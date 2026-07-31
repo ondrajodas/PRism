@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Drží seznam PR aktuální — v intervalu se ptá všech zdrojů a publikuje výsledek.
 ///
