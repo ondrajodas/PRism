@@ -42,8 +42,9 @@ včetně důvodu.
 - **Všechno jde přes PR.** Žádné přímé pushe do `main` — každá změna (kód i dokumentace)
   má vlastní branch a PR, i když je malá. PR odkazuje na issue, které řeší.
 - **Branch:** anglicky, krátce, s číslem issue — např. `issue-4-github-gateway`.
-- **Před prvním pushem mi appku spusť a dej mi prostor na připomínky.** Platí pro první
-  push branche, ne pro opravy po review — tam už je co komentovat na PR.
+- **Před prvním pushem mi appku spusť a dej mi prostor na připomínky — ale jen když je
+  na změně co vidět.** Platí pro první push branche, ne pro opravy po review — tam už je
+  co komentovat na PR.
 
   ```bash
   ./bin/run.sh
@@ -53,9 +54,14 @@ včetně důvodu.
   proklikám, dokud je změna ještě levná na přepsání. Zelené testy nejsou důkaz, že se to
   chová, jak jsem chtěl.
 
-  Napiš, **na co se mám podívat** a co v příslušné obrazovce uvidím. Když je změna
-  neviditelná (vrstva bez UI), řekni to a ukaž místo toho, jak se to projeví — třeba že
-  appka projde tam, kam předtím neprošla.
+  Napiš, **na co se mám podívat** a co v příslušné obrazovce uvidím.
+
+  **Když se změna v UI nijak neprojeví** (vrstva bez UI — modely, parser, protokol),
+  **na pauzu mě netahej.** Neviditelnou změnu nemám jak proklikat, takže by pauza jen
+  brzdila. Napiš do shrnutí jednou větou, že vidět není nic a proč, dolož to zelenými
+  testy a **pokračuj rovnou na commit a PR** — kontrola proběhne nad diffem na PR.
+  Rozhodující je, jestli se něco změnilo na obrazovce, ne jestli je změna malá: oprava
+  jednoho textu v labelu se ukazuje, nový `Codable` model ne.
 
   Když ke stavu, který chceš ukázat, nejde přijít normálním používáním (chybějící binárka,
   chyba sítě), viz *Jak si zkontrolovat, jak view vypadá* v sekci Testování — a hlavně
