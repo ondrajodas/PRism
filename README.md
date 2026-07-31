@@ -80,4 +80,5 @@ notarizace by byly potřeba až pro distribuci.
 docs/superpowers/specs/   návrh a specifikace
 CLAUDE.md                 pravidla pro práci v repu
 README.md                 tento soubor
+.gitignore                artefakty Xcode buildu, SPM, .DS_Store
 ```
