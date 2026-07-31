@@ -1,4 +1,4 @@
-# pr-review
+# PRism
 
 Nativní macOS aplikace, která hlídá GitHub pull requesty, u kterých jsem požádán o
 review, spouští na ně review skilly Claude Code a nálezy zobrazuje vedle diffu.
@@ -6,6 +6,10 @@ review, spouští na ně review skilly Claude Code a nálezy zobrazuje vedle dif
 Aplikace je **orchestrátor a prohlížeč** — nemá vlastní review logiku. Veškerá analýza
 žije ve skillech Claude Code; aplikace rozhoduje, kdy spustit který skill a kde, odchytí
 strukturovaný výstup a vykreslí ho.
+
+Jméno je hranol: jeden pull request projde několika nezávislými reviewery a rozloží se na
+spektrum pohledů, které se schválně neslučují do jednoho. V systému se aplikace hlásí
+jako **GitHub PR Review** — `PRism` je jméno projektu, ne popisek v Docku.
 
 > **Nikdy nic neposílá na GitHub.** Žádné komentáře, žádná review, žádné approve.
 > Verdikt *approve / request changes* je návrh zobrazený v aplikaci. Je to tvrdá
@@ -17,11 +21,11 @@ strukturovaný výstup a vykreslí ho.
 buildí, testuje a spustí do prázdného okna. Žádná z pěti fází (viz
 [CLAUDE.md](CLAUDE.md)) zatím není hotová.
 
-Postup se dá sledovat přes [releases](https://github.com/ondrajodas/pr-review/releases) —
+Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
 aktuálně je.
 
-- [Návrh (specifikace)](docs/superpowers/specs/2026-07-31-pr-review-design.md) — plný
+- [Návrh (specifikace)](docs/superpowers/specs/2026-07-31-prism-design.md) — plný
   návrh včetně záznamu rozhodnutí a zamítnutých alternativ
 - [CLAUDE.md](CLAUDE.md) — pravidla pro práci v tomto repu
 
@@ -75,11 +79,11 @@ Spustit aplikaci — jeden příkaz, buildne v Debug a otevře okno:
 Samotný build a testy:
 
 ```bash
-xcodebuild -project pr-review.xcodeproj -scheme pr-review build
+xcodebuild -project PRism.xcodeproj -scheme PRism build
 ```
 
 ```bash
-xcodebuild -project pr-review.xcodeproj -scheme pr-review test
+xcodebuild -project PRism.xcodeproj -scheme PRism test
 ```
 
 `bin/run.sh` buildí do `build/` v repu (`-derivedDataPath`), aby byla cesta k `.app`
@@ -92,13 +96,13 @@ ani tým. Developer ID podpis a notarizace by byly potřeba až pro distribuci.
 ## Struktura
 
 ```
-pr-review.xcodeproj/      Xcode projekt (shared scheme je verzovaný)
-App/                      zdrojáky aplikace — target pr-review
-Tests/                    unit testy — target pr-reviewTests
+PRism.xcodeproj/      Xcode projekt (shared scheme je verzovaný)
+App/                      zdrojáky aplikace — target PRism
+Tests/                    unit testy — target PRismTests
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR
 Info.plist                název aplikace, verze, minimální systém
-pr-review.entitlements    vypnutý App Sandbox
+PRism.entitlements    vypnutý App Sandbox
 docs/superpowers/specs/   návrh a specifikace
 CLAUDE.md                 pravidla pro práci v repu
 README.md                 tento soubor
@@ -110,5 +114,5 @@ targetu bere z filesystému. Nový soubor stačí vytvořit, do `project.pbxproj
 nezapisuje. `Info.plist` a entitlements proto leží v kořeni: cokoli uvnitř `App/`, co
 není zdroják, by se zkopírovalo do `.app` jako resource.
 
-Projekt, target i produkt se jmenují `pr-review`; uživateli se aplikace hlásí jako
+Projekt, target i produkt se jmenují `PRism`; uživateli se aplikace hlásí jako
 **GitHub PR Review** (`CFBundleName` a `CFBundleDisplayName` v `Info.plist`).

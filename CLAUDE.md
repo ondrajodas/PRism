@@ -72,7 +72,7 @@ na ně review skilly Claude Code jako headless session a nálezy zobrazuje vedle
 Aplikace je **orchestrátor a prohlížeč** — nemá vlastní review logiku. Když se objeví
 potřeba „chytřejšího" review, patří to do skillu, ne do aplikace.
 
-Plný návrh: [`docs/superpowers/specs/2026-07-31-pr-review-design.md`](docs/superpowers/specs/2026-07-31-pr-review-design.md)
+Plný návrh: [`docs/superpowers/specs/2026-07-31-prism-design.md`](docs/superpowers/specs/2026-07-31-prism-design.md)
 
 ## Tvrdé podmínky
 
@@ -83,7 +83,7 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 2. **Reviewer je read-only.** `--allowedTools` bez `Write`, `Edit` a bez obecného `Bash`.
    Reviewer strukturálně nemůže změnit kód ani nic odeslat.
 3. **Nikdy nesahat na uživatelovy klony.** Aplikace pracuje výhradně ve své cache
-   (`~/Library/Application Support/pr-review/`). Mohou být rozdělané, na jiné branchi,
+   (`~/Library/Application Support/PRism/`). Mohou být rozdělané, na jiné branchi,
    mít vlastní worktrees.
 4. **Aplikace nikdy nedrží GitHub token.** Autentizace je delegovaná na `gh`.
 5. **Nálezy jsou klíčované `headSha`.** Nové commity nálezy zneplatní (stav
@@ -123,12 +123,12 @@ patří to do `Policy`.
 - **Do `App/` patří jen zdrojáky.** Buildable folder zkopíruje všechno, co neumí
   zkompilovat, do `.app` jako resource — `Info.plist` uvnitř `App/` skončil v bundlu
   dvakrát, podruhé s nerozexpandovanými `$(...)`. Konfigurace bundle (`Info.plist`,
-  `pr-review.entitlements`) proto leží v kořeni repa.
+  `PRism.entitlements`) proto leží v kořeni repa.
 - **Název aplikace je jinde než název projektu.** Target, produkt i repo jsou
-  `pr-review`; uživateli se aplikace hlásí jako **GitHub PR Review**. `CFBundleName`
+  `PRism`; uživateli se aplikace hlásí jako **GitHub PR Review**. `CFBundleName`
   nejde nastavit přes `INFOPLIST_KEY_*` — Xcode ho generuje z `PRODUCT_NAME` — proto má
   projekt vlastní `Info.plist` místo `GENERATE_INFOPLIST_FILE`. Swiftový modul drží
-  `PRODUCT_MODULE_NAME = pr_review`, takže testy importují `pr_review`.
+  `PRODUCT_MODULE_NAME = PRism`, takže testy importují `PRism`.
 - **Moduly jsou složky, ne targety.** Všechen kód žije v jednom app targetu; `Policy`
   a spol. budou podsložky `App/`. Framework by si vynutil `public` u všeho, co používá
   UI — daň, kterou osobní aplikace nepotřebuje. Vyčlenit se dá později.
@@ -149,11 +149,11 @@ patří to do `Policy`.
 ## Příkazy
 
 ```bash
-xcodebuild -project pr-review.xcodeproj -scheme pr-review build
+xcodebuild -project PRism.xcodeproj -scheme PRism build
 ```
 
 ```bash
-xcodebuild -project pr-review.xcodeproj -scheme pr-review test
+xcodebuild -project PRism.xcodeproj -scheme PRism test
 ```
 
 ```bash

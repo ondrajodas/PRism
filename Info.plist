@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<!-- Uživatelský název aplikace. Nejde odvodit z PRODUCT_NAME, protože ten drží
-	     technický název produktu (pr-review.app) — proto vlastní Info.plist místo
+	     technický název produktu (PRism.app) — proto vlastní Info.plist místo
 	     GENERATE_INFOPLIST_FILE. CFBundleName jde do menu baru, DisplayName do Finderu. -->
 	<key>CFBundleDisplayName</key>
 	<string>GitHub PR Review</string>

@@ -1,8 +1,8 @@
-# pr-review — návrh
+# PRism — návrh
 
 **Datum:** 2026-07-31
 **Stav:** návrh odsouhlasen, neimplementováno
-**Repo:** `ondrajodas/pr-review` (privátní)
+**Repo:** `ondrajodas/PRism` (privátní)
 
 ## Účel
 
@@ -89,7 +89,7 @@ Vlastní všechny pracovní kopie. **Nikdy nesahá na uživatelovy klony** — m
 rozdělané, na jiné branchi, nebo už mít vlastní worktrees.
 
 ```
-~/Library/Application Support/pr-review/
+~/Library/Application Support/PRism/
   repos/<owner>/<repo>.git          # bare, partial clone s --filter=blob:none
   worktrees/<owner>-<repo>-<pr>-<sha>/   # detached worktree na review
 ```
@@ -217,7 +217,7 @@ Tři oblasti. Zvolený tvar: diff v plné šířce s nálezy u kódu a tabbed pa
 ## Platformová rozhodnutí
 
 - **SwiftUI**, target macOS 26, Xcode projekt v repu. Bundle id
-  `com.ondrajodas.pr-review`.
+  `com.ondrajodas.prism`.
 - **App Sandbox je vypnutý.** Aplikace spouští `git`, `gh` a `claude` a zapisuje do své
   cache mimo sandbox kontejner. Je to osobní nástroj, ne submission do App Store. Pro
   lokální použití stačí ad-hoc podpis (`codesign -s -`); Developer ID podpis a
@@ -226,15 +226,15 @@ Tři oblasti. Zvolený tvar: diff v plné šířce s nálezy u kódu a tabbed pa
   targety — žijí jako podsložky `App/`. Framework `PRReviewCore` by dal testům přístup
   bez launche aplikace, ale vynutil by `public` u každého typu, který se dotkne UI. To je
   daň za hranici, kterou u osobní aplikace nikdo nevymáhá. Testy vidí dovnitř přes
-  `@testable import pr_review` proti app targetu (`TEST_HOST`). Vyčlenit framework jde
+  `@testable import PRism` proti app targetu (`TEST_HOST`). Vyčlenit framework jde
   kdykoli později; opačný směr by byl dražší.
 - **`project.pbxproj` je psaný ručně, zdroje jsou buildable folders.** Žádný XcodeGen ani
   Tuist — byla by to instalovaná závislost navíc kvůli souboru, který se po scaffoldu
   skoro nemění. `App/` a `Tests/` jsou v projektu `PBXFileSystemSynchronizedRootGroup`,
   takže obsah targetu vychází z filesystému: nový zdroják se nikam nezapisuje a v pbxproj
   nevznikají merge konflikty.
-- **Uživatelský název je „GitHub PR Review", technický `pr-review`.** Repo, target,
-  scheme i produkt (`pr-review.app`) drží technický název, aby skripty a cesty zůstaly
+- **Uživatelský název je „GitHub PR Review", technický `PRism`.** Repo, target,
+  scheme i produkt (`PRism.app`) drží technický název, aby skripty a cesty zůstaly
   bez mezer; aplikace se v Docku, Finderu a menu baru hlásí lidsky. `CFBundleName` jde
   nastavit jen přes `PRODUCT_NAME`, takže projekt má vlastní `Info.plist` místo
   `GENERATE_INFOPLIST_FILE`. Přejmenovat rovnou produkt by bylo jednodušší, ale mezery
@@ -311,6 +311,7 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Nálezy klíčované `headSha` | Klíčované podle PR | Nové commity musí zneplatnit, ne tiše mást |
 | Bez terminálu v v1 | SwiftTerm od začátku | `stream-json` vykreslený nativně je pro sledování lepší; zásah je vzácný |
 | Jeden app target, moduly jako složky | Framework `PRReviewCore` + app | Framework si vynutí `public` u všeho, co vidí UI; hranici jde vyčlenit později |
+| Název `PRism` | `pr-review`, `gh-pr-review` | Hranol rozkládá světlo na spektrum, appka rozkládá PR na nezávislé pohledy — pojmenovává to, čím se liší. `gh-` prefix je konvence pro rozšíření `gh` CLI a u nativní aplikace by mátl. Uživatelský název zůstává `GitHub PR Review` |
 | Ručně psaný `project.pbxproj` + buildable folders | XcodeGen / Tuist | Nechceme instalovanou závislost kvůli souboru, který se skoro nemění; synchronizované složky odstraní důvod pbxproj vůbec editovat |
 
 ## K ověření před implementací
