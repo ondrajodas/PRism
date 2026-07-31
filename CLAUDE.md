@@ -140,6 +140,36 @@ Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`.
 bez mockování. Když se přistihneš, že píšeš `if` nad nálezy někde ve view nebo v runneru,
 patří to do `Policy`.
 
+### Doménové modely (`App/Models/`)
+
+Typy, na kterých staví všechny moduly — proto vlastní složka, ne příslušnost k jednomu
+z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`.
+
+| Typ | Co je |
+|---|---|
+| `RepoID` | `owner/repo` |
+| `PRIdentifier` | `owner/repo#číslo` — klíč všeho, co se váže k PR: dedup zdrojů, review stav, uložené nálezy |
+| `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav |
+| `PullRequestState` | `open` / `draft` / `merged` / `closed` |
+| `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
+
+Tři věci, které se u nich nemají rozbít:
+
+- **Identifikátory se kódují na jediný řetězec**, ne na objekt s poli. Existuje pak jeden
+  kanonický zápis pro disk, klíč slovníku i UI. Parsování a formátování drží
+  `LosslessStringConvertible` (`init?(_:)` + `description`) a `Codable` ho jen používá.
+  `CodingKeyRepresentable` je tam proto, aby `[PRIdentifier: ReviewState]` v JSONu vyšlo
+  jako objekt, ne jako pole střídavých klíčů a hodnot.
+- **`ReviewState` rozlišuje chybové stavy**, protože každý vede jinam: `clean` (doběhlo,
+  nic nenašlo) je opak `failed` (session spadla), `checkoutFailed` se spraví opakováním
+  clonu a `timedOut` si drží částečné nálezy. Případy: `notStarted`, `queued`, `cloning`,
+  `checkoutFailed(detail:)`, `running(finished:total:)`, `clean`, `completed(findings:)`,
+  `failed(detail:)`, `timedOut(findings:)`, `stale`.
+- **`clean` vzniká jen přes `ReviewState.finished(findingCount:)`.** Jinak se dřív nebo
+  později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
+
+Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
+
 ### Vrstva `Environment` (`App/Environment/`)
 
 Pod těmi sedmi moduly leží podpůrná vrstva — přístup ke stroji, který `GitHubGateway`,
@@ -214,6 +244,11 @@ Právě proto tam eskalace na `SIGKILL` je.
 
 ## Testování
 
+- **Modely** — round-trip přes `Codable` u každého typu i každého případu `ReviewState`,
+  parsování a formátování identifikátorů včetně neplatných vstupů, a kontrola skutečného
+  tvaru JSONu (identifikátor musí být řetězec, slovník klíčovaný jím musí být objekt).
+  Pomocníci na round-trip jsou v `Tests/Models/CodableRoundTrip.swift`; balí hodnotu do
+  pole, protože holý řetězec by na nejvyšší úrovni byl JSON fragment.
 - **`Policy`** — vyčerpávající unit testy, nic se nemockuje.
 - **`Environment`** — `BinaryLocator`, `GhAuthCheck`, `LoginShellPathReader` a `Preflight`
   proti fakes (`Tests/Environment/EnvironmentFakes.swift`). `FakeShellPathReader` počítá
@@ -292,11 +327,14 @@ Kontrola prostředí hotová (issue #2) — `Environment` vrstva a `Preflight` b
 Když něco chybí, ukáže se blokující gate se všemi problémy naráz a tlačítkem `Zkusit znovu`;
 když je všechno v pořádku, aplikace pokračuje do (zatím prázdného) `ContentView`.
 
-Žádná z pěti fází zatím není rozpracovaná.
+Doménové modely hotové (issue #3) — `App/Models/`. Vrstva bez UI: aplikace se chová
+stejně jako předtím, jen na ní má co stavět fáze 1.
+
+Rozpracovaná fáze 1 (seznam PR).
 
 Plánované fáze:
 
-1. Seznam PR z `gh` + polling
+1. Seznam PR z `gh` + polling — **doménové modely hotové**
 2. Checkout cache + worktree
 3. `ReviewRunner` + parsování streamu
 4. UI diffu s bublinami
