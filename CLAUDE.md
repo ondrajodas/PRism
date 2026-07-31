@@ -42,6 +42,16 @@ včetně důvodu.
 - **Všechno jde přes PR.** Žádné přímé pushe do `main` — každá změna (kód i dokumentace)
   má vlastní branch a PR, i když je malá. PR odkazuje na issue, které řeší.
 - **Branch:** anglicky, krátce, s číslem issue — např. `issue-4-github-gateway`.
+- **Po vytvoření PR na něj pusť Copilota a počkej na výsledek.**
+
+  ```bash
+  gh pr edit <číslo> --add-reviewer Copilot
+  ```
+
+  Když Copilot nálezy má, projdi je a řekni, co je reálné a co šum — teprve pak se
+  rozhoduje dál. Když nemá žádné, **stejně čekej na můj pokyn.**
+- **Merge PR a zavření issue jen na můj pokyn.** Nikdy to nedělej z vlastního
+  rozhodnutí, že je práce hotová — ani když je zeleno a Copilot mlčí.
 - **Po mergnutí PR se vydá nový tag a GitHub release.** Release notes píšeme česky a
   popisují progress: co se změnilo, jaký je aktuální stav proti milníkům a co je další
   krok. Release je deník projektu — kdo si přečte poslední release, ví, kde jsme.
