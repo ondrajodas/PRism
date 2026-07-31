@@ -4,9 +4,11 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<!-- Uživatelský název aplikace. Nejde odvodit z PRODUCT_NAME, protože ten drží
-	     technický název produktu (PRism.app) — proto vlastní Info.plist místo
-	     GENERATE_INFOPLIST_FILE. CFBundleName jde do menu baru, DisplayName do Finderu. -->
+	<!-- CFBundleName jde do menu baru, CFBundleDisplayName do Finderu a Docku.
+	     Proč vlastní Info.plist a ne GENERATE_INFOPLIST_FILE: CFBundleName se generuje
+	     z PRODUCT_NAME a klíč INFOPLIST_KEY_CFBundleName Xcode tiše ignoruje. Původně
+	     se tím řešil rozdíl mezi názvem produktu a názvem pro uživatele; po sjednocení
+	     na PRism ten důvod odpadl a plist by šel zrušit — viz CLAUDE.md. -->
 	<key>CFBundleDisplayName</key>
 	<string>PRism</string>
 	<key>CFBundleName</key>
