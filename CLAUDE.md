@@ -79,6 +79,17 @@ včetně důvodu.
   Projects classic a reviewer se nepřidá; REST `/requested_reviewers` vrátí 200 a bota
   tiše zahodí. Skript proto jde přes GraphQL mutaci `requestReviews` s `botIds`.
 
+  Totéž platí pro `gh pr edit` obecně a pro `gh issue view` — obojí si tahá
+  `projectCards` a spadne dřív, než něco udělá. Číst a upravovat jde přes REST:
+
+  ```bash
+  gh api repos/{owner}/{repo}/issues/3 --jq .body
+  jq -Rs '{body: .}' telo.md > payload.json
+  gh api repos/{owner}/{repo}/pulls/32 -X PATCH --input payload.json
+  ```
+
+  `gh pr create`, `gh pr list` a `gh api` fungují normálně — zlobí jen ty dva příkazy.
+
   Když Copilot nálezy má, projdi je a řekni, co je reálné a co šum — teprve pak se
   rozhoduje dál. Když nemá žádné, **stejně čekej na můj pokyn.**
 - **Merge PR a zavření issue jen na můj pokyn.** Nikdy to nedělej z vlastního
