@@ -223,7 +223,7 @@ Tři oblasti. Zvolený tvar: diff v plné šířce s nálezy u kódu a tabbed pa
   lokální použití stačí ad-hoc podpis (`codesign -s -`); Developer ID podpis a
   notarizace by byly potřeba až pro distribuci.
 - **Jeden app target, moduly jako složky.** Sedm modulů z architektury nejsou samostatné
-  targety — žijí jako podsložky `App/`. Framework `PRReviewCore` by dal testům přístup
+  targety — žijí jako podsložky `App/`. Framework `PRismCore` by dal testům přístup
   bez launche aplikace, ale vynutil by `public` u každého typu, který se dotkne UI. To je
   daň za hranici, kterou u osobní aplikace nikdo nevymáhá. Testy vidí dovnitř přes
   `@testable import PRism` proti app targetu (`TEST_HOST`). Vyčlenit framework jde
@@ -233,12 +233,15 @@ Tři oblasti. Zvolený tvar: diff v plné šířce s nálezy u kódu a tabbed pa
   skoro nemění. `App/` a `Tests/` jsou v projektu `PBXFileSystemSynchronizedRootGroup`,
   takže obsah targetu vychází z filesystému: nový zdroják se nikam nezapisuje a v pbxproj
   nevznikají merge konflikty.
-- **Uživatelský název je „GitHub PR Review", technický `PRism`.** Repo, target,
-  scheme i produkt (`PRism.app`) drží technický název, aby skripty a cesty zůstaly
-  bez mezer; aplikace se v Docku, Finderu a menu baru hlásí lidsky. `CFBundleName` jde
-  nastavit jen přes `PRODUCT_NAME`, takže projekt má vlastní `Info.plist` místo
-  `GENERATE_INFOPLIST_FILE`. Přejmenovat rovnou produkt by bylo jednodušší, ale mezery
-  v názvu `.app` by prosákly do `bin/run.sh`, `TEST_HOST` a `killall`.
+- **Jeden název `PRism` napříč vším** — repo, projekt, target, scheme, produkt
+  (`PRism.app`), Swiftový modul i to, co vidí uživatel v Docku. Krátce existovala
+  dvojice „technický `pr-review` + uživatelský `GitHub PR Review`"; sjednocení ji
+  zrušilo, protože dvě jména pro jednu věc si musí každý pamatovat a nic tím nezískal.
+  Název bez mezer navíc drží `bin/run.sh`, `TEST_HOST` a `killall` jednoduché.
+- **Vlastní `Info.plist` místo `GENERATE_INFOPLIST_FILE`.** `CFBundleName` jde nastavit
+  jen přes `PRODUCT_NAME` — `INFOPLIST_KEY_CFBundleName` Xcode tiše ignoruje. Po
+  sjednocení názvů ten důvod odpadl a plist by šlo zrušit; zatím zůstává kvůli explicitní
+  kontrole nad metadaty bundlu.
 - **Swift 6 language mode od prvního commitu.** Aplikace bude žonglovat s podprocesy a
   souběžnými review běhy; strict concurrency zapnutá dodatečně by znamenala refaktoring
   hotového kódu.
@@ -310,8 +313,8 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Paralelní reviewery, mechanický odznak `2×` | Agregační session slučující nálezy | Nesouhlas mezi reviewery je informace; slučování stojí session a tu informaci zahodí |
 | Nálezy klíčované `headSha` | Klíčované podle PR | Nové commity musí zneplatnit, ne tiše mást |
 | Bez terminálu v v1 | SwiftTerm od začátku | `stream-json` vykreslený nativně je pro sledování lepší; zásah je vzácný |
-| Jeden app target, moduly jako složky | Framework `PRReviewCore` + app | Framework si vynutí `public` u všeho, co vidí UI; hranici jde vyčlenit později |
-| Název `PRism` | `pr-review`, `gh-pr-review` | Hranol rozkládá světlo na spektrum, appka rozkládá PR na nezávislé pohledy — pojmenovává to, čím se liší. `gh-` prefix je konvence pro rozšíření `gh` CLI a u nativní aplikace by mátl. Uživatelský název zůstává `GitHub PR Review` |
+| Jeden app target, moduly jako složky | Framework `PRismCore` + app | Framework si vynutí `public` u všeho, co vidí UI; hranici jde vyčlenit později |
+| Název `PRism` všude | `pr-review`, `gh-pr-review`, dvojice technický + uživatelský název | Hranol rozkládá světlo na spektrum, appka rozkládá PR na nezávislé pohledy — pojmenovává to, čím se liší. `gh-` prefix je konvence pro rozšíření `gh` CLI a u nativní aplikace by mátl. Dvě jména pro jednu věc si musí každý pamatovat a nic nevynesla |
 | Ručně psaný `project.pbxproj` + buildable folders | XcodeGen / Tuist | Nechceme instalovanou závislost kvůli souboru, který se skoro nemění; synchronizované složky odstraní důvod pbxproj vůbec editovat |
 
 ## K ověření před implementací

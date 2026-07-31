@@ -124,11 +124,14 @@ patří to do `Policy`.
   zkompilovat, do `.app` jako resource — `Info.plist` uvnitř `App/` skončil v bundlu
   dvakrát, podruhé s nerozexpandovanými `$(...)`. Konfigurace bundle (`Info.plist`,
   `PRism.entitlements`) proto leží v kořeni repa.
-- **Název aplikace je jinde než název projektu.** Target, produkt i repo jsou
-  `PRism`; uživateli se aplikace hlásí jako **GitHub PR Review**. `CFBundleName`
-  nejde nastavit přes `INFOPLIST_KEY_*` — Xcode ho generuje z `PRODUCT_NAME` — proto má
-  projekt vlastní `Info.plist` místo `GENERATE_INFOPLIST_FILE`. Swiftový modul drží
-  `PRODUCT_MODULE_NAME = PRism`, takže testy importují `PRism`.
+- **Jeden název všude: `PRism`.** Repo, projekt, target, scheme, produkt, Swiftový modul
+  i to, co appka ukazuje v Docku. Když název měníš, projdi i `PRODUCT_MODULE_NAME`,
+  `TEST_HOST`, `CODE_SIGN_ENTITLEMENTS` a `bin/run.sh` — jinak build projde, ale spadne
+  až test nebo spuštění.
+- **`CFBundleName` nejde nastavit přes `INFOPLIST_KEY_*`.** Xcode ho generuje
+  z `PRODUCT_NAME` a klíč tiše ignoruje. Projekt má proto vlastní `Info.plist` místo
+  `GENERATE_INFOPLIST_FILE`. Původní důvod (produkt a uživatelský název se lišily) po
+  přejmenování na `PRism` odpadl — plist se teď dá zjednodušit, ale zatím zůstává.
 - **Moduly jsou složky, ne targety.** Všechen kód žije v jednom app targetu; `Policy`
   a spol. budou podsložky `App/`. Framework by si vynutil `public` u všeho, co používá
   UI — daň, kterou osobní aplikace nepotřebuje. Vyčlenit se dá později.

@@ -7,9 +7,9 @@ Aplikace je **orchestrátor a prohlížeč** — nemá vlastní review logiku. V
 žije ve skillech Claude Code; aplikace rozhoduje, kdy spustit který skill a kde, odchytí
 strukturovaný výstup a vykreslí ho.
 
-Jméno je hranol: jeden pull request projde několika nezávislými reviewery a rozloží se na
-spektrum pohledů, které se schválně neslučují do jednoho. V systému se aplikace hlásí
-jako **GitHub PR Review** — `PRism` je jméno projektu, ne popisek v Docku.
+Hranol rozloží jeden paprsek na spektrum. Tahle aplikace dělá totéž s pull requestem —
+pustí na něj několik nezávislých reviewerů a jejich nálezy schválně neslévá do jednoho
+názoru.
 
 > **Nikdy nic neposílá na GitHub.** Žádné komentáře, žádná review, žádné approve.
 > Verdikt *approve / request changes* je návrh zobrazený v aplikaci. Je to tvrdá
@@ -96,13 +96,13 @@ ani tým. Developer ID podpis a notarizace by byly potřeba až pro distribuci.
 ## Struktura
 
 ```
-PRism.xcodeproj/      Xcode projekt (shared scheme je verzovaný)
+PRism.xcodeproj/          Xcode projekt (shared scheme je verzovaný)
 App/                      zdrojáky aplikace — target PRism
 Tests/                    unit testy — target PRismTests
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR
 Info.plist                název aplikace, verze, minimální systém
-PRism.entitlements    vypnutý App Sandbox
+PRism.entitlements        vypnutý App Sandbox
 docs/superpowers/specs/   návrh a specifikace
 CLAUDE.md                 pravidla pro práci v repu
 README.md                 tento soubor
@@ -114,5 +114,6 @@ targetu bere z filesystému. Nový soubor stačí vytvořit, do `project.pbxproj
 nezapisuje. `Info.plist` a entitlements proto leží v kořeni: cokoli uvnitř `App/`, co
 není zdroják, by se zkopírovalo do `.app` jako resource.
 
-Projekt, target i produkt se jmenují `PRism`; uživateli se aplikace hlásí jako
-**GitHub PR Review** (`CFBundleName` a `CFBundleDisplayName` v `Info.plist`).
+Repo, Xcode projekt, target, produkt i to, co appka ukazuje v Docku, se jmenují stejně —
+`PRism`. Swiftový modul taky (`PRODUCT_MODULE_NAME`), takže testy dělají
+`@testable import PRism`.

@@ -9,13 +9,13 @@ import Testing
     #expect(Bundle.main.bundleIdentifier == "com.ondrajodas.prism")
 }
 
-/// Projekt, target i repo se jmenují `PRism`; uživateli se aplikace hlásí jinak.
-@Test func appPresentsItselfUnderFriendlyName() {
+/// Název je jeden napříč vším — hlídá, že se v bundlu neobjeví jiný než `PRism`.
+@Test func appPresentsItselfAsPRism() {
     let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
     let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
 
-    #expect(displayName == "GitHub PR Review")
-    #expect(name == "GitHub PR Review")
+    #expect(displayName == "PRism")
+    #expect(name == "PRism")
 }
 
 @Test @MainActor func contentViewCanBeCreated() {

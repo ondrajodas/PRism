@@ -1,9 +1,9 @@
 import SwiftUI
 
 @main
-struct PRReviewApp: App {
+struct PRismApp: App {
     var body: some Scene {
-        WindowGroup("GitHub PR Review") {
+        WindowGroup("PRism") {
             ContentView()
         }
         .defaultSize(width: 1100, height: 700)

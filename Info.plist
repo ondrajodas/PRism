@@ -8,9 +8,9 @@
 	     technický název produktu (PRism.app) — proto vlastní Info.plist místo
 	     GENERATE_INFOPLIST_FILE. CFBundleName jde do menu baru, DisplayName do Finderu. -->
 	<key>CFBundleDisplayName</key>
-	<string>GitHub PR Review</string>
+	<string>PRism</string>
 	<key>CFBundleName</key>
-	<string>GitHub PR Review</string>
+	<string>PRism</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
