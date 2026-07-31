@@ -22,9 +22,10 @@ staví.** Aplikace se buildí, testuje a při startu si ověří, že má `gh`, 
 a že je `gh` přihlášený — jinak řekne, co chybí a čím se to spraví. Za tou kontrolou je
 zatím prázdné okno. Pod ním stojí doménové modely (pull request, identifikátory, stav
 review), `GitHubGateway`, který umí vyhledat PR přes `gh` a dotáhnout jejich metadata
-včetně SHA, a slučování výsledků z několika zdrojů do jednoho seřazeného seznamu. Chybí
-polling a samotné okno se seznamem — první z pěti fází (viz [CLAUDE.md](CLAUDE.md)) proto
-ještě není hotová.
+včetně SHA, slučování výsledků z několika zdrojů do jednoho seřazeného seznamu a polling,
+který to drží aktuální — včetně backoffu při rate limitu a zachování posledních známých
+dat při výpadku sítě. Chybí poslední krok: zapojit to do okna. První z pěti fází
+(viz [CLAUDE.md](CLAUDE.md)) proto ještě není hotová.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -115,12 +116,14 @@ App/                      zdrojáky aplikace — target PRism
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
   GitHub/                 čtení PR přes gh CLI: gateway, typované chyby, tvar výstupu
   Policy/                 čisté funkce: slučování zdrojů, řazení
+  Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Views/                  SwiftUI obrazovky
 Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip
   Environment/            testy Environment vrstvy + fakes
   GitHub/                 testy gateway a klasifikace chyb gh
   Policy/                 testy čistých funkcí
+  Polling/                testy pollingu proti fake gateway a fake času
   Fixtures/gh/            skutečné JSON výstupy gh z veřejných repozitářů
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR

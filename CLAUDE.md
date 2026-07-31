@@ -202,6 +202,35 @@ Tři věci, které se u nich nemají rozbít:
 
 Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
 
+### `PollingService` (`App/Polling/`)
+
+Drží seznam PR aktuální: v intervalu (default 60 s) se zeptá všech zdrojů, sloučí je přes
+`PullRequestList` a publikuje `PollState`. `@MainActor` a `@Observable` — jeho stav je to,
+co kreslí okno; síťová práce stejně probíhá v podprocesech `gh`.
+
+`run()` je smyčka (obnovit → počkat → opakovat), `refresh()` jeden cyklus. Tlačítko
+„obnovit teď“ volá `refresh()` — ruční obnovení není nic jiného než tik mimo pořadí.
+
+Čtyři věci, které se u toho nemají rozbít:
+
+- **Selhání jednoho zdroje zahodí celý tik.** Publikovat, co prošlo, znamená, že PR ze
+  selhaného zdroje z okna zmizí — a zmizelý PR vypadá jako vyřízený, ne jako nenačtený.
+- **Backoff je jen pro rate limit.** Ten si aplikace způsobila sama tím, že se ptá moc.
+  Za výpadek sítě nemůže a delší čekání by jen oddálilo zotavení. Zdvojnásobení za každý
+  rate limit v řadě, strop 15 minut, úspěch ho vynuluje.
+- **`since` se při opakovaném selhání drží.** Jinak by v UI pořád stálo „neaktuální od
+  teď“ a nešlo by poznat, jak dlouho výpadek trvá.
+- **Zrušení není chyba GitHubu.** `CancellationError` stav nepřepisuje — jinak by při
+  zavření okna probliklo hlášení, že něco spadlo.
+
+Stav je `PollStatus` (`notStarted` / `upToDate` / `failing` / `rateLimited`) plus
+`lastSuccess: Date?`. Otázka „je vůbec co ukázat“ se neřeší dalšími případy výčtu, ale
+tím optionalem; `PollState.isStale` z toho dělá jedno pojmenované místo, takže view nic
+neskládá.
+
+**Polling netahá detail PR.** Seznam SHA nepotřebuje — potřebuje je až checkout a review,
+takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
+
 ### `Policy` (`App/Policy/`)
 
 Čisté funkce nad daty, žádné I/O. Testuje se bez mockování a bez binárek.
@@ -272,6 +301,7 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `BinaryLocator` | Nejdřív známá místa, teprve pro zbytek login shell — a ten **jednou** pro všechny chybějící |
 | `GhAuthCheck` | `gh auth status`: exit 0 přihlášen, 1 nepřihlášen, cokoli jiného `checkFailed` se stderrem |
 | `Preflight` | Složí lokaci + auth do `PreflightReport` |
+| `TimeSource` | Protokol: `now` a `sleep(for:)`. Hodiny jsou přístup ke stroji jako každý jiný — a bez nich by testy pollingu čekaly reálné minuty |
 
 `PreflightReport` je jediná pravda o prostředí; `problems` i `toolPaths` se z něj **jen
 počítají** — čistě, bez I/O. Tady platí totéž pravidlo jako u `Policy`: když píšeš `if`
@@ -358,6 +388,11 @@ Právě proto tam eskalace na `SIGKILL` je.
 - **Parsování streamu** — klíčový spoj. Nahrát skutečný `stream-json` výstup z reálných
   běhů jako fixtures a testovat parser proti nim: init eventy, `ReportFindings` cally,
   chybný vstup, zkrácený stream.
+- **`PollingService`** — proti `FakeGitHubGateway` (odpovědi v pořadí, poslední se opakuje)
+  a `FakeTimeSource`. Ten místo čekání zapisuje **požadované délky uspání** — na nich se
+  ověřuje backoff — a po zadaném počtu uspání smyčku ukončí `CancellationError`em. Testy
+  tak běží v nulovém reálném čase a bez závodů. Pozor na počítání odpovědí: selhávající
+  tik spotřebuje jen jednu, protože se u prvního zdroje přeruší.
 - **`Config`** — merge globální + per-repo, defaulty pro neznámé repo.
 - **`GitHubGateway` / `RepoCheckout` / `ReviewRunner`** — fake v testech na úrovni
   aplikace; malý počet integračních testů proti skutečným binárkám a scratch repu.
@@ -433,8 +468,11 @@ stejně jako předtím, jen na ní má co stavět fáze 1.
 a dotáhnout detail se SHA.
 
 Zdroje a slučování hotové (issue #5) — `Source` v `App/Models/` a `PullRequestList`
-v `App/Policy/`. Pořád vrstva bez UI: díly na seznam PR existují, ale nikdo je zatím
-nespojuje — to je polling (#6) a okno se seznamem (#7).
+v `App/Policy/`.
+
+Polling hotový (issue #6) — `App/Polling/`. Spojuje gateway, zdroje a slučování do
+`PollState`, který se dá rovnou kreslit. Poslední vrstva bez UI: zbývá ji zapojit do okna
+se seznamem (#7).
 
 Rozpracovaná fáze 1 (seznam PR).
 
