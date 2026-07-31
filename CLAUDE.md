@@ -1,0 +1,135 @@
+# CLAUDE.md
+
+Pravidla pro práci Claude Code v tomto repu.
+
+## Údržba dokumentace — platí vždy
+
+**Každá změna, kterou tady uděláme, se musí promítnout do `README.md` a `CLAUDE.md`.**
+Není to úklid na konec, dělá se to **ve stejném commitu** jako samotná změna. Cílem je,
+aby se aplikace dala pochopit z těchto dvou souborů bez čtení kódu — a aby další session
+Claude Code měla po přečtení `CLAUDE.md` dost kontextu na to, aby mohla hned pracovat.
+
+Co kam patří:
+
+| Soubor | Obsah | Kdy aktualizovat |
+|---|---|---|
+| `README.md` | Co aplikace je, jak funguje, jak se buildí a spouští, požadavky, struktura repa | Změna chování, rozsahu, požadavků, build postupu nebo struktury |
+| `CLAUDE.md` | Jak se v repu pracuje, aktuální architektura, konvence, tvrdé podmínky | Změna architektury, hranic modulů, konvencí, příkazů nebo pravidel |
+| `docs/superpowers/specs/` | Proč jsou rozhodnutí taková, jaká jsou — včetně zamítnutých alternativ | Změna návrhového rozhodnutí; zapsat i **proč** se změnilo, staré nechat v záznamu rozhodnutí |
+
+Když se změna nikam z toho nevejde, je to signál, že jsem si neujasnil, co vlastně měním
+— vyřešit to, ne to přeskočit.
+
+Konkrétně: přidání modulu → `CLAUDE.md` (architektura) + `README.md` (struktura, pokud se
+mění). Změna konfigurace → `README.md` (klíčová rozhodnutí) + specifikace. Nový build
+příkaz → `README.md` + sekce Příkazy níž. Zahození návrhového rozhodnutí → specifikace,
+včetně důvodu.
+
+## Jazyk
+
+- **Dokumentace, specifikace, komentáře a prózu piš česky.** Včetně tohoto souboru,
+  README a všeho v `docs/`.
+- **Identifikátory v kódu anglicky** — názvy typů, funkcí, polí, souborů, flagů:
+  `blockingCategories`, `headSha`, `ReviewRunner`. Kód se česky nepíše.
+- **Commit messages, názvy branchí, titulky a popisy PR anglicky.** Formát
+  [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+- **Žádné AI atribuce** v commitech ani v PR — bez podpisů a bez „generated with".
+
+## Co aplikace je
+
+Nativní macOS aplikace (SwiftUI), která hlídá GitHub PR přiřazené mně k review, spouští
+na ně review skilly Claude Code jako headless session a nálezy zobrazuje vedle diffu.
+
+Aplikace je **orchestrátor a prohlížeč** — nemá vlastní review logiku. Když se objeví
+potřeba „chytřejšího" review, patří to do skillu, ne do aplikace.
+
+Plný návrh: [`docs/superpowers/specs/2026-07-31-pr-review-design.md`](docs/superpowers/specs/2026-07-31-pr-review-design.md)
+
+## Tvrdé podmínky
+
+Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav se a zeptej se.
+
+1. **Nikdy nic neposílat na GitHub.** Žádné komentáře, review, approve, labely. Verdikt
+   je návrh zobrazený v aplikaci. Aplikace je vůči GitHubu **jen pro čtení**.
+2. **Reviewer je read-only.** `--allowedTools` bez `Write`, `Edit` a bez obecného `Bash`.
+   Reviewer strukturálně nemůže změnit kód ani nic odeslat.
+3. **Nikdy nesahat na uživatelovy klony.** Aplikace pracuje výhradně ve své cache
+   (`~/Library/Application Support/pr-review/`). Mohou být rozdělané, na jiné branchi,
+   mít vlastní worktrees.
+4. **Aplikace nikdy nedrží GitHub token.** Autentizace je delegovaná na `gh`.
+5. **Nálezy jsou klíčované `headSha`.** Nové commity nálezy zneplatní (stav
+   „zastaralé"), nikdy se nesmí tiše zobrazovat proti kódu, který už neexistuje.
+
+## Architektura
+
+Sedm modulů. Tři, které sahají do vnějšího světa, jsou za protokolem, aby byly v testech
+nahraditelné fake implementací.
+
+| Modul | Zodpovědnost | Vnější svět |
+|---|---|---|
+| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a diff | `gh` CLI |
+| `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` | `claude` CLI |
+| `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
+| `Policy` | **Čisté funkce, žádné I/O.** Blokující příznak, návrh verdiktu, detekce shody `2×`, řazení | — |
+| `Config` | Globální default + override per repo | disk |
+| `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu | — |
+
+Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`.
+
+**Kam co psát:** rozhodovací logika patří do `Policy` jako čistá funkce — tam se testuje
+bez mockování. Když se přistihneš, že píšeš `if` nad nálezy někde ve view nebo v runneru,
+patří to do `Policy`.
+
+## Konvence
+
+- **Krátké, jednoúčelové metody.** Čitelnost před chytrostí.
+- **Nepoužívat `final`** u typů, které se v testech nahrazují.
+- **Protokol + fake, ne mockovací framework**, u tří modulů se vnějším světem.
+- **Nové soubory drž malé a soustředěné.** Když soubor roste, obvykle dělá víc věcí.
+- Chybové stavy jsou v návrhu vyjmenované (viz specifikace, sekce *Chování při chybách*)
+  — každý z nich má mít v UI vlastní rozlišitelný stav. `čisté` (žádné nálezy) a
+  `failed` (session spadla) se nesmí slít do jednoho.
+
+## Testování
+
+- **`Policy`** — vyčerpávající unit testy, nic se nemockuje.
+- **Parsování streamu** — klíčový spoj. Nahrát skutečný `stream-json` výstup z reálných
+  běhů jako fixtures a testovat parser proti nim: init eventy, `ReportFindings` cally,
+  chybný vstup, zkrácený stream.
+- **`Config`** — merge globální + per-repo, defaulty pro neznámé repo.
+- **`GitHubGateway` / `RepoCheckout` / `ReviewRunner`** — fake v testech na úrovni
+  aplikace; malý počet integračních testů proti skutečným binárkám a scratch repu.
+
+## Příkazy
+
+Xcode projekt zatím neexistuje. Až vznikne:
+
+```bash
+xcodebuild -project pr-review.xcodeproj -scheme pr-review build
+```
+
+```bash
+xcodebuild -project pr-review.xcodeproj -scheme pr-review test
+```
+
+## Prostředí
+
+- macOS 26, Xcode 26, Swift 6.3
+- Vyžaduje na stroji `gh` (přihlášený), `claude` a `git`
+- **App Sandbox vypnutý** — aplikace spouští podprocesy a zapisuje do vlastní cache
+- **Binárky hledej absolutní cestou.** GUI aplikace spuštěná z Finderu nedědí `PATH` ze
+  shellu, takže `gh` se podle jména nenajde. Řeší se při startu s jasnou chybou.
+
+## Stav
+
+Návrh odsouhlasen, neimplementováno. Plánované fáze:
+
+1. Seznam PR z `gh` + polling
+2. Checkout cache + worktree
+3. `ReviewRunner` + parsování streamu
+4. UI diffu s bublinami
+5. Konfigurace a auto režim
+
+Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
+fáze ubývají.**
