@@ -181,6 +181,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PRIdentifier` | `owner/repo#číslo` — klíč všeho, co se váže k PR: dedup zdrojů, review stav, uložené nálezy |
 | `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav |
 | `PullRequestSummary` | Totéž **bez SHA** — co dá vyhledávání. Viz `App/GitHub/` níž |
+| `Source` | Zdroj PR: jméno pro UI + search dotaz. Default `Source.reviewRequested` |
 | `PullRequestState` | `open` / `draft` / `merged` / `closed` |
 | `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
 
@@ -200,6 +201,21 @@ Tři věci, které se u nich nemají rozbít:
   později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
 
 Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
+
+### `Policy` (`App/Policy/`)
+
+Čisté funkce nad daty, žádné I/O. Testuje se bez mockování a bez binárek.
+
+| Typ | Co dělá |
+|---|---|
+| `PullRequestList` | Sloučí výsledky zdrojů do jednoho seznamu: dedup podle `PRIdentifier`, řazení |
+
+- **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
+  Volající pak nic nespojuje a z typu je vidět, že jde o několik nezávislých dotazů.
+- **Při kolizi vyhrávají novější data**, ne pořadí zdrojů. Zdroje se dotazují postupně,
+  takže jeden z nich může nést stav, který mezitím zastaral.
+- **Řadí se od naposledy změněného, při shodě podle identifikátoru.** Druhé kritérium není
+  kosmetika: bez něj by pořadí mezi pollingy poskakovalo, protože slovník nemá pořadí.
 
 ### `GitHubGateway` (`App/GitHub/`)
 
@@ -319,7 +335,10 @@ Právě proto tam eskalace na `SIGKILL` je.
   tvaru JSONu (identifikátor musí být řetězec, slovník klíčovaný jím musí být objekt).
   Pomocníci na round-trip jsou v `Tests/Models/CodableRoundTrip.swift`; balí hodnotu do
   pole, protože holý řetězec by na nejvyšší úrovni byl JSON fragment.
-- **`Policy`** — vyčerpávající unit testy, nic se nemockuje.
+- **`Policy`** — vyčerpávající unit testy, nic se nemockuje. U slučování zdrojů včetně
+  toho, co se snadno přehlédne: kolize s různým `updatedAt` v obou pořadích zdrojů,
+  prázdný zdroj, žádný zdroj a **shodné časy** (na kterých se pozná nedeterministické
+  řazení).
 - **`Environment`** — `BinaryLocator`, `GhAuthCheck`, `LoginShellPathReader` a `Preflight`
   proti fakes (`Tests/Environment/EnvironmentFakes.swift`). `FakeShellPathReader` počítá
   volání: že se login shell spustí nejvýš jednou a jen když je co dohledávat, je součást
@@ -411,8 +430,11 @@ Doménové modely hotové (issue #3) — `App/Models/`. Vrstva bez UI: aplikace 
 stejně jako předtím, jen na ní má co stavět fáze 1.
 
 `GitHubGateway` hotový (issue #4) — `App/GitHub/`. Umí `gh auth status`, vyhledat PR
-a dotáhnout detail se SHA. Zase vrstva bez UI; nikdo ji zatím nevolá, čeká na zdroje (#5)
-a polling (#6).
+a dotáhnout detail se SHA.
+
+Zdroje a slučování hotové (issue #5) — `Source` v `App/Models/` a `PullRequestList`
+v `App/Policy/`. Pořád vrstva bez UI: díly na seznam PR existují, ale nikdo je zatím
+nespojuje — to je polling (#6) a okno se seznamem (#7).
 
 Rozpracovaná fáze 1 (seznam PR).
 

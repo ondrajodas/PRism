@@ -21,9 +21,10 @@ názoru.
 staví.** Aplikace se buildí, testuje a při startu si ověří, že má `gh`, `git` i `claude`
 a že je `gh` přihlášený — jinak řekne, co chybí a čím se to spraví. Za tou kontrolou je
 zatím prázdné okno. Pod ním stojí doménové modely (pull request, identifikátory, stav
-review) a `GitHubGateway`, který umí vyhledat PR přes `gh` a dotáhnout jejich metadata
-včetně SHA. Chybí zdroje a slučování, polling a samotný seznam — první z pěti fází
-(viz [CLAUDE.md](CLAUDE.md)) proto ještě není hotová.
+review), `GitHubGateway`, který umí vyhledat PR přes `gh` a dotáhnout jejich metadata
+včetně SHA, a slučování výsledků z několika zdrojů do jednoho seřazeného seznamu. Chybí
+polling a samotné okno se seznamem — první z pěti fází (viz [CLAUDE.md](CLAUDE.md)) proto
+ještě není hotová.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -113,11 +114,13 @@ App/                      zdrojáky aplikace — target PRism
   Models/                 doménové modely: PR, identifikátory, stav review
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
   GitHub/                 čtení PR přes gh CLI: gateway, typované chyby, tvar výstupu
+  Policy/                 čisté funkce: slučování zdrojů, řazení
   Views/                  SwiftUI obrazovky
 Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip
   Environment/            testy Environment vrstvy + fakes
   GitHub/                 testy gateway a klasifikace chyb gh
+  Policy/                 testy čistých funkcí
   Fixtures/gh/            skutečné JSON výstupy gh z veřejných repozitářů
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR
