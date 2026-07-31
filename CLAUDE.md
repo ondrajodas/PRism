@@ -45,8 +45,12 @@ včetně důvodu.
 - **Po vytvoření PR na něj pusť Copilota a počkej na výsledek.**
 
   ```bash
-  gh pr edit <číslo> --add-reviewer Copilot
+  ./bin/copilot-review.sh <číslo PR>
   ```
+
+  `gh pr edit --add-reviewer Copilot` **nepoužívej** — na tomhle repu padá na deprecated
+  Projects classic a reviewer se nepřidá; REST `/requested_reviewers` vrátí 200 a bota
+  tiše zahodí. Skript proto jde přes GraphQL mutaci `requestReviews` s `botIds`.
 
   Když Copilot nálezy má, projdi je a řekni, co je reálné a co šum — teprve pak se
   rozhoduje dál. Když nemá žádné, **stejně čekej na můj pokyn.**
