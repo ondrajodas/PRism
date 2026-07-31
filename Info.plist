@@ -2,8 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Aplikace mluví česky, takže to musí vědět i bundle. Bez deklarované lokalizace
+	     spadne `Locale.current` na vývojový jazyk a relativní časy v seznamu vyjdou
+	     anglicky („2 hours ago“) vedle českých popisků. -->
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>cs</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>cs</string>
+	</array>
 	<!-- CFBundleName jde do menu baru, CFBundleDisplayName do Finderu a Docku.
 	     Proč vlastní Info.plist a ne GENERATE_INFOPLIST_FILE: CFBundleName se generuje
 	     z PRODUCT_NAME a klíč INFOPLIST_KEY_CFBundleName Xcode tiše ignoruje. Původně

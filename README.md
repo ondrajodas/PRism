@@ -17,15 +17,15 @@ názoru.
 
 ## Stav
 
-**Scaffold, kontrola prostředí, doménové modely a čtení PR z GitHubu hotové, UI se teprve
-staví.** Aplikace se buildí, testuje a při startu si ověří, že má `gh`, `git` i `claude`
-a že je `gh` přihlášený — jinak řekne, co chybí a čím se to spraví. Za tou kontrolou je
-zatím prázdné okno. Pod ním stojí doménové modely (pull request, identifikátory, stav
-review), `GitHubGateway`, který umí vyhledat PR přes `gh` a dotáhnout jejich metadata
-včetně SHA, slučování výsledků z několika zdrojů do jednoho seřazeného seznamu a polling,
-který to drží aktuální — včetně backoffu při rate limitu a zachování posledních známých
-dat při výpadku sítě. Chybí poslední krok: zapojit to do okna. První z pěti fází
-(viz [CLAUDE.md](CLAUDE.md)) proto ještě není hotová.
+**První použitelná verze: aplikace ukazuje moje skutečné PR.** Po startu si ověří, že má
+`gh`, `git` i `claude` a že je `gh` přihlášený — jinak řekne, co chybí a čím se to spraví.
+Pak se otevře seznam pull requestů napříč repozitáři, který se sám obnovuje: každý řádek
+nese repo, číslo, titulek, autora a čas poslední změny. Při výpadku sítě zůstanou
+poslední známá data a nad seznamem se objeví pruh, že nejsou aktuální; při rate limitu
+pruh říká, kdy to zkusí znovu.
+
+Review se zatím nespouští — stav u všech PR je `neběželo`. Z pěti fází
+(viz [CLAUDE.md](CLAUDE.md)) je hotová první.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -117,6 +117,7 @@ App/                      zdrojáky aplikace — target PRism
   GitHub/                 čtení PR přes gh CLI: gateway, typované chyby, tvar výstupu
   Policy/                 čisté funkce: slučování zdrojů, řazení
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
+  Store/                  AppStore — stav, který kreslí okno
   Views/                  SwiftUI obrazovky
 Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip
@@ -124,6 +125,7 @@ Tests/                    unit testy — target PRismTests
   GitHub/                 testy gateway a klasifikace chyb gh
   Policy/                 testy čistých funkcí
   Polling/                testy pollingu proti fake gateway a fake času
+  Store/                  testy AppStore
   Fixtures/gh/            skutečné JSON výstupy gh z veřejných repozitářů
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR

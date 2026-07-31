@@ -202,6 +202,40 @@ Tři věci, které se u nich nemají rozbít:
 
 Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
 
+### `AppStore` (`App/Store/`) a okno (`App/Views/`)
+
+`AppStore` drží to, co kreslí okno: polling seznamu a **výběr řádku**. Výběr žije tady, ne
+ve view — jinak by ho každé přestavění seznamu zahodilo. Postupně sem přibude stav review
+na jednotlivých PR a limit souběžných session.
+
+Vzniká z `ToolPaths` po preflightu (`AppStore(toolPaths:)`); testy si podstrčí fake
+gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruší.
+
+| View | Co dělá |
+|---|---|
+| `ContentView` | `NavigationSplitView`: vlevo seznam, vpravo (zatím) placeholder detailu |
+| `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
+| `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu |
+| `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
+| `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
+
+Čtyři věci, na které se u okna naráží:
+
+- **Banner jde přes `safeAreaInset`, ne do `VStack` nad seznamem.** S `VStack`em přestane
+  být `List` tím, co sidebar odsazuje od horní lišty, a řádky se schovají pod ni.
+- **Čísla PR se píšou `Text(verbatim:)`.** `Text("#\(number)")` interpoluje přes locale
+  a udělá z PR #21663 „#21 663“ — číslo PR není množství.
+- **Obsah zajíždí pod poloprůhlednou lištu a je to tak správně.** Zkoušelo se to zrušit
+  (`toolbarBackgroundVisibility`, pak vypnutí `fullSizeContentView` přes `NSWindow`) a
+  **zahodilo** — Mail i Finder se chovají stejně, takže vlastní chování by bylo cizí,
+  a vypnutí `fullSizeContentView` navíc odsune toolbar do vlastního pruhu.
+- **Prázdný `PollStatusBanner` se nekreslí vůbec.** Trvalý pruh „vše OK“ ubírá místo
+  seznamu a oko se ho naučí přehlížet. A **dokud se nic nenačetlo, nekreslí se taky** —
+  není co označit za neaktuální a chybu vysvětluje prázdný stav pod ním.
+- **Proč je seznam prázdný, rozhoduje `PollState.emptyReason`, ne view.** „Prázdno,
+  protože nic není“ a „prázdno, protože se to nepovedlo načíst“ vypadají v okně stejně,
+  ale znamenají opak; bez toho se u chybové hlášky svítilo zelené „Žádné PR k review“.
+
 ### `PollingService` (`App/Polling/`)
 
 Drží seznam PR aktuální: v intervalu (default 60 s) se zeptá všech zdrojů, sloučí je přes
@@ -339,6 +373,10 @@ Právě proto tam eskalace na `SIGKILL` je.
   (`PBXFileSystemSynchronizedRootGroup`) — soubory i podsložky se do targetu berou
   z filesystému. Nový zdroják = jen ho vytvořit. Editovat pbxproj je potřeba jen při
   změně targetů nebo build settings.
+- **Uživatelské texty jsou české a bundle to musí vědět.** `Info.plist` deklaruje
+  `CFBundleDevelopmentRegion = cs` a `CFBundleLocalizations = [cs]`. Bez toho spadne
+  `Locale.current` na vývojový jazyk a formátované hodnoty (relativní časy, čísla) vyjdou
+  anglicky vedle českých popisků.
 - **Do `App/` patří jen zdrojáky.** Buildable folder zkopíruje všechno, co neumí
   zkompilovat, do `.app` jako resource — `Info.plist` uvnitř `App/` skončil v bundlu
   dvakrát, podruhé s nerozexpandovanými `$(...)`. Konfigurace bundle (`Info.plist`,
@@ -393,6 +431,8 @@ Právě proto tam eskalace na `SIGKILL` je.
   ověřuje backoff — a po zadaném počtu uspání smyčku ukončí `CancellationError`em. Testy
   tak běží v nulovém reálném čase a bez závodů. Pozor na počítání odpovědí: selhávající
   tik spotřebuje jen jednu, protože se u prvního zdroje přeruší.
+- **`AppStore`** — proti fake gateway: obnovení se ptá zdrojů, seznam se čte z pollingu,
+  výběr se drží. Views se neunit-testují; kontroluje se běžící aplikace (viz níž).
 - **`Config`** — merge globální + per-repo, defaulty pro neznámé repo.
 - **`GitHubGateway` / `RepoCheckout` / `ReviewRunner`** — fake v testech na úrovni
   aplikace; malý počet integračních testů proti skutečným binárkám a scratch repu.
@@ -412,15 +452,31 @@ Dva zádrhely, které to má:
 - **`ImageRenderer` je `@MainActor`** — pomocná funkce v testu musí být taky, jinak Swift 6
   neprojde.
 
-Stav běžící aplikace jde vyčíst i přes accessibility, což je užitečné na kontrolu, že se
-appka dostala do správné obrazovky:
+- **`List` se offscreen nevykreslí vůbec** — je to AppKit tabulka a `ImageRenderer` místo
+  ní nakreslí žlutý placeholder přes celé plátno. Nevypovídá to o aplikaci. Řádky se dají
+  zkontrolovat tak, že se poskládají ručně do `VStack`u mimo `List`.
+
+Stav běžící aplikace jde vyčíst i přes accessibility — a je to **spolehlivější než render**,
+protože měří skutečné okno. Chodí se po `UI elements` po úrovních; `entire contents` na
+SwiftUI okně vrátí nulu:
 
 ```bash
-osascript -e 'tell application "System Events" to tell process "PRism" \
-    to get value of every static text of every group of window 1'
+osascript <<'EOF'
+tell application "System Events" to tell process "PRism"
+    set out to {}
+    repeat with e in (UI elements of window 1)
+        set end of out to (role of e) & " pos=" & (position of e as string) ¬
+            & " size=" & (size of e as string)
+    end repeat
+    return out
+end tell
+EOF
 ```
 
-Tlačítka takhle ale nepřečteš — SwiftUI jejich titulek přes AppleScript nevystavuje.
+`value` vrátí texty, `description` popisky tlačítek (`Obnovit`, `Skrýt boční panel`).
+Takhle se dá dokázat i rozvržení: že seznam začíná pod toolbarem se pozná porovnáním
+`position` scroll areay s výškou `AXToolbar`. Když se s uživatelem lišíte v tom, co je na
+obrazovce, tohle to rozhodne — screenshot nedostaneš.
 
 **Když si na chvíli upravíš `RootView`, ať vidíš jiný stav, nezapomeň rebuildnout, než
 řekneš, že je hotovo.** Vrácený zdroják na běžící aplikaci nic nezmění a pak se ukazuje
@@ -470,15 +526,15 @@ a dotáhnout detail se SHA.
 Zdroje a slučování hotové (issue #5) — `Source` v `App/Models/` a `PullRequestList`
 v `App/Policy/`.
 
-Polling hotový (issue #6) — `App/Polling/`. Spojuje gateway, zdroje a slučování do
-`PollState`, který se dá rovnou kreslit. Poslední vrstva bez UI: zbývá ji zapojit do okna
-se seznamem (#7).
+Polling hotový (issue #6) — `App/Polling/`.
 
-Rozpracovaná fáze 1 (seznam PR).
+**Fáze 1 hotová (issue #7).** Aplikace ukazuje skutečné PR: okno se seznamem napříč
+repozitáři, prázdný stav, úvodní loading, banner při výpadku a rate limitu, výběr řádku.
+Stav review je zatím u všech `neběželo` — spouštění přijde ve fázi 3.
 
 Plánované fáze:
 
-1. Seznam PR z `gh` + polling — **modely a `GitHubGateway` hotové**
+1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
 2. Checkout cache + worktree
 3. `ReviewRunner` + parsování streamu
 4. UI diffu s bublinami

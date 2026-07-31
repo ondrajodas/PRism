@@ -39,8 +39,8 @@ struct RootView: View {
         case .checking:
             ProgressView("Kontroluji prostředí…")
                 .frame(minWidth: 600, minHeight: 400)
-        case .ready:
-            ContentView()
+        case .ready(let toolPaths):
+            ContentView(toolPaths: toolPaths)
         case .blocked(let report):
             PreflightGateView(report: report) {
                 Task { await model.check() }
