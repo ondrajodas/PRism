@@ -96,6 +96,8 @@ pr-review.xcodeproj/      Xcode projekt (shared scheme je verzovaný)
 App/                      zdrojáky aplikace — target pr-review
 Tests/                    unit testy — target pr-reviewTests
 bin/run.sh                build + spuštění jedním příkazem
+Info.plist                název aplikace, verze, minimální systém
+pr-review.entitlements    vypnutý App Sandbox
 docs/superpowers/specs/   návrh a specifikace
 CLAUDE.md                 pravidla pro práci v repu
 README.md                 tento soubor
@@ -104,4 +106,8 @@ README.md                 tento soubor
 
 `App/` a `Tests/` jsou v projektu napojené jako **buildable folders** — obsah se do
 targetu bere z filesystému. Nový soubor stačí vytvořit, do `project.pbxproj` se nic
-nezapisuje.
+nezapisuje. `Info.plist` a entitlements proto leží v kořeni: cokoli uvnitř `App/`, co
+není zdroják, by se zkopírovalo do `.app` jako resource.
+
+Projekt, target i produkt se jmenují `pr-review`; uživateli se aplikace hlásí jako
+**GitHub PR Review** (`CFBundleName` a `CFBundleDisplayName` v `Info.plist`).

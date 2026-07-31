@@ -106,6 +106,15 @@ patří to do `Policy`.
   (`PBXFileSystemSynchronizedRootGroup`) — soubory i podsložky se do targetu berou
   z filesystému. Nový zdroják = jen ho vytvořit. Editovat pbxproj je potřeba jen při
   změně targetů nebo build settings.
+- **Do `App/` patří jen zdrojáky.** Buildable folder zkopíruje všechno, co neumí
+  zkompilovat, do `.app` jako resource — `Info.plist` uvnitř `App/` skončil v bundlu
+  dvakrát, podruhé s nerozexpandovanými `$(...)`. Konfigurace bundle (`Info.plist`,
+  `pr-review.entitlements`) proto leží v kořeni repa.
+- **Název aplikace je jinde než název projektu.** Target, produkt i repo jsou
+  `pr-review`; uživateli se aplikace hlásí jako **GitHub PR Review**. `CFBundleName`
+  nejde nastavit přes `INFOPLIST_KEY_*` — Xcode ho generuje z `PRODUCT_NAME` — proto má
+  projekt vlastní `Info.plist` místo `GENERATE_INFOPLIST_FILE`. Swiftový modul drží
+  `PRODUCT_MODULE_NAME = pr_review`, takže testy importují `pr_review`.
 - **Moduly jsou složky, ne targety.** Všechen kód žije v jednom app targetu; `Policy`
   a spol. budou podsložky `App/`. Framework by si vynutil `public` u všeho, co používá
   UI — daň, kterou osobní aplikace nepotřebuje. Vyčlenit se dá později.

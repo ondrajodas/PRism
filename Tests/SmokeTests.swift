@@ -9,6 +9,15 @@ import Testing
     #expect(Bundle.main.bundleIdentifier == "com.ondrajodas.pr-review")
 }
 
+/// Projekt, target i repo se jmenují `pr-review`; uživateli se aplikace hlásí jinak.
+@Test func appPresentsItselfUnderFriendlyName() {
+    let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+    let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+
+    #expect(displayName == "GitHub PR Review")
+    #expect(name == "GitHub PR Review")
+}
+
 @Test @MainActor func contentViewCanBeCreated() {
     _ = ContentView()
 }

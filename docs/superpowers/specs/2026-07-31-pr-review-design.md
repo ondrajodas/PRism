@@ -233,6 +233,12 @@ Tři oblasti. Zvolený tvar: diff v plné šířce s nálezy u kódu a tabbed pa
   skoro nemění. `App/` a `Tests/` jsou v projektu `PBXFileSystemSynchronizedRootGroup`,
   takže obsah targetu vychází z filesystému: nový zdroják se nikam nezapisuje a v pbxproj
   nevznikají merge konflikty.
+- **Uživatelský název je „GitHub PR Review", technický `pr-review`.** Repo, target,
+  scheme i produkt (`pr-review.app`) drží technický název, aby skripty a cesty zůstaly
+  bez mezer; aplikace se v Docku, Finderu a menu baru hlásí lidsky. `CFBundleName` jde
+  nastavit jen přes `PRODUCT_NAME`, takže projekt má vlastní `Info.plist` místo
+  `GENERATE_INFOPLIST_FILE`. Přejmenovat rovnou produkt by bylo jednodušší, ale mezery
+  v názvu `.app` by prosákly do `bin/run.sh`, `TEST_HOST` a `killall`.
 - **Swift 6 language mode od prvního commitu.** Aplikace bude žonglovat s podprocesy a
   souběžnými review běhy; strict concurrency zapnutá dodatečně by znamenala refaktoring
   hotového kódu.

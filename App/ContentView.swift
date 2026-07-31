@@ -4,7 +4,7 @@ import SwiftUI
 struct ContentView: View {
     var body: some View {
         ContentUnavailableView(
-            "pr-review",
+            "GitHub PR Review",
             systemImage: "checklist",
             description: Text("Seznam PR se sem doplní v dalších fázích.")
         )
