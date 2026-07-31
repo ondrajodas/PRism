@@ -13,7 +13,9 @@ strukturovaný výstup a vykreslí ho.
 
 ## Stav
 
-**Návrh odsouhlasen, neimplementováno.** V repu je zatím jen dokumentace.
+**Scaffold hotový, funkcionalita se teprve staví.** V repu je Xcode projekt, který se
+buildí, testuje a spustí do prázdného okna. Žádná z pěti fází (viz
+[CLAUDE.md](CLAUDE.md)) zatím není hotová.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/pr-review/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -64,7 +66,13 @@ Aplikace binárky hledá absolutní cestou, protože GUI aplikace spuštěná z 
 
 ## Build
 
-Xcode projekt zatím neexistuje. Až vznikne:
+Spustit aplikaci — jeden příkaz, buildne v Debug a otevře okno:
+
+```bash
+./bin/run.sh
+```
+
+Samotný build a testy:
 
 ```bash
 xcodebuild -project pr-review.xcodeproj -scheme pr-review build
@@ -74,15 +82,32 @@ xcodebuild -project pr-review.xcodeproj -scheme pr-review build
 xcodebuild -project pr-review.xcodeproj -scheme pr-review test
 ```
 
+`bin/run.sh` buildí do `build/` v repu (`-derivedDataPath`), aby byla cesta k `.app`
+předvídatelná; složka je gitignorovaná. Před spuštěním ukončí předchozí instanci.
+
 Aplikace běží **bez App Sandboxu** — spouští `git`, `gh` a `claude` a zapisuje do vlastní
-cache. Pro lokální použití stačí ad-hoc podpis (`codesign -s -`); Developer ID podpis a
-notarizace by byly potřeba až pro distribuci.
+cache. Podpis je ad-hoc (`CODE_SIGN_IDENTITY = "-"`), takže build nepotřebuje Apple účet
+ani tým. Developer ID podpis a notarizace by byly potřeba až pro distribuci.
 
 ## Struktura
 
 ```
+pr-review.xcodeproj/      Xcode projekt (shared scheme je verzovaný)
+App/                      zdrojáky aplikace — target pr-review
+Tests/                    unit testy — target pr-reviewTests
+bin/run.sh                build + spuštění jedním příkazem
+Info.plist                název aplikace, verze, minimální systém
+pr-review.entitlements    vypnutý App Sandbox
 docs/superpowers/specs/   návrh a specifikace
 CLAUDE.md                 pravidla pro práci v repu
 README.md                 tento soubor
 .gitignore                artefakty Xcode buildu, SPM, .DS_Store
 ```
+
+`App/` a `Tests/` jsou v projektu napojené jako **buildable folders** — obsah se do
+targetu bere z filesystému. Nový soubor stačí vytvořit, do `project.pbxproj` se nic
+nezapisuje. `Info.plist` a entitlements proto leží v kořeni: cokoli uvnitř `App/`, co
+není zdroják, by se zkopírovalo do `.app` jako resource.
+
+Projekt, target i produkt se jmenují `pr-review`; uživateli se aplikace hlásí jako
+**GitHub PR Review** (`CFBundleName` a `CFBundleDisplayName` v `Info.plist`).
