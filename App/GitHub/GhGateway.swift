@@ -29,7 +29,7 @@ struct GhGateway: GitHubGateway {
     }
 
     func searchPullRequests(query: String) async throws -> [PullRequestSummary] {
-        let arguments = ["search", "prs"] + Self.tokens(of: query) + [
+        let arguments = ["search", "prs"] + GhSearchQuery.arguments(from: query) + [
             "--limit", String(searchLimit),
             "--json", GhSearchItem.jsonFields,
         ]
@@ -46,13 +46,6 @@ struct GhGateway: GitHubGateway {
         ]
 
         return try await run(arguments, decodedAs: GhPullRequestDetail.self).pullRequest(id: id)
-    }
-
-    /// Dotaz se posílá po tokenech, ne jako jeden argument. `gh search prs` bere každý
-    /// argument jako jeden výraz — celý dotaz v jednom by z `review-requested:@me is:open`
-    /// udělal `review-requested:"@me is:open"` a GitHub ho odmítne.
-    private static func tokens(of query: String) -> [String] {
-        query.split(whereSeparator: \.isWhitespace).map(String.init)
     }
 
     private func run<T: Decodable>(_ arguments: [String], decodedAs type: T.Type) async throws -> T {

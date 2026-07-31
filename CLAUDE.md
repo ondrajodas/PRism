@@ -211,6 +211,7 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 | `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
+| `GhSearchQuery` | Rozdělení search dotazu na argumenty `gh` — čistá funkce |
 | `GhSearchItem`, `GhPullRequestDetail` | Tvar JSONu z `gh` a převod na doménové modely |
 | `PullRequestState(ghState:isDraft:)` | Mapování stavu — `gh` ho popisuje dvěma poli |
 
@@ -222,9 +223,12 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   Dotahovat detail rovnou v gateway pro každý nalezený PR by z jednoho pollu udělalo N+1
   podprocesů — **kdy se detail dotáhne, rozhoduje polling** (#6), typicky jen u PR se
   změněným `updatedAt`.
-- **Dotaz se posílá po tokenech.** `gh search prs` bere každý argument jako jeden výraz;
-  celý dotaz v jednom argumentu udělá z `review-requested:@me is:open`
-  `review-requested:"@me is:open"` a GitHub ho odmítne.
+- **Dotaz se posílá po argumentech a uvozovky se respektují** (`GhSearchQuery`).
+  `gh search prs` bere každý argument jako jeden výraz a hodnotu s mezerou si sám
+  uzávorkuje. Celý dotaz v jednom argumentu proto GitHub odmítne
+  (`review-requested:"@me is:open"`), zatímco dělení naslepo **nespadne a tiše hledá něco
+  jiného**: z `label:"help wanted"` se stane `label:help` plus fulltextové `wanted`.
+  Ověřeno na živém `gh` — obě podoby vracejí jiné PR.
 - **Chyby se klasifikují z exit kódu a textu.** `gh` má vlastní exit kód `4` pro chybějící
   přihlášení, zbytek (`HTTP 401`, `rate limit`, `error connecting to`,
   `Could not resolve to`) se pozná z výstupu. Je to křehké, ale nic lepšího `gh` nenabízí —
