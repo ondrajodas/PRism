@@ -15,6 +15,10 @@ strukturovaný výstup a vykreslí ho.
 
 **Návrh odsouhlasen, neimplementováno.** V repu je zatím jen dokumentace.
 
+Postup se dá sledovat přes [releases](https://github.com/ondrajodas/pr-review/releases) —
+po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
+aktuálně je.
+
 - [Návrh (specifikace)](docs/superpowers/specs/2026-07-31-pr-review-design.md) — plný
   návrh včetně záznamu rozhodnutí a zamítnutých alternativ
 - [CLAUDE.md](CLAUDE.md) — pravidla pro práci v tomto repu

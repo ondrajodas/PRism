@@ -31,9 +31,24 @@ včetně důvodu.
   README a všeho v `docs/`.
 - **Identifikátory v kódu anglicky** — názvy typů, funkcí, polí, souborů, flagů:
   `blockingCategories`, `headSha`, `ReviewRunner`. Kód se česky nepíše.
+- **Issues celé česky** — titulek i popis.
 - **Commit messages, názvy branchí, titulky a popisy PR anglicky.** Formát
   [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+- **Release notes česky** (viz Pracovní postup).
 - **Žádné AI atribuce** v commitech ani v PR — bez podpisů a bez „generated with".
+
+## Pracovní postup (git)
+
+- **Všechno jde přes PR.** Žádné přímé pushe do `main` — každá změna (kód i dokumentace)
+  má vlastní branch a PR, i když je malá. PR odkazuje na issue, které řeší.
+- **Branch:** anglicky, krátce, s číslem issue — např. `issue-4-github-gateway`.
+- **Po mergnutí PR se vydá nový tag a GitHub release.** Release notes píšeme česky a
+  popisují progress: co se změnilo, jaký je aktuální stav proti milníkům a co je další
+  krok. Release je deník projektu — kdo si přečte poslední release, ví, kde jsme.
+- **Verzování:** `v0.<milník>.<pořadí PR v milníku>` — např. třetí mergnutý PR
+  v milníku 1 je `v0.1.3`. Verze `v1.0.0` = dokončený rozsah v1 podle specifikace.
+- Binárky se do release nepřikládají — buildujeme lokálně. Release slouží k záznamu
+  postupu, ne k distribuci.
 
 ## Co aplikace je
 
