@@ -222,6 +222,22 @@ Tři oblasti. Zvolený tvar: diff v plné šířce s nálezy u kódu a tabbed pa
   cache mimo sandbox kontejner. Je to osobní nástroj, ne submission do App Store. Pro
   lokální použití stačí ad-hoc podpis (`codesign -s -`); Developer ID podpis a
   notarizace by byly potřeba až pro distribuci.
+- **Jeden app target, moduly jako složky.** Sedm modulů z architektury nejsou samostatné
+  targety — žijí jako podsložky `App/`. Framework `PRReviewCore` by dal testům přístup
+  bez launche aplikace, ale vynutil by `public` u každého typu, který se dotkne UI. To je
+  daň za hranici, kterou u osobní aplikace nikdo nevymáhá. Testy vidí dovnitř přes
+  `@testable import pr_review` proti app targetu (`TEST_HOST`). Vyčlenit framework jde
+  kdykoli později; opačný směr by byl dražší.
+- **`project.pbxproj` je psaný ručně, zdroje jsou buildable folders.** Žádný XcodeGen ani
+  Tuist — byla by to instalovaná závislost navíc kvůli souboru, který se po scaffoldu
+  skoro nemění. `App/` a `Tests/` jsou v projektu `PBXFileSystemSynchronizedRootGroup`,
+  takže obsah targetu vychází z filesystému: nový zdroják se nikam nezapisuje a v pbxproj
+  nevznikají merge konflikty.
+- **Swift 6 language mode od prvního commitu.** Aplikace bude žonglovat s podprocesy a
+  souběžnými review běhy; strict concurrency zapnutá dodatečně by znamenala refaktoring
+  hotového kódu.
+- **Ad-hoc podpis** (`CODE_SIGN_IDENTITY = "-"`, styl Manual). Build nepotřebuje Apple
+  účet ani tým, což drží `xcodebuild` reprodukovatelný na čistém stroji.
 - **Binárky se musí hledat absolutní cestou.** GUI aplikace spuštěná z Finderu nedědí
   `PATH` z shellu, takže `gh`, `git` ani `claude` se podle jména nenajdou. Aplikace je
   vyhledá při startu (zkoušením známých míst — `/opt/homebrew/bin`, `~/.local/bin` —
@@ -288,6 +304,8 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Paralelní reviewery, mechanický odznak `2×` | Agregační session slučující nálezy | Nesouhlas mezi reviewery je informace; slučování stojí session a tu informaci zahodí |
 | Nálezy klíčované `headSha` | Klíčované podle PR | Nové commity musí zneplatnit, ne tiše mást |
 | Bez terminálu v v1 | SwiftTerm od začátku | `stream-json` vykreslený nativně je pro sledování lepší; zásah je vzácný |
+| Jeden app target, moduly jako složky | Framework `PRReviewCore` + app | Framework si vynutí `public` u všeho, co vidí UI; hranici jde vyčlenit později |
+| Ručně psaný `project.pbxproj` + buildable folders | XcodeGen / Tuist | Nechceme instalovanou závislost kvůli souboru, který se skoro nemění; synchronizované složky odstraní důvod pbxproj vůbec editovat |
 
 ## K ověření před implementací
 

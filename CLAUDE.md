@@ -102,6 +102,13 @@ patří to do `Policy`.
 - **Nepoužívat `final`** u typů, které se v testech nahrazují.
 - **Protokol + fake, ne mockovací framework**, u tří modulů se vnějším světem.
 - **Nové soubory drž malé a soustředěné.** Když soubor roste, obvykle dělá víc věcí.
+- **Do `project.pbxproj` nesahej.** `App/` a `Tests/` jsou buildable folders
+  (`PBXFileSystemSynchronizedRootGroup`) — soubory i podsložky se do targetu berou
+  z filesystému. Nový zdroják = jen ho vytvořit. Editovat pbxproj je potřeba jen při
+  změně targetů nebo build settings.
+- **Moduly jsou složky, ne targety.** Všechen kód žije v jednom app targetu; `Policy`
+  a spol. budou podsložky `App/`. Framework by si vynutil `public` u všeho, co používá
+  UI — daň, kterou osobní aplikace nepotřebuje. Vyčlenit se dá později.
 - Chybové stavy jsou v návrhu vyjmenované (viz specifikace, sekce *Chování při chybách*)
   — každý z nich má mít v UI vlastní rozlišitelný stav. `čisté` (žádné nálezy) a
   `failed` (session spadla) se nesmí slít do jednoho.
@@ -118,8 +125,6 @@ patří to do `Policy`.
 
 ## Příkazy
 
-Xcode projekt zatím neexistuje. Až vznikne:
-
 ```bash
 xcodebuild -project pr-review.xcodeproj -scheme pr-review build
 ```
@@ -127,6 +132,14 @@ xcodebuild -project pr-review.xcodeproj -scheme pr-review build
 ```bash
 xcodebuild -project pr-review.xcodeproj -scheme pr-review test
 ```
+
+```bash
+./bin/run.sh    # build v Debug + otevření aplikace
+```
+
+`xcodebuild` na tomhle stroji plive na začátku výstupu chyby o `CoreSimulator` — jsou
+neškodné, týkají se iOS simulátorů, ne macOS buildu. Rozhoduje `** BUILD SUCCEEDED **`,
+resp. `** TEST SUCCEEDED **` na konci.
 
 ## Prostředí
 
@@ -138,7 +151,10 @@ xcodebuild -project pr-review.xcodeproj -scheme pr-review test
 
 ## Stav
 
-Návrh odsouhlasen, neimplementováno. Plánované fáze:
+Scaffold hotový (issue #1) — projekt se buildí, `xcodebuild test` běží, `./bin/run.sh`
+otevře prázdné okno. Žádná fáze zatím není rozpracovaná.
+
+Plánované fáze:
 
 1. Seznam PR z `gh` + polling
 2. Checkout cache + worktree
