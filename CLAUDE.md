@@ -32,8 +32,11 @@ včetně důvodu.
 - **Identifikátory v kódu anglicky** — názvy typů, funkcí, polí, souborů, flagů:
   `blockingCategories`, `headSha`, `ReviewRunner`. Kód se česky nepíše.
 - **Issues celé česky** — titulek i popis.
-- **Commit messages, názvy branchí, titulky a popisy PR anglicky.** Formát
+- **Commit messages, názvy branchí a titulky PR anglicky.** Formát
   [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+- **Popisy PR česky.** Titulek zůstává anglicky (je z něj commit message při mergi),
+  ale tělo PR je próza pro mě — a próza se v tomhle repu píše česky. Platí i pro
+  komentáře na PR a odpovědi na review.
 - **Release notes česky** (viz Pracovní postup).
 - **Žádné AI atribuce** v commitech ani v PR — bez podpisů a bez „generated with“.
 
@@ -42,8 +45,9 @@ včetně důvodu.
 - **Všechno jde přes PR.** Žádné přímé pushe do `main` — každá změna (kód i dokumentace)
   má vlastní branch a PR, i když je malá. PR odkazuje na issue, které řeší.
 - **Branch:** anglicky, krátce, s číslem issue — např. `issue-4-github-gateway`.
-- **Před prvním pushem mi appku spusť a dej mi prostor na připomínky.** Platí pro první
-  push branche, ne pro opravy po review — tam už je co komentovat na PR.
+- **Před prvním pushem mi appku spusť a dej mi prostor na připomínky — ale jen když je
+  na změně co vidět.** Platí pro první push branche, ne pro opravy po review — tam už je
+  co komentovat na PR.
 
   ```bash
   ./bin/run.sh
@@ -53,9 +57,14 @@ včetně důvodu.
   proklikám, dokud je změna ještě levná na přepsání. Zelené testy nejsou důkaz, že se to
   chová, jak jsem chtěl.
 
-  Napiš, **na co se mám podívat** a co v příslušné obrazovce uvidím. Když je změna
-  neviditelná (vrstva bez UI), řekni to a ukaž místo toho, jak se to projeví — třeba že
-  appka projde tam, kam předtím neprošla.
+  Napiš, **na co se mám podívat** a co v příslušné obrazovce uvidím.
+
+  **Když se změna v UI nijak neprojeví** (vrstva bez UI — modely, parser, protokol),
+  **na pauzu mě netahej.** Neviditelnou změnu nemám jak proklikat, takže by pauza jen
+  brzdila. Napiš do shrnutí jednou větou, že vidět není nic a proč, dolož to zelenými
+  testy a **pokračuj rovnou na commit a PR** — kontrola proběhne nad diffem na PR.
+  Rozhodující je, jestli se něco změnilo na obrazovce, ne jestli je změna malá: oprava
+  jednoho textu v labelu se ukazuje, nový `Codable` model ne.
 
   Když ke stavu, který chceš ukázat, nejde přijít normálním používáním (chybějící binárka,
   chyba sítě), viz *Jak si zkontrolovat, jak view vypadá* v sekci Testování — a hlavně
@@ -69,6 +78,17 @@ včetně důvodu.
   `gh pr edit --add-reviewer Copilot` **nepoužívej** — na tomhle repu padá na deprecated
   Projects classic a reviewer se nepřidá; REST `/requested_reviewers` vrátí 200 a bota
   tiše zahodí. Skript proto jde přes GraphQL mutaci `requestReviews` s `botIds`.
+
+  Totéž platí pro `gh pr edit` obecně a pro `gh issue view` — obojí si tahá
+  `projectCards` a spadne dřív, než něco udělá. Číst a upravovat jde přes REST:
+
+  ```bash
+  gh api repos/{owner}/{repo}/issues/3 --jq .body
+  jq -Rs '{body: .}' telo.md > payload.json
+  gh api repos/{owner}/{repo}/pulls/32 -X PATCH --input payload.json
+  ```
+
+  `gh pr create`, `gh pr list` a `gh api` fungují normálně — zlobí jen ty dva příkazy.
 
   Když Copilot nálezy má, projdi je a řekni, co je reálné a co šum — teprve pak se
   rozhoduje dál. Když nemá žádné, **stejně čekej na můj pokyn.**
@@ -139,6 +159,36 @@ Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`.
 **Kam co psát:** rozhodovací logika patří do `Policy` jako čistá funkce — tam se testuje
 bez mockování. Když se přistihneš, že píšeš `if` nad nálezy někde ve view nebo v runneru,
 patří to do `Policy`.
+
+### Doménové modely (`App/Models/`)
+
+Typy, na kterých staví všechny moduly — proto vlastní složka, ne příslušnost k jednomu
+z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`.
+
+| Typ | Co je |
+|---|---|
+| `RepoID` | `owner/repo` |
+| `PRIdentifier` | `owner/repo#číslo` — klíč všeho, co se váže k PR: dedup zdrojů, review stav, uložené nálezy |
+| `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav |
+| `PullRequestState` | `open` / `draft` / `merged` / `closed` |
+| `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
+
+Tři věci, které se u nich nemají rozbít:
+
+- **Identifikátory se kódují na jediný řetězec**, ne na objekt s poli. Existuje pak jeden
+  kanonický zápis pro disk, klíč slovníku i UI. Parsování a formátování drží
+  `LosslessStringConvertible` (`init?(_:)` + `description`) a `Codable` ho jen používá.
+  `CodingKeyRepresentable` je tam proto, aby `[PRIdentifier: ReviewState]` v JSONu vyšlo
+  jako objekt, ne jako pole střídavých klíčů a hodnot.
+- **`ReviewState` rozlišuje chybové stavy**, protože každý vede jinam: `clean` (doběhlo,
+  nic nenašlo) je opak `failed` (session spadla), `checkoutFailed` se spraví opakováním
+  clonu a `timedOut` si drží částečné nálezy. Případy: `notStarted`, `queued`, `cloning`,
+  `checkoutFailed(detail:)`, `running(finished:total:)`, `clean`, `completed(findings:)`,
+  `failed(detail:)`, `timedOut(findings:)`, `stale`.
+- **`clean` vzniká jen přes `ReviewState.finished(findingCount:)`.** Jinak se dřív nebo
+  později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
+
+Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
 
 ### Vrstva `Environment` (`App/Environment/`)
 
@@ -214,6 +264,11 @@ Právě proto tam eskalace na `SIGKILL` je.
 
 ## Testování
 
+- **Modely** — round-trip přes `Codable` u každého typu i každého případu `ReviewState`,
+  parsování a formátování identifikátorů včetně neplatných vstupů, a kontrola skutečného
+  tvaru JSONu (identifikátor musí být řetězec, slovník klíčovaný jím musí být objekt).
+  Pomocníci na round-trip jsou v `Tests/Models/CodableRoundTrip.swift`; balí hodnotu do
+  pole, protože holý řetězec by na nejvyšší úrovni byl JSON fragment.
 - **`Policy`** — vyčerpávající unit testy, nic se nemockuje.
 - **`Environment`** — `BinaryLocator`, `GhAuthCheck`, `LoginShellPathReader` a `Preflight`
   proti fakes (`Tests/Environment/EnvironmentFakes.swift`). `FakeShellPathReader` počítá
@@ -292,11 +347,14 @@ Kontrola prostředí hotová (issue #2) — `Environment` vrstva a `Preflight` b
 Když něco chybí, ukáže se blokující gate se všemi problémy naráz a tlačítkem `Zkusit znovu`;
 když je všechno v pořádku, aplikace pokračuje do (zatím prázdného) `ContentView`.
 
-Žádná z pěti fází zatím není rozpracovaná.
+Doménové modely hotové (issue #3) — `App/Models/`. Vrstva bez UI: aplikace se chová
+stejně jako předtím, jen na ní má co stavět fáze 1.
+
+Rozpracovaná fáze 1 (seznam PR).
 
 Plánované fáze:
 
-1. Seznam PR z `gh` + polling
+1. Seznam PR z `gh` + polling — **doménové modely hotové**
 2. Checkout cache + worktree
 3. `ReviewRunner` + parsování streamu
 4. UI diffu s bublinami

@@ -17,10 +17,12 @@ názoru.
 
 ## Stav
 
-**Scaffold a kontrola prostředí hotové, funkcionalita se teprve staví.** Aplikace se
-buildí, testuje a při startu si ověří, že má `gh`, `git` i `claude` a že je `gh`
-přihlášený — jinak řekne, co chybí a čím se to spraví. Za tou kontrolou je zatím prázdné
-okno. Žádná z pěti fází (viz [CLAUDE.md](CLAUDE.md)) není hotová.
+**Scaffold, kontrola prostředí a doménové modely hotové, funkcionalita se teprve staví.**
+Aplikace se buildí, testuje a při startu si ověří, že má `gh`, `git` i `claude` a že je
+`gh` přihlášený — jinak řekne, co chybí a čím se to spraví. Za tou kontrolou je zatím
+prázdné okno. Stojí pod ním doménové modely (pull request, identifikátory, stav review),
+na kterých staví první fáze — seznam PR. Žádná z pěti fází (viz [CLAUDE.md](CLAUDE.md))
+není hotová.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -107,9 +109,11 @@ ani tým. Developer ID podpis a notarizace by byly potřeba až pro distribuci.
 ```
 PRism.xcodeproj/          Xcode projekt (shared scheme je verzovaný)
 App/                      zdrojáky aplikace — target PRism
+  Models/                 doménové modely: PR, identifikátory, stav review
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
   Views/                  SwiftUI obrazovky
 Tests/                    unit testy — target PRismTests
+  Models/                 testy modelů + pomocníci na Codable round-trip
   Environment/            testy Environment vrstvy + fakes
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR
