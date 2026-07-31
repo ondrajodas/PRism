@@ -35,7 +35,7 @@ včetně důvodu.
 - **Commit messages, názvy branchí, titulky a popisy PR anglicky.** Formát
   [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 - **Release notes česky** (viz Pracovní postup).
-- **Žádné AI atribuce** v commitech ani v PR — bez podpisů a bez „generated with".
+- **Žádné AI atribuce** v commitech ani v PR — bez podpisů a bez „generated with“.
 
 ## Pracovní postup (git)
 
@@ -49,7 +49,7 @@ včetně důvodu.
   ./bin/run.sh
   ```
 
-  Pak **zastav a čekej.** Ne „spustil jsem a jde to" a hned commit — smysl je, že si to
+  Pak **zastav a čekej.** Ne „spustil jsem a jde to“ a hned commit — smysl je, že si to
   proklikám, dokud je změna ještě levná na přepsání. Zelené testy nejsou důkaz, že se to
   chová, jak jsem chtěl.
 
@@ -88,7 +88,7 @@ Nativní macOS aplikace (SwiftUI), která hlídá GitHub PR přiřazené mně k 
 na ně review skilly Claude Code jako headless session a nálezy zobrazuje vedle diffu.
 
 Aplikace je **orchestrátor a prohlížeč** — nemá vlastní review logiku. Když se objeví
-potřeba „chytřejšího" review, patří to do skillu, ne do aplikace.
+potřeba „chytřejšího“ review, patří to do skillu, ne do aplikace.
 
 Plný návrh: [`docs/superpowers/specs/2026-07-31-prism-design.md`](docs/superpowers/specs/2026-07-31-prism-design.md)
 
@@ -117,7 +117,7 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    mít vlastní worktrees.
 4. **Aplikace nikdy nedrží GitHub token.** Autentizace je delegovaná na `gh`.
 5. **Nálezy jsou klíčované `headSha`.** Nové commity nálezy zneplatní (stav
-   „zastaralé"), nikdy se nesmí tiše zobrazovat proti kódu, který už neexistuje.
+   „zastaralé“), nikdy se nesmí tiše zobrazovat proti kódu, který už neexistuje.
 
 ## Architektura
 

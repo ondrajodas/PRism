@@ -235,7 +235,7 @@ Tři oblasti. Zvolený tvar: diff v plné šířce s nálezy u kódu a tabbed pa
   nevznikají merge konflikty.
 - **Jeden název `PRism` napříč vším** — repo, projekt, target, scheme, produkt
   (`PRism.app`), Swiftový modul i to, co vidí uživatel v Docku. Krátce existovala
-  dvojice „technický `pr-review` + uživatelský `GitHub PR Review`"; sjednocení ji
+  dvojice „technický `pr-review` + uživatelský `GitHub PR Review`“; sjednocení ji
   zrušilo, protože dvě jména pro jednu věc si musí každý pamatovat a nic tím nezískal.
   Název bez mezer navíc drží `bin/run.sh`, `TEST_HOST` a `killall` jednoduché.
 - **Vlastní `Info.plist` místo `GENERATE_INFOPLIST_FILE`.** `CFBundleName` jde nastavit
@@ -317,10 +317,10 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Jeden app target, moduly jako složky | Framework `PRismCore` + app | Framework si vynutí `public` u všeho, co vidí UI; hranici jde vyčlenit později |
 | Název `PRism` všude | `pr-review`, `gh-pr-review`, dvojice technický + uživatelský název | Hranol rozkládá světlo na spektrum, appka rozkládá PR na nezávislé pohledy — pojmenovává to, čím se liší. `gh-` prefix je konvence pro rozšíření `gh` CLI a u nativní aplikace by mátl. Dvě jména pro jednu věc si musí každý pamatovat a nic nevynesla |
 | Ručně psaný `project.pbxproj` + buildable folders | XcodeGen / Tuist | Nechceme instalovanou závislost kvůli souboru, který se skoro nemění; synchronizované složky odstraní důvod pbxproj vůbec editovat |
-| `Preflight` nad `BinaryLocator`em, ne v něm | Locator dělá lokaci i `gh auth status` | Locator má umět jedno; „locator" navíc nehledá přihlášení. `GitHubGateway` může `GhAuthCheck` znovu použít pro průběžný re-check, aniž by tahal lokaci binárek |
-| `ToolPaths` s neoptional poli, které vzniknou jen po úspěšném preflightu | Optional cesty všude, kontrola u každého volání | Typ nese důkaz, že preflight prošel. Zbytek aplikace pak nemá kód pro stav „binárka chybí", který nemůže nastat |
+| `Preflight` nad `BinaryLocator`em, ne v něm | Locator dělá lokaci i `gh auth status` | Locator má umět jedno; „locator“ navíc nehledá přihlášení. `GitHubGateway` může `GhAuthCheck` znovu použít pro průběžný re-check, aniž by tahal lokaci binárek |
+| `ToolPaths` s neoptional poli, které vzniknou jen po úspěšném preflightu | Optional cesty všude, kontrola u každého volání | Typ nese důkaz, že preflight prošel. Zbytek aplikace pak nemá kód pro stav „binárka chybí“, který nemůže nastat |
 | Offline `gh` v M0 blokuje start | Pustit aplikaci dál a spolehnout se na offline režim | Spec offline režim slibuje, ale v M0 neexistuje cache, ze které by se dalo něco zobrazit — bez funkčního `gh` aplikace neumí nic. Tolerance patří do `PollingService`, kde už bude co ukázat. **Tohle rozhodnutí se má s #6 přehodnotit.** |
-| „Nepřihlášený" a „stav se nepodařilo zjistit" jsou dva stavy | Jeden stav „gh nefunguje" | První se spraví `gh auth login`, druhý ne — slití by uživatele poslalo špatným směrem. Stejný důvod jako u `čisté` vs. `failed` u review |
+| „Nepřihlášený“ a „stav se nepodařilo zjistit“ jsou dva stavy | Jeden stav „gh nefunguje“ | První se spraví `gh auth login`, druhý ne — slití by uživatele poslalo špatným směrem. Stejný důvod jako u `čisté` vs. `failed` u review |
 | Gate vypíše všechny problémy naráz + `Zkusit znovu` | První problém a restart po opravě | Tři chybějící binárky se vyřeší jedním průchodem, ne třemi spuštěními |
 | Známá místa první, login shell jen pro zbytek a jen jednou | Vždycky přečíst `PATH` z login shellu | Známá místa pokryjí skoro všechny instalace bez spuštění procesu. Login shell umí být pomalý nebo zaseknutý na cizím `.zshrc`, takže je to fallback s timeoutem, ne první krok |
 | `Environment` jako podpůrná vrstva | Osmý modul v tabulce architektury | Není to zodpovědnost v doméně review, je to přístup ke stroji, který si tři moduly sdílejí. Rovný seznam osmi položek by smíchal dvě různé úrovně |
