@@ -17,9 +17,10 @@ názoru.
 
 ## Stav
 
-**Scaffold hotový, funkcionalita se teprve staví.** V repu je Xcode projekt, který se
-buildí, testuje a spustí do prázdného okna. Žádná z pěti fází (viz
-[CLAUDE.md](CLAUDE.md)) zatím není hotová.
+**Scaffold a kontrola prostředí hotové, funkcionalita se teprve staví.** Aplikace se
+buildí, testuje a při startu si ověří, že má `gh`, `git` i `claude` a že je `gh`
+přihlášený — jinak řekne, co chybí a čím se to spraví. Za tou kontrolou je zatím prázdné
+okno. Žádná z pěti fází (viz [CLAUDE.md](CLAUDE.md)) není hotová.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -66,7 +67,15 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 - `git`
 
 Aplikace binárky hledá absolutní cestou, protože GUI aplikace spuštěná z Finderu nedědí
-`PATH` z shellu. Když některá chybí, ohlásí to při startu jasnou chybou.
+`PATH` z shellu. Nejdřív zkusí známá místa (`/opt/homebrew/bin`, `/usr/local/bin`,
+`/usr/bin`, `~/.local/bin`), a co v nich není, dohledá v `PATH` login shellu. Ten čte
+`.zshenv`, `.zprofile` a `.zlogin`, ale **ne `.zshrc`** — kdo má nástroj mimo známá místa
+a `PATH` doplněný jen v `.zshrc`, musí cestu přidat do `.zprofile`.
+
+Když něco chybí, aplikace se nespustí do prázdna — ukáže blokující obrazovku se **všemi**
+problémy naráz: u každého nástroje cestu, kde se našel, nebo k čemu je a čím se instaluje.
+U `gh` navíc kontroluje přihlášení. Po instalaci stačí `Zkusit znovu`, restart není
+potřeba.
 
 ## Build
 
@@ -98,7 +107,10 @@ ani tým. Developer ID podpis a notarizace by byly potřeba až pro distribuci.
 ```
 PRism.xcodeproj/          Xcode projekt (shared scheme je verzovaný)
 App/                      zdrojáky aplikace — target PRism
+  Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
+  Views/                  SwiftUI obrazovky
 Tests/                    unit testy — target PRismTests
+  Environment/            testy Environment vrstvy + fakes
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR
 Info.plist                název aplikace, verze, minimální systém

@@ -74,6 +74,18 @@ potřeba „chytřejšího" review, patří to do skillu, ne do aplikace.
 
 Plný návrh: [`docs/superpowers/specs/2026-07-31-prism-design.md`](docs/superpowers/specs/2026-07-31-prism-design.md)
 
+## Rozhodování
+
+**Návrhová rozhodnutí děláš sám.** Neptej se na potvrzení u každého detailu — kde žije
+kontrola, kam patří složka, jaký stav blokuje, jak se jmenuje typ. Rozhodni, implementuj
+a **zapiš rozhodnutí i s důvodem** do specifikace. Záznam rozhodnutí je to, co dovoluje
+pozdější korekci: je z něj vidět, proč je to tak, a proto se to dá vědomě změnit.
+
+Je to osobní nástroj. Rychleji se posoudí na běžící aplikaci než v návrhu, takže se
+rozhodnutí koriguje podle toho, jak se appka chová — ne debatou předem.
+
+Ptát se dál na: **tvrdé podmínky** níž, **merge PR** a **zavření issue**.
+
 ## Tvrdé podmínky
 
 Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav se a zeptej se.
@@ -110,11 +122,54 @@ Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`.
 bez mockování. Když se přistihneš, že píšeš `if` nad nálezy někde ve view nebo v runneru,
 patří to do `Policy`.
 
+### Vrstva `Environment` (`App/Environment/`)
+
+Pod těmi sedmi moduly leží podpůrná vrstva — přístup ke stroji, který `GitHubGateway`,
+`RepoCheckout` a `ReviewRunner` sdílejí. Není to osmý modul: nemá vlastní zodpovědnost
+v domény review, jen drží to, čím se s systémem mluví.
+
+| Typ | Co dělá |
+|---|---|
+| `Tool` | Výčet `gh` / `git` / `claude` + k čemu je a jak se instaluje (texty pro gate) |
+| `ToolPaths` | Absolutní cesty ke všem třem. **Neoptional pole** — vznikne jen když preflight prošel, takže zbytek aplikace neřeší chybějící binárku |
+| `ExecutableProbe` | Protokol: leží na cestě spustitelný soubor? Reálná implementace odmítá složky (`/usr/bin` má spustitelný bit taky) a následuje symlinky (`claude` je symlink) |
+| `ProcessRunning` | Protokol: spusť, počkej, seber stdout/stderr/exit. `SubprocessRunner` nad `Foundation.Process`, s timeoutem, eskalací `SIGTERM` → `SIGKILL` a zabitím při zrušení |
+| `ShellPathReading` | Protokol: `PATH` z login shellu (`zsh -lc 'echo $PATH'`). Selhání = prázdný seznam, ne pád |
+| `BinaryLocator` | Nejdřív známá místa, teprve pro zbytek login shell — a ten **jednou** pro všechny chybějící |
+| `GhAuthCheck` | `gh auth status`: exit 0 přihlášen, 1 nepřihlášen, cokoli jiného `checkFailed` se stderrem |
+| `Preflight` | Složí lokaci + auth do `PreflightReport` |
+
+`PreflightReport` je jediná pravda o prostředí; `problems` i `toolPaths` se z něj **jen
+počítají** — čistě, bez I/O. Tady platí totéž pravidlo jako u `Policy`: když píšeš `if`
+nad stavem prostředí ve view, patří to do reportu.
+
+**`ProcessRunning` zatím jen bufferuje.** `ReviewRunner` bude potřebovat výstup po řádcích,
+jak vzniká (`stream-json`) — to přijde jako samostatná metoda, tuhle to nemění.
+
+Tři věci o podprocesech, na které se naráží znovu:
+
+- **Blokující I/O nesmí na kooperativní pool.** `readToEnd()` ani `waitUntilExit()` neumí
+  čekat kooperativně a pool má jen tolik vláken, kolik je jader — několik paralelních review
+  by si je vzájemně vyhladovělo. `SubprocessRunner` je proto odsouvá na vlastní
+  `DispatchQueue` a volajícímu je podává přes `async let`, takže zůstávají navázané na
+  životní cyklus volání. `Task.detached` by odvázalo strukturu **a** problém neřešilo.
+- **Oba pipy se musí číst souběžně.** Sériově: než dojde EOF na prvním, druhý naplní buffer
+  jádra a proces se zasekne na zápisu.
+- **Zrušení musí proces zabít.** Bez toho čekání na EOF drží volání, dokud proces nedoběhne
+  sám. Řeší `withTaskCancellationHandler`.
+
+**`zsh -lc` nečte `.zshrc`** — neinteraktivní login shell čte `.zshenv`, `.zprofile`
+a `.zlogin`. Přidat `-i` se zkoušelo a zahodilo (viz komentář v `LoginShellPathReader`
+a specifikace): z aplikace se zaseklo a interaktivní shell navíc **ignoruje `SIGTERM`**.
+Právě proto tam eskalace na `SIGKILL` je.
+
 ## Konvence
 
 - **Krátké, jednoúčelové metody.** Čitelnost před chytrostí.
 - **Nepoužívat `final`** u typů, které se v testech nahrazují.
-- **Protokol + fake, ne mockovací framework**, u tří modulů se vnějším světem.
+- **Protokol + fake, ne mockovací framework**, u tří modulů se vnějším světem — a stejně
+  u `Environment`, kde jsou za protokolem `ExecutableProbe`, `ProcessRunning`
+  a `ShellPathReading`.
 - **Nové soubory drž malé a soustředěné.** Když soubor roste, obvykle dělá víc věcí.
 - **Do `project.pbxproj` nesahej.** `App/` a `Tests/` jsou buildable folders
   (`PBXFileSystemSynchronizedRootGroup`) — soubory i podsložky se do targetu berou
@@ -142,12 +197,47 @@ patří to do `Policy`.
 ## Testování
 
 - **`Policy`** — vyčerpávající unit testy, nic se nemockuje.
+- **`Environment`** — `BinaryLocator`, `GhAuthCheck`, `LoginShellPathReader` a `Preflight`
+  proti fakes (`Tests/Environment/EnvironmentFakes.swift`). `FakeShellPathReader` počítá
+  volání: že se login shell spustí nejvýš jednou a jen když je co dohledávat, je součást
+  kontraktu, ne detail. Plus malý počet testů proti skutečnému systému
+  (`RealEnvironmentTests`) na to, co fake ověřit neumí — složka se spustitelným bitem,
+  symlink, skutečný timeout, skutečný `zsh -lc`.
 - **Parsování streamu** — klíčový spoj. Nahrát skutečný `stream-json` výstup z reálných
   běhů jako fixtures a testovat parser proti nim: init eventy, `ReportFindings` cally,
   chybný vstup, zkrácený stream.
 - **`Config`** — merge globální + per-repo, defaulty pro neznámé repo.
 - **`GitHubGateway` / `RepoCheckout` / `ReviewRunner`** — fake v testech na úrovni
   aplikace; malý počet integračních testů proti skutečným binárkám a scratch repu.
+
+### Jak si zkontrolovat, jak view vypadá
+
+`screencapture` na tomhle stroji nefunguje (chybí oprávnění Screen Recording), takže
+screenshot běžící aplikace nedostaneš. Co funguje: dočasný test, který view vykreslí přes
+`ImageRenderer` do PNG ve scratchpadu, a ten se pak přečte. Před commitem se maže.
+
+Dva zádrhely, které to má:
+
+- **`.buttonStyle(.borderless)` se v `ImageRenderer`u nevykreslí** — místo ikony vyjde žlutý
+  placeholder chybějícího symbolu, i u symbolu, který existuje. Není to chyba v aplikaci,
+  je to omezení offscreen renderu u AppKit-backed styles. `.plain` SwiftUI kreslí sám
+  a vykreslí se správně, takže se dá ověřit. Gate proto používá `.plain`.
+- **`ImageRenderer` je `@MainActor`** — pomocná funkce v testu musí být taky, jinak Swift 6
+  neprojde.
+
+Stav běžící aplikace jde vyčíst i přes accessibility, což je užitečné na kontrolu, že se
+appka dostala do správné obrazovky:
+
+```bash
+osascript -e 'tell application "System Events" to tell process "PRism" \
+    to get value of every static text of every group of window 1'
+```
+
+Tlačítka takhle ale nepřečteš — SwiftUI jejich titulek přes AppleScript nevystavuje.
+
+**Když si na chvíli upravíš `RootView`, ať vidíš jiný stav, nezapomeň rebuildnout, než
+řekneš, že je hotovo.** Vrácený zdroják na běžící aplikaci nic nezmění a pak se ukazuje
+falešná obrazovka.
 
 ## Příkazy
 
@@ -173,12 +263,18 @@ resp. `** TEST SUCCEEDED **` na konci.
 - Vyžaduje na stroji `gh` (přihlášený), `claude` a `git`
 - **App Sandbox vypnutý** — aplikace spouští podprocesy a zapisuje do vlastní cache
 - **Binárky hledej absolutní cestou.** GUI aplikace spuštěná z Finderu nedědí `PATH` ze
-  shellu, takže `gh` se podle jména nenajde. Řeší se při startu s jasnou chybou.
+  shellu, takže `gh` se podle jména nenajde. Řeší `BinaryLocator` při startu; cesty se
+  berou z `ToolPaths`, nikdy z názvu binárky.
 
 ## Stav
 
-Scaffold hotový (issue #1) — projekt se buildí, `xcodebuild test` běží, `./bin/run.sh`
-otevře prázdné okno. Žádná fáze zatím není rozpracovaná.
+Scaffold hotový (issue #1) — projekt se buildí, `xcodebuild test` běží.
+
+Kontrola prostředí hotová (issue #2) — `Environment` vrstva a `Preflight` běží při startu.
+Když něco chybí, ukáže se blokující gate se všemi problémy naráz a tlačítkem `Zkusit znovu`;
+když je všechno v pořádku, aplikace pokračuje do (zatím prázdného) `ContentView`.
+
+Žádná z pěti fází zatím není rozpracovaná.
 
 Plánované fáze:
 
