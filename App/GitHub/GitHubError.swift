@@ -5,7 +5,7 @@ import Foundation
 /// Typované, ne řetězec: každý případ vede v UI jinam. `notAuthenticated` chce
 /// `gh auth login`, `network` se sám spraví, `rateLimited` chce počkat a `commandFailed`
 /// je něco, co jsme nečekali a je potřeba to ukázat celé.
-enum GitHubError: Error, Equatable {
+enum GitHubError: Error, Equatable, Sendable {
     /// `gh` není přihlášený, nebo mu GitHub token odmítl.
     case notAuthenticated
     /// Vyčerpaný rate limit — primární i sekundární.

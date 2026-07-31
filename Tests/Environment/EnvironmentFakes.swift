@@ -73,6 +73,37 @@ final class FakeProcessRunner: ProcessRunning, @unchecked Sendable {
     }
 }
 
+/// Čas, který se nikam neposouvá sám.
+///
+/// Místo čekání si jen zapíše, jak dlouho se mělo čekat — na tom se testuje backoff — a
+/// posune `now` o tutéž dobu, aby razítka ve stavu odpovídala. Po `stopAfter` uspáních
+/// vyhodí `CancellationError`, čímž ukončí pollovací smyčku; test tak doběhne za nulový
+/// reálný čas a bez závodů.
+final class FakeTimeSource: TimeSource, @unchecked Sendable {
+    private let lock = NSLock()
+    private let stopAfter: Int
+    private var current: Date
+    private var sleeps: [Duration] = []
+
+    init(start: Date = Date(timeIntervalSince1970: 1_000_000), stopAfter: Int = .max) {
+        current = start
+        self.stopAfter = stopAfter
+    }
+
+    var now: Date { lock.withLock { current } }
+
+    var requestedSleeps: [Duration] { lock.withLock { sleeps } }
+
+    func sleep(for duration: Duration) async throws {
+        let count: Int = lock.withLock {
+            sleeps.append(duration)
+            current = current.addingTimeInterval(duration.seconds)
+            return sleeps.count
+        }
+        if count >= stopAfter { throw CancellationError() }
+    }
+}
+
 /// Cesty, na kterých nástroje leží podle `BinaryLocator.knownLocations`.
 enum KnownPath {
     static let gh = "/opt/homebrew/bin/gh"
