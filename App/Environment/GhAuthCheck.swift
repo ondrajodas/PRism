@@ -43,8 +43,7 @@ struct GhAuthCheck: Sendable {
     }
 
     private static func message(from result: ProcessResult) -> String {
-        let output = result.standardError.isEmpty ? result.standardOutput : result.standardError
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "gh auth status skončil s kódem \(result.exitCode)." : trimmed
+        let text = result.failureText
+        return text.isEmpty ? "gh auth status skončil s kódem \(result.exitCode)." : text
     }
 }

@@ -1,0 +1,78 @@
+[
+  {
+    "author": {
+      "id": "MDQ6VXNlcjE2MTE1MTA=",
+      "is_bot": false,
+      "login": "williammartin",
+      "type": "User",
+      "url": "https://github.com/williammartin"
+    },
+    "isDraft": true,
+    "number": 275,
+    "repository": {
+      "name": "go-gh",
+      "nameWithOwner": "cli/go-gh"
+    },
+    "state": "open",
+    "title": "Add per-host API endpoint overrides",
+    "updatedAt": "2026-07-31T15:32:50Z",
+    "url": "https://github.com/cli/go-gh/pull/275"
+  },
+  {
+    "author": {
+      "id": "MDQ6VXNlcjMzMTUwNTk=",
+      "is_bot": false,
+      "login": "jamietanna",
+      "type": "User",
+      "url": "https://github.com/jamietanna"
+    },
+    "isDraft": true,
+    "number": 14017,
+    "repository": {
+      "name": "cli",
+      "nameWithOwner": "cli/cli"
+    },
+    "state": "open",
+    "title": "feat(discussion): add support for Discussion Templates",
+    "updatedAt": "2026-07-30T14:37:39Z",
+    "url": "https://github.com/cli/cli/pull/14017"
+  },
+  {
+    "author": {
+      "id": "MDQ6VXNlcjE2MTE1MTA=",
+      "is_bot": false,
+      "login": "williammartin",
+      "type": "User",
+      "url": "https://github.com/williammartin"
+    },
+    "isDraft": true,
+    "number": 14013,
+    "repository": {
+      "name": "cli",
+      "nameWithOwner": "cli/cli"
+    },
+    "state": "open",
+    "title": "Route autolink requests through api.Client",
+    "updatedAt": "2026-07-31T11:24:07Z",
+    "url": "https://github.com/cli/cli/pull/14013"
+  },
+  {
+    "author": {
+      "id": "MDQ6VXNlcjQxMjYyMTA4",
+      "is_bot": false,
+      "login": "benekuehn",
+      "type": "User",
+      "url": "https://github.com/benekuehn"
+    },
+    "isDraft": false,
+    "number": 274,
+    "repository": {
+      "name": "go-gh",
+      "nameWithOwner": "cli/go-gh"
+    },
+    "state": "open",
+    "title": "fix: refresh repository identity after SSH translation",
+    "updatedAt": "2026-07-30T12:14:15Z",
+    "url": "https://github.com/cli/go-gh/pull/274"
+  }
+]

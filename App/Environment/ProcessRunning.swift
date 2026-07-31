@@ -7,6 +7,15 @@ struct ProcessResult: Sendable, Equatable {
     let standardError: String
 }
 
+extension ProcessResult {
+    /// Čím proces vysvětlil selhání: stderr, a když mlčí, stdout — ořezané. Prázdné, když
+    /// nemluví ani jeden; co říct místo toho, ví volající, protože ví, co spouštěl.
+    var failureText: String {
+        let output = standardError.isEmpty ? standardOutput : standardError
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 enum ProcessError: Error, Equatable {
     /// Binárku se nepodařilo spustit — chybí, není spustitelná, nebo ji odmítl systém.
     case launchFailed(String)

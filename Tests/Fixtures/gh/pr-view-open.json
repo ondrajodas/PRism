@@ -1,0 +1,16 @@
+{
+  "author": {
+    "id": "MDQ6VXNlcjE2MTE1MTA=",
+    "is_bot": false,
+    "login": "williammartin",
+    "name": "William Martin"
+  },
+  "baseRefOid": "d6105c45a251cd06ff34ac778eca8aa0c75b9b36",
+  "headRefOid": "958a4b2caa3fc2ac3870f7c2e20fa467a5ebe6a5",
+  "isDraft": false,
+  "number": 13997,
+  "state": "OPEN",
+  "title": "Route gpg key requests through api.Client",
+  "updatedAt": "2026-07-31T13:21:51Z",
+  "url": "https://github.com/cli/cli/pull/13997"
+}
