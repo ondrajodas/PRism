@@ -32,8 +32,11 @@ včetně důvodu.
 - **Identifikátory v kódu anglicky** — názvy typů, funkcí, polí, souborů, flagů:
   `blockingCategories`, `headSha`, `ReviewRunner`. Kód se česky nepíše.
 - **Issues celé česky** — titulek i popis.
-- **Commit messages, názvy branchí, titulky a popisy PR anglicky.** Formát
+- **Commit messages, názvy branchí a titulky PR anglicky.** Formát
   [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+- **Popisy PR česky.** Titulek zůstává anglicky (je z něj commit message při mergi),
+  ale tělo PR je próza pro mě — a próza se v tomhle repu píše česky. Platí i pro
+  komentáře na PR a odpovědi na review.
 - **Release notes česky** (viz Pracovní postup).
 - **Žádné AI atribuce** v commitech ani v PR — bez podpisů a bez „generated with“.
 
