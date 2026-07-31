@@ -5,16 +5,20 @@ import Testing
 
 @Suite("PullRequestList – slučování zdrojů")
 struct PullRequestListTests {
+    /// URL má tvar, jaký PR na GitHubu skutečně má. `owner/repo#číslo` je zápis pro nás,
+    /// ne cesta — `#` by se v URL stal fragmentem a testovací data by přestala odpovídat
+    /// tomu, co do modelu doopravdy přijde.
     private func summary(
         _ identifier: String,
         updatedAt: TimeInterval,
         title: String = "titulek"
     ) -> PullRequestSummary {
-        PullRequestSummary(
-            id: PRIdentifier(identifier)!,
+        let id = PRIdentifier(identifier)!
+        return PullRequestSummary(
+            id: id,
             title: title,
             author: "autor",
-            url: URL(string: "https://github.com/\(identifier)")!,
+            url: URL(string: "https://github.com/\(id.repo)/pull/\(id.number)")!,
             updatedAt: Date(timeIntervalSince1970: updatedAt),
             state: .open
         )
