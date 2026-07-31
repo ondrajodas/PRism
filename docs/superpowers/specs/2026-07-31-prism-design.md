@@ -77,6 +77,9 @@ Zodpovědnosti:
   později je nová položka v konfiguraci, ne zásah do kódu.
 - Sloučit a deduplikovat výsledky přes zdroje podle `owner/repo#number`.
 - Načíst metadata PR: název, autor, `headSha`, `baseSha`, URL, `updatedAt`, stav.
+  **Ve dvou krocích:** vyhledávání dá jen povrch (`PullRequestSummary`), protože
+  `gh search prs` SHA neumí; `headSha` a `baseSha` přijdou až z `gh pr view` na konkrétní
+  PR. Kdy se detail dotáhne, rozhoduje polling — ne gateway.
 - Načíst diff pro zobrazení (`gh pr diff`) — jen k zobrazení, reviewery čtou skutečné
   soubory.
 
@@ -331,6 +334,14 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | `PullRequestState` je plochý výčet `open` / `draft` / `merged` / `closed` | `state` + `isDraft` bool, jak to vrací GitHub | V UI je z toho jeden odznak. Dvě pole by dovolila kombinace, které reálně nevzniknou (mergnutý draft), a každé místo, co stav zobrazuje, by je muselo skládat. Mapování ze `gh` je jednořádkové: otevřený a `isDraft` → `draft` |
 | `ReviewState.checkoutFailed` odděleně od `failed` | Jeden `failed` pro všechno, co se nepovedlo | Selhaný clone se spraví tlačítkem opakovat, spadlá session ne. Stejný důvod jako `čisté` vs. `failed`: slití pošle uživatele špatným směrem. Vyplývá to i z tabulky *Chování při chybách*, kde jsou to dva řádky |
 | `clean` je vlastní případ, vzniká jen přes `ReviewState.finished(findingCount:)` | `completed(findings: 0)` znamená čisté | Bez továrničky typ dovoluje dva zápisy téhož stavu a každé porovnání by muselo řešit oba. Továrnička je jedno místo, kde se to rozhoduje — a je čistá, takže se testuje bez čehokoli okolo |
+| Vyhledávání vrací `PullRequestSummary`, plný `PullRequest` až z detailu | Gateway po searchu sama dotáhne `gh pr view` na každý výsledek; prázdné SHA v modelu | Ověřeno proti `gh`: `gh search prs` `headRefOid`/`baseRefOid` neumí, jsou jen v `gh pr view`. Ze searchu tedy `PullRequest` postavit nejde. Dotahovat detail uvnitř gateway by z každého pollu udělalo N+1 podprocesů; kdy se detail dotáhne (typicky jen u PR se změněným `updatedAt`) je rozhodnutí pollingu, ne gateway. Prázdné SHA by rozbila tvrdou podmínku, že se nálezy klíčují `headSha` |
+| Search dotaz se `gh` předává rozdělený na tokeny | Celý dotaz jako jeden argument | Ověřeno: `gh search prs "review-requested:@me is:open"` skončí `Invalid search query "review-requested:\"@me is:open\""` — `gh` bere každý argument jako jeden výraz |
+| Chyby `gh` se klasifikují čistou funkcí nad `ProcessResult` | Předat volajícímu stderr jako řetězec; klasifikovat až v UI | Každý stav vede jinam: `notAuthenticated` chce `gh auth login`, `network` se spraví sám, `rateLimited` chce počkat. Rozpoznávání z textu je křehké, a právě proto patří na jedno místo bez I/O, kde se dá projet tabulkou skutečných hlášek. Exit kód rozliší jen chybějící přihlášení — `gh` na ně má vlastní `4` |
+| Klasifikace chyb `gh` není v `Policy` | Přesunout ji tam jako čistou funkci | `Policy` je o verdiktech review. Parsování výstupu `gh` je znalost o `gh`, a ta má zůstat v `App/GitHub/` — jinak `Policy` postupně nasaje vokabulář všech tří CLI |
+| Výstup `gh` se dekóduje do DTO a teprve mapuje | `Codable` doménových modelů čte rovnou `gh` JSON | `PullRequest` se kóduje na disk (`ReviewStore`), takže jeho `Codable` popisuje **uložený** tvar. Sloučení by znamenalo, že změna formátu `gh` mění formát dat na disku — a naopak, že `author.login` a velikost písmen ve `state` z `gh` prosáknou do persistence |
+| `fetchDetail` ověří, že `gh` vrátil PR s číslem, na které se ptal | Věřit odpovědi; brát číslo z odpovědi | Identifikátor se bere z dotazu, protože `gh pr view` repo nevrací. Tichý rozchod čísla by naklíčoval nálezy cizímu PR — přesně tomu má klíčování `headSha` bránit |
+| Fixtures jen z veřejných repozitářů | Nahrát skutečný výstup `review-requested:@me` | Ten obsahuje titulky firemních PR a jména kolegů. `cli/cli`, `cli/go-gh` a `ondrajodas/PRism` dají stejný tvar dat bez toho. Stav, na který se veřejná fixture nedá sehnat (zavřený nemergnutý PR), se testuje inline JSONem |
+| `ProcessRunning` zůstává bez `cwd` a `env` | Rozšířit ho hned, jak žádá issue #4 | `gh` cílové repo předává přes `--repo`, cwd nepotřebuje. Parametr, který nikdo nenastavuje, by narostl do všech fake implementací dřív, než by k něčemu byl. Přidá se s `RepoCheckout` (#8), který ho použije |
 | `zsh -lc`, `.zshrc` se nepřečte | `zsh -ilc`, aby fallback viděl i `.zshrc` | Zkoušeno a zahozeno: interaktivní shell se ze spuštěné aplikace zasekl (z terminálu běží pod 0,5 s) a **ignoruje `SIGTERM`** — vytáhla ho až eskalace na `SIGKILL`, tedy 7 s do prázdného výsledku. Zaseknutý start je horší selhání než nenalezená binárka, kterou gate umí vysvětlit. Zůstává jako známé omezení |
 
 ## K ověření před implementací

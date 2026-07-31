@@ -1,0 +1,16 @@
+{
+  "author": {
+    "id": "MDQ6VXNlcjEyMTQzODY2",
+    "is_bot": false,
+    "login": "ondrajodas",
+    "name": "Ondřej Jodas"
+  },
+  "baseRefOid": "2e9a9e7351f17424d0e0b90ef225804fa65b2a32",
+  "headRefOid": "7a9a8266ad6fa94a8e3332a10fc759f30187286f",
+  "isDraft": false,
+  "number": 32,
+  "state": "MERGED",
+  "title": "feat: add domain models for pull requests, identifiers and review state",
+  "updatedAt": "2026-07-31T20:05:20Z",
+  "url": "https://github.com/ondrajodas/PRism/pull/32"
+}

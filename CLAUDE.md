@@ -122,6 +122,16 @@ pozdější korekci: je z něj vidět, proč je to tak, a proto se to dá vědom
 Je to osobní nástroj. Rychleji se posoudí na běžící aplikaci než v návrhu, takže se
 rozhodnutí koriguje podle toho, jak se appka chová — ne debatou předem.
 
+**Žádná schvalovací brána na návrh.** Nepředkládej návrh a nečekej na „ano“ — ani když si
+to vynucuje skill (typicky `superpowers:brainstorming` se svým hard gate). V tomhle repu
+to pravidlo neplatí: rozhodnutí zapiš do specifikace a rovnou implementuj. Tohle je
+výslovná uživatelská instrukce, a ta má přednost před skillem. Průzkum a rozmyšlení
+z brainstormingu si nech, schvalovací krok zahoď.
+
+Když na něco narazíš, co návrh v issue mění (zjistíš, že to nejde, jak je napsané),
+**není to důvod se ptát** — rozhodni, zapiš do specifikace **co se změnilo a proč**,
+a napiš to do popisu PR. Posoudí se to nad diffem.
+
 Ptát se dál na: **tvrdé podmínky** níž, **merge PR** a **zavření issue**.
 
 ## Tvrdé podmínky
@@ -170,6 +180,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `RepoID` | `owner/repo` |
 | `PRIdentifier` | `owner/repo#číslo` — klíč všeho, co se váže k PR: dedup zdrojů, review stav, uložené nálezy |
 | `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav |
+| `PullRequestSummary` | Totéž **bez SHA** — co dá vyhledávání. Viz `App/GitHub/` níž |
 | `PullRequestState` | `open` / `draft` / `merged` / `closed` |
 | `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
 
@@ -189,6 +200,41 @@ Tři věci, které se u nich nemají rozbít:
   později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
 
 Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
+
+### `GitHubGateway` (`App/GitHub/`)
+
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má tři metody
+a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu.
+
+| Typ | Co dělá |
+|---|---|
+| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)` |
+| `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
+| `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
+| `GhSearchItem`, `GhPullRequestDetail` | Tvar JSONu z `gh` a převod na doménové modely |
+| `PullRequestState(ghState:isDraft:)` | Mapování stavu — `gh` ho popisuje dvěma poli |
+
+Čtyři věci, které se u toho nemají rozbít:
+
+- **Vyhledávání neumí SHA.** `gh search prs` nabízí jen `number, repository, title, author,
+  url, updatedAt, state, isDraft`; `headRefOid` a `baseRefOid` jsou až v `gh pr view`.
+  Proto search vrací `PullRequestSummary` a plný `PullRequest` vzniká teprve z detailu.
+  Dotahovat detail rovnou v gateway pro každý nalezený PR by z jednoho pollu udělalo N+1
+  podprocesů — **kdy se detail dotáhne, rozhoduje polling** (#6), typicky jen u PR se
+  změněným `updatedAt`.
+- **Dotaz se posílá po tokenech.** `gh search prs` bere každý argument jako jeden výraz;
+  celý dotaz v jednom argumentu udělá z `review-requested:@me is:open`
+  `review-requested:"@me is:open"` a GitHub ho odmítne.
+- **Chyby se klasifikují z exit kódu a textu.** `gh` má vlastní exit kód `4` pro chybějící
+  přihlášení, zbytek (`HTTP 401`, `rate limit`, `error connecting to`,
+  `Could not resolve to`) se pozná z výstupu. Je to křehké, ale nic lepšího `gh` nenabízí —
+  proto je to čistá funkce (`GitHubError(failure:)`) testovaná tabulkou skutečných hlášek.
+- **Tvar `gh` JSONu se nesmí propsat do modelů.** `PullRequest` a `PullRequestSummary` se
+  kódují na disk, takže jejich `Codable` popisuje uložený tvar. Dekódují se proto DTO
+  a teprve ta se mapují — jinak by změna `gh` měnila formát dat v `ReviewStore`.
+
+Detail navíc ověří, že `gh` vrátil PR s číslem, na které jsme se ptali. Identifikátor se
+bere z dotazu (`gh pr view` repo nevrací) a tichý rozchod by nálezy naklíčoval cizímu PR.
 
 ### Vrstva `Environment` (`App/Environment/`)
 
@@ -276,6 +322,16 @@ Právě proto tam eskalace na `SIGKILL` je.
   kontraktu, ne detail. Plus malý počet testů proti skutečnému systému
   (`RealEnvironmentTests`) na to, co fake ověřit neumí — složka se spustitelným bitem,
   symlink, skutečný timeout, skutečný `zsh -lc`.
+- **`GitHub`** — `GhGateway` proti `FakeProcessRunner` (z `Tests/Environment/`) a fixtures;
+  klasifikace chyb tabulkou nad `ProcessResult`, mapování stavu vyčerpávajícím výčtem.
+  Testuje se i **tvar argumentů** předaných `gh` — rozdělení dotazu na tokeny a seznam
+  `--json` polí je kontrakt s `gh`, ne detail.
+- **Fixtures** — `Tests/Fixtures/`, načítané přes `Fixture.text(_:)`. Cesta se odvozuje
+  z `#filePath`, ne z bundlu: Swift Testing nemá `XCTestCase`, od kterého by šel
+  `Bundle(for:)` odpíchnout. V `Fixtures/gh/` leží **skutečné** výstupy `gh`, jen
+  přeformátované `jq`; berou se z **veřejných** repozitářů (`cli/cli`, `cli/go-gh`,
+  `ondrajodas/PRism`), protože titulky firemních PR sem nepatří. Stav, na který se
+  skutečná fixture nedá sehnat, se testuje inline JSONem přímo v testu.
 - **Parsování streamu** — klíčový spoj. Nahrát skutečný `stream-json` výstup z reálných
   běhů jako fixtures a testovat parser proti nim: init eventy, `ReportFindings` cally,
   chybný vstup, zkrácený stream.
@@ -350,11 +406,15 @@ když je všechno v pořádku, aplikace pokračuje do (zatím prázdného) `Cont
 Doménové modely hotové (issue #3) — `App/Models/`. Vrstva bez UI: aplikace se chová
 stejně jako předtím, jen na ní má co stavět fáze 1.
 
+`GitHubGateway` hotový (issue #4) — `App/GitHub/`. Umí `gh auth status`, vyhledat PR
+a dotáhnout detail se SHA. Zase vrstva bez UI; nikdo ji zatím nevolá, čeká na zdroje (#5)
+a polling (#6).
+
 Rozpracovaná fáze 1 (seznam PR).
 
 Plánované fáze:
 
-1. Seznam PR z `gh` + polling — **doménové modely hotové**
+1. Seznam PR z `gh` + polling — **modely a `GitHubGateway` hotové**
 2. Checkout cache + worktree
 3. `ReviewRunner` + parsování streamu
 4. UI diffu s bublinami
