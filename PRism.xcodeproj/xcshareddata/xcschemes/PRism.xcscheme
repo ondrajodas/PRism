@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A100000000000000000000A4"
-               BuildableName = "pr-review.app"
-               BlueprintName = "pr-review"
-               ReferencedContainer = "container:pr-review.xcodeproj">
+               BuildableName = "PRism.app"
+               BlueprintName = "PRism"
+               ReferencedContainer = "container:PRism.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -34,9 +34,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A100000000000000000000A5"
-               BuildableName = "pr-reviewTests.xctest"
-               BlueprintName = "pr-reviewTests"
-               ReferencedContainer = "container:pr-review.xcodeproj">
+               BuildableName = "PRismTests.xctest"
+               BlueprintName = "PRismTests"
+               ReferencedContainer = "container:PRism.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -56,9 +56,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A100000000000000000000A4"
-            BuildableName = "pr-review.app"
-            BlueprintName = "pr-review"
-            ReferencedContainer = "container:pr-review.xcodeproj">
+            BuildableName = "PRism.app"
+            BlueprintName = "PRism"
+            ReferencedContainer = "container:PRism.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -73,9 +73,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A100000000000000000000A4"
-            BuildableName = "pr-review.app"
-            BlueprintName = "pr-review"
-            ReferencedContainer = "container:pr-review.xcodeproj">
+            BuildableName = "PRism.app"
+            BlueprintName = "PRism"
+            ReferencedContainer = "container:PRism.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

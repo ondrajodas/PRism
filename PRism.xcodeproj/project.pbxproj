@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		A100000000000000000000A6 /* pr-review.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "pr-review.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		A100000000000000000000A7 /* pr-reviewTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "pr-reviewTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A100000000000000000000A6 /* PRism.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "PRism.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A100000000000000000000A7 /* PRismTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "PRismTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -46,8 +46,8 @@
 		A100000000000000000000A3 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A100000000000000000000A6 /* pr-review.app */,
-				A100000000000000000000A7 /* pr-reviewTests.xctest */,
+				A100000000000000000000A6 /* PRism.app */,
+				A100000000000000000000A7 /* PRismTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -55,9 +55,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A100000000000000000000A4 /* pr-review */ = {
+		A100000000000000000000A4 /* PRism */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A100000000000000000000C2 /* Build configuration list for PBXNativeTarget "pr-review" */;
+			buildConfigurationList = A100000000000000000000C2 /* Build configuration list for PBXNativeTarget "PRism" */;
 			buildPhases = (
 				A100000000000000000000B1 /* Sources */,
 				A100000000000000000000B2 /* Frameworks */,
@@ -70,16 +70,16 @@
 			fileSystemSynchronizedGroups = (
 				A100000000000000000000A8 /* App */,
 			);
-			name = "pr-review";
+			name = "PRism";
 			packageProductDependencies = (
 			);
-			productName = "pr-review";
-			productReference = A100000000000000000000A6 /* pr-review.app */;
+			productName = "PRism";
+			productReference = A100000000000000000000A6 /* PRism.app */;
 			productType = "com.apple.product-type.application";
 		};
-		A100000000000000000000A5 /* pr-reviewTests */ = {
+		A100000000000000000000A5 /* PRismTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A100000000000000000000C3 /* Build configuration list for PBXNativeTarget "pr-reviewTests" */;
+			buildConfigurationList = A100000000000000000000C3 /* Build configuration list for PBXNativeTarget "PRismTests" */;
 			buildPhases = (
 				A100000000000000000000B4 /* Sources */,
 				A100000000000000000000B5 /* Frameworks */,
@@ -93,11 +93,11 @@
 			fileSystemSynchronizedGroups = (
 				A100000000000000000000A9 /* Tests */,
 			);
-			name = "pr-reviewTests";
+			name = "PRismTests";
 			packageProductDependencies = (
 			);
-			productName = "pr-reviewTests";
-			productReference = A100000000000000000000A7 /* pr-reviewTests.xctest */;
+			productName = "PRismTests";
+			productReference = A100000000000000000000A7 /* PRismTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -119,7 +119,7 @@
 					};
 				};
 			};
-			buildConfigurationList = A100000000000000000000C1 /* Build configuration list for PBXProject "pr-review" */;
+			buildConfigurationList = A100000000000000000000C1 /* Build configuration list for PBXProject "PRism" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -133,8 +133,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A100000000000000000000A4 /* pr-review */,
-				A100000000000000000000A5 /* pr-reviewTests */,
+				A100000000000000000000A4 /* PRism */,
+				A100000000000000000000A5 /* PRismTests */,
 			);
 		};
 /* End PBXProject section */
@@ -176,7 +176,7 @@
 /* Begin PBXTargetDependency section */
 		A100000000000000000000E1 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = A100000000000000000000A4 /* pr-review */;
+			target = A100000000000000000000A4 /* PRism */;
 			targetProxy = A100000000000000000000E2 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -187,7 +187,7 @@
 			containerPortal = A100000000000000000000A1 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = A100000000000000000000A4;
-			remoteInfo = "pr-review";
+			remoteInfo = "PRism";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -308,7 +308,7 @@
 		A100000000000000000000D3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "pr-review.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "PRism.entitlements";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -323,8 +323,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.pr-review";
-				PRODUCT_MODULE_NAME = pr_review;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.prism";
+				PRODUCT_MODULE_NAME = PRism;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -334,7 +334,7 @@
 		A100000000000000000000D4 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "pr-review.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "PRism.entitlements";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -349,8 +349,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.pr-review";
-				PRODUCT_MODULE_NAME = pr_review;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.prism";
+				PRODUCT_MODULE_NAME = PRism;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -367,11 +367,11 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.pr-review.tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.prism.tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/pr-review.app/Contents/MacOS/pr-review";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PRism.app/Contents/MacOS/PRism";
 			};
 			name = Debug;
 		};
@@ -385,18 +385,18 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.pr-review.tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.prism.tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/pr-review.app/Contents/MacOS/pr-review";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PRism.app/Contents/MacOS/PRism";
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A100000000000000000000C1 /* Build configuration list for PBXProject "pr-review" */ = {
+		A100000000000000000000C1 /* Build configuration list for PBXProject "PRism" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A100000000000000000000D1 /* Debug */,
@@ -405,7 +405,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A100000000000000000000C2 /* Build configuration list for PBXNativeTarget "pr-review" */ = {
+		A100000000000000000000C2 /* Build configuration list for PBXNativeTarget "PRism" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A100000000000000000000D3 /* Debug */,
@@ -414,7 +414,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A100000000000000000000C3 /* Build configuration list for PBXNativeTarget "pr-reviewTests" */ = {
+		A100000000000000000000C3 /* Build configuration list for PBXNativeTarget "PRismTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A100000000000000000000D5 /* Debug */,

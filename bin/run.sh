@@ -5,16 +5,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DERIVED_DATA="build"
-APP="$DERIVED_DATA/Build/Products/Debug/pr-review.app"
+APP="$DERIVED_DATA/Build/Products/Debug/PRism.app"
 
 xcodebuild \
-    -project pr-review.xcodeproj \
-    -scheme pr-review \
+    -project PRism.xcodeproj \
+    -scheme PRism \
     -configuration Debug \
     -derivedDataPath "$DERIVED_DATA" \
     build
 
 # Předchozí instanci ukončit, ať se okna nehromadí při opakovaném spuštění.
-killall pr-review 2>/dev/null || true
+killall PRism 2>/dev/null || true
 
 open "$APP"
