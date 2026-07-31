@@ -33,6 +33,7 @@ final class AppStore {
     var status: PollStatus { polling.state.status }
     var lastSuccess: Date? { polling.state.lastSuccess }
     var isStale: Bool { polling.state.isStale }
+    var emptyReason: PollEmptyReason? { polling.state.emptyReason }
 
     /// Drží seznam aktuální, dokud okno žije. Zrušení tasku smyčku ukončí.
     func keepFresh() async {

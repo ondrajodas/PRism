@@ -230,7 +230,11 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
   **zahodilo** — Mail i Finder se chovají stejně, takže vlastní chování by bylo cizí,
   a vypnutí `fullSizeContentView` navíc odsune toolbar do vlastního pruhu.
 - **Prázdný `PollStatusBanner` se nekreslí vůbec.** Trvalý pruh „vše OK“ ubírá místo
-  seznamu a oko se ho naučí přehlížet.
+  seznamu a oko se ho naučí přehlížet. A **dokud se nic nenačetlo, nekreslí se taky** —
+  není co označit za neaktuální a chybu vysvětluje prázdný stav pod ním.
+- **Proč je seznam prázdný, rozhoduje `PollState.emptyReason`, ne view.** „Prázdno,
+  protože nic není“ a „prázdno, protože se to nepovedlo načíst“ vypadají v okně stejně,
+  ale znamenají opak; bez toho se u chybové hlášky svítilo zelené „Žádné PR k review“.
 
 ### `PollingService` (`App/Polling/`)
 

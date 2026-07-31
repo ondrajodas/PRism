@@ -17,16 +17,29 @@ struct PullRequestListView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if !store.pullRequests.isEmpty {
+        switch store.emptyReason {
+        case nil:
             list
-        } else if store.status == .notStarted {
+        case .loading:
             ProgressView("Načítám PR…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
+        case .noPullRequests:
             ContentUnavailableView(
                 "Žádné PR k review",
                 systemImage: "checkmark.circle",
                 description: Text("Až po tobě někdo bude chtít review, objeví se tady.")
+            )
+        case .failure(let reason):
+            ContentUnavailableView(
+                "Seznam PR se nepodařilo načíst",
+                systemImage: "exclamationmark.triangle",
+                description: Text(reason.userDescription)
+            )
+        case .rateLimited(let retryAt):
+            ContentUnavailableView(
+                "GitHub omezuje dotazy",
+                systemImage: "hourglass",
+                description: Text("Zkusím to znovu v \(retryAt.formatted(date: .omitted, time: .shortened)).")
             )
         }
     }

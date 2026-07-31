@@ -36,7 +36,12 @@ struct PollStatusBanner: View {
     }
 
     private var content: Content? {
-        switch status {
+        // Banner mluví o **zastaralých datech**. Když se ještě nic nenačetlo, není co
+        // označit za neaktuální a chybu vysvětluje prázdný stav pod ním — jinak by tu
+        // stála dvakrát.
+        guard lastSuccess != nil else { return nil }
+
+        return switch status {
         case .notStarted, .upToDate:
             nil
         case .rateLimited(_, let retryAt):
@@ -49,22 +54,15 @@ struct PollStatusBanner: View {
         case .failing(let since, let reason):
             Content(
                 symbol: "exclamationmark.triangle",
-                headline: headline(failingSince: since),
+                headline: "Neaktuální — obnovení se nedaří od \(time(since))",
                 detail: reason.userDescription,
                 tint: .red
             )
         }
     }
 
-    /// Když se ještě nikdy nepovedlo načíst, není co označit za neaktuální — je prázdno.
-    private func headline(failingSince since: Date) -> String {
-        lastSuccess == nil
-            ? "Seznam PR se nepodařilo načíst"
-            : "Neaktuální — obnovení se nedaří od \(time(since))"
-    }
-
     private var freshness: String {
-        guard let lastSuccess else { return "Zatím se nepodařilo načíst žádná data." }
+        guard let lastSuccess else { return "" }
         return "Zobrazená data jsou z \(time(lastSuccess))."
     }
 
@@ -83,10 +81,8 @@ struct PollStatusBanner: View {
             status: .rateLimited(since: .now, retryAt: .now.addingTimeInterval(120)),
             lastSuccess: .now.addingTimeInterval(-600)
         )
-        PollStatusBanner(
-            status: .failing(since: .now, reason: .notAuthenticated),
-            lastSuccess: nil
-        )
+        // Bez načtených dat se banner nekreslí — chybu vysvětluje prázdný stav seznamu.
+        PollStatusBanner(status: .failing(since: .now, reason: .notAuthenticated), lastSuccess: nil)
     }
     .frame(width: 380)
 }
