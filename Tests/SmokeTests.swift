@@ -21,3 +21,22 @@ import Testing
 @Test @MainActor func contentViewCanBeCreated() {
     _ = ContentView()
 }
+
+/// Gate obrazovka se staví z reportu, který v testech nikdy nevznikne z běžného provozu —
+/// tohle hlídá, že se dá složit i pro stav, kdy chybí binárka a `gh` je nepřihlášené.
+@Test @MainActor func preflightGateCanBeCreatedForBlockedEnvironment() {
+    let report = PreflightReport(
+        toolStates: [
+            .gh: .found(URL(filePath: "/opt/homebrew/bin/gh"), source: .knownLocation),
+            .git: .found(URL(filePath: "/usr/bin/git"), source: .loginShellPath),
+            .claude: .missing,
+        ],
+        ghAuth: .loggedOut
+    )
+
+    _ = PreflightGateView(report: report, onRetry: {})
+}
+
+@Test @MainActor func rootViewCanBeCreated() {
+    _ = RootView()
+}

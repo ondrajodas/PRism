@@ -4,7 +4,7 @@ import SwiftUI
 struct PRismApp: App {
     var body: some Scene {
         WindowGroup("PRism") {
-            ContentView()
+            RootView()
         }
         .defaultSize(width: 1100, height: 700)
     }
