@@ -96,6 +96,7 @@ pr-review.xcodeproj/      Xcode projekt (shared scheme je verzovaný)
 App/                      zdrojáky aplikace — target pr-review
 Tests/                    unit testy — target pr-reviewTests
 bin/run.sh                build + spuštění jedním příkazem
+bin/copilot-review.sh     vyžádání Copilot review na PR
 Info.plist                název aplikace, verze, minimální systém
 pr-review.entitlements    vypnutý App Sandbox
 docs/superpowers/specs/   návrh a specifikace
