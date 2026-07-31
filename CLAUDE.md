@@ -133,7 +133,7 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `Tool` | Výčet `gh` / `git` / `claude` + k čemu je a jak se instaluje (texty pro gate) |
 | `ToolPaths` | Absolutní cesty ke všem třem. **Neoptional pole** — vznikne jen když preflight prošel, takže zbytek aplikace neřeší chybějící binárku |
 | `ExecutableProbe` | Protokol: leží na cestě spustitelný soubor? Reálná implementace odmítá složky (`/usr/bin` má spustitelný bit taky) a následuje symlinky (`claude` je symlink) |
-| `ProcessRunning` | Protokol: spusť, počkej, seber stdout/stderr/exit. `SubprocessRunner` nad `Foundation.Process`, s timeoutem a eskalací `SIGTERM` → `SIGKILL` |
+| `ProcessRunning` | Protokol: spusť, počkej, seber stdout/stderr/exit. `SubprocessRunner` nad `Foundation.Process`, s timeoutem, eskalací `SIGTERM` → `SIGKILL` a zabitím při zrušení |
 | `ShellPathReading` | Protokol: `PATH` z login shellu (`zsh -lc 'echo $PATH'`). Selhání = prázdný seznam, ne pád |
 | `BinaryLocator` | Nejdřív známá místa, teprve pro zbytek login shell — a ten **jednou** pro všechny chybějící |
 | `GhAuthCheck` | `gh auth status`: exit 0 přihlášen, 1 nepřihlášen, cokoli jiného `checkFailed` se stderrem |
@@ -145,6 +145,23 @@ nad stavem prostředí ve view, patří to do reportu.
 
 **`ProcessRunning` zatím jen bufferuje.** `ReviewRunner` bude potřebovat výstup po řádcích,
 jak vzniká (`stream-json`) — to přijde jako samostatná metoda, tuhle to nemění.
+
+Tři věci o podprocesech, na které se naráží znovu:
+
+- **Blokující I/O nesmí na kooperativní pool.** `readToEnd()` ani `waitUntilExit()` neumí
+  čekat kooperativně a pool má jen tolik vláken, kolik je jader — několik paralelních review
+  by si je vzájemně vyhladovělo. `SubprocessRunner` je proto odsouvá na vlastní
+  `DispatchQueue` a volajícímu je podává přes `async let`, takže zůstávají navázané na
+  životní cyklus volání. `Task.detached` by odvázalo strukturu **a** problém neřešilo.
+- **Oba pipy se musí číst souběžně.** Sériově: než dojde EOF na prvním, druhý naplní buffer
+  jádra a proces se zasekne na zápisu.
+- **Zrušení musí proces zabít.** Bez toho čekání na EOF drží volání, dokud proces nedoběhne
+  sám. Řeší `withTaskCancellationHandler`.
+
+**`zsh -lc` nečte `.zshrc`** — neinteraktivní login shell čte `.zshenv`, `.zprofile`
+a `.zlogin`. Přidat `-i` se zkoušelo a zahodilo (viz komentář v `LoginShellPathReader`
+a specifikace): z aplikace se zaseklo a interaktivní shell navíc **ignoruje `SIGTERM`**.
+Právě proto tam eskalace na `SIGKILL` je.
 
 ## Konvence
 

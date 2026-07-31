@@ -71,6 +71,26 @@ struct RealEnvironmentTests {
         }
     }
 
+    @Test("Zrušené volání proces zabije, místo aby čekalo, až doběhne sám")
+    func runnerKillsProcessOnCancellation() async throws {
+        // Bez zabití by `run()` čekalo na EOF na pipách, tedy plných 30 s — čtení skončí
+        // teprve tím, že proces pipy zavře.
+        let elapsed = await ContinuousClock().measure {
+            let running = Task {
+                try? await runner.run(
+                    URL(filePath: "/bin/sleep"),
+                    arguments: ["30"],
+                    timeout: .seconds(60)
+                )
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+            running.cancel()
+            _ = await running.value
+        }
+
+        #expect(elapsed < .seconds(5))
+    }
+
     @Test("Runner ohlásí, že binárku nešlo spustit")
     func runnerReportsLaunchFailure() async {
         do {

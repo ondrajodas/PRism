@@ -8,12 +8,23 @@ protocol ShellPathReading: Sendable {
 
 /// Spustí login shell a nechá si vypsat `PATH`.
 ///
-/// Login shell, protože právě v `.zprofile` a `.zshrc` leží `eval $(brew shellenv)` a
-/// podobné doplňky `PATH`, které aplikace spuštěná z Finderu nikdy nevidí.
+/// Login shell (`-lc`), protože doplňky `PATH` jako `eval $(brew shellenv)` leží
+/// v `.zprofile` nebo `.zshenv`, a ty aplikace spuštěná z Finderu nikdy nevidí.
 ///
-/// Když shell selže nebo se zasekne na vlastní konfiguraci, výsledkem je prázdný seznam.
-/// Binárka pak vyjde jako nenalezená a gate obrazovka to řekne — což je lepší než aby
-/// aplikace uvízla na startu kvůli cizímu `.zshrc`.
+/// **Známé omezení: `.zshrc` se takhle nepřečte.** Neinteraktivní login shell čte `.zshenv`,
+/// `.zprofile` a `.zlogin` — `.zshrc` patří interaktivním. Kdo má `PATH` doplněný jen tam
+/// a binárku mimo známá místa, tomu tenhle fallback nepomůže.
+///
+/// Přidat `-i` se zkoušelo a **zahodilo**: interaktivní shell se z aplikace zasekl (jinak
+/// než z terminálu, kde běží pod půl sekundy) a navíc ignoruje `SIGTERM`, takže ho vytáhla
+/// až eskalace na `SIGKILL`. Za pokrytí `.zshrc` to není — zaseknutý start je horší selhání
+/// než nenalezená binárka, kterou gate obrazovka umí vysvětlit.
+///
+/// Výstup se čte po **posledním neprázdném řádku**: `PATH` je to, co vypsal náš `echo`,
+/// a startup soubory si do stdout klidně napíšou svoje.
+///
+/// Když shell selže nebo se zasekne, výsledkem je prázdný seznam. Binárka pak vyjde jako
+/// nenalezená a gate to řekne — což je lepší než aby aplikace uvízla na startu.
 struct LoginShellPathReader: ShellPathReading {
     private let runner: ProcessRunning
     private let timeout: Duration
@@ -44,11 +55,18 @@ struct LoginShellPathReader: ShellPathReading {
         return URL(filePath: shell)
     }
 
-    private static func directories(in path: String) -> [URL] {
-        path
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    private static func directories(in output: String) -> [URL] {
+        guard let path = lastNonEmptyLine(of: output) else { return [] }
+        return path
             .split(separator: ":")
             .filter { !$0.isEmpty }
             .map { URL(filePath: String($0)) }
+    }
+
+    private static func lastNonEmptyLine(of output: String) -> String? {
+        output
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .last { !$0.isEmpty }
     }
 }

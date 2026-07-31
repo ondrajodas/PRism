@@ -324,6 +324,8 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Gate vypíše všechny problémy naráz + `Zkusit znovu` | První problém a restart po opravě | Tři chybějící binárky se vyřeší jedním průchodem, ne třemi spuštěními |
 | Známá místa první, login shell jen pro zbytek a jen jednou | Vždycky přečíst `PATH` z login shellu | Známá místa pokryjí skoro všechny instalace bez spuštění procesu. Login shell umí být pomalý nebo zaseknutý na cizím `.zshrc`, takže je to fallback s timeoutem, ne první krok |
 | `Environment` jako podpůrná vrstva | Osmý modul v tabulce architektury | Není to zodpovědnost v doméně review, je to přístup ke stroji, který si tři moduly sdílejí. Rovný seznam osmi položek by smíchal dvě různé úrovně |
+| Blokující I/O podprocesu na vlastní `DispatchQueue`, navázané přes `async let` | `Task.detached`; child tasky v task groupě | Pool kooperativní konkurence má jen tolik vláken, kolik jader, a `readToEnd()` neumí čekat kooperativně — paralelní review by si vlákna vzájemně vyhladovělo. `Task.detached` navíc odvazuje práci od životního cyklu volání; child tasky strukturu drží, ale běží na tomtéž poolu, takže samotný problém neřeší |
+| `zsh -lc`, `.zshrc` se nepřečte | `zsh -ilc`, aby fallback viděl i `.zshrc` | Zkoušeno a zahozeno: interaktivní shell se ze spuštěné aplikace zasekl (z terminálu běží pod 0,5 s) a **ignoruje `SIGTERM`** — vytáhla ho až eskalace na `SIGKILL`, tedy 7 s do prázdného výsledku. Zaseknutý start je horší selhání než nenalezená binárka, kterou gate umí vysvětlit. Zůstává jako známé omezení |
 
 ## K ověření před implementací
 

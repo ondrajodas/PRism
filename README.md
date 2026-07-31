@@ -68,7 +68,9 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 
 Aplikace binárky hledá absolutní cestou, protože GUI aplikace spuštěná z Finderu nedědí
 `PATH` z shellu. Nejdřív zkusí známá místa (`/opt/homebrew/bin`, `/usr/local/bin`,
-`/usr/bin`, `~/.local/bin`), a co v nich není, dohledá v `PATH` login shellu.
+`/usr/bin`, `~/.local/bin`), a co v nich není, dohledá v `PATH` login shellu. Ten čte
+`.zshenv`, `.zprofile` a `.zlogin`, ale **ne `.zshrc`** — kdo má nástroj mimo známá místa
+a `PATH` doplněný jen v `.zshrc`, musí cestu přidat do `.zprofile`.
 
 Když něco chybí, aplikace se nespustí do prázdna — ukáže blokující obrazovku se **všemi**
 problémy naráz: u každého nástroje cestu, kde se našel, nebo k čemu je a čím se instaluje.

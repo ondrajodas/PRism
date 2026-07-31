@@ -39,7 +39,33 @@ struct LoginShellPathReaderTests {
         _ = await LoginShellPathReader(runner: runner).loginShellPath()
 
         #expect(runner.invocations.count == 1)
+        // Bez `-i`: interaktivní shell se z aplikace zasekl a ignoruje SIGTERM.
         #expect(runner.invocations.first?.arguments == ["-lc", "echo $PATH"])
+    }
+
+    @Test("Z povídavého shellu vezme poslední řádek")
+    func usesLastLineWhenShellPrintsChatter() async {
+        // Startup soubory si do stdout klidně napíšou svoje. PATH je to, co vypsal
+        // náš `echo` — tedy poslední řádek, ne celý výstup.
+        let runner = FakeProcessRunner(
+            exitCode: 0,
+            standardOutput: "Hezký den!\nnvm: verze 20\n/opt/homebrew/bin:/usr/bin\n"
+        )
+
+        let directories = await LoginShellPathReader(runner: runner).loginShellPath()
+
+        #expect(
+            directories.map { $0.path(percentEncoded: false) } == ["/opt/homebrew/bin", "/usr/bin"]
+        )
+    }
+
+    @Test("Prázdný výstup nedá žádnou složku")
+    func emptyWhenShellPrintsNothing() async {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: "\n  \n")
+
+        let directories = await LoginShellPathReader(runner: runner).loginShellPath()
+
+        #expect(directories.isEmpty)
     }
 
     @Test("Nenulový exit kód znamená prázdný výsledek, ne pád")
