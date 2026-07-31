@@ -25,6 +25,24 @@ enum GitHubError: Error, Equatable, Sendable {
 }
 
 extension GitHubError {
+    /// Věta pro uživatele, i s detailem z `gh`.
+    ///
+    /// Text patří k typu ze stejného důvodu jako u `Tool`: kdo chybu vyrábí, ví nejlíp,
+    /// co se stalo — a view pak nemá co skládat. Detail se drží u věty, protože bez něj
+    /// se u poloviny případů nedá poznat, co dělat dál.
+    var userDescription: String {
+        switch self {
+        case .notAuthenticated: "gh není přihlášený — spusť gh auth login."
+        case .rateLimited(let detail): "GitHub omezuje dotazy. \(detail)"
+        case .network(let detail): "GitHub není dostupný. \(detail)"
+        case .notFound(let detail): "GitHub o tom neví. \(detail)"
+        case .timedOut: "gh nedoběhl v limitu."
+        case .toolUnavailable(let detail): "gh se nepodařilo spustit. \(detail)"
+        case .commandFailed(let exitCode, let message): "gh skončil s kódem \(exitCode). \(message)"
+        case .malformedOutput(let detail): "Výstupu gh nerozumím. \(detail)"
+        }
+    }
+
     /// Zařadí nenulový výsledek `gh` podle exit kódu a toho, co napsal na výstup.
     ///
     /// Exit kód rozliší jen chybějící přihlášení (`gh` na ně má vlastní čtyřku), zbytek se

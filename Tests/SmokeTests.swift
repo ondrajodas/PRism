@@ -19,7 +19,7 @@ import Testing
 }
 
 @Test @MainActor func contentViewCanBeCreated() {
-    _ = ContentView()
+    _ = ContentView(store: AppStore(gateway: FakeGitHubGateway(always: .success([]))))
 }
 
 /// Gate obrazovka se staví z reportu, který v testech nikdy nevznikne z běžného provozu —
