@@ -45,9 +45,12 @@ struct PullRequestListView: View {
     }
 
     private var list: some View {
-        List(store.pullRequests, id: \.id, selection: $store.selection) { pullRequest in
-            // Stav review je zatím placeholder — spouštění review přijde s M3.
-            PullRequestRow(pullRequest: pullRequest, reviewState: .notStarted)
+        // Stavy se čtou **tady**, ne až uvnitř řádku: `List` staví řádky líně a mimo
+        // sledování závislostí rodiče, takže změna stavu by seznam nemusela překreslit.
+        let rows = store.pullRequests.map { ($0, store.reviewState(for: $0.id)) }
+
+        return List(rows, id: \.0.id, selection: $store.selection) { pullRequest, state in
+            PullRequestRow(pullRequest: pullRequest, reviewState: state)
         }
     }
 

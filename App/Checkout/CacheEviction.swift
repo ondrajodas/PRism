@@ -34,19 +34,25 @@ struct CacheEviction: Sendable {
     ///   - openPullRequests: co je teď ve sledovaném seznamu. **Ne totéž co „otevřené na
     ///     GitHubu“** — PR, který zůstal otevřený, ale už po mně review nechce, ze seznamu
     ///     vypadne a jeho cache je k zahození stejně jako u zavřeného.
-    ///   - busy: repa s právě běžícím review. Ta se nemažou za žádnou cenu.
-    func run(openPullRequests: [PRIdentifier], busy: Set<RepoID>) async throws {
+    ///   - busy: repa, se kterými se právě pracuje. Ta se nemažou za žádnou cenu.
+    ///     Předává se jako **dotaz**, ne jako snímek: úklid je dlouhá disková operace
+    ///     a příprava, která začne uprostřed ní, by jinak přišla o ochranu.
+    func run(
+        openPullRequests: [PRIdentifier],
+        busy: @Sendable () async -> Set<RepoID>
+    ) async throws {
         let wanted = Set(openPullRequests.map(\.repo))
         let cached = cachedRepositories()
 
         try await discardUnwantedWorktrees(keeping: openPullRequests, busy: busy)
 
-        for repo in cached where !wanted.contains(repo) && !busy.contains(repo) {
+        for repo in cached where !wanted.contains(repo) {
+            guard await !busy().contains(repo) else { continue }
             try evict(repo)
         }
 
         try await forgetClosedPullRequests(openPullRequests, cached: cached, busy: busy)
-        try evictOverBudget(busy: busy)
+        try await evictOverBudget(busy: busy)
     }
 
     /// Stromy PR, které zmizely ze sledovaného seznamu. Bez tohohle by strom zavřeného PR
@@ -55,13 +61,17 @@ struct CacheEviction: Sendable {
     /// Stromy po **starším commitu** téhož PR se tu nepoznají: seznam z pollingu nese jen
     /// `PullRequestSummary`, a ten `headSha` nemá (`gh search prs` ho neumí). Uklidí se, až
     /// PR ze seznamu odejde — nebo je zahodí ten, kdo review spouští, protože ten sha zná.
-    private func discardUnwantedWorktrees(keeping open: [PRIdentifier], busy: Set<RepoID>) async throws {
+    private func discardUnwantedWorktrees(
+        keeping open: [PRIdentifier],
+        busy: @Sendable () async -> Set<RepoID>
+    ) async throws {
         // Klíčem je `(repo, číslo)`, ne samotné číslo: čísla PR se mezi repozitáři
         // opakují, takže `repoA#1` by si držel při životě strom `repoB#1`.
         let wanted = Set(open)
 
         var touched: Set<RepoID> = []
-        for (repo, worktree) in allWorktrees() where !busy.contains(repo) {
+        for (repo, worktree) in allWorktrees() {
+            guard await !busy().contains(repo) else { continue }
             let number = Int(worktree.lastPathComponent.split(separator: "-").first ?? "")
             guard let number, wanted.contains(PRIdentifier(repo: repo, number: number)) else {
                 try remove(worktree)
@@ -83,12 +93,13 @@ struct CacheEviction: Sendable {
     private func forgetClosedPullRequests(
         _ open: [PRIdentifier],
         cached: [RepoID],
-        busy: Set<RepoID>
+        busy: @Sendable () async -> Set<RepoID>
     ) async throws {
         guard let checkout else { return }
         let openByRepo = Dictionary(grouping: open, by: \.repo)
 
-        for repo in cached where !busy.contains(repo) {
+        for repo in cached {
+            guard await !busy().contains(repo) else { continue }
             let keep = Set(openByRepo[repo, default: []].map(\.number))
             // Výpis refů dělá `git`, ne `FileManager`: `git gc` volné refy zabalí do
             // `packed-refs` a složku `refs/prism/pr` přitom smaže, takže čtení adresáře
@@ -101,7 +112,7 @@ struct CacheEviction: Sendable {
 
     /// Nejdéle nepoužité odcházejí první. Kdo je zrovna v práci, zůstává — i za cenu
     /// překročeného rozpočtu.
-    private func evictOverBudget(busy: Set<RepoID>) throws {
+    private func evictOverBudget(busy: @Sendable () async -> Set<RepoID>) async throws {
         var entries = try cachedRepositories().map {
             (repo: $0, size: try size(of: $0), lastUsed: lastUsed($0))
         }
@@ -112,7 +123,7 @@ struct CacheEviction: Sendable {
         entries.sort { $0.lastUsed < $1.lastUsed }
 
         for entry in entries where total > budget {
-            guard !busy.contains(entry.repo) else { continue }
+            guard await !busy().contains(entry.repo) else { continue }
             try evict(entry.repo)
             total -= entry.size
         }

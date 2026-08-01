@@ -24,8 +24,12 @@ nese repo, číslo, titulek, autora a čas poslední změny. Při výpadku sít�
 poslední známá data a nad seznamem se objeví pruh, že nejsou aktuální; při rate limitu
 pruh říká, kdy to zkusí znovu.
 
-Review se zatím nespouští — stav u všech PR je `neběželo`, a nic se zatím ani neklonuje.
-Vlastní cache repozitářů už ale funguje: bare partial clone do
+Review se zatím nespouští, ale **pracovní kopii si už vyžádat jde**: u vybraného PR na to
+je tlačítko (samo se nestahuje nic), během klonování je v řádku vidět `ve frontě · clone`. Když se to
+nepovede, ukáže se `clone selhal` a v detailu celý výstup `gitu` s tlačítkem `Zkusit
+znovu`.
+
+Pod tím vším je vlastní cache repozitářů: bare partial clone do
 `~/Library/Application Support/PRism/`, přihlášení delegované na `gh`, odpojený
 `git worktree` pro každé review a úklid, který po každém pollingu zahodí repa bez
 otevřeného PR a při překročení rozpočtu (10 GB) i ta nejdéle nepoužitá. Zbývá ten, kdo si

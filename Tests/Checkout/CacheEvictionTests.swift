@@ -41,7 +41,7 @@ struct CacheEvictionTests {
 
         try await eviction(budget: .max).run(
             openPullRequests: [PRIdentifier(repo: vault, number: 1)],
-            busy: []
+            busy: { Set() }
         )
 
         #expect(exists(vault))
@@ -60,7 +60,7 @@ struct CacheEvictionTests {
                 PRIdentifier(repo: vault, number: 1),
                 PRIdentifier(repo: stacks, number: 2),
             ],
-            busy: []
+            busy: { Set() }
         )
 
         #expect(exists(vault))
@@ -73,7 +73,7 @@ struct CacheEvictionTests {
         try makeClone(stacks, usedAt: Date(timeIntervalSince1970: 200))
         let open = [PRIdentifier(repo: vault, number: 1), PRIdentifier(repo: stacks, number: 2)]
 
-        try await eviction(budget: 300_000).run(openPullRequests: open, busy: [])
+        try await eviction(budget: 300_000).run(openPullRequests: open, busy: { Set() })
 
         #expect(!exists(vault)) // starší
         #expect(exists(stacks))
@@ -86,7 +86,7 @@ struct CacheEvictionTests {
         try makeClone(stacks, usedAt: Date(timeIntervalSince1970: 200))
         let open = [PRIdentifier(repo: vault, number: 1), PRIdentifier(repo: stacks, number: 2)]
 
-        try await eviction(budget: 300_000).run(openPullRequests: open, busy: [vault])
+        try await eviction(budget: 300_000).run(openPullRequests: open, busy: { [vault] as Set })
 
         #expect(exists(vault))
         #expect(!exists(stacks))
@@ -96,7 +96,7 @@ struct CacheEvictionTests {
     func busyRepositorySurvivesEvenWithoutOpenPullRequests() async throws {
         try makeClone(vault)
 
-        try await eviction(budget: .max).run(openPullRequests: [], busy: [vault])
+        try await eviction(budget: .max).run(openPullRequests: [], busy: { [vault] as Set })
 
         #expect(exists(vault))
     }
@@ -108,14 +108,14 @@ struct CacheEvictionTests {
         let worktree = layout.worktree(for: PRIdentifier(repo: vault, number: 1), at: String(repeating: "a", count: 40))
         try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
 
-        try await eviction(budget: .max).run(openPullRequests: [], busy: [])
+        try await eviction(budget: .max).run(openPullRequests: [], busy: { Set() })
 
         #expect(!FileManager.default.fileExists(atPath: worktree.path(percentEncoded: false)))
     }
 
     @Test("Prázdná cache eviction nerozhodí")
     func emptyCacheIsFine() async throws {
-        try await eviction(budget: 10).run(openPullRequests: [], busy: [])
+        try await eviction(budget: 10).run(openPullRequests: [], busy: { Set() })
     }
 
     @Test("Použití repa se zaznamená")
@@ -136,7 +136,7 @@ extension CacheEvictionTests {
         let checkout = FakeRepoCheckout(tracked: [vault: [1, 2, 3]])
         let eviction = CacheEviction(layout: layout, budget: .max, checkout: checkout)
 
-        try await eviction.run(openPullRequests: [PRIdentifier(repo: vault, number: 2)], busy: [])
+        try await eviction.run(openPullRequests: [PRIdentifier(repo: vault, number: 2)], busy: { Set() })
 
         #expect(checkout.forgottenPullRequests.map(\.number).sorted() == [1, 3])
     }
@@ -147,7 +147,7 @@ extension CacheEvictionTests {
         let checkout = FakeRepoCheckout(tracked: [vault: [1]])
         let eviction = CacheEviction(layout: layout, budget: .max, checkout: checkout)
 
-        try await eviction.run(openPullRequests: [], busy: [vault])
+        try await eviction.run(openPullRequests: [], busy: { [vault] as Set })
 
         #expect(checkout.forgottenPullRequests.isEmpty)
     }
@@ -164,7 +164,7 @@ extension CacheEvictionTests {
 
         try await eviction(budget: .max).run(
             openPullRequests: [PRIdentifier(repo: vault, number: 8)],
-            busy: []
+            busy: { Set() }
         )
 
         #expect(!FileManager.default.fileExists(atPath: closed.path(percentEncoded: false)))
@@ -183,7 +183,7 @@ extension CacheEvictionTests {
 
         try await eviction(budget: .max).run(
             openPullRequests: [PRIdentifier(repo: stacks, number: 1)],
-            busy: []
+            busy: { Set() }
         )
 
         #expect(!exists(kbc))
@@ -203,7 +203,7 @@ extension CacheEvictionTests {
             withDestinationURL: outside.url
         )
 
-        _ = try? await eviction(budget: .max).run(openPullRequests: [], busy: [])
+        _ = try? await eviction(budget: .max).run(openPullRequests: [], busy: { Set() })
 
         #expect(FileManager.default.fileExists(atPath: victim.path(percentEncoded: false)))
     }
@@ -227,7 +227,7 @@ extension CacheEvictionTests {
                 PRIdentifier(repo: stacks, number: 1), // stejné číslo, jiné repo
                 PRIdentifier(repo: vault, number: 2),
             ],
-            busy: []
+            busy: { Set() }
         )
 
         #expect(!FileManager.default.fileExists(atPath: closed.path(percentEncoded: false)))
@@ -247,7 +247,7 @@ extension CacheEvictionTests {
 
         try await CacheEviction(layout: layout, budget: .max, checkout: checkout).run(
             openPullRequests: [PRIdentifier(repo: vault, number: 8)],
-            busy: []
+            busy: { Set() }
         )
 
         #expect(checkout.prunedRepositories == [vault])

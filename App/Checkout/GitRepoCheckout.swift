@@ -86,6 +86,10 @@ struct GitRepoCheckout: RepoCheckout {
         return output.split(separator: "\n").compactMap { Int($0.split(separator: "/").last ?? "") }
     }
 
+    func existingClone(for repo: RepoID) async -> URL? {
+        hasUsableClone(for: repo) ? layout.bareClone(for: repo) : nil
+    }
+
     func pruneWorktrees(in repo: RepoID) async throws {
         let clone = layout.bareClone(for: repo)
         guard FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)) else { return }

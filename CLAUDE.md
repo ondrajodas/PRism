@@ -110,11 +110,14 @@ včetně důvodu.
   Dvě pasti při čtení výsledku:
 
   ```bash
-  # Bot se jmenuje copilot-pull-request-reviewer[bot], ne „Copilot“ —
-  # filtr na .user.login == "Copilot" nenajde nic a vypadá to jako čisté review.
+  # Pozor na dvě různá jména: review píše `copilot-pull-request-reviewer[bot]`,
+  # ale inline komentáře `Copilot`. Filtr `startswith("copilot")` je navíc citlivý
+  # na velikost písmen, takže na komentáře nesedí — a vypadá to, že žádné nejsou.
   gh api repos/{owner}/{repo}/pulls/37/reviews \
       --jq '.[] | select(.user.login | startswith("copilot")) | .body'
-  gh api repos/{owner}/{repo}/pulls/37/comments --jq '.[] | "\(.path):\(.line)\n\(.body)"'
+  gh api repos/{owner}/{repo}/pulls/37/comments \
+      --jq '.[] | select(.user.login | ascii_downcase | startswith("copilot")) |
+            "\(.id) \(.path):\(.line)\n\(.body)"'
   ```
 
   A hlavně: **„generated no new comments“ neznamená, že nic nenašel.** Část nálezů se
@@ -197,7 +200,7 @@ nahraditelné fake implementací.
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Blokující příznak, návrh verdiktu, detekce shody `2×`, řazení | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení | — |
 | `Config` | Globální default + override per repo | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu | — |
 
@@ -318,22 +321,34 @@ Věci, které se u toho nemají rozbít:
 
 ### `AppStore` (`App/Store/`) a okno (`App/Views/`)
 
-`AppStore` drží to, co kreslí okno: polling seznamu a **výběr řádku**. Výběr žije tady, ne
-ve view — jinak by ho každé přestavění seznamu zahodilo. Postupně sem přibude stav review
-na jednotlivých PR a limit souběžných session.
+`AppStore` drží to, co kreslí okno: polling seznamu, **výběr řádku** a **stav review na
+jednotlivých PR**. Výběr žije tady, ne ve view — jinak by ho každé přestavění seznamu
+zahodilo. Postupně sem přibude limit souběžných session.
 
 Vzniká z `ToolPaths` po preflightu (`AppStore(toolPaths:)`); testy si podstrčí fake
 gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruší.
 
 | View | Co dělá |
 |---|---|
-| `ContentView` | `NavigationSplitView`: vlevo seznam, vpravo (zatím) placeholder detailu |
+| `ContentView` | `NavigationSplitView`: vlevo seznam, vpravo detail vybraného PR |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
+| `PullRequestDetailView` | Pravý panel: příprava pracovní kopie, chyba `gitu` a „Zkusit znovu“ |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
 
-Čtyři věci, na které se u okna naráží:
+Věci, na které se u okna naráží:
+
+- **Stav checkoutu je jeden a klíčovaný repem** (`CheckoutState`). `ReviewState` pro řádek
+  i `busy` pro eviction se z něj **odvozují** — dvě mapy s různými klíči si dokázaly
+  odporovat: jedno PR hlásilo selhání nad klonem, který mezitím pro druhé PR téhož repa
+  v pořádku vznikl. Překlad na `ReviewState` je čistá funkce v `Policy`.
+- **`ready` se v řádku ukazuje jako `notStarted`.** `ReviewState` popisuje **review**, a to
+  se checkoutem nespustilo; „hotová kopie“ v něm případ nemá a vymýšlet ho by znamenalo
+  lhát odznakem. Že je kopie připravená, říká detail.
+- **Při výběru řádku se stav srovnává podle disku**, ne jen doplňuje. Klon mohla mezitím
+  sebrat eviction, takže zapsaná cesta se musí ověřit znovu — jinak detail hlásí
+  „připraveno“ na složku, která neexistuje.
 
 - **Banner jde přes `safeAreaInset`, ne do `VStack` nad seznamem.** S `VStack`em přestane
   být `List` tím, co sidebar odsazuje od horní lišty, a řádky se schovají pod ni.
@@ -343,6 +358,14 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
   (`toolbarBackgroundVisibility`, pak vypnutí `fullSizeContentView` přes `NSWindow`) a
   **zahodilo** — Mail i Finder se chovají stejně, takže vlastní chování by bylo cizí,
   a vypnutí `fullSizeContentView` navíc odsune toolbar do vlastního pruhu.
+- **`busy` se eviction předává jako dotaz, ne jako snímek.** Úklid je dlouhá disková
+  operace; příprava, která začne uprostřed ní, by jinak přišla o ochranu a `git` by
+  klonoval do složky, kterou mu eviction pod rukama maže.
+- **View si o checkoutu nedrží vlastní `@State`.** `PullRequestDetailView` si SwiftUI mezi
+  PR ponechá (stejná pozice ve stromu), takže vlastní příznak „připravuji“ přetekl z jednoho
+  PR na druhé. Všechno jde ze store.
+- **Stavy se čtou v těle `list`, ne až uvnitř řádku.** `List` staví řádky líně a mimo
+  sledování závislostí rodiče, takže změna stavu nemusí seznam překreslit.
 - **Prázdný `PollStatusBanner` se nekreslí vůbec.** Trvalý pruh „vše OK“ ubírá místo
   seznamu a oko se ho naučí přehlížet. A **dokud se nic nenačetlo, nekreslí se taky** —
   není co označit za neaktuální a chybu vysvětluje prázdný stav pod ním.
@@ -386,6 +409,7 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 | Typ | Co dělá |
 |---|---|
 | `PullRequestList` | Sloučí výsledky zdrojů do jednoho seznamu: dedup podle `PRIdentifier`, řazení |
+| `Policy.reviewState(for:)` | Překlad stavu pracovní kopie na stav v řádku PR |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
   Volající pak nic nespojuje a z typu je vidět, že jde o několik nezávislých dotazů.
@@ -585,6 +609,11 @@ Dva zádrhely, které to má:
 - **`List` se offscreen nevykreslí vůbec** — je to AppKit tabulka a `ImageRenderer` místo
   ní nakreslí žlutý placeholder přes celé plátno. Nevypovídá to o aplikaci. Řádky se dají
   zkontrolovat tak, že se poskládají ručně do `VStack`u mimo `List`.
+- **`GroupBox` se offscreen nevykreslí taky** — a na rozdíl od `Listu` beze stopy, takže to
+  vypadá, že se stav vůbec nezobrazil. Stejná kategorie jako `.borderless`. Kde na kontrole
+  záleží, se hodí vlastní rámeček (`background(…, in: .rect(cornerRadius:))`), který
+  SwiftUI kreslí sám.
+- **`Link` vyjde jako žlutý placeholder.** V aplikaci je v pořádku, offscreen ne.
 
 Stav běžící aplikace jde vyčíst i přes accessibility — a je to **spolehlivější než render**,
 protože měří skutečné okno. Chodí se po `UI elements` po úrovních; `entire contents` na
@@ -673,6 +702,10 @@ Polling hotový (issue #6) — `App/Polling/`.
 **Fáze 1 hotová (issue #7).** Aplikace ukazuje skutečné PR: okno se seznamem napříč
 repozitáři, prázdný stav, úvodní loading, banner při výpadku a rate limitu, výběr řádku.
 Stav review je zatím u všech `neběželo` — spouštění přijde ve fázi 3.
+
+Stavy checkoutu v seznamu hotové (issue #11) — `AppStore` umí připravit pracovní kopii,
+řádek ukazuje `ve frontě · clone` nebo `clone selhal` a detail nese výstup `gitu`
+i tlačítko `Zkusit znovu`. **Aplikace tím poprvé něco zapisuje na disk.**
 
 Spike k `claude` CLI hotový (issue #12) — [`docs/claude-cli.md`](docs/claude-cli.md)
 a fixtures v `Tests/Fixtures/stream-json/`. **Žádný appkový kód**, ale opravil dvě chyby
