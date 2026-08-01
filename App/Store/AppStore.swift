@@ -18,15 +18,26 @@ final class AppStore {
         gateway: any GitHubGateway,
         sources: [Source] = [.reviewRequested],
         interval: Duration = .seconds(60),
-        time: any TimeSource = SystemTimeSource()
+        time: any TimeSource = SystemTimeSource(),
+        eviction: CacheEviction? = nil
     ) {
         polling = PollingService(gateway: gateway, sources: sources, interval: interval, time: time)
+        polling.afterSuccessfulTick = { [eviction] summaries in
+            // `busy` je zatím prázdné — review se ještě nespouští. Až se začne, musí sem
+            // přijít repa s běžícím během, jinak jim eviction sebere klon pod rukama.
+            try? await eviction?.run(openPullRequests: summaries.map(\.id), busy: [])
+        }
     }
 
     /// Sestavení z toho, co našel preflight. Absolutní cesta k `gh` je jediné, co gateway
     /// potřebuje — token si drží `gh` sám.
     convenience init(toolPaths: ToolPaths) {
-        self.init(gateway: GhGateway(gh: toolPaths.gh, runner: SubprocessRunner()))
+        let runner = SubprocessRunner()
+        let checkout = GitRepoCheckout(git: toolPaths.git, gh: toolPaths.gh, runner: runner)
+        self.init(
+            gateway: GhGateway(gh: toolPaths.gh, runner: runner),
+            eviction: CacheEviction(checkout: checkout)
+        )
     }
 
     var pullRequests: [PullRequestSummary] { polling.state.pullRequests }

@@ -31,11 +31,14 @@ struct WorktreeTests {
 
     // MARK: - Cesty
 
-    @Test("Worktree má v názvu repo, číslo PR i celý sha")
+    @Test("Worktree leží pod svým repem a jmenuje se podle PR a celého sha")
     func worktreePathCarriesTheKey() {
-        let path = layout.worktree(for: pr, at: headSha).lastPathComponent
+        let path = layout.worktree(for: pr, at: headSha)
 
-        #expect(path == "keboola-vault-85-\(headSha)")
+        #expect(path.lastPathComponent == "85-\(headSha)")
+        // Zanořené pod repem, ne slepené do jednoho jména — jinak by úklid podle prefixu
+        // sahal i na repa, jejichž jméno tím prefixem začíná.
+        #expect(path.deletingLastPathComponent().lastPathComponent == "vault")
     }
 
     @Test("Jiný sha znamená jiný worktree")

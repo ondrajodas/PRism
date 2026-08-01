@@ -239,13 +239,14 @@ Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživate
 
 | Typ | Co dělá |
 |---|---|
-| `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree` a `removeWorktree`. Vše idempotentní |
+| `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree`, `removeWorktree`, `forgetPullRequest` a `trackedPullRequests`. Vše idempotentní |
 | `GitRepoCheckout` | Implementace nad `git`: první volání klonuje, další fetchuje |
 | `CacheLayout` | Kde co leží. `root` je injektovatelný, aby testy nesáhly do skutečné cache |
 | `CheckoutCoordinator` | Aktor: souběžná volání nad stejným klíčem se spojí do jedné práce |
+| `CacheEviction` | Úklid cache: repa bez otevřeného PR, pak LRU do rozpočtu (10 GB) |
 | `CheckoutError` | Typované chyby + klasifikace stderru `gitu` jako čistá funkce |
 
-Devět věcí, které se u toho nemají rozbít:
+Věci, které se u toho nemají rozbít:
 
 - **Worktree je klíčovaný `(PR, headSha)`**, ne jen PR. Nálezy visí na `headSha`, takže dva
   běhy nad různými commity téhož PR si nesmí sáhnout na stejný strom. Naopak dva skilly
@@ -270,6 +271,24 @@ Devět věcí, které se u toho nemají rozbít:
   S jedním `--force` na něm `remove` skončí `cannot remove a locked working tree` a stav
   se nedá srovnat vůbec. `prune` za tím uklidí záznamy po stromech, které zmizely bez
   `remove` (pád aplikace, ruční smazání); sám `remove` administrativu uklidí.
+- **Eviction nikdy nesmí sáhnout na repo s běžícím review.** Smazat klon pod běžícím
+  review by mu vzalo pracovní strom pod rukama. Rozpočet je strop na místo na disku, ne
+  důvod rozbít rozdělanou práci — když se pod ním nedá zůstat, zůstane se nad ním.
+- **Úklid běží po každém úspěšném tiku, i po tom, který nic nevrátil** — prázdná odpověď
+  je informace (PR zmizel ze seznamu). **Po selhaném tiku ne:** seznam po výpadku sítě
+  zůstane beze změny a po startu je prázdný, takže by se celá cache smazala kvůli chvíli
+  bez sítě.
+- **Stromy jsou zanořené pod repem** (`worktrees/<owner>/<repo>/<pr>-<sha>`), ne slepené
+  do jednoho jména. Ploché `owner-repo-…` se nedá filtrovat podle prefixu: `keboola-kbc-`
+  sedí i na `keboola-kbc-stacks-…`, takže úklid jednoho repa by sahal na stromy jiného.
+- **Refy se vypisují `gitem`, ne čtením `refs/`.** `git gc` volné refy zabalí do
+  `packed-refs` a složku smaže, takže výpis přes `FileManager` by po prvním gc tiše
+  přestal cokoli najít.
+- **Do rozpočtu se počítají i stromy.** Klon je `--filter=blob:none`, takže materializované
+  soubory leží právě v nich — měřit jen klon znamená měřit menšinu.
+- **Eviction maže jen uvnitř cache.** Je to jediné místo, které maže rekurzivně podle toho,
+  co našlo na disku, takže si před smazáním ověří, že cesta po rozbalení symlinků pořád
+  leží pod kořenem cache.
 - **Souběžná volání nad stejným klíčem spojuje `CheckoutCoordinator`.** Dvě review nad
   různými PR téhož repa spustí přípravu naráz a druhé volání by mohlo smazat složku
   rozběhnutého klonu prvního. **Uvnitř koordinované práce se nesmí volat nic, co jde přes
@@ -529,6 +548,9 @@ Právě proto tam eskalace na `SIGKILL` je.
 - **`AppStore`** — proti fake gateway: obnovení se ptá zdrojů, seznam se čte z pollingu,
   výběr se drží. Views se neunit-testují; kontroluje se běžící aplikace (viz níž).
 - **`Config`** — merge globální + per-repo, defaulty pro neznámé repo.
+- **`CacheEviction`** — proti skutečné dočasné složce, ne proti fake filesystému: rozpočet
+  je injektovatelný, takže stačí malé soubory. Pozor, počítá se **alokovaná** velikost, tedy
+  po blocích — stobajtový soubor zabere 4 KB a testovací rozpočty musí být řádově výš.
 - **`RepoCheckout`** — dvě vrstvy, a **obě jsou potřeba**. Fake runner ověří, co se `gitu`
   posílá za argumenty (na tocích s víc příkazy `ScriptedProcessRunner`, který odpovídá
   jinak na každé volání); integrační test (`RealRepoCheckoutTests`) klonuje z `file://`
@@ -646,13 +668,14 @@ Polling hotový (issue #6) — `App/Polling/`.
 repozitáři, prázdný stav, úvodní loading, banner při výpadku a rate limitu, výběr řádku.
 Stav review je zatím u všech `neběželo` — spouštění přijde ve fázi 3.
 
-Rozpracovaná fáze 2 — `App/Checkout/`, vrstva bez UI. Bare klon do cache hotový (#8),
-worktree per review i serializace souběžných příprav hotové (#9). Zbývá eviction (#10).
+**Fáze 2 hotová** — `App/Checkout/`, vrstva bez UI. Bare klon do cache (#8), worktree per
+review i serializace souběžných příprav (#9) a eviction cache (#10). Aplikace si tedy umí
+připravit pracovní kopii a uklidit po sobě; chybí jen ten, kdo ji použije.
 
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
-2. Checkout cache + worktree — **klon i worktrees hotové**, zbývá eviction
+2. ~~Checkout cache + worktree~~ — **hotovo**
 3. `ReviewRunner` + parsování streamu
 4. UI diffu s bublinami
 5. Konfigurace a auto režim

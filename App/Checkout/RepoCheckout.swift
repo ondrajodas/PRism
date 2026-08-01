@@ -18,4 +18,10 @@ protocol RepoCheckout: Sendable {
 
     /// Uklidí pracovní strom. Chybějící strom není chyba.
     func removeWorktree(for pr: PRIdentifier, at headSha: String) async throws
+
+    /// Zahodí ref, kterým si aplikace držela commity daného PR. Chybějící ref není chyba.
+    func forgetPullRequest(_ pr: PRIdentifier) async throws
+
+    /// Čísla PR, ke kterým si aplikace v tomhle repu drží ref.
+    func trackedPullRequests(in repo: RepoID) async throws -> [Int]
 }
