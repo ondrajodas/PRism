@@ -12,7 +12,10 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
         self.tracked = tracked
     }
 
+    private var pruned: [RepoID] = []
+
     var forgottenPullRequests: [PRIdentifier] { lock.withLock { forgotten } }
+    var prunedRepositories: [RepoID] { lock.withLock { pruned } }
 
     func prepare(_ repo: RepoID) async throws -> URL { URL(filePath: "/tmp/\(repo)") }
 
@@ -27,4 +30,8 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
     }
 
     func trackedPullRequests(in repo: RepoID) async throws -> [Int] { tracked[repo] ?? [] }
+
+    func pruneWorktrees(in repo: RepoID) async throws {
+        lock.withLock { pruned.append(repo) }
+    }
 }

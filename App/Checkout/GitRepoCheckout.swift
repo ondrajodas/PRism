@@ -86,6 +86,12 @@ struct GitRepoCheckout: RepoCheckout {
         return output.split(separator: "\n").compactMap { Int($0.split(separator: "/").last ?? "") }
     }
 
+    func pruneWorktrees(in repo: RepoID) async throws {
+        let clone = layout.bareClone(for: repo)
+        guard FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)) else { return }
+        try await run(["-C", clone.path(percentEncoded: false), "worktree", "prune"])
+    }
+
     func forgetPullRequest(_ pr: PRIdentifier) async throws {
         let clone = layout.bareClone(for: pr.repo)
         guard FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)) else { return }

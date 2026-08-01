@@ -24,4 +24,7 @@ protocol RepoCheckout: Sendable {
 
     /// Čísla PR, ke kterým si aplikace v tomhle repu drží ref.
     func trackedPullRequests(in repo: RepoID) async throws -> [Int]
+
+    /// Zahodí záznamy o stromech, které už na disku nejsou.
+    func pruneWorktrees(in repo: RepoID) async throws
 }

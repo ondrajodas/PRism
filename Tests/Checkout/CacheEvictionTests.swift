@@ -234,3 +234,22 @@ extension CacheEvictionTests {
         #expect(FileManager.default.fileExists(atPath: open.path(percentEncoded: false)))
     }
 }
+
+extension CacheEvictionTests {
+    @Test("Po smazání stromu se v klonu zahodí i jeho záznam")
+    func prunesTheCloneAfterRemovingAWorktree() async throws {
+        // Samotné smazání složky nestačí — klon si o stromu drží záznam a příští
+        // `worktree add` na stejnou cestu by skončil `missing but already registered`.
+        try makeClone(vault)
+        let stale = layout.worktree(for: PRIdentifier(repo: vault, number: 7), at: String(repeating: "a", count: 40))
+        try FileManager.default.createDirectory(at: stale, withIntermediateDirectories: true)
+        let checkout = FakeRepoCheckout()
+
+        try await CacheEviction(layout: layout, budget: .max, checkout: checkout).run(
+            openPullRequests: [PRIdentifier(repo: vault, number: 8)],
+            busy: []
+        )
+
+        #expect(checkout.prunedRepositories == [vault])
+    }
+}

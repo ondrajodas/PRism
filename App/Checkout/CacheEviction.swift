@@ -39,7 +39,7 @@ struct CacheEviction: Sendable {
         let wanted = Set(openPullRequests.map(\.repo))
         let cached = cachedRepositories()
 
-        try discardUnwantedWorktrees(keeping: openPullRequests, busy: busy)
+        try await discardUnwantedWorktrees(keeping: openPullRequests, busy: busy)
 
         for repo in cached where !wanted.contains(repo) && !busy.contains(repo) {
             try evict(repo)
@@ -55,17 +55,25 @@ struct CacheEviction: Sendable {
     /// Stromy po **starším commitu** téhož PR se tu nepoznají: seznam z pollingu nese jen
     /// `PullRequestSummary`, a ten `headSha` nemá (`gh search prs` ho neumí). Uklidí se, až
     /// PR ze seznamu odejde — nebo je zahodí ten, kdo review spouští, protože ten sha zná.
-    private func discardUnwantedWorktrees(keeping open: [PRIdentifier], busy: Set<RepoID>) throws {
+    private func discardUnwantedWorktrees(keeping open: [PRIdentifier], busy: Set<RepoID>) async throws {
         // Klíčem je `(repo, číslo)`, ne samotné číslo: čísla PR se mezi repozitáři
         // opakují, takže `repoA#1` by si držel při životě strom `repoB#1`.
         let wanted = Set(open)
 
+        var touched: Set<RepoID> = []
         for (repo, worktree) in allWorktrees() where !busy.contains(repo) {
             let number = Int(worktree.lastPathComponent.split(separator: "-").first ?? "")
             guard let number, wanted.contains(PRIdentifier(repo: repo, number: number)) else {
                 try remove(worktree)
+                touched.insert(repo)
                 continue
             }
+        }
+
+        // Smazat složku nestačí: klon si o stromu drží záznam a příští `worktree add` na
+        // stejnou cestu skončí `missing but already registered` — a to už napořád.
+        for repo in touched {
+            try await checkout?.pruneWorktrees(in: repo)
         }
     }
 
