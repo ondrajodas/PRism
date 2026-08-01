@@ -48,6 +48,12 @@ actor CheckoutCoordinator {
         return task
     }
 
+    /// Odchod čekajícího, který se dočkal výsledku.
+    ///
+    /// Zrušení se tu ztratit nemůže, i když `onCancel` odbíhá do vlastního tasku:
+    /// `leave` se spustí teprve po návratu z `task.value`, tedy až práce doběhla — a
+    /// doběhlou práci není co rušit. `waiterLeft`, který dorazí po něm, najde prázdno
+    /// a neudělá nic.
     private func leave(_ key: String, _ token: UUID) {
         waiters[key]?.remove(token)
         guard waiters[key]?.isEmpty != false else { return }
