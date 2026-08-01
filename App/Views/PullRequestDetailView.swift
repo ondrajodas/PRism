@@ -65,6 +65,9 @@ struct PullRequestDetailView: View {
             Text(detail)
                 .font(.system(.callout, design: .monospaced))
                 .textSelection(.enabled)
+                // Bez `fixedSize` se dlouhý výstup `gitu` ořízne a nejde ani zkopírovat —
+                // přitom právě z něj se pozná, co se stalo.
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button("Zkusit znovu", systemImage: "arrow.clockwise", action: prepare)
         }
