@@ -94,7 +94,12 @@ struct GitRepoCheckout: RepoCheckout {
     /// `gh` se volá absolutní cestou, protože helper spouští shell, který `PATH`
     /// z GUI aplikace nezdědil.
     private var credentialConfiguration: [String] {
-        ["-c", "credential.helper=!'\(gh.path(percentEncoded: false))' auth git-credential"]
+        // Helper spouští shell, takže cesta musí do apostrofů — a apostrof v ní se musí
+        // odescapovat, jinak by je předčasně uzavřela. Cesta k `gh` sice pochází
+        // z preflightu, ne od uživatele, ale skládat shellový příkaz bez escapování je
+        // zvyk, který se dřív nebo později vymstí.
+        let quoted = gh.path(percentEncoded: false).replacingOccurrences(of: "'", with: "'\\''")
+        return ["-c", "credential.helper=!'\(quoted)' auth git-credential"]
     }
 
     /// Bez toho by se `git` na chybějící heslo zeptal a čekal — podproces bez terminálu
