@@ -8,6 +8,7 @@ struct GitRepoCheckout: RepoCheckout {
     private let runner: ProcessRunning
     private let timeout: Duration
     private let remote: @Sendable (RepoID) -> String
+    private let coordinator = CheckoutCoordinator()
 
     /// `remote` je švih pro integrační testy — ty klonují z `file://` scratch repa, aby
     /// nepotřebovaly síť ani přihlášení.
@@ -28,6 +29,139 @@ struct GitRepoCheckout: RepoCheckout {
     }
 
     func prepare(_ repo: RepoID) async throws -> URL {
+        try await coordinator.run(key: "clone:\(repo)", kind: "clone") { try await clone(repo) }
+    }
+
+    func worktree(for pr: PRIdentifier, at headSha: String) async throws -> URL {
+        let path = layout.worktree(for: pr, at: headSha)
+        return try await coordinator.run(key: Self.worktreeKey(path), kind: "add") {
+            try await addWorktree(for: pr, at: headSha, path: path)
+        }
+    }
+
+    func removeWorktree(for pr: PRIdentifier, at headSha: String) async throws {
+        let path = layout.worktree(for: pr, at: headSha)
+        try await coordinator.run(key: Self.worktreeKey(path), kind: "remove") {
+            try await discardWorktree(for: pr, at: path)
+        }
+    }
+
+    private func discardWorktree(for pr: PRIdentifier, at path: URL) async throws {
+        let clone = layout.bareClone(for: pr.repo)
+
+        // `--force` dvakrát schválně: jedno vynutí odstranění špinavého stromu, druhé
+        // odemkne zamčený. Zabitý `worktree add` po sobě nechává zámek `initializing`
+        // a s jedním `--force` na něm `remove` skončí `cannot remove a locked working
+        // tree` — stav by se pak nedal srovnat vůbec.
+        let removed = try await succeeds([
+            "-C", clone.path(percentEncoded: false),
+            "worktree", "remove", "--force", "--force",
+            path.path(percentEncoded: false),
+        ])
+
+        // `prune` uklidí záznamy po stromech, které zmizely bez `remove` (pád aplikace,
+        // ruční smazání složky). Když klon neexistuje, není co uklízet — a úklid stromu
+        // v neexistujícím klonu chybou být nemá.
+        if FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)) {
+            try await run(["-C", clone.path(percentEncoded: false), "worktree", "prune"])
+        }
+
+        // Poslední záchrana: když `git` strom neodstranil, složka na disku by zůstala
+        // a příští `add` na stejné jméno by odmítl.
+        if !removed {
+            try removeDirectory(at: path, describedAs: "Zbytek po worktree")
+        }
+    }
+
+    private func addWorktree(for pr: PRIdentifier, at headSha: String, path: URL) async throws -> URL {
+        // Použitelný strom se sdílí — dva skilly nad jedním PR mají jeden checkout — a
+        // hlavně se kvůli němu nemusí znovu fetchovat.
+        if await isUsableWorktree(at: path, expecting: headSha) { return path }
+
+        // Když tam něco je a použitelné to není, zahodí se to. Po zabitém `worktree add`
+        // zůstane rozkopírovaná složka se zámkem, kterou `fileExists` od hotové nerozezná
+        // — reviewer by četl uříznutý strom a nálezy by se naklíčovaly na `headSha` proti
+        // kódu, který tam není.
+        //
+        // Přímo `discardWorktree`, ne `removeWorktree`: to jde přes koordinátor pod
+        // **stejným klíčem**, pod kterým už běžíme — čekalo by samo na sebe.
+        if FileManager.default.fileExists(atPath: path.path(percentEncoded: false)) {
+            try await discardWorktree(for: pr, at: path)
+        }
+
+        let clone = try await prepare(pr.repo)
+        try await ensureCommit(headSha, of: pr, in: clone)
+        try createParentDirectory(of: path)
+        try await run([
+            "-C", clone.path(percentEncoded: false),
+        ] + credentialConfiguration + [
+            "worktree", "add", "--detach",
+            path.path(percentEncoded: false),
+            headSha,
+        ])
+        return path
+    }
+
+    /// Strom je použitelný, jen když v něm `git` odpoví a stojí přesně na tom commitu.
+    ///
+    /// Existence složky nestačí: zabitý `add` nechá rozdělaný strom a smazaný klon nechá
+    /// strom, ve kterém `git` hlásí `not a git repository`. Porovnání s `headSha` navíc
+    /// pokrývá případ, kdy se dva různé commity potkají na zkráceném sha v názvu složky.
+    private func isUsableWorktree(at path: URL, expecting headSha: String) async -> Bool {
+        guard FileManager.default.fileExists(atPath: path.path(percentEncoded: false)) else {
+            return false
+        }
+        let head = try? await run(["-C", path.path(percentEncoded: false), "rev-parse", "HEAD"])
+        return head?.trimmingCharacters(in: .whitespacesAndNewlines) == headSha
+    }
+
+    /// Dotáhne commit, pokud v klonu není.
+    ///
+    /// Vždycky přes `refs/pull/<n>/head`, ne přes samotný sha: ten ref má na GitHubu
+    /// **každý** PR včetně těch z forků, kdežto `git fetch origin <sha>` potřebuje na
+    /// serveru povolené `allowAnySHA1InWant`, na což spoleh není. Jedna cesta místo dvou.
+    private func ensureCommit(_ sha: String, of pr: PRIdentifier, in clone: URL) async throws {
+        if try await hasCommit(sha, in: clone) { return }
+
+        try await run(["-C", clone.path(percentEncoded: false)] + credentialConfiguration + [
+            "fetch", "--no-tags", "origin", "+refs/pull/\(pr.number)/head:refs/prism/pr/\(pr.number)",
+        ])
+
+        guard try await hasCommit(sha, in: clone) else {
+            throw CheckoutError.commitNotFound(sha)
+        }
+    }
+
+    /// Skutečně **lokální** dotaz.
+    ///
+    /// Bez `GIT_NO_LAZY_FETCH=1` si `cat-file` na partial klonu chybějící commit tiše
+    /// dotáhne z promisor remote — takže by tahle „levná kontrola“ chodila na síť,
+    /// s naším timeoutem, bez credential helperu, a fetch `refs/pull/<n>/head` pod ní
+    /// by se nikdy nespustil. Commit by pak v klonu ležel bez refu, který ho drží.
+    private func hasCommit(_ sha: String, in clone: URL) async throws -> Bool {
+        let arguments = ["-C", clone.path(percentEncoded: false), "cat-file", "-e", "\(sha)^{commit}"]
+        let local = environment.merging(["GIT_NO_LAZY_FETCH": "1"]) { _, new in new }
+        return try await succeeds(arguments, environment: local)
+    }
+
+    /// Prošel příkaz? Chyba `gitu` je odpověď „ne“, ale **zrušení odpověď není** — samotné
+    /// `try?` by ho spolklo a úloha by pokračovala dál, i když ji nikdo nechce.
+    private func succeeds(_ arguments: [String], environment: [String: String]? = nil) async throws -> Bool {
+        do {
+            _ = try await run(arguments, environment: environment)
+            return true
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return false
+        }
+    }
+
+    private static func worktreeKey(_ path: URL) -> String {
+        "worktree:\(path.path(percentEncoded: false))"
+    }
+
+    private func clone(_ repo: RepoID) async throws -> URL {
         let clone = layout.bareClone(for: repo)
 
         if hasUsableClone(for: repo) {
@@ -39,10 +173,10 @@ struct GitRepoCheckout: RepoCheckout {
         // vždycky a náš timeout ho zabíjí `SIGKILL`em, takže na to není spoleh. Rozhodovat
         // se podle pouhé existence složky by znamenalo, že další pokus jde na `fetch`
         // v něčem, co repozitář není, a opakování by se z toho nikdy nezotavilo.
-        try removeLeftover(at: clone)
+        try removeDirectory(at: clone, describedAs: "Zbytek po klonu")
         try createParentDirectory(of: clone)
         try await run(cloneArguments(from: repo, into: clone))
-        markCloneComplete(repo)
+        try markCloneComplete(repo)
         return clone
     }
 
@@ -56,14 +190,22 @@ struct GitRepoCheckout: RepoCheckout {
         )
     }
 
-    /// Nezdařený zápis značky přípravu neshodí. Klon se povedl a je použitelný; chybějící
-    /// značka znamená jen to, že se příště naklonuje znovu — což je nepříjemné, ne špatně.
-    /// Opačné pořadí (shodit hotový klon kvůli souboru navíc) by bylo horší.
-    private func markCloneComplete(_ repo: RepoID) {
-        FileManager.default.createFile(
-            atPath: layout.cloneMarker(for: repo).path(percentEncoded: false),
-            contents: nil
+    /// Nezdařený zápis značky je chyba, i když klon sám prošel.
+    ///
+    /// Původně se polykal: chybějící značka znamenala jen klonování navíc. Od chvíle, kdy
+    /// nad klonem visí worktrees, to neplatí — příští `prepare` by klon bez značky smazal
+    /// a stromy pod ním by zůstaly bez repozitáře. Selhat hned a hlasitě je levnější.
+    private func markCloneComplete(_ repo: RepoID) throws {
+        // Složka po úspěšném klonu existuje; `createDirectory` je tu proto, aby značka
+        // nebyla první věc, která spadne, když se stane něco nečekaného.
+        try? FileManager.default.createDirectory(
+            at: layout.bareClone(for: repo),
+            withIntermediateDirectories: true
         )
+        let marker = layout.cloneMarker(for: repo).path(percentEncoded: false)
+        guard FileManager.default.createFile(atPath: marker, contents: nil) else {
+            throw CheckoutError.cacheUnavailable("Značku dokončeného klonu nejde zapsat: \(marker)")
+        }
     }
 
     /// Partial clone: `--filter=blob:none` stáhne historii bez obsahu souborů a bloby
@@ -111,14 +253,14 @@ struct GitRepoCheckout: RepoCheckout {
     /// „Nic tam nebylo“ je normální stav, cokoli jiného ne. Spolknout selhání mazání by
     /// znamenalo, že se `git` zakousne na „destination path already exists“ a skutečná
     /// příčina (práva, zamčený soubor) se nikam nedostane.
-    private func removeLeftover(at clone: URL) throws {
+    private func removeDirectory(at url: URL, describedAs what: String) throws {
         do {
-            try FileManager.default.removeItem(at: clone)
+            try FileManager.default.removeItem(at: url)
         } catch CocoaError.fileNoSuchFile {
             return
         } catch {
             throw CheckoutError.cacheUnavailable(
-                "Zbytek po klonu v \(clone.path(percentEncoded: false)) nejde smazat: "
+                "\(what) v \(url.path(percentEncoded: false)) nejde smazat: "
                     + error.localizedDescription
             )
         }
@@ -137,13 +279,17 @@ struct GitRepoCheckout: RepoCheckout {
         }
     }
 
-    private func run(_ arguments: [String]) async throws {
+    @discardableResult
+    private func run(
+        _ arguments: [String],
+        environment: [String: String]? = nil
+    ) async throws -> String {
         let result: ProcessResult
         do {
             result = try await runner.run(
                 git,
                 arguments: arguments,
-                environment: environment,
+                environment: environment ?? self.environment,
                 timeout: timeout
             )
         } catch ProcessError.timedOut {
@@ -157,5 +303,6 @@ struct GitRepoCheckout: RepoCheckout {
         }
 
         guard result.exitCode == 0 else { throw CheckoutError(failure: result) }
+        return result.standardOutput
     }
 }

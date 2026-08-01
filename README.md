@@ -25,9 +25,10 @@ poslední známá data a nad seznamem se objeví pruh, že nejsou aktuální; p�
 pruh říká, kdy to zkusí znovu.
 
 Review se zatím nespouští — stav u všech PR je `neběželo`, a nic se zatím ani neklonuje.
-Vrstva pro vlastní cache repozitářů (bare partial clone do
-`~/Library/Application Support/PRism/`, přihlášení delegované na `gh`) už ale existuje
-a je otestovaná; zapojí se, až půjde review spustit. Platí u ní, že **vlastních klonů na
+Vrstva pro vlastní cache repozitářů už ale existuje a je otestovaná: bare partial clone
+do `~/Library/Application Support/PRism/`, přihlášení delegované na `gh` a odpojený
+`git worktree` pro každé review, klíčovaný číslem PR a head commitem. Zapojí se, až půjde
+review spustit. Platí u ní, že **vlastních klonů na
 disku se aplikace nikdy nedotkne** — pracuje výhradně ve své cache.
 
 Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) je hotová první, druhá rozpracovaná.

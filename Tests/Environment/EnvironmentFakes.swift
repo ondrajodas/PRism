@@ -85,6 +85,45 @@ final class FakeProcessRunner: ProcessRunning, @unchecked Sendable {
     }
 }
 
+/// Runner, který odpovídá jinak na každé volání — na tocích, kde jde několik příkazů po
+/// sobě a záleží na jejich výsledcích. Poslední odpověď se opakuje, takže test předepisuje
+/// jen to, co ho zajímá.
+final class ScriptedProcessRunner: ProcessRunning, @unchecked Sendable {
+    private let outcomes: [Result<ProcessResult, ProcessError>]
+    private let lock = NSLock()
+    private var recorded: [FakeProcessRunner.Invocation] = []
+
+    init(_ outcomes: [Result<ProcessResult, ProcessError>]) {
+        precondition(!outcomes.isEmpty, "Runner potřebuje aspoň jednu odpověď.")
+        self.outcomes = outcomes
+    }
+
+    /// Zkratka: posloupnost exit kódů, nic na výstupu.
+    convenience init(exitCodes: [Int32]) {
+        self.init(exitCodes.map { .success(ProcessResult(exitCode: $0, standardOutput: "", standardError: "")) })
+    }
+
+    var invocations: [FakeProcessRunner.Invocation] { lock.withLock { recorded } }
+
+    /// Argumenty jednotlivých volání — na nich se ověřuje pořadí příkazů.
+    var commands: [[String]] { invocations.map(\.arguments) }
+
+    func run(
+        _ executable: URL,
+        arguments: [String],
+        environment: [String: String],
+        timeout: Duration
+    ) async throws -> ProcessResult {
+        let index: Int = lock.withLock {
+            recorded.append(
+                .init(executable: executable, arguments: arguments, environment: environment)
+            )
+            return recorded.count - 1
+        }
+        return try outcomes[min(index, outcomes.count - 1)].get()
+    }
+}
+
 /// Čas, který se nikam neposouvá sám.
 ///
 /// Místo čekání si jen zapíše, jak dlouho se mělo čekat — na tom se testuje backoff — a
