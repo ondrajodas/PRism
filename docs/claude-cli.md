@@ -116,14 +116,20 @@ s prázdným polem `findings`**, ne že by nástroj nezavolalo; obojí je ve fix
 | `review-killed.jsonl` | Běh zabitý uprostřed — **chybí `result` event** |
 | `review-denied-write.jsonl` | Odmítnutý `Write`: `is_error` v `tool_result` i `permission_denials` v `result` |
 
-Streamy jsou **surové**, nic se z nich nemazalo. Prošly kontrolou na tajemství (tokeny,
-klíče, hesla, e-maily — nic).
+Issue #12 žádalo „kompletní surové streamy“ — redakce hook eventů je vědomá odchylka a týká
+se jen obsahu, který do repa nepatří. Všechno, co parser potřebuje, je v nich tak, jak to
+CLI vypsalo.
 
-Nesou ale lokální prostředí, a víc, než se na první pohled zdá: kromě jmen nainstalovaných
-pluginů a cest pod `/Users/ondra` je v `hook_response.output.additionalContext` **celý text
-některých skillů**, který si tam pověsil `SessionStart` hook. Je to i podstatná část objemu
-fixtures. Repo je privátní, takže to je v pořádku — ale kdyby se někdy zveřejňovalo, tohle
-je první místo ke kontrole, ne jen cesty.
+Streamy jsou surové **s jedinou výjimkou**: v `system/hook_response` eventech je obsah polí
+`output` a `stdout` nahrazený placeholderem. `SessionStart` hook do nich vkládá celý text
+nainstalovaných skillů — je to **cizí obsah**, který do tohohle repa nepatří, a pro parser
+je to navíc šum. Ostatní eventy jsou beze změny, bajt po bajtu; redakce ubrala zhruba
+pětinu objemu.
+
+Prošly kontrolou na tajemství (tokeny, klíče, hesla, e-maily — nic). Nesou ale pořád
+lokální prostředí: jména nainstalovaných pluginů a skillů v `init` eventu a cesty pod
+`/Users/ondra`. Repo je privátní, takže to je v pořádku; kdyby se někdy zveřejňovalo, je to
+místo ke kontrole.
 
 Testovaný kód byl schválně chybný `Cart.swift` ve scratch repu (součet ignoruje množství,
 celočíselné dělení u slevy, index bez kontroly prázdnosti) — v repu není, fixtures ho nesou
