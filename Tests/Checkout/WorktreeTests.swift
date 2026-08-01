@@ -31,11 +31,11 @@ struct WorktreeTests {
 
     // MARK: - Cesty
 
-    @Test("Worktree má v názvu repo, číslo PR i zkrácený sha")
+    @Test("Worktree má v názvu repo, číslo PR i celý sha")
     func worktreePathCarriesTheKey() {
         let path = layout.worktree(for: pr, at: headSha).lastPathComponent
 
-        #expect(path == "keboola-vault-85-7a9a826")
+        #expect(path == "keboola-vault-85-\(headSha)")
     }
 
     @Test("Jiný sha znamená jiný worktree")

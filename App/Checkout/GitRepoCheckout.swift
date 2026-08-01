@@ -53,7 +53,7 @@ struct GitRepoCheckout: RepoCheckout {
         // odemkne zamčený. Zabitý `worktree add` po sobě nechává zámek `initializing`
         // a s jedním `--force` na něm `remove` skončí `cannot remove a locked working
         // tree` — stav by se pak nedal srovnat vůbec.
-        let removed = try? await run([
+        let removed = try await succeeds([
             "-C", clone.path(percentEncoded: false),
             "worktree", "remove", "--force", "--force",
             path.path(percentEncoded: false),
@@ -68,7 +68,7 @@ struct GitRepoCheckout: RepoCheckout {
 
         // Poslední záchrana: když `git` strom neodstranil, složka na disku by zůstala
         // a příští `add` na stejné jméno by odmítl.
-        if removed == nil {
+        if !removed {
             try removeLeftover(at: path)
         }
     }
@@ -111,8 +111,8 @@ struct GitRepoCheckout: RepoCheckout {
         guard FileManager.default.fileExists(atPath: path.path(percentEncoded: false)) else {
             return false
         }
-        let result = try? await run(["-C", path.path(percentEncoded: false), "rev-parse", "HEAD"])
-        return result?.trimmingCharacters(in: .whitespacesAndNewlines) == headSha
+        let head = try? await run(["-C", path.path(percentEncoded: false), "rev-parse", "HEAD"])
+        return head?.trimmingCharacters(in: .whitespacesAndNewlines) == headSha
     }
 
     /// Dotáhne commit, pokud v klonu není.
@@ -121,13 +121,13 @@ struct GitRepoCheckout: RepoCheckout {
     /// **každý** PR včetně těch z forků, kdežto `git fetch origin <sha>` potřebuje na
     /// serveru povolené `allowAnySHA1InWant`, na což spoleh není. Jedna cesta místo dvou.
     private func ensureCommit(_ sha: String, of pr: PRIdentifier, in clone: URL) async throws {
-        if await hasCommit(sha, in: clone) { return }
+        if try await hasCommit(sha, in: clone) { return }
 
         try await run(["-C", clone.path(percentEncoded: false)] + credentialConfiguration + [
             "fetch", "--no-tags", "origin", "+refs/pull/\(pr.number)/head:refs/prism/pr/\(pr.number)",
         ])
 
-        guard await hasCommit(sha, in: clone) else {
+        guard try await hasCommit(sha, in: clone) else {
             throw CheckoutError.commitNotFound(sha)
         }
     }
@@ -138,10 +138,23 @@ struct GitRepoCheckout: RepoCheckout {
     /// dotáhne z promisor remote — takže by tahle „levná kontrola“ chodila na síť,
     /// s naším timeoutem, bez credential helperu, a fetch `refs/pull/<n>/head` pod ní
     /// by se nikdy nespustil. Commit by pak v klonu ležel bez refu, který ho drží.
-    private func hasCommit(_ sha: String, in clone: URL) async -> Bool {
+    private func hasCommit(_ sha: String, in clone: URL) async throws -> Bool {
         let arguments = ["-C", clone.path(percentEncoded: false), "cat-file", "-e", "\(sha)^{commit}"]
         let local = environment.merging(["GIT_NO_LAZY_FETCH": "1"]) { _, new in new }
-        return (try? await run(arguments, environment: local)) != nil
+        return try await succeeds(arguments, environment: local)
+    }
+
+    /// Prošel příkaz? Chyba `gitu` je odpověď „ne“, ale **zrušení odpověď není** — samotné
+    /// `try?` by ho spolklo a úloha by pokračovala dál, i když ji nikdo nechce.
+    private func succeeds(_ arguments: [String], environment: [String: String]? = nil) async throws -> Bool {
+        do {
+            _ = try await run(arguments, environment: environment)
+            return true
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return false
+        }
     }
 
     private static func worktreeKey(_ path: URL) -> String {

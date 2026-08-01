@@ -21,17 +21,15 @@ struct CacheLayout: Sendable, Equatable {
             .appending(path: "\(repo.name).git")
     }
 
-    /// Pracovní strom jednoho review: `worktrees/<owner>-<repo>-<pr>-<zkrácený sha>`.
+    /// Pracovní strom jednoho review: `worktrees/<owner>-<repo>-<pr>-<sha>`.
     ///
     /// `headSha` je v názvu schválně — nálezy na něm visí, takže dva běhy nad různými
     /// commity téhož PR si nesmí sáhnout na stejný strom.
     func worktree(for pr: PRIdentifier, at headSha: String) -> URL {
-        let name = "\(pr.repo.owner)-\(pr.repo.name)-\(pr.number)-\(Self.shortened(headSha))"
+        // Celý sha, ne zkrácený: cesta je zároveň klíč koordinátoru, takže shoda prefixu
+        // dvou commitů by dva běhy poslala na tentýž strom.
+        let name = "\(pr.repo.owner)-\(pr.repo.name)-\(pr.number)-\(headSha)"
         return root.appending(path: "worktrees").appending(path: name)
-    }
-
-    private static func shortened(_ sha: String) -> String {
-        String(sha.prefix(7))
     }
 
     /// Značka „klon doběhl celý“, zapsaná až po úspěšném `git clone`.

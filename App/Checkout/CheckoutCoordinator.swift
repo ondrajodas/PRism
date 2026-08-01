@@ -8,27 +8,32 @@ import Foundation
 /// volající chce: výsledek je stejný.
 actor CheckoutCoordinator {
     private var running: [String: Task<any Sendable, any Error>] = [:]
-    private var waiters: [String: Int] = [:]
+    /// Čekatelé podle identity, ne počtu. Kdyby se počítali, zrušený čekající by z počtu
+    /// odešel až po návratu z `task.value` — jenže ten se nevrátí, dokud práce běží. Dva
+    /// zrušení čekatelé by se tak navzájem viděli jako „ještě někdo čeká“ a práci by
+    /// nezrušil ani jeden.
+    private var waiters: [String: Set<UUID>] = [:]
 
     func run<T: Sendable>(
         key: String,
         work: @escaping @Sendable () async throws -> T
     ) async throws -> T {
+        let token = UUID()
         let task = join(key, work)
-        waiters[key, default: 0] += 1
+        waiters[key, default: []].insert(token)
 
         do {
             let value = try await withTaskCancellationHandler {
                 try await task.value
             } onCancel: {
-                Task { await self.waiterLeft(key) }
+                Task { await self.waiterLeft(key, token) }
             }
-            leave(key)
+            leave(key, token)
             // Typ drží dvojice klíč–práce: k jednomu klíči se připojují jen volání, která
             // dělají totéž. Kdyby to přestalo platit, spadne to tady a hned.
             return value as! T
         } catch {
-            leave(key)
+            leave(key, token)
             throw error
         }
     }
@@ -43,14 +48,11 @@ actor CheckoutCoordinator {
         return task
     }
 
-    private func leave(_ key: String) {
-        let remaining = (waiters[key] ?? 1) - 1
-        guard remaining > 0 else {
-            waiters[key] = nil
-            running[key] = nil
-            return
-        }
-        waiters[key] = remaining
+    private func leave(_ key: String, _ token: UUID) {
+        waiters[key]?.remove(token)
+        guard waiters[key]?.isEmpty != false else { return }
+        waiters[key] = nil
+        running[key] = nil
     }
 
     /// Zrušení **posledního** čekajícího zruší i samotnou práci.
@@ -59,8 +61,9 @@ actor CheckoutCoordinator {
     /// a `withTaskCancellationHandler` v `SubprocessRunner`u, který má proces zabít, by
     /// se nikdy nespustil. Dokud čeká někdo další, práce pokračuje: rozdělaný klon je
     /// horší než klon navíc.
-    private func waiterLeft(_ key: String) {
-        guard let count = waiters[key], count <= 1 else { return }
+    private func waiterLeft(_ key: String, _ token: UUID) {
+        waiters[key]?.remove(token)
+        guard waiters[key]?.isEmpty != false else { return }
         running[key]?.cancel()
     }
 }
