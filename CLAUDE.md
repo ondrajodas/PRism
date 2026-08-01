@@ -371,9 +371,10 @@ Věci, které se u toho nemají rozbít:
   přestal cokoli najít.
 - **Do rozpočtu se počítají i stromy.** Klon je `--filter=blob:none`, takže materializované
   soubory leží právě v nich — měřit jen klon znamená měřit menšinu.
-- **Eviction maže jen uvnitř cache.** Je to jediné místo, které maže rekurzivně podle toho,
-  co našlo na disku, takže si před smazáním ověří, že cesta po rozbalení symlinků pořád
-  leží pod kořenem cache.
+- **Maže se jen uvnitř cache.** Kdo maže podle toho, co našel na disku, si před smazáním
+  ověří, že cesta po rozbalení symlinků pořád leží pod kořenem — `removeItem` přes odkaz
+  v rodičovské komponentě smaže **cíl**, ne odkaz. Odpovídá na to `CacheLayout.contains`,
+  jedno místo pro eviction i `ReviewStore`.
 - **Souběžná volání nad stejným klíčem spojuje `CheckoutCoordinator`.** Dvě review nad
   různými PR téhož repa spustí přípravu naráz a druhé volání by mohlo smazat složku
   rozběhnutého klonu prvního. **Uvnitř koordinované práce se nesmí volat nic, co jde přes

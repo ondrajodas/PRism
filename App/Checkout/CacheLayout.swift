@@ -38,6 +38,23 @@ struct CacheLayout: Sendable, Equatable {
         reviews.appending(path: repo.owner).appending(path: repo.name)
     }
 
+    /// Leží cesta uvnitř kořene, i po rozbalení symlinků?
+    ///
+    /// Symlink v cestě umí mazání vyvést ven: `removeItem` přes odkaz v rodičovské
+    /// komponentě smaže **cíl**, ne odkaz. Aplikace si takový odkaz sama nevyrobí, ale
+    /// „nikdy nesahat na uživatelovy klony“ je tvrdá podmínka — a podle výpisu z disku maže
+    /// `CacheEviction` i `ReviewStore`.
+    ///
+    /// Rozbaluje se **rodič**, ne cesta samotná: soubor se teprve může zakládat, a odkaz na
+    /// cíl mimo cache je neškodný — `removeItem` smaže odkaz, ne to, kam ukazuje.
+    func contains(_ url: URL) -> Bool {
+        let root = root.resolvingSymlinksInPath().path(percentEncoded: false)
+        let parent = url.deletingLastPathComponent()
+            .resolvingSymlinksInPath()
+            .path(percentEncoded: false)
+        return parent == root || parent.hasPrefix(root + "/")
+    }
+
     /// Bare klon repa: `repos/<owner>/<repo>.git`.
     func bareClone(for repo: RepoID) -> URL {
         repositories

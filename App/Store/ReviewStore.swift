@@ -117,7 +117,11 @@ actor ReviewStore {
                 continue
             }
 
-            if now.timeIntervalSince(closedAt) >= retention {
+            // Mimo cache se nemaže. Výpis z disku sem symlinkem ven nedostane — `enumerator`
+            // do odkazovaných složek nesestupuje —, ale tvrdá podmínka „nikdy nesahat na
+            // uživatelovy soubory“ nemá viset na tomhle detailu `FileManageru`. Radši
+            // nesmazat než smazat cizí.
+            if now.timeIntervalSince(closedAt) >= retention, layout.contains(url) {
                 try FileManager.default.removeItem(at: url)
             }
         }

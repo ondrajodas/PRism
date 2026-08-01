@@ -237,11 +237,10 @@ extension CacheEviction {
 
     /// Vrátí cestu, jen když po rozbalení symlinků leží pod kořenem cache.
     private static func insideCache(_ url: URL, of layout: CacheLayout) throws -> URL {
-        let root = layout.root.resolvingSymlinksInPath().path(percentEncoded: false)
-        // Rozbaluje se rodič: samotný soubor ještě existovat nemusí.
-        let parent = url.deletingLastPathComponent().resolvingSymlinksInPath().path(percentEncoded: false)
-        guard parent == root || parent.hasPrefix(root + "/") else {
-            throw CheckoutError.cacheUnavailable("Cesta \(parent) vede mimo cache aplikace.")
+        guard layout.contains(url) else {
+            throw CheckoutError.cacheUnavailable(
+                "Cesta \(url.path(percentEncoded: false)) vede mimo cache aplikace."
+            )
         }
         return url
     }
