@@ -39,8 +39,9 @@ struct SubprocessStreamer: ProcessStreaming {
             continuation.onTermination = { termination in
                 timeoutTask.cancel()
                 // Zrušení musí proces zabít. Bez toho by session běžela dál i poté, co
-                // uživatel review zrušil nebo zavřel okno.
-                if case .cancelled = termination { launched.signal(SIGKILL) }
+                // uživatel review zrušil nebo zavřel okno — a `requestKill` na to stačí
+                // i tehdy, když zrušení předběhlo samotné spuštění.
+                if case .cancelled = termination { launched.requestKill() }
             }
 
             do {

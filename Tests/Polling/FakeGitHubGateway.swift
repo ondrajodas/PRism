@@ -8,16 +8,23 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     typealias Outcome = Result<[PullRequestSummary], any Error>
 
     private let outcomes: [Outcome]
+    /// Co vrátí `fetchDetail`. Detail se tahá až kvůli review, takže ho většina testů
+    /// nepotřebuje a nechá ho `nil`.
+    private let detail: Result<PullRequest, any Error>?
     private let lock = NSLock()
     private var asked: [String] = []
+    private var detailsAsked: [PRIdentifier] = []
 
-    init(_ outcomes: [Outcome]) {
+    init(_ outcomes: [Outcome], detail: Result<PullRequest, any Error>? = nil) {
         self.outcomes = outcomes
+        self.detail = detail
     }
 
-    convenience init(always outcome: Outcome) {
-        self.init([outcome])
+    convenience init(always outcome: Outcome, detail: Result<PullRequest, any Error>? = nil) {
+        self.init([outcome], detail: detail)
     }
+
+    var detailRequests: [PRIdentifier] { lock.withLock { detailsAsked } }
 
     /// Dotazy v pořadí, jak přišly — na nich se pozná, že se prošly všechny zdroje.
     var queries: [String] { lock.withLock { asked } }
@@ -36,6 +43,8 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
 
     /// Polling detail netahá — SHA potřebuje až review, ne seznam.
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {
-        throw GitHubError.notFound("Fake gateway detail nezná.")
+        lock.withLock { detailsAsked.append(id) }
+        guard let detail else { throw GitHubError.notFound("Fake gateway detail nezná.") }
+        return try detail.get()
     }
 }

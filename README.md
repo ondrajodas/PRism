@@ -17,33 +17,33 @@ názoru.
 
 ## Stav
 
-**První použitelná verze: aplikace ukazuje moje skutečné PR.** Po startu si ověří, že má
-`gh`, `git` i `claude` a že je `gh` přihlášený — jinak řekne, co chybí a čím se to spraví.
-Pak se otevře seznam pull requestů napříč repozitáři, který se sám obnovuje: každý řádek
-nese repo, číslo, titulek, autora a čas poslední změny. Při výpadku sítě zůstanou
-poslední známá data a nad seznamem se objeví pruh, že nejsou aktuální; při rate limitu
-pruh říká, kdy to zkusí znovu.
+**Aplikace dělá to, kvůli čemu vznikla: pustí review na moje skutečné PR a ukáže nálezy.**
 
-Review se zatím nespouští, ale **pracovní kopii si už vyžádat jde**: u vybraného PR na to
-je tlačítko (samo se nestahuje nic), během klonování je v řádku vidět `ve frontě · clone`. Když se to
-nepovede, ukáže se `clone selhal` a v detailu celý výstup `gitu` s tlačítkem `Zkusit
-znovu`.
+Po startu si ověří, že má `gh`, `git` i `claude` a že je `gh` přihlášený — jinak řekne, co
+chybí a čím se to spraví. Pak se otevře seznam pull requestů napříč repozitáři, který se
+sám obnovuje: každý řádek nese repo, číslo, titulek, autora a čas poslední změny. Při
+výpadku sítě zůstanou poslední známá data a nad seznamem se objeví pruh, že nejsou
+aktuální; při rate limitu pruh říká, kdy to zkusí znovu.
+
+U vybraného PR je tlačítko **Spustit review**. Za ním se stane tohle: dotáhne se head
+commit, připraví se odpojený pracovní strom a v něm se spustí headless session Claude Code
+omezená na čtení. Řádek mezitím ukazuje `ve frontě · clone` → `běží 0/1` → `čisté` nebo
+`N nálezů`; běh jde kdykoli zrušit. Nálezy se uloží na disk, takže přežijí restart, a
+v detailu je nahoře **návrh verdiktu** (`approve` / `request changes` / *není z čeho
+soudit*) a pod ním seznam nálezů po kategoriích s odznakem u těch blokujících. Zobrazení je
+zatím surové — diff s bublinami je další fáze.
+
+Sada reviewerů je zatím konstanta v kódu; výběr v nastavení přijde s konfigurací.
 
 Pod tím vším je vlastní cache repozitářů: bare partial clone do
 `~/Library/Application Support/PRism/`, přihlášení delegované na `gh`, odpojený
 `git worktree` pro každé review a úklid, který po každém pollingu zahodí repa bez
 otevřeného PR a při překročení rozpočtu (10 GB) i ta nejdéle nepoužitá. Platí u ní, že
 **vlastních klonů na disku se aplikace nikdy nedotkne** — pracuje výhradně ve své cache.
+Uložené nálezy jsou klíčované head commitem: nové commity je označí jako zastaralé
+a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí.
 
-Vedle toho už je hotový i samotný běh review: spuštění headless session `claude`
-v pracovním stromě, čtení `stream-json` výstupu po řádcích, timeout (15 minut), zrušení
-a limit tří souběžných session. Výsledky se ukládají na disk — jeden JSON soubor na PR
-a head commit, takže přežijí restart; nové commity starší nálezy označí jako zastaralé
-a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí. Hotové je i rozhodování
-nad nálezy: co blokuje, jaký verdikt z toho plyne, kde se dva reviewery shodli a v jakém
-pořadí to ukázat. Do okna to zatím nevede — chybí ten, kdo zmáčkne tlačítko.
-
-Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první dvě a rozdělaná třetí.
+Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první tři.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -78,7 +78,7 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 |---|---|
 | **Reviewery** | Běží nezávisle a paralelně. Texty nálezů se mezi nimi neslučují — nesouhlas dvou reviewerů je informace. Shoda na stejném `file:line` se označí odznakem `2×`. |
 | **Závažnost** | Aplikace nevymýšlí vlastní škálu. Seskupuje podle `category` z výstupu reviewera a odvozuje jediný blokující boolean (`verdict == CONFIRMED` a `category` v blokující sadě). Z toho vypadne návrh verdiktu. |
-| **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené, takže pokus o zápis skončí odmítnutím a soubor nevznikne. Ověřeno proti CLI — v seznamu nástrojů session se objevují i nepovolené, takže záruka stojí na odmítnutí zápisu, ne na jejich nepřítomnosti. Bezpečnostní vlastnost i praktická: headless session neumí odpovědět na permission prompt. |
+| **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
 | **Konfigurace** | Dvě úrovně: globální default a override per repo (režim auto/manual, sada skillů, blokující kategorie). |
 

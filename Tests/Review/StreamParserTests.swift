@@ -171,6 +171,46 @@ struct StreamParserTests {
         #expect(result.findings.count == 1)
     }
 
+    @Test("Přeformulovaný popisek z nálezu druhý nález neudělá")
+    func aRewordedShortSummaryIsStillTheSameFinding() {
+        // Ověřeno na skutečném běhu (#17): reviewer nahlásil tentýž problém průběžně
+        // a znovu v závěrečném seznamu, jen si mezitím upravil `short_summary`.
+        // Porovnání celé hodnoty ho propustilo a v UI byl dvakrát.
+        func call(shortSummary: String) -> String {
+            """
+            {"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1",\
+            "name":"ReportFindings","input":{"findings":[{"file":"A.php","line":96,\
+            "summary":"delay node je inertní","short_summary":"\(shortSummary)"}]}}]}}
+            """
+        }
+
+        let result = parser.summarize([
+            call(shortSummary: "delay node can never match anything"),
+            call(shortSummary: "delay node can never match"),
+        ])
+
+        #expect(result.findings.count == 1)
+    }
+
+    @Test("Dva různé problémy na jednom řádku zůstanou dva")
+    func twoDifferentProblemsOnOneLineStayTwo() {
+        // Deduplikace se drží povinného `summary`, takže různé nálezy neslije.
+        func call(summary: String) -> String {
+            """
+            {"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1",\
+            "name":"ReportFindings","input":{"findings":[{"file":"A.php","line":96,\
+            "summary":"\(summary)"}]}}]}}
+            """
+        }
+
+        let result = parser.summarize([
+            call(summary: "chybí kontrola prázdnosti"),
+            call(summary: "celočíselné dělení useká zbytek"),
+        ])
+
+        #expect(result.findings.count == 2)
+    }
+
     @Test("Číslo řádku snese text, ale ne boolean")
     func readsLineNumbersDefensively() {
         // `JSONSerialization` mapuje `true` na `NSNumber`, takže z něj `as? Int` udělá

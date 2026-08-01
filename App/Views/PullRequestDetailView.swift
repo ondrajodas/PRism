@@ -13,16 +13,57 @@ struct PullRequestDetailView: View {
         VStack(alignment: .leading, spacing: 16) {
             header
             checkout
-            Spacer()
-            Text("Diff a nálezy sem přijdou v dalších fázích.")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
+            review
+            findings
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // Klon je jeden pro celé repo, takže druhé PR ze stejného repa může mít hotovo,
         // aniž by o tom kdo řekl. Zjistí se to při výběru řádku, ne klonováním.
         .task(id: pullRequest.id) { await store.noteExistingCheckout(for: pullRequest.id) }
+    }
+
+    /// Spuštění a zrušení review. Tlačítko je tady, ne v toolbaru: patří k vybranému PR
+    /// a v toolbaru by nebylo vidět, ke kterému.
+    @ViewBuilder private var review: some View {
+        if store.isReviewing(pullRequest.id) {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(runningLabel)
+                Button("Zrušit", systemImage: "stop.circle") {
+                    store.cancelReview(for: pullRequest.id)
+                }
+            }
+        } else {
+            HStack(spacing: 12) {
+                Button("Spustit review", systemImage: "play.circle") {
+                    store.startReview(for: pullRequest.id)
+                }
+                if case .failed(let detail) = store.reviewPhases[pullRequest.id] {
+                    Label(detail, systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private var runningLabel: String {
+        switch store.reviewPhases[pullRequest.id] {
+        case .running(let finished, let total): "Běží review — hotovo \(finished) z \(total)"
+        default: "Připravuji pracovní kopii a stahuji commit…"
+        }
+    }
+
+    @ViewBuilder private var findings: some View {
+        if let record = store.reviewRecord(for: pullRequest.id) {
+            FindingsView(record: record)
+        } else {
+            Spacer()
+            Text("Zatím tu žádné nálezy nejsou. Diff s bublinami přijde v dalších fázích.")
+                .font(.callout)
+                .foregroundStyle(.tertiary)
+        }
     }
 
     private var header: some View {

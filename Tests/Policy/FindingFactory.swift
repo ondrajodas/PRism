@@ -54,7 +54,8 @@ func makeStoredRun(
     findings: [ReportedFinding] = [],
     calledReportFindings: Bool = true,
     droppedFindings: Int = 0,
-    headSha: String = "aaaa1111"
+    headSha: String = "aaaa1111",
+    finishedAt: Date = Date(timeIntervalSince1970: 1_000_000)
 ) -> StoredReviewRun {
     var summary = StreamSummary()
     summary.findings = findings
@@ -70,7 +71,7 @@ func makeStoredRun(
         summary: summary,
         outcome: outcome
     )
-    return StoredReviewRun(run, finishedAt: Date(timeIntervalSince1970: 1_000_000))
+    return StoredReviewRun(run, finishedAt: finishedAt)
 }
 
 func makeRecord(

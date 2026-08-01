@@ -2,9 +2,10 @@
 
 **Ověřeno:** 2026-08-01 · **verze:** `2.1.220 (Claude Code)` · **stroj:** macOS 26
 
-Spike k issue #12. Specifikace měla flagy `claude` CLI psané z pracovní znalosti; tenhle
-dokument je nahrazuje tím, co skutečně dělá nainstalované CLI. Všechno níž je ověřené
-spuštěním, ne odvozené z nápovědy — kde se nápověda a chování liší, je to napsané.
+Spike k issue #12, doplněno a **opraveno** u #17. Specifikace měla flagy `claude` CLI psané
+z pracovní znalosti; tenhle dokument je nahrazuje tím, co skutečně dělá nainstalované CLI.
+Všechno níž je ověřené spuštěním, ne odvozené z nápovědy — kde se nápověda a chování liší,
+je to napsané.
 
 Surové streamy z těch běhů leží v [`Tests/Fixtures/stream-json/`](../Tests/Fixtures/stream-json).
 
@@ -15,6 +16,7 @@ claude -p "<prompt>" \
     --output-format stream-json \
     --verbose \
     --allowedTools "Read,Grep,Glob,Bash(git:*),ReportFindings" \
+    --disallowedTools "Bash(gh:*),Bash(git push:*)" \
     < /dev/null
 ```
 
@@ -29,8 +31,8 @@ claude -p "<prompt>" \
 - **`stdin` musí být zavřený.** Jinak `claude` čeká tři sekundy a vypíše
   `Warning: no stdin data received in 3s`. `SubprocessRunner` posílá `FileHandle.nullDevice`,
   takže je to splněné — ale je to podmínka, ne shoda náhod.
-- **Pracovní složka je `cwd` procesu.** Nedá se předat flagem, takže `ReviewRunner` bude
-  potřebovat `cwd` v `ProcessRunning` (dnes tam není; `git` si vystačí s `-C`).
+- **Pracovní složka je `cwd` procesu.** Nedá se předat flagem — proto má `ProcessStreaming`
+  `workingDirectory`, kdežto bufferovaná cesta si u `gitu` vystačí s `-C`.
 
 ## `--allowedTools`: co doopravdy dělá
 
@@ -46,7 +48,8 @@ Podstatnější je, co ten flag **není**:
 | | |
 |---|---|
 | **Není totéž co seznam dostupných nástrojů** | Init event vypisuje i nástroje, které povolené nejsou — `Write`, `Edit` i `Bash` v něm jsou, ať je v `--allowedTools` cokoli. Na část seznamu ale vliv má: bez `Grep`/`Glob` v povoleních zmizí i z `tools` |
-| **Neomezuje `Bash` jen na uvedený vzor** | S `--allowedTools "Bash(git:*)"` prošly i `ls -la` a `cat soubor` |
+| **Bash zužuje, ale vedle vzoru platí i vestavěný seznam** | S `--allowedTools "Bash(git:*)"` prošly `ls -la` i `cat soubor` — **ne** proto, že by scope neplatil, ale protože jsou to čtecí příkazy z vestavěného seznamu Claude Code. `gh auth status` **neprošel** (`This command requires approval`, viz `permission_denials`) |
+| **Uvnitř vzoru projde všechno** | `Bash(git:*)` povolí **každý** git příkaz včetně `git push`. Ověřeno spuštěním: `git push --dry-run origin HEAD` se provedl a selhal až na chybějícím remote |
 | **Zápis přesto neprojde** | `touch`, `rm` i nástroj `Write` skončily chybou a soubory nevznikly |
 
 `--allowedTools` seznam nástrojů v init eventu **částečně ovlivňuje**, ale nepovolené
@@ -54,14 +57,56 @@ nástroje z něj nemizí. Ověřeno porovnáním dvou fixtures: běh s `--allowe
 v `tools` 31 položek a chybí v nich `Grep` a `Glob`, kdežto běh s `Read,Grep,Glob,…` jich
 má 33. **`Write`, `Edit` i `Bash` jsou přitom v obou** — tedy i tam, kde povolené nejsou.
 
-Hranice povolení tedy nevede podle vzoru v `--allowedTools`, ale podle toho, jestli je
-operace **měnící**. Pro tvrdou podmínku „reviewer je read-only“ to dopadá dobře — mutace
-strukturálně neprojdou — ale zdůvodnění v návrhu bylo chybné a je opravené.
+**Oprava proti první verzi tohohle dokumentu (ověřeno u #17).** Původně tu stálo, že scope
+`Bash` nezúží a že hranice vede podle toho, jestli je operace měnící. Obojí je nepřesné:
+
+- Co je **mimo** vzor, se odmítne — pokud to není na vestavěném seznamu čtecích příkazů.
+  `ls -la` a `cat` proto prošly, `gh auth status` ne.
+- Co je **uvnitř** vzoru, projde celé. `Bash(git:*)` tedy pouští i `git push` — a to je
+  jediná cesta, kterou by session z naší cache uměla něco odeslat, protože `origin` míří na
+  skutečné repo a má credential helper.
+
+## `--disallowedTools`: čím se to zavírá
+
+Zákaz **přebíjí povolení** a funguje na vzor příkazu, ne jen na nástroj. Ověřeno:
+
+```bash
+--allowedTools "Read,Grep,Glob,Bash(git:*),ReportFindings" \
+--disallowedTools "Bash(gh:*),Bash(git push:*)"
+```
+
+| Příkaz | Bez zákazu | Se zákazem |
+|---|---|---|
+| `git log --oneline` | projde | projde |
+| `git push origin HEAD:…` | **projde** | `Permission to use Bash with command … has been denied` |
+| `git push file://…/repo.git HEAD:…` | projde | odmítnuto — **ani s vypsanou URL** |
+| `gh auth status` | odmítnuto (`requires approval`) | odmítnuto (výslovně) |
+
+Na vzdálený repozitář po pokusu nedorazil žádný ref. Rozdíl v hlášce stojí za pozornost:
+bez zákazu je to „vyžaduje schválení“ (tedy stav, který by v interaktivním režimu šel
+odklepnout), se zákazem „bylo odepřeno“.
 
 Odmítnutí je ve streamu vidět dvakrát: jako `tool_result` s `is_error: true` a textem
 `Claude requested permissions to …, but you haven't granted it yet.`, a souhrnně v `result`
 eventu v poli `permission_denials` (`tool_name`, `tool_use_id`, `tool_input`). Běh přitom
 skončí `subtype: "success"` a `is_error: false` — **odmítnutý nástroj není chyba běhu**.
+
+## Jak se review vyvolává (ověřeno u #17)
+
+Nálezy sbírá aplikace z `ReportFindings` tool callů, takže **na promptu záleží**.
+
+| Vyvolání | Co se stalo |
+|---|---|
+| `-p "/code-review …"` (vestavěný slash command) | Doběhne `success`, ale `num_turns: 0`, **žádný `tool_use`** a nálezy jsou v `result.result` jako text s JSON blokem. Sběr by tiše nefungoval — i když se o `ReportFindings` v promptu výslovně řekne |
+| `-p "…Report every finding by calling the ReportFindings tool…"` (prostý prompt) | 13 tahů, `ReportFindings` se třemi nálezy. Totéž dělal spike u #12 |
+
+Aplikace proto **slash command nepouští**. Až se sada reviewerů přesune do konfigurace
+(#23), bude to potřeba vyřešit znovu: skutečné skilly by šly načíst nástrojem `Skill`, ten
+je ale dneska v odmítnutých (v tom běhu se o něj session pokusila a nedostala ho).
+
+Ten samý běh mimochodem doložil, že read-only drží i pod tlakem: reviewer si chtěl chybu
+ověřit kompilací, takže zkusil `Write` a `mktemp … && swiftc …`. **Obojí odmítnuto** a v repu
+po něm nic nezůstalo.
 
 ## Tvar streamu
 
@@ -140,3 +185,17 @@ místo ke kontrole.
 Testovaný kód byl schválně chybný `Cart.swift` ve scratch repu (součet ignoruje množství,
 celočíselné dělení u slevy, index bez kontroly prázdnosti) — v repu není, fixtures ho nesou
 v obsahu streamu.
+
+## Dva různé `code-review`
+
+V instalaci na tomhle stroji jsou **dva** slash commandy s tímhle jménem a dělají něco
+úplně jiného:
+
+| | |
+|---|---|
+| `code-review` (vestavěný) | Reviewuje lokální změny a nálezy hlásí přes `ReportFindings`. **Tenhle aplikace pouští** — z něj jsou i fixtures |
+| `code-review:code-review` (plugin) | Reviewuje PR přes `gh pr diff` a v `allowed-tools` má `Bash(gh pr comment:*)`, tedy **píše komentář na GitHub**. Nálezy přes `ReportFindings` nehlásí vůbec |
+
+Rozdíl je jeden prefix a důsledek je porušení tvrdé podmínky. Až se sada skillů přesune do
+konfigurace (#23), musí se vybírat přesným id — a zákaz `Bash(gh:*)` tam musí zůstat jako
+pojistka, protože co skill dělá, aplikace dopředu neví.

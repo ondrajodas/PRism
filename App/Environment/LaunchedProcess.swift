@@ -16,6 +16,8 @@ final class LaunchedProcess: @unchecked Sendable {
     private let error = Pipe()
     private let lock = NSLock()
     private var timedOut = false
+    private var running = false
+    private var killRequested = false
     private var terminationStatus: Int32?
     private var exitWaiters: [CheckedContinuation<Int32, Never>] = []
 
@@ -47,6 +49,15 @@ final class LaunchedProcess: @unchecked Sendable {
         } catch {
             throw ProcessError.launchFailed(error.localizedDescription)
         }
+
+        // Zabít se o proces mohl někdo říct dřív, než vznikl — zrušení dorazí kdykoli.
+        // Bez tohohle by `SIGKILL` narazil na `isRunning == false`, neudělal nic a proces
+        // by pak naběhl a doběhl do konce, i když už ho nikdo nechce.
+        let wanted: Bool = lock.withLock {
+            running = true
+            return killRequested
+        }
+        if wanted { signal(SIGKILL) }
     }
 
     func readStandardOutput() -> String { Self.readToEnd(output) }
@@ -101,6 +112,18 @@ final class LaunchedProcess: @unchecked Sendable {
     func signal(_ signalNumber: Int32) {
         guard process.isRunning else { return }
         kill(process.processIdentifier, signalNumber)
+    }
+
+    /// Zabít proces, ať už běží, nebo se teprve spouští.
+    ///
+    /// `signal(SIGKILL)` sám nestačí: zrušení může dorazit v okně mezi nastavením handleru
+    /// a `process.run()`, kdy ještě není koho zabít — a proces by pak naběhl osiřelý.
+    func requestKill() {
+        let now: Bool = lock.withLock {
+            killRequested = true
+            return running
+        }
+        if now { signal(SIGKILL) }
     }
 
     func markTimedOut() { lock.withLock { timedOut = true } }

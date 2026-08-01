@@ -41,8 +41,10 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
         return try outcome.get()
     }
 
+    /// Stejné selhání jako u přípravy — `worktree` ji volá, takže co položí ji, položí i ho.
     func worktree(for pr: PRIdentifier, at headSha: String) async throws -> URL {
-        URL(filePath: "/tmp/\(pr)-\(headSha)")
+        _ = try outcome.get()
+        return URL(filePath: "/tmp/\(pr)-\(headSha)")
     }
 
     func removeWorktree(for pr: PRIdentifier, at headSha: String) async throws {}
