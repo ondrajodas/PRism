@@ -14,10 +14,19 @@ actor CheckoutCoordinator {
     /// nezrušil ani jeden.
     private var waiters: [String: Set<UUID>] = [:]
 
+    /// Slučuje se podle `key` **i** `kind`.
+    ///
+    /// Nad jednou cestou existují dvě různé operace — založit strom a uklidit ho — a
+    /// slučovat se smějí jen stejné. Kdyby se úklid připojil k rozdělanému zakládání,
+    /// dostal by cizí výsledek (`as!` by spadlo) a hlavně by neuklidil. Různé druhy tedy
+    /// běží samostatně; když si na disku vlezou do cesty, ohlásí to `git` jako chybu —
+    /// což je normální stav, na rozdíl od pádu na přetypování.
     func run<T: Sendable>(
         key: String,
+        kind: String,
         work: @escaping @Sendable () async throws -> T
     ) async throws -> T {
+        let key = "\(kind):\(key)"
         let token = UUID()
         let task = join(key, work)
         waiters[key, default: []].insert(token)
@@ -29,8 +38,8 @@ actor CheckoutCoordinator {
                 Task { await self.waiterLeft(key, token) }
             }
             leave(key, token)
-            // Typ drží dvojice klíč–práce: k jednomu klíči se připojují jen volání, která
-            // dělají totéž. Kdyby to přestalo platit, spadne to tady a hned.
+            // Typ drží druh práce: k běžícímu tasku se připojí jen volání stejného druhu,
+            // které vrací totéž. Kdyby to přestalo platit, spadne to tady a hned.
             return value as! T
         } catch {
             leave(key, token)

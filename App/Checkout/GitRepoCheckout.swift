@@ -29,19 +29,19 @@ struct GitRepoCheckout: RepoCheckout {
     }
 
     func prepare(_ repo: RepoID) async throws -> URL {
-        try await coordinator.run(key: "clone:\(repo)") { try await clone(repo) }
+        try await coordinator.run(key: "clone:\(repo)", kind: "clone") { try await clone(repo) }
     }
 
     func worktree(for pr: PRIdentifier, at headSha: String) async throws -> URL {
         let path = layout.worktree(for: pr, at: headSha)
-        return try await coordinator.run(key: Self.worktreeKey(path)) {
+        return try await coordinator.run(key: Self.worktreeKey(path), kind: "add") {
             try await addWorktree(for: pr, at: headSha, path: path)
         }
     }
 
     func removeWorktree(for pr: PRIdentifier, at headSha: String) async throws {
         let path = layout.worktree(for: pr, at: headSha)
-        try await coordinator.run(key: Self.worktreeKey(path)) {
+        try await coordinator.run(key: Self.worktreeKey(path), kind: "remove") {
             try await discardWorktree(for: pr, at: path)
         }
     }

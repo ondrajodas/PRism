@@ -32,9 +32,9 @@ struct CheckoutCoordinatorTests {
         let coordinator = CheckoutCoordinator()
         let work = SlowWork()
 
-        async let first = coordinator.run(key: "keboola/vault") { await work.run() }
+        async let first = coordinator.run(key: "keboola/vault", kind: "clone") { await work.run() }
         await work.waitUntilStarted()
-        async let second = coordinator.run(key: "keboola/vault") { await work.run() }
+        async let second = coordinator.run(key: "keboola/vault", kind: "clone") { await work.run() }
         await Task.yield()
         await work.finish()
 
@@ -47,8 +47,8 @@ struct CheckoutCoordinatorTests {
     func differentKeysRunIndependently() async throws {
         let coordinator = CheckoutCoordinator()
 
-        async let first = coordinator.run(key: "a") { URL(filePath: "/a") }
-        async let second = coordinator.run(key: "b") { URL(filePath: "/b") }
+        async let first = coordinator.run(key: "a", kind: "clone") { URL(filePath: "/a") }
+        async let second = coordinator.run(key: "b", kind: "clone") { URL(filePath: "/b") }
 
         #expect(try await [first, second] == [URL(filePath: "/a"), URL(filePath: "/b")])
     }
@@ -59,8 +59,8 @@ struct CheckoutCoordinatorTests {
         // a nikdy by nic nedotáhla.
         let coordinator = CheckoutCoordinator()
 
-        _ = try await coordinator.run(key: "a") { URL(filePath: "/první") }
-        let second = try await coordinator.run(key: "a") { URL(filePath: "/druhý") }
+        _ = try await coordinator.run(key: "a", kind: "clone") { URL(filePath: "/první") }
+        let second = try await coordinator.run(key: "a", kind: "clone") { URL(filePath: "/druhý") }
 
         #expect(second == URL(filePath: "/druhý"))
     }
@@ -89,7 +89,7 @@ struct CheckoutCoordinatorTests {
         let coordinator = CheckoutCoordinator()
         let work = CancellableWork()
 
-        let waiter = Task { try await coordinator.run(key: "a") { await work.run() } }
+        let waiter = Task { try await coordinator.run(key: "a", kind: "clone") { await work.run() } }
         await work.waitUntilStarted()
         waiter.cancel()
         _ = try? await waiter.value
@@ -103,9 +103,9 @@ struct CheckoutCoordinatorTests {
         let coordinator = CheckoutCoordinator()
         let work = CancellableWork()
 
-        let first = Task { try await coordinator.run(key: "a") { await work.run() } }
+        let first = Task { try await coordinator.run(key: "a", kind: "clone") { await work.run() } }
         await work.waitUntilStarted()
-        let second = Task { try await coordinator.run(key: "a") { await work.run() } }
+        let second = Task { try await coordinator.run(key: "a", kind: "clone") { await work.run() } }
         await Task.yield()
         first.cancel()
 
@@ -118,12 +118,35 @@ struct CheckoutCoordinatorTests {
         #expect(await work.sawCancellation)
     }
 
+    @Test("Jiný druh práce se k běžící nepřipojí")
+    func differentKindDoesNotJoin() async throws {
+        // Založení stromu a jeho úklid sdílejí cestu, ale vracejí jiný typ. Připojit se
+        // k cizí práci by znamenalo dostat cizí výsledek — a hlavně by úklid neuklidil.
+        let coordinator = CheckoutCoordinator()
+        let work = SlowWork()
+        let cleaned = Cleaned()
+
+        async let creating: URL = coordinator.run(key: "strom", kind: "add") { await work.run() }
+        await work.waitUntilStarted()
+        try await coordinator.run(key: "strom", kind: "remove") { await cleaned.mark() }
+
+        #expect(await cleaned.done)
+        await work.finish()
+        _ = try await creating
+        #expect(await work.runs == 1)
+    }
+
+    private actor Cleaned {
+        private(set) var done = false
+        func mark() { done = true }
+    }
+
     @Test("Chyba se předá všem, kdo na práci čekali")
     func failurePropagatesToEveryCaller() async {
         let coordinator = CheckoutCoordinator()
 
         await #expect(throws: CheckoutError.timedOut) {
-            try await coordinator.run(key: "a") { throw CheckoutError.timedOut }
+            try await coordinator.run(key: "a", kind: "clone") { throw CheckoutError.timedOut }
         }
     }
 }
