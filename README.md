@@ -67,7 +67,8 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 |---|---|
 | **Reviewery** | Běží nezávisle a paralelně. Texty nálezů se mezi nimi neslučují — nesouhlas dvou reviewerů je informace. Shoda na stejném `file:line` se označí odznakem `2×`. |
 | **Závažnost** | Aplikace nevymýšlí vlastní škálu. Seskupuje podle `category` z výstupu reviewera a odvozuje jediný blokující boolean (`verdict == CONFIRMED` a `category` v blokující sadě). Z toho vypadne návrh verdiktu. |
-| **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené, takže pokus o zápis skončí odmítnutím a soubor nevznikne. Ověřeno proti CLI — nástroje v session existují, jen jsou nepovolené. Bezpečnostní vlastnost i praktická: headless session neumí odpovědět na permission prompt. |
+| **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené, takže pokus o zápis skončí odmítnutím a soubor nevznikne. Ověřeno proti CLI — v seznamu nástrojů session se objevují i nepovolené, takže záruka
+stojí na odmítnutí zápisu, ne na jejich nepřítomnosti. Bezpečnostní vlastnost i praktická: headless session neumí odpovědět na permission prompt. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
 | **Konfigurace** | Dvě úrovně: globální default a override per repo (režim auto/manual, sada skillů, blokující kategorie). |
 

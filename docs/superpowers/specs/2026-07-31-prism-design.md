@@ -123,8 +123,7 @@ claude -p "<prompt>"
 - **Read-only z principu.** `--allowedTools` neobsahuje `Write` ani `Edit` a u `Bash`
   uvádí jen `git`. Ověřeno u #12, že záruka drží — ale stojí na něčem jiném, než návrh
   předpokládal: scope `Bash(git:*)` `Bash` **nezúží** (projdou i `ls` nebo `cat`)
-  a nástroje zůstávají v session všechny, protože `--allowedTools` je seznam povolení,
-  ne dostupnosti. Neprojdou **měnící** operace: `touch`, `rm` i `Write` skončily
+  a v seznamu nástrojů session se objevují i nepovolené (`Write` a `Edit` tam jsou vždy). Neprojdou **měnící** operace: `touch`, `rm` i `Write` skončily
   odmítnutím a nic po nich nezůstalo. Read-only tedy drží nepovolením mutací.
 
   Hodnota `--allowedTools` je v ukázce **bez uvozovek** schválně: aplikace shell nepoužívá
@@ -408,8 +407,9 @@ a `Tests/Fixtures/stream-json/`. Co z toho plyne pro návrh:
 - **`ReportFindings` musí být v `--allowedTools`.** Sada navržená výš
   (`Read,Grep,Glob,Bash(git:*)`) ho neobsahovala, takže by reviewer nálezy **napsal jako
   text** a sběr přes tool cally by tiše nefungoval. Opraveno v popisu `ReviewRunner`.
-- **`--allowedTools` je seznam povolení, ne dostupnosti.** Nástroje zůstávají v session
-  všechny a `Bash(git:*)` nezúží `Bash` jen na git — projdou i `ls` nebo `cat`. Read-only
+- **`--allowedTools` není totéž co seznam dostupných nástrojů.** V init eventu se objevují
+  i nepovolené — `Write` a `Edit` tam jsou vždycky — a `Bash(git:*)` nezúží `Bash` jen na
+  git, projdou i `ls` nebo `cat`. Read-only
   garance drží, ale z jiného důvodu, než návrh předpokládal: neprojdou **měnící** operace
   (`touch`, `rm`, `Write` skončily chybou a nic nevzniklo).
 - **`session_id` je na každém eventu**, nejen v `init`.

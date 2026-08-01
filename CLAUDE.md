@@ -173,8 +173,8 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    je návrh zobrazený v aplikaci. Aplikace je vůči GitHubu **jen pro čtení**.
 2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit` a u `Bash` se
    uvádí jen `git`. Ověřeno proti CLI (#12), že záruka drží — ale ne tím, čím se čekalo:
-   nástroje v session zůstávají všechny a scope `Bash(git:*)` `Bash` nezúží (projdou i
-   negitové příkazy), protože `--allowedTools` je seznam **povolení**, ne dostupnosti.
+   v seznamu nástrojů session se objevují i nepovolené (`Write` a `Edit` tam jsou vždy)
+   a scope `Bash(git:*)` `Bash` nezúží — projdou i negitové příkazy.
    Co neprojde, jsou **měnící** operace: `touch`, `rm` i `Write` skončily odmítnutím a nic
    po nich nezůstalo. Reviewer tedy nemůže změnit kód ani nic odeslat, jen z jiného
    důvodu, než tu stálo dřív.

@@ -45,12 +45,17 @@ Podstatnější je, co ten flag **není**:
 
 | | |
 |---|---|
-| **Neomezuje seznam nástrojů** | Init event vypisuje všechny nástroje včetně `Write` a `Edit`, ať je v `--allowedTools` cokoli. Je to seznam **povolení**, ne dostupnosti |
+| **Není totéž co seznam dostupných nástrojů** | Init event vypisuje i nástroje, které povolené nejsou — `Write`, `Edit` i `Bash` v něm jsou, ať je v `--allowedTools` cokoli. Na část seznamu ale vliv má: bez `Grep`/`Glob` v povoleních zmizí i z `tools` |
 | **Neomezuje `Bash` jen na uvedený vzor** | S `--allowedTools "Bash(git:*)"` prošly i `ls -la` a `cat soubor` |
 | **Zápis přesto neprojde** | `touch`, `rm` i nástroj `Write` skončily chybou a soubory nevznikly |
 
-Hranice tedy nevede podle vzoru v `--allowedTools`, ale podle toho, jestli je operace
-**měnící**. Pro tvrdou podmínku „reviewer je read-only“ to dopadá dobře — mutace
+`--allowedTools` seznam nástrojů v init eventu **částečně ovlivňuje**, ale nepovolené
+nástroje z něj nemizí. Ověřeno porovnáním dvou fixtures: běh s `--allowedTools "Read"` má
+v `tools` 31 položek a chybí v nich `Grep` a `Glob`, kdežto běh s `Read,Grep,Glob,…` jich
+má 33. **`Write`, `Edit` i `Bash` jsou přitom v obou** — tedy i tam, kde povolené nejsou.
+
+Hranice povolení tedy nevede podle vzoru v `--allowedTools`, ale podle toho, jestli je
+operace **měnící**. Pro tvrdou podmínku „reviewer je read-only“ to dopadá dobře — mutace
 strukturálně neprojdou — ale zdůvodnění v návrhu bylo chybné a je opravené.
 
 Odmítnutí je ve streamu vidět dvakrát: jako `tool_result` s `is_error: true` a textem
@@ -65,7 +70,7 @@ Jeden JSON objekt na řádek. Typy v pořadí, v jakém chodí:
 | `type` / `subtype` | K čemu |
 |---|---|
 | `system` / `hook_started`, `hook_response` | Hooky uživatelova prostředí. Pro aplikaci šum |
-| `system` / `init` | Start session — 22 klíčů, mimo jiné `session_id`, `cwd`, `model`, `tools`, `permissionMode` |
+| `system` / `init` | Start session — 22 klíčů, mimo jiné `session_id`, `cwd`, `model`, `tools`, `permissionMode`. **`tools` není spolehlivý obraz povolení** (viz níž) |
 | `assistant` | Zpráva modelu; `message.content[]` nese bloky `text` a `tool_use` |
 | `user` | Výsledky nástrojů; `message.content[]` nese bloky `tool_result` |
 | `rate_limit_event` | Informace o limitech, chodí i uprostřed běhu |
