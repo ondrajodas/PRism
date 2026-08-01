@@ -198,6 +198,21 @@ struct AppStoreReviewTests {
         #expect(store.checkoutState(for: pr.repo) == .absent)
     }
 
+    @Test("Nečekaná chyba reviewera se ukáže, ne ztratí")
+    func anUnexpectedRunnerErrorBecomesAFailedRun() async throws {
+        // Protokol slibuje, že se vyhodí jen zrušení. Kdyby to někdy neplatilo, nesmí se
+        // z toho stát tichý „neběželo“.
+        struct Boom: Error, LocalizedError {
+            var errorDescription: String? { "runner se rozsypal" }
+        }
+        let store = store(gateway: gateway(), reviewer: FakeReviewRunner(failing: Boom()))
+
+        store.startReview(for: pr)
+        try await waitUntilIdle(store)
+
+        #expect(store.reviewState(for: pr) == .failed(detail: "runner se rozsypal"))
+    }
+
     @Test("Nezapsaný nález se nezamlčí")
     func aFindingThatCannotBeSavedIsNotSwallowed() async throws {
         // Ztracený nález by jinak vypadal jako „review neběželo“ — tedy jako schválený PR

@@ -92,10 +92,33 @@ včetně důvodu.
 
   Když Copilot nálezy má, projdi je, řekni, co je reálné a co šum, a co je reálné oprav.
 
-- **Před pushem si diff zreviduj sám** — ideálně subagentem, ať to nezdržuje. Copilot má
-  latenci v minutách a každé kolo stojí čas; co si najdeš sám, projde rovnou. Subagent
-  dostane diff a hledá to, co hledá Copilot: chyby, které testy nechytí, zavádějící
-  dokumentaci, zapomenutý úklid, duplicitu.
+- **Vlastní revize diffu je podmínka pushnutí, ne doporučení.** `copilot-review.sh` se smí
+  pustit teprve po ní. Není to úspora práce, je to úspora **času**: Copilot má latenci
+  v minutách, takže každý nález, který bys našel sám, stojí kolo navíc. U #46 z toho byla
+  čtyři kola a dvě z nich byla zbytečná.
+
+  Revize se musí někde **projevit** — buď opravou, nebo větou v popisu PR o tom, co jsi
+  hledal. Když po ní diff vypadá nedotčeně a Copilot pak najde něco, co grep z tabulky níž
+  chytá, revize neproběhla.
+
+  Subagent je fajn, ale **není podmínka** a není výmluva, když zrovna není po ruce: projít
+  `git diff main...HEAD` vlastníma očima plus grepy níž zabere minuty a nic dalšího
+  nepotřebuje.
+
+  **Tohle Copilot v tomhle repu nachází opakovaně**, takže to projdi dřív, než ho pustíš:
+
+  | Vzor | Proč to bolí |
+  |---|---|
+  | `try?`, prázdný `catch`, `?? default` nad operací, která může selhat | Ztracená data vypadají v UI jako „nic tu nebylo“. U každého se ptej: pozná uživatel, že se to nepovedlo? Když ne, patří to do stavu, ne do `try?` |
+  | Text v UI, který tvrdí víc, než data unesou | „Reviewer nenahlásil žádný nález“ zní jako čisto i tehdy, když se nálezy nemají kde vzít |
+  | Stav, který se drží, ale nikdo ho nečte | Buď to zobraz, nebo nedrž — jinak je to mrtvá váha, která svádí k tomu spolehnout se na ni |
+  | Kontrola, která jinde v repu je, a tady chybí | Typicky ochrana proti mazání mimo cache. Když už někde existuje, patří na jedno místo a použije se z obou |
+  | Čtení nebo dekódování všeho, když stačí předfiltr | U operací, které běží při každém uložení nebo tiku, to není detail |
+
+- **Když nález přijde, oprav třídu, ne výskyt.** Copilot vidí vždycky jen nový diff, takže
+  na druhý výskyt téhož vzoru upozorní až v dalším kole — a to je zase pár minut. Po každém
+  reálném nálezu proto projdi diff na tentýž vzor (`git diff main...HEAD | grep …`) a oprav
+  všechny naráz. U #46 by to ušetřilo dvě kola ze čtyř.
 - **Po opravě a pushi pusť Copilota znovu — a takhle dokola, dokud nálezy nedojdou.**
   Jeden průchod nestačí: oprava umí odkrýt další problém a Copilot vidí až nový diff.
   Cyklus je *oprava → push → `./bin/copilot-review.sh <PR>` → projít nálezy*, a končí

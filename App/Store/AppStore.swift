@@ -73,7 +73,9 @@ final class AppStore {
             }
             try? await eviction?.run(openPullRequests: summaries.map(\.id), busy: busy)
             // Stejné pravidlo jako u eviction: uklízet se smí jen po **úspěšném** tiku,
-            // protože „PR chybí v seznamu“ znamená po výpadku sítě něco jiného.
+            // protože „PR chybí v seznamu“ znamená po výpadku sítě něco jiného. Selhání
+            // úklidu se spolkne schválně — neuklizený soubor nikomu nevadí a příští tik to
+            // zkusí znovu; hlásit to uživateli by byl šum bez akce.
             try? await reviews?.cleanUp(openPullRequests: summaries.map(\.id))
         }
     }
@@ -109,6 +111,10 @@ final class AppStore {
     }
 
     /// Nálezy z minula. Bez toho by se po startu tvářil každý PR, že se nikdy nereviewoval.
+    ///
+    /// Selhání čtení se **smí** spolknout, na rozdíl od selhání zápisu: nepřečtený soubor
+    /// nikam nezmizel a příští start ho zkusí znovu. Co se přečíst nepodařilo po souborech,
+    /// se navíc počítá do `unreadableReviewFiles` a je to vidět pod seznamem.
     func loadStoredReviews() async {
         guard let reviews else { return }
         guard let loaded = try? await reviews.load() else { return }
@@ -262,7 +268,23 @@ final class AppStore {
                     worktree: worktree,
                     baseSha: detail.baseSha
                 )
-                group.addTask { try? await reviewer.run(request) }
+                // Protokol slibuje, že selhání session se vrací jako výsledek a vyhodí se
+                // jen zrušení — ale spolehnout se na to znamená, že jakákoli jiná chyba
+                // zmizí a řádek se bude tvářit, že se nic nespustilo. Radši ji přeložíme
+                // na `failed`, kde je vidět.
+                group.addTask {
+                    do {
+                        return try await reviewer.run(request)
+                    } catch is CancellationError {
+                        return nil
+                    } catch {
+                        return ReviewRun(
+                            key: request.key,
+                            summary: StreamSummary(),
+                            outcome: .failed(detail: error.localizedDescription)
+                        )
+                    }
+                }
             }
 
             var finished = 0

@@ -192,6 +192,28 @@ struct StreamParserTests {
         #expect(result.findings.count == 1)
     }
 
+    @Test("Doplněný verdikt a kategorie z druhého hlášení přebijí náčrt")
+    func aLaterReportReplacesTheDraft() {
+        // Průběžné hlášení bývá náčrt. Kdyby vyhrálo, přišel by nález o `verdict`
+        // a `category` — a s nimi o blokující příznak, tedy o jediný odvozený boolean.
+        let draft = """
+        {"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1",\
+        "name":"ReportFindings","input":{"findings":[{"file":"A.php","line":96,\
+        "summary":"ztráta dat"}]}}]}}
+        """
+        let complete = """
+        {"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2",\
+        "name":"ReportFindings","input":{"findings":[{"file":"A.php","line":96,\
+        "summary":"ztráta dat","category":"data-loss","verdict":"CONFIRMED"}]}}]}}
+        """
+
+        let result = parser.summarize([draft, complete])
+
+        #expect(result.findings.count == 1)
+        #expect(result.findings.first?.verdict == .confirmed)
+        #expect(result.findings.first?.category == "data-loss")
+    }
+
     @Test("Dva různé problémy na jednom řádku zůstanou dva")
     func twoDifferentProblemsOnOneLineStayTwo() {
         // Deduplikace se drží povinného `summary`, takže různé nálezy neslije.

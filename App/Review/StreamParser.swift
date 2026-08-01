@@ -76,8 +76,13 @@ struct StreamParser: Sendable {
                 continue
             }
             // Reviewer, který hlásí průběžně a na konci pošle kompletní seznam, by jinak
-            // dodal každý nález dvakrát.
-            if !summary.findings.contains(where: { isSameFinding($0, finding) }) {
+            // dodal každý nález dvakrát. Pozdější hlášení toho **přepíše** dřívější a
+            // zůstane na jeho místě: průběžné bývá náčrt, závěrečné doplněné. A doplňuje se
+            // i `verdict` s `category`, na kterých stojí blokující příznak — držet se
+            // prvního by z potvrzeného nálezu v blokující kategorii udělalo neblokující.
+            if let existing = summary.findings.firstIndex(where: { isSameFinding($0, finding) }) {
+                summary.findings[existing] = finding
+            } else {
                 summary.findings.append(finding)
             }
         }
