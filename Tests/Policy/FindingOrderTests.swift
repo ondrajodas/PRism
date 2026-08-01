@@ -62,8 +62,9 @@ struct FindingOrderTests {
 
     @Test("Nález bez souboru jde úplně dozadu, ne dopředu")
     func aFindingWithoutAFileGoesLast() {
-        // Chybějící soubor je prázdný řetězec, a ten se řadí **před** všechno — takže
-        // bez vlastního kritéria by architektonická poznámka předběhla konkrétní řádky.
+        // Chybějící soubor je `nil` a v klíči z něj vyjde prázdný řetězec, který se řadí
+        // **před** všechno — takže bez vlastního kritéria by architektonická poznámka
+        // předběhla konkrétní řádky.
         let sorted = Policy.sorted([
             makeFinding(file: nil, line: nil, summary: "chybí testy"),
             makeFinding(file: "Cart.swift", line: 3, summary: "řádek 3"),
