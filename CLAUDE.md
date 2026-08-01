@@ -548,8 +548,10 @@ Nad nálezy platí navíc:
   opatrné `approve`. Schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou
   aplikace umí udělat. Z běhu se dá vyvodit „je čisto“, jen když **doběhl**, **zavolal
   `ReportFindings`** a **nic nezahodil**; zastaralý záznam nedá verdikt vůbec.
-- **Nález z vytimeoutovaného běhu ale platí.** Session se nedopočítala, co stihla nahlásit,
-  je pravda — takže blokovat umí i běh, který sám o sobě `approve` nedá.
+- **Nálezy se berou ze všech běhů, i ze spadlých a vytimeoutovaných.** Selhal *běh*, ne
+  nález — ten dorazil jako celý `ReportFindings` call. Filtrovat je podle stavu běhu by
+  znamenalo, že spadlý reviewer s nahlášenou ztrátou dat vedle jednoho čistého běhu vyjde
+  jako `approve`. Blokovat tedy umí i běh, který sám o sobě `approve` nedá.
 - **Shoda se počítá po reviewerech, ne po nálezech.** Jeden reviewer, který na jednom řádku
   najde dvě různé věci, si nepřikyvuje.
 - **Řadí se podle vlastnosti kategorie, ne nálezu.** Kdyby první kritérium bylo

@@ -17,8 +17,11 @@ extension Policy {
         // o kódu, který neexistuje.
         guard !record.isStale else { return nil }
 
-        // Nález z vytimeoutovaného běhu je pořád nález — session se nedopočítala, ale co
-        // stihla nahlásit, platí.
+        // Nálezy se berou ze **všech** běhů, i ze spadlých a vytimeoutovaných. Selhal
+        // *běh*, ne nález: ten dorazil jako celý `ReportFindings` call a rozbité nálezy
+        // parser dovnitř nepustí. Filtrovat je podle stavu běhu by znamenalo, že spadlý
+        // reviewer s nahlášenou ztrátou dat vedle jednoho čistého běhu vyjde jako
+        // `approve` — tedy přesně ta chyba, které se tenhle typ vyhýbá.
         if record.findings.contains(where: { isBlocking($0, categories: categories) }) {
             return .requestChanges
         }

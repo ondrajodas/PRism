@@ -69,6 +69,35 @@ struct VerdictSuggestionTests {
         #expect(Policy.suggestedVerdict(for: record) == .requestChanges)
     }
 
+    @Test("Nález ze spadlé session platí i vedle čistého běhu")
+    func aFindingFromAFailedRunOutweighsACleanOne() {
+        // Klíčový případ: kdyby se nálezy ze spadlých běhů zahazovaly, tenhle záznam by
+        // navrhl **approve** — a to navzdory nahlášené ztrátě dat, kterou má v sobě.
+        // Spadlý je *běh*, ne nález; ten dorazil jako celý `ReportFindings` call.
+        let record = makeRecord(runs: [
+            makeStoredRun(
+                skill: "security-review",
+                outcome: .failed(detail: "spadlo po nálezu"),
+                findings: [makeReported(category: "data-loss", verdict: .confirmed)]
+            ),
+            makeStoredRun(skill: "code-review"),
+        ])
+
+        #expect(Policy.suggestedVerdict(for: record) == .requestChanges)
+    }
+
+    @Test("Spadlá session s nálezem sama o sobě blokuje")
+    func aFailedRunWithAFindingStillBlocks() {
+        let record = makeRecord(runs: [
+            makeStoredRun(
+                outcome: .failed(detail: "spadlo"),
+                findings: [makeReported(category: "correctness", verdict: .confirmed)]
+            ),
+        ])
+
+        #expect(Policy.suggestedVerdict(for: record) == .requestChanges)
+    }
+
     @Test("Nezavolaný ReportFindings není čisté review")
     func aRunThatNeverReportedSuggestsNothing() {
         // Nálezy se neměly kde vzít — typicky proto, že nástroj chyběl v `--allowedTools`.
