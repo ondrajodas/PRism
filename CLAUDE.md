@@ -110,11 +110,14 @@ včetně důvodu.
   Dvě pasti při čtení výsledku:
 
   ```bash
-  # Bot se jmenuje copilot-pull-request-reviewer[bot], ne „Copilot“ —
-  # filtr na .user.login == "Copilot" nenajde nic a vypadá to jako čisté review.
+  # Pozor na dvě různá jména: review píše `copilot-pull-request-reviewer[bot]`,
+  # ale inline komentáře `Copilot`. Filtr `startswith("copilot")` je navíc citlivý
+  # na velikost písmen, takže na komentáře nesedí — a vypadá to, že žádné nejsou.
   gh api repos/{owner}/{repo}/pulls/37/reviews \
       --jq '.[] | select(.user.login | startswith("copilot")) | .body'
-  gh api repos/{owner}/{repo}/pulls/37/comments --jq '.[] | "\(.path):\(.line)\n\(.body)"'
+  gh api repos/{owner}/{repo}/pulls/37/comments \
+      --jq '.[] | select(.user.login | ascii_downcase | startswith("copilot")) |
+            "\(.id) \(.path):\(.line)\n\(.body)"'
   ```
 
   A hlavně: **„generated no new comments“ neznamená, že nic nenašel.** Část nálezů se
