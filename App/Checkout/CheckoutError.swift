@@ -18,6 +18,9 @@ enum CheckoutError: Error, Equatable, Sendable {
     /// založit. Vlastní případ proto, že `git` do toho nemá co mluvit: kdyby se to spolklo,
     /// spadl by až `git` na „destination path already exists“ a skutečná příčina by zmizela.
     case cacheUnavailable(String)
+    /// Commit se nepodařilo dostat do klonu ani po dotažení refu pull requestu. Znamená
+    /// to, že PR mezitím zmizel nebo byl přepsán — ne že se má opakovat donekonečna.
+    case commitNotFound(String)
     case gitFailed(exitCode: Int32, message: String)
 }
 

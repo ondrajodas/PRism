@@ -76,6 +76,93 @@ struct RealRepoCheckoutTests {
         #expect(try await revision("main", in: clone).isEmpty == false)
     }
 
+    @Test("Dva worktrees z jednoho klonu vedle sebe, úklid nechá klon čistý")
+    func twoWorktreesSideBySide() async throws {
+        let pr = PRIdentifier(repo: repo, number: 42)
+        try await makeScratchRepository(at: origin)
+        let firstCommit = try await revision("HEAD", in: origin)
+        let secondCommit = try await commit("druhý", to: origin)
+
+        let checkout = checkout(remote: origin.absoluteString)
+        let clone = try await checkout.prepare(repo)
+
+        let older = try await checkout.worktree(for: pr, at: firstCommit)
+        let newer = try await checkout.worktree(for: pr, at: secondCommit)
+
+        #expect(older != newer)
+        #expect(try await revision("HEAD", in: older) == firstCommit)
+        #expect(try await revision("HEAD", in: newer) == secondCommit)
+        #expect(try await worktreeCount(in: clone) == 3) // bare klon + dva stromy
+
+        try await checkout.removeWorktree(for: pr, at: firstCommit)
+        try await checkout.removeWorktree(for: pr, at: secondCommit)
+
+        #expect(FileManager.default.fileExists(atPath: older.path) == false)
+        #expect(FileManager.default.fileExists(atPath: newer.path) == false)
+        // Bez `prune` by tu zbyly záznamy o stromech, které už nejsou.
+        #expect(try await worktreeCount(in: clone) == 1)
+    }
+
+    @Test("Commit mimo větve se dotáhne přes ref pull requestu")
+    func fetchesCommitThatOnlyExistsUnderThePullRequestRef() async throws {
+        // Přesně situace PR z forku: commit není v žádné větvi originu, drží ho jen
+        // `refs/pull/<n>/head`. Klon ho tedy nemá a musí ho dotáhnout.
+        let pr = PRIdentifier(repo: repo, number: 42)
+        try await makeScratchRepository(at: origin)
+        let hidden = try await makeCommitOutsideBranches(number: 42, in: origin)
+
+        let checkout = checkout(remote: origin.absoluteString)
+        let clone = try await checkout.prepare(repo)
+        #expect(try await isMissing(hidden, in: clone))
+
+        let worktree = try await checkout.worktree(for: pr, at: hidden)
+
+        #expect(try await revision("HEAD", in: worktree) == hidden)
+    }
+
+    /// Commit, na který nevede žádná větev — dosažitelný jen přes `refs/pull/<n>/head`.
+    private func makeCommitOutsideBranches(number: Int, in url: URL) async throws -> String {
+        try await git(["checkout", "--detach"], in: url)
+        let sha = try await commit("z forku", to: url)
+        try await git(["update-ref", "refs/pull/\(number)/head", sha], in: url)
+        try await git(["checkout", "main"], in: url)
+        return sha
+    }
+
+    private func isMissing(_ sha: String, in clone: URL) async throws -> Bool {
+        let result = try await runner.run(
+            git,
+            arguments: ["-C", clone.path(percentEncoded: false), "cat-file", "-e", "\(sha)^{commit}"],
+            environment: ["GIT_NO_LAZY_FETCH": "1"],
+            timeout: .seconds(30)
+        )
+        return result.exitCode != 0
+    }
+
+    @Test("Existující worktree se použije znovu")
+    func worktreeIsReusedForTheSameCommit() async throws {
+        // Dva skilly nad jedním PR sdílejí jeden checkout — druhý běh nesmí klonovat znovu.
+        let pr = PRIdentifier(repo: repo, number: 42)
+        try await makeScratchRepository(at: origin)
+        let head = try await revision("HEAD", in: origin)
+        let checkout = checkout(remote: origin.absoluteString)
+
+        let first = try await checkout.worktree(for: pr, at: head)
+        let second = try await checkout.worktree(for: pr, at: head)
+
+        #expect(first == second)
+        #expect(try await worktreeCount(in: layout.bareClone(for: repo)) == 2)
+    }
+
+    private func worktreeCount(in clone: URL) async throws -> Int {
+        let result = try await runner.run(
+            git,
+            arguments: ["-C", clone.path(percentEncoded: false), "worktree", "list"],
+            timeout: .seconds(30)
+        )
+        return result.standardOutput.split(separator: "\n").count
+    }
+
     @Test("Neexistující remote skončí zařazenou chybou, ne pádem")
     func missingRemoteIsClassified() async throws {
         let missing = workspace.url.appending(path: "nikde").absoluteString

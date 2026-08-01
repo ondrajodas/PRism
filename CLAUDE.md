@@ -239,12 +239,42 @@ Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživate
 
 | Typ | Co dělá |
 |---|---|
-| `RepoCheckout` | Protokol: `prepare(_ repo:)` → cesta k bare klonu. Idempotentní |
+| `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree` a `removeWorktree`. Vše idempotentní |
 | `GitRepoCheckout` | Implementace nad `git`: první volání klonuje, další fetchuje |
 | `CacheLayout` | Kde co leží. `root` je injektovatelný, aby testy nesáhly do skutečné cache |
+| `CheckoutCoordinator` | Aktor: souběžná volání nad stejným klíčem se spojí do jedné práce |
 | `CheckoutError` | Typované chyby + klasifikace stderru `gitu` jako čistá funkce |
 
-Pět věcí, které se u toho nemají rozbít:
+Devět věcí, které se u toho nemají rozbít:
+
+- **Worktree je klíčovaný `(PR, headSha)`**, ne jen PR. Nálezy visí na `headSha`, takže dva
+  běhy nad různými commity téhož PR si nesmí sáhnout na stejný strom. Naopak dva skilly
+  nad **stejným** commitem strom sdílejí — proto je vytvoření idempotentní.
+- **Použitelnost stromu se ověřuje `rev-parse HEAD`, ne existencí složky.** Zabitý
+  `worktree add` nechá rozkopírovanou složku se zámkem `initializing`, kterou `fileExists`
+  od hotové nerozezná — reviewer by pak četl uříznutý strom. Porovnání s `headSha` navíc
+  ošetří, že zkrácený sha v názvu složky může dvěma commitům vyjít stejně.
+- **`cat-file` musí běžet s `GIT_NO_LAZY_FETCH=1`.** Na partial klonu si chybějící commit
+  jinak **sám dotáhne z promisor remote** — takže „levná lokální kontrola“ chodí na síť,
+  bez credential helperu, a fetch `refs/pull/<n>/head` pod ní se nikdy nespustí. Commit by
+  pak v klonu ležel bez refu, který ho drží.
+- **Každé volání `gitu`, které může sáhnout na promisor remote, potřebuje credential
+  helper.** Netýká se to jen `clone` a `fetch`: na partial klonu si bloby dotahuje
+  i `worktree add`. Bez helperu skončí u privátního repa hláškou, kterou klasifikace
+  zařadí jako `notAuthenticated` — a uživatel se dozví „přihlas se“, i když přihlášený je.
+- **Chybějící commit se dotahuje přes `refs/pull/<n>/head`, ne přes samotný sha.** Ten ref
+  má na GitHubu **každý** PR včetně forků, kdežto `git fetch origin <sha>` potřebuje na
+  serveru povolené `allowAnySHA1InWant`, na což spoleh není. Jedna cesta místo dvou.
+- **`worktree remove` potřebuje `--force` dvakrát.** Jedno vynutí odstranění špinavého
+  stromu, druhé odemkne zamčený — a zabitý `add` po sobě zámek `initializing` nechává.
+  S jedním `--force` na něm `remove` skončí `cannot remove a locked working tree` a stav
+  se nedá srovnat vůbec. `prune` za tím uklidí záznamy po stromech, které zmizely bez
+  `remove` (pád aplikace, ruční smazání); sám `remove` administrativu uklidí.
+- **Souběžná volání nad stejným klíčem spojuje `CheckoutCoordinator`.** Dvě review nad
+  různými PR téhož repa spustí přípravu naráz a druhé volání by mohlo smazat složku
+  rozběhnutého klonu prvního. **Uvnitř koordinované práce se nesmí volat nic, co jde přes
+  tentýž klíč** — čekalo by samo na sebe (proto `addWorktree` volá `discardWorktree`, ne
+  `removeWorktree`).
 
 - **Dokončený klon se pozná podle vlastní značky** (`prism-clone-complete`), ne podle
   toho, co je uvnitř. `git` zakládá `HEAD` i `config` **hned na začátku** klonování, takže
@@ -500,9 +530,12 @@ Právě proto tam eskalace na `SIGKILL` je.
   výběr se drží. Views se neunit-testují; kontroluje se běžící aplikace (viz níž).
 - **`Config`** — merge globální + per-repo, defaulty pro neznámé repo.
 - **`RepoCheckout`** — dvě vrstvy, a **obě jsou potřeba**. Fake runner ověří, co se `gitu`
-  posílá za argumenty; integrační test (`RealRepoCheckoutTests`) klonuje z `file://`
-  scratch repa a ověří, že jim `git` rozumí a vznikne z toho použitelný klon. Chybějící
-  refspec u fetche prošel unit testy bez povšimnutí a chytil ho až ten druhý.
+  posílá za argumenty (na tocích s víc příkazy `ScriptedProcessRunner`, který odpovídá
+  jinak na každé volání); integrační test (`RealRepoCheckoutTests`) klonuje z `file://`
+  scratch repa a ověří, že jim `git` rozumí a vznikne z toho použitelný klon i worktree.
+  Chybějící refspec u fetche prošel unit testy bez povšimnutí a chytil ho až ten druhý.
+  Pozor na `contains` nad polem argumentů — porovnává **celé prvky**, ne podřetězce,
+  takže refspec (`+refs/pull/85/head:refs/prism/pr/85`) se musí hledat vnořeným `contains`.
 - **`ReviewRunner`** — fake v testech na úrovni aplikace; malý počet integračních testů
   proti skutečné binárce.
 
@@ -613,13 +646,13 @@ Polling hotový (issue #6) — `App/Polling/`.
 repozitáři, prázdný stav, úvodní loading, banner při výpadku a rate limitu, výběr řádku.
 Stav review je zatím u všech `neběželo` — spouštění přijde ve fázi 3.
 
-Rozpracovaná fáze 2: bare klon do cache hotový (issue #8) — `App/Checkout/`. Vrstva bez
-UI; worktrees (#9) a eviction (#10) zbývají.
+Rozpracovaná fáze 2 — `App/Checkout/`, vrstva bez UI. Bare klon do cache hotový (#8),
+worktree per review i serializace souběžných příprav hotové (#9). Zbývá eviction (#10).
 
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
-2. Checkout cache + worktree — **bare klon hotový**
+2. Checkout cache + worktree — **klon i worktrees hotové**, zbývá eviction
 3. `ReviewRunner` + parsování streamu
 4. UI diffu s bublinami
 5. Konfigurace a auto režim
