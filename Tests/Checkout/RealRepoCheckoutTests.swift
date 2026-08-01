@@ -27,7 +27,10 @@ struct RealRepoCheckoutTests {
             gh: URL(filePath: "/usr/bin/false"),
             layout: layout,
             runner: runner,
-            remote: { _ in origin.path(percentEncoded: false) }
+            // `file://`, ne holá cesta: u holé cesty `git` přepne na lokální klon
+            // s hardlinky, obejde přenosový protokol a `--filter` úplně ignoruje.
+            // Test by pak ověřoval jinou cestu kódem, než jakou pojede aplikace.
+            remote: { _ in "file://\(origin.path(percentEncoded: false))" }
         )
 
         let clone = try await checkout.prepare(repo)
@@ -53,7 +56,7 @@ struct RealRepoCheckoutTests {
             gh: URL(filePath: "/usr/bin/false"),
             layout: layout,
             runner: runner,
-            remote: { _ in workspace.url.appending(path: "nikde").path(percentEncoded: false) }
+            remote: { _ in "file://\(workspace.url.appending(path: "nikde").path(percentEncoded: false))" }
         )
 
         await #expect(throws: CheckoutError.self) {
@@ -99,16 +102,3 @@ struct RealRepoCheckoutTests {
     }
 }
 
-/// Složka, která po sobě uklidí, i když test spadne.
-final class TemporaryDirectory: @unchecked Sendable {
-    let url: URL
-
-    init() throws {
-        url = URL(filePath: NSTemporaryDirectory()).appending(path: "prism-tests-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-    }
-
-    deinit {
-        try? FileManager.default.removeItem(at: url)
-    }
-}

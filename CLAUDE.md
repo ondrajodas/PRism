@@ -97,6 +97,21 @@ včetně důvodu.
   Cyklus je *oprava → push → `./bin/copilot-review.sh <PR>` → projít nálezy*, a končí
   kolem, ve kterém už nic reálného nezbylo. Nálezy, které vyhodnotíš jako šum, se
   opravovat nemusí — ale musí na ně být odpověď, ať je z PR vidět proč.
+
+  Dvě pasti při čtení výsledku:
+
+  ```bash
+  # Bot se jmenuje copilot-pull-request-reviewer[bot], ne „Copilot“ —
+  # filtr na .user.login == "Copilot" nenajde nic a vypadá to jako čisté review.
+  gh api repos/{owner}/{repo}/pulls/37/reviews \
+      --jq '.[] | select(.user.login | startswith("copilot")) | .body'
+  gh api repos/{owner}/{repo}/pulls/37/comments --jq '.[] | "\(.path):\(.line)\n\(.body)"'
+  ```
+
+  A hlavně: **„generated no new comments“ neznamená, že nic nenašel.** Část nálezů se
+  schová do sekce *Suppressed comments* uvnitř **těla review** a v inline komentářích
+  nejsou vůbec. Tělo se proto musí přečíst celé — u #8 tam takhle ležely dva reálné
+  nálezy pod hlavičkou, že nové komentáře nejsou.
 - **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
   a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
   Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
@@ -534,6 +549,18 @@ xcodebuild -project PRism.xcodeproj -scheme PRism test
 `xcodebuild` na tomhle stroji plive na začátku výstupu chyby o `CoreSimulator` — jsou
 neškodné, týkají se iOS simulátorů, ne macOS buildu. Rozhoduje `** BUILD SUCCEEDED **`,
 resp. `** TEST SUCCEEDED **` na konci.
+
+**Výstup `xcodebuild` piš do souboru a grepuj až ten soubor.**
+
+```bash
+xcodebuild -project PRism.xcodeproj -scheme PRism test > /tmp/tests.log 2>&1
+grep -E "error:|✘|Test run with|TEST (SUCCEEDED|FAILED)" /tmp/tests.log | tail -5
+```
+
+Roura `xcodebuild … | grep … | head -N` se umí zaseknout na neurčito a vypadá to jako
+zaseknuté testy — přitom testy doběhnou za sekundu. Stálo to jednou přes půl hodiny
+hledání neexistující chyby v testech. Když se zdá, že test run visí, první věc je pustit
+ho do souboru.
 
 ## Prostředí
 
