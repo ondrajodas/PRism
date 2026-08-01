@@ -92,14 +92,40 @@ včetně důvodu.
 
   Když Copilot nálezy má, projdi je, řekni, co je reálné a co šum, a co je reálné oprav.
 
-- **Před pushem si diff zreviduj sám** — ideálně subagentem, ať to nezdržuje. Copilot má
-  latenci v minutách a každé kolo stojí čas; co si najdeš sám, projde rovnou. Subagent
-  dostane diff a hledá to, co hledá Copilot: chyby, které testy nechytí, zavádějící
-  dokumentaci, zapomenutý úklid, duplicitu.
-- **Po opravě a pushi pusť Copilota znovu — a takhle dokola, dokud nálezy nedojdou.**
-  Jeden průchod nestačí: oprava umí odkrýt další problém a Copilot vidí až nový diff.
-  Cyklus je *oprava → push → `./bin/copilot-review.sh <PR>` → projít nálezy*, a končí
-  kolem, ve kterém už nic reálného nezbylo.
+- **Vlastní revize diffu je podmínka pushnutí, ne doporučení.** `copilot-review.sh` se smí
+  pustit teprve po ní. Není to úspora práce, je to úspora **času**: Copilot má latenci
+  v minutách, takže každý nález, který bys našel sám, stojí kolo navíc. U #46 z toho byla
+  čtyři kola a dvě z nich byla zbytečná.
+
+  Revize se musí někde **projevit** — buď opravou, nebo větou v popisu PR o tom, co jsi
+  hledal. Když po ní diff vypadá nedotčeně a Copilot pak najde něco, co grep z tabulky níž
+  chytá, revize neproběhla.
+
+  Subagent je fajn, ale **není podmínka** a není výmluva, když zrovna není po ruce: projít
+  `git diff main...HEAD` vlastníma očima plus grepy níž zabere minuty a nic dalšího
+  nepotřebuje.
+
+  **Tohle Copilot v tomhle repu nachází opakovaně**, takže to projdi dřív, než ho pustíš:
+
+  | Vzor | Proč to bolí |
+  |---|---|
+  | `try?`, prázdný `catch`, `?? default` nad operací, která může selhat | Ztracená data vypadají v UI jako „nic tu nebylo“. U každého se ptej: pozná uživatel, že se to nepovedlo? Když ne, patří to do stavu, ne do `try?` |
+  | Text v UI, který tvrdí víc, než data unesou | „Reviewer nenahlásil žádný nález“ zní jako čisto i tehdy, když se nálezy nemají kde vzít |
+  | Stav, který se drží, ale nikdo ho nečte | Buď to zobraz, nebo nedrž — jinak je to mrtvá váha, která svádí k tomu spolehnout se na ni |
+  | Kontrola, která jinde v repu je, a tady chybí | Typicky ochrana proti mazání mimo cache. Když už někde existuje, patří na jedno místo a použije se z obou |
+  | Čtení nebo dekódování všeho, když stačí předfiltr | U operací, které běží při každém uložení nebo tiku, to není detail |
+
+- **Když nález přijde, oprav třídu, ne výskyt.** Copilot vidí vždycky jen nový diff, takže
+  na druhý výskyt téhož vzoru upozorní až v dalším kole — a to je zase pár minut. Po každém
+  reálném nálezu proto projdi diff na tentýž vzor (`git diff main...HEAD | grep …`) a oprav
+  všechny naráz. U #46 by to ušetřilo dvě kola ze čtyř.
+- **Copilot je kontrola, ne hledání — stačí jedno kolo.** Když vlastní revize proběhla
+  pořádně, druhé kolo obvykle jen potvrdí, co první našlo. Pusť ho jednou, nálezy oprav
+  a **mergni podle vlastního uvážení**.
+
+  Další kolo si vyžádej jen tehdy, když ten první průchod odhalil něco **strukturálního** —
+  tedy vzor, který se opravou mohl objevit i jinde, ne překlep. Točit to na jistotu je
+  přesně to zdržení, kvůli kterému se tohle pravidlo změnilo.
 
   **Nemusíš vyhovět všem komentářům.** Copilot navrhuje i věci, které v tomhle repu
   nedávají smysl nebo jsou horší než to, co tam je. Rozhoduješ ty — u nálezu, který
@@ -174,14 +200,21 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 
 1. **Nikdy nic neposílat na GitHub.** Žádné komentáře, review, approve, labely. Verdikt
    je návrh zobrazený v aplikaci. Aplikace je vůči GitHubu **jen pro čtení**.
-2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit` a u `Bash` se
-   uvádí jen `git`. Ověřeno proti CLI (#12), že záruka drží — ale ne tím, čím se čekalo:
-   v seznamu nástrojů session se objevují i nepovolené (`Write` a `Edit` tam jsou vždy)
-   a scope `Bash(git:*)` `Bash` nezúží — projdou i negitové příkazy.
-   Co neprojde, jsou **měnící** operace: `touch`, `rm` i `Write` skončily odmítnutím a nic
-   po nich nezůstalo. Reviewer tedy nemůže změnit kód ani nic odeslat, jen z jiného
-   důvodu, než tu stálo dřív. Odmítnutý nástroj přitom **není chyba běhu** — session
-   pokračuje a skončí `success`, odmítnutí je vidět v `permission_denials`.
+2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit`, u `Bash` se uvádí
+   jen `git` — a v `--disallowedTools` jsou `Bash(gh:*)` a `Bash(git push:*)`.
+
+   Ověřeno spuštěním (#12, **opraveno u #17**; podrobnosti v `docs/claude-cli.md`):
+   - Co je **mimo** povolený vzor, se odmítne, pokud to není na vestavěném seznamu čtecích
+     příkazů. `ls` a `cat` projdou, `gh` ne.
+   - Co je **uvnitř** vzoru, projde celé — `Bash(git:*)` tedy pouští i `git push`. To je
+     jediná cesta, kterou by session z naší cache něco odeslala, protože `origin` míří na
+     skutečné repo a má credential helper. **Zavírá to až `--disallowedTools`**, který
+     povolení přebíjí a zabere i na `git push` s vypsanou URL.
+   - `Write`, `Edit` ani `Bash` z init eventu nezmizí, ať je v povoleních cokoli — seznam
+     nástrojů není obraz oprávnění.
+
+   Odmítnutý nástroj **není chyba běhu**: session pokračuje a skončí `success`, odmítnutí je
+   vidět v `permission_denials`.
 3. **Nikdy nesahat na uživatelovy klony.** Aplikace pracuje výhradně ve své cache
    (`~/Library/Application Support/PRism/`). Mohou být rozdělané, na jiné branchi,
    mít vlastní worktrees.
@@ -261,6 +294,11 @@ Klíčový spoj: ze `stream-json` výstupu `claude` udělá to, co aplikaci zaj�
   u `gh` — tam si `--json` polem říkáme, co má přijít, takže DTO dává smysl. Tady přichází
   cizí formát, který se vyvíjí, a většina eventů nás nezajímá; typované dekódování by
   padalo na věcech, které jsou aplikaci lhostejné.
+- **Nález se deduplikuje podle místa a `summary`, ne podle celé hodnoty.** Reviewer, který
+  hlásí průběžně a na konci pošle kompletní seznam, dodá tentýž nález dvakrát — a ověřeno na
+  skutečném běhu (#17), že si při tom umí přeformulovat `short_summary`. Porovnání celé
+  hodnoty ho proto propustilo. Dva různé problémy na jednom řádku se neslijí, protože se liší
+  v `summary`, které je jediné povinné pole.
 - **Rozbitý řádek se spočítá, ne vyhodí.** Proces se dá zabít uprostřed řádku a jedna
   useknutá řádka nesmí zahodit nálezy, které už dorazily.
 - **`calledReportFindings` je oddělené od prázdného seznamu.** „Nic jsem nenašel“
@@ -435,9 +473,33 @@ Věci, které se u toho nemají rozbít:
 
 ### `AppStore` (`App/Store/`) a okno (`App/Views/`)
 
-`AppStore` drží to, co kreslí okno: polling seznamu, **výběr řádku** a **stav review na
-jednotlivých PR**. Výběr žije tady, ne ve view — jinak by ho každé přestavění seznamu
-zahodilo. Postupně sem přibude limit souběžných session.
+`AppStore` drží to, co kreslí okno: polling seznamu, **výběr řádku**, **stav pracovních
+kopií** a **review**. Výběr žije tady, ne ve view — jinak by ho každé přestavění seznamu
+zahodilo.
+
+Review orchestruje takhle: `gh pr view` (kvůli `headSha` a `baseSha`) → označit starší
+záznamy zastaralými → worktree → skilly paralelně → každý doběhlý uložit do `ReviewStore`.
+Limit souběžných session hlídá `ReviewRunner`, ne tenhle kód.
+
+Věci, které se u toho nemají rozbít:
+
+- **Repo s běžícím review je pro eviction nedotknutelné.** `busyRepositories` proto nejsou
+  jen repa ve stavu `preparing`, ale i všechna, nad kterými běží review — smazat klon pod
+  běžící session by jí vzalo pracovní strom pod rukama.
+- **Chyba checkoutu je stav repa, chyba GitHubu stav PR.** Na první narazí i druhé PR téhož
+  repa a řeší se stejným tlačítkem; druhá se týká jen toho jednoho PR. Proto má
+  `ReviewPhase` vlastní případ `failed`, místo aby se všechno cpalo do `CheckoutState`.
+- **Ukládá se po každém doběhlém skillu**, ne až na konci — když se aplikace zavře uprostřed,
+  co doběhlo, zůstane.
+- **Nový head commit zneplatní i záznam v paměti**, ne jen ten na disku. Jinak by řádek celou
+  dobu běhu ukazoval nálezy proti kódu, který v PR není.
+- **Stav pracovní kopie se po každé fázi srovná podle disku.** Včetně zrušení: bez toho by
+  v řádku zůstalo `ve frontě · clone` až do restartu.
+- **Zrušení neuloží nic.** Rozdělané review je horší než žádné — a fáze se vrací tam, kde
+  byla, ne do chyby.
+- **Nezapsaný nález review položí.** Selhání zápisu se nespolkne: ztracený nález by v řádku
+  vypadal jako „neběželo“, tedy jako schválený PR s neohlášenou chybou. Ostatní skilly
+  přitom doběhnou, ať se nezahodí i to, co se uložit povedlo.
 
 Vzniká z `ToolPaths` po preflightu (`AppStore(toolPaths:)`); testy si podstrčí fake
 gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruší.
@@ -448,7 +510,8 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
-| `PullRequestDetailView` | Pravý panel: příprava pracovní kopie, chyba `gitu` a „Zkusit znovu“ |
+| `PullRequestDetailView` | Pravý panel: pracovní kopie, spuštění a zrušení review, nálezy |
+| `FindingsView` | Návrh verdiktu a **surový** seznam nálezů po kategoriích. Bubliny u diffu jsou M4 |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
 
 Věci, na které se u okna naráží:
@@ -737,6 +800,12 @@ Právě proto tam eskalace na `SIGKILL` je.
   tik spotřebuje jen jednu, protože se u prvního zdroje přeruší.
 - **`AppStore`** — proti fake gateway: obnovení se ptá zdrojů, seznam se čte z pollingu,
   výběr se drží. Views se neunit-testují; kontroluje se běžící aplikace (viz níž).
+- **`AppStore` — review** — fake gateway, fake checkout, fake reviewer a **skutečný**
+  `ReviewStore` nad dočasnou složkou: on rozhoduje, co se objeví po restartu, takže fake by
+  ověřoval sám sebe. `FakeReviewRunner` umí běh pozdržet, na čemž stojí testy průběhu,
+  zrušení a toho, že druhé zmáčknutí nespustí nic dalšího. Čeká se točením přes
+  `Task.yield()`, ne na continuation — zrušený běh musí z čekání vypadnout sám, jinak by
+  test visel místo aby spadl.
 - **`ReviewStore`** — proti skutečné dočasné složce, ne proti fake filesystému: kořen je
   injektovatelný, takže jde o pár kilobajtů, a ověřuje se to, na čem store stojí — `Codable`
   cesta na disk a zpět a chování `FileManageru`. Hodiny jsou `FakeTimeSource`, který se
@@ -892,7 +961,22 @@ starší záznamy označí jako zastaralé a záznamy PR, který zmizel ze sezna
 dnech uklidí. Taky vrstva bez UI — načte je `AppStore` v #17.
 
 Rozhodování nad nálezy hotové (issue #16) — `App/Policy/`. Blokující příznak, návrh
-verdiktu, shoda reviewerů a pořadí pro UI, všechno čisté funkce. Poslední dílek před #17.
+verdiktu, shoda reviewerů a pořadí pro UI, všechno čisté funkce.
+
+**Fáze 3 hotová (issue #17).** Aplikace poprvé dělá to, kvůli čemu existuje: tlačítko
+`Spustit review` u vybraného PR spustí headless session v pracovním stromě, řádek ukazuje
+průběh, nálezy se ukládají a v detailu je návrh verdiktu se seznamem po kategoriích. Běh
+jde zrušit. Sada skillů je zatím konstanta (`AppStore.defaultSkills`) — výběr v nastavení
+je #23.
+
+Dvě věci, které #17 odhalilo a opravilo:
+
+- **Prompt nesmí být slash command.** `-p "/code-review …"` doběhne úspěšně, ale nálezy
+  vrátí jako text a `ReportFindings` nezavolá — sběr by tiše nefungoval. Ověřeno spuštěním,
+  podrobnosti v [`docs/claude-cli.md`](docs/claude-cli.md).
+- **`Bash(git:*)` pouštělo i `git push`.** V cache míří `origin` na skutečné repo
+  s credential helperem, takže reviewer uměl pushnout do uživatelova repozitáře. Zavírá to
+  `--disallowedTools`, ověřeno i proti obcházení přes vypsanou URL.
 
 Stavy checkoutu v seznamu hotové (issue #11) — `AppStore` umí připravit pracovní kopii,
 řádek ukazuje `ve frontě · clone` nebo `clone selhal` a detail nese výstup `gitu`
@@ -911,7 +995,7 @@ Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
 2. ~~Checkout cache + worktree~~ — **hotovo**
-3. `ReviewRunner` + parsování streamu — **parser i runner hotové**, zbývá je spustit z UI (#17)
+3. ~~`ReviewRunner` + parsování streamu~~ — **hotovo**
 4. UI diffu s bublinami
 5. Konfigurace a auto režim
 

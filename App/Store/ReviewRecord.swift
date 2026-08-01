@@ -39,6 +39,9 @@ struct ReviewRecord: Codable, Hashable, Sendable {
     /// Nálezy ze všech reviewerů dohromady. Neslučují se — každý si nese, kdo ho našel.
     var findings: [Finding] { runs.flatMap(\.findings) }
 
+    /// Kdy doběhl poslední z reviewerů. `nil`, dokud žádný nedoběhl.
+    var finishedAt: Date? { runs.map(\.finishedAt).max() }
+
     /// Nový výsledek téhož skillu ten předchozí nahradí, jiný se přidá na konec.
     mutating func replace(_ run: StoredReviewRun) {
         guard let index = runs.firstIndex(where: { $0.skillID == run.skillID }) else {

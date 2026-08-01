@@ -26,7 +26,19 @@ struct ClaudeCommandTests {
             "--output-format", "stream-json",
             "--verbose",
             "--allowedTools", ClaudeCommand.allowedTools,
+            "--disallowedTools", ClaudeCommand.disallowedTools,
         ])
+    }
+
+    @Test("Reviewer nesmí pushnout ani sáhnout na gh")
+    func theReviewerCannotPushOrUseGh() {
+        // `Bash(git:*)` povoluje **všechny** git příkazy včetně `push` — ověřeno spuštěním.
+        // Bez tohohle zákazu by session uměla pushnout do uživatelova repozitáře, protože
+        // `origin` v cache míří na skutečné repo a má credential helper.
+        let disallowed = ClaudeCommand.disallowedTools.split(separator: ",").map(String.init)
+
+        #expect(disallowed.contains("Bash(git push:*)"))
+        #expect(disallowed.contains("Bash(gh:*)"))
     }
 
     @Test("Reviewer nedostane nic, čím by mohl zapisovat")
@@ -40,13 +52,23 @@ struct ClaudeCommandTests {
         #expect(tools.contains("ReportFindings"))
     }
 
-    @Test("Prompt vyvolá skill a řekne, proti čemu diffovat")
-    func thePromptInvokesTheSkill() {
+    @Test("Prompt řekne, kdo reviewuje, proti čemu a jak to hlásit")
+    func thePromptCarriesTheContract() {
         let prompt = ClaudeCommand.prompt(for: request)
 
-        #expect(prompt.hasPrefix("/code-review "))
+        #expect(prompt.contains("\"code-review\" reviewer"))
         #expect(prompt.contains("bbbb2222...HEAD"))
         #expect(prompt.contains("ReportFindings"))
+        // I prázdný seznam je odpověď — bez něj se „nic jsem nenašel" nedá odlišit od
+        // „nereportoval jsem".
+        #expect(prompt.contains("empty list"))
+    }
+
+    @Test("Prompt není slash command")
+    func thePromptIsNotASlashCommand() {
+        // Ověřeno spuštěním: `-p "/code-review …"` doběhne úspěšně, ale nálezy vrátí jako
+        // text a `ReportFindings` nezavolá — sběr by tiše nefungoval.
+        #expect(!ClaudeCommand.prompt(for: request).hasPrefix("/"))
     }
 
     @Test("Prostředí pustí nested git k privátnímu repu bez ptaní")

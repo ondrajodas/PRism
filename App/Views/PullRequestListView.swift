@@ -12,8 +12,26 @@ struct PullRequestListView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 PollStatusBanner(status: store.status, lastSuccess: store.lastSuccess)
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) { unreadableWarning }
             .navigationTitle("Pull requesty")
             .toolbar { refreshButton }
+    }
+
+    /// Rozbitý soubor s nálezy znamená, že se nějaké ztratily — a ztracený nález se v UI
+    /// nesmí tvářit jako „review neběželo“. Je to stav celé cache, ne jednoho PR, takže
+    /// patří pod seznam; když je všechno v pořádku, nekreslí se vůbec.
+    @ViewBuilder private var unreadableWarning: some View {
+        if store.unreadableReviewFiles > 0 {
+            Label(
+                "\(store.unreadableReviewFiles) uložených nálezů se nepodařilo přečíst.",
+                systemImage: "exclamationmark.triangle"
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     @ViewBuilder private var content: some View {

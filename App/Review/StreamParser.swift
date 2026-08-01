@@ -76,11 +76,29 @@ struct StreamParser: Sendable {
                 continue
             }
             // Reviewer, který hlásí průběžně a na konci pošle kompletní seznam, by jinak
-            // dodal každý nález dvakrát.
-            if !summary.findings.contains(finding) {
+            // dodal každý nález dvakrát. Pozdější hlášení toho **přepíše** dřívější a
+            // zůstane na jeho místě: průběžné bývá náčrt, závěrečné doplněné. A doplňuje se
+            // i `verdict` s `category`, na kterých stojí blokující příznak — držet se
+            // prvního by z potvrzeného nálezu v blokující kategorii udělalo neblokující.
+            if let existing = summary.findings.firstIndex(where: { isSameFinding($0, finding) }) {
+                summary.findings[existing] = finding
+            } else {
                 summary.findings.append(finding)
             }
         }
+    }
+
+    /// Je to tentýž nález?
+    ///
+    /// Porovnává se **místo a povinné `summary`**, ne celá hodnota. Ověřeno na skutečném
+    /// běhu (#17): reviewer nahlásil tentýž problém dvakrát, jednou průběžně a jednou
+    /// v závěrečném seznamu, a mezitím si přeformuloval `short_summary` — porovnání celé
+    /// hodnoty ho proto propustilo a v UI byl dvakrát.
+    ///
+    /// Dva **různé** problémy na jednom řádku se tím neslijí: liší se v `summary`, které je
+    /// jediné povinné pole, takže prázdné být nemůže.
+    private func isSameFinding(_ left: ReportedFinding, _ right: ReportedFinding) -> Bool {
+        left.file == right.file && left.line == right.line && left.summary == right.summary
     }
 
     private func consumeResult(_ object: [String: Any], into summary: inout StreamSummary) {

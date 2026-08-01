@@ -34,7 +34,7 @@ struct SubprocessRunner: ProcessRunning {
         } onCancel: {
             // Bez tohohle by zrušené volání čekalo, až proces doběhne sám — čtení pipy
             // skončí teprve tím, že je zavře.
-            launched.signal(SIGKILL)
+            launched.requestKill()
         }
     }
 

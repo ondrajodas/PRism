@@ -16,6 +16,20 @@ enum ClaudeCommand {
     /// a sběr přes tool cally tiše nefunguje — návrh tuhle chybu obsahoval.
     static let allowedTools = "Read,Grep,Glob,Bash(git:*),ReportFindings"
 
+    /// Nástroje, které se **výslovně zakazují**, i kdyby je povolení pustilo.
+    ///
+    /// Ověřeno spuštěním (#17), že `--disallowedTools` přebíjí `--allowedTools`. Dvě
+    /// položky, každá kvůli jinému zjištění:
+    ///
+    /// - **`Bash(git push:*)` zavírá skutečnou díru.** `Bash(git:*)` povoluje **všechny**
+    ///   git příkazy včetně `push` — ověřeno, že bez zákazu projde. A `origin` v naší cache
+    ///   míří na skutečné repo s credential helperem, takže by session uměla pushnout do
+    ///   uživatelova repozitáře. Se zákazem neprojde ani `git push` s vypsanou URL.
+    /// - **`Bash(gh:*)` je pojistka.** `gh` neprojde ani bez něj (viz níž), ale tvrdá
+    ///   podmínka „na GitHub se nic neposílá“ nemá stát na tom, co je zrovna na cizím
+    ///   seznamu bezpečných příkazů.
+    static let disallowedTools = "Bash(gh:*),Bash(git push:*)"
+
     /// `--verbose` není volba, je to podmínka: bez něj `claude` v print režimu
     /// `stream-json` odmítne.
     static func arguments(prompt: String) -> [String] {
@@ -24,20 +38,33 @@ enum ClaudeCommand {
             "--output-format", "stream-json",
             "--verbose",
             "--allowedTools", allowedTools,
+            "--disallowedTools", disallowedTools,
         ]
     }
 
     /// Prompt je zatím **natvrdo**; konfigurace skillů a modelu přijde v #23.
     ///
-    /// Skill se vyvolává lomítkem, protože to je způsob, kterým se skilly spouštějí i
-    /// interaktivně. Zbytek je kontext, který session sama zjistit nemůže: strom je
-    /// odpojený na head commitu, takže bez base sha nemá reviewer proti čemu diffovat.
+    /// **Není to slash command, a to je ověřené rozhodnutí.** `-p "/code-review …"`
+    /// doběhne úspěšně, ale vestavěný příkaz si jede vlastní pipeline a nálezy vrátí jako
+    /// **text** — `ReportFindings` nezavolá ani když se o to prompt výslovně řekne
+    /// (`num_turns: 0`, žádný `tool_use`). Sběr nálezů by tím tiše nefungoval. Prostý
+    /// prompt, který si o `ReportFindings` řekne sám, nálezy vrací (ověřeno spuštěním na
+    /// scratch repu; totéž dělal spike u #12).
+    ///
+    /// Zbytek je kontext, který session sama zjistit nemůže: strom je odpojený na head
+    /// commitu, takže bez base sha nemá reviewer proti čemu diffovat.
+    ///
+    /// Prázdný seznam se vyžaduje schválně — „nic jsem nenašel“ a „nereportoval jsem“ jsou
+    /// různé věci a jen ta první smí vyjít jako čisté review.
     static func prompt(for request: ReviewRequest) -> String {
         """
-        /\(request.key.skillID) Review the changes of this pull request. \
-        The head commit is checked out here; see them with \
+        You are running as the "\(request.key.skillID)" reviewer of a pull request. \
+        The head commit is checked out here; see the changes with \
         `git diff \(request.baseSha)...HEAD`. \
-        Report every finding with the ReportFindings tool.
+        Report every finding by calling the ReportFindings tool — that call is the only \
+        output that counts, so call it even when you find nothing, with an empty list. \
+        Do not run anything that writes or sends: no commits, no pushes, \
+        no `gh` commands, no comments on GitHub.
         """
     }
 
