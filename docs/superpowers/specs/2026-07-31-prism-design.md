@@ -115,17 +115,21 @@ Spouští jednu Claude Code session na skill a mění její výstup na nálezy.
 ```
 claude -p "<prompt>"
   --output-format stream-json --verbose
-  --allowedTools "Read,Grep,Glob,Bash(git:*),ReportFindings"
+  --allowedTools Read,Grep,Glob,Bash(git:*),ReportFindings
   --model <z konfigurace>
   cwd: <cesta k worktree>
 ```
 
-- **Read-only z principu.** `--allowedTools` neobsahuje `Write` ani `Edit` a `Bash` je
-  omezený na `git`. Ověřeno u #12, že záruka drží — ale **jinak, než se čekalo**: scope
-  `Bash(git:*)` `Bash` ve skutečnosti nezúží (projdou i `ls` nebo `cat`) a nástroje
-  zůstávají v session všechny. Co neprojde, jsou **měnící** operace: `touch`, `rm`
-  i `Write` skončily odmítnutím a nic po nich nezůstalo. Read-only tedy stojí na
-  nepovolení mutací, ne na nepřítomnosti nástrojů. Je to bezpečnostní vlastnost (reviewer strukturálně nemůže změnit kód ani
+- **Read-only z principu.** `--allowedTools` neobsahuje `Write` ani `Edit` a u `Bash`
+  uvádí jen `git`. Ověřeno u #12, že záruka drží — ale stojí na něčem jiném, než návrh
+  předpokládal: scope `Bash(git:*)` `Bash` **nezúží** (projdou i `ls` nebo `cat`)
+  a nástroje zůstávají v session všechny, protože `--allowedTools` je seznam povolení,
+  ne dostupnosti. Neprojdou **měnící** operace: `touch`, `rm` i `Write` skončily
+  odmítnutím a nic po nich nezůstalo. Read-only tedy drží nepovolením mutací.
+
+  Hodnota `--allowedTools` je v ukázce **bez uvozovek** schválně: aplikace shell nepoužívá
+  a `Process` dostává argumenty polem. Kdo si to zkouší v terminálu, uvozovky potřebuje —
+  `*` by prošlo glob expansion a závorky jsou syntaktická chyba. Je to bezpečnostní vlastnost (reviewer strukturálně nemůže změnit kód ani
   nikam nic poslat) i praktická věc: odpadne tím téměř každý důvod, proč by se Claude
   zastavil a chtěl povolení. Headless session nemá jak na permission prompt odpovědět,
   takže by jinak visela do timeoutu.
