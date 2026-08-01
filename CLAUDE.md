@@ -584,7 +584,9 @@ nezavolají, by musely dopsat všechny. `workingDirectory` je jen v `ProcessStre
   bývají nálezy.
 - **Timeout má poslední slovo, i když EOF nedorazí.** Roury může držet něco, co po procesu
   zbylo, a proud by pak čekal navždy. Proto hlídání běží až do konce **proudu** (ruší ho
-  `onTermination`, ne konec procesu) a po `SIGKILL`u proud ukončí samo.
+  `onTermination`, ne konec procesu) a po `SIGKILL`u proud ukončí samo. Data, která po
+  konci proudu ještě přijdou, se zahodí a čtení se odpojí — ukecaný potomek by jinak plnil
+  buffer, ze kterého už nikdo nečte.
 
 **`zsh -lc` nečte `.zshrc`** — neinteraktivní login shell čte `.zshenv`, `.zprofile`
 a `.zlogin`. Přidat `-i` se zkoušelo a zahodilo (viz komentář v `LoginShellPathReader`
@@ -684,7 +686,9 @@ Právě proto tam eskalace na `SIGKILL` je.
 - **`SubprocessStreamer`** — proti **skutečným procesům** (`/bin/sh`), ne proti fake
   runneru. Že řádky přijdou v pořadí, že se doručí i useknutý poslední řádek, že proces
   běží v předané složce a že zaseknutý skončí timeoutem, se dá zjistit jen spuštěním —
-  přesně tohle unit testy `RepoCheckoutu` nechytly.
+  přesně tohle unit testy `RepoCheckoutu` nechytly. Odkladná doba mezi `SIGTERM`,
+  `SIGKILL`em a vzdáním se čekání na EOF je proto injektovatelná (`gracePeriod`): jinak by
+  test na potomka, který drží rouru po zabitém procesu, trval čtyři sekundy.
 - **`ReviewSlots`** — limit, pořadí ve frontě a zrušený čekatel, který nesmí frontu ucpat.
 
 ### Jak si zkontrolovat, jak view vypadá

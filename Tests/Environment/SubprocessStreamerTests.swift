@@ -86,6 +86,23 @@ struct SubprocessStreamerTests {
         #expect(events == [.line("nalez")])
     }
 
+    @Test("Timeout ukončí proud, i když roura zůstane otevřená")
+    func aTimeoutEndsTheStreamEvenWithAnOpenPipe() async throws {
+        // Potomek na pozadí zdědí stdout a zabitý shell ho nepřežije — EOF tedy nedorazí.
+        // Bez posledního slova timeoutu by proud čekal navždy a review by viselo.
+        let streamer = SubprocessStreamer(gracePeriod: .milliseconds(100))
+
+        await #expect(throws: ProcessError.timedOut) {
+            for try await _ in streamer.stream(
+                shell,
+                arguments: ["-c", "sleep 5 & sleep 5"],
+                environment: [:],
+                workingDirectory: nil,
+                timeout: .milliseconds(200)
+            ) {}
+        }
+    }
+
     @Test("Zrušení proces zabije")
     func cancellationKillsTheProcess() async throws {
         // Bez toho by session běžela dál i poté, co uživatel zavřel okno.

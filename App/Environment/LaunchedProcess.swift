@@ -53,18 +53,19 @@ final class LaunchedProcess: @unchecked Sendable {
 
     func readStandardError() -> String { Self.readToEnd(error) }
 
-    /// Podává stdout po kouscích, jak vznikají; `nil` znamená konec proudu.
+    /// Podává stdout po kouscích, jak vznikají; `nil` znamená konec proudu. Vrácené `false`
+    /// znamená „už mě to nezajímá“ a čtení se odpojí.
     ///
     /// Čte `readabilityHandler`, ne `readToEnd()`: ten by výstup vydal až po doběhnutí
     /// procesu, takže by z „průběžných nálezů“ nezbylo nic — a hlavně by na patnáctiminutové
     /// review držel blokující vlákno.
-    func streamStandardOutput(_ receive: @escaping @Sendable (Data?) -> Void) {
+    func streamStandardOutput(_ receive: @escaping @Sendable (Data?) -> Bool) {
         Self.stream(output, into: receive)
     }
 
     /// Totéž pro stderr. Ten se nikam nestreamuje, jen se sbírá na vysvětlení selhání —
     /// číst ho ale musíme průběžně, jinak si proces naplní buffer jádra a zasekne se.
-    func streamStandardError(_ receive: @escaping @Sendable (Data?) -> Void) {
+    func streamStandardError(_ receive: @escaping @Sendable (Data?) -> Bool) {
         Self.stream(error, into: receive)
     }
 
@@ -113,15 +114,19 @@ final class LaunchedProcess: @unchecked Sendable {
 
     /// Prázdná dávka znamená EOF. Handler se přitom musí odpojit — jinak by se
     /// `readabilityHandler` volal pořád dokola nad zavřeným koncem.
-    private static func stream(_ pipe: Pipe, into receive: @escaping @Sendable (Data?) -> Void) {
+    ///
+    /// Odpojí se i tehdy, když příjemce řekne, že už nemá odběratele. Rouru může po
+    /// zabitém procesu držet jeho potomek a ukecaný potomek by jinak plnil buffer, ze
+    /// kterého už nikdo nečte.
+    private static func stream(_ pipe: Pipe, into receive: @escaping @Sendable (Data?) -> Bool) {
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             guard !data.isEmpty else {
                 handle.readabilityHandler = nil
-                receive(nil)
+                _ = receive(nil)
                 return
             }
-            receive(data)
+            if !receive(data) { handle.readabilityHandler = nil }
         }
     }
 }
