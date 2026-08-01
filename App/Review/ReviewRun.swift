@@ -22,7 +22,7 @@ struct ReviewRun: Sendable, Equatable {
 /// `finished` **není** totéž co „něco našel“: doběhlá session bez nálezů je čisté review,
 /// ne selhání. Rozlišit se to musí tady, protože výš už to nikdo nepozná — a schválený PR
 /// s neohlášenou chybou je nejdražší chyba, kterou tahle aplikace umí udělat.
-enum ReviewRunOutcome: Sendable, Equatable {
+enum ReviewRunOutcome: Sendable, Hashable, Codable {
     /// Proces doběhl s nulovým návratovým kódem.
     case finished
     /// Nedoběhl v limitu a byl zabit. Nálezy, které do té doby dorazily, jsou v `summary`.

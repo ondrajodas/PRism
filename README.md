@@ -37,8 +37,10 @@ otevřeného PR a při překročení rozpočtu (10 GB) i ta nejdéle nepoužitá
 
 Vedle toho už je hotový i samotný běh review: spuštění headless session `claude`
 v pracovním stromě, čtení `stream-json` výstupu po řádcích, timeout (15 minut), zrušení
-a limit tří souběžných session. Do okna to zatím nevede — chybí ten, kdo zmáčkne
-tlačítko.
+a limit tří souběžných session. Výsledky se ukládají na disk — jeden JSON soubor na PR
+a head commit, takže přežijí restart; nové commity starší nálezy označí jako zastaralé
+a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí. Do okna to zatím
+nevede — chybí ten, kdo zmáčkne tlačítko.
 
 Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první dvě a rozdělaná třetí.
 
@@ -134,7 +136,7 @@ App/                      zdrojáky aplikace — target PRism
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
-  Store/                  AppStore — stav, který kreslí okno
+  Store/                  AppStore — stav, který kreslí okno; ReviewStore — nálezy na disku
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky
 Tests/                    unit testy — target PRismTests
@@ -145,7 +147,7 @@ Tests/                    unit testy — target PRismTests
   Policy/                 testy čistých funkcí
   Review/                 testy parseru a runneru proti skutečným streamům
   Polling/                testy pollingu proti fake gateway a fake času
-  Store/                  testy AppStore
+  Store/                  testy AppStore a persistence nálezů
   Support/                testy sdílených drobností
   Fixtures/gh/            skutečné JSON výstupy gh z veřejných repozitářů
   Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů

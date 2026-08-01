@@ -1,11 +1,15 @@
 import Foundation
 
-/// Kde má aplikace svoje pracovní kopie.
+/// Kde má aplikace svoje soubory.
 ///
 /// Tvrdá podmínka: **nikdy nesahat na uživatelovy klony.** Ty mohou být rozdělané, na jiné
 /// branchi nebo mít vlastní worktrees. Všechno, co si aplikace naklonuje, leží pod jedním
 /// kořenem, který si drží sama — a `root` je injektovatelný, aby testy nikdy nesáhly do
 /// toho skutečného.
+///
+/// Kromě pracovních kopií sem patří i uložené výsledky review. Vlastní typ s vlastním
+/// kořenem by znamenal dvě místa, která se můžou v kořeni rozejít — a `CacheLayout` je
+/// právě to jedno místo, které ví, co kde leží.
 struct CacheLayout: Sendable, Equatable {
     let root: URL
 
@@ -16,6 +20,23 @@ struct CacheLayout: Sendable, Equatable {
     /// Kde leží klony a stromy — eviction je potřebuje projít, ne jen skládat cesty.
     var repositories: URL { root.appending(path: "repos") }
     var worktrees: URL { root.appending(path: "worktrees") }
+
+    /// Uložené výsledky review. **Mimo dosah eviction** — ta chodí jen po `repositories`
+    /// a `worktrees`, protože nálezy jsou kilobajty a řídí se vlastní lhůtou, ne rozpočtem
+    /// na místo.
+    var reviews: URL { root.appending(path: "reviews") }
+
+    /// Výsledky review jednoho PR na jednom commitu: `reviews/<owner>/<repo>/<pr>-<sha>.json`.
+    ///
+    /// Zanořeno pod repo ze stejného důvodu jako stromy: ploché jméno se nedá filtrovat
+    /// podle prefixu, takže úklid jednoho repa by sahal na cizí.
+    func reviewFile(for pr: PRIdentifier, at headSha: String) -> URL {
+        reviews(of: pr.repo).appending(path: "\(pr.number)-\(headSha).json")
+    }
+
+    func reviews(of repo: RepoID) -> URL {
+        reviews.appending(path: repo.owner).appending(path: repo.name)
+    }
 
     /// Bare klon repa: `repos/<owner>/<repo>.git`.
     func bareClone(for repo: RepoID) -> URL {
