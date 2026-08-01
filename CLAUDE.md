@@ -119,10 +119,13 @@ včetně důvodu.
   na druhý výskyt téhož vzoru upozorní až v dalším kole — a to je zase pár minut. Po každém
   reálném nálezu proto projdi diff na tentýž vzor (`git diff main...HEAD | grep …`) a oprav
   všechny naráz. U #46 by to ušetřilo dvě kola ze čtyř.
-- **Po opravě a pushi pusť Copilota znovu — a takhle dokola, dokud nálezy nedojdou.**
-  Jeden průchod nestačí: oprava umí odkrýt další problém a Copilot vidí až nový diff.
-  Cyklus je *oprava → push → `./bin/copilot-review.sh <PR>` → projít nálezy*, a končí
-  kolem, ve kterém už nic reálného nezbylo.
+- **Copilot je kontrola, ne hledání — stačí jedno kolo.** Když vlastní revize proběhla
+  pořádně, druhé kolo obvykle jen potvrdí, co první našlo. Pusť ho jednou, nálezy oprav
+  a **mergni podle vlastního uvážení**.
+
+  Další kolo si vyžádej jen tehdy, když ten první průchod odhalil něco **strukturálního** —
+  tedy vzor, který se opravou mohl objevit i jinde, ne překlep. Točit to na jistotu je
+  přesně to zdržení, kvůli kterému se tohle pravidlo změnilo.
 
   **Nemusíš vyhovět všem komentářům.** Copilot navrhuje i věci, které v tomhle repu
   nedávají smysl nebo jsou horší než to, co tam je. Rozhoduješ ty — u nálezu, který
