@@ -24,11 +24,11 @@ nese repo, číslo, titulek, autora a čas poslední změny. Při výpadku sít�
 poslední známá data a nad seznamem se objeví pruh, že nejsou aktuální; při rate limitu
 pruh říká, kdy to zkusí znovu.
 
-Review se zatím nespouští — stav u všech PR je `neběželo`. Pod povrchem už ale funguje
-vlastní cache repozitářů: repo se na vyžádání naklonuje jako bare partial clone do
-`~/Library/Application Support/PRism/` a při dalším setkání se jen aktualizuje. **Klonů na
-disku se aplikace nikdy nedotkne** a přihlášení k privátním repům deleguje na `gh`, aniž
-by měnila globální git config.
+Review se zatím nespouští — stav u všech PR je `neběželo`, a nic se zatím ani neklonuje.
+Vrstva pro vlastní cache repozitářů (bare partial clone do
+`~/Library/Application Support/PRism/`, přihlášení delegované na `gh`) už ale existuje
+a je otestovaná; zapojí se, až půjde review spustit. Platí u ní, že **klonů na disku se
+aplikace nikdy nedotkne**.
 
 Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) je hotová první, druhá rozpracovaná.
 
