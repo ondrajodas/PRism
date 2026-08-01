@@ -37,6 +37,10 @@ claude -p "<prompt>" \
 Nápověda ukazuje `"Bash(git *) Edit"` s mezerou, ale **funguje i `Bash(git:*)`** — ověřeno,
 `git status --short` přes něj prošel.
 
+V shellu se ta hodnota musí dát do uvozovek: `*` by prošlo glob expansion a závorky jsou
+v `bash` i `zsh` syntaktická chyba. Aplikace shell nepoužívá — `Process` dostává argumenty
+polem, takže je to jen otázka ukázek v dokumentaci.
+
 Podstatnější je, co ten flag **není**:
 
 | | |

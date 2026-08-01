@@ -115,7 +115,7 @@ Spouští jednu Claude Code session na skill a mění její výstup na nálezy.
 ```
 claude -p "<prompt>"
   --output-format stream-json --verbose
-  --allowedTools Read,Grep,Glob,Bash(git:*),ReportFindings
+  --allowedTools "Read,Grep,Glob,Bash(git:*),ReportFindings"
   --model <z konfigurace>
   cwd: <cesta k worktree>
 ```
