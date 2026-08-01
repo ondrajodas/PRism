@@ -18,6 +18,12 @@ final class PollingService {
     /// Kolikátý rate limit v řadě to je. Nula znamená, že poslední pokus prošel.
     private var rateLimitStreak = 0
 
+    /// Zavolá se po **úspěšném** tiku, i po tom, který nic nevrátil. Věší se sem úklid
+    /// cache: prázdná odpověď je informace (PR zmizelo ze seznamu), ale **selhaná není** —
+    /// po výpadku sítě zůstane `pullRequests` beze změny, a při prvním tiku po startu je
+    /// prázdný. Uklízet po něm by znamenalo smazat celou cache kvůli chvíli bez sítě.
+    var afterSuccessfulTick: (@Sendable ([PullRequestSummary]) async -> Void)?
+
     init(
         gateway: any GitHubGateway,
         sources: [Source] = [.reviewRequested],
@@ -51,6 +57,9 @@ final class PollingService {
             state.status = .upToDate
             state.lastSuccess = time.now
             rateLimitStreak = 0
+            // Uvnitř `refresh()` schválně, ne ve smyčce: ruční obnovení je tik mimo
+            // pořadí a má uklidit stejně jako ten pravidelný.
+            await afterSuccessfulTick?(state.pullRequests)
         } catch is CancellationError {
             // Zrušení není chyba GitHubu. Publikovat ho jako selhání by uživateli tvrdilo,
             // že něco spadlo, zatímco jsme jen skončili.

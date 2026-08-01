@@ -57,3 +57,47 @@ struct AppStoreTests {
         #expect(store.selection == PRIdentifier("cli/cli#1"))
     }
 }
+
+extension AppStoreTests {
+    @Test("Po každém tiku se pustí úklid cache")
+    func tidiesTheCacheAfterEveryTick() async throws {
+        // Zavřené PR se poznají jen tím, že v odpovědi chybí — úklid proto musí běžet
+        // i po tiku, který nenašel nic.
+        let workspace = try TemporaryDirectory()
+        let layout = CacheLayout(root: workspace.url)
+        let clone = layout.bareClone(for: RepoID(owner: "cli", name: "cli"))
+        try FileManager.default.createDirectory(at: clone, withIntermediateDirectories: true)
+
+        let store = AppStore(
+            gateway: FakeGitHubGateway(always: .success([])),
+            sources: sources,
+            time: FakeTimeSource(stopAfter: 1),
+            eviction: CacheEviction(layout: layout, budget: .max)
+        )
+        await store.keepFresh()
+
+        #expect(!FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)))
+    }
+}
+
+extension AppStoreTests {
+    @Test("Selhaný tik cache neuklidí")
+    func aFailedTickNeverTouchesTheCache() async throws {
+        // Po výpadku sítě zůstane seznam beze změny — a po startu je prázdný. Uklízet
+        // po takovém tiku by znamenalo smazat celou cache kvůli chvíli bez sítě.
+        let workspace = try TemporaryDirectory()
+        let layout = CacheLayout(root: workspace.url)
+        let clone = layout.bareClone(for: RepoID(owner: "cli", name: "cli"))
+        try FileManager.default.createDirectory(at: clone, withIntermediateDirectories: true)
+
+        let store = AppStore(
+            gateway: FakeGitHubGateway(always: .failure(GitHubError.network("bez sítě"))),
+            sources: sources,
+            time: FakeTimeSource(stopAfter: 1),
+            eviction: CacheEviction(layout: layout, budget: .max)
+        )
+        await store.keepFresh()
+
+        #expect(FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)))
+    }
+}

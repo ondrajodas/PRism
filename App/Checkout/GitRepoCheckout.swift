@@ -73,10 +73,47 @@ struct GitRepoCheckout: RepoCheckout {
         }
     }
 
+    /// Výpis dělá `git`, ne `FileManager`: `git gc` volné refy zabalí do `packed-refs`
+    /// a složku `refs/prism/pr` přitom smaže, takže čtení adresáře by po prvním gc tiše
+    /// přestalo cokoli najít. Novější `reftable` backend složku nemá vůbec.
+    func trackedPullRequests(in repo: RepoID) async throws -> [Int] {
+        let clone = layout.bareClone(for: repo)
+        guard FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)) else { return [] }
+        let output = try await run([
+            "-C", clone.path(percentEncoded: false),
+            "for-each-ref", "--format=%(refname)", "refs/prism/pr",
+        ])
+        return output.split(separator: "\n").compactMap { Int($0.split(separator: "/").last ?? "") }
+    }
+
+    func pruneWorktrees(in repo: RepoID) async throws {
+        let clone = layout.bareClone(for: repo)
+        guard FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)) else { return }
+        try await run(["-C", clone.path(percentEncoded: false), "worktree", "prune"])
+    }
+
+    func forgetPullRequest(_ pr: PRIdentifier) async throws {
+        let clone = layout.bareClone(for: pr.repo)
+        guard FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)) else { return }
+        let ref = "refs/prism/pr/\(pr.number)"
+
+        // Nejdřív se zjistí, jestli ref vůbec je — teprve pak se maže „naostro“. Kdyby se
+        // výsledek mazání jen spolkl, prošla by tudy i skutečná chyba `gitu` a ref by
+        // zůstal viset, takže by `git gc` jeho objekty nikdy neuvolnil.
+        let arguments = ["-C", clone.path(percentEncoded: false)]
+        guard try await succeeds(arguments + ["show-ref", "--verify", "--quiet", ref]) else { return }
+        try await run(arguments + ["update-ref", "-d", ref])
+    }
+
     private func addWorktree(for pr: PRIdentifier, at headSha: String, path: URL) async throws -> URL {
         // Použitelný strom se sdílí — dva skilly nad jedním PR mají jeden checkout — a
         // hlavně se kvůli němu nemusí znovu fetchovat.
-        if await isUsableWorktree(at: path, expecting: headSha) { return path }
+        if await isUsableWorktree(at: path, expecting: headSha) {
+            // I znovupoužití je použití — bez tohohle by repo, nad kterým se denně
+            // reviewuje, mělo `lastUsed` staré týdny a v LRU odešlo jako první.
+            try? CacheEviction.markUsed(pr.repo, in: layout)
+            return path
+        }
 
         // Když tam něco je a použitelné to není, zahodí se to. Po zabitém `worktree add`
         // zůstane rozkopírovaná složka se zámkem, kterou `fileExists` od hotové nerozezná
@@ -166,6 +203,9 @@ struct GitRepoCheckout: RepoCheckout {
 
         if hasUsableClone(for: repo) {
             try await run(fetchArguments(in: clone))
+            // Záznam o použití rozhoduje, co z cache odejde první — proto se obnovuje
+            // při každé přípravě, ne jen při klonování.
+            try? CacheEviction.markUsed(repo, in: layout)
             return clone
         }
 
@@ -175,8 +215,12 @@ struct GitRepoCheckout: RepoCheckout {
         // v něčem, co repozitář není, a opakování by se z toho nikdy nezotavilo.
         try removeDirectory(at: clone, describedAs: "Zbytek po klonu")
         try createParentDirectory(of: clone)
+        // Razítko se zapisuje **před** klonováním: rozklonované repo by jinak razítko
+        // nemělo, v LRU vyšlo jako nejstarší a eviction by ho odstřelila uprostřed práce.
+        try? CacheEviction.markUsed(repo, in: layout)
         try await run(cloneArguments(from: repo, into: clone))
         try markCloneComplete(repo)
+        try? CacheEviction.markUsed(repo, in: layout)
         return clone
     }
 

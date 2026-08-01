@@ -25,13 +25,14 @@ poslední známá data a nad seznamem se objeví pruh, že nejsou aktuální; p�
 pruh říká, kdy to zkusí znovu.
 
 Review se zatím nespouští — stav u všech PR je `neběželo`, a nic se zatím ani neklonuje.
-Vrstva pro vlastní cache repozitářů už ale existuje a je otestovaná: bare partial clone
-do `~/Library/Application Support/PRism/`, přihlášení delegované na `gh` a odpojený
-`git worktree` pro každé review, klíčovaný číslem PR a head commitem. Zapojí se, až půjde
-review spustit. Platí u ní, že **vlastních klonů na
+Vlastní cache repozitářů už ale funguje: bare partial clone do
+`~/Library/Application Support/PRism/`, přihlášení delegované na `gh`, odpojený
+`git worktree` pro každé review a úklid, který po každém pollingu zahodí repa bez
+otevřeného PR a při překročení rozpočtu (10 GB) i ta nejdéle nepoužitá. Zbývá ten, kdo si
+o pracovní kopii řekne — spouštění review. Platí u ní, že **vlastních klonů na
 disku se aplikace nikdy nedotkne** — pracuje výhradně ve své cache.
 
-Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) je hotová první, druhá rozpracovaná.
+Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první dvě.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -121,7 +122,7 @@ App/                      zdrojáky aplikace — target PRism
   Models/                 doménové modely: PR, identifikátory, stav review
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
   GitHub/                 čtení PR přes gh CLI: gateway, typované chyby, tvar výstupu
-  Checkout/               vlastní cache repozitářů: bare partial clone, cesty, chyby
+  Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Policy/                 čisté funkce: slučování zdrojů, řazení
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno
