@@ -66,8 +66,8 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 | | |
 |---|---|
 | **Reviewery** | Běží nezávisle a paralelně. Texty nálezů se mezi nimi neslučují — nesouhlas dvou reviewerů je informace. Shoda na stejném `file:line` se označí odznakem `2×`. |
-| **Závažnost** | Aplikace nevymýšlí vlastní škálu. Seskupuje podle `category` z výstupu revieweera a odvozuje jediný blokující boolean (`verdict == CONFIRMED` a `category` v blokující sadě). Z toho vypadne návrh verdiktu. |
-| **Oprávnění** | Reviewer je read-only — bez `Write` a `Edit`. Bezpečnostní vlastnost i praktická: headless session neumí odpovědět na permission prompt. |
+| **Závažnost** | Aplikace nevymýšlí vlastní škálu. Seskupuje podle `category` z výstupu reviewera a odvozuje jediný blokující boolean (`verdict == CONFIRMED` a `category` v blokující sadě). Z toho vypadne návrh verdiktu. |
+| **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené, takže pokus o zápis skončí odmítnutím a soubor nevznikne. Ověřeno proti CLI — v seznamu nástrojů session se objevují i nepovolené, takže záruka stojí na odmítnutí zápisu, ne na jejich nepřítomnosti. Bezpečnostní vlastnost i praktická: headless session neumí odpovědět na permission prompt. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
 | **Konfigurace** | Dvě úrovně: globální default a override per repo (režim auto/manual, sada skillů, blokující kategorie). |
 
@@ -136,10 +136,12 @@ Tests/                    unit testy — target PRismTests
   Polling/                testy pollingu proti fake gateway a fake času
   Store/                  testy AppStore
   Fixtures/gh/            skutečné JSON výstupy gh z veřejných repozitářů
+  Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR
 Info.plist                název aplikace, verze, minimální systém
 PRism.entitlements        vypnutý App Sandbox
+docs/claude-cli.md        ověřené chování claude CLI (flagy, tvar eventů)
 docs/superpowers/specs/   návrh a specifikace
 CLAUDE.md                 pravidla pro práci v repu
 README.md                 tento soubor

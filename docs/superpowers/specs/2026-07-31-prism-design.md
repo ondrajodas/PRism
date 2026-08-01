@@ -115,16 +115,27 @@ Spouští jednu Claude Code session na skill a mění její výstup na nálezy.
 ```
 claude -p "<prompt>"
   --output-format stream-json --verbose
-  --allowedTools Read,Grep,Glob,Bash(git:*)
+  --allowedTools Read,Grep,Glob,Bash(git:*),ReportFindings
   --model <z konfigurace>
   cwd: <cesta k worktree>
 ```
 
-- **Read-only z principu.** `--allowedTools` neobsahuje `Write`, `Edit` ani obecný
-  `Bash`. Je to bezpečnostní vlastnost (reviewer strukturálně nemůže změnit kód ani
-  nikam nic poslat) i praktická věc: odpadne tím téměř každý důvod, proč by se Claude
-  zastavil a chtěl povolení. Headless session nemá jak na permission prompt odpovědět,
-  takže by jinak visela do timeoutu.
+- **Read-only z principu.** `--allowedTools` neobsahuje `Write` ani `Edit` a u `Bash`
+  uvádí jen `git`. Ověřeno u #12, že záruka drží — ale stojí na něčem jiném, než návrh
+  předpokládal: scope `Bash(git:*)` `Bash` **nezúží** (projdou i `ls` nebo `cat`)
+  a v seznamu nástrojů session se objevují i nepovolené (`Write` a `Edit` tam jsou vždy). Neprojdou **měnící** operace: `touch`, `rm` i `Write` skončily
+  odmítnutím a nic po nich nezůstalo. Read-only tedy drží nepovolením mutací.
+
+  Hodnota `--allowedTools` je v ukázce **bez uvozovek** schválně: aplikace shell nepoužívá
+  a `Process` dostává argumenty polem. Kdo si to zkouší v terminálu, uvozovky potřebuje —
+  `*` by prošlo glob expansion a závorky jsou syntaktická chyba.
+
+  Je to bezpečnostní vlastnost: reviewer nemůže změnit kód ani nikam nic poslat.
+  Původní zdůvodnění „jinak by session visela na permission promptu do timeoutu“ **neplatí**
+  — ověřeno u #12, že v headless režimu se nepovolený nástroj rovnou odmítne, běh pokračuje
+  a skončí `success`; odmítnutí se objeví v `tool_result` a v `permission_denials`. Úzká
+  sada nástrojů tedy nešetří timeout, ale tahy: reviewer neztrácí čas voláními, která
+  stejně neprojdou.
 - **`CLAUDE.md` daného repa se aplikuje zdarma**, protože cwd session je skutečný
   checkout. Konvence projektu tím platí, aniž bychom cokoli přenášeli.
 - **`session_id` se ukládá** z init eventu streamu, i když v1 terminál nemá. Stojí to
@@ -153,7 +164,7 @@ Tady skončila otázka severity, a návrh **záměrně nevymýšlí vlastní šk
 pojmenovávající *druh* problému) a `verdict` (`CONFIRMED` / `PLAUSIBLE`). Obojí jsou
 skutečná data, která reviewer vyprodukoval.
 
-- **Skupiny v UI jsou podle `category`** — pojmenování od revieweera, ne interpretace
+- **Skupiny v UI jsou podle `category`** — pojmenování od reviewera, ne interpretace
   aplikace. Uvnitř skupiny se `CONFIRMED` řadí nad `PLAUSIBLE`.
 - **Blokující příznak je jediný odvozený boolean:** nález blokuje, když
   `verdict == CONFIRMED` **a** `category ∈ blockingCategories`
@@ -388,10 +399,25 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Cache je `~/Library/Application Support/PRism/` | `~/Library/Application Support/pr-review/`, jak stálo v issue #8 | Zbytek po starém názvu. Jeden název napříč vším platí i pro složku na disku |
 | `zsh -lc`, `.zshrc` se nepřečte | `zsh -ilc`, aby fallback viděl i `.zshrc` | Zkoušeno a zahozeno: interaktivní shell se ze spuštěné aplikace zasekl (z terminálu běží pod 0,5 s) a **ignoruje `SIGTERM`** — vytáhla ho až eskalace na `SIGKILL`, tedy 7 s do prázdného výsledku. Zaseknutý start je horší selhání než nenalezená binárka, kterou gate umí vysvětlit. Zůstává jako známé omezení |
 
-## K ověření před implementací
+## Ověřeno proti CLI (2026-08-01)
 
-Flagy Claude Code CLI jsou psané z pracovní znalosti a před tím, než se na ně budeme
-spoléhat, se musí potvrdit proti `claude --help` na nainstalované verzi (2.1.220):
-přesný zápis `--output-format stream-json`, jestli je `--verbose` v print režimu
-povinný, syntaxe `--allowedTools` pro scoped Bash patterny a tvar init eventu, který
-nese `session_id`.
+Flagy Claude Code CLI byly psané z pracovní znalosti. Spike (#12) je ověřil proti verzi
+`2.1.220`; podrobnosti a surové streamy jsou v [`docs/claude-cli.md`](../../claude-cli.md)
+a `Tests/Fixtures/stream-json/`. Co z toho plyne pro návrh:
+
+- **`--verbose` je v print režimu povinný** — bez něj `claude` odmítne `stream-json`.
+- **`ReportFindings` musí být v `--allowedTools`.** Sada navržená výš
+  (`Read,Grep,Glob,Bash(git:*)`) ho neobsahovala, takže by reviewer nálezy **napsal jako
+  text** a sběr přes tool cally by tiše nefungoval. Opraveno v popisu `ReviewRunner`.
+- **`--allowedTools` není totéž co seznam dostupných nástrojů.** V init eventu se objevují
+  i nepovolené — `Write` a `Edit` tam jsou vždycky — a `Bash(git:*)` nezúží `Bash` jen na
+  git, projdou i `ls` nebo `cat`. Read-only
+  garance drží, ale z jiného důvodu, než návrh předpokládal: neprojdou **měnící** operace
+  (`touch`, `rm`, `Write` skončily chybou a nic nevzniklo).
+- **`session_id` je na každém eventu**, nejen v `init`.
+- **Zabitý běh nemá `result` event** — rozlišení „doběhlo“ vs. „zabito“ stojí na jeho
+  přítomnosti.
+- **`stdin` musí být zavřený**, jinak `claude` čeká tři sekundy. `SubprocessRunner` to
+  splňuje.
+- **Pracovní složku nelze předat flagem** — je to `cwd` procesu, takže `ReviewRunner` si
+  vyžádá `cwd` v `ProcessRunning` (u `git` stačilo `-C`, viz rozhodnutí u #8).
