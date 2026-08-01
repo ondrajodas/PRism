@@ -21,7 +21,10 @@ extension Policy {
     ) -> Bool {
         guard finding.verdict == .confirmed, let category = finding.category else { return false }
         let wanted = normalized(category: category)
-        return categories.contains { normalized(category: $0) == wanted }
+        // Sada je `Set`, tak se nejdřív zeptáme jako `Setu`. To sedne na default i na
+        // cokoli rozumného z konfigurace; teprve když ne, platí se za porovnání bez ohledu
+        // na velikost písmen.
+        return categories.contains(wanted) || categories.contains { normalized(category: $0) == wanted }
     }
 
     /// Kategorie se porovnávají bez ohledu na velikost písmen.

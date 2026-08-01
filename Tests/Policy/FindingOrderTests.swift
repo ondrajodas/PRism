@@ -60,6 +60,18 @@ struct FindingOrderTests {
         #expect(sorted.map(\.summary) == ["řádek 3", "celý soubor"])
     }
 
+    @Test("Nález bez souboru jde úplně dozadu, ne dopředu")
+    func aFindingWithoutAFileGoesLast() {
+        // Chybějící soubor je prázdný řetězec, a ten se řadí **před** všechno — takže
+        // bez vlastního kritéria by architektonická poznámka předběhla konkrétní řádky.
+        let sorted = Policy.sorted([
+            makeFinding(file: nil, line: nil, summary: "chybí testy"),
+            makeFinding(file: "Cart.swift", line: 3, summary: "řádek 3"),
+        ])
+
+        #expect(sorted.map(\.summary) == ["řádek 3", "chybí testy"])
+    }
+
     @Test("Řazení je úplné, takže pořadí mezi překresleními neposkakuje")
     func theOrderIsTotal() {
         // Bez posledního kritéria by dva nálezy stejného druhu na stejném řádku měnily
