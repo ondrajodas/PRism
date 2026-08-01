@@ -154,7 +154,7 @@ Tady skončila otázka severity, a návrh **záměrně nevymýšlí vlastní šk
 pojmenovávající *druh* problému) a `verdict` (`CONFIRMED` / `PLAUSIBLE`). Obojí jsou
 skutečná data, která reviewer vyprodukoval.
 
-- **Skupiny v UI jsou podle `category`** — pojmenování od revieweera, ne interpretace
+- **Skupiny v UI jsou podle `category`** — pojmenování od reviewera, ne interpretace
   aplikace. Uvnitř skupiny se `CONFIRMED` řadí nad `PLAUSIBLE`.
 - **Blokující příznak je jediný odvozený boolean:** nález blokuje, když
   `verdict == CONFIRMED` **a** `category ∈ blockingCategories`

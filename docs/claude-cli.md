@@ -99,7 +99,7 @@ Jeden nález (ověřeno na skutečném běhu):
 }
 ```
 
-`category` je volný kebab-case slug od revieweera, `verdict` je `CONFIRMED` nebo
+`category` je volný kebab-case slug od reviewera, `verdict` je `CONFIRMED` nebo
 `PLAUSIBLE` — tedy přesně to, na čem staví `Policy`. **Čisté review volá `ReportFindings`
 s prázdným polem `findings`**, ne že by nástroj nezavolalo; obojí je ve fixtures.
 
