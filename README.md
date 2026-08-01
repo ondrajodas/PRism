@@ -24,8 +24,13 @@ nese repo, číslo, titulek, autora a čas poslední změny. Při výpadku sít�
 poslední známá data a nad seznamem se objeví pruh, že nejsou aktuální; při rate limitu
 pruh říká, kdy to zkusí znovu.
 
-Review se zatím nespouští — stav u všech PR je `neběželo`. Z pěti fází
-(viz [CLAUDE.md](CLAUDE.md)) je hotová první.
+Review se zatím nespouští — stav u všech PR je `neběželo`, a nic se zatím ani neklonuje.
+Vrstva pro vlastní cache repozitářů (bare partial clone do
+`~/Library/Application Support/PRism/`, přihlášení delegované na `gh`) už ale existuje
+a je otestovaná; zapojí se, až půjde review spustit. Platí u ní, že **vlastních klonů na
+disku se aplikace nikdy nedotkne** — pracuje výhradně ve své cache.
+
+Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) je hotová první, druhá rozpracovaná.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -40,8 +45,8 @@ aktuálně je.
 1. **Polling GitHubu** přes `gh` — hledají se PR, u kterých je po mně požadované review
    (`review-requested:@me`). Repozitáře nejsou pevný seznam, může přijít cokoli.
 2. **Checkout na vyžádání** — repo se naklonuje do vlastní cache aplikace jako bare
-   partial clone a přidá se detached `git worktree` na head commitu daného PR. Vlastních
-   klonů na disku se aplikace nikdy nedotkne.
+   partial clone a přidá se detached `git worktree` na head commitu daného PR.
+   **Vlastních** klonů na disku se aplikace nikdy nedotkne.
 3. **Review** — nakonfigurované skilly se spustí jako paralelní headless session
    Claude Code v tom worktree, omezené na read-only nástroje. Spouští se **tlačítkem**;
    automatický režim se zapíná zvlášť pro každé repo (nová repa mají default manuální).
@@ -115,6 +120,7 @@ App/                      zdrojáky aplikace — target PRism
   Models/                 doménové modely: PR, identifikátory, stav review
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
   GitHub/                 čtení PR přes gh CLI: gateway, typované chyby, tvar výstupu
+  Checkout/               vlastní cache repozitářů: bare partial clone, cesty, chyby
   Policy/                 čisté funkce: slučování zdrojů, řazení
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno
@@ -122,6 +128,7 @@ App/                      zdrojáky aplikace — target PRism
 Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip
   Environment/            testy Environment vrstvy + fakes
+  Checkout/               testy klonování — proti fake runneru i skutečnému gitu
   GitHub/                 testy gateway a klasifikace chyb gh
   Policy/                 testy čistých funkcí
   Polling/                testy pollingu proti fake gateway a fake času

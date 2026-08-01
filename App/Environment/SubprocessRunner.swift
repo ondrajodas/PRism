@@ -2,8 +2,17 @@ import Foundation
 
 /// Runner nad `Foundation.Process`.
 struct SubprocessRunner: ProcessRunning {
-    func run(_ executable: URL, arguments: [String], timeout: Duration) async throws -> ProcessResult {
-        let launched = LaunchedProcess(executable: executable, arguments: arguments)
+    func run(
+        _ executable: URL,
+        arguments: [String],
+        environment: [String: String],
+        timeout: Duration
+    ) async throws -> ProcessResult {
+        let launched = LaunchedProcess(
+            executable: executable,
+            arguments: arguments,
+            environment: environment
+        )
         try launched.launch()
 
         return try await withTaskCancellationHandler {
@@ -35,7 +44,7 @@ struct SubprocessRunner: ProcessRunning {
         async let output = blocking { launched.readStandardOutput() }
         async let error = blocking { launched.readStandardError() }
         let (standardOutput, standardError) = await (output, error)
-        let exitCode = await blocking { launched.waitUntilExit() }
+        let exitCode = await launched.exitCode()
         return ProcessResult(
             exitCode: exitCode,
             standardOutput: standardOutput,
@@ -88,13 +97,21 @@ private final class LaunchedProcess: @unchecked Sendable {
     private let error = Pipe()
     private let lock = NSLock()
     private var timedOut = false
+    private var terminationStatus: Int32?
+    private var exitWaiters: [CheckedContinuation<Int32, Never>] = []
 
-    init(executable: URL, arguments: [String]) {
+    init(executable: URL, arguments: [String], environment: [String: String] = [:]) {
         process.executableURL = executable
         process.arguments = arguments
+        if !environment.isEmpty {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+        }
         process.standardOutput = output
         process.standardError = error
         process.standardInput = FileHandle.nullDevice
+        process.terminationHandler = { [weak self] process in
+            self?.processDidExit(process.terminationStatus)
+        }
     }
 
     func launch() throws {
@@ -109,9 +126,34 @@ private final class LaunchedProcess: @unchecked Sendable {
 
     func readStandardError() -> String { Self.readToEnd(error) }
 
-    func waitUntilExit() -> Int32 {
-        process.waitUntilExit()
-        return process.terminationStatus
+    /// Konec procesu **nedrží vlákno**. `waitUntilExit()` je blokující, takže by na každý
+    /// podproces připadala tři vlákna z `ioQueue` (dvě čtení a čekání) — a jakmile jich je
+    /// v běhu dost, nemá si nové čekání kde spustit a celé volání uvízne. `Process` umí dát
+    /// vědět sám, tak si necháme zavolat.
+    func exitCode() async -> Int32 {
+        await withCheckedContinuation { continuation in
+            let finished: Int32? = lock.withLock {
+                if let status = terminationStatus { return status }
+                exitWaiters.append(continuation)
+                return nil
+            }
+            if let finished { continuation.resume(returning: finished) }
+        }
+    }
+
+    /// Volá `terminationHandler`. Když si o výsledek ještě nikdo neřekl, jen se uloží.
+    ///
+    /// Čekatelů je pole, ne jeden: druhé volání `exitCode()` by jinak toho prvního
+    /// přepsalo a jeho `continuation` by se nikdy neresumnula — task by visel navždy
+    /// a runtime by to jen tiše ohlásil jako uniklou continuation. Dnes je volající
+    /// jediný, ale `ReviewRunner` nad tímhle boxem staví streamovací variantu.
+    private func processDidExit(_ status: Int32) {
+        let waiters: [CheckedContinuation<Int32, Never>] = lock.withLock {
+            terminationStatus = status
+            defer { exitWaiters.removeAll() }
+            return exitWaiters
+        }
+        for waiter in waiters { waiter.resume(returning: status) }
     }
 
     func signal(_ signalNumber: Int32) {

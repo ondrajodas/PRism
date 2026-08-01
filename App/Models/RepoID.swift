@@ -9,7 +9,15 @@ struct RepoID: Hashable, Sendable, LosslessStringConvertible {
     let owner: String
     let name: String
 
+    /// Invariant drží typ, ne volající. Parsování z řetězce neplatné jméno odmítne, ale
+    /// tenhle init by ho pustil dál — a z obou vede stejná cesta do cache aplikace, na
+    /// které se maže. `precondition` proto, že jde o chybu v kódu, ne o data z GitHubu:
+    /// ten `.` ani `..` jako jméno repa nevydá.
     init(owner: String, name: String) {
+        precondition(
+            Self.isValidComponent(owner[...]) && Self.isValidComponent(name[...]),
+            "Neplatné jméno repozitáře: \(owner)/\(name)"
+        )
         self.owner = owner
         self.name = name
     }
@@ -26,9 +34,15 @@ struct RepoID: Hashable, Sendable, LosslessStringConvertible {
 
     var description: String { "\(owner)/\(name)" }
 
+    /// `.` a `..` jsou odmítnuté schválně: z identifikátoru se skládá cesta do cache
+    /// aplikace a na té cestě se maže. Jméno jako `../..` by mazání pustilo ven z cache.
+    /// GitHub takové repo nevydá, ale kontrola je jeden řádek a chyba by byla drahá.
     private static func isValidComponent(_ component: Substring) -> Bool {
         !component.isEmpty
+            && component != "."
+            && component != ".."
             && !component.contains("#")
+            && !component.contains("/")
             && component.allSatisfy { !$0.isWhitespace }
     }
 }

@@ -39,6 +39,15 @@ final class FakeProcessRunner: ProcessRunning, @unchecked Sendable {
     struct Invocation: Equatable {
         let executable: URL
         let arguments: [String]
+        let environment: [String: String]
+
+        /// Vlastní init, aby `environment` mohlo mít default a zůstat `let` — u `var`
+        /// s výchozí hodnotou jde zaznamenanou invokaci omylem přepsat.
+        init(executable: URL, arguments: [String], environment: [String: String] = [:]) {
+            self.executable = executable
+            self.arguments = arguments
+            self.environment = environment
+        }
     }
 
     private let outcome: Result<ProcessResult, ProcessError>
@@ -64,10 +73,13 @@ final class FakeProcessRunner: ProcessRunning, @unchecked Sendable {
     func run(
         _ executable: URL,
         arguments: [String],
+        environment: [String: String],
         timeout: Duration
     ) async throws -> ProcessResult {
         lock.withLock {
-            recorded.append(Invocation(executable: executable, arguments: arguments))
+            recorded.append(
+                Invocation(executable: executable, arguments: arguments, environment: environment)
+            )
         }
         return try outcome.get()
     }

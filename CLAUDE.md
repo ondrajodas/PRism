@@ -90,10 +90,40 @@ včetně důvodu.
 
   `gh pr create`, `gh pr list` a `gh api` fungují normálně — zlobí jen ty dva příkazy.
 
-  Když Copilot nálezy má, projdi je a řekni, co je reálné a co šum — teprve pak se
-  rozhoduje dál. Když nemá žádné, **stejně čekej na můj pokyn.**
-- **Merge PR a zavření issue jen na můj pokyn.** Nikdy to nedělej z vlastního
-  rozhodnutí, že je práce hotová — ani když je zeleno a Copilot mlčí.
+  Když Copilot nálezy má, projdi je, řekni, co je reálné a co šum, a co je reálné oprav.
+
+- **Před pushem si diff zreviduj sám** — ideálně subagentem, ať to nezdržuje. Copilot má
+  latenci v minutách a každé kolo stojí čas; co si najdeš sám, projde rovnou. Subagent
+  dostane diff a hledá to, co hledá Copilot: chyby, které testy nechytí, zavádějící
+  dokumentaci, zapomenutý úklid, duplicitu.
+- **Po opravě a pushi pusť Copilota znovu — a takhle dokola, dokud nálezy nedojdou.**
+  Jeden průchod nestačí: oprava umí odkrýt další problém a Copilot vidí až nový diff.
+  Cyklus je *oprava → push → `./bin/copilot-review.sh <PR>` → projít nálezy*, a končí
+  kolem, ve kterém už nic reálného nezbylo.
+
+  **Nemusíš vyhovět všem komentářům.** Copilot navrhuje i věci, které v tomhle repu
+  nedávají smysl nebo jsou horší než to, co tam je. Rozhoduješ ty — u nálezu, který
+  neopravíš, ale musí být odpověď s důvodem, ať je z PR vidět, že se to zvážilo. Když si
+  radou nejsi jistý, ověř ji (spusť to, změř to); zamítnutí podložené měřením je lepší
+  než oprava naslepo.
+
+  Dvě pasti při čtení výsledku:
+
+  ```bash
+  # Bot se jmenuje copilot-pull-request-reviewer[bot], ne „Copilot“ —
+  # filtr na .user.login == "Copilot" nenajde nic a vypadá to jako čisté review.
+  gh api repos/{owner}/{repo}/pulls/37/reviews \
+      --jq '.[] | select(.user.login | startswith("copilot")) | .body'
+  gh api repos/{owner}/{repo}/pulls/37/comments --jq '.[] | "\(.path):\(.line)\n\(.body)"'
+  ```
+
+  A hlavně: **„generated no new comments“ neznamená, že nic nenašel.** Část nálezů se
+  schová do sekce *Suppressed comments* uvnitř **těla review** a v inline komentářích
+  nejsou vůbec. Tělo se proto musí přečíst celé — u #8 tam takhle ležely dva reálné
+  nálezy pod hlavičkou, že nové komentáře nejsou.
+- **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
+  a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
+  Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
 - **Po mergnutí PR se vydá nový tag a GitHub release.** Release notes píšeme česky a
   popisují progress: co se změnilo, jaký je aktuální stav proti milníkům a co je další
   krok. Release je deník projektu — kdo si přečte poslední release, ví, kde jsme.
@@ -132,7 +162,8 @@ Když na něco narazíš, co návrh v issue mění (zjistíš, že to nejde, jak
 **není to důvod se ptát** — rozhodni, zapiš do specifikace **co se změnilo a proč**,
 a napiš to do popisu PR. Posoudí se to nad diffem.
 
-Ptát se dál na: **tvrdé podmínky** níž, **merge PR** a **zavření issue**.
+Ptát se dál na **tvrdé podmínky** níž. Merge PR ani zavření issue mezi ně **nepatří** —
+to si od 2026-08-01 řídíš sám, viz pracovní postup.
 
 ## Tvrdé podmínky
 
@@ -201,6 +232,34 @@ Tři věci, které se u nich nemají rozbít:
   později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
 
 Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
+
+### `RepoCheckout` (`App/Checkout/`)
+
+Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživatelovy klony.**
+
+| Typ | Co dělá |
+|---|---|
+| `RepoCheckout` | Protokol: `prepare(_ repo:)` → cesta k bare klonu. Idempotentní |
+| `GitRepoCheckout` | Implementace nad `git`: první volání klonuje, další fetchuje |
+| `CacheLayout` | Kde co leží. `root` je injektovatelný, aby testy nesáhly do skutečné cache |
+| `CheckoutError` | Typované chyby + klasifikace stderru `gitu` jako čistá funkce |
+
+Pět věcí, které se u toho nemají rozbít:
+
+- **Dokončený klon se pozná podle vlastní značky** (`prism-clone-complete`), ne podle
+  toho, co je uvnitř. `git` zakládá `HEAD` i `config` **hned na začátku** klonování, takže
+  po zabitém klonu složka vypadá jako hotový repozitář — a fetch nad ní dokonce projde,
+  jen z klonu tiše zmizí `promisor` a partial clone přestane platit.
+- **Fetch v bare klonu potřebuje explicitní refspec** (`+refs/heads/*:refs/heads/*`).
+  `git clone --bare` `remote.origin.fetch` nenastavuje, takže samotné `git fetch origin`
+  jen zapíše `FETCH_HEAD` a větve zůstanou, kde byly. Odhalil to až integrační test.
+- **Přihlášení jde přes `gh` jako credential helper v `-c`**, ne přes `gh auth setup-git`
+  — ten zapisuje do globálního git configu uživatele. Ověřeno, že helper sám stačí.
+  `gh` se volá **absolutní cestou**: helper spouští shell, který `PATH` nezdědil.
+- **`GIT_TERMINAL_PROMPT=0` je povinné.** Bez něj se `git` na chybějící heslo zeptá
+  a podproces bez terminálu na tom visí až do timeoutu.
+- **Cesty se předávají přes `-C`, ne pracovní složkou procesu.** Pracovní složka je stav
+  procesu; `-C` je parametr volání a paralelní běhy se nemají jak přebít.
 
 ### `AppStore` (`App/Store/`) a okno (`App/Views/`)
 
@@ -330,7 +389,7 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `Tool` | Výčet `gh` / `git` / `claude` + k čemu je a jak se instaluje (texty pro gate) |
 | `ToolPaths` | Absolutní cesty ke všem třem. **Neoptional pole** — vznikne jen když preflight prošel, takže zbytek aplikace neřeší chybějící binárku |
 | `ExecutableProbe` | Protokol: leží na cestě spustitelný soubor? Reálná implementace odmítá složky (`/usr/bin` má spustitelný bit taky) a následuje symlinky (`claude` je symlink) |
-| `ProcessRunning` | Protokol: spusť, počkej, seber stdout/stderr/exit. `SubprocessRunner` nad `Foundation.Process`, s timeoutem, eskalací `SIGTERM` → `SIGKILL` a zabitím při zrušení |
+| `ProcessRunning` | Protokol: spusť, počkej, seber stdout/stderr/exit. `SubprocessRunner` nad `Foundation.Process`, s timeoutem, eskalací `SIGTERM` → `SIGKILL` a zabitím při zrušení. `environment` se k prostředí aplikace **přidává**, nepřepisuje ho — jinak by podproces přišel o `HOME` a nenašel konfiguraci |
 | `ShellPathReading` | Protokol: `PATH` z login shellu (`zsh -lc 'echo $PATH'`). Selhání = prázdný seznam, ne pád |
 | `BinaryLocator` | Nejdřív známá místa, teprve pro zbytek login shell — a ten **jednou** pro všechny chybějící |
 | `GhAuthCheck` | `gh auth status`: exit 0 přihlášen, 1 nepřihlášen, cokoli jiného `checkFailed` se stderrem |
@@ -344,13 +403,19 @@ nad stavem prostředí ve view, patří to do reportu.
 **`ProcessRunning` zatím jen bufferuje.** `ReviewRunner` bude potřebovat výstup po řádcích,
 jak vzniká (`stream-json`) — to přijde jako samostatná metoda, tuhle to nemění.
 
-Tři věci o podprocesech, na které se naráží znovu:
+Čtyři věci o podprocesech, na které se naráží znovu:
 
-- **Blokující I/O nesmí na kooperativní pool.** `readToEnd()` ani `waitUntilExit()` neumí
-  čekat kooperativně a pool má jen tolik vláken, kolik je jader — několik paralelních review
-  by si je vzájemně vyhladovělo. `SubprocessRunner` je proto odsouvá na vlastní
-  `DispatchQueue` a volajícímu je podává přes `async let`, takže zůstávají navázané na
-  životní cyklus volání. `Task.detached` by odvázalo strukturu **a** problém neřešilo.
+- **Blokující I/O nesmí na kooperativní pool.** `readToEnd()` neumí čekat kooperativně
+  a pool má jen tolik vláken, kolik je jader — několik paralelních review by si je
+  vzájemně vyhladovělo. `SubprocessRunner` ho proto odsouvá na vlastní `DispatchQueue`
+  a volajícímu ho podává přes `async let`, takže zůstává navázané na životní cyklus
+  volání. `Task.detached` by odvázalo strukturu **a** problém neřešilo.
+- **Na konec procesu se čeká přes `terminationHandler`, ne `waitUntilExit()`.** To je taky
+  blokující, takže by na každý podproces připadala **tři** vlákna z `ioQueue` (dvě čtení
+  a čekání). Jakmile jich je v běhu dost, nemá si nové čekání kde spustit a volání uvízne
+  — projeví se to jako **náhodně visící běh testů**, ve kterém všechny testy prošly.
+  Stálo to půl dne hledání; s `terminationHandler`em jde sada pětkrát za sebou zeleně,
+  před tím padal každý druhý až třetí běh.
 - **Oba pipy se musí číst souběžně.** Sériově: než dojde EOF na prvním, druhý naplní buffer
   jádra a proces se zasekne na zápisu.
 - **Zrušení musí proces zabít.** Bez toho čekání na EOF drží volání, dokud proces nedoběhne
@@ -434,8 +499,12 @@ Právě proto tam eskalace na `SIGKILL` je.
 - **`AppStore`** — proti fake gateway: obnovení se ptá zdrojů, seznam se čte z pollingu,
   výběr se drží. Views se neunit-testují; kontroluje se běžící aplikace (viz níž).
 - **`Config`** — merge globální + per-repo, defaulty pro neznámé repo.
-- **`GitHubGateway` / `RepoCheckout` / `ReviewRunner`** — fake v testech na úrovni
-  aplikace; malý počet integračních testů proti skutečným binárkám a scratch repu.
+- **`RepoCheckout`** — dvě vrstvy, a **obě jsou potřeba**. Fake runner ověří, co se `gitu`
+  posílá za argumenty; integrační test (`RealRepoCheckoutTests`) klonuje z `file://`
+  scratch repa a ověří, že jim `git` rozumí a vznikne z toho použitelný klon. Chybějící
+  refspec u fetche prošel unit testy bez povšimnutí a chytil ho až ten druhý.
+- **`ReviewRunner`** — fake v testech na úrovni aplikace; malý počet integračních testů
+  proti skutečné binárce.
 
 ### Jak si zkontrolovat, jak view vypadá
 
@@ -500,6 +569,18 @@ xcodebuild -project PRism.xcodeproj -scheme PRism test
 neškodné, týkají se iOS simulátorů, ne macOS buildu. Rozhoduje `** BUILD SUCCEEDED **`,
 resp. `** TEST SUCCEEDED **` na konci.
 
+**Výstup `xcodebuild` piš do souboru a grepuj až ten soubor.**
+
+```bash
+xcodebuild -project PRism.xcodeproj -scheme PRism test > /tmp/tests.log 2>&1
+grep -E "error:|✘|Test run with|TEST (SUCCEEDED|FAILED)" /tmp/tests.log | tail -5
+```
+
+Roura `xcodebuild … | grep … | head -N` se umí zaseknout na neurčito a vypadá to jako
+zaseknuté testy — přitom testy doběhnou za sekundu. Stálo to jednou přes půl hodiny
+hledání neexistující chyby v testech. Když se zdá, že test run visí, první věc je pustit
+ho do souboru.
+
 ## Prostředí
 
 - macOS 26, Xcode 26, Swift 6.3
@@ -532,10 +613,13 @@ Polling hotový (issue #6) — `App/Polling/`.
 repozitáři, prázdný stav, úvodní loading, banner při výpadku a rate limitu, výběr řádku.
 Stav review je zatím u všech `neběželo` — spouštění přijde ve fázi 3.
 
+Rozpracovaná fáze 2: bare klon do cache hotový (issue #8) — `App/Checkout/`. Vrstva bez
+UI; worktrees (#9) a eviction (#10) zbývají.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
-2. Checkout cache + worktree
+2. Checkout cache + worktree — **bare klon hotový**
 3. `ReviewRunner` + parsování streamu
 4. UI diffu s bublinami
 5. Konfigurace a auto režim

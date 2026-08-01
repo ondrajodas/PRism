@@ -1,0 +1,68 @@
+import Foundation
+
+/// Proč se nepovedlo připravit pracovní kopii.
+///
+/// Typované ze stejného důvodu jako u `GitHubError`: každý případ vede jinam.
+/// `notAuthenticated` chce `gh auth login`, `network` se spraví sám. Text `gitu` se drží
+/// u chyby, protože právě on je to, co se v řádku PR ukáže u stavu `checkoutFailed`.
+enum CheckoutError: Error, Equatable, Sendable {
+    case notAuthenticated(String)
+    case network(String)
+    /// Repozitář neexistuje — **nebo na něj nevidíme**. GitHub obojí schválně slévá do
+    /// „Repository not found“, aby neprozradil, že privátní repo existuje. Není to tedy
+    /// konečný stav: může znamenat chybějící oprávnění, se kterým se dá něco dělat.
+    case repositoryNotFound(String)
+    case timedOut
+    case toolUnavailable(String)
+    /// Cache na disku nejde připravit — zbytek po klonu se nedá smazat nebo složku nejde
+    /// založit. Vlastní případ proto, že `git` do toho nemá co mluvit: kdyby se to spolklo,
+    /// spadl by až `git` na „destination path already exists“ a skutečná příčina by zmizela.
+    case cacheUnavailable(String)
+    case gitFailed(exitCode: Int32, message: String)
+}
+
+extension CheckoutError {
+    init(failure result: ProcessResult) {
+        let message = result.failureText.isEmpty
+            ? "git skončil s kódem \(result.exitCode)."
+            : result.failureText
+
+        if Self.mentions(message, Self.authSignals) {
+            self = .notAuthenticated(message)
+        } else if Self.mentions(message, Self.networkSignals) {
+            self = .network(message)
+        } else if Self.mentions(message, Self.notFoundSignals) {
+            self = .repositoryNotFound(message)
+        } else {
+            self = .gitFailed(exitCode: result.exitCode, message: message)
+        }
+    }
+
+    private static let authSignals = [
+        "authentication failed",
+        "could not read username",
+        "could not read password",
+        "terminal prompts disabled",
+        "permission denied (publickey)",
+        "403 forbidden",
+    ]
+    /// Celé fráze, ne tokeny. Hlášky `gitu` obsahují celou URL, takže holé `"ssl"` by
+    /// zařadilo jako síťovou chybu cokoli u `openssl`, `wolfssl` nebo `boringssl` — a
+    /// `network` se testuje dřív než `repositoryNotFound`, takže by uživatel místo
+    /// „zkontroluj oprávnění“ dostal „spraví se to samo“.
+    private static let networkSignals = [
+        "could not resolve host",
+        "failed to connect",
+        "connection timed out",
+        "network is unreachable",
+        "connection refused",
+        "ssl certificate problem",
+        "ssl connect error",
+    ]
+    private static let notFoundSignals = ["repository not found", "does not exist"]
+
+    private static func mentions(_ message: String, _ signals: [String]) -> Bool {
+        let lowered = message.lowercased()
+        return signals.contains { lowered.contains($0) }
+    }
+}
