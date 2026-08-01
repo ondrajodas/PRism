@@ -110,7 +110,8 @@ final class AppStore {
 
     /// Nálezy z minula. Bez toho by se po startu tvářil každý PR, že se nikdy nereviewoval.
     func loadStoredReviews() async {
-        guard let loaded = try? await reviews?.load() else { return }
+        guard let reviews else { return }
+        guard let loaded = try? await reviews.load() else { return }
         reviewRecords = Policy.currentRecords(from: loaded.records)
         unreadableReviewFiles = loaded.unreadable
     }
