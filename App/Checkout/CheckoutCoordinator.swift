@@ -7,6 +7,14 @@ import Foundation
 /// se proto k běžící práci **připojí** místo aby začal vlastní — což je zároveň to, co
 /// volající chce: výsledek je stejný.
 actor CheckoutCoordinator {
+    /// Ke klíči se připojila práce s jiným návratovým typem. Znamená to chybu v kódu,
+    /// ne stav, do kterého se dá dostat používáním.
+    struct MismatchedWork: Error {
+        let key: String
+        let expected: String
+        let got: String
+    }
+
     private var running: [String: Task<any Sendable, any Error>] = [:]
     /// Čekatelé podle identity, ne počtu. Kdyby se počítali, zrušený čekající by z počtu
     /// odešel až po návratu z `task.value` — jenže ten se nevrátí, dokud práce běží. Dva
@@ -26,7 +34,9 @@ actor CheckoutCoordinator {
         kind: String,
         work: @escaping @Sendable () async throws -> T
     ) async throws -> T {
-        let key = "\(kind):\(key)"
+        // Návratový typ je v klíči taky: dvě práce, které vracejí něco jiného, se pak
+        // nemají jak potkat, i kdyby někdo omylem použil stejný `kind`.
+        let key = "\(kind):\(T.self):\(key)"
         let token = UUID()
         let task = join(key, work)
         waiters[key, default: []].insert(token)
@@ -38,9 +48,11 @@ actor CheckoutCoordinator {
                 Task { await self.waiterLeft(key, token) }
             }
             leave(key, token)
-            // Typ drží druh práce: k běžícímu tasku se připojí jen volání stejného druhu,
-            // které vrací totéž. Kdyby to přestalo platit, spadne to tady a hned.
-            return value as! T
+            guard let typed = value as? T else {
+                // Nemá jak nastat — klíč nese typ. Ohlásit se to ale musí líp než pádem.
+                throw MismatchedWork(key: key, expected: "\(T.self)", got: "\(type(of: value))")
+            }
+            return typed
         } catch {
             leave(key, token)
             throw error
