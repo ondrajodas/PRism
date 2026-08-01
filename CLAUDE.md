@@ -426,6 +426,10 @@ Věci, které se u toho nemají rozbít:
   nálezy a ty se nesmí tvářit jako „review neběželo“.
 - **`reviews/` je mimo dosah eviction.** Ta chodí jen po `repos/` a `worktrees/`: nálezy jsou
   kilobajty a řídí se vlastní lhůtou, ne rozpočtem na místo.
+- **Záznamy jednoho PR se hledají podle prefixu jména souboru**, ne dekódováním celé
+  historie repa — `save` i `markCurrent` běží často. Jméno ale není pravda: tou zůstává
+  `pullRequest` uvnitř souboru, který se stejně ověří. Pomlčka je součást prefixu, takže
+  `42-` nesedí na `421-`; je na to test.
 
 ### `AppStore` (`App/Store/`) a okno (`App/Views/`)
 

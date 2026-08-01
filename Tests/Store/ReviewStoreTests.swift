@@ -182,6 +182,22 @@ struct ReviewStoreTests {
         #expect(loaded.records.first?.isStale == true)
     }
 
+    @Test("PR, jehož číslo je prefixem jiného, cizí záznam nezestárne")
+    func aNumberThatPrefixesAnotherLeavesItAlone() async throws {
+        // Soubory se jmenují `<pr>-<sha>.json` a hledají se podle prefixu, takže PR 4 nesmí
+        // sáhnout na PR 42. Pomlčka v prefixu je jediné, co tomu brání.
+        let shortNumber = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 4)
+        let store = store()
+        try await store.save(run(pr: shortNumber, headSha: "aaaa1111"))
+        try await store.save(run(headSha: "aaaa1111"))
+
+        try await store.markCurrent("bbbb2222", of: shortNumber)
+        let loaded = try await store.load()
+
+        #expect(loaded.records.first { $0.pullRequest == shortNumber }?.isStale == true)
+        #expect(loaded.records.first { $0.pullRequest == pullRequest }?.isStale == false)
+    }
+
     @Test("Cizí PR zastaralost nechytne")
     func anotherPullRequestIsLeftAlone() async throws {
         let other = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 7)

@@ -124,7 +124,8 @@ actor ReviewStore {
     }
 
     private func markStale(everythingBut headSha: String, of pullRequest: PRIdentifier) throws {
-        for url in recordFiles(in: layout.reviews(of: pullRequest.repo)) {
+        let files = recordFiles(in: layout.reviews(of: pullRequest.repo), named: "\(pullRequest.number)-")
+        for url in files {
             guard var record = try? read(at: url), record.pullRequest == pullRequest else {
                 continue
             }
@@ -149,9 +150,25 @@ actor ReviewStore {
         try encoder.encode(record).write(to: url, options: .atomic)
     }
 
-    /// Chybějící složka není chyba — do prvního review žádná neexistuje.
-    private func recordFiles(in directory: URL) -> [URL] {
-        let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil)
-        return (enumerator?.allObjects as? [URL] ?? []).filter { $0.pathExtension == "json" }
+    /// Soubory se záznamy. Chybějící složka není chyba — do prvního review žádná neexistuje.
+    ///
+    /// `prefix` odfiltruje cizí PR **ještě před čtením**: jméno souboru začíná číslem PR,
+    /// takže se ušetří dekódování celé historie repa při každém uložení. Na jméno se přitom
+    /// nespoléhá jako na pravdu — tou zůstává `pullRequest` uvnitř souboru, který si volající
+    /// stejně ověří. `42-` navíc nesedí na `421-`, protože pomlčka je součást prefixu.
+    private func recordFiles(in directory: URL, named prefix: String? = nil) -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: nil
+        ) else { return [] }
+
+        // Po prvcích, ne `allObjects`: ten vylistuje celý strom do paměti, včetně souborů,
+        // které nás nezajímají.
+        var files: [URL] = []
+        for case let url as URL in enumerator where url.pathExtension == "json" {
+            guard prefix.map(url.lastPathComponent.hasPrefix) ?? true else { continue }
+            files.append(url)
+        }
+        return files
     }
 }
