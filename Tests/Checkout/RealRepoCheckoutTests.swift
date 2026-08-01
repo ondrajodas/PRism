@@ -9,6 +9,8 @@ import Testing
 /// z toho vznikne použitelný klon. Ta druhá půlka se namockovat nedá.
 @Suite("RepoCheckout proti skutečnému gitu")
 struct RealRepoCheckoutTests {
+    /// Systémový `git`, ne `KnownPath.git`: tenhle test binárku skutečně spouští, a
+    /// `/usr/bin/git` je na macOS vždycky — homebrew instalace být nemusí.
     private let git = URL(filePath: "/usr/bin/git")
     private let runner = SubprocessRunner()
     private let repo = RepoID(owner: "scratch", name: "sample")

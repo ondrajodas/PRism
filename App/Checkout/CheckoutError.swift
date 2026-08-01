@@ -3,12 +3,14 @@ import Foundation
 /// Proč se nepovedlo připravit pracovní kopii.
 ///
 /// Typované ze stejného důvodu jako u `GitHubError`: každý případ vede jinam.
-/// `notAuthenticated` chce `gh auth login`, `network` se spraví sám, `repositoryNotFound`
-/// znamená, že PR sledovat nemá smysl. Text `gitu` se drží u chyby, protože právě on je
-/// to, co se v řádku PR ukáže u stavu `checkoutFailed`.
+/// `notAuthenticated` chce `gh auth login`, `network` se spraví sám. Text `gitu` se drží
+/// u chyby, protože právě on je to, co se v řádku PR ukáže u stavu `checkoutFailed`.
 enum CheckoutError: Error, Equatable, Sendable {
     case notAuthenticated(String)
     case network(String)
+    /// Repozitář neexistuje — **nebo na něj nevidíme**. GitHub obojí schválně slévá do
+    /// „Repository not found“, aby neprozradil, že privátní repo existuje. Není to tedy
+    /// konečný stav: může znamenat chybějící oprávnění, se kterým se dá něco dělat.
     case repositoryNotFound(String)
     case timedOut
     case toolUnavailable(String)

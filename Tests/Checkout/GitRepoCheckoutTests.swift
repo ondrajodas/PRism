@@ -5,7 +5,7 @@ import Testing
 
 @Suite("GitRepoCheckout")
 struct GitRepoCheckoutTests {
-    private let git = URL(filePath: "/opt/homebrew/bin/git")
+    private let git = URL(filePath: KnownPath.git)
     private let gh = URL(filePath: KnownPath.gh)
     private let vault = RepoID(owner: "keboola", name: "vault")
 
