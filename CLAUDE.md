@@ -537,9 +537,9 @@ Právě proto tam eskalace na `SIGKILL` je.
   přeformátované `jq`; berou se z **veřejných** repozitářů (`cli/cli`, `cli/go-gh`,
   `ondrajodas/PRism`), protože titulky firemních PR sem nepatří. Stav, na který se
   skutečná fixture nedá sehnat, se testuje inline JSONem přímo v testu.
-- **Parsování streamu** — klíčový spoj. Nahrát skutečný `stream-json` výstup z reálných
-  běhů jako fixtures a testovat parser proti nim: init eventy, `ReportFindings` cally,
-  chybný vstup, zkrácený stream.
+- **Parsování streamu** — klíčový spoj. Fixtures ze skutečných běhů už v repu jsou
+  (`Tests/Fixtures/stream-json/`, viz [`docs/claude-cli.md`](docs/claude-cli.md)): běh
+  s nálezy, čistý běh, zabitý běh a odmítnutý zápis. Parser se testuje proti nim.
 - **`PollingService`** — proti `FakeGitHubGateway` (odpovědi v pořadí, poslední se opakuje)
   a `FakeTimeSource`. Ten místo čekání zapisuje **požadované délky uspání** — na nich se
   ověřuje backoff — a po zadaném počtu uspání smyčku ukončí `CancellationError`em. Testy
@@ -668,6 +668,11 @@ Polling hotový (issue #6) — `App/Polling/`.
 repozitáři, prázdný stav, úvodní loading, banner při výpadku a rate limitu, výběr řádku.
 Stav review je zatím u všech `neběželo` — spouštění přijde ve fázi 3.
 
+Spike k `claude` CLI hotový (issue #12) — [`docs/claude-cli.md`](docs/claude-cli.md)
+a fixtures v `Tests/Fixtures/stream-json/`. **Žádný appkový kód**, ale opravil dvě chyby
+v návrhu: `--verbose` je povinný a `ReportFindings` musí být v `--allowedTools`, jinak
+reviewer nálezy napíše textem a sběr tiše nefunguje.
+
 **Fáze 2 hotová** — `App/Checkout/`, vrstva bez UI. Bare klon do cache (#8), worktree per
 review i serializace souběžných příprav (#9) a eviction cache (#10). Aplikace si tedy umí
 připravit pracovní kopii a uklidit po sobě; chybí jen ten, kdo ji použije.
@@ -676,7 +681,7 @@ Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
 2. ~~Checkout cache + worktree~~ — **hotovo**
-3. `ReviewRunner` + parsování streamu
+3. `ReviewRunner` + parsování streamu — **spike hotový**, flagy ověřené
 4. UI diffu s bublinami
 5. Konfigurace a auto režim
 

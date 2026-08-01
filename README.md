@@ -136,10 +136,12 @@ Tests/                    unit testy — target PRismTests
   Polling/                testy pollingu proti fake gateway a fake času
   Store/                  testy AppStore
   Fixtures/gh/            skutečné JSON výstupy gh z veřejných repozitářů
+  Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR
 Info.plist                název aplikace, verze, minimální systém
 PRism.entitlements        vypnutý App Sandbox
+docs/claude-cli.md        ověřené chování claude CLI (flagy, tvar eventů)
 docs/superpowers/specs/   návrh a specifikace
 CLAUDE.md                 pravidla pro práci v repu
 README.md                 tento soubor
