@@ -2,8 +2,17 @@ import Foundation
 
 /// Runner nad `Foundation.Process`.
 struct SubprocessRunner: ProcessRunning {
-    func run(_ executable: URL, arguments: [String], timeout: Duration) async throws -> ProcessResult {
-        let launched = LaunchedProcess(executable: executable, arguments: arguments)
+    func run(
+        _ executable: URL,
+        arguments: [String],
+        environment: [String: String],
+        timeout: Duration
+    ) async throws -> ProcessResult {
+        let launched = LaunchedProcess(
+            executable: executable,
+            arguments: arguments,
+            environment: environment
+        )
         try launched.launch()
 
         return try await withTaskCancellationHandler {
@@ -89,9 +98,12 @@ private final class LaunchedProcess: @unchecked Sendable {
     private let lock = NSLock()
     private var timedOut = false
 
-    init(executable: URL, arguments: [String]) {
+    init(executable: URL, arguments: [String], environment: [String: String] = [:]) {
         process.executableURL = executable
         process.arguments = arguments
+        if !environment.isEmpty {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+        }
         process.standardOutput = output
         process.standardError = error
         process.standardInput = FileHandle.nullDevice

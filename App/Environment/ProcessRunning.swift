@@ -30,5 +30,18 @@ enum ProcessError: Error, Equatable {
 /// tak, jak vzniká (`stream-json`) — to přijde jako samostatná metoda, tahle se tím
 /// nemění.
 protocol ProcessRunning: Sendable {
-    func run(_ executable: URL, arguments: [String], timeout: Duration) async throws -> ProcessResult
+    /// `environment` se **přidává** k prostředí aplikace, nepřepisuje ho celé — jinak by
+    /// podproces přišel o `HOME` a `gh` ani `git` by nenašly svoji konfiguraci.
+    func run(
+        _ executable: URL,
+        arguments: [String],
+        environment: [String: String],
+        timeout: Duration
+    ) async throws -> ProcessResult
+}
+
+extension ProcessRunning {
+    func run(_ executable: URL, arguments: [String], timeout: Duration) async throws -> ProcessResult {
+        try await run(executable, arguments: arguments, environment: [:], timeout: timeout)
+    }
 }

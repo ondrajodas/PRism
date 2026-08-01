@@ -24,8 +24,13 @@ nese repo, číslo, titulek, autora a čas poslední změny. Při výpadku sít�
 poslední známá data a nad seznamem se objeví pruh, že nejsou aktuální; při rate limitu
 pruh říká, kdy to zkusí znovu.
 
-Review se zatím nespouští — stav u všech PR je `neběželo`. Z pěti fází
-(viz [CLAUDE.md](CLAUDE.md)) je hotová první.
+Review se zatím nespouští — stav u všech PR je `neběželo`. Pod povrchem už ale funguje
+vlastní cache repozitářů: repo se na vyžádání naklonuje jako bare partial clone do
+`~/Library/Application Support/PRism/` a při dalším setkání se jen aktualizuje. **Klonů na
+disku se aplikace nikdy nedotkne** a přihlášení k privátním repům deleguje na `gh`, aniž
+by měnila globální git config.
+
+Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) je hotová první, druhá rozpracovaná.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -115,6 +120,7 @@ App/                      zdrojáky aplikace — target PRism
   Models/                 doménové modely: PR, identifikátory, stav review
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
   GitHub/                 čtení PR přes gh CLI: gateway, typované chyby, tvar výstupu
+  Checkout/               vlastní cache repozitářů: bare partial clone, cesty, chyby
   Policy/                 čisté funkce: slučování zdrojů, řazení
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno
@@ -122,6 +128,7 @@ App/                      zdrojáky aplikace — target PRism
 Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip
   Environment/            testy Environment vrstvy + fakes
+  Checkout/               testy klonování — proti fake runneru i skutečnému gitu
   GitHub/                 testy gateway a klasifikace chyb gh
   Policy/                 testy čistých funkcí
   Polling/                testy pollingu proti fake gateway a fake času

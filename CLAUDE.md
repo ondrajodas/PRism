@@ -202,6 +202,30 @@ Tři věci, které se u nich nemají rozbít:
 
 Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
 
+### `RepoCheckout` (`App/Checkout/`)
+
+Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživatelovy klony.**
+
+| Typ | Co dělá |
+|---|---|
+| `RepoCheckout` | Protokol: `prepare(_ repo:)` → cesta k bare klonu. Idempotentní |
+| `GitRepoCheckout` | Implementace nad `git`: první volání klonuje, další fetchuje |
+| `CacheLayout` | Kde co leží. `root` je injektovatelný, aby testy nesáhly do skutečné cache |
+| `CheckoutError` | Typované chyby + klasifikace stderru `gitu` jako čistá funkce |
+
+Čtyři věci, které se u toho nemají rozbít:
+
+- **Fetch v bare klonu potřebuje explicitní refspec** (`+refs/heads/*:refs/heads/*`).
+  `git clone --bare` `remote.origin.fetch` nenastavuje, takže samotné `git fetch origin`
+  jen zapíše `FETCH_HEAD` a větve zůstanou, kde byly. Odhalil to až integrační test.
+- **Přihlášení jde přes `gh` jako credential helper v `-c`**, ne přes `gh auth setup-git`
+  — ten zapisuje do globálního git configu uživatele. Ověřeno, že helper sám stačí.
+  `gh` se volá **absolutní cestou**: helper spouští shell, který `PATH` nezdědil.
+- **`GIT_TERMINAL_PROMPT=0` je povinné.** Bez něj se `git` na chybějící heslo zeptá
+  a podproces bez terminálu na tom visí až do timeoutu.
+- **Cesty se předávají přes `-C`, ne pracovní složkou procesu.** Pracovní složka je stav
+  procesu; `-C` je parametr volání a paralelní běhy se nemají jak přebít.
+
 ### `AppStore` (`App/Store/`) a okno (`App/Views/`)
 
 `AppStore` drží to, co kreslí okno: polling seznamu a **výběr řádku**. Výběr žije tady, ne
@@ -330,7 +354,7 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `Tool` | Výčet `gh` / `git` / `claude` + k čemu je a jak se instaluje (texty pro gate) |
 | `ToolPaths` | Absolutní cesty ke všem třem. **Neoptional pole** — vznikne jen když preflight prošel, takže zbytek aplikace neřeší chybějící binárku |
 | `ExecutableProbe` | Protokol: leží na cestě spustitelný soubor? Reálná implementace odmítá složky (`/usr/bin` má spustitelný bit taky) a následuje symlinky (`claude` je symlink) |
-| `ProcessRunning` | Protokol: spusť, počkej, seber stdout/stderr/exit. `SubprocessRunner` nad `Foundation.Process`, s timeoutem, eskalací `SIGTERM` → `SIGKILL` a zabitím při zrušení |
+| `ProcessRunning` | Protokol: spusť, počkej, seber stdout/stderr/exit. `SubprocessRunner` nad `Foundation.Process`, s timeoutem, eskalací `SIGTERM` → `SIGKILL` a zabitím při zrušení. `environment` se k prostředí aplikace **přidává**, nepřepisuje ho — jinak by podproces přišel o `HOME` a nenašel konfiguraci |
 | `ShellPathReading` | Protokol: `PATH` z login shellu (`zsh -lc 'echo $PATH'`). Selhání = prázdný seznam, ne pád |
 | `BinaryLocator` | Nejdřív známá místa, teprve pro zbytek login shell — a ten **jednou** pro všechny chybějící |
 | `GhAuthCheck` | `gh auth status`: exit 0 přihlášen, 1 nepřihlášen, cokoli jiného `checkFailed` se stderrem |
@@ -434,8 +458,12 @@ Právě proto tam eskalace na `SIGKILL` je.
 - **`AppStore`** — proti fake gateway: obnovení se ptá zdrojů, seznam se čte z pollingu,
   výběr se drží. Views se neunit-testují; kontroluje se běžící aplikace (viz níž).
 - **`Config`** — merge globální + per-repo, defaulty pro neznámé repo.
-- **`GitHubGateway` / `RepoCheckout` / `ReviewRunner`** — fake v testech na úrovni
-  aplikace; malý počet integračních testů proti skutečným binárkám a scratch repu.
+- **`RepoCheckout`** — dvě vrstvy, a **obě jsou potřeba**. Fake runner ověří, co se `gitu`
+  posílá za argumenty; integrační test (`RealRepoCheckoutTests`) klonuje z `file://`
+  scratch repa a ověří, že jim `git` rozumí a vznikne z toho použitelný klon. Chybějící
+  refspec u fetche prošel unit testy bez povšimnutí a chytil ho až ten druhý.
+- **`ReviewRunner`** — fake v testech na úrovni aplikace; malý počet integračních testů
+  proti skutečné binárce.
 
 ### Jak si zkontrolovat, jak view vypadá
 
@@ -532,10 +560,13 @@ Polling hotový (issue #6) — `App/Polling/`.
 repozitáři, prázdný stav, úvodní loading, banner při výpadku a rate limitu, výběr řádku.
 Stav review je zatím u všech `neběželo` — spouštění přijde ve fázi 3.
 
+Rozpracovaná fáze 2: bare klon do cache hotový (issue #8) — `App/Checkout/`. Vrstva bez
+UI; worktrees (#9) a eviction (#10) zbývají.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
-2. Checkout cache + worktree
+2. Checkout cache + worktree — **bare klon hotový**
 3. `ReviewRunner` + parsování streamu
 4. UI diffu s bublinami
 5. Konfigurace a auto režim
