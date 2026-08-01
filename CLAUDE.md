@@ -90,10 +90,16 @@ včetně důvodu.
 
   `gh pr create`, `gh pr list` a `gh api` fungují normálně — zlobí jen ty dva příkazy.
 
-  Když Copilot nálezy má, projdi je a řekni, co je reálné a co šum — teprve pak se
-  rozhoduje dál. Když nemá žádné, **stejně čekej na můj pokyn.**
-- **Merge PR a zavření issue jen na můj pokyn.** Nikdy to nedělej z vlastního
-  rozhodnutí, že je práce hotová — ani když je zeleno a Copilot mlčí.
+  Když Copilot nálezy má, projdi je, řekni, co je reálné a co šum, a co je reálné oprav.
+
+- **Po opravě a pushi pusť Copilota znovu — a takhle dokola, dokud nálezy nedojdou.**
+  Jeden průchod nestačí: oprava umí odkrýt další problém a Copilot vidí až nový diff.
+  Cyklus je *oprava → push → `./bin/copilot-review.sh <PR>` → projít nálezy*, a končí
+  kolem, ve kterém už nic reálného nezbylo. Nálezy, které vyhodnotíš jako šum, se
+  opravovat nemusí — ale musí na ně být odpověď, ať je z PR vidět proč.
+- **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
+  a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
+  Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
 - **Po mergnutí PR se vydá nový tag a GitHub release.** Release notes píšeme česky a
   popisují progress: co se změnilo, jaký je aktuální stav proti milníkům a co je další
   krok. Release je deník projektu — kdo si přečte poslední release, ví, kde jsme.
@@ -132,7 +138,8 @@ Když na něco narazíš, co návrh v issue mění (zjistíš, že to nejde, jak
 **není to důvod se ptát** — rozhodni, zapiš do specifikace **co se změnilo a proč**,
 a napiš to do popisu PR. Posoudí se to nad diffem.
 
-Ptát se dál na: **tvrdé podmínky** níž, **merge PR** a **zavření issue**.
+Ptát se dál na **tvrdé podmínky** níž. Merge PR ani zavření issue mezi ně **nepatří** —
+to si od 2026-08-01 řídíš sám, viz pracovní postup.
 
 ## Tvrdé podmínky
 
