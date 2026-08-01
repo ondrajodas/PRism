@@ -547,7 +547,9 @@ Nad nálezy platí navíc:
 - **`suggestedVerdict` vrací `nil`, když není z čeho soudit** — a je to vlastní odpověď, ne
   opatrné `approve`. Schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou
   aplikace umí udělat. Z běhu se dá vyvodit „je čisto“, jen když **doběhl**, **zavolal
-  `ReportFindings`** a **nic nezahodil**; zastaralý záznam nedá verdikt vůbec.
+  `ReportFindings`** a **nic nezahodil**; zastaralý záznam nedá verdikt vůbec. Zahozený
+  nález přitom bere `approve` **celému záznamu**, ne jen svému běhu — čistý výsledek jiného
+  skillu o tom ztraceném nálezu nic neříká.
 - **Nálezy se berou ze všech běhů, i ze spadlých a vytimeoutovaných.** Selhal *běh*, ne
   nález — ten dorazil jako celý `ReportFindings` call. Filtrovat je podle stavu běhu by
   znamenalo, že spadlý reviewer s nahlášenou ztrátou dat vedle jednoho čistého běhu vyjde

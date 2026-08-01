@@ -115,6 +115,31 @@ struct VerdictSuggestionTests {
         #expect(Policy.suggestedVerdict(for: record) == nil)
     }
 
+    @Test("Zahozený nález v jednom běhu bere approve celému záznamu")
+    func droppedFindingsAnywherePreventApprove() {
+        // Čistý výsledek jiného skillu o tom ztraceném nálezu nic neříká — je to známá
+        // neznámá, ne důkaz, že je čisto.
+        let record = makeRecord(runs: [
+            makeStoredRun(skill: "code-review"),
+            makeStoredRun(skill: "security-review", droppedFindings: 1),
+        ])
+
+        #expect(Policy.suggestedVerdict(for: record) == nil)
+    }
+
+    @Test("Blokující nález má přednost i před zahozeným")
+    func aBlockingFindingWinsOverADroppedOne() {
+        let record = makeRecord(runs: [
+            makeStoredRun(
+                skill: "code-review",
+                findings: [makeReported(category: "correctness", verdict: .confirmed)]
+            ),
+            makeStoredRun(skill: "security-review", droppedFindings: 1),
+        ])
+
+        #expect(Policy.suggestedVerdict(for: record) == .requestChanges)
+    }
+
     @Test("Zastaralý záznam návrh nedá, ani kdyby byl čistý")
     func aStaleRecordSuggestsNothing() {
         // Mluvil by o commitu, který v PR není.

@@ -26,6 +26,12 @@ extension Policy {
             return .requestChanges
         }
 
+        // Zahozený nález **kdekoli** v záznamu bere approve celému PR, ne jen svému běhu.
+        // Víme, že reviewer něco hlásil a aplikace to nepřečetla — a čistý výsledek jiného
+        // skillu o tom ztraceném nálezu nic neříká. Je to známá neznámá, tedy přesně ten
+        // stav, ze kterého se nemá soudit.
+        guard record.runs.allSatisfy({ $0.droppedFindings == 0 }) else { return nil }
+
         return record.runs.contains(where: isConclusive) ? .approve : nil
     }
 
