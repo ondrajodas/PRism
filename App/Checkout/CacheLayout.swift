@@ -24,7 +24,7 @@ struct CacheLayout: Sendable, Equatable {
             .appending(path: "\(repo.name).git")
     }
 
-    /// Pracovní strom jednoho review: `worktrees/<owner>-<repo>-<pr>-<sha>`.
+    /// Pracovní strom jednoho review: `worktrees/<owner>/<repo>/<pr>-<sha>`.
     ///
     /// `headSha` je v názvu schválně — nálezy na něm visí, takže dva běhy nad různými
     /// commity téhož PR si nesmí sáhnout na stejný strom.

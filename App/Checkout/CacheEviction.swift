@@ -53,11 +53,13 @@ struct CacheEviction: Sendable {
     /// starším commitu. Bez tohohle by strom zavřeného PR přežil v repu, které v cache
     /// zůstává kvůli jiným PR, a nesmazal by ho nikdy nikdo.
     private func discardUnwantedWorktrees(keeping open: [PRIdentifier], busy: Set<RepoID>) throws {
-        let wanted = Set(open.map(\.number))
+        // Klíčem je `(repo, číslo)`, ne samotné číslo: čísla PR se mezi repozitáři
+        // opakují, takže `repoA#1` by si držel při životě strom `repoB#1`.
+        let wanted = Set(open)
 
         for (repo, worktree) in allWorktrees() where !busy.contains(repo) {
             let number = Int(worktree.lastPathComponent.split(separator: "-").first ?? "")
-            guard let number, wanted.contains(number) else {
+            guard let number, wanted.contains(PRIdentifier(repo: repo, number: number)) else {
                 try remove(worktree)
                 continue
             }
@@ -196,13 +198,29 @@ struct CacheEviction: Sendable {
 
 extension CacheEviction {
     /// Zaznamená, že se s repem právě pracovalo.
+    ///
+    /// Zápis je atomický a jde jen do cache — stejná kontrola jako u mazání. Symlink
+    /// v cestě by jinak psal mimo ni, a „pracuje výhradně ve své cache“ je tvrdá podmínka.
     static func markUsed(_ repo: RepoID, at date: Date = .now, in layout: CacheLayout) throws {
+        let marker = try insideCache(layout.lastUsedMarker(for: repo), of: layout)
         let stamp = ISO8601DateFormatter().string(from: date)
-        try Data(stamp.utf8).write(to: layout.lastUsedMarker(for: repo))
+        try Data(stamp.utf8).write(to: marker, options: .atomic)
     }
 
     static func lastUsed(_ repo: RepoID, in layout: CacheLayout) throws -> Date? {
-        let data = try Data(contentsOf: layout.lastUsedMarker(for: repo))
+        let marker = try insideCache(layout.lastUsedMarker(for: repo), of: layout)
+        let data = try Data(contentsOf: marker)
         return ISO8601DateFormatter().date(from: String(decoding: data, as: UTF8.self))
+    }
+
+    /// Vrátí cestu, jen když po rozbalení symlinků leží pod kořenem cache.
+    private static func insideCache(_ url: URL, of layout: CacheLayout) throws -> URL {
+        let root = layout.root.resolvingSymlinksInPath().path(percentEncoded: false)
+        // Rozbaluje se rodič: samotný soubor ještě existovat nemusí.
+        let parent = url.deletingLastPathComponent().resolvingSymlinksInPath().path(percentEncoded: false)
+        guard parent == root || parent.hasPrefix(root + "/") else {
+            throw CheckoutError.cacheUnavailable("Cesta \(parent) vede mimo cache aplikace.")
+        }
+        return url
     }
 }

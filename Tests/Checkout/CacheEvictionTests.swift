@@ -208,3 +208,29 @@ extension CacheEvictionTests {
         #expect(FileManager.default.fileExists(atPath: victim.path(percentEncoded: false)))
     }
 }
+
+extension CacheEvictionTests {
+    @Test("Stejné číslo PR v jiném repu strom neudrží")
+    func worktreesAreKeptByRepositoryAndNumber() async throws {
+        // Čísla PR se mezi repozitáři opakují — kdyby se filtrovalo jen podle čísla,
+        // otevřené `kbc-stacks#1` by drželo při životě strom zavřeného `vault#1`.
+        try makeClone(vault)
+        try makeClone(stacks)
+        let closed = layout.worktree(for: PRIdentifier(repo: vault, number: 1), at: String(repeating: "a", count: 40))
+        let open = layout.worktree(for: PRIdentifier(repo: vault, number: 2), at: String(repeating: "b", count: 40))
+        for path in [closed, open] {
+            try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
+        }
+
+        try await eviction(budget: .max).run(
+            openPullRequests: [
+                PRIdentifier(repo: stacks, number: 1), // stejné číslo, jiné repo
+                PRIdentifier(repo: vault, number: 2),
+            ],
+            busy: []
+        )
+
+        #expect(!FileManager.default.fileExists(atPath: closed.path(percentEncoded: false)))
+        #expect(FileManager.default.fileExists(atPath: open.path(percentEncoded: false)))
+    }
+}
