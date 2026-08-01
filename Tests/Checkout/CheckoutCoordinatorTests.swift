@@ -65,6 +65,59 @@ struct CheckoutCoordinatorTests {
         #expect(second == URL(filePath: "/druhý"))
     }
 
+    /// Práce, která běží, dokud ji někdo nezruší — a poví, že si zrušení všimla.
+    private actor CancellableWork {
+        private var started = false
+        private(set) var sawCancellation = false
+
+        func run() async -> URL {
+            started = true
+            while !Task.isCancelled { await Task.yield() }
+            sawCancellation = true
+            return URL(filePath: "/zruseno")
+        }
+
+        func waitUntilStarted() async {
+            while !started { await Task.yield() }
+        }
+    }
+
+    @Test("Zrušení posledního čekajícího zruší i sdílenou práci")
+    func cancellingTheLastWaiterCancelsTheWork() async throws {
+        // Bez toho by `git` běžel dál do timeoutu, i když už výsledek nikdo nechce —
+        // a `withTaskCancellationHandler` v `SubprocessRunner`u by se nikdy nespustil.
+        let coordinator = CheckoutCoordinator()
+        let work = CancellableWork()
+
+        let waiter = Task { try await coordinator.run(key: "a") { await work.run() } }
+        await work.waitUntilStarted()
+        waiter.cancel()
+        _ = try? await waiter.value
+
+        #expect(await work.sawCancellation)
+    }
+
+    @Test("Dokud čeká někdo další, práce pokračuje")
+    func workSurvivesWhileAnotherCallerWaits() async throws {
+        // Rozdělaný klon je horší než klon navíc, takže odchod jednoho zájemce nestačí.
+        let coordinator = CheckoutCoordinator()
+        let work = CancellableWork()
+
+        let first = Task { try await coordinator.run(key: "a") { await work.run() } }
+        await work.waitUntilStarted()
+        let second = Task { try await coordinator.run(key: "a") { await work.run() } }
+        await Task.yield()
+        first.cancel()
+
+        // Druhý čekající drží práci naživu, takže se nezruší ani po zrušení prvního.
+        await Task.yield()
+        #expect(await work.sawCancellation == false)
+
+        second.cancel()
+        _ = try? await second.value
+        #expect(await work.sawCancellation)
+    }
+
     @Test("Chyba se předá všem, kdo na práci čekali")
     func failurePropagatesToEveryCaller() async {
         let coordinator = CheckoutCoordinator()

@@ -69,7 +69,7 @@ struct GitRepoCheckout: RepoCheckout {
         // Poslední záchrana: když `git` strom neodstranil, složka na disku by zůstala
         // a příští `add` na stejné jméno by odmítl.
         if !removed {
-            try removeLeftover(at: path)
+            try removeDirectory(at: path, describedAs: "Zbytek po worktree")
         }
     }
 
@@ -173,7 +173,7 @@ struct GitRepoCheckout: RepoCheckout {
         // vždycky a náš timeout ho zabíjí `SIGKILL`em, takže na to není spoleh. Rozhodovat
         // se podle pouhé existence složky by znamenalo, že další pokus jde na `fetch`
         // v něčem, co repozitář není, a opakování by se z toho nikdy nezotavilo.
-        try removeLeftover(at: clone)
+        try removeDirectory(at: clone, describedAs: "Zbytek po klonu")
         try createParentDirectory(of: clone)
         try await run(cloneArguments(from: repo, into: clone))
         try markCloneComplete(repo)
@@ -253,14 +253,14 @@ struct GitRepoCheckout: RepoCheckout {
     /// „Nic tam nebylo“ je normální stav, cokoli jiného ne. Spolknout selhání mazání by
     /// znamenalo, že se `git` zakousne na „destination path already exists“ a skutečná
     /// příčina (práva, zamčený soubor) se nikam nedostane.
-    private func removeLeftover(at clone: URL) throws {
+    private func removeDirectory(at url: URL, describedAs what: String) throws {
         do {
-            try FileManager.default.removeItem(at: clone)
+            try FileManager.default.removeItem(at: url)
         } catch CocoaError.fileNoSuchFile {
             return
         } catch {
             throw CheckoutError.cacheUnavailable(
-                "Zbytek po klonu v \(clone.path(percentEncoded: false)) nejde smazat: "
+                "\(what) v \(url.path(percentEncoded: false)) nejde smazat: "
                     + error.localizedDescription
             )
         }
