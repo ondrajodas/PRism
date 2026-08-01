@@ -89,10 +89,14 @@ struct GitRepoCheckout: RepoCheckout {
     func forgetPullRequest(_ pr: PRIdentifier) async throws {
         let clone = layout.bareClone(for: pr.repo)
         guard FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)) else { return }
-        _ = try await succeeds([
-            "-C", clone.path(percentEncoded: false),
-            "update-ref", "-d", "refs/prism/pr/\(pr.number)",
-        ])
+        let ref = "refs/prism/pr/\(pr.number)"
+
+        // Nejdřív se zjistí, jestli ref vůbec je — teprve pak se maže „naostro“. Kdyby se
+        // výsledek mazání jen spolkl, prošla by tudy i skutečná chyba `gitu` a ref by
+        // zůstal viset, takže by `git gc` jeho objekty nikdy neuvolnil.
+        let arguments = ["-C", clone.path(percentEncoded: false)]
+        guard try await succeeds(arguments + ["show-ref", "--verify", "--quiet", ref]) else { return }
+        try await run(arguments + ["update-ref", "-d", ref])
     }
 
     private func addWorktree(for pr: PRIdentifier, at headSha: String, path: URL) async throws -> URL {

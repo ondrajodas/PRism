@@ -49,9 +49,12 @@ struct CacheEviction: Sendable {
         try evictOverBudget(busy: busy)
     }
 
-    /// Stromy, o které už není zájem — buď jejich PR zmizel ze seznamu, nebo jsou po
-    /// starším commitu. Bez tohohle by strom zavřeného PR přežil v repu, které v cache
-    /// zůstává kvůli jiným PR, a nesmazal by ho nikdy nikdo.
+    /// Stromy PR, které zmizely ze sledovaného seznamu. Bez tohohle by strom zavřeného PR
+    /// přežil v repu, které v cache zůstává kvůli jiným PR, a nesmazal by ho nikdo.
+    ///
+    /// Stromy po **starším commitu** téhož PR se tu nepoznají: seznam z pollingu nese jen
+    /// `PullRequestSummary`, a ten `headSha` nemá (`gh search prs` ho neumí). Uklidí se, až
+    /// PR ze seznamu odejde — nebo je zahodí ten, kdo review spouští, protože ten sha zná.
     private func discardUnwantedWorktrees(keeping open: [PRIdentifier], busy: Set<RepoID>) throws {
         // Klíčem je `(repo, číslo)`, ne samotné číslo: čísla PR se mezi repozitáři
         // opakují, takže `repoA#1` by si držel při životě strom `repoB#1`.
