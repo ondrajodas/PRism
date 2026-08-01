@@ -25,15 +25,7 @@ struct ContentView: View {
 
     @ViewBuilder private var detail: some View {
         if let selected = store.pullRequests.first(where: { $0.id == store.selection }) {
-            VStack(spacing: 8) {
-                Text(selected.title).font(.title2)
-                Text(selected.id.description).foregroundStyle(.secondary)
-                Text("Diff a nálezy sem přijdou v dalších fázích.")
-                    .font(.callout)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PullRequestDetailView(store: store, pullRequest: selected)
         } else {
             ContentUnavailableView(
                 "Vyber pull request",

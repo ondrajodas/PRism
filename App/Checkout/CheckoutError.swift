@@ -25,6 +25,31 @@ enum CheckoutError: Error, Equatable, Sendable {
 }
 
 extension CheckoutError {
+    /// Věta pro uživatele i s tím, co řekl `git`.
+    ///
+    /// Text `gitu` se drží u chyby schválně: v řádku PR se ukazuje stav `clone selhal`
+    /// a tohle je to, co si člověk rozklikne, aby věděl, co s tím.
+    var userDescription: String {
+        switch self {
+        case .notAuthenticated(let detail):
+            "Přihlášení odmítnuto. Zkontroluj `gh auth status`.\n\n\(detail)"
+        case .network(let detail):
+            "GitHub není dostupný.\n\n\(detail)"
+        case .repositoryNotFound(let detail):
+            "Repozitář neexistuje, nebo na něj nevidíš.\n\n\(detail)"
+        case .timedOut:
+            "git nedoběhl v limitu."
+        case .toolUnavailable(let detail):
+            "git se nepodařilo spustit.\n\n\(detail)"
+        case .cacheUnavailable(let detail):
+            "Cache aplikace nejde připravit.\n\n\(detail)"
+        case .commitNotFound(let sha):
+            "Commit \(sha) se nepodařilo dotáhnout — PR mezitím zmizel nebo byl přepsán."
+        case .gitFailed(let exitCode, let message):
+            "git skončil s kódem \(exitCode).\n\n\(message)"
+        }
+    }
+
     init(failure result: ProcessResult) {
         let message = result.failureText.isEmpty
             ? "git skončil s kódem \(result.exitCode)."

@@ -27,4 +27,7 @@ protocol RepoCheckout: Sendable {
 
     /// Zahodí záznamy o stromech, které už na disku nejsou.
     func pruneWorktrees(in repo: RepoID) async throws
+
+    /// Cesta k **hotovému** klonu, pokud v cache je. Nic nestahuje ani nezakládá.
+    func existingClone(for repo: RepoID) async -> URL?
 }

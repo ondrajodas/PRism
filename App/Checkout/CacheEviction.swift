@@ -34,19 +34,25 @@ struct CacheEviction: Sendable {
     ///   - openPullRequests: co je teď ve sledovaném seznamu. **Ne totéž co „otevřené na
     ///     GitHubu“** — PR, který zůstal otevřený, ale už po mně review nechce, ze seznamu
     ///     vypadne a jeho cache je k zahození stejně jako u zavřeného.
-    ///   - busy: repa s právě běžícím review. Ta se nemažou za žádnou cenu.
-    func run(openPullRequests: [PRIdentifier], busy: Set<RepoID>) async throws {
+    ///   - busy: repa, se kterými se právě pracuje. Ta se nemažou za žádnou cenu.
+    ///     Předává se jako **dotaz**, ne jako snímek: úklid je dlouhá disková operace
+    ///     a příprava, která začne uprostřed ní, by jinak přišla o ochranu.
+    func run(
+        openPullRequests: [PRIdentifier],
+        busy: @Sendable () async -> Set<RepoID>
+    ) async throws {
         let wanted = Set(openPullRequests.map(\.repo))
         let cached = cachedRepositories()
 
-        try await discardUnwantedWorktrees(keeping: openPullRequests, busy: busy)
+        try await discardUnwantedWorktrees(keeping: openPullRequests, busy: await busy())
 
-        for repo in cached where !wanted.contains(repo) && !busy.contains(repo) {
+        for repo in cached where !wanted.contains(repo) {
+            guard await !busy().contains(repo) else { continue }
             try evict(repo)
         }
 
-        try await forgetClosedPullRequests(openPullRequests, cached: cached, busy: busy)
-        try evictOverBudget(busy: busy)
+        try await forgetClosedPullRequests(openPullRequests, cached: cached, busy: await busy())
+        try await evictOverBudget(busy: busy)
     }
 
     /// Stromy PR, které zmizely ze sledovaného seznamu. Bez tohohle by strom zavřeného PR
@@ -101,7 +107,7 @@ struct CacheEviction: Sendable {
 
     /// Nejdéle nepoužité odcházejí první. Kdo je zrovna v práci, zůstává — i za cenu
     /// překročeného rozpočtu.
-    private func evictOverBudget(busy: Set<RepoID>) throws {
+    private func evictOverBudget(busy: @Sendable () async -> Set<RepoID>) async throws {
         var entries = try cachedRepositories().map {
             (repo: $0, size: try size(of: $0), lastUsed: lastUsed($0))
         }
@@ -112,7 +118,7 @@ struct CacheEviction: Sendable {
         entries.sort { $0.lastUsed < $1.lastUsed }
 
         for entry in entries where total > budget {
-            guard !busy.contains(entry.repo) else { continue }
+            guard await !busy().contains(entry.repo) else { continue }
             try evict(entry.repo)
             total -= entry.size
         }
