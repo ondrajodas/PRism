@@ -147,6 +147,13 @@ claude -p "<prompt>"
 - Každý běh má timeout podle hodin a jde zrušit. Paralelismus je globálně omezený
   (default 3 session), aby dávka PR nezahltila stroj ani účet.
 
+  **Doplněno u #14:** timeout je 15 minut a hlídá ho `ProcessStreaming`, ne runner —
+  vlastní proces je jediný, kdo umí eskalovat `SIGTERM` → `SIGKILL`, a runner by časovač
+  duplikoval. Vytimeoutovaný běh si **nechává nálezy**, které do té doby dorazily, což je
+  celý důvod, proč se stream čte průběžně. Limit souběhu drží `ReviewSlots` s frontou
+  v pořadí příchodu; slučování stejného klíče leží nad ním, aby připojený požadavek
+  nezabral druhý slot.
+
 Běhy jsou klíčované `(repo, prNumber, headSha, skillId)`. Když přijdou nové commity,
 změní se `headSha` a předchozí nálezy se označí jako **zastaralé** — nezobrazují se
 tiše proti kódu, který už neexistuje.
@@ -410,6 +417,12 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Náš helper se **přidává**, existující se neruší | Vynulovat helpery a nechat jen `gh` | Na testovacím stroji sedí `credential.helper=osxkeychain` v systémovém configu a funguje. Zrušit ho by znamenalo vypnout uživateli fungující přihlášení a nahradit ho spouštěním `gh` u každého volání. Náš helper je záchranná síť pro případ, kdy je přihlášený jen `gh` |
 | Fetch v bare klonu se dělá s explicitním refspecem | Spolehnout se na `remote.origin.fetch` z klonu | `git clone --bare` `remote.origin.fetch` **nenastavuje** (na rozdíl od běžného klonu i od `--mirror`), takže `git fetch origin` jen zapíše `FETCH_HEAD` a větve zůstanou tam, kde byly. Odhalil to integrační test proti skutečnému `gitu` — unit test s fake runnerem to odhalit nemohl, protože argumenty vypadaly rozumně |
 | Cache je `~/Library/Application Support/PRism/` | `~/Library/Application Support/pr-review/`, jak stálo v issue #8 | Zbytek po starém názvu. Jeden název napříč vším platí i pro složku na disku |
+| Streamování výstupu je **vlastní protokol** `ProcessStreaming` | Další metoda na `ProcessRunning`, jak psalo rozhodnutí u #2 | **Změna proti #2.** Fake implementace `ProcessRunning` jsou u `gh` i `git` v každém druhém testu; metodu, kterou nikdy nezavolají, by musely dopsat všechny. Volající je přitom jediný — `ReviewRunner`. Vedlejší efekt, který rozhodl: `workingDirectory` (které `claude` potřebuje a `git` ne) tak zůstalo mimo bufferovanou cestu, místo aby se do ní přidal parametr, který nikdo nenastavuje |
+| Selhání session je **výsledek**, ne vyhozená chyba | `ReviewRunner` vyhodí typovanou chybu, jako to dělá `RepoCheckout` | `čisté` a `failed` se nesmí slít, a chyba vyhozená z volání se do stavu překládá až u volajícího — tam, kde se to dá zapomenout. Vrácený `ReviewRun` s `outcome` nese navíc to, co se u chyby ztrácí: částečné nálezy z vytimeoutovaného běhu. Vyhozený zůstal jen `CancellationError`, protože zrušení není výsledek |
+| Slučování stejného klíče je **nad** frontou slotů | Nejdřív slot, pak slučování | Připojený požadavek by jinak zabral druhý slot pro běh, na který sám čeká — při limitu 3 by tři takové dvojice frontu zablokovaly úplně |
+| `CheckoutCoordinator` se přejmenoval na `WorkCoordinator` a přesunul do `App/Support/` | Napsat slučování běhů znovu uvnitř `ReviewRunneru` | Logika kolem rušení posledního čekajícího je jemná a už jednou draze odladěná; druhá kopie by se rozešla. Název podle prvního uživatele přestal platit ve chvíli, kdy má uživatele dva |
+| Průběh dostává **ten, kdo běh spustil** | Rozeslat průběh všem, kdo se ke klíči připojili | Registr posluchačů na aktoru by hlásil události přes hopy, takže by o jejich pořadí rozhodovalo plánování, ne stream — a v tabu Průběh je pořadí to hlavní. Připojený požadavek dostane výsledek; průběh sleduje ten, kdo o běh požádal, a v aplikaci je to vždycky tentýž `AppStore` |
+| Credential helper se session předává přes `GIT_CONFIG_*` | Nechat nested `git` bez přihlášení | Pracovní strom stojí nad partial klonem, takže `git diff` proti base commitu si dotahuje bloby ze sítě. `-c` z `RepoCheckoutu` sem nedosáhne — `git` spouští sám reviewer, a proměnné prostředí jsou jediná cesta, jak mu config podstrčit. Přidává se, existující helpery se neruší. **Ověřené to zatím není**; potvrdí to až první běh nad privátním repem |
 | `zsh -lc`, `.zshrc` se nepřečte | `zsh -ilc`, aby fallback viděl i `.zshrc` | Zkoušeno a zahozeno: interaktivní shell se ze spuštěné aplikace zasekl (z terminálu běží pod 0,5 s) a **ignoruje `SIGTERM`** — vytáhla ho až eskalace na `SIGKILL`, tedy 7 s do prázdného výsledku. Zaseknutý start je horší selhání než nenalezená binárka, kterou gate umí vysvětlit. Zůstává jako známé omezení |
 
 ## Ověřeno proti CLI (2026-08-01)
@@ -432,5 +445,6 @@ a `Tests/Fixtures/stream-json/`. Co z toho plyne pro návrh:
   přítomnosti.
 - **`stdin` musí být zavřený**, jinak `claude` čeká tři sekundy. `SubprocessRunner` to
   splňuje.
-- **Pracovní složku nelze předat flagem** — je to `cwd` procesu, takže `ReviewRunner` si
-  vyžádá `cwd` v `ProcessRunning` (u `git` stačilo `-C`, viz rozhodnutí u #8).
+- **Pracovní složku nelze předat flagem** — je to `cwd` procesu. **Doplněno u #14:**
+  `cwd` nepřibylo do `ProcessRunning`, ale do nového `ProcessStreaming` (viz záznam
+  rozhodnutí), takže bufferovaná cesta zůstala beze změny.

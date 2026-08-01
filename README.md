@@ -32,11 +32,15 @@ znovu`.
 Pod tím vším je vlastní cache repozitářů: bare partial clone do
 `~/Library/Application Support/PRism/`, přihlášení delegované na `gh`, odpojený
 `git worktree` pro každé review a úklid, který po každém pollingu zahodí repa bez
-otevřeného PR a při překročení rozpočtu (10 GB) i ta nejdéle nepoužitá. Zbývá ten, kdo si
-o pracovní kopii řekne — spouštění review. Platí u ní, že **vlastních klonů na
-disku se aplikace nikdy nedotkne** — pracuje výhradně ve své cache.
+otevřeného PR a při překročení rozpočtu (10 GB) i ta nejdéle nepoužitá. Platí u ní, že
+**vlastních klonů na disku se aplikace nikdy nedotkne** — pracuje výhradně ve své cache.
 
-Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první dvě.
+Vedle toho už je hotový i samotný běh review: spuštění headless session `claude`
+v pracovním stromě, čtení `stream-json` výstupu po řádcích, timeout (15 minut), zrušení
+a limit tří souběžných session. Do okna to zatím nevede — chybí ten, kdo zmáčkne
+tlačítko.
+
+Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první dvě a rozdělaná třetí.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -128,9 +132,10 @@ App/                      zdrojáky aplikace — target PRism
   GitHub/                 čtení PR přes gh CLI: gateway, typované chyby, tvar výstupu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku
-  Review/                 parsování stream-json výstupu claude na nálezy
+  Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno
+  Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky
 Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip
@@ -138,9 +143,10 @@ Tests/                    unit testy — target PRismTests
   Checkout/               testy klonování — proti fake runneru i skutečnému gitu
   GitHub/                 testy gateway a klasifikace chyb gh
   Policy/                 testy čistých funkcí
-  Review/                 testy parseru proti skutečným streamům
+  Review/                 testy parseru a runneru proti skutečným streamům
   Polling/                testy pollingu proti fake gateway a fake času
   Store/                  testy AppStore
+  Support/                testy sdílených drobností
   Fixtures/gh/            skutečné JSON výstupy gh z veřejných repozitářů
   Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů
 bin/run.sh                build + spuštění jedním příkazem
