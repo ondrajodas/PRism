@@ -74,6 +74,7 @@ Jeden JSON objekt na řádek. Typy v pořadí, v jakém chodí:
 | `assistant` | Zpráva modelu; `message.content[]` nese bloky `text` a `tool_use` |
 | `user` | Výsledky nástrojů; `message.content[]` nese bloky `tool_result` |
 | `rate_limit_event` | Informace o limitech, chodí i uprostřed běhu |
+| `system` / `thinking_tokens` | Průběžné počty; ve fixtures je jich nejvíc ze všech |
 | `result` / `success` | Konec běhu: `duration_ms`, `num_turns`, `total_cost_usd`, `usage`, `permission_denials`, `result` |
 
 Dvě věci, které se od návrhu liší:

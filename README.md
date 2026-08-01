@@ -127,7 +127,8 @@ App/                      zdrojáky aplikace — target PRism
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
   GitHub/                 čtení PR přes gh CLI: gateway, typované chyby, tvar výstupu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
-  Policy/                 čisté funkce: slučování zdrojů, řazení
+  Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku
+  Review/                 parsování stream-json výstupu claude na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno
   Views/                  SwiftUI obrazovky
@@ -137,6 +138,7 @@ Tests/                    unit testy — target PRismTests
   Checkout/               testy klonování — proti fake runneru i skutečnému gitu
   GitHub/                 testy gateway a klasifikace chyb gh
   Policy/                 testy čistých funkcí
+  Review/                 testy parseru proti skutečným streamům
   Polling/                testy pollingu proti fake gateway a fake času
   Store/                  testy AppStore
   Fixtures/gh/            skutečné JSON výstupy gh z veřejných repozitářů
