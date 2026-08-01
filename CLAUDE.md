@@ -326,7 +326,7 @@ Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživate
 |---|---|
 | `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree`, `removeWorktree`, `forgetPullRequest` a `trackedPullRequests`. Vše idempotentní |
 | `GitRepoCheckout` | Implementace nad `git`: první volání klonuje, další fetchuje |
-| `CacheLayout` | Kde co leží. `root` je injektovatelný, aby testy nesáhly do skutečné cache |
+| `CacheLayout` | Kde co leží — klony, stromy **i uložené nálezy**. `root` je injektovatelný, aby testy nesáhly do skutečné cache |
 | `CheckoutCoordinator` | Aktor: souběžná volání nad stejným klíčem se spojí do jedné práce |
 | `CacheEviction` | Úklid cache: repa bez otevřeného PR, pak LRU do rozpočtu (10 GB) |
 | `CheckoutError` | Typované chyby + klasifikace stderru `gitu` jako čistá funkce |
@@ -371,9 +371,10 @@ Věci, které se u toho nemají rozbít:
   přestal cokoli najít.
 - **Do rozpočtu se počítají i stromy.** Klon je `--filter=blob:none`, takže materializované
   soubory leží právě v nich — měřit jen klon znamená měřit menšinu.
-- **Eviction maže jen uvnitř cache.** Je to jediné místo, které maže rekurzivně podle toho,
-  co našlo na disku, takže si před smazáním ověří, že cesta po rozbalení symlinků pořád
-  leží pod kořenem cache.
+- **Maže se jen uvnitř cache.** Kdo maže podle toho, co našel na disku, si před smazáním
+  ověří, že cesta po rozbalení symlinků pořád leží pod kořenem — `removeItem` přes odkaz
+  v rodičovské komponentě smaže **cíl**, ne odkaz. Odpovídá na to `CacheLayout.contains`,
+  jedno místo pro eviction i `ReviewStore`.
 - **Souběžná volání nad stejným klíčem spojuje `CheckoutCoordinator`.** Dvě review nad
   různými PR téhož repa spustí přípravu naráz a druhé volání by mohlo smazat složku
   rozběhnutého klonu prvního. **Uvnitř koordinované práce se nesmí volat nic, co jde přes
@@ -394,6 +395,42 @@ Věci, které se u toho nemají rozbít:
   a podproces bez terminálu na tom visí až do timeoutu.
 - **Cesty se předávají přes `-C`, ne pracovní složkou procesu.** Pracovní složka je stav
   procesu; `-C` je parametr volání a paralelní běhy se nemají jak přebít.
+
+### `ReviewStore` (`App/Store/`)
+
+Výsledky review na disku: jeden JSON soubor na `(repo, PR, headSha)` pod
+`reviews/<owner>/<repo>/<pr>-<sha>.json`.
+
+| Typ | Co je |
+|---|---|
+| `ReviewStore` | Aktor: `save`, `markCurrent`, `load`, `cleanUp`. Atomický zápis |
+| `ReviewRecord` | Obsah jednoho souboru: PR, `headSha`, běhy, `isStale`, `closedAt` |
+| `StoredReviewRun` | Jeden běh: skill, `outcome`, session id, nálezy, `droppedFindings`, čas |
+
+Věci, které se u toho nemají rozbít:
+
+- **Store je aktor.** Uložení je čtení, změna a zápis téhož souboru a dva skilly nad jedním
+  commitem doběhnou klidně naráz — bez serializace by si výsledky přepsaly.
+- **`isStale` je uložené, ne odvozené.** Odvodit by ho šlo jen porovnáním s aktuálním
+  `headSha`, jenže ten aplikace z vyhledávání **nedostane** (`gh search prs` ho neumí, viz
+  #4). Zjistí ho teprve při dotažení detailu — a to je právě chvíle, kdy se příznak nastaví.
+- **Stárnutí umí `save` i `markCurrent`.** `save` ho dělá taky schválně: kdyby to viselo jen
+  na `markCurrent`, stačilo by ho jednou zapomenout a nálezy proti neexistujícímu kódu by
+  se tvářily jako platné.
+- **Zastaralý záznam se nemaže.** Je to historie; UI ho ukazuje jako zastaralý.
+- **Lhůta na úklid běží od zavření, ne od stáří záznamu.** Proto `closedAt`: PR otevřený půl
+  roku by jinak o historii přišel v okamžiku, kdy se zavře. PR, který se do seznamu vrátí,
+  lhůtu ruší.
+- **`cleanUp` smí běžet jen po úspěšném tiku pollingu** — po výpadku sítě je seznam prázdný
+  a úklid by z něj vyvodil, že zavřené je všechno. Stejná past jako u `CacheEviction`.
+- **Nepřečtené soubory se počítají** (`Loaded.unreadable`). Rozbitý soubor znamená ztracené
+  nálezy a ty se nesmí tvářit jako „review neběželo“.
+- **`reviews/` je mimo dosah eviction.** Ta chodí jen po `repos/` a `worktrees/`: nálezy jsou
+  kilobajty a řídí se vlastní lhůtou, ne rozpočtem na místo.
+- **Záznamy jednoho PR se hledají podle prefixu jména souboru**, ne dekódováním celé
+  historie repa — `save` i `markCurrent` běží často. Jméno ale není pravda: tou zůstává
+  `pullRequest` uvnitř souboru, který se stejně ověří. Pomlčka je součást prefixu, takže
+  `42-` nesedí na `421-`; je na to test.
 
 ### `AppStore` (`App/Store/`) a okno (`App/Views/`)
 
@@ -667,6 +704,12 @@ Právě proto tam eskalace na `SIGKILL` je.
   tik spotřebuje jen jednu, protože se u prvního zdroje přeruší.
 - **`AppStore`** — proti fake gateway: obnovení se ptá zdrojů, seznam se čte z pollingu,
   výběr se drží. Views se neunit-testují; kontroluje se běžící aplikace (viz níž).
+- **`ReviewStore`** — proti skutečné dočasné složce, ne proti fake filesystému: kořen je
+  injektovatelný, takže jde o pár kilobajtů, a ověřuje se to, na čem store stojí — `Codable`
+  cesta na disk a zpět a chování `FileManageru`. Hodiny jsou `FakeTimeSource`, který se
+  posouvá uspáním, takže třicetidenní lhůta se testuje v nulovém reálném čase. Round-trip
+  `ReviewRecord` má vlastní testy včetně **každého případu** `ReviewRunOutcome` — `failed`
+  nese asociovanou hodnotu a ta se z JSONu ztratí nejtišeji.
 - **`Config`** — merge globální + per-repo, defaulty pro neznámé repo.
 - **`CacheEviction`** — proti skutečné dočasné složce, ne proti fake filesystému: rozpočet
   je injektovatelný, takže stačí malé soubory. Pozor, počítá se **alokovaná** velikost, tedy
@@ -810,6 +853,10 @@ i konec běhu, a rozbitý řádek ho nepoloží.
 Umí spustit headless session v pracovním stromě, číst její výstup po řádcích, zabít ji po
 patnácti minutách se zachovanými nálezy, nechat se zrušit a držet limit tří souběžných
 session. Vrstva bez UI — zavolá ho `AppStore` v #17.
+
+`ReviewStore` hotový (issue #15) — `App/Store/`. Výsledky přežijí restart, nový commit
+starší záznamy označí jako zastaralé a záznamy PR, který zmizel ze seznamu, se po třiceti
+dnech uklidí. Taky vrstva bez UI — načte je `AppStore` v #17.
 
 Stavy checkoutu v seznamu hotové (issue #11) — `AppStore` umí připravit pracovní kopii,
 řádek ukazuje `ve frontě · clone` nebo `clone selhal` a detail nese výstup `gitu`

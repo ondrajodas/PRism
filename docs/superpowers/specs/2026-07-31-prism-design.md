@@ -164,6 +164,13 @@ Persistence. `Codable` modely v JSON souborech pod Application Support, jeden so
 `(repo, pr, headSha)`. Zvoleno místo SwiftData proto, že dat je málo, přístupový vzor je
 triviálně souborový a čistý `Codable` drží store nahraditelný v testech bez databáze.
 
+**Doplněno u #15:** soubory leží pod `reviews/<owner>/<repo>/<pr>-<sha>.json` a zapisují se
+atomicky. Store je **aktor** — dva skilly nad jedním commitem zapisují do téhož souboru
+a bez serializace by si výsledky přepsaly. Nový head commit označí starší záznamy
+`isStale`, ale **nemaže je**: jsou to historie a UI je ukazuje jako zastaralé. Záznamy PR,
+který zmizel ze sledovaného seznamu, se uklidí po třiceti dnech — lhůta běží od zavření
+(`closedAt`), ne od stáří záznamu.
+
 ### 5. Policy — čisté funkce, žádné I/O
 
 Tady skončila otázka severity, a návrh **záměrně nevymýšlí vlastní škálu závažnosti**.
@@ -417,6 +424,12 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Náš helper se **přidává**, existující se neruší | Vynulovat helpery a nechat jen `gh` | Na testovacím stroji sedí `credential.helper=osxkeychain` v systémovém configu a funguje. Zrušit ho by znamenalo vypnout uživateli fungující přihlášení a nahradit ho spouštěním `gh` u každého volání. Náš helper je záchranná síť pro případ, kdy je přihlášený jen `gh` |
 | Fetch v bare klonu se dělá s explicitním refspecem | Spolehnout se na `remote.origin.fetch` z klonu | `git clone --bare` `remote.origin.fetch` **nenastavuje** (na rozdíl od běžného klonu i od `--mirror`), takže `git fetch origin` jen zapíše `FETCH_HEAD` a větve zůstanou tam, kde byly. Odhalil to integrační test proti skutečnému `gitu` — unit test s fake runnerem to odhalit nemohl, protože argumenty vypadaly rozumně |
 | Cache je `~/Library/Application Support/PRism/` | `~/Library/Application Support/pr-review/`, jak stálo v issue #8 | Zbytek po starém názvu. Jeden název napříč vším platí i pro složku na disku |
+| `isStale` se **ukládá**, neodvozuje z aktuálního `headSha` | Porovnat záznam s hlavičkou PR až při zobrazení | Odvození je bezpečnější jen zdánlivě: aktuální `headSha` aplikace z vyhledávání **nedostane** (`gh search prs` ho neumí, viz rozhodnutí u #4), takže v okamžiku zobrazení ho zpravidla nezná. Zná ho ve chvíli, kdy si dotáhne detail — a právě tam se příznak nastaví. Aby se na to nedalo zapomenout, stárnutí spouští `save` i `markCurrent` |
+| Lhůta na úklid běží od **zavření**, ne od stáří záznamu | Mazat záznamy starší než 30 dní | PR otevřený půl roku by o historii přišel v okamžiku, kdy se zavře — tedy přesně tehdy, kdy se k nálezům člověk vrací. Stojí to jedno pole (`closedAt`) a jeden zápis, když PR poprvé zmizí ze seznamu |
+| `ReviewStore` **není za protokolem** | Protokol + fake, jako `GitHubGateway`/`RepoCheckout`/`ReviewRunner` | Ty tři jsou za protokolem proto, že mluví s cizími binárkami a sítí. Store mluví s vlastním souborem ve vlastní složce, jejíž kořen je injektovatelný — fake by tedy ověřoval sám sebe místo `Codable` cesty na disk. Stejná úvaha jako u `CacheEviction`, kde se osvědčila |
+| Uložené výsledky leží pod `CacheLayout`, ne pod vlastním kořenem | Vlastní typ s vlastní cestou v `ReviewStore` | `CacheLayout` je to jedno místo, které ví, co kde leží; druhý typ s vlastním kořenem by se s ním mohl v kořeni rozejít. Eviction se přitom `reviews/` nedotkne — chodí adresně po `repos/` a `worktrees/` |
+| Ukládá se **jedno** razítko (`finishedAt`) | Začátek i konec běhu, jak psalo issue („časy") | `ReviewRun` začátek nenese a protahovat čas přes celý runner jen kvůli razítku by znamenalo závislost na hodinách v každé vrstvě. Co UI potřebuje, je „jak staré je tohle review"; délku běhu má `result` event, takže se dá doplnit, až o ni bude zájem |
+| Do souboru se neukládají pokusy o nástroje | Uložit `attemptedTools` a `deniedTools` pro tab Průběh | Tab Průběh je o **běžící** session; po restartu se k ní stejně nedá vrátit. Soubory by rostly o data bez konzumenta. `droppedFindings` a `calledReportFindings` se naopak ukládají — na nich stojí rozdíl mezi „čisté" a „nálezy se nemají kde vzít" |
 | Streamování výstupu je **vlastní protokol** `ProcessStreaming` | Další metoda na `ProcessRunning`, jak psalo rozhodnutí u #2 | **Změna proti #2.** Fake implementace `ProcessRunning` jsou u `gh` i `git` v každém druhém testu; metodu, kterou nikdy nezavolají, by musely dopsat všechny. Volající je přitom jediný — `ReviewRunner`. Vedlejší efekt, který rozhodl: `workingDirectory` (které `claude` potřebuje a `git` ne) tak zůstalo mimo bufferovanou cestu, místo aby se do ní přidal parametr, který nikdo nenastavuje |
 | Selhání session je **výsledek**, ne vyhozená chyba | `ReviewRunner` vyhodí typovanou chybu, jako to dělá `RepoCheckout` | `čisté` a `failed` se nesmí slít, a chyba vyhozená z volání se do stavu překládá až u volajícího — tam, kde se to dá zapomenout. Vrácený `ReviewRun` s `outcome` nese navíc to, co se u chyby ztrácí: částečné nálezy z vytimeoutovaného běhu. Vyhozený zůstal jen `CancellationError`, protože zrušení není výsledek |
 | Slučování stejného klíče je **nad** frontou slotů | Nejdřív slot, pak slučování | Připojený požadavek by jinak zabral druhý slot pro běh, na který sám čeká — při limitu 3 by tři takové dvojice frontu zablokovaly úplně |

@@ -28,4 +28,36 @@ struct CacheLayoutTests {
 
         #expect(path.hasSuffix("/Library/Application Support/PRism"))
     }
+
+    @Test("Výsledky review leží pod reviews/<owner>/<repo>/<pr>-<sha>.json")
+    func reviewFilePath() {
+        let file = layout.reviewFile(for: PRIdentifier(repo: vault, number: 42), at: "aaaa1111")
+
+        #expect(file.path(percentEncoded: false)
+            == "/tmp/prism-cache/reviews/keboola/vault/42-aaaa1111.json")
+    }
+
+    @Test("Cesta uvnitř cache je uvnitř, cesta mimo ni ne")
+    func containsAnswersForBothSides() {
+        #expect(layout.contains(layout.bareClone(for: vault)))
+        #expect(layout.contains(layout.root.appending(path: "cokoli")))
+        #expect(!layout.contains(URL(filePath: "/tmp/prism-cache-jineho/soubor")))
+        // Kořen sám do cache nepatří — smazat ho by znamenalo smazat celou cache.
+        #expect(!layout.contains(layout.root))
+    }
+
+    @Test("Symlink v cestě odpověď nezmění")
+    func aSymlinkInThePathDoesNotFoolIt() throws {
+        // Tohle je celý důvod, proč se cesta rozbaluje: `removeItem` přes odkaz
+        // v rodičovské komponentě smaže cíl, ne odkaz.
+        let cache = try TemporaryDirectory()
+        let outside = try TemporaryDirectory()
+        let layout = CacheLayout(root: cache.url)
+        try FileManager.default.createSymbolicLink(
+            at: cache.url.appending(path: "ven"),
+            withDestinationURL: outside.url
+        )
+
+        #expect(!layout.contains(cache.url.appending(path: "ven/uzivateluv-soubor")))
+    }
 }
