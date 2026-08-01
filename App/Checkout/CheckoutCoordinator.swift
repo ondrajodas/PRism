@@ -48,6 +48,9 @@ actor CheckoutCoordinator {
                 Task { await self.waiterLeft(key, token) }
             }
             leave(key, token)
+            // Práce mohla doběhnout dřív, než zrušení dorazilo. Vracet výsledek
+            // zrušenému volajícímu by znamenalo, že pokračuje v něčem, co má skončit.
+            try Task.checkCancellation()
             guard let typed = value as? T else {
                 // Nemá jak nastat — klíč nese typ. Ohlásit se to ale musí líp než pádem.
                 throw MismatchedWork(key: key, expected: "\(T.self)", got: "\(type(of: value))")
