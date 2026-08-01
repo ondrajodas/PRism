@@ -226,6 +226,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `Finding` | `ReportedFinding` + **kdo** ho našel (skill) a **proti čemu** (`headSha`) |
 | `PullRequestState` | `open` / `draft` / `merged` / `closed` |
 | `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
+| `ReviewVerdict` | Návrh, co s PR udělat: `approve` / `requestChanges`. Jako jediný **není `Codable`** — neukládá se, odvozuje se z uložených nálezů |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -523,6 +524,10 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 |---|---|
 | `PullRequestList` | Sloučí výsledky zdrojů do jednoho seznamu: dedup podle `PRIdentifier`, řazení |
 | `Policy.reviewState(for:)` | Překlad stavu pracovní kopie na stav v řádku PR |
+| `Policy.isBlocking(_:categories:)` | Jediný odvozený boolean nad nálezem |
+| `Policy.suggestedVerdict(for:)` | Návrh verdiktu nad `ReviewRecord`. `nil` = není z čeho soudit |
+| `Policy.groups(of:)` | Shoda reviewerů na `file:line` → `FindingGroup` s odznakem `2×` |
+| `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
   Volající pak nic nespojuje a z typu je vidět, že jde o několik nezávislých dotazů.
@@ -530,6 +535,31 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
   takže jeden z nich může nést stav, který mezitím zastaral.
 - **Řadí se od naposledy změněného, při shodě podle identifikátoru.** Druhé kritérium není
   kosmetika: bez něj by pořadí mezi pollingy poskakovalo, protože slovník nemá pořadí.
+
+Nad nálezy platí navíc:
+
+- **Aplikace si nevymýšlí škálu závažnosti.** Blokující příznak je `verdict == CONFIRMED`
+  **a** `category` v blokující sadě (default `correctness`, `security`, `data-loss`) —
+  a ta sada je jediný knoflík, kterým se dolaďuje, co je vážné. Právě proto se kvůli tomu
+  nemusí přepisovat skilly.
+- **Kategorie se porovnávají bez ohledu na velikost písmen.** Je to volný slug od reviewera;
+  kdyby `Data-Loss` neblokovalo, prošel by PR s hlášenou ztrátou dat.
+- **`suggestedVerdict` vrací `nil`, když není z čeho soudit** — a je to vlastní odpověď, ne
+  opatrné `approve`. Schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou
+  aplikace umí udělat. Z běhu se dá vyvodit „je čisto“, jen když **doběhl**, **zavolal
+  `ReportFindings`** a **nic nezahodil**; zastaralý záznam nedá verdikt vůbec. Zahozený
+  nález přitom bere `approve` **celému záznamu**, ne jen svému běhu — čistý výsledek jiného
+  skillu o tom ztraceném nálezu nic neříká.
+- **Nálezy se berou ze všech běhů, i ze spadlých a vytimeoutovaných.** Selhal *běh*, ne
+  nález — ten dorazil jako celý `ReportFindings` call. Filtrovat je podle stavu běhu by
+  znamenalo, že spadlý reviewer s nahlášenou ztrátou dat vedle jednoho čistého běhu vyjde
+  jako `approve`. Blokovat tedy umí i běh, který sám o sobě `approve` nedá.
+- **Shoda se počítá po reviewerech, ne po nálezech.** Jeden reviewer, který na jednom řádku
+  najde dvě různé věci, si nepřikyvuje.
+- **Řadí se podle vlastnosti kategorie, ne nálezu.** Kdyby první kritérium bylo
+  `isBlocking`, rozpadla by se kategorie s `CONFIRMED` i `PLAUSIBLE` na dvě sekce se
+  stejným názvem. Poslední kritérium je `summary`, aby bylo pořadí úplné a nepřeskakovalo
+  mezi překresleními.
 
 ### `GitHubGateway` (`App/GitHub/`)
 
@@ -675,7 +705,10 @@ Právě proto tam eskalace na `SIGKILL` je.
 - **`Policy`** — vyčerpávající unit testy, nic se nemockuje. U slučování zdrojů včetně
   toho, co se snadno přehlédne: kolize s různým `updatedAt` v obou pořadích zdrojů,
   prázdný zdroj, žádný zdroj a **shodné časy** (na kterých se pozná nedeterministické
-  řazení).
+  řazení). U nálezů hranice blokující sady, každý způsob, jak návrh verdiktu **nevznikne**,
+  shoda 1×/2×/3× a řazení ověřené i z obráceného vstupu. Data staví `Tests/Policy/
+  FindingFactory.swift` — není to fake, jen zkratka; uložený běh se skládá přes `ReviewRun`,
+  tedy tou cestou, kterou vzniká doopravdy.
 - **`Environment`** — `BinaryLocator`, `GhAuthCheck`, `LoginShellPathReader` a `Preflight`
   proti fakes (`Tests/Environment/EnvironmentFakes.swift`). `FakeShellPathReader` počítá
   volání: že se login shell spustí nejvýš jednou a jen když je co dohledávat, je součást
@@ -857,6 +890,9 @@ session. Vrstva bez UI — zavolá ho `AppStore` v #17.
 `ReviewStore` hotový (issue #15) — `App/Store/`. Výsledky přežijí restart, nový commit
 starší záznamy označí jako zastaralé a záznamy PR, který zmizel ze seznamu, se po třiceti
 dnech uklidí. Taky vrstva bez UI — načte je `AppStore` v #17.
+
+Rozhodování nad nálezy hotové (issue #16) — `App/Policy/`. Blokující příznak, návrh
+verdiktu, shoda reviewerů a pořadí pro UI, všechno čisté funkce. Poslední dílek před #17.
 
 Stavy checkoutu v seznamu hotové (issue #11) — `AppStore` umí připravit pracovní kopii,
 řádek ukazuje `ve frontě · clone` nebo `clone selhal` a detail nese výstup `gitu`

@@ -193,6 +193,14 @@ skutečná data, která reviewer vyprodukoval.
 Důsledek, který je dobré říct nahlas: **žádný skill se nemusí přepisovat.** Sada
 `blockingCategories` je jediný knoflík, kterým se doladí, co se považuje za vážné.
 
+**Doplněno u #16:** návrh verdiktu má **tři** výsledky, ne dva — `approve`,
+`requestChanges` a *žádný*. Ten třetí je celý smysl toho, že `clean` a `failed` jsou
+rozlišené: z běhu se dá vyvodit „je čisto“, jen když doběhl, zavolal `ReportFindings`
+a nic nezahodil. Nález z vytimeoutovaného běhu přitom pořád blokuje — session se
+nedopočítala, ale co stihla nahlásit, je pravda. Zastaralý záznam nedá verdikt vůbec.
+Shoda se počítá po **reviewerech**, ne po nálezech, a kategorie se porovnávají bez ohledu
+na velikost písmen.
+
 ### 6. Config
 
 Dvě úrovně, vyhodnocené globální → per-repo:
@@ -424,6 +432,13 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Náš helper se **přidává**, existující se neruší | Vynulovat helpery a nechat jen `gh` | Na testovacím stroji sedí `credential.helper=osxkeychain` v systémovém configu a funguje. Zrušit ho by znamenalo vypnout uživateli fungující přihlášení a nahradit ho spouštěním `gh` u každého volání. Náš helper je záchranná síť pro případ, kdy je přihlášený jen `gh` |
 | Fetch v bare klonu se dělá s explicitním refspecem | Spolehnout se na `remote.origin.fetch` z klonu | `git clone --bare` `remote.origin.fetch` **nenastavuje** (na rozdíl od běžného klonu i od `--mirror`), takže `git fetch origin` jen zapíše `FETCH_HEAD` a větve zůstanou tam, kde byly. Odhalil to integrační test proti skutečnému `gitu` — unit test s fake runnerem to odhalit nemohl, protože argumenty vypadaly rozumně |
 | Cache je `~/Library/Application Support/PRism/` | `~/Library/Application Support/pr-review/`, jak stálo v issue #8 | Zbytek po starém názvu. Jeden název napříč vším platí i pro složku na disku |
+| Návrh verdiktu umí **nic nenavrhnout** | Vždycky vrátit `approve` nebo `requestChanges`, jak psalo issue | Bez třetího výsledku by PR, u kterého reviewer spadl, vyšel jako schválený — a to je nejdražší chyba, jakou tahle aplikace umí udělat. `nil` je vlastní odpověď, ne opatrné `approve`; UI z něj udělá „není z čeho soudit“ |
+| Nálezy se berou ze **všech** běhů, i ze spadlých | Nezapočítávat nálezy ze spadlých běhů, jak se dá číst issue („failed běhy se nezapočítávají“) | Selhal *běh*, ne nález: ten dorazil jako celý `ReportFindings` call a rozbité parser dovnitř nepustí. Rozhodl mixovaný případ — spadlý reviewer s nahlášenou ztrátou dat **vedle** jednoho čistého běhu by po filtrování vyšel jako `approve`. „Nezapočítávají se“ tedy platí pro důkaz **čistoty**, ne pro nálezy |
+| Za důkaz čistoty se bere jen běh, který **doběhl, reportoval a nic nezahodil** | Stačí, že běh doběhl | Každá z těch tří podmínek pokrývá jiný způsob, jak se „nic jsem nenašel“ splete s „nemám co říct“: zabitá session, nezavolaný `ReportFindings` (nástroj chyběl v `--allowedTools`) a nález, který se nepodařilo přečíst. Teprve tímhle dostávají `calledReportFindings` a `droppedFindings` konzumenta, kvůli kterému se ukládají |
+| Kategorie se porovnávají bez ohledu na velikost písmen | Porovnávat přesně, jak přišly | Je to volný slug od reviewera, ne výčet. `Data-Loss` proti `data-loss` by znamenalo PR s hlášenou ztrátou dat, který nic neblokuje — a v UI dvě sekce téhož |
+| Řadí se podle toho, jestli je **kategorie** blokující, ne jestli blokuje **nález** | První kritérium `isBlocking(finding)` | Kategorie, ve které je `CONFIRMED` i `PLAUSIBLE`, by se rozpadla na dvě sekce se stejným názvem. Blokující kategorie nahoře je přitom to, co se hledá první — a žádná nová škála z toho nevzniká |
+| Shoda se počítá po reviewerech | Počítat nálezy ve skupině | Jeden reviewer, který na jednom řádku najde dvě různé věci, si nepřikyvuje — odznak `2×` má znamenat dva nezávislé názory |
+| `ReviewVerdict` **není `Codable`** | Nechat ho jako ostatní modely | Neukládá se; odvozuje se z uložených nálezů, takže by `Codable` popisoval tvar, který na disku nikdy není — a byla by to netestovaná plocha |
 | `isStale` se **ukládá**, neodvozuje z aktuálního `headSha` | Porovnat záznam s hlavičkou PR až při zobrazení | Odvození je bezpečnější jen zdánlivě: aktuální `headSha` aplikace z vyhledávání **nedostane** (`gh search prs` ho neumí, viz rozhodnutí u #4), takže v okamžiku zobrazení ho zpravidla nezná. Zná ho ve chvíli, kdy si dotáhne detail — a právě tam se příznak nastaví. Aby se na to nedalo zapomenout, stárnutí spouští `save` i `markCurrent` |
 | Lhůta na úklid běží od **zavření**, ne od stáří záznamu | Mazat záznamy starší než 30 dní | PR otevřený půl roku by o historii přišel v okamžiku, kdy se zavře — tedy přesně tehdy, kdy se k nálezům člověk vrací. Stojí to jedno pole (`closedAt`) a jeden zápis, když PR poprvé zmizí ze seznamu |
 | `ReviewStore` **není za protokolem** | Protokol + fake, jako `GitHubGateway`/`RepoCheckout`/`ReviewRunner` | Ty tři jsou za protokolem proto, že mluví s cizími binárkami a sítí. Store mluví s vlastním souborem ve vlastní složce, jejíž kořen je injektovatelný — fake by tedy ověřoval sám sebe místo `Codable` cesty na disk. Stejná úvaha jako u `CacheEviction`, kde se osvědčila |

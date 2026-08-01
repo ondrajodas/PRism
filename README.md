@@ -39,8 +39,9 @@ Vedle toho už je hotový i samotný běh review: spuštění headless session `
 v pracovním stromě, čtení `stream-json` výstupu po řádcích, timeout (15 minut), zrušení
 a limit tří souběžných session. Výsledky se ukládají na disk — jeden JSON soubor na PR
 a head commit, takže přežijí restart; nové commity starší nálezy označí jako zastaralé
-a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí. Do okna to zatím
-nevede — chybí ten, kdo zmáčkne tlačítko.
+a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí. Hotové je i rozhodování
+nad nálezy: co blokuje, jaký verdikt z toho plyne, kde se dva reviewery shodli a v jakém
+pořadí to ukázat. Do okna to zatím nevede — chybí ten, kdo zmáčkne tlačítko.
 
 Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první dvě a rozdělaná třetí.
 
