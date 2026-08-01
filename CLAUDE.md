@@ -171,11 +171,13 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 
 1. **Nikdy nic neposílat na GitHub.** Žádné komentáře, review, approve, labely. Verdikt
    je návrh zobrazený v aplikaci. Aplikace je vůči GitHubu **jen pro čtení**.
-2. **Reviewer je read-only.** `--allowedTools` bez `Write`, `Edit` a bez obecného `Bash`.
-   Ověřeno proti CLI (#12): nástroje v session zůstávají všechny — `--allowedTools` je
-   seznam **povolení**, ne dostupnosti — ale měnící operace neprojdou. `touch`, `rm`
-   i `Write` skončily odmítnutím a nic po nich nezůstalo. Záruka tedy platí, jen stojí na
-   nepovolení, ne na nepřítomnosti.
+2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit` a u `Bash` se
+   uvádí jen `git`. Ověřeno proti CLI (#12), že záruka drží — ale ne tím, čím se čekalo:
+   nástroje v session zůstávají všechny a scope `Bash(git:*)` `Bash` nezúží (projdou i
+   negitové příkazy), protože `--allowedTools` je seznam **povolení**, ne dostupnosti.
+   Co neprojde, jsou **měnící** operace: `touch`, `rm` i `Write` skončily odmítnutím a nic
+   po nich nezůstalo. Reviewer tedy nemůže změnit kód ani nic odeslat, jen z jiného
+   důvodu, než tu stálo dřív.
 3. **Nikdy nesahat na uživatelovy klony.** Aplikace pracuje výhradně ve své cache
    (`~/Library/Application Support/PRism/`). Mohou být rozdělané, na jiné branchi,
    mít vlastní worktrees.

@@ -129,10 +129,12 @@ claude -p "<prompt>"
 
   Hodnota `--allowedTools` je v ukázce **bez uvozovek** schválně: aplikace shell nepoužívá
   a `Process` dostává argumenty polem. Kdo si to zkouší v terminálu, uvozovky potřebuje —
-  `*` by prošlo glob expansion a závorky jsou syntaktická chyba. Je to bezpečnostní vlastnost (reviewer strukturálně nemůže změnit kód ani
-  nikam nic poslat) i praktická věc: odpadne tím téměř každý důvod, proč by se Claude
-  zastavil a chtěl povolení. Headless session nemá jak na permission prompt odpovědět,
-  takže by jinak visela do timeoutu.
+  `*` by prošlo glob expansion a závorky jsou syntaktická chyba.
+
+  Je to bezpečnostní vlastnost (reviewer nemůže změnit kód ani nikam nic poslat)
+  i praktická věc: odpadne tím téměř každý důvod, proč by se Claude zastavil a chtěl
+  povolení. Headless session nemá jak na permission prompt odpovědět, takže by jinak
+  visela do timeoutu.
 - **`CLAUDE.md` daného repa se aplikuje zdarma**, protože cwd session je skutečný
   checkout. Konvence projektu tím platí, aniž bychom cokoli přenášeli.
 - **`session_id` se ukládá** z init eventu streamu, i když v1 terminál nemá. Stojí to
