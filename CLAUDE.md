@@ -251,7 +251,7 @@ Klíčový spoj: ze `stream-json` výstupu `claude` udělá to, co aplikaci zaj�
 | Typ | Co je |
 |---|---|
 | `StreamParser` | JSONL řádky → `StreamSummary`. **Nikdy nevyhodí výjimku** |
-| `StreamSummary` | Session id, nálezy, použité a odmítnuté nástroje, konec běhu, počet rozbitých řádků |
+| `StreamSummary` | Session id, nálezy, **pokusy** o nástroje a odmítnuté nástroje, konec běhu, počty nepřečteného |
 
 | `ReviewOutcome` | Konec běhu podle `result` eventu |
 

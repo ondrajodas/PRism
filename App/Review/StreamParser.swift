@@ -111,14 +111,19 @@ struct StreamParser: Sendable {
         )
     }
 
-    /// Číslo řádku snese i text, ale ne `Bool`.
+    /// Číslo řádku snese i text, ale musí to být **kladné celé číslo**.
     ///
     /// `JSONSerialization` mapuje `true` na `NSNumber`, takže `as? Int` by z něj udělalo
-    /// řádek 1 — nález by ukázal na cizí místo v souboru, což je horší než žádný řádek.
+    /// řádek 1. A `13.5` by se oříznulo na 13. Obojí by nález ukázalo na cizí místo
+    /// v souboru, což je horší než nález bez řádku — ten aspoň skončí v tabulce.
     private func line(from value: Any?) -> Int? {
+        let candidate: Int?
         if let number = value as? NSNumber, !(value is Bool) {
-            return number.intValue
+            let whole = number.intValue
+            candidate = Double(whole) == number.doubleValue ? whole : nil
+        } else {
+            candidate = (value as? String).flatMap(Int.init)
         }
-        return (value as? String).flatMap(Int.init)
+        return candidate.flatMap { $0 > 0 ? $0 : nil }
     }
 }

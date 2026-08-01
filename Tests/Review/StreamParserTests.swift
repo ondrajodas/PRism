@@ -183,6 +183,11 @@ struct StreamParserTests {
         #expect(line("13") == 13)
         #expect(line("\"13\"") == 13)
         #expect(line("true") == nil)
+        // Neceločíselné by se oříznulo na jiný řádek, nula a záporná čísla neexistují —
+        // nález bez řádku je lepší než nález ukazující jinam.
+        #expect(line("13.5") == nil)
+        #expect(line("0") == nil)
+        #expect(line("-3") == nil)
     }
 
     @Test("Session id se přečte i bez init eventu")
