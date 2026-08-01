@@ -14,6 +14,13 @@ actor ReviewSlots {
     /// `onCancel` odbíhá do vlastního tasku, takže může předběhnout zápis do fronty. Bez
     /// tohohle záznamu by se zrušený čekatel zapsal až po něm a čekal na slot navždy.
     private var cancelledBeforeWaiting: Set<UUID> = []
+    /// Volání `acquire`, která právě probíhají.
+    ///
+    /// Rozhoduje, jestli má smysl si zrušení pamatovat: `onCancel` může dorazit i poté, co
+    /// čekatel slot dostal a z fronty odešel. Bez téhle podmínky by se takové zrušení
+    /// uložilo do `cancelledBeforeWaiting`, kde už ho nikdo nikdy nepřečte — a set by
+    /// v dlouho běžící aplikaci rostl bez omezení.
+    private var pendingAcquires: Set<UUID> = []
 
     init(limit: Int) {
         precondition(limit > 0, "Bez jediného slotu by se nespustilo nic.")
@@ -44,6 +51,13 @@ actor ReviewSlots {
         }
 
         let id = UUID()
+        pendingAcquires.insert(id)
+        // Doběhne na aktoru bez suspendování, takže se `abandon` nemá kam vklínit.
+        defer {
+            pendingAcquires.remove(id)
+            cancelledBeforeWaiting.remove(id)
+        }
+
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
                 if cancelledBeforeWaiting.remove(id) != nil {
@@ -69,7 +83,9 @@ actor ReviewSlots {
 
     private func abandon(_ id: UUID) {
         guard let index = waiting.firstIndex(where: { $0.id == id }) else {
-            cancelledBeforeWaiting.insert(id)
+            // Zrušení, které dorazilo po tom, co čekatel z fronty odešel, si pamatovat
+            // nemá kdo přečíst.
+            if pendingAcquires.contains(id) { cancelledBeforeWaiting.insert(id) }
             return
         }
         waiting.remove(at: index).continuation.resume(throwing: CancellationError())
