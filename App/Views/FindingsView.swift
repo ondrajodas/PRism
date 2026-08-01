@@ -11,11 +11,28 @@ struct FindingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             verdict
             if record.findings.isEmpty {
-                Text("Reviewer nenahlásil žádný nález.")
-                    .foregroundStyle(.secondary)
+                emptyExplanation
             } else {
                 list
             }
+        }
+    }
+
+    /// Prázdný seznam neznamená sám o sobě čisté review — reviewer taky nemusel nálezy
+    /// nahlásit vůbec nebo se je nepodařilo přečíst. Vysvětlení se proto bere ze stavu,
+    /// který z toho počítá `Policy`, ne z vlastní věty tady: dvě formulace téhož by se
+    /// dřív nebo později rozešly.
+    @ViewBuilder private var emptyExplanation: some View {
+        switch Policy.reviewState(for: record) {
+        case .clean:
+            Text("Review doběhlo a nic nenašlo.")
+                .foregroundStyle(.secondary)
+        case .failed(let detail), .checkoutFailed(let detail):
+            Text(detail)
+                .foregroundStyle(.orange)
+        default:
+            Text("Nálezy k tomuhle běhu nejsou.")
+                .foregroundStyle(.secondary)
         }
     }
 

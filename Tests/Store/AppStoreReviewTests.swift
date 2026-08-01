@@ -198,6 +198,27 @@ struct AppStoreReviewTests {
         #expect(store.checkoutState(for: pr.repo) == .absent)
     }
 
+    @Test("Nezapsaný nález se nezamlčí")
+    func aFindingThatCannotBeSavedIsNotSwallowed() async throws {
+        // Ztracený nález by jinak vypadal jako „review neběželo“ — tedy jako schválený PR
+        // s neohlášenou chybou. Cesta pod `/dev/null` se nedá založit, takže zápis selže.
+        let broken = ReviewStore(layout: CacheLayout(root: URL(filePath: "/dev/null/prism")))
+        let store = store(
+            gateway: gateway(),
+            reviewer: FakeReviewRunner(findings: [finding()]),
+            reviews: broken
+        )
+
+        store.startReview(for: pr)
+        try await waitUntilIdle(store)
+
+        guard case .failed = store.reviewState(for: pr) else {
+            Issue.record("Očekáváno selhání, přišlo \(store.reviewState(for: pr))")
+            return
+        }
+        #expect(store.reviewRecord(for: pr) == nil)
+    }
+
     @Test("Selhání pracovní kopie je stav repa")
     func aCheckoutErrorBelongsToTheRepository() async throws {
         // Druhé PR téhož repa na ni narazí taky a řeší se stejným tlačítkem.

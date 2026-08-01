@@ -224,7 +224,7 @@ final class AppStore {
             await syncCheckoutState(for: pr.repo, using: checkout)
             try Task.checkCancellation()
 
-            await runSkills(for: pr, of: detail, in: worktree, using: reviewer, saving: reviews)
+            try await runSkills(for: pr, of: detail, in: worktree, using: reviewer, saving: reviews)
             reviewPhases[pr] = nil
         } catch is CancellationError {
             // Zrušení není selhání — stav se srovná podle disku, ne do chyby.
@@ -252,10 +252,10 @@ final class AppStore {
         in worktree: URL,
         using reviewer: any ReviewRunning,
         saving reviews: ReviewStore
-    ) async {
+    ) async throws {
         reviewPhases[pr] = .running(finished: 0, total: skills.count)
 
-        await withTaskGroup(of: ReviewRun?.self) { group in
+        let failure: (any Error)? = await withTaskGroup(of: ReviewRun?.self) { group in
             for skill in skills {
                 let request = ReviewRequest(
                     key: ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill),
@@ -266,13 +266,25 @@ final class AppStore {
             }
 
             var finished = 0
+            var saveFailure: (any Error)?
             for await run in group {
                 finished += 1
                 reviewPhases[pr] = .running(finished: finished, total: skills.count)
                 guard let run, !Task.isCancelled else { continue }
-                if let record = try? await reviews.save(run) { reviewRecords[pr] = record }
+                do {
+                    reviewRecords[pr] = try await reviews.save(run)
+                } catch {
+                    // Nezapsaný nález je ztracený nález. Spolknout to by znamenalo, že
+                    // řádek po doběhlém review ukazuje „neběželo“ — tedy přesně to, čemu se
+                    // celý ten rozlišený stav vyhýbá. Ostatní skilly doběhnou, ať se
+                    // nezahodí i to, co se uložit povedlo.
+                    saveFailure = saveFailure ?? error
+                }
             }
+            return saveFailure
         }
+
+        if let failure { throw failure }
     }
 
     /// Srovná stav pracovní kopie podle disku.

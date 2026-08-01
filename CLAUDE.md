@@ -471,6 +471,9 @@ Věci, které se u toho nemají rozbít:
   v řádku zůstalo `ve frontě · clone` až do restartu.
 - **Zrušení neuloží nic.** Rozdělané review je horší než žádné — a fáze se vrací tam, kde
   byla, ne do chyby.
+- **Nezapsaný nález review položí.** Selhání zápisu se nespolkne: ztracený nález by v řádku
+  vypadal jako „neběželo“, tedy jako schválený PR s neohlášenou chybou. Ostatní skilly
+  přitom doběhnou, ať se nezahodí i to, co se uložit povedlo.
 
 Vzniká z `ToolPaths` po preflightu (`AppStore(toolPaths:)`); testy si podstrčí fake
 gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruší.
