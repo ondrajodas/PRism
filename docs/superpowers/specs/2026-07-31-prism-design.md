@@ -130,10 +130,12 @@ claude -p "<prompt>"
   a `Process` dostává argumenty polem. Kdo si to zkouší v terminálu, uvozovky potřebuje —
   `*` by prošlo glob expansion a závorky jsou syntaktická chyba.
 
-  Je to bezpečnostní vlastnost (reviewer nemůže změnit kód ani nikam nic poslat)
-  i praktická věc: odpadne tím téměř každý důvod, proč by se Claude zastavil a chtěl
-  povolení. Headless session nemá jak na permission prompt odpovědět, takže by jinak
-  visela do timeoutu.
+  Je to bezpečnostní vlastnost: reviewer nemůže změnit kód ani nikam nic poslat.
+  Původní zdůvodnění „jinak by session visela na permission promptu do timeoutu“ **neplatí**
+  — ověřeno u #12, že v headless režimu se nepovolený nástroj rovnou odmítne, běh pokračuje
+  a skončí `success`; odmítnutí se objeví v `tool_result` a v `permission_denials`. Úzká
+  sada nástrojů tedy nešetří timeout, ale tahy: reviewer neztrácí čas voláními, která
+  stejně neprojdou.
 - **`CLAUDE.md` daného repa se aplikuje zdarma**, protože cwd session je skutečný
   checkout. Konvence projektu tím platí, aniž bychom cokoli přenášeli.
 - **`session_id` se ukládá** z init eventu streamu, i když v1 terminál nemá. Stojí to

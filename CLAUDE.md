@@ -177,7 +177,8 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    a scope `Bash(git:*)` `Bash` nezúží — projdou i negitové příkazy.
    Co neprojde, jsou **měnící** operace: `touch`, `rm` i `Write` skončily odmítnutím a nic
    po nich nezůstalo. Reviewer tedy nemůže změnit kód ani nic odeslat, jen z jiného
-   důvodu, než tu stálo dřív.
+   důvodu, než tu stálo dřív. Odmítnutý nástroj přitom **není chyba běhu** — session
+   pokračuje a skončí `success`, odmítnutí je vidět v `permission_denials`.
 3. **Nikdy nesahat na uživatelovy klony.** Aplikace pracuje výhradně ve své cache
    (`~/Library/Application Support/PRism/`). Mohou být rozdělané, na jiné branchi,
    mít vlastní worktrees.
