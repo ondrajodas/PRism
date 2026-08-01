@@ -123,6 +123,22 @@ struct GitRepoCheckoutTests {
         ))
     }
 
+    @Test("Když zbytek po klonu nejde smazat, řekne se to rovnou")
+    func unremovableLeftoverIsReported() async throws {
+        // Jinak by se spolklo skutečné selhání a `git` by pak spadl na „destination path
+        // already exists“ — uživatel by řešil git místo práv na disku.
+        try makeClone(complete: false)
+        let parent = layout.bareClone(for: vault).deletingLastPathComponent()
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: parent.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: parent.path)
+        }
+
+        await #expect(throws: CheckoutError.self) {
+            try await checkout(FakeProcessRunner(exitCode: 0)).prepare(vault)
+        }
+    }
+
     @Test("Chyba gitu se zařadí, ne jen předá")
     func gitFailureIsClassified() async {
         let stderr = "remote: Repository not found.\nfatal: repository not found"

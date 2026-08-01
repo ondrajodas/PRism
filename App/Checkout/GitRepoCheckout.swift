@@ -39,7 +39,7 @@ struct GitRepoCheckout: RepoCheckout {
         // vždycky a náš timeout ho zabíjí `SIGKILL`em, takže na to není spoleh. Rozhodovat
         // se podle pouhé existence složky by znamenalo, že další pokus jde na `fetch`
         // v něčem, co repozitář není, a opakování by se z toho nikdy nezotavilo.
-        try? FileManager.default.removeItem(at: clone)
+        try removeLeftover(at: clone)
         try createParentDirectory(of: clone)
         try await run(cloneArguments(from: repo, into: clone))
         markCloneComplete(repo)
@@ -108,11 +108,33 @@ struct GitRepoCheckout: RepoCheckout {
         ["GIT_TERMINAL_PROMPT": "0"]
     }
 
+    /// „Nic tam nebylo“ je normální stav, cokoli jiného ne. Spolknout selhání mazání by
+    /// znamenalo, že se `git` zakousne na „destination path already exists“ a skutečná
+    /// příčina (práva, zamčený soubor) se nikam nedostane.
+    private func removeLeftover(at clone: URL) throws {
+        do {
+            try FileManager.default.removeItem(at: clone)
+        } catch CocoaError.fileNoSuchFile {
+            return
+        } catch {
+            throw CheckoutError.cacheUnavailable(
+                "Zbytek po klonu v \(clone.path(percentEncoded: false)) nejde smazat: "
+                    + error.localizedDescription
+            )
+        }
+    }
+
     private func createParentDirectory(of clone: URL) throws {
-        try FileManager.default.createDirectory(
-            at: clone.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
+        do {
+            try FileManager.default.createDirectory(
+                at: clone.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+        } catch {
+            throw CheckoutError.cacheUnavailable(
+                "Složku v cache nejde založit: " + error.localizedDescription
+            )
+        }
     }
 
     private func run(_ arguments: [String]) async throws {

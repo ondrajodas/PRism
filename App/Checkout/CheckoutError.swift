@@ -14,6 +14,10 @@ enum CheckoutError: Error, Equatable, Sendable {
     case repositoryNotFound(String)
     case timedOut
     case toolUnavailable(String)
+    /// Cache na disku nejde připravit — zbytek po klonu se nedá smazat nebo složku nejde
+    /// založit. Vlastní případ proto, že `git` do toho nemá co mluvit: kdyby se to spolklo,
+    /// spadl by až `git` na „destination path already exists“ a skutečná příčina by zmizela.
+    case cacheUnavailable(String)
     case gitFailed(exitCode: Int32, message: String)
 }
 
