@@ -222,6 +222,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav |
 | `PullRequestSummary` | Totéž **bez SHA** — co dá vyhledávání. Viz `App/GitHub/` níž |
 | `Source` | Zdroj PR: jméno pro UI + search dotaz. Default `Source.reviewRequested` |
+| `ReportedFinding` | Nález přesně jak ho poslal reviewer; `FindingVerdict` je `CONFIRMED`/`PLAUSIBLE` |
+| `Finding` | `ReportedFinding` + **kdo** ho našel (skill) a **proti čemu** (`headSha`) |
 | `PullRequestState` | `open` / `draft` / `merged` / `closed` |
 | `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
 
@@ -241,6 +243,35 @@ Tři věci, které se u nich nemají rozbít:
   později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
 
 Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
+
+### `StreamParser` (`App/Review/`)
+
+Klíčový spoj: ze `stream-json` výstupu `claude` udělá to, co aplikaci zajímá.
+
+| Typ | Co je |
+|---|---|
+| `StreamParser` | JSONL řádky → `StreamSummary`. **Nikdy nevyhodí výjimku** |
+| `StreamSummary` | Session id, nálezy, **pokusy** o nástroje a odmítnuté nástroje, konec běhu, počty nepřečteného |
+
+| `ReviewOutcome` | Konec běhu podle `result` eventu |
+
+Čtyři věci, které se u toho nemají rozbít:
+
+- **Stream se čte defenzivně (`JSONSerialization`), ne přes `Codable`.** Je to opačně než
+  u `gh` — tam si `--json` polem říkáme, co má přijít, takže DTO dává smysl. Tady přichází
+  cizí formát, který se vyvíjí, a většina eventů nás nezajímá; typované dekódování by
+  padalo na věcech, které jsou aplikaci lhostejné.
+- **Rozbitý řádek se spočítá, ne vyhodí.** Proces se dá zabít uprostřed řádku a jedna
+  useknutá řádka nesmí zahodit nálezy, které už dorazily.
+- **`calledReportFindings` je oddělené od prázdného seznamu.** „Nic jsem nenašel“
+  (zavolaný nástroj s prázdným polem) a „nereportoval jsem“ (nezavolaný nástroj) jsou
+  různé věci — to druhé znamená, že se nálezy nemají kde vzít.
+- **Chybějící `result` event znamená, že běh nedoběhl.** Zabitý stream ho nemá (ověřeno
+  u #12, je na to fixture) — ale `nil` vyjde i z rozbitého posledního řádku, takže obrácená
+  implikace „`nil` = zabito“ neplatí.
+- **Zahozený nález se počítá.** `droppedFindings` musí být vidět: bez něj je „nález bez
+  povinného pole“ k nerozeznání od „nic jsem nenašel“, tedy od schváleného PR
+  s neohlášenou chybou.
 
 ### `RepoCheckout` (`App/Checkout/`)
 
@@ -567,7 +598,9 @@ Právě proto tam eskalace na `SIGKILL` je.
   přeformátované `jq`; berou se z **veřejných** repozitářů (`cli/cli`, `cli/go-gh`,
   `ondrajodas/PRism`), protože titulky firemních PR sem nepatří. Stav, na který se
   skutečná fixture nedá sehnat, se testuje inline JSONem přímo v testu.
-- **Parsování streamu** — klíčový spoj. Fixtures ze skutečných běhů už v repu jsou
+- **`StreamParser`** — proti **všem** fixtures ze skutečných běhů, plus syntetické rozbité
+  vstupy: nevalidní JSON, useknutý řádek, neznámý event, nález bez povinných polí, prázdný
+  vstup. Fixtures ze skutečných běhů už v repu jsou
   (`Tests/Fixtures/stream-json/`, viz [`docs/claude-cli.md`](docs/claude-cli.md)): běh
   s nálezy, čistý běh, zabitý běh a odmítnutý zápis. Parser se testuje proti nim.
 - **`PollingService`** — proti `FakeGitHubGateway` (odpovědi v pořadí, poslední se opakuje)
@@ -702,6 +735,9 @@ Polling hotový (issue #6) — `App/Polling/`.
 **Fáze 1 hotová (issue #7).** Aplikace ukazuje skutečné PR: okno se seznamem napříč
 repozitáři, prázdný stav, úvodní loading, banner při výpadku a rate limitu, výběr řádku.
 Stav review je zatím u všech `neběželo` — spouštění přijde ve fázi 3.
+
+`StreamParser` hotový (issue #13) — `App/Review/`. Ze streamu vytáhne nálezy, session id
+i konec běhu, a rozbitý řádek ho nepoloží. Vrstva bez UI; volat ho bude `ReviewRunner` (#14).
 
 Stavy checkoutu v seznamu hotové (issue #11) — `AppStore` umí připravit pracovní kopii,
 řádek ukazuje `ve frontě · clone` nebo `clone selhal` a detail nese výstup `gitu`

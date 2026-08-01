@@ -142,8 +142,8 @@ claude -p "<prompt>"
   jeden string a drží to otevřené dvě cesty: budoucí vestavěný terminál, nebo tlačítko
   *zkopírovat `claude --resume <id>`*.
 - Nálezy pocházejí z **`ReportFindings` tool callů** odchycených v event streamu —
-  strukturovaný JSON, ne parsování prózy. Fallback na parsování textu pokrývá skilly,
-  které ten nástroj nepoužívají.
+  strukturovaný JSON, ne parsování prózy. **Fallback na parsování textu v1 není** (viz
+  záznam rozhodnutí): nezavolaný nástroj je vlastní stav, ne důvod hádat nálezy z prózy.
 - Každý běh má timeout podle hodin a jde zrušit. Paralelismus je globálně omezený
   (default 3 session), aby dávka PR nezahltila stroj ani účet.
 
@@ -279,7 +279,7 @@ Tři oblasti. Zvolený tvar: diff v plné šířce s nálezy u kódu a tabbed pa
 | Session skončí nenulovým kódem | Běh označen `failed`, stderr uchován a zobrazitelný; ostatní reviewery to neovlivní |
 | Session nevrátí žádné nálezy | Odlišeno od selhání: `čisté`, ne `failed` |
 | Session překročí timeout | Zabita, označena `timed out`, částečné nálezy se zachovají |
-| Chybný nebo chybějící `ReportFindings` | Fallback na parsování textu; když ani to nic nedá, `unparseable` s uchovaným raw výstupem |
+| Chybný nebo chybějící `ReportFindings` | Rozlišený stav: `calledReportFindings == false` znamená, že se nálezy nemají kde vzít; nečitelné nálezy se počítají v `droppedFindings` |
 | Rate limit | Backoff, zobrazit, kdy se polling obnoví |
 | Offline | Dál se zobrazují cachované PR a nálezy, označené jako neaktuální |
 | Nové commity během review | Běh dokončí proti svému `headSha`; výsledek se uloží a označí `zastaralé` |
@@ -345,6 +345,14 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | `PullRequestState` je plochý výčet `open` / `draft` / `merged` / `closed` | `state` + `isDraft` bool, jak to vrací GitHub | V UI je z toho jeden odznak. Dvě pole by dovolila kombinace, které reálně nevzniknou (mergnutý draft), a každé místo, co stav zobrazuje, by je muselo skládat. Mapování ze `gh` je jednořádkové: otevřený a `isDraft` → `draft` |
 | `ReviewState.checkoutFailed` odděleně od `failed` | Jeden `failed` pro všechno, co se nepovedlo | Selhaný clone se spraví tlačítkem opakovat, spadlá session ne. Stejný důvod jako `čisté` vs. `failed`: slití pošle uživatele špatným směrem. Vyplývá to i z tabulky *Chování při chybách*, kde jsou to dva řádky |
 | `clean` je vlastní případ, vzniká jen přes `ReviewState.finished(findingCount:)` | `completed(findings: 0)` znamená čisté | Bez továrničky typ dovoluje dva zápisy téhož stavu a každé porovnání by muselo řešit oba. Továrnička je jedno místo, kde se to rozhoduje — a je čistá, takže se testuje bez čehokoli okolo |
+| Fallback na parsování prózy v1 není | Když `ReportFindings` nedorazí, vytáhnout nálezy z textu | Původní návrh ho sliboval, ale spike u #12 ukázal, že nezavolaný nástroj má **jednu** pravděpodobnou příčinu: chybí v `--allowedTools`. To je chyba konfigurace, kterou má aplikace přiznat, ne obcházet hádáním z prózy — a hádání by navíc vyrobilo nálezy bez `category` a `verdict`, na kterých stojí `Policy`. Stav `unparseable` proto v `ReviewState` není |
+| Zahozený nález se počítá (`droppedFindings`) | Tiše ho přeskočit | Bez čítače je „nález bez povinného pole“ k nerozeznání od „nic jsem nenašel“ — tedy od schváleného PR s neohlášenou chybou. Povinné je proto jen `summary`; scénář selhání smí chybět, ať se zahazuje co nejmíň |
+| Stejný nález ze dvou volání se nezdvojí | Slučovat všechna volání appendem | Reviewer, který hlásí průběžně a na konci pošle kompletní seznam, je běžný vzorec — a duplicitní nález v tabulce vypadá jako dva různé problémy |
+| `ReportedFinding` a `FindingVerdict` leží v `App/Models/` | Nechat je u parseru, který je vyrábí | Staví na nich `Policy` i `ReviewStore`; modul, který data vyrábí, si je nemá vlastnit — stejný důvod jako u ostatních doménových modelů. `FindingVerdict` se navíc jmenuje takhle schválně: slovo „verdikt“ potřebuje `Policy` pro návrh approve / request changes |
+| Stream se čte defenzivně (`JSONSerialization`), ne přes `Codable` | Typované DTO jako u `gh` | U `gh` si `--json` polem říkáme, co má přijít, takže DTO popisuje kontrakt, který držíme. Stream `claude` je cizí formát, který se vyvíjí, a drtivá většina eventů aplikaci nezajímá — typované dekódování by padalo na věcech, které jsou jí lhostejné, a každá nová verze CLI by rozbila parser |
+| Rozbitý řádek se spočítá, ne vyhodí | Nechat parser házet a řešit to výš | Proces se dá zabít uprostřed řádku. Jedna useknutá řádka nesmí zahodit nálezy, které už dorazily — a právě u zabitého běhu jsou částečné nálezy to jediné, co zbylo |
+| „Nic jsem nenašel“ a „nereportoval jsem“ jsou dva různé stavy | Prázdný seznam pro obojí | Čistý běh `ReportFindings` **zavolá** s prázdným polem (ověřeno fixturou). Nezavolaný nástroj naopak znamená, že se nálezy nemají kde vzít — třeba proto, že `ReportFindings` chybí v `--allowedTools`. Slití by z chyby konfigurace udělalo „čisté review“ |
+| `Finding` odděluje, co poslal reviewer, od toho, co doplnila aplikace | Jeden plochý typ | `reviewer` a `headSha` ve streamu nejsou a vědět je může jen aplikace. Oddělení drží zřejmé, co je cizí data a co naše — a `headSha` je tvrdá podmínka, takže nesmí být jen dalším volitelným polem vedle ostatních |
 | Stav pracovní kopie je **jeden**, klíčovaný repem (`CheckoutState`) | Držet cestu ke kopii a stav řádku odděleně, každé s jiným klíčem | Bare klon je jeden pro celý repozitář. Dvě mapy — cesta podle repa, stav podle PR — si dokázaly odporovat: jedno PR hlásilo `clone selhal` nad klonem, který mezitím pro druhé PR téhož repa v pořádku vznikl, a selhání jednoho PR mazalo cestu i tomu, kterému se povedlo. `ReviewState` pro řádek i `busy` pro eviction se teď odvozují z jednoho stavu, překlad je čistá funkce v `Policy` |
 | Při výběru řádku se stav srovnává podle disku | Doplnit cestu jen když chybí | Klon mohla mezitím sebrat eviction — ta maže podle LRU napříč cache, tedy i repo s otevřeným PR. Zapsaná cesta by pak ukazovala na složku, která neexistuje. Ověření je jeden `fileExists`, takže se dělá při každém výběru |
 | `busy` se eviction předává jako **dotaz**, ne jako snímek | Odečíst množinu na začátku úklidu | Úklid je dlouhá disková operace (prochází celou cache). Příprava, která začne uprostřed něj, by o ochranu přišla a `git` by klonoval do složky, kterou mu eviction pod rukama maže |
