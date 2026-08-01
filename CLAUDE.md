@@ -92,11 +92,20 @@ včetně důvodu.
 
   Když Copilot nálezy má, projdi je, řekni, co je reálné a co šum, a co je reálné oprav.
 
+- **Před pushem si diff zreviduj sám** — ideálně subagentem, ať to nezdržuje. Copilot má
+  latenci v minutách a každé kolo stojí čas; co si najdeš sám, projde rovnou. Subagent
+  dostane diff a hledá to, co hledá Copilot: chyby, které testy nechytí, zavádějící
+  dokumentaci, zapomenutý úklid, duplicitu.
 - **Po opravě a pushi pusť Copilota znovu — a takhle dokola, dokud nálezy nedojdou.**
   Jeden průchod nestačí: oprava umí odkrýt další problém a Copilot vidí až nový diff.
   Cyklus je *oprava → push → `./bin/copilot-review.sh <PR>` → projít nálezy*, a končí
-  kolem, ve kterém už nic reálného nezbylo. Nálezy, které vyhodnotíš jako šum, se
-  opravovat nemusí — ale musí na ně být odpověď, ať je z PR vidět proč.
+  kolem, ve kterém už nic reálného nezbylo.
+
+  **Nemusíš vyhovět všem komentářům.** Copilot navrhuje i věci, které v tomhle repu
+  nedávají smysl nebo jsou horší než to, co tam je. Rozhoduješ ty — u nálezu, který
+  neopravíš, ale musí být odpověď s důvodem, ať je z PR vidět, že se to zvážilo. Když si
+  radou nejsi jistý, ověř ji (spusť to, změř to); zamítnutí podložené měřením je lepší
+  než oprava naslepo.
 
   Dvě pasti při čtení výsledku:
 
@@ -235,8 +244,12 @@ Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživate
 | `CacheLayout` | Kde co leží. `root` je injektovatelný, aby testy nesáhly do skutečné cache |
 | `CheckoutError` | Typované chyby + klasifikace stderru `gitu` jako čistá funkce |
 
-Čtyři věci, které se u toho nemají rozbít:
+Pět věcí, které se u toho nemají rozbít:
 
+- **Dokončený klon se pozná podle vlastní značky** (`prism-clone-complete`), ne podle
+  toho, co je uvnitř. `git` zakládá `HEAD` i `config` **hned na začátku** klonování, takže
+  po zabitém klonu složka vypadá jako hotový repozitář — a fetch nad ní dokonce projde,
+  jen z klonu tiše zmizí `promisor` a partial clone přestane platit.
 - **Fetch v bare klonu potřebuje explicitní refspec** (`+refs/heads/*:refs/heads/*`).
   `git clone --bare` `remote.origin.fetch` nenastavuje, takže samotné `git fetch origin`
   jen zapíše `FETCH_HEAD` a větve zůstanou, kde byly. Odhalil to až integrační test.
@@ -390,13 +403,19 @@ nad stavem prostředí ve view, patří to do reportu.
 **`ProcessRunning` zatím jen bufferuje.** `ReviewRunner` bude potřebovat výstup po řádcích,
 jak vzniká (`stream-json`) — to přijde jako samostatná metoda, tuhle to nemění.
 
-Tři věci o podprocesech, na které se naráží znovu:
+Čtyři věci o podprocesech, na které se naráží znovu:
 
-- **Blokující I/O nesmí na kooperativní pool.** `readToEnd()` ani `waitUntilExit()` neumí
-  čekat kooperativně a pool má jen tolik vláken, kolik je jader — několik paralelních review
-  by si je vzájemně vyhladovělo. `SubprocessRunner` je proto odsouvá na vlastní
-  `DispatchQueue` a volajícímu je podává přes `async let`, takže zůstávají navázané na
-  životní cyklus volání. `Task.detached` by odvázalo strukturu **a** problém neřešilo.
+- **Blokující I/O nesmí na kooperativní pool.** `readToEnd()` neumí čekat kooperativně
+  a pool má jen tolik vláken, kolik je jader — několik paralelních review by si je
+  vzájemně vyhladovělo. `SubprocessRunner` ho proto odsouvá na vlastní `DispatchQueue`
+  a volajícímu ho podává přes `async let`, takže zůstává navázané na životní cyklus
+  volání. `Task.detached` by odvázalo strukturu **a** problém neřešilo.
+- **Na konec procesu se čeká přes `terminationHandler`, ne `waitUntilExit()`.** To je taky
+  blokující, takže by na každý podproces připadala **tři** vlákna z `ioQueue` (dvě čtení
+  a čekání). Jakmile jich je v běhu dost, nemá si nové čekání kde spustit a volání uvízne
+  — projeví se to jako **náhodně visící běh testů**, ve kterém všechny testy prošly.
+  Stálo to půl dne hledání; s `terminationHandler`em jde sada pětkrát za sebou zeleně,
+  před tím padal každý druhý až třetí běh.
 - **Oba pipy se musí číst souběžně.** Sériově: než dojde EOF na prvním, druhý naplní buffer
   jádra a proces se zasekne na zápisu.
 - **Zrušení musí proces zabít.** Bez toho čekání na EOF drží volání, dokud proces nedoběhne

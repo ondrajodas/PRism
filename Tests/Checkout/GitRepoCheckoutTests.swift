@@ -27,6 +27,26 @@ struct GitRepoCheckoutTests {
         GitRepoCheckout(git: git, gh: gh, layout: layout, runner: runner)
     }
 
+    /// Klon v cache. `HEAD` a `config` zakládá `git` **hned na začátku** klonování, takže
+    /// je má i zbytek po zabitém klonu — o dokončení rozhoduje jen naše značka.
+    private func makeClone(complete: Bool) throws {
+        let clone = layout.bareClone(for: vault)
+        try FileManager.default.createDirectory(at: clone, withIntermediateDirectories: true)
+        try "ref: refs/heads/.invalid\n".write(
+            to: clone.appending(path: "HEAD"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "[core]\n\trepositoryformatversion = 0\n".write(
+            to: clone.appending(path: "config"),
+            atomically: true,
+            encoding: .utf8
+        )
+        if complete {
+            try Data().write(to: layout.cloneMarker(for: vault))
+        }
+    }
+
     @Test("První příprava klonuje bare a bez blobů")
     func firstPrepareClonesBare() async throws {
         let runner = FakeProcessRunner(exitCode: 0)
@@ -68,10 +88,7 @@ struct GitRepoCheckoutTests {
 
     @Test("Existující klon se jen aktualizuje")
     func existingCloneIsFetched() async throws {
-        try FileManager.default.createDirectory(
-            at: layout.bareClone(for: vault),
-            withIntermediateDirectories: true
-        )
+        try makeClone(complete: true)
         let runner = FakeProcessRunner(exitCode: 0)
 
         _ = try await checkout(runner).prepare(vault)
@@ -84,6 +101,26 @@ struct GitRepoCheckoutTests {
         #expect(arguments.contains("+refs/heads/*:refs/heads/*"))
         // `-C` místo pracovní složky procesu: běhy se nesmí přebíjet.
         #expect(arguments.prefix(2) == ["-C", layout.bareClone(for: vault).path(percentEncoded: false)])
+    }
+
+    @Test("Zbytek po přerušeném klonu se zahodí a klonuje se znovu")
+    func partialCloneIsDiscardedAndRetried() async throws {
+        // `git` po nepovedeném klonu složku uklidit nemusí a náš timeout ho zabíjí
+        // `SIGKILL`em. Zbytek přitom `HEAD` i `config` **má** — kdyby se dokončenost
+        // odvozovala z nich, šel by další pokus na `fetch`, ten by dokonce prošel, ale
+        // klon by tiše přestal být partial.
+        try makeClone(complete: false)
+        let runner = FakeProcessRunner(exitCode: 0)
+
+        _ = try await checkout(runner).prepare(vault)
+
+        let arguments = try #require(runner.invocations.first?.arguments)
+        #expect(arguments.contains("clone"))
+        #expect(!arguments.contains("fetch"))
+        // Zbytek musí být pryč, jinak by do něj `git clone` odmítl klonovat.
+        #expect(!FileManager.default.fileExists(
+            atPath: layout.bareClone(for: vault).appending(path: "HEAD").path(percentEncoded: false)
+        ))
     }
 
     @Test("Chyba gitu se zařadí, ne jen předá")

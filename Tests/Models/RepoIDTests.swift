@@ -4,6 +4,7 @@ import Testing
 @testable import PRism
 
 @Suite("RepoID")
+
 struct RepoIDTests {
     @Test("Formátuje se jako owner/repo")
     func formatsAsOwnerSlashName() {
@@ -31,6 +32,11 @@ struct RepoIDTests {
             "ondra jodas/PRism",
             "ondrajodas/PR ism",
             "ondrajodas/PRism#12",
+            // Z identifikátoru se skládá cesta do cache a na té cestě se maže —
+            // krok „nahoru" v ní nemá co dělat.
+            "../..",
+            "./PRism",
+            "ondrajodas/..",
         ]
     )
     func rejectsMalformedInput(raw: String) {

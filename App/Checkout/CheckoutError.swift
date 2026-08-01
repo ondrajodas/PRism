@@ -42,15 +42,20 @@ extension CheckoutError {
         "permission denied (publickey)",
         "403 forbidden",
     ]
+    /// Celé fráze, ne tokeny. Hlášky `gitu` obsahují celou URL, takže holé `"ssl"` by
+    /// zařadilo jako síťovou chybu cokoli u `openssl`, `wolfssl` nebo `boringssl` — a
+    /// `network` se testuje dřív než `repositoryNotFound`, takže by uživatel místo
+    /// „zkontroluj oprávnění“ dostal „spraví se to samo“.
     private static let networkSignals = [
         "could not resolve host",
         "failed to connect",
         "connection timed out",
         "network is unreachable",
         "connection refused",
-        "ssl",
+        "ssl certificate problem",
+        "ssl connect error",
     ]
-    private static let notFoundSignals = ["repository not found", "not found", "does not exist"]
+    private static let notFoundSignals = ["repository not found", "does not exist"]
 
     private static func mentions(_ message: String, _ signals: [String]) -> Bool {
         let lowered = message.lowercased()

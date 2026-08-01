@@ -15,23 +15,37 @@ struct RealRepoCheckoutTests {
     private let runner = SubprocessRunner()
     private let repo = RepoID(owner: "scratch", name: "sample")
 
-    @Test("První příprava naklonuje, druhá jen dotáhne nové commity")
-    func clonesThenFetches() async throws {
-        let workspace = try TemporaryDirectory()
-        let origin = workspace.url.appending(path: "origin")
-        try await makeScratchRepository(at: origin)
+    /// Pracovní složka **musí** být uložená v suite, ne lokální proměnná v testu.
+    /// `TemporaryDirectory` se maže v `deinit`, takže lokální proměnná umí zmizet hned po
+    /// posledním použití — a smazat složku `gitu` pod rukama uprostřed klonování. Projeví
+    /// se to jako náhodně visící test, ne jako chyba.
+    private let workspace: TemporaryDirectory
+    private let origin: URL
+    private let layout: CacheLayout
 
-        let layout = CacheLayout(root: workspace.url.appending(path: "cache"))
-        let checkout = GitRepoCheckout(
+    init() throws {
+        workspace = try TemporaryDirectory()
+        origin = workspace.url.appending(path: "origin")
+        layout = CacheLayout(root: workspace.url.appending(path: "cache"))
+    }
+
+    private func checkout(remote: String) -> GitRepoCheckout {
+        GitRepoCheckout(
             git: git,
             gh: URL(filePath: "/usr/bin/false"),
             layout: layout,
             runner: runner,
-            // `file://`, ne holá cesta: u holé cesty `git` přepne na lokální klon
-            // s hardlinky, obejde přenosový protokol a `--filter` úplně ignoruje.
-            // Test by pak ověřoval jinou cestu kódem, než jakou pojede aplikace.
-            remote: { _ in "file://\(origin.path(percentEncoded: false))" }
+            // `file://`, ne holá cesta: u holé cesty `git` vypíše
+            // `--filter is ignored in local clones`, udělá klon s hardlinky a přenosový
+            // protokol vůbec nepoužije. Test by pak nejel tou cestou kódu co aplikace.
+            remote: { _ in remote }
         )
+    }
+
+    @Test("První příprava naklonuje, druhá jen dotáhne nové commity")
+    func clonesThenFetches() async throws {
+        try await makeScratchRepository(at: origin)
+        let checkout = checkout(remote: origin.absoluteString)
 
         let clone = try await checkout.prepare(repo)
 
@@ -47,20 +61,27 @@ struct RealRepoCheckoutTests {
         #expect(try await revision("main", in: clone) == secondCommit)
     }
 
+    @Test("Přerušený klon se opraví sám, nezasekne se na něm")
+    func recoversFromAnInterruptedClone() async throws {
+        // Nasimulovaný zbytek po klonu, který nedoběhl: složka je, `HEAD` ne. Bez úklidu
+        // by každý další pokus šel na `fetch` a padal na „not a git repository“.
+        try await makeScratchRepository(at: origin)
+        let leftover = layout.bareClone(for: repo)
+        try FileManager.default.createDirectory(at: leftover, withIntermediateDirectories: true)
+        try "smetí".write(to: leftover.appending(path: "config"), atomically: true, encoding: .utf8)
+
+        let clone = try await checkout(remote: origin.absoluteString).prepare(repo)
+
+        #expect(FileManager.default.fileExists(atPath: clone.appending(path: "HEAD").path))
+        #expect(try await revision("main", in: clone).isEmpty == false)
+    }
+
     @Test("Neexistující remote skončí zařazenou chybou, ne pádem")
     func missingRemoteIsClassified() async throws {
-        let workspace = try TemporaryDirectory()
-        let layout = CacheLayout(root: workspace.url.appending(path: "cache"))
-        let checkout = GitRepoCheckout(
-            git: git,
-            gh: URL(filePath: "/usr/bin/false"),
-            layout: layout,
-            runner: runner,
-            remote: { _ in "file://\(workspace.url.appending(path: "nikde").path(percentEncoded: false))" }
-        )
+        let missing = workspace.url.appending(path: "nikde").absoluteString
 
         await #expect(throws: CheckoutError.self) {
-            try await checkout.prepare(repo)
+            try await checkout(remote: missing).prepare(repo)
         }
     }
 
@@ -101,4 +122,3 @@ struct RealRepoCheckoutTests {
         #expect(result.exitCode == 0, "git \(arguments.joined(separator: " ")): \(result.standardError)")
     }
 }
-

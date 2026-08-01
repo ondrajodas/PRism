@@ -26,9 +26,15 @@ struct RepoID: Hashable, Sendable, LosslessStringConvertible {
 
     var description: String { "\(owner)/\(name)" }
 
+    /// `.` a `..` jsou odmítnuté schválně: z identifikátoru se skládá cesta do cache
+    /// aplikace a na té cestě se maže. Jméno jako `../..` by mazání pustilo ven z cache.
+    /// GitHub takové repo nevydá, ale kontrola je jeden řádek a chyba by byla drahá.
     private static func isValidComponent(_ component: Substring) -> Bool {
         !component.isEmpty
+            && component != "."
+            && component != ".."
             && !component.contains("#")
+            && !component.contains("/")
             && component.allSatisfy { !$0.isWhitespace }
     }
 }

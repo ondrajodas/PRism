@@ -30,14 +30,40 @@ struct GitRepoCheckout: RepoCheckout {
     func prepare(_ repo: RepoID) async throws -> URL {
         let clone = layout.bareClone(for: repo)
 
-        if FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)) {
+        if hasUsableClone(for: repo) {
             try await run(fetchArguments(in: clone))
-        } else {
-            try createParentDirectory(of: clone)
-            try await run(cloneArguments(from: repo, into: clone))
+            return clone
         }
 
+        // Cílová složka může existovat i po **přerušeném** klonu — `git` po sobě neuklidí
+        // vždycky a náš timeout ho zabíjí `SIGKILL`em, takže na to není spoleh. Rozhodovat
+        // se podle pouhé existence složky by znamenalo, že další pokus jde na `fetch`
+        // v něčem, co repozitář není, a opakování by se z toho nikdy nezotavilo.
+        try? FileManager.default.removeItem(at: clone)
+        try createParentDirectory(of: clone)
+        try await run(cloneArguments(from: repo, into: clone))
+        markCloneComplete(repo)
         return clone
+    }
+
+    /// Hotový klon poznáme podle **vlastní značky**, ne podle toho, co je uvnitř.
+    /// `git` zakládá `HEAD`, `config` i `refs/` hned na začátku, takže zabitý klon vypadá
+    /// zvenčí jako hotový repozitář — a fetch nad ním dokonce projde, jen z klonu tiše
+    /// zmizí `promisor` a partial clone přestane platit.
+    private func hasUsableClone(for repo: RepoID) -> Bool {
+        FileManager.default.fileExists(
+            atPath: layout.cloneMarker(for: repo).path(percentEncoded: false)
+        )
+    }
+
+    /// Nezdařený zápis značky přípravu neshodí. Klon se povedl a je použitelný; chybějící
+    /// značka znamená jen to, že se příště naklonuje znovu — což je nepříjemné, ne špatně.
+    /// Opačné pořadí (shodit hotový klon kvůli souboru navíc) by bylo horší.
+    private func markCloneComplete(_ repo: RepoID) {
+        FileManager.default.createFile(
+            atPath: layout.cloneMarker(for: repo).path(percentEncoded: false),
+            contents: nil
+        )
     }
 
     /// Partial clone: `--filter=blob:none` stáhne historii bez obsahu souborů a bloby
