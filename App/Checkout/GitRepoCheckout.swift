@@ -8,7 +8,7 @@ struct GitRepoCheckout: RepoCheckout {
     private let runner: ProcessRunning
     private let timeout: Duration
     private let remote: @Sendable (RepoID) -> String
-    private let coordinator = CheckoutCoordinator()
+    private let coordinator = WorkCoordinator()
 
     /// `remote` je švih pro integrační testy — ty klonují z `file://` scratch repa, aby
     /// nepotřebovaly síť ani přihlášení.

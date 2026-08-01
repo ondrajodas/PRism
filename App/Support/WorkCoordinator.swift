@@ -1,12 +1,15 @@
 import Foundation
 
-/// Hlídá, že nad jedním klíčem neběží dvě přípravy naráz.
+/// Hlídá, že nad jedním klíčem neběží dvě práce naráz.
 ///
 /// Dvě review nad různými PR téhož repa se spustí současně a obě sáhnou na tentýž klon:
 /// druhé volání by mohlo smazat složku toho, které se právě klonuje. Souběžný požadavek
 /// se proto k běžící práci **připojí** místo aby začal vlastní — což je zároveň to, co
 /// volající chce: výsledek je stejný.
-actor CheckoutCoordinator {
+///
+/// Používá to `RepoCheckout` (klony a stromy) i `ReviewRunner` (běhy klíčované
+/// `ReviewRunKey`). Proto leží mimo oba — je to sdílená drobnost, ne část modulu.
+actor WorkCoordinator {
     /// Ke klíči se připojila práce s jiným návratovým typem. Znamená to chybu v kódu,
     /// ne stav, do kterého se dá dostat používáním.
     struct MismatchedWork: Error {

@@ -252,7 +252,6 @@ Klíčový spoj: ze `stream-json` výstupu `claude` udělá to, co aplikaci zaj�
 |---|---|
 | `StreamParser` | JSONL řádky → `StreamSummary`. **Nikdy nevyhodí výjimku** |
 | `StreamSummary` | Session id, nálezy, **pokusy** o nástroje a odmítnuté nástroje, konec běhu, počty nepřečteného |
-
 | `ReviewOutcome` | Konec běhu podle `result` eventu |
 
 Čtyři věci, které se u toho nemají rozbít:
@@ -272,6 +271,52 @@ Klíčový spoj: ze `stream-json` výstupu `claude` udělá to, co aplikaci zaj�
 - **Zahozený nález se počítá.** `droppedFindings` musí být vidět: bez něj je „nález bez
   povinného pole“ k nerozeznání od „nic jsem nenašel“, tedy od schváleného PR
   s neohlášenou chybou.
+
+### `ReviewRunner` (`App/Review/`)
+
+Jeden běh = jedna headless session `claude` na jeden skill v jednom pracovním stromě.
+
+| Typ | Co je |
+|---|---|
+| `ReviewRunning` | Protokol: `run(_:progress:)`. Schválně nemá nic, čím by šlo něco odeslat |
+| `ClaudeReviewRunner` | Implementace nad `claude` přes `ProcessStreaming` |
+| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat) |
+| `ReviewRunKey` | `(PR, headSha, skillID)` — identita běhu |
+| `ReviewRun` | Výsledek: klíč, `StreamSummary`, `ReviewRunOutcome`; `findings` doplní reviewera a `headSha` |
+| `ReviewRunOutcome` | `finished` / `timedOut` / `failed(detail:)` |
+| `ReviewProgress` | `queued`, `started(sessionID:)`, `attemptedTool`, `findings(count:)` |
+| `ReviewSlots` | Aktor: limit souběžných session (3), fronta v pořadí příchodu |
+| `ClaudeCommand` | Čisté funkce: argumenty, prompt, prostředí session |
+
+Věci, které se u toho nemají rozbít:
+
+- **Selhání session není chyba volání.** Spadlá i vytimeoutovaná session se vrací jako
+  `ReviewRun` s příslušným `outcome`, protože obojí je výsledek, který se zobrazuje.
+  Vyhodí se jen `CancellationError`. Kdyby selhání létalo jako chyba, `clean` a `failed`
+  by se v UI slily do jednoho „nepovedlo se“.
+- **Timeout si nechá, co stihl.** Proto se stream čte průběžně a `StreamSummary` se plní
+  po řádcích: u zabitého běhu jsou částečné nálezy jediné, co je.
+- **Zrušený proud skončí bez chyby**, takže po smyčce musí přijít `Task.checkCancellation()`
+  — jinak by ze zrušeného review vypadl výsledek, jako by doběhlo.
+- **Slučování stejného klíče je nad frontou**, ne pod ní. Připojený požadavek jinak zabere
+  druhý slot pro běh, na který sám čeká.
+- **Slot se předává, ne vrací.** Mezikrok, ve kterém je volný, by pustil dovnitř běh, který
+  si o něj řekl později.
+- **`.queued` se hlásí vždycky**, i když je slot volný hned. Rozlišovat „čekal“ od
+  „nečekal“ by znamenalo hádat, jestli se `acquire` opravdu uspalo.
+- **Prostředí session nese credential helper přes `GIT_CONFIG_*`.** Strom stojí nad partial
+  klonem, takže `git diff` proti base commitu si dotahuje bloby ze sítě — a `-c` z
+  `RepoCheckoutu` sem nedosáhne, protože `git` spouští sám reviewer. Ověřené to zatím není;
+  potvrdí to až první běh nad privátním repem.
+- **Prompt je natvrdo** a skill se vyvolává lomítkem. Konfigurace skillů a modelu je #23.
+
+### `App/Support/`
+
+Sdílené drobnosti, které nepatří žádnému modulu. Zatím jedna: `WorkCoordinator` (dřív
+`CheckoutCoordinator`) — souběžná volání nad stejným klíčem spojí do jedné práce a zrušení
+posledního čekajícího zruší i tu práci. Používá ho `RepoCheckout` (klony, stromy)
+i `ReviewRunner` (běhy). Kdyby si každý držel vlastní kopii, existovala by ta jemná logika
+kolem rušení dvakrát.
 
 ### `RepoCheckout` (`App/Checkout/`)
 
@@ -500,6 +545,8 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `ToolPaths` | Absolutní cesty ke všem třem. **Neoptional pole** — vznikne jen když preflight prošel, takže zbytek aplikace neřeší chybějící binárku |
 | `ExecutableProbe` | Protokol: leží na cestě spustitelný soubor? Reálná implementace odmítá složky (`/usr/bin` má spustitelný bit taky) a následuje symlinky (`claude` je symlink) |
 | `ProcessRunning` | Protokol: spusť, počkej, seber stdout/stderr/exit. `SubprocessRunner` nad `Foundation.Process`, s timeoutem, eskalací `SIGTERM` → `SIGKILL` a zabitím při zrušení. `environment` se k prostředí aplikace **přidává**, nepřepisuje ho — jinak by podproces přišel o `HOME` a nenašel konfiguraci |
+| `ProcessStreaming` | Protokol: výstup **po řádcích, jak vzniká**, plus `workingDirectory`. `SubprocessStreamer` nad `Foundation.Process`. Chyby chodí v proudu, ne z volání |
+| `LaunchedProcess` | Běžící proces a jeho pipy za `Sendable` fasádou. Staví na něm obojí — bufferovaná i streamovací cesta |
 | `ShellPathReading` | Protokol: `PATH` z login shellu (`zsh -lc 'echo $PATH'`). Selhání = prázdný seznam, ne pád |
 | `BinaryLocator` | Nejdřív známá místa, teprve pro zbytek login shell — a ten **jednou** pro všechny chybějící |
 | `GhAuthCheck` | `gh auth status`: exit 0 přihlášen, 1 nepřihlášen, cokoli jiného `checkFailed` se stderrem |
@@ -510,10 +557,12 @@ v domény review, jen drží to, čím se s systémem mluví.
 počítají** — čistě, bez I/O. Tady platí totéž pravidlo jako u `Policy`: když píšeš `if`
 nad stavem prostředí ve view, patří to do reportu.
 
-**`ProcessRunning` zatím jen bufferuje.** `ReviewRunner` bude potřebovat výstup po řádcích,
-jak vzniká (`stream-json`) — to přijde jako samostatná metoda, tuhle to nemění.
+**Streamování je vlastní protokol, ne další metoda `ProcessRunning`.** Fake implementace
+`ProcessRunning` jsou u `gh` i `git` v každém druhém testu a metodu, kterou nikdy
+nezavolají, by musely dopsat všechny. `workingDirectory` je jen v `ProcessStreaming` —
+`claude` pracovní složku flagem předat neumí, kdežto `git` si vystačí s `-C`.
 
-Čtyři věci o podprocesech, na které se naráží znovu:
+Šest věcí o podprocesech, na které se naráží znovu:
 
 - **Blokující I/O nesmí na kooperativní pool.** `readToEnd()` neumí čekat kooperativně
   a pool má jen tolik vláken, kolik je jader — několik paralelních review by si je
@@ -529,7 +578,13 @@ jak vzniká (`stream-json`) — to přijde jako samostatná metoda, tuhle to nem
 - **Oba pipy se musí číst souběžně.** Sériově: než dojde EOF na prvním, druhý naplní buffer
   jádra a proces se zasekne na zápisu.
 - **Zrušení musí proces zabít.** Bez toho čekání na EOF drží volání, dokud proces nedoběhne
-  sám. Řeší `withTaskCancellationHandler`.
+  sám. Řeší `withTaskCancellationHandler`, u proudu `continuation.onTermination`.
+- **Proud smí skončit teprve po EOF na obou rourách, ne po exitu procesu.** Skončit hned po
+  exitu by uřízlo řádky, které ještě leží v rouře — u review přesně ty poslední, ve kterých
+  bývají nálezy.
+- **Timeout má poslední slovo, i když EOF nedorazí.** Roury může držet něco, co po procesu
+  zbylo, a proud by pak čekal navždy. Proto hlídání běží až do konce **proudu** (ruší ho
+  `onTermination`, ne konec procesu) a po `SIGKILL`u proud ukončí samo.
 
 **`zsh -lc` nečte `.zshrc`** — neinteraktivní login shell čte `.zshenv`, `.zprofile`
 a `.zlogin`. Přidat `-i` se zkoušelo a zahodilo (viz komentář v `LoginShellPathReader`
@@ -621,8 +676,16 @@ Právě proto tam eskalace na `SIGKILL` je.
   Chybějící refspec u fetche prošel unit testy bez povšimnutí a chytil ho až ten druhý.
   Pozor na `contains` nad polem argumentů — porovnává **celé prvky**, ne podřetězce,
   takže refspec (`+refs/pull/85/head:refs/prism/pr/85`) se musí hledat vnořeným `contains`.
-- **`ReviewRunner`** — fake v testech na úrovni aplikace; malý počet integračních testů
-  proti skutečné binárce.
+- **`ReviewRunner`** — proti `FakeProcessStreamer`, který přehraje fixtures ze skutečných
+  běhů: úspěch, čisté review, nenulový exit, nespuštěná binárka, timeout. Fake umí běh
+  **pozdržet**, a na tom stojí testy limitu souběhu (4 běhy, naráz nejvýš 3), slučování
+  stejného klíče a zrušení. Čekání jde přes `Task.yield()` v smyčce, ne přes `sleep` —
+  test, který se nedočká, uvízne, což je srozumitelnější než náhodné padání.
+- **`SubprocessStreamer`** — proti **skutečným procesům** (`/bin/sh`), ne proti fake
+  runneru. Že řádky přijdou v pořadí, že se doručí i useknutý poslední řádek, že proces
+  běží v předané složce a že zaseknutý skončí timeoutem, se dá zjistit jen spuštěním —
+  přesně tohle unit testy `RepoCheckoutu` nechytly.
+- **`ReviewSlots`** — limit, pořadí ve frontě a zrušený čekatel, který nesmí frontu ucpat.
 
 ### Jak si zkontrolovat, jak view vypadá
 
@@ -737,7 +800,12 @@ repozitáři, prázdný stav, úvodní loading, banner při výpadku a rate limi
 Stav review je zatím u všech `neběželo` — spouštění přijde ve fázi 3.
 
 `StreamParser` hotový (issue #13) — `App/Review/`. Ze streamu vytáhne nálezy, session id
-i konec běhu, a rozbitý řádek ho nepoloží. Vrstva bez UI; volat ho bude `ReviewRunner` (#14).
+i konec běhu, a rozbitý řádek ho nepoloží.
+
+`ReviewRunner` hotový (issue #14) — `App/Review/` a `ProcessStreaming` v `App/Environment/`.
+Umí spustit headless session v pracovním stromě, číst její výstup po řádcích, zabít ji po
+patnácti minutách se zachovanými nálezy, nechat se zrušit a držet limit tří souběžných
+session. Vrstva bez UI — zavolá ho `AppStore` v #17.
 
 Stavy checkoutu v seznamu hotové (issue #11) — `AppStore` umí připravit pracovní kopii,
 řádek ukazuje `ve frontě · clone` nebo `clone selhal` a detail nese výstup `gitu`
@@ -756,7 +824,7 @@ Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
 2. ~~Checkout cache + worktree~~ — **hotovo**
-3. `ReviewRunner` + parsování streamu — **spike hotový**, flagy ověřené
+3. `ReviewRunner` + parsování streamu — **parser i runner hotové**, zbývá je spustit z UI (#17)
 4. UI diffu s bublinami
 5. Konfigurace a auto režim
 

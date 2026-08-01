@@ -26,9 +26,8 @@ enum ProcessError: Error, Equatable {
 /// Spuštění podprocesu. Za protokolem, aby preflight i moduly nad ním šly testovat bez
 /// skutečných binárek.
 ///
-/// Umí jen „spusť, počkej, seber výstup". `ReviewRunner` bude potřebovat výstup po řádcích
-/// tak, jak vzniká (`stream-json`) — to přijde jako samostatná metoda, tahle se tím
-/// nemění.
+/// Umí jen „spusť, počkej, seber výstup". Výstup po řádcích, jak vzniká, dává
+/// `ProcessStreaming` — vlastní protokol vedle tohohle, ne další metoda tady.
 protocol ProcessRunning: Sendable {
     /// `environment` se **přidává** k prostředí aplikace, nepřepisuje ho celé — jinak by
     /// podproces přišel o `HOME` a `gh` ani `git` by nenašly svoji konfiguraci.
