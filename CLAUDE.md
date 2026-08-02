@@ -517,7 +517,11 @@ Věci, které se u toho nemají rozbít:
   to, co reviewer najde — a ověřit, že neovlivnilo, je drahé: tři běhy nad týmž commitem
   daly 1, 2 a 3 nálezy, takže rozptyl schová jakýkoli efekt menší než ten. Jazyk se proto
   řeší až za review, viz `FindingTranslating` níž. Je na to test, aby se to nevrátilo.
-- **Prompt je natvrdo** a skill se vyvolává lomítkem. Konfigurace skillů a modelu je #23.
+- **Skill se dnes nevyvolává vůbec.** Prompt jen napíše jeho jméno do věty
+  (`You are running as the "code-review" reviewer`) a `Skill` **není** v `--allowedTools`.
+  Lomítková varianta se zahodila u #17, protože rozbíjela `ReportFindings`, a náhrada se
+  nedodělala — takže každý nakonfigurovaný skill pustí totéž obecné review a jeho jméno je
+  jen štítek. Dopadá to i na sadu skillů podle jazyka (#24). Řeší se v #78.
 
 ### Překlad nálezů (`App/Review/`)
 
