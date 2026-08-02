@@ -761,7 +761,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
 | `PullRequestDetailView` | Pravý panel: dvouřádková lišta (titulek, review, stav kopie), pod ní diff a nálezy |
-| `DiffView` | Diff v plné šířce: souhrn, skokové menu, soubory s ukotvenou hlavičkou |
+| `DiffView` | Diff v plné šířce: souhrn, skokové menu, soubory s ukotvenou hlavičkou, kterou jde sbalit |
 | `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek, rozbalovací řádek nebo poznámka |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout |
@@ -852,6 +852,31 @@ Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
   Dva nálezy v jednom souboru by jinak dotáhly kontext jen k prvnímu.
 - **Sbalení kontextu si nechá načtený obsah.** Druhé rozbalení by jinak chodilo po síti
   pro něco, co už jednou dorazilo.
+
+Sbalení celých souborů (`foldedFiles`) je **jiná věc než rozbalení kontextu**, i když se
+česky obojímu říká „sbalit“ — proto `DiffFoldingActions` vedle `DiffExpansionActions`:
+
+- **Sbalené je to, co je v množině**, ne naopak. U PR o padesáti souborech je rozbaleno
+  výchozí stav a sbalení je gesto, takže se pamatuje to druhé — prázdná množina znamená
+  „nikdo nic nesbalil“ a nemusí se plnit při načtení diffu.
+- **Stav drží store, ne view.** `PullRequestDetailView` si SwiftUI mezi PR ponechá (stejná
+  pozice ve stromu), takže by sbalení přeteklo z jednoho pull requestu na druhý — stejná
+  past jako u příznaku „připravuji“.
+- **Skok sbalený soubor rozbalí, a to *před* nastavením cíle.** Sbalený soubor nemá řádky,
+  takže `scrollTo` by mířilo na id, které v líném seznamu není. Platí pro skok ze stromu
+  i z tabulky nálezů.
+- **Hlavička zůstává vždycky**, včetně `+N −M` a odznaku změny — jinak by sbalený soubor
+  zmizel a nešel otevřít zpátky.
+- **Odznak s počtem nálezů je u souboru vždycky**, ne jen u sbaleného. U sbaleného je to
+  nutnost (zavřený soubor s nevyřízeným nálezem se dá zapomenout), u rozbaleného zkratka:
+  projedu hlavičky a vím, kde nálezy jsou, aniž bych scrolloval obsahem.
+- **`Divider()` v `overlay` se kreslí svisle.** Orientaci si bere z okolní osy a v overlay
+  žádná není. Hlavička souboru tak od #18 kreslila svislou čárku uprostřed místo čáry pod
+  sebou; všimlo se toho až po sbalení všech souborů, kdy se ty čárky poskládaly do jedné
+  čáry. Kde na orientaci záleží, patří `Rectangle().fill(.separator).frame(height: 1)`.
+- **`Sbalit vše` a `Rozbalit vše` je jedno tlačítko**, které se přepíná podle toho, jestli
+  je všechno sbalené. Dvě tlačítka by znamenala, že je jedno z nich pořád k ničemu.
+  `unfoldAll` sahá **jen na svoje PR**: sbalení v jiném je cizí stav.
 
 Průběh review drží `AppStore` taky (`reviewTimelines`, per PR):
 
@@ -1224,6 +1249,9 @@ Právě proto tam eskalace na `SIGKILL` je.
   a diakritiku. `Language` má tabulkové testy na detekci z přípony i ze jména souboru.
 - **`AppStore` — diff** — proti fake gateway: načtení, cache podle `updatedAt`, opakování
   po selhání a zahození diffu PR, které zmizelo ze seznamu.
+- **`AppStore` — sbalení souborů** — výchozí rozbaleno, přepínání tam a zpět, že sbalení
+  jednoho souboru nesahá na jiné ani na jiné PR, idempotentní rozbalení (na tom stojí skok)
+  a `Rozbalit vše`, které nechá cizí PR být.
 - **`AppStore` — rozbalení kontextu** — že se obsah souboru dotáhne jednou, že selhání
   nenechá po sobě točící se kolečko ani úsek označený za odkrytý, a že sbalení zahodí
   rozsahy, ale načtený obsah nechá.
@@ -1507,6 +1535,10 @@ zůstanou, jak jsou.
 Vyvolání skillu opravené (issue #78) — prompt si o skill říká nástrojem `Skill` výslovně
 a výchozí id je `code-review:code-review`, protože `code-review` skill není. Do té doby se
 skill načetl v 5 ze 14 běhů a model si při neexistujícím jménu domýšlel, co spustit.
+
+Sbalování souborů hotové (issue #59) — klik na hlavičku sbalí a rozbalí diff souboru,
+`Sbalit vše` / `Rozbalit vše` je v horní liště a skok ze stromu i z tabulky nálezů sbalený
+soubor otevře. V hlavičce je odznak s počtem nálezů, červený u blokujících.
 
 Plánované fáze:
 
