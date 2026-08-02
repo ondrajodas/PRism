@@ -230,6 +230,7 @@ final class AppStore {
         do {
             let text = try await gateway.fetchDiff(id: id)
             diffStates[id] = .loaded(DiffParser.parse(text), updatedAt: pullRequest.updatedAt)
+            revealFindingsOutsideTheDiff(for: id)
         } catch is CancellationError {
             // Přepnutí na jiné PR načítání zruší. Nechat tam `.loading` by znamenalo
             // spinner, který se nikdy nedotočí. Maže se **jen** rozdělaný stav: mezitím
@@ -289,31 +290,76 @@ final class AppStore {
             expansions[key] = state
             return
         }
-        guard !state.isLoading else { return }
 
+        // Než obsah dorazí, rozsahy se schovávají stranou. Zahodit ten druhý (dva nálezy
+        // v jednom souboru) by znamenalo bublinu bez kódu, o kterém mluví.
+        state.pending.append(lines)
+        guard !state.isLoading else {
+            expansions[key] = state
+            return
+        }
         state.isLoading = true
         state.failure = nil
         expansions[key] = state
-        Task { [weak self] in await self?.loadFile(key, revealing: lines) }
+        Task { [weak self] in await self?.loadFile(key) }
     }
 
-    private func loadFile(_ key: FileExpansionKey, revealing lines: ClosedRange<Int>) async {
-        var state = expansions[key] ?? FileExpansion()
-        state.isLoading = false
-
+    private func loadFile(_ key: FileExpansionKey) async {
         do {
             let text = try await gateway.fetchFile(id: key.pullRequest, path: key.path)
+            // Stav se čte **až po** awaitu: mezitím mohly přibýt další vyžádané rozsahy.
+            var state = expansions[key] ?? FileExpansion()
+            state.isLoading = false
             state.content = FileExpansion.lines(of: text)
-            state.revealed.reveal(lines)
+            // Rozsahy se ořezávají na skutečnou délku souboru. Reviewer umí nahlásit řádek,
+            // který v souboru není, a odkrytý neexistující řádek by dal kotvu na řádek,
+            // který se nikdy nevykreslí — tedy skok, po kterém se nic nestane.
+            for range in state.pending {
+                guard let clamped = clamp(range, to: state.content.count) else { continue }
+                state.revealed.reveal(clamped)
+            }
+            state.pending = []
+            expansions[key] = state
         } catch is CancellationError {
             // Zrušení není selhání: úsek zůstane skrytý a další kliknutí to zkusí znovu.
-        } catch let error as GitHubError {
-            state.failure = error.userDescription
+            expansions[key]?.isLoading = false
         } catch {
-            state.failure = error.localizedDescription
+            var state = expansions[key] ?? FileExpansion()
+            state.isLoading = false
+            state.pending = []
+            state.failure = (error as? GitHubError)?.userDescription ?? error.localizedDescription
+            expansions[key] = state
         }
-        expansions[key] = state
     }
+
+    /// Dotáhne kód k nálezům, jejichž řádek v diffu není.
+    ///
+    /// Děje se to samo, ne na kliknutí (**změna proti #47**): bublina, která mluví
+    /// o řádku 10, a řádek 10 nikde — to je přesně případ, kdy čekání na kliknutí stojí
+    /// nejvíc. Týká se to jen souborů, kde nález opravdu je, takže se stahuje málo.
+    private func revealFindingsOutsideTheDiff(for pr: PRIdentifier) {
+        guard case .loaded(let diff, _) = diffStates[pr], let record = reviewRecords[pr] else { return }
+
+        for group in Policy.groups(of: record.findings) {
+            guard let path = group.file, let line = group.line,
+                  let file = diff.file(at: path),
+                  // Smazaný soubor ani binárka nový obsah nemají, takže není co stahovat.
+                  file.change != .deleted, !file.isBinary,
+                  !file.showsLine(line)
+            else { continue }
+
+            reveal(max(1, line - Self.findingContext)...(line + Self.findingContext), of: file.displayPath, in: pr)
+        }
+    }
+
+    private func clamp(_ range: ClosedRange<Int>, to length: Int) -> ClosedRange<Int>? {
+        let lower = max(1, range.lowerBound)
+        let upper = min(length, range.upperBound)
+        return lower <= upper ? lower...upper : nil
+    }
+
+    /// Kolik řádků kolem nálezu se dotáhne. Samotný řádek bez okolí se čte špatně.
+    private static let findingContext = 3
 
     // MARK: - Review
 
@@ -496,6 +542,7 @@ final class AppStore {
                 reporter.yield(.finished(skill: run.key.skillID, run.outcome))
                 do {
                     reviewRecords[pr] = try await reviews.save(run)
+                    revealFindingsOutsideTheDiff(for: pr)
                 } catch {
                     // Nezapsaný nález je ztracený nález. Spolknout to by znamenalo, že
                     // řádek po doběhlém review ukazuje „neběželo“ — tedy přesně to, čemu se

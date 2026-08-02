@@ -41,7 +41,9 @@ plné šířky vejde.
 V mezerách mezi hunky jsou **šipky na rozbalení kontextu** — dotáhnou kód, který v diffu
 není, po dvaceti řádcích nebo celý úsek naráz. Obsah souboru se čte z GitHubu až na
 kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi zmizí.
-`Zobrazit jen diff` sbalí všechno zpátky.
+`Zobrazit jen diff` sbalí všechno zpátky. **Kód kolem nálezu, jehož řádek v diffu není,
+se dotáhne sám** — nález bez svého kódu se nedá posoudit. Nahoře v liště je **strom
+souborů** pro skok kamkoli v diffu.
 
 Kód je **obarvený podle jazyka** — vlastní pravidla, žádná externí závislost, paleta
 Darcula v tmavém režimu a IntelliJ Light ve světlém. Barví se řádek po řádku bez paměti,

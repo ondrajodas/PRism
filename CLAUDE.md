@@ -294,6 +294,7 @@ z `GitHubGateway`, tenhle kód mu jen rozumí.
 | `DiffLine` | Druh (`context`/`added`/`removed`/`meta`), stará a nová čísla, text |
 | `DiffRow` | Diff rozbalený na řádky pro vykreslení, včetně bublin nálezů, + `anchor(in:file:line:)` pro skok z nálezu |
 | `DiffState` | Stav načtení per PR: `loading` / `loaded(Diff, updatedAt:)` / `failed` |
+| `FileTreeNode` | Soubory diffu jako strom pro navigaci; slévá složky s jediným potomkem |
 | `DiffExpander` | Skrytý úsek mimo hunky a kroky, kterými se dá odkrýt |
 | `RevealedLines` | Které skryté řádky jsou odkryté; slučuje rozsahy a dělí jimi mezeru |
 | `FileExpansion` | Rozbalování jednoho souboru: odkryté rozsahy, obsah, načítání, chyba |
@@ -603,6 +604,7 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
 | `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume` |
 | `ReviewerChipsView` | Chipy reviewerů: stav a filtr naráz |
+| `FileTreeView` | Popover se stromem souborů; odsazení a sbalování si řídí sám |
 | `VerdictView` | Návrh verdiktu jako **doporučení**; žádná GitHub akce na něm nevisí |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
 
@@ -621,6 +623,11 @@ Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
   kontext (`expansions`).
 - **Rozsah se zapíše jako odkrytý až po načtení obsahu.** Zapsat ho hned by sundalo
   rozbalovací řádek i se spinnerem a zůstalo by po něm prázdno.
+- **Kód kolem nálezu mimo diff se dotáhne sám** (`revealFindingsOutsideTheDiff`), hned po
+  načtení diffu i po doběhnutí běhu. Je to **změna proti #47**: nález, jehož kód není
+  vidět, se nedá posoudit. Smazaný soubor a binárka se přeskočí — nový obsah nemají.
+- **Rozsahy vyžádané během načítání se schovají do `pending`** a použijí, až obsah dorazí.
+  Dva nálezy v jednom souboru by jinak dotáhly kontext jen k prvnímu.
 - **Sbalení kontextu si nechá načtený obsah.** Druhé rozbalení by jinak chodilo po síti
   pro něco, co už jednou dorazilo.
 
@@ -949,6 +956,11 @@ Právě proto tam eskalace na `SIGKILL` je.
   hunky s posunem starých čísel, za posledním s neznámým koncem), že se rozbalený řádek
   chová jako kontext s oběma čísly, že se hlavička po slití hunků sundá a že kotva na
   řádek platí i po rozbalení.
+- **`FileTreeNode`** — slévání složek s jediným potomkem, větvení, pořadí podle diffu,
+  součty na složkách a unikátní identity (`a/x.swift` vs `b/x.swift`).
+- **`AppStore` — dotažení kódu k nálezům** — že se tahá jen u nálezu mimo hunky, že se
+  nesahá na soubor mimo diff ani na nález bez řádku, a že se druhý rozsah vyžádaný během
+  načítání neztratí.
 - **`RevealedLines`** — slučování překrývajících se i **sousedících** rozsahů a dělení
   mezery na skryté a odkryté kusy, včetně odkrytí, které mezeru přesahuje.
 - **`Policy.chips`** — každý stav zvlášť, včetně toho, že nereportující běh ani běh se

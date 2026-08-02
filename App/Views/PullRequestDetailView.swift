@@ -142,11 +142,22 @@ struct PullRequestDetailView: View {
     /// nedá (soubor v diffu není), nestane se nic — skákat naslepo je horší než nehnout se.
     private func jump(to finding: Finding) {
         guard case .loaded(let diff, _) = store.diffState(for: pullRequest.id),
-              let file = finding.file,
-              let anchor = DiffRow.anchor(in: diff, file: file, line: finding.line)
+              let path = finding.file,
+              // Rozbalený kontext je uložený pod **novou** cestou souboru, kdežto nález umí
+              // přijít pod starou. Bez překladu by kotva u přejmenovaného souboru rozbalený
+              // kontext neviděla a skok by spadl na hlavičku.
+              let file = diff.file(at: path),
+              let anchor = DiffRow.anchor(
+                  in: diff,
+                  file: path,
+                  line: finding.line,
+                  revealed: store.expansion(of: file.displayPath, in: pullRequest.id).revealed
+              )
         else { return }
         scrollTarget = anchor
-        highlighted = FindingHighlight(file: file, line: finding.line)
+        // Zvýraznění se porovnává s tím, co nahlásil reviewer, ne s cestou v diffu — bublina
+        // nese jeho `file`, ne `displayPath`.
+        highlighted = FindingHighlight(file: path, line: finding.line)
     }
 
     @ViewBuilder private var diff: some View {

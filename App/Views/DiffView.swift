@@ -19,6 +19,7 @@ struct DiffView: View {
 
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
+    @State private var isPickingFile = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -117,20 +118,21 @@ struct DiffView: View {
         .foregroundStyle(.orange)
     }
 
+    /// Popover se stromem, ne rozbalovací menu: u PR přes třicet souborů je plochý seznam
+    /// cest nepoužitelný a vnořená podmenu se špatně trefují.
     private func jumpMenu(_ proxy: ScrollViewProxy) -> some View {
-        Menu {
-            ForEach(diff.files) { file in
-                Button {
-                    withAnimation { proxy.scrollTo(file.id, anchor: .top) }
-                } label: {
-                    Text(verbatim: "\(file.displayPath)  +\(file.additions) −\(file.deletions)")
-                }
-            }
+        Button {
+            isPickingFile = true
         } label: {
             Label("Přejít na soubor", systemImage: "list.bullet.indent")
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+        .buttonStyle(.borderless)
+        .popover(isPresented: $isPickingFile, arrowEdge: .bottom) {
+            FileTreeView(files: diff.files) { file in
+                isPickingFile = false
+                withAnimation { proxy.scrollTo(file.id, anchor: .top) }
+            }
+        }
     }
 
     private func fileHeader(_ file: FileDiff) -> some View {
