@@ -12,6 +12,11 @@ struct DiffView: View {
     /// Rozbalování kontextu. Bere se ze store, ne z vlastního stavu — jinak by rozbalení
     /// přeteklo z jednoho pull requestu na druhý.
     let expansion: DiffExpansionActions
+    /// Nálezy k zavěšení pod řádky. Seskupené podle místa už volajícím.
+    var findings: [FindingGroup] = []
+
+    /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
+    @AppStorage("showFindingBubbles") private var showBubbles = true
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -20,9 +25,12 @@ struct DiffView: View {
                 Divider()
                 files
             }
+            // Doprostřed, ne na vrch: bublina visí **pod** svým řádkem, takže u horní hrany
+            // by bylo vidět jen ji a kód nad ní ne. Ukotvená hlavička souboru navíc vršek
+            // překrývá, takže by řádek scrollnutý „na vrch“ skončil pod ní.
             .onChange(of: scrollTarget) { _, target in
                 guard let target else { return }
-                withAnimation { proxy.scrollTo(target, anchor: .top) }
+                withAnimation { proxy.scrollTo(target, anchor: .center) }
                 scrollTarget = nil
             }
         }
@@ -48,7 +56,13 @@ struct DiffView: View {
     private func rows(of file: FileDiff) -> some View {
         let state = expansion.state(file)
         let language = Language(path: file.displayPath)
-        return ForEach(DiffRow.rows(of: file, revealed: state.revealed, content: state.content)) { row in
+        let rows = DiffRow.rows(
+            of: file,
+            revealed: state.revealed,
+            content: state.content,
+            findings: showBubbles ? findings : []
+        )
+        return ForEach(rows) { row in
             DiffRowView(
                 row: row,
                 language: language,
@@ -68,6 +82,12 @@ struct DiffView: View {
                 unrecognizedWarning
             }
             Spacer()
+            if !findings.isEmpty {
+                Toggle("Bubliny", isOn: $showBubbles)
+                    .toggleStyle(.checkbox)
+                    .font(.callout)
+                    .help("Zobrazit nálezy u řádků, kterých se týkají")
+            }
             if let collapse = expansion.collapse {
                 Button("Zobrazit jen diff", systemImage: "arrow.down.right.and.arrow.up.left") {
                     collapse()

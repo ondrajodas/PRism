@@ -97,7 +97,12 @@ struct PullRequestDetailView: View {
         case .loaded(let diff, _) where diff.isEmpty:
             placeholder("Diff je prázdný — tenhle pull request nic nemění.")
         case .loaded(let diff, _):
-            DiffView(diff: diff, scrollTarget: $scrollTarget, expansion: expansionActions)
+            DiffView(
+                diff: diff,
+                scrollTarget: $scrollTarget,
+                expansion: expansionActions,
+                findings: Policy.groups(of: store.reviewRecord(for: pullRequest.id)?.findings ?? [])
+            )
         case .failed(let detail):
             diffFailure(detail)
         case .loading, nil:

@@ -46,7 +46,13 @@ kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi
 Kód je **obarvený podle jazyka** — vlastní pravidla, žádná externí závislost, paleta
 Darcula v tmavém režimu a IntelliJ Light ve světlém. Barví se řádek po řádku bez paměti,
 protože diff je útržek: víceřádkový komentář se obarví jen tam, kde začíná. Soubor
-v neznámém jazyce zůstane jednobarevný. Bubliny nálezů přímo u kódu jsou další krok.
+v neznámém jazyce zůstane jednobarevný.
+
+**Nálezy visí jako bubliny u řádků, kterých se týkají** — pill kategorie, verdict, jméno
+revieweru a rozbalitelný scénář selhání; blokující nález má červený pruh. Shodu dvou
+reviewerů na jednom místě označí `2×`, ale jejich texty se neslučují. Nález na řádek, který
+v diffu není, se neztratí: visí u hlavičky souboru a nabídne ten řádek dotáhnout. Bubliny
+jdou vypnout přepínačem nad diffem.
 
 Sada reviewerů je zatím konstanta v kódu; výběr v nastavení přijde s konfigurací.
 

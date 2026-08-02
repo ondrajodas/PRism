@@ -11,6 +11,9 @@ enum DiffRow: Identifiable {
     case line(String, DiffLine)
     /// Skrytý úsek mimo hunky, který se dá dotáhnout.
     case expander(String, DiffExpander)
+    /// Nálezy k řádku nad sebou. `anchored: false` znamená, že řádek v diffu není a
+    /// bublina visí u hlavičky souboru — schovat ji by znamenalo, že ji nikdo neuvidí.
+    case finding(String, FindingGroup, anchored: Bool)
     /// Věta místo obsahu — u binárky nebo u souboru beze změny obsahu.
     case note(String, String)
 
@@ -21,7 +24,8 @@ enum DiffRow: Identifiable {
     /// se identity posunuly a odkaz z nálezu by po rozbalení ukázal jinam.
     var id: String {
         switch self {
-        case .hunk(let id, _), .line(let id, _), .expander(let id, _), .note(let id, _): id
+        case .hunk(let id, _), .line(let id, _), .expander(let id, _), .note(let id, _),
+             .finding(let id, _, _): id
         }
     }
 
@@ -31,10 +35,12 @@ enum DiffRow: Identifiable {
     ///   - revealed: skryté úseky, které si uživatel nechal dotáhnout.
     ///   - content: obsah souboru na hlavě PR, po řádcích. Prázdný, dokud se nenačetl —
     ///     pak se ukazují jen rozbalovací řádky.
+    ///   - findings: nálezy napříč diffem; k tomuhle souboru se z nich vyberou samy.
     static func rows(
         of file: FileDiff,
         revealed: RevealedLines = RevealedLines(),
-        content: [String] = []
+        content: [String] = [],
+        findings: [FindingGroup] = []
     ) -> [DiffRow] {
         if file.isBinary { return [.note(id(of: file, "note"), "Binární soubor — obsah se nezobrazuje.")] }
         if file.hunks.isEmpty { return [.note(id(of: file, "note"), "Beze změny obsahu.")] }
@@ -63,7 +69,7 @@ enum DiffRow: Identifiable {
             }
         }
         rows += expandable ? trailingGapRows(of: file, revealed: revealed, content: content) : []
-        return rows
+        return withBubbles(rows, of: file, findings: findings)
     }
 
     /// Kam v diffu ukazuje nález — id řádku, na který se dá odscrollovat.
@@ -82,6 +88,82 @@ enum DiffRow: Identifiable {
             }
         }
         return file.id
+    }
+
+    // MARK: - Bubliny nálezů
+
+    /// Zavěsí nálezy pod řádky, kterých se týkají.
+    ///
+    /// Dělá se to **nad hotovým seznamem**, ne uvnitř skládání: bublina tak sedne i na
+    /// rozbalený kontext (#47), aniž by o nálezech musela vědět každá větev.
+    ///
+    /// Nález, jehož řádek v diffu **není** (reviewer čte celý pracovní strom, ne jen diff)
+    /// nezmizí — visí u hlavičky souboru a nabídne svůj řádek dotáhnout. Schovat ho by
+    /// znamenalo, že si ho nikdo nepřečte.
+    private static func withBubbles(
+        _ rows: [DiffRow],
+        of file: FileDiff,
+        findings: [FindingGroup]
+    ) -> [DiffRow] {
+        let mine = groups(of: file, from: findings)
+        guard !mine.isEmpty else { return rows }
+
+        let rendered = Set(rows.compactMap { row -> Int? in
+            guard case .line(_, let line) = row else { return nil }
+            return line.newNumber
+        })
+        // Řazení podle řádku: slovník pořadí nemá, takže bez něj by bubliny mezi
+        // překresleními poskakovaly.
+        let unanchored = mine
+            .filter { $0.line.map { !rendered.contains($0) } ?? true }
+            .sorted { ($0.line ?? 0) < ($1.line ?? 0) }
+        let byLine = Dictionary(
+            mine.compactMap { group in group.line.map { ($0, group) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        var result = unanchored.map { group in
+            DiffRow.finding(id(of: file, "u\(group.line.map(String.init) ?? "soubor")"), group, anchored: false)
+        }
+        result.reserveCapacity(rows.count + mine.count)
+        for row in rows {
+            result.append(row)
+            guard case .line(_, let line) = row,
+                  let number = line.newNumber,
+                  let group = byLine[number]
+            else { continue }
+            result.append(.finding(id(of: file, "f\(number)"), group, anchored: true))
+        }
+        return result
+    }
+
+    /// Nálezy, které patří tomuhle souboru.
+    ///
+    /// Soubor se poznává i podle **staré** cesty, stejně jako u skoku z nálezu: reviewer
+    /// může přejmenovaný soubor nahlásit pod tou, kterou měl dřív. Když se pak na jednom
+    /// řádku potkají nálezy z obou cest, **slijí se** — zahodit jeden by byla tichá ztráta.
+    private static func groups(of file: FileDiff, from findings: [FindingGroup]) -> [FindingGroup] {
+        var byLine: [Int: FindingGroup] = [:]
+        var withoutLine: [FindingGroup] = []
+
+        for group in findings {
+            guard let path = group.file, path == file.newPath || path == file.oldPath else { continue }
+            guard let line = group.line else {
+                withoutLine.append(group)
+                continue
+            }
+
+            if let existing = byLine[line] {
+                byLine[line] = FindingGroup(
+                    file: existing.file,
+                    line: line,
+                    findings: existing.findings + group.findings
+                )
+            } else {
+                byLine[line] = group
+            }
+        }
+        return withoutLine + byLine.values
     }
 
     // MARK: - Skryté úseky

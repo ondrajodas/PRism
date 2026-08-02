@@ -292,7 +292,7 @@ z `GitHubGateway`, tenhle kód mu jen rozumí.
 | `FileDiff` | Cesty, druh změny (`added`/`deleted`/`modified`/`renamed`), `isBinary`, hunky |
 | `DiffHunk` | Rozsahy, nadpis sekce za druhým `@@`, řádky |
 | `DiffLine` | Druh (`context`/`added`/`removed`/`meta`), stará a nová čísla, text |
-| `DiffRow` | Diff rozbalený na řádky pro vykreslení + `anchor(in:file:line:)` pro skok z nálezu |
+| `DiffRow` | Diff rozbalený na řádky pro vykreslení, včetně bublin nálezů, + `anchor(in:file:line:)` pro skok z nálezu |
 | `DiffState` | Stav načtení per PR: `loading` / `loaded(Diff, updatedAt:)` / `failed` |
 | `DiffExpander` | Skrytý úsek mimo hunky a kroky, kterými se dá odkrýt |
 | `RevealedLines` | Které skryté řádky jsou odkryté; slučuje rozsahy a dělí jimi mezeru |
@@ -322,6 +322,13 @@ Věci, které se u toho nemají rozbít:
   uprostřed neodděluje nic. Mezera, která nikdy nebyla, hlavičku nechává.
 - **Skryté úseky se počítají v číslech nového souboru**, staré se dopočítá posunem
   (`old = new − shift`), který nadělal předchozí hunk.
+- **Bubliny se zavěšují nad hotovým seznamem řádků**, ne uvnitř skládání. Sednou proto
+  i na rozbalený kontext, aniž by o nich ta větev věděla.
+- **Nález, jehož řádek v diffu není, nezmizí** — vyjde jako bublina s `anchored: false`
+  na začátku souboru. Schovat ho by znamenalo, že si ho nikdo nepřečte; reviewer čte celý
+  pracovní strom, takže mimo diff hlásí běžně.
+- **Nezakotvené bubliny se řadí podle čísla řádku.** Slovník pořadí nemá, takže by jinak
+  mezi překresleními poskakovaly.
 
 ### `App/Syntax/`
 
@@ -587,6 +594,7 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
 | `DiffView` | Diff v plné šířce: souhrn, skokové menu, soubory s ukotvenou hlavičkou |
 | `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek, rozbalovací řádek nebo poznámka |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
+| `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout |
 | `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah obarvený podle jazyka |
 | `FindingsView` | Spodní lišta: návrh verdiktu, počet nálezů a rozbalovací seznam s prokliky do diffu |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
@@ -917,6 +925,10 @@ Právě proto tam eskalace na `SIGKILL` je.
   řádek platí i po rozbalení.
 - **`RevealedLines`** — slučování překrývajících se i **sousedících** rozsahů a dělení
   mezery na skryté a odkryté kusy, včetně odkrytí, které mezeru přesahuje.
+- **Bubliny nálezů** — že bublina visí pod svým řádkem, že nález mimo diff a nález bez
+  řádku skončí u hlavičky souboru (a v pořadí podle čísla řádku), že se po rozbalení
+  kontextu bublina k řádku přesune, že dva reviewery na jednom řádku dají jednu bublinu
+  s `agreement == 2` a že se nálezy cizích souborů nepřipletou.
 - **`SyntaxHighlighter`** — každý test ověřuje i **invariant**, že spojení run dá zpátky
   původní řádek. Pokrývá komentáře (i mřížku jen tam, kde ji jazyk má), řetězce
   s escapovanou uvozovkou i neuzavřené, komentář v řetězci a naopak, klíčová slova jen
@@ -1136,6 +1148,10 @@ na kliknutí a `Zobrazit jen diff` sbalí všechno zpátky.
 
 Obarvení kódu hotové (issue #48) — `App/Syntax/`. Vlastní pravidla bez externí závislosti,
 paleta Darcula / IntelliJ Light podle režimu.
+
+Bubliny nálezů hotové (issue #19) — nález visí u svého řádku, blokující má červený pruh,
+shoda reviewerů odznak `2×`. Nález mimo diff visí u hlavičky souboru a nabídne svůj řádek
+dotáhnout — **změna proti zadání**, viz specifikace.
 
 Plánované fáze:
 
