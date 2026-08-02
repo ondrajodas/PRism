@@ -25,6 +25,8 @@ struct DiffRowView: View {
                 failure: contentFailure,
                 reveal: reveal
             )
+        case .finding(_, let group, let anchored):
+            FindingBubbleView(group: group, isAnchored: anchored, reveal: reveal)
         case .note(_, let text):
             note(text)
         }

@@ -309,6 +309,20 @@ rozbalovací řádky jako na GitHubu.
   nikdy nebyla, zůstává — u prvního hunku je jediné, z čeho se pozná, kde v souboru jsme.
 - **`Zobrazit jen diff`** sbalí všechno zpátky. Ukazuje se jen tehdy, když je co sbalit.
 
+### Bubliny nálezů (#19)
+
+Nález visí u řádku, kterého se týká, jako review komentář u kódu.
+
+- **Bublina pod svým řádkem**: pill kategorie, verdict, jméno revieweru, `summary`
+  a rozbalitelný `failure_scenario`. Blokující nález má červený pruh po straně.
+- **Shoda patří bublině, ne nálezu.** Odznak `2×` je jednou nahoře i se jmény; texty
+  reviewerů jdou pod sebou a **neslučují se**.
+- **Nález, jehož řádek v diffu není, nezmizí** — visí u hlavičky souboru a nabídne svůj
+  řádek dotáhnout. Viz záznam rozhodnutí, je to **změna proti zadání #19**.
+- **Přepínač `Bubliny`** v liště nad diffem; stav se pamatuje mezi spuštěními
+  (`UserDefaults`, ne store — je to předvolba pohledu napříč pull requesty).
+- **Skok z panelu nálezů míří doprostřed okna**, ne na horní hranu.
+
 ### Obarvení kódu (#48)
 
 Vlastní pravidla v `App/Syntax/`, žádná závislost. Komentáře, řetězce, čísla, klíčová
@@ -552,6 +566,10 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Rozsah se zapíše jako odkrytý **až po** načtení obsahu | Zapsat ho hned a obsah doplnit, až dorazí | Jinak zmizí rozbalovací řádek i se spinnerem a zůstane po něm prázdné místo — vypadá to, že se nic nestalo. Ze stejného důvodu `rows(of:)` ignoruje odkryté rozsahy, dokud obsah není: bez něj není co ukázat |
 | Rozbalená mezera **sundá hlavičku hunku** | Nechat hlavičky vždycky | Když se dvě části slijí do jednoho souvislého bloku, hlavička `@@` uprostřed neodděluje nic a mate — přišlo to jako první připomínka při zkoušení. Mezera, která nikdy nebyla, hlavičku nechává |
 | Sbalení si **nechá načtený obsah** | Zahodit ho spolu s rozsahy | Druhé rozbalení by jinak chodilo po síti pro něco, co už jednou dorazilo. Paměť to nestojí nic proti diffu samotnému |
+| Nález mimo diff visí **u hlavičky souboru** a nabídne řádek dotáhnout | Nezobrazovat ho v diffu vůbec a nechat ho jen v tabulce, jak psalo issue #19 | **Změna proti zadání.** Zadání vzniklo dřív než rozbalení kontextu (#47) — a hlavně: reviewer čte celý pracovní strom, takže mimo diff hlásí běžně. Nález, který není vidět, je k ničemu; schovat ho do tabulky znamená spolehnout se, že tam uživatel půjde. Tlačítko dotáhne řádek i tři nad a pod (samotný řádek bez okolí se čte špatně) a bublina se pak přesune ke svému kódu sama, protože se váže na vykreslené řádky |
+| Bubliny se zavěšují **nad hotovým seznamem řádků** | Vkládat je při skládání, uvnitř každé větve | Skládání má čtyři cesty (hunk, mezera, rozbalený kontext, poznámka) a nálezy by musely protéct všemi. Nad hotovým seznamem to je jeden průchod — a bublina díky tomu sedne i na rozbalený kontext, aniž by o ní ta větev věděla |
+| Skok z nálezu míří **doprostřed** okna | Na horní hranu, jako skok na soubor | Bublina visí **pod** svým řádkem, takže u horní hrany by bylo vidět jen ji a kód nad ní ne. Ukotvená hlavička souboru navíc vršek překrývá, takže by řádek scrollnutý na vrch skončil pod ní. Skok na **soubor** na vrchu zůstává — tam je hlavička přesně to, co má být nahoře |
+| Přepínač bublin je v `UserDefaults`, ne ve store | Držet ho v `AppStore` vedle ostatního stavu | Je to předvolba pohledu napříč pull requesty, ne údaj o konkrétním PR — a má přežít restart. Stav ve store se naopak zahazuje s PR, které zmizí ze seznamu |
 | Obarvení kódu **bez externí závislosti** | highlight.js ve `WKWebView` nebo tree-sitter přes SPM | Repozitář zatím žádnou závislost nemá a obojí je velké kladivo na „obarvi mi komentáře a řetězce“. Vlastní pravidla dají osmdesát procent výsledku, nikomu se neupdatují a vejdou se do jednoho souboru s testy. Kdyby to nestačilo, je to místo, kde se závislost dá dodat později |
 | Barví se **řádek po řádku, bez paměti** | Držet stav (otevřený blokový komentář, řetězec) napříč souborem | Diff je útržek: mezi hunky chybí řádky, ze kterých by se stav dopočítal, takže by se barvilo podle textu, který v okně vůbec není. Po rozbalení kontextu (#47) by se navíc barvy měnily pod rukama. Cena je neobarvený vnitřek víceřádkového komentáře — vidět je pořád, jen šedě není |
 | Paleta **Darcula + IntelliJ Light** | Systémové barvy (`.purple`, `.teal`), které se samy přizpůsobí režimu | Systémové barvy byly první verze a fungovaly, ale je to paleta bez původu. Darcula je to, v čem se kód reálně čte, a IntelliJ Light je její **oficiální** protějšek — vlastní „světlá Darcula“ by byla vymyšlená. Daň: Darcula má zelené řetězce, takže na zeleném podbarvení přidaného řádku je zelená na zelené; v provozu čitelné, ale je to nejslabší místo palety |
