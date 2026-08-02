@@ -294,6 +294,9 @@ z `GitHubGateway`, tenhle kód mu jen rozumí.
 | `DiffLine` | Druh (`context`/`added`/`removed`/`meta`), stará a nová čísla, text |
 | `DiffRow` | Diff rozbalený na řádky pro vykreslení + `anchor(in:file:line:)` pro skok z nálezu |
 | `DiffState` | Stav načtení per PR: `loading` / `loaded(Diff, updatedAt:)` / `failed` |
+| `DiffExpander` | Skrytý úsek mimo hunky a kroky, kterými se dá odkrýt |
+| `RevealedLines` | Které skryté řádky jsou odkryté; slučuje rozsahy a dělí jimi mezeru |
+| `FileExpansion` | Rozbalování jednoho souboru: odkryté rozsahy, obsah, načítání, chyba |
 
 Věci, které se u toho nemají rozbít:
 
@@ -310,8 +313,15 @@ Věci, které se u toho nemají rozbít:
   soubor vznikl.
 - **`DiffRow` je jediné místo, které čísluje řádky pro UI.** Skok z nálezu (`anchor`)
   staví na `rows(of:)`, takže se číslování a hledání kotvy nemůžou rozejít.
-- **Identita řádku nese cestu souboru** (`"<file.id>|<index>"`). Pořadí uvnitř souboru
-  by se mezi soubory křížilo a skok by končil jinde.
+- **Identita řádku nese cestu souboru** a **neodvozuje se z pořadí v seznamu**
+  (`"<file.id>|h2l7"`, `"<file.id>|c184"`). Rozbalení kontextu řádky přidává, takže by se
+  poziční identity posunuly a odkaz z nálezu by po rozbalení ukázal jinam.
+- **Dokud obsah souboru nedorazí, nic není odkryté.** `rows(of:)` odkryté rozsahy bez
+  obsahu ignoruje — jinak zmizí rozbalovací řádek i se spinnerem a zůstane po něm prázdno.
+- **Rozbalená mezera sundá hlavičku hunku.** Slité části jdou nepřetržitě za sebou a `@@`
+  uprostřed neodděluje nic. Mezera, která nikdy nebyla, hlavičku nechává.
+- **Skryté úseky se počítají v číslech nového souboru**, staré se dopočítá posunem
+  (`old = new − shift`), který nadělal předchozí hunk.
 
 ### `StreamParser` (`App/Review/`)
 
@@ -547,7 +557,8 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
 | `PullRequestDetailView` | Pravý panel: dvouřádková lišta (titulek, review, stav kopie), pod ní diff a nálezy |
 | `DiffView` | Diff v plné šířce: souhrn, skokové menu, soubory s ukotvenou hlavičkou |
-| `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek nebo poznámka |
+| `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek, rozbalovací řádek nebo poznámka |
+| `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah |
 | `FindingsView` | Spodní lišta: návrh verdiktu, počet nálezů a rozbalovací seznam s prokliky do diffu |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
@@ -563,7 +574,12 @@ Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
 - **Zrušení maže jen rozdělaný stav.** Mezitím spuštěné načtení už mohlo doběhnout a to se
   přepsat nesmí.
 - **Diff PR, které zmizelo ze seznamu, se zahodí** — jsou to megabajty. Rozdělané načítání
-  přežije ze stejného důvodu jako běžící příprava klonu.
+  přežije ze stejného důvodu jako běžící příprava klonu. Totéž platí pro rozbalený
+  kontext (`expansions`).
+- **Rozsah se zapíše jako odkrytý až po načtení obsahu.** Zapsat ho hned by sundalo
+  rozbalovací řádek i se spinnerem a zůstalo by po něm prázdno.
+- **Sbalení kontextu si nechá načtený obsah.** Druhé rozbalení by jinak chodilo po síti
+  pro něco, co už jednou dorazilo.
 
 Věci, na které se u okna naráží:
 
@@ -687,7 +703,7 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchDiff(id:)` |
+| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchDiff(id:)`, `fetchFile(id:path:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhSearchQuery` | Rozdělení search dotazu na argumenty `gh` — čistá funkce |
@@ -716,6 +732,11 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   na rozdíl od `--json` polí, kde si říkáme, co má přijít. Rozumí mu až `DiffParser`.
   Volá se `gh pr diff <n> --repo … --color never`; to `never` je pojistka proti defaultu
   `auto`, který by při zápisu na terminál poslal ANSI escape sekvence.
+- **Obsah souboru se čte přes ref pull requestu**, ne přes `headSha`:
+  `gh api repos/…/contents/<cesta>?ref=refs/pull/<n>/head` s hlavičkou
+  `Accept: application/vnd.github.raw`. Ověřeno na živém API — ten ref má každý PR včetně
+  forků, takže odpadá `gh pr view` jen kvůli SHA. Cesta se procentuje, jinak ji mezera
+  v názvu rozbije.
 - **Tvar `gh` JSONu se nesmí propsat do modelů.** `PullRequest` a `PullRequestSummary` se
   kódují na disk, takže jejich `Codable` popisuje uložený tvar. Dekódují se proto DTO
   a teprve ta se mapují — jinak by změna `gh` měnila formát dat v `ReviewStore`.
@@ -862,8 +883,17 @@ Právě proto tam eskalace na `SIGKILL` je.
   jen práv a nesmysl mezi soubory.
 - **`DiffRow`** — skok z nálezu: na změněný řádek, na soubor u nálezu bez čísla i mimo
   hunky, `nil` u souboru mimo diff, a přejmenovaný soubor nalezený pod starou cestou.
+  Rozbalení kontextu má vlastní sadu: kde skryté úseky jsou (nad prvním hunkem, mezi
+  hunky s posunem starých čísel, za posledním s neznámým koncem), že se rozbalený řádek
+  chová jako kontext s oběma čísly, že se hlavička po slití hunků sundá a že kotva na
+  řádek platí i po rozbalení.
+- **`RevealedLines`** — slučování překrývajících se i **sousedících** rozsahů a dělení
+  mezery na skryté a odkryté kusy, včetně odkrytí, které mezeru přesahuje.
 - **`AppStore` — diff** — proti fake gateway: načtení, cache podle `updatedAt`, opakování
   po selhání a zahození diffu PR, které zmizelo ze seznamu.
+- **`AppStore` — rozbalení kontextu** — že se obsah souboru dotáhne jednou, že selhání
+  nenechá po sobě točící se kolečko ani úsek označený za odkrytý, a že sbalení zahodí
+  rozsahy, ale načtený obsah nechá.
 - **`PollingService`** — proti `FakeGitHubGateway` (odpovědi v pořadí, poslední se opakuje)
   a `FakeTimeSource`. Ten místo čekání zapisuje **požadované délky uspání** — na nich se
   ověřuje backoff — a po zadaném počtu uspání smyčku ukončí `CancellationError`em. Testy
@@ -1065,7 +1095,11 @@ připravit pracovní kopii a uklidit po sobě; chybí jen ten, kdo ji použije.
 Diff view hotový (issue #18) — `App/Diff/` a `DiffView`. Detail PR ukazuje diff v plné
 šířce: soubory pod sebou s ukotvenou hlavičkou, skokové menu, souhrn `N souborů · +X −Y`.
 Nálezy se přestěhovaly do spodní lišty, ze které se dá kliknutím odskočit na `file:line`
-v diffu. Rozbalení kontextu mimo hunk je #47, obarvení kódu #48.
+v diffu.
+
+Rozbalení kontextu hotové (issue #47) — šipkami v mezerách mezi hunky se dotáhne kód,
+který v diffu není. Obsah souboru se čte z GitHubu přes ref pull requestu, načítá se až
+na kliknutí a `Zobrazit jen diff` sbalí všechno zpátky. Zbývá obarvení kódu (#48).
 
 Plánované fáze:
 

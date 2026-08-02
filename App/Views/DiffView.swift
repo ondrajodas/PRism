@@ -9,6 +9,9 @@ struct DiffView: View {
     /// Kam odscrollovat. Nastaví ho panel nálezů; po skoku se vrací na `nil`, aby šlo
     /// na totéž místo skočit i podruhé.
     @Binding var scrollTarget: String?
+    /// Rozbalování kontextu. Bere se ze store, ne z vlastního stavu — jinak by rozbalení
+    /// přeteklo z jednoho pull requestu na druhý.
+    let expansion: DiffExpansionActions
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -32,15 +35,25 @@ struct DiffView: View {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 ForEach(diff.files) { file in
                     Section {
-                        ForEach(DiffRow.rows(of: file)) { row in
-                            DiffRowView(row: row)
-                        }
+                        rows(of: file)
                     } header: {
                         fileHeader(file)
                     }
                     .id(file.id)
                 }
             }
+        }
+    }
+
+    private func rows(of file: FileDiff) -> some View {
+        let state = expansion.state(file)
+        return ForEach(DiffRow.rows(of: file, revealed: state.revealed, content: state.content)) { row in
+            DiffRowView(
+                row: row,
+                isLoadingContent: state.isLoading,
+                contentFailure: state.failure,
+                reveal: { expansion.reveal(file, $0) }
+            )
         }
     }
 
@@ -53,6 +66,13 @@ struct DiffView: View {
                 unrecognizedWarning
             }
             Spacer()
+            if let collapse = expansion.collapse {
+                Button("Zobrazit jen diff", systemImage: "arrow.down.right.and.arrow.up.left") {
+                    collapse()
+                }
+                .font(.callout)
+                .buttonStyle(.borderless)
+            }
             jumpMenu(proxy)
         }
         .padding(.horizontal, 16)

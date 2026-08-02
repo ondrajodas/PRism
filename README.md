@@ -36,7 +36,12 @@ Kliknutím na nález diff odskočí na jeho `file:line`.
 Detail PR ukazuje **diff v plné šířce**: soubory pod sebou s hlavičkou, která při scrollu
 zůstává nahoře, souhrn `N souborů · +X −Y` a menu na skok mezi soubory. Přejmenování, nové,
 smazané i binární soubory jsou označené; dlouhé řádky se zalamují, protože 120 znaků se do
-plné šířky vejde. Bubliny nálezů přímo u kódu jsou další krok.
+plné šířky vejde.
+
+V mezerách mezi hunky jsou **šipky na rozbalení kontextu** — dotáhnou kód, který v diffu
+není, po dvaceti řádcích nebo celý úsek naráz. Obsah souboru se čte z GitHubu až na
+kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi zmizí.
+`Zobrazit jen diff` sbalí všechno zpátky. Bubliny nálezů přímo u kódu jsou další krok.
 
 Sada reviewerů je zatím konstanta v kódu; výběr v nastavení přijde s konfigurací.
 

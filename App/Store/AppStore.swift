@@ -32,6 +32,9 @@ final class AppStore {
     /// Diff **per PR**. Co v mapě není, se ještě nenačítalo.
     private(set) var diffStates: [PRIdentifier: DiffState] = [:]
 
+    /// Rozbalený kontext **per soubor v PR**. Co v mapě není, nikdo nerozbaloval.
+    private(set) var expansions: [FileExpansionKey: FileExpansion] = [:]
+
     /// Kolik uložených souborů s nálezy se nepodařilo přečíst.
     ///
     /// Musí být vidět: rozbitý soubor znamená ztracené nálezy, a ty se nesmí tvářit jako
@@ -241,6 +244,71 @@ final class AppStore {
         return updatedAt == pullRequest.updatedAt
     }
 
+    // MARK: - Rozbalení kontextu
+
+    func expansion(of path: String, in pr: PRIdentifier) -> FileExpansion {
+        expansions[FileExpansionKey(pullRequest: pr, path: path)] ?? FileExpansion()
+    }
+
+    /// Je v diffu vidět něco navíc proti tomu, co poslal `gh`?
+    func hasRevealedLines(in pr: PRIdentifier) -> Bool {
+        expansions.contains { $0.key.pullRequest == pr && !$0.value.revealed.ranges.isEmpty }
+    }
+
+    /// Sbalí všechen rozbalený kontext zpátky na samotný diff.
+    ///
+    /// Načtený obsah souborů si **nechá**: kdyby ho zahodila, druhé rozbalení by znovu
+    /// chodilo po síti pro něco, co už jednou dorazilo.
+    func collapseRevealedLines(in pr: PRIdentifier) {
+        // Zápis do `expansions` uprostřed iterace je bezpečný: slovník je hodnotový typ,
+        // takže smyčka jede přes snapshot pořízený na jejím začátku. Ověřeno spuštěním
+        // (1000 prvků, žádný přeskočený). Podmínka na prázdné rozsahy tu není kvůli
+        // výkonu — zbytečný zápis by hlásil změnu i tam, kde se nic nezměnilo.
+        for (key, expansion) in expansions where key.pullRequest == pr {
+            guard !expansion.revealed.ranges.isEmpty else { continue }
+            expansions[key]?.revealed = RevealedLines()
+        }
+    }
+
+    /// Odkryje skryté řádky souboru. Obsah se dotáhne při prvním rozbalení a pak už se drží.
+    ///
+    /// Rozsah se zapíše **až po** načtení: kdyby se zapsal hned, zmizel by rozbalovací
+    /// řádek i se spinnerem a zůstalo by po něm prázdno.
+    func reveal(_ lines: ClosedRange<Int>, of path: String, in pr: PRIdentifier) {
+        let key = FileExpansionKey(pullRequest: pr, path: path)
+        var state = expansions[key] ?? FileExpansion()
+
+        guard state.content.isEmpty else {
+            state.revealed.reveal(lines)
+            expansions[key] = state
+            return
+        }
+        guard !state.isLoading else { return }
+
+        state.isLoading = true
+        state.failure = nil
+        expansions[key] = state
+        Task { [weak self] in await self?.loadFile(key, revealing: lines) }
+    }
+
+    private func loadFile(_ key: FileExpansionKey, revealing lines: ClosedRange<Int>) async {
+        var state = expansions[key] ?? FileExpansion()
+        state.isLoading = false
+
+        do {
+            let text = try await gateway.fetchFile(id: key.pullRequest, path: key.path)
+            state.content = FileExpansion.lines(of: text)
+            state.revealed.reveal(lines)
+        } catch is CancellationError {
+            // Zrušení není selhání: úsek zůstane skrytý a další kliknutí to zkusí znovu.
+        } catch let error as GitHubError {
+            state.failure = error.userDescription
+        } catch {
+            state.failure = error.localizedDescription
+        }
+        expansions[key] = state
+    }
+
     // MARK: - Review
 
     /// Spustí review vybraného PR. Opakované zmáčknutí, dokud běží, nic nedělá.
@@ -380,5 +448,8 @@ final class AppStore {
         // ho doběhlé volání zapsalo zpátky a v mapě by zůstalo tak jako tak.
         let wantedPullRequests = Set(summaries.map(\.id))
         diffStates = diffStates.filter { wantedPullRequests.contains($0.key) || $0.value == .loading }
+        expansions = expansions.filter {
+            wantedPullRequests.contains($0.key.pullRequest) || $0.value.isLoading
+        }
     }
 }
