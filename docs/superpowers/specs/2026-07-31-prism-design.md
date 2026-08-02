@@ -291,7 +291,8 @@ rozbalovací řádky jako na GitHubu.
   s `Accept: application/vnd.github.raw`. Ověřeno na živém API: ref pull requestu projde,
   takže kvůli SHA není potřeba `gh pr view`. Pracovní kopie se použít nedá — diff se
   ukazuje dřív, než se cokoli klonuje.
-- **Načítá se až na kliknutí** a drží se po souborech. Rozbalení je řídká akce.
+- **Načítá se na kliknutí** a drží se po souborech. **Výjimka:** kód kolem nálezu, jehož
+  řádek v diffu není, se dotáhne sám — viz záznam rozhodnutí.
 - **Skryté úseky se počítají z hunků**, v číslech nového souboru. Staré číslo se dopočítá
   z posunu, který předchozí hunk nadělal (`old = new − shift`), takže rozbalený řádek má
   obě čísla stejně jako každý jiný kontext.
@@ -334,6 +335,17 @@ poznámky k architektuře. Právě kvůli nim nestačí bubliny.
   platí pořadí z `Policy` — tabulka nemá vlastní představu o tom, co patří nahoru.
 - **Nález bez místa má v sloupci `—`.**
 - **Klik na řádek** odscrolluje diff na místo nálezu a jeho bublina se na chvíli zvýrazní.
+
+### Strom souborů (#51)
+
+Navigace po souborech diffu. Plochý seznam cest se u PR přes víc adresářů čte špatně —
+společné prefixy zaberou většinu šířky.
+
+- **Popover se stromem** místo rozbalovacího menu; složky se dají sbalit, výchozí je
+  rozbaleno.
+- **Složky s jediným potomkem se slévají** do jednoho řádku (`App/Views/Diff`).
+- **Pořadí kopíruje diff**, nesetřiďuje se znovu. Uvnitř složky jdou podsložky před soubory.
+- Složka **sčítá `+N −M`** z toho, co je pod ní; u souboru zůstává odznak změny.
 
 ### Chipy reviewerů a verdikt (#21)
 
@@ -603,6 +615,9 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Proklik z nálezu do diffu je už v #18 | Nechat ho na #20 podle rozpisu milníku | Panel nálezů bez odskoku znamená hledat `file:line` očima ve dvou tisících řádcích. Je to jedna čistá funkce (`DiffRow.anchor`) nad řádky, které stejně vznikají — odkládat to znamenalo dvakrát otevírat totéž místo |
 | Nález mimo hunky skočí **na soubor** | Nedělat nic, když se řádek v diffu nenajde | Reviewer čte celý pracovní strom, ne jen diff, takže umí nahlásit řádek, který se nezměnil. Hlavička souboru je nejbližší pravdivé místo; skákat na jiný řádek by lhalo |
 | Cesta ke klonu je **nápověda**, ne řádek v hlavičce | Vypisovat ji pod stavem pracovní kopie | Je to údaj, který se hodí jednou za měsíc, a zabíral pruh přes celou šířku okna. U **selhání** zůstává výpis celý a rozbalený — tam je text od `gitu` to jediné, z čeho se pozná, co dělat |
+| Kód kolem nálezu **mimo diff se dotáhne sám** | Čekat na kliknutí na „Zobrazit ho“, jak rozhodovalo #47 | **Změna proti #47.** Bublina, která mluví o řádku 10, a řádek 10 nikde — to je přesně případ, kdy čekání na kliknutí stojí nejvíc, protože nález bez svého kódu nejde posoudit. Týká se to jen souborů, kde nález opravdu je, takže jde o jednotky stažení i u velkého PR; smazaný soubor a binárka se přeskočí, nový obsah nemají |
+| Strom je **popover**, ne vnořená podmenu | `Menu` s podmenu, jak nabízelo issue #51 | Rozhodnuto nad běžícím PR, jak issue chtělo: u 49 souborů je plochý seznam nepoužitelný a v podmenu se u hlubší struktury špatně míří. Popover unese scroll, sbalování i souhrny |
+| Strom se vykresluje **ručně**, ne přes `OutlineGroup` | Nechat odsazení na `OutlineGroup` | `OutlineGroup` odsazuje jen uvnitř `List`u; v `LazyVStack`u vyjdou všechny úrovně na stejné x a z řádků není poznat, co je pod čím |
 | Obsah souboru přes **ref pull requestu** (`refs/pull/<n>/head`) | Dotáhnout `headSha` přes `gh pr view` a číst soubor podle něj | Ověřeno na živém API, že ten ref projde — ušetří to jedno volání `gh` u každého rozbalení a hlavně odpadá stav navíc (SHA, který by se musel držet a invalidovat). Ten ref má na GitHubu každý PR včetně forků, stejně jako u fetche v `RepoCheckoutu` |
 | Rozsah se zapíše jako odkrytý **až po** načtení obsahu | Zapsat ho hned a obsah doplnit, až dorazí | Jinak zmizí rozbalovací řádek i se spinnerem a zůstane po něm prázdné místo — vypadá to, že se nic nestalo. Ze stejného důvodu `rows(of:)` ignoruje odkryté rozsahy, dokud obsah není: bez něj není co ukázat |
 | Rozbalená mezera **sundá hlavičku hunku** | Nechat hlavičky vždycky | Když se dvě části slijí do jednoho souvislého bloku, hlavička `@@` uprostřed neodděluje nic a mate — přišlo to jako první připomínka při zkoušení. Mezera, která nikdy nebyla, hlavičku nechává |

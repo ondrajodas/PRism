@@ -48,6 +48,33 @@ struct DiffRowTests {
         #expect(DiffRow.anchor(in: diff, file: "CLAUDE.md", line: 99999) == file.id)
     }
 
+    /// Nález mimo hunky si svůj kód dotáhne (#47), takže řádek **je** vykreslený — jako
+    /// rozbalený kontext. Kotva na hlavičku souboru by pak přistála jinde, než kde nález je.
+    @Test("Kotva na rozbaleném řádku ukazuje na ten řádek")
+    func anchorsOnARevealedLine() throws {
+        let diff = try ordinaryDiff()
+        let file = try #require(diff.files.first { $0.displayPath == "CLAUDE.md" })
+        var revealed = RevealedLines()
+        revealed.reveal(100...110)
+
+        let anchor = try #require(DiffRow.anchor(in: diff, file: "CLAUDE.md", line: 105, revealed: revealed))
+
+        let rows = DiffRow.rows(of: file, revealed: revealed, content: (1...600).map { "řádek \($0)" })
+        guard case .line(_, let line) = try #require(rows.first(where: { $0.id == anchor })) else {
+            Issue.record("Kotva má ukazovat na řádek")
+            return
+        }
+        #expect(line.newNumber == 105)
+    }
+
+    @Test("Nerozbalený řádek mimo hunky pořád spadne na soubor")
+    func fallsBackToTheFileWhenTheLineIsNotRevealed() throws {
+        let diff = try ordinaryDiff()
+        let file = try #require(diff.files.first { $0.displayPath == "CLAUDE.md" })
+
+        #expect(DiffRow.anchor(in: diff, file: "CLAUDE.md", line: 105) == file.id)
+    }
+
     @Test("Nález v souboru, který v diffu není, nikam neukazuje")
     func hasNoAnchorForAFileOutsideTheDiff() throws {
         #expect(DiffRow.anchor(in: try ordinaryDiff(), file: "App/Nikde.swift", line: 3) == nil)

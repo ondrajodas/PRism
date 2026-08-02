@@ -143,7 +143,14 @@ struct PullRequestDetailView: View {
     private func jump(to finding: Finding) {
         guard case .loaded(let diff, _) = store.diffState(for: pullRequest.id),
               let file = finding.file,
-              let anchor = DiffRow.anchor(in: diff, file: file, line: finding.line)
+              let anchor = DiffRow.anchor(
+                  in: diff,
+                  file: file,
+                  line: finding.line,
+                  // Nález mimo diff má svůj kód dotažený, takže kotva musí umět mířit
+                  // i na rozbalený kontext, ne jen do hunků.
+                  revealed: store.expansion(of: file, in: pullRequest.id).revealed
+              )
         else { return }
         scrollTarget = anchor
         highlighted = FindingHighlight(file: file, line: finding.line)

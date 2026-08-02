@@ -25,6 +25,12 @@ struct FileDiff: Hashable, Sendable, Identifiable {
     /// Pod jakým jménem soubor v okně vystupuje — po přejmenování pod novým.
     var displayPath: String { newPath ?? oldPath ?? "?" }
 
+    /// Je tenhle řádek nového souboru v některém hunku? Podle toho se pozná nález, ke
+    /// kterému se musí kód teprve dotáhnout.
+    func showsLine(_ line: Int) -> Bool {
+        hunks.contains { hunk in hunk.lines.contains { $0.newNumber == line } }
+    }
+
     var additions: Int { count(of: .added) }
     var deletions: Int { count(of: .removed) }
 

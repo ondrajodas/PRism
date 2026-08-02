@@ -6,6 +6,9 @@ struct FileExpansion: Equatable, Sendable {
     var revealed = RevealedLines()
     /// Obsah souboru na hlavě PR, po řádcích. Prázdný, dokud se nenačetl.
     var content: [String] = []
+    /// Rozsahy vyžádané, **než** dorazil obsah. Bez nich by se druhý nález v témže
+    /// souboru během načítání ztratil.
+    var pending: [ClosedRange<Int>] = []
     var isLoading = false
     /// Proč se obsah nepodařilo načíst. Musí být vidět: bez toho vypadá selhání jako
     /// úsek, ve kterém nic není.

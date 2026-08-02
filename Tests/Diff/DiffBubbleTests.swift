@@ -191,6 +191,31 @@ struct DiffBubbleTests {
         #expect(bubbles(rows).count == 1)
     }
 
+    /// Binárka a soubor beze změny obsahu se vykreslují zkratkou. Nález na nich se ale
+    /// nesmí ztratit — je to přesně ten druh ticha, kvůli kterému by PR vypadal čistý.
+    @Test("Nález na binárním souboru se neztratí")
+    func keepsAFindingOnABinaryFile() throws {
+        let diff = DiffParser.parse(try Fixture.text("gh/pr-diff-binary.diff"))
+        let binary = diff.files.first { $0.isBinary }
+        let file = try #require(binary)
+        let path = try #require(file.displayPath as String?)
+
+        let rows = DiffRow.rows(of: file, findings: Policy.groups(of: [finding(path, 3)]))
+
+        #expect(unanchored(rows).count == 1)
+    }
+
+    @Test("Nález na souboru beze změny obsahu se neztratí")
+    func keepsAFindingOnAFileWithoutHunks() throws {
+        let diff = DiffParser.parse(try Fixture.text("gh/pr-diff-rename.diff"))
+        let file = try #require(diff.files.first { $0.hunks.isEmpty })
+        let path = try #require(file.newPath)
+
+        let rows = DiffRow.rows(of: file, findings: Policy.groups(of: [finding(path, nil)]))
+
+        #expect(unanchored(rows).count == 1)
+    }
+
     @Test("Bez nálezů se nic nemění")
     func changesNothingWithoutFindings() throws {
         let file = try claudeFile()

@@ -42,8 +42,22 @@ enum DiffRow: Identifiable {
         content: [String] = [],
         findings: [FindingGroup] = []
     ) -> [DiffRow] {
-        if file.isBinary { return [.note(id(of: file, "note"), "Binární soubor — obsah se nezobrazuje.")] }
-        if file.hunks.isEmpty { return [.note(id(of: file, "note"), "Beze změny obsahu.")] }
+        // I zkratka projde přes `withBubbles`: nález na binárce nebo na souboru beze změny
+        // obsahu se jinak z diffu ztratí úplně — a tiše zmizelý nález vypadá jako čistý PR.
+        if file.isBinary {
+            return withBubbles(
+                [.note(id(of: file, "note"), "Binární soubor — obsah se nezobrazuje.")],
+                of: file,
+                findings: findings
+            )
+        }
+        if file.hunks.isEmpty {
+            return withBubbles(
+                [.note(id(of: file, "note"), "Beze změny obsahu.")],
+                of: file,
+                findings: findings
+            )
+        }
 
         // Bez obsahu není co odkrývat. Kdyby se úsek přesto tvářil jako odkrytý, zmizel by
         // rozbalovací řádek i se spinnerem a zůstalo by po něm prázdno.
@@ -74,10 +88,18 @@ enum DiffRow: Identifiable {
 
     /// Kam v diffu ukazuje nález — id řádku, na který se dá odscrollovat.
     ///
-    /// Když se řádek najít nedá (nález bez čísla nebo na řádku mimo hunky), vrací se
-    /// **soubor**: reviewer čte celý pracovní strom, ne jen diff, takže umí nahlásit
-    /// řádek, který se nezměnil. Odskočit aspoň na soubor je pořád lepší než nic.
-    static func anchor(in diff: Diff, file path: String, line: Int?) -> String? {
+    /// Hledá se v hunkách i v **rozbaleném kontextu**: nález mimo diff si svůj kód dotáhne
+    /// (#47), takže jeho řádek je vykreslený, jen jinou cestou. Kotva na hlavičku souboru
+    /// by u něj přistála jinde, než kde nález opravdu je.
+    ///
+    /// Když řádek vykreslený není (nález bez čísla nebo nedotažený kontext), vrací se
+    /// **soubor** — odskočit aspoň na něj je pořád lepší než nic.
+    static func anchor(
+        in diff: Diff,
+        file path: String,
+        line: Int?,
+        revealed: RevealedLines = RevealedLines()
+    ) -> String? {
         guard let file = diff.files.first(where: { $0.newPath == path || $0.oldPath == path })
         else { return nil }
         guard let line else { return file.id }
@@ -87,6 +109,7 @@ enum DiffRow: Identifiable {
                 return id(of: file, "h\(index)l\(position)")
             }
         }
+        if revealed.ranges.contains(where: { $0.contains(line) }) { return id(of: file, "c\(line)") }
         return file.id
     }
 
