@@ -323,6 +323,34 @@ Věci, které se u toho nemají rozbít:
 - **Skryté úseky se počítají v číslech nového souboru**, staré se dopočítá posunem
   (`old = new − shift`), který nadělal předchozí hunk.
 
+### `App/Syntax/`
+
+Obarvení kódu v diffu. Čisté funkce, **žádná externí závislost** — vlastní pravidla místo
+highlight.js nebo tree-sitteru.
+
+| Typ | Co je |
+|---|---|
+| `Language` | Pravidla jednoho jazyka: komentáře, uvozovky, sigily proměnných, klíčová slova. `init?(path:)` pozná jazyk z cesty |
+| `SyntaxHighlighter` | Řádek → `[SyntaxRun]`. Stavový průchod po znacích |
+| `SyntaxRun`, `SyntaxKind` | Kus řádku a jeho význam: `plain`, `comment`, `string`, `number`, `keyword`, `variable` |
+| `SyntaxPalette` | Barvy — Darcula pro tmavý režim, IntelliJ Light pro světlý |
+
+Věci, které se u toho nemají rozbít:
+
+- **Spojení run musí dát původní řádek.** Je to invariant ve všech testech: obarvení
+  nesmí text změnit, jinak by se v diffu tiše ztratil znak.
+- **Barví se řádek po řádku, bez paměti.** Blokový komentář přes víc řádků se obarví jen
+  tam, kde začíná. Diff je útržek — mezi hunky chybí řádky, ze kterých by se stav
+  dopočítal.
+- **Neznámý jazyk se nebarví vůbec.** Cizí pravidla vypadají jako náhodné skvrny.
+- **Řetězec je silnější než komentář i proměnná.** `"// tohle není komentář"` je řetězec
+  a `"běží $name"` zůstane jednou hodnotou.
+- **Klíčové slovo musí být celé slovo** (`functional` není `func`) a **číslice uvnitř
+  jména není číslo** (`utf8`).
+- **Proměnné jen tam, kde je poznat sigil** (`$` v PHP a shellu).
+- **Obyčejný text vlastní barvu nemá** — dědí ji z okolí, takže soubor bez rozpoznaného
+  jazyka nevypadá jinak než ten s ním.
+
 ### `StreamParser` (`App/Review/`)
 
 Klíčový spoj: ze `stream-json` výstupu `claude` udělá to, co aplikaci zajímá.
@@ -559,7 +587,7 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
 | `DiffView` | Diff v plné šířce: souhrn, skokové menu, soubory s ukotvenou hlavičkou |
 | `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek, rozbalovací řádek nebo poznámka |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
-| `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah |
+| `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah obarvený podle jazyka |
 | `FindingsView` | Spodní lišta: návrh verdiktu, počet nálezů a rozbalovací seznam s prokliky do diffu |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
 
@@ -889,6 +917,11 @@ Právě proto tam eskalace na `SIGKILL` je.
   řádek platí i po rozbalení.
 - **`RevealedLines`** — slučování překrývajících se i **sousedících** rozsahů a dělení
   mezery na skryté a odkryté kusy, včetně odkrytí, které mezeru přesahuje.
+- **`SyntaxHighlighter`** — každý test ověřuje i **invariant**, že spojení run dá zpátky
+  původní řádek. Pokrývá komentáře (i mřížku jen tam, kde ji jazyk má), řetězce
+  s escapovanou uvozovkou i neuzavřené, komentář v řetězci a naopak, klíčová slova jen
+  jako celá slova, čísla mimo jména, proměnné se sigilem i ve složených závorkách
+  a diakritiku. `Language` má tabulkové testy na detekci z přípony i ze jména souboru.
 - **`AppStore` — diff** — proti fake gateway: načtení, cache podle `updatedAt`, opakování
   po selhání a zahození diffu PR, které zmizelo ze seznamu.
 - **`AppStore` — rozbalení kontextu** — že se obsah souboru dotáhne jednou, že selhání
@@ -1099,7 +1132,10 @@ v diffu.
 
 Rozbalení kontextu hotové (issue #47) — šipkami v mezerách mezi hunky se dotáhne kód,
 který v diffu není. Obsah souboru se čte z GitHubu přes ref pull requestu, načítá se až
-na kliknutí a `Zobrazit jen diff` sbalí všechno zpátky. Zbývá obarvení kódu (#48).
+na kliknutí a `Zobrazit jen diff` sbalí všechno zpátky.
+
+Obarvení kódu hotové (issue #48) — `App/Syntax/`. Vlastní pravidla bez externí závislosti,
+paleta Darcula / IntelliJ Light podle režimu.
 
 Plánované fáze:
 
