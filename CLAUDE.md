@@ -513,9 +513,10 @@ Věci, které se u toho nemají rozbít:
   klonem, takže `git diff` proti base commitu si dotahuje bloby ze sítě — a `-c` z
   `RepoCheckoutu` sem nedosáhne, protože `git` spouští sám reviewer. Ověřené to zatím není;
   potvrdí to až první běh nad privátním repem.
-- **Prompt o jazyku nálezů mlčí a mlčet musí.** Instrukce „piš česky“ v něm stála na
-  skutečném PR dva ze tří nálezů (anglicky tři, česky jeden). Překládá se až po doběhnutí,
-  viz `FindingTranslating` níž. Je na to test, aby se to nevrátilo.
+- **Prompt o jazyku nálezů mlčí a mlčet musí.** Cokoli, co se do něj přidá, může ovlivnit
+  to, co reviewer najde — a ověřit, že neovlivnilo, je drahé: tři běhy nad týmž commitem
+  daly 1, 2 a 3 nálezy, takže rozptyl schová jakýkoli efekt menší než ten. Jazyk se proto
+  řeší až za review, viz `FindingTranslating` níž. Je na to test, aby se to nevrátilo.
 - **Prompt je natvrdo** a skill se vyvolává lomítkem. Konfigurace skillů a modelu je #23.
 
 ### Překlad nálezů (`App/Review/`)
@@ -1473,9 +1474,9 @@ od globální liší, taky mu zapíše. Mapa je ve výchozím stavu prázdná, t
 uživatel nevyplní, detekce na sadu nesahá.
 
 Jazyk nálezů hotový (issue #52) — `FindingsLanguage` v `App/Models/`, volba v konfiguraci
-globálně i per repo. **Překládá se až po doběhnutí běhu**, prompt o jazyku mlčí: měřením se
-ukázalo, že instrukce „piš česky“ stojí dva ze tří nálezů. Změna neplatí zpětně, uložené
-nálezy zůstanou, jak jsou.
+globálně i per repo. **Překládá se až po doběhnutí běhu**, prompt o jazyku mlčí — ten se
+nesmí měnit kvůli něčemu, co je jen na pohled. Změna neplatí zpětně, uložené nálezy
+zůstanou, jak jsou.
 
 Plánované fáze:
 

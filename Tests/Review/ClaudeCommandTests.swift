@@ -74,8 +74,9 @@ struct ClaudeCommandTests {
         #expect(!prompt.contains("  "))
     }
 
-    /// Jazyk nálezů se **do promptu nedostane** — měřením se ukázalo, že instrukce „piš
-    /// česky“ stála dva ze tří nálezů. Překládá se až po doběhnutí, viz `FindingTranslating`.
+    /// Jazyk nálezů se **do promptu nedostane**. Cokoli v něm může ovlivnit to, co reviewer
+    /// najde, a ověřit opak je drahé — překládá se proto až po doběhnutí, viz
+    /// `FindingTranslating`.
     @Test("Prompt reviewerovi jazyk nediktuje")
     func thePromptSaysNothingAboutLanguage() {
         let prompt = ClaudeCommand.prompt(for: request)

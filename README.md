@@ -80,9 +80,9 @@ session smí běžet naráz, rozpočet cache a model. Repozitář si může pře
 **Nálezy chodí česky**, protože okno je české — u firemního repa s mezinárodním týmem se
 dá přepnout na angličtinu, globálně i jen pro to jedno repo. Překládají se **až po
 doběhnutí review**, jednou krátkou session na celý běh; reviewer sám dostane pořád tentýž
-anglický prompt. Měřením se totiž ukázalo, že instrukce „piš nálezy česky“ stojí nálezy:
-na stejném PR dala anglická varianta tři, česká jednu. Originál zůstává uložený vedle
-překladu a když se překlad nepovede, ukáže se prostě anglicky.
+anglický prompt. Je to schválně: instrukce v promptu by kvalitu review ovlivnit mohla,
+překlad po něm nemůže. Originál zůstává uložený vedle překladu a když se překlad nepovede,
+ukáže se prostě anglicky.
 
 Sada skillů se dá navázat na **programovací jazyk**: při review se z obsahu repa pozná,
 čím je psané (`composer.json` a `.php` → PHP, `go.mod` → Go), a odpovídající sada se

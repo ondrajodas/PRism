@@ -235,11 +235,19 @@ restartu; soubor se načte při spuštění a pak pokaždé, když se okno vrát
 **Jazyk nálezů hotový (#52).** `FindingsLanguage` (`cs`/`en`) globálně i per repo.
 
 **Rozhodnutí ze zadání se otočilo.** Issue chtělo říct jazyk reviewerovi v promptu
-a překlad po doběhnutí výslovně zamítalo. Postavené to tak bylo a **měření to vyvrátilo**:
-na skutečném PR dala anglická varianta tři nálezy (stejně jako build před změnou) a česká
-jeden. Za rozdíl nemohla ta věta — anglická varianta ji má taky — ale samotný požadavek psát
-česky. Reviewer má přemýšlet a psát v jazyce, ve kterém je nejsilnější; jazyk je věc
-zobrazení a řeší se až po něm.
+a překlad po doběhnutí výslovně zamítalo. Postavené to tak bylo a při zkoušení se zdálo, že
+to stojí nálezy: česká varianta dala na skutečném PR jeden nález tam, kde anglická tři.
+
+**To přiřazení příčiny ale neuneslo váhu, kterou jsem mu dal**, a je poctivé to tu nechat
+zapsané. Byl to jeden běh na variantu. Když se prompt vrátil na původní znění, dal tentýž
+commit dva nálezy — tedy 1, 2 a 3 přes tři běhy nad stejným kódem. Rozptyl mezi běhy je
+stejně velký jako efekt, který se tomu připisoval, a rozhodnout to doopravdy by chtělo
+několik běhů na variantu.
+
+**Přesto se otočení nechává, protože obstojí i bez toho měření.** Překlad po doběhnutí
+kvalitu review ovlivnit **nemůže konstrukcí** — reviewer dostává tentýž prompt jako
+předtím. Instrukce v promptu ovlivnit může a vyvrátit se to levně nedá. Když je bezpečná
+varianta zadarmo, nemá smysl platit za jistotu u té druhé.
 
 Zamítnutí navíc stálo na přeceněném čísle: „další session na každý nález“ neplatí, překládá
 se celý seznam jednou dávkou, tedy jedno krátké volání na běh.
@@ -698,6 +706,7 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Ruční sada detekci **navždycky umlčí**, i prázdná | Detekovat znovu, když je sada prázdná | Prázdná sada je vlastní odpověď („tady nereviewuj nic“) a přepsat ji odvozenou by znamenalo vracet uživateli jeho rozhodnutí zpátky. `nil` je jediný stav, který znamená „tohle tu nikdo nenastavoval“ |
 | Výchozí mapa jazyků je **prázdná** | Nasadit rovnou `php: [code-review, oj-php-quality-check]`, jak psalo zadání | `oj-php-quality-check` je skill z uživatelovy globální konfigurace, ne z tohohle repa; zadrátovat ho do defaultů aplikace by pustil na repa něco, o co si nikdo neřekl, a rozešel by se s testem „výchozí hodnoty odpovídají konstantám, které nahradily“ |
 | V UI se píše „**programovací** jazyk“, ne jen „jazyk“ | Kratší popisek „Skilly podle jazyka“ | Spletlo se to hned při prvním zkoušení s jazykem, ve kterém reviewer píše nálezy (#52) — a to je otázka, kterou repo řeší taky, takže záměna není hypotetická. Delší popisek je levnější než vysvětlování |
+| Jazyk se řeší **překladem po doběhnutí**, ne instrukcí v promptu | Říct reviewerovi „piš česky“, jak to zadání #52 chtělo | **Změna proti zadání.** Spouštěčem bylo pozorování, že česká varianta dala jeden nález tam, kde anglická tři — ale to přiřazení nevydrželo: po návratu promptu na původní znění dal tentýž commit dva, takže rozptyl mezi běhy je stejně velký jako domnělý efekt. Rozhodnutí drží i tak, jen z jiného důvodu: překlad po doběhnutí kvalitu review ovlivnit **nemůže konstrukcí**, instrukce v promptu může a vyvrátit se to levně nedá. Bezpečná varianta je zadarmo |
 | Jazyk nálezů je **uzavřený výčet** (`cs`/`en`) | Volný řetězec, jako u skillů, kategorií a modelu | Hodnota jde do **anglické věty v promptu** a do **českého popisku v okně**. U volného řetězce by první záviselo na tom, jak ho uživatel napíše (`Czeh` by tiše nefungovalo), a druhé by nešlo ukázat vůbec. Je to jediná volba v konfiguraci, kterou aplikace sama formuluje do věty — proto se u ní vyplatí uzavřít, co jinde zůstává otevřené. Přidat jazyk je jeden case a dva řetězce |
 | Věta o jazyku se posílá **i pro angličtinu** | Poslat ji jen tehdy, když se chce něco jiného než výchozí chování modelu | Reviewer čte pracovní strom, a když je repo dokumentované česky (třeba tenhle), napsal by česky i nálezy na repu, kde se to nechce. Mlčení není volba jazyka, je to hádání — a cena za jistotu je jedna věta |
 | Jazyk žije v sekci **Režim review**, ne mezi hodnotami běhu | Vlastní sekce, nebo přidat k intervalu a rozpočtu | Je to spolu s režimem to, co se u jednotlivých rep mění nejčastěji, a obojí má stejný tvar „globální default, který si repo přebije“. Sedmá sekce v už tak dlouhém formuláři je šum; interval a rozpočet se naopak nastaví jednou za život |

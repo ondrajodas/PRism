@@ -2,10 +2,13 @@ import Foundation
 
 /// Překlad textů nálezů do jazyka z nastavení.
 ///
-/// **Až po doběhnutí review, ne instrukcí v promptu** — a je to změna proti zadání #52,
-/// podložená měřením. Věta „piš nálezy česky“ v promptu stála na skutečném PR dva ze tří
-/// nálezů: anglicky vyšly tři (stejně jako před tou změnou), česky jeden. Reviewer má
-/// přemýšlet a psát v jazyce, ve kterém je nejsilnější; jazyk je věc zobrazení.
+/// **Až po doběhnutí review, ne instrukcí v promptu** — změna proti zadání #52.
+///
+/// Důvod je **zbavit se rizika, ne naměřený rozdíl**. Překlad po doběhnutí kvalitu review
+/// ovlivnit nemůže konstrukcí: reviewer dostává tentýž prompt jako předtím. Instrukce
+/// v promptu ovlivnit může a levně se to nevyvrátí — tři běhy nad týmž commitem daly
+/// 1, 2 a 3 nálezy, takže rozptyl mezi běhy je stejně velký jako efekt, který by se dal
+/// změřit. Bezpečná varianta je zadarmo, tak se vzala.
 ///
 /// Za protokolem ze stejného důvodu jako `ReviewRunning` — a stejně jako on nemá metodu,
 /// kterou by šlo něco odeslat.
