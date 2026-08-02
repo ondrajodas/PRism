@@ -74,8 +74,18 @@ struct PullRequestDetailView: View {
     @ViewBuilder private var content: some View {
         VStack(spacing: 0) {
             diff
-            if let record = store.reviewRecord(for: pullRequest.id) {
-                FindingsPanel(record: record, isExpanded: $findingsExpanded, jump: jump)
+            // Panel se ukáže i **bez** záznamu, jakmile něco běží: při prvním review je
+            // průběh to jediné, co je, a čekat na uložený výsledek by ho schovalo.
+            let timelines = store.timelines(for: pullRequest.id)
+            let record = store.reviewRecord(for: pullRequest.id)
+            if record != nil || !timelines.isEmpty {
+                FindingsPanel(
+                    record: record,
+                    isExpanded: $findingsExpanded,
+                    jump: jump,
+                    timelines: timelines,
+                    isRunning: store.isReviewing(pullRequest.id)
+                )
             }
         }
     }

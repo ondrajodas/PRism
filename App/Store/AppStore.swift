@@ -35,12 +35,17 @@ final class AppStore {
     /// Rozbalený kontext **per soubor v PR**. Co v mapě není, nikdo nerozbaloval.
     private(set) var expansions: [FileExpansionKey: FileExpansion] = [:]
 
+    /// Co reviewery dělaly, per PR. Drží se i po doběhnutí — právě tehdy se k tomu člověk
+    /// vrací. Pořadí kopíruje pořadí, ve kterém běhy začaly.
+    private(set) var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
+
     /// Kolik uložených souborů s nálezy se nepodařilo přečíst.
     ///
     /// Musí být vidět: rozbitý soubor znamená ztracené nálezy, a ty se nesmí tvářit jako
     /// „review neběželo“.
     private(set) var unreadableReviewFiles = 0
 
+    private let time: any TimeSource
     private let polling: PollingService
     private let gateway: any GitHubGateway
     private let checkout: (any RepoCheckout)?
@@ -64,6 +69,7 @@ final class AppStore {
         reviews: ReviewStore? = nil,
         skills: [String] = AppStore.defaultSkills
     ) {
+        self.time = time
         polling = PollingService(gateway: gateway, sources: sources, interval: interval, time: time)
         self.gateway = gateway
         self.checkout = checkout
@@ -322,10 +328,18 @@ final class AppStore {
         reviewTasks[pr]?.cancel()
     }
 
+    /// Časová osa běhů posledního review. Prázdná, dokud se nic nespustilo.
+    func timelines(for pr: PRIdentifier) -> [ReviewerTimeline] {
+        reviewTimelines[pr] ?? []
+    }
+
     private func review(_ pr: PRIdentifier) async {
         defer { reviewTasks[pr] = nil }
         guard let reviewer, let checkout, let reviews else { return }
 
+        // Nový běh začíná s čistou osou — míchat dohromady, co dělaly dva různé běhy, by
+        // z časové osy udělalo nesmysl.
+        reviewTimelines[pr] = []
         reviewPhases[pr] = .preparing
         do {
             // SHA umí dát jen detail — vyhledávání ho nevrací (viz rozhodnutí u #4).
@@ -369,7 +383,72 @@ final class AppStore {
     ) async throws {
         reviewPhases[pr] = .running(finished: 0, total: skills.count)
 
-        let failure: (any Error)? = await withTaskGroup(of: ReviewRun?.self) { group in
+        // Průběh teče přes proud, ne přímo do store: hlásí se ze session, která běží mimo
+        // hlavní vlákno, a **pořadí událostí je to hlavní, co časová osa říká**. Proud ho
+        // drží; hop do vlastního tasku na každou událost by o pořadí nechal rozhodovat
+        // plánovač.
+        let (events, reporter) = AsyncStream<ReviewEvent>.makeStream()
+        async let drained: Void = drain(events, for: pr, in: worktree)
+        let failure = await runSkills(
+            for: pr,
+            of: detail,
+            in: worktree,
+            using: reviewer,
+            saving: reviews,
+            reporting: reporter
+        )
+        reporter.finish()
+        await drained
+
+        if let failure { throw failure }
+    }
+
+    /// Co se v běhu stalo. **Konec běhu jde stejným proudem jako průběh** — jinak by ho
+    /// osa dostala dřív než události, které mu předcházely, a někdy vůbec.
+    private enum ReviewEvent: Sendable {
+        case progress(skill: String, ReviewProgress)
+        case finished(skill: String, ReviewRunOutcome)
+    }
+
+    /// Zapisuje průběh v pořadí, ve kterém dorazil.
+    private func drain(_ events: AsyncStream<ReviewEvent>, for pr: PRIdentifier, in worktree: URL) async {
+        for await event in events {
+            switch event {
+            case .progress(let skill, let progress): record(progress, of: skill, for: pr, in: worktree)
+            case .finished(let skill, let outcome): finish(outcome, of: skill, for: pr)
+            }
+        }
+    }
+
+    private func record(_ progress: ReviewProgress, of skill: String, for pr: PRIdentifier, in worktree: URL) {
+        var timelines = reviewTimelines[pr] ?? []
+        if let index = timelines.firstIndex(where: { $0.skill == skill }) {
+            timelines[index].record(progress, at: time.now)
+        } else {
+            var timeline = ReviewerTimeline(skill: skill, worktree: worktree)
+            timeline.record(progress, at: time.now)
+            timelines.append(timeline)
+        }
+        reviewTimelines[pr] = timelines
+    }
+
+    private func finish(_ outcome: ReviewRunOutcome, of skill: String, for pr: PRIdentifier) {
+        guard var timelines = reviewTimelines[pr],
+              let index = timelines.firstIndex(where: { $0.skill == skill })
+        else { return }
+        timelines[index].finish(outcome, at: time.now)
+        reviewTimelines[pr] = timelines
+    }
+
+    private func runSkills(
+        for pr: PRIdentifier,
+        of detail: PullRequest,
+        in worktree: URL,
+        using reviewer: any ReviewRunning,
+        saving reviews: ReviewStore,
+        reporting reporter: AsyncStream<ReviewEvent>.Continuation
+    ) async -> (any Error)? {
+        await withTaskGroup(of: ReviewRun?.self) { group in
             for skill in skills {
                 let request = ReviewRequest(
                     key: ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill),
@@ -382,7 +461,7 @@ final class AppStore {
                 // na `failed`, kde je vidět.
                 group.addTask {
                     do {
-                        return try await reviewer.run(request)
+                        return try await reviewer.run(request) { reporter.yield(.progress(skill: skill, $0)) }
                     } catch is CancellationError {
                         return nil
                     } catch {
@@ -401,6 +480,7 @@ final class AppStore {
                 finished += 1
                 reviewPhases[pr] = .running(finished: finished, total: skills.count)
                 guard let run, !Task.isCancelled else { continue }
+                reporter.yield(.finished(skill: run.key.skillID, run.outcome))
                 do {
                     reviewRecords[pr] = try await reviews.save(run)
                 } catch {
@@ -413,8 +493,6 @@ final class AppStore {
             }
             return saveFailure
         }
-
-        if let failure { throw failure }
     }
 
     /// Srovná stav pracovní kopie podle disku.
@@ -450,6 +528,11 @@ final class AppStore {
         diffStates = diffStates.filter { wantedPullRequests.contains($0.key) || $0.value == .loading }
         expansions = expansions.filter {
             wantedPullRequests.contains($0.key.pullRequest) || $0.value.isLoading
+        }
+        // Běžící review si osu drží: `reviewTasks` je pravda o tom, co ještě běží, a jeho
+        // události by se jinak zapisovaly do mapy, ze které je někdo právě vyhodil.
+        reviewTimelines = reviewTimelines.filter {
+            wantedPullRequests.contains($0.key) || reviewTasks[$0.key] != nil
         }
     }
 }

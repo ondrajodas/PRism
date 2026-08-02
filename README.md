@@ -60,6 +60,11 @@ v kódu** — chybějící testy nebo poznámky k architektuře; kvůli nim samo
 nestačí. Klik na řádek odscrolluje diff a bublinu na chvíli zvýrazní. Výška panelu se
 táhne za horní hranu a pamatuje se.
 
+V tabu **Průběh** běží časová osa toho, co reviewer právě dělá — který soubor čte, co
+hledá, jaký příkaz spustil. Skládá se nativně z eventů, ne přeposíláním textu, takže
+aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vrátit, zkopíruje
+se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí běhu.
+
 Sada reviewerů je zatím konstanta v kódu; výběr v nastavení přijde s konfigurací.
 
 Pod tím vším je vlastní cache repozitářů: bare partial clone do

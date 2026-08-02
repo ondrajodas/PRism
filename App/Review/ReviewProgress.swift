@@ -10,7 +10,7 @@ enum ReviewProgress: Sendable, Equatable {
     /// Session naběhla; `sessionID` drží cestu k `claude --resume`.
     case started(sessionID: String)
     /// Reviewer si řekl o nástroj. **Pokus, ne použití** — odmítnutý nástroj je tu taky.
-    case attemptedTool(String)
+    case attemptedTool(ToolAttempt)
     /// Kolik nálezů zatím dorazilo.
     case findings(count: Int)
 }
