@@ -10,6 +10,8 @@ struct FindingBubbleView: View {
     /// ten řádek dotáhnout.
     var isAnchored = true
     var reveal: ((ClosedRange<Int>) -> Void)?
+    /// Skočilo se sem právě z tabulky? Samotný scroll nepoví, kam mířil.
+    var isHighlighted = false
 
     /// Kolik řádků kolem nálezu se ukáže, když si o to uživatel řekne. Samotný řádek bez
     /// okolí se čte špatně.
@@ -29,6 +31,11 @@ struct FindingBubbleView: View {
         .background(background, in: .rect(cornerRadius: 8))
         .overlay(alignment: .leading) { accent }
         .clipShape(.rect(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(.tint, lineWidth: isHighlighted ? 2 : 0)
+        }
+        .animation(.easeOut(duration: 0.2), value: isHighlighted)
         .padding(.leading, 104)   // odsazení do sloupce s obsahem, vedle čísel řádků
         .padding(.trailing, 16)
         .padding(.vertical, 4)

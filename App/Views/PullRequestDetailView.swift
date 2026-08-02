@@ -16,6 +16,10 @@ struct PullRequestDetailView: View {
     /// Řádek diffu, na který se má odscrollovat po kliknutí na nález.
     @State private var scrollTarget: String?
 
+    /// Místo, na které se právě skočilo. Zvýraznění po chvíli zhasne — trvalý rámeček by
+    /// se pletl s blokujícím nálezem.
+    @State private var highlighted: FindingHighlight?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             controls
@@ -23,6 +27,12 @@ struct PullRequestDetailView: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .task(id: highlighted) {
+            guard highlighted != nil else { return }
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            highlighted = nil
+        }
         // Klon je jeden pro celé repo, takže druhé PR ze stejného repa může mít hotovo,
         // aniž by o tom kdo řekl. Zjistí se to při výběru řádku, ne klonováním.
         .task(id: pullRequest.id) { await store.noteExistingCheckout(for: pullRequest.id) }
@@ -65,7 +75,7 @@ struct PullRequestDetailView: View {
         VStack(spacing: 0) {
             diff
             if let record = store.reviewRecord(for: pullRequest.id) {
-                FindingsView(record: record, isExpanded: $findingsExpanded, jump: jump)
+                FindingsPanel(record: record, isExpanded: $findingsExpanded, jump: jump)
             }
         }
     }
@@ -90,6 +100,7 @@ struct PullRequestDetailView: View {
               let anchor = DiffRow.anchor(in: diff, file: file, line: finding.line)
         else { return }
         scrollTarget = anchor
+        highlighted = FindingHighlight(file: file, line: finding.line)
     }
 
     @ViewBuilder private var diff: some View {
@@ -101,7 +112,8 @@ struct PullRequestDetailView: View {
                 diff: diff,
                 scrollTarget: $scrollTarget,
                 expansion: expansionActions,
-                findings: Policy.groups(of: store.reviewRecord(for: pullRequest.id)?.findings ?? [])
+                findings: Policy.groups(of: store.reviewRecord(for: pullRequest.id)?.findings ?? []),
+                highlighted: highlighted
             )
         case .failed(let detail):
             diffFailure(detail)

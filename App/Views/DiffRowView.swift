@@ -11,6 +11,8 @@ struct DiffRowView: View {
     /// Proč se obsah souboru nepodařilo načíst.
     var contentFailure: String?
     var reveal: (ClosedRange<Int>) -> Void = { _ in }
+    /// Místo, na které se právě skočilo z tabulky.
+    var highlighted: FindingHighlight?
 
     var body: some View {
         switch row {
@@ -26,7 +28,12 @@ struct DiffRowView: View {
                 reveal: reveal
             )
         case .finding(_, let group, let anchored):
-            FindingBubbleView(group: group, isAnchored: anchored, reveal: reveal)
+            FindingBubbleView(
+                group: group,
+                isAnchored: anchored,
+                reveal: reveal,
+                isHighlighted: highlighted?.matches(group) ?? false
+            )
         case .note(_, let text):
             note(text)
         }
