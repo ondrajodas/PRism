@@ -75,6 +75,18 @@ struct DiffRowTests {
         #expect(DiffRow.anchor(in: diff, file: "CLAUDE.md", line: 105) == file.id)
     }
 
+    /// Soubor se hledá podle **obou** cest. Přejmenovaný soubor umí reviewer nahlásit pod
+    /// tou starou a expanze se přitom klíčují novou — bez jednoho místa na překlad se ty
+    /// dvě věci rozejdou.
+    @Test("Soubor se najde podle nové i staré cesty")
+    func findsAFileByEitherPath() throws {
+        let diff = DiffParser.parse(try Fixture.text("gh/pr-diff-rename.diff"))
+
+        #expect(diff.file(at: "App/PRismApp.swift")?.newPath == "App/PRismApp.swift")
+        #expect(diff.file(at: "App/PRReviewApp.swift")?.newPath == "App/PRismApp.swift")
+        #expect(diff.file(at: "nikde/neni.swift") == nil)
+    }
+
     @Test("Nález v souboru, který v diffu není, nikam neukazuje")
     func hasNoAnchorForAFileOutsideTheDiff() throws {
         #expect(DiffRow.anchor(in: try ordinaryDiff(), file: "App/Nikde.swift", line: 3) == nil)

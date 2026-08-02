@@ -100,8 +100,7 @@ enum DiffRow: Identifiable {
         line: Int?,
         revealed: RevealedLines = RevealedLines()
     ) -> String? {
-        guard let file = diff.files.first(where: { $0.newPath == path || $0.oldPath == path })
-        else { return nil }
+        guard let file = diff.file(at: path) else { return nil }
         guard let line else { return file.id }
 
         for (index, hunk) in file.hunks.enumerated() {

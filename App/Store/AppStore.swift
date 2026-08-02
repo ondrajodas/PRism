@@ -311,7 +311,13 @@ final class AppStore {
             var state = expansions[key] ?? FileExpansion()
             state.isLoading = false
             state.content = FileExpansion.lines(of: text)
-            for range in state.pending { state.revealed.reveal(range) }
+            // Rozsahy se ořezávají na skutečnou délku souboru. Reviewer umí nahlásit řádek,
+            // který v souboru není, a odkrytý neexistující řádek by dal kotvu na řádek,
+            // který se nikdy nevykreslí — tedy skok, po kterém se nic nestane.
+            for range in state.pending {
+                guard let clamped = clamp(range, to: state.content.count) else { continue }
+                state.revealed.reveal(clamped)
+            }
             state.pending = []
             expansions[key] = state
         } catch is CancellationError {
@@ -336,7 +342,7 @@ final class AppStore {
 
         for group in Policy.groups(of: record.findings) {
             guard let path = group.file, let line = group.line,
-                  let file = diff.files.first(where: { $0.newPath == path || $0.oldPath == path }),
+                  let file = diff.file(at: path),
                   // Smazaný soubor ani binárka nový obsah nemají, takže není co stahovat.
                   file.change != .deleted, !file.isBinary,
                   !file.showsLine(line)
@@ -344,6 +350,12 @@ final class AppStore {
 
             reveal(max(1, line - Self.findingContext)...(line + Self.findingContext), of: file.displayPath, in: pr)
         }
+    }
+
+    private func clamp(_ range: ClosedRange<Int>, to length: Int) -> ClosedRange<Int>? {
+        let lower = max(1, range.lowerBound)
+        let upper = min(length, range.upperBound)
+        return lower <= upper ? lower...upper : nil
     }
 
     /// Kolik řádků kolem nálezu se dotáhne. Samotný řádek bez okolí se čte špatně.

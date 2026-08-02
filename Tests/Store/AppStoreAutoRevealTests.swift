@@ -153,6 +153,28 @@ struct AppStoreAutoRevealTests {
         #expect(gateway.fileRequests.isEmpty)
     }
 
+    /// Reviewer umí nahlásit řádek, který v souboru není. Odkrýt ho by znamenalo kotvu na
+    /// řádek, který se nikdy nevykreslí — tedy skok, po kterém se nic nestane.
+    @Test("Řádek za koncem souboru se neodkryje")
+    func neverRevealsALineBeyondTheEndOfTheFile() async throws {
+        let gateway = FakeGitHubGateway(
+            always: .success([]),
+            detail: .success(detail()),
+            diffs: [.success(diff)],
+            files: [.success((1...20).map { "řádek \($0)" }.joined(separator: "\n"))]
+        )
+        let store = try store(gateway, reporting: [finding(line: 9999)])
+        await runReview(store)
+
+        await store.loadDiff(for: summary())
+        for _ in 0..<400 where store.expansion(of: "App/Main.swift", in: pr).content.isEmpty {
+            await Task.yield()
+        }
+
+        let revealed = store.expansion(of: "App/Main.swift", in: pr).revealed
+        #expect(!revealed.ranges.contains { $0.contains(9999) })
+    }
+
     /// Dva nálezy v jednom souboru spustí načtení jednou — a **oba** rozsahy musí přežít.
     @Test("Druhý nález se během načítání neztratí")
     func keepsTheSecondRangeRequestedWhileLoading() async throws {
