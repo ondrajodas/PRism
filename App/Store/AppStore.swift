@@ -63,6 +63,7 @@ final class AppStore {
     private let checkout: (any RepoCheckout)?
     private let reviewer: (any ReviewRunning)?
     private let reviews: ReviewStore?
+    private let translator: (any FindingTranslating)?
     private let configStore: ConfigStore?
     /// Běžící review podle PR — drží se kvůli zrušení.
     private var reviewTasks: [PRIdentifier: Task<Void, Never>] = [:]
@@ -75,7 +76,8 @@ final class AppStore {
         eviction: CacheEviction? = nil,
         checkout: (any RepoCheckout)? = nil,
         reviewer: (any ReviewRunning)? = nil,
-        reviews: ReviewStore? = nil
+        reviews: ReviewStore? = nil,
+        translator: (any FindingTranslating)? = nil
     ) {
         self.time = time
         self.configuration = configuration
@@ -90,6 +92,7 @@ final class AppStore {
         self.checkout = checkout
         self.reviewer = reviewer
         self.reviews = reviews
+        self.translator = translator
         polling.afterSuccessfulTick = { [weak self] summaries in
             await self?.forget(whatIsNotIn: summaries)
             // `busy` se nepředává jako snímek, ale jako dotaz: eviction je dlouhá disková
@@ -131,7 +134,8 @@ final class AppStore {
                 maxConcurrent: { box.value.global.maxConcurrentReviews },
                 model: { box.value.global.model }
             ),
-            reviews: ReviewStore()
+            reviews: ReviewStore(),
+            translator: ClaudeFindingTranslator(claude: toolPaths.claude, runner: runner)
         )
         self.configurationBox = box
     }
@@ -649,11 +653,7 @@ final class AppStore {
                 let request = ReviewRequest(
                     key: ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill),
                     worktree: worktree,
-                    baseSha: detail.baseSha,
-                    // Čte se **teď**, ne při startu: přepnutí jazyka se má projevit na
-                    // dalším běhu bez restartu. Uložené nálezy zůstanou v jazyce, ve
-                    // kterém vznikly — přepsat by je šlo jedině novým během.
-                    findingsLanguage: resolved(for: pr.repo).findingsLanguage
+                    baseSha: detail.baseSha
                 )
                 // Protokol slibuje, že selhání session se vrací jako výsledek a vyhodí se
                 // jen zrušení — ale spolehnout se na to znamená, že jakákoli jiná chyba
@@ -682,8 +682,14 @@ final class AppStore {
                 guard let run, !Task.isCancelled else { continue }
                 reporter.yield(.finished(skill: run.key.skillID, run.outcome))
                 do {
+                    // Ukládá se **před** překladem: ten je krátká síťová operace navíc
+                    // a když se na ní aplikace zavře, nálezy už jsou na disku. V originále,
+                    // ale jsou — což je přesně to, co pravidlo „co doběhlo, zůstane“ chce.
                     reviewRecords[pr] = try await reviews.save(run)
                     revealFindingsOutsideTheDiff(for: pr)
+                    if let translated = await translated(run, for: pr.repo) {
+                        reviewRecords[pr] = try await reviews.save(translated)
+                    }
                 } catch {
                     // Nezapsaný nález je ztracený nález. Spolknout to by znamenalo, že
                     // řádek po doběhlém review ukazuje „neběželo“ — tedy přesně to, čemu se
@@ -694,6 +700,31 @@ final class AppStore {
             }
             return saveFailure
         }
+    }
+
+    /// Doplní běhu překlady nálezů. `nil` = není co ukládat znovu.
+    ///
+    /// Jazyk se čte **teď**, ne při startu, takže se přepnutí projeví na dalším běhu.
+    /// Zpětně neplatí: uložené nálezy zůstanou v jazyce, ve kterém se uložily.
+    private func translated(_ run: ReviewRun, for repo: RepoID) async -> ReviewRun? {
+        guard let translator, !run.summary.findings.isEmpty else { return nil }
+        // Zrušené review nemá utrácet session za překlad. Nálezy jsou v tu chvíli uložené
+        // v originále, takže se nic neztrácí — jen se nepřekládá to, co si nikdo nevyžádal.
+        guard !Task.isCancelled else { return nil }
+        // Angličtina se nepřekládá — reviewer v ní píše sám od sebe (ověřeno na skutečných
+        // bězích). Volat kvůli tomu model by byla session za nic.
+        let language = resolved(for: repo).findingsLanguage
+        guard language != .english else { return nil }
+
+        // Selhání překladu review nepoloží: nálezy jsou uložené a v originále čitelné.
+        // Že jsou anglicky, je vidět na první pohled — mlčení tu nic neschovává.
+        guard let translations = try? await translator.translate(run.summary.findings, to: language),
+              translations.contains(where: { $0 != nil })
+        else { return nil }
+
+        var translated = run
+        translated.translations = translations
+        return translated
     }
 
     /// Srovná stav pracovní kopie podle disku.

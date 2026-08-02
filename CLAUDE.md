@@ -264,6 +264,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ReviewVerdict` | Návrh, co s PR udělat: `approve` / `requestChanges`. Jako jediný **není `Codable`** — neukládá se, odvozuje se z uložených nálezů |
 | `ProjectLanguage` | Čím je repo psané — klíč mapy „jazyk → sada skillů“. **Není to `Syntax.Language`**, viz níž |
 | `FindingsLanguage` | Jazyk prózy v nálezech (`cs`/`en`). Ani tohle **není `ProjectLanguage`** |
+| `FindingTranslation` | Přeložená próza nálezu. Visí vedle originálu, nepřepisuje ho |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -512,17 +513,49 @@ Věci, které se u toho nemají rozbít:
   klonem, takže `git diff` proti base commitu si dotahuje bloby ze sítě — a `-c` z
   `RepoCheckoutu` sem nedosáhne, protože `git` spouští sám reviewer. Ověřené to zatím není;
   potvrdí to až první běh nad privátním repem.
-- **Jazyk nálezů se říká reviewerovi, nepřekládá se po něm.** Překlad po doběhnutí je další
-  session na každý nález, další cena a další místo, kde se text může rozejít s tím, co
-  reviewer opravdu tvrdil. Věta jde do promptu **i pro angličtinu**: reviewer čte pracovní
-  strom, a když je repo dokumentované česky, napsal by česky i nálezy tam, kde se to
-  nechce — mlčení není volba jazyka, je to hádání.
-- **`category` zůstává anglicky, i když je zbytek česky.** Je to slug, na který se váže
-  blokující sada (`correctness`, `security`, `data-loss`); přeložený by v `Policy` přestal
-  sedět a nález se ztrátou dat by přestal blokovat. Prompt si o to říká výslovně.
-- **Změna jazyka neplatí zpětně.** Čte se při skládání `ReviewRequest`, takže se projeví na
-  dalším běhu; uložené nálezy zůstanou v jazyce, ve kterém vznikly.
+- **Prompt o jazyku nálezů mlčí a mlčet musí.** Instrukce „piš česky“ v něm stála na
+  skutečném PR dva ze tří nálezů (anglicky tři, česky jeden). Překládá se až po doběhnutí,
+  viz `FindingTranslating` níž. Je na to test, aby se to nevrátilo.
 - **Prompt je natvrdo** a skill se vyvolává lomítkem. Konfigurace skillů a modelu je #23.
+
+### Překlad nálezů (`App/Review/`)
+
+Nálezy se do jazyka z nastavení překládají **až po doběhnutí review**, ne instrukcí
+v promptu.
+
+| Typ | Co je |
+|---|---|
+| `FindingTranslating` | Protokol: `translate(_:to:)`. Stejně jako `ReviewRunning` nemá nic, čím by šlo něco odeslat |
+| `ClaudeFindingTranslator` | Jedna krátká `claude -p` session na celý běh |
+| `TranslationCommand` | Čisté funkce: argumenty, prompt, defenzivní čtení odpovědi |
+| `FindingTranslation` | Přeložená próza — `summary`, `shortSummary`, `failureScenario` |
+
+Věci, které se u toho nemají rozbít:
+
+- **Překlad nesmí ztratit nález.** Vrací se pole zarovnané se vstupem, `nil` na místě
+  znamená nepřeloženo. Nepřeložený nález se ukáže v originále; chybějící by v UI vypadal
+  jako neexistující, tedy jako schválený PR s neohlášenou chybou.
+- **Páruje se podle `id`, ne podle pořadí.** Model, který jednu položku vynechá nebo
+  prohodí, by u pozičního párování přiřadil překlady cizím nálezům. `id` mimo rozsah se
+  zahazuje ze stejného důvodu.
+- **Odpověď se čte defenzivně (`JSONSerialization`), ne přes `Codable`.** Je to volný text
+  od modelu, ne dohodnutý formát: chodí obalený v ```-blocích, s větou navíc, nebo úplně
+  jinak. Vykrojí se první `[` až poslední `]`.
+- **Selhání překladu není selhání review.** Nálezy dorazily a jsou uložené; nenulový exit
+  ani nesmyslná odpověď nesmí položit běh. Že jsou anglicky, je vidět na první pohled —
+  mlčení tu nic neschovává.
+- **Ukládá se dvakrát: originál hned, překlad po něm.** Kdyby se čekalo na překlad, zavření
+  aplikace uprostřed by nálezy zahodilo — a „co doběhlo, zůstane“ je pravidlo, které je
+  starší než překlad.
+- **Angličtina se nepřekládá.** Reviewer v ní píše sám od sebe (ověřeno na skutečných
+  bězích), takže by to byla session za nic.
+- **Překladač nedostane jediný nástroj.** Je to transformace textu; session, která nemůže
+  nic spustit, nemůže ani omylem sáhnout na repozitář. Zákazy zůstávají jako pojistka.
+- **`category` se nepřekládá, protože se neposílá.** Do promptu jde jen próza — nabídnout
+  modelu slug znamená riskovat, že ho změní, a na něm stojí blokující sada.
+- **Překlad je zobrazení, ne tvrzení.** `Finding.reported` zůstává tím, co poslal reviewer;
+  překlad visí vedle a texty se skládají **po polích** (`translation?.summary ?? reported.summary`).
+  Kdyby překladateli jedno pole vypadlo, je jeden anglický řádek lepší než chybějící text.
 
 ### `App/Support/`
 
@@ -1191,8 +1224,14 @@ Právě proto tam eskalace na `SIGKILL` je.
   nesmaže jako „shodný s globálním“ a že se rozbitá hodnota srazí na `manual`, kdežto
   chybějící klíč vezme globální.
 - **Jazyk nálezů** — u konfigurace výchozí čeština, override per repo a to, že se vlastní
-  hodnota nesmaže jako shodná s globální (stejná past jako u režimu); u promptu že se věta
-  posílá pro **oba** jazyky a že si výslovně říká o anglickou `category`.
+  hodnota nesmaže jako shodná s globální (stejná past jako u režimu). U promptu naopak to,
+  že o jazyku **mlčí** — kdyby se to vrátilo, stálo by to nálezy.
+- **Překlad** — `TranslationCommand` na každou podobu nesmyslu, kterou model umí vrátit:
+  prohozená `id`, `id` mimo rozsah, chybějící položka, code fence, prázdno, položka bez
+  `summary`. `ClaudeFindingTranslator` proti fake procesu na to, že nenulový exit ani
+  rozbitá odpověď nevyhodí chybu. `AppStore` na celou cestu: přeložené nálezy na disku
+  i po restartu, angličtina bez volání, čisté review bez volání, selhaný překlad
+  s originály a — to hlavní — **nepřeložený nález, který nesmí zmizet vedle přeložených**.
 - **`Policy.projectLanguages`** — jednojazyčné projekty (PHP, Go, TS, Swift), smíšený
   s pořadím podle váhy, zatoulaný soubor pod prahem, marker bez souborů, prázdný repozitář
   a repozitář bez zdrojáků. Plus to, co se snadno rozbije: že samotný `package.json`
@@ -1434,8 +1473,9 @@ od globální liší, taky mu zapíše. Mapa je ve výchozím stavu prázdná, t
 uživatel nevyplní, detekce na sadu nesahá.
 
 Jazyk nálezů hotový (issue #52) — `FindingsLanguage` v `App/Models/`, volba v konfiguraci
-globálně i per repo. Jde do promptu headless session, nepřekládá se po doběhnutí;
-`category` zůstává anglicky a změna neplatí zpětně.
+globálně i per repo. **Překládá se až po doběhnutí běhu**, prompt o jazyku mlčí: měřením se
+ukázalo, že instrukce „piš česky“ stojí dva ze tří nálezů. Změna neplatí zpětně, uložené
+nálezy zůstanou, jak jsou.
 
 Plánované fáze:
 

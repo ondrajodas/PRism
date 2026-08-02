@@ -6,11 +6,25 @@ struct ReviewRun: Sendable, Equatable {
     /// Co vypadlo ze streamu — nálezy, session id, pokusy o nástroje, počty nepřečteného.
     let summary: StreamSummary
     let outcome: ReviewRunOutcome
+    /// Překlady nálezů do jazyka z nastavení, **zarovnané se `summary.findings`**. Prázdné,
+    /// dokud se nepřekládalo; `nil` na místě znamená nález, který se přeložit nepodařilo.
+    ///
+    /// Sedí tady, ne v `StreamSummary`: ta je obrazem toho, co reviewer poslal, a překlad
+    /// vzniká až po něm.
+    var translations: [FindingTranslation?] = []
 
-    /// Nálezy doplněné o to, co ví jen aplikace: **kdo** je našel a **proti čemu**.
+    /// Nálezy doplněné o to, co ví jen aplikace: **kdo** je našel, **proti čemu** a jak se
+    /// jejich texty čtou v nastaveném jazyce.
     var findings: [Finding] {
-        summary.findings.map {
-            Finding(reported: $0, reviewer: key.skillID, headSha: key.headSha)
+        summary.findings.enumerated().map { index, reported in
+            Finding(
+                reported: reported,
+                reviewer: key.skillID,
+                headSha: key.headSha,
+                // Kratší pole překladů nesmí nález zahodit — `indices.contains` je tu
+                // proto, že o délce rozhoduje odpověď modelu, ne náš kód.
+                translation: translations.indices.contains(index) ? translations[index] : nil
+            )
         }
     }
 

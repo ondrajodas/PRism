@@ -20,8 +20,7 @@ struct ClaudeReviewRunnerTests {
                 skillID: skill
             ),
             worktree: URL(filePath: "/tmp/prism/worktrees/cli/cli/\(number)-\(headSha)"),
-            baseSha: "bbbb2222",
-            findingsLanguage: .czech
+            baseSha: "bbbb2222"
         )
     }
 

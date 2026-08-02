@@ -5,20 +5,15 @@ import Testing
 
 @Suite("ClaudeCommand")
 struct ClaudeCommandTests {
-    private func request(language: FindingsLanguage = .czech) -> ReviewRequest {
-        ReviewRequest(
-            key: ReviewRunKey(
-                pullRequest: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 7),
-                headSha: "aaaa1111",
-                skillID: "code-review"
-            ),
-            worktree: URL(filePath: "/tmp/strom"),
-            baseSha: "bbbb2222",
-            findingsLanguage: language
-        )
-    }
-
-    private var request: ReviewRequest { request() }
+    private let request = ReviewRequest(
+        key: ReviewRunKey(
+            pullRequest: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 7),
+            headSha: "aaaa1111",
+            skillID: "code-review"
+        ),
+        worktree: URL(filePath: "/tmp/strom"),
+        baseSha: "bbbb2222"
+    )
 
     @Test("Argumenty odpovídají ověřenému volání")
     func theArgumentsMatchTheVerifiedCommand() {
@@ -69,44 +64,24 @@ struct ClaudeCommandTests {
         #expect(prompt.contains("empty list"))
     }
 
-    /// Prompt je **jeden řádek**. Skládá se ze dvou víceřádkových literálů spojených
-    /// interpolací a je snadné do něj `\n` propašovat vynechaným `\` na konci řádku.
-    /// Víceřádkový literál sám o sobě závěrečný newline nemá — řádek s ukončovacími
-    /// uvozovkami do obsahu nepatří — ale spolehnout se na to bez testu znamená čekat,
-    /// až to někdo rozbije.
-    @Test("Prompt je jeden řádek", arguments: FindingsLanguage.allCases)
-    func thePromptIsASingleLine(language: FindingsLanguage) {
-        let prompt = ClaudeCommand.prompt(for: request(language: language))
+    /// Prompt je **jeden řádek**. Skládá se z víceřádkového literálu se spojkami `\` na
+    /// koncích a je snadné do něj `\n` propašovat tím, že se na jednom řádku vynechá.
+    @Test("Prompt je jeden řádek")
+    func thePromptIsASingleLine() {
+        let prompt = ClaudeCommand.prompt(for: request)
 
         #expect(!prompt.contains("\n"))
         #expect(!prompt.contains("  "))
     }
 
-    /// Jazyk se **říká reviewerovi**, nepřekládá se po něm — prompt je tedy jediné místo,
-    /// kde se volba projeví.
-    @Test("Prompt si řekne o jazyk nálezů")
-    func thePromptAsksForTheFindingsLanguage() {
-        #expect(ClaudeCommand.prompt(for: request(language: .czech)).contains("in Czech"))
-        #expect(ClaudeCommand.prompt(for: request(language: .english)).contains("in English"))
-    }
+    /// Jazyk nálezů se **do promptu nedostane** — měřením se ukázalo, že instrukce „piš
+    /// česky“ stála dva ze tří nálezů. Překládá se až po doběhnutí, viz `FindingTranslating`.
+    @Test("Prompt reviewerovi jazyk nediktuje")
+    func thePromptSaysNothingAboutLanguage() {
+        let prompt = ClaudeCommand.prompt(for: request)
 
-    /// Věta se posílá i pro angličtinu. Reviewer čte pracovní strom, a když je repo
-    /// dokumentované česky, napsal by česky i nálezy tam, kde se to nechce.
-    @Test("Angličtina se taky vysloví, nemlčí se o ní")
-    func statesEnglishExplicitly() {
-        let prompt = ClaudeCommand.prompt(for: request(language: .english))
-
-        #expect(prompt.contains("Write summary, short_summary and failure_scenario"))
-    }
-
-    /// `category` je slug, na který se váže blokující sada. Přeložený by v `Policy`
-    /// přestal sedět a nález se ztrátou dat by přestal blokovat.
-    @Test("Prompt drží kategorii anglicky i u českých nálezů")
-    func keepsTheCategoryInEnglish() {
-        let prompt = ClaudeCommand.prompt(for: request(language: .czech))
-
-        #expect(prompt.contains("Keep category in English"))
-        #expect(prompt.contains("data-loss"))
+        #expect(!prompt.contains("Czech"))
+        #expect(!prompt.contains("in English"))
     }
 
     @Test("Prompt není slash command")

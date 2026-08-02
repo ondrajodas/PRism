@@ -62,14 +62,6 @@ enum ClaudeCommand {
     ///
     /// Prázdný seznam se vyžaduje schválně — „nic jsem nenašel“ a „nereportoval jsem“ jsou
     /// různé věci a jen ta první smí vyjít jako čisté review.
-    ///
-    /// **Jazyk se říká reviewerovi, nepřekládá se po něm** (#52). Překlad po doběhnutí je
-    /// další session na každý nález, další cena a další místo, kde se text může rozejít
-    /// s tím, co reviewer opravdu tvrdil.
-    ///
-    /// Věta o jazyku se posílá **vždycky, i pro angličtinu**. Reviewer čte pracovní strom,
-    /// a když je repo dokumentované česky (třeba tenhle), napsal by česky i nálezy na repu,
-    /// kde se to nechce. Mlčení není volba jazyka, je to hádání.
     static func prompt(for request: ReviewRequest) -> String {
         """
         You are running as the "\(request.key.skillID)" reviewer of a pull request. \
@@ -77,20 +69,8 @@ enum ClaudeCommand {
         `git diff \(request.baseSha)...HEAD`. \
         Report every finding by calling the ReportFindings tool — that call is the only \
         output that counts, so call it even when you find nothing, with an empty list. \
-        \(languageInstruction(request.findingsLanguage)) \
         Do not run anything that writes or sends: no commits, no pushes, \
         no `gh` commands, no comments on GitHub.
-        """
-    }
-
-    /// `category` musí zůstat anglicky, i když je zbytek česky: je to slug, na který se
-    /// váže blokující sada (`correctness`, `security`, `data-loss`). Přeložený slug by
-    /// v `Policy` přestal sedět a nález se ztrátou dat by přestal blokovat.
-    private static func languageInstruction(_ language: FindingsLanguage) -> String {
-        """
-        Write summary, short_summary and failure_scenario in \(language.promptName). \
-        Keep category in English — it is a fixed slug like correctness or data-loss, \
-        not prose.
         """
     }
 

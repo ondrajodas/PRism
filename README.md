@@ -78,10 +78,11 @@ session smí běžet naráz, rozpočet cache a model. Repozitář si může pře
 (`manual`/`automatic`), jazyk nálezů, skilly i kategorie.
 
 **Nálezy chodí česky**, protože okno je české — u firemního repa s mezinárodním týmem se
-dá přepnout na angličtinu, globálně i jen pro to jedno repo. Jazyk se říká reviewerovi
-v promptu, nepřekládá se po doběhnutí, takže se projeví na dalším běhu a starých záznamů
-se nedotkne. `category` zůstává vždycky anglicky — je to slug, na který se váže blokující
-sada.
+dá přepnout na angličtinu, globálně i jen pro to jedno repo. Překládají se **až po
+doběhnutí review**, jednou krátkou session na celý běh; reviewer sám dostane pořád tentýž
+anglický prompt. Měřením se totiž ukázalo, že instrukce „piš nálezy česky“ stojí nálezy:
+na stejném PR dala anglická varianta tři, česká jednu. Originál zůstává uložený vedle
+překladu a když se překlad nepovede, ukáže se prostě anglicky.
 
 Sada skillů se dá navázat na **programovací jazyk**: při review se z obsahu repa pozná,
 čím je psané (`composer.json` a `.php` → PHP, `go.mod` → Go), a odpovídající sada se
@@ -146,7 +147,7 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 | | |
 |---|---|
 | **Reviewery** | Běží nezávisle a paralelně. Texty nálezů se mezi nimi neslučují — nesouhlas dvou reviewerů je informace. Shoda na stejném `file:line` se označí odznakem `2×`. |
-| **Jazyk nálezů** | Volba v nastavení, ne natvrdo. Říká se reviewerovi v promptu — překlad po doběhnutí by byl další session na každý nález a další místo, kde se text může rozejít s tím, co reviewer tvrdil. |
+| **Jazyk nálezů** | Volba v nastavení, ne natvrdo. Řeší se **překladem po doběhnutí**, ne instrukcí v promptu: psát rovnou česky měřitelně ubírá nálezy. Reviewer píše v jazyce, ve kterém je nejsilnější; jazyk je věc zobrazení. |
 | **Závažnost** | Aplikace nevymýšlí vlastní škálu. Seskupuje podle `category` z výstupu reviewera a odvozuje jediný blokující boolean (`verdict == CONFIRMED` a `category` v blokující sadě). Z toho vypadne návrh verdiktu. |
 | **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |

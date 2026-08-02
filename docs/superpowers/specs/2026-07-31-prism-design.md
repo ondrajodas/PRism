@@ -232,9 +232,17 @@ hodnota má přednost a detekci navždycky umlčí.
 čistá funkce. Hodnoty se čtou **při použití**, ne při startu, takže se změna projeví bez
 restartu; soubor se načte při spuštění a pak pokaždé, když se okno vrátí do popředí.
 
-**Jazyk nálezů hotový (#52).** `FindingsLanguage` (`cs`/`en`) globálně i per repo, jde do
-promptu headless session. Rozhodnutí ze zadání — říct to reviewerovi místo překládat po
-něm — zůstalo v platnosti a ověřilo se jako laciné: je to jedna věta v promptu.
+**Jazyk nálezů hotový (#52).** `FindingsLanguage` (`cs`/`en`) globálně i per repo.
+
+**Rozhodnutí ze zadání se otočilo.** Issue chtělo říct jazyk reviewerovi v promptu
+a překlad po doběhnutí výslovně zamítalo. Postavené to tak bylo a **měření to vyvrátilo**:
+na skutečném PR dala anglická varianta tři nálezy (stejně jako build před změnou) a česká
+jeden. Za rozdíl nemohla ta věta — anglická varianta ji má taky — ale samotný požadavek psát
+česky. Reviewer má přemýšlet a psát v jazyce, ve kterém je nejsilnější; jazyk je věc
+zobrazení a řeší se až po něm.
+
+Zamítnutí navíc stálo na přeceněném čísle: „další session na každý nález“ neplatí, překládá
+se celý seznam jednou dávkou, tedy jedno krátké volání na běh.
 
 **Okno nastavení hotové (#70).** Scéna `Settings` (⌘,) se dvěma záložkami píše do téhož
 souboru. Rozpis výš se u toho změnil: **globální část dostala `mode`**, tedy výchozí režim
