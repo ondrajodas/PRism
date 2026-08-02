@@ -25,8 +25,9 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// Výchozí režim pro repo, které si neřeklo o jiný. Ve výchozím stavu `manual` —
     /// zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
     var mode: ReviewMode
-    /// Jazyk, ve kterém reviewer píše nálezy. Výchozí čeština — okno je české a nálezy
-    /// vedle českých popisků působily jako dva slepené nástroje.
+    /// Jazyk, do kterého se nálezy překládají, než se ukážou. **Ne** jazyk, ve kterém je
+    /// reviewer píše — jeho prompt o jazyku mlčí. Výchozí čeština, protože okno je české
+    /// a anglické nálezy vedle českých popisků působily jako dva slepené nástroje.
     var findingsLanguage: FindingsLanguage
     /// V sekundách, ne `Duration` — soubor se edituje ručně a `Duration` se do JSONu
     /// kóduje jako dvojice čísel, kterou nikdo nenapíše.

@@ -1,6 +1,9 @@
 import Foundation
 
-/// Jazyk, ve kterém reviewer píše nálezy.
+/// Jazyk, ve kterém se nálezy **ukazují**.
+///
+/// Ne jazyk, ve kterém je reviewer píše — ten dostává pořád tentýž anglický prompt a o jazyku
+/// se v něm nic neříká. Sem se překládá až po doběhnutí běhu, viz `FindingTranslating`.
 ///
 /// **Není to `ProjectLanguage`** — ten říká, čím je repo psané, a vybírá podle toho sadu
 /// skillů. Tohle je jazyk prózy v `summary`, `short_summary` a `failure_scenario`.
@@ -21,8 +24,9 @@ enum FindingsLanguage: String, CaseIterable, Codable, Hashable, Sendable {
         }
     }
 
-    /// Jak se jazyk jmenuje ve větě, kterou dostane reviewer. Anglicky, protože prompt je
-    /// anglický a jméno se do něj dosazuje.
+    /// Jak se jazyk jmenuje ve větě, kterou dostane **překladač** (`Translate … into
+    /// Czech`). Anglicky, protože ten prompt je anglický a jméno se do něj dosazuje.
+    /// Reviewer tenhle řetězec nikdy nevidí.
     var promptName: String {
         switch self {
         case .czech: "Czech"

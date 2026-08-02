@@ -21,15 +21,28 @@ struct ClaudeFindingTranslator: FindingTranslating {
     ) async throws -> [FindingTranslation?] {
         guard !findings.isEmpty else { return [] }
 
-        let result = try await runner.run(
-            claude,
-            arguments: TranslationCommand.arguments(prompt: TranslationCommand.prompt(for: findings, to: language)),
-            timeout: timeout
-        )
-        // Selhání překladu **není** selhání review. Nálezy dorazily a jsou uložené;
-        // nepřeložené se ukážou v originále, což je vidět na první pohled. Vyhodit to jako
-        // chybu by znamenalo, že drobnost kolem zobrazení shodí výsledek, který už máme.
-        guard result.exitCode == 0 else { return Array(repeating: nil, count: findings.count) }
+        let untranslated = [FindingTranslation?](repeating: nil, count: findings.count)
+
+        let result: ProcessResult
+        do {
+            result = try await runner.run(
+                claude,
+                arguments: TranslationCommand.arguments(
+                    prompt: TranslationCommand.prompt(for: findings, to: language)
+                ),
+                timeout: timeout
+            )
+        } catch is CancellationError {
+            // Jediná chyba, která smí ven. Zrušení není selhání překladu a spolknout ho
+            // znamená pokračovat v práci, o kterou si nikdo neřekl.
+            throw CancellationError()
+        } catch {
+            // Nespuštěná binárka ani timeout nesmí položit review, které nálezy už dodalo.
+            // Zachytit se to musí **tady**, ne `try?` u volajícího: záruka „selhání překladu
+            // není selhání review“ nemá viset na tom, že si ji každé volání zopakuje.
+            return untranslated
+        }
+        guard result.exitCode == 0 else { return untranslated }
 
         return TranslationCommand.parse(result.standardOutput, count: findings.count)
     }

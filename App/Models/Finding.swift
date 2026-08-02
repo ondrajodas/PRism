@@ -15,7 +15,7 @@ struct Finding: Hashable, Codable, Sendable {
     ///
     /// Volitelné i v uloženém tvaru — starší záznamy ho nemají a přijít o ně kvůli novému
     /// poli by znamenalo ztracené nálezy.
-    var translation: FindingTranslation?
+    let translation: FindingTranslation?
 
     init(
         reported: ReportedFinding,

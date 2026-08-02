@@ -51,6 +51,17 @@ struct ClaudeFindingTranslatorTests {
         #expect(translations == [nil, nil])
     }
 
+    /// Záruka „selhání překladu není selhání review“ nesmí viset na tom, že si volající
+    /// vzpomene na `try?`. Nespuštěná binárka i timeout se zachytávají tady.
+    @Test("Nespuštěný claude nevyhodí chybu ven")
+    func aFailedLaunchDoesNotThrow() async throws {
+        let runner = FakeProcessRunner(failing: .launchFailed("claude nejde spustit"))
+
+        let translations = try await translator(runner).translate([finding("A")], to: .czech)
+
+        #expect(translations == [nil])
+    }
+
     @Test("Rozbitá odpověď nechá nálezy nepřeložené")
     func garbageLeavesTheOriginals() async throws {
         let runner = FakeProcessRunner(exitCode: 0, standardOutput: "Promiňte, nerozumím.")
