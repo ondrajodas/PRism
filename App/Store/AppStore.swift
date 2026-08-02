@@ -519,12 +519,15 @@ final class AppStore {
         }
     }
 
-    /// Při **prvním** review repa odvodí sadu skillů z toho, co v něm leží.
+    /// Odvodí sadu skillů z toho, co v repu leží.
     ///
-    /// Spustí se jen tehdy, když si repo o skilly ještě neřeklo. `nil` znamená „tady to
-    /// nikdo nenastavoval“; ruční hodnota má přednost a **i prázdná** („tady nereviewuj
-    /// nic“) detekci navždycky umlčí — přepsat ji by znamenalo vracet uživateli jeho
-    /// rozhodnutí zpátky.
+    /// Běží při **každém** review, dokud si repo o skilly neřeklo (`skills == nil`) — ne
+    /// jen při prvním. Je to schválně: mapa jazyků se dá vyplnit až potom, co se repo
+    /// jednou zreviewovalo, a bez opakování by se projevila teprve na dalším repu.
+    /// Stojí to jedno lokální `git ls-files` navíc.
+    ///
+    /// Ruční hodnota má přednost a **i prázdná** („tady nereviewuj nic“) detekci
+    /// navždycky umlčí — přepsat ji by znamenalo vracet uživateli jeho rozhodnutí zpátky.
     ///
     /// Zapisuje se jen to, co se od globální sady liší. Zápis „stejné jako globální“ by byl
     /// override, o který nikdo nežádal — a pozdější změna globální sady by tenhle repo

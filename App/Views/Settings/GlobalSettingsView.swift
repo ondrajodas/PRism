@@ -54,7 +54,7 @@ struct GlobalSettingsView: View {
                 // (#52) — proto všude „programovací jazyk“, i když je to delší.
                 Text("Skilly podle programovacího jazyka")
             } footer: {
-                Text("Při prvním review se z obsahu repa pozná, čím je psané, a sada odsud se mu zapíše. Rozhoduje to, **které skilly se spustí** — ne jazyk, ve kterém reviewer píše nálezy. Jazyk, který tu není, bere sadu výš.")
+                Text("Při review se z obsahu repa pozná, čím je psané, a použije se sada odsud. Rozhoduje to, **které skilly se spustí** — ne jazyk, ve kterém reviewer píše nálezy. Jazyk, který tu není, bere sadu výš.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

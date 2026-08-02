@@ -224,9 +224,9 @@ při prvním setkání s repem.
 
 **Hotovo (#24).** `ProjectLanguage` + `Policy.projectLanguages(in:)` nad výpisem
 `git ls-files`, mapa `skillsByLanguage` v globální části konfigurace. Rozhodovací pořadí
-je tedy trojí: globální `skills` → sada podle jazyka → override per repo. Detekce běží při
-**prvním** review repa a zapisuje jen to, co se od globální sady liší; ruční hodnota má
-přednost a detekci navždycky umlčí.
+je tedy trojí: globální `skills` → sada podle jazyka → override per repo. Detekce běží při **každém** review,
+dokud si repo o skilly neřekne, a zapisuje jen to, co se od globální sady liší; ruční
+hodnota má přednost a detekci navždycky umlčí.
 
 **Hotovo (#23).** `config.json` v kořeni cache, `Configuration` → `resolved(for:)` jako
 čistá funkce. Hodnoty se čtou **při použití**, ne při startu, takže se změna projeví bez

@@ -77,11 +77,14 @@ PR, sada skillů, blokující kategorie, výchozí režim review, interval polli
 session smí běžet naráz, rozpočet cache a model. Repozitář si může přebít režim
 (`manual`/`automatic`), skilly i kategorie.
 
-Sada skillů se dá navázat na **programovací jazyk**: při prvním review se z obsahu repa
-pozná, čím je psané (`composer.json` a `.php` → PHP, `go.mod` → Go), a odpovídající sada
-se mu zapíše. Smysl je nepouštět PHP skilly na Go repu — každý skill je jedna session.
-Ručně nastavená sada má vždycky přednost a detekci navždycky umlčí. Mapa jazyk → skilly
-je ve výchozím stavu prázdná, takže dokud se nevyplní, detekce na nic nesahá. Soubor se zakládá sám s dosavadními výchozími
+Sada skillů se dá navázat na **programovací jazyk**: při review se z obsahu repa pozná,
+čím je psané (`composer.json` a `.php` → PHP, `go.mod` → Go), a odpovídající sada se
+použije. Smysl je nepouštět PHP skilly na Go repu — každý skill je jedna session.
+Repu se sada **zapíše, jen když se od globální liší** — jinak by v konfiguraci vznikl
+override, o který nikdo nežádal, a pozdější změna globální sady by takové repo minula.
+Odhad se opakuje při každém review, dokud si repo neřekne o vlastní sadu; ručně nastavená
+sada má vždycky přednost a detekci navždycky umlčí. Mapa jazyk → skilly je ve výchozím
+stavu prázdná, takže dokud se nevyplní, detekce na nic nesahá. Soubor se zakládá sám s dosavadními výchozími
 hodnotami, načítá se při startu i při návratu do aplikace, a když je rozbitý, běží se na
 defaultech a je to vidět.
 
@@ -120,7 +123,7 @@ aktuálně je.
    **Vlastních** klonů na disku se aplikace nikdy nedotkne.
 3. **Review** — nakonfigurované skilly se spustí jako paralelní headless session
    Claude Code v tom worktree, omezené na read-only nástroje. Které to jsou, může záviset
-   na programovacím jazyce repa; při prvním review se odhadne z `git ls-files`. Spouští se **tlačítkem**;
+   na programovacím jazyce repa; ten se odhaduje z `git ls-files`. Spouští se **tlačítkem**;
    automatický režim se dá zapnout globálně i zvlášť pro každé repo (výchozí je manuální,
    aby neznámé repo nespálilo panel session bez dozoru).
 4. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.

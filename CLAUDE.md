@@ -647,9 +647,11 @@ Věci, které se u toho nemají rozbít:
   `ReviewPhase` vlastní případ `failed`, místo aby se všechno cpalo do `CheckoutState`.
 - **Jazyk repa se odhaduje před `runSkills`, ne po nich.** Sada, kterou detekce zapíše, je
   ta, se kterou má **tenhle** běh jet; po skillech by se projevila až podruhé.
-- **Detekce běží jen jednou a ruční hodnota ji navždycky umlčí.** Rozhoduje
+- **Detekce běží při každém review, dokud si repo o skilly neřekne.** Rozhoduje
   `repositories[repo]?.skills == nil`; vyplněná sada — **i prázdná** — znamená, že si to
-  někdo nastavil, a přepsat mu to by bylo vracení jeho rozhodnutí zpátky.
+  někdo nastavil, a přepsat mu to by bylo vracení jeho rozhodnutí zpátky. Opakování je
+  schválně: mapa jazyků se dá vyplnit až potom, co se repo jednou zreviewovalo, a bez něj
+  by se projevila teprve na dalším repu. Stojí to jedno lokální `git ls-files` navíc.
 - **Zapisuje se jen to, co se od globální sady liší.** Zápis „stejné jako globální“ by byl
   override, o který nikdo nežádal, a pozdější změna globální sady by takové repo tiše
   minula — stejná past jako u režimu.
@@ -1394,9 +1396,10 @@ globální výchozí režim review, a `RepositoryConfig.mode` je proto voliteln�
 k němu druhá scéna nedosáhla.
 
 Odhad jazyka projektu hotový (issue #24) — `ProjectLanguage` v `App/Models/`,
-`Policy.projectLanguages(in:)` a mapa `skillsByLanguage` v konfiguraci. Při prvním review
-repa se z `git ls-files` pozná, čím je psané, a odvozená sada skillů se mu zapíše. Mapa je
-ve výchozím stavu prázdná, takže dokud si ji uživatel nevyplní, detekce na sadu nesahá.
+`Policy.projectLanguages(in:)` a mapa `skillsByLanguage` v konfiguraci. Před spuštěním
+skillů se z `git ls-files` pozná, čím je repo psané, a odvozená sada se použije — a když se
+od globální liší, taky mu zapíše. Mapa je ve výchozím stavu prázdná, takže dokud si ji
+uživatel nevyplní, detekce na sadu nesahá.
 
 Plánované fáze:
 
