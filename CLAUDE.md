@@ -596,7 +596,9 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout |
 | `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah obarvený podle jazyka |
-| `FindingsView` | Spodní lišta: návrh verdiktu, počet nálezů a rozbalovací seznam s prokliky do diffu |
+| `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`, návrh verdiktu, tabulka s řazením a prokliky do diffu |
+| `FindingRow` | Nález převedený na řádek tabulky — texty, identita, blokující příznak |
+| `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
 
 Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
@@ -925,6 +927,9 @@ Právě proto tam eskalace na `SIGKILL` je.
   řádek platí i po rozbalení.
 - **`RevealedLines`** — slučování překrývajících se i **sousedících** rozsahů a dělení
   mezery na skryté a odkryté kusy, včetně odkrytí, které mezeru přesahuje.
+- **`FindingRow`** — skládání textů (`—` u nálezu bez místa, samotný soubor bez řádku,
+  `file:line` bez locale u velkých čísel), blokující příznak, výchozí pořadí z `Policy`
+  a unikátní identita řádků.
 - **Bubliny nálezů** — že bublina visí pod svým řádkem, že nález mimo diff a nález bez
   řádku skončí u hlavičky souboru (a v pořadí podle čísla řádku), že se po rozbalení
   kontextu bublina k řádku přesune, že dva reviewery na jednom řádku dají jednu bublinu
@@ -1152,6 +1157,9 @@ paleta Darcula / IntelliJ Light podle režimu.
 Bubliny nálezů hotové (issue #19) — nález visí u svého řádku, blokující má červený pruh,
 shoda reviewerů odznak `2×`. Nález mimo diff visí u hlavičky souboru a nabídne svůj řádek
 dotáhnout — **změna proti zadání**, viz specifikace.
+
+Spodní panel hotový (issue #20) — taby `Nálezy`/`Průběh`, řaditelná tabulka, tažením
+měnitelná výška a proklik do diffu se zvýrazněním bubliny. `Průběh` je placeholder pro #22.
 
 Plánované fáze:
 

@@ -54,6 +54,12 @@ reviewerů na jednom místě označí `2×`, ale jejich texty se neslučují. N�
 v diffu není, se neztratí: visí u hlavičky souboru a nabídne ten řádek dotáhnout. Bubliny
 jdou vypnout přepínačem nad diffem.
 
+Pod diffem je **panel s taby**: řaditelná tabulka nálezů (kategorie, reviewer, místo,
+shrnutí) a zatím prázdný Průběh. Panel je jediné místo, kde jsou vidět nálezy **bez místa
+v kódu** — chybějící testy nebo poznámky k architektuře; kvůli nim samotné bubliny
+nestačí. Klik na řádek odscrolluje diff a bublinu na chvíli zvýrazní. Výška panelu se
+táhne za horní hranu a pamatuje se.
+
 Sada reviewerů je zatím konstanta v kódu; výběr v nastavení přijde s konfigurací.
 
 Pod tím vším je vlastní cache repozitářů: bare partial clone do

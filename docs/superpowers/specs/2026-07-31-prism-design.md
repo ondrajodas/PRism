@@ -323,6 +323,18 @@ Nález visí u řádku, kterého se týká, jako review komentář u kódu.
   (`UserDefaults`, ne store — je to předvolba pohledu napříč pull requesty).
 - **Skok z panelu nálezů míří doprostřed okna**, ne na horní hranu.
 
+### Spodní panel (#20)
+
+Domov přehledu nálezů a **jediné místo pro nálezy bez `file:line`** — chybějící testy,
+poznámky k architektuře. Právě kvůli nim nestačí bubliny.
+
+- **Taby `Nálezy · N` a `Průběh`** (druhý je zatím placeholder, #22). Panel je sbalitelný
+  a výška se mění tažením za horní hranu; obojí přežije restart.
+- **Tabulka**: kategorie · reviewer · místo · nález. Řadí se klikem na hlavičku, bez něj
+  platí pořadí z `Policy` — tabulka nemá vlastní představu o tom, co patří nahoru.
+- **Nález bez místa má v sloupci `—`.**
+- **Klik na řádek** odscrolluje diff na místo nálezu a jeho bublina se na chvíli zvýrazní.
+
 ### Obarvení kódu (#48)
 
 Vlastní pravidla v `App/Syntax/`, žádná závislost. Komentáře, řetězce, čísla, klíčová
@@ -566,6 +578,10 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Rozsah se zapíše jako odkrytý **až po** načtení obsahu | Zapsat ho hned a obsah doplnit, až dorazí | Jinak zmizí rozbalovací řádek i se spinnerem a zůstane po něm prázdné místo — vypadá to, že se nic nestalo. Ze stejného důvodu `rows(of:)` ignoruje odkryté rozsahy, dokud obsah není: bez něj není co ukázat |
 | Rozbalená mezera **sundá hlavičku hunku** | Nechat hlavičky vždycky | Když se dvě části slijí do jednoho souvislého bloku, hlavička `@@` uprostřed neodděluje nic a mate — přišlo to jako první připomínka při zkoušení. Mezera, která nikdy nebyla, hlavičku nechává |
 | Sbalení si **nechá načtený obsah** | Zahodit ho spolu s rozsahy | Druhé rozbalení by jinak chodilo po síti pro něco, co už jednou dorazilo. Paměť to nestojí nic proti diffu samotnému |
+| Výběr v tabulce se po skoku **zahazuje** | Nechat vybraný řádek podbarvený, jak to tabulka dělá sama | Druhé kliknutí na už vybraný řádek by neudělalo nic — a to je přesně situace „odscrolloval jsem jinam a chci se vrátit“. Zpětnou vazbu dává zvýrazněná bublina v diffu, ne podbarvení v tabulce |
+| Zvýraznění bubliny po skoku **zhasne** | Nechat rámeček, dokud se neklikne jinam | Trvalý rámeček se plete s červeným pruhem u blokujícího nálezu — dvě různé věci by říkaly „dívej se sem“. Dvě a půl vteřiny stačí na to, aby oko skok dohnalo |
+| Výška panelu se **táhne a pamatuje** | Měřit ji podle obsahu, jak to dělal seznam před #20 | Měření dávalo smysl u seznamu, který měl přirozenou výšku. Tabulka ji nemá — kolik místa má dostat, ví jen uživatel, a u každého PR jinak |
+| Řádek tabulky je **vlastní typ** (`FindingRow`) | Dát `Finding` identitu a strčit ho do `Table` přímo | `Table` potřebuje `Identifiable`, ale doménový model se kvůli zobrazení měnit nemá — `Finding` je to, co uložil reviewer. Vedlejší přínos: skládání textů (`—` u nálezu bez místa, `file:line` bez locale) je čistá funkce a testuje se bez UI |
 | Nález mimo diff visí **u hlavičky souboru** a nabídne řádek dotáhnout | Nezobrazovat ho v diffu vůbec a nechat ho jen v tabulce, jak psalo issue #19 | **Změna proti zadání.** Zadání vzniklo dřív než rozbalení kontextu (#47) — a hlavně: reviewer čte celý pracovní strom, takže mimo diff hlásí běžně. Nález, který není vidět, je k ničemu; schovat ho do tabulky znamená spolehnout se, že tam uživatel půjde. Tlačítko dotáhne řádek i tři nad a pod (samotný řádek bez okolí se čte špatně) a bublina se pak přesune ke svému kódu sama, protože se váže na vykreslené řádky |
 | Bubliny se zavěšují **nad hotovým seznamem řádků** | Vkládat je při skládání, uvnitř každé větve | Skládání má čtyři cesty (hunk, mezera, rozbalený kontext, poznámka) a nálezy by musely protéct všemi. Nad hotovým seznamem to je jeden průchod — a bublina díky tomu sedne i na rozbalený kontext, aniž by o ní ta větev věděla |
 | Skok z nálezu míří **doprostřed** okna | Na horní hranu, jako skok na soubor | Bublina visí **pod** svým řádkem, takže u horní hrany by bylo vidět jen ji a kód nad ní ne. Ukotvená hlavička souboru navíc vršek překrývá, takže by řádek scrollnutý na vrch skončil pod ní. Skok na **soubor** na vrchu zůstává — tam je hlavička přesně to, co má být nahoře |

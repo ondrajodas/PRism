@@ -14,6 +14,8 @@ struct DiffView: View {
     let expansion: DiffExpansionActions
     /// Nálezy k zavěšení pod řádky. Seskupené podle místa už volajícím.
     var findings: [FindingGroup] = []
+    /// Místo, na které se právě skočilo z tabulky nálezů.
+    var highlighted: FindingHighlight?
 
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
@@ -68,7 +70,8 @@ struct DiffView: View {
                 language: language,
                 isLoadingContent: state.isLoading,
                 contentFailure: state.failure,
-                reveal: { expansion.reveal(file, $0) }
+                reveal: { expansion.reveal(file, $0) },
+                highlighted: highlighted
             )
         }
     }
