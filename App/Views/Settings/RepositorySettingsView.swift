@@ -109,7 +109,8 @@ private struct RepositoryDetailView: View {
                 title: "Skilly",
                 items: config.skills,
                 fallback: settings.draft.global.skills,
-                placeholder: "code-review",
+                itemLabel: "Skill",
+                placeholder: "code-review:code-review",
                 addLabel: "Přidat skill",
                 emptyMeaning: "Prázdný seznam znamená, že se tady nereviewuje nic."
             )
@@ -118,6 +119,7 @@ private struct RepositoryDetailView: View {
                 title: "Blokující kategorie",
                 items: config.blockingCategories,
                 fallback: settings.draft.global.blockingCategories,
+                itemLabel: "Kategorie",
                 placeholder: "correctness",
                 addLabel: "Přidat kategorii",
                 emptyMeaning: "Prázdný seznam znamená, že tady nic neblokuje."
@@ -135,6 +137,7 @@ private struct RepositoryDetailView: View {
         title: LocalizedStringKey,
         items: Binding<[String]?>,
         fallback: [String],
+        itemLabel: LocalizedStringKey,
         placeholder: String,
         addLabel: String,
         emptyMeaning: LocalizedStringKey
@@ -142,7 +145,12 @@ private struct RepositoryDetailView: View {
         Section {
             Toggle("Vlastní sada", isOn: isOverridden(items, fallback: fallback))
             if items.wrappedValue != nil {
-                StringListEditor(items: unwrapped(items), placeholder: placeholder, addLabel: addLabel)
+                StringListEditor(
+                    items: unwrapped(items),
+                    itemLabel: itemLabel,
+                    placeholder: placeholder,
+                    addLabel: addLabel
+                )
             }
         } header: {
             Text(title)

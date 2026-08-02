@@ -22,13 +22,14 @@ struct SourceListEditor: View {
     private func row(at index: Int) -> some View {
         HStack(alignment: .top, spacing: 6) {
             VStack(alignment: .leading, spacing: 4) {
-                // `prompt:` ze stejného důvodu jako u `StringListEditor` — první argument
-                // by se ve `Form`u stal popiskem vlevo, ne nápovědou v poli.
-                TextField("", text: binding(at: index, \.name), prompt: Text("Název"))
+                // Nápověda patří do `prompt:` — první argument by se ve `Form`u stal
+                // popiskem vlevo od pole. Zůstává ale vyplněný: `.labelsHidden()` ho skryje
+                // jen vizuálně, pro VoiceOver je to pořád jediný popis pole.
+                TextField("Název", text: binding(at: index, \.name), prompt: Text("Jméno zdroje"))
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                 TextField(
-                    "",
+                    "Dotaz",
                     text: binding(at: index, \.query),
                     prompt: Text(verbatim: "review-requested:@me is:open")
                 )

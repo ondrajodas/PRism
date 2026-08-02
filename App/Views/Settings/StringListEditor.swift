@@ -6,6 +6,10 @@ import SwiftUI
 /// Editor ho proto nedoplňuje ani nezakazuje, jen ho volající umí popsat.
 struct StringListEditor: View {
     @Binding var items: [String]
+    /// Čím je jedna položka — `Skill`, `Kategorie`. Vizuálně schovaný, ale **musí být
+    /// vyplněný**: `.labelsHidden()` skryje jen zobrazení, pro VoiceOver zůstává labelem,
+    /// a prázdný by mu nenechal co číst.
+    let itemLabel: LocalizedStringKey
     let placeholder: String
     let addLabel: String
 
@@ -21,10 +25,10 @@ struct StringListEditor: View {
 
     private func row(at index: Int) -> some View {
         HStack(spacing: 6) {
-            // `prompt:`, ne první argument. Ten se ve `Form`u vykreslí jako **popisek
-            // vlevo od pole**, ne jako nápověda uvnitř — u vyplněného řádku to pak vypadá
-            // jako dvě hodnoty vedle sebe.
-            TextField("", text: binding(at: index), prompt: Text(verbatim: placeholder))
+            // Nápověda patří do `prompt:`. První argument se ve `Form`u vykreslí jako
+            // **popisek vlevo od pole**, ne jako nápověda uvnitř — u vyplněného řádku to
+            // pak vypadá jako dvě hodnoty vedle sebe.
+            TextField(itemLabel, text: binding(at: index), prompt: Text(verbatim: placeholder))
                 .labelsHidden()
                 .textFieldStyle(.roundedBorder)
             Button {

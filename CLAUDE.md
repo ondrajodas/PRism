@@ -812,7 +812,8 @@ Věci, které se u toho nemají rozbít:
 - **Placeholder se předává `prompt:`, ne prvním argumentem `TextField`u.** Ve `Form`u
   s `.formStyle(.grouped)` se první argument vykreslí jako **popisek vlevo od pole**, ne
   jako nápověda uvnitř — u vyplněného řádku to pak vypadá jako dvě hodnoty vedle sebe.
-  Chytilo se to až na běžící aplikaci.
+  Chytilo se to až na běžící aplikaci. Popisek přitom zůstává **vyplněný** a schová se
+  `.labelsHidden()`: to skryje jen zobrazení, pro VoiceOver je pořád jediný popis pole.
 - **`Binding(items)` nad optionalem je past.** Force-unwrapuje při každém čtení a editor
   nad ním jeden překreslovací cyklus přežije i vypnutí přepínače — takže `nil` shodí proces
   v `BindingOperations.ForceUnwrapping`. **Ověřeno pádem aplikace** při vypnutí vlastní sady

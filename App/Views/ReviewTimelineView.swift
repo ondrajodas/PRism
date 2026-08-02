@@ -57,7 +57,10 @@ struct ReviewTimelineView: View {
                 Label("běžel \(loaded)", systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.orange)
-                    .help("Nastavený skill `\(timeline.skill)` neexistuje, takže si session vybrala nejbližší.")
+                    // Jen to, co je jisté. Nejčastější příčina je, že nastavené id na nic
+                    // nemapuje, ale detekce hlásí **jakoukoli** neshodu — tvrdit příčinu
+                    // by bylo hádání vydávané za zjištění.
+                    .help("Session si načetla jiný skill, než je nastavený (`\(timeline.skill)`).")
             }
             if let sessionID = timeline.sessionID {
                 Text(verbatim: sessionID)

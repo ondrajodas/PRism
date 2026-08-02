@@ -42,7 +42,8 @@ struct GlobalSettingsView: View {
             Section {
                 StringListEditor(
                     items: $settings.draft.global.skills,
-                    placeholder: "code-review",
+                    itemLabel: "Skill",
+                    placeholder: "code-review:code-review",
                     addLabel: "Přidat skill"
                 )
             } header: {
@@ -71,6 +72,7 @@ struct GlobalSettingsView: View {
             Section {
                 StringListEditor(
                     items: $settings.draft.global.blockingCategories,
+                    itemLabel: "Kategorie",
                     placeholder: "correctness",
                     addLabel: "Přidat kategorii"
                 )
