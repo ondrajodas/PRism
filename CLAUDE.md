@@ -1561,6 +1561,16 @@ Tím končí rozsah v1 podle specifikace. Za ním:
    podmínka platí beze změny.
 7. **Konverzace, komentáře a taby** (M7) — cizí komentáře a vlákna v okně, odpovídání do
    nich a rozvržení jako na GitHubu (taby `Overview` / `Files changed`).
+8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
+   s oprávněním a klikem (#88), doběhlé review (#82), nové PR (#85), vypínání po
+   událostech (#86) a seskupování (#87).
+
+Pořadí M6–M8 není závazné. M8 na nich nestojí a dá se udělat kdykoli — je to jediný
+z těch tří milníků, který **nemění tvrdé podmínky**.
+
+Vedle fází stojí milník **Průběžné**: koš na to, co do žádné z nich nepatří (ikona,
+podpis, stavový řádek). Nemá pořadí ani termín a verze se z něj neodvozuje — viz
+Pracovní postup.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
