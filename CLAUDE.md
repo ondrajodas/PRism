@@ -602,6 +602,8 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
 | `FindingRow` | Nález převedený na řádek tabulky — texty, identita, blokující příznak |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
 | `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume` |
+| `ReviewerChipsView` | Chipy reviewerů: stav a filtr naráz |
+| `VerdictView` | Návrh verdiktu jako **doporučení**; žádná GitHub akce na něm nevisí |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
 
 Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
@@ -713,6 +715,7 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 | `Policy.isBlocking(_:categories:)` | Jediný odvozený boolean nad nálezem |
 | `Policy.suggestedVerdict(for:)` | Návrh verdiktu nad `ReviewRecord`. `nil` = není z čeho soudit |
 | `Policy.groups(of:)` | Shoda reviewerů na `file:line` → `FindingGroup` s odznakem `2×` |
+| `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
@@ -740,6 +743,11 @@ Nad nálezy platí navíc:
   nález — ten dorazil jako celý `ReportFindings` call. Filtrovat je podle stavu běhu by
   znamenalo, že spadlý reviewer s nahlášenou ztrátou dat vedle jednoho čistého běhu vyjde
   jako `approve`. Blokovat tedy umí i běh, který sám o sobě `approve` nedá.
+- **Chip `nejisté` je vlastní stav.** Běh, který doběhl, ale nezavolal `ReportFindings`
+  nebo se mu ztratil nález, není ani čistý, ani spadlý — a ukázat u něj „čisté“ znamená
+  schválený PR s neohlášenou chybou.
+- **Běžící reviewer přebíjí starší výsledek**, protože to, co je na obrazovce, se právě
+  přepisuje.
 - **Shoda se počítá po reviewerech, ne po nálezech.** Jeden reviewer, který na jednom řádku
   najde dvě různé věci, si nepřikyvuje.
 - **Řadí se podle vlastnosti kategorie, ne nálezu.** Kdyby první kritérium bylo
@@ -940,6 +948,9 @@ Právě proto tam eskalace na `SIGKILL` je.
   řádek platí i po rozbalení.
 - **`RevealedLines`** — slučování překrývajících se i **sousedících** rozsahů a dělení
   mezery na skryté a odkryté kusy, včetně odkrytí, které mezeru přesahuje.
+- **`Policy.chips`** — každý stav zvlášť, včetně toho, že nereportující běh ani běh se
+  ztraceným nálezem nesmí vyjít jako `čisté`, že běžící reviewer přebije starší výsledek
+  a že reviewer mimo nastavenou sadu o chip nepřijde.
 - **`ToolAttempt`** — zkrácení proti pracovnímu stromu: relativní cesta, zahozené
   `cd <strom> &&`, cesta uvnitř příkazu, a že se bez stromu nic nemění. Pozor na past
   v testu: skutečný nástroj dostane cestu **nekódovanou**, takže `URL.path()` v přípravě
@@ -1179,6 +1190,10 @@ dotáhnout — **změna proti zadání**, viz specifikace.
 
 Spodní panel hotový (issue #20) — taby `Nálezy`/`Průběh`, řaditelná tabulka, tažením
 měnitelná výška a proklik do diffu se zvýrazněním bubliny.
+
+Chipy reviewerů a verdikt hotové (issue #21) — horní lišta detailu ukazuje, co který
+reviewer udělal, klikem se jeho nálezy schovají z bublin i z tabulky, a vpravo je návrh
+verdiktu. **Filtr návrh nemění** — je to pohled, ne tvrzení o PR.
 
 Tab Průběh hotový (issue #22) — časová osa toho, co reviewer dělá, se `session_id`
 a kopírováním `claude --resume`. Osa zůstává i po doběhnutí běhu.

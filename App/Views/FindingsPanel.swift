@@ -15,6 +15,8 @@ struct FindingsPanel: View {
     /// Odskok do diffu na místo nálezu.
     let jump: (Finding) -> Void
     /// Co reviewery dělaly. Prázdné, dokud se nic nespustilo.
+    /// Nálezy k zobrazení — po filtru chipů, takže ne nutně všechny ze záznamu.
+    var findings: [Finding] = []
     var timelines: [ReviewerTimeline] = []
     var isRunning = false
 
@@ -81,7 +83,6 @@ struct FindingsPanel: View {
                     .font(.callout)
                     .help("Posouvat osu na nejnovější událost")
             }
-            verdict
             if let finishedAt = record?.finishedAt {
                 Text(finishedAt, format: .relative(presentation: .named))
                     .font(.caption)
@@ -102,21 +103,6 @@ struct FindingsPanel: View {
         .fixedSize()
         // Rozbalený panel bez obsahu vypadá jako chyba — přepnutí tabu ho proto otevře.
         .onChange(of: tab) { _, _ in isExpanded = true }
-    }
-
-    @ViewBuilder private var verdict: some View {
-        if let record {
-            HStack(spacing: 6) {
-                Label(verdictText(of: record), systemImage: verdictSymbol(of: record))
-                    .foregroundStyle(verdictColor(of: record))
-                    .font(.callout.weight(.medium))
-                if record.isStale {
-                    Text("proti staršímu commitu")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-            }
-        }
     }
 
     /// Tažením za horní hranu se panelu mění výška. Pruh je schválně vyšší než čára, aby
@@ -211,7 +197,11 @@ struct FindingsPanel: View {
     /// nahlásit vůbec nebo se je nepodařilo přečíst. Vysvětlení se bere ze stavu, který
     /// z toho počítá `Policy`, ne z vlastní věty tady.
     @ViewBuilder private var emptyExplanation: some View {
-        if let record {
+        // Schované nálezy nejsou žádné nálezy. Bez téhle věty vypadá zapnutý filtr jako
+        // čisté review — tedy jako schválený PR s neohlášenou chybou.
+        if let record, !record.findings.isEmpty {
+            Text("Nálezy jsou schované filtrem reviewerů.").foregroundStyle(.secondary)
+        } else if let record {
             explanation(of: record)
         } else if isRunning {
             Text("Review běží. Co se právě děje, je v tabu Průběh.").foregroundStyle(.secondary)
@@ -240,33 +230,8 @@ struct FindingsPanel: View {
         return sortOrder.isEmpty ? base : base.sorted(using: sortOrder)
     }
 
-    private var findings: [Finding] { record?.findings ?? [] }
-
     private var countText: String {
         findings.isEmpty ? "Nálezy" : "Nálezy · \(findings.count)"
     }
 
-    private func verdictText(of record: ReviewRecord) -> String {
-        switch Policy.suggestedVerdict(for: record) {
-        case .approve: "Návrh: approve"
-        case .requestChanges: "Návrh: request changes"
-        case nil: "Návrh: není z čeho soudit"
-        }
-    }
-
-    private func verdictSymbol(of record: ReviewRecord) -> String {
-        switch Policy.suggestedVerdict(for: record) {
-        case .approve: "checkmark.seal"
-        case .requestChanges: "exclamationmark.triangle"
-        case nil: "questionmark.circle"
-        }
-    }
-
-    private func verdictColor(of record: ReviewRecord) -> Color {
-        switch Policy.suggestedVerdict(for: record) {
-        case .approve: .green
-        case .requestChanges: .orange
-        case nil: .secondary
-        }
-    }
 }
