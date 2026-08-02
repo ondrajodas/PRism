@@ -150,6 +150,8 @@ final class AppStore {
         configurationBox?.value = loaded.configuration
         polling.sources = loaded.configuration.global.sources
         polling.interval = .seconds(loaded.configuration.global.pollIntervalSeconds)
+        // Limit souběhu se čte při každém pokusu o slot, ale kdo už čeká ve frontě, spí.
+        await reviewer?.configurationChanged()
     }
 
     var pullRequests: [PullRequestSummary] { polling.state.pullRequests }

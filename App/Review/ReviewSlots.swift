@@ -82,12 +82,28 @@ actor ReviewSlots {
 
     /// Slot se **předává** dalšímu ve frontě, ne vrací a znovu bere. Mezikrok, ve kterém je
     /// volný, by pustil dovnitř běh, který si o slot řekl později.
+    ///
+    /// Předá se ale jen tehdy, když se do nového limitu vejde. Po snížení limitu za běhu
+    /// se běhy nad strop musí **vyčerpat** — jinak by souběh držel staré číslo tak dlouho,
+    /// dokud je fronta neprázdná.
     private func release() {
-        guard !waiting.isEmpty else {
+        guard !waiting.isEmpty, taken <= currentLimit else {
             taken -= 1
             return
         }
         waiting.removeFirst().continuation.resume()
+    }
+
+    /// Pustí dovnitř čekatele, na které je po zvýšení limitu místo.
+    ///
+    /// Limit se sice čte při každém pokusu o slot, ale to samo nestačí: kdo už čeká, spí
+    /// a nikdo ho nevzbudí. Bez tohohle by zvýšení limitu za běhu vypadalo, že se
+    /// neprojevilo, dokud něco nedoběhne.
+    func admitWaiting() {
+        while taken < currentLimit, !waiting.isEmpty {
+            taken += 1
+            waiting.removeFirst().continuation.resume()
+        }
     }
 
     private func abandon(_ id: UUID) {

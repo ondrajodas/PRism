@@ -76,6 +76,18 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         self.skills = skills
         self.blockingCategories = blockingCategories
     }
+
+    /// Tolerantní ze stejného důvodu jako `GlobalConfig`, a tady na tom záleží nejvíc:
+    /// override, který mění jen skilly, je to nejběžnější, co do souboru někdo napíše.
+    /// Povinný `mode` by kvůli němu shodil **celou** konfiguraci včetně toho, co je
+    /// napsané správně. Neznámý režim je totéž — výchozí je `manual`, protože samo od
+    /// sebe se nemá spouštět nic.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        mode = (try? container.decodeIfPresent(ReviewMode.self, forKey: .mode)) ?? .manual
+        skills = try container.decodeIfPresent([String].self, forKey: .skills)
+        blockingCategories = try container.decodeIfPresent([String].self, forKey: .blockingCategories)
+    }
 }
 
 /// Celý obsah `config.json`.

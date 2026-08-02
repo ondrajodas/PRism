@@ -108,3 +108,37 @@ struct ConfigurationTests {
         #expect(repositories.keys.contains("cli/cli"))
     }
 }
+
+/// Tolerance musí platit i na úrovni repa, ne jen globálně. Override, který mění jen
+/// skilly, je ta nejběžnější věc, kterou do souboru někdo napíše — a `keyNotFound`
+/// na `mode` by kvůli němu zahodil **celou** konfiguraci včetně toho, co je správně.
+@Suite("Configuration — tolerantní čtení repa")
+struct RepositoryConfigDecodingTests {
+    private func configuration(_ json: String) throws -> Configuration {
+        try JSONDecoder().decode(Configuration.self, from: Data(json.utf8))
+    }
+
+    @Test("Override bez režimu projde a režim je výchozí")
+    func acceptsAnOverrideWithoutAMode() throws {
+        let configuration = try self.configuration(#"{"repositories": {"cli/cli": {"skills": ["go-review"]}}}"#)
+
+        let repo = try #require(RepoID("cli/cli"))
+        #expect(configuration.resolved(for: repo).skills == ["go-review"])
+        #expect(configuration.resolved(for: repo).mode == .manual)
+    }
+
+    @Test("Prázdný override projde")
+    func acceptsAnEmptyOverride() throws {
+        let configuration = try self.configuration(#"{"repositories": {"cli/cli": {}}}"#)
+
+        #expect(configuration.repositories.count == 1)
+    }
+
+    @Test("Neznámý režim nezahodí zbytek konfigurace")
+    func survivesAnUnknownMode() throws {
+        let configuration = try self.configuration(#"{"repositories": {"cli/cli": {"mode": "poloautomat"}}}"#)
+
+        let repo = try #require(RepoID("cli/cli"))
+        #expect(configuration.resolved(for: repo).mode == .manual)
+    }
+}

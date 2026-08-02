@@ -41,6 +41,11 @@ struct ClaudeReviewRunner: ReviewRunning {
 
     /// Slučování je **nad** frontou schválně: připojený požadavek nesmí zabrat druhý slot,
     /// když už jeden drží běh, na který čeká.
+    /// Po zvýšení limitu se čekatelé musí pustit dál — sami se nevzbudí.
+    func configurationChanged() async {
+        await slots.admitWaiting()
+    }
+
     func run(
         _ request: ReviewRequest,
         progress: @escaping ReviewProgressHandler

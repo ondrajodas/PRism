@@ -347,8 +347,12 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 
 Věci, které se u toho nemají rozbít:
 
-- **Dekóduje se tolerantně.** Chybějící klíč znamená „ber výchozí“, ne „zahoď celou
-  konfiguraci“ — ručně psaný soubor málokdy obsahuje všechno.
+- **Dekóduje se tolerantně, i uvnitř repa.** Chybějící klíč znamená „ber výchozí“, ne
+  „zahoď celou konfiguraci“ — ručně psaný soubor málokdy obsahuje všechno. Platí to
+  hlavně na `RepositoryConfig`: override, který mění jen skilly, je to nejběžnější, co
+  do souboru někdo napíše, a povinný `mode` by kvůli němu shodil celý soubor.
+  **Výjimka je `sources` a `skills`** — tam se rozbitá hodnota hlásí, protože tiše
+  podstrčený výchozí seznam by ukazoval cizí PR nebo pustil jiné reviewery.
 - **Rozbitý soubor se nepřepisuje** a chyba je vidět nad seznamem. Aplikace běží na
   defaultech, ale mlčet o tom nesmí.
 - **Hodnoty se čtou při použití**, ne při startu: limit souběhu při každém pokusu o slot,
@@ -453,6 +457,10 @@ Věci, které se u toho nemají rozbít:
   druhý slot pro běh, na který sám čeká.
 - **Slot se předává, ne vrací.** Mezikrok, ve kterém je volný, by pustil dovnitř běh, který
   si o něj řekl později.
+- **Změněný limit se musí projevit na obou stranách.** Čte se při každém pokusu o slot,
+  ale to samo nestačí: po **zvýšení** spí čekatelé, které nemá kdo vzbudit (proto
+  `admitWaiting()`, které volá `AppStore` po načtení konfigurace), a po **snížení** se
+  slot nesmí předat dál, dokud se souběh nevyčerpá na nový strop.
 - **`.queued` se hlásí vždycky**, i když je slot volný hned. Rozlišovat „čekal“ od
   „nečekal“ by znamenalo hádat, jestli se `acquire` opravdu uspalo.
 - **Prostředí session nese credential helper přes `GIT_CONFIG_*`.** Strom stojí nad partial
