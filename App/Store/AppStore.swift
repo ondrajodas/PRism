@@ -328,6 +328,19 @@ final class AppStore {
         reviewTasks[pr]?.cancel()
     }
 
+    /// Sada skillů, které se pouštějí. Chipy z ní berou pořadí i to, co ještě neběželo.
+    var reviewSkills: [String] { skills }
+
+    /// Reviewery, kteří na PR **právě běží**.
+    ///
+    /// Odvozeno, ne vedeno zvlášť: běh, který ještě nestihl poslat první událost, osu
+    /// nemá — a přesto běží. Proto se počítá jako „všechno, co nedoběhlo“.
+    func runningReviewers(for pr: PRIdentifier) -> Set<String> {
+        guard isReviewing(pr) else { return [] }
+        let finished = Set(timelines(for: pr).filter(\.isFinished).map(\.skill))
+        return Set(skills).subtracting(finished)
+    }
+
     /// Časová osa běhů posledního review. Prázdná, dokud se nic nespustilo.
     func timelines(for pr: PRIdentifier) -> [ReviewerTimeline] {
         reviewTimelines[pr] ?? []

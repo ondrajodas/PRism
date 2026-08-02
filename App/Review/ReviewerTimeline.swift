@@ -15,6 +15,11 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
 
     var id: String { skill }
 
+    /// Doběhl už tenhle běh? Pozná se podle toho, že v ose je jeho konec.
+    var isFinished: Bool {
+        entries.contains { if case .finished = $0.kind { true } else { false } }
+    }
+
     struct Entry: Identifiable, Equatable, Sendable {
         /// Pořadí v ose. `Date` na identitu nestačí — dva eventy můžou padnout do stejné
         /// milisekundy.

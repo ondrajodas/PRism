@@ -335,6 +335,21 @@ poznámky k architektuře. Právě kvůli nim nestačí bubliny.
 - **Nález bez místa má v sloupci `—`.**
 - **Klik na řádek** odscrolluje diff na místo nálezu a jeho bublina se na chvíli zvýrazní.
 
+### Chipy reviewerů a verdikt (#21)
+
+Horní lišta detailu: kdo co našel a co se s tím navrhuje.
+
+- **Chip na reviewera** se stavem: `N nálezů`, `čisté`, `běží`, `selhalo`, `timeout · N`
+  a `nejisté`. Ten poslední je běh, který doběhl, ale **nezavolal `ReportFindings`** nebo
+  se mu ztratil nález — takový se nesmí tvářit jako čistý. Stejné pravidlo jako u návrhu
+  verdiktu.
+- **Klik na chip filtruje** nálezy toho reviewera z bublin i z tabulky; vypnutý je
+  ztlumený. Podrobnost selhání (stderr) visí na nápovědě.
+- **Reviewer mimo nastavenou sadu** se přidá na konec — jinak by nešlo poznat, odkud se
+  jeho nálezy v tabulce vzaly.
+- **Návrh verdiktu vpravo**, vizuálně jako doporučení. Aplikace na GitHub nic neposílá,
+  takže na něm nevisí žádná akce; u zastaralého záznamu se říká, proč návrh není.
+
 ### Tab Průběh (#22)
 
 Živý pohled na to, co reviewer právě dělá — **nativně z eventů**, ne přeposíláním textu.
@@ -592,6 +607,9 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Rozsah se zapíše jako odkrytý **až po** načtení obsahu | Zapsat ho hned a obsah doplnit, až dorazí | Jinak zmizí rozbalovací řádek i se spinnerem a zůstane po něm prázdné místo — vypadá to, že se nic nestalo. Ze stejného důvodu `rows(of:)` ignoruje odkryté rozsahy, dokud obsah není: bez něj není co ukázat |
 | Rozbalená mezera **sundá hlavičku hunku** | Nechat hlavičky vždycky | Když se dvě části slijí do jednoho souvislého bloku, hlavička `@@` uprostřed neodděluje nic a mate — přišlo to jako první připomínka při zkoušení. Mezera, která nikdy nebyla, hlavičku nechává |
 | Sbalení si **nechá načtený obsah** | Zahodit ho spolu s rozsahy | Druhé rozbalení by jinak chodilo po síti pro něco, co už jednou dorazilo. Paměť to nestojí nic proti diffu samotnému |
+| Filtr reviewerů **nemění návrh verdiktu** | Počítat verdikt jen z toho, co je vidět | Ztlumení revieweera je pohled, ne tvrzení o pull requestu. Kdyby filtr do verdiktu sahal, dalo by se schováním revieweera „vyrobit“ approve — a to je nejdražší chyba, jakou tahle aplikace umí udělat |
+| Klik na chip **filtruje**, stderr je v nápovědě | Klik otevře stderr, jak psalo issue | Dvě různé akce na jedno kliknutí nejdou a filtr se používá mnohem častěji. Text selhání je jedno najetí myší daleko a u chipu, kde dává smysl, je i důvod nejistoty |
+| Chip má stav **`nejisté`** | Vystačit si s `čisté`/`nálezy`/`selhalo`, jak psalo issue | Běh, který doběhl, ale nezavolal `ReportFindings` (nebo se mu ztratil nález), není ani čistý, ani spadlý. Ukázat u něj „čisté“ znamená schválený PR s neohlášenou chybou — stejná past, kvůli které umí návrh verdiktu odpovědět „není z čeho soudit“ |
 | Konec běhu jde do osy **stejným proudem** jako průběh | Zapsat ho přímo, jakmile běh doběhne | Odhalily to testy: zápis mimo proud dorazil **dřív** než události, které mu předcházely, a někdy se ztratil úplně (osa pro ten skill ještě neexistovala). Jeden proud dělá pořadí věcí konstrukce, ne štěstí |
 | Průběh teče do store **proudem**, ne přímým voláním | Hopnout na `@MainActor` u každé události | Události se hlásí ze session, která běží mimo hlavní vlákno, a **pořadí je to hlavní, co osa říká**. Task na každou událost nechá o pořadí rozhodovat plánovač; `AsyncStream` ho drží a `drain` je jediná smyčka, která do osy zapisuje |
 | Pokus o nástroj nese i **to, nad čím běžel** | Nechat v ose jen jméno nástroje, jak to parser uměl | Deset řádků „Bash“ pod sebou neřekne nic. Detail se bere z `input` podle známých klíčů (`file_path`, `pattern`, `command`, …); neznámý nástroj detail prostě nemá, protože hádat by znamenalo ukázat cizí hodnotu jako cestu |

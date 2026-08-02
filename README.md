@@ -60,6 +60,11 @@ v kódu** — chybějící testy nebo poznámky k architektuře; kvůli nim samo
 nestačí. Klik na řádek odscrolluje diff a bublinu na chvíli zvýrazní. Výška panelu se
 táhne za horní hranu a pamatuje se.
 
+Nad diffem jsou **chipy reviewerů**: u každého je vidět, co udělal (`3 nálezy`, `čisté`,
+`běží`, `selhalo`, `nejisté`) a kliknutím se jeho nálezy schovají z bublin i z tabulky.
+Vpravo je **návrh verdiktu** — je to doporučení, ne akce; aplikace na GitHub nic neposílá.
+Filtr návrhem nehýbe, aby se schováním revieweera nedal „vyrobit“ approve.
+
 V tabu **Průběh** běží časová osa toho, co reviewer právě dělá — který soubor čte, co
 hledá, jaký příkaz spustil. Skládá se nativně z eventů, ne přeposíláním textu, takže
 aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vrátit, zkopíruje

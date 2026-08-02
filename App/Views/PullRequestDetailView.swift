@@ -20,6 +20,10 @@ struct PullRequestDetailView: View {
     /// se pletl s blokujícím nálezem.
     @State private var highlighted: FindingHighlight?
 
+    /// Reviewery, jejichž nálezy jsou schované. Filtr je pohled, ne údaj o PR, takže
+    /// **smí** přetéct mezi pull requesty — jméno skillu znamená všude totéž.
+    @State private var mutedReviewers: Set<String> = []
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             controls
@@ -59,6 +63,7 @@ struct PullRequestDetailView: View {
                 Link("otevřít na GitHubu", destination: pullRequest.url).font(.callout)
                 checkout
             }
+            reviewers
             // Selhání checkoutu se do lišty nevejde, a právě u něj je text od `gitu`
             // to jediné, z čeho se pozná, co dělat dál.
             if case .failed(let detail) = store.checkoutState(for: pullRequest.repo) {
@@ -83,11 +88,42 @@ struct PullRequestDetailView: View {
                     record: record,
                     isExpanded: $findingsExpanded,
                     jump: jump,
+                    findings: visibleFindings,
                     timelines: timelines,
                     isRunning: store.isReviewing(pullRequest.id)
                 )
             }
         }
+    }
+
+    /// Chipy reviewerů a návrh verdiktu. Ukazují se, jakmile je co říct — u PR, na kterém
+    /// review nikdy neběželo, by to byl jen řádek prázdných odznaků.
+    @ViewBuilder private var reviewers: some View {
+        let record = store.reviewRecord(for: pullRequest.id)
+        if record != nil || store.isReviewing(pullRequest.id) {
+            HStack(spacing: 12) {
+                ReviewerChipsView(
+                    chips: Policy.chips(
+                        for: record,
+                        skills: store.reviewSkills,
+                        running: store.runningReviewers(for: pullRequest.id)
+                    ),
+                    muted: $mutedReviewers
+                )
+                Spacer(minLength: 12)
+                if let record {
+                    VerdictView(record: record)
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    /// Nálezy po odfiltrování ztlumených reviewerů. Verdikt se tím **nemění** — filtr je
+    /// pohled, ne tvrzení o pull requestu.
+    private var visibleFindings: [Finding] {
+        (store.reviewRecord(for: pullRequest.id)?.findings ?? [])
+            .filter { !mutedReviewers.contains($0.reviewer) }
     }
 
     /// Rozbaluje se obsah souboru **na hlavě PR**, takže u přejmenovaného souboru platí
@@ -122,7 +158,7 @@ struct PullRequestDetailView: View {
                 diff: diff,
                 scrollTarget: $scrollTarget,
                 expansion: expansionActions,
-                findings: Policy.groups(of: store.reviewRecord(for: pullRequest.id)?.findings ?? []),
+                findings: Policy.groups(of: visibleFindings),
                 highlighted: highlighted
             )
         case .failed(let detail):
