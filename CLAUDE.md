@@ -403,7 +403,9 @@ Jeden běh = jedna headless session `claude` na jeden skill v jednom pracovním 
 | `ReviewRunKey` | `(PR, headSha, skillID)` — identita běhu |
 | `ReviewRun` | Výsledek: klíč, `StreamSummary`, `ReviewRunOutcome`; `findings` doplní reviewera a `headSha` |
 | `ReviewRunOutcome` | `finished` / `timedOut` / `failed(detail:)` |
-| `ReviewProgress` | `queued`, `started(sessionID:)`, `attemptedTool`, `findings(count:)` |
+| `ReviewProgress` | `queued`, `started(sessionID:)`, `attemptedTool(ToolAttempt)`, `findings(count:)` |
+| `ToolAttempt` | Pokus o nástroj: jméno a to, nad čím běžel; umí se zkrátit proti pracovnímu stromu |
+| `ReviewerTimeline` | Časová osa jednoho revieweera pro tab Průběh — události s časem, `sessionID`, pracovní strom |
 | `ReviewSlots` | Aktor: limit souběžných session (3), fronta v pořadí příchodu |
 | `ClaudeCommand` | Čisté funkce: argumenty, prompt, prostředí session |
 
@@ -599,6 +601,7 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
 | `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`, návrh verdiktu, tabulka s řazením a prokliky do diffu |
 | `FindingRow` | Nález převedený na řádek tabulky — texty, identita, blokující příznak |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
+| `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume` |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
 
 Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
@@ -618,6 +621,16 @@ Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
   rozbalovací řádek i se spinnerem a zůstalo by po něm prázdno.
 - **Sbalení kontextu si nechá načtený obsah.** Druhé rozbalení by jinak chodilo po síti
   pro něco, co už jednou dorazilo.
+
+Průběh review drží `AppStore` taky (`reviewTimelines`, per PR):
+
+- **Události tečou proudem** (`AsyncStream`), ne přímým voláním. Hlásí se ze session mimo
+  hlavní vlákno a **pořadí je to hlavní, co osa říká** — task na každou událost by o něm
+  nechal rozhodovat plánovač.
+- **Konec běhu jde stejným proudem.** Zápis mimo něj dorazil dřív než to, co mu
+  předcházelo, a někdy se ztratil úplně; je na to test.
+- **Osa se drží i po doběhnutí** — právě tehdy se k ní člověk vrací. Nový běh ji vynuluje
+  a PR, které zmizí ze seznamu, ji ztratí (běžící review si ji podrží).
 
 Věci, na které se u okna naráží:
 
@@ -927,6 +940,12 @@ Právě proto tam eskalace na `SIGKILL` je.
   řádek platí i po rozbalení.
 - **`RevealedLines`** — slučování překrývajících se i **sousedících** rozsahů a dělení
   mezery na skryté a odkryté kusy, včetně odkrytí, které mezeru přesahuje.
+- **`ToolAttempt`** — zkrácení proti pracovnímu stromu: relativní cesta, zahozené
+  `cd <strom> &&`, cesta uvnitř příkazu, a že se bez stromu nic nemění. Pozor na past
+  v testu: skutečný nástroj dostane cestu **nekódovanou**, takže `URL.path()` v přípravě
+  vstupu ověřuje něco, co nikdy nevznikne.
+- **`AppStore` — průběh** — pořadí událostí včetně konce běhu, že osa přežije doběhnutí,
+  že nový běh začíná načisto a že se s PR mimo seznam zahodí.
 - **`FindingRow`** — skládání textů (`—` u nálezu bez místa, samotný soubor bez řádku,
   `file:line` bez locale u velkých čísel), blokující příznak, výchozí pořadí z `Policy`
   a unikátní identita řádků.
@@ -1159,7 +1178,10 @@ shoda reviewerů odznak `2×`. Nález mimo diff visí u hlavičky souboru a nab�
 dotáhnout — **změna proti zadání**, viz specifikace.
 
 Spodní panel hotový (issue #20) — taby `Nálezy`/`Průběh`, řaditelná tabulka, tažením
-měnitelná výška a proklik do diffu se zvýrazněním bubliny. `Průběh` je placeholder pro #22.
+měnitelná výška a proklik do diffu se zvýrazněním bubliny.
+
+Tab Průběh hotový (issue #22) — časová osa toho, co reviewer dělá, se `session_id`
+a kopírováním `claude --resume`. Osa zůstává i po doběhnutí běhu.
 
 Plánované fáze:
 

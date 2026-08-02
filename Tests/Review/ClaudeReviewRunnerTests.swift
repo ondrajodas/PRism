@@ -142,7 +142,10 @@ struct ClaudeReviewRunnerTests {
         let events = collected.events
         #expect(events.first == .queued)
         #expect(events.contains { if case .started = $0 { true } else { false } })
-        #expect(events.contains(.attemptedTool("ReportFindings")))
+        #expect(events.contains { event in
+            guard case .attemptedTool(let tool) = event else { return false }
+            return tool.name == "ReportFindings"
+        })
         #expect(events.last == .findings(count: 4))
     }
 

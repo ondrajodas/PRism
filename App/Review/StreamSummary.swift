@@ -15,7 +15,7 @@ struct StreamSummary: Sendable, Equatable {
     ///
     /// **Pokusy, ne použití:** odmítnutý nástroj je tu taky. Tvrdit „použil“ by u `Write`
     /// znamenalo hlásit, že reviewer zapisoval do repa, což je přesně to, co nesmí.
-    var attemptedTools: [String] = []
+    var attemptedTools: [ToolAttempt] = []
     /// Nástroje, které session chtěla, ale nedostala. Není to chyba běhu.
     ///
     /// Bere se z `result` eventu, takže **zabitý běh je nemá** — u něj se odmítnutí

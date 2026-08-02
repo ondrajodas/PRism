@@ -64,15 +64,50 @@ struct StreamParserTests {
         #expect(result.outcome?.isError == false)
         #expect(result.deniedTools == ["Write"])
         // `Write` se **nepoužil**, jen se o něj řeklo — v tabu Průběh se to nesmí slít.
-        #expect(result.attemptedTools.contains("Write"))
+        #expect(result.attemptedTools.map(\.name).contains("Write"))
     }
 
     @Test("Nástroje, o které si reviewer řekl, se dají vyjmenovat")
     func listsToolsThatWereAttempted() throws {
         let result = try summary(of: "review-with-findings")
 
-        #expect(result.attemptedTools.contains("Read"))
-        #expect(result.attemptedTools.contains("ReportFindings"))
+        #expect(result.attemptedTools.map(\.name).contains("Read"))
+        #expect(result.attemptedTools.map(\.name).contains("ReportFindings"))
+    }
+
+    /// Samotné „Read“ v tabu Průběh nic neřekne — zajímavé je, **co** reviewer četl.
+    @Test("Pokus o nástroj nese i to, nad čím běžel")
+    func carriesWhatTheToolRanOn() throws {
+        let result = try summary(of: "review-with-findings")
+
+        let read = try #require(result.attemptedTools.first { $0.name == "Read" })
+        #expect(read.detail?.hasSuffix(".swift") == true)
+    }
+
+    @Test("Detail se bere podle nástroje", arguments: [
+        (#"{"pattern": "TODO"}"#, "Grep", "TODO"),
+        (#"{"command": "git diff --stat"}"#, "Bash", "git diff --stat"),
+        (#"{"file_path": "/tmp/x.swift"}"#, "Read", "/tmp/x.swift"),
+        (#"{"path": "/tmp"}"#, "Glob", "/tmp"),
+    ])
+    func picksTheDetailByTool(input: String, tool: String, expected: String) throws {
+        let line = """
+            {"type":"assistant","message":{"content":[{"type":"tool_use","name":"\(tool)","input":\(input)}]}}
+            """
+
+        let attempt = try #require(parser.summarize([line]).attemptedTools.first)
+
+        #expect(attempt.name == tool)
+        #expect(attempt.detail == expected)
+    }
+
+    @Test("Nástroj, ze kterého se nic vytáhnout nedá, detail nemá")
+    func hasNoDetailWhenThereIsNothingToShow() throws {
+        let line = """
+            {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Divné","input":{"x":1}}]}}
+            """
+
+        #expect(parser.summarize([line]).attemptedTools.first?.detail == nil)
     }
 
     // MARK: - Odolnost

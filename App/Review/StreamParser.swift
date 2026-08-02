@@ -54,7 +54,7 @@ struct StreamParser: Sendable {
 
         for block in content where block["type"] as? String == "tool_use" {
             guard let name = block["name"] as? String else { continue }
-            summary.attemptedTools.append(name)
+            summary.attemptedTools.append(ToolAttempt(name: name, input: block["input"] as? [String: Any]))
 
             guard name == "ReportFindings" else { continue }
             summary.calledReportFindings = true

@@ -8,10 +8,15 @@ import SwiftUI
 /// Sbalený ukazuje jen to podstatné: návrh verdiktu, počet nálezů a stáří. Diff je to
 /// hlavní, kvůli čemu je okno otevřené, takže panel si o místo musí říct.
 struct FindingsPanel: View {
-    let record: ReviewRecord
+    /// `nil` při **prvním** běhu, než se uloží záznam — právě tehdy je průběh
+    /// nejzajímavější, takže se na něj nesmí čekat.
+    let record: ReviewRecord?
     @Binding var isExpanded: Bool
     /// Odskok do diffu na místo nálezu.
     let jump: (Finding) -> Void
+    /// Co reviewery dělaly. Prázdné, dokud se nic nespustilo.
+    var timelines: [ReviewerTimeline] = []
+    var isRunning = false
 
     private enum Tab: Hashable {
         case findings
@@ -21,6 +26,8 @@ struct FindingsPanel: View {
     /// Výška si drží uživatel taháním a přežívá restart — kolik místa chce dát nálezům,
     /// ví jen on.
     @AppStorage("findingsPanelHeight") private var height = 220.0
+    /// Sledovat konec časové osy. Předvolba pohledu, takže `UserDefaults`, ne store.
+    @AppStorage("progressFollowsTail") private var followsTail = true
     @State private var tab: Tab = .findings
     @State private var sortOrder: [KeyPathComparator<FindingRow>] = []
     @State private var selection: FindingRow.ID?
@@ -68,8 +75,14 @@ struct FindingsPanel: View {
 
             tabs
             Spacer()
+            if tab == .progress {
+                Toggle("Sledovat konec", isOn: $followsTail)
+                    .toggleStyle(.checkbox)
+                    .font(.callout)
+                    .help("Posouvat osu na nejnovější událost")
+            }
             verdict
-            if let finishedAt = record.finishedAt {
+            if let finishedAt = record?.finishedAt {
                 Text(finishedAt, format: .relative(presentation: .named))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -91,15 +104,17 @@ struct FindingsPanel: View {
         .onChange(of: tab) { _, _ in isExpanded = true }
     }
 
-    private var verdict: some View {
-        HStack(spacing: 6) {
-            Label(verdictText, systemImage: verdictSymbol)
-                .foregroundStyle(verdictColor)
-                .font(.callout.weight(.medium))
-            if record.isStale {
-                Text("proti staršímu commitu")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+    @ViewBuilder private var verdict: some View {
+        if let record {
+            HStack(spacing: 6) {
+                Label(verdictText(of: record), systemImage: verdictSymbol(of: record))
+                    .foregroundStyle(verdictColor(of: record))
+                    .font(.callout.weight(.medium))
+                if record.isStale {
+                    Text("proti staršímu commitu")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
         }
     }
@@ -133,13 +148,13 @@ struct FindingsPanel: View {
 
     @ViewBuilder private var content: some View {
         switch tab {
-        case .findings: findings
+        case .findings: findingsTab
         case .progress: progress
         }
     }
 
-    @ViewBuilder private var findings: some View {
-        if record.findings.isEmpty {
+    @ViewBuilder private var findingsTab: some View {
+        if findings.isEmpty {
             emptyExplanation
                 .padding(16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -189,17 +204,23 @@ struct FindingsPanel: View {
     }
 
     private var progress: some View {
-        ContentUnavailableView(
-            "Průběh přijde s dalším krokem",
-            systemImage: "waveform",
-            description: Text("Tady poběží živý výpis toho, co reviewer právě dělá.")
-        )
+        ReviewTimelineView(timelines: timelines, followsTail: followsTail)
     }
 
     /// Prázdná tabulka neznamená sama o sobě čisté review — reviewer taky nemusel nálezy
     /// nahlásit vůbec nebo se je nepodařilo přečíst. Vysvětlení se bere ze stavu, který
     /// z toho počítá `Policy`, ne z vlastní věty tady.
     @ViewBuilder private var emptyExplanation: some View {
+        if let record {
+            explanation(of: record)
+        } else if isRunning {
+            Text("Review běží. Co se právě děje, je v tabu Průběh.").foregroundStyle(.secondary)
+        } else {
+            Text("Nálezy k tomuhle běhu nejsou.").foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private func explanation(of record: ReviewRecord) -> some View {
         switch Policy.reviewState(for: record) {
         case .clean:
             Text("Review doběhlo a nic nenašlo.").foregroundStyle(.secondary)
@@ -215,17 +236,17 @@ struct FindingsPanel: View {
     /// Bez řazení podle sloupce platí pořadí z `Policy` — tabulka nemá vlastní představu
     /// o tom, co patří nahoru.
     private var rows: [FindingRow] {
-        let base = FindingRow.rows(of: record.findings)
+        let base = FindingRow.rows(of: findings)
         return sortOrder.isEmpty ? base : base.sorted(using: sortOrder)
     }
 
+    private var findings: [Finding] { record?.findings ?? [] }
+
     private var countText: String {
-        record.findings.isEmpty
-            ? "Nálezy"
-            : "Nálezy · \(record.findings.count)"
+        findings.isEmpty ? "Nálezy" : "Nálezy · \(findings.count)"
     }
 
-    private var verdictText: String {
+    private func verdictText(of record: ReviewRecord) -> String {
         switch Policy.suggestedVerdict(for: record) {
         case .approve: "Návrh: approve"
         case .requestChanges: "Návrh: request changes"
@@ -233,7 +254,7 @@ struct FindingsPanel: View {
         }
     }
 
-    private var verdictSymbol: String {
+    private func verdictSymbol(of record: ReviewRecord) -> String {
         switch Policy.suggestedVerdict(for: record) {
         case .approve: "checkmark.seal"
         case .requestChanges: "exclamationmark.triangle"
@@ -241,7 +262,7 @@ struct FindingsPanel: View {
         }
     }
 
-    private var verdictColor: Color {
+    private func verdictColor(of record: ReviewRecord) -> Color {
         switch Policy.suggestedVerdict(for: record) {
         case .approve: .green
         case .requestChanges: .orange

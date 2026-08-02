@@ -335,6 +335,20 @@ poznámky k architektuře. Právě kvůli nim nestačí bubliny.
 - **Nález bez místa má v sloupci `—`.**
 - **Klik na řádek** odscrolluje diff na místo nálezu a jeho bublina se na chvíli zvýrazní.
 
+### Tab Průběh (#22)
+
+Živý pohled na to, co reviewer právě dělá — **nativně z eventů**, ne přeposíláním textu.
+Proto v1 nepotřebuje vestavěný terminál.
+
+- **Sekce na reviewera**, v ní události pod sebou: čas, nástroj a to, nad čím běžel.
+- **Hlavička nese `session_id` a tlačítko `Zkopírovat resume`** (`claude --resume <id>`) —
+  levná náhrada terminálu, když je potřeba se do session vrátit.
+- **Osa se drží i po doběhnutí**, v paměti. Po restartu by se k session stejně nedalo
+  připojit, takže persistence nic nepřidá. Nový běh ji vynuluje.
+- **Sledovat konec** posouvá osu na nejnovější událost; dá se vypnout.
+- **Cesty se zkracují proti pracovnímu stromu** a `cd <strom> &&` z příkazů mizí. Bez toho
+  začíná každý řádek stejnými sedmdesáti znaky cache.
+
 ### Obarvení kódu (#48)
 
 Vlastní pravidla v `App/Syntax/`, žádná závislost. Komentáře, řetězce, čísla, klíčová
@@ -578,6 +592,11 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Rozsah se zapíše jako odkrytý **až po** načtení obsahu | Zapsat ho hned a obsah doplnit, až dorazí | Jinak zmizí rozbalovací řádek i se spinnerem a zůstane po něm prázdné místo — vypadá to, že se nic nestalo. Ze stejného důvodu `rows(of:)` ignoruje odkryté rozsahy, dokud obsah není: bez něj není co ukázat |
 | Rozbalená mezera **sundá hlavičku hunku** | Nechat hlavičky vždycky | Když se dvě části slijí do jednoho souvislého bloku, hlavička `@@` uprostřed neodděluje nic a mate — přišlo to jako první připomínka při zkoušení. Mezera, která nikdy nebyla, hlavičku nechává |
 | Sbalení si **nechá načtený obsah** | Zahodit ho spolu s rozsahy | Druhé rozbalení by jinak chodilo po síti pro něco, co už jednou dorazilo. Paměť to nestojí nic proti diffu samotnému |
+| Konec běhu jde do osy **stejným proudem** jako průběh | Zapsat ho přímo, jakmile běh doběhne | Odhalily to testy: zápis mimo proud dorazil **dřív** než události, které mu předcházely, a někdy se ztratil úplně (osa pro ten skill ještě neexistovala). Jeden proud dělá pořadí věcí konstrukce, ne štěstí |
+| Průběh teče do store **proudem**, ne přímým voláním | Hopnout na `@MainActor` u každé události | Události se hlásí ze session, která běží mimo hlavní vlákno, a **pořadí je to hlavní, co osa říká**. Task na každou událost nechá o pořadí rozhodovat plánovač; `AsyncStream` ho drží a `drain` je jediná smyčka, která do osy zapisuje |
+| Pokus o nástroj nese i **to, nad čím běžel** | Nechat v ose jen jméno nástroje, jak to parser uměl | Deset řádků „Bash“ pod sebou neřekne nic. Detail se bere z `input` podle známých klíčů (`file_path`, `pattern`, `command`, …); neznámý nástroj detail prostě nemá, protože hádat by znamenalo ukázat cizí hodnotu jako cestu |
+| Detail se zkracuje **proti pracovnímu stromu** | Ukázat, co přišlo | Každá cesta začíná stejnými sedmdesáti znaky cache a každý příkaz `cd <strom> &&`; po zkrácení je na řádku vidět soubor, ne kde ho aplikace má. Ořezává se navíc z jiné strany podle nástroje: u cesty je zajímavý konec, u příkazu začátek |
+| Panel se ukáže i **bez uloženého záznamu** | Vázat ho na `ReviewRecord`, jak to bylo od #20 | Při **prvním** review žádný záznam ještě není — a to je přesně chvíle, kdy je průběh to jediné, co existuje. Čekat na uložený výsledek by ho schovalo |
 | Výběr v tabulce se po skoku **zahazuje** | Nechat vybraný řádek podbarvený, jak to tabulka dělá sama | Druhé kliknutí na už vybraný řádek by neudělalo nic — a to je přesně situace „odscrolloval jsem jinam a chci se vrátit“. Zpětnou vazbu dává zvýrazněná bublina v diffu, ne podbarvení v tabulce |
 | Zvýraznění bubliny po skoku **zhasne** | Nechat rámeček, dokud se neklikne jinam | Trvalý rámeček se plete s červeným pruhem u blokujícího nálezu — dvě různé věci by říkaly „dívej se sem“. Dvě a půl vteřiny stačí na to, aby oko skok dohnalo |
 | Výška panelu se **táhne a pamatuje** | Měřit ji podle obsahu, jak to dělal seznam před #20 | Měření dávalo smysl u seznamu, který měl přirozenou výšku. Tabulka ji nemá — kolik místa má dostat, ví jen uživatel, a u každého PR jinak |

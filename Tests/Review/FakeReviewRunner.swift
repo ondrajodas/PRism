@@ -13,6 +13,9 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
     private let calledReportFindings: Bool
     private let failure: (any Error)?
     private let holds: Bool
+    /// Co běh nahlásí jako průběh. Prázdné u testů, které se na časovou osu neptají —
+    /// samotné `.queued` hlásí runner vždycky.
+    private let reported: [ReviewProgress]
     private let lock = NSLock()
     private var recorded: [ReviewRequest] = []
     private var released = false
@@ -22,13 +25,15 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         findings: [ReportedFinding] = [],
         calledReportFindings: Bool = true,
         failing failure: (any Error)? = nil,
-        holdsUntilRelease: Bool = false
+        holdsUntilRelease: Bool = false,
+        progress reported: [ReviewProgress] = []
     ) {
         self.outcome = outcome
         self.findings = findings
         self.calledReportFindings = calledReportFindings
         self.failure = failure
         holds = holdsUntilRelease
+        self.reported = reported
     }
 
     var requests: [ReviewRequest] { lock.withLock { recorded } }
@@ -44,7 +49,11 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         progress: @escaping ReviewProgressHandler
     ) async throws -> ReviewRun {
         lock.withLock { recorded.append(request) }
-        progress(.queued)
+        if reported.isEmpty {
+            progress(.queued)
+        } else {
+            for event in reported { progress(event) }
+        }
 
         while holds, !isReleased, !Task.isCancelled { await Task.yield() }
         try Task.checkCancellation()
