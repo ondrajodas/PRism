@@ -158,6 +158,11 @@ včetně důvodu.
   krok. Release je deník projektu — kdo si přečte poslední release, ví, kde jsme.
 - **Verzování:** `v0.<milník>.<pořadí PR v milníku>` — např. třetí mergnutý PR
   v milníku 1 je `v0.1.3`. Verze `v1.0.0` = dokončený rozsah v1 podle specifikace.
+
+  **Milník `Průběžné` číslo nemá** — je to koš na věci mimo fáze (provoz aplikace,
+  drobnosti, opravy). PR z něj **pokračuje v číslování běžící fáze**, protože verze je
+  značka na časové ose, ne štítek původu. Vlastní řada by znamenala, že se čísla vracejí
+  zpátky: `v0.0.x` po `v0.5.7` nikomu neřekne, kdy to vzniklo.
 - Binárky se do release nepřikládají — buildujeme lokálně. Release slouží k záznamu
   postupu, ne k distribuci.
 
