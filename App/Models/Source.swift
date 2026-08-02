@@ -7,9 +7,12 @@ import Foundation
 /// zásah do logiky. Proto slučování a deduplikace existují dřív, než je co slučovat.
 struct Source: Hashable, Codable, Sendable {
     /// Jméno pro UI — v konfiguraci a u řádku, odkud PR přišel.
-    let name: String
+    ///
+    /// `var`, protože zdroje se dají editovat v okně nastavení. Neplyne z toho, že by se
+    /// měnily za běhu jinde — mění je jen ten editor.
+    var name: String
     /// Search dotaz ve tvaru, kterému rozumí GitHub (`gh search prs`).
-    let query: String
+    var query: String
 
     /// Jediný zdroj, se kterým aplikace startuje.
     ///

@@ -1,0 +1,194 @@
+import SwiftUI
+
+/// Záložka „Repozitáře“ — režim a override skillů a kategorií pro jedno repo.
+struct RepositorySettingsView: View {
+    @Bindable var settings: SettingsModel
+    let repositories: [RepoID]
+    @State private var selection: RepoID?
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // Široký sloupec schválně: `keboola/sandboxes-notebook-utils` je běžné jméno
+            // a uříznuté `…andboxes-notebook-utils` se od sousedního repa nepozná.
+            list
+                .frame(width: 290)
+            Divider()
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        // Bez výběru je pravá půlka prázdná hned po otevření záložky, což vypadá jako
+        // chyba. První repo je odpověď na „ukaž mi něco“, ne rozhodnutí za uživatele.
+        .task { selection = selection ?? repositories.first }
+    }
+
+    @ViewBuilder private var list: some View {
+        if repositories.isEmpty {
+            ContentUnavailableView(
+                "Žádné repozitáře",
+                systemImage: "folder",
+                description: Text("Objeví se tu, jakmile dorazí první PR.")
+            )
+        } else {
+            List(repositories, id: \.self, selection: $selection) { repo in
+                row(repo)
+            }
+        }
+    }
+
+    private func row(_ repo: RepoID) -> some View {
+        HStack(spacing: 6) {
+            Text(verbatim: repo.description)
+                .lineLimit(1)
+                .truncationMode(.head)
+            Spacer(minLength: 4)
+            if settings.draft.resolved(for: repo).mode == .automatic {
+                Text("auto")
+                    .font(.caption2)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(.tint.opacity(0.18), in: .capsule)
+            }
+        }
+    }
+
+    @ViewBuilder private var detail: some View {
+        if let repo = selection, repositories.contains(repo) {
+            RepositoryDetailView(settings: settings, repo: repo)
+        } else {
+            ContentUnavailableView(
+                "Vyber repozitář",
+                systemImage: "sidebar.left",
+                description: Text("Vlevo jsou repa z posledního seznamu PR i z konfigurace.")
+            )
+        }
+    }
+}
+
+/// Nastavení jednoho repa.
+private struct RepositoryDetailView: View {
+    @Bindable var settings: SettingsModel
+    let repo: RepoID
+
+    var body: some View {
+        Form {
+            Section {
+                // `nil` je vlastní volba, ne prázdno: „ber globální“ se musí dát vybrat
+                // zpátky, jinak by se repo po jednom kliknutí navždycky odpojilo od
+                // globálního defaultu.
+                Picker("Režim", selection: config.mode) {
+                    Text("Podle globálního nastavení (\(modeName(settings.draft.global.mode)))")
+                        .tag(ReviewMode?.none)
+                    Text("Manuální").tag(ReviewMode?.some(.manual))
+                    Text("Automatický").tag(ReviewMode?.some(.automatic))
+                }
+                .pickerStyle(.radioGroup)
+            } header: {
+                Text(verbatim: repo.description)
+                    .font(.headline)
+            } footer: {
+                Text("Manuální čeká na tlačítko. Automatický spustí review, jakmile se PR objeví v seznamu.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            override(
+                title: "Skilly",
+                items: config.skills,
+                fallback: settings.draft.global.skills,
+                placeholder: "code-review",
+                addLabel: "Přidat skill",
+                emptyMeaning: "Prázdný seznam znamená, že se tady nereviewuje nic."
+            )
+
+            override(
+                title: "Blokující kategorie",
+                items: config.blockingCategories,
+                fallback: settings.draft.global.blockingCategories,
+                placeholder: "correctness",
+                addLabel: "Přidat kategorii",
+                emptyMeaning: "Prázdný seznam znamená, že tady nic neblokuje."
+            )
+        }
+        .formStyle(.grouped)
+    }
+
+    /// Sekce s vlastní sadou, nebo jen výpis té globální.
+    ///
+    /// Vypnutý přepínač je `nil` („ber globální“), zapnutý prázdný seznam je vlastní
+    /// odpověď („tady nic“) — a to jsou dvě různé věci, které se musí dát rozeznat i na
+    /// obrazovce, nejen v souboru.
+    @ViewBuilder private func override(
+        title: LocalizedStringKey,
+        items: Binding<[String]?>,
+        fallback: [String],
+        placeholder: String,
+        addLabel: String,
+        emptyMeaning: LocalizedStringKey
+    ) -> some View {
+        Section {
+            Toggle("Vlastní sada", isOn: isOverridden(items, fallback: fallback))
+            if items.wrappedValue != nil {
+                StringListEditor(items: unwrapped(items), placeholder: placeholder, addLabel: addLabel)
+            }
+        } header: {
+            Text(title)
+        } footer: {
+            if items.wrappedValue == nil {
+                Text("Bere globální: \(describe(fallback))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if items.wrappedValue?.isEmpty == true {
+                Text(emptyMeaning)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func describe(_ items: [String]) -> String {
+        items.isEmpty ? "nic" : items.joined(separator: ", ")
+    }
+
+    private func modeName(_ mode: ReviewMode) -> String {
+        switch mode {
+        case .manual: "manuální"
+        case .automatic: "automatický"
+        }
+    }
+
+    /// Odvozený `Binding` bez `nil`.
+    ///
+    /// **Nesmí to být `Binding(items)`**: ten force-unwrapuje při každém čtení a editor
+    /// nad ním jeden cyklus přežije i vypnutí přepínače — takže `nil` spadne rovnou
+    /// v `BindingOperations.ForceUnwrapping`. Ověřeno pádem aplikace při vypnutí vlastní
+    /// sady skillů. Zápis se stejnou pojistkou zahazuje: doběhlá editace už zrušeného
+    /// override by ho jinak vzkřísila.
+    private func unwrapped(_ items: Binding<[String]?>) -> Binding<[String]> {
+        Binding(
+            get: { items.wrappedValue ?? [] },
+            set: { newValue in
+                guard items.wrappedValue != nil else { return }
+                items.wrappedValue = newValue
+            }
+        )
+    }
+
+    /// Zapnutí začíná od globální sady — nejčastější důvod pro override je jednu položku
+    /// ubrat, ne psát seznam od nuly.
+    private func isOverridden(_ items: Binding<[String]?>, fallback: [String]) -> Binding<Bool> {
+        Binding(
+            get: { items.wrappedValue != nil },
+            set: { items.wrappedValue = $0 ? fallback : nil }
+        )
+    }
+
+    /// Repo bez záznamu v konfiguraci se chová jako `RepositoryConfig()`, takže se dá
+    /// editovat rovnou. Prázdný záznam za sebou nenechává — o to se stará
+    /// `Configuration.setRepository(_:for:)`.
+    private var config: Binding<RepositoryConfig> {
+        Binding(
+            get: { settings.draft.repositories[repo] ?? RepositoryConfig() },
+            set: { settings.draft.setRepository($0, for: repo) }
+        )
+    }
+}

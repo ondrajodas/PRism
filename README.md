@@ -73,11 +73,18 @@ aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vr�
 se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí běhu.
 
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
-PR, sada skillů, blokující kategorie, interval pollingu, kolik session smí běžet naráz,
-rozpočet cache a model. Repozitář si může přebít režim (`manual`/`automatic`), skilly
-i kategorie. Soubor se zakládá sám s dosavadními výchozími hodnotami, načítá se při startu
-i při návratu do aplikace, a když je rozbitý, běží se na defaultech a je to vidět. Editor
-v okně teprve přijde — zatím se edituje soubor.
+PR, sada skillů, blokující kategorie, výchozí režim review, interval pollingu, kolik
+session smí běžet naráz, rozpočet cache a model. Repozitář si může přebít režim
+(`manual`/`automatic`), skilly i kategorie. Soubor se zakládá sám s dosavadními výchozími
+hodnotami, načítá se při startu i při návratu do aplikace, a když je rozbitý, běží se na
+defaultech a je to vidět.
+
+Editovat ho jde ručně, nebo **oknem nastavení** (⌘, nebo ozubené kolo v toolbaru). Okno
+má dvě záložky: globální hodnoty a per repo, kde se u každého repa z posledního seznamu PR
+nastavuje režim a případný override skillů a kategorií. Ukládá se samo do téhož souboru,
+pár set milisekund po posledním úhozu, a změna se projeví bez restartu. Rozbitý soubor
+editor **nepřepíše** — místo formuláře ukáže chybu a nabídne soubor otevřít. Dokud je
+nastavení vepředu, hlavní okno se lehce rozostří.
 
 Pod tím vším je vlastní cache repozitářů: bare partial clone do
 `~/Library/Application Support/PRism/`, přihlášení delegované na `gh`, odpojený
@@ -87,7 +94,8 @@ otevřeného PR a při překročení rozpočtu (10 GB) i ta nejdéle nepoužitá
 Uložené nálezy jsou klíčované head commitem: nové commity je označí jako zastaralé
 a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí.
 
-Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první tři a rozjetá čtvrtá.
+Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první čtyři; z páté zbývá automatický
+režim a jazyk nálezů.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -106,7 +114,8 @@ aktuálně je.
    **Vlastních** klonů na disku se aplikace nikdy nedotkne.
 3. **Review** — nakonfigurované skilly se spustí jako paralelní headless session
    Claude Code v tom worktree, omezené na read-only nástroje. Spouští se **tlačítkem**;
-   automatický režim se zapíná zvlášť pro každé repo (nová repa mají default manuální).
+   automatický režim se dá zapnout globálně i zvlášť pro každé repo (výchozí je manuální,
+   aby neznámé repo nespálilo panel session bez dozoru).
 4. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
    Strukturovaná data, ne parsování textu.
 5. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
@@ -124,7 +133,7 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 | **Závažnost** | Aplikace nevymýšlí vlastní škálu. Seskupuje podle `category` z výstupu reviewera a odvozuje jediný blokující boolean (`verdict == CONFIRMED` a `category` v blokující sadě). Z toho vypadne návrh verdiktu. |
 | **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
-| **Konfigurace** | Dvě úrovně: globální default a override per repo (režim auto/manual, sada skillů, blokující kategorie). |
+| **Konfigurace** | Dvě úrovně: globální default a override per repo (režim auto/manual, sada skillů, blokující kategorie). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
 
 ## Požadavky
 
@@ -178,6 +187,7 @@ App/                      zdrojáky aplikace — target PRism
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
   GitHub/                 čtení PR přes gh CLI: gateway, typované chyby, tvar výstupu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
+  Config/                 config.json: globální default, override per repo, čtení a zápis
   Diff/                   parsování unified diffu na soubory, hunky a řádky
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku
   Review/                 spuštění session claude a překlad stream-json na nálezy
@@ -186,16 +196,19 @@ App/                      zdrojáky aplikace — target PRism
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky
+    Settings/             okno nastavení (⌘,) — globální hodnoty a nastavení per repo
 Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip
   Environment/            testy Environment vrstvy + fakes
   Checkout/               testy klonování — proti fake runneru i skutečnému gitu
+  Config/                 testy čtení, zápisu a slučování konfigurace
   Diff/                   testy parseru diffu proti skutečným výstupům gh pr diff
   GitHub/                 testy gateway a klasifikace chyb gh
   Policy/                 testy čistých funkcí
   Review/                 testy parseru a runneru proti skutečným streamům
   Polling/                testy pollingu proti fake gateway a fake času
   Store/                  testy AppStore a persistence nálezů
+  Views/                  testy řádků tabulky a modelu okna nastavení
   Syntax/                 testy detekce jazyka a obarvení kódu
   Support/                testy sdílených drobností
   Fixtures/gh/            skutečné výstupy gh z veřejných repozitářů (JSON i diffy)

@@ -225,7 +225,14 @@ při prvním setkání s repem.
 **Hotovo (#23).** `config.json` v kořeni cache, `Configuration` → `resolved(for:)` jako
 čistá funkce. Hodnoty se čtou **při použití**, ne při startu, takže se změna projeví bez
 restartu; soubor se načte při spuštění a pak pokaždé, když se okno vrátí do popředí.
-Editor v okně je #70 — zatím se edituje soubor.
+
+**Okno nastavení hotové (#70).** Scéna `Settings` (⌘,) se dvěma záložkami píše do téhož
+souboru. Rozpis výš se u toho změnil: **globální část dostala `mode`**, tedy výchozí režim
+review, a per-repo `mode` je proto **volitelný** (`nil` = ber globální). Vynutil si to
+požadavek na globální default — bez optionalu by nešlo odlišit repo, které si o `manual`
+řeklo, od toho, které o režimu mlčí, a při globálním automatu jsou to opačné odpovědi.
+Věta „nové repozitáře mají default `manual`“ tím platit nepřestala, jen se posunula: neznámé
+repo bere **globální** režim a ten je ve výchozím stavu `manual`.
 
 ## UI
 
@@ -656,6 +663,15 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Obarvení se **necachuje**, počítá se při vykreslení řádku | Sdílená cache klíčovaná jazykem a textem řádku, jak psalo issue | **Změna proti zadání #48.** Změřeno na skutečném kódu: 8,2 µs na řádek s optimalizací (48 µs v Debug buildu), tedy 0,33 ms na celou obrazovku o 40 řádcích — a to jen když se přestaví všechny naráz; při scrollování se skládají jednotky řádků. Cache by za to přinesla globální měnitelný stav, invalidaci a strop paměti. Je to místo, kam se dá sáhnout, kdyby se to někdy projevilo |
 | Proměnná uvnitř řetězce zůstává **řetězcem** | Obarvit `$name` i uvnitř `"…"`, jak to dělá PhpStorm | Dvě barvy uvnitř jedné uvozovkované hodnoty rozbíjejí to, co má řetězec říct — že tohle všechno je jeden literál. Je to výměna jedné podmínky v tokenizeru, kdyby se rozhodnutí mělo otočit |
 | `zsh -lc`, `.zshrc` se nepřečte | `zsh -ilc`, aby fallback viděl i `.zshrc` | Zkoušeno a zahozeno: interaktivní shell se ze spuštěné aplikace zasekl (z terminálu běží pod 0,5 s) a **ignoruje `SIGTERM`** — vytáhla ho až eskalace na `SIGKILL`, tedy 7 s do prázdného výsledku. Zaseknutý start je horší selhání než nenalezená binárka, kterou gate umí vysvětlit. Zůstává jako známé omezení |
+| Nastavení je **scéna `Settings`** (⌘,), ne sheet nad oknem | Sheet, panel v detailu, nebo ponechat popover s cestou k souboru | Zadání chtělo ⌘, a je to macOS zvyklost. Daň je viditelná: store se musel přestěhovat z `ContentView` do `PreflightModel`, protože scéna je vlastní strom a k `@State` uvnitř okna nedosáhne. Sheet by tuhle přestavbu ušetřil, ale ⌘, by pak nefungovalo a seznam rep by tahal store stejně |
+| Ukládá se **samo, odloženě** (600 ms), bez tlačítka `Uložit` | Explicitní tlačítko, nebo zápis na commit každého pole | Tlačítko je krok navíc u něčeho, co má být jeden klik (přepnout repo na automat), a stav „rozepsáno, neuloženo“ by musel být vidět. Zápis na každý úhoz znamená deset dotyků disku za slovo a uložené mezistavy. Zpoždění řeší obojí; zavření okna ho nečeká (`flush()`) |
+| Zápis se **stejnou** hodnotou se zahazuje | Ukládat každý zápis do draftu | Nebylo to zamýšlené pravidlo, byla to oprava: pole si při zobrazení zapisují zpátky, co v nich je, takže **samotné otevření okna** přepsalo ručně editovaný soubor a patička hlásila „Uloženo“. Chytilo se to na běžící aplikaci, ne v testu |
+| Globální `mode` a **volitelný** per-repo `mode` | Nechat režim jen per repo, jak psalo #23 | Vyžádané při zkoušení: přepínat desítky rep po jednom je práce, kterou má dělat default. Optional per repo je pak podmínka správnosti, ne kosmetika — explicitní `manual` musí přežít přepnutí globálního defaultu na automat, jinak by se repo, u kterého jsem automat vypnul, samo zapnulo |
+| Prázdný záznam repa se **maže**, ale podle prázdnosti, ne podle shody s globálem | Nechat v souboru všechno, co se proklikalo, nebo mazat vše, co se rovná globální hodnotě | Soubor se čte ručně, takže hromada prázdných objektů po proklikání okna vadí. Mazat „stejné jako globální“ ale nejde: byl by to přesně ten tichý přepínač z řádku výš |
+| Rozbitá hodnota režimu se sráží na `manual`, chybějící klíč bere globální | Brát obojí stejně | Chybějící klíč je „nic jsem neřekl“, kdežto překlep v hodnotě je pokus něco říct. Když se tím pokusem automat **vypínal**, nesmí ho překlep nechat zapnutý — stejná logika jako u nuly souběžných session |
+| Rozostřuje se, jen když je nastavení **key window** | Rozostřit vždycky, když je okno otevřené, nebo udělat nastavení modální | Okno je nemodální, takže se kliknutím zpátky do seznamu dá dál pracovat — a rozostřené okno, ve kterém zrovna píšu, je horší než žádný efekt. Modální okno nastavení by zase zablokovalo sledování běžícího review. Poloměr 3 px doladěn na běžící aplikaci (6 bylo moc) |
+| Odvozený `Binding` z optionalu se píše **ručně**, ne přes `Binding(_:)` | Nechat `if let list = Binding(items)`, jak to SwiftUI nabízí | **Shazovalo to aplikaci** při vypnutí vlastní sady skillů: `BindingOperations.ForceUnwrapping` čte základ znovu při každém update a editor nad ním jeden překreslovací cyklus přežije. Ruční binding s `?? []` nemá kde spadnout a zápis se navíc zahazuje, dokud je zdroj `nil` — jinak by doběhlá editace zrušený override vzkřísila |
+| Rozepsaná hodnota z editoru se **přeskočí** | Nepouštět ji do konfigurace (validace v okně), nebo ji použít, jak je | Našlo se vlastní revizí diffu, ne Copilotem: `Přidat zdroj` vyrobí řádek, který se uloží dřív, než se dopíše dotaz — a `gh search prs` bez výrazu selže. Protože selhání jednoho zdroje zahazuje celý tik, zmizel by kvůli rozepsanému řádku celý seznam PR. Validace v okně by musela blokovat ukládání a vyrobit stav „rozepsáno, neuloženo“, který autosave nemá kde ukázat; přeskočení je jedna čistá funkce a prázdný **seznam** zůstává vlastní odpovědí |
 
 ## Ověřeno proti CLI (2026-08-01)
 

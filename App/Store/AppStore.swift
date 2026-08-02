@@ -39,6 +39,12 @@ final class AppStore {
     /// vrací. Pořadí kopíruje pořadí, ve kterém běhy začaly.
     private(set) var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
 
+    /// Je otevřené okno nastavení? Hlavní okno se podle toho rozostří, aby netahalo oko.
+    ///
+    /// Žije tady, ne ve view: okno nastavení je **vlastní scéna**, takže si to dvě okna
+    /// nemají kde říct jinudy.
+    var isSettingsOpen = false
+
     /// Nastavení, se kterým aplikace běží.
     private(set) var configuration: Configuration
     /// Proč se konfiguraci nepodařilo přečíst. Rozbitý soubor nesmí aplikaci položit, ale
@@ -76,7 +82,7 @@ final class AppStore {
         self.configStore = configStore
         polling = PollingService(
             gateway: gateway,
-            sources: configuration.global.sources,
+            sources: configuration.activeSources,
             interval: .seconds(configuration.global.pollIntervalSeconds),
             time: time
         )
@@ -140,16 +146,42 @@ final class AppStore {
         configuration.resolved(for: repo)
     }
 
+    /// Repozitáře, které okno nastavení nabídne — z posledního seznamu PR i z konfigurace.
+    var knownRepositories: [RepoID] {
+        Policy.knownRepositories(in: pullRequests, configuration: configuration)
+    }
+
     /// Znovu načte `config.json`. Co se čte při použití (skilly, kategorie, limit souběhu,
     /// rozpočet cache), se projeví hned; zdroje a interval se přepíšou pollingu tady.
     func reloadConfiguration() async {
         guard let configStore else { return }
         let loaded = await configStore.load()
-        configuration = loaded.configuration
         configurationFailure = loaded.failure
-        configurationBox?.value = loaded.configuration
-        polling.sources = loaded.configuration.global.sources
-        polling.interval = .seconds(loaded.configuration.global.pollIntervalSeconds)
+        await apply(loaded.configuration)
+    }
+
+    /// Uloží konfiguraci z okna nastavení a hned ji propíše dál.
+    ///
+    /// Chyba **letí ven**: neuložené nastavení, o kterém se mlčí, vypadá v okně jako
+    /// uložené a po restartu je pryč. Do stavu se přitom propíše až po úspěšném zápisu,
+    /// aby se okno a soubor nerozešly.
+    func updateConfiguration(_ configuration: Configuration) async throws {
+        try await configStore?.save(configuration)
+        // Na disku teď leží to, co jsme zapsali — starší chyba čtení už neplatí. Uložit se
+        // dá jen z odemčeného editoru, takže se tím nepřebíjí soubor, který se nepovedlo
+        // přečíst.
+        configurationFailure = nil
+        await apply(configuration)
+    }
+
+    /// Jedna cesta, kterou se nová konfigurace dostane do běžící aplikace — ať přišla
+    /// z disku, nebo z okna nastavení. Kdyby byly dvě, jedna z nich by časem zapomněla
+    /// něco přepsat.
+    private func apply(_ configuration: Configuration) async {
+        self.configuration = configuration
+        configurationBox?.value = configuration
+        polling.sources = configuration.activeSources
+        polling.interval = .seconds(configuration.global.pollIntervalSeconds)
         // Limit souběhu se čte při každém pokusu o slot, ale kdo už čeká ve frontě, spí.
         await reviewer?.configurationChanged()
     }
