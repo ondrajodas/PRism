@@ -17,6 +17,7 @@ struct FindingsPanel: View {
     /// Co reviewery dělaly. Prázdné, dokud se nic nespustilo.
     /// Nálezy k zobrazení — po filtru chipů, takže ne nutně všechny ze záznamu.
     var findings: [Finding] = []
+    var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     var timelines: [ReviewerTimeline] = []
     var isRunning = false
 
@@ -211,7 +212,7 @@ struct FindingsPanel: View {
     }
 
     @ViewBuilder private func explanation(of record: ReviewRecord) -> some View {
-        switch Policy.reviewState(for: record) {
+        switch Policy.reviewState(for: record, categories: blockingCategories) {
         case .clean:
             Text("Review doběhlo a nic nenašlo.").foregroundStyle(.secondary)
         case .failed(let detail), .checkoutFailed(let detail):
@@ -226,7 +227,7 @@ struct FindingsPanel: View {
     /// Bez řazení podle sloupce platí pořadí z `Policy` — tabulka nemá vlastní představu
     /// o tom, co patří nahoru.
     private var rows: [FindingRow] {
-        let base = FindingRow.rows(of: findings)
+        let base = FindingRow.rows(of: findings, blocking: blockingCategories)
         return sortOrder.isEmpty ? base : base.sorted(using: sortOrder)
     }
 

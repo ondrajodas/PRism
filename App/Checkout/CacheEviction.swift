@@ -12,22 +12,26 @@ import Foundation
 /// rozdělanou práci.
 struct CacheEviction: Sendable {
     private let layout: CacheLayout
-    private let budget: Int
+    private let budget: @Sendable () -> Int
     private let checkout: (any RepoCheckout)?
 
-    /// 10 GB je zatím konstanta; do konfigurace se přesune s #23.
+    /// Použije se, když rozpočet nikdo nepředá — v aplikaci ho dává konfigurace.
     static let defaultBudget = 10 * 1024 * 1024 * 1024
 
     /// `checkout` je volitelný jen kvůli testům eviction samotné — v aplikaci se předává,
     /// aby se s repem zahodily i refy, které si aplikace k jeho PR založila.
     init(
         layout: CacheLayout = .applicationSupport,
-        budget: Int = defaultBudget,
+        budget: @escaping @Sendable () -> Int = { defaultBudget },
         checkout: (any RepoCheckout)? = nil
     ) {
         self.layout = layout
         self.budget = budget
         self.checkout = checkout
+    }
+
+    init(layout: CacheLayout = .applicationSupport, budget: Int, checkout: (any RepoCheckout)? = nil) {
+        self.init(layout: layout, budget: { budget }, checkout: checkout)
     }
 
     /// - Parameters:
@@ -117,6 +121,7 @@ struct CacheEviction: Sendable {
             (repo: $0, size: try size(of: $0), lastUsed: lastUsed($0))
         }
         var total = entries.reduce(0) { $0 + $1.size }
+        let budget = budget()
         guard total > budget else { return }
 
         // Razítko se čte jednou dopředu, ne při každém porovnání.

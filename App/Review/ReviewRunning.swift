@@ -30,9 +30,17 @@ protocol ReviewRunning: Sendable {
         _ request: ReviewRequest,
         progress: @escaping ReviewProgressHandler
     ) async throws -> ReviewRun
+
+    /// Konfigurace se načetla znovu — limit souběhu se mohl změnit.
+    ///
+    /// Výchozí implementace nedělá nic: limit hlídá jen skutečný runner a fakes v testech
+    /// by tuhle metodu jinak musely dopisovat všechny.
+    func configurationChanged() async
 }
 
 extension ReviewRunning {
+    func configurationChanged() async {}
+
     func run(_ request: ReviewRequest) async throws -> ReviewRun {
         try await run(request, progress: { _ in })
     }

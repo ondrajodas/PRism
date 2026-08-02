@@ -11,8 +11,9 @@ final class PollingService {
     private(set) var state = PollState()
 
     private let gateway: any GitHubGateway
-    private let sources: [Source]
-    private let interval: Duration
+    /// Mění je reload konfigurace, takže nejsou `let`.
+    var sources: [Source]
+    var interval: Duration
     private let time: any TimeSource
 
     /// Kolikátý rate limit v řadě to je. Nula znamená, že poslední pokus prošel.

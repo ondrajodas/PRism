@@ -89,6 +89,7 @@ struct PullRequestDetailView: View {
                     isExpanded: $findingsExpanded,
                     jump: jump,
                     findings: visibleFindings,
+                    blockingCategories: blockingCategories,
                     timelines: timelines,
                     isRunning: store.isReviewing(pullRequest.id)
                 )
@@ -105,18 +106,24 @@ struct PullRequestDetailView: View {
                 ReviewerChipsView(
                     chips: Policy.chips(
                         for: record,
-                        skills: store.reviewSkills,
+                        skills: store.reviewSkills(for: pullRequest.repo),
                         running: store.runningReviewers(for: pullRequest.id)
                     ),
                     muted: $mutedReviewers
                 )
                 Spacer(minLength: 12)
                 if let record {
-                    VerdictView(record: record)
+                    VerdictView(record: record, blockingCategories: blockingCategories)
                 }
             }
             .padding(.top, 2)
         }
+    }
+
+    /// Co se na tomhle repu považuje za blokující. Bere se z konfigurace, ne z konstanty
+    /// v `Policy` — právě kvůli tomu je to jediný knoflík, kterým se doladí, co je vážné.
+    private var blockingCategories: Set<String> {
+        store.resolved(for: pullRequest.repo).blockingCategories
     }
 
     /// Nálezy po odfiltrování ztlumených reviewerů. Verdikt se tím **nemění** — filtr je
@@ -170,6 +177,7 @@ struct PullRequestDetailView: View {
                 scrollTarget: $scrollTarget,
                 expansion: expansionActions,
                 findings: Policy.groups(of: visibleFindings),
+                blockingCategories: blockingCategories,
                 highlighted: highlighted
             )
         case .failed(let detail):

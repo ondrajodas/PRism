@@ -34,7 +34,7 @@ struct ClaudeReviewRunnerTests {
         _ streamer: FakeProcessStreamer,
         maxConcurrent: Int = 3
     ) -> ClaudeReviewRunner {
-        ClaudeReviewRunner(claude: claude, gh: gh, runner: streamer, maxConcurrent: maxConcurrent)
+        ClaudeReviewRunner(claude: claude, gh: gh, runner: streamer, maxConcurrent: { maxConcurrent })
     }
 
     // MARK: - Výsledek běhu

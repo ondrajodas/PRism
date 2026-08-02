@@ -6,6 +6,7 @@ import SwiftUI
 /// tlačítko. Proto je i vizuálně doporučení, ne příkaz.
 struct VerdictView: View {
     let record: ReviewRecord
+    let blockingCategories: Set<String>
 
     var body: some View {
         HStack(spacing: 6) {
@@ -29,7 +30,7 @@ struct VerdictView: View {
     }
 
     private var verdict: ReviewVerdict? {
-        Policy.suggestedVerdict(for: record)
+        Policy.suggestedVerdict(for: record, categories: blockingCategories)
     }
 
     private var text: String {

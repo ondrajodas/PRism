@@ -32,17 +32,23 @@ enum ClaudeCommand {
 
     /// `--verbose` není volba, je to podmínka: bez něj `claude` v print režimu
     /// `stream-json` odmítne.
-    static func arguments(prompt: String) -> [String] {
-        [
+    static func arguments(prompt: String, model: String? = nil) -> [String] {
+        var arguments = [
             "-p", prompt,
             "--output-format", "stream-json",
             "--verbose",
             "--allowedTools", allowedTools,
             "--disallowedTools", disallowedTools,
         ]
+        // Bez volby se `--model` neposílá vůbec — `claude` si pak vybere sám a aplikace
+        // nemusí vědět, jak se který model jmenuje.
+        if let model, !model.isEmpty {
+            arguments += ["--model", model]
+        }
+        return arguments
     }
 
-    /// Prompt je zatím **natvrdo**; konfigurace skillů a modelu přijde v #23.
+    /// Prompt je **natvrdo**; skilly a model se berou z konfigurace (#23).
     ///
     /// **Není to slash command, a to je ověřené rozhodnutí.** `-p "/code-review …"`
     /// doběhne úspěšně, ale vestavěný příkaz si jede vlastní pipeline a nálezy vrátí jako

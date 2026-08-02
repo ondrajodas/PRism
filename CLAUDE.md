@@ -234,7 +234,7 @@ nahraditelné fake implementací.
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení | — |
-| `Config` | Globální default + override per repo | disk |
+| `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu | — |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`. Mimo tuhle sedmičku stojí
@@ -331,6 +331,39 @@ Věci, které se u toho nemají rozbít:
 - **Nezakotvené bubliny se řadí podle čísla řádku.** Slovník pořadí nemá, takže by jinak
   mezi překresleními poskakovaly.
 
+### `Config` (`App/Config/`)
+
+Nastavení ve dvou úrovních. Nahrazuje konstanty, které byly do #23 roztroušené po celé
+aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozpočet cache).
+
+| Typ | Co je |
+|---|---|
+| `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]` |
+| `GlobalConfig` | `sources`, `skills`, `blockingCategories`, interval, souběh, rozpočet, model |
+| `RepositoryConfig` | `mode` (`manual`/`automatic`), override skillů a kategorií |
+| `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
+| `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
+| `ConfigurationBox` | Aktuální konfigurace pro kód mimo hlavní vlákno (limit souběhu, rozpočet, model) |
+
+Věci, které se u toho nemají rozbít:
+
+- **Dekóduje se tolerantně, i uvnitř repa.** Chybějící klíč znamená „ber výchozí“, ne
+  „zahoď celou konfiguraci“ — ručně psaný soubor málokdy obsahuje všechno. Platí to
+  hlavně na `RepositoryConfig`: override, který mění jen skilly, je to nejběžnější, co
+  do souboru někdo napíše, a povinný `mode` by kvůli němu shodil celý soubor.
+  **Výjimka je `sources` a `skills`** — tam se rozbitá hodnota hlásí, protože tiše
+  podstrčený výchozí seznam by ukazoval cizí PR nebo pustil jiné reviewery.
+- **Rozbitý soubor se nepřepisuje** a chyba je vidět nad seznamem. Aplikace běží na
+  defaultech, ale mlčet o tom nesmí.
+- **Hodnoty se čtou při použití**, ne při startu: limit souběhu při každém pokusu o slot,
+  rozpočet při každém úklidu, skilly při spuštění review. Proto stačí načíst a nemusí se
+  restartovat.
+- **Nula souběžných session se bere jako jedna.** Překlep nemá aplikaci umlčet.
+- **Prázdný seznam skillů u repa je vlastní odpověď** („tady nereviewuj nic“), `nil`
+  znamená „ber globální“.
+- **Výchozí hodnoty musí odpovídat konstantám, které nahradily** — je na to test, jinak by
+  se aplikace po zavedení konfigurace začala chovat jinak.
+
 ### `App/Syntax/`
 
 Obarvení kódu v diffu. Čisté funkce, **žádná externí závislost** — vlastní pravidla místo
@@ -424,6 +457,10 @@ Věci, které se u toho nemají rozbít:
   druhý slot pro běh, na který sám čeká.
 - **Slot se předává, ne vrací.** Mezikrok, ve kterém je volný, by pustil dovnitř běh, který
   si o něj řekl později.
+- **Změněný limit se musí projevit na obou stranách.** Čte se při každém pokusu o slot,
+  ale to samo nestačí: po **zvýšení** spí čekatelé, které nemá kdo vzbudit (proto
+  `admitWaiting()`, které volá `AppStore` po načtení konfigurace), a po **snížení** se
+  slot nesmí předat dál, dokud se souběh nevyčerpá na nový strop.
 - **`.queued` se hlásí vždycky**, i když je slot volný hned. Rozlišovat „čekal“ od
   „nečekal“ by znamenalo hádat, jestli se `acquire` opravdu uspalo.
 - **Prostředí session nese credential helper přes `GIT_CONFIG_*`.** Strom stojí nad partial
@@ -1205,6 +1242,9 @@ dotáhnout — **změna proti zadání**, viz specifikace.
 
 Spodní panel hotový (issue #20) — taby `Nálezy`/`Průběh`, řaditelná tabulka, tažením
 měnitelná výška a proklik do diffu se zvýrazněním bubliny.
+
+Konfigurace hotová (issue #23) — `App/Config/`, `config.json` v kořeni cache. Načte se při
+startu a při návratu okna do popředí; editor v okně je #70.
 
 Chipy reviewerů a verdikt hotové (issue #21) — horní lišta detailu ukazuje, co který
 reviewer udělal, klikem se jeho nálezy schovají z bublin i z tabulky, a vpravo je návrh

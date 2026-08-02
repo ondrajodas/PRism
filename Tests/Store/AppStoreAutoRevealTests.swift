@@ -11,6 +11,13 @@ import Testing
 @MainActor
 struct AppStoreAutoRevealTests {
     private let sources = [Source(name: "Moje", query: "review-requested:@me is:open")]
+
+    /// Zdroje i sada skillů se berou z konfigurace, takže si ji test postaví.
+    private var configuration: Configuration {
+        var configuration = Configuration.standard
+        configuration.global.sources = sources
+        return configuration
+    }
     private let pr = PRIdentifier("cli/cli#1")!
 
     /// Diff mění řádek 2; nález na řádku 10 tedy v diffu není.
@@ -71,12 +78,11 @@ struct AppStoreAutoRevealTests {
         let workspace = try TemporaryDirectory()
         return AppStore(
             gateway: gateway,
-            sources: sources,
+            configuration: configuration,
             time: FakeTimeSource(),
             checkout: FakeRepoCheckout(outcome: .success(URL(filePath: "/tmp/clone.git"))),
             reviewer: FakeReviewRunner(findings: findings.map(\.reported)),
             reviews: ReviewStore(layout: CacheLayout(root: workspace.url)),
-            skills: ["code-review"]
         )
     }
 

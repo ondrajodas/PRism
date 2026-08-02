@@ -6,7 +6,9 @@ import Foundation
 /// procesů. Běhy nad limit čekají ve frontě v pořadí, ve kterém přišly — kdo si řekl dřív,
 /// jde dřív; jinak by se u větší dávky nedalo poznat, jestli se na řádek vůbec dostane.
 actor ReviewSlots {
-    private let limit: Int
+    /// Limit se čte **při každém pokusu o slot**, ne jednou při vzniku — jinak by se
+    /// změna konfigurace projevila až po restartu.
+    private let limit: @Sendable () -> Int
     private var taken = 0
     private var waiting: [(id: UUID, continuation: CheckedContinuation<Void, any Error>)] = []
     /// Zrušení, která dorazila dřív, než se čekatel stihl zapsat.
@@ -22,10 +24,17 @@ actor ReviewSlots {
     /// v dlouho běžící aplikaci rostl bez omezení.
     private var pendingAcquires: Set<UUID> = []
 
-    init(limit: Int) {
-        precondition(limit > 0, "Bez jediného slotu by se nespustilo nic.")
+    init(limit: @escaping @Sendable () -> Int) {
         self.limit = limit
     }
+
+    init(limit: Int) {
+        self.init(limit: { limit })
+    }
+
+    /// Nula z konfigurace by znamenala, že se nespustí nic a nikdo nepozná proč. Překlep
+    /// v souboru nemá aplikaci umlčet.
+    private var currentLimit: Int { max(1, limit()) }
 
     /// Spustí práci, jakmile je volný slot, a slot po ní vrátí — i když skončila chybou.
     ///
@@ -45,7 +54,7 @@ actor ReviewSlots {
 
     private func acquire() async throws {
         try Task.checkCancellation()
-        guard taken >= limit else {
+        guard taken >= currentLimit else {
             taken += 1
             return
         }
@@ -73,12 +82,28 @@ actor ReviewSlots {
 
     /// Slot se **předává** dalšímu ve frontě, ne vrací a znovu bere. Mezikrok, ve kterém je
     /// volný, by pustil dovnitř běh, který si o slot řekl později.
+    ///
+    /// Předá se ale jen tehdy, když se do nového limitu vejde. Po snížení limitu za běhu
+    /// se běhy nad strop musí **vyčerpat** — jinak by souběh držel staré číslo tak dlouho,
+    /// dokud je fronta neprázdná.
     private func release() {
-        guard !waiting.isEmpty else {
+        guard !waiting.isEmpty, taken <= currentLimit else {
             taken -= 1
             return
         }
         waiting.removeFirst().continuation.resume()
+    }
+
+    /// Pustí dovnitř čekatele, na které je po zvýšení limitu místo.
+    ///
+    /// Limit se sice čte při každém pokusu o slot, ale to samo nestačí: kdo už čeká, spí
+    /// a nikdo ho nevzbudí. Bez tohohle by zvýšení limitu za běhu vypadalo, že se
+    /// neprojevilo, dokud něco nedoběhne.
+    func admitWaiting() {
+        while taken < currentLimit, !waiting.isEmpty {
+            taken += 1
+            waiting.removeFirst().continuation.resume()
+        }
     }
 
     private func abandon(_ id: UUID) {

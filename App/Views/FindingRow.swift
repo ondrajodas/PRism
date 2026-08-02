@@ -18,8 +18,11 @@ struct FindingRow: Identifiable, Hashable, Sendable {
     let isBlocking: Bool
 
     /// Nálezy v pořadí, ve kterém je řadí `Policy`.
-    static func rows(of findings: [Finding]) -> [FindingRow] {
-        Policy.sorted(findings).enumerated().map { index, finding in
+    static func rows(
+        of findings: [Finding],
+        blocking categories: Set<String> = Policy.defaultBlockingCategories
+    ) -> [FindingRow] {
+        Policy.sorted(findings, categories: categories).enumerated().map { index, finding in
             FindingRow(
                 id: index,
                 finding: finding,
@@ -27,7 +30,7 @@ struct FindingRow: Identifiable, Hashable, Sendable {
                 reviewer: finding.reviewer,
                 location: location(of: finding),
                 summary: finding.summary,
-                isBlocking: Policy.isBlocking(finding)
+                isBlocking: Policy.isBlocking(finding, categories: categories)
             )
         }
     }

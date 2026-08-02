@@ -20,23 +20,32 @@ struct ClaudeReviewRunner: ReviewRunning {
     /// Stejný klíč se nespouští dvakrát — souběžný požadavek se k běžícímu **připojí**.
     private let coordinator = WorkCoordinator()
     private let slots: ReviewSlots
+    /// Volba modelu z konfigurace; `nil` = ten, který si `claude` zvolí sám.
+    private let model: @Sendable () -> String?
 
     init(
         claude: URL,
         gh: URL,
         runner: any ProcessStreaming,
         timeout: Duration = ClaudeReviewRunner.defaultTimeout,
-        maxConcurrent: Int = ClaudeReviewRunner.defaultConcurrency
+        maxConcurrent: @escaping @Sendable () -> Int = { ClaudeReviewRunner.defaultConcurrency },
+        model: @escaping @Sendable () -> String? = { nil }
     ) {
         self.claude = claude
         self.gh = gh
         self.runner = runner
         self.timeout = timeout
         slots = ReviewSlots(limit: maxConcurrent)
+        self.model = model
     }
 
     /// Slučování je **nad** frontou schválně: připojený požadavek nesmí zabrat druhý slot,
     /// když už jeden drží běh, na který čeká.
+    /// Po zvýšení limitu se čekatelé musí pustit dál — sami se nevzbudí.
+    func configurationChanged() async {
+        await slots.admitWaiting()
+    }
+
     func run(
         _ request: ReviewRequest,
         progress: @escaping ReviewProgressHandler
@@ -58,7 +67,7 @@ struct ClaudeReviewRunner: ReviewRunning {
 
         let events = runner.stream(
             claude,
-            arguments: ClaudeCommand.arguments(prompt: ClaudeCommand.prompt(for: request)),
+            arguments: ClaudeCommand.arguments(prompt: ClaudeCommand.prompt(for: request), model: model()),
             environment: ClaudeCommand.environment(gh: gh),
             workingDirectory: request.worktree,
             timeout: timeout

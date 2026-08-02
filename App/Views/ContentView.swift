@@ -3,6 +3,7 @@ import SwiftUI
 /// Hlavní okno: vlevo seznam PR, vpravo místo pro diff a nálezy.
 struct ContentView: View {
     @State private var store: AppStore
+    @Environment(\.scenePhase) private var scenePhase
 
     init(toolPaths: ToolPaths) {
         _store = State(initialValue: AppStore(toolPaths: toolPaths))
@@ -21,6 +22,14 @@ struct ContentView: View {
         }
         // Smyčka žije, dokud žije okno — zavření okna task zruší a polling se zastaví.
         .task { await store.keepFresh() }
+        // Konfigurace se edituje v souboru mimo aplikaci, takže se načte pokaždé, když se
+        // do ní člověk vrátí. Sledovat soubor by znamenalo řešit atomický zápis, po kterém
+        // hlídaný deskriptor přestane platit — a tlačítko by byl krok navíc za něco, co se
+        // dá udělat samo.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await store.reloadConfiguration() }
+        }
     }
 
     @ViewBuilder private var detail: some View {
