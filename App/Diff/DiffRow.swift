@@ -112,18 +112,23 @@ enum DiffRow: Identifiable {
             guard case .line(_, let line) = row else { return nil }
             return line.newNumber
         })
-        // Řazení podle řádku: slovník pořadí nemá, takže bez něj by bubliny mezi
-        // překresleními poskakovaly.
-        let unanchored = mine
-            .filter { $0.line.map { !rendered.contains($0) } ?? true }
+        // Nálezy bez řádku se schválně neslučují, takže jich k jednomu souboru může být
+        // víc; drží se v pořadí, ve kterém přišly. Ty s řádkem se řadí podle něj —
+        // slovník pořadí nemá a bubliny by mezi překresleními poskakovaly.
+        let withoutLine = mine.filter { $0.line == nil }
+        let missingLines = mine
+            .filter { line in line.line.map { !rendered.contains($0) } ?? false }
             .sorted { ($0.line ?? 0) < ($1.line ?? 0) }
+        let unanchored = withoutLine + missingLines
         let byLine = Dictionary(
             mine.compactMap { group in group.line.map { ($0, group) } },
             uniquingKeysWith: { first, _ in first }
         )
 
-        var result = unanchored.map { group in
-            DiffRow.finding(id(of: file, "u\(group.line.map(String.init) ?? "soubor")"), group, anchored: false)
+        // Identita se čísluje pořadím: `line` na ni nestačí, protože nálezů bez řádku
+        // může být k jednomu souboru několik a se stejným `id` by je `ForEach` nerozeznal.
+        var result = unanchored.enumerated().map { offset, group in
+            DiffRow.finding(id(of: file, "u\(offset)"), group, anchored: false)
         }
         result.reserveCapacity(rows.count + mine.count)
         for row in rows {

@@ -98,6 +98,23 @@ struct DiffBubbleTests {
         #expect(unanchored(rows).map(\.line) == [nil, 8000, 9000])
     }
 
+    /// Nálezy bez řádku se schválně neslučují, takže jich k jednomu souboru může být víc.
+    /// Se stejným `id` by je `ForEach` nerozeznal a vykreslil by je špatně.
+    @Test("Každá bublina má vlastní identitu")
+    func givesEveryBubbleItsOwnIdentity() throws {
+        let groups = Policy.groups(of: [
+            finding("CLAUDE.md", nil, reviewer: "code-review"),
+            finding("CLAUDE.md", nil, reviewer: "security"),
+            finding("CLAUDE.md", 8000),
+            finding("CLAUDE.md", 9000),
+        ])
+
+        let rows = DiffRow.rows(of: try claudeFile(), findings: groups)
+
+        #expect(unanchored(rows).count == 4)
+        #expect(Set(rows.map(\.id)).count == rows.count)
+    }
+
     /// Jakmile se řádek dotáhne rozbalením kontextu (#47), bublina se k němu přesune sama.
     @Test("Po rozbalení kontextu bublina sedne ke svému řádku")
     func anchorsTheBubbleOnceItsLineIsRevealed() throws {
