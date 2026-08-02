@@ -29,9 +29,14 @@ U vybraného PR je tlačítko **Spustit review**. Za ním se stane tohle: dotáh
 commit, připraví se odpojený pracovní strom a v něm se spustí headless session Claude Code
 omezená na čtení. Řádek mezitím ukazuje `ve frontě · clone` → `běží 0/1` → `čisté` nebo
 `N nálezů`; běh jde kdykoli zrušit. Nálezy se uloží na disk, takže přežijí restart, a
-v detailu je nahoře **návrh verdiktu** (`approve` / `request changes` / *není z čeho
-soudit*) a pod ním seznam nálezů po kategoriích s odznakem u těch blokujících. Zobrazení je
-zatím surové — diff s bublinami je další fáze.
+v detailu je dole lišta s **návrhem verdiktu** (`approve` / `request changes` / *není
+z čeho soudit*) a rozbaleným seznamem nálezů po kategoriích, s odznakem u těch blokujících.
+Kliknutím na nález diff odskočí na jeho `file:line`.
+
+Detail PR ukazuje **diff v plné šířce**: soubory pod sebou s hlavičkou, která při scrollu
+zůstává nahoře, souhrn `N souborů · +X −Y` a menu na skok mezi soubory. Přejmenování, nové,
+smazané i binární soubory jsou označené; dlouhé řádky se zalamují, protože 120 znaků se do
+plné šířky vejde. Bubliny nálezů přímo u kódu jsou další krok.
 
 Sada reviewerů je zatím konstanta v kódu; výběr v nastavení přijde s konfigurací.
 
@@ -43,7 +48,7 @@ otevřeného PR a při překročení rozpočtu (10 GB) i ta nejdéle nepoužitá
 Uložené nálezy jsou klíčované head commitem: nové commity je označí jako zastaralé
 a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí.
 
-Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první tři.
+Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první tři a rozjetá čtvrtá.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -134,6 +139,7 @@ App/                      zdrojáky aplikace — target PRism
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
   GitHub/                 čtení PR přes gh CLI: gateway, typované chyby, tvar výstupu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
+  Diff/                   parsování unified diffu na soubory, hunky a řádky
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
@@ -144,13 +150,14 @@ Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip
   Environment/            testy Environment vrstvy + fakes
   Checkout/               testy klonování — proti fake runneru i skutečnému gitu
+  Diff/                   testy parseru diffu proti skutečným výstupům gh pr diff
   GitHub/                 testy gateway a klasifikace chyb gh
   Policy/                 testy čistých funkcí
   Review/                 testy parseru a runneru proti skutečným streamům
   Polling/                testy pollingu proti fake gateway a fake času
   Store/                  testy AppStore a persistence nálezů
   Support/                testy sdílených drobností
-  Fixtures/gh/            skutečné JSON výstupy gh z veřejných repozitářů
+  Fixtures/gh/            skutečné výstupy gh z veřejných repozitářů (JSON i diffy)
   Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR

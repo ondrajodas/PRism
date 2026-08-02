@@ -1,0 +1,814 @@
+diff --git a/.github/CONTRIBUTING.md b/.github/CONTRIBUTING.md
+index a1ed27d990a..c6b68a9546e 100644
+--- a/.github/CONTRIBUTING.md
++++ b/.github/CONTRIBUTING.md
+@@ -24,7 +24,7 @@ We accept pull requests for bug fixes and features where we've discussed the app
+ ## Building the project
+ 
+ Prerequisites:
+-- Go 1.23+
++- Go 1.24+
+ 
+ Build with:
+ * Unix-like systems: `make`
+@@ -86,5 +86,5 @@ A member of the core team will [triage](../docs/triage.md) the design proposal.
+ [How to Contribute to Open Source]: https://opensource.guide/how-to-contribute/
+ [Using Pull Requests]: https://docs.github.com/en/free-pro-team@latest/github/collaborating-with-issues-and-pull-requests/about-pull-requests
+ [GitHub Help]: https://docs.github.com/
+-[CLI Design System]: https://primer.style/cli/
++[CLI Design System]: /docs/primer/
+ [Google Docs Template]: https://docs.google.com/document/d/1JIRErIUuJ6fTgabiFYfCH3x91pyHuytbfa0QLnTfXKM/edit#heading=h.or54sa47ylpg
+diff --git a/docs/primer/README.md b/docs/primer/README.md
+new file mode 100644
+index 00000000000..98625bbcedb
+--- /dev/null
++++ b/docs/primer/README.md
+@@ -0,0 +1,15 @@
++# GitHub CLI Primer Design
++
++These guidelines are a collection of principles, foundations and usage guidelines for designing GitHub command line products.
++
++## [Components](components)
++
++Design guidance on how we format content in in the Terminal through text formatting, color and font weights.
++
++## [Foundations](foundations)
++
++Design concepts and constraints that can help create a better Terminal like experience for GitHub.
++
++## [Getting started](getting-started)
++
++Primer is also a design system for Terminal like implementations of GitHub. If you’re just starting out with creating those kind of experiences, here’s a list of principles and design foundations to get you started.
+diff --git a/docs/primer/components/README.md b/docs/primer/components/README.md
+new file mode 100644
+index 00000000000..1e002fab27b
+--- /dev/null
++++ b/docs/primer/components/README.md
+@@ -0,0 +1,234 @@
++# Components
++
++Components are consistent, reusable patterns that we use throughout the command line tool.
++
++## Syntax
++
++We show meaning or objects through syntax such as angled brackets, square brackets, curly brackets, parenthesis, and color.
++
++### Branches
++
++Display branch names in brackets and/or cyan
++
++![A branch name in brackets and cyan](images/Syntax-Branch.png)
++
++### Labels
++
++Display labels in parenthesis and/or gray
++
++![A label name in parenthesis and gray](images/Syntax-Label.png)
++
++### Repository
++
++Display repository names in bold where appropriate
++
++![A repository name in bold](images/Syntax-Repo.png)
++
++### Help
++
++Use consistent syntax in [help pages](/docs/command-line-syntax.md) to explain command usage.
++
++#### Literal text
++
++Use plain text for parts of the command that cannot be changed
++
++```shell
++gh help
++```
++
++The argument help is required in this command.
++
++#### Placeholder values
++
++Use angled brackets to represent a value the user must replace. No other expressions can be contained within the angled brackets.
++
++```shell
++gh pr view <issue-number>
++```
++
++Replace "issue-number" with an issue number.
++
++#### Optional arguments
++
++Place optional arguments in square brackets. Mutually exclusive arguments can be included inside square brackets if they are separated with vertical bars.
++
++
++```shell
++gh pr checkout [--web]
++```
++
++The argument `--web` is optional.
++
++```shell
++gh pr view [<number> | <url>]
++```
++
++The "number" and "url" arguments are optional.
++
++#### Required mutually exclusive arguments
++
++Place required mutually exclusive arguments inside braces, separate arguments with vertical bars.
++
++```shell
++gh pr {view | create}
++```
++
++#### Repeatable arguments
++
++Ellipsis represent arguments that can appear multiple times
++
++```shell
++gh pr close <pr-number>...
++```
++
++#### Variable naming
++
++For multi-word variables use dash-case (all lower case with words separated by dashes)
++
++
++```shell
++gh pr checkout <issue-number>
++```
++
++#### Additional examples
++
++Optional argument with placeholder:
++
++```shell
++<command> <subcommand> [<arg>]
++```
++
++Required argument with mutually exclusive options:
++
++```shell
++<command> <subcommand> {<path> | <string> | literal}
++```
++
++Optional argument with mutually exclusive options:
++
++```shell
++<command> <subcommand> [<path> | <string>]
++```
++
++## Prompts
++
++Generally speaking, prompts are the CLI’s version of forms.
++
++- Use prompts for entering information
++- Use a prompt when user intent is unclear
++- Make sure to provide flags for all prompts
++
++### Yes/No
++
++Use for yes/no questions, usually a confirmation. The default (what will happen if you enter nothing and hit enter) is in caps.
++
++![An example of a yes/no prompt](images/Prompt-YesNo.png)
++
++### Short text
++
++Use to enter short strings of text. Enter will accept the auto fill if available
++
++![An example of a short text prompt](images/Prompt-ShortText.png)
++
++### Long text
++
++Use to enter large bodies of text. E key will open the user’s preferred editor, and Enter will skip.
++
++![An example of a long text prompt](images/Prompt-LongText.png)
++
++### Radio select
++
++Use to select one option
++
++![An example of a radio select prompt](images/Prompt-RadioSelect.png)
++
++### Multi select
++
++Use to select multiple options
++
++![An example of a multi select prompt](images/Prompt-MultiSelect.png)
++
++## State
++
++The CLI reflects how GitHub.com displays state through [color](/docs/primer/foundations#color) and [iconography](/docs/primer/foundations#iconography).
++
++![A collection of examples of state from various command outputs](images/States.png)
++
++## Progress indicators
++
++For processes that might take a while, include a progress indicator with context on what’s happening.
++
++![An example of a loading spinner when forking a repository](images/Progress-Spinner.png)
++
++## Headers
++
++When viewing output that could be unclear, headers can quickly set context for what the user is seeing and where they are.
++
++### Examples
++
++![An example of the header of the `gh pr create` command](images/Headers-Examples.png)
++
++The header of the `gh pr create` command reassures the user that they're creating the correct pull request.
++
++![An example of the header of the `gh pr list` command](images/Headers-gh-pr-list.png)
++
++The header of the `gh pr list` command sets context for what list the user is seeing.
++
++## Lists
++
++Lists use tables to show information.
++
++- State is shown in color.
++- A header is used for context.
++- Information shown may be branch names, dates, or what is most relevant in context.
++
++![An example of gh pr list](images/Lists-gh-pr-list.png)
++
++## Detail views
++
++Single item views show more detail than list views. The body of the item is rendered indented. The item’s URL is shown at the bottom.
++
++![An example of gh issue view](images/Detail-gh-issue-view.png)
++
++## Empty states
++
++Make sure to include empty messages in command outputs when appropriate.
++
++![The empty state of the gh pr status command](images/Empty-states-1.png)
++
++The empty state of `gh pr status`
++
++![The empty state of the gh issue list command](images/Empty-states-2.png)
++
++The empty state of `gh issue list`
++
++## Help pages
++
++Help commands can exist at any level:
++
++- Top level (`gh`)
++- Second level (`gh [command]`)
++- Third level (`gh [command] [subcommand]`)
++
++Each can be accessed using the `--help` flag, or using `gh help [command]`.
++
++Each help page includes a combination of different sections.
++
++### Required sections
++
++- Usage
++- Core commands
++- Flags
++- Learn more
++- Inherited flags
++
++### Other available sections
++
++- Additional commands
++- Examples
++- Arguments
++- Feedback
++
++### Example
++
++![The output of gh help](images/Help.png)
+diff --git a/docs/primer/components/images/Detail-gh-issue-view.png b/docs/primer/components/images/Detail-gh-issue-view.png
+new file mode 100644
+index 00000000000..351859b0fc8
+Binary files /dev/null and b/docs/primer/components/images/Detail-gh-issue-view.png differ
+diff --git a/docs/primer/components/images/Empty-states-1.png b/docs/primer/components/images/Empty-states-1.png
+new file mode 100644
+index 00000000000..05e6b1cc985
+Binary files /dev/null and b/docs/primer/components/images/Empty-states-1.png differ
+diff --git a/docs/primer/components/images/Empty-states-2.png b/docs/primer/components/images/Empty-states-2.png
+new file mode 100644
+index 00000000000..4e99ad37e62
+Binary files /dev/null and b/docs/primer/components/images/Empty-states-2.png differ
+diff --git a/docs/primer/components/images/Headers-Examples.png b/docs/primer/components/images/Headers-Examples.png
+new file mode 100644
+index 00000000000..007f219733e
+Binary files /dev/null and b/docs/primer/components/images/Headers-Examples.png differ
+diff --git a/docs/primer/components/images/Headers-gh-pr-list.png b/docs/primer/components/images/Headers-gh-pr-list.png
+new file mode 100644
+index 00000000000..1ff4fb7d5dd
+Binary files /dev/null and b/docs/primer/components/images/Headers-gh-pr-list.png differ
+diff --git a/docs/primer/components/images/Help.png b/docs/primer/components/images/Help.png
+new file mode 100644
+index 00000000000..935ab54785b
+Binary files /dev/null and b/docs/primer/components/images/Help.png differ
+diff --git a/docs/primer/components/images/Lists-gh-pr-list.png b/docs/primer/components/images/Lists-gh-pr-list.png
+new file mode 100644
+index 00000000000..1ff4fb7d5dd
+Binary files /dev/null and b/docs/primer/components/images/Lists-gh-pr-list.png differ
+diff --git a/docs/primer/components/images/Progress-Spinner.png b/docs/primer/components/images/Progress-Spinner.png
+new file mode 100644
+index 00000000000..527017e365f
+Binary files /dev/null and b/docs/primer/components/images/Progress-Spinner.png differ
+diff --git a/docs/primer/components/images/Prompt-LongText.png b/docs/primer/components/images/Prompt-LongText.png
+new file mode 100644
+index 00000000000..6c6b089274e
+Binary files /dev/null and b/docs/primer/components/images/Prompt-LongText.png differ
+diff --git a/docs/primer/components/images/Prompt-MultiSelect.png b/docs/primer/components/images/Prompt-MultiSelect.png
+new file mode 100644
+index 00000000000..59769aabf1b
+Binary files /dev/null and b/docs/primer/components/images/Prompt-MultiSelect.png differ
+diff --git a/docs/primer/components/images/Prompt-RadioSelect.png b/docs/primer/components/images/Prompt-RadioSelect.png
+new file mode 100644
+index 00000000000..320f79957b3
+Binary files /dev/null and b/docs/primer/components/images/Prompt-RadioSelect.png differ
+diff --git a/docs/primer/components/images/Prompt-ShortText.png b/docs/primer/components/images/Prompt-ShortText.png
+new file mode 100644
+index 00000000000..34219613f44
+Binary files /dev/null and b/docs/primer/components/images/Prompt-ShortText.png differ
+diff --git a/docs/primer/components/images/Prompt-YesNo.png b/docs/primer/components/images/Prompt-YesNo.png
+new file mode 100644
+index 00000000000..aed39b2b985
+Binary files /dev/null and b/docs/primer/components/images/Prompt-YesNo.png differ
+diff --git a/docs/primer/components/images/Spinner.png b/docs/primer/components/images/Spinner.png
+new file mode 100644
+index 00000000000..527017e365f
+Binary files /dev/null and b/docs/primer/components/images/Spinner.png differ
+diff --git a/docs/primer/components/images/States.png b/docs/primer/components/images/States.png
+new file mode 100644
+index 00000000000..c1baea32638
+Binary files /dev/null and b/docs/primer/components/images/States.png differ
+diff --git a/docs/primer/components/images/Syntax-Branch.png b/docs/primer/components/images/Syntax-Branch.png
+new file mode 100644
+index 00000000000..8dcbcbd15d6
+Binary files /dev/null and b/docs/primer/components/images/Syntax-Branch.png differ
+diff --git a/docs/primer/components/images/Syntax-Label.png b/docs/primer/components/images/Syntax-Label.png
+new file mode 100644
+index 00000000000..630f6ee8737
+Binary files /dev/null and b/docs/primer/components/images/Syntax-Label.png differ
+diff --git a/docs/primer/components/images/Syntax-Repo.png b/docs/primer/components/images/Syntax-Repo.png
+new file mode 100644
+index 00000000000..0a922913163
+Binary files /dev/null and b/docs/primer/components/images/Syntax-Repo.png differ
+diff --git a/docs/primer/foundations/README.md b/docs/primer/foundations/README.md
+new file mode 100644
+index 00000000000..e743bac022a
+--- /dev/null
++++ b/docs/primer/foundations/README.md
+@@ -0,0 +1,214 @@
++# Foundations
++
++Design concepts and constraints that can help create a better Terminal like experience for GitHub.
++
++## Language
++
++Language is the most important tool at our disposal for creating a clear, understandable product. Having clear language helps us create memorable commands that are clear in what they will do.
++
++We generally follow this structure:
++
++| **gh**  | **`<command>`** | **`<subcommand>`** | **[value]** | **[flags]** | **[value]** |
++| --- | ----------- | -------------- | ------- | --------- | ------- |
++| gh  | issue       | view           | 234     | --web     | -       |
++| gh  | pr          | create         | -       | --title   | “Title” |
++| gh  | repo        | fork           | cli/cli | --clone   | false   |
++| gh  | pr          | status         | -       | -         | -       |
++| gh  | issue       | list           | -       | --state   | closed  |
++| gh  | pr          | review         | 234     | --approve | -       |
++
++**Command:** The object you want to interact with
++
++**Subcommand:** The action you want to take on that object. Most `gh` commands contain a command and subcommand. These may take arguments, such as issue/PR numbers, URLs, file names, OWNER/REPO, etc.
++
++**Flag:** A way to modify the command, also may be called “options”. You can use multiple flags. Flags can take values, but don’t always. Flags always have a long version with two dashes `(--state)` but often also have a shortcut with one dash and one letter `(-s)`. It’s possible to chain shorthand flags: `-sfv` is the same as `-s -f -v`
++
++**Values:** Are passed to the commands or flags
++
++- The most common command values are:
++  - Issue or PR number
++  - The “owner/repo” pair
++  - URLs
++  - Branch names
++  - File names
++- The possible flag values depend on the flag:
++  - `--state` takes `{closed | open | merged}`
++  - `--clone` is a boolean flag
++  - `--title` takes a string
++  - `--limit` takes an integer
++
++_Tip: To get a better sense of what feels right, try writing out the commands in the CLI a few different ways._
++
++<table>
++  <tr>
++    <td>
++      Do: Use a flag for modifiers of actions.
++      <img alt="`gh pr review --approve` command" src="images/Language-06.png" />
++    </td>
++    <td>
++      Don't: Avoid making modifiers their own commands.
++      <img alt="`gh pr approve` command" src="images/Language-03.png" />
++    </td>
++  </tr>
++</table>
++
++**When designing your command’s language system:**
++
++- Use [GitHub language](/getting-started/principles#make-it-feel-like-github)
++- Use unambiguous language that can’t be confused for something else
++- Use shorter phrases if possible and appropriate
++
++<table>
++  <tr>
++    <td>
++      Do: Use language that can't be misconstrued.
++      <img alt="`gh pr create` command" src="images/Language-05.png" />
++    </td>
++    <td>
++      Don't: Avoid language that can be interpreted in multiple ways ("open in browser"  or "open a pull request" here).
++      <img alt="`gh pr open` command" src="images/Language-02.png" />
++    </td>
++  </tr>
++</table>
++
++<table>
++  <tr>
++    <td>
++      Do: Use understood shorthands to save characters to type.
++      <img alt="`gh repo view` command" src="images/Language-04.png" />
++    </td>
++    <td>
++      Don't: Avoid long words in commands if there's a reasonable alternative.
++      <img alt="`gh repository view` command" src="images/Language-01.png" />
++    </td>
++  </tr>
++</table>
++
++## Typography
++
++Everything in a command line interface is text, so type hierarchy is important. All type is the same size and font, but you can still create type hierarchy using font weight and space.
++
++![An example of normal weight, and bold weight. Italics is striked through since it's not used.](images/Typography.png)
++
++- People customize their fonts, but you can assume it will be a monospace
++- Monospace fonts inherently create visual order
++- Fonts may have variable unicode support
++
++### Accessibility
++
++If you want to ensure that a screen reader will read a pause, you can use a:
++- period (`.`)
++- comma (`,`)
++- colon (`:`)
++
++## Spacing
++
++You can use the following to create hierarchy and visual rhythm:
++
++- Line breaks
++- Tables
++- Indentation
++
++Do: Use space to create more legible output.
++
++<img alt="`gh pr status` command indenting content under sections" src="images/Spacing-gh-pr-status.png" />
++
++Don't: Not using space makes output difficult to parse.
++
++<img alt="`gh pr status` command where content is not indented, making it harder to read" src="images/Spacing-gh-pr-status-compressed.png" />
++
++## Color
++
++Terminals reliably recognize the 8 basic ANSI colors. There are also bright versions of each of these colors that you can use, but less reliably.
++
++<img alt="A table describing the usage of the 8 basic colors." src="images/Colors.png" />
++
++### Things to note
++- Background color is available but we haven’t taken advantage of it yet.
++- Some terminals do not reliably support 256-color escape sequences.
++- Users can customize how their terminal displays the 8 basic colors, but that’s opt-in (for example, the user knows they’re making their greens not green).
++- Only use color to [enhance meaning](https://primer.style/design/accessibility/guidelines#use-of-color), not to communicate meaning.
++
++## Iconography
++
++Since graphical image support in terminal emulators is unreliable, we rely on Unicode for iconography. When applying iconography consider:
++
++- People use different fonts that will have varying Unicode support
++- Only use iconography to [enhance meaning](https://primer.style/design/global/accessibility#visual-accessibility), not to communicate meaning
++
++_Note: In Windows, Powershell’s default font (Lucida Console) has poor Unicode support. Microsoft suggests changing it for more Unicode support._
++
++**Symbols currently used:**
++
++```
++✓ 	Success
++- 	Neutral
++✗ 	Failure
+++ 	Changes requested
++! 	Alert
++```
++
++<table>
++  <tr>
++    <td>
++      Do: Use checks for success messages.
++      <img alt="✓ Checks passing" src="images/Iconography-1.png" />
++    </td>
++    <td>
++      Don't: Don't use checks for failure messages.
++      <img alt="✓ Checks failing" src="images/Iconography-2.png" />
++    </td>
++  </tr>
++</table>
++
++<table>
++  <tr>
++    <td>
++      Do: Use checks for success of closing or deleting.
++      <img alt="✓ Issue closed" src="images/Iconography-3.png" />
++    </td>
++    <td>
++      Do: Don't use alerts when closing or deleting.
++      <img alt="! Issue closed" src="images/Iconography-4.png" />
++    </td>
++  </tr>
++</table>
++
++## Scriptability
++
++Make choices that ensure that creating automations or scripts with GitHub commands is obvious and frictionless. Practically, this means:
++
++- Create flags for anything interactive
++- Ensure flags have clear language and defaults
++- Consider what should be different for terminal vs machine output
++
++### In terminal
++
++![An example of gh pr list](images/Scriptability-gh-pr-list.png)
++
++### Through pipe
++
++![An example of gh pr list piped through the cat command](images/Scriptability-gh-pr-list-machine.png)
++
++### Differences to note in machine output
++
++- No color or styling
++- State is explicitly written, not implied from color
++- Tabs between columns instead of table layout, since `cut` uses tabs as a delimiter
++- No truncation
++- Exact date format
++- No header
++
++## Customizability
++
++Be aware that people exist in different environments and may customize their setups. Customizations include:
++
++- **Shell:** shell prompt, shell aliases, PATH and other environment variables, tab-completion behavior
++- **Terminal:** font, color scheme, and keyboard shortcuts
++- **Operating system**: language input options, accessibility settings
++
++The CLI tool itself is also customizable. These are all tools at your disposal when designing new commands.
++
++- Aliasing: [`gh alias set`](https://cli.github.com/manual/gh_alias_set)
++- Preferences: [`gh config set`](https://cli.github.com/manual/gh_config_set)
++- Environment variables: `NO_COLOR`, `EDITOR`, etc
+diff --git a/docs/primer/foundations/images/Colors.png b/docs/primer/foundations/images/Colors.png
+new file mode 100644
+index 00000000000..ab25b1687e9
+Binary files /dev/null and b/docs/primer/foundations/images/Colors.png differ
+diff --git a/docs/primer/foundations/images/Iconography-1.png b/docs/primer/foundations/images/Iconography-1.png
+new file mode 100644
+index 00000000000..012feba8baf
+Binary files /dev/null and b/docs/primer/foundations/images/Iconography-1.png differ
+diff --git a/docs/primer/foundations/images/Iconography-2.png b/docs/primer/foundations/images/Iconography-2.png
+new file mode 100644
+index 00000000000..613e023777c
+Binary files /dev/null and b/docs/primer/foundations/images/Iconography-2.png differ
+diff --git a/docs/primer/foundations/images/Iconography-3.png b/docs/primer/foundations/images/Iconography-3.png
+new file mode 100644
+index 00000000000..4638e9fa84c
+Binary files /dev/null and b/docs/primer/foundations/images/Iconography-3.png differ
+diff --git a/docs/primer/foundations/images/Iconography-4.png b/docs/primer/foundations/images/Iconography-4.png
+new file mode 100644
+index 00000000000..b26ece5a8c0
+Binary files /dev/null and b/docs/primer/foundations/images/Iconography-4.png differ
+diff --git a/docs/primer/foundations/images/Language-01.png b/docs/primer/foundations/images/Language-01.png
+new file mode 100644
+index 00000000000..d2a43ca5ca3
+Binary files /dev/null and b/docs/primer/foundations/images/Language-01.png differ
+diff --git a/docs/primer/foundations/images/Language-02.png b/docs/primer/foundations/images/Language-02.png
+new file mode 100644
+index 00000000000..0ec1c4babf6
+Binary files /dev/null and b/docs/primer/foundations/images/Language-02.png differ
+diff --git a/docs/primer/foundations/images/Language-03.png b/docs/primer/foundations/images/Language-03.png
+new file mode 100644
+index 00000000000..30e75ec4086
+Binary files /dev/null and b/docs/primer/foundations/images/Language-03.png differ
+diff --git a/docs/primer/foundations/images/Language-04.png b/docs/primer/foundations/images/Language-04.png
+new file mode 100644
+index 00000000000..9d427644259
+Binary files /dev/null and b/docs/primer/foundations/images/Language-04.png differ
+diff --git a/docs/primer/foundations/images/Language-05.png b/docs/primer/foundations/images/Language-05.png
+new file mode 100644
+index 00000000000..ab59700d47d
+Binary files /dev/null and b/docs/primer/foundations/images/Language-05.png differ
+diff --git a/docs/primer/foundations/images/Language-06.png b/docs/primer/foundations/images/Language-06.png
+new file mode 100644
+index 00000000000..9691d30cc6b
+Binary files /dev/null and b/docs/primer/foundations/images/Language-06.png differ
+diff --git a/docs/primer/foundations/images/Scriptability-gh-pr-list-machine.png b/docs/primer/foundations/images/Scriptability-gh-pr-list-machine.png
+new file mode 100644
+index 00000000000..872af4a242b
+Binary files /dev/null and b/docs/primer/foundations/images/Scriptability-gh-pr-list-machine.png differ
+diff --git a/docs/primer/foundations/images/Scriptability-gh-pr-list.png b/docs/primer/foundations/images/Scriptability-gh-pr-list.png
+new file mode 100644
+index 00000000000..1ff4fb7d5dd
+Binary files /dev/null and b/docs/primer/foundations/images/Scriptability-gh-pr-list.png differ
+diff --git a/docs/primer/foundations/images/Spacing-gh-pr-status-compressed.png b/docs/primer/foundations/images/Spacing-gh-pr-status-compressed.png
+new file mode 100644
+index 00000000000..733cdf23741
+Binary files /dev/null and b/docs/primer/foundations/images/Spacing-gh-pr-status-compressed.png differ
+diff --git a/docs/primer/foundations/images/Spacing-gh-pr-status.png b/docs/primer/foundations/images/Spacing-gh-pr-status.png
+new file mode 100644
+index 00000000000..793e1451c46
+Binary files /dev/null and b/docs/primer/foundations/images/Spacing-gh-pr-status.png differ
+diff --git a/docs/primer/foundations/images/Typography.png b/docs/primer/foundations/images/Typography.png
+new file mode 100644
+index 00000000000..5ed8b117280
+Binary files /dev/null and b/docs/primer/foundations/images/Typography.png differ
+diff --git a/docs/primer/getting-started/README.md b/docs/primer/getting-started/README.md
+new file mode 100644
+index 00000000000..f402cbd3e7e
+--- /dev/null
++++ b/docs/primer/getting-started/README.md
+@@ -0,0 +1,131 @@
++# Getting Started
++
++## Principles
++
++### Reasonable defaults, easy overrides
++
++Optimize for what most people will need to do most of the time, but make it easy for people to adjust it to their needs. Often this means considering the default behavior of each command, and how it might need to be adjusted with flags.
++
++### Make it feel like GitHub
++
++Using this tool, it should be obvious that it’s GitHub and not anything else. Use details that are specific to GitHub, such as language or color. When designing output, reflect the GitHub.com interface as much as possible and appropriate.
++
++<table>
++  <tr>
++    <td>
++      Do: Use language accurate to GitHub.com.
++      <img alt="`gh pr close` command" src="images/Principle2-05.png" />
++    </td>
++    <td>
++      Don't: Don't use language that GitHub.com doesn't use.
++      <img alt="`gh pr delete` command" src="images/Principle2-02.png" />
++    </td>
++  </tr>
++</table>
++
++<table>
++  <tr>
++    <td>
++      Do: Use sentence case.
++      <img alt="Pull request with request being a lowercase r" src="images/Principle2-04.png" />
++    </td>
++    <td>
++      Don't: Don't use title case.
++      <img alt="Pull Request with Request being an uppercase R" src="images/Principle2-01.png" />
++    </td>
++  </tr>
++</table>
++
++**Resources**
++
++- [GitHub Brand Content Guide](https://brand.github.com)
++
++### Reduce cognitive load
++
++Command line interfaces are not as visually intuitive as graphical interfaces. They have very few affordances (indicators of use), rely on memory, and are often unforgiving of mistakes. We do our best to design our commands to mitigate this.
++
++Reducing cognitive load is necessary for [making an accessible product](https://www.w3.org/TR/coga-usable/#summary) .
++
++**Ways to reduce cognitive load**
++
++- Include confirm steps, especially for riskier commands
++- Include headers to help set context for output
++- Ensure consistent command language to make memorizing easier
++- Ensure similar commands are visually and behaviorally parallel. \* For example, any create command should behave the same
++- Anticipate what people might want to do next. \* For example, we ask if you want to delete your branch after you merge.
++- Anticipate what mistakes people might make
++
++### Bias towards terminal, but make it easy to get to the browser
++
++We want to help people stay in the terminal wherever they might want to maintain focus and reduce context switching, but when it’s necessary to jump to GitHub.com make it obvious, fast, and easy. Certain actions are probably better to do in a visual interface.
++
++![A prompt asking 'What's next?' with the choice 'Preview in browser' selected.](images/Principle4-01.png)
++
++A preview in browser step helps users create issues and pull requests more smoothly.
++
++![The `gh pr create command` with `--title` and `--body` flags outputting a pull request URL.](images/Principle4-02.png)
++
++Many commands output the relevant URL at the end.
++
++![The `gh issue view` command with the `--web` flag. The output is opening a URL in the browser.](images/Principle4-03.png)
++
++Web flags help users jump to the browser quickly
++
++## Process
++
++When designing for the command line, consider:
++
++### 1. What the command does
++
++- What makes sense to do from a terminal? What doesn’t?
++- What might people want to automate?
++- What is the default behavior? What flags might you need to change that behavior?
++- What might people try and fail to do and how can you anticipate that?
++
++### 2. What the command is called
++
++- What should the  [command language system](/docs/primer/foundations#language)  be?
++- What should be a command vs a flag?
++- How can you align the language of the new command with the existing commands?
++
++### 3. What the command outputs
++
++- What can you do to make the CLI version [feel like the GitHub.com version](#make-it-feel-like-github), using [color](/docs/primer/foundations#color), [language](/docs/primer/foundations#language), [spacing](/docs/primer/foundations#spacing), info shown, etc?
++- How should the [machine output](/docs/primer/foundations#scriptability) differ from the interactive behavior?
++
++### 4. How you explain your command
++
++- You will need to provide a short and long description of the command for the [help pages](/docs/primer/components#help).
++
++### 5. How people discover your command
++
++- Are there ways to integrate CLI into the feature where it exists on other platforms?
++
++## Prototyping
++
++When designing for GitHub CLI, there are several ways you can go about prototyping your ideas.
++
++### Google Docs
++
++![A screenshot of the Google Docs template](images/Prototyping-GoogleDocs.png)
++
++Best for simple quick illustrations of most ideas
++
++Use [this template](https://docs.google.com/document/d/1JIRErIUuJ6fTgabiFYfCH3x91pyHuytbfa0QLnTfXKM/edit?usp=sharing), or format your document with these steps:
++
++1. Choose a dark background (File > Page Setup > Page Color)
++1. Choose a light text color
++1. Choose a monospace font
++
++**Tips**
++
++- Mix it up since people’s setups change so much. Not everyone uses dark background!
++- Make use of the document outline and headers to help communicate your ideas
++
++### Figma
++
++![A screenshot of the Figma library](images/Prototyping-Figma.png)
++
++If you need to show a process unfolding over time, or need to show a prototype that feels more real to users, Figma or code prototypes are best.
++
++[**Figma library**](https://www.figma.com/file/zYsBk5KFoMlovE4g2f4Wkg/Primer-Command-Line) (accessible to GitHub staff only)
+diff --git a/docs/primer/getting-started/images/Principle2-01.png b/docs/primer/getting-started/images/Principle2-01.png
+new file mode 100644
+index 00000000000..89f0942edc5
+Binary files /dev/null and b/docs/primer/getting-started/images/Principle2-01.png differ
+diff --git a/docs/primer/getting-started/images/Principle2-02.png b/docs/primer/getting-started/images/Principle2-02.png
+new file mode 100644
+index 00000000000..171d5aa2265
+Binary files /dev/null and b/docs/primer/getting-started/images/Principle2-02.png differ
+diff --git a/docs/primer/getting-started/images/Principle2-03.png b/docs/primer/getting-started/images/Principle2-03.png
+new file mode 100644
+index 00000000000..118c8f82bf7
+Binary files /dev/null and b/docs/primer/getting-started/images/Principle2-03.png differ
+diff --git a/docs/primer/getting-started/images/Principle2-04.png b/docs/primer/getting-started/images/Principle2-04.png
+new file mode 100644
+index 00000000000..01192608bed
+Binary files /dev/null and b/docs/primer/getting-started/images/Principle2-04.png differ
+diff --git a/docs/primer/getting-started/images/Principle2-05.png b/docs/primer/getting-started/images/Principle2-05.png
+new file mode 100644
+index 00000000000..18d57f39186
+Binary files /dev/null and b/docs/primer/getting-started/images/Principle2-05.png differ
+diff --git a/docs/primer/getting-started/images/Principle4-01.png b/docs/primer/getting-started/images/Principle4-01.png
+new file mode 100644
+index 00000000000..29bd0a2f99c
+Binary files /dev/null and b/docs/primer/getting-started/images/Principle4-01.png differ
+diff --git a/docs/primer/getting-started/images/Principle4-02.png b/docs/primer/getting-started/images/Principle4-02.png
+new file mode 100644
+index 00000000000..658cad333fc
+Binary files /dev/null and b/docs/primer/getting-started/images/Principle4-02.png differ
+diff --git a/docs/primer/getting-started/images/Principle4-03.png b/docs/primer/getting-started/images/Principle4-03.png
+new file mode 100644
+index 00000000000..4864b8a98ed
+Binary files /dev/null and b/docs/primer/getting-started/images/Principle4-03.png differ
+diff --git a/docs/primer/getting-started/images/Prototyping-Figma.png b/docs/primer/getting-started/images/Prototyping-Figma.png
+new file mode 100644
+index 00000000000..e4898a982d6
+Binary files /dev/null and b/docs/primer/getting-started/images/Prototyping-Figma.png differ
+diff --git a/docs/primer/getting-started/images/Prototyping-GoogleDocs.png b/docs/primer/getting-started/images/Prototyping-GoogleDocs.png
+new file mode 100644
+index 00000000000..76c6d6c835f
+Binary files /dev/null and b/docs/primer/getting-started/images/Prototyping-GoogleDocs.png differ

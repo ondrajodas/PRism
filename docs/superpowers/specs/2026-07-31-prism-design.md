@@ -81,7 +81,8 @@ Zodpovědnosti:
   `gh search prs` SHA neumí; `headSha` a `baseSha` přijdou až z `gh pr view` na konkrétní
   PR. Kdy se detail dotáhne, rozhoduje polling — ne gateway.
 - Načíst diff pro zobrazení (`gh pr diff`) — jen k zobrazení, reviewery čtou skutečné
-  soubory.
+  soubory. Gateway vrací **syrový text**: unified diff není tvar, který by `gh` definoval
+  (na rozdíl od `--json` polí), takže mu rozumí až parser v `App/Diff/`.
 
 Polling v intervalu (default 60 s). Jeden search dotaz na zdroj a poll je hluboko pod
 rate limitem GitHub search API pro autentizovaného uživatele.
@@ -249,6 +250,37 @@ Tři oblasti. Zvolený tvar: diff v plné šířce s nálezy u kódu a tabbed pa
 - **Verdikt je označený jako návrh** a není na něj navěšená žádná GitHub akce.
 - **Tab Průběh** vykresluje živý `stream-json` event stream nativně — který soubor
   reviewer čte, jaký nástroj zavolal. Strukturované vykreslení, ne přeposílání ANSI.
+
+### Diff (#18)
+
+Diff je jediné, co z GitHubu přichází jako text a ne jako JSON, takže z něj někdo musí
+udělat model. Dělá to `App/Diff/`: `DiffParser` a typy, na které překládá (`Diff`,
+`FileDiff`, `DiffHunk`, `DiffLine`). **Není to osmý modul** — je to zobrazovací cesta,
+protože diff nemá v doméně review jinou roli než být vidět.
+
+- **Parser nikdy nevyhodí výjimku a nerozpoznaný řádek počítá.** Stejné pravidlo jako
+  u `StreamParseru` a `droppedFindings`: diff, ze kterého kus tiše vypadl, vypadá jako
+  úplný — a review se dělá právě nad tím, co je vidět.
+- **Řádek se čte podle stavu (hlavička / hunk), ne podle prvního znaku.** Odebraný řádek
+  začínající `---` je jinak k nerozeznání od hlavičky souboru, a `--` na začátku řádku se
+  v kódu i v textu vyskytuje běžně.
+- **Cesty se berou z `rename from`/`rename to` a `---`/`+++`.** Hlavička
+  `diff --git a/… b/…` je u cest s mezerou nejednoznačná; slouží jen jako záchrana tam,
+  kde ostatní řádky chybí — u binárních souborů a u přejmenování beze změny obsahu.
+- **U binárního souboru se ukáže jen hlavička.** `gh pr diff` u něj místo hunků pošle
+  `Binary files … differ`, takže není co vykreslovat.
+- **Diff drží `AppStore`, cachuje se podle `updatedAt`** a zahodí se s PR, který zmizel
+  ze seznamu.
+- **Dlouhé řádky se zalamují, diff nescrolluje vodorovně.**
+- **Navigace mezi soubory je skokové menu** v hlavičce diffu; soubory jdou pod sebou
+  s ukotvenou hlavičkou, ne v odděleném seznamu vedle.
+- **Jedna buňka líného seznamu = jeden řádek**, ne hunk. Viz záznam rozhodnutí.
+- **Nálezy jsou spodní lišta**, rozbalená, se šipkou na sbalení. Diff je to, kvůli čemu
+  je okno otevřené, takže o místo si říká seznam nálezů, ne obráceně.
+- **Z nálezu se dá skočit do diffu** na jeho `file:line`.
+
+Co v #18 **není** a má vlastní issue: rozbalení kontextu mimo hunk (#47, potřebuje obsah
+souboru, ne jen diff) a obarvení kódu podle jazyka (#48).
 
 ## Platformová rozhodnutí
 
@@ -457,6 +489,20 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | `CheckoutCoordinator` se přejmenoval na `WorkCoordinator` a přesunul do `App/Support/` | Napsat slučování běhů znovu uvnitř `ReviewRunneru` | Logika kolem rušení posledního čekajícího je jemná a už jednou draze odladěná; druhá kopie by se rozešla. Název podle prvního uživatele přestal platit ve chvíli, kdy má uživatele dva |
 | Průběh dostává **ten, kdo běh spustil** | Rozeslat průběh všem, kdo se ke klíči připojili | Registr posluchačů na aktoru by hlásil události přes hopy, takže by o jejich pořadí rozhodovalo plánování, ne stream — a v tabu Průběh je pořadí to hlavní. Připojený požadavek dostane výsledek; průběh sleduje ten, kdo o běh požádal, a v aplikaci je to vždycky tentýž `AppStore` |
 | Credential helper se session předává přes `GIT_CONFIG_*` | Nechat nested `git` bez přihlášení | Pracovní strom stojí nad partial klonem, takže `git diff` proti base commitu si dotahuje bloby ze sítě. `-c` z `RepoCheckoutu` sem nedosáhne — `git` spouští sám reviewer, a proměnné prostředí jsou jediná cesta, jak mu config podstrčit. Přidává se, existující helpery se neruší. **Ověřené to zatím není**; potvrdí to až první běh nad privátním repem |
+| Diff se tahá `gh pr diff` | Vygenerovat ho `git diff` v pracovní kopii, která stejně vzniká kvůli review | Zobrazuje se **PR**, ne stav lokální kopie. Worktree v tu chvíli zpravidla neexistuje — diff se čte dřív, než se cokoli klonuje, a klonovat repo kvůli prohlédnutí diffu je nepoměr. `git diff base...head` by navíc proti GitHubu mohl dát jiný rozsah, protože base commit se pod PR mění |
+| `App/Diff/` je vlastní složka, ne součást `Policy` | Přidat parser k ostatním čistým funkcím do `Policy` | `Policy` je **rozhodování** nad daty (co blokuje, co navrhnout, jak řadit) a testuje se jako pravidla. Parser je překlad cizího formátu na model — stejná kategorie jako `StreamParser`, který taky žije u svého konzumenta. Kdyby se do `Policy` slilo všechno čisté, přestane být poznat, co se v ní hledá |
+| Nerozpoznaný řádek se **počítá a je vidět** | Přeskočit, co parser nezná | Diff s vynechaným kusem vypadá jako úplný a nic v okně neřekne, že se kouká na neúplný podklad. Stejné pravidlo jako u `droppedFindings`: ztráta, kterou nikdo nevidí, je horší než hlášená ztráta |
+| Řádek se zařazuje podle **stavu** (hlavička / hunk) | Rozhodovat podle prvního znaku, jak to dělá většina jednoduchých parserů | Odebraný řádek `--- a tady něco` je pak k nerozeznání od hlavičky `--- a/soubor` a diff se rozpadne přesně tam, kde se mluví o diffech. Uvnitř hunku znamená `-` vždycky odebráno; hlavičky se čtou jen mezi soubory |
+| Cesty z `rename from`/`---`/`+++`, hlavička `diff --git` jen jako záchrana | Parsovat cesty z hlavičky `diff --git a/… b/…` | Hlavička je u cest s mezerou nejednoznačná (`a/x y b/z` jde rozdělit víc způsoby), kdežto `rename from`, `rename to`, `---` a `+++` nesou vždycky právě jednu cestu. Hlavička zůstává jen tam, kde ostatní chybí — u binárek a přejmenování beze změny obsahu |
+| Diff se cachuje v paměti podle `updatedAt` | Načíst při každém výběru řádku | Přepínání mezi PR je nejčastější pohyb v okně a každé by jinak stálo podproces a kolo po síti. `updatedAt` je jediné, co seznam o čerstvosti ví — mění se i po komentáři, takže občas načte zbytečně. Opačná chyba (ukázat starý diff k novému commitu) je dražší |
+| Diff drží `AppStore`, ne view | `@State` v `PullRequestDetailView` | Stejná past jako u checkoutu: SwiftUI si detail mezi PR ponechá (stejná pozice ve stromu), takže by diff přetekl z jednoho PR na druhý. Ve store se navíc zahodí spolu s ostatním stavem, když PR vypadne ze seznamu |
+| Dlouhé řádky se zalamují | Vnořený vodorovný `ScrollView` | 120 znaků se do plné šířky vejde — kvůli tomu diff plnou šířku dostal — takže zalomení potká výjimku, ne pravidlo. Vodorovný scroll uvnitř `LazyVStack`u navíc nutí měřit nejširší řádek, aby podbarvení nekončilo u každého řádku jinde; to je cena za případ, který skoro nenastává |
+| Buňka líného seznamu je **řádek**, ne hunk | Vykreslit hunk jako celek (hlavička + jeho řádky v jedné buňce) | Ukázalo se to při zvětšení okna: buňka vytvořená při jiné šířce se sama nepřeměří, takže se překreslila jen zčásti a mezi hlavičkami hunků zůstala prázdná místa. Řádek jako vlastní buňka to nemá kde udělat. Vedlejší přínos: skok z nálezu má na co ukázat |
+| Diff **nejde označit myší** | `.textSelection(.enabled)` nad obsahem diffu | Zkoušeno a zahodeno spolu s předchozím: výběr textu nad tisíci `Text`y v líném seznamu je druhý známý zdroj nevykreslených řádků na macOS. Kopírování kódu z diffu si nikdo nevyžádal, prázdná místa v diffu vadila hned |
+| Nálezy jsou **sbalitelná spodní lišta**, ne polovina okna | Posuvné dělítko (`VSplitView`) mezi diffem a nálezy | Rozdělené okno dalo diffu čtyři řádky a zbytek seznamu nálezů, kterých bývá pár. Lišta ukazuje pořád to podstatné (návrh verdiktu, počet nálezů, stáří) a seznam si o místo řekne kliknutím. Rozbalená je defaultně — po doběhlém review se nálezy mají nabídnout, ne schovat |
+| Proklik z nálezu do diffu je už v #18 | Nechat ho na #20 podle rozpisu milníku | Panel nálezů bez odskoku znamená hledat `file:line` očima ve dvou tisících řádcích. Je to jedna čistá funkce (`DiffRow.anchor`) nad řádky, které stejně vznikají — odkládat to znamenalo dvakrát otevírat totéž místo |
+| Nález mimo hunky skočí **na soubor** | Nedělat nic, když se řádek v diffu nenajde | Reviewer čte celý pracovní strom, ne jen diff, takže umí nahlásit řádek, který se nezměnil. Hlavička souboru je nejbližší pravdivé místo; skákat na jiný řádek by lhalo |
+| Cesta ke klonu je **nápověda**, ne řádek v hlavičce | Vypisovat ji pod stavem pracovní kopie | Je to údaj, který se hodí jednou za měsíc, a zabíral pruh přes celou šířku okna. U **selhání** zůstává výpis celý a rozbalený — tam je text od `gitu` to jediné, z čeho se pozná, co dělat |
 | `zsh -lc`, `.zshrc` se nepřečte | `zsh -ilc`, aby fallback viděl i `.zshrc` | Zkoušeno a zahozeno: interaktivní shell se ze spuštěné aplikace zasekl (z terminálu běží pod 0,5 s) a **ignoruje `SIGTERM`** — vytáhla ho až eskalace na `SIGKILL`, tedy 7 s do prázdného výsledku. Zaseknutý start je horší selhání než nenalezená binárka, kterou gate umí vysvětlit. Zůstává jako známé omezení |
 
 ## Ověřeno proti CLI (2026-08-01)

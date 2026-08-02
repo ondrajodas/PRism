@@ -188,6 +188,45 @@ struct GhGatewayTests {
         }
     }
 
+    // MARK: - Diff
+
+    @Test("Diff se ptá na konkrétní PR a vypíná barvy")
+    func diffAsksForOnePullRequestWithoutColor() async throws {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: "")
+
+        _ = try await gateway(runner).fetchDiff(id: prism)
+
+        // `--color never` je pojistka: default `auto` se rozhoduje podle toho, jestli je
+        // na výstupu terminál, a barevný diff by parseru přinesl ANSI escape sekvence.
+        #expect(runner.invocations == [
+            .init(executable: gh, arguments: [
+                "pr", "diff", "32",
+                "--repo", "ondrajodas/PRism",
+                "--color", "never",
+            ]),
+        ])
+    }
+
+    /// Gateway diffu **nerozumí** — tvar unified diffu není nic, co by `gh` definoval,
+    /// takže překlad na model dělá `DiffParser`, ne tenhle typ.
+    @Test("Diff se vrací jako syrový text")
+    func diffIsReturnedRaw() async throws {
+        let text = try Fixture.text("gh/pr-diff-deleted.diff")
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: text)
+
+        #expect(try await gateway(runner).fetchDiff(id: prism) == text)
+    }
+
+    @Test("Neexistující PR v diffu je nenalezeno")
+    func diffOfUnknownPullRequestIsNotFound() async {
+        let stderr = "GraphQL: Could not resolve to a PullRequest with the number of 99999. (repository.pullRequest)"
+        let runner = FakeProcessRunner(exitCode: 1, standardError: stderr)
+
+        await #expect(throws: GitHubError.notFound(stderr)) {
+            try await gateway(runner).fetchDiff(id: prism)
+        }
+    }
+
     // MARK: - Auth
 
     @Test("Kontrola přihlášení jde přes gh auth status")

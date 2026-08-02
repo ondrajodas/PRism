@@ -14,4 +14,11 @@ protocol GitHubGateway: Sendable {
 
     /// Doplní metadata, která vyhledávání nedává — hlavně `headSha` a `baseSha`.
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest
+
+    /// Diff pull requestu jako **syrový text** unified diffu.
+    ///
+    /// Nerozparsovaný schválně: tvar diffu není nic, co by `gh` definoval (na rozdíl od
+    /// `--json` polí), takže mu rozumí až `DiffParser`. Diff je **jen k zobrazení** —
+    /// reviewery čtou skutečné soubory v pracovním stromě.
+    func fetchDiff(id: PRIdentifier) async throws -> String
 }
