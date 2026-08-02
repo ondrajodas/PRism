@@ -18,6 +18,10 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     var sources: [Source]
     /// Sada, která platí, dokud ji nepřebije jazyk nebo repo. Je to ta „hvězdička“
     /// z rozpisu v #24 — druhý zápis téhož by byla past pro toho, kdo soubor čte.
+    ///
+    /// **Jsou to id nástroje `Skill`, ne slash commandy.** Do #78 tu stálo `code-review`,
+    /// což skill vůbec není (je to plugin **command**), takže se nemělo co načíst a model
+    /// si domýšlel. Plugin se adresuje `plugin:skill`, uživatelský skill svým jménem.
     var skills: [String]
     /// Výchozí sada podle rozpoznaného jazyka projektu. Prázdná mapa = detekce nic nemění.
     var skillsByLanguage: [ProjectLanguage: [String]]
@@ -166,7 +170,7 @@ struct Configuration: Codable, Equatable, Sendable {
     static let standard = Configuration(
         global: GlobalConfig(
             sources: [.reviewRequested],
-            skills: ["code-review"],
+            skills: ["code-review:code-review"],
             blockingCategories: Policy.defaultBlockingCategories.sorted(),
             mode: .manual,
             findingsLanguage: .czech,

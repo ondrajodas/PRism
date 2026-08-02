@@ -13,7 +13,11 @@ struct ToolAttempt: Hashable, Sendable {
     /// Klíče, pod kterými nástroje `claude` nesou to podstatné, v pořadí, v jakém se
     /// zkoušejí. Neznámý nástroj detail prostě nemá — hádat by znamenalo ukázat cizí číslo
     /// jako cestu.
-    static let detailKeys = ["file_path", "notebook_path", "pattern", "command", "path", "query", "url"]
+    /// `skill` je mezi nimi od #78: bez něj je v ose vidět holé „Skill“ a nepozná se,
+    /// **který** se načetl — a právě to je u něj ta zajímavá informace.
+    static let detailKeys = [
+        "file_path", "notebook_path", "pattern", "command", "path", "query", "url", "skill",
+    ]
 
     init(name: String, input: [String: Any]?) {
         self.name = name

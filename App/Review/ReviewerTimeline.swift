@@ -41,6 +41,27 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         self.worktree = worktree
     }
 
+    /// Který skill si session doopravdy načetla. `nil` = žádný.
+    var loadedSkill: String? {
+        entries.lazy.compactMap { entry -> String? in
+            guard case .tool(let tool) = entry.kind, tool.name == "Skill" else { return nil }
+            return tool.detail
+        }.first
+    }
+
+    /// Načetl se **jiný** skill, než jaký byl nastavený?
+    ///
+    /// Stává se to, když nakonfigurované id na nic nemapuje: model si domyslí nejbližší,
+    /// co jde oslovit — ověřeno u #78, kde se z `code-review` stalo `code-review:code-review`.
+    /// Bez upozornění by osa i chip tvrdily, že běžel nastavený skill, a běžel by jiný.
+    ///
+    /// Běh **bez** načteného skillu se sem nepočítá: reviewer, který si žádný nevzal, udělal
+    /// obecné review, a to je jiná situace než záměna.
+    var loadedADifferentSkill: Bool {
+        guard let loadedSkill else { return false }
+        return loadedSkill != skill
+    }
+
     /// Nejnovější událost napříč reviewery — podle ní se osa posouvá na konec.
     ///
     /// Napříč, ne z poslední osy v poli: reviewery běží paralelně, takže nová událost

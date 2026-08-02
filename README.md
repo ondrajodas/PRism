@@ -129,7 +129,9 @@ aktuálně je.
    partial clone a přidá se detached `git worktree` na head commitu daného PR.
    **Vlastních** klonů na disku se aplikace nikdy nedotkne.
 3. **Review** — nakonfigurované skilly se spustí jako paralelní headless session
-   Claude Code v tom worktree, omezené na read-only nástroje. Které to jsou, může záviset
+   Claude Code v tom worktree, omezené na read-only nástroje. Prompt si o skill říká
+   nástrojem `Skill` výslovně, takže v konfiguraci jsou jeho id (`plugin:skill`), ne
+   slash commandy. Které to jsou, může záviset
    na programovacím jazyce repa; ten se odhaduje z `git ls-files`. Spouští se **tlačítkem**;
    automatický režim se dá zapnout globálně i zvlášť pro každé repo (výchozí je manuální,
    aby neznámé repo nespálilo panel session bez dozoru).

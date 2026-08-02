@@ -51,6 +51,17 @@ struct ReviewTimelineView: View {
         HStack(spacing: 8) {
             Text(verbatim: timeline.skill)
                 .font(.callout.weight(.semibold))
+            // Hlavička tvrdí, který skill běžel. Když si session načetla jiný, musí to
+            // říct — jinak je to text, co tvrdí víc, než data unesou.
+            if timeline.loadedADifferentSkill, let loaded = timeline.loadedSkill {
+                Label("běžel \(loaded)", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    // Jen to, co je jisté. Nejčastější příčina je, že nastavené id na nic
+                    // nemapuje, ale detekce hlásí **jakoukoli** neshodu — tvrdit příčinu
+                    // by bylo hádání vydávané za zjištění.
+                    .help("Session si načetla jiný skill, než je nastavený (`\(timeline.skill)`).")
+            }
             if let sessionID = timeline.sessionID {
                 Text(verbatim: sessionID)
                     .font(.system(.caption, design: .monospaced))

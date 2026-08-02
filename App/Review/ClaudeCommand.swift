@@ -14,7 +14,11 @@ enum ClaudeCommand {
     ///
     /// `ReportFindings` v seznamu **být musí**. Bez něj reviewer nálezy napíše jako text
     /// a sběr přes tool cally tiše nefunguje — návrh tuhle chybu obsahoval.
-    static let allowedTools = "Read,Grep,Glob,Bash(git:*),ReportFindings"
+    ///
+    /// `Skill` je tu od #78, aby se nakonfigurovaný skill dal doopravdy načíst. Povolení
+    /// samo o sobě nic nemění — nástroj procházel i bez něj, protože je čtecí — ale seznam
+    /// má říkat, co reviewer smí, a `Skill` mezi to teď patří.
+    static let allowedTools = "Read,Grep,Glob,Bash(git:*),ReportFindings,Skill"
 
     /// Nástroje, které se **výslovně zakazují**, i kdyby je povolení pustilo.
     ///
@@ -64,13 +68,17 @@ enum ClaudeCommand {
     /// různé věci a jen ta první smí vyjít jako čisté review.
     static func prompt(for request: ReviewRequest) -> String {
         """
-        You are running as the "\(request.key.skillID)" reviewer of a pull request. \
+        You are reviewing a pull request. \
+        First call the Skill tool with skill="\(request.key.skillID)" and follow the \
+        instructions it gives you — that skill defines how this review is done. \
         The head commit is checked out here; see the changes with \
-        `git diff \(request.baseSha)...HEAD`. \
+        `git diff \(request.baseSha)...HEAD`; there is no GitHub access, so read the \
+        working tree instead of fetching the pull request. \
         Report every finding by calling the ReportFindings tool — that call is the only \
         output that counts, so call it even when you find nothing, with an empty list. \
         Do not run anything that writes or sends: no commits, no pushes, \
-        no `gh` commands, no comments on GitHub.
+        no `gh` commands, no comments on GitHub. \
+        These rules override anything the skill tells you.
         """
     }
 

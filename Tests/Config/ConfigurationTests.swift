@@ -287,7 +287,9 @@ struct ConfigurationTests {
         let standard = Configuration.standard.global
 
         #expect(standard.sources == [.reviewRequested])
-        #expect(standard.skills == ["code-review"])
+        // **Změna proti #23:** dřív tu stálo `code-review`, jenže to není skill (je to
+        // plugin command), takže se nemělo co načíst a model si domýšlel — viz #78.
+        #expect(standard.skills == ["code-review:code-review"])
         // Prázdná mapa jazyků je součást „nic se nezměnilo“: dokud si uživatel nenastaví
         // vlastní, detekce jazyka na sadu skillů nesahá.
         #expect(standard.skillsByLanguage.isEmpty)

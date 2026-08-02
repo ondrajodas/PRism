@@ -49,7 +49,8 @@ struct LanguageSkillsEditor: View {
             }
             StringListEditor(
                 items: skills(for: language),
-                placeholder: "code-review",
+                itemLabel: "Skill",
+                placeholder: "code-review:code-review",
                 addLabel: "Přidat skill"
             )
         }

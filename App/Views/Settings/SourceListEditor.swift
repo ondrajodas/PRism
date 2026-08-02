@@ -22,11 +22,20 @@ struct SourceListEditor: View {
     private func row(at index: Int) -> some View {
         HStack(alignment: .top, spacing: 6) {
             VStack(alignment: .leading, spacing: 4) {
-                TextField("Název", text: binding(at: index, \.name))
+                // Nápověda patří do `prompt:` — první argument by se ve `Form`u stal
+                // popiskem vlevo od pole. Zůstává ale vyplněný: `.labelsHidden()` ho skryje
+                // jen vizuálně, pro VoiceOver je to pořád jediný popis pole.
+                TextField("Název", text: binding(at: index, \.name), prompt: Text("Jméno zdroje"))
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
-                TextField("review-requested:@me is:open", text: binding(at: index, \.query))
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
+                TextField(
+                    "Dotaz",
+                    text: binding(at: index, \.query),
+                    prompt: Text(verbatim: "review-requested:@me is:open")
+                )
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
             }
             Button {
                 sources.remove(at: index)

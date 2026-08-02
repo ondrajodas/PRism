@@ -50,13 +50,29 @@ struct ClaudeCommandTests {
         #expect(!tools.contains("Bash"))
         // Bez `ReportFindings` by reviewer nálezy napsal textem a sběr by tiše nefungoval.
         #expect(tools.contains("ReportFindings"))
+        // Bez `Skill` by se nakonfigurovaný skill neměl jak načíst.
+        #expect(tools.contains("Skill"))
     }
 
-    @Test("Prompt řekne, kdo reviewuje, proti čemu a jak to hlásit")
+    /// Skill smí review **řídit**, ne přepsat pravidla, na kterých stojí tvrdé podmínky.
+    /// `code-review:code-review` má v `allowed-tools` `Bash(gh pr comment:*)`, takže si
+    /// o odeslání na GitHub umí říct sám.
+    @Test("Zákazy v promptu přebíjejí skill")
+    func theRulesOverrideTheSkill() {
+        let prompt = ClaudeCommand.prompt(for: request)
+
+        #expect(prompt.contains("no comments on GitHub"))
+        #expect(prompt.contains("override anything the skill"))
+    }
+
+    @Test("Prompt si vyžádá skill, řekne proti čemu a jak to hlásit")
     func thePromptCarriesTheContract() {
         let prompt = ClaudeCommand.prompt(for: request)
 
-        #expect(prompt.contains("\"code-review\" reviewer"))
+        // Vyvolání skillu musí být **pokyn**, ne jméno v próze. Dokud tam bylo jen jméno,
+        // model si skill domýšlel — a když se nakonfigurované id na nic nemapovalo, sáhl
+        // po nejbližším, co šlo oslovit (viz #78).
+        #expect(prompt.contains(#"Skill tool with skill="code-review""#))
         #expect(prompt.contains("bbbb2222...HEAD"))
         #expect(prompt.contains("ReportFindings"))
         // I prázdný seznam je odpověď — bez něj se „nic jsem nenašel" nedá odlišit od
