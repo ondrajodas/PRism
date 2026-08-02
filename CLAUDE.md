@@ -1258,9 +1258,17 @@ Plánované fáze:
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
 2. ~~Checkout cache + worktree~~ — **hotovo**
 3. ~~`ReviewRunner` + parsování streamu~~ — **hotovo**
-4. UI diffu s bublinami — diff hotový (#18), zbývají bubliny (#19), tabulka (#20),
-   chipy (#21) a tab Průběh (#22)
-5. Konfigurace a auto režim
+4. ~~UI diffu s bublinami~~ — **hotovo** (#18–#22, #47, #48, #51)
+5. Konfigurace a auto režim — konfigurace hotová (#23), zbývá auto režim (#24, #25),
+   jazyk nálezů (#52) a okno nastavení (#70)
+
+Tím končí rozsah v1 podle specifikace. Za ním:
+
+6. **Review na GitHub** (M6) — odesílání review z okna. Tenhle milník **ruší tvrdou
+   podmínku č. 1** a nahrazuje ji pravidlem „jediná cesta ven“ (#67). Dokud není hotový,
+   podmínka platí beze změny.
+7. **Konverzace, komentáře a taby** (M7) — cizí komentáře a vlákna v okně, odpovídání do
+   nich a rozvržení jako na GitHubu (taby `Overview` / `Files changed`).
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
