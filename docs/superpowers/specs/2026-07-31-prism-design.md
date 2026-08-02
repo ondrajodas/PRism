@@ -754,8 +754,8 @@ a `Tests/Fixtures/stream-json/`. Co z toho plyne pro návrh:
 
 ## Za hranicí v1 — milníky M6 až M8
 
-Rozsah v1 končí konfigurací a auto režimem (M5). Dva z milníků za ním mění jeden
-z předpokladů návrhu: aplikace přestává být vůči GitHubu jen pro čtení.
+Rozsah v1 končí konfigurací a auto režimem (M5). **M6 a M7** za ním mění jeden
+z předpokladů návrhu: aplikace přestává být vůči GitHubu jen pro čtení. M8 ne — viz níž.
 
 | Milník | Co v něm je |
 |---|---|
