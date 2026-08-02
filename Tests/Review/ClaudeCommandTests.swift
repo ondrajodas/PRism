@@ -64,6 +64,27 @@ struct ClaudeCommandTests {
         #expect(prompt.contains("empty list"))
     }
 
+    /// Prompt je **jeden řádek**. Skládá se z víceřádkového literálu se spojkami `\` na
+    /// koncích a je snadné do něj `\n` propašovat tím, že se na jednom řádku vynechá.
+    @Test("Prompt je jeden řádek")
+    func thePromptIsASingleLine() {
+        let prompt = ClaudeCommand.prompt(for: request)
+
+        #expect(!prompt.contains("\n"))
+        #expect(!prompt.contains("  "))
+    }
+
+    /// Jazyk nálezů se **do promptu nedostane**. Cokoli v něm může ovlivnit to, co reviewer
+    /// najde, a ověřit opak je drahé — překládá se proto až po doběhnutí, viz
+    /// `FindingTranslating`.
+    @Test("Prompt reviewerovi jazyk nediktuje")
+    func thePromptSaysNothingAboutLanguage() {
+        let prompt = ClaudeCommand.prompt(for: request)
+
+        #expect(!prompt.contains("Czech"))
+        #expect(!prompt.contains("in English"))
+    }
+
     @Test("Prompt není slash command")
     func thePromptIsNotASlashCommand() {
         // Ověřeno spuštěním: `-p "/code-review …"` doběhne úspěšně, ale nálezy vrátí jako

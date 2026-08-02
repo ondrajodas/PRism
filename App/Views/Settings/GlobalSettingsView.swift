@@ -22,10 +22,19 @@ struct GlobalSettingsView: View {
                     Text("Automatický").tag(ReviewMode.automatic)
                 }
                 .pickerStyle(.radioGroup)
+
+                // Jazyk patří sem, ne mezi hodnoty běhu: je to spolu s režimem to, co se
+                // u jednotlivých rep mění nejčastěji, a v obou případech je globální
+                // hodnota jen výchozí.
+                Picker("Jazyk nálezů", selection: $settings.draft.global.findingsLanguage) {
+                    ForEach(FindingsLanguage.allCases, id: \.self) { language in
+                        Text(verbatim: language.displayName).tag(language)
+                    }
+                }
             } header: {
                 Text("Režim review")
             } footer: {
-                Text("Platí pro repa, která si neřeknou o jiný. Manuální čeká na tlačítko, automatický spustí review, jakmile se PR objeví v seznamu.")
+                Text("Platí pro repa, která si neřeknou o jiný. Manuální čeká na tlačítko, automatický spustí review, jakmile se PR objeví v seznamu. Jazyk se týká textu nálezů; `category` zůstává vždycky anglicky, protože je to slug, na který se váže blokující sada.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

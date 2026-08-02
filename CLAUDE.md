@@ -263,6 +263,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
 | `ReviewVerdict` | Návrh, co s PR udělat: `approve` / `requestChanges`. Jako jediný **není `Codable`** — neukládá se, odvozuje se z uložených nálezů |
 | `ProjectLanguage` | Čím je repo psané — klíč mapy „jazyk → sada skillů“. **Není to `Syntax.Language`**, viz níž |
+| `FindingsLanguage` | Jazyk prózy v nálezech (`cs`/`en`). Ani tohle **není `ProjectLanguage`** |
+| `FindingTranslation` | Přeložená próza nálezu. Visí vedle originálu, nepřepisuje ho |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -279,6 +281,14 @@ Tři věci, které se u nich nemají rozbít:
 - **`clean` vzniká jen přes `ReviewState.finished(findingCount:)`.** Jinak se dřív nebo
   později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
 
+- **Tři různé „jazyky“ se nesmí slít.** `ProjectLanguage` říká, čím je repo psané (vybírá
+  skilly), `FindingsLanguage` jazyk prózy v nálezech (jde do promptu), `Syntax.Language`
+  pravidla obarvení. Odpovídají na tři různé otázky a jediné, co sdílejí, je slovo v názvu
+  — proto se i v UI píše „programovací jazyk“ a „jazyk nálezů“, nikdy jen „jazyk“.
+- **`FindingsLanguage` je uzavřený výčet**, i když skilly, kategorie i model jsou volné
+  řetězce. Hodnota jde do **anglické věty v promptu** a do **českého popisku v okně**;
+  u volného řetězce by první záviselo na tom, jak ho uživatel napíše, a druhé by nešlo
+  ukázat vůbec. Přidat jazyk je jeden case a dva řetězce.
 - **`ProjectLanguage` a `Syntax.Language` jsou dva různé výčty schválně.** První odpovídá
   na „co je tohle za projekt“, druhý na „jak tenhle řádek obarvit“ — a patří k němu YAML,
   JSON i Markdown, které o projektu neříkají nic. Spojit je by znamenalo, že rozpoznat
@@ -345,8 +355,8 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, interval, souběh, rozpočet, model |
-| `RepositoryConfig` | Override pro jedno repo: `mode`, skilly, kategorie — **všechno volitelné** |
+| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `findingsLanguage`, interval, souběh, rozpočet, model |
+| `RepositoryConfig` | Override pro jedno repo: `mode`, `findingsLanguage`, skilly, kategorie — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
 | `ConfigurationBox` | Aktuální konfigurace pro kód mimo hlavní vlákno (limit souběhu, rozpočet, model) |
@@ -388,6 +398,11 @@ Věci, které se u toho nemají rozbít:
   bez výrazu selže a **selhání jednoho zdroje zahazuje celý tik**, takže by kvůli
   rozepsanému řádku zmizel celý seznam PR. Prázdný **seznam** to nemění, ten je pořád
   vlastní odpověď.
+- **Jazyk nálezů se řídí stejnými pravidly jako režim** — `nil` u repa znamená „ber
+  globální“ a záznam se maže podle prázdnosti, ne podle shody s globálem. Rozdíl je
+  v tolerantním čtení: **rozbitá hodnota jazyka spadne na globální**, ne na výchozí.
+  U režimu je přísnost kvůli tomu, že překlep by pustil review, o které nikdo nežádal;
+  u jazyka je nejhorší následek próza v jiném jazyce.
 - **Rozbitá hodnota režimu se sráží na `manual`, ne na globální default.** Chybějící klíč
   je „ber globální“, ale překlep v hodnotě, kterou se někdo pokoušel automat **vypnout**,
   ho nesmí nechat zapnutý. Platí i globálně.
@@ -464,7 +479,7 @@ Jeden běh = jedna headless session `claude` na jeden skill v jednom pracovním 
 |---|---|
 | `ReviewRunning` | Protokol: `run(_:progress:)`. Schválně nemá nic, čím by šlo něco odeslat |
 | `ClaudeReviewRunner` | Implementace nad `claude` přes `ProcessStreaming` |
-| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat) |
+| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat), jazyk nálezů |
 | `ReviewRunKey` | `(PR, headSha, skillID)` — identita běhu |
 | `ReviewRun` | Výsledek: klíč, `StreamSummary`, `ReviewRunOutcome`; `findings` doplní reviewera a `headSha` |
 | `ReviewRunOutcome` | `finished` / `timedOut` / `failed(detail:)` |
@@ -498,7 +513,59 @@ Věci, které se u toho nemají rozbít:
   klonem, takže `git diff` proti base commitu si dotahuje bloby ze sítě — a `-c` z
   `RepoCheckoutu` sem nedosáhne, protože `git` spouští sám reviewer. Ověřené to zatím není;
   potvrdí to až první běh nad privátním repem.
-- **Prompt je natvrdo** a skill se vyvolává lomítkem. Konfigurace skillů a modelu je #23.
+- **Prompt o jazyku nálezů mlčí a mlčet musí.** Cokoli, co se do něj přidá, může ovlivnit
+  to, co reviewer najde — a ověřit, že neovlivnilo, je drahé: tři běhy nad týmž commitem
+  daly 1, 2 a 3 nálezy, takže rozptyl schová jakýkoli efekt menší než ten. Jazyk se proto
+  řeší až za review, viz `FindingTranslating` níž. Je na to test, aby se to nevrátilo.
+- **Jestli se skill načte, je dnes na náhodě.** Prompt jeho jméno jen napíše do věty
+  (`You are running as the "code-review" reviewer`) a nikde si o jeho vyvolání neřekne.
+  Reviewer si nástroj `Skill` občas zavolá sám — usoudí to z té věty — a občas ne:
+  **v 5 ze 14 zaznamenaných běhů ano, v 9 ne**. Nástroj přitom projde, i když v
+  `--allowedTools` není (čtecí builtin), takže o oprávnění nejde.
+
+  Lomítková varianta se zahodila u #17, protože rozbíjela `ReportFindings`, a náhrada se
+  nedodělala. Dokud to platí, je sada skillů podle jazyka (#24) i chip na reviewera jen
+  štítek nad během, který si obsah zvolil sám. Je to taky nejlepší vysvětlení rozptylu
+  v počtu nálezů mezi běhy nad týmž commitem. Řeší se v #78.
+
+### Překlad nálezů (`App/Review/`)
+
+Nálezy se do jazyka z nastavení překládají **až po doběhnutí review**, ne instrukcí
+v promptu.
+
+| Typ | Co je |
+|---|---|
+| `FindingTranslating` | Protokol: `translate(_:to:)`. Stejně jako `ReviewRunning` nemá nic, čím by šlo něco odeslat |
+| `ClaudeFindingTranslator` | Jedna krátká `claude -p` session na celý běh |
+| `TranslationCommand` | Čisté funkce: argumenty, prompt, defenzivní čtení odpovědi |
+| `FindingTranslation` | Přeložená próza — `summary`, `shortSummary`, `failureScenario` |
+
+Věci, které se u toho nemají rozbít:
+
+- **Překlad nesmí ztratit nález.** Vrací se pole zarovnané se vstupem, `nil` na místě
+  znamená nepřeloženo. Nepřeložený nález se ukáže v originále; chybějící by v UI vypadal
+  jako neexistující, tedy jako schválený PR s neohlášenou chybou.
+- **Páruje se podle `id`, ne podle pořadí.** Model, který jednu položku vynechá nebo
+  prohodí, by u pozičního párování přiřadil překlady cizím nálezům. `id` mimo rozsah se
+  zahazuje ze stejného důvodu.
+- **Odpověď se čte defenzivně (`JSONSerialization`), ne přes `Codable`.** Je to volný text
+  od modelu, ne dohodnutý formát: chodí obalený v ```-blocích, s větou navíc, nebo úplně
+  jinak. Vykrojí se první `[` až poslední `]`.
+- **Selhání překladu není selhání review.** Nálezy dorazily a jsou uložené; nenulový exit
+  ani nesmyslná odpověď nesmí položit běh. Že jsou anglicky, je vidět na první pohled —
+  mlčení tu nic neschovává.
+- **Ukládá se dvakrát: originál hned, překlad po něm.** Kdyby se čekalo na překlad, zavření
+  aplikace uprostřed by nálezy zahodilo — a „co doběhlo, zůstane“ je pravidlo, které je
+  starší než překlad.
+- **Angličtina se nepřekládá.** Reviewer v ní píše sám od sebe (ověřeno na skutečných
+  bězích), takže by to byla session za nic.
+- **Překladač nedostane jediný nástroj.** Je to transformace textu; session, která nemůže
+  nic spustit, nemůže ani omylem sáhnout na repozitář. Zákazy zůstávají jako pojistka.
+- **`category` se nepřekládá, protože se neposílá.** Do promptu jde jen próza — nabídnout
+  modelu slug znamená riskovat, že ho změní, a na něm stojí blokující sada.
+- **Překlad je zobrazení, ne tvrzení.** `Finding.reported` zůstává tím, co poslal reviewer;
+  překlad visí vedle a texty se skládají **po polích** (`translation?.summary ?? reported.summary`).
+  Kdyby překladateli jedno pole vypadlo, je jeden anglický řádek lepší než chybějící text.
 
 ### `App/Support/`
 
@@ -707,7 +774,7 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsScene` | Obsah scény; dokud neprošel preflight, není store a okno to řekne |
 | `SettingsView` | Dvě záložky, patička s cestou a stavem uložení, zámek na rozbitý soubor |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
-| `GlobalSettingsView` | Zdroje, výchozí režim, skilly, sady podle jazyka, kategorie, běh |
+| `GlobalSettingsView` | Zdroje, výchozí režim a jazyk nálezů, skilly, sady podle jazyka, kategorie, běh |
 | `LanguageSkillsEditor` | Mapa „programovací jazyk → sada skillů“; ukazuje jen nastavené jazyky |
 | `RepositorySettingsView` | Seznam rep vlevo, režim a override vpravo |
 | `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
@@ -1166,6 +1233,15 @@ Právě proto tam eskalace na `SIGKILL` je.
   co se dá rozbít tiše: že vlastní `manual` přebije globální automat, že se takový záznam
   nesmaže jako „shodný s globálním“ a že se rozbitá hodnota srazí na `manual`, kdežto
   chybějící klíč vezme globální.
+- **Jazyk nálezů** — u konfigurace výchozí čeština, override per repo a to, že se vlastní
+  hodnota nesmaže jako shodná s globální (stejná past jako u režimu). U promptu naopak to,
+  že o jazyku **mlčí** — kdyby se to vrátilo, stálo by to nálezy.
+- **Překlad** — `TranslationCommand` na každou podobu nesmyslu, kterou model umí vrátit:
+  prohozená `id`, `id` mimo rozsah, chybějící položka, code fence, prázdno, položka bez
+  `summary`. `ClaudeFindingTranslator` proti fake procesu na to, že nenulový exit ani
+  rozbitá odpověď nevyhodí chybu. `AppStore` na celou cestu: přeložené nálezy na disku
+  i po restartu, angličtina bez volání, čisté review bez volání, selhaný překlad
+  s originály a — to hlavní — **nepřeložený nález, který nesmí zmizet vedle přeložených**.
 - **`Policy.projectLanguages`** — jednojazyčné projekty (PHP, Go, TS, Swift), smíšený
   s pořadím podle váhy, zatoulaný soubor pod prahem, marker bez souborů, prázdný repozitář
   a repozitář bez zdrojáků. Plus to, co se snadno rozbije: že samotný `package.json`
@@ -1249,6 +1325,11 @@ EOF
 Takhle se dá dokázat i rozvržení: že seznam začíná pod toolbarem se pozná porovnáním
 `position` scroll areay s výškou `AXToolbar`. Když se s uživatelem lišíte v tom, co je na
 obrazovce, tohle to rozhodne — screenshot nedostaneš.
+
+**Po dočasném testovacím souboru zkontroluj `git status`.** Xcode si při jeho přidání
+přepíše `project.pbxproj` — samé přeformátování (uvozovky, pořadí sekcí), žádná změna
+významu, ale v diffu PR je to sto řádků šumu. Smazáním souboru se to nevrátí, musí se
+`git restore PRism.xcodeproj/project.pbxproj`.
 
 **Když si na chvíli upravíš `RootView`, ať vidíš jiný stav, nezapomeň rebuildnout, než
 řekneš, že je hotovo.** Vrácený zdroják na běžící aplikaci nic nezmění a pak se ukazuje
@@ -1401,14 +1482,19 @@ skillů se z `git ls-files` pozná, čím je repo psané, a odvozená sada se po
 od globální liší, taky mu zapíše. Mapa je ve výchozím stavu prázdná, takže dokud si ji
 uživatel nevyplní, detekce na sadu nesahá.
 
+Jazyk nálezů hotový (issue #52) — `FindingsLanguage` v `App/Models/`, volba v konfiguraci
+globálně i per repo. **Překládá se až po doběhnutí běhu**, prompt o jazyku mlčí — ten se
+nesmí měnit kvůli něčemu, co je jen na pohled. Změna neplatí zpětně, uložené nálezy
+zůstanou, jak jsou.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
 2. ~~Checkout cache + worktree~~ — **hotovo**
 3. ~~`ReviewRunner` + parsování streamu~~ — **hotovo**
 4. ~~UI diffu s bublinami~~ — **hotovo** (#18–#22, #47, #48, #51)
-5. Konfigurace a auto režim — konfigurace (#23), okno nastavení (#70) a odhad jazyka (#24)
-   hotové, zbývá auto režim (#25) a jazyk nálezů (#52)
+5. Konfigurace a auto režim — konfigurace (#23), okno nastavení (#70), odhad jazyka (#24)
+   a jazyk nálezů (#52) hotové, zbývá **auto režim (#25)**
 
 Tím končí rozsah v1 podle specifikace. Za ním:
 

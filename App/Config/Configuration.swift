@@ -25,6 +25,10 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// Výchozí režim pro repo, které si neřeklo o jiný. Ve výchozím stavu `manual` —
     /// zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
     var mode: ReviewMode
+    /// Jazyk, do kterého se nálezy překládají, než se ukážou. **Ne** jazyk, ve kterém je
+    /// reviewer píše — jeho prompt o jazyku mlčí. Výchozí čeština, protože okno je české
+    /// a anglické nálezy vedle českých popisků působily jako dva slepené nástroje.
+    var findingsLanguage: FindingsLanguage
     /// V sekundách, ne `Duration` — soubor se edituje ručně a `Duration` se do JSONu
     /// kóduje jako dvojice čísel, kterou nikdo nenapíše.
     var pollIntervalSeconds: Int
@@ -40,6 +44,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         skillsByLanguage: [ProjectLanguage: [String]] = [:],
         blockingCategories: [String],
         mode: ReviewMode,
+        findingsLanguage: FindingsLanguage = .czech,
         pollIntervalSeconds: Int,
         maxConcurrentReviews: Int,
         cacheBudgetMegabytes: Int,
@@ -50,6 +55,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.skillsByLanguage = skillsByLanguage
         self.blockingCategories = blockingCategories
         self.mode = mode
+        self.findingsLanguage = findingsLanguage
         self.pollIntervalSeconds = pollIntervalSeconds
         self.maxConcurrentReviews = maxConcurrentReviews
         self.cacheBudgetMegabytes = cacheBudgetMegabytes
@@ -71,6 +77,8 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // Neznámý režim se bere jako `manual` ze stejného důvodu jako u repa: samo od sebe
         // se nemá spouštět nic, a překlep v souboru není důvod pustit reviewery na všechno.
         mode = (try? container.decode(ReviewMode.self, forKey: .mode)) ?? standard.mode
+        findingsLanguage = (try? container.decode(FindingsLanguage.self, forKey: .findingsLanguage))
+            ?? standard.findingsLanguage
         pollIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds)
             ?? standard.pollIntervalSeconds
         maxConcurrentReviews = try container.decodeIfPresent(Int.self, forKey: .maxConcurrentReviews)
@@ -87,14 +95,23 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
     /// nešlo by odlišit repo, které si o `manual` **řeklo**, od toho, které o něm nic
     /// neříká — a při globálním automatu jsou to opačné odpovědi.
     var mode: ReviewMode?
+    /// `nil` = ber globální. U firemního repa s mezinárodním týmem dává smysl angličtina,
+    /// i když je zbytek fronty český.
+    var findingsLanguage: FindingsLanguage?
     /// **Nahrazuje** globální sadu, neslučuje se s ní — smysl je vyhodit PHP skilly na Go
     /// repu. Prázdné pole je vlastní odpověď („tady nereviewuj nic“), `nil` znamená
     /// „ber globální“.
     var skills: [String]?
     var blockingCategories: [String]?
 
-    init(mode: ReviewMode? = nil, skills: [String]? = nil, blockingCategories: [String]? = nil) {
+    init(
+        mode: ReviewMode? = nil,
+        findingsLanguage: FindingsLanguage? = nil,
+        skills: [String]? = nil,
+        blockingCategories: [String]? = nil
+    ) {
         self.mode = mode
+        self.findingsLanguage = findingsLanguage
         self.skills = skills
         self.blockingCategories = blockingCategories
     }
@@ -115,6 +132,9 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         } else {
             mode = nil
         }
+        // Na rozdíl od režimu se rozbitá hodnota bere jako „nic jsem neřekl“: špatný jazyk
+        // znamená prózu v jiném jazyce, ne spuštěné review, o které nikdo nežádal.
+        findingsLanguage = try? container.decodeIfPresent(FindingsLanguage.self, forKey: .findingsLanguage)
         skills = try container.decodeIfPresent([String].self, forKey: .skills)
         blockingCategories = try container.decodeIfPresent([String].self, forKey: .blockingCategories)
     }
@@ -149,6 +169,7 @@ struct Configuration: Codable, Equatable, Sendable {
             skills: ["code-review"],
             blockingCategories: Policy.defaultBlockingCategories.sorted(),
             mode: .manual,
+            findingsLanguage: .czech,
             pollIntervalSeconds: 60,
             maxConcurrentReviews: 3,
             cacheBudgetMegabytes: 10 * 1024,
@@ -179,6 +200,7 @@ struct Configuration: Codable, Equatable, Sendable {
         let overrides = repositories[repo]
         return ResolvedConfig(
             mode: overrides?.mode ?? global.mode,
+            findingsLanguage: overrides?.findingsLanguage ?? global.findingsLanguage,
             skills: Self.nonBlank(overrides?.skills ?? global.skills),
             blockingCategories: Set(Self.nonBlank(overrides?.blockingCategories ?? global.blockingCategories))
         )
@@ -231,6 +253,7 @@ struct Configuration: Codable, Equatable, Sendable {
 /// Co z konfigurace vyjde pro jedno repo.
 struct ResolvedConfig: Equatable, Sendable {
     let mode: ReviewMode
+    let findingsLanguage: FindingsLanguage
     let skills: [String]
     let blockingCategories: Set<String>
 }

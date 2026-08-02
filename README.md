@@ -75,7 +75,14 @@ se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí bě
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
 PR, sada skillů, blokující kategorie, výchozí režim review, interval pollingu, kolik
 session smí běžet naráz, rozpočet cache a model. Repozitář si může přebít režim
-(`manual`/`automatic`), skilly i kategorie.
+(`manual`/`automatic`), jazyk nálezů, skilly i kategorie.
+
+**Nálezy chodí česky**, protože okno je české — u firemního repa s mezinárodním týmem se
+dá přepnout na angličtinu, globálně i jen pro to jedno repo. Překládají se **až po
+doběhnutí review**, jednou krátkou session na celý běh; reviewer sám dostane pořád tentýž
+anglický prompt. Je to schválně: instrukce v promptu by kvalitu review ovlivnit mohla,
+překlad po něm nemůže. Originál zůstává uložený vedle překladu a když se překlad nepovede,
+ukáže se prostě anglicky.
 
 Sada skillů se dá navázat na **programovací jazyk**: při review se z obsahu repa pozná,
 čím je psané (`composer.json` a `.php` → PHP, `go.mod` → Go), a odpovídající sada se
@@ -103,8 +110,8 @@ otevřeného PR a při překročení rozpočtu (10 GB) i ta nejdéle nepoužitá
 Uložené nálezy jsou klíčované head commitem: nové commity je označí jako zastaralé
 a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí.
 
-Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první čtyři; z páté zbývá automatický
-režim (#25) a jazyk nálezů (#52).
+Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první čtyři; z páté zbývá už jen automatický
+režim (#25).
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -140,6 +147,7 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 | | |
 |---|---|
 | **Reviewery** | Běží nezávisle a paralelně. Texty nálezů se mezi nimi neslučují — nesouhlas dvou reviewerů je informace. Shoda na stejném `file:line` se označí odznakem `2×`. |
+| **Jazyk nálezů** | Volba v nastavení, ne natvrdo. Řeší se **překladem po doběhnutí**, ne instrukcí v promptu: psát rovnou česky měřitelně ubírá nálezy. Reviewer píše v jazyce, ve kterém je nejsilnější; jazyk je věc zobrazení. |
 | **Závažnost** | Aplikace nevymýšlí vlastní škálu. Seskupuje podle `category` z výstupu reviewera a odvozuje jediný blokující boolean (`verdict == CONFIRMED` a `category` v blokující sadě). Z toho vypadne návrh verdiktu. |
 | **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
