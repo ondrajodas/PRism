@@ -21,4 +21,10 @@ protocol GitHubGateway: Sendable {
     /// `--json` polí), takže mu rozumí až `DiffParser`. Diff je **jen k zobrazení** —
     /// reviewery čtou skutečné soubory v pracovním stromě.
     func fetchDiff(id: PRIdentifier) async throws -> String
+
+    /// Obsah souboru na hlavě pull requestu — kvůli rozbalení kontextu mimo hunky.
+    ///
+    /// Diff sám okolní řádky nenese a pracovní kopie v tu chvíli existovat nemusí, takže
+    /// se soubor čte přímo z GitHubu.
+    func fetchFile(id: PRIdentifier, path: String) async throws -> String
 }

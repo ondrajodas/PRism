@@ -58,6 +58,17 @@ struct GhGateway: GitHubGateway {
         ])
     }
 
+    func fetchFile(id: PRIdentifier, path: String) async throws -> String {
+        // `refs/pull/<n>/head` má na GitHubu každý PR včetně forků, takže se `headSha`
+        // shánět nemusí — ověřeno na živém API. Cesta se procentuje: mezera v názvu
+        // souboru by jinak URL rozbila.
+        let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+        return try await run([
+            "api", "repos/\(id.repo)/contents/\(encoded)?ref=refs/pull/\(id.number)/head",
+            "--header", "Accept: application/vnd.github.raw",
+        ])
+    }
+
     private func run<T: Decodable>(_ arguments: [String], decodedAs type: T.Type) async throws -> T {
         let output = try await run(arguments)
         do {

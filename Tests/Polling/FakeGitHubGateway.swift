@@ -14,27 +14,33 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     /// Co vrátí `fetchDiff` — v pořadí, poslední se opakuje. Na střídání selhání a
     /// úspěchu stojí test, že „zkusit znovu“ opravdu načte.
     private let diffs: [Result<String, any Error>]
+    /// Co vrátí `fetchFile` — v pořadí, poslední se opakuje.
+    private let files: [Result<String, any Error>]
     private let lock = NSLock()
     private var asked: [String] = []
     private var detailsAsked: [PRIdentifier] = []
     private var diffsAsked: [PRIdentifier] = []
+    private var filesAsked: [(id: PRIdentifier, path: String)] = []
 
     init(
         _ outcomes: [Outcome],
         detail: Result<PullRequest, any Error>? = nil,
-        diffs: [Result<String, any Error>] = []
+        diffs: [Result<String, any Error>] = [],
+        files: [Result<String, any Error>] = []
     ) {
         self.outcomes = outcomes
         self.detail = detail
         self.diffs = diffs
+        self.files = files
     }
 
     convenience init(
         always outcome: Outcome,
         detail: Result<PullRequest, any Error>? = nil,
-        diffs: [Result<String, any Error>] = []
+        diffs: [Result<String, any Error>] = [],
+        files: [Result<String, any Error>] = []
     ) {
-        self.init([outcome], detail: detail, diffs: diffs)
+        self.init([outcome], detail: detail, diffs: diffs, files: files)
     }
 
     var detailRequests: [PRIdentifier] { lock.withLock { detailsAsked } }
@@ -63,6 +69,19 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         lock.withLock { detailsAsked.append(id) }
         guard let detail else { throw GitHubError.notFound("Fake gateway detail nezná.") }
         return try detail.get()
+    }
+
+    /// Na co se někdo ptal, v pořadí. Na počtu stojí test, že se obsah souboru dotahuje
+    /// jednou, ne při každém rozbalení.
+    var fileRequests: [(id: PRIdentifier, path: String)] { lock.withLock { filesAsked } }
+
+    func fetchFile(id: PRIdentifier, path: String) async throws -> String {
+        let index: Int = lock.withLock {
+            filesAsked.append((id, path))
+            return filesAsked.count - 1
+        }
+        guard !files.isEmpty else { throw GitHubError.notFound("Fake gateway soubor nezná.") }
+        return try files[min(index, files.count - 1)].get()
     }
 
     func fetchDiff(id: PRIdentifier) async throws -> String {

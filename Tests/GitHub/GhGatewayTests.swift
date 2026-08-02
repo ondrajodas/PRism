@@ -227,6 +227,43 @@ struct GhGatewayTests {
         }
     }
 
+    // MARK: - Obsah souboru
+
+    @Test("Obsah souboru se čte přes ref pull requestu, ne přes SHA")
+    func fileIsReadThroughThePullRequestRef() async throws {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: "obsah")
+
+        _ = try await gateway(runner).fetchFile(id: prism, path: "App/Main.swift")
+
+        // `refs/pull/<n>/head` má každý PR včetně forků, takže se `headSha` shánět nemusí.
+        // Raw hlavička je to, co odliší text souboru od JSONu s base64.
+        #expect(runner.invocations == [
+            .init(executable: gh, arguments: [
+                "api", "repos/ondrajodas/PRism/contents/App/Main.swift?ref=refs/pull/32/head",
+                "--header", "Accept: application/vnd.github.raw",
+            ]),
+        ])
+    }
+
+    @Test("Mezera v cestě se procentuje")
+    func encodesSpacesInThePath() async throws {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: "obsah")
+
+        _ = try await gateway(runner).fetchFile(id: prism, path: "docs/můj soubor.md")
+
+        let path = try #require(runner.invocations.first?.arguments[1])
+        #expect(path.contains("m%C5%AFj%20soubor.md"))
+    }
+
+    @Test("Soubor, který na hlavě PR není, je nenalezen")
+    func missingFileIsNotFound() async {
+        let runner = FakeProcessRunner(exitCode: 1, standardError: "gh: Not Found (HTTP 404)")
+
+        await #expect(throws: GitHubError.notFound("gh: Not Found (HTTP 404)")) {
+            try await gateway(runner).fetchFile(id: prism, path: "nikde.md")
+        }
+    }
+
     // MARK: - Auth
 
     @Test("Kontrola přihlášení jde přes gh auth status")

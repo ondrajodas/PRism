@@ -1,14 +1,30 @@
 import SwiftUI
 
-/// Vykreslí jeden řádek diffu — hlavičku hunku, řádek souboru nebo poznámku.
+/// Vykreslí jeden řádek diffu — hlavičku hunku, řádek souboru, rozbalovací řádek nebo
+/// poznámku.
 struct DiffRowView: View {
     let row: DiffRow
+    /// Načítá se právě obsah souboru, do kterého řádek patří?
+    var isLoadingContent = false
+    /// Proč se obsah souboru nepodařilo načíst.
+    var contentFailure: String?
+    var reveal: (ClosedRange<Int>) -> Void = { _ in }
 
     var body: some View {
         switch row {
-        case .hunk(_, let hunk): hunkHeader(hunk)
-        case .line(_, let line): DiffLineView(line: line)
-        case .note(_, let text): note(text)
+        case .hunk(_, let hunk):
+            hunkHeader(hunk)
+        case .line(_, let line):
+            DiffLineView(line: line)
+        case .expander(_, let expander):
+            DiffExpanderView(
+                expander: expander,
+                isLoading: isLoadingContent,
+                failure: contentFailure,
+                reveal: reveal
+            )
+        case .note(_, let text):
+            note(text)
         }
     }
 

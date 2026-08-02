@@ -282,6 +282,33 @@ protože diff nemá v doméně review jinou roli než být vidět.
 Co v #18 **není** a má vlastní issue: rozbalení kontextu mimo hunk (#47, potřebuje obsah
 souboru, ne jen diff) a obarvení kódu podle jazyka (#48).
 
+### Rozbalení kontextu (#47)
+
+Mezi hunky je skrytý kód a občas je potřeba vidět, co je o pár řádků vedle. Řeší to
+rozbalovací řádky jako na GitHubu.
+
+- **Obsah souboru se tahá `gh api repos/…/contents/<cesta>?ref=refs/pull/<n>/head`**
+  s `Accept: application/vnd.github.raw`. Ověřeno na živém API: ref pull requestu projde,
+  takže kvůli SHA není potřeba `gh pr view`. Pracovní kopie se použít nedá — diff se
+  ukazuje dřív, než se cokoli klonuje.
+- **Načítá se až na kliknutí** a drží se po souborech. Rozbalení je řídká akce.
+- **Skryté úseky se počítají z hunků**, v číslech nového souboru. Staré číslo se dopočítá
+  z posunu, který předchozí hunk nadělal (`old = new − shift`), takže rozbalený řádek má
+  obě čísla stejně jako každý jiný kontext.
+- **Úsek za posledním hunkem má neznámý konec**, dokud obsah nedorazí — kde soubor končí,
+  z diffu vyčíst nejde. Rozbalovací řádek se proto ukáže i bez počtu a po načtení buď
+  počet dostane, nebo zmizí.
+- **Rozbalené rozsahy drží `AppStore`**, ne view: stejná past jako u diffu, view by je
+  přelilo mezi pull requesty.
+- **Smazaný a binární soubor rozbalovat nejde** — nový obsah neexistuje.
+- **Ovládání jsou šipky vlevo**, v místě čísel řádků. `⌄` posune o krok dolů od hunku nad
+  mezerou, `⌃` o krok nahoru od hunku pod ní; u úseku kratšího než krok je jedna šipka,
+  která ho dorazí celý. Počet skrytých řádků je zároveň zkratka na celý úsek.
+- **Rozbalená mezera slije hunky a hlavička `@@` mezi nimi zmizí.** Řádky pak jdou
+  nepřetržitě za sebou a hlavička uprostřed nemá co oddělovat. Hlavička, pod kterou mezera
+  nikdy nebyla, zůstává — u prvního hunku je jediné, z čeho se pozná, kde v souboru jsme.
+- **`Zobrazit jen diff`** sbalí všechno zpátky. Ukazuje se jen tehdy, když je co sbalit.
+
 ## Platformová rozhodnutí
 
 - **SwiftUI**, target macOS 26, Xcode projekt v repu. Bundle id
@@ -503,6 +530,10 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Proklik z nálezu do diffu je už v #18 | Nechat ho na #20 podle rozpisu milníku | Panel nálezů bez odskoku znamená hledat `file:line` očima ve dvou tisících řádcích. Je to jedna čistá funkce (`DiffRow.anchor`) nad řádky, které stejně vznikají — odkládat to znamenalo dvakrát otevírat totéž místo |
 | Nález mimo hunky skočí **na soubor** | Nedělat nic, když se řádek v diffu nenajde | Reviewer čte celý pracovní strom, ne jen diff, takže umí nahlásit řádek, který se nezměnil. Hlavička souboru je nejbližší pravdivé místo; skákat na jiný řádek by lhalo |
 | Cesta ke klonu je **nápověda**, ne řádek v hlavičce | Vypisovat ji pod stavem pracovní kopie | Je to údaj, který se hodí jednou za měsíc, a zabíral pruh přes celou šířku okna. U **selhání** zůstává výpis celý a rozbalený — tam je text od `gitu` to jediné, z čeho se pozná, co dělat |
+| Obsah souboru přes **ref pull requestu** (`refs/pull/<n>/head`) | Dotáhnout `headSha` přes `gh pr view` a číst soubor podle něj | Ověřeno na živém API, že ten ref projde — ušetří to jedno volání `gh` u každého rozbalení a hlavně odpadá stav navíc (SHA, který by se musel držet a invalidovat). Ten ref má na GitHubu každý PR včetně forků, stejně jako u fetche v `RepoCheckoutu` |
+| Rozsah se zapíše jako odkrytý **až po** načtení obsahu | Zapsat ho hned a obsah doplnit, až dorazí | Jinak zmizí rozbalovací řádek i se spinnerem a zůstane po něm prázdné místo — vypadá to, že se nic nestalo. Ze stejného důvodu `rows(of:)` ignoruje odkryté rozsahy, dokud obsah není: bez něj není co ukázat |
+| Rozbalená mezera **sundá hlavičku hunku** | Nechat hlavičky vždycky | Když se dvě části slijí do jednoho souvislého bloku, hlavička `@@` uprostřed neodděluje nic a mate — přišlo to jako první připomínka při zkoušení. Mezera, která nikdy nebyla, hlavičku nechává |
+| Sbalení si **nechá načtený obsah** | Zahodit ho spolu s rozsahy | Druhé rozbalení by jinak chodilo po síti pro něco, co už jednou dorazilo. Paměť to nestojí nic proti diffu samotnému |
 | `zsh -lc`, `.zshrc` se nepřečte | `zsh -ilc`, aby fallback viděl i `.zshrc` | Zkoušeno a zahozeno: interaktivní shell se ze spuštěné aplikace zasekl (z terminálu běží pod 0,5 s) a **ignoruje `SIGTERM`** — vytáhla ho až eskalace na `SIGKILL`, tedy 7 s do prázdného výsledku. Zaseknutý start je horší selhání než nenalezená binárka, kterou gate umí vysvětlit. Zůstává jako známé omezení |
 
 ## Ověřeno proti CLI (2026-08-01)

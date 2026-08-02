@@ -70,6 +70,18 @@ struct PullRequestDetailView: View {
         }
     }
 
+    /// Rozbaluje se obsah souboru **na hlavě PR**, takže u přejmenovaného souboru platí
+    /// nová cesta — a `displayPath` je právě ona.
+    private var expansionActions: DiffExpansionActions {
+        DiffExpansionActions(
+            state: { store.expansion(of: $0.displayPath, in: pullRequest.id) },
+            reveal: { store.reveal($1, of: $0.displayPath, in: pullRequest.id) },
+            collapse: store.hasRevealedLines(in: pullRequest.id)
+                ? { store.collapseRevealedLines(in: pullRequest.id) }
+                : nil
+        )
+    }
+
     /// Nález ukazuje na `file:line`; kde to je v diffu, ví `DiffRow`. Když se místo najít
     /// nedá (soubor v diffu není), nestane se nic — skákat naslepo je horší než nehnout se.
     private func jump(to finding: Finding) {
@@ -85,7 +97,7 @@ struct PullRequestDetailView: View {
         case .loaded(let diff, _) where diff.isEmpty:
             placeholder("Diff je prázdný — tenhle pull request nic nemění.")
         case .loaded(let diff, _):
-            DiffView(diff: diff, scrollTarget: $scrollTarget)
+            DiffView(diff: diff, scrollTarget: $scrollTarget, expansion: expansionActions)
         case .failed(let detail):
             diffFailure(detail)
         case .loading, nil:
