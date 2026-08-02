@@ -680,3 +680,24 @@ a `Tests/Fixtures/stream-json/`. Co z toho plyne pro návrh:
 - **Pracovní složku nelze předat flagem** — je to `cwd` procesu. **Doplněno u #14:**
   `cwd` nepřibylo do `ProcessRunning`, ale do nového `ProcessStreaming` (viz záznam
   rozhodnutí), takže bufferovaná cesta zůstala beze změny.
+
+
+## Za hranicí v1 — milníky M6 a M7
+
+Rozsah v1 končí konfigurací a auto režimem (M5). To, co přijde po něm, mění jeden
+z předpokladů návrhu: aplikace přestává být vůči GitHubu jen pro čtení.
+
+| Milník | Co v něm je |
+|---|---|
+| **M6 — Review na GitHub** | Draft review (#65), skládání z nálezů a komentářů k řádkům (#66), `ReviewPublisher` jako jediná cesta ven (#67), potvrzovací sheet (#68), přenesení draftu na nový commit (#69). Předchází mu spike proti vlastnímu repu (#62) |
+| **M7 — Konverzace, komentáře a taby** | Čtení konverzace PR (#63), vlákna jako bubliny u kódu (#64), odpovídání do nich a jejich vyřešení (#73), taby `Overview` / `Files changed` (#72) |
+
+### Záznam rozhodnutí
+
+| Rozhodnutí | Alternativa | Proč |
+|---|---|---|
+| Odesílání review a konverzace jsou **dva milníky**, ne jeden | Jeden milník „GitHub“, jak vznikl při brainstormingu | Byl by to největší milník v projektu a hranice mezi jeho polovinami je ostrá: odesílání review je verdikt nad celým PR a stojí na draftu, konverzace je čtení cizího obsahu plus odpověď do vlákna. Rozdělené se dá každý dokončit a vydat samostatně |
+| Pořadí je **nejdřív review, pak konverzace** | Nejdřív konverzaci, protože je skoro celá jen pro čtení, a odesílání až po ní | Zkoušelo se to opačně a přehodilo zpátky: kvůli odeslání review aplikace vzniká, kdežto cizí komentáře jsou kontext k němu. Navíc `ReviewPublisher` (#67) zavádí jedinou cestu ven — a odpověď do vlákna (#73) po ní jde taky, takže dřív hotová konverzace by si buď musela postavit vlastní cestu, nebo na M6 stejně čekat |
+| Odpověď do vlákna jde **přes `ReviewPublisher`** | Vlastní modul, protože to není review | Pravidlo, které nahrazuje tvrdou podmínku č. 1, stojí na tom, že `grep ReviewPublisher` vyjmenuje **všechna** místa, odkud aplikace píše. Druhá cesta ven by z něj udělala nepravdu — a to je přesně ta vlastnost, kvůli které se ta podmínka smí zrušit |
+| Odpověď **nemá potvrzovací dialog**, review ano | Potvrzovat obojí, ať je to jednotné | Review je verdikt nad celým PR a odeslat ho omylem je drahé. Odpověď je jedna věta v diskuzi, jde smazat — a potvrzování každé z nich by z okna udělalo klikačku |
+| Konverzace bez kotvy patří do tabu **`Overview`**, ne do spodního panelu | Tab `Konverzace` vedle `Nálezů` a `Průběhu`, jak to měla původní podoba #64 | Spodní panel je úzký pruh pod diffem a existuje proto, aby se obsah četl **vedle kódu**, kterého se týká. Vlákno bez kotvy žádný takový kód nemá. Dva domovy pro konverzaci navíc znamenají hledat komentář na dvou místech |
