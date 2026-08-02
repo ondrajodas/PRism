@@ -338,9 +338,9 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 
 | Typ | Co je |
 |---|---|
-| `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]` |
-| `GlobalConfig` | `sources`, `skills`, `blockingCategories`, interval, souběh, rozpočet, model |
-| `RepositoryConfig` | `mode` (`manual`/`automatic`), override skillů a kategorií |
+| `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
+| `GlobalConfig` | `sources`, `skills`, `blockingCategories`, `mode`, interval, souběh, rozpočet, model |
+| `RepositoryConfig` | Override pro jedno repo: `mode`, skilly, kategorie — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
 | `ConfigurationBox` | Aktuální konfigurace pro kód mimo hlavní vlákno (limit souběhu, rozpočet, model) |
@@ -361,8 +361,24 @@ Věci, které se u toho nemají rozbít:
 - **Nula souběžných session se bere jako jedna.** Překlep nemá aplikaci umlčet.
 - **Prázdný seznam skillů u repa je vlastní odpověď** („tady nereviewuj nic“), `nil`
   znamená „ber globální“.
+- **`RepositoryConfig.mode` je volitelný ze stejného důvodu jako sady.** `nil` = „ber
+  globální“, vyplněná hodnota = „řekl jsem si o tohle“. Kdyby byl povinný, nešlo by odlišit
+  repo, které si o `manual` řeklo, od toho, které o režimu mlčí — a při globálním automatu
+  jsou to opačné odpovědi. Proto taky `setRepository(_:for:)` maže záznam podle
+  **prázdnosti**, ne podle shody s globální hodnotou: mazat „stejné jako globální“ by repo
+  po přepnutí defaultu tiše zapnulo.
+- **Rozepsaná hodnota z editoru se přeskočí, ne použije.** Řádek v okně nastavení vzniká
+  prázdný a uloží se dřív, než se dopíše — takže `resolved(for:)` zahazuje prázdné skilly
+  a kategorie a `activeSources` zdroje bez dotazu. U zdroje je to nejdražší: `gh search prs`
+  bez výrazu selže a **selhání jednoho zdroje zahazuje celý tik**, takže by kvůli
+  rozepsanému řádku zmizel celý seznam PR. Prázdný **seznam** to nemění, ten je pořád
+  vlastní odpověď.
+- **Rozbitá hodnota režimu se sráží na `manual`, ne na globální default.** Chybějící klíč
+  je „ber globální“, ale překlep v hodnotě, kterou se někdo pokoušel automat **vypnout**,
+  ho nesmí nechat zapnutý. Platí i globálně.
 - **Výchozí hodnoty musí odpovídat konstantám, které nahradily** — je na to test, jinak by
-  se aplikace po zavedení konfigurace začala chovat jinak.
+  se aplikace po zavedení konfigurace začala chovat jinak. Výchozí `mode` je `manual`:
+  zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
 
 ### `App/Syntax/`
 
@@ -621,8 +637,10 @@ Věci, které se u toho nemají rozbít:
   vypadal jako „neběželo“, tedy jako schválený PR s neohlášenou chybou. Ostatní skilly
   přitom doběhnou, ať se nezahodí i to, co se uložit povedlo.
 
-Vzniká z `ToolPaths` po preflightu (`AppStore(toolPaths:)`); testy si podstrčí fake
-gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruší.
+Vzniká z `ToolPaths` po preflightu (`AppStore(toolPaths:)`); **vlastní ho `PreflightModel`
+nad scénami**, ne `ContentView`. Okno nastavení je vlastní scéna (`Settings`) a k `@State`
+uvnitř hlavního okna by se nedostalo. Testy si podstrčí fake gateway. Smyčka pollingu visí
+na `.task` okna, takže zavření okna ji zruší.
 
 | View | Co dělá |
 |---|---|
@@ -644,6 +662,52 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
 | `FileTreeView` | Popover se stromem souborů; odsazení a sbalování si řídí sám |
 | `VerdictView` | Návrh verdiktu jako **doporučení**; žádná GitHub akce na něm nevisí |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
+
+### Okno nastavení (`App/Views/Settings/`)
+
+Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisuje do téhož
+`config.json`, který jde editovat ručně.
+
+| Typ | Co dělá |
+|---|---|
+| `SettingsScene` | Obsah scény; dokud neprošel preflight, není store a okno to řekne |
+| `SettingsView` | Dvě záložky, patička s cestou a stavem uložení, zámek na rozbitý soubor |
+| `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
+| `GlobalSettingsView` | Zdroje, výchozí režim, skilly, kategorie, běh |
+| `RepositorySettingsView` | Seznam rep vlevo, režim a override vpravo |
+| `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
+
+Věci, které se u toho nemají rozbít:
+
+- **Rozbitý soubor editor nepřepíše.** Když `configurationFailure` není `nil`, místo
+  formuláře je chyba s nabídkou soubor otevřít nebo načíst znovu. Uložit přes něj výchozí
+  hodnoty by zahodilo něco, co uživatel psal — kvůli chybějící čárce.
+- **Zápis se stejnou hodnotou se zahazuje.** Pole si při zobrazení zapíšou zpátky, co
+  v nich je (`TextField(value:format:)` normalizuje, `nil` model se vrací jako prázdný
+  řetězec), takže bez té podmínky by **samotné otevření okna** přepsalo ručně editovaný
+  soubor. Chytilo se to až na běžící aplikaci: patička hlásila „Uloženo“, aniž by se něco
+  změnilo.
+- **Ukládá se odloženě** (600 ms po posledním úhozu), jinak by psaní jednoho slova
+  znamenalo deset zápisů na disk — a uložilo by mezistavy, které nikdo nechtěl. Zavření
+  okna to nečeká a uloží hned (`flush()`).
+- **Vlastní uložení se pozná od změny zvenčí.** Zápis se propíše do store a odtud se vrátí
+  zpátky do `sync(with:)`; bez porovnání se `settled` by si formulář přepisoval rozepsaný
+  text pokaždé, když uložení doběhne. **Po selhaném zápisu se `settled` vrací zpátky** —
+  store se nezměnil, takže do `sync` přijde stará konfigurace a bez toho by vypadala jako
+  změna zvenčí a přepsala rozepsanou práci. Zároveň by `flush()` viděl `storage == settled`
+  a nezkusil to znovu.
+- **`Binding(items)` nad optionalem je past.** Force-unwrapuje při každém čtení a editor
+  nad ním jeden překreslovací cyklus přežije i vypnutí přepínače — takže `nil` shodí proces
+  v `BindingOperations.ForceUnwrapping`. **Ověřeno pádem aplikace** při vypnutí vlastní sady
+  skillů. Odvozený binding se proto píše ručně s `?? []` a zápis se zahazuje, dokud je zdroj
+  `nil` — doběhlá editace už zrušeného override by ho jinak vzkřísila.
+- **Index je identita řádku v seznamech**, takže mezi odebráním a překreslením se sahá na
+  prvek, který v poli už není. `$items[index]` by na tom spadl; bindingy jsou proto psané
+  ručně s kontrolou rozsahu.
+- **Hlavní okno se rozostří jen tehdy, když je nastavení opravdu vepředu.** Okno je
+  nemodální, takže kliknutím zpátky do seznamu se v něm dá dál pracovat — a rozostřené
+  okno, ve kterém zrovna píšu, je horší než žádný efekt. Rozhoduje `controlActiveState`,
+  příznak `isSettingsOpen` žije v `AppStore` (dvě scény si to nemají kde říct jinudy).
 
 Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
 
@@ -1045,7 +1109,17 @@ Právě proto tam eskalace na `SIGKILL` je.
   posouvá uspáním, takže třicetidenní lhůta se testuje v nulovém reálném čase. Round-trip
   `ReviewRecord` má vlastní testy včetně **každého případu** `ReviewRunOutcome` — `failed`
   nese asociovanou hodnotu a ta se z JSONu ztratí nejtišeji.
-- **`Config`** — merge globální + per-repo, defaulty pro neznámé repo.
+- **`Config`** — merge globální + per-repo, defaulty pro neznámé repo. U režimu navíc to,
+  co se dá rozbít tiše: že vlastní `manual` přebije globální automat, že se takový záznam
+  nesmaže jako „shodný s globálním“ a že se rozbitá hodnota srazí na `manual`, kdežto
+  chybějící klíč vezme globální.
+- **`Policy.knownRepositories`** — union seznamu PR a konfigurace, dedup, řazení bez ohledu
+  na velikost písmen a repo bez otevřeného PR, které ze seznamu zmizet nesmí.
+- **`SettingsModel`** — odložený zápis přes `FakeTimeSource` (tedy v nulovém reálném čase):
+  že se rychlé změny slijí do jednoho zápisu, že `flush()` uloží bez čekání, že změna
+  zvenčí formulář srovná, ale vlastní uložení ne, a že je selhání zápisu vidět. Na testech
+  `flush()` je vlastní `BlockingTime`, jehož uspání samo neskončí — s okamžitým fake časem
+  by odložený zápis závodil s tím okamžitým a nešlo by poznat, který zapsal.
 - **`CacheEviction`** — proti skutečné dočasné složce, ne proti fake filesystému: rozpočet
   je injektovatelný, takže stačí malé soubory. Pozor, počítá se **alokovaná** velikost, tedy
   po blocích — stobajtový soubor zabere 4 KB a testovací rozpočty musí být řádově výš.
@@ -1244,7 +1318,7 @@ Spodní panel hotový (issue #20) — taby `Nálezy`/`Průběh`, řaditelná tab
 měnitelná výška a proklik do diffu se zvýrazněním bubliny.
 
 Konfigurace hotová (issue #23) — `App/Config/`, `config.json` v kořeni cache. Načte se při
-startu a při návratu okna do popředí; editor v okně je #70.
+startu a při návratu okna do popředí.
 
 Chipy reviewerů a verdikt hotové (issue #21) — horní lišta detailu ukazuje, co který
 reviewer udělal, klikem se jeho nálezy schovají z bublin i z tabulky, a vpravo je návrh
@@ -1253,14 +1327,21 @@ verdiktu. **Filtr návrh nemění** — je to pohled, ne tvrzení o PR.
 Tab Průběh hotový (issue #22) — časová osa toho, co reviewer dělá, se `session_id`
 a kopírováním `claude --resume`. Osa zůstává i po doběhnutí běhu.
 
+Okno nastavení hotové (issue #70) — `App/Views/Settings/`, scéna `Settings` (⌘,). Globální
+hodnoty a nastavení per repo se klikají místo editace JSONu; ukládá se odloženě do téhož
+souboru a projeví se bez restartu. **Změna proti #23:** `GlobalConfig` má `mode`, tedy
+globální výchozí režim review, a `RepositoryConfig.mode` je proto volitelný — viz sekce
+`Config` výš. Store se přestěhoval z `ContentView` do `PreflightModel`, protože jinak by
+k němu druhá scéna nedosáhla.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
 2. ~~Checkout cache + worktree~~ — **hotovo**
 3. ~~`ReviewRunner` + parsování streamu~~ — **hotovo**
 4. ~~UI diffu s bublinami~~ — **hotovo** (#18–#22, #47, #48, #51)
-5. Konfigurace a auto režim — konfigurace hotová (#23), zbývá auto režim (#24, #25),
-   jazyk nálezů (#52) a okno nastavení (#70)
+5. Konfigurace a auto režim — konfigurace (#23) a okno nastavení (#70) hotové, zbývá
+   auto režim (#24, #25) a jazyk nálezů (#52)
 
 Tím končí rozsah v1 podle specifikace. Za ním:
 

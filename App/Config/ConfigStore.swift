@@ -1,5 +1,17 @@
 import Foundation
 
+/// Proč se konfiguraci nepodařilo uložit.
+enum ConfigurationError: LocalizedError {
+    /// Store postavený bez `ConfigStore` — staví ho tak jen testy.
+    case noStore
+
+    var errorDescription: String? {
+        switch self {
+        case .noStore: "Konfiguraci není kam uložit — aplikace běží bez souboru nastavení."
+        }
+    }
+}
+
 /// `config.json` na disku.
 ///
 /// Aktor ze stejného důvodu jako `ReviewStore`: čtení i zápis sahají na týž soubor

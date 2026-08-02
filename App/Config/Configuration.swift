@@ -18,6 +18,9 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     var sources: [Source]
     var skills: [String]
     var blockingCategories: [String]
+    /// Výchozí režim pro repo, které si neřeklo o jiný. Ve výchozím stavu `manual` —
+    /// zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
+    var mode: ReviewMode
     /// V sekundách, ne `Duration` — soubor se edituje ručně a `Duration` se do JSONu
     /// kóduje jako dvojice čísel, kterou nikdo nenapíše.
     var pollIntervalSeconds: Int
@@ -31,6 +34,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         sources: [Source],
         skills: [String],
         blockingCategories: [String],
+        mode: ReviewMode,
         pollIntervalSeconds: Int,
         maxConcurrentReviews: Int,
         cacheBudgetMegabytes: Int,
@@ -39,6 +43,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.sources = sources
         self.skills = skills
         self.blockingCategories = blockingCategories
+        self.mode = mode
         self.pollIntervalSeconds = pollIntervalSeconds
         self.maxConcurrentReviews = maxConcurrentReviews
         self.cacheBudgetMegabytes = cacheBudgetMegabytes
@@ -52,6 +57,9 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         skills = try container.decodeIfPresent([String].self, forKey: .skills) ?? standard.skills
         blockingCategories = try container.decodeIfPresent([String].self, forKey: .blockingCategories)
             ?? standard.blockingCategories
+        // Neznámý režim se bere jako `manual` ze stejného důvodu jako u repa: samo od sebe
+        // se nemá spouštět nic, a překlep v souboru není důvod pustit reviewery na všechno.
+        mode = (try? container.decode(ReviewMode.self, forKey: .mode)) ?? standard.mode
         pollIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds)
             ?? standard.pollIntervalSeconds
         maxConcurrentReviews = try container.decodeIfPresent(Int.self, forKey: .maxConcurrentReviews)
@@ -64,14 +72,17 @@ struct GlobalConfig: Codable, Equatable, Sendable {
 
 /// Co si repo nastavuje jinak. Co je `nil`, se bere globálně.
 struct RepositoryConfig: Codable, Equatable, Sendable {
-    var mode: ReviewMode
+    /// `nil` znamená „ber globální“, stejně jako u sad níž. Kdyby byl režim povinný,
+    /// nešlo by odlišit repo, které si o `manual` **řeklo**, od toho, které o něm nic
+    /// neříká — a při globálním automatu jsou to opačné odpovědi.
+    var mode: ReviewMode?
     /// **Nahrazuje** globální sadu, neslučuje se s ní — smysl je vyhodit PHP skilly na Go
     /// repu. Prázdné pole je vlastní odpověď („tady nereviewuj nic“), `nil` znamená
     /// „ber globální“.
     var skills: [String]?
     var blockingCategories: [String]?
 
-    init(mode: ReviewMode = .manual, skills: [String]? = nil, blockingCategories: [String]? = nil) {
+    init(mode: ReviewMode? = nil, skills: [String]? = nil, blockingCategories: [String]? = nil) {
         self.mode = mode
         self.skills = skills
         self.blockingCategories = blockingCategories
@@ -79,12 +90,20 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
 
     /// Tolerantní ze stejného důvodu jako `GlobalConfig`, a tady na tom záleží nejvíc:
     /// override, který mění jen skilly, je to nejběžnější, co do souboru někdo napíše.
-    /// Povinný `mode` by kvůli němu shodil **celou** konfiguraci včetně toho, co je
-    /// napsané správně. Neznámý režim je totéž — výchozí je `manual`, protože samo od
-    /// sebe se nemá spouštět nic.
+    /// Přísné dekódování by kvůli němu shodilo **celou** konfiguraci včetně toho, co je
+    /// napsané správně.
+    ///
+    /// Chybějící klíč a **rozbitá hodnota** se ale rozlišují: chybějící znamená „ber
+    /// globální“, kdežto překlep v hodnotě se srazí na `manual`. Vzít u něj globální
+    /// hodnotu by při globálním automatu znamenalo, že překlep pustí reviewery na repo,
+    /// u kterého se je někdo pokoušel vypnout.
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        mode = (try? container.decodeIfPresent(ReviewMode.self, forKey: .mode)) ?? .manual
+        if container.contains(.mode) {
+            mode = (try? container.decode(ReviewMode.self, forKey: .mode)) ?? .manual
+        } else {
+            mode = nil
+        }
         skills = try container.decodeIfPresent([String].self, forKey: .skills)
         blockingCategories = try container.decodeIfPresent([String].self, forKey: .blockingCategories)
     }
@@ -118,6 +137,7 @@ struct Configuration: Codable, Equatable, Sendable {
             sources: [.reviewRequested],
             skills: ["code-review"],
             blockingCategories: Policy.defaultBlockingCategories.sorted(),
+            mode: .manual,
             pollIntervalSeconds: 60,
             maxConcurrentReviews: 3,
             cacheBudgetMegabytes: 10 * 1024,
@@ -126,16 +146,53 @@ struct Configuration: Codable, Equatable, Sendable {
         repositories: [:]
     )
 
-    /// Nastavení pro konkrétní repo. Neznámé repo dostane globální hodnoty a **manuální
-    /// režim**: když můžou přijít libovolná repa, neznámé nesmí bez dozoru spálit celý
-    /// panel Claude sessions.
+    /// Zapíše nastavení repa tak, jak se má objevit v souboru.
+    ///
+    /// Záznam, ve kterém nic není, klíč **smaže** — znamená totéž jako chybějící
+    /// a `config.json` se čte ručně. Bez toho by v něm po každém proklikání okna
+    /// nastavení zůstala hromada prázdných objektů.
+    ///
+    /// Rozhoduje o tom prázdnost, **ne shoda s globální hodnotou**: repo, které si
+    /// o `manual` řeklo, si ho má podržet i potom, co se globální default přepne na
+    /// automat. Smazat ho jako „stejně jako globální“ by ho tiše zapnulo.
+    mutating func setRepository(_ repository: RepositoryConfig, for repo: RepoID) {
+        repositories[repo] = repository == RepositoryConfig() ? nil : repository
+    }
+
+    /// Nastavení pro konkrétní repo — globální hodnoty přebité tím, co si repo řeklo.
+    ///
+    /// Neznámé repo dostane globální režim, a ten je ve výchozím stavu **manuální**: když
+    /// můžou přijít libovolná repa, neznámé nesmí bez dozoru spálit celý panel Claude
+    /// sessions. Přepnout globální default na automat je vědomé rozhodnutí uživatele.
     func resolved(for repo: RepoID) -> ResolvedConfig {
         let overrides = repositories[repo]
         return ResolvedConfig(
-            mode: overrides?.mode ?? .manual,
-            skills: overrides?.skills ?? global.skills,
-            blockingCategories: Set(overrides?.blockingCategories ?? global.blockingCategories)
+            mode: overrides?.mode ?? global.mode,
+            skills: Self.nonBlank(overrides?.skills ?? global.skills),
+            blockingCategories: Set(Self.nonBlank(overrides?.blockingCategories ?? global.blockingCategories))
         )
+    }
+
+    /// Zdroje, na které se má aplikace ptát.
+    ///
+    /// Zdroj bez dotazu se přeskočí. V okně nastavení totiž **existuje mezistav**: řádek
+    /// se přidá prázdný a mezi jeho vznikem a dopsáním dotazu se konfigurace uloží.
+    /// `gh search prs` bez výrazu selže, a protože **selhání jednoho zdroje zahazuje celý
+    /// tik**, zmizel by kvůli rozepsanému řádku celý seznam PR.
+    var activeSources: [Source] {
+        global.sources.filter { !$0.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    /// Prázdné položky se zahazují ze stejného důvodu jako prázdný dotaz: nový řádek
+    /// v editoru vzniká prázdný. Skill bez jména by se pustil jako session, která nemá co
+    /// dělat, a kategorie bez jména neodpovídá žádnému nálezu.
+    ///
+    /// Prázdný **seznam** to nemění — ten je pořád vlastní odpověď („tady nic“).
+    private static func nonBlank(_ items: [String]) -> [String] {
+        items.compactMap {
+            let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
     }
 }
 

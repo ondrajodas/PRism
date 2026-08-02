@@ -1,0 +1,96 @@
+import SwiftUI
+
+/// Záložka „Obecné“ — hodnoty, které platí, dokud je repo nepřebije.
+struct GlobalSettingsView: View {
+    @Bindable var settings: SettingsModel
+
+    var body: some View {
+        Form {
+            Section {
+                SourceListEditor(sources: $settings.draft.global.sources)
+            } header: {
+                Text("Zdroje")
+            } footer: {
+                Text("Search dotazy pro `gh search prs`. Výsledky se slévají a deduplikují.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker("Výchozí režim", selection: $settings.draft.global.mode) {
+                    Text("Manuální").tag(ReviewMode.manual)
+                    Text("Automatický").tag(ReviewMode.automatic)
+                }
+                .pickerStyle(.radioGroup)
+            } header: {
+                Text("Režim review")
+            } footer: {
+                Text("Platí pro repa, která si neřeknou o jiný. Manuální čeká na tlačítko, automatický spustí review, jakmile se PR objeví v seznamu.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                StringListEditor(
+                    items: $settings.draft.global.skills,
+                    placeholder: "code-review",
+                    addLabel: "Přidat skill"
+                )
+            } header: {
+                Text("Skilly")
+            } footer: {
+                Text("Každý skill je jedna headless session. Repo si sadu může přebít.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                StringListEditor(
+                    items: $settings.draft.global.blockingCategories,
+                    placeholder: "correctness",
+                    addLabel: "Přidat kategorii"
+                )
+            } header: {
+                Text("Blokující kategorie")
+            } footer: {
+                // Jeden literál, ne konkatenace: složený výraz spadne na `Text(String)`,
+                // které markdown neumí — a `CONFIRMED` by se vykreslilo se zpětnými
+                // apostrofy místo monospace.
+                Text("Nález blokuje, když je `CONFIRMED` a jeho kategorie je v téhle sadě. Na velikosti písmen nezáleží.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Běh") {
+                TextField(
+                    "Interval pollingu (s)",
+                    value: $settings.draft.global.pollIntervalSeconds,
+                    format: .number.grouping(.never)
+                )
+                TextField(
+                    "Rozpočet cache (MB)",
+                    value: $settings.draft.global.cacheBudgetMegabytes,
+                    format: .number.grouping(.never)
+                )
+                Stepper(value: $settings.draft.global.maxConcurrentReviews, in: 1...10) {
+                    LabeledContent(
+                        "Souběžné session",
+                        value: settings.draft.global.maxConcurrentReviews.formatted()
+                    )
+                }
+                TextField("Model", text: modelName, prompt: Text("výchozí podle claude"))
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// Prázdné pole znamená „nech rozhodnout `claude`“, tedy `nil` v konfiguraci.
+    /// `ClaudeCommand` prázdný řetězec taky přeskočí, ale mít v souboru dva zápisy téhož
+    /// je past pro toho, kdo ho čte — `nil` je jediný.
+    private var modelName: Binding<String> {
+        Binding(
+            get: { settings.draft.global.model ?? "" },
+            set: { settings.draft.global.model = $0.isEmpty ? nil : $0 }
+        )
+    }
+}

@@ -1,11 +1,10 @@
-import AppKit
 import SwiftUI
 
 /// Levý sloupec — seznam PR napříč repozitáři.
 struct PullRequestListView: View {
     @Bindable var store: AppStore
+    @Environment(\.openSettings) private var openSettings
     @State private var isRefreshing = false
-    @State private var isShowingSettings = false
 
     var body: some View {
         content
@@ -105,35 +104,12 @@ struct PullRequestListView: View {
         .help("Obnovit seznam")
     }
 
-    /// Konfigurace se edituje v souboru, ne v okně (editor je #70). Ozubené kolo ale
-    /// slibuje nastavení, takže pod ním musí něco takového být: kde soubor je a jak ho
-    /// otevřít. Načítat ho ručně netřeba — děje se to při návratu do aplikace.
+    /// Otevře okno nastavení — totéž, co ⌘, v menu. Ozubené kolo je zvyklost, ale samo
+    /// o sobě se nedá najít klávesnicí, a naopak zkratku hledá málokdo v toolbaru.
     private var settingsButton: some View {
-        Button { isShowingSettings = true } label: {
+        Button { openSettings() } label: {
             Label("Nastavení", systemImage: "gearshape")
         }
-        .help("Nastavení aplikace")
-        .popover(isPresented: $isShowingSettings, arrowEdge: .bottom) { settingsPopover }
-    }
-
-    private var settingsPopover: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Nastavení").font(.headline)
-            Text("Zatím se edituje v souboru — editor v okně teprve přijde. Změny se načtou, jakmile se do aplikace vrátíš.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(verbatim: CacheLayout.applicationSupport.configFile.path(percentEncoded: false))
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.tertiary)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Otevřít soubor", systemImage: "square.and.pencil") {
-                NSWorkspace.shared.open(CacheLayout.applicationSupport.configFile)
-                isShowingSettings = false
-            }
-        }
-        .padding(14)
-        .frame(width: 380, alignment: .leading)
+        .help("Nastavení aplikace (⌘,)")
     }
 }

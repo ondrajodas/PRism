@@ -38,5 +38,15 @@ import Testing
 }
 
 @Test @MainActor func rootViewCanBeCreated() {
-    _ = RootView()
+    _ = RootView(model: PreflightModel())
+}
+
+/// Okno nastavení se dá otevřít i dřív, než projde preflight — musí se tedy dát složit
+/// i bez store.
+@Test @MainActor func settingsSceneCanBeCreatedBeforePreflightPasses() {
+    _ = SettingsScene(preflight: PreflightModel())
+}
+
+@Test @MainActor func settingsViewCanBeCreated() {
+    _ = SettingsView(store: AppStore(gateway: FakeGitHubGateway(always: .success([]))))
 }
