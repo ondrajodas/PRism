@@ -26,7 +26,7 @@ struct ReviewStateBadge: View {
         case .checkoutFailed: "clone selhal"
         case .running(let finished, let total): "běží \(finished)/\(total)"
         case .clean: "čisté"
-        case .completed(let findings): "\(findings) nálezů"
+        case .completed(let findings): Plural.czech(findings, one: "nález", few: "nálezy", many: "nálezů")
         case .failed: "selhalo"
         case .timedOut: "timeout"
         case .stale: "zastaralé"

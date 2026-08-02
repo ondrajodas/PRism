@@ -48,6 +48,16 @@ struct GhGateway: GitHubGateway {
         return try await run(arguments, decodedAs: GhPullRequestDetail.self).pullRequest(id: id)
     }
 
+    func fetchDiff(id: PRIdentifier) async throws -> String {
+        // `--color never` je pojistka proti defaultu `auto`: kdyby `gh` usoudil, že píše
+        // na terminál, přišly by v diffu ANSI escape sekvence.
+        try await run([
+            "pr", "diff", String(id.number),
+            "--repo", id.repo.description,
+            "--color", "never",
+        ])
+    }
+
     private func run<T: Decodable>(_ arguments: [String], decodedAs type: T.Type) async throws -> T {
         let output = try await run(arguments)
         do {

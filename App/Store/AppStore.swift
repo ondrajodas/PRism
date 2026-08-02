@@ -29,6 +29,9 @@ final class AppStore {
     /// který to je, rozhoduje `Policy.currentRecords(from:)`.
     private(set) var reviewRecords: [PRIdentifier: ReviewRecord] = [:]
 
+    /// Diff **per PR**. Co v mapě není, se ještě nenačítalo.
+    private(set) var diffStates: [PRIdentifier: DiffState] = [:]
+
     /// Kolik uložených souborů s nálezy se nepodařilo přečíst.
     ///
     /// Musí být vidět: rozbitý soubor znamená ztracené nálezy, a ty se nesmí tvářit jako
@@ -201,6 +204,43 @@ final class AppStore {
         }
     }
 
+    // MARK: - Diff
+
+    func diffState(for pr: PRIdentifier) -> DiffState? { diffStates[pr] }
+
+    /// Načte diff vybraného PR. Načtený se drží — na GitHub se sáhne znovu, teprve když
+    /// se změní `updatedAt`.
+    ///
+    /// `updatedAt` se mění i po komentáři, takže se občas načte zbytečně. Opačná chyba —
+    /// ukázat diff, ve kterém chybí nový commit — je dražší.
+    func loadDiff(for pullRequest: PullRequestSummary) async {
+        let id = pullRequest.id
+        guard !hasCurrentDiff(for: pullRequest) else { return }
+        diffStates[id] = .loading
+
+        do {
+            let text = try await gateway.fetchDiff(id: id)
+            diffStates[id] = .loaded(DiffParser.parse(text), updatedAt: pullRequest.updatedAt)
+        } catch is CancellationError {
+            // Přepnutí na jiné PR načítání zruší. Nechat tam `.loading` by znamenalo
+            // spinner, který se nikdy nedotočí. Maže se **jen** rozdělaný stav: mezitím
+            // spuštěné načtení už mohlo doběhnout a to se přepsat nesmí.
+            if diffStates[id] == .loading { diffStates[id] = nil }
+        } catch let error as GitHubError {
+            diffStates[id] = .failed(error.userDescription)
+        } catch {
+            diffStates[id] = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Rozdělané načítání se za platný diff **nepovažuje** — dvě souběžná načtení jsou
+    /// jen zbytečné volání navíc, kdežto přeskočit to jediné, které běží, znamená prázdno
+    /// v okně, dokud si uživatel PR nevybere znovu.
+    private func hasCurrentDiff(for pullRequest: PullRequestSummary) -> Bool {
+        guard case .loaded(_, let updatedAt) = diffStates[pullRequest.id] else { return false }
+        return updatedAt == pullRequest.updatedAt
+    }
+
     // MARK: - Review
 
     /// Spustí review vybraného PR. Opakované zmáčknutí, dokud běží, nic nedělá.
@@ -334,5 +374,11 @@ final class AppStore {
     private func forget(whatIsNotIn summaries: [PullRequestSummary]) {
         let wanted = Set(summaries.map(\.id.repo))
         checkoutStates = checkoutStates.filter { wanted.contains($0.key) || $0.value == .preparing }
+
+        // Diff velkého PR jsou megabajty, takže se drží jen pro to, co je v seznamu.
+        // Rozdělané načítání přežije ze stejného důvodu jako běžící příprava: jinak by si
+        // ho doběhlé volání zapsalo zpátky a v mapě by zůstalo tak jako tak.
+        let wantedPullRequests = Set(summaries.map(\.id))
+        diffStates = diffStates.filter { wantedPullRequests.contains($0.key) || $0.value == .loading }
     }
 }

@@ -1,0 +1,41 @@
+import SwiftUI
+
+/// Vykreslí jeden řádek diffu — hlavičku hunku, řádek souboru nebo poznámku.
+struct DiffRowView: View {
+    let row: DiffRow
+
+    var body: some View {
+        switch row {
+        case .hunk(_, let hunk): hunkHeader(hunk)
+        case .line(_, let line): DiffLineView(line: line)
+        case .note(_, let text): note(text)
+        }
+    }
+
+    private func hunkHeader(_ hunk: DiffHunk) -> some View {
+        HStack(spacing: 8) {
+            Text(verbatim: hunk.header)
+            if !hunk.heading.isEmpty {
+                Text(verbatim: hunk.heading)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        .font(.system(.caption, design: .monospaced))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.4))
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}

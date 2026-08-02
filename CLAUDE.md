@@ -229,7 +229,7 @@ nahraditelné fake implementací.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
-| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a diff | `gh` CLI |
+| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
@@ -237,7 +237,9 @@ nahraditelné fake implementací.
 | `Config` | Globální default + override per repo | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu | — |
 
-Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`.
+Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`. Mimo tuhle sedmičku stojí
+`App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá
+diff jinou roli než být vidět.
 
 **Kam co psát:** rozhodovací logika patří do `Policy` jako čistá funkce — tam se testuje
 bez mockování. Když se přistihneš, že píšeš `if` nad nálezy někde ve view nebo v runneru,
@@ -277,6 +279,39 @@ Tři věci, které se u nich nemají rozbít:
   později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
 
 Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
+
+### `App/Diff/`
+
+Diff pull requestu od načtení po řádky, které se kreslí. Žádné I/O — text přijde
+z `GitHubGateway`, tenhle kód mu jen rozumí.
+
+| Typ | Co je |
+|---|---|
+| `DiffParser` | Unified diff → `Diff`. **Nikdy nevyhodí výjimku** |
+| `Diff` | Soubory + `unrecognizedLines`; součty `additions`/`deletions` |
+| `FileDiff` | Cesty, druh změny (`added`/`deleted`/`modified`/`renamed`), `isBinary`, hunky |
+| `DiffHunk` | Rozsahy, nadpis sekce za druhým `@@`, řádky |
+| `DiffLine` | Druh (`context`/`added`/`removed`/`meta`), stará a nová čísla, text |
+| `DiffRow` | Diff rozbalený na řádky pro vykreslení + `anchor(in:file:line:)` pro skok z nálezu |
+| `DiffState` | Stav načtení per PR: `loading` / `loaded(Diff, updatedAt:)` / `failed` |
+
+Věci, které se u toho nemají rozbít:
+
+- **Řádek se zařazuje podle stavu (hlavička / hunk), ne podle prvního znaku.** Odebraný
+  řádek začínající `---` je jinak k nerozeznání od hlavičky souboru — a `--` na začátku
+  řádku se v kódu i v textu vyskytuje běžně.
+- **Nerozpoznaný řádek se počítá** (`unrecognizedLines`) a UI to hlásí. Diff, ze kterého
+  kus tiše vypadl, vypadá jako úplný.
+- **Cesty se berou z `rename from`/`rename to` a `---`/`+++`.** Hlavička
+  `diff --git a/… b/…` je u cest s mezerou nejednoznačná a slouží jen jako záchrana tam,
+  kde ostatní řádky chybí (binárky, přejmenování beze změny obsahu).
+- **`/dev/null` je pravda o souboru, ne chybějící údaj.** Proto se u přidaného souboru
+  stará cesta zahodí, i když ji hlavička nabízí — a `--- /dev/null` sám o sobě určí, že
+  soubor vznikl.
+- **`DiffRow` je jediné místo, které čísluje řádky pro UI.** Skok z nálezu (`anchor`)
+  staví na `rows(of:)`, takže se číslování a hledání kotvy nemůžou rozejít.
+- **Identita řádku nese cestu souboru** (`"<file.id>|<index>"`). Pořadí uvnitř souboru
+  by se mezi soubory křížilo a skok by končil jinde.
 
 ### `StreamParser` (`App/Review/`)
 
@@ -510,9 +545,25 @@ gateway. Smyčka pollingu visí na `.task` okna, takže zavření okna ji zruš�
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
-| `PullRequestDetailView` | Pravý panel: pracovní kopie, spuštění a zrušení review, nálezy |
-| `FindingsView` | Návrh verdiktu a **surový** seznam nálezů po kategoriích. Bubliny u diffu jsou M4 |
+| `PullRequestDetailView` | Pravý panel: dvouřádková lišta (titulek, review, stav kopie), pod ní diff a nálezy |
+| `DiffView` | Diff v plné šířce: souhrn, skokové menu, soubory s ukotvenou hlavičkou |
+| `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek nebo poznámka |
+| `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah |
+| `FindingsView` | Spodní lišta: návrh verdiktu, počet nálezů a rozbalovací seznam s prokliky do diffu |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
+
+Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
+
+- **Cachuje se podle `updatedAt`.** Přepínání mezi PR je nejčastější pohyb v okně a každé
+  by jinak stálo podproces a kolo po síti. Načítá se z `.task(id: pullRequest)`, tedy nad
+  celým shrnutím — nový commit změní `updatedAt` a diff se načte znovu i bez přepnutí PR.
+- **Rozdělané načítání se za platný diff nepovažuje.** Dvě souběžná načtení jsou jen
+  volání navíc; přeskočit to jediné, které běží, znamená prázdno v okně až do dalšího
+  výběru.
+- **Zrušení maže jen rozdělaný stav.** Mezitím spuštěné načtení už mohlo doběhnout a to se
+  přepsat nesmí.
+- **Diff PR, které zmizelo ze seznamu, se zahodí** — jsou to megabajty. Rozdělané načítání
+  přežije ze stejného důvodu jako běžící příprava klonu.
 
 Věci, na které se u okna naráží:
 
@@ -541,6 +592,11 @@ Věci, na které se u okna naráží:
 - **View si o checkoutu nedrží vlastní `@State`.** `PullRequestDetailView` si SwiftUI mezi
   PR ponechá (stejná pozice ve stromu), takže vlastní příznak „připravuji“ přetekl z jednoho
   PR na druhé. Všechno jde ze store.
+- **Jedna buňka líného seznamu je jeden řádek diffu, ne hunk.** Buňka vytvořená při jiné
+  šířce okna se sama nepřeměří, takže se hunk po zvětšení okna překreslil jen zčásti
+  a mezi hlavičkami zůstala prázdná místa. Ze stejného důvodu nad diffem není
+  `.textSelection(.enabled)` — nad tisíci `Text`y v líném seznamu je to druhý zdroj
+  nevykreslených řádků.
 - **Stavy se čtou v těle `list`, ne až uvnitř řádku.** `List` staví řádky líně a mimo
   sledování závislostí rodiče, takže změna stavu nemusí seznam překreslit.
 - **Prázdný `PollStatusBanner` se nekreslí vůbec.** Trvalý pruh „vše OK“ ubírá místo
@@ -631,7 +687,7 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)` |
+| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchDiff(id:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhSearchQuery` | Rozdělení search dotazu na argumenty `gh` — čistá funkce |
@@ -656,6 +712,10 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   přihlášení, zbytek (`HTTP 401`, `rate limit`, `error connecting to`,
   `Could not resolve to`) se pozná z výstupu. Je to křehké, ale nic lepšího `gh` nenabízí —
   proto je to čistá funkce (`GitHubError(failure:)`) testovaná tabulkou skutečných hlášek.
+- **Diff se vrací jako syrový text.** Unified diff není tvar, který by `gh` definoval —
+  na rozdíl od `--json` polí, kde si říkáme, co má přijít. Rozumí mu až `DiffParser`.
+  Volá se `gh pr diff <n> --repo … --color never`; to `never` je pojistka proti defaultu
+  `auto`, který by při zápisu na terminál poslal ANSI escape sekvence.
 - **Tvar `gh` JSONu se nesmí propsat do modelů.** `PullRequest` a `PullRequestSummary` se
   kódují na disk, takže jejich `Codable` popisuje uložený tvar. Dekódují se proto DTO
   a teprve ta se mapují — jinak by změna `gh` měnila formát dat v `ReviewStore`.
@@ -793,6 +853,17 @@ Právě proto tam eskalace na `SIGKILL` je.
   vstup. Fixtures ze skutečných běhů už v repu jsou
   (`Tests/Fixtures/stream-json/`, viz [`docs/claude-cli.md`](docs/claude-cli.md)): běh
   s nálezy, čistý běh, zabitý běh a odmítnutý zápis. Parser se testuje proti nim.
+- **`DiffParser`** — proti **skutečným** výstupům `gh pr diff` z veřejných repozitářů
+  (`Tests/Fixtures/gh/pr-diff-*.diff`: běžný diff, přejmenování včetně `similarity index
+  100%` bez hunků, 44 binárek vedle textových souborů, smazaný soubor). U každé fixture se
+  kontroluje `unrecognizedLines == 0` — to je ta věta „rozumím celému formátu“. Syntetické
+  vstupy pokrývají, co se z reálného PR nedá sehnat: odebraný řádek začínající `---`,
+  hunk bez počtu řádků, `\ No newline at end of file`, prázdný kontextový řádek, změna
+  jen práv a nesmysl mezi soubory.
+- **`DiffRow`** — skok z nálezu: na změněný řádek, na soubor u nálezu bez čísla i mimo
+  hunky, `nil` u souboru mimo diff, a přejmenovaný soubor nalezený pod starou cestou.
+- **`AppStore` — diff** — proti fake gateway: načtení, cache podle `updatedAt`, opakování
+  po selhání a zahození diffu PR, které zmizelo ze seznamu.
 - **`PollingService`** — proti `FakeGitHubGateway` (odpovědi v pořadí, poslední se opakuje)
   a `FakeTimeSource`. Ten místo čekání zapisuje **požadované délky uspání** — na nich se
   ověřuje backoff — a po zadaném počtu uspání smyčku ukončí `CancellationError`em. Testy
@@ -991,12 +1062,18 @@ reviewer nálezy napíše textem a sběr tiše nefunguje.
 review i serializace souběžných příprav (#9) a eviction cache (#10). Aplikace si tedy umí
 připravit pracovní kopii a uklidit po sobě; chybí jen ten, kdo ji použije.
 
+Diff view hotový (issue #18) — `App/Diff/` a `DiffView`. Detail PR ukazuje diff v plné
+šířce: soubory pod sebou s ukotvenou hlavičkou, skokové menu, souhrn `N souborů · +X −Y`.
+Nálezy se přestěhovaly do spodní lišty, ze které se dá kliknutím odskočit na `file:line`
+v diffu. Rozbalení kontextu mimo hunk je #47, obarvení kódu #48.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
 2. ~~Checkout cache + worktree~~ — **hotovo**
 3. ~~`ReviewRunner` + parsování streamu~~ — **hotovo**
-4. UI diffu s bublinami
+4. UI diffu s bublinami — diff hotový (#18), zbývají bubliny (#19), tabulka (#20),
+   chipy (#21) a tab Průběh (#22)
 5. Konfigurace a auto režim
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak

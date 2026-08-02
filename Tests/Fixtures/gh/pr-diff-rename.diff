@@ -1,0 +1,599 @@
+diff --git a/App/ContentView.swift b/App/ContentView.swift
+index 8bbacb5..54918f8 100644
+--- a/App/ContentView.swift
++++ b/App/ContentView.swift
+@@ -4,7 +4,7 @@ import SwiftUI
+ struct ContentView: View {
+     var body: some View {
+         ContentUnavailableView(
+-            "GitHub PR Review",
++            "PRism",
+             systemImage: "checklist",
+             description: Text("Seznam PR se sem doplní v dalších fázích.")
+         )
+diff --git a/App/PRReviewApp.swift b/App/PRismApp.swift
+similarity index 67%
+rename from App/PRReviewApp.swift
+rename to App/PRismApp.swift
+index f82ca92..1e7051c 100644
+--- a/App/PRReviewApp.swift
++++ b/App/PRismApp.swift
+@@ -1,9 +1,9 @@
+ import SwiftUI
+ 
+ @main
+-struct PRReviewApp: App {
++struct PRismApp: App {
+     var body: some Scene {
+-        WindowGroup("GitHub PR Review") {
++        WindowGroup("PRism") {
+             ContentView()
+         }
+         .defaultSize(width: 1100, height: 700)
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 0949bae..3060c99 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -72,7 +72,7 @@ na ně review skilly Claude Code jako headless session a nálezy zobrazuje vedle
+ Aplikace je **orchestrátor a prohlížeč** — nemá vlastní review logiku. Když se objeví
+ potřeba „chytřejšího" review, patří to do skillu, ne do aplikace.
+ 
+-Plný návrh: [`docs/superpowers/specs/2026-07-31-pr-review-design.md`](docs/superpowers/specs/2026-07-31-pr-review-design.md)
++Plný návrh: [`docs/superpowers/specs/2026-07-31-prism-design.md`](docs/superpowers/specs/2026-07-31-prism-design.md)
+ 
+ ## Tvrdé podmínky
+ 
+@@ -83,7 +83,7 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
+ 2. **Reviewer je read-only.** `--allowedTools` bez `Write`, `Edit` a bez obecného `Bash`.
+    Reviewer strukturálně nemůže změnit kód ani nic odeslat.
+ 3. **Nikdy nesahat na uživatelovy klony.** Aplikace pracuje výhradně ve své cache
+-   (`~/Library/Application Support/pr-review/`). Mohou být rozdělané, na jiné branchi,
++   (`~/Library/Application Support/PRism/`). Mohou být rozdělané, na jiné branchi,
+    mít vlastní worktrees.
+ 4. **Aplikace nikdy nedrží GitHub token.** Autentizace je delegovaná na `gh`.
+ 5. **Nálezy jsou klíčované `headSha`.** Nové commity nálezy zneplatní (stav
+@@ -123,12 +123,15 @@ patří to do `Policy`.
+ - **Do `App/` patří jen zdrojáky.** Buildable folder zkopíruje všechno, co neumí
+   zkompilovat, do `.app` jako resource — `Info.plist` uvnitř `App/` skončil v bundlu
+   dvakrát, podruhé s nerozexpandovanými `$(...)`. Konfigurace bundle (`Info.plist`,
+-  `pr-review.entitlements`) proto leží v kořeni repa.
+-- **Název aplikace je jinde než název projektu.** Target, produkt i repo jsou
+-  `pr-review`; uživateli se aplikace hlásí jako **GitHub PR Review**. `CFBundleName`
+-  nejde nastavit přes `INFOPLIST_KEY_*` — Xcode ho generuje z `PRODUCT_NAME` — proto má
+-  projekt vlastní `Info.plist` místo `GENERATE_INFOPLIST_FILE`. Swiftový modul drží
+-  `PRODUCT_MODULE_NAME = pr_review`, takže testy importují `pr_review`.
++  `PRism.entitlements`) proto leží v kořeni repa.
++- **Jeden název všude: `PRism`.** Repo, projekt, target, scheme, produkt, Swiftový modul
++  i to, co appka ukazuje v Docku. Když název měníš, projdi i `PRODUCT_MODULE_NAME`,
++  `TEST_HOST`, `CODE_SIGN_ENTITLEMENTS` a `bin/run.sh` — jinak build projde, ale spadne
++  až test nebo spuštění.
++- **`CFBundleName` nejde nastavit přes `INFOPLIST_KEY_*`.** Xcode ho generuje
++  z `PRODUCT_NAME` a klíč tiše ignoruje. Projekt má proto vlastní `Info.plist` místo
++  `GENERATE_INFOPLIST_FILE`. Původní důvod (produkt a uživatelský název se lišily) po
++  přejmenování na `PRism` odpadl — plist se teď dá zjednodušit, ale zatím zůstává.
+ - **Moduly jsou složky, ne targety.** Všechen kód žije v jednom app targetu; `Policy`
+   a spol. budou podsložky `App/`. Framework by si vynutil `public` u všeho, co používá
+   UI — daň, kterou osobní aplikace nepotřebuje. Vyčlenit se dá později.
+@@ -149,11 +152,11 @@ patří to do `Policy`.
+ ## Příkazy
+ 
+ ```bash
+-xcodebuild -project pr-review.xcodeproj -scheme pr-review build
++xcodebuild -project PRism.xcodeproj -scheme PRism build
+ ```
+ 
+ ```bash
+-xcodebuild -project pr-review.xcodeproj -scheme pr-review test
++xcodebuild -project PRism.xcodeproj -scheme PRism test
+ ```
+ 
+ ```bash
+diff --git a/Info.plist b/Info.plist
+index 1f40f90..24ebb00 100644
+--- a/Info.plist
++++ b/Info.plist
+@@ -4,13 +4,15 @@
+ <dict>
+ 	<key>CFBundleDevelopmentRegion</key>
+ 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+-	<!-- Uživatelský název aplikace. Nejde odvodit z PRODUCT_NAME, protože ten drží
+-	     technický název produktu (pr-review.app) — proto vlastní Info.plist místo
+-	     GENERATE_INFOPLIST_FILE. CFBundleName jde do menu baru, DisplayName do Finderu. -->
++	<!-- CFBundleName jde do menu baru, CFBundleDisplayName do Finderu a Docku.
++	     Proč vlastní Info.plist a ne GENERATE_INFOPLIST_FILE: CFBundleName se generuje
++	     z PRODUCT_NAME a klíč INFOPLIST_KEY_CFBundleName Xcode tiše ignoruje. Původně
++	     se tím řešil rozdíl mezi názvem produktu a názvem pro uživatele; po sjednocení
++	     na PRism ten důvod odpadl a plist by šel zrušit — viz CLAUDE.md. -->
+ 	<key>CFBundleDisplayName</key>
+-	<string>GitHub PR Review</string>
++	<string>PRism</string>
+ 	<key>CFBundleName</key>
+-	<string>GitHub PR Review</string>
++	<string>PRism</string>
+ 	<key>CFBundleExecutable</key>
+ 	<string>$(EXECUTABLE_NAME)</string>
+ 	<key>CFBundleIdentifier</key>
+diff --git a/pr-review.entitlements b/PRism.entitlements
+similarity index 100%
+rename from pr-review.entitlements
+rename to PRism.entitlements
+diff --git a/pr-review.xcodeproj/project.pbxproj b/PRism.xcodeproj/project.pbxproj
+similarity index 86%
+rename from pr-review.xcodeproj/project.pbxproj
+rename to PRism.xcodeproj/project.pbxproj
+index fefa244..7028929 100644
+--- a/pr-review.xcodeproj/project.pbxproj
++++ b/PRism.xcodeproj/project.pbxproj
+@@ -7,8 +7,8 @@
+ 	objects = {
+ 
+ /* Begin PBXFileReference section */
+-		A100000000000000000000A6 /* pr-review.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "pr-review.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+-		A100000000000000000000A7 /* pr-reviewTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "pr-reviewTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
++		A100000000000000000000A6 /* PRism.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "PRism.app"; sourceTree = BUILT_PRODUCTS_DIR; };
++		A100000000000000000000A7 /* PRismTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "PRismTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+ /* End PBXFileReference section */
+ 
+ /* Begin PBXFileSystemSynchronizedRootGroup section */
+@@ -46,8 +46,8 @@
+ 		A100000000000000000000A3 /* Products */ = {
+ 			isa = PBXGroup;
+ 			children = (
+-				A100000000000000000000A6 /* pr-review.app */,
+-				A100000000000000000000A7 /* pr-reviewTests.xctest */,
++				A100000000000000000000A6 /* PRism.app */,
++				A100000000000000000000A7 /* PRismTests.xctest */,
+ 			);
+ 			name = Products;
+ 			sourceTree = "<group>";
+@@ -55,9 +55,9 @@
+ /* End PBXGroup section */
+ 
+ /* Begin PBXNativeTarget section */
+-		A100000000000000000000A4 /* pr-review */ = {
++		A100000000000000000000A4 /* PRism */ = {
+ 			isa = PBXNativeTarget;
+-			buildConfigurationList = A100000000000000000000C2 /* Build configuration list for PBXNativeTarget "pr-review" */;
++			buildConfigurationList = A100000000000000000000C2 /* Build configuration list for PBXNativeTarget "PRism" */;
+ 			buildPhases = (
+ 				A100000000000000000000B1 /* Sources */,
+ 				A100000000000000000000B2 /* Frameworks */,
+@@ -70,16 +70,16 @@
+ 			fileSystemSynchronizedGroups = (
+ 				A100000000000000000000A8 /* App */,
+ 			);
+-			name = "pr-review";
++			name = "PRism";
+ 			packageProductDependencies = (
+ 			);
+-			productName = "pr-review";
+-			productReference = A100000000000000000000A6 /* pr-review.app */;
++			productName = "PRism";
++			productReference = A100000000000000000000A6 /* PRism.app */;
+ 			productType = "com.apple.product-type.application";
+ 		};
+-		A100000000000000000000A5 /* pr-reviewTests */ = {
++		A100000000000000000000A5 /* PRismTests */ = {
+ 			isa = PBXNativeTarget;
+-			buildConfigurationList = A100000000000000000000C3 /* Build configuration list for PBXNativeTarget "pr-reviewTests" */;
++			buildConfigurationList = A100000000000000000000C3 /* Build configuration list for PBXNativeTarget "PRismTests" */;
+ 			buildPhases = (
+ 				A100000000000000000000B4 /* Sources */,
+ 				A100000000000000000000B5 /* Frameworks */,
+@@ -93,11 +93,11 @@
+ 			fileSystemSynchronizedGroups = (
+ 				A100000000000000000000A9 /* Tests */,
+ 			);
+-			name = "pr-reviewTests";
++			name = "PRismTests";
+ 			packageProductDependencies = (
+ 			);
+-			productName = "pr-reviewTests";
+-			productReference = A100000000000000000000A7 /* pr-reviewTests.xctest */;
++			productName = "PRismTests";
++			productReference = A100000000000000000000A7 /* PRismTests.xctest */;
+ 			productType = "com.apple.product-type.bundle.unit-test";
+ 		};
+ /* End PBXNativeTarget section */
+@@ -119,7 +119,7 @@
+ 					};
+ 				};
+ 			};
+-			buildConfigurationList = A100000000000000000000C1 /* Build configuration list for PBXProject "pr-review" */;
++			buildConfigurationList = A100000000000000000000C1 /* Build configuration list for PBXProject "PRism" */;
+ 			developmentRegion = en;
+ 			hasScannedForEncodings = 0;
+ 			knownRegions = (
+@@ -133,8 +133,8 @@
+ 			projectDirPath = "";
+ 			projectRoot = "";
+ 			targets = (
+-				A100000000000000000000A4 /* pr-review */,
+-				A100000000000000000000A5 /* pr-reviewTests */,
++				A100000000000000000000A4 /* PRism */,
++				A100000000000000000000A5 /* PRismTests */,
+ 			);
+ 		};
+ /* End PBXProject section */
+@@ -176,7 +176,7 @@
+ /* Begin PBXTargetDependency section */
+ 		A100000000000000000000E1 /* PBXTargetDependency */ = {
+ 			isa = PBXTargetDependency;
+-			target = A100000000000000000000A4 /* pr-review */;
++			target = A100000000000000000000A4 /* PRism */;
+ 			targetProxy = A100000000000000000000E2 /* PBXContainerItemProxy */;
+ 		};
+ /* End PBXTargetDependency section */
+@@ -187,7 +187,7 @@
+ 			containerPortal = A100000000000000000000A1 /* Project object */;
+ 			proxyType = 1;
+ 			remoteGlobalIDString = A100000000000000000000A4;
+-			remoteInfo = "pr-review";
++			remoteInfo = "PRism";
+ 		};
+ /* End PBXContainerItemProxy section */
+ 
+@@ -308,7 +308,7 @@
+ 		A100000000000000000000D3 /* Debug */ = {
+ 			isa = XCBuildConfiguration;
+ 			buildSettings = {
+-				CODE_SIGN_ENTITLEMENTS = "pr-review.entitlements";
++				CODE_SIGN_ENTITLEMENTS = "PRism.entitlements";
+ 				CODE_SIGN_IDENTITY = "-";
+ 				CODE_SIGN_STYLE = Manual;
+ 				COMBINE_HIDPI_IMAGES = YES;
+@@ -323,8 +323,8 @@
+ 					"@executable_path/../Frameworks",
+ 				);
+ 				MARKETING_VERSION = 0.1;
+-				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.pr-review";
+-				PRODUCT_MODULE_NAME = pr_review;
++				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.prism";
++				PRODUCT_MODULE_NAME = PRism;
+ 				PRODUCT_NAME = "$(TARGET_NAME)";
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				SWIFT_EMIT_LOC_STRINGS = YES;
+@@ -334,7 +334,7 @@
+ 		A100000000000000000000D4 /* Release */ = {
+ 			isa = XCBuildConfiguration;
+ 			buildSettings = {
+-				CODE_SIGN_ENTITLEMENTS = "pr-review.entitlements";
++				CODE_SIGN_ENTITLEMENTS = "PRism.entitlements";
+ 				CODE_SIGN_IDENTITY = "-";
+ 				CODE_SIGN_STYLE = Manual;
+ 				COMBINE_HIDPI_IMAGES = YES;
+@@ -349,8 +349,8 @@
+ 					"@executable_path/../Frameworks",
+ 				);
+ 				MARKETING_VERSION = 0.1;
+-				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.pr-review";
+-				PRODUCT_MODULE_NAME = pr_review;
++				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.prism";
++				PRODUCT_MODULE_NAME = PRism;
+ 				PRODUCT_NAME = "$(TARGET_NAME)";
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				SWIFT_EMIT_LOC_STRINGS = YES;
+@@ -367,11 +367,11 @@
+ 				DEVELOPMENT_TEAM = "";
+ 				GENERATE_INFOPLIST_FILE = YES;
+ 				MARKETING_VERSION = 0.1;
+-				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.pr-review.tests";
++				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.prism.tests";
+ 				PRODUCT_NAME = "$(TARGET_NAME)";
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				SWIFT_EMIT_LOC_STRINGS = NO;
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/pr-review.app/Contents/MacOS/pr-review";
++				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PRism.app/Contents/MacOS/PRism";
+ 			};
+ 			name = Debug;
+ 		};
+@@ -385,18 +385,18 @@
+ 				DEVELOPMENT_TEAM = "";
+ 				GENERATE_INFOPLIST_FILE = YES;
+ 				MARKETING_VERSION = 0.1;
+-				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.pr-review.tests";
++				PRODUCT_BUNDLE_IDENTIFIER = "com.ondrajodas.prism.tests";
+ 				PRODUCT_NAME = "$(TARGET_NAME)";
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				SWIFT_EMIT_LOC_STRINGS = NO;
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/pr-review.app/Contents/MacOS/pr-review";
++				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PRism.app/Contents/MacOS/PRism";
+ 			};
+ 			name = Release;
+ 		};
+ /* End XCBuildConfiguration section */
+ 
+ /* Begin XCConfigurationList section */
+-		A100000000000000000000C1 /* Build configuration list for PBXProject "pr-review" */ = {
++		A100000000000000000000C1 /* Build configuration list for PBXProject "PRism" */ = {
+ 			isa = XCConfigurationList;
+ 			buildConfigurations = (
+ 				A100000000000000000000D1 /* Debug */,
+@@ -405,7 +405,7 @@
+ 			defaultConfigurationIsVisible = 0;
+ 			defaultConfigurationName = Release;
+ 		};
+-		A100000000000000000000C2 /* Build configuration list for PBXNativeTarget "pr-review" */ = {
++		A100000000000000000000C2 /* Build configuration list for PBXNativeTarget "PRism" */ = {
+ 			isa = XCConfigurationList;
+ 			buildConfigurations = (
+ 				A100000000000000000000D3 /* Debug */,
+@@ -414,7 +414,7 @@
+ 			defaultConfigurationIsVisible = 0;
+ 			defaultConfigurationName = Release;
+ 		};
+-		A100000000000000000000C3 /* Build configuration list for PBXNativeTarget "pr-reviewTests" */ = {
++		A100000000000000000000C3 /* Build configuration list for PBXNativeTarget "PRismTests" */ = {
+ 			isa = XCConfigurationList;
+ 			buildConfigurations = (
+ 				A100000000000000000000D5 /* Debug */,
+diff --git a/pr-review.xcodeproj/xcshareddata/xcschemes/pr-review.xcscheme b/PRism.xcodeproj/xcshareddata/xcschemes/PRism.xcscheme
+similarity index 80%
+rename from pr-review.xcodeproj/xcshareddata/xcschemes/pr-review.xcscheme
+rename to PRism.xcodeproj/xcshareddata/xcschemes/PRism.xcscheme
+index a88ed8d..bd55eae 100644
+--- a/pr-review.xcodeproj/xcshareddata/xcschemes/pr-review.xcscheme
++++ b/PRism.xcodeproj/xcshareddata/xcschemes/PRism.xcscheme
+@@ -16,9 +16,9 @@
+             <BuildableReference
+                BuildableIdentifier = "primary"
+                BlueprintIdentifier = "A100000000000000000000A4"
+-               BuildableName = "pr-review.app"
+-               BlueprintName = "pr-review"
+-               ReferencedContainer = "container:pr-review.xcodeproj">
++               BuildableName = "PRism.app"
++               BlueprintName = "PRism"
++               ReferencedContainer = "container:PRism.xcodeproj">
+             </BuildableReference>
+          </BuildActionEntry>
+       </BuildActionEntries>
+@@ -34,9 +34,9 @@
+             <BuildableReference
+                BuildableIdentifier = "primary"
+                BlueprintIdentifier = "A100000000000000000000A5"
+-               BuildableName = "pr-reviewTests.xctest"
+-               BlueprintName = "pr-reviewTests"
+-               ReferencedContainer = "container:pr-review.xcodeproj">
++               BuildableName = "PRismTests.xctest"
++               BlueprintName = "PRismTests"
++               ReferencedContainer = "container:PRism.xcodeproj">
+             </BuildableReference>
+          </TestableReference>
+       </Testables>
+@@ -56,9 +56,9 @@
+          <BuildableReference
+             BuildableIdentifier = "primary"
+             BlueprintIdentifier = "A100000000000000000000A4"
+-            BuildableName = "pr-review.app"
+-            BlueprintName = "pr-review"
+-            ReferencedContainer = "container:pr-review.xcodeproj">
++            BuildableName = "PRism.app"
++            BlueprintName = "PRism"
++            ReferencedContainer = "container:PRism.xcodeproj">
+          </BuildableReference>
+       </BuildableProductRunnable>
+    </LaunchAction>
+@@ -73,9 +73,9 @@
+          <BuildableReference
+             BuildableIdentifier = "primary"
+             BlueprintIdentifier = "A100000000000000000000A4"
+-            BuildableName = "pr-review.app"
+-            BlueprintName = "pr-review"
+-            ReferencedContainer = "container:pr-review.xcodeproj">
++            BuildableName = "PRism.app"
++            BlueprintName = "PRism"
++            ReferencedContainer = "container:PRism.xcodeproj">
+          </BuildableReference>
+       </BuildableProductRunnable>
+    </ProfileAction>
+diff --git a/README.md b/README.md
+index 98b8be0..430681b 100644
+--- a/README.md
++++ b/README.md
+@@ -1,4 +1,4 @@
+-# pr-review
++# PRism
+ 
+ Nativní macOS aplikace, která hlídá GitHub pull requesty, u kterých jsem požádán o
+ review, spouští na ně review skilly Claude Code a nálezy zobrazuje vedle diffu.
+@@ -7,6 +7,10 @@ Aplikace je **orchestrátor a prohlížeč** — nemá vlastní review logiku. V
+ žije ve skillech Claude Code; aplikace rozhoduje, kdy spustit který skill a kde, odchytí
+ strukturovaný výstup a vykreslí ho.
+ 
++Hranol rozloží jeden paprsek na spektrum. Tahle aplikace dělá totéž s pull requestem —
++pustí na něj několik nezávislých reviewerů a jejich nálezy schválně neslévá do jednoho
++názoru.
++
+ > **Nikdy nic neposílá na GitHub.** Žádné komentáře, žádná review, žádné approve.
+ > Verdikt *approve / request changes* je návrh zobrazený v aplikaci. Je to tvrdá
+ > podmínka návrhu, ne zjednodušení první verze.
+@@ -17,11 +21,11 @@ strukturovaný výstup a vykreslí ho.
+ buildí, testuje a spustí do prázdného okna. Žádná z pěti fází (viz
+ [CLAUDE.md](CLAUDE.md)) zatím není hotová.
+ 
+-Postup se dá sledovat přes [releases](https://github.com/ondrajodas/pr-review/releases) —
++Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
+ po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
+ aktuálně je.
+ 
+-- [Návrh (specifikace)](docs/superpowers/specs/2026-07-31-pr-review-design.md) — plný
++- [Návrh (specifikace)](docs/superpowers/specs/2026-07-31-prism-design.md) — plný
+   návrh včetně záznamu rozhodnutí a zamítnutých alternativ
+ - [CLAUDE.md](CLAUDE.md) — pravidla pro práci v tomto repu
+ 
+@@ -75,11 +79,11 @@ Spustit aplikaci — jeden příkaz, buildne v Debug a otevře okno:
+ Samotný build a testy:
+ 
+ ```bash
+-xcodebuild -project pr-review.xcodeproj -scheme pr-review build
++xcodebuild -project PRism.xcodeproj -scheme PRism build
+ ```
+ 
+ ```bash
+-xcodebuild -project pr-review.xcodeproj -scheme pr-review test
++xcodebuild -project PRism.xcodeproj -scheme PRism test
+ ```
+ 
+ `bin/run.sh` buildí do `build/` v repu (`-derivedDataPath`), aby byla cesta k `.app`
+@@ -92,13 +96,13 @@ ani tým. Developer ID podpis a notarizace by byly potřeba až pro distribuci.
+ ## Struktura
+ 
+ ```
+-pr-review.xcodeproj/      Xcode projekt (shared scheme je verzovaný)
+-App/                      zdrojáky aplikace — target pr-review
+-Tests/                    unit testy — target pr-reviewTests
++PRism.xcodeproj/          Xcode projekt (shared scheme je verzovaný)
++App/                      zdrojáky aplikace — target PRism
++Tests/                    unit testy — target PRismTests
+ bin/run.sh                build + spuštění jedním příkazem
+ bin/copilot-review.sh     vyžádání Copilot review na PR
+ Info.plist                název aplikace, verze, minimální systém
+-pr-review.entitlements    vypnutý App Sandbox
++PRism.entitlements        vypnutý App Sandbox
+ docs/superpowers/specs/   návrh a specifikace
+ CLAUDE.md                 pravidla pro práci v repu
+ README.md                 tento soubor
+@@ -110,5 +114,6 @@ targetu bere z filesystému. Nový soubor stačí vytvořit, do `project.pbxproj
+ nezapisuje. `Info.plist` a entitlements proto leží v kořeni: cokoli uvnitř `App/`, co
+ není zdroják, by se zkopírovalo do `.app` jako resource.
+ 
+-Projekt, target i produkt se jmenují `pr-review`; uživateli se aplikace hlásí jako
+-**GitHub PR Review** (`CFBundleName` a `CFBundleDisplayName` v `Info.plist`).
++Repo, Xcode projekt, target, produkt i to, co appka ukazuje v Docku, se jmenují stejně —
++`PRism`. Swiftový modul taky (`PRODUCT_MODULE_NAME`), takže testy dělají
++`@testable import PRism`.
+diff --git a/Tests/SmokeTests.swift b/Tests/SmokeTests.swift
+index 87e92f5..36fe12b 100644
+--- a/Tests/SmokeTests.swift
++++ b/Tests/SmokeTests.swift
+@@ -1,21 +1,21 @@
+ import Foundation
+ import Testing
+ 
+-@testable import pr_review
++@testable import PRism
+ 
+ /// Smoke testy scaffoldu. Nedělají nic chytrého — ověřují, že se testy linkují proti
+ /// app bundlu a že se do něj propsaly build settings. Když se projekt rozbije, padá tohle.
+ @Test func appBundleIdentifierMatchesProjectSetting() {
+-    #expect(Bundle.main.bundleIdentifier == "com.ondrajodas.pr-review")
++    #expect(Bundle.main.bundleIdentifier == "com.ondrajodas.prism")
+ }
+ 
+-/// Projekt, target i repo se jmenují `pr-review`; uživateli se aplikace hlásí jinak.
+-@Test func appPresentsItselfUnderFriendlyName() {
++/// Název je jeden napříč vším — hlídá, že se v bundlu neobjeví jiný než `PRism`.
++@Test func appPresentsItselfAsPRism() {
+     let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+     let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+ 
+-    #expect(displayName == "GitHub PR Review")
+-    #expect(name == "GitHub PR Review")
++    #expect(displayName == "PRism")
++    #expect(name == "PRism")
+ }
+ 
+ @Test @MainActor func contentViewCanBeCreated() {
+diff --git a/bin/run.sh b/bin/run.sh
+index e879b91..68a5a72 100755
+--- a/bin/run.sh
++++ b/bin/run.sh
+@@ -5,16 +5,16 @@ set -euo pipefail
+ cd "$(dirname "$0")/.."
+ 
+ DERIVED_DATA="build"
+-APP="$DERIVED_DATA/Build/Products/Debug/pr-review.app"
++APP="$DERIVED_DATA/Build/Products/Debug/PRism.app"
+ 
+ xcodebuild \
+-    -project pr-review.xcodeproj \
+-    -scheme pr-review \
++    -project PRism.xcodeproj \
++    -scheme PRism \
+     -configuration Debug \
+     -derivedDataPath "$DERIVED_DATA" \
+     build
+ 
+ # Předchozí instanci ukončit, ať se okna nehromadí při opakovaném spuštění.
+-killall pr-review 2>/dev/null || true
++killall PRism 2>/dev/null || true
+ 
+ open "$APP"
+diff --git a/docs/superpowers/specs/2026-07-31-pr-review-design.md b/docs/superpowers/specs/2026-07-31-prism-design.md
+similarity index 92%
+rename from docs/superpowers/specs/2026-07-31-pr-review-design.md
+rename to docs/superpowers/specs/2026-07-31-prism-design.md
+index fabd3d9..e23f2a2 100644
+--- a/docs/superpowers/specs/2026-07-31-pr-review-design.md
++++ b/docs/superpowers/specs/2026-07-31-prism-design.md
+@@ -1,8 +1,8 @@
+-# pr-review — návrh
++# PRism — návrh
+ 
+ **Datum:** 2026-07-31
+ **Stav:** návrh odsouhlasen, neimplementováno
+-**Repo:** `ondrajodas/pr-review` (privátní)
++**Repo:** `ondrajodas/PRism` (privátní)
+ 
+ ## Účel
+ 
+@@ -89,7 +89,7 @@ Vlastní všechny pracovní kopie. **Nikdy nesahá na uživatelovy klony** — m
+ rozdělané, na jiné branchi, nebo už mít vlastní worktrees.
+ 
+ ```
+-~/Library/Application Support/pr-review/
++~/Library/Application Support/PRism/
+   repos/<owner>/<repo>.git          # bare, partial clone s --filter=blob:none
+   worktrees/<owner>-<repo>-<pr>-<sha>/   # detached worktree na review
+ ```
+@@ -217,28 +217,31 @@ Tři oblasti. Zvolený tvar: diff v plné šířce s nálezy u kódu a tabbed pa
+ ## Platformová rozhodnutí
+ 
+ - **SwiftUI**, target macOS 26, Xcode projekt v repu. Bundle id
+-  `com.ondrajodas.pr-review`.
++  `com.ondrajodas.prism`.
+ - **App Sandbox je vypnutý.** Aplikace spouští `git`, `gh` a `claude` a zapisuje do své
+   cache mimo sandbox kontejner. Je to osobní nástroj, ne submission do App Store. Pro
+   lokální použití stačí ad-hoc podpis (`codesign -s -`); Developer ID podpis a
+   notarizace by byly potřeba až pro distribuci.
+ - **Jeden app target, moduly jako složky.** Sedm modulů z architektury nejsou samostatné
+-  targety — žijí jako podsložky `App/`. Framework `PRReviewCore` by dal testům přístup
++  targety — žijí jako podsložky `App/`. Framework `PRismCore` by dal testům přístup
+   bez launche aplikace, ale vynutil by `public` u každého typu, který se dotkne UI. To je
+   daň za hranici, kterou u osobní aplikace nikdo nevymáhá. Testy vidí dovnitř přes
+-  `@testable import pr_review` proti app targetu (`TEST_HOST`). Vyčlenit framework jde
++  `@testable import PRism` proti app targetu (`TEST_HOST`). Vyčlenit framework jde
+   kdykoli později; opačný směr by byl dražší.
+ - **`project.pbxproj` je psaný ručně, zdroje jsou buildable folders.** Žádný XcodeGen ani
+   Tuist — byla by to instalovaná závislost navíc kvůli souboru, který se po scaffoldu
+   skoro nemění. `App/` a `Tests/` jsou v projektu `PBXFileSystemSynchronizedRootGroup`,
+   takže obsah targetu vychází z filesystému: nový zdroják se nikam nezapisuje a v pbxproj
+   nevznikají merge konflikty.
+-- **Uživatelský název je „GitHub PR Review", technický `pr-review`.** Repo, target,
+-  scheme i produkt (`pr-review.app`) drží technický název, aby skripty a cesty zůstaly
+-  bez mezer; aplikace se v Docku, Finderu a menu baru hlásí lidsky. `CFBundleName` jde
+-  nastavit jen přes `PRODUCT_NAME`, takže projekt má vlastní `Info.plist` místo
+-  `GENERATE_INFOPLIST_FILE`. Přejmenovat rovnou produkt by bylo jednodušší, ale mezery
+-  v názvu `.app` by prosákly do `bin/run.sh`, `TEST_HOST` a `killall`.
++- **Jeden název `PRism` napříč vším** — repo, projekt, target, scheme, produkt
++  (`PRism.app`), Swiftový modul i to, co vidí uživatel v Docku. Krátce existovala
++  dvojice „technický `pr-review` + uživatelský `GitHub PR Review`"; sjednocení ji
++  zrušilo, protože dvě jména pro jednu věc si musí každý pamatovat a nic tím nezískal.
++  Název bez mezer navíc drží `bin/run.sh`, `TEST_HOST` a `killall` jednoduché.
++- **Vlastní `Info.plist` místo `GENERATE_INFOPLIST_FILE`.** `CFBundleName` jde nastavit
++  jen přes `PRODUCT_NAME` — `INFOPLIST_KEY_CFBundleName` Xcode tiše ignoruje. Po
++  sjednocení názvů ten důvod odpadl a plist by šlo zrušit; zatím zůstává kvůli explicitní
++  kontrole nad metadaty bundlu.
+ - **Swift 6 language mode od prvního commitu.** Aplikace bude žonglovat s podprocesy a
+   souběžnými review běhy; strict concurrency zapnutá dodatečně by znamenala refaktoring
+   hotového kódu.
+@@ -310,7 +313,8 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
+ | Paralelní reviewery, mechanický odznak `2×` | Agregační session slučující nálezy | Nesouhlas mezi reviewery je informace; slučování stojí session a tu informaci zahodí |
+ | Nálezy klíčované `headSha` | Klíčované podle PR | Nové commity musí zneplatnit, ne tiše mást |
+ | Bez terminálu v v1 | SwiftTerm od začátku | `stream-json` vykreslený nativně je pro sledování lepší; zásah je vzácný |
+-| Jeden app target, moduly jako složky | Framework `PRReviewCore` + app | Framework si vynutí `public` u všeho, co vidí UI; hranici jde vyčlenit později |
++| Jeden app target, moduly jako složky | Framework `PRismCore` + app | Framework si vynutí `public` u všeho, co vidí UI; hranici jde vyčlenit později |
++| Název `PRism` všude | `pr-review`, `gh-pr-review`, dvojice technický + uživatelský název | Hranol rozkládá světlo na spektrum, appka rozkládá PR na nezávislé pohledy — pojmenovává to, čím se liší. `gh-` prefix je konvence pro rozšíření `gh` CLI a u nativní aplikace by mátl. Dvě jména pro jednu věc si musí každý pamatovat a nic nevynesla |
+ | Ručně psaný `project.pbxproj` + buildable folders | XcodeGen / Tuist | Nechceme instalovanou závislost kvůli souboru, který se skoro nemění; synchronizované složky odstraní důvod pbxproj vůbec editovat |
+ 
+ ## K ověření před implementací

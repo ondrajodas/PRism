@@ -1,26 +1,125 @@
 import SwiftUI
 
-/// Pravý panel: co víme o vybraném PR a co se s ním dá zatím dělat.
+/// Pravý panel: diff vybraného PR, nálezy pod ním a ovládání nahoře.
 ///
-/// Diff a nálezy sem přijdou v dalších fázích; teď tu žije příprava pracovní kopie —
-/// včetně toho, co řekl `git`, když se nepovedla.
+/// Diff dostává plnou šířku — PHP na 120 znaků se má vejít. Bubliny nálezů u kódu jsou
+/// #19, tabulka nálezů #20; zatím je pod diffem surový seznam.
 struct PullRequestDetailView: View {
     let store: AppStore
     let pullRequest: PullRequestSummary
 
+    /// Rozbalený panel nálezů. Je to předvolba pohledu, ne údaj o PR, takže **smí**
+    /// přetéct mezi pull requesty — na rozdíl od stavu pracovní kopie, který se proto
+    /// drží ve store.
+    @State private var findingsExpanded = true
+
+    /// Řádek diffu, na který se má odscrollovat po kliknutí na nález.
+    @State private var scrollTarget: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
-            checkout
-            review
-            findings
+        VStack(alignment: .leading, spacing: 0) {
+            controls
+            Divider()
+            content
         }
-        .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // Klon je jeden pro celé repo, takže druhé PR ze stejného repa může mít hotovo,
         // aniž by o tom kdo řekl. Zjistí se to při výběru řádku, ne klonováním.
         .task(id: pullRequest.id) { await store.noteExistingCheckout(for: pullRequest.id) }
+        // Klíčem je celé shrnutí, ne jen identifikátor: nový commit změní `updatedAt`,
+        // a to je přesně chvíle, kdy se má diff načíst znovu i bez přepnutí PR.
+        .task(id: pullRequest) { await store.loadDiff(for: pullRequest) }
+    }
+
+    /// Dva řádky, ne čtyři bloky: cesta ke klonu, stav kopie i spuštění review se vejdou
+    /// vedle titulku. Místo v okně patří diffu.
+    private var controls: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(pullRequest.title)
+                    .font(.title3)
+                    .lineLimit(2)
+                Spacer(minLength: 12)
+                review
+            }
+            HStack(spacing: 10) {
+                Text(pullRequest.id.description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Link("otevřít na GitHubu", destination: pullRequest.url).font(.callout)
+                checkout
+            }
+            // Selhání checkoutu se do lišty nevejde, a právě u něj je text od `gitu`
+            // to jediné, z čeho se pozná, co dělat dál.
+            if case .failed(let detail) = store.checkoutState(for: pullRequest.repo) {
+                checkoutFailure(detail)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Diff dostane všechno místo; nálezy jsou spodní lišta, kterou si uživatel rozbalí.
+    @ViewBuilder private var content: some View {
+        VStack(spacing: 0) {
+            diff
+            if let record = store.reviewRecord(for: pullRequest.id) {
+                FindingsView(record: record, isExpanded: $findingsExpanded, jump: jump)
+            }
+        }
+    }
+
+    /// Nález ukazuje na `file:line`; kde to je v diffu, ví `DiffRow`. Když se místo najít
+    /// nedá (soubor v diffu není), nestane se nic — skákat naslepo je horší než nehnout se.
+    private func jump(to finding: Finding) {
+        guard case .loaded(let diff, _) = store.diffState(for: pullRequest.id),
+              let file = finding.file,
+              let anchor = DiffRow.anchor(in: diff, file: file, line: finding.line)
+        else { return }
+        scrollTarget = anchor
+    }
+
+    @ViewBuilder private var diff: some View {
+        switch store.diffState(for: pullRequest.id) {
+        case .loaded(let diff, _) where diff.isEmpty:
+            placeholder("Diff je prázdný — tenhle pull request nic nemění.")
+        case .loaded(let diff, _):
+            DiffView(diff: diff, scrollTarget: $scrollTarget)
+        case .failed(let detail):
+            diffFailure(detail)
+        case .loading, nil:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Načítám diff…")
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private func diffFailure(_ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Diff se nepodařilo načíst", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+            Text(detail)
+                .font(.system(.callout, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Zkusit znovu", systemImage: "arrow.clockwise") {
+                Task { await store.loadDiff(for: pullRequest) }
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func placeholder(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .padding(20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     /// Spuštění a zrušení review. Tlačítko je tady, ne v toolbaru: patří k vybranému PR
@@ -55,49 +154,38 @@ struct PullRequestDetailView: View {
         }
     }
 
-    @ViewBuilder private var findings: some View {
-        if let record = store.reviewRecord(for: pullRequest.id) {
-            FindingsView(record: record)
-        } else {
-            Spacer()
-            Text("Zatím tu žádné nálezy nejsou. Diff s bublinami přijde v dalších fázích.")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(pullRequest.title).font(.title2)
-            HStack(spacing: 6) {
-                Text(pullRequest.id.description).foregroundStyle(.secondary)
-                Link("otevřít na GitHubu", destination: pullRequest.url).font(.callout)
-            }
-        }
-    }
-
+    /// Stav pracovní kopie jako jeden údaj v liště. Cesta ke klonu visí na nápovědě:
+    /// potřeba je zřídka, ale jako samostatný řádek zabírala pruh, který patří diffu.
+    ///
     /// Vždycky podle stavu ve store, nikdy podle vlastního `@State`. `PullRequestDetailView`
     /// si SwiftUI mezi PR drží (stejná pozice ve stromu), takže vlastní příznak by přetekl
     /// z jednoho pull requestu na druhý.
     @ViewBuilder private var checkout: some View {
         switch store.checkoutState(for: pullRequest.repo) {
         case .preparing:
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Připravuji pracovní kopii… U velkého repa to chvíli trvá.")
+                Text("připravuji kopii…")
             }
-        case .failed(let detail):
-            failure(detail)
+            .font(.callout)
+            .foregroundStyle(.secondary)
         case .ready(let path):
-            ready(path)
+            Label("kopie připravená", systemImage: "checkmark.circle")
+                .font(.callout)
+                .foregroundStyle(.green)
+                .help(path.path(percentEncoded: false))
+        case .failed:
+            EmptyView()   // vypisuje se celé pod lištou, viz `checkoutFailure`
         case .absent:
-            Button("Připravit pracovní kopii", systemImage: "arrow.down.circle", action: prepare)
+            Button("připravit kopii", systemImage: "arrow.down.circle", action: prepare)
+                .buttonStyle(.link)
+                .font(.callout)
         }
     }
 
     /// Vlastní rámeček místo `GroupBox`u: ten je AppKit kontejner a `ImageRenderer` ho
     /// nevykreslí, takže by tenhle stav nešlo zkontrolovat jinak než ručně v aplikaci.
-    private func failure(_ detail: String) -> some View {
+    private func checkoutFailure(_ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Pracovní kopii se nepodařilo připravit", systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.red)
@@ -115,17 +203,6 @@ struct PullRequestDetailView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.red.opacity(0.08), in: .rect(cornerRadius: 8))
-    }
-
-    private func ready(_ path: URL) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("Pracovní kopie připravená", systemImage: "checkmark.circle")
-                .foregroundStyle(.green)
-            Text(path.path(percentEncoded: false))
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-        }
     }
 
     private func prepare() {
