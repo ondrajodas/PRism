@@ -163,6 +163,40 @@ struct RealRepoCheckoutTests {
         return result.standardOutput.split(separator: "\n").count
     }
 
+    /// Výpis souborů se dá ověřit jen spuštěním: že `ls-files` v odpojeném stromu nad
+    /// partial klonem vůbec něco vrátí, z argumentů poznat nejde. A na tom výpisu stojí
+    /// odhad jazyka, tedy sada skillů, která se pak repu zapíše.
+    @Test("Výpis verzovaných souborů vrátí obsah stromu, ne ignorované soubory")
+    func listsTrackedFilesFromTheWorktree() async throws {
+        let pr = PRIdentifier(repo: repo, number: 42)
+        try await makeScratchRepository(at: origin)
+        try "vendor/\n".write(to: origin.appending(path: ".gitignore"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(
+            at: origin.appending(path: "src"),
+            withIntermediateDirectories: true
+        )
+        try "<?php\n".write(to: origin.appending(path: "src/Cart.php"), atomically: true, encoding: .utf8)
+        try await git(["add", "."], in: origin)
+        try await git(["commit", "-m", "zdrojáky"], in: origin)
+        let head = try await revision("HEAD", in: origin)
+        let checkout = checkout(remote: origin.absoluteString)
+
+        let worktree = try await checkout.worktree(for: pr, at: head)
+        // Ignorovaná složka existuje jen na disku — ve výpisu být nesmí, jinak by odhad
+        // jazyka převážily závislosti.
+        try FileManager.default.createDirectory(
+            at: worktree.appending(path: "vendor"),
+            withIntermediateDirectories: true
+        )
+        try "x\n".write(to: worktree.appending(path: "vendor/balik.php"), atomically: true, encoding: .utf8)
+
+        let files = try await checkout.trackedFiles(in: worktree)
+
+        #expect(files.contains("src/Cart.php"))
+        #expect(files.contains("README.md"))
+        #expect(!files.contains { $0.hasPrefix("vendor/") })
+    }
+
     @Test("Neexistující remote skončí zařazenou chybou, ne pádem")
     func missingRemoteIsClassified() async throws {
         let missing = workspace.url.appending(path: "nikde").absoluteString

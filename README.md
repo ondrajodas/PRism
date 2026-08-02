@@ -75,7 +75,16 @@ se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí bě
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
 PR, sada skillů, blokující kategorie, výchozí režim review, interval pollingu, kolik
 session smí běžet naráz, rozpočet cache a model. Repozitář si může přebít režim
-(`manual`/`automatic`), skilly i kategorie. Soubor se zakládá sám s dosavadními výchozími
+(`manual`/`automatic`), skilly i kategorie.
+
+Sada skillů se dá navázat na **programovací jazyk**: při review se z obsahu repa pozná,
+čím je psané (`composer.json` a `.php` → PHP, `go.mod` → Go), a odpovídající sada se
+použije. Smysl je nepouštět PHP skilly na Go repu — každý skill je jedna session.
+Repu se sada **zapíše, jen když se od globální liší** — jinak by v konfiguraci vznikl
+override, o který nikdo nežádal, a pozdější změna globální sady by takové repo minula.
+Odhad se opakuje při každém review, dokud si repo neřekne o vlastní sadu; ručně nastavená
+sada má vždycky přednost a detekci navždycky umlčí. Mapa jazyk → skilly je ve výchozím
+stavu prázdná, takže dokud se nevyplní, detekce na nic nesahá. Soubor se zakládá sám s dosavadními výchozími
 hodnotami, načítá se při startu i při návratu do aplikace, a když je rozbitý, běží se na
 defaultech a je to vidět.
 
@@ -95,7 +104,7 @@ Uložené nálezy jsou klíčované head commitem: nové commity je označí jak
 a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí.
 
 Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první čtyři; z páté zbývá automatický
-režim a jazyk nálezů.
+režim (#25) a jazyk nálezů (#52).
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -113,7 +122,8 @@ aktuálně je.
    partial clone a přidá se detached `git worktree` na head commitu daného PR.
    **Vlastních** klonů na disku se aplikace nikdy nedotkne.
 3. **Review** — nakonfigurované skilly se spustí jako paralelní headless session
-   Claude Code v tom worktree, omezené na read-only nástroje. Spouští se **tlačítkem**;
+   Claude Code v tom worktree, omezené na read-only nástroje. Které to jsou, může záviset
+   na programovacím jazyce repa; ten se odhaduje z `git ls-files`. Spouští se **tlačítkem**;
    automatický režim se dá zapnout globálně i zvlášť pro každé repo (výchozí je manuální,
    aby neznámé repo nespálilo panel session bez dozoru).
 4. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
@@ -133,7 +143,7 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 | **Závažnost** | Aplikace nevymýšlí vlastní škálu. Seskupuje podle `category` z výstupu reviewera a odvozuje jediný blokující boolean (`verdict == CONFIRMED` a `category` v blokující sadě). Z toho vypadne návrh verdiktu. |
 | **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
-| **Konfigurace** | Dvě úrovně: globální default a override per repo (režim auto/manual, sada skillů, blokující kategorie). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
+| **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
 
 ## Požadavky
 
@@ -189,7 +199,7 @@ App/                      zdrojáky aplikace — target PRism
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Config/                 config.json: globální default, override per repo, čtení a zápis
   Diff/                   parsování unified diffu na soubory, hunky a řádky
-  Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku
+  Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno; ReviewStore — nálezy na disku

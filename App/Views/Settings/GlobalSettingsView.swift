@@ -45,6 +45,21 @@ struct GlobalSettingsView: View {
             }
 
             Section {
+                LanguageSkillsEditor(
+                    skillsByLanguage: $settings.draft.global.skillsByLanguage,
+                    globalFallback: settings.draft.global.skills
+                )
+            } header: {
+                // „Jazyk“ samotné se plete s jazykem, ve kterém reviewer píše nálezy
+                // (#52) — proto všude „programovací jazyk“, i když je to delší.
+                Text("Skilly podle programovacího jazyka")
+            } footer: {
+                Text("Při review se z obsahu repa pozná, čím je psané, a použije se sada odsud. Rozhoduje to, **které skilly se spustí** — ne jazyk, ve kterém reviewer píše nálezy. Jazyk, který tu není, bere sadu výš.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 StringListEditor(
                     items: $settings.draft.global.blockingCategories,
                     placeholder: "correctness",

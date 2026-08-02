@@ -86,6 +86,13 @@ struct GitRepoCheckout: RepoCheckout {
         return output.split(separator: "\n").compactMap { Int($0.split(separator: "/").last ?? "") }
     }
 
+    func trackedFiles(in worktree: URL) async throws -> [String] {
+        // `-c` je sice výchozí, ale vypsané je z příkazu vidět, že jde o index, ne o to,
+        // co zrovna leží na disku.
+        let output = try await run(["-C", worktree.path(percentEncoded: false), "ls-files", "-c"])
+        return output.split(separator: "\n").map(String.init)
+    }
+
     func existingClone(for repo: RepoID) async -> URL? {
         hasUsableClone(for: repo) ? layout.bareClone(for: repo) : nil
     }

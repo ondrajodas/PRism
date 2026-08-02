@@ -47,8 +47,8 @@ final class AppStore {
 
     /// Nastavení, se kterým aplikace běží.
     private(set) var configuration: Configuration
-    /// Proč se konfiguraci nepodařilo přečíst. Rozbitý soubor nesmí aplikaci položit, ale
-    /// taky se nesmí spolknout — jinak uživatel hledá, proč mu nastavení nefunguje.
+    /// Proč se konfiguraci nepodařilo přečíst nebo uložit. Ani jedno nesmí aplikaci
+    /// položit, ale ani projít tiše — jinak uživatel hledá, proč mu nastavení nefunguje.
     private(set) var configurationFailure: String?
 
     /// Kolik uložených souborů s nálezy se nepodařilo přečíst.
@@ -493,6 +493,14 @@ final class AppStore {
             await syncCheckoutState(for: pr.repo, using: checkout)
             try Task.checkCancellation()
 
+            // Musí to být **před** `runSkills`, ne po: sada, kterou detekce zapíše, je
+            // ta, se kterou má tenhle běh jet.
+            await adoptDetectedSkills(for: pr.repo, in: worktree, using: checkout)
+            // Odhad jazyka zrušení **spolkne** — nepovedený výpis se od zrušeného nepozná
+            // a obojí tam znamená „sadu neodvodíme“. Zrušené review by pak jelo dál, takže
+            // se to musí zeptat znovu tady.
+            try Task.checkCancellation()
+
             try await runSkills(for: pr, of: detail, in: worktree, using: reviewer, saving: reviews)
             reviewPhases[pr] = nil
         } catch is CancellationError {
@@ -508,6 +516,51 @@ final class AppStore {
             reviewPhases[pr] = .failed(detail: error.userDescription)
         } catch {
             reviewPhases[pr] = .failed(detail: error.localizedDescription)
+        }
+    }
+
+    /// Odvodí sadu skillů z toho, co v repu leží.
+    ///
+    /// Běží při **každém** review, dokud si repo o skilly neřeklo (`skills == nil`) — ne
+    /// jen při prvním. Je to schválně: mapa jazyků se dá vyplnit až potom, co se repo
+    /// jednou zreviewovalo, a bez opakování by se projevila teprve na dalším repu.
+    /// Stojí to jedno lokální `git ls-files` navíc.
+    ///
+    /// Ruční hodnota má přednost a **i prázdná** („tady nereviewuj nic“) detekci
+    /// navždycky umlčí — přepsat ji by znamenalo vracet uživateli jeho rozhodnutí zpátky.
+    ///
+    /// Zapisuje se jen to, co se od globální sady liší. Zápis „stejné jako globální“ by byl
+    /// override, o který nikdo nežádal — a pozdější změna globální sady by tenhle repo
+    /// tiše minula.
+    private func adoptDetectedSkills(for repo: RepoID, in worktree: URL, using checkout: any RepoCheckout) async {
+        guard configuration.repositories[repo]?.skills == nil else { return }
+
+        let files: [String]
+        do {
+            files = try await checkout.trackedFiles(in: worktree)
+        } catch {
+            // Nepovedený výpis znamená, že se sada neodvodí a poběží globální — tedy přesně
+            // to, co běželo před #24. Nic se neztrácí a příští review to zkusí znovu,
+            // protože `skills` zůstává `nil`. Položit kvůli tomu celé review by bylo dražší
+            // než ta ztráta.
+            return
+        }
+
+        let detected = configuration.defaultSkills(for: Policy.projectLanguages(in: files))
+        guard detected != resolved(for: repo).skills else { return }
+
+        var entry = configuration.repositories[repo] ?? RepositoryConfig()
+        entry.skills = detected
+        var updated = configuration
+        updated.setRepository(entry, for: repo)
+
+        do {
+            try await updateConfiguration(updated)
+        } catch {
+            // Review poběží dál, jen s globální sadou — `resolved(for:)` čte to, co je
+            // v paměti, a tam se nic nezměnilo. Mlčet o tom ale nejde: nastavení, které
+            // se neuložilo, je přesně to, kvůli čemu se pak hledá, proč něco nefunguje.
+            configurationFailure = "Rozpoznanou sadu skillů se nepodařilo uložit. \(error.localizedDescription)"
         }
     }
 

@@ -222,6 +222,12 @@ Skilly jsou per-repo z konkrétního důvodu: `oj-php-quality-check` na Go nebo 
 repu nepřinese nic a session stejně zaplatíš. Autodetekce jazyka nastaví výchozí sadu
 při prvním setkání s repem.
 
+**Hotovo (#24).** `ProjectLanguage` + `Policy.projectLanguages(in:)` nad výpisem
+`git ls-files`, mapa `skillsByLanguage` v globální části konfigurace. Rozhodovací pořadí
+je tedy trojí: globální `skills` → sada podle jazyka → override per repo. Detekce běží při **každém** review,
+dokud si repo o skilly neřekne, a zapisuje jen to, co se od globální sady liší; ruční
+hodnota má přednost a detekci navždycky umlčí.
+
 **Hotovo (#23).** `config.json` v kořeni cache, `Configuration` → `resolved(for:)` jako
 čistá funkce. Hodnoty se čtou **při použití**, ne při startu, takže se změna projeví bez
 restartu; soubor se načte při spuštění a pak pokaždé, když se okno vrátí do popředí.
@@ -672,6 +678,14 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Rozostřuje se, jen když je nastavení **key window** | Rozostřit vždycky, když je okno otevřené, nebo udělat nastavení modální | Okno je nemodální, takže se kliknutím zpátky do seznamu dá dál pracovat — a rozostřené okno, ve kterém zrovna píšu, je horší než žádný efekt. Modální okno nastavení by zase zablokovalo sledování běžícího review. Poloměr 3 px doladěn na běžící aplikaci (6 bylo moc) |
 | Odvozený `Binding` z optionalu se píše **ručně**, ne přes `Binding(_:)` | Nechat `if let list = Binding(items)`, jak to SwiftUI nabízí | **Shazovalo to aplikaci** při vypnutí vlastní sady skillů: `BindingOperations.ForceUnwrapping` čte základ znovu při každém update a editor nad ním jeden překreslovací cyklus přežije. Ruční binding s `?? []` nemá kde spadnout a zápis se navíc zahazuje, dokud je zdroj `nil` — jinak by doběhlá editace zrušený override vzkřísila |
 | Rozepsaná hodnota z editoru se **přeskočí** | Nepouštět ji do konfigurace (validace v okně), nebo ji použít, jak je | Našlo se vlastní revizí diffu, ne Copilotem: `Přidat zdroj` vyrobí řádek, který se uloží dřív, než se dopíše dotaz — a `gh search prs` bez výrazu selže. Protože selhání jednoho zdroje zahazuje celý tik, zmizel by kvůli rozepsanému řádku celý seznam PR. Validace v okně by musela blokovat ukládání a vyrobit stav „rozepsáno, neuloženo“, který autosave nemá kde ukázat; přeskočení je jedna čistá funkce a prázdný **seznam** zůstává vlastní odpovědí |
+| Jazyk projektu je **vlastní výčet**, ne `Syntax.Language` | Rozšířit typ z obarvování a použít ho na obojí | Odpovídají na jiné otázky: obarvování zná YAML, JSON a Markdown, které o projektu neříkají nic, a naopak by rozpoznat Python vyžadovalo umět ho obarvit. Se sdíleným výčtem by každý repozitář vyšel jako „YAML“. Cena jsou dvě tabulky přípon, ale každá je krátká a odpovídá na svoji otázku |
+| Soubory se vypisují `git ls-files`, ne `FileManagerem` | Projít pracovní strom rekurzivně | Ignorované složky (`vendor/`, `node_modules/`, buildy) jsou zrovna ty, kterých je nejvíc — u PHP projektu se závislostmi by odhad určilo `vendor/`, ne `src/`. `git` navíc čte index, takže na partial klonu nepotřebuje obsah blobů |
+| `package.json` **není** marker | Vzít ho jako marker JavaScriptu, jak psalo zadání #24 | **Změna proti zadání.** Má ho každý TypeScript projekt stejně jako JavaScriptový, takže by JavaScript přidával úplně všude a na každém TS repu by běžely obě sady. Čím je node projekt psaný, řeknou přípony; `tsconfig.json` je oproti tomu jednoznačný |
+| Jazyk podle přípon až od **desetiny** rozpoznaných zdrojáků | Zařadit každý jazyk, jehož soubor se v repu vyskytne | „Převažující“ ze zadání znamená prominentní, ne „vyskytl se“. Jeden zatoulaný `.py` skript v PHP repu nemá pouštět Python reviewery — každá session stojí peníze. Do jmenovatele jdou jen rozpoznané zdrojáky, protože s Markdownem a YAMLem uvnitř by podíl neříkal nic o kódu |
+| Odvozená sada se zapíše, **jen když se liší** od globální | Zapsat ji vždycky, ať je vidět, co detekce našla | Zápis „stejné jako globální“ je override, o který nikdo nežádal — a pozdější změna globální sady by takové repo tiše minula. Je to tentýž tichý přepínač, kvůli kterému se u režimu maže záznam podle prázdnosti, ne podle shody s globálem |
+| Ruční sada detekci **navždycky umlčí**, i prázdná | Detekovat znovu, když je sada prázdná | Prázdná sada je vlastní odpověď („tady nereviewuj nic“) a přepsat ji odvozenou by znamenalo vracet uživateli jeho rozhodnutí zpátky. `nil` je jediný stav, který znamená „tohle tu nikdo nenastavoval“ |
+| Výchozí mapa jazyků je **prázdná** | Nasadit rovnou `php: [code-review, oj-php-quality-check]`, jak psalo zadání | `oj-php-quality-check` je skill z uživatelovy globální konfigurace, ne z tohohle repa; zadrátovat ho do defaultů aplikace by pustil na repa něco, o co si nikdo neřekl, a rozešel by se s testem „výchozí hodnoty odpovídají konstantám, které nahradily“ |
+| V UI se píše „**programovací** jazyk“, ne jen „jazyk“ | Kratší popisek „Skilly podle jazyka“ | Spletlo se to hned při prvním zkoušení s jazykem, ve kterém reviewer píše nálezy (#52) — a to je otázka, kterou repo řeší taky, takže záměna není hypotetická. Delší popisek je levnější než vysvětlování |
 
 ## Ověřeno proti CLI (2026-08-01)
 
