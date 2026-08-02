@@ -157,8 +157,9 @@ struct ReviewTimelineView: View {
         "\(timeline.skill)#\(entry.id)"
     }
 
+    /// Kam posouvat, když je zapnuté sledování konce. Nejnovější událost se hledá
+    /// **napříč** reviewery — viz `ReviewerTimeline.newestEntry(in:)`.
     private var lastEntry: String? {
-        guard let timeline = timelines.last, let entry = timeline.entries.last else { return nil }
-        return identifier(of: entry, in: timeline)
+        ReviewerTimeline.newestEntry(in: timelines).map { "\($0.skill)#\($0.entry)" }
     }
 }

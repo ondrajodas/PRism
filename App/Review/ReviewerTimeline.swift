@@ -36,6 +36,17 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         self.worktree = worktree
     }
 
+    /// Nejnovější událost napříč reviewery — podle ní se osa posouvá na konec.
+    ///
+    /// Napříč, ne z poslední osy v poli: reviewery běží paralelně, takže nová událost
+    /// klidně přibude do té dřívější a osa by se přestala posouvat.
+    static func newestEntry(in timelines: [ReviewerTimeline]) -> (skill: String, entry: Int)? {
+        timelines
+            .compactMap { timeline in timeline.entries.last.map { (timeline.skill, $0.id, $0.at) } }
+            .max { $0.2 < $1.2 }
+            .map { (skill: $0.0, entry: $0.1) }
+    }
+
     mutating func record(_ progress: ReviewProgress, at time: Date) {
         switch progress {
         case .queued:

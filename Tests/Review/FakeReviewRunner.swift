@@ -49,11 +49,11 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         progress: @escaping ReviewProgressHandler
     ) async throws -> ReviewRun {
         lock.withLock { recorded.append(request) }
-        if reported.isEmpty {
-            progress(.queued)
-        } else {
-            for event in reported { progress(event) }
-        }
+        // `.queued` hlásí skutečný runner **vždycky**, i když je slot volný hned. Fake,
+        // který ho u vlastního seznamu vynechá, by pouštěl testy popisující průběh, jaký
+        // v provozu nevznikne.
+        progress(.queued)
+        for event in reported { progress(event) }
 
         while holds, !isReleased, !Task.isCancelled { await Task.yield() }
         try Task.checkCancellation()
