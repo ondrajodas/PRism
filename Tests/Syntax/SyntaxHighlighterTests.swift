@@ -108,6 +108,20 @@ struct SyntaxHighlighterTests {
         #expect(text("let x = 42 + 3.14", .swift, of: .number) == ["42", "3.14"])
     }
 
+    /// Rozsahy jsou ve Swiftu všude a tečka v nich není desetinná — `1...3` jsou dvě
+    /// čísla a operátor mezi nimi, ne jedno dlouhé číslo.
+    @Test("Operátor rozsahu se do čísla nepočítá")
+    func neverSwallowsARangeOperator() {
+        #expect(text("for i in 1...3 {", .swift, of: .number) == ["1", "3"])
+        #expect(text("array[0..<count]", .swift, of: .number) == ["0"])
+    }
+
+    @Test("Desetinná tečka do čísla patří")
+    func keepsTheDecimalPoint() {
+        #expect(text("let x = 3.14", .swift, of: .number) == ["3.14"])
+        #expect(text("let x = 1.", .swift, of: .number) == ["1"])
+    }
+
     @Test("Číslice uvnitř jména není číslo")
     func neverMarksDigitsInsideAnIdentifier() {
         #expect(text("let utf8 = encoding2", .swift, of: .number).isEmpty)

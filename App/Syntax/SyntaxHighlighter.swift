@@ -98,8 +98,12 @@ private struct LineScanner {
         guard line[position].isNumber, !isWordCharacter(at: position - 1) else { return false }
 
         var end = position
-        while end < line.count, line[end].isNumber || line[end] == "." || line[end] == "_" {
-            end += 1
+        while end < line.count {
+            if line[end].isNumber || line[end] == "_" { end += 1; continue }
+            // Tečka patří do čísla, jen když za ní číslice pokračuje. Jinak je to konec
+            // věty nebo operátor rozsahu — `1...3` jsou dvě čísla, ne jedno dlouhé.
+            guard line[end] == ".", line.indices.contains(end + 1), line[end + 1].isNumber else { break }
+            end += 2
         }
         // `utf8` je jméno, ne číslo — číslice těsně před písmenem nic neznačí.
         guard !isWordCharacter(at: end) else { return false }
