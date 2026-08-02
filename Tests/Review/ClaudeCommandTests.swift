@@ -69,6 +69,19 @@ struct ClaudeCommandTests {
         #expect(prompt.contains("empty list"))
     }
 
+    /// Prompt je **jeden řádek**. Skládá se ze dvou víceřádkových literálů spojených
+    /// interpolací a je snadné do něj `\n` propašovat vynechaným `\` na konci řádku.
+    /// Víceřádkový literál sám o sobě závěrečný newline nemá — řádek s ukončovacími
+    /// uvozovkami do obsahu nepatří — ale spolehnout se na to bez testu znamená čekat,
+    /// až to někdo rozbije.
+    @Test("Prompt je jeden řádek", arguments: FindingsLanguage.allCases)
+    func thePromptIsASingleLine(language: FindingsLanguage) {
+        let prompt = ClaudeCommand.prompt(for: request(language: language))
+
+        #expect(!prompt.contains("\n"))
+        #expect(!prompt.contains("  "))
+    }
+
     /// Jazyk se **říká reviewerovi**, nepřekládá se po něm — prompt je tedy jediné místo,
     /// kde se volba projeví.
     @Test("Prompt si řekne o jazyk nálezů")
