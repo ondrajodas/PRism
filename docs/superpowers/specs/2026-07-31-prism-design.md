@@ -752,15 +752,33 @@ a `Tests/Fixtures/stream-json/`. Co z toho plyne pro návrh:
   rozhodnutí), takže bufferovaná cesta zůstala beze změny.
 
 
-## Za hranicí v1 — milníky M6 a M7
+## Za hranicí v1 — milníky M6 až M8
 
-Rozsah v1 končí konfigurací a auto režimem (M5). To, co přijde po něm, mění jeden
-z předpokladů návrhu: aplikace přestává být vůči GitHubu jen pro čtení.
+Rozsah v1 končí konfigurací a auto režimem (M5). **M6 a M7** za ním mění jeden
+z předpokladů návrhu: aplikace přestává být vůči GitHubu jen pro čtení. M8 ne — viz níž.
 
 | Milník | Co v něm je |
 |---|---|
 | **M6 — Review na GitHub** | Draft review (#65), skládání z nálezů a komentářů k řádkům (#66), `ReviewPublisher` jako jediná cesta ven (#67), potvrzovací sheet (#68), přenesení draftu na nový commit (#69). Předchází mu spike proti vlastnímu repu (#62) |
 | **M7 — Konverzace, komentáře a taby** | Čtení konverzace PR (#63), vlákna jako bubliny u kódu (#64), odpovídání do nich a jejich vyřešení (#73), taby `Overview` / `Files changed` (#72) |
+| **M8 — Notifikace** | Základ s oprávněním a klikem (#88), doběhlé review (#82), nové PR (#85), vypínání po událostech (#86), seskupování (#87) |
+
+**M8 na M6 ani M7 nestojí** a pořadí není závazné — je to jediný z těch tří milníků, který
+tvrdé podmínky nemění. Aplikace v něm zůstává vůči GitHubu jen pro čtení; notifikace jsou
+cesta ven **k uživateli**, ne na GitHub, takže se jich pravidlo „jediná cesta ven“ (#67)
+netýká.
+
+Dvě rozhodnutí, která z rozpisu M8 nejsou vidět a stála za rozdělení na pět issues:
+
+- **Základ je vlastní issue** (#88), ne součást první notifikace. Oprávnění, doručení
+  a hlavně **klik, který vybere PR**, jsou společné všem druhům — jinak by se to psalo
+  v každém issue znovu. Stejný tvar jako `StreamParser` (#13) nebo `ReviewStore` (#15):
+  vrstva bez UI, konzument přijde vzápětí.
+- **Ohlášená PR jsou snímek, ne rostoucí seznam** (#85). Uloží se, co bylo v posledním
+  **úspěšném** tiku, a příště se ohlásí to, co v něm není. Nic se nehromadí, nemusí se nic
+  uklízet a vypadává z toho i odpověď na „co s PR, které se vrátí do fronty“ — ohlásí se
+  znovu. Log ohlášených by potřeboval vlastní lhůtu a vlastní úklid, tedy další místo, kde
+  se dá zapomenout mazat.
 
 ### Záznam rozhodnutí
 
