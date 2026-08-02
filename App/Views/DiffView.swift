@@ -250,12 +250,17 @@ struct DiffView: View {
         }
     }
 
-    /// Nálezy patřící k souboru. Porovnává se přes `Diff.file(at:)`, protože nález umí
-    /// přijít pod **starou** cestou přejmenovaného souboru.
+    /// Nálezy patřící k souboru. Nález umí přijít pod **starou** cestou přejmenovaného
+    /// souboru, takže se porovnává proti oběma.
+    ///
+    /// Stejně jako `DiffRow.groups(of:from:)`, a je to podmínka správnosti, ne kosmetika:
+    /// odznak musí počítat přesně to, co se ukáže jako bubliny. Přes `Diff.file(at:)` by se
+    /// to rozešlo u řetězu přejmenování, kde jedna cesta sedí na dva soubory — a bylo by to
+    /// navíc lineární hledání uvnitř dvojité smyčky.
     private func findings(in file: FileDiff) -> [FindingGroup] {
         findings.filter { group in
             guard let path = group.file else { return false }
-            return diff.file(at: path)?.id == file.id
+            return path == file.newPath || path == file.oldPath
         }
     }
 
