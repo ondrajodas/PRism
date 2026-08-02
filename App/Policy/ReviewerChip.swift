@@ -23,8 +23,17 @@ struct ReviewerChip: Identifiable, Hashable, Sendable {
 
     let skill: String
     let state: State
+    /// Co na výsledku chybí, i když nálezy dorazily — typicky nález, který se nepodařilo
+    /// přečíst. Stav zůstává `findings`, aby byl vidět počet; tohle říká, že úplný není.
+    let warning: String?
 
     var id: String { skill }
+
+    init(skill: String, state: State, warning: String? = nil) {
+        self.skill = skill
+        self.state = state
+        self.warning = warning
+    }
 }
 
 extension Policy {
@@ -40,11 +49,20 @@ extension Policy {
         let extra = runs.map(\.skillID).filter { !skills.contains($0) }
 
         return (skills + extra).map { skill in
-            ReviewerChip(
+            let run = runs.first { $0.skillID == skill }
+            return ReviewerChip(
                 skill: skill,
-                state: state(of: skill, in: runs, running: running)
+                state: state(of: skill, in: runs, running: running),
+                warning: run.flatMap(warning(of:))
             )
         }
+    }
+
+    /// Ztracený nález se hlásí i tehdy, když nějaké nálezy dorazily. Bez toho vypadá
+    /// neúplný výsledek jako úplný — a `suggestedVerdict` pak mlčí bez vysvětlení.
+    private static func warning(of run: StoredReviewRun) -> String? {
+        guard run.droppedFindings > 0, !run.findings.isEmpty else { return nil }
+        return droppedText(run.droppedFindings)
     }
 
     private static func state(
@@ -67,14 +85,16 @@ extension Policy {
     private static func finishedState(of run: StoredReviewRun) -> ReviewerChip.State {
         if !run.findings.isEmpty { return .findings(run.findings.count) }
         if !run.calledReportFindings { return .inconclusive("reviewer nálezy nenahlásil") }
-        if run.droppedFindings > 0 {
-            return .inconclusive(Plural.czech(
-                run.droppedFindings,
-                one: "nález se nepodařilo přečíst",
-                few: "nálezy se nepodařilo přečíst",
-                many: "nálezů se nepodařilo přečíst"
-            ))
-        }
+        if run.droppedFindings > 0 { return .inconclusive(droppedText(run.droppedFindings)) }
         return .clean
+    }
+
+    private static func droppedText(_ count: Int) -> String {
+        Plural.czech(
+            count,
+            one: "nález se nepodařilo přečíst",
+            few: "nálezy se nepodařilo přečíst",
+            many: "nálezů se nepodařilo přečíst"
+        )
     }
 }

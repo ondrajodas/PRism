@@ -96,6 +96,28 @@ struct ReviewerChipTests {
         }
     }
 
+    /// Nálezy dorazily, ale ne všechny. Chip musí říct obojí: kolik jich je **a** že
+    /// výsledek není úplný — jinak je ztráta neviditelná.
+    @Test("Běh s nálezy i ztrátou hlásí počet a varuje")
+    func warnsWhenSomeFindingsWereLost() throws {
+        let chips = Policy.chips(
+            for: record([run("code-review", findings: 3, dropped: 1)]),
+            skills: ["code-review"],
+            running: []
+        )
+
+        let chip = try #require(chips.first)
+        #expect(chip.state == .findings(3))
+        #expect(chip.warning?.contains("nepodařilo přečíst") == true)
+    }
+
+    @Test("Čistý běh nemá co varovat")
+    func hasNoWarningWhenNothingWasLost() {
+        let chips = Policy.chips(for: record([run("code-review")]), skills: ["code-review"], running: [])
+
+        #expect(chips.first?.warning == nil)
+    }
+
     @Test("Spadlý běh nese text chyby")
     func carriesTheFailureDetail() {
         let chips = Policy.chips(

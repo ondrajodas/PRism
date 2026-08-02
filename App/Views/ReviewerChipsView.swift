@@ -28,6 +28,13 @@ struct ReviewerChipsView: View {
                 Text(verbatim: label(chip.state))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // Nálezy dorazily, ale ne všechny — bez tohohle vypadá neúplný výsledek
+                // jako úplný.
+                if chip.warning != nil {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
@@ -97,6 +104,7 @@ struct ReviewerChipsView: View {
 
     private func help(_ chip: ReviewerChip, isMuted: Bool) -> String {
         let action = isMuted ? "Zobrazit nálezy tohohle revieweera" : "Skrýt nálezy tohohle revieweera"
+        if let warning = chip.warning { return "\(warning)\n\n\(action)" }
         switch chip.state {
         case .failed(let detail): return "\(detail)\n\n\(action)"
         case .inconclusive(let reason): return "\(reason)\n\n\(action)"

@@ -748,6 +748,9 @@ Nad nálezy platí navíc:
   schválený PR s neohlášenou chybou.
 - **Běžící reviewer přebíjí starší výsledek**, protože to, co je na obrazovce, se právě
   přepisuje.
+- **Ztracený nález se hlásí i u chipu, který nálezy má** (`warning`). Stav zůstane
+  `findings`, aby byl vidět počet; bez varování vypadá neúplný výsledek jako úplný a
+  `suggestedVerdict` pak mlčí bez vysvětlení.
 - **Shoda se počítá po reviewerech, ne po nálezech.** Jeden reviewer, který na jednom řádku
   najde dvě různé věci, si nepřikyvuje.
 - **Řadí se podle vlastnosti kategorie, ne nálezu.** Kdyby první kritérium bylo
