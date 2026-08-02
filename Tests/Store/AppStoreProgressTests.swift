@@ -82,6 +82,45 @@ struct AppStoreProgressTests {
         }
     }
 
+    /// Nastavené id, které na nic nemapuje, si model nahradí nejbližším — a hlavička osy
+    /// by pak tvrdila, že běžel nastavený skill. Ověřeno u #78 na skutečném běhu.
+    @Test("Načtený jiný skill se pozná")
+    func spotsADifferentSkill() {
+        var timeline = ReviewerTimeline(skill: "code-review")
+        timeline.record(
+            .attemptedTool(ToolAttempt(name: "Skill", detail: "code-review:code-review")),
+            at: Date(timeIntervalSince1970: 0)
+        )
+
+        #expect(timeline.loadedSkill == "code-review:code-review")
+        #expect(timeline.loadedADifferentSkill)
+    }
+
+    @Test("Načtený správný skill se za záměnu nepovažuje")
+    func acceptsTheRequestedSkill() {
+        var timeline = ReviewerTimeline(skill: "code-review:code-review")
+        timeline.record(
+            .attemptedTool(ToolAttempt(name: "Skill", detail: "code-review:code-review")),
+            at: Date(timeIntervalSince1970: 0)
+        )
+
+        #expect(!timeline.loadedADifferentSkill)
+    }
+
+    /// Běh, který si skill nevzal vůbec, udělal obecné review — jiná situace než záměna,
+    /// a hlásit u něj „běžel jiný“ by bylo matoucí.
+    @Test("Běh bez skillu není záměna")
+    func aRunWithoutASkillIsNotAMismatch() {
+        var timeline = ReviewerTimeline(skill: "code-review")
+        timeline.record(
+            .attemptedTool(ToolAttempt(name: "Read", detail: "App/Main.swift")),
+            at: Date(timeIntervalSince1970: 0)
+        )
+
+        #expect(timeline.loadedSkill == nil)
+        #expect(!timeline.loadedADifferentSkill)
+    }
+
     @Test("Průběh běhu se zaznamená v pořadí")
     func recordsProgressInOrder() async throws {
         let workspace = try TemporaryDirectory()
@@ -98,7 +137,7 @@ struct AppStoreProgressTests {
         await runReview(store)
 
         let timeline = try #require(store.timelines(for: pr).first)
-        #expect(timeline.skill == "code-review")
+        #expect(timeline.skill == Configuration.standard.global.skills.first)
         #expect(timeline.sessionID == "session-abc")
         // Pořadí je to hlavní, co časová osa říká.
         #expect(timeline.entries.map(\.kind) == [

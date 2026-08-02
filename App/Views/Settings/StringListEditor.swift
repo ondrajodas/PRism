@@ -21,7 +21,11 @@ struct StringListEditor: View {
 
     private func row(at index: Int) -> some View {
         HStack(spacing: 6) {
-            TextField(placeholder, text: binding(at: index))
+            // `prompt:`, ne první argument. Ten se ve `Form`u vykreslí jako **popisek
+            // vlevo od pole**, ne jako nápověda uvnitř — u vyplněného řádku to pak vypadá
+            // jako dvě hodnoty vedle sebe.
+            TextField("", text: binding(at: index), prompt: Text(verbatim: placeholder))
+                .labelsHidden()
                 .textFieldStyle(.roundedBorder)
             Button {
                 items.remove(at: index)

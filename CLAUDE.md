@@ -201,7 +201,9 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 1. **Nikdy nic neposílat na GitHub.** Žádné komentáře, review, approve, labely. Verdikt
    je návrh zobrazený v aplikaci. Aplikace je vůči GitHubu **jen pro čtení**.
 2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit`, u `Bash` se uvádí
-   jen `git` — a v `--disallowedTools` jsou `Bash(gh:*)` a `Bash(git push:*)`.
+   jen `git` — a v `--disallowedTools` jsou `Bash(gh:*)` a `Bash(git push:*)`. `Skill` mezi
+   povolenými je (#78); sám o sobě nic nespouští, ale skill, který se přes něj načte, si
+   o odeslání na GitHub umí říct — proto ten zákaz.
 
    Ověřeno spuštěním (#12, **opraveno u #17**; podrobnosti v `docs/claude-cli.md`):
    - Co je **mimo** povolený vzor, se odmítne, pokud to není na vestavěném seznamu čtecích
@@ -517,16 +519,25 @@ Věci, které se u toho nemají rozbít:
   to, co reviewer najde — a ověřit, že neovlivnilo, je drahé: tři běhy nad týmž commitem
   daly 1, 2 a 3 nálezy, takže rozptyl schová jakýkoli efekt menší než ten. Jazyk se proto
   řeší až za review, viz `FindingTranslating` níž. Je na to test, aby se to nevrátilo.
-- **Jestli se skill načte, je dnes na náhodě.** Prompt jeho jméno jen napíše do věty
-  (`You are running as the "code-review" reviewer`) a nikde si o jeho vyvolání neřekne.
-  Reviewer si nástroj `Skill` občas zavolá sám — usoudí to z té věty — a občas ne:
-  **v 5 ze 14 zaznamenaných běhů ano, v 9 ne**. Nástroj přitom projde, i když v
-  `--allowedTools` není (čtecí builtin), takže o oprávnění nejde.
-
-  Lomítková varianta se zahodila u #17, protože rozbíjela `ReportFindings`, a náhrada se
-  nedodělala. Dokud to platí, je sada skillů podle jazyka (#24) i chip na reviewera jen
-  štítek nad během, který si obsah zvolil sám. Je to taky nejlepší vysvětlení rozptylu
-  v počtu nálezů mezi běhy nad týmž commitem. Řeší se v #78.
+- **Prompt si o skill říká výslovně** (`First call the Skill tool with skill="…"`), ne
+  jménem v próze. Do #78 tam bylo jen jméno a skill se načetl v **5 ze 14** běhů — jenže
+  příčina nebyla zapomnětlivost modelu: nakonfigurované `code-review` **není skill**, takže
+  se nemělo co načíst a model si domýšlel nejbližší id. Změřeno na scratch repu: se jménem,
+  které existuje, se skill načte 3/3 i bez pokynu; s neexistujícím si model 3/3 vybral něco
+  jiného. Podrobnosti v [`docs/claude-cli.md`](docs/claude-cli.md).
+- **V konfiguraci jsou id nástroje `Skill`, ne slash commandy.** Uživatelský skill svým
+  jménem, pluginový jako `plugin:skill`. Výchozí je `code-review:code-review`; `code-review`
+  je plugin **command** a jako skill neexistuje.
+- **Zákazy v promptu přebíjejí skill** a je to tam napsané. `code-review:code-review` má ve
+  svých `allowed-tools` `Bash(gh pr comment:*)`, takže si o odeslání na GitHub umí říct sám
+  — `--disallowedTools Bash(gh:*)` je nad tou větou pojistka, ne náhrada.
+- **Výslovný pokyn zaručí, že se skill načte, ne že se načte ten správný.** Neexistující
+  id si model nahradí nejbližším i tehdy, když ho prompt jmenuje — ověřeno na skutečném
+  běhu. Osa proto porovnává, co si session vzala (`ReviewerTimeline.loadedADifferentSkill`),
+  a záměnu hlásí; bez toho by hlavička tvrdila, že běžel nastavený skill.
+- **Reviewer načte i skill ležící v kontrolovaném repu** a řídí se jím. Je to **záměr**:
+  repo, které si přinese vlastní review skill, ho má dostat. Vypnout by to šlo
+  `--setting-sources user`, neověřeno.
 
 ### Překlad nálezů (`App/Review/`)
 
@@ -758,7 +769,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`, návrh verdiktu, tabulka s řazením a prokliky do diffu |
 | `FindingRow` | Nález převedený na řádek tabulky — texty, identita, blokující příznak |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
-| `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume` |
+| `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume`, upozornění na načtený jiný skill |
 | `ReviewerChipsView` | Chipy reviewerů: stav a filtr naráz |
 | `FileTreeView` | Popover se stromem souborů; odsazení a sbalování si řídí sám |
 | `VerdictView` | Návrh verdiktu jako **doporučení**; žádná GitHub akce na něm nevisí |
@@ -798,6 +809,10 @@ Věci, které se u toho nemají rozbít:
   store se nezměnil, takže do `sync` přijde stará konfigurace a bez toho by vypadala jako
   změna zvenčí a přepsala rozepsanou práci. Zároveň by `flush()` viděl `storage == settled`
   a nezkusil to znovu.
+- **Placeholder se předává `prompt:`, ne prvním argumentem `TextField`u.** Ve `Form`u
+  s `.formStyle(.grouped)` se první argument vykreslí jako **popisek vlevo od pole**, ne
+  jako nápověda uvnitř — u vyplněného řádku to pak vypadá jako dvě hodnoty vedle sebe.
+  Chytilo se to až na běžící aplikaci.
 - **`Binding(items)` nad optionalem je past.** Force-unwrapuje při každém čtení a editor
   nad ním jeden překreslovací cyklus přežije i vypnutí přepínače — takže `nil` shodí proces
   v `BindingOperations.ForceUnwrapping`. **Ověřeno pádem aplikace** při vypnutí vlastní sady
@@ -1192,7 +1207,8 @@ Právě proto tam eskalace na `SIGKILL` je.
   v testu: skutečný nástroj dostane cestu **nekódovanou**, takže `URL.path()` v přípravě
   vstupu ověřuje něco, co nikdy nevznikne.
 - **`AppStore` — průběh** — pořadí událostí včetně konce běhu, že osa přežije doběhnutí,
-  že nový běh začíná načisto a že se s PR mimo seznam zahodí.
+  že nový běh začíná načisto a že se s PR mimo seznam zahodí. Plus detekce záměny skillu:
+  načtený jiný, načtený správný a běh bez skillu (ten záměna není).
 - **`FindingRow`** — skládání textů (`—` u nálezu bez místa, samotný soubor bez řádku,
   `file:line` bez locale u velkých čísel), blokující příznak, výchozí pořadí z `Policy`
   a unikátní identita řádků.
@@ -1486,6 +1502,10 @@ Jazyk nálezů hotový (issue #52) — `FindingsLanguage` v `App/Models/`, volba
 globálně i per repo. **Překládá se až po doběhnutí běhu**, prompt o jazyku mlčí — ten se
 nesmí měnit kvůli něčemu, co je jen na pohled. Změna neplatí zpětně, uložené nálezy
 zůstanou, jak jsou.
+
+Vyvolání skillu opravené (issue #78) — prompt si o skill říká nástrojem `Skill` výslovně
+a výchozí id je `code-review:code-review`, protože `code-review` skill není. Do té doby se
+skill načetl v 5 ze 14 běhů a model si při neexistujícím jménu domýšlel, co spustit.
 
 Plánované fáze:
 

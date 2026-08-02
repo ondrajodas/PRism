@@ -91,22 +91,77 @@ Odmítnutí je ve streamu vidět dvakrát: jako `tool_result` s `is_error: true`
 eventu v poli `permission_denials` (`tool_name`, `tool_use_id`, `tool_input`). Běh přitom
 skončí `subtype: "success"` a `is_error: false` — **odmítnutý nástroj není chyba běhu**.
 
-## Jak se review vyvolává (ověřeno u #17)
+## Jak se review vyvolává (ověřeno u #17, přepsáno u #78)
 
 Nálezy sbírá aplikace z `ReportFindings` tool callů, takže **na promptu záleží**.
 
 | Vyvolání | Co se stalo |
 |---|---|
-| `-p "/code-review …"` (vestavěný slash command) | Doběhne `success`, ale `num_turns: 0`, **žádný `tool_use`** a nálezy jsou v `result.result` jako text s JSON blokem. Sběr by tiše nefungoval — i když se o `ReportFindings` v promptu výslovně řekne |
-| `-p "…Report every finding by calling the ReportFindings tool…"` (prostý prompt) | 13 tahů, `ReportFindings` se třemi nálezy. Totéž dělal spike u #12 |
+| `-p "/code-review …"` (slash command) | Doběhne `success`, ale `num_turns: 0`, **žádný `tool_use`** a nálezy jsou v `result.result` jako text s JSON blokem. Sběr by tiše nefungoval — i když se o `ReportFindings` v promptu výslovně řekne |
+| `-p "You are running as the \"X\" reviewer …"` (jméno jen v próze) | Nálezy chodí přes `ReportFindings`, ale **jestli se skill načte, je na modelu** — viz níž |
+| `-p "First call the Skill tool with skill=\"X\" …"` (výslovný pokyn) | Skill se načte a `ReportFindings` funguje dál. **Tohle aplikace dělá od #78** |
 
-Aplikace proto **slash command nepouští**. Až se sada reviewerů přesune do konfigurace
-(#23), bude to potřeba vyřešit znovu: skutečné skilly by šly načíst nástrojem `Skill`, ten
-je ale dneska v odmítnutých (v tom běhu se o něj session pokusila a nedostala ho).
+### Skill se nenačte tím, že se jmenuje (#78)
 
-Ten samý běh mimochodem doložil, že read-only drží i pod tlakem: reviewer si chtěl chybu
-ověřit kompilací, takže zkusil `Write` a `mktemp … && swiftc …`. **Obojí odmítnuto** a v repu
-po něm nic nezůstalo.
+Do #78 prompt jméno skillu jen napsal do věty. Změřeno na scratch repu s vlastním skillem,
+který nechává v každém nálezu poznávací značku:
+
+| Jméno v promptu | Skill existuje? | Běhů | Načetl se |
+|---|---|---|---|
+| `prism-marker`, jen v próze | ano (projektový skill v repu) | 3 | 3× ano |
+| `prism-marker`, výslovný pokyn | ano | 3 | 3× ano |
+| `code-review`, jen v próze | **ne** | 3 | 3× si model **domyslel jiný** |
+
+Rozhodující tedy není, jestli si model vzpomene, ale **jestli se jméno na něco mapuje**.
+Když ne, sáhne po nejbližším, co jde nástrojem `Skill` oslovit. Ve všech třech bězích to
+bylo `code-review:code-review` — a k tomu si navíc načetl projektový skill ležící
+v reviewovaném repu a řídil se jím (poznat podle značky v nálezech).
+
+Na skutečných bězích aplikace vyšel stejný obrázek: skill se načetl v **5 ze 14** běhů,
+protože konfigurace jmenovala `code-review`.
+
+### `code-review` není skill
+
+Na tomhle stroji neexistuje žádný `SKILL.md` se jménem `code-review`. Co existuje:
+
+| co | kde | jak se to adresuje |
+|---|---|---|
+| uživatelské skilly | `~/.claude/skills/<jméno>/SKILL.md` | jménem |
+| plugin **command** `code-review` | `plugins/code-review/commands/code-review.md` | `code-review:code-review` |
+| vestavěný `/code-review` | zadrátovaný v CLI, žádný soubor | jen jako slash command |
+
+Konfigurace aplikace proto jmenuje **id nástroje `Skill`**, ne slash commandy.
+
+### `Skill` prochází i mimo `--allowedTools`
+
+Nástroj `Skill` se v běhu použil, i když v povoleních nebyl, a **bez** `permission_denials`
+— je to čtecí builtin, stejně jako `ls` a `cat` (viz sekce o `--allowedTools`). Povolení
+tedy není to, čím se načítání skillů řídí. V seznamu je od #78 stejně, protože ten seznam
+má říkat, co reviewer smí.
+
+### Projektové skilly z reviewovaného repa se načtou
+
+Reviewer si načte i skill, který leží v `.claude/skills/` **uvnitř kontrolovaného
+worktree**, a řídí se jím — doloženo tím, že nálezy nesly značku z takového skillu.
+Znamená to, že si PR může přinést vlastní instrukce pro svého revieweera.
+
+Bereme to jako **žádoucí**: repo, které si přinese vlastní review skill, ho má dostat.
+Vypnout by to šlo `--setting-sources user` (načte jen uživatelské nastavení, ne projektové)
+— **neověřeno, nezkoušelo se**, je to jen zaznamenaná možnost, kdyby se rozhodnutí otočilo.
+
+### `code-review:code-review` pod omezeními aplikace
+
+Dřív tu stálo, že tenhle plugin nálezy přes `ReportFindings` nehlásí. **To platilo pro
+slash command podobu.** Vyvolaný nástrojem `Skill` s promptem aplikace se chová jinak
+(ověřeno spuštěním u #78):
+
+- `ReportFindings` zavolal, nálezy dorazily,
+- `gh` ani `Task` **nezkusil ani jednou**, žádná odmítnutá oprávnění,
+- diff si vzal z worktree (`git diff`, `git show`, `git blame`), ne přes `gh pr diff`.
+
+Prompt mu k tomu výslovně říká, že GitHub k dispozici není a že **zákazy přebíjejí skill**.
+Zákaz `Bash(gh:*)` v `--disallowedTools` zůstává jako pojistka — ten plugin má
+`Bash(gh pr comment:*)` ve svých `allowed-tools`, takže si o odeslání umí říct sám.
 
 ## Tvar streamu
 
@@ -188,14 +243,13 @@ v obsahu streamu.
 
 ## Dva různé `code-review`
 
-V instalaci na tomhle stroji jsou **dva** slash commandy s tímhle jménem a dělají něco
-úplně jiného:
+V instalaci na tomhle stroji jsou **dva** slash commandy s tímhle jménem:
 
 | | |
 |---|---|
-| `code-review` (vestavěný) | Reviewuje lokální změny a nálezy hlásí přes `ReportFindings`. **Tenhle aplikace pouští** — z něj jsou i fixtures |
-| `code-review:code-review` (plugin) | Reviewuje PR přes `gh pr diff` a v `allowed-tools` má `Bash(gh pr comment:*)`, tedy **píše komentář na GitHub**. Nálezy přes `ReportFindings` nehlásí vůbec |
+| `code-review` (vestavěný) | Reviewuje lokální změny a nálezy hlásí přes `ReportFindings` |
+| `code-review:code-review` (plugin) | Reviewuje PR a v `allowed-tools` má `Bash(gh pr comment:*)`, tedy **umí napsat komentář na GitHub** |
 
-Rozdíl je jeden prefix a důsledek je porušení tvrdé podmínky. Až se sada skillů přesune do
-konfigurace (#23), musí se vybírat přesným id — a zákaz `Bash(gh:*)` tam musí zůstat jako
-pojistka, protože co skill dělá, aplikace dopředu neví.
+Aplikace pouští ten **pluginový**, protože jako jediný jde adresovat nástrojem `Skill`
+(vestavěný slash command skill není). Rozdíl proti tomu, co tu stálo do #78: pod promptem
+aplikace na GitHub nesáhne — viz měření výš — a zákaz `Bash(gh:*)` je nad tím pojistka.

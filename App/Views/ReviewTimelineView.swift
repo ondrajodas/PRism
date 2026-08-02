@@ -51,6 +51,14 @@ struct ReviewTimelineView: View {
         HStack(spacing: 8) {
             Text(verbatim: timeline.skill)
                 .font(.callout.weight(.semibold))
+            // Hlavička tvrdí, který skill běžel. Když si session načetla jiný, musí to
+            // říct — jinak je to text, co tvrdí víc, než data unesou.
+            if timeline.loadedADifferentSkill, let loaded = timeline.loadedSkill {
+                Label("běžel \(loaded)", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .help("Nastavený skill `\(timeline.skill)` neexistuje, takže si session vybrala nejbližší.")
+            }
             if let sessionID = timeline.sessionID {
                 Text(verbatim: sessionID)
                     .font(.system(.caption, design: .monospaced))

@@ -22,11 +22,19 @@ struct SourceListEditor: View {
     private func row(at index: Int) -> some View {
         HStack(alignment: .top, spacing: 6) {
             VStack(alignment: .leading, spacing: 4) {
-                TextField("Název", text: binding(at: index, \.name))
+                // `prompt:` ze stejného důvodu jako u `StringListEditor` — první argument
+                // by se ve `Form`u stal popiskem vlevo, ne nápovědou v poli.
+                TextField("", text: binding(at: index, \.name), prompt: Text("Název"))
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
-                TextField("review-requested:@me is:open", text: binding(at: index, \.query))
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
+                TextField(
+                    "",
+                    text: binding(at: index, \.query),
+                    prompt: Text(verbatim: "review-requested:@me is:open")
+                )
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
             }
             Button {
                 sources.remove(at: index)

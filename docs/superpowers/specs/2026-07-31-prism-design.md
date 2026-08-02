@@ -232,6 +232,11 @@ hodnota má přednost a detekci navždycky umlčí.
 čistá funkce. Hodnoty se čtou **při použití**, ne při startu, takže se změna projeví bez
 restartu; soubor se načte při spuštění a pak pokaždé, když se okno vrátí do popředí.
 
+**Vyvolání skillu opravené (#78).** Prompt si o skill říká nástrojem `Skill` výslovně
+a konfigurace jmenuje jeho **id**, ne slash command. Rozhodnutí z #17 („skill se vyvolává
+lomítkem“) tím padá úplně: lomítko rozbíjí `ReportFindings`, próza skill nevyvolá, zbývá
+nástroj. Měření a ověřené chování jsou v [`docs/claude-cli.md`](../../claude-cli.md).
+
 **Jazyk nálezů hotový (#52).** `FindingsLanguage` (`cs`/`en`) globálně i per repo.
 
 **Rozhodnutí ze zadání se otočilo.** Issue chtělo říct jazyk reviewerovi v promptu
@@ -711,6 +716,11 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Věta o jazyku se posílá **i pro angličtinu** | Poslat ji jen tehdy, když se chce něco jiného než výchozí chování modelu | Reviewer čte pracovní strom, a když je repo dokumentované česky (třeba tenhle), napsal by česky i nálezy na repu, kde se to nechce. Mlčení není volba jazyka, je to hádání — a cena za jistotu je jedna věta |
 | Jazyk žije v sekci **Režim review**, ne mezi hodnotami běhu | Vlastní sekce, nebo přidat k intervalu a rozpočtu | Je to spolu s režimem to, co se u jednotlivých rep mění nejčastěji, a obojí má stejný tvar „globální default, který si repo přebije“. Sedmá sekce v už tak dlouhém formuláři je šum; interval a rozpočet se naopak nastaví jednou za život |
 | Rozbitá hodnota jazyka spadne na **globální**, ne na výchozí | Srazit ji na češtinu, jako se režim sráží na `manual` | U režimu je přísnost kvůli tomu, že překlep by pustil review, o které nikdo nežádal. U jazyka je nejhorší následek próza v jiném jazyce, takže se hodnota, které se nedá rozumět, bere jako „nic jsem neřekl“ |
+| Prompt si o skill říká **výslovně** nástrojem `Skill` | Nechat jméno v próze, jak to bylo od #17 | **Změna proti #17.** Jméno v próze skill nevyvolá — model si ho domyslí, a když se nakonfigurované id na nic nemapuje, sáhne po nejbližším. Změřeno: se jménem, které existuje, 3/3 načteno i bez pokynu; s neexistujícím si 3/3 vybral něco jiného, včetně pluginu, který umí psát na GitHub. Na skutečných bězích to dělalo 5 ze 14 |
+| Výchozí skill je **`code-review:code-review`** | Nechat `code-review`, nebo nemít výchozí skill vůbec | `code-review` **není skill** — je to plugin *command*, žádný `SKILL.md` s tím jménem neexistuje. Ověřeno spuštěním, že pluginová varianta se pod omezeními aplikace chová správně: hlásí přes `ReportFindings`, `gh` ani `Task` nezkusí a diff si vezme z worktree. Nemít výchozí skill by znamenalo vzdát se toho, na čem stojí sada podle jazyka (#24) |
+| Zákazy v promptu **přebíjejí skill**, a je to tam napsané | Spolehnout se jen na `--disallowedTools` | Skill je cizí instrukce, kterou aplikace dopředu nezná — `code-review:code-review` má `Bash(gh pr comment:*)` ve svých `allowed-tools`. Věta v promptu a zákaz v CLI se nezastupují: první říká, co se má dělat, druhý zavírá, co jde udělat |
+| Skill z **kontrolovaného repa** se načíst smí | Vypnout projektová nastavení přes `--setting-sources user` | Ověřeno, že se to děje: reviewer načte `.claude/skills/` z worktree a řídí se jím. Je to injektážní plocha — PR si může přinést instrukce pro svého revieweera — ale taky žádoucí vlastnost, protože repo se skutečným review skillem ho má dostat. Rozhodnuto ponechat; kdyby se to mělo otočit, knoflík je zaznamenaný |
+| `Skill` je v `--allowedTools`, i když projde i bez něj | Nechat ho venku, když na tom nezáleží | Nástroj je čtecí builtin, takže povolení jeho chování neřídí (ověřeno). Seznam ale má být čitelný jako „co reviewer smí“ — a co v něm chybí, se při příštím čtení bude jevit jako zakázané |
 
 ## Ověřeno proti CLI (2026-08-01)
 
