@@ -16,7 +16,11 @@ enum ReviewMode: String, Codable, Hashable, Sendable {
 /// nefunguje.
 struct GlobalConfig: Codable, Equatable, Sendable {
     var sources: [Source]
+    /// Sada, která platí, dokud ji nepřebije jazyk nebo repo. Je to ta „hvězdička“
+    /// z rozpisu v #24 — druhý zápis téhož by byla past pro toho, kdo soubor čte.
     var skills: [String]
+    /// Výchozí sada podle rozpoznaného jazyka projektu. Prázdná mapa = detekce nic nemění.
+    var skillsByLanguage: [ProjectLanguage: [String]]
     var blockingCategories: [String]
     /// Výchozí režim pro repo, které si neřeklo o jiný. Ve výchozím stavu `manual` —
     /// zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
@@ -33,6 +37,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     init(
         sources: [Source],
         skills: [String],
+        skillsByLanguage: [ProjectLanguage: [String]] = [:],
         blockingCategories: [String],
         mode: ReviewMode,
         pollIntervalSeconds: Int,
@@ -42,6 +47,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     ) {
         self.sources = sources
         self.skills = skills
+        self.skillsByLanguage = skillsByLanguage
         self.blockingCategories = blockingCategories
         self.mode = mode
         self.pollIntervalSeconds = pollIntervalSeconds
@@ -55,6 +61,11 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         let standard = Configuration.standard.global
         sources = try container.decodeIfPresent([Source].self, forKey: .sources) ?? standard.sources
         skills = try container.decodeIfPresent([String].self, forKey: .skills) ?? standard.skills
+        // Rozbitá mapa se hlásí ze stejného důvodu jako rozbité `skills`: tiše podstrčený
+        // výchozí (prázdný) obsah by na jazykových repech pustil jiné reviewery, než jaké
+        // tam měly běžet.
+        skillsByLanguage = try container.decodeIfPresent([ProjectLanguage: [String]].self, forKey: .skillsByLanguage)
+            ?? standard.skillsByLanguage
         blockingCategories = try container.decodeIfPresent([String].self, forKey: .blockingCategories)
             ?? standard.blockingCategories
         // Neznámý režim se bere jako `manual` ze stejného důvodu jako u repa: samo od sebe
@@ -181,6 +192,27 @@ struct Configuration: Codable, Equatable, Sendable {
     /// tik**, zmizel by kvůli rozepsanému řádku celý seznam PR.
     var activeSources: [Source] {
         global.sources.filter { !$0.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    /// Výchozí sada skillů pro repo, ve kterém se rozpoznaly tyhle jazyky.
+    ///
+    /// Hodnota u jazyka je **celá sada**, ne příspěvek ke globální — stejně jako override
+    /// per repo. Smysl je vyhodit PHP skilly na Go repu, ne k nim další přidat.
+    ///
+    /// Když žádný z rozpoznaných jazyků v mapě není, platí globální sada. Rozhoduje
+    /// **existence záznamu**, ne jeho obsah: `php: []` je vlastní odpověď („PHP tady
+    /// nereviewuj“) a nesmí spadnout zpátky na globální hodnoty.
+    func defaultSkills(for languages: [ProjectLanguage]) -> [String] {
+        let mapped = languages.compactMap { global.skillsByLanguage[$0] }
+        guard !mapped.isEmpty else { return Self.nonBlank(global.skills) }
+
+        // Pořadí jde od nejsilnějšího jazyka, duplicity vypadnou. `Set` by tu pořadí
+        // rozhodil a s ním i pořadí chipů v liště.
+        var skills: [String] = []
+        for skill in Self.nonBlank(mapped.flatMap { $0 }) where !skills.contains(skill) {
+            skills.append(skill)
+        }
+        return skills
     }
 
     /// Prázdné položky se zahazují ze stejného důvodu jako prázdný dotaz: nový řádek

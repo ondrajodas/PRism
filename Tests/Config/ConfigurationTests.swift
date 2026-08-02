@@ -92,6 +92,69 @@ struct ConfigurationTests {
         #expect(configuration.resolved(for: vault).mode == .automatic)
     }
 
+    // MARK: - Sada podle jazyka
+
+    private func withLanguages(_ map: [ProjectLanguage: [String]]) -> Configuration {
+        var configuration = configuration()
+        configuration.global.skillsByLanguage = map
+        return configuration
+    }
+
+    @Test("Rozpoznaný jazyk určí sadu skillů")
+    func picksSkillsForADetectedLanguage() {
+        let configuration = withLanguages([.php: ["code-review", "php-quality"]])
+
+        #expect(configuration.defaultSkills(for: [.php]) == ["code-review", "php-quality"])
+    }
+
+    /// Mapa **nahrazuje**, neslučuje — stejně jako override per repo. Smysl je vyhodit PHP
+    /// skilly na Go repu, ne k nim další přidat.
+    @Test("Sada podle jazyka globální nahrazuje, nedoplňuje")
+    func replacesTheGlobalSet() {
+        let configuration = withLanguages([.go: ["go-review"]])
+
+        #expect(configuration.defaultSkills(for: [.go]) == ["go-review"])
+    }
+
+    /// Pořadí jde od nejsilnějšího jazyka a duplicity vypadnou — jinak by se `code-review`
+    /// spustil dvakrát.
+    @Test("Dva jazyky dají sjednocení bez duplicit")
+    func mergesTwoLanguagesWithoutDuplicates() {
+        let configuration = withLanguages([
+            .php: ["code-review", "php-quality"],
+            .typescript: ["code-review", "ts-review"],
+        ])
+
+        #expect(configuration.defaultSkills(for: [.php, .typescript])
+            == ["code-review", "php-quality", "ts-review"])
+    }
+
+    @Test("Jazyk mimo mapu bere globální sadu")
+    func fallsBackToTheGlobalSet() {
+        let configuration = withLanguages([.php: ["php-quality"]])
+
+        #expect(configuration.defaultSkills(for: [.go]) == ["code-review", "security"])
+    }
+
+    @Test("Bez rozpoznaného jazyka platí globální sada")
+    func fallsBackWhenNothingWasDetected() {
+        #expect(withLanguages([.php: ["php-quality"]]).defaultSkills(for: []) == ["code-review", "security"])
+    }
+
+    /// Prázdná sada u jazyka je vlastní odpověď („tenhle jazyk tu nereviewuj“) a nesmí
+    /// spadnout zpátky na globální hodnoty. Rozhoduje **existence** záznamu, ne obsah.
+    @Test("Prázdná sada u jazyka nespadne na globální")
+    func treatsAnEmptyLanguageSetAsDeliberate() {
+        #expect(withLanguages([.php: []]).defaultSkills(for: [.php]).isEmpty)
+    }
+
+    @Test("Prázdná sada u jednoho jazyka nezruší druhý")
+    func keepsTheOtherLanguagesSet() {
+        let configuration = withLanguages([.php: [], .go: ["go-review"]])
+
+        #expect(configuration.defaultSkills(for: [.php, .go]) == ["go-review"])
+    }
+
     // MARK: - Rozepsané hodnoty z editoru
 
     /// Řádek v editoru vzniká prázdný a konfigurace se ukládá dřív, než se dopíše. Skill
@@ -187,6 +250,9 @@ struct ConfigurationTests {
 
         #expect(standard.sources == [.reviewRequested])
         #expect(standard.skills == ["code-review"])
+        // Prázdná mapa jazyků je součást „nic se nezměnilo“: dokud si uživatel nenastaví
+        // vlastní, detekce jazyka na sadu skillů nesahá.
+        #expect(standard.skillsByLanguage.isEmpty)
         #expect(Set(standard.blockingCategories) == Policy.defaultBlockingCategories)
         // Zapnout automat plošně musí být vědomé rozhodnutí, ne to, do čeho aplikace
         // spadne sama.
@@ -215,6 +281,18 @@ struct ConfigurationTests {
 
         let repositories = try #require(json["repositories"] as? [String: Any])
         #expect(repositories.keys.contains("cli/cli"))
+    }
+
+    /// Ze stejného důvodu jako u repozitářů: bez `CodingKeyRepresentable` by se slovník
+    /// zakódoval jako pole střídavých klíčů a hodnot, které se ručně needituje.
+    @Test("Mapa jazyků je v JSONu objekt klíčovaný jménem jazyka")
+    func keysLanguagesByTheirName() throws {
+        let data = try JSONEncoder().encode(withLanguages([.php: ["php-quality"]]))
+        let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        let global = try #require(json["global"] as? [String: Any])
+        let byLanguage = try #require(global["skillsByLanguage"] as? [String: Any])
+        #expect(Array(byLanguage.keys) == ["php"])
     }
 }
 

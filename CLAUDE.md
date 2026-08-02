@@ -262,6 +262,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PullRequestState` | `open` / `draft` / `merged` / `closed` |
 | `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
 | `ReviewVerdict` | Návrh, co s PR udělat: `approve` / `requestChanges`. Jako jediný **není `Codable`** — neukládá se, odvozuje se z uložených nálezů |
+| `ProjectLanguage` | Čím je repo psané — klíč mapy „jazyk → sada skillů“. **Není to `Syntax.Language`**, viz níž |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -277,6 +278,11 @@ Tři věci, které se u nich nemají rozbít:
   `failed(detail:)`, `timedOut(findings:)`, `stale`.
 - **`clean` vzniká jen přes `ReviewState.finished(findingCount:)`.** Jinak se dřív nebo
   později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
+
+- **`ProjectLanguage` a `Syntax.Language` jsou dva různé výčty schválně.** První odpovídá
+  na „co je tohle za projekt“, druhý na „jak tenhle řádek obarvit“ — a patří k němu YAML,
+  JSON i Markdown, které o projektu neříkají nic. Spojit je by znamenalo, že rozpoznat
+  Python vyžaduje umět ho obarvit, a že každý repozitář vyjde jako „YAML“.
 
 Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
 
@@ -339,7 +345,7 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `blockingCategories`, `mode`, interval, souběh, rozpočet, model |
+| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, interval, souběh, rozpočet, model |
 | `RepositoryConfig` | Override pro jedno repo: `mode`, skilly, kategorie — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
@@ -367,6 +373,15 @@ Věci, které se u toho nemají rozbít:
   jsou to opačné odpovědi. Proto taky `setRepository(_:for:)` maže záznam podle
   **prázdnosti**, ne podle shody s globální hodnotou: mazat „stejné jako globální“ by repo
   po přepnutí defaultu tiše zapnulo.
+- **Sada podle jazyka je náhrada, ne příspěvek.** `skillsByLanguage[.php]` je celá sada,
+  stejně jako override per repo — smysl je vyhodit PHP skilly na Go repu, ne k nim další
+  přidat. Rozhoduje **existence** záznamu, ne obsah: `php: []` znamená „PHP tady
+  nereviewuj“ a nesmí spadnout zpátky na globální. Když žádný rozpoznaný jazyk v mapě
+  není, platí `skills` — ta je tou „hvězdičkou“ z rozpisu #24, druhý zápis téhož by byl
+  jen past pro toho, kdo soubor čte.
+- **Výchozí mapa je prázdná.** Zadrátovat do defaultů konkrétní skilly (`oj-php-quality-check`
+  a spol.) by znamenalo pustit na repa něco, o co si nikdo neřekl — a jsou to skilly
+  z uživatelovy konfigurace, ne z tohohle repa.
 - **Rozepsaná hodnota z editoru se přeskočí, ne použije.** Řádek v okně nastavení vzniká
   prázdný a uloží se dřív, než se dopíše — takže `resolved(for:)` zahazuje prázdné skilly
   a kategorie a `activeSources` zdroje bez dotazu. U zdroje je to nejdražší: `gh search prs`
@@ -499,7 +514,7 @@ Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživate
 
 | Typ | Co dělá |
 |---|---|
-| `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree`, `removeWorktree`, `forgetPullRequest` a `trackedPullRequests`. Vše idempotentní |
+| `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree`, `trackedFiles`, `removeWorktree`, `forgetPullRequest` a `trackedPullRequests`. Vše idempotentní |
 | `GitRepoCheckout` | Implementace nad `git`: první volání klonuje, další fetchuje |
 | `CacheLayout` | Kde co leží — klony, stromy **i uložené nálezy**. `root` je injektovatelný, aby testy nesáhly do skutečné cache |
 | `CheckoutCoordinator` | Aktor: souběžná volání nad stejným klíčem se spojí do jedné práce |
@@ -508,6 +523,11 @@ Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživate
 
 Věci, které se u toho nemají rozbít:
 
+- **Soubory se vypisují `gitem` (`ls-files`), ne `FileManagerem`.** Ignorované složky
+  (`vendor/`, `node_modules/`, buildy) jsou zrovna ty, kterých je nejvíc — procházení
+  disku by jimi odhad jazyka převážilo. Ověřené je to integračním testem, protože
+  z argumentů poznat nejde, jestli `ls-files` v odpojeném stromu nad partial klonem vůbec
+  něco vrátí.
 - **Worktree je klíčovaný `(PR, headSha)`**, ne jen PR. Nálezy visí na `headSha`, takže dva
   běhy nad různými commity téhož PR si nesmí sáhnout na stejný strom. Naopak dva skilly
   nad **stejným** commitem strom sdílejí — proto je vytvoření idempotentní.
@@ -625,6 +645,18 @@ Věci, které se u toho nemají rozbít:
 - **Chyba checkoutu je stav repa, chyba GitHubu stav PR.** Na první narazí i druhé PR téhož
   repa a řeší se stejným tlačítkem; druhá se týká jen toho jednoho PR. Proto má
   `ReviewPhase` vlastní případ `failed`, místo aby se všechno cpalo do `CheckoutState`.
+- **Jazyk repa se odhaduje před `runSkills`, ne po nich.** Sada, kterou detekce zapíše, je
+  ta, se kterou má **tenhle** běh jet; po skillech by se projevila až podruhé.
+- **Detekce běží jen jednou a ruční hodnota ji navždycky umlčí.** Rozhoduje
+  `repositories[repo]?.skills == nil`; vyplněná sada — **i prázdná** — znamená, že si to
+  někdo nastavil, a přepsat mu to by bylo vracení jeho rozhodnutí zpátky.
+- **Zapisuje se jen to, co se od globální sady liší.** Zápis „stejné jako globální“ by byl
+  override, o který nikdo nežádal, a pozdější změna globální sady by takové repo tiše
+  minula — stejná past jako u režimu.
+- **Nepovedený výpis souborů review nepoloží.** Sada se pak neodvodí a poběží globální,
+  tedy přesně to, co běželo před #24; nic se neztrácí a příští review to zkusí znovu.
+  Selhaný **zápis** už se ale hlásí (`configurationFailure`) — nastavení, které se
+  neuložilo, je přesně to, kvůli čemu se pak hledá, proč něco nefunguje.
 - **Ukládá se po každém doběhlém skillu**, ne až na konci — když se aplikace zavře uprostřed,
   co doběhlo, zůstane.
 - **Nový head commit zneplatní i záznam v paměti**, ne jen ten na disku. Jinak by řádek celou
@@ -673,7 +705,8 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsScene` | Obsah scény; dokud neprošel preflight, není store a okno to řekne |
 | `SettingsView` | Dvě záložky, patička s cestou a stavem uložení, zámek na rozbitý soubor |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
-| `GlobalSettingsView` | Zdroje, výchozí režim, skilly, kategorie, běh |
+| `GlobalSettingsView` | Zdroje, výchozí režim, skilly, sady podle jazyka, kategorie, běh |
+| `LanguageSkillsEditor` | Mapa „programovací jazyk → sada skillů“; ukazuje jen nastavené jazyky |
 | `RepositorySettingsView` | Seznam rep vlevo, režim a override vpravo |
 | `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
 
@@ -704,6 +737,9 @@ Věci, které se u toho nemají rozbít:
 - **Index je identita řádku v seznamech**, takže mezi odebráním a překreslením se sahá na
   prvek, který v poli už není. `$items[index]` by na tom spadl; bindingy jsou proto psané
   ručně s kontrolou rozsahu.
+- **V textech se píše „programovací jazyk“, ne jen „jazyk“.** Samotné „jazyk“ se plete
+  s jazykem, ve kterém reviewer píše nálezy (#52) — ověřeno tím, že se to spletlo hned
+  při prvním zkoušení. Delší popisek je levnější než vysvětlování.
 - **Hlavní okno se rozostří jen tehdy, když je nastavení opravdu vepředu.** Okno je
   nemodální, takže kliknutím zpátky do seznamu se v něm dá dál pracovat — a rozostřené
   okno, ve kterém zrovna píšu, je horší než žádný efekt. Rozhoduje `controlActiveState`,
@@ -824,6 +860,7 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 | `Policy.suggestedVerdict(for:)` | Návrh verdiktu nad `ReviewRecord`. `nil` = není z čeho soudit |
 | `Policy.groups(of:)` | Shoda reviewerů na `file:line` → `FindingGroup` s odznakem `2×` |
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` |
+| `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
@@ -832,6 +869,20 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
   takže jeden z nich může nést stav, který mezitím zastaral.
 - **Řadí se od naposledy změněného, při shodě podle identifikátoru.** Druhé kritérium není
   kosmetika: bez něj by pořadí mezi pollingy poskakovalo, protože slovník nemá pořadí.
+
+Nad odhadem jazyka platí:
+
+- **Marker přebíjí počty.** Soubor, který o projektu prohlašuje, čím je (`composer.json`,
+  `go.mod`, `tsconfig.json`), váží víc než statistika přípon. **`package.json` mezi nimi
+  není**, i když ho zadání #24 jmenovalo: má ho každý TypeScript projekt stejně jako
+  JavaScriptový, takže by JavaScript přidával úplně všude.
+- **„Převažující“ znamená prominentní, ne „vyskytl se“.** Jazyk se podle přípon zařadí, až
+  když má aspoň desetinu rozpoznaných zdrojáků — jeden zatoulaný `.py` skript v PHP repu
+  nemá pouštět Python reviewery, protože každá session stojí peníze.
+- **Do jmenovatele jdou jen rozpoznané zdrojáky.** S Markdownem a YAMLem uvnitř by podíl
+  neříkal nic o kódu: konfigurace a dokumentace jsou v každém repu.
+- **Pořadí je podle počtu, při shodě podle jména.** Není to kosmetika — z pořadí jazyků
+  vychází pořadí skillů, a množina pořadí nemá.
 
 Nad nálezy platí navíc:
 
@@ -1113,6 +1164,14 @@ Právě proto tam eskalace na `SIGKILL` je.
   co se dá rozbít tiše: že vlastní `manual` přebije globální automat, že se takový záznam
   nesmaže jako „shodný s globálním“ a že se rozbitá hodnota srazí na `manual`, kdežto
   chybějící klíč vezme globální.
+- **`Policy.projectLanguages`** — jednojazyčné projekty (PHP, Go, TS, Swift), smíšený
+  s pořadím podle váhy, zatoulaný soubor pod prahem, marker bez souborů, prázdný repozitář
+  a repozitář bez zdrojáků. Plus to, co se snadno rozbije: že samotný `package.json`
+  JavaScript nezpůsobí a že při shodě počtů rozhoduje jméno.
+- **`AppStore` — jazyk repa** — fake checkout dodá výpis souborů, **skutečný** `ConfigStore`
+  nad dočasnou složkou rozhoduje, co v souboru zůstane. Pokrývá zápis odvozené sady i to,
+  kdy se **nezapisuje**: shoda s globální, ruční hodnota, prázdná ruční hodnota. A že
+  reviewer dostane odvozenou sadu **hned při prvním běhu**, ne až podruhé.
 - **`Policy.knownRepositories`** — union seznamu PR a konfigurace, dedup, řazení bez ohledu
   na velikost písmen a repo bez otevřeného PR, které ze seznamu zmizet nesmí.
 - **`SettingsModel`** — odložený zápis přes `FakeTimeSource` (tedy v nulovém reálném čase):
@@ -1334,14 +1393,19 @@ globální výchozí režim review, a `RepositoryConfig.mode` je proto voliteln�
 `Config` výš. Store se přestěhoval z `ContentView` do `PreflightModel`, protože jinak by
 k němu druhá scéna nedosáhla.
 
+Odhad jazyka projektu hotový (issue #24) — `ProjectLanguage` v `App/Models/`,
+`Policy.projectLanguages(in:)` a mapa `skillsByLanguage` v konfiguraci. Při prvním review
+repa se z `git ls-files` pozná, čím je psané, a odvozená sada skillů se mu zapíše. Mapa je
+ve výchozím stavu prázdná, takže dokud si ji uživatel nevyplní, detekce na sadu nesahá.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
 2. ~~Checkout cache + worktree~~ — **hotovo**
 3. ~~`ReviewRunner` + parsování streamu~~ — **hotovo**
 4. ~~UI diffu s bublinami~~ — **hotovo** (#18–#22, #47, #48, #51)
-5. Konfigurace a auto režim — konfigurace (#23) a okno nastavení (#70) hotové, zbývá
-   auto režim (#24, #25) a jazyk nálezů (#52)
+5. Konfigurace a auto režim — konfigurace (#23), okno nastavení (#70) a odhad jazyka (#24)
+   hotové, zbývá auto režim (#25) a jazyk nálezů (#52)
 
 Tím končí rozsah v1 podle specifikace. Za ním:
 

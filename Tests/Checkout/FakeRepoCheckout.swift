@@ -16,15 +16,20 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
     /// zbytek stavu.
     private var existing: [RepoID: URL]
 
+    /// Co „leží v pracovním stromě“ — podklad pro detekci jazyka.
+    private let files: Result<[String], CheckoutError>
+
     init(
         tracked: [RepoID: [Int]] = [:],
         outcome: Result<URL, CheckoutError> = .success(URL(filePath: "/tmp/klon")),
         existing: [RepoID: URL] = [:],
+        files: Result<[String], CheckoutError> = .success([]),
         gate: AsyncGate? = nil
     ) {
         self.tracked = tracked
         self.outcome = outcome
         self.existing = existing
+        self.files = files
         self.gate = gate
     }
 
@@ -46,6 +51,8 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
         _ = try outcome.get()
         return URL(filePath: "/tmp/\(pr)-\(headSha)")
     }
+
+    func trackedFiles(in worktree: URL) async throws -> [String] { try files.get() }
 
     func removeWorktree(for pr: PRIdentifier, at headSha: String) async throws {}
 

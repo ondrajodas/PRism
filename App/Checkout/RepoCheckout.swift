@@ -16,6 +16,12 @@ protocol RepoCheckout: Sendable {
     /// Idempotentní: existující strom pro stejné `(PR, sha)` se použije znovu.
     func worktree(for pr: PRIdentifier, at headSha: String) async throws -> URL
 
+    /// Cesty souborů, které repo verzuje — podklad pro odhad jazyka projektu.
+    ///
+    /// Ptá se `gitu`, ne `FileManageru`: ignorované složky (`vendor/`, `node_modules/`,
+    /// buildy) jsou zrovna ty, kterých je nejvíc, takže by odhad převážily.
+    func trackedFiles(in worktree: URL) async throws -> [String]
+
     /// Uklidí pracovní strom. Chybějící strom není chyba.
     func removeWorktree(for pr: PRIdentifier, at headSha: String) async throws
 
