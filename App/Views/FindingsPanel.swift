@@ -31,13 +31,22 @@ struct FindingsPanel: View {
     private static let minimumHeight = 120.0
     private static let maximumHeight = 600.0
 
+    /// Uložená výška se ořezává **při použití**, ne jen při tažení: v `UserDefaults` může
+    /// být cokoli (ruční editace, jiný rozsah ze starší verze) a `frame(height:)` se
+    /// zápornou hodnotou rozhodí celý panel.
+    private var clampedHeight: Double { clamp(height) }
+
+    private func clamp(_ value: Double) -> Double {
+        min(max(Self.minimumHeight, value), Self.maximumHeight)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             resizeHandle
             bar
             if isExpanded {
                 Divider()
-                content.frame(height: height)
+                content.frame(height: clampedHeight)
             }
         }
         .background(.bar)
@@ -103,19 +112,17 @@ struct FindingsPanel: View {
                 Color.clear
                     .frame(height: 8)
                     .contentShape(.rect)
-                    .onHover { inside in
-                        if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
-                    }
+                    // `pointerStyle` místo ručního `NSCursor.push()`/`pop()`: když view
+                    // zmizí uprostřed hoveru, druhá půlka páru se nikdy nezavolá a
+                    // v aplikaci zůstane cizí kurzor.
+                    .pointerStyle(.frameResize(position: .top))
                     .gesture(
                         DragGesture()
                             .onChanged { drag in
-                                let start = heightAtDragStart ?? height
+                                let start = heightAtDragStart ?? clampedHeight
                                 heightAtDragStart = start
                                 isExpanded = true
-                                height = min(
-                                    max(Self.minimumHeight, start - drag.translation.height),
-                                    Self.maximumHeight
-                                )
+                                height = clamp(start - drag.translation.height)
                             }
                             .onEnded { _ in heightAtDragStart = nil }
                     )
