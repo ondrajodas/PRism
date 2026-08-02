@@ -9,11 +9,15 @@ struct ReviewRequest: Sendable, Equatable {
     /// Commit, proti kterému se diffuje. Do klíče nepatří: identitu běhu určuje `headSha`,
     /// base se může změnit rebasem cílové větve, aniž by šlo o jiné review.
     let baseSha: String
+    /// Jazyk, ve kterém má reviewer psát nálezy. Do klíče nepatří: je to způsob, jakým se
+    /// běh zeptá, ne jiné review.
+    let findingsLanguage: FindingsLanguage
 
-    init(key: ReviewRunKey, worktree: URL, baseSha: String) {
+    init(key: ReviewRunKey, worktree: URL, baseSha: String, findingsLanguage: FindingsLanguage) {
         self.key = key
         self.worktree = worktree
         self.baseSha = baseSha
+        self.findingsLanguage = findingsLanguage
     }
 }
 

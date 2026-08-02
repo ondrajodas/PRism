@@ -5,15 +5,20 @@ import Testing
 
 @Suite("ClaudeCommand")
 struct ClaudeCommandTests {
-    private let request = ReviewRequest(
-        key: ReviewRunKey(
-            pullRequest: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 7),
-            headSha: "aaaa1111",
-            skillID: "code-review"
-        ),
-        worktree: URL(filePath: "/tmp/strom"),
-        baseSha: "bbbb2222"
-    )
+    private func request(language: FindingsLanguage = .czech) -> ReviewRequest {
+        ReviewRequest(
+            key: ReviewRunKey(
+                pullRequest: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 7),
+                headSha: "aaaa1111",
+                skillID: "code-review"
+            ),
+            worktree: URL(filePath: "/tmp/strom"),
+            baseSha: "bbbb2222",
+            findingsLanguage: language
+        )
+    }
+
+    private var request: ReviewRequest { request() }
 
     @Test("Argumenty odpovídají ověřenému volání")
     func theArgumentsMatchTheVerifiedCommand() {
@@ -62,6 +67,33 @@ struct ClaudeCommandTests {
         // I prázdný seznam je odpověď — bez něj se „nic jsem nenašel" nedá odlišit od
         // „nereportoval jsem".
         #expect(prompt.contains("empty list"))
+    }
+
+    /// Jazyk se **říká reviewerovi**, nepřekládá se po něm — prompt je tedy jediné místo,
+    /// kde se volba projeví.
+    @Test("Prompt si řekne o jazyk nálezů")
+    func thePromptAsksForTheFindingsLanguage() {
+        #expect(ClaudeCommand.prompt(for: request(language: .czech)).contains("in Czech"))
+        #expect(ClaudeCommand.prompt(for: request(language: .english)).contains("in English"))
+    }
+
+    /// Věta se posílá i pro angličtinu. Reviewer čte pracovní strom, a když je repo
+    /// dokumentované česky, napsal by česky i nálezy tam, kde se to nechce.
+    @Test("Angličtina se taky vysloví, nemlčí se o ní")
+    func statesEnglishExplicitly() {
+        let prompt = ClaudeCommand.prompt(for: request(language: .english))
+
+        #expect(prompt.contains("Write summary, short_summary and failure_scenario"))
+    }
+
+    /// `category` je slug, na který se váže blokující sada. Přeložený by v `Policy`
+    /// přestal sedět a nález se ztrátou dat by přestal blokovat.
+    @Test("Prompt drží kategorii anglicky i u českých nálezů")
+    func keepsTheCategoryInEnglish() {
+        let prompt = ClaudeCommand.prompt(for: request(language: .czech))
+
+        #expect(prompt.contains("Keep category in English"))
+        #expect(prompt.contains("data-loss"))
     }
 
     @Test("Prompt není slash command")

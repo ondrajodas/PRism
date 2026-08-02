@@ -92,6 +92,44 @@ struct ConfigurationTests {
         #expect(configuration.resolved(for: vault).mode == .automatic)
     }
 
+    // MARK: - Jazyk nálezů
+
+    /// Okno je české, takže nálezy vedle českých popisků nemají chodit anglicky.
+    @Test("Výchozí jazyk nálezů je čeština")
+    func defaultsToCzechFindings() {
+        #expect(configuration().resolved(for: cli).findingsLanguage == .czech)
+    }
+
+    /// U firemního repa s mezinárodním týmem dává smysl angličtina, i když je zbytek
+    /// fronty český.
+    @Test("Jazyk nálezů jde přebít per repo")
+    func overridesTheFindingsLanguagePerRepository() {
+        let configuration = configuration([cli: RepositoryConfig(findingsLanguage: .english)])
+
+        #expect(configuration.resolved(for: cli).findingsLanguage == .english)
+        #expect(configuration.resolved(for: vault).findingsLanguage == .czech)
+    }
+
+    @Test("Globální jazyk platí pro repo, které si o jiný neřeklo")
+    func takesTheGlobalFindingsLanguage() {
+        var configuration = configuration()
+        configuration.global.findingsLanguage = .english
+
+        #expect(configuration.resolved(for: cli).findingsLanguage == .english)
+    }
+
+    /// Stejná past jako u režimu: mazat záznam podle shody s globální hodnotou by repo,
+    /// u kterého jsem si o češtinu **řekl**, přepnulo přepnutím globálního defaultu.
+    @Test("Vlastní jazyk se nesmaže jako shodný s globálním")
+    func keepsAnExplicitLanguageThatMatchesTheGlobalOne() {
+        var configuration = configuration()
+
+        configuration.setRepository(RepositoryConfig(findingsLanguage: .czech), for: cli)
+        configuration.global.findingsLanguage = .english
+
+        #expect(configuration.resolved(for: cli).findingsLanguage == .czech)
+    }
+
     // MARK: - Sada podle jazyka
 
     private func withLanguages(_ map: [ProjectLanguage: [String]]) -> Configuration {
@@ -257,6 +295,7 @@ struct ConfigurationTests {
         // Zapnout automat plošně musí být vědomé rozhodnutí, ne to, do čeho aplikace
         // spadne sama.
         #expect(standard.mode == .manual)
+        #expect(standard.findingsLanguage == .czech)
         #expect(standard.pollIntervalSeconds == 60)
         #expect(standard.maxConcurrentReviews == 3)
         #expect(standard.cacheBudgetMegabytes == 10 * 1024)
@@ -340,6 +379,19 @@ struct RepositoryConfigDecodingTests {
         let configuration = try self.configuration(#"{"global": {"mode": "poloautomat"}}"#)
 
         #expect(configuration.global.mode == .manual)
+    }
+
+    /// Špatný jazyk znamená prózu v jiném jazyce, ne spuštěné review, o které nikdo
+    /// nežádal — na rozdíl od režimu se proto bere jako „nic jsem neřekl“.
+    @Test("Neznámý jazyk u repa spadne na globální")
+    func fallsBackOnAnUnknownFindingsLanguage() throws {
+        var configuration = try self.configuration(
+            #"{"repositories": {"cli/cli": {"findingsLanguage": "klingon"}}}"#
+        )
+        configuration.global.findingsLanguage = .english
+
+        let repo = try #require(RepoID("cli/cli"))
+        #expect(configuration.resolved(for: repo).findingsLanguage == .english)
     }
 
     @Test("Globální režim ze souboru se přečte")

@@ -649,7 +649,11 @@ final class AppStore {
                 let request = ReviewRequest(
                     key: ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill),
                     worktree: worktree,
-                    baseSha: detail.baseSha
+                    baseSha: detail.baseSha,
+                    // Čte se **teď**, ne při startu: přepnutí jazyka se má projevit na
+                    // dalším běhu bez restartu. Uložené nálezy zůstanou v jazyce, ve
+                    // kterém vznikly — přepsat by je šlo jedině novým během.
+                    findingsLanguage: resolved(for: pr.repo).findingsLanguage
                 )
                 // Protokol slibuje, že selhání session se vrací jako výsledek a vyhodí se
                 // jen zrušení — ale spolehnout se na to znamená, že jakákoli jiná chyba

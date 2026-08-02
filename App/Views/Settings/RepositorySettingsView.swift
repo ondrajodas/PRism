@@ -86,11 +86,21 @@ private struct RepositoryDetailView: View {
                     Text("Automatický").tag(ReviewMode?.some(.automatic))
                 }
                 .pickerStyle(.radioGroup)
+
+                // `nil` je i tady vlastní volba, ne prázdno — ze stejného důvodu jako
+                // u režimu.
+                Picker("Jazyk nálezů", selection: config.findingsLanguage) {
+                    Text("Podle globálního nastavení (\(settings.draft.global.findingsLanguage.displayName.lowercased()))")
+                        .tag(FindingsLanguage?.none)
+                    ForEach(FindingsLanguage.allCases, id: \.self) { language in
+                        Text(verbatim: language.displayName).tag(FindingsLanguage?.some(language))
+                    }
+                }
             } header: {
                 Text(verbatim: repo.description)
                     .font(.headline)
             } footer: {
-                Text("Manuální čeká na tlačítko. Automatický spustí review, jakmile se PR objeví v seznamu.")
+                Text("Manuální čeká na tlačítko. Automatický spustí review, jakmile se PR objeví v seznamu. Jazyk se projeví na dalším běhu — už uložené nálezy zůstanou, jak jsou.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
