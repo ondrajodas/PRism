@@ -8,6 +8,13 @@ import Testing
 struct AppStoreTests {
     private let sources = [Source(name: "Moje", query: "review-requested:@me is:open")]
 
+    /// Zdroje i sada skillů se berou z konfigurace, takže si ji test postaví.
+    private var configuration: Configuration {
+        var configuration = Configuration.standard
+        configuration.global.sources = sources
+        return configuration
+    }
+
     private func summary(_ identifier: String) -> PullRequestSummary {
         let id = PRIdentifier(identifier)!
         return PullRequestSummary(
@@ -21,7 +28,7 @@ struct AppStoreTests {
     }
 
     private func store(_ gateway: FakeGitHubGateway) -> AppStore {
-        AppStore(gateway: gateway, sources: sources, time: FakeTimeSource())
+        AppStore(gateway: gateway, configuration: configuration, time: FakeTimeSource())
     }
 
     @Test("Obnovení se zeptá zdrojů")
@@ -70,7 +77,7 @@ extension AppStoreTests {
 
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
-            sources: sources,
+            configuration: configuration,
             time: FakeTimeSource(stopAfter: 1),
             eviction: CacheEviction(layout: layout, budget: .max)
         )
@@ -92,7 +99,7 @@ extension AppStoreTests {
 
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .failure(GitHubError.network("bez sítě"))),
-            sources: sources,
+            configuration: configuration,
             time: FakeTimeSource(stopAfter: 1),
             eviction: CacheEviction(layout: layout, budget: .max)
         )
@@ -105,7 +112,7 @@ extension AppStoreTests {
 extension AppStoreTests {
     @Test("Než se něco spustí, je stav neběželo")
     func stateStartsAsNotStarted() {
-        let store = AppStore(gateway: FakeGitHubGateway(always: .success([])), sources: sources)
+        let store = AppStore(gateway: FakeGitHubGateway(always: .success([])), configuration: configuration)
 
         #expect(store.reviewState(for: PRIdentifier("cli/cli#1")!) == .notStarted)
     }
@@ -117,7 +124,7 @@ extension AppStoreTests {
         let gate = AsyncGate()
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
-            sources: sources,
+            configuration: configuration,
             checkout: FakeRepoCheckout(gate: gate)
         )
         let pr = PRIdentifier("cli/cli#1")!
@@ -137,7 +144,7 @@ extension AppStoreTests {
         let stderr = "fatal: repository not found"
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
-            sources: sources,
+            configuration: configuration,
             checkout: FakeRepoCheckout(outcome: .failure(.repositoryNotFound(stderr)))
         )
         let pr = PRIdentifier("cli/cli#1")!
@@ -159,7 +166,7 @@ extension AppStoreTests {
         let checkout = FakeRepoCheckout(outcome: .failure(.timedOut))
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
-            sources: sources,
+            configuration: configuration,
             checkout: checkout
         )
         let pr = PRIdentifier("cli/cli#1")!
@@ -182,7 +189,7 @@ extension AppStoreTests {
         let gate = AsyncGate()
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
-            sources: sources,
+            configuration: configuration,
             time: FakeTimeSource(stopAfter: 1),
             eviction: CacheEviction(layout: layout, budget: .max),
             checkout: FakeRepoCheckout(gate: gate)
@@ -207,7 +214,7 @@ extension AppStoreTests {
         let checkout = FakeRepoCheckout(outcome: .success(URL(filePath: "/tmp/cli.git")))
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
-            sources: sources,
+            configuration: configuration,
             checkout: checkout
         )
 
@@ -221,7 +228,7 @@ extension AppStoreTests {
         let checkout = FakeRepoCheckout(existing: [RepoID(owner: "cli", name: "cli"): URL(filePath: "/tmp/cli.git")])
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
-            sources: sources,
+            configuration: configuration,
             checkout: checkout
         )
         let pr = PRIdentifier("cli/cli#1")!
@@ -241,14 +248,14 @@ extension AppStoreTests {
         // Klon je společný, takže si dvě PR nesmí odporovat: jedno hlásit selhání nad
         // klonem, který pro druhé v pořádku vznikl.
         let checkout = FakeRepoCheckout(outcome: .failure(.timedOut))
-        let store = AppStore(gateway: FakeGitHubGateway(always: .success([])), sources: sources, checkout: checkout)
+        let store = AppStore(gateway: FakeGitHubGateway(always: .success([])), configuration: configuration, checkout: checkout)
 
         await store.prepareCheckout(for: PRIdentifier("cli/cli#1")!)
         #expect(store.reviewState(for: PRIdentifier("cli/cli#2")!) == .checkoutFailed(detail: "git nedoběhl v limitu."))
 
         let working = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
-            sources: sources,
+            configuration: configuration,
             checkout: FakeRepoCheckout(outcome: .success(URL(filePath: "/tmp/cli.git")))
         )
         await working.prepareCheckout(for: PRIdentifier("cli/cli#2")!)
@@ -262,7 +269,7 @@ extension AppStoreTests {
         // Eviction umí klon sebrat i repu s otevřeným PR. Zapsaná cesta by pak ukazovala
         // na složku, která neexistuje.
         let checkout = FakeRepoCheckout(outcome: .success(URL(filePath: "/tmp/cli.git")))
-        let store = AppStore(gateway: FakeGitHubGateway(always: .success([])), sources: sources, checkout: checkout)
+        let store = AppStore(gateway: FakeGitHubGateway(always: .success([])), configuration: configuration, checkout: checkout)
         let pr = PRIdentifier("cli/cli#1")!
 
         await store.prepareCheckout(for: pr)
@@ -277,7 +284,7 @@ extension AppStoreTests {
     func failureSurvivesReselection() async {
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
-            sources: sources,
+            configuration: configuration,
             checkout: FakeRepoCheckout(outcome: .failure(.timedOut))
         )
         let pr = PRIdentifier("cli/cli#1")!
@@ -294,7 +301,7 @@ extension AppStoreTests {
         // chyba z minula.
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
-            sources: sources,
+            configuration: configuration,
             time: FakeTimeSource(stopAfter: 1),
             checkout: FakeRepoCheckout(outcome: .failure(.timedOut))
         )
@@ -313,7 +320,7 @@ extension AppStoreTests {
         let gate = AsyncGate()
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
-            sources: sources,
+            configuration: configuration,
             time: FakeTimeSource(stopAfter: 1),
             checkout: FakeRepoCheckout(gate: gate)
         )

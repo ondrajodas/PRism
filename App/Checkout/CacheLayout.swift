@@ -26,6 +26,10 @@ struct CacheLayout: Sendable, Equatable {
     /// na místo.
     var reviews: URL { root.appending(path: "reviews") }
 
+    /// Konfigurace. Leží v kořeni cache, ne pod `reviews/` — edituje se ručně a má být
+    /// vidět hned, jakmile člověk složku otevře.
+    var configFile: URL { root.appending(path: "config.json") }
+
     /// Výsledky review jednoho PR na jednom commitu: `reviews/<owner>/<repo>/<pr>-<sha>.json`.
     ///
     /// Zanořeno pod repo ze stejného důvodu jako stromy: ploché jméno se nedá filtrovat

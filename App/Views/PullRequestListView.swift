@@ -1,9 +1,11 @@
+import AppKit
 import SwiftUI
 
 /// Levý sloupec — seznam PR napříč repozitáři.
 struct PullRequestListView: View {
     @Bindable var store: AppStore
     @State private var isRefreshing = false
+    @State private var isShowingSettings = false
 
     var body: some View {
         content
@@ -14,13 +16,25 @@ struct PullRequestListView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) { unreadableWarning }
             .navigationTitle("Pull requesty")
-            .toolbar { refreshButton }
+            .toolbar {
+                settingsButton
+                refreshButton
+            }
     }
 
     /// Rozbitý soubor s nálezy znamená, že se nějaké ztratily — a ztracený nález se v UI
     /// nesmí tvářit jako „review neběželo“. Je to stav celé cache, ne jednoho PR, takže
     /// patří pod seznam; když je všechno v pořádku, nekreslí se vůbec.
     @ViewBuilder private var unreadableWarning: some View {
+        // Rozbitá konfigurace nesmí projít tiše — jinak uživatel hledá, proč mu nastavení
+        // nefunguje, a aplikace mezitím běží na výchozích hodnotách.
+        if let failure = store.configurationFailure {
+            Label(failure, systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+        }
         if store.unreadableReviewFiles > 0 {
             Label(
                 "\(store.unreadableReviewFiles) uložených nálezů se nepodařilo přečíst.",
@@ -89,5 +103,37 @@ struct PullRequestListView: View {
         .disabled(isRefreshing)
         .keyboardShortcut("r")
         .help("Obnovit seznam")
+    }
+
+    /// Konfigurace se edituje v souboru, ne v okně (editor je #70). Ozubené kolo ale
+    /// slibuje nastavení, takže pod ním musí něco takového být: kde soubor je a jak ho
+    /// otevřít. Načítat ho ručně netřeba — děje se to při návratu do aplikace.
+    private var settingsButton: some View {
+        Button { isShowingSettings = true } label: {
+            Label("Nastavení", systemImage: "gearshape")
+        }
+        .help("Nastavení aplikace")
+        .popover(isPresented: $isShowingSettings, arrowEdge: .bottom) { settingsPopover }
+    }
+
+    private var settingsPopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Nastavení").font(.headline)
+            Text("Zatím se edituje v souboru — editor v okně teprve přijde. Změny se načtou, jakmile se do aplikace vrátíš.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(verbatim: CacheLayout.applicationSupport.configFile.path(percentEncoded: false))
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Otevřít soubor", systemImage: "square.and.pencil") {
+                NSWorkspace.shared.open(CacheLayout.applicationSupport.configFile)
+                isShowingSettings = false
+            }
+        }
+        .padding(14)
+        .frame(width: 380, alignment: .leading)
     }
 }

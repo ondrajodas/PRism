@@ -234,7 +234,7 @@ nahraditelné fake implementací.
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení | — |
-| `Config` | Globální default + override per repo | disk |
+| `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu | — |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`. Mimo tuhle sedmičku stojí
@@ -330,6 +330,35 @@ Věci, které se u toho nemají rozbít:
   pracovní strom, takže mimo diff hlásí běžně.
 - **Nezakotvené bubliny se řadí podle čísla řádku.** Slovník pořadí nemá, takže by jinak
   mezi překresleními poskakovaly.
+
+### `Config` (`App/Config/`)
+
+Nastavení ve dvou úrovních. Nahrazuje konstanty, které byly do #23 roztroušené po celé
+aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozpočet cache).
+
+| Typ | Co je |
+|---|---|
+| `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]` |
+| `GlobalConfig` | `sources`, `skills`, `blockingCategories`, interval, souběh, rozpočet, model |
+| `RepositoryConfig` | `mode` (`manual`/`automatic`), override skillů a kategorií |
+| `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
+| `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
+| `ConfigurationBox` | Aktuální konfigurace pro kód mimo hlavní vlákno (limit souběhu, rozpočet, model) |
+
+Věci, které se u toho nemají rozbít:
+
+- **Dekóduje se tolerantně.** Chybějící klíč znamená „ber výchozí“, ne „zahoď celou
+  konfiguraci“ — ručně psaný soubor málokdy obsahuje všechno.
+- **Rozbitý soubor se nepřepisuje** a chyba je vidět nad seznamem. Aplikace běží na
+  defaultech, ale mlčet o tom nesmí.
+- **Hodnoty se čtou při použití**, ne při startu: limit souběhu při každém pokusu o slot,
+  rozpočet při každém úklidu, skilly při spuštění review. Proto stačí načíst a nemusí se
+  restartovat.
+- **Nula souběžných session se bere jako jedna.** Překlep nemá aplikaci umlčet.
+- **Prázdný seznam skillů u repa je vlastní odpověď** („tady nereviewuj nic“), `nil`
+  znamená „ber globální“.
+- **Výchozí hodnoty musí odpovídat konstantám, které nahradily** — je na to test, jinak by
+  se aplikace po zavedení konfigurace začala chovat jinak.
 
 ### `App/Syntax/`
 
@@ -1205,6 +1234,9 @@ dotáhnout — **změna proti zadání**, viz specifikace.
 
 Spodní panel hotový (issue #20) — taby `Nálezy`/`Průběh`, řaditelná tabulka, tažením
 měnitelná výška a proklik do diffu se zvýrazněním bubliny.
+
+Konfigurace hotová (issue #23) — `App/Config/`, `config.json` v kořeni cache. Načte se při
+startu a při návratu okna do popředí; editor v okně je #70.
 
 Chipy reviewerů a verdikt hotové (issue #21) — horní lišta detailu ukazuje, co který
 reviewer udělal, klikem se jeho nálezy schovají z bublin i z tabulky, a vpravo je návrh

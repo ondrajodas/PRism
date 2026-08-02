@@ -42,6 +42,13 @@ struct NewestEntryTests {
 @MainActor
 struct AppStoreProgressTests {
     private let sources = [Source(name: "Moje", query: "review-requested:@me is:open")]
+
+    /// Zdroje i sada skillů se berou z konfigurace, takže si ji test postaví.
+    private var configuration: Configuration {
+        var configuration = Configuration.standard
+        configuration.global.sources = sources
+        return configuration
+    }
     private let pr = PRIdentifier("cli/cli#1")!
 
     private func detail() -> PullRequest {
@@ -60,12 +67,11 @@ struct AppStoreProgressTests {
     private func store(_ reviewer: FakeReviewRunner, reviews: ReviewStore) -> AppStore {
         AppStore(
             gateway: FakeGitHubGateway(always: .success([]), detail: .success(detail())),
-            sources: sources,
+            configuration: configuration,
             time: FakeTimeSource(),
             checkout: FakeRepoCheckout(outcome: .success(URL(filePath: "/tmp/clone.git"))),
             reviewer: reviewer,
             reviews: reviews,
-            skills: ["code-review"]
         )
     }
 
@@ -139,12 +145,11 @@ struct AppStoreProgressTests {
         let workspace = try TemporaryDirectory()
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([]), detail: .success(detail())),
-            sources: sources,
+            configuration: configuration,
             time: FakeTimeSource(stopAfter: 1),
             checkout: FakeRepoCheckout(outcome: .success(URL(filePath: "/tmp/clone.git"))),
             reviewer: FakeReviewRunner(progress: [.started(sessionID: "s")]),
             reviews: ReviewStore(layout: CacheLayout(root: workspace.url)),
-            skills: ["code-review"]
         )
 
         await runReview(store)

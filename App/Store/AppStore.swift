@@ -39,6 +39,12 @@ final class AppStore {
     /// vrací. Pořadí kopíruje pořadí, ve kterém běhy začaly.
     private(set) var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
 
+    /// Nastavení, se kterým aplikace běží.
+    private(set) var configuration: Configuration
+    /// Proč se konfiguraci nepodařilo přečíst. Rozbitý soubor nesmí aplikaci položit, ale
+    /// taky se nesmí spolknout — jinak uživatel hledá, proč mu nastavení nefunguje.
+    private(set) var configurationFailure: String?
+
     /// Kolik uložených souborů s nálezy se nepodařilo přečíst.
     ///
     /// Musí být vidět: rozbitý soubor znamená ztracené nálezy, a ty se nesmí tvářit jako
@@ -51,31 +57,33 @@ final class AppStore {
     private let checkout: (any RepoCheckout)?
     private let reviewer: (any ReviewRunning)?
     private let reviews: ReviewStore?
-    private let skills: [String]
+    private let configStore: ConfigStore?
     /// Běžící review podle PR — drží se kvůli zrušení.
     private var reviewTasks: [PRIdentifier: Task<Void, Never>] = [:]
 
-    /// Skilly, které se na PR pouštějí. Konstanta; do konfigurace se přesune s #23.
-    static let defaultSkills = ["code-review"]
-
     init(
         gateway: any GitHubGateway,
-        sources: [Source] = [.reviewRequested],
-        interval: Duration = .seconds(60),
+        configuration: Configuration = .standard,
+        configStore: ConfigStore? = nil,
         time: any TimeSource = SystemTimeSource(),
         eviction: CacheEviction? = nil,
         checkout: (any RepoCheckout)? = nil,
         reviewer: (any ReviewRunning)? = nil,
-        reviews: ReviewStore? = nil,
-        skills: [String] = AppStore.defaultSkills
+        reviews: ReviewStore? = nil
     ) {
         self.time = time
-        polling = PollingService(gateway: gateway, sources: sources, interval: interval, time: time)
+        self.configuration = configuration
+        self.configStore = configStore
+        polling = PollingService(
+            gateway: gateway,
+            sources: configuration.global.sources,
+            interval: .seconds(configuration.global.pollIntervalSeconds),
+            time: time
+        )
         self.gateway = gateway
         self.checkout = checkout
         self.reviewer = reviewer
         self.reviews = reviews
-        self.skills = skills
         polling.afterSuccessfulTick = { [weak self] summaries in
             await self?.forget(whatIsNotIn: summaries)
             // `busy` se nepředává jako snímek, ale jako dotaz: eviction je dlouhá disková
@@ -97,17 +105,51 @@ final class AppStore {
     convenience init(toolPaths: ToolPaths) {
         let runner = SubprocessRunner()
         let checkout = GitRepoCheckout(git: toolPaths.git, gh: toolPaths.gh, runner: runner)
+        // Hodnoty se čtou **při použití**, ne teď: jinak by se reload konfigurace projevil
+        // až po restartu. `weak` proto, aby si providery nedržely store.
+        // Konfigurace se načte hned v `keepFresh()`; do té doby platí výchozí hodnoty,
+        // takže se nikde nečeká na disk.
+        let box = ConfigurationBox(.standard)
         self.init(
             gateway: GhGateway(gh: toolPaths.gh, runner: runner),
-            eviction: CacheEviction(checkout: checkout),
+            configStore: ConfigStore(),
+            eviction: CacheEviction(
+                budget: { box.value.global.cacheBudgetMegabytes * 1024 * 1024 },
+                checkout: checkout
+            ),
             checkout: checkout,
             reviewer: ClaudeReviewRunner(
                 claude: toolPaths.claude,
                 gh: toolPaths.gh,
-                runner: SubprocessStreamer()
+                runner: SubprocessStreamer(),
+                maxConcurrent: { box.value.global.maxConcurrentReviews },
+                model: { box.value.global.model }
             ),
             reviews: ReviewStore()
         )
+        self.configurationBox = box
+    }
+
+    /// Sdílená schránka na aktuální konfiguraci pro věci, které běží mimo hlavní vlákno
+    /// (limit souběhu, rozpočet cache, model). Store je `@MainActor`, takže sáhnout si
+    /// na něj přímo nemůžou.
+    private var configurationBox: ConfigurationBox?
+
+    /// Nastavení pro konkrétní repo — globální hodnoty přebité tím, co si repo řeklo.
+    func resolved(for repo: RepoID) -> ResolvedConfig {
+        configuration.resolved(for: repo)
+    }
+
+    /// Znovu načte `config.json`. Co se čte při použití (skilly, kategorie, limit souběhu,
+    /// rozpočet cache), se projeví hned; zdroje a interval se přepíšou pollingu tady.
+    func reloadConfiguration() async {
+        guard let configStore else { return }
+        let loaded = await configStore.load()
+        configuration = loaded.configuration
+        configurationFailure = loaded.failure
+        configurationBox?.value = loaded.configuration
+        polling.sources = loaded.configuration.global.sources
+        polling.interval = .seconds(loaded.configuration.global.pollIntervalSeconds)
     }
 
     var pullRequests: [PullRequestSummary] { polling.state.pullRequests }
@@ -118,6 +160,7 @@ final class AppStore {
 
     /// Drží seznam aktuální, dokud okno žije. Zrušení tasku smyčku ukončí.
     func keepFresh() async {
+        await reloadConfiguration()
         await loadStoredReviews()
         await polling.run()
     }
@@ -158,7 +201,8 @@ final class AppStore {
         Policy.reviewState(
             phase: reviewPhases[pr],
             record: reviewRecords[pr],
-            checkout: checkoutState(for: pr.repo)
+            checkout: checkoutState(for: pr.repo),
+            categories: resolved(for: pr.repo).blockingCategories
         )
     }
 
@@ -374,8 +418,8 @@ final class AppStore {
         reviewTasks[pr]?.cancel()
     }
 
-    /// Sada skillů, které se pouštějí. Chipy z ní berou pořadí i to, co ještě neběželo.
-    var reviewSkills: [String] { skills }
+    /// Sada skillů pro repo. Chipy z ní berou pořadí i to, co ještě neběželo.
+    func reviewSkills(for repo: RepoID) -> [String] { resolved(for: repo).skills }
 
     /// Reviewery, kteří na PR **právě běží**.
     ///
@@ -384,7 +428,7 @@ final class AppStore {
     func runningReviewers(for pr: PRIdentifier) -> Set<String> {
         guard isReviewing(pr) else { return [] }
         let finished = Set(timelines(for: pr).filter(\.isFinished).map(\.skill))
-        return Set(skills).subtracting(finished)
+        return Set(reviewSkills(for: pr.repo)).subtracting(finished)
     }
 
     /// Časová osa běhů posledního review. Prázdná, dokud se nic nespustilo.
@@ -440,6 +484,7 @@ final class AppStore {
         using reviewer: any ReviewRunning,
         saving reviews: ReviewStore
     ) async throws {
+        let skills = reviewSkills(for: pr.repo)
         reviewPhases[pr] = .running(finished: 0, total: skills.count)
 
         // Průběh teče přes proud, ne přímo do store: hlásí se ze session, která běží mimo
@@ -507,7 +552,8 @@ final class AppStore {
         saving reviews: ReviewStore,
         reporting reporter: AsyncStream<ReviewEvent>.Continuation
     ) async -> (any Error)? {
-        await withTaskGroup(of: ReviewRun?.self) { group in
+        let skills = reviewSkills(for: pr.repo)
+        return await withTaskGroup(of: ReviewRun?.self) { group in
             for skill in skills {
                 let request = ReviewRequest(
                     key: ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill),

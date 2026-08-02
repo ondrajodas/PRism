@@ -14,6 +14,7 @@ struct DiffView: View {
     let expansion: DiffExpansionActions
     /// Nálezy k zavěšení pod řádky. Seskupené podle místa už volajícím.
     var findings: [FindingGroup] = []
+    var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     /// Místo, na které se právě skočilo z tabulky nálezů.
     var highlighted: FindingHighlight?
 
@@ -72,7 +73,8 @@ struct DiffView: View {
                 isLoadingContent: state.isLoading,
                 contentFailure: state.failure,
                 reveal: { expansion.reveal(file, $0) },
-                highlighted: highlighted
+                highlighted: highlighted,
+                blockingCategories: blockingCategories
             )
         }
     }

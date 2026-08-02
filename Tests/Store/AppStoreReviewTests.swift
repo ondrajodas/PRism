@@ -104,7 +104,7 @@ struct AppStoreReviewTests {
         let request = try #require(reviewer.requests.first)
         #expect(request.key.headSha == "aaaa1111")
         #expect(request.baseSha == "bbbb2222")
-        #expect(request.key.skillID == AppStore.defaultSkills.first)
+        #expect(request.key.skillID == Configuration.standard.global.skills.first)
         #expect(request.worktree.path(percentEncoded: false).contains("aaaa1111"))
     }
 

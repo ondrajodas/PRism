@@ -222,6 +222,11 @@ Skilly jsou per-repo z konkrétního důvodu: `oj-php-quality-check` na Go nebo 
 repu nepřinese nic a session stejně zaplatíš. Autodetekce jazyka nastaví výchozí sadu
 při prvním setkání s repem.
 
+**Hotovo (#23).** `config.json` v kořeni cache, `Configuration` → `resolved(for:)` jako
+čistá funkce. Hodnoty se čtou **při použití**, ne při startu, takže se změna projeví bez
+restartu; soubor se načte při spuštění a pak pokaždé, když se okno vrátí do popředí.
+Editor v okně je #70 — zatím se edituje soubor.
+
 ## UI
 
 Tři oblasti. Zvolený tvar: diff v plné šířce s nálezy u kódu a tabbed panel pod ním.
@@ -622,6 +627,12 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Rozsah se zapíše jako odkrytý **až po** načtení obsahu | Zapsat ho hned a obsah doplnit, až dorazí | Jinak zmizí rozbalovací řádek i se spinnerem a zůstane po něm prázdné místo — vypadá to, že se nic nestalo. Ze stejného důvodu `rows(of:)` ignoruje odkryté rozsahy, dokud obsah není: bez něj není co ukázat |
 | Rozbalená mezera **sundá hlavičku hunku** | Nechat hlavičky vždycky | Když se dvě části slijí do jednoho souvislého bloku, hlavička `@@` uprostřed neodděluje nic a mate — přišlo to jako první připomínka při zkoušení. Mezera, která nikdy nebyla, hlavičku nechává |
 | Sbalení si **nechá načtený obsah** | Zahodit ho spolu s rozsahy | Druhé rozbalení by jinak chodilo po síti pro něco, co už jednou dorazilo. Paměť to nestojí nic proti diffu samotnému |
+| Konfigurace se dekóduje **tolerantně** | Přísné `Codable` — chybějící klíč = chyba | Soubor se edituje ručně a málokdy obsahuje všechno. Přísné dekódování by kvůli jednomu chybějícímu klíči zahodilo celou konfiguraci včetně toho, co je napsané správně — a uživatel by hledal, proč mu nastavení nefunguje. Chybějící klíč znamená „ber výchozí“ |
+| Rozbitý soubor se **nepřepíše** výchozími hodnotami | Přepsat ho, ať je zase platný | Uživatel ho psal; přijít o něj kvůli chybějící čárce je horší než ta chyba. Aplikace běží na defaultech a **říká to** — mlčky by to vypadalo, že nastavení nefunguje |
+| Hodnoty se čtou **při použití** | Načíst je jednou při startu | Limit souběhu, rozpočet cache i model se ptají v okamžiku, kdy je potřeba (`ConfigurationBox` kvůli tomu, že běží mimo hlavní vlákno). Jinak by se změna projevila až po restartu — a to je u souboru, který se edituje ručně, past |
+| Nula souběžných session se bere jako **jedna** | Věřit číslu ze souboru | Překlep v konfiguraci nemá aplikaci umlčet tak, že se nespustí nic a nikdo nepozná proč |
+| Konfigurace se načte **při návratu do popředí** | Tlačítko „Znovu načíst“ nebo hlídání souboru | Tlačítko je krok navíc za něco, co se dá udělat samo. Hlídání souboru by znamenalo řešit atomický zápis, po kterém přestane platit sledovaný deskriptor. Návrat do aplikace je přesně ta chvíle, kdy člověk soubor dopsal |
+| Prázdný seznam skillů u repa je **vlastní odpověď** | Brát prázdné pole jako „nic nenastaveno“ | „Tady nereviewuj nic“ se musí dát říct jinak než smazáním klíče, které znamená „ber globální“ |
 | Filtr reviewerů **nemění návrh verdiktu** | Počítat verdikt jen z toho, co je vidět | Ztlumení revieweera je pohled, ne tvrzení o pull requestu. Kdyby filtr do verdiktu sahal, dalo by se schováním revieweera „vyrobit“ approve — a to je nejdražší chyba, jakou tahle aplikace umí udělat |
 | Klik na chip **filtruje**, stderr je v nápovědě | Klik otevře stderr, jak psalo issue | Dvě různé akce na jedno kliknutí nejdou a filtr se používá mnohem častěji. Text selhání je jedno najetí myší daleko a u chipu, kde dává smysl, je i důvod nejistoty |
 | Chip má stav **`nejisté`** | Vystačit si s `čisté`/`nálezy`/`selhalo`, jak psalo issue | Běh, který doběhl, ale nezavolal `ReportFindings` (nebo se mu ztratil nález), není ani čistý, ani spadlý. Ukázat u něj „čisté“ znamená schválený PR s neohlášenou chybou — stejná past, kvůli které umí návrh verdiktu odpovědět „není z čeho soudit“ |

@@ -9,6 +9,13 @@ import Testing
 @MainActor
 struct AppStoreExpansionTests {
     private let sources = [Source(name: "Moje", query: "review-requested:@me is:open")]
+
+    /// Zdroje i sada skillů se berou z konfigurace, takže si ji test postaví.
+    private var configuration: Configuration {
+        var configuration = Configuration.standard
+        configuration.global.sources = sources
+        return configuration
+    }
     private let pr = PRIdentifier("cli/cli#1")!
     private let path = "App/Main.swift"
 
@@ -24,7 +31,7 @@ struct AppStoreExpansionTests {
     }
 
     private func store(_ gateway: FakeGitHubGateway) -> AppStore {
-        AppStore(gateway: gateway, sources: sources, time: FakeTimeSource())
+        AppStore(gateway: gateway, configuration: configuration, time: FakeTimeSource())
     }
 
     private func waitForContent(_ store: AppStore) async {
@@ -130,7 +137,7 @@ struct AppStoreExpansionTests {
             always: .success([]),
             files: [.success("první\ndruhý")]
         )
-        let store = AppStore(gateway: gateway, sources: sources, time: FakeTimeSource(stopAfter: 1))
+        let store = AppStore(gateway: gateway, configuration: configuration, time: FakeTimeSource(stopAfter: 1))
 
         store.reveal(1...1, of: path, in: pr)
         await waitForContent(store)

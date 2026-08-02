@@ -6,6 +6,7 @@ import SwiftUI
 /// pod sebou a odznak říká, kolik jich je. Nesouhlas dvou reviewerů je informace.
 struct FindingBubbleView: View {
     let group: FindingGroup
+    var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     /// `false` = řádek nálezu v diffu není. Bublina pak visí u hlavičky souboru a nabízí
     /// ten řádek dotáhnout.
     var isAnchored = true
@@ -90,7 +91,7 @@ struct FindingBubbleView: View {
 
     private func header(_ finding: Finding) -> some View {
         HStack(spacing: 6) {
-            if Policy.isBlocking(finding) {
+            if Policy.isBlocking(finding, categories: blockingCategories) {
                 pill("blokuje", color: .red)
             }
             if let category = finding.category {
@@ -140,7 +141,7 @@ struct FindingBubbleView: View {
     }
 
     private var isBlocking: Bool {
-        group.findings.contains { Policy.isBlocking($0) }
+        group.findings.contains { Policy.isBlocking($0, categories: blockingCategories) }
     }
 
     private var reviewers: String {

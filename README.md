@@ -72,7 +72,12 @@ hledá, jaký příkaz spustil. Skládá se nativně z eventů, ne přeposílán
 aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vrátit, zkopíruje
 se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí běhu.
 
-Sada reviewerů je zatím konstanta v kódu; výběr v nastavení přijde s konfigurací.
+Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
+PR, sada skillů, blokující kategorie, interval pollingu, kolik session smí běžet naráz,
+rozpočet cache a model. Repozitář si může přebít režim (`manual`/`automatic`), skilly
+i kategorie. Soubor se zakládá sám s dosavadními výchozími hodnotami, načítá se při startu
+i při návratu do aplikace, a když je rozbitý, běží se na defaultech a je to vidět. Editor
+v okně teprve přijde — zatím se edituje soubor.
 
 Pod tím vším je vlastní cache repozitářů: bare partial clone do
 `~/Library/Application Support/PRism/`, přihlášení delegované na `gh`, odpojený

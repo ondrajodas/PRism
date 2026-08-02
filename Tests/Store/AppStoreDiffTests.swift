@@ -9,6 +9,13 @@ import Testing
 @MainActor
 struct AppStoreDiffTests {
     private let sources = [Source(name: "Moje", query: "review-requested:@me is:open")]
+
+    /// Zdroje i sada skillů se berou z konfigurace, takže si ji test postaví.
+    private var configuration: Configuration {
+        var configuration = Configuration.standard
+        configuration.global.sources = sources
+        return configuration
+    }
     private let pr = PRIdentifier("cli/cli#1")!
 
     private func summary(updatedAt: TimeInterval = 100) -> PullRequestSummary {
@@ -23,7 +30,7 @@ struct AppStoreDiffTests {
     }
 
     private func store(_ gateway: FakeGitHubGateway) -> AppStore {
-        AppStore(gateway: gateway, sources: sources, time: FakeTimeSource())
+        AppStore(gateway: gateway, configuration: configuration, time: FakeTimeSource())
     }
 
     @Test("Výběr PR načte diff")
@@ -104,7 +111,7 @@ struct AppStoreDiffTests {
         )
         let store = AppStore(
             gateway: gateway,
-            sources: sources,
+            configuration: configuration,
             time: FakeTimeSource(stopAfter: 1)
         )
 

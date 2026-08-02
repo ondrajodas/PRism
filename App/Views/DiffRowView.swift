@@ -13,6 +13,7 @@ struct DiffRowView: View {
     var reveal: (ClosedRange<Int>) -> Void = { _ in }
     /// Místo, na které se právě skočilo z tabulky.
     var highlighted: FindingHighlight?
+    var blockingCategories: Set<String> = Policy.defaultBlockingCategories
 
     var body: some View {
         switch row {
@@ -30,6 +31,7 @@ struct DiffRowView: View {
         case .finding(_, let group, let anchored):
             FindingBubbleView(
                 group: group,
+                blockingCategories: blockingCategories,
                 isAnchored: anchored,
                 reveal: reveal,
                 isHighlighted: highlighted?.matches(group) ?? false
