@@ -517,11 +517,16 @@ Věci, které se u toho nemají rozbít:
   to, co reviewer najde — a ověřit, že neovlivnilo, je drahé: tři běhy nad týmž commitem
   daly 1, 2 a 3 nálezy, takže rozptyl schová jakýkoli efekt menší než ten. Jazyk se proto
   řeší až za review, viz `FindingTranslating` níž. Je na to test, aby se to nevrátilo.
-- **Skill se dnes nevyvolává vůbec.** Prompt jen napíše jeho jméno do věty
-  (`You are running as the "code-review" reviewer`) a `Skill` **není** v `--allowedTools`.
+- **Jestli se skill načte, je dnes na náhodě.** Prompt jeho jméno jen napíše do věty
+  (`You are running as the "code-review" reviewer`) a nikde si o jeho vyvolání neřekne.
+  Reviewer si nástroj `Skill` občas zavolá sám — usoudí to z té věty — a občas ne:
+  **v 5 ze 14 zaznamenaných běhů ano, v 9 ne**. Nástroj přitom projde, i když v
+  `--allowedTools` není (čtecí builtin), takže o oprávnění nejde.
+
   Lomítková varianta se zahodila u #17, protože rozbíjela `ReportFindings`, a náhrada se
-  nedodělala — takže každý nakonfigurovaný skill pustí totéž obecné review a jeho jméno je
-  jen štítek. Dopadá to i na sadu skillů podle jazyka (#24). Řeší se v #78.
+  nedodělala. Dokud to platí, je sada skillů podle jazyka (#24) i chip na reviewera jen
+  štítek nad během, který si obsah zvolil sám. Je to taky nejlepší vysvětlení rozptylu
+  v počtu nálezů mezi běhy nad týmž commitem. Řeší se v #78.
 
 ### Překlad nálezů (`App/Review/`)
 
