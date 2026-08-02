@@ -4,6 +4,8 @@ import SwiftUI
 /// poznámku.
 struct DiffRowView: View {
     let row: DiffRow
+    /// Jazyk souboru kvůli obarvení kódu. `nil` u souboru, kterému nerozumíme.
+    var language: Language?
     /// Načítá se právě obsah souboru, do kterého řádek patří?
     var isLoadingContent = false
     /// Proč se obsah souboru nepodařilo načíst.
@@ -15,7 +17,7 @@ struct DiffRowView: View {
         case .hunk(_, let hunk):
             hunkHeader(hunk)
         case .line(_, let line):
-            DiffLineView(line: line)
+            DiffLineView(line: line, language: language)
         case .expander(_, let expander):
             DiffExpanderView(
                 expander: expander,

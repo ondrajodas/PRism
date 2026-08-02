@@ -41,7 +41,12 @@ plné šířky vejde.
 V mezerách mezi hunky jsou **šipky na rozbalení kontextu** — dotáhnou kód, který v diffu
 není, po dvaceti řádcích nebo celý úsek naráz. Obsah souboru se čte z GitHubu až na
 kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi zmizí.
-`Zobrazit jen diff` sbalí všechno zpátky. Bubliny nálezů přímo u kódu jsou další krok.
+`Zobrazit jen diff` sbalí všechno zpátky.
+
+Kód je **obarvený podle jazyka** — vlastní pravidla, žádná externí závislost, paleta
+Darcula v tmavém režimu a IntelliJ Light ve světlém. Barví se řádek po řádku bez paměti,
+protože diff je útržek: víceřádkový komentář se obarví jen tam, kde začíná. Soubor
+v neznámém jazyce zůstane jednobarevný. Bubliny nálezů přímo u kódu jsou další krok.
 
 Sada reviewerů je zatím konstanta v kódu; výběr v nastavení přijde s konfigurací.
 
@@ -149,6 +154,7 @@ App/                      zdrojáky aplikace — target PRism
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno; ReviewStore — nálezy na disku
+  Syntax/                 obarvení kódu: jazyky, tokenizace, paleta
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky
 Tests/                    unit testy — target PRismTests
@@ -161,6 +167,7 @@ Tests/                    unit testy — target PRismTests
   Review/                 testy parseru a runneru proti skutečným streamům
   Polling/                testy pollingu proti fake gateway a fake času
   Store/                  testy AppStore a persistence nálezů
+  Syntax/                 testy detekce jazyka a obarvení kódu
   Support/                testy sdílených drobností
   Fixtures/gh/            skutečné výstupy gh z veřejných repozitářů (JSON i diffy)
   Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů

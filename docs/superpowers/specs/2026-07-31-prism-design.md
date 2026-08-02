@@ -309,6 +309,24 @@ rozbalovací řádky jako na GitHubu.
   nikdy nebyla, zůstává — u prvního hunku je jediné, z čeho se pozná, kde v souboru jsme.
 - **`Zobrazit jen diff`** sbalí všechno zpátky. Ukazuje se jen tehdy, když je co sbalit.
 
+### Obarvení kódu (#48)
+
+Vlastní pravidla v `App/Syntax/`, žádná závislost. Komentáře, řetězce, čísla, klíčová
+slova a proměnné — tolik, aby se v diffu chytlo oko.
+
+- **Jazyk se pozná z cesty**, neznámý soubor se nebarví. Obarvit něco podle cizích
+  pravidel vypadá jako náhodné skvrny.
+- **Barví se řádek po řádku, bez paměti.** Blokový komentář nebo řetězec přes víc řádků
+  se obarví jen tam, kde začíná. Diff je útržek — mezi hunky chybí řádky, ze kterých by
+  se stav dopočítal, takže držet ho napříč by barvilo podle textu, který v okně není.
+  Po rozbalení kontextu by se navíc barvy měnily pod rukama.
+- **Paleta je Darcula** (tmavý režim) a **IntelliJ Light** (světlý). Dvě nesourodá témata
+  by při přepnutí režimu vypadala jako dvě různé aplikace.
+- **Proměnné jen tam, kde je poznat syntaxe** (`$` v PHP a shellu). Ve Swiftu nebo Go by
+  se musel rozumět kód, ne řádek.
+- **Obyčejný text vlastní barvu nemá** — dědí ji z okolí, takže soubor bez rozpoznaného
+  jazyka nevypadá jinak než ten s ním.
+
 ## Platformová rozhodnutí
 
 - **SwiftUI**, target macOS 26, Xcode projekt v repu. Bundle id
@@ -534,6 +552,11 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Rozsah se zapíše jako odkrytý **až po** načtení obsahu | Zapsat ho hned a obsah doplnit, až dorazí | Jinak zmizí rozbalovací řádek i se spinnerem a zůstane po něm prázdné místo — vypadá to, že se nic nestalo. Ze stejného důvodu `rows(of:)` ignoruje odkryté rozsahy, dokud obsah není: bez něj není co ukázat |
 | Rozbalená mezera **sundá hlavičku hunku** | Nechat hlavičky vždycky | Když se dvě části slijí do jednoho souvislého bloku, hlavička `@@` uprostřed neodděluje nic a mate — přišlo to jako první připomínka při zkoušení. Mezera, která nikdy nebyla, hlavičku nechává |
 | Sbalení si **nechá načtený obsah** | Zahodit ho spolu s rozsahy | Druhé rozbalení by jinak chodilo po síti pro něco, co už jednou dorazilo. Paměť to nestojí nic proti diffu samotnému |
+| Obarvení kódu **bez externí závislosti** | highlight.js ve `WKWebView` nebo tree-sitter přes SPM | Repozitář zatím žádnou závislost nemá a obojí je velké kladivo na „obarvi mi komentáře a řetězce“. Vlastní pravidla dají osmdesát procent výsledku, nikomu se neupdatují a vejdou se do jednoho souboru s testy. Kdyby to nestačilo, je to místo, kde se závislost dá dodat později |
+| Barví se **řádek po řádku, bez paměti** | Držet stav (otevřený blokový komentář, řetězec) napříč souborem | Diff je útržek: mezi hunky chybí řádky, ze kterých by se stav dopočítal, takže by se barvilo podle textu, který v okně vůbec není. Po rozbalení kontextu (#47) by se navíc barvy měnily pod rukama. Cena je neobarvený vnitřek víceřádkového komentáře — vidět je pořád, jen šedě není |
+| Paleta **Darcula + IntelliJ Light** | Systémové barvy (`.purple`, `.teal`), které se samy přizpůsobí režimu | Systémové barvy byly první verze a fungovaly, ale je to paleta bez původu. Darcula je to, v čem se kód reálně čte, a IntelliJ Light je její **oficiální** protějšek — vlastní „světlá Darcula“ by byla vymyšlená. Daň: Darcula má zelené řetězce, takže na zeleném podbarvení přidaného řádku je zelená na zelené; v provozu čitelné, ale je to nejslabší místo palety |
+| Proměnné se barví **jen podle sigilu** (`$`) | Poznat proměnnou i ve Swiftu nebo Go | Bez sigilu je proměnná obyčejné jméno a od volání funkce ji na jednom řádku nerozliší nic než porozumění kódu. Půlka jazyků obarvená a půlka ne je horší než jasná hranice |
+| Proměnná uvnitř řetězce zůstává **řetězcem** | Obarvit `$name` i uvnitř `"…"`, jak to dělá PhpStorm | Dvě barvy uvnitř jedné uvozovkované hodnoty rozbíjejí to, co má řetězec říct — že tohle všechno je jeden literál. Je to výměna jedné podmínky v tokenizeru, kdyby se rozhodnutí mělo otočit |
 | `zsh -lc`, `.zshrc` se nepřečte | `zsh -ilc`, aby fallback viděl i `.zshrc` | Zkoušeno a zahozeno: interaktivní shell se ze spuštěné aplikace zasekl (z terminálu běží pod 0,5 s) a **ignoruje `SIGTERM`** — vytáhla ho až eskalace na `SIGKILL`, tedy 7 s do prázdného výsledku. Zaseknutý start je horší selhání než nenalezená binárka, kterou gate umí vysvětlit. Zůstává jako známé omezení |
 
 ## Ověřeno proti CLI (2026-08-01)

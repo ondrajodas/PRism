@@ -47,9 +47,11 @@ struct DiffView: View {
 
     private func rows(of file: FileDiff) -> some View {
         let state = expansion.state(file)
+        let language = Language(path: file.displayPath)
         return ForEach(DiffRow.rows(of: file, revealed: state.revealed, content: state.content)) { row in
             DiffRowView(
                 row: row,
+                language: language,
                 isLoadingContent: state.isLoading,
                 contentFailure: state.failure,
                 reveal: { expansion.reveal(file, $0) }
