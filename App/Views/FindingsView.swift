@@ -5,8 +5,8 @@ import SwiftUI
 /// Sbalená ukazuje jen to podstatné — návrh verdiktu a kolik nálezů je. Diff je to hlavní,
 /// kvůli čemu je okno otevřené, takže seznam nálezů si o místo musí říct.
 ///
-/// Tabulka s řazením a skokem do diffu je #20; tohle je surový seznam, ze kterého se dá
-/// poznat, jestli mašinerie dělá to, co má.
+/// Skok do diffu tu **už je** (kliknutím na nález); co zbývá na #20, je řaditelná tabulka
+/// místo tohohle surového seznamu.
 struct FindingsView: View {
     let record: ReviewRecord
     @Binding var isExpanded: Bool
