@@ -12,6 +12,8 @@ struct DiffView: View {
     /// Rozbalování kontextu. Bere se ze store, ne z vlastního stavu — jinak by rozbalení
     /// přeteklo z jednoho pull requestu na druhý.
     let expansion: DiffExpansionActions
+    /// Sbalování celých souborů. Taky ze store, ze stejného důvodu jako `expansion`.
+    let folding: DiffFoldingActions
     /// Nálezy k zavěšení pod řádky. Seskupené podle místa už volajícím.
     var findings: [FindingGroup] = []
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
@@ -47,7 +49,12 @@ struct DiffView: View {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 ForEach(diff.files) { file in
                     Section {
-                        rows(of: file)
+                        // Sbalený soubor se nevykresluje vůbec — u padesátisouborového PR
+                        // je to hlavní důvod, proč se sbaluje. Hlavička zůstává, takže
+                        // sekce nezmizí a skok na soubor pořád funguje.
+                        if !folding.isFolded(file) {
+                            rows(of: file)
+                        }
                     } header: {
                         fileHeader(file)
                     }
@@ -94,6 +101,7 @@ struct DiffView: View {
                     .font(.callout)
                     .help("Zobrazit nálezy u řádků, kterých se týkají")
             }
+            foldAllButton
             if let collapse = expansion.collapse {
                 Button("Zobrazit jen diff", systemImage: "arrow.down.right.and.arrow.up.left") {
                     collapse()
@@ -105,6 +113,28 @@ struct DiffView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+    }
+
+    /// Jedno tlačítko, ne dvě. Který ze dvou stavů dává smysl, plyne z toho, co je zrovna
+    /// na obrazovce — dvě tlačítka by znamenala, že je jedno z nich pořád k ničemu.
+    ///
+    /// Nepleteme si to se „Zobrazit jen diff“ vedle: to sbaluje **kontext uvnitř** souborů,
+    /// tohle celé soubory.
+    @ViewBuilder private var foldAllButton: some View {
+        if !diff.files.isEmpty {
+            let allFolded = diff.files.allSatisfy(folding.isFolded)
+            Button {
+                if allFolded { folding.unfoldAll() } else { folding.foldAll(diff.files) }
+            } label: {
+                Label(
+                    allFolded ? "Rozbalit vše" : "Sbalit vše",
+                    systemImage: allFolded ? "rectangle.expand.vertical" : "rectangle.compress.vertical"
+                )
+            }
+            .font(.callout)
+            .buttonStyle(.borderless)
+            .help(allFolded ? "Rozbalit diffy všech souborů" : "Sbalit diffy všech souborů")
+        }
     }
 
     /// Nerozpoznaný řádek znamená, že se člověk dívá na neúplný podklad. Bez téhle věty
@@ -132,13 +162,33 @@ struct DiffView: View {
         .popover(isPresented: $isPickingFile, arrowEdge: .bottom) {
             FileTreeView(files: diff.files) { file in
                 isPickingFile = false
+                // Skočit na sbalený soubor jde — hlavička zůstává — ale ukázala by se jen
+                // ona. Kdo si ho ze stromu vybral, chce ho vidět.
+                if folding.isFolded(file) { folding.toggle(file) }
                 withAnimation { proxy.scrollTo(file.id, anchor: .top) }
             }
         }
     }
 
+    /// Celá hlavička je tlačítko, ne jen šipka — na GitHubu se kliká kamkoli do řádku
+    /// a trefit se do šipky u padesáti souborů je práce navíc.
     private func fileHeader(_ file: FileDiff) -> some View {
+        Button {
+            folding.toggle(file)
+        } label: {
+            headerContent(file)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(verbatim: file.displayPath))
+        .accessibilityHint(folding.isFolded(file) ? "Rozbalí diff souboru" : "Sbalí diff souboru")
+    }
+
+    private func headerContent(_ file: FileDiff) -> some View {
         HStack(spacing: 8) {
+            Image(systemName: folding.isFolded(file) ? "chevron.right" : "chevron.down")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 10)
             Text(verbatim: file.displayPath)
                 .font(.system(.callout, design: .monospaced).weight(.semibold))
                 .lineLimit(1)
@@ -158,6 +208,7 @@ struct DiffView: View {
                     .truncationMode(.head)
             }
             Spacer()
+            fileFindings(file)
             Text(verbatim: "+\(file.additions) −\(file.deletions)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -166,9 +217,46 @@ struct DiffView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
         // Ukotvená hlavička jede přes obsah, takže pod ní musí být neprůhledné pozadí.
         .background(.bar)
-        .overlay(alignment: .bottom) { Divider() }
+        // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
+        // takže se vykreslí **svisle** — pod hlavičkami tedy nikdy nebyla čára, kterou tam
+        // tenhle kód chtěl, ale svislá čárka uprostřed. Dokud mezi hlavičkami byly řádky
+        // diffu, ztrácely se; po sbalení všech souborů (#59) se poskládaly do jedné čáry.
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(.separator).frame(height: 1)
+        }
+    }
+
+    /// Kolik nálezů v souboru je.
+    ///
+    /// Ukazuje se **vždycky**, ne jen u sbaleného. U sbaleného je to nutnost — zavřený
+    /// soubor s nevyřízeným nálezem by se dal zapomenout a tabulka nálezů je jiná
+    /// obrazovka. U rozbaleného to není šum, ale zkratka: projedu hlavičky a vím, kde
+    /// nálezy jsou, aniž bych scrolloval obsahem.
+    @ViewBuilder private func fileFindings(_ file: FileDiff) -> some View {
+        let groups = findings(in: file)
+        if !groups.isEmpty {
+            let blocking = groups.contains { group in
+                group.findings.contains { Policy.isBlocking($0, categories: blockingCategories) }
+            }
+            Label(
+                Plural.czech(groups.count, one: "nález", few: "nálezy", many: "nálezů"),
+                systemImage: blocking ? "exclamationmark.triangle.fill" : "text.magnifyingglass"
+            )
+            .font(.caption)
+            .foregroundStyle(blocking ? .red : .secondary)
+        }
+    }
+
+    /// Nálezy patřící k souboru. Porovnává se přes `Diff.file(at:)`, protože nález umí
+    /// přijít pod **starou** cestou přejmenovaného souboru.
+    private func findings(in file: FileDiff) -> [FindingGroup] {
+        findings.filter { group in
+            guard let path = group.file else { return false }
+            return diff.file(at: path)?.id == file.id
+        }
     }
 
     private func badge(for file: FileDiff) -> String? {

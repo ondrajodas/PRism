@@ -145,6 +145,15 @@ struct PullRequestDetailView: View {
         )
     }
 
+    private var foldingActions: DiffFoldingActions {
+        DiffFoldingActions(
+            isFolded: { store.isFolded($0.displayPath, in: pullRequest.id) },
+            toggle: { store.toggleFolded($0.displayPath, in: pullRequest.id) },
+            foldAll: { store.foldAll($0.map(\.displayPath), in: pullRequest.id) },
+            unfoldAll: { store.unfoldAll(in: pullRequest.id) }
+        )
+    }
+
     /// Nález ukazuje na `file:line`; kde to je v diffu, ví `DiffRow`. Když se místo najít
     /// nedá (soubor v diffu není), nestane se nic — skákat naslepo je horší než nehnout se.
     private func jump(to finding: Finding) {
@@ -161,6 +170,10 @@ struct PullRequestDetailView: View {
                   revealed: store.expansion(of: file.displayPath, in: pullRequest.id).revealed
               )
         else { return }
+        // Sbalený soubor nemá řádky, takže by skok skončil nikde. Rozbalit se musí
+        // **předtím**, než se nastaví cíl — jinak `scrollTo` míří na id, které v líném
+        // seznamu ještě není.
+        store.unfold(file.displayPath, in: pullRequest.id)
         scrollTarget = anchor
         // Zvýraznění se porovnává s tím, co nahlásil reviewer, ne s cestou v diffu — bublina
         // nese jeho `file`, ne `displayPath`.
@@ -176,6 +189,7 @@ struct PullRequestDetailView: View {
                 diff: diff,
                 scrollTarget: $scrollTarget,
                 expansion: expansionActions,
+                folding: foldingActions,
                 findings: Policy.groups(of: visibleFindings),
                 blockingCategories: blockingCategories,
                 highlighted: highlighted

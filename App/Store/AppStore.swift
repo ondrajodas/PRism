@@ -35,6 +35,13 @@ final class AppStore {
     /// Rozbalený kontext **per soubor v PR**. Co v mapě není, nikdo nerozbaloval.
     private(set) var expansions: [FileExpansionKey: FileExpansion] = [:]
 
+    /// Sbalené soubory diffu. Co v množině **není**, je rozbalené — u PR o padesáti
+    /// souborech je rozbaleno výchozí stav a sbalení je gesto, takže se pamatuje to druhé.
+    ///
+    /// Žije tady, ne ve view: `PullRequestDetailView` si SwiftUI mezi PR ponechá (stejná
+    /// pozice ve stromu), takže by sbalení přeteklo z jednoho pull requestu na druhý.
+    private(set) var foldedFiles: Set<FileExpansionKey> = []
+
     /// Co reviewery dělaly, per PR. Drží se i po doběhnutí — právě tehdy se k tomu člověk
     /// vrací. Pořadí kopíruje pořadí, ve kterém běhy začaly.
     private(set) var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
@@ -335,6 +342,40 @@ final class AppStore {
     private func hasCurrentDiff(for pullRequest: PullRequestSummary) -> Bool {
         guard case .loaded(_, let updatedAt) = diffStates[pullRequest.id] else { return false }
         return updatedAt == pullRequest.updatedAt
+    }
+
+    // MARK: - Sbalení souboru
+
+    func isFolded(_ path: String, in pr: PRIdentifier) -> Bool {
+        foldedFiles.contains(FileExpansionKey(pullRequest: pr, path: path))
+    }
+
+    func toggleFolded(_ path: String, in pr: PRIdentifier) {
+        let key = FileExpansionKey(pullRequest: pr, path: path)
+        if foldedFiles.contains(key) {
+            foldedFiles.remove(key)
+        } else {
+            foldedFiles.insert(key)
+        }
+    }
+
+    /// Rozbalí soubor, ať se dá skočit dovnitř. Skok na sbalený soubor by jinak skončil
+    /// nikde — jeho řádky v líném seznamu vůbec nejsou.
+    func unfold(_ path: String, in pr: PRIdentifier) {
+        foldedFiles.remove(FileExpansionKey(pullRequest: pr, path: path))
+    }
+
+    /// Sbalí vyjmenované soubory. Cesty dodává volající, protože co je v diffu, store neví.
+    func foldAll(_ paths: [String], in pr: PRIdentifier) {
+        foldedFiles.formUnion(paths.map { FileExpansionKey(pullRequest: pr, path: $0) })
+    }
+
+    /// Rozbalí všechno v tomhle PR. Cesty netřeba — rozbalené je to, co v množině není.
+    ///
+    /// Sahá **jen na tohle PR**: sbalení v jiném je cizí stav a smazat ho při „rozbalit vše“
+    /// by znamenalo, že se tlačítko v jednom okně projeví jinde.
+    func unfoldAll(in pr: PRIdentifier) {
+        foldedFiles = foldedFiles.filter { $0.pullRequest != pr }
     }
 
     // MARK: - Rozbalení kontextu
@@ -761,6 +802,9 @@ final class AppStore {
         expansions = expansions.filter {
             wantedPullRequests.contains($0.key.pullRequest) || $0.value.isLoading
         }
+        // Sbalení je jen příznak, ale drží klíč s celým identifikátorem PR — bez úklidu by
+        // množina rostla donekonečna.
+        foldedFiles = foldedFiles.filter { wantedPullRequests.contains($0.pullRequest) }
         // Běžící review si osu drží: `reviewTasks` je pravda o tom, co ještě běží, a jeho
         // události by se jinak zapisovaly do mapy, ze které je někdo právě vyhodil.
         reviewTimelines = reviewTimelines.filter {

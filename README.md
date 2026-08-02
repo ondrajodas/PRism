@@ -38,6 +38,12 @@ zůstává nahoře, souhrn `N souborů · +X −Y` a menu na skok mezi soubory. 
 smazané i binární soubory jsou označené; dlouhé řádky se zalamují, protože 120 znaků se do
 plné šířky vejde.
 
+**Klik na hlavičku souboru jeho diff sbalí a rozbalí**, jako na GitHubu — u PR přes deset
+souborů je to hlavní způsob, jak se v něm pohybovat. Hlavička zůstává vidět i se `+N −M`
+a s odznakem, kolik je v souboru nálezů (červeným, když je mezi nimi blokující). V horní
+liště je `Sbalit vše` / `Rozbalit vše` a skok na soubor nebo na nález sbalený soubor sám
+otevře.
+
 V mezerách mezi hunky jsou **šipky na rozbalení kontextu** — dotáhnou kód, který v diffu
 není, po dvaceti řádcích nebo celý úsek naráz. Obsah souboru se čte z GitHubu až na
 kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi zmizí.
