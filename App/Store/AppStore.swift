@@ -166,7 +166,11 @@ final class AppStore {
     /// uložené a po restartu je pryč. Do stavu se přitom propíše až po úspěšném zápisu,
     /// aby se okno a soubor nerozešly.
     func updateConfiguration(_ configuration: Configuration) async throws {
-        try await configStore?.save(configuration)
+        // Optional chaining by bez tohohle tiše prošlo a okno by hlásilo „Uloženo“ nad
+        // něčím, co nikam neodešlo. Store bez `ConfigStore` staví jen testy, ale
+        // signatura říká `throws` a to musí platit.
+        guard let configStore else { throw ConfigurationError.noStore }
+        try await configStore.save(configuration)
         // Na disku teď leží to, co jsme zapsali — starší chyba čtení už neplatí. Uložit se
         // dá jen z odemčeného editoru, takže se tím nepřebíjí soubor, který se nepovedlo
         // přečíst.

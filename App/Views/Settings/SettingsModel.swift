@@ -91,12 +91,18 @@ final class SettingsModel {
         // Nastavuje se **před** zápisem schválně: `write` propíše konfiguraci do store,
         // odkud se vrátí zpátky do `sync` — a to nesmí přepsat, co uživatel mezitím
         // napsal.
+        let previous = settled
         settled = configuration
         do {
             try await write(configuration)
             saveFailure = nil
             lastSaved = time.now
         } catch {
+            // Po selhání se to musí vrátit. Se `settled` na neuložené hodnotě by
+            // `flush()` viděl `storage == settled` a nezkusil to znovu — a hlavně by
+            // `sync(with:)` se **starou** konfigurací ze store (ta se nezměnila, zápis
+            // selhal) vypadal jako změna zvenčí a přepsal by rozepsanou práci.
+            settled = previous
             saveFailure = error.localizedDescription
         }
     }

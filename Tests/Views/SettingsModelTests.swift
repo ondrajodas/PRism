@@ -145,4 +145,35 @@ struct SettingsModelTests {
         #expect(settings.saveFailure?.isEmpty == false)
         #expect(settings.lastSaved == nil)
     }
+
+    /// Po selhaném zápisu se store nezměnil, takže do `sync` přijde **stará** konfigurace.
+    /// Kdyby ji model vzal jako změnu zvenčí, přepsal by rozepsanou práci — a to zrovna
+    /// v okamžiku, kdy je jediná kopie té práce ve formuláři.
+    @Test("Selhaný zápis nesmí nechat formulář přepsat starou konfigurací")
+    func keepsTheDraftAfterAFailedWrite() async {
+        let recorder = Recorder()
+        recorder.failure = CocoaError(.fileWriteNoPermission)
+        let settings = model(time: BlockingTime(), recorder: recorder)
+
+        settings.draft.global.skills = ["go-review"]
+        await settings.flush()
+        settings.sync(with: .standard)
+
+        #expect(settings.draft.global.skills == ["go-review"])
+    }
+
+    @Test("Po selhaném zápisu jde uložit znovu bez další editace")
+    func retriesAfterAFailedWrite() async {
+        let recorder = Recorder()
+        recorder.failure = CocoaError(.fileWriteNoPermission)
+        let settings = model(time: BlockingTime(), recorder: recorder)
+        settings.draft.global.skills = ["go-review"]
+        await settings.flush()
+
+        recorder.failure = nil
+        await settings.flush()
+
+        #expect(recorder.written.map(\.global.skills) == [["go-review"]])
+        #expect(settings.saveFailure == nil)
+    }
 }

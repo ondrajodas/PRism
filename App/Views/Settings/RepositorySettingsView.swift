@@ -18,7 +18,11 @@ struct RepositorySettingsView: View {
         }
         // Bez výběru je pravá půlka prázdná hned po otevření záložky, což vypadá jako
         // chyba. První repo je odpověď na „ukaž mi něco“, ne rozhodnutí za uživatele.
-        .task { selection = selection ?? repositories.first }
+        //
+        // `id:` je podstatné: okno se dá otevřít dřív, než dorazí první polling. Bez něj
+        // by seznam vlevo naskočil, ale vpravo by zůstalo „Vyber repozitář“, dokud si
+        // uživatel neklikne.
+        .task(id: repositories) { selection = selection ?? repositories.first }
     }
 
     @ViewBuilder private var list: some View {

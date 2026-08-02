@@ -692,7 +692,10 @@ Věci, které se u toho nemají rozbít:
   okna to nečeká a uloží hned (`flush()`).
 - **Vlastní uložení se pozná od změny zvenčí.** Zápis se propíše do store a odtud se vrátí
   zpátky do `sync(with:)`; bez porovnání se `settled` by si formulář přepisoval rozepsaný
-  text pokaždé, když uložení doběhne.
+  text pokaždé, když uložení doběhne. **Po selhaném zápisu se `settled` vrací zpátky** —
+  store se nezměnil, takže do `sync` přijde stará konfigurace a bez toho by vypadala jako
+  změna zvenčí a přepsala rozepsanou práci. Zároveň by `flush()` viděl `storage == settled`
+  a nezkusil to znovu.
 - **`Binding(items)` nad optionalem je past.** Force-unwrapuje při každém čtení a editor
   nad ním jeden překreslovací cyklus přežije i vypnutí přepínače — takže `nil` shodí proces
   v `BindingOperations.ForceUnwrapping`. **Ověřeno pádem aplikace** při vypnutí vlastní sady

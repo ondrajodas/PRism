@@ -93,6 +93,17 @@ struct AppStoreConfigurationTests {
         }
     }
 
+    /// Store bez `ConfigStore` staví jen testy, ale okno nastavení nad ním postavit jde —
+    /// a tiché „uložil jsem“ nad něčím, co nikam neodešlo, je horší než chyba.
+    @Test("Store bez souboru nastavení uložení neschová")
+    func refusesToSaveWithoutAStore() async throws {
+        let store = AppStore(gateway: FakeGitHubGateway(always: .success([])), time: FakeTimeSource())
+
+        await #expect(throws: ConfigurationError.noStore) {
+            try await store.updateConfiguration(.standard)
+        }
+    }
+
     /// Rozbitý soubor nesmí aplikaci položit ani projít tiše.
     @Test("Rozbitá konfigurace je vidět a běží se na výchozích")
     func surfacesABrokenConfiguration() async throws {
