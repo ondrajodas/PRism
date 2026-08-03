@@ -1,0 +1,13 @@
+// Podpis aplikace.
+//
+// Výchozí hodnota je ad-hoc podpis, takže se projekt zbuildí na jakémkoli stroji bez
+// jakékoli přípravy. Ad-hoc podpis ale nemá stálou identitu — každý build dá jiný otisk,
+// takže macOS považuje aplikaci pokaždé za jinou a povolení udělená přes TCC (přístup do
+// Stažených souborů, Dokumentů…) se na novou verzi už nevztahují.
+//
+// Stálou identitu dá self-signed certifikát v login keychainu. Vyrobí ho
+// `bin/setup-signing.sh`, který zároveň napíše `Signing.local.xcconfig` s jeho jménem —
+// a ten se odsud načte, pokud existuje. Necommituje se: je to vlastnost stroje, ne repa.
+CODE_SIGN_IDENTITY = -
+
+#include? "Signing.local.xcconfig"

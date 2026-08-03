@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Podpis — jméno certifikátu je vlastnost stroje, ne repa (bin/setup-signing.sh)
+Signing.local.xcconfig
+
 # Xcode
 build/
 DerivedData/

@@ -1257,7 +1257,20 @@ Právě proto tam eskalace na `SIGKILL` je.
 - **Do `project.pbxproj` nesahej.** `App/` a `Tests/` jsou buildable folders
   (`PBXFileSystemSynchronizedRootGroup`) — soubory i podsložky se do targetu berou
   z filesystému. Nový zdroják = jen ho vytvořit. Editovat pbxproj je potřeba jen při
-  změně targetů nebo build settings.
+  změně targetů nebo build settings. Jediný soubor, který v něm vyjmenovaný **je**, je
+  `Signing.xcconfig` — xcconfig se dá napojit jen odkazem (`baseConfigurationReference`
+  u obou konfigurací projektu), z filesystému se nevezme.
+- **V shell skriptech se proměnná v české próze píše `${VAR}`.** Uvozovka „ hned za
+  `$VAR` shodí bash 3.2 (ten je v `/bin/bash`) v UTF-8 locale na `unbound variable`: její
+  byty se počítají do jména proměnné. Chytí to `set -u`, ale až za běhu — `bash -n` ne.
+  Grep na ten vzor: `grep -nP '\$\{?[A-Za-z_][A-Za-z_0-9]*[^\x00-\x7F]' bin/*.sh`.
+- **`| grep -q` se ve skriptu s `pipefail` nesmí použít jako podmínka.** `grep -q` po první
+  shodě zavře rouru, producent dostane SIGPIPE a `pipefail` z toho udělá návratový kód
+  141 — takže podmínka vyjde **nepravdivě právě tehdy, když shoda je**. Výstup se čte do
+  proměnné a porovná `case`em. Stálo to mrtvou kontrolu ad-hoc podpisu v `bin/run.sh`,
+  která nevypsala nic ani nad ad-hoc podepsanou aplikací (#61). Kontrolu, která má něco
+  hlásit jen výjimečně, je proto potřeba **spustit i v tom výjimečném stavu** — jinak je
+  „nic nevypsala“ k nerozeznání od „funguje“.
 - **Uživatelské texty jsou české a bundle to musí vědět.** `Info.plist` deklaruje
   `CFBundleDevelopmentRegion = cs` a `CFBundleLocalizations = [cs]`. Bez toho spadne
   `Locale.current` na vývojový jazyk a formátované hodnoty (relativní časy, čísla) vyjdou
@@ -1519,6 +1532,12 @@ xcodebuild -project PRism.xcodeproj -scheme PRism test
 ./bin/run.sh    # build v Debug + otevření aplikace
                 # předchozí instanci ukončí Apple eventem, ne `killall` —
                 # při běžícím review se tedy zeptá a bez odpovědi nic nespustí
+                # a upozorní, když je build podepsaný ad-hoc
+```
+
+```bash
+./bin/setup-signing.sh    # jednorázově: self-signed certifikát do login keychainu
+                          # + Signing.local.xcconfig, ze kterého ho vezme build
 ```
 
 `xcodebuild` na tomhle stroji plive na začátku výstupu chyby o `CoreSimulator` — jsou
@@ -1542,6 +1561,17 @@ ho do souboru.
 - macOS 26, Xcode 26, Swift 6.3
 - Vyžaduje na stroji `gh` (přihlášený), `claude` a `git`
 - **App Sandbox vypnutý** — aplikace spouští podprocesy a zapisuje do vlastní cache
+- **Podpis je stálý, ne ad-hoc** (#61). `Signing.xcconfig` drží ad-hoc default a přes
+  `#include?` si tahá gitignorovaný `Signing.local.xcconfig` s jménem certifikátu, který
+  vyrobí `bin/setup-signing.sh`. Ad-hoc podpis nemá stálou identitu, takže po každém buildu
+  je to pro macOS jiná aplikace a **udělená TCC povolení propadnou** — dotaz na Stažené
+  soubory (kam leze `claude` přes `~/.zshrc`) se pak vrací pořád dokola. Podrobnosti
+  v README, sekce *Podpis*. Dvě věci, na které se u toho naráží:
+  - **Identita se nesmí zadrátovat do `project.pbxproj`.** Build s certifikátem, který na
+    stroji není, končí `No certificate matching 'PRism Local' found` — ověřeno. Proto je
+    fallback v checkovaném xcconfigu a jméno v tom lokálním, ne naopak.
+  - **`CODE_SIGN_IDENTITY` je jen na úrovni projektu.** Kdyby zůstalo v buildSettings
+    targetů, přebilo by xcconfig a lokální soubor by neměl žádný efekt.
 - **Binárky hledej absolutní cestou.** GUI aplikace spuštěná z Finderu nedědí `PATH` ze
   shellu, takže `gh` se podle jména nenajde. Řeší `BinaryLocator` při startu; cesty se
   berou z `ToolPaths`, nikdy z názvu binárky.
@@ -1682,6 +1712,10 @@ Potvrzení při zavření hotové (issue #94, levná varianta) — dokud běží
 před ukončením zeptá, protože session se zavřením zabije a nahlášené nálezy jsou pryč.
 `bin/run.sh` proto ukončuje aplikaci Apple eventem, ne `killall`. Dotažení nálezů
 z transcriptu zůstává v #94 pro pád aplikace a zabití zvenčí.
+
+Stálý podpis hotový (issue #61) — `Signing.xcconfig` a `bin/setup-signing.sh`. Aplikace už
+není po každém buildu pro macOS jiná aplikace, takže udělená povolení rebuild přežijí.
+Vrstva bez UI (build a podpis), viz *Prostředí* výš.
 
 Plánované fáze:
 
