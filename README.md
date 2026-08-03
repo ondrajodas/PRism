@@ -142,6 +142,9 @@ aktuálně je.
 
 - [Návrh (specifikace)](docs/superpowers/specs/2026-07-31-prism-design.md) — plný
   návrh včetně záznamu rozhodnutí a zamítnutých alternativ
+- [`docs/claude-cli.md`](docs/claude-cli.md) — ověřené chování `claude` CLI
+- [`docs/github-review-api.md`](docs/github-review-api.md) — ověřené chování zápisového
+  review API GitHubu; podklad pro milník M6, ve kterém aplikace přestane být jen pro čtení
 - [CLAUDE.md](CLAUDE.md) — pravidla pro práci v tomto repu
 
 ## Jak to funguje
@@ -303,6 +306,7 @@ Info.plist                název aplikace, verze, minimální systém
 PRism.entitlements        vypnutý App Sandbox
 Signing.xcconfig          podpis: ad-hoc default + volitelný Signing.local.xcconfig
 docs/claude-cli.md        ověřené chování claude CLI (flagy, tvar eventů)
+docs/github-review-api.md ověřené chování zápisového review API GitHubu (spike k M6)
 docs/superpowers/specs/   návrh a specifikace
 CLAUDE.md                 pravidla pro práci v repu
 README.md                 tento soubor

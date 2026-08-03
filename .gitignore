@@ -4,6 +4,11 @@
 # Podpis — jméno certifikátu je vlastnost stroje, ne repa (bin/setup-signing.sh)
 Signing.local.xcconfig
 
+# Lokální oprávnění Claude Code — grant vázaný na účet, ne na repo. Pouští zápis do
+# soukromého sandboxu pro spike #62; do verzovaného souboru nepatří právě proto, že
+# repo má tvrdou podmínku „aplikace na GitHub nic neposílá“.
+.claude/settings.local.json
+
 # Xcode
 build/
 DerivedData/
