@@ -52,7 +52,12 @@ struct ThreadBubbleView: View {
                 Text(verbatim: title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 if thread.isResolved { resolvedBadge }
+                // I ve **sbalené** hlavičce: vyřešené vlákno je sbalené výchozím stavem,
+                // takže bez tohohle by useknuté vlákno vypadalo úplné a nebyl by důvod ho
+                // otevřít. Utnutá data nesmí vypadat jako úplná ani na jeden pohled.
+                if thread.comments.isTruncated { truncationBadge }
                 Spacer(minLength: 0)
             }
             .contentShape(.rect)
@@ -78,6 +83,18 @@ struct ThreadBubbleView: View {
             .padding(.vertical, 2)
             .background(.green.opacity(0.18), in: .capsule)
             .foregroundStyle(.green)
+    }
+
+    /// Kolik komentářů se do stránky nevešlo. Číslo, ne jen ikona — „chybí něco“ nedává
+    /// důvod jít na GitHub, „chybí 12“ ano.
+    private var truncationBadge: some View {
+        Text(verbatim: "+\(thread.comments.missing)")
+            .font(.caption2)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.orange.opacity(0.18), in: .capsule)
+            .foregroundStyle(.orange)
+            .help("Další komentáře se nevešly — otevři vlákno na GitHubu.")
     }
 
     // MARK: - Komentář

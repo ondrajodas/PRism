@@ -36,13 +36,18 @@ final class AppStore {
     /// ještě nenačítalo.
     private(set) var conversationStates: [PRIdentifier: ConversationState] = [:]
 
-    /// Vlákna, u kterých si uživatel překlikl rozbalení proti výchozímu stavu.
+    /// Vlákna, u kterých si uživatel překlikl rozbalení proti výchozímu stavu, **per PR**.
     ///
     /// Drží se **odchylka**, ne seznam rozbalených: výchozí stav se odvozuje z vlákna
     /// (nevyřešené rozbalené, vyřešené sbalené), takže seznam rozbalených by se musel plnit
     /// při každém načtení konverzace — a ruční obnovení by uživateli zahodilo, co si zavřel.
     /// Rozhoduje `Policy.isThreadExpanded(_:toggled:)`.
-    private(set) var toggledThreads: Set<String> = []
+    ///
+    /// Klíčem je **PR**, i když `id` vlákna je globálně unikátní a samo by na rozlišení
+    /// stačilo. Je to kvůli úklidu: zahazovat se má podle toho, jestli PR zmizel ze seznamu,
+    /// a to z `id` vlákna poznat nejde. Plochá množina uklízená podle **načtených** konverzací
+    /// se po výpadku sítě (`.failed`) vyprázdnila a uživateli naskočilo výchozí rozbalení.
+    private(set) var toggledThreads: [PRIdentifier: Set<String>] = [:]
 
     /// Rozbalený kontext **per soubor v PR**. Co v mapě není, nikdo nerozbaloval.
     private(set) var expansions: [FileExpansionKey: FileExpansion] = [:]
@@ -438,16 +443,19 @@ final class AppStore {
         return Policy.threadsInTheDiff(conversation.threads.items, renderedIn: diff)
     }
 
-    func isThreadExpanded(_ thread: ReviewThread) -> Bool {
-        Policy.isThreadExpanded(thread, toggled: toggledThreads)
+    func isThreadExpanded(_ thread: ReviewThread, in pr: PRIdentifier) -> Bool {
+        Policy.isThreadExpanded(thread, toggled: toggledThreads[pr] ?? [])
     }
 
-    func toggleThread(_ thread: ReviewThread) {
-        if toggledThreads.contains(thread.id) {
-            toggledThreads.remove(thread.id)
+    func toggleThread(_ thread: ReviewThread, in pr: PRIdentifier) {
+        var toggled = toggledThreads[pr] ?? []
+        if toggled.contains(thread.id) {
+            toggled.remove(thread.id)
         } else {
-            toggledThreads.insert(thread.id)
+            toggled.insert(thread.id)
         }
+        // Prázdná množina se maže, ať v mapě nezůstávají klíče bez obsahu.
+        toggledThreads[pr] = toggled.isEmpty ? nil : toggled
     }
 
     // MARK: - Sbalení souboru
@@ -1069,14 +1077,10 @@ final class AppStore {
         conversationStates = conversationStates.filter {
             wantedPullRequests.contains($0.key) || $0.value == .loading
         }
-        // Překliknutá vlákna se uklízejí podle **zbylých konverzací**, ne podle PR: `id`
-        // vlákna svoje PR nenese, takže jinak by množina rostla donekonečna. Vlákna, jejichž
-        // konverzace v mapě zůstala, si stav podrží.
-        let liveThreads = Set(conversationStates.values.flatMap { state -> [String] in
-            guard case .loaded(let conversation, _) = state else { return [] }
-            return conversation.threads.items.map(\.id)
-        })
-        toggledThreads = toggledThreads.intersection(liveThreads)
+        // Překliknutá vlákna se uklízejí podle **PR**, ne podle vláken v načtených
+        // konverzacích. Podle konverzací to nešlo: PR ve stavu `.failed` v mapě zůstane, ale
+        // žádná vlákna nedá, takže by výpadek sítě uživateli zahodil, co si zavřel.
+        toggledThreads = toggledThreads.filter { wantedPullRequests.contains($0.key) }
         // Běžící review si osu drží: `reviewTasks` je pravda o tom, co ještě běží, a jeho
         // události by se jinak zapisovaly do mapy, ze které je někdo právě vyhodil.
         reviewTimelines = reviewTimelines.filter {

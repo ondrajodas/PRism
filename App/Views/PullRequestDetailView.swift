@@ -201,8 +201,8 @@ struct PullRequestDetailView: View {
                 highlighted: highlighted,
                 threads: store.anchoredThreads(for: pullRequest.id),
                 viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
-                isThreadExpanded: { store.isThreadExpanded($0) },
-                toggleThread: { store.toggleThread($0) }
+                isThreadExpanded: { store.isThreadExpanded($0, in: pullRequest.id) },
+                toggleThread: { store.toggleThread($0, in: pullRequest.id) }
             )
         case .failed(let detail):
             diffFailure(detail)

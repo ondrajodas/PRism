@@ -202,8 +202,8 @@ struct AppStoreConversationTests {
         let gateway = FakeGitHubGateway(always: .success([]))
         let store = store(gateway)
 
-        #expect(store.isThreadExpanded(thread(resolved: false)))
-        #expect(!store.isThreadExpanded(thread(resolved: true)))
+        #expect(store.isThreadExpanded(thread(resolved: false), in: pr))
+        #expect(!store.isThreadExpanded(thread(resolved: true), in: pr))
     }
 
     @Test("Překliknutí drží a jde vrátit")
@@ -211,21 +211,21 @@ struct AppStoreConversationTests {
         let store = store(FakeGitHubGateway(always: .success([])))
         let resolved = thread(resolved: true)
 
-        store.toggleThread(resolved)
-        #expect(store.isThreadExpanded(resolved))
+        store.toggleThread(resolved, in: pr)
+        #expect(store.isThreadExpanded(resolved, in: pr))
 
-        store.toggleThread(resolved)
-        #expect(!store.isThreadExpanded(resolved))
+        store.toggleThread(resolved, in: pr)
+        #expect(!store.isThreadExpanded(resolved, in: pr))
     }
 
     @Test("Překliknutí jednoho vlákna nesahá na druhé")
     func togglesOneThreadOnly() {
         let store = store(FakeGitHubGateway(always: .success([])))
 
-        store.toggleThread(thread(id: "a", resolved: true))
+        store.toggleThread(thread(id: "a", resolved: true), in: pr)
 
-        #expect(store.isThreadExpanded(thread(id: "a", resolved: true)))
-        #expect(!store.isThreadExpanded(thread(id: "b", resolved: true)))
+        #expect(store.isThreadExpanded(thread(id: "a", resolved: true), in: pr))
+        #expect(!store.isThreadExpanded(thread(id: "b", resolved: true), in: pr))
     }
 
     /// Ruční obnovení nesmí uživateli zahodit, co si zavřel — proto se drží odchylka, ne
@@ -238,11 +238,11 @@ struct AppStoreConversationTests {
         )
         let store = store(gateway)
         await store.loadConversation(for: summary())
-        store.toggleThread(thread(resolved: true))
+        store.toggleThread(thread(resolved: true), in: pr)
 
         await store.refreshConversation(for: summary())
 
-        #expect(store.isThreadExpanded(thread(resolved: true)))
+        #expect(store.isThreadExpanded(thread(resolved: true), in: pr))
     }
 
     // MARK: - Úklid
@@ -265,8 +265,32 @@ struct AppStoreConversationTests {
         #expect(store.conversation(for: pr) == nil)
     }
 
-    /// `id` vlákna svoje PR nenese, takže bez úklidu podle zbylých konverzací by množina
-    /// překliknutých rostla donekonečna.
+    /// Výpadek sítě nechá konverzaci ve stavu `.failed`, tedy bez vláken. Kdyby se úklid
+    /// řídil **načtenými** vlákny (jak to dělal první návrh), vyprázdnil by množinu a
+    /// uživateli by naskočilo výchozí rozbalení — proto se klíčuje PR.
+    @Test("Selhané načtení překliknutí nezahodí")
+    func keepsTogglesAfterAFailedLoad() async {
+        let gateway = FakeGitHubGateway(
+            always: .success([summary()]),
+            conversations: [
+                .success(conversation([thread(resolved: true)])),
+                .failure(GitHubError.network("bez sítě")),
+            ]
+        )
+        let store = store(gateway)
+        await store.refresh()
+        await store.loadConversation(for: summary())
+        store.toggleThread(thread(resolved: true), in: pr)
+
+        // Druhé načtení selže a konverzace zůstane v mapě jako `.failed`.
+        await store.refreshConversation(for: summary())
+        await store.refresh()
+
+        #expect(store.conversationState(for: pr) == .failed(GitHubError.network("bez sítě").userDescription))
+        #expect(store.isThreadExpanded(thread(resolved: true), in: pr))
+    }
+
+    /// Bez úklidu by mapa překliknutých rostla donekonečna.
     @Test("Překliknutá vlákna zmizelého PR se uklidí")
     func forgetsTogglesOfVanishedPullRequests() async {
         let other = PRIdentifier("cli/cli#2")!
@@ -278,11 +302,11 @@ struct AppStoreConversationTests {
 
         await store.refresh()
         await store.loadConversation(for: summary())
-        store.toggleThread(thread(id: "t1", resolved: true))
-        #expect(store.toggledThreads == ["t1"])
+        store.toggleThread(thread(id: "t1", resolved: true), in: pr)
+        #expect(store.toggledThreads[pr] == ["t1"])
 
         await store.refresh()
 
-        #expect(store.toggledThreads.isEmpty)
+        #expect(store.toggledThreads[pr] == nil)
     }
 }

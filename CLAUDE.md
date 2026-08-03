@@ -408,6 +408,15 @@ v pěti věcech se chovají jinak:
 - **Přepínač `Nálezy` vlákna neschovává.** Jmenuje se tak od #64 právě proto — do té doby
   `Bubliny`, což slibovalo, že vypne obojí (chytilo se to při zkoušení). Cizí komentář
   u kódu je důvod, proč se na PR člověk dívá, takže se s nálezy schovávat nemá.
+- **Zkrácené vlákno to hlásí i ve sbalené hlavičce** (odznak `+N`). Vyřešené vlákno je
+  sbalené výchozím stavem, takže hláška jen v rozbaleném těle by znamenala, že useknuté
+  vlákno vypadá úplné a není důvod ho otevřít.
+- **Překliknutá vlákna se drží per PR**, ne v ploché množině `id`. `id` vlákna je unikátní
+  a samo by na rozlišení stačilo, ale úklid odpovídá na otázku „zmizel PR ze seznamu?“ —
+  a ta se z `id` nepozná. Plochá množina uklízená podle **načtených** konverzací se po
+  výpadku sítě (`.failed`) vyprázdnila, protože takový stav v mapě zůstane, ale vlákna nedá.
+- **Bublina vlákna nemá `.textSelection(.enabled)`**, i když je to text ke kopírování —
+  platí tu totéž jako nad celým diffem. `FindingBubbleView` ho ze stejného důvodu nemá.
 
 ### `Config` (`App/Config/`)
 
