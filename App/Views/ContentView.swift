@@ -14,8 +14,21 @@ struct ContentView: View {
         } detail: {
             detail
         }
-        .blur(radius: store.isSettingsFrontmost ? 3 : 0)
-        .animation(.easeInOut(duration: 0.18), value: store.isSettingsFrontmost)
+        // **Ztmavení, ne rozostření.** `.blur()` protlačí celé okno přes offscreen
+        // vykreslení, a to i s poloměrem 0 — text tím ztratí subpixelové vyhlazení a
+        // v seznamu, diffu i hlavičce vypadá rozmazaně a „skáče“. Ověřeno tím, že se
+        // modifikátor odebral: bez něj je vykreslení v pořádku.
+        //
+        // Podmíněně ho aplikovat nejde: `if` kolem `NavigationSplitView` mu změní identitu
+        // a otevření nastavení by zahodilo pozici scrollu v diffu. Překryv s nulovou
+        // průhledností nic nerasterizuje, takže tuhle daň nemá.
+        .overlay {
+            Color.black
+                .opacity(store.isSettingsFrontmost ? 0.18 : 0)
+                // Klik má okno vybrat, ne se zastavit o překryv.
+                .allowsHitTesting(false)
+                .animation(.easeInOut(duration: 0.18), value: store.isSettingsFrontmost)
+        }
         // Smyčka žije, dokud žije okno — zavření okna task zruší a polling se zastaví.
         .task { await store.keepFresh() }
         // Konfigurace se edituje v souboru mimo aplikaci, takže se načte pokaždé, když se
