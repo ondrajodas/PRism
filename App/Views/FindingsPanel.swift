@@ -213,6 +213,16 @@ struct FindingsPanel: View {
         }
     }
 
+    /// Sloupce mají **strop** kromě `Nálezu`, a **každý má nápovědu**.
+    ///
+    /// Pružný sloupec bez `max` roste do nekonečna a AppKit dělí přebytek mezi všechny
+    /// takové — proto `Kategorie` s jedním slovem zabírala stejně jako text nálezu, který je
+    /// to hlavní. Strop je jediné, čím se dá říct „dál už neroste“, a co zbyde, spadne
+    /// `Nálezu`. Rozmezí jsou schválně široká, aby tažení za hlavičku pořád k něčemu bylo.
+    ///
+    /// A protože se každým sloupcem dá táhnout až na jeho `min`, umí se ořezat **každý** —
+    /// takže nápovědu má každý, ne jen ty dva, na které myslelo zadání. Ořezaný text bez
+    /// nápovědy je ztracený údaj a `Table` nemá kam rozbalit druhý řádek.
     private var table: some View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
             TableColumn("Kategorie", value: \.category) { row in
@@ -224,25 +234,47 @@ struct FindingsPanel: View {
                             .help("Blokující nález")
                     }
                     Text(verbatim: row.category)
+                        .lineLimit(1)
                 }
+                .help(row.category)
             }
-            .width(min: 110, ideal: 140)
+            .width(min: 100, ideal: 130, max: 190)
 
             TableColumn("Reviewer", value: \.reviewer) { row in
                 Text(verbatim: row.reviewer)
+                    .lineLimit(1)
+                    .help(row.reviewer)
             }
-            .width(min: 90, ideal: 110)
+            // `code-review:code-review` je výchozí id z konfigurace, takže se vejít **musí**
+            // — jinak se sloupec ořezává pořád. Při 13pt systémovém fontu je to 154,7 pt
+            // a odsazení buňky bere dalších ~19, proto 185.
+            //
+            // Drží to `min`, ne `ideal`: s `ideal: 175` sloupec vyšel na ~139 pt a text se
+            // ořezal. `ideal` je nápověda, kterou rozdělování šířky přebije — vejít se
+            // zaručí jedině podlaha. Delší id se ořeže a dočte z nápovědy; vejít se musí to
+            // nejdelší **běžné**, ne každé.
+            .width(min: 185, ideal: 185, max: 260)
 
             TableColumn("Místo", value: \.location) { row in
                 Text(verbatim: row.location)
                     .font(.system(.callout, design: .monospaced))
                     .foregroundStyle(row.finding.file == nil ? .secondary : .primary)
+                    .lineLimit(1)
+                    // Zepředu, ať zůstane jméno souboru a číslo řádku. Odzadu by z
+                    // `App/Views/…` zbyl společný prefix, který o nálezu neříká nic.
+                    .truncationMode(.head)
+                    .help(row.locationHelp)
             }
-            .width(min: 140, ideal: 260)
+            .width(min: 120, ideal: 240, max: 420)
 
             TableColumn("Nález", value: \.summary) { row in
-                Text(verbatim: row.summary).lineLimit(2)
+                Text(verbatim: row.summary)
+                    .lineLimit(2)
+                    .help(row.summary)
             }
+            // Bez `max`, takže si vezme, co ostatní nechají. `min` je tu proto, aby v úzkém
+            // okně mizely ony a ne on — je to ten sloupec, kvůli kterému se tabulka čte.
+            .width(min: 220)
         }
         // Výběr se hned zahazuje, aby se na totéž místo dalo skočit i podruhé — jinak by
         // druhé kliknutí na už vybraný řádek neudělalo nic.

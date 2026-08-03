@@ -827,7 +827,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout |
 | `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah obarvený podle jazyka |
 | `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`, návrh verdiktu, tabulka s řazením, prokliky do diffu a zahození nálezů |
-| `FindingRow` | Nález převedený na řádek tabulky — texty, identita, blokující příznak |
+| `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
 | `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume`, upozornění na načtený jiný skill |
 | `ReviewerChipsView` | Chipy reviewerů: stav a filtr naráz |
@@ -1032,6 +1032,28 @@ Věci, na které se u okna naráží:
   nevykreslených řádků.
 - **Stavy se čtou v těle `list`, ne až uvnitř řádku.** `List` staví řádky líně a mimo
   sledování závislostí rodiče, takže změna stavu nemusí seznam překreslit.
+- **`ideal` u sloupce `Table` je nápověda, ne šířka.** Rozdělování dostupné šířky ho
+  přebije: `Reviewer` s `ideal: 175` vyšel na ~139 pt a `code-review:code-review` se v něm
+  ořezal. Co se **musí** vejít, se proto zadává jako `min` — podlaha je jediné, co
+  rozdělování respektuje. Ověřeno na běžící aplikaci; AX to nepotvrdí, protože do SwiftUI
+  `Table` nepustí (stejná past jako `entire contents`), takže se šířka odečítá ze snímku
+  okna a odsazení buňky (~19 pt) se dopočítá z ořezaného textu.
+- **Sloupec `Table` bez `max` roste do nekonečna** a AppKit dělí přebytek šířky mezi
+  **všechny** takové sloupce. `.width(min:ideal:)` tedy poměr nedrží: v tabulce nálezů
+  zabírala `Kategorie` s jedním slovem stejně jako text nálezu, který je to hlavní (#60).
+  Strop je jediné, čím se dá říct „dál už neroste“ — sloupec, který má přebytek posbírat,
+  se pozná tím, že `max` **nemá**. `min` na něm ale být musí, ať v úzkém okně mizí ostatní
+  a ne on.
+- **Nápovědu má každý sloupec tabulky, ne jen ty ořezané.** Ořezaný text bez nápovědy je
+  ztracený údaj a `Table` nemá kam rozbalit druhý řádek — a protože se každým sloupcem dá
+  táhnout až na jeho `min`, umí se ořezat každý. Zadání #60 jmenovalo `Nález` a `Místo`,
+  ale `Kategorie` na svém minimu neuveze „bez kategorie“ s výstražnou ikonou. `Místo` se
+  přitom ořezává **zepředu** (`.truncationMode(.head)`, stejně jako cesty ve `FileTreeView`
+  a v hlavičkách `DiffView`), aby zůstalo jméno souboru a číslo řádku; společný prefix
+  `App/Views/…` o nálezu neříká nic.
+- **Nápověda u nálezu bez místa je věta, ne pomlčka.** Sloupec ukazuje `—`, ale tooltip
+  s pomlčkou nevysvětluje nic. Skládá se ve `FindingRow`, ne ve view — je to text a ten se
+  tam testuje bez UI.
 - **Prázdný `PollStatusBanner` se nekreslí vůbec.** Trvalý pruh „vše OK“ ubírá místo
   seznamu a oko se ho naučí přehlížet. A **dokud se nic nenačetlo, nekreslí se taky** —
   není co označit za neaktuální a chybu vysvětluje prázdný stav pod ním.
@@ -1361,7 +1383,10 @@ Právě proto tam eskalace na `SIGKILL` je.
   načtený jiný, načtený správný a běh bez skillu (ten záměna není).
 - **`FindingRow`** — skládání textů (`—` u nálezu bez místa, samotný soubor bez řádku,
   `file:line` bez locale u velkých čísel), blokující příznak, výchozí pořadí z `Policy`
-  a unikátní identita řádků.
+  a unikátní identita řádků. Plus **nápověda k místu**: celá cesta u nálezu s řádkem
+  i bez něj a vysvětlující věta tam, kde je ve sloupci `—`. Šířky sloupců se
+  neunit-testují — `Table` je AppKit tabulka, takže offscreen render z ní udělá žlutý
+  placeholder stejně jako z `Listu`; kontroluje se na běžící aplikaci.
 - **Bubliny nálezů** — že bublina visí pod svým řádkem, že nález mimo diff a nález bez
   řádku skončí u hlavičky souboru (a v pořadí podle čísla řádku), že se po rozbalení
   kontextu bublina k řádku přesune, že dva reviewery na jednom řádku dají jednu bublinu

@@ -60,6 +60,32 @@ struct FindingRowTests {
         #expect(row.location == "—")
     }
 
+    /// Sloupec se ořezává zepředu, takže z dlouhé cesty je vidět jen konec — nápověda je
+    /// jediné místo, kde je celá.
+    @Test("Nápověda u místa je celá cesta")
+    func explainsThePlaceInFull() throws {
+        let row = try #require(FindingRow.rows(of: [finding(file: "App/Views/FindingsPanel.swift")]).first)
+
+        #expect(row.locationHelp == "App/Views/FindingsPanel.swift:42")
+    }
+
+    /// Tooltip s pomlčkou nevysvětluje nic. Věta ano — a tohle je ten druh nálezu, kvůli
+    /// kterému tabulka existuje.
+    @Test("Nápověda u nálezu bez místa vysvětluje pomlčku")
+    func explainsAFindingWithoutAPlace() throws {
+        let row = try #require(FindingRow.rows(of: [finding(file: nil, line: nil)]).first)
+
+        #expect(row.location == "—")
+        #expect(row.locationHelp == "Nález nepatří ke konkrétnímu místu v kódu.")
+    }
+
+    @Test("Nález bez řádku má v nápovědě samotný soubor")
+    func explainsAFindingWithoutALine() throws {
+        let row = try #require(FindingRow.rows(of: [finding(line: nil)]).first)
+
+        #expect(row.locationHelp == "App/Main.swift")
+    }
+
     @Test("Nález bez kategorie se pojmenuje")
     func namesAFindingWithoutACategory() throws {
         let row = try #require(FindingRow.rows(of: [finding(category: nil)]).first)

@@ -382,6 +382,17 @@ poznámky k architektuře. Právě kvůli nim nestačí bubliny.
 - **Nález bez místa má v sloupci `—`.**
 - **Klik na řádek** odscrolluje diff na místo nálezu a jeho bublina se na chvíli zvýrazní.
 
+#### Šířky sloupců (#60)
+
+- **`Nález` bere, co ostatní nechají.** `Kategorie` a `Reviewer` mají strop na tom, co
+  potřebují, `Místo` něco mezi tím. Bez stropu roste pružný sloupec do nekonečna a přebytek
+  se dělí mezi všechny — dvě krátká slova pak zabírala polovinu tabulky.
+- **Co se nevejde, je v nápovědě — u každého sloupce.** U nálezu celý text, u místa celá
+  cesta. U nálezu bez místa vysvětluje nápověda pomlčku, protože tooltip s pomlčkou neříká
+  nic.
+- **`Místo` se ořezává zepředu**, ať zůstane jméno souboru a číslo řádku; text nálezu odzadu.
+- **Šířky zůstávají přetažitelné** — mění se jen výchozí poměr.
+
 ### Strom souborů (#51)
 
 Navigace po souborech diffu. Plochý seznam cest se u PR přes víc adresářů čte špatně —
@@ -825,3 +836,7 @@ Dvě rozhodnutí, která z rozpisu M8 nejsou vidět a stála za rozdělení na p
 | Odpověď do vlákna jde **přes `ReviewPublisher`** | Vlastní modul, protože to není review | Pravidlo, které nahrazuje tvrdou podmínku č. 1, stojí na tom, že `grep ReviewPublisher` vyjmenuje **všechna** místa, odkud aplikace píše. Druhá cesta ven by z něj udělala nepravdu — a to je přesně ta vlastnost, kvůli které se ta podmínka smí zrušit |
 | Odpověď **nemá potvrzovací dialog**, review ano | Potvrzovat obojí, ať je to jednotné | Review je verdikt nad celým PR a odeslat ho omylem je drahé. Odpověď je jedna věta v diskuzi, jde smazat — a potvrzování každé z nich by z okna udělalo klikačku |
 | Konverzace bez kotvy patří do tabu **`Overview`**, ne do spodního panelu | Tab `Konverzace` vedle `Nálezů` a `Průběhu`, jak to měla původní podoba #64 | Spodní panel je úzký pruh pod diffem a existuje proto, aby se obsah četl **vedle kódu**, kterého se týká. Vlákno bez kotvy žádný takový kód nemá. Dva domovy pro konverzaci navíc znamenají hledat komentář na dvou místech |
+| Krátké sloupce dostanou **`max`**, `Nález` zůstane bez stropu | Dát jim pevnou šířku (`.width(140)`), což poměr drží nejspolehlivěji | Pevná šířka zabíjí tažení, které zadání #60 výslovně chce zachovat. `max` je jediné, čím se v `Table` dá říct „dál už neroste“, a přebytek pak spadne tomu jednomu sloupci, který strop nemá. Rozmezí jsou schválně široká (`Kategorie` 100–190, `Místo` 120–420), aby tažení pořád k něčemu bylo; `Reviewer` je výjimka (185–260) a proč, je v řádku pod tímhle. `Nález` má naopak jen `min: 220`, ať v úzkém okně mizí ostatní a ne on |
+| `Reviewer` má nejdelší běžné id v **`min`** (185 pt), ne v `ideal` | Nastavit `ideal` a nechat `min` malé, ať se dá sloupec přetáhnout úzko | Vyžádané při zkoušení, a napodruhé: `ideal: 175` sloupec **nedodržel** — vyšel na ~139 pt a text se ořezal, protože `ideal` je nápověda, kterou rozdělování šířky přebije. Podlaha je jediné, co ji zaručí. `code-review:code-review` je při 13pt systémovém fontu 154,7 pt a odsazení buňky bere dalších ~19 (obojí změřeno, ne odhadnuto), a je to výchozí id z konfigurace — takže sloupec, do kterého se nevejde, se ořezává **pořád**. Nápověda je záchrana pro výjimku, ne náhrada za čitelnost běžného případu. Cena je, že se `Reviewer` nedá přetáhnout pod 185; přesně to je ale ta záruka. Delší id se ořeže a to už nevadí |
+| Nápověda u nálezu bez místa je **věta**, ne pomlčka | `String?` s podmíněným `.help`, nebo `.help("")` u nálezu bez cesty | Sloupec ukazuje `—` a tooltip s pomlčkou nevysvětluje nic; prázdný řetězec je navíc nedefinované chování AppKitu. Věta („Nález nepatří ke konkrétnímu místu v kódu.“) je jediné, co k tomu jde říct — a jako vedlejší efekt odpadne `if` ve view a text se testuje ve `FindingRow` bez UI |
+| Nápovědu dostal **každý sloupec**, ne jen `Nález` a `Místo` | Držet se zadání #60 a dát tooltip jen těm dvěma, které se ořezávají ve výchozím poměru | **Doplněno proti zadání.** Zadání jmenuje ty dva, u kterých je ořez vidět hned, ale strop není to, co o ořezu rozhoduje — táhnout se dá každým sloupcem až na jeho `min`, a tam neuveze ani `Kategorie` „bez kategorie“ s výstražnou ikonou. Argument „tooltip všude znamená tooltip nikde“ platí na **ozdobné** nápovědy; tyhle zpřístupňují ořezaný údaj, a ten je jinak nedosažitelný. Dělá to tak i Finder |

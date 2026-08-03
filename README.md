@@ -63,10 +63,17 @@ v diffu není, se neztratí: visí u hlavičky souboru a nabídne ten řádek do
 jdou vypnout přepínačem nad diffem.
 
 Pod diffem je **panel s taby**: řaditelná tabulka nálezů (kategorie, reviewer, místo,
-shrnutí) a zatím prázdný Průběh. Panel je jediné místo, kde jsou vidět nálezy **bez místa
+shrnutí) a Průběh. Panel je jediné místo, kde jsou vidět nálezy **bez místa
 v kódu** — chybějící testy nebo poznámky k architektuře; kvůli nim samotné bubliny
 nestačí. Klik na řádek odscrolluje diff a bublinu na chvíli zvýrazní. Výška panelu se
 táhne za horní hranu a pamatuje se.
+
+**Většinu šířky tabulky dostane text nálezu**, protože to je to, co se čte; kategorie
+a reviewer si berou jen tolik, kolik potřebují. Co se přesto nevejde, řekne **nápověda po
+najetí myší** — má ji každý sloupec, protože každým se dá přetáhnout až na jeho minimum.
+`Místo` se ořezává **zepředu**, ať zůstane vidět jméno souboru a číslo řádku; text nálezu
+odzadu. U nálezu, který ke konkrétnímu místu v kódu nepatří, vysvětluje nápověda pomlčku
+ve sloupci.
 
 V liště panelu je **koš**, kterým se uložené nálezy zahodí — hodí se, když se změnila sada
 skillů a v záznamu leží nálezy od revieweera, který už neběží. Maže se jen viditelný commit,
