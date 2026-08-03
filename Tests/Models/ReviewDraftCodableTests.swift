@@ -1,0 +1,123 @@
+import Foundation
+import Testing
+
+@testable import PRism
+
+/// Round-trip rozdělaného review. Ukládá se na disk, takže `Codable` popisuje uložený tvar
+/// — a optional verdikt je zrovna to, co se z JSONu ztrácí nejtišeji.
+@Suite("ReviewDraft — Codable")
+struct ReviewDraftCodableTests {
+    private let pr = PRIdentifier("cli/cli#42")!
+
+    private func comment(
+        id: UUID = UUID(uuidString: "00000000-0000-0000-0000-0000000000AA")!,
+        side: DiffSide = .right,
+        origin: ReviewDraftComment.Origin = .own
+    ) -> ReviewDraftComment {
+        ReviewDraftComment(
+            id: id,
+            path: "src/Cart.php",
+            line: 28,
+            side: side,
+            body: "tady se ignoruje množství",
+            origin: origin
+        )
+    }
+
+    @Test("Draft přežije round-trip")
+    func roundTripsADraft() throws {
+        let draft = ReviewDraft(
+            pullRequest: pr,
+            headSha: "abc123",
+            body: "celkem dobré",
+            verdict: .requestChanges,
+            comments: [comment()]
+        )
+
+        #expect(try roundTrip(draft) == draft)
+    }
+
+    /// `nil` verdikt není totéž jako `.comment` — první znamená „ještě nevybráno“. Kdyby se
+    /// z JSONu ztratil, otevřel by se draft s verdiktem, o který nikdo neřekl.
+    @Test("Draft bez verdiktu přežije round-trip")
+    func roundTripsADraftWithoutAVerdict() throws {
+        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", body: "rozepsané")
+
+        let decoded = try roundTrip(draft)
+
+        #expect(decoded == draft)
+        #expect(decoded.verdict == nil)
+    }
+
+    @Test("Každý verdikt přežije round-trip", arguments: [
+        ReviewDraft.Verdict.approve,
+        .requestChanges,
+        .comment,
+    ])
+    func roundTripsEveryVerdict(verdict: ReviewDraft.Verdict) throws {
+        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", verdict: verdict)
+
+        #expect(try roundTrip(draft).verdict == verdict)
+    }
+
+    @Test("Každý původ komentáře přežije round-trip", arguments: [
+        ReviewDraftComment.Origin.own,
+        .finding,
+    ])
+    func roundTripsEveryOrigin(origin: ReviewDraftComment.Origin) throws {
+        let value = comment(origin: origin)
+
+        #expect(try roundTrip(value) == value)
+    }
+
+    /// Strana je to, bez čeho komentář odejde na jiný řádek — u odebraného řádku zvlášť.
+    @Test("Strana komentáře přežije round-trip", arguments: [DiffSide.left, .right])
+    func roundTripsTheSide(side: DiffSide) throws {
+        let value = comment(side: side)
+
+        #expect(try roundTrip(value) == value)
+    }
+
+    @Test("Identita komentáře se round-tripem nemění")
+    func keepsTheCommentIdentity() throws {
+        let id = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+
+        #expect(try roundTrip(comment(id: id)).id == id)
+    }
+
+    /// Verdikt jde do `event` při odeslání, takže se na jeho zápis spoléhá API GitHubu.
+    @Test("Verdikt se kóduje jako hodnota, kterou bere GitHub")
+    func encodesTheVerdictAsTheGitHubEvent() throws {
+        let json = try encodedJSON(
+            ReviewDraft(pullRequest: pr, headSha: "abc", verdict: .requestChanges)
+        )
+
+        #expect(json.contains("REQUEST_CHANGES"))
+    }
+
+    /// Identifikátor PR se kóduje na řetězec, ne na objekt — jeden kanonický zápis pro disk
+    /// i pro UI.
+    @Test("Identifikátor PR je v JSONu řetězec, ne objekt")
+    func encodesTheIdentifierAsAString() throws {
+        let json = try encodedJSON(ReviewDraft(pullRequest: pr, headSha: "abc", body: "x"))
+
+        // Lomítko `JSONEncoder` escapuje na `\/`, takže se hledá začátek hodnoty: za
+        // dvojtečkou musí být uvozovka, ne `{`.
+        #expect(json.contains("\"pullRequest\":\""))
+        #expect(!json.contains("\"pullRequest\":{"))
+    }
+
+    /// Dva komentáře na jednom řádku jsou legitimní — jiná věc ke stejnému kódu.
+    @Test("Dva komentáře na jednom řádku se nesloučí")
+    func keepsTwoCommentsOnOneLine() throws {
+        let first = comment(id: UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!)
+        let second = comment(id: UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!)
+        let draft = ReviewDraft(
+            pullRequest: pr,
+            headSha: "abc",
+            comments: [first, second]
+        )
+
+        #expect(try roundTrip(draft).comments.count == 2)
+    }
+}

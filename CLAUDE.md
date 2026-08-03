@@ -277,7 +277,9 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ReviewThread` | Vlákno u řádku diffu: cesta, `line`/`originalLine`, `isResolved`, `isOutdated` |
 | `ThreadComment` | Jeden komentář — ve vlákně i pod PR; `replyToID` místo vnořování |
 | `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
-| `DiffSide` | `left`/`right` — ke které straně diffu se vlákno váže |
+| `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
+| `ReviewDraft` | Rozdělané review: PR, `headSha`, tělo, verdikt, komentáře. Verdikt je vnořený `ReviewDraft.Verdict` |
+| `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path`, `line`, `side`), tělo, `Origin` |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -758,6 +760,33 @@ Výsledky review na disku: jeden JSON soubor na `(repo, PR, headSha)` pod
 | `ReviewRecord` | Obsah jednoho souboru: PR, `headSha`, běhy, `isStale`, `closedAt` |
 | `StoredReviewRun` | Jeden běh: skill, `outcome`, session id, nálezy, `droppedFindings`, čas |
 
+Vedle něj stojí **`ReviewDraftStore`** (#65) — rozdělaná review, jeden soubor na PR pod
+`drafts/<owner>/<repo>/<pr>.json`:
+
+| Typ | Co je |
+|---|---|
+| `ReviewDraftStore` | Aktor: `save`, `load(for:)`, `load()`, `delete`. Atomický zápis |
+| `ReviewDraftStoreError` | Jediná vlastní chyba: v souboru jednoho PR leží draft jiného |
+
+- **Draft bydlí lokálně, ne jako serverové pending review.** Pending review na GitHubu jsou
+  **už odeslaná data**: jsou vidět v API, blokují další review (#62: 422 `User can only have
+  one pending review`) a každá úprava komentáře by byla volání API. Tím by padla zásada, že
+  bez potvrzení nic neopustí stroj.
+- **Jeden draft na PR, ne na `(PR, headSha)`.** Nálezy jsou strojový výsledek proti commitu,
+  draft je ručně psaná práce — a **nový commit ho nemaže**, jen zablokuje odeslání
+  (`Policy.isStale`). Zahodit prózu je dražší než ji nechat s poctivým příznakem; přenesení
+  na nový commit řeší #67.
+- **Prázdný draft se maže, ne ukládá.** Jinak by v cache zůstal soubor po každém PR, které
+  si někdo jen otevřel, a „draft existuje“ by přestalo znamenat „je co poslat“. Tentýž vzor
+  jako `Configuration.setRepository`.
+- **Draft se `verdict`em a ničím jiným prázdný není.** Schválení bez prózy je plnohodnotné
+  review — v datech z #63 čtvrtina vzorku. Chytil to test, který původně tvrdil opak.
+- **Nečitelný draft konkrétního PR vyhodí chybu, nevrátí `nil`.** Tichá nula by znamenala, že
+  rozepsané review vypadá jako neexistující a člověk by ho psal znovu. Ve výpisu všech se
+  nečitelné **počítají** (`Loaded.unreadable`), stejně jako u `ReviewStore`.
+- **`drafts/` je mimo dosah eviction**, stejně jako `reviews/` — a tady o to víc, protože je
+  to ručně psaná práce. Je na to test, který drží i to, kdyby někdo eviction rozšířil.
+
 Věci, které se u toho nemají rozbít:
 
 - **Store je aktor.** Uložení je čtení, změna a zápis téhož souboru a dva skilly nad jedním
@@ -1178,6 +1207,9 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
 | `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
+| `Policy.matches(_:_:)` | Patří vlákno k tomuhle řádku diffu — **jedno místo** pro výběr i umístění |
+| `Policy.commentableSide(of:in:)` | Ke které straně by šel komentář; `nil` = nedá se komentovat |
+| `Policy.isStale(_:head:)`, `Policy.isSendable(_:head:)` | Zastaralý a odesílatelný draft |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
   Volající pak nic nespojuje a z typu je vidět, že jde o několik nezávislých dotazů.
@@ -1533,6 +1565,17 @@ Právě proto tam eskalace na `SIGKILL` je.
   test visel místo aby spadl. Součástí je `runningReviews` **napříč PR**: na tom čísle visí,
   jestli se aplikace před zavřením zeptá. Samotný dialog se unit-testovat nedá (modální
   `NSAlert`), ověřil se na běžící aplikaci — viz níž.
+- **`ReviewDraftStore`** — proti skutečné dočasné složce, jako `ReviewStore`. To hlavní je
+  „draft přežije restart“, tedy načtení **novým** storem nad tou samou složkou. Plus prázdný
+  draft, který se maže; nečitelný soubor, který se ve výpisu počítá a u konkrétního PR vyhodí
+  chybu; draft cizího PR uvnitř souboru; a že cesta leží mimo složky, po kterých chodí
+  eviction. Pozor na past v testu: `ReviewDraftComment` si generuje `UUID`, takže dvě volání
+  továrničky nedají shodné hodnoty — draft se musí uložit do proměnné.
+- **`Policy` — draft** — komentovatelnost vyčerpávajícím výčtem: přidaný řádek (`right`),
+  kontextový (`right`), odebraný (`left`), `meta` (nikdy), řádek mimo hunky a **rozbalený
+  kontext**. Ten poslední se staví přes `DiffRow.rows(revealed:content:)`, ne ručně —
+  rozbalený řádek se skládá jako obyčejný kontext s oběma čísly, takže test, který si ho
+  vyrobí sám, by netestoval to, co v aplikaci vzniká.
 - **`ReviewStore`** — proti skutečné dočasné složce, ne proti fake filesystému: kořen je
   injektovatelný, takže jde o pár kilobajtů, a ověřuje se to, na čem store stojí — `Codable`
   cesta na disk a zpět a chování `FileManageru`. Hodiny jsou `FakeTimeSource`, který se
@@ -1804,6 +1847,12 @@ věcí, na kterých stojí zbytek M6:
 `SubmittedReview`. Jeden GraphQL dotaz za 1 bod přinese review ostatních, vlákna u řádků
 (s `isResolved` i `isOutdated`) a komentáře pod PR. Aplikace zůstává vůči GitHubu jen pro
 čtení.
+
+Model draftu hotový (issue #65) — `ReviewDraft`, `ReviewDraftComment`, `ReviewDraftStore`
+a `App/Policy/DraftPolicy.swift`. Rozdělané review přežije restart, novým commitem
+zastarává (ale nemaže se) a `Policy` umí říct, na které řádky diffu se vůbec dá komentovat.
+**Vrstva bez UI** — skládání draftu je #66, odeslání #67 a #68. Aplikace pořád nic
+neposílá: store zapisuje jen na disk.
 
 Vlákna u kódu hotová (issue #64) — `ThreadBubbleView`, `DiffRow.thread`,
 `App/Policy/ConversationPolicy.swift` a `conversationStates` v `AppStore`. Vlákno s řádkem
