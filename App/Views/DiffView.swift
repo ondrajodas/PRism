@@ -22,6 +22,9 @@ struct DiffView: View {
     /// Vlákna konverzace, která mají v tomhle diffu kotvu. Vybral je volající
     /// (`Policy.threadsInTheDiff`) — zastaralá patří do `Overview`, ne sem.
     var threads: [ReviewThread] = []
+    /// Kolik vláken se do stránky konverzace nevešlo. Nula u běžného PR — sto vláken je
+    /// řádově víc, než kolik jich vzniká.
+    var missingThreads = 0
     var viewer: String = ""
     var isThreadExpanded: (ReviewThread) -> Bool = { _ in true }
     var toggleThread: (ReviewThread) -> Void = { _ in }
@@ -107,6 +110,9 @@ struct DiffView: View {
             if diff.unrecognizedLines > 0 {
                 unrecognizedWarning
             }
+            if missingThreads > 0 {
+                missingThreadsWarning
+            }
             Spacer()
             if !findings.isEmpty {
                 // Jmenuje se `Nálezy`, ne `Bubliny`: schovává **jen** nálezy, kdežto
@@ -151,6 +157,20 @@ struct DiffView: View {
             .buttonStyle(.borderless)
             .help(allFolded ? "Rozbalit diffy všech souborů" : "Sbalit diffy všech souborů")
         }
+    }
+
+    /// Vlákna, která nedorazila, nemají jak chybět **viditelně**: v diffu se prostě
+    /// neobjeví bublina a to od „nikdo tam nic nenapsal“ nikdo nepozná. Hlásí se proto
+    /// stejně jako nepřečtené řádky diffu.
+    private var missingThreadsWarning: some View {
+        let count = Plural.czech(missingThreads, one: "vlákno", few: "vlákna", many: "vláken")
+        return Label {
+            Text(verbatim: "\(count) konverzace se nevešlo — otevři PR na GitHubu")
+        } icon: {
+            Image(systemName: "exclamationmark.triangle")
+        }
+        .font(.caption)
+        .foregroundStyle(.orange)
     }
 
     /// Nerozpoznaný řádek znamená, že se člověk dívá na neúplný podklad. Bez téhle věty

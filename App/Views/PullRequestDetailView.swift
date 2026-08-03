@@ -200,6 +200,7 @@ struct PullRequestDetailView: View {
                 blockingCategories: blockingCategories,
                 highlighted: highlighted,
                 threads: store.anchoredThreads(for: pullRequest.id),
+                missingThreads: store.conversation(for: pullRequest.id)?.threads.missing ?? 0,
                 viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
                 isThreadExpanded: { store.isThreadExpanded($0, in: pullRequest.id) },
                 toggleThread: { store.toggleThread($0, in: pullRequest.id) }
