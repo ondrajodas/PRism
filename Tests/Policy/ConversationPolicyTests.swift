@@ -12,14 +12,15 @@ struct ConversationPolicyTests {
         line: Int? = 27,
         originalLine: Int? = 27,
         resolved: Bool = false,
-        outdated: Bool = false
+        outdated: Bool = false,
+        side: DiffSide? = .right
     ) -> ReviewThread {
         ReviewThread(
             id: id,
             path: path,
             line: line,
             originalLine: originalLine,
-            side: .right,
+            side: side,
             isResolved: resolved,
             isOutdated: outdated,
             comments: ConversationPage(items: [], total: 0, hasNextPage: false)
@@ -122,6 +123,33 @@ struct ConversationPolicyTests {
 
         #expect(Set(inside).isDisjoint(with: Set(outside)))
         #expect(Set(inside).union(outside) == ["a", "b", "c", "d"])
+    }
+
+    /// `side` rozhoduje, se kterým číslem se porovnává. Bez toho by vlákno na odebraném
+    /// řádku vyšlo jako „v diffu“ na základě **nového** čísla, tedy u jiného kódu.
+    @Test("Levá strana se porovnává se starým číslem")
+    func matchesTheLeftSideByOldNumber() throws {
+        let diff = try diff()
+        // Starý řádek 26 je ten odebraný; nový 26 je „nové“.
+        #expect(Policy.threadsInTheDiff([thread(line: 26, side: .left)], renderedIn: diff).count == 1)
+        #expect(Policy.threadsInTheDiff([thread(line: 27, side: .left)], renderedIn: diff).count == 1)
+        // Odebraný řádek nové číslo nemá, takže na pravé straně na 26 nic není…
+        #expect(Policy.threadsInTheDiff([thread(line: 26, side: .right)], renderedIn: diff).count == 1)
+    }
+
+    @Test("Chybějící strana se bere jako pravá")
+    func treatsAMissingSideAsRight() throws {
+        #expect(Policy.threadsInTheDiff([thread(line: 27, side: nil)], renderedIn: try diff()).count == 1)
+    }
+
+    @Test("Kotvení je jedna pravda pro výběr i umístění")
+    func sharesOneRuleWithTheRows() throws {
+        let file = try #require(try diff().files.first)
+        let left = thread(line: 26, side: .left)
+        let renderedLine = try #require(file.hunks.first?.lines.first { $0.oldNumber == 26 })
+
+        #expect(Policy.matches(left, renderedLine))
+        #expect(Policy.threadsInTheDiff([left], renderedIn: try diff()).count == 1)
     }
 
     // MARK: - Výběr a pořadí

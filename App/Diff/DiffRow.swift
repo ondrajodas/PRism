@@ -159,19 +159,6 @@ enum DiffRow: Identifiable {
             uniquingKeysWith: { first, _ in first }
         )
 
-        // Vlákna se na řádku **neslučují do jednoho**, na rozdíl od nálezů: každé je vlastní
-        // konverzace s vlastním stavem vyřešení, takže dvě vlákna na jednom řádku jsou dvě
-        // bubliny pod sebou. Klíčem je `id` z GitHubu, ne pořadí — je stabilní přes
-        // překreslení i přes obnovení konverzace.
-        // Číslo se vytáhne **při filtrování**, ne až v klíči. `{ $0.line ?? 0 }` by byl
-        // default, na který se nedá dojít — a nedosažitelná nula v klíči slovníku svádí
-        // k tomu spolehnout se na ni, až filtr někdo změní.
-        let anchored = myThreads.compactMap { thread -> (line: Int, thread: ReviewThread)? in
-            guard let line = thread.line, rendered.contains(line) else { return nil }
-            return (line, thread)
-        }
-        let threadsByLine = Dictionary(grouping: anchored, by: \.line).mapValues { $0.map(\.thread) }
-
         // Identita se čísluje pořadím: `line` na ni nestačí, protože nálezů bez řádku
         // může být k jednomu souboru několik a se stejným `id` by je `ForEach` nerozeznal.
         var result = unanchored.enumerated().map { offset, group in
@@ -180,13 +167,21 @@ enum DiffRow: Identifiable {
         result.reserveCapacity(rows.count + mine.count + myThreads.count)
         for row in rows {
             result.append(row)
-            guard case .line(_, let line) = row, let number = line.newNumber else { continue }
-            if let group = byLine[number] {
+            guard case .line(_, let line) = row else { continue }
+            if let number = line.newNumber, let group = byLine[number] {
                 result.append(.finding(id(of: file, "f\(number)"), group, anchored: true))
             }
             // Vlákna jdou **pod** nálezy téhož řádku: nález je to, kvůli čemu je okno
             // otevřené, konverzace je kontext k němu.
-            for thread in threadsByLine[number] ?? [] {
+            //
+            // Kam vlákno patří, rozhoduje `Policy.matches` — **jedno místo** i pro výběr
+            // v `Policy.threadsInTheDiff`, aby se umístění a výběr nemohly rozejít. Řeší
+            // i `side`: vlákno na odebraném řádku má číslo ze staré verze souboru.
+            //
+            // Vlákna se na řádku **neslučují do jednoho**, na rozdíl od nálezů: každé je
+            // vlastní konverzace s vlastním stavem vyřešení. Klíčem identity je `id`
+            // z GitHubu, ne pořadí — je stabilní i přes obnovení konverzace.
+            for thread in myThreads where Policy.matches(thread, line) {
                 result.append(.thread(id(of: file, "t\(thread.id)"), thread))
             }
         }

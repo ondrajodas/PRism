@@ -402,6 +402,12 @@ v pěti věcech se chovají jinak:
 - **Vlákna se na jednom řádku neslévají.** Nálezy ano (dva reviewery na jednom řádku dají
   jednu bublinu s odznakem `2×`), vlákna ne: každé je vlastní konverzace s vlastním stavem
   vyřešení. Dvě vlákna na řádku jsou dvě bubliny.
+- **Kam vlákno patří, rozhoduje `Policy.matches(_:_:)` — jedno místo pro výběr i umístění.**
+  Řídí se `side`: u `right` se číslo porovnává s **novým**, u `left` se **starým**, protože
+  komentář k odebranému řádku má číslo ze staré verze souboru. Porovnávat vždycky s novým
+  znamená, že vlákno na smazaném řádku 26 sedne na **nový** řádek 26, tedy na jiný kód —
+  přesně to, kvůli čemu je `side` v modelu, a přesně to, co se v #64 nejdřív stalo. Chybějící
+  `side` se bere jako `right` (výchozí strana GitHubu).
 - **Identita bubliny nese `id` vlákna z GitHubu**, ne pořadí. Po obnovení konverzace se
   pořadí může změnit a stav rozbalení by přeskočil na jiné vlákno.
 - **Nález jde nad vlákno.** Nález je to, kvůli čemu je okno otevřené; konverzace je kontext.

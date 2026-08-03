@@ -69,9 +69,15 @@ struct ThreadBubbleView: View {
     /// Sbalené vlákno musí ze hlavičky říct, co v něm je — jinak není důvod ho otevřít.
     /// Rozbalené hlásí jen počet, protože autoři jsou vidět pod ním.
     private var title: String {
-        let count = thread.comments.items.count
         guard !isExpanded, let first = thread.comments.items.first else {
-            return count == 1 ? "1 komentář" : "\(count) komentářů"
+            // Přes `Plural.czech`, ne ručním `count == 1`: „2 komentářů“ praští do očí
+            // a tvary se v okně rozlišují na víc místech, takže patří na jedno.
+            return Plural.czech(
+                thread.comments.items.count,
+                one: "komentář",
+                few: "komentáře",
+                many: "komentářů"
+            )
         }
         return "\(first.author): \(oneLine(first.body))"
     }
@@ -144,7 +150,7 @@ struct ThreadBubbleView: View {
     /// nálezů. Chybí zrovna to, co je ve vlákně nejnovější.
     @ViewBuilder private var truncationNote: some View {
         if thread.comments.isTruncated {
-            Text(verbatim: "Další komentáře (\(thread.comments.missing)) se nevešly — otevři vlákno na GitHubu.")
+            Text(verbatim: "\(Plural.czech(thread.comments.missing, one: "komentář", few: "komentáře", many: "komentářů")) se nevešlo — otevři vlákno na GitHubu.")
                 .font(.caption2)
                 .foregroundStyle(.orange)
         }

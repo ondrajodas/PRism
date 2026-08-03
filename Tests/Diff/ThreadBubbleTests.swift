@@ -21,6 +21,7 @@ struct ThreadBubbleTests {
         path: String = "Cart.php",
         line: Int? = 27,
         resolved: Bool = false,
+        side: DiffSide? = .right,
         comments: [ThreadComment]? = nil,
         total: Int? = nil
     ) -> ReviewThread {
@@ -30,7 +31,7 @@ struct ThreadBubbleTests {
             path: path,
             line: line,
             originalLine: line,
-            side: .right,
+            side: side,
             isResolved: resolved,
             isOutdated: line == nil,
             comments: ConversationPage(
@@ -193,6 +194,54 @@ struct ThreadBubbleTests {
         let withEmpty = DiffRow.rows(of: try file(), threads: [])
 
         #expect(plain.map(\.id) == withEmpty.map(\.id))
+    }
+
+    // MARK: - Strana diffu
+
+    /// Vlákno na **odebraném** řádku má číslo ze staré verze souboru. Kdyby se porovnávalo
+    /// s novým (jak to dělal první návrh), sedlo by na jiný kód — a nikdo by to nepoznal.
+    /// Přesně kvůli tomu je `side` v modelu.
+    @Test("Vlákno na levé straně se kotví podle starého čísla")
+    func anchorsALeftThreadByTheOldNumber() throws {
+        let rows = DiffRow.rows(of: try file(), threads: [thread(line: 26, side: .left)])
+
+        let index = try #require(rows.firstIndex { row in
+            guard case .thread = row else { return false }
+            return true
+        })
+        guard case .line(_, let previous) = rows[index - 1] else {
+            Issue.record("nad bublinou není řádek")
+            return
+        }
+        // Starý řádek 26 je ten odebraný — nový 26 je „nové“, tedy jiný kód.
+        #expect(previous.oldNumber == 26)
+        #expect(previous.newNumber == nil)
+    }
+
+    /// Totéž číslo na obou stranách znamená jiný řádek. Bez `side` by obojí skončilo na
+    /// stejném místě.
+    @Test("Stejné číslo na levé a pravé straně dá jiné umístění")
+    func placesLeftAndRightDifferently() throws {
+        let left = DiffRow.rows(of: try file(), threads: [thread(line: 26, side: .left)])
+        let right = DiffRow.rows(of: try file(), threads: [thread(line: 26, side: .right)])
+
+        func lineAboveBubble(_ rows: [DiffRow]) -> DiffLine? {
+            guard let index = rows.firstIndex(where: { row in
+                if case .thread = row { true } else { false }
+            }), case .line(_, let line) = rows[index - 1] else { return nil }
+            return line
+        }
+
+        #expect(lineAboveBubble(left)?.text != lineAboveBubble(right)?.text)
+        #expect(lineAboveBubble(right)?.newNumber == 26)
+    }
+
+    /// Chybějící `side` se bere jako `right` — je to výchozí strana GitHubu.
+    @Test("Vlákno bez strany se kotví jako pravé")
+    func treatsAMissingSideAsRight() throws {
+        let rows = DiffRow.rows(of: try file(), threads: [thread(line: 26, side: nil)])
+
+        #expect(threadRows(rows).count == 1)
     }
 
     // MARK: - Zkrácení

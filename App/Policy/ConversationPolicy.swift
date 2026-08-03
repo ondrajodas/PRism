@@ -36,11 +36,31 @@ extension Policy {
     /// v `Overview`. Kdyby se podle něj kreslila bublina, sedla by na řádek, který dnes
     /// obsahuje něco jiného.
     private static func isAnchorable(_ thread: ReviewThread, in diff: Diff?) -> Bool {
-        guard let line = thread.line, let diff else { return false }
+        guard thread.line != nil, let diff else { return false }
         guard let file = diff.files.first(where: { $0.newPath == thread.path || $0.oldPath == thread.path })
         else { return false }
         return file.hunks.contains { hunk in
-            hunk.lines.contains { $0.newNumber == line }
+            hunk.lines.contains { matches(thread, $0) }
+        }
+    }
+
+    /// Patří vlákno k tomuhle řádku diffu?
+    ///
+    /// **Rozhoduje `side`.** U `right` se číslo porovnává s novým, u `left` se **starým** —
+    /// komentář k odebranému řádku má číslo ze staré verze souboru. Porovnávat vždycky
+    /// s novým znamená, že vlákno na smazaném řádku 26 sedne na **nový** řádek 26, tedy na
+    /// jiný kód. Přesně kvůli tomu je `side` v modelu.
+    ///
+    /// Chybějící `side` se bere jako `right`: je to výchozí strana GitHubu a vlákno spíš
+    /// ukázat u nového kódu než nikde.
+    ///
+    /// Je to **jediné místo**, kde se tohle rozhoduje — `DiffRow` ho používá při zavěšování
+    /// bublin, takže se výběr a umístění nemůžou rozejít.
+    static func matches(_ thread: ReviewThread, _ line: DiffLine) -> Bool {
+        guard let number = thread.line else { return false }
+        return switch thread.side ?? .right {
+        case .right: line.newNumber == number
+        case .left: line.oldNumber == number
         }
     }
 
