@@ -153,6 +153,24 @@ struct AppStoreReviewTests {
         try await waitUntilIdle(store)
     }
 
+    /// Na tomhle čísle visí, jestli se aplikace před zavřením zeptá (#94), takže se počítá
+    /// **napříč PR** a ze stejného zdroje jako `isReviewing`.
+    @Test("Běžící review se počítají napříč PR")
+    func countsRunningReviewsAcrossPullRequests() async throws {
+        let reviewer = FakeReviewRunner(holdsUntilRelease: true)
+        let store = store(gateway: gateway(), reviewer: reviewer)
+        #expect(store.runningReviews == 0)
+
+        store.startReview(for: pr)
+        store.startReview(for: PRIdentifier(repo: pr.repo, number: 43))
+        await reviewer.waitForStarts(2)
+        #expect(store.runningReviews == 2)
+
+        reviewer.releaseAll()
+        for _ in 0..<100_000 where store.runningReviews > 0 { await Task.yield() }
+        #expect(store.runningReviews == 0)
+    }
+
     @Test("Zrušení běh ukončí a nic neuloží")
     func cancellingLeavesNothingBehind() async throws {
         let reviewer = FakeReviewRunner(findings: [finding()], holdsUntilRelease: true)

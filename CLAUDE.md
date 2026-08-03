@@ -834,6 +834,27 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FileTreeView` | Popover se stromem souborů; odsazení a sbalování si řídí sám |
 | `VerdictView` | Návrh verdiktu jako **doporučení**; žádná GitHub akce na něm nevisí |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
+| `AppDelegate` | Ukončení aplikace: dokud běží review, ptá se |
+
+**Zavření aplikace se ptá, dokud běží review** (`AppDelegate`, #94). Session se ukončením
+zabije a nálezy, které reviewer už nahlásil, jsou pryč — v panelu i na disku, takže z řádku
+vyjde `neběželo`, tedy totéž jako u PR, který nikdo nekontroloval. Nastalo to v provozu.
+
+- **`NSAlert` a `runModal()`, ne SwiftUI.** `applicationShouldTerminate` musí odpovědět
+  **synchronně**; asynchronní cesta by aplikaci zavřela dřív, než se kdokoli zeptá.
+- **Výchozí tlačítko je `Zpět`**, ne `Ukončit`. Ztracený nález je dražší než jedno kliknutí
+  navíc, takže omylem odklepnutý `Enter` nemá nic zahodit.
+- **Text říká, co se ztratí.** „Běží review“ samo o sobě nedává důvod kliknout na Zpět.
+- **Počítá se z `reviewTasks`**, ze stejného zdroje jako `isReviewing`. Vlastní počitadlo je
+  druhé místo, které se s prvním může rozejít — a rozejít se v tomhle znamená zavřít bez
+  zeptání.
+- **`bin/run.sh` proto nepoužívá `killall`.** SIGTERM `applicationShouldTerminate`
+  **neprochází**, takže rebuild při vývoji zabíjel review i s nálezy — dvakrát za jedno
+  dopoledne. Skript posílá Apple event `quit`, tedy tou samou cestou jako ⌘Q, čeká na
+  odpověď a když aplikace zůstane běžet, novou verzi nespustí.
+- **Nezachytí to všechno**, a je to tak zamýšlené: pád aplikace ani zabití zvenčí takhle
+  odchytit nejde. Dotažení nálezů z transcriptu zůstává v #94 jako ta drahá varianta pro
+  zbytek.
 
 ### Okno nastavení (`App/Views/Settings/`)
 
@@ -1361,7 +1382,9 @@ Právě proto tam eskalace na `SIGKILL` je.
   ověřoval sám sebe. `FakeReviewRunner` umí běh pozdržet, na čemž stojí testy průběhu,
   zrušení a toho, že druhé zmáčknutí nespustí nic dalšího. Čeká se točením přes
   `Task.yield()`, ne na continuation — zrušený běh musí z čekání vypadnout sám, jinak by
-  test visel místo aby spadl.
+  test visel místo aby spadl. Součástí je `runningReviews` **napříč PR**: na tom čísle visí,
+  jestli se aplikace před zavřením zeptá. Samotný dialog se unit-testovat nedá (modální
+  `NSAlert`), ověřil se na běžící aplikaci — viz níž.
 - **`ReviewStore`** — proti skutečné dočasné složce, ne proti fake filesystému: kořen je
   injektovatelný, takže jde o pár kilobajtů, a ověřuje se to, na čem store stojí — `Codable`
   cesta na disk a zpět a chování `FileManageru`. Hodiny jsou `FakeTimeSource`, který se
@@ -1494,6 +1517,8 @@ xcodebuild -project PRism.xcodeproj -scheme PRism test
 
 ```bash
 ./bin/run.sh    # build v Debug + otevření aplikace
+                # předchozí instanci ukončí Apple eventem, ne `killall` —
+                # při běžícím review se tedy zeptá a bez odpovědi nic nespustí
 ```
 
 `xcodebuild` na tomhle stroji plive na začátku výstupu chyby o `CoreSimulator` — jsou
@@ -1652,6 +1677,11 @@ pojistka proti překvapení na účtu a drží se na disku, aby ho neobešel res
 Zahození nálezů hotové (issue #81) — koš v liště panelu zahodí uložený záznam viditelného
 commitu, takže se dá pustit review znovu s jinou sadou skillů. Na repu v automatickém režimu
 se pustí samo.
+
+Potvrzení při zavření hotové (issue #94, levná varianta) — dokud běží review, aplikace se
+před ukončením zeptá, protože session se zavřením zabije a nahlášené nálezy jsou pryč.
+`bin/run.sh` proto ukončuje aplikaci Apple eventem, ne `killall`. Dotažení nálezů
+z transcriptu zůstává v #94 pro pád aplikace a zabití zvenčí.
 
 Plánované fáze:
 
