@@ -874,7 +874,7 @@ Věci, které se u toho nemají rozbít:
   při prvním zkoušení. Delší popisek je levnější než vysvětlování.
 - **Hlavní okno se rozostří jen tehdy, když je nastavení opravdu vepředu.** Okno je
   nemodální, takže kliknutím zpátky do seznamu se v něm dá dál pracovat — a rozostřené
-  okno, ve kterém zrovna píšu, je horší než žádný efekt. Příznak `isSettingsOpen` žije
+  okno, ve kterém zrovna píšu, je horší než žádný efekt. Příznak `isSettingsFrontmost` žije
   v `AppStore` (dvě scény si to nemají kde říct jinudy).
 
   **Hlásí to okno nastavení o sobě** (`isSettingsFrontmost`), ne hlavní okno o něm. Hlavní

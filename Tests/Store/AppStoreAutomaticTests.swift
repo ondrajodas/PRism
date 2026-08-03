@@ -172,7 +172,7 @@ struct AppStoreAutomaticTests {
         await settle(store)
 
         #expect(reviewer.requests.count == 2)
-        #expect(store.isAutomaticPaused)
+        #expect(store.isAutomaticStopped)
     }
 
     /// Tohle spálilo šest z dvaceti za jedno dopoledne: rozpočet se strhával v plánovači,
@@ -221,6 +221,6 @@ struct AppStoreAutomaticTests {
         await store.refresh()
         await settle(store)
 
-        #expect(!store.isAutomaticPaused)
+        #expect(!store.isAutomaticStopped)
     }
 }

@@ -41,7 +41,7 @@ struct PullRequestListView: View {
                 // přibývají, nic se nespouští a proč se nedá zjistit odnikud.
                 // Nula v konfiguraci znamená **vypnuto**, ne vyčerpáno. „Vyčerpaný limit
                 // (0)“ by tvrdil, že se něco spotřebovalo, a poslal by hledat, co.
-                if store.isAutomaticPaused {
+                if store.isAutomaticStopped {
                     notice(automaticPausedText, icon: "pause.circle")
                 }
                 // Rozbitý soubor s nálezy znamená, že se nějaké ztratily — a ztracený nález
@@ -70,7 +70,7 @@ struct PullRequestListView: View {
 
     private var hasNotices: Bool {
         store.configurationFailure != nil
-            || store.isAutomaticPaused
+            || store.isAutomaticStopped
             || store.unreadableReviewFiles > 0
     }
 

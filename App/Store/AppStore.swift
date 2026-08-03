@@ -529,8 +529,13 @@ final class AppStore {
     /// je pozastaveno, až do dalšího tiku.
     private(set) var automaticRunsToday: Int?
 
-    /// Je automat pozastavený? Počítá se **teď**, z aktuálního limitu.
-    var isAutomaticPaused: Bool {
+    /// Nespustí automat nic? Počítá se **teď**, z aktuálního limitu.
+    ///
+    /// Pokrývá **dva důvody** a schválně je nerozlišuje: vyčerpaný limit a limit nastavený
+    /// na nulu. Pro rozhodnutí „ukázat hlášku“ je to totéž — repo je v automatickém režimu
+    /// a nic se nespustí. Který z těch dvou to je, rozlišuje až text hlášky, protože
+    /// „vyčerpaný limit (0)“ by tvrdilo, že se něco spotřebovalo.
+    var isAutomaticStopped: Bool {
         guard let automaticRunsToday else { return false }
         return automaticRunsToday >= configuration.global.autoRunsPerDay
     }
