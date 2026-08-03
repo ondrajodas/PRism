@@ -12,7 +12,7 @@ enum ConversationQuery {
     /// protože utnutá data nesmí vypadat jako úplná.
     static let pageSize = 100
 
-    static func arguments(for id: PRIdentifier, pageSize: Int = pageSize) -> [String] {
+    static func arguments(for id: PRIdentifier, pageSize: Int = Self.pageSize) -> [String] {
         [
             "api", "graphql",
             "-f", "query=\(document)",
