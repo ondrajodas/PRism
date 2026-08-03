@@ -11,6 +11,8 @@ struct FindingsPanel: View {
     /// `nil` při **prvním** běhu, než se uloží záznam — právě tehdy je průběh
     /// nejzajímavější, takže se na něj nesmí čekat.
     let record: ReviewRecord?
+    /// Zahodí uložené nálezy. `nil` = není co zahodit, tlačítko se nekreslí.
+    var clear: (() async throws -> Void)?
     @Binding var isExpanded: Bool
     /// Odskok do diffu na místo nálezu.
     let jump: (Finding) -> Void
@@ -37,6 +39,9 @@ struct FindingsPanel: View {
     /// Výška na začátku tažení. Bez ní se posun načítá z každé události znovu a panel
     /// utíká pryč.
     @State private var heightAtDragStart: Double?
+    @State private var isConfirmingClear = false
+    @State private var isClearing = false
+    @State private var clearFailure: String?
 
     private static let minimumHeight = 120.0
     private static let maximumHeight = 600.0
@@ -60,6 +65,17 @@ struct FindingsPanel: View {
             }
         }
         .background(.bar)
+        // `presenting:` podá text nepovinný, takže v těle není `?? ""` — default, který se
+        // nikdy nepoužije, čte příště jako možnost prázdné hlášky.
+        .alert(
+            "Nálezy se nepodařilo zahodit",
+            isPresented: .init(get: { clearFailure != nil }, set: { if !$0 { clearFailure = nil } }),
+            presenting: clearFailure
+        ) { _ in
+            Button("Zavřít", role: .cancel) { clearFailure = nil }
+        } message: { detail in
+            Text(verbatim: detail)
+        }
     }
 
     // MARK: - Lišta
@@ -89,9 +105,56 @@ struct FindingsPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            clearButton
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
+    }
+
+    /// Zahození uložených nálezů.
+    ///
+    /// Vpravo, **ne vedle tabů**, jak psalo zadání #81: mazací tlačítko těsně u přepínače,
+    /// do kterého se kliká pořád, si o překlep říká. Za běhu je zakázané — doběhlý skill by
+    /// se zapsal do právě vyčištěného záznamu.
+    @ViewBuilder private var clearButton: some View {
+        if let clear {
+            Button("Zahodit nálezy", systemImage: "trash") {
+                isConfirmingClear = true
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .font(.callout)
+            .disabled(isRunning || isClearing)
+            .help(isRunning
+                ? "Nejdřív nech review doběhnout, nebo ho zruš"
+                : "Zahodit uložené nálezy tohohle commitu a pustit review znovu")
+            // Potvrzení schválně: vrátit se k nálezům jde jedině novým během, a ten stojí
+            // session. Není to nevratné zdánlivě, je to nevratné doopravdy.
+            .confirmationDialog(
+                "Zahodit uložené nálezy?",
+                isPresented: $isConfirmingClear,
+                titleVisibility: .visible
+            ) {
+                Button("Zahodit", role: .destructive) { runClear(clear) }
+                Button("Zpět", role: .cancel) {}
+            } message: {
+                Text("Zpátky je dostaneš jedině novým review, které stojí session. Historie starších commitů zůstane.")
+            }
+        }
+    }
+
+    private func runClear(_ clear: @escaping () async throws -> Void) {
+        isClearing = true
+        Task {
+            defer { isClearing = false }
+            do {
+                try await clear()
+            } catch {
+                // Nesmazaný záznam se nesmí tvářit jako smazaný — vrátil by se po restartu
+                // a nikdo by nevěděl proč.
+                clearFailure = error.localizedDescription
+            }
+        }
     }
 
     private var tabs: some View {

@@ -68,6 +68,22 @@ actor ReviewStore {
         return record
     }
 
+    /// Zahodí uložený záznam jednoho `(PR, headSha)`.
+    ///
+    /// Maže se **jen ten viditelný commit**, ne historie PR: zastaralé záznamy jsou záznam
+    /// toho, co kdy platilo, a specifikace je schválně nechává. Chybějící soubor není chyba
+    /// — tlačítko se dá zmáčknout dvakrát a druhé zmáčknutí nemá nic položit.
+    ///
+    /// Mimo cache se nemaže. Cesta se skládá z `CacheLayout`, takže by ven vést nemohla,
+    /// ale tvrdá podmínka „nikdy nesahat na uživatelovy soubory“ nemá viset na tom, že si
+    /// to někdo pamatuje — kontrola je jedno volání a je stejná jako u eviction.
+    func delete(for pullRequest: PRIdentifier, at headSha: String) throws {
+        let url = layout.reviewFile(for: pullRequest, at: headSha)
+        guard layout.contains(url), FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
+        else { return }
+        try FileManager.default.removeItem(at: url)
+    }
+
     /// PR má tenhle head commit. Všechno starší se označí jako zastaralé.
     ///
     /// Volá se, jakmile se dotáhne detail PR — tedy v jediné chvíli, kdy aplikace aktuální
