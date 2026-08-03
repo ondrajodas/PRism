@@ -472,38 +472,67 @@ struct DraftPolicyTests {
 
     // MARK: - Odesílatelnost
 
-    @Test("Draft s verdiktem a obsahem se odeslat dá")
-    func isSendableWithAVerdict() {
-        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", body: "tělo", verdict: .approve)
+    /// Odesílatelnost se testuje nad **sandboxovým** repem, protože `PublishScope` je
+    /// součástí odpovědi: na `cli/cli` by nic nešlo odeslat bez ohledu na obsah draftu.
+    /// Že to tak je, hlídá `blocksARepositoryOutsideTheSandbox` níž.
+    private let sandbox = PRIdentifier("ondrajodas/prism-review-sandbox#7")!
 
-        #expect(Policy.isSendable(draft, head: "abc"))
+    @Test("Draft s verdiktem a obsahem se odeslat dá")
+    func sendsADraftWithAVerdict() {
+        let draft = ReviewDraft(pullRequest: sandbox, headSha: "abc", body: "tělo", verdict: .approve)
+
+        #expect(Policy.sendBlock(for: draft, head: "abc") == nil)
     }
 
     /// `event` je v API povinný a hádat ho za člověka znamená odeslat něco jiného, než chtěl.
     @Test("Bez vybraného verdiktu se odeslat nedá")
     func isNotSendableWithoutAVerdict() {
-        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", body: "tělo", verdict: nil)
+        let draft = ReviewDraft(pullRequest: sandbox, headSha: "abc", body: "tělo", verdict: nil)
 
-        #expect(!Policy.isSendable(draft, head: "abc"))
+        #expect(Policy.sendBlock(for: draft, head: "abc") == .noVerdict)
     }
 
     @Test("Úplně prázdný draft se odeslat nedá")
     func isNotSendableWhenEmpty() {
-        let draft = ReviewDraft(pullRequest: pr, headSha: "abc")
+        let draft = ReviewDraft(pullRequest: sandbox, headSha: "abc")
 
         #expect(draft.isEmpty)
-        #expect(!Policy.isSendable(draft, head: "abc"))
+        #expect(Policy.sendBlock(for: draft, head: "abc") == .nothingToSend)
+    }
+
+    /// Draft, který se ještě nezaložil, není „prázdný jinak“ — je to tentýž důvod.
+    @Test("Neexistující draft se odeslat nedá")
+    func blocksAMissingDraft() {
+        #expect(Policy.sendBlock(for: nil, head: "abc") == .nothingToSend)
+    }
+
+    /// Brána na sandbox je **první**, stejně jako v publisheru: na cizí repo se nemá ani
+    /// nabízet tlačítko, natož sahat na síť.
+    @Test("Repo mimo sandbox odeslání zablokuje ještě před obsahem draftu")
+    func blocksARepositoryOutsideTheSandbox() {
+        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", body: "tělo", verdict: .approve)
+
+        #expect(Policy.sendBlock(for: draft, head: "abc") == .outsideScope(pr.repo))
+    }
+
+    /// „Nevím, jaká je hlava“ **není** „zastaralé“ — dokud se detail načítá, nedá se říct
+    /// ani jedno, a banner o zastaralém draftu by nad ním lhal.
+    @Test("Neznámá hlava PR je vlastní důvod, ne zastarání")
+    func blocksWhenTheHeadIsUnknown() {
+        let draft = ReviewDraft(pullRequest: sandbox, headSha: "abc", body: "tělo", verdict: .approve)
+
+        #expect(Policy.sendBlock(for: draft, head: nil) == .headUnknown(detail: nil))
     }
 
     /// Schválení **bez prózy a bez komentářů je plnohodnotné review** — v datech z #63 to
     /// byla čtvrtina vzorku. Kdyby ho `isEmpty` bralo jako prázdné, nešlo by PR odklepnout
     /// bez toho, aby k tomu člověk něco napsal.
     @Test("Samotný verdikt bez prózy se odeslat dá")
-    func isSendableWithNothingButAVerdict() {
-        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", verdict: .approve)
+    func sendsADraftWithNothingButAVerdict() {
+        let draft = ReviewDraft(pullRequest: sandbox, headSha: "abc", verdict: .approve)
 
         #expect(!draft.isEmpty)
-        #expect(Policy.isSendable(draft, head: "abc"))
+        #expect(Policy.sendBlock(for: draft, head: "abc") == nil)
     }
 
     /// Prázdný komentář vzniká běžně — kliknu na „komentovat“ a rozmyslím si to. GitHub
@@ -511,7 +540,7 @@ struct DraftPolicyTests {
     @Test("Prázdný komentář zablokuje odeslání")
     func isNotSendableWithABlankComment() {
         let draft = ReviewDraft(
-            pullRequest: pr,
+            pullRequest: sandbox,
             headSha: "abc",
             verdict: .comment,
             comments: [
@@ -521,16 +550,37 @@ struct DraftPolicyTests {
         )
 
         #expect(!draft.isEmpty)
-        #expect(!Policy.isSendable(draft, head: "abc"))
+        #expect(Policy.sendBlock(for: draft, head: "abc") == .blankComment)
     }
 
     /// Nový commit draft **nemaže**, jen blokuje odeslání.
     @Test("Zastaralý draft se odeslat nedá, ale zůstává")
     func isNotSendableWhenStale() {
-        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", body: "tělo", verdict: .approve)
+        let draft = ReviewDraft(pullRequest: sandbox, headSha: "abc", body: "tělo", verdict: .approve)
 
-        #expect(!Policy.isSendable(draft, head: "def"))
+        #expect(Policy.sendBlock(for: draft, head: "def") == .stale(draft: "abc", head: "def"))
         #expect(!draft.isEmpty)
+    }
+
+    /// Věta u každého důvodu musí něco říkat — hláška, ze které nevyplývá další krok, je jen
+    /// zpráva o smůle, a prázdný text by v okně vypadal jako mlčky zakázané tlačítko.
+    @Test("Každý důvod má vlastní větu")
+    func everyBlockExplainsItself() {
+        let blocks: [DraftSendBlock] = [
+            .nothingToSend,
+            .outsideScope(pr.repo),
+            .headUnknown(detail: nil),
+            .headUnknown(detail: "gh není přihlášený."),
+            .noVerdict,
+            .stale(draft: "abcdef1234", head: "9876fedcba"),
+            .blankComment,
+        ]
+
+        #expect(Set(blocks.map(\.userDescription)).count == blocks.count)
+        #expect(blocks.allSatisfy { !$0.userDescription.isEmpty })
+        // Zkrácené sha, ne celé — v hlášce jde o to, že se liší, ne o čtyřicet znaků.
+        #expect(DraftSendBlock.stale(draft: "abcdef1234", head: "9876fedcba").userDescription
+            .contains("abcdef1"))
     }
 
     // MARK: - Prázdnost

@@ -237,20 +237,89 @@ extension Policy {
         draft.headSha != headSha
     }
 
-    /// Dá se draft odeslat?
+    /// Proč se rozdělané review **nedá** odeslat. `nil` = dá se.
     ///
-    /// Musí být z čeho poslat (`!isEmpty`), musí být vybraný verdikt a nesmí být zastaralý.
-    /// Chybějící verdikt je vlastní důvod: `event` je v API povinný a hádat ho za člověka
-    /// znamená odeslat něco jiného, než chtěl.
+    /// Odpovídá na to **jedna funkce s důvodem**, ne boolean vedle ní. Do #68 tady stálo
+    /// `isSendable`, které vracelo jen ano/ne — a vedle něj by teď existovala cesta, jak se
+    /// zeptat a důvod nedostat. Zakázané tlačítko bez vysvětlení je přesně to, co se v tomhle
+    /// okně nemá stát.
     ///
-    /// **Prázdný komentář blokuje odeslání celého draftu.** Vzniká běžně — kliknutím na
-    /// „komentovat“ se založí prázdný a text se dopisuje potom — a GitHub takový payload
-    /// odmítne, přičemž odmítnutí je atomické, takže s ním padne i všechno ostatní. Tady
-    /// se to pozná dřív, než se sáhne na síť.
-    static func isSendable(_ draft: ReviewDraft, head headSha: String) -> Bool {
-        guard !draft.isEmpty, draft.verdict != nil, !isStale(draft, head: headSha) else {
-            return false
+    /// Pořadí kopíruje `GhReviewPublisher.submit`: nejdřív brána na sandbox, pak obsah
+    /// draftu, pak shoda s hlavou PR. Kdyby se rozešlo, hlásilo by okno jiný důvod, než na
+    /// kterém odeslání doopravdy skončí.
+    ///
+    /// **Shoda nemůže být úplná** a je to tak zamýšlené: `pullRequestNotOpen` tady protějšek
+    /// nemá, protože stav PR známe jen z uloženého detailu — a ten je v tu chvíli z definice
+    /// starší než pravda. Zavřený PR proto pozná až pre-flight, těsně před odesláním. Slib
+    /// zní „nehlásit **jiný** důvod“, ne „vyjmenovat všechny“.
+    static func sendBlock(for draft: ReviewDraft?, head headSha: String?) -> DraftSendBlock? {
+        // Bez draftu není co posílat a hlavně není odkud vzít repo pro bránu níž.
+        guard let draft else { return .nothingToSend }
+        // Brána na sandbox je první, stejně jako v publisheru — a je to jediný důvod, který
+        // se dopsáním review nespraví.
+        guard PublishScope.allows(draft.pullRequest.repo) else {
+            return .outsideScope(draft.pullRequest.repo)
         }
-        return !draft.comments.contains { $0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !draft.isEmpty else { return .nothingToSend }
+        // „Nevím, jaká je hlava“ **není** „zastaralé“: dokud se detail načítá, nedá se říct
+        // ani jedno. Proč ji neznáme, tahle funkce neví — doplní to volající, který vidí
+        // stav načítání.
+        guard let headSha else { return .headUnknown(detail: nil) }
+        guard draft.verdict != nil else { return .noVerdict }
+        guard !isStale(draft, head: headSha) else {
+            return .stale(draft: draft.headSha, head: headSha)
+        }
+        guard !draft.comments.contains(where: {
+            $0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) else { return .blankComment }
+        return nil
+    }
+}
+
+/// Proč se rozdělané review nedá odeslat.
+///
+/// Typované, ne boolean, a se **větou pro okno**: mlčky zakázané tlačítko vypadá jako
+/// rozbitá aplikace, a každý z těch důvodů vede jinam — prázdný komentář se dopíše, verdikt
+/// vybere, zastaralý draft počká na přenesení (#69) a repo mimo sandbox na #107.
+enum DraftSendBlock: Hashable, Sendable {
+    /// Draft neexistuje nebo v něm není nic, co by šlo poslat.
+    case nothingToSend
+    /// Repo není v `PublishScope`.
+    case outsideScope(RepoID)
+    /// Ještě nevíme, na kterém commitu PR stojí.
+    ///
+    /// `detail` = **proč** se to nepovedlo zjistit; `nil` znamená, že se detail pořád načítá.
+    /// Rozdíl je v tom, co se s tím dá dělat: načítání se dořeší samo, selhání ne — a slíbit
+    /// „hned to bude“ nad chybou, která sama nezmizí, je horší než mlčet. Tentýž rozdíl už
+    /// v okně dělá `PullRequestDetailView.draftUnavailable`; doplňuje ho `AppStore`, protože
+    /// stav načítání zná jen on.
+    case headUnknown(detail: String?)
+    /// Verdikt není vybraný. `event` je v API povinný a nepředvyplňuje se.
+    case noVerdict
+    /// Draft je psaný proti staršímu commitu, než je hlava PR.
+    case stale(draft: String, head: String)
+    /// Aspoň jeden řádkový komentář je prázdný.
+    case blankComment
+
+    /// Věta pro okno. Ke každému důvodu patří i to, co s ním jde udělat.
+    var userDescription: String {
+        switch self {
+        case .nothingToSend:
+            "Není co poslat — v review není tělo, verdikt ani komentář."
+        case .outsideScope(let repo):
+            // Delegovaná, ne opsaná: dvě formulace téhož omezení by se rozešly a jedna
+            // z nich by pak tvrdila něco jiného než druhá.
+            PublishError.outsideAllowedScope(repo).userDescription
+        case .headUnknown(let detail?):
+            "Nevím, na kterém commitu PR stojí, takže odeslat nejde. \(detail)"
+        case .headUnknown:
+            "Zjišťuji, na kterém commitu PR stojí. Odeslat půjde, jakmile to bude jasné."
+        case .noVerdict:
+            "Vyber verdikt — bez něj GitHub review nepřijme."
+        case .stale(let draft, let head):
+            "Review je psané proti commitu \(draft.prefix(7)), ale hlava PR je \(head.prefix(7)). Takhle se odeslat nedá."
+        case .blankComment:
+            "Některý řádkový komentář je prázdný. Dopiš ho, nebo ho vyjmi — GitHub by kvůli němu odmítl celé review."
+        }
     }
 }

@@ -24,6 +24,11 @@ struct DraftActions {
     var setBody: (String) -> Void = { _ in }
     var setVerdict: (ReviewDraft.Verdict?) -> Void = { _ in }
     var discard: () -> Void = {}
+    /// Otevře potvrzení odeslání. **Sama nic neodesílá** — dvě kliknutí, dvě různá tlačítka.
+    var send: () -> Void = {}
+    /// Proč odeslat nejde. `nil` = jde. Je to stav, ne akce, ale patří k `send` stejně jako
+    /// `canCompose` k psaní: zakázané tlačítko bez důvodu vypadá jako rozbitá aplikace.
+    var sendBlock: DraftSendBlock?
 
     /// Akce svázané s jedním souborem diffu — cestu si doplní samy.
     ///

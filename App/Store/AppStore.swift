@@ -119,6 +119,13 @@ final class AppStore {
     private let time: any TimeSource
     private let polling: PollingService
     private let gateway: any GitHubGateway
+    /// Cesta ke `gh` — jediné, co si store kvůli odesílání drží.
+    ///
+    /// **Ne publisher a ani továrna na něj** (tvrdá podmínka č. 1): cesta ven se skládá až
+    /// v `ReviewSubmission.send()`, takže `AppStore` sám odeslat nic neumí — a grep, kterým
+    /// se ta podmínka kontroluje, ho schválně nevypíše. `nil` v testech znamená „odsud se
+    /// neposílá“ a `submission(for:)` pak nevrátí nic.
+    private let gh: URL?
     private let checkout: (any RepoCheckout)?
     private let reviewer: (any ReviewRunning)?
     private let reviews: ReviewStore?
@@ -148,9 +155,11 @@ final class AppStore {
         reviews: ReviewStore? = nil,
         drafts: ReviewDraftStore? = nil,
         translator: (any FindingTranslating)? = nil,
-        autoRuns: AutoRunLedger? = nil
+        autoRuns: AutoRunLedger? = nil,
+        gh: URL? = nil
     ) {
         self.time = time
+        self.gh = gh
         self.configuration = configuration
         self.configStore = configStore
         polling = PollingService(
@@ -213,7 +222,8 @@ final class AppStore {
             reviews: ReviewStore(),
             drafts: ReviewDraftStore(),
             translator: ClaudeFindingTranslator(claude: toolPaths.claude, runner: runner),
-            autoRuns: AutoRunLedger()
+            autoRuns: AutoRunLedger(),
+            gh: toolPaths.gh
         )
         self.configurationBox = box
     }
@@ -752,8 +762,8 @@ final class AppStore {
     /// Píše se draft proti staršímu commitu, než je hlava PR?
     ///
     /// `false`, dokud hlavu neznáme: „nevím“ není „zastaralé“ a banner o zablokovaném
-    /// odeslání nad načítajícím se detailem by lhal. Odeslání (#68) se stejně ptá
-    /// `Policy.isSendable`, které hlavu vyžaduje.
+    /// odeslání nad načítajícím se detailem by lhal. Odeslání se stejně ptá
+    /// `draftSendBlock(for:)`, které neznámou hlavu bere jako vlastní důvod.
     func isDraftStale(for pr: PRIdentifier) -> Bool {
         guard let draft = drafts[pr], let head = head(of: pr) else { return false }
         return Policy.isStale(draft, head: head)
@@ -875,6 +885,71 @@ final class AppStore {
                 to: draft.body
             )
         }
+    }
+
+    // MARK: - Odeslání review
+
+    /// Proč se rozdělané review nedá odeslat. `nil` = dá se.
+    ///
+    /// Věta z toho jde do okna: zakázané tlačítko bez důvodu vypadá jako rozbitá aplikace.
+    ///
+    /// **Proč hlavu neznáme, doplňuje store**, ne `Policy`: ta dostane jen `String?` a z něj
+    /// nepozná rozdíl mezi „načítá se“ a „nepovedlo se to“. Slíbit „hned to bude“ nad chybou,
+    /// která sama nezmizí, je přitom horší než mlčet.
+    func draftSendBlock(for pr: PRIdentifier) -> DraftSendBlock? {
+        let block = Policy.sendBlock(for: drafts[pr], head: head(of: pr))
+        guard case .headUnknown = block, case .failed(let detail) = detailStates[pr] else {
+            return block
+        }
+        return .headUnknown(detail: detail)
+    }
+
+    /// Návrh verdiktu z nálezů. `nil` = není z čeho soudit.
+    ///
+    /// V potvrzení odeslání stojí **vedle** zvoleného verdiktu, aby se dalo porovnat —
+    /// nepředvyplňuje nic.
+    func suggestedVerdict(for pr: PRIdentifier) -> ReviewVerdict? {
+        guard let record = reviewRecords[pr] else { return nil }
+        return Policy.suggestedVerdict(
+            for: record,
+            categories: resolved(for: pr.repo).blockingCategories
+        )
+    }
+
+    /// Složí jedno odeslání — snímek toho, co je teď v draftu.
+    ///
+    /// `nil` znamená „odeslat teď nejde“ a tlačítko, které to volá, je v takovém stavu
+    /// zakázané; kontrola je tady podruhé proto, že sheet se nad zastaralým draftem **nemá
+    /// otevřít vůbec** a spoléhat se na to, že si to view pohlídá, je o jedno místo k
+    /// zapomenutí víc.
+    ///
+    /// Publisher se tu **nevyrábí** — jen se předá `gh` a read-only gateway. Vzniká až
+    /// v `ReviewSubmission.send()`, viz tvrdá podmínka č. 1.
+    func submission(for pullRequest: PullRequestSummary) -> ReviewSubmission? {
+        let id = pullRequest.id
+        guard let gh, let draft = drafts[id], draftSendBlock(for: id) == nil else { return nil }
+        return ReviewSubmission(
+            pullRequest: pullRequest,
+            draft: draft,
+            suggestion: suggestedVerdict(for: id),
+            gh: gh,
+            gateway: gateway,
+            afterSuccess: { [weak self] in await self?.draftWasSubmitted(for: pullRequest) }
+        )
+    }
+
+    /// Úklid po odeslaném review: draft je pryč a konverzace se načte znovu.
+    ///
+    /// Draft se maže **až tady**, tedy po potvrzené odpovědi GitHubu — selhání ho nechává
+    /// netknutý, aby se dalo zkusit znovu bez psaní nanovo.
+    ///
+    /// Konverzace se obnovuje proto, že v ní od téhle chvíle leží moje vlastní review; bez
+    /// toho by v tabu `Přehled` chybělo až do dalšího přepnutí PR. Cache jde podle
+    /// `updatedAt`, které se odesláním review na GitHubu měnit nemusí, takže se zahazuje
+    /// ručně (`refreshConversation`).
+    func draftWasSubmitted(for pullRequest: PullRequestSummary) async {
+        discardDraft(for: pullRequest.id)
+        await refreshConversation(for: pullRequest)
     }
 
     /// Zahodí celé rozdělané review. Idempotentní — na tlačítko se dá zmáčknout dvakrát.

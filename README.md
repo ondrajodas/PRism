@@ -193,7 +193,30 @@ a odmítne s ním celé review.
 Že je něco rozděláno, je vidět **v řádku seznamu i v detailu** (ikona pera). Draft psaný
 proti staršímu commitu má v tabu **banner** a odeslat se nedá; text zůstává.
 
-Odesílání samotné je #68 — tenhle panel jen skládá, co se pošle.
+### Odeslání review
+
+**Dvě kliknutí, dvě různá tlačítka.** `Odeslat review…` v tabu `Moje review` nic neodesílá —
+otevře potvrzení, ve kterém je vidět **celý payload**: verdikt, tělo tak, jak je napsané,
+a každý řádkový komentář i s tím, ke kterému řádku a ke které straně diffu patří. Teprve
+tlačítko tam zavolá GitHub. Zavřít se dá kdykoli a draft tím zůstane netknutý.
+
+Ochrana stojí právě na tom výpisu, ne na obřadu: **žádné opisování názvu repa** a **žádný
+druhý dialog nad sheetem**. Obojí se za týden odklikává poslepu a oslabí to i to první
+potvrzení. Co zůstává, je pojmenování akce — tlačítko se jmenuje
+`Odeslat APPROVE pro owner/repo#123` — a to, že **není výchozí**: Enterem se nic neodešle.
+
+Návrh verdiktu z nálezů stojí v potvrzení **vedle** toho zvoleného. Nepředvyplňuje nic, ale
+když se rozchází (schvaluju PR, u kterého reviewer hlásí blokující nález), řekne to nahlas.
+
+Proč odeslat nejde, je vidět **předem** — vedle zakázaného tlačítka, ne až po pokusu:
+chybějící verdikt, prázdný řádkový komentář, draft proti staršímu commitu, nebo repo mimo
+sandbox. Zatím se totiž odesílá **jen do sandboxu** (`ondrajodas/prism-review-sandbox`);
+je to vědomé omezení první verze, ne technická překážka.
+
+Po úspěchu se potvrzení **zavře samo**, draft zmizí (i z disku) a konverzace se načte znovu,
+takže je moje review hned vidět v `Přehledu`. Otevřené zůstane jen tehdy, když GitHub vrátí
+stav, kterému aplikace nerozumí — tam je jediná zpráva ta, že se to má zkontrolovat ručně.
+**Selhání draft nemaže**: chyba je vypsaná i s tím, co se s ní dá dělat, a dá se zkusit znovu.
 
 Vlákna, jejichž řádek v aktuálním diffu **není** (typicky zastaralá po novém commitu), se
 do kódu nekotví — jejich čísla platila pro starý head, takže by bublina sedla na cizí řádky.
@@ -340,7 +363,7 @@ App/                      zdrojáky aplikace — target PRism
   Diff/                   parsování unified diffu na soubory, hunky a řádky
   Markdown/               vykreslení Markdownu z GitHubu: bloky, inline HTML od botů
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka
-  Publish/                jediná cesta ven: odeslání review na GitHub, brána na sandbox
+  Publish/                jediná cesta ven: odeslání review na GitHub, brána na sandbox, model potvrzení
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno; ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku
