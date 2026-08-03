@@ -524,6 +524,29 @@ struct DraftPolicyTests {
         #expect(Policy.sendBlock(for: draft, head: nil) == .headUnknown(detail: nil))
     }
 
+    /// **Hlásí se ten důvod, se kterým se dá něco udělat.** Vada na samotném draftu jde před
+    /// čekáním na hlavu PR: „vyber verdikt“ se dá splnit hned, kdežto „zjišťuji, na kterém
+    /// commitu PR stojí“ posílá čekat — a když se detail nepovede načíst, čekalo by se
+    /// donekonečna nad draftem, kterému chybí verdikt. Nález Copilota z #112.
+    @Test("Vada draftu se hlásí dřív než čekání na hlavu PR")
+    func prefersTheReasonTheUserCanFix() {
+        let withoutVerdict = ReviewDraft(pullRequest: sandbox, headSha: "abc", body: "tělo")
+        let withBlankComment = ReviewDraft(
+            pullRequest: sandbox,
+            headSha: "abc",
+            verdict: .comment,
+            comments: [
+                ReviewDraftComment(path: "a.php", line: 1, side: .right, body: " ", origin: .own),
+            ]
+        )
+
+        #expect(Policy.sendBlock(for: withoutVerdict, head: nil) == .noVerdict)
+        #expect(Policy.sendBlock(for: withBlankComment, head: nil) == .blankComment)
+        // A totéž proti zastarání — dopsat komentář jde, přenést draft na nový commit (#69)
+        // zatím ne.
+        #expect(Policy.sendBlock(for: withBlankComment, head: "def") == .blankComment)
+    }
+
     /// Schválení **bez prózy a bez komentářů je plnohodnotné review** — v datech z #63 to
     /// byla čtvrtina vzorku. Kdyby ho `isEmpty` bralo jako prázdné, nešlo by PR odklepnout
     /// bez toho, aby k tomu člověk něco napsal.

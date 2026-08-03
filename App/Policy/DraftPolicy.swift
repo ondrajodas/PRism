@@ -244,14 +244,20 @@ extension Policy {
     /// zeptat a důvod nedostat. Zakázané tlačítko bez vysvětlení je přesně to, co se v tomhle
     /// okně nemá stát.
     ///
-    /// Pořadí kopíruje `GhReviewPublisher.submit`: nejdřív brána na sandbox, pak obsah
-    /// draftu, pak shoda s hlavou PR. Kdyby se rozešlo, hlásilo by okno jiný důvod, než na
-    /// kterém odeslání doopravdy skončí.
+    /// Pořadí kopíruje `GhReviewPublisher.submit`: brána na sandbox, pak **všechno, co je
+    /// vidět na samotném draftu**, a teprve pak to, co potřebuje hlavu PR. V publisheru je to
+    /// totéž rozdělení — `PublishRequest.payload(for:)` běží před `preflight(_:)`.
     ///
-    /// **Shoda nemůže být úplná** a je to tak zamýšlené: `pullRequestNotOpen` tady protějšek
-    /// nemá, protože stav PR známe jen z uloženého detailu — a ten je v tu chvíli z definice
-    /// starší než pravda. Zavřený PR proto pozná až pre-flight, těsně před odesláním. Slib
-    /// zní „nehlásit **jiný** důvod“, ne „vyjmenovat všechny“.
+    /// Není to jen kosmetika: hlásí se ten důvod, se kterým **se dá něco udělat**. Draft bez
+    /// verdiktu má říct „vyber verdikt“, ne „zjišťuji, na kterém commitu PR stojí“ — čekání
+    /// tu vadu nespraví, a když se detail navíc nepovede načíst, ukazovalo by okno donekonečna
+    /// na síť místo na chybějící verdikt. Chytil to Copilot na #112.
+    ///
+    /// **Shoda s publisherem nemůže být úplná** a je to tak zamýšlené. `pullRequestNotOpen`
+    /// tady protějšek nemá, protože stav PR známe jen z uloženého detailu — a ten je v tu
+    /// chvíli z definice starší než pravda, takže zavřený PR pozná až pre-flight. Opačně
+    /// `blankComment` protějšek v publisheru nemá: je to náš předstih před 422, a patří
+    /// k obsahu draftu, protože se opravuje dopsáním textu.
     static func sendBlock(for draft: ReviewDraft?, head headSha: String?) -> DraftSendBlock? {
         // Bez draftu není co posílat a hlavně není odkud vzít repo pro bránu níž.
         guard let draft else { return .nothingToSend }
@@ -261,17 +267,17 @@ extension Policy {
             return .outsideScope(draft.pullRequest.repo)
         }
         guard !draft.isEmpty else { return .nothingToSend }
-        // „Nevím, jaká je hlava“ **není** „zastaralé“: dokud se detail načítá, nedá se říct
-        // ani jedno. Proč ji neznáme, tahle funkce neví — doplní to volající, který vidí
-        // stav načítání.
-        guard let headSha else { return .headUnknown(detail: nil) }
         guard draft.verdict != nil else { return .noVerdict }
-        guard !isStale(draft, head: headSha) else {
-            return .stale(draft: draft.headSha, head: headSha)
-        }
         guard !draft.comments.contains(where: {
             $0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }) else { return .blankComment }
+        // Odtud dál se bez hlavy PR nedá říct nic. „Nevím, jaká je hlava“ přitom **není**
+        // „zastaralé“ — proto vlastní případ. Proč ji neznáme, tahle funkce neví; doplní to
+        // volající, který vidí stav načítání.
+        guard let headSha else { return .headUnknown(detail: nil) }
+        guard !isStale(draft, head: headSha) else {
+            return .stale(draft: draft.headSha, head: headSha)
+        }
         return nil
     }
 }

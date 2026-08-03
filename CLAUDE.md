@@ -1491,9 +1491,15 @@ Nad odesílatelností draftu (#68) platí:
   zakázané tlačítko vypadá jako rozbitá aplikace. Proto bylo zahozené, ne ponechané jako
   zkratka. Ke každému případu `DraftSendBlock` patří **věta pro okno** s tím, co s ním jde
   udělat; je na to test, protože prázdná věta by se v UI projevila jako to mlčení.
-- **Pořadí důvodů kopíruje `GhReviewPublisher.submit`:** brána na sandbox, obsah draftu, shoda
-  s hlavou PR. Kdyby se rozešlo, hlásilo by okno jiný důvod, než na kterém odeslání doopravdy
-  skončí — a rada z něj by byla nepravdivá.
+- **Pořadí důvodů kopíruje `GhReviewPublisher.submit`:** brána na sandbox, pak všechno, co je
+  vidět na samotném draftu, a teprve pak to, co potřebuje hlavu PR (v publisheru totéž dělení
+  — `PublishRequest.payload(for:)` běží před `preflight(_:)`). Kdyby se rozešlo, hlásilo by
+  okno jiný důvod, než na kterém odeslání doopravdy skončí.
+
+  Není to kosmetika: hlásí se ten důvod, **se kterým se dá něco udělat**. Draft bez verdiktu
+  má říct „vyber verdikt“, ne „zjišťuji, na kterém commitu PR stojí“ — čekání tu vadu
+  nespraví, a nad selhaným detailem by okno ukazovalo donekonečna na síť místo na chybějící
+  verdikt. Chytil to Copilot na #112, kde `headUnknown` stálo před `noVerdict`.
 - **`PublishScope` je součástí odpovědi**, i když je to jinak věc publisheru. Na cizí repo se
   nemá ani nabízet tlačítko, natož sahat na síť, a druhé místo, kde se ta brána vyhodnocuje,
   by se s prvním rozešlo. Daň je, že testy odesílatelnosti musí běžet nad sandboxovým
