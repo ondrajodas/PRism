@@ -283,6 +283,11 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 
 Tři věci, které se u nich nemají rozbít:
 
+- **`PRIdentifier` je `Comparable` a čísla se srovnávají číselně.** Řadit podle
+  `description` je past, do které repozitář spadl **třikrát** (`ReviewStore`,
+  `PullRequestList`, `ReviewDraftStore`): řetězcově vyjde `#10` před `#2`. Determinismus by
+  to zachovalo, ale výpis, ve kterém jde desítka před dvojkou, vypadá rozbitě — a to je
+  jediná věc, kterou od pořadí chceme. Všechna řazení proto jdou přes `<` na identifikátoru.
 - **Identifikátory se kódují na jediný řetězec**, ne na objekt s poli. Existuje pak jeden
   kanonický zápis pro disk, klíč slovníku i UI. Parsování a formátování drží
   `LosslessStringConvertible` (`init?(_:)` + `description`) a `Codable` ho jen používá.
@@ -781,6 +786,12 @@ Vedle něj stojí **`ReviewDraftStore`** (#65) — rozdělaná review, jeden sou
   jako `Configuration.setRepository`.
 - **Draft se `verdict`em a ničím jiným prázdný není.** Schválení bez prózy je plnohodnotné
   review — v datech z #63 čtvrtina vzorku. Chytil to test, který původně tvrdil opak.
+- **Draft, který neleží tam, kam podle svého `pullRequest` patří, se do výpisu nedostane**
+  a spočítá se jako nečitelný. Jinak by výpis ukázal draft pro PR X, který `load(for: X)`
+  nenajde — a rozpor mezi „vidím ho“ a „nedá se otevřít“ je horší než počítadlo. Porovnávají
+  se přitom **kanonické cesty**, ne `URL` hodnoty: `FileManager.enumerator` vrací URL v jiné
+  podobě než `CacheLayout` (`/private/var` proti `/var`), takže `==` nad `URL` odmítne
+  i soubor, který na svém místě je. Chytily to testy, které po té změně zhasly všechny.
 - **Nečitelný draft konkrétního PR vyhodí chybu, nevrátí `nil`.** Tichá nula by znamenala, že
   rozepsané review vypadá jako neexistující a člověk by ho psal znovu. Ve výpisu všech se
   nečitelné **počítají** (`Loaded.unreadable`), stejně jako u `ReviewStore`.

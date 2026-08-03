@@ -4,9 +4,20 @@ import Foundation
 ///
 /// Klíč všeho, co se k PR váže: PR ze dvou zdrojů se podle něj deduplikuje, review stavy
 /// i uložené nálezy se podle něj hledají. Stejně jako `RepoID` se kóduje na jediný řetězec.
-struct PRIdentifier: Hashable, Sendable, LosslessStringConvertible {
+struct PRIdentifier: Hashable, Sendable, LosslessStringConvertible, Comparable {
     let repo: RepoID
     let number: Int
+
+    /// Pořadí je `(owner, repo, číslo)` a **číslo se srovnává číselně**.
+    ///
+    /// Řadit podle `description` je past, do které tenhle repozitář spadl třikrát: řetězcově
+    /// vyjde `#10` před `#2`. Determinismus by to sice zachovalo, ale výpis, ve kterém jde
+    /// desítka před dvojkou, vypadá rozbitě — a je to jediná věc, kterou od pořadí PR
+    /// v seznamu chceme. Proto je to **jedno místo** a všechna řazení jdou přes něj.
+    static func < (left: PRIdentifier, right: PRIdentifier) -> Bool {
+        (left.repo.owner, left.repo.name, left.number)
+            < (right.repo.owner, right.repo.name, right.number)
+    }
 
     init(repo: RepoID, number: Int) {
         self.repo = repo

@@ -116,17 +116,54 @@ struct ReviewDraftStoreTests {
     }
 
     /// Pořadí z `FileManageru` zaručené není a testy se na náhodu spoléhat nemají.
-    @Test("Výpis je v pořadí podle PR")
-    func sortsTheListing() async throws {
+    ///
+    /// Čísla jsou schválně přes desítku: **řetězcově** by `#10` vyšlo před `#2`, což je past,
+    /// do které řazení podle `description` spadlo.
+    @Test("Výpis řadí čísla PR číselně, ne řetězcově")
+    func sortsTheListingNumerically() async throws {
         let store = store()
-        for number in [43, 41, 42] {
+        for number in [10, 2, 42, 1] {
             let id = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: number)
             try await store.save(ReviewDraft(pullRequest: id, headSha: "x", body: "tělo"))
         }
 
         let drafts = try await store.load().drafts
 
-        #expect(drafts.map(\.pullRequest.number) == [41, 42, 43])
+        #expect(drafts.map(\.pullRequest.number) == [1, 2, 10, 42])
+    }
+
+    @Test("Výpis řadí i podle repa")
+    func sortsTheListingByRepository() async throws {
+        let store = store()
+        for repo in [RepoID(owner: "cli", name: "go-gh"), RepoID(owner: "cli", name: "cli")] {
+            let id = PRIdentifier(repo: repo, number: 1)
+            try await store.save(ReviewDraft(pullRequest: id, headSha: "x", body: "tělo"))
+        }
+
+        let drafts = try await store.load().drafts
+
+        #expect(drafts.map(\.pullRequest.repo.name) == ["cli", "go-gh"])
+    }
+
+    /// Výpis, ve kterém je draft, co se přes `load(for:)` nedá otevřít, je horší než
+    /// počítadlo, které o anomálii aspoň řekne.
+    @Test("Draft v cizím souboru se do výpisu nedostane a spočítá se")
+    func skipsAMisplacedDraftInTheListing() async throws {
+        let other = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 99)
+        let url = layout.draftFile(for: pr)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(ReviewDraft(pullRequest: other, headSha: "x", body: "špatné místo"))
+            .write(to: url)
+
+        let loaded = try await store().load()
+
+        #expect(loaded.drafts.isEmpty)
+        #expect(loaded.unreadable == 1)
     }
 
     // MARK: - Rozbité soubory

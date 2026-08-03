@@ -32,6 +32,6 @@ enum PullRequestList {
     /// se pořadí mezi pollingy měnilo a řádky by v seznamu poskakovaly pod rukou.
     private static func shouldPrecede(_ left: PullRequestSummary, _ right: PullRequestSummary) -> Bool {
         if left.updatedAt != right.updatedAt { return left.updatedAt > right.updatedAt }
-        return left.id.description < right.id.description
+        return left.id < right.id
     }
 }

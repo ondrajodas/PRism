@@ -82,17 +82,24 @@ actor ReviewDraftStore {
     }
 
     /// Všechno, co na disku je. Volá se při startu.
+    ///
+    /// Draft, který **neleží tam, kam podle svého `pullRequest` patří**, se do výpisu
+    /// nedostane a spočítá se jako nečitelný. Jinak by výpis ukázal draft pro PR X, ale
+    /// `load(for: X)` by ho nenašel — a nekonzistence mezi „vidím ho“ a „nedá se otevřít“
+    /// je horší než počítadlo, které o anomálii aspoň řekne.
     func load() throws -> Loaded {
         var loaded = Loaded()
         for url in draftFiles() {
-            guard let draft = try? read(at: url) else {
+            guard let draft = try? read(at: url), isInPlace(url, for: draft.pullRequest) else {
                 loaded.unreadable += 1
                 continue
             }
             loaded.drafts.append(draft)
         }
         // Pořadí z `FileManageru` není zaručené a UI ani testy se na náhodu spoléhat nemají.
-        loaded.drafts.sort { $0.pullRequest.description < $1.pullRequest.description }
+        // Přes `Comparable` na `PRIdentifier`, ne podle `description`: řetězcově vyjde
+        // `#10` před `#2`.
+        loaded.drafts.sort { $0.pullRequest < $1.pullRequest }
         return loaded
     }
 
@@ -108,6 +115,19 @@ actor ReviewDraftStore {
             return
         }
         try FileManager.default.removeItem(at: url)
+    }
+
+    /// Leží soubor tam, kam podle svého `pullRequest` patří?
+    ///
+    /// Porovnávají se **kanonické cesty**, ne `URL` hodnoty: `FileManager.enumerator` vrací
+    /// URL v jiné podobě než `CacheLayout` (na macOS typicky `/private/var` proti `/var`),
+    /// takže `==` nad `URL` odmítne i soubor, který je na svém místě. Stejná technika jako
+    /// v `CacheLayout.contains`.
+    private func isInPlace(_ url: URL, for pr: PRIdentifier) -> Bool {
+        func canonical(_ url: URL) -> String {
+            url.resolvingSymlinksInPath().standardizedFileURL.path(percentEncoded: false)
+        }
+        return canonical(url) == canonical(layout.draftFile(for: pr))
     }
 
     private func read(at url: URL) throws -> ReviewDraft {

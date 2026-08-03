@@ -105,13 +105,33 @@ struct DraftPolicyTests {
         }
     }
 
-    /// Řádky hunku komentovatelné **zůstanou**, i když je rozbalený kontext kolem nich.
+    /// Řádky hunku komentovatelné **zůstanou**, i když je kolem nich rozbalený kontext.
+    ///
+    /// Rozbalení se tu musí opravdu udělat, ne jen zmínit v názvu: bez `DiffRow.rows`
+    /// s `revealed`/`content` by test prošel, i kdyby rozbalení hunkové řádky rozbilo.
     @Test("Rozbalení nezkazí komentovatelnost řádků hunku")
     func keepsHunkLinesCommentableAfterRevealing() throws {
         let file = try file()
-        let hunkLines = try #require(file.hunks.first?.lines).filter { $0.kind != .meta }
+        let content = (1...40).map { "// řádek \($0)" }
+        var revealed = RevealedLines()
+        revealed.reveal(20...24)
 
-        #expect(hunkLines.allSatisfy { Policy.isCommentable($0, in: file) })
+        let rows = DiffRow.rows(of: file, revealed: revealed, content: content)
+        let hunkLines = rows.compactMap { row -> DiffLine? in
+            guard case .line(_, let line) = row else { return nil }
+            // Řádky hunku jsou 25–27 na nové straně, plus odebraný, který nové číslo nemá.
+            guard line.kind != .meta else { return nil }
+            guard line.newNumber.map({ $0 >= 25 }) ?? true else { return nil }
+            return line
+        }
+
+        #expect(hunkLines.count == 4, "hunk má tři nové řádky a jeden odebraný")
+        for line in hunkLines {
+            #expect(
+                Policy.isCommentable(line, in: file),
+                "řádek hunku (\(line.kind)) po rozbalení přestal být komentovatelný"
+            )
+        }
     }
 
     @Test("Soubor bez hunků nemá co komentovat")
