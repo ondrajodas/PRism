@@ -574,6 +574,24 @@ final class AppStore {
         }
     }
 
+    /// Smí tenhle běh utratit session?
+    ///
+    /// Ruční se neptá — za tím vždycky někdo stojí. Automatický si sáhne o denní rozpočet,
+    /// a jen když je co spustit: repo s prázdnou sadou skillů („tady nereviewuj nic“) žádnou
+    /// session neutratí, takže by za ni neměl nikdo platit.
+    private func canSpendSession(on pr: PRIdentifier) async -> Bool {
+        guard automaticReviews.contains(pr) else { return true }
+        guard !reviewSkills(for: pr.repo).isEmpty else {
+            reviewPhases[pr] = nil
+            return false
+        }
+        guard await claimAutomaticRun(for: pr) else {
+            reviewPhases[pr] = nil
+            return false
+        }
+        return true
+    }
+
     /// Sáhne si o rozpočet pro automatický běh. `false` = dnes už ne.
     ///
     /// Volá se **až potom, co je jasné, že se utratí session** — tedy za bránou na
@@ -661,16 +679,11 @@ final class AppStore {
             // `updatedAt`, které se mění i po komentáři — teprve `headSha` řekne, jestli
             // se kód opravdu změnil. Ruční spuštění se **nezastavuje**: když si o něj
             // někdo řekl podruhé, chce to pustit znovu.
-            if automaticReviews.contains(pr) {
-                guard !hasCurrentReview(of: pr, at: detail.headSha) else {
-                    reviewPhases[pr] = nil
-                    return
-                }
-                // Tady, ne v plánovači: teprve teď je jisté, že se utratí session.
-                guard await claimAutomaticRun(for: pr) else {
-                    reviewPhases[pr] = nil
-                    return
-                }
+            // Nemá cenu klonovat kvůli commitu, který je zreviewovaný. Rozpočet se tu ale
+            // **nestrhává** — session utrácí až `runSkills` a mezi tím může selhat checkout.
+            if automaticReviews.contains(pr), hasCurrentReview(of: pr, at: detail.headSha) {
+                reviewPhases[pr] = nil
+                return
             }
 
             checkoutStates[pr.repo] = .preparing
@@ -685,6 +698,13 @@ final class AppStore {
             // a obojí tam znamená „sadu neodvodíme“. Zrušené review by pak jelo dál, takže
             // se to musí zeptat znovu tady.
             try Task.checkCancellation()
+
+            // Rozpočet **až tady**: `runSkills` je jediné místo, které session utrácí.
+            // Cokoli dřív znamená platit i za běhy, které se nikdy nerozjely — selhal
+            // checkout, nebo repo nemá nastavený žádný skill. Ráno to spálilo šest z dvaceti
+            // za jedno dopoledne, když se to strhávalo v plánovači, a znovu, když se to
+            // strhávalo před checkoutem.
+            guard await canSpendSession(on: pr) else { return }
 
             try await runSkills(for: pr, of: detail, in: worktree, using: reviewer, saving: reviews)
             reviewPhases[pr] = nil

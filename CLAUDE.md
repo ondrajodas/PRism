@@ -754,13 +754,19 @@ Automatický režim (#25):
 - **Nulový `autoRunsPerDay` znamená vypnuto**, ne „bez omezení“. Je to obrácená volba než
   u nuly souběžných session, a schválně: tam překlep nesmí aplikaci umlčet, tady nesmí
   z překlepu vzniknout neomezené utrácení.
-- **Rozpočet se bere až za bránou na `headSha`.** Session je utracená v okamžiku, kdy běh
-  začne, takže počítat až doběhlé by pustilo dvacet běhů naráz — ale strhávat ho už
-  v plánovači je taky špatně: počítalo by i běhy, které se po dotažení detailu zahodí.
-  A protože se `consideredForAutomation` po restartu vynuluje, spálil každý restart
-  rozpočet za všechna auto PR, aniž by se cokoli spustilo. **Šest z dvaceti za jedno
-  dopoledne**, než si toho někdo všiml. Vyčerpaný rozpočet zastaví plánování ještě dřív,
-  než se sáhne na síť; PR, který rozpočet odmítne, se odznačí, aby o review nepřišel zítra.
+- **Rozpočet se bere těsně před `runSkills`, ne dřív.** Session je utracená v okamžiku, kdy
+  běh začne, takže počítat až doběhlé by pustilo dvacet běhů naráz — ale každý krok **před**
+  `runSkills` se dá projít bez jediné session, a pak se platí za nic:
+  - **v plánovači** se počítalo i za PR, které se po dotažení detailu zahodí. A protože se
+    `consideredForAutomation` po restartu vynuluje, spálil každý restart rozpočet za všechna
+    auto PR — **šest z dvaceti za jedno dopoledne**, než si toho někdo všiml;
+  - **před checkoutem** se platilo i za selhaný klon, tedy za běh, který nezačal;
+  - **bez kontroly skillů** se platilo i za repo s prázdnou sadou („tady nereviewuj nic“).
+
+  Vyčerpaný rozpočet zastaví plánování ještě dřív, než se sáhne na síť; PR, který rozpočet
+  odmítne, se odznačí, aby o review nepřišel zítra. Klonovat se nemá cenu pouštět kvůli
+  zreviewovanému commitu, takže brána na `headSha` zůstává **před** checkoutem — jen už
+  nestrhává rozpočet.
 - **Pozastavení se počítá při vykreslení, ne při tiku.** Drží se **spotřeba**, ne zbytek:
   limit se dá v nastavení změnit kdykoli a snímek „zbývá 0“ by po jeho zvednutí tvrdil, že
   je pozastaveno, až do dalšího tiku. Chytilo se to na běžící aplikaci.
