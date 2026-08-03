@@ -211,6 +211,50 @@ struct AppStoreAutomaticTests {
         #expect(await ledger.used() == 1)
     }
 
+    /// Rozpočet je na session, ne na pokusy. Selhal-li checkout, žádná neproběhla.
+    @Test("Selhaný checkout rozpočet nespotřebuje")
+    func aFailedCheckoutCostsNoBudget() async throws {
+        let ledger = AutoRunLedger(layout: layout, time: FakeTimeSource())
+        var configuration = Configuration.standard
+        configuration.repositories = [repo: RepositoryConfig(mode: .automatic)]
+        let store = AppStore(
+            gateway: FakeGitHubGateway(always: .success([summary()]), detail: .success(detail())),
+            configuration: configuration,
+            time: FakeTimeSource(),
+            checkout: FakeRepoCheckout(outcome: .failure(.notAuthenticated("gh: nepřihlášeno"))),
+            reviewer: FakeReviewRunner(),
+            reviews: ReviewStore(layout: layout, time: FakeTimeSource()),
+            autoRuns: ledger
+        )
+
+        await store.refresh()
+        await settle(store)
+
+        #expect(await ledger.used() == 0)
+    }
+
+    /// Prázdná sada skillů znamená „tady nereviewuj nic“ — a za nic se neplatí.
+    @Test("Repo bez skillů rozpočet nespotřebuje")
+    func aRepositoryWithoutSkillsCostsNoBudget() async throws {
+        let ledger = AutoRunLedger(layout: layout, time: FakeTimeSource())
+        var configuration = Configuration.standard
+        configuration.repositories = [repo: RepositoryConfig(mode: .automatic, skills: [])]
+        let store = AppStore(
+            gateway: FakeGitHubGateway(always: .success([summary()]), detail: .success(detail())),
+            configuration: configuration,
+            time: FakeTimeSource(),
+            checkout: FakeRepoCheckout(),
+            reviewer: FakeReviewRunner(),
+            reviews: ReviewStore(layout: layout, time: FakeTimeSource()),
+            autoRuns: ledger
+        )
+
+        await store.refresh()
+        await settle(store)
+
+        #expect(await ledger.used() == 0)
+    }
+
     @Test("Bez automatického repa se o limitu nemluví")
     func saysNothingAboutTheLimitWithoutAutomaticRepositories() async throws {
         let store = store(
