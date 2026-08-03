@@ -8,11 +8,17 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        NavigationSplitView {
-            PullRequestListView(store: store)
-                .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 520)
-        } detail: {
-            detail
+        VStack(spacing: 0) {
+            NavigationSplitView {
+                PullRequestListView(store: store)
+                    .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 520)
+            } detail: {
+                detail
+            }
+            // Hlášky jsou **přes celé okno a mimo split view** (#72). Pod seznamem PR to byl
+            // `safeAreaInset`, kvůli kterému obsah okna vycházel o výšku pruhu vyšší než okno
+            // a spodní hrana ho odřízla v obou sloupcích — podrobnosti v `AppNoticesView`.
+            AppNoticesView(store: store)
         }
         // **Ztmavení, ne rozostření.** `.blur()` protlačí celé okno přes offscreen
         // vykreslení, a to i s poloměrem 0 — text tím ztratí subpixelové vyhlazení a

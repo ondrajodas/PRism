@@ -76,7 +76,12 @@ struct FindingsPanel: View {
             bar
             if isExpanded {
                 Divider()
-                content.frame(height: clampedHeight)
+                // **Strop, ne pevná výška.** `frame(height:)` je nesmlouvavá: v nízkém okně
+                // se panel nezmenší, přeteče — a co se nevejde, se odřízne spodní hranou
+                // okna, takže poslední řádek tabulky je půlka. S `maxHeight` si vezme jen
+                // to, co je, a tabulka uvnitř scrolluje. Podlaha je tam proto, aby zůstal
+                // aspoň řádek: panel zmáčknutý na deset bodů je horší než sbalený.
+                content.frame(minHeight: Self.minimumHeight, maxHeight: clampedHeight)
             }
         }
         .background(.bar)

@@ -31,7 +31,9 @@ struct PullRequestDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             controls
-            Divider()
+            // Záložky nesou vlastní linku po celé šířce, takže samostatný `Divider()` mezi
+            // hlavičkou a obsahem by byl druhá čára pod sebou.
+            tabs
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -82,18 +84,46 @@ struct PullRequestDetailView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Diff dostane všechno místo; nálezy jsou spodní lišta, kterou si uživatel rozbalí.
+    /// Záložky na úrovni PR. Sedí **pod hlavičkou**, ne nad ní: titulek, stav kopie
+    /// i spuštění review platí pro obojí, takže by se v každém tabu musely kreslit znovu.
+    ///
+    /// Odznak u `Přehledu` říká, kolik je toho k přečtení.
+    private var tabs: some View {
+        PullRequestTabBar(selection: tabSelection) { tab in
+            tab == .overview ? store.overview(for: pullRequest.id).count : nil
+        }
+    }
+
+    /// Volba tabu žije ve store (per PR), takže si ji vlastní binding jen podává dál.
+    private var tabSelection: Binding<PullRequestTab> {
+        Binding(
+            get: { store.detailTab(for: pullRequest.id) },
+            set: { store.setDetailTab($0, for: pullRequest.id) }
+        )
+    }
+
+    /// Obsah vybraného tabu a pod ním spodní panel.
     ///
     /// Panel je vidět **vždycky**, i u PR, na kterém review nikdy neběželo (**změna proti
     /// #20**): od #66 v něm bydlí i rozdělané review, a to se zakládá od nuly. Kdyby se panel
     /// ukazoval až s prvním nálezem, nebylo by kde vybrat verdikt ani napsat tělo.
+    ///
+    /// A je vidět **v obou tabech**, ne jen u diffu (**doplněno proti zadání #72**, které
+    /// psalo, že `Změněné soubory` jsou dnešní obrazovka beze změny — v té době ještě panel
+    /// draft neobsahoval). Nálezy bez místa v kódu, průběh běhu i moje rozdělané review se
+    /// vážou k celému PR, ne k diffu; schovat je za přepnutí tabu by znamenalo, že se
+    /// rozepsané review přepnutím na `Přehled` „ztratí“.
     @ViewBuilder private var content: some View {
         VStack(spacing: 0) {
-            diff
+            switch store.detailTab(for: pullRequest.id) {
+            case .filesChanged: diff
+            case .overview: overview
+            }
             // Panel se ukáže i **bez** záznamu, jakmile něco běží: při prvním review je
             // průběh to jediné, co je, a čekat na uložený výsledek by ho schovalo.
             let record = store.reviewRecord(for: pullRequest.id)
@@ -116,6 +146,11 @@ struct PullRequestDetailView: View {
                 jumpToComment: jumpToComment,
                 tab: $panelTab
             )
+            // Panel si o místo říká **první**: má vlastní strop (výšku, kterou si uživatel
+            // vytáhl), takže víc než ten si nevezme — a zbytek dostane diff, který se umí
+            // stáhnout na nulu. Bez priority dělí `VStack` místo mezi dva pružné prvky
+            // rovnoměrně a v nízkém okně vyjde panel na půlku obrazovky.
+            .layoutPriority(1)
         }
     }
 
@@ -251,6 +286,16 @@ struct PullRequestDetailView: View {
               let anchor = DiffRow.anchor(in: diff, comment: comment)
         else { return }
         store.unfold(file.displayPath, in: pullRequest.id)
+        scroll(to: anchor)
+    }
+
+    /// Odscrolluje diff na místo — a **přepne se do něj**, když je vidět `Přehled`.
+    ///
+    /// Bez toho kliknutí na nález v `Přehledu` neudělalo nic: diff v tu chvíli v okně vůbec
+    /// není, takže se nemá kde scrollovat. Přepnout tab je správnější než kliknutí ignorovat —
+    /// kdo klikne na nález, chce vidět ten kód.
+    private func scroll(to anchor: String) {
+        store.setDetailTab(.filesChanged, for: pullRequest.id)
         scrollTarget = anchor
     }
 
@@ -283,10 +328,26 @@ struct PullRequestDetailView: View {
         // **předtím**, než se nastaví cíl — jinak `scrollTo` míří na id, které v líném
         // seznamu ještě není.
         store.unfold(file.displayPath, in: pullRequest.id)
-        scrollTarget = anchor
+        scroll(to: anchor)
         // Zvýraznění se porovnává s tím, co nahlásil reviewer, ne s cestou v diffu — bublina
         // nese jeho `file`, ne `displayPath`.
         highlighted = FindingHighlight(file: path, line: finding.line)
+    }
+
+    /// Tab `Přehled` — popis PR a konverzace bez kotvy v diffu.
+    private var overview: some View {
+        OverviewView(
+            description: store.description(of: pullRequest.id),
+            entries: store.overview(for: pullRequest.id),
+            state: store.conversationState(for: pullRequest.id),
+            viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
+            missing: store.conversation(for: pullRequest.id).map(ConversationShortfall.init)
+                ?? ConversationShortfall(),
+            isThreadExpanded: { store.isThreadExpanded($0, in: pullRequest.id) },
+            toggleThread: { store.toggleThread($0, in: pullRequest.id) },
+            refresh: { Task { await store.refreshConversation(for: pullRequest) } },
+            pullRequest: pullRequest
+        )
     }
 
     @ViewBuilder private var diff: some View {

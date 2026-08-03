@@ -105,7 +105,7 @@ struct GhGatewayTests {
             .init(executable: gh, arguments: [
                 "pr", "view", "32",
                 "--repo", "ondrajodas/PRism",
-                "--json", "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft",
+                "--json", "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body",
             ]),
         ])
     }
@@ -122,6 +122,40 @@ struct GhGatewayTests {
         #expect(pullRequest.state == .merged)
         #expect(pullRequest.author == "ondrajodas")
         #expect(pullRequest.updatedAt == (try date("2026-07-31T20:05:20Z")))
+    }
+
+    /// Popis PR jde do tabu `Přehled` (#72) a bere se z **téhož** detailu, kvůli kterému se
+    /// `gh pr view` volá — tedy bez volání navíc.
+    @Test("Detail nese popis PR")
+    func detailCarriesTheDescription() async throws {
+        let runner = try FakeProcessRunner(exitCode: 0, standardOutput: Fixture.text("gh/pr-view-merged.json"))
+
+        let pullRequest = try await gateway(runner).fetchDetail(id: prism)
+
+        #expect(pullRequest.body.hasPrefix("Řeší #3"))
+    }
+
+    /// Chybějící pole nemá položit celý detail — na `headSha` z něj stojí review.
+    @Test("Detail bez popisu projde s prázdným tělem")
+    func survivesAMissingDescription() async throws {
+        let json = """
+            {
+              "number": 32,
+              "title": "titulek",
+              "author": { "login": "ondrajodas" },
+              "headRefOid": "aaaa1111",
+              "baseRefOid": "bbbb2222",
+              "url": "https://github.com/ondrajodas/PRism/pull/32",
+              "updatedAt": "2026-07-31T20:05:20Z",
+              "state": "OPEN",
+              "isDraft": false
+            }
+            """
+        let runner = try FakeProcessRunner(exitCode: 0, standardOutput: json)
+
+        let pullRequest = try await gateway(runner).fetchDetail(id: prism)
+
+        #expect(pullRequest.body.isEmpty)
     }
 
     @Test("Otevřený PR se z detailu přečte jako otevřený")
