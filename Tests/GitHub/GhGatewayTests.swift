@@ -264,6 +264,61 @@ struct GhGatewayTests {
         }
     }
 
+    // MARK: - Konverzace
+
+    /// Fixture je `cli/cli#11451`, takže se na ni musí ptát stejný identifikátor — gateway
+    /// od #63 ověřuje, že odpověď patří tomu PR, na které jsme se ptali.
+    private let cliCLI = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 11451)
+
+    @Test("Konverzace jde jedním voláním gh api graphql")
+    func fetchesTheConversationInOneCall() async throws {
+        let runner = try FakeProcessRunner(
+            exitCode: 0,
+            standardOutput: Fixture.text("gh/conversation-small.json")
+        )
+
+        let conversation = try await gateway(runner).fetchConversation(id: cliCLI)
+
+        #expect(conversation.threads.items.count == 2)
+        #expect(conversation.viewer == "ondrajodas")
+        // Jeden podproces, ne tři — to je ten důvod, proč je to GraphQL a ne REST.
+        #expect(runner.invocations.count == 1)
+        #expect(runner.invocations.first?.arguments.prefix(2) == ["api", "graphql"])
+        #expect(runner.invocations.first?.arguments.contains("number=11451") == true)
+    }
+
+    /// Konverzace přilepená k cizímu PR by v okně vypadala naprosto v pořádku, takže tichý
+    /// rozchod je to nejhorší, co se tu může stát. Stejná kontrola jako u `fetchDetail`.
+    @Test("Konverzace cizího PR se odmítne")
+    func rejectsAConversationForADifferentPullRequest() async throws {
+        let runner = try FakeProcessRunner(
+            exitCode: 0,
+            standardOutput: Fixture.text("gh/conversation-small.json")
+        )
+
+        await #expect(throws: GitHubError.self) {
+            try await gateway(runner).fetchConversation(id: prism)
+        }
+    }
+
+    @Test("Rozbitá odpověď je malformedOutput, ne prázdná konverzace")
+    func reportsMalformedConversation() async {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: "{ tohle není odpověď")
+
+        await #expect(throws: GitHubError.self) {
+            try await gateway(runner).fetchConversation(id: cliCLI)
+        }
+    }
+
+    @Test("Chyba gh se klasifikuje i u konverzace")
+    func classifiesConversationFailures() async {
+        let runner = FakeProcessRunner(exitCode: 1, standardError: "gh: Not Found (HTTP 404)")
+
+        await #expect(throws: GitHubError.notFound("gh: Not Found (HTTP 404)")) {
+            try await gateway(runner).fetchConversation(id: cliCLI)
+        }
+    }
+
     // MARK: - Auth
 
     @Test("Kontrola přihlášení jde přes gh auth status")

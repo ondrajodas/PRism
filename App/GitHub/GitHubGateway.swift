@@ -27,4 +27,11 @@ protocol GitHubGateway: Sendable {
     /// Diff sám okolní řádky nenese a pracovní kopie v tu chvíli existovat nemusí, takže
     /// se soubor čte přímo z GitHubu.
     func fetchFile(id: PRIdentifier, path: String) async throws -> String
+
+    /// Konverzace pod PR — review ostatních, vlákna u řádků a komentáře.
+    ///
+    /// Jedním GraphQL dotazem, protože REST `isResolved` u vláken nemá vůbec a byly by to
+    /// tři podprocesy. Pořád **jen pro čtení**: odpovídat do vláken umí až #73, a i pak to
+    /// půjde přes `ReviewPublisher`, ne odsud.
+    func fetchConversation(id: PRIdentifier) async throws -> Conversation
 }

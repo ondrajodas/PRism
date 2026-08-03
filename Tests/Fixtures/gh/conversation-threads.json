@@ -1,0 +1,1116 @@
+{
+  "data": {
+    "viewer": {
+      "login": "ondrajodas"
+    },
+    "repository": {
+      "pullRequest": {
+        "number": 13084,
+        "reviews": {
+          "totalCount": 2,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "PRR_kwDODKw3uc70Pags",
+              "state": "CHANGES_REQUESTED",
+              "body": "Thanks for the PR, @maxbeizer! 🍻 It's great.\n\nNote that some of these comments are best to be resolved in a follow up PR, as they'd break the base for the `discussion view` PR.\n\n\nSummary of my comments (you can find the details in their corresponding comments):\n- Add tests for discussion client methods.\n- Add `--search` option.\n- Add `--sort` and `--order` options.\n- Add `--after` option for further pagination calls, and the `next` field in JSON output. We should basically do what we planned for pagination in `discussion view` (in https://github.com/cli/cli/issues/12810#issuecomment-4154772163).\n- Some domain-vs-API and domain-vs-CLI adaptions.\n- Question around having `hasDiscussionsEnabled` next to `discussions`; does that even work on repos where discussions are disabled.\n- A bit around `--help` docs; `(preview)` note, examples, and command usage format.\n\n\n### Further questions, but not ready to comment/share for now\n- Shouldn't `ClosedAt` and `AnswerChosenAt` fields be `null`-able?\n- What happens to ghost users in `author.login` query?\n- See if we can replace the plain text GQL query with a strongly-typed one.\n",
+              "submittedAt": "2026-04-13T14:38:25Z",
+              "author": {
+                "login": "babakks"
+              }
+            },
+            {
+              "id": "PRR_kwDODKw3uc70XMG4",
+              "state": "COMMENTED",
+              "body": "Thanks for the thorough review, @babakks! Really appreciate the detail here. 🙏\n\nI agree with the feedback across the board. Here's my plan for tackling it:\n\n**In this PR:**\n- Domain/API type safety: `*string` for State, exported consts in `types.go`, `switch` statements with `default` error clauses, `toFilterState()` helper\n- Pagination: `--after` flag, `DiscussionListResult` return type with cursor, `next` in JSON envelope\n- Search: `--search`/`-S` flag, single keyword string, qualifier/keyword terminology, `%q` quoting\n- CLI flags: split `--order-by` into `--sort` + `--order`, `(preview)` annotations, `Use: \"list [flags]\"`, `defaultLimit` const, additional examples\n- Code organization: category lookup → `shared/`, single-line errors, `pageLimit` → `remaining`, hoist `hasDiscussionsEnabled` out of loop\n- Guard clauses: `limit <= 0` validation in client methods\n\n**In follow-up PRs:**\n- Interface rename (`DiscussionClient` → `Discussions`) + export struct\n- Client method tests (following `agent-task/capi/sessions_test.go` pattern)\n\n**Will investigate:**\n- `hasDiscussionsEnabled` + `discussions` query behavior on repos with discussions disabled",
+              "submittedAt": "2026-04-13T15:08:28Z",
+              "author": {
+                "login": "maxbeizer"
+              }
+            }
+          ]
+        },
+        "reviewThreads": {
+          "totalCount": 38,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "PRRT_kwDODKw3uc56e1Kf",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": 23,
+              "originalLine": 23,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63G5ba",
+                    "body": "_TBF in a follow-up._\n\nConstructor functions, like `NewDiscussionClient` here, are expected to return a pointer to a struct/type and not an interface. I know here we can't just capitalise and export `discussionClient` struct as it would collide with `DiscussionClient` interface. So, my suggestion is to rename the interface to `Discussions` and then export the implementation as `DiscussionClient`. It's not perfect and could be seen as misleading, but I think I'm okay with it (TBF it's better than what we did in `agent-task` where the interface and the struct names are just different in casing).\n\n_Actually, the problem is we're defining both the interface and the implementation in the same package and that's why our hands are tied here. Interfaces make more sense to be defined at the consumer side (especially, with duck-typing, as in Go), but I prefer to keep them in the same package for consistency with other commands._",
+                    "createdAt": "2026-04-13T09:26:59Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072038618",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56fCq6",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 122,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63HLKA",
+                    "body": "Two pointers:\n\n- The method should also:\n  1. accept an `after` parameter (populated by `discussion list --after <CURSOR>`).\n  2. return a next page cursor (so that, for example, `discussion list` can populate the JSON's `next` field with it). As it'll be an awkwardly lengthy return type, we should probably introduce a secondary type for this.\n\n  Ultimately, the signature should read like this:\n\n  ```go\n  func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, after string, limit int) (DiscussionListResult, error)\n  ```\n\n- Let's add a guard clause for case `limit <= 0`. Asking this, because we're in a separate package than the `list` command and shouldn't rely on the caller's checks. The return value can be a `nil` slice, but it's better to return an error here to allow surfacing of any faulty code path.\n\n  ```go\n  if limit <= 0 {\n      return nil, 0, fmt.Errorf(\"limit argument must be positive: %v\", limit)\n  }\n  ```",
+                    "createdAt": "2026-04-13T09:41:18Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072111232",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56fHEM",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 145,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63HRCF",
+                    "body": "Let's not rely on such string manipulations to transfer types/values from domain to API types. What we should do is to:\n- Define acceptable values for the domain `OrderBY` type as consts in `types.go` (no need to define a secondary `string` type, though).\n- Here, add a `switch`-statement to assign the `orderField` temp (no `strings.*` usage). The switch should have a `default` clause that returns an error. This is to prevent half-baked code changes in the future, if any.\n",
+                    "createdAt": "2026-04-13T09:46:08Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072135301",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56fKnr",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": 172,
+              "originalLine": 149,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63HVuV",
+                    "body": "The same comment here.",
+                    "createdAt": "2026-04-13T09:49:57Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072154517",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56fPfH",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 164,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63HcIr",
+                    "body": "Two comments:\n- I think both `ListFilters.State` and `SearchFilters.State` should be `*string` (instead of `string`), where a `nil` indicates no filtering on state.\n- Since `\"open` and `\"close\"` are expected values, we should export them from the package (i.e. in `types.go`) as consts, and use them within the `list` command. Note that the `\"all\"` is not a domain level const as we indicate \"all states\" by a `nil` value. Basically, `\"all\"` is just something that command/interface honours.\n- To avoid hard-to-debug cases in the future, let's add a `default` clause here and return an error if the value is not recognised. Actually we should guard this with an `if`-statement to ignore if `filters.State` is not populated (`nil`). Also, we shouldn't do any case manipulation because these values are not meant to be passed directly from the `--state` values. I mean something like this:\n\n```go\n\tif filters.State != nil {\n    \tswitch *filters.State {\n\t\tcase FilterStateOpen:\n\t\t\tvariables[\"states\"] = []string{\"OPEN\"}\n\t\tcase FilterStateClosed:\n\t\t\tvariables[\"states\"] = []string{\"CLOSED\"}\n        default:\n        \treturn nil, 0, fmt.Errorf(\"unknown state filter: %q; should be one of %#v\", filters.State, []string{FilterStateClosed, FilterStateOpen})\n\t\t}\n\t}\n```",
+                    "createdAt": "2026-04-13T09:55:08Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072180779",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56fkLT",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 216,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63H3BB",
+                    "body": "This should be taken out of the loop.",
+                    "createdAt": "2026-04-13T10:16:58Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072290881",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56fm_b",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 199,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63H6oK",
+                    "body": "I'm not sure how would this work. I mean, the query contains both `hasDiscussionEnabled` and the `discussions`. What happens if a repo doesn't support discussions? Do we get (`false`, empty) or do we get a GQL error? My gut feeling is it's the latter, but we need to confirm this.",
+                    "createdAt": "2026-04-13T10:19:52Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072305674",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56fpeB",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 209,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63H92r",
+                    "body": "`pageLimit` is a bit confusing. Let's rename it to `remaining`.",
+                    "createdAt": "2026-04-13T10:22:41Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072318891",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56f15n",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 262,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63IOLN",
+                    "body": "When we extracted these as consts, we should use them here.",
+                    "createdAt": "2026-04-13T10:36:37Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072385741",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56f4E4",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 264,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63IQ_L",
+                    "body": "_This also applies to other qualifiers we're compiling here._\n\nWhat if the author value has whitespaces in it? this way, it'll be rendered as `author:foo bar`, which makes `bar` part of the search keywords. IIRC search qualifiers support quoting. We need to check to make sure it's the case, and if it is, we can simply use `%q` instead of `%s` (I know it'd leak Go-specific quoting, but it should be fine for now).",
+                    "createdAt": "2026-04-13T10:39:03Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072397259",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56f5Md",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": 313,
+              "originalLine": 287,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63ISab",
+                    "body": "The same comment as in list function.",
+                    "createdAt": "2026-04-13T10:40:15Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072403099",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56f6M2",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 290,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63ITup",
+                    "body": "Search keywords should be contained in a single string (similar to `--search` in `pr list` and `issue list`).",
+                    "createdAt": "2026-04-13T10:41:20Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072408489",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56f93r",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 254,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63IYhL",
+                    "body": "In naming of the search-related variables here please follow the terminology below:\n\n- **Query:** the entire search query (`author:@me foo bar`)\n- **Qualifier:** scoping terms (`author:@me`)\n- **Keywords:** free form text (`foo bar`)\n\nAnd here, let's make a `qualifiers` slice (of strings) to hold individual qualifiers, and then join them with whitespaces and then the keywords. Note that as I already commented, we should only have one keyword as a string (which can have multiple whitespace-separated words in it, all provided at a single string by the user via the `--search` option).",
+                    "createdAt": "2026-04-13T10:45:15Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072428107",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56f_n_",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 313,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63Iaxo",
+                    "body": "The same.",
+                    "createdAt": "2026-04-13T10:47:05Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072437352",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56f_w7",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 306,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63Ia9s",
+                    "body": "The same rename.",
+                    "createdAt": "2026-04-13T10:47:13Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072438124",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56gFz3",
+              "isResolved": true,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/discussion.go",
+              "line": 2,
+              "originalLine": 2,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63IjN4",
+                    "body": "A few points here:\n\n- First, short docs should not end in full stops (this should apply to this and upcoming subcommands).\n- In the short/long docs, we should indicate that the `discussion` command set is in preview. You can replicate what we did for `agent-task` command set. the gist is in the top-level `discussion` command we explain in the long descriptions that the command set is in preview mode, and then in subcommands (e.g. `list`) we add a `... (preview)` at the end of the short docs. For here (top-level) docs, I suggest:\n\n```go\n\t\tShort:   \"Work with GitHub Discussions (preview)\",\n\t\tLong: heredoc.Doc(`\n\t\t\tWorking with discussions in the GitHub CLI is in preview and subject to change without notice.\n\t\t`),\n```",
+                    "createdAt": "2026-04-13T10:53:05Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072471928",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56iEMj",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": 3,
+              "originalLine": 3,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63LLBO",
+                    "body": "We need proper tests for exported methods on `discussionClient`. We can use the same pattern as in `pkg/cmd/agent-task/capi/sessions_test.go`.",
+                    "createdAt": "2026-04-13T13:04:34Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073159246",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56iEtX",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": null,
+              "originalLine": 51,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63LLtN",
+                    "body": "Should end with `(preview)`.",
+                    "createdAt": "2026-04-13T13:05:06Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073162061",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56iF72",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": null,
+              "originalLine": 50,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63LNSK",
+                    "body": "As per our design docs, this should be:\n\n\n```suggestion\n\t\tUse:   \"list [flags]\",\n```",
+                    "createdAt": "2026-04-13T13:06:14Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073168522",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56iHOS",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": null,
+              "originalLine": 61,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63LO9h",
+                    "body": "**nitpick:** I'd remove the quotes and keep it as bare as possible:\n\n\n```suggestion\n\t\t\t$ gh discussion list --category General\n```",
+                    "createdAt": "2026-04-13T13:07:26Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073175393",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56iJAT",
+              "isResolved": true,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": 98,
+              "originalLine": 67,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63LRRX",
+                    "body": "**nitpick:** maybe also one more example involving `--answered=false` usage, because that's something users don't normally expect.\n\n\n```suggestion\n\t\t\t# List answered discussions as JSON\n\t\t\t$ gh discussion list --answered --json number,title,url\n\n\t\t\t# List unanswered discussions as JSON\n\t\t\t$ gh discussion list --answered=false --json number,title,url\n```",
+                    "createdAt": "2026-04-13T13:09:07Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073184855",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56iLgb",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": null,
+              "originalLine": 90,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63LUjs",
+                    "body": "Let's extract `30` as a package-scoped const (like `defaultLimit`), and use it here both as default value and in help docs:\n\n\n```suggestion\n\tcmd.Flags().IntVarP(&opts.Limit, \"limit\", \"L\", defaultLimit, fmt.Sprintf(\"Maximum number of discussions to fetch (default %d)\", defaultLimit))\n```",
+                    "createdAt": "2026-04-13T13:11:32Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073198316",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56iU6d",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": null,
+              "originalLine": 92,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63Lg-y",
+                    "body": "Let's change this to how `search issues` does it. That is:\n- `--sort {created|updated}` (no shorthand)\n- `--order {asc|desc}` (no shorthand)\n\nThe `repository.discussions` GQL query packs these two in a single `orderBy` argument, but that'd be confusing to expose it in the same to the user. As for the default values, we can replicate what GUI does which is `updated`/`desc`.",
+                    "createdAt": "2026-04-13T13:20:16Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073249202",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56iYd4",
+              "isResolved": true,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": 92,
+              "originalLine": 64,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63LltG",
+                    "body": "Maybe one more example involving `--state all` and multiple `--label` values:\n\n\n```suggestion\n\t\t\t# List closed discussions by author\n\t\t\t$ gh discussion list --state closed --author monalisa\n\n\t\t\t# List all discussions (closed or open) by label\n\t\t\t$ gh discussion list --state all --label bug,enhancement\n```",
+                    "createdAt": "2026-04-13T13:23:33Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073268550",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56ibAN",
+              "isResolved": true,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": 130,
+              "originalLine": 93,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63LpC6",
+                    "body": "We also need a `--search`/`-S` option (like in `pr list`) that accepts a string.\n\n```go\ncmd.Flags().StringVarP(&opts.Search, \"search\", \"S\", \"\", \"Search discussions with `query`\")\n```",
+                    "createdAt": "2026-04-13T13:25:55Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073282234",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56ifQU",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": null,
+              "originalLine": 218,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63Lule",
+                    "body": "This function is meant to be used by most of the upcoming commands. So, let's move it to `shared`, and also add a godoc that explains the lookup is case-insensitive and prefers slugs over names.",
+                    "createdAt": "2026-04-13T13:29:44Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073304926",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56imKn",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": null,
+              "originalLine": 234,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63L3oG",
+                    "body": "Let's not involve display logic (new lines) in error messages. We should only return a single-line short error message like below. We can show both slugs and names here, but I think encouraging users to pick slugs is a better approach:\n\n```suggestion\n\tslugs := make([]string, len(categories))\n\tfor i, c := range categories {\n\t\tslugs[i] = c.Slug\n\t}\n\tslices.Sort(slugs)\n\treturn nil, fmt.Errorf(\"unknown category: %q; must be one of %#v\", input, slugs)\n```",
+                    "createdAt": "2026-04-13T13:36:00Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073341958",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56i5RH",
+              "isResolved": true,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": 207,
+              "originalLine": 151,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63MQvx",
+                    "body": "As explained earlier/later, `ListFilters.State` and `SearchFilters.State` should not be directly populated from the provided options. We should adapt them manually. Assuming we have exported `FilterStateOpen` and `FilterStateClosed` consts from the `client` package, we should have a quick helper function that does the mapping for us:\n\n```go\nfunc toFilterState(v string) (*string, error) {\n    switch v {\n        case \"all\":\n            return nil, nil\n        case \"open\":\n            return FilterStateOpen, nil\n        case \"closed\":\n            return FilterStateClosed, nil    \n    }\n    return nil, fmt.Errorf(\"unknown state: %q\", v)\n}\n```",
+                    "createdAt": "2026-04-13T13:52:42Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073444849",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56jBCY",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 242,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63Ma96",
+                    "body": "The same comment (signature, and `limit` validation).",
+                    "createdAt": "2026-04-13T13:59:30Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073486714",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56jB4A",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": 217,
+              "originalLine": 160,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63McE-",
+                    "body": "The `next` field should be added here (value returned from the client's methods).",
+                    "createdAt": "2026-04-13T14:00:14Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073491262",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56jEmx",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": 281,
+              "originalLine": 246,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63Mfm7",
+                    "body": "**nitpick:** let's inline the messages as it's a bit hard to read:\n\n\n```suggestion\nfunc noResults(repo ghrepo.Interface, state string) error {\n\tswitch state {\n\tcase \"open\":\n\t\treturn cmdutil.NewNoResultsError(fmt.Sprintf(\"no open discussions match your search in %s\", ghrepo.FullName(repo)))\n\tcase \"closed\":\n        return cmdutil.NewNoResultsError(fmt.Sprintf(\"no closed discussions match your search in %s\", ghrepo.FullName(repo)))\n\t}\n    return cmdutil.NewNoResultsError(fmt.Sprintf(\"no discussions match your search in %s\", ghrepo.FullName(repo)))\n}\n```",
+                    "createdAt": "2026-04-13T14:02:35Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073505723",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56jFr6",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": 292,
+              "originalLine": 257,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63Mg_q",
+                    "body": "**nitpick:** the same inlining improvement.",
+                    "createdAt": "2026-04-13T14:03:29Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073511402",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56jICi",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": null,
+              "originalLine": 274,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63MkF3",
+                    "body": "Replace `cs.Gray` with `cs.Muted` to be consistent with `pr list`.",
+                    "createdAt": "2026-04-13T14:05:39Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073524087",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56jOOA",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": null,
+              "originalLine": 180,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63MsEa",
+                    "body": "I think we should move all this into `printDiscussion`, as it's the main decision maker on printing data.",
+                    "createdAt": "2026-04-13T14:11:02Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073556762",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56jcAf",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": null,
+              "originalLine": 310,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63M-G1",
+                    "body": "I know `issue list` has the same logic to print the remaining lines, but I think it never because both the caller always pass the length of the issues slice as the `totalCount` to the table renderer function. That's just a fortunate bug, IMO, because we never print that line, especially in non-TTY experience (where we should never print anything that machines cannot read).\n\nHere, it's not a bug because we have a valid `totalCount` passed in, but we still shouldn't print it in non-TTY mode. So:\n\n\n```suggestion\n\tif remaining := totalCount - len(discussions); isTerminal && remaining > 0 {\n\t\tfmt.Fprintf(opts.IO.Out, cs.Muted(\"And %d more\\n\"), remaining)\n\t}\n```",
+                    "createdAt": "2026-04-13T14:22:36Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073630645",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56jgcz",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": 243,
+              "originalLine": 189,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63ND77",
+                    "body": "The same interface-to-domain adaption should be done here for state.",
+                    "createdAt": "2026-04-13T14:26:22Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073654523",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56jh45",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": null,
+              "originalLine": 192,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63NFyA",
+                    "body": "Let's quote author value.\n\n\n```suggestion\n\t\tqueryParts = append(queryParts, fmt.Sprintf(\"author:%q\", opts.Author))\n```",
+                    "createdAt": "2026-04-13T14:27:32Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073662080",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56jiuB",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/list/list.go",
+              "line": 263,
+              "originalLine": 209,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63NG4M",
+                    "body": "We should also include the `--search` value here, if any.",
+                    "createdAt": "2026-04-13T14:28:16Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3073666572",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "comments": {
+          "totalCount": 4,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "IC_kwDODKw3uc78k438",
+              "body": "**Investigation result** for the `hasDiscussionsEnabled` question ([comment](https://github.com/cli/cli/pull/13084#discussion_r3072305674)):\n\nQuerying a repo with discussions disabled (`cli/go-gh`) returns `hasDiscussionsEnabled: false` with `discussions.totalCount: 0` — **no GQL error**. So our current approach of checking the boolean works correctly. The guard clause is valid as-is.",
+              "createdAt": "2026-04-13T15:19:33Z",
+              "url": "https://github.com/cli/cli/pull/13084#issuecomment-4237528572",
+              "author": {
+                "login": "maxbeizer"
+              }
+            },
+            {
+              "id": "IC_kwDODKw3uc78lYN-",
+              "body": "> Querying a repo with discussions disabled (`cli/go-gh`) returns `hasDiscussionsEnabled: false` with `discussions.totalCount: 0` — **no GQL error**. So our current approach of checking the boolean works correctly. The guard clause is valid as-is.\n\nThere's one more case when we fetch the categories, too, and that happens before the actual list query.",
+              "createdAt": "2026-04-13T15:35:57Z",
+              "url": "https://github.com/cli/cli/pull/13084#issuecomment-4237656958",
+              "author": {
+                "login": "babakks"
+              }
+            },
+            {
+              "id": "IC_kwDODKw3uc78lb0t",
+              "body": "Good call! I checked — `ListCategories` on a repo with discussions disabled returns an empty list (no GQL error), so the user would get `unknown category: \"foo\"; must be one of []` which is confusing.\n\nI think the cleanest fix is to add `hasDiscussionsEnabled` to the `ListCategories` query and return the \"discussions disabled\" error from there too. That way any code path that calls `ListCategories` gets the right error. I'll add that in the next push.",
+              "createdAt": "2026-04-13T15:38:10Z",
+              "url": "https://github.com/cli/cli/pull/13084#issuecomment-4237671725",
+              "author": {
+                "login": "maxbeizer"
+              }
+            },
+            {
+              "id": "IC_kwDODKw3uc78_pNd",
+              "body": "@maxbeizer, I went through the code and applied the below changes. I think it's good to be merged now. Please let me know what do you think! :beers: \r\n\r\n- Replaced `State string` with `Closed bool` in the domain `Discussion` type\r\n- Renamed `DiscussionAuthor` to `DiscussionActor` (covers both `author` and `answerChosenBy`)\r\n- Updated GQL fragments to fetch `author`/`answerChosenBy` actor fields (`id`, `name` via `...on User`/`...on Bot`)\r\n- Created `discussionListNode` (with `graphql` tags) separate from `discussionNode`, scoped to list/search fields only\r\n- Converted both `List` and `Search` from raw GQL strings (`GraphQL()`) to strongly-typed struct queries (`Query()`)\r\n- Removed `discussionNode`, `mapDiscussion`, and `discussionFields` (now dead code)\r\n- Simplified `List` query to declare all optional parameters upfront (no dynamic query building)\r\n- Changed `List`/`Search` return types to `*DiscussionListResult`\r\n- Created local `discussionListFields` in the list package (excludes `comments`)\r\n- Removed `reactionGroups` from list/search types and fields\r\n- Replaced `cs.Gray` with `cs.Muted` for closed discussion IDs\r\n- Moved header printing into `printDiscussions`\r\n- Inlined messages in `noResults` and `listHeader`\r\n- Quoted `author` qualifier in web URL\r\n- Included `--search` keywords in web URL\r\n",
+              "createdAt": "2026-04-14T14:09:48Z",
+              "url": "https://github.com/cli/cli/pull/13084#issuecomment-4244542301",
+              "author": {
+                "login": "babakks"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

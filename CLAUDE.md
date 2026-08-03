@@ -272,6 +272,12 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ProjectLanguage` | Čím je repo psané — klíč mapy „jazyk → sada skillů“. **Není to `Syntax.Language`**, viz níž |
 | `FindingsLanguage` | Jazyk prózy v nálezech (`cs`/`en`). Ani tohle **není `ProjectLanguage`** |
 | `FindingTranslation` | Přeložená próza nálezu. Visí vedle originálu, nepřepisuje ho |
+| `Conversation` | Cizí konverzace pod PR: review ostatních, vlákna, komentáře + `viewer` |
+| `ConversationPage` | Kus seznamu a kolik ho je celkem — nese **zkrácení** |
+| `ReviewThread` | Vlákno u řádku diffu: cesta, `line`/`originalLine`, `isResolved`, `isOutdated` |
+| `ThreadComment` | Jeden komentář — ve vlákně i pod PR; `replyToID` místo vnořování |
+| `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
+| `DiffSide` | `left`/`right` — ke které straně diffu se vlákno váže |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -302,6 +308,37 @@ Tři věci, které se u nich nemají rozbít:
   Python vyžaduje umět ho obarvit, a že každý repozitář vyjde jako „YAML“.
 
 Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
+
+Nad konverzací (#63) platí:
+
+- **Cizí konverzace není náš nález.** `Finding` je to, co našel reviewer; `ThreadComment` je
+  to, co napsal člověk na GitHubu. Mají stejné místo v diffu a nic víc, takže se nesmí slít
+  ani v modelech, ani v UI.
+- **Tři „review“ se nesmí splést.** `ReviewState` je stav našeho běhu v řádku,
+  `ReviewVerdict` náš návrh, co s PR udělat, a `SubmittedReview.State` cizí hotové
+  rozhodnutí z GitHubu. Třetí je proto **vnořený** — `SubmittedReview.State` se s těmi dvěma
+  nedá zaměnit ani při doplňování v editoru. Tatáž past jako u tří „jazyků“ výš.
+- **Zkrácení nese `ConversationPage`, ne volající.** `isTruncated` je `or` **dvou** signálů
+  z GraphQL (`hasNextPage` a `items.count < total`), protože nebezpečný směr je jediný:
+  tvrdit „máš všechno“, když ne. `or` se v něm splést nemůže. `total` se drží i tak, protože
+  z něj vyjde „1 ze 38“ — samotný boolean řekne jen, že něco chybí, ne kolik.
+- **`Conversation.isTruncated` se dívá i do vláken.** Useknutá odpověď **uvnitř** vlákna se
+  na počtu vláken neprojeví — a je to zrovna ta odpověď, kvůli které se člověk do vlákna
+  dívá.
+- **Zastaralé vlákno nemá `line`, ale `originalLine` ano.** Ověřeno na `cli/cli#13084`: ze
+  38 vláken bylo 24 `isOutdated` a `line == nil` právě u těch 24, ani jedna výjimka v žádném
+  směru. Stejné chování má REST (#62). Kotvu proto dává `anchorLine` (`line ?? originalLine`)
+  — vlákno bez čísla se nemá kde ukázat a zmizelý komentář kolegy je horší než komentář na
+  starém řádku.
+- **`replyToID`, ne vnořený komentář.** GitHub vrací vlákno jako plochý seznam; skládat
+  z něj strom by znamenalo rozhodovat, co s odpovědí na komentář, který v odpovědi není
+  (useknutá stránka). Plochý seznam s odkazem zpátky tu otázku neotevírá.
+- **`viewer` se drží jednou na `Conversation`**, ne jako `isMine` na každém komentáři. „Je to
+  moje“ je vztah mezi komentářem a tím, kdo se dívá, ne vlastnost komentáře — uložený příznak
+  by po změně účtu tvrdil něco jiného, než je pravda.
+- **Neznámý stav review konverzaci nepoloží** (`state == nil`), na rozdíl od neznámého stavu
+  PR, který vyhodí chybu. Ze stavu PR plyne chování (draft se sám nereviewuje); tady jde
+  o zobrazení cizího názoru a kvůli jedné nové hodnotě GitHubu nemají zmizet všechna vlákna.
 
 ### `App/Diff/`
 
@@ -1162,15 +1199,17 @@ Nad nálezy platí navíc:
 
 ### `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má tři metody
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má šest metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu.
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchDiff(id:)`, `fetchFile(id:path:)` |
+| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchDiff(id:)`, `fetchFile(id:path:)`, `fetchConversation(id:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhSearchQuery` | Rozdělení search dotazu na argumenty `gh` — čistá funkce |
+| `ConversationQuery` | GraphQL dotaz na konverzaci a jeho argumenty — čisté funkce |
+| `GhConversationResponse` | Tvar GraphQL odpovědi a mapování na `Conversation` |
 | `GhSearchItem`, `GhPullRequestDetail` | Tvar JSONu z `gh` a převod na doménové modely |
 | `PullRequestState(ghState:isDraft:)` | Mapování stavu — `gh` ho popisuje dvěma poli |
 
@@ -1207,6 +1246,24 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 
 Detail navíc ověří, že `gh` vrátil PR s číslem, na které jsme se ptali. Identifikátor se
 bere z dotazu (`gh pr view` repo nevrací) a tichý rozchod by nálezy naklíčoval cizímu PR.
+
+Konverzace (#63) jde **jedním GraphQL dotazem** přes `gh api graphql`:
+
+- **GraphQL, ne tři REST endpointy.** REST `isResolved` u vláken **nemá vůbec**, takže by
+  otázka „co s vyřešenými vlákny“ neměla odpověď — a byly by to tři podprocesy místo jednoho.
+  Ověřeno na živém API: celý dotaz stojí **1 bod z 5000/h**, ať má PR dvě vlákna nebo 38.
+- **Čísla se posílají `-F`, dotaz `-f`.** `number` a `page` jsou v GraphQL `Int!` a přes
+  `-f` by dorazily jako řetězec, na kterém dotaz spadne na typu.
+- **Repo se posílá rozdělené** na `owner` a `repo` — GraphQL má dva argumenty a slepené
+  `owner/repo` by hledalo repozitář s lomítkem v názvu.
+- **Chybějící `repository` nebo `pullRequest` je chyba**, kdežto chybějící `nodes` uvnitř
+  ne. Na PR jsme se ptali, takže prázdná odpověď by v okně vypadala jako „kolegové nic
+  nenapsali“; PR bez jediného komentáře je naopak normální stav.
+- **Komentář bez autora se zahodí, ale je to vidět.** Smazaný účet vrací `author: null`
+  a komentář „od nikoho“ v konverzaci nic neříká — jenže rozdíl proti `totalCount` pak hlásí
+  `ConversationPage.missing`, takže ztracený komentář není k nerozeznání od nenapsaného.
+- **Jedna velikost stránky na všechny seznamy**, ať se komentáře uvnitř vláken neutnou dřív
+  než vlákna sama.
 
 ### Vrstva `Environment` (`App/Environment/`)
 
@@ -1340,6 +1397,17 @@ Právě proto tam eskalace na `SIGKILL` je.
   klasifikace chyb tabulkou nad `ProcessResult`, mapování stavu vyčerpávajícím výčtem.
   Testuje se i **tvar argumentů** předaných `gh` — rozdělení dotazu na tokeny a seznam
   `--json` polí je kontrakt s `gh`, ne detail.
+- **Konverzace** — proti fixtures, které jsou surové odpovědi z veřejných PR `cli/cli`
+  sebrané **tím dotazem, který posílá aplikace** (`ConversationQuery.document`). Kdyby se
+  sbíraly jinak, testovaly by tvar, který v provozu nikdy nepřijde; ověřené je to i tak, že
+  volání složené aplikací (`-f query=<víceřádkový text>`) dá bajt po bajtu tutéž odpověď.
+  Pokrývá: vyřešené vlákno, 24 zastaralých vláken bez `line`, odpověď ukazující na svého
+  předchůdce, schválení s prázdným tělem, useknutou stránku (1 ze 38) a to, že se
+  `hasNextPage` s počty **nerozchází** — bez toho by `or` v `isTruncated` schoval, že jednomu
+  ze signálů nerozumíme. Syntetickým JSONem se testuje, co se ze skutečného PR nesehná:
+  chybějící `pullRequest`, `nodes: null`, komentář bez autora a neznámý stav review.
+  U dotazu se hlídá **seznam polí** — kdyby z něj vypadlo `isResolved`, ukazovala by se
+  vyřešená vlákna jako otevřená.
 - **Fixtures** — `Tests/Fixtures/`, načítané přes `Fixture.text(_:)`. Cesta se odvozuje
   z `#filePath`, ne z bundlu: Swift Testing nemá `XCTestCase`, od kterého by šel
   `Bundle(for:)` odpíchnout. V `Fixtures/gh/` leží **skutečné** výstupy `gh`, jen
@@ -1694,6 +1762,12 @@ věcí, na kterých stojí zbytek M6:
   musí verdikt schovat, ne spadnout na chybě. A **permalink v těle review se renderuje jako
   obarvený úryvek kódu** (i rozsah `#L40-L43`) — tak se do review dostane nález mimo diff,
   místo aby se zahodil.
+
+Čtení konverzace hotové (issue #63) — `fetchConversation(id:)`, `ConversationQuery`,
+`GhConversationResponse` a modely `Conversation`, `ReviewThread`, `ThreadComment`,
+`SubmittedReview`. Jeden GraphQL dotaz za 1 bod přinese review ostatních, vlákna u řádků
+(s `isResolved` i `isOutdated`) a komentáře pod PR. **Vrstva bez UI** — vykreslí to #64
+(vlákna u kódu) a #72 (taby). Aplikace zůstává vůči GitHubu jen pro čtení.
 
 **Fáze 2 hotová** — `App/Checkout/`, vrstva bez UI. Bare klon do cache (#8), worktree per
 review i serializace souběžných příprav (#9) a eviction cache (#10). Aplikace si tedy umí
