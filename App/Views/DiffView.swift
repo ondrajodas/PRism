@@ -28,6 +28,10 @@ struct DiffView: View {
     var viewer: String = ""
     var isThreadExpanded: (ReviewThread) -> Bool = { _ in true }
     var toggleThread: (ReviewThread) -> Void = { _ in }
+    /// Moje rozdělané komentáře. Kreslí se ty, které v diffu mají kotvu — celý seznam je
+    /// v panelu, takže se komentář na zmizelém řádku neztratí.
+    var comments: [ReviewDraftComment] = []
+    var draft = DraftActions()
 
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
@@ -83,9 +87,14 @@ struct DiffView: View {
             findings: showBubbles ? findings : [],
             // Vlákna se přepínačem `Nálezy` **neschovávají**. Ten přepínač je o nálezech
             // naší aplikace; cizí komentář u kódu je důvod, proč se na PR člověk dívá,
-            // a schovat ho spolu s nálezy by ho připravilo o to hlavní.
-            threads: threads
+            // a schovat ho spolu s nálezy by ho připravilo o to hlavní. Totéž platí o mých
+            // rozdělaných komentářích — ty se schovat nesmí o důvod víc, protože se odešlou.
+            threads: threads,
+            comments: comments
         )
+        // Kotvy jednou za soubor, ne pro každý řádek: `Policy.commentableSide` ověřuje
+        // příslušnost k hunku hledáním, takže po řádcích je to kvadratické.
+        let fileDraft = draft.bound(to: file, anchors: Policy.commentAnchors(in: file))
         return ForEach(rows) { row in
             DiffRowView(
                 row: row,
@@ -97,7 +106,8 @@ struct DiffView: View {
                 blockingCategories: blockingCategories,
                 viewer: viewer,
                 isThreadExpanded: isThreadExpanded,
-                toggleThread: toggleThread
+                toggleThread: toggleThread,
+                draft: fileDraft
             )
         }
     }

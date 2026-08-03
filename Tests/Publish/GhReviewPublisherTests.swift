@@ -344,7 +344,7 @@ struct GhReviewPublisherTests {
             line: 28,
             side: .right,
             body: "tady se ignoruje množství",
-            origin: .finding
+            origin: .finding(reviewer: "code-review")
         )
         let payload = try #require(PublishRequest.payload(
             for: draft(verdict: .requestChanges, comments: [comment])

@@ -20,6 +20,15 @@ struct PRismApp: App {
                 .onAppear { delegate.runningReviews = { preflight.store?.runningReviews ?? 0 } }
         }
         .defaultSize(width: 1100, height: 700)
+        // **Bez tohohle nešlo okno zmenšit na výšku.** Výchozí `.automatic` u `WindowGroup`
+        // odvozuje minimum okna z toho, co si obsah přeje — a `List` v bočním panelu si přeje
+        // celou výšku svých řádků, takže při dvanácti PR vyšlo minimum vyšší než obrazovka
+        // a spodní hranou okna nešlo hýbat. Ověřeno tím, že po skrytí bočního panelu se okno
+        // zmenšit dalo.
+        //
+        // `.contentMinSize` bere **minimum** obsahu, ne jeho přání, a strop nechává otevřený.
+        // Vlastní podlaha je proto na `RootView`, ať se okno nedá stáhnout do nesmyslu.
+        .windowResizability(.contentMinSize)
 
         Settings {
             SettingsScene(preflight: preflight)

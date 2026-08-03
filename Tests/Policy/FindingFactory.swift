@@ -11,7 +11,8 @@ func makeReported(
     line: Int? = nil,
     category: String? = "correctness",
     verdict: FindingVerdict? = .confirmed,
-    summary: String = "nález"
+    summary: String = "nález",
+    failureScenario: String? = nil
 ) -> ReportedFinding {
     ReportedFinding(
         file: file,
@@ -20,7 +21,7 @@ func makeReported(
         verdict: verdict,
         shortSummary: nil,
         summary: summary,
-        failureScenario: nil
+        failureScenario: failureScenario
     )
 }
 
@@ -30,6 +31,7 @@ func makeFinding(
     category: String? = "correctness",
     verdict: FindingVerdict? = .confirmed,
     summary: String = "nález",
+    failureScenario: String? = nil,
     reviewer: String = "code-review",
     headSha: String = "aaaa1111"
 ) -> Finding {
@@ -39,7 +41,8 @@ func makeFinding(
             line: line,
             category: category,
             verdict: verdict,
-            summary: summary
+            summary: summary,
+            failureScenario: failureScenario
         ),
         reviewer: reviewer,
         headSha: headSha

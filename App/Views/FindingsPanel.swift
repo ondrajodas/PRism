@@ -22,10 +22,22 @@ struct FindingsPanel: View {
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     var timelines: [ReviewerTimeline] = []
     var isRunning = false
+    /// Ke kterému PR panel patří. Potřebuje to tab s rozdělaným review — na identitě PR
+    /// visí, kam se doručí rozepsaný text při přepnutí.
+    let pullRequest: PRIdentifier
+    /// Rozdělané review. `nil` = ještě se nezačalo psát.
+    var draft: ReviewDraft?
+    var isDraftStale = false
+    /// Proč se do draftu nedá psát. `nil` = dá se.
+    var draftUnavailable: String?
+    var draftActions = DraftActions()
+    var jumpToComment: (ReviewDraftComment) -> Void = { _ in }
 
-    private enum Tab: Hashable {
+    enum Tab: Hashable {
         case findings
         case progress
+        /// Rozdělané review — tělo, verdikt a řádkové komentáře.
+        case draft
     }
 
     /// Výška si drží uživatel taháním a přežívá restart — kolik místa chce dát nálezům,
@@ -33,7 +45,10 @@ struct FindingsPanel: View {
     @AppStorage("findingsPanelHeight") private var height = 220.0
     /// Sledovat konec časové osy. Předvolba pohledu, takže `UserDefaults`, ne store.
     @AppStorage("progressFollowsTail") private var followsTail = true
-    @State private var tab: Tab = .findings
+    /// Který tab je vidět. Drží ho detail PR, ne panel: přidání poznámky do těla review se
+    /// z diffu musí umět přepnout na tab, do kterého ta poznámka spadla — jinak text zmizí
+    /// někam, kde ho nikdo nehledá.
+    @Binding var tab: Tab
     @State private var sortOrder: [KeyPathComparator<FindingRow>] = []
     @State private var selection: FindingRow.ID?
     /// Výška na začátku tažení. Bez ní se posun načítá z každé události znovu a panel
@@ -161,6 +176,7 @@ struct FindingsPanel: View {
         Picker("", selection: $tab) {
             Text(verbatim: countText).tag(Tab.findings)
             Text("Průběh").tag(Tab.progress)
+            Text(verbatim: draftText).tag(Tab.draft)
         }
         .pickerStyle(.segmented)
         .labelsHidden()
@@ -200,6 +216,15 @@ struct FindingsPanel: View {
         switch tab {
         case .findings: findingsTab
         case .progress: progress
+        case .draft:
+            DraftPanel(
+                pullRequest: pullRequest,
+                draft: draft,
+                isStale: isDraftStale,
+                unavailable: draftUnavailable,
+                actions: draftActions,
+                jump: jumpToComment
+            )
         }
     }
 
@@ -328,6 +353,14 @@ struct FindingsPanel: View {
 
     private var countText: String {
         findings.isEmpty ? "Nálezy" : "Nálezy · \(findings.count)"
+    }
+
+    /// Rozdělané review se hlásí **odznakem, ne počtem**: draft, ve kterém je jen vybraný
+    /// verdikt, je plnohodnotný (čtvrtina vzorku z #63), takže „· 0“ by o něm lhalo.
+    /// Zastaralý si přidá varování — banner uvnitř tabu není vidět, dokud se do něj neklikne.
+    private var draftText: String {
+        guard draft != nil else { return "Moje review" }
+        return isDraftStale ? "Moje review ⚠︎" : "Moje review ●"
     }
 
 }

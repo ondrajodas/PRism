@@ -62,12 +62,22 @@ struct ReviewDraftCodableTests {
 
     @Test("Každý původ komentáře přežije round-trip", arguments: [
         ReviewDraftComment.Origin.own,
-        .finding,
+        .finding(reviewer: "code-review:code-review"),
     ])
     func roundTripsEveryOrigin(origin: ReviewDraftComment.Origin) throws {
         let value = comment(origin: origin)
 
         #expect(try roundTrip(value) == value)
+    }
+
+    /// Jméno revieweera je to, čím se pozná, který nález už v draftu je. Kdyby se z JSONu
+    /// ztratilo, po restartu by odznak „v mém review“ zmizel z převzatého nálezu — a ten by
+    /// se dal převzít podruhé.
+    @Test("Reviewer u převzatého nálezu přežije round-trip")
+    func roundTripsTheAdoptedReviewer() throws {
+        let value = comment(origin: .finding(reviewer: "oj-php-quality-check"))
+
+        #expect(try roundTrip(value).origin.reviewer == "oj-php-quality-check")
     }
 
     /// Strana je to, bez čeho komentář odejde na jiný řádek — u odebraného řádku zvlášť.

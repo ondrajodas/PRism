@@ -20,13 +20,20 @@ struct DiffRowView: View {
     /// odscrollování zahodí a vlastní `@State` by rozbalení zapomněl.
     var isThreadExpanded: (ReviewThread) -> Bool = { _ in true }
     var toggleThread: (ReviewThread) -> Void = { _ in }
+    /// Akce rozdělaného review svázané s tímhle souborem — cestu si doplní samy.
+    var draft = FileDraftActions()
 
     var body: some View {
         switch row {
         case .hunk(_, let hunk):
             hunkHeader(hunk)
         case .line(_, let line):
-            DiffLineView(line: line, language: language)
+            DiffLineView(
+                line: line,
+                language: language,
+                draftAction: draft.action(for: line),
+                performDraftAction: perform
+            )
         case .expander(_, let expander):
             DiffExpanderView(
                 expander: expander,
@@ -40,7 +47,8 @@ struct DiffRowView: View {
                 blockingCategories: blockingCategories,
                 isAnchored: anchored,
                 reveal: reveal,
-                isHighlighted: highlighted?.matches(group) ?? false
+                isHighlighted: highlighted?.matches(group) ?? false,
+                draft: draft
             )
         case .thread(_, let thread):
             ThreadBubbleView(
@@ -49,8 +57,21 @@ struct DiffRowView: View {
                 isExpanded: isThreadExpanded(thread),
                 toggle: { toggleThread(thread) }
             )
+        case .draftComment(_, let comment):
+            DraftCommentBubbleView(
+                comment: comment,
+                update: { draft.updateComment(comment.id, $0) },
+                remove: { draft.removeComment(comment.id) }
+            )
         case .note(_, let text):
             note(text)
+        }
+    }
+
+    private func perform(_ action: LineDraftAction) {
+        switch action {
+        case .comment(let anchor): draft.comment(anchor)
+        case .note(let line): draft.note(line)
         }
     }
 

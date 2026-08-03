@@ -304,6 +304,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
 | `ReviewDraft` | Rozdělané review: PR, `headSha`, tělo, verdikt, komentáře. Verdikt je vnořený `ReviewDraft.Verdict` |
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path`, `line`, `side`), tělo, `Origin` |
+| `DetailState` | Stav dotažení detailu PR: `loading` / `loaded(PullRequest, updatedAt:)` / `failed`. Je z něj `headSha` pro draft |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -456,6 +457,21 @@ v pěti věcech se chovají jinak:
   výpadku sítě (`.failed`) vyprázdnila, protože takový stav v mapě zůstane, ale vlákna nedá.
 - **Bublina vlákna nemá `.textSelection(.enabled)`**, i když je to text ke kopírování —
   platí tu totéž jako nad celým diffem. `FindingBubbleView` ho ze stejného důvodu nemá.
+
+Moje rozdělané komentáře (#66) jsou **třetí druh bubliny** (`DiffRow.draftComment`) a řídí
+se z většiny pravidly vláken, protože jsou to taky komentáře ke kotvě:
+
+- **Kotví se podle `side`** (`Policy.matches` nad `ReviewDraftComment`), takže komentář
+  k odebranému řádku sedne na odebraný řádek. Je to tatáž funkce a tatáž lekce jako u vláken.
+- **Komentář bez řádku v aktuálním diffu se nekreslí**, jako zastaralé vlákno. Neztrácí se:
+  celý seznam je v tabu `Moje review`, odkud se dá vyjmout i ten, který se nemá kde ukázat.
+  To je rozdíl proti vláknům, kde je náhradní domov až `Overview` (#72).
+- **Neslévají se** — dva komentáře na řádku jsou dvě věci ke stejnému kódu.
+- **Jdou naspod, pod nález i pod vlákno.** Nález a cizí komentář jsou to, co si mám přečíst;
+  svoji rozepsanou větu znám.
+- **Identita nese `id` komentáře** (`d<uuid>`), ne pořadí — na tom stojí, že si `@State`
+  editoru udrží rozepsaný text mezi překreslením.
+- **Přepínač `Nálezy` je neschovává**, o důvod víc než u vláken: tenhle text se odešle.
 
 ### `Config` (`App/Config/`)
 
@@ -963,7 +979,7 @@ na `.task` okna, takže zavření okna ji zruší.
 |---|---|
 | `ContentView` | `NavigationSplitView`: vlevo seznam, vpravo detail vybraného PR |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
-| `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu |
+| `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
 | `PullRequestDetailView` | Pravý panel: dvouřádková lišta (titulek, review, stav kopie), pod ní diff a nálezy |
 | `DiffView` | Diff v plné šířce: souhrn, skokové menu, soubory s ukotvenou hlavičkou, kterou jde sbalit |
@@ -971,8 +987,12 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout |
 | `ThreadBubbleView` | Vlákno konverzace u řádku; vyřešené sbalené s odznakem, moje komentáře odlišené |
-| `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah obarvený podle jazyka |
-| `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`, návrh verdiktu, tabulka s řazením, prokliky do diffu a zahození nálezů |
+| `DraftCommentBubbleView` | Můj rozdělaný komentář u řádku: editor, odznak původu, vyjmutí |
+| `DraftTextEditor` | Textové pole draftu — odložený zápis a doručení při zmizení |
+| `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt bez předvyplnění, tělo, seznam komentářů |
+| `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
+| `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
+| `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`/`Moje review`, návrh verdiktu, tabulka s řazením, prokliky do diffu a zahození nálezů |
 | `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
 | `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume`, upozornění na načtený jiný skill |
@@ -1144,6 +1164,36 @@ Průběh review drží `AppStore` taky (`reviewTimelines`, per PR):
 - **Osa se drží i po doběhnutí** — právě tehdy se k ní člověk vrací. Nový běh ji vynuluje
   a PR, které zmizí ze seznamu, ji ztratí (běžící review si ji podrží).
 
+Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a platí u něj:
+
+- **Draft potřebuje `headSha`, takže se dotahuje detail PR** (`detailStates`, cache podle
+  `updatedAt`, načítá se při výběru řádku jako diff a konverzace). Vyhledávání SHA nedá
+  (#4) a pollingem se detail tahat nesmí (N+1 podprocesů na tik). Bez známé hlavy se draft
+  **nezakládá** a UI to říká — mlčky zakázané tlačítko vypadá jako rozbitá aplikace.
+  „Nevím“ přitom **není** „zastaralé“: banner o zablokovaném odeslání nad načítajícím se
+  detailem by lhal.
+- **Rozepsanému draftu se `headSha` nepřepisuje.** Nese commit, proti kterému se psal, i po
+  novém pushi — odtud banner a zablokované odeslání. Přenesení na nový commit je #69.
+- **Prázdný draft se maže**, včetně toho, ze kterého se vyjme poslední komentář. „Draft
+  existuje“ musí znamenat „je co poslat“, protože na tom stojí indikátor v řádku.
+- **Prázdný komentář se zahazuje**, jakmile se text uloží prázdný. Vzniká běžně (kliknu na
+  komentovat a rozmyslím si to) a GitHub takový payload odmítne — a odmítne s ním celé
+  review, protože odeslání je atomické. `Policy.isSendable` to hlídá i tak.
+- **Kam převzatý nález patří, rozhoduje `Policy.draftTarget`, ne view.** Je to pravidlo
+  GitHubu (řádkový komentář bere jen řádek uvnitř hunku), takže patří k rozhodovací logice.
+  Cesta se přitom překládá na dnešní (`displayPath`): nález umí přijít pod starou cestou
+  přejmenovaného souboru, kdežto komentář i permalink míří na hlavu PR.
+- **Uložení se čte až v tasku, ne při zavolání.** Dvě rychlé úpravy tak zapíšou tentýž
+  konečný stav a nezáleží na pořadí, ve kterém se tasky provedou; zachycená hodnota by
+  dovolila zapsat starší podobu jako poslední.
+- **Selhání zápisu je vidět** (`draftFailure`) a nečitelné soubory se počítají
+  (`unreadableDraftFiles`) — o důvod víc než u nálezů, protože ručně psaný text se nedá
+  dostat zpátky žádným dalším během.
+- **Draft se při úklidu nezahazuje**, na rozdíl od diffu, konverzace i detailu. Je to ručně
+  psaná práce, mapa je jeden malý záznam na PR a PR se do seznamu umí vrátit.
+- **Odesílání tady není.** `AppStore` nemá `ReviewPublishing` ani od #66 — skládání draftu
+  se dělá celé lokálně a jediná cesta ven zůstává jedna (#68).
+
 Věci, na které se u okna naráží:
 
 - **Stav checkoutu je jeden a klíčovaný repem** (`CheckoutState`). `ReviewState` pro řádek
@@ -1157,6 +1207,13 @@ Věci, na které se u okna naráží:
   sebrat eviction, takže zapsaná cesta se musí ověřit znovu — jinak detail hlásí
   „připraveno“ na složku, která neexistuje.
 
+- **Okno má `.windowResizability(.contentMinSize)` a vlastní podlahu na `RootView`.** Výchozí
+  `.automatic` u `WindowGroup` odvozuje minimum okna z toho, co si obsah **přeje** — a `List`
+  v bočním panelu si přeje celou výšku svých řádků, takže při dvanácti PR vyšlo minimum vyšší
+  než obrazovka a spodní hranou okna nešlo hýbat vůbec. Změřeno: po skrytí bočního panelu se
+  okno zmenšit dalo, s panelem ne. `.contentMinSize` bere **minimum** obsahu a strop nechává
+  otevřený, takže podlaha musí být vlastní (`700 × 400`) — jinak se okno dá stáhnout do
+  nesmyslu.
 - **Banner jde přes `safeAreaInset`, ne do `VStack` nad seznamem.** S `VStack`em přestane
   být `List` tím, co sidebar odsazuje od horní lišty, a řádky se schovají pod ni.
 - **Čísla PR se píšou `Text(verbatim:)`.** `Text("#\(number)")` interpoluje přes locale
@@ -1251,8 +1308,12 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
 | `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
-| `Policy.matches(_:_:)` | Patří vlákno k tomuhle řádku diffu — **jedno místo** pro výběr i umístění |
+| `Policy.matches(_:_:)` | Patří vlákno (nebo můj rozdělaný komentář) k tomuhle řádku diffu — **jedno místo** pro výběr i umístění |
 | `Policy.commentableSide(of:in:)` | Ke které straně by šel komentář; `nil` = nedá se komentovat |
+| `Policy.commentAnchor(of:in:)`, `Policy.commentAnchors(in:)` | Kotva komentáře (`DraftAnchor`: číslo + strana); mapa pro celý soubor jedním průchodem |
+| `Policy.draftTarget(for:in:)` | Kam převzatý nález patří — `DraftTarget.line` nebo `.body` |
+| `Policy.adoptedText(of:)`, `Policy.isAdopted(_:target:in:repo:)` | Text převzatého nálezu a odznak „už je v draftu“ |
+| `Policy.permalink(to:line:in:at:)`, `Policy.bodyItem(text:link:)`, `Policy.appendingBodyItem(_:to:)` | Odkaz na kód a skládání položek těla review |
 | `Policy.isStale(_:head:)`, `Policy.isSendable(_:head:)` | Zastaralý a odesílatelný draft |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
@@ -1674,6 +1735,25 @@ Právě proto tam eskalace na `SIGKILL` je.
   kontext**. Ten poslední se staví přes `DiffRow.rows(revealed:content:)`, ne ručně —
   rozbalený řádek se skládá jako obyčejný kontext s oběma čísly, takže test, který si ho
   vyrobí sám, by netestoval to, co v aplikaci vzniká.
+
+  U kotev navíc to, že **mapa dává totéž co dotaz po jednom řádku** — je to jen zrychlení,
+  takže rozchod by nabízel komentáře na řádcích, které GitHub odmítne. U rozřazení nálezu
+  každá varianta zvlášť (řádek v hunku, mimo hunky, bez řádku, bez souboru, bez diffu)
+  a **stará cesta přejmenovaného souboru**, která se musí přeložit na dnešní. U odznaku
+  „už je v draftu“ to hlavní: nález **druhého** revieweera na tomtéž řádku převzatý není.
+  U permalinku zakódovaná mezera v cestě a odkaz na vlastním řádku — bez obojího GitHub
+  úryvek kódu nevyrenderuje.
+- **`AppStore` — rozdělané review** — proti **skutečnému** `ReviewDraftStore` nad dočasnou
+  složkou: on rozhoduje, co je po restartu, takže fake by ověřoval sám sebe. Pokrývá cestu
+  od kliknutí po disk (komentář, verdikt, tělo, převzetí nálezu do těla i na řádek), a hlavně
+  to, co se dá pokazit tiše: draft, který se **nezakládá** bez známé hlavy PR; prázdný
+  komentář, který se zahodí a s ním i prázdný draft; zastarání po novém commitu, které text
+  **nechá**; a že „nevím, jaká je hlava“ se za zastaralé nevydává. Čeká se točením přes
+  `Task.yield()`, protože zápis běží v tasku.
+- **Bubliny rozdělaných komentářů** — že komentář visí pod svým řádkem, že `left` sedne na
+  **odebraný** řádek (tatáž past jako u vláken v #64), že se komentář na řádku mimo diff
+  nekreslí, že se dva na jednom řádku neslijí a že pořadí je nález → vlákno → můj komentář.
+  Plus kotva pro skok z panelu, včetně `left` a fallbacku na soubor.
 - **`ReviewStore`** — proti skutečné dočasné složce, ne proti fake filesystému: kořen je
   injektovatelný, takže jde o pár kilobajtů, a ověřuje se to, na čem store stojí — `Codable`
   cesta na disk a zpět a chování `FileManageru`. Hodiny jsou `FakeTimeSource`, který se
@@ -1958,6 +2038,15 @@ zastarává (ale nemaže se) a `Policy` umí říct, na které řádky diffu se 
 **Vrstva bez UI** — skládání draftu je #66, odeslání #67 a #68. Aplikace pořád nic
 neposílá: store zapisuje jen na disk.
 
+Skládání draftu hotové (issue #66) — `DraftPanel`, `DraftCommentBubbleView`,
+`DraftTextEditor`, `DraftActions` a sekce `drafts`/`detailStates` v `AppStore`. Review se dá
+poskládat z nálezů (`Převzít do review` v bublině) i z vlastních poznámek (tlačítko na řádku
+diffu), tělo a verdikt jsou v tabu `Moje review` a rozdělané review je vidět v řádku seznamu
+i v detailu. Co GitHub jako řádkový komentář nepřijme, jde do těla jako permalink — a UI to
+říká dopředu. **Nic se přitom neodesílá**: `AppStore` `ReviewPublishing` nezná, odeslání je
+#68. Kvůli `headSha` se při výběru řádku dotahuje detail PR (`gh pr view`, cache podle
+`updatedAt`) — bez něj by draft nešlo označit za zastaralý ani odeslat.
+
 Vlákna u kódu hotová (issue #64) — `ThreadBubbleView`, `DiffRow.thread`,
 `App/Policy/ConversationPolicy.swift` a `conversationStates` v `AppStore`. Vlákno s řádkem
 v aktuálním diffu visí jako bublina pod svým řádkem, vyřešené je sbalené s odznakem
@@ -2057,16 +2146,16 @@ Tím **končí rozsah v1** podle specifikace. Za ním:
 
 6. **Review na GitHub** (M6) — odesílání review z okna. Tvrdou podmínku č. 1 **už nahradil**
    pravidlem „jediná cesta ven“ (#67), zatím s bránou na sandbox (#107). Hotové: spike #62
-   (viz [`docs/github-review-api.md`](docs/github-review-api.md)), model draftu #65
-   a publisher #67. Zbývá skládání draftu (#66), sheet (#68) a přenesení na nový commit (#69).
+   (viz [`docs/github-review-api.md`](docs/github-review-api.md)), model draftu #65,
+   publisher #67 a skládání draftu #66. Zbývá sheet (#68) a přenesení na nový commit (#69).
 7. **Konverzace, komentáře a taby** (M7) — cizí komentáře a vlákna v okně, odpovídání do
    nich a rozvržení jako na GitHubu (taby `Overview` / `Files changed`).
 
-**M6 a M7 jsou do sebe zaklesnuté a nejdou udělat po sobě.** `#66` a `#68` z M6 čekají na
-`#64` z M7, kdežto `#73` z M7 čeká na `#67` z M6 — takže se to plánuje jako jeden blok
-o jedenácti issues, ne dva milníky za sebou. Bez závislostí jsou `#62` (hotový), `#63`
-a `#65`; `#98` (side-by-side diff) na konverzaci nestojí vůbec a dá se zařadit kamkoli.
-Pořadí zbytku: `#63` → `#65` → `#64` → `#67` → `#66` → `#72` → `#68` → `#73` → `#69`.
+**M6 a M7 jsou do sebe zaklesnuté a nejdou udělat po sobě.** `#66` a `#68` z M6 čekaly na
+`#64` z M7, kdežto `#73` z M7 čeká na `#67` z M6 — takže se to plánovalo jako jeden blok
+o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `#65`, `#64`,
+`#67` a `#66`; `#98` (side-by-side diff) na konverzaci nestojí vůbec a dá se zařadit kamkoli.
+Pořadí zbytku: `#72` → `#68` → `#73` → `#69`.
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
    s oprávněním a klikem (#88), doběhlé review (#82), nové PR (#85), vypínání po
    událostech (#86) a seskupování (#87).

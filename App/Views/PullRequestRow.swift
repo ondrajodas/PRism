@@ -7,6 +7,9 @@ import SwiftUI
 struct PullRequestRow: View {
     let pullRequest: PullRequestSummary
     let reviewState: ReviewState
+    /// Leží na tomhle PR rozdělané review? Ukazuje se ikonou, ne slovem: „draft“ je vedle
+    /// v řádku obsazený **rozpracovaným pull requestem**, což je něco jiného.
+    var hasDraft = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -26,6 +29,12 @@ struct PullRequestRow: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(.quaternary, in: .capsule)
+                }
+                if hasDraft {
+                    Image(systemName: "square.and.pencil")
+                        .font(.caption)
+                        .foregroundStyle(.tint)
+                        .help("Leží tu rozdělané review, které jsi ještě neodeslal")
                 }
                 Spacer(minLength: 8)
                 ReviewStateBadge(state: reviewState)

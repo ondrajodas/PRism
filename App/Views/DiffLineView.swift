@@ -5,8 +5,14 @@ struct DiffLineView: View {
     let line: DiffLine
     /// Jazyk souboru kvůli obarvení. `nil` = jednobarevný řádek.
     var language: Language?
+    /// Co jde s řádkem udělat v rozdělaném review. `nil` = nic, tlačítko se nekreslí.
+    var draftAction: LineDraftAction?
+    var performDraftAction: (LineDraftAction) -> Void = { _ in }
 
     @Environment(\.colorScheme) private var colorScheme
+    /// Tlačítko se ukazuje až na najetí, jako na GitHubu. Trvalé tlačítko u každého řádku
+    /// diffu je pruh ikon, ve kterém se ztratí kód.
+    @State private var isHovered = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -24,6 +30,46 @@ struct DiffLineView: View {
         .foregroundStyle(line.kind == .meta ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
         .padding(.horizontal, 8)
         .background(background)
+        // Přes čísla řádků, ne vedle nich: vlastní sloupec by odsunul obsah o svou šířku
+        // u **každého** řádku, i tam, kde se komentovat nedá.
+        .overlay(alignment: .topLeading) { draftButton }
+        .onHover { isHovered = $0 }
+    }
+
+    @ViewBuilder private var draftButton: some View {
+        if let draftAction, isHovered {
+            Button {
+                performDraftAction(draftAction)
+            } label: {
+                Image(systemName: symbol(of: draftAction))
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .frame(width: 18, height: 18)
+                    .background(.tint, in: .rect(cornerRadius: 4))
+            }
+            // `.plain`, ne `.borderless`: ten se v offscreen renderu (kontrola vzhledu bez
+            // screenshotu) nevykreslí a místo ikony vyjde žlutý placeholder.
+            .buttonStyle(.plain)
+            .padding(.leading, 4)
+            .padding(.top, 1)
+            .help(hint(of: draftAction))
+        }
+    }
+
+    private func symbol(of action: LineDraftAction) -> String {
+        switch action {
+        case .comment: "plus.bubble.fill"
+        case .note: "text.badge.plus"
+        }
+    }
+
+    /// U poznámky musí být z nápovědy poznat **proč** to nejde jako komentář — jinak to
+    /// vypadá jako jiné tlačítko na totéž.
+    private func hint(of action: LineDraftAction) -> String {
+        switch action {
+        case .comment: "Přidat komentář k tomuhle řádku"
+        case .note: "Řádek není v diffu, takže GitHub komentář k němu nepřijme. Přidá se do těla review jako odkaz na kód."
+        }
     }
 
     /// Obsah řádku obarvený podle jazyka.

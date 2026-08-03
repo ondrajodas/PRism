@@ -20,6 +20,11 @@ enum DiffRow: Identifiable {
     /// **nedostane**: jeho číslo platilo pro starý head, takže by bublina sedla na cizí kód.
     /// Domov má v `Overview` (#72), vybírá je `Policy.threadsOutsideTheDiff`.
     case thread(String, ReviewThread)
+    /// Můj rozdělaný komentář k řádku nad sebou.
+    ///
+    /// Kotví se jako vlákno (podle `side`), ne jako nález. Komentář, jehož řádek v aktuálním
+    /// diffu není, se **nekreslí** — celý seznam je vidět v panelu, takže se neztrácí.
+    case draftComment(String, ReviewDraftComment)
     /// Věta místo obsahu — u binárky nebo u souboru beze změny obsahu.
     case note(String, String)
 
@@ -31,7 +36,7 @@ enum DiffRow: Identifiable {
     var id: String {
         switch self {
         case .hunk(let id, _), .line(let id, _), .expander(let id, _), .note(let id, _),
-             .finding(let id, _, _), .thread(let id, _): id
+             .finding(let id, _, _), .thread(let id, _), .draftComment(let id, _): id
         }
     }
 
@@ -43,12 +48,14 @@ enum DiffRow: Identifiable {
     ///     pak se ukazují jen rozbalovací řádky.
     ///   - findings: nálezy napříč diffem; k tomuhle souboru se z nich vyberou samy.
     ///   - threads: vlákna konverzace napříč diffem; vybírají se stejně jako nálezy.
+    ///   - comments: moje rozdělané komentáře napříč diffem; vybírají se stejně.
     static func rows(
         of file: FileDiff,
         revealed: RevealedLines = RevealedLines(),
         content: [String] = [],
         findings: [FindingGroup] = [],
-        threads: [ReviewThread] = []
+        threads: [ReviewThread] = [],
+        comments: [ReviewDraftComment] = []
     ) -> [DiffRow] {
         // I zkratka projde přes `withBubbles`: nález na binárce nebo na souboru beze změny
         // obsahu se jinak z diffu ztratí úplně — a tiše zmizelý nález vypadá jako čistý PR.
@@ -57,7 +64,8 @@ enum DiffRow: Identifiable {
                 [.note(id(of: file, "note"), "Binární soubor — obsah se nezobrazuje.")],
                 of: file,
                 findings: findings,
-                threads: threads
+                threads: threads,
+                comments: comments
             )
         }
         if file.hunks.isEmpty {
@@ -65,7 +73,8 @@ enum DiffRow: Identifiable {
                 [.note(id(of: file, "note"), "Beze změny obsahu.")],
                 of: file,
                 findings: findings,
-                threads: threads
+                threads: threads,
+                comments: comments
             )
         }
 
@@ -93,7 +102,7 @@ enum DiffRow: Identifiable {
             }
         }
         rows += expandable ? trailingGapRows(of: file, revealed: revealed, content: content) : []
-        return withBubbles(rows, of: file, findings: findings, threads: threads)
+        return withBubbles(rows, of: file, findings: findings, threads: threads, comments: comments)
     }
 
     /// Kam v diffu ukazuje nález — id řádku, na který se dá odscrollovat.
@@ -122,6 +131,25 @@ enum DiffRow: Identifiable {
         return file.id
     }
 
+    /// Kam v diffu ukazuje můj rozdělaný komentář.
+    ///
+    /// Vlastní funkce, ne `anchor(in:file:line:)`: ta porovnává **nové** číslo řádku, kdežto
+    /// komentář k odebranému řádku má číslo ze staré verze souboru. Bez toho by skok
+    /// z panelu na takový komentář skončil u hlavičky souboru.
+    ///
+    /// Hledá se jen v hunkách, protože jen tam komentář může vzniknout. Když řádek v diffu
+    /// není (přišel nový commit), vrací se **soubor** — odskočit aspoň na něj je pořád lepší
+    /// než nehnout se.
+    static func anchor(in diff: Diff, comment: ReviewDraftComment) -> String? {
+        guard let file = diff.file(at: comment.path) else { return nil }
+        for (index, hunk) in file.hunks.enumerated() {
+            if let position = hunk.lines.firstIndex(where: { Policy.matches(comment, $0) }) {
+                return id(of: file, "h\(index)l\(position)")
+            }
+        }
+        return file.id
+    }
+
     // MARK: - Bubliny nálezů
 
     /// Zavěsí nálezy pod řádky, kterých se týkají.
@@ -136,11 +164,13 @@ enum DiffRow: Identifiable {
         _ rows: [DiffRow],
         of file: FileDiff,
         findings: [FindingGroup],
-        threads: [ReviewThread] = []
+        threads: [ReviewThread] = [],
+        comments: [ReviewDraftComment] = []
     ) -> [DiffRow] {
         let mine = groups(of: file, from: findings)
         let myThreads = Policy.threads(of: file, from: threads)
-        guard !mine.isEmpty || !myThreads.isEmpty else { return rows }
+        let myComments = Policy.comments(of: file, from: comments)
+        guard !mine.isEmpty || !myThreads.isEmpty || !myComments.isEmpty else { return rows }
 
         let rendered = Set(rows.compactMap { row -> Int? in
             guard case .line(_, let line) = row else { return nil }
@@ -164,7 +194,7 @@ enum DiffRow: Identifiable {
         var result = unanchored.enumerated().map { offset, group in
             DiffRow.finding(id(of: file, "u\(offset)"), group, anchored: false)
         }
-        result.reserveCapacity(rows.count + mine.count + myThreads.count)
+        result.reserveCapacity(rows.count + mine.count + myThreads.count + myComments.count)
         for row in rows {
             result.append(row)
             guard case .line(_, let line) = row else { continue }
@@ -183,6 +213,12 @@ enum DiffRow: Identifiable {
             // z GitHubu, ne pořadí — je stabilní i přes obnovení konverzace.
             for thread in myThreads where Policy.matches(thread, line) {
                 result.append(.thread(id(of: file, "t\(thread.id)"), thread))
+            }
+            // Moje rozdělané komentáře jdou **naspod**: nález a cizí komentář jsou to, co si
+            // mám přečíst, kdežto svou vlastní rozepsanou větu znám. Neslévají se, ze
+            // stejného důvodu jako vlákna — dva komentáře na jednom řádku jsou dvě věci.
+            for comment in myComments where Policy.matches(comment, line) {
+                result.append(.draftComment(id(of: file, "d\(comment.id)"), comment))
             }
         }
         return result

@@ -24,6 +24,10 @@ struct PullRequestDetailView: View {
     /// **smí** přetéct mezi pull requesty — jméno skillu znamená všude totéž.
     @State private var mutedReviewers: Set<String> = []
 
+    /// Který tab spodního panelu je vidět. Drží ho detail, ne panel: poznámka přidaná
+    /// z diffu do těla review se musí umět přepnout na tab, kam spadla.
+    @State private var panelTab: FindingsPanel.Tab = .findings
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             controls
@@ -46,6 +50,9 @@ struct PullRequestDetailView: View {
         // Konverzace stejnou cestou jako diff, ne pollingem: pro všech N PR by to byla
         // tatáž N+1 past, kvůli které se netahá ani detail.
         .task(id: pullRequest) { await store.loadConversation(for: pullRequest) }
+        // A detail taky — z něj je `headSha`, proti kterému se píše rozdělané review a proti
+        // kterému se pozná, že zastaralo.
+        .task(id: pullRequest) { await store.loadDetail(for: pullRequest) }
     }
 
     /// Dva řádky, ne čtyři bloky: cesta ke klonu, stav kopie i spuštění review se vejdou
@@ -65,6 +72,7 @@ struct PullRequestDetailView: View {
                     .foregroundStyle(.secondary)
                 Link("otevřít na GitHubu", destination: pullRequest.url).font(.callout)
                 checkout
+                draftChip
             }
             reviewers
             // Selhání checkoutu se do lišty nevejde, a právě u něj je text od `gitu`
@@ -79,27 +87,35 @@ struct PullRequestDetailView: View {
     }
 
     /// Diff dostane všechno místo; nálezy jsou spodní lišta, kterou si uživatel rozbalí.
+    ///
+    /// Panel je vidět **vždycky**, i u PR, na kterém review nikdy neběželo (**změna proti
+    /// #20**): od #66 v něm bydlí i rozdělané review, a to se zakládá od nuly. Kdyby se panel
+    /// ukazoval až s prvním nálezem, nebylo by kde vybrat verdikt ani napsat tělo.
     @ViewBuilder private var content: some View {
         VStack(spacing: 0) {
             diff
             // Panel se ukáže i **bez** záznamu, jakmile něco běží: při prvním review je
             // průběh to jediné, co je, a čekat na uložený výsledek by ho schovalo.
-            let timelines = store.timelines(for: pullRequest.id)
             let record = store.reviewRecord(for: pullRequest.id)
-            if record != nil || !timelines.isEmpty {
-                FindingsPanel(
-                    record: record,
-                    // `nil` = není co zahodit. Rozhoduje uložený záznam, ne to, co je vidět
-                    // po filtru reviewerů — filtr je pohled, ne obsah.
-                    clear: record == nil ? nil : { try await store.clearFindings(for: pullRequest.id) },
-                    isExpanded: $findingsExpanded,
-                    jump: jump,
-                    findings: visibleFindings,
-                    blockingCategories: blockingCategories,
-                    timelines: timelines,
-                    isRunning: store.isReviewing(pullRequest.id)
-                )
-            }
+            FindingsPanel(
+                record: record,
+                // `nil` = není co zahodit. Rozhoduje uložený záznam, ne to, co je vidět
+                // po filtru reviewerů — filtr je pohled, ne obsah.
+                clear: record == nil ? nil : { try await store.clearFindings(for: pullRequest.id) },
+                isExpanded: $findingsExpanded,
+                jump: jump,
+                findings: visibleFindings,
+                blockingCategories: blockingCategories,
+                timelines: store.timelines(for: pullRequest.id),
+                isRunning: store.isReviewing(pullRequest.id),
+                pullRequest: pullRequest.id,
+                draft: store.draft(for: pullRequest.id),
+                isDraftStale: store.isDraftStale(for: pullRequest.id),
+                draftUnavailable: draftUnavailable,
+                draftActions: draftActions,
+                jumpToComment: jumpToComment,
+                tab: $panelTab
+            )
         }
     }
 
@@ -149,6 +165,93 @@ struct PullRequestDetailView: View {
                 ? { store.collapseRevealedLines(in: pullRequest.id) }
                 : nil
         )
+    }
+
+    // MARK: - Rozdělané review
+
+    /// Indikátor rozdělaného review v detailu — a zkratka do tabu, kde se píše.
+    ///
+    /// Slovu „draft“ se v textu vyhýbá schválně: tím se v tomhle okně označuje **rozpracovaný
+    /// pull request** (chip v řádku seznamu), což je něco úplně jiného.
+    @ViewBuilder private var draftChip: some View {
+        if store.hasDraft(pullRequest.id) {
+            let isStale = store.isDraftStale(for: pullRequest.id)
+            Button {
+                showDraftTab()
+            } label: {
+                Label(
+                    isStale ? "rozdělané review · starší commit" : "rozdělané review",
+                    systemImage: "square.and.pencil"
+                )
+                .font(.callout)
+                .foregroundStyle(isStale ? AnyShapeStyle(.orange) : AnyShapeStyle(.tint))
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .help(isStale
+                ? "Review je psané proti staršímu commitu — takhle se odeslat nedá"
+                : "Otevřít tab Moje review")
+        }
+    }
+
+    /// Proč se do rozdělaného review nedá psát. `nil` = dá se.
+    ///
+    /// Bez `headSha` nemá draft proti čemu vzniknout, a mlčky zakázaná tlačítka vypadají jako
+    /// rozbitá aplikace. Rozepsaného draftu se to netýká — ten svůj commit už zná.
+    private var draftUnavailable: String? {
+        guard !store.canComposeDraft(for: pullRequest.id) else { return nil }
+        if case .failed(let detail) = store.detailState(for: pullRequest.id) {
+            return "Nevím, na kterém commitu PR stojí, takže se review nemá k čemu psát. \(detail)"
+        }
+        return "Zjišťuji, na kterém commitu PR stojí…"
+    }
+
+    private var draftActions: DraftActions {
+        let id = pullRequest.id
+        return DraftActions(
+            canCompose: store.canComposeDraft(for: id),
+            addComment: { path, anchor in store.addDraftComment(at: anchor, path: path, for: id) },
+            addNote: { path, line in
+                store.appendDraftBodyItem(text: "", path: path, line: line, for: id)
+                showDraftTab()
+            },
+            adopt: { finding in
+                // Kam nález spadl, se musí poznat: řádkový komentář je vidět hned pod
+                // řádkem, kdežto položka v těle je jinde v okně, takže se na ni přepne.
+                let goesToBody: Bool = if case .body = store.draftTarget(for: finding, in: id) {
+                    true
+                } else {
+                    false
+                }
+                store.adoptFinding(finding, for: id)
+                if goesToBody { showDraftTab() }
+            },
+            isAdopted: { store.isAdopted($0, in: id) },
+            target: { store.draftTarget(for: $0, in: id) },
+            updateComment: { store.updateDraftComment($0, body: $1, for: id) },
+            removeComment: { store.removeDraftComment($0, for: id) },
+            setBody: { store.setDraftBody($0, for: id) },
+            setVerdict: { store.setDraftVerdict($0, for: id) },
+            discard: { store.discardDraft(for: id) }
+        )
+    }
+
+    private func showDraftTab() {
+        panelTab = .draft
+        findingsExpanded = true
+    }
+
+    /// Skok na můj komentář v diffu.
+    ///
+    /// Vlastní cesta, ne `jump(to finding:)`: komentář k odebranému řádku má číslo ze staré
+    /// verze souboru, takže kotva podle nového čísla by skončila u hlavičky souboru.
+    private func jumpToComment(_ comment: ReviewDraftComment) {
+        guard case .loaded(let diff, _) = store.diffState(for: pullRequest.id),
+              let file = diff.file(at: comment.path),
+              let anchor = DiffRow.anchor(in: diff, comment: comment)
+        else { return }
+        store.unfold(file.displayPath, in: pullRequest.id)
+        scrollTarget = anchor
     }
 
     private var foldingActions: DiffFoldingActions {
@@ -203,7 +306,9 @@ struct PullRequestDetailView: View {
                 missingThreads: store.conversation(for: pullRequest.id)?.threads.missing ?? 0,
                 viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
                 isThreadExpanded: { store.isThreadExpanded($0, in: pullRequest.id) },
-                toggleThread: { store.toggleThread($0, in: pullRequest.id) }
+                toggleThread: { store.toggleThread($0, in: pullRequest.id) },
+                comments: store.draftComments(for: pullRequest.id),
+                draft: draftActions
             )
         case .failed(let detail):
             diffFailure(detail)
