@@ -136,6 +136,11 @@ a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí.
 **Rozsah v1 podle specifikace je hotový** — všech pět fází (viz [CLAUDE.md](CLAUDE.md)).
 Co přijde po něm, je v milnících M6 až M8.
 
+Z nich už je hotové čtení: aplikace umí **jedním GraphQL dotazem** načíst konverzaci pod PR
+— review ostatních, vlákna u řádků (včetně toho, která jsou vyřešená a která zastaralá)
+a komentáře. Vidět to zatím není, vykreslení přijde s taby. Pořád platí, že aplikace na
+GitHub nic neposílá.
+
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
 aktuálně je.
@@ -271,7 +276,7 @@ PRism.xcodeproj/          Xcode projekt (shared scheme je verzovaný)
 App/                      zdrojáky aplikace — target PRism
   Models/                 doménové modely: PR, identifikátory, stav review
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
-  GitHub/                 čtení PR přes gh CLI: gateway, typované chyby, tvar výstupu
+  GitHub/                 čtení PR a konverzace přes gh CLI: gateway, typované chyby, tvar výstupu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Config/                 config.json: globální default, override per repo, čtení a zápis
   Diff/                   parsování unified diffu na soubory, hunky a řádky

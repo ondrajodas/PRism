@@ -16,32 +16,44 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     private let diffs: [Result<String, any Error>]
     /// Co vrátí `fetchFile` — v pořadí, poslední se opakuje.
     private let files: [Result<String, any Error>]
+    /// Co vrátí `fetchConversation` — v pořadí, poslední se opakuje.
+    private let conversations: [Result<Conversation, any Error>]
     private let lock = NSLock()
     private var asked: [String] = []
     private var detailsAsked: [PRIdentifier] = []
     private var overriddenDetail: Result<PullRequest, any Error>?
     private var diffsAsked: [PRIdentifier] = []
     private var filesAsked: [(id: PRIdentifier, path: String)] = []
+    private var conversationsAsked: [PRIdentifier] = []
 
     init(
         _ outcomes: [Outcome],
         detail: Result<PullRequest, any Error>? = nil,
         diffs: [Result<String, any Error>] = [],
-        files: [Result<String, any Error>] = []
+        files: [Result<String, any Error>] = [],
+        conversations: [Result<Conversation, any Error>] = []
     ) {
         self.outcomes = outcomes
         self.detail = detail
         self.diffs = diffs
         self.files = files
+        self.conversations = conversations
     }
 
     convenience init(
         always outcome: Outcome,
         detail: Result<PullRequest, any Error>? = nil,
         diffs: [Result<String, any Error>] = [],
-        files: [Result<String, any Error>] = []
+        files: [Result<String, any Error>] = [],
+        conversations: [Result<Conversation, any Error>] = []
     ) {
-        self.init([outcome], detail: detail, diffs: diffs, files: files)
+        self.init(
+            [outcome],
+            detail: detail,
+            diffs: diffs,
+            files: files,
+            conversations: conversations
+        )
     }
 
     /// Čím se `detail` přebije **od teď dál** — nespotřebuje se, platí pro všechna další
@@ -102,5 +114,19 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         }
         guard !diffs.isEmpty else { throw GitHubError.notFound("Fake gateway diff nezná.") }
         return try diffs[min(index, diffs.count - 1)].get()
+    }
+
+    /// Na co se někdo ptal, v pořadí.
+    var conversationRequests: [PRIdentifier] { lock.withLock { conversationsAsked } }
+
+    func fetchConversation(id: PRIdentifier) async throws -> Conversation {
+        let index: Int = lock.withLock {
+            conversationsAsked.append(id)
+            return conversationsAsked.count - 1
+        }
+        guard !conversations.isEmpty else {
+            throw GitHubError.notFound("Fake gateway konverzaci nezná.")
+        }
+        return try conversations[min(index, conversations.count - 1)].get()
     }
 }

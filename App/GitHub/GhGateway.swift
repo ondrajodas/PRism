@@ -69,6 +69,14 @@ struct GhGateway: GitHubGateway {
         ])
     }
 
+    func fetchConversation(id: PRIdentifier) async throws -> Conversation {
+        let response = try await run(
+            ConversationQuery.arguments(for: id),
+            decodedAs: GhConversationResponse.self
+        )
+        return try response.conversation(id: id)
+    }
+
     private func run<T: Decodable>(_ arguments: [String], decodedAs type: T.Type) async throws -> T {
         let output = try await run(arguments)
         do {

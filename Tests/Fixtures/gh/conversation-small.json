@@ -1,0 +1,156 @@
+{
+  "data": {
+    "viewer": {
+      "login": "ondrajodas"
+    },
+    "repository": {
+      "pullRequest": {
+        "number": 11451,
+        "reviews": {
+          "totalCount": 4,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "PRR_kwDODKw3uc643_5t",
+              "state": "COMMENTED",
+              "body": "## Pull Request Overview\n\nThis PR fixes an error handling issue in the `FetchRefSHA` function where JSON decoding errors were not being properly mapped to the expected `ErrReleaseNotFound` error type.\n\n- Replaces generic JSON decoding error with specific `ErrReleaseNotFound` error\n- Adds clarifying comment about release not being found\n\n\n\n",
+              "submittedAt": "2025-08-08T17:29:33Z",
+              "author": {
+                "login": "copilot-pull-request-reviewer"
+              }
+            },
+            {
+              "id": "PRR_kwDODKw3uc644GzJ",
+              "state": "APPROVED",
+              "body": "",
+              "submittedAt": "2025-08-08T17:42:24Z",
+              "author": {
+                "login": "tingx2wang"
+              }
+            },
+            {
+              "id": "PRR_kwDODKw3uc644uH5",
+              "state": "CHANGES_REQUESTED",
+              "body": "Thanks for the PR, @ejahnGithub! 🙏 \n\nBut I believe the change may have unwanted side effects for other `release` commands.",
+              "submittedAt": "2025-08-08T18:54:11Z",
+              "author": {
+                "login": "babakks"
+              }
+            },
+            {
+              "id": "PRR_kwDODKw3uc645NkW",
+              "state": "COMMENTED",
+              "body": "",
+              "submittedAt": "2025-08-08T19:51:33Z",
+              "author": {
+                "login": "ejahnGithub"
+              }
+            }
+          ]
+        },
+        "reviewThreads": {
+          "totalCount": 2,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "PRRT_kwDODKw3uc5XATDu",
+              "isResolved": true,
+              "isOutdated": false,
+              "path": "pkg/cmd/release/shared/fetch.go",
+              "line": 168,
+              "originalLine": 168,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc6G7GwX",
+                    "body": "This change masks all JSON decoding errors as 'release not found' errors. JSON decoding can fail for reasons other than a missing release (malformed JSON, network issues, etc.). Consider checking the HTTP status code or response content to determine if it's actually a 'not found' case before returning `ErrReleaseNotFound`.\n```suggestion\n\t\treturn \"\", fmt.Errorf(\"failed to decode ref response: %w\", err)\n```",
+                    "createdAt": "2025-08-08T17:29:32Z",
+                    "url": "https://github.com/cli/cli/pull/11451#discussion_r2263641111",
+                    "author": {
+                      "login": "copilot-pull-request-reviewer"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc5XAsRq",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/release/shared/fetch.go",
+              "line": 168,
+              "originalLine": 168,
+              "diffSide": "RIGHT",
+              "comments": {
+                "totalCount": 2,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc6G7pcy",
+                    "body": "This change also affects other `release` subcmds. I agree with CCR in that this error can have other reasons. ",
+                    "createdAt": "2025-08-08T18:51:38Z",
+                    "url": "https://github.com/cli/cli/pull/11451#discussion_r2263783218",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  },
+                  {
+                    "id": "PRRC_kwDODKw3uc6G8AGk",
+                    "body": "When fetching the ref SHA of a tag, a partial semver match returns a 200 response with an empty body, which causes the JSON decode to fail.\r\nFor example, if the tag is v1.0.0, only refs/tags/v1.0.0 will work — v1 or v1.0 will return 200 with empty body.\r\n\r\nThis behavior aligns with other gh release commands, which also require the exact tag name, otherwise would return release not found. Partial semver versions won’t work — only the full, exact tag is accepted.",
+                    "createdAt": "2025-08-08T19:51:33Z",
+                    "url": "https://github.com/cli/cli/pull/11451#discussion_r2263876004",
+                    "author": {
+                      "login": "ejahnGithub"
+                    },
+                    "replyTo": {
+                      "id": "PRRC_kwDODKw3uc6G7pcy"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "comments": {
+          "totalCount": 2,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "IC_kwDODKw3uc684CNm",
+              "body": "Hi! Thanks for the pull request. Please ensure that this change is linked to an issue by mentioning an issue number in the description of the pull request. If this pull request would close the issue, please put the word 'Fixes' before the issue number somewhere in the pull request body. If this is a tiny change like fixing a typo, feel free to ignore this message.",
+              "createdAt": "2025-08-08T17:29:23Z",
+              "url": "https://github.com/cli/cli/pull/11451#issuecomment-3168805734",
+              "author": {
+                "login": "cliAutomation"
+              }
+            },
+            {
+              "id": "IC_kwDODKw3uc684IYV",
+              "body": "the lint error can ignore. not related to the change",
+              "createdAt": "2025-08-08T17:40:47Z",
+              "url": "https://github.com/cli/cli/pull/11451#issuecomment-3168830997",
+              "author": {
+                "login": "ejahnGithub"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
