@@ -14,6 +14,12 @@ enum DiffRow: Identifiable {
     /// Nálezy k řádku nad sebou. `anchored: false` znamená, že řádek v diffu není a
     /// bublina visí u hlavičky souboru — schovat ji by znamenalo, že ji nikdo neuvidí.
     case finding(String, FindingGroup, anchored: Bool)
+    /// Vlákno konverzace z GitHubu u řádku nad sebou.
+    ///
+    /// Vždycky zakotvené — na rozdíl od nálezu. Vlákno bez řádku v aktuálním diffu se sem
+    /// **nedostane**: jeho číslo platilo pro starý head, takže by bublina sedla na cizí kód.
+    /// Domov má v `Overview` (#72), vybírá je `Policy.threadsOutsideTheDiff`.
+    case thread(String, ReviewThread)
     /// Věta místo obsahu — u binárky nebo u souboru beze změny obsahu.
     case note(String, String)
 
@@ -25,7 +31,7 @@ enum DiffRow: Identifiable {
     var id: String {
         switch self {
         case .hunk(let id, _), .line(let id, _), .expander(let id, _), .note(let id, _),
-             .finding(let id, _, _): id
+             .finding(let id, _, _), .thread(let id, _): id
         }
     }
 
@@ -36,11 +42,13 @@ enum DiffRow: Identifiable {
     ///   - content: obsah souboru na hlavě PR, po řádcích. Prázdný, dokud se nenačetl —
     ///     pak se ukazují jen rozbalovací řádky.
     ///   - findings: nálezy napříč diffem; k tomuhle souboru se z nich vyberou samy.
+    ///   - threads: vlákna konverzace napříč diffem; vybírají se stejně jako nálezy.
     static func rows(
         of file: FileDiff,
         revealed: RevealedLines = RevealedLines(),
         content: [String] = [],
-        findings: [FindingGroup] = []
+        findings: [FindingGroup] = [],
+        threads: [ReviewThread] = []
     ) -> [DiffRow] {
         // I zkratka projde přes `withBubbles`: nález na binárce nebo na souboru beze změny
         // obsahu se jinak z diffu ztratí úplně — a tiše zmizelý nález vypadá jako čistý PR.
@@ -48,14 +56,16 @@ enum DiffRow: Identifiable {
             return withBubbles(
                 [.note(id(of: file, "note"), "Binární soubor — obsah se nezobrazuje.")],
                 of: file,
-                findings: findings
+                findings: findings,
+                threads: threads
             )
         }
         if file.hunks.isEmpty {
             return withBubbles(
                 [.note(id(of: file, "note"), "Beze změny obsahu.")],
                 of: file,
-                findings: findings
+                findings: findings,
+                threads: threads
             )
         }
 
@@ -83,7 +93,7 @@ enum DiffRow: Identifiable {
             }
         }
         rows += expandable ? trailingGapRows(of: file, revealed: revealed, content: content) : []
-        return withBubbles(rows, of: file, findings: findings)
+        return withBubbles(rows, of: file, findings: findings, threads: threads)
     }
 
     /// Kam v diffu ukazuje nález — id řádku, na který se dá odscrollovat.
@@ -125,10 +135,12 @@ enum DiffRow: Identifiable {
     private static func withBubbles(
         _ rows: [DiffRow],
         of file: FileDiff,
-        findings: [FindingGroup]
+        findings: [FindingGroup],
+        threads: [ReviewThread] = []
     ) -> [DiffRow] {
         let mine = groups(of: file, from: findings)
-        guard !mine.isEmpty else { return rows }
+        let myThreads = Policy.threads(of: file, from: threads)
+        guard !mine.isEmpty || !myThreads.isEmpty else { return rows }
 
         let rendered = Set(rows.compactMap { row -> Int? in
             guard case .line(_, let line) = row else { return nil }
@@ -147,19 +159,36 @@ enum DiffRow: Identifiable {
             uniquingKeysWith: { first, _ in first }
         )
 
+        // Vlákna se na řádku **neslučují do jednoho**, na rozdíl od nálezů: každé je vlastní
+        // konverzace s vlastním stavem vyřešení, takže dvě vlákna na jednom řádku jsou dvě
+        // bubliny pod sebou. Klíčem je `id` z GitHubu, ne pořadí — je stabilní přes
+        // překreslení i přes obnovení konverzace.
+        // Číslo se vytáhne **při filtrování**, ne až v klíči. `{ $0.line ?? 0 }` by byl
+        // default, na který se nedá dojít — a nedosažitelná nula v klíči slovníku svádí
+        // k tomu spolehnout se na ni, až filtr někdo změní.
+        let anchored = myThreads.compactMap { thread -> (line: Int, thread: ReviewThread)? in
+            guard let line = thread.line, rendered.contains(line) else { return nil }
+            return (line, thread)
+        }
+        let threadsByLine = Dictionary(grouping: anchored, by: \.line).mapValues { $0.map(\.thread) }
+
         // Identita se čísluje pořadím: `line` na ni nestačí, protože nálezů bez řádku
         // může být k jednomu souboru několik a se stejným `id` by je `ForEach` nerozeznal.
         var result = unanchored.enumerated().map { offset, group in
             DiffRow.finding(id(of: file, "u\(offset)"), group, anchored: false)
         }
-        result.reserveCapacity(rows.count + mine.count)
+        result.reserveCapacity(rows.count + mine.count + myThreads.count)
         for row in rows {
             result.append(row)
-            guard case .line(_, let line) = row,
-                  let number = line.newNumber,
-                  let group = byLine[number]
-            else { continue }
-            result.append(.finding(id(of: file, "f\(number)"), group, anchored: true))
+            guard case .line(_, let line) = row, let number = line.newNumber else { continue }
+            if let group = byLine[number] {
+                result.append(.finding(id(of: file, "f\(number)"), group, anchored: true))
+            }
+            // Vlákna jdou **pod** nálezy téhož řádku: nález je to, kvůli čemu je okno
+            // otevřené, konverzace je kontext k němu.
+            for thread in threadsByLine[number] ?? [] {
+                result.append(.thread(id(of: file, "t\(thread.id)"), thread))
+            }
         }
         return result
     }

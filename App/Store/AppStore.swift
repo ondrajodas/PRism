@@ -32,6 +32,18 @@ final class AppStore {
     /// Diff **per PR**. Co v mapě není, se ještě nenačítalo.
     private(set) var diffStates: [PRIdentifier: DiffState] = [:]
 
+    /// Konverzace **per PR** — review ostatních, vlákna, komentáře. Co v mapě není, se
+    /// ještě nenačítalo.
+    private(set) var conversationStates: [PRIdentifier: ConversationState] = [:]
+
+    /// Vlákna, u kterých si uživatel překlikl rozbalení proti výchozímu stavu.
+    ///
+    /// Drží se **odchylka**, ne seznam rozbalených: výchozí stav se odvozuje z vlákna
+    /// (nevyřešené rozbalené, vyřešené sbalené), takže seznam rozbalených by se musel plnit
+    /// při každém načtení konverzace — a ruční obnovení by uživateli zahodilo, co si zavřel.
+    /// Rozhoduje `Policy.isThreadExpanded(_:toggled:)`.
+    private(set) var toggledThreads: Set<String> = []
+
     /// Rozbalený kontext **per soubor v PR**. Co v mapě není, nikdo nerozbaloval.
     private(set) var expansions: [FileExpansionKey: FileExpansion] = [:]
 
@@ -367,6 +379,75 @@ final class AppStore {
     private func hasCurrentDiff(for pullRequest: PullRequestSummary) -> Bool {
         guard case .loaded(_, let updatedAt) = diffStates[pullRequest.id] else { return false }
         return updatedAt == pullRequest.updatedAt
+    }
+
+    // MARK: - Konverzace
+
+    func conversationState(for pr: PRIdentifier) -> ConversationState? { conversationStates[pr] }
+
+    func conversation(for pr: PRIdentifier) -> Conversation? {
+        guard case .loaded(let conversation, _) = conversationStates[pr] else { return nil }
+        return conversation
+    }
+
+    /// Načte konverzaci vybraného PR. Cache stejná jako u diffu — na GitHub se sáhne znovu,
+    /// teprve když se změní `updatedAt`.
+    ///
+    /// **Netahá se při pollingu.** Konverzace pro všech N PR je tatáž N+1 past, kvůli které
+    /// se netahá ani detail: jeden tik by byl N podprocesů. Načítá se při výběru řádku.
+    func loadConversation(for pullRequest: PullRequestSummary) async {
+        let id = pullRequest.id
+        guard !hasCurrentConversation(for: pullRequest) else { return }
+        conversationStates[id] = .loading
+
+        do {
+            let conversation = try await gateway.fetchConversation(id: id)
+            conversationStates[id] = .loaded(conversation, updatedAt: pullRequest.updatedAt)
+        } catch is CancellationError {
+            // Maže se **jen** rozdělaný stav: mezitím spuštěné načtení už mohlo doběhnout
+            // a to se přepsat nesmí. Stejné pravidlo jako u diffu.
+            if conversationStates[id] == .loading { conversationStates[id] = nil }
+        } catch let error as GitHubError {
+            conversationStates[id] = .failed(error.userDescription)
+        } catch {
+            conversationStates[id] = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Ruční obnovení konverzace — zahodí uložený stav a načte znovu.
+    ///
+    /// Kotví se na to, že konverzace **zastarává jinak než diff**: kolega odpoví za minutu
+    /// a `updatedAt` se tím sice změní, ale seznam se obnovuje po minutách. Tlačítko je
+    /// levnější než čekat na tik.
+    func refreshConversation(for pullRequest: PullRequestSummary) async {
+        conversationStates[pullRequest.id] = nil
+        await loadConversation(for: pullRequest)
+    }
+
+    /// Rozdělané načítání se za platnou konverzaci **nepovažuje** — stejný důvod jako
+    /// u diffu: přeskočit to jediné, které běží, znamená prázdno v okně.
+    private func hasCurrentConversation(for pullRequest: PullRequestSummary) -> Bool {
+        guard case .loaded(_, let updatedAt) = conversationStates[pullRequest.id] else { return false }
+        return updatedAt == pullRequest.updatedAt
+    }
+
+    /// Vlákna, která se v diffu dají zakotvit — ta se kreslí jako bubliny.
+    func anchoredThreads(for pr: PRIdentifier) -> [ReviewThread] {
+        guard let conversation = conversation(for: pr) else { return [] }
+        let diff: Diff? = if case .loaded(let diff, _) = diffStates[pr] { diff } else { nil }
+        return Policy.threadsInTheDiff(conversation.threads.items, renderedIn: diff)
+    }
+
+    func isThreadExpanded(_ thread: ReviewThread) -> Bool {
+        Policy.isThreadExpanded(thread, toggled: toggledThreads)
+    }
+
+    func toggleThread(_ thread: ReviewThread) {
+        if toggledThreads.contains(thread.id) {
+            toggledThreads.remove(thread.id)
+        } else {
+            toggledThreads.insert(thread.id)
+        }
     }
 
     // MARK: - Sbalení souboru
@@ -983,6 +1064,19 @@ final class AppStore {
         // Sbalení je jen příznak, ale drží klíč s celým identifikátorem PR — bez úklidu by
         // množina rostla donekonečna.
         foldedFiles = foldedFiles.filter { wantedPullRequests.contains($0.pullRequest) }
+        // Konverzace se drží ze stejného důvodu jako diff — u PR s desítkami vláken to nejsou
+        // kilobajty. Rozdělané načítání přežije, aby si ho doběhlé volání nezapsalo zpátky.
+        conversationStates = conversationStates.filter {
+            wantedPullRequests.contains($0.key) || $0.value == .loading
+        }
+        // Překliknutá vlákna se uklízejí podle **zbylých konverzací**, ne podle PR: `id`
+        // vlákna svoje PR nenese, takže jinak by množina rostla donekonečna. Vlákna, jejichž
+        // konverzace v mapě zůstala, si stav podrží.
+        let liveThreads = Set(conversationStates.values.flatMap { state -> [String] in
+            guard case .loaded(let conversation, _) = state else { return [] }
+            return conversation.threads.items.map(\.id)
+        })
+        toggledThreads = toggledThreads.intersection(liveThreads)
         // Běžící review si osu drží: `reviewTasks` je pravda o tom, co ještě běží, a jeho
         // události by se jinak zapisovaly do mapy, ze které je někdo právě vyhodil.
         reviewTimelines = reviewTimelines.filter {

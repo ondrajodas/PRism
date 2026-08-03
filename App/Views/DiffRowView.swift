@@ -14,6 +14,12 @@ struct DiffRowView: View {
     /// Místo, na které se právě skočilo z tabulky.
     var highlighted: FindingHighlight?
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
+    /// Přihlášený uživatel — kvůli odlišení mých komentářů ve vláknech.
+    var viewer: String = ""
+    /// Je vlákno rozbalené? Rozhoduje store, ne tenhle view: buňka líného seznamu se při
+    /// odscrollování zahodí a vlastní `@State` by rozbalení zapomněl.
+    var isThreadExpanded: (ReviewThread) -> Bool = { _ in true }
+    var toggleThread: (ReviewThread) -> Void = { _ in }
 
     var body: some View {
         switch row {
@@ -35,6 +41,13 @@ struct DiffRowView: View {
                 isAnchored: anchored,
                 reveal: reveal,
                 isHighlighted: highlighted?.matches(group) ?? false
+            )
+        case .thread(_, let thread):
+            ThreadBubbleView(
+                thread: thread,
+                viewer: viewer,
+                isExpanded: isThreadExpanded(thread),
+                toggle: { toggleThread(thread) }
             )
         case .note(_, let text):
             note(text)

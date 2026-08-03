@@ -19,6 +19,12 @@ struct DiffView: View {
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     /// Místo, na které se právě skočilo z tabulky nálezů.
     var highlighted: FindingHighlight?
+    /// Vlákna konverzace, která mají v tomhle diffu kotvu. Vybral je volající
+    /// (`Policy.threadsInTheDiff`) — zastaralá patří do `Overview`, ne sem.
+    var threads: [ReviewThread] = []
+    var viewer: String = ""
+    var isThreadExpanded: (ReviewThread) -> Bool = { _ in true }
+    var toggleThread: (ReviewThread) -> Void = { _ in }
 
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
@@ -71,7 +77,11 @@ struct DiffView: View {
             of: file,
             revealed: state.revealed,
             content: state.content,
-            findings: showBubbles ? findings : []
+            findings: showBubbles ? findings : [],
+            // Vlákna se přepínačem `Nálezy` **neschovávají**. Ten přepínač je o nálezech
+            // naší aplikace; cizí komentář u kódu je důvod, proč se na PR člověk dívá,
+            // a schovat ho spolu s nálezy by ho připravilo o to hlavní.
+            threads: threads
         )
         return ForEach(rows) { row in
             DiffRowView(
@@ -81,7 +91,10 @@ struct DiffView: View {
                 contentFailure: state.failure,
                 reveal: { expansion.reveal(file, $0) },
                 highlighted: highlighted,
-                blockingCategories: blockingCategories
+                blockingCategories: blockingCategories,
+                viewer: viewer,
+                isThreadExpanded: isThreadExpanded,
+                toggleThread: toggleThread
             )
         }
     }
@@ -96,10 +109,13 @@ struct DiffView: View {
             }
             Spacer()
             if !findings.isEmpty {
-                Toggle("Bubliny", isOn: $showBubbles)
+                // Jmenuje se `Nálezy`, ne `Bubliny`: schovává **jen** nálezy, kdežto
+                // „bubliny“ jsou od #64 i vlákna konverzace. Chytilo se to při zkoušení —
+                // obecný název sliboval, že vypne obojí.
+                Toggle("Nálezy", isOn: $showBubbles)
                     .toggleStyle(.checkbox)
                     .font(.callout)
-                    .help("Zobrazit nálezy u řádků, kterých se týkají")
+                    .help("Zobrazit nálezy u řádků, kterých se týkají. Vlákna konverzace zůstanou.")
             }
             foldAllButton
             if let collapse = expansion.collapse {

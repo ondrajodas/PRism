@@ -391,6 +391,24 @@ Věci, které se u toho nemají rozbít:
 - **Nezakotvené bubliny se řadí podle čísla řádku.** Slovník pořadí nemá, takže by jinak
   mezi překresleními poskakovaly.
 
+Vlákna konverzace (#64) se vezou **stejnou cestou** jako nálezy (`DiffRow.thread`), ale
+v pěti věcech se chovají jinak:
+
+- **Vlákno bez řádku v aktuálním diffu se nekreslí vůbec.** Je to obráceně než u nálezu,
+  který mimo diff visí u hlavičky souboru — a je to schválně: nález je hlášený proti
+  **současnému** commitu, takže jeho číslo pořád platí, kdežto zastaralé vlákno má číslo ze
+  **starého headu** a bublina by sedla na cizí kód. Domov má v `Overview` (#72), vybírá je
+  `Policy.threadsOutsideTheDiff`. Kotví se proto podle `line`, **nikdy** podle `anchorLine`.
+- **Vlákna se na jednom řádku neslévají.** Nálezy ano (dva reviewery na jednom řádku dají
+  jednu bublinu s odznakem `2×`), vlákna ne: každé je vlastní konverzace s vlastním stavem
+  vyřešení. Dvě vlákna na řádku jsou dvě bubliny.
+- **Identita bubliny nese `id` vlákna z GitHubu**, ne pořadí. Po obnovení konverzace se
+  pořadí může změnit a stav rozbalení by přeskočil na jiné vlákno.
+- **Nález jde nad vlákno.** Nález je to, kvůli čemu je okno otevřené; konverzace je kontext.
+- **Přepínač `Nálezy` vlákna neschovává.** Jmenuje se tak od #64 právě proto — do té doby
+  `Bubliny`, což slibovalo, že vypne obojí (chytilo se to při zkoušení). Cizí komentář
+  u kódu je důvod, proč se na PR člověk dívá, takže se s nálezy schovávat nemá.
+
 ### `Config` (`App/Config/`)
 
 Nastavení ve dvou úrovních. Nahrazuje konstanty, které byly do #23 roztroušené po celé
@@ -862,6 +880,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek, rozbalovací řádek nebo poznámka |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout |
+| `ThreadBubbleView` | Vlákno konverzace u řádku; vyřešené sbalené s odznakem, moje komentáře odlišené |
 | `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah obarvený podle jazyka |
 | `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`, návrh verdiktu, tabulka s řazením, prokliky do diffu a zahození nálezů |
 | `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak |
@@ -1766,8 +1785,16 @@ věcí, na kterých stojí zbytek M6:
 Čtení konverzace hotové (issue #63) — `fetchConversation(id:)`, `ConversationQuery`,
 `GhConversationResponse` a modely `Conversation`, `ReviewThread`, `ThreadComment`,
 `SubmittedReview`. Jeden GraphQL dotaz za 1 bod přinese review ostatních, vlákna u řádků
-(s `isResolved` i `isOutdated`) a komentáře pod PR. **Vrstva bez UI** — vykreslí to #64
-(vlákna u kódu) a #72 (taby). Aplikace zůstává vůči GitHubu jen pro čtení.
+(s `isResolved` i `isOutdated`) a komentáře pod PR. Aplikace zůstává vůči GitHubu jen pro
+čtení.
+
+Vlákna u kódu hotová (issue #64) — `ThreadBubbleView`, `DiffRow.thread`,
+`App/Policy/ConversationPolicy.swift` a `conversationStates` v `AppStore`. Vlákno s řádkem
+v aktuálním diffu visí jako bublina pod svým řádkem, vyřešené je sbalené s odznakem
+`vyřešeno` a moje komentáře mají odznak `já`. Konverzace se načítá **při výběru řádku**
+(cache podle `updatedAt`, ruční obnovení), ne pollingem — pro všech N PR by to byla tatáž
+N+1 past, kvůli které se netahá ani detail. Zastaralá vlákna a konverzace bez kotvy čekají
+na `Overview` v #72.
 
 **Fáze 2 hotová** — `App/Checkout/`, vrstva bez UI. Bare klon do cache (#8), worktree per
 review i serializace souběžných příprav (#9) a eviction cache (#10). Aplikace si tedy umí

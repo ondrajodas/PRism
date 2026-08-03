@@ -136,10 +136,16 @@ a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí.
 **Rozsah v1 podle specifikace je hotový** — všech pět fází (viz [CLAUDE.md](CLAUDE.md)).
 Co přijde po něm, je v milnících M6 až M8.
 
-Z nich už je hotové čtení: aplikace umí **jedním GraphQL dotazem** načíst konverzaci pod PR
-— review ostatních, vlákna u řádků (včetně toho, která jsou vyřešená a která zastaralá)
-a komentáře. Vidět to zatím není, vykreslení přijde s taby. Pořád platí, že aplikace na
-GitHub nic neposílá.
+Z nich už je hotové čtení konverzace: **vlákna od kolegů visí jako bubliny u svých řádků**,
+vedle nálezů. Vyřešená jsou sbalená na jeden pruh s odznakem `vyřešeno` (nemažou se — je to
+historie), moje komentáře mají odznak `já` a z každého se dá odskočit na GitHub. Konverzace
+se načte při výběru PR a drží se, dokud se nezmění `updatedAt`; pollingem se netahá, aby
+z jednoho tiku nebylo N podprocesů.
+
+Vlákna, jejichž řádek v aktuálním diffu **není** (typicky zastaralá po novém commitu), se
+do kódu nekotví — jejich čísla platila pro starý head, takže by bublina sedla na cizí řádky.
+Domov dostanou v tabu `Overview` spolu s review ostatních a komentáři pod PR. Pořád platí,
+že aplikace na GitHub nic neposílá.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
