@@ -67,7 +67,7 @@ v diffu není, se neztratí: visí u hlavičky souboru a nabídne ten řádek do
 jdou vypnout přepínačem nad diffem.
 
 Pod diffem je **panel s taby**: řaditelná tabulka nálezů (kategorie, reviewer, místo,
-shrnutí) a Průběh. Panel je jediné místo, kde jsou vidět nálezy **bez místa
+shrnutí), Průběh a Moje review. Panel je jediné místo, kde jsou vidět nálezy **bez místa
 v kódu** — chybějící testy nebo poznámky k architektuře; kvůli nim samotné bubliny
 nestačí. Klik na řádek odscrolluje diff a bublinu na chvíli zvýrazní. Výška panelu se
 táhne za horní hranu a pamatuje se.
@@ -147,10 +147,32 @@ historie), moje komentáře mají odznak `já` a z každého se dá odskočit na
 se načte při výběru PR a drží se, dokud se nezmění `updatedAt`; pollingem se netahá, aby
 z jednoho tiku nebylo N podprocesů.
 
-**Rozdělané review se dá držet na disku** a přežije restart: tělo, verdikt a řádkové
-komentáře leží v `drafts/` vedle uložených nálezů, mimo dosah úklidu cache. Nový commit ho
-nesmaže, jen zablokuje odeslání — vlastní próza nezastarává tak rychle jako strojové nálezy.
-Skládat ho z okna zatím nejde — UI k tomu přijde s #66 a #68.
+**Rozdělané review se skládá v okně** a přežije restart: tělo, verdikt a řádkové komentáře
+leží v `drafts/` vedle uložených nálezů, mimo dosah úklidu cache. Nový commit ho nesmaže,
+jen zablokuje odeslání — vlastní próza nezastarává tak rychle jako strojové nálezy.
+
+Hlavní smyčka je **nález → komentář mými slovy**: v bublině nálezu je `Převzít do review`,
+které z jeho textu udělá můj komentář u toho řádku — a ten se dá přepsat. Převzatý nález
+nese odznak `v mém review`, takže se nedá vzít dvakrát; rozeznává se podle revieweera, aby
+u shody `2×` nesvítil odznak i u toho druhého. Vlastní poznámku přidá tlačítko, které se
+objeví po najetí na řádek diffu.
+
+**Co GitHub jako řádkový komentář nepřijme, jde do těla review jako odkaz na kód** —
+permalink na commit, který se vyrenderuje jako obarvený úryvek. Týká se to nálezů mimo diff
+a řádků, které v diffu nejsou (rozbalený kontext). Tlačítko to říká dopředu, včetně důvodu,
+a po kliknutí se panel přepne na tab, kam text spadl.
+
+V tabu **Moje review** je tělo, seznam všech řádkových komentářů a **výběr verdiktu bez
+předvyplnění** — návrh z nálezů se do něj nepřepisuje, aby se odhad aplikace nedal splést
+s mým rozhodnutím. Seznam komentářů je jediné úplné místo: komentář na řádku, který
+z diffu zmizel, se nemá kde ukázat jako bublina, ale tady je i s možností ho vyjmout.
+Prázdný komentář se neuloží a odeslání zablokuje, protože GitHub takový payload odmítne —
+a odmítne s ním celé review.
+
+Že je něco rozděláno, je vidět **v řádku seznamu i v detailu** (ikona pera). Draft psaný
+proti staršímu commitu má v tabu **banner** a odeslat se nedá; text zůstává.
+
+Odesílání samotné je #68 — tenhle panel jen skládá, co se pošle.
 
 Vlákna, jejichž řádek v aktuálním diffu **není** (typicky zastaralá po novém commitu), se
 do kódu nekotví — jejich čísla platila pro starý head, takže by bublina sedla na cizí řádky.
@@ -299,7 +321,7 @@ App/                      zdrojáky aplikace — target PRism
   Publish/                jediná cesta ven: odeslání review na GitHub, brána na sandbox
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
-  Store/                  AppStore — stav, který kreslí okno; ReviewStore — nálezy na disku
+  Store/                  AppStore — stav, který kreslí okno; ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky

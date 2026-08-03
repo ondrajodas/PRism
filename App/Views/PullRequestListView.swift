@@ -52,6 +52,18 @@ struct PullRequestListView: View {
                         icon: "exclamationmark.triangle"
                     )
                 }
+                // A o důvod víc u rozdělaného review: nález se dá dostat zpátky dalším
+                // během, ručně psaný text ne.
+                if store.unreadableDraftFiles > 0 {
+                    notice(
+                        "\(store.unreadableDraftFiles) rozdělaných review se nepodařilo přečíst.",
+                        icon: "exclamationmark.triangle"
+                    )
+                }
+                // Neuložené review se nesmí tvářit jako uložené — po restartu by bylo pryč.
+                if let failure = store.draftFailure {
+                    notice(failure, icon: "exclamationmark.triangle")
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -72,6 +84,8 @@ struct PullRequestListView: View {
         store.configurationFailure != nil
             || store.isAutomaticStopped
             || store.unreadableReviewFiles > 0
+            || store.unreadableDraftFiles > 0
+            || store.draftFailure != nil
     }
 
     private func notice(_ text: String, icon: String) -> some View {
@@ -113,10 +127,14 @@ struct PullRequestListView: View {
     private var list: some View {
         // Stavy se čtou **tady**, ne až uvnitř řádku: `List` staví řádky líně a mimo
         // sledování závislostí rodiče, takže změna stavu by seznam nemusela překreslit.
-        let rows = store.pullRequests.map { ($0, store.reviewState(for: $0.id)) }
+        // Platí to i pro rozdělané review — bez toho by indikátor naskočil až po
+        // překreslení z jiného důvodu.
+        let rows = store.pullRequests.map {
+            ($0, store.reviewState(for: $0.id), store.hasDraft($0.id))
+        }
 
-        return List(rows, id: \.0.id, selection: $store.selection) { pullRequest, state in
-            PullRequestRow(pullRequest: pullRequest, reviewState: state)
+        return List(rows, id: \.0.id, selection: $store.selection) { pullRequest, state, hasDraft in
+            PullRequestRow(pullRequest: pullRequest, reviewState: state, hasDraft: hasDraft)
         }
     }
 

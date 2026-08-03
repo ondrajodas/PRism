@@ -2,8 +2,9 @@ import SwiftUI
 
 /// Návrh verdiktu — **návrh, ne akce**.
 ///
-/// Tvrdá podmínka: aplikace na GitHub nic neposílá, takže na verdiktu nevisí žádné
-/// tlačítko. Proto je i vizuálně doporučení, ne příkaz.
+/// Na verdiktu nevisí žádné tlačítko a od #66 to platí o důvod víc: verdikt, který se
+/// odešle, se vybírá v tabu `Moje review` a **nepředvyplňuje se** odsud. Odhad aplikace se
+/// nemá dát splést s mým rozhodnutím, takže je tohle i vizuálně doporučení, ne příkaz.
 struct VerdictView: View {
     let record: ReviewRecord
     let blockingCategories: Set<String>
@@ -26,7 +27,7 @@ struct VerdictView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .background(color.opacity(0.08), in: .rect(cornerRadius: 6))
-        .help("Návrh podle nálezů. Aplikace na GitHub nic neposílá — rozhodnutí je na tobě.")
+        .help("Návrh podle nálezů. Co se opravdu odešle, vybíráš v tabu Moje review.")
     }
 
     private var verdict: ReviewVerdict? {

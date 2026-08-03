@@ -45,10 +45,23 @@ struct ReviewDraft: Hashable, Codable, Sendable {
     /// plnohodnotná varianta — a na vlastním PR jediná povolená (ověřeno u #62: `APPROVE`
     /// i `REQUEST_CHANGES` vrátí 422). Vnoření je totéž řešení jako u `SubmittedReview.State`:
     /// tři významy slova „review“ se nemají dát zaměnit ani při doplňování v editoru.
-    enum Verdict: String, Codable, Sendable {
+    enum Verdict: String, Codable, Sendable, CaseIterable {
         case approve = "APPROVE"
         case requestChanges = "REQUEST_CHANGES"
         case comment = "COMMENT"
+
+        /// Jak se verdikt píše v okně.
+        ///
+        /// U modelu ze stejného důvodu jako `PullRequestState.czechLabel`: `rawValue` je
+        /// anglický, protože ho takhle chce API, a překládat ho v každém view, které ho
+        /// ukazuje, znamená dva překlady, které se rozejdou.
+        var czechLabel: String {
+            switch self {
+            case .approve: "Schválit"
+            case .requestChanges: "Vyžádat změny"
+            case .comment: "Jen komentář"
+            }
+        }
     }
 
     /// Není v něm nic, co by se dalo odeslat.
@@ -93,13 +106,28 @@ struct ReviewDraftComment: Hashable, Codable, Sendable, Identifiable {
 
     /// Odkud se komentář vzal.
     ///
-    /// Drží se **jen to**, ne odkaz na nález: `Finding` identitu nemá a text nálezu je už
-    /// v `body`. Uložené jméno revieweera, které by nikdo nečetl, je přesně ta mrtvá váha,
-    /// kterou tenhle repozitář hlídá — kdyby ho #66 potřebovalo pro popisek, doplní se tam.
-    enum Origin: String, Codable, Sendable {
+    /// Převzatý nález si nese **jméno revieweera** — doplněno v #66, kde se to poprvé má kde
+    /// přečíst. Do #65 tady žádný odkaz na nález nebyl a bylo to tak správně: uložené jméno,
+    /// které nikdo nečte, je mrtvá váha. Čtenář se ale našel a je jich dvakrát: bublina hlásí
+    /// odznakem, že nález už v draftu je, a psát to jen podle kotvy `(cesta, řádek, strana)`
+    /// nejde. Dva reviewery na jednom řádku jsou běžné (odznak `2×`), takže by se odznak
+    /// objevil i u toho druhého — a nález, který vypadá jako převzatý, z odeslaného review
+    /// tiše vypadne.
+    ///
+    /// Odkaz na `Finding` to pořád není, protože `Finding` identitu nemá. Zbytková
+    /// nepřesnost: dva nálezy **téhož** revieweera na jednom řádku se od sebe nerozliší.
+    enum Origin: Hashable, Codable, Sendable {
         /// Napsal jsem ho sám.
         case own
         /// Vznikl převzetím nálezu od revieweera.
-        case finding
+        case finding(reviewer: String)
+
+        /// Kdo nález našel; `nil` u vlastního komentáře.
+        var reviewer: String? {
+            switch self {
+            case .own: nil
+            case .finding(let reviewer): reviewer
+            }
+        }
     }
 }

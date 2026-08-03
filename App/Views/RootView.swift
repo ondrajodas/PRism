@@ -52,6 +52,10 @@ struct RootView: View {
 
     var body: some View {
         content
+            // Podlaha okna. Patří sem, ne k jednotlivým stavům: se `.contentMinSize`
+            // v `PRismApp` je minimum obsahu i minimem okna, takže bez toho by se okno dalo
+            // stáhnout na pár bodů. Čísla jsou stejná jako u obrazovky s kontrolou prostředí.
+            .frame(minWidth: 700, minHeight: 400)
             .task { await model.check() }
     }
 
