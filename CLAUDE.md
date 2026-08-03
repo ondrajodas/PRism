@@ -203,8 +203,30 @@ to si od 2026-08-01 řídíš sám, viz pracovní postup.
 
 Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav se a zeptej se.
 
-1. **Nikdy nic neposílat na GitHub.** Žádné komentáře, review, approve, labely. Verdikt
-   je návrh zobrazený v aplikaci. Aplikace je vůči GitHubu **jen pro čtení**.
+1. **Jediná cesta ven** (od #67; do té doby tu stálo „nikdy nic neposílat na GitHub“).
+   Aplikace **umí** odeslat review — ale jedině přes `ReviewPublishing`, jedině na výslovné
+   potvrzení člověkem a **zatím jedině do sandboxu**. Pravidlo se skládá z šesti věcí a každá
+   z nich je kontrolovatelná:
+
+   1. **`GitHubGateway` zůstává bez zápisových metod.** Polling, diff, checkout ani reviewer
+      tedy nemají čím něco odeslat — read-only je pořád vidět z typu.
+   2. **`grep ReviewPublishing` vyjmenuje všechna místa, odkud to jde.** Má jich být jedno.
+      Protokol má jednu metodu; cokoli dalšího (komentář, approve mimo review, label) by byla
+      druhá cesta ven.
+   3. **Publisher není pole `AppStore`.** Vzniká uvnitř té jediné cesty, která odesílá,
+      a zaniká s ní — nemá ho kde uložit nikdo, kdo ho nemá mít.
+   4. **Odeslání si žádá hotový draft s `headSha`** a pre-flight ověří, že je to pořád hlava
+      PR. Approve na kód, který jsi neviděl, tak nejde poslat ani závodem s pushnutým
+      commitem. GitHub proti tomu **nechrání** — změřeno u #62, že review se zastaralým
+      `commit_id` přijme.
+   5. **Jedno atomické volání.** Buď odejde všechno, nebo nic; žádný částečně odeslaný stav
+      po pádu uprostřed. Změřeno u #62.
+   6. **Zatím jen do sandboxu** (`PublishScope`, jediné povolené repo je
+      `ondrajodas/prism-review-sandbox`). Vyřazení řeší **#107**. Seznam je zadrátovaný, ne
+      v konfiguraci: kdyby se dal změnit editací `config.json`, není to brána, ale nastavení.
+
+   Co se **nezměnilo**: návrh verdiktu z nálezů (`ReviewVerdict`) je pořád jen návrh
+   zobrazený v aplikaci a sám nic neodesílá. Odesílá jen člověk.
 2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit`, u `Bash` se uvádí
    jen `git` — a v `--disallowedTools` jsou `Bash(gh:*)` a `Bash(git push:*)`. `Skill` mezi
    povolenými je (#78); sám o sobě nic nespouští, ale skill, který se přes něj načte, si
@@ -231,8 +253,9 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 
 ## Architektura
 
-Sedm modulů. Tři, které sahají do vnějšího světa, jsou za protokolem, aby byly v testech
-nahraditelné fake implementací.
+Osm modulů. Čtyři, které sahají do vnějšího světa, jsou za protokolem, aby byly v testech
+nahraditelné fake implementací. Osmý (`ReviewPublisher`, #67) je jediný, který **zapisuje** —
+viz tvrdá podmínka č. 1.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
@@ -243,6 +266,7 @@ nahraditelné fake implementací.
 | `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu | — |
+| `ReviewPublisher` | **Jediná cesta ven**: odeslat rozdělané review na GitHub | `gh` CLI |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`. Mimo tuhle sedmičku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá
@@ -1353,6 +1377,50 @@ Konverzace (#63) jde **jedním GraphQL dotazem** přes `gh api graphql`:
 - **Jedna velikost stránky na všechny seznamy**, ať se komentáře uvnitř vláken neutnou dřív
   než vlákna sama.
 
+### `ReviewPublisher` (`App/Publish/`)
+
+**Jediná cesta, kterou z aplikace něco odejde na GitHub.** Vznikl v #67 a nahradil tvrdou
+podmínku „nikdy nic neposílat“ pravidlem, které je vidět z kódu — viz tvrdé podmínky výš.
+
+| Typ | Co dělá |
+|---|---|
+| `ReviewPublishing` | Protokol s **jedinou** metodou `submit(_:)` → `SubmittedReview` |
+| `GhReviewPublisher` | Implementace nad `gh`; pre-flight přes `GitHubGateway` |
+| `PublishScope` | Zadrátovaný seznam rep, kam se smí odeslat. Zatím jen sandbox (#107) |
+| `PublishError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
+| `PublishRequest` | Payload a argumenty — čisté funkce |
+| `GhSubmittedReview` | Tvar odpovědi `POST /pulls/{n}/reviews` |
+
+Věci, které se u toho nemají rozbít:
+
+- **Brána na sandbox je první kontrola v cestě**, ještě před sítí. Na cizí repo se nemá ani
+  ptát na detail.
+- **Pre-flight ověřuje `headSha` a stav PR, a při neshodě se nevolá nic.** GitHub proti
+  odeslání proti zastaralému commitu nechrání (změřeno u #62), takže je to naše práce.
+  Draft PR se odeslat **smí** — je to otevřený stav a na GitHubu běžné.
+- **Payload jde dočasným souborem**, protože `ProcessRunning` neumí stdin — a přidávat mu
+  metodu jen kvůli tomuhle by ji musely dopsat všechny fake implementace v testech, tedy
+  stejná úvaha, kvůli které je streamování vlastní protokol. Soubor má práva `0600` (je v něm
+  nezveřejněný text review) a maže se v `defer`, ať odeslání dopadne jakkoli.
+
+  Dvě věci, na kterých u toho záleží: **práva se nastavují na prázdný soubor a obsah se píše
+  teprve pak**, takže text review na disku nikdy neexistuje se širšími právy — a zápis proto
+  **není `.atomic`**, protože ten píše vedle a přejmenováním by práva zahodil. A **selhání
+  zápisu soubor uklidí samo**, protože `defer` u volajícího se registruje až po návratu.
+- **Zrušení se propaguje jako `CancellationError`**, ne jako `toolUnavailable`. Jinak by okno
+  ukázalo „gh se nepodařilo spustit“ nad odesláním, které si člověk sám zrušil — a je to
+  totéž pravidlo, jaké drží `ReviewRunner`.
+- **Odpověď se čte typovaně a vlastním DTO.** REST používá `user` a `submitted_at`, kdežto
+  GraphQL v #63 `author` a `submittedAt`; sdílet DTO by znamenalo, že změna jednoho API mění
+  druhé. `id` je v RESTu číslo, v GraphQL řetězec — `SubmittedReview` drží řetězec.
+- **Nečitelná odpověď je vlastní chyba** (`malformedResponse`), ne ticho: review mohlo odejít
+  a z hlášky musí být vidět, že se to má zkontrolovat na GitHubu.
+- **Klasifikace zná i `Path could not be resolved`**, ne jen `Line …`. Narazilo se na to při
+  ověřování #67 proti živému API a je to vlastní případ, protože rada „přesuň komentář na
+  řádek uvnitř diffu“ je u chybějícího souboru nepravdivá.
+- **Ke každé chybě patří, co s ní jde udělat** (`userDescription`). Chyba, ze které nevyplývá
+  další krok, je jen zpráva o smůle.
+
 ### Vrstva `Environment` (`App/Environment/`)
 
 Pod těmi sedmi moduly leží podpůrná vrstva — přístup ke stroji, který `GitHubGateway`,
@@ -1585,6 +1653,16 @@ Právě proto tam eskalace na `SIGKILL` je.
   test visel místo aby spadl. Součástí je `runningReviews` **napříč PR**: na tom čísle visí,
   jestli se aplikace před zavřením zeptá. Samotný dialog se unit-testovat nedá (modální
   `NSAlert`), ověřil se na běžící aplikaci — viz níž.
+- **`ReviewPublisher`** — proti `FakeProcessRunner` a fake gateway. Úklid dočasného souboru
+  se ověřuje **cestou z konkrétní invokace**, ne obsahem systémové dočasné složky: Swift
+  Testing pouští testy paralelně, takže porovnání „před a po“ nad `/tmp` je flaky (chytilo se
+  to v review #67). Nejdůležitější testy
+  netvrdí, co se odeslalo, ale že se **nic neodeslalo**: repo mimo sandbox, neshoda `headSha`,
+  zavřený PR a draft bez verdiktu musí skončit dřív, než se sáhne na `gh` (kontroluje se
+  `runner.invocations.isEmpty`). Klasifikace chyb jde tabulkou nad **skutečnými** hláškami
+  z fixtures (`review-error-*.json`), úspěch nad skutečnou odpovědí (`review-submitted.json`)
+  — obojí z živého API. Tvar payloadu je ověřený tím, že týž payload API u #67 přijalo.
+  `FakeReviewPublisher` v `Tests/Publish/` nic neodesílá a počítá, co po něm kdo chtěl.
 - **`ReviewDraftStore`** — proti skutečné dočasné složce, jako `ReviewStore`. To hlavní je
   „draft přežije restart“, tedy načtení **novým** storem nad tou samou složkou. Plus prázdný
   draft, který se maže; nečitelný soubor, který se ve výpisu počítá a u konkrétního PR vyhodí
@@ -1868,6 +1946,12 @@ věcí, na kterých stojí zbytek M6:
 (s `isResolved` i `isOutdated`) a komentáře pod PR. Aplikace zůstává vůči GitHubu jen pro
 čtení.
 
+`ReviewPublisher` hotový (issue #67) — `App/Publish/`. **Aplikace umí odeslat review**, a tím
+se změnila tvrdá podmínka č. 1 na pravidlo „jediná cesta ven“ (viz Tvrdé podmínky). Odesílá se
+jedním atomickým voláním, po pre-flightu na `headSha` a stav PR, a **zatím jen do sandboxu**
+(`PublishScope`, vyřazení je #107). Vrstva bez UI — tlačítko přijde s #68, takže z okna to
+zatím nikdo nespustí.
+
 Model draftu hotový (issue #65) — `ReviewDraft`, `ReviewDraftComment`, `ReviewDraftStore`
 a `App/Policy/DraftPolicy.swift`. Rozdělané review přežije restart, novým commitem
 zastarává (ale nemaže se) a `Policy` umí říct, na které řádky diffu se vůbec dá komentovat.
@@ -1971,10 +2055,10 @@ Plánované fáze:
 
 Tím **končí rozsah v1** podle specifikace. Za ním:
 
-6. **Review na GitHub** (M6) — odesílání review z okna. Tenhle milník **ruší tvrdou
-   podmínku č. 1** a nahrazuje ji pravidlem „jediná cesta ven“ (#67). Dokud není hotový,
-   podmínka platí beze změny. **Spike #62 hotový** — viz výš a
-   [`docs/github-review-api.md`](docs/github-review-api.md).
+6. **Review na GitHub** (M6) — odesílání review z okna. Tvrdou podmínku č. 1 **už nahradil**
+   pravidlem „jediná cesta ven“ (#67), zatím s bránou na sandbox (#107). Hotové: spike #62
+   (viz [`docs/github-review-api.md`](docs/github-review-api.md)), model draftu #65
+   a publisher #67. Zbývá skládání draftu (#66), sheet (#68) a přenesení na nový commit (#69).
 7. **Konverzace, komentáře a taby** (M7) — cizí komentáře a vlákna v okně, odpovídání do
    nich a rozvržení jako na GitHubu (taby `Overview` / `Files changed`).
 

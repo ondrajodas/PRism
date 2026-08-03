@@ -1,0 +1,40 @@
+{
+  "id": 4844232301,
+  "node_id": "PRR_kwDOTrIEts8AAAABIL0ebQ",
+  "user": {
+    "login": "ondrajodas",
+    "id": 12143866,
+    "node_id": "MDQ6VXNlcjEyMTQzODY2",
+    "avatar_url": "https://avatars.githubusercontent.com/u/12143866?u=4f54cab57987f5442f70e89d2f473da06a137b91&v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/ondrajodas",
+    "html_url": "https://github.com/ondrajodas",
+    "followers_url": "https://api.github.com/users/ondrajodas/followers",
+    "following_url": "https://api.github.com/users/ondrajodas/following{/other_user}",
+    "gists_url": "https://api.github.com/users/ondrajodas/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/ondrajodas/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/ondrajodas/subscriptions",
+    "organizations_url": "https://api.github.com/users/ondrajodas/orgs",
+    "repos_url": "https://api.github.com/users/ondrajodas/repos",
+    "events_url": "https://api.github.com/users/ondrajodas/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/ondrajodas/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "body": "Ověření #67: payload skládaný aplikací.",
+  "state": "COMMENTED",
+  "html_url": "https://github.com/ondrajodas/prism-review-sandbox/pull/4#pullrequestreview-4844232301",
+  "pull_request_url": "https://api.github.com/repos/ondrajodas/prism-review-sandbox/pulls/4",
+  "author_association": "OWNER",
+  "_links": {
+    "html": {
+      "href": "https://github.com/ondrajodas/prism-review-sandbox/pull/4#pullrequestreview-4844232301"
+    },
+    "pull_request": {
+      "href": "https://api.github.com/repos/ondrajodas/prism-review-sandbox/pulls/4"
+    }
+  },
+  "submitted_at": "2026-08-03T12:59:03Z",
+  "commit_id": "4a7469f930880b0683354191d315bacfe941ef93"
+}

@@ -11,9 +11,13 @@ Hranol rozloží jeden paprsek na spektrum. Tahle aplikace dělá totéž s pull
 pustí na něj několik nezávislých reviewerů a jejich nálezy schválně neslévá do jednoho
 názoru.
 
-> **Nikdy nic neposílá na GitHub.** Žádné komentáře, žádná review, žádné approve.
-> Verdikt *approve / request changes* je návrh zobrazený v aplikaci. Je to tvrdá
-> podmínka návrhu, ne zjednodušení první verze.
+> **Na GitHub vede jediná cesta a otevírá ji jen člověk.** Aplikace umí odeslat review,
+> ale výhradně přes jeden modul, na výslovné potvrzení a proti commitu, který jsi opravdu
+> viděl. Nic se neodesílá samo — ani návrh verdiktu, ani reviewer.
+>
+> **Zatím navíc jen do testovacího sandboxu** (viz [#107](https://github.com/ondrajodas/PRism/issues/107)):
+> pravidlo je nové a než se pustí na PR kolegů, projde si provozem tam, kde omyl nikoho
+> nestojí čas.
 
 ## Stav
 
@@ -87,7 +91,8 @@ rebuildu neobchází a aplikaci ukončuje tou samou cestou jako ⌘Q.
 
 Nad diffem jsou **chipy reviewerů**: u každého je vidět, co udělal (`3 nálezy`, `čisté`,
 `běží`, `selhalo`, `nejisté`) a kliknutím se jeho nálezy schovají z bublin i z tabulky.
-Vpravo je **návrh verdiktu** — je to doporučení, ne akce; aplikace na GitHub nic neposílá.
+Vpravo je **návrh verdiktu** — je to doporučení, ne akce. Sám nic neodešle; odeslat review
+umí jedině člověk, a jedinou cestou (viz úvod).
 Filtr návrhem nehýbe, aby se schováním revieweera nedal „vyrobit“ approve.
 
 V tabu **Průběh** běží časová osa toho, co reviewer právě dělá — který soubor čte, co
@@ -145,13 +150,11 @@ z jednoho tiku nebylo N podprocesů.
 **Rozdělané review se dá držet na disku** a přežije restart: tělo, verdikt a řádkové
 komentáře leží v `drafts/` vedle uložených nálezů, mimo dosah úklidu cache. Nový commit ho
 nesmaže, jen zablokuje odeslání — vlastní próza nezastarává tak rychle jako strojové nálezy.
-Skládat a odesílat ho zatím nejde; UI k tomu přijde s M6, a do té doby aplikace na GitHub
-pořád nic neposílá.
+Skládat ho z okna zatím nejde — UI k tomu přijde s #66 a #68.
 
 Vlákna, jejichž řádek v aktuálním diffu **není** (typicky zastaralá po novém commitu), se
 do kódu nekotví — jejich čísla platila pro starý head, takže by bublina sedla na cizí řádky.
-Domov dostanou v tabu `Overview` spolu s review ostatních a komentáři pod PR. Pořád platí,
-že aplikace na GitHub nic neposílá.
+Domov dostanou v tabu `Overview` spolu s review ostatních a komentáři pod PR.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -161,7 +164,7 @@ aktuálně je.
   návrh včetně záznamu rozhodnutí a zamítnutých alternativ
 - [`docs/claude-cli.md`](docs/claude-cli.md) — ověřené chování `claude` CLI
 - [`docs/github-review-api.md`](docs/github-review-api.md) — ověřené chování zápisového
-  review API GitHubu; podklad pro milník M6, ve kterém aplikace přestane být jen pro čtení
+  review API GitHubu; podklad pro odesílání review (M6)
 - [CLAUDE.md](CLAUDE.md) — pravidla pro práci v tomto repu
 
 ## Jak to funguje
@@ -293,6 +296,7 @@ App/                      zdrojáky aplikace — target PRism
   Config/                 config.json: globální default, override per repo, čtení a zápis
   Diff/                   parsování unified diffu na soubory, hunky a řádky
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka
+  Publish/                jediná cesta ven: odeslání review na GitHub, brána na sandbox
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno; ReviewStore — nálezy na disku
@@ -310,6 +314,7 @@ Tests/                    unit testy — target PRismTests
   Policy/                 testy čistých funkcí
   Review/                 testy parseru a runneru proti skutečným streamům
   Polling/                testy pollingu proti fake gateway a fake času
+  Publish/                testy odesílání — hlavně že se při neshodě neodešle nic
   Store/                  testy AppStore a persistence nálezů
   Views/                  testy řádků tabulky a modelu okna nastavení
   Syntax/                 testy detekce jazyka a obarvení kódu
