@@ -728,6 +728,15 @@ Věci, které se u toho nemají rozbít:
   přestal cokoli najít.
 - **Do rozpočtu se počítají i stromy.** Klon je `--filter=blob:none`, takže materializované
   soubory leží právě v nich — měřit jen klon znamená měřit menšinu.
+- **`FileManager.enumerator` nesestupuje do odkazovaných složek, ale odkaz na soubor vrátí.**
+  Změřeno testem u #65, ne převzato — a je to **přesnější** než dřívější formulace „výpis
+  z disku sem symlinkem ven nedostane“. Odkaz na složku se opravdu nesleduje; odkaz na
+  *soubor* se ale vylistuje a přečetl by se **mimo cache**. `ReviewDraftStore` ho proto
+  přeskakuje a počítá. **`ReviewStore` to zatím nedělá** — je na to #106.
+
+  Pozor na past: kontrola „leží soubor tam, kam patří“ postavená na rozbalení symlinků na
+  **obou** stranách takový odkaz nezachytí, protože cíl vyjde rovný cíli. Symlink se musí
+  odmítnout výslovně (`.isSymbolicLinkKey`).
 - **Maže se jen uvnitř cache.** Kdo maže podle toho, co našel na disku, si před smazáním
   ověří, že cesta po rozbalení symlinků pořád leží pod kořenem — `removeItem` přes odkaz
   v rodičovské komponentě smaže **cíl**, ne odkaz. Odpovídá na to `CacheLayout.contains`,

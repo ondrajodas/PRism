@@ -215,6 +215,58 @@ struct ReviewDraftStoreTests {
         await #expect(throws: ReviewDraftStoreError.self) { try await store().load(for: pr) }
     }
 
+    // MARK: - Symlinky
+
+    /// Tvrzení z `CLAUDE.md` (u `ReviewStore.cleanUp`), že `FileManager.enumerator`
+    /// **nesestupuje do odkazovaných složek** — ověřené, ne převzaté. Kdyby to přestalo
+    /// platit, čtení by vylezlo mimo cache.
+    @Test("Enumerace nesestupuje do odkazované složky")
+    func doesNotDescendIntoASymlinkedDirectory() async throws {
+        let outside = directory.url.appending(path: "mimo-cache")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        try encoder.encode(ReviewDraft(pullRequest: pr, headSha: "x", body: "mimo"))
+            .write(to: outside.appending(path: "42.json"))
+
+        let inside = layout.drafts(of: pr.repo)
+        try FileManager.default.createDirectory(at: inside, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: inside.appending(path: "odkaz"),
+            withDestinationURL: outside
+        )
+
+        let loaded = try await store().load()
+
+        #expect(loaded.drafts.isEmpty, "enumerace sestoupila do odkazované složky")
+        #expect(loaded.unreadable == 0, "něco se přečetlo mimo cache")
+    }
+
+    /// Odkaz na **soubor** enumerace vrátí — a `isInPlace` ho **nezachytí**, protože rozbaluje
+    /// symlinky na obou stranách, takže cíl vyjde rovný cíli. Změřeno testem, který nejdřív
+    /// spadl. Proto se symlinky přeskakují výslovně.
+    @Test("Odkaz na soubor mimo cache se do výpisu nedostane")
+    func rejectsASymlinkedDraftFile() async throws {
+        let outside = directory.url.appending(path: "cizi.json")
+        let encoder = JSONEncoder()
+        try encoder.encode(ReviewDraft(pullRequest: pr, headSha: "x", body: "mimo"))
+            .write(to: outside)
+
+        let inside = layout.drafts(of: pr.repo)
+        try FileManager.default.createDirectory(at: inside, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: layout.draftFile(for: pr),
+            withDestinationURL: outside
+        )
+
+        let loaded = try await store().load()
+
+        #expect(loaded.drafts.isEmpty)
+        #expect(loaded.unreadable == 1, "odkaz se má spočítat, ne vypsat")
+
+        // A totéž u čtení jednoho PR — tichý průchod by přečetl soubor mimo cache.
+        await #expect(throws: ReviewDraftStoreError.self) { try await store().load(for: pr) }
+    }
+
     // MARK: - Mazání
 
     @Test("Zahození draft smaže a jde zmáčknout dvakrát")

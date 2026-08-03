@@ -9,11 +9,15 @@ import Foundation
 enum ReviewDraftStoreError: LocalizedError {
     /// V souboru jednoho PR leží draft jiného.
     case foreignDraft(expected: PRIdentifier, found: PRIdentifier)
+    /// Na místě draftu je symbolický odkaz — čtení by šlo mimo cache.
+    case symlinkedDraft(pullRequest: PRIdentifier)
 
     var errorDescription: String? {
         switch self {
         case .foreignDraft(let expected, let found):
             "V souboru draftu pro \(expected) leží rozdělané review pro \(found)."
+        case .symlinkedDraft(let pullRequest):
+            "Na místě draftu pro \(pullRequest) je symbolický odkaz. Aplikace čte jen svoje soubory."
         }
     }
 }
@@ -72,6 +76,12 @@ actor ReviewDraftStore {
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
             return nil
         }
+        // Symlink by přečetl soubor **mimo cache**. Aplikace si ho sama nevyrobí, ale
+        // „nikdy nesahat na uživatelovy soubory“ je tvrdá podmínka a nemá viset na tom, že
+        // si to někdo pamatuje. Stejná kontrola je ve výpisu.
+        guard !isSymbolicLink(url) else {
+            throw ReviewDraftStoreError.symlinkedDraft(pullRequest: pr)
+        }
         let draft = try read(at: url)
         // Jméno souboru není pravda — tou je `pullRequest` uvnitř. Rozchod by znamenal, že
         // se cizí rozdělané review nabídne k odeslání na tenhle PR.
@@ -88,8 +98,9 @@ actor ReviewDraftStore {
     /// `load(for: X)` by ho nenašel — a nekonzistence mezi „vidím ho“ a „nedá se otevřít“
     /// je horší než počítadlo, které o anomálii aspoň řekne.
     func load() throws -> Loaded {
-        var loaded = Loaded()
-        for url in draftFiles() {
+        let found = draftFiles()
+        var loaded = Loaded(unreadable: found.symlinks)
+        for url in found.files {
             guard let draft = try? read(at: url), isInPlace(url, for: draft.pullRequest) else {
                 loaded.unreadable += 1
                 continue
@@ -145,16 +156,31 @@ actor ReviewDraftStore {
     }
 
     /// Chybějící složka není chyba — do prvního draftu žádná neexistuje.
-    private func draftFiles() -> [URL] {
+    ///
+    /// **Symlinky se přeskočí a spočítají.** Odkaz na *složku* enumerace nesleduje (změřeno
+    /// testem, ne převzato), ale odkaz na *soubor* vrátí — a ten by se přečetl **mimo cache**.
+    /// `isInPlace` to nezachytí, protože rozbaluje symlinky na obou stranách, takže cíl vyjde
+    /// rovný cíli. Počítá se, protože něco v cache leží a nedá se z toho draft udělat; tiché
+    /// přeskočení by anomálii schovalo.
+    private func draftFiles() -> (files: [URL], symlinks: Int) {
         guard let enumerator = FileManager.default.enumerator(
             at: layout.drafts,
-            includingPropertiesForKeys: nil
-        ) else { return [] }
+            includingPropertiesForKeys: [.isSymbolicLinkKey]
+        ) else { return ([], 0) }
 
         var files: [URL] = []
+        var symlinks = 0
         for case let url as URL in enumerator where url.pathExtension == "json" {
+            if isSymbolicLink(url) {
+                symlinks += 1
+                continue
+            }
             files.append(url)
         }
-        return files
+        return (files, symlinks)
+    }
+
+    private func isSymbolicLink(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true
     }
 }
