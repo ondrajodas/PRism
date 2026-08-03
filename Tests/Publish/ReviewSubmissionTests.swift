@@ -43,9 +43,15 @@ struct ReviewSubmissionTests {
         )
     }
 
-    /// Závora, kterou test drží odeslání rozběhnuté. Točení přes `Task.yield()`, ne
-    /// continuation: test, který se nedočká, uvízne — a to je srozumitelnější než náhodné
-    /// padání. Stejná cesta jako u testů `ReviewRunneru`.
+    /// Závora, kterou test drží odeslání rozběhnuté. Čeká se **odmlkami, ne `Task.yield()`**.
+    ///
+    /// Točení přes `yield()` je jinde v testech tohohle repa běžné, ale tady by běželo
+    /// **na `MainActoru`** (`ReviewSubmission` je `@MainActor`) a **bez horní hranice** —
+    /// dokud závoru někdo nepustí. Swift Testing pouští suity paralelně, takže takový hot
+    /// spin ubírá čas všem ostatním: `SubprocessStreamerTests` na něm začaly padat, protože
+    /// zrušený proces se nestihl zabít dřív, než mu doběhl `sleep 1`. Millisekundová odmlka
+    /// vlákno pustí a vlastnost, kvůli které se `yield()` používá, zůstává — test, který se
+    /// nedočká, uvízne, což je srozumitelnější než náhodné padání.
     private final class AsyncGate: @unchecked Sendable {
         private let lock = NSLock()
         private var isOpen = false
@@ -53,7 +59,7 @@ struct ReviewSubmissionTests {
         func open() { lock.withLock { isOpen = true } }
 
         func wait() async {
-            while !lock.withLock({ isOpen }) { await Task.yield() }
+            while !lock.withLock({ isOpen }) { try? await Task.sleep(for: .milliseconds(1)) }
         }
     }
 
@@ -250,7 +256,7 @@ struct ReviewSubmissionTests {
         publisher.hold { await release.wait() }
 
         async let first: Void = submission.send()
-        while publisher.submitted.isEmpty { await Task.yield() }
+        while publisher.submitted.isEmpty { try? await Task.sleep(for: .milliseconds(1)) }
 
         #expect(submission.state == .sending)
         #expect(!submission.canSend)

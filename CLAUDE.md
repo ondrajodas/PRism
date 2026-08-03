@@ -1938,6 +1938,13 @@ Právě proto tam eskalace na `SIGKILL` je.
   Dvě věci se testují tabulkou chyb, protože jsou to celé **třídy**, ne jednotlivé případy:
   po které chybě se smí zkusit znovu a po které ne (`mightHaveReachedGitHub`).
 
+  Čeká se u nich **odmlkami, ne `Task.yield()`**, na rozdíl od zbytku repa. Ten spin by běžel
+  na `MainActoru` (`ReviewSubmission` je `@MainActor`) a **bez horní hranice** — dokud závoru
+  někdo nepustí. Swift Testing pouští suity paralelně, takže z toho začaly padat
+  `SubprocessStreamerTests`: zabíjený proces se nestihl zabít dřív, než mu doběhl `sleep 1`.
+  Změřeno, ne odhadnuto — na `main` procházely, na branchi padaly dvakrát za sebou a po
+  záměně za `Task.sleep(for: .milliseconds(1))` je sada třikrát po sobě zelená.
+
   A **dvojklik se pouští naráz** (`async let` dvakrát), ne s čekáním na to, až první odeslání
   poběží. Zákaz druhého odeslání drží jen na tom, že `state = .sending` leží před prvním
   `await`; test, který na první odeslání počká, ten závod zavře a přesunutí toho řádku by mu
