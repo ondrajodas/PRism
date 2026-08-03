@@ -42,13 +42,13 @@ struct AutoRunLedgerTests {
         #expect(await ledger(workspace, time: time).take(limit: 1))
     }
 
-    @Test("Zbývající počet klesá")
-    func reportsWhatIsLeft() async throws {
+    @Test("Spotřeba roste")
+    func reportsWhatWasUsed() async throws {
         let ledger = ledger(try TemporaryDirectory(), time: FakeTimeSource())
 
-        #expect(await ledger.remaining(limit: 3) == 3)
+        #expect(await ledger.used() == 0)
         _ = await ledger.take(limit: 3)
-        #expect(await ledger.remaining(limit: 3) == 2)
+        #expect(await ledger.used() == 1)
     }
 
     /// Nula znamená vypnuto, ne „bez omezení“ — opačná volba by z překlepu udělala
@@ -58,7 +58,7 @@ struct AutoRunLedgerTests {
         let ledger = ledger(try TemporaryDirectory(), time: FakeTimeSource())
 
         #expect(!(await ledger.take(limit: 0)))
-        #expect(await ledger.remaining(limit: 0) == 0)
+        #expect(await ledger.used() == 0)
     }
 
     /// Pojistka, kterou vypne rozbitý disk, není pojistka: kdyby se počítalo jen podle

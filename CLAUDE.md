@@ -747,8 +747,16 @@ Automatický režim (#25):
 - **Nulový `autoRunsPerDay` znamená vypnuto**, ne „bez omezení“. Je to obrácená volba než
   u nuly souběžných session, a schválně: tam překlep nesmí aplikaci umlčet, tady nesmí
   z překlepu vzniknout neomezené utrácení.
-- **Rozpočet se bere před spuštěním, ne po doběhnutí.** Session je utracená v okamžiku, kdy
-  běh začne; počítat až doběhlé by pustilo dvacet běhů naráz.
+- **Rozpočet se bere až za bránou na `headSha`.** Session je utracená v okamžiku, kdy běh
+  začne, takže počítat až doběhlé by pustilo dvacet běhů naráz — ale strhávat ho už
+  v plánovači je taky špatně: počítalo by i běhy, které se po dotažení detailu zahodí.
+  A protože se `consideredForAutomation` po restartu vynuluje, spálil každý restart
+  rozpočet za všechna auto PR, aniž by se cokoli spustilo. **Šest z dvaceti za jedno
+  dopoledne**, než si toho někdo všiml. Vyčerpaný rozpočet zastaví plánování ještě dřív,
+  než se sáhne na síť; PR, který rozpočet odmítne, se odznačí, aby o review nepřišel zítra.
+- **Pozastavení se počítá při vykreslení, ne při tiku.** Drží se **spotřeba**, ne zbytek:
+  limit se dá v nastavení změnit kdykoli a snímek „zbývá 0“ by po jeho zvednutí tvrdil, že
+  je pozastaveno, až do dalšího tiku. Chytilo se to na běžící aplikaci.
 - **Draft se sám nereviewuje.** Autor na něm pracuje a každý push by stál session. Ruční
   spuštění zůstává. **Změna proti zadání #25**, které to neřešilo.
 - **Ruší se jen automatická review.** PR, který zmizel ze seznamu (zavřený, mergnutý),
@@ -823,6 +831,7 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `LanguageSkillsEditor` | Mapa „programovací jazyk → sada skillů“; ukazuje jen nastavené jazyky |
 | `RepositorySettingsView` | Seznam rep vlevo, režim a override vpravo |
 | `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
+| `SettingsNumberField` | Číslo se šipkami **i** přepsáním; ořezává na povolený rozsah |
 
 Věci, které se u toho nemají rozbít:
 
@@ -843,6 +852,10 @@ Věci, které se u toho nemají rozbít:
   store se nezměnil, takže do `sync` přijde stará konfigurace a bez toho by vypadala jako
   změna zvenčí a přepsala rozepsanou práci. Zároveň by `flush()` viděl `storage == settled`
   a nezkusil to znovu.
+- **Čísla se zadávají šipkami i přepsáním.** Samotný `Stepper` nutí doklikat se z 60 na
+  600 po jedné, samotné pole nutí psát i tam, kde se mění o krok. A **rozsah musí hlídat
+  pole, ne jen `Stepper`** — ten za hranici nepustí, kdežto přepsaný rozpočet na `-5` by se
+  propsal do konfigurace a odtud do chování aplikace.
 - **Placeholder se předává `prompt:`, ne prvním argumentem `TextField`u.** Ve `Form`u
   s `.formStyle(.grouped)` se první argument vykreslí jako **popisek vlevo od pole**, ne
   jako nápověda uvnitř — u vyplněného řádku to pak vypadá jako dvě hodnoty vedle sebe.
@@ -861,8 +874,17 @@ Věci, které se u toho nemají rozbít:
   při prvním zkoušení. Delší popisek je levnější než vysvětlování.
 - **Hlavní okno se rozostří jen tehdy, když je nastavení opravdu vepředu.** Okno je
   nemodální, takže kliknutím zpátky do seznamu se v něm dá dál pracovat — a rozostřené
-  okno, ve kterém zrovna píšu, je horší než žádný efekt. Rozhoduje `controlActiveState`,
-  příznak `isSettingsOpen` žije v `AppStore` (dvě scény si to nemají kde říct jinudy).
+  okno, ve kterém zrovna píšu, je horší než žádný efekt. Příznak `isSettingsOpen` žije
+  v `AppStore` (dvě scény si to nemají kde říct jinudy).
+
+  **Hlásí to okno nastavení o sobě** (`isSettingsFrontmost`), ne hlavní okno o něm. Hlavní
+  okno umí přes `controlActiveState` říct jen „nemám fokus“ — a to je pravda i tehdy, když
+  je vepředu úplně jiná aplikace, takže se rozostřovalo bez důvodu. Opačná podmínka
+  (`== .active`) nefunguje taky: neaktivní okno hlásí `.inactive`, ne `.active`, takže se
+  nerozostřilo nikdy. Zeptat se toho okna, které fokus má, je jediná varianta, co drží.
+
+  **Šednutí textu v neaktivním okně s tímhle nesouvisí** — to kreslí macOS a chová se tak
+  i Finder a Mail. Ověřeno tím, že text šedne i ve stavu, kdy se rozostření vůbec nespouští.
 
 Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
 

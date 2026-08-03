@@ -41,9 +41,13 @@ actor AutoRunLedger {
         return true
     }
 
-    /// Kolik dnes ještě zbývá. Pro UI, které má říct, že je pozastaveno.
-    func remaining(limit: Int) -> Int {
-        max(0, limit - today().count)
+    /// Kolik review dnes automat spustil.
+    ///
+    /// Vrací se **spotřeba, ne zbytek**: zbytek závisí na limitu, a ten se dá v nastavení
+    /// změnit kdykoli. Kdyby se z toho udělal snímek „zbývá 0“, držel by se až do dalšího
+    /// tiku i po tom, co se limit zvedne — a UI by tvrdilo, že je pozastaveno, i když není.
+    func used() -> Int {
+        today().count
     }
 
     /// Dnešek podle **místního** dne — je to lidský den, ne UTC.
