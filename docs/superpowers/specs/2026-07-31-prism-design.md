@@ -471,8 +471,21 @@ slova a proměnné — tolik, aby se v diffu chytlo oko.
 - **Swift 6 language mode od prvního commitu.** Aplikace bude žonglovat s podprocesy a
   souběžnými review běhy; strict concurrency zapnutá dodatečně by znamenala refaktoring
   hotového kódu.
-- **Ad-hoc podpis** (`CODE_SIGN_IDENTITY = "-"`, styl Manual). Build nepotřebuje Apple
-  účet ani tým, což drží `xcodebuild` reprodukovatelný na čistém stroji.
+- **Podpis vlastním certifikátem, ad-hoc jako fallback** (#61, styl Manual). Původně byl
+  podpis ad-hoc (`CODE_SIGN_IDENTITY = "-"`) s odůvodněním, že build nepotřebuje Apple účet
+  ani tým a `xcodebuild` zůstane reprodukovatelný na čistém stroji. To platí dál, ale
+  ad-hoc podpis **nemá stálou identitu**: každý build dá jiný otisk, takže macOS považuje
+  aplikaci pokaždé za jinou a povolení udělená přes TCC propadnou. V provozu se to
+  projevovalo dotazem na přístup do Stažených souborů po každém rebuildu — vyvolával ho
+  `claude`, kterému inicializace shellu přes `~/.zshrc` sáhla na Google Cloud SDK
+  v `~/Downloads`; aplikace sama do chráněných složek nesahá.
+
+  Řeší to self-signed certifikát *Code Signing* `PRism Local` v login keychainu, který
+  jednorázově vyrobí `bin/setup-signing.sh`. Jméno certifikátu drží gitignorovaný
+  `Signing.local.xcconfig`, který si přes `#include?` tahá checkovaný `Signing.xcconfig`
+  s ad-hoc defaultem — na stroji bez certifikátu se tedy nic nemění. Zadrátovat jméno do
+  `project.pbxproj` nešlo: build s chybějícím certifikátem končí `No certificate matching`
+  (ověřeno), takže by projekt přestal jít zbuildit jinde.
 - **Binárky se musí hledat absolutní cestou.** GUI aplikace spuštěná z Finderu nedědí
   `PATH` z shellu, takže `gh`, `git` ani `claude` se podle jména nenajdou. Aplikace je
   vyhledá při startu (zkoušením známých míst — `/opt/homebrew/bin`, `~/.local/bin` —
@@ -743,6 +756,11 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Dialog staví na `NSAlert` a `runModal()` | SwiftUI potvrzení, jako má koš u nálezů | `applicationShouldTerminate` musí odpovědět **synchronně**. Asynchronní cesta by aplikaci zavřela dřív, než se kdokoli zeptá — tedy přesně to, proti čemu dialog je |
 | Výchozí tlačítko je **`Zpět`** | `Ukončit` jako výchozí, ať zavření nebrzdí | Ztracený nález je dražší než jedno kliknutí navíc. Omylem odklepnutý `Enter` nemá zahodit nálezy, o kterých ještě nikdo neví |
 | Rozpočet automatu se strhává **těsně před `runSkills`** | Nechat ho tam, kam se přesunul v #91 (za bránu na `headSha`, před checkoutem) | Session je utracená v okamžiku, kdy běh začne, takže počítat až doběhlé by pustilo dvacet běhů naráz. Ale každý krok **před** `runSkills` se dá projít bez jediné session: selhaný klon i repo s prázdnou sadou skillů platily za běh, který nezačal. Je to třetí poloha téhož claimu — nejdřív plánovač, pak před checkoutem, teď před spuštěním |
+| Jméno certifikátu drží **gitignorovaný `Signing.local.xcconfig`**, checkovaný `Signing.xcconfig` má ad-hoc default | Zadrátovat `CODE_SIGN_IDENTITY = "PRism Local"` do `project.pbxproj`, jak psalo zadání #61 | Build s certifikátem, který na stroji není, končí `No certificate matching 'PRism Local' found` (ověřeno spuštěním), takže by projekt přestal jít zbuildit kdekoli jinde. Fallback proto patří do verzované části a jméno do té lokální. `#include?` je optional include, takže chybějící soubor není chyba |
+| Podpis řeší **build settings** přes xcconfig | Nechat v projektu ad-hoc a v `bin/run.sh` aplikaci po buildu přepodepsat `codesign --force` | Přepodepsání zahodí entitlements, které do podpisu vkládá Xcode — v Debugu i `com.apple.security.get-task-allow`, bez kterého nejde připojit debugger. A stálou identitu by dostal jen build z `run.sh`; z Xcode nebo z `xcodebuild` by vyšla jiná aplikace, takže by povolení záviselo na tom, jak se buildilo |
+| `CODE_SIGN_IDENTITY` je **jen na úrovni projektu** | Nechat ho v buildSettings obou targetů a xcconfig napojit na ně | Nastavení v targetu přebíjí xcconfig, takže by lokální soubor neměl žádný efekt. Na úrovni projektu ho dědí app i testy, tedy i `TEST_HOST`, který testy spouštějí |
+| Certifikát vyrábí **skript**, ne postup v README | Naklikat ho v Keychain Access → Certificate Assistant, jak nabízelo zadání | Deset kliknutí v průvodci proti jednomu příkazu, a hlavně: přes `openssl` je vidět, co v certifikátu je (`extendedKeyUsage = codeSigning`, platnost, jméno). Skript je zároveň idempotentní, takže po čerstvém klonu jen doplní `Signing.local.xcconfig` |
+| `bin/run.sh` **upozorní na ad-hoc podpis** | Mlčet — build proběhl, aplikace jde spustit | Bez podpisu se vrátí dotazy na přístup k datům a příčina je jinak neviditelná. Je to tentýž důvod, proč `PollStatusBanner` hlásí neaktuální data: stav, který mění chování, nemá být potichu |
 | `bin/run.sh` ukončuje aplikaci **Apple eventem**, ne `killall` | Nechat `killall` — je to jen vývojový skript | SIGTERM `applicationShouldTerminate` neprochází, takže rebuild zabíjel review i s nálezy: dvakrát za jedno dopoledne, obojí s osmi a devíti nahlášenými nálezy. Pojistka, kterou obchází nejčastější způsob restartu, je poloviční. Skript proto čeká na odpověď a bez ní novou verzi nespustí |
 
 ## Ověřeno proti CLI (2026-08-01)

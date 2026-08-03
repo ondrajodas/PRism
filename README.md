@@ -213,8 +213,46 @@ xcodebuild -project PRism.xcodeproj -scheme PRism test
 předvídatelná; složka je gitignorovaná. Před spuštěním ukončí předchozí instanci.
 
 Aplikace běží **bez App Sandboxu** — spouští `git`, `gh` a `claude` a zapisuje do vlastní
-cache. Podpis je ad-hoc (`CODE_SIGN_IDENTITY = "-"`), takže build nepotřebuje Apple účet
-ani tým. Developer ID podpis a notarizace by byly potřeba až pro distribuci.
+cache.
+
+### Podpis
+
+Výchozí podpis je ad-hoc (`CODE_SIGN_IDENTITY = -` v `Signing.xcconfig`), takže build
+nepotřebuje Apple účet ani tým a projde na jakémkoli stroji bez přípravy. Developer ID
+podpis a notarizace by byly potřeba až pro distribuci.
+
+Ad-hoc podpis ale **nemá stálou identitu**: každý build dá jiný otisk, takže macOS považuje
+aplikaci pokaždé za jinou a povolení udělená přes TCC se na novou verzi nevztahují. Prakticky
+to znamená dotaz na přístup do **Stažených souborů** po každém rebuildu. Aplikace tam
+nesahá — vyvolává ho `claude`, který si při startu bere prostředí z uživatelova shellu, a ten
+načte `~/.zshrc` sourcující Google Cloud SDK rozbalený v `~/Downloads`. Dotaz se proto objeví
+až při spuštění review, ne po startu aplikace.
+
+Stálou identitu dá vlastní certifikát. Vyrobí ho jednorázově:
+
+```bash
+./bin/setup-signing.sh
+```
+
+Skript vytvoří self-signed certifikát typu *Code Signing* s názvem `PRism Local` v login
+keychainu a napíše `Signing.local.xcconfig` s jeho jménem; odtud si ho přes `#include?`
+vezme `Signing.xcconfig`, takže se podepisuje stejně ve `bin/run.sh`, v `xcodebuild` i v
+Xcode. Ten soubor se **necommituje** — jméno certifikátu je vlastnost stroje, ne repa, a
+bez něj se spadne zpátky na ad-hoc. Systém si přitom může říct o přihlašovací heslo —
+jednou při zápisu do nastavení důvěry (bez něj se self-signed certifikát mezi platné
+identity nezapočítá) a při prvním buildu ještě o přístup ke klíči, kde stačí kliknout na
+*Vždy povolit*. Ten druhý dotaz odbourá předem heslo zadané na řádku, který skript nabízí;
+přeskočit ho jde Enterem.
+
+Že je podpis stálý, se ověří takhle:
+
+```bash
+codesign -dv --verbose=4 build/Build/Products/Debug/PRism.app
+```
+
+Ad-hoc build hlásí `Signature=adhoc`, podepsaný `Authority=PRism Local`. Na ad-hoc podpis
+upozorní i `bin/run.sh`, protože jinak je příčina vracejících se dotazů neviditelná.
+Certifikát se odstraní přes `security delete-identity -c "PRism Local"`.
 
 ## Struktura
 
@@ -253,13 +291,15 @@ Tests/                    unit testy — target PRismTests
   Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR
+bin/setup-signing.sh      jednorázová příprava stálého podpisu (self-signed certifikát)
 Info.plist                název aplikace, verze, minimální systém
 PRism.entitlements        vypnutý App Sandbox
+Signing.xcconfig          podpis: ad-hoc default + volitelný Signing.local.xcconfig
 docs/claude-cli.md        ověřené chování claude CLI (flagy, tvar eventů)
 docs/superpowers/specs/   návrh a specifikace
 CLAUDE.md                 pravidla pro práci v repu
 README.md                 tento soubor
-.gitignore                artefakty Xcode buildu, SPM, .DS_Store
+.gitignore                artefakty Xcode buildu, SPM, .DS_Store, Signing.local.xcconfig
 ```
 
 `App/` a `Tests/` jsou v projektu napojené jako **buildable folders** — obsah se do
