@@ -280,6 +280,12 @@ final class AppStore {
     /// bylo z čeho ukázat důvod.
     func isReviewing(_ pr: PRIdentifier) -> Bool { reviewTasks[pr] != nil }
 
+    /// Kolik review běží napříč PR. Podle toho se ptá dialog při ukončení aplikace (#94).
+    ///
+    /// Ze stejného zdroje jako `isReviewing`, ne z vlastního počitadla: dvě místa, která se
+    /// můžou rozejít, by v nejhorším nechala aplikaci zavřít bez zeptání.
+    var runningReviews: Int { reviewTasks.count }
+
     /// Připraví pracovní kopii repa. Slouží i jako „zkusit znovu“ po selhání — příprava
     /// je idempotentní, takže opakování je totéž volání.
     ///

@@ -72,6 +72,12 @@ V liště panelu je **koš**, kterým se uložené nálezy zahodí — hodí se,
 skillů a v záznamu leží nálezy od revieweera, který už neběží. Maže se jen viditelný commit,
 historie zůstává, a na repu v automatickém režimu se review vzápětí pustí samo.
 
+**Zavřít aplikaci během review se musí potvrdit.** Ukončení session zabije a nálezy, které
+už reviewer nahlásil, se ztratí — z řádku pak vyjde `neběželo`, tedy totéž jako u PR, který
+nikdo nekontroloval. Dialog nabídne `Zpět` (výchozí) a `Ukončit`; co doběhlo, zůstává
+uložené. Pád aplikace ani zabití zvenčí takhle odchytit nejde, proto to `bin/run.sh` při
+rebuildu neobchází a aplikaci ukončuje tou samou cestou jako ⌘Q.
+
 Nad diffem jsou **chipy reviewerů**: u každého je vidět, co udělal (`3 nálezy`, `čisté`,
 `běží`, `selhalo`, `nejisté`) a kliknutím se jeho nálezy schovají z bublin i z tabulky.
 Vpravo je **návrh verdiktu** — je to doporučení, ne akce; aplikace na GitHub nic neposílá.
