@@ -38,6 +38,13 @@ final class AppStore {
     /// kvůli které se netahá konverzace. Cache podle `updatedAt` je stejná jako u diffu.
     private(set) var detailStates: [PRIdentifier: DetailState] = [:]
 
+    /// Který tab PR je vidět, **per PR**. Co v mapě není, je na `filesChanged`.
+    ///
+    /// Drží se odchylka od výchozího stavu, ne volba u každého PR — stejný vzor jako
+    /// u překliknutých vláken. Ve view to být nemůže: `PullRequestDetailView` si SwiftUI mezi
+    /// pull requesty ponechá, takže by volba přetekla z jednoho na druhý.
+    private(set) var detailTabs: [PRIdentifier: PullRequestTab] = [:]
+
     /// Rozdělané review **per PR**. Co v mapě není, se nezačalo psát.
     ///
     /// Načte se celé při startu, ne až při výběru řádku: indikátor v seznamu má být vidět
@@ -453,9 +460,26 @@ final class AppStore {
         return updatedAt == pullRequest.updatedAt
     }
 
+    // MARK: - Taby PR
+
+    /// Který tab je vidět. Výchozí drží `PullRequestTab.standard`, ať je odpověď na jednom
+    /// místě — čte ji i test, který hlídá, že se to nerozejde.
+    func detailTab(for pr: PRIdentifier) -> PullRequestTab { detailTabs[pr] ?? .standard }
+
+    func setDetailTab(_ tab: PullRequestTab, for pr: PRIdentifier) {
+        // Výchozí volba se z mapy maže, ať v ní nezůstávají klíče bez informace.
+        detailTabs[pr] = tab == .standard ? nil : tab
+    }
+
     // MARK: - Detail PR
 
     func detailState(for pr: PRIdentifier) -> DetailState? { detailStates[pr] }
+
+    /// Popis PR, jak ho napsal autor. `nil` = detail se ještě nenačetl.
+    func description(of pr: PRIdentifier) -> String? {
+        guard case .loaded(let detail, _) = detailStates[pr] else { return nil }
+        return detail.body
+    }
 
     /// Hlava PR, jak ji naposledy vrátil `gh pr view`. `nil` = ještě nevíme.
     ///
@@ -540,6 +564,15 @@ final class AppStore {
     private func hasCurrentConversation(for pullRequest: PullRequestSummary) -> Bool {
         guard case .loaded(_, let updatedAt) = conversationStates[pullRequest.id] else { return false }
         return updatedAt == pullRequest.updatedAt
+    }
+
+    /// Co patří do tabu `Přehled` — konverzace, která se neváže k řádku v aktuálním diffu.
+    ///
+    /// Prázdné, dokud konverzace nedorazí. Že se **načítá** nebo že to **selhalo**, se pozná
+    /// z `conversationState(for:)`; prázdný seznam sám o sobě neznamená „nikdo nic nenapsal“.
+    func overview(for pr: PRIdentifier) -> [ConversationEntry] {
+        guard let conversation = conversation(for: pr) else { return [] }
+        return Policy.overview(of: conversation, renderedIn: loadedDiff(for: pr))
     }
 
     /// Vlákna, která se v diffu dají zakotvit — ta se kreslí jako bubliny.
@@ -1382,6 +1415,9 @@ final class AppStore {
         // konverzacích. Podle konverzací to nešlo: PR ve stavu `.failed` v mapě zůstane, ale
         // žádná vlákna nedá, takže by výpadek sítě uživateli zahodil, co si zavřel.
         toggledThreads = toggledThreads.filter { wantedPullRequests.contains($0.key) }
+        // Volba tabu je jen příznak, ale drží klíč s celým identifikátorem PR — bez úklidu by
+        // mapa rostla donekonečna, stejně jako u sbalených souborů.
+        detailTabs = detailTabs.filter { wantedPullRequests.contains($0.key) }
         // Běžící review si osu drží: `reviewTasks` je pravda o tom, co ještě běží, a jeho
         // události by se jinak zapisovaly do mapy, ze které je někdo právě vyhodil.
         reviewTimelines = reviewTimelines.filter {

@@ -37,7 +37,26 @@ v detailu je dole lišta s **návrhem verdiktu** (`approve` / `request changes` 
 z čeho soudit*) a rozbaleným seznamem nálezů po kategoriích, s odznakem u těch blokujících.
 Kliknutím na nález diff odskočí na jeho `file:line`.
 
-Detail PR ukazuje **diff v plné šířce**: soubory pod sebou s hlavičkou, která při scrollu
+Detail PR má **záložky jako GitHub**: `Přehled` a `Změněné soubory`, podtržené, s odznakem
+kolik je v přehledu k přečtení. Volba se pamatuje **u každého PR zvlášť** a otevírá se
+`Přehled` — popis a diskuze se čtou dřív než kód, kterého se týkají.
+
+**`Přehled`** nese to, co se neváže k žádnému řádku: popis PR od autora a pod ním konverzaci
+chronologicky — review ostatních s odznakem (`schválil`, `vyžádal změny`), komentáře pod PR
+a vlákna, jejichž řádek v aktuálním diffu není (typicky zastaralá po novém commitu). Ta se
+kreslí **tou samou bublinou jako u kódu**, jen s cestou a řádkem nad ní, protože bez kódu
+vedle není z čeho poznat, o co jde. Moje komentáře mají odznak `já`, text jde označit
+a zkopírovat a konverzaci lze obnovit tlačítkem, aniž by se čekalo na tik pollingu.
+
+**Texty se renderují jako Markdown** — nadpisy, seznamy včetně zaškrtávacích, bloky kódu,
+citace, odkazy. Vlastní blokový parser bez závislosti (jako obarvení kódu): systémový umí
+formátování uvnitř řádku dobře, ale bloky tiše spolkne. Zvládá i **HTML, které do komentářů
+posílají boti** — `<!-- … -->` se nekreslí (jako na GitHubu), `<details>` je rozbalovátko
+a odkazy zůstávají klikatelné. Tabulky zůstávají jako monospace řádky a kód v blocích se
+neobarvuje: jazyk z fence je volný řetězec, takže mapovat ho na obarvovací pravidla znamená
+hádat, a špatně obarvený cizí kód je horší než neobarvený.
+
+**`Změněné soubory`** ukazují **diff v plné šířce**: soubory pod sebou s hlavičkou, která při scrollu
 zůstává nahoře, souhrn `N souborů · +X −Y` a menu na skok mezi soubory. Přejmenování, nové,
 smazané i binární soubory jsou označené; dlouhé řádky se zalamují, protože 120 znaků se do
 plné šířky vejde.
@@ -69,8 +88,10 @@ jdou vypnout přepínačem nad diffem.
 Pod diffem je **panel s taby**: řaditelná tabulka nálezů (kategorie, reviewer, místo,
 shrnutí), Průběh a Moje review. Panel je jediné místo, kde jsou vidět nálezy **bez místa
 v kódu** — chybějící testy nebo poznámky k architektuře; kvůli nim samotné bubliny
-nestačí. Klik na řádek odscrolluje diff a bublinu na chvíli zvýrazní. Výška panelu se
-táhne za horní hranu a pamatuje se.
+nestačí. Je vidět v **obou** záložkách, protože nálezy, průběh i rozdělané review patří
+k celému PR, ne k diffu. Klik na řádek odscrolluje diff (a přepne na něj, když jsi
+v `Přehledu`) tak, aby nad nálezem zůstalo pár řádků kontextu, a bublinu na chvíli
+zvýrazní. Výška panelu se táhne za horní hranu a pamatuje se.
 
 **Většinu šířky tabulky dostane text nálezu**, protože to je to, co se čte; kategorie
 a reviewer si berou jen tolik, kolik potřebují. Co se přesto nevejde, řekne **nápověda po
@@ -176,7 +197,7 @@ Odesílání samotné je #68 — tenhle panel jen skládá, co se pošle.
 
 Vlákna, jejichž řádek v aktuálním diffu **není** (typicky zastaralá po novém commitu), se
 do kódu nekotví — jejich čísla platila pro starý head, takže by bublina sedla na cizí řádky.
-Domov dostanou v tabu `Overview` spolu s review ostatních a komentáři pod PR.
+Domov mají v záložce `Přehled` spolu s review ostatních a komentáři pod PR.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -317,6 +338,7 @@ App/                      zdrojáky aplikace — target PRism
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Config/                 config.json: globální default, override per repo, čtení a zápis
   Diff/                   parsování unified diffu na soubory, hunky a řádky
+  Markdown/               vykreslení Markdownu z GitHubu: bloky, inline HTML od botů
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka
   Publish/                jediná cesta ven: odeslání review na GitHub, brána na sandbox
   Review/                 spuštění session claude a překlad stream-json na nálezy
@@ -332,6 +354,7 @@ Tests/                    unit testy — target PRismTests
   Checkout/               testy klonování — proti fake runneru i skutečnému gitu
   Config/                 testy čtení, zápisu a slučování konfigurace
   Diff/                   testy parseru diffu proti skutečným výstupům gh pr diff
+  Markdown/               testy parseru Markdownu (invariant: nic se neztratí) a HTML od botů
   GitHub/                 testy gateway a klasifikace chyb gh
   Policy/                 testy čistých funkcí
   Review/                 testy parseru a runneru proti skutečným streamům

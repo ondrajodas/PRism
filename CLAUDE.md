@@ -285,7 +285,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 |---|---|
 | `RepoID` | `owner/repo` |
 | `PRIdentifier` | `owner/repo#číslo` — klíč všeho, co se váže k PR: dedup zdrojů, review stav, uložené nálezy |
-| `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav |
+| `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav, **popis** (`body`) |
 | `PullRequestSummary` | Totéž **bez SHA** — co dá vyhledávání. Viz `App/GitHub/` níž |
 | `Source` | Zdroj PR: jméno pro UI + search dotaz. Default `Source.reviewRequested` |
 | `ReportedFinding` | Nález přesně jak ho poslal reviewer; `FindingVerdict` je `CONFIRMED`/`PLAUSIBLE` |
@@ -304,7 +304,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
 | `ReviewDraft` | Rozdělané review: PR, `headSha`, tělo, verdikt, komentáře. Verdikt je vnořený `ReviewDraft.Verdict` |
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path`, `line`, `side`), tělo, `Origin` |
-| `DetailState` | Stav dotažení detailu PR: `loading` / `loaded(PullRequest, updatedAt:)` / `failed`. Je z něj `headSha` pro draft |
+| `DetailState` | Stav dotažení detailu PR: `loading` / `loaded(PullRequest, updatedAt:)` / `failed`. Je z něj `headSha` pro draft a popis pro `Přehled` |
+| `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged`. Jako `ReviewVerdict` **není `Codable`** |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -535,6 +536,48 @@ Věci, které se u toho nemají rozbít:
 - **Výchozí hodnoty musí odpovídat konstantám, které nahradily** — je na to test, jinak by
   se aplikace po zavedení konfigurace začala chovat jinak. Výchozí `mode` je `manual`:
   zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
+
+### `App/Markdown/`
+
+Vykreslení Markdownu z GitHubu — popis PR, komentáře, těla review. Čisté funkce plus tři
+malá view, **žádná externí závislost**: stejná úvaha jako u `App/Syntax/`.
+
+| Typ | Co je |
+|---|---|
+| `MarkdownBlock` | Blok: nadpis, odstavec, položka seznamu (odrážka/číslo/zaškrtávátko), kód, citace, oddělovač, tabulka, `<details>`, HTML komentář |
+| `MarkdownParser` | Text → `[MarkdownBlock]`. **Nikdy nevyhodí výjimku** |
+| `MarkdownHTML` | Inline HTML na text: `<a href>` na Markdown odkaz, ostatní tagy pryč, entity dekódované |
+| `MarkdownText`, `MarkdownBlocksView`, `MarkdownBlockView` | Vykreslení; tři typy kvůli rekurzi v `<details>` |
+
+Věci, které se u toho nemají rozbít:
+
+- **Struktura je naše, inline systémový.** Bloky skládá parser, tučné/kurzívu/`kód`/odkazy
+  dělá `AttributedString`. Dávat mu celý text nejde: bloky ve `Text`u **tiše spolkne** —
+  z `## Popis` vyjde „Popis“ obyčejným písmem a odrážky ztratí odrážku.
+- **Žádný řádek se neztratí.** Je to invariant v testech (obsah ze všech bloků složený zpátky
+  dá vstup), tatáž pojistka jako „spojení run dá původní řádek“ u obarvování. Proto se
+  v modelu drží i to, co se **nekreslí** (HTML komentář) — zahodit to už v parseru by
+  znamenalo, že ztrátu textu nejde odlišit od chyby parsování.
+- **Tagy strhává view, ne parser.** Model tak nese to, co přišlo z GitHubu, a rozhodnutí
+  „`<p>` se v okně nemá čím projevit“ je vidět tam, kde se kreslí. Odstavec, ze kterého po
+  strhnutí nic nezbylo, se **nekreslí** — jinak po každém `</p>` zůstane mezera.
+- **`<!-- … -->` se nekreslí vůbec**, jako na GitHubu: je to značka pro stroje
+  (`linear-linkback` a spol.), ne text pro člověka.
+- **`<details>` je rozbalovátko s vnořenými bloky.** Uvnitř bývají odstavce a seznamy, takže
+  jako jeden slitý text nedávají smysl — proto se vnitřek parsuje rekurzivně a proto jsou
+  view tři: rekurze přes `some View` je typ definovaný sám sebou, což Swift odmítne.
+- **Neuzavřený fence i `<details>` se uzavřou koncem textu.** Useknutý komentář se nesmí
+  vykreslit jako prázdno.
+- **Uvnitř bloku kódu se nic neinterpretuje** — ani Markdown, ani HTML. `# komentář` v kódu
+  není nadpis a `<T>` je kód.
+- **Zaškrtávátko je obrázek, ne přepínač.** Je to cizí text, ne můj formulář.
+- **Tabulka a blok kódu se nevykreslují „správně“, ale úplně.** Tabulka jsou monospace řádky
+  se svislítky (vodorovně scrollovatelné), kód se neobarvuje: jazyk z fence je volný řetězec
+  (`sh`, `console`) a `Syntax.Language` se pozná z **cesty k souboru**, takže mapovat jedno
+  na druhé znamená hádat — a špatně obarvený cizí kód je horší než neobarvený.
+- **Známé omezení:** `<div>` uvnitř zpětných apostrofů se strhne taky, protože se to dělá nad
+  celým řádkem. Cizí HTML v inline kódu je vzácnější než bot, který posílá `<details>`
+  v každém komentáři.
 
 ### `App/Syntax/`
 
@@ -977,8 +1020,11 @@ na `.task` okna, takže zavření okna ji zruší.
 
 | View | Co dělá |
 |---|---|
-| `ContentView` | `NavigationSplitView`: vlevo seznam, vpravo detail vybraného PR |
+| `ContentView` | `NavigationSplitView`: vlevo seznam, vpravo detail vybraného PR; pod tím pruh s hláškami |
+| `AppNoticesView` | Pruh na spodku **okna**: rozbitá konfigurace, pozastavený automat, nečitelné soubory |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
+| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory`) — podtržené, s odznakem počtu |
+| `OverviewView` | Tab `Přehled`: popis PR a konverzace bez kotvy v diffu, chronologicky |
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
 | `PullRequestDetailView` | Pravý panel: dvouřádková lišta (titulek, review, stav kopie), pod ní diff a nálezy |
@@ -987,6 +1033,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout |
 | `ThreadBubbleView` | Vlákno konverzace u řádku; vyřešené sbalené s odznakem, moje komentáře odlišené |
+| `MarkdownText` | Vykreslený Markdown z GitHubu — viz `App/Markdown/` |
 | `DraftCommentBubbleView` | Můj rozdělaný komentář u řádku: editor, odznak původu, vyjmutí |
 | `DraftTextEditor` | Textové pole draftu — odložený zápis a doručení při zmizení |
 | `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt bez předvyplnění, tělo, seznam komentářů |
@@ -1164,6 +1211,24 @@ Průběh review drží `AppStore` taky (`reviewTimelines`, per PR):
 - **Osa se drží i po doběhnutí** — právě tehdy se k ní člověk vrací. Nový běh ji vynuluje
   a PR, které zmizí ze seznamu, ji ztratí (běžící review si ji podrží).
 
+Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
+
+- **Volba tabu je ve store, ne ve view.** `PullRequestDetailView` si SwiftUI mezi pull requesty
+  ponechá (stejná pozice ve stromu), takže `@State` by přetekl z jednoho PR na druhý — tatáž
+  past jako u sbalených souborů a příznaku „připravuji“.
+- **Drží se odchylka od výchozího stavu**, ne volba u každého PR. Výchozí je `Přehled`
+  (`PullRequestTab.standard`, **změna proti zadání #72** — popis a diskuze se čte dřív než kód
+  a stejně to má GitHub), takže se `filesChanged` z mapy maže a úklid podle seznamu PR ji
+  nenechá růst.
+- **Spodní panel je v obou tabech.** Nálezy bez místa v kódu, průběh i moje rozdělané review
+  se vážou k celému PR — schovat je za přepnutí tabu by znamenalo, že se rozepsané review
+  „ztratí“ přepnutím na `Přehled`.
+- **Skok na nález tab přepne**, a `DiffView` na cíl reaguje `task(id:)`, ne `onChange`: při
+  přepnutí z `Přehledu` diff **vzniká**, takže cíl už v něm je a žádná změna nepřijde.
+- **Cíl skoku se kotví k vršku s odstupem** (`DiffView.jumpAnchor`, 90 pt = ukotvená hlavička
+  plus tři řádky), ne doprostřed. `scrollTo` umí jen podíl výšky, takže se počítá z měřené
+  výšky diffu (`onGeometryChange`, jen měření — `GeometryReader` by sám zabral místo).
+
 Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a platí u něj:
 
 - **Draft potřebuje `headSha`, takže se dotahuje detail PR** (`detailStates`, cache podle
@@ -1226,6 +1291,17 @@ Věci, na které se u okna naráží:
   nesmyslu.
 - **Banner jde přes `safeAreaInset`, ne do `VStack` nad seznamem.** S `VStack`em přestane
   být `List` tím, co sidebar odsazuje od horní lišty, a řádky se schovají pod ni.
+- **Hlášky pod seznamem jsou naopak `VStack` na spodku okna** (`AppNoticesView`), a to **mimo
+  `NavigationSplitView`**. Jako `safeAreaInset` uvnitř bočního panelu dělaly dvě věci naráz:
+  obsah okna vycházel o výšku toho pruhu **vyšší než okno** a spodní hrana ho odřízla v obou
+  sloupcích (změřeno přes accessibility: okno 874 pt, obsah 904, po skrytí bočního panelu
+  rozdíl zmizel) — a tatáž mašinerie (`invalidateSafeAreaInsets` uvnitř `updateConstraints`
+  split view) stojí v crash reportu z 2026-08-03. `List` si totiž vezme celou dostupnou výšku
+  a pruh pod ním ji pak překročí. Přes celé okno je to zároveň směr, kterým měl stavový řádek
+  jít (#31).
+- **Panel má strop, ne pevnou výšku** (`maxHeight: clampedHeight` + `layoutPriority(1)`).
+  `frame(height:)` je nesmlouvavá: v nízkém okně panel nepustí místo, přeteče — a co se
+  nevejde, odřízne spodní hrana okna.
 - **Čísla PR se píšou `Text(verbatim:)`.** `Text("#\(number)")` interpoluje přes locale
   a udělá z PR #21663 „#21 663“ — číslo PR není množství.
 - **Obsah zajíždí pod poloprůhlednou lištu a je to tak správně.** Zkoušelo se to zrušit
@@ -1319,6 +1395,7 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 | `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
 | `Policy.matches(_:_:)` | Patří vlákno (nebo můj rozdělaný komentář) k tomuhle řádku diffu — **jedno místo** pro výběr i umístění |
+| `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR a vlákna bez kotvy, chronologicky (`ConversationEntry`) |
 | `Policy.commentableSide(of:in:)` | Ke které straně by šel komentář; `nil` = nedá se komentovat |
 | `Policy.commentAnchor(of:in:)`, `Policy.commentAnchors(in:)` | Kotva komentáře (`DraftAnchor`: číslo + strana); mapa pro celý soubor jedním průchodem |
 | `Policy.draftTarget(for:in:)` | Kam převzatý nález patří — `DraftTarget.line` nebo `.body` |
@@ -1753,6 +1830,20 @@ Právě proto tam eskalace na `SIGKILL` je.
   „už je v draftu“ to hlavní: nález **druhého** revieweera na tomtéž řádku převzatý není.
   U permalinku zakódovaná mezera v cestě a odkaz na vlastním řádku — bez obojího GitHub
   úryvek kódu nevyrenderuje.
+- **`Policy` — přehled (#72)** — chronologické slití review, komentářů a vláken; že se vlákno
+  **s kotvou** do přehledu nedostane (jinak se tentýž komentář čte na dvou místech); že review
+  bez verdiktu a bez prózy vypadne (je to jen obálka řádkových komentářů), kdežto schválení
+  s prázdným tělem zůstane; že položka bez data jde naspod, ne pryč; a že shodné `id` u review
+  a komentáře dá dvě položky, ne jednu.
+- **`MarkdownParser`** — každý test ověřuje i **invariant**, že se žádný obsah neztratil
+  (písmena a číslice ze všech bloků složené zpátky). Pokrývá nadpisy včetně falešných (`#tag`),
+  odstavce se zalomením, odrážky/čísla/zaškrtávátka, zanoření, fence (i neuzavřený a s cizími
+  značkami uvnitř), citace, oddělovače, tabulky — a HTML od botů: `<!-- … -->`, `<details>`
+  včetně **zanořeného** a neuzavřeného. Plus skutečný popis PR z fixture, tedy cizí text, který
+  nikdo nepsal pro test. `MarkdownHTML` má vlastní sadu: odkaz na Markdown se všemi druhy
+  uvozovek, `<br>`, entity a to, že `&amp;` se dekóduje naposled.
+- **`AppStore` — taby** — výchozí `Přehled` (proti `PullRequestTab.standard`, ať se to nerozejde),
+  volba per PR, přepnutí zpátky mažící klíč a úklid s PR, které zmizelo ze seznamu.
 - **`AppStore` — rozdělané review** — proti **skutečnému** `ReviewDraftStore` nad dočasnou
   složkou: on rozhoduje, co je po restartu, takže fake by ověřoval sám sebe. Pokrývá cestu
   od kliknutí po disk (komentář, verdikt, tělo, převzetí nálezu do těla i na řádek), a hlavně
@@ -2048,6 +2139,22 @@ zastarává (ale nemaže se) a `Policy` umí říct, na které řádky diffu se 
 **Vrstva bez UI** — skládání draftu je #66, odeslání #67 a #68. Aplikace pořád nic
 neposílá: store zapisuje jen na disk.
 
+Taby PR hotové (issue #72) — `PullRequestTab`, `PullRequestTabBar`, `OverviewView`,
+`Policy.overview(of:renderedIn:)` a `detailTabs` v `AppStore`. Detail PR se dělí na `Přehled`
+(popis PR a konverzace, která se neváže k řádku — review ostatních, komentáře pod PR
+a zastaralá vlákna, chronologicky) a `Změněné soubory` (dosavadní obrazovka s diffem). Volba
+se drží per PR, výchozí je **`Přehled`** (změna proti zadání). Popis PR se bere z detailu, který
+se stejně dotahuje kvůli `headSha`.
+
+Vedle zadání přibylo v témže PR:
+
+- **Vykreslený Markdown** (`App/Markdown/`) — popis, komentáře i těla review se renderují včetně
+  HTML od botů (`<details>`, `<!-- … -->`, odkazy). Ruší to rozhodnutí z prvního průchodu #72,
+  které Markdown nechávalo jako holý text.
+- **Hlášky se přestěhovaly na spodek okna** (`AppNoticesView`) — jako `safeAreaInset` uvnitř
+  bočního panelu způsobovaly, že obsah přetekl okno a spodní hrana ho odřízla; tatáž konstrukce
+  stojí v crash reportu z 2026-08-03. Viz sekce views výš.
+
 Skládání draftu hotové (issue #66) — `DraftPanel`, `DraftCommentBubbleView`,
 `DraftTextEditor`, `DraftActions` a sekce `drafts`/`detailStates` v `AppStore`. Review se dá
 poskládat z nálezů (`Převzít do review` v bublině) i z vlastních poznámek (tlačítko na řádku
@@ -2164,8 +2271,8 @@ Tím **končí rozsah v1** podle specifikace. Za ním:
 **M6 a M7 jsou do sebe zaklesnuté a nejdou udělat po sobě.** `#66` a `#68` z M6 čekaly na
 `#64` z M7, kdežto `#73` z M7 čeká na `#67` z M6 — takže se to plánovalo jako jeden blok
 o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `#65`, `#64`,
-`#67` a `#66`; `#98` (side-by-side diff) na konverzaci nestojí vůbec a dá se zařadit kamkoli.
-Pořadí zbytku: `#72` → `#68` → `#73` → `#69`.
+`#67`, `#66` a `#72`; `#98` (side-by-side diff) a `#110` (víceřádkové komentáře) na konverzaci
+nestojí vůbec a dají se zařadit kamkoli. Pořadí zbytku: `#68` → `#73` → `#69`.
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
    s oprávněním a klikem (#88), doběhlé review (#82), nové PR (#85), vypínání po
    událostech (#86) a seskupování (#87).

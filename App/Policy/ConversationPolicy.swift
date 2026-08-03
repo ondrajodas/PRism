@@ -1,7 +1,75 @@
 import Foundation
 
+/// Jedna položka konverzace v tabu `Přehled` — to, co se neváže k řádku v aktuálním diffu.
+///
+/// Tři různé věci v jednom seznamu, protože na GitHubu je člověk čte **za sebou**: schválení
+/// kolegy, jeho poznámka pod PR a vlákno, které po novém commitu ztratilo kotvu. Rozdělit je
+/// do tří sekcí by znamenalo skládat si časovou souslednost v hlavě.
+enum ConversationEntry: Hashable, Sendable, Identifiable {
+    /// Hotové review někoho jiného — verdikt, próza, nebo obojí.
+    case review(SubmittedReview)
+    /// Komentář pod PR, který nepatří k žádnému řádku.
+    case comment(ThreadComment)
+    /// Vlákno, které se v aktuálním diffu nemá kde ukázat (typicky zastaralé).
+    case thread(ReviewThread)
+
+    /// Identita nese **typ**, ne jen `id` z GitHubu: review a komentář mají vlastní číselné
+    /// řady a shoda mezi nimi by v `ForEach` zahodila jednu z položek.
+    var id: String {
+        switch self {
+        case .review(let review): "r\(review.id)"
+        case .comment(let comment): "c\(comment.id)"
+        case .thread(let thread): "t\(thread.id)"
+        }
+    }
+
+    /// Kdy položka vznikla. `nil` = nevíme — rozdělané (`pending`) review datum odeslání
+    /// nemá a vlákno bez komentářů se nemá čím datovat.
+    var date: Date? {
+        switch self {
+        case .review(let review): review.submittedAt
+        case .comment(let comment): comment.createdAt
+        // Vlákno se datuje **prvním** komentářem, tedy tím, kdy se to téma otevřelo. Podle
+        // poslední odpovědi by staré vlákno s novou odpovědí přeskočilo na konec a časová
+        // souslednost by přestala platit.
+        case .thread(let thread): thread.comments.items.first?.createdAt
+        }
+    }
+}
+
 /// Rozhodování nad konverzací. Čisté funkce, žádné I/O — testuje se bez mockování.
 extension Policy {
+    /// Co patří do tabu `Přehled`, chronologicky.
+    ///
+    /// Bere **jen** to, co u kódu nemá co dělat: vlákna bez kotvy v aktuálním diffu (ta
+    /// s kotvou zůstávají bublinami), komentáře pod PR a review ostatních.
+    ///
+    /// **Review bez verdiktu a bez prózy se zahazuje.** Každý řádkový komentář na GitHubu
+    /// patří do nějakého review, takže u PR s pěti komentáři u kódu přijdou i review, která
+    /// nejsou tvrzením — jsou to obálky. Ukázat je jako „někdo napsal review: (nic)“ znamená
+    /// seznam plný prázdných položek. Schválení s prázdným tělem se **nezahazuje**, to je
+    /// plnohodnotný verdikt (čtvrtina vzorku u #63).
+    ///
+    /// Řadí se od nejstaršího, jako Overview na GitHubu. Položky bez data jdou **naspod** —
+    /// nejsou součástí historie, protože se ještě nestaly (rozdělané review); při shodě
+    /// rozhoduje `id`, ať je pořadí úplné a nepřeskakuje mezi překresleními.
+    static func overview(of conversation: Conversation, renderedIn diff: Diff?) -> [ConversationEntry] {
+        let reviews = conversation.reviews.items
+            .filter { $0.isVerdict || !$0.body.isEmpty }
+            .map { ConversationEntry.review($0) }
+        let comments = conversation.comments.items.map { ConversationEntry.comment($0) }
+        let threads = threadsOutsideTheDiff(conversation.threads.items, renderedIn: diff)
+            .map { ConversationEntry.thread($0) }
+
+        return (reviews + comments + threads).sorted { first, second in
+            switch (first.date, second.date) {
+            case (let left?, let right?): left == right ? first.id < second.id : left < right
+            case (nil, nil): first.id < second.id
+            case (nil, _): false
+            case (_, nil): true
+            }
+        }
+    }
     /// Je vlákno rozbalené?
     ///
     /// Výchozí stav se **odvozuje z vlákna**: nevyřešené je rozbalené, vyřešené sbalené.

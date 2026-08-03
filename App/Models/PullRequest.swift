@@ -40,6 +40,34 @@ struct PullRequest: Hashable, Codable, Sendable {
     let url: URL
     let updatedAt: Date
     let state: PullRequestState
+    /// Popis PR, tedy to, co autor napsal do těla. Prázdný běžně.
+    ///
+    /// Patří k **metadatům PR**, ne do `Conversation`: ta je snímek *cizí* diskuze a popis je
+    /// PR sám. Bere se z detailu, který se od #66 stejně dotahuje při výběru řádku, takže to
+    /// nestojí ani jedno volání navíc.
+    let body: String
+
+    init(
+        id: PRIdentifier,
+        title: String,
+        author: String,
+        headSha: String,
+        baseSha: String,
+        url: URL,
+        updatedAt: Date,
+        state: PullRequestState,
+        body: String = ""
+    ) {
+        self.id = id
+        self.title = title
+        self.author = author
+        self.headSha = headSha
+        self.baseSha = baseSha
+        self.url = url
+        self.updatedAt = updatedAt
+        self.state = state
+        self.body = body
+    }
 
     var repo: RepoID { id.repo }
     var number: Int { id.number }

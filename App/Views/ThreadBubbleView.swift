@@ -12,6 +12,10 @@ struct ThreadBubbleView: View {
     var viewer: String = ""
     var isExpanded = true
     var toggle: (() -> Void)?
+    /// Odsazení zleva. Výchozí hodnota míří do sloupce s obsahem vedle čísel řádků, protože
+    /// u kódu bublina visí pod svým řádkem. V `Přehledu` (#72) žádná čísla nejsou, takže se
+    /// tam předává nula — jinak by vlákno viselo o sto bodů vpravo bez důvodu.
+    var indent: Double = 104
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -29,7 +33,7 @@ struct ThreadBubbleView: View {
         .background(background, in: .rect(cornerRadius: 8))
         .overlay(alignment: .leading) { accent }
         .clipShape(.rect(cornerRadius: 8))
-        .padding(.leading, 104)   // stejné odsazení jako u nálezů — do sloupce s obsahem
+        .padding(.leading, indent)   // u kódu do sloupce s obsahem, v Přehledu nula
         .padding(.trailing, 16)
         .padding(.vertical, 4)
     }
@@ -131,8 +135,10 @@ struct ThreadBubbleView: View {
             // zkopírovat. Bublina je buňka líného seznamu nad diffem a tam je selekce
             // podle CLAUDE.md druhý zdroj nevykreslených řádků — `FindingBubbleView` ho
             // ze stejného důvodu nemá. Kopíruje se z GitHubu, kam vede odkaz výš.
-            Text(verbatim: comment.body)
-                .font(.callout)
+            //
+            // Markdown se renderuje: komentáře na GitHubu se v něm píšou a `**takhle**`
+            // s dvojitými hvězdičkami se čte špatně.
+            MarkdownText(text: comment.body)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         // Odpověď je odsazená, ať je z pohledu vidět, co je reakce na co. Strom se z toho

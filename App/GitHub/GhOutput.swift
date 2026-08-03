@@ -69,8 +69,11 @@ struct GhPullRequestDetail: Decodable {
     let updatedAt: Date
     let state: String
     let isDraft: Bool
+    /// `gh` u PR bez popisu vrací prázdný řetězec, ne `null` — ale optional to je schválně:
+    /// chybějící pole nemá položit celý detail, na kterém stojí `headSha` pro review.
+    let body: String?
 
-    static let jsonFields = "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft"
+    static let jsonFields = "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body"
 
     /// Identifikátor se bere z dotazu — `gh pr view` neříká, ze kterého repa PR je, protože
     /// jsme mu ho zadali. Číslo se přesto ověřuje: nálezy se klíčují `headSha` konkrétního
@@ -87,7 +90,8 @@ struct GhPullRequestDetail: Decodable {
             baseSha: baseRefOid,
             url: url,
             updatedAt: updatedAt,
-            state: try GhOutput.state(raw: state, isDraft: isDraft)
+            state: try GhOutput.state(raw: state, isDraft: isDraft),
+            body: body ?? ""
         )
     }
 }

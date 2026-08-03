@@ -13,87 +13,11 @@ struct PullRequestListView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 PollStatusBanner(status: store.status, lastSuccess: store.lastSuccess)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { notices }
             .navigationTitle("Pull requesty")
             .toolbar {
                 settingsButton
                 refreshButton
             }
-    }
-
-    /// Pruh pod seznamem: co je špatně a co se kvůli tomu neděje.
-    ///
-    /// **Musí mít neprůhledné pozadí.** `safeAreaInset` sice místo vyhradí, ale průhledný
-    /// obsah nechá řádky seznamu prosvítat skrz a texty se míchají do sebe. A když není co
-    /// říct, nekreslí se vůbec — trvalý pruh ubírá místo seznamu a oko se ho naučí
-    /// přehlížet.
-    ///
-    /// Kde tyhle hlášky nakonec skončí, řeší #31 (stavový řádek).
-    @ViewBuilder private var notices: some View {
-        if hasNotices {
-            VStack(alignment: .leading, spacing: 4) {
-                // Rozbitá konfigurace nesmí projít tiše — jinak uživatel hledá, proč mu
-                // nastavení nefunguje, a aplikace mezitím běží na výchozích hodnotách.
-                if let failure = store.configurationFailure {
-                    notice(failure, icon: "exclamationmark.triangle")
-                }
-                // Pozastavený automat se **musí** ukázat. Bez toho vypadá jako rozbitý: PR
-                // přibývají, nic se nespouští a proč se nedá zjistit odnikud.
-                // Nula v konfiguraci znamená **vypnuto**, ne vyčerpáno. „Vyčerpaný limit
-                // (0)“ by tvrdil, že se něco spotřebovalo, a poslal by hledat, co.
-                if store.isAutomaticStopped {
-                    notice(automaticPausedText, icon: "pause.circle")
-                }
-                // Rozbitý soubor s nálezy znamená, že se nějaké ztratily — a ztracený nález
-                // se nesmí tvářit jako „review neběželo“.
-                if store.unreadableReviewFiles > 0 {
-                    notice(
-                        "\(store.unreadableReviewFiles) uložených nálezů se nepodařilo přečíst.",
-                        icon: "exclamationmark.triangle"
-                    )
-                }
-                // A o důvod víc u rozdělaného review: nález se dá dostat zpátky dalším
-                // během, ručně psaný text ne.
-                if store.unreadableDraftFiles > 0 {
-                    notice(
-                        "\(store.unreadableDraftFiles) rozdělaných review se nepodařilo přečíst.",
-                        icon: "exclamationmark.triangle"
-                    )
-                }
-                // Neuložené review se nesmí tvářit jako uložené — po restartu by bylo pryč.
-                if let failure = store.draftFailure {
-                    notice(failure, icon: "exclamationmark.triangle")
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.bar)
-            .overlay(alignment: .top) { Rectangle().fill(.separator).frame(height: 1) }
-        }
-    }
-
-    private var automaticPausedText: String {
-        let limit = store.configuration.global.autoRunsPerDay
-        return limit > 0
-            ? "Automatické review pozastavené — vyčerpaný denní limit (\(limit)). Ručně jde dál."
-            : "Automatické review je vypnuté (denní limit 0). Ručně jde dál."
-    }
-
-    private var hasNotices: Bool {
-        store.configurationFailure != nil
-            || store.isAutomaticStopped
-            || store.unreadableReviewFiles > 0
-            || store.unreadableDraftFiles > 0
-            || store.draftFailure != nil
-    }
-
-    private func notice(_ text: String, icon: String) -> some View {
-        Label(text, systemImage: icon)
-            .font(.caption)
-            .foregroundStyle(.orange)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder private var content: some View {

@@ -36,6 +36,10 @@ struct DiffView: View {
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
     @State private var isPickingFile = false
+    /// Výška viditelné části diffu — z ní se počítá, kam skočí nález. Čte se jen měřením
+    /// (`onGeometryChange`), takže do rozvržení nezasahuje: `GeometryReader` by naopak sám
+    /// zabral místo a v tomhle okně už jednou nadělal škodu.
+    @State private var viewportHeight = 0.0
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -44,16 +48,40 @@ struct DiffView: View {
                 Divider()
                 files
             }
-            // Doprostřed, ne na vrch: bublina visí **pod** svým řádkem, takže u horní hrany
-            // by bylo vidět jen ji a kód nad ní ne. Ukotvená hlavička souboru navíc vršek
-            // překrývá, takže by řádek scrollnutý „na vrch“ skončil pod ní.
-            .onChange(of: scrollTarget) { _, target in
-                guard let target else { return }
-                withAnimation { proxy.scrollTo(target, anchor: .center) }
+            // Kam cíl skočí, řeší `jumpAnchor`: **k vršku, ale s odstupem**. Na vrch samotný
+            // ne — ukotvená hlavička souboru vršek překrývá a bublina visí **pod** svým
+            // řádkem, takže by bylo vidět jen ji a kód nad ní ne.
+            //
+            // **`task(id:)`, ne `onChange`.** Od #72 se dá na nález kliknout i z `Přehledu`,
+            // odkud se nejdřív přepne tab — a diff v tu chvíli **vzniká**. Cíl už v něm tedy
+            // je a `onChange` by se nespustil, protože žádná změna nepřišla; `task(id:)` se
+            // spustí i při vzniku.
+            .task(id: scrollTarget) {
+                guard let target = scrollTarget else { return }
+                withAnimation { proxy.scrollTo(target, anchor: jumpAnchor) }
                 scrollTarget = nil
             }
         }
     }
+
+    /// Kam v okně skočí nález — **k vršku, ale s odstupem na pár řádků kontextu**.
+    ///
+    /// `scrollTo` umí jen podíl výšky, ne body, takže se z bodů podíl počítá: nad cílem má
+    /// zůstat ukotvená hlavička souboru (překrývá vršek) a pod ní ještě pár řádků, ať je vidět,
+    /// do čeho nález patří. Doprostřed to skákalo do #72 a půlka obrazovky nad nálezem byla
+    /// zbytečná; na vrch samotný zase cíl skončí pod hlavičkou.
+    ///
+    /// Strop `0.5` je pojistka pro nízké okno: v pruhu o výšce dvou řádků je „pět řádků nad“
+    /// nesplnitelné a střed je pak to nejlepší, co jde udělat. Dokud výška nedorazí, platí
+    /// taky střed — je to jediná hodnota, která nezávisí na tom, co ještě nevíme.
+    private var jumpAnchor: UnitPoint {
+        guard viewportHeight > 0 else { return .center }
+        return UnitPoint(x: 0, y: min(0.5, Self.contextAbove / viewportHeight))
+    }
+
+    /// Ukotvená hlavička souboru (~30 pt) a tři řádky diffu (~22 pt na řádek). Vyladěné na
+    /// běžící aplikaci: se pěti řádky (140 pt) odskok působil zbytečně velký.
+    private static let contextAbove = 90.0
 
     /// Každý **řádek** je vlastní buňka líného seznamu, ne každý hunk. Hunk jako celek
     /// se po změně šířky okna překresloval jen zčásti a v diffu zůstávala prázdná místa.
@@ -75,6 +103,8 @@ struct DiffView: View {
                 }
             }
         }
+        // Jen měření, žádný vliv na rozvržení — proto `onGeometryChange` a ne `GeometryReader`.
+        .onGeometryChange(for: Double.self) { $0.size.height } action: { viewportHeight = $0 }
     }
 
     private func rows(of file: FileDiff) -> some View {

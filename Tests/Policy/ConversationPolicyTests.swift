@@ -207,4 +207,153 @@ struct ConversationPolicyTests {
 
         #expect(Policy.threads(of: file, from: threads).map(\.id) == ["bez-radku", "s-radkem"])
     }
+
+    // MARK: - Přehled (#72)
+
+    private func comment(
+        id: String = "c1",
+        author: String = "kolega",
+        body: String = "komentář",
+        at seconds: TimeInterval
+    ) -> ThreadComment {
+        ThreadComment(
+            id: id,
+            author: author,
+            body: body,
+            createdAt: Date(timeIntervalSince1970: seconds),
+            url: URL(string: "https://github.com/cli/cli/pull/1#issuecomment-\(id)")!
+        )
+    }
+
+    private func review(
+        id: String = "r1",
+        author: String = "kolega",
+        state: SubmittedReview.State? = .approved,
+        body: String = "",
+        at seconds: TimeInterval? = 100
+    ) -> SubmittedReview {
+        SubmittedReview(
+            id: id,
+            author: author,
+            state: state,
+            body: body,
+            submittedAt: seconds.map { Date(timeIntervalSince1970: $0) }
+        )
+    }
+
+    private func conversation(
+        reviews: [SubmittedReview] = [],
+        threads: [ReviewThread] = [],
+        comments: [ThreadComment] = []
+    ) -> Conversation {
+        Conversation(
+            viewer: "ja",
+            reviews: ConversationPage(items: reviews, total: reviews.count, hasNextPage: false),
+            threads: ConversationPage(items: threads, total: threads.count, hasNextPage: false),
+            comments: ConversationPage(items: comments, total: comments.count, hasNextPage: false)
+        )
+    }
+
+    /// Tři různé věci v jednom seznamu, protože se na GitHubu čtou za sebou.
+    @Test("Přehled řadí review, komentáře a vlákna podle času")
+    func ordersEverythingChronologically() throws {
+        let value = conversation(
+            reviews: [review(id: "r", body: "koukám na to", at: 200)],
+            threads: [thread(id: "t", line: nil)],
+            comments: [comment(id: "c", at: 100)]
+        )
+
+        let entries = Policy.overview(of: value, renderedIn: try diff())
+
+        #expect(entries.map(\.id) == ["cc", "rr", "tt"], "vlákno bez komentářů datum nemá, jde naspod")
+    }
+
+    /// Vlákno **s kotvou** je bublina u kódu, takže se do přehledu nesmí dostat — jinak se
+    /// tentýž komentář čte na dvou místech.
+    @Test("Vlákno s kotvou v diffu se do přehledu nedostane")
+    func skipsAnchoredThreads() throws {
+        let value = conversation(threads: [thread(id: "kotva", line: 27)])
+
+        #expect(Policy.overview(of: value, renderedIn: try diff()).isEmpty)
+    }
+
+    @Test("Vlákno bez kotvy v přehledu je")
+    func keepsUnanchoredThreads() throws {
+        let value = conversation(threads: [thread(id: "zastaralé", line: nil, outdated: true)])
+
+        #expect(Policy.overview(of: value, renderedIn: try diff()).map(\.id) == ["tzastaralé"])
+    }
+
+    /// Každý řádkový komentář na GitHubu patří do nějakého review, takže u PR s komentáři
+    /// u kódu přijdou i review, která nejsou tvrzením — jen obálky. Jako „někdo napsal review:
+    /// (nic)“ by z nich byl seznam prázdných položek.
+    @Test("Review bez verdiktu a bez prózy se zahodí")
+    func dropsEmptyContainerReviews() throws {
+        let value = conversation(reviews: [review(id: "obálka", state: .commented, body: "")])
+
+        #expect(Policy.overview(of: value, renderedIn: try diff()).isEmpty)
+    }
+
+    /// Schválení bez prózy je plnohodnotný verdikt — čtvrtina vzorku u #63.
+    @Test("Schválení s prázdným tělem v přehledu zůstane")
+    func keepsAnEmptyApproval() throws {
+        let value = conversation(reviews: [review(id: "ok", state: .approved, body: "")])
+
+        #expect(Policy.overview(of: value, renderedIn: try diff()).map(\.id) == ["rok"])
+    }
+
+    /// Neznámý stav review (`nil`) konverzaci nepokládá, ale bez prózy taky nic neříká.
+    @Test("Neznámý stav review se bez prózy zahodí, s prózou zůstane")
+    func handlesAnUnknownReviewState() throws {
+        let mute = conversation(reviews: [review(id: "neznámé", state: nil, body: "")])
+        let talking = conversation(reviews: [review(id: "neznámé", state: nil, body: "něco")])
+
+        #expect(Policy.overview(of: mute, renderedIn: try diff()).isEmpty)
+        #expect(Policy.overview(of: talking, renderedIn: try diff()).map(\.id) == ["rneznámé"])
+    }
+
+    /// Rozdělané review na GitHubu odeslané ještě není, takže do historie nepatří — ale
+    /// zmizet nesmí: je to důvod, proč odsud nejde poslat naše (422 `one pending review`).
+    @Test("Review bez data odeslání jde naspod, ne pryč")
+    func sortsUndatedEntriesLast() throws {
+        let value = conversation(
+            reviews: [review(id: "rozdělané", state: .pending, body: "rozepsané", at: nil)],
+            comments: [comment(id: "c", at: 500)]
+        )
+
+        #expect(Policy.overview(of: value, renderedIn: try diff()).map(\.id) == ["cc", "rrozdělané"])
+    }
+
+    /// Bez diffu se nedá poznat, co má kotvu — a vlákno, které by se nikde neukázalo, je
+    /// horší než vlákno v přehledu.
+    @Test("Bez načteného diffu jsou v přehledu všechna vlákna")
+    func keepsEveryThreadWithoutADiff() {
+        let value = conversation(threads: [thread(id: "a", line: 27), thread(id: "b", line: nil)])
+
+        #expect(Policy.overview(of: value, renderedIn: nil).count == 2)
+    }
+
+    /// Review a komentář mají vlastní číselné řady, takže shoda `id` mezi nimi je možná —
+    /// a v `ForEach` by jedna z položek zmizela.
+    @Test("Stejné id u review a komentáře dá dvě položky")
+    func keepsItemsWithTheSameRawID() throws {
+        let value = conversation(
+            reviews: [review(id: "1", body: "review", at: 100)],
+            comments: [comment(id: "1", at: 200)]
+        )
+
+        let entries = Policy.overview(of: value, renderedIn: try diff())
+
+        #expect(entries.count == 2)
+        #expect(Set(entries.map(\.id)).count == 2)
+    }
+
+    /// Shodný čas nesmí nechat pořadí na náhodě — dvě položky ve stejné sekundě jsou běžné
+    /// (review a jeho komentář).
+    @Test("Při shodném čase rozhoduje identita")
+    func breaksOverviewTiesByIdentity() throws {
+        let value = conversation(comments: [comment(id: "b", at: 100), comment(id: "a", at: 100)])
+
+        #expect(Policy.overview(of: value, renderedIn: try diff()).map(\.id) == ["ca", "cb"])
+    }
 }
