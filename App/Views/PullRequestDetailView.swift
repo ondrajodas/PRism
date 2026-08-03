@@ -43,6 +43,9 @@ struct PullRequestDetailView: View {
         // Klíčem je celé shrnutí, ne jen identifikátor: nový commit změní `updatedAt`,
         // a to je přesně chvíle, kdy se má diff načíst znovu i bez přepnutí PR.
         .task(id: pullRequest) { await store.loadDiff(for: pullRequest) }
+        // Konverzace stejnou cestou jako diff, ne pollingem: pro všech N PR by to byla
+        // tatáž N+1 past, kvůli které se netahá ani detail.
+        .task(id: pullRequest) { await store.loadConversation(for: pullRequest) }
     }
 
     /// Dva řádky, ne čtyři bloky: cesta ke klonu, stav kopie i spuštění review se vejdou
@@ -195,7 +198,12 @@ struct PullRequestDetailView: View {
                 folding: foldingActions,
                 findings: Policy.groups(of: visibleFindings),
                 blockingCategories: blockingCategories,
-                highlighted: highlighted
+                highlighted: highlighted,
+                threads: store.anchoredThreads(for: pullRequest.id),
+                missingThreads: store.conversation(for: pullRequest.id)?.threads.missing ?? 0,
+                viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
+                isThreadExpanded: { store.isThreadExpanded($0, in: pullRequest.id) },
+                toggleThread: { store.toggleThread($0, in: pullRequest.id) }
             )
         case .failed(let detail):
             diffFailure(detail)
