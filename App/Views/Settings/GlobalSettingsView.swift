@@ -90,27 +90,29 @@ struct GlobalSettingsView: View {
             // `Běh` je hrst čísel, která se nastaví jednou. Denní limit patří mezi ně,
             // i když se týká automatu — je to strop na útratu, ne volba chování.
             Section("Běh") {
-                TextField(
-                    "Interval pollingu (s)",
+                SettingsNumberField(
+                    label: "Interval pollingu (s)",
                     value: $settings.draft.global.pollIntervalSeconds,
-                    format: .number.grouping(.never)
+                    range: 10...3600,
+                    step: 10
                 )
-                TextField(
-                    "Rozpočet cache (MB)",
+                SettingsNumberField(
+                    label: "Rozpočet cache (MB)",
                     value: $settings.draft.global.cacheBudgetMegabytes,
-                    format: .number.grouping(.never)
+                    range: 512...1_048_576,
+                    step: 1024
                 )
-                TextField(
-                    "Automatických review za den",
+                SettingsNumberField(
+                    label: "Souběžné session",
+                    value: $settings.draft.global.maxConcurrentReviews,
+                    range: 1...10
+                )
+                // Nula je platná hodnota: znamená, že automat nespustí nic.
+                SettingsNumberField(
+                    label: "Automatických review za den",
                     value: $settings.draft.global.autoRunsPerDay,
-                    format: .number.grouping(.never)
+                    range: 0...500
                 )
-                Stepper(value: $settings.draft.global.maxConcurrentReviews, in: 1...10) {
-                    LabeledContent(
-                        "Souběžné session",
-                        value: settings.draft.global.maxConcurrentReviews.formatted()
-                    )
-                }
                 TextField("Model", text: modelName, prompt: Text("výchozí podle claude"))
             }
         }

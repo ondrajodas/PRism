@@ -172,7 +172,43 @@ struct AppStoreAutomaticTests {
         await settle(store)
 
         #expect(reviewer.requests.count == 2)
-        #expect(store.remainingAutomaticRuns == 0)
+        #expect(store.isAutomaticStopped)
+    }
+
+    /// Tohle spálilo šest z dvaceti za jedno dopoledne: rozpočet se strhával v plánovači,
+    /// takže i restart aplikace (který vynuluje, co už se zvážilo) počítal běhy, které se
+    /// po dotažení detailu zahodily.
+    @Test("Přeskočený běh rozpočet nespotřebuje")
+    func aSkippedRunCostsNoBudget() async throws {
+        let ledger = AutoRunLedger(layout: layout, time: FakeTimeSource())
+        let gateway = FakeGitHubGateway(always: .success([summary()]), detail: .success(detail()))
+        var configuration = Configuration.standard
+        configuration.repositories = [repo: RepositoryConfig(mode: .automatic)]
+        func store() -> AppStore {
+            AppStore(
+                gateway: gateway,
+                configuration: configuration,
+                time: FakeTimeSource(),
+                checkout: FakeRepoCheckout(),
+                reviewer: FakeReviewRunner(),
+                reviews: ReviewStore(layout: layout, time: FakeTimeSource()),
+                autoRuns: ledger
+            )
+        }
+
+        let first = store()
+        await first.refresh()
+        await settle(first)
+        #expect(await ledger.used() == 1)
+
+        // Restart: `consideredForAutomation` je prázdné, takže se PR zváží znovu — ale
+        // `headSha` se nezměnil, takže se nic nespustí a rozpočet se sáhnout nesmí.
+        let restarted = store()
+        await restarted.loadStoredReviews()
+        await restarted.refresh()
+        await settle(restarted)
+
+        #expect(await ledger.used() == 1)
     }
 
     @Test("Bez automatického repa se o limitu nemluví")
@@ -185,6 +221,6 @@ struct AppStoreAutomaticTests {
         await store.refresh()
         await settle(store)
 
-        #expect(store.remainingAutomaticRuns == nil)
+        #expect(!store.isAutomaticStopped)
     }
 }

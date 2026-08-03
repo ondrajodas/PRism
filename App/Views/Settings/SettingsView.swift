@@ -8,6 +8,7 @@ import SwiftUI
 /// formulář srovná, viz `SettingsModel`.
 struct SettingsView: View {
     let store: AppStore
+    @Environment(\.controlActiveState) private var activeState
     @State private var settings: SettingsModel
 
     init(store: AppStore) {
@@ -26,11 +27,15 @@ struct SettingsView: View {
             .onChange(of: store.configuration) { _, configuration in
                 settings.sync(with: configuration)
             }
-            .onAppear { store.isSettingsOpen = true }
+            // Okno o sobě ví, jestli má fokus — hlavní okno to o něm poznat nedokáže.
+            .onAppear { store.isSettingsFrontmost = activeState == .key }
+            .onChange(of: activeState) { _, state in
+                store.isSettingsFrontmost = state == .key
+            }
             // Zavřít okno jde dřív, než doběhne zpoždění před zápisem. Rozepsaná změna se
             // nesmí ztratit jen proto, že jsem byl rychlejší než ono.
             .onDisappear {
-                store.isSettingsOpen = false
+                store.isSettingsFrontmost = false
                 Task { await settings.flush() }
             }
     }

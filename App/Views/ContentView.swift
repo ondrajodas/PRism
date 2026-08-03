@@ -6,7 +6,6 @@ struct ContentView: View {
     /// scéna a k `@State` uvnitř okna by se nedostalo.
     let store: AppStore
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.controlActiveState) private var activeState
 
     var body: some View {
         NavigationSplitView {
@@ -15,8 +14,8 @@ struct ContentView: View {
         } detail: {
             detail
         }
-        .blur(radius: isBehindSettings ? 3 : 0)
-        .animation(.easeInOut(duration: 0.18), value: isBehindSettings)
+        .blur(radius: store.isSettingsFrontmost ? 3 : 0)
+        .animation(.easeInOut(duration: 0.18), value: store.isSettingsFrontmost)
         // Smyčka žije, dokud žije okno — zavření okna task zruší a polling se zastaví.
         .task { await store.keepFresh() }
         // Konfigurace se edituje v souboru mimo aplikaci, takže se načte pokaždé, když se
@@ -27,15 +26,6 @@ struct ContentView: View {
             guard phase == .active else { return }
             Task { await store.reloadConfiguration() }
         }
-    }
-
-    /// Rozostřit se má jen tehdy, když je nastavení opravdu vepředu.
-    ///
-    /// Samotné „okno nastavení je otevřené“ nestačí: je nemodální, takže kliknutím zpátky
-    /// do seznamu se v něm dá dál pracovat — a rozostřené okno, ve kterém zrovna píšu, je
-    /// horší než žádný efekt. `controlActiveState` je `.key` právě u okna, které má fokus.
-    private var isBehindSettings: Bool {
-        store.isSettingsOpen && activeState != .key
     }
 
     @ViewBuilder private var detail: some View {

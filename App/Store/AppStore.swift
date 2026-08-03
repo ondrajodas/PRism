@@ -46,11 +46,15 @@ final class AppStore {
     /// vrací. Pořadí kopíruje pořadí, ve kterém běhy začaly.
     private(set) var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
 
-    /// Je otevřené okno nastavení? Hlavní okno se podle toho rozostří, aby netahalo oko.
+    /// Má okno nastavení fokus? Hlavní okno se podle toho rozostří, aby netahalo oko.
     ///
     /// Žije tady, ne ve view: okno nastavení je **vlastní scéna**, takže si to dvě okna
     /// nemají kde říct jinudy.
-    var isSettingsOpen = false
+    ///
+    /// Hlásí ho **okno nastavení o sobě**, ne hlavní okno o něm. Hlavní okno umí přes
+    /// `controlActiveState` říct jen „nemám fokus“, a to je pravda i tehdy, když je vepředu
+    /// úplně jiná aplikace — pak by se rozostřovalo bez důvodu.
+    var isSettingsFrontmost = false
 
     /// Nastavení, se kterým aplikace běží.
     private(set) var configuration: Configuration
@@ -517,9 +521,24 @@ final class AppStore {
 
     // MARK: - Automatický režim
 
-    /// Kolik automatických review dnes ještě zbývá. `nil` = automat není nastavený nikde,
-    /// takže se o limitu nemá co mluvit.
-    private(set) var remainingAutomaticRuns: Int?
+    /// Kolik review dnes automat spustil. `nil` = automat není nastavený nikde, takže se
+    /// o limitu nemá co mluvit.
+    ///
+    /// **Spotřeba, ne zbytek.** Porovnání s limitem patří tam, kde se kreslí, protože limit
+    /// se dá změnit v nastavení kdykoli — snímek „zbývá 0“ by po zvednutí limitu tvrdil, že
+    /// je pozastaveno, až do dalšího tiku.
+    private(set) var automaticRunsToday: Int?
+
+    /// Nespustí automat nic? Počítá se **teď**, z aktuálního limitu.
+    ///
+    /// Pokrývá **dva důvody** a schválně je nerozlišuje: vyčerpaný limit a limit nastavený
+    /// na nulu. Pro rozhodnutí „ukázat hlášku“ je to totéž — repo je v automatickém režimu
+    /// a nic se nespustí. Který z těch dvou to je, rozlišuje až text hlášky, protože
+    /// „vyčerpaný limit (0)“ by tvrdilo, že se něco spotřebovalo.
+    var isAutomaticStopped: Bool {
+        guard let automaticRunsToday else { return false }
+        return automaticRunsToday >= configuration.global.autoRunsPerDay
+    }
 
     /// Naplánuje review pro repa v automatickém režimu.
     ///
@@ -529,7 +548,7 @@ final class AppStore {
         guard let autoRuns else { return }
         let limit = configuration.global.autoRunsPerDay
         let anyAutomatic = summaries.contains { resolved(for: $0.repo).mode == .automatic }
-        remainingAutomaticRuns = anyAutomatic ? await autoRuns.remaining(limit: limit) : nil
+        automaticRunsToday = anyAutomatic ? await autoRuns.used() : nil
 
         let candidates = Policy.automaticallyReviewable(
             in: summaries,
@@ -539,17 +558,36 @@ final class AppStore {
         )
         let updates = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0.updatedAt) })
 
+        // Vyčerpaný rozpočet zastaví plánování **dřív**, než se sáhne na síť. Jinak by
+        // každý tik stál `gh pr view` za PR, které se stejně nespustí.
+        //
+        // `?? 0` není tichý default: hodnota se o dva řádky výš právě načetla z disku a
+        // `nil` je jen ve stavu „žádné automatické repo“, kdy je `candidates` stejně prázdné.
+        guard (automaticRunsToday ?? 0) < limit else { return }
+
         for pr in candidates {
-            // Rozpočet se bere **před** spuštěním: session je utracená v okamžiku, kdy běh
-            // začne, ne až doběhne.
-            guard await autoRuns.take(limit: limit) else { break }
             // Zapsat se to smí až potom, co se běh opravdu naplánoval. Obrácené pořadí by
             // znamenalo, že PR zamítnutý rozpočtem se už nikdy nezváží.
             consideredForAutomation[pr] = updates[pr]
             automaticReviews.insert(pr)
             reviewTasks[pr] = Task { [weak self] in await self?.review(pr) }
         }
-        remainingAutomaticRuns = anyAutomatic ? await autoRuns.remaining(limit: limit) : nil
+    }
+
+    /// Sáhne si o rozpočet pro automatický běh. `false` = dnes už ne.
+    ///
+    /// Volá se **až potom, co je jasné, že se utratí session** — tedy za bránou na
+    /// `headSha`. Strhávat ho v plánovači znamenalo počítat i běhy, které se po dotažení
+    /// detailu zahodí, a protože se `consideredForAutomation` po restartu vynuluje, spálil
+    /// každý restart rozpočet za všechna auto PR, aniž by se cokoli spustilo.
+    private func claimAutomaticRun(for pr: PRIdentifier) async -> Bool {
+        guard let autoRuns else { return true }
+        let allowed = await autoRuns.take(limit: configuration.global.autoRunsPerDay)
+        automaticRunsToday = await autoRuns.used()
+        // Zamítnutý PR se musí dát zvážit znovu, jinak by o review přišel i zítra, kdy je
+        // rozpočet volný — `updatedAt` se od té doby nemusí změnit.
+        if !allowed { consideredForAutomation[pr] = nil }
+        return allowed
     }
 
     /// Zrušení uživatelem. Session dostane `SIGKILL`, rozdělané výsledky se zahodí.
@@ -596,9 +634,16 @@ final class AppStore {
             // `updatedAt`, které se mění i po komentáři — teprve `headSha` řekne, jestli
             // se kód opravdu změnil. Ruční spuštění se **nezastavuje**: když si o něj
             // někdo řekl podruhé, chce to pustit znovu.
-            if automaticReviews.contains(pr), hasCurrentReview(of: pr, at: detail.headSha) {
-                reviewPhases[pr] = nil
-                return
+            if automaticReviews.contains(pr) {
+                guard !hasCurrentReview(of: pr, at: detail.headSha) else {
+                    reviewPhases[pr] = nil
+                    return
+                }
+                // Tady, ne v plánovači: teprve teď je jisté, že se utratí session.
+                guard await claimAutomaticRun(for: pr) else {
+                    reviewPhases[pr] = nil
+                    return
+                }
             }
 
             checkoutStates[pr.repo] = .preparing
