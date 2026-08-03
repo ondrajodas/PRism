@@ -1346,6 +1346,12 @@ Právě proto tam eskalace na `SIGKILL` je.
   přeformátované `jq`; berou se z **veřejných** repozitářů (`cli/cli`, `cli/go-gh`,
   `ondrajodas/PRism`), protože titulky firemních PR sem nepatří. Stav, na který se
   skutečná fixture nedá sehnat, se testuje inline JSONem přímo v testu.
+
+  Výjimka jsou `review-error-*.json` ze spike #62: chybové odpovědi zápisového review API
+  se z veřejného repa sehnat nedají (musel by se do něj poslat rozbitý payload), takže
+  pocházejí ze soukromého sandboxu `ondrajodas/prism-review-sandbox`. Neobsahují nic než
+  hlášku GitHubu. Konzumenta zatím **nemají** — klasifikaci chyb odesílání píše #67; leží
+  tady proto, že bez zápisu na GitHub se nedají vyrobit znovu.
 - **`StreamParser`** — proti **všem** fixtures ze skutečných běhů, plus syntetické rozbité
   vstupy: nevalidní JSON, useknutý řádek, neznámý event, nález bez povinných polí, prázdný
   vstup. Fixtures ze skutečných běhů už v repu jsou
@@ -1663,6 +1669,32 @@ a fixtures v `Tests/Fixtures/stream-json/`. **Žádný appkový kód**, ale opra
 v návrhu: `--verbose` je povinný a `ReportFindings` musí být v `--allowedTools`, jinak
 reviewer nálezy napíše textem a sběr tiše nefunguje.
 
+Spike k **zápisovému review API** hotový (issue #62) —
+[`docs/github-review-api.md`](docs/github-review-api.md) a fixtures
+`Tests/Fixtures/gh/review-error-*.json`. **Žádný appkový kód** a tvrdá podmínka č. 1 pořád
+platí; měřilo se ručně přes `gh api` nad soukromým `ondrajodas/prism-review-sandbox`. Šest
+věcí, na kterých stojí zbytek M6:
+
+- **Volání je atomické.** `POST /pulls/{n}/reviews` s verdiktem i `comments[]` odejde jedním
+  voláním, a payload s jedním komentářem mimo diff skončí 422, po kterém na PR **nezůstane
+  nic** — ani platné komentáře. `ReviewPublisher` (#67) proto nemusí umět částečné selhání
+  ani mít obrannou validaci nad rozřazením nálezů. **Rozřadit** je ale musí — nález mimo
+  hunky jde do těla jako permalink, ne jako řádkový komentář — a `DiffRow.anchor` to od #19
+  umí. Atomicita mění cenu omylu v tom rozřazení, ne jeho potřebu.
+- **Zastaralé `commit_id` GitHub přijme.** Review proti commitu, který už není head, projde.
+  Kontrola `headSha` tedy musí být v aplikaci těsně před odesláním — tentýž důvod jako
+  u tvrdé podmínky č. 5.
+- **Zastarání komentáře se pozná na `line == nil`** při zachovaném `original_line`.
+  `position` použít nelze, zůstává nenulové. Na tom postaví #69.
+- **Kotvu určuje hunk, ne změna.** Kontextový (nezměněný) řádek uvnitř hunku komentovat jde,
+  řádek mimo hunky ne.
+- **Pending review blokuje odeslání** (422 `User can only have one pending review`).
+  Smazat ho jde `DELETE`em, ale je to cizí rozdělaná práce — rozhodnutí pro #67.
+- **Na vlastním PR jde jen `COMMENT`.** `APPROVE` i `REQUEST_CHANGES` vrátí 422, takže #68
+  musí verdikt schovat, ne spadnout na chybě. A **permalink v těle review se renderuje jako
+  obarvený úryvek kódu** (i rozsah `#L40-L43`) — tak se do review dostane nález mimo diff,
+  místo aby se zahodil.
+
 **Fáze 2 hotová** — `App/Checkout/`, vrstva bez UI. Bare klon do cache (#8), worktree per
 review i serializace souběžných příprav (#9) a eviction cache (#10). Aplikace si tedy umí
 připravit pracovní kopii a uklidit po sobě; chybí jen ten, kdo ji použije.
@@ -1754,9 +1786,16 @@ Tím **končí rozsah v1** podle specifikace. Za ním:
 
 6. **Review na GitHub** (M6) — odesílání review z okna. Tenhle milník **ruší tvrdou
    podmínku č. 1** a nahrazuje ji pravidlem „jediná cesta ven“ (#67). Dokud není hotový,
-   podmínka platí beze změny.
+   podmínka platí beze změny. **Spike #62 hotový** — viz výš a
+   [`docs/github-review-api.md`](docs/github-review-api.md).
 7. **Konverzace, komentáře a taby** (M7) — cizí komentáře a vlákna v okně, odpovídání do
    nich a rozvržení jako na GitHubu (taby `Overview` / `Files changed`).
+
+**M6 a M7 jsou do sebe zaklesnuté a nejdou udělat po sobě.** `#66` a `#68` z M6 čekají na
+`#64` z M7, kdežto `#73` z M7 čeká na `#67` z M6 — takže se to plánuje jako jeden blok
+o jedenácti issues, ne dva milníky za sebou. Bez závislostí jsou `#62` (hotový), `#63`
+a `#65`; `#98` (side-by-side diff) na konverzaci nestojí vůbec a dá se zařadit kamkoli.
+Pořadí zbytku: `#63` → `#65` → `#64` → `#67` → `#66` → `#72` → `#68` → `#73` → `#69`.
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
    s oprávněním a klikem (#88), doběhlé review (#82), nové PR (#85), vypínání po
    událostech (#86) a seskupování (#87).
