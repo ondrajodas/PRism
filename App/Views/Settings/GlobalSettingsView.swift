@@ -87,6 +87,8 @@ struct GlobalSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            // `Běh` je hrst čísel, která se nastaví jednou. Denní limit patří mezi ně,
+            // i když se týká automatu — je to strop na útratu, ne volba chování.
             Section("Běh") {
                 TextField(
                     "Interval pollingu (s)",
@@ -96,6 +98,11 @@ struct GlobalSettingsView: View {
                 TextField(
                     "Rozpočet cache (MB)",
                     value: $settings.draft.global.cacheBudgetMegabytes,
+                    format: .number.grouping(.never)
+                )
+                TextField(
+                    "Automatických review za den",
+                    value: $settings.draft.global.autoRunsPerDay,
                     format: .number.grouping(.never)
                 )
                 Stepper(value: $settings.draft.global.maxConcurrentReviews, in: 1...10) {

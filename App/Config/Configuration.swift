@@ -37,6 +37,9 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// kóduje jako dvojice čísel, kterou nikdo nenapíše.
     var pollIntervalSeconds: Int
     var maxConcurrentReviews: Int
+    /// Kolik review smí za den spustit **automat**. Pojistka proti překvapení na účtu:
+    /// ruční spouštění limit nezná, protože za tím vždycky někdo stojí.
+    var autoRunsPerDay: Int
     /// V megabajtech ze stejného důvodu: `10737418240` se nečte.
     var cacheBudgetMegabytes: Int
     /// `nil` = model, který si `claude` zvolí sám.
@@ -51,6 +54,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         findingsLanguage: FindingsLanguage = .czech,
         pollIntervalSeconds: Int,
         maxConcurrentReviews: Int,
+        autoRunsPerDay: Int = 20,
         cacheBudgetMegabytes: Int,
         model: String?
     ) {
@@ -62,6 +66,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.findingsLanguage = findingsLanguage
         self.pollIntervalSeconds = pollIntervalSeconds
         self.maxConcurrentReviews = maxConcurrentReviews
+        self.autoRunsPerDay = autoRunsPerDay
         self.cacheBudgetMegabytes = cacheBudgetMegabytes
         self.model = model
     }
@@ -87,6 +92,8 @@ struct GlobalConfig: Codable, Equatable, Sendable {
             ?? standard.pollIntervalSeconds
         maxConcurrentReviews = try container.decodeIfPresent(Int.self, forKey: .maxConcurrentReviews)
             ?? standard.maxConcurrentReviews
+        autoRunsPerDay = try container.decodeIfPresent(Int.self, forKey: .autoRunsPerDay)
+            ?? standard.autoRunsPerDay
         cacheBudgetMegabytes = try container.decodeIfPresent(Int.self, forKey: .cacheBudgetMegabytes)
             ?? standard.cacheBudgetMegabytes
         model = try container.decodeIfPresent(String.self, forKey: .model)
@@ -176,6 +183,7 @@ struct Configuration: Codable, Equatable, Sendable {
             findingsLanguage: .czech,
             pollIntervalSeconds: 60,
             maxConcurrentReviews: 3,
+            autoRunsPerDay: 20,
             cacheBudgetMegabytes: 10 * 1024,
             model: nil
         ),

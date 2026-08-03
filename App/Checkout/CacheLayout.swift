@@ -30,6 +30,10 @@ struct CacheLayout: Sendable, Equatable {
     /// vidět hned, jakmile člověk složku otevře.
     var configFile: URL { root.appending(path: "config.json") }
 
+    /// Počitadlo dnešních automatických review. Vedle konfigurace, ne v ní: `config.json`
+    /// píše uživatel, tohle aplikace.
+    var autoRunsFile: URL { root.appending(path: "auto-runs.json") }
+
     /// Výsledky review jednoho PR na jednom commitu: `reviews/<owner>/<repo>/<pr>-<sha>.json`.
     ///
     /// Zanořeno pod repo ze stejného důvodu jako stromy: ploché jméno se nedá filtrovat

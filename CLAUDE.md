@@ -362,7 +362,7 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `findingsLanguage`, interval, souběh, rozpočet, model |
+| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `findingsLanguage`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
 | `RepositoryConfig` | Override pro jedno repo: `mode`, `findingsLanguage`, skilly, kategorie — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
@@ -682,6 +682,7 @@ Výsledky review na disku: jeden JSON soubor na `(repo, PR, headSha)` pod
 | Typ | Co je |
 |---|---|
 | `ReviewStore` | Aktor: `save`, `markCurrent`, `load`, `cleanUp`. Atomický zápis |
+| `AutoRunLedger` | Aktor: kolik review dnes spustil automat. **Na disku**, aby limit nešel obejít restartem |
 | `ReviewRecord` | Obsah jednoho souboru: PR, `headSha`, běhy, `isStale`, `closedAt` |
 | `StoredReviewRun` | Jeden běh: skill, `outcome`, session id, nálezy, `droppedFindings`, čas |
 
@@ -728,6 +729,34 @@ Věci, které se u toho nemají rozbít:
 - **Chyba checkoutu je stav repa, chyba GitHubu stav PR.** Na první narazí i druhé PR téhož
   repa a řeší se stejným tlačítkem; druhá se týká jen toho jednoho PR. Proto má
   `ReviewPhase` vlastní případ `failed`, místo aby se všechno cpalo do `CheckoutState`.
+Automatický režim (#25):
+
+- **`headSha` z pollingu není k dispozici**, takže se rozhoduje na dva kroky. Po tiku hrubý
+  filtr podle `updatedAt` (levný, bez sítě), a **teprve po dotažení detailu** se porovná
+  `headSha` a rozhodne, jestli se utratí session. Komentář na PR tedy stojí jedno
+  `gh pr view` a nula sessions. Dotahovat detail všech PR při každém tiku by z jednoho
+  pollu udělalo N podprocesů.
+- **Ruční spuštění se `headSha` nezastavuje.** Kdo si o review řekl podruhé, chce ho pustit
+  znovu; automat se ptá, jestli je to potřeba.
+- **Plánuje se jen po úspěšném tiku.** Po výpadku sítě je seznam prázdný — stejná past jako
+  u eviction a `ReviewStore.cleanUp`.
+- **Počitadlo je v paměti, disk je záloha.** Kdyby se počítalo jen podle souboru, trvale
+  selhávající zápis (plný disk, práva) by ho nikdy neposunul a limit by přestal platit
+  **úplně** — tedy přesně to, proti čemu je. Nečitelný soubor se naopak bere jako prázdný
+  den: umlčet automat kvůli počitadlu, které nejde přečíst, se nedá vysvětlit.
+- **Nulový `autoRunsPerDay` znamená vypnuto**, ne „bez omezení“. Je to obrácená volba než
+  u nuly souběžných session, a schválně: tam překlep nesmí aplikaci umlčet, tady nesmí
+  z překlepu vzniknout neomezené utrácení.
+- **Rozpočet se bere před spuštěním, ne po doběhnutí.** Session je utracená v okamžiku, kdy
+  běh začne; počítat až doběhlé by pustilo dvacet běhů naráz.
+- **Draft se sám nereviewuje.** Autor na něm pracuje a každý push by stál session. Ruční
+  spuštění zůstává. **Změna proti zadání #25**, které to neřešilo.
+- **Ruší se jen automatická review.** PR, který zmizel ze seznamu (zavřený, mergnutý),
+  nemá blokovat slot — ale ruční review si vyžádal člověk a zrušit mu ho pod rukama proto,
+  že to někdo mezitím mergnul, je horší než session navíc.
+- **Ruční spuštění maže příznak automatu**, jinak by se ruční běh dal zrušit tím, že PR
+  vypadne ze seznamu.
+
 - **Jazyk repa se odhaduje před `runSkills`, ne po nich.** Sada, kterou detekce zapíše, je
   ta, se kterou má **tenhle** běh jet; po skillech by se projevila až podruhé.
 - **Detekce běží při každém review, dokud si repo o skilly neřekne.** Rozhoduje
@@ -976,6 +1005,7 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 | `Policy.groups(of:)` | Shoda reviewerů na `file:line` → `FindingGroup` s odznakem `2×` |
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` |
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
+| `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
@@ -1292,6 +1322,14 @@ Právě proto tam eskalace na `SIGKILL` je.
   rozbitá odpověď nevyhodí chybu. `AppStore` na celou cestu: přeložené nálezy na disku
   i po restartu, angličtina bez volání, čisté review bez volání, selhaný překlad
   s originály a — to hlavní — **nepřeložený nález, který nesmí zmizet vedle přeložených**.
+- **`Policy.automaticallyReviewable`** — automat vs. manuál, už zvážený PR, změněný
+  `updatedAt`, běžící PR, draft a prázdný seznam.
+- **`AutoRunLedger`** — proti skutečné dočasné složce, protože jde právě o to, že
+  počitadlo **přežije restart**. Plus nový den, nulový limit (vypnuto, ne „bez omezení“)
+  a rozbitý soubor, který automat umlčet nesmí.
+- **`AppStore` — automatický režim** — celý řetěz od tiku po session: automat spustí,
+  manuál ne, druhý tik nad stejným commitem session **neutratí**, komentář (jiné
+  `updatedAt`, stejný `headSha`) taky ne, nový commit ano, a denní limit pozastaví.
 - **`Policy.projectLanguages`** — jednojazyčné projekty (PHP, Go, TS, Swift), smíšený
   s pořadím podle váhy, zatoulaný soubor pod prahem, marker bez souborů, prázdný repozitář
   a repozitář bez zdrojáků. Plus to, co se snadno rozbije: že samotný `package.json`
@@ -1545,16 +1583,22 @@ Sbalování souborů hotové (issue #59) — klik na hlavičku sbalí a rozbalí
 `Sbalit vše` / `Rozbalit vše` je v horní liště a skok ze stromu i z tabulky nálezů sbalený
 soubor otevře. V hlavičce je odznak s počtem nálezů, červený u blokujících.
 
+**Fáze 5 hotová (issue #25).** Repo v automatickém režimu se reviewuje samo: po každém
+úspěšném tiku se naplánují PR, u kterých se od minula něco změnilo, a session se utratí
+teprve tehdy, když se změnil `headSha`. Denní limit (`autoRunsPerDay`, výchozí 20) je
+pojistka proti překvapení na účtu a drží se na disku, aby ho neobešel restart.
+
+**Tím je hotový rozsah v1 podle specifikace.**
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
 2. ~~Checkout cache + worktree~~ — **hotovo**
 3. ~~`ReviewRunner` + parsování streamu~~ — **hotovo**
 4. ~~UI diffu s bublinami~~ — **hotovo** (#18–#22, #47, #48, #51)
-5. Konfigurace a auto režim — konfigurace (#23), okno nastavení (#70), odhad jazyka (#24)
-   a jazyk nálezů (#52) hotové, zbývá **auto režim (#25)**
+5. ~~Konfigurace a auto režim~~ — **hotovo** (#23, #70, #24, #52, #25)
 
-Tím končí rozsah v1 podle specifikace. Za ním:
+Tím **končí rozsah v1** podle specifikace. Za ním:
 
 6. **Review na GitHub** (M6) — odesílání review z okna. Tenhle milník **ruší tvrdou
    podmínku č. 1** a nahrazuje ji pravidlem „jediná cesta ven“ (#67). Dokud není hotový,

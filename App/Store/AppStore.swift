@@ -74,6 +74,15 @@ final class AppStore {
     private let configStore: ConfigStore?
     /// Běžící review podle PR — drží se kvůli zrušení.
     private var reviewTasks: [PRIdentifier: Task<Void, Never>] = [:]
+    /// Review, která spustil **automat**. Ruční se pozná tím, že tady není — a jen ta
+    /// automatická se ruší, když PR zmizí ze seznamu.
+    private var automaticReviews: Set<PRIdentifier> = []
+    /// `updatedAt`, se kterým se PR naposledy zvažoval pro automat.
+    ///
+    /// V paměti, ne na disku: po restartu se zváží znovu, což stojí jedno `gh pr view` na
+    /// PR. Session se za to neutratí — o tu rozhoduje až porovnání `headSha`.
+    private var consideredForAutomation: [PRIdentifier: Date] = [:]
+    private let autoRuns: AutoRunLedger?
 
     init(
         gateway: any GitHubGateway,
@@ -84,7 +93,8 @@ final class AppStore {
         checkout: (any RepoCheckout)? = nil,
         reviewer: (any ReviewRunning)? = nil,
         reviews: ReviewStore? = nil,
-        translator: (any FindingTranslating)? = nil
+        translator: (any FindingTranslating)? = nil,
+        autoRuns: AutoRunLedger? = nil
     ) {
         self.time = time
         self.configuration = configuration
@@ -100,8 +110,12 @@ final class AppStore {
         self.reviewer = reviewer
         self.reviews = reviews
         self.translator = translator
+        self.autoRuns = autoRuns
         polling.afterSuccessfulTick = { [weak self] summaries in
             await self?.forget(whatIsNotIn: summaries)
+            // Až po `forget`: PR, který ze seznamu vypadl, se nemá čím spustit, a běžící
+            // automat nad ním se má naopak zrušit.
+            await self?.startAutomaticReviews(for: summaries)
             // `busy` se nepředává jako snímek, ale jako dotaz: eviction je dlouhá disková
             // operace a příprava, která začne uprostřed ní, by jinak přišla o ochranu.
             let busy: @Sendable () async -> Set<RepoID> = { [weak self] in
@@ -142,7 +156,8 @@ final class AppStore {
                 model: { box.value.global.model }
             ),
             reviews: ReviewStore(),
-            translator: ClaudeFindingTranslator(claude: toolPaths.claude, runner: runner)
+            translator: ClaudeFindingTranslator(claude: toolPaths.claude, runner: runner),
+            autoRuns: AutoRunLedger()
         )
         self.configurationBox = box
     }
@@ -493,7 +508,48 @@ final class AppStore {
     /// Spustí review vybraného PR. Opakované zmáčknutí, dokud běží, nic nedělá.
     func startReview(for pr: PRIdentifier) {
         guard reviewer != nil, reviewTasks[pr] == nil else { return }
+        // Ruční spuštění přebíjí automat: kdyby PR mezitím spustil automat, nespustí se
+        // podruhé (`reviewTasks` už není `nil`), ale zůstal by označený jako automatický
+        // a zmizení ze seznamu by ho zrušilo pod rukama.
+        automaticReviews.remove(pr)
         reviewTasks[pr] = Task { [weak self] in await self?.review(pr) }
+    }
+
+    // MARK: - Automatický režim
+
+    /// Kolik automatických review dnes ještě zbývá. `nil` = automat není nastavený nikde,
+    /// takže se o limitu nemá co mluvit.
+    private(set) var remainingAutomaticRuns: Int?
+
+    /// Naplánuje review pro repa v automatickém režimu.
+    ///
+    /// Volá se **jen po úspěšném tiku**: po výpadku sítě je seznam prázdný, takže by se
+    /// nespustilo nic a `consideredForAutomation` by se rozešlo se skutečností.
+    private func startAutomaticReviews(for summaries: [PullRequestSummary]) async {
+        guard let autoRuns else { return }
+        let limit = configuration.global.autoRunsPerDay
+        let anyAutomatic = summaries.contains { resolved(for: $0.repo).mode == .automatic }
+        remainingAutomaticRuns = anyAutomatic ? await autoRuns.remaining(limit: limit) : nil
+
+        let candidates = Policy.automaticallyReviewable(
+            in: summaries,
+            configuration: configuration,
+            considered: consideredForAutomation,
+            running: Set(reviewTasks.keys)
+        )
+        let updates = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0.updatedAt) })
+
+        for pr in candidates {
+            // Rozpočet se bere **před** spuštěním: session je utracená v okamžiku, kdy běh
+            // začne, ne až doběhne.
+            guard await autoRuns.take(limit: limit) else { break }
+            // Zapsat se to smí až potom, co se běh opravdu naplánoval. Obrácené pořadí by
+            // znamenalo, že PR zamítnutý rozpočtem se už nikdy nezváží.
+            consideredForAutomation[pr] = updates[pr]
+            automaticReviews.insert(pr)
+            reviewTasks[pr] = Task { [weak self] in await self?.review(pr) }
+        }
+        remainingAutomaticRuns = anyAutomatic ? await autoRuns.remaining(limit: limit) : nil
     }
 
     /// Zrušení uživatelem. Session dostane `SIGKILL`, rozdělané výsledky se zahodí.
@@ -520,7 +576,10 @@ final class AppStore {
     }
 
     private func review(_ pr: PRIdentifier) async {
-        defer { reviewTasks[pr] = nil }
+        defer {
+            reviewTasks[pr] = nil
+            automaticReviews.remove(pr)
+        }
         guard let reviewer, let checkout, let reviews else { return }
 
         // Nový běh začíná s čistou osou — míchat dohromady, co dělaly dva různé běhy, by
@@ -532,6 +591,15 @@ final class AppStore {
             let detail = try await gateway.fetchDetail(id: pr)
             try await reviews.markCurrent(detail.headSha, of: pr)
             markStaleInMemory(for: pr, current: detail.headSha)
+
+            // Tady se rozhoduje, jestli se utratí session. Výběr po tiku jede podle
+            // `updatedAt`, které se mění i po komentáři — teprve `headSha` řekne, jestli
+            // se kód opravdu změnil. Ruční spuštění se **nezastavuje**: když si o něj
+            // někdo řekl podruhé, chce to pustit znovu.
+            if automaticReviews.contains(pr), hasCurrentReview(of: pr, at: detail.headSha) {
+                reviewPhases[pr] = nil
+                return
+            }
 
             checkoutStates[pr.repo] = .preparing
             let worktree = try await checkout.worktree(for: pr, at: detail.headSha)
@@ -780,6 +848,18 @@ final class AppStore {
         }
     }
 
+    /// Je pro tenhle `headSha` hotové review se **všemi** nastavenými skilly?
+    ///
+    /// Chybějící skill znamená, že se sada mezitím rozšířila nebo že běh nedoběhl celý —
+    /// a to je důvod pustit ho znovu. Zastaralý záznam se nepočítá vůbec.
+    private func hasCurrentReview(of pr: PRIdentifier, at headSha: String) -> Bool {
+        guard let record = reviewRecords[pr], record.headSha == headSha, !record.isStale else {
+            return false
+        }
+        let finished = Set(record.runs.map(\.skillID))
+        return Set(reviewSkills(for: pr.repo)).isSubset(of: finished)
+    }
+
     /// Nový head commit zneplatní i to, co držíme v paměti — jinak by řádek do konce běhu
     /// ukazoval nálezy proti kódu, který v PR není.
     private func markStaleInMemory(for pr: PRIdentifier, current headSha: String) {
@@ -810,5 +890,13 @@ final class AppStore {
         reviewTimelines = reviewTimelines.filter {
             wantedPullRequests.contains($0.key) || reviewTasks[$0.key] != nil
         }
+
+        // Zavřený nebo mergnutý PR nemá co blokovat slot. Ruší se **jen automatická**
+        // review: to ruční si vyžádal člověk a zrušit mu ho pod rukama proto, že PR mezitím
+        // někdo mergnul, je horší než session navíc.
+        for pr in automaticReviews where !wantedPullRequests.contains(pr) {
+            reviewTasks[pr]?.cancel()
+        }
+        consideredForAutomation = consideredForAutomation.filter { wantedPullRequests.contains($0.key) }
     }
 }

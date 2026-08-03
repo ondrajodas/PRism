@@ -13,7 +13,7 @@ struct PullRequestListView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 PollStatusBanner(status: store.status, lastSuccess: store.lastSuccess)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { unreadableWarning }
+            .safeAreaInset(edge: .bottom, spacing: 0) { notices }
             .navigationTitle("Pull requesty")
             .toolbar {
                 settingsButton
@@ -21,30 +21,65 @@ struct PullRequestListView: View {
             }
     }
 
-    /// Rozbitý soubor s nálezy znamená, že se nějaké ztratily — a ztracený nález se v UI
-    /// nesmí tvářit jako „review neběželo“. Je to stav celé cache, ne jednoho PR, takže
-    /// patří pod seznam; když je všechno v pořádku, nekreslí se vůbec.
-    @ViewBuilder private var unreadableWarning: some View {
-        // Rozbitá konfigurace nesmí projít tiše — jinak uživatel hledá, proč mu nastavení
-        // nefunguje, a aplikace mezitím běží na výchozích hodnotách.
-        if let failure = store.configurationFailure {
-            Label(failure, systemImage: "exclamationmark.triangle")
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-        }
-        if store.unreadableReviewFiles > 0 {
-            Label(
-                "\(store.unreadableReviewFiles) uložených nálezů se nepodařilo přečíst.",
-                systemImage: "exclamationmark.triangle"
-            )
-            .font(.caption)
-            .foregroundStyle(.orange)
+    /// Pruh pod seznamem: co je špatně a co se kvůli tomu neděje.
+    ///
+    /// **Musí mít neprůhledné pozadí.** `safeAreaInset` sice místo vyhradí, ale průhledný
+    /// obsah nechá řádky seznamu prosvítat skrz a texty se míchají do sebe. A když není co
+    /// říct, nekreslí se vůbec — trvalý pruh ubírá místo seznamu a oko se ho naučí
+    /// přehlížet.
+    ///
+    /// Kde tyhle hlášky nakonec skončí, řeší #31 (stavový řádek).
+    @ViewBuilder private var notices: some View {
+        if hasNotices {
+            VStack(alignment: .leading, spacing: 4) {
+                // Rozbitá konfigurace nesmí projít tiše — jinak uživatel hledá, proč mu
+                // nastavení nefunguje, a aplikace mezitím běží na výchozích hodnotách.
+                if let failure = store.configurationFailure {
+                    notice(failure, icon: "exclamationmark.triangle")
+                }
+                // Pozastavený automat se **musí** ukázat. Bez toho vypadá jako rozbitý: PR
+                // přibývají, nic se nespouští a proč se nedá zjistit odnikud.
+                // Nula v konfiguraci znamená **vypnuto**, ne vyčerpáno. „Vyčerpaný limit
+                // (0)“ by tvrdil, že se něco spotřebovalo, a poslal by hledat, co.
+                if store.remainingAutomaticRuns == 0 {
+                    notice(automaticPausedText, icon: "pause.circle")
+                }
+                // Rozbitý soubor s nálezy znamená, že se nějaké ztratily — a ztracený nález
+                // se nesmí tvářit jako „review neběželo“.
+                if store.unreadableReviewFiles > 0 {
+                    notice(
+                        "\(store.unreadableReviewFiles) uložených nálezů se nepodařilo přečíst.",
+                        icon: "exclamationmark.triangle"
+                    )
+                }
+            }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
+            .overlay(alignment: .top) { Rectangle().fill(.separator).frame(height: 1) }
         }
+    }
+
+    private var automaticPausedText: String {
+        let limit = store.configuration.global.autoRunsPerDay
+        return limit > 0
+            ? "Automatické review pozastavené — vyčerpaný denní limit (\(limit)). Ručně jde dál."
+            : "Automatické review je vypnuté (denní limit 0). Ručně jde dál."
+    }
+
+    private var hasNotices: Bool {
+        store.configurationFailure != nil
+            || store.remainingAutomaticRuns == 0
+            || store.unreadableReviewFiles > 0
+    }
+
+    private func notice(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder private var content: some View {
