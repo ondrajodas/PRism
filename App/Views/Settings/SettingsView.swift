@@ -22,7 +22,11 @@ struct SettingsView: View {
 
     var body: some View {
         content
-            .frame(width: 880, height: 560)
+            // **Ne pevná velikost.** `frame(width:height:)` uvnitř `Settings` scény se pere
+            // s tím, jak si okno řídí velikost samo — okno pak umí zmizet při tažení za
+            // hlavičku. `ideal` mu velikost navrhne a `min` ji drží v použitelných mezích.
+            .frame(minWidth: 720, idealWidth: 880, minHeight: 420, idealHeight: 560)
+            .onAppear(perform: centerWindow)
             .task { settings.sync(with: store.configuration) }
             .onChange(of: store.configuration) { _, configuration in
                 settings.sync(with: configuration)
@@ -63,16 +67,24 @@ struct SettingsView: View {
         }
     }
 
+    /// Patička jde přes `safeAreaInset`, **ne do `VStack`u pod `TabView`**.
+    ///
+    /// Se `VStack`em přestane být `TabView` tím, co si řídí bezpečnou oblast okna, a jeho
+    /// formulář si pak vyhradí místo od horní hrany — obsah tedy leze pod lištu se
+    /// záložkami a první řádek je uříznutý. Stejná past jako u pruhu nad seznamem PR.
     private var editor: some View {
-        VStack(spacing: 0) {
-            TabView {
-                GlobalSettingsView(settings: settings)
-                    .tabItem { Label("Obecné", systemImage: "gearshape") }
-                RepositorySettingsView(settings: settings, repositories: store.knownRepositories)
-                    .tabItem { Label("Repozitáře", systemImage: "folder") }
+        TabView {
+            GlobalSettingsView(settings: settings)
+                .tabItem { Label("Obecné", systemImage: "gearshape") }
+            RepositorySettingsView(settings: settings, repositories: store.knownRepositories)
+                .tabItem { Label("Repozitáře", systemImage: "folder") }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
+                footer
             }
-            Divider()
-            footer
+            .background(.bar)
         }
     }
 
@@ -111,7 +123,61 @@ struct SettingsView: View {
         }
     }
 
+    /// Otevře okno uprostřed **hlavního okna**, pokaždé.
+    ///
+    /// `Settings` scéna si jinak pozici pamatuje mezi spuštěními — a okno, které se otevře
+    /// tam, kam ho někdo kdysi odtáhl, se hledá hůř, než se posouvá. Autosave se proto
+    /// vypíná; bez toho by `setFrame` přepsal rámec, který si AppKit vzápětí obnoví ze
+    /// zapamatovaného.
+    ///
+    /// Střed **hlavního okna**, ne obrazovky: na velkém monitoru s oknem u kraje by se
+    /// nastavení otevřelo o půl metru vedle.
+    ///
+    /// Přes `async` schválně: v `onAppear` okno ještě nemusí být klíčové, takže by se
+    /// posunulo něco jiného, nebo nic.
+    private func centerWindow() {
+        DispatchQueue.main.async {
+            guard let window = NSApp.keyWindow else { return }
+            window.setFrameAutosaveName("")
+            // **Hladina se nechává normální.** Zkoušelo se `.floating`, ať okno zůstane
+            // nahoře až do křížku, a **zahodilo se**: kliknutí mimo ho má odklidit, protože
+            // najíždět na křížek kvůli jedné změně je otrava. Diagnostikou je přitom
+            // ověřené, že se okno nezavírá — `willClose` nepřijde nikdy, jen zaleze za
+            // hlavní okno. Vypadá to stejně a vyhovuje to líp.
+            window.setFrame(Self.centered(window.frame, in: host(besides: window)), display: true)
+        }
+    }
+
+    /// Hlavní okno aplikace. Poznává se podle titulku — `WindowGroup("PRism")` mu ho dává
+    /// a je to jediný stabilní znak, kterým se odliší od okna nastavení a od panelů.
+    private func host(besides settings: NSWindow) -> NSRect? {
+        NSApp.windows.first { $0 !== settings && $0.isVisible && $0.title == "PRism" }?.frame
+    }
+
+    /// Vystředí rámec v hostiteli a zarovná ho zpátky na obrazovku.
+    ///
+    /// To druhé je podstatné: hlavní okno může být zpola mimo viditelnou plochu a nastavení
+    /// vystředěné v něm by skončilo za hranou, kde po něm není ani křížek.
+    private static func centered(_ frame: NSRect, in host: NSRect?) -> NSRect {
+        guard let host else { return frame }
+        var moved = frame
+        moved.origin = CGPoint(x: host.midX - frame.width / 2, y: host.midY - frame.height / 2)
+
+        guard let visible = NSScreen.screens
+            .max(by: { $0.frame.intersection(host).area < $1.frame.intersection(host).area })?
+            .visibleFrame
+        else { return moved }
+        moved.origin.x = min(max(moved.origin.x, visible.minX), visible.maxX - frame.width)
+        moved.origin.y = min(max(moved.origin.y, visible.minY), visible.maxY - frame.height)
+        return moved
+    }
+
     private func openConfigFile() {
         NSWorkspace.shared.open(CacheLayout.applicationSupport.configFile)
     }
+}
+
+private extension NSRect {
+    /// Plocha průniku — podle ní se pozná, na které obrazovce okno převážně leží.
+    var area: CGFloat { isNull ? 0 : width * height }
 }

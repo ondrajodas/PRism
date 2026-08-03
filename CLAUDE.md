@@ -869,13 +869,28 @@ Věci, které se u toho nemají rozbít:
 - **Index je identita řádku v seznamech**, takže mezi odebráním a překreslením se sahá na
   prvek, který v poli už není. `$items[index]` by na tom spadl; bindingy jsou proto psané
   ručně s kontrolou rozsahu.
+- **Patička okna jde přes `safeAreaInset`, ne do `VStack`u pod `TabView`.** Se `VStack`em
+  přestane být `TabView` tím, co si řídí bezpečnou oblast, formulář si vyhradí místo od
+  horní hrany okna a obsah leze **pod lištu se záložkami**. Je to tatáž past jako u pruhu
+  nad seznamem PR — a projeví se stejně nenápadně: uříznutým prvním řádkem.
 - **V textech se píše „programovací jazyk“, ne jen „jazyk“.** Samotné „jazyk“ se plete
   s jazykem, ve kterém reviewer píše nálezy (#52) — ověřeno tím, že se to spletlo hned
   při prvním zkoušení. Delší popisek je levnější než vysvětlování.
-- **Hlavní okno se rozostří jen tehdy, když je nastavení opravdu vepředu.** Okno je
+- **Hlavní okno se za nastavením ztmaví, ne rozostří.** `.blur()` protlačí celý strom přes
+  offscreen vykreslení **i s poloměrem 0**, takže text ztratí subpixelové vyhlazení a
+  v seznamu, diffu i hlavičce vypadá rozmazaně. Ověřeno odebráním modifikátoru. Podmíněně
+  ho aplikovat nejde — `if` kolem `NavigationSplitView` mu změní identitu a otevření
+  nastavení by zahodilo pozici scrollu v diffu. Překryv s nulovou průhledností
+  nerasterizuje nic.
+- **Ztmavuje se jen tehdy, když je nastavení opravdu vepředu.** Okno je
   nemodální, takže kliknutím zpátky do seznamu se v něm dá dál pracovat — a rozostřené
   okno, ve kterém zrovna píšu, je horší než žádný efekt. Příznak `isSettingsFrontmost` žije
   v `AppStore` (dvě scény si to nemají kde říct jinudy).
+
+  **`controlActiveState` nerozlišuje „vepředu je jiné okno mojí aplikace“ od „vepředu je
+  jiná aplikace“** — obojí je `.inactive`. Proto se ptá okno nastavení na `.key` a ne hlavní
+  okno na negaci; kdyby někdy bylo potřeba to rozlišit u aplikace jako celku, je na to
+  `NSApp.isActive`.
 
   **Hlásí to okno nastavení o sobě** (`isSettingsFrontmost`), ne hlavní okno o něm. Hlavní
   okno umí přes `controlActiveState` říct jen „nemám fokus“ — a to je pravda i tehdy, když
