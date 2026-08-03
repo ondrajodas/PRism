@@ -299,6 +299,53 @@ struct GhReviewPublisherTests {
         #expect(review.author == "kdosi")
     }
 
+    // MARK: - Zrušení a dočasný soubor
+
+    /// Zrušení **není chyba nástroje**. Kdyby se přemapovalo na `toolUnavailable`, ukázalo by
+    /// okno „gh se nepodařilo spustit“ nad odesláním, které si člověk sám zrušil — a stejné
+    /// pravidlo drží `ReviewRunner`.
+    @Test("Zrušení projde jako zrušení, ne jako chyba nástroje")
+    func propagatesCancellation() async {
+        let publisher = publisher(CancellingProcessRunner())
+
+        await #expect(throws: CancellationError.self) {
+            try await publisher.submit(draft())
+        }
+    }
+
+    /// Je v něm text review, který ještě nikdo neviděl, a dočasná složka je společná pro celý
+    /// systém. Práva se čtou **uvnitř** fake runneru, protože jen tam soubor ještě existuje.
+    @Test("Soubor s review má práva 0600")
+    func writesThePayloadPrivately() async throws {
+        let runner = try PermissionCheckingRunner(
+            standardOutput: Fixture.text("gh/review-submitted.json")
+        )
+
+        _ = try await publisher(runner).submit(draft())
+
+        #expect(runner.permissions == 0o600, "payload měl práva \(String(runner.permissions ?? 0, radix: 8))")
+    }
+
+    /// Ani po selhaném odeslání nesmí soubor s textem review zůstat na disku.
+    @Test("Po selhání nezůstane v dočasné složce nic", arguments: [0, 1])
+    func leavesNoTemporaryFiles(exitCode: Int32) async throws {
+        let before = temporaryPayloads()
+        let runner = try FakeProcessRunner(
+            exitCode: exitCode,
+            standardOutput: exitCode == 0 ? Fixture.text("gh/review-submitted.json") : "",
+            standardError: exitCode == 0 ? "" : "gh: Unprocessable Entity"
+        )
+
+        _ = try? await publisher(runner).submit(draft())
+
+        #expect(temporaryPayloads() == before)
+    }
+
+    private func temporaryPayloads() -> Set<String> {
+        let contents = (try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory())) ?? []
+        return Set(contents.filter { $0.hasPrefix("prism-review-") })
+    }
+
     // MARK: - Payload
 
     @Test("Payload nese verdikt, commit i komentáře")
@@ -364,5 +411,42 @@ struct GhReviewPublisherTests {
         default:
             false
         }
+    }
+}
+
+/// Runner, který volání zruší — `FakeProcessRunner` umí selhat jen `ProcessError`.
+private final class CancellingProcessRunner: ProcessRunning, @unchecked Sendable {
+    func run(
+        _ executable: URL,
+        arguments: [String],
+        environment: [String: String],
+        timeout: Duration
+    ) async throws -> ProcessResult {
+        throw CancellationError()
+    }
+}
+
+/// Runner, který si při volání přečte práva payload souboru. Jinde než tady to nejde —
+/// po návratu je soubor smazaný.
+private final class PermissionCheckingRunner: ProcessRunning, @unchecked Sendable {
+    private let output: String
+    private let lock = NSLock()
+    private var seen: Int?
+
+    init(standardOutput: String) { output = standardOutput }
+
+    var permissions: Int? { lock.withLock { seen } }
+
+    func run(
+        _ executable: URL,
+        arguments: [String],
+        environment: [String: String],
+        timeout: Duration
+    ) async throws -> ProcessResult {
+        if let index = arguments.firstIndex(of: "--input"), index + 1 < arguments.count {
+            let attributes = try? FileManager.default.attributesOfItem(atPath: arguments[index + 1])
+            lock.withLock { seen = attributes?[.posixPermissions] as? Int }
+        }
+        return ProcessResult(exitCode: 0, standardOutput: output, standardError: "")
     }
 }

@@ -86,6 +86,11 @@ struct GhReviewPublisher: ReviewPublishing {
             throw PublishError.timedOut
         } catch ProcessError.launchFailed(let detail) {
             throw PublishError.toolUnavailable(detail)
+        } catch is CancellationError {
+            // Zrušení **není chyba nástroje** a musí projít jako zrušení — jinak by volající
+            // ukázal „gh se nepodařilo spustit“ nad odesláním, které si člověk sám zrušil.
+            // Stejné pravidlo jako u `ReviewRunner`, který vyhazuje jedině `CancellationError`.
+            throw CancellationError()
         } catch {
             throw PublishError.toolUnavailable(error.localizedDescription)
         }
@@ -101,12 +106,28 @@ struct GhReviewPublisher: ReviewPublishing {
     private func writePayload(_ payload: PublishRequest.Payload) throws -> URL {
         let file = URL(filePath: NSTemporaryDirectory())
             .appending(path: "prism-review-\(UUID().uuidString).json")
+        let path = file.path(percentEncoded: false)
+        // Kódování **před** vytvořením souboru: když selže, není co uklízet.
         let data = try PublishRequest.encoded(payload)
-        try data.write(to: file, options: .atomic)
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o600],
-            ofItemAtPath: file.path(percentEncoded: false)
-        )
+
+        // Nejdřív prázdný soubor s právy, teprve pak obsah — text review tak na disku nikdy
+        // neexistuje se širšími právy. Zápis proto **není** `.atomic`: ten píše do vedlejšího
+        // souboru a přejmenováním by práva `0600` zahodil.
+        guard FileManager.default.createFile(
+            atPath: path,
+            contents: nil,
+            attributes: [.posixPermissions: 0o600]
+        ) else {
+            throw PublishError.toolUnavailable("Nepodařilo se připravit soubor s review.")
+        }
+        do {
+            try data.write(to: file)
+        } catch {
+            // Bez tohohle by po selhaném zápisu zůstal na disku soubor s textem review —
+            // `defer`, který ho maže, se registruje až u volajícího.
+            try? FileManager.default.removeItem(at: file)
+            throw error
+        }
         return file
     }
 

@@ -11,6 +11,20 @@ enum PullRequestState: String, Codable, Sendable, CaseIterable {
     case draft
     case merged
     case closed
+
+    /// Jak se stav píše v okně.
+    ///
+    /// Patří k modelu, ne do view, které ho zrovna potřebuje: `rawValue` je **anglický**
+    /// a jde do JSONu na disk, takže interpolovat ho do české věty znamená ukázat
+    /// uživateli `closed` uprostřed češtiny. Chytilo se to v hlášce `PublishError`.
+    var czechLabel: String {
+        switch self {
+        case .open: "otevřený"
+        case .draft: "rozpracovaný"
+        case .merged: "mergnutý"
+        case .closed: "zavřený"
+        }
+    }
 }
 
 /// Pull request tak, jak ho aplikace potřebuje — metadata z `gh`, žádný diff a žádné nálezy.

@@ -1402,6 +1402,14 @@ Věci, které se u toho nemají rozbít:
   metodu jen kvůli tomuhle by ji musely dopsat všechny fake implementace v testech, tedy
   stejná úvaha, kvůli které je streamování vlastní protokol. Soubor má práva `0600` (je v něm
   nezveřejněný text review) a maže se v `defer`, ať odeslání dopadne jakkoli.
+
+  Dvě věci, na kterých u toho záleží: **práva se nastavují na prázdný soubor a obsah se píše
+  teprve pak**, takže text review na disku nikdy neexistuje se širšími právy — a zápis proto
+  **není `.atomic`**, protože ten píše vedle a přejmenováním by práva zahodil. A **selhání
+  zápisu soubor uklidí samo**, protože `defer` u volajícího se registruje až po návratu.
+- **Zrušení se propaguje jako `CancellationError`**, ne jako `toolUnavailable`. Jinak by okno
+  ukázalo „gh se nepodařilo spustit“ nad odesláním, které si člověk sám zrušil — a je to
+  totéž pravidlo, jaké drží `ReviewRunner`.
 - **Odpověď se čte typovaně a vlastním DTO.** REST používá `user` a `submitted_at`, kdežto
   GraphQL v #63 `author` a `submittedAt`; sdílet DTO by znamenalo, že změna jednoho API mění
   druhé. `id` je v RESTu číslo, v GraphQL řetězec — `SubmittedReview` drží řetězec.

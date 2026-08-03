@@ -87,7 +87,7 @@ extension PublishError {
         case .staleDraft(let draft, let head):
             "Draft je psaný proti commitu \(draft.prefix(7)), ale hlava PR je \(head.prefix(7)). Načti diff znovu."
         case .pullRequestNotOpen(let state):
-            "Pull request není otevřený (\(state)). Review se dá poslat jen na otevřený PR."
+            "Pull request není otevřený — je \(state.czechLabel). Review se dá poslat jen na otevřený PR."
         case .nothingToSend:
             "Není co poslat — draft je prázdný nebo v něm chybí verdikt."
         case .lineOutsideDiff:
