@@ -1653,7 +1653,10 @@ Právě proto tam eskalace na `SIGKILL` je.
   test visel místo aby spadl. Součástí je `runningReviews` **napříč PR**: na tom čísle visí,
   jestli se aplikace před zavřením zeptá. Samotný dialog se unit-testovat nedá (modální
   `NSAlert`), ověřil se na běžící aplikaci — viz níž.
-- **`ReviewPublisher`** — proti `FakeProcessRunner` a fake gateway. Nejdůležitější testy
+- **`ReviewPublisher`** — proti `FakeProcessRunner` a fake gateway. Úklid dočasného souboru
+  se ověřuje **cestou z konkrétní invokace**, ne obsahem systémové dočasné složky: Swift
+  Testing pouští testy paralelně, takže porovnání „před a po“ nad `/tmp` je flaky (chytilo se
+  to v review #67). Nejdůležitější testy
   netvrdí, co se odeslalo, ale že se **nic neodeslalo**: repo mimo sandbox, neshoda `headSha`,
   zavřený PR a draft bez verdiktu musí skončit dřív, než se sáhne na `gh` (kontroluje se
   `runner.invocations.isEmpty`). Klasifikace chyb jde tabulkou nad **skutečnými** hláškami

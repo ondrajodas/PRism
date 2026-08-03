@@ -172,12 +172,21 @@ struct GhReviewPublisherTests {
         #expect(review.submittedAt != nil)
     }
 
-    /// Payload jde souborem, protože `ProcessRunning` neumí stdin.
-    @Test("Payload se předává souborem, který po sobě uklidí")
-    func passesThePayloadInAFileAndCleansUp() async throws {
-        let runner = try success()
+    /// Payload jde souborem, protože `ProcessRunning` neumí stdin — a ten soubor nesmí
+    /// zůstat na disku, ať odeslání dopadne jakkoli. Je v něm nezveřejněný text review.
+    ///
+    /// Kontroluje se **cesta z konkrétní invokace**, ne obsah dočasné složky: Swift Testing
+    /// pouští testy paralelně, takže jiný test v téže suitě by do ní mezitím sáhl a porovnání
+    /// „před a po“ by bylo flaky.
+    @Test("Payload se předává souborem, který po sobě uklidí", arguments: [0, 1] as [Int32])
+    func passesThePayloadInAFileAndCleansUp(exitCode: Int32) async throws {
+        let runner = try FakeProcessRunner(
+            exitCode: exitCode,
+            standardOutput: exitCode == 0 ? Fixture.text("gh/review-submitted.json") : "",
+            standardError: exitCode == 0 ? "" : "gh: Unprocessable Entity"
+        )
 
-        _ = try await publisher(runner).submit(draft())
+        _ = try? await publisher(runner).submit(draft())
 
         let arguments = try #require(runner.invocations.first?.arguments)
         let index = try #require(arguments.firstIndex(of: "--input"))
@@ -324,26 +333,6 @@ struct GhReviewPublisherTests {
         _ = try await publisher(runner).submit(draft())
 
         #expect(runner.permissions == 0o600, "payload měl práva \(String(runner.permissions ?? 0, radix: 8))")
-    }
-
-    /// Ani po selhaném odeslání nesmí soubor s textem review zůstat na disku.
-    @Test("Po selhání nezůstane v dočasné složce nic", arguments: [0, 1])
-    func leavesNoTemporaryFiles(exitCode: Int32) async throws {
-        let before = temporaryPayloads()
-        let runner = try FakeProcessRunner(
-            exitCode: exitCode,
-            standardOutput: exitCode == 0 ? Fixture.text("gh/review-submitted.json") : "",
-            standardError: exitCode == 0 ? "" : "gh: Unprocessable Entity"
-        )
-
-        _ = try? await publisher(runner).submit(draft())
-
-        #expect(temporaryPayloads() == before)
-    }
-
-    private func temporaryPayloads() -> Set<String> {
-        let contents = (try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory())) ?? []
-        return Set(contents.filter { $0.hasPrefix("prism-review-") })
     }
 
     // MARK: - Payload
