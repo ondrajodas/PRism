@@ -142,6 +142,12 @@ historie), moje komentáře mají odznak `já` a z každého se dá odskočit na
 se načte při výběru PR a drží se, dokud se nezmění `updatedAt`; pollingem se netahá, aby
 z jednoho tiku nebylo N podprocesů.
 
+**Rozdělané review se dá držet na disku** a přežije restart: tělo, verdikt a řádkové
+komentáře leží v `drafts/` vedle uložených nálezů, mimo dosah úklidu cache. Nový commit ho
+nesmaže, jen zablokuje odeslání — vlastní próza nezastarává tak rychle jako strojové nálezy.
+Skládat a odesílat ho zatím nejde; UI k tomu přijde s M6, a do té doby aplikace na GitHub
+pořád nic neposílá.
+
 Vlákna, jejichž řádek v aktuálním diffu **není** (typicky zastaralá po novém commitu), se
 do kódu nekotví — jejich čísla platila pro starý head, takže by bublina sedla na cizí řádky.
 Domov dostanou v tabu `Overview` spolu s review ostatních a komentáři pod PR. Pořád platí,

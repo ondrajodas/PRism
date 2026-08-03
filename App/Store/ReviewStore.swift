@@ -103,7 +103,11 @@ actor ReviewStore {
             loaded.records.append(record)
         }
         // Pořadí z `FileManageru` není zaručené a UI ani testy se na náhodu spoléhat nemají.
-        loaded.records.sort { ($0.pullRequest.description, $0.headSha) < ($1.pullRequest.description, $1.headSha) }
+        // Číslo PR se srovnává číselně (`PRIdentifier: Comparable`) — podle `description`
+        // by `#10` vyšlo před `#2`.
+        loaded.records.sort {
+            ($0.pullRequest, $0.headSha) < ($1.pullRequest, $1.headSha)
+        }
         return loaded
     }
 

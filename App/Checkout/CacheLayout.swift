@@ -26,6 +26,10 @@ struct CacheLayout: Sendable, Equatable {
     /// na místo.
     var reviews: URL { root.appending(path: "reviews") }
 
+    /// Rozdělaná review. **Mimo dosah eviction**, ze stejného důvodu jako `reviews/` —
+    /// a tady o to víc: je to ručně psaná práce, kterou by rozpočet na místo neměl smazat.
+    var drafts: URL { root.appending(path: "drafts") }
+
     /// Konfigurace. Leží v kořeni cache, ne pod `reviews/` — edituje se ručně a má být
     /// vidět hned, jakmile člověk složku otevře.
     var configFile: URL { root.appending(path: "config.json") }
@@ -44,6 +48,19 @@ struct CacheLayout: Sendable, Equatable {
 
     func reviews(of repo: RepoID) -> URL {
         reviews.appending(path: repo.owner).appending(path: repo.name)
+    }
+
+    /// Rozdělané review jednoho PR: `drafts/<owner>/<repo>/<pr>.json`.
+    ///
+    /// Bez `headSha` v názvu, na rozdíl od nálezů: draft je jeden na PR a nový commit ho
+    /// nezahazuje, jen zablokuje odeslání. Zanořeno pod repo ze stejného důvodu jako
+    /// všechno ostatní — ploché jméno se nedá filtrovat podle prefixu.
+    func draftFile(for pr: PRIdentifier) -> URL {
+        drafts(of: pr.repo).appending(path: "\(pr.number).json")
+    }
+
+    func drafts(of repo: RepoID) -> URL {
+        drafts.appending(path: repo.owner).appending(path: repo.name)
     }
 
     /// Leží cesta uvnitř kořene, i po rozbalení symlinků?
