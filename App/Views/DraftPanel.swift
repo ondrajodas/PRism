@@ -281,7 +281,9 @@ struct DraftPanel: View {
     }
 
     private func preview(of comment: ReviewDraftComment) -> String {
-        guard !comment.body.isEmpty else { return "prázdný — takhle se neuloží" }
+        // „Zahodí se“, ne „neuloží se“: v draftu prázdný komentář chvíli je, jen nepřežije
+        // odchod z bubliny ani restart. Tatáž věta je i v bublině a musí říkat totéž.
+        guard !comment.body.isEmpty else { return "prázdný — zahodí se" }
         return comment.body.split(whereSeparator: \.isNewline).joined(separator: " ")
     }
 }

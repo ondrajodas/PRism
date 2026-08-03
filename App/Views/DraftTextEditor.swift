@@ -14,6 +14,15 @@ struct DraftTextEditor: View {
     let text: String
     var placeholder = ""
     var minHeight: Double = 60
+    /// Má se prázdný text doručit i tehdy, když se **nezměnil**?
+    ///
+    /// U řádkového komentáře ano. Prázdný komentář znamená „zahoď mě“ a vzniká právě tím, že
+    /// se založí kliknutím a nic se do něj nenapíše — tedy beze změny textu. Bez tohohle by
+    /// `flush()` na odmlku „nic se nezměnilo“ nic neposlal a prázdný komentář by zůstal
+    /// v draftu i na disku, kde blokuje odeslání celého review.
+    ///
+    /// U těla review ne: tam prázdno neznamená nic a zápis by byl jen práce navíc.
+    var commitsEmpty = false
     let commit: (String) -> Void
 
     @State private var value = ""
@@ -94,9 +103,13 @@ struct DraftTextEditor: View {
 
     /// Doručí, co je rozepsané, dřív než view zmizí. Přepnutí PR i odscrollování bubliny jde
     /// touhle cestou.
+    ///
+    /// Prázdný text se u komentáře doručí **i beze změny** (`commitsEmpty`) — jinak by
+    /// založený a nedopsaný komentář zůstal ležet v draftu, protože v něm od začátku prázdno
+    /// bylo a `value == committed` by odchod utnul.
     private func flush() {
         save?.cancel()
-        guard value != committed else { return }
+        guard value != committed || (commitsEmpty && value.isEmpty) else { return }
         commit(value)
         committed = value
     }

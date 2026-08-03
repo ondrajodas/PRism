@@ -303,8 +303,29 @@ final class AppStore {
             let loaded = try await draftStore.load()
             drafts = Dictionary(uniqueKeysWithValues: loaded.drafts.map { ($0.pullRequest, $0) })
             unreadableDraftFiles = loaded.unreadable
+            pruneBlankComments()
         } catch {
             draftFailure = "Rozdělaná review se nepodařilo načíst. \(error.localizedDescription)"
+        }
+    }
+
+    /// Zahodí prázdné komentáře, které přežily do dalšího spuštění.
+    ///
+    /// Za normálního běhu je uklidí bublina, když se od ní odejde. Pád aplikace nebo zabití
+    /// zvenčí ale k té chvíli nedojde — a prázdný komentář **blokuje odeslání celého review**,
+    /// takže by po restartu zůstal ležet jako důvod, proč to nejde poslat. Nic se tím
+    /// neztrácí: prázdný komentář nenese žádný text.
+    private func pruneBlankComments() {
+        for (pr, draft) in drafts {
+            let kept = draft.comments.filter {
+                !$0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            guard kept.count != draft.comments.count else { continue }
+            var pruned = draft
+            pruned.comments = kept
+            // Prázdný draft se maže — a soubor na disku se musí srovnat s tím, co je v paměti.
+            drafts[pr] = pruned.isEmpty ? nil : pruned
+            persistDraft(for: pr)
         }
     }
 

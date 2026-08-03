@@ -168,6 +168,52 @@ struct AppStoreDraftTests {
         #expect(try await drafts.load().drafts.isEmpty)
     }
 
+    /// Za běhu prázdný komentář uklidí bublina, když se od ní odejde. Pád aplikace nebo
+    /// zabití zvenčí k té chvíli nedojde — a prázdný komentář blokuje odeslání **celého**
+    /// review, takže by po restartu zůstal ležet jako nevysvětlitelný důvod, proč to nejde
+    /// poslat.
+    @Test("Prázdný komentář nepřežije restart")
+    func prunesABlankCommentOnLoad() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts)
+        store.addDraftComment(at: anchor, path: "Cart.php", body: "napsané", for: pr)
+        store.addDraftComment(
+            at: DraftAnchor(line: 27, side: .right),
+            path: "Cart.php",
+            body: " \n ",
+            for: pr
+        )
+        await settle()
+        #expect(store.draftComments(for: pr).count == 2)
+
+        let restarted = self.store(drafts)
+        await restarted.loadStoredDrafts()
+        await settle()
+
+        #expect(restarted.draftComments(for: pr).map(\.body) == ["napsané"])
+        // A srovná se i disk, ať se to nemusí dělat po každém startu znovu.
+        let onDisk = try await drafts.load().drafts.first
+        #expect(onDisk?.comments.map(\.body) == ["napsané"])
+    }
+
+    /// Draft, ve kterém nezůstane nic než prázdný komentář, se má smazat celý — „draft
+    /// existuje“ musí znamenat „je co poslat“.
+    @Test("Draft s jediným prázdným komentářem se po restartu smaže")
+    func deletesADraftLeftWithOnlyABlankComment() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts)
+        store.addDraftComment(at: anchor, path: "Cart.php", body: "   ", for: pr)
+        await settle()
+        #expect(try await drafts.load().drafts.count == 1)
+
+        let restarted = self.store(drafts)
+        await restarted.loadStoredDrafts()
+        await settle()
+
+        #expect(!restarted.hasDraft(pr))
+        #expect(try await drafts.load().drafts.isEmpty)
+    }
+
     // MARK: - Verdikt a tělo
 
     /// Schválení bez prózy je plnohodnotné review, takže samotný verdikt draft zakládá.

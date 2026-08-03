@@ -1179,6 +1179,16 @@ Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a p
 - **Prázdný komentář se zahazuje**, jakmile se text uloží prázdný. Vzniká běžně (kliknu na
   komentovat a rozmyslím si to) a GitHub takový payload odmítne — a odmítne s ním celé
   review, protože odeslání je atomické. `Policy.isSendable` to hlídá i tak.
+
+  Uklidit ho musí **editor** (`DraftTextEditor.commitsEmpty`), a proto doručuje prázdno
+  i tehdy, když se text **nezměnil**: komentář vzniká prázdný, takže „nic se nezměnilo“ je
+  přesně jeho stav a bez toho by zůstal ležet v draftu i na disku. Nešlo to uklidit
+  z bubliny (`onDisappear` nad komentářem): pořadí proti doručení textu z editoru není
+  zaručené, takže by se dopsaný komentář smazal. Po pádu aplikace ta chvíle nikdy nepřijde,
+  na to je druhá pojistka `pruneBlankComments()` při načtení z disku.
+
+  A texty o tom musí říkat **„zahodí se“, ne „neuloží se“** — na disku prázdný komentář
+  chvíli je. Je to na dvou místech (bublina, seznam v panelu) a musí říkat totéž.
 - **Kam převzatý nález patří, rozhoduje `Policy.draftTarget`, ne view.** Je to pravidlo
   GitHubu (řádkový komentář bere jen řádek uvnitř hunku), takže patří k rozhodovací logice.
   Cesta se přitom překládá na dnešní (`displayPath`): nález umí přijít pod starou cestou

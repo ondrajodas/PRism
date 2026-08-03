@@ -18,6 +18,9 @@ struct DraftCommentBubbleView: View {
                 text: comment.body,
                 placeholder: "Co k tomu řádku chceš napsat…",
                 minHeight: 54,
+                // Prázdný komentář znamená „zahoď mě“, takže se prázdno musí doručit i tehdy,
+                // když se nic nenapsalo — jinak zůstane ležet v draftu a blokuje odeslání.
+                commitsEmpty: true,
                 commit: update
             )
             if comment.body.isEmpty { emptyNote }
@@ -66,10 +69,14 @@ struct DraftCommentBubbleView: View {
         }
     }
 
-    /// Prázdný komentář GitHub odmítne a s ním celé review, takže se neuloží. Bez téhle věty
-    /// by po přepnutí PR beze slova zmizel.
+    /// Prázdný komentář GitHub odmítne a s ním celé review, takže se zahodí. Bez téhle věty
+    /// by po odscrollování nebo přepnutí PR beze slova zmizel.
+    ///
+    /// Text říká **zahodí se**, ne „neuloží se“: v draftu prázdný komentář chvíli je (vzniká
+    /// kliknutím, text se dopisuje potom) a zmizí, až se od něj odejde. Slibovat, že se nikam
+    /// neuložil, by bylo tvrzení víc, než data unesou.
     private var emptyNote: some View {
-        Text("Prázdný komentář se do review neuloží.")
+        Text("Prázdný komentář se neodešle — zahodí se, jakmile od něj odejdeš.")
             .font(.caption2)
             .foregroundStyle(.secondary)
     }
