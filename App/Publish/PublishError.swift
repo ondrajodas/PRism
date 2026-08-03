@@ -39,9 +39,49 @@ enum PublishError: Error, Equatable {
     case toolUnavailable(String)
     /// Odpověď se nepodařilo přečíst — review možná odešlo, ale nevíme, jak vypadá.
     case malformedResponse(String)
+    /// Odesílání se přerušilo uprostřed. Review mohlo dojít i nedojít.
+    ///
+    /// Vlastní případ, ne `unknown`: zrušit jde jedině **během** volání, takže je to jediná
+    /// chyba, u které se nedá říct ani „nic se nestalo“, ani „nepovedlo se to“. Dnes ji nikdo
+    /// nevyvolá (task odeslání se neruší), ale mít pro ni tvar znamená, že se `CancellationError`
+    /// nedá spolknout jako „nic se nestalo“ — což byl přesně ten první, nebezpečný pokus.
+    case interrupted
     /// Cokoli, co se nepodařilo zařadit. Text `gh` se nese dál, protože je to jediné, co
     /// o tom víme.
     case unknown(String)
+}
+
+extension PublishError {
+    /// Mohlo review přesto dojít na GitHub?
+    ///
+    /// **Nejdůležitější vlastnost celé téhle enumerace.** Rozhoduje o tom, jestli okno smí
+    /// napsat „nic se nestalo, zkus to znovu“ a jestli zůstane aktivní tlačítko odeslat —
+    /// a nabídnout znovuodeslání nad review, které už na PR leží, znamená **druhé review**.
+    /// Odeslání je atomické (#62), takže mezistav neexistuje: buď tam je celé, nebo vůbec.
+    ///
+    /// Rozhoduje se **konzervativně**: co se nedá s jistotou zařadit mezi odmítnutí, počítá se
+    /// jako „možná odešlo“. Cena za omyl je nesymetrická — falešné „radši zkontroluj GitHub“
+    /// stojí jedno kliknutí, falešné „nic se nestalo“ stojí approve navíc.
+    var mightHaveReachedGitHub: Bool {
+        switch self {
+        // Nic se nevolalo (brány a pre-flight), nebo `gh` vůbec nenaběhl.
+        case .outsideAllowedScope, .staleDraft, .nothingToSend, .pullRequestNotOpen,
+             .toolUnavailable:
+            false
+        // GitHub požadavek **odmítl** — 422 u rozřazení komentářů, 401 u přihlášení, 403 u
+        // limitu, spadlé spojení u sítě. Ve všech případech review nevzniklo.
+        case .lineOutsideDiff, .pathOutsideDiff, .pendingReviewExists, .ownPullRequest,
+             .notAuthenticated, .rateLimited, .network:
+            false
+        // `timedOut`: `gh` jsme po třiceti vteřinách zabili sami, POST mohl doběhnout.
+        // `malformedResponse`: exit kód byl **nula**, takže POST prošel a jen odpovědi
+        // nerozumíme — tady review skoro jistě existuje.
+        // `interrupted`: zrušeno uprostřed volání.
+        // `unknown`: nezařazená hláška, o které z definice nevíme nic.
+        case .timedOut, .malformedResponse, .interrupted, .unknown:
+            true
+        }
+    }
 }
 
 extension PublishError {
@@ -110,6 +150,8 @@ extension PublishError {
             "`gh` se nepodařilo spustit: \(detail)"
         case .malformedResponse(let detail):
             "Odpověď GitHubu nejde přečíst, takže nevím, jak review vypadá — zkontroluj ho na GitHubu. \(detail)"
+        case .interrupted:
+            "Odesílání se přerušilo uprostřed. Zkontroluj na GitHubu, jestli review přesto nedošlo."
         case .unknown(let detail):
             "Odeslání se nepovedlo: \(detail)"
         }

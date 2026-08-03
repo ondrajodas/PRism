@@ -7,6 +7,19 @@ struct ContentView: View {
     let store: AppStore
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Rozdělané odeslání review. `nil` = potvrzovací sheet je zavřený.
+    ///
+    /// Bydlí **tady, ne v detailu PR**, ačkoli se tam zakládá. Detail se kreslí jen tak dlouho,
+    /// dokud je vybraný PR v seznamu z pollingu — a odeslané review ruší `review-requested`,
+    /// takže právě ten PR z výchozího zdroje na příštím tiku **vypadne**. Sheet zavěšený na
+    /// detailu by tím zmizel bez stopy: uprostřed odesílání, nebo zrovna nad hláškou „odpovědi
+    /// nerozumím, zkontroluj to na GitHubu“, která je jediným místem, kde se to člověk dozví.
+    /// Modalita proti tomu nechrání, ta zastaví uživatele, ne tik pollingu.
+    ///
+    /// Ve store to naopak být nesmí: objekt má zaniknout se zavřením sheetu, protože v něm
+    /// vzniká jediná cesta ven (tvrdá podmínka č. 1).
+    @State private var submission: ReviewSubmission?
+
     var body: some View {
         VStack(spacing: 0) {
             NavigationSplitView {
@@ -19,6 +32,11 @@ struct ContentView: View {
             // `safeAreaInset`, kvůli kterému obsah okna vycházel o výšku pruhu vyšší než okno
             // a spodní hrana ho odřízla v obou sloupcích — podrobnosti v `AppNoticesView`.
             AppNoticesView(store: store)
+        }
+        // Potvrzení odeslání. `item:`, ne `isPresented:`: sheet nemá co ukazovat bez snímku
+        // draftu, takže `nil` je zavřený stav i zdroj dat naráz.
+        .sheet(item: $submission) { submission in
+            ReviewSubmissionSheet(submission: submission) { self.submission = nil }
         }
         // **Ztmavení, ne rozostření.** `.blur()` protlačí celé okno přes offscreen
         // vykreslení, a to i s poloměrem 0 — text tím ztratí subpixelové vyhlazení a
@@ -49,7 +67,7 @@ struct ContentView: View {
 
     @ViewBuilder private var detail: some View {
         if let selected = store.pullRequests.first(where: { $0.id == store.selection }) {
-            PullRequestDetailView(store: store, pullRequest: selected)
+            PullRequestDetailView(store: store, pullRequest: selected, submission: $submission)
         } else {
             ContentUnavailableView(
                 "Vyber pull request",

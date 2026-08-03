@@ -6,7 +6,9 @@ import SwiftUI
 /// tady je jediné místo, kde je vidět celý obsah toho, co se odešle. Komentář na řádku, který
 /// v aktuálním diffu není (přišel nový commit), by jinak nešlo ani najít, ani smazat.
 ///
-/// Odeslání tady **není**: to je #68. Tenhle panel jen skládá, co se pošle.
+/// Odeslat se odsud dá, ale **jen otevřením potvrzení** (#68): tlačítko `Odeslat review…`
+/// složí `ReviewSubmission` a ukáže sheet, ve kterém je vidět celý payload. Publisher se
+/// z tohohle souboru nevolá.
 struct DraftPanel: View {
     /// Ke kterému PR panel patří. Není to jen popisek: visí na tom identita editoru těla,
     /// a ta rozhoduje, kam se doručí rozepsaný text při přepnutí PR.
@@ -26,6 +28,7 @@ struct DraftPanel: View {
             if isStale { staleBanner }
             if let unavailable { unavailableNote(unavailable) }
             topRow
+            if let sendBlockNote { unavailableNote(sendBlockNote) }
             editors
         }
         .padding(.horizontal, 16)
@@ -63,8 +66,33 @@ struct DraftPanel: View {
         HStack(spacing: 12) {
             verdictPicker
             Spacer(minLength: 12)
-            if draft != nil { discardButton }
+            if draft != nil {
+                sendButton
+                discardButton
+            }
         }
+    }
+
+    /// Otevře potvrzení, **neodesílá**. Nad zastaralým draftem se sheet neotevře vůbec —
+    /// zakázané je tlačítko, ne až tlačítko uvnitř sheetu.
+    private var sendButton: some View {
+        Button("Odeslat review…", systemImage: "paperplane") { actions.send() }
+            .buttonStyle(.borderedProminent)
+            .font(.callout)
+            .disabled(actions.sendBlock != nil)
+            .help(actions.sendBlock?.userDescription
+                ?? "Ukáže, co přesně odejde na GitHub — odeslat se potvrzuje až tam")
+    }
+
+    /// Proč se odeslat nedá, větou pod lištou.
+    ///
+    /// Zastarání se tady **neopakuje**: má vlastní banner nahoře a dvě hlášky o téže věci
+    /// pod sebou čtou jako dva různé problémy. Bez draftu není co odesílat a tlačítko není
+    /// vidět, takže ani ten důvod nemá co říkat.
+    private var sendBlockNote: String? {
+        guard draft != nil, let block = actions.sendBlock else { return nil }
+        if case .stale = block { return nil }
+        return block.userDescription
     }
 
     /// Verdikt **bez předvyplnění**: dokud nic nesvítí, nikdo nevybral.
@@ -102,7 +130,7 @@ struct DraftPanel: View {
             actions.setVerdict(isChosen ? nil : verdict)
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: isChosen ? "checkmark.circle.fill" : symbol(of: verdict))
+                Image(systemName: isChosen ? "checkmark.circle.fill" : verdict.symbolName)
                 Text(verbatim: verdict.czechLabel)
             }
             .font(isChosen ? .callout.weight(.semibold) : .callout)
@@ -111,30 +139,9 @@ struct DraftPanel: View {
         .help(help(for: verdict))
 
         if isChosen {
-            button.buttonStyle(.borderedProminent).tint(tint(of: verdict))
+            button.buttonStyle(.borderedProminent).tint(verdict.tint)
         } else {
             button.buttonStyle(.bordered).tint(.secondary)
-        }
-    }
-
-    private func symbol(of verdict: ReviewDraft.Verdict) -> String {
-        switch verdict {
-        case .approve: "checkmark.seal"
-        case .requestChanges: "exclamationmark.triangle"
-        case .comment: "text.bubble"
-        }
-    }
-
-    /// `Vyžádat změny` je **červené**, ne oranžové.
-    ///
-    /// Návrh verdiktu z nálezů (`VerdictView`) oranžový zůstává schválně: to je odhad
-    /// aplikace, kdežto tohle je rozhodnutí, které odejde na GitHub. Červená se v tomhle okně
-    /// drží pro blokující věci a GitHub barví „changes requested“ stejně.
-    private func tint(of verdict: ReviewDraft.Verdict) -> Color {
-        switch verdict {
-        case .approve: .green
-        case .requestChanges: .red
-        case .comment: .accentColor
         }
     }
 

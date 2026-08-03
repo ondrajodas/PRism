@@ -210,11 +210,15 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 
    1. **`GitHubGateway` zůstává bez zápisových metod.** Polling, diff, checkout ani reviewer
       tedy nemají čím něco odeslat — read-only je pořád vidět z typu.
-   2. **`grep ReviewPublishing` vyjmenuje všechna místa, odkud to jde.** Má jich být jedno.
-      Protokol má jednu metodu; cokoli dalšího (komentář, approve mimo review, label) by byla
-      druhá cesta ven.
+   2. **`grep ReviewPublishing App/` vyjmenuje všechna místa, odkud to jde.** Mají být tři
+      soubory a jediné volání: protokol, `GhReviewPublisher` (implementace) a
+      `ReviewSubmission.send()` (volající). Protokol má jednu metodu; cokoli dalšího
+      (komentář, approve mimo review, label) by byla druhá cesta ven.
    3. **Publisher není pole `AppStore`.** Vzniká uvnitř té jediné cesty, která odesílá,
-      a zaniká s ní — nemá ho kde uložit nikdo, kdo ho nemá mít.
+      a zaniká s ní — nemá ho kde uložit nikdo, kdo ho nemá mít. Od #68 to drží
+      `ReviewSubmission`: skládá se až v `send()` a zaniká zavřením sheetu. `AppStore` si
+      kvůli odesílání drží **jen cestu ke `gh`**, ne publisher ani továrnu na něj — proto ho
+      ten grep nevypíše.
    4. **Odeslání si žádá hotový draft s `headSha`** a pre-flight ověří, že je to pořád hlava
       PR. Approve na kód, který jsi neviděl, tak nejde poslat ani závodem s pushnutým
       commitem. GitHub proti tomu **nechrání** — změřeno u #62, že review se zastaralým
@@ -266,7 +270,7 @@ viz tvrdá podmínka č. 1.
 | `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu | — |
-| `ReviewPublisher` | **Jediná cesta ven**: odeslat rozdělané review na GitHub | `gh` CLI |
+| `ReviewPublisher` | **Jediná cesta ven**: odeslat rozdělané review na GitHub, a `ReviewSubmission` jako jediný volající | `gh` CLI |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`. Mimo tuhle sedmičku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá
@@ -1040,7 +1044,9 @@ na `.task` okna, takže zavření okna ji zruší.
 | `MarkdownText` | Vykreslený Markdown z GitHubu — viz `App/Markdown/` |
 | `DraftCommentBubbleView` | Můj rozdělaný komentář u řádku: editor, odznak původu, vyjmutí |
 | `DraftTextEditor` | Textové pole draftu — odložený zápis a doručení při zmizení |
-| `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt bez předvyplnění, tělo, seznam komentářů |
+| `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt bez předvyplnění, tělo, seznam komentářů, `Odeslat review…` |
+| `ReviewSubmissionSheet` | Potvrzení odeslání: úplný výpis payloadu, průběh, typované chyby |
+| `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení |
 | `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
 | `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
 | `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`/`Moje review`, návrh verdiktu, tabulka s řazením, prokliky do diffu a zahození nálezů |
@@ -1247,7 +1253,7 @@ Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a p
   existuje“ musí znamenat „je co poslat“, protože na tom stojí indikátor v řádku.
 - **Prázdný komentář se zahazuje**, jakmile se text uloží prázdný. Vzniká běžně (kliknu na
   komentovat a rozmyslím si to) a GitHub takový payload odmítne — a odmítne s ním celé
-  review, protože odeslání je atomické. `Policy.isSendable` to hlídá i tak.
+  review, protože odeslání je atomické. `Policy.sendBlock` to hlídá i tak.
 
   Uklidit ho musí **editor** (`DraftTextEditor.commitsEmpty`), a proto doručuje prázdno
   i tehdy, když se text **nezměnil**: komentář vzniká prázdný, takže „nic se nezměnilo“ je
@@ -1270,8 +1276,24 @@ Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a p
   dostat zpátky žádným dalším během.
 - **Draft se při úklidu nezahazuje**, na rozdíl od diffu, konverzace i detailu. Je to ručně
   psaná práce, mapa je jeden malý záznam na PR a PR se do seznamu umí vrátit.
-- **Odesílání tady není.** `AppStore` nemá `ReviewPublishing` ani od #66 — skládání draftu
-  se dělá celé lokálně a jediná cesta ven zůstává jedna (#68).
+- **Odesílání tady pořád není.** Store si od #68 drží **jen cestu ke `gh`** a `submission(for:)`
+  z ní složí `ReviewSubmission`; publisher vzniká až uvnitř něj. `AppStore` sám odeslat neumí
+  a grep z tvrdé podmínky č. 1 ho nevypíše.
+- **Sheet se nad zastaralým draftem neotevře dvakrát.** Zakázané tlačítko je první pojistka,
+  `submission(for:)` vracející `nil` druhá — spoléhat na to, že si to pohlídá view, je o jedno
+  místo k zapomenutí víc.
+- **Konverzace se po odeslání obnovuje ručně.** `updatedAt` se odesláním review měnit nemusí,
+  takže cache podle něj by moje vlastní review v `Přehledu` neukázala až do přepnutí PR.
+- **Návrh verdiktu se do potvrzení předává, ale nepředvyplňuje.** Je to totéž pravidlo jako
+  u výběru v panelu: odhad aplikace se nemá dát splést s mým rozhodnutím.
+- **`ReviewSubmission` drží `ContentView`, ne detail PR ani store.** Ve storu být nesmí: objekt
+  má zaniknout se zavřením sheetu, protože v něm vzniká cesta ven. V detailu taky ne, i když
+  se tam zakládá — detail se kreslí jen tak dlouho, dokud je vybraný PR v seznamu z pollingu,
+  a **odeslané review ruší `review-requested`**, takže právě ten PR na příštím tiku vypadne.
+  Sheet by tím zmizel uprostřed odesílání, nebo zrovna nad hláškou „odpovědi nerozumím,
+  zkontroluj to na GitHubu“, která je jediným místem, kde se to člověk dozví. **Modalita proti
+  tomu nechrání** — zastaví uživatele, ne tik pollingu. Je to opačný směr než obvyklá past
+  s přetečením stavu mezi PR: tenhle stav nepřetéká, ale předčasně zaniká.
 
 Věci, na které se u okna naráží:
 
@@ -1405,7 +1427,8 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 | `Policy.draftTarget(for:in:)` | Kam převzatý nález patří — `DraftTarget.line` nebo `.body` |
 | `Policy.adoptedText(of:)`, `Policy.isAdopted(_:target:in:repo:)` | Text převzatého nálezu a odznak „už je v draftu“ |
 | `Policy.permalink(to:line:in:at:)`, `Policy.bodyItem(text:link:)`, `Policy.appendingBodyItem(_:to:)` | Odkaz na kód a skládání položek těla review |
-| `Policy.isStale(_:head:)`, `Policy.isSendable(_:head:)` | Zastaralý a odesílatelný draft |
+| `Policy.isStale(_:head:)` | Je draft psaný proti staršímu commitu? |
+| `Policy.sendBlock(for:head:)` | **Proč** se draft nedá odeslat (`DraftSendBlock`); `nil` = dá se |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
   Volající pak nic nespojuje a z typu je vidět, že jde o několik nezávislých dotazů.
@@ -1460,6 +1483,35 @@ Nad nálezy platí navíc:
   `isBlocking`, rozpadla by se kategorie s `CONFIRMED` i `PLAUSIBLE` na dvě sekce se
   stejným názvem. Poslední kritérium je `summary`, aby bylo pořadí úplné a nepřeskakovalo
   mezi překresleními.
+
+Nad odesílatelností draftu (#68) platí:
+
+- **Odpovídá jedna funkce, a vrací důvod, ne boolean.** Do #68 tady stálo `isSendable`, které
+  vracelo ano/ne; vedle `sendBlock` by to byla cesta, jak se zeptat a důvod nedostat — a mlčky
+  zakázané tlačítko vypadá jako rozbitá aplikace. Proto bylo zahozené, ne ponechané jako
+  zkratka. Ke každému případu `DraftSendBlock` patří **věta pro okno** s tím, co s ním jde
+  udělat; je na to test, protože prázdná věta by se v UI projevila jako to mlčení.
+- **Pořadí důvodů kopíruje `GhReviewPublisher.submit`:** brána na sandbox, pak všechno, co je
+  vidět na samotném draftu, a teprve pak to, co potřebuje hlavu PR (v publisheru totéž dělení
+  — `PublishRequest.payload(for:)` běží před `preflight(_:)`). Kdyby se rozešlo, hlásilo by
+  okno jiný důvod, než na kterém odeslání doopravdy skončí.
+
+  Není to kosmetika: hlásí se ten důvod, **se kterým se dá něco udělat**. Draft bez verdiktu
+  má říct „vyber verdikt“, ne „zjišťuji, na kterém commitu PR stojí“ — čekání tu vadu
+  nespraví, a nad selhaným detailem by okno ukazovalo donekonečna na síť místo na chybějící
+  verdikt. Chytil to Copilot na #112, kde `headUnknown` stálo před `noVerdict`.
+- **`PublishScope` je součástí odpovědi**, i když je to jinak věc publisheru. Na cizí repo se
+  nemá ani nabízet tlačítko, natož sahat na síť, a druhé místo, kde se ta brána vyhodnocuje,
+  by se s prvním rozešlo. Daň je, že testy odesílatelnosti musí běžet nad sandboxovým
+  identifikátorem.
+- **„Nevím, jaká je hlava“ je vlastní důvod** (`headUnknown`), ne zastarání. Dokud se detail
+  načítá, nedá se říct ani jedno — a banner o zastaralém draftu by nad ním lhal. Stejné
+  rozlišení jako u `AppStore.isDraftStale`.
+- **A rozlišuje se „načítá se“ od „nepovedlo se to“** (`headUnknown(detail:)`). První se dořeší
+  samo, druhá ne, takže věta „hned to bude“ nad selhaným detailem slibuje něco, co nepřijde.
+  Důvod doplňuje `AppStore.draftSendBlock`, protože `Policy` dostane jen `String?` a stav
+  načítání z něj nepozná. Tentýž rozdíl dělá i `PullRequestDetailView.draftUnavailable` —
+  chytilo se to vlastní revizí jako „kontrola, která jinde v repu je, a tady chybí“.
 
 ### `GitHubGateway` (`App/GitHub/`)
 
@@ -1542,6 +1594,7 @@ podmínku „nikdy nic neposílat“ pravidlem, které je vidět z kódu — viz
 | `PublishError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `PublishRequest` | Payload a argumenty — čisté funkce |
 | `GhSubmittedReview` | Tvar odpovědi `POST /pulls/{n}/reviews` |
+| `ReviewSubmission` | Jedno odeslání od kliknutí po odpověď — **jediný volající `submit(_:)`** |
 
 Věci, které se u toho nemají rozbít:
 
@@ -1572,6 +1625,40 @@ Věci, které se u toho nemají rozbít:
   řádek uvnitř diffu“ je u chybějícího souboru nepravdivá.
 - **Ke každé chybě patří, co s ní jde udělat** (`userDescription`). Chyba, ze které nevyplývá
   další krok, je jen zpráva o smůle.
+
+Nad `ReviewSubmission` (#68) platí navíc:
+
+- **Publisher vzniká uvnitř `send()` a zaniká s objektem.** Objekt sám vzniká kliknutím na
+  `Odeslat review…` a zaniká zavřením sheetu, takže cesta ven není otevřená po celou dobu
+  běhu aplikace. Tím se drží tvrdá podmínka č. 1 bod 3.
+- **Draft je snímek, ne odkaz do storu.** Co je v potvrzení vidět, to se odešle. Sheet je
+  modální, takže se draft pod ním změnit nemá čím — snímek je pojistka proti tomu, aby na
+  tom to tvrzení viselo.
+- **Draft se maže až po potvrzené odpovědi.** Selhání ho nechává netknutý (a sheet to říká
+  **větou**, ne nápovědou, jinak se rozepsaná práce začne psát znovu), takže se dá zkusit
+  znovu bez psaní nanovo. Úklid je závislost storu, ne tohohle objektu: dostane ho jako
+  closure, protože smazat draft a načíst konverzaci umí `AppStore`.
+- **Po úspěchu už se odeslat nedá.** Druhé odeslání by nebylo opravou toho prvního, ale
+  **druhým review**, které na PR leží jako samostatný záznam.
+- **A po selhání jen tehdy, když je jisté, že nic neodešlo** (`PublishError.mightHaveReachedGitHub`).
+  `malformedResponse` vzniká při **nulovém** exit kódu, tedy poté, co POST prošel; `timedOut`
+  znamená, že jsme `gh` po třiceti vteřinách zabili sami. Nabídnout nad tím `Odeslat` je
+  pozvánka poslat approve podruhé — takže je tlačítko zakázané a věta pod chybou říká, ať se
+  PR zkontroluje, místo obvyklého „nic se nemazalo, zkus to znovu“. Rozhoduje se
+  **konzervativně**: co se nedá s jistotou zařadit mezi odmítnutí, počítá se jako „možná
+  odešlo“, protože cena omylu je nesymetrická. Zkusit to znovu jde pořád — jen se sheet musí
+  vědomě otevřít znovu, draft zůstal. Chytila to revize diffu u #68.
+- **Zrušení se nevydává za „nic se nestalo“** (`PublishError.interrupted`). Zrušit jde jedině
+  *během* volání, takže POST mohl doběhnout — `.ready` by bylo totéž tvrzení jako výš, jen
+  schovanější. Dnes to nikdo nevyvolá (task odeslání se neruší), ale tvar se drží kvůli #73.
+- **Sheet se po úspěchu zavírá sám, ale ne u odpovědi, jejímuž stavu nerozumíme.** Že review
+  odešlo, je za sheetem vidět líp než v něm (draft zmizel z panelu i z řádku, v `Přehledu`
+  přibylo moje review), takže potvrzovací okno navíc je jen kliknutí za nic. Neznámý stav je
+  výjimka: „zkontroluj to na GitHubu“ se jinde v okně nedozví, protože review tam vypadá jako
+  každé jiné. Rozhoduje `closesItself`, tedy model, ne view.
+- **Rozchod s návrhem z nálezů se hlásí, ale nezakazuje.** Nálezy jsou návrh a přebít se smějí;
+  schválit PR, u kterého reviewer hlásí blokující nález, je ale nejdražší záměna, jakou tohle
+  okno umí. `jen komentář` rozchod **není** — je to vědomé „nerozhoduju“, ne opak schválení.
 
 ### Vrstva `Environment` (`App/Environment/`)
 
@@ -1834,6 +1921,41 @@ Právě proto tam eskalace na `SIGKILL` je.
   „už je v draftu“ to hlavní: nález **druhého** revieweera na tomtéž řádku převzatý není.
   U permalinku zakódovaná mezera v cestě a odkaz na vlastním řádku — bez obojího GitHub
   úryvek kódu nevyrenderuje.
+
+  U **odesílatelnosti** (#68) každý důvod zvlášť a **v pořadí**, ve kterém se hlásí: že repo
+  mimo sandbox přebije i hotový draft, že neznámá hlava není zastarání a že prázdný komentář
+  blokuje. Testy proto běží nad **sandboxovým** identifikátorem, jinak by všechny odpovědi
+  vyšly na `outsideScope`; že to tak je, drží vlastní test. Plus to, že **každý důvod má
+  vlastní neprázdnou větu** — prázdná by v okně vypadala jako mlčky zakázané tlačítko.
+- **`ReviewSubmission` (#68)** — proti `FakeReviewPublisher`, takže se **nic neodesílá**.
+  To hlavní není, co se odeslalo, ale kdy se **neodešle nebo neuklidí**: selhání nesmí spustit
+  úklid draftu (a musí jít zkusit znovu), po úspěchu se nesmí odeslat podruhé a zrušení se
+  nesmí hlásit jako chyba. Plus zavírání sheetu — u odpovědi, jejímuž stavu nerozumíme,
+  zůstává otevřený — a rozchod s návrhem z nálezů, u kterého se hlídá i to, že `jen komentář`
+  rozchod **není**. Pozor na past: `ReviewDraftComment` si generuje `UUID`, takže se draft
+  musí uložit do proměnné, ne vyrobit dvakrát.
+
+  Dvě věci se testují tabulkou chyb, protože jsou to celé **třídy**, ne jednotlivé případy:
+  po které chybě se smí zkusit znovu a po které ne (`mightHaveReachedGitHub`).
+
+  Čeká se u nich **odmlkami, ne `Task.yield()`**, na rozdíl od zbytku repa. Ten spin by běžel
+  na `MainActoru` (`ReviewSubmission` je `@MainActor`) a **bez horní hranice** — dokud závoru
+  někdo nepustí. Swift Testing pouští suity paralelně, takže z toho začaly padat
+  `SubprocessStreamerTests`: zabíjený proces se nestihl zabít dřív, než mu doběhl `sleep 1`.
+  Změřeno, ne odhadnuto — na `main` procházely, na branchi padaly dvakrát za sebou a po
+  záměně za `Task.sleep(for: .milliseconds(1))` je sada třikrát po sobě zelená.
+
+  A **dvojklik se pouští naráz** (`async let` dvakrát), ne s čekáním na to, až první odeslání
+  poběží. Zákaz druhého odeslání drží jen na tom, že `state = .sending` leží před prvním
+  `await`; test, který na první odeslání počká, ten závod zavře a přesunutí toho řádku by mu
+  prošlo. Ověřeno tím, že se ta regrese do kódu dočasně vložila — sekvenční test zůstal
+  zelený, souběžný spadl na `2 == 1`. `FakeReviewPublisher` umí odeslání **pozdržet**
+  (`hold(until:)`) ze stejného důvodu jako `FakeReviewRunner`.
+- **`AppStore` — odeslání (#68)** — proti **skutečnému** `ReviewDraftStore` nad dočasnou
+  složkou: po úspěchu má draft zmizet i z disku, tedy i pro restart. Vedle toho každý stav,
+  ve kterém `submission(for:)` nesmí vzniknout (zastaralý draft, chybějící verdikt, žádný
+  draft), a to, že se konverzace načte znovu — bez toho by v `Přehledu` chybělo moje vlastní
+  review až do přepnutí PR.
 - **`Policy` — přehled (#72)** — chronologické slití review, komentářů a vláken; že se vlákno
   **s kotvou** do přehledu nedostane (jinak se tentýž komentář čte na dvou místech); že review
   bez verdiktu a bez prózy vypadne (je to jen obálka řádkových komentářů), kdežto schválení
@@ -2134,8 +2256,16 @@ věcí, na kterých stojí zbytek M6:
 `ReviewPublisher` hotový (issue #67) — `App/Publish/`. **Aplikace umí odeslat review**, a tím
 se změnila tvrdá podmínka č. 1 na pravidlo „jediná cesta ven“ (viz Tvrdé podmínky). Odesílá se
 jedním atomickým voláním, po pre-flightu na `headSha` a stav PR, a **zatím jen do sandboxu**
-(`PublishScope`, vyřazení je #107). Vrstva bez UI — tlačítko přijde s #68, takže z okna to
-zatím nikdo nespustí.
+(`PublishScope`, vyřazení je #107). Vrstva bez UI — tlačítko přišlo až s #68.
+
+Odeslání z okna hotové (issue #68) — `ReviewSubmission` v `App/Publish/`,
+`ReviewSubmissionSheet`, `Policy.sendBlock(for:head:)` a `submission(for:)` v `AppStore`.
+**Review z aplikace doopravdy odejde na GitHub** — tlačítko `Odeslat review…` otevře potvrzení
+s úplným výpisem payloadu a teprve tam se odesílá. Tlačítko je pojmenované akcí
+(`Odeslat APPROVE pro owner/repo#123`) a **není výchozí**, takže Enterem se nic nepošle;
+opisování názvu repa ani druhý dialog tam schválně nejsou (viz zadání). Po úspěchu se sheet
+zavře, draft zmizí i z disku a konverzace se načte znovu; selhání draft **nechává**. Zatím jen
+do sandboxu — brána je `PublishScope` a vyřazení řeší #107.
 
 Model draftu hotový (issue #65) — `ReviewDraft`, `ReviewDraftComment`, `ReviewDraftStore`
 a `App/Policy/DraftPolicy.swift`. Rozdělané review přežije restart, novým commitem
@@ -2268,15 +2398,16 @@ Tím **končí rozsah v1** podle specifikace. Za ním:
 6. **Review na GitHub** (M6) — odesílání review z okna. Tvrdou podmínku č. 1 **už nahradil**
    pravidlem „jediná cesta ven“ (#67), zatím s bránou na sandbox (#107). Hotové: spike #62
    (viz [`docs/github-review-api.md`](docs/github-review-api.md)), model draftu #65,
-   publisher #67 a skládání draftu #66. Zbývá sheet (#68) a přenesení na nový commit (#69).
+   publisher #67, skládání draftu #66 a potvrzovací sheet #68. Zbývá přenesení draftu na nový
+   commit (#69).
 7. **Konverzace, komentáře a taby** (M7) — cizí komentáře a vlákna v okně, odpovídání do
    nich a rozvržení jako na GitHubu (taby `Overview` / `Files changed`).
 
 **M6 a M7 jsou do sebe zaklesnuté a nejdou udělat po sobě.** `#66` a `#68` z M6 čekaly na
 `#64` z M7, kdežto `#73` z M7 čeká na `#67` z M6 — takže se to plánovalo jako jeden blok
 o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `#65`, `#64`,
-`#67`, `#66` a `#72`; `#98` (side-by-side diff) a `#110` (víceřádkové komentáře) na konverzaci
-nestojí vůbec a dají se zařadit kamkoli. Pořadí zbytku: `#68` → `#73` → `#69`.
+`#67`, `#66`, `#72` a `#68`; `#98` (side-by-side diff) a `#110` (víceřádkové komentáře) na
+konverzaci nestojí vůbec a dají se zařadit kamkoli. Pořadí zbytku: `#73` → `#69`.
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
    s oprávněním a klikem (#88), doběhlé review (#82), nové PR (#85), vypínání po
    událostech (#86) a seskupování (#87).

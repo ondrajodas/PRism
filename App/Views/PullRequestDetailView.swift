@@ -28,6 +28,11 @@ struct PullRequestDetailView: View {
     /// z diffu do těla review se musí umět přepnout na tab, kam spadla.
     @State private var panelTab: FindingsPanel.Tab = .findings
 
+    /// Rozdělané odeslání review. Zakládá se tady, ale **drží ho `ContentView`** — detail
+    /// zmizí, jakmile PR vypadne ze seznamu, a odeslané review `review-requested` ruší, takže
+    /// se to na příštím tiku stane. Sheet by tím zmizel i s hláškou, kvůli které je otevřený.
+    @Binding var submission: ReviewSubmission?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             controls
@@ -267,7 +272,11 @@ struct PullRequestDetailView: View {
             removeComment: { store.removeDraftComment($0, for: id) },
             setBody: { store.setDraftBody($0, for: id) },
             setVerdict: { store.setDraftVerdict($0, for: id) },
-            discard: { store.discardDraft(for: id) }
+            discard: { store.discardDraft(for: id) },
+            // Otevře sheet, nic neodesílá. `submission(for:)` vrátí `nil`, když odeslat
+            // nejde — nad zastaralým draftem se tedy sheet neotevře ani omylem.
+            send: { submission = store.submission(for: pullRequest) },
+            sendBlock: store.draftSendBlock(for: id)
         )
     }
 
