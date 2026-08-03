@@ -38,7 +38,7 @@ final class AppStore {
     /// kvůli které se netahá konverzace. Cache podle `updatedAt` je stejná jako u diffu.
     private(set) var detailStates: [PRIdentifier: DetailState] = [:]
 
-    /// Který tab PR je vidět, **per PR**. Co v mapě není, je na `filesChanged`.
+    /// Který tab PR je vidět, **per PR**. Co v mapě není, je na `PullRequestTab.standard`.
     ///
     /// Drží se odchylka od výchozího stavu, ne volba u každého PR — stejný vzor jako
     /// u překliknutých vláken. Ve view to být nemůže: `PullRequestDetailView` si SwiftUI mezi

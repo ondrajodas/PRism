@@ -75,6 +75,47 @@ struct MarkdownHTMLTests {
         #expect(MarkdownHTML.stripped("&amp;lt;") == "&lt;")
     }
 
+    // MARK: - Inline kód
+
+    /// Generický typ v inline kódu **není tag**. Bez téhle výjimky z komentáře zmizí zrovna to,
+    /// o čem kolega píše nejčastěji.
+    @Test("Generický typ v inline kódu zůstane")
+    func keepsGenericsInsideCode() {
+        #expect(MarkdownHTML.stripped("použij `Array<T>` místo pole") == "použij `Array<T>` místo pole")
+        #expect(MarkdownHTML.stripped("`Result<OK, Err>`") == "`Result<OK, Err>`")
+    }
+
+    /// Kód uvnitř, HTML venku — obojí naráz na jednom řádku.
+    @Test("HTML mimo kód se strhne, kód zůstane")
+    func stripsOnlyOutsideCode() {
+        #expect(
+            MarkdownHTML.stripped("<b>pozor</b> na `Array<T>` tady")
+                == "pozor na `Array<T>` tady"
+        )
+    }
+
+    /// Pravidlo je Markdownové: zavírá běh **stejné délky**, takže dvojitý apostrof unese
+    /// apostrof uvnitř.
+    @Test("Dvojitý apostrof unese apostrof uvnitř")
+    func handlesDoubleBacktickSpans() {
+        #expect(MarkdownHTML.stripped("``kód s ` a <T>``") == "``kód s ` a <T>``")
+    }
+
+    /// Apostrof v běžné větě se stane — a spolknout kvůli němu půl komentáře by bylo horší než
+    /// neošetřený tag.
+    @Test("Neuzavřený apostrof kódem není")
+    func doesNotTreatAnUnclosedBacktickAsCode() {
+        #expect(MarkdownHTML.stripped("nedopsaný ` a <b>tučně</b>") == "nedopsaný ` a tučně")
+    }
+
+    @Test("Dva úseky kódu na řádku")
+    func handlesTwoCodeSpans() {
+        #expect(
+            MarkdownHTML.stripped("`<A>` a <i>něco</i> a `<B>`")
+                == "`<A>` a něco a `<B>`"
+        )
+    }
+
     /// Text bez HTML se nemá čím pokazit — a nemá se ani zdržovat.
     @Test("Text bez HTML zůstane nedotčený")
     func leavesPlainTextAlone() {

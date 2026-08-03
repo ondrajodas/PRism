@@ -176,9 +176,8 @@ struct MarkdownBlockView: View {
     /// Když parsování selže, vrací se **holý text** — nepřečtený komentář je horší než
     /// komentář bez tučného.
     ///
-    /// Známé omezení: `<div>` **uvnitř** zpětných apostrofů se strhne taky, protože se to dělá
-    /// nad celým řádkem. Cizí HTML v inline kódu je vzácnější než bot, který posílá
-    /// `<details>` v každém komentáři.
+    /// Inline kód `MarkdownHTML` **nechává být**, takže `Array<T>` v apostrofech zůstane —
+    /// bez toho by z komentáře zmizelo zrovna to, o čem kolega píše nejčastěji.
     private func inline(_ source: String) -> AttributedString {
         let text = MarkdownHTML.stripped(source).trimmingCharacters(in: .whitespacesAndNewlines)
         let options = AttributedString.MarkdownParsingOptions(

@@ -575,9 +575,13 @@ Věci, které se u toho nemají rozbít:
   se svislítky (vodorovně scrollovatelné), kód se neobarvuje: jazyk z fence je volný řetězec
   (`sh`, `console`) a `Syntax.Language` se pozná z **cesty k souboru**, takže mapovat jedno
   na druhé znamená hádat — a špatně obarvený cizí kód je horší než neobarvený.
-- **Známé omezení:** `<div>` uvnitř zpětných apostrofů se strhne taky, protože se to dělá nad
-  celým řádkem. Cizí HTML v inline kódu je vzácnější než bot, který posílá `<details>`
-  v každém komentáři.
+- **Inline kód se nestrhává.** `Array<T>` nebo `Result<OK, Err>` mezi zpětnými apostrofy není
+  tag — a je to zrovna to, o čem kolega v komentáři píše nejčastěji. Řídí se to Markdownovým
+  pravidlem (zavírá běh apostrofů **stejné délky**), takže ` ``x`` ` unese apostrof uvnitř;
+  neuzavřený apostrof kódem není, protože v běžné větě se stane a spolknout kvůli němu půl
+  komentáře je horší než neošetřený tag. **Doplněno po nálezu z review #72** — původně se
+  strhávalo nad celým řádkem s tím, že HTML v inline kódu je vzácné. `<div>` možná, generický
+  typ ne.
 
 ### `App/Syntax/`
 
