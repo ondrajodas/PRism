@@ -214,6 +214,9 @@ Per-repo: mode: auto | manual        # default: manual
           blockingCategories[]       # override
 ```
 
+**Hotovo (#25).** Automat plánuje po každém úspěšném tiku, session utratí teprve při změně
+`headSha` a hlídá ho denní limit uložený na disku. Tím je **dokončený rozsah v1**.
+
 **Nové repozitáře mají default `manual`.** Když jsou v rozsahu libovolná repa, neznámé
 repo nesmí bez dozoru spálit celý panel Claude sessions; objeví se v seznamu a čeká na
 tlačítko. `auto` se zapíná per repo tam, kde ho chci.
@@ -726,6 +729,12 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | `Sbalit vše` a `Rozbalit vše` je **jedno** tlačítko | Dvě vedle sebe | Který ze dvou stavů dává smysl, plyne z toho, co je na obrazovce — druhé tlačítko by bylo pořád k ničemu. `unfoldAll` přitom sahá jen na svoje PR, aby se tlačítko neprojevilo jinde |
 | Celá hlavička je tlačítko, ne jen šipka | Klikat na šipku, jak to dělá `DisclosureGroup` | Na GitHubu se kliká kamkoli do řádku a trefovat se do šipky u padesáti souborů je práce navíc. Šipka zůstává jako **ukazatel stavu**, ne jako terč |
 | Oddělovač pod hlavičkou je **`Rectangle`**, ne `Divider()` | Nechat `Divider()`, jak tam byl od #18 | `Divider` si orientaci bere z okolní osy a v `overlay` žádná není, takže se kreslil **svisle**. Pod hlavičkami tedy nikdy nebyla čára, kterou ten kód chtěl. Vyšlo to najevo až sbalením všech souborů, kdy se svislé čárky poskládaly do jedné — dobrá připomínka, že „ono se to nějak vykreslí“ není totéž co „vykreslí se to, co jsem napsal“ |
+| Automat se rozhoduje na **dva kroky**: `updatedAt` po tiku, `headSha` po detailu | Dotáhnout detail každého PR při každém tiku a rozhodovat rovnou podle `headSha` | Vyhledávání SHA nedává (#4), takže by to znamenalo N podprocesů na jeden poll. Dvoukrokové rozhodování stojí u nezměněného PR **nula** volání a u PR s novým komentářem jedno `gh pr view` — a session, což je to jediné drahé, se utratí jen při skutečné změně kódu |
+| Denní limit je **na disku**, ne v paměti | Počítat v paměti a po restartu začít od nuly | Je to pojistka proti překvapení na účtu, a pojistka, kterou obejde restart, není pojistka — restart je zrovna to, co se po nečekaném utrácení udělá jako první |
+| Rozpočet se bere **před** spuštěním | Započítat běh, až doběhne | Session je utracená v okamžiku, kdy běh začne. Počítat doběhlé by pustilo dvacet běhů naráz a limit by se projevil až potom, co je pozdě |
+| **Draft se sám nereviewuje** | Reviewovat všechno, co je v seznamu | **Doplněno proti zadání #25.** Autor na draftu ještě pracuje a každý push by stál session. Ruční spuštění zůstává, takže se o nic nepřichází |
+| Ruší se **jen automatická** review PR, který zmizel ze seznamu | Rušit všechna, nebo nerušit nic | Mergnutý PR nemá blokovat slot — to je smysl toho pravidla. Ruční review si ale vyžádal člověk a zrušit mu ho pod rukama proto, že to někdo mezitím mergnul, je horší než jedna session navíc |
+| Nulový `autoRunsPerDay` znamená **vypnuto** | Brát nulu jako „bez omezení“ | Stejná logika jako u nuly souběžných session, jen obráceně: tam překlep nesmí aplikaci umlčet, tady nesmí z překlepu vzniknout neomezené utrácení. Rozhoduje, co je horší následek |
 
 ## Ověřeno proti CLI (2026-08-01)
 

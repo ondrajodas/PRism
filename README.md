@@ -116,8 +116,8 @@ otevřeného PR a při překročení rozpočtu (10 GB) i ta nejdéle nepoužitá
 Uložené nálezy jsou klíčované head commitem: nové commity je označí jako zastaralé
 a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí.
 
-Z pěti fází (viz [CLAUDE.md](CLAUDE.md)) jsou hotové první čtyři; z páté zbývá už jen automatický
-režim (#25).
+**Rozsah v1 podle specifikace je hotový** — všech pět fází (viz [CLAUDE.md](CLAUDE.md)).
+Co přijde po něm, je v milnících M6 až M8.
 
 Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
 po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
@@ -138,9 +138,11 @@ aktuálně je.
    Claude Code v tom worktree, omezené na read-only nástroje. Prompt si o skill říká
    nástrojem `Skill` výslovně, takže v konfiguraci jsou jeho id (`plugin:skill`), ne
    slash commandy. Které to jsou, může záviset
-   na programovacím jazyce repa; ten se odhaduje z `git ls-files`. Spouští se **tlačítkem**;
-   automatický režim se dá zapnout globálně i zvlášť pro každé repo (výchozí je manuální,
-   aby neznámé repo nespálilo panel session bez dozoru).
+   na programovacím jazyce repa; ten se odhaduje z `git ls-files`. Spouští se **tlačítkem**,
+   nebo samo, když je repo v automatickém režimu — ten se zapíná globálně i zvlášť pro každé
+   repo a výchozí je manuální, aby neznámé repo nespálilo panel session bez dozoru.
+   **Automat utratí session, teprve když se změnil head commit**, takže komentář na PR ho
+   nespustí, a hlídá ho denní limit.
 4. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
    Strukturovaná data, ne parsování textu.
 5. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus

@@ -19,6 +19,7 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     private let lock = NSLock()
     private var asked: [String] = []
     private var detailsAsked: [PRIdentifier] = []
+    private var overriddenDetail: Result<PullRequest, any Error>?
     private var diffsAsked: [PRIdentifier] = []
     private var filesAsked: [(id: PRIdentifier, path: String)] = []
 
@@ -41,6 +42,13 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         files: [Result<String, any Error>] = []
     ) {
         self.init([outcome], detail: detail, diffs: diffs, files: files)
+    }
+
+    /// Čím se přebije `detail` od dalšího volání. Na tom stojí testy, ve kterých PR mezi
+    /// dvěma tiky dostane nový commit.
+    var nextDetail: Result<PullRequest, any Error>? {
+        get { lock.withLock { overriddenDetail } }
+        set { lock.withLock { overriddenDetail = newValue } }
     }
 
     var detailRequests: [PRIdentifier] { lock.withLock { detailsAsked } }
@@ -66,9 +74,12 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
 
     /// Polling detail netahá — SHA potřebuje až review, ne seznam.
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {
-        lock.withLock { detailsAsked.append(id) }
-        guard let detail else { throw GitHubError.notFound("Fake gateway detail nezná.") }
-        return try detail.get()
+        let answer: Result<PullRequest, any Error>? = lock.withLock {
+            detailsAsked.append(id)
+            return overriddenDetail ?? detail
+        }
+        guard let answer else { throw GitHubError.notFound("Fake gateway detail nezná.") }
+        return try answer.get()
     }
 
     /// Na co se někdo ptal, v pořadí. Na počtu stojí test, že se obsah souboru dotahuje
