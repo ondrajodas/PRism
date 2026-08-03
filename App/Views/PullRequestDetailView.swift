@@ -86,6 +86,9 @@ struct PullRequestDetailView: View {
             if record != nil || !timelines.isEmpty {
                 FindingsPanel(
                     record: record,
+                    // `nil` = není co zahodit. Rozhoduje uložený záznam, ne to, co je vidět
+                    // po filtru reviewerů — filtr je pohled, ne obsah.
+                    clear: record == nil ? nil : { try await store.clearFindings(for: pullRequest.id) },
                     isExpanded: $findingsExpanded,
                     jump: jump,
                     findings: visibleFindings,

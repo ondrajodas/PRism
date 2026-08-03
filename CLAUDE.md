@@ -681,7 +681,7 @@ Výsledky review na disku: jeden JSON soubor na `(repo, PR, headSha)` pod
 
 | Typ | Co je |
 |---|---|
-| `ReviewStore` | Aktor: `save`, `markCurrent`, `load`, `cleanUp`. Atomický zápis |
+| `ReviewStore` | Aktor: `save`, `markCurrent`, `load`, `delete`, `cleanUp`. Atomický zápis |
 | `AutoRunLedger` | Aktor: kolik review dnes spustil automat. **Na disku**, aby limit nešel obejít restartem |
 | `ReviewRecord` | Obsah jednoho souboru: PR, `headSha`, běhy, `isStale`, `closedAt` |
 | `StoredReviewRun` | Jeden běh: skill, `outcome`, session id, nálezy, `droppedFindings`, čas |
@@ -696,7 +696,14 @@ Věci, které se u toho nemají rozbít:
 - **Stárnutí umí `save` i `markCurrent`.** `save` ho dělá taky schválně: kdyby to viselo jen
   na `markCurrent`, stačilo by ho jednou zapomenout a nálezy proti neexistujícímu kódu by
   se tvářily jako platné.
-- **Zastaralý záznam se nemaže.** Je to historie; UI ho ukazuje jako zastaralý.
+- **Zastaralý záznam se nemaže sám.** Je to historie; UI ho ukazuje jako zastaralý. Ručním
+  zahozením (#81) ale zmizet **může**: „historie zůstává“ se vztahuje na **ostatní** záznamy,
+  ne na ochranu toho viditelného — kdo zmáčkne zahodit nad zastaralými nálezy, chce se
+  zbavit právě jich. Odhalil to test, který původně tvrdil opak.
+- **`delete` je idempotentní a jen uvnitř cache.** Tlačítko se dá zmáčknout dvakrát;
+  chybějící soubor tedy není chyba. Kontrola `layout.contains` je stejná jako u eviction —
+  cesta se skládá z `CacheLayout` a ven vést nemůže, ale tvrdá podmínka nemá viset na tom,
+  že si to někdo pamatuje.
 - **Lhůta na úklid běží od zavření, ne od stáří záznamu.** Proto `closedAt`: PR otevřený půl
   roku by jinak o historii přišel v okamžiku, kdy se zavře. PR, který se do seznamu vrátí,
   lhůtu ruší.
@@ -787,6 +794,11 @@ Automatický režim (#25):
   v řádku zůstalo `ve frontě · clone` až do restartu.
 - **Zrušení neuloží nic.** Rozdělané review je horší než žádné — a fáze se vrací tam, kde
   byla, ne do chyby.
+- **Zahození nálezů odznačí PR pro automat a rovnou ho zváží.** Plánovač si pamatuje
+  `updatedAt`, se kterým PR naposledy zvažoval, takže by ho po vyčištění považoval za
+  vyřízený až do dalšího pushe — a přitom zahození je právě ta chvíle, kdy se má review
+  pustit znovu. Nečeká se na tik, ale jde se **stejnou cestou jako po tiku**: jinak by se
+  klikáním na koš utrácely session mimo denní rozpočet. U manuálního repa se nespustí nic.
 - **Nezapsaný nález review položí.** Selhání zápisu se nespolkne: ztracený nález by v řádku
   vypadal jako „neběželo“, tedy jako schválený PR s neohlášenou chybou. Ostatní skilly
   přitom doběhnou, ať se nezahodí i to, co se uložit povedlo.
@@ -808,7 +820,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout |
 | `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah obarvený podle jazyka |
-| `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`, návrh verdiktu, tabulka s řazením a prokliky do diffu |
+| `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`, návrh verdiktu, tabulka s řazením, prokliky do diffu a zahození nálezů |
 | `FindingRow` | Nález převedený na řádek tabulky — texty, identita, blokující příznak |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
 | `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume`, upozornění na načtený jiný skill |
@@ -1321,6 +1333,10 @@ Právě proto tam eskalace na `SIGKILL` je.
   a diakritiku. `Language` má tabulkové testy na detekci z přípony i ze jména souboru.
 - **`AppStore` — diff** — proti fake gateway: načtení, cache podle `updatedAt`, opakování
   po selhání a zahození diffu PR, které zmizelo ze seznamu.
+- **`AppStore` — zahození nálezů** — proti **skutečnému** `ReviewStore`: že to zmizí
+  z panelu, z řádku i z disku a přežije restart, že další běh začíná načisto, že druhé
+  zmáčknutí nic nerozbije, že starší záznamy zůstanou a že se na automatickém repu review
+  pustí samo, kdežto na manuálním ne.
 - **`AppStore` — sbalení souborů** — výchozí rozbaleno, přepínání tam a zpět, že sbalení
   jednoho souboru nesahá na jiné ani na jiné PR, idempotentní rozbalení (na tom stojí skok)
   a `Rozbalit vše`, které nechá cizí PR být.
@@ -1626,6 +1642,10 @@ teprve tehdy, když se změnil `headSha`. Denní limit (`autoRunsPerDay`, výcho
 pojistka proti překvapení na účtu a drží se na disku, aby ho neobešel restart.
 
 **Tím je hotový rozsah v1 podle specifikace.**
+
+Zahození nálezů hotové (issue #81) — koš v liště panelu zahodí uložený záznam viditelného
+commitu, takže se dá pustit review znovu s jinou sadou skillů. Na repu v automatickém režimu
+se pustí samo.
 
 Plánované fáze:
 

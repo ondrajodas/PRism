@@ -68,6 +68,10 @@ v kódu** — chybějící testy nebo poznámky k architektuře; kvůli nim samo
 nestačí. Klik na řádek odscrolluje diff a bublinu na chvíli zvýrazní. Výška panelu se
 táhne za horní hranu a pamatuje se.
 
+V liště panelu je **koš**, kterým se uložené nálezy zahodí — hodí se, když se změnila sada
+skillů a v záznamu leží nálezy od revieweera, který už neběží. Maže se jen viditelný commit,
+historie zůstává, a na repu v automatickém režimu se review vzápětí pustí samo.
+
 Nad diffem jsou **chipy reviewerů**: u každého je vidět, co udělal (`3 nálezy`, `čisté`,
 `běží`, `selhalo`, `nejisté`) a kliknutím se jeho nálezy schovají z bublin i z tabulky.
 Vpravo je **návrh verdiktu** — je to doporučení, ne akce; aplikace na GitHub nic neposílá.
