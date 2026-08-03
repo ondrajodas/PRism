@@ -44,9 +44,9 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         self.init([outcome], detail: detail, diffs: diffs, files: files)
     }
 
-    /// Čím se přebije `detail` od dalšího volání. Na tom stojí testy, ve kterých PR mezi
-    /// dvěma tiky dostane nový commit.
-    var nextDetail: Result<PullRequest, any Error>? {
+    /// Čím se `detail` přebije **od teď dál** — nespotřebuje se, platí pro všechna další
+    /// volání. Na tom stojí testy, ve kterých PR mezi dvěma tiky dostane nový commit.
+    var detailFromNowOn: Result<PullRequest, any Error>? {
         get { lock.withLock { overriddenDetail } }
         set { lock.withLock { overriddenDetail = newValue } }
     }

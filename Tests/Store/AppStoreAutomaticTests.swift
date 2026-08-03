@@ -148,7 +148,7 @@ struct AppStoreAutomaticTests {
         await settle(store)
 
         // Druhý tik vidí jiný head commit.
-        gateway.nextDetail = .success(detail(headSha: "cccc3333"))
+        gateway.detailFromNowOn = .success(detail(headSha: "cccc3333"))
         await store.refresh()
         await settle(store)
 

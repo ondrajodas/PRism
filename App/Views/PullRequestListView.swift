@@ -39,12 +39,10 @@ struct PullRequestListView: View {
                 }
                 // Pozastavený automat se **musí** ukázat. Bez toho vypadá jako rozbitý: PR
                 // přibývají, nic se nespouští a proč se nedá zjistit odnikud.
+                // Nula v konfiguraci znamená **vypnuto**, ne vyčerpáno. „Vyčerpaný limit
+                // (0)“ by tvrdil, že se něco spotřebovalo, a poslal by hledat, co.
                 if store.remainingAutomaticRuns == 0 {
-                    notice(
-                        "Automatické review pozastavené — vyčerpaný denní limit "
-                            + "(\(store.configuration.global.autoRunsPerDay)). Ručně jde dál.",
-                        icon: "pause.circle"
-                    )
+                    notice(automaticPausedText, icon: "pause.circle")
                 }
                 // Rozbitý soubor s nálezy znamená, že se nějaké ztratily — a ztracený nález
                 // se nesmí tvářit jako „review neběželo“.
@@ -61,6 +59,13 @@ struct PullRequestListView: View {
             .background(.bar)
             .overlay(alignment: .top) { Rectangle().fill(.separator).frame(height: 1) }
         }
+    }
+
+    private var automaticPausedText: String {
+        let limit = store.configuration.global.autoRunsPerDay
+        return limit > 0
+            ? "Automatické review pozastavené — vyčerpaný denní limit (\(limit)). Ručně jde dál."
+            : "Automatické review je vypnuté (denní limit 0). Ručně jde dál."
     }
 
     private var hasNotices: Bool {

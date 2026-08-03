@@ -77,6 +77,20 @@ struct AutoRunLedgerTests {
         #expect(!(await ledger.take(limit: 1)))
     }
 
+    /// Přechodné selhání čtení nesmí počitadlo vynulovat. Bez zapamatování přečtené
+    /// hodnoty by se disk četl pokaždé znovu a jedno selhání by limit uvolnilo.
+    @Test("Zmizelý soubor už započítané běhy nezruší")
+    func keepsTheCountWhenTheFileDisappears() async throws {
+        let workspace = try TemporaryDirectory()
+        let layout = CacheLayout(root: workspace.url)
+        let ledger = ledger(workspace, time: FakeTimeSource())
+        #expect(await ledger.take(limit: 1))
+
+        try FileManager.default.removeItem(at: layout.autoRunsFile)
+
+        #expect(!(await ledger.take(limit: 1)))
+    }
+
     /// Nečitelné počitadlo automat neumlčí: nejhorší následek je pár běhů navíc, kdežto
     /// tiché zablokování se nedá vysvětlit.
     @Test("Rozbitý soubor se bere jako prázdný den")

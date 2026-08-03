@@ -56,6 +56,10 @@ actor AutoRunLedger {
         guard let stored = try? decoder.decode(Tally.self, from: Data(contentsOf: layout.autoRunsFile)),
               stored.day == day
         else { return Tally(day: day, count: 0) }
+        // Zapamatovat se to musí i po **čtení**, ne jen po zápisu. Jinak se disk čte
+        // pokaždé znovu a jediné přechodné selhání čtení vrátí počitadlo na nulu — tedy
+        // stejná díra v pojistce, kvůli které je zdrojem pravdy paměť.
+        cached = stored
         return stored
     }
 
