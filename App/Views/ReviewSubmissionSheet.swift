@@ -155,7 +155,7 @@ struct ReviewSubmissionSheet: View {
     private func commentRow(_ comment: ReviewDraftComment) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Text(verbatim: location(of: comment))
+                Text(verbatim: Policy.location(of: comment))
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -171,13 +171,6 @@ struct ReviewSubmissionSheet: View {
             }
             monospaced(comment.body)
         }
-    }
-
-    /// `(starý)` u levé strany není kosmetika: komentář k odebranému řádku nese číslo ze
-    /// **staré** verze souboru, takže bez toho vypadá jako komentář na jiném kódu.
-    private func location(of comment: ReviewDraftComment) -> String {
-        let side = comment.side == .left ? " (starý)" : ""
-        return "\(comment.path):\(comment.line)\(side)"
     }
 
     private func monospaced(_ text: String) -> some View {

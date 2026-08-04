@@ -16,3 +16,13 @@ enum ReviewPhase: Hashable, Sendable {
     /// nebo zápis na disk, a to jsou chyby jednoho PR, kdežto checkout je stav celého repa.
     case failed(detail: String)
 }
+
+/// Rozsah, který se právě táhne přes řádky diffu (#110).
+///
+/// Nese **složený** rozsah, ne dvojici konců: složit ho umí jen `Policy` nad diffem, takže se
+/// tím zaručí, že zvýraznění při tažení ukazuje přesně to, co z něj vznikne.
+struct CommentRangeDrag: Equatable, Sendable {
+    let pullRequest: PRIdentifier
+    let path: String
+    let anchor: DraftAnchor
+}

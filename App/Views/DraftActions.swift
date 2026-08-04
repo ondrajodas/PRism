@@ -12,6 +12,15 @@ struct DraftActions {
     var canCompose = false
     /// Založí prázdný řádkový komentář a nechá ho k dopsání.
     var addComment: (_ path: String, _ anchor: DraftAnchor) -> Void = { _, _ in }
+    /// ⇧ klik: roztáhne naposledy přidaný komentář na rozsah po tenhle řádek (#110). Když není
+    /// co roztahovat, založí obyčejný komentář — o tom rozhoduje store, ne view.
+    var extendComment: (_ path: String, _ anchor: DraftAnchor) -> Void = { _, _ in }
+    /// Tažení přes řádky (#110): hlásí se průběžně, komentář vzniká až v `endRangeDrag`.
+    /// `to == nil` = pod myší není řádek; rozsah se pak drží, ne aby se srazil (řeší store).
+    var dragRange: (_ path: String, _ from: DraftAnchor, _ to: DraftAnchor?) -> Void = { _, _, _ in }
+    var endRangeDrag: () -> Void = {}
+    /// Rozsah, který se právě táhne — kvůli zvýraznění řádků. `nil` = netáhne se.
+    var draggedRange: (path: String, anchor: DraftAnchor)?
     /// Poznámka do těla review s odkazem na kód — pro řádek, který komentář neunese.
     var addNote: (_ path: String, _ line: Int?) -> Void = { _, _ in }
     /// Převezme nález; kam půjde, rozhoduje store podle `Policy.draftTarget`.
@@ -40,6 +49,7 @@ struct DraftActions {
             canCompose: canCompose,
             anchors: { anchors[$0] ?? LineAnchors() },
             comment: { addComment(file.displayPath, $0) },
+            extend: { extendComment(file.displayPath, $0) },
             note: { addNote(file.displayPath, $0) },
             adopt: adopt,
             isAdopted: isAdopted,
@@ -56,6 +66,8 @@ struct FileDraftActions {
     /// Kotvy komentáře na řádku po stranách — prázdné u řádku, který komentář neunese.
     var anchors: (DiffLine) -> LineAnchors = { _ in LineAnchors() }
     var comment: (DraftAnchor) -> Void = { _ in }
+    /// ⇧ klik na tlačítko u řádku — roztažení rozsahu (#110).
+    var extend: (DraftAnchor) -> Void = { _ in }
     var note: (Int?) -> Void = { _ in }
     var adopt: (Finding) -> Void = { _ in }
     var isAdopted: (Finding) -> Bool = { _ in false }

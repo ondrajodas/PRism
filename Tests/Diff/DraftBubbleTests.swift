@@ -32,7 +32,7 @@ struct DraftBubbleTests {
         body: String = "moje poznámka",
         origin: ReviewDraftComment.Origin = .own
     ) -> ReviewDraftComment {
-        ReviewDraftComment(path: path, line: line, side: side, body: body, origin: origin)
+        ReviewDraftComment(path: path, anchor: DraftAnchor(line: line, side: side), body: body, origin: origin)
     }
 
     /// Komentáře v pořadí, ve kterém se kreslí. Jeden řádek nese komentáře k oběma stranám
@@ -102,6 +102,24 @@ struct DraftBubbleTests {
         )
 
         #expect(comments(in: rows).map(\.body) == ["první", "druhý"])
+    }
+
+    /// Víceřádkový komentář (#110) visí u **posledního** řádku rozsahu, jako na GitHubu — a je to
+    /// tentýž mechanismus jako u jednořádkového, protože konec rozsahu je `line`/`side`. Kde
+    /// rozsah začíná, ukazuje zvýraznění řádků a hlavička bubliny.
+    @Test("Bublina rozsahu visí u posledního řádku")
+    func hangsARangeUnderItsLastLine() throws {
+        let range = ReviewDraftComment(
+            path: "Cart.php",
+            anchor: DraftAnchor(line: 27, side: .right, start: DraftAnchor.Endpoint(line: 25, side: .right)),
+            body: "tenhle blok",
+            origin: .own
+        )
+
+        let rows = DiffRow.rows(of: try file(), comments: [range])
+
+        let index = try #require(rows.firstIndex { if case .draftComments = $0 { true } else { false } })
+        #expect(try line(above: index, in: rows).newNumber == 27)
     }
 
     /// Nález a cizí komentář jsou to, co si mám přečíst; svou vlastní rozepsanou větu znám.

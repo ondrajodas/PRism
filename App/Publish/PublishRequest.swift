@@ -17,10 +17,16 @@ enum PublishRequest {
             let path: String
             let line: Int
             let side: String
+            /// Rozsah řádků (#110). U jednořádkového komentáře **oba `nil`**, takže v payloadu
+            /// nejsou vůbec — je to tentýž tvar, který prošel u #62 a #67.
+            let startLine: Int?
+            let startSide: String?
             let body: String
 
             enum CodingKeys: String, CodingKey {
                 case path, line, side, body
+                case startLine = "start_line"
+                case startSide = "start_side"
             }
         }
 
@@ -48,6 +54,10 @@ enum PublishRequest {
                     // Strana se posílá tak, jak ji chce API — `RIGHT`/`LEFT`. Bez ní by
                     // komentář k odebranému řádku sedl na jiný kód.
                     side: $0.side.rawValue,
+                    // Rozsah jde jako `start_line`/`start_side` (změřeno u #110). Konec je
+                    // `line`/`side` výš, takže bublina i payload míří na tentýž řádek.
+                    startLine: $0.startLine,
+                    startSide: $0.startSide?.rawValue,
                     body: $0.body
                 )
             }

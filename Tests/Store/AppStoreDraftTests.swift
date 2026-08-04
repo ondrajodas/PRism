@@ -265,6 +265,227 @@ struct AppStoreDraftTests {
         #expect(!store.hasDraft(pr))
     }
 
+    // MARK: - Rozsah řádků (#110)
+
+    /// ⇧ klik roztáhne **naposledy přidaný** komentář, ne nový vedle něj: rozsah je oprava
+    /// toho, co jsem právě napsal („ono to patří k celému bloku“).
+    @Test("Šift klik roztáhne poslední komentář na rozsah")
+    func extendsTheLastCommentIntoARange() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+
+        store.addDraftComment(at: DraftAnchor(line: 25, side: .right), path: "Cart.php", for: pr)
+        store.extendDraftComment(to: DraftAnchor(line: 27, side: .right), path: "Cart.php", for: pr)
+        await settle()
+
+        let comment = try #require(store.draftComments(for: pr).first)
+        #expect(store.draftComments(for: pr).count == 1, "roztažení komentář nezdvojí")
+        #expect(comment.anchor.start?.line == 25)
+        #expect(comment.line == 27)
+        // Identita zůstává, jinak by editor přišel o rozepsaný text a bublina by přeskočila.
+        #expect(store.draftComments(for: pr).first?.id == comment.id)
+    }
+
+    @Test("Rozsah přežije restart")
+    func keepsTheRangeAcrossRestart() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+
+        store.addDraftComment(at: DraftAnchor(line: 25, side: .right), path: "Cart.php", body: "blok", for: pr)
+        store.extendDraftComment(to: DraftAnchor(line: 27, side: .right), path: "Cart.php", for: pr)
+        await settle()
+
+        let restarted = self.store(drafts)
+        await restarted.loadStoredDrafts()
+        let comment = try #require(restarted.draftComments(for: pr).first)
+        #expect(comment.anchor.start?.line == 25)
+        #expect(comment.line == 27)
+    }
+
+    /// Kliknutí, po kterém se nestane nic, vypadá jako rozbitá aplikace — takže když není co
+    /// roztahovat, vznikne obyčejný komentář.
+    @Test("Šift klik bez předchozího komentáře založí obyčejný komentář")
+    func fallsBackToAPlainComment() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+
+        store.extendDraftComment(to: DraftAnchor(line: 26, side: .right), path: "Cart.php", for: pr)
+        await settle()
+
+        let comment = try #require(store.draftComments(for: pr).first)
+        #expect(comment.anchor.start == nil)
+        #expect(comment.line == 26)
+    }
+
+    /// Rozsah přes dva soubory GitHub nezná a nedal by se ani zobrazit.
+    @Test("Šift klik v jiném souboru rozsah nespojí")
+    func doesNotJoinTwoFiles() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+
+        store.addDraftComment(at: DraftAnchor(line: 25, side: .right), path: "Cart.php", for: pr)
+        store.extendDraftComment(to: DraftAnchor(line: 3, side: .right), path: "Jinde.php", for: pr)
+        await settle()
+
+        #expect(store.draftComments(for: pr).count == 2)
+        #expect(store.draftComments(for: pr).allSatisfy { $0.anchor.start == nil })
+    }
+
+    /// Roztažení se dá zopakovat — druhý ⇧ klik posune konec dál, ne že by rozsah zahodil.
+    @Test("Druhé roztažení posune konec rozsahu")
+    func extendsTwice() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+
+        store.addDraftComment(at: DraftAnchor(line: 25, side: .right), path: "Cart.php", for: pr)
+        store.extendDraftComment(to: DraftAnchor(line: 26, side: .right), path: "Cart.php", for: pr)
+        store.extendDraftComment(to: DraftAnchor(line: 27, side: .right), path: "Cart.php", for: pr)
+        await settle()
+
+        let comment = try #require(store.draftComments(for: pr).first)
+        #expect(store.draftComments(for: pr).count == 1)
+        #expect(comment.anchor.start?.line == 25)
+        #expect(comment.line == 27)
+    }
+
+    // MARK: - Tažení rozsahu (#110)
+
+    @Test("Tažení přes řádky založí komentář na rozsah")
+    func dragsARange() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+
+        store.dragCommentRange(
+            path: "Cart.php",
+            from: DraftAnchor(line: 25, side: .right),
+            to: DraftAnchor(line: 27, side: .right),
+            for: pr
+        )
+        store.finishCommentRange()
+        await settle()
+
+        let comment = try #require(store.draftComments(for: pr).first)
+        #expect(comment.anchor.start?.line == 25)
+        #expect(comment.line == 27)
+        #expect(store.commentDrag == nil, "po dotažení se stav tažení uklidí")
+    }
+
+    /// Zvýraznění při tažení kreslí **tentýž** rozsah, který z něj vznikne — proto se skládá už
+    /// během tažení a store ho drží složený.
+    @Test("Rozdělané tažení je vidět jako rozsah")
+    func exposesTheDraggedRange() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+
+        store.dragCommentRange(
+            path: "Cart.php",
+            from: DraftAnchor(line: 27, side: .right),
+            to: DraftAnchor(line: 25, side: .right),
+            for: pr
+        )
+
+        let drag = try #require(store.commentDrag)
+        // Pořadí se srovnává podle diffu, ne podle toho, kterým směrem myš táhla.
+        #expect(drag.anchor.start?.line == 25)
+        #expect(drag.anchor.line == 27)
+        #expect(store.draftComments(for: pr).isEmpty, "komentář vzniká teprve na konci tažení")
+    }
+
+    /// Tažení, které nikam nedošlo, dá jednořádkový komentář — je to totéž co tlačítko u řádku.
+    @Test("Tažení na jednom řádku dá jednořádkový komentář")
+    func dragsASingleLine() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+
+        let anchor = DraftAnchor(line: 26, side: .right)
+        store.dragCommentRange(path: "Cart.php", from: anchor, to: anchor, for: pr)
+        store.finishCommentRange()
+        await settle()
+
+        #expect(store.draftComments(for: pr).first?.anchor.start == nil)
+    }
+
+    /// Konec v jiném souboru rozsah nesloží, takže se **drží poslední platný** — rozsah, který
+    /// při vyjetí z diffu poskočí zpátky na jeden řádek, by se nedal dotáhnout.
+    @Test("Konec mimo soubor nechá poslední platný rozsah")
+    func keepsTheLastValidRange() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+
+        store.dragCommentRange(
+            path: "Cart.php",
+            from: DraftAnchor(line: 25, side: .right),
+            to: DraftAnchor(line: 27, side: .right),
+            for: pr
+        )
+        store.dragCommentRange(
+            path: "Cart.php",
+            from: DraftAnchor(line: 25, side: .right),
+            to: DraftAnchor(line: 900, side: .right),
+            for: pr
+        )
+
+        #expect(store.commentDrag?.anchor.line == 27)
+    }
+
+    /// **Nahlášené při zkoušení #110:** při jízdě přes prázdnou protistranu (vlevo nic, vpravo
+    /// přidané řádky) se rozsah srazil na první řádek a po přejetí na další řádek se zase objevil.
+    /// Přejetí přes místo, kde řádek není, není zrušení výběru.
+    @Test("Přejetí přes prázdné místo rozsah nezruší")
+    func keepsTheRangeOverAGap() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+        let start = DraftAnchor(line: 25, side: .right)
+
+        store.dragCommentRange(path: "Cart.php", from: start, to: DraftAnchor(line: 27, side: .right), for: pr)
+        store.dragCommentRange(path: "Cart.php", from: start, to: nil, for: pr)
+
+        #expect(store.commentDrag?.anchor.start?.line == 25)
+        #expect(store.commentDrag?.anchor.line == 27, "rozsah se drží, nesrazí se na začátek")
+    }
+
+    /// Dokud rozsah žádný není, platí samotný začátek — z tažení má vzniknout aspoň jednořádkový
+    /// komentář, i když se první pohyb trefí mimo řádky.
+    @Test("Bez rozsahu a bez cíle platí začátek")
+    func startsFromTheAnchorWithoutATarget() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+
+        store.dragCommentRange(path: "Cart.php", from: DraftAnchor(line: 26, side: .right), to: nil, for: pr)
+
+        #expect(store.commentDrag?.anchor.line == 26)
+        #expect(store.commentDrag?.anchor.start == nil)
+    }
+
+    @Test("Bez načteného diffu se tažením nic nezaloží")
+    func ignoresADragWithoutADiff() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts)
+
+        store.dragCommentRange(
+            path: "Cart.php",
+            from: DraftAnchor(line: 25, side: .right),
+            to: DraftAnchor(line: 27, side: .right),
+            for: pr
+        )
+        store.finishCommentRange()
+        await settle()
+
+        #expect(store.commentDrag == nil)
+        #expect(!store.hasDraft(pr))
+    }
+
     // MARK: - Převzetí nálezu
 
     @Test("Nález na řádku diffu se převezme jako komentář")

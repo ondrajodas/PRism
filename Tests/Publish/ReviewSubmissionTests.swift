@@ -28,7 +28,7 @@ struct ReviewSubmissionTests {
             body: "vypadá to dobře",
             verdict: verdict,
             comments: [
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "tady", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "tady", origin: .own),
             ]
         )
     }

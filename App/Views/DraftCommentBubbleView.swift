@@ -56,9 +56,14 @@ struct DraftCommentBubbleView: View {
                     .background(.quaternary, in: .capsule)
                     .foregroundStyle(.secondary)
             }
-            // Strana je vidět jen u odebraného řádku, kde je to důležité: komentář má číslo
-            // ze **staré** verze souboru, takže bez toho vypadá, že je na jiném řádku.
-            if comment.side == .left {
+            // U rozsahu se čísla ukazují vždycky (#110): bublina visí u **posledního** řádku,
+            // takže bez nich není poznat, kde rozsah začíná. U jednoho řádku jen tehdy, když je
+            // ze staré verze souboru — jinak by to byl šum u každého komentáře.
+            if comment.anchor.isRange {
+                Text(verbatim: "řádky \(Policy.lines(of: comment))")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            } else if comment.side == .left {
                 Text(verbatim: "starý řádek \(comment.line)")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)

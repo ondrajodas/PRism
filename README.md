@@ -70,7 +70,13 @@ odebraných řádků se s následujícím blokem přidaných spáruje pozičně;
 straně dostane prázdnou buňku s neutrálním pozadím. Kontextový řádek stojí na obou stranách,
 hlavička hunku, rozbalovací řádek, bubliny i poznámky `git`u jdou přes celou šířku. Všechno,
 co diff umí pod sebou, umí i vedle sebe — bubliny, rozbalování kontextu, obarvení, sbalování
-souborů i skok z tabulky nálezů. **Rozepsaný komentář visí jen v té půlce, které se týká** —
+souborů i skok z tabulky nálezů. **Komentovat jde i rozsah řádků**: klikni do diffu a **táhni myší přes řádky** — vybraný rozsah
+se průběžně zvýrazňuje a po puštění se otevře komentář. Bublina visí u posledního řádku rozsahu,
+jako na GitHubu. Rozepsaný komentář jde ještě roztáhnout **⇧ klikem** na `+` u jiného řádku (to
+tažení neumí, protože komentář už existuje). Rozsah smí přeskočit i mezeru mezi hunky a odesílá se
+jako `start_line`/`start_side`, tedy tak, jak to čeká GitHub.
+
+**Rozepsaný komentář visí jen v té půlce, které se týká** —
 komentář k odebranému řádku vlevo, k novému vpravo, a když komentuješ obě strany téhož řádku,
 stojí oba **vedle sebe**. Nálezy a cizí vlákna zůstávají přes celou šířku, protože se na stranu
 nevážou a nesou delší text.

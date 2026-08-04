@@ -356,8 +356,7 @@ struct DraftPolicyTests {
             comments: [
                 ReviewDraftComment(
                     path: "Cart.php",
-                    line: 26,
-                    side: .right,
+                    anchor: DraftAnchor(line: 26, side: .right),
                     body: "moje slova",
                     origin: .finding(reviewer: "code-review")
                 ),
@@ -381,8 +380,7 @@ struct DraftPolicyTests {
             comments: [
                 ReviewDraftComment(
                     path: "Cart.php",
-                    line: 26,
-                    side: .right,
+                    anchor: DraftAnchor(line: 26, side: .right),
                     body: "moje slova",
                     origin: .finding(reviewer: "code-review")
                 ),
@@ -402,7 +400,7 @@ struct DraftPolicyTests {
             pullRequest: pr,
             headSha: "abc",
             comments: [
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "moje", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "moje", origin: .own),
             ]
         )
 
@@ -594,7 +592,7 @@ struct DraftPolicyTests {
             headSha: "abc",
             verdict: .comment,
             comments: [
-                ReviewDraftComment(path: "a.php", line: 1, side: .right, body: " ", origin: .own),
+                ReviewDraftComment(path: "a.php", anchor: DraftAnchor(line: 1, side: .right), body: " ", origin: .own),
             ]
         )
 
@@ -625,8 +623,8 @@ struct DraftPolicyTests {
             headSha: "abc",
             verdict: .comment,
             comments: [
-                ReviewDraftComment(path: "a.php", line: 1, side: .right, body: "napsané", origin: .own),
-                ReviewDraftComment(path: "a.php", line: 2, side: .right, body: "  \n ", origin: .own),
+                ReviewDraftComment(path: "a.php", anchor: DraftAnchor(line: 1, side: .right), body: "napsané", origin: .own),
+                ReviewDraftComment(path: "a.php", anchor: DraftAnchor(line: 2, side: .right), body: "  \n ", origin: .own),
             ]
         )
 
@@ -675,9 +673,9 @@ struct DraftPolicyTests {
             pullRequest: pr,
             headSha: "abc",
             comments: [
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "první", origin: .own),
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "druhý", origin: .own),
-                ReviewDraftComment(path: "Cart.php", line: 40, side: .right, body: "jiný řádek", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "první", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "druhý", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 40, side: .right), body: "jiný řádek", origin: .own),
             ]
         )
 
@@ -693,10 +691,10 @@ struct DraftPolicyTests {
             pullRequest: pr,
             headSha: "abc",
             comments: [
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "a", origin: .own),
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "b", origin: .own),
-                ReviewDraftComment(path: "Order.php", line: 8, side: .right, body: "c", origin: .own),
-                ReviewDraftComment(path: "Order.php", line: 8, side: .right, body: "d", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "a", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "b", origin: .own),
+                ReviewDraftComment(path: "Order.php", anchor: DraftAnchor(line: 8, side: .right), body: "c", origin: .own),
+                ReviewDraftComment(path: "Order.php", anchor: DraftAnchor(line: 8, side: .right), body: "d", origin: .own),
             ]
         )
 
@@ -710,9 +708,9 @@ struct DraftPolicyTests {
             pullRequest: pr,
             headSha: "abc",
             comments: [
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "a", origin: .own),
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "b", origin: .own),
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "c", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "a", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "b", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "c", origin: .own),
             ]
         )
 
@@ -727,8 +725,8 @@ struct DraftPolicyTests {
             pullRequest: pr,
             headSha: "abc",
             comments: [
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "nový", origin: .own),
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .left, body: "smazaný", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "nový", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .left), body: "smazaný", origin: .own),
             ]
         )
 
@@ -741,8 +739,8 @@ struct DraftPolicyTests {
             pullRequest: pr,
             headSha: "abc",
             comments: [
-                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "a", origin: .own),
-                ReviewDraftComment(path: "Order.php", line: 26, side: .right, body: "b", origin: .own),
+                ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "a", origin: .own),
+                ReviewDraftComment(path: "Order.php", anchor: DraftAnchor(line: 26, side: .right), body: "b", origin: .own),
             ]
         )
 
@@ -766,7 +764,7 @@ struct DraftPolicyTests {
             pullRequest: pr,
             headSha: "abc",
             comments: [
-                ReviewDraftComment(path: "a.php", line: 1, side: .right, body: "x", origin: .own),
+                ReviewDraftComment(path: "a.php", anchor: DraftAnchor(line: 1, side: .right), body: "x", origin: .own),
             ]
         ).isEmpty)
     }

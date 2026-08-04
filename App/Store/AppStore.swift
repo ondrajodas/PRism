@@ -118,6 +118,22 @@ final class AppStore {
     /// u jednoho souboru otočí pohled.
     private(set) var diffLayoutOverride: DiffLayout?
 
+    /// Komentář, který se dá ⇧ klikem roztáhnout na rozsah — ten naposledy přidaný v tomhle PR
+    /// (#110). Chybějící záznam = není co roztahovat, takže ⇧ klik založí obyčejný komentář.
+    ///
+    /// Drží se **id komentáře**, ne kotva: druhý konec se z komentáře dopočítá a po roztažení
+    /// zůstane platný, kdežto uložená kotva by se s ním rozešla. Uklízí se s PR mimo seznam,
+    /// jako ostatní stav vázaný na PR.
+    private(set) var rangeTargets: [PRIdentifier: UUID] = [:]
+
+    /// Rozsah, který se právě táhne přes řádky diffu (#110). `nil` = netáhne se.
+    ///
+    /// Drží se **složený rozsah**, ne dvojice konců: složit ho umí jen `Policy` (potřebuje k tomu
+    /// diff, protože pořadí konců rozhoduje podle kreslených řádků), takže by se to jinak počítalo
+    /// dvakrát — při zvýrazňování i při vzniku komentáře. Zvýraznění tak ukazuje **přesně** ten
+    /// rozsah, který z tažení vznikne.
+    private(set) var commentDrag: CommentRangeDrag?
+
     /// Co reviewery dělaly, per PR. Drží se i po doběhnutí — právě tehdy se k tomu člověk
     /// vrací. Pořadí kopíruje pořadí, ve kterém běhy začaly.
     private(set) var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
@@ -822,6 +838,37 @@ final class AppStore {
         toggledThreads[pr] = toggled.isEmpty ? nil : toggled
     }
 
+    // MARK: - Tažení rozsahu (#110)
+
+    /// Průběh tažení: `from` je řádek, na kterém začalo, `to` ten pod myší.
+    ///
+    /// Rozsah se skládá při každém pohybu, protože se z něj kreslí zvýraznění — a musí to být
+    /// tentýž rozsah, který vznikne na konci.
+    ///
+    /// **`to == nil` znamená „pod myší žádný řádek není“** — prázdná protistrana ve split pohledu,
+    /// mezera mezi soubory, hlavička hunku. Rozdělaný rozsah se pak **drží**: přejetí přes prázdné
+    /// místo není zrušení výběru, a bez tohohle se rozsah srazil na první řádek a po přejetí na
+    /// další řádek se zase objevil (nahlášené při zkoušení #110). Dokud ale rozsah není žádný,
+    /// platí samotný začátek, ať z tažení vznikne aspoň jednořádkový komentář.
+    ///
+    /// Když rozsah `Policy` složit nedá (druhý konec v jiném souboru nebo mimo diff), drží se
+    /// poslední platný ze stejného důvodu.
+    func dragCommentRange(path: String, from: DraftAnchor, to: DraftAnchor?, for pr: PRIdentifier) {
+        guard case .loaded(let diff, _) = diffStates[pr], let file = diff.file(at: path) else { return }
+        guard let target = to ?? (commentDrag == nil ? from : nil),
+              let range = Policy.commentRange(from: from.end, to: target.end, in: file)
+        else { return }
+        commentDrag = CommentRangeDrag(pullRequest: pr, path: path, anchor: range)
+    }
+
+    /// Konec tažení: z rozsahu vznikne komentář. Tažení, které nikam nedošlo (rozsah délky 1),
+    /// dá obyčejný jednořádkový komentář — je to totéž, co tlačítko u řádku.
+    func finishCommentRange() {
+        guard let drag = commentDrag else { return }
+        commentDrag = nil
+        addDraftComment(at: drag.anchor, path: drag.path, for: drag.pullRequest)
+    }
+
     // MARK: - Pohled na diff
 
     /// S jakým pohledem se diff kreslí: odchylka z lišty, jinak hodnota z nastavení.
@@ -1054,15 +1101,52 @@ final class AppStore {
         origin: ReviewDraftComment.Origin = .own,
         for pr: PRIdentifier
     ) {
-        mutateDraft(for: pr) {
-            $0.comments.append(
-                ReviewDraftComment(
-                    path: path,
-                    line: anchor.line,
-                    side: anchor.side,
-                    body: body,
-                    origin: origin
-                )
+        let comment = ReviewDraftComment(path: path, anchor: anchor, body: body, origin: origin)
+        mutateDraft(for: pr) { $0.comments.append(comment) }
+        // Komentář, který se dá ⇧ klikem roztáhnout na rozsah. Drží se **id**, ne kotva:
+        // z komentáře se druhý konec dopočítá, kdežto uložená kotva by se s ním po roztažení
+        // rozešla.
+        rangeTargets[pr] = comment.id
+    }
+
+    /// Roztáhne naposledy přidaný komentář na rozsah končící (nebo začínající) tímhle řádkem.
+    ///
+    /// Tohle je ⇧ klik na tlačítko u řádku. Když není co roztahovat — nic se nepřidávalo, cíl
+    /// se mezitím vyjmul, nebo je v jiném souboru — **založí se obyčejný komentář**. Kliknutí,
+    /// po kterém se nestane nic, vypadá jako rozbitá aplikace.
+    ///
+    /// Rozsah skládá `Policy.commentRange`, protože o pořadí konců rozhoduje diff, ne čísla
+    /// (#110). Bez načteného diffu se rozsah nemá o co opřít, takže vyjde jednořádkový komentář.
+    func extendDraftComment(to anchor: DraftAnchor, path: String, for pr: PRIdentifier) {
+        guard let id = rangeTargets[pr],
+              let existing = draft(for: pr)?.comments.first(where: { $0.id == id }),
+              existing.path == path,
+              case .loaded(let diff, _) = diffStates[pr],
+              let file = diff.file(at: path),
+              // Na místě zůstává **kotva**, tedy začátek už existujícího rozsahu (u jednořádkového
+              // komentáře jeho řádek). Roztahovat od konce by druhým ⇧ klikem zahodilo první konec:
+              // z 25–26 by po kliku na 27 vyšlo 26–27. Chytil to test.
+              let range = Policy.commentRange(
+                  from: existing.anchor.start ?? existing.anchor.end,
+                  to: anchor.end,
+                  in: file
+              )
+        else {
+            addDraftComment(at: anchor, path: path, for: pr)
+            return
+        }
+
+        mutateDraft(for: pr) { draft in
+            guard let index = draft.comments.firstIndex(where: { $0.id == id }) else { return }
+            let comment = draft.comments[index]
+            // Nový komentář se **stejným `id`**: kotva je `let`, ale identita musí zůstat, ať
+            // si editor udrží rozepsaný text a bublina nepřeskočí jako nová.
+            draft.comments[index] = ReviewDraftComment(
+                id: comment.id,
+                path: comment.path,
+                anchor: range,
+                body: comment.body,
+                origin: comment.origin
             )
         }
     }
@@ -1763,6 +1847,12 @@ final class AppStore {
         // Volba tabu je jen příznak, ale drží klíč s celým identifikátorem PR — bez úklidu by
         // mapa rostla donekonečna, stejně jako u sbalených souborů.
         detailTabs = detailTabs.filter { wantedPullRequests.contains($0.key) }
+        // Cíl pro ⇧ klik (#110) je jen zkratka pro to, co je zrovna na obrazovce. Draft sám se
+        // drží dál — kdyby se PR vrátilo, komentáře v něm jsou, jen se ⇧ klikem nedá roztáhnout
+        // něco, na co se člověk mezitím přestal dívat.
+        rangeTargets = rangeTargets.filter { wantedPullRequests.contains($0.key) }
+        // Rozdělané tažení nemá s PR mimo seznam co dělat — a je to stav v řádu sekundy.
+        if let drag = commentDrag, !wantedPullRequests.contains(drag.pullRequest) { commentDrag = nil }
         // Běžící review si osu drží: `reviewTasks` je pravda o tom, co ještě běží, a jeho
         // události by se jinak zapisovaly do mapy, ze které je někdo právě vyhodil.
         reviewTimelines = reviewTimelines.filter {
