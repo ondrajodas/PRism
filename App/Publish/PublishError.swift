@@ -142,7 +142,11 @@ extension PublishError {
     var userDescription: String {
         switch self {
         case .publishingNotAllowed(let repo):
-            "Odesílání review není pro \(repo) povolené. Zapni ho v nastavení (⌘,)."
+            // **Bez slova „review“**: tatáž brána od #73 povoluje i odpovědi do vláken, takže
+            // věta o review by u zakázaného `Odpovědět` mluvila o něčem jiném, než co uživatel
+            // právě dělá. Zůstává jedna věta na jednom místě (delegují ji `DraftSendBlock`
+            // i `ThreadActions`) a odkazuje na přepínač, který se jmenuje stejně.
+            "Odesílání na GitHub není pro \(repo) povolené. Zapni ho v nastavení (⌘,)."
         case .staleDraft(let draft, let head):
             "Draft je psaný proti commitu \(draft.prefix(7)), ale hlava PR je \(head.prefix(7)). Načti diff znovu."
         case .pullRequestNotOpen(let state):

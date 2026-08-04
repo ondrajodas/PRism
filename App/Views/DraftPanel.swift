@@ -242,10 +242,12 @@ struct DraftPanel: View {
     /// Odpovídat **jde**, jen až potom: z odeslaného komentáře se stane vlákno a v něm už je
     /// tlačítko `Odpovědět`.
     @ViewBuilder private var sharedAnchorNote: some View {
-        let shared = Policy.commentsSharingAnAnchor(in: draft)
-        if shared > 1 {
+        let lines = Policy.linesWithSeveralComments(in: draft)
+        if lines > 0 {
             Label {
-                Text(verbatim: "\(shared) komentáře míří na stejný řádek — odejdou jako samostatná vlákna, ne jako odpověď. Odpovědět půjde, až review odešleš.")
+                // Mluví se o **řádcích**, ne o počtu komentářů: dvě různé kotvy po dvou
+                // komentářích nejsou „čtyři komentáře na stejném řádku“. Chytil to Copilot.
+                Text(verbatim: "\(Plural.czech(lines, one: "Na jednom řádku", few: "Na \(lines) řádcích", many: "Na \(lines) řádcích")) máš víc komentářů — odejdou jako samostatná vlákna, ne jako odpověď. Odpovědět půjde, až review odešleš.")
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {
                 Image(systemName: "info.circle")

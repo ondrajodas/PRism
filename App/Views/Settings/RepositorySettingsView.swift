@@ -90,7 +90,7 @@ private struct RepositoryDetailView: View {
                 // Tříhodnotový jako režim, a ze stejného důvodu: „ber globální“ se musí dát
                 // vybrat zpátky. `false` u repa navíc není totéž jako `nil` — po přepnutí
                 // globálního defaultu na povoleno si ho repo podrží.
-                Picker("Odesílání review", selection: config.allowsPublishing) {
+                Picker("Odesílání na GitHub", selection: config.allowsPublishing) {
                     Text("Podle globálního nastavení (\(publishingName(settings.draft.global.allowsPublishing)))")
                         .tag(Bool?.none)
                     Text("Povoleno").tag(Bool?.some(true))

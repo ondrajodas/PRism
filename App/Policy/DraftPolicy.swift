@@ -196,17 +196,16 @@ extension Policy {
     /// přibudou dvě. `in_reply_to` v `comments[]` neexistuje a neodeslané vlákno navíc ještě
     /// nemá `id`, na které by šlo odkázat.
     ///
-    /// Vrací **počet**, ne boolean: věta „na jednom řádku máš víc komentářů“ se od „máš jich
-    /// tam pět“ liší v tom, co s tím člověk udělá. Nula znamená, že každý komentář stojí na
-    /// vlastním řádku.
-    static func commentsSharingAnAnchor(in draft: ReviewDraft?) -> Int {
+    /// Vrací **počet takových řádků**, ne komentářů. Rozdíl našel Copilot na #119: součet
+    /// komentářů napříč všemi sdílenými kotvami se v okně skládal do věty „N komentářů míří na
+    /// stejný řádek“, což u dvou různých řádků po dvou komentářích tvrdilo nepravdu — čtyři
+    /// komentáře na jeden řádek nemířily. Počet míst tu informaci unese a splést se v něm nedá.
+    ///
+    /// Nula znamená, že každý komentář stojí na vlastní kotvě.
+    static func linesWithSeveralComments(in draft: ReviewDraft?) -> Int {
         guard let draft else { return 0 }
-        let anchors = draft.comments.map { AnchorKey($0) }
-        let counts = Dictionary(grouping: anchors, by: { $0 }).mapValues(\.count)
-        // Sečtou se **všechny** komentáře na sdílených kotvách, ne jen ty „navíc“: tvrdit, že
-        // je sdílený jen ten druhý, by znamenalo, že první je v pořádku sám — a přitom se do
-        // dvou vláken rozpadnou oba.
-        return counts.values.filter { $0 > 1 }.reduce(0, +)
+        let counts = Dictionary(grouping: draft.comments, by: { AnchorKey($0) }).mapValues(\.count)
+        return counts.values.filter { $0 > 1 }.count
     }
 
     /// Kotva komentáře jako klíč. Tři pole, protože komentář k odebranému řádku má stejné

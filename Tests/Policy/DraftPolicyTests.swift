@@ -628,8 +628,8 @@ struct DraftPolicyTests {
     /// Dva komentáře na tomtéž řádku **nedají odpověď**, ale dvě samostatná vlákna — změřeno
     /// u #73 na živém API (payload se dvěma komentáři na `README.md:8` přidal dvě vlákna).
     /// Okno to musí říct dopředu, takže se to musí umět spočítat.
-    @Test("Komentáře na stejné kotvě se poznají")
-    func countsCommentsSharingAnAnchor() {
+    @Test("Řádek s víc komentáři se pozná")
+    func countsLinesWithSeveralComments() {
         let draft = ReviewDraft(
             pullRequest: pr,
             headSha: "abc",
@@ -640,8 +640,42 @@ struct DraftPolicyTests {
             ]
         )
 
-        // **Oba** komentáře na sdílené kotvě, ne jen ten druhý: do dvou vláken se rozpadnou oba.
-        #expect(Policy.commentsSharingAnAnchor(in: draft) == 2)
+        #expect(Policy.linesWithSeveralComments(in: draft) == 1)
+    }
+
+    /// Počítají se **řádky, ne komentáře** — nález Copilota z #119. Dvě různé kotvy po dvou
+    /// komentářích jsou dvě místa; součet komentářů (4) by se v okně složil do věty „4 komentáře
+    /// míří na stejný řádek“, což je nepravda, protože na jeden řádek nemíří žádné čtyři.
+    @Test("Dvě různé kotvy po dvou komentářích dají dva řádky, ne čtyři komentáře")
+    func countsPlacesNotComments() {
+        let draft = ReviewDraft(
+            pullRequest: pr,
+            headSha: "abc",
+            comments: [
+                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "a", origin: .own),
+                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "b", origin: .own),
+                ReviewDraftComment(path: "Order.php", line: 8, side: .right, body: "c", origin: .own),
+                ReviewDraftComment(path: "Order.php", line: 8, side: .right, body: "d", origin: .own),
+            ]
+        )
+
+        #expect(Policy.linesWithSeveralComments(in: draft) == 2)
+    }
+
+    /// Tři komentáře na jednom řádku jsou pořád **jedno** místo.
+    @Test("Tři komentáře na jednom řádku dají jeden řádek")
+    func countsOnePlaceForThreeComments() {
+        let draft = ReviewDraft(
+            pullRequest: pr,
+            headSha: "abc",
+            comments: [
+                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "a", origin: .own),
+                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "b", origin: .own),
+                ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "c", origin: .own),
+            ]
+        )
+
+        #expect(Policy.linesWithSeveralComments(in: draft) == 1)
     }
 
     /// Strana je součást kotvy: komentář k odebranému řádku 26 a k přidanému řádku 26 jsou
@@ -657,7 +691,7 @@ struct DraftPolicyTests {
             ]
         )
 
-        #expect(Policy.commentsSharingAnAnchor(in: draft) == 0)
+        #expect(Policy.linesWithSeveralComments(in: draft) == 0)
     }
 
     @Test("Stejné číslo v jiném souboru kotvu nesdílí")
@@ -671,13 +705,13 @@ struct DraftPolicyTests {
             ]
         )
 
-        #expect(Policy.commentsSharingAnAnchor(in: draft) == 0)
+        #expect(Policy.linesWithSeveralComments(in: draft) == 0)
     }
 
     @Test("Bez draftu a bez komentářů se nesdílí nic")
     func countsNothingWithoutComments() {
-        #expect(Policy.commentsSharingAnAnchor(in: nil) == 0)
-        #expect(Policy.commentsSharingAnAnchor(in: ReviewDraft(pullRequest: pr, headSha: "abc")) == 0)
+        #expect(Policy.linesWithSeveralComments(in: nil) == 0)
+        #expect(Policy.linesWithSeveralComments(in: ReviewDraft(pullRequest: pr, headSha: "abc")) == 0)
     }
 
     // MARK: - Prázdnost

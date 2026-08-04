@@ -534,7 +534,7 @@ se z většiny pravidly vláken, protože jsou to taky komentáře ke kotvě:
   celý seznam je v tabu `Moje review`, odkud se dá vyjmout i ten, který se nemá kde ukázat.
   To je rozdíl proti vláknům, kde je náhradní domov až `Overview` (#72).
 - **Neslévají se** — dva komentáře na řádku jsou dvě věci ke stejnému kódu. A **panel to říká
-  dopředu** (`Policy.commentsSharingAnAnchor`), protože z nich na GitHubu vzniknou **dvě
+  dopředu** (`Policy.linesWithSeveralComments`), protože z nich na GitHubu vzniknou **dvě
   samostatná vlákna, ne odpověď pod prvním komentářem**. Změřeno u #73 v sandboxu: payload
   review se dvěma komentáři na `README.md:8` přidal dvě vlákna po jednom komentáři. Jinak to
   nejde — `comments[]` neumí `in_reply_to` a neodeslané vlákno ještě nemá `id`, na které by
@@ -1165,7 +1165,7 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsScene` | Obsah scény; dokud neprošel preflight, není store a okno to řekne |
 | `SettingsView` | Dvě záložky, patička s cestou a stavem uložení, zámek na rozbitý soubor |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
-| `GlobalSettingsView` | Zdroje, výchozí režim a jazyk nálezů, **odesílání review**, skilly, sady podle jazyka, kategorie, běh |
+| `GlobalSettingsView` | Zdroje, výchozí režim a jazyk nálezů, **odesílání na GitHub**, skilly, sady podle jazyka, kategorie, běh |
 | `LanguageSkillsEditor` | Mapa „programovací jazyk → sada skillů“; ukazuje jen nastavené jazyky |
 | `RepositorySettingsView` | Seznam rep vlevo, režim, povolení odesílání a override vpravo |
 | `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
@@ -1610,7 +1610,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
 | `Policy.matches(_:_:)` | Patří vlákno (nebo můj rozdělaný komentář) k tomuhle řádku diffu — **jedno místo** pro výběr i umístění |
 | `Policy.inserting(_:intoThread:of:)`, `Policy.applying(_:to:)` | Zápis odeslané odpovědi a vyřešení do načtené konverzace; `nil` = vlákno tam není |
-| `Policy.commentsSharingAnAnchor(in:)` | Kolik komentářů draftu míří na tentýž řádek — z nich budou samostatná vlákna, ne odpověď |
+| `Policy.linesWithSeveralComments(in:)` | Na kolika řádcích draftu je víc komentářů — z každého budou samostatná vlákna, ne odpověď |
 | `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR a vlákna bez kotvy, chronologicky (`ConversationEntry`) |
 | `Policy.commentableSide(of:in:)` | Ke které straně by šel komentář; `nil` = nedá se komentovat |
 | `Policy.commentAnchor(of:in:)`, `Policy.commentAnchors(in:)` | Kotva komentáře (`DraftAnchor`: číslo + strana); mapa pro celý soubor jedním průchodem |
