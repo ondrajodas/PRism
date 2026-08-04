@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// Pruh na spodku okna: co je špatně a co se kvůli tomu neděje.
+/// Hlášky ve stavovém řádku: co je špatně a co se kvůli tomu neděje.
 ///
-/// **Přes celé okno, ne pod seznamem PR** (#72). Do té doby to byl `safeAreaInset` uvnitř
-/// bočního panelu a mělo to dvě chyby, které spolu souvisely: obsah okna vycházel o výšku
-/// tohohle pruhu **vyšší než okno** a spodní hrana ho v obou sloupcích odřízla (změřeno přes
-/// accessibility: okno 874 pt, obsah 904), a tatáž mašinerie (`invalidateSafeAreaInsets` uvnitř
-/// `updateConstraints` split view) stojí v crash reportu z 2026-08-03. Mimo split view ani
-/// jedno nehrozí — a je to i směr, kterým měl stavový řádek jít (#31).
+/// **Levá strana `StatusBarView`, ne vlastní pruh** (#31). Do #72 to byl `safeAreaInset`
+/// uvnitř bočního panelu a mělo to dvě chyby, které spolu souvisely: obsah okna vycházel
+/// o výšku tohohle pruhu **vyšší než okno** a spodní hrana ho v obou sloupcích odřízla
+/// (změřeno přes accessibility: okno 874 pt, obsah 904), a tatáž mašinerie
+/// (`invalidateSafeAreaInsets` uvnitř `updateConstraints` split view) stojí v crash reportu
+/// z 2026-08-03. Pak z toho byl vlastní pruh přes celé okno a od #31 je součástí stavového
+/// řádku — dva pruhy na tytéž hlášky by znamenaly, že se jeden z nich přestane plnit.
 ///
-/// **Když není co říct, nekreslí se vůbec.** Trvalý pruh ubírá místo a oko se ho naučí
-/// přehlížet.
+/// **Když není co říct, nekreslí se vůbec** — pruh drží stavový řádek a puntíky v něm, takže
+/// prázdné hlášky nemají co vyhradit. Pozadí ani odsazení si proto nedělá samo.
 struct AppNoticesView: View {
     let store: AppStore
 
@@ -50,11 +51,6 @@ struct AppNoticesView: View {
                     notice(failure, icon: "exclamationmark.triangle")
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.bar)
-            .overlay(alignment: .top) { Rectangle().fill(.separator).frame(height: 1) }
         }
     }
 
@@ -78,6 +74,5 @@ struct AppNoticesView: View {
             .font(.caption)
             .foregroundStyle(.orange)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

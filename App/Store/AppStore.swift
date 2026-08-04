@@ -118,6 +118,12 @@ final class AppStore {
 
     private let time: any TimeSource
     private let polling: PollingService
+    /// Dostupnost služeb pro stavový řádek. `nil` = odsud se nesleduje (testy) a řádek pak
+    /// žádné puntíky neukazuje.
+    ///
+    /// Nepovinné schválně, jako `checkout` nebo `reviews`: `keepFresh()` volají i testy
+    /// a monitor s živým klientem by z nich udělal testy chodící na síť.
+    private let health: HealthMonitor?
     private let gateway: any GitHubGateway
     /// Cesta ke `gh` — jediné, co si store kvůli odesílání drží.
     ///
@@ -156,10 +162,12 @@ final class AppStore {
         drafts: ReviewDraftStore? = nil,
         translator: (any FindingTranslating)? = nil,
         autoRuns: AutoRunLedger? = nil,
-        gh: URL? = nil
+        gh: URL? = nil,
+        health: HealthMonitor? = nil
     ) {
         self.time = time
         self.gh = gh
+        self.health = health
         self.configuration = configuration
         self.configStore = configStore
         polling = PollingService(
@@ -192,6 +200,15 @@ final class AppStore {
             // zkusí znovu; hlásit to uživateli by byl šum bez akce.
             try? await reviews?.cleanUp(openPullRequests: summaries.map(\.id))
         }
+        // Monitor si skutečná volání nedrží — bere si je odsud. Jinak by existovalo druhé
+        // místo se stavem pollingu a rozejít se v tomhle znamená svítit červeně nad
+        // funkčním GitHubem.
+        health?.lastCall = { [weak self] service in
+            switch service {
+            case .github: self?.gitHubCall
+            case .claude: self?.lastReviewCall
+            }
+        }
     }
 
     /// Sestavení z toho, co našel preflight. Absolutní cesta k `gh` je jediné, co gateway
@@ -223,7 +240,8 @@ final class AppStore {
             drafts: ReviewDraftStore(),
             translator: ClaudeFindingTranslator(claude: toolPaths.claude, runner: runner),
             autoRuns: AutoRunLedger(),
-            gh: toolPaths.gh
+            gh: toolPaths.gh,
+            health: HealthMonitor()
         )
         self.configurationBox = box
     }
@@ -288,12 +306,62 @@ final class AppStore {
     var isStale: Bool { polling.state.isStale }
     var emptyReason: PollEmptyReason? { polling.state.emptyReason }
 
+    /// Puntíky pro stavový řádek. Prázdné, když se dostupnost odsud nesleduje.
+    var healthReports: [ServiceHealthReport] { health?.reports ?? [] }
+
+    /// Řekne monitoru, jestli je okno vidět — na pozadí se nekontroluje nic.
+    ///
+    /// Skryté okno interval **neposouvá**, takže po dlouhé nepřítomnosti se zkontroluje
+    /// hned na prvním taktu a po krátké se nekontroluje zbytečně. Puntík se stavem z doby,
+    /// kdy se nesledovalo, tak nevisí déle než takt.
+    func windowVisibilityChanged(_ visible: Bool) {
+        health?.isWindowVisible = visible
+    }
+
+    /// Jak dopadl poslední dotaz na GitHub — odvozeno z pollingu, ne vedeno zvlášť.
+    ///
+    /// Polling se ptá každou minutu a je to **totéž volání**, na kterém stojí zbytek
+    /// aplikace, takže lepší zdravotní signál se nedá koupit. Ostatní volání gateway
+    /// (detail, diff, konverzace) sem schválně nepřitékají: běží nepravidelně a jejich
+    /// `notFound` není o dostupnosti, nýbrž o tom, že na PR nevidíme.
+    private var gitHubCall: ServiceCall? {
+        switch polling.state.status {
+        case .notStarted:
+            nil
+        case .upToDate:
+            polling.state.lastSuccess.map { ServiceCall(since: $0) }
+        case .failing(let since, let reason):
+            ServiceCall(since: since, failure: reason.userDescription)
+        case .rateLimited(let since, let retryAt):
+            // Rate limit **je** selhané volání, i když si ho aplikace způsobila sama tím,
+            // že se ptá moc. Zelená znamená „funguje mi to“ a tady to nefunguje; že za to
+            // GitHub nemůže, řekne věta.
+            ServiceCall(
+                since: since,
+                failure: "GitHub omezuje dotazy — zkusím to v \(retryAt.formatted(date: .omitted, time: .shortened))."
+            )
+        }
+    }
+
+    /// Jak dopadla poslední headless session. `nil` = žádná ještě neběžela.
+    ///
+    /// Jde jen o **review**, ne o překlad nálezů: ten se smí nepovést tiše (nálezy zůstanou
+    /// v originále), takže by se z něj červený puntík vyráběl nad něčím, co za chybu ani
+    /// nepovažujeme.
+    private(set) var lastReviewCall: ServiceCall?
+
     /// Drží seznam aktuální, dokud okno žije. Zrušení tasku smyčku ukončí.
     func keepFresh() async {
         await reloadConfiguration()
         await loadStoredReviews()
         await loadStoredDrafts()
-        await polling.run()
+        // Obojí běží, dokud žije okno; zrušení tasku ukončí skupinu i s oběma smyčkami.
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.polling.run() }
+            if let health {
+                group.addTask { await health.run() }
+            }
+        }
     }
 
     /// Nálezy z minula. Bez toho by se po startu tvářil každý PR, že se nikdy nereviewoval.
@@ -1329,11 +1397,36 @@ final class AppStore {
     }
 
     private func finish(_ outcome: ReviewRunOutcome, of skill: String, for pr: PRIdentifier) {
+        record(outcome)
         guard var timelines = reviewTimelines[pr],
               let index = timelines.firstIndex(where: { $0.skill == skill })
         else { return }
         timelines[index].finish(outcome, at: time.now)
         reviewTimelines[pr] = timelines
+    }
+
+    /// Doběhlý běh jako zdravotní signál Claude — puntík ve stavovém řádku jede na skutečném
+    /// provozu, ne na sondě.
+    ///
+    /// **`timedOut` nezapisuje nic.** Session jsme po patnácti minutách zabili sami, takže
+    /// z toho nejde vyvodit ani „funguje“, ani „nefunguje“ — a dlouhé review je běžná věc.
+    /// `failed` naopak signál je, i když příčina může být na naší straně (třeba neexistující
+    /// skill); věta v nápovědě proto říká, co přišlo na stderr, a to, jestli za to může
+    /// Claude, se pozná ze žlutého puntíku.
+    /// **Při opakovaném selhání se `since` drží.** Nese začátek výpadku, ne poslední pokus —
+    /// jinak by se „Nedaří se od …“ posouvalo s každou další spadlou session a nešlo by poznat,
+    /// jak dlouho to trvá. Je to tatáž úvaha (a tatáž věta v nápovědě) jako
+    /// `PollingService.failingSince`; u GitHubu ji drží `PollState`, tady ji musí držet tohle.
+    private func record(_ outcome: ReviewRunOutcome) {
+        switch outcome {
+        case .finished:
+            lastReviewCall = ServiceCall(since: time.now)
+        case .failed(let detail):
+            let failingSince = lastReviewCall.flatMap { $0.succeeded ? nil : $0.since } ?? time.now
+            lastReviewCall = ServiceCall(since: failingSince, failure: detail)
+        case .timedOut:
+            break
+        }
     }
 
     private func runSkills(

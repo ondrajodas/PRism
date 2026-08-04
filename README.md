@@ -121,6 +121,30 @@ hledá, jaký příkaz spustil. Skládá se nativně z eventů, ne přeposílán
 aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vrátit, zkopíruje
 se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí běhu.
 
+Na spodku okna je **stavový řádek**: vlevo hlášky o stavu celé aplikace (rozbitá
+konfigurace, pozastavený automat kvůli dennímu limitu, soubory, které se nepodařilo
+přečíst), vpravo puntík u GitHubu a u Claude. Puntík odpovídá na otázku „je to na mojí
+straně, nebo mají oni výpadek?“ ještě předtím, než se člověk začne prohrabávat chybou:
+
+| Puntík | Význam |
+|---|---|
+| ○ šedá | zatím nezjištěno — po startu, dokud se něco nestane |
+| ● zelená | žádný incident na komponentách, které používáme — a poslední skutečné volání prošlo, nebo ještě žádné neproběhlo (nápověda řekne které) |
+| ● žlutá | provozovatel hlásí incident na komponentě, kterou používáme (i když volání procházejí) |
+| ● červená | poslední skutečné volání selhalo — nebo je stroj bez sítě, což řekne nápověda |
+
+Červenou určuje **skutečný provoz**, ne sonda: polling se ptá `gh` každou minutu a review
+pouští `claude`, takže lepší signál se nedá koupit a nestojí nic navíc. Zelenou dá i samotná
+čistá status page — šedá znamená „nevíme nic“ a tady něco víme; puntík Claude by jinak zůstal
+šedý, dokud neproběhne první review. Žlutá jde
+ze status pages provozovatelů ([GitHub](https://www.githubstatus.com),
+[Claude](https://status.claude.com)) — sleduje se z nich jen to, co aplikace používá, takže
+incident v `Actions` nebo `Packages` puntík nerozsvítí. Kontroluje se po deseti minutách,
+podmíněným dotazem (druhý dotaz je `304` bez těla), po selhaném volání častěji a **na pozadí
+vůbec** — aplikace, kterou nikdo nevidí, nemá komu svítit. Když se stav služby zjistit
+nepovede, nic se nezablokuje: puntík se řídí voláními a nápověda po hoveru řekne, co se
+nepovedlo a kdy se to zjišťovalo.
+
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
 PR, sada skillů, blokující kategorie, výchozí režim review, interval pollingu, kolik
 session smí běžet naráz, rozpočet cache a model. Repozitář si může přebít režim
@@ -268,6 +292,7 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 | **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
 | **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
+| **Dostupnost služeb** | Jede na skutečném provozu, ne na sondě: `gh auth status` na timeru by stál spawn procesu a přístup do keychainu — a projde i tehdy, když skutečné volání selže na rate limitu. Status pages jsou proti tomu levné (`components.json` s `ETagem`) a odpovídají na to, co z volání nezjistíme: jestli je problém na jejich straně. |
 
 ## Požadavky
 
@@ -275,6 +300,11 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 - [`gh`](https://cli.github.com) — přihlášený (`gh auth login`)
 - `claude` — Claude Code CLI
 - `git`
+
+Kromě těch tří binárek chodí aplikace na síť **jediným vlastním voláním**: stahuje si stav
+komponent ze status pages GitHubu a Claude pro stavový řádek. Jsou to veřejné endpointy, jde
+o `GET` bez tokenu a bez cookies, a když se nepovede, aplikace o něj nezavadí — puntík se
+pak řídí jen skutečnými voláními. Vše ostatní jde přes podprocesy `gh`, `git` a `claude`.
 
 Aplikace binárky hledá absolutní cestou, protože GUI aplikace spuštěná z Finderu nedědí
 `PATH` z shellu. Nejdřív zkusí známá místa (`/opt/homebrew/bin`, `/usr/local/bin`,
@@ -361,6 +391,7 @@ App/                      zdrojáky aplikace — target PRism
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Config/                 config.json: globální default, override per repo, čtení a zápis
   Diff/                   parsování unified diffu na soubory, hunky a řádky
+  Health/                 dostupnost služeb pro stavový řádek: status pages, signály, monitor
   Markdown/               vykreslení Markdownu z GitHubu: bloky, inline HTML od botů
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka
   Publish/                jediná cesta ven: odeslání review na GitHub, brána na sandbox, model potvrzení
@@ -377,6 +408,7 @@ Tests/                    unit testy — target PRismTests
   Checkout/               testy klonování — proti fake runneru i skutečnému gitu
   Config/                 testy čtení, zápisu a slučování konfigurace
   Diff/                   testy parseru diffu proti skutečným výstupům gh pr diff
+  Health/                 testy status pages, monitoru dostupnosti a HTTP vrstvy
   Markdown/               testy parseru Markdownu (invariant: nic se neztratí) a HTML od botů
   GitHub/                 testy gateway a klasifikace chyb gh
   Policy/                 testy čistých funkcí
@@ -389,6 +421,7 @@ Tests/                    unit testy — target PRismTests
   Support/                testy sdílených drobností
   Fixtures/gh/            skutečné výstupy gh z veřejných repozitářů (JSON i diffy)
   Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů
+  Fixtures/statuspage/    skutečné components.json ze status pages (a jeden s dopsaným incidentem)
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR
 bin/setup-signing.sh      jednorázová příprava stálého podpisu (self-signed certifikát)

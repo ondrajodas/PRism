@@ -274,7 +274,8 @@ viz tvrdá podmínka č. 1.
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`. Mimo tuhle sedmičku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá
-diff jinou roli než být vidět.
+diff jinou roli než být vidět. Totéž platí o `App/Health/` (#31): dostupnost služeb je
+o tom, jestli jde review vůbec spustit, ne o review samotném.
 
 **Kam co psát:** rozhodovací logika patří do `Policy` jako čistá funkce — tam se testuje
 bez mockování. Když se přistihneš, že píšeš `if` nad nálezy někde ve view nebo v runneru,
@@ -1028,8 +1029,10 @@ na `.task` okna, takže zavření okna ji zruší.
 
 | View | Co dělá |
 |---|---|
-| `ContentView` | `NavigationSplitView`: vlevo seznam, vpravo detail vybraného PR; pod tím pruh s hláškami |
-| `AppNoticesView` | Pruh na spodku **okna**: rozbitá konfigurace, pozastavený automat, nečitelné soubory |
+| `ContentView` | `NavigationSplitView`: vlevo seznam, vpravo detail vybraného PR; pod tím stavový řádek |
+| `StatusBarView` | Stavový řádek na spodku **okna**: vlevo hlášky, vpravo puntíky služeb |
+| `ServiceHealthDot` | Puntík jedné služby; po hoveru důvod a čas poslední kontroly |
+| `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory`) — podtržené, s odznakem počtu |
 | `OverviewView` | Tab `Přehled`: popis PR a konverzace bez kotvy v diffu, chronologicky |
@@ -1295,6 +1298,26 @@ Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a p
   tomu nechrání** — zastaví uživatele, ne tik pollingu. Je to opačný směr než obvyklá past
   s přetečením stavu mezi PR: tenhle stav nepřetéká, ale předčasně zaniká.
 
+Signály pro stavový řádek (#31) do `AppStore` patří taky, protože jen on ví, jak dopadla
+skutečná volání:
+
+- **Stav GitHubu se z pollingu odvozuje, ne vede zvlášť.** `PollState` už drží, co je
+  potřeba (`upToDate` + `lastSuccess`, `failing(since:reason:)`, `rateLimited`), takže
+  vlastní kopie by byla druhé místo, které se s prvním rozejde.
+- **Rate limit je selhané volání.** Zelená znamená „funguje mi to“ a při rate limitu to
+  nefunguje; že za to GitHub nemůže, řekne věta v nápovědě.
+- **Ostatní volání gateway do puntíku netečou** — detail, diff ani konverzace neběží
+  pravidelně a `notFound` u nich není o dostupnosti, nýbrž o tom, že na PR nevidíme.
+- **Claude jede na výsledcích session, a `timedOut` nezapisuje nic.** Session jsme po
+  patnácti minutách zabili sami, takže z toho nejde vyvodit ani „funguje“, ani „nefunguje“ —
+  a dlouhé review je běžná věc. `failed` signál je, i když příčina může být u nás (třeba
+  neexistující skill); nápověda proto říká, co přišlo na stderr.
+- **Překlad nálezů se nepočítá.** Smí se nepovést tiše (nálezy zůstanou v originále), takže
+  by z něj vznikal červený puntík nad něčím, co za chybu ani nepovažujeme.
+- **`HealthMonitor` je nepovinná závislost**, jako `checkout` nebo `reviews`. `keepFresh()`
+  volají i testy a monitor s živým klientem by z nich udělal testy chodící na síť; bez
+  monitoru řádek prostě žádné puntíky nemá.
+
 Věci, na které se u okna naráží:
 
 - **Stav checkoutu je jeden a klíčovaný repem** (`CheckoutState`). `ReviewState` pro řádek
@@ -1317,7 +1340,8 @@ Věci, na které se u okna naráží:
   nesmyslu.
 - **Banner jde přes `safeAreaInset`, ne do `VStack` nad seznamem.** S `VStack`em přestane
   být `List` tím, co sidebar odsazuje od horní lišty, a řádky se schovají pod ni.
-- **Hlášky pod seznamem jsou naopak `VStack` na spodku okna** (`AppNoticesView`), a to **mimo
+- **Hlášky pod seznamem jsou naopak `VStack` na spodku okna** (`AppNoticesView`, od #31 uvnitř
+  `StatusBarView`), a to **mimo
   `NavigationSplitView`**. Jako `safeAreaInset` uvnitř bočního panelu dělaly dvě věci naráz:
   obsah okna vycházel o výšku toho pruhu **vyšší než okno** a spodní hrana ho odřízla v obou
   sloupcích (změřeno přes accessibility: okno 874 pt, obsah 904, po skrytí bočního panelu
@@ -1405,6 +1429,73 @@ neskládá.
 **Polling netahá detail PR.** Seznam SHA nepotřebuje — potřebuje je až checkout a review,
 takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 
+### `App/Health/` — dostupnost služeb (#31)
+
+Puntíky ve stavovém řádku: jak se vede GitHubu a Claude. Není to modul (viz Architektura) —
+odpovídá to na otázku, jestli jde review vůbec spustit, ne na nic z domény review.
+
+| Typ | Co je |
+|---|---|
+| `MonitoredService` | Která služba a kde má status page — plus **jména komponent**, na kterých nám záleží |
+| `StatusPage` | Stav sledovaných komponent; `missing` nese jména, která stránka nezná |
+| `StatusPageComponent` | Jedna komponenta: jméno a **surový** stav (`operational`, `major_outage`, …) |
+| `StatusPageResult` | `fetched` / `unchanged` (`304`) — „platí, co jsi měl“ není „nic tam není“ |
+| `StatusPageReading`, `StatusPageClient` | Protokol a aktor nad `HTTPGetting`, který drží `ETagy` |
+| `StatusPageError` | `unreachable` / `badStatus` / `malformed`, s větou pro nápovědu |
+| `HealthSignals`, `ServiceCall` | Tři signály na vstup `Policy`: poslední skutečné volání, stav komponent, dostupnost sítě |
+| `ServiceHealth` | Puntík: `unknown` / `operational` / `incident` / `failing` / `offline` |
+| `ServiceHealthReport` | Co `Policy` složí — stav, věta a časy pro nápovědu |
+| `HealthMonitor` | `@MainActor @Observable`: hlídá síť, v intervalu čte status pages, skládá reporty |
+
+Věci, které se u toho nemají rozbít:
+
+- **Zelenou a červenou určuje skutečný provoz, ne sonda.** Polling se ptá `gh` každou minutu
+  a review pouští `claude` — každé takové volání je pravdivý signál a nestojí nic navíc.
+  `gh auth status` na timeru by stál spawn procesu a přístup do keychainu, a přitom je *méně*
+  pravdivý: projde i tehdy, když skutečné volání selže na rate limitu nebo chybějícím scope.
+- **Sledují se komponenty, ne celostránkový indikátor.** Incident v `Actions` nebo `Packages`
+  se téhle aplikace netýká, takže `status.json` by svítil na něco, co nepoužíváme. Komponenta
+  se pozná **jménem**, takže přejmenovaná musí být vidět (`StatusPage.missing`) — kontrola,
+  která tiše nehlídá nic, vypadá stejně jako „všechno v pořádku“.
+- **Cokoli jiného než `operational` je incident.** Seznam hodnot je jejich a může se rozšířit;
+  spolknout neznámou hodnotu jako „v pořádku“ by schovalo výpadek, kdežto žlutý puntík
+  s vypsanou hodnotou je nanejvýš falešný poplach, ze kterého je vidět, co přišlo.
+- **Puntíků je pět, ne tři.** „Nezjištěno“ není „nefunguje“ a **„stroj je bez sítě“ není
+  „služba je mimo“** — to je zrovna ta otázka, na kterou řádek existuje. Proto vlastní signál
+  z `NWPathMonitoru`, ne dohad ze dvou selhání: vypnutá Wi-Fi je vidět hned.
+- **Pořadí signálů drží `Policy.health(of:from:)`** a záleží na něm: bez sítě přebíjí
+  všechno, selhané volání přebíjí incident (a incident se přidá do věty jako vysvětlení),
+  incident přebíjí „zatím nic neproběhlo“, a **zelenou dá i samotná čerstvě přečtená čistá
+  status page**. Šedá znamená „nevíme nic“ — a tady víme, co o sobě říká provozovatel; Claude
+  by jinak zůstal šedý, dokud neproběhne první review, tedy většinu času. Že vlastní volání
+  ještě neproběhlo, řekne **věta**, ne barva: status page nemluví o rate limitu ani
+  o chybějícím scope. **Stará stránka po selhané kontrole se nepočítá** ani pro zelenou, ani
+  pro věty o tom, že je u nich čisto.
+- **Selhaná kontrola status page nic nezablokuje.** Když volání procházejí, je zelená
+  pravdivější než šedá; mlčet o tom ale nejde, jinak se „o incidentech nevíme“ nepozná od
+  „žádný incident není“. Věta jde do nápovědy, puntík zůstává.
+- **Selhaná kontrola nechává poslední známý stav.** Deset minut starý stav je lepší odpověď
+  než žádná a `checkedAt` říká, jak starý je.
+- **`ETag` se ukládá teprve po úspěšném dekódování.** Kdyby se zapsal hned, odpověď, které
+  nerozumíme, by nám příště přišla jako `304` — tedy „platí, co jsi měl“ na stránku, kterou
+  jsme nikdy nepřečetli, a puntík by zůstal nezjištěný navždycky.
+- **Zrušení není zjištění.** Ani v klientovi (`CancellationError` místo výpadku), ani
+  v monitoru (`check` se nezapíše) — jinak by po zavření okna zůstala v nápovědě hláška
+  o nedostupné status page.
+- **Na pozadí se nekontroluje nic.** Aplikace, kterou nikdo nevidí, nemá komu svítit
+  puntíkem. Skryté okno přitom interval **neposouvá**, takže po dlouhé nepřítomnosti se
+  zkontroluje hned na prvním taktu.
+- **Monitor se budí v krátkém taktu (30 s) a kontroluje, až když je co kontrolovat.** Uspat
+  se rovnou na deset minut nejde: interval se mění za běhu (po selhaném volání se zkracuje
+  na minutu) a okno se mezitím může vrátit do popředí — uspání, které začalo, když bylo
+  všechno v pořádku, by se o obojí nedozvědělo. Alternativy jsou horší: continuation držená
+  mezi voláními, nebo nestrukturovaný `Task`, který přežije zavření okna.
+- **Skutečná volání si monitor nedrží** — bere si je závěrkou `lastCall`, kterou plní
+  `AppStore`. Vlastní kopie stavu pollingu je druhé místo, které se s prvním může rozejít,
+  a rozejít se v tomhle znamená svítit červeně nad funkčním GitHubem.
+- **Interval není v konfiguraci.** Neovlivňuje chování aplikace, jen čerstvost puntíku —
+  knoflík v nastavení by byl další řádek, který si nikdo nenastaví.
+
 ### `Policy` (`App/Policy/`)
 
 Čisté funkce nad daty, žádné I/O. Testuje se bez mockování a bez binárek.
@@ -1429,6 +1520,7 @@ takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 | `Policy.permalink(to:line:in:at:)`, `Policy.bodyItem(text:link:)`, `Policy.appendingBodyItem(_:to:)` | Odkaz na kód a skládání položek těla review |
 | `Policy.isStale(_:head:)` | Je draft psaný proti staršímu commitu? |
 | `Policy.sendBlock(for:head:)` | **Proč** se draft nedá odeslat (`DraftSendBlock`); `nil` = dá se |
+| `Policy.health(of:from:)` | Puntík služby ve stavovém řádku ze tří signálů — viz `App/Health/` |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
   Volající pak nic nespojuje a z typu je vidět, že jde o několik nezávislých dotazů.
@@ -1679,6 +1771,8 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `GhAuthCheck` | `gh auth status`: exit 0 přihlášen, 1 nepřihlášen, cokoli jiného `checkFailed` se stderrem |
 | `Preflight` | Složí lokaci + auth do `PreflightReport` |
 | `TimeSource` | Protokol: `now` a `sleep(for:)`. Hodiny jsou přístup ke stroji jako každý jiný — a bez nich by testy pollingu čekaly reálné minuty |
+| `HTTPGetting` | Protokol: `GET` s `If-None-Match`. `URLSessionHTTP` nad `URLSession` — **jediné místo, kde aplikace chodí na síť sama**, bez podprocesu |
+| `NetworkReachability` | Protokol: proud „má stroj cestu do sítě?“. `PathMonitorReachability` nad `NWPathMonitor` |
 
 `PreflightReport` je jediná pravda o prostředí; `problems` i `toolPaths` se z něj **jen
 počítají** — čistě, bez I/O. Tady platí totéž pravidlo jako u `Policy`: když píšeš `if`
@@ -1719,6 +1813,18 @@ nezavolají, by musely dopsat všechny. `workingDirectory` je jen v `ProcessStre
 a `.zlogin`. Přidat `-i` se zkoušelo a zahodilo (viz komentář v `LoginShellPathReader`
 a specifikace): z aplikace se zaseklo a interaktivní shell navíc **ignoruje `SIGTERM`**.
 Právě proto tam eskalace na `SIGKILL` je.
+
+Nad `HTTPGetting` (#31) platí:
+
+- **Stavový kód je data, ne chyba.** Chybou je jen to, že se na server nedostaneme
+  (`transport`, `timedOut`); `304` a `503` zařadí až ten, kdo ví, na co se ptal — stejná
+  úvaha jako u `ProcessResult`.
+- **`ETag` řeší volající, ne `URLCache`.** Cache rozhoduje sama, kdy se zeptá znovu; smyslem
+  je ptát se v pevném intervalu a **poznat**, že se nic nezměnilo. Sezení je proto
+  `ephemeral`, bez cookies a bez cache.
+- **Zrušení se překládá na `CancellationError`.** `URLSession` ho hlásí jako
+  `URLError(.cancelled)`; vydávat ho za výpadek sítě by po zavření okna probleskovalo
+  hláškou o nedostupné službě. Totéž pravidlo drží `ReviewRunner` i `GhReviewPublisher`.
 
 ## Konvence
 
@@ -1803,7 +1909,28 @@ Právě proto tam eskalace na `SIGKILL` je.
   chybějící `pullRequest`, `nodes: null`, komentář bez autora a neznámý stav review.
   U dotazu se hlídá **seznam polí** — kdyby z něj vypadlo `isResolved`, ukazovala by se
   vyřešená vlákna jako otevřená.
-- **Fixtures** — `Tests/Fixtures/`, načítané přes `Fixture.text(_:)`. Cesta se odvozuje
+- **Dostupnost služeb (#31)** — tři vrstvy, každá jinak. `Policy.health` vyčerpávajícím
+  výčtem stavů (nic se nemockuje), včetně toho, co se dá pokazit tiše: že **incident mimo
+  sledované komponenty puntík nerozsvítí** (skutečná fixture s výpadkem v `Actions`), že
+  **status page sama na zelenou nestačí**, že se **offline nevydává za výpadek služby**, že
+  selhaná kontrola nic nezablokuje a že **každý stav má neprázdný důvod** — puntík, který po
+  hoveru nic neřekne, je dekorace. `StatusPageClient` proti `FakeHTTPGetter` na operational,
+  incident, rozbitý JSON, `503`, `304` a na to, že se **`ETag` neukládá po odpovědi, které
+  jsme nerozuměli** a že se **nepletou mezi službami**. `HealthMonitor` na to, že se na pozadí
+  nekontroluje nic, že skryté okno interval neposouvá, že výchozí interval je deset minut
+  a po selhaném volání minuta, že `304` a selhaná kontrola nechávají poslední známý stav a že
+  zrušení není selhání. `AppStore` na to, odkud se berou skutečná volání — z pollingu (včetně
+  rate limitu) a z výsledků session (včetně toho, že `timedOut` nezapisuje nic).
+
+  Fake čas u smyčky **neuspává**, takže dojede celá při prvním `yield`u; přepínat jí stav
+  uprostřed je závod a testy proto pouštějí dvě smyčky za sebou.
+- **`URLSessionHTTP`** — proti **skutečnému systému**, ne fake runneru, a přitom **bez sítě**:
+  chodí se na `127.0.0.1:1`, kde nikdo neposlouchá. Fake ověří, co si s odpovědí počne
+  klient, ale ne to, jestli `URLSession` odmítnuté spojení a zrušení hlásí tak, jak si
+  myslíme. Zrušení je deterministické — tělo tasku se rozjede teprve na `task.value`, tedy
+  po `cancel()`.
+- **Fixtures** — `Tests/Fixtures/`, načítané přes `Fixture.text(_:)` a `Fixture.data(_:)`.
+  Cesta se odvozuje
   z `#filePath`, ne z bundlu: Swift Testing nemá `XCTestCase`, od kterého by šel
   `Bundle(for:)` odpíchnout. V `Fixtures/gh/` leží **skutečné** výstupy `gh`, jen
   přeformátované `jq`; berou se z **veřejných** repozitářů (`cli/cli`, `cli/go-gh`,
@@ -1815,6 +1942,12 @@ Právě proto tam eskalace na `SIGKILL` je.
   pocházejí ze soukromého sandboxu `ondrajodas/prism-review-sandbox`. Neobsahují nic než
   hlášku GitHubu. Konzumenta zatím **nemají** — klasifikaci chyb odesílání píše #67; leží
   tady proto, že bez zápisu na GitHub se nedají vyrobit znovu.
+
+  `Fixtures/statuspage/` jsou **skutečné** `components.json` z obou status pages, sebrané
+  tou adresou, na kterou se ptá aplikace. `github-incident.json` je z nich jediný upravený:
+  incident se na přání nevyrobí, takže je do skutečného tvaru dopsaný — `major_outage`
+  a `degraded_performance` na sledovaných komponentách a `partial_outage` v `Actions`, aby
+  bylo na čem ověřit, že se cizí výpadek nepočítá.
 - **`StreamParser`** — proti **všem** fixtures ze skutečných běhů, plus syntetické rozbité
   vstupy: nevalidní JSON, useknutý řádek, neznámý event, nález bez povinných polí, prázdný
   vstup. Fixtures ze skutečných běhů už v repu jsou
@@ -2384,6 +2517,14 @@ z transcriptu zůstává v #94 pro pád aplikace a zabití zvenčí.
 Stálý podpis hotový (issue #61) — `Signing.xcconfig` a `bin/setup-signing.sh`. Aplikace už
 není po každém buildu pro macOS jiná aplikace, takže udělená povolení rebuild přežijí.
 Vrstva bez UI (build a podpis), viz *Prostředí* výš.
+
+Stavový řádek hotový (issue #31) — `App/Health/`, `StatusBarView`, `Policy.health(of:from:)`
+a `HTTPGetting` s `NetworkReachability` v `App/Environment/`. Na spodku okna je puntík
+u GitHubu a u Claude: zelenou a červenou určuje **skutečný provoz** (tik pollingu, doběhlá
+session), žlutou incident na komponentách, které aplikace používá, a bez sítě má vlastní
+důvod. Hlášky z dosavadního pruhu se do řádku **přestěhovaly** — dvě místa na tytéž hlášky
+znamenají, že se jedno z nich přestane plnit. Je to **první `URLSession` v projektu**: do té
+doby šel všechen kontakt s vnějším světem přes podprocesy.
 
 Plánované fáze:
 

@@ -14,4 +14,9 @@ enum Fixture {
     static func text(_ relativePath: String) throws -> String {
         try String(contentsOf: directory.appending(path: relativePath), encoding: .utf8)
     }
+
+    /// Obsah fixture jako bajty — pro to, co se dekóduje z `Data` (HTTP odpovědi).
+    static func data(_ relativePath: String) throws -> Data {
+        try Data(contentsOf: directory.appending(path: relativePath))
+    }
 }
