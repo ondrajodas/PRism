@@ -340,6 +340,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path`, `line`, `side`), tělo, `Origin` |
 | `DetailState` | Stav dotažení detailu PR: `loading` / `loaded(PullRequest, updatedAt:)` / `failed`. Je z něj `headSha` pro draft a popis pro `Přehled` |
 | `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged`. Jako `ReviewVerdict` **není `Codable`** |
+| `DiffLayout` | Jak se kreslí diff: `unified` (pod sebou) / `split` (vedle sebe). Nastavení **člověka, ne repa** — proto jen v `GlobalConfig` |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -419,7 +420,8 @@ z `GitHubGateway`, tenhle kód mu jen rozumí.
 | `FileDiff` | Cesty, druh změny (`added`/`deleted`/`modified`/`renamed`), `isBinary`, hunky |
 | `DiffHunk` | Rozsahy, nadpis sekce za druhým `@@`, řádky |
 | `DiffLine` | Druh (`context`/`added`/`removed`/`meta`), stará a nová čísla, text |
-| `DiffRow` | Diff rozbalený na řádky pro vykreslení, včetně bublin nálezů, + `anchor(in:file:line:)` pro skok z nálezu |
+| `DiffRow` | Diff rozbalený na řádky pro vykreslení, včetně bublin nálezů a **dvojic** pro pohled vedle sebe, + `anchor(in:file:line:)` pro skok z nálezu |
+| `DiffRow.paired(_:)` | Slití hotových řádků do dvojic (`App/Diff/DiffPairing.swift`) — čistá funkce, celý pohled `split` stojí na ní |
 | `DiffState` | Stav načtení per PR: `loading` / `loaded(Diff, updatedAt:)` / `failed` |
 | `FileTreeNode` | Soubory diffu jako strom pro navigaci; slévá složky s jediným potomkem |
 | `DiffExpander` | Skrytý úsek mimo hunky a kroky, kterými se dá odkrýt |
@@ -457,6 +459,82 @@ Věci, které se u toho nemají rozbít:
   pracovní strom, takže mimo diff hlásí běžně.
 - **Nezakotvené bubliny se řadí podle čísla řádku.** Slovník pořadí nemá, takže by jinak
   mezi překresleními poskakovaly.
+
+Pohled **vedle sebe** (#98) je `DiffRow.pair(_, left:, right:)` a platí u něj:
+
+- **Jeden model, dva pohledy.** Dvojice je case `DiffRow`, ne vlastní typ vedle něj — se
+  samostatným typem by se logika bublin, expanderů a kotev psala dvakrát, a to je zrovna ta
+  část, na které visí „nález nesmí zmizet“. Cenou je `sourceLines`, přes které se ptají
+  bubliny a kotvy místo `case .line`.
+- **Slévá se před zavěšením bublin**, ne po něm. Bublina se vkládá za řádek s daným
+  `newNumber`, takže by uprostřed bloku přidaných řádků párování rozťala a druhá polovina
+  bloku by se spárovala s prázdnem.
+- **Identita dvojice je identita pravého řádku** (levého, jen když pravý není). Kotvy
+  z nálezů i vláken se hledají podle `newNumber` a ten je vždycky vpravo, takže
+  `anchor(in:file:line:)` platí ve split pohledu **beze změny**. Levý řádek dvojice svoje id
+  ztrácí — proto je `anchor(in:comment:layout:)` jediná kotva, která pohled zná: komentář
+  k odebranému řádku by jinak mířil na id, které v seznamu není. **Hledá se proto nad
+  hotovými řádky**, ne nad hunky — jedno místo, které rozhoduje o identitě, se s ní nemůže
+  rozejít.
+- **Z dvojic se poskládají přesně původní řádky**, žádný se neztratí ani nezdvojí. Je to
+  invariant v testech, tatáž pojistka jako „spojení run dá původní řádek“ u obarvování:
+  pohled je způsob zobrazení, takže nesmí měnit obsah diffu.
+- **Kontextový řádek stojí na obou stranách jako tatáž hodnota.** Z rovnosti se pozná, že je
+  to **jeden** řádek souboru — `sourceLines` ho proto vrátí jednou a vlákno ani nález u něj
+  nevyjde jako dvě bubliny.
+- **`+` po `-` je přepsání, `-` po `+` už nová skupina.** Přidané řádky blok uzavírají,
+  jinak by se starý obsah spároval s novým, který s ním nesouvisí. Uzavírá ho i kontext,
+  `meta` řádek, hlavička hunku a rozbalovací řádek.
+- **Přes celou šířku jde všechno, co stranu nemá**: hlavička hunku, rozbalovací řádek,
+  bublina, poznámka i `meta` řádek (`\ No newline at end of file`) — ten není obsah souboru.
+- **Pozadí kreslí dvojice, ne buňka** (`DiffPairView`). Buňka se roztáhne jen na svůj obsah,
+  takže u kratší (a hlavně u chybějící) strany by pod ní prosvítalo okno a chybějící řádek by
+  vypadal jako mezera. Barvy si přitom obojí bere z `DiffLineView.background(of:)`, aby se
+  přidaný řádek nekreslil v jednom pohledu jinak než v druhém.
+- **Buňka se ptá za svou stranu, takže komentář vznikne tam, kam se kliklo**
+  (`draft.action(for:on:)` a `LineAnchors`). Kontextový řádek unese **obě** strany — je v obou
+  verzích souboru a `side: LEFT` na nezměněném řádku GitHub přijme (změřeno u #98 na živém API
+  v sandboxu, zapíše se jako `side: LEFT`, `line == original_line`; dokumentace GitHubu `RIGHT`
+  u nezměněných řádků jen doporučuje). Dvě kola omylů předtím: nejdřív se tlačítko filtrovalo
+  podle kanonické strany, takže **vlevo u kontextového řádku nebylo vůbec** (a těch je v diffu
+  většina); pak se nabízelo, ale zakládalo komentář vpravo, tedy „okno se otevře jinde, než kam
+  jsem klikl“. Dvě tlačítka naráz nevzniknou, `isHovered` je per buňka.
+- **Buňka je pružná jen na šířku, ne na výšku.** `maxHeight: .infinity` tam bylo (aby se dala
+  najet myší i pod kratší text zalomené dvojice) a **položilo to aplikaci**: main thread se
+  zasekl na 99 % v `StackLayout.explicitAlignment` a `ViewResponder.hitTest`, tedy v přepočtu
+  layoutu při pohybu myši nad diffem (změřeno `sample`m). Pružná výška v líném seznamu, který
+  výšku nenavrhuje, je pro layout engine práce bez konce — v `overlay` a `background` je totéž
+  neškodné, protože těm se konkrétní velikost navrhuje. Cena: u dvojice se zalomenou stranou se
+  pod kratším textem tlačítko na komentář nenabídne.
+- **Moje rozdělané komentáře jsou jeden řádek modelu na řádek diffu**, rozdělený po stranách
+  (`draftComments(_, left:, right:)`), a ve split pohledu stojí **vedle sebe ve svých
+  polovinách**. Jeden řádek na komentář to neumí: dvě buňky líného seznamu se překrýt nedají,
+  takže by komentáře k oběma stranám téhož řádku zůstaly pod sebou. Do které poloviny komentář
+  patří, říká jeho `side`; že patří k tomuhle řádku, ověří `Policy.matches` — **obojí je
+  potřeba**, protože v pohledu pod sebou (a u kontextové dvojice) je na obou stranách tatáž
+  řádka a samotné `matches` by komentář vrátilo dvakrát.
+- **Identitu řádku s komentáři dává místo, ne komentář** (`"<id řádku>|d"`). Kdyby vycházela
+  z prvního komentáře, vyjmutí levého by ji změnilo a editor toho druhého by přišel o rozepsaný
+  text. Identita **bublin** uvnitř je `id` komentáře (`ForEach`), a na tom to `@State` stojí —
+  do #98 to bylo `d<uuid>` na celém řádku.
+- **Komentáře se neslévají do jedné bubliny**, ani na jedné straně: dva komentáře na řádku jsou
+  dvě věci ke stejnému kódu. Ve stejné polovině tedy stojí pod sebou.
+- **Nález a cizí vlákno zůstávají přes celou šířku**: nález stranu nemá vůbec (hlásí se proti
+  nové verzi) a obojí nese delší text, který by se v půlce mačkal.
+- **Rozdělení šířky musí být stejné jako v `DiffPairView`** (dvě poloviny plus 1 pt na čáru),
+  jinak komentář přeteče do sloupce, kterého se netýká. Prázdná polovina si šířku **bere** —
+  bez toho by se ta plná rozlila přes celý řádek a přestala ukazovat, kam patří.
+- **Odsazení bubliny se ve split pohledu krátí o sloupec s čísly** (104 → 52), aby nezačínala
+  uvnitř kódu. **U komentáře v polovině se do sloupce s obsahem nezarovnává vůbec** (16): na
+  půlce šířky je 52 pt odsazení pro parádu drahé a editor, do kterého se píše, potřebuje místo
+  — kam patří, říká svislý pruh bubliny. `indent` mají všechny tři bubliny; do #98 ho měla jen
+  `ThreadBubbleView` (kvůli `Přehledu`).
+- **Dlouhý řádek se zalamuje, vodorovný scroll ne.** V líném seznamu je scroll na buňku druhý
+  zdroj nevykreslených řádků (viz past s hunkem jako buňkou) a dva sloupce by se navíc musely
+  scrollovat svázaně.
+- **Při úzkém okně se nic nepřepíná samo.** Split v úzkém okně je nepoužitelný, ale pohled,
+  který se mění sám, je horší než pohled, který si člověk zvolil špatně — přepínač je po ruce
+  v liště.
 
 Vlákna konverzace (#64) se vezou **stejnou cestou** jako nálezy (`DiffRow.thread`), ale
 v pěti věcech se chovají jinak:
@@ -525,7 +603,7 @@ Odpovídání do vláken (#73) k tomu přidává:
   sekání. Když vlákno v konverzaci mezitím zmizí, konverzace se načte **znovu** — odeslaný
   komentář, který se nemá kde ukázat, vypadá jako neodeslaný.
 
-Moje rozdělané komentáře (#66) jsou **třetí druh bubliny** (`DiffRow.draftComment`) a řídí
+Moje rozdělané komentáře (#66) jsou **třetí druh bubliny** (`DiffRow.draftComments`) a řídí
 se z většiny pravidly vláken, protože jsou to taky komentáře ke kotvě:
 
 - **Kotví se podle `side`** (`Policy.matches` nad `ReviewDraftComment`), takže komentář
@@ -541,8 +619,10 @@ se z většiny pravidly vláken, protože jsou to taky komentáře ke kotvě:
   šlo odkázat; odpovědět jde teprve na vlákno, které z odeslaného komentáře vznikne.
 - **Jdou naspod, pod nález i pod vlákno.** Nález a cizí komentář jsou to, co si mám přečíst;
   svoji rozepsanou větu znám.
-- **Identita nese `id` komentáře** (`d<uuid>`), ne pořadí — na tom stojí, že si `@State`
-  editoru udrží rozepsaný text mezi překreslením.
+- **Identita bubliny nese `id` komentáře**, ne pořadí — na tom stojí, že si `@State` editoru
+  udrží rozepsaný text mezi překreslením. Od #98 je to `id` v `ForEach` **uvnitř** řádku, ne id
+  celého řádku (`d<uuid>`): jeden řádek nese komentáře k oběma stranám, aby mohly ve split
+  pohledu stát vedle sebe, a jeho identitu proto dává **místo**, ne komentář.
 - **Přepínač `Nálezy` je neschovává**, o důvod víc než u vláken: tenhle text se odešle.
 
 ### `Config` (`App/Config/`)
@@ -553,7 +633,7 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
+| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
 | `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
@@ -607,6 +687,12 @@ Věci, které se u toho nemají rozbít:
   **Rozbitá hodnota se srazí na `false`** na obou úrovních: je to tatáž přísnost jako u režimu
   a opačná než u jazyka nálezů, protože překlep nesmí otevřít cestu ven. Že je výchozí stav
   vypnutý, drží řádek v testu výchozích hodnot.
+- **Pohled na diff (#98) se čte tolerantně jako jazyk nálezů a per repo se nenastavuje.**
+  Rozbitá hodnota spadne na výchozí (`unified`) a celý soubor kvůli ní nezmizí — nejhorší
+  následek je jiný pohled na diff, který se otočí jedním kliknutím v liště. `RepositoryConfig`
+  ho nemá schválně: `mode` nebo `skills` jsou vlastnost repa, kdežto jak se čte diff, je
+  vlastnost člověka, který ho čte. **Přepínač v liště do souboru nezapisuje** — odchylka žije
+  v `AppStore` (viz níž), jinak by hodnota tady přestala být tou, které se říká výchozí.
 - **Rozbitá hodnota režimu se sráží na `manual`, ne na globální default.** Chybějící klíč
   je „ber globální“, ale překlep v hodnotě, kterou se někdo pokoušel automat **vypnout**,
   ho nesmí nechat zapnutý. Platí i globálně.
@@ -1111,20 +1197,21 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
 | `PullRequestDetailView` | Pravý panel: dvouřádková lišta (titulek, review, stav kopie), pod ní diff a nálezy |
-| `DiffView` | Diff v plné šířce: souhrn, skokové menu, soubory s ukotvenou hlavičkou, kterou jde sbalit |
-| `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek, rozbalovací řádek nebo poznámka |
+| `DiffView` | Diff v plné šířce: souhrn, přepínač pohledu, skokové menu, soubory s ukotvenou hlavičkou, kterou jde sbalit |
+| `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek, dvojice, rozbalovací řádek nebo poznámka |
+| `DiffPairView` | Dvojice vedle sebe: dvě buňky `DiffLineView` se `side`, pozadí za celou dvojici, prázdná protistrana |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout |
 | `ThreadBubbleView` | Vlákno konverzace u řádku; vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73) |
 | `ThreadActions` | Co se dá dělat s vláknem — rozbalení, odpověď, vyřešení a důvod, proč odesílat nejde |
 | `MarkdownText` | Vykreslený Markdown z GitHubu — viz `App/Markdown/` |
-| `DraftCommentBubbleView` | Můj rozdělaný komentář u řádku: editor, odznak původu, vyjmutí |
+| `DraftCommentBubbleView` | Můj rozdělaný komentář u řádku: editor, odznak původu, vyjmutí. Ve split pohledu visí jen v půlce, které se týká |
 | `DraftTextEditor` | Textové pole draftu — odložený zápis a doručení při zmizení |
 | `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt bez předvyplnění, tělo, seznam komentářů, `Odeslat review…` |
 | `ReviewSubmissionSheet` | Potvrzení odeslání: úplný výpis payloadu, průběh, typované chyby |
 | `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení |
 | `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
-| `DiffLineView` | Řádek souboru: dvě čísla, znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
+| `DiffLineView` | Řádek souboru: dvě čísla (v buňce dvojice jedno, podle `side`), znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
 | `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`/`Moje review`, návrh verdiktu, tabulka s řazením, prokliky do diffu a zahození nálezů |
 | `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
@@ -1165,7 +1252,7 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsScene` | Obsah scény; dokud neprošel preflight, není store a okno to řekne |
 | `SettingsView` | Dvě záložky, patička s cestou a stavem uložení, zámek na rozbitý soubor |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
-| `GlobalSettingsView` | Zdroje, výchozí režim a jazyk nálezů, **odesílání na GitHub**, skilly, sady podle jazyka, kategorie, běh |
+| `GlobalSettingsView` | Zdroje, výchozí režim a jazyk nálezů, **pohled na diff**, **odesílání na GitHub**, skilly, sady podle jazyka, kategorie, běh |
 | `LanguageSkillsEditor` | Mapa „programovací jazyk → sada skillů“; ukazuje jen nastavené jazyky |
 | `RepositorySettingsView` | Seznam rep vlevo, režim, povolení odesílání a override vpravo |
 | `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
@@ -1211,6 +1298,10 @@ Věci, které se u toho nemají rozbít:
   přestane být `TabView` tím, co si řídí bezpečnou oblast, formulář si vyhradí místo od
   horní hrany okna a obsah leze **pod lištu se záložkami**. Je to tatáž past jako u pruhu
   nad seznamem PR — a projeví se stejně nenápadně: uříznutým prvním řádkem.
+- **Pohled na diff má vlastní sekci, ne řádek v `Režimu review`.** S review nesouvisí a je to
+  nastavení člověka, ne repa — proto ho nemá ani záložka rep. A z patičky musí být vidět, že
+  **přepínač v liště tuhle hodnotu nepřepisuje**: jinak by nastavení vypadalo jako něco, co se
+  samo mění.
 - **Žádný text u odesílání se nesmí dát přečíst jako „zapnout automatické odesílání“.**
   Přepínač rozhoduje **jen** o tom, jestli se tlačítko `Odeslat review…` vůbec nabídne;
   odesílá pořád člověk potvrzením, ve kterém je vidět celý payload. Patička to proto říká
@@ -1266,6 +1357,22 @@ Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
 - **Sbalení kontextu si nechá načtený obsah.** Druhé rozbalení by jinak chodilo po síti
   pro něco, co už jednou dorazilo.
 
+Pohled na diff (#98) drží `AppStore` v `diffLayoutOverride`:
+
+- **Odchylka žije ve storu, ne ve view.** `PullRequestDetailView` si SwiftUI mezi PR ponechá
+  (stejná pozice ve stromu), takže `@State` by přepnutí zahodilo přestavění stromu — tatáž
+  past jako u sbalených souborů.
+- **Drží se globálně, ne per PR.** Pohled je způsob čtení, takže přepnutím na jiný pull
+  request nemá důvod se vracet.
+- **Na disk se nezapisuje.** Nastavení říká „takhle to chci mít“, přepínač v liště „teď se na
+  to podívám jinak“ — po restartu tedy platí zase nastavení. Kdyby přepínač zapisoval do
+  `config.json`, měnila by se nastavená hodnota sama tím, že si člověk u jednoho souboru
+  otočí pohled.
+- **Odchylka se zapíše i tehdy, když se rovná nastavené hodnotě.** Totéž pravidlo jako
+  u `Configuration.setRepository`, kde se maže podle prázdnosti a ne podle shody s globální
+  hodnotou: kdo si pohled otočil sám, má ho podržet i po změně v nastavení. Bez odchylky se
+  změna v nastavení projeví **bez restartu**, protože se čte při každém vykreslení.
+
 Sbalení celých souborů (`foldedFiles`) je **jiná věc než rozbalení kontextu**, i když se
 česky obojímu říká „sbalit“ — proto `DiffFoldingActions` vedle `DiffExpansionActions`:
 
@@ -1283,6 +1390,22 @@ Sbalení celých souborů (`foldedFiles`) je **jiná věc než rozbalení kontex
 - **Odznak s počtem nálezů je u souboru vždycky**, ne jen u sbaleného. U sbaleného je to
   nutnost (zavřený soubor s nevyřízeným nálezem se dá zapomenout), u rozbaleného zkratka:
   projedu hlavičky a vím, kde nálezy jsou, aniž bych scrolloval obsahem.
+- **Tlačítko na komentář nesmí být vyšší než řádek diffu.** Řádek je vysoký ~15 pt (změřeno
+  z renderu), takže pevná `height: 18` z něj vyčnívala **do toho následujícího** — jak na
+  tlačítko myš zamířila, hover přešel na další řádek a ikonka zmizela. Komentovat pak nešlo
+  vůbec a vypadalo to jako záhada v hoveru; nahlášené při zkoušení #98, ale je to od #66.
+  Výška se proto bere z řádku (`maxHeight: .infinity` uvnitř `overlay`, kterému se navrhuje
+  velikost řádku — ohraničené, na rozdíl od pružné výšky v líném seznamu), ne z konstanty:
+  ta by byla druhé místo, které se s výškou řádku rozejde.
+- **Cíl tlačítka je celý sloupec s číslem** (`DiffLineView.numberColumn`), i když je vidět
+  pilulka o 18 pt. Na řádku vysokém 15 pt je to rozdíl mezi „jde to“ a „myš to mine“; číslo
+  řádku samo o sobě na kliknutí nereaguje, takže se tím nic nepřebíjí.
+- **Na myš musí reagovat celý obdélník řádku** (`contentShape(.rect)` nad `onHover`). Bez toho
+  drží hover jen nad číslicemi a nad glyfy kódu: kontextový řádek má **průhledné pozadí**
+  a `Text` uvnitř pružného rámce si hit-test nese jen na svou velikost, takže odsazení kódu
+  a mezera za koncem řádku nereagují. Projevilo se to jako „ikonka se ukáže jen nad čísly“ —
+  myš vyjela z citlivé plochy dřív, než k tlačítku došla. `contentShape` na rozvržení nesahá,
+  takže s pružnou výškou a zaseknutím výš nemá nic společného.
 - **`Divider()` v `overlay` se kreslí svisle.** Orientaci si bere z okolní osy a v overlay
   žádná není. Hlavička souboru tak od #18 kreslila svislou čárku uprostřed místo čáry pod
   sebou; všimlo se toho až po sbalení všech souborů, kdy se ty čárky poskládaly do jedné
@@ -1344,6 +1467,13 @@ Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a p
 
   A texty o tom musí říkat **„zahodí se“, ne „neuloží se“** — na disku prázdný komentář
   chvíli je. Je to na dvou místech (bublina, seznam v panelu) a musí říkat totéž.
+- **Kontextový řádek se dá komentovat na obě strany** (`LineAnchors`), změněný jen na svou:
+  odebraný v nové verzi souboru neexistuje a přidaný ve staré. Změřeno u #98 na živém API, protože
+  dokumentace GitHubu u nezměněných řádků `RIGHT` jen **doporučuje** — a hádat se to nesmí, `422`
+  zahodí celé review. Stojí na tom, že ve split pohledu vznikne komentář v té polovině, do které
+  se kliklo. **Kanonická zůstává pravá** (`preferred`): je to výchozí strana GitHubu, ukazuje na
+  novou verzi souboru a platí tam, kde se strana nevybírá — v pohledu pod sebou a u převzatého
+  nálezu, který stranu nemá.
 - **Kam převzatý nález patří, rozhoduje `Policy.draftTarget`, ne view.** Je to pravidlo
   GitHubu (řádkový komentář bere jen řádek uvnitř hunku), takže patří k rozhodovací logice.
   Cesta se přitom překládá na dnešní (`displayPath`): nález umí přijít pod starou cestou
@@ -1612,8 +1742,9 @@ Věci, které se u toho nemají rozbít:
 | `Policy.inserting(_:intoThread:of:)`, `Policy.applying(_:to:)` | Zápis odeslané odpovědi a vyřešení do načtené konverzace; `nil` = vlákno tam není |
 | `Policy.linesWithSeveralComments(in:)` | Na kolika řádcích draftu je víc komentářů — z každého budou samostatná vlákna, ne odpověď |
 | `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR a vlákna bez kotvy, chronologicky (`ConversationEntry`) |
-| `Policy.commentableSide(of:in:)` | Ke které straně by šel komentář; `nil` = nedá se komentovat |
-| `Policy.commentAnchor(of:in:)`, `Policy.commentAnchors(in:)` | Kotva komentáře (`DraftAnchor`: číslo + strana); mapa pro celý soubor jedním průchodem |
+| `Policy.commentableSide(of:in:)` | Ke které **kanonické** straně by šel komentář; `nil` = nedá se komentovat |
+| `Policy.commentAnchors(of:in:)`, `Policy.commentAnchors(in:)` | Kotvy na **obě strany** (`LineAnchors`) — kontextový řádek unese vlevo i vpravo; mapa pro celý soubor jedním průchodem |
+| `Policy.commentAnchor(of:in:)` | Kanonická kotva (`DraftAnchor`: číslo + strana) — tudy chodí převzatý nález, který stranu nemá |
 | `Policy.draftTarget(for:in:)` | Kam převzatý nález patří — `DraftTarget.line` nebo `.body` |
 | `Policy.adoptedText(of:)`, `Policy.isAdopted(_:target:in:repo:)` | Text převzatého nálezu a odznak „už je v draftu“ |
 | `Policy.permalink(to:line:in:at:)`, `Policy.bodyItem(text:link:)`, `Policy.appendingBodyItem(_:to:)` | Odkaz na kód a skládání položek těla review |
@@ -2143,6 +2274,18 @@ Nad `HTTPGetting` (#31) platí:
   hunky s posunem starých čísel, za posledním s neznámým koncem), že se rozbalený řádek
   chová jako kontext s oběma čísly, že se hlavička po slití hunků sundá a že kotva na
   řádek platí i po rozbalení.
+- **Pohled vedle sebe (#98)** — párování nad syntetickými diffy (stejně dlouhé bloky,
+  nestejně dlouhé na obě strany, samostatný blok odebraných i přidaných, kontext, `meta`, nový
+  a smazaný soubor, odebraný řádek **po** přidaném) a nad tím dva **invarianty** proti
+  skutečným fixtures: že se z dvojic poskládají přesně původní řádky (počty, tedy ztráta
+  i zdvojení) a že pořadí na každé straně kopíruje původní diff. Ověřené dočasně vloženou
+  regresí, ne jen zeleným během: vypuštěný přebytek odebraných shodí obojí.
+
+  Vedle toho `SplitBubbleTests` na to, co se dá pokazit tiše: bublina nálezu pod dvojicí,
+  nález mimo diff, který u hlavičky souboru **zůstane**, vlákno na **odebrané** straně, vlákno
+  a komentář na kontextovém řádku, které **nesmí vzniknout dvakrát**, a kotvy — nálezová platí
+  v obou pohledech (i po rozbalení kontextu), kdežto ta na komentář k odebranému řádku míří ve
+  split pohledu na dvojici.
 - **`FileTreeNode`** — slévání složek s jediným potomkem, větvení, pořadí podle diffu,
   součty na složkách a unikátní identity (`a/x.swift` vs `b/x.swift`).
 - **`AppStore` — dotažení kódu k nálezům** — že se tahá jen u nálezu mimo hunky, že se
@@ -2181,6 +2324,10 @@ Nad `HTTPGetting` (#31) platí:
   z panelu, z řádku i z disku a přežije restart, že další běh začíná načisto, že druhé
   zmáčknutí nic nerozbije, že starší záznamy zůstanou a že se na automatickém repu review
   pustí samo, kdežto na manuálním ne.
+- **`AppStore` — pohled na diff** — že se bez odchylky bere hodnota z nastavení, že ji přepnutí
+  v liště přebije, že se změna nastavení projeví **bez restartu** a že odchylka **shodná**
+  s nastavením přežije jeho změnu. Poslední dva potřebují skutečný `ConfigStore` nad dočasnou
+  složkou: bez něj `updateConfiguration` skončí chybou `noStore` a nepropíše se nic.
 - **`AppStore` — sbalení souborů** — výchozí rozbaleno, přepínání tam a zpět, že sbalení
   jednoho souboru nesahá na jiné ani na jiné PR, idempotentní rozbalení (na tom stojí skok)
   a `Rozbalit vše`, které nechá cizí PR být.
@@ -2718,6 +2865,14 @@ Sbalování souborů hotové (issue #59) — klik na hlavičku sbalí a rozbalí
 `Sbalit vše` / `Rozbalit vše` je v horní liště a skok ze stromu i z tabulky nálezů sbalený
 soubor otevře. V hlavičce je odznak s počtem nálezů, červený u blokujících.
 
+Pohled vedle sebe hotový (issue #98) — `DiffLayout` v `App/Models/`, `DiffRow.pair`
+a `DiffRow.paired(_:)` v `App/Diff/DiffPairing.swift`, `DiffPairView`, přepínač v liště nad
+diffem, `global.diffLayout` v konfiguraci a `diffLayoutOverride` v `AppStore`. **Starý a nový
+obsah jde postavit proti sobě**, spárovaný po řádcích; všechno, co diff umí pod sebou, umí
+i vedle sebe (bubliny, rozbalení kontextu, obarvení, sbalování, skoky). Výchozí pohled je
+v nastavení a projeví se bez restartu, přepínač v liště je odchylka do zavření aplikace —
+nastavení říká „takhle to chci mít“, přepínač „teď se na to podívám jinak“.
+
 **Fáze 5 hotová (issue #25).** Repo v automatickém režimu se reviewuje samo: po každém
 úspěšném tiku se naplánují PR, u kterých se od minula něco změnilo, a session se utratí
 teprve tehdy, když se změnil `headSha`. Denní limit (`autoRunsPerDay`, výchozí 20) je
@@ -2777,13 +2932,15 @@ Tím **končí rozsah v1** podle specifikace. Za ním:
    Zbývá přenesení draftu na nový commit (#69).
 7. **Konverzace, komentáře a taby** (M7) — cizí komentáře a vlákna v okně, odpovídání do
    nich a rozvržení jako na GitHubu (taby `Overview` / `Files changed`). Hotové: čtení #63,
-   vlákna u kódu #64, taby #72 a odpovídání #73; zbývá side-by-side diff (#98).
+   vlákna u kódu #64, taby #72, odpovídání #73 a side-by-side diff #98; zbývají víceřádkové
+   komentáře (#110).
 
 **M6 a M7 jsou do sebe zaklesnuté a nejdou udělat po sobě.** `#66` a `#68` z M6 čekaly na
 `#64` z M7, kdežto `#73` z M7 čekalo na `#67` z M6 — takže se to plánovalo jako jeden blok
 o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `#65`, `#64`,
-`#67`, `#66`, `#72`, `#68` a `#73`; `#98` (side-by-side diff) a `#110` (víceřádkové komentáře) na
-konverzaci nestojí vůbec a dají se zařadit kamkoli. Zbývá `#69` (přenesení draftu na nový commit).
+`#67`, `#66`, `#72`, `#68`, `#73` a `#98`; to poslední na konverzaci nestálo vůbec, stejně jako
+`#110` (víceřádkové komentáře) — dají se zařadit kamkoli. Zbývá `#69` (přenesení draftu na nový
+commit) a `#110`.
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
    s oprávněním a klikem (#88), doběhlé review (#82), nové PR (#85), vypínání po
    událostech (#86) a seskupování (#87).

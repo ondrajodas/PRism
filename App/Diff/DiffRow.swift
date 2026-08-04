@@ -9,6 +9,15 @@ import Foundation
 enum DiffRow: Identifiable {
     case hunk(String, DiffHunk)
     case line(String, DiffLine)
+    /// Dvojice řádků v pohledu **vedle sebe** — vlevo starý obsah, vpravo nový.
+    ///
+    /// Jeden model pro oba pohledy, ne vlastní typ vedle `DiffRow`: se samostatným typem by
+    /// se logika bublin, expanderů a kotev psala dvakrát, a to je zrovna ta část, na které
+    /// visí „nález nesmí zmizet“. Skládá je `DiffRow.paired(_:)`.
+    ///
+    /// Chybějící strana (`nil`) je prázdná buňka, ne mezera — u kontextového řádku je na
+    /// obou stranách **tatáž hodnota**, protože je to jeden řádek souboru.
+    case pair(String, left: DiffLine?, right: DiffLine?)
     /// Skrytý úsek mimo hunky, který se dá dotáhnout.
     case expander(String, DiffExpander)
     /// Nálezy k řádku nad sebou. `anchored: false` znamená, že řádek v diffu není a
@@ -20,11 +29,16 @@ enum DiffRow: Identifiable {
     /// **nedostane**: jeho číslo platilo pro starý head, takže by bublina sedla na cizí kód.
     /// Domov má v `Overview` (#72), vybírá je `Policy.threadsOutsideTheDiff`.
     case thread(String, ReviewThread)
-    /// Můj rozdělaný komentář k řádku nad sebou.
+    /// Moje rozdělané komentáře k řádku nad sebou, rozdělené podle strany diffu.
     ///
     /// Kotví se jako vlákno (podle `side`), ne jako nález. Komentář, jehož řádek v aktuálním
     /// diffu není, se **nekreslí** — celý seznam je vidět v panelu, takže se neztrácí.
-    case draftComment(String, ReviewDraftComment)
+    ///
+    /// **Jeden řádek na řádek diffu, ne na komentář**: ve split pohledu stojí komentáře ke staré
+    /// a k nové straně **vedle sebe** ve svých polovinách, a to ze dvou samostatných řádků
+    /// složit nejde. Rozdělení podle strany platí i v pohledu pod sebou (`side` je vlastnost
+    /// komentáře, ne pohledu) — tam se jen vypíšou pod sebou přes celou šířku.
+    case draftComments(String, left: [ReviewDraftComment], right: [ReviewDraftComment])
     /// Věta místo obsahu — u binárky nebo u souboru beze změny obsahu.
     case note(String, String)
 
@@ -35,14 +49,49 @@ enum DiffRow: Identifiable {
     /// se identity posunuly a odkaz z nálezu by po rozbalení ukázal jinam.
     var id: String {
         switch self {
-        case .hunk(let id, _), .line(let id, _), .expander(let id, _), .note(let id, _),
-             .finding(let id, _, _), .thread(let id, _), .draftComment(let id, _): id
+        case .hunk(let id, _), .line(let id, _), .pair(let id, _, _), .expander(let id, _),
+             .note(let id, _), .finding(let id, _, _), .thread(let id, _),
+             .draftComments(let id, _, _): id
         }
+    }
+
+    /// Řádky po stranách: u dvojice zleva a zprava, u řádku v pohledu pod sebou **tentýž na
+    /// obou** — jedna řádka tam nese starou i novou verzi. Prázdné u všeho, co obsah souboru
+    /// nenese (hlavička hunku, expander, bublina, poznámka).
+    ///
+    /// Odsud se vybírají vlákna i komentáře, takže rozdělení na strany je jedno a totéž pro
+    /// oba pohledy. Kdo se ptá „ke které straně to patří“, dostane odpověď z jednoho místa.
+    var sides: (left: DiffLine?, right: DiffLine?) {
+        switch self {
+        case .line(_, let line): (line, line)
+        case .pair(_, let left, let right): (left, right)
+        default: (nil, nil)
+        }
+    }
+
+    /// Řádky souboru, které tenhle řádek diffu nese — u dvojice jeden nebo dva.
+    ///
+    /// Kontextová dvojice má na obou stranách **tutéž hodnotu** a vrací se proto **jednou**:
+    /// dvakrát by se porovnávala dvakrát a vlákno u ní vyšlo jako dvě bubliny.
+    var sourceLines: [DiffLine] {
+        let sides = sides
+        guard sides.left != sides.right else { return [sides.left].compactMap { $0 } }
+        return [sides.left, sides.right].compactMap { $0 }
+    }
+
+    /// Číslo řádku v **nové** verzi souboru, na které se zavěšují bubliny. U dvojice vychází
+    /// z pravé strany, protože nová čísla stojí vždycky vpravo.
+    ///
+    /// Odvozuje se ze `sourceLines`, ať se ty dvě odpovědi nemůžou rozejít.
+    var newNumber: Int? {
+        sourceLines.compactMap(\.newNumber).first
     }
 
     /// Řádky souboru k vykreslení.
     ///
     /// - Parameters:
+    ///   - layout: `unified` skládá řádky pod sebe, `split` je slévá do dvojic. Slévá se
+    ///     **před** zavěšením bublin — viz `DiffRow.paired(_:)`.
     ///   - revealed: skryté úseky, které si uživatel nechal dotáhnout.
     ///   - content: obsah souboru na hlavě PR, po řádcích. Prázdný, dokud se nenačetl —
     ///     pak se ukazují jen rozbalovací řádky.
@@ -51,6 +100,7 @@ enum DiffRow: Identifiable {
     ///   - comments: moje rozdělané komentáře napříč diffem; vybírají se stejně.
     static func rows(
         of file: FileDiff,
+        layout: DiffLayout = .unified,
         revealed: RevealedLines = RevealedLines(),
         content: [String] = [],
         findings: [FindingGroup] = [],
@@ -102,7 +152,13 @@ enum DiffRow: Identifiable {
             }
         }
         rows += expandable ? trailingGapRows(of: file, revealed: revealed, content: content) : []
-        return withBubbles(rows, of: file, findings: findings, threads: threads, comments: comments)
+        return withBubbles(
+            layout == .split ? paired(rows) : rows,
+            of: file,
+            findings: findings,
+            threads: threads,
+            comments: comments
+        )
     }
 
     /// Kam v diffu ukazuje nález — id řádku, na který se dá odscrollovat.
@@ -137,15 +193,20 @@ enum DiffRow: Identifiable {
     /// komentář k odebranému řádku má číslo ze staré verze souboru. Bez toho by skok
     /// z panelu na takový komentář skončil u hlavičky souboru.
     ///
-    /// Hledá se jen v hunkách, protože jen tam komentář může vzniknout. Když řádek v diffu
-    /// není (přišel nový commit), vrací se **soubor** — odskočit aspoň na něj je pořád lepší
-    /// než nehnout se.
-    static func anchor(in diff: Diff, comment: ReviewDraftComment) -> String? {
+    /// Hledá se nad **hotovými řádky**, ne nad hunky, a to kvůli split pohledu: odebraný
+    /// řádek je tam slitý do dvojice, jejíž identita je z **pravé** strany — id složené
+    /// z hunku a pozice by v seznamu vůbec nebylo a skok by neudělal nic. Jedno místo, které
+    /// rozhoduje o identitě řádku, je zároveň jediné, které se s ní nemůže rozejít.
+    ///
+    /// Obsah souboru ani odkryté úseky se nepředávají: komentář může vzniknout jedině
+    /// na řádku uvnitř hunku (`Policy.commentableSide`), a ty jsou v řádcích tak či tak.
+    /// Když řádek v diffu není (přišel nový commit), vrací se **soubor** — odskočit aspoň
+    /// na něj je pořád lepší než nehnout se.
+    static func anchor(in diff: Diff, comment: ReviewDraftComment, layout: DiffLayout = .unified) -> String? {
         guard let file = diff.file(at: comment.path) else { return nil }
-        for (index, hunk) in file.hunks.enumerated() {
-            if let position = hunk.lines.firstIndex(where: { Policy.matches(comment, $0) }) {
-                return id(of: file, "h\(index)l\(position)")
-            }
+        for row in rows(of: file, layout: layout)
+        where row.sourceLines.contains(where: { Policy.matches(comment, $0) }) {
+            return row.id
         }
         return file.id
     }
@@ -172,10 +233,9 @@ enum DiffRow: Identifiable {
         let myComments = Policy.comments(of: file, from: comments)
         guard !mine.isEmpty || !myThreads.isEmpty || !myComments.isEmpty else { return rows }
 
-        let rendered = Set(rows.compactMap { row -> Int? in
-            guard case .line(_, let line) = row else { return nil }
-            return line.newNumber
-        })
+        // Čte se `newNumber` z řádku i z dvojice — u dvojice je z pravé strany. Bez toho by
+        // se ve split pohledu každý nález tvářil jako nález na řádku, který v diffu není.
+        let rendered = Set(rows.compactMap(\.newNumber))
         // Nálezy bez řádku se schválně neslučují, takže jich k jednomu souboru může být
         // víc; drží se v pořadí, ve kterém přišly. Ty s řádkem se řadí podle něj —
         // slovník pořadí nemá a bubliny by mezi překresleními poskakovaly.
@@ -197,8 +257,11 @@ enum DiffRow: Identifiable {
         result.reserveCapacity(rows.count + mine.count + myThreads.count + myComments.count)
         for row in rows {
             result.append(row)
-            guard case .line(_, let line) = row else { continue }
-            if let number = line.newNumber, let group = byLine[number] {
+            // Ve split pohledu nese řádky souboru dvojice, jinak `.line`. Zbytek (hlavička,
+            // expander, poznámka) žádné nemá a bublina se k němu nevěší.
+            let lines = row.sourceLines
+            guard !lines.isEmpty else { continue }
+            if let number = row.newNumber, let group = byLine[number] {
                 result.append(.finding(id(of: file, "f\(number)"), group, anchored: true))
             }
             // Vlákna jdou **pod** nálezy téhož řádku: nález je to, kvůli čemu je okno
@@ -211,17 +274,39 @@ enum DiffRow: Identifiable {
             // Vlákna se na řádku **neslučují do jednoho**, na rozdíl od nálezů: každé je
             // vlastní konverzace s vlastním stavem vyřešení. Klíčem identity je `id`
             // z GitHubu, ne pořadí — je stabilní i přes obnovení konverzace.
-            for thread in myThreads where Policy.matches(thread, line) {
+            //
+            // U dvojice se porovnávají **obě** strany: vlákno na odebraném řádku má číslo ze
+            // staré verze, tedy z té levé. Jeden thread nemůže sednout na obě — `side` určuje,
+            // které číslo se porovnává, a to má vždycky jen jedna strana.
+            for thread in myThreads where lines.contains(where: { Policy.matches(thread, $0) }) {
                 result.append(.thread(id(of: file, "t\(thread.id)"), thread))
             }
             // Moje rozdělané komentáře jdou **naspod**: nález a cizí komentář jsou to, co si
-            // mám přečíst, kdežto svou vlastní rozepsanou větu znám. Neslévají se, ze
-            // stejného důvodu jako vlákna — dva komentáře na jednom řádku jsou dvě věci.
-            for comment in myComments where Policy.matches(comment, line) {
-                result.append(.draftComment(id(of: file, "d\(comment.id)"), comment))
+            // mám přečíst, kdežto svou vlastní rozepsanou větu znám. Neslévají se do jedné
+            // bubliny, ze stejného důvodu jako vlákna — dva komentáře na jednom řádku jsou dvě
+            // věci — ale jsou v **jednom řádku** rozdělené po stranách, aby mohly ve split
+            // pohledu stát vedle sebe.
+            //
+            // Identitu řádku dává **místo, ne komentář**: kdyby vycházela z prvního komentáře,
+            // vyjmutí levého by ji změnilo a editor toho druhého by přišel o rozepsaný text.
+            // Identita jednotlivých bublin je `id` komentáře, viz `DiffRowView`.
+            //
+            // Do které poloviny komentář patří, říká jeho `side`; že patří k **tomuhle** řádku,
+            // ověří `Policy.matches`. Obojí je potřeba: v pohledu pod sebou (a u kontextové
+            // dvojice) stojí na obou stranách tatáž řádka, takže samotné `matches` by komentář
+            // vrátilo do obou polovin — tedy dvakrát.
+            let byLeft = myComments.filter { $0.side == .left && matches($0, row.sides.left) }
+            let byRight = myComments.filter { $0.side == .right && matches($0, row.sides.right) }
+            if !byLeft.isEmpty || !byRight.isEmpty {
+                result.append(.draftComments("\(row.id)|d", left: byLeft, right: byRight))
             }
         }
         return result
+    }
+
+    /// Patří komentář k řádku na téhle straně? Bez řádku (chybějící protistrana) nikdy.
+    private static func matches(_ comment: ReviewDraftComment, _ line: DiffLine?) -> Bool {
+        line.map { Policy.matches(comment, $0) } ?? false
     }
 
     /// Nálezy, které patří tomuhle souboru.

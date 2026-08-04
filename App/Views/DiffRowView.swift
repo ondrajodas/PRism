@@ -6,6 +6,9 @@ struct DiffRowView: View {
     let row: DiffRow
     /// Jazyk souboru kvůli obarvení kódu. `nil` u souboru, kterému nerozumíme.
     var language: Language?
+    /// Pohled na diff. Řádky samy ho poznají z toho, že jsou dvojice; bubliny ne — a přitom
+    /// se podle něj kreslí jinak (odsazení, a u komentáře i půlka, ve které visí).
+    var layout: DiffLayout = .unified
     /// Načítá se právě obsah souboru, do kterého řádek patří?
     var isLoadingContent = false
     /// Proč se obsah souboru nepodařilo načíst.
@@ -33,6 +36,14 @@ struct DiffRowView: View {
                 draftAction: draft.action(for: line),
                 performDraftAction: perform
             )
+        case .pair(_, let left, let right):
+            DiffPairView(
+                left: left,
+                right: right,
+                language: language,
+                draft: draft,
+                performDraftAction: perform
+            )
         case .expander(_, let expander):
             DiffExpanderView(
                 expander: expander,
@@ -47,7 +58,8 @@ struct DiffRowView: View {
                 isAnchored: anchored,
                 reveal: reveal,
                 isHighlighted: highlighted?.matches(group) ?? false,
-                draft: draft
+                draft: draft,
+                indent: indent
             )
         case .thread(_, let thread):
             ThreadBubbleView(
@@ -55,18 +67,84 @@ struct DiffRowView: View {
                 viewer: viewer,
                 isExpanded: threads.isExpanded(thread),
                 toggle: { threads.toggle(thread) },
+                indent: indent,
                 actions: threads
             )
-        case .draftComment(_, let comment):
-            DraftCommentBubbleView(
-                comment: comment,
-                update: { draft.updateComment(comment.id, $0) },
-                remove: { draft.removeComment(comment.id) }
-            )
+        case .draftComments(_, let left, let right):
+            draftComments(left: left, right: right)
         case .note(_, let text):
             note(text)
         }
     }
+
+    /// Moje rozdělané komentáře k jednomu řádku diffu.
+    ///
+    /// Ve split pohledu **vedle sebe ve svých polovinách**: komentář je vázaný na stranu, takže
+    /// pruh přes oba sloupce by tvrdil, že patří k obojímu — a u komentáře k odebranému řádku
+    /// je to matoucí nejvíc. Rozdělení šířky je **stejné jako v `DiffPairView`** (dvě poloviny
+    /// a mezi nimi 1 pt na dělicí čáru), takže komentář končí tam, kde končí buňka jeho řádku.
+    ///
+    /// V pohledu pod sebou pod sebou přes celou šířku, jako dosud. Nález ani cizí vlákno se na
+    /// stranu nevážou (nález stranu nemá vůbec) a nesou delší text, takže zůstávají přes celou
+    /// šířku v obou pohledech.
+    @ViewBuilder private func draftComments(
+        left: [ReviewDraftComment],
+        right: [ReviewDraftComment]
+    ) -> some View {
+        if layout == .split {
+            HStack(alignment: .top, spacing: 0) {
+                column(left)
+                Color.clear.frame(width: 1)
+                column(right)
+            }
+        } else {
+            VStack(spacing: 0) { bubbles(left + right) }
+        }
+    }
+
+    /// Jedna polovina se svými komentáři. Prázdná strana si šířku vzít **musí**, jinak by se
+    /// druhá rozlila přes celý řádek a přestala ukazovat, ke které straně patří.
+    @ViewBuilder private func column(_ comments: [ReviewDraftComment]) -> some View {
+        if comments.isEmpty {
+            Color.clear.frame(maxWidth: .infinity)
+        } else {
+            VStack(spacing: 0) { bubbles(comments) }
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// Identitu nese `id` komentáře, ne pořadí — na tom stojí, že si editor udrží rozepsaný
+    /// text mezi překreslením i po vyjmutí sousedního komentáře.
+    private func bubbles(_ comments: [ReviewDraftComment]) -> some View {
+        ForEach(comments) { comment in
+            DraftCommentBubbleView(
+                comment: comment,
+                indent: commentIndent,
+                update: { draft.updateComment(comment.id, $0) },
+                remove: { draft.removeComment(comment.id) }
+            )
+        }
+    }
+
+    /// Odsazení bubliny do sloupce s obsahem.
+    ///
+    /// Ve split pohledu je v buňce **jedno** číslo řádku místo dvou, takže se odsazení o ten
+    /// sloupec zkrátí — jinak by bublina začínala až uvnitř kódu.
+    private var indent: Double {
+        layout == .split ? Self.bubbleIndent - DiffLineView.numberColumn : Self.bubbleIndent
+    }
+
+    /// Odsazení **komentáře**, který ve split pohledu bydlí v polovině řádku. Do sloupce
+    /// s obsahem se tam nezarovnává: na půlce šířky je 52 pt odsazení pro parádu drahé
+    /// a editor, do kterého se píše, potřebuje místo. Svislý pruh bubliny říká, kam patří,
+    /// líp než odsazení.
+    private var commentIndent: Double {
+        layout == .split ? 16 : Self.bubbleIndent
+    }
+
+    /// Odsazení bubliny v pohledu pod sebou — stejná hodnota, jakou mají bubliny ve výchozím
+    /// stavu, jen na jednom místě pro všechny tři druhy.
+    private static let bubbleIndent = 104.0
 
     private func perform(_ action: LineDraftAction) {
         switch action {

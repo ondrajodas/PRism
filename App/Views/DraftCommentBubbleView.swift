@@ -8,6 +8,9 @@ import SwiftUI
 /// na GitHub.
 struct DraftCommentBubbleView: View {
     let comment: ReviewDraftComment
+    /// Odsazení do sloupce s obsahem. Ve split pohledu je v buňce jedno číslo řádku místo
+    /// dvou, takže je kratší — stejný parametr jako u `ThreadBubbleView`.
+    var indent: Double = 104
     var update: (String) -> Void = { _ in }
     var remove: () -> Void = {}
 
@@ -32,7 +35,7 @@ struct DraftCommentBubbleView: View {
             Rectangle().fill(.tint).frame(width: 3)
         }
         .clipShape(.rect(cornerRadius: 8))
-        .padding(.leading, 104)   // stejné odsazení jako nálezy a vlákna — do sloupce s obsahem
+        .padding(.leading, indent)   // stejné odsazení jako nálezy a vlákna — do sloupce s obsahem
         .padding(.trailing, 16)
         .padding(.vertical, 4)
     }

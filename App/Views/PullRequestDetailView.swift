@@ -195,6 +195,12 @@ struct PullRequestDetailView: View {
             .filter { !mutedReviewers.contains($0.reviewer) }
     }
 
+    /// Pohled na diff. Žije ve store (globálně, do zavření aplikace), takže si ho vlastní
+    /// binding jen podává dál — stejně jako volbu tabu.
+    private var diffLayout: Binding<DiffLayout> {
+        Binding(get: { store.diffLayout }, set: { store.setDiffLayout($0) })
+    }
+
     /// Rozbaluje se obsah souboru **na hlavě PR**, takže u přejmenovaného souboru platí
     /// nová cesta — a `displayPath` je právě ona.
     private var expansionActions: DiffExpansionActions {
@@ -289,10 +295,14 @@ struct PullRequestDetailView: View {
     ///
     /// Vlastní cesta, ne `jump(to finding:)`: komentář k odebranému řádku má číslo ze staré
     /// verze souboru, takže kotva podle nového čísla by skončila u hlavičky souboru.
+    ///
+    /// Pohled se předává, protože **na něm identita řádku závisí**: ve split pohledu je
+    /// odebraný řádek slitý do dvojice, jejíž id je z pravé strany. Skok z nálezu ho naopak
+    /// nepotřebuje — ten hledá podle nového čísla, a to je vpravo v obou pohledech.
     private func jumpToComment(_ comment: ReviewDraftComment) {
         guard case .loaded(let diff, _) = store.diffState(for: pullRequest.id),
               let file = diff.file(at: comment.path),
-              let anchor = DiffRow.anchor(in: diff, comment: comment)
+              let anchor = DiffRow.anchor(in: diff, comment: comment, layout: store.diffLayout)
         else { return }
         store.unfold(file.displayPath, in: pullRequest.id)
         scroll(to: anchor)
@@ -401,7 +411,8 @@ struct PullRequestDetailView: View {
                 viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
                 threadActions: threadActions,
                 comments: store.draftComments(for: pullRequest.id),
-                draft: draftActions
+                draft: draftActions,
+                layout: diffLayout
             )
         case .failed(let detail):
             diffFailure(detail)

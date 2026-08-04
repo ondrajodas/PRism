@@ -105,6 +105,19 @@ final class AppStore {
     /// pozice ve stromu), takže by sbalení přeteklo z jednoho pull requestu na druhý.
     private(set) var foldedFiles: Set<FileExpansionKey> = []
 
+    /// Odchylka od pohledu na diff, který je v nastavení. `nil` = ber ho z konfigurace.
+    ///
+    /// Drží se **globálně, ne per PR**: pohled je způsob čtení, takže přepnutím na jiný pull
+    /// request nemá důvod se vracet. A ve storu, ne ve view — `PullRequestDetailView` si
+    /// SwiftUI mezi PR ponechá (stejná pozice ve stromu), takže `@State` by odchylku zahodilo
+    /// přestavění stromu; tatáž past jako u sbalených souborů.
+    ///
+    /// **Na disk se nezapisuje.** Nastavení říká „takhle to chci mít“, přepínač v liště „teď
+    /// se na to podívám jinak“. Kdyby přepínač zapisoval do `config.json`, přestala by být
+    /// hodnota v nastavení tím, čemu se říká výchozí — měnila by se sama tím, že si člověk
+    /// u jednoho souboru otočí pohled.
+    private(set) var diffLayoutOverride: DiffLayout?
+
     /// Co reviewery dělaly, per PR. Drží se i po doběhnutí — právě tehdy se k tomu člověk
     /// vrací. Pořadí kopíruje pořadí, ve kterém běhy začaly.
     private(set) var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
@@ -807,6 +820,23 @@ final class AppStore {
         }
         // Prázdná množina se maže, ať v mapě nezůstávají klíče bez obsahu.
         toggledThreads[pr] = toggled.isEmpty ? nil : toggled
+    }
+
+    // MARK: - Pohled na diff
+
+    /// S jakým pohledem se diff kreslí: odchylka z lišty, jinak hodnota z nastavení.
+    var diffLayout: DiffLayout {
+        diffLayoutOverride ?? configuration.global.diffLayout
+    }
+
+    /// Přepnutí z lišty nad diffem.
+    ///
+    /// Odchylka se zapíše **i tehdy, když se rovná nastavené hodnotě**. Je to totéž pravidlo
+    /// jako u `Configuration.setRepository`, kde se maže podle prázdnosti a ne podle shody
+    /// s globální hodnotou: kdo si pohled otočil sám, má ho podržet i po změně v nastavení.
+    /// Do zavření aplikace — po restartu platí zase nastavení.
+    func setDiffLayout(_ layout: DiffLayout) {
+        diffLayoutOverride = layout
     }
 
     // MARK: - Sbalení souboru
