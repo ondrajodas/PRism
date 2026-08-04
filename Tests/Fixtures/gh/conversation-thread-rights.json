@@ -1,0 +1,130 @@
+{
+  "data": {
+    "viewer": {
+      "login": "ondrajodas"
+    },
+    "repository": {
+      "pullRequest": {
+        "number": 13084,
+        "reviews": {
+          "totalCount": 2,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "PRR_kwDODKw3uc70Pags",
+              "state": "CHANGES_REQUESTED",
+              "body": "Thanks for the PR, @maxbeizer! 🍻 It's great.\n\nNote that some of these comments are best to be resolved in a follow up PR, as they'd break the base for the `discussion view` PR.\n\n\nSummary of my comments (you can find the details in their corresponding comments):\n- Add tests for discussion client methods.\n- Add `--search` option.\n- Add `--sort` and `--order` options.\n- Add `--after` option for further pagination calls, and the `next` field in JSON output. We should basically do what we planned for pagination in `discussion view` (in https://github.com/cli/cli/issues/12810#issuecomment-4154772163).\n- Some domain-vs-API and domain-vs-CLI adaptions.\n- Question around having `hasDiscussionsEnabled` next to `discussions`; does that even work on repos where discussions are disabled.\n- A bit around `--help` docs; `(preview)` note, examples, and command usage format.\n\n\n### Further questions, but not ready to comment/share for now\n- Shouldn't `ClosedAt` and `AnswerChosenAt` fields be `null`-able?\n- What happens to ghost users in `author.login` query?\n- See if we can replace the plain text GQL query with a strongly-typed one.\n",
+              "submittedAt": "2026-04-13T14:38:25Z",
+              "author": {
+                "login": "babakks"
+              }
+            },
+            {
+              "id": "PRR_kwDODKw3uc70XMG4",
+              "state": "COMMENTED",
+              "body": "Thanks for the thorough review, @babakks! Really appreciate the detail here. 🙏\n\nI agree with the feedback across the board. Here's my plan for tackling it:\n\n**In this PR:**\n- Domain/API type safety: `*string` for State, exported consts in `types.go`, `switch` statements with `default` error clauses, `toFilterState()` helper\n- Pagination: `--after` flag, `DiscussionListResult` return type with cursor, `next` in JSON envelope\n- Search: `--search`/`-S` flag, single keyword string, qualifier/keyword terminology, `%q` quoting\n- CLI flags: split `--order-by` into `--sort` + `--order`, `(preview)` annotations, `Use: \"list [flags]\"`, `defaultLimit` const, additional examples\n- Code organization: category lookup → `shared/`, single-line errors, `pageLimit` → `remaining`, hoist `hasDiscussionsEnabled` out of loop\n- Guard clauses: `limit <= 0` validation in client methods\n\n**In follow-up PRs:**\n- Interface rename (`DiscussionClient` → `Discussions`) + export struct\n- Client method tests (following `agent-task/capi/sessions_test.go` pattern)\n\n**Will investigate:**\n- `hasDiscussionsEnabled` + `discussions` query behavior on repos with discussions disabled",
+              "submittedAt": "2026-04-13T15:08:28Z",
+              "author": {
+                "login": "maxbeizer"
+              }
+            }
+          ]
+        },
+        "reviewThreads": {
+          "totalCount": 38,
+          "pageInfo": {
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "id": "PRRT_kwDODKw3uc56e1Kf",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": 23,
+              "originalLine": 23,
+              "diffSide": "RIGHT",
+              "viewerCanResolve": false,
+              "viewerCanUnresolve": false,
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63G5ba",
+                    "body": "_TBF in a follow-up._\n\nConstructor functions, like `NewDiscussionClient` here, are expected to return a pointer to a struct/type and not an interface. I know here we can't just capitalise and export `discussionClient` struct as it would collide with `DiscussionClient` interface. So, my suggestion is to rename the interface to `Discussions` and then export the implementation as `DiscussionClient`. It's not perfect and could be seen as misleading, but I think I'm okay with it (TBF it's better than what we did in `agent-task` where the interface and the struct names are just different in casing).\n\n_Actually, the problem is we're defining both the interface and the implementation in the same package and that's why our hands are tied here. Interfaces make more sense to be defined at the consumer side (especially, with duck-typing, as in Go), but I prefer to keep them in the same package for consistency with other commands._",
+                    "createdAt": "2026-04-13T09:26:59Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072038618",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56fCq6",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 122,
+              "diffSide": "RIGHT",
+              "viewerCanResolve": false,
+              "viewerCanUnresolve": false,
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63HLKA",
+                    "body": "Two pointers:\n\n- The method should also:\n  1. accept an `after` parameter (populated by `discussion list --after <CURSOR>`).\n  2. return a next page cursor (so that, for example, `discussion list` can populate the JSON's `next` field with it). As it'll be an awkwardly lengthy return type, we should probably introduce a secondary type for this.\n\n  Ultimately, the signature should read like this:\n\n  ```go\n  func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, after string, limit int) (DiscussionListResult, error)\n  ```\n\n- Let's add a guard clause for case `limit <= 0`. Asking this, because we're in a separate package than the `list` command and shouldn't rely on the caller's checks. The return value can be a `nil` slice, but it's better to return an error here to allow surfacing of any faulty code path.\n\n  ```go\n  if limit <= 0 {\n      return nil, 0, fmt.Errorf(\"limit argument must be positive: %v\", limit)\n  }\n  ```",
+                    "createdAt": "2026-04-13T09:41:18Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072111232",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "comments": {
+          "totalCount": 4,
+          "pageInfo": {
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "id": "IC_kwDODKw3uc78k438",
+              "body": "**Investigation result** for the `hasDiscussionsEnabled` question ([comment](https://github.com/cli/cli/pull/13084#discussion_r3072305674)):\n\nQuerying a repo with discussions disabled (`cli/go-gh`) returns `hasDiscussionsEnabled: false` with `discussions.totalCount: 0` — **no GQL error**. So our current approach of checking the boolean works correctly. The guard clause is valid as-is.",
+              "createdAt": "2026-04-13T15:19:33Z",
+              "url": "https://github.com/cli/cli/pull/13084#issuecomment-4237528572",
+              "author": {
+                "login": "maxbeizer"
+              }
+            },
+            {
+              "id": "IC_kwDODKw3uc78lYN-",
+              "body": "> Querying a repo with discussions disabled (`cli/go-gh`) returns `hasDiscussionsEnabled: false` with `discussions.totalCount: 0` — **no GQL error**. So our current approach of checking the boolean works correctly. The guard clause is valid as-is.\n\nThere's one more case when we fetch the categories, too, and that happens before the actual list query.",
+              "createdAt": "2026-04-13T15:35:57Z",
+              "url": "https://github.com/cli/cli/pull/13084#issuecomment-4237656958",
+              "author": {
+                "login": "babakks"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

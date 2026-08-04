@@ -188,6 +188,41 @@ extension Policy {
         }
     }
 
+    /// Na kolika kotvách draftu leží **víc než jeden** komentář.
+    ///
+    /// Existuje kvůli tomu, co se dá čekat a nestane se: dva komentáře na jednom řádku
+    /// **nevytvoří vlákno s odpovědí**, ale dvě samostatná vlákna vedle sebe. Změřeno u #73
+    /// v sandboxu — payload review s dvěma komentáři na tomtéž řádku GitHub přijme a vláken
+    /// přibudou dvě. `in_reply_to` v `comments[]` neexistuje a neodeslané vlákno navíc ještě
+    /// nemá `id`, na které by šlo odkázat.
+    ///
+    /// Počítají se **místa, ne komentáře**, a je to celý smysl té změny: první verze sčítala
+    /// komentáře napříč všemi sdílenými kotvami a okno z toho skládalo větu „N komentářů míří na
+    /// stejný řádek“, což u dvou různých řádků po dvou komentářích tvrdilo nepravdu — čtyři
+    /// komentáře na jeden řádek nemířily. Našel to Copilot na #119, a **podruhé** ještě
+    /// v tomhle popisu, který po přejmenování pořád mluvil o počtu komentářů.
+    ///
+    /// Nula znamená, že každý komentář stojí na vlastní kotvě.
+    static func linesWithSeveralComments(in draft: ReviewDraft?) -> Int {
+        guard let draft else { return 0 }
+        let counts = Dictionary(grouping: draft.comments, by: { AnchorKey($0) }).mapValues(\.count)
+        return counts.values.filter { $0 > 1 }.count
+    }
+
+    /// Kotva komentáře jako klíč. Tři pole, protože komentář k odebranému řádku má stejné
+    /// číslo jako ten k přidanému — a jsou to různá místa (viz `matches(_:_:)`).
+    private struct AnchorKey: Hashable {
+        let path: String
+        let line: Int
+        let side: DiffSide
+
+        init(_ comment: ReviewDraftComment) {
+            path = comment.path
+            line = comment.line
+            side = comment.side
+        }
+    }
+
     // MARK: - Tělo review
 
     /// Permalink na řádek v konkrétním commitu.

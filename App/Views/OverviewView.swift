@@ -18,8 +18,8 @@ struct OverviewView: View {
     var viewer: String = ""
     /// Kolik se toho do stránek konverzace nevešlo, po částech.
     var missing: ConversationShortfall = ConversationShortfall()
-    var isThreadExpanded: (ReviewThread) -> Bool = { _ in true }
-    var toggleThread: (ReviewThread) -> Void = { _ in }
+    /// Rozbalení, odpovídání a vyřešení vláken (#73) — jeden parametr, protože patří k sobě.
+    var threadActions = ThreadActions()
     var refresh: () -> Void = {}
 
     let pullRequest: PullRequestSummary
@@ -218,9 +218,10 @@ struct OverviewView: View {
             ThreadBubbleView(
                 thread: thread,
                 viewer: viewer,
-                isExpanded: isThreadExpanded(thread),
-                toggle: { toggleThread(thread) },
-                indent: 0
+                isExpanded: threadActions.isExpanded(thread),
+                toggle: { threadActions.toggle(thread) },
+                indent: 0,
+                actions: threadActions
             )
         }
     }

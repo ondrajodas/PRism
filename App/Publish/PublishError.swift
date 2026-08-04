@@ -19,6 +19,19 @@ enum PublishError: Error, Equatable {
     case pullRequestNotOpen(PullRequestState)
     /// Draft je prázdný nebo bez verdiktu. Nic se nevolalo.
     case nothingToSend
+    /// Odpověď do vlákna je prázdná. Nic se nevolalo.
+    ///
+    /// Vlastní případ, ne `nothingToSend`: ten mluví o draftu a jeho věta radí vybrat verdikt,
+    /// což u odpovědi nedává smysl. A není to opatrnost — změřeno v sandboxu, že GitHub prázdné
+    /// tělo **tiše spolkne** (`comment: null`, exit 0), takže bez téhle brány by okno hlásilo
+    /// odeslanou odpověď, která nikdy nevznikla.
+    case blankReply
+    /// Vlákno, do kterého se odpovídá, na GitHubu není.
+    ///
+    /// Vlastní případ, ne `network`: hláška `Could not resolve to a node with the global id`
+    /// vypadá jako ta, kterou `GitHubError` používá pro neexistující repozitář, ale znamená něco
+    /// jiného a vede jinam — konverzaci je potřeba načíst znovu, ne zkoušet síť.
+    case threadNotFound(String)
     /// Komentář míří na řádek, který v diffu není. **Neodeslalo se nic** — volání je
     /// atomické (změřeno u #62).
     case lineOutsideDiff(String)
@@ -65,13 +78,13 @@ extension PublishError {
     var mightHaveReachedGitHub: Bool {
         switch self {
         // Nic se nevolalo (brány a pre-flight), nebo `gh` vůbec nenaběhl.
-        case .publishingNotAllowed, .staleDraft, .nothingToSend, .pullRequestNotOpen,
-             .toolUnavailable:
+        case .publishingNotAllowed, .staleDraft, .nothingToSend, .blankReply,
+             .pullRequestNotOpen, .toolUnavailable:
             false
         // GitHub požadavek **odmítl** — 422 u rozřazení komentářů, 401 u přihlášení, 403 u
         // limitu, spadlé spojení u sítě. Ve všech případech review nevzniklo.
         case .lineOutsideDiff, .pathOutsideDiff, .pendingReviewExists, .ownPullRequest,
-             .notAuthenticated, .rateLimited, .network:
+             .notAuthenticated, .rateLimited, .network, .threadNotFound:
             false
         // `timedOut`: `gh` jsme po třiceti vteřinách zabili sami, POST mohl doběhnout.
         // `malformedResponse`: exit kód byl **nula**, takže POST prošel a jen odpovědi
@@ -98,6 +111,12 @@ extension PublishError {
         }
 
         switch true {
+        // **Před** obecným `Could not resolve to` níž, jinak by chybějící vlákno vyšlo jako
+        // výpadek sítě. Hlášky se liší jen koncem (`…to a node with the global id` proti
+        // `…to a Repository`), takže na pořadí těch dvou případů záleží — změřeno na živém
+        // API u #73.
+        case text.contains("Could not resolve to a node"):
+            self = .threadNotFound(text)
         case text.contains("Line could not be resolved"):
             self = .lineOutsideDiff(text)
         case text.contains("Path could not be resolved"):
@@ -123,13 +142,25 @@ extension PublishError {
     var userDescription: String {
         switch self {
         case .publishingNotAllowed(let repo):
-            "Odesílání review není pro \(repo) povolené. Zapni ho v nastavení (⌘,)."
+            // **Bez slova „review“**: tatáž brána od #73 povoluje i odpovědi do vláken, takže
+            // věta o review by u zakázaného `Odpovědět` mluvila o něčem jiném, než co uživatel
+            // právě dělá. Zůstává jedna věta na jednom místě (delegují ji `DraftSendBlock`
+            // i `ThreadActions`) a odkazuje na přepínač, který se jmenuje stejně.
+            "Odesílání na GitHub není pro \(repo) povolené. Zapni ho v nastavení (⌘,)."
         case .staleDraft(let draft, let head):
             "Draft je psaný proti commitu \(draft.prefix(7)), ale hlava PR je \(head.prefix(7)). Načti diff znovu."
         case .pullRequestNotOpen(let state):
-            "Pull request není otevřený — je \(state.czechLabel). Review se dá poslat jen na otevřený PR."
+            // Neutrálně: tuhle chybu dostane i odpověď do vlákna, takže věta o review by
+            // mluvila o něčem jiném, než co uživatel právě dělá.
+            "Pull request není otevřený — je \(state.czechLabel). Odeslat se dá jen na otevřený PR."
         case .nothingToSend:
             "Není co poslat — draft je prázdný nebo v něm chybí verdikt."
+        case .blankReply:
+            // Ne „neuloží se“ ani „nepovedlo se“: GitHub prázdné tělo přijme a zahodí, takže
+            // bez téhle věty by se odpověď jevila jako odeslaná. Změřeno v sandboxu.
+            "Odpověď je prázdná. Napiš text — prázdný komentář GitHub tiše zahodí."
+        case .threadNotFound:
+            "Vlákno na GitHubu není — někdo ho mezitím smazal, nebo je konverzace v okně stará. Načti ji znovu."
         case .lineOutsideDiff:
             "Některý komentář míří na řádek, který v diffu není. Neodeslalo se nic; přesuň ho na řádek uvnitř diffu."
         case .pathOutsideDiff:
@@ -144,14 +175,18 @@ extension PublishError {
             "GitHub omezuje počet dotazů. Zkus to za chvíli."
         case .network(let detail):
             "GitHub není dostupný: \(detail)"
+        // Tři věty o nejistém výsledku, a všechny **neutrální**: nastanou u review i u odpovědi
+        // do vlákna, takže „jestli review nedošlo“ by u zakázané odpovědi poslalo člověka hledat
+        // něco, co neposílal. Co zůstává, je pokyn zkontrolovat to na GitHubu — ten platí pro
+        // obojí a je to celý smysl těch hlášek.
         case .timedOut:
-            "Odeslání trvalo moc dlouho. Zkontroluj na GitHubu, jestli review přesto nedošlo."
+            "Odeslání trvalo moc dlouho. Zkontroluj na GitHubu, jestli přesto neprošlo."
         case .toolUnavailable(let detail):
             "`gh` se nepodařilo spustit: \(detail)"
         case .malformedResponse(let detail):
-            "Odpověď GitHubu nejde přečíst, takže nevím, jak review vypadá — zkontroluj ho na GitHubu. \(detail)"
+            "Odpověď GitHubu nejde přečíst, takže nevím, jak to dopadlo — zkontroluj to na GitHubu. \(detail)"
         case .interrupted:
-            "Odesílání se přerušilo uprostřed. Zkontroluj na GitHubu, jestli review přesto nedošlo."
+            "Odesílání se přerušilo uprostřed. Zkontroluj na GitHubu, jestli přesto neprošlo."
         case .unknown(let detail):
             "Odeslání se nepovedlo: \(detail)"
         }

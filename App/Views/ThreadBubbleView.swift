@@ -16,6 +16,9 @@ struct ThreadBubbleView: View {
     /// u kódu bublina visí pod svým řádkem. V `Přehledu` (#72) žádná čísla nejsou, takže se
     /// tam předává nula — jinak by vlákno viselo o sto bodů vpravo bez důvodu.
     var indent: Double = 104
+    /// Odpovídání a vyřešení (#73). `nil` = bublina je jen ke čtení, což je stav, ve kterém se
+    /// staví v testech skládání řádků a v náhledech.
+    var actions: ThreadActions?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -26,6 +29,9 @@ struct ThreadBubbleView: View {
                     entry(comment)
                 }
                 truncationNote
+                // Jen v rozbaleném vlákně: ve sbaleném (typicky vyřešeném) je hlavička jeden
+                // pruh a pole na odpověď by z něj udělalo to největší v bublině.
+                compose
             }
         }
         .padding(10)
@@ -159,6 +165,121 @@ struct ThreadBubbleView: View {
             Text(verbatim: "\(Plural.czech(thread.comments.missing, one: "komentář", few: "komentáře", many: "komentářů")) se nevešlo — otevři vlákno na GitHubu.")
                 .font(.caption2)
                 .foregroundStyle(.orange)
+        }
+    }
+
+    // MARK: - Odpověď (#73)
+
+    /// Pole na odpověď a tlačítka pod ním.
+    ///
+    /// **Bez potvrzování** — rozhodnutí #73: odpověď je jedna věta v diskuzi, dá se smazat
+    /// a potvrzovací sheet u každé by z okna udělal klikačku. Review se potvrzuje proto, že je
+    /// to verdikt nad celým PR.
+    @ViewBuilder private var compose: some View {
+        if let actions {
+            VStack(alignment: .leading, spacing: 6) {
+                Divider()
+                DraftTextEditor(
+                    text: actions.reply(thread),
+                    placeholder: "Odpovědět ve vlákně…",
+                    minHeight: 52,
+                    commit: { actions.setReply(thread, $0) }
+                )
+                // Identita per vlákno: bublina je buňka líného seznamu a po odscrollování se
+                // staví znovu, takže bez tohohle by se rozepsaný text mohl objevit u cizího
+                // vlákna. Tatáž past jako u těla review, které se klíčuje PR.
+                .id(thread.id)
+                .disabled(state?.isBusy == true)
+
+                controls(actions)
+                failureNote
+            }
+        }
+    }
+
+    private func controls(_ actions: ThreadActions) -> some View {
+        HStack(spacing: 8) {
+            replyButton(actions)
+            resolutionButton(actions)
+            Spacer(minLength: 0)
+            if let state, state.isBusy {
+                ProgressView().controlSize(.small)
+                Text(verbatim: busyLabel(state))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Zakázané tlačítko **s důvodem**, ne schované: prázdná odpověď, běžící akce i zakázané
+    /// odesílání se dají vysvětlit, kdežto chybějící tlačítko ne.
+    private func replyButton(_ actions: ThreadActions) -> some View {
+        Button("Odpovědět", systemImage: "arrowshape.turn.up.left") { actions.send(thread) }
+            .buttonStyle(.borderedProminent)
+            .font(.caption)
+            .disabled(actions.block != nil || !hasText(actions) || state?.isBusy == true)
+            .help(replyHelp(actions))
+    }
+
+    private func replyHelp(_ actions: ThreadActions) -> String {
+        if let block = actions.block { return block }
+        if !hasText(actions) { return "Napiš odpověď — prázdnou GitHub tiše zahodí." }
+        return "Odešle odpověď do vlákna. Nepotvrzuje se, je to jedna věta v diskuzi."
+    }
+
+    /// `Vyřešit` / `Znovu otevřít` se kreslí jen tam, kde na to GitHub dává právo
+    /// (`viewerCanResolve` / `viewerCanUnresolve`) — tady tlačítko **mizí**, na rozdíl od
+    /// odpovědi: chybějící právo se nedá spravit ničím, co je v okně, takže by zakázané
+    /// tlačítko jen zabíralo místo a slibovalo akci, která nikdy nepůjde.
+    @ViewBuilder private func resolutionButton(_ actions: ThreadActions) -> some View {
+        if thread.canToggleResolution {
+            Button(
+                thread.isResolved ? "Znovu otevřít" : "Vyřešit",
+                systemImage: thread.isResolved ? "arrow.uturn.backward" : "checkmark.circle"
+            ) {
+                actions.setResolved(thread, !thread.isResolved)
+            }
+            .buttonStyle(.bordered)
+            .font(.caption)
+            .disabled(actions.block != nil || state?.isBusy == true)
+            .help(actions.block ?? (thread.isResolved
+                ? "Otevře vlákno zpátky na GitHubu"
+                : "Označí vlákno na GitHubu za vyřešené"))
+        }
+    }
+
+    /// Co se nepovedlo, a co s tím.
+    ///
+    /// **Věta o zachovaném textu jen tam, kde nějaký je** (`keptText`) — u selhaného vyřešení
+    /// není co zachraňovat a „text zůstal“ by tvrdilo víc, než se stalo. U odpovědi je naopak
+    /// zásadní: bez ní se rozepsaná věta začne psát znovu.
+    @ViewBuilder private var failureNote: some View {
+        if let state, let failure = state.failure {
+            Label {
+                Text(verbatim: state.keptText
+                    ? "\(failure.userDescription) Text zůstal, dá se zkusit znovu."
+                    : failure.userDescription)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+            }
+            .font(.caption2)
+            .foregroundStyle(.orange)
+        }
+    }
+
+    private var state: ThreadActionState? { actions?.state(thread) }
+
+    private func hasText(_ actions: ThreadActions) -> Bool {
+        !actions.reply(thread).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func busyLabel(_ state: ThreadActionState) -> String {
+        switch state {
+        case .replying: "odesílám odpověď…"
+        case .resolving(let resolved): resolved ? "označuji za vyřešené…" : "otevírám zpátky…"
+        // Selhání se hlásí větou pod tlačítky, ne popiskem u spinneru — ten už není vidět.
+        case .replyFailed, .resolutionFailed: ""
         }
     }
 

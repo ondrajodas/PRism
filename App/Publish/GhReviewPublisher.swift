@@ -39,25 +39,75 @@ struct GhReviewPublisher: ReviewPublishing {
             throw PublishError.nothingToSend
         }
 
-        try await preflight(draft)
+        try await preflight(draft.pullRequest, expecting: draft.headSha)
         return try await post(payload, to: draft.pullRequest)
     }
 
+    // MARK: - Vlákna
+
+    /// Odpoví do vlákna. Brána je stejná jako u review, pre-flight **užší** — viz `preflight`.
+    func reply(to thread: ThreadTarget, body: String) async throws -> ThreadComment {
+        guard scope.allows(thread.pullRequest.repo) else {
+            throw PublishError.publishingNotAllowed(thread.pullRequest.repo)
+        }
+        // Prázdná odpověď se **nevolá**: GitHub ji přijme, nic nevytvoří a vrátí exit 0
+        // (změřeno v sandboxu), takže by okno hlásilo odeslanou odpověď, která nevznikla.
+        guard ThreadRequest.isSendable(body) else { throw PublishError.blankReply }
+
+        try await preflight(thread.pullRequest, expecting: nil)
+
+        let output = try await call(ThreadRequest.replyArguments(to: thread, body: body))
+        let decoded = try decoded(GhThreadReplyResponse.self, from: output)
+        guard let comment = decoded.comment() else {
+            throw PublishError.malformedResponse("V odpovědi chybí vložený komentář.")
+        }
+        return comment
+    }
+
+    /// Přepne vyřešení vlákna.
+    func setResolved(_ resolved: Bool, of thread: ThreadTarget) async throws -> ThreadResolution {
+        guard scope.allows(thread.pullRequest.repo) else {
+            throw PublishError.publishingNotAllowed(thread.pullRequest.repo)
+        }
+
+        try await preflight(thread.pullRequest, expecting: nil)
+
+        let output = try await call(ThreadRequest.resolutionArguments(of: thread, resolved: resolved))
+        let decoded = try decoded(GhThreadResolutionResponse.self, from: output)
+        guard let resolution = decoded.resolution() else {
+            throw PublishError.malformedResponse("V odpovědi chybí stav vlákna.")
+        }
+        return resolution
+    }
+
+    // MARK: - Pre-flight
+
     /// Ověří, že se posílá na to, co jsme viděli. **Při neshodě se nevolá zápis.**
     ///
-    /// `headSha` je to hlavní: approve na kód, který jsi neviděl, tak nejde poslat ani
-    /// závodem s pushnutým commitem. GitHub proti tomu nechrání — změřeno u #62, že review
-    /// se zastaralým `commit_id` **přijme**.
-    private func preflight(_ draft: ReviewDraft) async throws {
+    /// `expecting` je hlava, na kterou má PR stát — a je **volitelná**, protože každá cesta ven
+    /// se váže na něco jiného:
+    ///
+    /// - **Review** ji vyžaduje: approve na kód, který jsi neviděl, nesmí projít ani závodem
+    ///   s pushnutým commitem. GitHub proti tomu nechrání (změřeno u #62, že review se
+    ///   zastaralým `commit_id` přijme).
+    /// - **Odpověď do vlákna** ji nemá čím vyplnit a nemá proč: váže se na vlákno, ne na commit.
+    ///   Odpovědět na vlákno, které vzniklo před třemi pushi, je běžné — kontrola hlavy by
+    ///   zakázala zrovna to, na co se odpovídá.
+    ///
+    /// Stav PR se ověřuje vždycky, a **je to striktnější než GitHub**: změřeno u #73, že odpověď
+    /// na zavřeném PR projde. Schválně: aplikace ukazuje PR z `review-requested`, takže mergnutý
+    /// PR ze seznamu vypadne a k jeho vláknům se z okna nedostaneš — a psát do diskuze, která se
+    /// uzavřela, patří do prohlížeče, ne sem.
+    private func preflight(_ id: PRIdentifier, expecting head: String?) async throws {
         let pullRequest: PullRequest
         do {
-            pullRequest = try await gateway.fetchDetail(id: draft.pullRequest)
+            pullRequest = try await gateway.fetchDetail(id: id)
         } catch let error as GitHubError {
             throw PublishError(preflight: error)
         }
 
-        guard pullRequest.headSha == draft.headSha else {
-            throw PublishError.staleDraft(draft: draft.headSha, head: pullRequest.headSha)
+        if let head, pullRequest.headSha != head {
+            throw PublishError.staleDraft(draft: head, head: pullRequest.headSha)
         }
         // Draft je otevřený stav, takže se na něj review poslat dá — GitHub to dovolí a je to
         // běžné. Zavřený a mergnutý ne.
@@ -79,13 +129,19 @@ struct GhReviewPublisher: ReviewPublishing {
         // není žádná — na rozdíl od `try?` nad operací, jejíž selhání se nedá poznat jinak.
         defer { try? FileManager.default.removeItem(at: file) }
 
+        let output = try await call(PublishRequest.arguments(for: pr, payload: file))
+        return try submitted(from: output)
+    }
+
+    /// Jedno volání `gh` a klasifikace všeho, co z něj může vypadnout.
+    ///
+    /// Sdílené **všemi** cestami ven (review, odpověď, vyřešení): kdyby si každá třídila chyby
+    /// sama, lišily by se v tom, co znamená timeout nebo zrušení — a `mightHaveReachedGitHub`
+    /// pak rozhoduje o tom, jestli okno nabídne odeslat znovu.
+    private func call(_ arguments: [String]) async throws -> String {
         let result: ProcessResult
         do {
-            result = try await runner.run(
-                gh,
-                arguments: PublishRequest.arguments(for: pr, payload: file),
-                timeout: timeout
-            )
+            result = try await runner.run(gh, arguments: arguments, timeout: timeout)
         } catch ProcessError.timedOut {
             throw PublishError.timedOut
         } catch ProcessError.launchFailed(let detail) {
@@ -100,7 +156,20 @@ struct GhReviewPublisher: ReviewPublishing {
         }
 
         guard result.exitCode == 0 else { throw PublishError(failure: result) }
-        return try submitted(from: result.standardOutput)
+        return result.standardOutput
+    }
+
+    /// Dekódování odpovědi. Selhání je vždycky `malformedResponse`, protože exit kód byl nula —
+    /// tedy volání prošlo a nerozumíme jen tomu, co přišlo zpátky.
+    private func decoded<Response: Decodable>(
+        _ type: Response.Type,
+        from output: String
+    ) throws -> Response {
+        do {
+            return try GhOutput.decoder.decode(type, from: Data(output.utf8))
+        } catch {
+            throw PublishError.malformedResponse("\(error)")
+        }
     }
 
     /// Payload do dočasného souboru, protože `ProcessRunning` neumí stdin.
@@ -138,12 +207,7 @@ struct GhReviewPublisher: ReviewPublishing {
     /// Odpověď se čte typovaně, protože o jejím tvaru rozhoduje `--json`-like kontrakt REST
     /// API a zajímá nás z ní jen pár polí.
     private func submitted(from output: String) throws -> SubmittedReview {
-        let decoded: GhSubmittedReview
-        do {
-            decoded = try GhOutput.decoder.decode(GhSubmittedReview.self, from: Data(output.utf8))
-        } catch {
-            throw PublishError.malformedResponse("\(error)")
-        }
+        let decoded = try decoded(GhSubmittedReview.self, from: output)
         guard let review = decoded.review() else {
             throw PublishError.malformedResponse("V odpovědi chybí autor review.")
         }

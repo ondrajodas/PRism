@@ -16,10 +16,9 @@ struct DiffRowView: View {
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     /// Přihlášený uživatel — kvůli odlišení mých komentářů ve vláknech.
     var viewer: String = ""
-    /// Je vlákno rozbalené? Rozhoduje store, ne tenhle view: buňka líného seznamu se při
-    /// odscrollování zahodí a vlastní `@State` by rozbalení zapomněl.
-    var isThreadExpanded: (ReviewThread) -> Bool = { _ in true }
-    var toggleThread: (ReviewThread) -> Void = { _ in }
+    /// Co se dá dělat s vlákny. Rozhoduje store, ne tenhle view: buňka líného seznamu se při
+    /// odscrollování zahodí, takže vlastní `@State` by zapomněl rozbalení i rozepsanou odpověď.
+    var threads = ThreadActions()
     /// Akce rozdělaného review svázané s tímhle souborem — cestu si doplní samy.
     var draft = FileDraftActions()
 
@@ -54,8 +53,9 @@ struct DiffRowView: View {
             ThreadBubbleView(
                 thread: thread,
                 viewer: viewer,
-                isExpanded: isThreadExpanded(thread),
-                toggle: { toggleThread(thread) }
+                isExpanded: threads.isExpanded(thread),
+                toggle: { threads.toggle(thread) },
+                actions: threads
             )
         case .draftComment(_, let comment):
             DraftCommentBubbleView(

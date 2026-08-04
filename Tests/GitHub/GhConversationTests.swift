@@ -105,6 +105,91 @@ struct GhConversationTests {
         #expect(conversation.threads.items.allSatisfy { $0.side == .right })
     }
 
+    // MARK: - Práva na vyřešení
+
+    /// Skutečná odpověď z **cizího** repa: na `cli/cli` právo vyřešit vlákno nemám, takže
+    /// `viewerCanResolve` je `false` u vyřešeného i nevyřešeného. Přesně proto se to pole
+    /// tahá — bez něj by okno nabízelo tlačítko, které vždycky selže.
+    @Test("Vlákno v cizím repu se vyřešit nedá a je to v datech")
+    func readsMissingResolveRights() throws {
+        let conversation = try load("conversation-thread-rights.json", number: 13084)
+
+        let threads = conversation.threads.items
+        let allowed = threads.filter { $0.canResolve || $0.canUnresolve }
+        // A tedy ani přepnout — v obou stavech, protože ani jedno právo tam není.
+        let togglable = threads.filter(\.canToggleResolution)
+        // Obojí schválně: kdyby ve fixture byla jen vyřešená vlákna, test by neřekl nic
+        // o tom, že se `canResolve` čte i u otevřeného.
+        let resolved = threads.filter(\.isResolved)
+        let open = threads.filter { !$0.isResolved }
+
+        #expect(threads.count == 2)
+        #expect(allowed.isEmpty)
+        #expect(togglable.isEmpty)
+        #expect(resolved.count == 1)
+        #expect(open.count == 1)
+    }
+
+    /// Starší fixtures ta pole nemají, protože vznikly dřív, než se do dotazu přidala.
+    /// Chybějící právo znamená **„smíš“** — tlačítko schované kvůli údaji, který nedorazil,
+    /// vypadá jako rozbitá aplikace, kdežto odmítnutí od GitHubu má hlášku s návodem.
+    @Test(
+        "Odpověď bez polí o právech je bere jako povolení",
+        arguments: [("conversation-small.json", 11451), ("conversation-threads.json", 13084)]
+    )
+    func treatsMissingRightsAsAllowed(fixture: String, number: Int) throws {
+        let conversation = try load(fixture, number: number)
+
+        let threads = conversation.threads.items
+        let denied = threads.filter { !$0.canResolve || !$0.canUnresolve }
+        let togglable = threads.filter(\.canToggleResolution)
+
+        #expect(!threads.isEmpty)
+        #expect(denied.isEmpty)
+        #expect(togglable.count == threads.count)
+    }
+
+    /// Každé z těch dvou práv platí v jiném stavu vlákna, takže se nedají zaměnit: GitHub
+    /// u vyřešeného vlákna posílá `canResolve: false` a `canUnresolve: true`. Kdyby okno
+    /// koukalo pořád na to samé, nabízelo by `Znovu otevřít` podle práva k opačné akci.
+    ///
+    /// Na skutečné odpovědi se to nesehná — na cizím repu jsou obě `false` a na vlastním obě
+    /// `true`, takže rozdíl se pozná až tady.
+    @Test("Co jde přepnout, rozhoduje stav vlákna")
+    func picksTheRightPermissionForTheState() throws {
+        let resolved = try thread(isResolved: true, canResolve: false, canUnresolve: true)
+        #expect(resolved.canToggleResolution)
+
+        let open = try thread(isResolved: false, canResolve: false, canUnresolve: true)
+        #expect(!open.canToggleResolution)
+    }
+
+    private func thread(
+        isResolved: Bool,
+        canResolve: Bool,
+        canUnresolve: Bool
+    ) throws -> ReviewThread {
+        let json = """
+        {"data": {"viewer": {"login": "ondrajodas"},
+          "repository": {"pullRequest": {"number": 1,
+            "reviews": {"totalCount": 0, "nodes": []},
+            "comments": {"totalCount": 0, "nodes": []},
+            "reviewThreads": {"totalCount": 1, "nodes": [
+              {"id": "PRRT_1", "path": "src/Cart.php", "line": 5, "originalLine": 5,
+               "diffSide": "RIGHT", "isResolved": \(isResolved), "isOutdated": false,
+               "viewerCanResolve": \(canResolve), "viewerCanUnresolve": \(canUnresolve),
+               "comments": {"totalCount": 0, "nodes": []}}]}}}}}
+        """
+        let response = try GhOutput.decoder.decode(
+            GhConversationResponse.self,
+            from: Data(json.utf8)
+        )
+        let conversation = try response.conversation(
+            id: PRIdentifier(repo: RepoID("ondrajodas/PRism")!, number: 1)
+        )
+        return try #require(conversation.threads.items.first)
+    }
+
     // MARK: - Odpovědi ve vláknech
 
     @Test("Odpověď ve vlákně ukazuje na svého předchůdce")

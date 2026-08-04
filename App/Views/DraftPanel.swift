@@ -216,6 +216,7 @@ struct DraftPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
+                sharedAnchorNote
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(commentList) { comment in
@@ -231,6 +232,31 @@ struct DraftPanel: View {
     }
 
     private var commentList: [ReviewDraftComment] { draft?.comments ?? [] }
+
+    /// Dva komentáře na jednom řádku **nedají odpověď**, ale dvě samostatná vlákna.
+    ///
+    /// Je to jediná věc na téhle obrazovce, kterou se dá čekat a nestane se: člověk připíše
+    /// druhý komentář k témuž řádku s tím, že navazuje na první. Změřeno u #73, že GitHub z toho
+    /// udělá dvě vlákna — takže než aby to bylo překvapení až na PR, řekne se to tady.
+    ///
+    /// Odpovídat **jde**, jen až potom: z odeslaného komentáře se stane vlákno a v něm už je
+    /// tlačítko `Odpovědět`.
+    @ViewBuilder private var sharedAnchorNote: some View {
+        let lines = Policy.linesWithSeveralComments(in: draft)
+        if lines > 0 {
+            Label {
+                // Mluví se o **řádcích**, ne o počtu komentářů: dvě různé kotvy po dvou
+                // komentářích nejsou „čtyři komentáře na stejném řádku“. Chytil to Copilot.
+                Text(verbatim: "\(Plural.czech(lines, one: "Na jednom řádku", few: "Na \(lines) řádcích", many: "Na \(lines) řádcích")) máš víc komentářů — odejdou jako samostatná vlákna, ne jako odpověď. Odpovědět půjde, až review odešleš.")
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "info.circle")
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 
     private var commentsTitle: String {
         commentList.isEmpty

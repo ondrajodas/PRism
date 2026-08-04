@@ -26,8 +26,8 @@ struct DiffView: View {
     /// řádově víc, než kolik jich vzniká.
     var missingThreads = 0
     var viewer: String = ""
-    var isThreadExpanded: (ReviewThread) -> Bool = { _ in true }
-    var toggleThread: (ReviewThread) -> Void = { _ in }
+    /// Rozbalení, odpovídání a vyřešení vláken (#73) — jeden parametr, protože patří k sobě.
+    var threadActions = ThreadActions()
     /// Moje rozdělané komentáře. Kreslí se ty, které v diffu mají kotvu — celý seznam je
     /// v panelu, takže se komentář na zmizelém řádku neztratí.
     var comments: [ReviewDraftComment] = []
@@ -135,8 +135,7 @@ struct DiffView: View {
                 highlighted: highlighted,
                 blockingCategories: blockingCategories,
                 viewer: viewer,
-                isThreadExpanded: isThreadExpanded,
-                toggleThread: toggleThread,
+                threads: threadActions,
                 draft: fileDraft
             )
         }

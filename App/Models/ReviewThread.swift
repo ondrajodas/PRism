@@ -22,6 +22,16 @@ struct ReviewThread: Hashable, Codable, Sendable {
     let side: DiffSide?
     let isResolved: Bool
     let isOutdated: Bool
+    /// Smím vlákno označit za vyřešené? Říká to GitHub (`viewerCanResolve`) — právo na to
+    /// nemá každý, kdo PR vidí.
+    ///
+    /// Drží se **obě** práva, ne jedno odvozené: GitHub je vyhodnocuje podle stavu vlákna
+    /// (u vyřešeného je `canResolve` false a `canUnresolve` true), takže složit je do jednoho
+    /// příznaku už při mapování by zahodilo, co k tomu API řeklo. Co potřebuje okno, dává
+    /// `canToggleResolution`.
+    let canResolve: Bool
+    /// Smím vyřešené vlákno otevřít zpátky (`viewerCanUnresolve`)?
+    let canUnresolve: Bool
     let comments: ConversationPage<ThreadComment>
 
     init(
@@ -32,6 +42,8 @@ struct ReviewThread: Hashable, Codable, Sendable {
         side: DiffSide?,
         isResolved: Bool,
         isOutdated: Bool,
+        canResolve: Bool = true,
+        canUnresolve: Bool = true,
         comments: ConversationPage<ThreadComment>
     ) {
         self.id = id
@@ -41,8 +53,17 @@ struct ReviewThread: Hashable, Codable, Sendable {
         self.side = side
         self.isResolved = isResolved
         self.isOutdated = isOutdated
+        self.canResolve = canResolve
+        self.canUnresolve = canUnresolve
         self.comments = comments
     }
+
+    /// Dá se stav vyřešení z aplikace přepnout?
+    ///
+    /// Podle stavu vlákna, protože každé z těch dvou práv platí v jiném: u otevřeného vlákna
+    /// rozhoduje `canResolve`, u vyřešeného `canUnresolve`. Bez toho by okno nabízelo
+    /// `Znovu otevřít` na základě práva, které se vztahuje k opačné akci.
+    var canToggleResolution: Bool { isResolved ? canUnresolve : canResolve }
 
     /// Číslo řádku, u kterého se vlákno má ukázat: aktuální, a když zastaralo, to původní.
     ///
