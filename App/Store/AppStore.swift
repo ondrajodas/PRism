@@ -1413,11 +1413,19 @@ final class AppStore {
     /// `failed` naopak signál je, i když příčina může být na naší straně (třeba neexistující
     /// skill); věta v nápovědě proto říká, co přišlo na stderr, a to, jestli za to může
     /// Claude, se pozná ze žlutého puntíku.
+    /// **Při opakovaném selhání se `since` drží.** Nese začátek výpadku, ne poslední pokus —
+    /// jinak by se „Nedaří se od …“ posouvalo s každou další spadlou session a nešlo by poznat,
+    /// jak dlouho to trvá. Je to tatáž úvaha (a tatáž věta v nápovědě) jako
+    /// `PollingService.failingSince`; u GitHubu ji drží `PollState`, tady ji musí držet tohle.
     private func record(_ outcome: ReviewRunOutcome) {
         switch outcome {
-        case .finished: lastReviewCall = ServiceCall(since: time.now)
-        case .failed(let detail): lastReviewCall = ServiceCall(since: time.now, failure: detail)
-        case .timedOut: break
+        case .finished:
+            lastReviewCall = ServiceCall(since: time.now)
+        case .failed(let detail):
+            let failingSince = lastReviewCall.flatMap { $0.succeeded ? nil : $0.since } ?? time.now
+            lastReviewCall = ServiceCall(since: failingSince, failure: detail)
+        case .timedOut:
+            break
         }
     }
 

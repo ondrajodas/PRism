@@ -114,14 +114,14 @@ struct HealthMonitorTests {
         monitor.lastCall = { _ in ServiceCall(since: Date(timeIntervalSince1970: 1_000_000)) }
 
         let task = Task { await monitor.run() }
-        while monitor.isOnline == nil { await Task.yield() }
+        while monitor.isOnline == nil { try await Self.pause() }
 
         #expect(monitor.reports.allSatisfy { $0.state == .offline })
 
         reachability.send(true)
-        while monitor.isOnline != true { await Task.yield() }
-        // Kolo se dožaduje výslovně, ne přes smyčku: `FakeTimeSource` neuspává, takže na
-        // pořadí, ve kterém plánovač pustí obě větve `run()`, není spoleh.
+        while monitor.isOnline != true { try await Self.pause() }
+        // Kolo se dožaduje výslovně, ne přes smyčku monitoru: `FakeTimeSource` neuspává,
+        // takže na pořadí, ve kterém plánovač pustí obě větve `run()`, není spoleh.
         await monitor.refresh()
         #expect(monitor.reports.allSatisfy { $0.state == .operational })
 
@@ -130,20 +130,20 @@ struct HealthMonitorTests {
     }
 
     @Test("Když okno není vidět, nekontroluje se nic")
-    func nothingIsCheckedWhileHidden() async {
+    func nothingIsCheckedWhileHidden() async throws {
         let statusPage = FakeStatusPage(.success(.fetched(Self.operational)))
         let time = FakeTimeSource(stopAfter: 4)
         let monitor = HealthMonitor(statusPage: statusPage, reachability: FakeReachability(), time: time)
         monitor.isWindowVisible = false
 
-        await run(monitor, until: time, sleeps: 4)
+        try await run(monitor, until: time, sleeps: 4)
 
         // Aplikace na pozadí nemá komu svítit puntíkem — a HTTP dotaz za nic je zbytečný.
         #expect(statusPage.reads.isEmpty)
     }
 
     @Test("Skryté okno interval neposouvá, takže po návratu se zkontroluje hned")
-    func hiddenWindowDoesNotSpendTheInterval() async {
+    func hiddenWindowDoesNotSpendTheInterval() async throws {
         let statusPage = FakeStatusPage(.success(.fetched(Self.operational)))
         // Tři takty naslepo (90 s) a pak jeden po návratu okna. Kdyby skryté okno interval
         // posouvalo, druhá smyčka by se dívala na uplynulých 90 s z deseti minut a nesáhla
@@ -153,14 +153,14 @@ struct HealthMonitorTests {
         monitor.isWindowVisible = false
 
         // Dvě smyčky za sebou, ne přepnutí za běhu: `FakeTimeSource` neuspává, takže smyčka
-        // dojede celá při prvním `yield`u a přepnout ji uprostřed by byl závod.
-        await run(monitor, until: time, sleeps: 3)
+        // dojede celá při první odmlce testu a přepnout ji uprostřed by byl závod.
+        try await run(monitor, until: time, sleeps: 3)
         #expect(statusPage.reads.isEmpty)
 
         monitor.isWindowVisible = true
         // Čtvrté uspání je to, na kterém `FakeTimeSource` smyčku ukončí — takže druhý běh
         // je právě jedno kolo.
-        await run(monitor, until: time, sleeps: 4)
+        try await run(monitor, until: time, sleeps: 4)
 
         #expect(statusPage.reads == MonitoredService.allCases)
     }
@@ -168,29 +168,39 @@ struct HealthMonitorTests {
     /// Pustí smyčku, počká na daný počet uspání a uklidí ji.
     ///
     /// Zrušení je potřeba i po vyčerpaných uspáních: kontrola stavu skončí sama, ale hlídání
-    /// sítě běží dál, takže `run()` bez něj nevrátí. Čeká se točením přes `Task.yield()` —
+    /// sítě běží dál, takže `run()` bez něj nevrátí. Čeká se v smyčce bez horní hranice —
     /// test, který se nedočká, uvízne, a to je srozumitelnější než náhodné padání.
-    private func run(_ monitor: HealthMonitor, until time: FakeTimeSource, sleeps: Int) async {
+    private func run(_ monitor: HealthMonitor, until time: FakeTimeSource, sleeps: Int) async throws {
         let task = Task { await monitor.run() }
-        while time.requestedSleeps.count < sleeps { await Task.yield() }
+        while time.requestedSleeps.count < sleeps { try await Self.pause() }
         task.cancel()
         await task.value
     }
 
+    /// Krátká odmlka, **ne `Task.yield()`**.
+    ///
+    /// Suita je `@MainActor` a Swift Testing pouští suity paralelně, takže spin bez odmlky
+    /// vyhladoví testy, které čekají na skutečné procesy — změřeno na `SubprocessStreamerTests`,
+    /// kde se zabíjený proces nestihl zabít dřív, než mu doběhl `sleep 1`. Tatáž lekce jako
+    /// u `ReviewSubmission`.
+    private static func pause() async throws {
+        try await Task.sleep(for: .milliseconds(1))
+    }
+
     @Test("Ve výchozím stavu se kontroluje po deseti minutách")
-    func defaultIntervalIsTenMinutes() async {
+    func defaultIntervalIsTenMinutes() async throws {
         let statusPage = FakeStatusPage(.success(.fetched(Self.operational)))
         // Takt je 30 s, takže 21 uspání je 630 s — právě tak, aby druhé kolo padlo dovnitř.
         let time = FakeTimeSource(stopAfter: 21)
         let monitor = HealthMonitor(statusPage: statusPage, reachability: FakeReachability(), time: time)
 
-        await run(monitor, until: time, sleeps: 21)
+        try await run(monitor, until: time, sleeps: 21)
 
         #expect(statusPage.reads.count == 2 * MonitoredService.allCases.count)
     }
 
     @Test("Po selhaném volání se kontroluje častěji")
-    func failedCallShortensTheInterval() async {
+    func failedCallShortensTheInterval() async throws {
         let statusPage = FakeStatusPage(.success(.fetched(Self.operational)))
         let time = FakeTimeSource(stopAfter: 5)
         let monitor = HealthMonitor(statusPage: statusPage, reachability: FakeReachability(), time: time)
@@ -198,7 +208,7 @@ struct HealthMonitorTests {
         // s odpovědí „oni, nebo já?“ je to nejmíň užitečné, co může řádek udělat.
         monitor.lastCall = { _ in ServiceCall(since: Date(timeIntervalSince1970: 1_000_000), failure: "spadlo") }
 
-        await run(monitor, until: time, sleeps: 5)
+        try await run(monitor, until: time, sleeps: 5)
 
         // 150 s při zkráceném intervalu 60 s = tři kola; s desetiminutovým by bylo jedno.
         #expect(statusPage.reads.count == 3 * MonitoredService.allCases.count)

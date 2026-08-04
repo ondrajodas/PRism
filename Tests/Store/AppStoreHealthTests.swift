@@ -45,11 +45,12 @@ struct AppStoreHealthTests {
     private func store(
         gateway: FakeGitHubGateway,
         health: HealthMonitor,
-        reviewer: FakeReviewRunner = FakeReviewRunner()
+        reviewer: FakeReviewRunner = FakeReviewRunner(),
+        time: FakeTimeSource = FakeTimeSource()
     ) -> AppStore {
         AppStore(
             gateway: gateway,
-            time: FakeTimeSource(),
+            time: time,
             checkout: FakeRepoCheckout(),
             reviewer: reviewer,
             reviews: ReviewStore(layout: layout, time: FakeTimeSource()),
@@ -57,8 +58,16 @@ struct AppStoreHealthTests {
         )
     }
 
-    private func waitUntilIdle(_ store: AppStore) async {
-        for _ in 0..<100_000 where store.isReviewing(pr) { await Task.yield() }
+    /// Počká, až review doběhne — **odmlkami, ne `Task.yield()`**.
+    ///
+    /// Spin by běžel na `MainActoru` a Swift Testing pouští suity paralelně, takže by
+    /// vyhladověl testy, které čekají na skutečné procesy. Změřeno: s `yield()` padal
+    /// `SubprocessStreamerTests` („Zrušení proces zabije“), protože se zabíjený proces
+    /// nestihl zabít dřív, než mu doběhl `sleep 1`. Tatáž lekce jako u `ReviewSubmission`.
+    private func waitUntilIdle(_ store: AppStore) async throws {
+        for _ in 0..<2_000 where store.isReviewing(pr) {
+            try await Task.sleep(for: .milliseconds(1))
+        }
         #expect(!store.isReviewing(pr))
     }
 
@@ -121,7 +130,7 @@ struct AppStoreHealthTests {
         )
 
         store.startReview(for: pr)
-        await waitUntilIdle(store)
+        try await waitUntilIdle(store)
 
         let report = try #require(store.healthReports.first { $0.service == .claude })
         #expect(report.state == .operational)
@@ -136,11 +145,35 @@ struct AppStoreHealthTests {
         )
 
         store.startReview(for: pr)
-        await waitUntilIdle(store)
+        try await waitUntilIdle(store)
 
         let report = try #require(store.healthReports.first { $0.service == .claude })
         #expect(report.state == .failing)
         #expect(report.reason.contains("command not found"))
+    }
+
+    @Test("Opakovaná selhání session drží začátek výpadku")
+    func repeatedFailuresKeepTheStartOfTheOutage() async throws {
+        let time = FakeTimeSource()
+        let store = store(
+            gateway: FakeGitHubGateway(always: .success([]), detail: .success(detail)),
+            health: monitor(),
+            reviewer: FakeReviewRunner(outcome: .failed(detail: "claude: command not found")),
+            time: time
+        )
+
+        store.startReview(for: pr)
+        try await waitUntilIdle(store)
+        let outageStarted = store.lastReviewCall?.since
+        try await time.sleep(for: .seconds(600))
+        store.startReview(for: pr)
+        try await waitUntilIdle(store)
+
+        // Nápověda říká „Nedaří se od …“, takže razítko nese **začátek** výpadku. Kdyby se
+        // posouvalo s každou další spadlou session, nešlo by poznat, jak dlouho to trvá —
+        // u GitHubu to drží `PollState.failing(since:)` a tady to musí držet store.
+        #expect(store.lastReviewCall?.since == outageStarted)
+        #expect(store.lastReviewCall?.succeeded == false)
     }
 
     @Test("Vytimeoutovaná session není zdravotní signál")
@@ -152,7 +185,7 @@ struct AppStoreHealthTests {
         )
 
         store.startReview(for: pr)
-        await waitUntilIdle(store)
+        try await waitUntilIdle(store)
 
         // Session jsme po patnácti minutách zabili sami — z toho nejde vyvodit ani
         // „funguje“, ani „nefunguje“, a dlouhé review je běžná věc.
