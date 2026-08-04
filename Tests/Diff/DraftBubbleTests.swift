@@ -35,10 +35,12 @@ struct DraftBubbleTests {
         ReviewDraftComment(path: path, line: line, side: side, body: body, origin: origin)
     }
 
+    /// Komentáře v pořadí, ve kterém se kreslí. Jeden řádek nese komentáře k oběma stranám
+    /// (od #98 stojí ve split pohledu vedle sebe), takže se strany skládají za sebe.
     private func comments(in rows: [DiffRow]) -> [ReviewDraftComment] {
-        rows.compactMap { row in
-            guard case .draftComment(_, let comment) = row else { return nil }
-            return comment
+        rows.flatMap { row in
+            guard case .draftComments(_, let left, let right) = row else { return [ReviewDraftComment]() }
+            return left + right
         }
     }
 
@@ -56,7 +58,7 @@ struct DraftBubbleTests {
     func hangsUnderItsLine() throws {
         let rows = DiffRow.rows(of: try file(), comments: [comment(line: 26)])
 
-        let index = try #require(rows.firstIndex { if case .draftComment = $0 { true } else { false } })
+        let index = try #require(rows.firstIndex { if case .draftComments = $0 { true } else { false } })
         #expect(try line(above: index, in: rows).newNumber == 26)
     }
 
@@ -66,7 +68,7 @@ struct DraftBubbleTests {
     func hangsALeftSideCommentOnTheRemovedLine() throws {
         let rows = DiffRow.rows(of: try file(), comments: [comment(line: 26, side: .left)])
 
-        let index = try #require(rows.firstIndex { if case .draftComment = $0 { true } else { false } })
+        let index = try #require(rows.firstIndex { if case .draftComments = $0 { true } else { false } })
         let anchor = try line(above: index, in: rows)
         #expect(anchor.kind == .removed)
         #expect(anchor.oldNumber == 26)
@@ -126,7 +128,7 @@ struct DraftBubbleTests {
             switch row {
             case .finding: "finding"
             case .thread: "thread"
-            case .draftComment: "draft"
+            case .draftComments: "draft"
             default: nil
             }
         }

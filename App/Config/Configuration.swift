@@ -40,6 +40,13 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// reviewer píše — jeho prompt o jazyku mlčí. Výchozí čeština, protože okno je české
     /// a anglické nálezy vedle českých popisků působily jako dva slepené nástroje.
     var findingsLanguage: FindingsLanguage
+    /// S jakým pohledem se diff otevírá. Výchozí `unified`, tedy dnešní chování.
+    ///
+    /// Per repo se to **nenastavuje**: `mode` nebo `skills` jsou vlastnost repa, kdežto jak
+    /// se čte diff, je vlastnost člověka, který ho čte. Přepínač v liště nad diffem je proti
+    /// tomuhle jen odchylka do zavření aplikace — do souboru nezapisuje, jinak by hodnota
+    /// tady přestala být tou, které se říká výchozí.
+    var diffLayout: DiffLayout
     /// V sekundách, ne `Duration` — soubor se edituje ručně a `Duration` se do JSONu
     /// kóduje jako dvojice čísel, kterou nikdo nenapíše.
     var pollIntervalSeconds: Int
@@ -60,6 +67,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         mode: ReviewMode,
         allowsPublishing: Bool = false,
         findingsLanguage: FindingsLanguage = .czech,
+        diffLayout: DiffLayout = .unified,
         pollIntervalSeconds: Int,
         maxConcurrentReviews: Int,
         autoRunsPerDay: Int = 20,
@@ -73,6 +81,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.mode = mode
         self.allowsPublishing = allowsPublishing
         self.findingsLanguage = findingsLanguage
+        self.diffLayout = diffLayout
         self.pollIntervalSeconds = pollIntervalSeconds
         self.maxConcurrentReviews = maxConcurrentReviews
         self.autoRunsPerDay = autoRunsPerDay
@@ -102,6 +111,10 @@ struct GlobalConfig: Codable, Equatable, Sendable {
             ?? standard.allowsPublishing
         findingsLanguage = (try? container.decode(FindingsLanguage.self, forKey: .findingsLanguage))
             ?? standard.findingsLanguage
+        // Tolerantně jako jazyk nálezů, ne přísně jako režim nebo odesílání: nejhorší
+        // následek překlepu je jiný pohled na diff, který se otočí jedním kliknutím
+        // v liště — nespustí review ani neotevře cestu ven.
+        diffLayout = (try? container.decode(DiffLayout.self, forKey: .diffLayout)) ?? standard.diffLayout
         pollIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds)
             ?? standard.pollIntervalSeconds
         maxConcurrentReviews = try container.decodeIfPresent(Int.self, forKey: .maxConcurrentReviews)
@@ -211,6 +224,7 @@ struct Configuration: Codable, Equatable, Sendable {
             mode: .manual,
             allowsPublishing: false,
             findingsLanguage: .czech,
+            diffLayout: .unified,
             pollIntervalSeconds: 60,
             maxConcurrentReviews: 3,
             autoRunsPerDay: 20,

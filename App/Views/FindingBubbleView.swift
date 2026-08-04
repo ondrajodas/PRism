@@ -15,6 +15,9 @@ struct FindingBubbleView: View {
     var isHighlighted = false
     /// Převzetí nálezu do rozdělaného review.
     var draft = FileDraftActions()
+    /// Odsazení do sloupce s obsahem. Ve split pohledu je v buňce jedno číslo řádku místo
+    /// dvou, takže je kratší — stejný parametr jako u `ThreadBubbleView`.
+    var indent: Double = 104
 
     /// Kolik řádků kolem nálezu se ukáže, když si o to uživatel řekne. Samotný řádek bez
     /// okolí se čte špatně.
@@ -39,7 +42,7 @@ struct FindingBubbleView: View {
                 .strokeBorder(.tint, lineWidth: isHighlighted ? 2 : 0)
         }
         .animation(.easeOut(duration: 0.2), value: isHighlighted)
-        .padding(.leading, 104)   // odsazení do sloupce s obsahem, vedle čísel řádků
+        .padding(.leading, indent)   // odsazení do sloupce s obsahem, vedle čísel řádků
         .padding(.trailing, 16)
         .padding(.vertical, 4)
     }

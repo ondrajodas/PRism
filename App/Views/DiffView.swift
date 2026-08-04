@@ -32,6 +32,13 @@ struct DiffView: View {
     /// v panelu, takže se komentář na zmizelém řádku neztratí.
     var comments: [ReviewDraftComment] = []
     var draft = DraftActions()
+    /// Pohled na diff — pod sebou, nebo vedle sebe.
+    ///
+    /// Binding do storu, ne `@AppStorage` jako u přepínače nálezů: výchozí hodnota je
+    /// v `config.json` (mění se v nastavení) a přepínač v liště je proti ní jen **odchylka do
+    /// zavření aplikace**. Zapisovat ji na disk by znamenalo, že se nastavená hodnota mění
+    /// sama tím, že si člověk u jednoho souboru otočí pohled.
+    @Binding var layout: DiffLayout
 
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
@@ -112,6 +119,7 @@ struct DiffView: View {
         let language = Language(path: file.displayPath)
         let rows = DiffRow.rows(
             of: file,
+            layout: layout,
             revealed: state.revealed,
             content: state.content,
             findings: showBubbles ? findings : [],
@@ -129,6 +137,7 @@ struct DiffView: View {
             DiffRowView(
                 row: row,
                 language: language,
+                layout: layout,
                 isLoadingContent: state.isLoading,
                 contentFailure: state.failure,
                 reveal: { expansion.reveal(file, $0) },
@@ -153,6 +162,7 @@ struct DiffView: View {
                 missingThreadsWarning
             }
             Spacer()
+            layoutPicker
             if !findings.isEmpty {
                 // Jmenuje se `Nálezy`, ne `Bubliny`: schovává **jen** nálezy, kdežto
                 // „bubliny“ jsou od #64 i vlákna konverzace. Chytilo se to při zkoušení —
@@ -174,6 +184,28 @@ struct DiffView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+    }
+
+    /// Přepnutí pohledu na diff. Segmentovaný přepínač s ikonami, ne přepínač v nastavení:
+    /// otočit pohled je věc, která se dělá **při čtení konkrétního souboru** — chodit pro ni
+    /// do ⌘, a hledat pole je pro tenhle pohyb špatné.
+    ///
+    /// Zůstává **do zavření aplikace** a napříč pull requesty: pohled je způsob čtení, takže
+    /// přepnutím na jiný PR nemá důvod se vracet. Po restartu platí zase to, co je v nastavení.
+    private var layoutPicker: some View {
+        Picker("Pohled na diff", selection: $layout) {
+            ForEach(DiffLayout.allCases, id: \.self) { option in
+                Image(systemName: option.symbol)
+                    .accessibilityLabel(Text(verbatim: option.displayName))
+                    .tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+        // Popisek zůstává vyplněný a jen se schová: pro VoiceOver je to pořád jediný popis
+        // celého přepínače.
+        .labelsHidden()
+        .fixedSize()
+        .help("Kreslit diff vedle sebe (starý a nový obsah proti sobě), nebo pod sebou")
     }
 
     /// Jedno tlačítko, ne dvě. Který ze dvou stavů dává smysl, plyne z toho, co je zrovna

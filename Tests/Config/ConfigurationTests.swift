@@ -340,6 +340,9 @@ struct ConfigurationTests {
         // podmínka č. 1: dokud si o to někdo výslovně neřekne, neodejde na GitHub nic.
         #expect(!standard.allowsPublishing)
         #expect(standard.findingsLanguage == .czech)
+        // Výchozí pohled na diff je ten, který aplikace kreslila před #98 — nový pohled se
+        // nemá zapnout sám.
+        #expect(standard.diffLayout == .unified)
         #expect(standard.pollIntervalSeconds == 60)
         #expect(standard.maxConcurrentReviews == 3)
         #expect(standard.cacheBudgetMegabytes == 10 * 1024)
@@ -485,6 +488,37 @@ struct RepositoryConfigDecodingTests {
     func readsTheGlobalMode() throws {
         let configuration = try self.configuration(#"{"global": {"mode": "automatic"}}"#)
 
+        #expect(configuration.global.mode == .automatic)
+    }
+
+    // MARK: - Pohled na diff
+
+    @Test("Pohled na diff ze souboru se přečte")
+    func readsTheDiffLayout() throws {
+        let configuration = try self.configuration(#"{"global": {"diffLayout": "split"}}"#)
+
+        #expect(configuration.global.diffLayout == .split)
+    }
+
+    /// Chybějící klíč znamená dnešní chování — konfigurace bez `diffLayout` je ta, kterou má
+    /// na disku každý, kdo aplikaci používal před #98.
+    @Test("Chybějící pohled na diff bere výchozí")
+    func fallsBackOnAMissingDiffLayout() throws {
+        let configuration = try self.configuration(#"{"global": {"mode": "automatic"}}"#)
+
+        #expect(configuration.global.diffLayout == .unified)
+    }
+
+    /// Tolerantně jako jazyk nálezů, ne přísně jako režim: nejhorší následek překlepu je jiný
+    /// pohled na diff, který se otočí jedním kliknutím v liště. A celý soubor kvůli němu
+    /// zmizet nesmí.
+    @Test("Rozbitý pohled na diff nezahodí zbytek konfigurace")
+    func survivesABrokenDiffLayout() throws {
+        let configuration = try self.configuration(
+            #"{"global": {"diffLayout": "vedle-sebe", "mode": "automatic"}}"#
+        )
+
+        #expect(configuration.global.diffLayout == .unified)
         #expect(configuration.global.mode == .automatic)
     }
 }

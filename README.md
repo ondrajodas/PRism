@@ -62,6 +62,25 @@ zůstává nahoře, souhrn `N souborů · +X −Y` a menu na skok mezi soubory. 
 smazané i binární soubory jsou označené; dlouhé řádky se zalamují, protože 120 znaků se do
 plné šířky vejde.
 
+Diff se dá kreslit **dvěma způsoby** a přepíná se segmentovaným přepínačem v liště nad ním:
+`Pod sebou` je klasický unified diff (odebrané a přidané řádky pod sebou, dvě čísla vlevo),
+`Vedle sebe` staví starý obsah vlevo a nový vpravo, spárovaný po řádcích. U přepsaného bloku
+se tím odpadá páření `-` a `+` řádků očima, což je u review nejčastější otázka. Blok
+odebraných řádků se s následujícím blokem přidaných spáruje pozičně; přebytek na kterékoli
+straně dostane prázdnou buňku s neutrálním pozadím. Kontextový řádek stojí na obou stranách,
+hlavička hunku, rozbalovací řádek, bubliny i poznámky `git`u jdou přes celou šířku. Všechno,
+co diff umí pod sebou, umí i vedle sebe — bubliny, rozbalování kontextu, obarvení, sbalování
+souborů i skok z tabulky nálezů. **Rozepsaný komentář visí jen v té půlce, které se týká** —
+komentář k odebranému řádku vlevo, k novému vpravo, a když komentuješ obě strany téhož řádku,
+stojí oba **vedle sebe**. Nálezy a cizí vlákna zůstávají přes celou šířku, protože se na stranu
+nevážou a nesou delší text.
+
+**S jakým pohledem se diff otevírá, je v nastavení** (`Diff → Pohled na diff`, v souboru
+`global.diffLayout`); výchozí je `Pod sebou`, tedy dosavadní chování. Přepínač v liště je
+proti tomu jen odchylka: platí napříč pull requesty do zavření aplikace a do konfigurace
+nezapisuje — nastavení říká „takhle to chci mít“, přepínač „teď se na to podívám jinak“.
+Per repo se pohled nenastavuje, protože jak se čte diff, je vlastnost člověka, ne repozitáře.
+
 **Klik na hlavičku souboru jeho diff sbalí a rozbalí**, jako na GitHubu — u PR přes deset
 souborů je to hlavní způsob, jak se v něm pohybovat. Hlavička zůstává vidět i se `+N −M`
 a s odznakem, kolik je v souboru nálezů (červeným, když je mezi nimi blokující). V horní
@@ -440,7 +459,7 @@ App/                      zdrojáky aplikace — target PRism
   GitHub/                 čtení PR a konverzace přes gh CLI: gateway, typované chyby, tvar výstupu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Config/                 config.json: globální default, override per repo, čtení a zápis
-  Diff/                   parsování unified diffu na soubory, hunky a řádky
+  Diff/                   parsování unified diffu na soubory, hunky a řádky + slití do dvojic pro pohled vedle sebe
   Health/                 dostupnost služeb pro stavový řádek: status pages, signály, monitor
   Markdown/               vykreslení Markdownu z GitHubu: bloky, inline HTML od botů
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka

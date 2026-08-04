@@ -35,10 +35,10 @@ struct DraftActions {
     /// Volající uvnitř diffu tak nemá jak poslat komentář na jiný soubor, než u kterého
     /// zrovna je. Kotvy se předávají jako hotová mapa, protože počítat je pro každý řádek
     /// zvlášť je kvadratické (viz `Policy.commentAnchors(in:)`).
-    func bound(to file: FileDiff, anchors: [DiffLine: DraftAnchor]) -> FileDraftActions {
+    func bound(to file: FileDiff, anchors: [DiffLine: LineAnchors]) -> FileDraftActions {
         FileDraftActions(
             canCompose: canCompose,
-            anchor: { anchors[$0] },
+            anchors: { anchors[$0] ?? LineAnchors() },
             comment: { addComment(file.displayPath, $0) },
             note: { addNote(file.displayPath, $0) },
             adopt: adopt,
@@ -53,8 +53,8 @@ struct DraftActions {
 /// Akce draftu uvnitř jednoho souboru diffu.
 struct FileDraftActions {
     var canCompose = false
-    /// Kotva komentáře na řádku — `nil` u řádku, který komentář neunese.
-    var anchor: (DiffLine) -> DraftAnchor? = { _ in nil }
+    /// Kotvy komentáře na řádku po stranách — prázdné u řádku, který komentář neunese.
+    var anchors: (DiffLine) -> LineAnchors = { _ in LineAnchors() }
     var comment: (DraftAnchor) -> Void = { _ in }
     var note: (Int?) -> Void = { _ in }
     var adopt: (Finding) -> Void = { _ in }
@@ -65,9 +65,15 @@ struct FileDraftActions {
 
     /// Co jde na řádku udělat. `nil` = nic — meta řádek ani hlavička hunku obsah souboru
     /// nejsou, takže se k nim nedá vztáhnout ani poznámka.
-    func action(for line: DiffLine) -> LineDraftAction? {
+    ///
+    /// `side` říká, **na kterou stranu diffu se ptáme**. Ve split pohledu se ptá buňka za sebe,
+    /// aby komentář vznikl tam, kam se kliklo — kontextový řádek unese obě strany (změřeno #98).
+    /// V pohledu pod sebou je `nil` a platí kanonická strana.
+    func action(for line: DiffLine, on side: DiffSide? = nil) -> LineDraftAction? {
         guard canCompose else { return nil }
-        if let anchor = anchor(line) { return .comment(anchor) }
+        let anchors = anchors(line)
+        let anchor: DraftAnchor? = if let side { anchors.anchor(on: side) } else { anchors.preferred }
+        if let anchor { return .comment(anchor) }
         // Rozbalený kontext (#47) v diffu není, takže na něj GitHub řádkový komentář
         // nepustí — poznámka s odkazem na kód je jediné, co k němu jde napsat.
         return line.newNumber.map { .note(line: $0) }

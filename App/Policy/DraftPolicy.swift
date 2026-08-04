@@ -23,6 +23,33 @@ enum DraftTarget: Hashable, Sendable {
     case body(path: String?, line: Int?)
 }
 
+/// Na které strany diffu se dá na jednom řádku komentovat.
+///
+/// Kontextový (nezměněný) řádek unese **obě**: je v obou verzích souboru, takže komentář jde
+/// napsat vlevo i vpravo. **Změřeno u #98 na živém API** — `side: LEFT` na nezměněném řádku
+/// GitHub přijme a zapíše jako `side: LEFT` s `line == original_line`; dokumentace u nezměněných
+/// řádků `RIGHT` jen doporučuje, `LEFT` nezakazuje. Bez toho by ve split pohledu kliknutí do levé
+/// poloviny založilo komentář vpravo, tedy „okno se otevře jinde, než kam jsem klikl“.
+struct LineAnchors: Hashable, Sendable {
+    var left: DraftAnchor?
+    var right: DraftAnchor?
+
+    var isEmpty: Bool { left == nil && right == nil }
+
+    /// Kotva pro konkrétní stranu; `nil` = na tuhle stranu se komentovat nedá.
+    func anchor(on side: DiffSide) -> DraftAnchor? {
+        switch side {
+        case .left: left
+        case .right: right
+        }
+    }
+
+    /// Kotva pro pohled pod sebou, kde se strana nevybírá — a pro převzatý nález, který stranu
+    /// nemá. `right` je výchozí strana GitHubu a u nezměněného řádku ukazuje na novou verzi
+    /// souboru, tedy na to, co člověk čte.
+    var preferred: DraftAnchor? { right ?? left }
+}
+
 /// Rozhodování nad rozdělaným review. Čisté funkce, žádné I/O.
 extension Policy {
     /// Ke které straně diffu by šel komentář na tomhle řádku — `nil` znamená „nedá se
@@ -39,12 +66,15 @@ extension Policy {
     /// souboru neexistuje a jeho číslo je ze starého — bez správné strany by komentář odešel
     /// na jiný řádek.
     ///
+    /// Vrací **kanonickou** stranu, tedy tu, která platí, když se nikdo neptá na konkrétní
+    /// polovinu. Kontextový řádek unese i `left` (změřeno u #98) — na to je `LineAnchors`.
+    ///
     /// **Rozbalený kontext (#47) komentovat nejde.** Jsou to řádky, které v diffu nejsou:
     /// dotáhly se ze souboru, aby se nález mimo diff dal přečíst. Pozná se to tím, že řádek
     /// v žádném hunku není — `DiffRow` je skládá jako obyčejný kontext s oběma čísly, takže
     /// ze samotného `DiffLine` to poznat nelze a příslušnost k hunku se musí ověřit.
     static func commentableSide(of line: DiffLine, in file: FileDiff) -> DiffSide? {
-        guard let side = side(of: line.kind) else { return nil }
+        guard let side = sides(of: line.kind).first else { return nil }
         guard file.hunks.contains(where: { $0.lines.contains(line) }) else { return nil }
         return side
     }
@@ -55,8 +85,17 @@ extension Policy {
     }
 
     /// Kotva komentáře na tomhle řádku — `nil` znamená „nedá se komentovat“.
+    ///
+    /// Kanonická strana, tedy ta, která platí bez dotazu na konkrétní polovinu diffu. Tudy
+    /// chodí i převzatý nález, který stranu nemá.
     static func commentAnchor(of line: DiffLine, in file: FileDiff) -> DraftAnchor? {
-        commentableSide(of: line, in: file).flatMap { anchor(of: line, on: $0) }
+        commentAnchors(of: line, in: file).preferred
+    }
+
+    /// Kotvy na obě strany diffu — `isEmpty` znamená „nedá se komentovat“.
+    static func commentAnchors(of line: DiffLine, in file: FileDiff) -> LineAnchors {
+        guard file.hunks.contains(where: { $0.lines.contains(line) }) else { return LineAnchors() }
+        return anchors(of: line)
     }
 
     /// Kotvy všech komentovatelných řádků souboru, jedním průchodem.
@@ -68,14 +107,13 @@ extension Policy {
     /// Klíčem je celý řádek, a je to bezpečné: rozbalený kontext (#47) se řádku hunku nikdy
     /// nerovná, protože jeho čísla jsou z úseku **mimo** hunky. Kdyby se rovnal, dostal by
     /// z mapy odpověď „komentovat jde“, kterou GitHub odmítne.
-    static func commentAnchors(in file: FileDiff) -> [DiffLine: DraftAnchor] {
-        var result: [DiffLine: DraftAnchor] = [:]
+    static func commentAnchors(in file: FileDiff) -> [DiffLine: LineAnchors] {
+        var result: [DiffLine: LineAnchors] = [:]
         for hunk in file.hunks {
             for line in hunk.lines {
-                guard let side = side(of: line.kind), let anchor = anchor(of: line, on: side) else {
-                    continue
-                }
-                result[line] = anchor
+                let anchors = anchors(of: line)
+                guard !anchors.isEmpty else { continue }
+                result[line] = anchors
             }
         }
         return result
@@ -103,12 +141,31 @@ extension Policy {
         comments.filter { $0.path == file.newPath || $0.path == file.oldPath }
     }
 
-    private static func side(of kind: DiffLine.Kind) -> DiffSide? {
+    /// Které strany diffu řádek unese, v pořadí od kanonické.
+    ///
+    /// Kontextový řádek unese **obě** — je v obou verzích souboru. Změřeno u #98, viz
+    /// `LineAnchors`; do té doby tady stálo jen `.right` a kliknutí do levé poloviny split
+    /// pohledu zakládalo komentář vpravo.
+    private static func sides(of kind: DiffLine.Kind) -> [DiffSide] {
         switch kind {
-        case .added, .context: .right
-        case .removed: .left
-        case .meta: nil
+        case .added: [.right]
+        case .removed: [.left]
+        case .context: [.right, .left]
+        case .meta: []
         }
+    }
+
+    /// Kotvy řádku bez ověření hunku — vnitřní krok, protože příslušnost k hunku se ověřuje
+    /// jednou za soubor (viz `commentAnchors(in:)`), ne pro každý řádek.
+    private static func anchors(of line: DiffLine) -> LineAnchors {
+        var result = LineAnchors()
+        for side in sides(of: line.kind) {
+            switch side {
+            case .left: result.left = anchor(of: line, on: .left)
+            case .right: result.right = anchor(of: line, on: .right)
+            }
+        }
+        return result
     }
 
     /// Číslo se bere podle strany: vpravo nové, vlevo staré. Chybějící číslo znamená, že
@@ -138,10 +195,12 @@ extension Policy {
         let resolved = file?.displayPath ?? path
 
         guard let line = finding.line else { return .body(path: resolved, line: nil) }
+        // Nález stranu nemá — hlásí se proti nové verzi souboru, takže platí kanonická
+        // (`preferred`). Že kontextový řádek unese i `left`, je věc kliknutí ve split
+        // pohledu, ne převzetí nálezu.
         guard let file,
               let hunkLine = file.hunks.lazy.flatMap(\.lines).first(where: { $0.newNumber == line }),
-              let side = side(of: hunkLine.kind),
-              let anchor = anchor(of: hunkLine, on: side)
+              let anchor = anchors(of: hunkLine).preferred
         else { return .body(path: resolved, line: line) }
         return .line(path: resolved, anchor: anchor)
     }

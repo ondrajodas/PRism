@@ -188,10 +188,51 @@ struct DraftPolicyTests {
 
         for hunk in file.hunks {
             for line in hunk.lines {
-                #expect(anchors[line] == Policy.commentAnchor(of: line, in: file))
+                #expect(anchors[line] == Policy.commentAnchors(of: line, in: file))
+                #expect(anchors[line]?.preferred == Policy.commentAnchor(of: line, in: file))
             }
         }
         #expect(anchors.count == 4, "hunk má tři řádky s číslem plus odebraný")
+    }
+
+    /// Kontextový řádek je v obou verzích souboru, takže se dá komentovat vlevo i vpravo —
+    /// **změřeno u #98 na živém API**: `side: LEFT` na nezměněném řádku GitHub přijme. Bez toho
+    /// by klik do levé poloviny split pohledu zakládal komentář vpravo.
+    @Test("Kontextový řádek unese kotvu na obě strany")
+    func anchorsAContextLineOnBothSides() throws {
+        let file = try file()
+        let context = try #require(file.hunks.first?.lines.first { $0.kind == .context })
+
+        let anchors = Policy.commentAnchors(of: context, in: file)
+
+        #expect(anchors.right?.side == .right)
+        #expect(anchors.right?.line == context.newNumber)
+        #expect(anchors.left?.side == .left)
+        #expect(anchors.left?.line == context.oldNumber)
+        // Kanonická zůstává pravá: je to výchozí strana GitHubu a ukazuje na novou verzi
+        // souboru, tedy na to, co člověk čte. Tudy chodí i převzatý nález, který stranu nemá.
+        #expect(anchors.preferred == anchors.right)
+    }
+
+    /// Změněný řádek naopak druhou stranu **nemá** — v té verzi souboru neexistuje, takže by
+    /// komentář neměl na čem stát.
+    @Test("Odebraný a přidaný řádek mají jen svou stranu")
+    func anchorsAChangedLineOnItsOwnSideOnly() throws {
+        let file = try file()
+        let removed = try #require(file.hunks.first?.lines.first { $0.kind == .removed })
+        let added = try #require(file.hunks.first?.lines.first { $0.kind == .added })
+
+        #expect(Policy.commentAnchors(of: removed, in: file).right == nil)
+        #expect(Policy.commentAnchors(of: removed, in: file).left?.line == removed.oldNumber)
+        #expect(Policy.commentAnchors(of: added, in: file).left == nil)
+        #expect(Policy.commentAnchors(of: added, in: file).right?.line == added.newNumber)
+    }
+
+    @Test("Řádek mimo hunky nemá kotvu ani na jednu stranu")
+    func hasNoAnchorsOutsideTheHunks() throws {
+        let anchors = Policy.commentAnchors(of: line(.context, old: 5, new: 5, text: "mimo hunk"), in: try file())
+
+        #expect(anchors.isEmpty)
     }
 
     /// Rozbalený kontext (#47) v mapě být nesmí — je to řádek, který v diffu není.
