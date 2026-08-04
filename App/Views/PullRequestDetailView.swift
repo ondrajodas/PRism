@@ -343,6 +343,31 @@ struct PullRequestDetailView: View {
         highlighted = FindingHighlight(file: path, line: finding.line)
     }
 
+    /// Co se dá dělat s vlákny (#73) — jedno místo pro diff i `Přehled`, ať se v jednom
+    /// z nich nezapomene.
+    ///
+    /// `block` je věta, proč odesílat nejde. Skládá se z `PublishError`, aby okno hlásilo
+    /// **tentýž** důvod, na kterém by odeslání doopravdy skončilo — stejná úvaha jako
+    /// u `DraftSendBlock.publishingNotAllowed`, který si větu taky nepíše sám.
+    private var threadActions: ThreadActions {
+        ThreadActions(
+            isExpanded: { store.isThreadExpanded($0, in: pullRequest.id) },
+            toggle: { store.toggleThread($0, in: pullRequest.id) },
+            reply: { store.threadReply(for: $0.id, in: pullRequest.id) },
+            setReply: { store.setThreadReply($1, for: $0.id, in: pullRequest.id) },
+            send: { thread in
+                Task { await store.sendThreadReply(to: thread, in: pullRequest) }
+            },
+            setResolved: { thread, resolved in
+                Task { await store.setThreadResolved(resolved, of: thread, in: pullRequest) }
+            },
+            state: { store.threadState(for: $0.id, in: pullRequest.id) },
+            block: store.canPublishToThreads(in: pullRequest.repo)
+                ? nil
+                : PublishError.publishingNotAllowed(pullRequest.repo).userDescription
+        )
+    }
+
     /// Tab `Přehled` — popis PR a konverzace bez kotvy v diffu.
     private var overview: some View {
         OverviewView(
@@ -352,8 +377,7 @@ struct PullRequestDetailView: View {
             viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
             missing: store.conversation(for: pullRequest.id).map(ConversationShortfall.init)
                 ?? ConversationShortfall(),
-            isThreadExpanded: { store.isThreadExpanded($0, in: pullRequest.id) },
-            toggleThread: { store.toggleThread($0, in: pullRequest.id) },
+            threadActions: threadActions,
             refresh: { Task { await store.refreshConversation(for: pullRequest) } },
             pullRequest: pullRequest
         )
@@ -375,8 +399,7 @@ struct PullRequestDetailView: View {
                 threads: store.anchoredThreads(for: pullRequest.id),
                 missingThreads: store.conversation(for: pullRequest.id)?.threads.missing ?? 0,
                 viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
-                isThreadExpanded: { store.isThreadExpanded($0, in: pullRequest.id) },
-                toggleThread: { store.toggleThread($0, in: pullRequest.id) },
+                threadActions: threadActions,
                 comments: store.draftComments(for: pullRequest.id),
                 draft: draftActions
             )

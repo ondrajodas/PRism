@@ -80,6 +80,21 @@ final class AppStore {
     /// se po výpadku sítě (`.failed`) vyprázdnila a uživateli naskočilo výchozí rozbalení.
     private(set) var toggledThreads: [PRIdentifier: Set<String>] = [:]
 
+    /// Rozepsané odpovědi do vláken (#73). Co v mapě není, nikdo nerozepsal.
+    ///
+    /// Žije tady, ne v bublině: ta je buňka líného seznamu nad diffem, takže `@State` v ní
+    /// odscrollování nepřežije — tatáž past jako u `DraftTextEditor`. Na disk se to naopak
+    /// **neukládá**: je to jedna věta v diskuzi, ne review, a další store by za ni platil
+    /// souborem na každé vlákno.
+    ///
+    /// Zahazuje se s PR mimo seznam, stejně jako konverzace — bez vlákna se odpověď nemá kde
+    /// ukázat. To je rozdíl proti rozdělanému review, které se drží: to je vlastní práce
+    /// v řádu odstavců a má na disku své místo.
+    private(set) var threadReplies: [ThreadKey: String] = [:]
+
+    /// Co se právě děje s vláknem, nebo co u něj selhalo. Chybějící záznam = nic.
+    private(set) var threadStates: [ThreadKey: ThreadActionState] = [:]
+
     /// Rozbalený kontext **per soubor v PR**. Co v mapě není, nikdo nerozbaloval.
     private(set) var expansions: [FileExpansionKey: FileExpansion] = [:]
 
@@ -661,6 +676,126 @@ final class AppStore {
 
     func isThreadExpanded(_ thread: ReviewThread, in pr: PRIdentifier) -> Bool {
         Policy.isThreadExpanded(thread, toggled: toggledThreads[pr] ?? [])
+    }
+
+    // MARK: - Odpovídání do vláken (#73)
+
+    func threadReply(for threadID: String, in pr: PRIdentifier) -> String {
+        threadReplies[ThreadKey(pullRequest: pr, threadID: threadID)] ?? ""
+    }
+
+    /// Zapíše rozepsaný text. Prázdný se **maže**, ať mapa nedrží záznam po každém vlákně,
+    /// do kterého někdo klikl a rozmyslel si to — tentýž vzor jako prázdný draft.
+    func setThreadReply(_ text: String, for threadID: String, in pr: PRIdentifier) {
+        let key = ThreadKey(pullRequest: pr, threadID: threadID)
+        threadReplies[key] = text.isEmpty ? nil : text
+    }
+
+    func threadState(for threadID: String, in pr: PRIdentifier) -> ThreadActionState? {
+        threadStates[ThreadKey(pullRequest: pr, threadID: threadID)]
+    }
+
+    /// Smí se do vláken tohohle repa odesílat?
+    ///
+    /// Tatáž brána jako u review (`PublishScope`), takže se okno neptá dvakrát jinak. Okno na
+    /// ni ale nereaguje schováním tlačítka — nechá ho **zakázané s důvodem**, jinak by
+    /// chybějící tlačítko vypadalo jako rozbitá aplikace.
+    func canPublishToThreads(in repo: RepoID) -> Bool {
+        gh != nil && publishScope.allows(repo)
+    }
+
+    /// Odešle rozepsanou odpověď do vlákna a vloží ji do konverzace.
+    ///
+    /// Text se po úspěchu maže, po selhání **zůstává** — je to zadání #73 a jediná pojistka
+    /// proti tomu, aby se rozepsaná věta ztratila kvůli chvilkovému výpadku.
+    func sendThreadReply(to thread: ReviewThread, in pullRequest: PullRequestSummary) async {
+        let id = pullRequest.id
+        let key = ThreadKey(pullRequest: id, threadID: thread.id)
+        let body = threadReplies[key] ?? ""
+        guard let submission = threadSubmission(for: thread.id, in: id) else { return }
+        // Dvojklik: druhé odeslání by bylo druhý komentář, ne oprava prvního. Kontrola leží
+        // **před** prvním `await`, takže mezi nimi není mezera, do které by se závod vešel.
+        guard threadStates[key]?.isBusy != true else { return }
+        threadStates[key] = .replying
+
+        do {
+            let comment = try await submission.reply(body)
+            threadStates[key] = nil
+            threadReplies[key] = nil
+            insert(comment, intoThread: thread.id, of: pullRequest)
+        } catch let error as PublishError {
+            threadStates[key] = .replyFailed(error)
+        } catch {
+            threadStates[key] = .replyFailed(.unknown(error.localizedDescription))
+        }
+    }
+
+    /// Přepne vyřešení vlákna a zapíše, co GitHub potvrdil.
+    func setThreadResolved(
+        _ resolved: Bool,
+        of thread: ReviewThread,
+        in pullRequest: PullRequestSummary
+    ) async {
+        let id = pullRequest.id
+        let key = ThreadKey(pullRequest: id, threadID: thread.id)
+        guard let submission = threadSubmission(for: thread.id, in: id) else { return }
+        guard threadStates[key]?.isBusy != true else { return }
+        threadStates[key] = .resolving(to: resolved)
+
+        do {
+            let resolution = try await submission.setResolved(resolved)
+            threadStates[key] = nil
+            apply(resolution, of: pullRequest)
+        } catch let error as PublishError {
+            threadStates[key] = .resolutionFailed(error)
+        } catch {
+            threadStates[key] = .resolutionFailed(.unknown(error.localizedDescription))
+        }
+    }
+
+    /// Publisher se tu **nevyrábí** — jen se předá `gh`, read-only gateway a brána. Vzniká až
+    /// uvnitř `ThreadSubmission`, viz tvrdá podmínka č. 1.
+    private func threadSubmission(
+        for threadID: String,
+        in pr: PRIdentifier
+    ) -> ThreadSubmission? {
+        guard let gh else { return nil }
+        return ThreadSubmission(
+            target: ThreadTarget(pullRequest: pr, threadID: threadID),
+            gh: gh,
+            gateway: gateway,
+            scope: publishScope
+        )
+    }
+
+    /// Vloží odeslanou odpověď do načtené konverzace, ať je vidět bez kola po síti.
+    ///
+    /// Když vlákno v konverzaci **není** (mezitím se obnovila, nebo ho někdo smazal), konverzace
+    /// se načte znovu: odeslaný komentář, který se nemá kde ukázat, vypadá jako neodeslaný.
+    private func insert(
+        _ comment: ThreadComment,
+        intoThread threadID: String,
+        of pullRequest: PullRequestSummary
+    ) {
+        let id = pullRequest.id
+        guard case .loaded(let conversation, let updatedAt) = conversationStates[id],
+              let updated = Policy.inserting(comment, intoThread: threadID, of: conversation)
+        else {
+            Task { await refreshConversation(for: pullRequest) }
+            return
+        }
+        conversationStates[id] = .loaded(updated, updatedAt: updatedAt)
+    }
+
+    private func apply(_ resolution: ThreadResolution, of pullRequest: PullRequestSummary) {
+        let id = pullRequest.id
+        guard case .loaded(let conversation, let updatedAt) = conversationStates[id],
+              let updated = Policy.applying(resolution, to: conversation)
+        else {
+            Task { await refreshConversation(for: pullRequest) }
+            return
+        }
+        conversationStates[id] = .loaded(updated, updatedAt: updatedAt)
     }
 
     func toggleThread(_ thread: ReviewThread, in pr: PRIdentifier) {
@@ -1591,6 +1726,10 @@ final class AppStore {
         // konverzacích. Podle konverzací to nešlo: PR ve stavu `.failed` v mapě zůstane, ale
         // žádná vlákna nedá, takže by výpadek sítě uživateli zahodil, co si zavřel.
         toggledThreads = toggledThreads.filter { wantedPullRequests.contains($0.key) }
+        // Rozepsané odpovědi a stavy odesílání jdou s konverzací, ke které patří. Klíč nese PR
+        // právě kvůli tomuhle — z `id` vlákna by se nepoznalo, ke kterému PR patří.
+        threadReplies = threadReplies.filter { wantedPullRequests.contains($0.key.pullRequest) }
+        threadStates = threadStates.filter { wantedPullRequests.contains($0.key.pullRequest) }
         // Volba tabu je jen příznak, ale drží klíč s celým identifikátorem PR — bez úklidu by
         // mapa rostla donekonečna, stejně jako u sbalených souborů.
         detailTabs = detailTabs.filter { wantedPullRequests.contains($0.key) }

@@ -67,6 +67,8 @@ struct GhConversationResponse: Decodable {
         let line: Int?
         let originalLine: Int?
         let diffSide: String?
+        let viewerCanResolve: Bool?
+        let viewerCanUnresolve: Bool?
         let comments: Connection<Comment>
     }
 
@@ -147,6 +149,13 @@ private extension GhConversationResponse.Thread {
             // schované jako vyřešené je horší než vlákno zbytečně otevřené.
             isResolved: isResolved ?? false,
             isOutdated: isOutdated ?? false,
+            // Chybějící **právo** se naopak bere jako „smíš“ — opačný směr než u příznaků výš,
+            // a schválně. Živé API obě pole vždycky vrátí, takže `nil` znamená starou odpověď,
+            // ne odepřené právo; a tlačítko schované kvůli údaji, který nedorazil, vypadá jako
+            // rozbitá aplikace. Když právo doopravdy nemám, GitHub akci odmítne hláškou,
+            // ze které je vidět, co se stalo.
+            canResolve: viewerCanResolve ?? true,
+            canUnresolve: viewerCanUnresolve ?? true,
             comments: comments.page { $0.comment() }
         )
     }

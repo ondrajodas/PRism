@@ -11,9 +11,10 @@ Hranol rozloží jeden paprsek na spektrum. Tahle aplikace dělá totéž s pull
 pustí na něj několik nezávislých reviewerů a jejich nálezy schválně neslévá do jednoho
 názoru.
 
-> **Na GitHub vede jediná cesta a otevírá ji jen člověk.** Aplikace umí odeslat review,
-> ale výhradně přes jeden modul, na výslovné potvrzení a proti commitu, který jsi opravdu
-> viděl. Nic se neodesílá samo — ani návrh verdiktu, ani reviewer.
+> **Na GitHub vede jediná cesta a otevírá ji jen člověk.** Aplikace umí odeslat review
+> a odpovědět do vlákna, ale výhradně přes jeden modul a jen na výslovný pokyn — review
+> navíc proti commitu, který jsi opravdu viděl. Nic se neodesílá samo — ani návrh verdiktu,
+> ani reviewer.
 >
 > **A jedině tam, kde se to povolilo.** Odesílání je ve výchozím stavu vypnuté — zapíná se
 > v nastavení, globálně nebo u jednoho repa. Dokud si o to někdo výslovně neřekne, neodejde
@@ -192,6 +193,19 @@ historie), moje komentáře mají odznak `já` a z každého se dá odskočit na
 se načte při výběru PR a drží se, dokud se nezmění `updatedAt`; pollingem se netahá, aby
 z jednoho tiku nebylo N podprocesů.
 
+**A dá se do nich odpovědět.** V rozbaleném vlákně je pole na odpověď a tlačítko `Odpovědět`,
+vedle něj `Vyřešit` (u vyřešeného `Znovu otevřít`) — všechno funguje jak v diffu, tak
+v `Přehledu`. Odeslaná odpověď se ve vlákně objeví hned, bez čekání na další načtení, protože
+ji GitHub v odpovědi celou vrací. **Odpověď se nepotvrzuje** dialogem jako review: je to jedna
+věta v diskuzi, dá se smazat a potvrzování každé by z okna udělalo klikačku — tlačítko je
+pojmenované, takže se to nestane omylem.
+
+Dvě věci, které nejsou vidět, ale jsou v tom to podstatné: **když odeslání selže, rozepsaný
+text zůstane** na místě a chyba pod polem řekne, co s ní jde udělat. A **prázdná odpověď se
+neodešle** — GitHub ji totiž přijme, nic nevytvoří a vrátí úspěch, takže by okno hlásilo
+odeslanou odpověď, která nikdy nevznikla. `Vyřešit` se navíc nabízí jen tam, kde na to GitHub
+dává právo; jinde by tlačítko vždycky selhalo.
+
 **Rozdělané review se skládá v okně** a přežije restart: tělo, verdikt a řádkové komentáře
 leží v `drafts/` vedle uložených nálezů, mimo dosah úklidu cache. Nový commit ho nesmaže,
 jen zablokuje odeslání — vlastní próza nezastarává tak rychle jako strojové nálezy.
@@ -217,6 +231,12 @@ a odmítne s ním celé review.
 Že je něco rozděláno, je vidět **v řádku seznamu i v detailu** (ikona pera). Draft psaný
 proti staršímu commitu má v tabu **banner** a odeslat se nedá; text zůstává.
 
+Na jeden řádek jde napsat i **víc komentářů** a odejdou spolu s review. Panel u toho ale řekne,
+co z nich vznikne: **samostatná vlákna vedle sebe, ne odpověď** pod prvním komentářem. Jinak to
+GitHub neumí — v payloadu review se nedá říct „tenhle je odpověď na tamten“ a neodeslané vlákno
+ještě nemá identitu, na kterou by šlo odkázat. Odpovědět jde na vlákno, které z odeslaného
+komentáře vznikne.
+
 ### Odeslání review
 
 **Dvě kliknutí, dvě různá tlačítka.** `Odeslat review…` v tabu `Moje review` nic neodesílá —
@@ -241,7 +261,8 @@ nebo u konkrétního repa (`Povoleno` / `Zakázáno` / `Podle globálního nasta
 bez restartu. Rozhoduje **jen** o tom, jestli se tlačítko vůbec nabídne: odesílá pořád člověk
 potvrzením a proti commitu, který má před sebou. Přepnutí u repa se drží i po změně globálního
 defaultu — repo, které si o zákaz řeklo, se tím nesmí tiše otevřít. Překlep v `config.json` se
-sráží na zakázané, nikdy na povolené.
+sráží na zakázané, nikdy na povolené. **Platí to i pro odpovědi do vláken** — jedna brána pro
+obojí, takže se nedá stát, že se do repa nesmí poslat review, ale komentář ano.
 
 Po úspěchu se potvrzení **zavře samo**, draft zmizí (i z disku) a konverzace se načte znovu,
 takže je moje review hned vidět v `Přehledu`. Otevřené zůstane jen tehdy, když GitHub vrátí
@@ -423,7 +444,7 @@ App/                      zdrojáky aplikace — target PRism
   Health/                 dostupnost služeb pro stavový řádek: status pages, signály, monitor
   Markdown/               vykreslení Markdownu z GitHubu: bloky, inline HTML od botů
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka
-  Publish/                jediná cesta ven: odeslání review na GitHub, brána z nastavení, model potvrzení
+  Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno; ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku

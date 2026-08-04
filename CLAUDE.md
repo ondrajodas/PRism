@@ -204,27 +204,44 @@ to si od 2026-08-01 řídíš sám, viz pracovní postup.
 Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav se a zeptej se.
 
 1. **Jediná cesta ven** (od #67; do té doby tu stálo „nikdy nic neposílat na GitHub“).
-   Aplikace **umí** odeslat review — ale jedině přes `ReviewPublishing`, jedině na výslovné
-   potvrzení člověkem a jedině tam, kde se to **v nastavení povolilo**. Pravidlo se skládá
-   z šesti věcí a každá z nich je kontrolovatelná:
+   Aplikace **umí** odeslat review a od #73 se **ozvat do vlákna** — ale jedině přes
+   `ReviewPublishing`, jedině na výslovný pokyn člověka a jedině tam, kde se to **v nastavení
+   povolilo**. Pravidlo se skládá z šesti věcí a každá z nich je kontrolovatelná:
 
    1. **`GitHubGateway` zůstává bez zápisových metod.** Polling, diff, checkout ani reviewer
       tedy nemají čím něco odeslat — read-only je pořád vidět z typu.
-   2. **`grep ReviewPublishing App/` vyjmenuje všechna místa, odkud to jde.** Mají být tři
-      soubory a jediné volání: protokol, `GhReviewPublisher` (implementace) a
-      `ReviewSubmission.send()` (volající). Protokol má jednu metodu; cokoli dalšího
-      (komentář, approve mimo review, label) by byla druhá cesta ven.
-   3. **Publisher není pole `AppStore`.** Vzniká uvnitř té jediné cesty, která odesílá,
-      a zaniká s ní — nemá ho kde uložit nikdo, kdo ho nemá mít. Od #68 to drží
-      `ReviewSubmission`: skládá se až v `send()` a zaniká zavřením sheetu. `AppStore` si
-      kvůli odesílání drží **jen cestu ke `gh`**, ne publisher ani továrnu na něj — proto ho
-      ten grep nevypíše.
-   4. **Odeslání si žádá hotový draft s `headSha`** a pre-flight ověří, že je to pořád hlava
-      PR. Approve na kód, který jsi neviděl, tak nejde poslat ani závodem s pushnutým
+   2. **`grep ReviewPublishing App/` vyjmenuje všechna místa, odkud to jde.** Mají to být
+      **čtyři soubory a dva volající**: protokol, `GhReviewPublisher` (implementace),
+      `ReviewSubmission.send()` (review) a `ThreadSubmission` (odpověď a vyřešení vlákna).
+
+      Protokol má **tři vyjmenované metody** — `submit`, `reply`, `setResolved`. Do #73 měl
+      jednu a stálo tu, že cokoli dalšího by byla druhá cesta ven; změnilo se to proto, že
+      odpovědět kolegovi do vlákna je půlka toho, kvůli čeho se u review přepíná do
+      prohlížeče, a přes `GitHubGateway` to jít nesmí (bod 1). Co **zůstává**: výčet je
+      krátký, vyjmenovaný na jednom místě a **každá metoda si sama ověří bránu z bodu 6** —
+      proto všechny berou adresu, ze které se pozná repo. Roste-li ten výčet, roste to, co
+      aplikace umí odeslat, a to má být vidět v jednom souboru. Approve mimo review, label ani
+      komentář pod PR tam pořád nepatří.
+   3. **Publisher není pole `AppStore`.** Vzniká uvnitř té cesty, která odesílá, a zaniká
+      s ní — nemá ho kde uložit nikdo, kdo ho nemá mít. Drží to `ReviewSubmission` (skládá se
+      až v `send()`, zaniká zavřením sheetu) a `ThreadSubmission` (skládá se v `reply(_:)`
+      a `setResolved(_:)`). `AppStore` si kvůli odesílání drží **jen cestu ke `gh`**, ne
+      publisher ani továrnu na něj — proto ho ten grep nevypíše. Platí to i pro vlákna, kde
+      `AppStore` odesílání spouští: drží **stav** (`ThreadActionState`), ne cestu ven.
+   4. **Odeslání review si žádá hotový draft s `headSha`** a pre-flight ověří, že je to pořád
+      hlava PR. Approve na kód, který jsi neviděl, tak nejde poslat ani závodem s pushnutým
       commitem. GitHub proti tomu **nechrání** — změřeno u #62, že review se zastaralým
       `commit_id` přijme.
+
+      **U odpovědi do vlákna se `headSha` neověřuje** (#73) a je to schválně: odpověď se váže
+      na vlákno, ne na commit, takže kontrola hlavy by zakázala zrovna tu situaci, kvůli které
+      se do vlákna píše („opraveno v abc123“). Ověřuje se **stav PR**, a to i tam
+      **striktněji než GitHub** — změřeno u #73, že odpověď na zavřeném PR projde. Aplikace
+      ukazuje PR z `review-requested`, takže mergnutý PR ze seznamu vypadne a k jeho vláknům se
+      z okna nedostaneš; psát do uzavřené diskuze patří do prohlížeče.
    5. **Jedno atomické volání.** Buď odejde všechno, nebo nic; žádný částečně odeslaný stav
-      po pádu uprostřed. Změřeno u #62.
+      po pádu uprostřed. Změřeno u #62. U vláken je to triviálně splněné — odpověď i vyřešení
+      jsou jedna mutace.
    6. **Jen tam, kde se to povolilo** — `PublishScope`, složený z `Configuration`
       (`allowsPublishing` globálně i per repo). **Výchozí stav je vypnuto**, a právě to drží
       vlastnost „samo nic neodejde“: dokud si někdo výslovně neřekne o konkrétní repo nebo
@@ -239,7 +256,10 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
       nechrání seznam, ale body 4 a 5 výš a potvrzení s úplným výpisem payloadu (#68).
 
    Co se **nezměnilo**: návrh verdiktu z nálezů (`ReviewVerdict`) je pořád jen návrh
-   zobrazený v aplikaci a sám nic neodesílá. Odesílá jen člověk.
+   zobrazený v aplikaci a sám nic neodesílá. Odesílá jen člověk. **Potvrzovací sheet je jen
+   u review** — odpověď do vlákna se podle #73 nepotvrzuje, protože je to jedna věta v diskuzi,
+   dá se smazat a potvrzování každé by z okna udělalo klikačku. „Výslovný pokyn člověka“ tedy
+   u review znamená dvě kliknutí na dvou různých tlačítkech, u odpovědi jedno pojmenované.
 2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit`, u `Bash` se uvádí
    jen `git` — a v `--disallowedTools` jsou `Bash(gh:*)` a `Bash(git push:*)`. `Skill` mezi
    povolenými je (#78); sám o sobě nic nespouští, ale skill, který se přes něj načte, si
@@ -312,7 +332,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `FindingTranslation` | Přeložená próza nálezu. Visí vedle originálu, nepřepisuje ho |
 | `Conversation` | Cizí konverzace pod PR: review ostatních, vlákna, komentáře + `viewer` |
 | `ConversationPage` | Kus seznamu a kolik ho je celkem — nese **zkrácení** |
-| `ReviewThread` | Vlákno u řádku diffu: cesta, `line`/`originalLine`, `isResolved`, `isOutdated` |
+| `ReviewThread` | Vlákno u řádku diffu: cesta, `line`/`originalLine`, `isResolved`, `isOutdated`, **práva viewera** (`canResolve`/`canUnresolve`) |
 | `ThreadComment` | Jeden komentář — ve vlákně i pod PR; `replyToID` místo vnořování |
 | `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
@@ -473,6 +493,38 @@ v pěti věcech se chovají jinak:
 - **Bublina vlákna nemá `.textSelection(.enabled)`**, i když je to text ke kopírování —
   platí tu totéž jako nad celým diffem. `FindingBubbleView` ho ze stejného důvodu nemá.
 
+Odpovídání do vláken (#73) k tomu přidává:
+
+- **Právo přepnout vyřešení říká GitHub, ne my.** Dotaz si bere `viewerCanResolve`
+  a `viewerCanUnresolve` a `ReviewThread` drží **obě** — každé platí v jiném stavu vlákna (u
+  vyřešeného je `canResolve` false a `canUnresolve` true), takže složit je do jednoho příznaku
+  už při mapování by zahodilo, co API řeklo. Co potřebuje okno, dává `canToggleResolution`.
+- **Chybějící právo v odpovědi znamená „smíš“**, obráceně než chybějící `isResolved`. Živé API
+  obě pole vždycky vrátí, takže `nil` znamená starou odpověď (fixtures z #63), ne odepřené
+  právo — a tlačítko schované kvůli údaji, který nedorazil, vypadá jako rozbitá aplikace.
+- **Tlačítko `Vyřešit` se schovává, tlačítko `Odpovědět` ne.** Chybějící právo se nedá spravit
+  ničím, co je v okně, takže by zakázané tlačítko slibovalo akci, která nikdy nepůjde. Prázdný
+  text, běžící odeslání nebo zakázané odesílání jsou naopak stavy, které **mají vysvětlení** —
+  tam tlačítko zůstane zakázané s důvodem v nápovědě, jako `DraftPanel.sendButton`.
+- **Rozepsaná odpověď žije ve storu** (`AppStore.threadReplies`), ne v bublině: ta je buňka
+  líného seznamu, takže `@State` v ní odscrollování nepřežije — tatáž past jako
+  u `DraftTextEditor`. Na disk se **neukládá**, na rozdíl od draftu review: je to jedna věta
+  v diskuzi a další store by za ni platil souborem na každé vlákno.
+- **Selhání text nechává na místě** a hláška to říká větou. Je to zadání #73 a jediná pojistka
+  proti tomu, aby se rozepsaná věta ztratila kvůli chvilkovému výpadku sítě.
+- **Stav selhání nese, co selhalo** (`replyFailed` / `resolutionFailed`), ne jedno společné
+  `failed`. Věta „text zůstal“ patří jen k odpovědi — u vyřešení není co zachraňovat a tvrdila by
+  víc, než se stalo. Bez rozlišení v modelu to view nemá jak poznat; chytila to vlastní revize
+  diffu u #73, kde se ta věta lepila k obojímu.
+- **Prázdná odpověď se neodesílá.** Změřeno u #73, že GitHub prázdné tělo přijme, **nic
+  nevytvoří** a vrátí exit 0 — takže bez té brány (`ThreadRequest.isSendable`) by okno hlásilo
+  odeslanou odpověď, která nikdy nevznikla. Text se posílá netrimovaný (odsazení v ukázce kódu
+  je součást zprávy), kontroluje se trimovaný.
+- **Odeslaná odpověď se do vlákna vloží bez dalšího čtení** (`Policy.inserting`), protože ji
+  mutace celou vrací. Kolo po síti kvůli komentáři, který už máme, by v okně vypadalo jako
+  sekání. Když vlákno v konverzaci mezitím zmizí, konverzace se načte **znovu** — odeslaný
+  komentář, který se nemá kde ukázat, vypadá jako neodeslaný.
+
 Moje rozdělané komentáře (#66) jsou **třetí druh bubliny** (`DiffRow.draftComment`) a řídí
 se z většiny pravidly vláken, protože jsou to taky komentáře ke kotvě:
 
@@ -481,7 +533,12 @@ se z většiny pravidly vláken, protože jsou to taky komentáře ke kotvě:
 - **Komentář bez řádku v aktuálním diffu se nekreslí**, jako zastaralé vlákno. Neztrácí se:
   celý seznam je v tabu `Moje review`, odkud se dá vyjmout i ten, který se nemá kde ukázat.
   To je rozdíl proti vláknům, kde je náhradní domov až `Overview` (#72).
-- **Neslévají se** — dva komentáře na řádku jsou dvě věci ke stejnému kódu.
+- **Neslévají se** — dva komentáře na řádku jsou dvě věci ke stejnému kódu. A **panel to říká
+  dopředu** (`Policy.commentsSharingAnAnchor`), protože z nich na GitHubu vzniknou **dvě
+  samostatná vlákna, ne odpověď pod prvním komentářem**. Změřeno u #73 v sandboxu: payload
+  review se dvěma komentáři na `README.md:8` přidal dvě vlákna po jednom komentáři. Jinak to
+  nejde — `comments[]` neumí `in_reply_to` a neodeslané vlákno ještě nemá `id`, na které by
+  šlo odkázat; odpovědět jde teprve na vlákno, které z odeslaného komentáře vznikne.
 - **Jdou naspod, pod nález i pod vlákno.** Nález a cizí komentář jsou to, co si mám přečíst;
   svoji rozepsanou větu znám.
 - **Identita nese `id` komentáře** (`d<uuid>`), ne pořadí — na tom stojí, že si `@State`
@@ -1058,7 +1115,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek, rozbalovací řádek nebo poznámka |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout |
-| `ThreadBubbleView` | Vlákno konverzace u řádku; vyřešené sbalené s odznakem, moje komentáře odlišené |
+| `ThreadBubbleView` | Vlákno konverzace u řádku; vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73) |
+| `ThreadActions` | Co se dá dělat s vláknem — rozbalení, odpověď, vyřešení a důvod, proč odesílat nejde |
 | `MarkdownText` | Vykreslený Markdown z GitHubu — viz `App/Markdown/` |
 | `DraftCommentBubbleView` | Můj rozdělaný komentář u řádku: editor, odznak původu, vyjmutí |
 | `DraftTextEditor` | Textové pole draftu — odložený zápis a doručení při zmizení |
@@ -1317,6 +1375,26 @@ Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a p
   tomu nechrání** — zastaví uživatele, ne tik pollingu. Je to opačný směr než obvyklá past
   s přetečením stavu mezi PR: tenhle stav nepřetéká, ale předčasně zaniká.
 
+Odpovídání do vláken (#73) drží `AppStore` ve dvou mapách klíčovaných `ThreadKey`
+(`threadReplies` a `threadStates`) a platí u něj:
+
+- **Store odesílání spouští, ale cestu ven nedrží.** `sendThreadReply` a `setThreadResolved` si
+  složí `ThreadSubmission` (jen z cesty ke `gh`, gateway a brány) a publisher vzniká až uvnitř
+  něj — takže `grep ReviewPublishing App/` `AppStore.swift` dál nevypíše. Rozdíl proti review je
+  jen v tom, kdo akci spouští: tam sheet, tady tlačítko v bublině.
+- **Klíč nese PR, i když `id` vlákna je unikátní samo.** Úklid odpovídá na otázku „zmizel PR ze
+  seznamu?“, a ta se z `id` nepozná — tatáž lekce jako u `toggledThreads` z #64.
+- **Rozepsaný text se zahazuje s PR mimo seznam**, jako konverzace, ke které patří. Je to opačné
+  rozhodnutí než u draftu review, který se drží: ten je vlastní práce v řádu odstavců a má na
+  disku své místo, kdežto odpověď je jedna věta bez konverzace nezobrazitelná.
+- **Dvojklik pošle jednu odpověď.** Kontrola `isBusy` leží **před** prvním `await`, takže mezi
+  nimi není mezera, do které by se závod vešel. Je na to test se souběžnými voláními — sekvenční
+  by prošel i bez té ochrany.
+- **Selhání drží stav, dokud se nezkusí znovu.** Chyba, která zmizí sama, je chyba, kterou nikdo
+  nepřečte; text u toho zůstává.
+- **Prázdný text se z mapy maže**, ať v ní nezůstane záznam po každém vlákně, do kterého někdo
+  klikl a rozmyslel si to. Tentýž vzor jako prázdný draft.
+
 Signály pro stavový řádek (#31) do `AppStore` patří taky, protože jen on ví, jak dopadla
 skutečná volání:
 
@@ -1531,6 +1609,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
 | `Policy.matches(_:_:)` | Patří vlákno (nebo můj rozdělaný komentář) k tomuhle řádku diffu — **jedno místo** pro výběr i umístění |
+| `Policy.inserting(_:intoThread:of:)`, `Policy.applying(_:to:)` | Zápis odeslané odpovědi a vyřešení do načtené konverzace; `nil` = vlákno tam není |
+| `Policy.commentsSharingAnAnchor(in:)` | Kolik komentářů draftu míří na tentýž řádek — z nich budou samostatná vlákna, ne odpověď |
 | `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR a vlákna bez kotvy, chronologicky (`ConversationEntry`) |
 | `Policy.commentableSide(of:in:)` | Ke které straně by šel komentář; `nil` = nedá se komentovat |
 | `Policy.commentAnchor(of:in:)`, `Policy.commentAnchors(in:)` | Kotva komentáře (`DraftAnchor`: číslo + strana); mapa pro celý soubor jedním průchodem |
@@ -1692,6 +1772,10 @@ Konverzace (#63) jde **jedním GraphQL dotazem** přes `gh api graphql`:
   `ConversationPage.missing`, takže ztracený komentář není k nerozeznání od nenapsaného.
 - **Jedna velikost stránky na všechny seznamy**, ať se komentáře uvnitř vláken neutnou dřív
   než vlákna sama.
+- **Dotaz si od #73 bere i `viewerCanResolve` a `viewerCanUnresolve`.** Bez nich by okno nabízelo
+  `Vyřešit` i tam, kde na to reviewer právo nemá — a tlačítko, které vždycky selže, je horší než
+  žádné. Starší fixtures ta pole nemají, takže se chybějící hodnota bere jako **povolení**; viz
+  pravidla nad vlákny v modelech.
 
 ### `ReviewPublisher` (`App/Publish/`)
 
@@ -1700,13 +1784,17 @@ podmínku „nikdy nic neposílat“ pravidlem, které je vidět z kódu — viz
 
 | Typ | Co dělá |
 |---|---|
-| `ReviewPublishing` | Protokol s **jedinou** metodou `submit(_:)` → `SubmittedReview` |
+| `ReviewPublishing` | Protokol se **třemi** metodami: `submit(_:)`, `reply(to:body:)`, `setResolved(_:of:)` |
 | `GhReviewPublisher` | Implementace nad `gh`; pre-flight přes `GitHubGateway` |
 | `PublishScope` | Brána: smí se z tohohle repa odeslat? Skládá se z `Configuration`, výchozí stav **vypnuto** |
 | `PublishError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
-| `PublishRequest` | Payload a argumenty — čisté funkce |
-| `GhSubmittedReview` | Tvar odpovědi `POST /pulls/{n}/reviews` |
-| `ReviewSubmission` | Jedno odeslání od kliknutí po odpověď — **jediný volající `submit(_:)`** |
+| `PublishRequest` | Payload a argumenty review — čisté funkce |
+| `ThreadRequest` | GraphQL mutace pro vlákna a jejich argumenty — čisté funkce |
+| `ThreadTarget`, `ThreadResolution` | Adresa vlákna (PR + `id`) a to, jak dopadlo přepnutí vyřešení |
+| `ThreadActionState`, `ThreadKey` | Co se s vláknem právě děje a klíč, pod kterým to drží `AppStore` |
+| `GhSubmittedReview`, `GhThreadReplyResponse`, `GhThreadResolutionResponse` | Tvary odpovědí — REST review a dvou GraphQL mutací |
+| `ReviewSubmission` | Jedno odeslání review od kliknutí po odpověď — **volající `submit(_:)`** |
+| `ThreadSubmission` | Jedna akce nad vláknem — **volající `reply` a `setResolved`** |
 
 Věci, které se u toho nemají rozbít:
 
@@ -1716,6 +1804,13 @@ Věci, které se u toho nemají rozbít:
 - **Pre-flight ověřuje `headSha` a stav PR, a při neshodě se nevolá nic.** GitHub proti
   odeslání proti zastaralému commitu nechrání (změřeno u #62), takže je to naše práce.
   Draft PR se odeslat **smí** — je to otevřený stav a na GitHubu běžné.
+
+  **Hlava je volitelný parametr** (`preflight(_:expecting:)`), protože každá cesta ven se váže
+  na něco jiného: review na commit, odpověď do vlákna na vlákno. Jedna funkce s `nil` místo dvou
+  podobných je tady schválně — dvě by se rozešly v tom, co dělají se stavem PR.
+- **Volání `gh` a dekódování odpovědi má každá cesta ven společné** (`call(_:)`, `decoded(_:from:)`).
+  Kdyby si každá třídila chyby sama, lišily by se v tom, co znamená timeout nebo zrušení — a na
+  tom stojí `mightHaveReachedGitHub`, tedy jestli okno nabídne odeslat znovu.
 - **Payload jde dočasným souborem**, protože `ProcessRunning` neumí stdin — a přidávat mu
   metodu jen kvůli tomuhle by ji musely dopsat všechny fake implementace v testech, tedy
   stejná úvaha, kvůli které je streamování vlastní protokol. Soubor má práva `0600` (je v něm
@@ -1763,7 +1858,8 @@ Nad `ReviewSubmission` (#68) platí navíc:
   vědomě otevřít znovu, draft zůstal. Chytila to revize diffu u #68.
 - **Zrušení se nevydává za „nic se nestalo“** (`PublishError.interrupted`). Zrušit jde jedině
   *během* volání, takže POST mohl doběhnout — `.ready` by bylo totéž tvrzení jako výš, jen
-  schovanější. Dnes to nikdo nevyvolá (task odeslání se neruší), ale tvar se drží kvůli #73.
+  schovanější. Od #73 to má i druhého uživatele: `ThreadSubmission` převádí `CancellationError`
+  na tentýž případ, aby se zrušené odeslání odpovědi nedalo splést s neodeslaným.
 - **Sheet se po úspěchu zavírá sám, ale ne u odpovědi, jejímuž stavu nerozumíme.** Že review
   odešlo, je za sheetem vidět líp než v něm (draft zmizel z panelu i z řádku, v `Přehledu`
   přibylo moje review), takže potvrzovací okno navíc je jen kliknutí za nic. Neznámý stav je
@@ -1772,6 +1868,31 @@ Nad `ReviewSubmission` (#68) platí navíc:
 - **Rozchod s návrhem z nálezů se hlásí, ale nezakazuje.** Nálezy jsou návrh a přebít se smějí;
   schválit PR, u kterého reviewer hlásí blokující nález, je ale nejdražší záměna, jakou tohle
   okno umí. `jen komentář` rozchod **není** — je to vědomé „nerozhoduju“, ne opak schválení.
+
+Nad `ThreadSubmission` (#73) platí:
+
+- **Je to `struct` bez stavu**, na rozdíl od `ReviewSubmission`. Kdo čeká na odpověď a co
+  selhalo, drží `AppStore` (`ThreadActionState`), protože to musí přežít odscrollování bubliny —
+  a bez sheetu není co držet uvnitř objektu. Publisher se skládá až v `reply(_:)`
+  a `setResolved(_:)`, takže bod 3 tvrdé podmínky platí dál.
+- **Odpověď adresuje vlákno, ne komentář.** GraphQL mutace bere `pullRequestReviewThreadId`,
+  tedy `ReviewThread.id`, které v modelu už je. **Změna proti zadání #73**, které jmenovalo
+  `POST /pulls/{n}/comments/{id}/replies`: REST potřebuje `databaseId` komentáře (dnes se z
+  konverzace netahá) a hlavně by se muselo rozhodovat, na **který** komentář ve vlákně se
+  odpovídá — a to je rozhodnutí bez opory v datech, protože vlákno má jednu odpověď. Vyřešení
+  GraphQL vyžaduje tak či tak (`isResolved` v RESTu není, viz #63), takže jedna cesta místo dvou.
+- **Dvě mutace na vyřešení**, ne jedna s příznakem — `resolveReviewThread`
+  a `unresolveReviewThread`. GitHub jinou možnost nedává.
+- **Odpověď vrací celý komentář**, takže se do vlákna vloží bez dalšího čtení. Změřeno na živém
+  API, že mutace dá `id`, `body`, `createdAt`, `url`, `author` i `replyTo` — přesně to, z čeho
+  se skládá `ThreadComment`.
+- **`comment: null` není úspěch.** Přijde s **nulovým** exit kódem (změřeno u prázdného těla),
+  takže bez toho by se do vlákna vložil komentář, který na GitHubu není. Dělá se z toho
+  `malformedResponse`, tedy „možná odešlo, zkontroluj to“.
+- **Chybějící vlákno je vlastní chyba** (`threadNotFound`), ne `network`. Hláška
+  `Could not resolve to a node with the global id` se od té o neexistujícím repozitáři liší jen
+  koncem, takže na **pořadí** případů v klasifikaci záleží — a rada „zkus to znovu“ je u zmizelého
+  vlákna nepravdivá, správná je „načti konverzaci znovu“.
 
 ### Vrstva `Environment` (`App/Environment/`)
 
@@ -1944,6 +2065,27 @@ Nad `HTTPGetting` (#31) platí:
   chybějící `pullRequest`, `nodes: null`, komentář bez autora a neznámý stav review.
   U dotazu se hlídá **seznam polí** — kdyby z něj vypadlo `isResolved`, ukazovala by se
   vyřešená vlákna jako otevřená.
+
+  **Práva viewera (#73)** mají vlastní fixture z `cli/cli` (`conversation-thread-rights.json`,
+  `first: 2`), protože na cizím repu jsou obě `false` — tedy zrovna ten případ, kvůli kterému se
+  ta pole tahají. Starší fixtures je nemají, a to je **taky test**: ověřují, že se chybějící
+  právo bere jako povolení. Rozdíl mezi `canResolve` a `canUnresolve` se na skutečné odpovědi
+  nesehná (na cizím repu obě `false`, na vlastním obě `true`), takže na něj je syntetický JSON.
+- **Odpovídání do vláken (#73)** — čisté funkce plus publisher proti `FakeProcessRunner`.
+  Nejdůležitější testy netvrdí, co se odeslalo, ale že se **nic neodeslalo**
+  (`runner.invocations.isEmpty`): bez povolení v nastavení, s prázdným tělem a na zavřený PR.
+  Vedle toho to, co je u odpovědi **jinak než u review** — nový commit odpověď ani vyřešení
+  neblokuje. Klasifikace se hlídá tabulkou nad **skutečnými** hláškami z živého API, včetně toho,
+  že se chybějící vlákno nesmí splést s výpadkem sítě; a `comment: null` musí skončit chybou, ne
+  úspěchem. `Policy.inserting` má vlastní sadu, ve které je to hlavní, že vložení **nesníží**
+  `missing` u useknutého vlákna.
+- **`AppStore` — odpovídání (#73)** — `gh` je **podstrčený shell skript** v dočasné složce, který
+  vypíše připravenou odpověď a zapisuje, kolikrát byl spuštěn. Fake publisher se sem podstrčit
+  nedá (store si ho podle tvrdé podmínky nesmí držet ani jako továrnu), takže se projde celá cesta
+  včetně čtení výstupu — a nula spuštění je jediný způsob, jak dokázat, že se **nevolalo nic**.
+  Pokrývá: odpověď ve vlákně **bez druhého dotazu** na konverzaci, selhání, které **nechá text**,
+  prázdnou odpověď bez volání sítě, a dvojklik pouštěný **souběžně** (sekvenční test by prošel
+  i bez ochrany, proto má skript krátkou odmlku).
 - **Dostupnost služeb (#31)** — tři vrstvy, každá jinak. `Policy.health` vyčerpávajícím
   výčtem stavů (nic se nemockuje), včetně toho, co se dá pokazit tiše: že **incident mimo
   sledované komponenty puntík nerozsvítí** (skutečná fixture s výpadkem v `Actions`), že
@@ -2480,6 +2622,31 @@ v aktuálním diffu visí jako bublina pod svým řádkem, vyřešené je sbalen
 N+1 past, kvůli které se netahá ani detail. Zastaralá vlákna a konverzace bez kotvy čekají
 na `Overview` v #72.
 
+Odpovídání do vláken hotové (issue #73) — `ThreadRequest`, `ThreadSubmission`, `ThreadOutbound`
+a `GhThreadResponse` v `App/Publish/`, `App/Policy/ThreadUpdatePolicy.swift`, `ThreadActions`
+a `threadReplies`/`threadStates` v `AppStore`. **Do vlákna se dá odpovědět a jde označit za
+vyřešené** — z bubliny u kódu i z `Přehledu`, bez potvrzovacího sheetu (rozhodnutí #73: je to
+jedna věta v diskuzi, ne verdikt nad PR). Odeslaná odpověď se ve vlákně objeví bez dalšího
+načtení, selhání **nechá text na místě**.
+
+Tím se změnila **tvrdá podmínka č. 1**: protokol má tři vyjmenované metody místo jedné a grep
+vypíše čtyři soubory se dvěma volajícími (viz Tvrdé podmínky). Pre-flight u odpovědi `headSha`
+neověřuje — odpověď se váže na vlákno, ne na commit.
+
+Tři věci změřené na živém API v sandboxu, které měnily návrh:
+
+- **Odpověď jde GraphQL mutací, ne RESTem ze zadání.** `addPullRequestReviewThreadReply` bere
+  `id` vlákna, které v modelu už je; REST by potřeboval `databaseId` komentáře a muselo by se
+  rozhodovat, na který komentář ve vlákně se odpovídá.
+- **Prázdné tělo GitHub tiše spolkne** — `comment: null`, exit **0**, ve vlákně nic. Proto je
+  brána `ThreadRequest.isSendable` a proto se `comment: null` hlásí jako chyba.
+- **Odpověď na zavřeném PR GitHub pustí**, aplikace ji ale nepustí. Je to vědomě striktnější:
+  mergnutý PR ze seznamu vypadne, takže se k jeho vláknům z okna nedostaneš.
+
+Vedle zadání přibyla **práva viewera** (`viewerCanResolve`/`viewerCanUnresolve` v dotazu
+a `ReviewThread.canToggleResolution`): bez nich by okno nabízelo `Vyřešit` i tam, kde na to
+reviewer právo nemá, a tlačítko by vždycky selhalo.
+
 **Fáze 2 hotová** — `App/Checkout/`, vrstva bez UI. Bare klon do cache (#8), worktree per
 review i serializace souběžných příprav (#9) a eviction cache (#10). Aplikace si tedy umí
 připravit pracovní kopii a uklidit po sobě; chybí jen ten, kdo ji použije.
@@ -2597,13 +2764,14 @@ Tím **končí rozsah v1** podle specifikace. Za ním:
    publisher #67, skládání draftu #66, potvrzovací sheet #68 a povolení v nastavení #107.
    Zbývá přenesení draftu na nový commit (#69).
 7. **Konverzace, komentáře a taby** (M7) — cizí komentáře a vlákna v okně, odpovídání do
-   nich a rozvržení jako na GitHubu (taby `Overview` / `Files changed`).
+   nich a rozvržení jako na GitHubu (taby `Overview` / `Files changed`). Hotové: čtení #63,
+   vlákna u kódu #64, taby #72 a odpovídání #73; zbývá side-by-side diff (#98).
 
 **M6 a M7 jsou do sebe zaklesnuté a nejdou udělat po sobě.** `#66` a `#68` z M6 čekaly na
-`#64` z M7, kdežto `#73` z M7 čeká na `#67` z M6 — takže se to plánovalo jako jeden blok
+`#64` z M7, kdežto `#73` z M7 čekalo na `#67` z M6 — takže se to plánovalo jako jeden blok
 o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `#65`, `#64`,
-`#67`, `#66`, `#72` a `#68`; `#98` (side-by-side diff) a `#110` (víceřádkové komentáře) na
-konverzaci nestojí vůbec a dají se zařadit kamkoli. Pořadí zbytku: `#73` → `#69`.
+`#67`, `#66`, `#72`, `#68` a `#73`; `#98` (side-by-side diff) a `#110` (víceřádkové komentáře) na
+konverzaci nestojí vůbec a dají se zařadit kamkoli. Zbývá `#69` (přenesení draftu na nový commit).
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
    s oprávněním a klikem (#88), doběhlé review (#82), nové PR (#85), vypínání po
    událostech (#86) a seskupování (#87).

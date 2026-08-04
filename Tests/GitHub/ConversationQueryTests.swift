@@ -55,6 +55,9 @@ struct ConversationQueryTests {
             "viewer", "reviews", "reviewThreads", "comments",
             "isResolved", "isOutdated", "originalLine", "diffSide",
             "replyTo", "totalCount", "hasNextPage", "submittedAt",
+            // Bez práv by okno nabízelo `Vyřešit` i tam, kde na to reviewer právo nemá —
+            // a tlačítko, které vždycky selže, je horší než žádné.
+            "viewerCanResolve", "viewerCanUnresolve",
         ] {
             #expect(document.contains(field), "v dotazu chybí \(field)")
         }

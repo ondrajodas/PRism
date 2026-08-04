@@ -41,6 +41,7 @@ enum ConversationQuery {
             pageInfo { hasNextPage }
             nodes {
               id isResolved isOutdated path line originalLine diffSide
+              viewerCanResolve viewerCanUnresolve
               comments(first: $page) {
                 totalCount
                 pageInfo { hasNextPage }
