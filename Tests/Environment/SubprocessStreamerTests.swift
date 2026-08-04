@@ -145,10 +145,17 @@ struct SubprocessStreamerTests {
 
     /// PID z běžícího procesu. Čeká na něj pollingem, ne pevnou odmlkou — start `/bin/sh` trvá
     /// jednotky milisekund, ale pod zátěží klidně stovky.
+    /// **Nekladné číslo se nepřijme**, i když ho `echo $$` dát nemůže. `kill(0, …)` míří na celou
+    /// **procesovou skupinu** volajícího a negativní PID taky na skupinu — takže hodnota, která
+    /// se sem omylem dostane, by z kontroly existence jednoho procesu udělala něco úplně jiného.
+    /// Upozornil na to Copilot na #121; past by se tady sice neotevřela (soubor se plní jedním
+    /// `echo $$`, a `pid_t(_:)` je failable, takže rozbitý text vede na další kolo pollingu, ne
+    /// na nulu), ale stojí to jednu podmínku.
     private func pid(from file: URL) async throws -> pid_t {
         for _ in 0..<250 {
             if let text = try? String(contentsOf: file, encoding: .utf8),
-               let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+               let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+               pid > 0 {
                 return pid
             }
             try await Task.sleep(for: .milliseconds(20))
