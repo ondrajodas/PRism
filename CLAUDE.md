@@ -1861,6 +1861,13 @@ Nad `HTTPGetting` (#31) platí:
   změně targetů nebo build settings. Jediný soubor, který v něm vyjmenovaný **je**, je
   `Signing.xcconfig` — xcconfig se dá napojit jen odkazem (`baseConfigurationReference`
   u obou konfigurací projektu), z filesystému se nevezme.
+
+  Druhá výjimka je `ASSETCATALOG_COMPILER_APPICON_NAME` (#83): je to **build setting**, takže
+  jinudy než pbxprojem nastavit nejde. Leží na **app targetu**, ne na projektu — testovací
+  target ikonu mít nemá; je to tatáž úvaha jako u `CODE_SIGN_IDENTITY`, jen obráceně.
+  Samotný `App/Assets.xcassets` se ale v pbxproj **nevyjmenovává** — buildable folder ho
+  vezme z filesystému a `actool` ho zkompiluje do `Assets.car` a `AppIcon.icns`. Ověřeno
+  obsahem `.app`.
 - **V shell skriptech se proměnná v české próze píše `${VAR}`.** Uvozovka „ hned za
   `$VAR` shodí bash 3.2 (ten je v `/bin/bash`) v UTF-8 locale na `unbound variable`: její
   byty se počítají do jména proměnné. Chytí to `set -u`, ale až za běhu — `bash -n` ne.
@@ -1884,6 +1891,13 @@ Nad `HTTPGetting` (#31) platí:
   i to, co appka ukazuje v Docku. Když název měníš, projdi i `PRODUCT_MODULE_NAME`,
   `TEST_HOST`, `CODE_SIGN_ENTITLEMENTS` a `bin/run.sh` — jinak build projde, ale spadne
   až test nebo spuštění.
+- **Ikona potřebuje `CFBundleIconName` v `Info.plist` napsané ručně.** Xcode ho generuje
+  z `ASSETCATALOG_COMPILER_APPICON_NAME`, ale jen když si plist generuje sám — a tady je
+  vlastní (`GENERATE_INFOPLIST_FILE = NO`). Bez toho klíče se ikona **zkompiluje**
+  a v bundlu leží, jen ji systém nenajde a v Docku zůstane prázdný obdélník.
+- **Po překreslení ikony se musí restartovat Dock** (`killall Dock`). Cache ikon je vázaná
+  na cestu k `.app`, která se rebuildem nemění, takže Dock dál ukazuje tu starou — a vypadá
+  to, že se nic nezměnilo. Stálo to jedno kolo hledání neexistující chyby v buildu.
 - **`CFBundleName` nejde nastavit přes `INFOPLIST_KEY_*`.** Xcode ho generuje
   z `PRODUCT_NAME` a klíč tiše ignoruje. Projekt má proto vlastní `Info.plist` místo
   `GENERATE_INFOPLIST_FILE`. Původní důvod (produkt a uživatelský název se lišily) po
@@ -2278,6 +2292,12 @@ xcodebuild -project PRism.xcodeproj -scheme PRism test
                           # + Signing.local.xcconfig, ze kterého ho vezme build
 ```
 
+```bash
+swift bin/make-icon.swift              # překreslí ikonu do App/Assets.xcassets
+swift bin/make-icon.swift split        # druhá barevná varianta
+swift bin/make-icon.swift split /tmp/x # jen vykreslit, bez zásahu do repa
+```
+
 `xcodebuild` na tomhle stroji plive na začátku výstupu chyby o `CoreSimulator` — jsou
 neškodné, týkají se iOS simulátorů, ne macOS buildu. Rozhoduje `** BUILD SUCCEEDED **`,
 resp. `** TEST SUCCEEDED **` na konci.
@@ -2538,6 +2558,13 @@ z transcriptu zůstává v #94 pro pád aplikace a zabití zvenčí.
 Stálý podpis hotový (issue #61) — `Signing.xcconfig` a `bin/setup-signing.sh`. Aplikace už
 není po každém buildu pro macOS jiná aplikace, takže udělená povolení rebuild přežijí.
 Vrstva bez UI (build a podpis), viz *Prostředí* výš.
+
+Ikona hotová (issue #83) — `bin/make-icon.swift` a `App/Assets.xcassets/`. Znaky obou
+nástrojů rozpůlené diagonálou zleva zdola doprava nahoru: vlevo nahoře Claude, vpravo dole
+GitHub. Generuje se **z kódu** z oficiálních značek v `bin/icon-sources/` (obě jsou jediná
+SVG cesta, takže si skript vystačí s minimálním překladem `d` na `Path` — žádná závislost).
+V repu jsou **dvě barevné varianty**, nasazená je krémový znak na oranžové. Malé velikosti se
+kreslí hruběji, ne zmenšením.
 
 Povolení odesílání v nastavení hotové (issue #107) — `allowsPublishing` v `Configuration`
 (globálně i per repo), `PublishScope` složený z konfigurace a přepínač v okně nastavení.

@@ -345,6 +345,28 @@ xcodebuild -project PRism.xcodeproj -scheme PRism test
 `bin/run.sh` buildí do `build/` v repu (`-derivedDataPath`), aby byla cesta k `.app`
 předvídatelná; složka je gitignorovaná. Před spuštěním ukončí předchozí instanci.
 
+### Ikona
+
+Ikona je **generovaná z kódu**, ne obrázek přinesený zvenčí:
+
+```bash
+swift bin/make-icon.swift                    # nasazená varianta
+swift bin/make-icon.swift split              # druhá barevná varianta
+swift bin/make-icon.swift split /tmp/náhled  # jen vykreslit, bez zásahu do repa
+```
+
+Motiv jsou znaky obou nástrojů rozpůlené diagonálou zleva zdola doprava nahoru — vlevo
+nahoře Claude, vpravo dole GitHub. Skládá se z **oficiálních** značek (`bin/icon-sources/`,
+favicony obou služeb), takže se nekreslí zpaměti; barvy jsou z nich taky. Nasazená je
+varianta s krémovým znakem na oranžové, druhá (Claude v původních barvách) zůstává v repu,
+aby se dalo přepnout.
+
+**Malé velikosti nejsou zmenšené velké** — pod 64 px se kreslí hruběji, protože ve 16 bodech
+ikona skončí v přepínači aplikací a jemná kresba se tam slije.
+
+Po překreslení je potřeba **restartovat Dock** (`killall Dock`), jinak se dál dívá na starou
+ikonu z cache a vypadá to, že se nic nezměnilo.
+
 Aplikace běží **bez App Sandboxu** — spouští `git`, `gh` a `claude` a zapisuje do vlastní
 cache.
 
@@ -409,6 +431,7 @@ App/                      zdrojáky aplikace — target PRism
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky
     Settings/             okno nastavení (⌘,) — globální hodnoty a nastavení per repo
+  Assets.xcassets/        ikona aplikace (generovaná, viz bin/make-icon.swift)
 Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip
   Environment/            testy Environment vrstvy + fakes
@@ -432,6 +455,8 @@ Tests/                    unit testy — target PRismTests
 bin/run.sh                build + spuštění jedním příkazem
 bin/copilot-review.sh     vyžádání Copilot review na PR
 bin/setup-signing.sh      jednorázová příprava stálého podpisu (self-signed certifikát)
+bin/make-icon.swift       vykreslí ikonu do asset catalogu (bez závislosti, přes ImageRenderer)
+bin/icon-sources/         oficiální značky, ze kterých se ikona skládá
 Info.plist                název aplikace, verze, minimální systém
 PRism.entitlements        vypnutý App Sandbox
 Signing.xcconfig          podpis: ad-hoc default + volitelný Signing.local.xcconfig
