@@ -5,9 +5,40 @@ import Foundation
 /// Dvě hodnoty spolu, ne každá zvlášť: k odebranému řádku patří číslo ze **staré** verze
 /// souboru, takže volající, který si stranu a číslo vybírá sám, si je umí spárovat špatně —
 /// a komentář pak odejde na jiný řádek, aniž by to bylo na čem poznat.
+///
+/// `line` a `side` jsou **konec** rozsahu: u víceřádkového komentáře je to poslední řádek,
+/// u kterého visí bublina (jako na GitHubu), a přesně ten pár, který jde do payloadu jako
+/// `line`/`side`. Začátek je v `start` a `nil` znamená jednořádkový komentář.
 struct DraftAnchor: Hashable, Sendable {
     let line: Int
     let side: DiffSide
+    /// Začátek rozsahu, když je komentář víceřádkový. Jde do payloadu jako
+    /// `start_line`/`start_side`.
+    ///
+    /// **`nil` u jednořádkového komentáře, ne `start == line`.** Změřeno u #110, že GitHub
+    /// `start_line == line` přijme, takže by šlo mít jen rozsah — jenže pak by se u každého
+    /// jednořádkového komentáře posílalo o dvě pole víc, než co prošlo u #62 a #67. Dvě
+    /// podoby téhož by navíc byla past pro toho, kdo draft na disku čte, proto `Policy` rozsah
+    /// s oběma konci na jednom řádku **srazí** na `nil`.
+    let start: Endpoint?
+
+    init(line: Int, side: DiffSide, start: Endpoint? = nil) {
+        self.line = line
+        self.side = side
+        self.start = start
+    }
+
+    /// Jeden konec rozsahu. Tentýž pár jako `line`/`side` výš — vlastní typ proto, aby se
+    /// konce nedaly zaměnit a aby šly seřadit.
+    struct Endpoint: Hashable, Sendable {
+        let line: Int
+        let side: DiffSide
+    }
+
+    /// Konec rozsahu jako `Endpoint`, ať se dvojice konců dá řešit jednotně.
+    var end: Endpoint { Endpoint(line: line, side: side) }
+
+    var isRange: Bool { start != nil }
 }
 
 /// Kam převzatý nález (nebo vlastní poznámka) v draftu patří.
@@ -117,6 +148,142 @@ extension Policy {
             }
         }
         return result
+    }
+
+    // MARK: - Rozsah řádků (#110)
+
+    /// Spojí dva konce do rozsahu a **seřadí je podle pořadí, ve kterém se řádky kreslí**.
+    ///
+    /// Bere konce, ne celé kotvy: kdo rozsah roztahuje, musí sám rozhodnout, který konec zůstává
+    /// na místě — u ⇧ kliku je to **začátek** už existujícího rozsahu, ne jeho konec.
+    /// `nil` = některý konec v diffu není, takže rozsah nemá z čeho vzniknout.
+    ///
+    /// Pořadí se bere z diffu, ne z čísel, a je to podstatné: na jedné straně z toho vyjde
+    /// vzestupné číslo, což GitHub kontroluje (`start_line > line` se stejným `side` skončí
+    /// `422 Start position could not be resolved`), ale **napříč stranami nekontroluje nic** —
+    /// `LEFT` a `RIGHT` jsou dvě různé osy číslování, takže rozsah `6 LEFT → 5 RIGHT` je
+    /// v pořádku, i když čísla klesají. Obojí změřeno u #110.
+    ///
+    /// **Oba konce musí ležet v hunku, ale nemusí být ve stejném.** Rozsah smí přeskočit mezeru,
+    /// která v diffu vůbec není (změřeno u #110) — jen konec mimo hunk je `422`.
+    ///
+    /// Když oba konce sedí na tentýž řádek, vyjde **jednořádkový** komentář: rozsah délky 1 by
+    /// GitHub sice přijal, ale byla by to druhá podoba téhož (viz `DraftAnchor.start`).
+    static func commentRange(
+        from one: DraftAnchor.Endpoint,
+        to other: DraftAnchor.Endpoint,
+        in file: FileDiff
+    ) -> DraftAnchor? {
+        guard let first = position(of: one, in: file), let second = position(of: other, in: file) else {
+            return nil
+        }
+        guard first != second else { return DraftAnchor(line: other.line, side: other.side) }
+
+        let (start, end) = first < second ? (one, other) : (other, one)
+        return DraftAnchor(line: end.line, side: end.side, start: start)
+    }
+
+    /// Řádky, které rozsah pokrývá — pro zvýraznění v diffu. Prázdné u jednořádkového
+    /// komentáře i u toho, jehož konce v diffu nejsou.
+    ///
+    /// Pokrytí je **po řádcích diffu, ne po stranách**: rozsah je úsek toho, co se kreslí, takže
+    /// kontextový řádek uprostřed do něj patří celý. Ve split pohledu se proto zvýrazní obě
+    /// buňky takového řádku, a je to tak správně — ten řádek v rozsahu je.
+    static func rangeLines(of comment: ReviewDraftComment, in file: FileDiff) -> Set<DiffLine> {
+        rangeLines(of: comment.anchor, in: file)
+    }
+
+    /// Totéž pro rozsah, který ještě není komentářem — tažení ho ukazuje průběžně (#110).
+    static func rangeLines(of anchor: DraftAnchor, in file: FileDiff) -> Set<DiffLine> {
+        guard let start = anchor.start,
+              let from = position(of: start, in: file),
+              let to = position(of: anchor.end, in: file)
+        else { return [] }
+
+        let lines = file.hunks.flatMap(\.lines)
+        return Set(lines[min(from, to)...max(from, to)])
+    }
+
+    /// Buňky pokryté rozsahy **všech** komentářů, které patří k tomuhle souboru — jedním
+    /// průchodem, protože hledání konců jde přes všechny hunky a po řádcích by to bylo
+    /// kvadratické (tentýž důvod jako u `commentAnchors(in:)`).
+    static func commentRangeCells(of comments: [ReviewDraftComment], in file: FileDiff) -> Set<DraftAnchor.Endpoint> {
+        self.comments(of: file, from: comments).reduce(into: Set<DraftAnchor.Endpoint>()) { result, comment in
+            result.formUnion(rangeCells(of: comment.anchor, in: file))
+        }
+    }
+
+    /// Buňky, které rozsah pokrývá — **řádek a strana**, ne jen řádek.
+    ///
+    /// Ve split pohledu je to rozdíl, na kterém záleží: rozsah tažený v pravém sloupci nemá
+    /// zvýrazňovat levý, i když kontextový řádek stojí na obou stranách jako tatáž hodnota.
+    /// Nahlášené při zkoušení #110 („označuje se levý i pravý řádek“) — do té doby bylo pokrytí
+    /// po řádcích a bralo obě buňky.
+    ///
+    /// Strany bere z **konců** rozsahu: obvykle jedna, u rozsahu přes obě strany obě — ten spadá
+    /// do obou sloupců doopravdy.
+    static func rangeCells(of anchor: DraftAnchor, in file: FileDiff) -> Set<DraftAnchor.Endpoint> {
+        let sides: Set<DiffSide> = anchor.start.map { [$0.side, anchor.side] } ?? [anchor.side]
+        var result: Set<DraftAnchor.Endpoint> = []
+        for line in rangeLines(of: anchor, in: file) {
+            for side in sides {
+                guard let number = number(of: line, on: side) else { continue }
+                result.insert(DraftAnchor.Endpoint(line: number, side: side))
+            }
+        }
+        return result
+    }
+
+    /// Číslo řádku na dané straně — vpravo nové, vlevo staré. `nil` = na téhle straně řádek není.
+    static func number(of line: DiffLine, on side: DiffSide) -> Int? {
+        switch side {
+        case .right: line.newNumber
+        case .left: line.oldNumber
+        }
+    }
+
+    /// Kolikátý je řádek s tímhle koncem v pořadí kreslených řádků souboru. `nil` = není v diffu.
+    ///
+    /// Hledá se podle strany: vpravo se porovnává nové číslo, vlevo staré — tatáž otázka jako
+    /// `matches(_:_:)` nad komentářem, jen nad koncem rozsahu.
+    private static func position(of endpoint: DraftAnchor.Endpoint, in file: FileDiff) -> Int? {
+        file.hunks.flatMap(\.lines).firstIndex { line in
+            switch endpoint.side {
+            case .right: line.newNumber == endpoint.line
+            case .left: line.oldNumber == endpoint.line
+            }
+        }
+    }
+
+    /// Kde komentář je, jako text do panelu i do potvrzení odeslání — `Cart.php:26–31`.
+    ///
+    /// Jedno místo pro obě obrazovky: do #110 to byly dva shodné výrazy ve dvou views a text
+    /// s rozsahem by se v jednom z nich zapomněl. Testuje se bez UI.
+    ///
+    /// Strana se píše jen tam, kde je jiná než výchozí (`starý`/`staré`) — u komentáře k nové
+    /// verzi souboru by to byl šum u každého řádku.
+    static func location(of comment: ReviewDraftComment) -> String {
+        "\(comment.path):\(lines(of: comment))"
+    }
+
+    /// Jen ta čísla — `26–31`, `26 (starý)`. Bez cesty, protože bublina u kódu už ví, ve kterém
+    /// souboru je; skládat to ve view přes hledání dvojtečky v `location` by se rozbilo na cestě,
+    /// která dvojtečku obsahuje.
+    static func lines(of comment: ReviewDraftComment) -> String {
+        let anchor = comment.anchor
+        guard let start = anchor.start else {
+            return "\(anchor.line)\(anchor.side == .left ? " (starý)" : "")"
+        }
+        guard start.side == anchor.side else {
+            // Rozsah přes obě strany (změřeno u #110, že ho GitHub bere): bez stran u obou
+            // čísel by z `6–5` vypadal jako chyba.
+            return "\(label(of: start))–\(label(of: anchor.end))"
+        }
+        return "\(start.line)–\(anchor.line)\(anchor.side == .left ? " (staré)" : "")"
+    }
+
+    private static func label(of endpoint: DraftAnchor.Endpoint) -> String {
+        "\(endpoint.line)\(endpoint.side == .left ? " (starý)" : " (nový)")"
     }
 
     /// Patří rozdělaný komentář k tomuhle řádku diffu?
@@ -272,13 +439,14 @@ extension Policy {
     /// číslo jako ten k přidanému — a jsou to různá místa (viz `matches(_:_:)`).
     private struct AnchorKey: Hashable {
         let path: String
-        let line: Int
-        let side: DiffSide
+        /// Celá kotva, tedy i začátek rozsahu (#110): dva komentáře na **stejném** rozsahu jsou
+        /// dvě vlákna k témuž místu, ale komentář na 26 a komentář na 20–26 míří jinam, i když
+        /// mají stejný konec.
+        let anchor: DraftAnchor
 
         init(_ comment: ReviewDraftComment) {
             path = comment.path
-            line = comment.line
-            side = comment.side
+            anchor = comment.anchor
         }
     }
 

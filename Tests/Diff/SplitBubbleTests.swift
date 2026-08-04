@@ -141,7 +141,7 @@ struct SplitBubbleTests {
 
     @Test("Rozdělaný komentář na kontextovém řádku nevznikne dvakrát")
     func doesNotDuplicateACommentOnAContextLine() throws {
-        let comment = ReviewDraftComment(path: "Cart.php", line: 27, side: .right, body: "moje", origin: .own)
+        let comment = ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 27, side: .right), body: "moje", origin: .own)
 
         let rows = DiffRow.rows(of: try file(), layout: .split, comments: [comment])
 
@@ -157,8 +157,8 @@ struct SplitBubbleTests {
     @Test("Komentáře k oběma stranám jsou v jednom řádku, rozdělené po stranách")
     func putsCommentsOfBothSidesInOneRow() throws {
         let comments = [
-            ReviewDraftComment(path: "Cart.php", line: 26, side: .left, body: "vlevo", origin: .own),
-            ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "vpravo", origin: .own),
+            ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .left), body: "vlevo", origin: .own),
+            ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "vpravo", origin: .own),
         ]
 
         let rows = DiffRow.rows(of: try file(), layout: .split, comments: comments)
@@ -177,8 +177,8 @@ struct SplitBubbleTests {
     @Test("Dva komentáře na jedné straně zůstanou v jednom sloupci")
     func stacksTwoCommentsOnTheSameSide() throws {
         let comments = [
-            ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "první", origin: .own),
-            ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "druhý", origin: .own),
+            ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "první", origin: .own),
+            ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "druhý", origin: .own),
         ]
 
         let rows = DiffRow.rows(of: try file(), layout: .split, comments: comments)
@@ -196,8 +196,8 @@ struct SplitBubbleTests {
     /// komentář, vyjmutí levého by ji změnila a editor toho druhého by přišel o rozepsaný text.
     @Test("Identita řádku s komentáři se vyjmutím jednoho z nich nezmění")
     func keepsTheRowIdentityWhenACommentGoesAway() throws {
-        let left = ReviewDraftComment(path: "Cart.php", line: 26, side: .left, body: "vlevo", origin: .own)
-        let right = ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "vpravo", origin: .own)
+        let left = ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .left), body: "vlevo", origin: .own)
+        let right = ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "vpravo", origin: .own)
 
         func identity(_ comments: [ReviewDraftComment]) throws -> String {
             let rows = DiffRow.rows(of: try file(), layout: .split, comments: comments)
@@ -247,7 +247,7 @@ struct SplitBubbleTests {
     @Test("Kotva komentáře na odebraném řádku míří na dvojici")
     func anchorsACommentOnTheRemovedSide() throws {
         let diff = diff()
-        let comment = ReviewDraftComment(path: "Cart.php", line: 26, side: .left, body: "moje", origin: .own)
+        let comment = ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .left), body: "moje", origin: .own)
 
         let anchor = try #require(DiffRow.anchor(in: diff, comment: comment, layout: .split))
 
@@ -259,7 +259,7 @@ struct SplitBubbleTests {
     @Test("Kotva komentáře na přidaném řádku je v obou pohledech stejná")
     func anchorsACommentTheSameWayInBothLayouts() throws {
         let diff = diff()
-        let comment = ReviewDraftComment(path: "Cart.php", line: 26, side: .right, body: "moje", origin: .own)
+        let comment = ReviewDraftComment(path: "Cart.php", anchor: DraftAnchor(line: 26, side: .right), body: "moje", origin: .own)
 
         #expect(
             DiffRow.anchor(in: diff, comment: comment, layout: .split)
@@ -269,7 +269,7 @@ struct SplitBubbleTests {
 
     @Test("Komentář v souboru, který v diffu není, nikam neukazuje ani vedle sebe")
     func hasNoAnchorOutsideTheDiff() throws {
-        let comment = ReviewDraftComment(path: "Jinde.php", line: 26, side: .right, body: "moje", origin: .own)
+        let comment = ReviewDraftComment(path: "Jinde.php", anchor: DraftAnchor(line: 26, side: .right), body: "moje", origin: .own)
 
         #expect(DiffRow.anchor(in: diff(), comment: comment, layout: .split) == nil)
     }

@@ -27,7 +27,7 @@ struct ReviewDraftStoreTests {
         body: String = "tady to spadne",
         origin: ReviewDraftComment.Origin = .own
     ) -> ReviewDraftComment {
-        ReviewDraftComment(path: path, line: line, side: side, body: body, origin: origin)
+        ReviewDraftComment(path: path, anchor: DraftAnchor(line: line, side: side), body: body, origin: origin)
     }
 
     private func draft(

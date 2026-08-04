@@ -257,6 +257,12 @@ struct PullRequestDetailView: View {
         return DraftActions(
             canCompose: store.canComposeDraft(for: id),
             addComment: { path, anchor in store.addDraftComment(at: anchor, path: path, for: id) },
+            extendComment: { path, anchor in store.extendDraftComment(to: anchor, path: path, for: id) },
+            dragRange: { path, from, to in
+                store.dragCommentRange(path: path, from: from, to: to, for: id)
+            },
+            endRangeDrag: { store.finishCommentRange() },
+            draggedRange: store.commentDrag.map { (path: $0.path, anchor: $0.anchor) },
             addNote: { path, line in
                 store.appendDraftBodyItem(text: "", path: path, line: line, for: id)
                 showDraftTab()

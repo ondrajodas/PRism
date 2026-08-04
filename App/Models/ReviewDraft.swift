@@ -80,28 +80,52 @@ struct ReviewDraftComment: Hashable, Codable, Sendable, Identifiable {
     /// (jiná věc ke stejnému kódu) a `ForEach` i editace potřebují je rozlišit.
     let id: UUID
     let path: String
+    /// **Konec** rozsahu — u jednořádkového komentáře ten jediný řádek. U víceřádkového je to
+    /// poslední řádek, u kterého visí bublina (jako na GitHubu).
     let line: Int
     /// Ke které straně diffu se komentář váže. **Není odvoditelná z `line`**: odebraný
     /// řádek má číslo ze staré verze souboru, takže bez strany by komentář odešel na jiný
-    /// řádek. Rozhoduje `Policy.commentableSide(of:in:)`.
+    /// řádek. Rozhoduje `Policy.commentAnchors(of:in:)`.
     let side: DiffSide
+    /// Začátek rozsahu u víceřádkového komentáře (#110). `nil` = jeden řádek.
+    ///
+    /// Ploché volitelné klíče, ne vnořený objekt: draft na disku vznikl u #65 bez nich, takže
+    /// **chybějící klíč musí znamenat jeden řádek** — synthetizovaný `Codable` u optionalu
+    /// dekóduje `decodeIfPresent`, takže starší soubory se čtou dál. Vnořený `DraftAnchor` by
+    /// tvar souboru změnil a rozdělaná review by se po aktualizaci nepřečetla.
+    let startLine: Int?
+    let startSide: DiffSide?
     var body: String
     let origin: Origin
 
+    /// Kotva se předává celá, ne po číslech: `DraftAnchor` je jediné místo, které ví, že
+    /// k odebranému řádku patří staré číslo — a od #110 taky to, kde rozsah začíná.
     init(
         id: UUID = UUID(),
         path: String,
-        line: Int,
-        side: DiffSide,
+        anchor: DraftAnchor,
         body: String,
         origin: Origin
     ) {
         self.id = id
         self.path = path
-        self.line = line
-        self.side = side
+        line = anchor.line
+        side = anchor.side
+        startLine = anchor.start?.line
+        startSide = anchor.start?.side
         self.body = body
         self.origin = origin
+    }
+
+    /// Kotva zpátky jako celek. Rozsah vznikne jen tehdy, když je **celý** — půl kotvy
+    /// (číslo bez strany) by znamenalo hádat stranu, a to je zrovna ta chyba, kvůli které
+    /// `DraftAnchor` existuje.
+    var anchor: DraftAnchor {
+        DraftAnchor(
+            line: line,
+            side: side,
+            start: startLine.flatMap { start in startSide.map { DraftAnchor.Endpoint(line: start, side: $0) } }
+        )
     }
 
     /// Odkud se komentář vzal.

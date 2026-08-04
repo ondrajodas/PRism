@@ -175,6 +175,51 @@ rozpoznat dřív, než nabídne tlačítko — jinak si o odeslání řekne a do
 
 Fixtures: `review-error-approve-own-pr.json`, `review-error-request-changes-own-pr.json`
 
+## 8. Víceřádkový komentář: `start_line` a `start_side` (#110)
+
+Měřeno na PR #1 (`change-in-the-middle`, hunk na nových řádcích 25–31 v 52řádkovém souboru),
+PR #7 (`two-hunks-110`, dva hunky: nové 2–8 a 37–43) a PR #3 (README s odebranými řádky 3, 4, 6
+a přidanými 3, 5–13). Rozsah se posílá jako `start_line` + `start_side` vedle `line` + `side`.
+
+| Případ | Payload | Výsledek |
+|---|---|---|
+| Rozsah uvnitř jednoho hunku, stejná strana | `start_line: 26, line: 30, side: RIGHT` | **přijat**, zapsán jako `start=26/RIGHT end=30/RIGHT`, `subject_type: line` |
+| `start_line == line` | `start_line: 28, line: 28, side: RIGHT` | **přijat**, zapsán jako rozsah délky 1 |
+| Rozsah **přes mezeru mezi dvěma hunky** | `start_line: 5, line: 40, side: RIGHT` (hunky 2–8 a 37–43) | **přijat** — mezera mimo diff se přeskočí |
+| Rozsah **přes obě strany** | `start_line: 28, start_side: LEFT, line: 30, side: RIGHT` | **přijat** |
+| Přes strany s **obrácenými čísly** | `start_line: 6, start_side: LEFT, line: 5, side: RIGHT` | **přijat** |
+| Přes strany opačným směrem | `start_line: 3, start_side: RIGHT, line: 6, side: LEFT` | **přijat** |
+| Oba konce `LEFT`, vzestupně | `start_line: 3, line: 6, side: LEFT` | **přijat** |
+| **Konec mimo hunk** | `start_line: 26, line: 40` (hunk končí na 31) | **422 `Line could not be resolved`** |
+| **Začátek mimo hunk** | `start_line: 10, line: 28` (hunk začíná na 25) | **422 `Line could not be resolved`** |
+| **Stejná strana, začátek za koncem** | `start_line: 8, line: 5, side: RIGHT` | **422 `Start position could not be resolved`** |
+
+Dvě věci jsou jinak, než by se čekalo:
+
+- **Rozsah nemusí být v jednom hunku.** Smí přeskočit mezeru, která v diffu vůbec není — takže
+  „oba konce v jednom hunku“ **není** podmínka. Podmínka je, že **každý konec** sám leží v nějakém
+  hunku; jinak přijde tatáž hláška jako u jednořádkového komentáře mimo diff (bod 3).
+- **Pořadí hlídá GitHub jen na jedné straně.** `start_line > line` se stejným `side` skončí 422 —
+  a hláška je **jiná** (`Start position could not be resolved`), takže se klasifikace chyb dá
+  rozlišit. Napříč stranami projde jakákoli kombinace, protože `LEFT` a `RIGHT` konec jsou dvě
+  různé osy číslování a GitHub je nesrovnává.
+
+### Zastarání rozsahu
+
+Po commitu, který komentované řádky přepíše, jsou **oba konce `null`**:
+
+| Pole | Před | Po novém commitu |
+|---|---|---|
+| `start_line` | 26 | **`null`** |
+| `line` | 30 | **`null`** |
+| `original_start_line` | 26 | 26 |
+| `original_line` | 30 | 30 |
+| `position` | 7 | 1 (**nenulová**) |
+
+Je to tedy stejné jako u jednořádkového komentáře (bod 4): zastarání se pozná na `line == nil`
+při zachovaném `original_line`, `position` se použít nedá. Pro #69 z toho plyne, že se rozsah
+přenáší jako celek — buď se najdou oba konce, nebo je zastaralý celý.
+
 ## Mimo zadání: `commit_id` musí být plný sha
 
 Zkrácený sha (`5b6250cb`) API odmítne:
@@ -199,6 +244,10 @@ Fixture: `review-error-abbreviated-sha.json`
 | Pending review blokuje (5) | #67 potřebuje vlastní stav pro „na PR leží cizí rozdělané review“ |
 | Permalink renderuje úryvek (6) | Nález mimo diff se do review dostane v těle, ne zahozením |
 | Na vlastním PR jen `COMMENT` (7) | #68 musí verdikt schovat, ne ho nabídnout a spadnout na 422 |
+| Rozsah smí přeskočit mezeru mezi hunky, ale každý konec musí být v hunku (8) | `Policy` u #110 hlídá **oba konce** zvlášť, ne jeden hunk pro celý rozsah — tažení přes mezeru mezi hunky je legitimní |
+| Pořadí se hlídá jen na stejné straně (8) | `Policy` řadí konce podle **pořadí v kresleném diffu**; na jedné straně z toho vyjde vzestupné číslo, napříč stranami GitHub nic nekontroluje |
+| `start_line == line` projde (8) | Jednořádkový komentář **nemusí** být zvláštní případ — v aplikaci jím ale zůstává, ať se nemění payload, který u #62 a #67 prošel |
+| Zastaralý rozsah má `null` na obou koncích (8) | #69 přenáší rozsah jako celek: buď se najdou oba konce, nebo je zastaralý |
 
 ## Fixtures
 

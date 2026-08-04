@@ -24,25 +24,47 @@ struct DiffRowView: View {
     var threads = ThreadActions()
     /// Akce rozdělaného review svázané s tímhle souborem — cestu si doplní samy.
     var draft = FileDraftActions()
+    /// Buňky, které leží uvnitř rozsahu některého mého komentáře (#110) — **řádek a strana**,
+    /// protože rozsah v pravém sloupci nemá zvýrazňovat levý. Skládá je volající jednou za
+    /// soubor, ne řádek po řádku: hledání konců rozsahu jde přes všechny hunky.
+    var commentRangeCells: Set<DraftAnchor.Endpoint> = []
+    /// Totéž pro rozsah, který se právě táhne — svítí výrazněji než hotový komentář.
+    var draggedCells: Set<DraftAnchor.Endpoint> = []
+    /// Konec taženého rozsahu; při tažení je tlačítko vidět jen tam, takže jde s myší.
+    var dragEnd: DraftAnchor.Endpoint?
+    /// Tažení přes řádky, kterým se vybírá rozsah komentáře (#110).
+    var rangeDrag = RangeDragActions()
 
     var body: some View {
         switch row {
         case .hunk(_, let hunk):
             hunkHeader(hunk)
-        case .line(_, let line):
+        case .line(let id, let line):
             DiffLineView(
                 line: line,
                 language: language,
                 draftAction: draft.action(for: line),
-                performDraftAction: perform
+                performDraftAction: perform,
+                isInCommentRange: covers(commentRangeCells, line),
+                isInDraggedRange: covers(draggedCells, line),
+                dragEnd: dragEnd,
+                rangeDrag: rangeDrag,
+                dragID: id
             )
-        case .pair(_, let left, let right):
+        case .pair(let id, let left, let right):
             DiffPairView(
                 left: left,
                 right: right,
                 language: language,
                 draft: draft,
-                performDraftAction: perform
+                performDraftAction: perform,
+                leftInRange: left.map { covers(commentRangeCells, $0, on: .left) } ?? false,
+                rightInRange: right.map { covers(commentRangeCells, $0, on: .right) } ?? false,
+                leftInDrag: left.map { covers(draggedCells, $0, on: .left) } ?? false,
+                rightInDrag: right.map { covers(draggedCells, $0, on: .right) } ?? false,
+                dragEnd: dragEnd,
+                rangeDrag: rangeDrag,
+                dragID: id
             )
         case .expander(_, let expander):
             DiffExpanderView(
@@ -74,6 +96,17 @@ struct DiffRowView: View {
             draftComments(left: left, right: right)
         case .note(_, let text):
             note(text)
+        }
+    }
+
+    /// Leží buňka (řádek na dané straně) uvnitř rozsahu? V pohledu pod sebou je sloupec jediný,
+    /// takže stačí, když řádek padne do rozsahu na **kterékoli** straně.
+    private func covers(_ cells: Set<DraftAnchor.Endpoint>, _ line: DiffLine, on side: DiffSide? = nil) -> Bool {
+        guard !cells.isEmpty else { return false }
+        let sides: [DiffSide] = side.map { [$0] } ?? [.right, .left]
+        return sides.contains { candidate in
+            guard let number = Policy.number(of: line, on: candidate) else { return false }
+            return cells.contains(DraftAnchor.Endpoint(line: number, side: candidate))
         }
     }
 
@@ -146,9 +179,11 @@ struct DiffRowView: View {
     /// stavu, jen na jednom místě pro všechny tři druhy.
     private static let bubbleIndent = 104.0
 
-    private func perform(_ action: LineDraftAction) {
+    /// `extendsRange` je ⇧ klik (#110). Poznámka do těla review rozsah nezná — je to odkaz na
+    /// jeden řádek, který v diffu není.
+    private func perform(_ action: LineDraftAction, extendsRange: Bool) {
         switch action {
-        case .comment(let anchor): draft.comment(anchor)
+        case .comment(let anchor): extendsRange ? draft.extend(anchor) : draft.comment(anchor)
         case .note(let line): draft.note(line)
         }
     }

@@ -12,13 +12,27 @@ struct DiffPairView: View {
     var language: Language?
     /// Akce rozdělaného review svázané s tímhle souborem.
     var draft = FileDraftActions()
-    var performDraftAction: (LineDraftAction) -> Void = { _ in }
+    /// Druhý parametr je „⇧ bylo držené“ — roztažení rozsahu místo nového komentáře (#110).
+    var performDraftAction: (LineDraftAction, Bool) -> Void = { _, _ in }
+    /// Leží ta která strana uvnitř rozsahu mého komentáře? Pozadí rozsahu kreslí dvojice ze
+    /// stejného důvodu jako pozadí druhu řádku — buňka se roztáhne jen na svůj obsah.
+    var leftInRange = false
+    var rightInRange = false
+    /// Totéž pro rozsah, který se právě táhne — svítí výrazněji.
+    var leftInDrag = false
+    var rightInDrag = false
+    /// Konec taženého rozsahu; tlačítko se při tažení ukazuje jen tam.
+    var dragEnd: DraftAnchor.Endpoint?
+    /// Tažení přes řádky (#110). Identita se doplňuje stranou, aby se rámečky obou buněk
+    /// nepřebily — ve split pohledu se právě z rámečku pozná, na které straně se táhne.
+    var rangeDrag = RangeDragActions()
+    var dragID: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            cell(left, side: .left)
+            cell(left, side: .left, inDrag: leftInDrag)
             Rectangle().fill(.separator).frame(width: 1)
-            cell(right, side: .right)
+            cell(right, side: .right, inDrag: rightInDrag)
         }
         // Pozadí kreslí dvojice, ne buňky. Buňka se roztáhne jen na svůj obsah, takže
         // u kratší strany (a hlavně u té chybějící) by pod ní prosvítalo okno a chybějící
@@ -26,14 +40,14 @@ struct DiffPairView: View {
         // sedí na sebe.
         .background {
             HStack(spacing: 0) {
-                background(of: left)
+                background(of: left, tint: DiffLineView.tint(dragged: leftInDrag, saved: leftInRange))
                 Color.clear.frame(width: 1)
-                background(of: right)
+                background(of: right, tint: DiffLineView.tint(dragged: rightInDrag, saved: rightInRange))
             }
         }
     }
 
-    @ViewBuilder private func cell(_ line: DiffLine?, side: DiffSide) -> some View {
+    @ViewBuilder private func cell(_ line: DiffLine?, side: DiffSide, inDrag: Bool) -> some View {
         if let line {
             DiffLineView(
                 line: line,
@@ -45,7 +59,10 @@ struct DiffPairView: View {
                 // zakládal komentář vpravo („okno se otevře jinde, než kam jsem klikl“);
                 // předtím se zase tlačítko vlevo vůbec nenabízelo, což bylo horší.
                 draftAction: draft.action(for: line, on: side),
-                performDraftAction: performDraftAction
+                performDraftAction: performDraftAction,
+                dragEnd: dragEnd,
+                rangeDrag: rangeDrag,
+                dragID: dragID.map { "\($0)|\(side.rawValue)" }
             )
             // **Jen šířka, výška ne.** `maxHeight: .infinity` tady bylo a položilo to aplikaci:
             // main thread se zasekl na 99 % v `StackLayout.explicitAlignment` a
@@ -62,9 +79,13 @@ struct DiffPairView: View {
         }
     }
 
-    @ViewBuilder private func background(of line: DiffLine?) -> some View {
+    @ViewBuilder private func background(of line: DiffLine?, tint: Color) -> some View {
         if let line {
-            DiffLineView.background(of: line.kind).frame(maxWidth: .infinity)
+            DiffLineView.background(of: line.kind)
+                // Pruh rozsahu jde **přes** barvu druhu řádku, ať zůstane vidět, co je přidané
+                // a co odebrané.
+                .background(tint)
+                .frame(maxWidth: .infinity)
         } else {
             // Neutrální plocha, ne prázdno: „tady žádný řádek není“ se od „je tu prázdný
             // řádek“ jinak nepozná. `Color.primary` funguje v obou režimech — v tmavém je

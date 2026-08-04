@@ -47,6 +47,13 @@ struct DiffView: View {
     /// (`onGeometryChange`), takže do rozvržení nezasahuje: `GeometryReader` by naopak sám
     /// zabral místo a v tomhle okně už jednou nadělal škodu.
     @State private var viewportHeight = 0.0
+    /// Rámečky řádků pro tažení rozsahu (#110). `@State`, aby přežily překreslení; obsah je
+    /// mimo observable stav, takže se jimi diff nepřekresluje — viz `DiffRowFrames`.
+    @State private var rowFrames = DiffRowFrames()
+
+    /// Souřadnicový prostor **obsahu** diffu. Rámečky řádků i poloha myši při tažení se čtou
+    /// v něm, takže scrollování s nimi nehýbe.
+    static let contentSpace = "prism-diff-content"
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -109,6 +116,7 @@ struct DiffView: View {
                     .id(file.id)
                 }
             }
+            .coordinateSpace(.named(Self.contentSpace))
         }
         // Jen měření, žádný vliv na rozvržení — proto `onGeometryChange` a ne `GeometryReader`.
         .onGeometryChange(for: Double.self) { $0.size.height } action: { viewportHeight = $0 }
@@ -133,6 +141,13 @@ struct DiffView: View {
         // Kotvy jednou za soubor, ne pro každý řádek: `Policy.commentableSide` ověřuje
         // příslušnost k hunku hledáním, takže po řádcích je to kvadratické.
         let fileDraft = draft.bound(to: file, anchors: Policy.commentAnchors(in: file))
+        // Rozsahy taky jednou za soubor: hledání konců jde přes všechny hunky, takže po řádcích
+        // by to bylo kvadratické — tentýž důvod jako u kotev.
+        let rangeCells = Policy.commentRangeCells(of: comments, in: file)
+        // Rozsah, který se právě táhne, se drží **zvlášť**: svítí výrazněji než hotový komentář
+        // a jen na jeho konci je vidět tlačítko, aby šlo s myší.
+        let dragged = draft.draggedRange.flatMap { $0.path == file.displayPath ? $0.anchor : nil }
+        let draggedCells = dragged.map { Policy.rangeCells(of: $0, in: file) } ?? []
         return ForEach(rows) { row in
             DiffRowView(
                 row: row,
@@ -145,7 +160,15 @@ struct DiffView: View {
                 blockingCategories: blockingCategories,
                 viewer: viewer,
                 threads: threadActions,
-                draft: fileDraft
+                draft: fileDraft,
+                commentRangeCells: rangeCells,
+                draggedCells: draggedCells,
+                dragEnd: dragged?.end,
+                rangeDrag: RangeDragActions(
+                    frames: rowFrames,
+                    move: { draft.dragRange(file.displayPath, $0, $1) },
+                    end: draft.endRangeDrag
+                )
             )
         }
     }

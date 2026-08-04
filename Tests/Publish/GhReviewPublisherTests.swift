@@ -359,8 +359,7 @@ struct GhReviewPublisherTests {
     func buildsThePayload() throws {
         let comment = ReviewDraftComment(
             path: "Cart.php",
-            line: 28,
-            side: .right,
+            anchor: DraftAnchor(line: 28, side: .right),
             body: "tady se ignoruje množství",
             origin: .finding(reviewer: "code-review")
         )
@@ -380,8 +379,7 @@ struct GhReviewPublisherTests {
     func sendsTheLeftSide() throws {
         let comment = ReviewDraftComment(
             path: "Cart.php",
-            line: 26,
-            side: .left,
+            anchor: DraftAnchor(line: 26, side: .left),
             body: "odebraný řádek",
             origin: .own
         )
@@ -400,6 +398,61 @@ struct GhReviewPublisherTests {
         #expect(json.contains("\"commit_id\""))
         #expect(json.contains("\"event\""))
         #expect(!json.contains("\"commitID\""))
+    }
+
+    /// Rozsah jde jako `start_line`/`start_side` (#110) — přesně ten payload, který GitHub
+    /// v sandboxu přijal a zapsal jako `start=26/RIGHT end=30/RIGHT`.
+    @Test("Rozsah se posílá jako start_line a start_side")
+    func sendsTheRangeEndpoints() throws {
+        let comment = ReviewDraftComment(
+            path: "Cart.php",
+            anchor: DraftAnchor(line: 30, side: .right, start: DraftAnchor.Endpoint(line: 26, side: .right)),
+            body: "tenhle blok patří do vlastní metody",
+            origin: .own
+        )
+        let payload = try #require(PublishRequest.payload(for: draft(comments: [comment])))
+        let json = String(decoding: try PublishRequest.encoded(payload), as: UTF8.self)
+
+        #expect(payload.comments.first?.startLine == 26)
+        #expect(payload.comments.first?.startSide == "RIGHT")
+        #expect(json.contains("\"start_line\""))
+        #expect(json.contains("\"start_side\""))
+    }
+
+    /// U jednořádkového komentáře v payloadu **nesmí být vůbec**: je to tentýž tvar, který
+    /// prošel u #62 a #67, a rozsah délky 1 by byl druhá podoba téhož.
+    @Test("Jednořádkový komentář posílá payload bez rozsahu")
+    func omitsTheRangeForASingleLine() throws {
+        let comment = ReviewDraftComment(
+            path: "Cart.php",
+            anchor: DraftAnchor(line: 28, side: .right),
+            body: "jeden řádek",
+            origin: .own
+        )
+        let payload = try #require(PublishRequest.payload(for: draft(comments: [comment])))
+        let json = String(decoding: try PublishRequest.encoded(payload), as: UTF8.self)
+
+        #expect(payload.comments.first?.startLine == nil)
+        #expect(!json.contains("start_line"))
+        #expect(!json.contains("start_side"))
+    }
+
+    /// Rozsah přes obě strany GitHub bere (změřeno u #110) — a strany se posílají každá svá,
+    /// takže se nesmí odvozovat jedna z druhé.
+    @Test("Rozsah přes obě strany posílá dvě různé strany")
+    func sendsBothSidesOfAMixedRange() throws {
+        let comment = ReviewDraftComment(
+            path: "README.md",
+            anchor: DraftAnchor(line: 5, side: .right, start: DraftAnchor.Endpoint(line: 6, side: .left)),
+            body: "tady se to přepsalo",
+            origin: .own
+        )
+        let payload = try #require(PublishRequest.payload(for: draft(comments: [comment])))
+
+        #expect(payload.comments.first?.startSide == "LEFT")
+        #expect(payload.comments.first?.side == "RIGHT")
+        #expect(payload.comments.first?.startLine == 6)
+        #expect(payload.comments.first?.line == 5)
     }
 
     @Test("Bez verdiktu payload nevznikne")

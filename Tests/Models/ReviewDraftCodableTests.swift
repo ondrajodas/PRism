@@ -12,13 +12,13 @@ struct ReviewDraftCodableTests {
     private func comment(
         id: UUID = UUID(uuidString: "00000000-0000-0000-0000-0000000000AA")!,
         side: DiffSide = .right,
+        start: DraftAnchor.Endpoint? = nil,
         origin: ReviewDraftComment.Origin = .own
     ) -> ReviewDraftComment {
         ReviewDraftComment(
             id: id,
             path: "src/Cart.php",
-            line: 28,
-            side: side,
+            anchor: DraftAnchor(line: 28, side: side, start: start),
             body: "tady se ignoruje množství",
             origin: origin
         )
@@ -93,6 +93,78 @@ struct ReviewDraftCodableTests {
         let id = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
 
         #expect(try roundTrip(comment(id: id)).id == id)
+    }
+
+    // MARK: - Rozsah (#110)
+
+    @Test("Rozsah komentáře přežije round-trip")
+    func roundTripsARange() throws {
+        let start = DraftAnchor.Endpoint(line: 20, side: .right)
+
+        let restored = try roundTrip(comment(start: start))
+
+        #expect(restored.anchor.start == start)
+        #expect(restored.anchor.line == 28)
+        #expect(restored.anchor.isRange)
+    }
+
+    @Test("Rozsah přes obě strany přežije round-trip")
+    func roundTripsAMixedRange() throws {
+        let start = DraftAnchor.Endpoint(line: 20, side: .left)
+
+        #expect(try roundTrip(comment(start: start)).anchor.start == start)
+    }
+
+    /// **Draft z disku vznikl u #65 bez rozsahu.** Chybějící klíč proto musí znamenat jeden
+    /// řádek, ne nečitelný soubor — jinak by aktualizace aplikace zahodila rozdělaná review,
+    /// tedy ručně psanou práci, kterou nedostane zpátky žádný další běh.
+    @Test("Starší draft bez rozsahu se přečte jako jednořádkový komentář")
+    func readsAnOlderDraftWithoutARange() throws {
+        let json = """
+            {
+              "pullRequest": "cli/cli#42",
+              "headSha": "abc123",
+              "body": "",
+              "comments": [
+                {
+                  "id": "00000000-0000-0000-0000-0000000000AA",
+                  "path": "src/Cart.php",
+                  "line": 28,
+                  "side": "RIGHT",
+                  "body": "tady se ignoruje množství",
+                  "origin": {"own": {}}
+                }
+              ]
+            }
+            """
+
+        let draft = try JSONDecoder().decode(ReviewDraft.self, from: Data(json.utf8))
+
+        let comment = try #require(draft.comments.first)
+        #expect(comment.anchor.start == nil)
+        #expect(!comment.anchor.isRange)
+        #expect(comment.line == 28)
+    }
+
+    /// Půl kotvy je horší než žádná: číslo bez strany by znamenalo hádat, ke které verzi souboru
+    /// rozsah patří, a komentář by odešel jinam.
+    @Test("Rozsah bez strany se nebere jako rozsah")
+    func ignoresAHalfWrittenRange() throws {
+        let json = """
+            {
+              "id": "00000000-0000-0000-0000-0000000000AA",
+              "path": "src/Cart.php",
+              "line": 28,
+              "side": "RIGHT",
+              "startLine": 20,
+              "body": "půl kotvy",
+              "origin": {"own": {}}
+            }
+            """
+
+        let comment = try JSONDecoder().decode(ReviewDraftComment.self, from: Data(json.utf8))
+
+        #expect(comment.anchor.start == nil)
     }
 
     /// Verdikt jde do `event` při odeslání, takže se na jeho zápis spoléhá API GitHubu.

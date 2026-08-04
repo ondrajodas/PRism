@@ -273,7 +273,7 @@ struct DraftPanel: View {
                     HStack(spacing: 4) {
                         // Zepředu, ať zůstane jméno souboru a číslo řádku — stejně jako ve
                         // sloupci `Místo` v tabulce nálezů.
-                        Text(verbatim: location(of: comment))
+                        Text(verbatim: Policy.location(of: comment))
                             .font(.system(.caption, design: .monospaced))
                             .lineLimit(1)
                             .truncationMode(.head)
@@ -304,13 +304,6 @@ struct DraftPanel: View {
             .help("Vyjmout komentář z rozdělaného review")
         }
         .padding(.vertical, 6)
-    }
-
-    private func location(of comment: ReviewDraftComment) -> String {
-        // `verbatim` a ruční skládání: `Text("…\(line)")` by číslo řádku prohnalo locale
-        // a z 21663 udělalo „21 663“.
-        let side = comment.side == .left ? " (starý)" : ""
-        return "\(comment.path):\(comment.line)\(side)"
     }
 
     private func preview(of comment: ReviewDraftComment) -> String {
