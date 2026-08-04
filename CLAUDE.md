@@ -2355,6 +2355,18 @@ Nad `HTTPGetting` (#31) platí:
   přesně tohle unit testy `RepoCheckoutu` nechytly. Odkladná doba mezi `SIGTERM`,
   `SIGKILL`em a vzdáním se čekání na EOF je proto injektovatelná (`gracePeriod`): jinak by
   test na potomka, který drží rouru po zabitém procesu, trval čtyři sekundy.
+
+  **Zrušení se ověřuje na PID, ne na souboru, který proces po sobě nechá** (#101). Sledovat
+  soubor znamená dočkat se konce jeho `sleep` — takže rezerva proti zpoždění pod zátěží se dá
+  zvětšit jen tím, že test poběží stejně dlouho, a při 800 ms padal jeden běh ze čtyř, jak
+  ostatních suit ubývalo procesů. Na PID (`kill(pid, 0)`, který nic neposílá) se zabití pozná
+  **v okamžiku, kdy nastane**: deadline může být pětisekundový a test přesto skončí v desítkách
+  milisekund. Testuje to navíc přesnější tvrzení — zmizelý proces, ne neproběhlý `touch`.
+
+  **Flaky test se opravuje mechanismem, ne konstantou.** Zvětšení konstanty se dá jen odhadnout
+  a příště se posune zátěž; polling na výsledek s velkorysým deadlinem je odpověď, která se
+  nemusí ladit. Ověřuje se to **opakováním**, ne jedním zeleným během: 20 běhů suity v řadě,
+  protože u flaky s 25 % je pět zelených běhů ještě čtvrtina případů.
 - **`ReviewSlots`** — limit, pořadí ve frontě a zrušený čekatel, který nesmí frontu ucpat.
 
 ### Jak si zkontrolovat, jak view vypadá
