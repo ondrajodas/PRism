@@ -32,6 +32,12 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!-- Ikona leží v asset catalogu (`App/Assets.xcassets`), takže tady musí být jméno
+	     jejího setu. Xcode ho do plistu **negeneruje**, protože GENERATE_INFOPLIST_FILE je
+	     vypnuté — bez tohohle klíče se ikona zkompiluje do Assets.car, ale systém ji nenajde
+	     a v Docku zůstane prázdný obdélník. -->
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>
