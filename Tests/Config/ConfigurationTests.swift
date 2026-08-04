@@ -278,6 +278,45 @@ struct ConfigurationTests {
         #expect(configuration.resolved(for: cli).mode == .manual)
     }
 
+    // MARK: - Povolení odesílání
+
+    /// Neznámé repo nesmí dostat otevřenou cestu ven ani omylem.
+    @Test("Neznámé repo odesílat nesmí")
+    func publishingIsOffForAnUnknownRepository() {
+        #expect(!configuration().resolved(for: cli).allowsPublishing)
+    }
+
+    @Test("Repo si odesílání zapne i při globálně vypnutém")
+    func aRepositoryCanOptIn() {
+        let configuration = configuration([cli: RepositoryConfig(allowsPublishing: true)])
+
+        #expect(configuration.resolved(for: cli).allowsPublishing)
+        // Povolení je per repo, takže sousední repo zůstává zavřené.
+        #expect(!configuration.resolved(for: vault).allowsPublishing)
+    }
+
+    @Test("Repo si odesílání zakáže i při globálně zapnutém")
+    func aRepositoryCanOptOut() {
+        var configuration = configuration([cli: RepositoryConfig(allowsPublishing: false)])
+        configuration.global.allowsPublishing = true
+
+        #expect(!configuration.resolved(for: cli).allowsPublishing)
+        #expect(configuration.resolved(for: vault).allowsPublishing)
+    }
+
+    /// Tatáž past jako u režimu: `false` u repa je **vlastní odpověď**, ne shoda s globální
+    /// hodnotou. Smazat ho jako „stejné jako globální“ by ho po přepnutí defaultu tiše
+    /// otevřelo — a tady je následek odeslané review na repo, kam se posílat nemělo.
+    @Test("Zakázané odesílání u repa se nesmaže jako shodné s globálním")
+    func keepsAnExplicitOptOut() {
+        var configuration = configuration()
+        configuration.setRepository(RepositoryConfig(allowsPublishing: false), for: cli)
+        configuration.global.allowsPublishing = true
+
+        #expect(configuration.repositories[cli] != nil)
+        #expect(!configuration.resolved(for: cli).allowsPublishing)
+    }
+
     // MARK: - Výchozí hodnoty
 
     /// Výchozí konfigurace musí odpovídat tomu, co bylo do teď zadrátované v kódu — jinak
@@ -297,6 +336,9 @@ struct ConfigurationTests {
         // Zapnout automat plošně musí být vědomé rozhodnutí, ne to, do čeho aplikace
         // spadne sama.
         #expect(standard.mode == .manual)
+        // Výchozí stav odesílání je **vypnuto**, a je to vlastnost, na které stojí tvrdá
+        // podmínka č. 1: dokud si o to někdo výslovně neřekne, neodejde na GitHub nic.
+        #expect(!standard.allowsPublishing)
         #expect(standard.findingsLanguage == .czech)
         #expect(standard.pollIntervalSeconds == 60)
         #expect(standard.maxConcurrentReviews == 3)
@@ -394,6 +436,49 @@ struct RepositoryConfigDecodingTests {
 
         let repo = try #require(RepoID("cli/cli"))
         #expect(configuration.resolved(for: repo).findingsLanguage == .english)
+    }
+
+    /// Rozbitá hodnota se srazí na `false`, ne na globální. Překlep v repu, u kterého se
+    /// odesílání někdo pokoušel **zakázat**, ho nesmí nechat otevřené — je to tatáž přísnost
+    /// jako u režimu a opačná než u jazyka nálezů.
+    @Test("Rozbité povolení u repa skončí na zakázaném")
+    func survivesABrokenPublishingFlag() throws {
+        var configuration = try self.configuration(
+            #"{"repositories": {"cli/cli": {"allowsPublishing": "ano"}}}"#
+        )
+        configuration.global.allowsPublishing = true
+
+        let repo = try #require(RepoID("cli/cli"))
+        #expect(!configuration.resolved(for: repo).allowsPublishing)
+    }
+
+    /// Chybějící klíč je naopak „ber globální“ — jinak by override, který mění jen skilly,
+    /// repu tiše zakázal odesílání.
+    @Test("Chybějící povolení u repa bere globální hodnotu")
+    func fallsBackOnAMissingPublishingFlag() throws {
+        var configuration = try self.configuration(#"{"repositories": {"cli/cli": {"skills": ["go-review"]}}}"#)
+        configuration.global.allowsPublishing = true
+
+        let repo = try #require(RepoID("cli/cli"))
+        #expect(configuration.resolved(for: repo).allowsPublishing)
+    }
+
+    @Test("Rozbité globální povolení skončí na zakázaném")
+    func survivesABrokenGlobalPublishingFlag() throws {
+        let configuration = try self.configuration(#"{"global": {"allowsPublishing": "ano"}}"#)
+
+        #expect(!configuration.global.allowsPublishing)
+    }
+
+    @Test("Povolení ze souboru se přečte na obou úrovních")
+    func readsThePublishingFlag() throws {
+        let configuration = try self.configuration(
+            #"{"global": {"allowsPublishing": true}, "repositories": {"cli/cli": {"allowsPublishing": false}}}"#
+        )
+
+        let repo = try #require(RepoID("cli/cli"))
+        #expect(configuration.global.allowsPublishing)
+        #expect(!configuration.resolved(for: repo).allowsPublishing)
     }
 
     @Test("Globální režim ze souboru se přečte")

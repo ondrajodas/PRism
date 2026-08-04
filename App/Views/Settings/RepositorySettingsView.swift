@@ -87,6 +87,17 @@ private struct RepositoryDetailView: View {
                 }
                 .pickerStyle(.radioGroup)
 
+                // Tříhodnotový jako režim, a ze stejného důvodu: „ber globální“ se musí dát
+                // vybrat zpátky. `false` u repa navíc není totéž jako `nil` — po přepnutí
+                // globálního defaultu na povoleno si ho repo podrží.
+                Picker("Odesílání review", selection: config.allowsPublishing) {
+                    Text("Podle globálního nastavení (\(publishingName(settings.draft.global.allowsPublishing)))")
+                        .tag(Bool?.none)
+                    Text("Povoleno").tag(Bool?.some(true))
+                    Text("Zakázáno").tag(Bool?.some(false))
+                }
+                .pickerStyle(.radioGroup)
+
                 // `nil` je i tady vlastní volba, ne prázdno — ze stejného důvodu jako
                 // u režimu.
                 Picker("Jazyk nálezů", selection: config.findingsLanguage) {
@@ -100,7 +111,7 @@ private struct RepositoryDetailView: View {
                 Text(verbatim: repo.description)
                     .font(.headline)
             } footer: {
-                Text("Manuální čeká na tlačítko. Automatický spustí review, jakmile se PR objeví v seznamu. Jazyk se projeví na dalším běhu — už uložené nálezy zůstanou, jak jsou.")
+                Text("Manuální čeká na tlačítko. Automatický spustí review, jakmile se PR objeví v seznamu. Odesílání rozhoduje jen o tom, jestli se review dá odeslat; když je zakázané, tlačítko `Odeslat review…` zůstane zakázané a řekne proč. Potvrdit odeslání musí vždycky člověk. Jazyk se projeví na dalším běhu; už uložené nálezy zůstanou, jak jsou.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -169,6 +180,10 @@ private struct RepositoryDetailView: View {
 
     private func describe(_ items: [String]) -> String {
         items.isEmpty ? "nic" : items.joined(separator: ", ")
+    }
+
+    private func publishingName(_ allowed: Bool) -> String {
+        allowed ? "povoleno" : "zakázáno"
     }
 
     private func modeName(_ mode: ReviewMode) -> String {

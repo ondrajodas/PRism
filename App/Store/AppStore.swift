@@ -965,7 +965,7 @@ final class AppStore {
     /// nepozná rozdíl mezi „načítá se“ a „nepovedlo se to“. Slíbit „hned to bude“ nad chybou,
     /// která sama nezmizí, je přitom horší než mlčet.
     func draftSendBlock(for pr: PRIdentifier) -> DraftSendBlock? {
-        let block = Policy.sendBlock(for: drafts[pr], head: head(of: pr))
+        let block = Policy.sendBlock(for: drafts[pr], head: head(of: pr), scope: publishScope)
         guard case .headUnknown = block, case .failed(let detail) = detailStates[pr] else {
             return block
         }
@@ -1002,9 +1002,17 @@ final class AppStore {
             suggestion: suggestedVerdict(for: id),
             gh: gh,
             gateway: gateway,
+            scope: publishScope,
             afterSuccess: { [weak self] in await self?.draftWasSubmitted(for: pullRequest) }
         )
     }
+
+    /// Brána na odesílání, složená **z aktuální konfigurace**.
+    ///
+    /// Čte se při použití, ne při startu — jako limit souběhu nebo rozpočet cache — takže
+    /// přepnutí v okně nastavení platí bez restartu. Je to počítaná vlastnost schválně:
+    /// uložený snímek by se s konfigurací rozešel.
+    private var publishScope: PublishScope { PublishScope(configuration: configuration) }
 
     /// Úklid po odeslaném review: draft je pryč a konverzace se načte znovu.
     ///

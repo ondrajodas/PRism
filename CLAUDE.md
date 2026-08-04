@@ -205,8 +205,8 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 
 1. **Jediná cesta ven** (od #67; do té doby tu stálo „nikdy nic neposílat na GitHub“).
    Aplikace **umí** odeslat review — ale jedině přes `ReviewPublishing`, jedině na výslovné
-   potvrzení člověkem a **zatím jedině do sandboxu**. Pravidlo se skládá z šesti věcí a každá
-   z nich je kontrolovatelná:
+   potvrzení člověkem a jedině tam, kde se to **v nastavení povolilo**. Pravidlo se skládá
+   z šesti věcí a každá z nich je kontrolovatelná:
 
    1. **`GitHubGateway` zůstává bez zápisových metod.** Polling, diff, checkout ani reviewer
       tedy nemají čím něco odeslat — read-only je pořád vidět z typu.
@@ -225,9 +225,18 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
       `commit_id` přijme.
    5. **Jedno atomické volání.** Buď odejde všechno, nebo nic; žádný částečně odeslaný stav
       po pádu uprostřed. Změřeno u #62.
-   6. **Zatím jen do sandboxu** (`PublishScope`, jediné povolené repo je
-      `ondrajodas/prism-review-sandbox`). Vyřazení řeší **#107**. Seznam je zadrátovaný, ne
-      v konfiguraci: kdyby se dal změnit editací `config.json`, není to brána, ale nastavení.
+   6. **Jen tam, kde se to povolilo** — `PublishScope`, složený z `Configuration`
+      (`allowsPublishing` globálně i per repo). **Výchozí stav je vypnuto**, a právě to drží
+      vlastnost „samo nic neodejde“: dokud si někdo výslovně neřekne o konkrétní repo nebo
+      neotočí globální default, nejde odeslat nikam. Sandbox v tom **není výjimka v kódu** —
+      zapíná se stejným přepínačem jako cokoli jiného.
+
+      **Změna proti #67** (do #107 tu stál zadrátovaný seznam s jediným sandboxem
+      a odůvodnění, že brána v `config.json` už není brána, ale nastavení). Změnilo se to
+      proto, že „kam smím odesílat“ je rozhodnutí **per repo**, které se mění často — a jako
+      konstanta stálo každé takové rozhodnutí commit, review a release, tedy cenu, kterou má
+      platit změna *pravidla*, ne změna *jednoho repa*. Proti omylem odeslanému review
+      nechrání seznam, ale body 4 a 5 výš a potvrzení s úplným výpisem payloadu (#68).
 
    Co se **nezměnilo**: návrh verdiktu z nálezů (`ReviewVerdict`) je pořád jen návrh
    zobrazený v aplikaci a sám nic neodesílá. Odesílá jen člověk.
@@ -487,8 +496,8 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `findingsLanguage`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
-| `RepositoryConfig` | Override pro jedno repo: `mode`, `findingsLanguage`, skilly, kategorie — **všechno volitelné** |
+| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
+| `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
 | `ConfigurationBox` | Aktuální konfigurace pro kód mimo hlavní vlákno (limit souběhu, rozpočet, model) |
@@ -535,6 +544,12 @@ Věci, které se u toho nemají rozbít:
   v tolerantním čtení: **rozbitá hodnota jazyka spadne na globální**, ne na výchozí.
   U režimu je přísnost kvůli tomu, že překlep by pustil review, o které nikdo nežádal;
   u jazyka je nejhorší následek próza v jiném jazyce.
+- **Povolení odesílání (#107) se řídí pravidly režimu, s výchozím stavem vypnuto.**
+  `nil` u repa znamená „ber globální“, vyplněná hodnota „řekl jsem si o tohle“ — a `false`
+  se proto **nemaže** jako shodné s globálním, jinak by ho přepnutí defaultu tiše otevřelo.
+  **Rozbitá hodnota se srazí na `false`** na obou úrovních: je to tatáž přísnost jako u režimu
+  a opačná než u jazyka nálezů, protože překlep nesmí otevřít cestu ven. Že je výchozí stav
+  vypnutý, drží řádek v testu výchozích hodnot.
 - **Rozbitá hodnota režimu se sráží na `manual`, ne na globální default.** Chybějící klíč
   je „ber globální“, ale překlep v hodnotě, kterou se někdo pokoušel automat **vypnout**,
   ho nesmí nechat zapnutý. Platí i globálně.
@@ -1092,9 +1107,9 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsScene` | Obsah scény; dokud neprošel preflight, není store a okno to řekne |
 | `SettingsView` | Dvě záložky, patička s cestou a stavem uložení, zámek na rozbitý soubor |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
-| `GlobalSettingsView` | Zdroje, výchozí režim a jazyk nálezů, skilly, sady podle jazyka, kategorie, běh |
+| `GlobalSettingsView` | Zdroje, výchozí režim a jazyk nálezů, **odesílání review**, skilly, sady podle jazyka, kategorie, běh |
 | `LanguageSkillsEditor` | Mapa „programovací jazyk → sada skillů“; ukazuje jen nastavené jazyky |
-| `RepositorySettingsView` | Seznam rep vlevo, režim a override vpravo |
+| `RepositorySettingsView` | Seznam rep vlevo, režim, povolení odesílání a override vpravo |
 | `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
 | `SettingsNumberField` | Číslo se šipkami **i** přepsáním; ořezává na povolený rozsah |
 
@@ -1138,6 +1153,10 @@ Věci, které se u toho nemají rozbít:
   přestane být `TabView` tím, co si řídí bezpečnou oblast, formulář si vyhradí místo od
   horní hrany okna a obsah leze **pod lištu se záložkami**. Je to tatáž past jako u pruhu
   nad seznamem PR — a projeví se stejně nenápadně: uříznutým prvním řádkem.
+- **Žádný text u odesílání se nesmí dát přečíst jako „zapnout automatické odesílání“.**
+  Přepínač rozhoduje **jen** o tom, jestli se tlačítko `Odeslat review…` vůbec nabídne;
+  odesílá pořád člověk potvrzením, ve kterém je vidět celý payload. Patička to proto říká
+  výslovně — a je to tatáž úvaha jako u `VerdictView`, který je taky jen doporučení.
 - **V textech se píše „programovací jazyk“, ne jen „jazyk“.** Samotné „jazyk“ se plete
   s jazykem, ve kterém reviewer píše nálezy (#52) — ověřeno tím, že se to spletlo hned
   při prvním zkoušení. Delší popisek je levnější než vysvětlování.
@@ -1583,7 +1602,7 @@ Nad odesílatelností draftu (#68) platí:
   zakázané tlačítko vypadá jako rozbitá aplikace. Proto bylo zahozené, ne ponechané jako
   zkratka. Ke každému případu `DraftSendBlock` patří **věta pro okno** s tím, co s ním jde
   udělat; je na to test, protože prázdná věta by se v UI projevila jako to mlčení.
-- **Pořadí důvodů kopíruje `GhReviewPublisher.submit`:** brána na sandbox, pak všechno, co je
+- **Pořadí důvodů kopíruje `GhReviewPublisher.submit`:** brána na odesílání, pak všechno, co je
   vidět na samotném draftu, a teprve pak to, co potřebuje hlavu PR (v publisheru totéž dělení
   — `PublishRequest.payload(for:)` běží před `preflight(_:)`). Kdyby se rozešlo, hlásilo by
   okno jiný důvod, než na kterém odeslání doopravdy skončí.
@@ -1592,10 +1611,11 @@ Nad odesílatelností draftu (#68) platí:
   má říct „vyber verdikt“, ne „zjišťuji, na kterém commitu PR stojí“ — čekání tu vadu
   nespraví, a nad selhaným detailem by okno ukazovalo donekonečna na síť místo na chybějící
   verdikt. Chytil to Copilot na #112, kde `headUnknown` stálo před `noVerdict`.
-- **`PublishScope` je součástí odpovědi**, i když je to jinak věc publisheru. Na cizí repo se
-  nemá ani nabízet tlačítko, natož sahat na síť, a druhé místo, kde se ta brána vyhodnocuje,
-  by se s prvním rozešlo. Daň je, že testy odesílatelnosti musí běžet nad sandboxovým
-  identifikátorem.
+- **`PublishScope` je součástí odpovědi**, i když je to jinak věc publisheru. Na nepovolené
+  repo se nemá ani nabízet tlačítko, natož sahat na síť, a druhé místo, kde se ta brána
+  vyhodnocuje, by se s prvním rozešlo. Od #107 se **předává parametrem** (`sendBlock(for:head:scope:)`),
+  protože `Policy` je bez I/O a ke konfiguraci se nedostane — testy si tak řeknou o povolení
+  místo toho, aby musely běžet nad sandboxovým identifikátorem.
 - **„Nevím, jaká je hlava“ je vlastní důvod** (`headUnknown`), ne zastarání. Dokud se detail
   načítá, nedá se říct ani jedno — a banner o zastaralém draftu by nad ním lhal. Stejné
   rozlišení jako u `AppStore.isDraftStale`.
@@ -1682,7 +1702,7 @@ podmínku „nikdy nic neposílat“ pravidlem, které je vidět z kódu — viz
 |---|---|
 | `ReviewPublishing` | Protokol s **jedinou** metodou `submit(_:)` → `SubmittedReview` |
 | `GhReviewPublisher` | Implementace nad `gh`; pre-flight přes `GitHubGateway` |
-| `PublishScope` | Zadrátovaný seznam rep, kam se smí odeslat. Zatím jen sandbox (#107) |
+| `PublishScope` | Brána: smí se z tohohle repa odeslat? Skládá se z `Configuration`, výchozí stav **vypnuto** |
 | `PublishError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `PublishRequest` | Payload a argumenty — čisté funkce |
 | `GhSubmittedReview` | Tvar odpovědi `POST /pulls/{n}/reviews` |
@@ -1690,8 +1710,9 @@ podmínku „nikdy nic neposílat“ pravidlem, které je vidět z kódu — viz
 
 Věci, které se u toho nemají rozbít:
 
-- **Brána na sandbox je první kontrola v cestě**, ještě před sítí. Na cizí repo se nemá ani
-  ptát na detail.
+- **Brána je první kontrola v cestě**, ještě před sítí. Na nepovolené repo se nemá ani ptát
+  na detail — a `scope` je v `init` **bez výchozí hodnoty**, takže se publisher bez brány
+  nedá složit.
 - **Pre-flight ověřuje `headSha` a stav PR, a při neshodě se nevolá nic.** GitHub proti
   odeslání proti zastaralému commitu nechrání (změřeno u #62), takže je to naše práce.
   Draft PR se odeslat **smí** — je to otevřený stav a na GitHubu běžné.
@@ -2029,7 +2050,7 @@ Nad `HTTPGetting` (#31) platí:
   se ověřuje **cestou z konkrétní invokace**, ne obsahem systémové dočasné složky: Swift
   Testing pouští testy paralelně, takže porovnání „před a po“ nad `/tmp` je flaky (chytilo se
   to v review #67). Nejdůležitější testy
-  netvrdí, co se odeslalo, ale že se **nic neodeslalo**: repo mimo sandbox, neshoda `headSha`,
+  netvrdí, co se odeslalo, ale že se **nic neodeslalo**: výchozí (vypnuté) nastavení, neshoda `headSha`,
   zavřený PR a draft bez verdiktu musí skončit dřív, než se sáhne na `gh` (kontroluje se
   `runner.invocations.isEmpty`). Klasifikace chyb jde tabulkou nad **skutečnými** hláškami
   z fixtures (`review-error-*.json`), úspěch nad skutečnou odpovědí (`review-submitted.json`)
@@ -2056,9 +2077,10 @@ Nad `HTTPGetting` (#31) platí:
   úryvek kódu nevyrenderuje.
 
   U **odesílatelnosti** (#68) každý důvod zvlášť a **v pořadí**, ve kterém se hlásí: že repo
-  mimo sandbox přebije i hotový draft, že neznámá hlava není zastarání a že prázdný komentář
-  blokuje. Testy proto běží nad **sandboxovým** identifikátorem, jinak by všechny odpovědi
-  vyšly na `outsideScope`; že to tak je, drží vlastní test. Plus to, že **každý důvod má
+  bez povolení přebije i hotový draft, že neznámá hlava není zastarání a že prázdný komentář
+  blokuje. Brána se od #107 **předává**, takže si test o povolení řekne (`PublishScope.allowing(_:)`)
+  místo toho, aby musel běžet nad sandboxovým identifikátorem; že výchozí konfigurace nepovolí
+  nic, drží vlastní test. Plus to, že **každý důvod má
   vlastní neprázdnou větu** — prázdná by v okně vypadala jako mlčky zakázané tlačítko.
 - **`ReviewSubmission` (#68)** — proti `FakeReviewPublisher`, takže se **nic neodesílá**.
   To hlavní není, co se odeslalo, ale kdy se **neodešle nebo neuklidí**: selhání nesmí spustit
@@ -2388,8 +2410,8 @@ věcí, na kterých stojí zbytek M6:
 
 `ReviewPublisher` hotový (issue #67) — `App/Publish/`. **Aplikace umí odeslat review**, a tím
 se změnila tvrdá podmínka č. 1 na pravidlo „jediná cesta ven“ (viz Tvrdé podmínky). Odesílá se
-jedním atomickým voláním, po pre-flightu na `headSha` a stav PR, a **zatím jen do sandboxu**
-(`PublishScope`, vyřazení je #107). Vrstva bez UI — tlačítko přišlo až s #68.
+jedním atomickým voláním, po pre-flightu na `headSha` a stav PR, a jen tam, kde to `PublishScope`
+povolí. Vrstva bez UI — tlačítko přišlo až s #68.
 
 Odeslání z okna hotové (issue #68) — `ReviewSubmission` v `App/Publish/`,
 `ReviewSubmissionSheet`, `Policy.sendBlock(for:head:)` a `submission(for:)` v `AppStore`.
@@ -2397,8 +2419,7 @@ Odeslání z okna hotové (issue #68) — `ReviewSubmission` v `App/Publish/`,
 s úplným výpisem payloadu a teprve tam se odesílá. Tlačítko je pojmenované akcí
 (`Odeslat APPROVE pro owner/repo#123`) a **není výchozí**, takže Enterem se nic nepošle;
 opisování názvu repa ani druhý dialog tam schválně nejsou (viz zadání). Po úspěchu se sheet
-zavře, draft zmizí i z disku a konverzace se načte znovu; selhání draft **nechává**. Zatím jen
-do sandboxu — brána je `PublishScope` a vyřazení řeší #107.
+zavře, draft zmizí i z disku a konverzace se načte znovu; selhání draft **nechává**.
 
 Model draftu hotový (issue #65) — `ReviewDraft`, `ReviewDraftComment`, `ReviewDraftStore`
 a `App/Policy/DraftPolicy.swift`. Rozdělané review přežije restart, novým commitem
@@ -2518,6 +2539,13 @@ Stálý podpis hotový (issue #61) — `Signing.xcconfig` a `bin/setup-signing.s
 není po každém buildu pro macOS jiná aplikace, takže udělená povolení rebuild přežijí.
 Vrstva bez UI (build a podpis), viz *Prostředí* výš.
 
+Povolení odesílání v nastavení hotové (issue #107) — `allowsPublishing` v `Configuration`
+(globálně i per repo), `PublishScope` složený z konfigurace a přepínač v okně nastavení.
+**Mění tvrdou podmínku č. 1, bod 6**: zadrátovaný seznam s jediným sandboxem je pryč, brána
+je nastavení s **výchozím stavem vypnuto** — dokud si o odesílání někdo výslovně neřekne,
+neodejde nikam nic. Sandbox není výjimka v kódu, zapíná se stejným přepínačem. Rozbitá hodnota
+v souboru se sráží na zakázané, na obou úrovních.
+
 Stavový řádek hotový (issue #31) — `App/Health/`, `StatusBarView`, `Policy.health(of:from:)`
 a `HTTPGetting` s `NetworkReachability` v `App/Environment/`. Na spodku okna je puntík
 u GitHubu a u Claude: zelenou a červenou určuje **skutečný provoz** (tik pollingu, doběhlá
@@ -2537,10 +2565,10 @@ Plánované fáze:
 Tím **končí rozsah v1** podle specifikace. Za ním:
 
 6. **Review na GitHub** (M6) — odesílání review z okna. Tvrdou podmínku č. 1 **už nahradil**
-   pravidlem „jediná cesta ven“ (#67), zatím s bránou na sandbox (#107). Hotové: spike #62
+   pravidlem „jediná cesta ven“ (#67) a bránou v nastavení (#107). Hotové: spike #62
    (viz [`docs/github-review-api.md`](docs/github-review-api.md)), model draftu #65,
-   publisher #67, skládání draftu #66 a potvrzovací sheet #68. Zbývá přenesení draftu na nový
-   commit (#69).
+   publisher #67, skládání draftu #66, potvrzovací sheet #68 a povolení v nastavení #107.
+   Zbývá přenesení draftu na nový commit (#69).
 7. **Konverzace, komentáře a taby** (M7) — cizí komentáře a vlákna v okně, odpovídání do
    nich a rozvržení jako na GitHubu (taby `Overview` / `Files changed`).
 

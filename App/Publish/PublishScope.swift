@@ -2,18 +2,34 @@ import Foundation
 
 /// Kam se **smí** odeslat review.
 ///
-/// Zatím jedině do sandboxu. Je to vědomé omezení první verze odesílání, ne technická
-/// překážka: pravidlo „jediná cesta ven“ je nové a než ho pustíme na PR kolegů, projde si
-/// provozem na repu, kde omyl nikoho nestojí čas. Vyřazení řeší #107.
+/// **Jediné místo, které na tu otázku odpovídá** — ptá se ho `GhReviewPublisher.submit`
+/// (první kontrola v cestě, ještě před sítí) i `Policy.sendBlock`, aby okno hlásilo tentýž
+/// důvod, na kterém odeslání doopravdy skončí. Dvě místa, kde se to vyhodnocuje, by se
+/// rozešla.
 ///
-/// **Seznam je zadrátovaný schválně, ne v konfiguraci.** Kdyby se dal změnit editací
-/// `config.json`, není to brána, ale nastavení — a omyl v souboru, který se edituje ručně,
-/// by odeslal review na ostré repo. Rozšířit ho takhle vyžaduje změnu kódu, code review
-/// a release, což je přesně ta cena, kterou tahle brána má mít.
-enum PublishScope {
-    static let allowed: Set<RepoID> = [
-        RepoID(owner: "ondrajodas", name: "prism-review-sandbox"),
-    ]
+/// **Od #107 se skládá z konfigurace, ne ze zadrátovaného seznamu.** Do té doby tu stála
+/// množina s jediným sandboxem a odůvodnění, že brána v `config.json` už není brána, ale
+/// nastavení. Změnilo se to proto, že „kam smím odesílat“ je rozhodnutí **per repo**, které
+/// se mění často — a jako konstanta stálo každé takové rozhodnutí commit, review a release,
+/// tedy cenu, kterou má platit změna *pravidla*, ne změna *jednoho repa*. Proti omylem
+/// odeslanému review nechrání seznam, ale potvrzení s úplným výpisem payloadu (#68)
+/// a pre-flight na `headSha` (#67); ty se nemění.
+///
+/// Vlastnost „samo nic neodejde“ drží **výchozí stav vypnuto** (`GlobalConfig.allowsPublishing`
+/// je `false`): dokud si někdo výslovně neřekne o konkrétní repo nebo neotočí globální
+/// default, nejde odeslat nikam. Sandbox v tom **není výjimka** — zapíná se stejným
+/// přepínačem jako cokoli jiného, protože výjimka v kódu by tvrdila něco jiného než nastavení.
+struct PublishScope: Sendable, Equatable {
+    private let configuration: Configuration
 
-    static func allows(_ repo: RepoID) -> Bool { allowed.contains(repo) }
+    /// Snímek konfigurace, ne odkaz na store: scope se skládá **při kliknutí**
+    /// (`AppStore.submission(for:)`), takže přepnutí v nastavení platí bez restartu — a co je
+    /// vidět v potvrzení, to platí i při odeslání.
+    init(configuration: Configuration) {
+        self.configuration = configuration
+    }
+
+    func allows(_ repo: RepoID) -> Bool {
+        configuration.resolved(for: repo).allowsPublishing
+    }
 }

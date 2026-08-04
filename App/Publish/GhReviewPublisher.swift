@@ -11,25 +11,29 @@ struct GhReviewPublisher: ReviewPublishing {
     private let gh: URL
     private let runner: ProcessRunning
     private let gateway: any GitHubGateway
+    /// Brána bez výchozí hodnoty: publisher se bez ní nedá složit, takže se nedá zapomenout.
+    private let scope: PublishScope
     private let timeout: Duration
 
     init(
         gh: URL,
         runner: ProcessRunning,
         gateway: any GitHubGateway,
+        scope: PublishScope,
         timeout: Duration = .seconds(30)
     ) {
         self.gh = gh
         self.runner = runner
         self.gateway = gateway
+        self.scope = scope
         self.timeout = timeout
     }
 
     func submit(_ draft: ReviewDraft) async throws -> SubmittedReview {
-        // Brána na sandbox je **první**, ještě před sítí: dokud se odesílá jen tam, nemá se
-        // kvůli cizímu repu ani ptát na detail.
-        guard PublishScope.allows(draft.pullRequest.repo) else {
-            throw PublishError.outsideAllowedScope(draft.pullRequest.repo)
+        // Brána je **první**, ještě před sítí: na repo, které povolené není, se nemá ani ptát
+        // na detail.
+        guard scope.allows(draft.pullRequest.repo) else {
+            throw PublishError.publishingNotAllowed(draft.pullRequest.repo)
         }
         guard let payload = PublishRequest.payload(for: draft), !draft.isEmpty else {
             throw PublishError.nothingToSend
