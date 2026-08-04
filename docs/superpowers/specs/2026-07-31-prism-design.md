@@ -453,6 +453,23 @@ slova a proměnné — tolik, aby se v diffu chytlo oko.
 - **Obyčejný text vlastní barvu nemá** — dědí ji z okolí, takže soubor bez rozpoznaného
   jazyka nevypadá jinak než ten s ním.
 
+### Stavový řádek (#31)
+
+Trvalý pruh na spodku okna, přes celou šířku a mimo `NavigationSplitView`. Vlevo hlášky
+o stavu celé aplikace (rozbitá konfigurace, pozastavený automat, nečitelné soubory), vpravo
+puntík u GitHubu a u Claude. Odpovídá na otázku „je to na mojí straně, nebo mají oni
+výpadek?“ dřív, než se člověk začne prohrabávat konkrétní chybou.
+
+- **Pět stavů:** ○ nezjištěno, ● funguje, ● incident na komponentě, kterou používáme,
+  ● poslední volání selhalo, ● stroj je bez sítě. Poslední dva jsou oba červené, ale mají
+  vlastní věty — a to je celý smysl.
+- **Zelenou a červenou určuje skutečný provoz**, žlutou status page provozovatele. Podrobné
+  proč je v záznamu rozhodnutí.
+- **Nápověda po hoveru je povinná část**, ne příplatek: puntík bez důvodu a bez času
+  poslední kontroly je dekorace. Říká stav, co se stalo, odkdy to platí a kdy se stav služby
+  zjišťoval.
+- **Na pozadí se nekontroluje nic.** Aplikace, kterou nikdo nevidí, nemá komu svítit.
+
 ## Platformová rozhodnutí
 
 - **SwiftUI**, target macOS 26, Xcode projekt v repu. Bundle id
@@ -519,7 +536,8 @@ slova a proměnné — tolik, aby se v diffu chytlo oko.
 | Session překročí timeout | Zabita, označena `timed out`, částečné nálezy se zachovají |
 | Chybný nebo chybějící `ReportFindings` | Rozlišený stav: `calledReportFindings == false` znamená, že se nálezy nemají kde vzít; nečitelné nálezy se počítají v `droppedFindings` |
 | Rate limit | Backoff, zobrazit, kdy se polling obnoví |
-| Offline | Dál se zobrazují cachované PR a nálezy, označené jako neaktuální |
+| Offline | Dál se zobrazují cachované PR a nálezy, označené jako neaktuální; ve stavovém řádku **vlastní důvod** u puntíku, ne „služba je mimo“ |
+| Status page se nepodařilo přečíst | Nezablokuje nic: puntík se řídí skutečnými voláními a nápověda řekne, že se stav služby zjistit nepovedlo |
 | Nové commity během review | Běh dokončí proti svému `headSha`; výsledek se uloží a označí `zastaralé` |
 
 ## Testování
@@ -775,6 +793,18 @@ Záměrně mimo v1, a návrh drží každou z těch věcí levnou na přidání:
 | Certifikát vyrábí **skript**, ne postup v README | Naklikat ho v Keychain Access → Certificate Assistant, jak nabízelo zadání | Deset kliknutí v průvodci proti jednomu příkazu, a hlavně: přes `openssl` je vidět, co v certifikátu je (`extendedKeyUsage = codeSigning`, platnost, jméno). Skript je zároveň idempotentní, takže po čerstvém klonu jen doplní `Signing.local.xcconfig` |
 | `bin/run.sh` **upozorní na ad-hoc podpis** | Mlčet — build proběhl, aplikace jde spustit | Bez podpisu se vrátí dotazy na přístup k datům a příčina je jinak neviditelná. Je to tentýž důvod, proč `PollStatusBanner` hlásí neaktuální data: stav, který mění chování, nemá být potichu |
 | `bin/run.sh` ukončuje aplikaci **Apple eventem**, ne `killall` | Nechat `killall` — je to jen vývojový skript | SIGTERM `applicationShouldTerminate` neprochází, takže rebuild zabíjel review i s nálezy: dvakrát za jedno dopoledne, obojí s osmi a devíti nahlášenými nálezy. Pojistka, kterou obchází nejčastější způsob restartu, je poloviční. Skript proto čeká na odpověď a bez ní novou verzi nespustí |
+
+| Stavový řádek jede na **skutečném provozu**, doplněný status pages | Periodická sonda (`gh auth status`, testovací dotaz) na timeru | Polling se ptá `gh` každou minutu a review pouští `claude` — každé takové volání je pravdivý zdravotní signál a nestojí nic navíc. Sonda je proti tomu *méně* pravdivá (projde i tehdy, když skutečné volání selže na rate limitu nebo chybějícím scope) a dražší: spawn procesu a přístup do keychainu jsou řádově těžší než jeden `GET`. Status pages doplňují to jediné, co z volání nezjistíme — jestli je problém na jejich straně |
+| Sledují se **jmenované komponenty**, ne celostránkový indikátor | Číst `status.json` (215 B) a brát jeho `indicator` | Oba provozovatelé jezdí na Statuspage.io a incident v `Actions`, `Packages` nebo `claude.ai` se téhle aplikace netýká — celostránkový indikátor by svítil na něco, co nepoužíváme. Daň je 4 KB místo 215 B (a s `ETagem` `304` bez těla) a to, že se komponenta pozná **jménem**: přejmenovaná se proto počítá do `StatusPage.missing` a řekne to nápověda, jinak by kontrola tiše nehlídala nic |
+| Puntíků je **pět**: nezjištěno, funguje, incident, nefunguje, bez sítě | Tři (zelená / žlutá / červená), offline jako červená s obecným textem | „Nezjištěno“ není „nefunguje“ — po startu by jinak svítilo, že je všechno mimo. A „stroj je bez sítě“ není „služba je mimo“: to je zrovna ta otázka, kvůli které řádek existuje, takže vydávat jedno za druhé by ho připravilo o smysl. Slévat chybové stavy zakazuje `CLAUDE.md` obecně |
+| Dostupnost sítě má **vlastní signál** (`NWPathMonitor`) | Odvodit offline z toho, že selhalo volání i stahování status page | Odvozování čeká na dvě selhání, kdežto vypnutá Wi-Fi je vidět hned — a odvozený stav by tvrdil „bez sítě“ i tehdy, když je nedostupná jen jedna strana. Cena je jeden protokol v `Environment` a `Network` framework, který je v systému |
+| Zelenou dá i **samotná čistá status page**, věta doříká, na čem stojí | Vyžadovat pro zelenou skutečné volání (**rozhodnutí z průběhu #31, odmítnuté při zkoušení**) | První verze trvala na tom, že status page říká, co si o sobě myslí provozovatel, ne že to funguje nám — a brala šedou u Claude jako pravdu, ne chybu. Na běžící aplikaci to neobstálo: review se pouští občas, takže by puntík Claude byl šedý **většinu času** a přestal by nést informaci. Šedá má znamenat „nevíme nic“, a čerstvě přečtená stránka bez incidentu je něco. Původní obava se řeší **větou** („Vlastní volání ještě neproběhlo“), ne barvou; a stará stránka po selhané kontrole zelenou nedá |
+| Rate limit je **červená** | Žlutá, protože za to GitHub nemůže | Zelená znamená „funguje mi to“ a při rate limitu to nefunguje. Že si to aplikace způsobila sama, řekne věta v nápovědě; žlutá je vyhrazená pro „oni něco hlásí, ale mně to jde“ |
+| `ReviewRunOutcome.timedOut` **není** zdravotní signál | Počítat timeout jako selhání služby | Session jsme po patnácti minutách zabili sami, takže z toho nejde vyvodit ani „funguje“, ani „nefunguje“ — a dlouhé review je běžná věc. `failed` signál je, i když příčina může být u nás (neexistující skill); nápověda proto ukazuje stderr |
+| Monitor se budí v **taktu 30 s** a kontroluje, až když je co kontrolovat | Uspat se přímo na deset minut; nebo budit spáče zvenčí (continuation, `Task`) | Interval se mění za běhu (po selhaném volání se zkracuje na minutu) a okno se mezitím může vrátit do popředí — uspání začaté v době, kdy bylo všechno v pořádku, by se o obojí nedozvědělo a puntík by nad selhaným voláním ukazoval deset minut starý stav. Probuzení zvenčí by znamenalo continuation drženou mezi voláními, nebo nestrukturovaný `Task`, který přežije zavření okna. Timer wake jednou za půl minuty nestojí nic, `refresh()` z něj vypadne hned |
+| Hlášky se **přestěhovaly do stavového řádku**, dosavadní pruh zmizel | Nechat hlášky ve vlastním pruhu a puntíky přidat vedle | Dvě místa na tytéž hlášky znamenají, že se jedno z nich časem přestane plnit — a dva pruhy pod sebou berou místo, které v nízkém okně chybí diffu. Řádek je proti dosavadnímu pruhu **trvalý**: puntík, který se ukáže jen při problému, je puntík, o kterém nikdo neví, že existuje |
+| Interval kontroly **není v konfiguraci** | Přidat ho do `config.json` a do okna nastavení, jako interval pollingu | Neovlivňuje chování aplikace, jen čerstvost puntíku. Knoflík by byl další řádek v nastavení, který si nikdo nenastaví, a další hodnota, kterou musí `resolved(for:)` uvážit |
+| `HTTPGetting` je **vlastní protokol** v `Environment` | Použít `URLSession` přímo a testovat přes `URLProtocol` stub; nebo přidat metodu k `ProcessRunning` | Žádný test nesmí chodit na síť a `URLProtocol` stub je globální stav, který se mezi paralelními suitami plete. Vlastní protokol je čtyřicet řádků a chová se jako `ProcessRunning`: stavový kód je **data**, chybou je jen to, že se na server nedostaneme. K `ProcessRunning` to nepatří vůbec — tohle je jediná cesta, která podproces nepotřebuje |
 
 ## Ověřeno proti CLI (2026-08-01)
 

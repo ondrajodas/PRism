@@ -28,10 +28,11 @@ struct ContentView: View {
             } detail: {
                 detail
             }
-            // Hlášky jsou **přes celé okno a mimo split view** (#72). Pod seznamem PR to byl
-            // `safeAreaInset`, kvůli kterému obsah okna vycházel o výšku pruhu vyšší než okno
-            // a spodní hrana ho odřízla v obou sloupcích — podrobnosti v `AppNoticesView`.
-            AppNoticesView(store: store)
+            // Stavový řádek je **přes celé okno a mimo split view** (#72, #31). Pod seznamem
+            // PR to byl `safeAreaInset`, kvůli kterému obsah okna vycházel o výšku pruhu
+            // vyšší než okno a spodní hrana ho odřízla v obou sloupcích — podrobnosti
+            // v `AppNoticesView`.
+            StatusBarView(store: store)
         }
         // Potvrzení odeslání. `item:`, ne `isPresented:`: sheet nemá co ukazovat bez snímku
         // draftu, takže `nil` je zavřený stav i zdroj dat naráz.
@@ -60,6 +61,10 @@ struct ContentView: View {
         // hlídaný deskriptor přestane platit — a tlačítko by byl krok navíc za něco, co se
         // dá udělat samo.
         .onChange(of: scenePhase) { _, phase in
+            // Na pozadí se dostupnost služeb nekontroluje — aplikace, kterou nikdo nevidí,
+            // nemá komu svítit puntíkem. `.inactive` je pořád vidět (okno jen není vepředu),
+            // takže se hlídá jen `.background`: zavřené, skryté nebo minimalizované okno.
+            store.windowVisibilityChanged(phase != .background)
             guard phase == .active else { return }
             Task { await store.reloadConfiguration() }
         }
