@@ -150,7 +150,9 @@ extension PublishError {
         case .staleDraft(let draft, let head):
             "Draft je psaný proti commitu \(draft.prefix(7)), ale hlava PR je \(head.prefix(7)). Načti diff znovu."
         case .pullRequestNotOpen(let state):
-            "Pull request není otevřený — je \(state.czechLabel). Review se dá poslat jen na otevřený PR."
+            // Neutrálně: tuhle chybu dostane i odpověď do vlákna, takže věta o review by
+            // mluvila o něčem jiném, než co uživatel právě dělá.
+            "Pull request není otevřený — je \(state.czechLabel). Odeslat se dá jen na otevřený PR."
         case .nothingToSend:
             "Není co poslat — draft je prázdný nebo v něm chybí verdikt."
         case .blankReply:
@@ -173,14 +175,18 @@ extension PublishError {
             "GitHub omezuje počet dotazů. Zkus to za chvíli."
         case .network(let detail):
             "GitHub není dostupný: \(detail)"
+        // Tři věty o nejistém výsledku, a všechny **neutrální**: nastanou u review i u odpovědi
+        // do vlákna, takže „jestli review nedošlo“ by u zakázané odpovědi poslalo člověka hledat
+        // něco, co neposílal. Co zůstává, je pokyn zkontrolovat to na GitHubu — ten platí pro
+        // obojí a je to celý smysl těch hlášek.
         case .timedOut:
-            "Odeslání trvalo moc dlouho. Zkontroluj na GitHubu, jestli review přesto nedošlo."
+            "Odeslání trvalo moc dlouho. Zkontroluj na GitHubu, jestli přesto neprošlo."
         case .toolUnavailable(let detail):
             "`gh` se nepodařilo spustit: \(detail)"
         case .malformedResponse(let detail):
-            "Odpověď GitHubu nejde přečíst, takže nevím, jak review vypadá — zkontroluj ho na GitHubu. \(detail)"
+            "Odpověď GitHubu nejde přečíst, takže nevím, jak to dopadlo — zkontroluj to na GitHubu. \(detail)"
         case .interrupted:
-            "Odesílání se přerušilo uprostřed. Zkontroluj na GitHubu, jestli review přesto nedošlo."
+            "Odesílání se přerušilo uprostřed. Zkontroluj na GitHubu, jestli přesto neprošlo."
         case .unknown(let detail):
             "Odeslání se nepovedlo: \(detail)"
         }

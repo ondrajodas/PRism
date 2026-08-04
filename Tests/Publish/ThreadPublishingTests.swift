@@ -277,6 +277,48 @@ struct ThreadPublishingTests {
         }
     }
 
+    /// Chyby, které dostane **i odpověď do vlákna**, o review mluvit nesmí.
+    ///
+    /// Vzor z nálezu Copilota na #119: věta „zapni odesílání review v nastavení“ u zakázaného
+    /// `Odpovědět` mluví o něčem jiném, než co člověk právě dělá. Při opravě se ukázalo, že to
+    /// sahá dál než na to jedno místo — `pullRequestNotOpen`, `timedOut`, `malformedResponse`
+    /// i `interrupted` posílaly hledat „jestli review nedošlo“ nad odpovědí, která žádné review
+    /// nebyla. Tenhle test tu třídu drží, protože jinak se to vrátí u další sdílené chyby.
+    @Test("Sdílené chyby nemluví o review")
+    func keepsSharedErrorsNeutral() {
+        // **Ne sandboxové repo**: jmenuje se `prism-review-sandbox`, takže by slovo „review“
+        // do věty dodal jeho název a test by padal na vlastní past — hláška v pořádku je.
+        let shared: [PublishError] = [
+            .publishingNotAllowed(RepoID(owner: "cli", name: "cli")),
+            .pullRequestNotOpen(.merged),
+            .notAuthenticated,
+            .rateLimited("limit"),
+            .network("nejde"),
+            .timedOut,
+            .toolUnavailable("nespustilo se"),
+            .malformedResponse("rozbité"),
+            .interrupted,
+            .unknown("nevím"),
+            .blankReply,
+            .threadNotFound("chybí"),
+        ]
+
+        for error in shared {
+            #expect(
+                !error.userDescription.lowercased().contains("review"),
+                "věta u \(error) mluví o review, ale dostane ji i odpověď do vlákna"
+            )
+        }
+    }
+
+    /// A obráceně: chyby, které **jsou** jen o review, o něm mluvit mají — jinak by z hlášky
+    /// nebylo poznat, čeho se týká.
+    @Test("Chyby jen od review o review mluví")
+    func keepsReviewOnlyErrorsSpecific() {
+        #expect(PublishError.pendingReviewExists.userDescription.lowercased().contains("review"))
+        #expect(PublishError.nothingToSend.userDescription.lowercased().contains("draft"))
+    }
+
     // MARK: - Čisté funkce
 
     @Test("Prázdné tělo se nepovažuje za odesílatelné", arguments: ["", "   ", "\n\t"])
