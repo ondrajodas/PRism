@@ -103,30 +103,80 @@ struct SubprocessStreamerTests {
         }
     }
 
+    /// Bez toho by session běžela dál i poté, co uživatel zavřel okno.
+    ///
+    /// **Sleduje se PID, ne soubor po procesu** — a je to oprava #101, ne kosmetika. Původní
+    /// verze spouštěla `sleep 1; touch <soubor>`, po 200 ms rušila a po dalších 1,5 s ověřovala,
+    /// že soubor není. Rezerva proti zpoždění pod zátěží tam byla jen ~800 ms a **nedala se
+    /// zvětšit zdarma**: delší `sleep` znamená, že se test musí stejně dlouho dočkat jeho konce.
+    /// Padalo to tím spíš, čím víc procesů pouštěly ostatní suity (Swift Testing je pouští
+    /// paralelně) — po #73 vycházel jeden pád ze čtyř běhů, na commitu před ním 0 ze 3.
+    ///
+    /// Na PID se zabití pozná **v okamžiku, kdy nastane**, takže deadline může být klidně
+    /// pětisekundový a test přesto skončí v desítkách milisekund. Zároveň testuje víc než dřív:
+    /// nepřítomnost souboru dokazovala jen to, že `touch` neproběhl, kdežto zmizelý PID je
+    /// přímo to tvrzení, které od zrušení chceme.
     @Test("Zrušení proces zabije")
     func cancellationKillsTheProcess() async throws {
-        // Bez toho by session běžela dál i poté, co uživatel zavřel okno.
-        let marker = URL(
+        let pidFile = URL(
             filePath: NSTemporaryDirectory()
-        ).appending(path: "prism-streamer-\(UUID().uuidString)")
-        let path = marker.path(percentEncoded: false)
+        ).appending(path: "prism-streamer-\(UUID().uuidString).pid")
+        let path = pidFile.path(percentEncoded: false)
+        defer { try? FileManager.default.removeItem(at: pidFile) }
 
         let task = Task {
             for try await _ in streamer.stream(
                 shell,
-                arguments: ["-c", "sleep 1; touch '\(path)'"],
+                arguments: ["-c", "echo $$ > '\(path)'; sleep 30"],
                 environment: [:],
                 workingDirectory: nil,
-                timeout: .seconds(30)
+                timeout: .seconds(60)
             ) {}
         }
 
-        try await Task.sleep(for: .milliseconds(200))
+        // Rušit se má proces, který **doopravdy běží** — jinak by test mohl projít i tehdy,
+        // kdyby se nespustil vůbec.
+        let pid = try await pid(from: pidFile)
         task.cancel()
         _ = try? await task.value
 
-        // Kdyby zrušení proces nezabilo, doběhl by sám a soubor by po sobě nechal.
-        try await Task.sleep(for: .milliseconds(1500))
-        #expect(!FileManager.default.fileExists(atPath: path))
+        #expect(await isGone(pid), "proces \(pid) po zrušení pořád běží")
     }
+
+    /// PID z běžícího procesu. Čeká na něj pollingem, ne pevnou odmlkou — start `/bin/sh` trvá
+    /// jednotky milisekund, ale pod zátěží klidně stovky.
+    /// **Nekladné číslo se nepřijme**, i když ho `echo $$` dát nemůže. `kill(0, …)` míří na celou
+    /// **procesovou skupinu** volajícího a negativní PID taky na skupinu — takže hodnota, která
+    /// se sem omylem dostane, by z kontroly existence jednoho procesu udělala něco úplně jiného.
+    /// Upozornil na to Copilot na #121; past by se tady sice neotevřela (soubor se plní jedním
+    /// `echo $$`, a `pid_t(_:)` je failable, takže rozbitý text vede na další kolo pollingu, ne
+    /// na nulu), ale stojí to jednu podmínku.
+    private func pid(from file: URL) async throws -> pid_t {
+        for _ in 0..<250 {
+            if let text = try? String(contentsOf: file, encoding: .utf8),
+               let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+               pid > 0 {
+                return pid
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        throw ProcessTestFailure.processNeverStarted
+    }
+
+    /// Zmizel proces? `kill(pid, 0)` jen ověřuje existenci, nic neposílá.
+    ///
+    /// Čeká se na **výsledek**, ne pevnou dobu: když zrušení zabije proces hned (běžný případ),
+    /// vrátí to po prvním kole. Deadline je velkorysý schválně — je tu proti zátěži, ne proti
+    /// pomalému zabíjení.
+    private func isGone(_ pid: pid_t) async -> Bool {
+        for _ in 0..<250 {
+            if kill(pid, 0) != 0 { return true }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        return false
+    }
+}
+
+private enum ProcessTestFailure: Error {
+    case processNeverStarted
 }
