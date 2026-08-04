@@ -49,14 +49,19 @@ struct GhReviewPublisherTests {
         )
     }
 
+    /// Brána je povinný parametr, takže publisher bez ní nevznikne. Testy ji dostávají
+    /// otevřenou pro `sandbox` — kdyby výchozí byla `.standard`, skončil by každý test na
+    /// bráně a nic dalšího by se neověřilo.
     private func publisher(
         _ runner: ProcessRunning,
-        detail: Result<PullRequest, any Error>? = nil
+        detail: Result<PullRequest, any Error>? = nil,
+        scope: PublishScope? = nil
     ) -> GhReviewPublisher {
         GhReviewPublisher(
             gh: gh,
             runner: runner,
-            gateway: FakeGitHubGateway(always: .success([]), detail: detail ?? .success(self.detail()))
+            gateway: FakeGitHubGateway(always: .success([]), detail: detail ?? .success(self.detail())),
+            scope: scope ?? .allowing(sandbox.repo)
         )
     }
 
@@ -64,26 +69,39 @@ struct GhReviewPublisherTests {
         try FakeProcessRunner(exitCode: 0, standardOutput: Fixture.text("gh/review-submitted.json"))
     }
 
-    // MARK: - Brána na sandbox
+    // MARK: - Brána na odesílání
 
-    /// Vědomé omezení první verze odesílání (#107 ho vyřadí). Je **první** kontrola v cestě:
-    /// na cizí repo se nemá ani ptát na detail.
-    @Test("Mimo sandbox se neodešle nic a nic se nezavolá")
-    func refusesRepositoriesOutsideTheSandbox() async throws {
+    /// **Nejdůležitější test v tomhle souboru.** Ve výchozím nastavení se neodešle nic —
+    /// a brána je **první** kontrola v cestě, takže se na nepovolené repo ani neptáme na
+    /// detail. Kdyby se přesunula za pre-flight, sáhlo by se na síť kvůli repu, kam se
+    /// posílat nemá.
+    @Test("Ve výchozím nastavení se neodešle nic a nic se nezavolá")
+    func refusesRepositoriesWithoutPermission() async throws {
+        let runner = try success()
+
+        await #expect(throws: PublishError.publishingNotAllowed(sandbox.repo)) {
+            try await publisher(runner, scope: .standard).submit(draft())
+        }
+        #expect(runner.invocations.isEmpty, "sáhlo se na gh, i když odesílání není povolené")
+    }
+
+    /// Povolení je per repo, takže jedno otevřené repo neotevře ostatní.
+    @Test("Povolení jednoho repa neotevře jiné")
+    func permissionDoesNotLeakToOtherRepositories() async throws {
         let runner = try success()
         let ostré = PRIdentifier(repo: RepoID(owner: "keboola", name: "vault"), number: 85)
 
-        await #expect(throws: PublishError.outsideAllowedScope(ostré.repo)) {
+        await #expect(throws: PublishError.publishingNotAllowed(ostré.repo)) {
             try await publisher(runner).submit(draft(ostré))
         }
-        #expect(runner.invocations.isEmpty, "sáhlo se na gh, i když je repo mimo sandbox")
+        #expect(runner.invocations.isEmpty, "sáhlo se na gh, i když repo povolené není")
     }
 
-    @Test("Sandbox v seznamu je, cokoli jiného ne")
-    func allowsOnlyTheSandbox() {
-        #expect(PublishScope.allows(RepoID(owner: "ondrajodas", name: "prism-review-sandbox")))
-        #expect(!PublishScope.allows(RepoID(owner: "keboola", name: "vault")))
-        #expect(!PublishScope.allows(RepoID(owner: "ondrajodas", name: "PRism")))
+    /// Sandbox **není výjimka v kódu** — od #107 se zapíná stejným přepínačem jako cokoli
+    /// jiného. Výjimka by tvrdila něco jiného než nastavení.
+    @Test("Sandbox sám o sobě povolený není")
+    func theSandboxIsNotHardcoded() {
+        #expect(!PublishScope.standard.allows(sandbox.repo))
     }
 
     // MARK: - Pre-flight

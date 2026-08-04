@@ -15,9 +15,19 @@ import Testing
 struct AppStoreSubmissionTests {
     private let directory: TemporaryDirectory
     private let layout: CacheLayout
-    /// Sandboxové repo: `PublishScope` je součástí odpovědi na „dá se odeslat“, takže na
-    /// `cli/cli` by nevznikl žádný sheet bez ohledu na obsah draftu.
     private let pr = PRIdentifier("ondrajodas/prism-review-sandbox#7")!
+
+    /// Konfigurace s **povoleným odesíláním** pro tohle repo.
+    ///
+    /// Brána je součástí odpovědi na „dá se odeslat“, takže bez ní by nevznikl žádný sheet
+    /// bez ohledu na obsah draftu — a že to tak je, hlídá `refusesWithoutPermission` níž.
+    /// Do #107 bylo povolené repo zadrátované v kódu, takže testy musely běžet nad
+    /// sandboxovým identifikátorem; teď si o povolení řeknou.
+    private var publishing: Configuration {
+        var configuration = Configuration.standard
+        configuration.setRepository(RepositoryConfig(allowsPublishing: true), for: pr.repo)
+        return configuration
+    }
 
     init() throws {
         directory = try TemporaryDirectory()
@@ -67,9 +77,17 @@ struct AppStoreSubmissionTests {
 
     /// `gh` je jen cesta — publisher se z ní skládá až při odesílání, ke kterému tyhle testy
     /// nedojdou. `nil` by znamenalo „odsud se neposílá“ a sheet by nevznikl nikdy.
-    private func store(_ gateway: FakeGitHubGateway) -> AppStore {
+    private func store(
+        _ gateway: FakeGitHubGateway,
+        configuration: Configuration? = nil
+    ) -> AppStore {
         AppStore(
             gateway: gateway,
+            configuration: configuration ?? publishing,
+            // Skutečný `ConfigStore` nad dočasnou složkou, aby šlo nastavení přepnout tou
+            // samou cestou jako z okna — `updateConfiguration` bez něj schválně vyhodí
+            // chybu, protože nastavení, které se neuložilo, nesmí vypadat jako uložené.
+            configStore: ConfigStore(layout: layout),
             time: FakeTimeSource(),
             drafts: ReviewDraftStore(layout: layout),
             gh: URL(filePath: "/usr/bin/true")
@@ -78,8 +96,11 @@ struct AppStoreSubmissionTests {
 
     /// Detail je to, odkud se ví, proti kterému commitu se review píše — bez něj se draft
     /// ani nezakládá.
-    private func prepared(_ gateway: FakeGitHubGateway) async -> AppStore {
-        let store = store(gateway)
+    private func prepared(
+        _ gateway: FakeGitHubGateway,
+        configuration: Configuration? = nil
+    ) async -> AppStore {
+        let store = store(gateway, configuration: configuration)
         await store.loadDetail(for: summary())
         return store
     }
@@ -90,6 +111,36 @@ struct AppStoreSubmissionTests {
     }
 
     // MARK: - Kdy sheet vznikne
+
+    /// **Nejdůležitější test celého #107 na úrovni store.** Ve výchozím nastavení se
+    /// neodesílá nikam: sheet nevznikne ani nad hotovým draftem a okno o tom řekne větou,
+    /// která ukazuje do nastavení — ne mlčky zakázaným tlačítkem.
+    @Test("Ve výchozím nastavení odeslání nevznikne a okno pošle do nastavení")
+    func refusesWithoutPermission() async throws {
+        let store = await prepared(gateway(), configuration: .standard)
+        store.setDraftBody("vypadá to dobře", for: pr)
+        store.setDraftVerdict(.approve, for: pr)
+
+        #expect(store.submission(for: summary()) == nil)
+        let block = try #require(store.draftSendBlock(for: pr))
+        #expect(block == .publishingNotAllowed(pr.repo))
+        #expect(block.userDescription.contains("nastavení"))
+    }
+
+    /// Přepnutí v nastavení platí **bez restartu**: scope se skládá při kliknutí, ne při
+    /// startu store.
+    @Test("Povolení v nastavení se projeví hned")
+    func permissionAppliesWithoutRestart() async throws {
+        let store = await prepared(gateway(), configuration: .standard)
+        store.setDraftBody("vypadá to dobře", for: pr)
+        store.setDraftVerdict(.approve, for: pr)
+        #expect(store.submission(for: summary()) == nil)
+
+        try await store.updateConfiguration(publishing)
+
+        #expect(store.draftSendBlock(for: pr) == nil)
+        #expect(store.submission(for: summary()) != nil)
+    }
 
     @Test("Hotový draft dá odeslání se snímkem a s návrhem z nálezů")
     func buildsASubmission() async throws {
@@ -160,6 +211,7 @@ struct AppStoreSubmissionTests {
                 always: .success([summary()]),
                 detail: .failure(GitHubError.notAuthenticated)
             ),
+            configuration: publishing,
             time: FakeTimeSource(),
             drafts: drafts,
             gh: URL(filePath: "/usr/bin/true")

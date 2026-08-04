@@ -15,9 +15,9 @@ názoru.
 > ale výhradně přes jeden modul, na výslovné potvrzení a proti commitu, který jsi opravdu
 > viděl. Nic se neodesílá samo — ani návrh verdiktu, ani reviewer.
 >
-> **Zatím navíc jen do testovacího sandboxu** (viz [#107](https://github.com/ondrajodas/PRism/issues/107)):
-> pravidlo je nové a než se pustí na PR kolegů, projde si provozem tam, kde omyl nikoho
-> nestojí čas.
+> **A jedině tam, kde se to povolilo.** Odesílání je ve výchozím stavu vypnuté — zapíná se
+> v nastavení, globálně nebo u jednoho repa. Dokud si o to někdo výslovně neřekne, neodejde
+> nikam nic.
 
 ## Stav
 
@@ -233,9 +233,15 @@ Návrh verdiktu z nálezů stojí v potvrzení **vedle** toho zvoleného. Nepře
 když se rozchází (schvaluju PR, u kterého reviewer hlásí blokující nález), řekne to nahlas.
 
 Proč odeslat nejde, je vidět **předem** — vedle zakázaného tlačítka, ne až po pokusu:
-chybějící verdikt, prázdný řádkový komentář, draft proti staršímu commitu, nebo repo mimo
-sandbox. Zatím se totiž odesílá **jen do sandboxu** (`ondrajodas/prism-review-sandbox`);
-je to vědomé omezení první verze, ne technická překážka.
+chybějící verdikt, prázdný řádkový komentář, draft proti staršímu commitu, nebo repo, které
+odesílat nesmí.
+
+**Povolení je nastavení, ne konstanta**, a ve výchozím stavu je vypnuté. Zapíná se globálně
+nebo u konkrétního repa (`Povoleno` / `Zakázáno` / `Podle globálního nastavení`) a platí hned,
+bez restartu. Rozhoduje **jen** o tom, jestli se tlačítko vůbec nabídne: odesílá pořád člověk
+potvrzením a proti commitu, který má před sebou. Přepnutí u repa se drží i po změně globálního
+defaultu — repo, které si o zákaz řeklo, se tím nesmí tiše otevřít. Překlep v `config.json` se
+sráží na zakázané, nikdy na povolené.
 
 Po úspěchu se potvrzení **zavře samo**, draft zmizí (i z disku) a konverzace se načte znovu,
 takže je moje review hned vidět v `Přehledu`. Otevřené zůstane jen tehdy, když GitHub vrátí
@@ -292,6 +298,7 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 | **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
 | **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
+| **Odesílání review** | Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl. |
 | **Dostupnost služeb** | Jede na skutečném provozu, ne na sondě: `gh auth status` na timeru by stál spawn procesu a přístup do keychainu — a projde i tehdy, když skutečné volání selže na rate limitu. Status pages jsou proti tomu levné (`components.json` s `ETagem`) a odpovídají na to, co z volání nezjistíme: jestli je problém na jejich straně. |
 
 ## Požadavky
@@ -394,7 +401,7 @@ App/                      zdrojáky aplikace — target PRism
   Health/                 dostupnost služeb pro stavový řádek: status pages, signály, monitor
   Markdown/               vykreslení Markdownu z GitHubu: bloky, inline HTML od botů
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka
-  Publish/                jediná cesta ven: odeslání review na GitHub, brána na sandbox, model potvrzení
+  Publish/                jediná cesta ven: odeslání review na GitHub, brána z nastavení, model potvrzení
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno; ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku

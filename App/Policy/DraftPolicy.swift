@@ -244,7 +244,7 @@ extension Policy {
     /// zeptat a důvod nedostat. Zakázané tlačítko bez vysvětlení je přesně to, co se v tomhle
     /// okně nemá stát.
     ///
-    /// Pořadí kopíruje `GhReviewPublisher.submit`: brána na sandbox, pak **všechno, co je
+    /// Pořadí kopíruje `GhReviewPublisher.submit`: brána na odesílání, pak **všechno, co je
     /// vidět na samotném draftu**, a teprve pak to, co potřebuje hlavu PR. V publisheru je to
     /// totéž rozdělení — `PublishRequest.payload(for:)` běží před `preflight(_:)`.
     ///
@@ -258,13 +258,19 @@ extension Policy {
     /// chvíli z definice starší než pravda, takže zavřený PR pozná až pre-flight. Opačně
     /// `blankComment` protějšek v publisheru nemá: je to náš předstih před 422, a patří
     /// k obsahu draftu, protože se opravuje dopsáním textu.
-    static func sendBlock(for draft: ReviewDraft?, head headSha: String?) -> DraftSendBlock? {
+    /// **Brána se předává parametrem**, protože `Policy` je bez I/O a ke konfiguraci se
+    /// nedostane. Skládá ji volající při kliknutí, takže přepnutí v nastavení platí hned.
+    static func sendBlock(
+        for draft: ReviewDraft?,
+        head headSha: String?,
+        scope: PublishScope
+    ) -> DraftSendBlock? {
         // Bez draftu není co posílat a hlavně není odkud vzít repo pro bránu níž.
         guard let draft else { return .nothingToSend }
-        // Brána na sandbox je první, stejně jako v publisheru — a je to jediný důvod, který
-        // se dopsáním review nespraví.
-        guard PublishScope.allows(draft.pullRequest.repo) else {
-            return .outsideScope(draft.pullRequest.repo)
+        // Brána je první, stejně jako v publisheru — a je to jediný důvod, který se dopsáním
+        // review nespraví.
+        guard scope.allows(draft.pullRequest.repo) else {
+            return .publishingNotAllowed(draft.pullRequest.repo)
         }
         guard !draft.isEmpty else { return .nothingToSend }
         guard draft.verdict != nil else { return .noVerdict }
@@ -286,12 +292,12 @@ extension Policy {
 ///
 /// Typované, ne boolean, a se **větou pro okno**: mlčky zakázané tlačítko vypadá jako
 /// rozbitá aplikace, a každý z těch důvodů vede jinam — prázdný komentář se dopíše, verdikt
-/// vybere, zastaralý draft počká na přenesení (#69) a repo mimo sandbox na #107.
+/// vybere, zastaralý draft počká na přenesení (#69) a nepovolené repo na přepínač v nastavení.
 enum DraftSendBlock: Hashable, Sendable {
     /// Draft neexistuje nebo v něm není nic, co by šlo poslat.
     case nothingToSend
-    /// Repo není v `PublishScope`.
-    case outsideScope(RepoID)
+    /// Odesílání není pro tohle repo povolené (`PublishScope`).
+    case publishingNotAllowed(RepoID)
     /// Ještě nevíme, na kterém commitu PR stojí.
     ///
     /// `detail` = **proč** se to nepovedlo zjistit; `nil` znamená, že se detail pořád načítá.
@@ -312,10 +318,10 @@ enum DraftSendBlock: Hashable, Sendable {
         switch self {
         case .nothingToSend:
             "Není co poslat — v review není tělo, verdikt ani komentář."
-        case .outsideScope(let repo):
+        case .publishingNotAllowed(let repo):
             // Delegovaná, ne opsaná: dvě formulace téhož omezení by se rozešly a jedna
             // z nich by pak tvrdila něco jiného než druhá.
-            PublishError.outsideAllowedScope(repo).userDescription
+            PublishError.publishingNotAllowed(repo).userDescription
         case .headUnknown(let detail?):
             "Nevím, na kterém commitu PR stojí, takže odeslat nejde. \(detail)"
         case .headUnknown:

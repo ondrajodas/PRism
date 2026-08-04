@@ -29,6 +29,13 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// Výchozí režim pro repo, které si neřeklo o jiný. Ve výchozím stavu `manual` —
     /// zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
     var mode: ReviewMode
+    /// Smí se z aplikace odeslat review? Ve výchozím stavu **ne**.
+    ///
+    /// Je to brána, ne pohodlí — viz tvrdá podmínka č. 1 v `CLAUDE.md`. Do #107 to byl
+    /// zadrátovaný seznam rep s jediným sandboxem; teď je to nastavení, ale vlastnost „samo
+    /// nic neodejde“ drží **výchozí vypnuto**: dokud si o to někdo výslovně neřekne, nejde
+    /// odeslat nikam. Odesílá pořád jedině člověk potvrzením (#68), to se nemění.
+    var allowsPublishing: Bool
     /// Jazyk, do kterého se nálezy překládají, než se ukážou. **Ne** jazyk, ve kterém je
     /// reviewer píše — jeho prompt o jazyku mlčí. Výchozí čeština, protože okno je české
     /// a anglické nálezy vedle českých popisků působily jako dva slepené nástroje.
@@ -51,6 +58,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         skillsByLanguage: [ProjectLanguage: [String]] = [:],
         blockingCategories: [String],
         mode: ReviewMode,
+        allowsPublishing: Bool = false,
         findingsLanguage: FindingsLanguage = .czech,
         pollIntervalSeconds: Int,
         maxConcurrentReviews: Int,
@@ -63,6 +71,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.skillsByLanguage = skillsByLanguage
         self.blockingCategories = blockingCategories
         self.mode = mode
+        self.allowsPublishing = allowsPublishing
         self.findingsLanguage = findingsLanguage
         self.pollIntervalSeconds = pollIntervalSeconds
         self.maxConcurrentReviews = maxConcurrentReviews
@@ -86,6 +95,11 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // Neznámý režim se bere jako `manual` ze stejného důvodu jako u repa: samo od sebe
         // se nemá spouštět nic, a překlep v souboru není důvod pustit reviewery na všechno.
         mode = (try? container.decode(ReviewMode.self, forKey: .mode)) ?? standard.mode
+        // Rozbitá hodnota se srazí na výchozí, a ta je `false`: překlep v souboru nesmí
+        // otevřít cestu ven. Je to tatáž přísnost jako u režimu a opačná než u jazyka
+        // nálezů, kde je nejhorším následkem próza v jiném jazyce.
+        allowsPublishing = (try? container.decode(Bool.self, forKey: .allowsPublishing))
+            ?? standard.allowsPublishing
         findingsLanguage = (try? container.decode(FindingsLanguage.self, forKey: .findingsLanguage))
             ?? standard.findingsLanguage
         pollIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds)
@@ -106,6 +120,10 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
     /// nešlo by odlišit repo, které si o `manual` **řeklo**, od toho, které o něm nic
     /// neříká — a při globálním automatu jsou to opačné odpovědi.
     var mode: ReviewMode?
+    /// `nil` = ber globální, stejně jako režim. Vyplněná hodnota znamená „řekl jsem si
+    /// o tohle“ — a `false` u repa se proto **nesmaže** jako „shodné s globálním“, jinak by
+    /// ho přepnutí globálního defaultu tiše otevřelo.
+    var allowsPublishing: Bool?
     /// `nil` = ber globální. U firemního repa s mezinárodním týmem dává smysl angličtina,
     /// i když je zbytek fronty český.
     var findingsLanguage: FindingsLanguage?
@@ -117,11 +135,13 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
 
     init(
         mode: ReviewMode? = nil,
+        allowsPublishing: Bool? = nil,
         findingsLanguage: FindingsLanguage? = nil,
         skills: [String]? = nil,
         blockingCategories: [String]? = nil
     ) {
         self.mode = mode
+        self.allowsPublishing = allowsPublishing
         self.findingsLanguage = findingsLanguage
         self.skills = skills
         self.blockingCategories = blockingCategories
@@ -142,6 +162,15 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
             mode = (try? container.decode(ReviewMode.self, forKey: .mode)) ?? .manual
         } else {
             mode = nil
+        }
+        // Stejně jako u režimu: chybějící klíč je „ber globální“, ale **rozbitá hodnota se
+        // srazí na `false`**. Vzít u ní globální hodnotu by znamenalo, že překlep v repu,
+        // u kterého se odesílání někdo pokoušel zakázat, ho při globálním povolení nechá
+        // otevřené.
+        if container.contains(.allowsPublishing) {
+            allowsPublishing = (try? container.decode(Bool.self, forKey: .allowsPublishing)) ?? false
+        } else {
+            allowsPublishing = nil
         }
         // Na rozdíl od režimu se rozbitá hodnota bere jako „nic jsem neřekl“: špatný jazyk
         // znamená prózu v jiném jazyce, ne spuštěné review, o které nikdo nežádal.
@@ -180,6 +209,7 @@ struct Configuration: Codable, Equatable, Sendable {
             skills: ["code-review:code-review"],
             blockingCategories: Policy.defaultBlockingCategories.sorted(),
             mode: .manual,
+            allowsPublishing: false,
             findingsLanguage: .czech,
             pollIntervalSeconds: 60,
             maxConcurrentReviews: 3,
@@ -212,6 +242,7 @@ struct Configuration: Codable, Equatable, Sendable {
         let overrides = repositories[repo]
         return ResolvedConfig(
             mode: overrides?.mode ?? global.mode,
+            allowsPublishing: overrides?.allowsPublishing ?? global.allowsPublishing,
             findingsLanguage: overrides?.findingsLanguage ?? global.findingsLanguage,
             skills: Self.nonBlank(overrides?.skills ?? global.skills),
             blockingCategories: Set(Self.nonBlank(overrides?.blockingCategories ?? global.blockingCategories))
@@ -265,6 +296,9 @@ struct Configuration: Codable, Equatable, Sendable {
 /// Co z konfigurace vyjde pro jedno repo.
 struct ResolvedConfig: Equatable, Sendable {
     let mode: ReviewMode
+    /// Smí se z tohohle repa odeslat review? Odpovídá na to `PublishScope`, ne volající —
+    /// dvě místa, kde se ta otázka vyhodnocuje, by se rozešla.
+    let allowsPublishing: Bool
     let findingsLanguage: FindingsLanguage
     let skills: [String]
     let blockingCategories: Set<String>

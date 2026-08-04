@@ -40,6 +40,22 @@ struct GlobalSettingsView: View {
             }
 
             Section {
+                Toggle("Povolit odesílání", isOn: $settings.draft.global.allowsPublishing)
+            } header: {
+                Text("Odesílání review")
+            } footer: {
+                // Text nesmí být čitelný jako „zapnout automatické odesílání“. Přepínač
+                // rozhoduje **jen** o tom, jestli se review dá odeslat; odesílá pořád člověk
+                // potvrzením, ve kterém je vidět celý payload.
+                //
+                // A nesmí slibovat, že se tlačítko schová — nechá se **zakázané a s důvodem**,
+                // protože mizející tlačítko vypadá jako rozbitá aplikace.
+                Text("Když je vypnuté, tlačítko `Odeslat review…` zůstane zakázané a řekne proč. Samo se neodešle nikdy nic — review odchází jedině tak, že ho člověk potvrdí, a jedině proti commitu, který má před sebou. Repo si to může přebít.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 StringListEditor(
                     items: $settings.draft.global.skills,
                     itemLabel: "Skill",

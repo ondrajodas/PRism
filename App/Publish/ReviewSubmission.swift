@@ -65,13 +65,18 @@ final class ReviewSubmission: Identifiable {
         suggestion: ReviewVerdict?,
         gh: URL,
         gateway: any GitHubGateway,
+        scope: PublishScope,
         afterSuccess: @escaping @MainActor () async -> Void
     ) {
         self.init(
             pullRequest: pullRequest,
             draft: draft,
             suggestion: suggestion,
-            publisher: { GhReviewPublisher(gh: gh, runner: SubprocessRunner(), gateway: gateway) },
+            // Brána je snímek konfigurace z okamžiku kliknutí — stejně jako draft. Co je
+            // vidět v potvrzení, to platí i při odeslání.
+            publisher: {
+                GhReviewPublisher(gh: gh, runner: SubprocessRunner(), gateway: gateway, scope: scope)
+            },
             afterSuccess: afterSuccess
         )
     }

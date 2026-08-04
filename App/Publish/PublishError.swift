@@ -11,8 +11,8 @@ import Foundation
 /// skutečných hlášek z fixtures ze spike #62 — je to křehké rozpoznávání z textu, takže
 /// právě proto patří na jedno místo bez I/O.
 enum PublishError: Error, Equatable {
-    /// Repo není v `PublishScope`. Nic se nevolalo.
-    case outsideAllowedScope(RepoID)
+    /// Odesílání není pro tohle repo povolené (`PublishScope`). Nic se nevolalo.
+    case publishingNotAllowed(RepoID)
     /// Draft je psaný proti jinému commitu, než je teď hlava PR. Nic se nevolalo.
     case staleDraft(draft: String, head: String)
     /// PR není otevřený.
@@ -65,7 +65,7 @@ extension PublishError {
     var mightHaveReachedGitHub: Bool {
         switch self {
         // Nic se nevolalo (brány a pre-flight), nebo `gh` vůbec nenaběhl.
-        case .outsideAllowedScope, .staleDraft, .nothingToSend, .pullRequestNotOpen,
+        case .publishingNotAllowed, .staleDraft, .nothingToSend, .pullRequestNotOpen,
              .toolUnavailable:
             false
         // GitHub požadavek **odmítl** — 422 u rozřazení komentářů, 401 u přihlášení, 403 u
@@ -122,8 +122,8 @@ extension PublishError {
     /// nevyplývá další krok, je jen zpráva o smůle.
     var userDescription: String {
         switch self {
-        case .outsideAllowedScope(let repo):
-            "Odesílání je zatím povolené jen do sandboxu, ne do \(repo). Viz #107."
+        case .publishingNotAllowed(let repo):
+            "Odesílání review není pro \(repo) povolené. Zapni ho v nastavení (⌘,)."
         case .staleDraft(let draft, let head):
             "Draft je psaný proti commitu \(draft.prefix(7)), ale hlava PR je \(head.prefix(7)). Načti diff znovu."
         case .pullRequestNotOpen(let state):
