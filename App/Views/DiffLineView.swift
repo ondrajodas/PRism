@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Jeden řádek diffu: dvě čísla, znak změny a obsah. V pohledu vedle sebe jedna buňka
