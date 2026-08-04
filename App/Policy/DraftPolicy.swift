@@ -188,7 +188,7 @@ extension Policy {
         }
     }
 
-    /// Kolik komentářů draftu sedí na kotvě, kterou má i jiný komentář.
+    /// Na kolika kotvách draftu leží **víc než jeden** komentář.
     ///
     /// Existuje kvůli tomu, co se dá čekat a nestane se: dva komentáře na jednom řádku
     /// **nevytvoří vlákno s odpovědí**, ale dvě samostatná vlákna vedle sebe. Změřeno u #73
@@ -196,10 +196,11 @@ extension Policy {
     /// přibudou dvě. `in_reply_to` v `comments[]` neexistuje a neodeslané vlákno navíc ještě
     /// nemá `id`, na které by šlo odkázat.
     ///
-    /// Vrací **počet takových řádků**, ne komentářů. Rozdíl našel Copilot na #119: součet
-    /// komentářů napříč všemi sdílenými kotvami se v okně skládal do věty „N komentářů míří na
+    /// Počítají se **místa, ne komentáře**, a je to celý smysl té změny: první verze sčítala
+    /// komentáře napříč všemi sdílenými kotvami a okno z toho skládalo větu „N komentářů míří na
     /// stejný řádek“, což u dvou různých řádků po dvou komentářích tvrdilo nepravdu — čtyři
-    /// komentáře na jeden řádek nemířily. Počet míst tu informaci unese a splést se v něm nedá.
+    /// komentáře na jeden řádek nemířily. Našel to Copilot na #119, a **podruhé** ještě
+    /// v tomhle popisu, který po přejmenování pořád mluvil o počtu komentářů.
     ///
     /// Nula znamená, že každý komentář stojí na vlastní kotvě.
     static func linesWithSeveralComments(in draft: ReviewDraft?) -> Int {
