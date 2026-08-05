@@ -19,6 +19,10 @@ struct FindingsPanel: View {
     /// Co reviewery dělaly. Prázdné, dokud se nic nespustilo.
     /// Nálezy k zobrazení — po filtru chipů, takže ne nutně všechny ze záznamu.
     var findings: [Finding] = []
+    /// Jak jsem nálezy posoudil (#113). Celá mapa ze záznamu — řádek si z ní vezme to své.
+    var dismissals: [FindingKey: FindingDismissal] = [:]
+    /// Odmítnutí a vrácení nálezu. Kontextové menu se bez toho nekreslí.
+    var findingActions: FindingActions?
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     var timelines: [ReviewerTimeline] = []
     var isRunning = false
@@ -271,16 +275,25 @@ struct FindingsPanel: View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
             TableColumn("Kategorie", value: \.category) { row in
                 HStack(spacing: 4) {
-                    if row.isBlocking {
+                    if row.showsBlockingWarning {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.red)
                             .font(.caption2)
                             .help("Blokující nález")
                     }
+                    if let dismissal = row.dismissal {
+                        Text(verbatim: dismissal.reason.label)
+                            .font(.caption2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(.secondary.opacity(0.15), in: .capsule)
+                            .foregroundStyle(.secondary)
+                    }
                     Text(verbatim: row.category)
                         .lineLimit(1)
                 }
-                .help(row.category)
+                .help(row.categoryHelp)
+                .modifier(DismissedRowStyle(row: row, actions: findingActions))
             }
             .width(min: 100, ideal: 130, max: 190)
 
@@ -288,6 +301,7 @@ struct FindingsPanel: View {
                 Text(verbatim: row.reviewer)
                     .lineLimit(1)
                     .help(row.reviewer)
+                    .modifier(DismissedRowStyle(row: row, actions: findingActions))
             }
             // `code-review:code-review` je výchozí id z konfigurace, takže se vejít **musí**
             // — jinak se sloupec ořezává pořád. Při 13pt systémovém fontu je to 154,7 pt
@@ -308,6 +322,7 @@ struct FindingsPanel: View {
                     // `App/Views/…` zbyl společný prefix, který o nálezu neříká nic.
                     .truncationMode(.head)
                     .help(row.locationHelp)
+                    .modifier(DismissedRowStyle(row: row, actions: findingActions))
             }
             .width(min: 120, ideal: 240, max: 420)
 
@@ -315,6 +330,7 @@ struct FindingsPanel: View {
                 Text(verbatim: row.summary)
                     .lineLimit(2)
                     .help(row.summary)
+                    .modifier(DismissedRowStyle(row: row, actions: findingActions))
             }
             // Bez `max`, takže si vezme, co ostatní nechají. `min` je tu proto, aby v úzkém
             // okně mizely ony a ne on — je to ten sloupec, kvůli kterému se tabulka čte.
@@ -364,9 +380,9 @@ struct FindingsPanel: View {
     // MARK: - Data
 
     /// Bez řazení podle sloupce platí pořadí z `Policy` — tabulka nemá vlastní představu
-    /// o tom, co patří nahoru.
+    /// o tom, co patří nahoru, včetně toho, že odmítnuté jdou naspod.
     private var rows: [FindingRow] {
-        let base = FindingRow.rows(of: findings, blocking: blockingCategories)
+        let base = FindingRow.rows(of: findings, blocking: blockingCategories, dismissals: dismissals)
         return sortOrder.isEmpty ? base : base.sorted(using: sortOrder)
     }
 

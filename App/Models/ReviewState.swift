@@ -22,6 +22,13 @@ enum ReviewState: Hashable, Codable, Sendable {
     case clean
     /// Doběhlo a nálezy jsou. Kolik z nich blokuje, odvozuje `Policy`, ne tenhle typ.
     case completed(findings: Int)
+    /// Nálezy byly, ale **všechny** jsem posoudil jako falešné (#113).
+    ///
+    /// Vlastní případ, ne `clean`: ten znamená „reviewer nic nenašel“, což je jiné tvrzení
+    /// než „našel a já to zamítl“ — a `completed(findings: 0)` zakazuje pravidlo
+    /// u `finished(findingCount:)`. Nese počet odmítnutých, protože bez něj by odznak tvrdil
+    /// jen „vyřízeno“ a nebylo by z čeho poznat, kolik jsem toho vlastně přeskočil.
+    case dismissed(findings: Int)
     /// Session skončila nenulovým kódem; `detail` je uchovaný stderr.
     case failed(detail: String)
     /// Session byla zabita timeoutem. Částečné nálezy se zachovávají.

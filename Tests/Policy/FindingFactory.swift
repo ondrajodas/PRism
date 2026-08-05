@@ -12,14 +12,15 @@ func makeReported(
     category: String? = "correctness",
     verdict: FindingVerdict? = .confirmed,
     summary: String = "nález",
-    failureScenario: String? = nil
+    failureScenario: String? = nil,
+    shortSummary: String? = nil
 ) -> ReportedFinding {
     ReportedFinding(
         file: file,
         line: line,
         category: category,
         verdict: verdict,
-        shortSummary: nil,
+        shortSummary: shortSummary,
         summary: summary,
         failureScenario: failureScenario
     )
@@ -32,8 +33,10 @@ func makeFinding(
     verdict: FindingVerdict? = .confirmed,
     summary: String = "nález",
     failureScenario: String? = nil,
+    shortSummary: String? = nil,
     reviewer: String = "code-review",
-    headSha: String = "aaaa1111"
+    headSha: String = "aaaa1111",
+    translation: FindingTranslation? = nil
 ) -> Finding {
     Finding(
         reported: makeReported(
@@ -42,10 +45,26 @@ func makeFinding(
             category: category,
             verdict: verdict,
             summary: summary,
-            failureScenario: failureScenario
+            failureScenario: failureScenario,
+            shortSummary: shortSummary
         ),
         reviewer: reviewer,
-        headSha: headSha
+        headSha: headSha,
+        translation: translation
+    )
+}
+
+/// Odmítnutí nálezů (#113) klíčované **produkční** funkcí, ne vlastním skládáním klíče —
+/// jinak by testy ověřovaly svoji kopii pravidla místo toho pravidla.
+func makeDismissals(
+    _ findings: [Finding],
+    reason: FindingDismissal.Reason = .invalid,
+    at date: Date = Date(timeIntervalSince1970: 1_000_000)
+) -> [FindingKey: FindingDismissal] {
+    Dictionary(
+        uniqueKeysWithValues: findings.map {
+            (Policy.key(of: $0), FindingDismissal(reason: reason, dismissedAt: date))
+        }
     )
 }
 

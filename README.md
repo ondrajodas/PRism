@@ -126,9 +126,33 @@ najetí myší** — má ji každý sloupec, protože každým se dá přetáhno
 odzadu. U nálezu, který ke konkrétnímu místu v kódu nepatří, vysvětluje nápověda pomlčku
 ve sloupci.
 
+**Falešně pozitivní nález se dá odmítnout, aniž bys zahodil ostatní.** V bublině je
+`Odmítnout: neplatný · irelevantní` — `neplatný` znamená „reviewer se mýlí“, `irelevantní`
+„má pravdu, ale sem to nepatří“. Rozdíl stojí za dva knoflíky, protože první je vstup pro
+doladění skillu nebo blokující sady a druhý ne; volný text u toho není, protože se nikam
+neodesílá a nikdo by ho nečetl. Totéž jde z **kontextového menu** v tabulce
+(`Označit jako…` / `Vrátit mezi platné`).
+
+Odmítnutý nález se **nepočítá do návrhu verdiktu ani do řádku seznamu** — jeden falešný nález
+s `CONFIRMED` v blokující kategorii tak nedrží celý PR na `request changes`. **Nikam ale
+nezmizí:** v bublině se sbalí na jeden řádek s odznakem důvodu a tlačítkem `Vrátit`,
+v tabulce zůstane ztlumený naspod. Schovaný nález se nedá přečíst a nedá se odlišit od
+neexistujícího — a když je to moje rozhodnutí, musím mít jak zkontrolovat, co jsem odmítl;
+proto tu není ani přepínač „schovat odmítnuté“. Když jsi nálezy odmítl všechny, řádek
+v seznamu ukáže `odmítnuto · N`, **ne `čisté`**: „reviewer nic nenašel“ je jiné tvrzení než
+„našel a já to zamítl“. Návrh verdiktu to napíše taky (`1 odmítnutý nález se nepočítá`).
+
+Označení platí **jen pro ten commit** — nálezy jsou klíčované head commitem, takže nález
+falešný nad starým kódem nemusí být falešný nad novým. Přežije to restart i **opakované
+review týmž skillem**, které jinak celý předchozí výsledek přepíše. Odmítnutí u jednoho
+revieweera nesundá nález druhého; odznak `2×` proto spadne na `1×`. A komentář, který jsi
+z nálezu už převzal do svého review, se odmítnutím **nevyjme** — je to tvoje próza, vyjímá
+se v `Moje review` a bublina to u takového nálezu napíše.
+
 V liště panelu je **koš**, kterým se uložené nálezy zahodí — hodí se, když se změnila sada
-skillů a v záznamu leží nálezy od revieweera, který už neběží. Maže se jen viditelný commit,
-historie zůstává, a na repu v automatickém režimu se review vzápětí pustí samo.
+skillů a v záznamu leží nálezy od revieweera, který už neběží. Je to hrubší nástroj než
+odmítnutí: maže celý záznam viditelného commitu, historie starších zůstává, a na repu
+v automatickém režimu se review vzápětí pustí samo.
 
 **Zavřít aplikaci během review se musí potvrdit.** Ukončení session zabije a nálezy, které
 už reviewer nahlásil, se ztratí — z řádku pak vyjde `neběželo`, tedy totéž jako u PR, který
@@ -365,6 +389,7 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 | **Reviewery** | Běží nezávisle a paralelně. Texty nálezů se mezi nimi neslučují — nesouhlas dvou reviewerů je informace. Shoda na stejném `file:line` se označí odznakem `2×`. |
 | **Jazyk nálezů** | Volba v nastavení, ne natvrdo. Řeší se **překladem po doběhnutí**, ne instrukcí v promptu: psát rovnou česky měřitelně ubírá nálezy. Reviewer píše v jazyce, ve kterém je nejsilnější; jazyk je věc zobrazení. |
 | **Závažnost** | Aplikace nevymýšlí vlastní škálu. Seskupuje podle `category` z výstupu reviewera a odvozuje jediný blokující boolean (`verdict == CONFIRMED` a `category` v blokující sadě). Z toho vypadne návrh verdiktu. |
+| **Falešně pozitivní nálezy** | Normální provoz, ne chyba. Jeden nález se dá odmítnout jako `neplatný` nebo `irelevantní` a ostatní platí dál; do verdiktu a do řádku seznamu se nepočítá, ale z okna nezmizí — sbalí se. Označení bydlí na záznamu, ne na nálezu, aby ho nesmazalo opakované review týmž skillem, a platí jen pro ten commit: nálezy jsou klíčované head commitem. |
 | **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
 | **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |

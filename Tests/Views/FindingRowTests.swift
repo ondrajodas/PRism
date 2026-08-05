@@ -125,4 +125,58 @@ struct FindingRowTests {
 
         #expect(Set(rows.map(\.id)).count == 3)
     }
+
+    // MARK: - Odmítnuté nálezy (#113)
+
+    @Test("Odmítnutý řádek si nese důvod")
+    func aDismissedRowCarriesItsReason() throws {
+        let dismissed = finding(line: 42)
+        let active = finding(line: 43)
+
+        let rows = FindingRow.rows(
+            of: [dismissed, active],
+            dismissals: makeDismissals([dismissed], reason: .irrelevant)
+        )
+
+        #expect(rows.first(where: { $0.location.hasSuffix(":42") })?.dismissal?.reason == .irrelevant)
+        #expect(rows.first(where: { $0.location.hasSuffix(":43") })?.dismissal == nil)
+    }
+
+    /// Výstražná ikona u nálezu, který jsem odmítl, by tvrdila, že PR pořád na něčem stojí —
+    /// a přitom se z něj právě proto nepočítá.
+    @Test("Odmítnutý blokující nález výstražnou ikonu neukazuje")
+    func aDismissedBlockingRowDropsTheWarning() throws {
+        let blocking = finding(category: "correctness", verdict: .confirmed)
+
+        let row = try #require(FindingRow.rows(of: [blocking], dismissals: makeDismissals([blocking])).first)
+
+        #expect(row.isBlocking)
+        #expect(row.showsBlockingWarning == false)
+    }
+
+    /// Nový sloupec kvůli tomu není, takže důvod musí být aspoň v nápovědě — jinak by
+    /// z tabulky nešlo poznat, proč nález neplatí.
+    @Test("Nápověda ke kategorii vysvětlí odmítnutí")
+    func theCategoryHelpExplainsTheDismissal() throws {
+        let dismissed = finding()
+
+        let row = try #require(
+            FindingRow.rows(of: [dismissed], dismissals: makeDismissals([dismissed], reason: .invalid)).first
+        )
+
+        #expect(row.categoryHelp.contains("correctness"))
+        #expect(row.categoryHelp.contains(FindingDismissal.Reason.invalid.explanation))
+        // Platný nález má v nápovědě jen kategorii, ne prázdný přívěsek.
+        #expect(FindingRow.rows(of: [dismissed]).first?.categoryHelp == "correctness")
+    }
+
+    @Test("Odmítnuté řádky jdou naspod")
+    func dismissedRowsSinkToTheBottom() {
+        let dismissed = finding(line: 42, category: "correctness", verdict: .confirmed)
+        let active = finding(line: 43, category: "style", verdict: .plausible)
+
+        let rows = FindingRow.rows(of: [dismissed, active], dismissals: makeDismissals([dismissed]))
+
+        #expect(rows.map(\.dismissal).map { $0 == nil } == [true, false])
+    }
 }

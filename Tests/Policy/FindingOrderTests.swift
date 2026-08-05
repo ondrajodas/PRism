@@ -139,4 +139,41 @@ struct FindingOrderTests {
         #expect(Policy.sections([]).isEmpty)
         #expect(Policy.sorted([]).isEmpty)
     }
+
+    // MARK: - Odmítnuté nálezy (#113)
+
+    /// Odmítnuté nemají konkurovat platným — a je to **první** kritérium, takže i odmítnutý
+    /// blokující nález jde pod platný stylistický.
+    @Test("Odmítnuté jdou naspod, i když blokují")
+    func dismissedFindingsSinkToTheBottom() {
+        let dismissed = makeFinding(category: "correctness", verdict: .confirmed, summary: "falešný")
+        let active = makeFinding(category: "style", verdict: .plausible, summary: "styl")
+
+        let sorted = Policy.sorted([dismissed, active], dismissals: makeDismissals([dismissed]))
+
+        #expect(sorted.map(\.summary) == ["styl", "falešný"])
+    }
+
+    @Test("Mezi odmítnutými platí stejná kritéria jako mezi platnými")
+    func dismissedFindingsKeepTheirOwnOrder() {
+        let blocking = makeFinding(category: "correctness", verdict: .confirmed, summary: "jistá chyba")
+        let cosmetic = makeFinding(category: "style", verdict: .confirmed, summary: "styl")
+
+        let sorted = Policy.sorted(
+            [cosmetic, blocking],
+            dismissals: makeDismissals([blocking, cosmetic])
+        )
+
+        #expect(sorted.map(\.summary) == ["jistá chyba", "styl"])
+    }
+
+    @Test("Bez odmítnutí se pořadí nemění")
+    func nothingDismissedNothingMoves() {
+        let findings = [
+            makeFinding(category: "style", summary: "styl"),
+            makeFinding(category: "correctness", summary: "chyba"),
+        ]
+
+        #expect(Policy.sorted(findings, dismissals: [:]) == Policy.sorted(findings))
+    }
 }

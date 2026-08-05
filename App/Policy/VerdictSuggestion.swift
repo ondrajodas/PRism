@@ -22,7 +22,12 @@ extension Policy {
         // parser dovnitř nepustí. Filtrovat je podle stavu běhu by znamenalo, že spadlý
         // reviewer s nahlášenou ztrátou dat vedle jednoho čistého běhu vyjde jako
         // `approve` — tedy přesně ta chyba, které se tenhle typ vyhýbá.
-        if record.findings.contains(where: { isBlocking($0, categories: categories) }) {
+        //
+        // Odmítnuté (#113) se nepočítají — a `isBlocking` se kvůli tomu **nemění**: blokující
+        // je vlastnost nálezu a kategorie, kdežto „tomuhle nálezu nevěřím“ je můj názor nad
+        // celým záznamem. Proto se filtruje tady a přes `activeFindings`, tedy tou samou
+        // cestou jako v řádku seznamu.
+        if record.activeFindings.contains(where: { isBlocking($0, categories: categories) }) {
             return .requestChanges
         }
 
@@ -30,6 +35,9 @@ extension Policy {
         // Víme, že reviewer něco hlásil a aplikace to nepřečetla — a čistý výsledek jiného
         // skillu o tom ztraceném nálezu nic neříká. Je to známá neznámá, tedy přesně ten
         // stav, ze kterého se nemá soudit.
+        //
+        // **Odmítnutím se to nespraví**, ať je odmítnuto cokoli: odmítnutí mluví o nálezu,
+        // který znám, ne o tom, který se nepřečetl. Proto je tahle brána za filtrem výš.
         guard record.runs.allSatisfy({ $0.droppedFindings == 0 }) else { return nil }
 
         return record.runs.contains(where: isConclusive) ? .approve : nil

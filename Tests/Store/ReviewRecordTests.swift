@@ -72,6 +72,67 @@ struct ReviewRecordTests {
         #expect(record.runs.first?.findings.map(\.summary) == ["druhý"])
     }
 
+    // MARK: - Odmítnuté nálezy (#113)
+
+    @Test("Odmítnutí přežijí round-trip", arguments: FindingDismissal.Reason.allCases)
+    func dismissalsSurviveTheRoundTrip(reason: FindingDismissal.Reason) throws {
+        var record = ReviewRecord(
+            pullRequest: pullRequest,
+            headSha: "aaaa1111",
+            runs: [storedRun(skill: "code-review", findings: ["falešný"])]
+        )
+        record.setDismissal(
+            FindingDismissal(reason: reason, dismissedAt: Date(timeIntervalSince1970: 1_500_000)),
+            of: record.findings[0]
+        )
+
+        let decoded = try roundTrip(record)
+
+        #expect(decoded == record)
+        #expect(decoded.activeFindings.isEmpty)
+        #expect(decoded.dismissal(of: decoded.findings[0])?.reason == reason)
+    }
+
+    /// Souborů bez tohohle klíče je na disku plno. Kdyby se na něj sahalo povinně, skončily
+    /// by `keyNotFound` — tedy ztracenými nálezy kvůli poli, které v nich být nemůže.
+    @Test("Starší soubor bez odmítnutí se načte")
+    func anOlderFileWithoutDismissalsStillLoads() throws {
+        let json = """
+        {
+          "headSha": "aaaa1111",
+          "isStale": false,
+          "pullRequest": "cli/cli#42",
+          "runs": []
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(ReviewRecord.self, from: Data(json.utf8))
+
+        #expect(decoded.dismissals.isEmpty)
+        #expect(decoded.pullRequest == pullRequest)
+    }
+
+    /// Klíčem je řetězec, takže mapa musí v JSONu vyjít jako **objekt**, ne jako pole
+    /// střídavých klíčů a hodnot.
+    @Test("Odmítnutí se kódují jako objekt")
+    func dismissalsEncodeAsAnObject() throws {
+        var record = ReviewRecord(
+            pullRequest: pullRequest,
+            headSha: "aaaa1111",
+            runs: [storedRun(skill: "code-review", findings: ["falešný"])]
+        )
+        record.setDismissal(
+            FindingDismissal(reason: .irrelevant, dismissedAt: Date(timeIntervalSince1970: 0)),
+            of: record.findings[0]
+        )
+
+        let encoded = try JSONSerialization.jsonObject(
+            with: try JSONEncoder().encode(record)
+        ) as? [String: Any]
+
+        #expect(encoded?["dismissals"] is [String: Any])
+    }
+
     @Test("Nálezy se skládají ze všech reviewerů, ale neslučují")
     func findingsComeFromEveryReviewer() {
         // Nesouhlas dvou reviewerů je informace — texty se nikdy neslévají.

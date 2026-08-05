@@ -15,6 +15,9 @@ struct FindingBubbleView: View {
     var isHighlighted = false
     /// Převzetí nálezu do rozdělaného review.
     var draft = FileDraftActions()
+    /// Odmítnutí a vrácení nálezu (#113). `nil` = bublina je jen ke čtení, což je stav, ve
+    /// kterém se staví v testech skládání řádků a v náhledech.
+    var actions: FindingActions?
     /// Odsazení do sloupce s obsahem. Ve split pohledu je v buňce jedno číslo řádku místo
     /// dvou, takže je kratší — stejný parametr jako u `ThreadBubbleView`.
     var indent: Double = 104
@@ -74,7 +77,19 @@ struct FindingBubbleView: View {
         }
     }
 
-    private func entry(_ finding: Finding) -> some View {
+    /// Odmítnutý nález se **sbalí, nezmizí** (#113). Mizející nález je v tomhle okně nejhorší
+    /// vzor: schovaný se nedá přečíst a nedá se odlišit od neexistujícího — a tady o důvod
+    /// víc, protože to schování je moje rozhodnutí, takže musím mít jak zkontrolovat, co jsem
+    /// odmítl. Ze stejného důvodu tu není přepínač „schovat odmítnuté“.
+    @ViewBuilder private func entry(_ finding: Finding) -> some View {
+        if let dismissal = group.dismissal(of: finding) {
+            dismissed(finding, dismissal)
+        } else {
+            active(finding)
+        }
+    }
+
+    private func active(_ finding: Finding) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             header(finding)
             Text(finding.summary)
@@ -90,27 +105,100 @@ struct FindingBubbleView: View {
                 }
                 .font(.caption)
             }
-            adoption(of: finding)
+            footer(of: finding)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Jeden řádek: proč neplatí, čeho se to týkalo a jak to vzít zpátky.
+    ///
+    /// Text nálezu zůstává (na jeden řádek), protože bez něj by se nedalo poznat, co jsem
+    /// odmítl — a pak by se to nedalo ani zkontrolovat.
+    private func dismissed(_ finding: Finding, _ dismissal: FindingDismissal) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Image(systemName: "slash.circle")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                pill(dismissal.reason.label, color: .secondary)
+                Text(verbatim: finding.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if let actions {
+                    Button("Vrátit") { actions.restore(finding) }
+                        .font(.caption)
+                        .buttonStyle(.link)
+                        .help("Vrátit nález mezi platné")
+                }
+            }
+            // Kdy jsem to posoudil, patří do nápovědy — u PR, ke kterému se vracím za dva
+            // dny, je to rozdíl mezi „to jsem řešil“ a „to jsem řešil kdysi“. Bez toho by
+            // `dismissedAt` byl stav, který se drží a nikdo ho nečte.
+            .help(hint(for: dismissal))
+            // Odmítnutí nesahá na rozdělané review, takže se to musí říct: bez téhle věty
+            // vypadá review vyčištěné a převzatý komentář v něm odejde.
+            if draft.isAdopted(finding) {
+                Text("Text je pořád v mém review — vyjmout se dá v tabu Moje review.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Důvod a kdy jsem ho vybral. Datum se skládá do `String`u, ne interpoluje do `Text`u —
+    /// v nápovědě je to jedna věta, ne dvě hodnoty pod sebou.
+    private func hint(for dismissal: FindingDismissal) -> String {
+        let when = dismissal.dismissedAt.formatted(date: .abbreviated, time: .shortened)
+        return "\(dismissal.reason.explanation) Odmítnuto \(when)."
+    }
+
+    /// Co se s nálezem dá udělat: vlevo převzetí do mého review, vpravo odmítnutí. Dvě různé
+    /// věci na dvou stranách — kliknout omylem na to druhé by znamenalo zahodit nález,
+    /// o kterém jsem chtěl napsat komentář.
+    private func footer(of finding: Finding) -> some View {
+        HStack(spacing: 8) {
+            adoption(of: finding)
+            Spacer(minLength: 8)
+            dismissal(of: finding)
+        }
+    }
+
+    /// Dva důvody vedle sebe, ne rozbalovací menu: je to jedno kliknutí místo dvou a rozdíl
+    /// mezi nimi vysvětlí nápověda.
+    @ViewBuilder private func dismissal(of finding: Finding) -> some View {
+        if let actions {
+            HStack(spacing: 6) {
+                Text("Odmítnout:")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                ForEach(FindingDismissal.Reason.allCases, id: \.self) { reason in
+                    Button(reason.label) { actions.dismiss(finding, reason) }
+                        .font(.caption)
+                        .buttonStyle(.link)
+                        .help(reason.explanation)
+                }
+            }
+        }
     }
 
     /// Převzetí nálezu do mého review — hlavní pracovní smyčka: nález → komentář mými slovy.
     ///
     /// Když už převzatý je, místo tlačítka je odznak. Bez něj by se nález dal převzít
     /// podruhé, aniž by bylo poznat, že v draftu už jednou je.
+    ///
+    /// Odmítnutému nálezu se nenabízí vůbec — ta větev se do sbaleného řádku nedostane.
     @ViewBuilder private func adoption(of finding: Finding) -> some View {
         if draft.canCompose {
             // Cíl se počítá **jednou**: hledá řádek v hunkách, takže u velkého souboru je to
             // průchod, který se nemá dělat čtyřikrát za každé překreslení bubliny.
             let target = draft.target(finding)
             if draft.isAdopted(finding) {
-                HStack(spacing: 6) {
-                    Label(adoptedLabel(for: target), systemImage: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.tint)
-                    Spacer(minLength: 0)
-                }
+                Label(adoptedLabel(for: target), systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.tint)
             } else {
                 HStack(spacing: 8) {
                     Button(adoptLabel(for: target)) { draft.adopt(finding) }
@@ -124,7 +212,6 @@ struct FindingBubbleView: View {
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
-                    Spacer(minLength: 0)
                 }
             }
         }
@@ -206,11 +293,15 @@ struct FindingBubbleView: View {
         isBlocking ? .red.opacity(0.07) : .gray.opacity(0.12)
     }
 
+    /// Červený pruh a pozadí se řídí **platnými** nálezy: bublina, jejíž jediný blokující
+    /// nález jsem odmítl, nemá dál křičet, že se na ni má koukat dřív.
     private var isBlocking: Bool {
-        group.findings.contains { Policy.isBlocking($0, categories: blockingCategories) }
+        group.activeFindings.contains { Policy.isBlocking($0, categories: blockingCategories) }
     }
 
+    /// Jen ti, jejichž nález pořád platí — jinak by odznak `2×` vyjmenoval revieweera, jehož
+    /// nález jsem odmítl, a shoda by se počítala z něčeho jiného, než je napsané.
     private var reviewers: String {
-        Set(group.findings.map(\.reviewer)).sorted().joined(separator: ", ")
+        Set(group.activeFindings.map(\.reviewer)).sorted().joined(separator: ", ")
     }
 }

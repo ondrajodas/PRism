@@ -49,6 +49,45 @@ struct FindingAgreementTests {
         #expect(groups.first?.agreement == 1)
     }
 
+    /// Shoda dvou reviewerů, ze kterých jednomu nevěřím, není shoda (#113).
+    @Test("Odmítnutí jednoho z dvojice sundá odznak 2×")
+    func dismissingOneOfTwoDropsTheBadge() {
+        let mine = makeFinding(file: "Cart.swift", line: 13, reviewer: "code-review")
+        let theirs = makeFinding(file: "Cart.swift", line: 13, reviewer: "security-review")
+
+        let groups = Policy.groups(of: [mine, theirs], dismissals: makeDismissals([theirs]))
+
+        #expect(groups.first?.agreement == 1)
+        // A nezmizel: sbalený řádek v bublině zůstává, jinak by se nedalo zkontrolovat,
+        // co jsem odmítl.
+        #expect(groups.first?.findings.count == 2)
+        #expect(groups.first?.activeFindings.map(\.reviewer) == ["code-review"])
+    }
+
+    @Test("Odmítnutí obou sundá shodu na nulu")
+    func dismissingBothLeavesNoAgreement() {
+        let mine = makeFinding(file: "Cart.swift", line: 13, reviewer: "code-review")
+        let theirs = makeFinding(file: "Cart.swift", line: 13, reviewer: "security-review")
+
+        let groups = Policy.groups(of: [mine, theirs], dismissals: makeDismissals([mine, theirs]))
+
+        #expect(groups.first?.agreement == 0)
+        #expect(groups.first?.findings.count == 2)
+    }
+
+    /// Skupina je hodnota v `DiffRow`, takže odmítnutí v jiném souboru ji nesmí změnit —
+    /// jinak líný seznam překresluje bubliny, se kterými se nic nestalo.
+    @Test("Skupina si nese jen svoje odmítnutí")
+    func aGroupCarriesOnlyItsOwnDismissals() {
+        let here = makeFinding(file: "Cart.swift", line: 13)
+        let elsewhere = makeFinding(file: "Order.swift", line: 99)
+
+        let groups = Policy.groups(of: [here, elsewhere], dismissals: makeDismissals([elsewhere]))
+
+        #expect(groups.first?.dismissals.isEmpty == true)
+        #expect(groups.last?.dismissals.count == 1)
+    }
+
     @Test("Různá místa se neslučují")
     func differentPlacesStayApart() {
         let groups = Policy.groups(of: [

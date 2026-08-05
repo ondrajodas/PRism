@@ -11,12 +11,31 @@ struct FindingGroup: Hashable, Sendable {
     let line: Int?
     /// Nikdy prázdné.
     var findings: [Finding]
+    /// Odmítnutí, která platí na nálezy **v téhle skupině** (#113).
+    ///
+    /// Filtrovaná mapa, ne celá ze záznamu: skupina je hodnota v `DiffRow`, takže by ji jinak
+    /// změnilo odmítnutí nálezu v úplně jiném souboru — a líný seznam by překresloval bubliny,
+    /// se kterými se nic nestalo.
+    var dismissals: [FindingKey: FindingDismissal] = [:]
+
+    /// Platí na nálezu odmítnutí? Bublina se podle toho kreslí sbalená.
+    func dismissal(of finding: Finding) -> FindingDismissal? {
+        dismissals[Policy.key(of: finding)]
+    }
+
+    /// Nálezy, které pořád platí. Ty odmítnuté ze skupiny **nemizí** — schovaný nález se nedá
+    /// přečíst a nedá se odlišit od neexistujícího.
+    var activeFindings: [Finding] { findings.filter { dismissal(of: $0) == nil } }
 
     /// Kolik **nezávislých** reviewerů to nahlásilo — odznak `2×`.
     ///
     /// Reviewery, ne nálezy: jeden reviewer, který na jednom řádku najde dvě různé věci,
     /// si nepřikyvuje.
-    var agreement: Int { Set(findings.map(\.reviewer)).count }
+    ///
+    /// A jen ty platné: shoda dvou reviewerů, ze kterých jednomu nevěřím, není shoda. Když
+    /// z dvojice zbyde jeden, odznak proto zmizí — tatáž lekce jako u odznaku „už je
+    /// v draftu“ (#66), kde odmítnutí jednoho revieweera nesmí mluvit za druhého.
+    var agreement: Int { Set(activeFindings.map(\.reviewer)).count }
 }
 
 extension Policy {
@@ -24,7 +43,12 @@ extension Policy {
     ///
     /// Pořadí skupin kopíruje pořadí, ve kterém se místa poprvé objevila ve vstupu — takže
     /// setříděný vstup dá setříděný výstup a `Policy` nemá dvě různá řazení.
-    static func groups(of findings: [Finding]) -> [FindingGroup] {
+    ///
+    /// - Parameter dismissals: celá mapa ze záznamu; každá skupina si z ní vezme jen to své.
+    static func groups(
+        of findings: [Finding],
+        dismissals: [FindingKey: FindingDismissal] = [:]
+    ) -> [FindingGroup] {
         var groups: [FindingGroup] = []
         var index: [Location: Int] = [:]
 
@@ -42,7 +66,15 @@ extension Policy {
                 groups.append(FindingGroup(file: file, line: line, findings: [finding]))
             }
         }
-        return groups
+
+        guard !dismissals.isEmpty else { return groups }
+        return groups.map { group in
+            var group = group
+            group.dismissals = dismissals.filter { key, _ in
+                group.findings.contains { Policy.key(of: $0) == key }
+            }
+            return group
+        }
     }
 
     /// Místo v kódu. Jen jako klíč slučování — ven se nedostane.

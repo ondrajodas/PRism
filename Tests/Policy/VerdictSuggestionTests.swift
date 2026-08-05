@@ -176,4 +176,87 @@ struct VerdictSuggestionTests {
 
         #expect(Policy.suggestedVerdict(for: record, categories: ["style"]) == .requestChanges)
     }
+
+    // MARK: - Odmítnuté nálezy (#113)
+
+    /// Celý smysl #113: jeden falešně pozitivní nález nemá držet PR na `requestChanges`.
+    @Test("Odmítnutý blokující nález pustí approve")
+    func dismissingTheBlockingFindingAllowsApprove() {
+        var record = makeRecord(runs: [
+            makeStoredRun(findings: [makeReported(category: "security", verdict: .confirmed)]),
+        ])
+        #expect(Policy.suggestedVerdict(for: record) == .requestChanges)
+
+        record.setDismissal(dismissal(), of: record.findings[0])
+
+        #expect(Policy.suggestedVerdict(for: record) == .approve)
+    }
+
+    @Test("Odmítnutý neblokující nález na verdiktu nic nemění")
+    func dismissingANonBlockingFindingChangesNothing() {
+        var record = makeRecord(runs: [
+            makeStoredRun(findings: [makeReported(category: "style", verdict: .confirmed)]),
+        ])
+        record.setDismissal(dismissal(), of: record.findings[0])
+
+        #expect(Policy.suggestedVerdict(for: record) == .approve)
+    }
+
+    @Test("Zbylý blokující nález approve nepustí")
+    func oneRemainingBlockingFindingStillBlocks() {
+        var record = makeRecord(runs: [
+            makeStoredRun(findings: [
+                makeReported(category: "security", verdict: .confirmed, summary: "falešný"),
+                makeReported(category: "correctness", verdict: .confirmed, summary: "platný"),
+            ]),
+        ])
+        record.setDismissal(dismissal(), of: record.findings[0])
+
+        #expect(Policy.suggestedVerdict(for: record) == .requestChanges)
+    }
+
+    /// Odmítnutí mluví o nálezu, který znám — ne o tom, který se nepřečetl. Ztracený nález
+    /// se jím proto neschová.
+    @Test("Zahozený nález přebíjí odmítnutí")
+    func droppedFindingsBeatDismissals() {
+        var record = makeRecord(runs: [
+            makeStoredRun(
+                findings: [makeReported(category: "security", verdict: .confirmed)],
+                droppedFindings: 1
+            ),
+        ])
+        record.setDismissal(dismissal(), of: record.findings[0])
+
+        #expect(Policy.suggestedVerdict(for: record) == nil)
+    }
+
+    @Test("Odmítnutí nezachrání ani nezavolaný ReportFindings")
+    func dismissalsDoNotFixAnUnreportedRun() {
+        var record = makeRecord(runs: [
+            makeStoredRun(
+                findings: [makeReported(category: "security", verdict: .confirmed)],
+                calledReportFindings: false
+            ),
+        ])
+        record.setDismissal(dismissal(), of: record.findings[0])
+
+        #expect(Policy.suggestedVerdict(for: record) == nil)
+    }
+
+    /// Odmítnutí jednoho revieweera nemluví za druhého — tatáž lekce jako u odznaku `2×`.
+    @Test("Odmítnutí u jednoho revieweera nesundá nález druhého")
+    func dismissingOneReviewerLeavesTheOther() {
+        let blocking = makeReported(category: "security", verdict: .confirmed)
+        var record = makeRecord(runs: [
+            makeStoredRun(skill: "code-review", findings: [blocking]),
+            makeStoredRun(skill: "security-review", findings: [blocking]),
+        ])
+        record.setDismissal(dismissal(), of: record.findings[0])
+
+        #expect(Policy.suggestedVerdict(for: record) == .requestChanges)
+    }
+
+    private func dismissal(_ reason: FindingDismissal.Reason = .invalid) -> FindingDismissal {
+        FindingDismissal(reason: reason, dismissedAt: Date(timeIntervalSince1970: 1_000_000))
+    }
 }

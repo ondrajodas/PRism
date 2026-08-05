@@ -63,6 +63,13 @@ final class AppStore {
     /// zápisu nespolkne. Na rozdíl od nálezů se nedá zopakovat žádným během.
     private(set) var draftFailure: String?
 
+    /// Proč se nepodařilo uložit odmítnutí nálezu (#113).
+    ///
+    /// Neuložené odmítnutí se po restartu vrátí a nikdo nebude vědět proč — takže se tady
+    /// selhání zápisu nespolkne, stejně jako u draftu. Tichý `try?` by z toho udělal přesně
+    /// ten vzor, na který si `CLAUDE.md` stěžuje.
+    private(set) var dismissalFailure: String?
+
     /// Konverzace **per PR** — review ostatních, vlákna, komentáře. Co v mapě není, se
     /// ještě nenačítalo.
     private(set) var conversationStates: [PRIdentifier: ConversationState] = [:]
@@ -1581,6 +1588,42 @@ final class AppStore {
         // tou samou cestou jako po tiku, včetně rozpočtu a limitu souběhu. U manuálního repa
         // se nestane nic — tam se spouští tlačítkem.
         await startAutomaticReviews(for: pullRequests)
+    }
+
+    /// Odmítne nález jako falešně pozitivní (#113).
+    ///
+    /// Je to opak `clearFindings`: ten je hrubý nástroj („pusť review znovu s jinou sadou“),
+    /// tohle řeší jeden nález a **ostatní nechá platit**. Proto se z toho ani nespouští další
+    /// review — nic nového se nezjistilo, jen jsem něco posoudil.
+    ///
+    /// Rozdělané review se tím **nemění**: cizí nález je cizí věta, můj převzatý komentář je
+    /// moje próza. Vyjímá se v tabu `Moje review`, ne jedním bitem odsud.
+    func dismissFinding(_ finding: Finding, as reason: FindingDismissal.Reason, for pr: PRIdentifier) async {
+        await applyDismissal(for: pr) { reviews in
+            try await reviews.dismiss(finding, as: reason, in: pr)
+        }
+    }
+
+    /// Vrátí odmítnutý nález mezi platné.
+    func restoreFinding(_ finding: Finding, for pr: PRIdentifier) async {
+        await applyDismissal(for: pr) { reviews in
+            try await reviews.restore(finding, in: pr)
+        }
+    }
+
+    /// Zapíše změnu a srovná podle ní paměť. Disk rozhoduje: kdyby se mapa v paměti měnila
+    /// před zápisem, odmítnutí by po neúspěšném zápisu zůstalo vidět a po restartu zmizelo.
+    private func applyDismissal(
+        for pr: PRIdentifier,
+        _ write: (ReviewStore) async throws -> ReviewRecord
+    ) async {
+        guard let reviews else { return }
+        do {
+            reviewRecords[pr] = try await write(reviews)
+            dismissalFailure = nil
+        } catch {
+            dismissalFailure = "Posouzení nálezu se nepodařilo uložit. \(error.localizedDescription)"
+        }
     }
 
     /// Zrušení uživatelem. Session dostane `SIGKILL`, rozdělané výsledky se zahodí.

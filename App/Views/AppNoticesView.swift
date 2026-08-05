@@ -50,6 +50,11 @@ struct AppNoticesView: View {
                 if let failure = store.draftFailure {
                     notice(failure, icon: "exclamationmark.triangle")
                 }
+                // A totéž u posouzeného nálezu (#113): neuložené odmítnutí se po restartu
+                // vrátí a nebylo by z čeho poznat proč.
+                if let failure = store.dismissalFailure {
+                    notice(failure, icon: "exclamationmark.triangle")
+                }
             }
         }
     }
@@ -67,6 +72,7 @@ struct AppNoticesView: View {
             || store.unreadableReviewFiles > 0
             || store.unreadableDraftFiles > 0
             || store.draftFailure != nil
+            || store.dismissalFailure != nil
     }
 
     private func notice(_ text: String, icon: String) -> some View {

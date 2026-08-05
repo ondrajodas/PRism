@@ -339,6 +339,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `Source` | Zdroj PR: jméno pro UI + search dotaz. Default `Source.reviewRequested` |
 | `ReportedFinding` | Nález přesně jak ho poslal reviewer; `FindingVerdict` je `CONFIRMED`/`PLAUSIBLE` |
 | `Finding` | `ReportedFinding` + **kdo** ho našel (skill) a **proti čemu** (`headSha`) |
+| `FindingKey` | Identita nálezu napříč běhy. Skládá ji **jen** `Policy.key(of:)` |
+| `FindingDismissal` | „Tenhle nález neplatí“ — důvod (`invalid`/`irrelevant`) a čas. **Bez volného textu** |
 | `PullRequestState` | `open` / `draft` / `merged` / `closed` |
 | `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
 | `ReviewVerdict` | Návrh, co s PR udělat: `approve` / `requestChanges`. Jako jediný **není `Codable`** — neukládá se, odvozuje se z uložených nálezů |
@@ -375,9 +377,12 @@ Tři věci, které se u nich nemají rozbít:
   nic nenašlo) je opak `failed` (session spadla), `checkoutFailed` se spraví opakováním
   clonu a `timedOut` si drží částečné nálezy. Případy: `notStarted`, `queued`, `cloning`,
   `checkoutFailed(detail:)`, `running(finished:total:)`, `clean`, `completed(findings:)`,
-  `failed(detail:)`, `timedOut(findings:)`, `stale`.
+  `dismissed(findings:)`, `failed(detail:)`, `timedOut(findings:)`, `stale`.
 - **`clean` vzniká jen přes `ReviewState.finished(findingCount:)`.** Jinak se dřív nebo
   později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
+- **`dismissed` není `clean`** (#113). „Reviewer nic nenašel“ a „našel a já to všechno
+  zamítl“ jsou dvě různá tvrzení a v řádku se musí poznat — a `completed(findings: 0)`
+  zakazuje pravidlo o řádek výš. Nese proto počet odmítnutých a má vlastní barvu.
 
 - **Tři různé „jazyky“ se nesmí slít.** `ProjectLanguage` říká, čím je repo psané (vybírá
   skilly), `FindingsLanguage` jazyk prózy v nálezech (jde do promptu), `Syntax.Language`
@@ -407,6 +412,31 @@ Nad verdiktem (#114) platí:
 - **`ReviewVerdict` neumí `comment` a nemá.** `jen komentář` je vědomé „nerozhoduju“, tedy pravý
   opak návrhu z nálezů; proto má `ReviewDraft.Verdict` tři případy a návrh dva, a proto se mapuje
   jen jedním směrem (`ReviewVerdict.choice`).
+
+Nad odmítnutím nálezu (#113) platí:
+
+- **Označení bydlí na `ReviewRecord`u, ne na `Finding`u.** Důvod je `ReviewRecord.replace(_:)`:
+  opakované review týmž skillem celý `StoredReviewRun` **přepíše**, takže označení uvnitř nálezu
+  by zmizelo přesně v okamžiku, kdy se ten samý falešný nález vrátí. Ověřeno dočasně vloženou
+  regresí. Vedle toho je `Finding.reported` věta revieweera — můj názor na ni je jiná vrstva.
+- **V `Codable` je to volitelné.** Starší soubory klíč nemají a `ReviewRecord` má proto ruční
+  `init(from:)`: syntetizovaný sahá na neoptional klíč bez ohledu na výchozí hodnotu, takže by
+  celý záznam skončil `keyNotFound` — tedy ztracenými nálezy kvůli poli, které v něm být nemůže.
+  Tatáž úvaha jako u `Finding.translation`, jen tam to obstará optional.
+- **Klíč skládá jedna funkce**, `Policy.key(of:)`, z `(reviewer, file, line, reported.summary)`.
+  Kdyby vznikal na dvou místech, po druhém běhu by se označení přestalo párovat a **tiše
+  zmizelo**. Bere se `reported.summary`, ne `summary`: překlad se ukládá druhým zápisem a při
+  dalším běhu ho model napíše jinak. Že se `short_summary` přeformuluje, je změřené u #17 —
+  proto ne celá hodnota.
+- **Nepřenáší se na nový commit.** Vychází to samo z toho, že mapa leží v souboru daného
+  `headSha` (tvrdá podmínka č. 5): nález falešný nad starým kódem nemusí být falešný nad novým.
+  Opačné rozhodnutí než u draftu (#69), a schválně — draft je próza, tohle je jeden bit.
+- **Dva důvody, ne jeden ani pět, a bez volného textu.** „Reviewer se mýlí“ (`invalid`) a „má
+  pravdu, ale sem to nepatří“ (`irrelevant`) vedou jinam: první je vstup pro doladění skillu nebo
+  blokující sady, druhý ne. Poznámka, kterou nikdo nečte a nikam se neodesílá, je mrtvá váha,
+  která svádí spolehnout se na ni jako na zpětnou vazbu pro skill.
+- **Osiřelé označení se neuklízí.** Nález, který v tomhle běhu nepřišel, může přijít v dalším —
+  uklidit jeho označení znamená přijít o něj právě tam, kde je nejdražší. Je to pár bajtů.
 
 Nad konverzací (#63) platí:
 
@@ -1050,7 +1080,8 @@ Výsledky review na disku: jeden JSON soubor na `(repo, PR, headSha)` pod
 
 | Typ | Co je |
 |---|---|
-| `ReviewStore` | Aktor: `save`, `markCurrent`, `load`, `delete`, `cleanUp`. Atomický zápis |
+| `ReviewStore` | Aktor: `save`, `dismiss`, `restore`, `markCurrent`, `load`, `delete`, `cleanUp`. Atomický zápis |
+| `ReviewStoreError` | Jediná vlastní chyba: záznam, do kterého se má zapsat, na disku není |
 | `AutoRunLedger` | Aktor: kolik review dnes spustil automat. **Na disku**, aby limit nešel obejít restartem |
 | `ReviewRecord` | Obsah jednoho souboru: PR, `headSha`, běhy, `isStale`, `closedAt` |
 | `StoredReviewRun` | Jeden běh: skill, `outcome`, session id, nálezy, `droppedFindings`, čas |
@@ -1102,6 +1133,12 @@ Věci, které se u toho nemají rozbít:
   zahozením (#81) ale zmizet **může**: „historie zůstává“ se vztahuje na **ostatní** záznamy,
   ne na ochranu toho viditelného — kdo zmáčkne zahodit nad zastaralými nálezy, chce se
   zbavit právě jich. Odhalil to test, který původně tvrdil opak.
+- **Odmítnutí nálezu (#113) je mutace na storu, ne přepis záznamu zvenčí.** Uložení je čtení,
+  změna a zápis téhož souboru, takže dva doběhlé skilly a kliknutí v okně by si ho přepsaly —
+  tentýž důvod, proč je store aktor. Soubor si najde podle **`finding.headSha`**, ne podle
+  viditelného záznamu: nález si commit nese sám a druhá cesta k témuž údaji je druhé místo,
+  kde se dá minout. Chybějící soubor je **chyba** (`recordNotFound`), ne založení prázdného
+  záznamu — tím by z okna zmizely všechny ostatní nálezy.
 - **`delete` je idempotentní a jen uvnitř cache.** Tlačítko se dá zmáčknout dvakrát;
   chybějící soubor tedy není chyba. Kontrola `layout.contains` je stejná jako u eviction —
   cesta se skládá z `CacheLayout` a ven vést nemůže, ale tvrdá podmínka nemá viset na tom,
@@ -1207,6 +1244,12 @@ Automatický režim (#25):
   vyřízený až do dalšího pushe — a přitom zahození je právě ta chvíle, kdy se má review
   pustit znovu. Nečeká se na tik, ale jde se **stejnou cestou jako po tiku**: jinak by se
   klikáním na koš utrácely session mimo denní rozpočet. U manuálního repa se nespustí nic.
+- **Odmítnutí nálezu (#113) další review nespouští**, na rozdíl od zahození celého záznamu.
+  Zahození znamená „pusť to znovu, tenhle výsledek je k ničemu“; odmítnutí je opak — nic nového
+  se nezjistilo, jen jsem jeden nález posoudil a ostatní nechal platit. Paměť se přitom srovnává
+  **až podle zapsaného záznamu** (`applyDismissal`): kdyby se mapa měnila před zápisem, bylo by
+  odmítnutí vidět a po restartu zmizelo. Selhání zápisu je vidět (`dismissalFailure`) — tichý
+  `try?` je tady přesně ten vzor z tabulky výš.
 - **Nezapsaný nález review položí.** Selhání zápisu se nespolkne: ztracený nález by v řádku
   vypadal jako „neběželo“, tedy jako schválený PR s neohlášenou chybou. Ostatní skilly
   přitom doběhnou, ať se nezahodí i to, co se uložit povedlo.
@@ -1233,7 +1276,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffPairView` | Dvojice vedle sebe: dvě buňky `DiffLineView` se `side`, pozadí za celou dvojici, prázdná protistrana |
 | `RangeDragActions`, `DiffRowFrames` | Tažení rozsahu komentáře (#110) — akce a rámečky řádků **mimo observable stav** |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
-| `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout |
+| `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit` |
+| `FindingActions` | Co se dá dělat s nálezem — odmítnout a vrátit; jedno místo pro bublinu i tabulku |
 | `ThreadBubbleView` | Vlákno konverzace u řádku; vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73) |
 | `ThreadActions` | Co se dá dělat s vláknem — rozbalení, odpověď, vyřešení a důvod, proč odesílat nejde |
 | `MarkdownText` | Vykreslený Markdown z GitHubu — viz `App/Markdown/` |
@@ -1246,12 +1290,13 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
 | `DiffLineView` | Řádek souboru: dvě čísla (v buňce dvojice jedno, podle `side`), znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
 | `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`/`Moje review`, návrh verdiktu, tabulka s řazením, prokliky do diffu a zahození nálezů |
-| `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak |
+| `DismissedRowStyle` | Buňka tabulky: ztlumení odmítnutého řádku a kontextové menu `Označit jako…` / `Vrátit` |
+| `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak, odmítnutí |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
 | `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume`, upozornění na načtený jiný skill |
 | `ReviewerChipsView` | Chipy reviewerů: stav a filtr naráz |
 | `FileTreeView` | Popover se stromem souborů; odsazení a sbalování si řídí sám |
-| `VerdictView` | Návrh verdiktu jako **doporučení**; žádná GitHub akce na něm nevisí |
+| `VerdictView` | Návrh verdiktu jako **doporučení**; žádná GitHub akce na něm nevisí. Když stojí na odmítnutých nálezech, nese to jejich počet |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
 | `AppDelegate` | Ukončení aplikace: dokud běží review, ptá se |
 
@@ -1897,6 +1942,8 @@ Věci, které se u toho nemají rozbít:
 | `PullRequestList` | Sloučí výsledky zdrojů do jednoho seznamu: dedup podle `PRIdentifier`, řazení |
 | `Policy.reviewState(for:)` | Překlad stavu pracovní kopie na stav v řádku PR |
 | `Policy.isBlocking(_:categories:)` | Jediný odvozený boolean nad nálezem |
+| `Policy.key(of:)` | Identita nálezu napříč běhy — **jediné místo**, kde se klíč skládá |
+| `ReviewRecord.activeFindings`, `.dismissal(of:)`, `.setDismissal(_:of:)` | Odmítnuté nálezy (#113) — čtení i zápis na jednom místě |
 | `Policy.suggestedVerdict(for:)` | Návrh verdiktu nad `ReviewRecord`. `nil` = není z čeho soudit |
 | `Policy.effectiveVerdict(of:suggestion:)` | Který verdikt **platí** a odkud je — moje volba, jinak návrh (#114) |
 | `Policy.prefillableSuggestion(_:author:viewer:)`, `Policy.isOwn(author:viewer:)` | Smí se návrhem předvyplnit? Na vlastním PR ne |
@@ -1974,6 +2021,18 @@ Nad nálezy platí navíc:
   `suggestedVerdict` pak mlčí bez vysvětlení.
 - **Shoda se počítá po reviewerech, ne po nálezech.** Jeden reviewer, který na jednom řádku
   najde dvě různé věci, si nepřikyvuje.
+- **Odmítnuté nálezy (#113) se vyhodnocují nad záznamem, `isBlocking` se nemění.** Blokující
+  je vlastnost nálezu a kategorie; „tomuhle nevěřím“ je můj názor nad celým záznamem. Filtruje
+  proto jedno `activeFindings`, přes které jde `suggestedVerdict` **i** `reviewState` — dvě
+  kopie by znamenaly, že řádek seznamu a panel řeknou o tomtéž PR dvě různé věci.
+- **Ztracený nález se odmítnutím neschová.** `droppedFindings > 0` dál dává `nil`, ať je
+  odmítnuto cokoli: odmítnutí mluví o nálezu, který znám, ne o tom, který se nepřečetl.
+- **Odmítnutí jednoho revieweera neodmítá druhého**, a odznak `2×` proto počítá jen platné —
+  když z dvojice zbyde jeden, zmizí, protože shoda dvou reviewerů, ze kterých jednomu nevěřím,
+  není shoda. Tatáž lekce jako u odznaku „už je v draftu“ (#66). Skupina si nese **svoje**
+  odmítnutí (filtrovanou mapu), aby se hodnota v `DiffRow` neměnila kvůli jinému souboru.
+- **`Policy.sorted` řadí odmítnuté naspod**, a je to **první** kritérium: i odmítnutý blokující
+  nález má ustoupit platnému stylistickému. Poslední zůstává `summary`, ať je pořadí úplné.
 - **Řadí se podle vlastnosti kategorie, ne nálezu.** Kdyby první kritérium bylo
   `isBlocking`, rozpadla by se kategorie s `CONFIRMED` i `PLAUSIBLE` na dvě sekce se
   stejným názvem. Poslední kritérium je `summary`, aby bylo pořadí úplné a nepřeskakovalo
@@ -2534,6 +2593,23 @@ Nad `HTTPGetting` (#31) platí:
   z panelu, z řádku i z disku a přežije restart, že další běh začíná načisto, že druhé
   zmáčknutí nic nerozbije, že starší záznamy zůstanou a že se na automatickém repu review
   pustí samo, kdežto na manuálním ne.
+- **Odmítnutí nálezů (#113)** — čtyři vrstvy. **Klíč** na to, co se nesmí rozejít: tentýž nález
+  z druhého běhu se spáruje i po **přeformulovaném `short_summary`** a po překladu, kdežto nález
+  druhého revieweera na tomtéž řádku ne. **`Policy`** na to, že odmítnutý blokující nález pustí
+  `approve`, kdežto `droppedFindings > 0` dál dává `nil` (odmítnutí mluví o nálezu, který znám),
+  že odmítnutí u jednoho revieweera nesundá nález druhého, že odznak `2×` spadne na `1×` a že
+  odmítnuté jdou v řazení **naspod, i když blokují**. **`ReviewState`** na to, že odmítnutí všeho
+  **není `clean`**, ale `dismissed`, a že zastaralost i timeout to přebíjejí.
+
+  Round-trip `ReviewRecord` s odmítnutími i bez nich — **starší soubor bez toho klíče se musí
+  načíst** (inline JSON, ne jen `roundTrip`), a mapa musí v JSONu vyjít jako **objekt**.
+
+  `ReviewStore` a `AppStore` proti **skutečné** dočasné složce, protože rozhoduje disk: odmítnutí
+  přežije restart, `Vrátit` ho zruší, sedne na commit, ke kterému nález patří, a bez uloženého
+  záznamu je to **chyba**, ne prázdný záznam. Nejdůležitější test celého issue je, že **opakované
+  review týmž skillem odmítnutí nezahodí** — `replace(_:)` je přesně to místo, kde by se ztratilo;
+  ověřeno dočasně vloženou regresí, po které spadly tři testy na třech vrstvách. K tomu, že
+  odmítnutí **nevyjme převzatý komentář** z draftu a že selhání zápisu je vidět.
 - **`AppStore` — pohled na diff** — že se bez odchylky bere hodnota z nastavení, že ji přepnutí
   v liště přebije, že se změna nastavení projeví **bez restartu** a že odchylka **shodná**
   s nastavením přežije jeho změnu. Poslední dva potřebují skutečný `ConfigStore` nad dočasnou
@@ -3149,6 +3225,17 @@ pojistka proti překvapení na účtu a drží se na disku, aby ho neobešel res
 Zahození nálezů hotové (issue #81) — koš v liště panelu zahodí uložený záznam viditelného
 commitu, takže se dá pustit review znovu s jinou sadou skillů. Na repu v automatickém režimu
 se pustí samo.
+
+Odmítnutí nálezu hotové (issue #113) — `FindingDismissal` a `FindingKey` v `App/Models/`,
+`Policy.key(of:)` a `ReviewRecord.activeFindings`, mutace na `ReviewStore`u, akce v bublině
+i v kontextovém menu tabulky. **Falešně pozitivní nález se dá jedním kliknutím odmítnout jako
+`neplatný` nebo `irelevantní`**, návrh verdiktu se tím posune na `approve` a ostatní nálezy
+platí dál — tedy to, co #81 řešit nemůže, protože zahazuje celý záznam. Odmítnutý nález
+**nemizí**: sbalí se na jeden řádek s odznakem důvodu a `Vrátit`, v tabulce je ztlumený naspod.
+Bydlí to na `ReviewRecord`u, ne na `Finding`u, kvůli `replace(_:)` — a nepřenáší se na nový
+commit, protože nálezy jsou klíčované `headSha`. Řádek seznamu má vlastní stav `dismissed`, ne
+`clean`: „reviewer nic nenašel“ a „našel a já to zamítl“ jsou jiná tvrzení. Odůvodnění obojího
+je ve specifikaci.
 
 Potvrzení při zavření hotové (issue #94, levná varianta) — dokud běží review, aplikace se
 před ukončením zeptá, protože session se zavřením zabije a nahlášené nálezy jsou pryč.
