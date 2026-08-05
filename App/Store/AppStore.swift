@@ -1515,6 +1515,12 @@ final class AppStore {
     @discardableResult
     func notify(_ notification: PullRequestNotification) async -> NotificationDelivery? {
         guard let notifications else { return nil }
+        // Brána z nastavení (#86) je **tady**, v jediném místě, kterým jde všechno — jako
+        // `PublishScope` u odesílání. Kdyby se ptal každý volající, jeden by to zapomněl.
+        //
+        // Vrátit se to musí **před** `deliver(_:)`: ten si říká o oprávnění, a dialog za
+        // něco, co je vypnuté, je dialog za nic. Je to zadání #86 a je na to test.
+        guard configuration.global.notifications.allows(notification.event) else { return nil }
         let delivery = await notifications.deliver(notification)
         notificationFailure = message(for: delivery)
         return delivery

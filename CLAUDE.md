@@ -360,6 +360,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `DetailState` | Stav dotažení detailu PR: `loading` / `loaded(PullRequest, updatedAt:)` / `failed`. Je z něj `headSha` pro draft a popis pro `Přehled` |
 | `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged`. Jako `ReviewVerdict` **není `Codable`** |
 | `DiffLayout` | Jak se kreslí diff: `unified` (pod sebou) / `split` (vedle sebe). Nastavení **člověka, ne repa** — proto jen v `GlobalConfig` |
+| `NotificationEvent` | Co notifikaci vyvolalo: `newPullRequest` / `findings` / `clean` / `failure`. Nese si ji notifikace sama |
+| `NotificationSettings` | Co se má hlásit (#86) — hlavní vypínač a čtyři události. Jako `DiffLayout` jen globálně |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -694,7 +696,7 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
+| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
 | `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
@@ -748,6 +750,13 @@ Věci, které se u toho nemají rozbít:
   **Rozbitá hodnota se srazí na `false`** na obou úrovních: je to tatáž přísnost jako u režimu
   a opačná než u jazyka nálezů, protože překlep nesmí otevřít cestu ven. Že je výchozí stav
   vypnutý, drží řádek v testu výchozích hodnot.
+- **Notifikace (#86) se čtou tolerantně a per repo se nenastavují.** Chybějící sekce i chybějící
+  přepínač znamenají **zapnuto**, a rozbitá hodnota se sráží na **výchozí (zapnuto)** — opačná
+  volba než u `allowsPublishing`, kde překlep nesmí otevřít cestu ven. Tady je nejhorším
+  následkem notifikace, o kterou si nikdo neřekl, kdežto umlčená aplikace se pozná až tím, že
+  nic nepřišlo. **Rozbitý jeden přepínač nezahodí ostatní**: sekce se dekóduje po polích, jinak
+  by se s jedním překlepem vypnulo i to, co je napsané správně. Per repo to není ze stejného
+  důvodu jako `diffLayout` — „nechci být vyrušován“ je vlastnost člověka, ne repa.
 - **Pohled na diff (#98) se čte tolerantně jako jazyk nálezů a per repo se nenastavuje.**
   Rozbitá hodnota spadne na výchozí (`unified`) a celý soubor kvůli ní nezmizí — nejhorší
   následek je jiný pohled na diff, který se otočí jedním kliknutím v liště. `RepositoryConfig`
@@ -1329,9 +1338,10 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | Typ | Co dělá |
 |---|---|
 | `SettingsScene` | Obsah scény; dokud neprošel preflight, není store a okno to řekne |
-| `SettingsView` | Dvě záložky, patička s cestou a stavem uložení, zámek na rozbitý soubor |
+| `SettingsView` | Tři záložky, patička s cestou a stavem uložení, zámek na rozbitý soubor |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
 | `GlobalSettingsView` | Zdroje, výchozí režim a jazyk nálezů, **pohled na diff**, **odesílání na GitHub**, skilly, sady podle jazyka, kategorie, běh |
+| `NotificationSettingsView` | Záložka `Notifikace` (#86): hlavní vypínač a čtyři události |
 | `LanguageSkillsEditor` | Mapa „programovací jazyk → sada skillů“; ukazuje jen nastavené jazyky |
 | `RepositorySettingsView` | Seznam rep vlevo, režim, povolení odesílání a override vpravo |
 | `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
@@ -1377,6 +1387,14 @@ Věci, které se u toho nemají rozbít:
   přestane být `TabView` tím, co si řídí bezpečnou oblast, formulář si vyhradí místo od
   horní hrany okna a obsah leze **pod lištu se záložkami**. Je to tatáž past jako u pruhu
   nad seznamem PR — a projeví se stejně nenápadně: uříznutým prvním řádkem.
+- **Notifikace mají vlastní záložku, ne sekci v `Obecné`** (#86). `Obecné` je dlouhá záložka
+  (zdroje, režim, jazyk, diff, odesílání, tři editory seznamů, běh) a notifikace by v ní byly
+  šestý pruh přepínačů, který se hledá scrollováním. Jsou navíc jediná část aplikace, která si
+  sahá na **systémové oprávnění**, takže mají o čem mluvit samy za sebe. Nejdřív to sekce byla
+  a přesunulo se to na přání při zkoušení.
+- **Jednotlivé události se schovají, když je hlavní vypínač vypnutý.** Čtyři zakázané přepínače
+  pod vypnutým vypínačem jsou čtyři řádky, které nic neříkají — u tlačítek v okně review je to
+  obráceně (zakázané zůstávají a řeknou důvod), ale tam ten důvod není o řádek výš.
 - **Pohled na diff má vlastní sekci, ne řádek v `Režimu review`.** S review nesouvisí a je to
   nastavení člověka, ne repa — proto ho nemá ani záložka rep. A z patičky musí být vidět, že
   **přepínač v liště tuhle hodnotu nepřepisuje**: jinak by nastavení vypadalo jako něco, co se
@@ -1803,6 +1821,23 @@ Notifikace o novém PR (#85) drží stav na disku (`AnnouncedPullRequests`) a pl
   rozhodnout, jestli zkusit znovu. `@discardableResult`, takže #82 se to netýká.
 - **Bez notifikačního centra se snímek nezakládá.** Kdyby se plnil i tak, po zapnutí notifikací
   by první nová PR vypadala jako už ohlášená.
+
+Brána z nastavení (#86) leží v `notify(_:)` a platí u ní:
+
+- **Jedno místo, kterým jde všechno** — jako `PublishScope` u odesílání. Kdyby se ptal každý
+  volající, jeden by to zapomněl.
+- **Vrací se před `deliver(_:)`**, protože ten si říká o oprávnění: dialog za něco, co je
+  vypnuté, je dialog za nic. Je to zadání #86 a pozná se jen tím, že se centra nikdo nezeptal —
+  proto je na to test s nulou doručení.
+- **Vypnutá událost není selhání doručení.** `notify` vrátí `nil`, takže `isWorthRetrying`
+  neplatí a snímek ohlášených PR se **posune** — jinak by se vypnutá událost zkoušela při každém
+  tiku dokola, jen tiše.
+- **Událost si nese notifikace sama** (`PullRequestNotification.event`), skládá ji `Policy` z
+  téhož `ReviewState` jako text. Odvozovat ji u odesílání by byla druhá cesta k témuž údaji.
+  Odmítnuté nálezy patří ke `clean` (nezbylo nic k řešení) a **timeout se rozděluje**: s nálezy
+  je to `findings` (jsou k přečtení), bez nich `failure` (běh nedoběhl a nic z toho není). Do
+  #133 padal celý `timedOut` do `findings`, takže kdo si vypnul selhání, dostával hlášku
+  o běhu, který nic nenahlásil — chytil to rozpor mezi textem v nastavení a mapováním.
 
 Signály pro stavový řádek (#31) do `AppStore` patří taky, protože jen on ví, jak dopadla
 skutečná volání:
@@ -3408,6 +3443,17 @@ je nastavení s **výchozím stavem vypnuto** — dokud si o odesílání někdo
 neodejde nikam nic. Sandbox není výjimka v kódu, zapíná se stejným přepínačem. Rozbitá hodnota
 v souboru se sráží na zakázané, na obou úrovních.
 
+Volba, co se má hlásit, hotová (issue #86) — `NotificationSettings` a `NotificationEvent`
+v `App/Models/`, `global.notifications` v konfiguraci, sekce v okně nastavení a brána
+v `AppStore.notify(_:)`. **Notifikace se dají vypnout jako celek nebo po událostech** (nový PR,
+review s nálezy, čisté review, selhání) — a s vypnutým hlavním přepínačem se aplikace **nezeptá
+ani na systémové oprávnění**.
+
+Výchozí stav je **všechno zapnuté**: vypnuté notifikace by znamenaly, že se funkce po vydání
+nikdy neprojeví, a co otravuje, se vypne jedním přepínačem. Nejtěsnější to bylo u čistého review
+(je to zpráva „nemusíš nic dělat“), ale u ručně spuštěného běhu je to zrovna ta odpověď, na
+kterou člověk čeká.
+
 Notifikace o novém PR hotová (issue #85) — `AnnouncedPullRequests` v `App/Store/`
 a `Policy.newPullRequestNotification(for:title:)`. **Když se ve frontě objeví PR, který tam
 nebyl, přijde notifikace** s repem, číslem a titulkem; klik ji vybere.
@@ -3478,7 +3524,7 @@ o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `
 **M8 (notifikace)**, který na ničem z toho nestojí.
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
    s oprávněním a klikem (#88, **hotovo**), doběhlé review (#82, **hotovo**), nové PR (#85,
-   **hotovo**), vypínání po událostech (#86) a seskupování (#87).
+   **hotovo**), vypínání po událostech (#86, **hotovo**) a seskupování (#87).
 
 Pořadí M6–M8 není závazné. M8 na nich nestojí a dá se udělat kdykoli — je to jediný
 z těch tří milníků, který **nemění tvrdé podmínky**.

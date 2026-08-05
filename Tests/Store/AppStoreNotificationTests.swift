@@ -46,7 +46,12 @@ struct AppStoreNotificationTests {
     }
 
     private func notification(for pullRequest: PRIdentifier) -> PullRequestNotification {
-        PullRequestNotification(pullRequest: pullRequest, title: "Review doběhlo", body: "2 nálezy")
+        PullRequestNotification(
+            pullRequest: pullRequest,
+            title: "Review doběhlo",
+            body: "2 nálezy",
+            event: .findings
+        )
     }
 
     /// Ohraničené čekání: test, který se nedočká, má spadnout na `#expect`, ne viset.

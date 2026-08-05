@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Okno nastavení. Dvě záložky — globální hodnoty a to, co si přebírá jednotlivé repo.
+/// Okno nastavení. Tři záložky — globální hodnoty, notifikace a to, co si přebírá jednotlivé
+/// repo.
 ///
 /// Zapisuje do téhož `config.json`, který jde editovat ručně, takže platí dvě věci:
 /// **rozbitý soubor se nepřepíše** (editor se zamkne a nabídne ho otevřít) a změna zvenčí
@@ -78,6 +79,8 @@ struct SettingsView: View {
         TabView {
             GlobalSettingsView(settings: settings)
                 .tabItem { Label("Obecné", systemImage: "gearshape") }
+            NotificationSettingsView(settings: settings)
+                .tabItem { Label("Notifikace", systemImage: "bell") }
             RepositorySettingsView(settings: settings, repositories: store.knownRepositories)
                 .tabItem { Label("Repozitáře", systemImage: "folder") }
         }
