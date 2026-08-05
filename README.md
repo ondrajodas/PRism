@@ -345,9 +345,12 @@ Vlákna, jejichž řádek v aktuálním diffu **není** (typicky zastaralá po n
 do kódu nekotví — jejich čísla platila pro starý head, takže by bublina sedla na cizí řádky.
 Domov mají v záložce `Přehled` spolu s review ostatních a komentáři pod PR.
 
-Co se ve které verzi změnilo, je v [releases](https://github.com/ondrajodas/PRism/releases) —
-po každém mergnutém PR vzniká tag a release s popisem toho, co ta verze přinesla. Kde projekt
-je jako celek, říká sekce [Stav](CLAUDE.md#stav) v `CLAUDE.md`, ne release notes: ten stav by
+Co se ve které verzi změnilo, ukazuje **okno `Novinky v PRism`** přímo v aplikaci (✨
+v toolbaru, nebo menu aplikace): vlevo celá historie vydání, vpravo release notes
+té vybrané. **Po aktualizaci se otevře samo**, jednou, s vybranou nejnovější verzí — jinak
+by o novinkách nikdo nevěděl. Podrobnosti jsou v sekci [Novinky](#novinky) níž; totéž je
+i v [releases](https://github.com/ondrajodas/PRism/releases) na GitHubu. Kde projekt je
+jako celek, říká sekce [Stav](CLAUDE.md#stav) v `CLAUDE.md`, ne release notes: ten stav by
 v nich zastaral hned další verzí.
 
 - [Návrh (specifikace)](docs/superpowers/specs/2026-07-31-prism-design.md) — plný
@@ -412,6 +415,31 @@ tam byla, než začala hlídat, za nová nepovažuje. Ohlásí se až devátý.
 Notifikace fungují jedině z `/Applications` — `bin/run.sh` tam aplikaci instaluje sám, viz
 *Build*.
 
+## Novinky
+
+Okno `Novinky v PRism` (menu aplikace hned pod `O aplikaci PRism`, nebo ✨ v toolbaru)
+je jedno okno nad jedněmi daty: vlevo seznam všech vydání s tagem, názvem a časem vydání,
+vpravo release notes té vybrané, vykreslené jako Markdown. Dvě obrazovky — „co je nového“
+zvlášť a „historie“ zvlášť — by se dřív nebo později rozešly. **Čas u data je tam schválně:**
+verzí vyjde za jeden den klidně šest, takže samotné `5. 8. 2026` o pořadí neříká nic.
+
+**Po aktualizaci se otevře samo, jednou**, s vybranou nejnovější verzí; vydání novější než to
+naposledy viděné mají v seznamu odznak `nové`. Jinak by o novinkách nikdo nevěděl — a otevřít
+se dá kdykoli — z menu aplikace nebo tlačítkem v toolbaru hlavního okna, hned vedle
+ozubeného kola. Zavírá se **Escem** i ⌘W: je to okno na čtení, takže v něm není co ztratit.
+
+Historie se tahá **jedním voláním** `gh` z vlastního repa aplikace (tělo releasu je rovnou
+v seznamu, takže se na jednotlivou verzi nechodí zvlášť) a drží se v paměti do konce běhu:
+jednou při startu kvůli tomu, jestli něco přibylo, a pak už jen z paměti. V pollingu ani na
+pozadí se aplikace na nic neptá. Bez sítě je v okně **důvod a tlačítko `Zkusit znovu`**, ne
+prázdný seznam — „nepovedlo se to načíst“ a „žádná vydání nejsou“ znamenají opak.
+
+**Okno mluví o tom, co vyšlo na GitHubu, ne o spuštěném buildu**, a nevypisuje proto číslo
+verze. Verze v bundlu (`MARKETING_VERSION`) tagy nikdy nesledovala, takže by tvrdila `0.1`;
+a u lokálního buildu se ty dvě věci rozcházejí v obou směrech. Aplikace si místo toho pamatuje
+poslední **viděný tag** a nabízí, co je novější. **První spuštění mlčí** a značku jen založí —
+jinak by po startu vypadala jako nová celá historie.
+
 ## Klíčová rozhodnutí
 
 | | |
@@ -425,6 +453,7 @@ Notifikace fungují jedině z `/Applications` — `bin/run.sh` tam aplikaci inst
 | **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
 | **Odesílání na GitHub** | Platí pro review i pro odpovědi do vláken. Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl. |
 | **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |
+| **Novinky v aplikaci** | Okno mluví o tom, co vyšlo na GitHubu, ne o spuštěném buildu — verze v bundlu tagy nikdy nesledovala, takže by tvrdila `0.1`. Značka je poslední **viděný tag** v předvolbách aplikace (stav aplikace, ne nastavení k editaci) a historie se drží v paměti do konce běhu: disková cache by dala offline režim, ale je to další store s vlastním úklidem. |
 | **Dostupnost služeb** | Jede na skutečném provozu, ne na sondě: `gh auth status` na timeru by stál spawn procesu a přístup do keychainu — a projde i tehdy, když skutečné volání selže na rate limitu. Status pages jsou proti tomu levné (`components.json` s `ETagem`) a odpovídají na to, co z volání nezjistíme: jestli je problém na jejich straně. |
 
 ## Požadavky
@@ -553,7 +582,7 @@ Certifikát se odstraní přes `security delete-identity -c "PRism Local"`.
 PRism.xcodeproj/          Xcode projekt (shared scheme je verzovaný)
 App/                      zdrojáky aplikace — target PRism
   Models/                 doménové modely: PR, identifikátory, stav review
-  Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight, notifikace
+  Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight, notifikace, předvolby
   GitHub/                 čtení PR a konverzace přes gh CLI: gateway, typované chyby, tvar výstupu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Config/                 config.json: globální default, override per repo, čtení a zápis
@@ -568,6 +597,7 @@ App/                      zdrojáky aplikace — target PRism
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky
+    ReleaseNotes/         okno s novinkami — historie vydání a release notes vybrané verze
     Settings/             okno nastavení (⌘,) — globální hodnoty a nastavení per repo
   Assets.xcassets/        ikona aplikace (generovaná, viz bin/make-icon.swift)
 Tests/                    unit testy — target PRismTests
@@ -584,7 +614,7 @@ Tests/                    unit testy — target PRismTests
   Polling/                testy pollingu proti fake gateway a fake času
   Publish/                testy odesílání — hlavně že se při neshodě neodešle nic
   Store/                  testy AppStore a persistence nálezů
-  Views/                  testy řádků tabulky a modelu okna nastavení
+  Views/                  testy řádků tabulky, modelu okna nastavení a novinek
   Syntax/                 testy detekce jazyka a obarvení kódu
   Support/                testy sdílených drobností
   Fixtures/gh/            skutečné výstupy gh z veřejných repozitářů (JSON i diffy)

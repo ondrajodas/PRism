@@ -77,6 +77,21 @@ struct GhGateway: GitHubGateway {
         return try response.conversation(id: id)
     }
 
+    func fetchReleases() async throws -> [Release] {
+        // Jedna stránka na celou historii. `per_page=100` je strop GitHubu; kdyby jich
+        // někdy bylo víc, přidá se `--paginate` — dokud jich je 69, je to volání navíc za nic.
+        //
+        // Rozdělané (`draft`) vydání se zahazuje až v mapování: REST je nefiltruje a nám
+        // je vidí, protože do vlastního repa máme zápis.
+        let items = try await run([
+            "api", "repos/\(Release.repository)/releases?per_page=100",
+        ], decodedAs: [GhRelease].self)
+
+        // **Neřadí se tady.** Pořadí je rozhodnutí (`Policy.sortedReleases`), ne tvar
+        // odpovědi — gateway vrací, co přišlo.
+        return items.compactMap { $0.release() }
+    }
+
     private func run<T: Decodable>(_ arguments: [String], decodedAs type: T.Type) async throws -> T {
         let output = try await run(arguments)
         do {

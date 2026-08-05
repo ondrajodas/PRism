@@ -34,4 +34,16 @@ protocol GitHubGateway: Sendable {
     /// tři podprocesy. Pořád **jen pro čtení**: odpovídat do vláken umí až #73, a i pak to
     /// půjde přes `ReviewPublisher`, ne odsud.
     func fetchConversation(id: PRIdentifier) async throws -> Conversation
+
+    /// Vydání vlastního repa aplikace — co je v okně s novinkami (#127).
+    ///
+    /// **Celá historie stojí jedno volání**: tělo releasu je rovnou v seznamu, takže se na
+    /// jednotlivou verzi nechodí zvlášť. Změřeno nad 69 releasy — jedna stránka, ~1 s.
+    ///
+    /// Repozitář se **nepředává**: je to `Release.repository`, tedy vlastní repo aplikace.
+    /// Parametr by sliboval, že se dá ptát i jinam, což tahle metoda neumí a nemá umět.
+    ///
+    /// Sedmá **čtecí** metoda protokolu, takže tvrdá podmínka č. 1 platí dál: gateway pořád
+    /// nemá nic, čím by šlo něco odeslat.
+    func fetchReleases() async throws -> [Release]
 }

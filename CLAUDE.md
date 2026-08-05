@@ -362,6 +362,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `DiffLayout` | Jak se kreslí diff: `unified` (pod sebou) / `split` (vedle sebe). Nastavení **člověka, ne repa** — proto jen v `GlobalConfig` |
 | `NotificationEvent` | Co notifikaci vyvolalo: `newPullRequest` / `findings` / `clean` / `failure`. Nese si ji notifikace sama |
 | `NotificationSettings` | Co se má hlásit (#86) — hlavní vypínač a čtyři události. Jako `DiffLayout` jen globálně |
+| `Release` | Jedno vydání aplikace na GitHubu (#127): tag, název, datum, release notes, odkaz. Jako `ReviewVerdict` **není `Codable`** — na disk nejde |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -1957,6 +1958,88 @@ Věci, na které se u okna naráží:
   protože nic není“ a „prázdno, protože se to nepovedlo načíst“ vypadají v okně stejně,
   ale znamenají opak; bez toho se u chybové hlášky svítilo zelené „Žádné PR k review“.
 
+### Okno s novinkami (`App/Views/ReleaseNotes/`)
+
+Scéna `Window` s id `release-notes` (menu aplikace, hned pod `O aplikaci PRism`). Vlevo
+historie vydání, vpravo release notes vybraného — **jedno okno nad jedněmi daty**, protože
+dvě obrazovky („co je nového“ a „historie“) by se dřív nebo později rozešly.
+
+| Typ | Co dělá |
+|---|---|
+| `ReleaseNotesWindow` | Id a titulek okna — jedno místo pro scénu i pro položku v menu |
+| `ReleaseNotesScene` | Obsah scény; dokud neprošel preflight, není `gh` a okno to řekne |
+| `ReleaseNotesMenuItem` | Položka v menu aplikace; `openWindow` se čte tam, kde se používá |
+| `ReleaseNotesModel` | Historie, výběr, značka „tohle už jsem viděl“ a rozhodnutí, jestli se má okno po startu otevřít |
+| `ReleaseNotesView`, `ReleaseRowView`, `ReleaseNotesDetailView` | Rozdělené okno, řádek seznamu a vykreslené release notes |
+| `ReleaseRow` | Vydání převedené na řádek seznamu — texty a odznak `nové`, mimo view a testovatelné |
+
+Věci, které se u toho nemají rozbít:
+
+- **Aplikace neví, kolikátá je, a okno o tom mlčí.** `MARKETING_VERSION` je pořád `0.1`,
+  zatímco tagy jsou na `v1.1.x` — verze v bundlu tagy nikdy nesledovala. Okno proto mluví
+  o tom, **co vyšlo na GitHubu**, a číslo běžící verze nikde nevypisuje; u lokálního buildu
+  se ty dvě věci rozcházejí v obou směrech. Druhá cesta (zvednout `MARKETING_VERSION`
+  a udržovat ho) by přidala krok do rituálu vydávání, u kterého by stačilo jednou zapomenout
+  a značka by lhala — dá se přidat kdykoli potom.
+- **Značka je poslední viděný tag v předvolbách**, ne v `config.json`. Je to **stav
+  aplikace**, ne nastavení, které si někdo edituje — stejně jako výška spodního panelu.
+  Chodí se přes `PreferenceStoring` (`App/Environment/`), ne rovnou přes `UserDefaults`:
+  testy by jinak psaly do skutečných předvoleb aplikace a vlastní suite po sobě **nechává
+  soubor** v `~/Library/Preferences` — změřeno, `removePersistentDomain` ani `synchronize()`
+  to nespraví.
+- **Značka se posouvá až tím, že se novinky ukázaly.** Načíst historii kvůli tomu, aby se
+  zjistilo, jestli je co ukázat, ještě neznamená, že to někdo viděl. Posouvá ji `markAsSeen()`
+  ze dvou míst: z kontroly při startu a z `.task` okna.
+- **Odznaky `nové` se počítají proti značce *před* posunutím** a v rámci běhu se nemění.
+  Jinak by zhasly v tomtéž okamžiku, kdy se okno objeví, a nebylo by podle čeho poznat, co je
+  nového.
+- **Okno se po startu nabídne jednou za běh** (`hasOfferedAfterStart`). Hlavní okno jde zavřít
+  a otevřít znovu, čímž se kontrola pustí podruhé — a značka je už posunutá, takže bez pojistky
+  by okno vyskočilo pokaždé. Chytila to vlastní revize diffu. Po **selhaném** startu se pojistka
+  nespotřebuje: nenačtená historie není nabídnutá historie.
+- **První spuštění mlčí** a značku jen založí. Bez toho vypadá po startu jako nová celá
+  historie — tatáž úvaha jako u snímku ohlášených PR (#85).
+- **Selhání je vidět, ne prázdný seznam.** `.failed(String)` má vlastní stav a v okně důvod
+  s tlačítkem `Zkusit znovu`; prázdný seznam by z výpadku sítě udělal „nic tu není“. A okno se
+  po selhaném startu **samo neotevře** — vyrušení chybovou hláškou po každém startu bez sítě si
+  nikdo neobjednal.
+- **Rozdělení se kreslí jen nad načtenou historií.** Prázdný boční panel vedle chyby by říkal
+  totéž dvakrát a hůř; dokud není co vybírat, je stav odpovědí na celé okno.
+- **Historie se drží v paměti do konce běhu, na disk nejde.** Disková cache by dala offline
+  režim, ale je to další store s vlastním formátem a vlastním úklidem — a při startu se stejně
+  musí zeptat, jestli nepřibylo vydání. Proto `Release` **není `Codable`**.
+- **Na síť se sahá dvakrát za běh, oboje na vyžádání**: jednou při startu kvůli značce, jednou
+  při otevření okna (a to už je z paměti). V pollingu ani na pozadí se neptá a do puntíku
+  dostupnosti GitHubu to neteče — puntík stojí na tom, co běží pravidelně.
+- **Tag se v řádku nečte dvakrát.** Release se v tomhle repu jmenují `v1.1.23 — notifikace
+  o re-review`, takže by se tag opakoval a delší polovina by se ořezala dřív; `ReleaseRow` proto
+  prefix zahodí. Když název tagem **nezačíná**, nesahá se na něj — hádat, co je oddělovač, se
+  vyplatí jen tam, kde je jisté, co se odděluje.
+- **Datum formátuje view, ne `ReleaseRow`.** Texty řádku tak nezávisí na locale a dají se
+  testovat; tatáž úvaha jako u `FindingRow`. Je u něj **čas**: verze se vydávají po mergnutí
+  PR, takže jich v jednom dni vyjde klidně šest a seznam se samotným `5. 8. 2026` šestkrát pod
+  sebou o pořadí neříká nic. Nahlášené při zkoušení.
+- **Řádky se skládají v těle seznamu**, ne uvnitř buňky. `List` staví řádky líně a mimo
+  sledování závislostí rodiče, takže odznak `nové` by se po načtení nemusel překreslit — tatáž
+  past jako u stavů v seznamu PR.
+- **Menu si o okno říká samo.** `Window` scéna žádnou položku do menu nepřidá, takže bez
+  `CommandGroup(after: .appInfo)` by se okno dalo otevřít jedině po aktualizaci — a to je
+  ta menší polovina zadání #127. Vedle toho je **tlačítko v toolbaru** hlavního okna, hned
+  u ozubeného kola: obojí je o aplikaci, ne o vybraném PR. `Obnovit` zůstává vpravo, protože
+  je to jediné z těch tří, co se mačká často.
+- **`openWindow` je v toolbaru bočního panelu němá akce.** Tlačítko projde, okno se
+  neotevře — proto ho `ContentView` čte v těle okna a do `PullRequestListView` posílá jako
+  uzávěr. Ověřeno na běžící aplikaci proti dvěma známým dobrým cestám: `openSettings` ze
+  **stejného** toolbaru funguje a `openWindow` s tímtéž id funguje z menu i z `RootView`,
+  takže to není chybné id ani chybějící scéna.
+- **Esc okno zavře, a jde to schovaným tlačítkem** s `keyboardShortcut(.cancelAction)`, ne
+  `onExitCommand`. Ten se váže na fokus a Esc spolkne `List` v bočním panelu dřív, než se
+  k němu dostane — ověřeno na běžící aplikaci (okno bylo `AXFocused` a nezavřelo se), zkratka
+  na okně zabrala. `opacity(0)` s nulovým rámcem, ne `hidden()`: schovanému view zkratka
+  nechodí. Titulek okna nese **jméno okna** a vybraná verze jde do `navigationSubtitle`:
+  `navigationTitle` v detailu přebije titulek scény, takže by v liště stálo jen `v1.1.23`
+  a nešlo by poznat, o jaké okno jde (taky chyceno na běžící aplikaci).
+
 ### `PollingService` (`App/Polling/`)
 
 Drží seznam PR aktuální: v intervalu (default 60 s) se zeptá všech zdrojů, sloučí je přes
@@ -2095,6 +2178,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje |
 | `Policy.newPullRequestNotification(for:title:)` | Notifikace o novém PR ve frontě (#85) |
 | `Policy.newPullRequestsNotification(for:titles:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
+| `Policy.sortedReleases(_:)` | Vydání od nejnovějšího (#127) — podle **data**, ne podle tagu |
+| `Policy.newReleases(in:since:)` | Co vyšlo od poslední viděné verze; neznámá značka = **nic** |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
   Volající pak nic nespojuje a z typu je vidět, že jde o několik nezávislých dotazů.
@@ -2206,18 +2291,19 @@ Nad odesílatelností draftu (#68) platí:
 
 ### `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má šest metod
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má sedm metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu.
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchDiff(id:)`, `fetchFile(id:path:)`, `fetchConversation(id:)` |
+| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchDiff(id:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhSearchQuery` | Rozdělení search dotazu na argumenty `gh` — čistá funkce |
 | `ConversationQuery` | GraphQL dotaz na konverzaci a jeho argumenty — čisté funkce |
 | `GhConversationResponse` | Tvar GraphQL odpovědi a mapování na `Conversation` |
 | `GhSearchItem`, `GhPullRequestDetail` | Tvar JSONu z `gh` a převod na doménové modely |
+| `GhRelease` | Tvar jedné položky `GET /repos/…/releases` a převod na `Release` |
 | `PullRequestState(ghState:isDraft:)` | Mapování stavu — `gh` ho popisuje dvěma poli |
 
 Čtyři věci, které se u toho nemají rozbít:
@@ -2440,6 +2526,7 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `HTTPGetting` | Protokol: `GET` s `If-None-Match`. `URLSessionHTTP` nad `URLSession` — **jediné místo, kde aplikace chodí na síť sama**, bez podprocesu |
 | `NetworkReachability` | Protokol: proud „má stroj cestu do sítě?“. `PathMonitorReachability` nad `NWPathMonitor` |
 | `UserNotifying` | Protokol: doručit notifikaci a dát proud kliknutí. `PullRequestNotification` je vstup, `NotificationDelivery` výsledek |
+| `PreferenceStoring` | Protokol nad trvalými předvolbami (stav aplikace, ne `config.json`); `UserDefaults` ho splňuje |
 | `SystemNotificationCenter` | `UNUserNotificationCenter` za tím protokolem — **statická jediná instance** a delegát, který kliknutí převádí na hodnotu v proudu |
 
 Nad notifikacemi (#88) platí:
@@ -2701,6 +2788,10 @@ Nad `HTTPGetting` (#31) platí:
   pocházejí ze soukromého sandboxu `ondrajodas/prism-review-sandbox`. Neobsahují nic než
   hlášku GitHubu. Konzumenta zatím **nemají** — klasifikaci chyb odesílání píše #67; leží
   tady proto, že bez zápisu na GitHub se nedají vyrobit znovu.
+
+  `releases.json` (#127) jsou **první tři** z 69 vydání vlastního repa, jak je vrátilo
+  `gh api` — jen zkrácené na prefix a přeformátované `jq`. Celá odpověď má stovky kilobajtů
+  a tvar je u všech položek stejný, takže tři stačí.
 
   `Fixtures/statuspage/` jsou **skutečné** `components.json` z obou status pages, sebrané
   tou adresou, na kterou se ptá aplikace. `github-incident.json` je z nich jediný upravený:
@@ -3000,6 +3091,26 @@ Nad `HTTPGetting` (#31) platí:
   reviewer dostane odvozenou sadu **hned při prvním běhu**, ne až podruhé.
 - **`Policy.knownRepositories`** — union seznamu PR a konfigurace, dedup, řazení bez ohledu
   na velikost písmen a repo bez otevřeného PR, které ze seznamu zmizet nesmí.
+- **Novinky (#127)** — tři vrstvy. `Policy` vyčerpávajícím výčtem, včetně toho, co se dá
+  pokazit tiše: **značka, která v seznamu není, nesmí prohlásit za novou celou historii**
+  a řazení musí být úplné (druhé kritérium se ověřuje i z obráceného vstupu).
+  `GhRelease` proti **skutečnému** výstupu `gh api` (`Fixtures/gh/releases.json`, první tři
+  z 69 vydání) plus adresu volání — repo je konstanta a `per_page` drží historii na jedné
+  stránce, takže obojí je kontrakt s `gh`. Syntetickým JSONem to, co se ze skutečné odpovědi
+  nesehná: **rozdělané (`draft`) vydání**, které se do seznamu nesmí dostat, a vydání bez
+  názvu i bez popisu.
+
+  `ReleaseNotesModel` proti fake gateway a **předvolbám v paměti** (`InMemoryPreferences`).
+  Skutečné `UserDefaults` sem nepatří ani jako vlastní suite: po `removePersistentDomain`
+  zůstává soubor v `~/Library/Preferences` (změřeno — z jedenácti jich zbylo šest, a ani
+  `synchronize()` s tím nehnul). To hlavní není, co se v okně ukáže, ale kdy se **neukáže**: první
+  spuštění mlčí, po selhání se **značka neposune** (jinak by se ta vydání už nikdy neohlásila)
+  a v jednom běhu se okno nabídne **jen jednou** — hlavní okno jde zavřít a otevřít znovu.
+  K tomu, že se historie tahá **jednou za běh**, že `Zkusit znovu` načte i po selhání a že
+  posunutí značky **nezhasne odznaky**.
+
+  `ReleaseRow` na skládání textů: tag na začátku názvu se zahodí i s oddělovačem, název, který
+  tagem nezačíná, zůstane celý, a vydání pojmenované jen tagem nemá druhý text.
 - **`SettingsModel`** — odložený zápis přes `FakeTimeSource` (tedy v nulovém reálném čase):
   že se rychlé změny slijí do jednoho zápisu, že `flush()` uloží bez čekání, že změna
   zvenčí formulář srovná, ale vlastní uložení ne, a že je selhání zápisu vidět. Na testech
@@ -3462,6 +3573,18 @@ GitHub. Generuje se **z kódu** z oficiálních značek v `bin/icon-sources/` (o
 SVG cesta, takže si skript vystačí s minimálním překladem `d` na `Path` — žádná závislost).
 V repu jsou **dvě barevné varianty**, nasazená je krémový znak na oranžové. Malé velikosti se
 kreslí hruběji, ne zmenšením.
+
+Okno s novinkami hotové (issue #127) — `Release` v `App/Models/`, `fetchReleases()`
+v `GitHubGateway`, `Policy.sortedReleases`/`newReleases` a `App/Views/ReleaseNotes/`.
+**Co se ve které verzi změnilo, je vidět v aplikaci**: vlevo celá historie vydání, vpravo
+release notes vybrané verze vykreslené `App/Markdown/` (jeho první konzument mimo konverzaci
+pod PR). Po aktualizaci se okno otevře samo, jednou, s vybranou nejnovější verzí; jinak se
+otevírá z menu aplikace. Bez sítě je v něm důvod a `Zkusit znovu`, ne prázdný seznam.
+
+Aplikace přitom **neví, kolikátá je** — `MARKETING_VERSION` je pořád `0.1` a tagy nikdy
+nesledoval. Okno proto mluví o tom, co vyšlo na GitHubu, verzi běžícího buildu nevypisuje
+a pamatuje si poslední **viděný tag** v `UserDefaults`. Tvrdá podmínka č. 1 se nemění:
+`fetchReleases()` je sedmá **čtecí** metoda gateway.
 
 Povolení odesílání v nastavení hotové (issue #107) — `allowsPublishing` v `Configuration`
 (globálně i per repo), `PublishScope` složený z konfigurace a přepínač v okně nastavení.

@@ -6,6 +6,9 @@ struct ContentView: View {
     /// scéna a k `@State` uvnitř okna by se nedostalo.
     let store: AppStore
     @Environment(\.scenePhase) private var scenePhase
+    /// Čte se **tady, v těle okna**, ne v toolbaru bočního panelu — tam je to němá akce
+    /// (viz `PullRequestListView.openReleaseNotes`).
+    @Environment(\.openWindow) private var openWindow
 
     /// Rozdělané odeslání review. `nil` = potvrzovací sheet je zavřený.
     ///
@@ -23,8 +26,10 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             NavigationSplitView {
-                PullRequestListView(store: store)
-                    .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 520)
+                PullRequestListView(store: store) {
+                    openWindow(id: ReleaseNotesWindow.id)
+                }
+                .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 520)
             } detail: {
                 detail
             }

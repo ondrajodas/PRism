@@ -155,6 +155,24 @@ final class FakeTimeSource: TimeSource, @unchecked Sendable {
     }
 }
 
+/// Předvolby v paměti. Skutečné `UserDefaults` sem nepatří ani jako vlastní suite: ta po
+/// sobě nechává soubor v `~/Library/Preferences` (změřeno u #127 — `removePersistentDomain`
+/// ani `synchronize()` to nespraví).
+final class InMemoryPreferences: PreferenceStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: String]
+
+    init(_ values: [String: String] = [:]) {
+        self.values = values
+    }
+
+    func preference(forKey key: String) -> String? { lock.withLock { values[key] } }
+
+    func setPreference(_ value: String, forKey key: String) {
+        lock.withLock { values[key] = value }
+    }
+}
+
 /// Cesty, na kterých nástroje leží podle `BinaryLocator.knownLocations`.
 enum KnownPath {
     static let gh = "/opt/homebrew/bin/gh"
