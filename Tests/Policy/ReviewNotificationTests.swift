@@ -184,3 +184,39 @@ struct ReviewNotificationTests {
         #expect(Policy.blockingCount(in: record) == 0)
     }
 }
+
+extension ReviewNotificationTests {
+    private func event(_ state: ReviewState) -> NotificationEvent? {
+        Policy.reviewNotification(for: pr, state: state)?.event
+    }
+
+    @Test("Timeout s nálezy je o nálezech, bez nich je to selhání")
+    func splitsTimeoutByWhetherItDelivered() {
+        // Do #133 padal celý `timedOut` do `findings`, takže kdo si vypnul `Review se nepovedlo`,
+        // dostával notifikaci o běhu, který nedoběhl a **nic nenahlásil** — a to je selhání,
+        // ne nález. Chytil to Copilot na rozporu mezi textem v nastavení a mapováním.
+        #expect(event(.timedOut(findings: 2)) == .findings)
+        #expect(event(.timedOut(findings: 0)) == .failure)
+    }
+
+    @Test("Události odpovídají tomu, co notifikace říká", arguments: [
+        (ReviewState.completed(findings: 1), NotificationEvent.findings),
+        (.clean, .clean),
+        (.dismissed(findings: 2), .clean),
+        (.failed(detail: "spadlo to"), .failure),
+        (.checkoutFailed(detail: "clone selhal"), .failure),
+    ])
+    func mapsStatesToEvents(state: ReviewState, expected: NotificationEvent) {
+        // Odmítnuté nálezy jsou z pohledu vyrušení totéž jako čisto: nezbylo nic k řešení.
+        #expect(event(state) == expected)
+    }
+
+    @Test("Co se neohlašuje, nemá ani událost")
+    func hasNoEventWhenThereIsNothingToSay() {
+        // Text a událost si musí odpovídat — obojí vychází z téhož `ReviewState`, takže kdyby se
+        // množiny rozešly, vznikla by notifikace bez události nebo naopak.
+        for state in [ReviewState.notStarted, .queued, .cloning, .running(finished: 1, total: 2), .stale] {
+            #expect(Policy.reviewNotification(for: pr, state: state) == nil)
+        }
+    }
+}

@@ -40,7 +40,7 @@ struct NotificationSettingsView: View {
                     // Text říká, **co v které notifikaci uvidím**, ne jen že existuje: podle
                     // toho se rozhoduje, co vypnout. `Čisté review` má vysvětlení navíc, protože
                     // je to nejčastější hláška u automatického režimu a nejmenší informace.
-                    Text("Nálezy nesou počet a to, kolik z nich blokuje. `Čisté review` je zpráva, že reviewer nic nenašel — u ručně spuštěného běhu je to ta odpověď, na kterou se čeká, u automatu s dvaceti běhy denně nejčastější a nejmenší informace. `Review se nepovedlo` pokrývá spadlou session, timeout i selhanou pracovní kopii. Platí globálně, ne per repo.")
+                    Text("`Review s nálezy` nese počet a to, kolik z nich blokuje — a taky běh, který se nevešel do limitu, ale nálezy stihl. `Čisté review` je zpráva, že nezbylo nic k řešení; u ručně spuštěného běhu je to ta odpověď, na kterou se čeká, u automatu s dvaceti běhy denně nejčastější a nejmenší informace. `Review se nepovedlo` pokrývá spadlou session, selhanou pracovní kopii a běh, který nedoběhl a nic nenahlásil. Platí globálně, ne per repo.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

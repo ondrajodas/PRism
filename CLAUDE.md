@@ -1834,8 +1834,10 @@ Brána z nastavení (#86) leží v `notify(_:)` a platí u ní:
   tiku dokola, jen tiše.
 - **Událost si nese notifikace sama** (`PullRequestNotification.event`), skládá ji `Policy` z
   téhož `ReviewState` jako text. Odvozovat ji u odesílání by byla druhá cesta k témuž údaji.
-  Timeout patří k `findings` (částečné nálezy jsou pořád nálezy), odmítnuté nálezy ke `clean`
-  (nezbylo nic k řešení).
+  Odmítnuté nálezy patří ke `clean` (nezbylo nic k řešení) a **timeout se rozděluje**: s nálezy
+  je to `findings` (jsou k přečtení), bez nich `failure` (běh nedoběhl a nic z toho není). Do
+  #133 padal celý `timedOut` do `findings`, takže kdo si vypnul selhání, dostával hlášku
+  o běhu, který nic nenahlásil — chytil to rozpor mezi textem v nastavení a mapováním.
 
 Signály pro stavový řádek (#31) do `AppStore` patří taky, protože jen on ví, jak dopadla
 skutečná volání:

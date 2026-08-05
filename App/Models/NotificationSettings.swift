@@ -9,11 +9,13 @@ import Foundation
 enum NotificationEvent: String, Codable, CaseIterable, Hashable, Sendable {
     /// Ve frontě je PR, který tam nebyl (#85).
     case newPullRequest
-    /// Review doběhlo a něco našlo.
+    /// Review dodalo nálezy — včetně běhu, který se nevešel do limitu, ale nálezy stihl.
     case findings
-    /// Review doběhlo a je čisto.
+    /// Review doběhlo a nezbylo nic k řešení: čisto, nebo jen nálezy, které jsem odmítl.
     case clean
-    /// Review se nepovedlo — spadlá session, timeout, selhaný checkout, nejistý výsledek.
+    /// Review se nepovedlo — spadlá session, selhaná pracovní kopie, nejistý výsledek
+    /// a timeout, který **nic nenahlásil**. Timeout s nálezy patří k `findings`, protože
+    /// nálezy jsou tam k přečtení; rozhoduje `Policy.reviewNotification`.
     case failure
 }
 

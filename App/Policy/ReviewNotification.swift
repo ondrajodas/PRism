@@ -45,11 +45,18 @@ extension Policy {
         switch state {
         case .notStarted, .queued, .cloning, .running, .stale:
             nil
-        case .completed, .timedOut:
-            // Timeout patří k nálezům, i když nic nenašel: doběhlo to jinak, než mělo, a je to
-            // výsledek review, který si člověk má přečíst. Do `failure` nepatří, protože
-            // částečné nálezy jsou pořád nálezy.
+        case .completed:
             .findings
+        case .timedOut(let findings):
+            // **Timeout se rozděluje podle toho, jestli něco dodal.** S nálezy je to o nálezech
+            // (jsou k přečtení a čekají na posouzení), bez nich je to selhání: běh nedoběhl
+            // a nic z toho není.
+            //
+            // Do #133 padal celý `timedOut` do `.findings`, což znamenalo, že kdo si vypne
+            // `Review se nepovedlo`, dostával notifikaci o běhu, který nedoběhl a nic nenahlásil.
+            // Chytil to Copilot na rozporu mezi textem v nastavení a mapováním — a správná
+            // oprava byla mapování, ne text.
+            findings > 0 ? .findings : .failure
         case .clean, .dismissed:
             // Odmítnuté nálezy jsou z pohledu vyrušení totéž jako čisto: nezbylo nic, co bych
             // musel řešit. Kdo si vypne „čisté review“, nechce ani tuhle hlášku.
