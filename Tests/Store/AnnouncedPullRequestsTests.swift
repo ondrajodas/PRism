@@ -73,16 +73,35 @@ struct AnnouncedPullRequestsTests {
     @Test("PR, které zmizelo a vrátilo se, se ohlásí znovu")
     func announcesAReturningPullRequestAgain() async {
         // Vypadává to ze snímku samo a je to tak zamýšlené: vrátilo se do fronty a je to
-        // informace. Log ohlášených by na to musel mít vlastní lhůtu a vlastní úklid.
+        // informace (re-review). Log ohlášených by na to musel mít vlastní lhůtu a vlastní
+        // úklid.
+        //
+        // **Bez ručního `remember`** (#135): do té opravy si tady test prázdný snímek zapisoval
+        // sám, takže ověřoval kontrakt, který `AppStore` neplní — u tiku bez novinek se vrací
+        // dřív, než by na zápis došlo. Test byl zelený a provoz rozbitý.
         let announced = store()
         _ = await announced.newcomers(in: [pr("cli/cli#1")])
-        await announced.remember([pr("cli/cli#1")])
         _ = await announced.newcomers(in: [])
-        await announced.remember([])
 
         let newcomers = await announced.newcomers(in: [pr("cli/cli#1")])
 
         #expect(newcomers == [pr("cli/cli#1")])
+    }
+
+    @Test("Odebrání ze snímku nečeká na doručení, přidání ano")
+    func removesImmediatelyButAddsOnlyAfterDelivery() async {
+        // Ta nesymetrie je celá pointa #135: odebrání nikdy notifikaci neztratí (jen umožní
+        // budoucí ohlášení), kdežto přidání před doručením znamená hlášku, která se už nikdy
+        // nepošle.
+        let announced = store()
+        _ = await announced.newcomers(in: [pr("cli/cli#1"), pr("cli/cli#2")])
+
+        // #2 odešlo z fronty — ze snímku musí zmizet bez toho, aby to kdo potvrdil.
+        _ = await announced.newcomers(in: [pr("cli/cli#1")])
+        #expect(await announced.newcomers(in: [pr("cli/cli#1"), pr("cli/cli#2")]) == [pr("cli/cli#2")])
+
+        // A naopak: nově ohlášené se do snímku dostane teprve `remember`, ne porovnáním.
+        #expect(await announced.newcomers(in: [pr("cli/cli#1"), pr("cli/cli#2")]) == [pr("cli/cli#2")])
     }
 
     @Test("Snímek se nezvětšuje, drží velikost fronty")

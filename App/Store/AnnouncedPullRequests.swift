@@ -44,12 +44,23 @@ actor AnnouncedPullRequests {
         let previous = load()
         // První spuštění: zapamatovat **hned** a mlčet. Zapsat se to tady musí, protože
         // volající nemá co doručovat, takže by `remember(_:)` nikdy nepřišlo — a snímek by se
-        // nezaložil ani při dalších ticích. U ostatních tiků se naopak nezapisuje nic:
-        // o pořadí „nejdřív doručit, pak zapsat“ rozhoduje volající.
+        // nezaložil ani při dalších ticích.
         guard known else {
             write(Set(current))
             return []
         }
+
+        // **PR, která ve frontě nejsou, ze snímku vypadnou — hned** (#135). Odeslané review
+        // ruší `review-requested`, takže PR z fronty odejde; kdyby ve snímku zůstal, po
+        // **re-review** už by nebyl „nový“ a notifikace by nepřišla. Nahlášené z provozu.
+        //
+        // Odebírá se tady, kdežto přidává až v `remember(_:)`, a ta nesymetrie je schválně:
+        // **odebrání nikdy notifikaci neztratí** (jen umožní budoucí ohlášení), kdežto přidání
+        // před doručením znamená hlášku, která se už nikdy nepošle (pravidlo z #85). Zápis
+        // proto nemůže zůstat celý na volajícím — ten se u tiku bez novinek vrací dřív.
+        let stillListed = previous.intersection(current)
+        if stillListed != previous { write(stillListed) }
+
         // Pořadí se bere ze **vstupu**, ne z množiny — ta ho nemá, takže by notifikace mezi
         // tiky poskakovaly. Vstup je řazený `Policy.sorted`, tedy od naposledy změněného.
         return current.filter { !previous.contains($0) }
