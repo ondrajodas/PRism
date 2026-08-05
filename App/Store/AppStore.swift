@@ -1325,6 +1325,7 @@ final class AppStore {
             suggestion: suggestedVerdict(for: id),
             anchors: transfer ? draftAnchorStates(for: id) : [],
             needsTransfer: transfer,
+            targetHead: transfer ? head(of: id) : nil,
             gh: gh,
             gateway: gateway,
             scope: publishScope,

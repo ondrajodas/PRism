@@ -33,12 +33,8 @@ struct ReviewSubmissionSheet: View {
     /// Dvě stránky v jednom okně (#69): dokud je draft psaný proti staršímu commitu, je vidět
     /// kontrola kotev; po přenesení payload, který odejde.
     @ViewBuilder private var content: some View {
-        if submission.state == .checking {
-            DraftTransferView(
-                anchors: submission.anchors,
-                head: submission.pullRequest.id.description,
-                choices: $choices
-            )
+        if submission.state == .checking, let head = submission.targetHead {
+            DraftTransferView(anchors: submission.anchors, head: head, choices: $choices)
         } else {
             payload
         }
@@ -264,8 +260,11 @@ struct ReviewSubmissionSheet: View {
     @ViewBuilder private var checkingStatus: some View {
         let needsAttention = submission.anchors.filter { $0.state == .lost || $0.state == .uncertain }.count
         if needsAttention > 0 {
+            // Sloveso se skloňuje s podstatným jménem: „2 komentáře **chtějí**“. Skládat větu
+            // z ohnutého jména a pevného slovesa je past, do které se dá spadnout u každého
+            // `Plural.czech`.
             Label(
-                "\(Plural.czech(needsAttention, one: "komentář", few: "komentáře", many: "komentářů")) chce rozhodnout",
+                "\(Plural.czech(needsAttention, one: "komentář chce", few: "komentáře chtějí", many: "komentářů chce")) rozhodnout",
                 systemImage: "exclamationmark.triangle.fill"
             )
             .font(.caption)
@@ -317,11 +316,13 @@ struct ReviewSubmissionSheet: View {
     /// První ze dvou kliknutí u zastaralého draftu (#69). Pojmenované **commitem**, na který se
     /// přenáší — z „OK“ by nebylo poznat, co se potvrzuje. Odeslání je až druhé tlačítko, které se
     /// objeví teprve po tomhle.
-    private var transferButton: some View {
-        Button("Přenést na \(submission.pullRequest.id.description)") {
-            submission.transfer(choices: choices)
+    @ViewBuilder private var transferButton: some View {
+        if let head = submission.targetHead {
+            Button("Přenést na \(head.prefix(7))") {
+                submission.transfer(choices: choices)
+            }
+            .buttonStyle(.borderedProminent)
         }
-        .buttonStyle(.borderedProminent)
     }
 
     /// Tlačítko je pojmenované **akcí**, ne slovem „OK“ — a hlavně **není výchozí**:

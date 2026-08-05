@@ -79,6 +79,7 @@ struct ReviewSubmissionTests {
         cleanups: Cleanups = Cleanups(),
         anchors: [DraftAnchorCheck] = [],
         needsTransfer: Bool = false,
+        targetHead: String? = nil,
         transferred: ReviewDraft? = nil
     ) -> ReviewSubmission {
         ReviewSubmission(
@@ -87,6 +88,7 @@ struct ReviewSubmissionTests {
             suggestion: suggestion,
             anchors: anchors,
             needsTransfer: needsTransfer,
+            targetHead: targetHead,
             publisher: { publisher },
             afterSuccess: { cleanups.record() },
             applyTransfer: { _ in transferred }
@@ -108,6 +110,20 @@ struct ReviewSubmissionTests {
 
         #expect(publisher.submitted.isEmpty, "nic se nesmí odeslat")
         #expect(submission.state == .checking)
+    }
+
+    /// Cíl přenesení je **sha commitu**, ne identifikátor PR: jmenuje se v tlačítku, takže
+    /// záměna by v okně tvrdila, že se potvrzuje něco jiného. Nález Copilota z #124.
+    @Test("Cíl přenesení je hlava PR, ne draftu")
+    func exposesTheTargetHead() {
+        let submission = submission(
+            FakeReviewPublisher(always: .success(review())),
+            needsTransfer: true,
+            targetHead: "bbbb2222"
+        )
+
+        #expect(submission.targetHead == "bbbb2222")
+        #expect(submission.draft.headSha == "aaaa1111", "draft si drží commit, proti kterému je psaný")
     }
 
     /// Zastaralý draft **bez řádkových komentářů** je zastaralý taky — kontrola se z prázdných

@@ -585,6 +585,10 @@ struct AppStoreDraftTests {
         }
         #expect(anchor.line == 28)
 
+        // Cíl přenesení je hlava PR, ne commit, proti kterému je draft psaný. Že ho okno dostane,
+        // hlídají testy `ReviewSubmission` — store bez cesty ke `gh` potvrzení nesloží.
+        #expect(store.head(of: pr) == "bbbb2222")
+
         store.transferDraft(for: pr)
         await settle()
 

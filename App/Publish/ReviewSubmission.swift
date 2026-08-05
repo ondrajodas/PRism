@@ -32,6 +32,12 @@ final class ReviewSubmission: Identifiable {
     /// Kotvy ke kontrole, když je draft psaný proti staršímu commitu (#69). Prázdné, když
     /// není co kontrolovat.
     private(set) var anchors: [DraftAnchorCheck]
+    /// Commit, na který se draft přenáší — **hlava PR**, ne to, proti čemu je draft psaný
+    /// (`draft.headSha`). `nil` = nepřenáší se.
+    ///
+    /// Drží se zvlášť schválně: po přenesení ho má draft v `headSha`, ale **před** ním se musí
+    /// vzít odjinud — a v okně se jmenuje v tlačítku, takže si ho nesmí splést s identifikátorem PR.
+    let targetHead: String?
 
     private(set) var state: State
 
@@ -62,6 +68,7 @@ final class ReviewSubmission: Identifiable {
         suggestion: ReviewVerdict?,
         anchors: [DraftAnchorCheck] = [],
         needsTransfer: Bool = false,
+        targetHead: String? = nil,
         publisher: @escaping @MainActor () -> any ReviewPublishing,
         afterSuccess: @escaping @MainActor () async -> Void,
         applyTransfer: @escaping @MainActor ([UUID: DraftTransferChoice]) -> ReviewDraft? = { _ in nil }
@@ -70,6 +77,7 @@ final class ReviewSubmission: Identifiable {
         self.draft = draft
         self.suggestion = suggestion
         self.anchors = anchors
+        self.targetHead = targetHead
         self.publisher = publisher
         self.afterSuccess = afterSuccess
         self.applyTransfer = applyTransfer
@@ -87,6 +95,7 @@ final class ReviewSubmission: Identifiable {
         suggestion: ReviewVerdict?,
         anchors: [DraftAnchorCheck] = [],
         needsTransfer: Bool = false,
+        targetHead: String? = nil,
         gh: URL,
         gateway: any GitHubGateway,
         scope: PublishScope,
@@ -99,6 +108,7 @@ final class ReviewSubmission: Identifiable {
             suggestion: suggestion,
             anchors: anchors,
             needsTransfer: needsTransfer,
+            targetHead: targetHead,
             // Brána je snímek konfigurace z okamžiku kliknutí — stejně jako draft. Co je
             // vidět v potvrzení, to platí i při odeslání.
             publisher: {
