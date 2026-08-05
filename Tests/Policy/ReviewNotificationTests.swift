@@ -111,8 +111,17 @@ struct ReviewNotificationTests {
         // to nesmí slít.
         let text = body(.dismissed(findings: 2))
 
-        #expect(text == "Zbyly jen nálezy, které jsi odmítl (2).")
+        #expect(text == "Odmítl jsi 2 nálezy a nic jiného nezbylo.")
         #expect(text != body(.clean))
+    }
+
+    @Test("Věta o odmítnutých unese i jediný nález")
+    func inflectsTheDismissedCount() {
+        // Původní formulace („Zbyly jen nálezy, které jsi odmítl (1)“) mluvila o jednom
+        // nálezu v množném čísle — tatáž třída chyby jako u blokujících, jen ji tady neřeší
+        // skloňování slova, ale to, jak je věta postavená.
+        #expect(body(.dismissed(findings: 1)) == "Odmítl jsi 1 nález a nic jiného nezbylo.")
+        #expect(body(.dismissed(findings: 8)) == "Odmítl jsi 8 nálezů a nic jiného nezbylo.")
     }
 
     @Test("Selhaný checkout se pozná od selhané session")

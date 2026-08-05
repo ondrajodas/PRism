@@ -48,7 +48,12 @@ extension Policy {
         case .dismissed(let count):
             // „Našel a já to zamítl“ je jiné tvrzení než „nic nenašel“ (#113), takže se
             // v textu nesmí slít. Nastane po opakovaném review, kde odmítnutí zůstala.
-            "Zbyly jen nálezy, které jsi odmítl (\(count))."
+            //
+            // Formulace je schválně taková, aby ji unesl **každý** tvar počtu: „Zbyly jen
+            // nálezy, které jsi odmítl (1)“ mluví o jednom nálezu v množném čísle. Je to
+            // tatáž třída chyby, jakou u blokujících našel Copilot na #131 — jen tady ji
+            // neřeší skloňování slova, ale to, jak je věta postavená.
+            "Odmítl jsi \(Plural.czech(count, one: "nález", few: "nálezy", many: "nálezů")) a nic jiného nezbylo."
         case .failed(let detail):
             // Sem spadá i „nemám co říct“ — spadlá session i nereportující běh. Detail
             // z `Policy` je věta, se kterou se dá něco dělat, takže se posílá celá.
