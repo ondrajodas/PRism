@@ -58,7 +58,14 @@ struct FindingsPanel: View {
     @State private var isClearing = false
     @State private var clearFailure: String?
 
-    private static let minimumHeight = 120.0
+    /// Podlaha panelu. **Změřená, ne odhadnutá** (#69): obsah tabu `Moje review` má se
+    /// zastaralým draftem přirozenou výšku 198 pt (banner, verdikt, dva editory) a bez banneru
+    /// 161 pt — offscreen render `DraftPanel`u. Se starou podlahou 120 pt se proto scrolloval,
+    /// i když byl panel vytažený, a scrollbar v pruhu pod diffem vypadá jako rozbité rozvržení.
+    ///
+    /// Vejde se tím i tabulka nálezů (šest řádků) a časová osa. Scroll uvnitř draftu zůstává jako
+    /// pojistka pro úzké okno, kde se banner zalomí na víc řádků.
+    private static let minimumHeight = 200.0
     private static let maximumHeight = 600.0
 
     /// Uložená výška se ořezává **při použití**, ne jen při tažení: v `UserDefaults` může

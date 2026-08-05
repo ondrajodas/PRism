@@ -13,11 +13,14 @@ struct ReviewSubmissionSheet: View {
     let submission: ReviewSubmission
     let close: () -> Void
 
+    /// Rozhodnutí z kontroly kotev (#69). Drží je okno, protože potvrzovací tlačítko je v patičce.
+    @State private var choices: [UUID: DraftTransferChoice] = [:]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            ScrollView { payload.padding(16) }
+            ScrollView { content.padding(16) }
             Divider()
             footer
         }
@@ -25,6 +28,16 @@ struct ReviewSubmissionSheet: View {
         // Zavřít okno uprostřed volání by znamenalo nevědět, jestli review odešlo. `gh` má
         // třicetivteřinový timeout, takže to čekání je ohraničené.
         .interactiveDismissDisabled(submission.state == .sending)
+    }
+
+    /// Dvě stránky v jednom okně (#69): dokud je draft psaný proti staršímu commitu, je vidět
+    /// kontrola kotev; po přenesení payload, který odejde.
+    @ViewBuilder private var content: some View {
+        if submission.state == .checking, let head = submission.targetHead {
+            DraftTransferView(anchors: submission.anchors, head: head, choices: $choices)
+        } else {
+            payload
+        }
     }
 
     // MARK: - Hlavička
@@ -206,6 +219,8 @@ struct ReviewSubmissionSheet: View {
         switch submission.state {
         case .ready:
             EmptyView()
+        case .checking:
+            checkingStatus
         case .sending:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
@@ -240,6 +255,23 @@ struct ReviewSubmissionSheet: View {
         }
     }
 
+    /// Kolik kotev si žádá rozhodnutí. Bez toho by se u dlouhého seznamu dalo přehlédnout, že se
+    /// něco ztratilo — a ztracená kotva je jediná věc, kterou GitHub odmítne i s celým review.
+    @ViewBuilder private var checkingStatus: some View {
+        let needsAttention = submission.anchors.filter { $0.state == .lost || $0.state == .uncertain }.count
+        if needsAttention > 0 {
+            // Sloveso se skloňuje s podstatným jménem: „2 komentáře **chtějí**“. Skládat větu
+            // z ohnutého jména a pevného slovesa je past, do které se dá spadnout u každého
+            // `Plural.czech`.
+            Label(
+                "\(Plural.czech(needsAttention, one: "komentář chce", few: "komentáře chtějí", many: "komentářů chce")) rozhodnout",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
+        }
+    }
+
     /// Co se stalo s draftem — a jestli se to smí zkusit znovu.
     ///
     /// **Dvě různé věty schválně.** „Nic se nemazalo, dá se zkusit znovu“ nad chybou, po které
@@ -269,11 +301,27 @@ struct ReviewSubmissionSheet: View {
                 .font(.callout)
             Button("Zavřít", action: close)
                 .keyboardShortcut(.cancelAction)
+        case .checking:
+            Button("Zrušit", role: .cancel, action: close)
+                .keyboardShortcut(.cancelAction)
+            transferButton
         default:
             Button("Zrušit", role: .cancel, action: close)
                 .keyboardShortcut(.cancelAction)
                 .disabled(submission.state == .sending)
             sendButton
+        }
+    }
+
+    /// První ze dvou kliknutí u zastaralého draftu (#69). Pojmenované **commitem**, na který se
+    /// přenáší — z „OK“ by nebylo poznat, co se potvrzuje. Odeslání je až druhé tlačítko, které se
+    /// objeví teprve po tomhle.
+    @ViewBuilder private var transferButton: some View {
+        if let head = submission.targetHead {
+            Button("Přenést na \(head.prefix(7))") {
+                submission.transfer(choices: choices)
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 

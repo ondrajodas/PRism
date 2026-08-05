@@ -26,3 +26,14 @@ struct CommentRangeDrag: Equatable, Sendable {
     let path: String
     let anchor: DraftAnchor
 }
+
+/// Jedna kotva ke kontrole při přenesení draftu na nový commit (#69).
+///
+/// Vlastní typ, ne dvojice: `Equatable` nad n-ticí se nesyntetizuje a stav odesílání se s ním
+/// porovnává (`ReviewSubmission.State`).
+struct DraftAnchorCheck: Equatable, Sendable, Identifiable {
+    let comment: ReviewDraftComment
+    let state: DraftAnchorState
+
+    var id: UUID { comment.id }
+}

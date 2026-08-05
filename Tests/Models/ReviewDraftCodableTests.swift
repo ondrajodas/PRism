@@ -167,6 +167,46 @@ struct ReviewDraftCodableTests {
         #expect(comment.anchor.start == nil)
     }
 
+    // MARK: - Snímek kódu (#69)
+
+    @Test("Snímek kódu přežije round-trip")
+    func roundTripsTheSnapshot() throws {
+        let comment = ReviewDraftComment(
+            path: "src/Cart.php",
+            anchor: DraftAnchor(line: 28, side: .right, start: DraftAnchor.Endpoint(line: 26, side: .right)),
+            snapshot: DraftSnapshot(anchored: "return $total;", start: "$total = 0;"),
+            body: "tenhle blok",
+            origin: .own
+        )
+
+        let restored = try roundTrip(comment)
+
+        #expect(restored.snapshot.anchored == "return $total;")
+        #expect(restored.snapshot.start == "$total = 0;")
+    }
+
+    /// **Draft z doby před #69 snímek nemá.** Chybějící klíč znamená „nevíme, co tam bylo“, ne
+    /// nečitelný soubor — jinak by aktualizace zahodila ručně psanou práci. Revalidace to pak
+    /// hlásí jako nejistotu, ne jako shodu.
+    @Test("Starší draft bez snímku se přečte")
+    func readsAnOlderDraftWithoutASnapshot() throws {
+        let json = """
+            {
+              "id": "00000000-0000-0000-0000-0000000000AA",
+              "path": "src/Cart.php",
+              "line": 28,
+              "side": "RIGHT",
+              "body": "tady se ignoruje množství",
+              "origin": {"own": {}}
+            }
+            """
+
+        let comment = try JSONDecoder().decode(ReviewDraftComment.self, from: Data(json.utf8))
+
+        #expect(comment.snapshot.isEmpty)
+        #expect(comment.line == 28)
+    }
+
     /// Verdikt jde do `event` při odeslání, takže se na jeho zápis spoléhá API GitHubu.
     @Test("Verdikt se kóduje jako hodnota, kterou bere GitHub")
     func encodesTheVerdictAsTheGitHubEvent() throws {

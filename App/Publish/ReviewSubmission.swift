@@ -21,14 +21,30 @@ final class ReviewSubmission: Identifiable {
 
     let pullRequest: PullRequestSummary
     /// Co odejde. Snímek pořízený při otevření sheetu.
-    let draft: ReviewDraft
+    ///
+    /// Přepsat ho umí **jedině přenesení na nový commit** (#69), a to je výslovná akce člověka
+    /// v tomtéž okně — takže „co je v potvrzení vidět, to se odešle“ platí dál.
+    private(set) var draft: ReviewDraft
     /// Návrh verdiktu z nálezů — v sheetu stojí **vedle** zvoleného, aby se dal porovnat.
     /// Nepředvyplňuje nic; volba už padla v tabu `Moje review`.
     let suggestion: ReviewVerdict?
 
-    private(set) var state: State = .ready
+    /// Kotvy ke kontrole, když je draft psaný proti staršímu commitu (#69). Prázdné, když
+    /// není co kontrolovat.
+    private(set) var anchors: [DraftAnchorCheck]
+    /// Commit, na který se draft přenáší — **hlava PR**, ne to, proti čemu je draft psaný
+    /// (`draft.headSha`). `nil` = nepřenáší se.
+    ///
+    /// Drží se zvlášť schválně: po přenesení ho má draft v `headSha`, ale **před** ním se musí
+    /// vzít odjinud — a v okně se jmenuje v tlačítku, takže si ho nesmí splést s identifikátorem PR.
+    let targetHead: String?
+
+    private(set) var state: State
 
     enum State: Equatable {
+        /// Draft je psaný proti staršímu commitu — **než se dá odeslat, musí se zkontrolovat**,
+        /// co se stane s každou kotvou. Odsud se dá jen přenést (nebo zavřít).
+        case checking
         case ready
         case sending
         /// Odeslání selhalo. **Draft zůstal netknutý** — nic se nemazalo.
@@ -42,19 +58,33 @@ final class ReviewSubmission: Identifiable {
     /// Co udělat po úspěchu — smazat draft a načíst konverzaci znovu. Skládá to `AppStore`,
     /// protože obojí je jeho stav; tenhle objekt o něm nic neví.
     private let afterSuccess: @MainActor () async -> Void
+    /// Jak draft přenést na nový commit (#69). Vrací **nový snímek**, nebo `nil`, když to
+    /// nešlo. Dělá to `AppStore`, protože přenesený draft se ukládá na disk.
+    private let applyTransfer: @MainActor ([UUID: DraftTransferChoice]) -> ReviewDraft?
 
     init(
         pullRequest: PullRequestSummary,
         draft: ReviewDraft,
         suggestion: ReviewVerdict?,
+        anchors: [DraftAnchorCheck] = [],
+        needsTransfer: Bool = false,
+        targetHead: String? = nil,
         publisher: @escaping @MainActor () -> any ReviewPublishing,
-        afterSuccess: @escaping @MainActor () async -> Void
+        afterSuccess: @escaping @MainActor () async -> Void,
+        applyTransfer: @escaping @MainActor ([UUID: DraftTransferChoice]) -> ReviewDraft? = { _ in nil }
     ) {
         self.pullRequest = pullRequest
         self.draft = draft
         self.suggestion = suggestion
+        self.anchors = anchors
+        self.targetHead = targetHead
         self.publisher = publisher
         self.afterSuccess = afterSuccess
+        self.applyTransfer = applyTransfer
+        // **Ne podle prázdnosti kotev**: draft bez řádkových komentářů (jen tělo a verdikt) je
+        // zastaralý taky a přenesením se mu posune commit, proti kterému je psaný. Odvozovat to
+        // z kotev by ho poslalo proti staré hlavě, kterou pre-flight odmítne.
+        state = needsTransfer ? .checking : .ready
     }
 
     /// Ostrá cesta: publisher se skládá z `gh` a read-only gateway (kvůli pre-flightu) —
@@ -63,22 +93,42 @@ final class ReviewSubmission: Identifiable {
         pullRequest: PullRequestSummary,
         draft: ReviewDraft,
         suggestion: ReviewVerdict?,
+        anchors: [DraftAnchorCheck] = [],
+        needsTransfer: Bool = false,
+        targetHead: String? = nil,
         gh: URL,
         gateway: any GitHubGateway,
         scope: PublishScope,
-        afterSuccess: @escaping @MainActor () async -> Void
+        afterSuccess: @escaping @MainActor () async -> Void,
+        applyTransfer: @escaping @MainActor ([UUID: DraftTransferChoice]) -> ReviewDraft? = { _ in nil }
     ) {
         self.init(
             pullRequest: pullRequest,
             draft: draft,
             suggestion: suggestion,
+            anchors: anchors,
+            needsTransfer: needsTransfer,
+            targetHead: targetHead,
             // Brána je snímek konfigurace z okamžiku kliknutí — stejně jako draft. Co je
             // vidět v potvrzení, to platí i při odeslání.
             publisher: {
                 GhReviewPublisher(gh: gh, runner: SubprocessRunner(), gateway: gateway, scope: scope)
             },
-            afterSuccess: afterSuccess
+            afterSuccess: afterSuccess,
+            applyTransfer: applyTransfer
         )
+    }
+
+    /// Přenese draft na nový commit podle rozhodnutí z kontroly a přepne na potvrzení payloadu.
+    ///
+    /// Dva kroky v jednom okně schválně (#69): zkontrolovat kotvy se musí tak či tak, než se
+    /// review pošle, takže druhé okno by byl jen mezikrok. Odesílá se pořád **dvěma kliknutími
+    /// na dvě různá tlačítka**, což je pravidlo z #68 — jen to první je teď „přenést“.
+    func transfer(choices: [UUID: DraftTransferChoice]) {
+        guard state == .checking, let transferred = applyTransfer(choices) else { return }
+        draft = transferred
+        anchors = []
+        state = .ready
     }
 
     /// Verdikt, který odejde. Bez něj by se sheet neotevřel (`Policy.sendBlock`), takže
@@ -122,7 +172,8 @@ final class ReviewSubmission: Identifiable {
         switch state {
         case .ready: true
         case .failed(let error): !error.mightHaveReachedGitHub
-        case .sending, .sent: false
+        // `.checking` je zastaralý draft (#69): dokud se nepřenese, odeslat se nemá co.
+        case .checking, .sending, .sent: false
         }
     }
 
@@ -130,6 +181,9 @@ final class ReviewSubmission: Identifiable {
     ///
     /// Selhání nechává draft beze změny: uklízí se až po potvrzené odpovědi, takže se po
     /// chybě dá zkusit znovu, aniž by se text musel psát podruhé.
+    /// Odeslání. V `.checking` **nedělá nic**: dokud se draft nepřenesl, je psaný proti jinému
+    /// commitu, než na který by se odeslal — a přesně to `GhReviewPublisher` v pre-flightu odmítne.
+    /// Kontrola tady je proto, aby se na tu chybu nešlo naběhnout z UI.
     func send() async {
         guard canSend else { return }
         state = .sending

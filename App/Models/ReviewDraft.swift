@@ -74,6 +74,19 @@ struct ReviewDraft: Hashable, Codable, Sendable {
     }
 }
 
+/// Snímek kódu, ke kterému se komentář psal (#69).
+///
+/// Dvě hodnoty spolu ze stejného důvodu jako u `DraftAnchor`: k rozsahu patří oba konce, a kdo si
+/// je skládá sám, umí je zaměnit. Prázdný snímek (`nil` v obou) znamená „nevíme, co tam bylo“.
+struct DraftSnapshot: Hashable, Sendable {
+    /// Text řádku na konci rozsahu — u jednořádkového komentáře toho jediného.
+    var anchored: String?
+    /// Text řádku na začátku rozsahu. `nil` u jednořádkového komentáře.
+    var start: String?
+
+    var isEmpty: Bool { anchored == nil && start == nil }
+}
+
 /// Jeden řádkový komentář v rozdělaném review.
 struct ReviewDraftComment: Hashable, Codable, Sendable, Identifiable {
     /// Vlastní identita, ne `path:line`. Dva komentáře na jednom řádku jsou legitimní
@@ -95,6 +108,16 @@ struct ReviewDraftComment: Hashable, Codable, Sendable, Identifiable {
     /// tvar souboru změnil a rozdělaná review by se po aktualizaci nepřečetla.
     let startLine: Int?
     let startSide: DiffSide?
+    /// Text řádků, ke kterým se komentář psal — konec rozsahu a (u víceřádkového) začátek (#69).
+    ///
+    /// **Není to obsah komentáře, je to snímek kódu.** Bez něj se po novém commitu nedá poznat,
+    /// jestli na tom řádku pořád stojí to, co člověk komentoval — samotné číslo řádku to neřekne,
+    /// a komentář, který se tiše přenese na jiný kód, je přesně to, čemu se #69 vyhýbá.
+    ///
+    /// `nil` znamená „nevíme“: draft z doby před #69 a komentář založený bez načteného diffu.
+    /// Revalidace to musí umět říct, ne se tvářit, že sedí.
+    let anchoredText: String?
+    let startText: String?
     var body: String
     let origin: Origin
 
@@ -104,6 +127,7 @@ struct ReviewDraftComment: Hashable, Codable, Sendable, Identifiable {
         id: UUID = UUID(),
         path: String,
         anchor: DraftAnchor,
+        snapshot: DraftSnapshot = DraftSnapshot(),
         body: String,
         origin: Origin
     ) {
@@ -113,8 +137,15 @@ struct ReviewDraftComment: Hashable, Codable, Sendable, Identifiable {
         side = anchor.side
         startLine = anchor.start?.line
         startSide = anchor.start?.side
+        anchoredText = snapshot.anchored
+        startText = snapshot.start
         self.body = body
         self.origin = origin
+    }
+
+    /// Snímek kódu zpátky jako celek.
+    var snapshot: DraftSnapshot {
+        DraftSnapshot(anchored: anchoredText, start: startText)
     }
 
     /// Kotva zpátky jako celek. Rozsah vznikne jen tehdy, když je **celý** — půl kotvy

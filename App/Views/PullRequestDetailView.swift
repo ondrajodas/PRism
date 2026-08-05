@@ -288,7 +288,11 @@ struct PullRequestDetailView: View {
             // Otevře sheet, nic neodesílá. `submission(for:)` vrátí `nil`, když odeslat
             // nejde — nad zastaralým draftem se tedy sheet neotevře ani omylem.
             send: { submission = store.submission(for: pullRequest) },
-            sendBlock: store.draftSendBlock(for: id)
+            sendBlock: store.draftSendBlock(for: id),
+            // Zastaralý draft se dá poslat **po kontrole kotev v tomtéž okně** (#69), takže
+            // tlačítko není zakázané — jen se jinak jmenuje. Bez diffu nebo bez známé hlavy PR
+            // není proti čemu kontrolovat a zůstává zakázané s důvodem.
+            canTransfer: store.canTransferDraft(for: id)
         )
     }
 

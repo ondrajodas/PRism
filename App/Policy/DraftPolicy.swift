@@ -81,6 +81,31 @@ struct LineAnchors: Hashable, Sendable {
     var preferred: DraftAnchor? { right ?? left }
 }
 
+/// Jak dopadla kotva komentáře proti novému commitu (#69).
+///
+/// Čtyři stavy, ne dva, protože každý vede jinam — tatáž úvaha jako u `ReviewState`: „nevím“ není
+/// „ztraceno“ a „posunulo se“ není „sedí“.
+enum DraftAnchorState: Hashable, Sendable {
+    /// Komentovaný řádek je pořád na svém místě.
+    case fits
+    /// Komentovaný řádek se v souboru našel jinde. Nese **novou** kotvu.
+    case moved(DraftAnchor)
+    /// Adresa pořád jde komentovat, ale **nevíme, co na ní bylo** — draft z doby před #69 nebo
+    /// komentář založený bez načteného diffu. Rozhodnout musí člověk.
+    case uncertain
+    /// Komentovaný řádek v novém diffu není.
+    case lost
+}
+
+/// Co se má s komentářem při přenesení stát.
+enum DraftTransferChoice: Hashable, Sendable {
+    /// Nechat kotvu, jak je. U `moved` to znamená **novou** kotvu ze stavu.
+    case keep
+    /// Přepsat na tělo review (s odkazem na kód) — text zůstane, kotva zmizí.
+    case body
+    case delete
+}
+
 /// Rozhodování nad rozdělaným review. Čisté funkce, žádné I/O.
 extension Policy {
     /// Ke které straně diffu by šel komentář na tomhle řádku — `nil` znamená „nedá se
@@ -253,6 +278,153 @@ extension Policy {
             case .left: line.oldNumber == endpoint.line
             }
         }
+    }
+
+    // MARK: - Přenesení na nový commit (#69)
+
+    /// Snímek kódu pod kotvou — text řádků, ke kterým se komentář píše.
+    ///
+    /// Bere se z diffu, ne od view: jedno místo, které ví, že vlevo je staré číslo a vpravo nové.
+    /// Prázdný snímek znamená, že se to nedalo zjistit (soubor v diffu není) — a revalidace to pak
+    /// musí říct, ne se tvářit, že kotva sedí.
+    static func snapshot(of anchor: DraftAnchor, in file: FileDiff) -> DraftSnapshot {
+        DraftSnapshot(
+            anchored: text(at: anchor.end, in: file),
+            start: anchor.start.flatMap { text(at: $0, in: file) }
+        )
+    }
+
+    /// Text řádku na daném konci. `nil` = takový řádek v diffu není.
+    static func text(at endpoint: DraftAnchor.Endpoint, in file: FileDiff) -> String? {
+        file.hunks.lazy.flatMap(\.lines).first { line in
+            number(of: line, on: endpoint.side) == endpoint.line
+        }?.text
+    }
+
+    /// Jak dopadne kotva komentáře proti **novému** diffu.
+    ///
+    /// Rozhoduje **text**, ne číslo řádku: nový commit čísla posouvá, takže „stejné číslo“ neříká
+    /// nic o tom, jestli tam pořád stojí komentovaný kód. Porovnává se **otrimovaný** text — změna
+    /// odsazení je pořád tentýž řádek a přeanchorovat ho jinam by bylo horší než ho nechat.
+    static func anchorState(of comment: ReviewDraftComment, in diff: Diff) -> DraftAnchorState {
+        guard let file = diff.file(at: comment.path) else { return .lost }
+
+        let anchor = comment.anchor
+        // Bez snímku (draft z doby před #69) se dá zjistit jen tohle: leží ta adresa pořád
+        // v hunku? Tvrdit „sedí“ by byl přesně ten tichý přenos, kterému se #69 vyhýbá.
+        guard !comment.snapshot.isEmpty else {
+            return line(at: anchor.end, in: file) == nil ? .lost : .uncertain
+        }
+
+        guard let end = endpoint(matching: comment.anchoredText, near: anchor.end, in: file) else {
+            return .lost
+        }
+        guard let start = anchor.start else {
+            return end == anchor.end ? .fits : .moved(DraftAnchor(line: end.line, side: end.side))
+        }
+        // U rozsahu musí sednout **oba** konce. Když jeden zmizel, přeanchorovat druhý by z rozsahu
+        // udělalo něco jiného, než co člověk označil.
+        guard let newStart = endpoint(matching: comment.startText, near: start, in: file),
+              let range = commentRange(from: newStart, to: end, in: file)
+        else { return .lost }
+
+        return range == anchor ? .fits : .moved(range)
+    }
+
+    /// Výchozí volba pro každý stav kotvy.
+    ///
+    /// `lost` míří do **těla**, ne do koše: text je ručně psaná práce a odkaz na kód se z něj udělat
+    /// dá, takže smazání musí být rozhodnutí člověka, ne výchozí stav. `uncertain` zůstává na svém
+    /// místě, protože nejčastěji tam pořád je to, co komentoval — ale je to vidět v seznamu
+    /// s výstrahou, takže tiché to není.
+    static func defaultChoice(for state: DraftAnchorState) -> DraftTransferChoice {
+        switch state {
+        case .fits, .moved, .uncertain: .keep
+        case .lost: .body
+        }
+    }
+
+    /// Přenese draft na nový commit podle rozhodnutí, která člověk potvrdil.
+    ///
+    /// Chybějící rozhodnutí u komentáře znamená **výchozí** pro jeho stav; kdo sheet potvrdí bez
+    /// klikání, dostane to, co v něm bylo vidět. `headSha` se přepíše **až tady**: dokud se draft
+    /// nepřenesl, musí zůstat zastaralý, aby ho nešlo odeslat.
+    static func transferring(
+        _ draft: ReviewDraft,
+        to diff: Diff,
+        head: String,
+        in repo: RepoID,
+        choices: [UUID: DraftTransferChoice] = [:]
+    ) -> ReviewDraft {
+        var result = draft
+        result.headSha = head
+        result.comments = []
+
+        for comment in draft.comments {
+            let state = anchorState(of: comment, in: diff)
+            switch choices[comment.id] ?? defaultChoice(for: state) {
+            case .delete:
+                continue
+            case .body:
+                // Odkaz míří na **nový** commit: tělo se odešle proti němu, takže permalink na
+                // starou hlavu by ukazoval na kód, který v PR není.
+                let item = bodyItem(
+                    text: comment.body,
+                    link: permalink(to: comment.path, line: comment.line, in: repo, at: head)
+                )
+                result.body = appendingBodyItem(item, to: result.body)
+            case .keep:
+                result.comments.append(moved(comment, by: state))
+            }
+        }
+        return result
+    }
+
+    /// Komentář s kotvou podle stavu — u `moved` s novou, jinak s tou, kterou měl.
+    ///
+    /// Snímek **zůstává**: kotva se posunula právě proto, že se ten text našel jinde, takže je to
+    /// pořád ten kód, ke kterému člověk komentoval. Přepsat ho textem z nového diffu by nic
+    /// nezměnilo a při dalším commitu by se hledalo totéž.
+    private static func moved(_ comment: ReviewDraftComment, by state: DraftAnchorState) -> ReviewDraftComment {
+        guard case .moved(let anchor) = state else { return comment }
+        return ReviewDraftComment(
+            id: comment.id,
+            path: comment.path,
+            anchor: anchor,
+            snapshot: comment.snapshot,
+            body: comment.body,
+            origin: comment.origin
+        )
+    }
+
+    /// Konec s tímhle textem, **nejblíž** původnímu číslu. `nil` = text v diffu není.
+    ///
+    /// Nejblíž schválně: stejný řádek se v souboru vyskytuje víckrát (`}`, prázdný řádek), takže
+    /// první nález by kotvu odnesl na druhý konec souboru. Strana se drží: komentář k odebranému
+    /// řádku patří ke staré verzi, takže se hledá mezi odebranými.
+    private static func endpoint(
+        matching text: String?,
+        near endpoint: DraftAnchor.Endpoint,
+        in file: FileDiff
+    ) -> DraftAnchor.Endpoint? {
+        guard let text else { return nil }
+        let wanted = text.trimmingCharacters(in: .whitespaces)
+
+        return file.hunks
+            .lazy
+            .flatMap(\.lines)
+            .compactMap { line -> DraftAnchor.Endpoint? in
+                guard line.text.trimmingCharacters(in: .whitespaces) == wanted,
+                      let number = number(of: line, on: endpoint.side)
+                else { return nil }
+                return DraftAnchor.Endpoint(line: number, side: endpoint.side)
+            }
+            .min { abs($0.line - endpoint.line) < abs($1.line - endpoint.line) }
+    }
+
+    /// Řádek na daném konci — `nil`, když v diffu není.
+    private static func line(at endpoint: DraftAnchor.Endpoint, in file: FileDiff) -> DiffLine? {
+        file.hunks.lazy.flatMap(\.lines).first { number(of: $0, on: endpoint.side) == endpoint.line }
     }
 
     /// Kde komentář je, jako text do panelu i do potvrzení odeslání — `Cart.php:26–31`.
@@ -574,6 +746,12 @@ enum DraftSendBlock: Hashable, Sendable {
     case stale(draft: String, head: String)
     /// Aspoň jeden řádkový komentář je prázdný.
     case blankComment
+
+    /// Je to zastarání? Odsud se pozná, že se s tím dá něco udělat **v okně odeslání** (#69) —
+    /// ostatní důvody se opravují v panelu, takže tam otevírat okno nemá smysl.
+    var isStale: Bool {
+        if case .stale = self { true } else { false }
+    }
 
     /// Věta pro okno. Ke každému důvodu patří i to, co s ním jde udělat.
     var userDescription: String {
