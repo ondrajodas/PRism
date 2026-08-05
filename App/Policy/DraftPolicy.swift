@@ -658,6 +658,57 @@ extension Policy {
         return body.hasSuffix("\n") ? "\(body)\n\(item)" : "\(body)\n\n\(item)"
     }
 
+    // MARK: - Verdikt (#114)
+
+    /// Verdikt, který na draftu **platí** — moje volba, jinak návrh z nálezů.
+    ///
+    /// Moje volba přebíjí návrh vždycky a druhý klik na ni ji ruší, takže se pak vrátí návrh.
+    /// `nil` znamená „nevybráno **a** není z čeho navrhnout“ — a přesně kvůli tomu vrací
+    /// `suggestedVerdict` `nil` místo opatrného `approve`: schválit PR proto, že reviewer spadl,
+    /// je nejdražší chyba, kterou tahle aplikace umí udělat.
+    ///
+    /// **Návrhem se nic neukládá.** Draft zůstává `verdict == nil`, dokud na verdikt někdo
+    /// neklikne; tohle je počítaná odpověď na „co by odešlo“, ne zápis. Do #114 se
+    /// nepředvyplňovalo vůbec — proč se to rozhodnutí změnilo, je ve specifikaci.
+    static func effectiveVerdict(
+        of draft: ReviewDraft?,
+        suggestion: ReviewVerdict?
+    ) -> EffectiveVerdict? {
+        if let chosen = draft?.verdict {
+            return EffectiveVerdict(verdict: chosen, origin: .chosen)
+        }
+        return suggestion.map { EffectiveVerdict(verdict: $0.choice, origin: .suggested) }
+    }
+
+    /// Návrh, kterým se **smí** předvyplnit. `nil` = nepředvyplňovat.
+    ///
+    /// Na vlastním PR ne: `APPROVE` i `REQUEST_CHANGES` tam GitHub odmítne (změřeno u #62,
+    /// `PublishError.ownPullRequest`) a návrh umí právě ty dva. Předvyplněním by se k odeslání,
+    /// které skončí `422`, došlo snáz než dnes — projde tam jedině `COMMENT`, a ten se
+    /// nepředvyplňuje nikdy, protože je to vědomé „nerozhoduju“.
+    static func prefillableSuggestion(
+        _ suggestion: ReviewVerdict?,
+        author: String?,
+        viewer: String?
+    ) -> ReviewVerdict? {
+        isOwn(author: author, viewer: viewer) ? nil : suggestion
+    }
+
+    /// Je to můj vlastní PR?
+    ///
+    /// **`false`, dokud nevíme, kdo se dívá** — `viewer` je z načtené konverzace, takže by
+    /// opatrnost návrh schovala u každého PR, dokud nedorazí. Cena omylu je jedna chyba od
+    /// GitHubu, a ta si o `Jen komentář` řekne sama; schovaný návrh naproti tomu nevysvětlí nic.
+    ///
+    /// Bere **dva optionaly, ne `Conversation`**, i když `Conversation.isMine` porovnává totéž.
+    /// Právě ten stav „konverzaci nemám“ je to, o čem se tady rozhoduje, a `isMine` ho vyjádřit
+    /// neumí — má `viewer` neoptional. Řetězit to přes model by znamenalo, že se rozhodnutí dělá
+    /// v `??` u volajícího, tedy mimo `Policy` a mimo testy.
+    static func isOwn(author: String?, viewer: String?) -> Bool {
+        guard let author, let viewer else { return false }
+        return author == viewer
+    }
+
     /// Je draft psaný proti staršímu commitu, než je hlava PR?
     ///
     /// Nový commit draft **nemaže**, jen zablokuje odeslání — vlastní próza nezastarává tak
@@ -694,10 +745,20 @@ extension Policy {
     /// k obsahu draftu, protože se opravuje dopsáním textu.
     /// **Brána se předává parametrem**, protože `Policy` je bez I/O a ke konfiguraci se
     /// nedostane. Skládá ji volající při kliknutí, takže přepnutí v nastavení platí hned.
+    ///
+    /// **Návrh z nálezů verdikt zastoupí** (#114): `noVerdict` odpadá, když je z čeho navrhnout,
+    /// protože odejde právě ten návrh. Ptá se na to přes `effectiveVerdict(of:suggestion:)`, tedy
+    /// tou samou funkcí, ze které kreslí panel — dvě odpovědi na „platí nějaký verdikt?“ by se
+    /// rozešly a okno by zakázalo tlačítko nad verdiktem, který je v něm vidět.
+    ///
+    /// Výchozí `nil` u návrhu znamená „žádný“, tedy chování před #114. Default tady být smí,
+    /// protože jeho zapomenutí odeslání **zablokuje**, ne otevře — u `scope` je to obráceně
+    /// a proto tam žádný není.
     static func sendBlock(
         for draft: ReviewDraft?,
         head headSha: String?,
-        scope: PublishScope
+        scope: PublishScope,
+        suggestion: ReviewVerdict? = nil
     ) -> DraftSendBlock? {
         // Bez draftu není co posílat a hlavně není odkud vzít repo pro bránu níž.
         guard let draft else { return .nothingToSend }
@@ -707,7 +768,7 @@ extension Policy {
             return .publishingNotAllowed(draft.pullRequest.repo)
         }
         guard !draft.isEmpty else { return .nothingToSend }
-        guard draft.verdict != nil else { return .noVerdict }
+        guard effectiveVerdict(of: draft, suggestion: suggestion) != nil else { return .noVerdict }
         guard !draft.comments.contains(where: {
             $0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }) else { return .blankComment }
@@ -740,7 +801,11 @@ enum DraftSendBlock: Hashable, Sendable {
     /// v okně dělá `PullRequestDetailView.draftUnavailable`; doplňuje ho `AppStore`, protože
     /// stav načítání zná jen on.
     case headUnknown(detail: String?)
-    /// Verdikt není vybraný. `event` je v API povinný a nepředvyplňuje se.
+    /// Verdikt není vybraný **a není z čeho ho navrhnout**.
+    ///
+    /// `event` je v API povinný, takže bez něj review neodejde. Od #114 se předvyplňuje návrhem
+    /// z nálezů, takže tenhle důvod zbývá na PR, kde review neproběhlo, spadlo, ztratilo nález
+    /// nebo je jeho záznam zastaralý — tam se vybírá ručně.
     case noVerdict
     /// Draft je psaný proti staršímu commitu, než je hlava PR.
     case stale(draft: String, head: String)

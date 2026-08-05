@@ -268,8 +268,10 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
       platit změna *pravidla*, ne změna *jednoho repa*. Proti omylem odeslanému review
       nechrání seznam, ale body 4 a 5 výš a potvrzení s úplným výpisem payloadu (#68).
 
-   Co se **nezměnilo**: návrh verdiktu z nálezů (`ReviewVerdict`) je pořád jen návrh
-   zobrazený v aplikaci a sám nic neodesílá. Odesílá jen člověk. **Potvrzovací sheet je jen
+   Co se **nezměnilo**: návrh verdiktu z nálezů (`ReviewVerdict`) je pořád jen návrh a sám nic
+   neodesílá. Od #114 se jím **předvyplňuje** verdikt v panelu, takže odejít umí — ale jedině
+   tou samou cestou jako cokoli jiného: dvěma kliknutími člověka v potvrzení, ve kterém je celý
+   payload vidět a je u něj napsané, že hodnota je z návrhu. Odesílá tedy pořád jen člověk. **Potvrzovací sheet je jen
    u review** — odpověď do vlákna se podle #73 nepotvrzuje, protože je to jedna věta v diskuzi,
    dá se smazat a potvrzování každé by z okna udělalo klikačku. „Výslovný pokyn člověka“ tedy
    u review znamená dvě kliknutí na dvou různých tlačítkech, u odpovědi jedno pojmenované.
@@ -340,6 +342,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PullRequestState` | `open` / `draft` / `merged` / `closed` |
 | `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
 | `ReviewVerdict` | Návrh, co s PR udělat: `approve` / `requestChanges`. Jako jediný **není `Codable`** — neukládá se, odvozuje se z uložených nálezů |
+| `EffectiveVerdict` | Verdikt, který na draftu **platí**, a jeho původ (`suggested`/`chosen`). Taky **není `Codable`** — počítá se, viz níž |
 | `ProjectLanguage` | Čím je repo psané — klíč mapy „jazyk → sada skillů“. **Není to `Syntax.Language`**, viz níž |
 | `FindingsLanguage` | Jazyk prózy v nálezech (`cs`/`en`). Ani tohle **není `ProjectLanguage`** |
 | `FindingTranslation` | Přeložená próza nálezu. Visí vedle originálu, nepřepisuje ho |
@@ -390,6 +393,20 @@ Tři věci, které se u nich nemají rozbít:
   Python vyžaduje umět ho obarvit, a že každý repozitář vyjde jako „YAML“.
 
 Kolik nálezů blokuje, se z `ReviewState` **neodvozuje** — to je `Policy`.
+
+Nad verdiktem (#114) platí:
+
+- **`EffectiveVerdict` nese hodnotu i původ, protože samotná hodnota nestačí.** `APPROVE`
+  z návrhu aplikace a `APPROVE`, který jsem vybral, odejdou na GitHub stejně, ale v okně se
+  **musí** dát odlišit — tatáž úvaha jako u `ReviewDraftComment.Origin`. Do #114 stačila hodnota,
+  protože jiný původ neexistoval.
+- **Návrh se neukládá.** Draft zůstává `verdict == nil`, dokud na verdikt někdo neklikne, a co
+  platí, se **počítá** (`Policy.effectiveVerdict`). Kdyby se předvyplněná hodnota zapsala, vznikl
+  by draft ze samotného otevření PR — a „draft existuje“ musí znamenat „je co poslat“, protože
+  na tom stojí indikátor v řádku i mazání prázdného draftu.
+- **`ReviewVerdict` neumí `comment` a nemá.** `jen komentář` je vědomé „nerozhoduju“, tedy pravý
+  opak návrhu z nálezů; proto má `ReviewDraft.Verdict` tři případy a návrh dva, a proto se mapuje
+  jen jedním směrem (`ReviewVerdict.choice`).
 
 Nad konverzací (#63) platí:
 
@@ -1222,7 +1239,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `MarkdownText` | Vykreslený Markdown z GitHubu — viz `App/Markdown/` |
 | `DraftCommentBubbleView` | Můj rozdělaný komentář u řádku: editor, odznak původu, vyjmutí. Ve split pohledu visí jen v půlce, které se týká |
 | `DraftTextEditor` | Textové pole draftu — odložený zápis a doručení při zmizení |
-| `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt bez předvyplnění, tělo, seznam komentářů, `Odeslat review…` (u zastaralého `Zkontrolovat a odeslat…`). Obsah scrolluje, jen když se nevejde |
+| `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt **předvyplněný návrhem z nálezů** (obtažený, s popiskem), tělo, seznam komentářů, `Odeslat review…` (u zastaralého `Zkontrolovat a odeslat…`). Obsah scrolluje, jen když se nevejde |
 | `ReviewSubmissionSheet` | Potvrzení odeslání: **kontrola kotev u zastaralého draftu** (#69), pak úplný výpis payloadu, průběh, typované chyby |
 | `DraftTransferView` | První stránka toho potvrzení: stav každé kotvy (sedí / posunulo se / nevím / ztraceno) a volba, co s ní |
 | `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení |
@@ -1545,6 +1562,19 @@ Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a p
   novém pushi — odtud banner a zablokované odeslání. Přenesení na nový commit je #69.
 - **Prázdný draft se maže**, včetně toho, ze kterého se vyjme poslední komentář. „Draft
   existuje“ musí znamenat „je co poslat“, protože na tom stojí indikátor v řádku.
+- **Verdikt se předvyplňuje návrhem z nálezů (#114), ale draft o tom neví.** Co platí, počítá
+  `effectiveVerdict(for:)` z uloženého draftu a z návrhu; `setDraftVerdict` je pořád **jen moje
+  volba**, takže zrušená volba nepadá na „nevybráno“, ale zpátky na návrh. Kdyby se návrh
+  zapisoval, existoval by draft po každém PR, které si někdo jen otevřel — tedy proti pravidlu
+  o řádek výš. Je na to ten nejdůležitější test #114.
+- **Předvyplněný návrh doplní až snímek pro odeslání** (`submission(for:)`), ne mapa `drafts`.
+  Uložená hodnota tak zůstane bez verdiktu i pro restart, a přesto odejde to, co je v potvrzení
+  vidět. Vybraný verdikt to nikdy nepřepíše: volba přebíjí návrh.
+- **Na vlastním PR se návrh nenabídne** (`isOwnPullRequest`, autor z detailu proti
+  `Conversation.viewer`). GitHub tam bere jedině `COMMENT` (změřeno u #62), takže by předvyplněný
+  `APPROVE` vedl k `422`. Dokud konverzace nedorazí, **předvyplňuje se dál** — kdo se dívá, se
+  jinde nedozvíme a schovaný návrh u každého PR by byl horší než jedna měřená chyba, která si
+  o `Jen komentář` řekne sama.
 - **Prázdný komentář se zahazuje**, jakmile se text uloží prázdný. Vzniká běžně (kliknu na
   komentovat a rozmyslím si to) a GitHub takový payload odmítne — a odmítne s ním celé
   review, protože odeslání je atomické. `Policy.sendBlock` to hlídá i tak.
@@ -1615,8 +1645,16 @@ Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a p
   místo k zapomenutí víc.
 - **Konverzace se po odeslání obnovuje ručně.** `updatedAt` se odesláním review měnit nemusí,
   takže cache podle něj by moje vlastní review v `Přehledu` neukázala až do přepnutí PR.
-- **Návrh verdiktu se do potvrzení předává, ale nepředvyplňuje.** Je to totéž pravidlo jako
-  u výběru v panelu: odhad aplikace se nemá dát splést s mým rozhodnutím.
+- **Návrhem z nálezů se verdikt předvyplňuje (#114) — a snímek to musí nést.** Uložený draft
+  zůstává bez verdiktu (návrh se neukládá), takže odesílaná hodnota se do snímku doplňuje
+  v `submission(for:)`; „co je v potvrzení vidět, to se odešle“ platí dál, jen ta hodnota
+  nepochází z disku. Odkud přišla, říká `verdictOrigin` a sheet to napíše větou.
+  **Změna proti #66 a #68**, kde tady stálo, že se nepředvyplňuje, protože se odhad aplikace
+  nemá dát splést s mým rozhodnutím — odlišit se pořád musí, ale ochranu proti záměně nese sheet,
+  ne to kliknutí. Důvod je ve specifikaci.
+- **Přenesení na nový commit verdikt nesmí ztratit.** `applyTransfer` vrací **uložený** draft,
+  tedy ten bez předvyplněného návrhu — takže si ho `ReviewSubmission.transfer` doplní zpátky.
+  Bez toho by review po přenesení odešlo bez `event`u, tedy neodešlo vůbec.
 - **`ReviewSubmission` drží `ContentView`, ne detail PR ani store.** Ve storu být nesmí: objekt
   má zaniknout se zavřením sheetu, protože v něm vzniká cesta ven. V detailu taky ne, i když
   se tam zakládá — detail se kreslí jen tak dlouho, dokud je vybraný PR v seznamu z pollingu,
@@ -1860,6 +1898,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.reviewState(for:)` | Překlad stavu pracovní kopie na stav v řádku PR |
 | `Policy.isBlocking(_:categories:)` | Jediný odvozený boolean nad nálezem |
 | `Policy.suggestedVerdict(for:)` | Návrh verdiktu nad `ReviewRecord`. `nil` = není z čeho soudit |
+| `Policy.effectiveVerdict(of:suggestion:)` | Který verdikt **platí** a odkud je — moje volba, jinak návrh (#114) |
+| `Policy.prefillableSuggestion(_:author:viewer:)`, `Policy.isOwn(author:viewer:)` | Smí se návrhem předvyplnit? Na vlastním PR ne |
 | `Policy.groups(of:)` | Shoda reviewerů na `file:line` → `FindingGroup` s odznakem `2×` |
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` |
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
@@ -1968,6 +2008,18 @@ Nad odesílatelností draftu (#68) platí:
   Důvod doplňuje `AppStore.draftSendBlock`, protože `Policy` dostane jen `String?` a stav
   načítání z něj nepozná. Tentýž rozdíl dělá i `PullRequestDetailView.draftUnavailable` —
   chytilo se to vlastní revizí jako „kontrola, která jinde v repu je, a tady chybí“.
+- **Návrh z nálezů verdikt zastoupí, takže `noVerdict` odpadá** (#114) — a ptá se na to
+  `effectiveVerdict(of:suggestion:)`, tedy tou samou funkcí, ze které kreslí panel. Dvě odpovědi
+  na „platí nějaký verdikt?“ by se rozešly a okno by zakázalo tlačítko nad hodnotou, kterou má
+  předvyplněnou. **Pořadí ostatních důvodů se nemění**, takže prázdný komentář, zastarání ani
+  brána návrh nepřeskočí. Zbývá tedy na PR, kde review neproběhlo, spadlo, ztratilo nález nebo
+  je jeho záznam zastaralý — tam se vybírá ručně.
+- **Návrh sám rozdělané review nezakládá.** Neexistující i prázdný draft dá dál `nothingToSend`,
+  protože se návrh neukládá a „draft existuje“ musí znamenat „je co poslat“. Návrh proto zastupuje
+  **jen** chybějící verdikt draftu, který už nějaký obsah má — u čistého PR bez poznámek zůstává
+  jedno kliknutí, kterým se návrh přijme za svůj, a panel to říká větou.
+- **Návrh se do `sendBlock` předává s výchozím `nil`.** Default tam smí být, protože jeho
+  zapomenutí odeslání **zablokuje**, ne otevře — u `scope` je to obráceně a proto tam žádný není.
 
 ### `GitHubGateway` (`App/GitHub/`)
 
@@ -2148,6 +2200,15 @@ Nad `ReviewSubmission` (#68) platí navíc:
 - **Rozchod s návrhem z nálezů se hlásí, ale nezakazuje.** Nálezy jsou návrh a přebít se smějí;
   schválit PR, u kterého reviewer hlásí blokující nález, je ale nejdražší záměna, jakou tohle
   okno umí. `jen komentář` rozchod **není** — je to vědomé „nerozhoduju“, ne opak schválení.
+  Od #114 to platí jen pro **vědomé** přepnutí (`verdictOrigin == .chosen`): u předvyplněného
+  návrhu by okno varovalo před hodnotou, kterou navrhla sama aplikace. Hodnotami by to vyšlo
+  stejně, ale viselo by to na shodě, kterou nic nedrží.
+- **Odesílaný verdikt může být návrh, a sheet to napíše** (#114). `verdictOrigin` nese, odkud
+  hodnota je; bez toho by předvyplněný `APPROVE` v posledním okně před odesláním vypadal jako
+  moje rozhodnutí. Výchozí `.chosen` v `init` odpovídá draftu, který si verdikt nese sám.
+- **Přenesení na nový commit verdikt nezahodí.** `applyTransfer` vrací **uložený** draft, tedy
+  ten bez předvyplněného návrhu, takže si ho `transfer` doplní zpátky. Bez toho by review po
+  přenesení odešlo bez `event`u — tedy neodešlo vůbec.
 
 Nad `ThreadSubmission` (#73) platí:
 
@@ -2549,13 +2610,23 @@ Nad `HTTPGetting` (#31) platí:
   místo toho, aby musel běžet nad sandboxovým identifikátorem; že výchozí konfigurace nepovolí
   nic, drží vlastní test. Plus to, že **každý důvod má
   vlastní neprázdnou větu** — prázdná by v okně vypadala jako mlčky zakázané tlačítko.
+
+  U **předvyplněného verdiktu** (#114) to hlavní není, že s návrhem `noVerdict` zmizí, ale že
+  návrh **nepřeskočí ostatní důvody** — prázdný komentář, zastarání ani bránu — a že z prázdného
+  ani neexistujícího draftu nedělá „je co poslat“. `effectiveVerdict` má vlastní sadu na každý
+  stav: bez návrhu, s návrhem, volba přebíjející návrh, `comment` proti návrhu a **zrušená volba
+  padající zpátky na návrh**. K tomu vlastní PR: shodný autor a `viewer` nepředvyplní, neznámý
+  `viewer` předvyplňuje dál.
 - **`ReviewSubmission` (#68)** — proti `FakeReviewPublisher`, takže se **nic neodesílá**.
   To hlavní není, co se odeslalo, ale kdy se **neodešle nebo neuklidí**: selhání nesmí spustit
   úklid draftu (a musí jít zkusit znovu), po úspěchu se nesmí odeslat podruhé a zrušení se
   nesmí hlásit jako chyba. Plus zavírání sheetu — u odpovědi, jejímuž stavu nerozumíme,
   zůstává otevřený — a rozchod s návrhem z nálezů, u kterého se hlídá i to, že `jen komentář`
-  rozchod **není**. Pozor na past: `ReviewDraftComment` si generuje `UUID`, takže se draft
-  musí uložit do proměnné, ne vyrobit dvakrát.
+  rozchod **není** a že jím **předvyplněný návrh** není (#114), zatímco vědomé přepnutí pořád
+  varuje. Plus to, že přenesení na nový commit předvyplněný verdikt **nezahodí** — přenesený
+  draft přichází ze storu bez verdiktu, takže by review odešlo bez `event`u. Pozor na past:
+  `ReviewDraftComment` si generuje `UUID`, takže se draft musí uložit do proměnné, ne vyrobit
+  dvakrát.
 
   Dvě věci se testují tabulkou chyb, protože jsou to celé **třídy**, ne jednotlivé případy:
   po které chybě se smí zkusit znovu a po které ne (`mightHaveReachedGitHub`).
@@ -2599,6 +2670,15 @@ Nad `HTTPGetting` (#31) platí:
   komentář, který se zahodí a s ním i prázdný draft; zastarání po novém commitu, které text
   **nechá**; a že „nevím, jaká je hlava“ se za zastaralé nevydává. Čeká se točením přes
   `Task.yield()`, protože zápis běží v tasku.
+- **`AppStore` — předvyplněný verdikt (#114)** — proti **skutečnému** `ReviewStore`
+  i `ReviewDraftStore` nad dočasnou složkou, protože obsah disku je to, co rozhoduje.
+  **Nejdůležitější test celého issue** je, že po doběhlém review a nule úprav je verdikt navržený,
+  ale draft **neexistuje** — ani v paměti, ani v cache, ani po restartu. Vedle toho: blokující
+  nález navrhne `requestChanges`, bez doběhlého review se nepředvyplní nic (a `sendBlock` dál
+  hlásí `noVerdict`), moje volba přebije návrh a zrušení ho vrátí (přičemž draft, ve kterém nic
+  nezůstalo, se maže), a na vlastním PR se návrh nenabídne, kdežto bez načtené konverzace ano.
+  Nakonec to, co odejde: snímek z `submission(for:)` nese návrh s `verdictOrigin == .suggested`,
+  **na disku pořád leží draft bez verdiktu**, a vybraná hodnota se návrhem nepřepíše.
 - **Bubliny rozdělaných komentářů** — že komentář visí pod svým řádkem, že `left` sedne na
   **odebraný** řádek (tatáž past jako u vláken v #64), že se komentář na řádku mimo diff
   nekreslí, že se dva na jednom řádku neslijí a že pořadí je nález → vlákno → můj komentář.
@@ -3035,6 +3115,15 @@ a `transferDraft` v `AppStore`. **Rozdělané review psané proti staršímu com
 odeslat proti novému** a žádná kotva se nepřenese tiše: u každého komentáře je vidět, jestli sedí,
 posunula se, nevíme (draft z doby před #69), nebo se ztratila — a co s ní bude. Tím je **hotový
 milník M6**.
+
+Předvyplněný verdikt hotový (issue #114) — `EffectiveVerdict` v `App/Models/`,
+`Policy.effectiveVerdict`/`prefillableSuggestion`, třetí stav tlačítka v `DraftPanel`
+a `verdictOrigin` v `ReviewSubmission`. **U PR s doběhlým review je verdikt navržený a dá se
+odeslat, aniž bych na něj klikal** — a přitom se nikam neukládá: draft na disku zůstává bez
+verdiktu, takže „draft existuje“ dál znamená „je co poslat“. Z panelu i ze sheetu je poznat, že
+je to návrh, ne moje volba. **Mění rozhodnutí z #66 a #68**, podle kterého se verdikt
+nepředvyplňuje; ochranu proti záměně nese potvrzovací sheet, ne to kliknutí (viz specifikace).
+Na vlastním PR se návrh nenabídne, protože tam GitHub bere jedině `COMMENT`.
 
 Víceřádkové komentáře hotové (issue #110) — rozsah v `DraftAnchor.start`, `Policy.commentRange`,
 `start_line`/`start_side` v payloadu, tažení přes řádky (`RangeDragActions`, `DiffRowFrames`)

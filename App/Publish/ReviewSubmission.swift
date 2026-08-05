@@ -25,9 +25,18 @@ final class ReviewSubmission: Identifiable {
     /// Přepsat ho umí **jedině přenesení na nový commit** (#69), a to je výslovná akce člověka
     /// v tomtéž okně — takže „co je v potvrzení vidět, to se odešle“ platí dál.
     private(set) var draft: ReviewDraft
-    /// Návrh verdiktu z nálezů — v sheetu stojí **vedle** zvoleného, aby se dal porovnat.
-    /// Nepředvyplňuje nic; volba už padla v tabu `Moje review`.
+    /// Návrh verdiktu z nálezů — v sheetu stojí **vedle** odesílaného, aby se dal porovnat.
+    ///
+    /// Od #114 se jím verdikt draftu **předvyplňuje**, takže odesílaná hodnota může být přímo
+    /// tenhle návrh; že se to stalo, říká `verdictOrigin`. Do #114 tady stálo, že nepředvyplňuje
+    /// nic a volba padla v panelu — důvod změny je ve specifikaci.
     let suggestion: ReviewVerdict?
+    /// Odkud se vzal verdikt ve snímku: moje volba, nebo návrh z nálezů (#114).
+    ///
+    /// Sheet je poslední brána, takže musí říct **odkud ta hodnota přišla** — jinak by
+    /// předvyplněný `APPROVE` vypadal jako moje rozhodnutí. `nil` znamená, že verdikt nemá ani
+    /// draft (rozbitý stav: `Policy.sendBlock` by sheet nepustil otevřít).
+    let verdictOrigin: EffectiveVerdict.Origin?
 
     /// Kotvy ke kontrole, když je draft psaný proti staršímu commitu (#69). Prázdné, když
     /// není co kontrolovat.
@@ -62,10 +71,14 @@ final class ReviewSubmission: Identifiable {
     /// nešlo. Dělá to `AppStore`, protože přenesený draft se ukládá na disk.
     private let applyTransfer: @MainActor ([UUID: DraftTransferChoice]) -> ReviewDraft?
 
+    /// Výchozí `verdictOrigin` je `.chosen`: draft, který si verdikt nese sám, ho má od člověka.
+    /// Předvyplněný návrh (#114) doplňuje `AppStore.submission(for:)` a musí si o původ říct —
+    /// mlčení by v sheetu vypadalo jako moje rozhodnutí.
     init(
         pullRequest: PullRequestSummary,
         draft: ReviewDraft,
         suggestion: ReviewVerdict?,
+        verdictOrigin: EffectiveVerdict.Origin? = .chosen,
         anchors: [DraftAnchorCheck] = [],
         needsTransfer: Bool = false,
         targetHead: String? = nil,
@@ -76,6 +89,7 @@ final class ReviewSubmission: Identifiable {
         self.pullRequest = pullRequest
         self.draft = draft
         self.suggestion = suggestion
+        self.verdictOrigin = verdictOrigin
         self.anchors = anchors
         self.targetHead = targetHead
         self.publisher = publisher
@@ -93,6 +107,7 @@ final class ReviewSubmission: Identifiable {
         pullRequest: PullRequestSummary,
         draft: ReviewDraft,
         suggestion: ReviewVerdict?,
+        verdictOrigin: EffectiveVerdict.Origin? = .chosen,
         anchors: [DraftAnchorCheck] = [],
         needsTransfer: Bool = false,
         targetHead: String? = nil,
@@ -106,6 +121,7 @@ final class ReviewSubmission: Identifiable {
             pullRequest: pullRequest,
             draft: draft,
             suggestion: suggestion,
+            verdictOrigin: verdictOrigin,
             anchors: anchors,
             needsTransfer: needsTransfer,
             targetHead: targetHead,
@@ -125,7 +141,11 @@ final class ReviewSubmission: Identifiable {
     /// review pošle, takže druhé okno by byl jen mezikrok. Odesílá se pořád **dvěma kliknutími
     /// na dvě různá tlačítka**, což je pravidlo z #68 — jen to první je teď „přenést“.
     func transfer(choices: [UUID: DraftTransferChoice]) {
-        guard state == .checking, let transferred = applyTransfer(choices) else { return }
+        guard state == .checking, var transferred = applyTransfer(choices) else { return }
+        // Přenesení hýbe kotvami, ne verdiktem. Předvyplněný návrh (#114) v **uloženém** draftu
+        // není, takže by se tímhle krokem ztratil a review by odešlo bez `event`u — tedy by se
+        // vůbec neodeslalo. Vybraný verdikt to nepřepíše: doplňuje se jen tam, kde žádný není.
+        if transferred.verdict == nil { transferred.verdict = draft.verdict }
         draft = transferred
         anchors = []
         state = .ready
@@ -135,15 +155,26 @@ final class ReviewSubmission: Identifiable {
     /// `nil` znamená rozbitý stav, ne nabídku hádat.
     var verdict: ReviewDraft.Verdict? { draft.verdict }
 
-    /// Rozchází se moje volba s tím, co navrhly nálezy?
+    /// Odejde předvyplněný návrh z nálezů, který nikdo nepřepsal? (#114)
+    ///
+    /// Sheet to musí napsat: je to poslední brána a hodnota, která odejde, se od mého rozhodnutí
+    /// musí dát odlišit i tady, ne jen v panelu.
+    var isVerdictSuggested: Bool { verdictOrigin == .suggested }
+
+    /// Rozchází se **moje volba** s tím, co navrhly nálezy?
     ///
     /// Není to zákaz — nálezy jsou návrh a člověk je od toho, aby je přebil. Ale schválit PR,
     /// u kterého reviewer hlásí blokující nález, je ta nejdražší záměna, jakou tohle okno umí,
     /// takže se to v potvrzení říká nahlas.
+    ///
+    /// Předvyplněný verdikt (#114) rozchod **nikdy** není: hodnotou se návrhu rovná, ale hlavně
+    /// tady zbývá přesně na rozchod, který vznikl **vědomým** přepnutím. Ptát se jen hodnot by
+    /// vyšlo stejně, jen by to viselo na shodě, kterou nic nedrží.
     var contradictsSuggestion: Bool {
+        guard verdictOrigin == .chosen else { return false }
         switch (suggestion, draft.verdict) {
-        case (.requestChanges, .approve), (.approve, .requestChanges): true
-        default: false
+        case (.requestChanges, .approve), (.approve, .requestChanges): return true
+        default: return false
         }
     }
 

@@ -139,7 +139,8 @@ rebuildu neobchází a aplikaci ukončuje tou samou cestou jako ⌘Q.
 Nad diffem jsou **chipy reviewerů**: u každého je vidět, co udělal (`3 nálezy`, `čisté`,
 `běží`, `selhalo`, `nejisté`) a kliknutím se jeho nálezy schovají z bublin i z tabulky.
 Vpravo je **návrh verdiktu** — je to doporučení, ne akce. Sám nic neodešle; odeslat review
-umí jedině člověk, a jedinou cestou (viz úvod).
+umí jedině člověk, a jedinou cestou (viz úvod). Tentýž návrh **předvyplní verdikt** v tabu
+`Moje review`, takže se u něj pozná, jestli hodnota je z nálezů, nebo moje.
 Filtr návrhem nehýbe, aby se schováním revieweera nedal „vyrobit“ approve.
 
 V tabu **Průběh** běží časová osa toho, co reviewer právě dělá — který soubor čte, co
@@ -255,9 +256,20 @@ permalink na commit, který se vyrenderuje jako obarvený úryvek. Týká se to 
 a řádků, které v diffu nejsou (rozbalený kontext). Tlačítko to říká dopředu, včetně důvodu,
 a po kliknutí se panel přepne na tab, kam text spadl.
 
-V tabu **Moje review** je tělo, seznam všech řádkových komentářů a **výběr verdiktu bez
-předvyplnění** — návrh z nálezů se do něj nepřepisuje, aby se odhad aplikace nedal splést
-s mým rozhodnutím. Seznam komentářů je jediné úplné místo: komentář na řádku, který
+V tabu **Moje review** je tělo, seznam všech řádkových komentářů a výběr verdiktu, který je
+**předvyplněný návrhem z nálezů**. Takový verdikt je jen **obtažený** a stojí u něj popisek
+`návrh z nálezů`; vyplněné tlačítko se zaškrtnutím zůstává vyhrazené mé volbě, která návrh
+vždycky přebije (a druhý klik ji zruší, takže se návrh vrátí). Když návrh není — review
+neproběhlo, spadlo, nebo je jeho záznam zastaralý — zůstává verdikt nevybraný a odeslat se nedá:
+schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou tahle aplikace umí udělat.
+**Na vlastním PR se návrh nenabídne** a panel řekne proč: GitHub tam přijme jedině `Jen komentář`.
+
+Návrh se přitom **nikam neukládá**. Rozdělané review z otevření PR nevznikne — dokud se do něj
+něco nenapíše, žádný draft není a ikona v řádku seznamu nesvítí. Předvyplněný verdikt tedy
+zastoupí chybějící volbu u review, které už nějaký obsah má; u čistého PR bez poznámek se návrh
+přijme za svůj jedním kliknutím a panel to říká větou.
+
+Seznam komentářů je jediné úplné místo: komentář na řádku, který
 z diffu zmizel, se nemá kde ukázat jako bublina, ale tady je i s možností ho vyjmout.
 Prázdný komentář se neuloží a odeslání zablokuje, protože GitHub takový payload odmítne —
 a odmítne s ním celé review.
@@ -283,8 +295,10 @@ druhý dialog nad sheetem**. Obojí se za týden odklikává poslepu a oslabí t
 potvrzení. Co zůstává, je pojmenování akce — tlačítko se jmenuje
 `Odeslat APPROVE pro owner/repo#123` — a to, že **není výchozí**: Enterem se nic neodešle.
 
-Návrh verdiktu z nálezů stojí v potvrzení **vedle** toho zvoleného. Nepředvyplňuje nic, ale
-když se rozchází (schvaluju PR, u kterého reviewer hlásí blokující nález), řekne to nahlas.
+Návrh verdiktu z nálezů stojí v potvrzení **vedle** toho odesílaného. Když je odesílaná hodnota
+z návrhu, sheet to napíše (`Je to návrh z nálezů — ručně jsi verdikt nevybral.`), aby se v posledním
+okně před odesláním nedala splést s mým rozhodnutím. A když se **moje** volba s návrhem rozchází
+(schvaluju PR, u kterého reviewer hlásí blokující nález), řekne to nahlas.
 
 Proč odeslat nejde, je vidět **předem** — vedle zakázaného tlačítka, ne až po pokusu:
 chybějící verdikt, prázdný řádkový komentář, draft proti staršímu commitu, nebo repo, které

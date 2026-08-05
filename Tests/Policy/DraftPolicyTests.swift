@@ -509,6 +509,99 @@ struct DraftPolicyTests {
         #expect(Policy.isStale(draft, head: "def"))
     }
 
+    // MARK: - Verdikt a jeho původ (#114)
+
+    /// Bez návrhu a bez volby neplatí nic — a je to **vlastní odpověď**, ne opatrné `approve`.
+    /// Právě proto umí `suggestedVerdict` vrátit `nil`: schválit PR, u kterého reviewer spadl,
+    /// je nejdražší chyba, kterou tahle aplikace umí udělat.
+    @Test("Bez návrhu a bez volby neplatí žádný verdikt")
+    func hasNoVerdictWithoutASuggestion() {
+        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", body: "tělo")
+
+        #expect(Policy.effectiveVerdict(of: draft, suggestion: nil) == nil)
+        #expect(Policy.effectiveVerdict(of: nil, suggestion: nil) == nil)
+    }
+
+    /// **To hlavní z #114:** návrh platí, i když na verdikt nikdo neklikl — a je z něj vidět,
+    /// že ho nikdo nevybral.
+    @Test("Návrh platí a nese svůj původ")
+    func fillsInTheSuggestion() {
+        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", body: "tělo")
+
+        let effective = Policy.effectiveVerdict(of: draft, suggestion: .requestChanges)
+
+        #expect(effective == EffectiveVerdict(verdict: .requestChanges, origin: .suggested))
+        #expect(effective?.isSuggested == true)
+        // A totéž bez draftu: verdikt platí, i když se rozdělané review ještě nezaložilo.
+        #expect(Policy.effectiveVerdict(of: nil, suggestion: .approve)?.origin == .suggested)
+    }
+
+    /// Moje volba přebíjí návrh **vždycky** — nálezy jsou návrh a člověk je od toho, aby je
+    /// přebil.
+    @Test("Moje volba přebije návrh")
+    func theChoiceWinsOverTheSuggestion() {
+        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", verdict: .approve)
+
+        #expect(
+            Policy.effectiveVerdict(of: draft, suggestion: .requestChanges)
+                == EffectiveVerdict(verdict: .approve, origin: .chosen)
+        )
+    }
+
+    /// `jen komentář` je vědomé „nerozhoduju“, tedy pravý opak návrhu — takže se
+    /// nepředvyplňuje nikdy, ale vybrat se dá i proti němu.
+    @Test("Jen komentář návrh přebije a sám se nenavrhuje")
+    func commentIsAlwaysAChoice() {
+        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", verdict: .comment)
+
+        #expect(
+            Policy.effectiveVerdict(of: draft, suggestion: .approve)
+                == EffectiveVerdict(verdict: .comment, origin: .chosen)
+        )
+        // Návrh `comment` neexistuje: `ReviewVerdict` má dva případy a oba se mapují na sebe.
+        #expect(ReviewVerdict.approve.choice == .approve)
+        #expect(ReviewVerdict.requestChanges.choice == .requestChanges)
+    }
+
+    /// Druhý klik na vybraný verdikt volbu ruší (`setDraftVerdict(nil)`) — a nekončí
+    /// u „nevybráno“, ale zpátky u návrhu. Ten platí, dokud si člověk nevybere.
+    @Test("Zrušená volba padne zpátky na návrh")
+    func fallsBackToTheSuggestionWhenTheChoiceIsCleared() {
+        var draft = ReviewDraft(pullRequest: pr, headSha: "abc", body: "tělo", verdict: .approve)
+        draft.verdict = nil
+
+        #expect(
+            Policy.effectiveVerdict(of: draft, suggestion: .approve)
+                == EffectiveVerdict(verdict: .approve, origin: .suggested)
+        )
+    }
+
+    /// Na vlastním PR GitHub `APPROVE` ani `REQUEST_CHANGES` nevezme (změřeno u #62) — a návrh
+    /// umí právě ty dva. Předvyplnit ho tam znamená dovést člověka k `422` snáz než dnes.
+    @Test("Na vlastním PR se návrh nepředvyplní")
+    func doesNotPrefillOnMyOwnPullRequest() {
+        #expect(Policy.prefillableSuggestion(.approve, author: "ondra", viewer: "ondra") == nil)
+        #expect(Policy.isOwn(author: "ondra", viewer: "ondra"))
+    }
+
+    /// Cizí PR je ten běžný případ a předvyplňuje se normálně.
+    @Test("Na cizím PR se návrh předvyplní")
+    func prefillsOnSomebodyElsesPullRequest() {
+        #expect(Policy.prefillableSuggestion(.approve, author: "kolega", viewer: "ondra") == .approve)
+        #expect(!Policy.isOwn(author: "kolega", viewer: "ondra"))
+    }
+
+    /// **Neznámý `viewer` znamená „předvyplň“**, ne „radši ne“: kdo se dívá, víme až z načtené
+    /// konverzace, takže by opatrnost návrh schovala u každého PR, dokud nedorazí. Cena omylu
+    /// je jedna chyba od GitHubu, a ta si o `Jen komentář` řekne sama.
+    @Test("Dokud nevíme, kdo se dívá, předvyplňuje se dál")
+    func prefillsWhileTheViewerIsUnknown() {
+        #expect(Policy.prefillableSuggestion(.approve, author: "ondra", viewer: nil) == .approve)
+        #expect(Policy.prefillableSuggestion(.approve, author: nil, viewer: "ondra") == .approve)
+        #expect(!Policy.isOwn(author: "ondra", viewer: nil))
+        #expect(!Policy.isOwn(author: nil, viewer: "ondra"))
+    }
+
     // MARK: - Odesílatelnost
 
     /// Brána je součástí odpovědi `sendBlock`, takže se testy odesílatelnosti musí odehrávat
@@ -639,6 +732,52 @@ struct DraftPolicyTests {
 
         #expect(Policy.sendBlock(for: draft, head: "def", scope: scope) == .stale(draft: "abc", head: "def"))
         #expect(!draft.isEmpty)
+    }
+
+    /// **Návrh z nálezů verdikt zastoupí** (#114): odejde právě on, takže by `noVerdict` zakázalo
+    /// tlačítko nad hodnotou, kterou má panel předvyplněnou.
+    @Test("S návrhem z nálezů se odeslat dá i bez kliknutí na verdikt")
+    func sendsWithASuggestedVerdict() {
+        let draft = ReviewDraft(pullRequest: pr, headSha: "abc", body: "tělo")
+
+        #expect(Policy.sendBlock(for: draft, head: "abc", scope: scope, suggestion: .approve) == nil)
+        // Bez návrhu zůstává důvod na svém místě — tam se vybírá ručně.
+        #expect(Policy.sendBlock(for: draft, head: "abc", scope: scope, suggestion: nil) == .noVerdict)
+    }
+
+    /// Návrh **nepřeskakuje ostatní důvody**: pořadí kopíruje `GhReviewPublisher.submit`, takže
+    /// rozchod by hlásil jiný důvod, než na kterém odeslání doopravdy skončí.
+    @Test("Návrh nepřebije ostatní důvody, proč se odeslat nedá")
+    func aSuggestionDoesNotSkipTheOtherBlocks() {
+        let blank = ReviewDraft(
+            pullRequest: pr,
+            headSha: "abc",
+            comments: [
+                ReviewDraftComment(path: "a.php", anchor: DraftAnchor(line: 1, side: .right), body: " ", origin: .own),
+            ]
+        )
+        let stale = ReviewDraft(pullRequest: pr, headSha: "abc", body: "tělo")
+
+        #expect(Policy.sendBlock(for: blank, head: "abc", scope: scope, suggestion: .approve) == .blankComment)
+        #expect(
+            Policy.sendBlock(for: stale, head: "def", scope: scope, suggestion: .approve)
+                == .stale(draft: "abc", head: "def")
+        )
+        #expect(
+            Policy.sendBlock(for: stale, head: "abc", scope: .standard, suggestion: .approve)
+                == .publishingNotAllowed(pr.repo)
+        )
+        // A prázdný (i neexistující) draft zůstává „není co poslat“: návrh se neukládá, takže
+        // sám o sobě rozdělané review nezakládá.
+        #expect(Policy.sendBlock(for: nil, head: "abc", scope: scope, suggestion: .approve) == .nothingToSend)
+        #expect(
+            Policy.sendBlock(
+                for: ReviewDraft(pullRequest: pr, headSha: "abc"),
+                head: "abc",
+                scope: scope,
+                suggestion: .approve
+            ) == .nothingToSend
+        )
     }
 
     /// Věta u každého důvodu musí něco říkat — hláška, ze které nevyplývá další krok, je jen
