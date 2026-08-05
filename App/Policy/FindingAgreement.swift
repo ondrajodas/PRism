@@ -68,11 +68,18 @@ extension Policy {
         }
 
         guard !dismissals.isEmpty else { return groups }
+        // Jde se po **nálezech ve skupině** a mapa se jen dotazuje, ne filtruje: filtr přes
+        // celou mapu s lineárním hledáním uvnitř je O(skupiny × odmítnutí × nálezy) a tohle
+        // běží při každém překreslení diffu.
         return groups.map { group in
             var group = group
-            group.dismissals = dismissals.filter { key, _ in
-                group.findings.contains { Policy.key(of: $0) == key }
+            var mine: [FindingKey: FindingDismissal] = [:]
+            for finding in group.findings {
+                let key = Policy.key(of: finding)
+                guard let dismissal = dismissals[key] else { continue }
+                mine[key] = dismissal
             }
+            group.dismissals = mine
             return group
         }
     }

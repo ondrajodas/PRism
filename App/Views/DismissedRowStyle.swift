@@ -12,26 +12,31 @@ struct DismissedRowStyle: ViewModifier {
     /// `nil` = jen ke čtení; menu se pak nekreslí.
     let actions: FindingActions?
 
-    func body(content: Content) -> some View {
-        content
-            // Ztlumit, ne schovat. Odmítnutý nález zabírá jeden řádek naspod tabulky a je
-            // pořád k přečtení — schovaný by se nedal odlišit od neexistujícího a nešlo by
-            // zkontrolovat, co jsem odmítl.
-            .opacity(row.dismissal == nil ? 1 : 0.5)
-            .contextMenu { menu }
+    /// Menu se přidává **jen** když je co v něm nabídnout. `contextMenu` s prázdným obsahem
+    /// otevře po pravém kliku prázdné okno, které nic neudělá — a je to horší než nic, protože
+    /// zároveň přebije menu, které by se jinak nabídlo odjinud.
+    @ViewBuilder func body(content: Content) -> some View {
+        // Ztlumit, ne schovat. Odmítnutý nález zabírá jeden řádek naspod tabulky a je pořád
+        // k přečtení — schovaný by se nedal odlišit od neexistujícího a nešlo by zkontrolovat,
+        // co jsem odmítl.
+        let dimmed = content.opacity(row.dismissal == nil ? 1 : 0.5)
+
+        if let actions {
+            dimmed.contextMenu { menu(actions) }
+        } else {
+            dimmed
+        }
     }
 
-    @ViewBuilder private var menu: some View {
-        if let actions {
-            if row.dismissal == nil {
-                ForEach(FindingDismissal.Reason.allCases, id: \.self) { reason in
-                    Button("Označit jako \(reason.label)") {
-                        actions.dismiss(row.finding, reason)
-                    }
+    @ViewBuilder private func menu(_ actions: FindingActions) -> some View {
+        if row.dismissal == nil {
+            ForEach(FindingDismissal.Reason.allCases, id: \.self) { reason in
+                Button("Označit jako \(reason.label)") {
+                    actions.dismiss(row.finding, reason)
                 }
-            } else {
-                Button("Vrátit mezi platné") { actions.restore(row.finding) }
             }
+        } else {
+            Button("Vrátit mezi platné") { actions.restore(row.finding) }
         }
     }
 }

@@ -28,10 +28,13 @@ extension Policy {
         dismissals: [FindingKey: FindingDismissal] = [:]
     ) -> [Finding] {
         let blocking = Set(categories.map(normalized(category:)))
-        return findings.sorted {
-            sortKey(of: $0, blocking: blocking, dismissals: dismissals)
-                < sortKey(of: $1, blocking: blocking, dismissals: dismissals)
-        }
+        // Klíč se skládá **jednou na nález**, ne při každém porovnání: staví se z něj řetězce
+        // (`lowercased()` u kategorie a od #113 celý `Policy.key(of:)`), takže v komparátoru
+        // by se tatáž práce udělala log n krát.
+        return findings
+            .map { (finding: $0, key: sortKey(of: $0, blocking: blocking, dismissals: dismissals)) }
+            .sorted { $0.key < $1.key }
+            .map(\.finding)
     }
 
     /// Nálezy po kategoriích, ve stejném pořadí jako `sorted`.
