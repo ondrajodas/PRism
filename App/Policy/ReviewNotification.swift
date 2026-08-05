@@ -58,20 +58,19 @@ extension Policy {
         }
     }
 
-    /// „3 nálezy, 1 blokující“ — a `blocking` se do textu dostane jen tehdy, když je z čeho.
+    /// „3 nálezy, z toho 1 blokující“ — a `blocking` se do textu dostane jen tehdy, když je
+    /// z čeho.
+    ///
+    /// Skloňuje `Plural.czech`, tedy tentýž helper, jakým se řídí odznak stavu a chipy
+    /// reviewerů. Vlastní `switch` tady být nesmí: byla by to čtvrtá kopie téhož pravidla
+    /// a rozešly by se — tenhle soubor to zkusil a vyšlo z toho „3 blokujících“ (nález
+    /// Copilota na #131). U „blokující“ jsou přitom tvary jen **dva**, protože jednotné číslo
+    /// a 2–4 vyjdou stejně; `one` a `few` jsou proto shodné, ne opomenutí.
     private static func findingsText(_ findings: Int, blocking: Int) -> String {
-        let found = "\(findings) \(findingWord(findings))"
+        let found = Plural.czech(findings, one: "nález", few: "nálezy", many: "nálezů")
         guard blocking > 0 else { return "\(found), nic blokujícího." }
-        return "\(found), z toho \(blocking) blokující\(blocking == 1 ? "" : "ch")."
-    }
-
-    /// Čeština má tři tvary a notifikace je krátký text, kde je to vidět.
-    private static func findingWord(_ count: Int) -> String {
-        switch count {
-        case 1: "nález"
-        case 2 ... 4: "nálezy"
-        default: "nálezů"
-        }
+        let blocks = Plural.czech(blocking, one: "blokující", few: "blokující", many: "blokujících")
+        return "\(found), z toho \(blocks)."
     }
 
     /// Kolik z platných nálezů záznamu blokuje.

@@ -1771,6 +1771,11 @@ Notifikace o doběhlém review (#82) k tomu přidávají:
 - **Blokující počet se bere z platných nálezů** (`activeFindings`), takže odmítnutý nález
   (#113) nevyrušuje. Text říká i to, když **nic** neblokuje — bez té půlky věty by „3 nálezy“
   vypadaly stejně vážně jako tři blokující.
+- **Skloňuje `Plural.czech`**, ne vlastní `switch`. Byla by to čtvrtá kopie téhož pravidla
+  (odznak stavu, chipy, osa) a kopie se rozešly hned: první podoba skloňovala „blokující“
+  jedničkou proti ostatním, z čehož vycházelo „3 blokujících“ (nález Copilota na #131).
+  U „blokující“ jsou tvary jen **dva** — jednotné číslo a 2–4 vyjdou stejně — takže `one`
+  a `few` jsou shodné záměrně.
 - **Titulek nese repo a číslo**, ne „Review doběhlo“: notifikací může viset víc a bez
   identifikace se nepozná, které patří ke kterému PR. Skládá se přes `description`
   identifikátoru, takže se číslo nikde neformátuje přes locale — z `#21663` by jinak vyšlo

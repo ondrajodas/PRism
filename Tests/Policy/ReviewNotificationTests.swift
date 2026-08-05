@@ -43,10 +43,18 @@ struct ReviewNotificationTests {
         #expect(body(.completed(findings: count)) == expected)
     }
 
-    @Test("Skloňuje se i blokující počet")
-    func inflectsTheBlockingCount() {
-        #expect(body(.completed(findings: 5), blocking: 2) == "5 nálezů, z toho 2 blokujících.")
-        #expect(body(.completed(findings: 5), blocking: 1) == "5 nálezů, z toho 1 blokující.")
+    @Test("Skloňuje se i blokující počet", arguments: [
+        (1, "1 blokující"),
+        (2, "2 blokující"),
+        (4, "4 blokující"),
+        (5, "5 blokujících"),
+        (12, "12 blokujících"),
+    ])
+    func inflectsTheBlockingCount(blocking: Int, expected: String) {
+        // U „blokující“ jsou tvary **dva**, ne tři: 1 i 2–4 vyjdou stejně a teprve od pěti se
+        // mění. Původně se to skloňovalo jako „jednička proti ostatním“, z čehož vycházelo
+        // „3 blokujících“ — chytil to Copilot na #131, takže je na to tabulka.
+        #expect(body(.completed(findings: 20), blocking: blocking) == "20 nálezů, z toho \(expected).")
     }
 
     @Test("Čisté review je kratší, ale poznat se musí")
