@@ -220,3 +220,111 @@ extension ReviewNotificationTests {
         }
     }
 }
+
+/// Seskupování notifikací (#87).
+///
+/// Čistá funkce, takže **bez čekání v reálném čase** — a to je i důvod, proč se slévá nad
+/// seznamem z jednoho tiku a ne přes vlastní okno: zadání chce test bez zdržení.
+@Suite("Policy — seskupování notifikací")
+struct NotificationGroupingTests {
+    private func pr(_ text: String) -> PRIdentifier { PRIdentifier(text)! }
+
+    private func notification(_ ids: [String], titles: [String: String] = [:]) -> PullRequestNotification? {
+        Policy.newPullRequestsNotification(
+            for: ids.map(pr),
+            titles: Dictionary(uniqueKeysWithValues: titles.map { (pr($0.key), $0.value) })
+        )
+    }
+
+    @Test("Jedno PR dá plnou hlášku s titulkem, ne souhrn")
+    func aSinglePullRequestKeepsItsTitle() {
+        // „1 nový PR k review“ říká **méně** než jeho název.
+        let result = notification(["cli/cli#1"], titles: ["cli/cli#1": "Opravit součet"])
+
+        #expect(result?.title == "Nový PR k review — cli/cli#1")
+        #expect(result?.body == "Opravit součet")
+    }
+
+    @Test("Tři PR dají jednu notifikaci, ne tři")
+    func threePullRequestsBecomeOne() {
+        let result = notification(["cli/cli#1", "cli/cli#2", "b/b#7"])
+
+        #expect(result?.title == "3 nové PR k review")
+        #expect(result?.body == "cli/cli#1, cli/cli#2, b/b#7")
+    }
+
+    @Test("Souhrn skloňuje počet", arguments: [
+        (2, "2 nové PR k review"),
+        (4, "4 nové PR k review"),
+        (5, "5 nových PR k review"),
+        (12, "12 nových PR k review"),
+    ])
+    func inflectsTheSummaryCount(count: Int, expected: String) {
+        let ids = (1 ... count).map { "cli/cli#\($0)" }
+
+        #expect(notification(ids)?.title == expected)
+    }
+
+    @Test("Dlouhý seznam se zkrátí a řekne kolik zbývá")
+    func shortensALongList() {
+        // Notifikace má dva řádky, takže se vypíšou tři jménem a zbytek spočítá. Počet je ta
+        // informace, podle které se pozná, jestli se do fronty jít podívat hned.
+        let ids = (1 ... 7).map { "cli/cli#\($0)" }
+
+        let result = notification(ids)
+
+        #expect(result?.body == "cli/cli#1, cli/cli#2, cli/cli#3 a 4 další")
+    }
+
+    @Test("Zbytek se skloňuje taky")
+    func inflectsTheRemainder() {
+        let ids = (1 ... 9).map { "cli/cli#\($0)" }
+
+        #expect(notification(ids)?.body.hasSuffix("a 6 dalších") == true)
+    }
+
+    @Test("Klik na souhrn vybere první PR")
+    func clickingASummarySelectsTheFirst() {
+        // Nevybrat nic by znamenalo kliknutí, po kterém se nestane nic; seznam je řazený od
+        // naposledy změněného, takže první je ten, u kterého má smysl začít.
+        let result = notification(["cli/cli#9", "cli/cli#1"])
+
+        #expect(result?.pullRequest == pr("cli/cli#9"))
+    }
+
+    @Test("Prázdný seznam nedá nic")
+    func nothingForAnEmptyList() {
+        #expect(notification([]) == nil)
+    }
+
+    @Test("Nový výsledek review přepíše ten starý, hlášku o novém PR ne")
+    func replacesOnlyWithinTheSameGroup() {
+        // Výsledek review nad PR je **jeden** a nový ho přepíše, ať byl předchozí jakýkoli —
+        // jinak by po opakovaném běhu zůstala vedle „3 nálezy“ viset stará hláška „nenašel
+        // žádný nález“, tedy tvrzení, které už neplatí. Tenhle test původně tvrdil opak
+        // a chytil vadu v návrhu identity.
+        let clean = Policy.reviewNotification(for: pr("cli/cli#1"), state: .clean)!
+        let findings = Policy.reviewNotification(for: pr("cli/cli#1"), state: .completed(findings: 2))!
+        let failure = Policy.reviewNotification(for: pr("cli/cli#1"), state: .failed(detail: "spadlo"))!
+        let newcomer = notification(["cli/cli#1"])!
+
+        #expect(clean.identifier == findings.identifier)
+        #expect(findings.identifier == failure.identifier)
+        // Že PR přišel a jak dopadlo jeho review, jsou dvě různé informace.
+        #expect(newcomer.identifier != clean.identifier)
+        // A hláška o jiném PR nesmí přepsat nic z toho.
+        #expect(Policy.reviewNotification(for: pr("cli/cli#2"), state: .clean)!.identifier != clean.identifier)
+    }
+
+    @Test("Vlákno je podle PR, ať systém řadí jeho hlášky k sobě")
+    func threadsByPullRequest() {
+        // Podle PR, ne podle repa: u firemního monorepa by seskupení po repu slilo věci, které
+        // spolu nemají nic společného.
+        let review = Policy.reviewNotification(for: pr("cli/cli#1"), state: .clean)!
+        let newcomer = notification(["cli/cli#1"])!
+        let elsewhere = Policy.reviewNotification(for: pr("cli/cli#2"), state: .clean)!
+
+        #expect(review.threadIdentifier == newcomer.threadIdentifier)
+        #expect(review.threadIdentifier != elsewhere.threadIdentifier)
+    }
+}

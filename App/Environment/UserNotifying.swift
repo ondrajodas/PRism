@@ -39,6 +39,49 @@ struct PullRequestNotification: Sendable, Equatable {
     /// Co ji vyvolalo (#86). Nese si to notifikace sama, aby brána nemusela hádat z textu —
     /// druhá cesta k témuž údaji by se s první rozešla.
     let event: NotificationEvent
+
+    /// Identita, pod kterou se notifikace doručí (#87).
+    ///
+    /// **Stejná identita nahradí to, co ještě visí** — a je to schválně: druhý výsledek review
+    /// nad tímtéž PR je oprava toho prvního, ne druhá informace.
+    ///
+    /// Skládá se z PR a **skupiny** události, ne z události samotné: všechny tři výsledky review
+    /// se navzájem přepisují (`NotificationEvent.replacementGroup`), takže po opakovaném běhu
+    /// nezůstane vedle „3 nálezy“ viset stará hláška „nenašel žádný nález“. Hláška o novém PR
+    /// má vlastní skupinu, protože to je jiná informace.
+    ///
+    /// **Změna proti #88**, kde to bylo náhodné `UUID`, aby se nic nenahrazovalo. Tehdy to bylo
+    /// správně (slévání ještě nebylo rozhodnuté), teď je náhrada ta žádaná vlastnost.
+    var identifier: String {
+        "\(pullRequest)|\(event.replacementGroup)"
+    }
+
+    /// Do kterého vlákna notifikace patří (#87) — podle něj je systém řadí k sobě.
+    ///
+    /// **Podle PR**, ne podle repa: notifikace o témž pull requestu patří k sobě (nový PR, pak
+    /// jeho review), kdežto seskupení po repu by u firemního monorepa slilo věci, které spolu
+    /// nemají nic společného.
+    ///
+    /// **Souhrn za víc PR má vlastní vlákno** (`Policy.newPullRequestsThread`): není o tom
+    /// jednom PR, který v něm náhodou stojí první, takže zařadit ho pod jeho vlákno by bylo
+    /// zavádějící. Proto je to uložené pole s výchozí hodnotou, ne odvozená vlastnost — jinak
+    /// by se souhrn nemohl přihlásit jinam a komentář by tvrdil něco, co kód nedělá (což byl
+    /// nález Copilota na #134).
+    let threadIdentifier: String
+
+    init(
+        pullRequest: PRIdentifier,
+        title: String,
+        body: String,
+        event: NotificationEvent,
+        threadIdentifier: String? = nil
+    ) {
+        self.pullRequest = pullRequest
+        self.title = title
+        self.body = body
+        self.event = event
+        self.threadIdentifier = threadIdentifier ?? pullRequest.description
+    }
 }
 
 /// Jak dopadlo doručení.

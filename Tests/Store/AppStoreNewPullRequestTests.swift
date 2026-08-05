@@ -199,13 +199,36 @@ struct AppStoreNewPullRequestTests {
 }
 
 extension AppStoreNewPullRequestTests {
-    @Test("Selhání u jednoho PR neopakuje ta, která dorazila")
-    func doesNotRepeatWhatAlreadyArrived() async {
-        // Kdyby jedno selhání zdrželo zápis celého snímku, příští tik by poslal znovu i PR,
-        // která už dorazila — a při opakovaném selhání jedné z nich by se ty ostatní posílaly
-        // každou minutu. Chytil to Copilot na #132.
+    @Test("Víc nových PR naráz dá jednu notifikaci")
+    func groupsSeveralNewcomersIntoOne() async {
+        // Deset hlášek naráz je první důvod, proč si člověk notifikace vypne (#87). Slévá se
+        // seznam z jednoho tiku, takže na to není potřeba žádné čekací okno — a tenhle test
+        // proto neběží v reálném čase.
         let center = FakeNotificationCenter()
-        center.answer(with: .failed("centrum neodpovědělo"), for: PRIdentifier("cli/cli#3")!)
+        let gateway = FakeGitHubGateway([
+            .success([summary("cli/cli#1")]),
+            .success([
+                summary("cli/cli#1"),
+                summary("cli/cli#2"),
+                summary("cli/cli#3"),
+                summary("b/b#9"),
+            ]),
+        ])
+        let store = store(gateway, center: center)
+
+        await store.refresh()
+        await store.refresh()
+
+        #expect(center.delivered.count == 1)
+        #expect(center.delivered.first?.title == "3 nové PR k review")
+    }
+
+    @Test("Nedoručený souhrn se zkusí znovu jako celek")
+    func retriesTheWholeSummary() async {
+        // Doručení je jedno, takže i výsledek je jeden: nedoručený souhrn nechá **všechna**
+        // nová PR mimo snímek. Do #87 se zapisovalo po jednotlivých PR, protože se i po
+        // jednotlivých posílalo.
+        let center = FakeNotificationCenter(outcome: .failed("centrum neodpovědělo"))
         let gateway = FakeGitHubGateway([
             .success([summary("cli/cli#1")]),
             .success([summary("cli/cli#1"), summary("cli/cli#2"), summary("cli/cli#3")]),
@@ -215,15 +238,12 @@ extension AppStoreNewPullRequestTests {
 
         await store.refresh()
         await store.refresh()
-        #expect(center.delivered.map(\.pullRequest) == [
-            PRIdentifier("cli/cli#2"), PRIdentifier("cli/cli#3"),
-        ])
+        #expect(center.delivered.count == 1)
 
+        center.answer(with: .delivered)
         await store.refresh()
 
-        // Třetí tik smí zkusit **jen** to selhané, ne obě.
-        #expect(center.delivered.map(\.pullRequest) == [
-            PRIdentifier("cli/cli#2"), PRIdentifier("cli/cli#3"), PRIdentifier("cli/cli#3"),
-        ])
+        #expect(center.delivered.count == 2)
+        #expect(center.delivered.last?.title == "2 nové PR k review")
     }
 }
