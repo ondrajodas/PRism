@@ -53,4 +53,15 @@ enum NotificationDelivery: Sendable, Equatable {
     case notAuthorized
     /// Systém doručení odmítl. Text je to, co k tomu řekl.
     case failed(String)
+
+    /// Má cenu to zkusit znovu? (#85)
+    ///
+    /// **Jen u `failed`.** Zakázané oprávnění se opakováním nespraví, takže zkoušet ho každou
+    /// minutu je volání za nic — a `delivered` se opakovat nemá vůbec. Rozlišení bydlí tady,
+    /// ne u volajícího: kdyby si ho každý odvozoval sám, druhá kopie by u nového případu
+    /// výčtu odpověděla jinak.
+    var isWorthRetrying: Bool {
+        if case .failed = self { return true }
+        return false
+    }
 }

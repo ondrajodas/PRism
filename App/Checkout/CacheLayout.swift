@@ -38,6 +38,10 @@ struct CacheLayout: Sendable, Equatable {
     /// píše uživatel, tohle aplikace.
     var autoRunsFile: URL { root.appending(path: "auto-runs.json") }
 
+    /// Které PR už aplikace ohlásila jako nové (#85). Snímek posledního úspěšného tiku, ne
+    /// rostoucí log — viz `AnnouncedPullRequests`.
+    var announcedFile: URL { root.appending(path: "announced.json") }
+
     /// Výsledky review jednoho PR na jednom commitu: `reviews/<owner>/<repo>/<pr>-<sha>.json`.
     ///
     /// Zanořeno pod repo ze stejného důvodu jako stromy: ploché jméno se nedá filtrovat
