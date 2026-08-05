@@ -165,16 +165,22 @@ extension Policy {
                 few: "nové PR k review",
                 many: "nových PR k review"
             ),
-            body: summary(of: pullRequests, titles: titles),
-            event: .newPullRequest
+            body: summary(of: pullRequests),
+            event: .newPullRequest,
+            // Vlastní vlákno: souhrn není o tom jednom PR, který v něm stojí první.
+            threadIdentifier: newPullRequestsThread
         )
     }
 
+    /// Vlákno, do kterého patří souhrn za víc nových PR (#87).
+    static let newPullRequestsThread = "new-pull-requests"
+
     /// Které PR souhrn jmenuje. Delší seznam se zkrátí — notifikace má dva řádky.
-    private static func summary(
-        of pullRequests: [PRIdentifier],
-        titles: [PRIdentifier: String]
-    ) -> String {
+    ///
+    /// **Titulky se sem nepředávají schválně.** Vypisují se identifikátory, protože tři názvy
+    /// PR se do dvou řádků banneru nevejdou a `owner/repo#číslo` řekne, čeho se to týká. Do
+    /// #134 tu parametr `titles` byl a nepoužíval se — mrtvá větev, kterou našel Copilot.
+    private static func summary(of pullRequests: [PRIdentifier]) -> String {
         let listed = pullRequests.prefix(summaryLimit).map(\.description).joined(separator: ", ")
         let rest = pullRequests.count - summaryLimit
         guard rest > 0 else { return listed }

@@ -1858,11 +1858,14 @@ final class AppStore {
     /// oprávnění ano**: opakovat každou minutu něco, co je zakázané, nemá cenu a po povolení
     /// se ta PR ve frontě přečtou v okně. Že notifikace nechodí, je vidět ve stavovém řádku.
     ///
-    /// Do snímku jde **fronta bez těch, u kterých doručení selhalo**, ne „všechno nebo nic“.
-    /// Kdyby jedno selhání zdrželo celý zápis, příští tik by poslal znovu i PR, která už
-    /// dorazila — a při opakovaném selhání jedné z nich by se ty ostatní posílaly každou
-    /// minutu. Chytil to Copilot na #132; řeší se to snímkem, ne pamětí, takže to platí
-    /// i přes restart.
+    /// Zápis je od #87 **všechno nebo nic**, a vyplývá to ze slévání: za tik jde jedna
+    /// notifikace, takže je jedno doručení a jeden výsledek. Nedoručený souhrn proto nechá
+    /// všechna nová PR mimo snímek a příští tik je zkusí znovu jako celek.
+    ///
+    /// Do #87 se zapisovalo **po jednotlivých PR** (fronta bez těch, u kterých doručení
+    /// selhalo), protože se i po jednotlivých posílalo — bez toho by při opakovaném selhání
+    /// jedné notifikace chodily ty ostatní každou minutu (nález Copilota na #132). Se souhrnem
+    /// ta situace nastat nemůže: buď odešel celý, nebo vůbec.
     private func announceNewPullRequests(in summaries: [PullRequestSummary]) async {
         guard notifications != nil, let announced else { return }
         let listed = summaries.map(\.id)

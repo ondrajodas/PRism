@@ -237,7 +237,7 @@ struct NotificationGroupingTests {
     }
 
     @Test("Jedno PR dá plnou hlášku s titulkem, ne souhrn")
-    func asinglePullRequestKeepsItsTitle() {
+    func aSinglePullRequestKeepsItsTitle() {
         // „1 nový PR k review“ říká **méně** než jeho název.
         let result = notification(["cli/cli#1"], titles: ["cli/cli#1": "Opravit součet"])
 

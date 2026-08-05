@@ -68,7 +68,7 @@ struct NotificationSettingsTests {
     }
 
     @Test("Rozbitá hodnota aplikaci neumlčí")
-    func abrokenValueDoesNotSilenceTheApp() throws {
+    func aBrokenValueDoesNotSilenceTheApp() throws {
         // Opačná volba než u `allowsPublishing`, kde se překlep sráží na zakázáno: tam nesmí
         // otevřít cestu ven, kdežto tady je nejhorším následkem notifikace, o kterou si nikdo
         // neřekl — a ta se dá zavřít. Umlčená aplikace se naopak pozná až tím, že nic nepřišlo.
@@ -83,7 +83,7 @@ struct NotificationSettingsTests {
     }
 
     @Test("Rozbitý přepínač nezahodí ty ostatní")
-    func abrokenToggleKeepsTheOthers() throws {
+    func aBrokenToggleKeepsTheOthers() throws {
         // Celá sekce se kvůli jednomu překlepu zahazovat nemá — jinak by se s ním vypnulo
         // i to, co je napsané správně.
         let json = Data("""

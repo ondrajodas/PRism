@@ -60,9 +60,27 @@ struct PullRequestNotification: Sendable, Equatable {
     ///
     /// **Podle PR**, ne podle repa: notifikace o témž pull requestu patří k sobě (nový PR, pak
     /// jeho review), kdežto seskupení po repu by u firemního monorepa slilo věci, které spolu
-    /// nemají nic společného. Souhrn za víc PR má vlastní vlákno — viz `Policy`.
-    var threadIdentifier: String {
-        pullRequest.description
+    /// nemají nic společného.
+    ///
+    /// **Souhrn za víc PR má vlastní vlákno** (`Policy.newPullRequestsThread`): není o tom
+    /// jednom PR, který v něm náhodou stojí první, takže zařadit ho pod jeho vlákno by bylo
+    /// zavádějící. Proto je to uložené pole s výchozí hodnotou, ne odvozená vlastnost — jinak
+    /// by se souhrn nemohl přihlásit jinam a komentář by tvrdil něco, co kód nedělá (což byl
+    /// nález Copilota na #134).
+    let threadIdentifier: String
+
+    init(
+        pullRequest: PRIdentifier,
+        title: String,
+        body: String,
+        event: NotificationEvent,
+        threadIdentifier: String? = nil
+    ) {
+        self.pullRequest = pullRequest
+        self.title = title
+        self.body = body
+        self.event = event
+        self.threadIdentifier = threadIdentifier ?? pullRequest.description
     }
 }
 

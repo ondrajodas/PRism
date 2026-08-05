@@ -379,8 +379,38 @@ v nich zastaral hned další verzí.
    řaditelná tabulka pro nálezy, které ke konkrétnímu řádku nepatří (chybějící testy,
    architektonické poznámky).
 
+6. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
+   a o doběhlém review. Klik na notifikaci ten pull request vybere a dá okno dopředu.
+
 Nálezy jsou klíčované head commitem PR. Když přijdou nové commity, předchozí nálezy se
 označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
+
+### Notifikace
+
+Co přijde a co v tom bude:
+
+| Kdy | Co uvidím |
+|---|---|
+| Nový PR ve frontě | `Nový PR k review — owner/repo#123` a název PR |
+| Víc nových PR naráz | Jeden souhrn: `4 nové PR k review` a tři z nich jménem plus `a 1 další` |
+| Review našlo nálezy | `owner/repo#123` a `3 nálezy, z toho 1 blokující.` |
+| Review je čisté | `Reviewer nenašel žádný nález.` |
+| Review se nepovedlo | Důvod, se kterým se dá něco dělat — spadlá session, timeout bez nálezů, selhaná pracovní kopie |
+
+**Jedna notifikace na pull request**, ne jedna na skill: reviewery jedou paralelně a tři
+hlášky za jednu věc jsou tři vyrušení. Nový výsledek review přepíše ten starý, aby vedle
+`3 nálezy` nezůstala viset stará hláška `nenašel žádný nález`. Notifikace o témž PR systém řadí
+k sobě.
+
+**Co se hlásí, se nastavuje** — záložka `Notifikace` v okně nastavení: hlavní vypínač a čtyři
+události (nový PR, review s nálezy, čisté review, selhání). Ve výchozím stavu je zapnuté všechno.
+S vypnutým hlavním přepínačem se aplikace **nezeptá ani na systémové oprávnění**.
+
+**Po prvním spuštění nepřijde lavina.** Aplikace si drží snímek poslední fronty, takže PR, která
+tam byla, než začala hlídat, za nová nepovažuje. Ohlásí se až devátý.
+
+Notifikace fungují jedině z `/Applications` — `bin/run.sh` tam aplikaci instaluje sám, viz
+*Build*.
 
 ## Klíčová rozhodnutí
 
@@ -394,6 +424,7 @@ označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
 | **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
 | **Odesílání na GitHub** | Platí pro review i pro odpovědi do vláken. Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl. |
+| **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |
 | **Dostupnost služeb** | Jede na skutečném provozu, ne na sondě: `gh auth status` na timeru by stál spawn procesu a přístup do keychainu — a projde i tehdy, když skutečné volání selže na rate limitu. Status pages jsou proti tomu levné (`components.json` s `ETagem`) a odpovídají na to, co z volání nezjistíme: jestli je problém na jejich straně. |
 
 ## Požadavky
