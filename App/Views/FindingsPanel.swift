@@ -27,7 +27,12 @@ struct FindingsPanel: View {
     let pullRequest: PRIdentifier
     /// Rozdělané review. `nil` = ještě se nezačalo psát.
     var draft: ReviewDraft?
+    /// Verdikt, který platí — moje volba, nebo návrh z nálezů (#114). Nebere se z `draft`:
+    /// návrh se neukládá, takže v draftu není.
+    var draftVerdict: EffectiveVerdict?
     var isDraftStale = false
+    /// Je to můj vlastní PR? Pak se návrh nepředvyplňuje a panel to vysvětlí.
+    var isOwnPullRequest = false
     /// Proč se do draftu nedá psát. `nil` = dá se.
     var draftUnavailable: String?
     var draftActions = DraftActions()
@@ -232,7 +237,9 @@ struct FindingsPanel: View {
             DraftPanel(
                 pullRequest: pullRequest,
                 draft: draft,
+                verdict: draftVerdict,
                 isStale: isDraftStale,
+                isOwnPullRequest: isOwnPullRequest,
                 unavailable: draftUnavailable,
                 actions: draftActions,
                 jump: jumpToComment

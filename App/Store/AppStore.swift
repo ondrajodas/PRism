@@ -1243,9 +1243,9 @@ final class AppStore {
 
     /// Vybere verdikt, nebo volbu zruší (`nil`).
     ///
-    /// Nepředvyplňuje se ani návrhem z nálezů: `event` je to jediné, co GitHubu říká, co
-    /// s PR udělat, a předvyplněný odhad aplikace by se v okně nedal odlišit od mého
-    /// rozhodnutí.
+    /// Tudy chodí **jen moje volba** — tedy klik v panelu. Návrh z nálezů (#114) se tímhle
+    /// nezapisuje: platí, dokud si člověk nevybere, a počítá ho `effectiveVerdict(for:)`.
+    /// Zrušená volba proto nekončí u „nevybráno“, ale u návrhu, když je z čeho.
     func setDraftVerdict(_ verdict: ReviewDraft.Verdict?, for pr: PRIdentifier) {
         mutateDraft(for: pr) { $0.verdict = verdict }
     }
@@ -1280,7 +1280,14 @@ final class AppStore {
     /// nepozná rozdíl mezi „načítá se“ a „nepovedlo se to“. Slíbit „hned to bude“ nad chybou,
     /// která sama nezmizí, je přitom horší než mlčet.
     func draftSendBlock(for pr: PRIdentifier) -> DraftSendBlock? {
-        let block = Policy.sendBlock(for: drafts[pr], head: head(of: pr), scope: publishScope)
+        let block = Policy.sendBlock(
+            for: drafts[pr],
+            head: head(of: pr),
+            scope: publishScope,
+            // Návrh z nálezů verdikt zastoupí (#114), takže `noVerdict` nesmí hlásit nic, co
+            // by panel v tu chvíli ukazoval jako předvyplněné.
+            suggestion: prefillableSuggestion(for: pr)
+        )
         guard case .headUnknown = block, case .failed(let detail) = detailStates[pr] else {
             return block
         }
@@ -1289,14 +1296,47 @@ final class AppStore {
 
     /// Návrh verdiktu z nálezů. `nil` = není z čeho soudit.
     ///
-    /// V potvrzení odeslání stojí **vedle** zvoleného verdiktu, aby se dalo porovnat —
-    /// nepředvyplňuje nic.
+    /// V potvrzení odeslání stojí **vedle** odesílaného verdiktu, aby se dalo porovnat. Čím se
+    /// předvyplňuje, říká `prefillableSuggestion(for:)` — na vlastním PR se návrh nenabízí,
+    /// ale tady zůstává, protože „nálezy říkají approve“ je pravda i tam.
     func suggestedVerdict(for pr: PRIdentifier) -> ReviewVerdict? {
         guard let record = reviewRecords[pr] else { return nil }
         return Policy.suggestedVerdict(
             for: record,
             categories: resolved(for: pr.repo).blockingCategories
         )
+    }
+
+    /// Verdikt, který na PR **platí** — moje volba, jinak návrh z nálezů (#114).
+    ///
+    /// Panel z něj kreslí třetí stav („návrh z nálezů“, obtažený), odeslání ho doplní do
+    /// snímku. **Nikam se neukládá**: draft na disku zůstává bez verdiktu, dokud na něj někdo
+    /// neklikne, jinak by draft vznikl ze samotného otevření PR.
+    func effectiveVerdict(for pr: PRIdentifier) -> EffectiveVerdict? {
+        Policy.effectiveVerdict(of: drafts[pr], suggestion: prefillableSuggestion(for: pr))
+    }
+
+    /// Návrh, kterým se smí předvyplnit — na vlastním PR žádný.
+    private func prefillableSuggestion(for pr: PRIdentifier) -> ReviewVerdict? {
+        Policy.prefillableSuggestion(
+            suggestedVerdict(for: pr),
+            author: author(of: pr),
+            viewer: conversation(for: pr)?.viewer
+        )
+    }
+
+    /// Je to můj vlastní PR? `false`, dokud se nenačetla konverzace — kdo se dívá, je jen v ní.
+    ///
+    /// Panel z toho skládá větu o tom, že tam GitHub bere jedině `Jen komentář`; bez ní by
+    /// nepředvyplněný verdikt vypadal jako chybějící návrh.
+    func isOwnPullRequest(_ pr: PRIdentifier) -> Bool {
+        Policy.isOwn(author: author(of: pr), viewer: conversation(for: pr)?.viewer)
+    }
+
+    /// Autor PR z dotaženého detailu. `nil` = ještě nevíme.
+    private func author(of pr: PRIdentifier) -> String? {
+        guard case .loaded(let detail, _) = detailStates[pr] else { return nil }
+        return detail.author
     }
 
     /// Složí jedno odeslání — snímek toho, co je teď v draftu.
@@ -1319,10 +1359,19 @@ final class AppStore {
         guard draftSendBlock(for: id) == nil || (transfer && draftSendBlock(for: id)?.isStale == true) else {
             return nil
         }
+        // Verdikt, který odejde, může být **návrh** (#114). Do snímku se proto doplní tady:
+        // „co je v potvrzení vidět, to se odešle“ platí dál, jen ta hodnota nepochází z disku.
+        // Uložený draft ho nedostane — návrh se neukládá.
+        let effective = effectiveVerdict(for: id)
+        var snapshot = draft
+        // Vlastní volba přebíjí návrh, takže `effective` nikdy neruší vybraný verdikt; `??` je
+        // pojistka proti tomu, aby snímek o hodnotu přišel, kdyby se to rozešlo.
+        snapshot.verdict = effective?.verdict ?? draft.verdict
         return ReviewSubmission(
             pullRequest: pullRequest,
-            draft: draft,
+            draft: snapshot,
             suggestion: suggestedVerdict(for: id),
+            verdictOrigin: effective?.origin,
             anchors: transfer ? draftAnchorStates(for: id) : [],
             needsTransfer: transfer,
             targetHead: transfer ? head(of: id) : nil,

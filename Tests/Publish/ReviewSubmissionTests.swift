@@ -76,6 +76,7 @@ struct ReviewSubmissionTests {
         _ publisher: FakeReviewPublisher,
         draft: ReviewDraft? = nil,
         suggestion: ReviewVerdict? = nil,
+        verdictOrigin: EffectiveVerdict.Origin? = .chosen,
         cleanups: Cleanups = Cleanups(),
         anchors: [DraftAnchorCheck] = [],
         needsTransfer: Bool = false,
@@ -86,6 +87,7 @@ struct ReviewSubmissionTests {
             pullRequest: summary(),
             draft: draft ?? self.draft(),
             suggestion: suggestion,
+            verdictOrigin: verdictOrigin,
             anchors: anchors,
             needsTransfer: needsTransfer,
             targetHead: targetHead,
@@ -93,6 +95,73 @@ struct ReviewSubmissionTests {
             afterSuccess: { cleanups.record() },
             applyTransfer: { _ in transferred }
         )
+    }
+
+    // MARK: - Předvyplněný verdikt (#114)
+
+    /// Odejde to, co je v snímku vidět — i když ta hodnota pochází z **návrhu**, ne z kliknutí.
+    /// A rozchod s návrhem to není: `contradictsSuggestion` zbývá na **vědomé** přepnutí, takže
+    /// by tady varovalo před hodnotou, kterou navrhla sama aplikace.
+    @Test("Předvyplněný návrh odejde a rozchod to není")
+    func sendsASuggestedVerdict() async {
+        let publisher = FakeReviewPublisher(always: .success(review()))
+        let draft = ReviewDraft(pullRequest: pr, headSha: "aaaa1111", body: "tělo", verdict: .approve)
+        let submission = submission(
+            publisher,
+            draft: draft,
+            suggestion: .approve,
+            verdictOrigin: .suggested
+        )
+
+        #expect(submission.isVerdictSuggested)
+        #expect(!submission.contradictsSuggestion)
+
+        await submission.send()
+
+        #expect(publisher.submitted == [draft])
+    }
+
+    /// Rozchod, který vznikl **vědomým** přepnutím, se hlásí dál — schválit PR, u kterého
+    /// reviewer hlásí blokující nález, je nejdražší záměna, jakou tohle okno umí.
+    @Test("Vědomé přepnutí návrhu se pořád hlásí")
+    func stillWarnsAboutADeliberateContradiction() {
+        let submission = submission(
+            FakeReviewPublisher(always: .success(review())),
+            draft: ReviewDraft(pullRequest: pr, headSha: "aaaa1111", verdict: .approve),
+            suggestion: .requestChanges,
+            verdictOrigin: .chosen
+        )
+
+        #expect(submission.contradictsSuggestion)
+        #expect(!submission.isVerdictSuggested)
+    }
+
+    /// Přenesení na nový commit (#69) hýbe **kotvami, ne verdiktem**. Předvyplněný návrh
+    /// v uloženém draftu není, takže by se tím krokem ztratil a review by odešlo bez `event`u —
+    /// tedy by neodešlo vůbec.
+    @Test("Přenesení nezahodí předvyplněný verdikt")
+    func keepsASuggestedVerdictThroughTheTransfer() async {
+        let publisher = FakeReviewPublisher(always: .success(review()))
+        // Tak, jak přenesený draft přijde ze store: bez verdiktu, protože se návrh neukládá.
+        let transferred = ReviewDraft(pullRequest: pr, headSha: "bbbb2222", body: "tělo")
+        let submission = submission(
+            publisher,
+            draft: ReviewDraft(pullRequest: pr, headSha: "aaaa1111", body: "tělo", verdict: .approve),
+            suggestion: .approve,
+            verdictOrigin: .suggested,
+            needsTransfer: true,
+            targetHead: "bbbb2222",
+            transferred: transferred
+        )
+
+        submission.transfer(choices: [:])
+
+        #expect(submission.state == .ready)
+        #expect(submission.draft.verdict == .approve)
+        #expect(submission.draft.headSha == "bbbb2222")
+
+        await submission.send()
+        #expect(publisher.submitted.first?.verdict == .approve)
     }
 
     // MARK: - Kontrola proti novému commitu (#69)

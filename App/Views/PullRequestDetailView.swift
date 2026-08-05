@@ -145,7 +145,11 @@ struct PullRequestDetailView: View {
                 isRunning: store.isReviewing(pullRequest.id),
                 pullRequest: pullRequest.id,
                 draft: store.draft(for: pullRequest.id),
+                // Verdikt jde vedle draftu, ne z něj: předvyplněný návrh (#114) se neukládá,
+                // takže v draftu není a panel by nad ním ukazoval „nevybráno“.
+                draftVerdict: store.effectiveVerdict(for: pullRequest.id),
                 isDraftStale: store.isDraftStale(for: pullRequest.id),
+                isOwnPullRequest: store.isOwnPullRequest(pullRequest.id),
                 draftUnavailable: draftUnavailable,
                 draftActions: draftActions,
                 jumpToComment: jumpToComment,

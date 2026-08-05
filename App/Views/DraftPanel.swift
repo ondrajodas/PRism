@@ -14,8 +14,16 @@ struct DraftPanel: View {
     /// a ta rozhoduje, kam se doručí rozepsaný text při přepnutí PR.
     let pullRequest: PRIdentifier
     let draft: ReviewDraft?
+    /// Verdikt, který platí — moje volba, nebo **návrh z nálezů** (#114). `nil` = nevybráno
+    /// a není z čeho navrhnout.
+    ///
+    /// Nebere se z `draft.verdict`: návrh v draftu není (neukládá se), takže by panel ukazoval
+    /// „nevybráno“ nad hodnotou, která by odešla.
+    var verdict: EffectiveVerdict?
     /// Je draft psaný proti staršímu commitu, než je hlava PR?
     var isStale = false
+    /// Je to můj vlastní PR? Pak se návrh nepředvyplňuje a panel to musí vysvětlit.
+    var isOwnPullRequest = false
     /// Proč se do draftu nedá psát. `nil` = dá se.
     var unavailable: String?
     var actions = DraftActions()
@@ -44,7 +52,9 @@ struct DraftPanel: View {
                 if isStale { staleBanner }
                 if let unavailable { unavailableNote(unavailable) }
                 topRow
+                if let ownPullRequestNote { unavailableNote(ownPullRequestNote) }
                 if let sendBlockNote { unavailableNote(sendBlockNote) }
+                if let suggestionOnlyNote { unavailableNote(suggestionOnlyNote) }
                 editors
             }
             .padding(.horizontal, 16)
@@ -145,7 +155,26 @@ struct DraftPanel: View {
         return block.userDescription
     }
 
-    /// Verdikt **bez předvyplnění**: dokud nic nesvítí, nikdo nevybral.
+    /// Předvyplněný návrh **sám review nezakládá** (#114), takže tlačítko odeslat zatím není.
+    ///
+    /// Návrh se neukládá, takže „draft existuje“ dál znamená „je co poslat“ — na tom stojí
+    /// indikátor v řádku seznamu i mazání prázdného draftu. Bez téhle věty by chybějící tlačítko
+    /// nad předvyplněným verdiktem vypadalo jako závada; s ní je z ní vidět, že stačí jedno
+    /// kliknutí. Ukazuje se jen v tom jednom stavu, kdy je co vysvětlovat.
+    private var suggestionOnlyNote: String? {
+        guard draft == nil, verdict?.isSuggested == true else { return nil }
+        // Neslibuje se, že odeslání **půjde**: brána na repo, zastarání ani neznámá hlava PR
+        // odsud vidět nejsou, takže „a půjde odeslat“ by tvrdilo víc, než tahle věta ví.
+        return "Návrh je předvyplněný, ale rozdělané review ještě neexistuje — poslat se dá teprve to. Založíš ho kliknutím na verdikt, tělem review nebo komentářem."
+    }
+
+    /// Verdikt **předvyplněný návrhem z nálezů** (#114) — do té doby se nepředvyplňoval vůbec.
+    ///
+    /// Změnilo se to proto, že ochrana proti záměně verdiktu neleží v tom kliknutí, ale za ním:
+    /// potvrzovací sheet s úplným výpisem payloadu, tlačítko pojmenované akcí, které **není
+    /// výchozí**, a pre-flight na `headSha`. Klik v panelu byl proti tomu duplikát, který
+    /// v převažující většině případů opisoval, co aplikace už spočítala. Co se jím chránilo,
+    /// zůstalo: z okna je pořád vidět, jestli je hodnota moje volba, nebo návrh.
     ///
     /// Tři tlačítka místo `Pickeru`: ten musí mít vybranou hodnotu, takže by v něm musela být
     /// čtvrtá, falešná („nevybráno“) — a hodnota, kterou GitHubu posílám jako `event`, se od
@@ -155,52 +184,97 @@ struct DraftPanel: View {
             Text("Verdikt:")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            ForEach(ReviewDraft.Verdict.allCases, id: \.self) { verdict in
-                verdictButton(verdict)
+            ForEach(ReviewDraft.Verdict.allCases, id: \.self) { choice in
+                verdictButton(choice)
             }
-            if draft?.verdict == nil {
-                Text("nevybráno")
+            if let verdictCaption {
+                Text(verbatim: verdictCaption)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
         }
     }
 
-    /// Vybraný verdikt je **vyplněný a se zaškrtnutím**, ne jen obarvený.
+    /// Popisek za tlačítky. U mojí volby žádný — to říká vyplněné tlačítko se zaškrtnutím.
+    private var verdictCaption: String? {
+        switch verdict?.origin {
+        case .chosen: nil
+        case .suggested: "návrh z nálezů"
+        case nil: "nevybráno"
+        }
+    }
+
+    /// **Vybráno je vyplněné a se zaškrtnutím, návrh jen obtažený, nevybráno bez barvy.**
     ///
-    /// Je to hodnota, která jde do `event` — tedy to, co GitHub s PR udělá. Rozdíl mezi
-    /// „vybráno“ a „nevybráno“ proto nemá stát jen na odstínu textu: barvy se v tmavém
-    /// režimu i u barvosleposti sbíhají a splést si `Vyžádat změny` se `Schválit` je ta
-    /// nejdražší záměna, jakou tohle okno umí.
-    @ViewBuilder private func verdictButton(_ verdict: ReviewDraft.Verdict) -> some View {
-        let isChosen = draft?.verdict == verdict
+    /// Je to hodnota, která jde do `event` — tedy to, co GitHub s PR udělá. Rozdíl mezi „aplikace
+    /// hádá“ a „rozhodl jsem“ proto nemá stát jen na odstínu: barvy se v tmavém režimu i u
+    /// barvosleposti sbíhají a splést si `Vyžádat změny` se `Schválit` je ta nejdražší záměna,
+    /// jakou tohle okno umí. Vyplnění se zaškrtnutím zůstává vyhrazené **mé** volbě, takže se
+    /// tvar, ikona i popisek za tlačítky mění naráz.
+    @ViewBuilder private func verdictButton(_ choice: ReviewDraft.Verdict) -> some View {
+        let origin = verdict?.verdict == choice ? verdict?.origin : nil
+        let isChosen = origin == .chosen
         let button = Button {
             // Druhé kliknutí volbu ruší — jinak by se vybraný verdikt nedal vzít zpátky
-            // a draft by šel zrušit jedině celý.
-            actions.setVerdict(isChosen ? nil : verdict)
+            // a draft by šel zrušit jedině celý. Zrušená volba spadne zpátky na návrh, ne na
+            // „nevybráno“: návrh platí, dokud si nevyberu.
+            actions.setVerdict(isChosen ? nil : choice)
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: isChosen ? "checkmark.circle.fill" : verdict.symbolName)
-                Text(verbatim: verdict.czechLabel)
+                Image(systemName: isChosen ? "checkmark.circle.fill" : choice.symbolName)
+                Text(verbatim: choice.czechLabel)
             }
             .font(isChosen ? .callout.weight(.semibold) : .callout)
         }
         .disabled(unavailable != nil)
-        .help(help(for: verdict))
+        .help(help(for: choice, origin: origin))
 
-        if isChosen {
-            button.buttonStyle(.borderedProminent).tint(verdict.tint)
-        } else {
+        switch origin {
+        case .chosen:
+            button.buttonStyle(.borderedProminent).tint(choice.tint)
+        case .suggested:
+            // Obtažení kreslí `overlay`, ne `tint`: ten u `.bordered` obarví text a to je zase
+            // jen odstín. Poloměr sedí na tvar macOS tlačítka — vyladěné na offscreen renderu.
+            button
+                .buttonStyle(.bordered)
+                .tint(choice.tint)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(choice.tint, lineWidth: 1.5)
+                }
+        case nil:
             button.buttonStyle(.bordered).tint(.secondary)
         }
     }
 
-    private func help(for verdict: ReviewDraft.Verdict) -> String {
-        switch verdict {
-        case .approve: "Odešle review jako APPROVE"
-        case .requestChanges: "Odešle review jako REQUEST_CHANGES"
-        case .comment: "Odešle review bez verdiktu (COMMENT) — na vlastním PR to jediné jde"
+    /// Nápověda říká, **co se stane** — a u předvyplněného návrhu i to, že ho nikdo nevybral.
+    private func help(for choice: ReviewDraft.Verdict, origin: EffectiveVerdict.Origin?) -> String {
+        guard origin != .suggested else {
+            // Podmíněně („kdyby odešlo“) schválně: jestli odeslat vůbec jde, rozhoduje
+            // `Policy.sendBlock`, a to odsud vidět není.
+            return "Návrh z nálezů: kdyby review odešlo teď, půjde jako \(choice.rawValue). Kliknutím si verdikt vybereš sám."
         }
+        switch choice {
+        case .approve: return "Odešle review jako APPROVE"
+        case .requestChanges: return "Odešle review jako REQUEST_CHANGES"
+        // Že je `COMMENT` na vlastním PR ta **jediná** možnost, patří do `ownPullRequestNote` —
+        // ukáže se přesně tam, kde to platí. V nápovědě to od #114 stálo mimo kontext a dalo se
+        // přečíst obráceně, totiž že `COMMENT` jinde než na vlastním PR nejde (nález Copilota
+        // na #128). Nápověda proto říká jen, co ta volba udělá.
+        case .comment: return "Odešle review bez verdiktu (COMMENT) — vědomé „nerozhoduju“"
+        }
+    }
+
+    /// Na vlastním PR bere GitHub jedině `COMMENT` (změřeno u #62: `APPROVE`
+    /// i `REQUEST_CHANGES` vrátí 422), takže se návrh **nepředvyplňuje** (#114).
+    ///
+    /// Bez téhle věty by chybějící návrh u doběhlého review vypadal jako rozbitá aplikace —
+    /// všude jinde se předvyplní. Tlačítka zůstávají povolená schválně: kdo se dívá, víme jen
+    /// z načtené konverzace, a tlačítko zakázané podle údaje, který nemusí dorazit, slibuje
+    /// méně než chyba od GitHubu, která si o `Jen komentář` řekne sama.
+    private var ownPullRequestNote: String? {
+        guard isOwnPullRequest else { return nil }
+        return "Tohle je tvůj PR: GitHub na něm přijme jedině „Jen komentář“. Schválit ani vyžádat změny na vlastním PR nejde, takže se návrh z nálezů nepředvyplňuje."
     }
 
     private var discardButton: some View {

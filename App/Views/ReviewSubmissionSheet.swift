@@ -71,8 +71,11 @@ struct ReviewSubmissionSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Zvolený verdikt a **vedle něj** návrh z nálezů. Návrh nic nepředvyplňuje — v tuhle
-    /// chvíli je volba dávno hotová a tohle je poslední místo, kde se dá porovnat.
+    /// Verdikt, který odejde, a **vedle něj** návrh z nálezů.
+    ///
+    /// Od #114 se jím verdikt předvyplňuje, takže odesílaná hodnota může být přímo ten návrh —
+    /// a sheet to musí říct. Je to poslední brána před odesláním, takže z ní má být poznat
+    /// **odkud hodnota přišla**, ne jen jaká je.
     private var verdictSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             sectionTitle("Verdikt")
@@ -98,11 +101,16 @@ struct ReviewSubmissionSheet: View {
         }
     }
 
+    /// U předvyplněného návrhu se neříká, **jaký** návrh je (to je ta hodnota vedle), ale že
+    /// hodnota je z návrhu a nikdo ji nepřepsal. Jinak stojí návrh vedle mojí volby k porovnání.
     private var suggestionText: String {
+        guard !submission.isVerdictSuggested else {
+            return "Je to návrh z nálezů — ručně jsi verdikt nevybral."
+        }
         switch submission.suggestion {
-        case .approve: "Návrh z nálezů: approve"
-        case .requestChanges: "Návrh z nálezů: request changes"
-        case nil: "Návrh z nálezů: není z čeho soudit"
+        case .approve: return "Návrh z nálezů: approve"
+        case .requestChanges: return "Návrh z nálezů: request changes"
+        case nil: return "Návrh z nálezů: není z čeho soudit"
         }
     }
 
