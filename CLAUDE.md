@@ -1264,7 +1264,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ContentView` | `NavigationSplitView`: vlevo seznam, vpravo detail vybraného PR; pod tím stavový řádek |
 | `StatusBarView` | Stavový řádek na spodku **okna**: vlevo hlášky, vpravo puntíky služeb |
 | `ServiceHealthDot` | Puntík jedné služby; po hoveru důvod a čas poslední kontroly |
-| `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory |
+| `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory, zakázané notifikace |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory`) — podtržené, s odznakem počtu |
 | `OverviewView` | Tab `Přehled`: popis PR a konverzace bez kotvy v diffu, chronologicky |
@@ -1728,6 +1728,29 @@ Odpovídání do vláken (#73) drží `AppStore` ve dvou mapách klíčovaných 
   nepřečte; text u toho zůstává.
 - **Prázdný text se z mapy maže**, ať v ní nezůstane záznam po každém vlákně, do kterého někdo
   klikl a rozmyslel si to. Tentýž vzor jako prázdný draft.
+
+Notifikace (#88) drží `AppStore` v `notificationFailure` a platí u nich:
+
+- **Odmítnuté oprávnění musí být v okně vidět.** Aplikace kvůli němu nespadne, jen mlčí —
+  takže bez hlášky je „nic mi nepřišlo“ k nerozeznání od „nic se nestalo“, a spravit se to dá
+  jedině v Nastavení systému, kam aplikace nedosáhne. Tatáž kategorie jako rozbitá
+  konfigurace: nesmí položit, nesmí projít tiše. Věta proto říká, **kde** se to povolí.
+- **Úspěch hlášku maže.** Oprávnění se dá povolit a příští doručení projde; věta, která by po
+  něm zůstala, by posílala hledat vyřešený problém.
+- **Doručení bez nastaveného centra si nic nezapíše.** „Odsud se neposílá“ (testy) není
+  porucha, o které by se mělo hlásit — jinak by každý test s notifikacemi měl v okně větu
+  o tom, že něco nefunguje.
+- **Klik na PR mimo seznam výběr nemění.** Notifikace přežije tik, který PR odklidil, a vybrat
+  neexistující řádek nejde; skočit místo toho jinam by bylo horší než nechat na obrazovce to,
+  co tam bylo. Okno je vepředu tak jako tak, takže kliknutí nezůstane bez odpovědi.
+- **Dokud se seznam nenačetl (`status == .notStarted`), vybere se i tak.** Je to zrovna ten
+  případ, kvůli kterému má proud kliknutí buffer: aplikaci spustilo právě to kliknutí, takže
+  polling ještě neproběhl a **prázdný seznam neznamená „PR je zavřený“, ale „ještě nevím“**.
+  Bez toho by se klik z notifikace, která aplikaci spustila, zahodil — tedy přesně ten scénář,
+  pro který je celý buffer. Chytila to vlastní revize diffu u #88; detail se dokreslí, jakmile
+  první tik dorazí.
+- **Proud kliknutí se konzumuje ve `keepFresh()`**, tedy dokud žije okno — jako polling
+  a monitor dostupnosti. Bez nastaveného centra se task ani nezakládá.
 
 Signály pro stavový řádek (#31) do `AppStore` patří taky, protože jen on ví, jak dopadla
 skutečná volání:
@@ -2315,6 +2338,48 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `TimeSource` | Protokol: `now` a `sleep(for:)`. Hodiny jsou přístup ke stroji jako každý jiný — a bez nich by testy pollingu čekaly reálné minuty |
 | `HTTPGetting` | Protokol: `GET` s `If-None-Match`. `URLSessionHTTP` nad `URLSession` — **jediné místo, kde aplikace chodí na síť sama**, bez podprocesu |
 | `NetworkReachability` | Protokol: proud „má stroj cestu do sítě?“. `PathMonitorReachability` nad `NWPathMonitor` |
+| `UserNotifying` | Protokol: doručit notifikaci a dát proud kliknutí. `PullRequestNotification` je vstup, `NotificationDelivery` výsledek |
+| `SystemNotificationCenter` | `UNUserNotificationCenter` za tím protokolem — **statická jediná instance** a delegát, který kliknutí převádí na hodnotu v proudu |
+
+Nad notifikacemi (#88) platí:
+
+- **Notifikace fungují jedině z `/Applications`.** Změřeno: z `build/` i z `~/Applications`
+  vrací `requestAuthorization` chybu `Notifications are not allowed for this application`
+  a `authorizationStatus` zůstane `denied` — **bez dialogu a bez záznamu v Nastavení
+  systému**, takže se to nedá ani ručně povolit. Není to vlastnost PRismu: stejnou chybu
+  dostala minimální cizí aplikace s jiným bundle identifikátorem. Postupně se vyloučil
+  podpis (self-signed, ad-hoc, hardened runtime), `get-task-allow`, Debug proti Release,
+  duplicitní záznamy v LaunchServices, restart `usernoted` i MDM profily. Proto `bin/run.sh`
+  instaluje do `/Applications` a spouští odtud.
+- **`deliver(_:)` si o oprávnění řekne sám**, zvláštní metoda na to není. Dialog má přijít
+  až u první notifikace (ten hned po instalaci se odklikne pryč) a jedna cesta znamená, že
+  se ta chvíle nedá minout. `requestAuthorization` je idempotentní — po prvním rozhodnutí
+  systém dialog neukáže a jen vrátí stav, takže si „už jsem se ptal“ nikdo pamatovat nemusí.
+- **Jedna statická instance, a schválně.** Delegát je vlastnost systémového singletonu
+  (`UNUserNotificationCenter.current()`), takže druhá instance by první přebila delegáta
+  a kliknutí by tiše přestala chodit. Singleton je tady obraz toho, že systémové centrum je
+  jedno, ne kompromis kvůli protahování objektu. V testech se nepoužije: `AppStore` dostane
+  fake parametrem.
+- **Delegát se nastavuje při startu** (`AppDelegate.applicationDidFinishLaunching`), ne až
+  u první notifikace. Když aplikaci spustilo právě kliknutí na notifikaci, systém ho doručí
+  hned po startu — tedy dřív, než projde preflight a složí se `AppStore`. Proud kliknutí si
+  je proto **drží**, dokud si je store nevyzvedne; je na to test.
+- **Proud kliknutí má jednoho konzumenta.** Systém má delegáta jednoho, takže i proud je
+  jeden — druhé volání `clicks()` by prvnímu kliknutí kradlo.
+- **Okno dopředu dává vrstva prostředí, ne store.** Aktivace aplikace je přístup ke stroji
+  stejně jako doručení notifikace, takže `AppStore` zůstává bez AppKitu a v testech se nic
+  neaktivuje. Dopředu se jde i tehdy, když identifikátoru nerozumíme — kliknutí je pokyn
+  otevřít aplikaci.
+- **Doručuje se i s aplikací vepředu** (`willPresent`). Bez toho macOS notifikaci potlačí,
+  jakmile je aplikace aktivní — jenže review trvá minuty a mezitím se v okně dělá něco
+  jiného, takže „okno je vidět“ neznamená „dívám se na to, co doběhlo“.
+- **Notifikace se nenahrazují** — každá má náhodný identifikátor. Per-PR identifikátor by
+  znamenal, že hláška o novém PR přepíše hlášku o doběhlém review nad tímtéž PR; slévání je
+  vlastní rozhodnutí a řeší ho #87.
+- **Tři případy výsledku, ne boolean.** „Uživatel to zakázal“ (`notAuthorized`) a „systém to
+  nevzal“ (`failed`) vedou jinam: první se dá spravit jedině v Nastavení systému, druhá je
+  chyba, u které je co vypsat. Tatáž úvaha jako u `ReviewState`, kde se `clean` nesmí slít
+  s `failed`.
 
 `PreflightReport` je jediná pravda o prostředí; `problems` i `toolPaths` se z něj **jen
 počítají** — čistě, bez I/O. Tady platí totéž pravidlo jako u `Policy`: když píšeš `if`
@@ -2610,6 +2675,19 @@ Nad `HTTPGetting` (#31) platí:
   review týmž skillem odmítnutí nezahodí** — `replace(_:)` je přesně to místo, kde by se ztratilo;
   ověřeno dočasně vloženou regresí, po které spadly tři testy na třech vrstvách. K tomu, že
   odmítnutí **nevyjme převzatý komentář** z draftu a že selhání zápisu je vidět.
+- **Notifikace (#88)** — proti `FakeNotificationCenter`, takže se **nic nedoručuje**. To hlavní
+  není text notifikace, ale dvě věci, které se dají pokazit tiše: že se **odmítnuté oprávnění
+  dá poznat** (a úspěch tu hlášku smaže) a že se **kliknutí neztratí, když dorazí dřív**, než
+  si ho má kdo vyzvednout — na tom stojí klik na notifikaci, která aplikaci teprve spustila.
+  K tomu klik na PR mimo seznam, který výběr nemění, a doručení bez centra, které si nic
+  nezapíše. Čeká se **ohraničeně** (200 × 1 ms), ne neomezeným `Task.yield()` spinem: ten by
+  běžel na `MainActoru` bez horní hranice, což položilo suitu u #68.
+
+  Skutečné doručení fakem ověřit nejde, takže se ověřilo **spuštěním** — notifikace dorazila,
+  delegát dostal `willPresent` i `didReceive` (`UNNotificationDefaultActionIdentifier`) a klik
+  vybral ten PR, na který notifikace ukazovala. Klikalo se fyzickým `CGEvent`em na souřadnice
+  z accessibility, protože `click` ani `click at` v System Events skutečný klik na notifikaci
+  nepošlou. Podrobnosti v sekci `App/Environment/`.
 - **`AppStore` — pohled na diff** — že se bez odchylky bere hodnota z nastavení, že ji přepnutí
   v liště přebije, že se změna nastavení projeví **bez restartu** a že odchylka **shodná**
   s nastavením přežije jeho změnu. Poslední dva potřebují skutečný `ConfigStore` nad dočasnou
@@ -2902,10 +2980,13 @@ xcodebuild -project PRism.xcodeproj -scheme PRism test
 ```
 
 ```bash
-./bin/run.sh    # build v Debug + otevření aplikace
+./bin/run.sh    # build v Debug + instalace do /Applications + otevření aplikace
+                # z /Applications schválně: jinde nefungují notifikace (#88)
                 # předchozí instanci ukončí Apple eventem, ne `killall` —
                 # při běžícím review se tedy zeptá a bez odpovědi nic nespustí
                 # a upozorní, když je build podepsaný ad-hoc
+                # cizí bundle v /Applications nepřepíše a při selhání instalace
+                # radši nespustí nic, ať se nekouká na starý build
 ```
 
 ```bash
@@ -2954,6 +3035,9 @@ ho do souboru.
 - **Binárky hledej absolutní cestou.** GUI aplikace spuštěná z Finderu nedědí `PATH` ze
   shellu, takže `gh` se podle jména nenajde. Řeší `BinaryLocator` při startu; cesty se
   berou z `ToolPaths`, nikdy z názvu binárky.
+- **Aplikace se provozuje z `/Applications`** (#88). Odjinud macOS nepovolí notifikace —
+  změřeno, podrobnosti v sekci `App/Environment/`. `bin/run.sh` tam bundle instaluje sám,
+  takže ručně se nic dělat nemusí; `build/` zůstává jen místem, kde se buildí.
 
 ## Stav
 
@@ -3260,6 +3344,23 @@ je nastavení s **výchozím stavem vypnuto** — dokud si o odesílání někdo
 neodejde nikam nic. Sandbox není výjimka v kódu, zapíná se stejným přepínačem. Rozbitá hodnota
 v souboru se sráží na zakázané, na obou úrovních.
 
+Základ notifikací hotový (issue #88) — `UserNotifying` a `SystemNotificationCenter`
+v `App/Environment/`, `notify(_:)` a obsluha kliknutí v `AppStore`, hláška v `AppNoticesView`.
+**Vrstva bez konzumenta**: aplikace umí notifikaci doručit a poznat kliknutí (vybere PR a dá
+okno dopředu), ale sama zatím nic neposílá — první konzument je #82. O oprávnění se říká až
+u první notifikace, odmítnuté oprávnění aplikaci nepoloží a je vidět ve stavovém řádku.
+
+Ověřeno spuštěním, ne jen testy: notifikace dorazila, delegát dostal `willPresent`
+i `didReceive` a klik vybral ten PR, na který ukazovala.
+
+**Přineslo to jednu změnu mimo zadání:** `bin/run.sh` instaluje aplikaci do `/Applications`
+a spouští ji odtud, protože **odjinud macOS notifikace nepovolí** — z `build/`
+i z `~/Applications` zůstane oprávnění `denied` bez dialogu a bez záznamu v Nastavení
+systému. Vyloučeno postupně: podpis (self-signed, ad-hoc, hardened runtime),
+`get-task-allow`, Debug proti Release, duplikáty v LaunchServices, restart `usernoted`, MDM
+profily — a rozhodla minimální cizí aplikace s jiným bundle identifikátorem, která dostala
+tutéž chybu. Bez té změny by se M8 nedal ani vyzkoušet, ani používat.
+
 Stavový řádek hotový (issue #31) — `App/Health/`, `StatusBarView`, `Policy.health(of:from:)`
 a `HTTPGetting` s `NetworkReachability` v `App/Environment/`. Na spodku okna je puntík
 u GitHubu a u Claude: zelenou a červenou určuje **skutečný provoz** (tik pollingu, doběhlá
@@ -3294,7 +3395,7 @@ o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `
 `#67`, `#66`, `#72`, `#68`, `#73`, `#98`, `#110` a `#69` — tedy **celý**. Zbývá už jen milník
 **M8 (notifikace)**, který na ničem z toho nestojí.
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
-   s oprávněním a klikem (#88), doběhlé review (#82), nové PR (#85), vypínání po
+   s oprávněním a klikem (#88, **hotovo**), doběhlé review (#82), nové PR (#85), vypínání po
    událostech (#86) a seskupování (#87).
 
 Pořadí M6–M8 není závazné. M8 na nich nestojí a dá se udělat kdykoli — je to jediný

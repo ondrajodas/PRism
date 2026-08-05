@@ -421,7 +421,8 @@ potřeba.
 
 ## Build
 
-Spustit aplikaci — jeden příkaz, buildne v Debug a otevře okno:
+Spustit aplikaci — jeden příkaz, buildne v Debug, nainstaluje do `/Applications` a otevře
+okno:
 
 ```bash
 ./bin/run.sh
@@ -439,6 +440,17 @@ xcodebuild -project PRism.xcodeproj -scheme PRism test
 
 `bin/run.sh` buildí do `build/` v repu (`-derivedDataPath`), aby byla cesta k `.app`
 předvídatelná; složka je gitignorovaná. Před spuštěním ukončí předchozí instanci.
+
+Hotový bundle pak **nainstaluje do `/Applications` a spustí odtud**, protože jinde
+nefungují notifikace: z `build/` i z `~/Applications` vrací systém
+`Notifications are not allowed for this application` a stav oprávnění zůstane `denied` —
+bez dialogu a bez záznamu v Nastavení systému, takže se to nedá ani ručně povolit.
+Ověřeno i na minimální cizí aplikaci s jiným bundle identifikátorem, takže to není
+vlastnost PRismu, ale toho, odkud je aplikace spuštěná.
+
+Skript odmítne přepsat bundle, který se hlásí cizím identifikátorem, a když se instalace
+nepovede, radši nespustí nic — spuštěná stará verze z `/Applications` je přesně ta past
+„koukám na starý build“.
 
 ### Ikona
 
@@ -510,7 +522,7 @@ Certifikát se odstraní přes `security delete-identity -c "PRism Local"`.
 PRism.xcodeproj/          Xcode projekt (shared scheme je verzovaný)
 App/                      zdrojáky aplikace — target PRism
   Models/                 doménové modely: PR, identifikátory, stav review
-  Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight
+  Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight, notifikace
   GitHub/                 čtení PR a konverzace přes gh CLI: gateway, typované chyby, tvar výstupu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Config/                 config.json: globální default, override per repo, čtení a zápis

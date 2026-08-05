@@ -55,6 +55,13 @@ struct AppNoticesView: View {
                 if let failure = store.dismissalFailure {
                     notice(failure, icon: "exclamationmark.triangle")
                 }
+                // Notifikace, které nechodí (#88). Odmítnuté oprávnění aplikaci nepoloží, takže
+                // bez tohohle je „nic mi nepřišlo“ k nerozeznání od „nic se nestalo“ — a spravit
+                // se to dá jedině v Nastavení systému, kam aplikace nedosáhne. Vlastní ikona:
+                // není to rozbitá aplikace, je to vypnutý zvonek.
+                if let failure = store.notificationFailure {
+                    notice(failure, icon: "bell.slash")
+                }
             }
         }
     }
@@ -73,6 +80,7 @@ struct AppNoticesView: View {
             || store.unreadableDraftFiles > 0
             || store.draftFailure != nil
             || store.dismissalFailure != nil
+            || store.notificationFailure != nil
     }
 
     private func notice(_ text: String, icon: String) -> some View {

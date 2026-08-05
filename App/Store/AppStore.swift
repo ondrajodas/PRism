@@ -70,6 +70,14 @@ final class AppStore {
     /// ten vzor, na který si `CLAUDE.md` stěžuje.
     private(set) var dismissalFailure: String?
 
+    /// Proč notifikace nechodí (#88). `nil` = chodí, nebo se ještě žádná neposílala.
+    ///
+    /// Odmítnuté oprávnění **není chyba běhu** — aplikace jede dál, jen mlčí. Právě proto to
+    /// musí být v okně vidět: bez toho se hledá, proč nic nepřichází, a odpověď leží
+    /// v Nastavení systému, kam aplikace nedosáhne. Tatáž kategorie jako rozbitá konfigurace:
+    /// nesmí položit, nesmí projít tiše.
+    private(set) var notificationFailure: String?
+
     /// Konverzace **per PR** — review ostatních, vlákna, komentáře. Co v mapě není, se
     /// ještě nenačítalo.
     private(set) var conversationStates: [PRIdentifier: ConversationState] = [:]
@@ -189,6 +197,12 @@ final class AppStore {
     private let draftStore: ReviewDraftStore?
     private let translator: (any FindingTranslating)?
     private let configStore: ConfigStore?
+    /// Doručování notifikací (#88). `nil` = odsud se neposílají (testy), takže se nic
+    /// nedoručí a proud kliknutí se ani nezačne konzumovat.
+    ///
+    /// Nepovinné schválně, jako `health` nebo `reviews`: `keepFresh()` volají i testy a živé
+    /// centrum by z nich udělalo testy sahající na systémové notifikace.
+    private let notifications: (any UserNotifying)?
     /// Běžící review podle PR — drží se kvůli zrušení.
     private var reviewTasks: [PRIdentifier: Task<Void, Never>] = [:]
     /// Review, která spustil **automat**. Ruční se pozná tím, že tady není — a jen ta
@@ -214,11 +228,13 @@ final class AppStore {
         translator: (any FindingTranslating)? = nil,
         autoRuns: AutoRunLedger? = nil,
         gh: URL? = nil,
-        health: HealthMonitor? = nil
+        health: HealthMonitor? = nil,
+        notifications: (any UserNotifying)? = nil
     ) {
         self.time = time
         self.gh = gh
         self.health = health
+        self.notifications = notifications
         self.configuration = configuration
         self.configStore = configStore
         polling = PollingService(
@@ -292,7 +308,8 @@ final class AppStore {
             translator: ClaudeFindingTranslator(claude: toolPaths.claude, runner: runner),
             autoRuns: AutoRunLedger(),
             gh: toolPaths.gh,
-            health: HealthMonitor()
+            health: HealthMonitor(),
+            notifications: SystemNotificationCenter.shared
         )
         self.configurationBox = box
     }
@@ -406,11 +423,14 @@ final class AppStore {
         await reloadConfiguration()
         await loadStoredReviews()
         await loadStoredDrafts()
-        // Obojí běží, dokud žije okno; zrušení tasku ukončí skupinu i s oběma smyčkami.
+        // Všechno běží, dokud žije okno; zrušení tasku ukončí skupinu i se všemi smyčkami.
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.polling.run() }
             if let health {
                 group.addTask { await health.run() }
+            }
+            if notifications != nil {
+                group.addTask { await self.handleNotificationClicks() }
             }
         }
     }
@@ -1472,6 +1492,66 @@ final class AppStore {
         // a zmizení ze seznamu by ho zrušilo pod rukama.
         automaticReviews.remove(pr)
         reviewTasks[pr] = Task { [weak self] in await self?.review(pr) }
+    }
+
+    // MARK: - Notifikace (#88)
+
+    /// Pošle notifikaci a zapamatuje si, když nešla.
+    ///
+    /// Vrstva bez konzumenta: první, kdo tuhle cestu použije, je #82 (doběhlé review), pak
+    /// #85 (nové PR). Volání bez nastaveného centra (testy) neudělá nic a **nic si ani
+    /// nezapíše** — „odsud se neposílá“ není porucha, o které by se mělo hlásit.
+    func notify(_ notification: PullRequestNotification) async {
+        guard let notifications else { return }
+        notificationFailure = message(for: await notifications.deliver(notification))
+    }
+
+    /// Proč notifikace nedorazila, jako věta pro okno. `nil` = dorazila.
+    ///
+    /// Úspěch hlášku **maže**: oprávnění se dá povolit v Nastavení systému a příští
+    /// doručení už projde — věta, která by po něm zůstala, by posílala hledat vyřešený
+    /// problém.
+    private func message(for delivery: NotificationDelivery) -> String? {
+        switch delivery {
+        case .delivered:
+            nil
+        case .notAuthorized:
+            // Říká, co se kvůli tomu neděje, a kde se to dá spravit. Aplikace tam nedosáhne,
+            // takže samotné „nemám oprávnění“ by nedávalo další krok.
+            //
+            // Schválně **nejmenuje konkrétní událost**: tahle vrstva je základ pro víc druhů
+            // notifikací (doběhlé review #82, nové PR #85), takže „o doběhlém review nedám
+            // vědět“ by u těch ostatních tvrdilo něco jiného, než se stalo.
+            """
+            Notifikace nemají povolení, takže se o dění v PR nedozvíš, dokud se do aplikace \
+            nepodíváš. Povolit se dá v Nastavení systému → Oznámení → PRism.
+            """
+        case .failed(let detail):
+            "Notifikaci se nepodařilo doručit. \(detail)"
+        }
+    }
+
+    /// Klik na notifikaci vybere PR, kterého se týká.
+    ///
+    /// Okno dopředu dává `SystemNotificationCenter` — aktivace aplikace je přístup ke stroji
+    /// jako doručení samotné, takže store zůstává bez AppKitu.
+    ///
+    /// **PR, který v seznamu není, výběr nemění.** Notifikace přežije tik, který ho odklidil
+    /// (mergnul se, zavřel se), a vybrat neexistující řádek nejde — skočit místo toho jinam by
+    /// bylo horší než nechat na obrazovce to, co tam bylo. Okno je vepředu tak jako tak, takže
+    /// kliknutí nezůstane bez odpovědi.
+    ///
+    /// **Dokud se ale seznam nenačetl, vybere se i tak.** Je to zrovna ten případ, kvůli kterému
+    /// si proud kliknutí drží buffer: aplikaci spustilo právě tohle kliknutí, takže polling ještě
+    /// neproběhl a prázdný seznam neznamená „PR je zavřený“, ale „ještě nevím“. Zahodit klik tady
+    /// by celý ten scénář rozbilo — detail se dokreslí, jakmile první tik dorazí.
+    func handleNotificationClicks() async {
+        guard let notifications else { return }
+        for await pr in notifications.clicks() {
+            let listed = pullRequests.contains { $0.id == pr }
+            guard listed || status == .notStarted else { continue }
+            selection = pr
+        }
     }
 
     // MARK: - Automatický režim
