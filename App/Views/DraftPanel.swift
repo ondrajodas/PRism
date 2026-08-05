@@ -257,7 +257,11 @@ struct DraftPanel: View {
         switch choice {
         case .approve: return "Odešle review jako APPROVE"
         case .requestChanges: return "Odešle review jako REQUEST_CHANGES"
-        case .comment: return "Odešle review bez verdiktu (COMMENT) — na vlastním PR to jediné jde"
+        // Že je `COMMENT` na vlastním PR ta **jediná** možnost, patří do `ownPullRequestNote` —
+        // ukáže se přesně tam, kde to platí. V nápovědě to od #114 stálo mimo kontext a dalo se
+        // přečíst obráceně, totiž že `COMMENT` jinde než na vlastním PR nejde (nález Copilota
+        // na #128). Nápověda proto říká jen, co ta volba udělá.
+        case .comment: return "Odešle review bez verdiktu (COMMENT) — vědomé „nerozhoduju“"
         }
     }
 
