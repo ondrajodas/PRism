@@ -13,6 +13,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kolik review právě běží. Doplní `PRismApp`, jakmile má store; do té doby nic neběží.
     @MainActor var runningReviews: () -> Int = { 0 }
 
+    /// Delegát notifikací musí stát dřív, než systém doručí první kliknutí (#88).
+    ///
+    /// Když aplikaci spustilo právě kliknutí na notifikaci, přijde hned po startu — tedy dřív,
+    /// než projde preflight a složí se `AppStore`. Bez tohohle by delegát vznikl teprve s ním
+    /// a kliknutí by se ztratilo; proud kliknutí si je proto podrží, dokud si je store
+    /// nevyzvedne. **O oprávnění se tím nežádá** — na to se čeká až do první notifikace.
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        SystemNotificationCenter.prepare()
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         MainActor.assumeIsolated {
             let running = runningReviews()
