@@ -3,6 +3,14 @@ import SwiftUI
 /// Levý sloupec — seznam PR napříč repozitáři.
 struct PullRequestListView: View {
     @Bindable var store: AppStore
+    /// Otevře okno s novinkami (#127).
+    ///
+    /// Předává se **shora**, ne přes `@Environment(\.openWindow)` tady: v toolbaru bočního
+    /// panelu je ta akce **němá** — tlačítko projde, ale okno se neotevře. Ověřeno na běžící
+    /// aplikaci proti dvěma známým dobrým cestám: `openSettings` ze **stejného** toolbaru
+    /// funguje a `openWindow` s tímtéž id funguje z menu i z `RootView`. `ContentView` ji
+    /// proto čte v těle okna a sem posílá jako uzávěr.
+    let openReleaseNotes: () -> Void
     @Environment(\.openSettings) private var openSettings
     @State private var isRefreshing = false
 
@@ -15,6 +23,7 @@ struct PullRequestListView: View {
             }
             .navigationTitle("Pull requesty")
             .toolbar {
+                releaseNotesButton
                 settingsButton
                 refreshButton
             }
@@ -88,5 +97,19 @@ struct PullRequestListView: View {
             Label("Nastavení", systemImage: "gearshape")
         }
         .help("Nastavení aplikace (⌘,)")
+    }
+
+    /// Otevře okno s novinkami — totéž, co položka v menu aplikace (#127).
+    ///
+    /// Stojí **vedle nastavení**, protože je to totéž patro: obojí je o aplikaci, ne o pull
+    /// requestu, který je zrovna vybraný. `Obnovit` zůstává vpravo — je to jediná z těch tří
+    /// věcí, která se mačká často. Odznak s počtem nepřečtených tady **není**: seznam PR ke
+    /// stavu novinek nemá přístup a protahovat ho sem kvůli tečce znamená druhé místo, které
+    /// se s oknem umí rozejít.
+    private var releaseNotesButton: some View {
+        Button(action: openReleaseNotes) {
+            Label(ReleaseNotesWindow.title, systemImage: "sparkles")
+        }
+        .help("Co se v které verzi změnilo")
     }
 }

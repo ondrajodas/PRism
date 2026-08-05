@@ -18,6 +18,9 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     private let files: [Result<String, any Error>]
     /// Co vrátí `fetchConversation` — v pořadí, poslední se opakuje.
     private let conversations: [Result<Conversation, any Error>]
+    /// Co vrátí `fetchReleases` — v pořadí, poslední se opakuje. Na střídání selhání
+    /// a úspěchu stojí test, že „Zkusit znovu“ opravdu načte.
+    private let releases: [Result<[Release], any Error>]
     private let lock = NSLock()
     private var asked: [String] = []
     private var detailsAsked: [PRIdentifier] = []
@@ -25,19 +28,22 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     private var diffsAsked: [PRIdentifier] = []
     private var filesAsked: [(id: PRIdentifier, path: String)] = []
     private var conversationsAsked: [PRIdentifier] = []
+    private var releasesAsked = 0
 
     init(
         _ outcomes: [Outcome],
         detail: Result<PullRequest, any Error>? = nil,
         diffs: [Result<String, any Error>] = [],
         files: [Result<String, any Error>] = [],
-        conversations: [Result<Conversation, any Error>] = []
+        conversations: [Result<Conversation, any Error>] = [],
+        releases: [Result<[Release], any Error>] = []
     ) {
         self.outcomes = outcomes
         self.detail = detail
         self.diffs = diffs
         self.files = files
         self.conversations = conversations
+        self.releases = releases
     }
 
     convenience init(
@@ -45,14 +51,16 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         detail: Result<PullRequest, any Error>? = nil,
         diffs: [Result<String, any Error>] = [],
         files: [Result<String, any Error>] = [],
-        conversations: [Result<Conversation, any Error>] = []
+        conversations: [Result<Conversation, any Error>] = [],
+        releases: [Result<[Release], any Error>] = []
     ) {
         self.init(
             [outcome],
             detail: detail,
             diffs: diffs,
             files: files,
-            conversations: conversations
+            conversations: conversations,
+            releases: releases
         )
     }
 
@@ -128,5 +136,20 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
             throw GitHubError.notFound("Fake gateway konverzaci nezná.")
         }
         return try conversations[min(index, conversations.count - 1)].get()
+    }
+
+    /// Kolikrát se někdo ptal na vydání. Na počtu stojí test, že se historie tahá **jednou
+    /// za běh**, ne při každém otevření okna.
+    var releaseRequests: Int { lock.withLock { releasesAsked } }
+
+    func fetchReleases() async throws -> [Release] {
+        let index: Int = lock.withLock {
+            releasesAsked += 1
+            return releasesAsked - 1
+        }
+        guard !releases.isEmpty else {
+            throw GitHubError.notFound("Fake gateway vydání nezná.")
+        }
+        return try releases[min(index, releases.count - 1)].get()
     }
 }

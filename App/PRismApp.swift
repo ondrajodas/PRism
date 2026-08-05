@@ -29,9 +29,25 @@ struct PRismApp: App {
         // `.contentMinSize` bere **minimum** obsahu, ne jeho přání, a strop nechává otevřený.
         // Vlastní podlaha je proto na `RootView`, ať se okno nedá stáhnout do nesmyslu.
         .windowResizability(.contentMinSize)
+        // Položka v menu aplikace, hned pod „O aplikaci PRism“ — tam se „co je nového“
+        // hledá. `Window` scéna sama žádnou položku nepřidá, takže bez tohohle by se okno
+        // dalo otevřít jedině po aktualizaci, a to je ta menší polovina zadání #127.
+        .commands {
+            CommandGroup(after: .appInfo) {
+                ReleaseNotesMenuItem()
+            }
+        }
 
         Settings {
             SettingsScene(preflight: preflight)
         }
+
+        // `Window`, ne `WindowGroup`: novinky jsou jedno okno nad jedněmi daty, takže druhá
+        // kopie by jen dovolila mít otevřené dvě různé verze téhož seznamu.
+        Window(ReleaseNotesWindow.title, id: ReleaseNotesWindow.id) {
+            ReleaseNotesScene(preflight: preflight)
+        }
+        .defaultSize(width: 900, height: 620)
+        .windowResizability(.contentMinSize)
     }
 }
