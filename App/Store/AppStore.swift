@@ -1101,12 +1101,30 @@ final class AppStore {
         origin: ReviewDraftComment.Origin = .own,
         for pr: PRIdentifier
     ) {
-        let comment = ReviewDraftComment(path: path, anchor: anchor, body: body, origin: origin)
+        // Snímek kódu se bere **tady**, z načteného diffu (#69): bez něj se po novém commitu
+        // nedá poznat, jestli na tom řádku pořád stojí to, co člověk komentoval. Jedno místo,
+        // které to ví — view by si stranu a číslo muselo párovat samo.
+        let comment = ReviewDraftComment(
+            path: path,
+            anchor: anchor,
+            snapshot: snapshot(of: anchor, path: path, in: pr),
+            body: body,
+            origin: origin
+        )
         mutateDraft(for: pr) { $0.comments.append(comment) }
         // Komentář, který se dá ⇧ klikem roztáhnout na rozsah. Drží se **id**, ne kotva:
         // z komentáře se druhý konec dopočítá, kdežto uložená kotva by se s ním po roztažení
         // rozešla.
         rangeTargets[pr] = comment.id
+    }
+
+    /// Snímek kódu pod kotvou z načteného diffu. Prázdný, když diff není — revalidace to pak
+    /// řekne jako „nevím“ místo aby předstírala, že kotva sedí.
+    private func snapshot(of anchor: DraftAnchor, path: String, in pr: PRIdentifier) -> DraftSnapshot {
+        guard case .loaded(let diff, _) = diffStates[pr], let file = diff.file(at: path) else {
+            return DraftSnapshot()
+        }
+        return Policy.snapshot(of: anchor, in: file)
     }
 
     /// Roztáhne naposledy přidaný komentář na rozsah končící (nebo začínající) tímhle řádkem.
@@ -1145,10 +1163,58 @@ final class AppStore {
                 id: comment.id,
                 path: comment.path,
                 anchor: range,
+                // Roztažením se mění oba konce, takže se snímek bere znovu — starý by po dalším
+                // commitu hledal řádek, který v rozsahu už není.
+                snapshot: Policy.snapshot(of: range, in: file),
                 body: comment.body,
                 origin: comment.origin
             )
         }
+    }
+
+    // MARK: - Přenesení na nový commit (#69)
+
+    /// Stavy kotev proti **aktuálnímu** diffu — z nich se skládá seznam v potvrzení přenesení.
+    ///
+    /// Prázdné, když není co přenášet: žádný draft, nebo není načtený diff (bez něj by se
+    /// rozhodovalo naslepo).
+    func draftAnchorStates(for pr: PRIdentifier) -> [DraftAnchorCheck] {
+        guard let draft = drafts[pr], case .loaded(let diff, _) = diffStates[pr] else { return [] }
+        return draft.comments.map { DraftAnchorCheck(comment: $0, state: Policy.anchorState(of: $0, in: diff)) }
+    }
+
+    /// Dá se draft přenést na nový commit? Jen když je zastaralý a je proti čemu ho kontrolovat.
+    func canTransferDraft(for pr: PRIdentifier) -> Bool {
+        guard isDraftStale(for: pr), head(of: pr) != nil else { return false }
+        guard case .loaded = diffStates[pr] else { return false }
+        return true
+    }
+
+    /// Přenese draft na hlavu PR podle rozhodnutí z potvrzení.
+    ///
+    /// Nový `headSha` se nastavuje **až tady**, tedy až po tom, co člověk viděl, co se s kterou
+    /// kotvou stane — dokud se draft nepřenesl, musí zůstat zastaralý a nedat se odeslat. Draft,
+    /// ze kterého by nic nezůstalo (všechno smazané), se **smaže**: „draft existuje“ musí znamenat
+    /// „je co poslat“.
+    @discardableResult
+    func transferDraft(for pr: PRIdentifier, choices: [UUID: DraftTransferChoice] = [:]) -> ReviewDraft? {
+        guard let draft = drafts[pr], let head = head(of: pr),
+              case .loaded(let diff, _) = diffStates[pr]
+        else { return nil }
+
+        let transferred = Policy.transferring(
+            draft,
+            to: diff,
+            head: head,
+            in: pr.repo,
+            choices: choices
+        )
+        // Přes `mutateDraft`, ne zápisem do mapy: pravidlo „prázdný draft se maže“ i zápis na disk
+        // mají zůstat na jednom místě. Druhá kopie by se s ním časem rozešla.
+        mutateDraft(for: pr) { $0 = transferred }
+        // Vrací se **přenesený** draft, i když z něj v mapě nic nezůstalo: potvrzení odeslání si
+        // z něj udělá nový snímek, a prázdný draft se pozná na tom, že v něm nic není.
+        return transferred
     }
 
     /// Přepíše text komentáře. **Prázdný text komentář zahodí.**
@@ -1244,15 +1310,26 @@ final class AppStore {
     /// v `ReviewSubmission.send()`, viz tvrdá podmínka č. 1.
     func submission(for pullRequest: PullRequestSummary) -> ReviewSubmission? {
         let id = pullRequest.id
-        guard let gh, let draft = drafts[id], draftSendBlock(for: id) == nil else { return nil }
+        guard let gh, let draft = drafts[id] else { return nil }
+        // Zastaralý draft se **smí** otevřít, když je proti čemu ho zkontrolovat (#69): okno pak
+        // začne kontrolou kotev a odeslání se odemkne až po přenesení. Zastarání je totiž jediný
+        // důvod, se kterým se dá něco udělat právě tady — u chybějícího verdiktu nebo prázdného
+        // komentáře patří oprava do panelu.
+        let transfer = canTransferDraft(for: id)
+        guard draftSendBlock(for: id) == nil || (transfer && draftSendBlock(for: id)?.isStale == true) else {
+            return nil
+        }
         return ReviewSubmission(
             pullRequest: pullRequest,
             draft: draft,
             suggestion: suggestedVerdict(for: id),
+            anchors: transfer ? draftAnchorStates(for: id) : [],
+            needsTransfer: transfer,
             gh: gh,
             gateway: gateway,
             scope: publishScope,
-            afterSuccess: { [weak self] in await self?.draftWasSubmitted(for: pullRequest) }
+            afterSuccess: { [weak self] in await self?.draftWasSubmitted(for: pullRequest) },
+            applyTransfer: { [weak self] choices in self?.transferDraft(for: id, choices: choices) }
         )
     }
 

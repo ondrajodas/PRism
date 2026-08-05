@@ -235,6 +235,15 @@ dává právo; jinde by tlačítko vždycky selhalo.
 leží v `drafts/` vedle uložených nálezů, mimo dosah úklidu cache. Nový commit ho nesmaže,
 jen zablokuje odeslání — vlastní próza nezastarává tak rychle jako strojové nálezy.
 
+**Po novém commitu se review přenese, ale ne tiše.** Tlačítko se u zastaralého draftu jmenuje
+`Zkontrolovat a odeslat…` a okno začne kontrolou kotev: u každého komentáře je vidět, jestli
+**sedí**, **posunul se na jiný řádek**, jestli **nevíme, co na tom řádku bylo** (komentář z doby
+před touhle funkcí), nebo že se **řádek v novém diffu ztratil**. Rozhoduje text řádku, ne jeho
+číslo — komentáře si proto ukládají snímek kódu, ke kterému se psaly, a změna odsazení kotvu
+neztratí. U každého se dá vybrat, co s ním: nechat, přepsat do těla review s odkazem na kód, nebo
+vyjmout; ztracený komentář míří do těla, protože smazat ručně psaný text musí být tvoje
+rozhodnutí. Teprve po přenesení se ukáže payload a dá se odeslat.
+
 Hlavní smyčka je **nález → komentář mými slovy**: v bublině nálezu je `Převzít do review`,
 které z jeho textu udělá můj komentář u toho řádku — a ten se dá přepsat. Převzatý nález
 nese odznak `v mém review`, takže se nedá vzít dvakrát; rozeznává se podle revieweera, aby

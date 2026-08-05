@@ -337,7 +337,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
 | `ReviewDraft` | Rozdělané review: PR, `headSha`, tělo, verdikt, komentáře. Verdikt je vnořený `ReviewDraft.Verdict` |
-| `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) |
+| `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
+| `DraftSnapshot` | Text řádků, ke kterým se komentář psal — konec rozsahu a jeho začátek. Prázdný = nevíme |
 | `DetailState` | Stav dotažení detailu PR: `loading` / `loaded(PullRequest, updatedAt:)` / `failed`. Je z něj `headSha` pro draft a popis pro `Přehled` |
 | `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged`. Jako `ReviewVerdict` **není `Codable`** |
 | `DiffLayout` | Jak se kreslí diff: `unified` (pod sebou) / `split` (vedle sebe). Nastavení **člověka, ne repa** — proto jen v `GlobalConfig` |
@@ -1208,8 +1209,9 @@ na `.task` okna, takže zavření okna ji zruší.
 | `MarkdownText` | Vykreslený Markdown z GitHubu — viz `App/Markdown/` |
 | `DraftCommentBubbleView` | Můj rozdělaný komentář u řádku: editor, odznak původu, vyjmutí. Ve split pohledu visí jen v půlce, které se týká |
 | `DraftTextEditor` | Textové pole draftu — odložený zápis a doručení při zmizení |
-| `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt bez předvyplnění, tělo, seznam komentářů, `Odeslat review…` |
-| `ReviewSubmissionSheet` | Potvrzení odeslání: úplný výpis payloadu, průběh, typované chyby |
+| `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt bez předvyplnění, tělo, seznam komentářů, `Odeslat review…` (u zastaralého `Zkontrolovat a odeslat…`). Obsah scrolluje, jen když se nevejde |
+| `ReviewSubmissionSheet` | Potvrzení odeslání: **kontrola kotev u zastaralého draftu** (#69), pak úplný výpis payloadu, průběh, typované chyby |
+| `DraftTransferView` | První stránka toho potvrzení: stav každé kotvy (sedí / posunulo se / nevím / ztraceno) a volba, co s ní |
 | `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení |
 | `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
 | `DiffLineView` | Řádek souboru: dvě čísla (v buňce dvojice jedno, podle `side`), znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
@@ -1357,6 +1359,20 @@ Diff drží taky `AppStore` (`diffStates`), klíčovaný PR:
   Dva nálezy v jednom souboru by jinak dotáhly kontext jen k prvnímu.
 - **Sbalení kontextu si nechá načtený obsah.** Druhé rozbalení by jinak chodilo po síti
   pro něco, co už jednou dorazilo.
+
+Přenesení draftu na nový commit (#69) `AppStore` orchestruje takhle:
+
+- **Snímek kódu se bere při zakládání komentáře, ze načteného diffu** — jedno místo, které ví, že
+  vlevo je staré číslo a vpravo nové. Bez diffu zůstane prázdný a revalidace to pak řekne jako
+  „nevím“, ne že kotva sedí.
+- **Roztažení rozsahu snímek bere znovu.** Mění se oba konce, takže starý snímek by po dalším
+  commitu hledal řádek, který v rozsahu už není.
+- **Přenést se dá jen zastaralý draft a jen s načteným diffem** (`canTransferDraft`). Bez něj by se
+  rozhodovalo naslepo.
+- **Draft, ze kterého přenesením nic nezůstane, se maže** — „draft existuje“ musí znamenat „je co
+  poslat“, tatáž zásada jako u prázdného komentáře.
+- **Přenesený draft se vrací volajícímu**, i když v mapě nezůstal: potvrzení odeslání si z něj dělá
+  nový snímek.
 
 Rozsah komentáře (#110) drží `AppStore` ve dvou věcech — `commentDrag` (probíhající tažení)
 a `rangeTargets` (per PR, cíl pro ⇧ klik):
@@ -1529,6 +1545,23 @@ Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a p
 
   A texty o tom musí říkat **„zahodí se“, ne „neuloží se“** — na disku prázdný komentář
   chvíli je. Je to na dvou místech (bublina, seznam v panelu) a musí říkat totéž.
+- **Přenesení na nový commit (#69) rozhoduje podle textu, ne podle čísla řádku.** Komentář si
+  proto nese **snímek kódu** (`DraftSnapshot`) — bez něj se po novém commitu nedá poznat, jestli
+  na tom řádku pořád stojí to, co člověk komentoval, a „stejné číslo“ o kódu neříká nic.
+  Porovnává se **otrimovaný** text (změna odsazení je pořád tentýž řádek) a hledá se **nejblíž**
+  původnímu číslu, protože stejný řádek (`}`, prázdno) je v souboru víckrát a první nález by kotvu
+  odnesl na druhý konec.
+- **Čtyři stavy kotvy, ne dva** (`DraftAnchorState`): `fits`, `moved`, `uncertain`, `lost`. Tatáž
+  úvaha jako u `ReviewState` — „nevím, co tam bylo“ (draft z doby před #69, který snímek nemá) není
+  „ztraceno“ a „posunulo se“ není „sedí“. Tvrdit „sedí“ bez snímku by byl přesně ten **tichý
+  přenos**, kterému se #69 vyhýbá.
+- **U rozsahu musí sednout oba konce.** Když jeden zmizel, je celý rozsah `lost` — přeanchorovat
+  druhý by z něj udělalo něco jiného, než co člověk označil.
+- **Výchozí volby drží text.** `lost` míří **do těla** review (s odkazem na kód), ne do koše:
+  smazání ručně psané práce musí být rozhodnutí člověka. Odkaz míří na **nový** commit, protože
+  proti němu se tělo odešle.
+- **`headSha` se přepisuje až přenesením.** Dokud se draft nepřenesl, musí zůstat zastaralý —
+  jinak by šel odeslat proti hlavě, na kterou nikdo nekoukal.
 - **Rozsah řádků (#110) je součást kotvy, ne druhý druh komentáře.** `DraftAnchor.start` je
   `nil` u jednořádkového; rozsah s oběma konci na jednom řádku se **srazí** na `nil`, ať
   neexistují dvě podoby téhož (GitHub `start_line == line` přijme, změřeno). Pravidla jsou
@@ -1654,6 +1687,12 @@ Věci, na které se u okna naráží:
 - **Panel má strop, ne pevnou výšku** (`maxHeight: clampedHeight` + `layoutPriority(1)`).
   `frame(height:)` je nesmlouvavá: v nízkém okně panel nepustí místo, přeteče — a co se
   nevejde, odřízne spodní hrana okna.
+- **Obsah draft panelu scrolluje, ale jen když se nevejde**, a podlaha panelu je **změřená**
+  (200 pt). Panel je pruh s výškou, kterou si uživatel vytáhne, kdežto draft má svoje minimum:
+  se zastaralým draftem 198 pt, bez banneru 161 (offscreen render `DraftPanel`u u #69). Se starou
+  podlahou 120 pt obsah **přetékal přes záložky nad sebou** a po přidání scrollu se scrolloval
+  i u vytaženého panelu. Samotné `clipped()` by ho jen schovalo, což je horší polovina téhož
+  problému; `minHeight` z měřené výšky drží obojí — dokud se obsah vejde, vyplní panel jako dřív.
 - **Čísla PR se píšou `Text(verbatim:)`.** `Text("#\(number)")` interpoluje přes locale
   a udělá z PR #21663 „#21 663“ — číslo PR není množství.
 - **Obsah zajíždí pod poloprůhlednou lištu a je to tak správně.** Zkoušelo se to zrušit
@@ -1823,6 +1862,9 @@ Věci, které se u toho nemají rozbít:
 | `Policy.commentRange(from:to:in:)` | Dva konce → rozsah seřazený podle pořadí v diffu; `nil` = konec v diffu není |
 | `Policy.rangeCells(of:in:)`, `Policy.commentRangeCells(of:in:)` | Buňky `(řádek, strana)`, které rozsah pokrývá — pro zvýraznění v diffu |
 | `Policy.location(of:)`, `Policy.lines(of:)` | Kde komentář je, jako text (`Cart.php:26–31`) — jedno místo pro panel i potvrzení |
+| `Policy.snapshot(of:in:)`, `Policy.text(at:in:)` | Snímek kódu pod kotvou z diffu (#69) |
+| `Policy.anchorState(of:in:)` | Jak kotva dopadla proti novému diffu: `fits` / `moved` / `uncertain` / `lost` |
+| `Policy.transferring(_:to:head:in:choices:)`, `Policy.defaultChoice(for:)` | Přenesení draftu na nový commit podle potvrzených rozhodnutí |
 | `Policy.draftTarget(for:in:)` | Kam převzatý nález patří — `DraftTarget.line` nebo `.body` |
 | `Policy.adoptedText(of:)`, `Policy.isAdopted(_:target:in:repo:)` | Text převzatého nálezu a odznak „už je v draftu“ |
 | `Policy.permalink(to:line:in:at:)`, `Policy.bodyItem(text:link:)`, `Policy.appendingBodyItem(_:to:)` | Odkaz na kód a skládání položek těla review |
@@ -2002,7 +2044,8 @@ podmínku „nikdy nic neposílat“ pravidlem, které je vidět z kódu — viz
 | `ThreadTarget`, `ThreadResolution` | Adresa vlákna (PR + `id`) a to, jak dopadlo přepnutí vyřešení |
 | `ThreadActionState`, `ThreadKey` | Co se s vláknem právě děje a klíč, pod kterým to drží `AppStore` |
 | `GhSubmittedReview`, `GhThreadReplyResponse`, `GhThreadResolutionResponse` | Tvary odpovědí — REST review a dvou GraphQL mutací |
-| `ReviewSubmission` | Jedno odeslání review od kliknutí po odpověď — **volající `submit(_:)`** |
+| `ReviewSubmission` | Jedno odeslání review od kliknutí po odpověď — **volající `submit(_:)`**. Od #69 začíná u zastaralého draftu kontrolou kotev (`.checking`) |
+| `DraftAnchorCheck` | Jedna kotva ke kontrole při přenesení (#69) — komentář a jeho stav |
 | `ThreadSubmission` | Jedna akce nad vláknem — **volající `reply` a `setResolved`** |
 
 Věci, které se u toho nemají rozbít:
@@ -2042,6 +2085,21 @@ Věci, které se u toho nemají rozbít:
   řádek uvnitř diffu“ je u chybějícího souboru nepravdivá.
 - **Ke každé chybě patří, co s ní jde udělat** (`userDescription`). Chyba, ze které nevyplývá
   další krok, je jen zpráva o smůle.
+
+Nad `ReviewSubmission` platí od #69 ještě tohle:
+
+- **Zastaralý draft okno otevře, ale neodešle.** Stav `.checking` znamená „nejdřív zkontroluj
+  kotvy“; `canSend` je v něm `false`, takže se z UI nedá naběhnout na chybu, kterou by pre-flight
+  publisheru vrátil (draft psaný proti jiné hlavě).
+- **Kontrola je první stránka téhož okna, ne druhé okno.** Zkontrolovat kotvy se musí tak či tak,
+  než review odejde — vlastní okno by byl mezikrok, ve kterém se kliká na totéž. Dvě kliknutí na
+  dvě různá tlačítka (pravidlo z #68) zůstávají: to první je `Přenést na <sha>`.
+- **Snímek draftu se smí přepsat jedině přenesením**, tedy výslovnou akcí člověka v tomtéž okně —
+  „co je v potvrzení vidět, to se odešle“ platí dál. Nepovedené přenesení nechá okno **v kontrole**,
+  protože tvářit se jako hotové by znamenalo odeslat proti starému commitu.
+- **`.checking` se neodvozuje z prázdných kotev.** Zastaralý draft bez řádkových komentářů (jen
+  tělo a verdikt) je zastaralý taky a přenesením se mu posune commit; odvozovat to z kotev by ho
+  poslalo proti staré hlavě.
 
 Nad `ReviewSubmission` (#68) platí navíc:
 
@@ -2443,6 +2501,21 @@ Nad `HTTPGetting` (#31) platí:
   chybu; draft cizího PR uvnitř souboru; a že cesta leží mimo složky, po kterých chodí
   eviction. Pozor na past v testu: `ReviewDraftComment` si generuje `UUID`, takže dvě volání
   továrničky nedají shodné hodnoty — draft se musí uložit do proměnné.
+- **Přenesení draftu (#69)** — `Policy` vyčerpávajícím výčtem stavů: nezměněný řádek sedí,
+  posunutý se najde na novém čísle (rozhoduje **text**, ne číslo), přepsaný se ztratí, změna
+  odsazení kotvu neztratí, chybějící snímek dá `uncertain` a ne `fits`, a rozsah s jedním zmizelým
+  koncem je `lost`. U přenesení to hlavní není, co se přenese, ale **co se nepřenese tiše**:
+  ztracený komentář jde do těla s odkazem na nový commit, rozhodnutí člověka přebije výchozí volbu
+  a rozepsané tělo zůstane.
+
+  `AppStore` proti **skutečnému** `ReviewDraftStore`: komentář si uloží snímek, bez diffu zůstane
+  prázdný, a celý řetěz od staršího draftu po odeslání — kotva se posune na nový řádek, zastarání
+  přestane blokovat a **přežije to restart**. Plus draft, ze kterého přenesení vyjme všechno, se
+  smaže.
+
+  `ReviewSubmission` na to, že se **v kontrole nedá odeslat** (`runner`/publisher nedostane nic),
+  že prázdné kotvy z kontroly nedělají hotový stav, že po přenesení odejde **nový** snímek a že
+  nepovedené přenesení nechá okno v kontrole.
 - **`Policy` — draft** — komentovatelnost vyčerpávajícím výčtem: přidaný řádek (`right`),
   kontextový (`right`), odebraný (`left`), `meta` (nikdy), řádek mimo hunky a **rozbalený
   kontext**. Ten poslední se staví přes `DiffRow.rows(revealed:content:)`, ne ručně —
@@ -2943,6 +3016,13 @@ Sbalování souborů hotové (issue #59) — klik na hlavičku sbalí a rozbalí
 `Sbalit vše` / `Rozbalit vše` je v horní liště a skok ze stromu i z tabulky nálezů sbalený
 soubor otevře. V hlavičce je odznak s počtem nálezů, červený u blokujících.
 
+Přenesení draftu na nový commit hotové (issue #69) — `DraftSnapshot` v `App/Models/`,
+`Policy.anchorState`/`transferring`, `DraftTransferView` jako první stránka potvrzení odeslání
+a `transferDraft` v `AppStore`. **Rozdělané review psané proti staršímu commitu jde po kontrole
+odeslat proti novému** a žádná kotva se nepřenese tiše: u každého komentáře je vidět, jestli sedí,
+posunula se, nevíme (draft z doby před #69), nebo se ztratila — a co s ní bude. Tím je **hotový
+milník M6**.
+
 Víceřádkové komentáře hotové (issue #110) — rozsah v `DraftAnchor.start`, `Policy.commentRange`,
 `start_line`/`start_side` v payloadu, tažení přes řádky (`RangeDragActions`, `DiffRowFrames`)
 a ⇧ klik na roztažení už napsaného komentáře. **Komentovat jde blok řádků, ne jen jeden** —
@@ -3009,11 +3089,11 @@ Plánované fáze:
 
 Tím **končí rozsah v1** podle specifikace. Za ním:
 
-6. **Review na GitHub** (M6) — odesílání review z okna. Tvrdou podmínku č. 1 **už nahradil**
-   pravidlem „jediná cesta ven“ (#67) a bránou v nastavení (#107). Hotové: spike #62
+6. **Review na GitHub** (M6) — odesílání review z okna. **Hotový.** Tvrdou podmínku č. 1
+   nahradil pravidlem „jediná cesta ven“ (#67) a bránou v nastavení (#107). Obsahoval: spike #62
    (viz [`docs/github-review-api.md`](docs/github-review-api.md)), model draftu #65,
-   publisher #67, skládání draftu #66, potvrzovací sheet #68 a povolení v nastavení #107.
-   Zbývá přenesení draftu na nový commit (#69).
+   publisher #67, skládání draftu #66, potvrzovací sheet #68, povolení v nastavení #107
+   a přenesení draftu na nový commit #69.
 7. **Konverzace, komentáře a taby** (M7) — cizí komentáře a vlákna v okně, odpovídání do
    nich a rozvržení jako na GitHubu (taby `Overview` / `Files changed`). Hotové: čtení #63,
    vlákna u kódu #64, taby #72, odpovídání #73, side-by-side diff #98 a víceřádkové komentáře
@@ -3022,8 +3102,8 @@ Tím **končí rozsah v1** podle specifikace. Za ním:
 **M6 a M7 jsou do sebe zaklesnuté a nejdou udělat po sobě.** `#66` a `#68` z M6 čekaly na
 `#64` z M7, kdežto `#73` z M7 čekalo na `#67` z M6 — takže se to plánovalo jako jeden blok
 o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `#65`, `#64`,
-`#67`, `#66`, `#72`, `#68`, `#73`, `#98` a `#110`; ty dva poslední na konverzaci nestály vůbec.
-Zbývá `#69` (přenesení draftu na nový commit).
+`#67`, `#66`, `#72`, `#68`, `#73`, `#98`, `#110` a `#69` — tedy **celý**. Zbývá už jen milník
+**M8 (notifikace)**, který na ničem z toho nestojí.
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
    s oprávněním a klikem (#88), doběhlé review (#82), nové PR (#85), vypínání po
    událostech (#86) a seskupování (#87).

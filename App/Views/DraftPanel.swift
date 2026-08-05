@@ -23,26 +23,48 @@ struct DraftPanel: View {
 
     @State private var isConfirmingDiscard = false
 
+    /// Výška, kterou panel doopravdy má — z ní se počítá, jestli se obsah ještě vejde.
+    /// Jen měření (`onGeometryChange`), takže do rozvržení nezasahuje; `GeometryReader` by
+    /// naopak sám zabral místo, a v tomhle okně už to jednou uškodilo.
+    @State private var available = 0.0
+
+    /// Obsah **scrolluje, ale jen když se nevejde**.
+    ///
+    /// Panel je pruh s výškou, kterou si uživatel vytáhne, kdežto draft má svoje minimum
+    /// (banner o zastarání, verdikt, dva editory). Bez scrollu obsah v nízkém panelu **přetékal
+    /// přes záložky nad sebou** — nahlášené při zkoušení #69, kde banner vyrostl o tlačítko.
+    /// Samotné `clipped()` by ho jen schovalo, což je ta horší polovina téhož problému.
+    ///
+    /// `minHeight` z měřené výšky drží obojí: dokud se obsah vejde, vyplní panel jako dřív
+    /// (editor roste s pruhem), a jak přeteče, začne se scrollovat. Zpětná vazba to není —
+    /// výška `ScrollView`u přichází od panelu, ne od obsahu.
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if isStale { staleBanner }
-            if let unavailable { unavailableNote(unavailable) }
-            topRow
-            if let sendBlockNote { unavailableNote(sendBlockNote) }
-            editors
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                if isStale { staleBanner }
+                if let unavailable { unavailableNote(unavailable) }
+                topRow
+                if let sendBlockNote { unavailableNote(sendBlockNote) }
+                editors
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: available, alignment: .topLeading)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onGeometryChange(for: Double.self) { $0.size.height } action: { available = $0 }
     }
 
     // MARK: - Hlavička
 
-    /// Zastaralý draft se **nemaže** — jen se nedá odeslat. Vlastní próza je dražší než
-    /// strojový nález, takže se nechává s poctivým příznakem; přenesení na nový commit je #69.
+    /// Zastaralý draft se **nemaže** — jen se nedá odeslat rovnou. Vlastní próza je dražší než
+    /// strojový nález, takže se nechává s poctivým příznakem.
+    ///
+    /// Banner **vlastní tlačítko nemá** (rozhodnuto při zkoušení #69): kontrola kotev je první
+    /// stránka okna, které otevře `Zkontrolovat a odeslat…`, takže druhé tlačítko na totéž by
+    /// znamenalo, že je jedno z nich pořád k ničemu. Text proto ukazuje na to, které tam je.
     private var staleBanner: some View {
         Label {
-            Text("Review je psané proti staršímu commitu, než je teď v PR. Odeslat se takhle nedá — komentáře by sedly na jiný kód. Text zůstává, nic se nemaže.")
+            Text(staleText)
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -52,6 +74,16 @@ struct DraftPanel: View {
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.orange.opacity(0.1), in: .rect(cornerRadius: 6))
+    }
+
+    /// Věta se mění podle toho, jestli je proti čemu kontrolovat: bez diffu nebo bez známé hlavy
+    /// PR se přenést nedá a slibovat cestu, která není, by bylo horší než říct, že se čeká.
+    private var staleText: String {
+        actions.canTransfer
+            // Krátce schválně: co se s tím dělá, říká tlačítko vedle, a delší věta zvedala
+            // minimální výšku panelu (banner se roztáhl na tři řádky).
+            ? "Review je psané proti staršímu commitu. Kotvy zkontroluješ v okně, které otevře „Zkontrolovat a odeslat…“ — text zůstává, nic se nemaže."
+            : "Review je psané proti staršímu commitu, než je teď v PR. Odeslat se takhle nedá — komentáře by sedly na jiný kód. Text zůstává, nic se nemaže."
     }
 
     private func unavailableNote(_ text: String) -> some View {
@@ -73,15 +105,33 @@ struct DraftPanel: View {
         }
     }
 
-    /// Otevře potvrzení, **neodesílá**. Nad zastaralým draftem se sheet neotevře vůbec —
-    /// zakázané je tlačítko, ne až tlačítko uvnitř sheetu.
+    /// Otevře potvrzení, **neodesílá**.
+    ///
+    /// U zastaralého draftu, který se dá přenést (#69), tlačítko **zakázané není** — jmenuje se
+    /// jinak a okno začne kontrolou kotev. Zakázané zůstává tam, kde se s tím v okně nedá nic
+    /// udělat (chybí verdikt, prázdný komentář, nepovolené odesílání): oprava patří do panelu.
     private var sendButton: some View {
-        Button("Odeslat review…", systemImage: "paperplane") { actions.send() }
+        Button(sendLabel, systemImage: "paperplane") { actions.send() }
             .buttonStyle(.borderedProminent)
             .font(.callout)
-            .disabled(actions.sendBlock != nil)
-            .help(actions.sendBlock?.userDescription
-                ?? "Ukáže, co přesně odejde na GitHub — odeslat se potvrzuje až tam")
+            .disabled(!canOpenSubmission)
+            .help(canOpenSubmission
+                ? "Ukáže, co přesně odejde na GitHub — odeslat se potvrzuje až tam"
+                : actions.sendBlock?.userDescription ?? "")
+    }
+
+    private var sendLabel: String {
+        needsTransfer ? "Zkontrolovat a odeslat…" : "Odeslat review…"
+    }
+
+    /// Zastarání je jediný důvod, se kterým se dá něco udělat **v tom okně** — proto se jím
+    /// tlačítko nezakazuje.
+    private var needsTransfer: Bool {
+        actions.canTransfer && actions.sendBlock?.isStale == true
+    }
+
+    private var canOpenSubmission: Bool {
+        actions.sendBlock == nil || needsTransfer
     }
 
     /// Proč se odeslat nedá, větou pod lištou.

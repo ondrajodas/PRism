@@ -38,6 +38,10 @@ struct DraftActions {
     /// Proč odeslat nejde. `nil` = jde. Je to stav, ne akce, ale patří k `send` stejně jako
     /// `canCompose` k psaní: zakázané tlačítko bez důvodu vypadá jako rozbitá aplikace.
     var sendBlock: DraftSendBlock?
+    /// Dá se zastaralý draft přenést na nový commit (#69)? Rozhoduje o tom, jestli je tlačítko
+    /// odeslání zakázané, nebo se jen jmenuje `Zkontrolovat a odeslat…` — kontrola i přenesení
+    /// se dějí v tom okně, které otevře `send`.
+    var canTransfer = false
 
     /// Akce svázané s jedním souborem diffu — cestu si doplní samy.
     ///

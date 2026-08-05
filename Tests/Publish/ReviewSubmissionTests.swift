@@ -76,15 +76,103 @@ struct ReviewSubmissionTests {
         _ publisher: FakeReviewPublisher,
         draft: ReviewDraft? = nil,
         suggestion: ReviewVerdict? = nil,
-        cleanups: Cleanups = Cleanups()
+        cleanups: Cleanups = Cleanups(),
+        anchors: [DraftAnchorCheck] = [],
+        needsTransfer: Bool = false,
+        transferred: ReviewDraft? = nil
     ) -> ReviewSubmission {
         ReviewSubmission(
             pullRequest: summary(),
             draft: draft ?? self.draft(),
             suggestion: suggestion,
+            anchors: anchors,
+            needsTransfer: needsTransfer,
             publisher: { publisher },
-            afterSuccess: { cleanups.record() }
+            afterSuccess: { cleanups.record() },
+            applyTransfer: { _ in transferred }
         )
+    }
+
+    // MARK: - Kontrola proti novému commitu (#69)
+
+    /// **To hlavní:** dokud se draft nepřenesl, nesmí se dát odeslat. Pre-flight publisheru by ho
+    /// odmítl (jiná hlava), ale na tu chybu se nemá jít naběhnout z okna.
+    @Test("V kontrole se odeslat nedá")
+    func refusesToSendWhileChecking() async {
+        let publisher = FakeReviewPublisher(always: .success(review()))
+        let submission = submission(publisher, needsTransfer: true)
+
+        #expect(submission.state == .checking)
+        #expect(!submission.canSend)
+        await submission.send()
+
+        #expect(publisher.submitted.isEmpty, "nic se nesmí odeslat")
+        #expect(submission.state == .checking)
+    }
+
+    /// Zastaralý draft **bez řádkových komentářů** je zastaralý taky — kontrola se z prázdných
+    /// kotev odvodit nedá, takže o ní rozhoduje vlastní příznak.
+    @Test("Prázdné kotvy z kontroly nedělají hotový stav")
+    func staysCheckingWithoutAnchors() {
+        let submission = submission(FakeReviewPublisher(always: .success(review())), needsTransfer: true)
+
+        #expect(submission.anchors.isEmpty)
+        #expect(submission.state == .checking)
+    }
+
+    /// Po přenesení se ukáže **nový** snímek: co je v potvrzení vidět, to se odešle.
+    @Test("Přenesení nahradí snímek a odemkne odeslání")
+    func transfersAndUnlocksSending() async {
+        let publisher = FakeReviewPublisher(always: .success(review()))
+        let new = ReviewDraft(
+            pullRequest: pr,
+            headSha: "bbbb2222",
+            body: "vypadá to dobře",
+            verdict: .approve,
+            comments: []
+        )
+        let submission = submission(publisher, needsTransfer: true, transferred: new)
+
+        submission.transfer(choices: [:])
+
+        #expect(submission.state == .ready)
+        #expect(submission.draft == new)
+        #expect(submission.anchors.isEmpty)
+
+        await submission.send()
+        #expect(publisher.submitted == [new], "odešle se přenesený draft, ne ten původní")
+    }
+
+    /// Když přenesení nevyjde (draft nebo diff zmizely pod rukama), okno **zůstane v kontrole** —
+    /// tvářit se jako hotové by znamenalo odeslat proti starému commitu.
+    @Test("Nepovedené přenesení nechá okno v kontrole")
+    func staysCheckingWhenTheTransferFails() {
+        let submission = submission(
+            FakeReviewPublisher(always: .success(review())),
+            needsTransfer: true,
+            transferred: nil
+        )
+
+        submission.transfer(choices: [:])
+
+        #expect(submission.state == .checking)
+        #expect(!submission.canSend)
+    }
+
+    /// Přenést se dá jen z kontroly: druhé zavolání by přepsalo snímek, který už člověk potvrdil.
+    @Test("Přenesení mimo kontrolu nic nedělá")
+    func ignoresATransferOutsideChecking() {
+        let original = draft()
+        let submission = submission(
+            FakeReviewPublisher(always: .success(review())),
+            draft: original,
+            transferred: ReviewDraft(pullRequest: pr, headSha: "cccc3333", verdict: .approve)
+        )
+
+        submission.transfer(choices: [:])
+
+        #expect(submission.state == .ready)
+        #expect(submission.draft == original)
     }
 
     /// Draft se drží v proměnné, ne se vyrábí dvakrát: `ReviewDraftComment` si generuje

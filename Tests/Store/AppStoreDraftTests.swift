@@ -486,6 +486,152 @@ struct AppStoreDraftTests {
         #expect(!store.hasDraft(pr))
     }
 
+    // MARK: - Přenesení na nový commit (#69)
+
+    /// Diff po novém commitu: komentovaný řádek se posunul o dva dolů.
+    private var shiftedDiffText: String {
+        """
+        diff --git a/Cart.php b/Cart.php
+        --- a/Cart.php
+        +++ b/Cart.php
+        @@ -25,3 +25,5 @@
+         kontext
+        +navíc
+        +
+        -staré
+        +nové
+         další
+        """
+    }
+
+    /// Komentář se zakládá **se snímkem kódu** — bez něj by revalidace nemohla říct nic než
+    /// „nevím“, a to je zrovna to, kvůli čemu se snímek ukládá.
+    @Test("Komentář si uloží text řádku, ke kterému se psal")
+    func storesTheAnchoredText() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+
+        store.addDraftComment(at: anchor, path: "Cart.php", body: "text", for: pr)
+        await settle()
+
+        #expect(store.draftComments(for: pr).first?.anchoredText == "nové")
+    }
+
+    /// Bez načteného diffu snímek nevznikne — a nesmí se z toho stát tvrzení, že kotva sedí.
+    @Test("Bez diffu je snímek prázdný")
+    func leavesTheSnapshotEmptyWithoutADiff() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts)
+
+        store.addDraftComment(at: anchor, path: "Cart.php", body: "text", for: pr)
+        await settle()
+
+        #expect(store.draftComments(for: pr).first?.snapshot.isEmpty == true)
+    }
+
+    /// Zastaralý draft se dá přenést, jen když je proti čemu: bez diffu a bez hlavy PR by se
+    /// rozhodovalo naslepo.
+    @Test("Přenést se dá jen zastaralý draft, a jen s diffem")
+    func offersTheTransferOnlyWhenItMakesSense() async throws {
+        let drafts = drafts()
+        let store = await prepared(drafts, diffs: [.success(diffText)])
+        await store.loadDiff(for: summary())
+        store.addDraftComment(at: anchor, path: "Cart.php", body: "text", for: pr)
+        await settle()
+
+        #expect(!store.canTransferDraft(for: pr), "draft proti aktuální hlavě zastaralý není")
+    }
+
+    /// **To hlavní z #69:** draft psaný proti starému commitu jde po revizi odeslat proti novému
+    /// a kotva se přenese na řádek, kde ten kód teď je.
+    @Test("Přenesení posune kotvu a odblokuje odeslání")
+    func transfersTheDraftToTheNewCommit() async throws {
+        let drafts = drafts()
+        let store = self.store(
+            drafts,
+            detail: .success(detail(headSha: "bbbb2222")),
+            diffs: [.success(shiftedDiffText)]
+        )
+        // Draft z minula: psaný proti starší hlavě, s kotvou na řádku 26 a snímkem toho řádku.
+        try await drafts.save(
+            ReviewDraft(
+                pullRequest: pr,
+                headSha: "aaaa1111",
+                verdict: .comment,
+                comments: [
+                    ReviewDraftComment(
+                        path: "Cart.php",
+                        anchor: DraftAnchor(line: 26, side: .right),
+                        snapshot: DraftSnapshot(anchored: "nové"),
+                        body: "tady chybí kontrola",
+                        origin: .own
+                    ),
+                ]
+            )
+        )
+        await store.loadStoredDrafts()
+        await store.loadDetail(for: summary())
+        await store.loadDiff(for: summary())
+
+        #expect(store.isDraftStale(for: pr))
+        #expect(store.canTransferDraft(for: pr))
+        // V novém diffu je „nové“ na řádku 28 — kotva se má posunout, ne zůstat na 26.
+        let states = store.draftAnchorStates(for: pr)
+        #expect(states.count == 1)
+        guard case .moved(let anchor) = try #require(states.first?.state) else {
+            Issue.record("čekal jsem posun, přišlo \(String(describing: states.first?.state))")
+            return
+        }
+        #expect(anchor.line == 28)
+
+        store.transferDraft(for: pr)
+        await settle()
+
+        #expect(store.draftComments(for: pr).first?.line == 28)
+        #expect(!store.isDraftStale(for: pr), "po přenesení už zastaralý není")
+        // A hlavně: zastarání už není důvod, proč to nejde odeslat.
+        if case .stale = store.draftSendBlock(for: pr) {
+            Issue.record("po přenesení nesmí odeslání blokovat zastarání")
+        }
+        // A přežije to restart — přenesení je zápis na disk, ne jen do paměti.
+        let restarted = self.store(drafts, detail: .success(detail(headSha: "bbbb2222")))
+        await restarted.loadStoredDrafts()
+        #expect(restarted.draft(for: pr)?.headSha == "bbbb2222")
+        #expect(restarted.draftComments(for: pr).first?.line == 28)
+    }
+
+    /// Draft, ze kterého se všechno vyjme, se **smaže** — „draft existuje“ musí znamenat „je co
+    /// poslat“. Tatáž zásada jako u prázdného komentáře.
+    @Test("Přenesení, které vyjme všechno, draft smaže")
+    func deletesADraftEmptiedByTheTransfer() async throws {
+        let drafts = drafts()
+        let store = self.store(
+            drafts,
+            detail: .success(detail(headSha: "bbbb2222")),
+            diffs: [.success(shiftedDiffText)]
+        )
+        let comment = ReviewDraftComment(
+            path: "Cart.php",
+            anchor: DraftAnchor(line: 26, side: .right),
+            snapshot: DraftSnapshot(anchored: "nové"),
+            body: "tady chybí kontrola",
+            origin: .own
+        )
+        try await drafts.save(
+            ReviewDraft(pullRequest: pr, headSha: "aaaa1111", comments: [comment])
+        )
+        await store.loadStoredDrafts()
+        await store.loadDetail(for: summary())
+        await store.loadDiff(for: summary())
+
+        store.transferDraft(for: pr, choices: [comment.id: .delete])
+        await settle()
+
+        #expect(!store.hasDraft(pr))
+        #expect(try await drafts.load().drafts.isEmpty)
+    }
+
     // MARK: - Převzetí nálezu
 
     @Test("Nález na řádku diffu se převezme jako komentář")
