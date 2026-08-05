@@ -1752,6 +1752,30 @@ Notifikace (#88) drží `AppStore` v `notificationFailure` a platí u nich:
 - **Proud kliknutí se konzumuje ve `keepFresh()`**, tedy dokud žije okno — jako polling
   a monitor dostupnosti. Bez nastaveného centra se task ani nezakládá.
 
+Notifikace o doběhlém review (#82) k tomu přidávají:
+
+- **Posílá se tam, kde se review uzavírá**, ne u ukládání jednotlivého běhu. Reviewery jedou
+  paralelně, takže po každém běhu by u tří skillů přišlo „čisté“ a za minutu „3 nálezy“ za
+  totéž PR — tři vyrušení za jednu věc. Je na to test se dvěma skilly.
+- **Rozhoduje `reviewState(for:)`**, tedy tentýž stav, jaký ukazuje řádek seznamu. Druhý
+  výpočet nad běhy by se s prvním rozešel a **řádek a notifikace by řekly dvě různé věci**;
+  navíc už ten stav rozlišuje všechno, co #82 chce poznat, včetně „nemám co říct“
+  (nereportující běh, ztracený nález).
+- **Zrušené review se neoznamuje.** Zrušil si ho člověk, takže o něm ví. Proto notifikace
+  **není v `defer`**, ale u každé větve zvlášť — `defer` by ji poslal i po `CancellationError`
+  a nikdo by si toho nevšiml. Je na to test.
+- **Přeskočené review neoznamuje nic.** Když automat zjistí, že je commit už zreviewovaný,
+  vrací se dřív, než se na notifikaci dojde — session se neutratila a nic nového se nezjistilo.
+- **Selhaný checkout se hlásí jinými slovy než spadlá session.** Jsou to dvě různé věci
+  a vedou jinam (jedna se řeší tlačítkem u repa, druhá u PR) — tatáž úvaha jako u `ReviewState`.
+- **Blokující počet se bere z platných nálezů** (`activeFindings`), takže odmítnutý nález
+  (#113) nevyrušuje. Text říká i to, když **nic** neblokuje — bez té půlky věty by „3 nálezy“
+  vypadaly stejně vážně jako tři blokující.
+- **Titulek nese repo a číslo**, ne „Review doběhlo“: notifikací může viset víc a bez
+  identifikace se nepozná, které patří ke kterému PR. Skládá se přes `description`
+  identifikátoru, takže se číslo nikde neformátuje přes locale — z `#21663` by jinak vyšlo
+  `#21 663`. Je na to test.
+
 Signály pro stavový řádek (#31) do `AppStore` patří taky, protože jen on ví, jak dopadla
 skutečná volání:
 
@@ -1994,6 +2018,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.isStale(_:head:)` | Je draft psaný proti staršímu commitu? |
 | `Policy.sendBlock(for:head:)` | **Proč** se draft nedá odeslat (`DraftSendBlock`); `nil` = dá se |
 | `Policy.health(of:from:)` | Puntík služby ve stavovém řádku ze tří signálů — viz `App/Health/` |
+| `Policy.reviewNotification(for:state:blocking:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět |
+| `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
   Volající pak nic nespojuje a z typu je vidět, že jde o několik nezávislých dotazů.
@@ -2688,6 +2714,15 @@ Nad `HTTPGetting` (#31) platí:
   vybral ten PR, na který notifikace ukazovala. Klikalo se fyzickým `CGEvent`em na souřadnice
   z accessibility, protože `click` ani `click at` v System Events skutečný klik na notifikaci
   nepošlou. Podrobnosti v sekci `App/Environment/`.
+- **Notifikace o doběhlém review (#82)** — dvě vrstvy. `Policy` vyčerpávajícím výčtem stavů,
+  včetně skloňování (notifikace je krátký text, kde je špatný tvar to jediné, co v ní je vidět)
+  a toho, co se nesmí slít: **nereportující běh se nesmí ohlásit jako čistý**, odmítnuté nálezy
+  nejsou čisto a selhaný checkout není spadlá session. Plus že se stavy, které nejsou konec
+  běhu (`running`, `cloning`, …) a `stale` **neoznamují vůbec**.
+
+  `AppStore` na **kdy**: že dva skilly nad jedním PR dají **jednu** notifikaci, že selhání
+  checkoutu i GitHubu dá vědět, a hlavně že se **zrušené review neoznamuje** — ten test je
+  z celého issue nejdůležitější, protože bez něj by stačilo dát notifikaci do `defer`.
 - **`AppStore` — pohled na diff** — že se bez odchylky bere hodnota z nastavení, že ji přepnutí
   v liště přebije, že se změna nastavení projeví **bez restartu** a že odchylka **shodná**
   s nastavením přežije jeho změnu. Poslední dva potřebují skutečný `ConfigStore` nad dočasnou
@@ -3344,6 +3379,16 @@ je nastavení s **výchozím stavem vypnuto** — dokud si o odesílání někdo
 neodejde nikam nic. Sandbox není výjimka v kódu, zapíná se stejným přepínačem. Rozbitá hodnota
 v souboru se sráží na zakázané, na obou úrovních.
 
+Notifikace o doběhlém review hotová (issue #82) — `Policy.reviewNotification(for:state:blocking:)`
+a `notifyAboutFinishedReview(of:)` v `AppStore`. **Aplikace poprvé sama něco pošle:** po
+doběhnutí review přijde jedna notifikace na PR a klik na ni ten PR vybere. Text rozlišuje
+nálezy (s počtem blokujících), čisto, timeout s částečnými nálezy, odmítnuté nálezy, spadlou
+session i selhaný checkout — a „nemám co říct“ se nesmí ohlásit jako čisto. Zrušené review
+mlčí.
+
+Staví to na `ReviewState`, ne na běhách: tentýž stav kreslí i řádek seznamu, takže se ty dva
+nemůžou rozejít.
+
 Základ notifikací hotový (issue #88) — `UserNotifying` a `SystemNotificationCenter`
 v `App/Environment/`, `notify(_:)` a obsluha kliknutí v `AppStore`, hláška v `AppNoticesView`.
 **Vrstva bez konzumenta**: aplikace umí notifikaci doručit a poznat kliknutí (vybere PR a dá
@@ -3395,8 +3440,8 @@ o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `
 `#67`, `#66`, `#72`, `#68`, `#73`, `#98`, `#110` a `#69` — tedy **celý**. Zbývá už jen milník
 **M8 (notifikace)**, který na ničem z toho nestojí.
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
-   s oprávněním a klikem (#88, **hotovo**), doběhlé review (#82), nové PR (#85), vypínání po
-   událostech (#86) a seskupování (#87).
+   s oprávněním a klikem (#88, **hotovo**), doběhlé review (#82, **hotovo**), nové PR (#85),
+   vypínání po událostech (#86) a seskupování (#87).
 
 Pořadí M6–M8 není závazné. M8 na nich nestojí a dá se udělat kdykoli — je to jediný
 z těch tří milníků, který **nemění tvrdé podmínky**.
