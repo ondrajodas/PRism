@@ -22,24 +22,44 @@ struct FindingRow: Identifiable, Hashable, Sendable {
     let locationHelp: String
     let summary: String
     let isBlocking: Bool
+    /// Jak jsem nález posoudil (#113). `nil` = platí.
+    ///
+    /// Nový sloupec kvůli tomu **není**: při šířkách z #60 nemá kam, takže stav visí
+    /// u `Kategorie` jako odznak a v nápovědě.
+    let dismissal: FindingDismissal?
 
     /// Nálezy v pořadí, ve kterém je řadí `Policy`.
     static func rows(
         of findings: [Finding],
-        blocking categories: Set<String> = Policy.defaultBlockingCategories
+        blocking categories: Set<String> = Policy.defaultBlockingCategories,
+        dismissals: [FindingKey: FindingDismissal] = [:]
     ) -> [FindingRow] {
-        Policy.sorted(findings, categories: categories).enumerated().map { index, finding in
-            FindingRow(
-                id: index,
-                finding: finding,
-                category: finding.category ?? "bez kategorie",
-                reviewer: finding.reviewer,
-                location: location(of: finding),
-                locationHelp: locationHelp(of: finding),
-                summary: finding.summary,
-                isBlocking: Policy.isBlocking(finding, categories: categories)
-            )
-        }
+        Policy.sorted(findings, categories: categories, dismissals: dismissals)
+            .enumerated()
+            .map { index, finding in
+                FindingRow(
+                    id: index,
+                    finding: finding,
+                    category: finding.category ?? "bez kategorie",
+                    reviewer: finding.reviewer,
+                    location: location(of: finding),
+                    locationHelp: locationHelp(of: finding),
+                    summary: finding.summary,
+                    isBlocking: Policy.isBlocking(finding, categories: categories),
+                    dismissal: dismissals[Policy.key(of: finding)]
+                )
+            }
+    }
+
+    /// Blokující **a platný**. Výstražná ikona u nálezu, který jsem odmítl, by tvrdila, že
+    /// PR pořád na něčem stojí — a přitom se z něj právě proto nepočítá.
+    var showsBlockingWarning: Bool { isBlocking && dismissal == nil }
+
+    /// Co se o kategorii dozvíš z nápovědy. U odmítnutého nálezu i to, proč neplatí — sloupec
+    /// unese odznak, ale ne celou větu.
+    var categoryHelp: String {
+        guard let dismissal else { return category }
+        return "\(category) · odmítnuto: \(dismissal.reason.explanation)"
     }
 
     /// Skládá se do `String`u, ne do `Text`u s interpolací — tam by číslo řádku prošlo

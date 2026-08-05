@@ -21,19 +21,50 @@ struct ReviewRecord: Codable, Hashable, Sendable {
     /// Od toho okamžiku běží lhůta, po které záznam zmizí. Kdyby se místo něj počítalo
     /// stáří záznamu, PR otevřený půl roku by o historii přišel hned, jak se zavře.
     var closedAt: Date?
+    /// Nálezy, které jsem posoudil jako falešně pozitivní (#113). Klíčem je
+    /// `Policy.key(of:)`.
+    ///
+    /// Bydlí to **na záznamu, ne na `Finding`u**, kvůli `replace(_:)`: opakované review týmž
+    /// skillem celý `StoredReviewRun` přepíše, takže označení uvnitř nálezu by zmizelo právě
+    /// v tu chvíli, kdy se stejný falešný nález vrátí. Vedle toho `Finding.reported` je věta
+    /// revieweera — můj názor na ni je jiná vrstva.
+    ///
+    /// Čte a mění se přes `activeFindings` a `setDismissal(_:of:)`, viz
+    /// `App/Policy/FindingDismissalPolicy.swift`.
+    var dismissals: [FindingKey: FindingDismissal]
 
     init(
         pullRequest: PRIdentifier,
         headSha: String,
         runs: [StoredReviewRun] = [],
         isStale: Bool = false,
-        closedAt: Date? = nil
+        closedAt: Date? = nil,
+        dismissals: [FindingKey: FindingDismissal] = [:]
     ) {
         self.pullRequest = pullRequest
         self.headSha = headSha
         self.runs = runs
         self.isStale = isStale
         self.closedAt = closedAt
+        self.dismissals = dismissals
+    }
+
+    /// Dekóduje se ručně **jen kvůli `dismissals`**: syntetizovaný `init(from:)` sahá na
+    /// každý neoptional klíč bez ohledu na výchozí hodnotu, takže by starší soubor (a je
+    /// jich na disku plno) skončil `keyNotFound` — tedy ztracenými nálezy kvůli poli, které
+    /// v něm být nemůže. Tatáž úvaha jako u `Finding.translation`, jen tam to obstará
+    /// optional.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        pullRequest = try container.decode(PRIdentifier.self, forKey: .pullRequest)
+        headSha = try container.decode(String.self, forKey: .headSha)
+        runs = try container.decode([StoredReviewRun].self, forKey: .runs)
+        isStale = try container.decode(Bool.self, forKey: .isStale)
+        closedAt = try container.decodeIfPresent(Date.self, forKey: .closedAt)
+        dismissals = try container.decodeIfPresent(
+            [FindingKey: FindingDismissal].self,
+            forKey: .dismissals
+        ) ?? [:]
     }
 
     /// Nálezy ze všech reviewerů dohromady. Neslučují se — každý si nese, kdo ho našel.

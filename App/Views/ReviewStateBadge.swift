@@ -27,6 +27,9 @@ struct ReviewStateBadge: View {
         case .running(let finished, let total): "běží \(finished)/\(total)"
         case .clean: "čisté"
         case .completed(let findings): Plural.czech(findings, one: "nález", few: "nálezy", many: "nálezů")
+        // Ne „čisté“: reviewer našel a já to zamítl, což je jiné tvrzení. Počet zůstává, ať
+        // je z řádku poznat, kolik jsem toho přeskočil.
+        case .dismissed(let findings): "odmítnuto · \(findings)"
         case .failed: "selhalo"
         case .timedOut: "timeout"
         case .stale: "zastaralé"
@@ -38,6 +41,9 @@ struct ReviewStateBadge: View {
         case .notStarted, .queued, .cloning: .secondary
         case .running: .accentColor
         case .clean: .green
+        // Vlastní barva, ne zelená ani oranžová: vyřízeno to je, ale ne tím, že by bylo
+        // čisto — a od nálezů, které čekají, se to musí poznat i bez čtení textu.
+        case .dismissed: .mint
         case .completed: .orange
         case .checkoutFailed, .failed, .timedOut: .red
         case .stale: .yellow
@@ -51,6 +57,7 @@ struct ReviewStateBadge: View {
         ReviewStateBadge(state: .running(finished: 2, total: 3))
         ReviewStateBadge(state: .clean)
         ReviewStateBadge(state: .completed(findings: 9))
+        ReviewStateBadge(state: .dismissed(findings: 3))
         ReviewStateBadge(state: .failed(detail: "boom"))
         ReviewStateBadge(state: .stale)
     }

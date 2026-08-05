@@ -10,20 +10,31 @@ struct FindingSection: Hashable, Sendable {
 extension Policy {
     /// Pořadí nálezů pro UI.
     ///
-    /// Kritéria odshora: blokující kategorie první, pak kategorie abecedně, uvnitř
-    /// `CONFIRMED` nad `PLAUSIBLE` a nakonec podle `file:line`.
+    /// Kritéria odshora: odmítnuté naspod, pak blokující kategorie, kategorie abecedně,
+    /// uvnitř `CONFIRMED` nad `PLAUSIBLE` a nakonec podle `file:line`.
     ///
     /// Blokující kategorie nahoře je jediné místo, kde se odvozený příznak promítá do
     /// řazení — žádná nová škála z toho nevzniká, jen se nejdůležitější věc nemusí hledat.
     /// Poslední kritérium je `summary`, aby bylo pořadí **úplné**: bez něj by dva nálezy
     /// stejného druhu na stejném řádku přeskakovaly mezi překresleními. Porovnává se
     /// obyčejně, ne podle jazyka — je to rozhodčí na shody, ne řazení, které někdo čte.
+    ///
+    /// Odmítnuté (#113) jdou **naspod, ne pryč**: v tabulce zabírají jeden ztlumený řádek,
+    /// takže nekonkurují platným, a přesto je vidět, co jsem odmítl. Je to první kritérium,
+    /// protože i odmítnutý blokující nález má ustoupit platnému stylistickému.
     static func sorted(
         _ findings: [Finding],
-        categories: Set<String> = defaultBlockingCategories
+        categories: Set<String> = defaultBlockingCategories,
+        dismissals: [FindingKey: FindingDismissal] = [:]
     ) -> [Finding] {
         let blocking = Set(categories.map(normalized(category:)))
-        return findings.sorted { key(of: $0, blocking: blocking) < key(of: $1, blocking: blocking) }
+        // Klíč se skládá **jednou na nález**, ne při každém porovnání: staví se z něj řetězce
+        // (`lowercased()` u kategorie a od #113 celý `Policy.key(of:)`), takže v komparátoru
+        // by se tatáž práce udělala log n krát.
+        return findings
+            .map { (finding: $0, key: sortKey(of: $0, blocking: blocking, dismissals: dismissals)) }
+            .sorted { $0.key < $1.key }
+            .map(\.finding)
     }
 
     /// Nálezy po kategoriích, ve stejném pořadí jako `sorted`.
@@ -60,10 +71,19 @@ extension Policy {
     /// První kritérium je vlastnost **kategorie**, ne nálezu: kdyby se řadilo podle
     /// `isBlocking`, rozpadla by se kategorie, ve které je `CONFIRMED` i `PLAUSIBLE`, na
     /// dvě sekce se stejným názvem.
-    private static func key(of finding: Finding, blocking: Set<String>) -> SortKey {
+    ///
+    /// Jmenuje se `sortKey`, ne `key`: `Policy.key(of:)` je **identita nálezu** napříč běhy
+    /// (#113), tohle jsou kritéria řazení. Dvě různé věci se stejným jménem se pletou —
+    /// tatáž úvaha jako u tří „review“ v modelech.
+    private static func sortKey(
+        of finding: Finding,
+        blocking: Set<String>,
+        dismissals: [FindingKey: FindingDismissal]
+    ) -> SortKey {
         let category = finding.category.map(normalized(category:))
 
         return SortKey(
+            dismissedRank: dismissals[key(of: finding)] == nil ? 0 : 1,
             // Chybějící hodnoty jdou dozadu, a proto pořadí, ne příznak: `Bool` v Swiftu
             // není `Comparable` a možnosti jsou tři, ne dvě.
             categoryRank: category.map { blocking.contains($0) ? 0 : 1 } ?? 2,
@@ -79,9 +99,10 @@ extension Policy {
     /// Kritéria řazení v pořadí důležitosti.
     ///
     /// Vlastní typ, ne n-tice: těch je porovnatelných jen šest prvků a hlavně by kritéria
-    /// neměla jména — u sedmi hodnot v závorce se pak dá pořadí přehodit, aniž si toho
+    /// neměla jména — u osmi hodnot v závorce se pak dá pořadí přehodit, aniž si toho
     /// někdo všimne.
     private struct SortKey: Comparable {
+        let dismissedRank: Int
         let categoryRank: Int
         let category: String
         let verdictRank: Int
@@ -91,6 +112,7 @@ extension Policy {
         let summary: String
 
         static func < (left: SortKey, right: SortKey) -> Bool {
+            if left.dismissedRank != right.dismissedRank { return left.dismissedRank < right.dismissedRank }
             if left.categoryRank != right.categoryRank { return left.categoryRank < right.categoryRank }
             if left.category != right.category { return left.category < right.category }
             if left.verdictRank != right.verdictRank { return left.verdictRank < right.verdictRank }

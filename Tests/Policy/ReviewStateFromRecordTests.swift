@@ -86,6 +86,56 @@ struct ReviewStateFromRecordTests {
         #expect(Policy.reviewState(for: record(runs: [])) == .notStarted)
     }
 
+    // MARK: - Odmítnuté nálezy (#113)
+
+    /// `clean` znamená „reviewer nic nenašel“, což je jiné tvrzení než „našel a já to
+    /// zamítl“. Kdyby se slily, řádek by o vyřízeném PR tvrdil něco, co se nestalo.
+    @Test("Odmítnutí všech nálezů není čisté review")
+    func dismissingEverythingIsNotClean() {
+        var stored = record(runs: [makeStoredRun(findings: [blocking])])
+        stored.setDismissal(dismissal(), of: stored.findings[0])
+
+        let state = Policy.reviewState(for: stored)
+
+        #expect(state != .clean)
+        #expect(state == .dismissed(findings: 1))
+    }
+
+    @Test("Řádek počítá jen platné nálezy")
+    func theRowCountsActiveFindingsOnly() {
+        var stored = record(runs: [
+            makeStoredRun(findings: [
+                makeReported(file: "Cart.swift", line: 13, summary: "falešný"),
+                makeReported(file: "Cart.swift", line: 14, summary: "platný"),
+            ]),
+        ])
+        stored.setDismissal(dismissal(), of: stored.findings[0])
+
+        #expect(Policy.reviewState(for: stored) == .completed(findings: 1))
+    }
+
+    /// Timeout se nesmí tvářit jako doběhlé review ani tehdy, když jsem jeho nálezy odmítl —
+    /// zabitý běh o čistotě kódu nevypovídá.
+    @Test("Timeout zůstává timeoutem i po odmítnutí")
+    func aTimeoutStaysATimeout() {
+        var stored = record(runs: [makeStoredRun(outcome: .timedOut, findings: [blocking])])
+        stored.setDismissal(dismissal(), of: stored.findings[0])
+
+        #expect(Policy.reviewState(for: stored) == .timedOut(findings: 0))
+    }
+
+    @Test("Zastaralost přebíjí i odmítnutí")
+    func staleWinsOverDismissals() {
+        var stored = record(runs: [makeStoredRun(findings: [blocking])], isStale: true)
+        stored.setDismissal(dismissal(), of: stored.findings[0])
+
+        #expect(Policy.reviewState(for: stored) == .stale)
+    }
+
+    private func dismissal() -> FindingDismissal {
+        FindingDismissal(reason: .invalid, dismissedAt: Date(timeIntervalSince1970: 1_000_000))
+    }
+
     // MARK: - Fáze přebíjí výsledek
 
     @Test("Co běží, přebíjí to, co doběhlo")

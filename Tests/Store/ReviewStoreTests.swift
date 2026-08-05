@@ -127,6 +127,90 @@ struct ReviewStoreTests {
         #expect(record.findings.map(\.summary) == ["druhý pokus"])
     }
 
+    // MARK: - Odmítnuté nálezy (#113)
+
+    @Test("Odmítnutí přežije cestu na disk a zpět")
+    func aDismissalSurvivesTheRoundTrip() async throws {
+        let store = store()
+        let saved = try await store.save(run())
+        let finding = try #require(saved.findings.first)
+
+        try await store.dismiss(finding, as: .irrelevant, in: pullRequest)
+        let loaded = try await store.load()
+
+        let record = try #require(loaded.records.first)
+        #expect(record.dismissal(of: finding)?.reason == .irrelevant)
+        #expect(record.dismissal(of: finding)?.dismissedAt == time.now)
+        #expect(record.activeFindings.isEmpty)
+        // A nález sám nikam nezmizel — sbalený řádek v okně na něm stojí.
+        #expect(record.findings.count == 1)
+    }
+
+    @Test("Vrácení odmítnutí smaže")
+    func restoringClearsTheDismissal() async throws {
+        let store = store()
+        let saved = try await store.save(run())
+        let finding = try #require(saved.findings.first)
+        try await store.dismiss(finding, as: .invalid, in: pullRequest)
+
+        try await store.restore(finding, in: pullRequest)
+        let loaded = try await store.load()
+
+        let record = try #require(loaded.records.first)
+        #expect(record.dismissals.isEmpty)
+        #expect(record.activeFindings.count == 1)
+    }
+
+    /// To hlavní z #113: opakované review týmž skillem `StoredReviewRun` přepíše, a to je
+    /// zrovna chvíle, kdy se stejný falešný nález vrátí. Označení bydlí na záznamu právě
+    /// proto, aby to přežilo.
+    @Test("Opakované review týmž skillem odmítnutí nezahodí")
+    func rerunningTheSameSkillKeepsTheDismissal() async throws {
+        let store = store()
+        let saved = try await store.save(run())
+        let finding = try #require(saved.findings.first)
+        try await store.dismiss(finding, as: .invalid, in: pullRequest)
+
+        try await store.save(run())
+        let loaded = try await store.load()
+
+        let record = try #require(loaded.records.first)
+        #expect(record.runs.count == 1)
+        #expect(record.findings.count == 1)
+        #expect(record.activeFindings.isEmpty)
+    }
+
+    /// Kdyby se místo chyby založil prázdný záznam, zmizely by z okna všechny ostatní nálezy
+    /// — a odmítnutí, které nikde není, se po restartu vrátí bez vysvětlení.
+    @Test("Odmítnutí bez uloženého záznamu je chyba")
+    func dismissingWithoutARecordThrows() async throws {
+        let store = store()
+        let finding = makeFinding(file: "Cart.swift", line: 13)
+
+        await #expect(throws: ReviewStoreError.recordNotFound(pullRequest, headSha: "aaaa1111")) {
+            try await store.dismiss(finding, as: .invalid, in: pullRequest)
+        }
+    }
+
+    /// Soubor se hledá podle `finding.headSha`, ne podle viditelného záznamu — nález si
+    /// commit nese sám (tvrdá podmínka č. 5).
+    @Test("Odmítnutí sedne na commit, ke kterému nález patří")
+    func aDismissalLandsOnTheFindingsCommit() async throws {
+        let store = store()
+        try await store.save(run(headSha: "aaaa1111"))
+        let newer = try await store.save(run(headSha: "cccc3333"))
+        let finding = try #require(newer.findings.first)
+
+        try await store.dismiss(finding, as: .invalid, in: pullRequest)
+        let loaded = try await store.load()
+
+        let byCommit = Dictionary(
+            uniqueKeysWithValues: loaded.records.map { ($0.headSha, $0) }
+        )
+        #expect(byCommit["cccc3333"]?.dismissals.count == 1)
+        #expect(byCommit["aaaa1111"]?.dismissals.isEmpty == true)
+    }
+
     @Test("Rozbitý soubor se nezamlčí")
     func anUnreadableFileIsCounted() async throws {
         // Ztracené nálezy se v UI nesmí tvářit jako „review neběželo".

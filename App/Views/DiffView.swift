@@ -16,6 +16,8 @@ struct DiffView: View {
     let folding: DiffFoldingActions
     /// Nálezy k zavěšení pod řádky. Seskupené podle místa už volajícím.
     var findings: [FindingGroup] = []
+    /// Odmítnutí a vrácení nálezu (#113). Skupiny si stav nesou samy, tudy jdou jen akce.
+    var findingActions: FindingActions?
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     /// Místo, na které se právě skočilo z tabulky nálezů.
     var highlighted: FindingHighlight?
@@ -158,6 +160,7 @@ struct DiffView: View {
                 reveal: { expansion.reveal(file, $0) },
                 highlighted: highlighted,
                 blockingCategories: blockingCategories,
+                findingActions: findingActions,
                 viewer: viewer,
                 threads: threadActions,
                 draft: fileDraft,
@@ -365,11 +368,14 @@ struct DiffView: View {
     /// soubor s nevyřízeným nálezem by se dal zapomenout a tabulka nálezů je jiná
     /// obrazovka. U rozbaleného to není šum, ale zkratka: projedu hlavičky a vím, kde
     /// nálezy jsou, aniž bych scrolloval obsahem.
+    /// Počítá **platné** nálezy (#113). Odznak je zkratka „kde je co vyřídit“, takže odmítnutý
+    /// nález v něm nemá co dělat — a hlavně by u sbaleného souboru svítil červeně nad něčím, co
+    /// jsem už posoudil. Nemizí tím nic: bublina u řádku i řádek v tabulce zůstávají.
     @ViewBuilder private func fileFindings(_ file: FileDiff) -> some View {
-        let groups = findings(in: file)
+        let groups = findings(in: file).filter { !$0.activeFindings.isEmpty }
         if !groups.isEmpty {
             let blocking = groups.contains { group in
-                group.findings.contains { Policy.isBlocking($0, categories: blockingCategories) }
+                group.activeFindings.contains { Policy.isBlocking($0, categories: blockingCategories) }
             }
             Label(
                 Plural.czech(groups.count, one: "nález", few: "nálezy", many: "nálezů"),

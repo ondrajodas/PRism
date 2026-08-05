@@ -29,11 +29,19 @@ extension Policy {
     /// 1. **zastaralé** — nálezy patří ke commitu, který v PR není, a to přebíjí všechno,
     /// 2. **timeout** — zabitý běh si nálezy nechává, ale nesmí se tvářit jako doběhlý,
     /// 3. **nálezy** — to je to, kvůli čemu se review pouštělo,
-    /// 4. **selhání** — spadlá session bez nálezů,
-    /// 5. **čisté** — jen když se z běhů dá vůbec soudit; jinak je to `failed` s vysvětlením.
+    /// 4. **odmítnuté** — nálezy byly, ale všechny jsem posoudil jako falešné (#113),
+    /// 5. **selhání** — spadlá session bez nálezů,
+    /// 6. **čisté** — jen když se z běhů dá vůbec soudit; jinak je to `failed` s vysvětlením.
     ///
     /// Ten poslední krok je celý smysl toho rozlišení: „nic jsem nenašel“ a „nemám co říct“
-    /// vypadají v datech stejně a v UI znamenají opak.
+    /// vypadají v datech stejně a v UI znamenají opak. Přesně proto je čtvrtý krok vlastní
+    /// stav a ne `clean`: „našel a já to zamítl“ je třetí tvrzení, které v datech vypadá
+    /// stejně jako ta dvě.
+    ///
+    /// Odmítnuté stojí až za `completed` a `timedOut` schválně — tam se počítají **platné**
+    /// nálezy, takže na řadu přijde jen tehdy, když nezbyl žádný. A před `failed` proto, že
+    /// stejné pořadí platí u nálezů, které se neodmítly: co reviewer našel, přebíjí to, že
+    /// jiný běh spadl.
     static func reviewState(
         for record: ReviewRecord,
         categories: Set<String> = defaultBlockingCategories
@@ -41,11 +49,14 @@ extension Policy {
         guard !record.runs.isEmpty else { return .notStarted }
         guard !record.isStale else { return .stale }
 
-        let findings = record.findings.count
+        let findings = record.activeFindings.count
         if record.runs.contains(where: { $0.outcome == .timedOut }) {
             return .timedOut(findings: findings)
         }
         if findings > 0 { return .completed(findings: findings) }
+        if record.dismissedCount > 0 {
+            return .dismissed(findings: record.dismissedCount)
+        }
         if let detail = record.runs.compactMap(failureDetail).first {
             return .failed(detail: detail)
         }

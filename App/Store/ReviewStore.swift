@@ -84,6 +84,59 @@ actor ReviewStore {
         try FileManager.default.removeItem(at: url)
     }
 
+    /// Odmítne nález jako falešně pozitivní (#113) a vrátí záznam, jak po tom vypadá.
+    ///
+    /// Soubor se hledá podle `finding.headSha`, ne podle parametru: nález si commit nese sám
+    /// (tvrdá podmínka č. 5) a druhá cesta k témuž údaji je druhé místo, kde se dá minout.
+    ///
+    /// Aktor to serializuje ze stejného důvodu jako `save`: dva doběhlé skilly a kliknutí
+    /// v okně si nesmí přepsat soubor.
+    @discardableResult
+    func dismiss(
+        _ finding: Finding,
+        as reason: FindingDismissal.Reason,
+        in pullRequest: PRIdentifier
+    ) throws -> ReviewRecord {
+        try setDismissal(
+            FindingDismissal(reason: reason, dismissedAt: time.now),
+            of: finding,
+            in: pullRequest
+        )
+    }
+
+    /// Vrátí nález mezi platné.
+    @discardableResult
+    func restore(_ finding: Finding, in pullRequest: PRIdentifier) throws -> ReviewRecord {
+        try setDismissal(nil, of: finding, in: pullRequest)
+    }
+
+    /// Zápis odmítnutí. Chybějící soubor je **chyba**, ne prázdný záznam: nález, který je
+    /// vidět v okně, musí na disku být — a kdyby se místo toho založil nový záznam bez běhů,
+    /// zmizely by z okna všechny ostatní nálezy.
+    ///
+    /// Rozbitý soubor hlásí **svoji** chybu, ne `recordNotFound`: `try?` nad čtením by
+    /// z nečitelného souboru udělal chybějící a hláška by posílala hledat něco jiného, než
+    /// se stalo. Cizí PR uvnitř souboru je naopak `recordNotFound` — záznam **tohohle** PR
+    /// tam opravdu není a dělat se s tím dá totéž.
+    private func setDismissal(
+        _ dismissal: FindingDismissal?,
+        of finding: Finding,
+        in pullRequest: PRIdentifier
+    ) throws -> ReviewRecord {
+        let url = layout.reviewFile(for: pullRequest, at: finding.headSha)
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+            throw ReviewStoreError.recordNotFound(pullRequest, headSha: finding.headSha)
+        }
+
+        var record = try read(at: url)
+        guard record.pullRequest == pullRequest else {
+            throw ReviewStoreError.recordNotFound(pullRequest, headSha: finding.headSha)
+        }
+        record.setDismissal(dismissal, of: finding)
+        try write(record, to: url)
+        return record
+    }
+
     /// PR má tenhle head commit. Všechno starší se označí jako zastaralé.
     ///
     /// Volá se, jakmile se dotáhne detail PR — tedy v jediné chvíli, kdy aplikace aktuální
@@ -194,5 +247,19 @@ actor ReviewStore {
             files.append(url)
         }
         return files
+    }
+}
+
+/// Chyby, které store hlásí sám za sebe — všechno ostatní jsou chyby `FileManageru`.
+enum ReviewStoreError: LocalizedError, Equatable {
+    /// Záznam, do kterého se má zapsat, na disku není.
+    case recordNotFound(PRIdentifier, headSha: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .recordNotFound(let pullRequest, let headSha):
+            "Uložené nálezy pro \(pullRequest) na commitu \(headSha.prefix(7)) se nenašly. "
+                + "Zkus review pustit znovu."
+        }
     }
 }

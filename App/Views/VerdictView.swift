@@ -44,10 +44,21 @@ struct VerdictView: View {
 
     /// Zastaralý záznam návrh nedá vůbec — a je potřeba říct proč, jinak to vypadá jako
     /// chyba aplikace.
+    ///
+    /// A když návrh stojí na tom, že jsem nálezy odmítl (#113), musí to být vidět: `approve`
+    /// postavené na třech zamítnutých nálezech se od „reviewer nic nenašel“ nesmí lišit jen
+    /// tím, že si to pamatuju. Je to tentýž vzor jako věta `Nálezy jsou schované filtrem
+    /// reviewerů` v prázdné tabulce.
     private var note: String? {
         if record.isStale { return "nálezy jsou proti staršímu commitu" }
         if verdict == nil { return "žádný běh nedoběhl tak, aby se z něj dalo soudit" }
-        return nil
+        guard record.dismissedCount > 0 else { return nil }
+        return Plural.czech(
+            record.dismissedCount,
+            one: "odmítnutý nález se nepočítá",
+            few: "odmítnuté nálezy se nepočítají",
+            many: "odmítnutých nálezů se nepočítá"
+        )
     }
 
     private var symbol: String {

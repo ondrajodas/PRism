@@ -17,6 +17,9 @@ struct DiffRowView: View {
     /// Místo, na které se právě skočilo z tabulky.
     var highlighted: FindingHighlight?
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
+    /// Odmítnutí a vrácení nálezu (#113). Rozhoduje store, ne tenhle view — ze stejného
+    /// důvodu jako u vláken.
+    var findingActions: FindingActions?
     /// Přihlášený uživatel — kvůli odlišení mých komentářů ve vláknech.
     var viewer: String = ""
     /// Co se dá dělat s vlákny. Rozhoduje store, ne tenhle view: buňka líného seznamu se při
@@ -81,6 +84,7 @@ struct DiffRowView: View {
                 reveal: reveal,
                 isHighlighted: highlighted?.matches(group) ?? false,
                 draft: draft,
+                actions: findingActions,
                 indent: indent
             )
         case .thread(_, let thread):

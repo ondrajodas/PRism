@@ -140,6 +140,8 @@ struct PullRequestDetailView: View {
                 isExpanded: $findingsExpanded,
                 jump: jump,
                 findings: visibleFindings,
+                dismissals: dismissals,
+                findingActions: findingActions,
                 blockingCategories: blockingCategories,
                 timelines: store.timelines(for: pullRequest.id),
                 isRunning: store.isReviewing(pullRequest.id),
@@ -194,9 +196,32 @@ struct PullRequestDetailView: View {
 
     /// Nálezy po odfiltrování ztlumených reviewerů. Verdikt se tím **nemění** — filtr je
     /// pohled, ne tvrzení o pull requestu.
+    ///
+    /// Odmítnuté (#113) tady zůstávají: filtr reviewerů schovává, odmítnutí ztlumuje. Kdyby
+    /// se odmítnuté vyřadily už tady, zmizely by z okna — a schovaný nález se nedá odlišit od
+    /// neexistujícího, natož zkontrolovat.
     private var visibleFindings: [Finding] {
         (store.reviewRecord(for: pullRequest.id)?.findings ?? [])
             .filter { !mutedReviewers.contains($0.reviewer) }
+    }
+
+    /// Jak jsem nálezy posoudil. Bere se z uloženého záznamu, ne z filtru — je to obsah,
+    /// ne pohled.
+    private var dismissals: [FindingKey: FindingDismissal] {
+        store.reviewRecord(for: pullRequest.id)?.dismissals ?? [:]
+    }
+
+    /// Odmítnutí nálezu (#113) — jedno místo pro bubliny u kódu i pro tabulku v panelu.
+    private var findingActions: FindingActions {
+        let id = pullRequest.id
+        return FindingActions(
+            dismiss: { finding, reason in
+                Task { await store.dismissFinding(finding, as: reason, for: id) }
+            },
+            restore: { finding in
+                Task { await store.restoreFinding(finding, for: id) }
+            }
+        )
     }
 
     /// Pohled na diff. Žije ve store (globálně, do zavření aplikace), takže si ho vlastní
@@ -417,7 +442,8 @@ struct PullRequestDetailView: View {
                 scrollTarget: $scrollTarget,
                 expansion: expansionActions,
                 folding: foldingActions,
-                findings: Policy.groups(of: visibleFindings),
+                findings: Policy.groups(of: visibleFindings, dismissals: dismissals),
+                findingActions: findingActions,
                 blockingCategories: blockingCategories,
                 highlighted: highlighted,
                 threads: store.anchoredThreads(for: pullRequest.id),
