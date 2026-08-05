@@ -58,6 +58,8 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     var cacheBudgetMegabytes: Int
     /// `nil` = model, který si `claude` zvolí sám.
     var model: String?
+    /// Co se má hlásit notifikací (#86). Jen globálně — viz `NotificationSettings`.
+    var notifications: NotificationSettings
 
     init(
         sources: [Source],
@@ -72,7 +74,8 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         maxConcurrentReviews: Int,
         autoRunsPerDay: Int = 20,
         cacheBudgetMegabytes: Int,
-        model: String?
+        model: String?,
+        notifications: NotificationSettings = NotificationSettings()
     ) {
         self.sources = sources
         self.skills = skills
@@ -87,6 +90,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.autoRunsPerDay = autoRunsPerDay
         self.cacheBudgetMegabytes = cacheBudgetMegabytes
         self.model = model
+        self.notifications = notifications
     }
 
     init(from decoder: any Decoder) throws {
@@ -124,6 +128,11 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         cacheBudgetMegabytes = try container.decodeIfPresent(Int.self, forKey: .cacheBudgetMegabytes)
             ?? standard.cacheBudgetMegabytes
         model = try container.decodeIfPresent(String.self, forKey: .model)
+        // Chybějící klíč = výchozí (všechno zapnuté). Rozbitý obsah řeší `NotificationSettings`
+        // sám, po jednotlivých přepínačích — celá sekce se kvůli jednomu překlepu zahazovat
+        // nemá, jinak by se s ním vypnulo i to, co je napsané správně.
+        notifications = try container.decodeIfPresent(NotificationSettings.self, forKey: .notifications)
+            ?? standard.notifications
     }
 }
 

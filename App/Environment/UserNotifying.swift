@@ -36,6 +36,9 @@ struct PullRequestNotification: Sendable, Equatable {
     let pullRequest: PRIdentifier
     let title: String
     let body: String
+    /// Co ji vyvolalo (#86). Nese si to notifikace sama, aby brána nemusela hádat z textu —
+    /// druhá cesta k témuž údaji by se s první rozešla.
+    let event: NotificationEvent
 }
 
 /// Jak dopadlo doručení.

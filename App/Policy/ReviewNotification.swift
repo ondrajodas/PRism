@@ -21,12 +21,42 @@ extension Policy {
         state: ReviewState,
         blocking: Int = 0
     ) -> PullRequestNotification? {
-        guard let body = notificationBody(state: state, blocking: blocking) else { return nil }
+        guard let body = notificationBody(state: state, blocking: blocking),
+              let event = notificationEvent(for: state)
+        else { return nil }
         // Titulek nese **repo a číslo**, ne jen „Review doběhlo“: notifikací může viset víc
         // a bez identifikace se nepozná, které patří ke kterému PR. Číslo se skládá přes
         // `description` identifikátoru, takže se nikde neinterpoluje přes locale — z `#21663`
         // by jinak bylo `#21 663`.
-        return PullRequestNotification(pullRequest: pr, title: pr.description, body: body)
+        return PullRequestNotification(
+            pullRequest: pr,
+            title: pr.description,
+            body: body,
+            event: event
+        )
+    }
+
+    /// Do které kategorie stav patří (#86).
+    ///
+    /// Skládá se **z téhož `ReviewState`** jako text, takže se brána a hláška nemůžou rozejít.
+    /// `nil` u stavů, které nejsou konec běhu — a to je stejná množina jako u textu, takže si
+    /// obojí musí odpovídat; drží to test.
+    private static func notificationEvent(for state: ReviewState) -> NotificationEvent? {
+        switch state {
+        case .notStarted, .queued, .cloning, .running, .stale:
+            nil
+        case .completed, .timedOut:
+            // Timeout patří k nálezům, i když nic nenašel: doběhlo to jinak, než mělo, a je to
+            // výsledek review, který si člověk má přečíst. Do `failure` nepatří, protože
+            // částečné nálezy jsou pořád nálezy.
+            .findings
+        case .clean, .dismissed:
+            // Odmítnuté nálezy jsou z pohledu vyrušení totéž jako čisto: nezbylo nic, co bych
+            // musel řešit. Kdo si vypne „čisté review“, nechce ani tuhle hlášku.
+            .clean
+        case .failed, .checkoutFailed:
+            .failure
+        }
     }
 
     /// Co se v notifikaci píše. `nil` = tenhle stav se neoznamuje.
@@ -94,7 +124,8 @@ extension Policy {
         PullRequestNotification(
             pullRequest: pr,
             title: "Nový PR k review — \(pr.description)",
-            body: title ?? "Titulek se nepodařilo přečíst."
+            body: title ?? "Titulek se nepodařilo přečíst.",
+            event: .newPullRequest
         )
     }
 
