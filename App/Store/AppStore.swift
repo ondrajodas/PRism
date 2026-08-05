@@ -1779,8 +1779,12 @@ final class AppStore {
 
             try await runSkills(for: pr, of: detail, in: worktree, using: reviewer, saving: reviews)
             reviewPhases[pr] = nil
+            await notifyAboutFinishedReview(of: pr)
         } catch is CancellationError {
             // Zrušení není selhání — stav se srovná podle disku, ne do chyby.
+            //
+            // A **neoznamuje se**: zrušil si ho člověk, takže o něm ví. Notifikace o tom, co
+            // jsem právě sám zastavil, je čisté vyrušení za nic.
             reviewPhases[pr] = nil
             await syncCheckoutState(for: pr.repo, using: checkout)
         } catch let error as CheckoutError {
@@ -1788,11 +1792,39 @@ final class AppStore {
             // ni narazí taky a řeší se stejným tlačítkem.
             reviewPhases[pr] = nil
             checkoutStates[pr.repo] = .failed(error.userDescription)
+            await notifyAboutFinishedReview(of: pr)
         } catch let error as GitHubError {
             reviewPhases[pr] = .failed(detail: error.userDescription)
+            await notifyAboutFinishedReview(of: pr)
         } catch {
             reviewPhases[pr] = .failed(detail: error.localizedDescription)
+            await notifyAboutFinishedReview(of: pr)
         }
+    }
+
+    /// Dá vědět, jak review dopadlo (#82).
+    ///
+    /// Volá se **až tam, kde se review uzavírá**, ne u ukládání jednotlivého běhu: jinak by
+    /// u tří skillů přišlo „čisté“ a za minutu „3 nálezy“ za totéž PR. Rozhoduje proto
+    /// `reviewState(for:)`, tedy tentýž stav, jaký ukazuje řádek seznamu — druhý výpočet by
+    /// se s prvním mohl rozejít.
+    ///
+    /// Stavy, které nejsou konec běhu, a zastaralý záznam si `Policy` odfiltruje sama.
+    private func notifyAboutFinishedReview(of pr: PRIdentifier) async {
+        guard notifications != nil else { return }
+        guard let notification = Policy.reviewNotification(
+            for: pr,
+            state: reviewState(for: pr),
+            blocking: blockingFindingCount(for: pr)
+        ) else { return }
+        await notify(notification)
+    }
+
+    /// Kolik nálezů PR blokuje. Bez záznamu nula — není to spolknuté selhání, ale odpověď:
+    /// když review nedoběhlo (selhal checkout, spadlo volání GitHubu), nemá co blokovat.
+    private func blockingFindingCount(for pr: PRIdentifier) -> Int {
+        guard let record = reviewRecords[pr] else { return 0 }
+        return Policy.blockingCount(in: record, categories: resolved(for: pr.repo).blockingCategories)
     }
 
     /// Odvodí sadu skillů z toho, co v repu leží.
