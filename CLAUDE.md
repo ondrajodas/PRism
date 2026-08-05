@@ -1812,6 +1812,16 @@ Notifikace o novém PR (#85) drží stav na disku (`AnnouncedPullRequests`) a pl
   `NotificationDelivery.isWorthRetrying` — opakovat každou minutu něco, co je systémově
   zakázané, je volání za nic, a ta PR se po povolení přečtou ve frontě v okně. Rozlišení bydlí
   na výčtu, ne u volajícího: druhá kopie by u nového případu odpověděla jinak.
+- **Odebrání ze snímku smí být hned, přidání až po doručení** (#135). Odeslané review ruší
+  `review-requested`, takže PR z fronty odejde — a kdyby ve snímku zůstal, po **re-review** by
+  nebyl „nový“ a notifikace by nepřišla. Odebírá proto `newcomers(in:)` sám, kdežto přidává
+  jen `remember(_:)`: **odebrání nikdy notifikaci neztratí** (jen umožní budoucí ohlášení),
+  přidání před doručením ano. Zápis nemůže zůstat celý na volajícím, protože ten se u tiku bez
+  novinek vrací dřív.
+
+  Chytil to **provoz, ne test** — a test na to přitom existoval: ověřoval `AnnouncedPullRequests`
+  přímo a prázdný snímek si zapsal ručně, tedy kontrakt, který `AppStore` neplní. Jednotkový test
+  byl zelený a integrace rozbitá; proto je od #135 test na celý řetěz přes `AppStore`.
 - **Zapisuje se celá fronta bez těch, u kterých doručení selhalo** — ne „všechno nebo nic“.
   Do snímku musí jít i PR, která tam byla už minule (jinak by se ohlásila podruhé), ale kdyby
   jedno selhání zdrželo zápis celý, příští tik by poslal znovu i to, co dorazilo — a při

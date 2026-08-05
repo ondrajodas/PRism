@@ -247,3 +247,26 @@ extension AppStoreNewPullRequestTests {
         #expect(center.delivered.last?.title == "2 nové PR k review")
     }
 }
+
+extension AppStoreNewPullRequestTests {
+    @Test("Re-review se ohlásí: PR odejde z fronty a vrátí se")
+    func announcesARereview() async {
+        // Odeslané review ruší `review-requested`, takže PR ze seznamu vypadne. Když autor
+        // požádá o re-review, vrátí se — a to je informace, o které se má dozvědět.
+        let center = FakeNotificationCenter()
+        let gateway = FakeGitHubGateway([
+            .success([summary("cli/cli#1"), summary("cli/cli#2")]),  // výchozí fronta
+            .success([summary("cli/cli#1")]),                        // #2 zreviewováno → pryč
+            .success([summary("cli/cli#1"), summary("cli/cli#2")]),  // re-review → zpátky
+        ])
+        let store = store(gateway, center: center)
+
+        await store.refresh()  // první tik mlčí
+        await store.refresh()  // #2 zmizelo
+        await store.refresh()  // #2 zpátky — tady má přijít notifikace
+
+        #expect(center.delivered.count == 1)
+        #expect(center.delivered.first?.pullRequest == PRIdentifier("cli/cli#2"))
+    }
+}
+
