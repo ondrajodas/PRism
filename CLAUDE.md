@@ -153,9 +153,22 @@ včetně důvodu.
 - **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
   a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
   Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
-- **Po mergnutí PR se vydá nový tag a GitHub release.** Release notes píšeme česky a
-  popisují progress: co se změnilo, jaký je aktuální stav proti milníkům a co je další
-  krok. Release je deník projektu — kdo si přečte poslední release, ví, kde jsme.
+- **Po mergnutí PR se vydá nový tag a GitHub release.** Release notes píšeme česky
+  a popisují **jen to, co se v téhle verzi změnilo**: co přibylo, co se opravilo, co se
+  rozhodlo jinak a proč, co se změřilo, co se zamítlo. Patří tam i to, co se změnou
+  souvisí — počet testů, věta „na tomhle není co vidět“ u vrstvy bez UI, známé omezení
+  toho, co se vydalo.
+
+  **Stav projektu do nich nepatří.** Žádná sekce `Kde jsme`, `Další krok`, `Stav proti
+  milníkům` ani výčet toho, co zbývá do milníku. Kde projekt je, se pozná z issues a ze
+  sekce *Stav* níž; release odpovídá jen na otázku „co je v téhle verzi jinak“.
+
+  **Změna proti původnímu pravidlu** (do #125 tu stálo, že release je deník projektu
+  a má popisovat progress). Deník nefungoval ze dvou důvodů: stav **zastará vydáním
+  dalšího releasu** a nikdo ho zpětně neopraví — ve `v1.1.12` stálo, že zbývá #69 a #110,
+  což o dvě verze později nebyla pravda — a v delších releasech **utopil samotnou změnu**,
+  které patřila půlka místa. Release je značka na časové ose, takže hodnotu má právě to,
+  co je v ní neměnné. Stávající releasy jsou podle toho pravidla přepsané zpětně.
 - **Verzování:** `v0.<milník>.<pořadí PR v milníku>` — např. třetí mergnutý PR
   v milníku 1 je `v0.1.3`. Verze `v1.0.0` = dokončený rozsah v1 podle specifikace.
 
@@ -164,7 +177,7 @@ včetně důvodu.
   značka na časové ose, ne štítek původu. Vlastní řada by znamenala, že se čísla vracejí
   zpátky: `v0.0.x` po `v0.5.7` nikomu neřekne, kdy to vzniklo.
 - Binárky se do release nepřikládají — buildujeme lokálně. Release slouží k záznamu
-  postupu, ne k distribuci.
+  změn, ne k distribuci.
 
 ## Co aplikace je
 

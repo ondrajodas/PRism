@@ -307,9 +307,10 @@ Vlákna, jejichž řádek v aktuálním diffu **není** (typicky zastaralá po n
 do kódu nekotví — jejich čísla platila pro starý head, takže by bublina sedla na cizí řádky.
 Domov mají v záložce `Přehled` spolu s review ostatních a komentáři pod PR.
 
-Postup se dá sledovat přes [releases](https://github.com/ondrajodas/PRism/releases) —
-po každém mergnutém PR vzniká tag a release s popisem, co se změnilo a kde projekt
-aktuálně je.
+Co se ve které verzi změnilo, je v [releases](https://github.com/ondrajodas/PRism/releases) —
+po každém mergnutém PR vzniká tag a release s popisem toho, co ta verze přinesla. Kde projekt
+je jako celek, říká sekce [Stav](CLAUDE.md#stav) v `CLAUDE.md`, ne release notes: ten stav by
+v nich zastaral hned další verzí.
 
 - [Návrh (specifikace)](docs/superpowers/specs/2026-07-31-prism-design.md) — plný
   návrh včetně záznamu rozhodnutí a zamítnutých alternativ
