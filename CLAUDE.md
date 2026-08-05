@@ -1794,8 +1794,11 @@ Notifikace o novém PR (#85) drží stav na disku (`AnnouncedPullRequests`) a pl
   `NotificationDelivery.isWorthRetrying` — opakovat každou minutu něco, co je systémově
   zakázané, je volání za nic, a ta PR se po povolení přečtou ve frontě v okně. Rozlišení bydlí
   na výčtu, ne u volajícího: druhá kopie by u nového případu odpověděla jinak.
-- **Zapisuje se celá fronta, ne jen to, co se doručilo.** Snímek má odpovídat seznamu, takže se
-  do něj musí dostat i PR, která tam byla už minule — jinak by se ohlásila podruhé.
+- **Zapisuje se celá fronta bez těch, u kterých doručení selhalo** — ne „všechno nebo nic“.
+  Do snímku musí jít i PR, která tam byla už minule (jinak by se ohlásila podruhé), ale kdyby
+  jedno selhání zdrželo zápis celý, příští tik by poslal znovu i to, co dorazilo — a při
+  opakovaném selhání jedné notifikace by se ostatní posílaly každou minutu. Chytil to Copilot
+  na #132; řeší se to snímkem, ne pamětí, takže to platí i přes restart.
 - **`notify(_:)` vrací, jak to dopadlo.** Do #85 nevracela nic; bez toho se volající nemá jak
   rozhodnout, jestli zkusit znovu. `@discardableResult`, takže #82 se to netýká.
 - **Bez notifikačního centra se snímek nezakládá.** Kdyby se plnil i tak, po zapnutí notifikací

@@ -197,3 +197,33 @@ struct AppStoreNewPullRequestTests {
         #expect(!FileManager.default.fileExists(atPath: layout.announcedFile.path))
     }
 }
+
+extension AppStoreNewPullRequestTests {
+    @Test("Selhání u jednoho PR neopakuje ta, která dorazila")
+    func doesNotRepeatWhatAlreadyArrived() async {
+        // Kdyby jedno selhání zdrželo zápis celého snímku, příští tik by poslal znovu i PR,
+        // která už dorazila — a při opakovaném selhání jedné z nich by se ty ostatní posílaly
+        // každou minutu. Chytil to Copilot na #132.
+        let center = FakeNotificationCenter()
+        center.answer(with: .failed("centrum neodpovědělo"), for: PRIdentifier("cli/cli#3")!)
+        let gateway = FakeGitHubGateway([
+            .success([summary("cli/cli#1")]),
+            .success([summary("cli/cli#1"), summary("cli/cli#2"), summary("cli/cli#3")]),
+            .success([summary("cli/cli#1"), summary("cli/cli#2"), summary("cli/cli#3")]),
+        ])
+        let store = store(gateway, center: center)
+
+        await store.refresh()
+        await store.refresh()
+        #expect(center.delivered.map(\.pullRequest) == [
+            PRIdentifier("cli/cli#2"), PRIdentifier("cli/cli#3"),
+        ])
+
+        await store.refresh()
+
+        // Třetí tik smí zkusit **jen** to selhané, ne obě.
+        #expect(center.delivered.map(\.pullRequest) == [
+            PRIdentifier("cli/cli#2"), PRIdentifier("cli/cli#3"), PRIdentifier("cli/cli#3"),
+        ])
+    }
+}

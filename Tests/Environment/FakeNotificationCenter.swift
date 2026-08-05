@@ -11,6 +11,7 @@ final class FakeNotificationCenter: UserNotifying, @unchecked Sendable {
     private let lock = NSLock()
     private var sent: [PullRequestNotification] = []
     private var outcome: NotificationDelivery
+    private var perPullRequest: [PRIdentifier: NotificationDelivery] = [:]
     private let clicked: AsyncStream<PRIdentifier>
     private let clicks_: AsyncStream<PRIdentifier>.Continuation
 
@@ -29,10 +30,16 @@ final class FakeNotificationCenter: UserNotifying, @unchecked Sendable {
         lock.withLock { outcome = delivery }
     }
 
+    /// Jak dopadne doručení **konkrétního** PR. Na tom stojí testy částečného selhání (#85):
+    /// když jedno PR z několika neprojde, ostatní se nesmí posílat znovu.
+    func answer(with delivery: NotificationDelivery, for pullRequest: PRIdentifier) {
+        lock.withLock { perPullRequest[pullRequest] = delivery }
+    }
+
     func deliver(_ notification: PullRequestNotification) async -> NotificationDelivery {
         lock.withLock {
             sent.append(notification)
-            return outcome
+            return perPullRequest[notification.pullRequest] ?? outcome
         }
     }
 
