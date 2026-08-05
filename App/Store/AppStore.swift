@@ -203,6 +203,8 @@ final class AppStore {
     /// Nepovinné schválně, jako `health` nebo `reviews`: `keepFresh()` volají i testy a živé
     /// centrum by z nich udělalo testy sahající na systémové notifikace.
     private let notifications: (any UserNotifying)?
+    /// Které PR už se ohlásily jako nové (#85). `nil` = odsud se nehlásí (testy).
+    private let announced: AnnouncedPullRequests?
     /// Běžící review podle PR — drží se kvůli zrušení.
     private var reviewTasks: [PRIdentifier: Task<Void, Never>] = [:]
     /// Review, která spustil **automat**. Ruční se pozná tím, že tady není — a jen ta
@@ -229,12 +231,14 @@ final class AppStore {
         autoRuns: AutoRunLedger? = nil,
         gh: URL? = nil,
         health: HealthMonitor? = nil,
-        notifications: (any UserNotifying)? = nil
+        notifications: (any UserNotifying)? = nil,
+        announced: AnnouncedPullRequests? = nil
     ) {
         self.time = time
         self.gh = gh
         self.health = health
         self.notifications = notifications
+        self.announced = announced
         self.configuration = configuration
         self.configStore = configStore
         polling = PollingService(
@@ -266,6 +270,10 @@ final class AppStore {
             // úklidu se spolkne schválně — neuklizený soubor nikomu nevadí a příští tik to
             // zkusí znovu; hlásit to uživateli by byl šum bez akce.
             try? await reviews?.cleanUp(openPullRequests: summaries.map(\.id))
+            // Nová PR se hlásí **jen po úspěšném tiku**, ze stejného důvodu jako všechno
+            // ostatní tady: po výpadku sítě je seznam prázdný, takže by se snímek vyprázdnil
+            // a při zotavení by přišlo úplně všechno.
+            await self?.announceNewPullRequests(in: summaries)
         }
         // Monitor si skutečná volání nedrží — bere si je odsud. Jinak by existovalo druhé
         // místo se stavem pollingu a rozejít se v tomhle znamená svítit červeně nad
@@ -309,7 +317,8 @@ final class AppStore {
             autoRuns: AutoRunLedger(),
             gh: toolPaths.gh,
             health: HealthMonitor(),
-            notifications: SystemNotificationCenter.shared
+            notifications: SystemNotificationCenter.shared,
+            announced: AnnouncedPullRequests()
         )
         self.configurationBox = box
     }
@@ -1501,9 +1510,14 @@ final class AppStore {
     /// Vrstva bez konzumenta: první, kdo tuhle cestu použije, je #82 (doběhlé review), pak
     /// #85 (nové PR). Volání bez nastaveného centra (testy) neudělá nic a **nic si ani
     /// nezapíše** — „odsud se neposílá“ není porucha, o které by se mělo hlásit.
-    func notify(_ notification: PullRequestNotification) async {
-        guard let notifications else { return }
-        notificationFailure = message(for: await notifications.deliver(notification))
+    /// Vrací, **jak** doručení dopadlo — volající se podle toho může rozhodnout, jestli to
+    /// zkusit znovu (#85 na tom stojí). `nil` = odsud se neposílá.
+    @discardableResult
+    func notify(_ notification: PullRequestNotification) async -> NotificationDelivery? {
+        guard let notifications else { return nil }
+        let delivery = await notifications.deliver(notification)
+        notificationFailure = message(for: delivery)
+        return delivery
     }
 
     /// Proč notifikace nedorazila, jako věta pro okno. `nil` = dorazila.
@@ -1825,6 +1839,37 @@ final class AppStore {
     private func blockingFindingCount(for pr: PRIdentifier) -> Int {
         guard let record = reviewRecords[pr] else { return 0 }
         return Policy.blockingCount(in: record, categories: resolved(for: pr.repo).blockingCategories)
+    }
+
+    /// Dá vědět o PR, která se v seznamu objevila (#85).
+    ///
+    /// **Zapisuje se až po doručení.** Opačné pořadí znamená, že se PR zapíše jako ohlášené,
+    /// notifikace se nepovede a už nikdy nepřijde — a je to zadání #85. Zapisuje se přitom
+    /// **celý** aktuální seznam, ne jen to, co se doručilo: snímek má odpovídat frontě, takže
+    /// se do něj musí dostat i PR, která tam byla už minule.
+    ///
+    /// **Přechodná chyba snímek nepřepíše** (příští tik to zkusí znovu), kdežto **odmítnuté
+    /// oprávnění ano**: opakovat každou minutu něco, co je zakázané, nemá cenu a po povolení
+    /// se ta PR ve frontě přečtou v okně. Že notifikace nechodí, je vidět ve stavovém řádku.
+    ///
+    /// Do snímku jde **fronta bez těch, u kterých doručení selhalo**, ne „všechno nebo nic“.
+    /// Kdyby jedno selhání zdrželo celý zápis, příští tik by poslal znovu i PR, která už
+    /// dorazila — a při opakovaném selhání jedné z nich by se ty ostatní posílaly každou
+    /// minutu. Chytil to Copilot na #132; řeší se to snímkem, ne pamětí, takže to platí
+    /// i přes restart.
+    private func announceNewPullRequests(in summaries: [PullRequestSummary]) async {
+        guard notifications != nil, let announced else { return }
+        let listed = summaries.map(\.id)
+        let newcomers = await announced.newcomers(in: listed)
+        guard !newcomers.isEmpty else { return }
+
+        var undelivered: Set<PRIdentifier> = []
+        for pr in newcomers {
+            let title = summaries.first { $0.id == pr }?.title
+            let delivery = await notify(Policy.newPullRequestNotification(for: pr, title: title))
+            if delivery?.isWorthRetrying == true { undelivered.insert(pr) }
+        }
+        await announced.remember(listed.filter { !undelivered.contains($0) })
     }
 
     /// Odvodí sadu skillů z toho, co v repu leží.

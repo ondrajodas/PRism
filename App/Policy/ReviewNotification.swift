@@ -78,6 +78,26 @@ extension Policy {
         return "\(found), z toho \(blocks)."
     }
 
+    /// Notifikace o novém PR ve frontě (#85).
+    ///
+    /// Na rozdíl od té o doběhlém review **nemá `nil` variantu**: co je nové, rozhoduje snímek
+    /// v `AnnouncedPullRequests`, a když se na tuhle funkci dojde, je o čem dát vědět.
+    ///
+    /// Titulek nese repo a číslo (jako u review), tělo **titulek PR** — to je jediné, z čeho
+    /// se pozná, jestli se na to jít podívat hned. Chybějící titulek je vlastní stav, ne
+    /// prázdný řádek: `gh` ho vždycky vrátí, takže by prázdno znamenalo, že se PR nespároval
+    /// se seznamem, a to se nemá tvrdit jako „PR bez názvu“.
+    static func newPullRequestNotification(
+        for pr: PRIdentifier,
+        title: String?
+    ) -> PullRequestNotification {
+        PullRequestNotification(
+            pullRequest: pr,
+            title: "Nový PR k review — \(pr.description)",
+            body: title ?? "Titulek se nepodařilo přečíst."
+        )
+    }
+
     /// Kolik z platných nálezů záznamu blokuje.
     ///
     /// Počítají se **platné** (`activeFindings`), tedy bez odmítnutých (#113) — blokující

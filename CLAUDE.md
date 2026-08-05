@@ -1083,6 +1083,7 @@ Výsledky review na disku: jeden JSON soubor na `(repo, PR, headSha)` pod
 | `ReviewStore` | Aktor: `save`, `dismiss`, `restore`, `markCurrent`, `load`, `delete`, `cleanUp`. Atomický zápis |
 | `ReviewStoreError` | Jediná vlastní chyba: záznam, do kterého se má zapsat, na disku není |
 | `AutoRunLedger` | Aktor: kolik review dnes spustil automat. **Na disku**, aby limit nešel obejít restartem |
+| `AnnouncedPullRequests` | Aktor: které PR se už ohlásily jako nové (#85). **Snímek** poslední fronty na disku, ne rostoucí log |
 | `ReviewRecord` | Obsah jednoho souboru: PR, `headSha`, běhy, `isStale`, `closedAt` |
 | `StoredReviewRun` | Jeden běh: skill, `outcome`, session id, nálezy, `droppedFindings`, čas |
 
@@ -1781,6 +1782,28 @@ Notifikace o doběhlém review (#82) k tomu přidávají:
   identifikátoru, takže se číslo nikde neformátuje přes locale — z `#21663` by jinak vyšlo
   `#21 663`. Je na to test.
 
+Notifikace o novém PR (#85) drží stav na disku (`AnnouncedPullRequests`) a platí u nich:
+
+- **Hlásí se jen po úspěšném tiku.** Po výpadku sítě je seznam prázdný, takže by se snímek
+  vyprázdnil a při zotavení by přišlo úplně všechno — tatáž past jako u `CacheEviction`
+  a `ReviewStore.cleanUp`. Je na to test.
+- **Snímek se zapisuje až po doručení.** Opačné pořadí znamená, že se PR zapíše jako ohlášené,
+  notifikace se nepovede a **už nikdy nepřijde**. Chytil to test, který byl napsaný dřív než
+  ta oprava: první podoba zapisovala vždycky.
+- **Přechodná chyba snímek nepřepíše, odmítnuté oprávnění ano.** Rozhoduje
+  `NotificationDelivery.isWorthRetrying` — opakovat každou minutu něco, co je systémově
+  zakázané, je volání za nic, a ta PR se po povolení přečtou ve frontě v okně. Rozlišení bydlí
+  na výčtu, ne u volajícího: druhá kopie by u nového případu odpověděla jinak.
+- **Zapisuje se celá fronta bez těch, u kterých doručení selhalo** — ne „všechno nebo nic“.
+  Do snímku musí jít i PR, která tam byla už minule (jinak by se ohlásila podruhé), ale kdyby
+  jedno selhání zdrželo zápis celý, příští tik by poslal znovu i to, co dorazilo — a při
+  opakovaném selhání jedné notifikace by se ostatní posílaly každou minutu. Chytil to Copilot
+  na #132; řeší se to snímkem, ne pamětí, takže to platí i přes restart.
+- **`notify(_:)` vrací, jak to dopadlo.** Do #85 nevracela nic; bez toho se volající nemá jak
+  rozhodnout, jestli zkusit znovu. `@discardableResult`, takže #82 se to netýká.
+- **Bez notifikačního centra se snímek nezakládá.** Kdyby se plnil i tak, po zapnutí notifikací
+  by první nová PR vypadala jako už ohlášená.
+
 Signály pro stavový řádek (#31) do `AppStore` patří taky, protože jen on ví, jak dopadla
 skutečná volání:
 
@@ -2025,6 +2048,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.health(of:from:)` | Puntík služby ve stavovém řádku ze tří signálů — viz `App/Health/` |
 | `Policy.reviewNotification(for:state:blocking:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje |
+| `Policy.newPullRequestNotification(for:title:)` | Notifikace o novém PR ve frontě (#85) |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
   Volající pak nic nespojuje a z typu je vidět, že jde o několik nezávislých dotazů.
@@ -3384,6 +3408,14 @@ je nastavení s **výchozím stavem vypnuto** — dokud si o odesílání někdo
 neodejde nikam nic. Sandbox není výjimka v kódu, zapíná se stejným přepínačem. Rozbitá hodnota
 v souboru se sráží na zakázané, na obou úrovních.
 
+Notifikace o novém PR hotová (issue #85) — `AnnouncedPullRequests` v `App/Store/`
+a `Policy.newPullRequestNotification(for:title:)`. **Když se ve frontě objeví PR, který tam
+nebyl, přijde notifikace** s repem, číslem a titulkem; klik ji vybere.
+
+Stav je **snímek poslední fronty na disku**, ne rostoucí log: nic se nehromadí, nemusí se nic
+uklízet a PR, které zmizí a vrátí se, se ohlásí znovu (vrátilo se do fronty a je to informace).
+První spuštění mlčí — bez toho by po každém startu přišlo deset notifikací naráz.
+
 Notifikace o doběhlém review hotová (issue #82) — `Policy.reviewNotification(for:state:blocking:)`
 a `notifyAboutFinishedReview(of:)` v `AppStore`. **Aplikace poprvé sama něco pošle:** po
 doběhnutí review přijde jedna notifikace na PR a klik na ni ten PR vybere. Text rozlišuje
@@ -3445,8 +3477,8 @@ o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `
 `#67`, `#66`, `#72`, `#68`, `#73`, `#98`, `#110` a `#69` — tedy **celý**. Zbývá už jen milník
 **M8 (notifikace)**, který na ničem z toho nestojí.
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
-   s oprávněním a klikem (#88, **hotovo**), doběhlé review (#82, **hotovo**), nové PR (#85),
-   vypínání po událostech (#86) a seskupování (#87).
+   s oprávněním a klikem (#88, **hotovo**), doběhlé review (#82, **hotovo**), nové PR (#85,
+   **hotovo**), vypínání po událostech (#86) a seskupování (#87).
 
 Pořadí M6–M8 není závazné. M8 na nich nestojí a dá se udělat kdykoli — je to jediný
 z těch tří milníků, který **nemění tvrdé podmínky**.
