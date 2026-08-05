@@ -17,6 +17,22 @@ enum NotificationEvent: String, Codable, CaseIterable, Hashable, Sendable {
     /// a timeout, který **nic nenahlásil**. Timeout s nálezy patří k `findings`, protože
     /// nálezy jsou tam k přečtení; rozhoduje `Policy.reviewNotification`.
     case failure
+
+    /// Co se navzájem nahrazuje, když jedna hláška ještě visí (#87).
+    ///
+    /// **Všechny tři výsledky review jsou jedna skupina.** Výsledek review nad PR je jeden
+    /// a nový ho přepíše, ať byl předchozí jakýkoli — jinak by po opakovaném běhu zůstala
+    /// vedle „3 nálezy“ viset stará hláška „reviewer nenašel žádný nález“, tedy tvrzení, které
+    /// už neplatí. Chytil to test, který původně tvrdil opak.
+    ///
+    /// Nový PR je vlastní skupina: že PR přišel a jak dopadlo jeho review, jsou dvě různé
+    /// informace a jedna nemá tu druhou přebít.
+    var replacementGroup: String {
+        switch self {
+        case .newPullRequest: "new"
+        case .findings, .clean, .failure: "review"
+        }
+    }
 }
 
 /// Co se má hlásit (#86).

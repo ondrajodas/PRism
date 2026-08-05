@@ -2084,6 +2084,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.reviewNotification(for:state:blocking:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje |
 | `Policy.newPullRequestNotification(for:title:)` | Notifikace o novém PR ve frontě (#85) |
+| `Policy.newPullRequestsNotification(for:titles:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
   Volající pak nic nespojuje a z typu je vidět, že jde o několik nezávislých dotazů.
@@ -2463,9 +2464,25 @@ Nad notifikacemi (#88) platí:
 - **Doručuje se i s aplikací vepředu** (`willPresent`). Bez toho macOS notifikaci potlačí,
   jakmile je aplikace aktivní — jenže review trvá minuty a mezitím se v okně dělá něco
   jiného, takže „okno je vidět“ neznamená „dívám se na to, co doběhlo“.
-- **Notifikace se nenahrazují** — každá má náhodný identifikátor. Per-PR identifikátor by
-  znamenal, že hláška o novém PR přepíše hlášku o doběhlém review nad tímtéž PR; slévání je
-  vlastní rozhodnutí a řeší ho #87.
+- **Nový výsledek review přepíše ten starý** (#87). Identita je `PR|skupina události`
+  (`NotificationEvent.replacementGroup`) a všechny tři výsledky review jsou **jedna skupina** —
+  jinak by po opakovaném běhu zůstala vedle „3 nálezy“ viset stará hláška „nenašel žádný nález“,
+  tedy tvrzení, které už neplatí. Chytil to test, který původně tvrdil opak. Hláška o novém PR
+  má vlastní skupinu: že PR přišel a jak dopadlo jeho review, jsou dvě různé informace.
+  **Změna proti #88**, kde byl identifikátor náhodné `UUID`.
+- **Vlákno je podle PR** (`threadIdentifier`), ne podle repa: notifikace o témž pull requestu
+  patří k sobě, kdežto seskupení po repu by u monorepa slilo věci, které spolu nesouvisí.
+- **Souhrn místo N hlášek** (#87): víc nových PR z jednoho tiku dá **jednu** notifikaci
+  („3 nové PR k review“), jedno PR dál plnou hlášku s titulkem — „1 nový PR k review“ říká
+  **méně** než jeho název. Vypíšou se tři jménem a zbytek se spočítá („a 4 další“), protože
+  banner má dva řádky a počet je ta informace, podle které se pozná, jestli jít hned.
+- **Žádné čekací okno.** Tik pollingu dodá celý seznam naráz, takže se slévá právě to, co se
+  stalo mezi dvěma tiky — a to je ten interval, o kterém má smysl mluvit. Vlastní okno by
+  znamenalo stav, zdržení hlášky a druhé místo, kde se rozhoduje, co patří k čemu. Proto se
+  slévání testuje **bez čekání v reálném čase**, jak chce zadání #87.
+- **Nedoručený souhrn se zkusí znovu jako celek.** Doručení je jedno, takže i výsledek je jeden:
+  všechna nová PR zůstanou mimo snímek. Do #87 se zapisovalo po jednotlivých PR, protože se i po
+  jednotlivých posílalo.
 - **Tři případy výsledku, ne boolean.** „Uživatel to zakázal“ (`notAuthorized`) a „systém to
   nevzal“ (`failed`) vedou jinam: první se dá spravit jedině v Nastavení systému, druhá je
   chyba, u které je co vypsat. Tatáž úvaha jako u `ReviewState`, kde se `clean` nesmí slít
@@ -3443,6 +3460,14 @@ je nastavení s **výchozím stavem vypnuto** — dokud si o odesílání někdo
 neodejde nikam nic. Sandbox není výjimka v kódu, zapíná se stejným přepínačem. Rozbitá hodnota
 v souboru se sráží na zakázané, na obou úrovních.
 
+Seskupování notifikací hotové (issue #87) — `Policy.newPullRequestsNotification`,
+`NotificationEvent.replacementGroup` a `identifier`/`threadIdentifier` na
+`PullRequestNotification`. **Deset nových PR naráz dá jednu notifikaci** („3 nové PR k review“),
+nový výsledek review přepíše ten starý a systém řadí hlášky k sobě podle PR. Slévá se seznam
+z jednoho tiku, takže na to není potřeba žádné čekací okno ani další stav.
+
+**Tím je hotový milník M8 — a s ním poslední naplánovaný milník projektu.**
+
 Volba, co se má hlásit, hotová (issue #86) — `NotificationSettings` a `NotificationEvent`
 v `App/Models/`, `global.notifications` v konfiguraci, sekce v okně nastavení a brána
 v `AppStore.notify(_:)`. **Notifikace se dají vypnout jako celek nebo po událostech** (nový PR,
@@ -3524,7 +3549,7 @@ o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `
 **M8 (notifikace)**, který na ničem z toho nestojí.
 8. **Notifikace** (M8) — aplikace dá vědět, i když se do ní nikdo nedívá: základ
    s oprávněním a klikem (#88, **hotovo**), doběhlé review (#82, **hotovo**), nové PR (#85,
-   **hotovo**), vypínání po událostech (#86, **hotovo**) a seskupování (#87).
+   **hotovo**), vypínání po událostech (#86, **hotovo**) a seskupování (#87, **hotovo**).
 
 Pořadí M6–M8 není závazné. M8 na nich nestojí a dá se udělat kdykoli — je to jediný
 z těch tří milníků, který **nemění tvrdé podmínky**.

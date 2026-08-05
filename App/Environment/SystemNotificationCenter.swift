@@ -63,11 +63,15 @@ final class SystemNotificationCenter: UserNotifying {
         // nedívá, a tichý banner se přehlédne. Vypnout se to dá v #86, seskupit v #87.
         content.sound = .default
         content.userInfo = [Self.pullRequestKey: notification.pullRequest.description]
+        // Vlákno (#87): systém podle něj notifikace řadí k sobě, takže se v centru neroztrhají
+        // mezi cizí hlášky. Skládá ho model, ne tahle vrstva — je to rozhodnutí o tom, co patří
+        // k čemu, ne o tom, jak se to doručí.
+        content.threadIdentifier = notification.threadIdentifier
         return UNNotificationRequest(
-            // Náhodné id, takže se notifikace **nenahrazují**. Per-PR identifikátor by
-            // znamenal, že hláška o novém PR přepíše hlášku o doběhlém review nad tímtéž PR
-            // — slévání je vlastní rozhodnutí a řeší ho #87.
-            identifier: UUID().uuidString,
+            // Stejná identita **nahradí** to, co ještě visí — druhý výsledek review nad tímtéž
+            // PR je oprava toho prvního, ne druhá informace. Do #87 tu bylo náhodné `UUID`,
+            // protože slévání ještě nebylo rozhodnuté.
+            identifier: notification.identifier,
             content: content,
             // `nil` = doručit hned, ne za čas.
             trigger: nil

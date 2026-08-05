@@ -1869,13 +1869,25 @@ final class AppStore {
         let newcomers = await announced.newcomers(in: listed)
         guard !newcomers.isEmpty else { return }
 
-        var undelivered: Set<PRIdentifier> = []
-        for pr in newcomers {
-            let title = summaries.first { $0.id == pr }?.title
-            let delivery = await notify(Policy.newPullRequestNotification(for: pr, title: title))
-            if delivery?.isWorthRetrying == true { undelivered.insert(pr) }
-        }
-        await announced.remember(listed.filter { !undelivered.contains($0) })
+        // Jedna notifikace za celý tik (#87), ne jedna na PR: deset hlášek naráz je první
+        // důvod, proč si člověk notifikace vypne. Čekací okno na to potřeba není — tik dodá
+        // celý seznam naráz, takže se slévá právě to, co se stalo mezi dvěma tiky.
+        guard let notification = Policy.newPullRequestsNotification(
+            for: newcomers,
+            titles: titles(from: summaries)
+        ) else { return }
+
+        let delivery = await notify(notification)
+        // Nedoručený souhrn nechá **všechna** nová PR mimo snímek, takže se příští tik zkusí
+        // znovu jako jeden celek. Do #87 se zapisovalo po jednotlivých PR, protože se i po
+        // jednotlivých posílalo; teď je doručení jedno, takže i výsledek je jeden.
+        guard delivery?.isWorthRetrying != true else { return }
+        await announced.remember(listed)
+    }
+
+    /// Titulky PR pro text notifikace, klíčované identifikátorem.
+    private func titles(from summaries: [PullRequestSummary]) -> [PRIdentifier: String] {
+        Dictionary(summaries.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// Odvodí sadu skillů z toho, co v repu leží.

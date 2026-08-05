@@ -136,6 +136,59 @@ extension Policy {
         )
     }
 
+    /// Notifikace za **všechna** nová PR z jednoho tiku (#87). `nil` = žádná nejsou.
+    ///
+    /// Jedno PR dá plnou hlášku s titulkem, víc PR **jeden souhrn**: deset hlášek naráz je
+    /// první důvod, proč si člověk notifikace vypne. U jednoho PR se souhrn nedělá schválně —
+    /// „1 nový PR k review“ říká **méně** než jeho název.
+    ///
+    /// **Žádné čekací okno.** Tik pollingu dodá celý seznam naráz, takže se slévá to, co se
+    /// stalo mezi dvěma tiky — a to je přesně ten interval, o kterém má smysl mluvit. Držet
+    /// vlastní okno by znamenalo stav, zdržení hlášky a druhé místo, kde se rozhoduje, co
+    /// patří k čemu. Proto se to testuje **bez čekání v reálném čase**, jak chce zadání.
+    static func newPullRequestsNotification(
+        for pullRequests: [PRIdentifier],
+        titles: [PRIdentifier: String] = [:]
+    ) -> PullRequestNotification? {
+        guard let first = pullRequests.first else { return nil }
+        guard pullRequests.count > 1 else {
+            return newPullRequestNotification(for: first, title: titles[first])
+        }
+        return PullRequestNotification(
+            // Klik vybere **první**, tedy naposledy změněný (seznam je řazený `Policy.sorted`).
+            // Nevybrat nic by znamenalo kliknutí, po kterém se nestane nic; a vybrat něco ze
+            // středu seznamu by bylo losování.
+            pullRequest: first,
+            title: Plural.czech(
+                pullRequests.count,
+                one: "nový PR k review",
+                few: "nové PR k review",
+                many: "nových PR k review"
+            ),
+            body: summary(of: pullRequests, titles: titles),
+            event: .newPullRequest
+        )
+    }
+
+    /// Které PR souhrn jmenuje. Delší seznam se zkrátí — notifikace má dva řádky.
+    private static func summary(
+        of pullRequests: [PRIdentifier],
+        titles: [PRIdentifier: String]
+    ) -> String {
+        let listed = pullRequests.prefix(summaryLimit).map(\.description).joined(separator: ", ")
+        let rest = pullRequests.count - summaryLimit
+        guard rest > 0 else { return listed }
+        // „a 4 další“ — ne jen „…“, protože počet je ta informace, podle které se pozná, jestli
+        // se do fronty jít podívat hned.
+        return "\(listed) a \(Plural.czech(rest, one: "další", few: "další", many: "dalších"))"
+    }
+
+    /// Kolik PR se v souhrnu vypíše jménem.
+    ///
+    /// Tři, protože `owner/repo#číslo` je dlouhé a macOS ukáže v banneru dva řádky — čtvrtý
+    /// identifikátor už se do nich nevejde a zbytek stejně řekne počet.
+    private static let summaryLimit = 3
+
     /// Kolik z platných nálezů záznamu blokuje.
     ///
     /// Počítají se **platné** (`activeFindings`), tedy bez odmítnutých (#113) — blokující
