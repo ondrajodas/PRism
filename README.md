@@ -434,6 +434,10 @@ jednou při startu kvůli tomu, jestli něco přibylo, a pak už jen z paměti. 
 pozadí se aplikace na nic neptá. Bez sítě je v okně **důvod a tlačítko `Zkusit znovu`**, ne
 prázdný seznam — „nepovedlo se to načíst“ a „žádná vydání nejsou“ znamenají opak.
 
+Že se vydání ukázalo, si aplikace poznamená **až ve chvíli, kdy je okno na obrazovce** — ne
+když se to rozhodne. Kdyby se okno neotevřelo, zůstane značka na místě a příští spuštění to
+zkusí znovu; opačné pořadí znamená vydání ohlášené „na papíře“, které se neukáže nikdy.
+
 **Okno mluví o tom, co vyšlo na GitHubu, ne o spuštěném buildu**, a nevypisuje proto číslo
 verze. Verze v bundlu (`MARKETING_VERSION`) tagy nikdy nesledovala, takže by tvrdila `0.1`;
 a u lokálního buildu se ty dvě věci rozcházejí v obou směrech. Aplikace si místo toho pamatuje

@@ -130,7 +130,48 @@ struct ReleaseNotesModelTests {
             #expect(await second.showsNewReleaseAfterStart())
             #expect(second.unseen == ["v1.1.1"])
             #expect(second.selection == "v1.1.1")
-            #expect(second.lastSeenTag == "v1.1.1")
+            // Značka se posune až otevřením okna, ne rozhodnutím ho otevřít — viz níž.
+            #expect(second.lastSeenTag == "v1.1.0")
+        }
+    }
+
+    /// **Nejdůležitější test tohohle chování.** Kdo si zapíše „ukázal jsem“ dřív, než se to
+    /// povedlo, tu hlášku už nikdy nepošle — tatáž past jako u snímku ohlášených PR (#85).
+    /// Stalo se to v provozu hned u prvního releasu, který se měl sám ohlásit: okno se
+    /// neotevřelo, ale značka se posunula, takže se to vydání nedalo ohlásit už nikdy.
+    @Test("Značka se posune až tím, že se okno opravdu ukáže")
+    func marksOnlyWhenTheWindowAppears() async throws {
+        try await withPreferences { preferences in
+            let (first, _) = model(preferences, [.success(history)])
+            _ = await first.showsNewReleaseAfterStart()
+
+            let (model, _) = model(preferences, [.success([release("v1.1.1", at: 3)] + history)])
+            #expect(await model.showsNewReleaseAfterStart())
+            #expect(model.lastSeenTag == "v1.1.0")
+
+            // Tohle dělá `ReleaseNotesView.task`, až se okno ukáže.
+            model.markAsSeen()
+            #expect(model.lastSeenTag == "v1.1.1")
+        }
+    }
+
+    /// Když se okno neotevře, značka zůstane — a příští spuštění to zkusí znovu. Bez toho
+    /// je vydání ohlášené „na papíře“ a nikdy se neukáže.
+    @Test("Neotevřené okno vydání neztratí, příští spuštění ho nabídne znovu")
+    func retriesWhenTheWindowNeverAppeared() async throws {
+        try await withPreferences { preferences in
+            let (first, _) = model(preferences, [.success(history)])
+            _ = await first.showsNewReleaseAfterStart()
+
+            let released = [release("v1.1.1", at: 3)] + history
+            let (failedToShow, _) = model(preferences, [.success(released)])
+            #expect(await failedToShow.showsNewReleaseAfterStart())
+
+            // Okno se neukázalo, takže `markAsSeen()` nikdo nezavolal — a další start to
+            // nabídne znovu.
+            let (nextStart, _) = model(preferences, [.success(released)])
+            #expect(await nextStart.showsNewReleaseAfterStart())
+            #expect(nextStart.unseen == ["v1.1.1"])
         }
     }
 
@@ -142,6 +183,7 @@ struct ReleaseNotesModelTests {
 
             let (second, _) = model(preferences, [.success([release("v1.1.1", at: 3)] + history)])
             #expect(await second.showsNewReleaseAfterStart())
+            second.markAsSeen()
 
             let (third, _) = model(preferences, [.success([release("v1.1.1", at: 3)] + history)])
             #expect(await third.showsNewReleaseAfterStart() == false)
