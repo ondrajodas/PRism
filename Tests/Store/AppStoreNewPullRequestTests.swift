@@ -46,12 +46,14 @@ struct AppStoreNewPullRequestTests {
     private func store(
         _ gateway: FakeGitHubGateway,
         center: FakeNotificationCenter,
-        announced: AnnouncedPullRequests? = nil
+        announced: AnnouncedPullRequests? = nil,
+        reviews: ReviewStore? = nil
     ) -> AppStore {
         AppStore(
             gateway: gateway,
             configuration: configuration,
             time: FakeTimeSource(),
+            reviews: reviews,
             notifications: center,
             announced: announced ?? AnnouncedPullRequests(layout: layout)
         )
@@ -245,6 +247,131 @@ extension AppStoreNewPullRequestTests {
 
         #expect(center.delivered.count == 2)
         #expect(center.delivered.last?.title == "2 nové PR k review")
+    }
+}
+
+/// Rozlišení re-review od nového PR (#137).
+///
+/// Proti **skutečnému** `ReviewStore` nad dočasnou složkou, protože zdrojem pravdy je disk:
+/// `reviewRecords` se z něj plní při startu a právě to drží PR, který z fronty odešel po mém
+/// review — tedy ten případ, kvůli kterému issue vzniklo.
+@Suite("AppStore — re-review v notifikaci")
+@MainActor
+struct AppStoreRereviewNotificationTests {
+    private let directory: TemporaryDirectory
+    private let layout: CacheLayout
+
+    init() throws {
+        directory = try TemporaryDirectory()
+        layout = CacheLayout(root: directory.url)
+    }
+
+    private var configuration: Configuration {
+        var configuration = Configuration.standard
+        configuration.global.sources = [Source(name: "Moje", query: "review-requested:@me is:open")]
+        return configuration
+    }
+
+    private func summary(_ text: String) -> PullRequestSummary {
+        let id = PRIdentifier(text)!
+        return PullRequestSummary(
+            id: id,
+            title: "titulek",
+            author: "autor",
+            url: URL(string: "https://github.com/\(id.repo)/pull/\(id.number)")!,
+            updatedAt: Date(timeIntervalSince1970: 100),
+            state: .open
+        )
+    }
+
+    private func reviews() -> ReviewStore {
+        ReviewStore(layout: layout, time: FakeTimeSource())
+    }
+
+    private func store(
+        _ gateway: FakeGitHubGateway,
+        center: FakeNotificationCenter,
+        reviews: ReviewStore
+    ) -> AppStore {
+        AppStore(
+            gateway: gateway,
+            configuration: configuration,
+            time: FakeTimeSource(),
+            reviews: reviews,
+            notifications: center,
+            announced: AnnouncedPullRequests(layout: layout)
+        )
+    }
+
+    /// Uloží doběhlé review, jako by na tom PR někdy běželo.
+    private func remember(_ text: String, in reviews: ReviewStore) async throws {
+        let id = PRIdentifier(text)!
+        var summary = StreamSummary()
+        summary.calledReportFindings = true
+        let run = ReviewRun(
+            key: ReviewRunKey(pullRequest: id, headSha: "aaaa1111", skillID: "code-review"),
+            summary: summary,
+            outcome: .finished
+        )
+        try await reviews.save(run)
+    }
+
+    @Test("PR s uloženým review se ohlásí jako re-review")
+    func announcesAKnownPullRequestAsARereview() async throws {
+        let reviews = reviews()
+        try await remember("cli/cli#2", in: reviews)
+
+        let center = FakeNotificationCenter()
+        let gateway = FakeGitHubGateway([
+            .success([summary("cli/cli#1")]),
+            .success([summary("cli/cli#1"), summary("cli/cli#2")]),
+        ])
+        let store = store(gateway, center: center, reviews: reviews)
+        await store.loadStoredReviews()
+
+        await store.refresh()
+        await store.refresh()
+
+        #expect(center.delivered.count == 1)
+        #expect(center.delivered.first?.title == "Znovu požádáno o review — cli/cli#2")
+    }
+
+    @Test("PR bez uloženého review zůstává novinkou")
+    func keepsAnUnreviewedPullRequestNew() async {
+        let center = FakeNotificationCenter()
+        let gateway = FakeGitHubGateway([
+            .success([summary("cli/cli#1")]),
+            .success([summary("cli/cli#1"), summary("cli/cli#2")]),
+        ])
+        let store = store(gateway, center: center, reviews: reviews())
+        await store.loadStoredReviews()
+
+        await store.refresh()
+        await store.refresh()
+
+        #expect(center.delivered.first?.title == "Nový PR k review — cli/cli#2")
+    }
+
+    /// Zahození nálezů (#81) znamená „tenhle výsledek je k ničemu“, takže se k tomu PR
+    /// chováme jako k nedotčenému. Je to výslovné rozhodnutí ze zadání #137.
+    @Test("Zahozený záznam z PR udělá zase novinku")
+    func discardedRecordMakesItNewAgain() async throws {
+        let reviews = reviews()
+        try await remember("cli/cli#2", in: reviews)
+
+        let center = FakeNotificationCenter()
+        let gateway = FakeGitHubGateway([
+            .success([summary("cli/cli#1")]),
+            .success([summary("cli/cli#1"), summary("cli/cli#2")]),
+        ])
+        let store = store(gateway, center: center, reviews: reviews)
+        await store.loadStoredReviews()
+        try await store.clearFindings(for: PRIdentifier("cli/cli#2")!)
+
+        await store.refresh()
+        await store.refresh()
+
+        #expect(center.delivered.first?.title == "Nový PR k review — cli/cli#2")
     }
 }
 

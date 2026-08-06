@@ -124,13 +124,22 @@ extension Policy {
     /// se pozná, jestli se na to jít podívat hned. Chybějící titulek je vlastní stav, ne
     /// prázdný řádek: `gh` ho vždycky vrátí, takže by prázdno znamenalo, že se PR nespároval
     /// se seznamem, a to se nemá tvrdit jako „PR bez názvu“.
+    ///
+    /// **Re-review se pozná textem** (#137). U PR, který jsem reviewoval minulý týden, není
+    /// „Nový PR k review“ pravda — a je to zrovna ten případ, kdy má člověk jiné očekávání:
+    /// u nového PR jde o první přečtení, u re-review o to, co se od mého review změnilo.
+    /// Vlastní `NotificationEvent` to není schválně: šel by sice vypnout zvlášť (#86), ale
+    /// je to pátý přepínač za rozdíl, který zatím nikdo vypínat nechtěl. Přidat se dá potom.
     static func newPullRequestNotification(
         for pr: PRIdentifier,
-        title: String?
+        title: String?,
+        isReReview: Bool = false
     ) -> PullRequestNotification {
         PullRequestNotification(
             pullRequest: pr,
-            title: "Nový PR k review — \(pr.description)",
+            title: isReReview
+                ? "Znovu požádáno o review — \(pr.description)"
+                : "Nový PR k review — \(pr.description)",
             body: title ?? "Titulek se nepodařilo přečíst.",
             event: .newPullRequest
         )
@@ -146,30 +155,61 @@ extension Policy {
     /// stalo mezi dvěma tiky — a to je přesně ten interval, o kterém má smysl mluvit. Držet
     /// vlastní okno by znamenalo stav, zdržení hlášky a druhé místo, kde se rozhoduje, co
     /// patří k čemu. Proto se to testuje **bez čekání v reálném čase**, jak chce zadání.
+    /// `reviewed` jsou PR, u kterých už někdy review běželo (#137) — viz `isReReview` výš.
     static func newPullRequestsNotification(
         for pullRequests: [PRIdentifier],
-        titles: [PRIdentifier: String] = [:]
+        titles: [PRIdentifier: String] = [:],
+        reviewed: Set<PRIdentifier> = []
     ) -> PullRequestNotification? {
         guard let first = pullRequests.first else { return nil }
         guard pullRequests.count > 1 else {
-            return newPullRequestNotification(for: first, title: titles[first])
+            return newPullRequestNotification(
+                for: first,
+                title: titles[first],
+                isReReview: reviewed.contains(first)
+            )
         }
         return PullRequestNotification(
             // Klik vybere **první**, tedy naposledy změněný (seznam je řazený `Policy.sorted`).
             // Nevybrat nic by znamenalo kliknutí, po kterém se nestane nic; a vybrat něco ze
             // středu seznamu by bylo losování.
             pullRequest: first,
-            title: Plural.czech(
-                pullRequests.count,
-                one: "nový PR k review",
-                few: "nové PR k review",
-                many: "nových PR k review"
+            title: summaryTitle(
+                count: pullRequests.count,
+                reReviews: pullRequests.count { reviewed.contains($0) }
             ),
             body: summary(of: pullRequests),
             event: .newPullRequest,
             // Vlastní vlákno: souhrn není o tom jednom PR, který v něm stojí první.
             threadIdentifier: newPullRequestsThread
         )
+    }
+
+    /// Titulek souhrnu. Kolik z nich je re-review, se řekne **jen když nějaké jsou** (#137).
+    ///
+    /// Nerozpadá se to na dvě notifikace (jednu za nové, druhou za re-review), i když by každá
+    /// řekla svoje: doručení je jedno, takže je jeden výsledek — a na tom stojí, že se při
+    /// selhání zkusí celá dávka znovu jako celek (#87). Dvě notifikace by vrátily částečný
+    /// zápis snímku, tedy tu past, kterou u #132 našel Copilot a #87 odstranil.
+    ///
+    /// U jednoho PR se souhrn nedělá vůbec, takže se tam rozdíl pozná plným textem — a to je
+    /// ten případ, kde na něm záleží nejvíc.
+    private static func summaryTitle(count: Int, reReviews: Int) -> String {
+        guard reReviews > 0 else {
+            return Plural.czech(
+                count,
+                one: "nový PR k review",
+                few: "nové PR k review",
+                many: "nových PR k review"
+            )
+        }
+        // Zkratka `PR` se v češtině neskloňuje, takže jsou všechny tři tvary shodné záměrně —
+        // tatáž situace jako u „blokující“. `Plural` se přesto použije, protože formátuje
+        // číslo přes locale; holá interpolace je ten vzor, kvůli kterému z `#21663` vyjde
+        // `#21 663`.
+        let all = Plural.czech(count, one: "PR k review", few: "PR k review", many: "PR k review")
+        let again = Plural.czech(reReviews, one: "znovu", few: "znovu", many: "znovu")
+        return "\(all) (\(again))"
     }
 
     /// Vlákno, do kterého patří souhrn za víc nových PR (#87).

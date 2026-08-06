@@ -229,10 +229,15 @@ extension ReviewNotificationTests {
 struct NotificationGroupingTests {
     private func pr(_ text: String) -> PRIdentifier { PRIdentifier(text)! }
 
-    private func notification(_ ids: [String], titles: [String: String] = [:]) -> PullRequestNotification? {
+    private func notification(
+        _ ids: [String],
+        titles: [String: String] = [:],
+        reviewed: [String] = []
+    ) -> PullRequestNotification? {
         Policy.newPullRequestsNotification(
             for: ids.map(pr),
-            titles: Dictionary(uniqueKeysWithValues: titles.map { (pr($0.key), $0.value) })
+            titles: Dictionary(uniqueKeysWithValues: titles.map { (pr($0.key), $0.value) }),
+            reviewed: Set(reviewed.map(pr))
         )
     }
 
@@ -295,6 +300,61 @@ struct NotificationGroupingTests {
     @Test("Prázdný seznam nedá nic")
     func nothingForAnEmptyList() {
         #expect(notification([]) == nil)
+    }
+
+    // MARK: - Re-review (#137)
+
+    /// Tohle je celé zadání #137: u PR, který jsem reviewoval minulý týden, není „Nový PR
+    /// k review“ pravda — a je to zrovna ten případ, kdy má člověk jiné očekávání.
+    @Test("Známé PR se ohlásí jako re-review, ne jako novinka")
+    func announcesAKnownPullRequestAsARereview() {
+        let result = notification(
+            ["cli/cli#1"],
+            titles: ["cli/cli#1": "Opravit součet"],
+            reviewed: ["cli/cli#1"]
+        )
+
+        #expect(result?.title == "Znovu požádáno o review — cli/cli#1")
+        // Tělo je pořád titulek PR: co se změnilo, se stejně pozná až v okně.
+        #expect(result?.body == "Opravit součet")
+    }
+
+    @Test("PR, u kterého review nikdy neběželo, zůstává novinkou")
+    func keepsAnUnknownPullRequestNew() {
+        let result = notification(["cli/cli#1"], reviewed: ["cli/cli#9"])
+
+        #expect(result?.title == "Nový PR k review — cli/cli#1")
+    }
+
+    @Test("Souhrn bez re-review se textem nemění")
+    func summaryWithoutRereviewsIsUnchanged() {
+        #expect(notification(["cli/cli#1", "cli/cli#2"])?.title == "2 nové PR k review")
+    }
+
+    @Test("Souhrn řekne, kolik z nich je znovu")
+    func summaryCountsRereviews() {
+        let result = notification(
+            ["cli/cli#1", "cli/cli#2", "cli/cli#3"],
+            reviewed: ["cli/cli#2"]
+        )
+
+        #expect(result?.title == "3 PR k review (1 znovu)")
+    }
+
+    @Test("Když jsou znovu všechna, řekne to taky")
+    func summaryWhenEverythingIsARereview() {
+        // Vlastní tvar („3 PR znovu k review“) tady schválně není: dvě větve se udrží
+        // v souladu snáz než tři a tenhle případ je vzácný.
+        let result = notification(["cli/cli#1", "cli/cli#2"], reviewed: ["cli/cli#1", "cli/cli#2"])
+
+        #expect(result?.title == "2 PR k review (2 znovu)")
+    }
+
+    @Test("Re-review nemění událost, takže se dá vypnout jedním přepínačem")
+    func rereviewKeepsTheEvent() {
+        // Vlastní `NotificationEvent` by šel vypnout zvlášť (#86), ale je to pátý přepínač
+        // za rozdíl, který zatím nikdo vypínat nechtěl.
+        #expect(notification(["cli/cli#1"], reviewed: ["cli/cli#1"])?.event == .newPullRequest)
     }
 
     @Test("Nový výsledek review přepíše ten starý, hlášku o novém PR ne")

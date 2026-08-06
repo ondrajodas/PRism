@@ -1803,6 +1803,24 @@ Notifikace o doběhlém review (#82) k tomu přidávají:
 
 Notifikace o novém PR (#85) drží stav na disku (`AnnouncedPullRequests`) a platí u nich:
 
+- **Re-review se pozná textem, ne vlastní událostí** (#137). U PR, který jsem reviewoval
+  minulý týden, není „Nový PR k review“ pravda — u nového PR jde o první přečtení, u re-review
+  o to, co se od mého review změnilo. Vlastní `NotificationEvent` by šel vypnout zvlášť (#86),
+  ale je to pátý přepínač za rozdíl, který zatím nikdo vypínat nechtěl; přidat se dá potom.
+- **Že PR znám, se pozná z uložených nálezů** (`reviewRecords`), ne z rozdělaného draftu:
+  draft může existovat u PR, které se nikdy nereviewovalo, kdežto záznam vzniká jedině
+  doběhlým během. Čte se z paměti — plní se při startu z disku a `forget` ho na rozdíl od
+  diffu nebo konverzace **neuklízí**, takže PR, který z fronty odešel po mém review, tam
+  zůstane. To je zrovna ten případ, kvůli kterému #137 vzniklo.
+- **Zahozený záznam (#81) z PR udělá zase novinku**, a je to schválně: zahození znamená
+  „tenhle výsledek je k ničemu“, takže chovat se k tomu PR jako k nedotčenému je poctivé.
+- **Souhrn se kvůli tomu nerozpadá na dvě notifikace.** Doručení je jedno, takže je jeden
+  výsledek — a na tom stojí, že se při selhání zkusí celá dávka znovu jako celek (#87). Dvě
+  notifikace by vrátily částečný zápis snímku, tedy tu past, kterou u #132 našel Copilot.
+  Kolik z nich je re-review, proto říká **titulek souhrnu** (`3 PR k review (1 znovu)`),
+  a jen když nějaké jsou. U jednoho PR se souhrn nedělá vůbec, takže tam se rozdíl pozná
+  plným textem — a to je ten případ, kde na něm záleží nejvíc.
+
 - **Hlásí se jen po úspěšném tiku.** Po výpadku sítě je seznam prázdný, takže by se snímek
   vyprázdnil a při zotavení by přišlo úplně všechno — tatáž past jako u `CacheEviction`
   a `ReviewStore.cleanUp`. Je na to test.
@@ -2185,8 +2203,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.health(of:from:)` | Puntík služby ve stavovém řádku ze tří signálů — viz `App/Health/` |
 | `Policy.reviewNotification(for:state:blocking:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje |
-| `Policy.newPullRequestNotification(for:title:)` | Notifikace o novém PR ve frontě (#85) |
-| `Policy.newPullRequestsNotification(for:titles:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
+| `Policy.newPullRequestNotification(for:title:isReReview:)` | Notifikace o novém PR ve frontě (#85); re-review se pozná textem (#137) |
+| `Policy.newPullRequestsNotification(for:titles:reviewed:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
 | `Policy.sortedReleases(_:)` | Vydání od nejnovějšího (#127) — podle **data**, ne podle tagu |
 | `Policy.newReleases(in:since:)` | Co vyšlo od poslední viděné verze; neznámá značka = **nic** |
 

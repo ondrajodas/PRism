@@ -395,7 +395,9 @@ Co přijde a co v tom bude:
 | Kdy | Co uvidím |
 |---|---|
 | Nový PR ve frontě | `Nový PR k review — owner/repo#123` a název PR |
+| PR, který jsem už reviewoval, se vrátil | `Znovu požádáno o review — owner/repo#123` a název PR |
 | Víc nových PR naráz | Jeden souhrn: `4 nové PR k review` a tři z nich jménem plus `a 1 další` |
+| Víc naráz, něco z toho znovu | `4 PR k review (1 znovu)` |
 | Review našlo nálezy | `owner/repo#123` a `3 nálezy, z toho 1 blokující.` |
 | Review je čisté | `Reviewer nenašel žádný nález.` |
 | Review se nepovedlo | Důvod, se kterým se dá něco dělat — spadlá session, timeout bez nálezů, selhaná pracovní kopie |
@@ -408,6 +410,11 @@ k sobě.
 **Co se hlásí, se nastavuje** — záložka `Notifikace` v okně nastavení: hlavní vypínač a čtyři
 události (nový PR, review s nálezy, čisté review, selhání). Ve výchozím stavu je zapnuté všechno.
 S vypnutým hlavním přepínačem se aplikace **nezeptá ani na systémové oprávnění**.
+
+**Re-review se pozná od novinky.** U pull requestu, který jsem už někdy reviewoval, není
+„nový PR“ pravda — a je to jiné očekávání: u nového jde o první přečtení, u re-review o to,
+co se od mého review změnilo. Že ho znám, se pozná z uložených nálezů; zahozený záznam z něj
+udělá zase novinku, protože zahození znamená „tenhle výsledek je k ničemu“.
 
 **Po prvním spuštění nepřijde lavina.** Aplikace si drží snímek poslední fronty, takže PR, která
 tam byla, než začala hlídat, za nová nepovažuje. Ohlásí se až devátý.

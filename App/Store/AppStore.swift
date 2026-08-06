@@ -1877,7 +1877,8 @@ final class AppStore {
         // celý seznam naráz, takže se slévá právě to, co se stalo mezi dvěma tiky.
         guard let notification = Policy.newPullRequestsNotification(
             for: newcomers,
-            titles: titles(from: summaries)
+            titles: titles(from: summaries),
+            reviewed: reviewedPullRequests
         ) else { return }
 
         let delivery = await notify(notification)
@@ -1887,6 +1888,18 @@ final class AppStore {
         guard delivery?.isWorthRetrying != true else { return }
         await announced.remember(listed)
     }
+
+    /// PR, u kterých už někdy review běželo (#137). Podle nich se pozná re-review od novinky.
+    ///
+    /// Zdrojem jsou **uložené nálezy**, ne rozdělaný draft: draft může existovat u PR, které
+    /// se nikdy nereviewovalo (stačí napsat komentář), kdežto záznam vzniká jedině doběhlým
+    /// během. Čte se z paměti — `reviewRecords` se plní při startu z disku a `forget` je na
+    /// rozdíl od diffu nebo konverzace **neuklízí**, takže PR, který z fronty odešel po mém
+    /// review, tam zůstane. To je zrovna ten případ, kvůli kterému #137 vzniklo.
+    ///
+    /// Zahozený záznam (#81) z PR udělá zase novinku, a je to tak schválně: zahození znamená
+    /// „tenhle výsledek je k ničemu“, takže chovat se k tomu PR jako k nedotčenému je poctivé.
+    private var reviewedPullRequests: Set<PRIdentifier> { Set(reviewRecords.keys) }
 
     /// Titulky PR pro text notifikace, klíčované identifikátorem.
     private func titles(from summaries: [PullRequestSummary]) -> [PRIdentifier: String] {
