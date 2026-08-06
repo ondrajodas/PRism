@@ -178,7 +178,8 @@ struct DiffView: View {
 
     private func summary(jumpingWith proxy: ScrollViewProxy) -> some View {
         HStack(spacing: 12) {
-            Text(verbatim: "\(files(diff.files.count)) · +\(diff.additions) −\(diff.deletions)")
+            (Text(verbatim: "\(files(diff.files.count)) · ")
+                + DiffCounts.text(additions: diff.additions, deletions: diff.deletions))
                 .font(.callout)
                 .foregroundStyle(.secondary)
             if diff.unrecognizedLines > 0 {
@@ -342,9 +343,8 @@ struct DiffView: View {
             }
             Spacer()
             fileFindings(file)
-            Text(verbatim: "+\(file.additions) −\(file.deletions)")
+            DiffCounts.text(additions: file.additions, deletions: file.deletions)
                 .font(.caption)
-                .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
         .padding(.horizontal, 16)

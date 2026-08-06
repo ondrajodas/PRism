@@ -81,9 +81,8 @@ private struct FileTreeBranch: View {
                     .background(.quaternary, in: .capsule)
             }
             Spacer(minLength: 8)
-            Text(verbatim: "+\(node.additions) −\(node.deletions)")
+            DiffCounts.text(additions: node.additions, deletions: node.deletions)
                 .font(.caption)
-                .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
         .padding(.vertical, 2)

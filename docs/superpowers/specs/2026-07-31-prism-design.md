@@ -455,6 +455,29 @@ slova a proměnné — tolik, aby se v diffu chytlo oko.
 - **Obyčejný text vlastní barvu nemá** — dědí ji z okolí, takže soubor bez rozpoznaného
   jazyka nevypadá jinak než ten s ním.
 
+### Obarvené počty řádků (#156)
+
+Počty `+X −Y` jsou zelené a červené, ne šedé. Barva je v diffu zavedený význam, takže se jí
+nic nového neučí — a „velký přírůstek“ a „velké mazání“ jsou na první pohled jiné PR.
+
+- **Barvu dává `DiffLineView.signColor(of:)`**, tedy tentýž zdroj jako znak změny v řádku.
+  Vlastní konstanty by byly druhá sada, která se s první jednou rozejde — a `+` v řádku by
+  se rozešlo s `+12` v hlavičce nad ním. Statická funkce je stejný vzor jako `background(of:)`,
+  o kterou se dělí buňka a dvojice ve split pohledu.
+- **Skládá je `DiffCounts.text`, ne každé místo samo.** Zadání jmenovalo dvě místa (souhrn
+  a hlavička souboru), ale jsou **tři** — třetí je strom souborů v popoveru. Nechat ho šedý
+  by byla přesně ta oprava výskytu místo třídy: mluví o tomtéž údaji a rozdíl by vypadal jako
+  závada. Doplněno vlastní revizí diffu, ne zadáním.
+- **Ne `background(of:)`.** Zadání nabízelo obojí, ale pozadí řádku je dvanáctiprocentní výplň;
+  jako barva písma je nečitelná. Sytá barva znaku je naopak text, který v diffu stojí od #18
+  ve stejné velikosti (`.caption`) — takže o její čitelnosti se rozhodlo tehdy a tady se nic
+  nového nezavádí.
+- **Ověřeno offscreen renderem v obou režimech**, ne odhadem: souhrn (`.callout`) i hlavička
+  (`.caption` nad `.bar`), světlý i tmavý. Zvažovala se tmavší zelená pro světlý režim, jakou
+  má GitHub — **zamítnuto**, protože by to byla přesně ta druhá sada barev z bodu výš.
+- **Červený odznak nálezů se s tím neplete**: má ikonu a slovo, kdežto počet je číslo se
+  znaménkem, a zelené `+X` stojí mezi nimi jako předěl. Doloženo renderem s blokujícím nálezem.
+
 ### Pohled vedle sebe (#98)
 
 Diff se dá kreslit dvěma způsoby a přepíná se segmentovaným přepínačem v liště nad ním:

@@ -226,7 +226,19 @@ struct DiffLineView: View {
     }
 
     private var signColor: Color {
-        switch line.kind {
+        Self.signColor(of: line.kind)
+    }
+
+    /// Barva znaku změny na začátku řádku.
+    ///
+    /// Statická ze stejného důvodu jako `background(of:)`: bere si ji i souhrn nad diffem
+    /// a hlavička souboru na počty `+X −Y` (#156). Dvě sady barev by se rozešly a `+` v řádku
+    /// by bylo jinak zelené než `+12` v hlavičce nad ním.
+    ///
+    /// **Ne `background(of:)`** — to je dvanáctiprocentní výplň, tedy barva, která je jako
+    /// písmo nečitelná. Sytá barva znaku je to, co v diffu už dneska stojí jako text.
+    static func signColor(of kind: DiffLine.Kind) -> Color {
+        switch kind {
         case .added: .green
         case .removed: .red
         case .context, .meta: .secondary
