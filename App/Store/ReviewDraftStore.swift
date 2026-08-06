@@ -79,7 +79,7 @@ actor ReviewDraftStore {
         // Symlink by přečetl soubor **mimo cache**. Aplikace si ho sama nevyrobí, ale
         // „nikdy nesahat na uživatelovy soubory“ je tvrdá podmínka a nemá viset na tom, že
         // si to někdo pamatuje. Stejná kontrola je ve výpisu.
-        guard !isSymbolicLink(url) else {
+        guard !layout.isSymbolicLink(url) else {
             throw ReviewDraftStoreError.symlinkedDraft(pullRequest: pr)
         }
         let draft = try read(at: url)
@@ -171,7 +171,7 @@ actor ReviewDraftStore {
         var files: [URL] = []
         var symlinks = 0
         for case let url as URL in enumerator where url.pathExtension == "json" {
-            if isSymbolicLink(url) {
+            if layout.isSymbolicLink(url) {
                 symlinks += 1
                 continue
             }
@@ -180,7 +180,4 @@ actor ReviewDraftStore {
         return (files, symlinks)
     }
 
-    private func isSymbolicLink(_ url: URL) -> Bool {
-        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true
-    }
 }

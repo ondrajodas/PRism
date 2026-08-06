@@ -9,10 +9,14 @@ import Testing
 @Suite("ReviewDraftStore")
 struct ReviewDraftStoreTests {
     private let directory: TemporaryDirectory
+    /// Složka **mimo cache**, na kterou testy symlinků odkazují — viz `ReviewStoreTests`.
+    /// Podsložka té první by ležela uvnitř kořene, takže by test netvrdil, co slibuje.
+    private let outsideCache: TemporaryDirectory
     private let layout: CacheLayout
 
     init() throws {
         directory = try TemporaryDirectory()
+        outsideCache = try TemporaryDirectory()
         layout = CacheLayout(root: directory.url)
     }
 
@@ -222,7 +226,7 @@ struct ReviewDraftStoreTests {
     /// platit, čtení by vylezlo mimo cache.
     @Test("Enumerace nesestupuje do odkazované složky")
     func doesNotDescendIntoASymlinkedDirectory() async throws {
-        let outside = directory.url.appending(path: "mimo-cache")
+        let outside = outsideCache.url.appending(path: "mimo-cache")
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         try encoder.encode(ReviewDraft(pullRequest: pr, headSha: "x", body: "mimo"))
@@ -246,7 +250,7 @@ struct ReviewDraftStoreTests {
     /// spadl. Proto se symlinky přeskakují výslovně.
     @Test("Odkaz na soubor mimo cache se do výpisu nedostane")
     func rejectsASymlinkedDraftFile() async throws {
-        let outside = directory.url.appending(path: "cizi.json")
+        let outside = outsideCache.url.appending(path: "cizi.json")
         let encoder = JSONEncoder()
         try encoder.encode(ReviewDraft(pullRequest: pr, headSha: "x", body: "mimo"))
             .write(to: outside)
