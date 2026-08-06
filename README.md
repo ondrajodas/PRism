@@ -416,6 +416,13 @@ S vypnutým hlavním přepínačem se aplikace **nezeptá ani na systémové opr
 co se od mého review změnilo. Že ho znám, se pozná z uložených nálezů; zahozený záznam z něj
 udělá zase novinku, protože zahození znamená „tenhle výsledek je k ničemu“.
 
+**Že notifikace fungují, je vidět ve stavovém řádku** — vlevo od puntíků služeb je zvonek
+s časem posledního doručení. `zatím nic` znamená, že se od spuštění nic neohlašovalo (a nic se
+tím netvrdí o tom, jestli to funguje), `vypnuto` že jsou vypnuté v nastavení. Čas posune jedině
+**doručená** notifikace: odmítnuté oprávnění ani selhání systému ho nechají být, jinak by řádek
+tvrdil, že to chodí, zrovna když nechodí. Drží se v paměti, takže po restartu začíná znovu —
+je to odpověď na „funguje mi to teď“, ne historie.
+
 **Po prvním spuštění nepřijde lavina.** Aplikace si drží snímek poslední fronty, takže PR, která
 tam byla, než začala hlídat, za nová nepovažuje. Ohlásí se až devátý.
 

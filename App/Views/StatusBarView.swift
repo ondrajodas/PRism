@@ -19,6 +19,12 @@ struct StatusBarView: View {
         HStack(alignment: .center, spacing: 12) {
             AppNoticesView(store: store)
             Spacer(minLength: 0)
+            // Vlevo od puntíků služeb, protože odpovídá na tutéž otázku („funguje mi to?“),
+            // ale službou není — proto zvonek, ne barevná tečka.
+            NotificationStatusView(
+                last: store.lastDeliveredNotification,
+                isEnabled: store.configuration.global.notifications.isEnabled
+            )
             ForEach(store.healthReports) { report in
                 ServiceHealthDot(report: report)
             }
@@ -74,18 +80,84 @@ struct ServiceHealthDot: View {
         var lines = ["\(report.service.name) — \(report.state.label)", report.reason]
         if let call = report.call {
             lines.append(call.succeeded
-                ? "Poslední volání prošlo v \(time(call.since))."
-                : "Nedaří se od \(time(call.since)).")
+                ? "Poslední volání prošlo v \(shortTime(call.since))."
+                : "Nedaří se od \(shortTime(call.since)).")
         }
         if let checkedAt = report.checkedAt {
-            lines.append("Stav služby zjišťován v \(time(checkedAt)).")
+            lines.append("Stav služby zjišťován v \(shortTime(checkedAt)).")
         }
         return lines.joined(separator: "\n")
     }
+}
 
-    private func time(_ date: Date) -> String {
-        date.formatted(date: .omitted, time: .shortened)
+/// Kdy se naposledy něco doopravdy ohlásilo (#138).
+///
+/// **Je vidět vždycky**, i když se ještě nic neohlásilo — ze stejného důvodu jako puntíky
+/// služeb: indikátor, který se objeví teprve tehdy, když je co ukázat, je indikátor, o kterém
+/// nikdo neví, že existuje, a po startu by se od rozbité aplikace nedal poznat.
+///
+/// Vidět je **jen čas**, celá věta je v nápovědě. Zadání #138 navrhovalo `naposledy ohlášeno
+/// v 21:35` rovnou v řádku, ale ten je úzký a puntíky vedle drží tentýž vzor: krátký popisek
+/// v řádku, detail po hoveru.
+struct NotificationStatusView: View {
+    let last: DeliveredNotification?
+    /// Hlavní vypínač z nastavení (#86). Vypnuté notifikace jsou vlastní odpověď: „zatím nic“
+    /// by u nich bylo pravda, ale poslalo by hledat poruchu, která žádná není.
+    let isEnabled: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .help(tooltip)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Notifikace")
+        .accessibilityValue(tooltip)
     }
+
+    private var symbol: String {
+        guard isEnabled else { return "bell.slash" }
+        return last == nil ? "bell" : "bell.badge"
+    }
+
+    /// „Zatím nic“ se musí poznat od času — je to zadání #138. Prázdný popisek by obojí slil.
+    private var label: String {
+        guard isEnabled else { return "vypnuto" }
+        guard let last else { return "zatím nic" }
+        return shortTime(last.at)
+    }
+
+    private var tooltip: String {
+        guard isEnabled else {
+            return """
+                Notifikace jsou vypnuté v nastavení, takže se nic neohlašuje.
+                Zapnout je jde v Nastavení → Notifikace.
+                """
+        }
+        guard let last else {
+            // Že se čas počítá od spuštění, musí být v nápovědě: bez toho vypadá „zatím nic“
+            // po restartu jako porucha, i když se včera ohlašovalo celý den.
+            return """
+                Od spuštění aplikace se nic neohlásilo.
+                Nic se tím netvrdí o tom, jestli notifikace fungují — jen zatím nebylo co říct.
+                """
+        }
+        return """
+            Naposledy ohlášeno v \(shortTime(last.at)).
+            \(last.title)
+            """
+    }
+}
+
+/// Čas v jednom tvaru pro celý řádek. Dvě kopie by se rozešly a pruh by ukazoval dva různé
+/// formáty vedle sebe.
+private func shortTime(_ date: Date) -> String {
+    date.formatted(date: .omitted, time: .shortened)
 }
 
 #Preview {
