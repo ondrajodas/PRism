@@ -1987,9 +1987,18 @@ Věci, které se u toho nemají rozbít:
   testy by jinak psaly do skutečných předvoleb aplikace a vlastní suite po sobě **nechává
   soubor** v `~/Library/Preferences` — změřeno, `removePersistentDomain` ani `synchronize()`
   to nespraví.
-- **Značka se posouvá až tím, že se novinky ukázaly.** Načíst historii kvůli tomu, aby se
-  zjistilo, jestli je co ukázat, ještě neznamená, že to někdo viděl. Posouvá ji `markAsSeen()`
-  ze dvou míst: z kontroly při startu a z `.task` okna.
+- **Značka se posouvá až tím, že se okno opravdu ukázalo.** Posouvá ji `markAsSeen()`
+  z `.task` okna; kontrola při startu ji posune **jen tehdy, když se okno otevírat nebude**
+  (první spuštění, nebo není co nového). Je to tatáž past jako u snímku ohlášených PR (#85):
+  kdo si zapíše „ohlásil jsem“ dřív, než se to povedlo, tu hlášku **už nikdy nepošle**.
+  **Stalo se to v provozu** hned u prvního releasu, který se měl sám ohlásit — okno se
+  neotevřelo, značka se posunula a `v1.1.24` se nedala ohlásit už nikdy. Takhle se to samo
+  spraví při příštím spuštění.
+
+  **Neposouvá se ani při druhém nabídnutí v témž běhu** (`hasOfferedAfterStart`). Je pořád
+  co ukazovat, takže posunout ji tam znamená tutéž chybu o větev vedle: hlavní okno jde zavřít
+  a otevřít, takže druhý průchod by vydání odbyl, aniž by ho kdo viděl. Nález Copilota na #142;
+  je na to test ověřený dočasně vloženou regresí.
 - **Odznaky `nové` se počítají proti značce *před* posunutím** a v rámci běhu se nemění.
   Jinak by zhasly v tomtéž okamžiku, kdy se okno objeví, a nebylo by podle čeho poznat, co je
   nového.

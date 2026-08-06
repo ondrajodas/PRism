@@ -89,9 +89,8 @@ final class ReleaseNotesModel {
     /// Poznamená si nejnovější vydání jako viděné.
     ///
     /// Značka se posouvá **až tady**, ne při načtení: načíst historii kvůli tomu, aby se
-    /// zjistilo, jestli je co ukázat, ještě neznamená, že to někdo viděl. Volá se ze dvou
-    /// míst — z kontroly při startu (okno se otevřelo, nebo nebylo co ukázat) a z okna
-    /// samotného (člověk si ho otevřel z menu).
+    /// zjistilo, jestli je co ukázat, ještě neznamená, že to někdo viděl. Volá ji **okno**,
+    /// jakmile se ukáže — a kontrola při startu jen tehdy, když se okno otevírat nebude.
     ///
     /// `unseen` se tím **nemění**: odznaky mají v otevřeném okně zůstat.
     func markAsSeen() {
@@ -112,11 +111,29 @@ final class ReleaseNotesModel {
         let isFirstRun = lastSeenTag == nil
         await load()
         guard case .loaded = state else { return false }
-        // Značka se posune i tehdy, když se okno neotevře: buď je nejnovější vydání viděné,
-        // nebo je tohle první spuštění a od příště se má hlásit jen to, co přibude.
-        markAsSeen()
-        guard !isFirstRun, !unseen.isEmpty, !hasOfferedAfterStart else { return false }
+
+        guard !isFirstRun, !unseen.isEmpty else {
+            // Není co ukazovat, takže značku posune tahle cesta: buď je nejnovější vydání
+            // viděné (posun je pak stejně bez efektu), nebo je tohle první spuštění a od
+            // příště se má hlásit jen to, co přibude.
+            markAsSeen()
+            return false
+        }
+
+        // **Ani tady se značka neposouvá**, i když se v tomhle běhu okno už jednou nabídlo.
+        // Je pořád co ukazovat — a když se to napoprvé nepovedlo, je tohle přesně ta situace,
+        // kvůli které celé #141 vzniklo. Posunout ji tady by tu chybu vrátilo o větev vedle:
+        // hlavní okno jde zavřít a otevřít, takže druhý průchod by vydání odbyl, aniž by ho
+        // kdo viděl. Nález Copilota na #142.
+        guard !hasOfferedAfterStart else { return false }
+
         hasOfferedAfterStart = true
+        // **Značku tady neposouváme.** Posune ji až okno, jakmile se opravdu ukáže
+        // (`ReleaseNotesView.task`). Pořadí je stejné pravidlo jako u snímku ohlášených PR
+        // (#85): kdo si zapíše „ohlásil jsem“ dřív, než se to povedlo, tu hlášku **už nikdy
+        // nepošle**. Stalo se to v provozu hned u prvního releasu, který se měl sám ohlásit —
+        // okno se neotevřelo, ale značka se posunula, takže se v1.1.24 nedala ohlásit už nikdy.
+        // Takhle se to samo spraví při příštím spuštění.
         return true
     }
 
