@@ -246,7 +246,7 @@ otevřeného PR a při překročení rozpočtu (10 GB) i ta nejdéle nepoužitá
 Uložené nálezy jsou klíčované head commitem: nové commity je označí jako zastaralé
 a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí.
 
-**Rozsah v1 podle specifikace je hotový** — všech pět fází (viz [CLAUDE.md](CLAUDE.md)).
+**Rozsah v1 podle specifikace je hotový** — všech pět fází (viz [`docs/stav.md`](docs/stav.md)).
 Co přijde po něm, je v milnících M6 až M8.
 
 Z nich už je hotové čtení konverzace: **vlákna od kolegů visí jako bubliny u svých řádků**,
@@ -362,8 +362,8 @@ v toolbaru, nebo menu aplikace): vlevo celá historie vydání, vpravo release n
 té vybrané. **Po aktualizaci se otevře samo**, jednou, s vybranou nejnovější verzí — jinak
 by o novinkách nikdo nevěděl. Podrobnosti jsou v sekci [Novinky](#novinky) níž; totéž je
 i v [releases](https://github.com/ondrajodas/PRism/releases) na GitHubu. Kde projekt je
-jako celek, říká sekce [Stav](CLAUDE.md#stav) v `CLAUDE.md`, ne release notes: ten stav by
-v nich zastaral hned další verzí.
+jako celek, říká [`docs/stav.md`](docs/stav.md), ne release notes: ten stav by v nich
+zastaral hned další verzí.
 
 - [Návrh (specifikace)](docs/superpowers/specs/2026-07-31-prism-design.md) — plný
   návrh včetně záznamu rozhodnutí a zamítnutých alternativ
@@ -371,6 +371,10 @@ v nich zastaral hned další verzí.
 - [`docs/github-review-api.md`](docs/github-review-api.md) — ověřené chování zápisového
   review API GitHubu; podklad pro odesílání review (M6)
 - [CLAUDE.md](CLAUDE.md) — pravidla pro práci v tomto repu
+- [`docs/architektura.md`](docs/architektura.md) — co který modul drží a co se u něj nemá
+  rozbít
+- [`docs/testovani.md`](docs/testovani.md) — co se u které oblasti testuje a proč zrovna to
+- [`docs/stav.md`](docs/stav.md) — co je hotové a co zbývá
 
 ## Jak to funguje
 
@@ -679,6 +683,9 @@ bin/icon-sources/         oficiální značky, ze kterých se ikona skládá
 Info.plist                název aplikace, verze, minimální systém
 PRism.entitlements        vypnutý App Sandbox
 Signing.xcconfig          podpis: ad-hoc default + volitelný Signing.local.xcconfig
+docs/architektura.md      podrobnosti po modulech
+docs/testovani.md         co se u které oblasti testuje
+docs/stav.md              co je hotové a co zbývá
 docs/claude-cli.md        ověřené chování claude CLI (flagy, tvar eventů)
 docs/github-review-api.md ověřené chování zápisového review API GitHubu (spike k M6)
 docs/superpowers/specs/   návrh a specifikace
