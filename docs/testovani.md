@@ -363,7 +363,7 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   Plus kotva pro skok z panelu, včetně `left` a fallbacku na soubor.
 - **Dotažení po pádu (#97)** — tři vrstvy. `TranscriptLocation` na **změřená** pravidla
   manglingu cesty: nejen `/` a mezery, ale všechno mimo `[A-Za-z0-9-]` (včetně podtržítka
-  a diakritiky), pomlčky se nesluřují a velikost písmen zůstává. `TranscriptStore` proti
+  a diakritiky), pomlčky se neslučují a velikost písmen zůstává. `TranscriptStore` proti
   **skutečnému** transcriptu z veřejného sandboxu, zkrácenému na pět řádků — jsou v něm typy
   eventů, které ve `stream-json` nejsou (`queue-operation`, `last-prompt`, `attachment`), takže
   fixture zároveň ověřuje, že je parser přejde. A že v něm **není `result`**, tedy že se
