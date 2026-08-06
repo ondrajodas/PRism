@@ -151,22 +151,26 @@ včetně důvodu.
   nejsou vůbec. Tělo se proto musí přečíst celé — u #8 tam takhle ležely dva reálné
   nálezy pod hlavičkou, že nové komentáře nejsou.
 
-  **Na PR, který mění `AppStore.swift`, Copilot spadne a opakování nepomůže.** Do review
-  napíše jen „Copilot encountered an error and was unable to review this pull request“;
-  skutečná příčina je v logu akce — `Error: Prompt too big after adding PR context`.
+  **Copilot si tenhle soubor bere jako custom instructions — a tím si sám ucpává kontext.**
+  Když spadne, do review napíše jen „Copilot encountered an error and was unable to review
+  this pull request“; příčina je vidět **jen v logu akce**:
 
-  Změřeno na třech PR za sebou: #159 (diff 12 kB, měnil `DiffView.swift` a spol.) prošel,
-  #160 (70 kB) a #161 (30 kB) spadly. **Nerozhoduje tedy velikost diffu**, ale co je ve
-  změněných souborech: oba spadlé sahaly na `AppStore.swift`, který má sám o sobě 128 kB —
-  Copilot si zjevně tahá **celý obsah** změněných souborů, ne jen diff. Sedí to i s tím, že
-  #159 v přehledu vyjmenoval jen čtyři ze sedmi souborů a `CLAUDE.md` (315 kB) mezi nimi
-  nebyl. Opakování je proto zbytečné, tři pokusy dopadnou stejně.
+  ```
+  [customInstructions] Built 1 custom instruction(s) for ondrajodas/PRism; names=["CLAUDE.md"]
+  Running detector: ccr[…;MaxPromptTokens=110000;…]
+  Error: Prompt too big after adding PR context
+  ```
 
-  Když k tomu dojde: **nepřepisuj kvůli tomu zadání ani nedělej umělé PR navíc** —
-  dokumentace musí jít se změnou v jednom commitu, to je pravidlo o řádek výš. Zbývá vlastní
-  revize, a ta je stejně podmínkou pushnutí; napiš do popisu PR, že Copilot nedoběhl a proč,
-  ať je z PR vidět, že kontrola nechyběla omylem. Trvale to spraví až rozdělení
-  `AppStore.swift`, které si o to říká i bez Copilota.
+  `CLAUDE.md` má 315 kB, takže sám o sobě sežere většinu ze 110 tisíc tokenů rozpočtu a na
+  „PR context“ nezbude. **Nerozhoduje proto velikost diffu**: #159 (12 kB) prošel, #160
+  (70 kB) i #161 (30 kB) spadly, a opakování dopadne pokaždé stejně. Napřed to vypadalo na
+  `AppStore.swift` (128 kB, byl v obou spadlých) — log ukázal, že to je jinak; **je to tenhle
+  soubor, ne ten review**.
+
+  Poroste to dál, takže je to k řešení, ne k obcházení. Do té doby: **nepřepisuj kvůli tomu
+  zadání ani nedělej umělé PR navíc** — dokumentace musí jít se změnou v jednom commitu, to
+  je pravidlo o řádek výš. Zbývá vlastní revize, a ta je stejně podmínkou pushnutí; napiš do
+  popisu PR, že Copilot nedoběhl a proč, ať je z PR vidět, že kontrola nechyběla omylem.
 - **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
   a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
   Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
