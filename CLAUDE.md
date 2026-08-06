@@ -2540,8 +2540,9 @@ v domény review, jen drží to, čím se s systémem mluví.
 
 Nad notifikacemi (#88) platí:
 
-- **Notifikace fungují jedině z `/Applications`.** Změřeno: z `build/` i z `~/Applications`
-  vrací `requestAuthorization` chybu `Notifications are not allowed for this application`
+- **Notifikace fungují jedině z `/Applications`.** Změřeno: z buildové složky v repu
+  i z `~/Applications` vrací `requestAuthorization` chybu
+  `Notifications are not allowed for this application`
   a `authorizationStatus` zůstane `denied` — **bez dialogu a bez záznamu v Nastavení
   systému**, takže se to nedá ani ručně povolit. Není to vlastnost PRismu: stejnou chybu
   dostala minimální cizí aplikace s jiným bundle identifikátorem. Postupně se vyloučil
@@ -3218,12 +3219,18 @@ falešná obrazovka.
 ## Příkazy
 
 ```bash
-xcodebuild -project PRism.xcodeproj -scheme PRism build
+xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex build
 ```
 
 ```bash
-xcodebuild -project PRism.xcodeproj -scheme PRism test
+xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test
 ```
+
+**`-derivedDataPath build.noindex` patří i k testům** (#139). `xcodebuild test` **spouští**
+testovacího hosta, a spuštění bundle ho zaregistruje v LaunchServices — bez toho přepínače
+skončí v `~/Library/Developer/Xcode/DerivedData/PRism-<hash>/…` a ve Spotlightu je PRism
+navždycky dvakrát. Do `build.noindex/` míří i `bin/run.sh`, takže tenhle záznam uklidí
+příští spuštění skriptu: je to **tatáž cesta**, kterou odregistrovává.
 
 ```bash
 ./bin/run.sh    # build v Debug + instalace do /Applications + otevření aplikace
@@ -3233,6 +3240,7 @@ xcodebuild -project PRism.xcodeproj -scheme PRism test
                 # a upozorní, když je build podepsaný ad-hoc
                 # cizí bundle v /Applications nepřepíše a při selhání instalace
                 # radši nespustí nic, ať se nekouká na starý build
+                # a po instalaci odregistruje kopii v build.noindex/ (#139)
 ```
 
 ```bash
@@ -3253,7 +3261,7 @@ resp. `** TEST SUCCEEDED **` na konci.
 **Výstup `xcodebuild` piš do souboru a grepuj až ten soubor.**
 
 ```bash
-xcodebuild -project PRism.xcodeproj -scheme PRism test > /tmp/tests.log 2>&1
+xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test > /tmp/tests.log 2>&1
 grep -E "error:|✘|Test run with|TEST (SUCCEEDED|FAILED)" /tmp/tests.log | tail -5
 ```
 
@@ -3283,7 +3291,20 @@ ho do souboru.
   berou z `ToolPaths`, nikdy z názvu binárky.
 - **Aplikace se provozuje z `/Applications`** (#88). Odjinud macOS nepovolí notifikace —
   změřeno, podrobnosti v sekci `App/Environment/`. `bin/run.sh` tam bundle instaluje sám,
-  takže ručně se nic dělat nemusí; `build/` zůstává jen místem, kde se buildí.
+  takže ručně se nic dělat nemusí; `build.noindex/` zůstává jen místem, kde se buildí.
+- **Buildí se do `build.noindex/`, ne do `build/`** (#139). Bez té přípony si LaunchServices
+  kopii **samo zaregistruje** — změřeno, po odregistrování je do 25 vteřin zpátky
+  (`.metadata_never_index` uvnitř složky s tím nehne, taky změřeno) — a ve Spotlightu pak
+  stojí dva PRismy se stejným jménem, ze kterých se nedá vybrat. Záznam navíc přežije
+  i smazání bundlu, takže se jich časem nasbíralo devět. Příponu `.noindex` používá na totéž
+  sám Xcode (`Intermediates.noindex`).
+
+  **Samotná přípona nestačí:** Xcode bundle na konci buildu registruje výslovně
+  (`lsregister -f -R -trusted`) a `xcodebuild test` ho navíc **spouští**, což ho zaregistruje
+  taky. `bin/run.sh` proto po instalaci tu jednu cestu odregistruje — a protože do
+  `build.noindex/` míří i testy, uklidí tím i po nich. Selhání se **hlásí, ale nepokládá
+  skript**: kvůli záznamu v databázi se nemá nespustit aplikace. Obě chybové větve jsou
+  vyzkoušené spuštěním, ne jen přečtené.
 
 ## Stav
 
@@ -3649,7 +3670,7 @@ Ověřeno spuštěním, ne jen testy: notifikace dorazila, delegát dostal `will
 i `didReceive` a klik vybral ten PR, na který ukazovala.
 
 **Přineslo to jednu změnu mimo zadání:** `bin/run.sh` instaluje aplikaci do `/Applications`
-a spouští ji odtud, protože **odjinud macOS notifikace nepovolí** — z `build/`
+a spouští ji odtud, protože **odjinud macOS notifikace nepovolí** — z buildové složky v repu
 i z `~/Applications` zůstane oprávnění `denied` bez dialogu a bez záznamu v Nastavení
 systému. Vyloučeno postupně: podpis (self-signed, ad-hoc, hardened runtime),
 `get-task-allow`, Debug proti Release, duplikáty v LaunchServices, restart `usernoted`, MDM

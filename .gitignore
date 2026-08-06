@@ -10,7 +10,7 @@ Signing.local.xcconfig
 .claude/settings.local.json
 
 # Xcode
-build/
+build.noindex/
 DerivedData/
 *.xcuserstate
 *.xcscmblueprint

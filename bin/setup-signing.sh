@@ -117,4 +117,4 @@ write_local_config
 echo
 echo "Hotovo. Další build se podepíše stálou identitou:"
 echo "    ./bin/run.sh"
-echo "Ověřit jde přes: codesign -dv --verbose=4 build/Build/Products/Debug/PRism.app"
+echo "Ověřit jde přes: codesign -dv --verbose=4 build.noindex/Build/Products/Debug/PRism.app"
