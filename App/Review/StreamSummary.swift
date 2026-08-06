@@ -26,6 +26,9 @@ struct StreamSummary: Sendable, Equatable {
     /// Konec běhu. `nil` znamená, že `result` event nedorazil — typicky zabitý běh, ale
     /// taky rozbitý poslední řádek nebo proces, který vůbec nenaběhl.
     var outcome: ReviewOutcome?
+    /// Co běh stál (#148). Ze stejného eventu jako `outcome`, takže **zabitý běh ji nemá** —
+    /// a `nil` je proto vlastní odpověď, ne nula. Nula by tvrdila, že běh byl zdarma.
+    var usage: RunUsage?
     /// Kolik řádků se nepodařilo přečíst. Nenulové číslo neznamená chybu běhu, ale stojí
     /// za zmínku v UI.
     var malformedLines = 0

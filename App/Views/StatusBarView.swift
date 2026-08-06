@@ -19,6 +19,11 @@ struct StatusBarView: View {
         HStack(alignment: .center, spacing: 12) {
             AppNoticesView(store: store)
             Spacer(minLength: 0)
+            // Vedle zvonku a puntíků, protože je to tatáž otázka „co mi to dělá“ — jen se ptá
+            // na účet místo na dostupnost.
+            if let spend = store.dailySpend {
+                DailySpendView(spend: spend)
+            }
             // Vlevo od puntíků služeb, protože odpovídá na tutéž otázku („funguje mi to?“),
             // ale službou není — proto zvonek, ne barevná tečka.
             NotificationStatusView(
@@ -151,6 +156,64 @@ struct NotificationStatusView: View {
             Naposledy ohlášeno v \(shortTime(last.at)).
             \(last.title)
             """
+    }
+}
+
+/// Co dneska stálo review (#148).
+///
+/// **V řádku je jen cena**, ne trvání ani počet kol. Součet trvání paralelních session totiž
+/// neměří nic — tři desetiminutové běhy naráz by daly „30 minut“ za deset uplynulých — a počet
+/// kol je trivia. Peníze jsou naopak číslo, které se jinde v aplikaci nedozvím vůbec, a kvůli
+/// kterému #148 vzniklo.
+///
+/// **Vidět je vždycky**, i s nulou, ze stejného důvodu jako zvonek vedle: ukazatel, který se
+/// objeví teprve tehdy, když je co ukázat, je ukazatel, o kterém nikdo neví, že existuje.
+struct DailySpendView: View {
+    let spend: DailySpend
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "dollarsign.circle")
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+            Text(verbatim: label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .help(tooltip)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Útrata za dnešek")
+        .accessibilityValue(tooltip)
+    }
+
+    /// `≥` u součtu, do kterého se nepodařilo započítat všechno — je to **dolní odhad**.
+    /// Zabitý běh peníze stál taky, jen jeho cenu nikdo nenahlásil, a součet bez té značky by
+    /// se tvářil jako úplný. Tatáž úvaha jako u `droppedFindings`.
+    ///
+    /// Ne `+` na konci, i když zkrácení jinde v okně značí `+N` (odznak u vlákna): tam je za
+    /// znaménkem **číslo**, kdežto samotné `12,35 $+` vypadá jako překlep. `≥` říká „aspoň“
+    /// a nic jiného znamenat nemůže.
+    private var label: String {
+        (spend.unknown > 0 ? "≥ " : "") + RunUsageText.cost(spend.cost)
+    }
+
+    private var tooltip: String {
+        guard !spend.isEmpty else {
+            return """
+                Dneska zatím neskončilo žádné review, takže se nic neutratilo.
+                Počítá se od půlnoci a přežije to restart.
+                """
+        }
+        var lines = ["Za dnešek \(RunUsageText.cost(spend.cost)) ve \(Plural.czech(spend.runs, one: "běhu", few: "bězích", many: "bězích"))."]
+        if spend.unknown > 0 {
+            lines.append("""
+                \(Plural.czech(spend.unknown, one: "Běh", few: "Běhy", many: "Běhů")) cenu \
+                nenahlásily (zabité nebo přerušené), takže skutečná částka je vyšší.
+                """)
+        }
+        lines.append("Ruční i automatická review dohromady; počítá se od půlnoci.")
+        return lines.joined(separator: "\n")
     }
 }
 

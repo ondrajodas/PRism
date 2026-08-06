@@ -103,6 +103,11 @@ struct StoredReviewRun: Codable, Hashable, Sendable {
     /// tomu by znamenalo protáhnout čas přes celý runner. Co UI potřebuje, je „jak staré
     /// je tohle review“.
     let finishedAt: Date
+    /// Co běh stál (#148). **Volitelné**, protože starší soubory ten klíč nemají — tatáž
+    /// úvaha jako u `Finding.translation`, a stejně jako tam to obstará optional: syntetizovaný
+    /// `init(from:)` u něj sáhne po `decodeIfPresent`, takže se chybějící klíč nedekóduje jako
+    /// chyba. `nil` navíc znamená totéž co ve `StreamSummary` — nevíme, ne nula.
+    let usage: RunUsage?
 
     init(_ run: ReviewRun, finishedAt: Date) {
         skillID = run.key.skillID
@@ -112,5 +117,6 @@ struct StoredReviewRun: Codable, Hashable, Sendable {
         droppedFindings = run.summary.droppedFindings
         calledReportFindings = run.summary.calledReportFindings
         self.finishedAt = finishedAt
+        usage = run.summary.usage
     }
 }

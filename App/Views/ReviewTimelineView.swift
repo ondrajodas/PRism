@@ -77,11 +77,24 @@ struct ReviewTimelineView: View {
                 .help("claude --resume \(sessionID)")
             }
             Spacer()
+            usage(timeline)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.bar)
+    }
+
+    /// Co běh stál (#148). Ukazuje se, **až když to dorazí** — cenu nese `result` event, takže
+    /// běžící reviewer ji nemá a zabitý ji mít nebude. Nula by tvrdila, že běh byl zdarma.
+    @ViewBuilder private func usage(_ timeline: ReviewerTimeline) -> some View {
+        if let usage = timeline.usage, let summary = RunUsageText.summary(of: usage) {
+            Text(verbatim: summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .help("Cena, trvání a počet kol modelu, jak je nahlásila session (`result` event).")
+        }
     }
 
     private func copyResume(_ sessionID: String) {

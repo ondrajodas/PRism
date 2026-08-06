@@ -174,9 +174,14 @@ hledá, jaký příkaz spustil. Skládá se nativně z eventů, ne přeposílán
 aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vrátit, zkopíruje
 se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí běhu.
 
+U doběhlého revieweera je v hlavičce **cena, trvání a počet kol** — `0,23 $ · 11,8 s · 3 kola`.
+Bere se to z toho, co nahlásila sama session, takže **zabitý běh je nemá**: nula by tvrdila, že
+byl zdarma. Součet za dnešek je ve stavovém řádku, viz níž.
+
 Na spodku okna je **stavový řádek**: vlevo hlášky o stavu celé aplikace (rozbitá
 konfigurace, pozastavený automat kvůli dennímu limitu, soubory, které se nepodařilo
-přečíst), vpravo puntík u GitHubu a u Claude. Puntík odpovídá na otázku „je to na mojí
+přečíst), vpravo **útrata za dnešek**, kdy se naposledy něco ohlásilo, a puntík u GitHubu
+a u Claude. Puntík odpovídá na otázku „je to na mojí
 straně, nebo mají oni výpadek?“ ještě předtím, než se člověk začne prohrabávat chybou:
 
 | Puntík | Význam |
@@ -423,6 +428,13 @@ S vypnutým hlavním přepínačem se aplikace **nezeptá ani na systémové opr
 „nový PR“ pravda — a je to jiné očekávání: u nového jde o první přečtení, u re-review o to,
 co se od mého review změnilo. Že ho znám, se pozná z uložených nálezů; zahozený záznam z něj
 udělá zase novinku, protože zahození znamená „tenhle výsledek je k ničemu“.
+
+**Co dneska stálo review, je vidět ve stavovém řádku** — cena za dnešek, ruční i automatická
+review dohromady, počítáno od půlnoci a přežívá to restart. Rozpočet v penězích aplikace nemá:
+`autoRunsPerDay` omezuje **počet PR**, ne sessions ani dolary, a je to vědomé — nejdřív se má
+pár týdnů koukat na skutečné číslo a teprve pak rozhodnout, jestli je brána potřeba. Součet, do
+kterého se nepodařilo započítat všechno (zabitý nebo přerušený běh cenu nenahlásí), je označený
+`≥`: je to **dolní odhad**, ne úplná částka.
 
 **Že notifikace fungují, je vidět ve stavovém řádku** — vlevo od puntíků služeb je zvonek
 s časem posledního doručení. `zatím nic` znamená, že se od spuštění nic neohlašovalo (a nic se
