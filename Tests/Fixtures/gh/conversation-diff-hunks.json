@@ -1,0 +1,171 @@
+{
+  "data": {
+    "viewer": {
+      "login": "ondrajodas"
+    },
+    "repository": {
+      "pullRequest": {
+        "number": 13084,
+        "reviews": {
+          "totalCount": 2,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "PRR_kwDODKw3uc70Pags",
+              "state": "CHANGES_REQUESTED",
+              "body": "Thanks for the PR, @maxbeizer! 🍻 It's great.\n\nNote that some of these comments are best to be resolved in a follow up PR, as they'd break the base for the `discussion view` PR.\n\n\nSummary of my comments (you can find the details in their corresponding comments):\n- Add tests for discussion client methods.\n- Add `--search` option.\n- Add `--sort` and `--order` options.\n- Add `--after` option for further pagination calls, and the `next` field in JSON output. We should basically do what we planned for pagination in `discussion view` (in https://github.com/cli/cli/issues/12810#issuecomment-4154772163).\n- Some domain-vs-API and domain-vs-CLI adaptions.\n- Question around having `hasDiscussionsEnabled` next to `discussions`; does that even work on repos where discussions are disabled.\n- A bit around `--help` docs; `(preview)` note, examples, and command usage format.\n\n\n### Further questions, but not ready to comment/share for now\n- Shouldn't `ClosedAt` and `AnswerChosenAt` fields be `null`-able?\n- What happens to ghost users in `author.login` query?\n- See if we can replace the plain text GQL query with a strongly-typed one.\n",
+              "submittedAt": "2026-04-13T14:38:25Z",
+              "author": {
+                "login": "babakks"
+              }
+            },
+            {
+              "id": "PRR_kwDODKw3uc70XMG4",
+              "state": "COMMENTED",
+              "body": "Thanks for the thorough review, @babakks! Really appreciate the detail here. 🙏\n\nI agree with the feedback across the board. Here's my plan for tackling it:\n\n**In this PR:**\n- Domain/API type safety: `*string` for State, exported consts in `types.go`, `switch` statements with `default` error clauses, `toFilterState()` helper\n- Pagination: `--after` flag, `DiscussionListResult` return type with cursor, `next` in JSON envelope\n- Search: `--search`/`-S` flag, single keyword string, qualifier/keyword terminology, `%q` quoting\n- CLI flags: split `--order-by` into `--sort` + `--order`, `(preview)` annotations, `Use: \"list [flags]\"`, `defaultLimit` const, additional examples\n- Code organization: category lookup → `shared/`, single-line errors, `pageLimit` → `remaining`, hoist `hasDiscussionsEnabled` out of loop\n- Guard clauses: `limit <= 0` validation in client methods\n\n**In follow-up PRs:**\n- Interface rename (`DiscussionClient` → `Discussions`) + export struct\n- Client method tests (following `agent-task/capi/sessions_test.go` pattern)\n\n**Will investigate:**\n- `hasDiscussionsEnabled` + `discussions` query behavior on repos with discussions disabled",
+              "submittedAt": "2026-04-13T15:08:28Z",
+              "author": {
+                "login": "maxbeizer"
+              }
+            }
+          ]
+        },
+        "reviewThreads": {
+          "totalCount": 38,
+          "pageInfo": {
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "id": "PRRT_kwDODKw3uc56e1Kf",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": 23,
+              "originalLine": 23,
+              "diffSide": "RIGHT",
+              "viewerCanResolve": false,
+              "viewerCanUnresolve": false,
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63G5ba",
+                    "body": "_TBF in a follow-up._\n\nConstructor functions, like `NewDiscussionClient` here, are expected to return a pointer to a struct/type and not an interface. I know here we can't just capitalise and export `discussionClient` struct as it would collide with `DiscussionClient` interface. So, my suggestion is to rename the interface to `Discussions` and then export the implementation as `DiscussionClient`. It's not perfect and could be seen as misleading, but I think I'm okay with it (TBF it's better than what we did in `agent-task` where the interface and the struct names are just different in casing).\n\n_Actually, the problem is we're defining both the interface and the implementation in the same package and that's why our hands are tied here. Interfaces make more sense to be defined at the consumer side (especially, with duck-typing, as in Go), but I prefer to keep them in the same package for consistency with other commands._",
+                    "createdAt": "2026-04-13T09:26:59Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072038618",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null,
+                    "diffHunk": "@@ -19,12 +22,314 @@ func NewDiscussionClient(httpClient *http.Client) DiscussionClient {\n \t}\n }"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56fCq6",
+              "isResolved": true,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 122,
+              "diffSide": "RIGHT",
+              "viewerCanResolve": false,
+              "viewerCanUnresolve": false,
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63HLKA",
+                    "body": "Two pointers:\n\n- The method should also:\n  1. accept an `after` parameter (populated by `discussion list --after <CURSOR>`).\n  2. return a next page cursor (so that, for example, `discussion list` can populate the JSON's `next` field with it). As it'll be an awkwardly lengthy return type, we should probably introduce a secondary type for this.\n\n  Ultimately, the signature should read like this:\n\n  ```go\n  func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, after string, limit int) (DiscussionListResult, error)\n  ```\n\n- Let's add a guard clause for case `limit <= 0`. Asking this, because we're in a separate package than the `list` command and shouldn't rely on the caller's checks. The return value can be a `nil` slice, but it's better to return an error here to allow surfacing of any faulty code path.\n\n  ```go\n  if limit <= 0 {\n      return nil, 0, fmt.Errorf(\"limit argument must be positive: %v\", limit)\n  }\n  ```",
+                    "createdAt": "2026-04-13T09:41:18Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072111232",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null,
+                    "diffHunk": "@@ -19,12 +22,314 @@ func NewDiscussionClient(httpClient *http.Client) DiscussionClient {\n \t}\n }\n \n-func (c *discussionClient) List(_ ghrepo.Interface, _ ListFilters, _ int) ([]Discussion, int, error) {\n-\treturn nil, 0, fmt.Errorf(\"not implemented\")\n+// discussionNode is the shared GraphQL response shape for a single discussion,\n+// used by both List and Search to avoid duplicating the field mapping.\n+type discussionNode struct {\n+\tID          string `json:\"id\"`\n+\tNumber      int    `json:\"number\"`\n+\tTitle       string `json:\"title\"`\n+\tURL         string `json:\"url\"`\n+\tState       string `json:\"state\"`\n+\tStateReason string `json:\"stateReason\"`\n+\tAuthor      struct {\n+\t\tLogin string `json:\"login\"`\n+\t} `json:\"author\"`\n+\tCategory struct {\n+\t\tID           string `json:\"id\"`\n+\t\tName         string `json:\"name\"`\n+\t\tSlug         string `json:\"slug\"`\n+\t\tEmoji        string `json:\"emoji\"`\n+\t\tIsAnswerable bool   `json:\"isAnswerable\"`\n+\t} `json:\"category\"`\n+\tLabels struct {\n+\t\tNodes []struct {\n+\t\t\tID    string `json:\"id\"`\n+\t\t\tName  string `json:\"name\"`\n+\t\t\tColor string `json:\"color\"`\n+\t\t} `json:\"nodes\"`\n+\t} `json:\"labels\"`\n+\tIsAnswered     bool      `json:\"isAnswered\"`\n+\tAnswerChosenAt time.Time `json:\"answerChosenAt\"`\n+\tAnswerChosenBy *struct {\n+\t\tLogin string `json:\"login\"`\n+\t} `json:\"answerChosenBy\"`\n+\tReactionGroups []struct {\n+\t\tContent string `json:\"content\"`\n+\t\tUsers   struct {\n+\t\t\tTotalCount int `json:\"totalCount\"`\n+\t\t} `json:\"users\"`\n+\t} `json:\"reactionGroups\"`\n+\tCreatedAt time.Time `json:\"createdAt\"`\n+\tUpdatedAt time.Time `json:\"updatedAt\"`\n+\tClosedAt  time.Time `json:\"closedAt\"`\n+\tLocked    bool      `json:\"locked\"`\n }\n \n-func (c *discussionClient) Search(_ ghrepo.Interface, _ SearchFilters, _ int) ([]Discussion, int, error) {\n-\treturn nil, 0, fmt.Errorf(\"not implemented\")\n+// mapDiscussion converts a GraphQL discussionNode response into the domain Discussion type.\n+func mapDiscussion(n discussionNode) Discussion {\n+\td := Discussion{\n+\t\tID:          n.ID,\n+\t\tNumber:      n.Number,\n+\t\tTitle:       n.Title,\n+\t\tURL:         n.URL,\n+\t\tState:       n.State,\n+\t\tStateReason: n.StateReason,\n+\t\tAuthor:      DiscussionAuthor{Login: n.Author.Login},\n+\t\tCategory: DiscussionCategory{\n+\t\t\tID:           n.Category.ID,\n+\t\t\tName:         n.Category.Name,\n+\t\t\tSlug:         n.Category.Slug,\n+\t\t\tEmoji:        n.Category.Emoji,\n+\t\t\tIsAnswerable: n.Category.IsAnswerable,\n+\t\t},\n+\t\tAnswered:       n.IsAnswered,\n+\t\tAnswerChosenAt: n.AnswerChosenAt,\n+\t\tCreatedAt:      n.CreatedAt,\n+\t\tUpdatedAt:      n.UpdatedAt,\n+\t\tClosedAt:       n.ClosedAt,\n+\t\tLocked:         n.Locked,\n+\t}\n+\n+\tif n.AnswerChosenBy != nil {\n+\t\td.AnswerChosenBy = &DiscussionAuthor{Login: n.AnswerChosenBy.Login}\n+\t}\n+\n+\td.Labels = make([]DiscussionLabel, len(n.Labels.Nodes))\n+\tfor i, l := range n.Labels.Nodes {\n+\t\td.Labels[i] = DiscussionLabel{ID: l.ID, Name: l.Name, Color: l.Color}\n+\t}\n+\n+\td.ReactionGroups = make([]ReactionGroup, len(n.ReactionGroups))\n+\tfor i, rg := range n.ReactionGroups {\n+\t\td.ReactionGroups[i] = ReactionGroup{Content: rg.Content, TotalCount: rg.Users.TotalCount}\n+\t}\n+\n+\treturn d\n+}\n+\n+// discussionFields is the GraphQL fragment selecting fields for discussion queries.\n+// It is shared by both List (repository.discussions) and Search queries.\n+const discussionFields = `\n+\tid number title url state stateReason\n+\tauthor { login }\n+\tcategory { id name slug emoji isAnswerable }\n+\tlabels(first: 20) { nodes { id name color } }\n+\tisAnswered answerChosenAt answerChosenBy { login }\n+\treactionGroups { content users { totalCount } }\n+\tcreatedAt updatedAt closedAt locked\n+`\n+\n+func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, limit int) ([]Discussion, int, error) {"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDODKw3uc56fHEM",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "pkg/cmd/discussion/client/client_impl.go",
+              "line": null,
+              "originalLine": 145,
+              "diffSide": "RIGHT",
+              "viewerCanResolve": false,
+              "viewerCanUnresolve": false,
+              "comments": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDODKw3uc63HRCF",
+                    "body": "Let's not rely on such string manipulations to transfer types/values from domain to API types. What we should do is to:\n- Define acceptable values for the domain `OrderBY` type as consts in `types.go` (no need to define a secondary `string` type, though).\n- Here, add a `switch`-statement to assign the `orderField` temp (no `strings.*` usage). The switch should have a `default` clause that returns an error. This is to prevent half-baked code changes in the future, if any.\n",
+                    "createdAt": "2026-04-13T09:46:08Z",
+                    "url": "https://github.com/cli/cli/pull/13084#discussion_r3072135301",
+                    "author": {
+                      "login": "babakks"
+                    },
+                    "replyTo": null,
+                    "diffHunk": "@@ -19,12 +22,314 @@ func NewDiscussionClient(httpClient *http.Client) DiscussionClient {\n \t}\n }\n \n-func (c *discussionClient) List(_ ghrepo.Interface, _ ListFilters, _ int) ([]Discussion, int, error) {\n-\treturn nil, 0, fmt.Errorf(\"not implemented\")\n+// discussionNode is the shared GraphQL response shape for a single discussion,\n+// used by both List and Search to avoid duplicating the field mapping.\n+type discussionNode struct {\n+\tID          string `json:\"id\"`\n+\tNumber      int    `json:\"number\"`\n+\tTitle       string `json:\"title\"`\n+\tURL         string `json:\"url\"`\n+\tState       string `json:\"state\"`\n+\tStateReason string `json:\"stateReason\"`\n+\tAuthor      struct {\n+\t\tLogin string `json:\"login\"`\n+\t} `json:\"author\"`\n+\tCategory struct {\n+\t\tID           string `json:\"id\"`\n+\t\tName         string `json:\"name\"`\n+\t\tSlug         string `json:\"slug\"`\n+\t\tEmoji        string `json:\"emoji\"`\n+\t\tIsAnswerable bool   `json:\"isAnswerable\"`\n+\t} `json:\"category\"`\n+\tLabels struct {\n+\t\tNodes []struct {\n+\t\t\tID    string `json:\"id\"`\n+\t\t\tName  string `json:\"name\"`\n+\t\t\tColor string `json:\"color\"`\n+\t\t} `json:\"nodes\"`\n+\t} `json:\"labels\"`\n+\tIsAnswered     bool      `json:\"isAnswered\"`\n+\tAnswerChosenAt time.Time `json:\"answerChosenAt\"`\n+\tAnswerChosenBy *struct {\n+\t\tLogin string `json:\"login\"`\n+\t} `json:\"answerChosenBy\"`\n+\tReactionGroups []struct {\n+\t\tContent string `json:\"content\"`\n+\t\tUsers   struct {\n+\t\t\tTotalCount int `json:\"totalCount\"`\n+\t\t} `json:\"users\"`\n+\t} `json:\"reactionGroups\"`\n+\tCreatedAt time.Time `json:\"createdAt\"`\n+\tUpdatedAt time.Time `json:\"updatedAt\"`\n+\tClosedAt  time.Time `json:\"closedAt\"`\n+\tLocked    bool      `json:\"locked\"`\n }\n \n-func (c *discussionClient) Search(_ ghrepo.Interface, _ SearchFilters, _ int) ([]Discussion, int, error) {\n-\treturn nil, 0, fmt.Errorf(\"not implemented\")\n+// mapDiscussion converts a GraphQL discussionNode response into the domain Discussion type.\n+func mapDiscussion(n discussionNode) Discussion {\n+\td := Discussion{\n+\t\tID:          n.ID,\n+\t\tNumber:      n.Number,\n+\t\tTitle:       n.Title,\n+\t\tURL:         n.URL,\n+\t\tState:       n.State,\n+\t\tStateReason: n.StateReason,\n+\t\tAuthor:      DiscussionAuthor{Login: n.Author.Login},\n+\t\tCategory: DiscussionCategory{\n+\t\t\tID:           n.Category.ID,\n+\t\t\tName:         n.Category.Name,\n+\t\t\tSlug:         n.Category.Slug,\n+\t\t\tEmoji:        n.Category.Emoji,\n+\t\t\tIsAnswerable: n.Category.IsAnswerable,\n+\t\t},\n+\t\tAnswered:       n.IsAnswered,\n+\t\tAnswerChosenAt: n.AnswerChosenAt,\n+\t\tCreatedAt:      n.CreatedAt,\n+\t\tUpdatedAt:      n.UpdatedAt,\n+\t\tClosedAt:       n.ClosedAt,\n+\t\tLocked:         n.Locked,\n+\t}\n+\n+\tif n.AnswerChosenBy != nil {\n+\t\td.AnswerChosenBy = &DiscussionAuthor{Login: n.AnswerChosenBy.Login}\n+\t}\n+\n+\td.Labels = make([]DiscussionLabel, len(n.Labels.Nodes))\n+\tfor i, l := range n.Labels.Nodes {\n+\t\td.Labels[i] = DiscussionLabel{ID: l.ID, Name: l.Name, Color: l.Color}\n+\t}\n+\n+\td.ReactionGroups = make([]ReactionGroup, len(n.ReactionGroups))\n+\tfor i, rg := range n.ReactionGroups {\n+\t\td.ReactionGroups[i] = ReactionGroup{Content: rg.Content, TotalCount: rg.Users.TotalCount}\n+\t}\n+\n+\treturn d\n+}\n+\n+// discussionFields is the GraphQL fragment selecting fields for discussion queries.\n+// It is shared by both List (repository.discussions) and Search queries.\n+const discussionFields = `\n+\tid number title url state stateReason\n+\tauthor { login }\n+\tcategory { id name slug emoji isAnswerable }\n+\tlabels(first: 20) { nodes { id name color } }\n+\tisAnswered answerChosenAt answerChosenBy { login }\n+\treactionGroups { content users { totalCount } }\n+\tcreatedAt updatedAt closedAt locked\n+`\n+\n+func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, limit int) ([]Discussion, int, error) {\n+\ttype response struct {\n+\t\tRepository struct {\n+\t\t\tHasDiscussionsEnabled bool `json:\"hasDiscussionsEnabled\"`\n+\t\t\tDiscussions           struct {\n+\t\t\t\tTotalCount int `json:\"totalCount\"`\n+\t\t\t\tPageInfo   struct {\n+\t\t\t\t\tHasNextPage bool   `json:\"hasNextPage\"`\n+\t\t\t\t\tEndCursor   string `json:\"endCursor\"`\n+\t\t\t\t} `json:\"pageInfo\"`\n+\t\t\t\tNodes []discussionNode `json:\"nodes\"`\n+\t\t\t} `json:\"discussions\"`\n+\t\t} `json:\"repository\"`\n+\t}\n+\n+\tvariables := map[string]interface{}{\n+\t\t\"owner\": repo.RepoOwner(),\n+\t\t\"name\":  repo.RepoName(),\n+\t}\n+\n+\torderField := \"UPDATED_AT\"\n+\torderDir := \"DESC\"\n+\tif filters.OrderBy != \"\" {\n+\t\torderField = strings.ToUpper(filters.OrderBy) + \"_AT\""
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "comments": {
+          "totalCount": 4,
+          "pageInfo": {
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "id": "IC_kwDODKw3uc78k438",
+              "body": "**Investigation result** for the `hasDiscussionsEnabled` question ([comment](https://github.com/cli/cli/pull/13084#discussion_r3072305674)):\n\nQuerying a repo with discussions disabled (`cli/go-gh`) returns `hasDiscussionsEnabled: false` with `discussions.totalCount: 0` — **no GQL error**. So our current approach of checking the boolean works correctly. The guard clause is valid as-is.",
+              "createdAt": "2026-04-13T15:19:33Z",
+              "url": "https://github.com/cli/cli/pull/13084#issuecomment-4237528572",
+              "author": {
+                "login": "maxbeizer"
+              }
+            },
+            {
+              "id": "IC_kwDODKw3uc78lYN-",
+              "body": "> Querying a repo with discussions disabled (`cli/go-gh`) returns `hasDiscussionsEnabled: false` with `discussions.totalCount: 0` — **no GQL error**. So our current approach of checking the boolean works correctly. The guard clause is valid as-is.\n\nThere's one more case when we fetch the categories, too, and that happens before the actual list query.",
+              "createdAt": "2026-04-13T15:35:57Z",
+              "url": "https://github.com/cli/cli/pull/13084#issuecomment-4237656958",
+              "author": {
+                "login": "babakks"
+              }
+            },
+            {
+              "id": "IC_kwDODKw3uc78lb0t",
+              "body": "Good call! I checked — `ListCategories` on a repo with discussions disabled returns an empty list (no GQL error), so the user would get `unknown category: \"foo\"; must be one of []` which is confusing.\n\nI think the cleanest fix is to add `hasDiscussionsEnabled` to the `ListCategories` query and return the \"discussions disabled\" error from there too. That way any code path that calls `ListCategories` gets the right error. I'll add that in the next push.",
+              "createdAt": "2026-04-13T15:38:10Z",
+              "url": "https://github.com/cli/cli/pull/13084#issuecomment-4237671725",
+              "author": {
+                "login": "maxbeizer"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

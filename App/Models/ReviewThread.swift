@@ -32,6 +32,19 @@ struct ReviewThread: Hashable, Codable, Sendable {
     let canResolve: Bool
     /// Smím vyřešené vlákno otevřít zpátky (`viewerCanUnresolve`)?
     let canUnresolve: Bool
+    /// Unified diff od začátku hunku **po komentovaný řádek**, jak ho GitHub pořídil proti
+    /// commitu, na kterém vlákno vzniklo (`diffHunk`). `nil` = nedorazil (starší odpověď).
+    ///
+    /// Je to **snímek z minulosti**, ne dnešní kód — a právě proto se drží: zastaralé vlákno
+    /// se u kódu nekreslí, protože jeho číslo platilo pro starý head, takže tohle je jediné,
+    /// čím se dá v `Přehledu` ukázat, o čem je řeč. Dopočítat úryvek z dnešního souboru by
+    /// u zastaralého vlákna ukázalo jiný kód.
+    ///
+    /// Nesmí se splést s `Policy.snapshot` u kotev draftu (#69) — ten je z **dnešního** diffu.
+    ///
+    /// Drží se **surový text**, ne rozparsované řádky: kolik se z něj ukáže, je rozhodnutí,
+    /// a to patří do `Policy` (`Policy.snippet(of:)`), ne do mapování odpovědi.
+    let diffHunk: String?
     let comments: ConversationPage<ThreadComment>
 
     init(
@@ -44,6 +57,7 @@ struct ReviewThread: Hashable, Codable, Sendable {
         isOutdated: Bool,
         canResolve: Bool = true,
         canUnresolve: Bool = true,
+        diffHunk: String? = nil,
         comments: ConversationPage<ThreadComment>
     ) {
         self.id = id
@@ -55,6 +69,7 @@ struct ReviewThread: Hashable, Codable, Sendable {
         self.isOutdated = isOutdated
         self.canResolve = canResolve
         self.canUnresolve = canUnresolve
+        self.diffHunk = diffHunk
         self.comments = comments
     }
 

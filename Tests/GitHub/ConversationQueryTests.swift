@@ -58,6 +58,9 @@ struct ConversationQueryTests {
             // Bez práv by okno nabízelo `Vyřešit` i tam, kde na to reviewer právo nemá —
             // a tlačítko, které vždycky selže, je horší než žádné.
             "viewerCanResolve", "viewerCanUnresolve",
+            // Bez hunku by v `Přehledu` zůstal komentář bez kódu, ke kterému se váže (#158) —
+            // a jinde než tady se u zastaralého vlákna vzít nedá.
+            "diffHunk",
         ] {
             #expect(document.contains(field), "v dotazu chybí \(field)")
         }

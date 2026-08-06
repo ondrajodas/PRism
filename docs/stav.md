@@ -428,6 +428,19 @@ začátku a `StreamParser` z toho nebral nic. Zabitý běh je nemá a **neukazuj
 je na disku (přežije restart) a u neúplného je `≥`, protože zabitá session peníze stála taky.
 Rozpočet v penězích se vědomě odkládá, viz specifikace.
 
+Úryvek kódu u vlákna hotový (issue #158) — `ReviewThread.diffHunk`, `ThreadSnippet`
+a `Policy.snippet(of:context:)` v `App/Policy/ThreadSnippet.swift`, `ThreadSnippetView`.
+**Vlákno v `Přehledu` má nad sebou obarvený kus kódu, ke kterému se váže** — dosud tam byla jen
+`cesta:řádek`, ze které se nedalo poznat, o čem je řeč. Jsou to zrovna vlákna, která v diffu
+domov nemají: zastaralé se u kódu nekreslí schválně, protože jeho číslo je ze starého headu.
+Kód se bere z `diffHunk` od GitHubu, tedy ze snímku proti commitu, na kterém komentář vznikl —
+nic se nedopočítává. **Změna proti zadání:** pět řádků *za* komentovaným řádkem se neukazuje,
+protože v `diffHunk`u nejsou (změřeno: jeho poslední řádek je právě ten komentovaný) a jinudy by
+si to vyžádalo novou čtecí metodu gateway. Ze 190řádkového mediánu se ukazuje šest řádků a
+zkrácení je vidět značkou. Vykresluje to `DiffLineView`, takže obarvení je jedno pro diff i pro
+úryvek; hunk se kvůli tomu obaluje syntetickou hlavičkou `diff --git` a `DiffParser` se
+**neupravoval**. Odůvodnění všeho je ve specifikaci.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**

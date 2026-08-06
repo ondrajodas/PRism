@@ -45,9 +45,14 @@ kolik je v přehledu k přečtení. Volba se pamatuje **u každého PR zvlášť
 **`Přehled`** nese to, co se neváže k žádnému řádku: popis PR od autora a pod ním konverzaci
 chronologicky — review ostatních s odznakem (`schválil`, `vyžádal změny`), komentáře pod PR
 a vlákna, jejichž řádek v aktuálním diffu není (typicky zastaralá po novém commitu). Ta se
-kreslí **tou samou bublinou jako u kódu**, jen s cestou a řádkem nad ní, protože bez kódu
-vedle není z čeho poznat, o co jde. Moje komentáře mají odznak `já`, text jde označit
-a zkopírovat a konverzaci lze obnovit tlačítkem, aniž by se čekalo na tik pollingu.
+kreslí **tou samou bublinou jako u kódu**, jen s cestou a řádkem nad ní — a **pod tím kus kódu,
+ke kterému se komentář váže**, obarvený a naformátovaný jako v diffu. Kód se bere ze snímku,
+který si GitHub k komentáři drží (`diffHunk`), takže platí pro commit, na kterém komentář vznikl
+— nedopočítává se z dnešního souboru, kde už na tom řádku bývá něco jiného. Hunky bývají dlouhé
+(medián 190 řádků), takže je vidět jeho konec po komentovaný řádek a **zkrácení je označené**.
+Moje komentáře mají odznak `já`, text jde označit a zkopírovat (kromě úryvku kódu, kde selekci
+brání gesto na výběr rozsahu) a konverzaci lze obnovit tlačítkem, aniž by se čekalo na tik
+pollingu.
 
 **Texty se renderují jako Markdown** — nadpisy, seznamy včetně zaškrtávacích, bloky kódu,
 citace, odkazy. Vlastní blokový parser bez závislosti (jako obarvení kódu): systémový umí
@@ -355,7 +360,8 @@ stav, kterému aplikace nerozumí — tam je jediná zpráva ta, že se to má z
 
 Vlákna, jejichž řádek v aktuálním diffu **není** (typicky zastaralá po novém commitu), se
 do kódu nekotví — jejich čísla platila pro starý head, takže by bublina sedla na cizí řádky.
-Domov mají v záložce `Přehled` spolu s review ostatních a komentáři pod PR.
+Domov mají v záložce `Přehled` spolu s review ostatních a komentáři pod PR, a je u nich vidět
+kód, ke kterému se vážou — ten ze **starého** commitu, ne z dnešního.
 
 Co se ve které verzi změnilo, ukazuje **okno `Novinky v PRism`** přímo v aplikaci (✨
 v toolbaru, nebo menu aplikace): vlevo celá historie vydání, vpravo release notes
