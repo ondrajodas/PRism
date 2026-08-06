@@ -1270,8 +1270,11 @@ Automatický režim (#25):
   - **Značka se zapisuje v proudu událostí a s `await`**, ne ve vlastním tasku. Odložený zápis
     se umí propsat až po tom, co běh doběhl a značku smazal — pak zůstane ležet nad hotovým
     během. Chytil to test, ne úvaha.
-  - **Maže se až po vyprázdnění proudu.** Zápis jde přes proud, uložení výsledku ne, takže by se
-    smazání umělo předběhnout — tatáž past z druhé strany.
+  - **Maže se až po vyprázdnění proudu, a to celá sada** — ne jen uložené běhy. Zápis jde přes
+    proud, uložení výsledku ne, takže by se smazání umělo předběhnout. Celá sada proto, že sem
+    se dojde jedině po skončeném review: pokrývá to i **zrušený** běh, který se schválně
+    neukládá, takže by mu značka zbyla a příští start by z transcriptu vzkřísil nálezy, které si
+    člověk zrušil. Po pádu se sem naopak nedojde vůbec, a o to jde.
   - **Značka nad uloženým během nic nepřepíše.** Pád mezi zápisem výsledku a smazáním značky
     jinak z hotového review udělá nedodělek (`interrupted` přes `finished`). Je to důležitější
     pojistka než pořadí mazání, protože to okno zavřít nejde.

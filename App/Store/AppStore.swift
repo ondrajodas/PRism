@@ -2086,7 +2086,7 @@ final class AppStore {
         // plánovač.
         let (events, reporter) = AsyncStream<ReviewEvent>.makeStream()
         async let drained: Void = drain(events, for: pr, at: detail.headSha, in: worktree)
-        let outcome = await runSkills(
+        let failure = await runSkills(
             for: pr,
             of: detail,
             in: worktree,
@@ -2100,11 +2100,19 @@ final class AppStore {
         // Značky se mažou **až po vyprázdnění proudu** (#97). Zápis značky jde přes něj, kdežto
         // uložení výsledku ne — takže by se smazání umělo předběhnout a značka by zůstala ležet
         // nad hotovým během. Chytil to test, ne úvaha.
-        for key in outcome.saved {
-            await interrupted?.forget(key)
+        //
+        // Maže se **celá sada, ne jen uložené běhy**: sem se dojde jedině tehdy, když review
+        // skončilo, takže značka po něm už nemá co znamenat. Pokrývá to i **zrušený** běh,
+        // který se schválně neukládá — nechat mu značku by znamenalo, že příští start dotáhne
+        // z transcriptu nálezy, které si člověk zrušil, tedy proti pravidlu „zrušení neuloží
+        // nic“. Po pádu se sem naopak nedojde vůbec, a o to jde.
+        for skill in reviewSkills(for: pr.repo) {
+            await interrupted?.forget(
+                ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill)
+            )
         }
 
-        if let failure = outcome.failure { throw failure }
+        if let failure { throw failure }
     }
 
     /// Co se v běhu stalo. **Konec běhu jde stejným proudem jako průběh** — jinak by ho
@@ -2192,7 +2200,7 @@ final class AppStore {
         using reviewer: any ReviewRunning,
         saving reviews: ReviewStore,
         reporting reporter: AsyncStream<ReviewEvent>.Continuation
-    ) async -> (saved: [ReviewRunKey], failure: (any Error)?) {
+    ) async -> (any Error)? {
         let skills = reviewSkills(for: pr.repo)
         return await withTaskGroup(of: ReviewRun?.self) { group in
             for skill in skills {
@@ -2222,7 +2230,6 @@ final class AppStore {
 
             var finished = 0
             var saveFailure: (any Error)?
-            var saved: [ReviewRunKey] = []
             for await run in group {
                 finished += 1
                 reviewPhases[pr] = .running(finished: finished, total: skills.count)
@@ -2233,7 +2240,6 @@ final class AppStore {
                     // a když se na ní aplikace zavře, nálezy už jsou na disku. V originále,
                     // ale jsou — což je přesně to, co pravidlo „co doběhlo, zůstane“ chce.
                     reviewRecords[pr] = try await reviews.save(run)
-                    saved.append(run.key)
                     revealFindingsOutsideTheDiff(for: pr)
                     if let translated = await translated(run, for: pr.repo) {
                         reviewRecords[pr] = try await reviews.save(translated)
@@ -2246,7 +2252,7 @@ final class AppStore {
                     saveFailure = saveFailure ?? error
                 }
             }
-            return (saved, saveFailure)
+            return saveFailure
         }
     }
 

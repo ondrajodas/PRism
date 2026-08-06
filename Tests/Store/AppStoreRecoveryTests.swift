@@ -333,6 +333,34 @@ struct AppStoreInterruptedMarkerTests {
         while store.isReviewing(pr) { await Task.yield() }
     }
 
+    /// Zrušené review se schválně neukládá („rozdělané review je horší než žádné“). Kdyby si
+    /// nechalo značku, příští start by z transcriptu vzkřísil nálezy, které si člověk zrušil.
+    @Test("Zrušené review si značku nenechá")
+    func aCancelledReviewLeavesNoMarker() async throws {
+        let interrupted = InterruptedRuns(layout: layout)
+        let reviewer = FakeReviewRunner(
+            holdsUntilRelease: true,
+            progress: [.started(sessionID: "s-42")]
+        )
+        let store = AppStore(
+            gateway: FakeGitHubGateway(always: .success([summary("cli/cli#42")]), detail: .success(detail())),
+            time: FakeTimeSource(),
+            checkout: FakeRepoCheckout(),
+            reviewer: reviewer,
+            reviews: ReviewStore(layout: layout, time: FakeTimeSource()),
+            interrupted: interrupted
+        )
+        await store.refresh()
+
+        store.startReview(for: pr)
+        await reviewer.waitForStarts(1)
+        store.cancelReview(for: pr)
+        try await waitUntilIdle(store)
+
+        #expect(store.reviewRecord(for: pr) == nil, "zrušené review se uložilo")
+        #expect(await interrupted.pending().isEmpty, "po zrušeném review zůstala značka")
+    }
+
     @Test("Session, která nahlásí id, se poznamená — a po uložení značka zmizí")
     func marksAndForgetsARun() async throws {
         let interrupted = InterruptedRuns(layout: layout)
