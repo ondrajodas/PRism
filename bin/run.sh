@@ -5,10 +5,20 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-DERIVED_DATA="build"
+# **`.noindex`, ne `build`.** Bez té přípony si LaunchServices kopii v `build/` **samo
+# zaregistruje** — a je jedno, kolikrát se odregistruje: měřeno, do 25 vteřin je zpátky
+# (`.metadata_never_index` uvnitř složky s tím nehne, taky změřeno). Ve Spotlightu a v
+# „Otevřít v aplikaci“ pak stojí dva PRismy se stejným jménem, ze kterých se nedá vybrat,
+# a protože záznam přežije i smazání bundlu, časem jich tam bylo devět (#139).
+#
+# Příponu `.noindex` používá na totéž sám Xcode (`Intermediates.noindex`): Spotlight takovou
+# složku neprohledává, takže se registrace **sama** nevrátí. Xcode ji ale na konci buildu
+# registruje výslovně (`lsregister -f -R -trusted`), takže se pod tímhle jménem musí ještě
+# odregistrovat — viz konec skriptu.
+DERIVED_DATA="build.noindex"
 APP="$DERIVED_DATA/Build/Products/Debug/PRism.app"
 # Instaluje se do systémových /Applications, protože **notifikace jinde nefungují** (#88).
-# Změřeno: z `build/` i z `~/Applications` vrací `requestAuthorization` chybu
+# Změřeno: z buildové složky v repu i z `~/Applications` vrací `requestAuthorization` chybu
 # „Notifications are not allowed for this application“ a `authorizationStatus` zůstane
 # `denied` — bez dialogu a bez záznamu v Nastavení systému, takže se to nedá ani povolit.
 # Z `/Applications` projde na první pokus. Ověřené i na minimální cizí aplikaci s jiným
@@ -83,6 +93,27 @@ fi
 if ! ditto "$APP" "${INSTALLED}"; then
     echo "Instalace do ${INSTALLED} se nepovedla — nová verze se nespustila."
     exit 1
+fi
+
+# Odregistrovat kopii, kterou při buildu zaregistroval Xcode (#139).
+#
+# Sama od sebe se nevrátí — o to se stará `.noindex` v názvu složky, viz `DERIVED_DATA` výš.
+# Bez tohohle kroku by tam ale zůstala po každém buildu, protože Xcode registruje výsledný
+# bundle výslovně.
+#
+# Odregistrovává se **cesta složená z `$APP`**, nikdy nic hledaného: odregistrovat tu
+# nainstalovanou by znamenalo, že ji nenajde Spotlight ani Dock, tedy pravý opak toho, o co
+# jde. Ta v build.noindex/ se přitom nikdy nespouští přímo — spouští se `${INSTALLED}` o řádek
+# níž.
+#
+# Selhání se jen ohlásí. `lsregister` není dokumentované API a skript běží pod `set -e`;
+# kvůli záznamu v databázi se nemá nespustit aplikace.
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+if [ -x "${LSREGISTER}" ]; then
+    "${LSREGISTER}" -u "${PWD}/${APP}" > /dev/null 2>&1 \
+        || echo "Pozor: kopii v ${APP} se nepodařilo odregistrovat, ve Spotlightu bude PRism dvakrát."
+else
+    echo "Pozor: lsregister na čekané cestě není, kopie v ${APP} zůstane ve Spotlightu."
 fi
 
 open "${INSTALLED}"

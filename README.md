@@ -495,18 +495,26 @@ okno:
 Samotný build a testy:
 
 ```bash
-xcodebuild -project PRism.xcodeproj -scheme PRism build
+xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex build
 ```
 
 ```bash
-xcodebuild -project PRism.xcodeproj -scheme PRism test
+xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test
 ```
 
-`bin/run.sh` buildí do `build/` v repu (`-derivedDataPath`), aby byla cesta k `.app`
+`bin/run.sh` buildí do `build.noindex/` v repu (`-derivedDataPath`), aby byla cesta k `.app`
 předvídatelná; složka je gitignorovaná. Před spuštěním ukončí předchozí instanci.
 
+**Přípona `.noindex` v názvu je funkční, ne kosmetická.** Bez ní si LaunchServices kopii
+v `build/` samo zaregistruje — po odregistrování je do 25 vteřin zpátky — a ve Spotlightu
+i v `Otevřít v aplikaci` pak stojí dva PRismy se stejným jménem, ze kterých se nedá vybrat.
+Spotlight `.noindex` složky neprohledává, takže se registrace sama nevrátí; Xcode ji ale na
+konci buildu přidá výslovně a `xcodebuild test` navíc testovacího hosta **spouští**, čímž
+ho zaregistruje taky. `bin/run.sh` proto po instalaci tu jednu cestu odregistruje — a protože
+do `build.noindex/` míří i testy, uklidí tím i po nich. Proto ten přepínač patří i k nim.
+
 Hotový bundle pak **nainstaluje do `/Applications` a spustí odtud**, protože jinde
-nefungují notifikace: z `build/` i z `~/Applications` vrací systém
+nefungují notifikace: z `build.noindex/` i z `~/Applications` vrací systém
 `Notifications are not allowed for this application` a stav oprávnění zůstane `denied` —
 bez dialogu a bez záznamu v Nastavení systému, takže se to nedá ani ručně povolit.
 Ověřeno i na minimální cizí aplikaci s jiným bundle identifikátorem, takže to není
@@ -573,7 +581,7 @@ přeskočit ho jde Enterem.
 Že je podpis stálý, se ověří takhle:
 
 ```bash
-codesign -dv --verbose=4 build/Build/Products/Debug/PRism.app
+codesign -dv --verbose=4 build.noindex/Build/Products/Debug/PRism.app
 ```
 
 Ad-hoc build hlásí `Signature=adhoc`, podepsaný `Authority=PRism Local`. Na ad-hoc podpis

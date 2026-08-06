@@ -10,6 +10,9 @@ Signing.local.xcconfig
 .claude/settings.local.json
 
 # Xcode
+build.noindex/
+# Zůstává kvůli složkám z doby před #139 a kvůli buildu bez -derivedDataPath:
+# `git status` zavalený artefakty je horší než řádek navíc.
 build/
 DerivedData/
 *.xcuserstate
