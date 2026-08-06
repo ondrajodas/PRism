@@ -42,6 +42,10 @@ struct CacheLayout: Sendable, Equatable {
     /// rostoucí log — viz `AnnouncedPullRequests`.
     var announcedFile: URL { root.appending(path: "announced.json") }
 
+    /// Běhy, které začaly a o kterých se neví, jestli doběhly (#97). Po startu je v něm to,
+    /// co aplikaci nepřežilo — viz `InterruptedRuns`.
+    var interruptedFile: URL { root.appending(path: "interrupted.json") }
+
     /// Výsledky review jednoho PR na jednom commitu: `reviews/<owner>/<repo>/<pr>-<sha>.json`.
     ///
     /// Zanořeno pod repo ze stejného důvodu jako stromy: ploché jméno se nedá filtrovat

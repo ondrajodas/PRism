@@ -430,6 +430,15 @@ struct ReviewStoreTests {
         #expect(foreign.runs.isEmpty, "přepsal se soubor mimo cache")
     }
 
+    /// Čtení jednoho záznamu (#97) je třetí cílené čtení podle cesty — kontrola v něm chybět
+    /// nesmí jen proto, že přibylo později.
+    @Test("Čtení jednoho záznamu přes odkaz vrátí nic")
+    func recordLookupIgnoresASymlink() async throws {
+        try makeSymlinkedRecord()
+
+        #expect(await store().record(for: pullRequest, at: "aaaa1111") == nil)
+    }
+
     /// Odmítnutí nálezu je cílený zápis podle cesty, takže se k odkazu dostane taky.
     @Test("Odmítnutí nálezu přes odkaz skončí chybou, ne zápisem ven")
     func dismissRefusesASymlinkedRecord() async throws {

@@ -53,6 +53,11 @@ extension Policy {
         if record.runs.contains(where: { $0.outcome == .timedOut }) {
             return .timedOut(findings: findings)
         }
+        // Přerušený běh stojí **za** timeoutem: když se sešly oba, je timeout konkrétnější
+        // (víme, proč skončil), kdežto „skončil s aplikací“ je jen to, co jsme dopočítali.
+        if record.runs.contains(where: { $0.outcome == .interrupted }) {
+            return .interrupted(findings: findings)
+        }
         if findings > 0 { return .completed(findings: findings) }
         if record.dismissedCount > 0 {
             return .dismissed(findings: record.dismissedCount)

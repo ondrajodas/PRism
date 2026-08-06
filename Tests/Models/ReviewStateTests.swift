@@ -17,6 +17,7 @@ struct ReviewStateTests {
             .completed(findings: 9),
             .failed(detail: "exit 1"),
             .timedOut(findings: 2),
+            .interrupted(findings: 3),
             .stale,
         ]
     )
