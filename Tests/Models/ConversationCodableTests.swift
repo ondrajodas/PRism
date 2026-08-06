@@ -23,7 +23,11 @@ struct ConversationCodableTests {
         )
     }
 
-    private func thread(line: Int? = 42, side: DiffSide? = .right) -> ReviewThread {
+    private func thread(
+        line: Int? = 42,
+        side: DiffSide? = .right,
+        hunk: String? = "@@ -40,3 +40,3 @@\n kontext\n-staré\n+nové"
+    ) -> ReviewThread {
         ReviewThread(
             id: "t1",
             path: "pkg/cmd/main.go",
@@ -32,6 +36,7 @@ struct ConversationCodableTests {
             side: side,
             isResolved: true,
             isOutdated: line == nil,
+            diffHunk: hunk,
             comments: ConversationPage(
                 items: [comment(), comment(id: "c2", replyTo: "c1")],
                 total: 2,
@@ -52,6 +57,11 @@ struct ConversationCodableTests {
         #expect(try roundTrip(thread(line: nil)) == thread(line: nil))
         #expect(try roundTrip(thread(side: nil)) == thread(side: nil))
         #expect(try roundTrip(thread(side: .left)) == thread(side: .left))
+        // Víceřádkový text v JSONu je to, co se u `diffHunk` (#158) může pokazit potichu —
+        // a chybějící hunk se musí odlišit od prázdného, jinak by z „nevíme“ vyšel prázdný
+        // úryvek.
+        #expect(try roundTrip(thread(hunk: nil)) == thread(hunk: nil))
+        #expect(try roundTrip(thread(hunk: "")) == thread(hunk: ""))
     }
 
     /// `state` a `submittedAt` jsou optional a asociovaná hodnota `nil` se z JSONu ztrácí

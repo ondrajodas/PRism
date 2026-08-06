@@ -35,7 +35,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `FindingTranslation` | Přeložená próza nálezu. Visí vedle originálu, nepřepisuje ho |
 | `Conversation` | Cizí konverzace pod PR: review ostatních, vlákna, komentáře + `viewer` |
 | `ConversationPage` | Kus seznamu a kolik ho je celkem — nese **zkrácení** |
-| `ReviewThread` | Vlákno u řádku diffu: cesta, `line`/`originalLine`, `isResolved`, `isOutdated`, **práva viewera** (`canResolve`/`canUnresolve`) |
+| `ReviewThread` | Vlákno u řádku diffu: cesta, `line`/`originalLine`, `isResolved`, `isOutdated`, **práva viewera** (`canResolve`/`canUnresolve`), `diffHunk` (#158) |
+| `ThreadSnippet` | Úryvek kódu k vláknu: řádky diffu a příznak zkrácení (#158). **Není `Codable`** — počítá se z `diffHunk` |
 | `ThreadComment` | Jeden komentář — ve vlákně i pod PR; `replyToID` místo vnořování |
 | `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
@@ -328,6 +329,46 @@ v pěti věcech se chovají jinak:
   výpadku sítě (`.failed`) vyprázdnila, protože takový stav v mapě zůstane, ale vlákna nedá.
 - **Bublina vlákna nemá `.textSelection(.enabled)`**, i když je to text ke kopírování —
   platí tu totéž jako nad celým diffem. `FindingBubbleView` ho ze stejného důvodu nemá.
+
+Úryvek kódu u vlákna v `Přehledu` (#158) k tomu přidává:
+
+- **Kód se bere z `diffHunk` od GitHubu, nikdy se nedopočítává.** Je to snímek proti commitu,
+  na kterém komentář vznikl, takže se nic nehádá — kdežto výřez z dnešního souboru by
+  u zastaralého vlákna ukázal **jiný kód**, a to je přesně ten druh tichého rozchodu, kterému
+  se aplikace vyhýbá jinde u nálezů (`headSha`).
+- **Kontext je jen před komentovaným řádkem, protože `diffHunk` končí právě na něm.** Změřeno
+  na `cli/cli#13084` u všech 38 vláken, na obou stranách diffu. Pět řádků *za* ním, jak chtělo
+  zadání #158, by si vyžádalo novou čtecí metodu gateway na obsah souboru v daném commitu —
+  dnešní `fetchFile(id:path:)` čte **dnešní** hlavu PR. Vlastní cena, vlastní rozhodnutí;
+  kontext před řádkem je zdarma a je to totéž, co ukazuje GitHub ve svém zabaleném vlákně.
+- **Hunk se nevykresluje celý.** Medián je 190 řádků (min 2, max 311), takže se ukazuje
+  posledních `Policy.threadSnippetContext + 1`, tedy šest — a **zkrácení je vidět** značkou nad
+  úryvkem. Přesný počet zahozených řádků ne: nedává důvod nic udělat, kdežto „začíná to dřív“ ano.
+- **Vykresluje to `DiffLineView`, ne vlastní renderer.** `diffHunk` *je* unified diff, takže ho
+  `DiffParser` přeloží na `DiffLine`y a dál platí totéž obarvení jako v diffu. Druhý renderer by
+  se rozešel a barvy by na dvou místech okna znamenaly něco jiného.
+- **Hunk se obaluje syntetickou hlavičkou `diff --git`.** `DiffParser` zařazuje řádky podle
+  stavu a před první hlavičkou souboru nemá řádek kam patřit — samotný `@@` blok by celý spadl
+  do `unrecognizedLines` (je na to test). **Parser se kvůli tomu neupravil**: na jeho invariantu
+  „nerozpoznaný řádek se počítá“ visí důvěra v celý diff. `---`/`+++` se nepřidávají, cesty
+  z hlavičky nikdo nečte — jazyk na obarvení se bere z `ReviewThread.path`.
+- **Úryvek je jen v `Přehledu`, ne v bublině.** Vlákno **s kotvou** visí u kódu, kde je ten kód
+  nad ním vidět, takže úryvek v `ThreadBubbleView` by ho kreslil dvakrát.
+- **Nerozpoznaný řádek se počítá jako zkrácení.** Úryvek pak není spojitý kus souboru, a tvrdit
+  u něj „tohle je celý kontext“ by bylo nepravdivé. Bezpečný směr je jediný.
+- **Vlákno bez hunku se kreslí jako dřív, ne prázdné.** Starší odpovědi (fixtures z #63) pole
+  nemají; `nil` znamená „nevíme“, kdežto prázdný rámeček by tvrdil, že kontext žádný není.
+- **Úryvek se počítá při vykreslení, ne dopředu a bez cache** — a je to **změřené, ne odhad**:
+  38 vláken s tím nejdelším hunkem z fixture (129 řádků) stojí **4,6 ms** na jedno „překreslení“
+  celého `Přehledu`, proti 0,15 ms, které tam už dneska stojí `Policy.overview` (výběr vláken
+  proti diffu). Není to na úhoz: rozepsaná odpověď jde do storu **odloženě po 400 ms**
+  (`DraftTextEditor`), takže se to spustí při načtení konverzace, při rozbalení vlákna a po
+  pauze v psaní. Předfiltr — parsovat jen konec hunku — by si vyžádal **vlastní počítání čísel
+  řádků**, tedy druhé místo, které dělá to, co `HunkBuilder`, a přesně tomu se tady vyhýbáme.
+- **Vybírat text v úryvku nejde**, i když `Přehled` má selekci jinak zapnutou (`OverviewView`).
+  Není to konzistence s diffem: `DiffLineView` nese gesto tažení pro rozsahy komentářů, takže
+  by tažení přes kód selekci spolklo a vypadalo by to jako rozbité okno. Kopírování z diffu
+  řeší #157 — na jednom místě pro obojí.
 
 Odpovídání do vláken (#73) k tomu přidává:
 
@@ -1055,6 +1096,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit` |
 | `FindingActions` | Co se dá dělat s nálezem — odmítnout a vrátit; jedno místo pro bublinu i tabulku |
 | `ThreadBubbleView` | Vlákno konverzace u řádku; vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73) |
+| `ThreadSnippetView` | Úryvek kódu k vláknu v `Přehledu` (#158) — řádky kreslí `DiffLineView`, nad nimi značka zkrácení |
 | `ThreadActions` | Co se dá dělat s vláknem — rozbalení, odpověď, vyřešení a důvod, proč odesílat nejde |
 | `MarkdownText` | Vykreslený Markdown z GitHubu — viz `App/Markdown/` |
 | `DraftCommentBubbleView` | Můj rozdělaný komentář u řádku: editor, odznak původu, vyjmutí. Ve split pohledu visí jen v půlce, které se týká |
@@ -2015,6 +2057,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.inserting(_:intoThread:of:)`, `Policy.applying(_:to:)` | Zápis odeslané odpovědi a vyřešení do načtené konverzace; `nil` = vlákno tam není |
 | `Policy.linesWithSeveralComments(in:)` | Na kolika řádcích draftu je víc komentářů — z každého budou samostatná vlákna, ne odpověď |
 | `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR a vlákna bez kotvy, chronologicky (`ConversationEntry`) |
+| `Policy.snippet(of:context:)` | `diffHunk` vlákna → `ThreadSnippet`: posledních pár řádků po komentovaný a příznak zkrácení (#158). `nil` = úryvek se nemá z čeho vzít. **Není to `Policy.snapshot`** — ten je z dnešního diffu a slouží kotvám draftu |
 | `Policy.commentableSide(of:in:)` | Ke které **kanonické** straně by šel komentář; `nil` = nedá se komentovat |
 | `Policy.commentAnchors(of:in:)`, `Policy.commentAnchors(in:)` | Kotvy na **obě strany** (`LineAnchors`) — kontextový řádek unese vlevo i vpravo; mapa pro celý soubor jedním průchodem |
 | `Policy.commentAnchor(of:in:)` | Kanonická kotva (`DraftAnchor`: číslo + strana + volitelný začátek rozsahu) — tudy chodí převzatý nález, který stranu nemá |
@@ -2217,6 +2260,17 @@ Konverzace (#63) jde **jedním GraphQL dotazem** přes `gh api graphql`:
   `Vyřešit` i tam, kde na to reviewer právo nemá — a tlačítko, které vždycky selže, je horší než
   žádné. Starší fixtures ta pole nemají, takže se chybějící hodnota bere jako **povolení**; viz
   pravidla nad vlákny v modelech.
+- **A od #158 `diffHunk`, tímtéž dotazem — ne druhým až při rozbalení vlákna.** Odpověď z toho
+  naroste ze 35 kB na 245 kB (změřeno na `cli/cli#13084`), ale **cena v bodech zůstává 1**
+  a konverzace se nepersistuje, takže je to JSON, který se dekóduje a zahodí s PR. Druhý dotaz
+  by byl druhá cesta ke konverzaci — vlastní stav načítání a vlastní chyba u každého vlákna,
+  a latence zrovna v okamžiku kliknutí.
+- **`diffHunk` se bere u komentáře, i když patří vláknu.** GraphQL ho na `PullRequestReviewThread`
+  nemá; model ho proto zvedne z prvního komentáře, **který ho má** (ne z prvního — kdyby ho GitHub
+  u některého vynechal, vlákno by o kontext přišlo kvůli pořadí). Zeptat se místo toho aliasem
+  `comments(first: 1)` jen na jeden komentář navíc se **zamítlo měřením**: na tomtéž PR to
+  neušetřilo nic (246 kB proti 245 kB, každé vlákno tam má jeden komentář) a **zvedlo cenu
+  z 1 bodu na 2**, protože je to další connection.
 
 ## `ReviewPublisher` (`App/Publish/`)
 

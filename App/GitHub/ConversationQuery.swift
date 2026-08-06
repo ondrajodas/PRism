@@ -5,7 +5,14 @@ import Foundation
 /// **GraphQL, ne tři REST endpointy.** REST nemá `isResolved` vůbec, takže by otázka „co
 /// s vyřešenými vlákny“ neměla odpověď — a byly by to tři podprocesy místo jednoho.
 /// Ověřeno na živém API: celý dotaz stojí **1 bod z 5000/h**, ať se ptá na PR se dvěma
-/// vlákny nebo s osmatřiceti.
+/// vlákny nebo s osmatřiceti — a **`diffHunk` na tom nic nemění** (#158), i když odpověď
+/// zvětší ze 35 kB na 245 kB.
+///
+/// **`diffHunk` se tahá tímhle dotazem, ne druhým až při rozbalení vlákna** (#158). Druhý
+/// dotaz by sice byl malý, ale byl by to druhý způsob, jak se dostat ke konverzaci — vlastní
+/// stav načítání a vlastní chyba u každého vlákna, a latence zrovna v okamžiku kliknutí.
+/// Cena je velikost odpovědi, ne body a ne kolo navíc: konverzace se **nepersistuje** a `gh`
+/// běží lokálně, takže 245 kB je JSON, který se dekóduje a zahodí s PR.
 enum ConversationQuery {
     /// Kolik se bere z každého seznamu. Sto komentářů na PR je řádově víc, než kolik jich
     /// vzniká; přes to se nestránkuje, ale **spočítá se, co chybí** (`ConversationPage`),
@@ -45,7 +52,7 @@ enum ConversationQuery {
               comments(first: $page) {
                 totalCount
                 pageInfo { hasNextPage }
-                nodes { id body createdAt url author { login } replyTo { id } }
+                nodes { id body createdAt url author { login } replyTo { id } diffHunk }
               }
             }
           }

@@ -191,8 +191,9 @@ struct OverviewView: View {
 
     /// Vlákno bez kotvy. Kreslí ho **tatáž bublina jako u kódu**, jen bez odsazení do sloupce
     /// s čísly řádků — jinak by se totéž vlákno na dvou místech aplikace vykreslovalo dvakrát
-    /// jinak. Nad ním je místo, kde bývalo: bez kódu vedle je to jediné, čím se dá poznat,
-    /// o čem to je.
+    /// jinak. Nad ním je místo, kde bývalo, a pod tím úryvek kódu, ke kterému se váže (#158):
+    /// `cesta:řádek` sama o sobě neřekne, o čem je řeč, a jinde se ten kód vzít nedá — číslo
+    /// řádku je ze starého headu, takže se v diffu nekreslí.
     private func threadCard(_ thread: ReviewThread) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
@@ -214,6 +215,9 @@ struct OverviewView: View {
                         .help("Řádek, u kterého vlákno vzniklo, v aktuálním diffu není")
                 }
                 Spacer(minLength: 0)
+            }
+            if let snippet = Policy.snippet(of: thread) {
+                ThreadSnippetView(snippet: snippet, path: thread.path)
             }
             ThreadBubbleView(
                 thread: thread,

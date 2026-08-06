@@ -98,6 +98,53 @@ struct GhConversationTests {
         #expect(outdated.anchorLine != nil)
     }
 
+    // MARK: - Úryvek kódu
+
+    /// `diffHunk` je na komentáři, ale do modelu jde na **vlákno**: kotva je jedna a odpovědi
+    /// ve vlákně nesou tentýž úryvek (změřeno na `cli/cli#13084` u všech 38 vláken). Co se
+    /// z hunku ukáže, rozhoduje `Policy` — testuje to `ThreadSnippetTests`.
+    @Test("Hunk se přečte z komentáře na vlákno")
+    func liftsTheDiffHunkOntoTheThread() throws {
+        let conversation = try load("conversation-diff-hunks.json", number: 13084)
+        let threads = conversation.threads.items
+
+        #expect(threads.count == 3)
+        #expect(threads.allSatisfy { $0.diffHunk?.hasPrefix("@@") == true })
+    }
+
+    /// Kdyby GitHub hunk u prvního komentáře vynechal, vlákno by o kontext přišlo kvůli
+    /// pořadí — proto se bere první, **který ho má**.
+    @Test("Hunk se najde i u pozdější odpovědi ve vlákně")
+    func findsTheHunkOnALaterComment() throws {
+        let json = """
+        {"data": {"viewer": {"login": "ondrajodas"},
+          "repository": {"pullRequest": {"number": 1,
+            "reviews": {"totalCount": 0, "nodes": []},
+            "comments": {"totalCount": 0, "nodes": []},
+            "reviewThreads": {"totalCount": 1, "nodes": [
+              {"id": "PRRT_1", "path": "src/Cart.php", "line": null, "originalLine": 5,
+               "diffSide": "RIGHT", "isResolved": false, "isOutdated": true,
+               "comments": {"totalCount": 2, "nodes": [
+                 {"id": "a", "body": "bez hunku", "createdAt": "2026-08-01T10:00:00Z",
+                  "url": "https://github.com/o/r/pull/1#discussion_a",
+                  "author": {"login": "kolega"}, "diffHunk": null},
+                 {"id": "b", "body": "s hunkem", "createdAt": "2026-08-01T11:00:00Z",
+                  "url": "https://github.com/o/r/pull/1#discussion_b",
+                  "author": {"login": "kolega"}, "diffHunk": "@@ -5,1 +5,1 @@\\n+kód"}
+               ]}}]}}}}}
+        """
+        let response = try GhOutput.decoder.decode(
+            GhConversationResponse.self,
+            from: Data(json.utf8)
+        )
+        let conversation = try response.conversation(
+            id: PRIdentifier(repo: RepoID("ondrajodas/PRism")!, number: 1)
+        )
+        let thread = try #require(conversation.threads.items.first)
+
+        #expect(thread.diffHunk == "@@ -5,1 +5,1 @@\n+kód")
+    }
+
     @Test("Strana diffu se přečte")
     func readsTheDiffSide() throws {
         let conversation = try load("conversation-small.json")

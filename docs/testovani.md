@@ -47,6 +47,21 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   ta pole tahají. Starší fixtures je nemají, a to je **taky test**: ověřují, že se chybějící
   právo bere jako povolení. Rozdíl mezi `canResolve` a `canUnresolve` se na skutečné odpovědi
   nesehná (na cizím repu obě `false`, na vlastním obě `true`), takže na něj je syntetický JSON.
+
+  **Úryvek kódu k vláknu (#158)** má vlastní fixture z téhož PR (`conversation-diff-hunks.json`,
+  `first: 3`) — vybraná velikostí stránky, ne ručním výřezem, aby zůstala tím, co pošle aplikace.
+  První tři vlákna dávají zrovna to, co je potřeba: **krátký hunk** (2 řádky, u kterého se
+  zkrácení hlásit **nesmí**, jinak by test prošel i s příznakem zadrátovaným na `true`) a **dva
+  dlouhé zastaralé** (106 a 129 řádků). To hlavní tvrzení je o **datech GitHubu**, ne o našem
+  kódu — že `diffHunk` končí na komentovaném řádku — takže se ověřuje proti fixture u každého
+  vlákna a číslo se bere podle `side`, stejně jako u kotvení bublin. Vymyšlený hunk by to
+  nedoložil. Ověřené vložením regrese: `prefix` místo `suffix`, `isTruncated` zadrátovaný na
+  `false` a zahozená syntetická hlavička — každé z toho testy shodí.
+
+  Zvlášť stojí **doklad, proč je syntetická hlavička potřeba**: samotný `@@` blok skončí celý
+  v `unrecognizedLines` a `files` je prázdné. Bez toho testu by se hlavička časem odstranila jako
+  zbytečná. Levá strana diffu ve vzorku není (všechna vlákna jsou `RIGHT`, jako u #63), takže
+  komentář k **odebranému** řádku má ručně sestavený hunk — a je u něj napsané proč.
 - **Odpovídání do vláken (#73)** — čisté funkce plus publisher proti `FakeProcessRunner`.
   Nejdůležitější testy netvrdí, co se odeslalo, ale že se **nic neodeslalo**
   (`runner.invocations.isEmpty`): bez povolení v nastavení, s prázdným tělem a na zavřený PR.

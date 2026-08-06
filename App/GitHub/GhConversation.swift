@@ -79,6 +79,10 @@ struct GhConversationResponse: Decodable {
         let url: URL?
         let author: GhAuthor?
         let replyTo: Reference?
+        /// Unified diff od začátku hunku po komentovaný řádek, jak ho GitHub pořídil proti
+        /// commitu, na kterém komentář vznikl. Do modelu jde na **vlákno**, ne na komentář —
+        /// viz `Thread.thread()`.
+        let diffHunk: String?
 
         struct Reference: Decodable {
             let id: String
@@ -156,6 +160,12 @@ private extension GhConversationResponse.Thread {
             // ze které je vidět, co se stalo.
             canResolve: viewerCanResolve ?? true,
             canUnresolve: viewerCanUnresolve ?? true,
+            // Hunk je vlastnost **vlákna**, i když ho GraphQL vrací u komentáře: kotva je
+            // jedna a odpovědi ve vlákně nesou tentýž úryvek (změřeno na `cli/cli#13084`,
+            // všech 38 vláken). Bere se z prvního komentáře, **který ho má** — ne z prvního
+            // komentáře: kdyby ho GitHub u některého vynechal, vlákno by o kontext přišlo
+            // kvůli pořadí.
+            diffHunk: comments.nodes?.compactMap(\.diffHunk).first,
             comments: comments.page { $0.comment() }
         )
     }
