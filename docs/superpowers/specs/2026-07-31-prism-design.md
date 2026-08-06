@@ -521,6 +521,33 @@ výpadek?“ dřív, než se člověk začne prohrabávat konkrétní chybou.
   zjišťoval.
 - **Na pozadí se nekontroluje nic.** Aplikace, kterou nikdo nevidí, nemá komu svítit.
 
+### Opakování jednoho revieweera (#149)
+
+Ze tří skillů jeden spadne nebo vytimeoutuje a jediná cesta zpátky byla pustit všechny tři —
+tedy zaplatit dvě session za výsledky, které leží na disku. `ReviewRecord.replace(_:)` je
+klíčovaný skillem, takže datová vrstva to unesla už předtím.
+
+- **Podmnožina jako parametr `startReview`, jedna úloha na PR.** Zadání nechávalo otevřené,
+  jestli `reviewTasks` klíčovat dvojicí `(PR, skill)` — **zamítnuto**: visí na nich `isReviewing`,
+  `runningReviews` (dialog při zavření, #94), rušení automatických běhů i ochrana rep před
+  eviction, tedy čtyři místa, která by se musela přepsat kvůli případu, který trvá minuty.
+  Úloha si proto nese podmnožinu a nad jedním PR běží pořád nejvýš jedna.
+- **Podmnožina se předává, ne snímkuje.** `nil` znamená „celá nastavená sada“ a čte se až
+  v `runSkills`, protože ji mezitím může změnit odhad jazyka repa — platit má ta, se kterou
+  běh doopravdy jede.
+- **Nabízí se u všech stavů, ne jen u neúspěšných** (zadání nechávalo na rozhodnutí). Pustit
+  znovu čistý běh je legitimní přání a stojí to jednu session, o kterou si člověk sám řekl;
+  u skillu, který ještě neběžel (přidal se do konfigurace po review), je to zrovna ta levná
+  cesta, jak ho dohnat. Text položky se podle toho liší, protože „pustit znovu“ u něj není
+  pravda.
+- **Kontextové menu, ne druhé tlačítko v chipu.** Chip je malý a jeho kliknutí patří filtru,
+  který se používá mnohem častěji; ikonka navíc by se do něj mačkala a trefovala by se hůř
+  než ta, kterou by nahradila. Že tam menu je, říká nápověda chipu — bez té věty by se o něm
+  nikdo nedozvěděl.
+- **Během běžícího review je položka zakázaná, ne schovaná.** Důvod je vidět o kousek vedle
+  (chip se spinnerem) a sám za chvíli zmizí; menu, které se občas neobjeví, vypadá jako závada.
+  Tatáž úvaha jako u tlačítka `Odpovědět` ve vlákně (#73).
+
 ### Cena a trvání běhu (#148)
 
 `result` event ze `stream-json` nese `total_cost_usd`, `duration_ms` a `num_turns` — a do #148

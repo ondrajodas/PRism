@@ -8,6 +8,11 @@ struct ReviewerChipsView: View {
     let chips: [ReviewerChip]
     /// Reviewery, jejichž nálezy jsou schované.
     @Binding var muted: Set<String>
+    /// Pustit znovu jen tohohle revieweera (#149). `nil` = odsud se nespouští (náhledy, testy).
+    var rerun: ((String) -> Void)?
+    /// Běží nad tímhle PR review? Dokud běží, nejde spustit nic dalšího — je to jedna úloha
+    /// na PR, viz `AppStore.RunningReview`.
+    var isReviewing = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -47,6 +52,25 @@ struct ReviewerChipsView: View {
         // Podrobnost (stderr, důvod nejistoty) visí na nápovědě: kliknutí patří filtru,
         // který se používá mnohem častěji.
         .help(help(chip, isMuted: isMuted))
+        .contextMenu { rerunItem(chip) }
+    }
+
+    /// Opakování jednoho revieweera (#149).
+    ///
+    /// **Kontextové menu, ne druhé tlačítko v chipu.** Chip je malý a jeho kliknutí už patří
+    /// filtru, který se používá mnohem častěji; ikonka navíc by se do něj mačkala a trefovala
+    /// by se hůř než ta, kterou by nahradila. Že tam menu je, říká nápověda.
+    ///
+    /// Dokud nad PR běží review, je položka **zakázaná, ne schovaná**: důvod je vidět
+    /// o kousek vedle (chip se spinnerem) a za chvíli sám zmizí — kdežto menu, které se občas
+    /// neobjeví, vypadá jako závada. Tatáž úvaha jako u tlačítka `Odpovědět` ve vlákně.
+    @ViewBuilder private func rerunItem(_ chip: ReviewerChip) -> some View {
+        if let rerun {
+            Button(chip.state == .notStarted ? "Pustit jen tohohle revieweera" : "Pustit znovu jen tohohle revieweera") {
+                rerun(chip.skill)
+            }
+            .disabled(isReviewing)
+        }
     }
 
     @ViewBuilder private func icon(_ state: ReviewerChip.State) -> some View {
@@ -110,7 +134,12 @@ struct ReviewerChipsView: View {
     /// `Průběh` je jen v paměti, takže po něm ukáže „zatím se nic nedělo“ a uložená cena by
     /// jinak neměla čtenáře.
     private func help(_ chip: ReviewerChip, isMuted: Bool) -> String {
-        let action = isMuted ? "Zobrazit nálezy tohohle revieweera" : "Skrýt nálezy tohohle revieweera"
+        var action = isMuted ? "Zobrazit nálezy tohohle revieweera" : "Skrýt nálezy tohohle revieweera"
+        // Bez téhle věty se o opakování nikdo nedozví: kontextové menu na chipu není nic,
+        // co by šlo uhodnout.
+        if rerun != nil {
+            action += "\nPravým tlačítkem: pustit znovu jen jeho, bez ostatních."
+        }
         let usage = chip.usage.flatMap(RunUsageText.summary(of:))
         return [state(of: chip), usage, action].compactMap { $0 }.joined(separator: "\n\n")
     }

@@ -217,7 +217,23 @@ final class AppStore {
     /// Čtení transcriptů zabitých session (#97). `nil` = odsud se nečte (testy).
     private let transcripts: (any TranscriptReading)?
     /// Běžící review podle PR — drží se kvůli zrušení.
-    private var reviewTasks: [PRIdentifier: Task<Void, Never>] = [:]
+    private var reviewTasks: [PRIdentifier: RunningReview] = [:]
+
+    /// Běžící review jednoho PR — úloha a to, které reviewery pouští.
+    ///
+    /// **Jedna úloha na PR, ne na `(PR, skill)`**, i když #149 pouští i podmnožinu. Na
+    /// `reviewTasks` visí `isReviewing`, `runningReviews` (podle kterého se aplikace ptá před
+    /// zavřením, #94), rušení automatických běhů i ochrana rep před eviction — klíčovat je
+    /// dvojicí by znamenalo přepsat všechna čtyři. Cena je, že se opakování jednoho revieweera
+    /// nedá spustit, dokud nad PR běží jiné review; to je ale stav, který sám za chvíli
+    /// skončí, a chip u něj mezitím ukazuje spinner.
+    private struct RunningReview {
+        let task: Task<Void, Never>
+        /// Podmnožina, kterou běh pouští (#149). `nil` = celá nastavená sada — a schválně ne
+        /// její snímek: sadu ještě může změnit odhad jazyka repa a platit má ta, se kterou běh
+        /// doopravdy jede.
+        let skills: [String]?
+    }
     /// Review, která spustil **automat**. Ruční se pozná tím, že tady není — a jen ta
     /// automatická se ruší, když PR zmizí ze seznamu.
     private var automaticReviews: Set<PRIdentifier> = []
@@ -669,6 +685,12 @@ final class AppStore {
     /// Ze stejného zdroje jako `isReviewing`, ne z vlastního počitadla: dvě místa, která se
     /// můžou rozejít, by v nejhorším nechala aplikaci zavřít bez zeptání.
     var runningReviews: Int { reviewTasks.count }
+
+    /// Které reviewery běžící review pouští. Celá nastavená sada, když neběží nic — chipy pak
+    /// ukazují to, co by se spustilo.
+    private func runningSkills(for pr: PRIdentifier) -> [String] {
+        reviewTasks[pr]?.skills ?? reviewSkills(for: pr.repo)
+    }
 
     /// Připraví pracovní kopii repa. Slouží i jako „zkusit znovu“ po selhání — příprava
     /// je idempotentní, takže opakování je totéž volání.
@@ -1629,13 +1651,23 @@ final class AppStore {
     // MARK: - Review
 
     /// Spustí review vybraného PR. Opakované zmáčknutí, dokud běží, nic nedělá.
-    func startReview(for pr: PRIdentifier) {
+    ///
+    /// `skills` je podmnožina k opakování (#149) — typicky jeden reviewer, který spadl.
+    /// `nil` znamená celou nastavenou sadu, a to **není totéž jako její snímek**: sadu ještě
+    /// může změnit odhad jazyka repa, který běží až nad pracovní kopií.
+    func startReview(for pr: PRIdentifier, skills: [String]? = nil) {
         guard reviewer != nil, reviewTasks[pr] == nil else { return }
+        // Prázdná podmnožina by spustila review bez jediného revieweera — tedy běh, který
+        // utratí checkout a nic nezjistí.
+        guard skills.map({ !$0.isEmpty }) ?? true else { return }
         // Ruční spuštění přebíjí automat: kdyby PR mezitím spustil automat, nespustí se
         // podruhé (`reviewTasks` už není `nil`), ale zůstal by označený jako automatický
         // a zmizení ze seznamu by ho zrušilo pod rukama.
         automaticReviews.remove(pr)
-        reviewTasks[pr] = Task { [weak self] in await self?.review(pr) }
+        reviewTasks[pr] = RunningReview(
+            task: Task { [weak self] in await self?.review(pr, skills: skills) },
+            skills: skills
+        )
     }
 
     // MARK: - Notifikace (#88)
@@ -1766,7 +1798,10 @@ final class AppStore {
             // znamenalo, že PR zamítnutý rozpočtem se už nikdy nezváží.
             consideredForAutomation[pr] = updates[pr]
             automaticReviews.insert(pr)
-            reviewTasks[pr] = Task { [weak self] in await self?.review(pr) }
+            reviewTasks[pr] = RunningReview(
+                task: Task { [weak self] in await self?.review(pr) },
+                skills: nil
+            )
         }
     }
 
@@ -1869,7 +1904,7 @@ final class AppStore {
 
     /// Zrušení uživatelem. Session dostane `SIGKILL`, rozdělané výsledky se zahodí.
     func cancelReview(for pr: PRIdentifier) {
-        reviewTasks[pr]?.cancel()
+        reviewTasks[pr]?.task.cancel()
     }
 
     /// Sada skillů pro repo. Chipy z ní berou pořadí i to, co ještě neběželo.
@@ -1882,7 +1917,10 @@ final class AppStore {
     func runningReviewers(for pr: PRIdentifier) -> Set<String> {
         guard isReviewing(pr) else { return [] }
         let finished = Set(timelines(for: pr).filter(\.isFinished).map(\.skill))
-        return Set(reviewSkills(for: pr.repo)).subtracting(finished)
+        // Jen ty, které tenhle běh pouští (#149). Celá sada by u opakování jednoho revieweera
+        // označila za běžící i ty ostatní — a jejich chipy by přestaly ukazovat výsledek,
+        // který mají uložený.
+        return Set(runningSkills(for: pr)).subtracting(finished)
     }
 
     /// Časová osa běhů posledního review. Prázdná, dokud se nic nespustilo.
@@ -1890,7 +1928,7 @@ final class AppStore {
         reviewTimelines[pr] ?? []
     }
 
-    private func review(_ pr: PRIdentifier) async {
+    private func review(_ pr: PRIdentifier, skills subset: [String]? = nil) async {
         defer {
             reviewTasks[pr] = nil
             automaticReviews.remove(pr)
@@ -1899,7 +1937,13 @@ final class AppStore {
 
         // Nový běh začíná s čistou osou — míchat dohromady, co dělaly dva různé běhy, by
         // z časové osy udělalo nesmysl.
-        reviewTimelines[pr] = []
+        //
+        // U opakování jednoho revieweera (#149) se maže **jen jeho** osa: ostatní neběží,
+        // takže by po nich zbylo prázdno a průběh, kvůli kterému se do tabu chodí, by zmizel
+        // za cizí běh.
+        reviewTimelines[pr] = subset.map { skills in
+            timelines(for: pr).filter { !skills.contains($0.skill) }
+        } ?? []
         reviewPhases[pr] = .preparing
         do {
             // SHA umí dát jen detail — vyhledávání ho nevrací (viz rozhodnutí u #4).
@@ -1938,7 +1982,14 @@ final class AppStore {
             // strhávalo před checkoutem.
             guard await canSpendSession(on: pr) else { return }
 
-            try await runSkills(for: pr, of: detail, in: worktree, using: reviewer, saving: reviews)
+            try await runSkills(
+                for: pr,
+                of: detail,
+                in: worktree,
+                using: reviewer,
+                saving: reviews,
+                only: subset
+            )
             reviewPhases[pr] = nil
             await notifyAboutFinishedReview(of: pr)
         } catch is CancellationError {
@@ -2101,9 +2152,12 @@ final class AppStore {
         of detail: PullRequest,
         in worktree: URL,
         using reviewer: any ReviewRunning,
-        saving reviews: ReviewStore
+        saving reviews: ReviewStore,
+        only subset: [String]? = nil
     ) async throws {
-        let skills = reviewSkills(for: pr.repo)
+        // Sada se čte **až tady**, po odhadu jazyka repa — proto se podmnožina předává jako
+        // parametr a ne jako snímek pořízený při spuštění.
+        let skills = subset ?? reviewSkills(for: pr.repo)
         reviewPhases[pr] = .running(finished: 0, total: skills.count)
 
         // Průběh teče přes proud, ne přímo do store: hlásí se ze session, která běží mimo
@@ -2118,6 +2172,7 @@ final class AppStore {
             in: worktree,
             using: reviewer,
             saving: reviews,
+            skills: skills,
             reporting: reporter
         )
         reporter.finish()
@@ -2132,7 +2187,10 @@ final class AppStore {
         // který se schválně neukládá — nechat mu značku by znamenalo, že příští start dotáhne
         // z transcriptu nálezy, které si člověk zrušil, tedy proti pravidlu „zrušení neuloží
         // nic“. Po pádu se sem naopak nedojde vůbec, a o to jde.
-        for skill in reviewSkills(for: pr.repo) {
+        // Maže se jen za **spuštěné** reviewery (#149): značka po skillu, který tenhle běh
+        // nepouštěl, pořád platí — a smazat ji znamená přijít o nálezy, které po něm zbyly
+        // v transcriptu.
+        for skill in skills {
             await interrupted?.forget(
                 ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill)
             )
@@ -2239,10 +2297,10 @@ final class AppStore {
         in worktree: URL,
         using reviewer: any ReviewRunning,
         saving reviews: ReviewStore,
+        skills: [String],
         reporting reporter: AsyncStream<ReviewEvent>.Continuation
     ) async -> (any Error)? {
-        let skills = reviewSkills(for: pr.repo)
-        return await withTaskGroup(of: ReviewRun?.self) { group in
+        await withTaskGroup(of: ReviewRun?.self) { group in
             for skill in skills {
                 let request = ReviewRequest(
                     key: ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill),
@@ -2415,7 +2473,7 @@ final class AppStore {
         // review: to ruční si vyžádal člověk a zrušit mu ho pod rukama proto, že PR mezitím
         // někdo mergnul, je horší než session navíc.
         for pr in automaticReviews where !wantedPullRequests.contains(pr) {
-            reviewTasks[pr]?.cancel()
+            reviewTasks[pr]?.task.cancel()
         }
         consideredForAutomation = consideredForAutomation.filter { wantedPullRequests.contains($0.key) }
     }

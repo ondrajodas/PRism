@@ -169,6 +169,11 @@ umí jedině člověk, a jedinou cestou (viz úvod). Tentýž návrh **předvypl
 `Moje review`, takže se u něj pozná, jestli hodnota je z nálezů, nebo moje.
 Filtr návrhem nehýbe, aby se schováním revieweera nedal „vyrobit“ approve.
 
+**Když ze tří reviewerů jeden spadne, jde pustit znovu jen on** — pravým tlačítkem na jeho chip.
+Za výsledky ostatních, které už leží na disku, se tím neplatí podruhé; jejich nálezy i průběh
+zůstávají. Dokud nad PR nějaké review běží, je ta položka zakázaná: je to jedna úloha na pull
+request.
+
 V tabu **Průběh** běží časová osa toho, co reviewer právě dělá — který soubor čte, co
 hledá, jaký příkaz spustil. Skládá se nativně z eventů, ne přeposíláním textu, takže
 aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vrátit, zkopíruje
