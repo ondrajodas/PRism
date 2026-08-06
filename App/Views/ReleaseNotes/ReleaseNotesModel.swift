@@ -112,13 +112,20 @@ final class ReleaseNotesModel {
         await load()
         guard case .loaded = state else { return false }
 
-        guard !isFirstRun, !unseen.isEmpty, !hasOfferedAfterStart else {
+        guard !isFirstRun, !unseen.isEmpty else {
             // Není co ukazovat, takže značku posune tahle cesta: buď je nejnovější vydání
             // viděné (posun je pak stejně bez efektu), nebo je tohle první spuštění a od
             // příště se má hlásit jen to, co přibude.
             markAsSeen()
             return false
         }
+
+        // **Ani tady se značka neposouvá**, i když se v tomhle běhu okno už jednou nabídlo.
+        // Je pořád co ukazovat — a když se to napoprvé nepovedlo, je tohle přesně ta situace,
+        // kvůli které celé #141 vzniklo. Posunout ji tady by tu chybu vrátilo o větev vedle:
+        // hlavní okno jde zavřít a otevřít, takže druhý průchod by vydání odbyl, aniž by ho
+        // kdo viděl. Nález Copilota na #142.
+        guard !hasOfferedAfterStart else { return false }
 
         hasOfferedAfterStart = true
         // **Značku tady neposouváme.** Posune ji až okno, jakmile se opravdu ukáže

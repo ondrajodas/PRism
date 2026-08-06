@@ -207,6 +207,29 @@ struct ReleaseNotesModelTests {
         }
     }
 
+    /// Nález Copilota na #142: pojistka „jednou za běh“ nesmí značku posunout ani ve chvíli,
+    /// kdy se okno v tomhle běhu už jednou nabídlo. Hlavní okno jde zavřít a otevřít, takže
+    /// druhý průchod by vydání odbyl, aniž by ho kdo viděl — tedy #141 o větev vedle.
+    @Test("Druhé nabídnutí v témž běhu značku neposune")
+    func secondOfferKeepsTheMark() async throws {
+        try await withPreferences { preferences in
+            let (first, _) = model(preferences, [.success(history)])
+            _ = await first.showsNewReleaseAfterStart()
+
+            let released = [release("v1.1.1", at: 3)] + history
+            let (offered, _) = model(preferences, [.success(released)])
+            #expect(await offered.showsNewReleaseAfterStart())
+
+            // Okno se neukázalo; hlavní okno se zavřelo a otevřelo, takže kontrola běží znovu.
+            #expect(await offered.showsNewReleaseAfterStart() == false)
+            #expect(offered.lastSeenTag == "v1.1.0")
+
+            // A příští spuštění to proto nabídne znovu.
+            let (nextStart, _) = model(preferences, [.success(released)])
+            #expect(await nextStart.showsNewReleaseAfterStart())
+        }
+    }
+
     @Test("Selhání pojistku nespotřebuje, takže další pokus okno otevřít může")
     func failureDoesNotConsumeTheOffer() async throws {
         try await withPreferences { preferences in
