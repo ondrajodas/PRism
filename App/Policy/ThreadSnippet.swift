@@ -47,7 +47,10 @@ extension Policy {
         let lines = diff.files.flatMap { $0.hunks.flatMap(\.lines) }
         guard !lines.isEmpty else { return nil }
 
-        let shown = lines.suffix(context + 1)
+        // `max(1, …)`, ne `context + 1`: záporný kontext by `suffix(_:)` **položil** (má na to
+        // precondition), a `lines` má být podle typu vždycky neprázdné. Nejmenší smysluplný
+        // úryvek je samotný komentovaný řádek, takže tam se to srazí.
+        let shown = lines.suffix(max(1, context + 1))
         return ThreadSnippet(
             lines: Array(shown),
             // Nerozpoznaný řádek se počítá jako zkrácení: úryvek pak není spojitý kus souboru
@@ -64,7 +67,19 @@ extension Policy {
     /// (`ThreadSnippetView`). Dva řádky navíc kvůli údaji, který se nikam nedostane, by byly
     /// mrtvá váha. Cesta se do hlavičky přesto píše ta pravá, ať syntetický diff popisuje týž
     /// soubor jako hunk sám.
+    ///
+    /// **Řádkové zlomy z cesty se musí zahodit.** Cestu určuje autor PR a git jméno souboru
+    /// s `\n` unese, takže bez toho by šlo do hlavičky propašovat další řádky diffu — třeba
+    /// vlastní `@@` blok — a v `Přehledu` by se ukázal kód, který v souboru není. Placeholder
+    /// místo cesty by hrozbu zavřel taky, ale nechal by v `FileDiff` nesmyslnou cestu jako past
+    /// pro toho, kdo by ji jednou chtěl číst.
     private static func synthesizedDiff(of hunk: String, path: String) -> String {
-        "diff --git a/\(path) b/\(path)\n\(hunk)"
+        "diff --git a/\(oneLine(path)) b/\(oneLine(path))\n\(hunk)"
+    }
+
+    /// Text bez řádkových zlomů — tentýž postup, jakým si hlavička bubliny krátí komentář
+    /// na jeden řádek.
+    private static func oneLine(_ text: String) -> String {
+        text.split(whereSeparator: \.isNewline).joined(separator: " ")
     }
 }

@@ -142,6 +142,21 @@ struct ThreadSnippetTests {
         #expect(!snippet.isTruncated)
     }
 
+    /// **Cesta nesmí do hlavičky propašovat další řádky diffu.** Určuje ji autor PR a git jméno
+    /// souboru s `\n` unese, takže bez zahození zlomů by se do syntetické hlavičky vešel vlastní
+    /// `@@` blok — a v `Přehledu` by se ukázal kód, který v souboru není. Nález z review #165.
+    @Test("Řádkový zlom v cestě do úryvku nic nepropašuje")
+    func refusesInjectionThroughThePath() throws {
+        let snippet = try #require(Policy.snippet(of: thread(
+            hunk: "@@ -1,1 +1,1 @@\n+skutečný kód",
+            path: "src/x\n@@ -1,1 +1,1 @@\n+podvržený kód",
+            originalLine: 1
+        )))
+
+        #expect(snippet.lines.map(\.text) == ["skutečný kód"])
+        #expect(!snippet.lines.contains { $0.text.contains("podvržený") })
+    }
+
     // MARK: - Levá strana
 
     /// Ve vzorku jsou všechna vlákna `RIGHT` (jako u #63), takže se komentář k **odebranému**
@@ -176,6 +191,21 @@ struct ThreadSnippetTests {
         let all = try #require(Policy.snippet(of: thread(hunk: hunk, originalLine: 6), context: 5))
         #expect(all.lines.count == 6)
         #expect(!all.isTruncated)
+    }
+
+    /// Záporný kontext nesmí `suffix(_:)` položit (má na to precondition) a `lines` má být podle
+    /// typu neprázdné — takže se srazí na samotný komentovaný řádek. Nikdo takhle nevolá, ale
+    /// pád na hodnotě parametru je horší než clamp.
+    @Test("Záporný kontext dá aspoň komentovaný řádek")
+    func clampsANegativeContext() throws {
+        let snippet = try #require(Policy.snippet(
+            of: thread(hunk: "@@ -1,3 +1,3 @@\n a\n b\n c", originalLine: 3),
+            context: -5
+        ))
+
+        #expect(snippet.lines.count == 1)
+        #expect(snippet.lines.last?.text == "c")
+        #expect(snippet.isTruncated)
     }
 
     /// Delší kontext, než je hunk, nesmí hlásit zkrácení ani spadnout na výřezu.

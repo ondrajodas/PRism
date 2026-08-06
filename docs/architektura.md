@@ -352,6 +352,15 @@ v pěti věcech se chovají jinak:
   do `unrecognizedLines` (je na to test). **Parser se kvůli tomu neupravil**: na jeho invariantu
   „nerozpoznaný řádek se počítá“ visí důvěra v celý diff. `---`/`+++` se nepřidávají, cesty
   z hlavičky nikdo nečte — jazyk na obarvení se bere z `ReviewThread.path`.
+- **Z cesty se do hlavičky nesmí dostat řádkový zlom** (nález z review #165). Cestu určuje autor
+  PR a git jméno souboru s `\n` unese, takže bez zahození zlomů jde do syntetické hlavičky
+  propašovat další řádky diffu — třeba vlastní `@@` blok — a v `Přehledu` se pak ukáže kód, který
+  v souboru **není**. Ověřeno vložením regrese, není to hypotéza. Placeholder místo cesty by
+  hrozbu zavřel taky, ale nechal by v `FileDiff` nesmyslnou cestu jako past pro toho, kdo by ji
+  jednou chtěl číst.
+- **Kontext se clampuje na aspoň jeden řádek** (`max(1, context + 1)`), taky nález z #165:
+  `suffix(_:)` má na zápornou délku precondition, takže by to **položilo aplikaci** — ověřeno.
+  A `ThreadSnippet.lines` má být podle typu neprázdné, což tím clamp drží i pro nesmyslný vstup.
 - **Úryvek je jen v `Přehledu`, ne v bublině.** Vlákno **s kotvou** visí u kódu, kde je ten kód
   nad ním vidět, takže úryvek v `ThreadBubbleView` by ho kreslil dvakrát.
 - **Nerozpoznaný řádek se počítá jako zkrácení.** Úryvek pak není spojitý kus souboru, a tvrdit
