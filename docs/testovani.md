@@ -485,6 +485,20 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   zvenčí formulář srovná, ale vlastní uložení ne, a že je selhání zápisu vidět. Na testech
   `flush()` je vlastní `BlockingTime`, jehož uspání samo neskončí — s okamžitým fake časem
   by odložený zápis závodil s tím okamžitým a nešlo by poznat, který zapsal.
+- **`WindowCentering` (#164)** — **geometrie, ne `NSWindow`**. `centered(_:in:on:)` si obrazovky
+  bere parametrem (`ScreenBounds`), takže je to čistá funkce; jinak by zůstalo neotestované zrovna
+  zarovnávání zpátky na viditelnou plochu, protože `NSScreen` se vyrobit nedá. Do #164 to byla
+  `private` funkce ve `SettingsView` a držel ji **jen komentář**.
+
+  To hlavní je **pořadí ořezu `max(min(…))`**: u okna širšího (nebo vyššího) než obrazovka by
+  obrácené pořadí rámec poslalo za levý okraj, kde po něm není ani křížek. Vedle toho každý kraj
+  zvlášť, menu bar (ořezává se podle `visible`, ne `frame`), chybějící hostitel (rámec se nechá,
+  jak byl), prázdný seznam obrazovek a **výběr obrazovky podle plochy průniku** — včetně toho, že
+  na pořadí v seznamu nezáleží a že `NSRect.null` musí mít nulovou plochu, ne nekonečnou.
+
+  Že se okno **nerozpůlí mezi monitory**, vyšlo z testu, který nejdřív čekal opak a spadl:
+  hostitel přes hranu dvou monitorů posune okno celé na ten s větším průnikem. Zapsané jako
+  chování, ne jako překlep v testu.
 - **`CacheEviction`** — proti skutečné dočasné složce, ne proti fake filesystému: rozpočet
   je injektovatelný, takže stačí malé soubory. Pozor, počítá se **alokovaná** velikost, tedy
   po blocích — stobajtový soubor zabere 4 KB a testovací rozpočty musí být řádově výš.

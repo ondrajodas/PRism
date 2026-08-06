@@ -477,6 +477,16 @@ naposledy viděné mají v seznamu odznak `nové`. Jinak by o novinkách nikdo n
 se dá kdykoli — z menu aplikace nebo tlačítkem v toolbaru hlavního okna, hned vedle
 ozubeného kola. Zavírá se **Escem** i ⌘W: je to okno na čtení, takže v něm není co ztratit.
 
+**Otevře se vystředěné v hlavním okně**, ne doprostřed obrazovky — otevírá se z jeho toolbaru,
+z menu a po aktualizaci, takže tam se člověk v tu chvíli kouká; na velkém (nebo druhém) monitoru
+by jinak vyskočilo někde vedle. S hlavním oknem u kraje obrazovky se zarovná zpátky na viditelnou
+plochu a bez hlavního okna se otevře tak, jak rozhodne systém. Stejně se od začátku středí okno
+nastavení — je to jeden mechanismus pro obě.
+
+Odsunuté okno **v rámci běhu zůstane, kam si ho dáš**, a po restartu je zpátky ve středu. Okno,
+které pod rukama uskakuje, je horší než okno mimo střed, takže se pozice srovnává jen při
+otevření, ne při vytažení dopředu.
+
 Historie se tahá **jedním voláním** `gh` z vlastního repa aplikace (tělo releasu je rovnou
 v seznamu, takže se na jednotlivou verzi nechodí zvlášť) a drží se v paměti do konce běhu:
 jednou při startu kvůli tomu, jestli něco přibylo, a pak už jen z paměti. V pollingu ani na

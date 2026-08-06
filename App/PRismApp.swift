@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// Identita hlavního okna. Titulek je zároveň to, čím ho `WindowCentering` pozná mezi
+/// `NSApp.windows` — proto konstanta a **žádný druhý literál `"PRism"`**: drží to pravidlo
+/// „jeden název všude“ z `CLAUDE.md`.
+enum MainWindow {
+    static let title = "PRism"
+}
+
 @main
 struct PRismApp: App {
     /// Žije nad scénami, ne v okně: `Settings` je **vlastní scéna** a ke store uvnitř
@@ -10,7 +17,7 @@ struct PRismApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        WindowGroup("PRism") {
+        WindowGroup(MainWindow.title) {
             RootView(model: preflight)
                 // Až tady, ne v initu delegáta: store vzniká teprve po preflightu. Čte se
                 // při každém dotazu, takže na pořadí nezáleží.

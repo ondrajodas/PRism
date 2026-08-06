@@ -1091,6 +1091,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DailySpendView` | Co dneska stálo review (#148) — cena za dnešek, u neúplného součtu s `≥` |
 | `RunUsageText` | Cena, trvání a počet kol jako text — jedno místo pro osu i stavový řádek |
 | `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory, zakázané notifikace |
+| `WindowCentering`, `WindowReader`, `ScreenBounds` | Vystředění pomocného okna **v hlavním okně**, ne na obrazovce (#164) — z jednoho místa pro nastavení i novinky |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory`) — podtržené, s odznakem počtu |
 | `OverviewView` | Tab `Přehled`: popis PR a konverzace bez kotvy v diffu, chronologicky |
@@ -1166,6 +1167,41 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 
 Věci, které se u toho nemají rozbít:
 
+- **Obě pomocná okna se středí v hlavním okně, ne na obrazovce** — `WindowCentering`
+  a `centeredInMainWindow()`. Do #164 to bylo `private` ve `SettingsView`, takže okno s novinkami
+  z toho nemělo nic a vyskakovalo doprostřed obrazovky; je to přesně ten vzor „kontrola, která
+  jinde v repu je, a tady chybí“ z `CLAUDE.md`. Sedm věcí, na kterých to stojí:
+  - **SwiftUI to samo neumí.** `.defaultPosition(_:)` bere `UnitPoint` vztažený k **obrazovce**,
+    takže „vystředit v jiném okně“ se jím nedá vyjádřit — proto cesta přes `NSWindow`.
+  - **Okno se hlásí samo** (`WindowReader`), nebere se z `NSApp.keyWindow`: to je v `onAppear`
+    klidně ještě hlavní okno a posunout omylem **jeho** je horší než nevystředit.
+  - **Středí se při vzniku obsahu, ne při každém vytažení dopředu.** `openWindow(id:)` nad už
+    otevřeným oknem ho jen aktivuje, a okno, které pod rukama uskočí, je horší než okno mimo
+    střed. Drží to `makeNSView`.
+  - **Hlavní okno se poznává podle titulku** (`MainWindow.title`) — jediný stabilní znak, kterým
+    se odliší od pomocných oken a panelů. Konstanta, ne druhý literál `"PRism"`: platí pravidlo
+    „jeden název všude“.
+  - **Bez hlavního okna se nedělá nic.** `host(besides:)` vrátí `nil` (zavřené, skryté) a rozhodne
+    systém, tedy střed obrazovky. Ne pád, ne dohad.
+  - **Uložená pozice se zahazuje** (`setFrameAutosaveName("")`), takže okno odsunuté na stranu se
+    **po restartu** vrátí do středu. Je to proti zvyklosti systému, ale schválně a u obou oken
+    stejně: jsou to okna na přečtení a na kliknutí, ne pracovní plocha, a dvě různá pravidla pro
+    dvě podobná okna se nedají vysvětlit.
+  - **V rámci jednoho běhu se ta dvě okna liší, a je to vlastnost scény, ne rozhodnutí.** Změřeno
+    na běžící aplikaci přes accessibility: `Settings` se zavřením **zničí**, takže se středí při
+    každém otevření (s hlavním oknem přesahujícím vpravo vyšlo `x = 612`, tedy přesně ořez
+    `maxX − width`). `Window` s novinkami obsah zavřením nezahodí, takže `makeNSView` podruhé
+    nepřijde a okno si drží, kam ho člověk odsunul; po restartu je zpátky ve středu (změřeno
+    odsunutím do kouta a restartem). Vyhnat ho do středu i tam by znamenalo středit na aktivaci
+    nebo na `onAppear` — a to je zrovna ta cesta, po které okno **uskakuje pod rukama**: u novinek
+    by ho posunulo i dotažení historie, protože se tím mění obsah scény.
+  - **Ořez zpátky na viditelnou plochu je `max(min(…))`, ne naopak.** U okna širšího než obrazovka
+    vyjde `maxX - width` menší než `minX`, takže obrácené pořadí by rámec poslalo **za levý
+    okraj**. Od #164 to drží test, ne jen komentář — `centered(_:in:on:)` si obrazovky bere
+    parametrem (`ScreenBounds`), protože `NSScreen` se v testu vyrobit nedá. Doložené je i to, že
+    se okno **nerozpůlí mezi monitory**: ořez ho posune celé na tu obrazovku, na které hlavní okno
+    převážně leží (podle plochy průniku — `NSRect.null` má nekonečné rozměry, takže „žádný průnik“
+    musí dát nulu, jinak by vyhrála obrazovka, na které hostitel není).
 - **Rozbitý soubor editor nepřepíše.** Když `configurationFailure` není `nil`, místo
   formuláře je chyba s nabídkou soubor otevřít nebo načíst znovu. Uložit přes něj výchozí
   hodnoty by zahodilo něco, co uživatel psal — kvůli chybějící čárce.
@@ -1872,6 +1908,10 @@ dvě obrazovky („co je nového“ a „historie“) by se dřív nebo později
 
 Věci, které se u toho nemají rozbít:
 
+- **Okno se středí v hlavním okně, ne na obrazovce** (#164) — přes `centeredInMainWindow()`,
+  tedy tou samou cestou jako nastavení. Otevírá se z toolbaru hlavního okna, z menu a po
+  aktualizaci, takže na velkém (nebo druhém) monitoru by vyskočilo mimo to, kam se člověk kouká.
+  Podrobnosti u `WindowCentering` níž.
 - **Aplikace neví, kolikátá je, a okno o tom mlčí.** `MARKETING_VERSION` je pořád `0.1`,
   zatímco tagy jsou na `v1.1.x` — verze v bundlu tagy nikdy nesledovala. Okno proto mluví
   o tom, **co vyšlo na GitHubu**, a číslo běžící verze nikde nevypisuje; u lokálního buildu
