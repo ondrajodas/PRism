@@ -70,6 +70,13 @@ final class AppStore {
     /// ten vzor, na který si `CLAUDE.md` stěžuje.
     private(set) var dismissalFailure: String?
 
+    /// Poslední **doručená** notifikace (#138). `nil` = od spuštění se nic neohlásilo.
+    ///
+    /// Posouvá ji jedině `.delivered`, ne pokus o doručení: jinak by stavový řádek tvrdil, že
+    /// něco odešlo, i když to systém odmítl — tedy přesně to mlčení vydávané za funkčnost,
+    /// kvůli kterému issue vzniklo.
+    private(set) var lastDeliveredNotification: DeliveredNotification?
+
     /// Proč notifikace nechodí (#88). `nil` = chodí, nebo se ještě žádná neposílala.
     ///
     /// Odmítnuté oprávnění **není chyba běhu** — aplikace jede dál, jen mlčí. Právě proto to
@@ -1523,6 +1530,12 @@ final class AppStore {
         guard configuration.global.notifications.allows(notification.event) else { return nil }
         let delivery = await notifications.deliver(notification)
         notificationFailure = message(for: delivery)
+        // Čas se posouvá **jen po doručení** (#138). Odmítnuté oprávnění ani selhání systému
+        // z toho „ohlášeno“ neudělá — řádek by pak tvrdil, že notifikace fungují, zrovna když
+        // nefungují.
+        if case .delivered = delivery {
+            lastDeliveredNotification = DeliveredNotification(at: time.now, title: notification.title)
+        }
         return delivery
     }
 

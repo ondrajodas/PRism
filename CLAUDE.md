@@ -363,6 +363,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `NotificationEvent` | Co notifikaci vyvolalo: `newPullRequest` / `findings` / `clean` / `failure`. Nese si ji notifikace sama |
 | `NotificationSettings` | Co se má hlásit (#86) — hlavní vypínač a čtyři události. Jako `DiffLayout` jen globálně |
 | `Release` | Jedno vydání aplikace na GitHubu (#127): tag, název, datum, release notes, odkaz. Jako `ReviewVerdict` **není `Codable`** — na disk nejde |
+| `DeliveredNotification` | Poslední **doručená** notifikace (#138) — čas a titulek. Taky **není `Codable`**, drží se v paměti |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -1275,6 +1276,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ContentView` | `NavigationSplitView`: vlevo seznam, vpravo detail vybraného PR; pod tím stavový řádek |
 | `StatusBarView` | Stavový řádek na spodku **okna**: vlevo hlášky, vpravo puntíky služeb |
 | `ServiceHealthDot` | Puntík jedné služby; po hoveru důvod a čas poslední kontroly |
+| `NotificationStatusView` | Kdy se naposledy něco ohlásilo (#138) — zvonek s časem, `zatím nic`, nebo `vypnuto` |
 | `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory, zakázané notifikace |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory`) — podtržené, s odznakem počtu |
@@ -1749,7 +1751,26 @@ Odpovídání do vláken (#73) drží `AppStore` ve dvou mapách klíčovaných 
 - **Prázdný text se z mapy maže**, ať v ní nezůstane záznam po každém vlákně, do kterého někdo
   klikl a rozmyslel si to. Tentýž vzor jako prázdný draft.
 
-Notifikace (#88) drží `AppStore` v `notificationFailure` a platí u nich:
+Notifikace (#88) drží `AppStore` v `notificationFailure` a `lastDeliveredNotification` a platí
+u nich:
+
+- **Že notifikace fungují, musí být vidět** (#138). Hláška z #88 řekne jen to, že je zakázalo
+  oprávnění — ale „nic nepřišlo, protože nic nebylo“ se od „nic nepřišlo, protože je něco
+  rozbité“ jinak odlišit nedá. Narazilo se na to dvakrát při ověřování M8 a zesílilo to po
+  #135, kde notifikace o re-review nepřicházela měsíce a nikdo to nemohl poznat. Řádek proto
+  ukazuje **čas posledního doručení**.
+- **Posouvá ho jedině `.delivered`.** Odmítnuté oprávnění, selhání systému ani vypnutá událost
+  z toho „ohlášeno“ neudělají — jinak by řádek tvrdil, že notifikace fungují, zrovna když
+  nefungují. Je to tatáž úvaha jako u snímku ohlášených PR (#85), který se taky přepisuje až po
+  doručení; je na to test na každý ze tří případů.
+- **Čas jde s titulkem jako jedna hodnota**, ne jako dvě vlastnosti storu: čas bez toho, čeho se
+  týkal, se v nápovědě nedá vysvětlit, a dvě vlastnosti se dají rozejít.
+- **Pozdější selhání poslední úspěch nesmaže.** Řádek odpovídá na „kdy naposledy něco odešlo“,
+  ne na „jak dopadl poslední pokus“ — to říká hláška o nedoručení vedle.
+- **Drží se v paměti, ne na disku.** Je to odpověď na „funguje mi to teď“ a k té je čas
+  z minulého spuštění zavádějící — puntíky služeb se po restartu počítají znovu ze stejného
+  důvodu. Že se počítá od spuštění, proto musí říct **nápověda**: bez toho vypadá `zatím nic`
+  po restartu jako porucha, i když se včera ohlašovalo celý den.
 
 - **Odmítnuté oprávnění musí být v okně vidět.** Aplikace kvůli němu nespadne, jen mlčí —
   takže bez hlášky je „nic mi nepřišlo“ k nerozeznání od „nic se nestalo“, a spravit se to dá
@@ -1884,6 +1905,15 @@ skutečná volání:
   neexistující skill); nápověda proto říká, co přišlo na stderr.
 - **Překlad nálezů se nepočítá.** Smí se nepovést tiše (nálezy zůstanou v originále), takže
   by z něj vznikal červený puntík nad něčím, co za chybu ani nepovažujeme.
+- **Indikátor ohlášení stojí vlevo od puntíků, ale puntík to není** (#138). Odpovídá na tutéž
+  otázku („funguje mi to?“), jenže notifikace nejsou služba, u které by se sledoval výpadek —
+  proto zvonek, ne barevná tečka. **Vidět je vždycky**, i když se nic neohlásilo: indikátor,
+  který se objeví teprve tehdy, když je co ukázat, je ten, o kterém nikdo neví, že existuje.
+  V řádku je **jen čas**, celá věta v nápovědě; zadání #138 navrhovalo `naposledy ohlášeno
+  v 21:35` rovnou v pruhu, ale ten je úzký a puntíky vedle drží tentýž vzor. Rozhodlo se to
+  nad renderem všech tří stavů, ne v návrhu.
+- **Vypnuté notifikace jsou vlastní stav** (`vypnuto`), ne `zatím nic`. Obojí by bylo pravda,
+  ale druhé by posílalo hledat poruchu, která žádná není.
 - **`HealthMonitor` je nepovinná závislost**, jako `checkout` nebo `reviews`. `keepFresh()`
   volají i testy a monitor s živým klientem by z nich udělal testy chodící na síť; bez
   monitoru řádek prostě žádné puntíky nemá.
@@ -3139,6 +3169,11 @@ Nad `HTTPGetting` (#31) platí:
 
   `ReleaseRow` na skládání textů: tag na začátku názvu se zahodí i s oddělovačem, název, který
   tagem nezačíná, zůstane celý, a vydání pojmenované jen tagem nemá druhý text.
+- **Poslední ohlášení (#138)** — proti `FakeNotificationCenter` a `FakeTimeSource`, takže se
+  nic nedoručuje a čas je daný. To hlavní není, že se zapíše, ale že se **nezapíše**: odmítnuté
+  oprávnění, selhání systému ani událost vypnutá v nastavení čas posunout nesmí — jinak by
+  stavový řádek tvrdil, že notifikace fungují, zrovna když nefungují. Plus že pozdější selhání
+  poslední úspěch nesmaže a že se před prvním doručením nemá co ukazovat.
 - **`SettingsModel`** — odložený zápis přes `FakeTimeSource` (tedy v nulovém reálném čase):
   že se rychlé změny slijí do jednoho zápisu, že `flush()` uloží bez čekání, že změna
   zvenčí formulář srovná, ale vlastní uložení ne, a že je selhání zápisu vidět. Na testech
@@ -3621,6 +3656,13 @@ GitHub. Generuje se **z kódu** z oficiálních značek v `bin/icon-sources/` (o
 SVG cesta, takže si skript vystačí s minimálním překladem `d` na `Path` — žádná závislost).
 V repu jsou **dvě barevné varianty**, nasazená je krémový znak na oranžové. Malé velikosti se
 kreslí hruběji, ne zmenšením.
+
+Poslední ohlášení ve stavovém řádku hotové (issue #138) — `DeliveredNotification`
+v `App/Models/`, `lastDeliveredNotification` v `AppStore` a `NotificationStatusView`
+v `StatusBarView`. **Že notifikace fungují, je vidět**: vlevo od puntíků služeb je zvonek
+s časem posledního doručení, `zatím nic`, nebo `vypnuto`. Čas posune jedině `.delivered` —
+odmítnuté oprávnění, selhání systému ani vypnutá událost ne, jinak by řádek tvrdil, že to
+chodí, zrovna když nechodí. Drží se v paměti: je to odpověď na „funguje mi to teď“, ne historie.
 
 Okno s novinkami hotové (issue #127) — `Release` v `App/Models/`, `fetchReleases()`
 v `GitHubGateway`, `Policy.sortedReleases`/`newReleases` a `App/Views/ReleaseNotes/`.
