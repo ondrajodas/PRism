@@ -151,14 +151,22 @@ včetně důvodu.
   nejsou vůbec. Tělo se proto musí přečíst celé — u #8 tam takhle ležely dva reálné
   nálezy pod hlavičkou, že nové komentáře nejsou.
 
-  **Na velkém PR Copilot spadne a opakování nepomůže.** Do review napíše jen „Copilot
-  encountered an error and was unable to review this pull request“; skutečná příčina je
-  v logu akce — `Error: Prompt too big after adding PR context`. Je to **deterministické**
-  podle velikosti diffu, takže tři pokusy dopadnou stejně (změřeno u #160, 70 kB diffu,
-  z toho 17 kB dokumentace). Když k tomu dojde: **nepřepisuj kvůli tomu zadání ani nedělej
-  umělé PR navíc** — dokumentace musí jít se změnou v jednom commitu, to je pravidlo o řádek
-  výš. Zbývá vlastní revize, a ta je stejně podmínkou pushnutí; napiš do popisu PR, že
-  Copilot nedoběhl a proč, ať je z PR vidět, že kontrola nechyběla omylem.
+  **Na PR, který mění `AppStore.swift`, Copilot spadne a opakování nepomůže.** Do review
+  napíše jen „Copilot encountered an error and was unable to review this pull request“;
+  skutečná příčina je v logu akce — `Error: Prompt too big after adding PR context`.
+
+  Změřeno na třech PR za sebou: #159 (diff 12 kB, měnil `DiffView.swift` a spol.) prošel,
+  #160 (70 kB) a #161 (30 kB) spadly. **Nerozhoduje tedy velikost diffu**, ale co je ve
+  změněných souborech: oba spadlé sahaly na `AppStore.swift`, který má sám o sobě 128 kB —
+  Copilot si zjevně tahá **celý obsah** změněných souborů, ne jen diff. Sedí to i s tím, že
+  #159 v přehledu vyjmenoval jen čtyři ze sedmi souborů a `CLAUDE.md` (315 kB) mezi nimi
+  nebyl. Opakování je proto zbytečné, tři pokusy dopadnou stejně.
+
+  Když k tomu dojde: **nepřepisuj kvůli tomu zadání ani nedělej umělé PR navíc** —
+  dokumentace musí jít se změnou v jednom commitu, to je pravidlo o řádek výš. Zbývá vlastní
+  revize, a ta je stejně podmínkou pushnutí; napiš do popisu PR, že Copilot nedoběhl a proč,
+  ať je z PR vidět, že kontrola nechyběla omylem. Trvale to spraví až rozdělení
+  `AppStore.swift`, které si o to říká i bez Copilota.
 - **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
   a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
   Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
