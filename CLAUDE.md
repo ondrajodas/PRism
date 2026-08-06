@@ -1573,6 +1573,15 @@ Sbalení celých souborů (`foldedFiles`) je **jiná věc než rozbalení kontex
 - **Odznak s počtem nálezů je u souboru vždycky**, ne jen u sbaleného. U sbaleného je to
   nutnost (zavřený soubor s nevyřízeným nálezem se dá zapomenout), u rozbaleného zkratka:
   projedu hlavičky a vím, kde nálezy jsou, aniž bych scrolloval obsahem.
+- **Počty `+X −Y` skládá `DiffCounts.text`** (#156) a barvu si berou z `DiffLineView.signColor(of:)`,
+  tedy odtud, odkud ji má znak změny v samotném řádku. Míst, kde se ty počty píšou, jsou **tři**
+  a nesousedí spolu: souhrn nad diffem, hlavička souboru a strom souborů. Kdyby si to každé
+  skládalo samo, zůstalo by po první změně jedno z nich šedé — chytila to vlastní revize diffu.
+  **Ne `background(of:)`**: to je
+  dvanáctiprocentní výplň a jako barva písma je nečitelná; sytá barva znaku je naopak text, který
+  v diffu stojí od #18. Čitelnost v obou režimech je ověřená offscreen renderem, ne odhadem —
+  a rozhoduje o ní `.caption` v hlavičce, ne `.callout` v souhrnu. Červený odznak nálezů se s tím
+  neplete: má ikonu a slovo, a zelené `+X` mezi ně vstupuje jako předěl.
 - **Tlačítko na komentář nesmí být vyšší než řádek diffu.** Řádek je vysoký ~15 pt (změřeno
   z renderu), takže pevná `height: 18` z něj vyčnívala **do toho následujícího** — jak na
   tlačítko myš zamířila, hover přešel na další řádek a ikonka zmizela. Komentovat pak nešlo
@@ -3828,6 +3837,12 @@ session), žlutou incident na komponentách, které aplikace používá, a bez s
 důvod. Hlášky z dosavadního pruhu se do řádku **přestěhovaly** — dvě místa na tytéž hlášky
 znamenají, že se jedno z nich přestane plnit. Je to **první `URLSession` v projektu**: do té
 doby šel všechen kontakt s vnějším světem přes podprocesy.
+
+Obarvené počty řádků hotové (issue #156) — `DiffCounts.text` a `DiffLineView.signColor(of:)`.
+Souhrn nad diffem, hlavičky souborů i strom souborů mají `+X` zeleně a `−Y` červeně, barvou
+znaku změny v samotném řádku — jeden zdroj místo tří, které by se rozešly. Čitelnost v obou
+režimech je doložená offscreen renderem, včetně toho, že se to neplete s červeným odznakem
+nálezů.
 
 Plánované fáze:
 

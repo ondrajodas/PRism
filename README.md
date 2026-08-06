@@ -60,7 +60,9 @@ hádat, a špatně obarvený cizí kód je horší než neobarvený.
 **`Změněné soubory`** ukazují **diff v plné šířce**: soubory pod sebou s hlavičkou, která při scrollu
 zůstává nahoře, souhrn `N souborů · +X −Y` a menu na skok mezi soubory. Přejmenování, nové,
 smazané i binární soubory jsou označené; dlouhé řádky se zalamují, protože 120 znaků se do
-plné šířky vejde.
+plné šířky vejde. Počty `+X` a `−Y` jsou obarvené jako znak změny v samotném řádku — zeleně
+a červeně, v souhrnu, v hlavičkách souborů i ve stromu souborů, takže „velký přírůstek“
+a „velké mazání“ jsou poznat na první pohled.
 
 Diff se dá kreslit **dvěma způsoby** a přepíná se segmentovaným přepínačem v liště nad ním:
 `Pod sebou` je klasický unified diff (odebrané a přidané řádky pod sebou, dvě čísla vlevo),
