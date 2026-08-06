@@ -11,11 +11,18 @@ import Testing
 @Suite("ReviewStore")
 struct ReviewStoreTests {
     private let directory: TemporaryDirectory
+    /// Složka **mimo cache**, na kterou testy symlinků odkazují.
+    ///
+    /// Vlastní `TemporaryDirectory`, ne podsložka té první: `layout` má kořen právě v ní,
+    /// takže cíl uvnitř by neležel mimo cache, jen mimo `reviews/` — a test by netvrdil, co
+    /// slibuje. Nález Copilota na #146.
+    private let outsideCache: TemporaryDirectory
     private let layout: CacheLayout
     private let time: FakeTimeSource
 
     init() throws {
         directory = try TemporaryDirectory()
+        outsideCache = try TemporaryDirectory()
         layout = CacheLayout(root: directory.url)
         time = FakeTimeSource()
     }
@@ -440,7 +447,7 @@ struct ReviewStoreTests {
 
     /// Cizí záznam mimo cache, na který se dá odkázat.
     private func foreignRecordDirectory() throws -> URL {
-        let outside = directory.url.appending(path: "mimo-cache")
+        let outside = outsideCache.url.appending(path: "mimo-cache")
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
         try encodedForeignRecord().write(to: outside.appending(path: "42-aaaa1111.json"))
         return outside
@@ -449,7 +456,7 @@ struct ReviewStoreTests {
     /// Odkaz na svém místě v cache, ukazující ven. Vrací cíl.
     @discardableResult
     private func makeSymlinkedRecord() throws -> URL {
-        let outside = directory.url.appending(path: "cizi.json")
+        let outside = outsideCache.url.appending(path: "cizi.json")
         try encodedForeignRecord().write(to: outside)
 
         let url = layout.reviewFile(for: pullRequest, at: "aaaa1111")
