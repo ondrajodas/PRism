@@ -177,7 +177,11 @@ struct PullRequestDetailView: View {
                         skills: store.reviewSkills(for: pullRequest.repo),
                         running: store.runningReviewers(for: pullRequest.id)
                     ),
-                    muted: $mutedReviewers
+                    muted: $mutedReviewers,
+                    // Opakování jednoho revieweera (#149). Ostatní běhy zůstávají uložené,
+                    // takže se za ně neplatí znovu.
+                    rerun: { store.startReview(for: pullRequest.id, skills: [$0]) },
+                    isReviewing: store.isReviewing(pullRequest.id)
                 )
                 Spacer(minLength: 12)
                 if let record {

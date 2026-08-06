@@ -1264,6 +1264,27 @@ Automatický režim (#25):
 - **Ruční spuštění maže příznak automatu**, jinak by se ruční běh dal zrušit tím, že PR
   vypadne ze seznamu.
 
+Opakování jednoho revieweera (#149) k tomu přidává:
+
+- **Jedna úloha na PR, ne na `(PR, skill)`.** Na `reviewTasks` visí `isReviewing`,
+  `runningReviews` (podle kterého se aplikace ptá před zavřením, #94), rušení automatických
+  běhů i ochrana rep před eviction — klíčovat je dvojicí by znamenalo přepsat všechna čtyři.
+  Úloha si proto nese **podmnožinu** (`RunningReview.skills`). Cena je, že se opakování nedá
+  spustit, dokud nad PR běží jiné review; ten stav sám za chvíli skončí a chip u něj mezitím
+  ukazuje spinner.
+- **Podmnožina je `nil`, ne snímek celé sady.** Sadu ještě může změnit odhad jazyka repa, který
+  běží až nad pracovní kopií — a platit má ta, se kterou běh doopravdy jede. Proto se čte až
+  v `runSkills`, ne při spuštění.
+- **Osa se maže jen tomu revieweerovi, který se opakuje.** Nový běh ji jinak nuluje celou;
+  u opakování by tím zmizel průběh ostatních, tedy to, kvůli čemu se do tabu chodí.
+- **Za běžící se považují jen skilly, které běh pouští** (`runningReviewers`). Celá sada by
+  chipy ostatních přepnula na spinner a přestaly by ukazovat výsledek, který mají uložený.
+- **Značky přerušených běhů (#97) se mažou jen za spuštěné reviewery.** Značka po skillu, který
+  tenhle běh nepouštěl, pořád platí — smazat ji znamená přijít o nálezy, které po něm zbyly
+  v transcriptu.
+- **Prázdná podmnožina nespustí nic.** Byl by to běh, který utratí checkout a nic nezjistí.
+- **Denní rozpočet se opakování netýká**, jako každého jiného ručního spuštění.
+
 - **Jazyk repa se odhaduje před `runSkills`, ne po nich.** Sada, kterou detekce zapíše, je
   ta, se kterou má **tenhle** běh jet; po skillech by se projevila až podruhé.
 - **Detekce běží při každém review, dokud si repo o skilly neřekne.** Rozhoduje
@@ -1373,7 +1394,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak, odmítnutí |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
 | `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume`, upozornění na načtený jiný skill |
-| `ReviewerChipsView` | Chipy reviewerů: stav a filtr naráz |
+| `ReviewerChipsView` | Chipy reviewerů: stav a filtr naráz; v kontextovém menu opakování jednoho revieweera (#149) |
 | `FileTreeView` | Popover se stromem souborů; odsazení a sbalování si řídí sám |
 | `VerdictView` | Návrh verdiktu jako **doporučení**; žádná GitHub akce na něm nevisí. Když stojí na odmítnutých nálezech, nese to jejich počet |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
@@ -3258,6 +3279,13 @@ Nad `HTTPGetting` (#31) platí:
 - **`AutoRunLedger`** — proti skutečné dočasné složce, protože jde právě o to, že
   počitadlo **přežije restart**. Plus nový den, nulový limit (vypnuto, ne „bez omezení“)
   a rozbitý soubor, který automat umlčet nesmí.
+- **Opakování jednoho revieweera (#149)** — proti `FakeReviewRunner`u, který si pamatuje
+  **každé** zadání: to hlavní není, že se pustil ten správný, ale že se ostatní **nespustily**
+  (`requests.map(\.key.skillID) == ["reviewer-b"]`). K tomu, že uložené nálezy ostatních
+  zůstanou (skutečný `ReviewStore` a druhý store nad toutéž složkou), že jim zůstane osa
+  — ověřeno **dočasně vloženou regresí**, po které ten test spadl — že za běžícího se
+  považuje jen opakovaný reviewer, že se do běžícího review nedá vklínit další běh a že
+  prázdná podmnožina nespustí nic.
 - **Cena a útrata (#148)** — tři vrstvy. `StreamParser` proti **všem** fixtures ze skutečných
   běhů (cena, trvání i počet kol se ověřují číslem, protože jen tak je vidět, že se čte
   `duration_ms` a ne `duration_api_ms` vedle něj), a hlavně že **zabitý běh cenu nemá a nemá
@@ -3902,6 +3930,13 @@ Souhrn nad diffem, hlavičky souborů i strom souborů mají `+X` zeleně a `−
 znaku změny v samotném řádku — jeden zdroj místo tří, které by se rozešly. Čitelnost v obou
 režimech je doložená offscreen renderem, včetně toho, že se to neplete s červeným odznakem
 nálezů.
+
+Opakování jednoho revieweera hotové (issue #149) — `startReview(for:skills:)`
+a `RunningReview` v `AppStore`, položka v kontextovém menu chipu. **Když ze tří skillů jeden
+spadne, jde pustit znovu jen on** — za dva výsledky, které leží na disku, se neplatí podruhé.
+Datová vrstva to unesla už dřív (`ReviewRecord.replace(_:)` je klíčovaný skillem); doplnit se
+musela osa (maže se jen ta jeho), `runningReviewers` (chipy ostatních dál ukazují svůj výsledek)
+a mazání značek přerušených běhů.
 
 Cena a trvání běhu hotové (issue #148) — `RunUsage` a `DailySpend` v `App/Models/`, `SpendLedger`
 v `App/Store/`, řádek u revieweera v tabu `Průběh` a útrata za dnešek ve stavovém řádku.
