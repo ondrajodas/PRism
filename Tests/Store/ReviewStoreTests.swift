@@ -361,4 +361,112 @@ struct ReviewStoreTests {
 
         #expect(try await store.load().records.count == 1)
     }
+    // MARK: - Symlinky (#106)
+
+    /// Tvrzení z `CLAUDE.md`, že `FileManager.enumerator` **nesestupuje do odkazovaných
+    /// složek** — ověřené i tady, ne jen u draftů. Kdyby to přestalo platit, čtení by vylezlo
+    /// mimo cache.
+    @Test("Enumerace nesestupuje do odkazované složky")
+    func doesNotDescendIntoASymlinkedDirectory() async throws {
+        let outside = try foreignRecordDirectory()
+
+        let inside = layout.reviews(of: pullRequest.repo)
+        try FileManager.default.createDirectory(at: inside, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: inside.appending(path: "odkaz"),
+            withDestinationURL: outside
+        )
+
+        let loaded = try await store().load()
+
+        #expect(loaded.records.isEmpty, "enumerace sestoupila do odkazované složky")
+        #expect(loaded.unreadable == 0, "něco se přečetlo mimo cache")
+    }
+
+    /// Odkaz na **soubor** enumerace vrátí, a `layout.contains` ho nezachytí — rozbaluje
+    /// symlinky na obou stranách, takže cíl vyjde rovný cíli. Proto se odmítá výslovně.
+    @Test("Odkaz na soubor mimo cache se do výpisu nedostane a spočítá se")
+    func rejectsASymlinkedRecordFile() async throws {
+        try makeSymlinkedRecord()
+
+        let loaded = try await store().load()
+
+        #expect(loaded.records.isEmpty, "přečetl se soubor mimo cache")
+        #expect(loaded.unreadable == 1, "odkaz se má spočítat, ne přejít mlčky")
+    }
+
+    /// Úklid chodí po témž výpisu, takže by přes odkaz četl i mazal cizí soubor.
+    @Test("Úklid odkazovaný soubor nepřečte a nesmaže")
+    func cleanUpLeavesASymlinkAlone() async throws {
+        let target = try makeSymlinkedRecord()
+
+        try await store().cleanUp(openPullRequests: [])
+        try await advance(days: 31)
+        try await store().cleanUp(openPullRequests: [])
+
+        #expect(FileManager.default.fileExists(atPath: target.path(percentEncoded: false)),
+                "smazal se soubor mimo cache")
+    }
+
+    /// Uložení běhu si přečte, co na disku je — přes odkaz by to byl cizí záznam. Bere se
+    /// jako prázdné místo a atomický zápis odkaz nahradí, takže cíl zůstane netknutý.
+    @Test("Uložení přes odkaz nepřečte cizí záznam a cíl nechá být")
+    func saveIgnoresASymlinkedRecord() async throws {
+        let target = try makeSymlinkedRecord()
+
+        let record = try await store().save(run(findings: ["nový nález"]))
+
+        #expect(record.runs.count == 1, "do záznamu se přimíchal cizí soubor")
+        #expect(record.findings.map(\.summary) == ["nový nález"])
+        // Cíl mimo cache se nesmí přepsat — zápis je atomický, takže nahradí odkaz.
+        let foreign = try JSONDecoder().decode(ReviewRecord.self, from: try Data(contentsOf: target))
+        #expect(foreign.runs.isEmpty, "přepsal se soubor mimo cache")
+    }
+
+    /// Odmítnutí nálezu je cílený zápis podle cesty, takže se k odkazu dostane taky.
+    @Test("Odmítnutí nálezu přes odkaz skončí chybou, ne zápisem ven")
+    func dismissRefusesASymlinkedRecord() async throws {
+        try makeSymlinkedRecord()
+        let finding = Finding(
+            reported: makeReported(file: "Cart.swift", line: 13),
+            reviewer: "code-review",
+            headSha: "aaaa1111"
+        )
+
+        await #expect(throws: ReviewStoreError.self) {
+            try await store().dismiss(finding, as: .invalid, in: pullRequest)
+        }
+    }
+
+    /// Cizí záznam mimo cache, na který se dá odkázat.
+    private func foreignRecordDirectory() throws -> URL {
+        let outside = directory.url.appending(path: "mimo-cache")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try encodedForeignRecord().write(to: outside.appending(path: "42-aaaa1111.json"))
+        return outside
+    }
+
+    /// Odkaz na svém místě v cache, ukazující ven. Vrací cíl.
+    @discardableResult
+    private func makeSymlinkedRecord() throws -> URL {
+        let outside = directory.url.appending(path: "cizi.json")
+        try encodedForeignRecord().write(to: outside)
+
+        let url = layout.reviewFile(for: pullRequest, at: "aaaa1111")
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(at: url, withDestinationURL: outside)
+        return outside
+    }
+
+    private func encodedForeignRecord() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(
+            ReviewRecord(pullRequest: pullRequest, headSha: "aaaa1111")
+        )
+    }
+
 }

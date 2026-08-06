@@ -84,6 +84,22 @@ struct CacheLayout: Sendable, Equatable {
         return parent == root || parent.hasPrefix(root + "/")
     }
 
+    /// Je ta cesta symlink?
+    ///
+    /// **Doplňuje `contains`, nenahrazuje ho.** `contains` řeší mazání (rozbaluje **rodiče**,
+    /// protože `removeItem` přes odkaz v cestě smaže cíl), tohle řeší **čtení**: odkaz na
+    /// soubor `FileManager.enumerator` do výpisu **dá** — na rozdíl od odkazu na složku, do
+    /// které nesestupuje (změřeno u #65). Přečíst by se tím dal soubor mimo cache.
+    ///
+    /// `contains` to nezachytí, protože rozbaluje symlinky na obou stranách, takže cíl vyjde
+    /// rovný cíli. Odkaz se proto musí odmítnout výslovně.
+    ///
+    /// Bydlí to tady, ne v jednotlivých storech: potřebují to dva (`ReviewStore`
+    /// i `ReviewDraftStore`) a je to totéž pravidlo o hranici cache jako `contains` (#106).
+    func isSymbolicLink(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true
+    }
+
     /// Bare klon repa: `repos/<owner>/<repo>.git`.
     func bareClone(for repo: RepoID) -> URL {
         repositories

@@ -57,7 +57,11 @@ actor ReviewStore {
         try markStale(everythingBut: run.key.headSha, of: pullRequest)
 
         let url = layout.reviewFile(for: pullRequest, at: run.key.headSha)
-        var record = (try? read(at: url))
+        // Odkaz se bere jako **prázdné místo**, ne jako záznam (#106): číst cizí soubor
+        // nechceme, a zápis je atomický, takže se odkaz vzápětí nahradí naším souborem —
+        // cíl zůstane netknutý. Nálezy se tím neztrácejí: záznam pro tenhle commit stejně
+        // žádný náš neexistuje.
+        var record = (layout.isSymbolicLink(url) ? nil : try? read(at: url))
             ?? ReviewRecord(pullRequest: pullRequest, headSha: run.key.headSha)
         record.replace(StoredReviewRun(run, finishedAt: time.now))
         record.isStale = false
@@ -127,6 +131,11 @@ actor ReviewStore {
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
             throw ReviewStoreError.recordNotFound(pullRequest, headSha: finding.headSha)
         }
+        // Odkaz je totéž co chybějící soubor: **náš** záznam tam není a přečíst cizí kvůli
+        // tomu, abychom do něj zapsali odmítnutí, je to poslední, co chceme (#106).
+        guard !layout.isSymbolicLink(url) else {
+            throw ReviewStoreError.recordNotFound(pullRequest, headSha: finding.headSha)
+        }
 
         var record = try read(at: url)
         guard record.pullRequest == pullRequest else {
@@ -148,7 +157,11 @@ actor ReviewStore {
     /// Všechno, co na disku je. Volá se při startu.
     func load() throws -> Loaded {
         var loaded = Loaded()
-        for url in recordFiles(in: layout.reviews) {
+        let found = recordFiles(in: layout.reviews)
+        // Odkaz se do `unreadable` počítá jako rozbitý soubor: obojí znamená, že v cache něco
+        // leží a nálezy z toho nejsou — a v okně se to nesmí tvářit jako „review neběželo“.
+        loaded.unreadable += found.symlinks
+        for url in found.files {
             guard let record = try? read(at: url) else {
                 loaded.unreadable += 1
                 continue
@@ -173,7 +186,9 @@ actor ReviewStore {
         let open = Set(openPullRequests)
         let now = time.now
 
-        for url in recordFiles(in: layout.reviews) {
+        // Odkaz se sem nedostane, takže se nepřečte ani nesmaže cizí soubor. Nepočítá se —
+        // úklid nemá kam počet ohlásit a `load()` ho při startu spočítá tak jako tak.
+        for url in recordFiles(in: layout.reviews).files {
             guard var record = try? read(at: url) else { continue }
 
             guard !open.contains(record.pullRequest) else {
@@ -201,7 +216,10 @@ actor ReviewStore {
     }
 
     private func markStale(everythingBut headSha: String, of pullRequest: PRIdentifier) throws {
-        let files = recordFiles(in: layout.reviews(of: pullRequest.repo), named: "\(pullRequest.number)-")
+        let files = recordFiles(
+            in: layout.reviews(of: pullRequest.repo),
+            named: "\(pullRequest.number)-"
+        ).files
         for url in files {
             guard var record = try? read(at: url), record.pullRequest == pullRequest else {
                 continue
@@ -233,20 +251,35 @@ actor ReviewStore {
     /// takže se ušetří dekódování celé historie repa při každém uložení. Na jméno se přitom
     /// nespoléhá jako na pravdu — tou zůstává `pullRequest` uvnitř souboru, který si volající
     /// stejně ověří. `42-` navíc nesedí na `421-`, protože pomlčka je součást prefixu.
-    private func recordFiles(in directory: URL, named prefix: String? = nil) -> [URL] {
+    ///
+    /// **Symlinky se přeskakují a počítají** (#106). `enumerator` do odkazovaných složek
+    /// nesestupuje, ale odkaz na **soubor** do výpisu dá — a ten by se přečetl mimo cache
+    /// (změřeno u #65). `layout.contains` to nezachytí, protože rozbaluje symlinky na obou
+    /// stranách, takže cíl vyjde rovný cíli; odkaz se musí odmítnout výslovně. Počítá se,
+    /// protože něco v cache leží a nedá se z toho záznam udělat — tiché přeskočení by
+    /// anomálii schovalo. Stejně to dělá `ReviewDraftStore` od #65.
+    private func recordFiles(
+        in directory: URL,
+        named prefix: String? = nil
+    ) -> (files: [URL], symlinks: Int) {
         guard let enumerator = FileManager.default.enumerator(
             at: directory,
-            includingPropertiesForKeys: nil
-        ) else { return [] }
+            includingPropertiesForKeys: [.isSymbolicLinkKey]
+        ) else { return ([], 0) }
 
         // Po prvcích, ne `allObjects`: ten vylistuje celý strom do paměti, včetně souborů,
         // které nás nezajímají.
         var files: [URL] = []
+        var symlinks = 0
         for case let url as URL in enumerator where url.pathExtension == "json" {
             guard prefix.map(url.lastPathComponent.hasPrefix) ?? true else { continue }
+            if layout.isSymbolicLink(url) {
+                symlinks += 1
+                continue
+            }
             files.append(url)
         }
-        return files
+        return (files, symlinks)
     }
 }
 

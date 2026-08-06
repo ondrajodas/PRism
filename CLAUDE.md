@@ -1053,16 +1053,25 @@ Věci, které se u toho nemají rozbít:
 - **`FileManager.enumerator` nesestupuje do odkazovaných složek, ale odkaz na soubor vrátí.**
   Změřeno testem u #65, ne převzato — a je to **přesnější** než dřívější formulace „výpis
   z disku sem symlinkem ven nedostane“. Odkaz na složku se opravdu nesleduje; odkaz na
-  *soubor* se ale vylistuje a přečetl by se **mimo cache**. `ReviewDraftStore` ho proto
-  přeskakuje a počítá. **`ReviewStore` to zatím nedělá** — je na to #106.
+  *soubor* se ale vylistuje a přečetl by se **mimo cache**. Odmítají ho proto **oba story**
+  (#106) a odpovídá na to **jedno místo**, `CacheLayout.isSymbolicLink` — potřebují to dva
+  a je to totéž pravidlo o hranici cache jako `contains`.
 
   Pozor na past: kontrola „leží soubor tam, kam patří“ postavená na rozbalení symlinků na
   **obou** stranách takový odkaz nezachytí, protože cíl vyjde rovný cíli. Symlink se musí
   odmítnout výslovně (`.isSymbolicLinkKey`).
+
+  **Nestačí to ve výpisu**, i cílená čtení podle cesty se k odkazu dostanou: `save` ho bere
+  jako **prázdné místo** (zápis je atomický, takže odkaz nahradí náš soubor a cíl zůstane
+  netknutý) a `dismiss`/`restore` jako `recordNotFound` — **náš** záznam tam není a číst
+  cizí kvůli tomu, abychom do něj zapsali odmítnutí, je to poslední, co chceme.
+  Ověřeno dočasně vrácenou regresí, po které `load` cizí soubor přečetl jako záznam
+  a odmítnutí nálezu prošlo nad cizími daty.
 - **Maže se jen uvnitř cache.** Kdo maže podle toho, co našel na disku, si před smazáním
   ověří, že cesta po rozbalení symlinků pořád leží pod kořenem — `removeItem` přes odkaz
   v rodičovské komponentě smaže **cíl**, ne odkaz. Odpovídá na to `CacheLayout.contains`,
-  jedno místo pro eviction i `ReviewStore`.
+  jedno místo pro eviction i `ReviewStore`. Je to **jiná otázka než `isSymbolicLink`**:
+  `contains` rozbaluje **rodiče** a řeší mazání, `isSymbolicLink` řeší **čtení** listu.
 - **Souběžná volání nad stejným klíčem spojuje `CheckoutCoordinator`.** Dvě review nad
   různými PR téhož repa spustí přípravu naráz a druhé volání by mohlo smazat složku
   rozběhnutého klonu prvního. **Uvnitř koordinované práce se nesmí volat nic, co jde přes
@@ -3112,6 +3121,13 @@ Nad `HTTPGetting` (#31) platí:
   **odebraný** řádek (tatáž past jako u vláken v #64), že se komentář na řádku mimo diff
   nekreslí, že se dva na jednom řádku neslijí a že pořadí je nález → vlákno → můj komentář.
   Plus kotva pro skok z panelu, včetně `left` a fallbacku na soubor.
+- **Symlinky v cache (#106)** — u `ReviewStore` totéž co u draftů od #65, protože je to táž
+  hranice: odkaz na **složku** se nesleduje (to je ověření tvrzení, ne domněnka), odkaz na
+  **soubor** se do výpisu nedostane a **spočítá se** do `unreadable`. Vedle výpisu i obě
+  cílená čtení podle cesty: úklid odkaz nepřečte ani nesmaže, uložení běhu z něj neudělá
+  záznam (a cíl mimo cache nechá být) a odmítnutí nálezu skončí chybou. Ověřeno **dočasně
+  vrácenou regresí** — bez toho `load` cizí soubor přečte jako záznam a odmítnutí projde nad
+  cizími daty.
 - **`ReviewStore`** — proti skutečné dočasné složce, ne proti fake filesystému: kořen je
   injektovatelný, takže jde o pár kilobajtů, a ověřuje se to, na čem store stojí — `Codable`
   cesta na disk a zpět a chování `FileManageru`. Hodiny jsou `FakeTimeSource`, který se
@@ -3656,6 +3672,12 @@ GitHub. Generuje se **z kódu** z oficiálních značek v `bin/icon-sources/` (o
 SVG cesta, takže si skript vystačí s minimálním překladem `d` na `Path` — žádná závislost).
 V repu jsou **dvě barevné varianty**, nasazená je krémový znak na oranžové. Malé velikosti se
 kreslí hruběji, ne zmenšením.
+
+Symlinky v `ReviewStore`u odmítnuté (issue #106) — `CacheLayout.isSymbolicLink` jako jedno
+místo pro oba story. Odkaz na soubor uvnitř `reviews/` by se přečetl **mimo cache**: `load`
+i `cleanUp` ho braly jako uložený záznam a `dismiss` nad ním zapisoval odmítnutí. Teď se
+přeskakuje a **počítá** do `unreadable`, protože tiché přeskočení by anomálii schovalo. Věta
+v `CLAUDE.md` o enumeraci a symlincích tím platí pro celý repozitář, ne jen pro drafty.
 
 Poslední ohlášení ve stavovém řádku hotové (issue #138) — `DeliveredNotification`
 v `App/Models/`, `lastDeliveredNotification` v `AppStore` a `NotificationStatusView`
