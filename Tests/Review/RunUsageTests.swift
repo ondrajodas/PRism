@@ -74,6 +74,26 @@ struct RunUsageTests {
         #expect(usage(inResult: #""total_cost_usd":-1,"duration_ms":-5,"num_turns":-2"#) == nil)
     }
 
+    /// `Int(_:)` nad `Double`m mimo rozsah **spadne**, nevrátí chybu — a parser, který nikdy
+    /// nevyhodí výjimku, o to míň smí položit celý proces. Chytila to vlastní revize diffu.
+    @Test("Nesmyslně velké číslo parser nepoloží")
+    func survivesHugeNumbers() throws {
+        let huge = try #require(usage(inResult: #""total_cost_usd":1e300,"duration_ms":1e300,"num_turns":1e300"#))
+
+        #expect(huge.cost == 1e300)
+        #expect(huge.duration == nil)
+        #expect(huge.turns == nil)
+    }
+
+    /// Desetinné `num_turns` by po `Int(_:)` prošlo oříznutím tiše; tady se aspoň nezmění
+    /// v nesmysl a řádek se z něj nestane.
+    @Test("Desetinné trvání se ořízne dolů")
+    func roundsFractionalValuesDown() throws {
+        let fractional = try #require(usage(inResult: #""duration_ms":11809.7"#))
+
+        #expect(fractional.duration == .milliseconds(11809))
+    }
+
     @Test("Result bez čísel žádnou cenu nedá")
     func aResultWithoutNumbersHasNoUsage() {
         #expect(usage(inResult: #""result":"hotovo""#) == nil)

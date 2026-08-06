@@ -122,8 +122,8 @@ struct StreamParser: Sendable {
     private func usage(from object: [String: Any]) -> RunUsage? {
         let usage = RunUsage(
             cost: nonNegative(object["total_cost_usd"]),
-            duration: nonNegative(object["duration_ms"]).map { Duration.milliseconds(Int($0)) },
-            turns: nonNegative(object["num_turns"]).map(Int.init)
+            duration: wholeNumber(object["duration_ms"]).map(Duration.milliseconds),
+            turns: wholeNumber(object["num_turns"])
         )
         return usage.isEmpty ? nil : usage
     }
@@ -137,6 +137,13 @@ struct StreamParser: Sendable {
         guard let number = value as? NSNumber, !(value is Bool) else { return nil }
         let candidate = number.doubleValue
         return candidate.isFinite && candidate >= 0 ? candidate : nil
+    }
+
+    /// Totéž jako celé číslo. **`Int(_:)` nad `Double`m tady být nesmí** — na hodnotě mimo
+    /// rozsah `Int`u (`"duration_ms": 1e300`) neselže, ale **spadne**, a parser, který nikdy
+    /// nevyhodí výjimku, o to míň smí položit celý proces. `Int(exactly:)` vrátí `nil`.
+    private func wholeNumber(_ value: Any?) -> Int? {
+        nonNegative(value).flatMap { Int(exactly: $0.rounded(.down)) }
     }
 
     /// Povinné je jen `summary` — bez něj není co ukázat. Zbytek volání tím netrpí; jeden
