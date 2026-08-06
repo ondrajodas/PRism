@@ -69,6 +69,7 @@ struct ReviewerChipsView: View {
         case .inconclusive: "questionmark.circle"
         case .failed: "xmark.circle"
         case .timedOut: "clock.badge.exclamationmark"
+        case .interrupted: "bolt.horizontal.circle"
         }
     }
 
@@ -81,6 +82,7 @@ struct ReviewerChipsView: View {
         case .inconclusive: "nejisté"
         case .failed: "selhalo"
         case .timedOut(let count): count > 0 ? "timeout · \(count)" : "timeout"
+        case .interrupted(let count): count > 0 ? "přerušeno · \(count)" : "přerušeno"
         }
     }
 
@@ -89,7 +91,7 @@ struct ReviewerChipsView: View {
         case .clean: .green
         case .findings: .orange
         case .failed: .red
-        case .inconclusive, .timedOut: .orange
+        case .inconclusive, .timedOut, .interrupted: .orange
         case .notStarted, .running: .secondary
         }
     }
@@ -97,7 +99,7 @@ struct ReviewerChipsView: View {
     private func background(_ state: ReviewerChip.State) -> Color {
         switch state {
         case .failed: .red.opacity(0.08)
-        case .findings, .inconclusive, .timedOut: .orange.opacity(0.08)
+        case .findings, .inconclusive, .timedOut, .interrupted: .orange.opacity(0.08)
         default: .gray.opacity(0.08)
         }
     }
@@ -109,6 +111,9 @@ struct ReviewerChipsView: View {
         case .failed(let detail): return "\(detail)\n\n\(action)"
         case .inconclusive(let reason): return "\(reason)\n\n\(action)"
         case .timedOut: return "Session nedoběhla v limitu; co stihla nahlásit, je vidět.\n\n\(action)"
+        case .interrupted:
+            return "Session skončila s aplikací (pád nebo zabití). Nálezy jsou dotažené "
+                + "z transcriptu, takže je jich tolik, kolik jich do té chvíle dorazilo.\n\n\(action)"
         default: return action
         }
     }

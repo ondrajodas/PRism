@@ -33,6 +33,12 @@ enum ReviewState: Hashable, Codable, Sendable {
     case failed(detail: String)
     /// Session byla zabita timeoutem. Částečné nálezy se zachovávají.
     case timedOut(findings: Int)
+    /// Session skončila s aplikací a nálezy se dotáhly z transcriptu (#97).
+    ///
+    /// Vlastní případ ze stejného důvodu jako `ReviewRunOutcome.interrupted`: „nedoběhlo,
+    /// protože je to pomalé“ a „nedoběhlo, protože spadla aplikace“ vedou jinam a odznak
+    /// `timeout` by nad druhým lhal.
+    case interrupted(findings: Int)
     /// Nálezy patří ke staršímu `headSha`, než jaký PR má teď.
     case stale
 

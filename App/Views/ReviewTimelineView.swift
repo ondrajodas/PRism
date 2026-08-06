@@ -130,6 +130,7 @@ struct ReviewTimelineView: View {
         switch outcome {
         case .finished: "doběhlo"
         case .timedOut: "vypršel čas"
+        case .interrupted: "přerušeno aplikací"
         case .failed(let detail): "selhalo: \(detail)"
         }
     }

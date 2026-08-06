@@ -105,6 +105,19 @@ struct ReviewNotificationTests {
         #expect(body(.timedOut(findings: 0)) == "Review nedoběhlo do limitu a nic nenahlásilo.")
     }
 
+    /// Přerušený běh musí říct **proč** to nedoběhlo: s timeoutem se dělá něco jiného (dá se
+    /// zvednout limit) než se spadlou aplikací. A že jsou nálezy z transcriptu, taky — samotné
+    /// „3 nálezy“ by tvrdilo, že běh doběhl.
+    @Test("Přerušený běh se pozná od timeoutu i od doběhlého")
+    func tellsAnInterruptedRunApart() {
+        let text = body(.interrupted(findings: 3), blocking: 1)
+
+        #expect(text?.contains("přerušila aplikace") == true)
+        #expect(text?.contains("3 nálezy") == true)
+        #expect(text?.contains("transcriptu") == true)
+        #expect(body(.interrupted(findings: 0)) == "Review přerušila aplikace a nic nenahlásilo.")
+    }
+
     @Test("Odmítnuté nálezy nejsou totéž jako čisto")
     func distinguishesDismissedFromClean() {
         // „Našel a já to zamítl“ je jiné tvrzení než „nic nenašel“ (#113) a v notifikaci se
@@ -197,6 +210,10 @@ extension ReviewNotificationTests {
         // ne nález. Chytil to Copilot na rozporu mezi textem v nastavení a mapováním.
         #expect(event(.timedOut(findings: 2)) == .findings)
         #expect(event(.timedOut(findings: 0)) == .failure)
+        // Přerušený běh se dělí stejně a ze stejného důvodu: nálezy jsou k přečtení, kdežto
+        // přerušený běh bez nich je selhání.
+        #expect(event(.interrupted(findings: 2)) == .findings)
+        #expect(event(.interrupted(findings: 0)) == .failure)
     }
 
     @Test("Události odpovídají tomu, co notifikace říká", arguments: [

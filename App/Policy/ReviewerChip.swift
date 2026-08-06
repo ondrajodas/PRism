@@ -19,6 +19,8 @@ struct ReviewerChip: Identifiable, Hashable, Sendable {
         case failed(String)
         /// Vytimeoutovaný běh si nechává, co stihl — částečné nálezy jsou to jediné, co je.
         case timedOut(findings: Int)
+        /// Session skončila s aplikací; nálezy jsou z transcriptu (#97).
+        case interrupted(findings: Int)
     }
 
     let skill: String
@@ -78,6 +80,7 @@ extension Policy {
         switch run.outcome {
         case .failed(let detail): return .failed(detail)
         case .timedOut: return .timedOut(findings: run.findings.count)
+        case .interrupted: return .interrupted(findings: run.findings.count)
         case .finished: return finishedState(of: run)
         }
     }

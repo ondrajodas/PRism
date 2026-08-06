@@ -364,6 +364,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `NotificationSettings` | Co se má hlásit (#86) — hlavní vypínač a čtyři události. Jako `DiffLayout` jen globálně |
 | `Release` | Jedno vydání aplikace na GitHubu (#127): tag, název, datum, release notes, odkaz. Jako `ReviewVerdict` **není `Codable`** — na disk nejde |
 | `DeliveredNotification` | Poslední **doručená** notifikace (#138) — čas a titulek. Taky **není `Codable`**, drží se v paměti |
+| `InterruptedRun` | Značka rozdělaného běhu (#97): klíč běhu, `sessionID` a pracovní strom — z těch dvou se najde transcript |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -381,7 +382,12 @@ Tři věci, které se u nich nemají rozbít:
   nic nenašlo) je opak `failed` (session spadla), `checkoutFailed` se spraví opakováním
   clonu a `timedOut` si drží částečné nálezy. Případy: `notStarted`, `queued`, `cloning`,
   `checkoutFailed(detail:)`, `running(finished:total:)`, `clean`, `completed(findings:)`,
-  `dismissed(findings:)`, `failed(detail:)`, `timedOut(findings:)`, `stale`.
+  `dismissed(findings:)`, `failed(detail:)`, `timedOut(findings:)`, `interrupted(findings:)`,
+  `stale`.
+- **`interrupted` není `timedOut`** (#97). Oba znamenají „nedoběhlo, částečné nálezy zůstaly“,
+  ale vedou jinam: timeout říká, že je review pomalé (dá se zvednout limit), přerušení že spadla
+  aplikace (nedá se dělat nic než pustit znovu). A odznak by u přerušeného běhu tvrdil
+  `timeout`, což je nepravda.
 - **`clean` vzniká jen přes `ReviewState.finished(findingCount:)`.** Jinak se dřív nebo
   později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
 - **`dismissed` není `clean`** (#113). „Reviewer nic nenašel“ a „našel a já to všechno
@@ -896,6 +902,8 @@ Jeden běh = jedna headless session `claude` na jeden skill v jednom pracovním 
 | `ReviewerTimeline` | Časová osa jednoho revieweera pro tab Průběh — události s časem, `sessionID`, pracovní strom |
 | `ReviewSlots` | Aktor: limit souběžných session (3), fronta v pořadí příchodu |
 | `ClaudeCommand` | Čisté funkce: argumenty, prompt, prostředí session |
+| `TranscriptLocation` | **Čistá funkce**: kde `claude` vede transcript session (#97) |
+| `TranscriptReading`, `TranscriptStore` | Přečte transcript zabité session a udělá z něj `StreamSummary` |
 
 Věci, které se u toho nemají rozbít:
 
@@ -1104,6 +1112,7 @@ Výsledky review na disku: jeden JSON soubor na `(repo, PR, headSha)` pod
 | `ReviewStoreError` | Jediná vlastní chyba: záznam, do kterého se má zapsat, na disku není |
 | `AutoRunLedger` | Aktor: kolik review dnes spustil automat. **Na disku**, aby limit nešel obejít restartem |
 | `AnnouncedPullRequests` | Aktor: které PR se už ohlásily jako nové (#85). **Snímek** poslední fronty na disku, ne rostoucí log |
+| `InterruptedRuns` | Aktor: běhy, které začaly a neví se, jestli doběhly (#97). Co v souboru po startu zbylo, aplikaci nepřežilo |
 | `ReviewRecord` | Obsah jednoho souboru: PR, `headSha`, běhy, `isStale`, `closedAt` |
 | `StoredReviewRun` | Jeden běh: skill, `outcome`, session id, nálezy, `droppedFindings`, čas |
 
@@ -1254,6 +1263,35 @@ Automatický režim (#25):
   neuložilo, je přesně to, kvůli čemu se pak hledá, proč něco nefunguje.
 - **Ukládá se po každém doběhlém skillu**, ne až na konci — když se aplikace zavře uprostřed,
   co doběhlo, zůstane.
+- **Co nedoběhlo, se dotáhne z transcriptu** (#97). Dialog při zavření (#94) pokrývá jen to, co
+  způsobí uživatel; pád aplikace, `kill` ani restart Macu odchytit nejdou — a nálezy se tam
+  ztrácely stejně. Značka (`InterruptedRuns`) se zapíše, jakmile dorazí `session_id`, a co
+  v souboru po startu zbylo, se přečte z transcriptu a uloží jako `interrupted`.
+  - **Značka se zapisuje v proudu událostí a s `await`**, ne ve vlastním tasku. Odložený zápis
+    se umí propsat až po tom, co běh doběhl a značku smazal — pak zůstane ležet nad hotovým
+    během. Chytil to test, ne úvaha.
+  - **Maže se až po vyprázdnění proudu, a to celá sada** — ne jen uložené běhy. Zápis jde přes
+    proud, uložení výsledku ne, takže by se smazání umělo předběhnout. Celá sada proto, že sem
+    se dojde jedině po skončeném review: pokrývá to i **zrušený** běh, který se schválně
+    neukládá, takže by mu značka zbyla a příští start by z transcriptu vzkřísil nálezy, které si
+    člověk zrušil. Po pádu se sem naopak nedojde vůbec, a o to jde.
+  - **Značka nad uloženým během nic nepřepíše.** Pád mezi zápisem výsledku a smazáním značky
+    jinak z hotového review udělá nedodělek (`interrupted` přes `finished`). Je to důležitější
+    pojistka než pořadí mazání, protože to okno zavřít nejde.
+  - **Značka bez transcriptu se zahodí.** Strom mohla sebrat eviction a bez něj se to nikdy
+    nedotáhne — ležela by tam navždycky.
+  - **Transcript bez jediného `ReportFindings` se neuloží.** Běh, který nálezy nikdy nenahlásil,
+    by v řádku vypadal jako „reviewer nic nenašel“ — přesně to tvrzení, kterému se #97 vyhýbá.
+  - **Nečitelný transcript není totéž co chybějící.** Chybějící už nebude (strom sebrala
+    eviction), takže se značka zahodí; nečitelný tam pořád leží i s nálezy, takže se značka
+    **nechá**. Rozlišuje to `do`/`catch`, ne `try?` — ten obě odpovědi slije do `nil`, protože
+    Swift výsledek `try?` nad funkcí vracející optional zplošťuje. Chytil to test.
+  - **Dotažený běh si nese `sessionID` ze značky.** Transcript má `sessionId`, `stream-json`
+    `session_id`, takže parser id nevytáhne — a bez něj by osa neuměla nabídnout
+    `claude --resume` a brána proti přepsání uloženého běhu by neměla co porovnávat.
+  - **Dotažení běh nepoloží.** Je to záchranná síť nad daty, která už jednou spadla pod stůl:
+    jedno selhání nesmí zastavit ostatní ani položit start; značka zůstane a příští start to
+    zkusí znovu.
 - **Nový head commit zneplatní i záznam v paměti**, ne jen ten na disku. Jinak by řádek celou
   dobu běhu ukazoval nálezy proti kódu, který v PR není.
 - **Stav pracovní kopie se po každé fázi srovná podle disku.** Včetně zrušení: bez toho by
@@ -3121,6 +3159,20 @@ Nad `HTTPGetting` (#31) platí:
   **odebraný** řádek (tatáž past jako u vláken v #64), že se komentář na řádku mimo diff
   nekreslí, že se dva na jednom řádku neslijí a že pořadí je nález → vlákno → můj komentář.
   Plus kotva pro skok z panelu, včetně `left` a fallbacku na soubor.
+- **Dotažení po pádu (#97)** — tři vrstvy. `TranscriptLocation` na **změřená** pravidla
+  manglingu cesty: nejen `/` a mezery, ale všechno mimo `[A-Za-z0-9-]` (včetně podtržítka
+  a diakritiky), pomlčky se nesluřují a velikost písmen zůstává. `TranscriptStore` proti
+  **skutečnému** transcriptu z veřejného sandboxu, zkrácenému na pět řádků — jsou v něm typy
+  eventů, které ve `stream-json` nejsou (`queue-operation`, `last-prompt`, `attachment`), takže
+  fixture zároveň ověřuje, že je parser přejde. A že v něm **není `result`**, tedy že se
+  z transcriptu nikdy nedá vyčíst „doběhlo“.
+
+  `AppStore` proti skutečnému `InterruptedRuns` i `ReviewStore` nad dočasnou složkou, protože
+  celé issue je o tom, co přežije restart. To hlavní: nálezy jsou po startu zpátky, uloží se jako
+  `interrupted` (ne `clean`), značka se zahodí, značka **bez** transcriptu se zahodí taky
+  a značka **nad uloženým během výsledek nepřepíše**. Plus že neuložený běh si značku nechá
+  a že se po doběhlém review značka nedrží — ten poslední chytil reálný závod mezi proudem
+  událostí a ukládáním.
 - **Symlinky v cache (#106)** — u `ReviewStore` totéž co u draftů od #65, protože je to táž
   hranice: odkaz na **složku** se nesleduje (to je ověření tvrzení, ne domněnka), odkaz na
   **soubor** se do výpisu nedostane a **spočítá se** do `unreadable`. Vedle výpisu i obě
@@ -3672,6 +3724,16 @@ GitHub. Generuje se **z kódu** z oficiálních značek v `bin/icon-sources/` (o
 SVG cesta, takže si skript vystačí s minimálním překladem `d` na `Path` — žádná závislost).
 V repu jsou **dvě barevné varianty**, nasazená je krémový znak na oranžové. Malé velikosti se
 kreslí hruběji, ne zmenšením.
+
+Dotažení nálezů po pádu hotové (issue #97) — `InterruptedRun` a `InterruptedRuns`,
+`TranscriptLocation` s `TranscriptStore` a `recoverInterruptedRuns()` v `AppStore`.
+**Nálezy z běhu, který aplikaci nepřežil, se po startu dotáhnou z transcriptu** a uloží se jako
+`interrupted` — nový stav vedle `timedOut`, protože „nedoběhlo, protože je to pomalé“ a
+„nedoběhlo, protože spadla aplikace“ vedou jinam a odznak `timeout` by nad druhým lhal. Dialog
+při zavření (#94) tím dostal druhou půlku: ten pokrývá jen to, co způsobí uživatel.
+
+Cesta k transcriptu je **změřená**: mangling nahrazuje všechno mimo `[A-Za-z0-9-]`, ne jen `/`
+a mezery, jak stálo v zadání.
 
 Symlinky v `ReviewStore`u odmítnuté (issue #106) — `CacheLayout.isSymbolicLink` jako jedno
 místo pro oba story. Odkaz na soubor uvnitř `reviews/` by se přečetl **mimo cache**: `load`

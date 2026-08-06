@@ -57,6 +57,10 @@ extension Policy {
             // Chytil to Copilot na rozporu mezi textem v nastavení a mapováním — a správná
             // oprava byla mapování, ne text.
             findings > 0 ? .findings : .failure
+        case .interrupted(let findings):
+            // Stejné dělení jako u timeoutu a ze stejného důvodu: nálezy jsou k přečtení,
+            // kdežto přerušený běh bez nich je selhání.
+            findings > 0 ? .findings : .failure
         case .clean, .dismissed:
             // Odmítnuté nálezy jsou z pohledu vyrušení totéž jako čisto: nezbylo nic, co bych
             // musel řešit. Kdo si vypne „čisté review“, nechce ani tuhle hlášku.
@@ -79,6 +83,13 @@ extension Policy {
             findings > 0
                 ? "Review nedoběhlo do limitu. \(findingsText(findings, blocking: blocking))"
                 : "Review nedoběhlo do limitu a nic nenahlásilo."
+        case .interrupted(let findings):
+            // Říká **proč** to nedoběhlo, protože se s tím dělá něco jiného než s timeoutem:
+            // limit se dá zvednout, spadlá aplikace ne. A nálezy jsou z transcriptu, takže
+            // „3 nálezy“ samo o sobě by tvrdilo, že běh doběhl.
+            findings > 0
+                ? "Review přerušila aplikace. \(findingsText(findings, blocking: blocking)) Nálezy jsou z transcriptu."
+                : "Review přerušila aplikace a nic nenahlásilo."
         case .clean:
             // Kratší a bez detailu — ale poznat se to musí, takže ne prázdné tělo.
             "Reviewer nenašel žádný nález."

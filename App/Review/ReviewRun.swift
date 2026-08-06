@@ -43,4 +43,12 @@ enum ReviewRunOutcome: Sendable, Hashable, Codable {
     case timedOut
     /// Nespustil se nebo skončil nenulovým kódem; `detail` je stderr, na kterém stojí UI.
     case failed(detail: String)
+    /// Skončil s aplikací — pád, `kill`, restart Macu — a nálezy se dotáhly z transcriptu (#97).
+    ///
+    /// **Vlastní případ, ne `timedOut`.** Oba znamenají „nedoběhlo, částečné nálezy zůstaly“,
+    /// ale vedou jinam: timeout říká, že je review moc pomalé (dá se zvednout limit), tohle že
+    /// spadla aplikace (nedá se dělat nic než pustit znovu). A odznak v řádku by u přerušeného
+    /// běhu tvrdil „timeout“, což je nepravda — přesně ten vzor, na který si `CLAUDE.md`
+    /// stěžuje.
+    case interrupted
 }

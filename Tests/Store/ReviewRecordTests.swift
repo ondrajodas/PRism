@@ -36,6 +36,7 @@ struct ReviewRecordTests {
         ReviewRunOutcome.finished,
         .timedOut,
         .failed(detail: "Invalid API key"),
+        .interrupted,
     ])
     func aRecordSurvivesTheRoundTrip(outcome: ReviewRunOutcome) throws {
         // Každý případ zvlášť: `failed` nese asociovanou hodnotu a ta se z JSONu ztratí

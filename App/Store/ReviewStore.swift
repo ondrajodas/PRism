@@ -146,6 +146,21 @@ actor ReviewStore {
         return record
     }
 
+    /// Záznam pro jeden commit, pokud nějaký je (#97).
+    ///
+    /// Cílené čtení podle cesty, ne výpis: dotažení po pádu se ptá na konkrétní `(PR, sha)`
+    /// a projít kvůli tomu celou historii repa by bylo drahé. Chybějící ani nečitelný soubor
+    /// není chyba — volající z toho vyvodí „záznam není“, a to je pro obě odpovědi správně.
+    /// Odkaz se bere jako **chybějící záznam** (#106): číst soubor mimo cache nechceme ani
+    /// tady. Je to třetí cílené čtení podle cesty vedle `save` a `setDismissal` a kontrola
+    /// v něm chybět nesmí jen proto, že přibylo později.
+    func record(for pullRequest: PRIdentifier, at headSha: String) -> ReviewRecord? {
+        let url = layout.reviewFile(for: pullRequest, at: headSha)
+        guard !layout.isSymbolicLink(url) else { return nil }
+        guard let record = try? read(at: url), record.pullRequest == pullRequest else { return nil }
+        return record
+    }
+
     /// PR má tenhle head commit. Všechno starší se označí jako zastaralé.
     ///
     /// Volá se, jakmile se dotáhne detail PR — tedy v jediné chvíli, kdy aplikace aktuální

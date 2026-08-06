@@ -212,6 +212,10 @@ final class AppStore {
     private let notifications: (any UserNotifying)?
     /// Které PR už se ohlásily jako nové (#85). `nil` = odsud se nehlásí (testy).
     private let announced: AnnouncedPullRequests?
+    /// Rozdělané běhy (#97). `nil` = odsud se nedotahuje (testy).
+    private let interrupted: InterruptedRuns?
+    /// Čtení transcriptů zabitých session (#97). `nil` = odsud se nečte (testy).
+    private let transcripts: (any TranscriptReading)?
     /// Běžící review podle PR — drží se kvůli zrušení.
     private var reviewTasks: [PRIdentifier: Task<Void, Never>] = [:]
     /// Review, která spustil **automat**. Ruční se pozná tím, že tady není — a jen ta
@@ -239,13 +243,17 @@ final class AppStore {
         gh: URL? = nil,
         health: HealthMonitor? = nil,
         notifications: (any UserNotifying)? = nil,
-        announced: AnnouncedPullRequests? = nil
+        announced: AnnouncedPullRequests? = nil,
+        interrupted: InterruptedRuns? = nil,
+        transcripts: (any TranscriptReading)? = nil
     ) {
         self.time = time
         self.gh = gh
         self.health = health
         self.notifications = notifications
         self.announced = announced
+        self.interrupted = interrupted
+        self.transcripts = transcripts
         self.configuration = configuration
         self.configStore = configStore
         polling = PollingService(
@@ -325,7 +333,9 @@ final class AppStore {
             gh: toolPaths.gh,
             health: HealthMonitor(),
             notifications: SystemNotificationCenter.shared,
-            announced: AnnouncedPullRequests()
+            announced: AnnouncedPullRequests(),
+            interrupted: InterruptedRuns(),
+            transcripts: TranscriptStore()
         )
         self.configurationBox = box
     }
@@ -437,6 +447,9 @@ final class AppStore {
     /// Drží seznam aktuální, dokud okno žije. Zrušení tasku smyčku ukončí.
     func keepFresh() async {
         await reloadConfiguration()
+        // **Před** načtením záznamů: dotažené nálezy se mají objevit hned po startu, ne až
+        // po dalším review. Kdyby se dotahovalo potom, `reviewRecords` by je neobsahovaly.
+        await recoverInterruptedRuns()
         await loadStoredReviews()
         await loadStoredDrafts()
         // Všechno běží, dokud žije okno; zrušení tasku ukončí skupinu i se všemi smyčkami.
@@ -449,6 +462,95 @@ final class AppStore {
                 group.addTask { await self.handleNotificationClicks() }
             }
         }
+    }
+
+    /// Dotáhne nálezy z běhů, které aplikaci nepřežily (#97).
+    ///
+    /// Potvrzovací dialog při zavření (#94) pokrývá jen to, co uživatel způsobí svým jednáním.
+    /// Pád aplikace, `kill` ani restart Macu se odchytit nedají — a nálezy se tam ztrácely
+    /// stejným způsobem: session se zabila, `ReviewStore` neměl záznam a řádek ukazoval
+    /// `neběželo`, tedy totéž jako u PR, který nikdo nekontroloval. Za jeden den vývoje spadla
+    /// aplikace dvakrát, takže to není teoretická situace.
+    ///
+    /// Běží **při startu, jednou**: značky, které v souboru zbyly, jsou přesně ty běhy, po
+    /// kterých nikdo neuklidil. Uloží se jako `interrupted`, ne jako doběhlé — chybí `result`
+    /// event, takže se neví, jestli reviewer skončil, a `clean` by nad tím lhalo.
+    ///
+    /// **Nezapsaný nález tady běh nepoloží**, na rozdíl od doběhlého review: tohle je záchranná
+    /// síť nad daty, která už jednou spadla pod stůl. Selhání jednoho dotažení nesmí zastavit
+    /// ostatní ani položit start aplikace; značka zůstane a příští start to zkusí znovu.
+    func recoverInterruptedRuns() async {
+        guard let interrupted, let transcripts, let reviews else { return }
+
+        for run in await interrupted.pending() {
+            // Značka nad **touž session**, která je uložená, znamená, že aplikace spadla mezi
+            // zápisem výsledku a smazáním značky. Dotáhnout ji znovu by přepsalo doběhlý běh
+            // přerušeným — tedy z hotového review udělalo nedodělek. Tohle okno zavřít nejde,
+            // takže je ta brána důležitější než pořadí, ve kterém se maže.
+            //
+            // Porovnává se **`sessionID`, ne skill** (#97). Skill by byl moc hrubý: záznam pro
+            // tentýž commit může být ze **staršího** review, a to je zrovna situace, kdy se
+            // nálezy dotáhnout mají — jinak by nad novým během zůstalo viset staré „čisté“.
+            // Vyšlo to najevo na živé zkoušce, ne z úvahy.
+            if let existing = await reviews.record(for: run.pullRequest, at: run.headSha),
+               existing.runs.contains(where: { $0.sessionID == run.sessionID }) {
+                await interrupted.forget(run.key)
+                continue
+            }
+
+            // **`do`/`catch`, ne `try?`.** Ten by obě odpovědi slil do `nil` — Swift výsledek
+            // `try?` nad funkcí vracející optional zplošťuje, takže „vyhodilo“ a „vrátilo nic“
+            // vyjde stejně. A rozdíl mezi nimi je tady celý smysl: transcript, který **není**,
+            // už nebude (strom sebrala eviction), kdežto ten, který se nedá **přečíst**, tam
+            // pořád leží i s nálezy. Chytil to test.
+            let found: StreamSummary?
+            do {
+                found = try await transcripts.summary(ofSession: run.sessionID, in: run.worktree)
+            } catch {
+                // Značka zůstává, ať to příští start zkusí znovu.
+                continue
+            }
+
+            guard let summary = found else {
+                await interrupted.forget(run.key)
+                continue
+            }
+
+            // Transcript má `sessionId`, kdežto `stream-json` `session_id` — parser proto z
+            // transcriptu id nevytáhne. Doplní se ze značky, ve které je autoritativně:
+            // bez něj by dotažený běh neuměl nabídnout `claude --resume` v ose a hlavně by
+            // brána o kus výš neměla co porovnávat.
+            var recoveredSummary = summary
+            recoveredSummary.sessionID = summary.sessionID ?? run.sessionID
+            let recovered = ReviewRun(key: run.key, summary: recoveredSummary, outcome: .interrupted)
+            do {
+                reviewRecords[run.pullRequest] = try await reviews.save(recovered)
+                await interrupted.forget(run.key)
+            } catch {
+                // Značka zůstává, ať to příští start zkusí znovu — nálezy v transcriptu nikam
+                // nezmizely.
+                continue
+            }
+        }
+    }
+
+    /// Poznamená si, že běh začal (#97). Volá se, jakmile ze session dorazí `session_id`.
+    private func markInterrupted(
+        _ sessionID: String,
+        of skill: String,
+        for pr: PRIdentifier,
+        at headSha: String,
+        in worktree: URL
+    ) async {
+        guard let interrupted else { return }
+        let run = InterruptedRun(
+            pullRequest: pr,
+            headSha: headSha,
+            skill: skill,
+            sessionID: sessionID,
+            worktree: worktree
+        )
+        await interrupted.remember(run)
     }
 
     /// Nálezy z minula. Bez toho by se po startu tvářil každý PR, že se nikdy nereviewoval.
@@ -1983,7 +2085,7 @@ final class AppStore {
         // drží; hop do vlastního tasku na každou událost by o pořadí nechal rozhodovat
         // plánovač.
         let (events, reporter) = AsyncStream<ReviewEvent>.makeStream()
-        async let drained: Void = drain(events, for: pr, in: worktree)
+        async let drained: Void = drain(events, for: pr, at: detail.headSha, in: worktree)
         let failure = await runSkills(
             for: pr,
             of: detail,
@@ -1994,6 +2096,21 @@ final class AppStore {
         )
         reporter.finish()
         await drained
+
+        // Značky se mažou **až po vyprázdnění proudu** (#97). Zápis značky jde přes něj, kdežto
+        // uložení výsledku ne — takže by se smazání umělo předběhnout a značka by zůstala ležet
+        // nad hotovým během. Chytil to test, ne úvaha.
+        //
+        // Maže se **celá sada, ne jen uložené běhy**: sem se dojde jedině tehdy, když review
+        // skončilo, takže značka po něm už nemá co znamenat. Pokrývá to i **zrušený** běh,
+        // který se schválně neukládá — nechat mu značku by znamenalo, že příští start dotáhne
+        // z transcriptu nálezy, které si člověk zrušil, tedy proti pravidlu „zrušení neuloží
+        // nic“. Po pádu se sem naopak nedojde vůbec, a o to jde.
+        for skill in reviewSkills(for: pr.repo) {
+            await interrupted?.forget(
+                ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill)
+            )
+        }
 
         if let failure { throw failure }
     }
@@ -2006,10 +2123,23 @@ final class AppStore {
     }
 
     /// Zapisuje průběh v pořadí, ve kterém dorazil.
-    private func drain(_ events: AsyncStream<ReviewEvent>, for pr: PRIdentifier, in worktree: URL) async {
+    private func drain(
+        _ events: AsyncStream<ReviewEvent>,
+        for pr: PRIdentifier,
+        at headSha: String,
+        in worktree: URL
+    ) async {
         for await event in events {
             switch event {
-            case .progress(let skill, let progress): record(progress, of: skill, for: pr, in: worktree)
+            case .progress(let skill, let progress):
+                // Značka se zapisuje **v proudu a s `await`**, ne ve vlastním tasku (#97).
+                // Odložený zápis se umí propsat až po tom, co běh doběhl a značku smazal —
+                // pak zůstane ležet nad hotovým během a příští start by ho dotahoval znovu.
+                // Chytil to test, ne úvaha.
+                if case .started(let sessionID) = progress {
+                    await markInterrupted(sessionID, of: skill, for: pr, at: headSha, in: worktree)
+                }
+                record(progress, of: skill, for: pr, in: worktree)
             case .finished(let skill, let outcome): finish(outcome, of: skill, for: pr)
             }
         }
@@ -2055,7 +2185,10 @@ final class AppStore {
         case .failed(let detail):
             let failingSince = lastReviewCall.flatMap { $0.succeeded ? nil : $0.since } ?? time.now
             lastReviewCall = ServiceCall(since: failingSince, failure: detail)
-        case .timedOut:
+        case .timedOut, .interrupted:
+            // Ani jedno není zpráva o Claude: timeout jsme způsobili my (zabili jsme session
+            // po patnácti minutách) a přerušení taky (spadla aplikace). Zapsat z toho červený
+            // puntík by ukazoval na cizí službu za naši vlastní nehodu.
             break
         }
     }

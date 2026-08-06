@@ -385,6 +385,12 @@ v nich zastaral hned další verzí.
 6. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
    a o doběhlém review. Klik na notifikaci ten pull request vybere a dá okno dopředu.
 
+**Co nedoběhlo, se neztratí.** Když se aplikace zavře, ptá se — session se ukončením zabije
+a nahlášené nálezy by byly pryč. Na pád aplikace nebo `kill` se ptát nedá, takže se nálezy
+**dotáhnou z transcriptu**, který si `claude` vede na disku: běh se poznamená, jakmile nahlásí
+id session, a po startu se z něj přečte, co stihl. Takový výsledek je v řádku `přerušeno`, ne
+`timeout` ani `čisté` — nedoběhl, takže se z něj nesmí soudit, že je hotovo.
+
 Nálezy jsou klíčované head commitem PR. Když přijdou nové commity, předchozí nálezy se
 označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 

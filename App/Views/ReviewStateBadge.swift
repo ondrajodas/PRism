@@ -32,6 +32,8 @@ struct ReviewStateBadge: View {
         case .dismissed(let findings): "odmítnuto · \(findings)"
         case .failed: "selhalo"
         case .timedOut: "timeout"
+        // Ne „timeout“: běh neskončil limitem, ale s aplikací — a dělá se s tím něco jiného.
+        case .interrupted: "přerušeno"
         case .stale: "zastaralé"
         }
     }
@@ -45,7 +47,7 @@ struct ReviewStateBadge: View {
         // čisto — a od nálezů, které čekají, se to musí poznat i bez čtení textu.
         case .dismissed: .mint
         case .completed: .orange
-        case .checkoutFailed, .failed, .timedOut: .red
+        case .checkoutFailed, .failed, .timedOut, .interrupted: .red
         case .stale: .yellow
         }
     }
