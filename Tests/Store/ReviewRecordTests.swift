@@ -113,6 +113,35 @@ struct ReviewRecordTests {
         #expect(decoded.pullRequest == pullRequest)
     }
 
+    /// Cena běhu (#148) přibyla později, takže uložených běhů bez ní je na disku plno.
+    /// Kdyby se na ni sahalo povinně, přišel by celý záznam o nálezy kvůli poli, které v něm
+    /// být nemůže — tatáž úvaha jako u odmítnutí o řádek výš.
+    @Test("Starší běh bez ceny se načte")
+    func anOlderRunWithoutUsageStillLoads() throws {
+        let json = """
+        {
+          "headSha": "aaaa1111",
+          "isStale": false,
+          "pullRequest": "cli/cli#42",
+          "runs": [
+            {
+              "calledReportFindings": true,
+              "droppedFindings": 0,
+              "findings": [],
+              "finishedAt": 0,
+              "outcome": { "finished": {} },
+              "skillID": "oj-php-quality-check"
+            }
+          ]
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(ReviewRecord.self, from: Data(json.utf8))
+
+        #expect(decoded.runs.count == 1)
+        #expect(decoded.runs[0].usage == nil)
+    }
+
     /// Klíčem je řetězec, takže mapa musí v JSONu vyjít jako **objekt**, ne jako pole
     /// střídavých klíčů a hodnot.
     @Test("Odmítnutí se kódují jako objekt")

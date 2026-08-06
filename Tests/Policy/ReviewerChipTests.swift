@@ -15,11 +15,13 @@ struct ReviewerChipTests {
         outcome: ReviewRunOutcome = .finished,
         findings: Int = 0,
         dropped: Int = 0,
-        reported: Bool = true
+        reported: Bool = true,
+        usage: RunUsage? = nil
     ) -> StoredReviewRun {
         var summary = StreamSummary()
         summary.calledReportFindings = reported
         summary.droppedFindings = dropped
+        summary.usage = usage
         summary.findings = (0..<findings).map {
             ReportedFinding(
                 file: "App/Main.swift",
@@ -51,6 +53,35 @@ struct ReviewerChipTests {
 
     private func state(_ chips: [ReviewerChip], of skill: String) -> ReviewerChip.State? {
         chips.first { $0.skill == skill }?.state
+    }
+
+    /// Osa v tabu `Průběh` je jen v paměti, takže po restartu je prázdná — chip je jediné
+    /// místo, kde se uložená cena čte, a bez toho by ji nikdo nepřečetl vůbec.
+    @Test("Chip nese cenu z uloženého běhu")
+    func carriesTheStoredCost() {
+        let usage = RunUsage(cost: 0.25, duration: .seconds(12), turns: 3)
+        let chips = Policy.chips(
+            for: record([run("code-review", usage: usage)]),
+            skills: ["code-review"],
+            running: []
+        )
+
+        #expect(chips.first?.usage == usage)
+    }
+
+    /// Zabitý běh cenu nenahlásil a nula by tvrdila, že byl zdarma.
+    @Test("Běh bez ceny ji na chipu nemá")
+    func hasNoCostWhenTheRunReportedNone() {
+        let chips = Policy.chips(for: record([run("code-review")]), skills: ["code-review"], running: [])
+
+        #expect(chips.first?.usage == nil)
+    }
+
+    @Test("Skill, který neběžel, cenu nemá")
+    func hasNoCostWithoutARun() {
+        let chips = Policy.chips(for: nil, skills: ["code-review"], running: [])
+
+        #expect(chips.first?.usage == nil)
     }
 
     @Test("Doběhlý běh s nálezy hlásí jejich počet")

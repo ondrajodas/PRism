@@ -42,6 +42,10 @@ struct CacheLayout: Sendable, Equatable {
     /// rostoucí log — viz `AnnouncedPullRequests`.
     var announcedFile: URL { root.appending(path: "announced.json") }
 
+    /// Co dneska stálo review (#148). Vedle počitadla automatických běhů a ze stejného
+    /// důvodu: píše to aplikace, ne člověk.
+    var spendFile: URL { root.appending(path: "spend.json") }
+
     /// Běhy, které začaly a o kterých se neví, jestli doběhly (#97). Po startu je v něm to,
     /// co aplikaci nepřežilo — viz `InterruptedRuns`.
     var interruptedFile: URL { root.appending(path: "interrupted.json") }

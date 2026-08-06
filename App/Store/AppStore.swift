@@ -227,6 +227,9 @@ final class AppStore {
     /// PR. Session se za to neutratí — o tu rozhoduje až porovnání `headSha`.
     private var consideredForAutomation: [PRIdentifier: Date] = [:]
     private let autoRuns: AutoRunLedger?
+    /// Kolik dneska stálo review (#148). Nepovinná závislost jako ostatní story — testy, které
+    /// o útratu nestojí, ji nedostanou a řádek pak žádnou útratu neukazuje.
+    private let spend: SpendLedger?
 
     init(
         gateway: any GitHubGateway,
@@ -240,6 +243,7 @@ final class AppStore {
         drafts: ReviewDraftStore? = nil,
         translator: (any FindingTranslating)? = nil,
         autoRuns: AutoRunLedger? = nil,
+        spend: SpendLedger? = nil,
         gh: URL? = nil,
         health: HealthMonitor? = nil,
         notifications: (any UserNotifying)? = nil,
@@ -269,6 +273,7 @@ final class AppStore {
         draftStore = drafts
         self.translator = translator
         self.autoRuns = autoRuns
+        self.spend = spend
         polling.afterSuccessfulTick = { [weak self] summaries in
             await self?.forget(whatIsNotIn: summaries)
             // Až po `forget`: PR, který ze seznamu vypadl, se nemá čím spustit, a běžící
@@ -289,6 +294,11 @@ final class AppStore {
             // ostatní tady: po výpadku sítě je seznam prázdný, takže by se snímek vyprázdnil
             // a při zotavení by přišlo úplně všechno.
             await self?.announceNewPullRequests(in: summaries)
+            // Útrata se počítá od půlnoci (#148), takže aplikace, která běží přes noc, by
+            // ráno ukazovala včerejší součet. Tik je nejlevnější místo, kde se to dá srovnat
+            // — účetní kniha si den pamatuje, takže se na disk sahá jednou za den, ne jednou
+            // za minutu.
+            await self?.loadDailySpend()
         }
         // Monitor si skutečná volání nedrží — bere si je odsud. Jinak by existovalo druhé
         // místo se stavem pollingu a rozejít se v tomhle znamená svítit červeně nad
@@ -330,6 +340,7 @@ final class AppStore {
             drafts: ReviewDraftStore(),
             translator: ClaudeFindingTranslator(claude: toolPaths.claude, runner: runner),
             autoRuns: AutoRunLedger(),
+            spend: SpendLedger(),
             gh: toolPaths.gh,
             health: HealthMonitor(),
             notifications: SystemNotificationCenter.shared,
@@ -452,6 +463,7 @@ final class AppStore {
         await recoverInterruptedRuns()
         await loadStoredReviews()
         await loadStoredDrafts()
+        await loadDailySpend()
         // Všechno běží, dokud žije okno; zrušení tasku ukončí skupinu i se všemi smyčkami.
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.polling.run() }
@@ -563,6 +575,20 @@ final class AppStore {
         guard let loaded = try? await reviews.load() else { return }
         reviewRecords = Policy.currentRecords(from: loaded.records)
         unreadableReviewFiles = loaded.unreadable
+    }
+
+    /// Co dneska stálo review (#148). `nil` = nemáme kde vzít (bez `SpendLedger`u v testech).
+    ///
+    /// Drží se **spotřeba**, ne zbytek, jako u `automaticRunsToday`: rozpočet v penězích
+    /// aplikace nemá (viz specifikace) a i kdyby ho měla, snímek „zbývá X“ by po změně limitu
+    /// lhal až do dalšího běhu.
+    private(set) var dailySpend: DailySpend?
+
+    /// Načte útratu z disku. Volá se při startu, ať řádek po restartu neukazuje nulu nad
+    /// dnem, ve kterém už se utrácelo.
+    func loadDailySpend() async {
+        guard let spend else { return }
+        dailySpend = await spend.spentToday()
     }
 
     /// Rozdělaná review z minula. Bez toho by po startu vypadalo každé PR jako nedotčené.
@@ -2119,7 +2145,8 @@ final class AppStore {
     /// osa dostala dřív než události, které mu předcházely, a někdy vůbec.
     private enum ReviewEvent: Sendable {
         case progress(skill: String, ReviewProgress)
-        case finished(skill: String, ReviewRunOutcome)
+        /// Konec běhu i s tím, co stál (#148) — `usage` je `nil` u běhu, který cenu nenahlásil.
+        case finished(skill: String, ReviewRunOutcome, usage: RunUsage?)
     }
 
     /// Zapisuje průběh v pořadí, ve kterém dorazil.
@@ -2140,7 +2167,8 @@ final class AppStore {
                     await markInterrupted(sessionID, of: skill, for: pr, at: headSha, in: worktree)
                 }
                 record(progress, of: skill, for: pr, in: worktree)
-            case .finished(let skill, let outcome): finish(outcome, of: skill, for: pr)
+            case .finished(let skill, let outcome, let usage):
+                finish(outcome, usage: usage, of: skill, for: pr)
             }
         }
     }
@@ -2157,13 +2185,25 @@ final class AppStore {
         reviewTimelines[pr] = timelines
     }
 
-    private func finish(_ outcome: ReviewRunOutcome, of skill: String, for pr: PRIdentifier) {
+    private func finish(
+        _ outcome: ReviewRunOutcome,
+        usage: RunUsage?,
+        of skill: String,
+        for pr: PRIdentifier
+    ) {
         record(outcome)
         guard var timelines = reviewTimelines[pr],
               let index = timelines.firstIndex(where: { $0.skill == skill })
         else { return }
-        timelines[index].finish(outcome, at: time.now)
+        timelines[index].finish(outcome, usage: usage, at: time.now)
         reviewTimelines[pr] = timelines
+    }
+
+    /// Přičte, co běh stál. Jde to **proudem událostí mimo**, přímo na aktor: útrata se neváže
+    /// na osu ani na uložený záznam, takže by ji zdržovalo pořadí, na kterém jí nezáleží.
+    private func recordSpend(_ usage: RunUsage?) async {
+        guard let spend else { return }
+        dailySpend = await spend.record(usage)
     }
 
     /// Doběhlý běh jako zdravotní signál Claude — puntík ve stavovém řádku jede na skutečném
@@ -2233,8 +2273,13 @@ final class AppStore {
             for await run in group {
                 finished += 1
                 reviewPhases[pr] = .running(finished: finished, total: skills.count)
-                guard let run, !Task.isCancelled else { continue }
-                reporter.yield(.finished(skill: run.key.skillID, run.outcome))
+                guard let run else { continue }
+                // Útrata se zapisuje **před** kontrolou zrušení: session, která doběhla,
+                // peníze stála, ať už se její výsledek uloží, nebo ne. Číslo, které zrušením
+                // zmizí, by o mém účtu lhalo.
+                await recordSpend(run.summary.usage)
+                guard !Task.isCancelled else { continue }
+                reporter.yield(.finished(skill: run.key.skillID, run.outcome, usage: run.summary.usage))
                 do {
                     // Ukládá se **před** překladem: ten je krátká síťová operace navíc
                     // a když se na ní aplikace zavře, nálezy už jsou na disku. V originále,

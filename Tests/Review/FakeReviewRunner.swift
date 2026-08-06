@@ -13,6 +13,9 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
     private let calledReportFindings: Bool
     private let failure: (any Error)?
     private let holds: Bool
+    /// Co běh nahlásí jako cenu (#148). Výchozí `nil` je „cenu nenahlásil“, tedy stav zabitého
+    /// běhu — testy, které o útratu nestojí, tím nic netvrdí.
+    private let usage: RunUsage?
     /// Co běh nahlásí jako průběh. Prázdné u testů, které se na časovou osu neptají —
     /// samotné `.queued` hlásí runner vždycky.
     private let reported: [ReviewProgress]
@@ -26,12 +29,14 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         calledReportFindings: Bool = true,
         failing failure: (any Error)? = nil,
         holdsUntilRelease: Bool = false,
+        usage: RunUsage? = nil,
         progress reported: [ReviewProgress] = []
     ) {
         self.outcome = outcome
         self.findings = findings
         self.calledReportFindings = calledReportFindings
         self.failure = failure
+        self.usage = usage
         holds = holdsUntilRelease
         self.reported = reported
     }
@@ -63,6 +68,7 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         summary.sessionID = "session-\(request.key.skillID)"
         summary.calledReportFindings = calledReportFindings
         summary.findings = findings
+        summary.usage = usage
         return ReviewRun(key: request.key, summary: summary, outcome: outcome)
     }
 

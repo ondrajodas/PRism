@@ -150,6 +150,15 @@ včetně důvodu.
   schová do sekce *Suppressed comments* uvnitř **těla review** a v inline komentářích
   nejsou vůbec. Tělo se proto musí přečíst celé — u #8 tam takhle ležely dva reálné
   nálezy pod hlavičkou, že nové komentáře nejsou.
+
+  **Na velkém PR Copilot spadne a opakování nepomůže.** Do review napíše jen „Copilot
+  encountered an error and was unable to review this pull request“; skutečná příčina je
+  v logu akce — `Error: Prompt too big after adding PR context`. Je to **deterministické**
+  podle velikosti diffu, takže tři pokusy dopadnou stejně (změřeno u #160, 70 kB diffu,
+  z toho 17 kB dokumentace). Když k tomu dojde: **nepřepisuj kvůli tomu zadání ani nedělej
+  umělé PR navíc** — dokumentace musí jít se změnou v jednom commitu, to je pravidlo o řádek
+  výš. Zbývá vlastní revize, a ta je stejně podmínkou pushnutí; napiš do popisu PR, že
+  Copilot nedoběhl a proč, ať je z PR vidět, že kontrola nechyběla omylem.
 - **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
   a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
   Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
@@ -365,6 +374,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `Release` | Jedno vydání aplikace na GitHubu (#127): tag, název, datum, release notes, odkaz. Jako `ReviewVerdict` **není `Codable`** — na disk nejde |
 | `DeliveredNotification` | Poslední **doručená** notifikace (#138) — čas a titulek. Taky **není `Codable`**, drží se v paměti |
 | `InterruptedRun` | Značka rozdělaného běhu (#97): klíč běhu, `sessionID` a pracovní strom — z těch dvou se najde transcript |
+| `RunUsage` | Co jeden běh stál (#148): cena, trvání a počet kol. Všechno **volitelné** — `nil` je „nevíme“, ne nula |
+| `DailySpend` | Součet za dnešek: cena, počet započítaných běhů a **počet těch bez ceny** |
 
 Tři věci, které se u nich nemají rozbít:
 
@@ -859,7 +870,7 @@ Klíčový spoj: ze `stream-json` výstupu `claude` udělá to, co aplikaci zaj�
 | Typ | Co je |
 |---|---|
 | `StreamParser` | JSONL řádky → `StreamSummary`. **Nikdy nevyhodí výjimku** |
-| `StreamSummary` | Session id, nálezy, **pokusy** o nástroje a odmítnuté nástroje, konec běhu, počty nepřečteného |
+| `StreamSummary` | Session id, nálezy, **pokusy** o nástroje a odmítnuté nástroje, konec běhu, **cena běhu**, počty nepřečteného |
 | `ReviewOutcome` | Konec běhu podle `result` eventu |
 
 Čtyři věci, které se u toho nemají rozbít:
@@ -884,6 +895,11 @@ Klíčový spoj: ze `stream-json` výstupu `claude` udělá to, co aplikaci zaj�
 - **Zahozený nález se počítá.** `droppedFindings` musí být vidět: bez něj je „nález bez
   povinného pole“ k nerozeznání od „nic jsem nenašel“, tedy od schváleného PR
   s neohlášenou chybou.
+- **Cena běhu je `nil`, ne nula** (#148). `total_cost_usd`, `duration_ms` a `num_turns` jsou
+  v tomtéž `result` eventu jako `outcome`, takže je zabitý běh nemá — a nula by tvrdila, že byl
+  zdarma. Čte se to stejně defenzivně jako číslo řádku: `true` je `NSNumber`, takže by bez
+  kontroly vyšla cena 1 $, a **záporná hodnota se zahazuje**, protože by v denním součtu
+  tvrdila, že mě běh vydělal.
 
 ### `ReviewRunner` (`App/Review/`)
 
@@ -1112,9 +1128,10 @@ Výsledky review na disku: jeden JSON soubor na `(repo, PR, headSha)` pod
 | `ReviewStoreError` | Jediná vlastní chyba: záznam, do kterého se má zapsat, na disku není |
 | `AutoRunLedger` | Aktor: kolik review dnes spustil automat. **Na disku**, aby limit nešel obejít restartem |
 | `AnnouncedPullRequests` | Aktor: které PR se už ohlásily jako nové (#85). **Snímek** poslední fronty na disku, ne rostoucí log |
+| `SpendLedger` | Aktor: co dneska stálo review (#148). **Na disku**, aby součet nevynuloval restart |
 | `InterruptedRuns` | Aktor: běhy, které začaly a neví se, jestli doběhly (#97). Co v souboru po startu zbylo, aplikaci nepřežilo |
 | `ReviewRecord` | Obsah jednoho souboru: PR, `headSha`, běhy, `isStale`, `closedAt` |
-| `StoredReviewRun` | Jeden běh: skill, `outcome`, session id, nálezy, `droppedFindings`, čas |
+| `StoredReviewRun` | Jeden běh: skill, `outcome`, session id, nálezy, `droppedFindings`, čas, **cena** (#148, volitelná) |
 
 Vedle něj stojí **`ReviewDraftStore`** (#65) — rozdělaná review, jeden soubor na PR pod
 `drafts/<owner>/<repo>/<pr>.json`:
@@ -1324,6 +1341,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `StatusBarView` | Stavový řádek na spodku **okna**: vlevo hlášky, vpravo puntíky služeb |
 | `ServiceHealthDot` | Puntík jedné služby; po hoveru důvod a čas poslední kontroly |
 | `NotificationStatusView` | Kdy se naposledy něco ohlásilo (#138) — zvonek s časem, `zatím nic`, nebo `vypnuto` |
+| `DailySpendView` | Co dneska stálo review (#148) — cena za dnešek, u neúplného součtu s `≥` |
+| `RunUsageText` | Cena, trvání a počet kol jako text — jedno místo pro osu i stavový řádek |
 | `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory, zakázané notifikace |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory`) — podtržené, s odznakem počtu |
@@ -1807,6 +1826,32 @@ Odpovídání do vláken (#73) drží `AppStore` ve dvou mapách klíčovaných 
 - **Prázdný text se z mapy maže**, ať v ní nezůstane záznam po každém vlákně, do kterého někdo
   klikl a rozmyslel si to. Tentýž vzor jako prázdný draft.
 
+Útratu za review (#148) drží `AppStore` v `dailySpend` nad `SpendLedger`em a platí u ní:
+
+- **Vlastní počitadlo na disku, ne součet z uložených záznamů.** Vypadá to jako druhé místo,
+  které se umí rozejít s pravdou, ale je to **jiná otázka**: `ReviewRecord` říká, co běh našel
+  proti danému commitu, kdežto tohle říká, co mě stálo utracení session. Rozcházejí se proto
+  zákonitě a správně — **zahozený záznam** (#81) i uklizený starý by ze součtu peníze odečetly,
+  a číslo, které klesne tím, že zmáčknu koš, je o mém účtu lež. Navíc by se při každém vykreslení
+  musel projít a dekódovat celý výpis `reviews/`, protože v paměti je jen `Policy.currentRecords`.
+- **Zapisuje se před kontrolou zrušení.** Session, která doběhla, peníze stála, ať už se její
+  výsledek uloží, nebo ne — číslo, které zrušením zmizí, by lhalo stejně jako to o řádek výš.
+- **Běh bez ceny se počítá jako neznámý, ne jako nula.** Zabitý běh `result` event nemá, takže
+  nula by tvrdila, že byl zdarma; drží se proto `unknown` a součet se v řádku označí `≥`.
+  Tatáž úvaha jako u `droppedFindings` — utnutá data nesmí vypadat jako úplná.
+- **Dotažené běhy z transcriptu (#97) se nezapisují.** Jejich cena nikdy nedorazila (transcript
+  `result` event nemá) a den, ve kterém běžely, neznáme — přičíst je k dnešku by byl výmysl.
+- **Součet se sráží po každém úspěšném tiku.** Počítá se od půlnoci, takže aplikace běžící přes
+  noc by ráno ukazovala včerejšek. Účetní kniha si den pamatuje i pro prázdný den, takže se na
+  disk sahá jednou za den, ne jednou za minutu.
+- **Uložená cena má čtenáře — chip revieweera.** Osa v tabu `Průběh` je jen v paměti, takže po
+  restartu je prázdná; kdyby cenu četla jenom ona, byl by `StoredReviewRun.usage` stav, který se
+  drží a nikdo ho nečte. Chip se staví ze **záznamu**, takže ji v nápovědě ukáže i druhý den.
+  Chytila to vlastní revize diffu.
+- **V řádku je jen cena**, ne trvání ani počet kol. Součet trvání paralelních session neměří nic
+  (tři desetiminutové běhy naráz by daly „30 minut“ za deset uplynulých) a počet kol je trivia.
+  Peníze jsou to, co se jinde v aplikaci nedozvím vůbec.
+
 Notifikace (#88) drží `AppStore` v `notificationFailure` a `lastDeliveredNotification` a platí
 u nich:
 
@@ -2264,7 +2309,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.effectiveVerdict(of:suggestion:)` | Který verdikt **platí** a odkud je — moje volba, jinak návrh (#114) |
 | `Policy.prefillableSuggestion(_:author:viewer:)`, `Policy.isOwn(author:viewer:)` | Smí se návrhem předvyplnit? Na vlastním PR ne |
 | `Policy.groups(of:)` | Shoda reviewerů na `file:line` → `FindingGroup` s odznakem `2×` |
-| `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` |
+| `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` i s **cenou** z uloženého běhu |
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
 | `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
@@ -3213,6 +3258,20 @@ Nad `HTTPGetting` (#31) platí:
 - **`AutoRunLedger`** — proti skutečné dočasné složce, protože jde právě o to, že
   počitadlo **přežije restart**. Plus nový den, nulový limit (vypnuto, ne „bez omezení“)
   a rozbitý soubor, který automat umlčet nesmí.
+- **Cena a útrata (#148)** — tři vrstvy. `StreamParser` proti **všem** fixtures ze skutečných
+  běhů (cena, trvání i počet kol se ověřují číslem, protože jen tak je vidět, že se čte
+  `duration_ms` a ne `duration_api_ms` vedle něj), a hlavně že **zabitý běh cenu nemá a nemá
+  ani nulu**. K tomu boolean místo čísla a záporná hodnota, tedy dva způsoby, jak by se do
+  součtu dostal nesmysl.
+
+  `SpendLedger` proti skutečné dočasné složce jako `AutoRunLedger`: sčítání, **přežití
+  restartu**, nový den od nuly, rozbitý soubor a to, že se běh bez ceny počítá jako
+  **neznámý**, ne jako nula.
+
+  `AppStore` na celý řetěz — cena z běhu se propíše do útraty i do uloženého záznamu, přežije
+  restart, dostane ji osa revieweera, a bez účetní knihy se **netvrdí nic**. `ReviewRecord` má
+  vlastní test na to, že se **starší běh bez ceny načte** (inline JSON): kdyby se na klíč sahalo
+  povinně, přišel by celý záznam o nálezy kvůli poli, které v něm být nemůže.
 - **`AppStore` — automatický režim** — celý řetěz od tiku po session: automat spustí,
   manuál ne, druhý tik nad stejným commitem session **neutratí**, komentář (jiné
   `updatedAt`, stejný `headSha`) taky ne, nový commit ano, a denní limit pozastaví.
@@ -3843,6 +3902,13 @@ Souhrn nad diffem, hlavičky souborů i strom souborů mají `+X` zeleně a `−
 znaku změny v samotném řádku — jeden zdroj místo tří, které by se rozešly. Čitelnost v obou
 režimech je doložená offscreen renderem, včetně toho, že se to neplete s červeným odznakem
 nálezů.
+
+Cena a trvání běhu hotové (issue #148) — `RunUsage` a `DailySpend` v `App/Models/`, `SpendLedger`
+v `App/Store/`, řádek u revieweera v tabu `Průběh` a útrata za dnešek ve stavovém řádku.
+**Aplikace poprvé říká, co ji stojí provoz**: `result` event nesl cenu, trvání i počet kol od
+začátku a `StreamParser` z toho nebral nic. Zabitý běh je nemá a **neukazuje nulu**; denní součet
+je na disku (přežije restart) a u neúplného je `≥`, protože zabitá session peníze stála taky.
+Rozpočet v penězích se vědomě odkládá, viz specifikace.
 
 Plánované fáze:
 

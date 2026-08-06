@@ -28,13 +28,18 @@ struct ReviewerChip: Identifiable, Hashable, Sendable {
     /// Co na výsledku chybí, i když nálezy dorazily — typicky nález, který se nepodařilo
     /// přečíst. Stav zůstává `findings`, aby byl vidět počet; tohle říká, že úplný není.
     let warning: String?
+    /// Co běh stál (#148). Bere se z **uloženého** záznamu, takže na rozdíl od osy v tabu
+    /// `Průběh` (ta je jen v paměti) přežije restart — a je to jediné místo, které uloženou
+    /// cenu čte. `nil` u běhu, který ji nenahlásil, a u skillu, který ještě neběžel.
+    let usage: RunUsage?
 
     var id: String { skill }
 
-    init(skill: String, state: State, warning: String? = nil) {
+    init(skill: String, state: State, warning: String? = nil, usage: RunUsage? = nil) {
         self.skill = skill
         self.state = state
         self.warning = warning
+        self.usage = usage
     }
 }
 
@@ -55,7 +60,8 @@ extension Policy {
             return ReviewerChip(
                 skill: skill,
                 state: state(of: skill, in: runs, running: running),
-                warning: run.flatMap(warning(of:))
+                warning: run.flatMap(warning(of:)),
+                usage: run?.usage
             )
         }
     }

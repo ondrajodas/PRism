@@ -521,6 +521,41 @@ výpadek?“ dřív, než se člověk začne prohrabávat konkrétní chybou.
   zjišťoval.
 - **Na pozadí se nekontroluje nic.** Aplikace, kterou nikdo nevidí, nemá komu svítit.
 
+### Cena a trvání běhu (#148)
+
+`result` event ze `stream-json` nese `total_cost_usd`, `duration_ms` a `num_turns` — a do #148
+se z toho nebralo nic, takže aplikace utrácela peníze a žádné číslo v okně na to neodpovídalo.
+Naměřeno na fixtures v repu: 0,232 $ / 11,8 s / 3 kola u čistého běhu a 0,327 $ / 49,5 s / 3 kola
+u běhu s nálezy.
+
+- **Chybějící hodnota je `nil`, ne nula.** Zabitý běh `result` event nemá vůbec, takže nula by
+  tvrdila, že byl zdarma — tatáž třída tvrzení jako „reviewer nenahlásil žádný nález“ nad
+  během, který nálezy neměl kde vzít.
+- **Denní součet vede vlastní počitadlo na disku** (`SpendLedger`), ne součet z uložených
+  záznamů. Zadání nabízelo obojí a druhá cesta zněla lákavěji („nemá druhé místo, které se umí
+  rozejít s pravdou“), jenže ta dvě čísla odpovídají na **jinou otázku**: záznam říká, co běh
+  našel proti commitu, kdežto tohle, co mě stálo utracení session. Zahozený záznam (#81) i ten
+  uklizený po třiceti dnech by ze součtu peníze odečetly — a číslo, které klesne tím, že zmáčknu
+  koš, je o mém účtu lež. Vedle toho by se musel při každém vykreslení projít celý výpis
+  `reviews/`, protože v paměti je jen `Policy.currentRecords`.
+- **Běh bez ceny se počítá jako neznámý**, ne jako nula, a součet to v řádku hlásí (`≥`).
+  Utnutá data nesmí vypadat jako úplná — tatáž zásada jako `droppedFindings`
+  a `ConversationPage.isTruncated`. Značka je `≥` a ne `+` na konci (jak zkrácení hlásí odznak
+  u vlákna): tam je za znaménkem číslo, kdežto `12,35 $+` vypadá jako překlep.
+- **Uložená cena se čte z chipu revieweera.** Zadání chtělo cenu uložit „ať to platí po
+  restartu“, jenže osa v tabu `Průběh` se drží jen v paměti — po restartu je prázdná, takže by
+  uložená hodnota neměla čtenáře a byl by to stav, který se drží a nikdo ho nečte. Chip se staví
+  ze záznamu, takže je to nejlevnější místo, kde ji vidět i druhý den; jde do jeho nápovědy vedle
+  věty o tom, jak běh dopadl.
+- **V řádku je jen cena.** Součet trvání paralelních session neměří nic — tři desetiminutové
+  běhy naráz by daly „30 minut“ za deset uplynulých — a počet kol je trivia. Peníze jsou to,
+  co se jinde v aplikaci nedozvím vůbec, a kvůli čemu #148 vzniklo.
+- **Rozpočet v penězích se vědomě odkládá** (zadání #148). Nejdřív se na to číslo má pár týdnů
+  koukat; u `autoRunsPerDay` se limit zadrátoval naslepo a vyšlo z něj číslo, které neznamená,
+  co říká — strhává se **jednou na PR**, takže při třech skillech je z dvacítky šedesát sessions.
+  Ruční běh se do něj nepočítá vůbec, ale do denního součtu ano: ten odpovídá na „co mě to
+  stálo“, ne na „co spustil automat“.
+
 ### Okno s novinkami (#127)
 
 Samostatná scéna (`Window`), otevíratelná z menu aplikace: vlevo seznam všech vydání

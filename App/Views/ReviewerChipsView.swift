@@ -104,17 +104,29 @@ struct ReviewerChipsView: View {
         }
     }
 
+    /// Nápověda chipu: co se stalo, **co to stálo** a co udělá kliknutí.
+    ///
+    /// Cena (#148) se bere z uloženého záznamu, takže je tady i po restartu — osa v tabu
+    /// `Průběh` je jen v paměti, takže po něm ukáže „zatím se nic nedělo“ a uložená cena by
+    /// jinak neměla čtenáře.
     private func help(_ chip: ReviewerChip, isMuted: Bool) -> String {
         let action = isMuted ? "Zobrazit nálezy tohohle revieweera" : "Skrýt nálezy tohohle revieweera"
-        if let warning = chip.warning { return "\(warning)\n\n\(action)" }
+        let usage = chip.usage.flatMap(RunUsageText.summary(of:))
+        return [state(of: chip), usage, action].compactMap { $0 }.joined(separator: "\n\n")
+    }
+
+    /// Věta o tom, jak běh dopadl. `nil` u stavů, ke kterým není co dodat — samotné „čisté“
+    /// říká chip sám a druhá věta o tomtéž je šum.
+    private func state(of chip: ReviewerChip) -> String? {
+        if let warning = chip.warning { return warning }
         switch chip.state {
-        case .failed(let detail): return "\(detail)\n\n\(action)"
-        case .inconclusive(let reason): return "\(reason)\n\n\(action)"
-        case .timedOut: return "Session nedoběhla v limitu; co stihla nahlásit, je vidět.\n\n\(action)"
+        case .failed(let detail): return detail
+        case .inconclusive(let reason): return reason
+        case .timedOut: return "Session nedoběhla v limitu; co stihla nahlásit, je vidět."
         case .interrupted:
             return "Session skončila s aplikací (pád nebo zabití). Nálezy jsou dotažené "
-                + "z transcriptu, takže je jich tolik, kolik jich do té chvíle dorazilo.\n\n\(action)"
-        default: return action
+                + "z transcriptu, takže je jich tolik, kolik jich do té chvíle dorazilo."
+        default: return nil
         }
     }
 }

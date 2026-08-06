@@ -11,6 +11,9 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     let worktree: URL?
     /// Cesta k `claude --resume`. Přijde s prvním eventem session.
     var sessionID: String?
+    /// Co běh stál (#148). Přijde s koncem běhu, protože ji nese `result` event — takže
+    /// běžící reviewer ji nemá a zabitý ji mít nebude. `nil` je odpověď „nevíme“, ne nula.
+    var usage: RunUsage?
     private(set) var entries: [Entry] = []
 
     var id: String { skill }
@@ -87,7 +90,8 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         }
     }
 
-    mutating func finish(_ outcome: ReviewRunOutcome, at time: Date) {
+    mutating func finish(_ outcome: ReviewRunOutcome, usage: RunUsage? = nil, at time: Date) {
+        self.usage = usage
         append(.finished(outcome), at: time)
     }
 
