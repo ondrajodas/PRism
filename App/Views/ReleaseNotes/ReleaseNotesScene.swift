@@ -21,6 +21,10 @@ struct ReleaseNotesScene: View {
 
     var body: some View {
         content
+            // Střed **hlavního okna**, ne obrazovky (#164). Okno se otevírá z jeho toolbaru,
+            // z menu a po aktualizaci — tedy vždycky od něj, takže tam se člověk v tu chvíli
+            // kouká. Mechanismus je tentýž, jakým se od začátku středí nastavení.
+            .centeredInMainWindow()
             // **Esc okno zavře.** Je to okno na čtení — nic se v něm nerozepisuje a nic se
             // z něj neodesílá, takže tu není co ztratit; jinak je na to jediná cesta ⌘W.
             // Hlavní okno ani nastavení to schválně nemají: v prvním se pracuje a druhé je

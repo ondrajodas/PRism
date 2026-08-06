@@ -441,6 +441,15 @@ zkrácení je vidět značkou. Vykresluje to `DiffLineView`, takže obarvení je
 úryvek; hunk se kvůli tomu obaluje syntetickou hlavičkou `diff --git` a `DiffParser` se
 **neupravoval**. Odůvodnění všeho je ve specifikaci.
 
+Středění okna s novinkami hotové (issue #164) — `App/Views/WindowCentering.swift`
+(`WindowCentering`, `WindowReader`, `ScreenBounds`, `centeredInMainWindow()`) a `MainWindow.title`
+v `PRismApp`. **Okno s novinkami vyskočí vystředěné v hlavním okně, ne doprostřed obrazovky** —
+mechanismus v repu už byl, jen byl `private` ve `SettingsView`, takže z něj druhá scéna neměla
+nic. `SettingsView` je o šedesát řádků menší. Přesunem to zároveň dostalo **testy**: geometrie
+se dá testovat, protože si obrazovky bere parametrem (`NSScreen` se vyrobit nedá), a drží tak
+pořadí ořezu `max(min(…))`, na kterém záleží u okna širšího než obrazovka. Vyšlo z toho i jedno
+doložené chování, které dosud nikde nestálo: okno se **nerozpůlí mezi dvěma monitory**.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
