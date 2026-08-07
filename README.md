@@ -269,6 +269,12 @@ pár set milisekund po posledním úhozu, a změna se projeví bez restartu. Roz
 editor **nepřepíše** — místo formuláře ukáže chybu a nabídne soubor otevřít. Dokud je
 nastavení vepředu, hlavní okno se lehce rozostří.
 
+**Stavový řádek sčítá frontu** (#155): `12 PR`, `3 blokující`, `2 review` — kolik PR čeká, kolik
+z nich má blokující nález a kolik má rozdělané review. Odznak v řádku seznamu mluví za jeden PR, tenhle souhrn za celou frontu — a sčítá
+ji **celou**, ne to, co je vidět po filtru reviewerů, protože filtr je pohled, ne obsah. Blokující se
+počítají bez odmítnutých nálezů, stejně jako v řádku. Dokud se seznam nenačetl, souhrn se neukáže
+vůbec: nula blokujících nad nenačtenými daty by vypadala jako čisto.
+
 Pod tím vším je vlastní cache repozitářů: bare partial clone do
 `~/Library/Application Support/PRism/`, přihlášení delegované na `gh`, odpojený
 `git worktree` pro každé review a úklid, který po každém pollingu zahodí repa bez

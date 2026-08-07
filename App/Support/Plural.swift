@@ -12,6 +12,13 @@ enum Plural {
         "\(formatted(count)) \(word(for: count, one: one, few: few, many: many))"
     }
 
+    /// Jen **tvar slova**, bez počtu. Potřebuje to stavový řádek (#155), kde se číslo píše
+    /// `verbatim` (počet položek v seznamu není množství k formátování), ale slovo se skloňovat
+    /// musí — a druhá tabulka tvarů by se s touhle rozešla.
+    static func word(_ count: Int, one: String, few: String, many: String) -> String {
+        word(for: count, one: one, few: few, many: many)
+    }
+
     private static func word(for count: Int, one: String, few: String, many: String) -> String {
         switch count {
         case 1: one

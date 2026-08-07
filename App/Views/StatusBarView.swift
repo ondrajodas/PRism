@@ -19,6 +19,11 @@ struct StatusBarView: View {
         HStack(alignment: .center, spacing: 12) {
             AppNoticesView(store: store)
             Spacer(minLength: 0)
+            // Vlevo od útraty a puntíků: souhrn je o **práci**, ne o tom, jestli aplikace funguje.
+            // `nil` = nemá se co sčítat (nenačtený seznam, prázdná fronta) — viz `queueSummary`.
+            if let summary = store.queueSummary {
+                QueueSummaryView(summary: summary)
+            }
             // Vedle zvonku a puntíků, protože je to tatáž otázka „co mi to dělá“ — jen se ptá
             // na účet místo na dostupnost.
             if let spend = store.dailySpend {
