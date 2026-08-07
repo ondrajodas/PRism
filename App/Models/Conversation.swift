@@ -18,17 +18,24 @@ struct Conversation: Hashable, Codable, Sendable {
     let threads: ConversationPage<ReviewThread>
     /// Komentáře pod PR — konverzace, která nepatří k žádnému řádku.
     let comments: ConversationPage<ThreadComment>
+    /// Co se na PR **stalo** (#171) — pushnuté commity, vyžádaná review, merge.
+    ///
+    /// Výchozí prázdná stránka schválně: odpovědi z doby před #171 `timelineItems` nemají
+    /// a nemají se kvůli tomu přestat dekódovat. Tatáž úvaha jako u `diffHunk`u u vlákna.
+    let events: ConversationPage<TimelineEvent>
 
     init(
         viewer: String,
         reviews: ConversationPage<SubmittedReview>,
         threads: ConversationPage<ReviewThread>,
-        comments: ConversationPage<ThreadComment>
+        comments: ConversationPage<ThreadComment>,
+        events: ConversationPage<TimelineEvent> = ConversationPage(items: [], hasNextPage: false)
     ) {
         self.viewer = viewer
         self.reviews = reviews
         self.threads = threads
         self.comments = comments
+        self.events = events
     }
 
     /// Přišlo něco zkrácené — ať na kterékoli úrovni, **včetně komentářů uvnitř vláken**.
@@ -40,6 +47,7 @@ struct Conversation: Hashable, Codable, Sendable {
         reviews.isTruncated
             || threads.isTruncated
             || comments.isTruncated
+            || events.isTruncated
             || threads.items.contains { $0.comments.isTruncated }
     }
 
@@ -69,6 +77,21 @@ struct ConversationPage<Element: Hashable & Codable & Sendable>: Hashable, Codab
         self.items = items
         self.total = total
         self.hasNextPage = hasNextPage
+    }
+
+    /// Stránka, u které se celkový počet **nedá zjistit** (#171).
+    ///
+    /// `timelineItems` s `itemTypes` vrací `totalCount` **bez ohledu na filtr** — změřeno na
+    /// `cli/cli#13084`: 49, zatímco uzlů dorazilo 22, a stejných 49 vyjde i bez filtru.
+    /// Vzít ten počet jako celek by znamenalo hlásit „chybí 27“ na PR, kde nechybí nic —
+    /// a hláška o zkrácení, která svítí vždycky, přestane něco znamenat.
+    ///
+    /// Zbývá tedy jediný signál, `hasNextPage`. Je to o polovinu méně, než na čem stojí
+    /// ostatní stránky, ale pořád ten, který se v nebezpečném směru („máš všechno“) splést
+    /// nemůže. `total` se dosazuje z počtu položek, takže `missing` vyjde nula — nevíme
+    /// o ničem, co by chybělo, a nepředstíráme, že víme.
+    init(items: [Element], hasNextPage: Bool) {
+        self.init(items: items, total: items.count, hasNextPage: hasNextPage)
     }
 
     /// Něco se nevešlo do stránky. Utnutá data nesmí vypadat jako úplná — stejné pravidlo

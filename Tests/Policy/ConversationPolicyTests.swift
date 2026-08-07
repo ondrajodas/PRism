@@ -244,13 +244,29 @@ struct ConversationPolicyTests {
     private func conversation(
         reviews: [SubmittedReview] = [],
         threads: [ReviewThread] = [],
-        comments: [ThreadComment] = []
+        comments: [ThreadComment] = [],
+        events: [TimelineEvent] = []
     ) -> Conversation {
         Conversation(
             viewer: "ja",
             reviews: ConversationPage(items: reviews, total: reviews.count, hasNextPage: false),
             threads: ConversationPage(items: threads, total: threads.count, hasNextPage: false),
-            comments: ConversationPage(items: comments, total: comments.count, hasNextPage: false)
+            comments: ConversationPage(items: comments, total: comments.count, hasNextPage: false),
+            events: ConversationPage(items: events, hasNextPage: false)
+        )
+    }
+
+    private func event(
+        id: String = "e1",
+        _ kind: TimelineEvent.Kind,
+        by login: String = "kolega",
+        at seconds: TimeInterval? = 100
+    ) -> TimelineEvent {
+        TimelineEvent(
+            id: id,
+            kind: kind,
+            actor: EventActor(login: login, avatarURL: nil, isBot: false),
+            at: seconds.map { Date(timeIntervalSince1970: $0) }
         )
     }
 
@@ -355,5 +371,88 @@ struct ConversationPolicyTests {
         let value = conversation(comments: [comment(id: "b", at: 100), comment(id: "a", at: 100)])
 
         #expect(Policy.overview(of: value, renderedIn: try diff()).map(\.id) == ["ca", "cb"])
+    }
+
+    // MARK: - Události časové osy (#171)
+
+    /// Události se **prokládají** s komentáři a review, ne aby stály zvlášť: přehled odpovídá
+    /// na „co se od minula stalo“ a push mezi dvěma komentáři je půlka té odpovědi.
+    @Test("Přehled proloží události komentáři a review")
+    func interleavesEventsWithTheConversation() throws {
+        let value = conversation(
+            reviews: [review(id: "r1", body: "díky", at: 300)],
+            comments: [comment(id: "c1", at: 100)],
+            events: [
+                event(id: "e2", .commit(oid: "abc1234", headline: "fix"), at: 400),
+                event(id: "e1", .reviewRequested(reviewer: "ja"), at: 200),
+            ]
+        )
+
+        #expect(Policy.overview(of: value, renderedIn: try diff()).map(\.id) == ["cc1", "ee1", "rr1", "ee2"])
+    }
+
+    /// Mergnutím se PR zavírá, takže GitHub kreslí **jeden** řádek. Dva („mergnul“ a „zavřel“
+    /// pár sekund po sobě) by tvrdily, že se staly dvě věci.
+    @Test("Zavření po mergi se nekreslí jako druhá událost")
+    func hidesTheCloseThatFollowsAMerge() throws {
+        let value = conversation(events: [
+            event(id: "m", .merged(into: "main"), at: 500),
+            event(id: "z", .closed, at: 501),
+        ])
+
+        #expect(Policy.overview(of: value, renderedIn: try diff()).map(\.id) == ["em"])
+    }
+
+    /// Zavřený **bez** mergnutí je naopak to, co je potřeba vidět — někdo se rozhodl PR
+    /// nevzít.
+    @Test("Zavření bez mergnutí zůstane")
+    func keepsACloseWithoutAMerge() throws {
+        let value = conversation(events: [event(id: "z", .closed, at: 500)])
+
+        #expect(Policy.overview(of: value, renderedIn: try diff()).map(\.id) == ["ez"])
+    }
+
+    /// Tatáž past jako u review a komentáře: `id` z GitHubu se mezi typy může potkat.
+    @Test("Stejné id u události a komentáře dá dvě položky")
+    func keepsEventsAndCommentsApart() throws {
+        let value = conversation(
+            comments: [comment(id: "1", at: 100)],
+            events: [event(id: "1", .readyForReview, at: 100)]
+        )
+
+        let entries = Policy.overview(of: value, renderedIn: try diff())
+        #expect(entries.count == 2)
+        #expect(Set(entries.map(\.id)).count == 2)
+    }
+
+    /// Odznak u záložky `Přehled` říká, **kolik je toho k přečtení** — a commit ani „vyžádal
+    /// review“ text k přečtení není. Bez toho by na PR s dvaceti commity ukazoval třicet, tedy
+    /// číslo, ze kterého se nedá poznat, že tam čekají tři komentáře.
+    @Test("Do počtu k přečtení se události nepočítají")
+    func doesNotCountEventsAsSomethingToRead() throws {
+        let value = conversation(
+            reviews: [review(id: "r1", body: "díky", at: 300)],
+            comments: [comment(id: "c1", at: 100)],
+            events: [
+                event(id: "e1", .commit(oid: "abc1234", headline: "fix"), at: 200),
+                event(id: "e2", .readyForReview, at: 250),
+            ]
+        )
+
+        let entries = Policy.overview(of: value, renderedIn: try diff())
+        #expect(entries.count == 4)
+        #expect(entries.count { $0.isReadable } == 2)
+    }
+
+    /// Datum u události chybět nemá, ale kdyby chybělo, patří naspod — jako review bez data
+    /// odeslání. Pryč ne: událost, o které nevíme kdy, se pořád stala.
+    @Test("Událost bez data jde naspod, ne pryč")
+    func putsUndatedEventsLast() throws {
+        let value = conversation(
+            comments: [comment(id: "c1", at: 100)],
+            events: [event(id: "e1", .readyForReview, at: nil)]
+        )
+
+        #expect(Policy.overview(of: value, renderedIn: try diff()).map(\.id) == ["cc1", "ee1"])
     }
 }

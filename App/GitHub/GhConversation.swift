@@ -27,6 +27,9 @@ struct GhConversationResponse: Decodable {
         let reviews: Connection<Review>
         let reviewThreads: Connection<Thread>
         let comments: Connection<Comment>
+        /// Volitelné, protože odpovědi z doby před #171 ji nemají — a starší fixture se kvůli
+        /// novému poli nesmí přestat dekódovat.
+        let timelineItems: Connection<TimelineItem>?
     }
 
     /// GraphQL stránka. `nodes` může chybět i být `null`, takže se bere jako prázdné —
@@ -72,6 +75,70 @@ struct GhConversationResponse: Decodable {
         let comments: Connection<Comment>
     }
 
+    /// Jedna položka časové osy (#171).
+    ///
+    /// **Jeden plochý tvar se všemi poli volitelnými**, ne typ na každou událost: `nodes` je
+    /// union a rozhoduje `__typename`, takže jedenáct `Decodable` typů by znamenalo jedenáct
+    /// míst, kde se dá zapomenout na `actor`. Co která událost doopravdy má, říká `kind()`.
+    struct TimelineItem: Decodable {
+        /// Který druh události to je. Jediné pole, které dorazí **vždycky** — typ uvedený
+        /// v `itemTypes` bez fragmentu nemá ani `id` (změřeno na živém API).
+        let type: String
+        let id: String?
+        let createdAt: Date?
+        let actor: Actor?
+        let commit: Commit?
+        let requestedReviewer: Reviewer?
+        let beforeCommit: CommitReference?
+        let afterCommit: CommitReference?
+        let mergeRefName: String?
+        let previousRefName: String?
+        let currentRefName: String?
+
+        enum CodingKeys: String, CodingKey {
+            case type = "__typename"
+            case id, createdAt, actor, commit, requestedReviewer
+            case beforeCommit, afterCommit, mergeRefName, previousRefName, currentRefName
+        }
+
+        /// Kdo událost udělal. Vlastní tvar, protože potřebuje `avatarUrl` a `__typename` —
+        /// `GhAuthor` má jen `login` a nese ho komentář, kde na obrázku nezáleží.
+        struct Actor: Decodable {
+            let type: String?
+            let login: String
+            let avatarUrl: URL?
+
+            enum CodingKeys: String, CodingKey {
+                case type = "__typename"
+                case login, avatarUrl
+            }
+        }
+
+        struct Commit: Decodable {
+            let oid: String
+            let messageHeadline: String?
+            let committedDate: Date?
+            let author: Author?
+
+            /// Autor commitu. `user` je `null` u commitu s e-mailem, který nesedí na účet —
+            /// pak zbývá `name` z commitu.
+            struct Author: Decodable {
+                let name: String?
+                let user: Actor?
+            }
+        }
+
+        /// Vyžádaný reviewer. `User`, `Bot` a `Mannequin` mají `login`, `Team` má `name`.
+        struct Reviewer: Decodable {
+            let login: String?
+            let name: String?
+        }
+
+        struct CommitReference: Decodable {
+            let oid: String
+        }
+    }
+
     struct Comment: Decodable {
         let id: String
         let body: String?
@@ -115,7 +182,23 @@ extension GhConversationResponse {
             viewer: data.viewer.login,
             reviews: pullRequest.reviews.page { $0.review() },
             threads: pullRequest.reviewThreads.page { $0.thread() },
-            comments: pullRequest.comments.page { $0.comment() }
+            comments: pullRequest.comments.page { $0.comment() },
+            events: pullRequest.timelineItems.eventPage()
+        )
+    }
+}
+
+private extension GhConversationResponse.Connection<GhConversationResponse.TimelineItem>? {
+    /// Časová osa z odpovědi. Chybějící `timelineItems` = prázdná osa (odpověď před #171).
+    ///
+    /// **Celkový počet se schválně nebere.** `timelineItems` s `itemTypes` vrací `totalCount`
+    /// bez ohledu na filtr — změřeno na `cli/cli#13084`: 49, zatímco uzlů dorazilo 29 a bez
+    /// filtru je jich taky 49. Z rozdílu by vyšlo „chybí dvacet událostí“ na PR, kde nechybí
+    /// nic, a hláška o zkrácení by svítila pořád. Viz `ConversationPage.init(items:hasNextPage:)`.
+    func eventPage() -> ConversationPage<TimelineEvent> {
+        ConversationPage(
+            items: (self?.nodes ?? []).compactMap { $0.event() },
+            hasNextPage: self?.pageInfo?.hasNextPage ?? false
         )
     }
 }
@@ -169,6 +252,72 @@ private extension GhConversationResponse.Thread {
             comments: comments.page { $0.comment() }
         )
     }
+}
+
+private extension GhConversationResponse.TimelineItem {
+    /// `nil` = položka, které nerozumíme, nebo která nemá identitu.
+    ///
+    /// Obojí se **nekreslí**. Změřeno na živém API, že typ uvedený v `itemTypes` bez
+    /// odpovídajícího fragmentu dorazí jako `{"__typename": "…"}` a nic víc — z takového uzlu
+    /// by v okně vyšel prázdný řádek, tedy událost, o které nejde říct ani co to bylo, ani kdo
+    /// za ní stojí. Zahození se nepočítá ze stejného důvodu jako u review: `totalCount` je
+    /// u časové osy nepoužitelný (viz `eventPage()`), takže se nemá o co odečítat.
+    func event() -> TimelineEvent? {
+        guard let id, let kind = kind() else { return nil }
+        return TimelineEvent(id: id, kind: kind, actor: eventActor(), at: date())
+    }
+
+    /// Druh události podle `__typename`. `nil` = tohle neumíme zobrazit.
+    private func kind() -> TimelineEvent.Kind? {
+        switch type {
+        case "PullRequestCommit":
+            guard let commit else { return nil }
+            return .commit(oid: commit.oid, headline: commit.messageHeadline ?? "")
+        case "ReviewRequestedEvent":
+            return .reviewRequested(reviewer: requestedReviewer?.reviewerName)
+        case "ReviewRequestRemovedEvent":
+            return .reviewRequestRemoved(reviewer: requestedReviewer?.reviewerName)
+        case "HeadRefForcePushedEvent":
+            return .forcePushed(before: beforeCommit?.oid, after: afterCommit?.oid)
+        case "ReadyForReviewEvent": return .readyForReview
+        case "ConvertToDraftEvent": return .convertedToDraft
+        case "MergedEvent": return .merged(into: mergeRefName)
+        case "ClosedEvent": return .closed
+        case "ReopenedEvent": return .reopened
+        case "BaseRefChangedEvent":
+            return .baseChanged(from: previousRefName, to: currentRefName)
+        default: return nil
+        }
+    }
+
+    /// Kdo za událostí stojí.
+    ///
+    /// U commitu je to jeho autor, ne `actor` — commit `actor`a nemá. Když e-mail nesedí na
+    /// účet, `user` je `null` a zbývá jméno z commitu: bez avataru a bez odkazu, ale řádek
+    /// bez autora by z toho vyjít nesměl.
+    private func eventActor() -> EventActor? {
+        if let author = commit?.author {
+            if let user = author.user { return user.eventActor() }
+            guard let name = author.name, !name.isEmpty else { return nil }
+            return EventActor(login: name, avatarURL: nil, isBot: false)
+        }
+        return actor?.eventActor()
+    }
+
+    /// Kdy. Commit má jen datum commitu — `pushedDate` GitHub už neplní, viz `TimelineEvent.at`.
+    private func date() -> Date? { commit?.committedDate ?? createdAt }
+}
+
+private extension GhConversationResponse.TimelineItem.Actor {
+    func eventActor() -> EventActor {
+        EventActor(login: login, avatarURL: avatarUrl, isBot: type == "Bot")
+    }
+}
+
+private extension GhConversationResponse.TimelineItem.Reviewer {
+    /// Jméno cíle. `User`, `Bot` a `Mannequin` ho mají v `login`, `Team` v `name` — pro okno
+    /// je to jedna a tatáž věta („vyžádal review od …“), takže se to slévá už tady.
+    var reviewerName: String? { login ?? name }
 }
 
 private extension GhConversationResponse.Comment {

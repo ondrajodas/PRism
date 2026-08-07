@@ -66,8 +66,17 @@ struct RootView: View {
     let model: PreflightModel
     @Environment(\.openWindow) private var openWindow
 
+    /// Obrázky uživatelů u událostí v přehledu (#171).
+    ///
+    /// Žije **tady**, ne v `PreflightModel`: preflight na avatary nemá vliv (jde se na
+    /// veřejné HTTP, ne přes `gh`) a potřebuje je jedině hlavní okno — nastavení ani novinky
+    /// ne. `@State` navíc drží cache po celou dobu života okna, takže se týž obrázek netahá
+    /// znovu při každém překreslení.
+    @State private var avatars = AvatarLoader()
+
     var body: some View {
         content
+            .environment(avatars)
             // Podlaha okna. Patří sem, ne k jednotlivým stavům: se `.contentMinSize`
             // v `PRismApp` je minimum obsahu i minimem okna, takže bez toho by se okno dalo
             // stáhnout na pár bodů. Čísla jsou stejná jako u obrazovky s kontrolou prostředí.

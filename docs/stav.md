@@ -531,6 +531,35 @@ pohled na výsledek. Automat filtr neřeší. Nad zadání přibylo jedno rozhod
 PR, které filtr schoval, filtr vymaže**, protože jinak by se detail nenakreslil a vypadalo by to, že
 klik nic neudělal.
 
+Události časové osy hotové (issue #171) — `TimelineEvent` a `EventActor` v `App/Models/`,
+`timelineItems` v `ConversationQuery`, mapování v `GhConversation`, `Policy.displayableEvents`
+a `ConversationEntry.event`, `TimelineEventRow`, `AvatarView` a `AvatarLoader` v `App/Views/`.
+**V `Přehledu` je vidět, co se na PR stalo** — pushnuté commity s titulkem a zkráceným sha,
+vyžádaná a odebraná review, force push s `před → po`, převedení z draftu, merge, zavření
+a změna base, proložené mezi komentáři a review a s avatarem toho, kdo za tím stojí.
+
+Vejde se to do **téhož** GraphQL dotazu a **cena zůstává 1 bod** — změřeno na sloučeném dotazu;
+odpověď naroste o 8,4 kB (na `cli/cli#13084` ze 245 na 254 kB). Druhý dotaz by tedy neměl co
+koupit.
+
+Dvě měření změnila návrh proti zadání:
+
+- **`totalCount` u `timelineItems` ignoruje `itemTypes`.** Vrací 49 tam, kde uzlů dorazí 29 —
+  a stejných 49 vyjde i bez filtru. Zkrácení proto stojí jen na `hasNextPage` (vlastní
+  konstruktor `ConversationPage(items:hasNextPage:)`) a v hlášce „nevešlo se“ je **„část
+  historie“ bez počtu**: číslo neznáme a vymýšlet se nemá. Bez toho by aplikace hlásila ztrátu
+  dvaceti událostí, které nikdy neexistovaly, na každém PR.
+- **`pushedDate` GitHub už neplní** (`null` u všech 21 commitů). U commitu je tedy datum
+  commitu, takže po rebase nebo merge cizí větve umí sedět jinde, než kde ho ukazuje GitHub —
+  tomu pořadí dává samo API. Vědomé omezení.
+
+Nad zadáním přibyla dvě rozhodnutí: **zavření hned po mergi se nekreslí** (mergnutím se PR
+zavírá, takže GitHub kreslí jeden řádek; zavření bez mergnutí zůstává) a **avatary jdou přes
+`HTTPGetting`**, ne přes `AsyncImage` — ten by si otevřel vlastní `URLSession` mimo jedinou
+cestu, kterou aplikace na síť chodí sama za sebe. Token se u nich neposílá, takže tvrdá podmínka
+č. 4 zůstává. Šum „vyžádal review / odebral“ se **neslévá**: je to pravda o tom PR a slévání by
+znamenalo rozhodovat, co je „tatáž“ událost.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
