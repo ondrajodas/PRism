@@ -100,7 +100,9 @@ struct PullRequestDetailView: View {
     /// Odznak u `Přehledu` říká, kolik je toho k přečtení.
     private var tabs: some View {
         PullRequestTabBar(selection: tabSelection) { tab in
-            tab == .overview ? store.overview(for: pullRequest.id).count : nil
+            // Jen to, co je **k přečtení** — události časové osy se nepočítají (#171), jinak by
+            // na PR s dvaceti commity odznak ukazoval třicet a přestal by o diskuzi něco říkat.
+            tab == .overview ? store.overview(for: pullRequest.id).count { $0.isReadable } : nil
         }
     }
 

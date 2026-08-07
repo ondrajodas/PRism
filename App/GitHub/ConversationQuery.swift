@@ -61,8 +61,55 @@ enum ConversationQuery {
             pageInfo { hasNextPage }
             nodes { id body createdAt url author { login } }
           }
+          timelineItems(first: $page, itemTypes: [
+            PULL_REQUEST_COMMIT, REVIEW_REQUESTED_EVENT, REVIEW_REQUEST_REMOVED_EVENT,
+            HEAD_REF_FORCE_PUSHED_EVENT, READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT,
+            MERGED_EVENT, CLOSED_EVENT, REOPENED_EVENT, BASE_REF_CHANGED_EVENT
+          ]) {
+            totalCount
+            pageInfo { hasNextPage }
+            nodes {
+              __typename
+              ... on Node { id }
+              ... on PullRequestCommit {
+                commit {
+                  oid messageHeadline committedDate
+                  author { name user { ...actorFields } }
+                }
+              }
+              ... on ReviewRequestedEvent {
+                createdAt actor { ...actorFields }
+                requestedReviewer { ...reviewerFields }
+              }
+              ... on ReviewRequestRemovedEvent {
+                createdAt actor { ...actorFields }
+                requestedReviewer { ...reviewerFields }
+              }
+              ... on HeadRefForcePushedEvent {
+                createdAt actor { ...actorFields }
+                beforeCommit { oid } afterCommit { oid }
+              }
+              ... on ReadyForReviewEvent { createdAt actor { ...actorFields } }
+              ... on ConvertToDraftEvent { createdAt actor { ...actorFields } }
+              ... on MergedEvent { createdAt actor { ...actorFields } mergeRefName }
+              ... on ClosedEvent { createdAt actor { ...actorFields } }
+              ... on ReopenedEvent { createdAt actor { ...actorFields } }
+              ... on BaseRefChangedEvent {
+                createdAt actor { ...actorFields }
+                previousRefName currentRefName
+              }
+            }
+          }
         }
       }
+    }
+    fragment actorFields on Actor { __typename login avatarUrl(size: 40) }
+    fragment reviewerFields on RequestedReviewer {
+      __typename
+      ... on User { login avatarUrl(size: 40) }
+      ... on Bot { login avatarUrl(size: 40) }
+      ... on Mannequin { login avatarUrl(size: 40) }
+      ... on Team { name avatarUrl(size: 40) }
     }
     """
 }

@@ -132,7 +132,49 @@ struct OverviewView: View {
         case .review(let review): reviewCard(review)
         case .comment(let comment): commentCard(comment)
         case .thread(let thread): threadCard(thread)
+        case .event(let event): eventRow(event)
         }
+    }
+
+    /// Co se na PR stalo (#171) — **jeden řádek**, ne karta jako u komentáře.
+    ///
+    /// Karta je pro text, který si člověk čte; událost je záznam děje o pěti slovech a ve
+    /// stejném rámečku jako odstavec prózy by mezi komentáři vypadala důležitěji, než je.
+    /// Tímhle se přehled taky čte jako časová osa na GitHubu: ikona, kdo, co, kdy.
+    private func eventRow(_ event: TimelineEvent) -> some View {
+        let row = TimelineEventRow(event: event)
+        return HStack(spacing: 6) {
+            Image(systemName: row.symbol)
+                .font(.caption)
+                .foregroundStyle(row.color)
+                .frame(width: 14)
+            if let actor = event.actor {
+                AvatarView(login: actor.login, url: actor.avatarURL)
+            }
+            Text(verbatim: row.title)
+                .font(row.isTitleCode ? .system(.caption, design: .monospaced) : .caption)
+                .lineLimit(2)
+            if row.isBot {
+                Text("Bot")
+                    .font(.caption2)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(.quaternary, in: .capsule)
+                    .foregroundStyle(.secondary)
+            }
+            if let date = event.at {
+                Text(date, format: .relative(presentation: .named))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if let detail = row.detail {
+                Text(verbatim: detail)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 1)
     }
 
     private func failure(_ detail: String) -> some View {
@@ -335,22 +377,30 @@ struct ConversationShortfall: Hashable, Sendable {
     var reviews = 0
     var comments = 0
     var threads = 0
+    /// Časová osa **bez počtu** (#171).
+    ///
+    /// Je to jediná část konverzace, u které se nedá říct kolik: `timelineItems` s `itemTypes`
+    /// vrací `totalCount` bez ohledu na filtr, takže zbývá `hasNextPage`. Mlčet o tom nejde —
+    /// chybějící push se od „nic se nestalo“ nepozná — ale číslo si nesmíme vymyslet.
+    var events = false
 
-    init(reviews: Int = 0, comments: Int = 0, threads: Int = 0) {
+    init(reviews: Int = 0, comments: Int = 0, threads: Int = 0, events: Bool = false) {
         self.reviews = reviews
         self.comments = comments
         self.threads = threads
+        self.events = events
     }
 
     init(_ conversation: Conversation) {
         self.init(
             reviews: conversation.reviews.missing,
             comments: conversation.comments.missing,
-            threads: conversation.threads.missing
+            threads: conversation.threads.missing,
+            events: conversation.events.isTruncated
         )
     }
 
-    var any: Bool { reviews > 0 || comments > 0 || threads > 0 }
+    var any: Bool { reviews > 0 || comments > 0 || threads > 0 || events }
 
     /// Věta o tom, co chybí — po částech, protože „něco se nevešlo“ nedává důvod jít na
     /// GitHub, kdežto „12 komentářů“ ano.
@@ -364,6 +414,10 @@ struct ConversationShortfall: Hashable, Sendable {
         }
         if threads > 0 {
             parts.append(Plural.czech(threads, one: "vlákno", few: "vlákna", many: "vláken"))
+        }
+        // Bez počtu, protože ho neznáme — „část historie“ je všechno, co se dá poctivě říct.
+        if events {
+            parts.append("část historie")
         }
         return "Nevešlo se: \(parts.joined(separator: ", "))"
     }

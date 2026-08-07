@@ -12,6 +12,11 @@ enum ConversationEntry: Hashable, Sendable, Identifiable {
     case comment(ThreadComment)
     /// Vlákno, které se v aktuálním diffu nemá kde ukázat (typicky zastaralé).
     case thread(ReviewThread)
+    /// Co se na PR stalo (#171) — push, vyžádané review, merge.
+    ///
+    /// Patří do **téhož** seznamu, ne do vlastní sekce vedle: přehled odpovídá na „co se od
+    /// minula stalo“ a push mezi dvěma komentáři je půlka té odpovědi.
+    case event(TimelineEvent)
 
     /// Identita nese **typ**, ne jen `id` z GitHubu: review a komentář mají vlastní číselné
     /// řady a shoda mezi nimi by v `ForEach` zahodila jednu z položek.
@@ -20,7 +25,18 @@ enum ConversationEntry: Hashable, Sendable, Identifiable {
         case .review(let review): "r\(review.id)"
         case .comment(let comment): "c\(comment.id)"
         case .thread(let thread): "t\(thread.id)"
+        case .event(let event): "e\(event.id)"
         }
+    }
+
+    /// Je to text, který si člověk **čte**?
+    ///
+    /// Události ne (#171): commit ani „vyžádal review“ není nic k přečtení, je to záznam děje.
+    /// Na tom stojí odznak u záložky `Přehled`, který říká, kolik je toho k přečtení — bez
+    /// tohohle rozdílu by na PR s dvaceti commity ukazoval třicet, tedy číslo, ze kterého se
+    /// nedá poznat, že tam čekají tři komentáře.
+    var isReadable: Bool {
+        if case .event = self { false } else { true }
     }
 
     /// Kdy položka vznikla. `nil` = nevíme — rozdělané (`pending`) review datum odeslání
@@ -33,6 +49,7 @@ enum ConversationEntry: Hashable, Sendable, Identifiable {
         // poslední odpovědi by staré vlákno s novou odpovědí přeskočilo na konec a časová
         // souslednost by přestala platit.
         case .thread(let thread): thread.comments.items.first?.createdAt
+        case .event(let event): event.at
         }
     }
 }
@@ -60,8 +77,9 @@ extension Policy {
         let comments = conversation.comments.items.map { ConversationEntry.comment($0) }
         let threads = threadsOutsideTheDiff(conversation.threads.items, renderedIn: diff)
             .map { ConversationEntry.thread($0) }
+        let events = displayableEvents(conversation.events.items).map { ConversationEntry.event($0) }
 
-        return (reviews + comments + threads).sorted { first, second in
+        return (reviews + comments + threads + events).sorted { first, second in
             switch (first.date, second.date) {
             case (let left?, let right?): left == right ? first.id < second.id : left < right
             case (nil, nil): first.id < second.id
@@ -70,6 +88,23 @@ extension Policy {
             }
         }
     }
+    /// Události, které se mají kreslit (#171).
+    ///
+    /// **Zavření se zahazuje, když je na PR i merge.** Mergnutím se pull request zavírá, takže
+    /// GitHub kreslí jeden řádek — a dva („mergnul“ a pár sekund po něm „zavřel“) by tvrdily,
+    /// že se staly dvě různé věci. Zavření **bez** mergnutí naopak zůstává: to je rozhodnutí
+    /// PR nevzít, a to je zrovna informace, kterou je potřeba vidět.
+    ///
+    /// Nic dalšího se nefiltruje. Několik párů „vyžádal review / odebral“ za sebou je šum,
+    /// který v provozu vzniká (`bin/copilot-review.sh`), ale je to **pravda o tom PR** —
+    /// slévat je znamená rozhodovat, co je „tatáž“ událost, a to je rozhodnutí, které se dělá
+    /// líp nad běžící aplikací než dopředu. Viz specifikace.
+    static func displayableEvents(_ events: [TimelineEvent]) -> [TimelineEvent] {
+        let isMerged = events.contains { if case .merged = $0.kind { true } else { false } }
+        guard isMerged else { return events }
+        return events.filter { $0.kind != .closed }
+    }
+
     /// Je vlákno rozbalené?
     ///
     /// Výchozí stav se **odvozuje z vlákna**: nevyřešené je rozbalené, vyřešené sbalené.

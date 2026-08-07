@@ -62,6 +62,41 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   v `unrecognizedLines` a `files` je prázdné. Bez toho testu by se hlavička časem odstranila jako
   zbytečná. Levá strana diffu ve vzorku není (všechna vlákna jsou `RIGHT`, jako u #63), takže
   komentář k **odebranému** řádku má ručně sestavený hunk — a je u něj napsané proč.
+
+- **Události časové osy (#171)** — dvě fixtures a inline JSON na zbytek, protože jeden PR
+  všechny druhy událostí nemá:
+
+  - `conversation-timeline.json` je **`ondrajodas/PRism#167`**, tedy vlastní repo — jediné
+    místo, kde se sehná **bot jako vyžádaný reviewer** (`copilot-pull-request-reviewer`, o který
+    si říká `bin/copilot-review.sh`). Na cizím PR takový případ není.
+  - `conversation-force-push.json` je `cli/cli#13084` s `page=3`. Malá stránka schválně, jako
+    u #158: celá odpověď je kvůli hunkům 280 kB, kdežto **force push** je v prvních třech
+    uzlech. Nese navíc `hasNextPage: true`, takže se na skutečných datech ověří i to, že se
+    zkrácení hlásí.
+
+  Nejdůležitější test celé oblasti je, že **nefiltrovaný `totalCount` nehlásí ztracené
+  události**: ta fixture má `totalCount: 49` proti třem uzlům, takže bez vlastního konstruktoru
+  `ConversationPage(items:hasNextPage:)` by z ní vyšlo „chybí 46“. Vedle toho se hlídá, že
+  **starší odpověď bez `timelineItems`** (`conversation-small.json`) projde a zbytek konverzace
+  se tím nerozbije.
+
+  Inline JSONem to, co se ze skutečného PR nesehná: převedení na draft, otevření znovu, změna
+  base, **bot jako aktér**, tým jako cíl, vyžádané review **bez cíle** (na `cli/cli#13084`
+  reálné, ale mimo první tři uzly), commit **bez napojeného účtu** a — to hlavní — **uzel,
+  kterému nerozumíme**, který se nesmí nakreslit jako prázdný řádek.
+
+  U dotazu se hlídá **seznam typů i fragmentů** (typ bez fragmentu dorazí prázdný), to, že
+  `PULL_REQUEST_REVIEW` ani `ISSUE_COMMENT` mezi typy **nejsou** (jinak by se komentáře
+  vykreslily dvakrát), a že fragment aktéra nese `__typename` — bez něj by se bot nepoznal.
+
+  `TimelineEventRow` má vlastní sadu na **texty**: každý druh musí mít neprázdný symbol i větu,
+  vyžádání review od sebe sama má vlastní znění, chybějící cíl nesmí nechat větu končit na „od“
+  a monospace patří jen titulku commitu. `AvatarLoader` proti `FakeHTTPGetter`: že se obrázek
+  **netahá dvakrát**, že se **selhání nezkouší znovu**, že data, která nejsou obrázek, se
+  zahodí — a že **dva souběžné požadavky dají jeden dotaz** (souběžně, protože sekvenční test
+  by prošel i bez ochrany před prvním `await`). Zvlášť stojí, že **zrušené** stahování se dá
+  zkusit znovu, kdežto selhané ne: na to je vlastní getter v testu, protože `FakeHTTPGetter` umí
+  vrátit jen `HTTPError` a `CancellationError` se jím nasimulovat nedá.
 - **Odpovídání do vláken (#73)** — čisté funkce plus publisher proti `FakeProcessRunner`.
   Nejdůležitější testy netvrdí, co se odeslalo, ale že se **nic neodeslalo**
   (`runner.invocations.isEmpty`): bez povolení v nastavení, s prázdným tělem a na zavřený PR.

@@ -33,8 +33,10 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ProjectLanguage` | Čím je repo psané — klíč mapy „jazyk → sada skillů“. **Není to `Syntax.Language`**, viz níž |
 | `FindingsLanguage` | Jazyk prózy v nálezech (`cs`/`en`). Ani tohle **není `ProjectLanguage`** |
 | `FindingTranslation` | Přeložená próza nálezu. Visí vedle originálu, nepřepisuje ho |
-| `Conversation` | Cizí konverzace pod PR: review ostatních, vlákna, komentáře + `viewer` |
+| `Conversation` | Cizí konverzace pod PR: review ostatních, vlákna, komentáře, **události časové osy** (#171) + `viewer` |
 | `ConversationPage` | Kus seznamu a kolik ho je celkem — nese **zkrácení** |
+| `TimelineEvent` | Co se na PR **stalo** (#171): commit, vyžádané a odebrané review, force push, draft, merge, close, reopen, změna base |
+| `EventActor` | Kdo za událostí stojí — jméno, adresa avataru a jestli je to bot |
 | `ReviewThread` | Vlákno u řádku diffu: cesta, `line`/`originalLine`, `isResolved`, `isOutdated`, **práva viewera** (`canResolve`/`canUnresolve`), `diffHunk` (#158) |
 | `ThreadSnippet` | Úryvek kódu k vláknu: řádky diffu a příznak zkrácení (#158). **Není `Codable`** — počítá se z `diffHunk` |
 | `ThreadComment` | Jeden komentář — ve vlákně i pod PR; `replyToID` místo vnořování |
@@ -169,6 +171,45 @@ Nad konverzací (#63) platí:
 - **Neznámý stav review konverzaci nepoloží** (`state == nil`), na rozdíl od neznámého stavu
   PR, který vyhodí chybu. Ze stavu PR plyne chování (draft se sám nereviewuje); tady jde
   o zobrazení cizího názoru a kvůli jedné nové hodnotě GitHubu nemají zmizet všechna vlákna.
+
+Nad událostmi časové osy (#171) platí:
+
+- **Událost je třetí druh cizího obsahu, ne komentář bez těla.** Review je něčí názor,
+  komentář něčí věta, `TimelineEvent` záznam děje („pushnul“, „vyžádal review“, „mergnul“).
+  Slít je do `ThreadComment` by znamenalo vymýšlet tělo tomu, kdo nic nenapsal.
+- **`totalCount` u `timelineItems` ignoruje `itemTypes`, takže se nesmí použít.** Změřeno na
+  `cli/cli#13084`: s filtrem vrací **49** a uzlů dorazí **29** — a stejných 49 vyjde i bez
+  filtru. Kdyby se z toho rozdílu počítalo „chybí“, hlásila by aplikace ztrátu dvaceti
+  událostí, které nikdy neexistovaly, a hláška o zkrácení by svítila na každém PR. Zbývá
+  proto jediný signál, `hasNextPage`, a je na to vlastní konstruktor
+  `ConversationPage(items:hasNextPage:)`: dosadí `total` z počtu položek, takže `missing`
+  vyjde nula. Je to o polovinu méně, než na čem stojí ostatní stránky, ale pořád ten signál,
+  který se v nebezpečném směru („máš všechno“) splést nemůže — a v hlášce „nevešlo se“ je
+  proto **„část historie“ bez počtu**.
+- **Identita je `id` uzlu z GraphQL, ne obsah.** Bere se jedním fragmentem `... on Node { id }`
+  místo deseti polí (ověřeno: 29 z 29 položek ho má a jsou unikátní). Skládat ji z druhu
+  a času nejde — na PR běžně stojí za sebou několik shodných párů „vyžádal review / odebral“
+  a při shodě na sekundu by je `ForEach` slil do jedné.
+- **U commitu je `at` datum commitu, ne pushnutí, a je to vědomé omezení.**
+  `PullRequestCommit` nic jiného nenabízí: `pushedDate` GitHub už neplní (změřeno — `null`
+  u všech 21 commitů `cli/cli#13084`). Po rebase nebo merge cizí větve proto umí commit sedět
+  jinde, než kde ho ukazuje GitHub, kterému pořadí dává samo API.
+- **Typ v `itemTypes` bez inline fragmentu dorazí prázdný.** Změřeno: `ClosedEvent` bez
+  fragmentu přišel jako `{"__typename": "ClosedEvent"}` a nic víc. Takový uzel a stejně tak
+  uzel neznámého druhu se **nekreslí** — prázdný řádek by byl událost, o které nejde říct ani
+  co to bylo, ani kdo za ní stojí. Nepočítá se, protože se nemá o co odečítat (bod výš).
+- **Chybějící cíl vyžádaného review událost nezahodí.** Změřeno na `cli/cli#13084`, že
+  `requestedReviewer` umí přijít `null`; „někdo si vyžádal review“ je pořád informace.
+  `User`, `Bot` a `Mannequin` nesou jméno v `login`, `Team` v `name` — slévá se to už při
+  mapování, protože v okně je to jedna a tatáž věta.
+- **Vyžádání review od sebe sama je vlastnost události, ne textu.** `isSelfDirected` porovnává
+  aktéra s cílem, takže z toho ve view nevznikne „ondrajodas vyžádal review od ondrajodas“.
+  GitHub to píše jinou větou a bez modelu by se to muselo rozhodovat při vykreslení.
+- **Commit bez napojeného účtu má aspoň jméno z commitu.** `commit.author.user` je `null`
+  u commitu s e-mailem, který nesedí na účet — pak zbývá `author.name`, bez avataru. Řádek
+  bez autora z toho vyjít nesmí.
+- **Bot se pozná i jako aktér**, ne jen jako cíl: `github-actions` vyžádá review stejně jako
+  člověk, takže `actor { __typename }` je v dotazu kvůli odznaku v okně.
 
 ## `App/Diff/`
 
@@ -1243,7 +1284,9 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory`) — podtržené, s odznakem počtu |
-| `OverviewView` | Tab `Přehled`: popis PR a konverzace bez kotvy v diffu, chronologicky |
+| `OverviewView` | Tab `Přehled`: popis PR, konverzace bez kotvy v diffu a **události časové osy**, chronologicky |
+| `TimelineEventRow` | Událost převedená na řádek — symbol, věta, barva a údaj vpravo (#171). Mimo view a testovatelné, jako `FindingRow` |
+| `AvatarView`, `AvatarLoader` | Obrázek uživatele u události a jeho cache nad `HTTPGetting` (#171) |
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
 | `PullRequestDetailView` | Pravý panel: dvouřádková lišta (titulek, review, stav kopie), pod ní diff a nálezy |
@@ -2278,7 +2321,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.matches(_:_:)` | Patří vlákno (nebo můj rozdělaný komentář) k tomuhle řádku diffu — **jedno místo** pro výběr i umístění |
 | `Policy.inserting(_:intoThread:of:)`, `Policy.applying(_:to:)` | Zápis odeslané odpovědi a vyřešení do načtené konverzace; `nil` = vlákno tam není |
 | `Policy.linesWithSeveralComments(in:)` | Na kolika řádcích draftu je víc komentářů — z každého budou samostatná vlákna, ne odpověď |
-| `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR a vlákna bez kotvy, chronologicky (`ConversationEntry`) |
+| `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR, vlákna bez kotvy a **události časové osy** (#171), chronologicky (`ConversationEntry`) |
+| `Policy.displayableEvents(_:)` | Které události se kreslí — zavření po mergi zahodí, zbytek nechá (#171) |
 | `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem** |
 | `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |
@@ -2370,6 +2414,64 @@ Nad nálezy platí navíc:
   `isBlocking`, rozpadla by se kategorie s `CONFIRMED` i `PLAUSIBLE` na dvě sekce se
   stejným názvem. Poslední kritérium je `summary`, aby bylo pořadí úplné a nepřeskakovalo
   mezi překresleními.
+
+Nad událostmi časové osy v přehledu (#171) platí:
+
+- **Události se prokládají s komentáři a review, ne aby stály zvlášť.** `Přehled` odpovídá na
+  „co se od minula stalo“ a push mezi dvěma komentáři je půlka té odpovědi. Proto je to case
+  `ConversationEntry`, ne druhý seznam vedle — řazení, identita i prázdný stav jsou pak jedno
+  místo. Identita nese prefix `e`, ze stejného důvodu jako u review a komentáře: `id` z GitHubu
+  se mezi typy může potkat.
+- **Zavření se zahazuje, když je na PR i merge.** Mergnutím se pull request zavírá, takže
+  GitHub kreslí jeden řádek — dva („mergnul“ a pár sekund po něm „zavřel“) by tvrdily, že se
+  staly dvě různé věci. Zavření **bez** mergnutí zůstává: to je rozhodnutí PR nevzít.
+- **Do odznaku u záložky `Přehled` se události nepočítají** (`ConversationEntry.isReadable`).
+  Odznak říká, **kolik je toho k přečtení**, a commit ani „vyžádal review“ text k přečtení není
+  — na PR s dvaceti commity by ukazoval třicet a přestal by o diskuzi něco říkat. Chyceno
+  vlastní revizí diffu, ne až v provozu: `overview` počítalo všechno.
+- **Nic dalšího se nefiltruje, a je to vědomé.** Několik párů „vyžádal review / odebral“ za
+  sebou je šum, který v provozu vzniká (`bin/copilot-review.sh`), ale je to **pravda o tom
+  PR**. Slévat je znamená rozhodovat, co je „tatáž“ událost — a to je rozhodnutí, které se
+  posoudí líp nad běžící aplikací než dopředu.
+- **Událost je jednořádková, ne karta.** Karta patří textu, který si člověk čte; „vyžádal
+  review“ je pět slov a ve stejném rámečku jako odstavec prózy by mezi komentáři vypadala
+  důležitěji, než je. Tímhle se `Přehled` čte jako časová osa na GitHubu: ikona, kdo, co, kdy.
+- **U commitu je hlavní text jeho titulek**, ne věta „X pushnul commit“: kdo pushnul, říká
+  avatar a ikona, kdežto titulek je to jediné, co o commitu něco vypovídá. Sází se monospace,
+  protože je to zpráva commitu — a rozhoduje o tom `TimelineEventRow.isTitleCode`, ne view,
+  aby ve view nestál `switch` nad druhem události.
+- **Barvu má jen merge a zavření.** Kde svítí všechno, nesvítí nic; jsou to jediné dvě
+  události, po kterých se s PR nedá dál pracovat.
+- **Texty se skládají mimo view** (`TimelineEventRow`), jako u `FindingRow` a `ReleaseRow` —
+  datum si formátuje view, takže na locale nezávisí nic, co se testuje. Každý druh musí mít
+  neprázdný symbol i větu: řádek beze symbolu vypadá jako rozbité vykreslení a řádek bez textu
+  jako prázdno.
+- **Aktér bez jména je „někdo“.** Smazaný účet aktéra nevrátí a věta bez podmětu by u části
+  druhů vyšla jako „zavřel PR“ bez toho kdo. Nastává to zřídka a je to levnější než dvě znění
+  každé věty.
+- **Avatary jdou přes `HTTPGetting`, ne přes `AsyncImage`.** Ten by si otevřel vlastní
+  `URLSession` mimo jedinou cestu, kterou aplikace na síť chodí sama za sebe — nedal by se
+  nahradit v testech ani spočítat mezi tím, co aplikace dělá. **Bez autentizace**: avatary jsou
+  veřejné (změřeno — HTTP 200 bez tokenu, 991 B na 40×40) a `HTTPGetting` ani nemá čím token
+  poslat, takže tvrdá podmínka č. 4 zůstává.
+- **Značka „už jsem o obrázek žádal“ se zapisuje před prvním `await`.** Dva řádky se stejným
+  autorem se vykreslí naráz, takže mezi kontrolou a zápisem nesmí být mezera — tatáž lekce jako
+  u dvojkliku na odeslání odpovědi (#73), a testuje se souběžně, protože sekvenční test by
+  prošel i bez té ochrany. Táž značka drží i to, že se **selhání v témže běhu nezkouší znovu**:
+  řádky jsou v líném seznamu, takže by odscrollování znamenalo další dotaz na obrázek, který
+  posledně nedorazil.
+- **Zrušené stahování značku uvolní, selhané ne.** Řádky jsou v líném seznamu, takže se `.task`
+  ruší při odscrollování uprostřed stahování — kdyby po sobě zrušení nechalo značku, ten avatar
+  by se v celém běhu **nikdy** nenačetl, i když nic neselhalo. Je to tatáž zásada jako
+  u `HealthMonitoru` („zrušení není zjištění“) a chytila to vlastní revize diffu, ne provoz.
+- **Cache se neuklízí a je to v pořádku.** Je omezená počtem lidí, se kterými člověk reviewuje,
+  a jeden obrázek je kilobajt; zaniká se oknem, protože `AvatarLoader` je `@State` na `RootView`.
+- **Chybějící avatar kreslí iniciálu, ne prázdno ani spinner.** Prázdné místo by se od
+  chybějícího řádku nepoznalo a kolečko s kolečkem uvnitř je u šestnácti pixelů nepokoj za nic.
+  `AvatarLoader` je přitom **nepovinná závislost** z prostředí, jako `HealthMonitor` ve
+  `StatusBarView`: bez něj (náhledy, offscreen render) zůstane iniciála.
+- **Avatary jsou zatím jen u událostí**, ne na kartách komentářů a review. Tam by se musela
+  rozšířit i ta část dotazu — je to samostatná změna, ne opomenutí.
 
 Nad odesílatelností draftu (#68) platí:
 
@@ -2496,6 +2598,20 @@ Konverzace (#63) jde **jedním GraphQL dotazem** přes `gh api graphql`:
   `comments(first: 1)` jen na jeden komentář navíc se **zamítlo měřením**: na tomtéž PR to
   neušetřilo nic (246 kB proti 245 kB, každé vlákno tam má jeden komentář) a **zvedlo cenu
   z 1 bodu na 2**, protože je to další connection.
+- **A od #171 `timelineItems`, taky tímtéž dotazem.** Cena zůstává **1 bod** i s ním (změřeno
+  na sloučeném dotazu) a odpověď naroste o 8,4 kB — na `cli/cli#13084` ze 245 na 254 kB, tedy
+  o tři a půl procenta. Za druhý dotaz by nebylo co koupit.
+- **`itemTypes` se vyjmenovávají a `PULL_REQUEST_REVIEW` ani `ISSUE_COMMENT` mezi nimi nejsou.**
+  Přehled je má z `reviews` a `comments`, takže by z časové osy vyšly podruhé. Je na to test,
+  protože z odpovědi samotné by se to poznalo až jako dvakrát vykreslený komentář.
+- **Ke každému typu patří inline fragment.** Typ uvedený bez něj dorazí jako
+  `{"__typename": "…"}` a nic víc (změřeno), tedy jako uzel, ze kterého se nedá nakreslit řádek.
+- **`id` se bere jedním fragmentem `... on Node { id }`** místo deseti polí u deseti typů.
+  Ověřeno, že ho mají všechny (29 z 29 uzlů) a jsou unikátní.
+- **Aktér a vyžádaný reviewer jdou přes pojmenované fragmenty** (`actorFields`,
+  `reviewerFields`), ne osmkrát opsané `actor { … }`. `reviewerFields` musí pokrýt `User`,
+  `Bot`, `Mannequin` **i** `Team`: bot vyžádá review stejně jako člověk a bez jeho fragmentu
+  z něj přijde jen `__typename`.
 
 ## `ReviewPublisher` (`App/Publish/`)
 

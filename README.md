@@ -66,6 +66,13 @@ Moje komentáře mají odznak `já`, text jde označit a zkopírovat (kromě úr
 brání gesto na výběr rozsahu) a konverzaci lze obnovit tlačítkem, aniž by se čekalo na tik
 pollingu.
 
+Mezi tím je vidět i **co se na PR stalo**: pushnuté commity (titulek a zkrácený sha),
+vyžádaná a odebraná review, force push s `před → po`, převedení z draftu, merge, zavření
+a změna base — každé s avatarem toho, kdo za tím stojí, a s relativním časem. Události jsou
+jednořádkové, ne karty jako komentáře, takže se přehled čte jako časová osa na GitHubu.
+Bere se to **týmž dotazem** jako konverzace, takže to nestojí ani jedno kolo po síti navíc.
+Zavření hned po mergi se nekreslí zvlášť (mergnutím se PR zavírá), zavření bez mergnutí ano.
+
 **Texty se renderují jako Markdown** — nadpisy, seznamy včetně zaškrtávacích, bloky kódu,
 citace, odkazy. Vlastní blokový parser bez závislosti (jako obarvení kódu): systémový umí
 formátování uvnitř řádku dobře, ale bloky tiše spolkne. Zvládá i **HTML, které do komentářů

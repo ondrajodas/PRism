@@ -1,0 +1,278 @@
+{
+  "data": {
+    "viewer": {
+      "login": "ondrajodas"
+    },
+    "repository": {
+      "pullRequest": {
+        "number": 167,
+        "reviews": {
+          "totalCount": 4,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "PRR_kwDOTpVdFc8AAAABIvZX5w",
+              "state": "COMMENTED",
+              "body": "## Pull request overview\n\nPR přidává možnost **vybírat a kopírovat kód z diffu** (issue #157) bez toho, aby tažení myší zakládalo rozdělaný komentář. Kvůli omezením SwiftUI selekce je vykreslení kódu v diffu přepsané na AppKit (`NSTextView`) a souvislé řádky se při vykreslení slučují do bloků; zároveň přibývá kontextové menu pro kopírování řádku/rozsahu/hunku a sheet pro výběr textu z hunku mimo diff.\n\n**Changes:**\n- Přepis vykreslení kódu v diffu na `NSTextView` + slučování řádků do bloků (`DiffBlock`/`DiffPairBlock`) pro selekci přes více řádků.\n- Nové kopírovací akce (řádek/rozsah/hunk) + `CodeTextSheet` („Vybrat text z hunku…“) a sjednocený zápis do schránky přes `Clipboard`.\n- Nové unit testy pro slučování bloků a pro skládání kódu do schránky + aktualizace dokumentace (README + docs).\n\n### Reviewed changes\n\nCopilot reviewed 29 out of 29 changed files in this pull request and generated 3 comments.\n\n<details>\n<summary>Show a summary per file</summary>\n\n| File | Description |\r\n| ---- | ----------- |\r\n| Tests/Policy/CopyPolicyTests.swift | Nové testy pro `Policy.code(...)`, volbu strany (left/right) a pořadí řádků při kopírování. |\r\n| Tests/Diff/DiffBlockTests.swift | Nové testy pro slučování `DiffRow` do bloků (unified i split) a hranice bloků na bublinách/hlavičkách. |\r\n| README.md | Uživatelský popis nového chování kopírování a výběru v diffu. |\r\n| docs/testovani.md | Doplnění testovacího katalogu a omezení měření UI interakcí pro #157. |\r\n| docs/superpowers/specs/2026-07-31-prism-design.md | Zápis změněných rozhodnutí a trade-offů kolem AppKitu/selektování/kopírování. |\r\n| docs/stav.md | Stav projektu: #157 označeno jako hotové + shrnutí implementačních dopadů. |\r\n| docs/architektura.md | Architektura: nové typy a popis vykreslení bloků a kopírovacích cest. |\r\n| App/Views/ThreadBubbleView.swift | Sjednocení odsazení bublin podle nové šířky gutteru (`contentInset`). |\r\n| App/Views/SelectableCodeView.swift | Read-only `NSTextView` pro výběr textu v `CodeTextSheet` (mimo diff). |\r\n| App/Views/ReviewTimelineView.swift | Přechod na `Clipboard.copy(...)` pro kopírování resume příkazu. |\r\n| App/Views/PreflightGateView.swift | Přechod na `Clipboard.copy(...)` pro kopírování příkazů. |\r\n| App/Views/FindingBubbleView.swift | Sjednocení odsazení bubliny podle `contentInset`. |\r\n| App/Views/DraftCommentBubbleView.swift | Sjednocení odsazení bubliny podle `contentInset`. |\r\n| App/Views/DiffView.swift | Integrace bloků do renderingu + sheet pro `CodeText` + wiring copy akcí. |\r\n| App/Views/DiffTextView.swift | Nový `NSTextView` renderer bloků: vlastní kreslení gutteru/pozadí/tintů + geometrie řádků. |\r\n| App/Views/DiffRowView.swift | Zapojení blokových řádků (`.block`/`.pairBlock`) a přidání `copyMenu` na relevantní prvky. |\r\n| App/Views/DiffPairView.swift | Přidání kopírovacího menu na buňky ve split řádku (pro zbylé `.pair` případy). |\r\n| App/Views/DiffPairBlockView.swift | `NSViewRepresentable` pro dva selektovatelné sloupce (`NSTextView`) ve split layoutu. |\r\n| App/Views/DiffPairBlockRowView.swift | SwiftUI overlay nad split blokem: pilulky + range drag + kontextové menu dle hoveru. |\r\n| App/Views/DiffLineView.swift | Přidání `.textSelection` pro obsah řádku + nový sloupec pro pilulku + sjednocený `contentInset`. |\r\n| App/Views/DiffCopyActions.swift | Nový typ akcí pro kopírování + `View.copyMenu(...)` helper. |\r\n| App/Views/DiffCodeBlockView.swift | `NSViewRepresentable` pro unified blok (`DiffTextView`) v LazyVStack (včetně `sizeThatFits`). |\r\n| App/Views/DiffBlockRowView.swift | SwiftUI overlay nad unified blokem: pilulka + range drag + kontextové menu dle hoveru. |\r\n| App/Views/CodeTextSheet.swift | Nový sheet pro zobrazení hunku jako jednoho selektovatelného textu + „Kopírovat vše“. |\r\n| App/Support/Clipboard.swift | Centralizace zápisu do schránky. |\r\n| App/Policy/DraftPolicy.swift | Přidání `rangeLinesInOrder` kvůli stabilnímu pořadí pro kopírování. |\r\n| App/Policy/CopyPolicy.swift | Nová čistá logika skládání kódu pro schránku + generování položek menu. |\r\n| App/Diff/DiffRow.swift | Nové případy `.block`/`.pairBlock` a explicitní poznámka, že slučování je až ve view. |\r\n| App/Diff/DiffBlock.swift | Nové typy `DiffBlock`/`DiffPairBlock` + implementace `DiffRow.blocked(...)` / `blockedPairs(...)`. |\n</details>\n\n\n\n\n\n<details>\n<summary>Suppressed comments (1)</summary>\n\n**App/Views/SelectableCodeView.swift:51**\n* `SelectableCodeView.updateNSView` vždy volá `setAttributedString(...)`, které ruší aktuální výběr. U `DiffTextView` se tomu bráníte podpisem obsahu; tady podobná pojistka chybí, takže libovolný SwiftUI update sheetu může výběr zrušit.\n```\n    func updateNSView(_ scroll: NSScrollView, context: Context) {\n        guard let textView = scroll.documentView as? NSTextView else { return }\n        // Přepisuje se celý obsah, ne rozdíl: je to jeden hunk, tedy stovky řádků, a děje se to\n        // při otevření okna a při přepnutí světlého a tmavého režimu.\n        textView.textStorage?.setAttributedString(Self.attributed(code, path: path, colorScheme: colorScheme))\n    }\n```\n</details>\n\n\n\n---\n\n💡 <a href=\"/ondrajodas/PRism/new/main?filename=.github/instructions/*.instructions.md\" class=\"Link--inTextBlock\" target=\"_blank\" rel=\"noopener noreferrer\">Add Copilot custom instructions</a> for smarter, more guided reviews. <a href=\"https://docs.github.com/en/copilot/customizing-copilot/adding-repository-custom-instructions-for-github-copilot\" class=\"Link--inTextBlock\" target=\"_blank\" rel=\"noopener noreferrer\">Learn how to get started</a>.",
+              "submittedAt": "2026-08-07T09:17:05Z",
+              "author": {
+                "login": "copilot-pull-request-reviewer"
+              }
+            },
+            {
+              "id": "PRR_kwDOTpVdFc8AAAABIvacKQ",
+              "state": "COMMENTED",
+              "body": "",
+              "submittedAt": "2026-08-07T09:19:39Z",
+              "author": {
+                "login": "ondrajodas"
+              }
+            },
+            {
+              "id": "PRR_kwDOTpVdFc8AAAABIvacrQ",
+              "state": "COMMENTED",
+              "body": "",
+              "submittedAt": "2026-08-07T09:19:40Z",
+              "author": {
+                "login": "ondrajodas"
+              }
+            },
+            {
+              "id": "PRR_kwDOTpVdFc8AAAABIvadPA",
+              "state": "COMMENTED",
+              "body": "",
+              "submittedAt": "2026-08-07T09:19:41Z",
+              "author": {
+                "login": "ondrajodas"
+              }
+            }
+          ]
+        },
+        "reviewThreads": {
+          "totalCount": 3,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "PRRT_kwDOTpVdFc6XOgpE",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "App/Views/DiffCopyActions.swift",
+              "line": null,
+              "originalLine": 44,
+              "diffSide": "RIGHT",
+              "viewerCanResolve": true,
+              "viewerCanUnresolve": false,
+              "comments": {
+                "totalCount": 2,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOTpVdFc7em2uA",
+                    "body": "Komentář u položky „Vybrat text z hunku…“ tvrdí, že v diffu nejde vybírat přes řádky, protože je to SwiftUI `Text`. Po #157 ale diff používá bloky v `NSTextView` a výběr přes řádky v rámci bloku jde; sheet slouží hlavně pro výběr přes hranice bloků (bubliny/hlavičky/expandery).",
+                    "createdAt": "2026-08-07T09:17:04Z",
+                    "url": "https://github.com/ondrajodas/PRism/pull/167#discussion_r3734727552",
+                    "author": {
+                      "login": "copilot-pull-request-reviewer"
+                    },
+                    "replyTo": null,
+                    "diffHunk": "@@ -0,0 +1,50 @@\n+import SwiftUI\n+\n+/// Kopírování kódu z diffu (#157) — co nabídne kontextové menu řádku a hlavičky hunku.\n+///\n+/// Jeden parametr místo dvou closures, které patří k sobě — stejný vzor jako `DraftActions`\n+/// a `RangeDragActions`.\n+///\n+/// **Skládá se až při otevření menu.** Obě closures se volají z `contextMenu`, tedy jednou za\n+/// pravé kliknutí; text rozsahu se hledá přes všechny hunky souboru, takže při vykreslení každého\n+/// řádku by to byla práce navíc u operace, kterou nikdo nevyvolal.\n+struct DiffCopyActions {\n+    /// Co se dá zkopírovat z tohohle řádku. Prázdné = menu se nekreslí.\n+    var targets: (DiffLine) -> [DiffCopyTarget] = { _ in [] }\n+    /// Co se dá zkopírovat z hunku jako celku.\n+    var hunkTargets: (DiffHunk) -> [DiffCopyTarget] = { _ in [] }\n+    /// Hunk, ve kterém řádek leží, jako text k vybírání (#157). `nil` = není z čeho ho složit,\n+    /// položka se pak v menu nekreslí.\n+    var selectableText: (DiffLine) -> CodeText? = { _ in nil }\n+    /// Totéž z hlavičky hunku.\n+    var selectableHunkText: (DiffHunk) -> CodeText? = { _ in nil }\n+    /// Otevře sheet s tím textem. Sheet drží `DiffView`, protože je nad celým diffem.\n+    var showText: (CodeText) -> Void = { _ in }\n+}\n+\n+extension View {\n+    /// Kontextové menu s kopírováním. Prázdný seznam menu **nepřidá**: prázdné menu, které se po\n+    /// pravém kliknutí otevře a nic nenabídne, vypadá jako rozbitá aplikace.\n+    ///\n+    /// Patří **na buňku, ne na seznam** — pravé kliknutí se vztahuje k tomu, na co se kliklo.\n+    @ViewBuilder func copyMenu(_ targets: [DiffCopyTarget], selectText: (() -> Void)? = nil) -> some View {\n+        if targets.isEmpty && selectText == nil {\n+            self\n+        } else {\n+            contextMenu {\n+                ForEach(targets) { target in\n+                    Button(target.title, systemImage: \"doc.on.doc\") {\n+                        Clipboard.copy(target.text)\n+                    }\n+                }\n+                if let selectText {\n+                    Divider()\n+                    // Tři tečky, protože se otevře okno — konvence systému. Vybírání přes řádky\n+                    // v diffu nejde (každý řádek je vlastní `Text`), takže tohle je jediná cesta,\n+                    // jak si vzít vlastní výřez z víc řádků."
+                  },
+                  {
+                    "id": "PRRC_kwDOTpVdFc7em6Ur",
+                    "body": "Reálný nález, opraveno v 8a1b0ac. Ten komentář popisoval mezistav před přepisem — a je to horší než překlep: tvrdí o aplikaci něco, co neplatí, a zrovna u položky menu, jejíž smysl se tím posunul. Přeformulováno na to, co platí dnes: v diffu se přes řádky vybírat **dá**, ale jen v rámci bloku, který končí u bubliny, u hlavičky hunku a u rozbalovacího řádku — sheet je na výřez **přes** ně.\n\nProšel jsem na tentýž vzor celý diff (`grep` na „přes víc řádků / nejde / nedá“) a našel **šest** výskytů, ne tři: vedle těch, které jsi našel, ještě `CopyPolicy.hunk(containing:in:)`, `CodeTextSheet` a `DiffBlock`. Opravené jsou všechny.",
+                    "createdAt": "2026-08-07T09:19:39Z",
+                    "url": "https://github.com/ondrajodas/PRism/pull/167#discussion_r3734742315",
+                    "author": {
+                      "login": "ondrajodas"
+                    },
+                    "replyTo": {
+                      "id": "PRRC_kwDOTpVdFc7em2uA"
+                    },
+                    "diffHunk": "@@ -0,0 +1,50 @@\n+import SwiftUI\n+\n+/// Kopírování kódu z diffu (#157) — co nabídne kontextové menu řádku a hlavičky hunku.\n+///\n+/// Jeden parametr místo dvou closures, které patří k sobě — stejný vzor jako `DraftActions`\n+/// a `RangeDragActions`.\n+///\n+/// **Skládá se až při otevření menu.** Obě closures se volají z `contextMenu`, tedy jednou za\n+/// pravé kliknutí; text rozsahu se hledá přes všechny hunky souboru, takže při vykreslení každého\n+/// řádku by to byla práce navíc u operace, kterou nikdo nevyvolal.\n+struct DiffCopyActions {\n+    /// Co se dá zkopírovat z tohohle řádku. Prázdné = menu se nekreslí.\n+    var targets: (DiffLine) -> [DiffCopyTarget] = { _ in [] }\n+    /// Co se dá zkopírovat z hunku jako celku.\n+    var hunkTargets: (DiffHunk) -> [DiffCopyTarget] = { _ in [] }\n+    /// Hunk, ve kterém řádek leží, jako text k vybírání (#157). `nil` = není z čeho ho složit,\n+    /// položka se pak v menu nekreslí.\n+    var selectableText: (DiffLine) -> CodeText? = { _ in nil }\n+    /// Totéž z hlavičky hunku.\n+    var selectableHunkText: (DiffHunk) -> CodeText? = { _ in nil }\n+    /// Otevře sheet s tím textem. Sheet drží `DiffView`, protože je nad celým diffem.\n+    var showText: (CodeText) -> Void = { _ in }\n+}\n+\n+extension View {\n+    /// Kontextové menu s kopírováním. Prázdný seznam menu **nepřidá**: prázdné menu, které se po\n+    /// pravém kliknutí otevře a nic nenabídne, vypadá jako rozbitá aplikace.\n+    ///\n+    /// Patří **na buňku, ne na seznam** — pravé kliknutí se vztahuje k tomu, na co se kliklo.\n+    @ViewBuilder func copyMenu(_ targets: [DiffCopyTarget], selectText: (() -> Void)? = nil) -> some View {\n+        if targets.isEmpty && selectText == nil {\n+            self\n+        } else {\n+            contextMenu {\n+                ForEach(targets) { target in\n+                    Button(target.title, systemImage: \"doc.on.doc\") {\n+                        Clipboard.copy(target.text)\n+                    }\n+                }\n+                if let selectText {\n+                    Divider()\n+                    // Tři tečky, protože se otevře okno — konvence systému. Vybírání přes řádky\n+                    // v diffu nejde (každý řádek je vlastní `Text`), takže tohle je jediná cesta,\n+                    // jak si vzít vlastní výřez z víc řádků."
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOTpVdFc6XOgpg",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "App/Views/SelectableCodeView.swift",
+              "line": null,
+              "originalLine": 10,
+              "diffSide": "RIGHT",
+              "viewerCanResolve": true,
+              "viewerCanUnresolve": false,
+              "comments": {
+                "totalCount": 2,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOTpVdFc7em2ut",
+                    "body": "V hlavičkovém komentáři se píše, že „v diffu jde vybrat jen jeden řádek“, což po přepisu na `NSTextView` bloky už neplatí. Doporučení: upřesnit, že to platí pro SwiftUI `Text` přístup, ne pro dnešní renderer.\n\nThis issue also appears on line 46 of the same file.",
+                    "createdAt": "2026-08-07T09:17:04Z",
+                    "url": "https://github.com/ondrajodas/PRism/pull/167#discussion_r3734727597",
+                    "author": {
+                      "login": "copilot-pull-request-reviewer"
+                    },
+                    "replyTo": null,
+                    "diffHunk": "@@ -0,0 +1,83 @@\n+import AppKit\n+import SwiftUI\n+\n+/// Kód, ve kterém se dá **vybírat přes víc řádků** — read-only `NSTextView` (#157).\n+///\n+/// **Ne SwiftUI `Text` se `.textSelection(.enabled)`.** Ten dává selekci po jednotlivých `Text`ech,\n+/// takže v diffu jde vybrat jen jeden řádek — a ani jeden `Text` s odřádkováním to nespravil\n+/// (nahlášené při zkoušení #157: „pořád mi nejde vybrat text z více řádků“). `NSTextView` je proti\n+/// tomu plnohodnotné textové zobrazení: výběr myší přes řádky, ⌘A, ⌘C i kontextové menu se\n+/// `Copy` dostaneme od systému, ne z vlastního kódu."
+                  },
+                  {
+                    "id": "PRRC_kwDOTpVdFc7em6Wa",
+                    "body": "Reálný nález, opraveno v 8a1b0ac — a měl jsi pravdu i v tom, že se to v souboru opakuje. Hlavička teď říká, že `SelectableCodeView` je pro sheet a že tatáž úvaha (SwiftUI `Text` dává selekci po jednotlivých textech) dovedla i **diff sám** k `DiffTextView`; a hlavně proč to view zůstalo i po tom přepisu — umí vybrat **přes hranice bloků**, což diff neumí.",
+                    "createdAt": "2026-08-07T09:19:40Z",
+                    "url": "https://github.com/ondrajodas/PRism/pull/167#discussion_r3734742426",
+                    "author": {
+                      "login": "ondrajodas"
+                    },
+                    "replyTo": {
+                      "id": "PRRC_kwDOTpVdFc7em2ut"
+                    },
+                    "diffHunk": "@@ -0,0 +1,83 @@\n+import AppKit\n+import SwiftUI\n+\n+/// Kód, ve kterém se dá **vybírat přes víc řádků** — read-only `NSTextView` (#157).\n+///\n+/// **Ne SwiftUI `Text` se `.textSelection(.enabled)`.** Ten dává selekci po jednotlivých `Text`ech,\n+/// takže v diffu jde vybrat jen jeden řádek — a ani jeden `Text` s odřádkováním to nespravil\n+/// (nahlášené při zkoušení #157: „pořád mi nejde vybrat text z více řádků“). `NSTextView` je proti\n+/// tomu plnohodnotné textové zobrazení: výběr myší přes řádky, ⌘A, ⌘C i kontextové menu se\n+/// `Copy` dostaneme od systému, ne z vlastního kódu."
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOTpVdFc6XOgpr",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "README.md",
+              "line": null,
+              "originalLine": 114,
+              "diffSide": "RIGHT",
+              "viewerCanResolve": true,
+              "viewerCanUnresolve": false,
+              "comments": {
+                "totalCount": 2,
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOTpVdFc7em2u-",
+                    "body": "V README je tvrzení, že výběr textu v diffu nejde přes víc řádků, ale po #157 se kód v diffu kreslí jako bloky v `NSTextView`, takže víc řádků vybrat jde (jen ne přes hranice bloků / bubliny). Tohle teď může čtenáře zmást a odporuje popisu výš.",
+                    "createdAt": "2026-08-07T09:17:04Z",
+                    "url": "https://github.com/ondrajodas/PRism/pull/167#discussion_r3734727614",
+                    "author": {
+                      "login": "copilot-pull-request-reviewer"
+                    },
+                    "replyTo": null,
+                    "diffHunk": "@@ -107,6 +108,28 @@ kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi\n se dotáhne sám** — nález bez svého kódu se nedá posoudit. Nahoře v liště je **strom\n souborů** pro skok kamkoli v diffu.\n \n+**Kód se dá vybrat myší a zkopírovat** (#157) — tažením přes text řádku, libovolný počet znaků,\n+a ⌘C. Vybírá se jen obsah, ne čísla řádků a ne znak změny, takže se do schránky nepřiplete diff.\n+**Přes víc řádků to v diffu nejde**: v SwiftUI je každý řádek vlastní text a selekce se mezi nimi\n+neslévá; hunk jako jeden text by uvnitř diffu otevřel měřenou past s nevykreslenými řádky. Na to je"
+                  },
+                  {
+                    "id": "PRRC_kwDOTpVdFc7em6ZA",
+                    "body": "Reálný nález a z těch tří nejdůležitější, protože README čte člověk, ne já — opraveno v 8a1b0ac. Ten odstavec byl navíc **vnitřně rozporný**: o pár řádků výš už stálo, že se vybírá myší jako v editoru. Vzniklo to tím, že jsem README přepisoval v průběhu ladění a jeden zápis kvůli chybě ve skriptu neproběhl; ta stará verze tam zůstala vedle nové.\n\nTeď je tam jeden odstavec: vybírá se přes libovolně mnoho řádků, blok končí u bubliny nebo hlavičky hunku, a `Vybrat text z hunku…` je na výřez přes ně.",
+                    "createdAt": "2026-08-07T09:19:41Z",
+                    "url": "https://github.com/ondrajodas/PRism/pull/167#discussion_r3734742592",
+                    "author": {
+                      "login": "ondrajodas"
+                    },
+                    "replyTo": {
+                      "id": "PRRC_kwDOTpVdFc7em2u-"
+                    },
+                    "diffHunk": "@@ -107,6 +108,28 @@ kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi\n se dotáhne sám** — nález bez svého kódu se nedá posoudit. Nahoře v liště je **strom\n souborů** pro skok kamkoli v diffu.\n \n+**Kód se dá vybrat myší a zkopírovat** (#157) — tažením přes text řádku, libovolný počet znaků,\n+a ⌘C. Vybírá se jen obsah, ne čísla řádků a ne znak změny, takže se do schránky nepřiplete diff.\n+**Přes víc řádků to v diffu nejde**: v SwiftUI je každý řádek vlastní text a selekce se mezi nimi\n+neslévá; hunk jako jeden text by uvnitř diffu otevřel měřenou past s nevykreslenými řádky. Na to je"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "comments": {
+          "totalCount": 0,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": []
+        },
+        "timelineItems": {
+          "totalCount": 12,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "__typename": "PullRequestCommit",
+              "id": "PURC_lADOTpVdFc779OVv2gAoNjFlMjg3NWYxNTY4ZjgwMzcxZmRhZDM0NjEzNjNmNmFjZmRhMDI0Ng",
+              "commit": {
+                "oid": "61e2875f1568f80371fdad3461363f6acfda0246",
+                "messageHeadline": "feat: select and copy code from the diff",
+                "committedDate": "2026-08-07T09:09:03Z",
+                "author": {
+                  "name": "Ondřej Jodas",
+                  "user": {
+                    "__typename": "User",
+                    "login": "ondrajodas",
+                    "avatarUrl": "https://avatars.githubusercontent.com/u/12143866?s=40&u=4f54cab57987f5442f70e89d2f473da06a137b91&v=4"
+                  }
+                }
+              }
+            },
+            {
+              "__typename": "ReviewRequestedEvent",
+              "id": "RRE_lADOTpVdFc8AAAABL06LE88AAAAGxwxuAw",
+              "createdAt": "2026-08-07T09:10:52Z",
+              "actor": {
+                "__typename": "User",
+                "login": "ondrajodas",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/12143866?s=40&u=4f54cab57987f5442f70e89d2f473da06a137b91&v=4"
+              },
+              "requestedReviewer": {
+                "__typename": "Bot",
+                "login": "copilot-pull-request-reviewer",
+                "avatarUrl": "https://avatars.githubusercontent.com/in/946600?s=40&v=4"
+              }
+            },
+            {
+              "__typename": "PullRequestCommit",
+              "id": "PURC_lADOTpVdFc779OVv2gAoMmRhMjhkNTAyMGRkNjc5N2MwZTUyN2I0N2NmZjRhNzE4YzRhMjVmNA",
+              "commit": {
+                "oid": "2da28d5020dd6797c0e527b47cff4a718c4a25f4",
+                "messageHeadline": "docs: say that the diff itself can be selected across lines",
+                "committedDate": "2026-08-07T09:19:36Z",
+                "author": {
+                  "name": "Ondřej Jodas",
+                  "user": {
+                    "__typename": "User",
+                    "login": "ondrajodas",
+                    "avatarUrl": "https://avatars.githubusercontent.com/u/12143866?s=40&u=4f54cab57987f5442f70e89d2f473da06a137b91&v=4"
+                  }
+                }
+              }
+            },
+            {
+              "__typename": "MergedEvent",
+              "id": "ME_lADOTpVdFc8AAAABL06LE88AAAAGxxJ5KA",
+              "createdAt": "2026-08-07T09:19:58Z",
+              "actor": {
+                "__typename": "User",
+                "login": "ondrajodas",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/12143866?s=40&u=4f54cab57987f5442f70e89d2f473da06a137b91&v=4"
+              },
+              "mergeRefName": "main"
+            },
+            {
+              "__typename": "ClosedEvent",
+              "id": "CE_lADOTpVdFc8AAAABL06LE88AAAAGxxJ5YA",
+              "createdAt": "2026-08-07T09:19:58Z",
+              "actor": {
+                "__typename": "User",
+                "login": "ondrajodas",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/12143866?s=40&u=4f54cab57987f5442f70e89d2f473da06a137b91&v=4"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

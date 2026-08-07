@@ -68,10 +68,72 @@ struct ConversationQueryTests {
 
     /// Stránkuje se jedním číslem pro všechny seznamy, ať se nemůže stát, že se komentáře
     /// uvnitř vláken utnou dřív než vlákna sama.
+    ///
+    /// Pět seznamů, ne čtyři: od #171 patří mezi ně i časová osa. Zvedlo se to vědomě —
+    /// tenhle test si toho všiml jako první.
     @Test("Velikost stránky platí na všechny seznamy")
     func usesOnePageSizeEverywhere() {
         let document = ConversationQuery.document
 
-        #expect(document.components(separatedBy: "first: $page").count - 1 == 4)
+        #expect(document.components(separatedBy: "first: $page").count - 1 == 5)
+    }
+
+    /// Bez událostí by v `Přehledu` chyběl push, vyžádané review i merge (#171) — a vzít se
+    /// jinde než tady nedají.
+    ///
+    /// **Každý typ v `itemTypes` musí mít i svůj fragment.** Změřeno na živém API: typ uvedený
+    /// bez fragmentu dorazí jako `{"__typename": "ClosedEvent"}` a nic víc, takže by z něj
+    /// v okně vyšel prázdný řádek.
+    @Test("Dotaz se ptá na události časové osy")
+    func asksForTimelineEvents() {
+        let document = ConversationQuery.document
+
+        for field in [
+            "timelineItems",
+            "PULL_REQUEST_COMMIT", "REVIEW_REQUESTED_EVENT", "REVIEW_REQUEST_REMOVED_EVENT",
+            "HEAD_REF_FORCE_PUSHED_EVENT", "READY_FOR_REVIEW_EVENT", "CONVERT_TO_DRAFT_EVENT",
+            "MERGED_EVENT", "CLOSED_EVENT", "REOPENED_EVENT", "BASE_REF_CHANGED_EVENT",
+            "PullRequestCommit", "ReviewRequestedEvent", "ReviewRequestRemovedEvent",
+            "HeadRefForcePushedEvent", "ReadyForReviewEvent", "ConvertToDraftEvent",
+            "MergedEvent", "ClosedEvent", "ReopenedEvent", "BaseRefChangedEvent",
+            "messageHeadline", "requestedReviewer", "avatarUrl",
+            // Vyžádaný reviewer umí být bot (`github-actions`), a bez tohohle fragmentu
+            // z něj dorazí jen `__typename` — tedy „někdo si vyžádal review“ bez toho kdo.
+            "on Bot",
+        ] {
+            #expect(document.contains(field), "v dotazu chybí \(field)")
+        }
+    }
+
+    /// Identita události se bere **z GraphQL**, ne z jejího obsahu: na PR běžně stojí za
+    /// sebou několik shodných párů „vyžádal review / odebral“ a při shodě na sekundu by se
+    /// v `ForEach` slily do jedné. Jeden fragment na `Node` místo deseti polí.
+    @Test("Události se ptají na id přes fragment na Node")
+    func asksForNodeIdentity() {
+        #expect(ConversationQuery.document.contains("on Node { id }"))
+    }
+
+    /// Bot se musí poznat i tam, kde událost **udělal** — `github-actions requested a review`
+    /// vypadá jinak než člověk. `__typename` proto patří k aktérovi, ne jen k uzlu osy.
+    @Test("Aktér nese jméno, obrázek i to, jestli je to bot")
+    func asksWhetherTheActorIsABot() throws {
+        let document = ConversationQuery.document
+
+        let fragment = try #require(document.components(separatedBy: "fragment actorFields on Actor").last)
+        let body = try #require(fragment.components(separatedBy: "}").first)
+        #expect(body.contains("__typename"))
+        #expect(body.contains("login"))
+        #expect(body.contains("avatarUrl"))
+    }
+
+    /// Review, komentáře pod PR ani vlákna do `itemTypes` **nepatří**: přehled je má
+    /// z vlastních seznamů, takže z časové osy by vyšly podruhé.
+    @Test("Časová osa nepřináší podruhé to, co přehled už má")
+    func doesNotAskForItemsTheOverviewAlreadyHas() {
+        let document = ConversationQuery.document
+
+        for duplicate in ["PULL_REQUEST_REVIEW", "ISSUE_COMMENT"] {
+            #expect(!document.contains(duplicate), "\(duplicate) by se v přehledu objevil dvakrát")
+        }
     }
 }
