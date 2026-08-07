@@ -50,20 +50,21 @@ struct PullRequestFilterButton: View {
             header
             Divider()
             if options.isEmpty {
-                // Nemá se z čeho vybírat — dokud nedorazí první seznam. Prázdný popover by vypadal
-                // jako rozbitá nabídka.
-                Text("Až dorazí seznam PR, bude se z čeho vybírat.")
+                // **Věta musí sednout na oba stavy**, protože prázdná nabídka znamená obojí: seznam
+                // ještě nedorazil, nebo dorazil prázdný. „Až dorazí seznam PR“ by u načteného
+                // prázdného seznamu tvrdilo, že se ještě čeká — nález Copilota na #170.
+                Text("Není z čeho vybírat — v seznamu nejsou žádné PR.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding(12)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        axis("Repozitáře", values: options.repositories.map(\.description), selected: filter.repositories.map(\.description)) { name, on in
+                        axis("Repozitáře", values: options.repositories.map(\.description), selected: Set(filter.repositories.map(\.description))) { name, on in
                             toggleRepository(named: name, on: on)
                         }
                         if !options.authors.isEmpty {
-                            axis("Autoři", values: options.authors, selected: Array(filter.authors)) { author, on in
+                            axis("Autoři", values: options.authors, selected: filter.authors) { author, on in
                                 toggleAuthor(author, on: on)
                             }
                         }
@@ -94,10 +95,13 @@ struct PullRequestFilterButton: View {
     ///
     /// `Toggle` s vlastním bindingem, ne `Picker`: vybírá se **víc hodnot** („ukaž mi dvě repa, na
     /// kterých teď pracuju“ je běžnější než jedno) a `Picker` s `.multiple` na macOS není.
+    /// `selected` je **`Set`**, ne pole: `contains` se volá pro každý řádek nabídky, takže nad polem
+    /// je to lineární v počtu vybraných hodnot × počet řádků. Nález Copilota na #170; u pěti rep to
+    /// nikdo nepozná, ale pole tady bylo jen proto, že se `RepoID`y mapovaly na jména.
     private func axis(
         _ title: String,
         values: [String],
-        selected: [String],
+        selected: Set<String>,
         toggle: @escaping (String, Bool) -> Void
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {

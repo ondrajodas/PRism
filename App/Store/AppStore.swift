@@ -472,8 +472,13 @@ final class AppStore {
     }
 
     /// Kolik PR filtr schoval. Musí být vidět v liště: skrytý filtr je způsob, jak přijít o review.
+    ///
+    /// Počítá se **bez druhého filtrování** — jen se spočítá, co filtrem neprojde. `visiblePullRequests`
+    /// tady bylo dřív a znamenalo to, že se seznam filtruje dvakrát; SwiftUI ho přitom čte při každém
+    /// překreslení lišty (nález Copilota na #170).
     var hiddenPullRequestCount: Int {
-        pullRequests.count - visiblePullRequests.count
+        guard filter.isActive else { return 0 }
+        return pullRequests.count { !filter.matches($0) }
     }
 
     /// Co nabídnout ve filtru — z **plného** seznamu, sjednocené s aktivním filtrem.
@@ -512,10 +517,13 @@ final class AppStore {
     /// Skládá to store, ne polling: ten o stavu okna neví a vědět nemá. Pořadí důvodů rozhoduje
     /// `Policy.listEmptyReason` a nad selhaným tikem vyhrává chyba načtení, ne filtr.
     var listEmptyReason: ListEmptyReason? {
-        Policy.listEmptyReason(
+        // Jedním průchodem: `visiblePullRequests` i `hiddenPullRequestCount` by seznam filtrovaly
+        // každý zvlášť, a tenhle getter čte SwiftUI při každém překreslení seznamu.
+        let hidden = hiddenPullRequestCount
+        return Policy.listEmptyReason(
             poll: emptyReason,
-            visible: visiblePullRequests.count,
-            hidden: hiddenPullRequestCount
+            visible: pullRequests.count - hidden,
+            hidden: hidden
         )
     }
 
