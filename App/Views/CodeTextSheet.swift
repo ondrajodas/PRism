@@ -1,13 +1,10 @@
 import SwiftUI
 
-/// Kus kódu jako **jeden** text, ve kterém se dá vybírat přes řádky (#157).
+/// Celý hunk jako **jeden** text, ve kterém se dá vybírat i **přes bubliny** (#157).
 ///
-/// Existuje proto, že v diffu to nejde a jít nemůže: každý řádek je vlastní `Text` a selekce se
-/// mezi dvěma `Text`y neslévá. Složit hunk do jednoho `Text`u **uvnitř** diffu nejde kvůli tomu,
-/// co na řádcích visí (bubliny mezi řádky, tlačítko na komentář, tažení rozsahu, pozadí podle
-/// druhu řádku) — a hlavně kvůli měřené pasti s hunkem jako jednou buňkou líného seznamu.
-///
-/// Tady je to bezpečné, protože je to **mimo diff**: read-only `NSTextView` nad jedním textem.
+/// V diffu se od #157 přes řádky vybírat dá, ale jen v rámci bloku — ten končí u bubliny, u hlavičky
+/// hunku a u rozbalovacího řádku, protože přes ně jeden text vést nejde (visí na nich komentáře,
+/// pilulka, tažení rozsahu i pozadí podle druhu řádku). Kdo chce výřez přes ně, dostane ho tady.
 struct CodeText: Identifiable, Hashable {
     /// Odkud kód je — cesta a hlavička hunku. Identita sheetu je z ní, takže dvě různá místa
     /// otevřou různý obsah.
@@ -62,8 +59,8 @@ struct CodeTextSheet: View {
         .padding(12)
     }
 
-    /// Kód k vybírání. Kreslí ho `SelectableCodeView` (`NSTextView`), protože SwiftUI `Text`
-    /// selekci přes víc řádků nedá — viz tam.
+    /// Kód k vybírání. Kreslí ho `SelectableCodeView` (`NSTextView`) — SwiftUI `Text` dává selekci
+    /// po jednotlivých textech, viz tam.
     private var code: some View {
         SelectableCodeView(code: content.code, path: content.path, colorScheme: colorScheme)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

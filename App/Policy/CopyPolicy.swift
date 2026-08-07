@@ -88,7 +88,8 @@ extension Policy {
     /// Hunk, ve kterém tenhle řádek leží. `nil` = řádek k žádnému nepatří.
     ///
     /// Slouží k tomu, aby se dal z kontextového menu řádku otevřít **celý jeho hunk** jako text
-    /// k vybírání (#157) — v diffu se přes řádky vybírat nedá, viz `CodeTextSheet`.
+    /// k vybírání (#157) — v diffu jde vybrat jen v rámci bloku, který u bubliny končí, viz
+    /// `CodeTextSheet`.
     static func hunk(containing line: DiffLine, in file: FileDiff) -> DiffHunk? {
         file.hunks.first { $0.lines.contains(line) }
     }

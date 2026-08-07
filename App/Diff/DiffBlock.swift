@@ -2,9 +2,9 @@ import Foundation
 
 /// Souvislý úsek řádků diffu, který se kreslí jako **jeden text** (#157).
 ///
-/// Vzniklo proto, že selekce přes víc řádků se ve SwiftUI udělat nedá: každý `Text` je vlastní
-/// selekce a diff se skládá po řádcích. Klasické kopírování přes řádky umí **jedno** textové
-/// zobrazení — `NSTextView` — takže se souvislé řádky slučují do bloku a ten se kreslí jím.
+/// Vzniklo proto, že ve SwiftUI je každý `Text` vlastní selekce, takže v diffu skládaném po řádcích
+/// by šlo vybrat jen jeden řádek. Výběr přes řádky umí **jedno** textové zobrazení — `NSTextView` —
+/// takže se souvislé řádky slučují do bloku a ten se kreslí jím.
 ///
 /// **Blok končí tam, kde do diffu něco vstoupí**: hlavička hunku, rozbalovací řádek, bublina
 /// nálezu, cizí vlákno, můj rozdělaný komentář. Selekce tedy jde přes celý úsek kódu mezi dvěma

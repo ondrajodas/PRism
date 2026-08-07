@@ -108,13 +108,16 @@ kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi
 se dotáhne sám** — nález bez svého kódu se nedá posoudit. Nahoře v liště je **strom
 souborů** pro skok kamkoli v diffu.
 
-**Kód se dá vybrat myší a zkopírovat** (#157) — tažením přes text řádku, libovolný počet znaků,
-a ⌘C. Vybírá se jen obsah, ne čísla řádků a ne znak změny, takže se do schránky nepřiplete diff.
-**Přes víc řádků to v diffu nejde**: v SwiftUI je každý řádek vlastní text a selekce se mezi nimi
-neslévá; hunk jako jeden text by uvnitř diffu otevřel měřenou past s nevykreslenými řádky. Na to je
-v kontextovém menu **`Vybrat text z hunku…`** — otevře hunk v samostatném okně jako jeden text, kde
-se dá vybrat libovolný výřez přes libovolně mnoho řádků, i s obarvením a s tlačítkem na zkopírování
-všeho. Zavírá se Escem.
+**Kód se vybírá myší jako v editoru** (#157) — tažením přes libovolně mnoho řádků, ⌘C. Vybírá se jen
+obsah, ne čísla řádků a ne znak změny, takže se do schránky nepřiplete diff. Kód proto kreslí
+`NSTextView`, ne SwiftUI text: ve SwiftUI je každý text vlastní selekce, takže by šlo vybrat jen
+jeden řádek. Souvislé řádky se slévají do bloku, který končí u hlavičky hunku, rozbalovacího řádku
+nebo bubliny — vybírat jde přes celý úsek kódu mezi nimi, u většiny řádků přes celý hunk. Výběr
+zůstává modrý, i když myš odjede jinam, a v pohledu vedle sebe žije **jen v jednom sloupci**.
+
+Na to, co blok neumí — vybrat **přes** bubliny — je v kontextovém menu `Vybrat text z hunku…`: otevře
+hunk v samostatném okně jako jeden text, s obarvením a s tlačítkem na zkopírování všeho. Zavírá se
+Escem.
 
 Na víc řádků je **pravé kliknutí**: `Kopírovat řádek`, u řádku, který leží v rozsahu tvého
 rozdělaného komentáře, i `Kopírovat rozsah` s počtem řádků, a na hlavičce hunku `Kopírovat hunk`.

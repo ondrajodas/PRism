@@ -39,9 +39,10 @@ extension View {
                 }
                 if let selectText {
                     Divider()
-                    // Tři tečky, protože se otevře okno — konvence systému. Vybírání přes řádky
-                    // v diffu nejde (každý řádek je vlastní `Text`), takže tohle je jediná cesta,
-                    // jak si vzít vlastní výřez z víc řádků.
+                    // Tři tečky, protože se otevře okno — konvence systému. V diffu se od #157 přes
+                    // řádky vybírat **dá**, ale jen v rámci bloku: ten končí u bubliny, u hlavičky
+                    // hunku a u rozbalovacího řádku. Sheet je na to, co blok neumí — vzít výřez
+                    // **přes** ně.
                     Button("Vybrat text z hunku…", systemImage: "text.cursor", action: selectText)
                 }
             }

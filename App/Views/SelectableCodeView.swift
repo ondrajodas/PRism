@@ -1,16 +1,16 @@
 import AppKit
 import SwiftUI
 
-/// Kód, ve kterém se dá **vybírat přes víc řádků** — read-only `NSTextView` (#157).
+/// Kód v `CodeTextSheet`u jako **jeden** text — read-only `NSTextView` (#157).
 ///
 /// **Ne SwiftUI `Text` se `.textSelection(.enabled)`.** Ten dává selekci po jednotlivých `Text`ech,
-/// takže v diffu jde vybrat jen jeden řádek — a ani jeden `Text` s odřádkováním to nespravil
-/// (nahlášené při zkoušení #157: „pořád mi nejde vybrat text z více řádků“). `NSTextView` je proti
-/// tomu plnohodnotné textové zobrazení: výběr myší přes řádky, ⌘A, ⌘C i kontextové menu se
-/// `Copy` dostaneme od systému, ne z vlastního kódu.
+/// takže by šlo vybrat jen jeden řádek — a ani jeden `Text` s odřádkováním to nespravil (zkoušeno
+/// u #157). `NSTextView` je proti tomu plnohodnotné textové zobrazení: výběr myší přes řádky, ⌘A,
+/// ⌘C i kontextové menu se `Copy` dostaneme od systému, ne z vlastního kódu. Tatáž úvaha pak
+/// dovedla i **diff sám** k `DiffTextView`.
 ///
-/// Je to **mimo diff** (jen v `CodeTextSheet`), takže se tím neotevírá past s nevykreslenými řádky
-/// v líném seznamu, kvůli které je diff skládaný po řádcích.
+/// Zůstává i po tom přepisu, protože umí něco, co diff neumí: **vybrat přes hranice bloků**. Blok
+/// v diffu končí u bubliny, u hlavičky hunku a u rozbalovacího řádku; tady je hunk celý a naráz.
 struct SelectableCodeView: NSViewRepresentable {
     let code: String
     /// Cesta k souboru — z ní se pozná jazyk na obarvení.
