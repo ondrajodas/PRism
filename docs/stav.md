@@ -495,6 +495,23 @@ vidět po filtru reviewerů — filtr je pohled, souhrn tvrzení o obsahu. Dokud
 neukáže se nic (nula blokujících nad nenačtenými daty vypadá jako čisto); po **selhaném** tiku se
 naopak ukáže, protože data jsou stará, ne chybějící, a to už hlásí banner nad seznamem.
 
+Rozdělení `AppStore` hotové (issue #154) — `App/Store/AppStore.swift` z 2508 řádků na 871
+a k tomu jedenáct `AppStore+*.swift` po zodpovědnostech (`+Review`, `+Conversation`, `+Draft`,
+`+DraftTransfer`, `+Submission`, `+Notifications`, `+DiffExpansion`, `+Diff`, `+Automatic`,
+`+Findings`, `+Detail`). Tabulka s tím, který soubor drží co, je v [`docs/architektura.md`](architektura.md)
+a odkaz na ni v `CLAUDE.md`.
+
+**Dělí se metody, ne data:** uložený stav zůstal na jednom místě, protože jeho invarianty se drží
+tím, že jsou pohromadě. Řezalo se podle `MARK` sekcí, které v souboru už byly — nebylo to nové
+rozdělení, jen se přepsalo do souborů, a **ověřením, že to byl přesun a ne přepis, je nedotčené
+`Tests/`**: 1563 testů prošlo bez jediné změny.
+
+Cena je 59 členů, které musely z `private` na `internal`, protože na ně extensiony sahají. Je to
+vidět (`store.gateway` je dnes dostupný z celé aplikace) a **tvrdou podmínku č. 1 to nemění**:
+publisher polem storu není a `GitHubGateway` zůstává bez zápisových metod. Zabalit závislosti do
+jednoho typu, aby stačilo otevřít jedno pole, by znamenalo přepsat `init` — a s ním testy, čímž by
+z přesunu byl přepis.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**

@@ -18,38 +18,38 @@ final class AppStore {
     /// (`Policy.reviewState(for:)`) a `busy` pro eviction taky. Dvě mapy s různými klíči
     /// si dokázaly odporovat — jedno PR hlásilo selhání nad klonem, který mezitím pro
     /// druhé PR téhož repa v pořádku vznikl.
-    private(set) var checkoutStates: [RepoID: CheckoutState] = [:]
+    var checkoutStates: [RepoID: CheckoutState] = [:]
 
     /// Co se s review právě děje. Co v mapě není, neběží.
-    private(set) var reviewPhases: [PRIdentifier: ReviewPhase] = [:]
+    var reviewPhases: [PRIdentifier: ReviewPhase] = [:]
 
     /// Poslední známý výsledek per PR — z disku při startu, pak z doběhlých běhů.
     ///
     /// Na disku je záznamů víc (historie po commitech), tady je vždycky jen ten platný;
     /// který to je, rozhoduje `Policy.currentRecords(from:)`.
-    private(set) var reviewRecords: [PRIdentifier: ReviewRecord] = [:]
+    var reviewRecords: [PRIdentifier: ReviewRecord] = [:]
 
     /// Diff **per PR**. Co v mapě není, se ještě nenačítalo.
-    private(set) var diffStates: [PRIdentifier: DiffState] = [:]
+    var diffStates: [PRIdentifier: DiffState] = [:]
 
     /// Detail **per PR** — kvůli `headSha`, proti kterému se píše rozdělané review.
     ///
     /// Dotahuje se při výběru řádku, ne pollingem: pro všech N PR by to byla tatáž N+1 past,
     /// kvůli které se netahá konverzace. Cache podle `updatedAt` je stejná jako u diffu.
-    private(set) var detailStates: [PRIdentifier: DetailState] = [:]
+    var detailStates: [PRIdentifier: DetailState] = [:]
 
     /// Který tab PR je vidět, **per PR**. Co v mapě není, je na `PullRequestTab.standard`.
     ///
     /// Drží se odchylka od výchozího stavu, ne volba u každého PR — stejný vzor jako
     /// u překliknutých vláken. Ve view to být nemůže: `PullRequestDetailView` si SwiftUI mezi
     /// pull requesty ponechá, takže by volba přetekla z jednoho na druhý.
-    private(set) var detailTabs: [PRIdentifier: PullRequestTab] = [:]
+    var detailTabs: [PRIdentifier: PullRequestTab] = [:]
 
     /// Rozdělané review **per PR**. Co v mapě není, se nezačalo psát.
     ///
     /// Načte se celé při startu, ne až při výběru řádku: indikátor v seznamu má být vidět
     /// u všech PR naráz a jsou to kilobajty.
-    private(set) var drafts: [PRIdentifier: ReviewDraft] = [:]
+    var drafts: [PRIdentifier: ReviewDraft] = [:]
 
     /// Kolik souborů s rozdělaným review se nepodařilo přečíst.
     ///
@@ -61,21 +61,21 @@ final class AppStore {
     ///
     /// Ztracená ručně psaná práce je to nejdražší, co tady umí zmizet — takže se selhání
     /// zápisu nespolkne. Na rozdíl od nálezů se nedá zopakovat žádným během.
-    private(set) var draftFailure: String?
+    var draftFailure: String?
 
     /// Proč se nepodařilo uložit odmítnutí nálezu (#113).
     ///
     /// Neuložené odmítnutí se po restartu vrátí a nikdo nebude vědět proč — takže se tady
     /// selhání zápisu nespolkne, stejně jako u draftu. Tichý `try?` by z toho udělal přesně
     /// ten vzor, na který si `CLAUDE.md` stěžuje.
-    private(set) var dismissalFailure: String?
+    var dismissalFailure: String?
 
     /// Poslední **doručená** notifikace (#138). `nil` = od spuštění se nic neohlásilo.
     ///
     /// Posouvá ji jedině `.delivered`, ne pokus o doručení: jinak by stavový řádek tvrdil, že
     /// něco odešlo, i když to systém odmítl — tedy přesně to mlčení vydávané za funkčnost,
     /// kvůli kterému issue vzniklo.
-    private(set) var lastDeliveredNotification: DeliveredNotification?
+    var lastDeliveredNotification: DeliveredNotification?
 
     /// Proč notifikace nechodí (#88). `nil` = chodí, nebo se ještě žádná neposílala.
     ///
@@ -83,11 +83,11 @@ final class AppStore {
     /// musí být v okně vidět: bez toho se hledá, proč nic nepřichází, a odpověď leží
     /// v Nastavení systému, kam aplikace nedosáhne. Tatáž kategorie jako rozbitá konfigurace:
     /// nesmí položit, nesmí projít tiše.
-    private(set) var notificationFailure: String?
+    var notificationFailure: String?
 
     /// Konverzace **per PR** — review ostatních, vlákna, komentáře. Co v mapě není, se
     /// ještě nenačítalo.
-    private(set) var conversationStates: [PRIdentifier: ConversationState] = [:]
+    var conversationStates: [PRIdentifier: ConversationState] = [:]
 
     /// Vlákna, u kterých si uživatel překlikl rozbalení proti výchozímu stavu, **per PR**.
     ///
@@ -100,7 +100,7 @@ final class AppStore {
     /// stačilo. Je to kvůli úklidu: zahazovat se má podle toho, jestli PR zmizel ze seznamu,
     /// a to z `id` vlákna poznat nejde. Plochá množina uklízená podle **načtených** konverzací
     /// se po výpadku sítě (`.failed`) vyprázdnila a uživateli naskočilo výchozí rozbalení.
-    private(set) var toggledThreads: [PRIdentifier: Set<String>] = [:]
+    var toggledThreads: [PRIdentifier: Set<String>] = [:]
 
     /// Rozepsané odpovědi do vláken (#73). Co v mapě není, nikdo nerozepsal.
     ///
@@ -112,20 +112,20 @@ final class AppStore {
     /// Zahazuje se s PR mimo seznam, stejně jako konverzace — bez vlákna se odpověď nemá kde
     /// ukázat. To je rozdíl proti rozdělanému review, které se drží: to je vlastní práce
     /// v řádu odstavců a má na disku své místo.
-    private(set) var threadReplies: [ThreadKey: String] = [:]
+    var threadReplies: [ThreadKey: String] = [:]
 
     /// Co se právě děje s vláknem, nebo co u něj selhalo. Chybějící záznam = nic.
-    private(set) var threadStates: [ThreadKey: ThreadActionState] = [:]
+    var threadStates: [ThreadKey: ThreadActionState] = [:]
 
     /// Rozbalený kontext **per soubor v PR**. Co v mapě není, nikdo nerozbaloval.
-    private(set) var expansions: [FileExpansionKey: FileExpansion] = [:]
+    var expansions: [FileExpansionKey: FileExpansion] = [:]
 
     /// Sbalené soubory diffu. Co v množině **není**, je rozbalené — u PR o padesáti
     /// souborech je rozbaleno výchozí stav a sbalení je gesto, takže se pamatuje to druhé.
     ///
     /// Žije tady, ne ve view: `PullRequestDetailView` si SwiftUI mezi PR ponechá (stejná
     /// pozice ve stromu), takže by sbalení přeteklo z jednoho pull requestu na druhý.
-    private(set) var foldedFiles: Set<FileExpansionKey> = []
+    var foldedFiles: Set<FileExpansionKey> = []
 
     /// Odchylka od pohledu na diff, který je v nastavení. `nil` = ber ho z konfigurace.
     ///
@@ -138,7 +138,7 @@ final class AppStore {
     /// se na to podívám jinak“. Kdyby přepínač zapisoval do `config.json`, přestala by být
     /// hodnota v nastavení tím, čemu se říká výchozí — měnila by se sama tím, že si člověk
     /// u jednoho souboru otočí pohled.
-    private(set) var diffLayoutOverride: DiffLayout?
+    var diffLayoutOverride: DiffLayout?
 
     /// Komentář, který se dá ⇧ klikem roztáhnout na rozsah — ten naposledy přidaný v tomhle PR
     /// (#110). Chybějící záznam = není co roztahovat, takže ⇧ klik založí obyčejný komentář.
@@ -146,7 +146,7 @@ final class AppStore {
     /// Drží se **id komentáře**, ne kotva: druhý konec se z komentáře dopočítá a po roztažení
     /// zůstane platný, kdežto uložená kotva by se s ním rozešla. Uklízí se s PR mimo seznam,
     /// jako ostatní stav vázaný na PR.
-    private(set) var rangeTargets: [PRIdentifier: UUID] = [:]
+    var rangeTargets: [PRIdentifier: UUID] = [:]
 
     /// Rozsah, který se právě táhne přes řádky diffu (#110). `nil` = netáhne se.
     ///
@@ -154,11 +154,11 @@ final class AppStore {
     /// diff, protože pořadí konců rozhoduje podle kreslených řádků), takže by se to jinak počítalo
     /// dvakrát — při zvýrazňování i při vzniku komentáře. Zvýraznění tak ukazuje **přesně** ten
     /// rozsah, který z tažení vznikne.
-    private(set) var commentDrag: CommentRangeDrag?
+    var commentDrag: CommentRangeDrag?
 
     /// Co reviewery dělaly, per PR. Drží se i po doběhnutí — právě tehdy se k tomu člověk
     /// vrací. Pořadí kopíruje pořadí, ve kterém běhy začaly.
-    private(set) var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
+    var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
 
     /// Má okno nastavení fokus? Hlavní okno se podle toho rozostří, aby netahalo oko.
     ///
@@ -172,9 +172,10 @@ final class AppStore {
 
     /// Nastavení, se kterým aplikace běží.
     private(set) var configuration: Configuration
+
     /// Proč se konfiguraci nepodařilo přečíst nebo uložit. Ani jedno nesmí aplikaci
     /// položit, ale ani projít tiše — jinak uživatel hledá, proč mu nastavení nefunguje.
-    private(set) var configurationFailure: String?
+    var configurationFailure: String?
 
     /// Kolik uložených souborů s nálezy se nepodařilo přečíst.
     ///
@@ -182,42 +183,57 @@ final class AppStore {
     /// „review neběželo“.
     private(set) var unreadableReviewFiles = 0
 
-    private let time: any TimeSource
+    let time: any TimeSource
+
     private let polling: PollingService
+
     /// Dostupnost služeb pro stavový řádek. `nil` = odsud se nesleduje (testy) a řádek pak
     /// žádné puntíky neukazuje.
     ///
     /// Nepovinné schválně, jako `checkout` nebo `reviews`: `keepFresh()` volají i testy
     /// a monitor s živým klientem by z nich udělal testy chodící na síť.
     private let health: HealthMonitor?
-    private let gateway: any GitHubGateway
+
+    let gateway: any GitHubGateway
+
     /// Cesta ke `gh` — jediné, co si store kvůli odesílání drží.
     ///
     /// **Ne publisher a ani továrna na něj** (tvrdá podmínka č. 1): cesta ven se skládá až
     /// v `ReviewSubmission.send()`, takže `AppStore` sám odeslat nic neumí — a grep, kterým
     /// se ta podmínka kontroluje, ho schválně nevypíše. `nil` v testech znamená „odsud se
     /// neposílá“ a `submission(for:)` pak nevrátí nic.
-    private let gh: URL?
-    private let checkout: (any RepoCheckout)?
-    private let reviewer: (any ReviewRunning)?
-    private let reviews: ReviewStore?
-    private let draftStore: ReviewDraftStore?
-    private let translator: (any FindingTranslating)?
+    let gh: URL?
+
+    let checkout: (any RepoCheckout)?
+
+    let reviewer: (any ReviewRunning)?
+
+    let reviews: ReviewStore?
+
+    let draftStore: ReviewDraftStore?
+
+    let translator: (any FindingTranslating)?
+
     private let configStore: ConfigStore?
+
     /// Doručování notifikací (#88). `nil` = odsud se neposílají (testy), takže se nic
     /// nedoručí a proud kliknutí se ani nezačne konzumovat.
     ///
     /// Nepovinné schválně, jako `health` nebo `reviews`: `keepFresh()` volají i testy a živé
     /// centrum by z nich udělalo testy sahající na systémové notifikace.
-    private let notifications: (any UserNotifying)?
+    let notifications: (any UserNotifying)?
+
     /// Které PR už se ohlásily jako nové (#85). `nil` = odsud se nehlásí (testy).
-    private let announced: AnnouncedPullRequests?
+    let announced: AnnouncedPullRequests?
+
     /// Rozdělané běhy (#97). `nil` = odsud se nedotahuje (testy).
-    private let interrupted: InterruptedRuns?
+    let interrupted: InterruptedRuns?
+
     /// Čtení transcriptů zabitých session (#97). `nil` = odsud se nečte (testy).
     private let transcripts: (any TranscriptReading)?
+
     /// Běžící review podle PR — drží se kvůli zrušení.
-    private var reviewTasks: [PRIdentifier: RunningReview] = [:]
+    var reviewTasks: [PRIdentifier: RunningReview] = [:]
 
     /// Běžící review jednoho PR — úloha a to, které reviewery pouští.
     ///
@@ -227,25 +243,29 @@ final class AppStore {
     /// dvojicí by znamenalo přepsat všechna čtyři. Cena je, že se opakování jednoho revieweera
     /// nedá spustit, dokud nad PR běží jiné review; to je ale stav, který sám za chvíli
     /// skončí, a chip u něj mezitím ukazuje spinner.
-    private struct RunningReview {
+    struct RunningReview {
         let task: Task<Void, Never>
         /// Podmnožina, kterou běh pouští (#149). `nil` = celá nastavená sada — a schválně ne
         /// její snímek: sadu ještě může změnit odhad jazyka repa a platit má ta, se kterou běh
         /// doopravdy jede.
         let skills: [String]?
     }
+
     /// Review, která spustil **automat**. Ruční se pozná tím, že tady není — a jen ta
     /// automatická se ruší, když PR zmizí ze seznamu.
-    private var automaticReviews: Set<PRIdentifier> = []
+    var automaticReviews: Set<PRIdentifier> = []
+
     /// `updatedAt`, se kterým se PR naposledy zvažoval pro automat.
     ///
     /// V paměti, ne na disku: po restartu se zváží znovu, což stojí jedno `gh pr view` na
     /// PR. Session se za to neutratí — o tu rozhoduje až porovnání `headSha`.
-    private var consideredForAutomation: [PRIdentifier: Date] = [:]
-    private let autoRuns: AutoRunLedger?
+    var consideredForAutomation: [PRIdentifier: Date] = [:]
+
+    let autoRuns: AutoRunLedger?
+
     /// Kolik dneska stálo review (#148). Nepovinná závislost jako ostatní story — testy, které
     /// o útratu nestojí, ji nedostanou a řádek pak žádnou útratu neukazuje.
-    private let spend: SpendLedger?
+    let spend: SpendLedger?
 
     init(
         gateway: any GitHubGateway,
@@ -422,9 +442,13 @@ final class AppStore {
     }
 
     var pullRequests: [PullRequestSummary] { polling.state.pullRequests }
+
     var status: PollStatus { polling.state.status }
+
     var lastSuccess: Date? { polling.state.lastSuccess }
+
     var isStale: Bool { polling.state.isStale }
+
     var emptyReason: PollEmptyReason? { polling.state.emptyReason }
 
     /// Puntíky pro stavový řádek. Prázdné, když se dostupnost odsud nesleduje.
@@ -469,7 +493,7 @@ final class AppStore {
     /// Jde jen o **review**, ne o překlad nálezů: ten se smí nepovést tiše (nálezy zůstanou
     /// v originále), takže by se z něj červený puntík vyráběl nad něčím, co za chybu ani
     /// nepovažujeme.
-    private(set) var lastReviewCall: ServiceCall?
+    var lastReviewCall: ServiceCall?
 
     /// Drží seznam aktuální, dokud okno žije. Zrušení tasku smyčku ukončí.
     func keepFresh() async {
@@ -563,7 +587,7 @@ final class AppStore {
     }
 
     /// Poznamená si, že běh začal (#97). Volá se, jakmile ze session dorazí `session_id`.
-    private func markInterrupted(
+    func markInterrupted(
         _ sessionID: String,
         of skill: String,
         for pr: PRIdentifier,
@@ -598,7 +622,7 @@ final class AppStore {
     /// Drží se **spotřeba**, ne zbytek, jako u `automaticRunsToday`: rozpočet v penězích
     /// aplikace nemá (viz specifikace) a i kdyby ho měla, snímek „zbývá X“ by po změně limitu
     /// lhal až do dalšího běhu.
-    private(set) var dailySpend: DailySpend?
+    var dailySpend: DailySpend?
 
     /// Načte útratu z disku. Volá se při startu, ať řádek po restartu neukazuje nulu nad
     /// dnem, ve kterém už se utrácelo.
@@ -715,7 +739,7 @@ final class AppStore {
 
     /// Které reviewery běžící review pouští. Celá nastavená sada, když neběží nic — chipy pak
     /// ukazují to, co by se spustilo.
-    private func runningSkills(for pr: PRIdentifier) -> [String] {
+    func runningSkills(for pr: PRIdentifier) -> [String] {
         reviewTasks[pr]?.skills ?? reviewSkills(for: pr.repo)
     }
 
@@ -764,1017 +788,8 @@ final class AppStore {
         }
     }
 
-    // MARK: - Diff
-
-    func diffState(for pr: PRIdentifier) -> DiffState? { diffStates[pr] }
-
-    /// Načte diff vybraného PR. Načtený se drží — na GitHub se sáhne znovu, teprve když
-    /// se změní `updatedAt`.
-    ///
-    /// `updatedAt` se mění i po komentáři, takže se občas načte zbytečně. Opačná chyba —
-    /// ukázat diff, ve kterém chybí nový commit — je dražší.
-    func loadDiff(for pullRequest: PullRequestSummary) async {
-        let id = pullRequest.id
-        guard !hasCurrentDiff(for: pullRequest) else { return }
-        diffStates[id] = .loading
-
-        do {
-            let text = try await gateway.fetchDiff(id: id)
-            diffStates[id] = .loaded(DiffParser.parse(text), updatedAt: pullRequest.updatedAt)
-            revealFindingsOutsideTheDiff(for: id)
-        } catch is CancellationError {
-            // Přepnutí na jiné PR načítání zruší. Nechat tam `.loading` by znamenalo
-            // spinner, který se nikdy nedotočí. Maže se **jen** rozdělaný stav: mezitím
-            // spuštěné načtení už mohlo doběhnout a to se přepsat nesmí.
-            if diffStates[id] == .loading { diffStates[id] = nil }
-        } catch let error as GitHubError {
-            diffStates[id] = .failed(error.userDescription)
-        } catch {
-            diffStates[id] = .failed(error.localizedDescription)
-        }
-    }
-
-    /// Rozdělané načítání se za platný diff **nepovažuje** — dvě souběžná načtení jsou
-    /// jen zbytečné volání navíc, kdežto přeskočit to jediné, které běží, znamená prázdno
-    /// v okně, dokud si uživatel PR nevybere znovu.
-    private func hasCurrentDiff(for pullRequest: PullRequestSummary) -> Bool {
-        guard case .loaded(_, let updatedAt) = diffStates[pullRequest.id] else { return false }
-        return updatedAt == pullRequest.updatedAt
-    }
-
-    // MARK: - Taby PR
-
-    /// Který tab je vidět. Výchozí drží `PullRequestTab.standard`, ať je odpověď na jednom
-    /// místě — čte ji i test, který hlídá, že se to nerozejde.
-    func detailTab(for pr: PRIdentifier) -> PullRequestTab { detailTabs[pr] ?? .standard }
-
-    func setDetailTab(_ tab: PullRequestTab, for pr: PRIdentifier) {
-        // Výchozí volba se z mapy maže, ať v ní nezůstávají klíče bez informace.
-        detailTabs[pr] = tab == .standard ? nil : tab
-    }
-
-    // MARK: - Detail PR
-
-    func detailState(for pr: PRIdentifier) -> DetailState? { detailStates[pr] }
-
-    /// Popis PR, jak ho napsal autor. `nil` = detail se ještě nenačetl.
-    func description(of pr: PRIdentifier) -> String? {
-        guard case .loaded(let detail, _) = detailStates[pr] else { return nil }
-        return detail.body
-    }
-
-    /// Hlava PR, jak ji naposledy vrátil `gh pr view`. `nil` = ještě nevíme.
-    ///
-    /// Na tom visí dvě věci: proti čemu se zakládá nový draft a jestli je ten stávající
-    /// zastaralý. „Nevím“ se přitom nesmí splést se „zastaralé“ — proto optional a ne
-    /// prázdný řetězec.
-    func head(of pr: PRIdentifier) -> String? {
-        guard case .loaded(let detail, _) = detailStates[pr] else { return nil }
-        return detail.headSha
-    }
-
-    /// Dotáhne detail vybraného PR. Načtený se drží, dokud se nezmění `updatedAt` — stejná
-    /// cache jako u diffu.
-    func loadDetail(for pullRequest: PullRequestSummary) async {
-        let id = pullRequest.id
-        guard !hasCurrentDetail(for: pullRequest) else { return }
-        detailStates[id] = .loading
-
-        do {
-            let detail = try await gateway.fetchDetail(id: id)
-            detailStates[id] = .loaded(detail, updatedAt: pullRequest.updatedAt)
-        } catch is CancellationError {
-            // Maže se **jen** rozdělaný stav: mezitím spuštěné načtení už mohlo doběhnout.
-            if detailStates[id] == .loading { detailStates[id] = nil }
-        } catch let error as GitHubError {
-            detailStates[id] = .failed(error.userDescription)
-        } catch {
-            detailStates[id] = .failed(error.localizedDescription)
-        }
-    }
-
-    private func hasCurrentDetail(for pullRequest: PullRequestSummary) -> Bool {
-        guard case .loaded(_, let updatedAt) = detailStates[pullRequest.id] else { return false }
-        return updatedAt == pullRequest.updatedAt
-    }
-
-    // MARK: - Konverzace
-
-    func conversationState(for pr: PRIdentifier) -> ConversationState? { conversationStates[pr] }
-
-    func conversation(for pr: PRIdentifier) -> Conversation? {
-        guard case .loaded(let conversation, _) = conversationStates[pr] else { return nil }
-        return conversation
-    }
-
-    /// Načte konverzaci vybraného PR. Cache stejná jako u diffu — na GitHub se sáhne znovu,
-    /// teprve když se změní `updatedAt`.
-    ///
-    /// **Netahá se při pollingu.** Konverzace pro všech N PR je tatáž N+1 past, kvůli které
-    /// se netahá ani detail: jeden tik by byl N podprocesů. Načítá se při výběru řádku.
-    func loadConversation(for pullRequest: PullRequestSummary) async {
-        let id = pullRequest.id
-        guard !hasCurrentConversation(for: pullRequest) else { return }
-        conversationStates[id] = .loading
-
-        do {
-            let conversation = try await gateway.fetchConversation(id: id)
-            conversationStates[id] = .loaded(conversation, updatedAt: pullRequest.updatedAt)
-        } catch is CancellationError {
-            // Maže se **jen** rozdělaný stav: mezitím spuštěné načtení už mohlo doběhnout
-            // a to se přepsat nesmí. Stejné pravidlo jako u diffu.
-            if conversationStates[id] == .loading { conversationStates[id] = nil }
-        } catch let error as GitHubError {
-            conversationStates[id] = .failed(error.userDescription)
-        } catch {
-            conversationStates[id] = .failed(error.localizedDescription)
-        }
-    }
-
-    /// Ruční obnovení konverzace — zahodí uložený stav a načte znovu.
-    ///
-    /// Kotví se na to, že konverzace **zastarává jinak než diff**: kolega odpoví za minutu
-    /// a `updatedAt` se tím sice změní, ale seznam se obnovuje po minutách. Tlačítko je
-    /// levnější než čekat na tik.
-    func refreshConversation(for pullRequest: PullRequestSummary) async {
-        conversationStates[pullRequest.id] = nil
-        await loadConversation(for: pullRequest)
-    }
-
-    /// Rozdělané načítání se za platnou konverzaci **nepovažuje** — stejný důvod jako
-    /// u diffu: přeskočit to jediné, které běží, znamená prázdno v okně.
-    private func hasCurrentConversation(for pullRequest: PullRequestSummary) -> Bool {
-        guard case .loaded(_, let updatedAt) = conversationStates[pullRequest.id] else { return false }
-        return updatedAt == pullRequest.updatedAt
-    }
-
-    /// Co patří do tabu `Přehled` — konverzace, která se neváže k řádku v aktuálním diffu.
-    ///
-    /// Prázdné, dokud konverzace nedorazí. Že se **načítá** nebo že to **selhalo**, se pozná
-    /// z `conversationState(for:)`; prázdný seznam sám o sobě neznamená „nikdo nic nenapsal“.
-    func overview(for pr: PRIdentifier) -> [ConversationEntry] {
-        guard let conversation = conversation(for: pr) else { return [] }
-        return Policy.overview(of: conversation, renderedIn: loadedDiff(for: pr))
-    }
-
-    /// Vlákna, která se v diffu dají zakotvit — ta se kreslí jako bubliny.
-    func anchoredThreads(for pr: PRIdentifier) -> [ReviewThread] {
-        guard let conversation = conversation(for: pr) else { return [] }
-        return Policy.threadsInTheDiff(conversation.threads.items, renderedIn: loadedDiff(for: pr))
-    }
-
-    func isThreadExpanded(_ thread: ReviewThread, in pr: PRIdentifier) -> Bool {
-        Policy.isThreadExpanded(thread, toggled: toggledThreads[pr] ?? [])
-    }
-
-    // MARK: - Odpovídání do vláken (#73)
-
-    func threadReply(for threadID: String, in pr: PRIdentifier) -> String {
-        threadReplies[ThreadKey(pullRequest: pr, threadID: threadID)] ?? ""
-    }
-
-    /// Zapíše rozepsaný text. Prázdný se **maže**, ať mapa nedrží záznam po každém vlákně,
-    /// do kterého někdo klikl a rozmyslel si to — tentýž vzor jako prázdný draft.
-    func setThreadReply(_ text: String, for threadID: String, in pr: PRIdentifier) {
-        let key = ThreadKey(pullRequest: pr, threadID: threadID)
-        threadReplies[key] = text.isEmpty ? nil : text
-    }
-
-    func threadState(for threadID: String, in pr: PRIdentifier) -> ThreadActionState? {
-        threadStates[ThreadKey(pullRequest: pr, threadID: threadID)]
-    }
-
-    /// Smí se do vláken tohohle repa odesílat?
-    ///
-    /// Tatáž brána jako u review (`PublishScope`), takže se okno neptá dvakrát jinak. Okno na
-    /// ni ale nereaguje schováním tlačítka — nechá ho **zakázané s důvodem**, jinak by
-    /// chybějící tlačítko vypadalo jako rozbitá aplikace.
-    func canPublishToThreads(in repo: RepoID) -> Bool {
-        gh != nil && publishScope.allows(repo)
-    }
-
-    /// Odešle rozepsanou odpověď do vlákna a vloží ji do konverzace.
-    ///
-    /// Text se po úspěchu maže, po selhání **zůstává** — je to zadání #73 a jediná pojistka
-    /// proti tomu, aby se rozepsaná věta ztratila kvůli chvilkovému výpadku.
-    func sendThreadReply(to thread: ReviewThread, in pullRequest: PullRequestSummary) async {
-        let id = pullRequest.id
-        let key = ThreadKey(pullRequest: id, threadID: thread.id)
-        let body = threadReplies[key] ?? ""
-        guard let submission = threadSubmission(for: thread.id, in: id) else { return }
-        // Dvojklik: druhé odeslání by bylo druhý komentář, ne oprava prvního. Kontrola leží
-        // **před** prvním `await`, takže mezi nimi není mezera, do které by se závod vešel.
-        guard threadStates[key]?.isBusy != true else { return }
-        threadStates[key] = .replying
-
-        do {
-            let comment = try await submission.reply(body)
-            threadStates[key] = nil
-            threadReplies[key] = nil
-            insert(comment, intoThread: thread.id, of: pullRequest)
-        } catch let error as PublishError {
-            threadStates[key] = .replyFailed(error)
-        } catch {
-            threadStates[key] = .replyFailed(.unknown(error.localizedDescription))
-        }
-    }
-
-    /// Přepne vyřešení vlákna a zapíše, co GitHub potvrdil.
-    func setThreadResolved(
-        _ resolved: Bool,
-        of thread: ReviewThread,
-        in pullRequest: PullRequestSummary
-    ) async {
-        let id = pullRequest.id
-        let key = ThreadKey(pullRequest: id, threadID: thread.id)
-        guard let submission = threadSubmission(for: thread.id, in: id) else { return }
-        guard threadStates[key]?.isBusy != true else { return }
-        threadStates[key] = .resolving(to: resolved)
-
-        do {
-            let resolution = try await submission.setResolved(resolved)
-            threadStates[key] = nil
-            apply(resolution, of: pullRequest)
-        } catch let error as PublishError {
-            threadStates[key] = .resolutionFailed(error)
-        } catch {
-            threadStates[key] = .resolutionFailed(.unknown(error.localizedDescription))
-        }
-    }
-
-    /// Publisher se tu **nevyrábí** — jen se předá `gh`, read-only gateway a brána. Vzniká až
-    /// uvnitř `ThreadSubmission`, viz tvrdá podmínka č. 1.
-    private func threadSubmission(
-        for threadID: String,
-        in pr: PRIdentifier
-    ) -> ThreadSubmission? {
-        guard let gh else { return nil }
-        return ThreadSubmission(
-            target: ThreadTarget(pullRequest: pr, threadID: threadID),
-            gh: gh,
-            gateway: gateway,
-            scope: publishScope
-        )
-    }
-
-    /// Vloží odeslanou odpověď do načtené konverzace, ať je vidět bez kola po síti.
-    ///
-    /// Když vlákno v konverzaci **není** (mezitím se obnovila, nebo ho někdo smazal), konverzace
-    /// se načte znovu: odeslaný komentář, který se nemá kde ukázat, vypadá jako neodeslaný.
-    private func insert(
-        _ comment: ThreadComment,
-        intoThread threadID: String,
-        of pullRequest: PullRequestSummary
-    ) {
-        let id = pullRequest.id
-        guard case .loaded(let conversation, let updatedAt) = conversationStates[id],
-              let updated = Policy.inserting(comment, intoThread: threadID, of: conversation)
-        else {
-            Task { await refreshConversation(for: pullRequest) }
-            return
-        }
-        conversationStates[id] = .loaded(updated, updatedAt: updatedAt)
-    }
-
-    private func apply(_ resolution: ThreadResolution, of pullRequest: PullRequestSummary) {
-        let id = pullRequest.id
-        guard case .loaded(let conversation, let updatedAt) = conversationStates[id],
-              let updated = Policy.applying(resolution, to: conversation)
-        else {
-            Task { await refreshConversation(for: pullRequest) }
-            return
-        }
-        conversationStates[id] = .loaded(updated, updatedAt: updatedAt)
-    }
-
-    func toggleThread(_ thread: ReviewThread, in pr: PRIdentifier) {
-        var toggled = toggledThreads[pr] ?? []
-        if toggled.contains(thread.id) {
-            toggled.remove(thread.id)
-        } else {
-            toggled.insert(thread.id)
-        }
-        // Prázdná množina se maže, ať v mapě nezůstávají klíče bez obsahu.
-        toggledThreads[pr] = toggled.isEmpty ? nil : toggled
-    }
-
-    // MARK: - Tažení rozsahu (#110)
-
-    /// Průběh tažení: `from` je řádek, na kterém začalo, `to` ten pod myší.
-    ///
-    /// Rozsah se skládá při každém pohybu, protože se z něj kreslí zvýraznění — a musí to být
-    /// tentýž rozsah, který vznikne na konci.
-    ///
-    /// **`to == nil` znamená „pod myší žádný řádek není“** — prázdná protistrana ve split pohledu,
-    /// mezera mezi soubory, hlavička hunku. Rozdělaný rozsah se pak **drží**: přejetí přes prázdné
-    /// místo není zrušení výběru, a bez tohohle se rozsah srazil na první řádek a po přejetí na
-    /// další řádek se zase objevil (nahlášené při zkoušení #110). Dokud ale rozsah není žádný,
-    /// platí samotný začátek, ať z tažení vznikne aspoň jednořádkový komentář.
-    ///
-    /// Když rozsah `Policy` složit nedá (druhý konec v jiném souboru nebo mimo diff), drží se
-    /// poslední platný ze stejného důvodu.
-    func dragCommentRange(path: String, from: DraftAnchor, to: DraftAnchor?, for pr: PRIdentifier) {
-        guard case .loaded(let diff, _) = diffStates[pr], let file = diff.file(at: path) else { return }
-        guard let target = to ?? (commentDrag == nil ? from : nil),
-              let range = Policy.commentRange(from: from.end, to: target.end, in: file)
-        else { return }
-        commentDrag = CommentRangeDrag(pullRequest: pr, path: path, anchor: range)
-    }
-
-    /// Konec tažení: z rozsahu vznikne komentář. Tažení, které nikam nedošlo (rozsah délky 1),
-    /// dá obyčejný jednořádkový komentář — je to totéž, co tlačítko u řádku.
-    func finishCommentRange() {
-        guard let drag = commentDrag else { return }
-        commentDrag = nil
-        addDraftComment(at: drag.anchor, path: drag.path, for: drag.pullRequest)
-    }
-
-    // MARK: - Pohled na diff
-
-    /// S jakým pohledem se diff kreslí: odchylka z lišty, jinak hodnota z nastavení.
-    var diffLayout: DiffLayout {
-        diffLayoutOverride ?? configuration.global.diffLayout
-    }
-
-    /// Přepnutí z lišty nad diffem.
-    ///
-    /// Odchylka se zapíše **i tehdy, když se rovná nastavené hodnotě**. Je to totéž pravidlo
-    /// jako u `Configuration.setRepository`, kde se maže podle prázdnosti a ne podle shody
-    /// s globální hodnotou: kdo si pohled otočil sám, má ho podržet i po změně v nastavení.
-    /// Do zavření aplikace — po restartu platí zase nastavení.
-    func setDiffLayout(_ layout: DiffLayout) {
-        diffLayoutOverride = layout
-    }
-
-    // MARK: - Sbalení souboru
-
-    func isFolded(_ path: String, in pr: PRIdentifier) -> Bool {
-        foldedFiles.contains(FileExpansionKey(pullRequest: pr, path: path))
-    }
-
-    func toggleFolded(_ path: String, in pr: PRIdentifier) {
-        let key = FileExpansionKey(pullRequest: pr, path: path)
-        if foldedFiles.contains(key) {
-            foldedFiles.remove(key)
-        } else {
-            foldedFiles.insert(key)
-        }
-    }
-
-    /// Rozbalí soubor, ať se dá skočit dovnitř. Skok na sbalený soubor by jinak skončil
-    /// nikde — jeho řádky v líném seznamu vůbec nejsou.
-    func unfold(_ path: String, in pr: PRIdentifier) {
-        foldedFiles.remove(FileExpansionKey(pullRequest: pr, path: path))
-    }
-
-    /// Sbalí vyjmenované soubory. Cesty dodává volající, protože co je v diffu, store neví.
-    func foldAll(_ paths: [String], in pr: PRIdentifier) {
-        foldedFiles.formUnion(paths.map { FileExpansionKey(pullRequest: pr, path: $0) })
-    }
-
-    /// Rozbalí všechno v tomhle PR. Cesty netřeba — rozbalené je to, co v množině není.
-    ///
-    /// Sahá **jen na tohle PR**: sbalení v jiném je cizí stav a smazat ho při „rozbalit vše“
-    /// by znamenalo, že se tlačítko v jednom okně projeví jinde.
-    func unfoldAll(in pr: PRIdentifier) {
-        foldedFiles = foldedFiles.filter { $0.pullRequest != pr }
-    }
-
-    // MARK: - Rozbalení kontextu
-
-    func expansion(of path: String, in pr: PRIdentifier) -> FileExpansion {
-        expansions[FileExpansionKey(pullRequest: pr, path: path)] ?? FileExpansion()
-    }
-
-    /// Je v diffu vidět něco navíc proti tomu, co poslal `gh`?
-    func hasRevealedLines(in pr: PRIdentifier) -> Bool {
-        expansions.contains { $0.key.pullRequest == pr && !$0.value.revealed.ranges.isEmpty }
-    }
-
-    /// Sbalí všechen rozbalený kontext zpátky na samotný diff.
-    ///
-    /// Načtený obsah souborů si **nechá**: kdyby ho zahodila, druhé rozbalení by znovu
-    /// chodilo po síti pro něco, co už jednou dorazilo.
-    func collapseRevealedLines(in pr: PRIdentifier) {
-        // Zápis do `expansions` uprostřed iterace je bezpečný: slovník je hodnotový typ,
-        // takže smyčka jede přes snapshot pořízený na jejím začátku. Ověřeno spuštěním
-        // (1000 prvků, žádný přeskočený). Podmínka na prázdné rozsahy tu není kvůli
-        // výkonu — zbytečný zápis by hlásil změnu i tam, kde se nic nezměnilo.
-        for (key, expansion) in expansions where key.pullRequest == pr {
-            guard !expansion.revealed.ranges.isEmpty else { continue }
-            expansions[key]?.revealed = RevealedLines()
-        }
-    }
-
-    /// Odkryje skryté řádky souboru. Obsah se dotáhne při prvním rozbalení a pak už se drží.
-    ///
-    /// Rozsah se zapíše **až po** načtení: kdyby se zapsal hned, zmizel by rozbalovací
-    /// řádek i se spinnerem a zůstalo by po něm prázdno.
-    func reveal(_ lines: ClosedRange<Int>, of path: String, in pr: PRIdentifier) {
-        let key = FileExpansionKey(pullRequest: pr, path: path)
-        var state = expansions[key] ?? FileExpansion()
-
-        guard state.content.isEmpty else {
-            state.revealed.reveal(lines)
-            expansions[key] = state
-            return
-        }
-
-        // Než obsah dorazí, rozsahy se schovávají stranou. Zahodit ten druhý (dva nálezy
-        // v jednom souboru) by znamenalo bublinu bez kódu, o kterém mluví.
-        state.pending.append(lines)
-        guard !state.isLoading else {
-            expansions[key] = state
-            return
-        }
-        state.isLoading = true
-        state.failure = nil
-        expansions[key] = state
-        Task { [weak self] in await self?.loadFile(key) }
-    }
-
-    private func loadFile(_ key: FileExpansionKey) async {
-        do {
-            let text = try await gateway.fetchFile(id: key.pullRequest, path: key.path)
-            // Stav se čte **až po** awaitu: mezitím mohly přibýt další vyžádané rozsahy.
-            var state = expansions[key] ?? FileExpansion()
-            state.isLoading = false
-            state.content = FileExpansion.lines(of: text)
-            // Rozsahy se ořezávají na skutečnou délku souboru. Reviewer umí nahlásit řádek,
-            // který v souboru není, a odkrytý neexistující řádek by dal kotvu na řádek,
-            // který se nikdy nevykreslí — tedy skok, po kterém se nic nestane.
-            for range in state.pending {
-                guard let clamped = clamp(range, to: state.content.count) else { continue }
-                state.revealed.reveal(clamped)
-            }
-            state.pending = []
-            expansions[key] = state
-        } catch is CancellationError {
-            // Zrušení není selhání: úsek zůstane skrytý a další kliknutí to zkusí znovu.
-            expansions[key]?.isLoading = false
-        } catch {
-            var state = expansions[key] ?? FileExpansion()
-            state.isLoading = false
-            state.pending = []
-            state.failure = (error as? GitHubError)?.userDescription ?? error.localizedDescription
-            expansions[key] = state
-        }
-    }
-
-    /// Dotáhne kód k nálezům, jejichž řádek v diffu není.
-    ///
-    /// Děje se to samo, ne na kliknutí (**změna proti #47**): bublina, která mluví
-    /// o řádku 10, a řádek 10 nikde — to je přesně případ, kdy čekání na kliknutí stojí
-    /// nejvíc. Týká se to jen souborů, kde nález opravdu je, takže se stahuje málo.
-    private func revealFindingsOutsideTheDiff(for pr: PRIdentifier) {
-        guard case .loaded(let diff, _) = diffStates[pr], let record = reviewRecords[pr] else { return }
-
-        for group in Policy.groups(of: record.findings) {
-            guard let path = group.file, let line = group.line,
-                  let file = diff.file(at: path),
-                  // Smazaný soubor ani binárka nový obsah nemají, takže není co stahovat.
-                  file.change != .deleted, !file.isBinary,
-                  !file.showsLine(line)
-            else { continue }
-
-            reveal(max(1, line - Self.findingContext)...(line + Self.findingContext), of: file.displayPath, in: pr)
-        }
-    }
-
-    private func clamp(_ range: ClosedRange<Int>, to length: Int) -> ClosedRange<Int>? {
-        let lower = max(1, range.lowerBound)
-        let upper = min(length, range.upperBound)
-        return lower <= upper ? lower...upper : nil
-    }
-
     /// Kolik řádků kolem nálezu se dotáhne. Samotný řádek bez okolí se čte špatně.
-    private static let findingContext = 3
-
-    // MARK: - Rozdělané review
-
-    func draft(for pr: PRIdentifier) -> ReviewDraft? { drafts[pr] }
-
-    /// Je co odeslat? Podle toho svítí indikátor v řádku seznamu i v detailu.
-    func hasDraft(_ pr: PRIdentifier) -> Bool { drafts[pr] != nil }
-
-    func draftComments(for pr: PRIdentifier) -> [ReviewDraftComment] { drafts[pr]?.comments ?? [] }
-
-    /// Píše se draft proti staršímu commitu, než je hlava PR?
-    ///
-    /// `false`, dokud hlavu neznáme: „nevím“ není „zastaralé“ a banner o zablokovaném
-    /// odeslání nad načítajícím se detailem by lhal. Odeslání se stejně ptá
-    /// `draftSendBlock(for:)`, které neznámou hlavu bere jako vlastní důvod.
-    func isDraftStale(for pr: PRIdentifier) -> Bool {
-        guard let draft = drafts[pr], let head = head(of: pr) else { return false }
-        return Policy.isStale(draft, head: head)
-    }
-
-    /// Dá se do draftu psát?
-    ///
-    /// Nový draft potřebuje `headSha` — bez něj by nešlo poznat, proti čemu je psaný, ani ho
-    /// odeslat. Do rozepsaného se psát dá vždycky, ten svůj commit už zná.
-    func canComposeDraft(for pr: PRIdentifier) -> Bool {
-        drafts[pr] != nil || head(of: pr) != nil
-    }
-
-    /// Kam by převzatý nález šel. Bublina podle toho pojmenuje tlačítko a řekne proč.
-    func draftTarget(for finding: Finding, in pr: PRIdentifier) -> DraftTarget {
-        Policy.draftTarget(for: finding, in: loadedDiff(for: pr))
-    }
-
-    /// Je nález už v rozdělaném review?
-    func isAdopted(_ finding: Finding, in pr: PRIdentifier) -> Bool {
-        Policy.isAdopted(
-            finding,
-            target: draftTarget(for: finding, in: pr),
-            in: drafts[pr],
-            repo: pr.repo
-        )
-    }
-
-    /// Převezme nález do rozdělaného review.
-    ///
-    /// Kam patří, rozhoduje `Policy.draftTarget` — tedy pravidlo GitHubu, ne vzhled okna:
-    /// řádek uvnitř hunku unese řádkový komentář, cokoli jiného jde do těla jako permalink.
-    /// Text se předvyplní tím, co napsal reviewer, a jde přepsat.
-    func adoptFinding(_ finding: Finding, for pr: PRIdentifier) {
-        let text = Policy.adoptedText(of: finding)
-        switch draftTarget(for: finding, in: pr) {
-        case .line(let path, let anchor):
-            addDraftComment(
-                at: anchor,
-                path: path,
-                body: text,
-                origin: .finding(reviewer: finding.reviewer),
-                for: pr
-            )
-        case .body(let path, let line):
-            appendDraftBodyItem(text: text, path: path, line: line, for: pr)
-        }
-    }
-
-    /// Založí řádkový komentář. Prázdný schválně — text se dopisuje v bublině.
-    func addDraftComment(
-        at anchor: DraftAnchor,
-        path: String,
-        body: String = "",
-        origin: ReviewDraftComment.Origin = .own,
-        for pr: PRIdentifier
-    ) {
-        // Snímek kódu se bere **tady**, z načteného diffu (#69): bez něj se po novém commitu
-        // nedá poznat, jestli na tom řádku pořád stojí to, co člověk komentoval. Jedno místo,
-        // které to ví — view by si stranu a číslo muselo párovat samo.
-        let comment = ReviewDraftComment(
-            path: path,
-            anchor: anchor,
-            snapshot: snapshot(of: anchor, path: path, in: pr),
-            body: body,
-            origin: origin
-        )
-        mutateDraft(for: pr) { $0.comments.append(comment) }
-        // Komentář, který se dá ⇧ klikem roztáhnout na rozsah. Drží se **id**, ne kotva:
-        // z komentáře se druhý konec dopočítá, kdežto uložená kotva by se s ním po roztažení
-        // rozešla.
-        rangeTargets[pr] = comment.id
-    }
-
-    /// Snímek kódu pod kotvou z načteného diffu. Prázdný, když diff není — revalidace to pak
-    /// řekne jako „nevím“ místo aby předstírala, že kotva sedí.
-    private func snapshot(of anchor: DraftAnchor, path: String, in pr: PRIdentifier) -> DraftSnapshot {
-        guard case .loaded(let diff, _) = diffStates[pr], let file = diff.file(at: path) else {
-            return DraftSnapshot()
-        }
-        return Policy.snapshot(of: anchor, in: file)
-    }
-
-    /// Roztáhne naposledy přidaný komentář na rozsah končící (nebo začínající) tímhle řádkem.
-    ///
-    /// Tohle je ⇧ klik na tlačítko u řádku. Když není co roztahovat — nic se nepřidávalo, cíl
-    /// se mezitím vyjmul, nebo je v jiném souboru — **založí se obyčejný komentář**. Kliknutí,
-    /// po kterém se nestane nic, vypadá jako rozbitá aplikace.
-    ///
-    /// Rozsah skládá `Policy.commentRange`, protože o pořadí konců rozhoduje diff, ne čísla
-    /// (#110). Bez načteného diffu se rozsah nemá o co opřít, takže vyjde jednořádkový komentář.
-    func extendDraftComment(to anchor: DraftAnchor, path: String, for pr: PRIdentifier) {
-        guard let id = rangeTargets[pr],
-              let existing = draft(for: pr)?.comments.first(where: { $0.id == id }),
-              existing.path == path,
-              case .loaded(let diff, _) = diffStates[pr],
-              let file = diff.file(at: path),
-              // Na místě zůstává **kotva**, tedy začátek už existujícího rozsahu (u jednořádkového
-              // komentáře jeho řádek). Roztahovat od konce by druhým ⇧ klikem zahodilo první konec:
-              // z 25–26 by po kliku na 27 vyšlo 26–27. Chytil to test.
-              let range = Policy.commentRange(
-                  from: existing.anchor.start ?? existing.anchor.end,
-                  to: anchor.end,
-                  in: file
-              )
-        else {
-            addDraftComment(at: anchor, path: path, for: pr)
-            return
-        }
-
-        mutateDraft(for: pr) { draft in
-            guard let index = draft.comments.firstIndex(where: { $0.id == id }) else { return }
-            let comment = draft.comments[index]
-            // Nový komentář se **stejným `id`**: kotva je `let`, ale identita musí zůstat, ať
-            // si editor udrží rozepsaný text a bublina nepřeskočí jako nová.
-            draft.comments[index] = ReviewDraftComment(
-                id: comment.id,
-                path: comment.path,
-                anchor: range,
-                // Roztažením se mění oba konce, takže se snímek bere znovu — starý by po dalším
-                // commitu hledal řádek, který v rozsahu už není.
-                snapshot: Policy.snapshot(of: range, in: file),
-                body: comment.body,
-                origin: comment.origin
-            )
-        }
-    }
-
-    // MARK: - Přenesení na nový commit (#69)
-
-    /// Stavy kotev proti **aktuálnímu** diffu — z nich se skládá seznam v potvrzení přenesení.
-    ///
-    /// Prázdné, když není co přenášet: žádný draft, nebo není načtený diff (bez něj by se
-    /// rozhodovalo naslepo).
-    func draftAnchorStates(for pr: PRIdentifier) -> [DraftAnchorCheck] {
-        guard let draft = drafts[pr], case .loaded(let diff, _) = diffStates[pr] else { return [] }
-        return draft.comments.map { DraftAnchorCheck(comment: $0, state: Policy.anchorState(of: $0, in: diff)) }
-    }
-
-    /// Dá se draft přenést na nový commit? Jen když je zastaralý a je proti čemu ho kontrolovat.
-    func canTransferDraft(for pr: PRIdentifier) -> Bool {
-        guard isDraftStale(for: pr), head(of: pr) != nil else { return false }
-        guard case .loaded = diffStates[pr] else { return false }
-        return true
-    }
-
-    /// Přenese draft na hlavu PR podle rozhodnutí z potvrzení.
-    ///
-    /// Nový `headSha` se nastavuje **až tady**, tedy až po tom, co člověk viděl, co se s kterou
-    /// kotvou stane — dokud se draft nepřenesl, musí zůstat zastaralý a nedat se odeslat. Draft,
-    /// ze kterého by nic nezůstalo (všechno smazané), se **smaže**: „draft existuje“ musí znamenat
-    /// „je co poslat“.
-    @discardableResult
-    func transferDraft(for pr: PRIdentifier, choices: [UUID: DraftTransferChoice] = [:]) -> ReviewDraft? {
-        guard let draft = drafts[pr], let head = head(of: pr),
-              case .loaded(let diff, _) = diffStates[pr]
-        else { return nil }
-
-        let transferred = Policy.transferring(
-            draft,
-            to: diff,
-            head: head,
-            in: pr.repo,
-            choices: choices
-        )
-        // Přes `mutateDraft`, ne zápisem do mapy: pravidlo „prázdný draft se maže“ i zápis na disk
-        // mají zůstat na jednom místě. Druhá kopie by se s ním časem rozešla.
-        mutateDraft(for: pr) { $0 = transferred }
-        // Vrací se **přenesený** draft, i když z něj v mapě nic nezůstalo: potvrzení odeslání si
-        // z něj udělá nový snímek, a prázdný draft se pozná na tom, že v něm nic není.
-        return transferred
-    }
-
-    /// Přepíše text komentáře. **Prázdný text komentář zahodí.**
-    ///
-    /// Prázdné komentáře vznikají běžně (kliknu na „komentovat“ a rozmyslím si to) a GitHub
-    /// je odmítne — a protože je odeslání atomické, padlo by s nimi celé review. Nechat je
-    /// ležet v draftu znamená hledat, proč se nedá odeslat.
-    func updateDraftComment(_ id: UUID, body: String, for pr: PRIdentifier) {
-        mutateDraft(for: pr) { draft in
-            guard let index = draft.comments.firstIndex(where: { $0.id == id }) else { return }
-            if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                draft.comments.remove(at: index)
-            } else {
-                draft.comments[index].body = body
-            }
-        }
-    }
-
-    func removeDraftComment(_ id: UUID, for pr: PRIdentifier) {
-        mutateDraft(for: pr) { $0.comments.removeAll { $0.id == id } }
-    }
-
-    func setDraftBody(_ body: String, for pr: PRIdentifier) {
-        mutateDraft(for: pr) { $0.body = body }
-    }
-
-    /// Vybere verdikt, nebo volbu zruší (`nil`).
-    ///
-    /// Tudy chodí **jen moje volba** — tedy klik v panelu. Návrh z nálezů (#114) se tímhle
-    /// nezapisuje: platí, dokud si člověk nevybere, a počítá ho `effectiveVerdict(for:)`.
-    /// Zrušená volba proto nekončí u „nevybráno“, ale u návrhu, když je z čeho.
-    func setDraftVerdict(_ verdict: ReviewDraft.Verdict?, for pr: PRIdentifier) {
-        mutateDraft(for: pr) { $0.verdict = verdict }
-    }
-
-    /// Přidá do těla review položku s odkazem na kód.
-    ///
-    /// Používá se pro nález mimo diff a pro řádek, který komentář neunese — tam GitHub
-    /// řádkový komentář nepustí a odmítne s ním celé review (změřeno u #62).
-    ///
-    /// Odkaz míří na commit, **proti kterému je draft psaný**, ne na aktuální hlavu PR: draft,
-    /// který se s hlavou rozešel, se neodešle (banner), ale odkaz v něm pořád ukazuje na kód,
-    /// ke kterému se ta věta psala.
-    func appendDraftBodyItem(text: String, path: String?, line: Int?, for pr: PRIdentifier) {
-        mutateDraft(for: pr) { draft in
-            let link = path.flatMap {
-                Policy.permalink(to: $0, line: line, in: pr.repo, at: draft.headSha)
-            }
-            draft.body = Policy.appendingBodyItem(
-                Policy.bodyItem(text: text, link: link),
-                to: draft.body
-            )
-        }
-    }
-
-    // MARK: - Odeslání review
-
-    /// Proč se rozdělané review nedá odeslat. `nil` = dá se.
-    ///
-    /// Věta z toho jde do okna: zakázané tlačítko bez důvodu vypadá jako rozbitá aplikace.
-    ///
-    /// **Proč hlavu neznáme, doplňuje store**, ne `Policy`: ta dostane jen `String?` a z něj
-    /// nepozná rozdíl mezi „načítá se“ a „nepovedlo se to“. Slíbit „hned to bude“ nad chybou,
-    /// která sama nezmizí, je přitom horší než mlčet.
-    func draftSendBlock(for pr: PRIdentifier) -> DraftSendBlock? {
-        let block = Policy.sendBlock(
-            for: drafts[pr],
-            head: head(of: pr),
-            scope: publishScope,
-            // Návrh z nálezů verdikt zastoupí (#114), takže `noVerdict` nesmí hlásit nic, co
-            // by panel v tu chvíli ukazoval jako předvyplněné.
-            suggestion: prefillableSuggestion(for: pr)
-        )
-        guard case .headUnknown = block, case .failed(let detail) = detailStates[pr] else {
-            return block
-        }
-        return .headUnknown(detail: detail)
-    }
-
-    /// Návrh verdiktu z nálezů. `nil` = není z čeho soudit.
-    ///
-    /// V potvrzení odeslání stojí **vedle** odesílaného verdiktu, aby se dalo porovnat. Čím se
-    /// předvyplňuje, říká `prefillableSuggestion(for:)` — na vlastním PR se návrh nenabízí,
-    /// ale tady zůstává, protože „nálezy říkají approve“ je pravda i tam.
-    func suggestedVerdict(for pr: PRIdentifier) -> ReviewVerdict? {
-        guard let record = reviewRecords[pr] else { return nil }
-        return Policy.suggestedVerdict(
-            for: record,
-            categories: resolved(for: pr.repo).blockingCategories
-        )
-    }
-
-    /// Verdikt, který na PR **platí** — moje volba, jinak návrh z nálezů (#114).
-    ///
-    /// Panel z něj kreslí třetí stav („návrh z nálezů“, obtažený), odeslání ho doplní do
-    /// snímku. **Nikam se neukládá**: draft na disku zůstává bez verdiktu, dokud na něj někdo
-    /// neklikne, jinak by draft vznikl ze samotného otevření PR.
-    func effectiveVerdict(for pr: PRIdentifier) -> EffectiveVerdict? {
-        Policy.effectiveVerdict(of: drafts[pr], suggestion: prefillableSuggestion(for: pr))
-    }
-
-    /// Návrh, kterým se smí předvyplnit — na vlastním PR žádný.
-    private func prefillableSuggestion(for pr: PRIdentifier) -> ReviewVerdict? {
-        Policy.prefillableSuggestion(
-            suggestedVerdict(for: pr),
-            author: author(of: pr),
-            viewer: conversation(for: pr)?.viewer
-        )
-    }
-
-    /// Je to můj vlastní PR? `false`, dokud se nenačetla konverzace — kdo se dívá, je jen v ní.
-    ///
-    /// Panel z toho skládá větu o tom, že tam GitHub bere jedině `Jen komentář`; bez ní by
-    /// nepředvyplněný verdikt vypadal jako chybějící návrh.
-    func isOwnPullRequest(_ pr: PRIdentifier) -> Bool {
-        Policy.isOwn(author: author(of: pr), viewer: conversation(for: pr)?.viewer)
-    }
-
-    /// Autor PR z dotaženého detailu. `nil` = ještě nevíme.
-    private func author(of pr: PRIdentifier) -> String? {
-        guard case .loaded(let detail, _) = detailStates[pr] else { return nil }
-        return detail.author
-    }
-
-    /// Složí jedno odeslání — snímek toho, co je teď v draftu.
-    ///
-    /// `nil` znamená „odeslat teď nejde“ a tlačítko, které to volá, je v takovém stavu
-    /// zakázané; kontrola je tady podruhé proto, že sheet se nad zastaralým draftem **nemá
-    /// otevřít vůbec** a spoléhat se na to, že si to view pohlídá, je o jedno místo k
-    /// zapomenutí víc.
-    ///
-    /// Publisher se tu **nevyrábí** — jen se předá `gh` a read-only gateway. Vzniká až
-    /// v `ReviewSubmission.send()`, viz tvrdá podmínka č. 1.
-    func submission(for pullRequest: PullRequestSummary) -> ReviewSubmission? {
-        let id = pullRequest.id
-        guard let gh, let draft = drafts[id] else { return nil }
-        // Zastaralý draft se **smí** otevřít, když je proti čemu ho zkontrolovat (#69): okno pak
-        // začne kontrolou kotev a odeslání se odemkne až po přenesení. Zastarání je totiž jediný
-        // důvod, se kterým se dá něco udělat právě tady — u chybějícího verdiktu nebo prázdného
-        // komentáře patří oprava do panelu.
-        let transfer = canTransferDraft(for: id)
-        guard draftSendBlock(for: id) == nil || (transfer && draftSendBlock(for: id)?.isStale == true) else {
-            return nil
-        }
-        // Verdikt, který odejde, může být **návrh** (#114). Do snímku se proto doplní tady:
-        // „co je v potvrzení vidět, to se odešle“ platí dál, jen ta hodnota nepochází z disku.
-        // Uložený draft ho nedostane — návrh se neukládá.
-        let effective = effectiveVerdict(for: id)
-        var snapshot = draft
-        // Vlastní volba přebíjí návrh, takže `effective` nikdy neruší vybraný verdikt; `??` je
-        // pojistka proti tomu, aby snímek o hodnotu přišel, kdyby se to rozešlo.
-        snapshot.verdict = effective?.verdict ?? draft.verdict
-        return ReviewSubmission(
-            pullRequest: pullRequest,
-            draft: snapshot,
-            suggestion: suggestedVerdict(for: id),
-            verdictOrigin: effective?.origin,
-            anchors: transfer ? draftAnchorStates(for: id) : [],
-            needsTransfer: transfer,
-            targetHead: transfer ? head(of: id) : nil,
-            gh: gh,
-            gateway: gateway,
-            scope: publishScope,
-            afterSuccess: { [weak self] in await self?.draftWasSubmitted(for: pullRequest) },
-            applyTransfer: { [weak self] choices in self?.transferDraft(for: id, choices: choices) }
-        )
-    }
-
-    /// Brána na odesílání, složená **z aktuální konfigurace**.
-    ///
-    /// Čte se při použití, ne při startu — jako limit souběhu nebo rozpočet cache — takže
-    /// přepnutí v okně nastavení platí bez restartu. Je to počítaná vlastnost schválně:
-    /// uložený snímek by se s konfigurací rozešel.
-    private var publishScope: PublishScope { PublishScope(configuration: configuration) }
-
-    /// Úklid po odeslaném review: draft je pryč a konverzace se načte znovu.
-    ///
-    /// Draft se maže **až tady**, tedy po potvrzené odpovědi GitHubu — selhání ho nechává
-    /// netknutý, aby se dalo zkusit znovu bez psaní nanovo.
-    ///
-    /// Konverzace se obnovuje proto, že v ní od téhle chvíle leží moje vlastní review; bez
-    /// toho by v tabu `Přehled` chybělo až do dalšího přepnutí PR. Cache jde podle
-    /// `updatedAt`, které se odesláním review na GitHubu měnit nemusí, takže se zahazuje
-    /// ručně (`refreshConversation`).
-    func draftWasSubmitted(for pullRequest: PullRequestSummary) async {
-        discardDraft(for: pullRequest.id)
-        await refreshConversation(for: pullRequest)
-    }
-
-    /// Zahodí celé rozdělané review. Idempotentní — na tlačítko se dá zmáčknout dvakrát.
-    func discardDraft(for pr: PRIdentifier) {
-        guard drafts[pr] != nil else { return }
-        drafts[pr] = nil
-        persistDraft(for: pr)
-    }
-
-    /// Jediná cesta, kterou se draft mění — a hned se ukládá.
-    ///
-    /// `headSha` nového draftu se bere z detailu; bez něj se draft **nezakládá**, protože by
-    /// nešlo poznat, proti čemu je psaný. Existujícímu draftu se `headSha` nepřepisuje —
-    /// přenesení na nový commit je #69.
-    private func mutateDraft(for pr: PRIdentifier, _ change: (inout ReviewDraft) -> Void) {
-        guard var draft = drafts[pr] ?? head(of: pr).map({ ReviewDraft(pullRequest: pr, headSha: $0) })
-        else { return }
-        change(&draft)
-        // Prázdný draft se maže — „draft existuje“ musí znamenat „je co poslat“.
-        drafts[pr] = draft.isEmpty ? nil : draft
-        persistDraft(for: pr)
-    }
-
-    /// Uloží draft na disk.
-    ///
-    /// Hodnota se čte **až v tasku**, ne teď: dvě rychlé úpravy za sebou tak zapíšou tentýž
-    /// konečný stav a nezáleží na tom, v jakém pořadí se tasky provedou. Kdyby se draft
-    /// zachytil do closure, pozdější task by mohl zapsat starší podobu.
-    private func persistDraft(for pr: PRIdentifier) {
-        guard draftStore != nil else { return }
-        Task { [weak self] in await self?.writeDraft(for: pr) }
-    }
-
-    private func writeDraft(for pr: PRIdentifier) async {
-        guard let draftStore else { return }
-        do {
-            if let draft = drafts[pr] {
-                try await draftStore.save(draft)
-            } else {
-                // Prázdný draft `save` maže sám, ale tady už v paměti není co uložit.
-                try await draftStore.delete(for: pr)
-            }
-            draftFailure = nil
-        } catch {
-            draftFailure = "Rozdělané review se nepodařilo uložit. \(error.localizedDescription)"
-        }
-    }
-
-    private func loadedDiff(for pr: PRIdentifier) -> Diff? {
-        guard case .loaded(let diff, _) = diffStates[pr] else { return nil }
-        return diff
-    }
-
-    // MARK: - Review
-
-    /// Spustí review vybraného PR. Opakované zmáčknutí, dokud běží, nic nedělá.
-    ///
-    /// `skills` je podmnožina k opakování (#149) — typicky jeden reviewer, který spadl.
-    /// `nil` znamená celou nastavenou sadu, a to **není totéž jako její snímek**: sadu ještě
-    /// může změnit odhad jazyka repa, který běží až nad pracovní kopií.
-    func startReview(for pr: PRIdentifier, skills: [String]? = nil) {
-        guard reviewer != nil, reviewTasks[pr] == nil else { return }
-        // Prázdná podmnožina by spustila review bez jediného revieweera — tedy běh, který
-        // utratí checkout a nic nezjistí.
-        guard skills.map({ !$0.isEmpty }) ?? true else { return }
-        // Ruční spuštění přebíjí automat: kdyby PR mezitím spustil automat, nespustí se
-        // podruhé (`reviewTasks` už není `nil`), ale zůstal by označený jako automatický
-        // a zmizení ze seznamu by ho zrušilo pod rukama.
-        automaticReviews.remove(pr)
-        reviewTasks[pr] = RunningReview(
-            task: Task { [weak self] in await self?.review(pr, skills: skills) },
-            skills: skills
-        )
-    }
-
-    // MARK: - Notifikace (#88)
-
-    /// Pošle notifikaci a zapamatuje si, když nešla.
-    ///
-    /// Vrstva bez konzumenta: první, kdo tuhle cestu použije, je #82 (doběhlé review), pak
-    /// #85 (nové PR). Volání bez nastaveného centra (testy) neudělá nic a **nic si ani
-    /// nezapíše** — „odsud se neposílá“ není porucha, o které by se mělo hlásit.
-    /// Vrací, **jak** doručení dopadlo — volající se podle toho může rozhodnout, jestli to
-    /// zkusit znovu (#85 na tom stojí). `nil` = odsud se neposílá.
-    @discardableResult
-    func notify(_ notification: PullRequestNotification) async -> NotificationDelivery? {
-        guard let notifications else { return nil }
-        // Brána z nastavení (#86) je **tady**, v jediném místě, kterým jde všechno — jako
-        // `PublishScope` u odesílání. Kdyby se ptal každý volající, jeden by to zapomněl.
-        //
-        // Vrátit se to musí **před** `deliver(_:)`: ten si říká o oprávnění, a dialog za
-        // něco, co je vypnuté, je dialog za nic. Je to zadání #86 a je na to test.
-        guard configuration.global.notifications.allows(notification.event) else { return nil }
-        let delivery = await notifications.deliver(notification)
-        notificationFailure = message(for: delivery)
-        // Čas se posouvá **jen po doručení** (#138). Odmítnuté oprávnění ani selhání systému
-        // z toho „ohlášeno“ neudělá — řádek by pak tvrdil, že notifikace fungují, zrovna když
-        // nefungují.
-        if case .delivered = delivery {
-            lastDeliveredNotification = DeliveredNotification(at: time.now, title: notification.title)
-        }
-        return delivery
-    }
-
-    /// Proč notifikace nedorazila, jako věta pro okno. `nil` = dorazila.
-    ///
-    /// Úspěch hlášku **maže**: oprávnění se dá povolit v Nastavení systému a příští
-    /// doručení už projde — věta, která by po něm zůstala, by posílala hledat vyřešený
-    /// problém.
-    private func message(for delivery: NotificationDelivery) -> String? {
-        switch delivery {
-        case .delivered:
-            nil
-        case .notAuthorized:
-            // Říká, co se kvůli tomu neděje, a kde se to dá spravit. Aplikace tam nedosáhne,
-            // takže samotné „nemám oprávnění“ by nedávalo další krok.
-            //
-            // Schválně **nejmenuje konkrétní událost**: tahle vrstva je základ pro víc druhů
-            // notifikací (doběhlé review #82, nové PR #85), takže „o doběhlém review nedám
-            // vědět“ by u těch ostatních tvrdilo něco jiného, než se stalo.
-            """
-            Notifikace nemají povolení, takže se o dění v PR nedozvíš, dokud se do aplikace \
-            nepodíváš. Povolit se dá v Nastavení systému → Oznámení → PRism.
-            """
-        case .failed(let detail):
-            "Notifikaci se nepodařilo doručit. \(detail)"
-        }
-    }
-
-    /// Klik na notifikaci vybere PR, kterého se týká.
-    ///
-    /// Okno dopředu dává `SystemNotificationCenter` — aktivace aplikace je přístup ke stroji
-    /// jako doručení samotné, takže store zůstává bez AppKitu.
-    ///
-    /// **PR, který v seznamu není, výběr nemění.** Notifikace přežije tik, který ho odklidil
-    /// (mergnul se, zavřel se), a vybrat neexistující řádek nejde — skočit místo toho jinam by
-    /// bylo horší než nechat na obrazovce to, co tam bylo. Okno je vepředu tak jako tak, takže
-    /// kliknutí nezůstane bez odpovědi.
-    ///
-    /// **Dokud se ale seznam nenačetl, vybere se i tak.** Je to zrovna ten případ, kvůli kterému
-    /// si proud kliknutí drží buffer: aplikaci spustilo právě tohle kliknutí, takže polling ještě
-    /// neproběhl a prázdný seznam neznamená „PR je zavřený“, ale „ještě nevím“. Zahodit klik tady
-    /// by celý ten scénář rozbilo — detail se dokreslí, jakmile první tik dorazí.
-    func handleNotificationClicks() async {
-        guard let notifications else { return }
-        for await pr in notifications.clicks() {
-            let listed = pullRequests.contains { $0.id == pr }
-            guard listed || status == .notStarted else { continue }
-            selection = pr
-        }
-    }
-
-    // MARK: - Automatický režim
+    static let findingContext = 3
 
     /// Kolik review dnes automat spustil. `nil` = automat není nastavený nikde, takže se
     /// o limitu nemá co mluvit.
@@ -1782,665 +797,14 @@ final class AppStore {
     /// **Spotřeba, ne zbytek.** Porovnání s limitem patří tam, kde se kreslí, protože limit
     /// se dá změnit v nastavení kdykoli — snímek „zbývá 0“ by po zvednutí limitu tvrdil, že
     /// je pozastaveno, až do dalšího tiku.
-    private(set) var automaticRunsToday: Int?
-
-    /// Nespustí automat nic? Počítá se **teď**, z aktuálního limitu.
-    ///
-    /// Pokrývá **dva důvody** a schválně je nerozlišuje: vyčerpaný limit a limit nastavený
-    /// na nulu. Pro rozhodnutí „ukázat hlášku“ je to totéž — repo je v automatickém režimu
-    /// a nic se nespustí. Který z těch dvou to je, rozlišuje až text hlášky, protože
-    /// „vyčerpaný limit (0)“ by tvrdilo, že se něco spotřebovalo.
-    var isAutomaticStopped: Bool {
-        guard let automaticRunsToday else { return false }
-        return automaticRunsToday >= configuration.global.autoRunsPerDay
-    }
-
-    /// Naplánuje review pro repa v automatickém režimu.
-    ///
-    /// Volá se **jen po úspěšném tiku**: po výpadku sítě je seznam prázdný, takže by se
-    /// nespustilo nic a `consideredForAutomation` by se rozešlo se skutečností.
-    private func startAutomaticReviews(for summaries: [PullRequestSummary]) async {
-        guard let autoRuns else { return }
-        let limit = configuration.global.autoRunsPerDay
-        let anyAutomatic = summaries.contains { resolved(for: $0.repo).mode == .automatic }
-        automaticRunsToday = anyAutomatic ? await autoRuns.used() : nil
-
-        let candidates = Policy.automaticallyReviewable(
-            in: summaries,
-            configuration: configuration,
-            considered: consideredForAutomation,
-            running: Set(reviewTasks.keys)
-        )
-        let updates = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0.updatedAt) })
-
-        // Vyčerpaný rozpočet zastaví plánování **dřív**, než se sáhne na síť. Jinak by
-        // každý tik stál `gh pr view` za PR, které se stejně nespustí.
-        //
-        // `?? 0` není tichý default: hodnota se o dva řádky výš právě načetla z disku a
-        // `nil` je jen ve stavu „žádné automatické repo“, kdy je `candidates` stejně prázdné.
-        guard (automaticRunsToday ?? 0) < limit else { return }
-
-        for pr in candidates {
-            // Zapsat se to smí až potom, co se běh opravdu naplánoval. Obrácené pořadí by
-            // znamenalo, že PR zamítnutý rozpočtem se už nikdy nezváží.
-            consideredForAutomation[pr] = updates[pr]
-            automaticReviews.insert(pr)
-            reviewTasks[pr] = RunningReview(
-                task: Task { [weak self] in await self?.review(pr) },
-                skills: nil
-            )
-        }
-    }
-
-    /// Smí tenhle běh utratit session?
-    ///
-    /// Ruční se neptá — za tím vždycky někdo stojí. Automatický si sáhne o denní rozpočet,
-    /// a jen když je co spustit: repo s prázdnou sadou skillů („tady nereviewuj nic“) žádnou
-    /// session neutratí, takže by za ni neměl nikdo platit.
-    private func canSpendSession(on pr: PRIdentifier) async -> Bool {
-        guard automaticReviews.contains(pr) else { return true }
-        guard !reviewSkills(for: pr.repo).isEmpty else {
-            reviewPhases[pr] = nil
-            return false
-        }
-        guard await claimAutomaticRun(for: pr) else {
-            reviewPhases[pr] = nil
-            return false
-        }
-        return true
-    }
-
-    /// Sáhne si o rozpočet pro automatický běh. `false` = dnes už ne.
-    ///
-    /// Volá se **až potom, co je jasné, že se utratí session** — tedy za bránou na
-    /// `headSha`. Strhávat ho v plánovači znamenalo počítat i běhy, které se po dotažení
-    /// detailu zahodí, a protože se `consideredForAutomation` po restartu vynuluje, spálil
-    /// každý restart rozpočet za všechna auto PR, aniž by se cokoli spustilo.
-    private func claimAutomaticRun(for pr: PRIdentifier) async -> Bool {
-        guard let autoRuns else { return true }
-        let allowed = await autoRuns.take(limit: configuration.global.autoRunsPerDay)
-        automaticRunsToday = await autoRuns.used()
-        // Zamítnutý PR se musí dát zvážit znovu, jinak by o review přišel i zítra, kdy je
-        // rozpočet volný — `updatedAt` se od té doby nemusí změnit.
-        if !allowed { consideredForAutomation[pr] = nil }
-        return allowed
-    }
-
-    /// Zahodí uložené nálezy vybraného PR.
-    ///
-    /// Smysl je pustit review znovu, typicky jiným skillem: nový běh **nahrazuje jen běh
-    /// téhož skillu**, takže po změně sady zůstávají v záznamu nálezy od revieweera, který
-    /// už neběží — a návrh verdiktu počítá z obojího.
-    ///
-    /// Maže se jen záznam pro commit, který je **vidět** — ostatní zůstávají. „Historie
-    /// zůstává“ se tedy vztahuje na ostatní záznamy, ne na ochranu toho viditelného: kdo
-    /// zmáčkne zahodit nad zastaralými nálezy, chce se zbavit právě jich.
-    ///
-    /// Selhání **letí ven**: nesmazaný záznam, o kterém se mlčí, vypadá v panelu jako
-    /// smazaný, dokud si někdo nevšimne, že se po restartu vrátil.
-    func clearFindings(for pr: PRIdentifier) async throws {
-        guard let reviews, let record = reviewRecords[pr] else { return }
-        try await reviews.delete(for: pr, at: record.headSha)
-        reviewRecords[pr] = nil
-
-        // Plánovač si pamatuje `updatedAt`, se kterým PR naposledy zvažoval, takže by ho po
-        // vyčištění považoval za vyřízený až do dalšího pushe. Zahození nálezů je ale právě
-        // ta chvíle, kdy se má review pustit znovu.
-        consideredForAutomation[pr] = nil
-        // A hned, ne až za minutu: kdo nálezy zahodí, čeká výsledek, ne příští tik. Jde se
-        // tou samou cestou jako po tiku, včetně rozpočtu a limitu souběhu. U manuálního repa
-        // se nestane nic — tam se spouští tlačítkem.
-        await startAutomaticReviews(for: pullRequests)
-    }
-
-    /// Odmítne nález jako falešně pozitivní (#113).
-    ///
-    /// Je to opak `clearFindings`: ten je hrubý nástroj („pusť review znovu s jinou sadou“),
-    /// tohle řeší jeden nález a **ostatní nechá platit**. Proto se z toho ani nespouští další
-    /// review — nic nového se nezjistilo, jen jsem něco posoudil.
-    ///
-    /// Rozdělané review se tím **nemění**: cizí nález je cizí věta, můj převzatý komentář je
-    /// moje próza. Vyjímá se v tabu `Moje review`, ne jedním bitem odsud.
-    func dismissFinding(_ finding: Finding, as reason: FindingDismissal.Reason, for pr: PRIdentifier) async {
-        await applyDismissal(for: pr) { reviews in
-            try await reviews.dismiss(finding, as: reason, in: pr)
-        }
-    }
-
-    /// Vrátí odmítnutý nález mezi platné.
-    func restoreFinding(_ finding: Finding, for pr: PRIdentifier) async {
-        await applyDismissal(for: pr) { reviews in
-            try await reviews.restore(finding, in: pr)
-        }
-    }
-
-    /// Zapíše změnu a srovná podle ní paměť. Disk rozhoduje: kdyby se mapa v paměti měnila
-    /// před zápisem, odmítnutí by po neúspěšném zápisu zůstalo vidět a po restartu zmizelo.
-    private func applyDismissal(
-        for pr: PRIdentifier,
-        _ write: (ReviewStore) async throws -> ReviewRecord
-    ) async {
-        guard let reviews else { return }
-        do {
-            reviewRecords[pr] = try await write(reviews)
-            dismissalFailure = nil
-        } catch {
-            dismissalFailure = "Posouzení nálezu se nepodařilo uložit. \(error.localizedDescription)"
-        }
-    }
-
-    /// Zrušení uživatelem. Session dostane `SIGKILL`, rozdělané výsledky se zahodí.
-    func cancelReview(for pr: PRIdentifier) {
-        reviewTasks[pr]?.task.cancel()
-    }
-
-    /// Sada skillů pro repo. Chipy z ní berou pořadí i to, co ještě neběželo.
-    func reviewSkills(for repo: RepoID) -> [String] { resolved(for: repo).skills }
-
-    /// Reviewery, kteří na PR **právě běží**.
-    ///
-    /// Odvozeno, ne vedeno zvlášť: běh, který ještě nestihl poslat první událost, osu
-    /// nemá — a přesto běží. Proto se počítá jako „všechno, co nedoběhlo“.
-    func runningReviewers(for pr: PRIdentifier) -> Set<String> {
-        guard isReviewing(pr) else { return [] }
-        let finished = Set(timelines(for: pr).filter(\.isFinished).map(\.skill))
-        // Jen ty, které tenhle běh pouští (#149). Celá sada by u opakování jednoho revieweera
-        // označila za běžící i ty ostatní — a jejich chipy by přestaly ukazovat výsledek,
-        // který mají uložený.
-        return Set(runningSkills(for: pr)).subtracting(finished)
-    }
-
-    /// Časová osa běhů posledního review. Prázdná, dokud se nic nespustilo.
-    func timelines(for pr: PRIdentifier) -> [ReviewerTimeline] {
-        reviewTimelines[pr] ?? []
-    }
-
-    private func review(_ pr: PRIdentifier, skills subset: [String]? = nil) async {
-        defer {
-            reviewTasks[pr] = nil
-            automaticReviews.remove(pr)
-        }
-        guard let reviewer, let checkout, let reviews else { return }
-
-        // Nový běh začíná s čistou osou — míchat dohromady, co dělaly dva různé běhy, by
-        // z časové osy udělalo nesmysl.
-        //
-        // U opakování jednoho revieweera (#149) se maže **jen jeho** osa: ostatní neběží,
-        // takže by po nich zbylo prázdno a průběh, kvůli kterému se do tabu chodí, by zmizel
-        // za cizí běh.
-        reviewTimelines[pr] = subset.map { skills in
-            timelines(for: pr).filter { !skills.contains($0.skill) }
-        } ?? []
-        reviewPhases[pr] = .preparing
-        do {
-            // SHA umí dát jen detail — vyhledávání ho nevrací (viz rozhodnutí u #4).
-            let detail = try await gateway.fetchDetail(id: pr)
-            try await reviews.markCurrent(detail.headSha, of: pr)
-            markStaleInMemory(for: pr, current: detail.headSha)
-
-            // Tady se rozhoduje, jestli se utratí session. Výběr po tiku jede podle
-            // `updatedAt`, které se mění i po komentáři — teprve `headSha` řekne, jestli
-            // se kód opravdu změnil. Ruční spuštění se **nezastavuje**: když si o něj
-            // někdo řekl podruhé, chce to pustit znovu.
-            // Nemá cenu klonovat kvůli commitu, který je zreviewovaný. Rozpočet se tu ale
-            // **nestrhává** — session utrácí až `runSkills` a mezi tím může selhat checkout.
-            if automaticReviews.contains(pr), hasCurrentReview(of: pr, at: detail.headSha) {
-                reviewPhases[pr] = nil
-                return
-            }
-
-            checkoutStates[pr.repo] = .preparing
-            let worktree = try await checkout.worktree(for: pr, at: detail.headSha)
-            await syncCheckoutState(for: pr.repo, using: checkout)
-            try Task.checkCancellation()
-
-            // Musí to být **před** `runSkills`, ne po: sada, kterou detekce zapíše, je
-            // ta, se kterou má tenhle běh jet.
-            await adoptDetectedSkills(for: pr.repo, in: worktree, using: checkout)
-            // Odhad jazyka zrušení **spolkne** — nepovedený výpis se od zrušeného nepozná
-            // a obojí tam znamená „sadu neodvodíme“. Zrušené review by pak jelo dál, takže
-            // se to musí zeptat znovu tady.
-            try Task.checkCancellation()
-
-            // Rozpočet **až tady**: `runSkills` je jediné místo, které session utrácí.
-            // Cokoli dřív znamená platit i za běhy, které se nikdy nerozjely — selhal
-            // checkout, nebo repo nemá nastavený žádný skill. Ráno to spálilo šest z dvaceti
-            // za jedno dopoledne, když se to strhávalo v plánovači, a znovu, když se to
-            // strhávalo před checkoutem.
-            guard await canSpendSession(on: pr) else { return }
-
-            try await runSkills(
-                for: pr,
-                of: detail,
-                in: worktree,
-                using: reviewer,
-                saving: reviews,
-                only: subset
-            )
-            reviewPhases[pr] = nil
-            await notifyAboutFinishedReview(of: pr)
-        } catch is CancellationError {
-            // Zrušení není selhání — stav se srovná podle disku, ne do chyby.
-            //
-            // A **neoznamuje se**: zrušil si ho člověk, takže o něm ví. Notifikace o tom, co
-            // jsem právě sám zastavil, je čisté vyrušení za nic.
-            reviewPhases[pr] = nil
-            await syncCheckoutState(for: pr.repo, using: checkout)
-        } catch let error as CheckoutError {
-            // Chyba pracovní kopie je stav **repa**, ne tohohle PR: druhé PR téhož repa na
-            // ni narazí taky a řeší se stejným tlačítkem.
-            reviewPhases[pr] = nil
-            checkoutStates[pr.repo] = .failed(error.userDescription)
-            await notifyAboutFinishedReview(of: pr)
-        } catch let error as GitHubError {
-            reviewPhases[pr] = .failed(detail: error.userDescription)
-            await notifyAboutFinishedReview(of: pr)
-        } catch {
-            reviewPhases[pr] = .failed(detail: error.localizedDescription)
-            await notifyAboutFinishedReview(of: pr)
-        }
-    }
-
-    /// Dá vědět, jak review dopadlo (#82).
-    ///
-    /// Volá se **až tam, kde se review uzavírá**, ne u ukládání jednotlivého běhu: jinak by
-    /// u tří skillů přišlo „čisté“ a za minutu „3 nálezy“ za totéž PR. Rozhoduje proto
-    /// `reviewState(for:)`, tedy tentýž stav, jaký ukazuje řádek seznamu — druhý výpočet by
-    /// se s prvním mohl rozejít.
-    ///
-    /// Stavy, které nejsou konec běhu, a zastaralý záznam si `Policy` odfiltruje sama.
-    private func notifyAboutFinishedReview(of pr: PRIdentifier) async {
-        guard notifications != nil else { return }
-        guard let notification = Policy.reviewNotification(
-            for: pr,
-            state: reviewState(for: pr),
-            blocking: blockingFindingCount(for: pr)
-        ) else { return }
-        await notify(notification)
-    }
-
-    /// Kolik nálezů PR blokuje. Bez záznamu nula — není to spolknuté selhání, ale odpověď:
-    /// když review nedoběhlo (selhal checkout, spadlo volání GitHubu), nemá co blokovat.
-    private func blockingFindingCount(for pr: PRIdentifier) -> Int {
-        guard let record = reviewRecords[pr] else { return 0 }
-        return Policy.blockingCount(in: record, categories: resolved(for: pr.repo).blockingCategories)
-    }
-
-    /// Dá vědět o PR, která se v seznamu objevila (#85).
-    ///
-    /// **Zapisuje se až po doručení.** Opačné pořadí znamená, že se PR zapíše jako ohlášené,
-    /// notifikace se nepovede a už nikdy nepřijde — a je to zadání #85. Zapisuje se přitom
-    /// **celý** aktuální seznam, ne jen to, co se doručilo: snímek má odpovídat frontě, takže
-    /// se do něj musí dostat i PR, která tam byla už minule.
-    ///
-    /// **Přechodná chyba snímek nepřepíše** (příští tik to zkusí znovu), kdežto **odmítnuté
-    /// oprávnění ano**: opakovat každou minutu něco, co je zakázané, nemá cenu a po povolení
-    /// se ta PR ve frontě přečtou v okně. Že notifikace nechodí, je vidět ve stavovém řádku.
-    ///
-    /// Zápis je od #87 **všechno nebo nic**, a vyplývá to ze slévání: za tik jde jedna
-    /// notifikace, takže je jedno doručení a jeden výsledek. Nedoručený souhrn proto nechá
-    /// všechna nová PR mimo snímek a příští tik je zkusí znovu jako celek.
-    ///
-    /// Do #87 se zapisovalo **po jednotlivých PR** (fronta bez těch, u kterých doručení
-    /// selhalo), protože se i po jednotlivých posílalo — bez toho by při opakovaném selhání
-    /// jedné notifikace chodily ty ostatní každou minutu (nález Copilota na #132). Se souhrnem
-    /// ta situace nastat nemůže: buď odešel celý, nebo vůbec.
-    private func announceNewPullRequests(in summaries: [PullRequestSummary]) async {
-        guard notifications != nil, let announced else { return }
-        let listed = summaries.map(\.id)
-        let newcomers = await announced.newcomers(in: listed)
-        guard !newcomers.isEmpty else { return }
-
-        // Jedna notifikace za celý tik (#87), ne jedna na PR: deset hlášek naráz je první
-        // důvod, proč si člověk notifikace vypne. Čekací okno na to potřeba není — tik dodá
-        // celý seznam naráz, takže se slévá právě to, co se stalo mezi dvěma tiky.
-        guard let notification = Policy.newPullRequestsNotification(
-            for: newcomers,
-            titles: titles(from: summaries),
-            reviewed: reviewedPullRequests
-        ) else { return }
-
-        let delivery = await notify(notification)
-        // Nedoručený souhrn nechá **všechna** nová PR mimo snímek, takže se příští tik zkusí
-        // znovu jako jeden celek. Do #87 se zapisovalo po jednotlivých PR, protože se i po
-        // jednotlivých posílalo; teď je doručení jedno, takže i výsledek je jeden.
-        guard delivery?.isWorthRetrying != true else { return }
-        await announced.remember(listed)
-    }
-
-    /// PR, u kterých už někdy review běželo (#137). Podle nich se pozná re-review od novinky.
-    ///
-    /// Zdrojem jsou **uložené nálezy**, ne rozdělaný draft: draft může existovat u PR, které
-    /// se nikdy nereviewovalo (stačí napsat komentář), kdežto záznam vzniká jedině doběhlým
-    /// během. Čte se z paměti — `reviewRecords` se plní při startu z disku a `forget` je na
-    /// rozdíl od diffu nebo konverzace **neuklízí**, takže PR, který z fronty odešel po mém
-    /// review, tam zůstane. To je zrovna ten případ, kvůli kterému #137 vzniklo.
-    ///
-    /// Zahozený záznam (#81) z PR udělá zase novinku, a je to tak schválně: zahození znamená
-    /// „tenhle výsledek je k ničemu“, takže chovat se k tomu PR jako k nedotčenému je poctivé.
-    private var reviewedPullRequests: Set<PRIdentifier> { Set(reviewRecords.keys) }
-
-    /// Titulky PR pro text notifikace, klíčované identifikátorem.
-    private func titles(from summaries: [PullRequestSummary]) -> [PRIdentifier: String] {
-        Dictionary(summaries.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
-    }
-
-    /// Odvodí sadu skillů z toho, co v repu leží.
-    ///
-    /// Běží při **každém** review, dokud si repo o skilly neřeklo (`skills == nil`) — ne
-    /// jen při prvním. Je to schválně: mapa jazyků se dá vyplnit až potom, co se repo
-    /// jednou zreviewovalo, a bez opakování by se projevila teprve na dalším repu.
-    /// Stojí to jedno lokální `git ls-files` navíc.
-    ///
-    /// Ruční hodnota má přednost a **i prázdná** („tady nereviewuj nic“) detekci
-    /// navždycky umlčí — přepsat ji by znamenalo vracet uživateli jeho rozhodnutí zpátky.
-    ///
-    /// Zapisuje se jen to, co se od globální sady liší. Zápis „stejné jako globální“ by byl
-    /// override, o který nikdo nežádal — a pozdější změna globální sady by tenhle repo
-    /// tiše minula.
-    private func adoptDetectedSkills(for repo: RepoID, in worktree: URL, using checkout: any RepoCheckout) async {
-        guard configuration.repositories[repo]?.skills == nil else { return }
-
-        let files: [String]
-        do {
-            files = try await checkout.trackedFiles(in: worktree)
-        } catch {
-            // Nepovedený výpis znamená, že se sada neodvodí a poběží globální — tedy přesně
-            // to, co běželo před #24. Nic se neztrácí a příští review to zkusí znovu,
-            // protože `skills` zůstává `nil`. Položit kvůli tomu celé review by bylo dražší
-            // než ta ztráta.
-            return
-        }
-
-        let detected = configuration.defaultSkills(for: Policy.projectLanguages(in: files))
-        guard detected != resolved(for: repo).skills else { return }
-
-        var entry = configuration.repositories[repo] ?? RepositoryConfig()
-        entry.skills = detected
-        var updated = configuration
-        updated.setRepository(entry, for: repo)
-
-        do {
-            try await updateConfiguration(updated)
-        } catch {
-            // Review poběží dál, jen s globální sadou — `resolved(for:)` čte to, co je
-            // v paměti, a tam se nic nezměnilo. Mlčet o tom ale nejde: nastavení, které
-            // se neuložilo, je přesně to, kvůli čemu se pak hledá, proč něco nefunguje.
-            configurationFailure = "Rozpoznanou sadu skillů se nepodařilo uložit. \(error.localizedDescription)"
-        }
-    }
-
-    /// Reviewery běží paralelně; limit souběhu hlídá `ReviewRunner`, ne tenhle kód.
-    ///
-    /// Ukládá se po **každém** doběhlém skillu, ne až na konci: když se aplikace zavře
-    /// uprostřed, co doběhlo, zůstane.
-    private func runSkills(
-        for pr: PRIdentifier,
-        of detail: PullRequest,
-        in worktree: URL,
-        using reviewer: any ReviewRunning,
-        saving reviews: ReviewStore,
-        only subset: [String]? = nil
-    ) async throws {
-        // Sada se čte **až tady**, po odhadu jazyka repa — proto se podmnožina předává jako
-        // parametr a ne jako snímek pořízený při spuštění.
-        let skills = subset ?? reviewSkills(for: pr.repo)
-        reviewPhases[pr] = .running(finished: 0, total: skills.count)
-
-        // Průběh teče přes proud, ne přímo do store: hlásí se ze session, která běží mimo
-        // hlavní vlákno, a **pořadí událostí je to hlavní, co časová osa říká**. Proud ho
-        // drží; hop do vlastního tasku na každou událost by o pořadí nechal rozhodovat
-        // plánovač.
-        let (events, reporter) = AsyncStream<ReviewEvent>.makeStream()
-        async let drained: Void = drain(events, for: pr, at: detail.headSha, in: worktree)
-        let failure = await runSkills(
-            for: pr,
-            of: detail,
-            in: worktree,
-            using: reviewer,
-            saving: reviews,
-            skills: skills,
-            reporting: reporter
-        )
-        reporter.finish()
-        await drained
-
-        // Značky se mažou **až po vyprázdnění proudu** (#97). Zápis značky jde přes něj, kdežto
-        // uložení výsledku ne — takže by se smazání umělo předběhnout a značka by zůstala ležet
-        // nad hotovým během. Chytil to test, ne úvaha.
-        //
-        // Maže se **celá sada, ne jen uložené běhy**: sem se dojde jedině tehdy, když review
-        // skončilo, takže značka po něm už nemá co znamenat. Pokrývá to i **zrušený** běh,
-        // který se schválně neukládá — nechat mu značku by znamenalo, že příští start dotáhne
-        // z transcriptu nálezy, které si člověk zrušil, tedy proti pravidlu „zrušení neuloží
-        // nic“. Po pádu se sem naopak nedojde vůbec, a o to jde.
-        // Maže se jen za **spuštěné** reviewery (#149): značka po skillu, který tenhle běh
-        // nepouštěl, pořád platí — a smazat ji znamená přijít o nálezy, které po něm zbyly
-        // v transcriptu.
-        for skill in skills {
-            await interrupted?.forget(
-                ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill)
-            )
-        }
-
-        if let failure { throw failure }
-    }
+    var automaticRunsToday: Int?
 
     /// Co se v běhu stalo. **Konec běhu jde stejným proudem jako průběh** — jinak by ho
     /// osa dostala dřív než události, které mu předcházely, a někdy vůbec.
-    private enum ReviewEvent: Sendable {
+    enum ReviewEvent: Sendable {
         case progress(skill: String, ReviewProgress)
         /// Konec běhu i s tím, co stál (#148) — `usage` je `nil` u běhu, který cenu nenahlásil.
         case finished(skill: String, ReviewRunOutcome, usage: RunUsage?)
-    }
-
-    /// Zapisuje průběh v pořadí, ve kterém dorazil.
-    private func drain(
-        _ events: AsyncStream<ReviewEvent>,
-        for pr: PRIdentifier,
-        at headSha: String,
-        in worktree: URL
-    ) async {
-        for await event in events {
-            switch event {
-            case .progress(let skill, let progress):
-                // Značka se zapisuje **v proudu a s `await`**, ne ve vlastním tasku (#97).
-                // Odložený zápis se umí propsat až po tom, co běh doběhl a značku smazal —
-                // pak zůstane ležet nad hotovým během a příští start by ho dotahoval znovu.
-                // Chytil to test, ne úvaha.
-                if case .started(let sessionID) = progress {
-                    await markInterrupted(sessionID, of: skill, for: pr, at: headSha, in: worktree)
-                }
-                record(progress, of: skill, for: pr, in: worktree)
-            case .finished(let skill, let outcome, let usage):
-                finish(outcome, usage: usage, of: skill, for: pr)
-            }
-        }
-    }
-
-    private func record(_ progress: ReviewProgress, of skill: String, for pr: PRIdentifier, in worktree: URL) {
-        var timelines = reviewTimelines[pr] ?? []
-        if let index = timelines.firstIndex(where: { $0.skill == skill }) {
-            timelines[index].record(progress, at: time.now)
-        } else {
-            var timeline = ReviewerTimeline(skill: skill, worktree: worktree)
-            timeline.record(progress, at: time.now)
-            timelines.append(timeline)
-        }
-        reviewTimelines[pr] = timelines
-    }
-
-    private func finish(
-        _ outcome: ReviewRunOutcome,
-        usage: RunUsage?,
-        of skill: String,
-        for pr: PRIdentifier
-    ) {
-        record(outcome)
-        guard var timelines = reviewTimelines[pr],
-              let index = timelines.firstIndex(where: { $0.skill == skill })
-        else { return }
-        timelines[index].finish(outcome, usage: usage, at: time.now)
-        reviewTimelines[pr] = timelines
-    }
-
-    /// Přičte, co běh stál. Jde to **proudem událostí mimo**, přímo na aktor: útrata se neváže
-    /// na osu ani na uložený záznam, takže by ji zdržovalo pořadí, na kterém jí nezáleží.
-    private func recordSpend(_ usage: RunUsage?) async {
-        guard let spend else { return }
-        dailySpend = await spend.record(usage)
-    }
-
-    /// Doběhlý běh jako zdravotní signál Claude — puntík ve stavovém řádku jede na skutečném
-    /// provozu, ne na sondě.
-    ///
-    /// **`timedOut` nezapisuje nic.** Session jsme po patnácti minutách zabili sami, takže
-    /// z toho nejde vyvodit ani „funguje“, ani „nefunguje“ — a dlouhé review je běžná věc.
-    /// `failed` naopak signál je, i když příčina může být na naší straně (třeba neexistující
-    /// skill); věta v nápovědě proto říká, co přišlo na stderr, a to, jestli za to může
-    /// Claude, se pozná ze žlutého puntíku.
-    /// **Při opakovaném selhání se `since` drží.** Nese začátek výpadku, ne poslední pokus —
-    /// jinak by se „Nedaří se od …“ posouvalo s každou další spadlou session a nešlo by poznat,
-    /// jak dlouho to trvá. Je to tatáž úvaha (a tatáž věta v nápovědě) jako
-    /// `PollingService.failingSince`; u GitHubu ji drží `PollState`, tady ji musí držet tohle.
-    private func record(_ outcome: ReviewRunOutcome) {
-        switch outcome {
-        case .finished:
-            lastReviewCall = ServiceCall(since: time.now)
-        case .failed(let detail):
-            let failingSince = lastReviewCall.flatMap { $0.succeeded ? nil : $0.since } ?? time.now
-            lastReviewCall = ServiceCall(since: failingSince, failure: detail)
-        case .timedOut, .interrupted:
-            // Ani jedno není zpráva o Claude: timeout jsme způsobili my (zabili jsme session
-            // po patnácti minutách) a přerušení taky (spadla aplikace). Zapsat z toho červený
-            // puntík by ukazoval na cizí službu za naši vlastní nehodu.
-            break
-        }
-    }
-
-    private func runSkills(
-        for pr: PRIdentifier,
-        of detail: PullRequest,
-        in worktree: URL,
-        using reviewer: any ReviewRunning,
-        saving reviews: ReviewStore,
-        skills: [String],
-        reporting reporter: AsyncStream<ReviewEvent>.Continuation
-    ) async -> (any Error)? {
-        await withTaskGroup(of: ReviewRun?.self) { group in
-            for skill in skills {
-                let request = ReviewRequest(
-                    key: ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill),
-                    worktree: worktree,
-                    baseSha: detail.baseSha
-                )
-                // Protokol slibuje, že selhání session se vrací jako výsledek a vyhodí se
-                // jen zrušení — ale spolehnout se na to znamená, že jakákoli jiná chyba
-                // zmizí a řádek se bude tvářit, že se nic nespustilo. Radši ji přeložíme
-                // na `failed`, kde je vidět.
-                group.addTask {
-                    do {
-                        return try await reviewer.run(request) { reporter.yield(.progress(skill: skill, $0)) }
-                    } catch is CancellationError {
-                        return nil
-                    } catch {
-                        return ReviewRun(
-                            key: request.key,
-                            summary: StreamSummary(),
-                            outcome: .failed(detail: error.localizedDescription)
-                        )
-                    }
-                }
-            }
-
-            var finished = 0
-            var saveFailure: (any Error)?
-            for await run in group {
-                finished += 1
-                reviewPhases[pr] = .running(finished: finished, total: skills.count)
-                guard let run else { continue }
-                // Útrata se zapisuje **před** kontrolou zrušení: session, která doběhla,
-                // peníze stála, ať už se její výsledek uloží, nebo ne. Číslo, které zrušením
-                // zmizí, by o mém účtu lhalo.
-                await recordSpend(run.summary.usage)
-                guard !Task.isCancelled else { continue }
-                reporter.yield(.finished(skill: run.key.skillID, run.outcome, usage: run.summary.usage))
-                do {
-                    // Ukládá se **před** překladem: ten je krátká síťová operace navíc
-                    // a když se na ní aplikace zavře, nálezy už jsou na disku. V originále,
-                    // ale jsou — což je přesně to, co pravidlo „co doběhlo, zůstane“ chce.
-                    reviewRecords[pr] = try await reviews.save(run)
-                    revealFindingsOutsideTheDiff(for: pr)
-                    if let translated = await translated(run, for: pr.repo) {
-                        reviewRecords[pr] = try await reviews.save(translated)
-                    }
-                } catch {
-                    // Nezapsaný nález je ztracený nález. Spolknout to by znamenalo, že
-                    // řádek po doběhlém review ukazuje „neběželo“ — tedy přesně to, čemu se
-                    // celý ten rozlišený stav vyhýbá. Ostatní skilly doběhnou, ať se
-                    // nezahodí i to, co se uložit povedlo.
-                    saveFailure = saveFailure ?? error
-                }
-            }
-            return saveFailure
-        }
-    }
-
-    /// Doplní běhu překlady nálezů. `nil` = není co ukládat znovu.
-    ///
-    /// Jazyk se čte **teď**, ne při startu, takže se přepnutí projeví na dalším běhu.
-    /// Zpětně neplatí: uložené nálezy zůstanou v jazyce, ve kterém se uložily.
-    private func translated(_ run: ReviewRun, for repo: RepoID) async -> ReviewRun? {
-        guard let translator, !run.summary.findings.isEmpty else { return nil }
-        // Zrušené review nemá utrácet session za překlad. Nálezy jsou v tu chvíli uložené
-        // v originále, takže se nic neztrácí — jen se nepřekládá to, co si nikdo nevyžádal.
-        guard !Task.isCancelled else { return nil }
-        // Angličtina se nepřekládá — reviewer v ní píše sám od sebe (ověřeno na skutečných
-        // bězích). Volat kvůli tomu model by byla session za nic.
-        let language = resolved(for: repo).findingsLanguage
-        guard language != .english else { return nil }
-
-        // Selhání překladu review nepoloží: nálezy jsou uložené a v originále čitelné.
-        // Že jsou anglicky, je vidět na první pohled — mlčení tu nic neschovává.
-        guard let translations = try? await translator.translate(run.summary.findings, to: language),
-              translations.contains(where: { $0 != nil })
-        else { return nil }
-
-        var translated = run
-        translated.translations = translations
-        return translated
-    }
-
-    /// Srovná stav pracovní kopie podle disku.
-    ///
-    /// Volá se po každé fázi, která ho mohla nechat v `.preparing` — a to je i zrušení.
-    /// Zapomenout na to znamená řádek, který do restartu ukazuje „ve frontě · clone“.
-    private func syncCheckoutState(for repo: RepoID, using checkout: any RepoCheckout) async {
-        if let clone = await checkout.existingClone(for: repo) {
-            checkoutStates[repo] = .ready(clone)
-        } else {
-            checkoutStates[repo] = .absent
-        }
-    }
-
-    /// Je pro tenhle `headSha` hotové review se **všemi** nastavenými skilly?
-    ///
-    /// Chybějící skill znamená, že se sada mezitím rozšířila nebo že běh nedoběhl celý —
-    /// a to je důvod pustit ho znovu. Zastaralý záznam se nepočítá vůbec.
-    private func hasCurrentReview(of pr: PRIdentifier, at headSha: String) -> Bool {
-        guard let record = reviewRecords[pr], record.headSha == headSha, !record.isStale else {
-            return false
-        }
-        let finished = Set(record.runs.map(\.skillID))
-        return Set(reviewSkills(for: pr.repo)).isSubset(of: finished)
-    }
-
-    /// Nový head commit zneplatní i to, co držíme v paměti — jinak by řádek do konce běhu
-    /// ukazoval nálezy proti kódu, který v PR není.
-    private func markStaleInMemory(for pr: PRIdentifier, current headSha: String) {
-        guard var record = reviewRecords[pr], record.headSha != headSha else { return }
-        record.isStale = true
-        reviewRecords[pr] = record
     }
 
     /// Zahodí stav rep, o která už není zájem. Bez toho by mapa rostla donekonečna a PR,
