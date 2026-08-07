@@ -485,6 +485,43 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   zvenčí formulář srovná, ale vlastní uložení ne, a že je selhání zápisu vidět. Na testech
   `flush()` je vlastní `BlockingTime`, jehož uspání samo neskončí — s okamžitým fake časem
   by odložený zápis závodil s tím okamžitým a nešlo by poznat, který zapsal.
+- **Kopírování kódu z diffu (#157)** — `Policy` vyčerpávajícím výčtem. Dvě věci se tu dají pokazit
+  potichu: **pořadí řádků** (rozsah se zvýrazňuje množinou, která pořadí nemá — ověřeno vloženou
+  regresí, `Set` místo pořadí testy shodí) a **která verze se kopíruje** u rozsahu přes obě strany
+  diffu. Vedle toho každý případ zvlášť: rozsah vpravo, vlevo, přes obě strany, mimo diff, kotva bez
+  začátku, hunk, poznámka `git`u, komentář jiného souboru, jednořádkový komentář (rozsah **nedělá**)
+  a české tvary v popisku menu. **Nejcennější test tvrdí, že kopírování draft nezmění** — celé
+  zadání #157 stojí na tom, že po kopírování nezůstane rozdělaný komentář.
+
+  Dva testy nejdřív **spadly** a obojí byla chyba v testu, ne v kódu: `contains("+ ")` je nesmysl
+  (`$a + $b` je legitimní kód, rozhoduje **začátek** řádku) a počet řádků rozsahu jsem odhadl místo
+  přepočítání proti diffu. Obojí je v testu poznamenané, ať to někdo nezkusí znovu.
+
+  **`CodeTextSheet` (#157)** se testuje jen tím, čím jde: `Policy.hunk(containing:in:)` na tom, že
+  řádek najde **svůj** hunk (u souboru s dvěma hunky by cizí ukázal jiný kód) a že řádek z cizího
+  souboru nenajde žádný. Samotný sheet je `ScrollView` nad jedním `Text`em, takže se offscreen
+  nevykreslí — viz past výš.
+
+  **Bloky řádků (#157)** mají vlastní sadu (`DiffBlockTests`): že se bez bublin slije všechno do
+  jednoho bloku a **žádný samostatný `.line` v seznamu nezůstane** (kreslil by se dvakrát), že
+  bublina blok **rozdělí**, že hlavička hunku a expander zůstanou mimo, že split slévá **dvojice**
+  a obě strany mají po sloučení stejný počet řádků (na tom stojí zarovnání), a že se slučování obou
+  pohledů **nesmí zaměnit** — záměna dá prázdný diff. Dva testy nejdřív spadly: bublina rozdělila
+  blok jinde, než jsem čekal (přepočítáno proti diffu), a před hlavičkou hunku stojí ještě expander.
+
+  **Co se unit testem ověřit nedá:** vybírání textu, kontextové menu a tažení rozsahu. Kliky
+  a pohyb myši se syntetizovat dají (`CGEvent` s `cgSessionEventTap` a `mouseEventClickState` —
+  s `cghidEventTap` se **nedoručí**), ale **tažení ani pravý klik ne**: kontextové menu se
+  neotevřelo ani u tabulky nálezů, která ho má od #113. Ověřuje se to tedy na běžící aplikaci rukou.
+  Pozor u toho na dvě věci, které stály čas: okno může být **na druhém monitoru** (souřadnice pak
+  začínají u 2450, ne u nuly) a po restartu **není vybrané žádné PR**, takže měření nad „diffem“
+  měří prázdnou obrazovku.
+
+  **Pozici pilulky s ikonkou** se offscreen renderem ověřit **dá** — a je to jediná cesta, jak
+  rozhodnout spor „posunul jsi ikonku“: stačí vykreslit `DiffLineView` s `dragEnd` nastaveným na
+  vlastní kotvu (hover v renderu není) a porovnat s tímtéž renderem nad `git stash`nutou verzí.
+  U #157 to ukázalo, že ikonka byla na čísle řádku **už předtím** — a teprve pak se posunula do
+  vlastního sloupce.
 - **`WindowCentering` (#164)** — **geometrie, ne `NSWindow`**. `centered(_:in:on:)` si obrazovky
   bere parametrem (`ScreenBounds`), takže je to čistá funkce; jinak by zůstalo neotestované zrovna
   zarovnávání zpátky na viditelnou plochu, protože `NSScreen` se vyrobit nedá. Do #164 to byla
@@ -557,6 +594,24 @@ Dva zádrhely, které to má:
   záleží, se hodí vlastní rámeček (`background(…, in: .rect(cornerRadius:))`), který
   SwiftUI kreslí sám.
 - **`Link` vyjde jako žlutý placeholder.** V aplikaci je v pořádku, offscreen ne.
+- **`NSViewRepresentable` se v `ImageRenderer`u nevykreslí** — vyjde žlutý placeholder přes celé
+  plátno, jako `List`. Od #157 se tím kreslí bloky kódu v diffu, takže takhle se vzhled diffu
+  zkontrolovat nedá.
+
+  **Samotné `NSView` ale ano, a to je cesta**: `bitmapImageRepForCachingDisplay(in:)` +
+  `cacheDisplay(in:to:)` vykreslí `DiffTextView` do bitmapy, kterou si jde přečíst. U #157 to
+  rozhodlo tři kola dohadování o čísla řádků — a hlavně to ukázalo, že **co se nakreslí po
+  `super.draw`, není vidět** (doloženo plným obdélníkem, který se taky nenakreslil). Pozor při tom
+  na `drawsBackground`: s `true` a bílou barvou pruhy pozadí zmizí pod ní, protože je kreslí
+  `super.draw` — v aplikaci je `false`, takže test musí být nastavený stejně.
+
+  Zbývá accessibility: bloky jsou `AXTextArea`, takže se dá ověřit, kolik jich vzniklo, a přes
+  ⌘A + ⌘C se dá **změřit samotná selekce** (kolik řádků skončí ve schránce).
+- **`ScrollView` se nevykreslí taky** — a beze stopy, jako `GroupBox`: vyjde prázdná plocha, takže
+  to vypadá, že obsah chybí. Zjištěno u #157 na `CodeTextSheet`u, kde se hlavička vykreslila
+  a kód pod ní ne; po vytažení `Text`u ze `ScrollView` se vykreslil. **Než začneš hledat chybu
+  v layoutu, zkus obsah vyjmout ze `ScrollView`** — u #157 to stálo dvě zbytečné opravy
+  (vodorovný scroll, `textSelection`), než se ukázalo, že v aplikaci je všechno v pořádku.
 
 Stav běžící aplikace jde vyčíst i přes accessibility — a je to **spolehlivější než render**,
 protože měří skutečné okno. Chodí se po `UI elements` po úrovních; `entire contents` na

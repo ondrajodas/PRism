@@ -52,6 +52,9 @@ struct DiffView: View {
     /// Rámečky řádků pro tažení rozsahu (#110). `@State`, aby přežily překreslení; obsah je
     /// mimo observable stav, takže se jimi diff nepřekresluje — viz `DiffRowFrames`.
     @State private var rowFrames = DiffRowFrames()
+    /// Hunk otevřený jako text k vybírání (#157). Sheet drží diff, protože je nad celým seznamem
+    /// řádků — a `nil` znamená, že žádný otevřený není.
+    @State private var codeText: CodeText?
 
     /// Souřadnicový prostor **obsahu** diffu. Rámečky řádků i poloha myši při tažení se čtou
     /// v něm, takže scrollování s nimi nehýbe.
@@ -122,11 +125,26 @@ struct DiffView: View {
         }
         // Jen měření, žádný vliv na rozvržení — proto `onGeometryChange` a ne `GeometryReader`.
         .onGeometryChange(for: Double.self) { $0.size.height } action: { viewportHeight = $0 }
+        .sheet(item: $codeText) { CodeTextSheet(content: $0) }
+    }
+
+    /// Hunk jako text k vybírání. Kód se skládá **stejnou funkcí jako pro schránku**
+    /// (`Policy.code(of:)`), takže se vybraný text nemůže rozejít s tím, co dá `Kopírovat hunk`.
+    private func codeText(of hunk: DiffHunk, in file: FileDiff) -> CodeText {
+        CodeText(
+            id: "\(file.displayPath)#\(hunk.header)",
+            path: file.displayPath,
+            heading: hunk.header,
+            code: Policy.code(of: hunk)
+        )
     }
 
     private func rows(of file: FileDiff) -> some View {
         let state = expansion.state(file)
         let language = Language(path: file.displayPath)
+        // Řádky se před vykreslením slijí do bloků (#157), aby v nich šlo vybírat text přes víc
+        // řádků — v obou pohledech. Ve split se slévají **dvojice** (`blockedPairs`) do dvou
+        // sloupců, které si odpovídají řádek po řádku; podrobnosti u `DiffPairBlockView`.
         let rows = DiffRow.rows(
             of: file,
             layout: layout,
@@ -150,7 +168,7 @@ struct DiffView: View {
         // a jen na jeho konci je vidět tlačítko, aby šlo s myší.
         let dragged = draft.draggedRange.flatMap { $0.path == file.displayPath ? $0.anchor : nil }
         let draggedCells = dragged.map { Policy.rangeCells(of: $0, in: file) } ?? []
-        return ForEach(rows) { row in
+        return ForEach(layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows)) { row in
             DiffRowView(
                 row: row,
                 language: language,
@@ -171,6 +189,22 @@ struct DiffView: View {
                     frames: rowFrames,
                     move: { draft.dragRange(file.displayPath, $0, $1) },
                     end: draft.endRangeDrag
+                ),
+                // Kopírování (#157) se skládá **až při otevření menu**: text rozsahu se hledá přes
+                // všechny hunky, takže při vykreslení každého řádku by to byla práce navíc u
+                // operace, kterou nikdo nevyvolal. Rozsahy se berou z **mých rozdělaných**
+                // komentářů — tažení už je vybírá a zvýrazňuje, jen se s nimi dosud dala udělat
+                // jediná věc.
+                copy: DiffCopyActions(
+                    targets: { Policy.copyTargets(for: $0, in: file, comments: comments) },
+                    hunkTargets: { hunk in
+                        [DiffCopyTarget(id: "hunk", title: "Kopírovat hunk", text: Policy.code(of: hunk))]
+                    },
+                    selectableText: { line in
+                        Policy.hunk(containing: line, in: file).map { codeText(of: $0, in: file) }
+                    },
+                    selectableHunkText: { codeText(of: $0, in: file) },
+                    showText: { codeText = $0 }
                 )
             )
         }

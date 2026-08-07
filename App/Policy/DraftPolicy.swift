@@ -220,13 +220,21 @@ extension Policy {
 
     /// Totéž pro rozsah, který ještě není komentářem — tažení ho ukazuje průběžně (#110).
     static func rangeLines(of anchor: DraftAnchor, in file: FileDiff) -> Set<DiffLine> {
+        Set(rangeLinesInOrder(of: anchor, in: file))
+    }
+
+    /// Řádky rozsahu **v pořadí, jak stojí v souboru**.
+    ///
+    /// Zvýraznění pořadí nepotřebuje (ptá se jen `contains`), kopírování do schránky (#157) ano —
+    /// a hledat konce rozsahu podruhé by znamenalo druhé místo, které to musí vědět stejně.
+    static func rangeLinesInOrder(of anchor: DraftAnchor, in file: FileDiff) -> [DiffLine] {
         guard let start = anchor.start,
               let from = position(of: start, in: file),
               let to = position(of: anchor.end, in: file)
         else { return [] }
 
         let lines = file.hunks.flatMap(\.lines)
-        return Set(lines[min(from, to)...max(from, to)])
+        return Array(lines[min(from, to)...max(from, to)])
     }
 
     /// Buňky pokryté rozsahy **všech** komentářů, které patří k tomuhle souboru — jedním

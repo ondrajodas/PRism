@@ -9,6 +9,12 @@ import Foundation
 enum DiffRow: Identifiable {
     case hunk(String, DiffHunk)
     case line(String, DiffLine)
+    /// Souvislý úsek řádků jako **jeden text** (#157) — kvůli selekci přes víc řádků, kterou
+    /// SwiftUI `Text` nedá. Skládá je `DiffRow.blocked(_:)` z `.line` řádků; `.line` proto
+    /// v pohledu pod sebou do seznamu přímo **nechodí**, jen jako mezikrok.
+    case block(String, DiffBlock)
+    /// Totéž pro pohled vedle sebe — dva sloupce, které si odpovídají řádek po řádku.
+    case pairBlock(String, DiffPairBlock)
     /// Dvojice řádků v pohledu **vedle sebe** — vlevo starý obsah, vpravo nový.
     ///
     /// Jeden model pro oba pohledy, ne vlastní typ vedle `DiffRow`: se samostatným typem by
@@ -51,7 +57,7 @@ enum DiffRow: Identifiable {
         switch self {
         case .hunk(let id, _), .line(let id, _), .pair(let id, _, _), .expander(let id, _),
              .note(let id, _), .finding(let id, _, _), .thread(let id, _),
-             .draftComments(let id, _, _): id
+             .draftComments(let id, _, _), .block(let id, _), .pairBlock(let id, _): id
         }
     }
 
@@ -152,6 +158,9 @@ enum DiffRow: Identifiable {
             }
         }
         rows += expandable ? trailingGapRows(of: file, revealed: revealed, content: content) : []
+        // **Bez slučování do bloků** — to je věc vykreslení, ne modelu, a dělá ho `DiffView`
+        // (`DiffRow.blocked(_:)`). Kdyby se slučovalo tady, musela by o blocích vědět i kotva
+        // skoku na nález a všechno, co se řádků ptá.
         return withBubbles(
             layout == .split ? paired(rows) : rows,
             of: file,

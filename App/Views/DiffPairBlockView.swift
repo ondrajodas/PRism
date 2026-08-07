@@ -1,0 +1,207 @@
+import AppKit
+import SwiftUI
+
+/// Dva sloupce kódu vedle sebe jako **dva texty**, ve kterých jde vybírat přes řádky (#157).
+///
+/// **Sloupce musí zůstat zarovnané**, jinak přestane platit, že vlevo a vpravo je tentýž řádek
+/// souboru — a to je celý smysl pohledu vedle sebe. Se zalamováním by jeden sloupec narostl
+/// o vizuální řádek a druhý ne, takže se tady **nezalamuje**: každý řádek je jeden vizuální
+/// a dlouhý kód se posouvá vodorovně (vlastní scroller na sloupec, jako na GitHubu).
+///
+/// V pohledu pod sebou je to obráceně — tam žádný protějšek není, takže se zalamuje jako dosud.
+/// Rozhodnutí #157; do té doby se v pohledu vedle sebe zalamovalo taky, ale nebyla v něm selekce.
+struct DiffPairBlockView: NSViewRepresentable {
+    let block: DiffPairBlock
+    var language: Language?
+    let colorScheme: ColorScheme
+    var leftRangeLines: Set<Int> = []
+    var rightRangeLines: Set<Int> = []
+    var leftDraggedLines: Set<Int> = []
+    var rightDraggedLines: Set<Int> = []
+    /// Rámečky řádků po layoutu — jeden na dvojici, protože sloupce jsou zarovnané.
+    var noteFrames: ([DiffBlockLineFrame]) -> Void = { _ in }
+
+    final class Coordinator {
+        var frames: [DiffBlockLineFrame] = []
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> DiffPairBlockContainer {
+        DiffPairBlockContainer()
+    }
+
+    func updateNSView(_ container: DiffPairBlockContainer, context: Context) {
+        let palette = SyntaxPalette.forScheme(colorScheme)
+        let signature = "\(block.hashValue)|\(language?.name ?? "")|\(colorScheme)"
+
+        container.show(
+            block,
+            language: language,
+            palette: palette,
+            signature: signature,
+            gutter: DiffLineView.contentInset(for: .split)
+        )
+        container.apply(
+            leftRange: leftRangeLines,
+            rightRange: rightRangeLines,
+            leftDragged: leftDraggedLines,
+            rightDragged: rightDraggedLines
+        )
+
+        let frames = container.lineFrames()
+        guard frames != context.coordinator.frames else { return }
+        context.coordinator.frames = frames
+        DispatchQueue.main.async { noteFrames(frames) }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: DiffPairBlockContainer, context: Context) -> CGSize? {
+        let width = proposal.width ?? nsView.bounds.width
+        guard width > 0 else { return nil }
+        return CGSize(width: width, height: nsView.height(forWidth: width))
+    }
+}
+
+/// Kontejner, který drží dva textové sloupce a dělicí čáru mezi nimi.
+///
+/// Existuje proto, aby zarovnání sloupců řešil **AppKit v jednom layoutu**, ne SwiftUI ve dvou
+/// nezávislých větvích: řádek vlevo a vpravo musí začínat na tomtéž `y`.
+final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
+    private let left = DiffTextView.pairColumn()
+    private let right = DiffTextView.pairColumn()
+    /// Sloupce jsou v clip view, **jinak přetečou do druhé půlky**: textové view s neomezenou
+    /// šířkou containeru si roztáhne vlastní rámec podle nejdelšího řádku a `frame`, který mu
+    /// nastaví kontejner, ho nezastaví. Nahlášené při zkoušení #157 („levý sloupec je roztáhnutý
+    /// do pravého“). Scroll view je tu tedy kvůli **ořezu**; vodorovný posun je vedlejší efekt,
+    /// který se hodí, protože se ve split pohledu nezalamuje.
+    private let leftScroll = NSScrollView()
+    private let rightScroll = NSScrollView()
+    private let separator = NSBox()
+    private var rowHeight: Double = 0
+    private var rows = 0
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        separator.boxType = .separator
+        for (scroll, column) in [(leftScroll, left), (rightScroll, right)] {
+            scroll.documentView = column
+            scroll.drawsBackground = false
+            scroll.hasVerticalScroller = false
+            scroll.hasHorizontalScroller = true
+            // Overlay scroller nezabírá výšku, takže sloupce zůstanou stejně vysoké.
+            scroll.scrollerStyle = .overlay
+            scroll.autohidesScrollers = true
+            addSubview(scroll)
+            column.delegate = self
+        }
+        // Výběr v druhém sloupci se ruší **při stisknutí**, ne až při puštění: dvě modré selekce
+        // vedle sebe po celou dobu tažení tvrdí, že je vybrané obojí. `textViewDidChangeSelection`
+        // na to nestačí — chodí až s hotovým výběrem.
+        left.onMouseDown = { [weak self] in self?.clearSelection(in: self?.right) }
+        right.onMouseDown = { [weak self] in self?.clearSelection(in: self?.left) }
+        addSubview(separator)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("jen z kódu") }
+
+    func show(
+        _ block: DiffPairBlock,
+        language: Language?,
+        palette: SyntaxPalette,
+        signature: String,
+        gutter: Double
+    ) {
+        rows = block.count
+        left.gutterWidth = gutter
+        right.gutterWidth = gutter
+        // V buňce dvojice je číslo jedno: vlevo staré, vpravo nové.
+        left.numberColumns = 1
+        right.numberColumns = 1
+        // Prázdná strana dvojice se kreslí jako **prázdný řádek**, ne jako mezera: řádky si musí
+        // odpovídat i tam, kde jedna strana chybí (přidaný nebo odebraný kód).
+        left.show(DiffBlock(lines: block.left.map { $0 ?? .blank }), language: language, palette: palette, signature: "L\(signature)")
+        right.show(DiffBlock(lines: block.right.map { $0 ?? .blank }), language: language, palette: palette, signature: "R\(signature)")
+        rowHeight = left.singleLineHeight
+        needsLayout = true
+        layoutColumns()
+    }
+
+    /// Sloupcům se musí nastavit **vlastní rámec**, ne jen rámec jejich clip view. Textové view
+    /// s neomezenou šířkou containeru si velikost samo nedopočítá, takže po přesunu do `NSScrollView`
+    /// zůstalo nulové — a v nulovém view nejde ani vybírat, ani nic vidět (nahlášené při zkoušení
+    /// #157: „teď po úpravě nejde už vybírat vůbec“).
+    ///
+    /// Šířka je nejdelší řádek, **nejméně však šířka sloupce**: pozadí řádku i pruh rozsahu se
+    /// kreslí přes celou šířku view, takže u krátkého kódu by končilo v polovině.
+    private func layoutColumns() {
+        let height = max(Double(rows) * rowHeight, rowHeight)
+        for (scroll, column) in [(leftScroll, left), (rightScroll, right)] {
+            column.sizeToFit()
+            column.frame = NSRect(
+                x: 0,
+                y: 0,
+                width: max(column.frame.width, scroll.contentSize.width),
+                height: height
+            )
+        }
+    }
+
+    func apply(leftRange: Set<Int>, rightRange: Set<Int>, leftDragged: Set<Int>, rightDragged: Set<Int>) {
+        guard left.commentRangeLines != leftRange || right.commentRangeLines != rightRange
+            || left.draggedLines != leftDragged || right.draggedLines != rightDragged
+        else { return }
+        left.commentRangeLines = leftRange
+        right.commentRangeLines = rightRange
+        left.draggedLines = leftDragged
+        right.draggedLines = rightDragged
+        left.needsDisplay = true
+        right.needsDisplay = true
+    }
+
+    /// Výška bloku: řádky × výška řádku. Bez zalamování je to přesné, takže se nemusí měřit layout.
+    func height(forWidth width: Double) -> Double {
+        max(Double(rows) * rowHeight, rowHeight)
+    }
+
+    /// Rámečky řádků — **jeden na dvojici**, protože sloupce jsou zarovnané. Overlay z nich staví
+    /// pilulky po obou stranách.
+    func lineFrames() -> [DiffBlockLineFrame] {
+        (0..<rows).map { index in
+            DiffBlockLineFrame(
+                index: index,
+                line: left.line(at: index) ?? .blank,
+                rect: CGRect(x: 0, y: Double(index) * rowHeight, width: bounds.width, height: rowHeight)
+            )
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        let half = (bounds.width - 1) / 2
+        leftScroll.frame = NSRect(x: 0, y: 0, width: half, height: bounds.height)
+        separator.frame = NSRect(x: half, y: 0, width: 1, height: bounds.height)
+        rightScroll.frame = NSRect(x: half + 1, y: 0, width: half, height: bounds.height)
+        // Znovu po každé změně šířky: minimální šířka sloupce se odsud odvozuje.
+        layoutColumns()
+    }
+
+    private func clearSelection(in column: DiffTextView?) {
+        guard let column, column.selectedRange().length > 0 else { return }
+        column.setSelectedRange(NSRange(location: 0, length: 0))
+    }
+
+    /// Záloha pro výběr klávesnicí (⇧+šipky, ⌘A) — tam žádný stisk myši není. `mouseDown` výš to
+    /// řeší dřív, tohle jen dorovnává zbytek.
+    func textViewDidChangeSelection(_ notification: Notification) {
+        guard let changed = notification.object as? DiffTextView, changed.selectedRange().length > 0
+        else { return }
+        clearSelection(in: changed === left ? right : left)
+    }
+}
+
+extension DiffLine {
+    /// Prázdná protistrana dvojice. Není to řádek souboru, takže nemá čísla ani druh změny —
+    /// jen drží zarovnání sloupců.
+    static let blank = DiffLine(kind: .context, oldNumber: nil, newNumber: nil, text: "")
+}

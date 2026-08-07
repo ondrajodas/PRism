@@ -10,7 +10,7 @@ struct DraftCommentBubbleView: View {
     let comment: ReviewDraftComment
     /// Odsazení do sloupce s obsahem. Ve split pohledu je v buňce jedno číslo řádku místo
     /// dvou, takže je kratší — stejný parametr jako u `ThreadBubbleView`.
-    var indent: Double = 104
+    var indent: Double = DiffLineView.contentInset(for: .unified)
     var update: (String) -> Void = { _ in }
     var remove: () -> Void = {}
 

@@ -162,8 +162,7 @@ private struct CommandToCopy: View {
     }
 
     private func copy() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(command, forType: .string)
+        Clipboard.copy(command)
         didCopy = true
     }
 }

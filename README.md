@@ -77,8 +77,9 @@ odebraných řádků se s následujícím blokem přidaných spáruje pozičně;
 straně dostane prázdnou buňku s neutrálním pozadím. Kontextový řádek stojí na obou stranách,
 hlavička hunku, rozbalovací řádek, bubliny i poznámky `git`u jdou přes celou šířku. Všechno,
 co diff umí pod sebou, umí i vedle sebe — bubliny, rozbalování kontextu, obarvení, sbalování
-souborů i skok z tabulky nálezů. **Komentovat jde i rozsah řádků**: klikni do diffu a **táhni myší přes řádky** — vybraný rozsah
-se průběžně zvýrazňuje a po puštění se otevře komentář. Bublina visí u posledního řádku rozsahu,
+souborů i skok z tabulky nálezů. **Komentovat jde i rozsah řádků**: **táhni myší přes sloupec s čísly** (nebo z pilulky s ikonkou) —
+vybraný rozsah se průběžně zvýrazňuje a po puštění se otevře komentář. Tažením **přes kód** se od
+#157 vybírá text, takže rozsah se táhne vlevo od něj. Bublina visí u posledního řádku rozsahu,
 jako na GitHubu. Rozepsaný komentář jde ještě roztáhnout **⇧ klikem** na `+` u jiného řádku (to
 tažení neumí, protože komentář už existuje). Rozsah smí přeskočit i mezeru mezi hunky a odesílá se
 jako `start_line`/`start_side`, tedy tak, jak to čeká GitHub.
@@ -106,6 +107,31 @@ kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi
 `Zobrazit jen diff` sbalí všechno zpátky. **Kód kolem nálezu, jehož řádek v diffu není,
 se dotáhne sám** — nález bez svého kódu se nedá posoudit. Nahoře v liště je **strom
 souborů** pro skok kamkoli v diffu.
+
+**Kód se vybírá myší jako v editoru** (#157) — tažením přes libovolně mnoho řádků, ⌘C. Vybírá se jen
+obsah, ne čísla řádků a ne znak změny, takže se do schránky nepřiplete diff. Kód proto kreslí
+`NSTextView`, ne SwiftUI text: ve SwiftUI je každý text vlastní selekce, takže by šlo vybrat jen
+jeden řádek. Souvislé řádky se slévají do bloku, který končí u hlavičky hunku, rozbalovacího řádku
+nebo bubliny — vybírat jde přes celý úsek kódu mezi nimi, u většiny řádků přes celý hunk. Výběr
+zůstává modrý, i když myš odjede jinam, a v pohledu vedle sebe žije **jen v jednom sloupci**.
+
+Na to, co blok neumí — vybrat **přes** bubliny — je v kontextovém menu `Vybrat text z hunku…`: otevře
+hunk v samostatném okně jako jeden text, s obarvením a s tlačítkem na zkopírování všeho. Zavírá se
+Escem.
+
+Na víc řádků je **pravé kliknutí**: `Kopírovat řádek`, u řádku, který leží v rozsahu tvého
+rozdělaného komentáře, i `Kopírovat rozsah` s počtem řádků, a na hlavičce hunku `Kopírovat hunk`.
+Ve schránce je **kód, ne diff** — bez `+`/`-`, bez čísel řádků a bez hlavičky hunku. U rozsahu přes
+odebrané i přidané řádky se kopíruje **nová** verze; rozsah čistě na levé straně naopak ten starý
+kód. Kopírováním **nevzniká komentář**, takže po sobě není co uklízet.
+
+Tažení rozsahu pro komentář se s vybíráním textu snese: nad kódem dostane tažení výběr textu, nad
+čísly a pilulkou výběr rozsahu. Pilulka s ikonkou má vlastní sloupec **vlevo od čísel**, takže už
+žádné číslo nepřekrývá, a **táhnout jde i z ní**. Kurzor se mění po sloupcích: ruka nad pilulkou,
+šipka nad čísly, textový nad kódem.
+
+**V pohledu vedle sebe se dlouhý řádek nezalamuje, ale posouvá vodorovně** — jinak by jeden sloupec
+narostl o zalomený řádek, druhý ne, a přestalo by platit, že vlevo a vpravo je tentýž řádek.
 
 Kód je **obarvený podle jazyka** — vlastní pravidla, žádná externí závislost, paleta
 Darcula v tmavém režimu a IntelliJ Light ve světlém. Barví se řádek po řádku bez paměti,

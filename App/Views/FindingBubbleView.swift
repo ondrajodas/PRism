@@ -20,7 +20,7 @@ struct FindingBubbleView: View {
     var actions: FindingActions?
     /// Odsazení do sloupce s obsahem. Ve split pohledu je v buňce jedno číslo řádku místo
     /// dvou, takže je kratší — stejný parametr jako u `ThreadBubbleView`.
-    var indent: Double = 104
+    var indent: Double = DiffLineView.contentInset(for: .unified)
 
     /// Kolik řádků kolem nálezu se ukáže, když si o to uživatel řekne. Samotný řádek bez
     /// okolí se čte špatně.
