@@ -17,7 +17,14 @@ struct QueueSummaryView: View {
                 // „PR“ se neskloňuje, takže je to jedno slovo pro všechny počty.
                 label: "PR",
                 tint: .secondary,
-                help: "\(Plural.czech(summary.pullRequests, one: "pull request", few: "pull requesty", many: "pull requestů")) čeká na review"
+                // Sloveso patří **do tvarů**, ne za ně: „2 pull requesty čeká“ je špatně česky.
+                // Nález Copilota na #168; tentýž vzor se našel ještě na dvou starších místech.
+                help: Plural.czech(
+                    summary.pullRequests,
+                    one: "pull request čeká na review",
+                    few: "pull requesty čekají na review",
+                    many: "pull requestů čeká na review"
+                )
             )
             // **Jen když je co hlásit.** Nula blokujících vedle nuly rozdělaných review je řádek
             // plný nul, ve kterém se to jedno číslo, na kterém záleží, ztratí.

@@ -295,9 +295,15 @@ struct DiffView: View {
     /// neobjeví bublina a to od „nikdo tam nic nenapsal“ nikdo nepozná. Hlásí se proto
     /// stejně jako nepřečtené řádky diffu.
     private var missingThreadsWarning: some View {
-        let count = Plural.czech(missingThreads, one: "vlákno", few: "vlákna", many: "vláken")
+        // Sloveso je **v tvarech**: „2 vlákna se nevešlo“ je špatně česky.
+        let count = Plural.czech(
+            missingThreads,
+            one: "vlákno konverzace se nevešlo",
+            few: "vlákna konverzace se nevešla",
+            many: "vláken konverzace se nevešlo"
+        )
         return Label {
-            Text(verbatim: "\(count) konverzace se nevešlo — otevři PR na GitHubu")
+            Text(verbatim: "\(count) — otevři PR na GitHubu")
         } icon: {
             Image(systemName: "exclamationmark.triangle")
         }

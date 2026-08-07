@@ -535,6 +535,11 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   (`21 blokujících`, `3 blokující`). Samotné ikony s čísly se ukázaly jako nečitelné (vyžádané při
   zkoušení: „nevím, co co znamená“), takže u každého čísla stojí slovo; tvar slova bez počtu dává
   `Plural.word(_:one:few:many:)`, protože číslo se v pruhu píše `verbatim`.
+
+  **Sloveso patří do tvarů, ne za ně** — „2 pull requesty čeká“ je špatně česky. Nález Copilota
+  na #168; při opravě se tentýž vzor našel ještě na **dvou starších místech** (useknuté vlákno
+  a nevešlá konverzace nad diffem). Neosobní konstrukce („2 řádky diffu se nepodařilo přečíst“)
+  je naopak správná a zůstává.
 - **`WindowCentering` (#164)** — **geometrie, ne `NSWindow`**. `centered(_:in:on:)` si obrazovky
   bere parametrem (`ScreenBounds`), takže je to čistá funkce; jinak by zůstalo neotestované zrovna
   zarovnávání zpátky na viditelnou plochu, protože `NSScreen` se vyrobit nedá. Do #164 to byla
