@@ -40,6 +40,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ThreadComment` | Jeden komentář — ve vlákně i pod PR; `replyToID` místo vnořování |
 | `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
+| `QueueSummary` | Souhrn fronty: počet PR, PR s blokujícím nálezem a PR s rozdělaným review (#155) |
 | `DiffBlock`, `DiffPairBlock` | Souvislý úsek řádků jako jeden text (#157) — kvůli výběru přes víc řádků. **Není `Codable`**, je to věc vykreslení |
 | `ReviewDraft` | Rozdělané review: PR, `headSha`, tělo, verdikt, komentáře. Verdikt je vnořený `ReviewDraft.Verdict` |
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
@@ -1166,6 +1167,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ServiceHealthDot` | Puntík jedné služby; po hoveru důvod a čas poslední kontroly |
 | `NotificationStatusView` | Kdy se naposledy něco ohlásilo (#138) — zvonek s časem, `zatím nic`, nebo `vypnuto` |
 | `DailySpendView` | Co dneska stálo review (#148) — cena za dnešek, u neúplného součtu s `≥` |
+| `QueueSummaryView` | Souhrn fronty (#155) — kolik PR čeká, kolik má blokující nález a kolik rozdělané review |
 | `RunUsageText` | Cena, trvání a počet kol jako text — jedno místo pro osu i stavový řádek |
 | `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory, zakázané notifikace |
 | `WindowCentering`, `WindowReader`, `ScreenBounds` | Vystředění pomocného okna **v hlavním okně**, ne na obrazovce (#164) — z jednoho místa pro nastavení i novinky |
@@ -1248,6 +1250,30 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsNumberField` | Číslo se šipkami **i** přepsáním; ořezává na povolený rozsah |
 
 Věci, které se u toho nemají rozbít:
+
+- **Souhrn fronty (#155) sčítá, nezužuje.** Filtr reviewerů (#117) seznam zužuje a je to *pohled*;
+  souhrn je tvrzení o tom, co ve frontě **je**. Kdyby se počítal z toho, co je po filtru vidět,
+  tvrdil by, že práce ubyla, jen protože jsem si schoval jednoho revieweera — tatáž úvaha jako
+  u tlačítka na zahození nálezů. Čtyři věci, na kterých to stojí:
+  - **Počítají se PR, ne nálezy.** Tři blokující nálezy na jednom PR jsou jedna položka práce;
+    souhrn odpovídá na „na kolik věcí se musím podívat“ a musí počítat totéž, co řádek seznamu.
+  - **Blokující se bere z `Policy.blockingCount(in:categories:)`**, tedy z **platných** nálezů:
+    odmítnutý (#113) strašit nemá a druhý výpočet by se s řádkem seznamu rozešel.
+  - **Rozhodnutí „ukázat, nebo ne“ je v `AppStore.queueSummary`**, ne v `Policy` ani ve view: jediné,
+    co ho rozhoduje, je stav pollingu, a ten zná jen store. Souhrn se **neukáže** dokud se seznam
+    nenačetl (`lastSuccess == nil`) — nula blokujících nad nenačtenými daty vypadá jako „čisto“ —
+    a nad prázdnou frontou, kde o tom mluví prázdný stav seznamu i s důvodem. **Po selhaném tiku se
+    naopak ukáže**, jen nad zastaralými daty, což už hlásí banner; schovat ho při každém výpadku by
+    znamenalo přestat vědět o rozdělaném review kvůli chvilkové chybě sítě.
+  - **Kategorie se berou globální, ne per repo.** Souhrn je jedno číslo přes celou frontu, takže se
+    nemá čím rozhodnout, které repo má přednost; řádek seznamu si dál bere ty svoje.
+  - **U každého čísla stojí slovo**, ne jen ikona (`12 PR`, `3 blokující`, `2 review`) — ikona sama
+    se nedá přečíst a nápověda po hoveru je až druhá šance. Konvence toho pruhu je ikona plus text,
+    jako u puntíků služeb. Tvar slova bez počtu dává `Plural.word(_:one:few:many:)`; číslo se píše
+    `verbatim`, protože počet položek v seznamu není množství k formátování.
+  - **Prázdný draft se nepočítá** a **nulové položky se nekreslí**. Draft vzniká i tím, že se otevře
+    panel a napíše se znak, který se pak smaže; a řádek plný nul je řádek, ve kterém se to jedno
+    číslo, na kterém záleží, ztratí.
 
 - **Obě pomocná okna se středí v hlavním okně, ne na obrazovce** — `WindowCentering`
   a `centeredInMainWindow()`. Do #164 to bylo `private` ve `SettingsView`, takže okno s novinkami
@@ -2188,6 +2214,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.inserting(_:intoThread:of:)`, `Policy.applying(_:to:)` | Zápis odeslané odpovědi a vyřešení do načtené konverzace; `nil` = vlákno tam není |
 | `Policy.linesWithSeveralComments(in:)` | Na kolika řádcích draftu je víc komentářů — z každého budou samostatná vlákna, ne odpověď |
 | `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR a vlákna bez kotvy, chronologicky (`ConversationEntry`) |
+| `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |
 | `Policy.snippet(of:context:)` | `diffHunk` vlákna → `ThreadSnippet`: posledních pár řádků po komentovaný a příznak zkrácení (#158). `nil` = úryvek se nemá z čeho vzít. **Není to `Policy.snapshot`** — ten je z dnešního diffu a slouží kotvám draftu |
 | `Policy.commentableSide(of:in:)` | Ke které **kanonické** straně by šel komentář; `nil` = nedá se komentovat |

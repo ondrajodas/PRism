@@ -162,7 +162,13 @@ struct ThreadBubbleView: View {
     /// nálezů. Chybí zrovna to, co je ve vlákně nejnovější.
     @ViewBuilder private var truncationNote: some View {
         if thread.comments.isTruncated {
-            Text(verbatim: "\(Plural.czech(thread.comments.missing, one: "komentář", few: "komentáře", many: "komentářů")) se nevešlo — otevři vlákno na GitHubu.")
+            // Sloveso je **v tvarech**: „2 komentáře se nevešlo“ je špatně česky.
+            Text(verbatim: Plural.czech(
+                thread.comments.missing,
+                one: "komentář se nevešel",
+                few: "komentáře se nevešly",
+                many: "komentářů se nevešlo"
+            ) + " — otevři vlákno na GitHubu.")
                 .font(.caption2)
                 .foregroundStyle(.orange)
         }

@@ -522,6 +522,24 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   vlastní kotvu (hover v renderu není) a porovnat s tímtéž renderem nad `git stash`nutou verzí.
   U #157 to ukázalo, že ikonka byla na čísle řádku **už předtím** — a teprve pak se posunula do
   vlastního sloupce.
+- **Souhrn fronty (#155)** — `Policy` vyčerpávajícím výčtem. Dvě věci se dají pokazit potichu
+  a obojí je ověřené **vložením regrese**: **počítat nálezy místo PR** (souhrn by tvrdil víc práce,
+  než kolik jí je — tři nálezy na jednom PR jsou jedna položka) a **počítat prázdný draft** za
+  rozdělané review. Vedle toho každý případ zvlášť: bez záznamů, blokující u každého PR jiné,
+  odmítnutý nález (nejcennější — kdyby se počítal, souhrn by se rozešel s řádkem seznamu),
+  přenastavené kategorie, PR s blokujícím nálezem **i** draftem, fronta přes víc rep a **záznam
+  nebo draft PR, které ve frontě už není** (mezitím se zavřelo, ale na disku zůstalo).
+
+  Vzhled je doložený offscreen renderem ve světlém i tmavém režimu — včetně toho, že se **nulové
+  položky nekreslí**, že velká čísla nejdou přes locale (žádné „1 234“) a že se **slovo skloňuje**
+  (`21 blokujících`, `3 blokující`). Samotné ikony s čísly se ukázaly jako nečitelné (vyžádané při
+  zkoušení: „nevím, co co znamená“), takže u každého čísla stojí slovo; tvar slova bez počtu dává
+  `Plural.word(_:one:few:many:)`, protože číslo se v pruhu píše `verbatim`.
+
+  **Sloveso patří do tvarů, ne za ně** — „2 pull requesty čeká“ je špatně česky. Nález Copilota
+  na #168; při opravě se tentýž vzor našel ještě na **dvou starších místech** (useknuté vlákno
+  a nevešlá konverzace nad diffem). Neosobní konstrukce („2 řádky diffu se nepodařilo přečíst“)
+  je naopak správná a zůstává.
 - **`WindowCentering` (#164)** — **geometrie, ne `NSWindow`**. `centered(_:in:on:)` si obrazovky
   bere parametrem (`ScreenBounds`), takže je to čistá funkce; jinak by zůstalo neotestované zrovna
   zarovnávání zpátky na viditelnou plochu, protože `NSScreen` se vyrobit nedá. Do #164 to byla

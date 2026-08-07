@@ -676,6 +676,33 @@ final class AppStore {
 
     func reviewRecord(for pr: PRIdentifier) -> ReviewRecord? { reviewRecords[pr] }
 
+    /// Souhrn nad frontou pro stavový řádek (#155). `nil` = nemá se co sčítat.
+    ///
+    /// **Rozhodnutí „ukázat, nebo ne“ je tady, ne v `Policy` ani ve view**, protože jediné, co ho
+    /// rozhoduje, je stav pollingu — a ten zná store. Souhrn se **neukáže**:
+    ///
+    /// - dokud se seznam nenačetl (`lastSuccess == nil`): nula blokujících by nad nenačtenými daty
+    ///   vypadala jako „čisto“, a to je zrovna ten nebezpečný směr;
+    /// - když je fronta prázdná: o tom mluví prázdný stav seznamu, a to i s důvodem.
+    ///
+    /// **Po selhaném tiku se naopak ukáže** — jen nad zastaralými daty, což už hlásí banner nad
+    /// seznamem. Schovat souhrn při každém výpadku by znamenalo, že o rozdělaném review přestanu
+    /// vědět kvůli chvilkové chybě sítě.
+    ///
+    /// Blokující kategorie se berou **globální**, ne per repo: souhrn je jedno číslo přes celou
+    /// frontu, takže se nemá čím rozhodnout, které repo má přednost. Řádek seznamu si dál bere ty
+    /// svoje (`reviewState(for:)`).
+    var queueSummary: QueueSummary? {
+        guard polling.state.lastSuccess != nil else { return nil }
+        let summary = Policy.summary(
+            of: pullRequests,
+            records: reviewRecords,
+            drafts: drafts,
+            categories: Set(configuration.global.blockingCategories)
+        )
+        return summary.isEmpty ? nil : summary
+    }
+
     /// Běží nad PR review? Rozhoduje běžící úloha, ne fáze — ta zůstává i po selhání, aby
     /// bylo z čeho ukázat důvod.
     func isReviewing(_ pr: PRIdentifier) -> Bool { reviewTasks[pr] != nil }
