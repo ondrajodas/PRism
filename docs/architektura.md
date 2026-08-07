@@ -40,6 +40,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ThreadComment` | Jeden komentář — ve vlákně i pod PR; `replyToID` místo vnořování |
 | `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
+| `DiffBlock`, `DiffPairBlock` | Souvislý úsek řádků jako jeden text (#157) — kvůli výběru přes víc řádků. **Není `Codable`**, je to věc vykreslení |
 | `ReviewDraft` | Rozdělané review: PR, `headSha`, tělo, verdikt, komentáře. Verdikt je vnořený `ReviewDraft.Verdict` |
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
 | `DraftSnapshot` | Text řádků, ke kterým se komentář psal — konec rozsahu a jeho začátek. Prázdný = nevíme |
@@ -294,6 +295,82 @@ Pohled **vedle sebe** (#98) je `DiffRow.pair(_, left:, right:)` a platí u něj:
 - **Při úzkém okně se nic nepřepíná samo.** Split v úzkém okně je nepoužitelný, ale pohled,
   který se mění sám, je horší než pohled, který si člověk zvolil špatně — přepínač je po ruce
   v liště.
+
+Vybírání a kopírování kódu (#157) — z diffu se do #157 nedalo dostat nic, protože tažení přes řádky
+vybírá rozsah komentáře a vybírání textu bylo nad diffem vypnuté. Skončilo to **přepisem vykreslení
+kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků nedá:
+
+- **Řádky se před vykreslením slévají do bloků** (`DiffRow.blocked(_:)`, ve split `blockedPairs(_:)`)
+  a blok kreslí jeden `NSTextView`. Blok **končí tam, kde do diffu něco vstoupí** — hlavička hunku,
+  rozbalovací řádek, bublina nálezu, cizí vlákno, můj rozdělaný komentář — takže vybírat jde přes
+  celý úsek kódu mezi nimi; u většiny řádků je to celý hunk.
+- **Slučování je věc vykreslení, ne modelu.** `DiffRow.rows(of:)` vrací řádky jako dosud a slévá je
+  `DiffView`. Kdyby se slévalo v modelu, musela by o blocích vědět i kotva skoku na nález a výběr
+  vláken — a testy `DiffRow` mluví o řádcích (85 z nich na tom prvním pokusu spadlo).
+- **Čísla řádků a znak změny se kreslí mimo text**, do `textContainerInset` vlevo. Kdyby byly
+  součástí textu, kopírovaly by se s ním — do schránky má jít kód, ne diff.
+- **Rozvržení gutteru je jeden součet na jednom místě** (`DiffLineView.contentInset(for:)`):
+  `[ikonka 18][číslo 52][číslo 52][znak 14]`, ve split jen jeden sloupec čísel. `DiffTextView`
+  kreslí ručně na dané `x`, takže rozejít se to smí jen tehdy, když má být kód nakřivo — když
+  v tom součtu chyběl `signColumn`, kreslil se znak přes číslo a čísla vycházela uříznutá.
+- **Pilulka na komentář a tažení rozsahu zůstávají SwiftUI** — v overlay nad blokem, pozicované
+  podle **skutečných rámečků řádků** z layout manageru, ne podle výšky × index: dlouhý řádek se
+  zalomí na dva vizuální a čísla by se rozešla s kódem.
+- **Ve split pohledu se nezalamuje** a dlouhý kód se posouvá vodorovně. **Ruší to rozhodnutí #98**,
+  kde se zalamovalo: se zalamováním by jeden sloupec narostl o vizuální řádek a druhý ne, čímž
+  přestane platit, že vlevo a vpravo je tentýž řádek souboru — a to je celý smysl toho pohledu.
+  V pohledu pod sebou žádný protějšek není, takže se zalamuje dál.
+- **Sloupce split pohledu jsou v clip view** (`NSScrollView`), jinak přetečou do druhé půlky: textové
+  view s neomezenou šířkou containeru si roztáhne vlastní rámec podle nejdelšího řádku a `frame`
+  z kontejneru ho nezastaví. Rámec se jim musí nastavit **explicitně** (nejdelší řádek, nejméně
+  šířka sloupce) — bez toho zůstaly nulové a nešlo v nich ani vybírat, ani nic vidět.
+- **Výběr žije jen v jednom sloupci** a ruší se **při stisknutí**, ne až při puštění: dvě modré
+  selekce vedle sebe po celou dobu tažení tvrdí, že je vybrané obojí. `textViewDidChangeSelection`
+  na to nestačí (chodí s hotovým výběrem) a zůstává jen jako záloha pro výběr klávesnicí.
+- **Kopírování nezakládá komentář.** Skládání textu je čistá funkce nad diffem (`Policy.code(of:)`)
+  a menu je na pravém kliknutí, které nic nezakládá. Je na to test, protože „zjednodušit“ to na
+  tutéž cestu, jakou jde komentování, je lákavé a tiché.
+- **Ve schránce je kód, ne diff:** bez `+`/`-`, bez čísel řádků a bez hlavičky hunku; poznámky
+  `git`u se vynechávají. U rozsahu přes obě strany se bere **nová** verze (o té je řeč a zůstane
+  po mergi), u rozsahu čistě vlevo naopak odebrané řádky.
+- **Rozsah se kopíruje v pořadí souboru.** Zvýraznění drží rozsah jako `Set`, takže hledání konců
+  má jedno místo (`Policy.rangeLinesInOrder`) a `rangeLines` je jen jeho množinová podoba — jinak by
+  kód přišel do schránky přeházený a nikdo by to nepoznal, dokud by ho někam nevložil.
+- **Kopíruje se hunk, ne „celý soubor“** — mezi hunky chybí řádky, takže slepený soubor by tvrdil,
+  že je kód souvislý.
+- **`CodeTextSheet` zůstal i po zapnutí selekce v diffu.** Blok končí u bubliny, takže hunk
+  s komentáři se v diffu naráz vybrat nedá; sheet ho ukáže jako **jeden** text mimo diff, kde jde
+  vybrat všechno a ⌘A funguje. Kód se skládá tou samou funkcí jako pro schránku, aby se vybraný
+  text nemohl rozejít s `Kopírovat hunk`.
+- **Pilulka má vlastní úzký sloupec vlevo od čísel.** Třetí umístění a obě předchozí měla důvod: do
+  #110 stála u pravé hrany a působila odděleně od diffu, od #110 sedla **na číslo řádku** a zpola ho
+  překryla (doloženo offscreen renderem, že to tak bylo **už před** #157). Cena je 18 pt odsazení
+  obsahu u každého řádku — to, co #110 zamítlo.
+- **Ikonka není `Button`, ale obrázek s `onTapGesture`.** `Button` si tažení bere pro sebe, takže
+  z pilulky nešlo roztáhnout rozsah. Klik a tažení se vylučují samy, protože drag má
+  `minimumDistance`; kurzor, nápovědu a accessibility trait je proto potřeba doplnit ručně.
+
+Sedm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne přečtené:
+
+| Past | Jak se projevila |
+|---|---|
+| **Co se nakreslí po `super.draw`, není vidět** | Čísla a znaky se nekreslily vůbec, ačkoli se kód volal se správnými hodnotami. Doloženo plným obdélníkem, který taky nebyl. Všechno vlastní kreslení musí být **před** `super.draw` |
+| `NSAttributedString.draw(at:)` ve **flipped** view kreslí **nad** bod | Text mimo řádek a mimo view. Musí to být `draw(in:)` s rámečkem a zarovnáním z odstavce |
+| `setAttributedString` **ruší výběr** | `updateNSView` chodí i při přejezdu myší (mění se, u kterého řádku svítí pilulka), takže výběr zmizel při každém hnutí. Text se proto skládá jen při změně **podpisu** obsahu |
+| SwiftUI `@ViewBuilder`, který podle stavu vybírá mezi `self` a modifikátorem, **mění strukturu** | `copyMenu` s prázdnou nabídkou zahodil podstrom a postavil nový `NSTextView` — s ním zmizel výběr, jak myš odjela z bloku. Menu se proto připojuje bezpodmínečně |
+| `NSCursor.set()` ze SwiftUI ani `addCursorRect` si proti `NSTextView` **neporadí** | Ruka nad pilulkou blikla jen v rohu, kde se to potkalo, nebo vůbec. Jde to jen přes tracking area a `cursorUpdate` — a i tam se musí rozhodovat v `mouseMoved`, protože `cursorUpdate` chodí jen při vstupu do areay |
+| `contentShape` **před** `frame` tvaruje nulovou velikost | Gesto tažení nemělo kde začít. Vypadá to jako drobnost v pořadí modifikátorů a je z toho nefunkční gesto |
+| `NSTextView` s neomezenou šířkou si **nedopočítá rámec** | Po přesunu do `NSScrollView` zůstal nulový: nic vidět, nic vybrat |
+
+**TextKit 1, ne 2.** Geometrie řádků se čte z `NSLayoutManager` (`boundingRect(forGlyphRange:)`) —
+podle ní se kreslí pozadí, čísla i pozice pilulek — a TextKit 2 layout manager nemá. Vynutí se tím,
+že se textové view vyrobí s ručně složeným `NSTextStorage`/`NSLayoutManager`/`NSTextContainer`.
+
+**`DiffLineView` a `DiffPairView` se v aplikaci už nekreslí** (bloky je nahradily), ale drží
+konstanty a barvy, které si bloky berou (`numberColumn`, `iconColumn`, `signColumn`,
+`contentInset(for:)`, `signColor(of:)`, `background(of:)`, `rangeTint`, `dragTint`). Zůstávají
+proto jako **jediné místo, kde ty hodnoty jsou** — vyčlenit je do vlastního typu je úklid na potom,
+ne součást #157.
 
 Vlákna konverzace (#64) se vezou **stejnou cestou** jako nálezy (`DiffRow.thread`), ale
 v pěti věcech se chovají jinak:
@@ -1092,6 +1169,11 @@ na `.task` okna, takže zavření okna ji zruší.
 | `RunUsageText` | Cena, trvání a počet kol jako text — jedno místo pro osu i stavový řádek |
 | `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory, zakázané notifikace |
 | `WindowCentering`, `WindowReader`, `ScreenBounds` | Vystředění pomocného okna **v hlavním okně**, ne na obrazovce (#164) — z jednoho místa pro nastavení i novinky |
+| `DiffCopyActions`, `copyMenu(_:selectText:)` | Kopírování kódu z diffu (#157) — co nabídne kontextové menu řádku a hunku |
+| `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157) |
+| `DiffCodeBlockView`, `DiffBlockRowView` | Blok v pohledu pod sebou a k němu pilulka na komentář a tažení rozsahu |
+| `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
+| `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory`) — podtržené, s odznakem počtu |
 | `OverviewView` | Tab `Přehled`: popis PR a konverzace bez kotvy v diffu, chronologicky |
@@ -2106,6 +2188,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.inserting(_:intoThread:of:)`, `Policy.applying(_:to:)` | Zápis odeslané odpovědi a vyřešení do načtené konverzace; `nil` = vlákno tam není |
 | `Policy.linesWithSeveralComments(in:)` | Na kolika řádcích draftu je víc komentářů — z každého budou samostatná vlákna, ne odpověď |
 | `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR a vlákna bez kotvy, chronologicky (`ConversationEntry`) |
+| `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |
 | `Policy.snippet(of:context:)` | `diffHunk` vlákna → `ThreadSnippet`: posledních pár řádků po komentovaný a příznak zkrácení (#158). `nil` = úryvek se nemá z čeho vzít. **Není to `Policy.snapshot`** — ten je z dnešního diffu a slouží kotvám draftu |
 | `Policy.commentableSide(of:in:)` | Ke které **kanonické** straně by šel komentář; `nil` = nedá se komentovat |
 | `Policy.commentAnchors(of:in:)`, `Policy.commentAnchors(in:)` | Kotvy na **obě strany** (`LineAnchors`) — kontextový řádek unese vlevo i vpravo; mapa pro celý soubor jedním průchodem |

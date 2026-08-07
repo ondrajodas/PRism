@@ -15,7 +15,7 @@ struct ThreadBubbleView: View {
     /// Odsazení zleva. Výchozí hodnota míří do sloupce s obsahem vedle čísel řádků, protože
     /// u kódu bublina visí pod svým řádkem. V `Přehledu` (#72) žádná čísla nejsou, takže se
     /// tam předává nula — jinak by vlákno viselo o sto bodů vpravo bez důvodu.
-    var indent: Double = 104
+    var indent: Double = DiffLineView.contentInset(for: .unified)
     /// Odpovídání a vyřešení (#73). `nil` = bublina je jen ke čtení, což je stav, ve kterém se
     /// staví v testech skládání řádků a v náhledech.
     var actions: ThreadActions?

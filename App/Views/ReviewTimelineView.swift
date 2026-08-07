@@ -98,8 +98,7 @@ struct ReviewTimelineView: View {
     }
 
     private func copyResume(_ sessionID: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString("claude --resume \(sessionID)", forType: .string)
+        Clipboard.copy("claude --resume \(sessionID)")
     }
 
     // MARK: - Událost

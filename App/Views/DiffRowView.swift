@@ -37,11 +37,42 @@ struct DiffRowView: View {
     var dragEnd: DraftAnchor.Endpoint?
     /// Tažení přes řádky, kterým se vybírá rozsah komentáře (#110).
     var rangeDrag = RangeDragActions()
+    /// Kopírování kódu do schránky (#157) — pravým kliknutím, takže **komentář nezakládá**.
+    var copy = DiffCopyActions()
 
     var body: some View {
         switch row {
         case .hunk(_, let hunk):
             hunkHeader(hunk)
+                .copyMenu(copy.hunkTargets(hunk), selectText: copy.selectableHunkText(hunk).map { text in
+                    { copy.showText(text) }
+                })
+        case .block(let id, let block):
+            DiffBlockRowView(
+                block: block,
+                language: language,
+                draft: draft,
+                performDraftAction: perform,
+                commentRangeCells: commentRangeCells,
+                draggedCells: draggedCells,
+                dragEnd: dragEnd,
+                rangeDrag: rangeDrag,
+                blockID: id,
+                copy: copy
+            )
+        case .pairBlock(let id, let pair):
+            DiffPairBlockRowView(
+                block: pair,
+                language: language,
+                draft: draft,
+                performDraftAction: perform,
+                commentRangeCells: commentRangeCells,
+                draggedCells: draggedCells,
+                dragEnd: dragEnd,
+                rangeDrag: rangeDrag,
+                blockID: id,
+                copy: copy
+            )
         case .line(let id, let line):
             DiffLineView(
                 line: line,
@@ -54,6 +85,7 @@ struct DiffRowView: View {
                 rangeDrag: rangeDrag,
                 dragID: id
             )
+            .copyMenu(copy.targets(line), selectText: selectText(of: line))
         case .pair(let id, let left, let right):
             DiffPairView(
                 left: left,
@@ -67,7 +99,8 @@ struct DiffRowView: View {
                 rightInDrag: right.map { covers(draggedCells, $0, on: .right) } ?? false,
                 dragEnd: dragEnd,
                 rangeDrag: rangeDrag,
-                dragID: id
+                dragID: id,
+                copy: copy
             )
         case .expander(_, let expander):
             DiffExpanderView(
@@ -101,6 +134,12 @@ struct DiffRowView: View {
         case .note(_, let text):
             note(text)
         }
+    }
+
+    /// Akce, která otevře hunk řádku jako text k vybírání (#157). `nil` = není z čeho ho složit,
+    /// položka se v menu nekreslí.
+    private func selectText(of line: DiffLine) -> (() -> Void)? {
+        copy.selectableText(line).map { text in { copy.showText(text) } }
     }
 
     /// Leží buňka (řádek na dané straně) uvnitř rozsahu? V pohledu pod sebou je sloupec jediný,
@@ -168,7 +207,7 @@ struct DiffRowView: View {
     /// Ve split pohledu je v buňce **jedno** číslo řádku místo dvou, takže se odsazení o ten
     /// sloupec zkrátí — jinak by bublina začínala až uvnitř kódu.
     private var indent: Double {
-        layout == .split ? Self.bubbleIndent - DiffLineView.numberColumn : Self.bubbleIndent
+        DiffLineView.contentInset(for: layout)
     }
 
     /// Odsazení **komentáře**, který ve split pohledu bydlí v polovině řádku. Do sloupce
@@ -176,12 +215,8 @@ struct DiffRowView: View {
     /// a editor, do kterého se píše, potřebuje místo. Svislý pruh bubliny říká, kam patří,
     /// líp než odsazení.
     private var commentIndent: Double {
-        layout == .split ? 16 : Self.bubbleIndent
+        layout == .split ? 16 : DiffLineView.contentInset(for: layout)
     }
-
-    /// Odsazení bubliny v pohledu pod sebou — stejná hodnota, jakou mají bubliny ve výchozím
-    /// stavu, jen na jednom místě pro všechny tři druhy.
-    private static let bubbleIndent = 104.0
 
     /// `extendsRange` je ⇧ klik (#110). Poznámka do těla review rozsah nezná — je to odkaz na
     /// jeden řádek, který v diffu není.

@@ -27,6 +27,9 @@ struct DiffPairView: View {
     /// nepřebily — ve split pohledu se právě z rámečku pozná, na které straně se táhne.
     var rangeDrag = RangeDragActions()
     var dragID: String?
+    /// Kopírování kódu do schránky (#157). Menu patří **na buňku**, ne na dvojici: pravé kliknutí
+    /// do levé poloviny se vztahuje k odebranému řádku, ne k tomu vedle.
+    var copy = DiffCopyActions()
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -64,6 +67,9 @@ struct DiffPairView: View {
                 rangeDrag: rangeDrag,
                 dragID: dragID.map { "\($0)|\(side.rawValue)" }
             )
+            .copyMenu(copy.targets(line), selectText: copy.selectableText(line).map { text in
+                { copy.showText(text) }
+            })
             // **Jen šířka, výška ne.** `maxHeight: .infinity` tady bylo a položilo to aplikaci:
             // main thread se zasekl na 99 % v `StackLayout.explicitAlignment` a
             // `ViewResponder.hitTest`, tedy v přepočtu layoutu při každém pohybu myši nad

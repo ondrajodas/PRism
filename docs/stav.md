@@ -450,6 +450,39 @@ se dá testovat, protože si obrazovky bere parametrem (`NSScreen` se vyrobit ne
 pořadí ořezu `max(min(…))`, na kterém záleží u okna širšího než obrazovka. Vyšlo z toho i jedno
 doložené chování, které dosud nikde nestálo: okno se **nerozpůlí mezi dvěma monitory**.
 
+Kopírování kódu z diffu hotové (issue #157) — `App/Policy/CopyPolicy.swift`
+(`Policy.code`, `copyTargets`, `range(covering:)`), `App/Support/Clipboard.swift`,
+`DiffCopyActions` a `DiffHoveredLine` v `App/Views/`. **Z diffu jde dostat kód do schránky, aniž
+by po tom zůstal rozdělaný komentář** — pravým kliknutím (`Kopírovat řádek`, `Kopírovat rozsah (N
+řádků)`, `Kopírovat hunk`) a ⌘C nad řádkem pod myší. Ve schránce je kód bez `+`/`-`, bez čísel
+řádků a bez hlavičky hunku.
+
+Nakonec **obojí ze zadání**: nejdřív varianta A (kopírování příkazem), pak na vyžádání při zkoušení
+i **varianta B** — vybírání textu myší. **Kód v diffu se vybírá myší jako v editoru, přes libovolně mnoho řádků.**
+
+Aby to šlo, **kreslí kód `NSTextView`, ne SwiftUI `Text`** — ve SwiftUI je každý `Text` vlastní
+selekce, takže přes řádky vybrat nejde ani v jednom bloku textu. Souvislé řádky se před vykreslením
+slévají do bloku (`DiffBlock`, `DiffPairBlock`) a blok končí tam, kde do diffu něco vstoupí —
+hlavička hunku, expander, bublina. Čísla řádků a znaky změny se kreslí **mimo text**, aby se
+nekopírovaly; pilulka na komentář a tažení rozsahu zůstaly SwiftUI nad blokem, pozicované podle
+skutečné geometrie řádků. Bubliny, expandery a hlavičky se nezměnily.
+
+Stálo to **rozhodnutí #98** (ve split pohledu se už nezalamuje, jinak se sloupce rozejdou) a sedm
+změřených pastí AppKitu, které jsou zapsané v architektuře — od „co se nakreslí po `super.draw`,
+není vidět“ po „`setAttributedString` ruší výběr, a `updateNSView` chodí i při přejezdu myší“.
+`CodeTextSheet` (`Vybrat text z hunku…`) zůstal na to, co blok neumí: vybrat hunk **přes** bubliny.
+
+Se selekcí se **pilulka s ikonkou přestěhovala do vlastního úzkého sloupce vlevo od čísel** (do té
+doby seděla na čísle řádku a zpola ho překrývala — doloženo offscreen renderem, že to tak bylo už
+před #157). **Tažení rozsahu naopak zůstalo na celém řádku:** přesun do sloupce s čísly rozbil
+zvýraznění během tažení, takže nebylo vidět, co je vybrané; nad kódem si teď tažení a selekce
+konkurují a vyhrává selekce, protože `Text` je potomek. Ikonka přestala být `Button`, protože ten
+si tažení bral pro sebe. Zmizel i ⌘C
+z aplikace: zkratku obsluhuje selekce, a dvě věci na jedné klávese jsou past, kde ⌘C přebije to, co
+má člověk vybrané. Že ikonka číslo překrývala **už před #157**, je doložené offscreen renderem proti
+`git stash`nuté verzi. `Clipboard` vznikl jako **třetí** výskyt `NSPasteboard` a oba dosavadní teď
+jdou přes něj.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**

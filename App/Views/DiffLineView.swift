@@ -40,9 +40,11 @@ struct DiffLineView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            // V buňce dvojice je číslo jedno: vlevo staré, vpravo nové. Bez `side` obojí.
-            if side != .right { number(line.oldNumber) }
-            if side != .left { number(line.newNumber) }
+            // Prázdné místo pro pilulku s ikonkou — ta visí v overlay, takže sama šířku nezabere.
+            // **Vlevo od čísel** (vyžádané při zkoušení #157): mezi čísly a kódem působila jako
+            // součást kódu a odsouvala ho od čísel.
+            Color.clear.frame(width: Self.iconColumn)
+            numbers
             Text(verbatim: sign)
                 .foregroundStyle(signColor)
                 .frame(width: 14, alignment: .leading)
@@ -50,6 +52,10 @@ struct DiffLineView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 // Dlouhý řádek se zalomí; bez tohohle by se v líném seznamu ořízl.
                 .fixedSize(horizontal: false, vertical: true)
+                // **Vybírat text jde jen tady, v obsahu řádku** (#157) — ne nad čísly a ne nad
+                // znakem změny. Do schránky má jít kód, ne diff, takže co se nedá vybrat, se
+                // nemůže do vybraného textu ani připlést.
+                .textSelection(.enabled)
         }
         .font(.system(.callout, design: .monospaced))
         .foregroundStyle(line.kind == .meta ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
@@ -73,14 +79,30 @@ struct DiffLineView: View {
             guard let dragID else { return }
             rangeDrag.frames?.note(rect, id: dragID, anchor: dragAnchor)
         }
-        // **Táhne se přes celý řádek, ne jen přes čísla.** GitHub má gesto ve sloupci s čísly, ale
-        // tady je nad diffem vypnuté vybírání textu, takže tažení přes kód nic nepřebíjí — a úzký
-        // sloupec by se navíc trefoval hůř než celý řádek. `minimumDistance` je nenulová, aby
-        // samotný klik zůstal kliknutím (jednořádkový komentář je od tlačítka).
+        // **Tažení rozsahu visí na celém řádku, ne na sloupci s čísly** — a je to návrat k #110,
+        // ke kterému mě dohnalo zkoušení #157. Přesun do sloupce vypadal správně (GitHub to tak
+        // má, a hlavně: nad kódem se od #157 vybírá text), ale **přestalo se u toho zvýrazňovat**
+        // to, co se právě táhne, takže při tažení nebylo vidět, co je vybrané. Zvýraznění jde
+        // přes store a překreslení celého diffu; s gestem na řádku funguje, s gestem uvnitř
+        // overlay ne.
+        //
+        // Nad kódem si tedy gesto a selekce **konkurují o totéž tažení** — a rozhoduje to, že
+        // `Text` se svým vybíráním je potomek, takže hit-test dostane první. Nad čísly, znakem
+        // změny a pilulkou žádný vybíratelný text není, takže tam zbude tažení rozsahu.
         .gesture(rangeGesture)
     }
 
-    /// Tlačítko na komentář, které se ukazuje po najetí myší.
+    /// Sloupec (nebo dva) s čísly řádků. Tažení rozsahu se odsud **neobsluhuje** — leží nad tím
+    /// `draftButton`, který zabírá celý sloupec (viz níž).
+    private var numbers: some View {
+        HStack(alignment: .top, spacing: 0) {
+            // V buňce dvojice je číslo jedno: vlevo staré, vpravo nové. Bez `side` obojí.
+            if side != .right { number(line.oldNumber) }
+            if side != .left { number(line.newNumber) }
+        }
+    }
+
+    /// Sloupec s čísly jako **plocha na tažení rozsahu**, a v něm tlačítko na komentář.
     ///
     /// **Výšku si bere z řádku, ne z konstanty** (`maxHeight: .infinity` uvnitř overlay, kterému
     /// se navrhuje velikost řádku, takže je to ohraničené). Do #98 tu byla pevná `height: 18`,
@@ -88,37 +110,79 @@ struct DiffLineView: View {
     /// takže jak na něj myš zamířila, hover přešel na další řádek a ikonka zmizela. Komentovat
     /// pak nešlo vůbec a vypadalo to jako záhada; nahlášené při zkoušení #98, ale je to od #66.
     /// Konstanta by tu byla druhé místo, které se s výškou řádku může rozejít.
-    @ViewBuilder private var draftButton: some View {
+    ///
+    /// Tažení rozsahu obsluhuje **celý řádek** (viz `body`), ne tenhle pruh — zvýraznění taženého
+    /// rozsahu jinak nefunguje.
+    private var draftButton: some View {
+        HStack(spacing: 0) {
+            dragStrip
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 8)
+    }
+
+    /// Sloupec s čísly a v něm zprava pilulka s ikonkou.
+    ///
+    /// Pozn. k `contentShape`: musí být **za** `frame`, ne před ním — před ním tvaruje `Color.clear`
+    /// v jeho vlastní, tedy nulové velikosti. Stálo to jedno kolo u #157, kdy na tomhle pruhu
+    /// viselo tažení rozsahu a nefungovalo.
+    private var dragStrip: some View {
+        ZStack(alignment: .leading) {
+            Color.clear
+            icon
+        }
+        .frame(width: gutterWidth + Self.iconColumn)
+        .frame(maxHeight: .infinity)
+        .contentShape(.rect)
+    }
+
+    /// Samotná pilulka s ikonkou. Ukazuje se po najetí myší.
+    ///
+    /// **Výšku si bere z řádku, ne z konstanty** (`maxHeight: .infinity` uvnitř overlay, kterému
+    /// se navrhuje velikost řádku, takže je to ohraničené). Do #98 tu byla pevná `height: 18`,
+    /// jenže řádek diffu je vysoký ~15 pt — tlačítko z něj **vyčnívalo do toho následujícího**,
+    /// takže jak na něj myš zamířila, hover přešel na další řádek a ikonka zmizela. Komentovat
+    /// pak nešlo vůbec a vypadalo to jako záhada; nahlášené při zkoušení #98, ale je to od #66.
+    /// Konstanta by tu byla druhé místo, které se s výškou řádku může rozejít.
+    @ViewBuilder private var icon: some View {
         if let draftAction, showsButton {
-            HStack(spacing: 0) {
-                Button {
-                    // Modifikátor se čte z AppKitu: SwiftUI ho akci tlačítka nepředá a jiná
-                    // cesta na macOS není. Co ⇧ **znamená**, rozhoduje store (`extendDraftComment`),
-                    // takže tady je jen ta jedna otázka a testuje se bez UI.
+            Image(systemName: symbol(of: draftAction))
+                .font(.caption)
+                .foregroundStyle(.white)
+                // **Pilulka má vlastní úzký sloupec, vlevo od čísel řádků.**
+                //
+                // Třetí umístění a obě předchozí měla svůj důvod: do #110 stála u pravé hrany
+                // sloupce a působila odděleně od diffu, od #110 sedla **na číslo řádku** a zpola ho
+                // překryla (vyšlo najevo až u #157, kdy se zapnulo vybírání textu — doloženo
+                // offscreen renderem, že to tak bylo už předtím). Vlastní sloupec vlevo nepřekrývá
+                // nic; napravo od čísel působil jako součást kódu a odsouval ho. Vyžádané při
+                // zkoušení #157.
+                //
+                // Cena je 18 pt odsazení obsahu u **každého** řádku, i tam, kde se komentovat nedá
+                // — přesně to, co #110 zamítlo. Zaplaceno vědomě: procento šířky okna proti
+                // nečitelnému číslu řádku pod myší.
+                //
+                // Výšku si bere z řádku, ne z konstanty. Do #98 tu byla pevná `height: 18`, jenže
+                // řádek diffu je vysoký ~15 pt — pilulka z něj vyčnívala do toho následujícího,
+                // takže jak na ni myš zamířila, hover přešel na další řádek a ikonka zmizela.
+                .frame(width: 18)
+                .frame(maxHeight: .infinity)
+                .background(.tint, in: .rect(cornerRadius: 4))
+                .contentShape(.rect)
+                // **`onTapGesture`, ne `Button`** (#157). `Button` si tažení vezme pro sebe, takže
+                // z pilulky nešlo roztáhnout rozsah — a začít tažení nad ikonkou je to nejbližší,
+                // co má člověk pod rukou, když už jednou míří na komentář. Klepnutí a tažení se
+                // takhle vylučují samy: `DragGesture` má `minimumDistance`, takže klik zůstane
+                // klikem. Modifikátor se čte z AppKitu — SwiftUI ho akci nepředá a jiná cesta na
+                // macOS není; co ⇧ **znamená**, rozhoduje store (`extendDraftComment`).
+                .onTapGesture {
                     performDraftAction(draftAction, NSEvent.modifierFlags.contains(.shift))
-                } label: {
-                    Image(systemName: symbol(of: draftAction))
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .frame(width: 18)
-                        .frame(maxHeight: .infinity)
-                        .background(.tint, in: .rect(cornerRadius: 4))
-                        // Pilulka sedí **na čísle řádku**, ne u hrany: zarovnaná doprava přes
-                        // celý sloupec s čísly skončí přímo tam, kde je číslo, a čte se jako
-                        // součást řádku. U hrany působila odděleně od diffu (nahlášené při
-                        // zkoušení #110). Trefit se dá do celého sloupce — na řádku vysokém
-                        // 15 pt je to rozdíl mezi „jde to“ a „myš to mine“ a číslo řádku samo
-                        // na kliknutí nereaguje, takže se tím nic nepřebíjí.
-                        .frame(width: gutterWidth, alignment: .trailing)
-                        .contentShape(.rect)
                 }
-                // `.plain`, ne `.borderless`: ten se v offscreen renderu (kontrola vzhledu bez
-                // screenshotu) nevykreslí a místo ikony vyjde žlutý placeholder.
-                .buttonStyle(.plain)
+                // Kurzor jako nad tlačítkem — bez `Button`u ho SwiftUI sám nenastaví.
+                .onHover { NSCursor.pointingHand.set(); if !$0 { NSCursor.arrow.set() } }
                 .help(hint(of: draftAction))
-                Spacer(minLength: 0)
-            }
-            .padding(.leading, 8)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel(hint(of: draftAction))
         }
     }
 
@@ -215,6 +279,29 @@ struct DiffLineView: View {
     /// Šířka sloupce s číslem řádku. Bere ji i cíl tlačítka na komentář a `DiffRowView` na
     /// odsazení bublin ve split pohledu — jedna hodnota místo tří, které se rozejdou.
     static let numberColumn = 52.0
+
+    /// Šířka sloupce, ve kterém bydlí pilulka s ikonkou na komentář (#157). Ze stejného důvodu
+    /// jako `numberColumn` je to jedna hodnota: odsazení bublin se od šířky sloupců **nesmí
+    /// rozejít**, jinak bubliny přestanou začínat tam, kde začíná kód.
+    static let iconColumn = 18.0
+
+    /// Šířka sloupce se znakem změny (`+`/`−`).
+    static let signColumn = 14.0
+
+    /// Odsazení obsahu řádku od levé hrany: sloupec ikonky, čísla řádků a znak změny.
+    ///
+    /// **Musí sedět s tím, jak si gutter dělí `DiffTextView`** — čísla i znak se v bloku kreslí
+    /// ručně na dané `x`, takže rozejít se to smí jen tehdy, když má být kód nakřivo. Jeden součet
+    /// na jednom místě je jediná pojistka; když v něm chyběl `signColumn`, kreslil se znak přes
+    /// číslo řádku a čísla vycházela uříznutá (nahlášené při zkoušení #157).
+    static func contentInset(for layout: DiffLayout) -> Double {
+        iconColumn + numbers(for: layout) + signColumn
+    }
+
+    /// Šířka sloupců s čísly — v pohledu vedle sebe jedno číslo, pod sebou dvě.
+    static func numbers(for layout: DiffLayout) -> Double {
+        layout == .split ? numberColumn : numberColumn * 2
+    }
 
     private var sign: String {
         switch line.kind {
