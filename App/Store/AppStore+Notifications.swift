@@ -71,11 +71,17 @@ extension AppStore {
     /// si proud kliknutí drží buffer: aplikaci spustilo právě tohle kliknutí, takže polling ještě
     /// neproběhl a prázdný seznam neznamená „PR je zavřený“, ale „ještě nevím“. Zahodit klik tady
     /// by celý ten scénář rozbilo — detail se dokreslí, jakmile první tik dorazí.
+    /// **Klik na PR, které schoval filtr (#117), filtr vymaže.** Kliknutí na notifikaci je výslovná
+    /// žádost tenhle PR vidět, takže by mlčení bylo nejhorší z možností — a druhá varianta (vybrat
+    /// ho a nechat filtr) je ještě horší: detail by se nekreslil, protože ho `ContentView` hledá ve
+    /// **viditelném** seznamu, a vypadalo by to, že klik nic neudělal. Že filtr zmizel, je vidět
+    /// v liště, takže se nic nestane potichu. Do zadání #117 to nepatřilo; rozhodnuto tady.
     func handleNotificationClicks() async {
         guard let notifications else { return }
         for await pr in notifications.clicks() {
             let listed = pullRequests.contains { $0.id == pr }
             guard listed || status == .notStarted else { continue }
+            if listed, !visiblePullRequests.contains(where: { $0.id == pr }) { clearFilter() }
             selection = pr
         }
     }

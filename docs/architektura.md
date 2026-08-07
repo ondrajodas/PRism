@@ -41,6 +41,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
 | `QueueSummary` | Souhrn fronty: počet PR, PR s blokujícím nálezem a PR s rozdělaným review (#155) |
+| `PullRequestFilter`, `PullRequestFilterOptions`, `ListEmptyReason` | Zúžení seznamu na repa a autory (#117), nabídka hodnot a důvod prázdna. **Není `Codable`** — nepřežije restart |
 | `DiffBlock`, `DiffPairBlock` | Souvislý úsek řádků jako jeden text (#157) — kvůli výběru přes víc řádků. **Není `Codable`**, je to věc vykreslení |
 | `ReviewDraft` | Rozdělané review: PR, `headSha`, tělo, verdikt, komentáře. Verdikt je vnořený `ReviewDraft.Verdict` |
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
@@ -1054,6 +1055,35 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 
 Věci, které se u toho nemají rozbít:
 
+- **`pullRequests` je plný seznam, `visiblePullRequests` je po filtru** (#117) — a **rozdíl mezi
+  těmi dvěma gettery je jediné, co dělí filtr od mazání cache**. Zúžený čte jedině seznam PR
+  a detail vybraného řádku; plný čte `knownRepositories` (okno nastavení musí vidět i repo, které
+  jsem si schoval — je to zrovna to, u kterého chci něco přenastavit), `queueSummary` (souhrn je
+  o obsahu fronty, ne o pohledu — #155), `handleNotificationClicks`, `startAutomaticReviews` po
+  zahození nálezů (#81) a úklid, který bere `summaries` z tiku. Kdyby na zúženém seznamu viselo
+  cokoli z úklidu (`forget(whatIsNotIn:)`, `CacheEviction`, `ReviewStore.cleanUp`, rušení
+  automatických review), **zapnutí filtru by zahodilo diffy a konverzace, smazalo cache a zrušilo
+  běžící review**. Je na to sada testů proti fakes, ne úvaha o tom, kdo dnes co čte — ověřená
+  vloženou regresí (když `pullRequests` filtruje sám, spadne osm testů).
+- **Filtr nepřežije restart** a je to jediný stav v okně, který umí PR **schovat úplně** — restart
+  je proto pojistka proti zapomenutému filtru, protože zmizelý PR vypadá jako vyřízený. Na trvalé
+  schování je `sources` v konfiguraci (dotaz umí i `-author:`): to je změna toho, **co se stahuje**,
+  a patří do nastavení, ne do lišty.
+- **Zapsat filtr jde jedině `setFilter(_:)`**, protože se s ním musí srovnat výběr: vybraný PR mimo
+  filtr výběr **ztrácí** (detail PR, který v seznamu není, se nedá zavřít ani znovu vybrat).
+  Nic se tím neztrácí — draft leží na disku a běžící review běží dál. Ruší se to **jen tam**, ne
+  pokaždé, když vybraný PR ze seznamu vypadne: PR, které z fronty odešlo tikem, si výběr drží
+  (dnešní chování, mergnutý PR jde ještě dočíst).
+- **Automat filtr neřeší.** Review na schovaném repu se dál plánuje; vypnout ho jde `mode: manual`
+  per repo. Kdyby to filtr vypínal, slil by se pohled s nastavením a stav „schoval jsem si to, tak
+  se to nereviewuje“ by nebyl kde ukázat.
+- **Klik na notifikaci PR, které filtr schoval, filtr vymaže** — rozhodnuto u #117, v zadání to
+  nebylo. Kliknutí je výslovná žádost ten PR vidět, takže mlčení by bylo nejhorší; a vybrat ho
+  a filtr nechat je ještě horší, protože `ContentView` hledá detail ve **viditelném** seznamu, takže
+  by se nenakreslil a vypadalo by to, že klik nic neudělal. Že filtr zmizel, je vidět v liště.
+- **Důvod prázdna skládá store, ne polling** (`listEmptyReason`): polling o stavu okna neví a vědět
+  nemá. Pořadí rozhoduje `Policy.listEmptyReason` a **nad selhaným tikem vyhrává chyba načtení, ne
+  filtr** — „schoval jsem ti to filtrem“ nad daty, která nedorazila, je nepravda.
 - **Repo s běžícím review je pro eviction nedotknutelné.** `busyRepositories` proto nejsou
   jen repa ve stavu `preparing`, ale i všechna, nad kterými běží review — smazat klon pod
   běžící session by jí vzalo pracovní strom pod rukama.
@@ -1211,6 +1241,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
+| `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory`) — podtržené, s odznakem počtu |
 | `OverviewView` | Tab `Přehled`: popis PR a konverzace bez kotvy v diffu, chronologicky |
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review |
@@ -2248,6 +2279,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.inserting(_:intoThread:of:)`, `Policy.applying(_:to:)` | Zápis odeslané odpovědi a vyřešení do načtené konverzace; `nil` = vlákno tam není |
 | `Policy.linesWithSeveralComments(in:)` | Na kolika řádcích draftu je víc komentářů — z každého budou samostatná vlákna, ne odpověď |
 | `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR a vlákna bez kotvy, chronologicky (`ConversationEntry`) |
+| `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem** |
 | `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |
 | `Policy.snippet(of:context:)` | `diffHunk` vlákna → `ThreadSnippet`: posledních pár řádků po komentovaný a příznak zkrácení (#158). `nil` = úryvek se nemá z čeho vzít. **Není to `Policy.snapshot`** — ten je z dnešního diffu a slouží kotvám draftu |

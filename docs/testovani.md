@@ -522,6 +522,22 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   vlastní kotvu (hover v renderu není) a porovnat s tímtéž renderem nad `git stash`nutou verzí.
   U #157 to ukázalo, že ikonka byla na čísle řádku **už předtím** — a teprve pak se posunula do
   vlastního sloupce.
+- **Filtr seznamu PR (#117)** — dvě vrstvy, a **ta druhá je z celého issue nejdůležitější**.
+
+  `Policy` vyčerpávajícím výčtem: prázdný filtr propustí **všechno** (ne nic), dvě repa dají
+  sjednocení, repo + autor průsečík, filtr na hodnotu, která v seznamu není, dá **prázdno** (ne
+  všechno), pořadí se nemění. U nabídky to hlavní je, že **drží hodnoty aktivního filtru, i když
+  jejich PR ze seznamu zmizel** — bez toho zmizí odškrtávátko a filtr zůstane zapnutý bez cesty
+  zpátky. U důvodu prázdna to, že **nad selhaným tikem vyhrává chyba načtení, ne filtr**.
+
+  **`AppStore` proti fakes na to, že filtr je pohled, ne mazání:** zapnutí filtru nezahodí diff
+  schovaného PR (a po vypnutí se GitHubu neptá znovu), nezahodí draft, nezruší běžící review,
+  nechá plný seznam plný, nechá `knownRepositories` (okno nastavení) i `queueSummary` beze změny.
+  Ověřeno **vložením regrese**: když `pullRequests` filtruje sám, spadne osm testů — mezi nimi ty
+  o nastavení, automatu a souhrnu fronty. Úvaha o tom, kdo dnes co čte, by tuhle záruku nedala.
+
+  K tomu výběr: vybraný PR mimo filtr výběr **ztrácí**, uvnitř filtru ho **drží**, a **tik, ve
+  kterém PR není, ho nesráží** (dnešní chování, které se nemá změnit).
 - **Souhrn fronty (#155)** — `Policy` vyčerpávajícím výčtem. Dvě věci se dají pokazit potichu
   a obojí je ověřené **vložením regrese**: **počítat nálezy místo PR** (souhrn by tvrdil víc práce,
   než kolik jí je — tři nálezy na jednom PR jsou jedna položka) a **počítat prázdný draft** za

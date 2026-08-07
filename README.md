@@ -30,6 +30,18 @@ sám obnovuje: každý řádek nese repo, číslo, titulek, autora a čas posled
 výpadku sítě zůstanou poslední známá data a nad seznamem se objeví pruh, že nejsou
 aktuální; při rate limitu pruh říká, kdy to zkusí znovu.
 
+**Seznam se dá zúžit filtrem** (#117) — ikona v toolbaru vlevo, odškrtávají se v ní repozitáře
+a autoři (uvnitř osy „nebo“, mezi osami „a“: dvě repa znamenají obojí, repo + autor jeho PR v tom
+repu). Že je filtr zapnutý a kolik schovává, je vidět na ikoně **bez otevírání nabídky**, protože
+skrytý filtr je způsob, jak přijít o review; a když schová všechno, řekne to a nabídne se vypnout —
+zelené „Žádné PR k review“ by nad zapnutým filtrem tvrdilo opak pravdy.
+
+Filtr je **pohled, ne seznam**: nic se tím nepřestane stahovat, nezahodí se diffy ani rozdělaná
+review, běžící review běží dál, automat plánuje dál a okno nastavení pořád vidí i schované repo.
+**Nepřežije restart** — je to jediné, co umí PR schovat úplně, a zmizelý PR vypadá jako vyřízený.
+Na trvalé schování jsou **zdroje** v nastavení (search dotaz umí i `-author:`), což je změna toho, co
+se stahuje.
+
 U vybraného PR je tlačítko **Spustit review**. Za ním se stane tohle: dotáhne se head
 commit, připraví se odpojený pracovní strom a v něm se spustí headless session Claude Code
 omezená na čtení. Řádek mezitím ukazuje `ve frontě · clone` → `běží 0/1` → `čisté` nebo

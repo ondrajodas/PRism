@@ -341,7 +341,7 @@ viz tvrdá podmínka č. 1.
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat rozdělané review na GitHub, a `ReviewSubmission` jako jediný volající | `gh` CLI |
@@ -373,6 +373,11 @@ Zvlášť stojí za přečtení, než sáhneš na:
   modul) a tvrdou podmínku č. 1 to nemění, protože publisher polem storu není.
 - **`AppStore` a okno** — co patří do store a co do view (`@State` v detailu PR přetéká mezi
   pull requesty), a proč se stav checkoutu klíčuje repem;
+- **`pullRequests` je plný seznam, `visiblePullRequests` je po filtru** (#117), a **rozdíl mezi
+  těmi dvěma gettery je jediné, co dělí filtr od mazání cache**. Zúžený čte jedině seznam a detail
+  vybraného řádku; plný čte okno nastavení, souhrn fronty, automat a úklid. Kdyby na zúženém
+  viselo cokoli z úklidu, zapnutí filtru by zahodilo diffy a konverzace, smazalo cache a zrušilo
+  běžící review;
 - **`Environment`** — podprocesy: blokující I/O nesmí na kooperativní pool, oba pipy se musí
   číst souběžně, zrušení musí proces zabít.
 

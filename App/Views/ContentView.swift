@@ -76,7 +76,10 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var detail: some View {
-        if let selected = store.pullRequests.first(where: { $0.id == store.selection }) {
+        // Ze **viditelného** seznamu (#117): detail PR, které filtr schoval, se nedá zavřít ani
+        // znovu vybrat kliknutím. `setFilter` výběr sráží sám, tohle je druhá pojistka pro případ,
+        // že se seznam změní tikem.
+        if let selected = store.visiblePullRequests.first(where: { $0.id == store.selection }) {
             PullRequestDetailView(store: store, pullRequest: selected, submission: $submission)
         } else {
             ContentUnavailableView(

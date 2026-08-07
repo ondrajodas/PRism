@@ -12,6 +12,19 @@ final class AppStore {
     /// Který řádek je vybraný.
     var selection: PRIdentifier?
 
+    /// Zúžení seznamu na vybraná repa a autory (#117).
+    ///
+    /// **Drží ho store, ne view:** `PullRequestListView` se přestavuje při každém tiku, takže
+    /// `@State` by filtr zahodil — tatáž past jako u výběru řádku a sbalených souborů.
+    ///
+    /// **Nepřežije restart** a je to jediný stav v okně, který umí PR **schovat úplně** — restart je
+    /// proto pojistka proti zapomenutému filtru, protože zmizelý PR vypadá jako vyřízený. Na trvalé
+    /// schování je `sources` v konfiguraci (dotaz umí i `-author:`); to je změna toho, co se
+    /// stahuje, a patří do nastavení, ne do lišty.
+    ///
+    /// Zapsat ho jde jedině `setFilter(_:)`, protože se s ním musí srovnat výběr.
+    private(set) var filter = PullRequestFilter()
+
     /// Stav pracovní kopie **per repo**. Co v mapě není, v cache není.
     ///
     /// Jediný zdroj pravdy o checkoutu: `ReviewState` pro řádek se z něj odvozuje
@@ -441,7 +454,55 @@ final class AppStore {
         await reviewer?.configurationChanged()
     }
 
+    /// **Plný** seznam z pollingu, nefiltrovaný — a musí to tak zůstat.
+    ///
+    /// Čte ho pět míst, kterých se filtr **nesmí týkat**: `knownRepositories` (okno nastavení),
+    /// `queueSummary` (souhrn je o obsahu fronty, ne o pohledu — #155), `handleNotificationClicks`,
+    /// `startAutomaticReviews` po zahození nálezů (#81) a úklid, který bere `summaries` z tiku.
+    ///
+    /// Kdyby na zúženém seznamu viselo cokoli z úklidu (`forget(whatIsNotIn:)`, `CacheEviction`,
+    /// `ReviewStore.cleanUp`, rušení automatických review), **zapnutí filtru by zahodilo diffy
+    /// a konverzace, smazalo cache a zrušilo běžící review**. Rozdíl mezi tímhle getterem
+    /// a `visiblePullRequests` je jediné, co dělí filtr od mazání cache — a je na to test.
     var pullRequests: [PullRequestSummary] { polling.state.pullRequests }
+
+    /// Seznam **po filtru** (#117). Čte ho jedině seznam PR a detail vybraného řádku.
+    var visiblePullRequests: [PullRequestSummary] {
+        Policy.filtered(pullRequests, by: filter)
+    }
+
+    /// Kolik PR filtr schoval. Musí být vidět v liště: skrytý filtr je způsob, jak přijít o review.
+    ///
+    /// Počítá se **bez druhého filtrování** — jen se spočítá, co filtrem neprojde. `visiblePullRequests`
+    /// tady bylo dřív a znamenalo to, že se seznam filtruje dvakrát; SwiftUI ho přitom čte při každém
+    /// překreslení lišty (nález Copilota na #170).
+    var hiddenPullRequestCount: Int {
+        guard filter.isActive else { return 0 }
+        return pullRequests.count { !filter.matches($0) }
+    }
+
+    /// Co nabídnout ve filtru — z **plného** seznamu, sjednocené s aktivním filtrem.
+    var filterOptions: PullRequestFilterOptions {
+        Policy.filterOptions(in: pullRequests, filter: filter)
+    }
+
+    /// Nastaví filtr a **srovná s ním výběr**.
+    ///
+    /// Vybraný PR, který spadne mimo filtr, výběr **ztrácí**: detail PR, který v seznamu není, se
+    /// nedá zavřít ani znovu vybrat kliknutím. Nic se tím neztrácí — draft leží na disku a běžící
+    /// review běží dál.
+    ///
+    /// Ruší se to **jen tady**, ne pokaždé, když vybraný PR ze seznamu vypadne: PR, které z fronty
+    /// odešlo tikem, si výběr drží (dnešní chování, které se nemá měnit — mergnutý PR jde ještě
+    /// dočíst).
+    func setFilter(_ filter: PullRequestFilter) {
+        self.filter = filter
+        if let selection, !visiblePullRequests.contains(where: { $0.id == selection }) {
+            self.selection = nil
+        }
+    }
+
+    func clearFilter() { setFilter(PullRequestFilter()) }
 
     var status: PollStatus { polling.state.status }
 
@@ -450,6 +511,21 @@ final class AppStore {
     var isStale: Bool { polling.state.isStale }
 
     var emptyReason: PollEmptyReason? { polling.state.emptyReason }
+
+    /// Proč je **viditelný** seznam prázdný — včetně toho, že ho schoval filtr (#117).
+    ///
+    /// Skládá to store, ne polling: ten o stavu okna neví a vědět nemá. Pořadí důvodů rozhoduje
+    /// `Policy.listEmptyReason` a nad selhaným tikem vyhrává chyba načtení, ne filtr.
+    var listEmptyReason: ListEmptyReason? {
+        // Jedním průchodem: `visiblePullRequests` i `hiddenPullRequestCount` by seznam filtrovaly
+        // každý zvlášť, a tenhle getter čte SwiftUI při každém překreslení seznamu.
+        let hidden = hiddenPullRequestCount
+        return Policy.listEmptyReason(
+            poll: emptyReason,
+            visible: pullRequests.count - hidden,
+            hidden: hidden
+        )
+    }
 
     /// Puntíky pro stavový řádek. Prázdné, když se dostupnost odsud nesleduje.
     var healthReports: [ServiceHealthReport] { health?.reports ?? [] }

@@ -25,30 +25,52 @@ struct PullRequestListView: View {
             .toolbar {
                 releaseNotesButton
                 settingsButton
+                filterButton
                 refreshButton
             }
     }
 
+    private var filterButton: some View {
+        PullRequestFilterButton(
+            options: store.filterOptions,
+            filter: store.filter,
+            hidden: store.hiddenPullRequestCount,
+            apply: store.setFilter
+        )
+    }
+
     @ViewBuilder private var content: some View {
-        switch store.emptyReason {
+        switch store.listEmptyReason {
         case nil:
             list
-        case .loading:
+        // **Vlastní vysvětlení, ne `Žádné PR k review`.** Zelené „všechno vyřízeno“ nad zapnutým
+        // filtrem tvrdí opak toho, co je pravda — tatáž lekce jako `Nálezy jsou schované filtrem
+        // reviewerů` v panelu. A nabízí filtr **vypnout**, ať se z toho stavu dá vyjít jedním
+        // kliknutím: schovaný PR vypadá jako vyřízený.
+        case .filtered(let hidden):
+            ContentUnavailableView {
+                Label("Filtr schoval všechno", systemImage: "line.3.horizontal.decrease.circle.fill")
+            } description: {
+                Text(verbatim: "\(Plural.czech(hidden, one: "pull request čeká", few: "pull requesty čekají", many: "pull requestů čeká")) na review, ale filtr je schovává.")
+            } actions: {
+                Button("Vymazat filtr") { store.clearFilter() }
+            }
+        case .poll(.loading):
             ProgressView("Načítám PR…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .noPullRequests:
+        case .poll(.noPullRequests):
             ContentUnavailableView(
                 "Žádné PR k review",
                 systemImage: "checkmark.circle",
                 description: Text("Až po tobě někdo bude chtít review, objeví se tady.")
             )
-        case .failure(let reason):
+        case .poll(.failure(let reason)):
             ContentUnavailableView(
                 "Seznam PR se nepodařilo načíst",
                 systemImage: "exclamationmark.triangle",
                 description: Text(reason.userDescription)
             )
-        case .rateLimited(let retryAt):
+        case .poll(.rateLimited(let retryAt)):
             ContentUnavailableView(
                 "GitHub omezuje dotazy",
                 systemImage: "hourglass",
@@ -62,7 +84,10 @@ struct PullRequestListView: View {
         // sledování závislostí rodiče, takže změna stavu by seznam nemusela překreslit.
         // Platí to i pro rozdělané review — bez toho by indikátor naskočil až po
         // překreslení z jiného důvodu.
-        let rows = store.pullRequests.map {
+        // **`visiblePullRequests`, ne `pullRequests`** (#117): filtr je pohled, takže se ho smí
+        // dotknout jedině seznam a detail vybraného řádku. Cokoli dalšího nad zúženým seznamem by
+        // ze zapnutí filtru udělalo mazání cache — viz `AppStore.pullRequests`.
+        let rows = store.visiblePullRequests.map {
             ($0, store.reviewState(for: $0.id), store.hasDraft($0.id))
         }
 
