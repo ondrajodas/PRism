@@ -33,10 +33,12 @@ struct TimelineEventRow {
         }
     }
 
-    /// Barvu má **jen merge a zavření**, zbytek dědí barvu okolí.
+    /// Barva **ikony**: merge fialově, zavření červeně, zbytek ztlumeně.
     ///
-    /// Tatáž úvaha jako u obarvení kódu: kde svítí všechno, nesvítí nic. Merge a zavření jsou
-    /// jediné dvě události, po kterých se s PR nedá dál pracovat — proto zrovna ty.
+    /// Vlastní barvu mají jen ty dvě, protože po nich se s PR nedá dál pracovat — a kde svítí
+    /// všechno, nesvítí nic. Zbytek je `.secondary`, tedy **ztlumeně, ne barvou okolí**: ikona
+    /// je ukazatel k textu, takže v plné síle by soupeřila s tím, co označuje. Dědit barvu
+    /// okolí by u ní znamenalo totéž zvýraznění jako u věty vedle.
     var color: Color {
         switch event.kind {
         case .merged: .purple
