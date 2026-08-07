@@ -696,7 +696,8 @@ App/                      zdrojáky aplikace — target PRism
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
-  Store/                  AppStore — stav, který kreslí okno; ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku
+  Store/                  AppStore — stav, který kreslí okno (stav v AppStore.swift, metody v AppStore+*.swift);
+                          ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky

@@ -343,7 +343,7 @@ viz tvrdá podmínka č. 1.
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
-| `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu | — |
+| `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat rozdělané review na GitHub, a `ReviewSubmission` jako jediný volající | `gh` CLI |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`. Mimo tuhle sedmičku stojí
@@ -364,6 +364,13 @@ Zvlášť stojí za přečtení, než sáhneš na:
 
 - **modely** — tři různé „jazyky“ a tři různá „review“ se nesmí slít, `ReviewState` rozlišuje
   chybové stavy schválně;
+- **`AppStore` je rozdělený na `extension` po zodpovědnostech** (#154), takže se hledá podle
+  souboru, ne v jednom dvoutisícovém: `AppStore.swift` drží **stav, init a polling**,
+  `+Diff`, `+DiffExpansion`, `+Detail`, `+Conversation`, `+Draft`, `+DraftTransfer`,
+  `+Submission`, `+Review`, `+Findings`, `+Notifications` a `+Automatic` metody. **Dělí se
+  metody, ne data** — uložený stav zůstává na jednom místě. Cena je, že `private` členy, na
+  které extensiony sahají, musely být `internal`; nic se tím neotevírá ven z aplikace (jeden
+  modul) a tvrdou podmínku č. 1 to nemění, protože publisher polem storu není.
 - **`AppStore` a okno** — co patří do store a co do view (`@State` v detailu PR přetéká mezi
   pull requesty), a proč se stav checkoutu klíčuje repem;
 - **`Environment`** — podprocesy: blokující I/O nesmí na kooperativní pool, oba pipy se musí

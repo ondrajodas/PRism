@@ -1018,6 +1018,40 @@ Review orchestruje takhle: `gh pr view` (kvůli `headSha` a `baseSha`) → ozna�
 záznamy zastaralými → worktree → skilly paralelně → každý doběhlý uložit do `ReviewStore`.
 Limit souběžných session hlídá `ReviewRunner`, ne tenhle kód.
 
+**Od #154 je to rozdělené na `extension` po zodpovědnostech** — do té doby jeden soubor
+o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen zapsaném na jednom místě:
+
+| Soubor | Co drží | Řádků |
+|---|---|---|
+| `AppStore.swift` | **Stav, `init`, polling, načítání z disku a úklid** (`forget`) | 871 |
+| `AppStore+Review.swift` | Spuštění a průběh review: session, osa, uložení výsledku | 450 |
+| `AppStore+Conversation.swift` | Cizí konverzace (#63) a odpovídání do vláken (#73) | 203 |
+| `AppStore+Draft.swift` | Rozdělané review (#65, #66) a tažení rozsahu (#110) | 190 |
+| `AppStore+Submission.swift` | Odeslání review na GitHub (#67, #68) | 172 |
+| `AppStore+Notifications.swift` | Co se ohlásí, když se do okna nikdo nedívá (#82, #85, #87) | 166 |
+| `AppStore+DiffExpansion.swift` | Rozbalování kontextu mimo hunky (#47) | 112 |
+| `AppStore+DraftTransfer.swift` | Přenesení draftu na nový commit (#69) | 103 |
+| `AppStore+Diff.swift` | Načtení diffu, pohled a sbalování souborů | 95 |
+| `AppStore+Automatic.swift` | Automatický režim a denní rozpočet (#25) | 89 |
+| `AppStore+Findings.swift` | Zahození záznamu (#81) a odmítnutí nálezu (#113) | 70 |
+| `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
+
+Čtyři věci, na kterých to rozdělení stojí:
+
+- **Dělí se metody, ne data.** Uložený stav zůstal v `AppStore.swift`, protože jeho invarianty
+  se drží tím, že jsou na jednom místě — mapa, do které zapisují tři soubory a každý si o ní
+  myslí něco jiného, je horší než dlouhý soubor.
+- **Řezalo se podle `MARK` sekcí, které tam už byly.** Nebylo to nové rozdělení, jen se přepsalo
+  do souborů; proto se nemusel měnit **ani jeden test** (`Tests/` je v tom PR nedotčené).
+- **`private` členy, na které extensiony sahají, musely být `internal`** — 59 z nich. Je to cena,
+  a je vidět: dnes je `store.gateway` dostupný z celé aplikace. Nic se tím **neotevírá ven**
+  (jeden modul) a **tvrdou podmínku č. 1 to nemění**, protože publisher polem storu není a
+  `GitHubGateway` je pořád bez zápisových metod. Zabalit závislosti do jednoho typu, aby stačilo
+  otevřít jedno pole, by znamenalo přepsat `init` — a s ním testy, které store staví parametry.
+- **`AppStore+Review.swift` je pořád velký a schválně jeden.** Běh review je jedna cesta od
+  `startReview` přes `runSkills` a `drain` po `finish`; rozříznout ji uprostřed znamená hledat,
+  kde pokračuje.
+
 Věci, které se u toho nemají rozbít:
 
 - **Repo s běžícím review je pro eviction nedotknutelné.** `busyRepositories` proto nejsou
