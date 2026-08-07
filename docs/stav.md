@@ -512,6 +512,25 @@ publisher polem storu není a `GitHubGateway` zůstává bez zápisových metod.
 jednoho typu, aby stačilo otevřít jedno pole, by znamenalo přepsat `init` — a s ním testy, čímž by
 z přesunu byl přepis.
 
+Filtr seznamu PR hotový (issue #117) — `PullRequestFilter`, `PullRequestFilterOptions`
+a `ListEmptyReason` v `App/Policy/PullRequestFilter.swift`, `Policy.filtered`/`filterOptions`/
+`listEmptyReason`, `filter`/`visiblePullRequests`/`setFilter` v `AppStore` a `PullRequestFilterButton`
+v toolbaru seznamu. **Seznam se dá zúžit na vybraná repa a autory**, je vidět, že je filtr zapnutý
+a kolik schovává, a vypnout jde jedním kliknutím i z prázdného stavu (ten má vlastní vysvětlení, ne
+zelené „Žádné PR k review“).
+
+To podstatné je, že **filtr je pohled, ne seznam**: `pullRequests` zůstává plný a zúžený je druhý
+getter (`visiblePullRequests`), který čte jedině seznam a detail vybraného řádku. Rozdíl mezi těmi
+dvěma je jediné, co dělí filtr od mazání cache — na `pullRequests` visí okno nastavení, souhrn
+fronty, automat a úklid. Je na to sada testů proti fakes, **ověřená vloženou regresí**: když
+`pullRequests` filtruje sám, spadne osm testů.
+
+Filtr **nepřežije restart** (je to jediný stav, který umí PR schovat úplně, takže restart je
+pojistka proti zapomenutému filtru) a nemíchá se se `sources` — zdroj mění, co se stahuje, filtr je
+pohled na výsledek. Automat filtr neřeší. Nad zadání přibylo jedno rozhodnutí: **klik na notifikaci
+PR, které filtr schoval, filtr vymaže**, protože jinak by se detail nenakreslil a vypadalo by to, že
+klik nic neudělal.
+
 Plánované fáze:
 
 1. ~~Seznam PR z `gh` + polling~~ — **hotovo**
