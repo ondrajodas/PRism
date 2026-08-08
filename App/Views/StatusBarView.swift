@@ -63,6 +63,7 @@ struct ServiceHealthDot: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .statusChip()
         .help(tooltip)
         // Puntík je barva a barva sama nestačí — popis nese celý stav i s důvodem.
         .accessibilityElement(children: .ignore)
@@ -124,6 +125,7 @@ struct NotificationStatusView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .statusChip()
         .help(tooltip)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Notifikace")
@@ -186,6 +188,7 @@ struct DailySpendView: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
+        .statusChip()
         .help(tooltip)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Útrata za dnešek")
@@ -219,6 +222,20 @@ struct DailySpendView: View {
         }
         lines.append("Ruční i automatická review dohromady; počítá se od půlnoci.")
         return lines.joined(separator: "\n")
+    }
+}
+
+extension View {
+    /// Tiché pozadí kolem položky stavového řádku (#179).
+    ///
+    /// Pruh nese vedle sebe pět až sedm údajů od různých věcí — fronta, útrata, notifikace,
+    /// puntíky služeb — a bez ohraničení splývaly do jedné věty, ve které se hledalo, kde jeden
+    /// končí a druhý začíná. Kapsle je **tichá schválně**: má oddělovat, ne přitahovat pozornost,
+    /// protože pruh je trvalý a všechno v něm je běžný stav, ne upozornění.
+    func statusChip() -> some View {
+        padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(.quaternary.opacity(0.35), in: .capsule)
     }
 }
 

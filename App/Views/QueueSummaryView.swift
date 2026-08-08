@@ -9,8 +9,12 @@ import SwiftUI
 struct QueueSummaryView: View {
     let summary: QueueSummary
 
+    /// **Jeden chip, ne tři** (#179, podle návrhu). Souhrn je jedna odpověď na jednu otázku
+    /// („musím se na to podívat hned?“), takže má být i jeden útvar; tři kapsle vedle sebe
+    /// vypadaly jako tři nezávislé ukazatele od tří různých věcí. Části odděluje `·`, jak to
+    /// pruh dělá i jinde.
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 5) {
             item(
                 symbol: "tray.full",
                 count: summary.pullRequests,
@@ -29,6 +33,7 @@ struct QueueSummaryView: View {
             // **Jen když je co hlásit.** Nula blokujících vedle nuly rozdělaných review je řádek
             // plný nul, ve kterém se to jedno číslo, na kterém záleží, ztratí.
             if summary.blocking > 0 {
+                separator
                 item(
                     symbol: "exclamationmark.triangle.fill",
                     count: summary.blocking,
@@ -38,6 +43,7 @@ struct QueueSummaryView: View {
                 )
             }
             if summary.drafts > 0 {
+                separator
                 item(
                     symbol: "square.and.pencil",
                     count: summary.drafts,
@@ -48,6 +54,13 @@ struct QueueSummaryView: View {
                 )
             }
         }
+        .statusChip()
+    }
+
+    private var separator: some View {
+        Text(verbatim: "·")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
     }
 
     /// Ikona, číslo a **slovo, které říká, čeho** — samotná ikona s číslem se nedá přečíst
