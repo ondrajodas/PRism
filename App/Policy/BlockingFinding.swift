@@ -27,6 +27,21 @@ extension Policy {
         return categories.contains(wanted) || categories.contains { normalized(category: $0) == wanted }
     }
 
+    /// Kolik z platných nálezů záznamu blokuje.
+    ///
+    /// Počítají se **platné** (`activeFindings`), tedy bez odmítnutých (#113) — blokující
+    /// nález, kterému nevěřím, není důvod k vyrušení ani k červenému řádku.
+    ///
+    /// Bydlí to **tady, u `isBlocking`**, ne u toho, kdo se ptá: od #172 se na to ptají dvě
+    /// místa (notifikace a řádek seznamu) a druhá kopie by znamenala, že banner a seznam umí
+    /// napočítat každý něco jiného.
+    static func blockingCount(
+        in record: ReviewRecord,
+        categories: Set<String> = defaultBlockingCategories
+    ) -> Int {
+        record.activeFindings.count { isBlocking($0, categories: categories) }
+    }
+
     /// Kategorie se porovnávají bez ohledu na velikost písmen.
     ///
     /// Reviewer je píše jako volný slug, takže `Data-Loss` a `data-loss` znamenají totéž —

@@ -246,14 +246,4 @@ extension Policy {
     /// identifikátor už se do nich nevejde a zbytek stejně řekne počet.
     private static let summaryLimit = 3
 
-    /// Kolik z platných nálezů záznamu blokuje.
-    ///
-    /// Počítají se **platné** (`activeFindings`), tedy bez odmítnutých (#113) — blokující
-    /// nález, kterému nevěřím, není důvod k vyrušení.
-    static func blockingCount(
-        in record: ReviewRecord,
-        categories: Set<String> = defaultBlockingCategories
-    ) -> Int {
-        record.activeFindings.count { isBlocking($0, categories: categories) }
-    }
 }
