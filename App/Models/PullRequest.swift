@@ -37,6 +37,11 @@ struct PullRequest: Hashable, Codable, Sendable {
     let author: String
     let headSha: String
     let baseSha: String
+    /// Jméno větve, ze které se merguje. Prázdné u odpovědí z doby před #174 — tatáž úmluva
+    /// jako u `body`, aby se starší uložená data nepřestala dekódovat.
+    var headRef: String = ""
+    /// Jméno cílové větve.
+    var baseRef: String = ""
     let url: URL
     let updatedAt: Date
     let state: PullRequestState
@@ -53,6 +58,8 @@ struct PullRequest: Hashable, Codable, Sendable {
         author: String,
         headSha: String,
         baseSha: String,
+        headRef: String = "",
+        baseRef: String = "",
         url: URL,
         updatedAt: Date,
         state: PullRequestState,
@@ -63,6 +70,8 @@ struct PullRequest: Hashable, Codable, Sendable {
         self.author = author
         self.headSha = headSha
         self.baseSha = baseSha
+        self.headRef = headRef
+        self.baseRef = baseRef
         self.url = url
         self.updatedAt = updatedAt
         self.state = state

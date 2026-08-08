@@ -105,7 +105,7 @@ struct GhGatewayTests {
             .init(executable: gh, arguments: [
                 "pr", "view", "32",
                 "--repo", "ondrajodas/PRism",
-                "--json", "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body",
+                "--json", "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body,headRefName,baseRefName",
             ]),
         ])
     }
@@ -167,6 +167,29 @@ struct GhGatewayTests {
 
         #expect(pullRequest.state == .open)
         #expect(pullRequest.title == "Route gpg key requests through api.Client")
+        // Větve (#174) — bez nich se v hlavičce nedá říct, kam se to merguje.
+        #expect(pullRequest.headRef == "williammartin-route-gpg-key-api")
+        #expect(pullRequest.baseRef == "trunk")
+    }
+
+    @Test("Detail bez jmen větví se pořád přečte")
+    func detailWithoutBranchNamesStillDecodes() async throws {
+        // `headRefName` přibylo až s #174 a je optional schválně: chybějící pole nesmí položit
+        // detail, na kterém stojí `headSha` pro review. V hlavičce se pak větve prostě
+        // nekreslí — je to tatáž úvaha jako u `body`.
+        let json = try Fixture.text("gh/pr-view-open.json")
+        let stripped = json
+            .split(separator: "\n")
+            .filter { !$0.contains("\"headRefName\"") && !$0.contains("\"baseRefName\"") }
+            .joined(separator: "\n")
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: stripped)
+        let id = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 13997)
+
+        let pullRequest = try await gateway(runner).fetchDetail(id: id)
+
+        #expect(pullRequest.headSha.isEmpty == false)
+        #expect(pullRequest.headRef.isEmpty)
+        #expect(pullRequest.baseRef.isEmpty)
     }
 
     @Test("Detail o jiném PR, než na který jsme se ptali, se zahodí")
