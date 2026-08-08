@@ -14,8 +14,12 @@ struct PreflightGateView: View {
         VStack(alignment: .leading, spacing: 22) {
             header
 
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(Tool.allCases, id: \.self) { tool in
+            // Řádky oddělené linkou, ne karty s pozadím: obrazovka je seznam nástrojů a to,
+            // co u kterého chybí, nese ikona a text pod jménem. Rámečky kolem každého by z ní
+            // udělaly hromadu boxů, ve které se stav hledá hůř než v prostém seznamu.
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(Tool.allCases.enumerated()), id: \.element) { index, tool in
+                    if index > 0 { Divider() }
                     ToolStatusRow(
                         tool: tool,
                         state: report.toolStates[tool] ?? .missing,
@@ -66,11 +70,17 @@ private struct ToolStatusRow: View {
                 .font(.title3)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(tool.executableName)
-                    .font(.headline)
+                // Jméno binárky **v mono** (#179): je to název příkazu, který se opisuje do
+                // terminálu, ne nadpis. V proporcionálním písmu se `gh` od prózy kolem
+                // neodlišilo a řádek se četl jako věta.
+                Text(verbatim: tool.executableName)
+                    .font(.system(.headline, design: .monospaced))
                 detail
             }
+            Spacer(minLength: 0)
         }
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var isSatisfied: Bool {

@@ -95,8 +95,13 @@ struct ReleaseRowView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 // `verbatim`: `v1.1.23` není číslo a interpolace by ho protáhla přes locale.
+                // **Mono** (#179): je to identifikátor, který se čte po znacích a porovnává
+                // se sousedním řádkem — proporcionální písmo čísla verzí rozhází pod sebou.
                 Text(verbatim: row.tag)
-                    .font(.headline)
+                    .font(.system(.callout, design: .monospaced).weight(.medium))
+                // Odznak **vpravo**, ne hned za tagem: řádek se pak čte zleva jako tag → název
+                // a `nové` je sloupec, který jde přejet očima přes celý seznam.
+                Spacer(minLength: 8)
                 if row.isUnseen {
                     Text("nové")
                         .font(.caption2)
@@ -116,9 +121,17 @@ struct ReleaseRowView: View {
             // sebou, o pořadí neříká nic. Nahlášené při zkoušení.
             Text(row.publishedAt.formatted(date: .numeric, time: .shortened))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
+        .padding(.leading, 8)
+        // Proužek u nepřečteného vydání — tentýž jazyk jako v řádku fronty (#172): co je nové,
+        // se má poznat periferně, ne až přečtením odznaku.
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(row.isUnseen ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear))
+                .frame(width: 3)
+        }
     }
 }
 
