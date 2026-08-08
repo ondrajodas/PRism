@@ -97,7 +97,12 @@ struct DiffView: View {
     /// vstupů by ukazoval na blok, který v seznamu není. Počítá se jen při skoku, tedy jednou za
     /// kliknutí, a jen pro **jeden** soubor.
     private func blockID(covering target: String) -> String {
-        guard let file = diff.files.first(where: { target.hasPrefix($0.id) }) else { return target }
+        // Porovnává se na **celé** `id`, ne na prefix: cesty se přejmenováním umí stát prefixem
+        // jedna druhé (`src/A.php` a `src/A.php.bak`) a index by se pak skládal z cizího souboru.
+        // Cíl je buď `file.id` sám (skok na hlavičku), nebo `file.id|<řádek>`.
+        guard
+            let file = diff.files.first(where: { target == $0.id || target.hasPrefix($0.id + "|") })
+        else { return target }
         let state = expansion.state(file)
         let rows = DiffRow.rows(
             of: file,

@@ -121,7 +121,11 @@ extension Policy {
         guard !places.isEmpty else { return nil }
 
         guard let index = cursor.current.flatMap({ places.firstIndex(of: $0) }) else {
-            return direction == .forward ? places.first : places.last
+            // Dozadu se bez kurzoru **nejde**, i když by poslední místo existovalo: lišta má
+            // šipku nahoru zhasnutou (`hasPrevious`), a kdyby ji zkratka přesto poslechla,
+            // dělalo by `⌥↑` něco, co okno v tu chvíli tvrdí, že nejde. Skok na poslední nález
+            // navíc není, co člověk od „předchozí“ čeká.
+            return direction == .forward ? places.first : nil
         }
 
         let next = direction == .forward ? index + 1 : index - 1

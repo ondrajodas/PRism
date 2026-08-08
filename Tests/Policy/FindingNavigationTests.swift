@@ -41,6 +41,26 @@ struct FindingNavigationTests {
         #expect(navigation.hasNext)
         #expect(!navigation.hasPrevious)
         #expect(Policy.step(.forward, over: groups, cursor: FindingCursor()) == place("a.php", 10))
+        // A zkratka `⌥↑` musí poslechnout totéž, co lišta ukazuje: šipka nahoru je zhasnutá,
+        // takže krok dozadu nesmí skočit na poslední místo. Tlačítko a klávesa se nesmí
+        // rozejít — jedno by pak dělalo něco, co druhé tvrdí, že nejde.
+        #expect(Policy.step(.backward, over: groups, cursor: FindingCursor()) == nil)
+    }
+
+    @Test("Kurzor mimo zúžený seznam jde jen dopředu")
+    func aCursorOutsideTheNarrowedListOnlyGoesForward() {
+        // Zapnu `jen blokující` a kurzor stojí na nálezu, který v zúženém seznamu není:
+        // dopředu se začíná od začátku, dozadu není odkud.
+        let groups = [
+            group("a.php", 10, category: "style"),
+            group("b.php", 20, category: "correctness"),
+        ]
+        var cursor = FindingCursor(current: place("a.php", 10))
+        cursor.onlyBlocking = true
+
+        #expect(Policy.step(.forward, over: groups, cursor: cursor) == place("b.php", 20))
+        #expect(Policy.step(.backward, over: groups, cursor: cursor) == nil)
+        #expect(!Policy.navigation(over: groups, cursor: cursor).hasPrevious)
     }
 
     @Test("Šipky se drží pořadí v diffu")
