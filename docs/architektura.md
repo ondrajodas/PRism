@@ -1356,7 +1356,7 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `DiffSettingsView` | **Pohled na diff** — nastavení člověka, ne repa, proto jen globálně |
 | `PublishingSettingsView` | **Odesílání na GitHub** — vlastní stránka, viz níž |
 | `RuntimeSettingsView` | Interval pollingu, rozpočet cache, souběžné session, denní limit, model |
-| `NotificationSettingsView` | Záložka `Notifikace` (#86): hlavní vypínač a čtyři události |
+| `NotificationSettingsView` | Stránka `Notifikace` (#86): hlavní vypínač a čtyři události |
 | `LanguageSkillsEditor` | Mapa „programovací jazyk → sada skillů“; ukazuje jen nastavené jazyky |
 | `RepositorySettingsView` | Seznam rep vlevo, režim, povolení odesílání a override vpravo |
 | `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
