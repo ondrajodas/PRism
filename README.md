@@ -415,7 +415,10 @@ komentáře vznikne.
 
 **Dvě kliknutí, dvě různá tlačítka.** `Odeslat review…` v tabu `Moje review` nic neodesílá —
 otevře potvrzení, ve kterém je vidět **celý payload**: verdikt, tělo tak, jak je napsané,
-a každý řádkový komentář i s tím, ke kterému řádku a ke které straně diffu patří. Teprve
+a každý řádkový komentář i s poli, se kterými odejde do API — `path`, `line` (u rozsahu
+`start_line`) a `side`. Ta pole se berou **z téhož payloadu, který se posílá** (#178), takže se
+výpis s odeslaným tělem nemůže rozejít; do #178 si je sheet skládal vlastní cestou a strana ani
+začátek rozsahu v něm nebyly vůbec, přestože právě ony rozhodují, ke kterému kódu komentář sedne. Teprve
 tlačítko tam zavolá GitHub. Zavřít se dá kdykoli a draft tím zůstane netknutý.
 
 Ochrana stojí právě na tom výpisu, ne na obřadu: **žádné opisování názvu repa** a **žádný
