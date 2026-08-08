@@ -82,18 +82,39 @@ struct PullRequestListView: View {
     private var list: some View {
         // Stavy se čtou **tady**, ne až uvnitř řádku: `List` staví řádky líně a mimo
         // sledování závislostí rodiče, takže změna stavu by seznam nemusela překreslit.
-        // Platí to i pro rozdělané review — bez toho by indikátor naskočil až po
-        // překreslení z jiného důvodu.
+        // Platí to i pro rozdělané review a pro odvozená čísla z #172 — bez toho by indikátor
+        // naskočil až po překreslení z jiného důvodu.
         // **`visiblePullRequests`, ne `pullRequests`** (#117): filtr je pohled, takže se ho smí
         // dotknout jedině seznam a detail vybraného řádku. Cokoli dalšího nad zúženým seznamem by
         // ze zapnutí filtru udělalo mazání cache — viz `AppStore.pullRequests`.
         let rows = store.visiblePullRequests.map {
-            ($0, store.reviewState(for: $0.id), store.hasDraft($0.id))
+            ListRow(
+                pullRequest: $0,
+                state: store.reviewState(for: $0.id),
+                hasDraft: store.hasDraft($0.id),
+                summary: store.queueRow(for: $0.id)
+            )
         }
 
-        return List(rows, id: \.0.id, selection: $store.selection) { pullRequest, state, hasDraft in
-            PullRequestRow(pullRequest: pullRequest, reviewState: state, hasDraft: hasDraft)
+        return List(rows, selection: $store.selection) { row in
+            PullRequestRow(
+                pullRequest: row.pullRequest,
+                reviewState: row.state,
+                hasDraft: row.hasDraft,
+                row: row.summary
+            )
         }
+    }
+
+    /// Co seznam o jednom řádku ví. Pojmenovaný typ, ne čtveřice: od #172 se skládá ze čtyř
+    /// věcí a `\.0.id` v `List`u by přestalo jít přečíst.
+    private struct ListRow: Identifiable {
+        let pullRequest: PullRequestSummary
+        let state: ReviewState
+        let hasDraft: Bool
+        let summary: QueueRow
+
+        var id: PRIdentifier { pullRequest.id }
     }
 
     private var refreshButton: some View {

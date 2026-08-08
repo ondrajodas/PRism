@@ -776,6 +776,16 @@ final class AppStore {
 
     func reviewRecord(for pr: PRIdentifier) -> ReviewRecord? { reviewRecords[pr] }
 
+    /// Odvozená čísla pro řádek seznamu (#172) — kolik nálezů blokuje a jak se rozdělily mezi
+    /// reviewery. Blokující sada je **per repo**, takže se bere z konfigurace stejně jako
+    /// u `reviewState(for:)`; jinak by řádek a odznak v detailu tvrdily každý něco jiného.
+    func queueRow(for pr: PRIdentifier) -> QueueRow {
+        Policy.queueRow(
+            for: reviewRecords[pr],
+            categories: resolved(for: pr.repo).blockingCategories
+        )
+    }
+
     /// Souhrn nad frontou pro stavový řádek (#155). `nil` = nemá se co sčítat.
     ///
     /// **Rozhodnutí „ukázat, nebo ne“ je tady, ne v `Policy` ani ve view**, protože jediné, co ho

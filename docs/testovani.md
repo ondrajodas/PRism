@@ -195,6 +195,18 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
 - **`Policy.chips`** — každý stav zvlášť, včetně toho, že nereportující běh ani běh se
   ztraceným nálezem nesmí vyjít jako `čisté`, že běžící reviewer přebije starší výsledek
   a že reviewer mimo nastavenou sadu o chip nepřijde.
+- **`Policy.queueRow` a `ReviewStateAppearance` (#172)** — dvě vrstvy téhož řádku. `Policy`
+  vyčerpávajícím výčtem: PR bez záznamu nedá **prázdno, ne nulu**; každý běh má v proužku svůj
+  díl v pořadí běhů; čistý reviewer má váhu 1, aby z proužku nezmizel; a čtyři výsledky se
+  neslijí (`clean` × `dismissed` × `inconclusive` × `blocking`). Nejcennější je test, že
+  **odmítnutý nález řádek neblokuje** — odmítnutí se dělá právě kvůli tomu účinku, takže by se
+  jeho ztráta jinak neprojevila nikde jinde než tím, že řádek svítí červeně napořád. Vedle toho
+  test, že nález jednoho revieweera **nezčervená cizí díl**: odmítnutí i nálezy visí na záznamu,
+  takže se musí protnout se skillem běhu. `ReviewStateAppearance` na text i barvu naráz, protože
+  se od #172 čtou na dvou místech (odznak a hrana řádku) — včetně toho, že blokující mění obojí,
+  že bez blokujících odznak nenaroste o „0 blokuje“ a že zastaralé zůstane žluté i s blokujícím.
+  Past v testu: `Policy.key(of:)` skládá identitu z revieweera, místa a **shrnutí**, takže tři
+  nálezy se stejným shrnutím jsou pro odmítnutí jeden a týž — vstup musí být rozlišitelný.
 - **`ToolAttempt`** — zkrácení proti pracovnímu stromu: relativní cesta, zahozené
   `cd <strom> &&`, cesta uvnitř příkazu, a že se bez stromu nic nemění. Pozor na past
   v testu: skutečný nástroj dostane cestu **nekódovanou**, takže `URL.path()` v přípravě

@@ -2325,6 +2325,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.displayableEvents(_:)` | Které události se kreslí — zavření po mergi zahodí, zbytek nechá (#171) |
 | `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem** |
 | `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
+| `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
+| `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |
 | `Policy.snippet(of:context:)` | `diffHunk` vlákna → `ThreadSnippet`: posledních pár řádků po komentovaný a příznak zkrácení (#158). `nil` = úryvek se nemá z čeho vzít. **Není to `Policy.snapshot`** — ten je z dnešního diffu a slouží kotvám draftu |
 | `Policy.commentableSide(of:in:)` | Ke které **kanonické** straně by šel komentář; `nil` = nedá se komentovat |
@@ -2343,7 +2345,6 @@ Věci, které se u toho nemají rozbít:
 | `Policy.sendBlock(for:head:)` | **Proč** se draft nedá odeslat (`DraftSendBlock`); `nil` = dá se |
 | `Policy.health(of:from:)` | Puntík služby ve stavovém řádku ze tří signálů — viz `App/Health/` |
 | `Policy.reviewNotification(for:state:blocking:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět |
-| `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje |
 | `Policy.newPullRequestNotification(for:title:isReReview:)` | Notifikace o novém PR ve frontě (#85); re-review se pozná textem (#137) |
 | `Policy.newPullRequestsNotification(for:titles:reviewed:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
 | `Policy.sortedReleases(_:)` | Vydání od nejnovějšího (#127) — podle **data**, ne podle tagu |
@@ -2378,6 +2379,31 @@ Nad nálezy platí navíc:
   nemusí přepisovat skilly.
 - **Kategorie se porovnávají bez ohledu na velikost písmen.** Je to volný slug od reviewera;
   kdyby `Data-Loss` neblokovalo, prošel by PR s hlášenou ztrátou dat.
+- **Blokující se počítá jedinou funkcí** (`blockingCount(in:categories:)`) a **z platných
+  nálezů**. Bydlí u `isBlocking`, ne u toho, kdo se ptá: od #172 se na to ptají dvě místa —
+  notifikace a řádek seznamu — a druhá kopie by znamenala, že banner a seznam umí napočítat
+  každý něco jiného. Odmítnutý nález (#113) se nepočítá nikde, protože přesně kvůli tomu
+  účinku se odmítá.
+- **`QueueRow` je odvozený, ne uložený** (#172). Kolik blokuje a jak se nálezy rozdělily mezi
+  reviewery, se počítá ze záznamu při každém překreslení — do `ReviewState` to nepatří, ten
+  odpovídá na otázku „v jaké fázi to je“ a porovnává se na rovnost na spoustě míst. Tři věci,
+  na kterých ten proužek stojí:
+  - **Díl na běh, ne na reviewera ze sady.** Kdo neběžel, v proužku není; kdyby tam byl,
+    tvrdil by proužek něco o výsledku, který neexistuje.
+  - **Váha je počet platných nálezů, minimálně 1.** Reviewer, který doběhl čistý, musí být
+    vidět — s nulovou šířkou by z proužku zmizela právě ta informace, že vůbec běžel.
+  - **Pět výsledků, které se nesmí slít**: `blocking`, `findings`, `clean`, `dismissed`
+    a `inconclusive`. `dismissed` není `clean` ze stejného důvodu jako u `ReviewState` (#113),
+    a `inconclusive` (spadlo, vytimeoutovalo, nereportovalo, ztratilo nález) není `clean`
+    proto, že zelený díl by tvrdil klid tam, kde se nálezy nemají kde vzít.
+  - **Nejistota přebíjí odmítnutí.** Běh, kterému se ztratil nález, vyjde `inconclusive` i tehdy,
+    když jsem všechno, co dorazilo, odmítl: ztracený nález jsem neviděl, takže „všechno
+    odmítnuto“ by nad ním tvrdilo víc, než data unesou. Pořadí kontrol je proto **nálezy →
+    nejistota → nedoběhlo → odmítnuto → čisto**, ne naopak.
+
+  Barva stavu se řídí týmž pravidlem, jen o patro výš: `timedOut` a `interrupted` zůstávají
+  **červené i bez nálezů**. Oranžová znamená „něco se našlo“, kdežto u nich je hlavní zpráva,
+  že běh neskončil — `timeout · 0` oranžově by vypadalo jako výsledek.
 - **`suggestedVerdict` vrací `nil`, když není z čeho soudit** — a je to vlastní odpověď, ne
   opatrné `approve`. Schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou
   aplikace umí udělat. Z běhu se dá vyvodit „je čisto“, jen když **doběhl**, **zavolal

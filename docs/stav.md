@@ -592,6 +592,14 @@ o jedenácti issues, ne dva milníky za sebou. Hotové z něj je `#62`, `#63`, `
 Pořadí M6–M8 není závazné. M8 na nich nestojí a dá se udělat kdykoli — je to jediný
 z těch tří milníků, který **nemění tvrdé podmínky**.
 
+9. **Revize okna** (M9) — nový vizuální jazyk podle návrhu ze srpna 2026 a přestavba okna
+   na záložky. Šestnáct issues ve čtyřech vlnách; **pořadí je v popisu milníku**, protože se
+   podle něj rozhoduje, co se dá dělat souběžně. Hotové: řádek fronty #172.
+
+   Vlna A (#172, #173, #174, #175, #187) je záměrně první a **nestojí na přestavbě okna**:
+   je z ní vidět, jestli nový vizuální jazyk sedí, dřív než se do něj investuje přepis
+   `ContentView`. Kdyby nesedl, je #172 nejlevnější místo, kde návrh zahodit.
+
 Vedle fází stojí milník **Průběžné**: koš na to, co do žádné z nich nepatří (ikona,
 podpis, stavový řádek). Nemá pořadí ani termín a verze se z něj neodvozuje — viz
 Pracovní postup.

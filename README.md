@@ -26,7 +26,12 @@ názoru.
 
 Po startu si ověří, že má `gh`, `git` i `claude` a že je `gh` přihlášený — jinak řekne, co
 chybí a čím se to spraví. Pak se otevře seznam pull requestů napříč repozitáři, který se
-sám obnovuje: každý řádek nese repo, číslo, titulek, autora a čas poslední změny. Při
+sám obnovuje. **Řádek začíná titulkem** (#172) a souřadnice — `repo #číslo · autor · čas
+poslední změny` — stojí pod ním: seznam míchá repozitáře, ale otázka „co to je“ přijde dřív než
+„odkud to je“. Stav review nese **barevná hrana řádku**, takže se fronta dá přejet očima, a vedle
+odznaku je **proužek s podílem reviewerů** — z něj je poznat, jestli nálezy hlásí jeden reviewer,
+nebo se na nich shodli dva. Blokující nález má vlastní barvu i text (`3 nálezy · 1 blokuje`); do
+#172 se nedal od tří kosmetických odlišit vůbec. Při
 výpadku sítě zůstanou poslední známá data a nad seznamem se objeví pruh, že nejsou
 aktuální; při rate limitu pruh říká, kdy to zkusí znovu.
 
