@@ -1364,6 +1364,10 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 
 Věci, které se u toho nemají rozbít:
 
+- **Sedm stránek, ne devět** (#177). Návrh kreslí i `Cache a úklid` a `Zdraví služeb`; obojí
+  je vynechané, protože pro ně v aplikaci **není obsah** — cache se dnes uklízí sama podle
+  rozpočtu a zdraví služeb žije ve stavovém řádku. Prázdná stránka je horší než chybějící,
+  a tahle úvaha platí i pro rail (#180).
 - **Dělí se podle otázky, na kterou se odpovídá** (#177), ne podle typu ovládacího prvku.
   `Odesílání` je proto vlastní stránka, i když je to jeden přepínač a jeden seznam: je to jediné
   místo, kde se rozhoduje, jestli z aplikace **může něco odejít** (tvrdá podmínka č. 1), a text
@@ -2423,6 +2427,24 @@ Nad nálezy platí navíc:
   Barva stavu se řídí týmž pravidlem, jen o patro výš: `timedOut` a `interrupted` zůstávají
   **červené i bez nálezů**. Oranžová znamená „něco se našlo“, kdežto u nich je hlavní zpráva,
   že běh neskončil — `timeout · 0` oranžově by vypadalo jako výsledek.
+- **Okno je rail plus záložky** (#180), ne `NavigationSplitView`. Seznam PR byl do té doby
+  **trvalý levý sloupec**, takže diff nikdy neměl celou šířku — a při čtení kódu se v seznamu
+  nehrabe. Teď je obsahem domácí záložky a otevřená review jsou záložky vedle ní. Pět věcí,
+  které se u toho nemají rozbít:
+  - **Záložka nic nevlastní.** Stav je jen `[PRIdentifier]` a aktivní záložka; diff, konverzace,
+    draft i běh visí ve store na `PRIdentifier` jako dosud. Zavření proto **nesmí nic zahodit** —
+    má na to vlastní test.
+  - **Po zavření se jde na sousední záložku**, ne domů: zavírá se doprojité review a další v řadě
+    je to, co člověk chce vidět. Domů se propadne, až když nezbyde žádná.
+  - **PR, který vypadl ze seznamu, si záložku drží.** Mergnutý pull request jde ještě dočíst
+    a zavřít ho má člověk, ne tik pollingu. Když o něm nevíme ani titulek, řekne se to místo
+    prázdné plochy.
+  - **Sheet odeslání zůstává na `ContentView`.** Detail zmizí, jakmile PR vypadne ze seznamu,
+    a odeslané review `review-requested` ruší — sheet zavěšený na detailu by zmizel uprostřed
+    odesílání.
+  - **Rail má jen položky, které mají obsah.** Návrh jich kreslí šest; položka, po jejímž otevření
+    je prázdno, je horší než položka, která ještě není. `Přehled` přijde s dashboardem (#181),
+    `Historie` a `Zdraví` potřebují napřed obsah, který v aplikaci není.
 - **Potvrzení odeslání vypisuje payload, ne draft** (#178). Do té doby si sheet skládal místo
   komentáře `Policy.location(of:)`, tedy **druhý** popis téhož — a `side` ani `start_line` v něm
   nebyly vůbec, přestože právě ony rozhodují, ke kterému kódu komentář na GitHubu sedne. Teď se

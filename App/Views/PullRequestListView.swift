@@ -1,18 +1,12 @@
 import SwiftUI
 
-/// Levý sloupec — seznam PR napříč repozitáři.
+/// Fronta pull requestů — obsah domácí záložky (#180).
+///
+/// Do #180 to byl **trvalý levý sloupec** vedle diffu. Přestěhoval se, protože se v něm při čtení
+/// kódu nehrabe a diff tím přišel o šířku, kterou má mít; akce nad ním (obnovit, filtr, novinky)
+/// jsou v liště `HomeView` nad obsahem, ne v toolbaru okna.
 struct PullRequestListView: View {
     @Bindable var store: AppStore
-    /// Otevře okno s novinkami (#127).
-    ///
-    /// Předává se **shora**, ne přes `@Environment(\.openWindow)` tady: v toolbaru bočního
-    /// panelu je ta akce **němá** — tlačítko projde, ale okno se neotevře. Ověřeno na běžící
-    /// aplikaci proti dvěma známým dobrým cestám: `openSettings` ze **stejného** toolbaru
-    /// funguje a `openWindow` s tímtéž id funguje z menu i z `RootView`. `ContentView` ji
-    /// proto čte v těle okna a sem posílá jako uzávěr.
-    let openReleaseNotes: () -> Void
-    @Environment(\.openSettings) private var openSettings
-    @State private var isRefreshing = false
 
     var body: some View {
         content
@@ -21,22 +15,6 @@ struct PullRequestListView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 PollStatusBanner(status: store.status, lastSuccess: store.lastSuccess)
             }
-            .navigationTitle("Pull requesty")
-            .toolbar {
-                releaseNotesButton
-                settingsButton
-                filterButton
-                refreshButton
-            }
-    }
-
-    private var filterButton: some View {
-        PullRequestFilterButton(
-            options: store.filterOptions,
-            filter: store.filter,
-            hidden: store.hiddenPullRequestCount,
-            apply: store.setFilter
-        )
     }
 
     @ViewBuilder private var content: some View {
@@ -96,7 +74,9 @@ struct PullRequestListView: View {
             )
         }
 
-        return List(rows, selection: $store.selection) { row in
+        // Výběr otevře **záložku** (#180): seznam je rozcestník, ne polovina okna, takže
+        // kliknutí má PR otevřít, ne ho jen označit vedle diffu.
+        return List(rows, selection: selectionOpeningTab) { row in
             PullRequestRow(
                 pullRequest: row.pullRequest,
                 reviewState: row.state,
@@ -104,6 +84,18 @@ struct PullRequestListView: View {
                 row: row.summary
             )
         }
+    }
+
+    /// Výběr, který otevře záložku. Čte se pořád `store.selection`, aby řádek zůstal
+    /// zvýrazněný — zapisuje se ale přes `openTab`, protože to je celá akce.
+    private var selectionOpeningTab: Binding<PRIdentifier?> {
+        Binding(
+            get: { store.selection },
+            set: { chosen in
+                guard let chosen else { return }
+                store.openTab(chosen)
+            }
+        )
     }
 
     /// Co seznam o jednom řádku ví. Pojmenovaný typ, ne čtveřice: od #172 se skládá ze čtyř
@@ -117,45 +109,8 @@ struct PullRequestListView: View {
         var id: PRIdentifier { pullRequest.id }
     }
 
-    private var refreshButton: some View {
-        Button {
-            Task {
-                isRefreshing = true
-                await store.refresh()
-                isRefreshing = false
-            }
-        } label: {
-            if isRefreshing {
-                ProgressView().controlSize(.small)
-            } else {
-                Label("Obnovit", systemImage: "arrow.clockwise")
-            }
-        }
-        .disabled(isRefreshing)
-        .keyboardShortcut("r")
-        .help("Obnovit seznam")
-    }
 
-    /// Otevře okno nastavení — totéž, co ⌘, v menu. Ozubené kolo je zvyklost, ale samo
-    /// o sobě se nedá najít klávesnicí, a naopak zkratku hledá málokdo v toolbaru.
-    private var settingsButton: some View {
-        Button { openSettings() } label: {
-            Label("Nastavení", systemImage: "gearshape")
-        }
-        .help("Nastavení aplikace (⌘,)")
-    }
 
     /// Otevře okno s novinkami — totéž, co položka v menu aplikace (#127).
     ///
-    /// Stojí **vedle nastavení**, protože je to totéž patro: obojí je o aplikaci, ne o pull
-    /// requestu, který je zrovna vybraný. `Obnovit` zůstává vpravo — je to jediná z těch tří
-    /// věcí, která se mačká často. Odznak s počtem nepřečtených tady **není**: seznam PR ke
-    /// stavu novinek nemá přístup a protahovat ho sem kvůli tečce znamená druhé místo, které
-    /// se s oknem umí rozejít.
-    private var releaseNotesButton: some View {
-        Button(action: openReleaseNotes) {
-            Label(ReleaseNotesWindow.title, systemImage: "sparkles")
-        }
-        .help("Co se v které verzi změnilo")
-    }
 }

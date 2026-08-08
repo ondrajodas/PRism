@@ -207,6 +207,12 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   že bez blokujících odznak nenaroste o „0 blokuje“ a že zastaralé zůstane žluté i s blokujícím.
   Past v testu: `Policy.key(of:)` skládá identitu z revieweera, místa a **shrnutí**, takže tři
   nálezy se stejným shrnutím jsou pro odmítnutí jeden a týž — vstup musí být rozlišitelný.
+- **Záložky okna (#180)** — otevření, žádný duplikát při druhém kliknutí, přechod na sousední
+  záložku po zavření aktivní, propadnutí domů u poslední a to, že **zavření neaktivní záložky
+  nepřepne obsah**. Nejcennější je test, že **zavření nezahodí rozdělané review** — jinak by okno
+  umělo zahodit rozepsanou práci jedním kliknutím na křížek. Past při jeho psaní: draft nevznikne
+  bez známé hlavy PR, takže se musí napřed dotáhnout detail; první verze testu selhala už na
+  přípravě a vypadalo to jako chyba v zavírání.
 - **Detail PR — větve (#174)** — fixture `pr-view-open.json` dostal `headRefName`/`baseRefName`
   ze skutečného volání téhož PR (mergem se větve nemění), takže testy dál stojí na reálném
   výstupu. Vedle toho test, že **detail bez těch polí se pořád přečte**: přibyla až s #174
@@ -683,6 +689,22 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
 - **`ReviewSlots`** — limit, pořadí ve frontě a zrušený čekatel, který nesmí frontu ucpat.
 
 ## Jak si zkontrolovat, jak view vypadá
+
+**Rozvržení okna se dá změřit přes accessibility, i když screenshot nejde** (#180). `screencapture`
+na tomhle stroji pořád selhává (`could not create image from display`), ale `System Events` vrátí
+`position` a `size` každého prvku — a z těch čísel se pozná to, co by jinak řekl jedině obrázek.
+U #180 to rozhodlo spor o hlavičku okna: semafor končil na `y=66`, záložky začínaly na `y=77`,
+tedy nad nimi byl prázdný pruh. Po opravě začínala hlavička na `y=42` (horní hrana okna) a její
+obsah na `y=50`, tedy **na stejné výšce jako semafor**.
+
+```bash
+osascript -e 'tell application "System Events" to tell process "PRism" to get position of window 1'
+```
+
+Vyžaduje to oprávnění Accessibility (na rozdíl od Screen Recording ho terminál má). `entire
+contents` u `AXScrollArea` občas selže na převodu typu — hierarchii je pak potřeba projít po
+patrech (`UI elements of …`).
+
 
 `screencapture` na tomhle stroji nefunguje (chybí oprávnění Screen Recording), takže
 screenshot běžící aplikace nedostaneš. Co funguje: dočasný test, který view vykreslí přes

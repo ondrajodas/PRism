@@ -12,6 +12,19 @@ final class AppStore {
     /// Který řádek je vybraný.
     var selection: PRIdentifier?
 
+    /// Otevřená review jako záložky (#180), v pořadí, ve kterém se otevřela.
+    ///
+    /// **Jen seznam identifikátorů.** Všechno ostatní — diff, konverzace, draft, běh — visí ve
+    /// store na `PRIdentifier` už dneska, takže záložka nic nevlastní a zavřít ji nesmí nic
+    /// zahodit: rozdělané review leží na disku a běžící review běží dál.
+    var openTabs: [PRIdentifier] = []
+
+    /// Která záložka je vidět.
+    var activeTab: WindowTab = .home
+
+    /// Co je vidět v domácí záložce.
+    var railSection: RailSection = .queue
+
     /// Zúžení seznamu na vybraná repa a autory (#117).
     ///
     /// **Drží ho store, ne view:** `PullRequestListView` se přestavuje při každém tiku, takže
@@ -529,6 +542,56 @@ final class AppStore {
     }
 
     func clearFilter() { setFilter(PullRequestFilter()) }
+
+    // MARK: - Záložky (#180)
+
+    /// Otevře PR jako záložku a přepne se na ni. Otevřený PR se **neotevírá podruhé** — kliknutí
+    /// na něj v seznamu ho jen vytáhne dopředu, jako v prohlížeči.
+    func openTab(_ pullRequest: PRIdentifier) {
+        if !openTabs.contains(pullRequest) { openTabs.append(pullRequest) }
+        activeTab = .pullRequest(pullRequest)
+        selection = pullRequest
+    }
+
+    /// Zavře záložku. **Nic se tím nezahazuje** — draft, nálezy i běžící review zůstávají, protože
+    /// nic z toho na záložce nevisí.
+    ///
+    /// Po zavření se jde na **sousední** záložku, ne domů: zavírá se typicky doprojité review
+    /// a další v řadě je to, co člověk chce vidět. Domů se propadne, až když nezbyde žádná.
+    func closeTab(_ pullRequest: PRIdentifier) {
+        guard let index = openTabs.firstIndex(of: pullRequest) else { return }
+        openTabs.remove(at: index)
+
+        guard activeTab == .pullRequest(pullRequest) else { return }
+        let neighbour = openTabs.indices.contains(index) ? openTabs[index] : openTabs.last
+        activeTab = neighbour.map(WindowTab.pullRequest) ?? .home
+        selection = neighbour
+    }
+
+    /// Shrnutí otevřených záložek. PR, který ze seznamu vypadl, si záložku drží — proto se
+    /// hledá i mezi tím, co je vidět, a nezmizí, jen protože ho tik přestal vracet.
+    var openTabSummaries: [PullRequestSummary] {
+        openTabs.compactMap { summary(for: $0) }
+    }
+
+    /// Shrnutí PR podle identifikátoru. `nil` = o tomhle PR nevíme nic ani z posledního tiku.
+    func summary(for pullRequest: PRIdentifier) -> PullRequestSummary? {
+        pullRequests.first { $0.id == pullRequest }
+    }
+
+    /// Odznak u fronty v railu. `nil`, dokud se seznam nenačetl — nula nad nenačtenými daty
+    /// vypadá jako „hotovo“, a to je zrovna ten nebezpečný směr (tatáž úvaha jako u souhrnu).
+    var railQueueCount: Int? {
+        lastSuccess == nil ? nil : visiblePullRequests.count
+    }
+
+    /// PR, na kterých leží rozdělané review — obsah sekce `Rozdělaná`.
+    ///
+    /// Čte **plný** seznam, ne zúžený filtrem: rozdělané review je moje práce, a ta se nemá
+    /// schovávat tím, že jsem si zúžil pohled na jiné repo. Tatáž úvaha jako u souhrnu fronty.
+    var pullRequestsWithDraft: [PullRequestSummary] {
+        pullRequests.filter { hasDraft($0.id) }
+    }
 
     var status: PollStatus { polling.state.status }
 
