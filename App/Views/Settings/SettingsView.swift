@@ -11,6 +11,10 @@ struct SettingsView: View {
     let store: AppStore
     @Environment(\.controlActiveState) private var activeState
     @State private var settings: SettingsModel
+    /// Vybraná stránka. `@State`, ne `@AppStorage`: nastavení se otevírá kvůli konkrétní věci
+    /// a vracet se do něj tam, kde jsem skončil minule, není, co člověk čeká — na rozdíl od
+    /// výšky panelu, kterou si vytáhne jednou a chce ji mít.
+    @State private var section: SettingsSection = .sources
 
     init(store: AppStore) {
         self.store = store
@@ -76,19 +80,25 @@ struct SettingsView: View {
         }
     }
 
-    /// Patička jde přes `safeAreaInset`, **ne do `VStack`u pod `TabView`**.
+    /// Boční navigace, ne záložky (#177).
     ///
-    /// Se `VStack`em přestane být `TabView` tím, co si řídí bezpečnou oblast okna, a jeho
-    /// formulář si pak vyhradí místo od horní hrany — obsah tedy leze pod lištu se
-    /// záložkami a první řádek je uříznutý. Stejná past jako u pruhu nad seznamem PR.
+    /// Tři taby, ze kterých jeden nesl osm sekcí, se hledaly scrollováním. Seznam vlevo je i vzor,
+    /// který má systém — systémové nastavení vypadá od Ventury takhle, takže se to nemusí učit.
+    ///
+    /// **`HStack` s `Listem`, ne `NavigationSplitView`**: uvnitř `Settings` scény si okno řídí
+    /// velikost samo a split view se s tím pere (viz `frame` níž). Tenhle vzor je navíc v okně
+    /// už jednou ověřený — přesně takhle je postavená stránka `Repozitáře`.
+    ///
+    /// Patička jde přes `safeAreaInset`, **ne do `VStack`u pod obsah**: jinak přestane být obsah
+    /// tím, co si řídí bezpečnou oblast okna, a formulář si vyhradí místo od horní hrany, takže
+    /// první řádek zůstane uříznutý. Tatáž past jako u pruhu nad seznamem PR.
     private var editor: some View {
-        TabView {
-            GlobalSettingsView(settings: settings)
-                .tabItem { Label("Obecné", systemImage: "gearshape") }
-            NotificationSettingsView(settings: settings)
-                .tabItem { Label("Notifikace", systemImage: "bell") }
-            RepositorySettingsView(settings: settings, repositories: store.knownRepositories)
-                .tabItem { Label("Repozitáře", systemImage: "folder") }
+        HStack(spacing: 0) {
+            navigation
+                .frame(width: 210)
+            Divider()
+            page
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
@@ -96,6 +106,32 @@ struct SettingsView: View {
                 footer
             }
             .background(.bar)
+        }
+    }
+
+    private var navigation: some View {
+        List(selection: $section) {
+            ForEach(SettingsSection.Group.allCases) { group in
+                Section(group.title) {
+                    ForEach(group.sections) { item in
+                        Label(item.title, systemImage: item.symbol).tag(item)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Vybraná stránka. `Repozitáře` dostávají seznam rep zvlášť — jsou jediná stránka, která
+    /// nečte jen konfiguraci, ale i to, co dorazilo z pollingu.
+    @ViewBuilder private var page: some View {
+        switch section {
+        case .sources: SourcesSettingsView(settings: settings)
+        case .review: ReviewSettingsView(settings: settings)
+        case .diff: DiffSettingsView(settings: settings)
+        case .publishing: PublishingSettingsView(settings: settings)
+        case .notifications: NotificationSettingsView(settings: settings)
+        case .repositories: RepositorySettingsView(settings: settings, repositories: store.knownRepositories)
+        case .runtime: RuntimeSettingsView(settings: settings)
         }
     }
 

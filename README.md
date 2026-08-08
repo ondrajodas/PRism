@@ -525,7 +525,7 @@ hlášky za jednu věc jsou tři vyrušení. Nový výsledek review přepíše t
 `3 nálezy` nezůstala viset stará hláška `nenašel žádný nález`. Notifikace o témž PR systém řadí
 k sobě.
 
-**Co se hlásí, se nastavuje** — záložka `Notifikace` v okně nastavení: hlavní vypínač a čtyři
+**Co se hlásí, se nastavuje** — stránka `Notifikace` v okně nastavení: hlavní vypínač a čtyři
 události (nový PR, review s nálezy, čisté review, selhání). Ve výchozím stavu je zapnuté všechno.
 S vypnutým hlavním přepínačem se aplikace **nezeptá ani na systémové oprávnění**.
 
@@ -760,7 +760,7 @@ App/                      zdrojáky aplikace — target PRism
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky
     ReleaseNotes/         okno s novinkami — historie vydání a release notes vybrané verze
-    Settings/             okno nastavení (⌘,) — globální hodnoty a nastavení per repo
+    Settings/             okno nastavení (⌘,) — sedm stránek v boční navigaci (#177)
   Assets.xcassets/        ikona aplikace (generovaná, viz bin/make-icon.swift)
 Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip

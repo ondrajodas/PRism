@@ -1348,10 +1348,15 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | Typ | Co dělá |
 |---|---|
 | `SettingsScene` | Obsah scény; dokud neprošel preflight, není store a okno to řekne |
-| `SettingsView` | Tři záložky, patička s cestou a stavem uložení, zámek na rozbitý soubor |
+| `SettingsView` | Boční navigace (#177), patička s cestou a stavem uložení, zámek na rozbitý soubor |
+| `SettingsSection` | Sedm stránek ve třech skupinách — `Co se hlídá`, `Co jde ven`, `Prostředí` |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
-| `GlobalSettingsView` | Zdroje, výchozí režim a jazyk nálezů, **pohled na diff**, **odesílání na GitHub**, skilly, sady podle jazyka, kategorie, běh |
-| `NotificationSettingsView` | Záložka `Notifikace` (#86): hlavní vypínač a čtyři události |
+| `SourcesSettingsView` | Zdroje PR (search dotazy) |
+| `ReviewSettingsView` | Výchozí režim a jazyk nálezů, skilly, sady podle jazyka, blokující kategorie |
+| `DiffSettingsView` | **Pohled na diff** — nastavení člověka, ne repa, proto jen globálně |
+| `PublishingSettingsView` | **Odesílání na GitHub** — vlastní stránka, viz níž |
+| `RuntimeSettingsView` | Interval pollingu, rozpočet cache, souběžné session, denní limit, model |
+| `NotificationSettingsView` | Stránka `Notifikace` (#86): hlavní vypínač a čtyři události |
 | `LanguageSkillsEditor` | Mapa „programovací jazyk → sada skillů“; ukazuje jen nastavené jazyky |
 | `RepositorySettingsView` | Seznam rep vlevo, režim, povolení odesílání a override vpravo |
 | `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
@@ -1359,6 +1364,18 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 
 Věci, které se u toho nemají rozbít:
 
+- **Dělí se podle otázky, na kterou se odpovídá** (#177), ne podle typu ovládacího prvku.
+  `Odesílání` je proto vlastní stránka, i když je to jeden přepínač a jeden seznam: je to jediné
+  místo, kde se rozhoduje, jestli z aplikace **může něco odejít** (tvrdá podmínka č. 1), a text
+  je tam důležitější než přepínač. Do #177 to byly tři záložky, ze kterých `Obecné` nesla osm
+  sekcí a hledalo se v ní scrollováním.
+- **Vybraná stránka se nepamatuje mezi spuštěními.** Nastavení se otevírá kvůli konkrétní věci;
+  vrátit se do něj tam, kde jsem skončil minule, není, co člověk čeká — na rozdíl od výšky
+  panelu, kterou si vytáhne jednou a chce ji mít.
+- **`HStack` s `Listem`, ne `NavigationSplitView`.** Uvnitř `Settings` scény si okno řídí velikost
+  samo a split view se s tím pere; tenhle vzor je v okně navíc už jednou ověřený stránkou
+  `Repozitáře`. Patička dál jde přes `safeAreaInset`, jinak si formulář vyhradí místo od horní
+  hrany a první řádek zůstane uříznutý.
 - **Souhrn fronty (#155) sčítá, nezužuje.** Filtr reviewerů (#117) seznam zužuje a je to *pohled*;
   souhrn je tvrzení o tom, co ve frontě **je**. Kdyby se počítal z toho, co je po filtru vidět,
   tvrdil by, že práce ubyla, jen protože jsem si schoval jednoho revieweera — tatáž úvaha jako
