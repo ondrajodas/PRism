@@ -2427,6 +2427,19 @@ Nad nálezy platí navíc:
   Barva stavu se řídí týmž pravidlem, jen o patro výš: `timedOut` a `interrupted` zůstávají
   **červené i bez nálezů**. Oranžová znamená „něco se našlo“, kdežto u nich je hlavní zpráva,
   že běh neskončil — `timeout · 0` oranžově by vypadalo jako výsledek.
+- **Barvy drží `Palette`, ne systém** (#180). Šedá z macOS je neutrální, kdežto návrh stojí na
+  neutrálech posunutých **do modrofialové**, tedy do stejné rodiny jako akcent; na jednom prvku je
+  ten rozdíl nepatrný, na celém okně je vidět. Paleta je **jeden zdroj** — barva se nesmí skládat
+  v každém view zvlášť, jinak má okno dvě „skoro stejné“ šedé.
+  - Světlá i tmavá varianta jde přes `NSColor(name:dynamicProvider:)`, protože jen ten se přepne
+    **za běhu**; dvě konstanty s `@Environment(\.colorScheme)` by znamenaly, že barvu řeší každé
+    view samo.
+  - **Akcent je fialový z návrhu, ne systémový.** Je to jediná barva, kterou si okno drží samo:
+    stojí na ní identita aplikace (hranol, spektrum reviewerů), a spektrum by se systémovým
+    akcentem měnilo význam podle nastavení systému. Nasazuje se `tint`em **na kořen okna**, takže
+    ho dědí odznaky i tlačítka uvnitř a nikde jinde se fialová nezadrátovává.
+  - Rozměry chrome jsou z návrhu doslova (hlavička 40 bodů, odsazení 13, mezera 14, záložka
+    `5×11` s poloměrem 7) a **ověřené měřením**, ne odhadem — viz `docs/testovani.md`.
 - **Okno je rail plus záložky** (#180), ne `NavigationSplitView`. Seznam PR byl do té doby
   **trvalý levý sloupec**, takže diff nikdy neměl celou šířku — a při čtení kódu se v seznamu
   nehrabe. Teď je obsahem domácí záložky a otevřená review jsou záložky vedle ní. Pět věcí,

@@ -35,14 +35,14 @@ struct ReviewTabsView: View {
     /// pull request, takže by z domečku mezi `repo#číslo` nebylo poznat, co za ní je.
     private var homeTab: some View {
         Button { active = .home } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 8) {
                 Image(systemName: "house")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                 Text("Přehled")
-                    .font(.caption)
+                    .font(.system(size: 12.5))
             }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
             .chrome(isActive: active == .home)
         }
         .buttonStyle(.plain)
@@ -53,23 +53,23 @@ struct ReviewTabsView: View {
     private func tab(_ summary: PullRequestSummary) -> some View {
         let item = WindowTab.pullRequest(summary.id)
         let isActive = active == item
-        return HStack(spacing: 6) {
+        return HStack(spacing: 8) {
             dot(for: summary.id)
             // `verbatim`: `repo#číslo` není věta a číslo PR není množství k formátování.
             Text(verbatim: "\(summary.repo.name)#\(summary.number)")
-                .font(.system(.caption, design: .monospaced))
+                .font(.system(size: 11.5, design: .monospaced))
                 .lineLimit(1)
             Button { close(summary.id) } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.system(size: 9))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(Palette.ink3)
             .help("Zavřít záložku — nic se tím nezahodí")
             .accessibilityLabel("Zavřít \(summary.repo.name)#\(summary.number)")
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 5)
         .chrome(isActive: isActive)
         .contentShape(.rect)
         .onTapGesture { active = item }
@@ -112,14 +112,16 @@ private extension View {
     /// pozadí lišty, kde samotná výplň skoro zmizí.
     func chrome(isActive: Bool) -> some View {
         background(
-            isActive ? AnyShapeStyle(.background.secondary) : AnyShapeStyle(.clear),
+            isActive ? AnyShapeStyle(Palette.raised) : AnyShapeStyle(.clear),
             in: .rect(cornerRadius: 7)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(.separator, lineWidth: isActive ? 1 : 0)
+                // Obrys z palety, ne `.separator`: systémový oddělovač je v tmavé liště tak
+                // jemný, že aktivní záložka splyne s pozadím a pruh se čte jako řada slov.
+                .strokeBorder(Palette.line, lineWidth: isActive ? 1 : 0)
         }
-        .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+        .foregroundStyle(isActive ? Palette.ink : Palette.ink2)
     }
 }
 

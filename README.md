@@ -24,6 +24,15 @@ názoru.
 
 **Aplikace dělá to, kvůli čemu vznikla: pustí review na moje skutečné PR a ukáže nálezy.**
 
+Okno má **vlastní hlavičku se záložkami** (#180): vlevo semafor, vedle něj domácí záložka
+`Přehled` a otevřená review, vpravo novinky, obnovení a nastavení. Seznam PR není trvalý sloupec —
+je obsahem domácí záložky, takže diff dostane celou šířku okna. Otevřené review zůstává otevřené
+a tečka u záložky nese jeho stav; u běžícího se točí prstýnek, u rozdělaného je pero. **Zavření
+záložky nic nezahodí.**
+
+Barvy si okno drží samo (`Palette`), včetně fialového akcentu — systémová šedá je neutrální,
+kdežto tenhle návrh stojí na neutrálech posunutých do modrofialové.
+
 Po startu si ověří, že má `gh`, `git` i `claude` a že je `gh` přihlášený — jinak řekne, co
 chybí a čím se to spraví. Pak se otevře seznam pull requestů napříč repozitáři, který se
 sám obnovuje. **Řádek začíná titulkem** (#172) a souřadnice — `repo #číslo · autor · čas

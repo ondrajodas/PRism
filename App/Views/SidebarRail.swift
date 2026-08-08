@@ -24,8 +24,8 @@ struct SidebarRail: View {
         .padding(.vertical, 10)
         .frame(width: 52)
         .frame(maxHeight: .infinity)
-        .background(.bar)
-        .overlay(alignment: .trailing) { Rectangle().fill(.separator).frame(width: 1) }
+        .background(Palette.chrome)
+        .overlay(alignment: .trailing) { Rectangle().fill(Palette.line).frame(width: 1) }
     }
 
     private func item(for item: RailSection) -> some View {

@@ -40,6 +40,17 @@ struct ContentView: View {
             }
             StatusBarView(store: store)
         }
+        // **Bezpečná oblast se ignoruje pro celé okno, ne jen pro hlavičku.** `fullSizeContentView`
+        // obsah pod lištu roztáhne, ale SwiftUI si pod ni vloží inset — a když ho ignoruje jen
+        // hlavička, zůstane ten pruh **pod ní**. Změřeno přes accessibility: hlavička končila
+        // na y=76 a obsah začínal až na y=120.
+        .ignoresSafeArea(edges: .top)
+        // Barvy okna drží `Palette` (#180): systémová šedá je neutrální, kdežto návrh stojí na
+        // neutrálech posunutých do modrofialové — do stejné rodiny jako akcent. Tint se nasazuje
+        // **na kořen okna**, takže ho dědí i odznaky a tlačítka uvnitř; jinde v aplikaci se
+        // fialová nezadrátovává.
+        .background(Palette.background)
+        .tint(Palette.accent)
         .fullSizeContentWindow()
         // Potvrzení odeslání. `item:`, ne `isPresented:`: sheet nemá co ukazovat bez snímku
         // draftu, takže `nil` je zavřený stav i zdroj dat naráz.
@@ -77,10 +88,13 @@ struct ContentView: View {
     /// řádek tlačítek, ne jako záložky. Cenou je odsazení na semafor a to, že se okno musí dát
     /// táhnout — obojí je vyřešené níž.
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 14) {
             // Místo pro semafor. Pevná hodnota, protože ta tři kolečka mají pevnou velikost
             // i rozteč; menší odsazení je překryje, větší nechá díru.
-            Spacer().frame(width: 78)
+            // Semafor macOS končí na x=70 (tři kolečka po 16 s roztečí 23, od x=8). Návrh dává
+            // za světla mezeru 14, takže záložky mají začínat na x=84: 13 odsazení + 57 + 14.
+            // Změřeno přes accessibility, ne odhadnuto.
+            Spacer().frame(width: 57)
             ReviewTabsView(
                 active: $store.activeTab,
                 tabs: store.openTabSummaries,
@@ -91,22 +105,17 @@ struct ContentView: View {
             )
             headerActions
         }
-        .padding(.horizontal, 10)
-        .frame(height: 38)
-        // **Bez tohohle zůstane nad hlavičkou prázdný pruh.** `fullSizeContentView` obsah pod
-        // lištu roztáhne, ale SwiftUI si pod ni vloží bezpečnou oblast, takže hlavička spadne
-        // zpátky pod semafor. Změřeno přes accessibility: semafor končil na y=66 a záložky
-        // začínaly na y=77.
-        .ignoresSafeArea(edges: .top)
-        .background(.bar)
-        .overlay(alignment: .bottom) { Rectangle().fill(.separator).frame(height: 1) }
+        .padding(.horizontal, 13)
+        .frame(height: 40)
+        .background(Palette.chrome)
+        .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
         // Bez systémové lišty se okno tahá za hlavičku — jinak by se s ním nedalo hnout jinak
         // než za okraje.
         .gesture(WindowDragGesture())
     }
 
     private var headerActions: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 3) {
             headerButton("sparkles", help: "Co se v které verzi změnilo") {
                 openWindow(id: ReleaseNotesWindow.id)
             }
@@ -122,9 +131,9 @@ struct ContentView: View {
     private func headerButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12))
-                .frame(width: 26, height: 22)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 13))
+                .frame(width: 27, height: 25)
+                .foregroundStyle(Palette.ink2)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)

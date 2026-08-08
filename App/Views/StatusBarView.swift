@@ -42,10 +42,10 @@ struct StatusBarView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bar)
+        .background(Palette.chrome)
         // `Divider()` v `overlay` se kreslí **svisle** — orientaci si bere z okolní osy
         // a v overlay žádná není.
-        .overlay(alignment: .top) { Rectangle().fill(.separator).frame(height: 1) }
+        .overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }
     }
 }
 
