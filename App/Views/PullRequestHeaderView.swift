@@ -2,18 +2,14 @@ import SwiftUI
 
 /// Souřadnice pull requestu pod titulkem (#174).
 ///
-/// Odpovídá na dvě otázky, které se do #174 v okně zodpovědět nedaly a chodilo se kvůli nim
-/// do prohlížeče: **kam se to merguje** a **proti čemu platí nálezy, které jsou na obrazovce**.
-///
-/// Druhá z nich je trivia ve chvíli, kdy se obě sha rovnají — a nejdůležitější údaj na obrazovce
-/// ve chvíli, kdy ne.
+/// Odpovídá na otázku, která se do #174 v okně zodpovědět nedala a chodilo se kvůli ní do
+/// prohlížeče: **kam se to merguje**. Na tu druhou — proti čemu platí nálezy na obrazovce —
+/// odpovídá `StaleHeadView` níž, protože se ukazuje jen občas.
 struct PullRequestHeaderView: View {
     let pullRequest: PullRequestSummary
     /// Načtený detail. `nil` = ještě nedorazil, takže větve ani hlavu neukazujeme; hádat je
     /// horší než je chvíli nemít.
     var detail: PullRequest?
-    /// Sha, proti které platí uložené nálezy. `nil` = žádné nejsou.
-    var findingsHead: String?
 
     var body: some View {
         HStack(spacing: 9) {
@@ -21,8 +17,12 @@ struct PullRequestHeaderView: View {
             if let detail, !detail.headRef.isEmpty, !detail.baseRef.isEmpty {
                 merge(detail)
             }
-            Text(verbatim: pullRequest.repo.description)
+            // Číslo zůstává u repa: v detailu jinde není a `owner/repo#číslo` je tvar, kterým
+            // se PR v tomhle repu píše všude jinde (klíč nálezů, název souboru, commit).
+            // `verbatim`, jinak locale udělá z #21663 „#21 663“.
+            Text(verbatim: "\(pullRequest.repo)#\(pullRequest.number)")
                 .foregroundStyle(.secondary)
+                .textSelection(.enabled)
             Link("otevřít na GitHubu", destination: pullRequest.url)
         }
         .font(.callout)

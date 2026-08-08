@@ -56,7 +56,7 @@ z čeho soudit*) a rozbaleným seznamem nálezů po kategoriích, s odznakem u t
 Kliknutím na nález diff odskočí na jeho `file:line`.
 
 Nad záložkami je **hlavička s tím, kam se to merguje** (#174): stav PR jako chip, `autor chce
-sloučit větev → base` a odkaz na GitHub. Větve se do okna dostaly až s #174 a je to první věc,
+sloučit větev → base`, `owner/repo#číslo` a odkaz na GitHub. Větve se do okna dostaly až s #174 a je to první věc,
 kterou u cizího PR hledám. Když se **hlava PR rozejde se sha, proti které platí nálezy**, přibude
 pod tím řádek s oběma — dokud se rovnají, je to trivia, jakmile se rozejdou, je to nejdůležitější
 údaj na obrazovce, protože všechno pod ním mluví o kódu, který na větvi už není. Vpravo u záložek
