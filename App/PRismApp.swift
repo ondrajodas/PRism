@@ -26,6 +26,10 @@ struct PRismApp: App {
                 // v okamžiku zavírání, ne v okamžiku, kdy se okno objevilo.
                 .onAppear { delegate.runningReviews = { preflight.store?.runningReviews ?? 0 } }
         }
+        // Systémová titulková lišta se schovává (#180): hlavičku si kreslí `ContentView` sám,
+        // aby v ní mohly být záložky vedle semaforu. Přes `toolbar` to nešlo — macOS si položky
+        // sází po svém a z pruhu záložek vyšel řádek tlačítek.
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1100, height: 700)
         // **Bez tohohle nešlo okno zmenšit na výšku.** Výchozí `.automatic` u `WindowGroup`
         // odvozuje minimum okna z toho, co si obsah přeje — a `List` v bočním panelu si přeje
