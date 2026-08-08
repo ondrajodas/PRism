@@ -53,9 +53,23 @@ struct ReviewStateAppearanceTests {
             ReviewStateAppearance.label(of: .timedOut(findings: 2), blocking: 1)
                 == "timeout · 2 · 1 blokuje"
         )
-        #expect(ReviewStateAppearance.color(of: .timedOut(findings: 2), blocking: 1) == .red)
         // Bez nálezů zůstane jen důvod — „timeout · 0" by tvrdilo, že se něco našlo.
         #expect(ReviewStateAppearance.label(of: .timedOut(findings: 0)) == "timeout")
+    }
+
+    @Test("Nedoběhlý běh zůstává červený i bez nálezů")
+    func anUnfinishedRunStaysRed() {
+        // Oranžová znamená „něco se našlo". U timeoutu a přerušení je ale hlavní zpráva ta,
+        // že běh neskončil — `timeout · 0` oranžově by vypadalo jako výsledek, a je to selhání.
+        #expect(ReviewStateAppearance.color(of: .timedOut(findings: 0)) == .red)
+        #expect(ReviewStateAppearance.color(of: .timedOut(findings: 2)) == .red)
+        #expect(ReviewStateAppearance.color(of: .interrupted(findings: 0)) == .red)
+        #expect(ReviewStateAppearance.color(of: .interrupted(findings: 2)) == .red)
+        // A stejnou barvu jako ostatní selhání — vedou jinam, ale obojí je „tohle neskončilo".
+        #expect(
+            ReviewStateAppearance.color(of: .timedOut(findings: 2))
+                == ReviewStateAppearance.color(of: .failed(detail: "boom"))
+        )
     }
 
     @Test("Běžící stav blokující ignoruje")

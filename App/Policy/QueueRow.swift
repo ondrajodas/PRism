@@ -92,19 +92,22 @@ extension Policy {
     ) -> ReviewerShare.Outcome {
         if active.contains(where: { isBlocking($0, categories: categories) }) { return .blocking }
         if !active.isEmpty { return .findings }
-        // Něco našel, ale nic z toho neplatí — všechno jsem to odmítl. Platí to i pro běh,
-        // který nedoběhl: co stihl najít, jsem posoudil.
-        if !run.findings.isEmpty { return .dismissed }
+
+        // **Nejistota přebíjí i odmítnutí.** Ztracený nález jsem neviděl, takže „všechno
+        // odmítnuto“ by nad ním tvrdilo víc, než data unesou — posoudil jsem jen to, co dorazilo.
+        // Tady se rozhoduje „čisto“ versus „nemám co říct“, stejná dvojice jako
+        // u `ReviewerChip.finishedState`, a stejně jako tam se nesmí slít.
+        if !run.calledReportFindings || run.droppedFindings > 0 { return .inconclusive }
 
         switch run.outcome {
         // Zabitý ani přerušený běh se nesmí tvářit jako doběhlý: o tom, co nestihl, nevíme nic.
+        // Co našel, se ale počítá — to už vyřídily větve výš.
         case .failed, .timedOut, .interrupted: return .inconclusive
         case .finished: break
         }
 
-        // Tady se rozhoduje „čisto“ versus „nemám co říct“ — stejná dvojice jako
-        // u `ReviewerChip.finishedState`, a stejně jako tam se nesmí slít.
-        if !run.calledReportFindings || run.droppedFindings > 0 { return .inconclusive }
+        // Něco našel a nic z toho neplatí — všechno jsem to odmítl (#113).
+        if !run.findings.isEmpty { return .dismissed }
         return .clean
     }
 }

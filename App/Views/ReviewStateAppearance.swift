@@ -23,8 +23,11 @@ enum ReviewStateAppearance {
         // Blokující nález je červený jako selhání schválně (#172): obojí znamená „tímhle se
         // musíš zabývat teď“, kdežto oranžová znamená „něco se našlo“. Do #172 se tyhle dvě
         // situace v řádku nedaly rozeznat vůbec.
-        case .completed, .timedOut, .interrupted: blocking > 0 ? .red : .orange
-        case .checkoutFailed, .failed: .red
+        case .completed: blocking > 0 ? .red : .orange
+        // Nedoběhlé běhy zůstávají červené **bez ohledu na nálezy**. Oranžová znamená „něco
+        // se našlo“, kdežto tady je hlavní zpráva, že běh neskončil — `timeout · 0` oranžově
+        // by vypadalo jako výsledek, a přitom je to selhání.
+        case .checkoutFailed, .failed, .timedOut, .interrupted: .red
         case .stale: .yellow
         }
     }

@@ -110,6 +110,22 @@ struct QueueRowTests {
         #expect(Policy.queueRow(for: dropped).spectrum.map(\.outcome) == [.inconclusive])
     }
 
+    @Test("Ztracený nález přebije odmítnutí")
+    func aDroppedFindingOutweighsDismissal() {
+        // Nález, který se nepodařilo přečíst, jsem neviděl — takže „všechno odmítnuto" by nad
+        // ním tvrdilo víc, než data unesou. Posoudil jsem jen to, co dorazilo.
+        let found = makeFinding(category: "style", verdict: .confirmed, summary: "dlouhá metoda")
+        var record = makeRecord(runs: [
+            makeStoredRun(
+                findings: [makeReported(category: "style", verdict: .confirmed, summary: "dlouhá metoda")],
+                droppedFindings: 2
+            )
+        ])
+        record.dismissals = makeDismissals([found])
+
+        #expect(Policy.queueRow(for: record).spectrum.map(\.outcome) == [.inconclusive])
+    }
+
     @Test("Nedoběhlý běh si nálezy nechává, ale bez nich je nejistý")
     func anUnfinishedRunKeepsWhatItFound() {
         let withFindings = makeRecord(runs: [

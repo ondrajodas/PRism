@@ -2392,10 +2392,18 @@ Nad nálezy platí navíc:
     tvrdil by proužek něco o výsledku, který neexistuje.
   - **Váha je počet platných nálezů, minimálně 1.** Reviewer, který doběhl čistý, musí být
     vidět — s nulovou šířkou by z proužku zmizela právě ta informace, že vůbec běžel.
-  - **Čtyři výsledky, které se nesmí slít**: `blocking`, `findings`, `clean`, `dismissed`
+  - **Pět výsledků, které se nesmí slít**: `blocking`, `findings`, `clean`, `dismissed`
     a `inconclusive`. `dismissed` není `clean` ze stejného důvodu jako u `ReviewState` (#113),
     a `inconclusive` (spadlo, vytimeoutovalo, nereportovalo, ztratilo nález) není `clean`
     proto, že zelený díl by tvrdil klid tam, kde se nálezy nemají kde vzít.
+  - **Nejistota přebíjí odmítnutí.** Běh, kterému se ztratil nález, vyjde `inconclusive` i tehdy,
+    když jsem všechno, co dorazilo, odmítl: ztracený nález jsem neviděl, takže „všechno
+    odmítnuto“ by nad ním tvrdilo víc, než data unesou. Pořadí kontrol je proto **nálezy →
+    nejistota → nedoběhlo → odmítnuto → čisto**, ne naopak.
+
+  Barva stavu se řídí týmž pravidlem, jen o patro výš: `timedOut` a `interrupted` zůstávají
+  **červené i bez nálezů**. Oranžová znamená „něco se našlo“, kdežto u nich je hlavní zpráva,
+  že běh neskončil — `timeout · 0` oranžově by vypadalo jako výsledek.
 - **`suggestedVerdict` vrací `nil`, když není z čeho soudit** — a je to vlastní odpověď, ne
   opatrné `approve`. Schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou
   aplikace umí udělat. Z běhu se dá vyvodit „je čisto“, jen když **doběhl**, **zavolal
