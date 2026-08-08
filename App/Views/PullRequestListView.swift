@@ -108,9 +108,4 @@ struct PullRequestListView: View {
 
         var id: PRIdentifier { pullRequest.id }
     }
-
-
-
-    /// Otevře okno s novinkami — totéž, co položka v menu aplikace (#127).
-    ///
 }

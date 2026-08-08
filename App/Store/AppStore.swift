@@ -12,6 +12,14 @@ final class AppStore {
     /// Který řádek je vybraný.
     var selection: PRIdentifier?
 
+    /// Poslední známé shrnutí otevřeného PR (#180).
+    ///
+    /// Bez toho by záložka zmizela ve chvíli, kdy PR vypadne z pollingu — a to je přesně to, co
+    /// se stane po odeslání review, protože tím padá `review-requested`. Zůstal by obsah, který
+    /// říká „pull request zmizel“, a **nebylo by ho čím zavřít**. Nálezem Copilota na #201; do té
+    /// doby se seznam záložek skládal jen z živých dat a dokumentace tvrdila opak.
+    var openTabSnapshots: [PRIdentifier: PullRequestSummary] = [:]
+
     /// Otevřená review jako záložky (#180), v pořadí, ve kterém se otevřela.
     ///
     /// **Jen seznam identifikátorů.** Všechno ostatní — diff, konverzace, draft, běh — visí ve
@@ -549,6 +557,7 @@ final class AppStore {
     /// na něj v seznamu ho jen vytáhne dopředu, jako v prohlížeči.
     func openTab(_ pullRequest: PRIdentifier) {
         if !openTabs.contains(pullRequest) { openTabs.append(pullRequest) }
+        if let summary = summary(for: pullRequest) { openTabSnapshots[pullRequest] = summary }
         activeTab = .pullRequest(pullRequest)
         selection = pullRequest
     }
@@ -561,6 +570,7 @@ final class AppStore {
     func closeTab(_ pullRequest: PRIdentifier) {
         guard let index = openTabs.firstIndex(of: pullRequest) else { return }
         openTabs.remove(at: index)
+        openTabSnapshots[pullRequest] = nil
 
         guard activeTab == .pullRequest(pullRequest) else { return }
         let neighbour = openTabs.indices.contains(index) ? openTabs[index] : openTabs.last
@@ -571,7 +581,10 @@ final class AppStore {
     /// Shrnutí otevřených záložek. PR, který ze seznamu vypadl, si záložku drží — proto se
     /// hledá i mezi tím, co je vidět, a nezmizí, jen protože ho tik přestal vracet.
     var openTabSummaries: [PullRequestSummary] {
-        openTabs.compactMap { summary(for: $0) }
+        // Živá data mají přednost (titulek se může změnit), snapshot je záchrana pro PR, které
+        // z pollingu vypadlo. `compactMap` sem nepatří: záložka bez shrnutí by z pruhu zmizela
+        // i s křížkem, kterým se zavírá.
+        openTabs.compactMap { summary(for: $0) ?? openTabSnapshots[$0] }
     }
 
     /// Shrnutí PR podle identifikátoru. `nil` = o tomhle PR nevíme nic ani z posledního tiku.

@@ -116,19 +116,26 @@ struct ContentView: View {
 
     private var headerActions: some View {
         HStack(spacing: 3) {
-            headerButton("sparkles", help: "Co se v které verzi změnilo") {
+            headerButton("sparkles", label: ReleaseNotesWindow.title, help: "Co se v které verzi změnilo") {
                 openWindow(id: ReleaseNotesWindow.id)
             }
-            headerButton("arrow.clockwise", help: "Obnovit seznam") {
+            headerButton("arrow.clockwise", label: "Obnovit", help: "Obnovit seznam") {
                 Task { await store.refresh() }
             }
-            headerButton("gearshape", help: "Nastavení aplikace (⌘,)") {
+            headerButton("gearshape", label: "Nastavení", help: "Nastavení aplikace (⌘,)") {
                 openSettings()
             }
         }
     }
 
-    private func headerButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
+    /// `label` je **povinný**, ne odvozený z ikony: VoiceOver by u ikonového tlačítka jinak
+    /// přečetl jméno symbolu (`sparkles`), což uživateli neřekne nic.
+    private func headerButton(
+        _ symbol: String,
+        label: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 13))
@@ -138,6 +145,7 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .help(help)
+        .accessibilityLabel(label)
     }
 
     /// Obsah okna: domácí záložka, nebo otevřené review.

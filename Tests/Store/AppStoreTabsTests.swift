@@ -132,6 +132,38 @@ struct AppStoreTabsTests {
         #expect(store.draft(for: first)?.body == "rozepsané")
     }
 
+    @Test("Záložka přežije vypadnutí PR ze seznamu")
+    func aTabSurvivesThePullRequestLeavingTheList() async {
+        // Přesně to se stane po odeslání review: tím padá `review-requested` a PR z pollingu
+        // zmizí. Kdyby se seznam záložek skládal jen z živých dat, zmizela by i záložka —
+        // a s ní křížek, kterým se zavírá. Nález Copilota na #201.
+        let gateway = FakeGitHubGateway([.success([summary(first)]), .success([])])
+        let store = AppStore(gateway: gateway, time: FakeTimeSource())
+        await store.refresh()
+        store.openTab(first)
+        #expect(store.openTabSummaries.map(\.id) == [first])
+
+        await store.refresh()
+
+        #expect(store.pullRequests.isEmpty)
+        #expect(store.openTabSummaries.map(\.id) == [first])
+        #expect(store.openTabs == [first])
+    }
+
+    @Test("Zavření záložky uklidí i její snímek")
+    func closingATabDropsItsSnapshot() async {
+        // Snímek je tu jen kvůli záložce; po zavření by z něj byla mrtvá váha, která navíc
+        // drží titulek PR, o který se nikdo nezajímá.
+        let gateway = FakeGitHubGateway([.success([summary(first)])])
+        let store = AppStore(gateway: gateway, time: FakeTimeSource())
+        await store.refresh()
+        store.openTab(first)
+
+        store.closeTab(first)
+
+        #expect(store.openTabSnapshots.isEmpty)
+    }
+
     @Test("Odznak fronty mlčí, dokud se seznam nenačte")
     func theQueueBadgeStaysQuietUntilLoaded() {
         // Nula nad nenačtenými daty vypadá jako „hotovo“ — tatáž úvaha jako u souhrnu fronty.

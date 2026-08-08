@@ -139,6 +139,9 @@ struct SpinningRing: View {
     var lineWidth: CGFloat = 2
 
     @State private var angle = 0.0
+    /// Vypnutý pohyb v systému. Prstýnek pak **stojí** — je nedokončený, takže je z něj pořád
+    /// poznat, že se něco děje, jen se netočí.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Circle()
@@ -150,12 +153,12 @@ struct SpinningRing: View {
             }
             .frame(width: size, height: size)
             .onAppear {
+                // Točit se něčím, co si člověk v systému vypnul, je horší než nehybná značka —
+                // a `repeatForever` se sám nezastaví, takže se nesmí spustit vůbec.
+                guard !reduceMotion else { return }
                 withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
                     angle = 360
                 }
             }
-            // Bez pohybu zůstane prstýnek stát — pořád je z něj poznat, že se něco děje, protože
-            // je nedokončený. Točit se něčím, co si člověk vypnul, je horší než nehybná značka.
-            .accessibilityHidden(false)
     }
 }
