@@ -43,6 +43,10 @@ struct FindingCardView: View {
         .modifier(DismissedRowStyle(row: row, actions: findingActions))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
+        // `onTapGesture` **není** akce, kterou VoiceOver umí spustit: prvek by se četl jako
+        // tlačítko, ale „activate“ by neudělalo nic. Skok se proto přidává i jako akce.
+        .accessibilityAction(.default, jump)
+        .accessibilityHint("Skočí na místo v diffu")
     }
 
     private var header: some View {
