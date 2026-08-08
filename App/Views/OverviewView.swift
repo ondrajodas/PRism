@@ -21,12 +21,37 @@ struct OverviewView: View {
     /// Rozbalení, odpovídání a vyřešení vláken (#73) — jeden parametr, protože patří k sobě.
     var threadActions = ThreadActions()
     var refresh: () -> Void = {}
+    /// Co přibylo od poslední návštěvy (#173). Prázdné = nic, nebo se ještě nenačetla
+    /// konverzace; banner se v obou případech nekreslí.
+    var changes: VisitChanges = .none
+    /// Proti čemu se změny počítají.
+    var lastVisit: Date?
+    /// Zastaraly nálezy nebo rozdělané review? Tvrzení o **uložených datech**, ne o časové ose,
+    /// takže ho počítá store.
+    var isStale = false
+    /// Nová hlava PR, pokud se od minule posunula — viz `SinceLastVisitView`.
+    var movedHead: String?
+    var rerun: (() -> Void)?
+    /// „Přečteno“ — viz `SinceLastVisitView`.
+    var dismissChanges: (() -> Void)?
 
     let pullRequest: PullRequestSummary
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                // Posunutá hlava se počítá jako změna i bez událostí: po rebase jsou commity
+                // starší než moje návštěva, takže se do `changes` nedostanou, ale kód je jiný.
+                if !changes.isEmpty || movedHead != nil {
+                    SinceLastVisitView(
+                        changes: changes,
+                        since: lastVisit,
+                        isStale: isStale,
+                        movedHead: movedHead,
+                        rerun: rerun,
+                        dismiss: dismissChanges
+                    )
+                }
                 descriptionCard
                 conversation
             }

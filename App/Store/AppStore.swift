@@ -280,6 +280,30 @@ final class AppStore {
     /// o útratu nestojí, ji nedostanou a řádek pak žádnou útratu neukazuje.
     let spend: SpendLedger?
 
+    /// Kdy jsem který PR naposled viděl (#173).
+    let visits: VisitLedger
+
+    /// Značka, proti které se **v tomhle běhu** počítá „od tvé poslední návštěvy“.
+    ///
+    /// Drží se zvlášť od zapsané návštěvy schválně, a je to tentýž vzor jako u odznaků `nové`
+    /// v okně s novinkami (#127): zapsat se musí hned při otevření, jinak by o návštěvě
+    /// nevěděl příští start — ale banner by se tím spotřeboval při prvním přepnutí tam a zpět.
+    /// Snapshot se proto nastaví jednou za běh aplikace a dál se nemění.
+    var visitSnapshots: [PRIdentifier: Date] = [:]
+
+    /// Hlava, kterou jsem u PR viděl při minulé návštěvě (#173). Čte se z ledgeru jednou, spolu
+    /// se snapshotem.
+    ///
+    /// **Chybějící klíč, ne `nil` uvnitř**: `[PRIdentifier: String?]` by dalo dvojitý optional
+    /// a `seenHeads[pr]` by vyšlo jako „něco tam je“ i pro uloženou `nil` hodnotu — pak by se
+    /// první otevření PR tvářilo jako posunutá hlava. Chytil to test, ne čtení kódu.
+    var seenHeads: [PRIdentifier: String] = [:]
+
+    /// PR, jehož detail je zrovna na obrazovce (#173). Drží se kvůli tomu, aby se poznalo
+    /// **odejití** — přepnutí jinam a návrat je nová návštěva, takže se banner podruhé
+    /// neukazuje. Uvnitř jednoho PR se tím nemění nic, takže odskok mezi taby o něj nepřipraví.
+    var openedPullRequest: PRIdentifier?
+
     init(
         gateway: any GitHubGateway,
         configuration: Configuration = .standard,
@@ -298,8 +322,10 @@ final class AppStore {
         notifications: (any UserNotifying)? = nil,
         announced: AnnouncedPullRequests? = nil,
         interrupted: InterruptedRuns? = nil,
-        transcripts: (any TranscriptReading)? = nil
+        transcripts: (any TranscriptReading)? = nil,
+        visits: VisitLedger = VisitLedger(preferences: UserDefaults.standard)
     ) {
+        self.visits = visits
         self.time = time
         self.gh = gh
         self.health = health

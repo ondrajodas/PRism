@@ -51,6 +51,10 @@ struct PullRequestDetailView: View {
         // Klon je jeden pro celé repo, takže druhé PR ze stejného repa může mít hotovo,
         // aniž by o tom kdo řekl. Zjistí se to při výběru řádku, ne klonováním.
         .task(id: pullRequest.id) { await store.noteExistingCheckout(for: pullRequest.id) }
+        // Návštěva se zapisuje **při zobrazení**, ne až po načtení konverzace: kdyby se čekalo
+        // na data, PR otevřený bez sítě by se za viděný nepovažoval a banner by příště ukázal
+        // i to, co jsem už četl.
+        .task(id: pullRequest.id) { store.noteVisit(to: pullRequest.id) }
         // Klíčem je celé shrnutí, ne jen identifikátor: nový commit změní `updatedAt`,
         // a to je přesně chvíle, kdy se má diff načíst znovu i bez přepnutí PR.
         .task(id: pullRequest) { await store.loadDiff(for: pullRequest) }
@@ -434,6 +438,16 @@ struct PullRequestDetailView: View {
                 ?? ConversationShortfall(),
             threadActions: threadActions,
             refresh: { Task { await store.refreshConversation(for: pullRequest) } },
+            changes: store.changesSinceLastVisit(for: pullRequest.id),
+            lastVisit: store.visitSnapshots[pullRequest.id],
+            // Obojí je „to, co mám na obrazovce, už neplatí“, takže se do banneru slévá do
+            // jedné věty — rozdíl mezi zastaralými nálezy a zastaralým draftem se řeší
+            // v panelu, kde se s nimi něco dělá.
+            isStale: store.reviewRecord(for: pullRequest.id)?.isStale == true
+                || store.isDraftStale(for: pullRequest.id),
+            movedHead: store.movedHead(for: pullRequest.id),
+            rerun: { store.startReview(for: pullRequest.id) },
+            dismissChanges: { store.markChangesAsSeen(for: pullRequest.id) },
             pullRequest: pullRequest
         )
     }

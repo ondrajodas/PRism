@@ -207,6 +207,17 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   že bez blokujících odznak nenaroste o „0 blokuje“ a že zastaralé zůstane žluté i s blokujícím.
   Past v testu: `Policy.key(of:)` skládá identitu z revieweera, místa a **shrnutí**, takže tři
   nálezy se stejným shrnutím jsou pro odmítnutí jeden a týž — vstup musí být rozlišitelný.
+- **`Policy.changes` a `VisitLedger` (#173)** — „co přibylo od minule“ ve dvou vrstvách.
+  `Policy` vyčerpávajícím výčtem: **bez značky se neukáže nic** (jinak by se u prvního otevření
+  vypsala celá historie), položka v tutéž sekundu se nepočítá (ostré porovnání), událost bez
+  data se zahodí, force-push má vlastní pole, moje komentáře nejsou novinka, odpověď ve vlákně
+  ano, neodeslané cizí review ne — a všechno chronologicky. `VisitLedger` na to, že návštěva
+  přežije novou instanci nad týmiž předvolbami, že se návštěvy různých PR nepletou, že zápis
+  **zahodí, co se přežilo** (a co je těsně pod hranicí, nechá), a že **rozbitá hodnota se čte
+  jako prázdno, ne jako pád** — včetně toho, že se přes ni dá zapsat, jinak by se takový stav
+  nedal opravit. A `AppStore` na **posunutou hlavu**: že se pozná i tehdy, když časová osa nic
+  nedá (rebase), že se nezměněná hlava za posun nevydává a že se bez znalosti té minulé netvrdí
+  nic — poslední z nich odhalil past s dvojitým optionalem, kterou čtení kódu minulo.
 - **`ToolAttempt`** — zkrácení proti pracovnímu stromu: relativní cesta, zahozené
   `cd <strom> &&`, cesta uvnitř příkazu, a že se bez stromu nic nemění. Pozor na past
   v testu: skutečný nástroj dostane cestu **nekódovanou**, takže `URL.path()` v přípravě
