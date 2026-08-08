@@ -2406,6 +2406,18 @@ Nad nálezy platí navíc:
   Barva stavu se řídí týmž pravidlem, jen o patro výš: `timedOut` a `interrupted` zůstávají
   **červené i bez nálezů**. Oranžová znamená „něco se našlo“, kdežto u nich je hlavní zpráva,
   že běh neskončil — `timeout · 0` oranžově by vypadalo jako výsledek.
+- **Nálezy v panelu jsou karty, ne tabulka** (#175). `Table` se při šířkách z #60 nedala
+  nasázet: kategorie, místo a shrnutí se perou o místo, odmítnutí (#113) muselo skončit jako
+  odznak u kategorie a delší nález se vešel na dva řádky bez možnosti rozbalit. Karta nese
+  závažnost **proužkem na hraně**, a to toutéž škálou jako řádek fronty (#172) — seznam a panel
+  nesmí o téže věci říkat každý něco jiného. Karta pod kurzorem procházení (#187) má rámeček,
+  takže je z lišty i z panelu poznat **totéž** místo; na tom stojí invariant, že
+  `FindingPlace(finding) == FindingPlace(group)`.
+
+  **Řazení podle sloupců se tím ztrácí a je to vědomé.** Nálezů je typicky pod dvacet,
+  `Policy.sorted` je řadí podle závažnosti a zúžit je jde filtrem reviewerů i přepínačem
+  `jen blokující`. `FindingRow` ale zůstává i se svými `Comparable` klíči — kdyby řazení
+  chybělo, vrátí se tabulka jako **druhý pohled**, ne místo karet.
 - **Skok míří na řádek, ale v seznamu je blok** (#187, oprava chyby z #157). Souvislé řádky se
   před vykreslením slévají do bloku kvůli výběru textu a blok nese `id` **jen toho prvního** —
   `scrollTo` na řádek uprostřed úseku tedy tiše neudělá nic. Blok si proto pamatuje `id` všech

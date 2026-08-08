@@ -207,6 +207,10 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   že bez blokujících odznak nenaroste o „0 blokuje“ a že zastaralé zůstane žluté i s blokujícím.
   Past v testu: `Policy.key(of:)` skládá identitu z revieweera, místa a **shrnutí**, takže tři
   nálezy se stejným shrnutím jsou pro odmítnutí jeden a týž — vstup musí být rozlišitelný.
+- **Karty nálezů (#175)** — `FindingRow` si testy nechává i po zahození tabulky: skládání textů
+  a pořadí z `Policy` platí pro karty stejně. Nově k nim invariant, že **nález a jeho skupina
+  dají totéž místo** (`FindingPlace`) — bez něj by lišta skákala jinam, než co je v panelu
+  označené jako aktuální, a nebylo by z čeho poznat proč.
 - **Skok na nález — cíl existuje v seznamu (#187)** — dvojice testů, která hlídá chybu z #157:
   kotva na řádek uprostřed bloku se musí přeložit na **něco, co v seznamu je**, a to v obou
   pohledech; druhý test naopak tvrdí, že **bez** překladu se netrefí. Z té dvojice je pak poznat,

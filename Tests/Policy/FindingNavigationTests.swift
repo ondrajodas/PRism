@@ -30,6 +30,19 @@ struct FindingNavigationTests {
         FindingPlace(group(file, line))
     }
 
+    @Test("Nález a jeho skupina dají totéž místo")
+    func aFindingAndItsGroupShareThePlace() {
+        // Na tomhle stojí zvýraznění karty v panelu (#175): kurzor se plní ze skupiny, ale
+        // karta se ptá za jednotlivý nález. Kdyby se ta dvě místa rozešla, lišta by skákala
+        // jinam, než co je v panelu označené — a nikdo by nepoznal proč.
+        let finding = makeFinding(file: "a.php", line: 10)
+        let group = FindingGroup(file: "a.php", line: 10, findings: [finding])
+
+        #expect(FindingPlace(finding) == FindingPlace(group))
+        // A nález bez místa v kódu žádné místo nedá — do procházení nepatří.
+        #expect(FindingPlace(makeFinding(file: nil, line: nil)) == nil)
+    }
+
     @Test("Bez kurzoru se jde dopředu, ne dozadu")
     func withoutACursorOnlyForwardIsPossible() {
         // První skok má vzít první nález, ne poslední.

@@ -187,20 +187,25 @@ kterému nevěřím, není práce k projití. Puntík zezelená, teprve až jsi 
 ne když skončíš na posledním; a nálezy bez místa v kódu se do počtu neplete — nedá se na ně
 skočit, tak je nápověda počítá zvlášť, aby `3/3` netvrdilo hotovo nad PR, kde zbývají v panelu.
 
-Pod diffem je **panel s taby**: řaditelná tabulka nálezů (kategorie, reviewer, místo,
-shrnutí), Průběh a Moje review. Panel je jediné místo, kde jsou vidět nálezy **bez místa
+Pod diffem je **panel s taby**: nálezy jako karty, Průběh a Moje review. Panel je jediné místo, kde jsou vidět nálezy **bez místa
 v kódu** — chybějící testy nebo poznámky k architektuře; kvůli nim samotné bubliny
 nestačí. Je vidět v **obou** záložkách, protože nálezy, průběh i rozdělané review patří
-k celému PR, ne k diffu. Klik na řádek odscrolluje diff (a přepne na něj, když jsi
+k celému PR, ne k diffu. Klik kamkoli do karty odscrolluje diff (a přepne na něj, když jsi
 v `Přehledu`) tak, aby nad nálezem zůstalo pár řádků kontextu, a bublinu na chvíli
 zvýrazní. Výška panelu se táhne za horní hranu a pamatuje se.
 
-**Většinu šířky tabulky dostane text nálezu**, protože to je to, co se čte; kategorie
-a reviewer si berou jen tolik, kolik potřebují. Co se přesto nevejde, řekne **nápověda po
-najetí myší** — má ji každý sloupec, protože každým se dá přetáhnout až na jeho minimum.
-`Místo` se ořezává **zepředu**, ať zůstane vidět jméno souboru a číslo řádku; text nálezu
-odzadu. U nálezu, který ke konkrétnímu místu v kódu nepatří, vysvětluje nápověda pomlčku
-ve sloupci.
+**Nález je karta se závažností na hraně** (#175): červená blokuje, oranžová je běžný nález,
+šedá odmítnutý — tatáž škála jako v řádku fronty, aby seznam a panel neříkaly o téže věci každý
+něco jiného. Nahoře `blokuje · kategorie · reviewer`, pod tím shrnutí na tři řádky a dole místo
+v kódu, ořezané **zepředu**, ať zůstane vidět jméno souboru a číslo řádku. Karta, na které stojí
+procházení šipkami, má rámeček a popisek `tady jsi`, takže je z panelu i z lišty nad diffem
+poznat totéž místo.
+
+Do #175 to byla řaditelná tabulka. **Řazení podle sloupců se tím ztratilo, a je to vědomé:**
+nálezů je typicky pod dvacet a `Policy` je řadí podle závažnosti, tedy tak, jak se mají číst;
+zúžit je jde filtrem reviewerů a přepínačem `jen blokující`. Tabulka se při šířkách okna
+nedala nasázet rozumně — kategorie, místo a shrnutí se praly o místo a odmítnutí muselo skončit
+jako odznak u kategorie, protože nový sloupec neměl kam.
 
 **Falešně pozitivní nález se dá odmítnout, aniž bys zahodil ostatní.** V bublině je
 `Odmítnout: neplatný · irelevantní` — `neplatný` znamená „reviewer se mýlí“, `irelevantní`

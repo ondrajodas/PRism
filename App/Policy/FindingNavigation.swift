@@ -33,6 +33,14 @@ struct FindingPlace: Hashable, Sendable {
         self.file = file
         self.line = group.line
     }
+
+    /// Místo jednoho nálezu. Skupiny se skládají právě podle `file:line`, takže nález a jeho
+    /// skupina dají **totéž** místo — a panel se tím trefí do téhož, na co skáče lišta.
+    init?(_ finding: Finding) {
+        guard let file = finding.file else { return nil }
+        self.file = file
+        self.line = finding.line
+    }
 }
 
 /// Co lišta ukazuje.
