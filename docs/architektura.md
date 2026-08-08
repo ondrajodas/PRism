@@ -2406,6 +2406,12 @@ Nad nálezy platí navíc:
   Barva stavu se řídí týmž pravidlem, jen o patro výš: `timedOut` a `interrupted` zůstávají
   **červené i bez nálezů**. Oranžová znamená „něco se našlo“, kdežto u nich je hlavní zpráva,
   že běh neskončil — `timeout · 0` oranžově by vypadalo jako výsledek.
+- **Potvrzení odeslání vypisuje payload, ne draft** (#178). Do té doby si sheet skládal místo
+  komentáře `Policy.location(of:)`, tedy **druhý** popis téhož — a `side` ani `start_line` v něm
+  nebyly vůbec, přestože právě ony rozhodují, ke kterému kódu komentář na GitHubu sedne. Teď se
+  bere z `PublishRequest.payload(for:)`, takže se výpis s odeslaným tělem nemůže rozejít; jména
+  polí zůstávají anglická ze stejného důvodu jako `APPROVE` u verdiktu. **Chování se tím
+  nemění** — tvrdá podmínka č. 1 platí beze změny.
 - **Hlavička PR ukazuje větve a dvě sha** (#174). `PullRequest` nese `headRef`/`baseRef`
   s **prázdnou výchozí hodnotou**, takže starší uložená data i odpověď bez těch polí projdou —
   tatáž úmluva jako u `body`. Hlava PR a sha, proti které platí nálezy, se kreslí **jen když se

@@ -158,9 +158,14 @@ struct ReviewSubmissionSheet: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
+                // Payload se skládá **jednou pro celou sekci**, ne pro každý řádek zvlášť:
+                // `PublishRequest.payload(for:)` mapuje celý draft, takže dotaz po řádcích je
+                // kvadratický. U dvaceti komentářů je to neměřitelné, ale je to přesně vzor,
+                // na který v tomhle repu Copilot chodí.
+                let payload = PublishRequest.payload(for: submission.draft)
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach(comments) { comment in
-                        commentRow(comment)
+                    ForEach(Array(comments.enumerated()), id: \.element.id) { index, comment in
+                        commentRow(comment, field: payload?.comments[safely: index])
                     }
                 }
             }
@@ -173,16 +178,13 @@ struct ReviewSubmissionSheet: View {
         comments.isEmpty ? "Řádkové komentáře" : "Řádkové komentáře · \(comments.count)"
     }
 
-    private func commentRow(_ comment: ReviewDraftComment) -> some View {
+    private func commentRow(
+        _ comment: ReviewDraftComment,
+        field: PublishRequest.Payload.Comment?
+    ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Text(verbatim: Policy.location(of: comment))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    // Zepředu, ať zůstane jméno souboru a číslo řádku — stejně jako
-                    // ve sloupci `Místo` v tabulce nálezů.
-                    .truncationMode(.head)
+                fields(of: comment, field: field)
                 if let reviewer = comment.origin.reviewer {
                     Text(verbatim: "z nálezu · \(reviewer)")
                         .font(.caption2)
@@ -193,6 +195,53 @@ struct ReviewSubmissionSheet: View {
             monospaced(comment.body)
         }
     }
+
+    /// Pole komentáře **tak, jak odejdou do API** (#178) — `path`, `line`/`start_line`, `side`.
+    ///
+    /// Bere se **ze skutečného payloadu**, ne z draftu: sheet je poslední brána a jeho jediná
+    /// práce je ukázat, co se odešle. Do #178 si zobrazení skládal `Policy.location(of:)`
+    /// vlastní cestou, takže to byl **druhý** popis téhož — a druhý popis se s prvním jednou
+    /// rozejde. `start_line` a `side` v něm navíc nebyly vůbec, přestože právě ony rozhodují,
+    /// ke kterému kódu komentář na GitHubu sedne.
+    ///
+    /// `nil` payload (chybí verdikt) sem nedojde — bez něj se sheet neotevře — ale kdyby, spadne
+    /// se na cestu z draftu, aby výpis nezmizel úplně.
+    @ViewBuilder private func fields(
+        of comment: ReviewDraftComment,
+        field: PublishRequest.Payload.Comment?
+    ) -> some View {
+        if let field {
+            Text(verbatim: field.path)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                // Zepředu, ať zůstane jméno souboru — stejně jako u místa nálezu.
+                .truncationMode(.head)
+            Text(verbatim: locationFields(of: field))
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+        } else {
+            Text(verbatim: Policy.location(of: comment))
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.head)
+        }
+    }
+
+    /// `line 81 · RIGHT`, u rozsahu `start_line 26 · LEFT → line 28 · RIGHT`.
+    ///
+    /// Jména polí jsou anglická schválně, stejně jako `APPROVE` u verdiktu: v payloadu se
+    /// jmenují takhle a člověk je má poznat, když se na PR podívá do API.
+    private func locationFields(of comment: PublishRequest.Payload.Comment) -> String {
+        let end = "line \(comment.line) · \(comment.side)"
+        guard let startLine = comment.startLine else { return end }
+        // Chybějící `start_side` znamená na GitHubu **tutéž stranu jako `side`**, takže se
+        // dosadí ona — vypsat prázdno by tvrdilo, že strana není určená, a ona je.
+        return "start_line \(startLine) · \(comment.startSide ?? comment.side) → \(end)"
+    }
+
 
     private func monospaced(_ text: String) -> some View {
         Text(verbatim: text)
