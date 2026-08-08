@@ -2441,6 +2441,11 @@ Nad nálezy platí navíc:
   `seenHeads` je `[PRIdentifier: String]`, ne `[PRIdentifier: String?]`: dvojitý optional dělá
   z „klíč tam je, ale hodnota je `nil`“ něco, co projde jako známá hlava, a první otevření PR se
   pak tváří jako posun. Chytil to test, ne čtení kódu.
+
+  **Obě baseline se posouvají naráz** (`moveBaseline`), a je to podmínka, ne úklid: banner stojí
+  na obou — `changes` na čase, „hlava se posunula“ na sha — takže po posunutí jen jedné zůstane
+  viset kvůli té zapomenuté. „Přečteno“ i „návrat je nová návštěva“ by pak přestaly platit přesně
+  v tom případě, kvůli kterému sha existuje: po rebase, kde časová osa mlčí.
 - **`suggestedVerdict` vrací `nil`, když není z čeho soudit** — a je to vlastní odpověď, ne
   opatrné `approve`. Schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou
   aplikace umí udělat. Z běhu se dá vyvodit „je čisto“, jen když **doběhl**, **zavolal

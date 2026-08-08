@@ -66,7 +66,27 @@ extension AppStore {
             previous != pullRequest,
             conversation(for: previous) != nil
         else { return }
-        visitSnapshots[previous] = time.now
+        moveBaseline(for: previous)
+    }
+
+    /// Posune **obě** baseline naráz — čas i hlavu — a zapíše je i na disk.
+    ///
+    /// Kdekoli se posouvá jedna, musí se posunout druhá. Banner totiž stojí na obou (`changes`
+    /// z času, „hlava se posunula“ ze sha), takže po posunutí jen jedné z nich zůstane viset
+    /// kvůli té zapomenuté — a „přečteno“ nebo „návrat je nová návštěva“ přestane platit
+    /// v přesně tom případě, kvůli kterému sha vůbec existuje: po rebase, kde časová osa mlčí.
+    ///
+    /// Hlava se posouvá jen tehdy, když je **detail načtený**: bez něj se nedá zapsat nic
+    /// pravdivého a přepsat ji na `nil` by znamenalo zahodit, co víme.
+    private func moveBaseline(for pullRequest: PRIdentifier) {
+        visitSnapshots[pullRequest] = time.now
+
+        guard case .loaded(let detail, _) = detailState(for: pullRequest) else {
+            visits.record(pullRequest, at: time.now)
+            return
+        }
+        seenHeads[pullRequest] = detail.headSha
+        visits.record(pullRequest, at: time.now, head: detail.headSha)
     }
 
     /// Co na PR přibylo od poslední návštěvy. Prázdné, dokud se nenačte konverzace — banner
@@ -89,7 +109,6 @@ extension AppStore {
     /// Zavření je proto **rozhodnutí člověka**, ne časovač. Nic se tím nezahazuje: co přibude
     /// potom, se objeví znovu.
     func markChangesAsSeen(for pullRequest: PRIdentifier) {
-        visitSnapshots[pullRequest] = time.now
-        visits.record(pullRequest, at: time.now)
+        moveBaseline(for: pullRequest)
     }
 }

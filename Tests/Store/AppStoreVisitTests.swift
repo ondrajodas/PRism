@@ -228,6 +228,62 @@ struct AppStoreVisitTests {
         #expect(store.movedHead(for: pr) == nil)
     }
 
+    @Test("Přečteno skryje i banner, který visel kvůli posunuté hlavě")
+    func markingAsSeenAlsoMovesTheHead() async {
+        // Křížek musí fungovat i v tom případě, kvůli kterému sha vůbec existuje: po rebase
+        // časová osa mlčí a banner drží jen posunutá hlava. Kdyby se posunul jen čas, pruh by
+        // po kliknutí zůstal viset.
+        let preferences = InMemoryPreferences()
+        let first = store(preferences: preferences, time: FakeTimeSource(start: start), head: "aaa1111")
+        first.noteVisit(to: pr)
+        await first.loadDetail(for: summary(pr))
+
+        let second = store(
+            preferences: preferences,
+            time: FakeTimeSource(start: start.addingTimeInterval(86_400)),
+            head: "bbb2222"
+        )
+        second.noteVisit(to: pr)
+        await second.loadDetail(for: summary(pr))
+        #expect(second.movedHead(for: pr) == "bbb2222")
+
+        second.markChangesAsSeen(for: pr)
+
+        #expect(second.movedHead(for: pr) == nil)
+        // A přežije to restart — jinak by se pruh vrátil při dalším spuštění.
+        #expect(VisitLedger(preferences: preferences).lastVisit(to: pr)?.head == "bbb2222")
+    }
+
+    @Test("Odchod na jiný PR posune i hlavu")
+    func leavingAlsoMovesTheHead() async {
+        // Totéž pravidlo jako u „přečteno": návrat je nová návštěva, takže po něm nesmí banner
+        // viset ani kvůli sha.
+        let preferences = InMemoryPreferences()
+        let first = store(preferences: preferences, time: FakeTimeSource(start: start), head: "aaa1111")
+        first.noteVisit(to: pr)
+        await first.loadDetail(for: summary(pr))
+
+        let time = FakeTimeSource(start: start.addingTimeInterval(86_400))
+        let second = AppStore(
+            gateway: FakeGitHubGateway(
+                [.success([])],
+                detail: .success(detail("bbb2222")),
+                conversations: [.success(emptyConversation)]
+            ),
+            time: time,
+            visits: VisitLedger(preferences: preferences)
+        )
+        second.noteVisit(to: pr)
+        await second.loadDetail(for: summary(pr))
+        await second.loadConversation(for: summary(pr))
+        #expect(second.movedHead(for: pr) == "bbb2222")
+
+        second.noteVisit(to: other)
+        second.noteVisit(to: pr)
+
+        #expect(second.movedHead(for: pr) == nil)
+    }
+
     @Test("Bez načtené konverzace se nic neukazuje")
     func withoutAConversationThereIsNothingToShow() {
         // „Nic nového" nad nenačtenými daty je tvrzení, které data neunesou.
