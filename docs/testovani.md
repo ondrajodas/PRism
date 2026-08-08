@@ -207,6 +207,17 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   že bez blokujících odznak nenaroste o „0 blokuje“ a že zastaralé zůstane žluté i s blokujícím.
   Past v testu: `Policy.key(of:)` skládá identitu z revieweera, místa a **shrnutí**, takže tři
   nálezy se stejným shrnutím jsou pro odmítnutí jeden a týž — vstup musí být rozlišitelný.
+- **Skok na nález — cíl existuje v seznamu (#187)** — dvojice testů, která hlídá chybu z #157:
+  kotva na řádek uprostřed bloku se musí přeložit na **něco, co v seznamu je**, a to v obou
+  pohledech; druhý test naopak tvrdí, že **bez** překladu se netrefí. Z té dvojice je pak poznat,
+  jestli spadlo zadání, nebo kód. Plus že se řádek mimo blok mapuje sám na sebe (jinak by přestal
+  fungovat skok na soubor) a že blok nezapomene ani jeden řádek, který spolkl.
+- **`Policy` — procházení nálezů (#187)** — vyčerpávajícím výčtem: bez kurzoru se jde jen
+  dopředu, šipky drží pořadí diffu, na kraji není kam, odmítnutý nález se přeskočí a skupina
+  bez platného nálezu vypadne celá. Tři případy, kvůli kterým to celé vzniklo: **nález bez místa
+  se počítá zvlášť** (jinak „1 z 1“ tvrdí hotovo nad PR se dvěma nálezy v panelu), **hotovo
+  znamená projitá všechna místa**, ne konec seznamu, a **ztracené místo pod kurzorem shodí jen
+  pozici** — po změně seznamu se nesmí ukázat „4 ze 3“.
 - **`Policy.changes` a `VisitLedger` (#173)** — „co přibylo od minule“ ve dvou vrstvách.
   `Policy` vyčerpávajícím výčtem: **bez značky se neukáže nic** (jinak by se u prvního otevření
   vypsala celá historie), položka v tutéž sekundu se nepočítá (ostré porovnání), událost bez

@@ -24,6 +24,13 @@ struct PullRequestDetailView: View {
     /// **smí** přetéct mezi pull requesty — jméno skillu znamená všude totéž.
     @State private var mutedReviewers: Set<String> = []
 
+    /// Kde jsem v procházení nálezů (#187).
+    ///
+    /// Na rozdíl od `mutedReviewers` **nesmí** přetéct mezi pull requesty: `file:line` z cizího
+    /// PR je náhodná shoda, a „prošel jsi všechno“ se rozhoduje z toho, co je v tomhle diffu.
+    /// Resetuje se proto při změně PR, viz `.task(id:)` níž.
+    @State private var cursor = FindingCursor()
+
     /// Který tab spodního panelu je vidět. Drží ho detail, ne panel: poznámka přidaná
     /// z diffu do těla review se musí umět přepnout na tab, kam spadla.
     @State private var panelTab: FindingsPanel.Tab = .findings
@@ -42,6 +49,7 @@ struct PullRequestDetailView: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background { navigationShortcuts }
         .task(id: highlighted) {
             guard highlighted != nil else { return }
             try? await Task.sleep(for: .seconds(2.5))
@@ -55,6 +63,8 @@ struct PullRequestDetailView: View {
         // na data, PR otevřený bez sítě by se za viděný nepovažoval a banner by příště ukázal
         // i to, co jsem už četl.
         .task(id: pullRequest.id) { store.noteVisit(to: pullRequest.id) }
+        // Kurzor procházení patří k tomuhle diffu, ne k oknu — viz `cursor`.
+        .task(id: pullRequest.id) { cursor = FindingCursor(onlyBlocking: cursor.onlyBlocking) }
         // Klíčem je celé shrnutí, ne jen identifikátor: nový commit změní `updatedAt`,
         // a to je přesně chvíle, kdy se má diff načíst znovu i bez přepnutí PR.
         .task(id: pullRequest) { await store.loadDiff(for: pullRequest) }
@@ -376,6 +386,61 @@ struct PullRequestDetailView: View {
         )
     }
 
+    /// Nálezy seskupené po místech. Skládá se na jednom místě, protože z toho čte diff
+    /// **i** procházení — dvě volání `Policy.groups` by se mohla rozejít v tom, co je jedno
+    /// místo, a lišta by pak počítala něco jiného, než na co skáče.
+    private var findingGroups: [FindingGroup] {
+        Policy.groups(of: visibleFindings, dismissals: dismissals)
+    }
+
+    /// Skok na další nebo předchozí nález (#187).
+    ///
+    /// Kurzor se posouvá **jen když se opravdu skočilo**: kdyby se posunul i při nezdaru
+    /// (soubor v diffu není), lišta by tvrdila, že jsem na místě, které jsem nikdy neviděl —
+    /// a „prošel jsi všechno“ by tím přestalo platit.
+    private func step(_ direction: NavigationStep, onlyBlocking: Bool? = nil) {
+        // `⌥⇧↓` skočí na další blokující, aniž by přepnul zúžení v liště: je to jednorázový
+        // pohyb, ne změna režimu čtení.
+        var cursor = cursor
+        if let onlyBlocking { cursor.onlyBlocking = onlyBlocking }
+
+        guard
+            let place = Policy.step(
+                direction,
+                over: findingGroups,
+                cursor: cursor,
+                categories: blockingCategories
+            ),
+            let finding = findingGroups
+                .first(where: { FindingPlace($0) == place })?
+                .activeFindings.first
+        else { return }
+
+        jump(to: finding)
+        // Zapisuje se do **vlastního** kurzoru, ne do té dočasné kopie výš, aby zúžení
+        // z `⌥⇧↓` nepřežilo jeden skok.
+        self.cursor = self.cursor.moved(to: place)
+    }
+
+    /// Zkratky bydlí **na detailu**, ne na tlačítkách v liště diffu: skočit na nález jde
+    /// i z `Přehledu` (skok si tab přepne sám), a tlačítko, které v tu chvíli není v okně,
+    /// by svou zkratku nemělo kde zaregistrovat.
+    ///
+    /// Průhledná tlačítka, ne `.hidden()`: skryté view z hierarchie zmizí i se zkratkou.
+    @ViewBuilder private var navigationShortcuts: some View {
+        VStack {
+            Button("Další nález") { step(.forward) }
+                .keyboardShortcut(.downArrow, modifiers: .option)
+            Button("Předchozí nález") { step(.backward) }
+                .keyboardShortcut(.upArrow, modifiers: .option)
+            Button("Další blokující nález") { step(.forward, onlyBlocking: true) }
+                .keyboardShortcut(.downArrow, modifiers: [.option, .shift])
+        }
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     /// Nález ukazuje na `file:line`; kde to je v diffu, ví `DiffRow`. Když se místo najít
     /// nedá (soubor v diffu není), nestane se nic — skákat naslepo je horší než nehnout se.
     private func jump(to finding: Finding) {
@@ -462,7 +527,7 @@ struct PullRequestDetailView: View {
                 scrollTarget: $scrollTarget,
                 expansion: expansionActions,
                 folding: foldingActions,
-                findings: Policy.groups(of: visibleFindings, dismissals: dismissals),
+                findings: findingGroups,
                 findingActions: findingActions,
                 blockingCategories: blockingCategories,
                 highlighted: highlighted,
@@ -472,7 +537,14 @@ struct PullRequestDetailView: View {
                 threadActions: threadActions,
                 comments: store.draftComments(for: pullRequest.id),
                 draft: draftActions,
-                layout: diffLayout
+                layout: diffLayout,
+                navigation: Policy.navigation(
+                    over: findingGroups,
+                    cursor: cursor,
+                    categories: blockingCategories
+                ),
+                onlyBlocking: $cursor.onlyBlocking,
+                stepFinding: { step($0) }
             )
         case .failed(let detail):
             diffFailure(detail)
