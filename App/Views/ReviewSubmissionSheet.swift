@@ -158,9 +158,14 @@ struct ReviewSubmissionSheet: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
+                // Payload se skládá **jednou pro celou sekci**, ne pro každý řádek zvlášť:
+                // `PublishRequest.payload(for:)` mapuje celý draft, takže dotaz po řádcích je
+                // kvadratický. U dvaceti komentářů je to neměřitelné, ale je to přesně vzor,
+                // na který v tomhle repu Copilot chodí.
+                let payload = PublishRequest.payload(for: submission.draft)
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach(comments) { comment in
-                        commentRow(comment)
+                    ForEach(Array(comments.enumerated()), id: \.element.id) { index, comment in
+                        commentRow(comment, field: payload?.comments[safely: index])
                     }
                 }
             }
@@ -173,10 +178,13 @@ struct ReviewSubmissionSheet: View {
         comments.isEmpty ? "Řádkové komentáře" : "Řádkové komentáře · \(comments.count)"
     }
 
-    private func commentRow(_ comment: ReviewDraftComment) -> some View {
+    private func commentRow(
+        _ comment: ReviewDraftComment,
+        field: PublishRequest.Payload.Comment?
+    ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                fields(of: comment)
+                fields(of: comment, field: field)
                 if let reviewer = comment.origin.reviewer {
                     Text(verbatim: "z nálezu · \(reviewer)")
                         .font(.caption2)
@@ -198,8 +206,11 @@ struct ReviewSubmissionSheet: View {
     ///
     /// `nil` payload (chybí verdikt) sem nedojde — bez něj se sheet neotevře — ale kdyby, spadne
     /// se na cestu z draftu, aby výpis nezmizel úplně.
-    @ViewBuilder private func fields(of comment: ReviewDraftComment) -> some View {
-        if let field = payloadComment(for: comment) {
+    @ViewBuilder private func fields(
+        of comment: ReviewDraftComment,
+        field: PublishRequest.Payload.Comment?
+    ) -> some View {
+        if let field {
             Text(verbatim: field.path)
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -231,16 +242,6 @@ struct ReviewSubmissionSheet: View {
         return "start_line \(startLine) · \(comment.startSide ?? comment.side) → \(end)"
     }
 
-    /// Komentář v payloadu, který odpovídá tomuhle draftovému. Páruje se pořadím, protože
-    /// `PublishRequest.payload` mapuje `draft.comments` jedna ku jedné.
-    private func payloadComment(for comment: ReviewDraftComment) -> PublishRequest.Payload.Comment? {
-        guard
-            let index = comments.firstIndex(where: { $0.id == comment.id }),
-            let payload = PublishRequest.payload(for: submission.draft),
-            payload.comments.indices.contains(index)
-        else { return nil }
-        return payload.comments[index]
-    }
 
     private func monospaced(_ text: String) -> some View {
         Text(verbatim: text)
