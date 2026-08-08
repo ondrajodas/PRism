@@ -54,12 +54,14 @@ struct FindingsPanel: View {
     @AppStorage("findingsPanelHeight") private var height = 220.0
     /// Sledovat konec časové osy. Předvolba pohledu, takže `UserDefaults`, ne store.
     @AppStorage("progressFollowsTail") private var followsTail = true
+    /// Kde stojí kurzor procházení (#187). Karta na tom místě dostane rámeček, takže panel
+    /// a diff ukazují **totéž** — bez toho by po skoku šipkou nebylo v seznamu poznat, kde jsem.
+    var current: FindingPlace?
+
     /// Který tab je vidět. Drží ho detail PR, ne panel: přidání poznámky do těla review se
     /// z diffu musí umět přepnout na tab, do kterého ta poznámka spadla — jinak text zmizí
     /// někam, kde ho nikdo nehledá.
     @Binding var tab: Tab
-    @State private var sortOrder: [KeyPathComparator<FindingRow>] = []
-    @State private var selection: FindingRow.ID?
     /// Výška na začátku tažení. Bez ní se posun načítá z každé události znovu a panel
     /// utíká pryč.
     @State private var heightAtDragStart: Double?
@@ -257,91 +259,35 @@ struct FindingsPanel: View {
                 .padding(16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
-            table
+            cards
         }
     }
 
-    /// Sloupce mají **strop** kromě `Nálezu`, a **každý má nápovědu**.
+    /// Karty, ne tabulka (#175).
     ///
-    /// Pružný sloupec bez `max` roste do nekonečna a AppKit dělí přebytek mezi všechny
-    /// takové — proto `Kategorie` s jedním slovem zabírala stejně jako text nálezu, který je
-    /// to hlavní. Strop je jediné, čím se dá říct „dál už neroste“, a co zbyde, spadne
-    /// `Nálezu`. Rozmezí jsou schválně široká, aby tažení za hlavičku pořád k něčemu bylo.
+    /// Tabulka se při šířkách z #60 nedala rozumně nasázet: kategorie, místo a shrnutí se
+    /// perou o místo, odmítnutí (#113) muselo skončit jako odznak u kategorie a delší nález
+    /// se vešel na dva řádky bez možnosti rozbalit. Karta má místa dost a **závažnost nese
+    /// proužek na hraně**, takže se čte dřív než text — jako v řádku fronty (#172).
     ///
-    /// A protože se každým sloupcem dá táhnout až na jeho `min`, umí se ořezat **každý** —
-    /// takže nápovědu má každý, ne jen ty dva, na které myslelo zadání. Ořezaný text bez
-    /// nápovědy je ztracený údaj a `Table` nemá kam rozbalit druhý řádek.
-    private var table: some View {
-        Table(rows, selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("Kategorie", value: \.category) { row in
-                HStack(spacing: 4) {
-                    if row.showsBlockingWarning {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                            .font(.caption2)
-                            .help("Blokující nález")
-                    }
-                    if let dismissal = row.dismissal {
-                        Text(verbatim: dismissal.reason.label)
-                            .font(.caption2)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(.secondary.opacity(0.15), in: .capsule)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(verbatim: row.category)
-                        .lineLimit(1)
+    /// **Řazení podle sloupců se tím ztrácí, a je to vědomé.** Nálezů je typicky pod dvacet
+    /// a `Policy.sorted` je řadí podle závažnosti, tedy tak, jak se mají číst; zúžit je jde
+    /// filtrem reviewerů a přepínačem `jen blokující` v liště nad diffem (#187). Kdyby se
+    /// ukázalo, že řazení chybí, vrátí se jako druhý pohled — proto zůstává `FindingRow`
+    /// se svými `Comparable` klíči, ze kterých tabulka žila.
+    private var cards: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 6) {
+                ForEach(rows) { row in
+                    FindingCardView(
+                        row: row,
+                        isCurrent: current == FindingPlace(row.finding),
+                        findingActions: findingActions,
+                        jump: { jump(row.finding) }
+                    )
                 }
-                .help(row.categoryHelp)
-                .modifier(DismissedRowStyle(row: row, actions: findingActions))
             }
-            .width(min: 100, ideal: 130, max: 190)
-
-            TableColumn("Reviewer", value: \.reviewer) { row in
-                Text(verbatim: row.reviewer)
-                    .lineLimit(1)
-                    .help(row.reviewer)
-                    .modifier(DismissedRowStyle(row: row, actions: findingActions))
-            }
-            // `code-review:code-review` je výchozí id z konfigurace, takže se vejít **musí**
-            // — jinak se sloupec ořezává pořád. Při 13pt systémovém fontu je to 154,7 pt
-            // a odsazení buňky bere dalších ~19, proto 185.
-            //
-            // Drží to `min`, ne `ideal`: s `ideal: 175` sloupec vyšel na ~139 pt a text se
-            // ořezal. `ideal` je nápověda, kterou rozdělování šířky přebije — vejít se
-            // zaručí jedině podlaha. Delší id se ořeže a dočte z nápovědy; vejít se musí to
-            // nejdelší **běžné**, ne každé.
-            .width(min: 185, ideal: 185, max: 260)
-
-            TableColumn("Místo", value: \.location) { row in
-                Text(verbatim: row.location)
-                    .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(row.finding.file == nil ? .secondary : .primary)
-                    .lineLimit(1)
-                    // Zepředu, ať zůstane jméno souboru a číslo řádku. Odzadu by z
-                    // `App/Views/…` zbyl společný prefix, který o nálezu neříká nic.
-                    .truncationMode(.head)
-                    .help(row.locationHelp)
-                    .modifier(DismissedRowStyle(row: row, actions: findingActions))
-            }
-            .width(min: 120, ideal: 240, max: 420)
-
-            TableColumn("Nález", value: \.summary) { row in
-                Text(verbatim: row.summary)
-                    .lineLimit(2)
-                    .help(row.summary)
-                    .modifier(DismissedRowStyle(row: row, actions: findingActions))
-            }
-            // Bez `max`, takže si vezme, co ostatní nechají. `min` je tu proto, aby v úzkém
-            // okně mizely ony a ne on — je to ten sloupec, kvůli kterému se tabulka čte.
-            .width(min: 220)
-        }
-        // Výběr se hned zahazuje, aby se na totéž místo dalo skočit i podruhé — jinak by
-        // druhé kliknutí na už vybraný řádek neudělalo nic.
-        .onChange(of: selection) { _, chosen in
-            guard let chosen, let row = rows.first(where: { $0.id == chosen }) else { return }
-            jump(row.finding)
-            selection = nil
+            .padding(10)
         }
     }
 
@@ -381,9 +327,9 @@ struct FindingsPanel: View {
 
     /// Bez řazení podle sloupce platí pořadí z `Policy` — tabulka nemá vlastní představu
     /// o tom, co patří nahoru, včetně toho, že odmítnuté jdou naspod.
+    /// Pořadí dává `Policy` — podle závažnosti, ne podle toho, co si kdo naklikal ve sloupci.
     private var rows: [FindingRow] {
-        let base = FindingRow.rows(of: findings, blocking: blockingCategories, dismissals: dismissals)
-        return sortOrder.isEmpty ? base : base.sorted(using: sortOrder)
+        FindingRow.rows(of: findings, blocking: blockingCategories, dismissals: dismissals)
     }
 
     private var countText: String {

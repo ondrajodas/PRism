@@ -171,6 +171,7 @@ struct PullRequestDetailView: View {
                 draftUnavailable: draftUnavailable,
                 draftActions: draftActions,
                 jumpToComment: jumpToComment,
+                current: cursor.current,
                 tab: $panelTab
             )
             // Panel si o místo říká **první**: má vlastní strop (výšku, kterou si uživatel
