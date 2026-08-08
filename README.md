@@ -59,7 +59,18 @@ Detail PR má **záložky jako GitHub**: `Přehled` a `Změněné soubory`, podt
 kolik je v přehledu k přečtení. Volba se pamatuje **u každého PR zvlášť** a otevírá se
 `Přehled` — popis a diskuze se čtou dřív než kód, kterého se týkají.
 
-**`Přehled`** nese to, co se neváže k žádnému řádku: popis PR od autora a pod ním konverzaci
+Úplně nahoře v `Přehledu` je **co se změnilo od tvé poslední návštěvy** (#173): nové commity,
+cizí review, komentáře — a hlavně **přepsaná historie větve**, protože právě po ní zastarají
+nálezy i rozdělané review. Tenhle jeden případ má vlastní barvu i větu o důsledku a nabízí
+pustit review znovu; jinak je to tiché oznámení. Banner se ukáže, **jen když opravdu něco
+přibylo**, a u PR otevřeného poprvé nikdy — „od tvé poslední návštěvy" by tam znamenalo „od
+začátku věků". Značka se posune hned při zobrazení, ale to, co je vidět, se během běhu aplikace
+nemění — odskok do `Změněných souborů` a zpátky o něj nepřipraví. **Odchod na jiný PR a návrat
+už je nová návštěva**, takže se banner podruhé neukazuje; projetí seznamu šipkami ho ale
+nespotřebuje, protože se posouvá jen u PR, u kterého se stihla načíst konverzace. Odklidit ho jde
+i rovnou křížkem vpravo.
+
+**`Přehled`** dál nese to, co se neváže k žádnému řádku: popis PR od autora a pod ním konverzaci
 chronologicky — review ostatních s odznakem (`schválil`, `vyžádal změny`), komentáře pod PR
 a vlákna, jejichž řádek v aktuálním diffu není (typicky zastaralá po novém commitu). Ta se
 kreslí **tou samou bublinou jako u kódu**, jen s cestou a řádkem nad ní — a **pod tím kus kódu,

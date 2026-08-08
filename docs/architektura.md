@@ -2327,6 +2327,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
+| `Policy.changes(in:since:)` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`) |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |
 | `Policy.snippet(of:context:)` | `diffHunk` vlákna → `ThreadSnippet`: posledních pár řádků po komentovaný a příznak zkrácení (#158). `nil` = úryvek se nemá z čeho vzít. **Není to `Policy.snapshot`** — ten je z dnešního diffu a slouží kotvám draftu |
 | `Policy.commentableSide(of:in:)` | Ke které **kanonické** straně by šel komentář; `nil` = nedá se komentovat |
@@ -2404,6 +2405,29 @@ Nad nálezy platí navíc:
   Barva stavu se řídí týmž pravidlem, jen o patro výš: `timedOut` a `interrupted` zůstávají
   **červené i bez nálezů**. Oranžová znamená „něco se našlo“, kdežto u nich je hlavní zpráva,
   že běh neskončil — `timeout · 0` oranžově by vypadalo jako výsledek.
+- **„Od tvé poslední návštěvy“ stojí na dvou různých značkách** (#173). `VisitLedger` je to,
+  co přežije restart; `AppStore.visitSnapshots` je to, **proti čemu se počítá v tomhle běhu**.
+  Zapsat návštěvu se musí hned při zobrazení, jinak by o ní příští start nevěděl — jenže tím by
+  se banner spotřeboval při prvním přepnutí tam a zpět. Snapshot se proto nastaví jednou za běh
+  a dál se nemění; je to tentýž vzor jako odznaky `nové` u novinek (#127). Tři pravidla, která
+  se u toho nemají rozbít:
+  - **Bez značky se neukáže nic.** PR viděný poprvé nemá „od minule“ — vypsat celou jeho
+    historii by tvrdilo, že to všechno přibylo teď.
+  - **Porovnává se ostře** (`>`), takže položka, která přišla v tutéž sekundu jako návštěva,
+    se příště nezopakuje. A **událost bez data se zahazuje**: `nil` znamená „nevíme kdy“
+    (`TimelineEvent.at`), kdežto řádek v banneru tvrdí „přišlo to teď“.
+  - **Moje vlastní komentáře nejsou novinka.** Banner odpovídá na to, co se stalo, když jsem se
+    nedíval.
+
+  Snapshot se posouvá **při odchodu na jiný PR**, ne při každém otevření a ne až s koncem
+  aplikace. Odejít a vrátit se je nová návštěva — během té první byl banner na obrazovce, takže
+  se podruhé neukazuje; uvnitř jednoho PR se ale nemění nic, aby o něj odskok do `Změněných
+  souborů` a zpátky nepřipravil. Podmínkou je **načtená konverzace** toho opouštěného PR: bez ní
+  se banner nemá z čeho vykreslit, takže na obrazovce nebyl, a projetí seznamu šipkami by jinak
+  zahodilo novinky u všech PR, přes které jsem přejel.
+
+  Vedle toho jde zavřít **ručně** (`markChangesAsSeen`) křížkem — to je pro „vím to hned teď, ať
+  to nezabírá místo“. Zavření posune **obě** značky, jinak by se pruh po restartu vrátil.
 - **`suggestedVerdict` vrací `nil`, když není z čeho soudit** — a je to vlastní odpověď, ne
   opatrné `approve`. Schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou
   aplikace umí udělat. Z běhu se dá vyvodit „je čisto“, jen když **doběhl**, **zavolal

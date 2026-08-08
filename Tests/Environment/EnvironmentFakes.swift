@@ -145,6 +145,15 @@ final class FakeTimeSource: TimeSource, @unchecked Sendable {
 
     var requestedSleeps: [Duration] { lock.withLock { sleeps } }
 
+    /// Posune hodiny bez čekání.
+    ///
+    /// Ne všechno, co v aplikaci závisí na čase, jde přes `sleep` pollingu — návštěva PR (#173)
+    /// se stane, když si na ni někdo klikne. Bez tohohle by se „mezitím uběhla hodina“ dalo
+    /// v testu vyjádřit jedině druhou instancí, a tím by se ztratilo, že jde o **tytéž** hodiny.
+    func advance(by seconds: TimeInterval) {
+        lock.withLock { current = current.addingTimeInterval(seconds) }
+    }
+
     func sleep(for duration: Duration) async throws {
         let count: Int = lock.withLock {
             sleeps.append(duration)
