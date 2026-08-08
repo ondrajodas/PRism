@@ -15,6 +15,10 @@ struct SinceLastVisitView: View {
     /// Zastaraly kvůli tomu nálezy nebo rozdělané review? Počítá store, ne tenhle typ —
     /// je to tvrzení o uložených datech, ne o časové ose.
     var isStale = false
+    /// Nová hlava PR, pokud se od minule posunula. Je to **druhý zdroj** vedle časové osy:
+    /// `TimelineEvent.at` je u commitu datum commitu, ne pushnutí, takže po rebase commity
+    /// z „od minule“ vypadnou — porovnání sha na to nesáhne.
+    var movedHead: String?
     var rerun: (() -> Void)?
     /// „Přečteno“. Bez toho by pruh visel, dokud je aplikace spuštěná — správně napoprvé,
     /// otravně napopáté.
@@ -24,7 +28,10 @@ struct SinceLastVisitView: View {
         VStack(alignment: .leading, spacing: 7) {
             header
             VStack(alignment: .leading, spacing: 3) {
-                ForEach(lines, id: \.self) { line in
+                // Identita je **pořadí**, ne text: dvě položky se snadno složí do stejné věty
+                // (dvě review od téhož autora se stejným verdiktem) a `id: \.self` by z nich
+                // udělal jeden řádek.
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                     Label {
                         Text(verbatim: line).font(.callout)
                     } icon: {
@@ -103,6 +110,11 @@ struct SinceLastVisitView: View {
             lines.append(
                 "\(Plural.czech(changes.commits.count, one: "nový commit", few: "nové commity", many: "nových commitů"))\(commitDetail)"
             )
+        } else if let movedHead {
+            // Hlava se posunula, ale žádný commit se do „od minule“ nevešel — typicky po
+            // rebase, kde jsou commity starší než moje návštěva. Říct se to musí, protože
+            // kód se změnil; kolik commitů to bylo, se z těch dat poctivě zjistit nedá.
+            lines.append("Hlava se posunula na \(movedHead.prefix(7))")
         }
         for review in changes.reviews {
             lines.append("\(review.author) \(verb(of: review))")

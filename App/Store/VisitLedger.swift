@@ -25,17 +25,35 @@ struct VisitLedger {
         self.preferences = preferences
     }
 
-    /// Kdy jsem PR viděl naposled. `nil` = nikdy, což je **jiný stav** než „dávno“: nad prvním
-    /// zobrazením se nemá co ukazovat, protože „od tvé poslední návštěvy“ by tam znamenalo
-    /// „od začátku věků“ a vypsalo by celou historii PR.
-    func lastVisit(to pullRequest: PRIdentifier) -> Date? {
+    /// Co si o poslední návštěvě pamatujeme.
+    ///
+    /// Vedle času i **hlava, kterou jsem tehdy viděl**. Bez ní by se nové commity poznávaly
+    /// jedině podle `TimelineEvent.at`, a to je u commitu **datum commitu, ne pushnutí**
+    /// (`pushedDate` GitHub neplní, změřeno u #171). Po rebase nebo cherry-picku je tedy starší
+    /// než moje návštěva a commit by z „od minule“ vypadl, přestože se na PR objevil teď —
+    /// tedy přesně ten nebezpečný směr, kdy banner mlčí o změně kódu.
+    struct Visit: Codable, Hashable, Sendable {
+        let at: Date
+        /// `nil` = návštěva proběhla dřív, než se stihl načíst detail PR.
+        var head: String?
+    }
+
+    /// Kdy jsem PR viděl naposled a s jakou hlavou. `nil` = nikdy, což je **jiný stav** než
+    /// „dávno“: nad prvním zobrazením se nemá co ukazovat, protože „od tvé poslední návštěvy“
+    /// by tam znamenalo „od začátku věků“ a vypsalo by celou historii PR.
+    func lastVisit(to pullRequest: PRIdentifier) -> Visit? {
         visits()[pullRequest.description]
     }
 
     /// Zapíše návštěvu a při té příležitosti zahodí, co se přežilo.
-    func record(_ pullRequest: PRIdentifier, at now: Date) {
-        var visits = visits().filter { now.timeIntervalSince($0.value) < Self.retention }
-        visits[pullRequest.description] = now
+    ///
+    /// `head` se **nepřepisuje na `nil`**: detail PR se načítá asynchronně, takže první zápis
+    /// hlavu ještě nezná a druhý (po načtení) ji doplní. Kdyby ji každý zápis přepsal, ztratila
+    /// by se pokaždé, když se na PR jen mrknu.
+    func record(_ pullRequest: PRIdentifier, at now: Date, head: String? = nil) {
+        var visits = visits().filter { now.timeIntervalSince($0.value.at) < Self.retention }
+        let key = pullRequest.description
+        visits[key] = Visit(at: now, head: head ?? visits[key]?.head)
         store(visits)
     }
 
@@ -45,16 +63,16 @@ struct VisitLedger {
     /// se banner neukáže. Opačná volba — tvářit se, že návštěva byla — by ukázala změny proti
     /// času, který jsme si vymysleli. Uživatelova data se tím neztrácejí, protože žádná
     /// nezadal; je to odvozený stav, který se do jednoho otevření PR obnoví sám.
-    private func visits() -> [String: Date] {
+    private func visits() -> [String: Visit] {
         guard
             let raw = preferences.preference(forKey: Self.key),
             let data = raw.data(using: .utf8),
-            let decoded = try? decoder.decode([String: Date].self, from: data)
+            let decoded = try? decoder.decode([String: Visit].self, from: data)
         else { return [:] }
         return decoded
     }
 
-    private func store(_ visits: [String: Date]) {
+    private func store(_ visits: [String: Visit]) {
         guard
             let data = try? encoder.encode(visits),
             let raw = String(data: data, encoding: .utf8)

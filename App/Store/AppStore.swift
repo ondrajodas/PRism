@@ -291,6 +291,14 @@ final class AppStore {
     /// Snapshot se proto nastaví jednou za běh aplikace a dál se nemění.
     var visitSnapshots: [PRIdentifier: Date] = [:]
 
+    /// Hlava, kterou jsem u PR viděl při minulé návštěvě (#173). Čte se z ledgeru jednou, spolu
+    /// se snapshotem.
+    ///
+    /// **Chybějící klíč, ne `nil` uvnitř**: `[PRIdentifier: String?]` by dalo dvojitý optional
+    /// a `seenHeads[pr]` by vyšlo jako „něco tam je“ i pro uloženou `nil` hodnotu — pak by se
+    /// první otevření PR tvářilo jako posunutá hlava. Chytil to test, ne čtení kódu.
+    var seenHeads: [PRIdentifier: String] = [:]
+
     /// PR, jehož detail je zrovna na obrazovce (#173). Drží se kvůli tomu, aby se poznalo
     /// **odejití** — přepnutí jinam a návrat je nová návštěva, takže se banner podruhé
     /// neukazuje. Uvnitř jednoho PR se tím nemění nic, takže odskok mezi taby o něj nepřipraví.

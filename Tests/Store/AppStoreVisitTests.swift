@@ -53,7 +53,7 @@ struct AppStoreVisitTests {
         store.noteVisit(to: pr)
 
         // Zapsaná je — jinak by o ní příští spuštění nevědělo.
-        #expect(VisitLedger(preferences: preferences).lastVisit(to: pr) == start)
+        #expect(VisitLedger(preferences: preferences).lastVisit(to: pr)?.at == start)
         // Ale snapshot je „teď", takže se nemá co ukázat: u PR viděného poprvé není „od minule".
         #expect(store.visitSnapshots[pr] == start)
     }
@@ -73,7 +73,7 @@ struct AppStoreVisitTests {
         store.noteVisit(to: pr)
 
         #expect(store.visitSnapshots[pr] == first)
-        #expect(VisitLedger(preferences: preferences).lastVisit(to: pr) == start.addingTimeInterval(3600))
+        #expect(VisitLedger(preferences: preferences).lastVisit(to: pr)?.at == start.addingTimeInterval(3600))
     }
 
     @Test("Odchod na jiný PR a návrat je nová návštěva")
@@ -135,7 +135,7 @@ struct AppStoreVisitTests {
 
         #expect(store.visitSnapshots[pr] == start.addingTimeInterval(3600))
         // A zapíše se i do předvoleb, jinak by se banner po restartu vrátil.
-        #expect(VisitLedger(preferences: preferences).lastVisit(to: pr) == start.addingTimeInterval(3600))
+        #expect(VisitLedger(preferences: preferences).lastVisit(to: pr)?.at == start.addingTimeInterval(3600))
     }
 
     @Test("Přečtené se dalším otevřením nevrátí")
@@ -152,6 +152,80 @@ struct AppStoreVisitTests {
         store.noteVisit(to: pr)
 
         #expect(store.visitSnapshots[pr] == start.addingTimeInterval(3600))
+    }
+
+    private func detail(_ head: String) -> PullRequest {
+        PullRequest(
+            id: pr,
+            title: "titulek",
+            author: "autor",
+            headSha: head,
+            baseSha: "base",
+            url: URL(string: "https://github.com/cli/cli/pull/1")!,
+            updatedAt: Date(timeIntervalSince1970: 100),
+            state: .open
+        )
+    }
+
+    private func store(
+        preferences: InMemoryPreferences,
+        time: FakeTimeSource,
+        head: String
+    ) -> AppStore {
+        AppStore(
+            gateway: FakeGitHubGateway([.success([])], detail: .success(detail(head))),
+            time: time,
+            visits: VisitLedger(preferences: preferences)
+        )
+    }
+
+    @Test("Posunutá hlava se pozná i bez commitu na časové ose")
+    func aMovedHeadIsDetectedWithoutTimelineEvents() async {
+        // Tohle je ten případ, kvůli kterému se hlava vůbec ukládá: `TimelineEvent.at` je
+        // u commitu `committedDate`, ne čas pushnutí, takže po rebase je starší než moje
+        // návštěva a commit z „od minule" vypadne. Porovnání sha na to nesáhne.
+        let preferences = InMemoryPreferences()
+        let first = store(preferences: preferences, time: FakeTimeSource(start: start), head: "aaa1111")
+        first.noteVisit(to: pr)
+        await first.loadDetail(for: summary(pr))
+
+        let second = store(
+            preferences: preferences,
+            time: FakeTimeSource(start: start.addingTimeInterval(86_400)),
+            head: "bbb2222"
+        )
+        second.noteVisit(to: pr)
+        await second.loadDetail(for: summary(pr))
+
+        #expect(second.movedHead(for: pr) == "bbb2222")
+    }
+
+    @Test("Nezměněná hlava se za posun nevydává")
+    func anUnchangedHeadIsNotAMove() async {
+        let preferences = InMemoryPreferences()
+        let first = store(preferences: preferences, time: FakeTimeSource(start: start), head: "aaa1111")
+        first.noteVisit(to: pr)
+        await first.loadDetail(for: summary(pr))
+
+        let second = store(
+            preferences: preferences,
+            time: FakeTimeSource(start: start.addingTimeInterval(86_400)),
+            head: "aaa1111"
+        )
+        second.noteVisit(to: pr)
+        await second.loadDetail(for: summary(pr))
+
+        #expect(second.movedHead(for: pr) == nil)
+    }
+
+    @Test("Bez znalosti minulé hlavy se posun netvrdí")
+    func withoutAKnownHeadNothingIsClaimed() async {
+        // První otevření PR: starou hlavu neznáme, takže „posunulo se" by byla výmluva.
+        let store = store(preferences: InMemoryPreferences(), time: FakeTimeSource(start: start), head: "aaa1111")
+        store.noteVisit(to: pr)
+        await store.loadDetail(for: summary(pr))
+
+        #expect(store.movedHead(for: pr) == nil)
     }
 
     @Test("Bez načtené konverzace se nic neukazuje")

@@ -215,7 +215,9 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   přežije novou instanci nad týmiž předvolbami, že se návštěvy různých PR nepletou, že zápis
   **zahodí, co se přežilo** (a co je těsně pod hranicí, nechá), a že **rozbitá hodnota se čte
   jako prázdno, ne jako pád** — včetně toho, že se přes ni dá zapsat, jinak by se takový stav
-  nedal opravit.
+  nedal opravit. A `AppStore` na **posunutou hlavu**: že se pozná i tehdy, když časová osa nic
+  nedá (rebase), že se nezměněná hlava za posun nevydává a že se bez znalosti té minulé netvrdí
+  nic — poslední z nich odhalil past s dvojitým optionalem, kterou čtení kódu minulo.
 - **`ToolAttempt`** — zkrácení proti pracovnímu stromu: relativní cesta, zahozené
   `cd <strom> &&`, cesta uvnitř příkazu, a že se bez stromu nic nemění. Pozor na past
   v testu: skutečný nástroj dostane cestu **nekódovanou**, takže `URL.path()` v přípravě

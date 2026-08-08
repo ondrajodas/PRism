@@ -445,6 +445,7 @@ struct PullRequestDetailView: View {
             // v panelu, kde se s nimi něco dělá.
             isStale: store.reviewRecord(for: pullRequest.id)?.isStale == true
                 || store.isDraftStale(for: pullRequest.id),
+            movedHead: store.movedHead(for: pullRequest.id),
             rerun: { store.startReview(for: pullRequest.id) },
             dismissChanges: { store.markChangesAsSeen(for: pullRequest.id) },
             pullRequest: pullRequest

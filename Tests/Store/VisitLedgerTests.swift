@@ -24,7 +24,7 @@ struct VisitLedgerTests {
         VisitLedger(preferences: preferences).record(pr, at: now)
 
         // Nová instance nad týmiž předvolbami — tohle je to, co se děje při dalším spuštění.
-        #expect(VisitLedger(preferences: preferences).lastVisit(to: pr) == now)
+        #expect(VisitLedger(preferences: preferences).lastVisit(to: pr)?.at == now)
     }
 
     @Test("Návštěvy různých PR se nepletou")
@@ -35,8 +35,8 @@ struct VisitLedgerTests {
         ledger.record(pr, at: now)
         ledger.record(other, at: now.addingTimeInterval(60))
 
-        #expect(ledger.lastVisit(to: pr) == now)
-        #expect(ledger.lastVisit(to: other) == now.addingTimeInterval(60))
+        #expect(ledger.lastVisit(to: pr)?.at == now)
+        #expect(ledger.lastVisit(to: other)?.at == now.addingTimeInterval(60))
     }
 
     @Test("Zápis zahodí, co se přežilo")
@@ -60,7 +60,7 @@ struct VisitLedgerTests {
 
         ledger.record(pr, at: now.addingTimeInterval(VisitLedger.retention - 1))
 
-        #expect(ledger.lastVisit(to: other) == now)
+        #expect(ledger.lastVisit(to: other)?.at == now)
     }
 
     @Test("Rozbitá hodnota se čte jako prázdno, ne jako pád")
@@ -75,6 +75,6 @@ struct VisitLedgerTests {
 
         // A zápis přes rozbitou hodnotu funguje dál — jinak by se stav nedal opravit.
         ledger.record(pr, at: now)
-        #expect(ledger.lastVisit(to: pr) == now)
+        #expect(ledger.lastVisit(to: pr)?.at == now)
     }
 }

@@ -29,6 +29,8 @@ struct OverviewView: View {
     /// Zastaraly nálezy nebo rozdělané review? Tvrzení o **uložených datech**, ne o časové ose,
     /// takže ho počítá store.
     var isStale = false
+    /// Nová hlava PR, pokud se od minule posunula — viz `SinceLastVisitView`.
+    var movedHead: String?
     var rerun: (() -> Void)?
     /// „Přečteno“ — viz `SinceLastVisitView`.
     var dismissChanges: (() -> Void)?
@@ -38,11 +40,14 @@ struct OverviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if !changes.isEmpty {
+                // Posunutá hlava se počítá jako změna i bez událostí: po rebase jsou commity
+                // starší než moje návštěva, takže se do `changes` nedostanou, ale kód je jiný.
+                if !changes.isEmpty || movedHead != nil {
                     SinceLastVisitView(
                         changes: changes,
                         since: lastVisit,
                         isStale: isStale,
+                        movedHead: movedHead,
                         rerun: rerun,
                         dismiss: dismissChanges
                     )

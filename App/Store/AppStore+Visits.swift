@@ -18,12 +18,39 @@ extension AppStore {
         openedPullRequest = pullRequest
 
         if visitSnapshots[pullRequest] == nil {
+            let previous = visits.lastVisit(to: pullRequest)
             // `Date.distantPast` u PR, který jsem nikdy neviděl, **nepoužíváme** — `nil` z
             // ledgeru propadne do snapshotu jako „nevím“ a změny pak vyjdou prázdné.
             // Ukázat při prvním otevření celou historii PR by nebylo „co je nového“.
-            visitSnapshots[pullRequest] = visits.lastVisit(to: pullRequest) ?? time.now
+            visitSnapshots[pullRequest] = previous?.at ?? time.now
+            // Klíč se zakládá, jen když hlavu **známe** — viz `seenHeads`.
+            if let head = previous?.head { seenHeads[pullRequest] = head }
         }
         visits.record(pullRequest, at: time.now)
+    }
+
+    /// Doplní hlavu, kterou jsem u PR viděl (#173).
+    ///
+    /// Volá se, až když se načte detail — `noteVisit` běží dřív a `headSha` v tu chvíli není.
+    /// Ukládá se proto, že **datum commitu nestačí**: `TimelineEvent.at` je u commitu
+    /// `committedDate`, ne čas pushnutí (`pushedDate` GitHub neplní, změřeno u #171), takže po
+    /// rebase nebo cherry-picku je starší než moje návštěva a commit by z „od minule“ vypadl.
+    /// Porovnání sha na to nesáhne — buď se hlava posunula, nebo ne.
+    func noteHead(_ head: String, for pullRequest: PRIdentifier) {
+        visits.record(pullRequest, at: time.now, head: head)
+    }
+
+    /// Posunula se od minule hlava PR? Vrací **novou** hlavu, jinak `nil`.
+    ///
+    /// `nil` i tehdy, když jsem minulou hlavu neviděl (stará návštěva bez `head`, nebo první
+    /// otevření): tvrdit „posunulo se“ proti něčemu, co neznám, by byla výmluva, ne informace.
+    func movedHead(for pullRequest: PRIdentifier) -> String? {
+        guard
+            let seen = seenHeads[pullRequest],
+            case .loaded(let detail, _) = detailState(for: pullRequest),
+            detail.headSha != seen
+        else { return nil }
+        return detail.headSha
     }
 
     /// Posune značku u PR, ze kterého jsem právě odešel — ale **jen když se konverzace stihla

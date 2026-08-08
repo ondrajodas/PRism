@@ -2428,6 +2428,19 @@ Nad nálezy platí navíc:
 
   Vedle toho jde zavřít **ručně** (`markChangesAsSeen`) křížkem — to je pro „vím to hned teď, ať
   to nezabírá místo“. Zavření posune **obě** značky, jinak by se pruh po restartu vrátil.
+- **Nové commity se nepoznají jen podle času** (#173). `TimelineEvent.at` je u commitu
+  `committedDate`, ne čas pushnutí (`pushedDate` GitHub neplní, změřeno u #171), takže po rebase
+  nebo cherry-picku je **starší než moje poslední návštěva** a commit z „od minule“ vypadne —
+  banner by mlčel o změně kódu, což je ten nebezpečný směr. `VisitLedger` si proto vedle času
+  pamatuje i **hlavu, kterou jsem viděl**, a `AppStore.movedHead(for:)` ji porovná s aktuální.
+  Když se liší a časová osa nic nedala, řekne se aspoň „hlava se posunula na …“; kolik commitů
+  to bylo, se z těch dat poctivě zjistit nedá. Hlava se zapisuje **až po načtení detailu**,
+  protože při zaznamenání návštěvy ještě není známá — a `record` ji proto **nepřepisuje na
+  `nil`**, jinak by ji každé mrknutí na PR zahodilo.
+
+  `seenHeads` je `[PRIdentifier: String]`, ne `[PRIdentifier: String?]`: dvojitý optional dělá
+  z „klíč tam je, ale hodnota je `nil`“ něco, co projde jako známá hlava, a první otevření PR se
+  pak tváří jako posun. Chytil to test, ne čtení kódu.
 - **`suggestedVerdict` vrací `nil`, když není z čeho soudit** — a je to vlastní odpověď, ne
   opatrné `approve`. Schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou
   aplikace umí udělat. Z běhu se dá vyvodit „je čisto“, jen když **doběhl**, **zavolal
