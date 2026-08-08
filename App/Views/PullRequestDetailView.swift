@@ -88,12 +88,17 @@ struct PullRequestDetailView: View {
                 review
             }
             HStack(spacing: 10) {
-                Text(pullRequest.id.description)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Link("otevřít na GitHubu", destination: pullRequest.url).font(.callout)
+                PullRequestHeaderView(pullRequest: pullRequest, detail: loadedDetail)
+                Spacer(minLength: 8)
                 checkout
                 draftChip
+            }
+            // Jen když se hlava rozešla se sha, proti které platí nálezy — jinak by to byl
+            // řádek s údajem, který nikoho nezajímá.
+            if let head = loadedDetail?.headSha,
+               let findingsHead = store.reviewRecord(for: pullRequest.id)?.headSha,
+               head != findingsHead {
+                StaleHeadView(head: head, findingsHead: findingsHead)
             }
             reviewers
             // Selhání checkoutu se do lišty nevejde, a právě u něj je text od `gitu`
@@ -118,6 +123,21 @@ struct PullRequestDetailView: View {
             // na PR s dvaceti commity odznak ukazoval třicet a přestal by o diskuzi něco říkat.
             tab == .overview ? store.overview(for: pullRequest.id).count { $0.isReadable } : nil
         }
+        .diffCounts(loadedDiffCounts)
+    }
+
+    /// Rozsah změny pro záložky (#174). `nil`, dokud diff nedorazí — nuly by tvrdily,
+    /// že PR nic nemění.
+    private var loadedDiffCounts: (additions: Int, deletions: Int)? {
+        guard case .loaded(let diff, _) = store.diffState(for: pullRequest.id) else { return nil }
+        return (diff.additions, diff.deletions)
+    }
+
+    /// Načtený detail PR. `nil` u načítání i selhání — hlavička si v obou případech
+    /// prostě nekreslí, co ještě neví.
+    private var loadedDetail: PullRequest? {
+        guard case .loaded(let detail, _) = store.detailState(for: pullRequest.id) else { return nil }
+        return detail
     }
 
     /// Volba tabu žije ve store (per PR), takže si ji vlastní binding jen podává dál.

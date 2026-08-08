@@ -55,6 +55,13 @@ v detailu je dole lišta s **návrhem verdiktu** (`approve` / `request changes` 
 z čeho soudit*) a rozbaleným seznamem nálezů po kategoriích, s odznakem u těch blokujících.
 Kliknutím na nález diff odskočí na jeho `file:line`.
 
+Nad záložkami je **hlavička s tím, kam se to merguje** (#174): stav PR jako chip, `autor chce
+sloučit větev → base` a odkaz na GitHub. Větve se do okna dostaly až s #174 a je to první věc,
+kterou u cizího PR hledám. Když se **hlava PR rozejde se sha, proti které platí nálezy**, přibude
+pod tím řádek s oběma — dokud se rovnají, je to trivia, jakmile se rozejdou, je to nejdůležitější
+údaj na obrazovce, protože všechno pod ním mluví o kódu, který na větvi už není. Vpravo u záložek
+je rozsah změny (`+X −Y`).
+
 Detail PR má **záložky jako GitHub**: `Přehled` a `Změněné soubory`, podtržené, s odznakem
 kolik je v přehledu k přečtení. Volba se pamatuje **u každého PR zvlášť** a otevírá se
 `Přehled` — popis a diskuze se čtou dřív než kód, kterého se týkají.

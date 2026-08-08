@@ -207,6 +207,10 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   že bez blokujících odznak nenaroste o „0 blokuje“ a že zastaralé zůstane žluté i s blokujícím.
   Past v testu: `Policy.key(of:)` skládá identitu z revieweera, místa a **shrnutí**, takže tři
   nálezy se stejným shrnutím jsou pro odmítnutí jeden a týž — vstup musí být rozlišitelný.
+- **Detail PR — větve (#174)** — fixture `pr-view-open.json` dostal `headRefName`/`baseRefName`
+  ze skutečného volání téhož PR (mergem se větve nemění), takže testy dál stojí na reálném
+  výstupu. Vedle toho test, že **detail bez těch polí se pořád přečte**: přibyla až s #174
+  a chybějící pole nesmí položit detail, na kterém stojí `headSha` pro review.
 - **Karty nálezů (#175)** — `FindingRow` si testy nechává i po zahození tabulky: skládání textů
   a pořadí z `Policy` platí pro karty stejně. Nově k nim invariant, že **nález a jeho skupina
   dají totéž místo** (`FindingPlace`) — bez něj by lišta skákala jinam, než co je v panelu

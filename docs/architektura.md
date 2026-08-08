@@ -2406,6 +2406,10 @@ Nad nálezy platí navíc:
   Barva stavu se řídí týmž pravidlem, jen o patro výš: `timedOut` a `interrupted` zůstávají
   **červené i bez nálezů**. Oranžová znamená „něco se našlo“, kdežto u nich je hlavní zpráva,
   že běh neskončil — `timeout · 0` oranžově by vypadalo jako výsledek.
+- **Hlavička PR ukazuje větve a dvě sha** (#174). `PullRequest` nese `headRef`/`baseRef`
+  s **prázdnou výchozí hodnotou**, takže starší uložená data i odpověď bez těch polí projdou —
+  tatáž úmluva jako u `body`. Hlava PR a sha, proti které platí nálezy, se kreslí **jen když se
+  rozejdou**: do té doby je to řádek s údajem, který nikoho nezajímá.
 - **Nálezy v panelu jsou karty, ne tabulka** (#175). `Table` se při šířkách z #60 nedala
   nasázet: kategorie, místo a shrnutí se perou o místo, odmítnutí (#113) muselo skončit jako
   odznak u kategorie a delší nález se vešel na dva řádky bez možnosti rozbalit. Karta nese

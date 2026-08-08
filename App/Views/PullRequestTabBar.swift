@@ -11,6 +11,17 @@ struct PullRequestTabBar: View {
     /// Kolik je v tabu k přečtení. `nil` i nula znamenají „bez odznaku“ — `0` by tvrdilo,
     /// že je co číst.
     var count: (PullRequestTab) -> Int? = { _ in nil }
+    /// Rozsah změny (#174) — `+X −Y` vpravo v řadě záložek. `nil`, dokud diff nedorazí:
+    /// nuly by tvrdily, že PR nic nemění.
+    private(set) var diffCounts: (additions: Int, deletions: Int)?
+
+    /// Doplní rozsah změny. Vlastní metoda, ne parametr v `init`u: volající ho počítá až
+    /// z načteného diffu, takže by jinak musel psát `nil` i tam, kde ho nemá odkud vzít.
+    func diffCounts(_ counts: (additions: Int, deletions: Int)?) -> PullRequestTabBar {
+        var copy = self
+        copy.diffCounts = counts
+        return copy
+    }
 
     /// Kvůli podtržení, které mezi záložkami **přejede**, ne přeskočí. Jedna instance
     /// v aktivní záložce, takže se animuje přesun ze zmizelé do nové.
@@ -20,7 +31,17 @@ struct PullRequestTabBar: View {
     var body: some View {
         HStack(spacing: 2) {
             ForEach(PullRequestTab.allCases, id: \.self) { item($0) }
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
+            if let diffCounts {
+                // Stojí u záložek, ne v hlavičce: mluví o tom, co je v `Změněných souborech`,
+                // a je to tentýž údaj jako v souhrnu nad diffem — proto `DiffCounts`, ne
+                // vlastní skládání, které by se s ním jednou rozešlo.
+                DiffCounts.text(additions: diffCounts.additions, deletions: diffCounts.deletions)
+                    .font(.caption)
+                    .monospacedDigit()
+                    .padding(.trailing, 4)
+                    .help("Kolik řádků PR přidává a ubírá")
+            }
         }
         .padding(.horizontal, 12)
         // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
