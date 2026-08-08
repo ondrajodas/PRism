@@ -13,6 +13,13 @@ struct DiffBlock: Hashable, Sendable {
     /// Řádky bloku v pořadí, jak jsou v souboru. Čísla řádků a znaky změny se kreslí **mimo text**
     /// (`DiffTextView`), aby se nekopírovaly — blok drží jen ty řádky.
     let lines: [DiffLine]
+    /// Identity řádků, které se do bloku slily.
+    ///
+    /// Blok se v seznamu kreslí pod `id` toho **prvního**, takže na ostatní se skočit nedá —
+    /// `scrollTo` na jejich `id` tiše neudělá nic. Tenhle seznam je to, čím se cíl skoku přeloží
+    /// na blok, který ho pokrývá (`DiffRow.blockIDs(in:)`). Bez něj mířil skok na nález uprostřed
+    /// úseku do prázdna, což bylo od #157 vidět jako „klik nedělá nic“.
+    var ids: [String] = []
 }
 
 /// Totéž pro pohled **vedle sebe**: dva bloky, které si odpovídají řádek po řádku.
@@ -25,6 +32,9 @@ struct DiffPairBlock: Hashable, Sendable {
     /// Levá strana po řádcích; `nil` = na téhle straně dvojice řádek není.
     let left: [DiffLine?]
     let right: [DiffLine?]
+
+    /// Identity slitých dvojic — viz `DiffBlock.ids`.
+    var ids: [String] = []
 
     /// Kolik řádků dvojice má. Obě strany mají po sloučení **stejnou délku** (viz `blockedPairs`),
     /// takže je to jen pojmenování toho, co drží zarovnání sloupců.
@@ -47,7 +57,10 @@ extension DiffRow {
 
         func flush() {
             guard let first = pending.first else { return }
-            result.append(.block(first.id, DiffBlock(lines: pending.map(\.line))))
+            result.append(.block(
+                first.id,
+                DiffBlock(lines: pending.map(\.line), ids: pending.map(\.id))
+            ))
             pending = []
         }
 
@@ -72,7 +85,11 @@ extension DiffRow {
             guard let first = pending.first else { return }
             result.append(.pairBlock(
                 first.id,
-                DiffPairBlock(left: pending.map(\.left), right: pending.map(\.right))
+                DiffPairBlock(
+                    left: pending.map(\.left),
+                    right: pending.map(\.right),
+                    ids: pending.map(\.id)
+                )
             ))
             pending = []
         }
@@ -87,5 +104,30 @@ extension DiffRow {
         }
         flush()
         return result
+    }
+}
+
+extension DiffRow {
+    /// Překlad `id` řádku na `id` bloku, který ho pokrývá.
+    ///
+    /// Skok na nález i na komentář míří na **řádek**, ale v seznamu je od #157 blok — a ten nese
+    /// `id` jen toho prvního. Bez překladu `scrollTo` tiše nic neudělá, což je ta nejhorší podoba
+    /// chyby: nic se nestane a není z čeho poznat proč.
+    ///
+    /// Řádky, které se do bloku neslily (hlavičky, bubliny, expandery), se mapují samy na sebe,
+    /// takže výsledek pokrývá **všechno**, na co se dá skočit.
+    static func blockIDs(in rows: [DiffRow]) -> [String: String] {
+        var index: [String: String] = [:]
+        for row in rows {
+            switch row {
+            case .block(let id, let block):
+                for lineID in block.ids { index[lineID] = id }
+            case .pairBlock(let id, let block):
+                for lineID in block.ids { index[lineID] = id }
+            default:
+                index[row.id] = row.id
+            }
+        }
+        return index
     }
 }

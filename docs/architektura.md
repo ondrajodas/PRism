@@ -2327,6 +2327,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
+| `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
 | `Policy.changes(in:since:)` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`) |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |
 | `Policy.snippet(of:context:)` | `diffHunk` vlákna → `ThreadSnippet`: posledních pár řádků po komentovaný a příznak zkrácení (#158). `nil` = úryvek se nemá z čeho vzít. **Není to `Policy.snapshot`** — ten je z dnešního diffu a slouží kotvám draftu |
@@ -2405,6 +2406,37 @@ Nad nálezy platí navíc:
   Barva stavu se řídí týmž pravidlem, jen o patro výš: `timedOut` a `interrupted` zůstávají
   **červené i bez nálezů**. Oranžová znamená „něco se našlo“, kdežto u nich je hlavní zpráva,
   že běh neskončil — `timeout · 0` oranžově by vypadalo jako výsledek.
+- **Skok míří na řádek, ale v seznamu je blok** (#187, oprava chyby z #157). Souvislé řádky se
+  před vykreslením slévají do bloku kvůli výběru textu a blok nese `id` **jen toho prvního** —
+  `scrollTo` na řádek uprostřed úseku tedy tiše neudělá nic. Blok si proto pamatuje `id` všech
+  řádků, které do něj spadly, a `DiffView` si cíl přeloží (`DiffRow.blockIDs(in:)`) **týmiž
+  vstupy, jakými ten soubor kreslí**: kde se blok přeruší, závisí na bublinách, vláknech,
+  komentářích i odkrytých úsecích, takže index z jiných vstupů by ukazoval na blok, který
+  v seznamu není.
+
+  Byla to tichá chyba i pro skok z panelu, jen si jí nikdo nevšiml: nález na prvním řádku bloku
+  (hned za hlavičkou hunku) fungoval. `DiffRow.anchor(in:comment:layout:)` má tutéž past
+  zapsanou od split pohledu — u nálezů se nedotáhla.
+- **Kurzor procházení drží místo, ne index** (#187). Seznam nálezů se pod rukama mění —
+  doběhne další reviewer, nález se odmítne, zapne se zúžení — a index by po každé takové změně
+  ukazoval jinam, aniž by se cokoli stalo. `FindingPlace` je `file:line`, tedy totéž, čím se
+  skupina identifikuje v diffu. Čtyři pravidla:
+  - **Odmítnuté se přeskakují.** Nález, kterému nevěřím, není práce k projití; kdyby v řadě
+    zůstal, „prošel jsi všechno“ by znamenalo i „proklikal jsi to, co jsi zamítl“.
+  - **Hotovo = projitá všechna místa**, ne „stojím na posledním“. Přeskákat je zprostředka
+    a skončit na konci neznamená, že jsem viděl i ta před tím — a zelený puntík je jediné
+    místo, kde okno tvrdí, že je práce hotová.
+  - **Nálezy bez místa v kódu se počítají zvlášť** (`withoutPlace`). Skočit se na ně nedá, ale
+    zamlčet je nejde: „1 z 1“ by nad PR se dvěma nálezy v panelu tvrdilo hotovo.
+  - **Ztracené místo pod kurzorem shodí pozici, ne seznam.** Ukázat „4 ze 3“ je horší než
+    přiznat, že nikde nestojím; z takového stavu se jde dopředu od začátku.
+
+  Kurzor **nesmí přetéct mezi pull requesty** (na rozdíl od ztlumených reviewerů nebo pohledu
+  na diff): `file:line` z cizího PR je náhodná shoda a „prošel jsi všechno“ se rozhoduje z toho,
+  co je v tomhle diffu. Zúžení `jen blokující` přetéct **smí** — je to způsob čtení.
+
+  Zvýraznění po skoku zůstává **dočasné**, jak bylo od #20: trvalý rámeček by se pletl
+  s blokujícím nálezem. Kde stojím, drží lišta, ne barva v diffu.
 - **„Od tvé poslední návštěvy“ stojí na dvou různých značkách** (#173). `VisitLedger` je to,
   co přežije restart; `AppStore.visitSnapshots` je to, **proti čemu se počítá v tomhle běhu**.
   Zapsat návštěvu se musí hned při zobrazení, jinak by o ní příští start nevěděl — jenže tím by

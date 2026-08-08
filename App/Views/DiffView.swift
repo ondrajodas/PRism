@@ -41,6 +41,11 @@ struct DiffView: View {
     /// zavření aplikace**. Zapisovat ji na disk by znamenalo, že se nastavená hodnota mění
     /// sama tím, že si člověk u jednoho souboru otočí pohled.
     @Binding var layout: DiffLayout
+    /// Stav procházení nálezů (#187). Počítá ho volající, protože skáče taky on — lišta jen
+    /// ukazuje, co z toho vyšlo.
+    var navigation: FindingNavigation = .none
+    var onlyBlocking: Binding<Bool> = .constant(false)
+    var stepFinding: ((NavigationStep) -> Void)?
 
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
@@ -77,10 +82,34 @@ struct DiffView: View {
             // spustí i při vzniku.
             .task(id: scrollTarget) {
                 guard let target = scrollTarget else { return }
-                withAnimation { proxy.scrollTo(target, anchor: jumpAnchor) }
+                // Cíl je **řádek**, ale v seznamu je od #157 blok, který nese `id` jen toho
+                // prvního — bez překladu `scrollTo` tiše nic neudělá.
+                withAnimation { proxy.scrollTo(blockID(covering: target), anchor: jumpAnchor) }
                 scrollTarget = nil
             }
         }
+    }
+
+    /// Blok, který cílový řádek pokrývá — a když žádný, cíl sám.
+    ///
+    /// Skládá se **týmiž vstupy, jakými se ten soubor kreslí** (pohled, odkryté úseky, bubliny,
+    /// vlákna, komentáře): kde se blok přeruší, na nich totiž závisí, a index poskládaný z jiných
+    /// vstupů by ukazoval na blok, který v seznamu není. Počítá se jen při skoku, tedy jednou za
+    /// kliknutí, a jen pro **jeden** soubor.
+    private func blockID(covering target: String) -> String {
+        guard let file = diff.files.first(where: { target.hasPrefix($0.id) }) else { return target }
+        let state = expansion.state(file)
+        let rows = DiffRow.rows(
+            of: file,
+            layout: layout,
+            revealed: state.revealed,
+            content: state.content,
+            findings: showBubbles ? findings : [],
+            threads: threads,
+            comments: comments
+        )
+        let blocked = layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows)
+        return DiffRow.blockIDs(in: blocked)[target] ?? target
     }
 
     /// Kam v okně skočí nález — **k vršku, ale s odstupem na pár řádků kontextu**.
@@ -223,6 +252,16 @@ struct DiffView: View {
                 missingThreadsWarning
             }
             Spacer()
+            // Procházení stojí **vlevo od pohledu a přepínačů**: je to jediná věc v liště,
+            // která se používá při každém review, kdežto zbytek se nastaví a nechá být.
+            if let stepFinding, !navigation.isEmpty {
+                FindingNavigationView(
+                    navigation: navigation,
+                    onlyBlocking: onlyBlocking,
+                    step: stepFinding
+                )
+                Divider().frame(height: 16)
+            }
             layoutPicker
             if !findings.isEmpty {
                 // Jmenuje se `Nálezy`, ne `Bubliny`: schovává **jen** nálezy, kdežto

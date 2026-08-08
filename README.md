@@ -179,6 +179,14 @@ reviewerů na jednom místě označí `2×`, ale jejich texty se neslučují. N�
 v diffu není, se neztratí: visí u hlavičky souboru a nabídne ten řádek dotáhnout. Bubliny
 jdou vypnout přepínačem nad diffem.
 
+**Nálezy se procházejí šipkami v liště nad diffem** (#187): `2/3` a dvě šipky, klávesově
+`⌥↓` a `⌥↑`, na další blokující `⌥⇧↓`. Do té doby vedla cesta k dalšímu nálezu vždycky přes
+panel — najít ho v seznamu a kliknout — takže seznam musel být pořád vidět. Zúžení
+`jen blokující` mění, kam šipky skáčou; **odmítnuté nálezy se přeskakují**, protože nález,
+kterému nevěřím, není práce k projití. Puntík zezelená, teprve až jsi prošel **všechna** místa,
+ne když skončíš na posledním; a nálezy bez místa v kódu se do počtu neplete — nedá se na ně
+skočit, tak je nápověda počítá zvlášť, aby `3/3` netvrdilo hotovo nad PR, kde zbývají v panelu.
+
 Pod diffem je **panel s taby**: řaditelná tabulka nálezů (kategorie, reviewer, místo,
 shrnutí), Průběh a Moje review. Panel je jediné místo, kde jsou vidět nálezy **bez místa
 v kódu** — chybějící testy nebo poznámky k architektuře; kvůli nim samotné bubliny
