@@ -532,6 +532,7 @@ struct PullRequestDetailView: View {
         OverviewView(
             description: store.description(of: pullRequest.id),
             facts: facts,
+            checks: store.checks[pullRequest.id] ?? [],
             changes: store.changesSinceLastVisit(for: pullRequest.id),
             lastVisit: store.visitSnapshots[pullRequest.id],
             // Obojí je „to, co mám na obrazovce, už neplatí“, takže se do banneru slévá do

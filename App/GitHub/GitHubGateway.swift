@@ -15,6 +15,12 @@ protocol GitHubGateway: Sendable {
     /// Doplní metadata, která vyhledávání nedává — hlavně `headSha` a `baseSha`.
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest
 
+    /// Checky na PR (#209) — jak dopadly joby z GitHub Actions a další statusy.
+    ///
+    /// **Čtení, jako všechno ostatní tady**: restart workflow do aplikace nepatří (tvrdá
+    /// podmínka č. 1). PR bez checků vrací prázdno, ne chybu — je to normální stav.
+    func fetchChecks(id: PRIdentifier) async throws -> [PullRequestCheck]
+
     /// Diff pull requestu jako **syrový text** unified diffu.
     ///
     /// Nerozparsovaný schválně: tvar diffu není nic, co by `gh` definoval (na rozdíl od

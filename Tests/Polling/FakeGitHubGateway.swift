@@ -93,6 +93,11 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     }
 
     /// Polling detail netahá — SHA potřebuje až review, ne seznam.
+    /// Co vrátí `fetchChecks` (#209). Většina testů checky nepotřebuje, takže prázdno.
+    var checks: [PullRequestCheck] = []
+
+    func fetchChecks(id: PRIdentifier) async throws -> [PullRequestCheck] { checks }
+
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {
         let answer: Result<PullRequest, any Error>? = lock.withLock {
             detailsAsked.append(id)

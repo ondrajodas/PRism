@@ -45,6 +45,10 @@ extension AppStore {
             // Hlavu si pamatuje i návštěva (#173): datum commitu na poznání nových commitů
             // nestačí, protože po rebase je starší než moje poslední návštěva.
             noteHead(detail.headSha, for: id)
+            // Checky se tahají **s detailem** (#209), ne pollingem přes všechna PR: to je
+            // tatáž N+1 past, kvůli které se netahá ani detail. Selhání je nechá prázdné —
+            // je to doplněk k PR, ne důvod položit načtení hlavičky.
+            checks[id] = (try? await gateway.fetchChecks(id: id)) ?? []
         } catch is CancellationError {
             // Maže se **jen** rozdělaný stav: mezitím spuštěné načtení už mohlo doběhnout.
             if detailStates[id] == .loading { detailStates[id] = nil }
