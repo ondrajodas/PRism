@@ -14,11 +14,21 @@ struct ProportionalColumns: Layout {
     let spacing: Double
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let widths = widths(in: proposal.width ?? 0, count: subviews.count)
-        let heights = zip(subviews, widths).map {
+        // **Bez konečné navržené šířky se poměr nemá z čeho počítat.** Dosadit nulu by znamenalo
+        // změřit sloupce v nulové šířce — tedy vrátit výšku textu zalomeného po písmenech, což je
+        // číslo, které s ničím nesouvisí. Volající se na to ptá při zjišťování přirozené velikosti
+        // (`.unspecified`, `.infinity`), takže se odpoví přirozenou šířkou sloupců.
+        guard let total = proposal.width, total.isFinite, total > 0 else {
+            let sizes = subviews.map { $0.sizeThatFits(proposal) }
+            return CGSize(
+                width: sizes.map(\.width).reduce(0, +) + spacing * Double(max(subviews.count - 1, 0)),
+                height: sizes.map(\.height).max() ?? 0
+            )
+        }
+        let heights = zip(subviews, widths(in: total, count: subviews.count)).map {
             $0.sizeThatFits(ProposedViewSize(width: $1, height: proposal.height)).height
         }
-        return CGSize(width: proposal.width ?? widths.reduce(0, +), height: heights.max() ?? 0)
+        return CGSize(width: total, height: heights.max() ?? 0)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -33,7 +43,10 @@ struct ProportionalColumns: Layout {
     }
 
     /// Šířky sloupců z toho, co zbude po mezerách.
-    private func widths(in total: Double, count: Int) -> [Double] {
+    ///
+    /// `internal`, ne `private`: je to jediná počítaná část layoutu a jinak by se nedala změřit —
+    /// `Layout` se bez hostitelského okna vykreslit nedá.
+    func widths(in total: Double, count: Int) -> [Double] {
         guard count > 0 else { return [] }
         let ratios = (0..<count).map { $0 < self.ratios.count ? self.ratios[$0] : 1 }
         let sum = ratios.reduce(0, +)

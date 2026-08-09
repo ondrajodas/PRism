@@ -151,6 +151,12 @@ extension Policy {
         }
         return counts
             .map { ReviewerShareOfFindings(reviewer: $0.key, findings: $0.value) }
-            .sorted { ($0.findings, $1.reviewer) > ($1.findings, $0.reviewer) }
+            // Od nejvíc nálezů, při shodě podle jména. Rozepsané, ne přes prohozenou dvojici:
+            // slovník pořadí nemá, takže druhé kritérium je to jediné, co drží legendu klidnou
+            // mezi překreslením — a musí být z kódu vidět, ne z triku s obrácenými prvky.
+            .sorted {
+                if $0.findings != $1.findings { return $0.findings > $1.findings }
+                return $0.reviewer < $1.reviewer
+            }
     }
 }

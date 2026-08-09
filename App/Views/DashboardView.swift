@@ -414,8 +414,8 @@ struct DashboardView: View {
 /// Sloupcový graf útraty za posledních pár dní (#181).
 ///
 /// **Dnešek je zvýrazněný**, ostatní dny jsou tlumené: karta mluví o dnešku a graf je kontext,
-/// ne druhé číslo. Den bez útraty má nulovou výšku, ale zůstává v řadě — jinak by sloupce
-/// přestaly znamenat dny.
+/// ne druhé číslo. Den bez útraty zůstává v řadě jako **čárka o jednom bodu** — nulová výška by
+/// z něj udělala prázdné místo a sloupce by přestaly znamenat dny.
 struct SpendSparkline: View {
     let days: [DaySpend]
 
@@ -429,16 +429,22 @@ struct SpendSparkline: View {
                     .frame(maxWidth: .infinity)
             }
         }
-        .frame(height: 26)
+        .frame(height: Self.fullHeight)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Útrata za posledních \(days.count) dní")
     }
 
     /// Výška podle nejdražšího dne v okně. Kdyby se škálovalo podle absolutní částky, byl by
     /// graf u levného týdne plochý a nedalo by se z něj nic přečíst.
+    ///
+    /// **Podlaha je jeden bod, ne nula** — i den, ve kterém se neutratilo nic, musí být v řadě
+    /// vidět, jinak se nedá spočítat, kolikátý zleva je dnešek.
     private func height(of day: DaySpend) -> Double {
         let peak = days.map(\.spend.cost).max() ?? 0
-        guard peak > 0 else { return 1 }
-        return max(1, 26 * day.spend.cost / peak)
+        guard peak > 0 else { return Self.floorHeight }
+        return max(Self.floorHeight, Self.fullHeight * day.spend.cost / peak)
     }
+
+    private static let fullHeight = 26.0
+    private static let floorHeight = 1.0
 }
