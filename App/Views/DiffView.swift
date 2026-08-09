@@ -60,6 +60,11 @@ struct DiffView: View {
     /// (`onGeometryChange`), takže do rozvržení nezasahuje: `GeometryReader` by naopak sám
     /// zabral místo a v tomhle okně už jednou nadělal škodu.
     @State private var viewportHeight = 0.0
+    /// Pro který pohled už automatika sloupce složila (#188). Bez toho by se opakovala při
+    /// každém vzniku view a přebíjela ruční `⌘1`/`⌘2`.
+    @State private var appliedLayout: DiffLayout?
+    /// Šířka, kterou má diff k dispozici — z ní se počítá, kolik znaků se vejde na stranu (#188).
+    @State private var contentWidth = 0.0
     /// Rámečky řádků pro tažení rozsahu (#110). `@State`, aby přežily překreslení; obsah je
     /// mimo observable stav, takže se jimi diff nepřekresluje — viz `DiffRowFrames`.
     @State private var rowFrames = DiffRowFrames()
@@ -82,6 +87,25 @@ struct DiffView: View {
                 HStack(spacing: 0) {
                     tree(jumpingWith: proxy)
                     files
+                }
+            }
+            // **Pohled vedle sebe složí postranní sloupce** (#188). Řádek se v něm dělí na dvě
+            // strany, takže na 14" nezbude ani 100 znaků; pod sebou je zase rozbalí. Ruční
+            // `⌘1`/`⌘2` to přebijí jednoduše tím, že platí až do **další** změny pohledu.
+            //
+            // `task(id:)`, ne `onChange`: pohled se drží napříč pull requesty (a výchozí je
+            // z nastavení), takže s `onChange` by se na PR otevřeném rovnou ve splitu nesložilo
+            // nic — změna nepřišla. `task(id:)` se spustí i při vzniku.
+            .task(id: layout) {
+                // **Jen jednou na pohled.** `task(id:)` se spustí i při novém vzniku view —
+                // a to nastane pokaždé, když se přepne panel vpravo, protože se tím přestaví
+                // `HStack` v detailu PR. Bez téhle stráže se ručně otevřený strom hned zase
+                // složil a nešel otevřít vůbec.
+                guard appliedLayout != layout else { return }
+                appliedLayout = layout
+                withAnimation(.snappy(duration: 0.15)) {
+                    isTreeExpanded = layout != .split
+                    panelExpanded?.wrappedValue = layout != .split
                 }
             }
             // Kam cíl skočí, řeší `jumpAnchor`: **k vršku, ale s odstupem**. Na vrch samotný
@@ -170,7 +194,10 @@ struct DiffView: View {
             .coordinateSpace(.named(Self.contentSpace))
         }
         // Jen měření, žádný vliv na rozvržení — proto `onGeometryChange` a ne `GeometryReader`.
-        .onGeometryChange(for: Double.self) { $0.size.height } action: { viewportHeight = $0 }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: {
+            viewportHeight = $0.height
+            contentWidth = $0.width
+        }
         .sheet(item: $codeText) { CodeTextSheet(content: $0) }
     }
 
@@ -297,6 +324,7 @@ struct DiffView: View {
                 .font(.callout)
                 .buttonStyle(.borderless)
             }
+            widthGauge
             columnToggles
             jumpMenu(proxy)
         }
@@ -381,6 +409,35 @@ struct DiffView: View {
         .foregroundStyle(.orange)
     }
 
+    /// Kolik znaků se vejde na stranu (#188).
+    ///
+    /// Ukazuje se **jen tehdy, když je slib porušený** — nad 120 znaků je to číslo, které nikoho
+    /// nezajímá, kdežto pod ním je to jediné vysvětlení, proč se řádky lámou. Měří se skutečné
+    /// okno, ne tabulka z zadání: ta platí pro jeden displej a jedno nastavení.
+    @ViewBuilder private var widthGauge: some View {
+        let characters = Policy.charactersPerSide(
+            contentWidth: contentWidth,
+            characterWidth: Self.characterWidth,
+            layout: layout,
+            // Skutečná šířka sloupců vlevo, ne odhad — kreslí je `DiffLineView`.
+            gutter: DiffLineView.contentInset(for: layout)
+        )
+        if contentWidth > 0, characters < Policy.promisedCharactersPerSide {
+            Label("\(characters) znaků na stranu", systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .monospacedDigit()
+                .help("Aplikace slibuje \(Policy.promisedCharactersPerSide) znaků. Pomůže složit sloupce nebo přepnout na pohled pod sebou.")
+        }
+    }
+
+    /// Šířka jednoho znaku písma, kterým se sází kód. Mono písmo má všechny znaky stejně široké,
+    /// takže stačí změřit jeden — a `maximumAdvancement` u něj vrací tutéž hodnotu.
+    private static let characterWidth = NSFont.monospacedSystemFont(
+        ofSize: NSFont.systemFontSize,
+        weight: .regular
+    ).maximumAdvancement.width
+
     /// Přepínače postranních sloupců, jak je má návrh v liště nad diffem (#197): `Strom ⌘1`
     /// a `Nálezy ⌘2`.
     ///
@@ -418,8 +475,41 @@ struct DiffView: View {
     /// a bez čísla na hraně se na ni po složení nedá odpovědět.
     @ViewBuilder private func tree(jumpingWith proxy: ScrollViewProxy) -> some View {
         if isTreeExpanded {
-            FileTreeView(files: diff.files, markers: fileMarkers, isCompact: true) { file in
-                jump(to: file, with: proxy)
+            VStack(spacing: 0) {
+                // Hlavička jako u panelu vpravo: popisek z návrhu (`7 SOUBORŮ`) a šipka, kterou
+                // se sloupec zavře. Zavírat jedině z lišty nad diffem znamená hledat tlačítko
+                // na druhém konci okna, než u kterého člověk zrovna je.
+                HStack(spacing: 8) {
+                    Text(verbatim: Plural.czech(
+                        diff.files.count,
+                        one: "soubor",
+                        few: "soubory",
+                        many: "souborů"
+                    ).uppercased())
+                        .font(.system(size: 10, design: .monospaced))
+                        .tracking(1)
+                        .foregroundStyle(Palette.ink3)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Button {
+                        withAnimation(.snappy(duration: 0.15)) { isTreeExpanded = false }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.caption)
+                            .foregroundStyle(Palette.ink3)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Složit strom souborů (⌘1)")
+                    .accessibilityLabel("Složit strom souborů")
+                }
+                .padding(.horizontal, 13)
+                .padding(.vertical, 9)
+                .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
+
+                FileTreeView(files: diff.files, markers: fileMarkers, isCompact: true) { file in
+                    jump(to: file, with: proxy)
+                }
             }
             .frame(width: Self.treeWidth)
             .background(Palette.chrome)
@@ -439,13 +529,24 @@ struct DiffView: View {
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
                         .background(Palette.raised, in: .rect(cornerRadius: 4))
-                    Text("soubory")
+                    // Svislý popisek: **`fixedSize` a pak výška**, ne šířka. Otočený text má
+                    // pořád vodorovný rámeček, takže omezením šířky se ořízne — a delší
+                    // popisek pak leze přes odznak nad sebou.
+                    Text(verbatim: Plural.word(
+                        diff.files.count,
+                        one: "soubor",
+                        few: "soubory",
+                        many: "souborů"
+                    ))
                         .font(.system(size: 10.5))
                         .tracking(0.6)
                         .foregroundStyle(Palette.ink3)
                         .fixedSize()
                         .rotationEffect(.degrees(90))
-                        .frame(width: Self.collapsedTreeWidth)
+                        // Otočení **nemění rozvržení** — rámeček zůstává vodorovný. Bez rámečku
+                        // po otočení si tedy proužek vezme šířku nenatočeného textu a roztáhne
+                        // se; proto se tady zadává **otočený otisk** (úzký a vysoký).
+                        .frame(width: 13, height: 62)
                     Spacer(minLength: 0)
                 }
                 .padding(.vertical, 10)

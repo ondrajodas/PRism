@@ -669,6 +669,10 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
 
   **Značku `≥` u neúplné útraty** (`RunUsageText.spent`) čtou od #181 dvě místa, takže má vlastní
   test — formát částky se netestuje, ten závisí na locale.
+- **Šířka diffu ve znacích (#188)** — `Policy` výčtem. Pokazit se dá potichu jedno: **zapomenout,
+  že se vedle sebe dělí šířka na dvě strany**. Číslo by pak tvrdilo, že se slib drží, zrovna
+  v režimu, ve kterém se nedrží. K tomu nezměřené okno (nula je pravda o měření, ne o okně)
+  a nulová šířka znaku, na které by dělení spadlo.
 - **Značky souborů ve stromu (#197)** — `Policy` výčtem. Pokazit se dá potichu jedno: **nechat
   blokující přebít obyčejným nálezem**. Značka by pak záležela na pořadí, ve kterém nálezy
   dorazily, takže se testuje v **obou pořadích**. K tomu nález bez cesty (patří celému PR, ne

@@ -1715,6 +1715,16 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
 - **Panel je v obou tabech.** Nálezy bez místa v kódu, průběh i moje rozdělané review
   se vážou k celému PR — schovat je za přepnutí tabu by znamenalo, že se rozepsané review
   „ztratí“ přepnutím na `Přehled`.
+- **Pohled vedle sebe složí postranní sloupce** (#188). Řádek se v něm dělí na dvě strany, takže
+  na 14" nezbude ani 100 znaků ani se složenými sloupci; pod sebou se zase rozbalí. Tři pravidla:
+  - **`task(id: layout)`, ne `onChange`.** Pohled se drží napříč pull requesty a výchozí je
+    z nastavení, takže s `onChange` by se na PR otevřeném rovnou ve splitu nesložilo nic — změna
+    nepřišla. Ověřeno na běžící aplikaci: ukazatel skočil ze 67 na 78 znaků, jak se strom složil.
+  - **Ruční `⌘1`/`⌘2` automatiku přebijí** — a jednoduše tím, že platí až do další změny pohledu.
+    Žádný další příznak; stav sloupce je jediná pravda.
+  - **Kolik znaků zbývá, se měří, ne bere z tabulky.** Tabulka v zadání #188 platí pro jeden
+    displej a jedno nastavení; číslo v liště platí pro okno, které mám otevřené. Ukazuje se
+    **jen pod slibem** (120 znaků z `CLAUDE.md`) — nad ním je to údaj, který nikoho nezajímá.
 - **Strom souborů je trvalý levý sloupec** (#197), ne jen popover. U PR o padesáti souborech
   nešlo poznat, kde v něm člověk je, aniž by ho otevřel. Šířka 210 z návrhu, složený je proužek
   34 bodů s počtem souborů; `⌘1` a tlačítko v liště nad diffem, vedle `Nálezy ⌘2`. Tři věci:
@@ -2420,6 +2430,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
+| `Policy.charactersPerSide(contentWidth:characterWidth:layout:gutter:)` | Kolik znaků kódu se vejde na stranu (#188); vedle sebe se šířka dělí na dvě |
 | `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
 | `Policy.changes(in:since:)` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`) |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |
