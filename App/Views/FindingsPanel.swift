@@ -1,12 +1,18 @@
 import SwiftUI
 
-/// Spodní panel pod diffem: přehled nálezů a (zatím prázdný) průběh běhu.
+/// Panel napravo od diffu: nálezy, rozdělané review a průběh běhu.
 ///
 /// Je to **jediné místo pro nálezy bez `file:line`** — chybějící testy, poznámky
 /// k architektuře. Právě kvůli nim nestačí bubliny u kódu.
 ///
-/// Sbalený ukazuje jen to podstatné: návrh verdiktu, počet nálezů a stáří. Diff je to
-/// hlavní, kvůli čemu je okno otevřené, takže panel si o místo musí říct.
+/// **Napravo, ne dole** (#182). Do té doby si bral výšku, které je v diffu nejmíň: kód je
+/// dlouhý a úzký, takže dole se pere o to jediné, čeho je málo. Napravo bere šířku, které je
+/// v okně přes celou obrazovku dost — spočítané v zadání #182: v pohledu pod sebou se i na 14"
+/// vejde 126 znaků na stranu, tedy slib „PHP na 120 znaků se vejde“ drží. V pohledu vedle sebe
+/// ho neunese žádný displej pod 27"; složení sloupců v tom režimu řeší #188.
+///
+/// Složený je **proužek na hraně** s počtem nálezů, ne zmizelý panel: schovaná práce je práce,
+/// o které nikdo neví.
 struct FindingsPanel: View {
     /// `nil` při **prvním** běhu, než se uloží záznam — právě tehdy je průběh
     /// nejzajímavější, takže se na něj nesmí čekat.
@@ -49,9 +55,10 @@ struct FindingsPanel: View {
         case draft
     }
 
-    /// Výška si drží uživatel taháním a přežívá restart — kolik místa chce dát nálezům,
-    /// ví jen on.
-    @AppStorage("findingsPanelHeight") private var height = 220.0
+    /// Šířku si drží uživatel taháním a přežívá restart — kolik místa chce dát nálezům,
+    /// ví jen on. **Vlastní klíč** (#182), ne přejmenovaná výška: uložených 220 by jako šířka
+    /// dalo panel užší, než v jakém se dá nález přečíst.
+    @AppStorage("findingsPanelWidth") private var width = 300.0
     /// Sledovat konec časové osy. Předvolba pohledu, takže `UserDefaults`, ne store.
     @AppStorage("progressFollowsTail") private var followsTail = true
     /// Kde stojí kurzor procházení (#187). Karta na tom místě dostane rámeček, takže panel
@@ -62,47 +69,49 @@ struct FindingsPanel: View {
     /// z diffu musí umět přepnout na tab, do kterého ta poznámka spadla — jinak text zmizí
     /// někam, kde ho nikdo nehledá.
     @Binding var tab: Tab
-    /// Výška na začátku tažení. Bez ní se posun načítá z každé události znovu a panel
+    /// Šířka na začátku tažení. Bez ní se posun načítá z každé události znovu a panel
     /// utíká pryč.
-    @State private var heightAtDragStart: Double?
+    @State private var widthAtDragStart: Double?
     @State private var isConfirmingClear = false
     @State private var isClearing = false
     @State private var clearFailure: String?
 
-    /// Podlaha panelu. **Změřená, ne odhadnutá** (#69): obsah tabu `Moje review` má se
-    /// zastaralým draftem přirozenou výšku 198 pt (banner, verdikt, dva editory) a bez banneru
-    /// 161 pt — offscreen render `DraftPanel`u. Se starou podlahou 120 pt se proto scrolloval,
-    /// i když byl panel vytažený, a scrollbar v pruhu pod diffem vypadá jako rozbité rozvržení.
+    /// Šířka z návrhu (`grid-template-columns: … 300px`) a meze kolem ní.
     ///
-    /// Vejde se tím i tabulka nálezů (šest řádků) a časová osa. Scroll uvnitř draftu zůstává jako
-    /// pojistka pro úzké okno, kde se banner zalomí na víc řádků.
-    private static let minimumHeight = 200.0
-    private static let maximumHeight = 600.0
+    /// Podlaha je **změřená na obsahu**, ne odhadnutá: karta nálezu (#175) nese kategorii, odznak
+    /// a shrnutí, a pod 240 body se shrnutí láme po dvou slovech. Strop drží slib z `CLAUDE.md`,
+    /// že diff dostane šířku — panel přes půl okna by ho porušil bez ohledu na displej.
+    static let defaultWidth = 300.0
+    private static let minimumWidth = 240.0
+    private static let maximumWidth = 520.0
+    /// Šířka složeného proužku, taky z návrhu (`.work.wide`).
+    static let collapsedWidth = 38.0
 
-    /// Uložená výška se ořezává **při použití**, ne jen při tažení: v `UserDefaults` může
-    /// být cokoli (ruční editace, jiný rozsah ze starší verze) a `frame(height:)` se
-    /// zápornou hodnotou rozhodí celý panel.
-    private var clampedHeight: Double { clamp(height) }
+    /// Uložená šířka se ořezává **při použití**, ne jen při tažení: v `UserDefaults` může
+    /// být cokoli (ruční editace, jiný rozsah ze starší verze) a `frame(width:)` se
+    /// zápornou hodnotou rozhodí celé okno.
+    private var clampedWidth: Double { clamp(width) }
 
     private func clamp(_ value: Double) -> Double {
-        min(max(Self.minimumHeight, value), Self.maximumHeight)
+        min(max(Self.minimumWidth, value), Self.maximumWidth)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            resizeHandle
-            bar
+        HStack(spacing: 0) {
             if isExpanded {
-                Divider()
-                // **Strop, ne pevná výška.** `frame(height:)` je nesmlouvavá: v nízkém okně
-                // se panel nezmenší, přeteče — a co se nevejde, se odřízne spodní hranou
-                // okna, takže poslední řádek tabulky je půlka. S `maxHeight` si vezme jen
-                // to, co je, a tabulka uvnitř scrolluje. Podlaha je tam proto, aby zůstal
-                // aspoň řádek: panel zmáčknutý na deset bodů je horší než sbalený.
-                content.frame(minHeight: Self.minimumHeight, maxHeight: clampedHeight)
+                resizeHandle
+                VStack(spacing: 0) {
+                    header
+                    segments
+                    content
+                }
+                .frame(width: clampedWidth)
+            } else {
+                collapsedStrip
             }
         }
-        .background(.bar)
+        .background(Palette.chrome)
+        .overlay(alignment: .leading) { Rectangle().fill(Palette.lineSoft).frame(width: 1) }
         // `presenting:` podá text nepovinný, takže v těle není `?? ""` — default, který se
         // nikdy nepoužije, čte příště jako možnost prázdné hlášky.
         .alert(
@@ -116,37 +125,93 @@ struct FindingsPanel: View {
         }
     }
 
-    // MARK: - Lišta
+    // MARK: - Hlavička a proužek
 
-    private var bar: some View {
-        HStack(spacing: 12) {
+    /// Řádek nad segmenty: sbalení, stáří výsledku a zahození nálezů.
+    ///
+    /// Návrh v sekci 02 hlavičku nekreslí — jenže tyhle tři věci v aplikaci jsou a někam patří.
+    /// Do segmentů ne (přepínají obsah), do obsahu taky ne (platí pro všechny tři). Sazba je
+    /// z `.side > header` v návrhu, který na to místo v CSS pamatuje.
+    private var header: some View {
+        HStack(spacing: 8) {
             Button {
-                withAnimation(.snappy(duration: 0.15)) { isExpanded.toggle() }
+                withAnimation(.snappy(duration: 0.15)) { isExpanded = false }
             } label: {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(Palette.ink3)
                     .font(.caption)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .help("Složit panel (⌘2)")
+            .accessibilityLabel("Složit panel")
 
-            tabs
-            Spacer()
             if tab == .progress {
                 Toggle("Sledovat konec", isOn: $followsTail)
                     .toggleStyle(.checkbox)
-                    .font(.callout)
+                    .font(.caption)
                     .help("Posouvat osu na nejnovější událost")
             }
+            Spacer(minLength: 4)
             if let finishedAt = record?.finishedAt {
                 Text(finishedAt, format: .relative(presentation: .named))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.ink3)
+                    .lineLimit(1)
             }
             clearButton
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 9)
+        .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
+    }
+
+    /// Složený panel — proužek na hraně okna, ne zmizelý panel.
+    ///
+    /// Nese **počet nálezů**, takže je z něj poznat, že je co číst; červený je, když mezi nimi
+    /// něco blokuje. Bez toho čísla je složení tichá ztráta práce, kterou reviewer odvedl.
+    private var collapsedStrip: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.15)) { isExpanded = true }
+        } label: {
+            VStack(spacing: 9) {
+                Image(systemName: "sidebar.right")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Palette.ink3)
+                if !findings.isEmpty {
+                    Text(verbatim: "\(findings.count)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(hasBlocking ? Color.red : Palette.ink2)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(
+                            (hasBlocking ? Color.red.opacity(0.15) : Palette.raised),
+                            in: .rect(cornerRadius: 4)
+                        )
+                }
+                Text(verbatim: "nálezy · review")
+                    .font(.system(size: 10.5))
+                    .tracking(0.6)
+                    .foregroundStyle(Palette.ink3)
+                    // Svislý text jako v návrhu (`writing-mode: vertical-rl`). Otočením, protože
+                    // svislou sazbu SwiftUI neumí — a proužek je na popisek naležato moc úzký.
+                    .fixedSize()
+                    .rotationEffect(.degrees(90))
+                    .frame(width: Self.collapsedWidth)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 10)
+            .frame(width: Self.collapsedWidth, alignment: .top)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help("Rozložit panel nálezů (⌘2)")
+        .accessibilityLabel("Rozložit panel nálezů")
+    }
+
+    private var hasBlocking: Bool {
+        findings.contains { Policy.isBlocking($0, categories: blockingCategories) }
     }
 
     /// Zahození uložených nálezů.
@@ -195,42 +260,70 @@ struct FindingsPanel: View {
         }
     }
 
-    private var tabs: some View {
-        Picker("", selection: $tab) {
-            Text(verbatim: countText).tag(Tab.findings)
-            Text("Průběh").tag(Tab.progress)
-            Text(verbatim: draftText).tag(Tab.draft)
+    /// Segmenty z návrhu, ne `Picker(.segmented)`: systémový přepínač si bere výšku
+    /// i šířku podle textu a v panelu 300 bodů se `Nálezy · 12 / Průběh / Moje review ●`
+    /// nevejde. Sazba je z `.seg` — poloměr 6, 11,5 bodu, aktivní na vyvýšené ploše.
+    private var segments: some View {
+        HStack(spacing: 2) {
+            segment("Nálezy", count: findings.isEmpty ? nil : findings.count, tag: .findings)
+            segment(draftLabel, tag: .draft)
+            segment("Průběh", tag: .progress)
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
-        // Rozbalený panel bez obsahu vypadá jako chyba — přepnutí tabu ho proto otevře.
-        .onChange(of: tab) { _, _ in isExpanded = true }
+        .padding(.horizontal, 11)
+        .padding(.top, 9)
+        .padding(.bottom, 4)
     }
 
-    /// Tažením za horní hranu se panelu mění výška. Pruh je schválně vyšší než čára, aby
+    private func segment(_ title: String, count: Int? = nil, tag: Tab) -> some View {
+        Button {
+            tab = tag
+            // Složený panel bez obsahu vypadá jako chyba — přepnutí segmentu ho proto otevře.
+            isExpanded = true
+        } label: {
+            HStack(spacing: 4) {
+                Text(verbatim: title)
+                if let count {
+                    Text(verbatim: "\(count)")
+                        .monospacedDigit()
+                        .foregroundStyle(tab == tag ? Palette.ink2 : Palette.ink3)
+                }
+            }
+            .font(.system(size: 11.5, weight: tab == tag ? .semibold : .regular))
+            .foregroundStyle(tab == tag ? Palette.ink : Palette.ink2)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background {
+                if tab == tag {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Palette.raised)
+                        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+                }
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(tab == tag ? .isSelected : [])
+    }
+
+    /// Tažením za levou hranu se panelu mění šířka. Pruh je schválně širší než čára, aby
     /// se do něj dalo trefit.
     private var resizeHandle: some View {
-        Divider()
-            .overlay {
-                Color.clear
-                    .frame(height: 8)
-                    .contentShape(.rect)
-                    // `pointerStyle` místo ručního `NSCursor.push()`/`pop()`: když view
-                    // zmizí uprostřed hoveru, druhá půlka páru se nikdy nezavolá a
-                    // v aplikaci zůstane cizí kurzor.
-                    .pointerStyle(.frameResize(position: .top))
-                    .gesture(
-                        DragGesture()
-                            .onChanged { drag in
-                                let start = heightAtDragStart ?? clampedHeight
-                                heightAtDragStart = start
-                                isExpanded = true
-                                height = clamp(start - drag.translation.height)
-                            }
-                            .onEnded { _ in heightAtDragStart = nil }
-                    )
-            }
+        Color.clear
+            .frame(width: 6)
+            .contentShape(.rect)
+            // `pointerStyle` místo ručního `NSCursor.push()`/`pop()`: když view zmizí uprostřed
+            // hoveru, druhá půlka páru se nikdy nezavolá a v aplikaci zůstane cizí kurzor.
+            .pointerStyle(.frameResize(position: .leading))
+            .gesture(
+                DragGesture()
+                    .onChanged { drag in
+                        let start = widthAtDragStart ?? clampedWidth
+                        widthAtDragStart = start
+                        width = clamp(start - drag.translation.width)
+                    }
+                    .onEnded { _ in widthAtDragStart = nil }
+            )
     }
 
     // MARK: - Obsah
@@ -332,14 +425,10 @@ struct FindingsPanel: View {
         FindingRow.rows(of: findings, blocking: blockingCategories, dismissals: dismissals)
     }
 
-    private var countText: String {
-        findings.isEmpty ? "Nálezy" : "Nálezy · \(findings.count)"
-    }
-
     /// Rozdělané review se hlásí **odznakem, ne počtem**: draft, ve kterém je jen vybraný
     /// verdikt, je plnohodnotný (čtvrtina vzorku z #63), takže „· 0“ by o něm lhalo.
     /// Zastaralý si přidá varování — banner uvnitř tabu není vidět, dokud se do něj neklikne.
-    private var draftText: String {
+    private var draftLabel: String {
         guard draft != nil else { return "Moje review" }
         return isDraftStale ? "Moje review ⚠︎" : "Moje review ●"
     }

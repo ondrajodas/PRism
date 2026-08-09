@@ -301,15 +301,19 @@ struct DashboardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(13)
         } else {
+            // Zkrácená jména (#182): `superpowers:requesting-code-review` se do sloupce nevejde
+            // a zalomí legendu na dva řádky. Celé id zůstává v nápovědě.
+            let names = Policy.shortReviewerNames(of: reviewers.map(\.reviewer))
             VStack(spacing: 9) {
                 ForEach(reviewers) { share in
                     HStack(spacing: 9) {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(ReviewStateAppearance.color(of: share.findings > 0 ? .findings : .clean))
                             .frame(width: 8, height: 8)
-                        Text(verbatim: share.reviewer)
+                        Text(verbatim: names[share.reviewer] ?? share.reviewer)
                             .font(.system(size: 12))
                             .lineLimit(1)
+                            .help(share.reviewer)
                         Spacer(minLength: 8)
                         Text(verbatim: "\(share.findings)")
                             .font(.system(size: 11.5, design: .monospaced))

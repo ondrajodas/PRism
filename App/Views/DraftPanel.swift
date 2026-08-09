@@ -104,13 +104,17 @@ struct DraftPanel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// Verdikt a tlačítka **pod sebou** (#182): v panelu 300 bodů širokém se `Změny z návrhu`
+    /// vedle `Odeslat review` nevejde a segmentovaný přepínač by se zmáčkl na tři písmena.
     private var topRow: some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             verdictPicker
-            Spacer(minLength: 12)
             if draft != nil {
-                sendButton
-                discardButton
+                HStack(spacing: 8) {
+                    sendButton
+                    Spacer(minLength: 4)
+                    discardButton
+                }
             }
         }
     }
@@ -179,13 +183,15 @@ struct DraftPanel: View {
     /// Tři tlačítka místo `Pickeru`: ten musí mít vybranou hodnotu, takže by v něm musela být
     /// čtvrtá, falešná („nevybráno“) — a hodnota, kterou GitHubu posílám jako `event`, se od
     /// návrhu aplikace musí dát odlišit na první pohled.
+    /// Tři **stejně široká** tlačítka bez předsazeného „Verdikt:“ (#182), jak je má návrh.
+    /// V panelu 300 bodů širokém je popisek to jediné, co se do třetiny šířky musí vejít —
+    /// a `Verdikt:` před nimi ubíralo místo tomu, co nese význam.
     private var verdictPicker: some View {
-        HStack(spacing: 6) {
-            Text("Verdikt:")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            ForEach(ReviewDraft.Verdict.allCases, id: \.self) { choice in
-                verdictButton(choice)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                ForEach(ReviewDraft.Verdict.allCases, id: \.self) { choice in
+                    verdictButton(choice)
+                }
             }
             if let verdictCaption {
                 Text(verbatim: verdictCaption)
@@ -222,9 +228,14 @@ struct DraftPanel: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: isChosen ? "checkmark.circle.fill" : choice.symbolName)
-                Text(verbatim: choice.czechLabel)
+                    .imageScale(.small)
+                Text(verbatim: choice.shortLabel)
+                    .lineLimit(1)
             }
             .font(isChosen ? .callout.weight(.semibold) : .callout)
+            // Stejný díl šířky pro každé tlačítko, jak to má návrh (`.vbtn { flex: 1 }`) —
+            // jinak si `Schválit` vezme víc než `Změny` a řada vypadá jako překlep.
+            .frame(maxWidth: .infinity)
         }
         .disabled(unavailable != nil)
         .help(help(for: choice, origin: origin))
@@ -297,10 +308,14 @@ struct DraftPanel: View {
 
     // MARK: - Obsah
 
-    /// Tělo vlevo, komentáře vpravo. Vedle sebe schválně: panel je nízký pruh a jedno pod
-    /// druhým by znamenalo scrollovat mezi dvěma věcmi, které se píšou naráz.
+    /// Tělo nahoře, komentáře pod ním (#182).
+    ///
+    /// **Změna proti #66**, kde to bylo vedle sebe: tehdy byl panel nízký pruh přes celé okno,
+    /// takže pod sebou by se mezi dvěma věcmi, které se píšou naráz, muselo scrollovat. Od #182
+    /// je panel svislý a 300 bodů široký — vedle sebe by na tělo review zbylo míň, než je jeden
+    /// řádek věty.
     private var editors: some View {
-        HStack(alignment: .top, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             bodyEditor
             comments
         }
@@ -352,7 +367,7 @@ struct DraftPanel: View {
             }
             Spacer(minLength: 0)
         }
-        .frame(width: 320, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private var commentList: [ReviewDraftComment] { draft?.comments ?? [] }

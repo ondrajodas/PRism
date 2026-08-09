@@ -1317,7 +1317,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení |
 | `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
 | `DiffLineView` | Řádek souboru: dvě čísla (v buňce dvojice jedno, podle `side`), znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
-| `FindingsPanel` | Spodní panel: taby `Nálezy`/`Průběh`/`Moje review`, návrh verdiktu, tabulka s řazením, prokliky do diffu a zahození nálezů |
+| `FindingsPanel` | Panel **napravo od diffu** (#182): segmenty `Nálezy`/`Moje review`/`Průběh`, karty nálezů, prokliky do diffu, zahození nálezů — a složení na proužek s počtem |
 | `DismissedRowStyle` | Buňka tabulky: ztlumení odmítnutého řádku a kontextové menu `Označit jako…` / `Vrátit` |
 | `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak, odmítnutí |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
@@ -1712,9 +1712,28 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   (`PullRequestTab.standard`, **změna proti zadání #72** — popis a diskuze se čte dřív než kód
   a stejně to má GitHub), takže se `filesChanged` z mapy maže a úklid podle seznamu PR ji
   nenechá růst.
-- **Spodní panel je v obou tabech.** Nálezy bez místa v kódu, průběh i moje rozdělané review
+- **Panel je v obou tabech.** Nálezy bez místa v kódu, průběh i moje rozdělané review
   se vážou k celému PR — schovat je za přepnutí tabu by znamenalo, že se rozepsané review
   „ztratí“ přepnutím na `Přehled`.
+- **Panel je napravo od diffu, ne pod ním** (#182). Dole si bral výšku, které je v diffu
+  nejmíň: kód je dlouhý a úzký, takže spodní pruh se pere právě o to, čeho je málo. Napravo
+  bere šířku — spočítané v zadání #182 pro mono 12 px: v pohledu **pod sebou** zbývá i na 14"
+  126 znaků na stranu, takže slib „PHP na 120 znaků se vejde“ platí dál. V pohledu **vedle
+  sebe** ho neunese žádný displej pod 27"; složení sloupců v tom režimu je #188. Pět věcí,
+  které se u toho nemají rozbít:
+  - **Složený je proužek s počtem, ne zmizelý panel.** Schovaná práce, o které nikdo neví, je
+    horší než úzký pruh; počet je červený, když mezi nálezy něco blokuje.
+  - **Šířka má vlastní klíč v předvolbách**, ne přejmenovanou výšku: uložených 220 by jako
+    šířka dalo panel užší, než v jakém se dá nález přečíst. Ořezává se **při použití**
+    (240–520), protože v `UserDefaults` může být cokoli.
+  - **Segmenty jsou vlastní, ne `Picker(.segmented)`.** Systémový přepínač se sází podle textu
+    a `Nálezy · 12 / Moje review ● / Průběh` se do 300 bodů nevejde.
+  - **Rozdělané review se sází pod sebe** (tělo, pak komentáře), **změna proti #66**: tam byly
+    vedle sebe, protože panel byl nízký pruh přes celé okno. Komentáře měly napevno 320 bodů,
+    což je víc, než je celý panel.
+  - **Verdikt jsou tři stejně široká tlačítka s krátkými popisky** (`Schválit` / `Změny` /
+    `Komentář`). Useknuté `Vyžád…` je u hodnoty, která rozhoduje, co GitHub s PR udělá,
+    horší než kratší slovo; plný popisek zůstává v potvrzení odeslání, kde je místo.
 - **Skok na nález tab přepne**, a `DiffView` na cíl reaguje `task(id:)`, ne `onChange`: při
   přepnutí z `Přehledu` diff **vzniká**, takže cíl už v něm je a žádná změna nepřijde.
 - **Cíl skoku se kotví k vršku s odstupem** (`DiffView.jumpAnchor`, 90 pt = ukotvená hlavička
@@ -2373,6 +2392,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
 | `Policy.dashboard(pullRequests:records:drafts:categories:since:)` | Podklad startovní obrazovky (#181): čtyři karty a rozpad nálezů podle revieweera (`Dashboard`, `ReviewerShareOfFindings`) |
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí fronty na dashboardu (#181) — podle závažnosti, ne podle času (`QueueEntry`) |
+| `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
 | `Policy.changes(in:since:)` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`) |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |

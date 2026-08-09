@@ -11,13 +11,28 @@ struct ReviewTimelineView: View {
     /// Při běžícím review se osa sama posouvá na konec.
     var followsTail = true
 
+    /// Zkrácená jména reviewerů pro hlavičky sekcí. Počítá se z **celé** osy naráz, protože
+    /// zkrátit se smí jen to, co zůstane jednoznačné vůči ostatním.
+    private var shortNames: [String: String] {
+        Policy.shortReviewerNames(of: timelines.map(\.skill))
+    }
+
     var body: some View {
         if timelines.isEmpty {
-            ContentUnavailableView(
-                "Zatím se nic nedělo",
-                systemImage: "waveform",
-                description: Text("Až se review spustí, poběží tady, co reviewer právě čte a spouští.")
-            )
+            // **Ne `ContentUnavailableView`** (#182): ten se v panelu na výšku vystředí, nadpis
+            // vysází na velikost titulku a nad text vloží prázdno přes půl okna. Ve svislém
+            // panelu je to jen vysvětlivka — patří nahoru a psaná drobným písmem, stejně jako
+            // prázdný stav nálezů vedle.
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Zatím se nic nedělo.")
+                Text("Až se review spustí, poběží tady, co reviewer právě čte a spouští.")
+                    .foregroundStyle(.tertiary)
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(13)
         } else {
             entries
         }
@@ -49,8 +64,13 @@ struct ReviewTimelineView: View {
 
     private func header(_ timeline: ReviewerTimeline) -> some View {
         HStack(spacing: 8) {
-            Text(verbatim: timeline.skill)
+            // Zkrácené jméno (#182): `code-review:code-review` se v panelu 300 bodů širokém
+            // zalomí na tři řádky. Celé id zůstává v nápovědě — a zkracuje se jen tam, kde
+            // tím jméno nepřestane být jednoznačné (`Policy.shortReviewerNames`).
+            Text(verbatim: shortNames[timeline.skill] ?? timeline.skill)
                 .font(.callout.weight(.semibold))
+                .lineLimit(1)
+                .help(timeline.skill)
             // Hlavička tvrdí, který skill běžel. Když si session načetla jiný, musí to
             // říct — jinak je to text, co tvrdí víc, než data unesou.
             if timeline.loadedADifferentSkill, let loaded = timeline.loadedSkill {

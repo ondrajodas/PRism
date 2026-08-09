@@ -71,6 +71,19 @@ struct ReviewDraft: Hashable, Codable, Sendable {
             case .comment: "Jen komentář"
             }
         }
+
+        /// Popisek do úzkého místa (#182) — tři tlačítka vedle sebe v panelu 300 bodů širokém.
+        ///
+        /// `Vyžádat změny` se do třetiny panelu nevejde a useknuté `Vyžád…` je u hodnoty, která
+        /// rozhoduje, co GitHub s PR udělá, horší než kratší slovo. Plný popisek zůstává tam, kde
+        /// je místo — v potvrzení odeslání, kde se čte, co přesně odejde.
+        var shortLabel: String {
+            switch self {
+            case .approve: "Schválit"
+            case .requestChanges: "Změny"
+            case .comment: "Komentář"
+            }
+        }
     }
 
     /// Není v něm nic, co by se dalo odeslat.

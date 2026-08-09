@@ -212,12 +212,18 @@ kterému nevěřím, není práce k projití. Puntík zezelená, teprve až jsi 
 ne když skončíš na posledním; a nálezy bez místa v kódu se do počtu neplete — nedá se na ně
 skočit, tak je nápověda počítá zvlášť, aby `3/3` netvrdilo hotovo nad PR, kde zbývají v panelu.
 
-Pod diffem je **panel s taby**: nálezy jako karty, Průběh a Moje review. Panel je jediné místo, kde jsou vidět nálezy **bez místa
-v kódu** — chybějící testy nebo poznámky k architektuře; kvůli nim samotné bubliny
-nestačí. Je vidět v **obou** záložkách, protože nálezy, průběh i rozdělané review patří
-k celému PR, ne k diffu. Klik kamkoli do karty odscrolluje diff (a přepne na něj, když jsi
-v `Přehledu`) tak, aby nad nálezem zůstalo pár řádků kontextu, a bublinu na chvíli
-zvýrazní. Výška panelu se táhne za horní hranu a pamatuje se.
+**Napravo od diffu je panel se segmenty** (#182): nálezy jako karty, Moje review a Průběh. Panel
+je jediné místo, kde jsou vidět nálezy **bez místa v kódu** — chybějící testy nebo poznámky
+k architektuře; kvůli nim samotné bubliny nestačí. Je vidět v **obou** záložkách, protože nálezy,
+průběh i rozdělané review patří k celému PR, ne k diffu. Klik kamkoli do karty odscrolluje diff
+(a přepne na něj, když jsi v `Přehledu`) tak, aby nad nálezem zůstalo pár řádků kontextu,
+a bublinu na chvíli zvýrazní.
+
+Do #182 byl panel **pod** diffem, kde si bral výšku — tedy to, čeho je u kódu nejmíň. Napravo bere
+šířku, které je v okně přes celou obrazovku dost: v pohledu pod sebou zbude i na 14" displeji 126
+znaků na stranu, takže slib „PHP na 120 znaků se vejde“ platí dál. **Složit ho jde na ⌘2** nebo
+šipkou v jeho hlavičce; složený je proužek na hraně s počtem nálezů, který zčervená, když mezi
+nimi něco blokuje. Šířka se táhne za levou hranu a pamatuje se.
 
 **Nález je karta se závažností na hraně** (#175): červená blokuje, oranžová je běžný nález,
 šedá odmítnutý — tatáž škála jako v řádku fronty, aby seznam a panel neříkaly o téže věci každý
