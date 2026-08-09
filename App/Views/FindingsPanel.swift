@@ -196,9 +196,12 @@ struct FindingsPanel: View {
                     .foregroundStyle(Palette.ink3)
                     // Svislý text jako v návrhu (`writing-mode: vertical-rl`). Otočením, protože
                     // svislou sazbu SwiftUI neumí — a proužek je na popisek naležato moc úzký.
+                    //
+                    // Po otočení se omezuje **výška, ne šířka**: rámeček zůstává vodorovný, takže
+                    // šířkou se text ořízne a přeleze přes odznak nad sebou.
                     .fixedSize()
                     .rotationEffect(.degrees(90))
-                    .frame(width: Self.collapsedWidth)
+                    .frame(height: 90)
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 10)
