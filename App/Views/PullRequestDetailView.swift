@@ -88,7 +88,11 @@ struct PullRequestDetailView: View {
                 review
             }
             HStack(spacing: 10) {
-                PullRequestHeaderView(pullRequest: pullRequest, detail: loadedDetail)
+                PullRequestHeaderView(
+                    pullRequest: pullRequest,
+                    detail: loadedDetail,
+                    checks: store.checks[pullRequest.id] ?? []
+                )
                 Spacer(minLength: 8)
                 checkout
                 draftChip

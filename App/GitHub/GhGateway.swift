@@ -57,10 +57,26 @@ struct GhGateway: GitHubGateway {
             "--repo", id.repo.description,
             "--json", "name,state,bucket,link,startedAt,completedAt",
         ]
-        // Nenulový kód znamená „něco spadlo“, ne selhání volání — a `gh` v tu chvíli JSON
-        // **na stdout stejně vypíše**. Rozlišuje se tedy podle výstupu, ne podle kódu.
-        let output = (try? await run(arguments)) ?? ""
-        guard !output.isEmpty else { return [] }
+        // **Nenulový kód tady není chyba volání.** `gh pr checks` jím hlásí „něco spadlo“ —
+        // a JSON přesto vypíše na stdout. Kdyby se šlo přes `run(_:)`, které na nenulový kód
+        // vyhazuje, zahodil by se výstup **právě tehdy, když nějaký check spadl**, a blok by
+        // tvrdil „žádné kontroly“ ve chvíli, kdy na nich nejvíc záleží. Nález Copilota na #209.
+        let result: ProcessResult
+        do {
+            result = try await runner.run(gh, arguments: arguments, timeout: timeout)
+        } catch ProcessError.timedOut {
+            throw GitHubError.timedOut
+        } catch {
+            throw GitHubError.toolUnavailable(error.localizedDescription)
+        }
+
+        let output = result.standardOutput
+        // Prázdný výstup = PR bez checků. To je běžný stav, ne chyba; teprve když `gh` skončí
+        // nenulově **a** nic nevypíše, je to selhání, o kterém nemá smysl mlčet.
+        guard !output.isEmpty else {
+            guard result.exitCode == 0 else { throw GitHubError(failure: result) }
+            return []
+        }
         do {
             return try GhOutput.decoder.decode([GhCheck].self, from: Data(output.utf8)).map(\.check)
         } catch {

@@ -10,6 +10,10 @@ struct PullRequestHeaderView: View {
     /// Načtený detail. `nil` = ještě nedorazil, takže větve ani hlavu neukazujeme; hádat je
     /// horší než je chvíli nemít.
     var detail: PullRequest?
+    /// Checky (#209). Souhrn patří **do hlavičky**, ne jen do tabu `Přehled`: „dá se to
+    /// mergnout“ je otázka, kterou má okno zodpovědět bez přepínání, a při čtení diffu se
+    /// do `Přehledu` nechodí.
+    var checks: [PullRequestCheck] = []
 
     var body: some View {
         HStack(spacing: 9) {
@@ -23,6 +27,7 @@ struct PullRequestHeaderView: View {
             Text(verbatim: "\(pullRequest.repo)#\(pullRequest.number)")
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
+            checksChip
             Link("otevřít na GitHubu", destination: pullRequest.url)
         }
         .font(.callout)
@@ -139,4 +144,56 @@ struct StaleHeadView: View {
     }
     .padding()
     .frame(width: 700)
+}
+
+
+extension PullRequestHeaderView {
+    /// Souhrn checků jedním chipem. **Barva podle nejhoršího** — dvanáct zelených a jeden
+    /// červený je červený stav. Bez checků se nekreslí nic: PR bez CI je běžná věc a prázdný
+    /// chip by tvrdil, že se něco nepovedlo.
+    @ViewBuilder fileprivate var checksChip: some View {
+        let summary = Policy.summary(of: checks)
+        if let worst = summary.worst {
+            HStack(spacing: 4) {
+                Image(systemName: symbol(of: worst))
+                    .font(.system(size: 10))
+                Text(verbatim: text(of: summary))
+                    .monospacedDigit()
+            }
+            .font(.caption)
+            .foregroundStyle(color(of: worst))
+            .help("Kontroly na GitHubu — podrobnosti jsou v Přehledu")
+        }
+    }
+
+    /// `1 selhala` u poruchy, jinak celý poměr: když je něco špatně, je to jediné, co má
+    /// v úzké hlavičce cenu — zbytek se dočte v `Přehledu`.
+    private func text(of summary: ChecksSummary) -> String {
+        if summary.failed > 0 {
+            return Plural.czech(summary.failed, one: "selhala", few: "selhaly", many: "selhalo")
+        }
+        if summary.running > 0 { return "\(summary.running) běží" }
+        if summary.passed > 0 {
+            return Plural.czech(summary.passed, one: "prošla", few: "prošly", many: "prošlo")
+        }
+        return "\(summary.skipped) přeskočeno"
+    }
+
+    private func symbol(of outcome: PullRequestCheck.Outcome) -> String {
+        switch outcome {
+        case .passed: "checkmark.circle"
+        case .failed, .cancelled: "xmark.circle"
+        case .running: "circle.dashed"
+        case .skipped: "minus.circle"
+        }
+    }
+
+    private func color(of outcome: PullRequestCheck.Outcome) -> Color {
+        switch outcome {
+        case .passed: .green
+        case .failed, .cancelled: .red
+        case .running: Palette.accent
+        case .skipped: Palette.ink3
+        }
+    }
 }
