@@ -68,7 +68,10 @@ extension AppStore {
 
     /// Časová osa běhů posledního review. Prázdná, dokud se nic nespustilo.
     func timelines(for pr: PRIdentifier) -> [ReviewerTimeline] {
-        reviewTimelines[pr] ?? []
+        // Živá osa má přednost (#203): běžící review si ji drží v paměti a uložená patří
+        // předchozímu běhu — přebít ji tou z disku by ukázalo starý průběh nad novým během.
+        if let live = reviewTimelines[pr], !live.isEmpty { return live }
+        return Policy.timelines(of: reviewRecords[pr])
     }
 
     func review(_ pr: PRIdentifier, skills subset: [String]? = nil) async {
@@ -396,7 +399,14 @@ extension AppStore {
                     // Ukládá se **před** překladem: ten je krátká síťová operace navíc
                     // a když se na ní aplikace zavře, nálezy už jsou na disku. V originále,
                     // ale jsou — což je přesně to, co pravidlo „co doběhlo, zůstane“ chce.
-                    reviewRecords[pr] = try await reviews.save(run)
+                    reviewRecords[pr] = try await reviews.save(
+                        run,
+                        // Osa se ukládá **s během**, ne zvlášť: je to jeho průběh, takže patří
+                        // do téhož souboru a zestárne s ním (#203).
+                        timeline: reviewTimelines[pr]?
+                            .first { $0.skill == run.key.skillID }?
+                            .stored()
+                    )
                     revealFindingsOutsideTheDiff(for: pr)
                     if let translated = await translated(run, for: pr.repo) {
                         reviewRecords[pr] = try await reviews.save(translated)

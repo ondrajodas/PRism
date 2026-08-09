@@ -287,7 +287,11 @@ request.
 V tabu **Průběh** běží časová osa toho, co reviewer právě dělá — který soubor čte, co
 hledá, jaký příkaz spustil. Skládá se nativně z eventů, ne přeposíláním textu, takže
 aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vrátit, zkopíruje
-se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí běhu.
+se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí běhu — a od #203
+**přežije i restart aplikace**: ukládá se k běhu, takže se k ní dá vrátit druhý den i s tím
+`sessionID`. Delší běh nadělá stovky událostí, proto se drží posledních 300 a kolik se jich
+nevešlo, je v hlavičce vidět; ořezává se **začátek**, protože se do osy kouká kvůli tomu, čím
+to skončilo.
 
 U doběhlého revieweera je v hlavičce **cena, trvání a počet kol** — `0,23 $ · 11,8 s · 3 kola`.
 Bere se to z toho, co nahlásila sama session, takže **zabitý běh je nemá**: nula by tvrdila, že

@@ -82,6 +82,14 @@ struct ReviewTimelineView: View {
                     // by bylo hádání vydávané za zjištění.
                     .help("Session si načetla jiný skill, než je nastavený (`\(timeline.skill)`).")
             }
+            // Zkrácená osa to musí říct (#203) — jinak vypadá, že běh začal uprostřed.
+            if timeline.droppedEntries > 0 {
+                Text(verbatim: "+\(timeline.droppedEntries) starších")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+                    .help("Starší události se do uloženého záznamu nevešly.")
+            }
             if let sessionID = timeline.sessionID {
                 Text(verbatim: sessionID)
                     .font(.system(.caption, design: .monospaced))

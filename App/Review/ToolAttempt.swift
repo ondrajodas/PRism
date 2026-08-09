@@ -4,7 +4,7 @@ import Foundation
 ///
 /// **Pokus, ne použití** — odmítnutý nástroj vypadá stejně. Že prošel, říká teprve to, že
 /// není v `deniedTools`.
-struct ToolAttempt: Hashable, Sendable {
+struct ToolAttempt: Hashable, Codable, Sendable {
     let name: String
     /// Soubor, vzor nebo příkaz — podle nástroje. `nil`, když se z volání nedá vytáhnout
     /// nic užitečného. Samotné „Read“ v tabu Průběh nic neřekne.
