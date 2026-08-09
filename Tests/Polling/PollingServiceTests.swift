@@ -88,6 +88,30 @@ struct PollingServiceTests {
         #expect(gateway.searchCount == sources.count * 3)
     }
 
+    /// Kdy se zeptáme znovu, ukazuje dashboard (#181). Odhad `lastSuccess + interval` by po
+    /// prvním rate limitu lhal, proto to zapisuje ta smyčka, která o čekání rozhodla.
+    @Test("Smyčka řekne, kdy se zeptá znovu")
+    func loopPublishesTheNextPoll() async {
+        let time = FakeTimeSource(stopAfter: 1)
+        let started = time.now
+
+        let service = service(gateway: FakeGitHubGateway(always: .success([])), time: time)
+        await service.run()
+
+        #expect(service.state.nextPoll == started.addingTimeInterval(interval.seconds))
+    }
+
+    /// Před prvním usnutím se nemá co ukázat — a nula ani „za chvíli“ by o příštím tiku tvrdily
+    /// něco, co se ještě nerozhodlo.
+    @Test("Ruční obnovení příští tik neplánuje")
+    func manualRefreshDoesNotScheduleTheNextPoll() async {
+        let service = service(gateway: FakeGitHubGateway(always: .success([])), time: FakeTimeSource())
+
+        await service.refresh()
+
+        #expect(service.state.nextPoll == nil)
+    }
+
     // MARK: - Výpadek sítě
 
     @Test("Síťová chyba nezahodí poslední známá data")
@@ -200,6 +224,20 @@ struct PollingServiceTests {
         await service(gateway: FakeGitHubGateway(always: .failure(limited)), time: time).run()
 
         #expect(time.requestedSleeps == [.seconds(120), .seconds(240), .seconds(480)])
+    }
+
+    /// Příští tik musí ctít backoff, ne nastavený interval — jinak by dashboard slíbil dotaz
+    /// za minutu ve chvíli, kdy se aplikace dvě minuty schválně neptá.
+    @Test("Příští tik po rate limitu počítá s backoffem")
+    func nextPollFollowsTheBackoff() async {
+        let limited = GitHubError.rateLimited("HTTP 403: API rate limit exceeded")
+        let time = FakeTimeSource(stopAfter: 1)
+        let hit = time.now
+
+        let service = service(gateway: FakeGitHubGateway(always: .failure(limited)), time: time)
+        await service.run()
+
+        #expect(service.state.nextPoll == hit.addingTimeInterval(120))
     }
 
     @Test("Backoff má strop, aby se polling neuspal na hodiny")

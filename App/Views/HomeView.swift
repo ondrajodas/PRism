@@ -10,8 +10,12 @@ struct HomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            toolbar
-            Divider()
+            // Dashboard si hlavičku kreslí sám, takže nad pozdravem nemá co stát prázdný pruh
+            // s linkou. Návrh v něm žádný nemá a v okně to byl řádek, který nic neříkal.
+            if store.railSection != .overview {
+                toolbar
+                Divider()
+            }
             content
         }
     }
@@ -21,8 +25,11 @@ struct HomeView: View {
     /// schovávat nemají (viz `AppStore.pullRequestsWithDraft`).
     private var toolbar: some View {
         HStack(spacing: 10) {
-            Text(verbatim: store.railSection.title)
-                .font(.headline)
+            // Dashboard má vlastní hlavičku s pozdravem, takže by nadpis stál dvakrát pod sebou.
+            if store.railSection != .overview {
+                Text(verbatim: store.railSection.title)
+                    .font(.headline)
+            }
             Spacer(minLength: 8)
             if store.railSection == .queue {
                 PullRequestFilterButton(
@@ -39,6 +46,7 @@ struct HomeView: View {
 
     @ViewBuilder private var content: some View {
         switch store.railSection {
+        case .overview: DashboardView(store: store, open: store.openTab(_:))
         case .queue: PullRequestListView(store: store)
         case .drafts: draftList
         }

@@ -33,6 +33,15 @@ záložky nic nezahodí.**
 Barvy si okno drží samo (`Palette`), včetně fialového akcentu — systémová šedá je neutrální,
 kdežto tenhle návrh stojí na neutrálech posunutých do modrofialové.
 
+Obsahem domácí záložky je **dashboard** (#181), ne prázdné „Vyber pull request“. Odpovídá na tři
+otázky, na které se do té doby muselo hledat po okně: **kolik toho čeká**, **co z toho blokuje**
+a **co mám rozdělané** — plus co mě dneska stálo review, i s grafem za posledních sedm dní. Pod
+kartami je fronta seřazená **podle závažnosti**, ne podle času, vedle ní rozpad nálezů podle
+revieweera za týden a blok `Co teď` s akcemi: pustit review na všechno, co neběželo (ptá se na
+potvrzení — je to jediné kliknutí v aplikaci, které utratí víc než jednu session), nebo se vrátit
+k nejstaršímu rozdělanému review. Nic se pro to nedotahuje; všechna ta čísla už v aplikaci byla,
+jen roztroušená.
+
 Po startu si ověří, že má `gh`, `git` i `claude` a že je `gh` přihlášený — jinak řekne, co
 chybí a čím se to spraví. Pak se otevře seznam pull requestů napříč repozitáři, který se
 sám obnovuje. **Řádek začíná titulkem** (#172) a souřadnice — `repo #číslo · autor · čas

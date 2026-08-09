@@ -23,19 +23,28 @@ struct ReviewDraft: Hashable, Codable, Sendable {
     /// `nil` = ještě nevybráno. Není to totéž jako `.comment`, což je vědomé „jen komentuju“.
     var verdict: Verdict?
     var comments: [ReviewDraftComment]
+    /// Kdy se draftu naposled někdo dotkl (#181).
+    ///
+    /// Kvůli dashboardu, který říká, jak dlouho nejstarší rozdělané review leží — a to je jediná
+    /// věc, kterou o něm chce člověk vědět, aniž by ho otevíral. `nil` u draftů z doby před #181;
+    /// **není to `Date()`**, protože ty leží někde od minule a tvrdit u nich „právě teď“ by
+    /// z nejstaršího udělalo nejnovější.
+    var updatedAt: Date?
 
     init(
         pullRequest: PRIdentifier,
         headSha: String,
         body: String = "",
         verdict: Verdict? = nil,
-        comments: [ReviewDraftComment] = []
+        comments: [ReviewDraftComment] = [],
+        updatedAt: Date? = nil
     ) {
         self.pullRequest = pullRequest
         self.headSha = headSha
         self.body = body
         self.verdict = verdict
         self.comments = comments
+        self.updatedAt = updatedAt
     }
 
     /// Co se s PR má stát — hodnota, která jde do `event` při odeslání.

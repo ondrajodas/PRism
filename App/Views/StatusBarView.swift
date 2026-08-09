@@ -202,9 +202,7 @@ struct DailySpendView: View {
     /// Ne `+` na konci, i když zkrácení jinde v okně značí `+N` (odznak u vlákna): tam je za
     /// znaménkem **číslo**, kdežto samotné `12,35 $+` vypadá jako překlep. `≥` říká „aspoň“
     /// a nic jiného znamenat nemůže.
-    private var label: String {
-        (spend.unknown > 0 ? "≥ " : "") + RunUsageText.cost(spend.cost)
-    }
+    private var label: String { RunUsageText.spent(spend) }
 
     private var tooltip: String {
         guard !spend.isEmpty else {

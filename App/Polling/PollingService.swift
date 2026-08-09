@@ -41,8 +41,12 @@ final class PollingService {
     func run() async {
         while !Task.isCancelled {
             await refresh()
+            let wait = waitBeforeNextPoll()
+            // Zapisuje se **tady**, ne v `refresh()`: rozhoduje o tom čekání, které se právě
+            // spočítalo, a to zná jenom smyčka.
+            state.nextPoll = time.now.addingTimeInterval(wait.seconds)
             do {
-                try await time.sleep(for: waitBeforeNextPoll())
+                try await time.sleep(for: wait)
             } catch {
                 return
             }

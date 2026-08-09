@@ -62,6 +62,9 @@ struct SidebarRail: View {
 
     private func count(of item: RailSection) -> Int? {
         switch item {
+        // Dashboard odznak nemá: sám je souhrn, takže by číslo vedle ikony opakovalo to,
+        // co je za ní vidět.
+        case .overview: nil
         case .queue: queueCount
         case .drafts: draftCount
         }
