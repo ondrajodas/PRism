@@ -2,9 +2,10 @@ import SwiftUI
 
 /// Prázdný nebo chybový stav — **jeden vzor pro celé okno** (#176).
 ///
-/// Do #176 jich bylo šest a každý vznikl zvlášť: žádné PR, filtr schoval všechno, rate limit,
-/// selhané načtení seznamu, rozbitá konfigurace, selhaný klon. Vypadaly jinak, mluvily jinak
-/// a některé neřekly, co s tím dělat.
+/// Do #176 jich bylo **deset** a každý vznikl zvlášť — od prázdné fronty a zapnutého filtru přes
+/// rate limit a selhané načtení až po prázdná místa v nastavení a v novinkách. Zadání jich
+/// jmenovalo šest; zbytek se našel při přesazování. Vypadaly jinak, mluvily jinak a některé
+/// neřekly, co s tím dělat.
 ///
 /// **Povaha není kosmetika.** Ikona a její barva rozlišují klid od poruchy dřív, než se čte text
 /// — a zelené „všechno vyřízeno“ nad zapnutým filtrem tvrdí opak toho, co je pravda. Proto má
