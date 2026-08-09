@@ -114,7 +114,8 @@ struct ConversationEntryView: View {
                 }
                 Spacer(minLength: 0)
             }
-            if let snippet = Policy.snippet(of: thread) {
+            // Kratší úryvek než u kódu (#216): na ose se ukazuje **místo**, ne diff.
+            if let snippet = Policy.snippet(of: thread, context: Policy.timelineSnippetContext) {
                 ThreadSnippetView(snippet: snippet, path: thread.path)
             }
             ThreadBubbleView(
@@ -144,20 +145,23 @@ struct ConversationEntryView: View {
         accent: Color,
         url: URL? = nil
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
+            // Hlavička **oddělená linkou**, jako u popisu PR (#198) a u kontrol (#209).
+            // Do #216 byla uvnitř šedého bloku, takže se od těla nedala odlišit.
             HStack(spacing: 6) {
+                AvatarView(login: author, url: nil, size: 18)
                 Text(verbatim: author)
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 12, weight: .semibold))
                 if isMine(author) {
                     Text("já")
-                        .font(.caption2)
+                        .font(.system(size: 10.5))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(.tint.opacity(0.18), in: .capsule)
                 }
                 if let badge {
                     Text(verbatim: badge.text)
-                        .font(.caption2)
+                        .font(.system(size: 10.5))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(badge.color.opacity(0.18), in: .capsule)
@@ -165,36 +169,54 @@ struct ConversationEntryView: View {
                 }
                 if let date {
                     Text(date, format: .relative(presentation: .named))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Palette.ink3)
                 } else {
                     // Rozdělané review na GitHubu ještě odeslané není — a je to důvod, proč
                     // odsud nejde poslat naše (změřeno u #62: 422 `one pending review`).
                     Text("neodeslané")
-                        .font(.caption2)
+                        .font(.system(size: 11.5))
                         .foregroundStyle(.orange)
                 }
                 Spacer(minLength: 0)
                 if let url {
                     Link(destination: url) {
-                        Image(systemName: "arrow.up.right.square").font(.caption2)
+                        Image(systemName: "arrow.up.right.square").font(.system(size: 11))
                     }
                     .help("Otevřít na GitHubu")
                 }
             }
-            if !body.isEmpty {
-                MarkdownText(text: body)
-            } else if let emptyNote {
-                Text(verbatim: emptyNote)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            .padding(.horizontal, 12)
+            .padding(.top, 9)
+            .padding(.bottom, 2)
+
+            Group {
+                if !body.isEmpty {
+                    // Próza 12,5 jako všude jinde v okně — do #216 byla o stupeň větší než
+                    // sousední bloky.
+                    MarkdownText(text: body, font: .system(size: 12.5))
+                } else if let emptyNote {
+                    Text(verbatim: emptyNote)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Palette.ink3)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
+            .padding(.bottom, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.chrome, in: .rect(cornerRadius: 7))
+        .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line, lineWidth: 1) }
+        // **Verdikt nese proužek na hraně**, ne jen odznak — tatáž škála jako v řádku fronty
+        // a na kartě nálezu, takže se schválení od vyžádaných změn pozná periferně.
+        .overlay(alignment: .leading) {
+            if accent != .secondary {
+                Rectangle().fill(accent).frame(width: 3)
             }
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quinary, in: .rect(cornerRadius: 8))
-        .overlay(alignment: .leading) { Rectangle().fill(accent.opacity(0.6)).frame(width: 3) }
-        .clipShape(.rect(cornerRadius: 8))
+        .clipShape(.rect(cornerRadius: 7))
     }
 
     /// Prázdný `viewer` znamená „nevím“, ne „to jsem já“ — jinak by se u nenačtené konverzace

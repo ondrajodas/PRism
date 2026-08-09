@@ -29,12 +29,14 @@ struct ConversationNodeView: View {
     private var axis: some View {
         VStack(spacing: 0) {
             ZStack {
+                // Malý uzel (#216): v návrhu je puntík menší než avatar vedle něj, takže osu
+                // vede a nepřebíjí ji. S 22 body byly šipky u vláken skoro tak velké jako text.
                 Circle()
                     .fill(Palette.surface)
-                    .overlay(Circle().strokeBorder(marker.color.opacity(0.5), lineWidth: 1.5))
-                    .frame(width: 22, height: 22)
+                    .overlay(Circle().strokeBorder(marker.color.opacity(0.5), lineWidth: 1))
+                    .frame(width: 16, height: 16)
                 Image(systemName: marker.symbol)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 8, weight: .medium))
                     .foregroundStyle(marker.color)
             }
             Rectangle()
@@ -42,7 +44,7 @@ struct ConversationNodeView: View {
                 .frame(width: 1)
                 .frame(maxHeight: .infinity)
         }
-        .frame(width: 22)
+        .frame(width: 16)
     }
 
     @ViewBuilder private var content: some View {

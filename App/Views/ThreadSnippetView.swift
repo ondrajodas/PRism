@@ -24,8 +24,14 @@ struct ThreadSnippetView: View {
             if snippet.isTruncated { truncationMark }
             // Klíčem je pořadí, ne řádek: dva prázdné řádky za sebou jsou si jako `DiffLine`
             // rovné a `ForEach` by z nich udělal jeden.
-            ForEach(Array(snippet.lines.enumerated()), id: \.offset) { _, line in
-                DiffLineView(line: line, language: language)
+            // **Barví se jen komentovaný řádek** (#216), ostatní jsou kontext. Úryvek na ose
+            // má ukázat *místo*, ne diff — s celým zeleným blokem se čte jako změna, o které
+            // vlákno není. Komentovaný je ten poslední: `Policy.snippet` končí právě jím.
+            ForEach(Array(snippet.lines.enumerated()), id: \.offset) { index, line in
+                DiffLineView(
+                    line: index == snippet.lines.count - 1 ? line : line.asContext,
+                    language: language
+                )
             }
         }
         .padding(.vertical, 4)

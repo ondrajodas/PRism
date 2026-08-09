@@ -1752,6 +1752,17 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     důvod, proč nálezy neplatí (tvrdá podmínka č. 5), a je žlutá jako stav `zastaralé`.
   - **Mřížka čtyř sloupců, ne `HStack`.** V `HStacku` se dvě dlaždice roztáhnou přes celou šířku
     a číslo v nich plave uprostřed prázdna; v mřížce si drží čtvrtinu bez ohledu na počet.
+- **Sazba položek konverzace je z návrhu** (#216). U #183 se konverzace přestěhovala, ale
+  položky zůstaly, jak vypadaly v `Přehledu` od #72 — a vedle sebe s návrhem to bylo zřetelné.
+  Čtyři věci, které se u toho rozhodly:
+  - **Úryvek u vlákna má na ose kratší kontext** (`Policy.timelineSnippetContext`, jeden řádek
+    proti pěti u kódu). V diffu je úryvek náhradou za to, že řádek nejde ukázat v souboru; na
+    ose stačí **ukázat místo**. S pěti zabralo jedno vlákno půl obrazovky.
+  - **Barví se jen komentovaný řádek**, ostatní jdou jako kontext (`DiffLine.asContext`). Celý
+    zelený blok se čte jako změna, o které vlákno není.
+  - **Komentář je bublina, ne karta s linkou.** Dělicí linka je správně u popisu PR (#198), kde
+    je pod ní dlouhý text; nad dvěma větami je to rámeček navíc.
+  - **Uzel je menší než avatar vedle něj.** Osu má vést, ne ji přebíjet.
 - **Konverzace je vlastní tab s časovou osou** (#183). `Přehled` a konverzace odpovídají na dvě
   různé otázky — „jak to teď stojí“ a „co se dělo“ — a v jednom scrollu se to druhé četlo tak, že
   se přes první přerolovalo. Čtyři pravidla:

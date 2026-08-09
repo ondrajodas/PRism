@@ -188,7 +188,7 @@ struct ThreadBubbleView: View {
                 DraftTextEditor(
                     text: actions.reply(thread),
                     placeholder: "Odpovědět ve vlákně…",
-                    minHeight: 52,
+                    minHeight: 34,
                     commit: { actions.setReply(thread, $0) }
                 )
                 // Identita per vlákno: bublina je buňka líného seznamu a po odscrollování se
