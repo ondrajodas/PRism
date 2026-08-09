@@ -1725,6 +1725,22 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Kolik znaků zbývá, se měří, ne bere z tabulky.** Tabulka v zadání #188 platí pro jeden
     displej a jedno nastavení; číslo v liště platí pro okno, které mám otevřené. Ukazuje se
     **jen pod slibem** (120 znaků z `CLAUDE.md`) — nad ním je to údaj, který nikoho nezajímá.
+- **Konverzace je vlastní tab s časovou osou** (#183). `Přehled` a konverzace odpovídají na dvě
+  různé otázky — „jak to teď stojí“ a „co se dělo“ — a v jednom scrollu se to druhé četlo tak, že
+  se přes první přerolovalo. Čtyři pravidla:
+  - **Uzel osy není položka konverzace.** `ConversationNode` slévá **za sebou jdoucí** commity do
+    jednoho uzlu: jedenáct pushů utopí dva komentáře, kvůli kterým se do konverzace chodí. Commit
+    před komentářem a po něm se **neslévá** — jsou to dvě různé věci, které se staly kolem něj.
+  - **Symbol nese uzel na ose, ne řádek.** Dvě ikony vedle sebe vypadají jako dva různé údaje.
+  - **Filtr je zúžení, ne čtyři seznamy** — a počty u popisků se počítají z **plné** osy, jinak by
+    se číslo měnilo tím, na co se zrovna kouká. Review s prózou patří ke komentářům (je to něčí
+    text), prázdný verdikt k událostem (je to děj).
+  - **Položku kreslí sdílené view** (`ConversationEntryView`), takže se totéž vlákno nevykresluje
+    dvakrát jinak. Vlákna **s kotvou** zůstávají bublinami u kódu; jediný domov konverzace se
+    nedělí, jen stěhoval.
+
+  Odznak s počtem se přesunul k `Konverzaci`: říká, kolik je toho **k přečtení**, a čte se
+  odteď tam. Události se do něj dál nepočítají (#171).
 - **Prázdné a chybové stavy mají jeden vzor** (`EmptyStateView`, #176). Bylo jich deset a každý
   vznikl zvlášť. Tři pravidla:
   - **Povaha není kosmetika**: `calm` (nic nechybí), `waiting` (něco je zapnuté nebo se čeká),

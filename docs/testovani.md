@@ -669,6 +669,10 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
 
   **Značku `≥` u neúplné útraty** (`RunUsageText.spent`) čtou od #181 dvě místa, takže má vlastní
   test — formát částky se netestuje, ten závisí na locale.
+- **Osa konverzace (#183)** — `Policy` výčtem. Dvě věci se dají pokazit potichu: **slít commity,
+  které za sebou nejdou** (mezi nimi je komentář, takže do jedné skupiny nepatří) a **zahodit prózu
+  review** při zúžení na komentáře. K tomu datum skupiny (bere se z **posledního** commitu — to je
+  okamžik, ve kterém větev vypadá tak, jak vypadá teď) a počty, které se počítají z plné osy.
 - **Šířka diffu ve znacích (#188)** — `Policy` výčtem. Pokazit se dá potichu jedno: **zapomenout,
   že se vedle sebe dělí šířka na dvě strany**. Číslo by pak tvrdilo, že se slib drží, zrovna
   v režimu, ve kterém se nedrží. K tomu nezměřené okno (nula je pravda o měření, ne o okně)

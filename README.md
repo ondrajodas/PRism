@@ -80,9 +80,15 @@ pod tím řádek s oběma — dokud se rovnají, je to trivia, jakmile se rozejd
 údaj na obrazovce, protože všechno pod ním mluví o kódu, který na větvi už není. Vpravo u záložek
 je rozsah změny (`+X −Y`).
 
-Detail PR má **záložky jako GitHub**: `Přehled` a `Změněné soubory`, podtržené, s odznakem
-kolik je v přehledu k přečtení. Volba se pamatuje **u každého PR zvlášť** a otevírá se
-`Přehled` — popis a diskuze se čtou dřív než kód, kterého se týkají.
+Detail PR má **tři záložky** (#183): `Přehled` říká, jak to teď stojí (popis, fakta, co se změnilo
+od minule), `Změněné soubory` je diff a `Konverzace` je **časová osa toho, co se dělo** — s uzly,
+u kterých tvar nese druh, se seskupenými commity (jedenáct pushů nesmí utopit dva komentáře),
+filtrem `Vše / Komentáře / Vlákna / Události` a značkou `Nové od tvé poslední návštěvy`. U force-pushe
+je rovnou u události napsané, že tím zastaraly nálezy, a tlačítko pustit review znovu.
+
+Záložky jsou podtržené jako na GitHubu a odznak u `Konverzace` říká, kolik je toho k přečtení.
+Volba se pamatuje **u každého PR zvlášť** a otevírá se `Přehled` — popis a diskuze se čtou dřív
+než kód, kterého se týkají.
 
 Úplně nahoře v `Přehledu` je **co se změnilo od tvé poslední návštěvy** (#173): nové commity,
 cizí review, komentáře — a hlavně **přepsaná historie větve**, protože právě po ní zastarají
@@ -95,9 +101,9 @@ už je nová návštěva**, takže se banner podruhé neukazuje; projetí seznam
 nespotřebuje, protože se posouvá jen u PR, u kterého se stihla načíst konverzace. Odklidit ho jde
 i rovnou křížkem vpravo.
 
-**`Přehled`** dál nese to, co se neváže k žádnému řádku: popis PR od autora a pod ním konverzaci
-chronologicky — review ostatních s odznakem (`schválil`, `vyžádal změny`), komentáře pod PR
-a vlákna, jejichž řádek v aktuálním diffu není (typicky zastaralá po novém commitu). Ta se
+**`Konverzace`** nese to, co se neváže k žádnému řádku: review ostatních s odznakem (`schválil`,
+`vyžádal změny`), komentáře pod PR a vlákna, jejichž řádek v aktuálním diffu není (typicky
+zastaralá po novém commitu). Ta se
 kreslí **tou samou bublinou jako u kódu**, jen s cestou a řádkem nad ní — a **pod tím kus kódu,
 ke kterému se komentář váže**, obarvený a naformátovaný jako v diffu. Kód se bere ze snímku,
 který si GitHub k komentáři drží (`diffHunk`), takže platí pro commit, na kterém komentář vznikl
@@ -220,7 +226,7 @@ je to cesta ke stromu, když je sloupec složený.
 je jediné místo, kde jsou vidět nálezy **bez místa v kódu** — chybějící testy nebo poznámky
 k architektuře; kvůli nim samotné bubliny nestačí. Je vidět v **obou** záložkách, protože nálezy,
 průběh i rozdělané review patří k celému PR, ne k diffu. Klik kamkoli do karty odscrolluje diff
-(a přepne na něj, když jsi v `Přehledu`) tak, aby nad nálezem zůstalo pár řádků kontextu,
+(a přepne na něj, když jsi v jiném tabu) tak, aby nad nálezem zůstalo pár řádků kontextu,
 a bublinu na chvíli zvýrazní.
 
 Do #182 byl panel **pod** diffem, kde si bral výšku — tedy to, čeho je u kódu nejmíň. Napravo bere
@@ -381,7 +387,7 @@ z jednoho tiku nebylo N podprocesů.
 
 **A dá se do nich odpovědět.** V rozbaleném vlákně je pole na odpověď a tlačítko `Odpovědět`,
 vedle něj `Vyřešit` (u vyřešeného `Znovu otevřít`) — všechno funguje jak v diffu, tak
-v `Přehledu`. Odeslaná odpověď se ve vlákně objeví hned, bez čekání na další načtení, protože
+v `Konverzaci`. Odeslaná odpověď se ve vlákně objeví hned, bez čekání na další načtení, protože
 ji GitHub v odpovědi celou vrací. **Odpověď se nepotvrzuje** dialogem jako review: je to jedna
 věta v diskuzi, dá se smazat a potvrzování každé by z okna udělalo klikačku — tlačítko je
 pojmenované, takže se to nestane omylem.
@@ -476,13 +482,13 @@ sráží na zakázané, nikdy na povolené. **Platí to i pro odpovědi do vlák
 obojí, takže se nedá stát, že se do repa nesmí poslat review, ale komentář ano.
 
 Po úspěchu se potvrzení **zavře samo**, draft zmizí (i z disku) a konverzace se načte znovu,
-takže je moje review hned vidět v `Přehledu`. Otevřené zůstane jen tehdy, když GitHub vrátí
+takže je moje review hned vidět v `Konverzaci`. Otevřené zůstane jen tehdy, když GitHub vrátí
 stav, kterému aplikace nerozumí — tam je jediná zpráva ta, že se to má zkontrolovat ručně.
 **Selhání draft nemaže**: chyba je vypsaná i s tím, co se s ní dá dělat, a dá se zkusit znovu.
 
 Vlákna, jejichž řádek v aktuálním diffu **není** (typicky zastaralá po novém commitu), se
 do kódu nekotví — jejich čísla platila pro starý head, takže by bublina sedla na cizí řádky.
-Domov mají v záložce `Přehled` spolu s review ostatních a komentáři pod PR, a je u nich vidět
+Domov mají v záložce `Konverzace` spolu s review ostatních a komentáři pod PR, a je u nich vidět
 kód, ke kterému se vážou — ten ze **starého** commitu, ne z dnešního.
 
 Co se ve které verzi změnilo, ukazuje **okno `Novinky v PRism`** přímo v aplikaci (✨

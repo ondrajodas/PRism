@@ -121,7 +121,10 @@ struct PullRequestDetailView: View {
         PullRequestTabBar(selection: tabSelection) { tab in
             // Jen to, co je **k přečtení** — události časové osy se nepočítají (#171), jinak by
             // na PR s dvaceti commity odznak ukazoval třicet a přestal by o diskuzi něco říkat.
-            tab == .overview ? store.overview(for: pullRequest.id).count { $0.isReadable } : nil
+            // Počet je u `Konverzace` (#183), ne u `Přehledu`: odznak říká, kolik je toho
+            // k přečtení, a od #183 se čte tam. Události se do něj nepočítají — na PR
+            // s dvaceti commity by přestal o diskuzi něco říkat.
+            tab == .conversation ? store.overview(for: pullRequest.id).count { $0.isReadable } : nil
         }
         .diffCounts(loadedDiffCounts)
     }
@@ -166,6 +169,7 @@ struct PullRequestDetailView: View {
             switch store.detailTab(for: pullRequest.id) {
             case .filesChanged: diff
             case .overview: overview
+            case .conversation: conversation
             }
             // Panel se ukáže i **bez** záznamu, jakmile něco běží: při prvním review je
             // průběh to jediné, co je, a čekat na uložený výsledek by ho schovalo.
@@ -527,13 +531,6 @@ struct PullRequestDetailView: View {
     private var overview: some View {
         OverviewView(
             description: store.description(of: pullRequest.id),
-            entries: store.overview(for: pullRequest.id),
-            state: store.conversationState(for: pullRequest.id),
-            viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
-            missing: store.conversation(for: pullRequest.id).map(ConversationShortfall.init)
-                ?? ConversationShortfall(),
-            threadActions: threadActions,
-            refresh: { Task { await store.refreshConversation(for: pullRequest) } },
             changes: store.changesSinceLastVisit(for: pullRequest.id),
             lastVisit: store.visitSnapshots[pullRequest.id],
             // Obojí je „to, co mám na obrazovce, už neplatí“, takže se do banneru slévá do
@@ -545,6 +542,24 @@ struct PullRequestDetailView: View {
             rerun: { store.startReview(for: pullRequest.id) },
             dismissChanges: { store.markChangesAsSeen(for: pullRequest.id) },
             pullRequest: pullRequest
+        )
+    }
+
+    /// Tab `Konverzace` (#183) — časová osa. Bere **tytéž položky** jako `Přehled` bral do #183;
+    /// jediný domov konverzace se nedělí, jen stěhoval.
+    private var conversation: some View {
+        ConversationView(
+            entries: store.overview(for: pullRequest.id),
+            state: store.conversationState(for: pullRequest.id),
+            viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
+            missing: store.conversation(for: pullRequest.id).map(ConversationShortfall.init)
+                ?? ConversationShortfall(),
+            threadActions: threadActions,
+            refresh: { Task { await store.refreshConversation(for: pullRequest) } },
+            lastVisit: store.visitSnapshots[pullRequest.id],
+            isStale: store.reviewRecord(for: pullRequest.id)?.isStale == true
+                || store.isDraftStale(for: pullRequest.id),
+            rerun: { store.startReview(for: pullRequest.id) }
         )
     }
 
