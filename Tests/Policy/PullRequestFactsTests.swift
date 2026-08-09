@@ -61,8 +61,9 @@ struct PullRequestFactsTests {
         #expect(facts(commits: 12, areCommitsExact: false).isEmpty)
     }
 
-    /// Proti čemu nálezy platí, je fakt o PR i bez načtené hlavy — dlaždice se kreslí, jen
-    /// není proti čemu ji označit za zastaralou.
+    /// Proti čemu nálezy platí, je fakt o PR i bez načtené hlavy. **Žlutá je i tak**: dokud
+    /// hlava nedorazí, nedá se ověřit, že nálezy platí proti dnešnímu kódu — a mlčet o tom je
+    /// horší než varovat zbytečně.
     @Test("Sha nálezů se ukáže i bez hlavy")
     func showsTheFindingsShaWithoutAHead() {
         let tiles = facts(findingsHead: "4f2ac91").tiles
