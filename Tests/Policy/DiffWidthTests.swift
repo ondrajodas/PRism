@@ -10,6 +10,9 @@ import Testing
 /// vysvětlení.
 @Suite("Šířka diffu ve znacích")
 struct DiffWidthTests {
+    /// Gutter se předává **vždycky**: výchozí hodnota tu byla a byla vymyšlená, takže ukazatel
+    /// tvrdil víc znaků, než se vejde (nález Copilota na #188). Tady je 64 jen kulaté číslo
+    /// do výpočtu, skutečné bere lišta z `DiffLineView`.
     private func characters(_ width: Double, layout: DiffLayout, gutter: Double = 64) -> Int {
         Policy.charactersPerSide(
             contentWidth: width,
@@ -50,7 +53,12 @@ struct DiffWidthTests {
     @Test("Nulová šířka znaku nespadne")
     func handlesAZeroCharacterWidth() {
         #expect(
-            Policy.charactersPerSide(contentWidth: 1000, characterWidth: 0, layout: .unified) == 0
+            Policy.charactersPerSide(
+                contentWidth: 1000,
+                characterWidth: 0,
+                layout: .unified,
+                gutter: 64
+            ) == 0
         )
     }
 

@@ -418,7 +418,9 @@ struct DiffView: View {
         let characters = Policy.charactersPerSide(
             contentWidth: contentWidth,
             characterWidth: Self.characterWidth,
-            layout: layout
+            layout: layout,
+            // Skutečná šířka sloupců vlevo, ne odhad — kreslí je `DiffLineView`.
+            gutter: DiffLineView.contentInset(for: layout)
         )
         if contentWidth > 0, characters < Policy.promisedCharactersPerSide {
             Label("\(characters) znaků na stranu", systemImage: "exclamationmark.triangle")
@@ -473,8 +475,41 @@ struct DiffView: View {
     /// a bez čísla na hraně se na ni po složení nedá odpovědět.
     @ViewBuilder private func tree(jumpingWith proxy: ScrollViewProxy) -> some View {
         if isTreeExpanded {
-            FileTreeView(files: diff.files, markers: fileMarkers, isCompact: true) { file in
-                jump(to: file, with: proxy)
+            VStack(spacing: 0) {
+                // Hlavička jako u panelu vpravo: popisek z návrhu (`7 SOUBORŮ`) a šipka, kterou
+                // se sloupec zavře. Zavírat jedině z lišty nad diffem znamená hledat tlačítko
+                // na druhém konci okna, než u kterého člověk zrovna je.
+                HStack(spacing: 8) {
+                    Text(verbatim: Plural.czech(
+                        diff.files.count,
+                        one: "soubor",
+                        few: "soubory",
+                        many: "souborů"
+                    ).uppercased())
+                        .font(.system(size: 10, design: .monospaced))
+                        .tracking(1)
+                        .foregroundStyle(Palette.ink3)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Button {
+                        withAnimation(.snappy(duration: 0.15)) { isTreeExpanded = false }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.caption)
+                            .foregroundStyle(Palette.ink3)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Složit strom souborů (⌘1)")
+                    .accessibilityLabel("Složit strom souborů")
+                }
+                .padding(.horizontal, 13)
+                .padding(.vertical, 9)
+                .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
+
+                FileTreeView(files: diff.files, markers: fileMarkers, isCompact: true) { file in
+                    jump(to: file, with: proxy)
+                }
             }
             .frame(width: Self.treeWidth)
             .background(Palette.chrome)

@@ -12,11 +12,15 @@ extension Policy {
     /// platí pro okno, které mám zrovna otevřené.
     ///
     /// `gutter` je to, co si na každé straně bere sloupec s čísly řádků a znaménkem změny.
+    /// **Bez výchozí hodnoty schválně** (nález Copilota na #188): měl jsem tu 64, kdežto diff
+    /// kreslí `DiffLineView.contentInset(for:)` — tedy 84 ve splitu a 136 pod sebou. Vymyšlené
+    /// číslo dělalo ukazatel optimističtější, než jaká je pravda, takže varování mohlo mlčet
+    /// zrovna nad řádky, které se lámou. Volající předává skutečnou hodnotu.
     static func charactersPerSide(
         contentWidth: Double,
         characterWidth: Double,
         layout: DiffLayout,
-        gutter: Double = 64
+        gutter: Double
     ) -> Int {
         guard characterWidth > 0 else { return 0 }
         // U pohledu vedle sebe se šířka dělí na dvě strany a každá má vlastní sloupec s čísly.
