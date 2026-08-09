@@ -108,8 +108,12 @@ struct StoredReviewRun: Codable, Hashable, Sendable {
     /// `init(from:)` u něj sáhne po `decodeIfPresent`, takže se chybějící klíč nedekóduje jako
     /// chyba. `nil` navíc znamená totéž co ve `StreamSummary` — nevíme, ne nula.
     let usage: RunUsage?
+    /// Co reviewer dělal (#203). **Volitelné**, protože starší soubory ten klíč nemají — tatáž
+    /// úmluva jako u `usage`. `nil` znamená „osa se neuložila“, ne „nic se nedělo“: prázdné pole
+    /// by po restartu tvrdilo, že běh proběhl bez jediné události.
+    let timeline: StoredTimeline?
 
-    init(_ run: ReviewRun, finishedAt: Date) {
+    init(_ run: ReviewRun, finishedAt: Date, timeline: StoredTimeline? = nil) {
         skillID = run.key.skillID
         outcome = run.outcome
         sessionID = run.sessionID
@@ -118,5 +122,6 @@ struct StoredReviewRun: Codable, Hashable, Sendable {
         calledReportFindings = run.summary.calledReportFindings
         self.finishedAt = finishedAt
         usage = run.summary.usage
+        self.timeline = timeline
     }
 }

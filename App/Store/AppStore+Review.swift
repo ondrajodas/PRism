@@ -68,7 +68,16 @@ extension AppStore {
 
     /// Časová osa běhů posledního review. Prázdná, dokud se nic nespustilo.
     func timelines(for pr: PRIdentifier) -> [ReviewerTimeline] {
-        reviewTimelines[pr] ?? []
+        // Živá osa má přednost (#203): běžící review si ji drží v paměti a uložená patří
+        // předchozímu běhu — přebít ji tou z disku by ukázalo starý průběh nad novým během.
+        //
+        // Rozhoduje **existence klíče, ne to, jestli je pole prázdné**. Nový běh si osu nuluje
+        // ještě před prvním eventem, takže by se v tom okně sáhlo na disk a nad rozjetým během
+        // by probliknul průběh toho předchozího — přesně to, čemu se tohle pravidlo vyhýbá.
+        // Cena: běh zrušený dřív, než cokoli dorazilo, nechá tab prázdný až do restartu. To je
+        // ale pravda o tomhle PR — poslední, co se s ním dělo, opravdu žádnou osu nemá.
+        if let live = reviewTimelines[pr] { return live }
+        return Policy.timelines(of: reviewRecords[pr])
     }
 
     func review(_ pr: PRIdentifier, skills subset: [String]? = nil) async {
@@ -396,7 +405,14 @@ extension AppStore {
                     // Ukládá se **před** překladem: ten je krátká síťová operace navíc
                     // a když se na ní aplikace zavře, nálezy už jsou na disku. V originále,
                     // ale jsou — což je přesně to, co pravidlo „co doběhlo, zůstane“ chce.
-                    reviewRecords[pr] = try await reviews.save(run)
+                    reviewRecords[pr] = try await reviews.save(
+                        run,
+                        // Osa se ukládá **s během**, ne zvlášť: je to jeho průběh, takže patří
+                        // do téhož souboru a zestárne s ním (#203).
+                        timeline: reviewTimelines[pr]?
+                            .first { $0.skill == run.key.skillID }?
+                            .stored()
+                    )
                     revealFindingsOutsideTheDiff(for: pr)
                     if let translated = await translated(run, for: pr.repo) {
                         reviewRecords[pr] = try await reviews.save(translated)

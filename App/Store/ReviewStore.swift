@@ -52,7 +52,7 @@ actor ReviewStore {
     /// zestárnou. Kdyby se to nechalo jen na `markCurrent`, stačilo by ho jednou zapomenout
     /// zavolat a nálezy proti neexistujícímu kódu by se ukazovaly jako platné.
     @discardableResult
-    func save(_ run: ReviewRun) throws -> ReviewRecord {
+    func save(_ run: ReviewRun, timeline: StoredTimeline? = nil) throws -> ReviewRecord {
         let pullRequest = run.key.pullRequest
         try markStale(everythingBut: run.key.headSha, of: pullRequest)
 
@@ -63,7 +63,10 @@ actor ReviewStore {
         // žádný náš neexistuje.
         var record = (layout.isSymbolicLink(url) ? nil : try? read(at: url))
             ?? ReviewRecord(pullRequest: pullRequest, headSha: run.key.headSha)
-        record.replace(StoredReviewRun(run, finishedAt: time.now))
+        // Osa se **nepřepisuje na nic**: překlad nálezů (#94) ukládá týž běh podruhé a osu
+        // s sebou nenese, takže by ji jinak druhý zápis smazal.
+        let stored = timeline ?? record.runs.first { $0.skillID == run.key.skillID }?.timeline
+        record.replace(StoredReviewRun(run, finishedAt: time.now, timeline: stored))
         record.isStale = false
         // Běh nad PR je důkaz, že o něj pořád je zájem.
         record.closedAt = nil

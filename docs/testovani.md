@@ -677,6 +677,11 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
 
   Samotné rozvržení panelu se neunit-testuje (je to view) — kontroluje se na běžící aplikaci proti
   vyrenderované sekci 02 návrhu, viz níž.
+- **Uložená osa běhu (#203)** — tři věci, které se dají pokazit potichu: **oříznout konec místo
+  začátku** (po restartu se do osy kouká proto, aby se vidělo, čím to skončilo), **zapomenout, že
+  se ořízlo** (sčítá se to mezi uloženími) a **přebít živou osu tou z disku** — to poslední je
+  ověřené **vloženou regresí**: bez té podmínky spadne sedm testů. K tomu kolečko přes `Codable`,
+  protože události nesou přiřazené hodnoty a chyba v kódování by se projevila až po restartu.
 - **`WindowCentering` (#164)** — **geometrie, ne `NSWindow`**. `centered(_:in:on:)` si obrazovky
   bere parametrem (`ScreenBounds`), takže je to čistá funkce; jinak by zůstalo neotestované zrovna
   zarovnávání zpátky na viditelnou plochu, protože `NSScreen` se vyrobit nedá. Do #164 to byla

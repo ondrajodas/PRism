@@ -1892,6 +1892,19 @@ Odpovídání do vláken (#73) drží `AppStore` ve dvou mapách klíčovaných 
 - **Součet se sráží po každém úspěšném tiku.** Počítá se od půlnoci, takže aplikace běžící přes
   noc by ráno ukazovala včerejšek. Účetní kniha si den pamatuje i pro prázdný den, takže se na
   disk sahá jednou za den, ne jednou za minutu.
+- **Osa běhu se ukládá k běhu** (#203). Do té doby žila jen v paměti, takže ji restart smazal
+  i se `sessionID`, tedy jedinou cestou zpátky do session (`claude --resume`) — a nálezy, ke
+  kterým patří, na disku zůstávaly. Čtyři pravidla:
+  - **Ukládá ji `StoredReviewRun`**, takže je klíčovaná `headSha` jako všechno ostatní a po novém
+    commitu zestárne s nálezy. Volitelná, protože starší soubory ten klíč nemají; `nil` znamená
+    „osa se neuložila“, ne „nic se nedělo“ — proto se běh bez osy v tabu `Průběh` **nekreslí**.
+  - **Živá osa přebíjí uloženou.** Běžící review si ji drží v paměti, kdežto uložená patří
+    předchozímu běhu; ověřeno vloženou regresí (spadne sedm testů).
+  - **Ořezává se začátek, ne konec**, a strop je 300 událostí: kdo se do osy dívá po restartu,
+    hledá, čím to skončilo. Kolik se ořízlo, se **sčítá mezi uloženími** a je to v hlavičce
+    vidět — tiché zkrácení je tatáž past jako `droppedFindings`.
+  - **`skill`, `sessionID` a cena se neduplikují** — osa je bere z běhu, pod kterým leží.
+    Dvě kopie téhož v jednom souboru se rozejdou.
 - **Uložená cena má čtenáře — chip revieweera.** Osa v tabu `Průběh` je jen v paměti, takže po
   restartu je prázdná; kdyby cenu četla jenom ona, byl by `StoredReviewRun.usage` stav, který se
   drží a nikdo ho nečte. Chip se staví ze **záznamu**, takže ji v nápovědě ukáže i druhý den.
@@ -2393,6 +2406,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.dashboard(pullRequests:records:drafts:categories:since:)` | Podklad startovní obrazovky (#181): čtyři karty a rozpad nálezů podle revieweera (`Dashboard`, `ReviewerShareOfFindings`) |
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí fronty na dashboardu (#181) — podle závažnosti, ne podle času (`QueueEntry`) |
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
+| `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
 | `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
 | `Policy.changes(in:since:)` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`) |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |

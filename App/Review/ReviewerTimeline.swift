@@ -2,8 +2,10 @@ import Foundation
 
 /// Co reviewer dělal, v pořadí, v jakém se to dělo.
 ///
-/// Drží se v paměti, ne na disku: k průběhu se člověk vrací hned po běhu („co to vlastně
-/// četlo?“), ne po restartu — a po restartu už by se k session stejně nedalo připojit.
+/// **Přežije restart** (#203). Do té doby se držela jen v paměti s odůvodněním, že se k průběhu
+/// člověk vrací hned po běhu; jenže s ní mizelo i `sessionID`, tedy jediná cesta zpátky do session
+/// (`claude --resume`) — a nálezy, ke kterým patří, na disku zůstávaly. Ukládá ji `StoredReviewRun`,
+/// takže je klíčovaná `headSha` jako všechno ostatní: po novém commitu zestárne s nálezy.
 struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     let skill: String
     /// Pracovní strom, ve kterém běh běžel. Podle něj se v ose zkracují cesty — bez toho
@@ -15,6 +17,9 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     /// běžící reviewer ji nemá a zabitý ji mít nebude. `nil` je odpověď „nevíme“, ne nula.
     var usage: RunUsage?
     private(set) var entries: [Entry] = []
+    /// Kolik událostí se na začátek osy nevešlo (#203). **Musí být vidět** — tiše zkrácená osa
+    /// tvrdí, že běh začal uprostřed, a je to tatáž past jako u `droppedFindings`.
+    private(set) var droppedEntries = 0
 
     var id: String { skill }
 
@@ -23,14 +28,14 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         entries.contains { if case .finished = $0.kind { true } else { false } }
     }
 
-    struct Entry: Identifiable, Equatable, Sendable {
+    struct Entry: Identifiable, Hashable, Codable, Sendable {
         /// Pořadí v ose. `Date` na identitu nestačí — dva eventy můžou padnout do stejné
         /// milisekundy.
         let id: Int
         let at: Date
         let kind: Kind
 
-        enum Kind: Equatable, Sendable {
+        enum Kind: Hashable, Codable, Sendable {
             case queued
             case started
             case tool(ToolAttempt)
@@ -43,6 +48,34 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         self.skill = skill
         self.worktree = worktree
     }
+
+    /// Osa poskládaná z uloženého běhu (#203).
+    ///
+    /// `skill`, `sessionID` a cenu bere z **běhu**, ne z uložené osy: obojí by v souboru leželo
+    /// dvakrát a dvě kopie téhož se dřív nebo později rozejdou.
+    init(_ run: StoredReviewRun) {
+        skill = run.skillID
+        worktree = run.timeline?.worktree
+        sessionID = run.sessionID
+        usage = run.usage
+        entries = run.timeline?.entries ?? []
+        droppedEntries = run.timeline?.dropped ?? 0
+    }
+
+    /// Co se z osy uloží. Ořezává se **začátek**, ne konec: kdo se do osy dívá po restartu,
+    /// hledá, čím to skončilo.
+    func stored(limit: Int = Self.storedEntryLimit) -> StoredTimeline {
+        let dropped = max(entries.count - limit, 0)
+        return StoredTimeline(
+            worktree: worktree,
+            entries: Array(entries.suffix(limit)),
+            dropped: droppedEntries + dropped
+        )
+    }
+
+    /// Strop uložených událostí. Delší běh jich nadělá stovky (každé čtení souboru je jedna)
+    /// a záznam leží vedle nálezů, které se čtou při každém startu.
+    static let storedEntryLimit = 300
 
     /// Který skill si session doopravdy načetla. `nil` = žádný.
     var loadedSkill: String? {
@@ -98,4 +131,17 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     private mutating func append(_ kind: Entry.Kind, at time: Date) {
         entries.append(Entry(id: entries.count, at: time, kind: kind))
     }
+}
+
+
+/// Osa, jak se ukládá k běhu (#203).
+///
+/// Vlastní typ, ne `ReviewerTimeline` samotná: ta nese i to, co `StoredReviewRun` už má
+/// (`skill`, `sessionID`, cenu), a dvě kopie téhož v jednom souboru se rozejdou.
+struct StoredTimeline: Codable, Hashable, Sendable {
+    /// Pracovní strom, ve kterém běh běžel — podle něj se v ose zkracují cesty.
+    var worktree: URL?
+    var entries: [ReviewerTimeline.Entry] = []
+    /// Kolik událostí se na začátku nevešlo do stropu.
+    var dropped = 0
 }

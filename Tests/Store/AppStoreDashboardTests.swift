@@ -95,3 +95,60 @@ struct AppStoreDashboardTests {
         #expect(store.runningReviews == 0)
     }
 }
+
+/// Osa běhu po restartu (#203).
+@Suite("AppStore — uložená osa")
+@MainActor
+struct AppStoreTimelineTests {
+    private let pullRequest = PRIdentifier("cli/cli#1")!
+
+    private func store() -> AppStore {
+        AppStore(gateway: FakeGitHubGateway([.success([])]), time: FakeTimeSource())
+    }
+
+    private func stored(_ detail: String) -> StoredTimeline {
+        var timeline = ReviewerTimeline(skill: "code-review")
+        timeline.record(.attemptedTool(ToolAttempt(name: "Read", detail: detail)), at: Date())
+        return timeline.stored()
+    }
+
+    @Test("Bez živé osy se vezme ta z uloženého záznamu")
+    func fallsBackToTheStoredTimeline() {
+        let store = store()
+        store.reviewRecords[pullRequest] = makeRecord(runs: [makeStoredRun(timeline: stored("z disku.php"))])
+
+        #expect(store.timelines(for: pullRequest).count == 1)
+        #expect(store.timelines(for: pullRequest).first?.entries.count == 1)
+    }
+
+    /// Rozhoduje **existence klíče, ne prázdnost pole**: nový běh si osu nuluje ještě před
+    /// prvním eventem, takže by se v tom okně sáhlo na disk a nad rozjetým během by probliknul
+    /// průběh toho předchozího. Nález Copilota na #205.
+    @Test("Vynulovaná osa nového běhu nesáhne na disk")
+    func doesNotFallBackWhileANewRunStarts() {
+        let store = store()
+        store.reviewRecords[pullRequest] = makeRecord(runs: [makeStoredRun(timeline: stored("z disku.php"))])
+        store.reviewTimelines[pullRequest] = []
+
+        #expect(store.timelines(for: pullRequest).isEmpty)
+    }
+
+    /// **Nejcennější test téhle sady.** Běžící review si osu drží v paměti a uložená patří
+    /// předchozímu běhu — přebít živou tou z disku by nad novým během ukázalo starý průběh.
+    @Test("Živá osa přebíjí tu uloženou")
+    func prefersTheLiveTimeline() {
+        let store = store()
+        store.reviewRecords[pullRequest] = makeRecord(runs: [makeStoredRun(timeline: stored("z disku.php"))])
+        var live = ReviewerTimeline(skill: "code-review")
+        live.record(.attemptedTool(ToolAttempt(name: "Read", detail: "živý.php")), at: Date())
+        store.reviewTimelines[pullRequest] = [live]
+
+        let timelines = store.timelines(for: pullRequest)
+        #expect(timelines.count == 1)
+        if case .tool(let tool) = timelines.first?.entries.first?.kind {
+            #expect(tool.detail == "živý.php")
+        } else {
+            Issue.record("osa není z paměti")
+        }
+    }
+}
