@@ -58,13 +58,4 @@ enum ThreadRequest {
         ]
     }
 
-    /// Dá se tenhle text odeslat jako odpověď?
-    ///
-    /// **Prázdné tělo GitHub tiše spolkne** — změřeno v sandboxu: mutace vrátí
-    /// `comment: null`, exit kód **nula** a ve vlákně nic nepřibude. Bez téhle kontroly by
-    /// aplikace hlásila „odesláno“ nad odpovědí, která nikdy nevznikla. Text se posílá
-    /// **netrimovaný** (odsazení v ukázce kódu je součást zprávy), kontroluje se trimovaný.
-    static func isSendable(_ body: String) -> Bool {
-        !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
 }

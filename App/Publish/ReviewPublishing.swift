@@ -7,11 +7,17 @@ import Foundation
 /// checkout ani reviewer nemají čím něco poslat. `grep ReviewPublishing` vyjmenuje všechna
 /// místa, odkud to jde; má jich být jedno.
 ///
-/// Metody jsou **vyjmenované a jsou tři** (do #73 jedna). Každá odpovídá jedné věci, kterou
-/// člověk v okně udělá — odeslat review, odpovědět do vlákna, přepnout jeho vyřešení — a nic
-/// dalšího tady být nesmí: approve mimo review, label ani komentář pod PR by byly cesty ven,
-/// o kterých okno nemluví. Roste-li tenhle výčet, roste to, co aplikace umí odeslat, a to má
-/// být vidět v jednom souboru.
+/// Metody jsou **vyjmenované a jsou čtyři** (do #73 jedna, do #216 tři). Každá odpovídá jedné
+/// věci, kterou člověk v okně udělá — odeslat review, odpovědět do vlákna, přepnout jeho
+/// vyřešení, napsat komentář pod PR — a nic dalšího tady být nesmí: approve mimo review, label
+/// ani zavření PR by byly cesty ven, o kterých okno nemluví. Roste-li tenhle výčet, roste to,
+/// co aplikace umí odeslat, a to má být vidět v jednom souboru.
+///
+/// **Komentář pod PR přibyl u #216** a je to vědomé rozšíření tvrdé podmínky č. 1, ne její
+/// obejití. Důvod je tentýž jako u odpovědi do vlákna: konverzace pod PR je v okně vidět celá,
+/// takže napsat do ní jednu větu je poslední věc, kvůli které se odsud přepíná do prohlížeče.
+/// Co se **nezměnilo**: výčet je pořád krátký a na jednom místě, každá metoda si sama ověří
+/// bránu, a `GitHubGateway` zápis dál nemá.
 ///
 /// **Každá metoda si sama ověří bránu `PublishScope`** — proto všechny berou adresu, ze které
 /// se dá zjistit repo. Kdyby ji jedna z nich brát nemusela, existovala by cesta ven, která se
@@ -36,4 +42,15 @@ protocol ReviewPublishing: Sendable {
     /// Označí vlákno za vyřešené, nebo ho otevře zpátky. Vrací stav i práva, jak je přepočítal
     /// GitHub.
     func setResolved(_ resolved: Bool, of thread: ThreadTarget) async throws -> ThreadResolution
+
+    /// Napíše komentář do diskuze pod PR (#216). Vrací komentář, jak ho potvrdil GitHub, takže
+    /// se dá vložit do konverzace bez dalšího čtení.
+    ///
+    /// Pre-flight je **stejně široký jako u odpovědi do vlákna**: scope a stav PR, ne `headSha`.
+    /// Komentář pod PR se neváže na žádný commit — psát „mrknu na to zítra“ pod PR, který mezitím
+    /// dostal push, je běžné, takže kontrola hlavy by zakazovala právě to.
+    ///
+    /// **Není to review.** Neposílá verdikt, nedá se jím schválit ani vyžádat změny a v panelu
+    /// `Moje review` se neobjeví; to jde jedině `submit(_:)`, a to s potvrzením.
+    func comment(on pullRequest: PRIdentifier, body: String) async throws -> ThreadComment
 }

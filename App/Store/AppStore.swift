@@ -152,6 +152,16 @@ final class AppStore {
     /// Co se právě děje s vláknem, nebo co u něj selhalo. Chybějící záznam = nic.
     var threadStates: [ThreadKey: ThreadActionState] = [:]
 
+    /// Rozepsané komentáře do diskuze pod PR (#216). Co v mapě není, nikdo nerozepsal.
+    ///
+    /// Žije tady ze stejného důvodu jako rozepsané odpovědi: composer sedí pod osou konverzace,
+    /// která se překliknutím tabu odbourá, takže `@State` v něm by rozepsanou větu zahodil.
+    /// Na disk se to **neukládá** — je to jedna věta v diskuzi, ne review.
+    var pullRequestComments: [PRIdentifier: String] = [:]
+
+    /// Co se právě děje s komentářem pod PR, nebo co u něj selhalo. Chybějící záznam = nic.
+    var pullRequestCommentStates: [PRIdentifier: CommentActionState] = [:]
+
     /// Rozbalený kontext **per soubor v PR**. Co v mapě není, nikdo nerozbaloval.
     var expansions: [FileExpansionKey: FileExpansion] = [:]
 
@@ -1080,6 +1090,12 @@ final class AppStore {
         // právě kvůli tomuhle — z `id` vlákna by se nepoznalo, ke kterému PR patří.
         threadReplies = threadReplies.filter { wantedPullRequests.contains($0.key.pullRequest) }
         threadStates = threadStates.filter { wantedPullRequests.contains($0.key.pullRequest) }
+        // Totéž pro rozepsaný komentář pod PR: bez konverzace, do které patří, se nemá kde
+        // ukázat ani odeslat.
+        pullRequestComments = pullRequestComments.filter { wantedPullRequests.contains($0.key) }
+        pullRequestCommentStates = pullRequestCommentStates.filter {
+            wantedPullRequests.contains($0.key)
+        }
         // Volba tabu je jen příznak, ale drží klíč s celým identifikátorem PR — bez úklidu by
         // mapa rostla donekonečna, stejně jako u sbalených souborů.
         detailTabs = detailTabs.filter { wantedPullRequests.contains($0.key) }

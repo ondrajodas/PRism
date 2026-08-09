@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// Kus kódu, ke kterému se vlákno váže (#158) — v `Přehledu` nad bublinou.
+/// Kus kódu, ke kterému se vlákno váže (#158) — pás uvnitř bubliny na ose konverzace.
 ///
 /// Je to **snímek z minulosti** (`diffHunk` z GitHubu), ne dnešní kód. Kreslí ho `DiffLineView`,
 /// tedy tentýž řádek jako v diffu: druhý renderer úryvku by se s diffem rozešel a barvy by na
 /// dvou místech okna znamenaly něco jiného.
 ///
-/// Jen v `Přehledu`, ne v bublině: vlákno **s kotvou** visí u kódu, kde je ten kód nad ním
-/// vidět, takže úryvek v bublině by ho kreslil dvakrát.
+/// Jen na ose (`ThreadBubbleView.Placement.timeline`), ne u kódu: vlákno **s kotvou** visí pod
+/// svým řádkem, kde je ten kód nad ním vidět, takže úryvek by ho kreslil dvakrát.
 struct ThreadSnippetView: View {
     let snippet: ThreadSnippet
     /// Cesta souboru — z ní se pozná jazyk na obarvení. Bere se z vlákna, protože hunk sám
@@ -34,12 +34,13 @@ struct ThreadSnippetView: View {
                 )
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quinary, in: .rect(cornerRadius: 6))
-        // Barevná pozadí přidaných a odebraných řádků jdou přes celou šířku, takže se musí
-        // zarovnat s rohy rámečku.
-        .clipShape(.rect(cornerRadius: 6))
+        // **Pás přes celou kartu, ne zaoblený blok uvnitř ní** (#216). Úryvek je od #216 jeden
+        // z pruhů bubliny (hlavička / kód / komentář), oddělený linkou jako ostatní — vlastní
+        // rámeček by uvnitř rámečku dělal druhou kartu. Plocha je `surface`, tedy o patro níž
+        // než `chrome` karty: kód se tím odliší od prózy kolem.
+        .background(Palette.surface)
         // **Vybírat se nedá**, i když `Přehled` má selekci jinak zapnutou: `DiffLineView` nese
         // gesto tažení pro rozsahy komentářů, takže by tažení přes kód selekci spolklo a
         // vypadalo by to jako rozbité okno. Kopírování z diffu řeší #157 — na jednom místě pro

@@ -11,10 +11,10 @@ Hranol rozloží jeden paprsek na spektrum. Tahle aplikace dělá totéž s pull
 pustí na něj několik nezávislých reviewerů a jejich nálezy schválně neslévá do jednoho
 názoru.
 
-> **Na GitHub vede jediná cesta a otevírá ji jen člověk.** Aplikace umí odeslat review
-> a odpovědět do vlákna, ale výhradně přes jeden modul a jen na výslovný pokyn — review
-> navíc proti commitu, který jsi opravdu viděl. Nic se neodesílá samo — ani návrh verdiktu,
-> ani reviewer.
+> **Na GitHub vede jediná cesta a otevírá ji jen člověk.** Aplikace umí odeslat review,
+> odpovědět do vlákna a napsat komentář pod PR, ale výhradně přes jeden modul a jen na výslovný
+> pokyn — review navíc proti commitu, který jsi opravdu viděl. Nic se neodesílá samo — ani
+> návrh verdiktu, ani reviewer.
 >
 > **A jedině tam, kde se to povolilo.** Odesílání je ve výchozím stavu vypnuté — zapíná se
 > v nastavení, globálně nebo u jednoho repa. Dokud si o to někdo výslovně neřekne, neodejde
@@ -409,6 +409,13 @@ neodešle** — GitHub ji totiž přijme, nic nevytvoří a vrátí úspěch, ta
 odeslanou odpověď, která nikdy nevznikla. `Vyřešit` se navíc nabízí jen tam, kde na to GitHub
 dává právo; jinde by tlačítko vždycky selhalo.
 
+**A dá se napsat i pod PR.** Na spodní hraně tabu `Konverzace` je pole `Napsat do konverzace
+pod PR…` a tlačítko `Odeslat komentář`. Je to poslední věc, kvůli které se u review přepínalo
+do prohlížeče. **Není to review**: nenese verdikt, nepotvrzuje se dialogem a v panelu
+`Moje review` se neobjeví — proto sedí pod osou konverzace, ne v panelu, kde by se s review
+pletlo. Platí u něj totéž co u odpovědi: po selhání text zůstane, prázdný komentář se neodešle
+a bez povolení v nastavení neodejde nic.
+
 **Rozdělané review se skládá v okně** a přežije restart: tělo, verdikt a řádkové komentáře
 leží v `drafts/` vedle uložených nálezů, mimo dosah úklidu cache. Nový commit ho nesmaže,
 jen zablokuje odeslání — vlastní próza nezastarává tak rychle jako strojové nálezy.
@@ -653,7 +660,7 @@ jinak by po startu vypadala jako nová celá historie.
 | **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
 | **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
-| **Odesílání na GitHub** | Platí pro review i pro odpovědi do vláken. Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl. |
+| **Odesílání na GitHub** | Platí pro review, odpovědi do vláken i komentáře pod PR. Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl. |
 | **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |
 | **Novinky v aplikaci** | Okno mluví o tom, co vyšlo na GitHubu, ne o spuštěném buildu — verze v bundlu tagy nikdy nesledovala, takže by tvrdila `0.1`. Značka je poslední **viděný tag** v předvolbách aplikace (stav aplikace, ne nastavení k editaci) a historie se drží v paměti do konce běhu: disková cache by dala offline režim, ale je to další store s vlastním úklidem. |
 | **Dostupnost služeb** | Jede na skutečném provozu, ne na sondě: `gh auth status` na timeru by stál spawn procesu a přístup do keychainu — a projde i tehdy, když skutečné volání selže na rate limitu. Status pages jsou proti tomu levné (`components.json` s `ETagem`) a odpovídají na to, co z volání nezjistíme: jestli je problém na jejich straně. |
@@ -800,7 +807,7 @@ App/                      zdrojáky aplikace — target PRism
   Health/                 dostupnost služeb pro stavový řádek: status pages, signály, monitor
   Markdown/               vykreslení Markdownu z GitHubu: bloky, inline HTML od botů
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka
-  Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, brána z nastavení
+  Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR, brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno (stav v AppStore.swift, metody v AppStore+*.swift);

@@ -42,10 +42,18 @@ struct PullRequestDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            controls
-            // Záložky nesou vlastní linku po celé šířce, takže samostatný `Divider()` mezi
-            // hlavičkou a obsahem by byl druhá čára pod sebou.
-            tabs
+            VStack(alignment: .leading, spacing: 0) {
+                controls
+                // Záložky nesou vlastní linku po celé šířce, takže samostatný `Divider()` mezi
+                // hlavičkou a obsahem by byl druhá čára pod sebou.
+                tabs
+            }
+            // **Hlavička leží na `surface`, ne na pozadí okna** (#216). Návrh má
+            // `.pr-head` i `.subtabs` na `--panel`; bez toho prosvítalo `background`
+            // (skoro černá) a titulek s odznaky plaval v prázdnu nad plochou, na které
+            // stojí obsah pod ním.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.surface)
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -170,11 +178,19 @@ struct PullRequestDetailView: View {
         // **Vedle sebe, ne pod sebou** (#182). Panel dole si bral výšku, které je v diffu
         // nejmíň; napravo bere šířku, které je v okně přes celou obrazovku dost.
         HStack(spacing: 0) {
-            switch store.detailTab(for: pullRequest.id) {
-            case .filesChanged: diff
-            case .overview: overview
-            case .conversation: conversation
+            // **Plocha tabu je `surface` ve všech třech** (#216) — návrh má `.ovpane`,
+            // `.diffpane` i `.convpane` na `--panel`. Bez toho prosvítalo `background`
+            // (skoro černá) a obsah plaval v prázdnu. Panel vedle si maluje `chrome` sám,
+            // takže se ho tohle netýká.
+            Group {
+                switch store.detailTab(for: pullRequest.id) {
+                case .filesChanged: diff
+                case .overview: overview
+                case .conversation: conversation
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Palette.surface)
             // Panel se ukáže i **bez** záznamu, jakmile něco běží: při prvním review je
             // průběh to jediné, co je, a čekat na uložený výsledek by ho schovalo.
             let record = store.reviewRecord(for: pullRequest.id)
@@ -565,7 +581,25 @@ struct PullRequestDetailView: View {
             lastVisit: store.visitSnapshots[pullRequest.id],
             isStale: store.reviewRecord(for: pullRequest.id)?.isStale == true
                 || store.isDraftStale(for: pullRequest.id),
-            rerun: { store.startReview(for: pullRequest.id) }
+            rerun: { store.startReview(for: pullRequest.id) },
+            composer: composer
+        )
+    }
+
+    /// Psaní do diskuze pod PR (#216). `nil` bez `gh` — bez něj nevede z aplikace ven žádná
+    /// cesta, takže by composer sliboval odeslání, které nikdy nepůjde. Zakázané odesílání
+    /// (repo mimo `PublishScope`) je něco jiného: to se dá zapnout v nastavení, takže pole
+    /// zůstává a tlačítko je zakázané s důvodem.
+    private var composer: ConversationComposer? {
+        guard store.gh != nil else { return nil }
+        return ConversationComposer(
+            text: store.pullRequestComment(for: pullRequest.id),
+            setText: { store.setPullRequestComment($0, for: pullRequest.id) },
+            send: { Task { await store.sendPullRequestComment(for: pullRequest) } },
+            state: store.pullRequestCommentState(for: pullRequest.id),
+            block: store.canPublishToThreads(in: pullRequest.repo)
+                ? nil
+                : PublishError.publishingNotAllowed(pullRequest.repo).userDescription
         )
     }
 

@@ -14,6 +14,13 @@ struct DraftTextEditor: View {
     let text: String
     var placeholder = ""
     var minHeight: Double = 60
+    /// Strop výšky. `nil` = pole se roztáhne, kolik dostane.
+    ///
+    /// Potřebuje ho ten, kdo pole staví do **svislého rozvržení se zbývajícím místem** (#216):
+    /// `TextEditor` je svisle nenasytný, takže si o to zbylé místo řekne stejným dílem jako
+    /// osa konverzace vedle něj — a composer pak zabral půlku tabu. Uvnitř scrollu (bublina
+    /// vlákna, panel review) žádné zbylé místo není, proto tam strop netřeba.
+    var maxHeight: Double?
     /// Má se prázdný text doručit i tehdy, když se **nezměnil**?
     ///
     /// U řádkového komentáře ano. Prázdný komentář znamená „zahoď mě“ a vzniká právě tím, že
@@ -37,7 +44,9 @@ struct DraftTextEditor: View {
         TextEditor(text: $value)
             .font(.callout)
             .scrollContentBackground(.hidden)
-            .frame(minHeight: minHeight)
+            // `map` schválně: `Double?` se na `CGFloat?` implicitně nepřevede, i když
+            // `Double` na `CGFloat` ano.
+            .frame(minHeight: minHeight, maxHeight: maxHeight.map { CGFloat($0) })
             // **Nápověda visí na editoru, ne na orámované ploše.** Kdyby se zavěsila až za
             // `padding`, počítala by se od hrany rámečku, kdežto kurzor stojí na začátku
             // textu — a mezi tím je právě to odsazení. Blikající kurzor mimo text z toho byl

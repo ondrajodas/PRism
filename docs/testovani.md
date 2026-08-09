@@ -112,6 +112,28 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   Pokrývá: odpověď ve vlákně **bez druhého dotazu** na konverzaci, selhání, které **nechá text**,
   prázdnou odpověď bez volání sítě, a dvojklik pouštěný **souběžně** (sekvenční test by prošel
   i bez ochrany, proto má skript krátkou odmlku).
+- **Komentář pod PR (#216)** — čtvrtá cesta ven, takže se u ní hlídá **totéž co u vláken**:
+  že se bez povolení, s prázdným tělem a na zavřeném PR **nevolá nic**, a že nový commit
+  komentář naopak neblokuje. Navíc dvě věci, které se dají pokazit tiše:
+  - **Tělo jde přes `-f`, ne `-F`.** `--field` čte hodnotu začínající `@` jako jméno souboru,
+    takže by komentář otevřený zmínkou skončil pokusem o čtení disku. Test se dívá na argument
+    **před** tělem, jinak by regrese prošla nepovšimnutě u všech komentářů kromě těch se zmínkou.
+  - **Hláška o prázdném komentáři musí být jiná než u odpovědi.** Věta, která pojmenuje něco
+    jiného, než na co se člověk dívá, vypadá jako chyba v jiné části okna.
+
+  Fixture je **skutečný** issue comment změřený na `ondrajodas/prism-review-sandbox#1`
+  (`gh api …/issues/1/comments`); `POST` vrací tentýž tvar, takže se dá vzít odsud. Inline, ne
+  soubor — je to jeden objekt.
+- **`AppStore` — komentář pod PR (#216)** — stejné uspořádání jako u vláken (podstrčený `gh`
+  skript, počítání spuštění). Pokrývá připsání do konverzace **bez druhého dotazu**, smazání
+  textu po úspěchu, **zachovaný text** po selhání, nulu volání bez povolení, souběžný dvojklik
+  a úklid rozepsaného textu, když PR vypadne ze seznamu.
+
+  A hlavně: **osa nesmí po odeslání zmizet.** `Conversation.init` má `events` s výchozí prázdnou
+  hodnotou, takže je při přeskládání lze vynechat bez chyby překladu — což se u #73 stalo
+  a do #216 se to neprojevilo nikde jinde než na obrazovce. Hlídají to dva testy: jeden nad
+  `Policy.inserting`/`applying` (obě cesty), druhý nad storem. **Ověřeno vložením regrese** —
+  po vrácení původního kódu test spadne na `events.items == []`.
 - **Dostupnost služeb (#31)** — tři vrstvy, každá jinak. `Policy.health` vyčerpávajícím
   výčtem stavů (nic se nemockuje), včetně toho, co se dá pokazit tiše: že **incident mimo
   sledované komponenty puntík nerozsvítí** (skutečná fixture s výpadkem v `Actions`), že

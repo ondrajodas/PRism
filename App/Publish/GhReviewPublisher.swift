@@ -52,7 +52,7 @@ struct GhReviewPublisher: ReviewPublishing {
         }
         // Prázdná odpověď se **nevolá**: GitHub ji přijme, nic nevytvoří a vrátí exit 0
         // (změřeno v sandboxu), takže by okno hlásilo odeslanou odpověď, která nevznikla.
-        guard ThreadRequest.isSendable(body) else { throw PublishError.blankReply }
+        guard PublishRequest.isSendable(body) else { throw PublishError.blankReply }
 
         try await preflight(thread.pullRequest, expecting: nil)
 
@@ -78,6 +78,28 @@ struct GhReviewPublisher: ReviewPublishing {
             throw PublishError.malformedResponse("V odpovědi chybí stav vlákna.")
         }
         return resolution
+    }
+
+    // MARK: - Komentář pod PR (#216)
+
+    /// Napíše komentář do diskuze pod PR. Brána i pre-flight stejné jako u odpovědi do vlákna —
+    /// komentář se neváže na commit, takže se hlava neověřuje.
+    func comment(on pullRequest: PRIdentifier, body: String) async throws -> ThreadComment {
+        guard scope.allows(pullRequest.repo) else {
+            throw PublishError.publishingNotAllowed(pullRequest.repo)
+        }
+        // Prázdné tělo se **nevolá**, ze stejného důvodu jako u odpovědi: GitHub ho spolkne
+        // a okno by hlásilo odeslaný komentář, který nevznikl.
+        guard PublishRequest.isSendable(body) else { throw PublishError.blankComment }
+
+        try await preflight(pullRequest, expecting: nil)
+
+        let output = try await call(CommentRequest.arguments(for: pullRequest, body: body))
+        let decoded = try decoded(GhIssueCommentResponse.self, from: output)
+        guard let comment = decoded.comment() else {
+            throw PublishError.malformedResponse("V odpovědi chybí vložený komentář.")
+        }
+        return comment
     }
 
     // MARK: - Pre-flight

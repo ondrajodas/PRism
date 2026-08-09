@@ -31,6 +31,13 @@ enum Palette {
     static let ink2 = Color(light: 0x5A6379, dark: 0x98A1B5)
     static let ink3 = Color(light: 0x8B93A7, dark: 0x6B7488)
 
+    /// Zastarání — force push, nálezy proti staré hlavě, vlákno bez místa v dnešním diffu.
+    ///
+    /// Vlastní token, ne `.orange` (#216): systémová oranžová je **výstraha**, kdežto `--stale`
+    /// z návrhu je okrová a znamená „platilo to, dneska už ne“. Vedle červené blokujícího nálezu
+    /// se ty dvě systémové barvy pletly do jedné škály naléhavosti, kterou zastarání nemá.
+    static let stale = Color(light: 0x9A6700, dark: 0xD4A72C)
+
     /// Akcent. **Fialová z návrhu, ne systémový akcent**: je to jediná barva, kterou si okno
     /// drží samo, protože na ní stojí identita aplikace (hranol, spektrum) — a spektrum
     /// reviewerů by se systémovým akcentem měnilo význam podle nastavení systému.

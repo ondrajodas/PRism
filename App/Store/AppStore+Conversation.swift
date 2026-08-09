@@ -145,6 +145,74 @@ extension AppStore {
         }
     }
 
+    // MARK: - Komentář pod PR (#216)
+
+    func pullRequestComment(for pr: PRIdentifier) -> String {
+        pullRequestComments[pr] ?? ""
+    }
+
+    /// Zapíše rozepsaný text. Prázdný se **maže**, ať mapa nedrží záznam po každém PR, do
+    /// jehož composeru někdo klikl a rozmyslel si to — tentýž vzor jako u odpovědí.
+    func setPullRequestComment(_ text: String, for pr: PRIdentifier) {
+        pullRequestComments[pr] = text.isEmpty ? nil : text
+    }
+
+    func pullRequestCommentState(for pr: PRIdentifier) -> CommentActionState? {
+        pullRequestCommentStates[pr]
+    }
+
+    /// Odešle rozepsaný komentář do diskuze pod PR a připíše ho do konverzace.
+    ///
+    /// Text se po úspěchu maže, po selhání **zůstává** — tatáž pojistka jako u odpovědi do
+    /// vlákna: rozepsaná věta se nesmí ztratit kvůli chvilkovému výpadku.
+    ///
+    /// **Není to review** a nesmí se s ním splést: nejde tudy verdikt, nic se nepotvrzuje
+    /// a v panelu `Moje review` se nic neobjeví. Odesílá se tou samou jedinou cestou ven
+    /// (`ReviewPublishing`), jen jinou metodou.
+    func sendPullRequestComment(for pullRequest: PullRequestSummary) async {
+        let id = pullRequest.id
+        let body = pullRequestComments[id] ?? ""
+        guard let submission = commentSubmission(for: id) else { return }
+        // Dvojklik: druhé odeslání by bylo druhý komentář, ne oprava prvního. Kontrola leží
+        // **před** prvním `await`, takže mezi nimi není mezera, do které by se závod vešel.
+        guard pullRequestCommentStates[id]?.isBusy != true else { return }
+        pullRequestCommentStates[id] = .sending
+
+        do {
+            let comment = try await submission.send(body)
+            pullRequestCommentStates[id] = nil
+            pullRequestComments[id] = nil
+            append(comment, to: pullRequest)
+        } catch let error as PublishError {
+            pullRequestCommentStates[id] = .failed(error)
+        } catch {
+            pullRequestCommentStates[id] = .failed(.unknown(error.localizedDescription))
+        }
+    }
+
+    /// Připíše odeslaný komentář do načtené konverzace, ať je vidět bez kola po síti.
+    ///
+    /// Když konverzace načtená **není** (composer je vidět i nad prázdnou osou), načte se —
+    /// odeslaný komentář, který se nemá kde ukázat, vypadá jako neodeslaný.
+    private func append(_ comment: ThreadComment, to pullRequest: PullRequestSummary) {
+        let id = pullRequest.id
+        guard case .loaded(let conversation, let updatedAt) = conversationStates[id] else {
+            Task { await refreshConversation(for: pullRequest) }
+            return
+        }
+        conversationStates[id] = .loaded(
+            Policy.appending(comment, to: conversation),
+            updatedAt: updatedAt
+        )
+    }
+
+    /// Publisher se tu **nevyrábí** — jen se předá `gh`, read-only gateway a brána. Vzniká až
+    /// uvnitř `CommentSubmission`, viz tvrdá podmínka č. 1.
+    private func commentSubmission(for pr: PRIdentifier) -> CommentSubmission? {
+        guard let gh else { return nil }
+        return CommentSubmission(pullRequest: pr, gh: gh, gateway: gateway, scope: publishScope)
+    }
+
     /// Publisher se tu **nevyrábí** — jen se předá `gh`, read-only gateway a brána. Vzniká až
     /// uvnitř `ThreadSubmission`, viz tvrdá podmínka č. 1.
     private func threadSubmission(

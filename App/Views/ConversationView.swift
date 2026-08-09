@@ -23,14 +23,33 @@ struct ConversationView: View {
     /// Zastaraly nálezy nebo rozdělané review? U force-pushe se to říká **přímo u události**.
     var isStale = false
     var rerun: (() -> Void)?
+    /// Psaní do diskuze pod PR (#216). `nil` = composer se nekreslí — je to stav pro náhledy
+    /// a testy skládání, kde není kam odesílat.
+    var composer: ConversationComposer?
 
     @State private var filter: ConversationFilter = .all
 
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Divider()
+            Rectangle().fill(Palette.lineSoft).frame(height: 1)
+            // Plochu pod osou (`--panel`) maluje detail PR pro všechny tři taby najednou,
+            // ať se nemůžou rozejít. Composer a lišta si nad ní kreslí vlastní `chrome`.
             timeline
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // **Composer je pod osou, ne v ní**: zůstává na místě, i když se osou scrolluje,
+            // a nezmizí zúžením filtru. Rozepsaná věta se nesmí schovat tím, na co se člověk
+            // zrovna dívá.
+            if let composer {
+                ConversationComposerView(
+                    text: composer.text,
+                    viewer: viewer,
+                    state: composer.state,
+                    block: composer.block,
+                    commit: composer.setText,
+                    send: composer.send
+                )
+            }
         }
     }
 
@@ -58,8 +77,11 @@ struct ConversationView: View {
                 .lineLimit(1)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Lišta je chrome, jako hlavička bloku kontrol a jako `.convbar` v návrhu.
+        .background(Palette.chrome)
     }
 
     /// Zúžení osy. Počty jsou z **plné** osy: číslo, které se mění tím, na co se zrovna koukám,

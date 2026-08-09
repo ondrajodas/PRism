@@ -1292,8 +1292,12 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory`) — podtržené, s odznakem počtu |
-| `OverviewView` | Tab `Přehled`: popis PR, konverzace bez kotvy v diffu a **události časové osy**, chronologicky |
-| `TimelineEventRow` | Událost převedená na řádek — symbol, věta, barva a údaj vpravo (#171). Mimo view a testovatelné, jako `FindingRow` |
+| `OverviewView` | Tab `Přehled`: popis PR, fakta, kontroly a co se změnilo od minule |
+| `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
+| `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka a obsah vpravo; slévá za sebou jdoucí commity |
+| `ConversationEntryView` | Položka osy: karta cizího review nebo komentáře, řádek události, vlákno bez kotvy |
+| `ConversationComposerView`, `ConversationComposer` | Psaní komentáře pod PR (#216) a akce k němu |
+| `TimelineEventRow` | Událost převedená na řádek — symbol, věta **s tučnými jmény**, barva uzlu (`tint: Color?`), sha po jednom (#171, sazba #216). Mimo view a testovatelné, jako `FindingRow` |
 | `AvatarView`, `AvatarLoader` | Obrázek uživatele u události a jeho cache nad `HTTPGetting` (#171) |
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
@@ -1305,8 +1309,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit` |
 | `FindingActions` | Co se dá dělat s nálezem — odmítnout a vrátit; jedno místo pro bublinu i tabulku |
-| `ThreadBubbleView` | Vlákno konverzace u řádku; vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73) |
-| `ThreadSnippetView` | Úryvek kódu k vláknu v `Přehledu` (#158) — řádky kreslí `DiffLineView`, nad nimi značka zkrácení |
+| `ThreadBubbleView` | Vlákno konverzace — u kódu i na ose (`Placement`); karta z pruhů, vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73, sazba #216) |
+| `ThreadSnippetView` | Úryvek kódu k vláknu na ose (#158) — pás uvnitř bubliny, řádky kreslí `DiffLineView`, nad nimi značka zkrácení |
 | `ThreadActions` | Co se dá dělat s vláknem — rozbalení, odpověď, vyřešení a důvod, proč odesílat nejde |
 | `MarkdownText` | Vykreslený Markdown z GitHubu — viz `App/Markdown/` |
 | `DraftCommentBubbleView` | Můj rozdělaný komentář u řádku: editor, odznak původu, vyjmutí. Ve split pohledu visí jen v půlce, které se týká |
@@ -1754,22 +1758,71 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     a číslo v nich plave uprostřed prázdna; v mřížce si drží čtvrtinu bez ohledu na počet.
 - **Sazba položek konverzace je z návrhu** (#216). U #183 se konverzace přestěhovala, ale
   položky zůstaly, jak vypadaly v `Přehledu` od #72 — a vedle sebe s návrhem to bylo zřetelné.
-  Čtyři věci, které se u toho rozhodly:
+  Ověřovalo se to **vyrenderovaným mockupem vedle offscreen renderu** položek, ne po paměti;
+  tři odchylky (přerušená osa, zmenšený uzel, odznak `Bot` u cizího jména) padly až na obrázku.
+  Co se u toho rozhodlo:
+  - **Karta je vodorovné pruhy, ne jeden blok.** Hlavička na `raised` a oddělená linkou
+    `lineSoft`, pod ní tělo — jako karta popisu PR (#198) a blok kontrol (#209). Do #216 to byl
+    jeden šedý blok, ve kterém se jméno nedalo odlišit od prózy pod ním.
+  - **Čas je u pravé hrany** (`margin-left: auto` v návrhu). Nalepený na odznak verdiktu se s ním
+    četl jako jeden údaj.
+  - **Verdikt nese proužek na hraně**, zelený u schválení, červený u vyžádaných změn — tatáž
+    škála jako řádek fronty a karta nálezu, takže se pozná periferně. Barva je **volitelná**
+    (`Color?`), ne `.secondary`: „má tahle karta verdikt?“ se jinak musí ptát porovnáním barev.
+  - **Próza 12,5** jako všude jinde v okně; do #216 byla o stupeň větší než sousední bloky.
+  - **Uzel je 24 bodů s plnou barvou obrysu.** Neutrální má obrys `line` a symbol `ink2` — dvě
+    různé barvy, takže je skládá `axis` a `marker` vrací `tint: Color?`. Ztlumený obrys
+    (`opacity(0.5)`) dělal ze zeleného schválení nevýrazný šedozelený kroužek.
+  - **Mezera mezi uzly patří obsahu, ne celému uzlu.** Kdyby odsazovala `HStack`, končila by
+    linka dřív než uzel a osa by mezi položkami měla díry.
+  - **Sha jsou odznaky vedle věty**, ne údaj u pravé hrany: u force-pushe patří ke slovesu.
+    Řádek proto potřebuje `shas: [String]` po jednom, a `detail` je z toho odvozený.
+  - **Jména v událostech jsou tučná** (`attributedTitle` s `inlinePresentationIntent`). Řádek
+    říká, **co** je jméno; jakou barvu tučné dostane, rozhoduje view. `title` je odvozený
+    (`String(characters)`), takže se věta a její sazba nemůžou rozejít.
+  - **Odznak `Bot` je u avataru**, ne za větou: za ní se lepil na jméno toho, **komu** se review
+    vyžádalo, tedy tvrdil něco jiného, než co je pravda.
+  - **Zastarání má vlastní token `Palette.stale`**, ne systémovou oranžovou: vedle červené
+    blokujícího nálezu se obojí slévalo do jedné škály naléhavosti, kterou zastarání nemá.
+  - **Bublina vlákna je jeden celek** složený z pruhů: cesta a odznaky v hlavičce, úryvek,
+    komentáře, pole na odpověď. Řádek s cestou **nad** rámečkem vypadal jako popisek k něčemu,
+    co začíná až pod ním.
+  - **`Placement` rozhoduje, co je v hlavičce.** Na ose cesta a řádek (nad bublinou žádný kód
+    není), u kódu náhled prvního komentáře, když je vlákno sbalené — cesta je v hlavičce souboru
+    o kus výš a v každé bublině by ji okno psalo podruhé. Do #216 to řídil `snippetContext: Int?`,
+    tedy jedno pole se dvěma významy; a náhled u sbaleného vlákna se přitom ztratil.
+  - **Odznak `zastaralé` zůstává na vlákně.** Při stěhování řádku s cestou dovnitř bubliny zmizel,
+    a bez něj vypadá zastaralé vlákno jako připomínka k dnešnímu kódu.
   - **Úryvek u vlákna má na ose kratší kontext** (`Policy.timelineSnippetContext`, jeden řádek
     proti pěti u kódu). V diffu je úryvek náhradou za to, že řádek nejde ukázat v souboru; na
     ose stačí **ukázat místo**. S pěti zabralo jedno vlákno půl obrazovky.
   - **Barví se jen komentovaný řádek**, ostatní jdou jako kontext (`DiffLine.asContext`). Celý
     zelený blok se čte jako změna, o které vlákno není.
-  - **Komentář je bublina, ne karta s linkou.** Dělicí linka je správně u popisu PR (#198), kde
-    je pod ní dlouhý text; nad dvěma větami je to rámeček navíc.
-  - **Uzel je menší než avatar vedle něj.** Osu má vést, ne ji přebíjet.
-  - **Bublina vlákna je jeden celek**: cesta a odznak v hlavičce (ne `1 komentář`), úryvek
-    a komentáře uvnitř. Řádek s cestou **nad** rámečkem vypadal jako popisek k něčemu, co
-    začíná až pod ním. Úryvek si bublina kreslí sama jedině tam, kde dostane `snippetContext` —
-    u kódu ho nese diff.
   - **Podklad z palety, ne systémová šeď**, a **bez proužku na hraně**: vyřešené vlákno hlásí
     odznak, takže proužek říkal totéž podruhé a v ose se pletl s proužkem verdiktu u review.
-  - **Tlačítka bez ikon** a vpravo od nich počet odpovědí, jak to má návrh.
+  - **Tlačítka bez ikon** a vpravo od nich počet odpovědí, jak to má návrh. Počet **ustoupí**
+    tomu, co se právě děje — dva údaje na jednom místě by se přebíjely.
+- **Komentář pod PR se dá napsat z okna** (`ConversationComposerView`, #216) — pruh na spodní
+  hraně tabu `Konverzace`. Je to čtvrtá cesta ven a rozšíření tvrdé podmínky č. 1, viz `CLAUDE.md`.
+  - **Pod osou, ne v pravém panelu**, kam ho kreslí návrh. Ten panel je vidět ve všech tabech
+    a jeden z jeho tabů je `Moje review`, takže by pod sebou stála dvě pole a dvě odesílací
+    tlačítka, z nichž každé dělá něco jiného — a zadání #216 výslovně říká, že s review splynout
+    nesmí. Sazba návrhu (linka nahoře, avatar, pole, odesílací tlačítko) zůstává; mění se, ke
+    kterému sloupci je pruh přilepený.
+  - **Composer je `nil` bez `gh`**, protože pak nevede z aplikace ven žádná cesta a pole by
+    slibovalo odeslání, které nikdy nepůjde. Zakázané odesílání (repo mimo `PublishScope`) je
+    něco jiného: to se dá zapnout v nastavení, takže pole zůstává a tlačítko je **zakázané
+    s důvodem** — tatáž úvaha jako u odpovědi do vlákna.
+  - **Rozepsaný text žije ve store** (`pullRequestComments`), ne ve view: překliknutí tabu osu
+    i composer odbourá. Na disk se neukládá — je to jedna věta v diskuzi, ne review.
+  - **Po selhání text zůstává**, po úspěchu se maže. Odeslaný komentář se připíše do načtené
+    konverzace (`Policy.appending`), takže je vidět bez kola po síti.
+  - **Dvojklik odešle jednou.** Kontrola leží před prvním `await`, takže mezi nimi není mezera,
+    do které by se závod vešel; druhé odeslání by nebylo oprava prvního, ale další věta.
+  - **Zápis do konverzace nesmí ztratit osu.** `Conversation.init` má `events` s výchozí prázdnou
+    hodnotou (kvůli odpovědím z doby před #171), takže je při přeskládání lze vynechat bez chyby
+    překladu — a osa se pak po odeslané odpovědi tiše vyprázdnila o commity a pushe. Opraveno
+    u #216 a hlídá to test, který ověřuje obě cesty (odpověď i vyřešení).
 - **Konverzace je vlastní tab s časovou osou** (#183). `Přehled` a konverzace odpovídají na dvě
   různé otázky — „jak to teď stojí“ a „co se dělo“ — a v jednom scrollu se to druhé četlo tak, že
   se přes první přerolovalo. Čtyři pravidla:
@@ -1968,6 +2021,16 @@ Odpovídání do vláken (#73) drží `AppStore` ve dvou mapách klíčovaných 
   nepřečte; text u toho zůstává.
 - **Prázdný text se z mapy maže**, ať v ní nezůstane záznam po každém vlákně, do kterého někdo
   klikl a rozmyslel si to. Tentýž vzor jako prázdný draft.
+
+Komentář pod PR (#216) drží `AppStore` ve dvou mapách klíčovaných rovnou `PRIdentifier`em
+(`pullRequestComments` a `pullRequestCommentStates`) a platí u něj **totéž co u vláken** —
+store odesílání spouští, ale cestu ven nedrží (`CommentSubmission`), text se zahazuje s PR mimo
+seznam, dvojklik pošle jeden komentář a selhání drží stav i text. Dvě věci jsou jinak:
+
+- **Klíč je PR sám**, ne složený `ThreadKey`: komentář pod PR žádnou jemnější adresu nemá.
+- **`CommentActionState` je vlastní typ**, ne `ThreadActionState`. Ten má případy pro vyřešení
+  vlákna, které tady nikdy nenastanou — a stav, jehož polovina se nedá dosáhnout, svádí psát nad
+  ním větve, kterými nikdo neprojde.
 
 Útratu za review (#148) drží `AppStore` v `dailySpend` nad `SpendLedger`em a platí u ní:
 
@@ -2977,18 +3040,21 @@ podmínku „nikdy nic neposílat“ pravidlem, které je vidět z kódu — viz
 
 | Typ | Co dělá |
 |---|---|
-| `ReviewPublishing` | Protokol se **třemi** metodami: `submit(_:)`, `reply(to:body:)`, `setResolved(_:of:)` |
+| `ReviewPublishing` | Protokol se **čtyřmi** metodami: `submit(_:)`, `reply(to:body:)`, `setResolved(_:of:)`, `comment(on:body:)` |
 | `GhReviewPublisher` | Implementace nad `gh`; pre-flight přes `GitHubGateway` |
 | `PublishScope` | Brána: smí se z tohohle repa odeslat? Skládá se z `Configuration`, výchozí stav **vypnuto** |
 | `PublishError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
-| `PublishRequest` | Payload a argumenty review — čisté funkce |
+| `PublishRequest` | Payload a argumenty review + `isSendable` (sdílená kontrola prázdného těla) — čisté funkce |
 | `ThreadRequest` | GraphQL mutace pro vlákna a jejich argumenty — čisté funkce |
+| `CommentRequest` | REST argumenty komentáře pod PR (#216) — čisté funkce |
 | `ThreadTarget`, `ThreadResolution` | Adresa vlákna (PR + `id`) a to, jak dopadlo přepnutí vyřešení |
 | `ThreadActionState`, `ThreadKey` | Co se s vláknem právě děje a klíč, pod kterým to drží `AppStore` |
-| `GhSubmittedReview`, `GhThreadReplyResponse`, `GhThreadResolutionResponse` | Tvary odpovědí — REST review a dvou GraphQL mutací |
+| `CommentActionState` | Co se právě děje s komentářem pod PR (#216) |
+| `GhSubmittedReview`, `GhThreadReplyResponse`, `GhThreadResolutionResponse`, `GhIssueCommentResponse` | Tvary odpovědí — REST review, dvou GraphQL mutací a REST komentáře |
 | `ReviewSubmission` | Jedno odeslání review od kliknutí po odpověď — **volající `submit(_:)`**. Od #69 začíná u zastaralého draftu kontrolou kotev (`.checking`) |
 | `DraftAnchorCheck` | Jedna kotva ke kontrole při přenesení (#69) — komentář a jeho stav |
 | `ThreadSubmission` | Jedna akce nad vláknem — **volající `reply` a `setResolved`** |
+| `CommentSubmission` | Jeden komentář pod PR — **volající `comment(on:body:)`** (#216) |
 
 Věci, které se u toho nemají rozbít:
 
@@ -3000,8 +3066,9 @@ Věci, které se u toho nemají rozbít:
   Draft PR se odeslat **smí** — je to otevřený stav a na GitHubu běžné.
 
   **Hlava je volitelný parametr** (`preflight(_:expecting:)`), protože každá cesta ven se váže
-  na něco jiného: review na commit, odpověď do vlákna na vlákno. Jedna funkce s `nil` místo dvou
-  podobných je tady schválně — dvě by se rozešly v tom, co dělají se stavem PR.
+  na něco jiného: review na commit, odpověď do vlákna na vlákno, komentář pod PR na diskuzi.
+  Jedna funkce s `nil` místo dvou podobných je tady schválně — dvě by se rozešly v tom, co
+  dělají se stavem PR.
 - **Volání `gh` a dekódování odpovědi má každá cesta ven společné** (`call(_:)`, `decoded(_:from:)`).
   Kdyby si každá třídila chyby sama, lišily by se v tom, co znamená timeout nebo zrušení — a na
   tom stojí `mightHaveReachedGitHub`, tedy jestli okno nabídne odeslat znovu.
@@ -3111,6 +3178,26 @@ Nad `ThreadSubmission` (#73) platí:
   `Could not resolve to a node with the global id` se od té o neexistujícím repozitáři liší jen
   koncem, takže na **pořadí** případů v klasifikaci záleží — a rada „zkus to znovu“ je u zmizelého
   vlákna nepravdivá, správná je „načti konverzaci znovu“.
+
+Nad `CommentSubmission` (#216) platí:
+
+- **REST, ne GraphQL — opačně než u vláken.** Tam rozhodlo, že mutace bere `id`, které v modelu
+  už je; tady je to naopak: `addComment` chce `subjectId`, tedy node ID pull requestu, a to se
+  netahá nikde — ani `PRIdentifier`, ani `PullRequest` ho nemá. Doplnit ho by znamenalo rozšířit
+  dotaz, model i mapování kvůli jednomu volání, kdežto REST si vystačí s `repo` a číslem.
+- **Endpoint je `issues`, ne `pulls`.** Komentář pod PR je z pohledu API issue comment: nepatří
+  k řádku ani k review, takže pro něj v `/pulls/` nic není.
+- **Tělo jde přes `-f`, ne `-F`.** `--field` čte hodnotu začínající `@` jako jméno souboru, takže
+  komentář otevřený zmínkou (`@ondrajodas …`) by se `gh` pokusil načíst z disku. Regrese by byla
+  tichá — prošlo by všechno kromě komentářů, které začínají zmínkou. Hlídá to vlastní test.
+- **Prázdné tělo se nevolá** (`blankComment`), ze stejného důvodu jako u odpovědi: GitHub ho
+  spolkne s nulovým exit kódem. Kontrola je sdílená (`PublishRequest.isSendable`) — dvě kopie
+  téže otázky by se rozešly zrovna v tom, co považují za prázdné.
+- **Vlastní chybový případ, ne `blankReply`.** Věta u odpovědi mluví o vlákně; hláška, která
+  pojmenuje něco jiného, než na co se člověk dívá, vypadá jako chyba v jiné části okna.
+- **`replyToID` zůstává `nil`.** Komentář pod PR není ve vlákně a `Conversation` ho drží ve
+  vlastní stránce — s vyplněným `replyTo` by se v ose kreslil odsazený jako odpověď na něco,
+  co neexistuje.
 
 ## Vrstva `Environment` (`App/Environment/`)
 
