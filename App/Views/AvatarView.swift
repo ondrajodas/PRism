@@ -40,10 +40,19 @@ struct AvatarView: View {
         }
     }
 
-    /// První písmeno jména. `?` u prázdného jména — nemá nastat (aktér bez jména se nekreslí
-    /// vůbec), ale kolečko bez obsahu vypadá jako chyba vykreslení.
+    /// **Dvě písmena**, jak je má návrh (`OD`, `VO`, `GA`): jedno se u dvou lidí se stejným
+    /// začátkem jména plete a v kolečku je na dvě místo dost. Bere se ze slov jména, a když je
+    /// jedno, z jeho začátku — `github-actions[bot]` tak dá `GA`, `odinuv` `OD`.
+    ///
+    /// `?` u prázdného jména — nemá nastat (aktér bez jména se nekreslí vůbec), ale kolečko bez
+    /// obsahu vypadá jako chyba vykreslení.
     private var initial: String {
-        guard let first = login.first else { return "?" }
-        return String(first).uppercased()
+        // Slova jména: `github-actions[bot]` má dvě, `odinuv` jedno.
+        let words = login.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+        guard let first = words.first else { return "?" }
+        if let second = words.dropFirst().first, let a = first.first, let b = second.first {
+            return "\(a)\(b)".uppercased()
+        }
+        return String(first.prefix(2)).uppercased()
     }
 }

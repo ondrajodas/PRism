@@ -69,6 +69,10 @@ struct OverviewView: View {
     private var descriptionCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
+                // Kolečko s iniciálami, jak ho má návrh — hlavička bez něj vypadá jako
+                // odstavec, ne jako něčí příspěvek. Obrázek se dotahuje, dokud nedorazí
+                // (a když nedorazí), zůstane iniciála.
+                AvatarView(login: pullRequest.author, url: nil, size: 18)
                 Text(verbatim: pullRequest.author)
                     .font(.system(size: 12, weight: .semibold))
                 Text(verbatim: pullRequest.state.czechLabel)
