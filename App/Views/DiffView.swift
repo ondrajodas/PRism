@@ -496,7 +496,19 @@ struct DiffView: View {
     private var fileMarkers: [String: FileMarker] {
         // `findings` jsou **skupiny** (shoda reviewerů na `file:line`), takže se rozbalí zpátky
         // na platné nálezy — značka mluví o souboru, ne o skupině.
-        Policy.fileMarkers(of: findings.flatMap(\.activeFindings), categories: blockingCategories)
+        let markers = Policy.fileMarkers(of: findings.flatMap(\.activeFindings), categories: blockingCategories)
+        // **Přejmenovaný soubor má dvě cesty.** Reviewer umí nález nahlásit pod tou starou,
+        // kdežto strom kreslí `displayPath` (novou) — bez překladu by se u přejmenovaného
+        // souboru značka nezobrazila vůbec. `Diff.file(at:)` hledá po obou stranách, takže
+        // je to tentýž překlad, jaký dělá skok na nález.
+        return Dictionary(
+            markers.compactMap { path, marker in
+                diff.file(at: path).map { ($0.displayPath, marker) }
+            },
+            // Když se stará i nová cesta potkají na témž souboru, blokující vyhrává — stejné
+            // pravidlo jako uvnitř `Policy.fileMarkers`.
+            uniquingKeysWith: { left, right in left == .blocking || right == .blocking ? .blocking : left }
+        )
     }
 
     /// Celá hlavička je tlačítko, ne jen šipka — na GitHubu se kliká kamkoli do řádku

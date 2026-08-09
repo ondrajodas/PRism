@@ -15,8 +15,9 @@ extension Policy {
     /// o souboru nic neříká. Nálezy bez cesty se vynechávají — patří celému PR, ne souboru,
     /// a v panelu mají vlastní místo.
     ///
-    /// Počítají se **platné** nálezy: odmítnutý (#113) nemá čím strašit, tatáž úvaha jako všude
-    /// jinde, kde se nálezy počítají.
+    /// **Odmítnuté nálezy odfiltruje volající** (`FindingGroup.activeFindings`) — odsud se to
+    /// poznat nedá, `Finding` o odmítnutí nic neví. Kdo sem pošle nefiltrovaný seznam, dostane
+    /// značku i u souboru, jehož jediný nález jsem zamítl (#113).
     static func fileMarkers(
         of findings: [Finding],
         categories: Set<String> = defaultBlockingCategories

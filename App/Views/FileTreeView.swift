@@ -11,8 +11,6 @@ struct FileTreeView: View {
     let files: [FileDiff]
     /// Které soubory nesou nález (#197). Prázdné = nekreslí se žádná značka.
     var markers: [String: FileMarker] = [:]
-    /// Který soubor je zrovna vidět — řádek se podbarví. `nil` = žádný.
-    var current: String?
     /// Úsporná sazba pro levý sloupec u diffu (#197).
     ///
     /// Ve sloupci 210 bodů širokém se **nevejde nic než jméno a značka**: počty `+/−` zaberou
@@ -35,7 +33,6 @@ struct FileTreeView: View {
                         depth: 0,
                         collapsed: $collapsed,
                         markers: markers,
-                        current: current,
                         isCompact: isCompact,
                         jump: jump
                     )
@@ -53,7 +50,6 @@ private struct FileTreeBranch: View {
     let depth: Int
     @Binding var collapsed: Set<String>
     let markers: [String: FileMarker]
-    let current: String?
     let isCompact: Bool
     let jump: (FileDiff) -> Void
 
@@ -70,7 +66,6 @@ private struct FileTreeBranch: View {
                     depth: depth + 1,
                     collapsed: $collapsed,
                     markers: markers,
-                    current: current,
                     isCompact: isCompact,
                     jump: jump
                 )
@@ -133,20 +128,13 @@ private struct FileTreeBranch: View {
             // V popoveru (420 bodů) zůstávají, tam se vejdou.
             if !isCompact {
                 DiffCounts.text(additions: node.additions, deletions: node.deletions)
-                    .font(isCompact ? .caption2 : .caption)
+                    .font(.caption)
                     .monospacedDigit()
             }
         }
         .padding(.vertical, 2)
         .padding(.leading, Double(depth) * indent)
         .contentShape(.rect)
-        // Kde v diffu jsem. Bez toho se u PR o padesáti souborech nedá ve stromu zorientovat —
-        // a právě kvůli tomu je sloupec trvalý (#197).
-        .background {
-            if let file, file.displayPath == current {
-                RoundedRectangle(cornerRadius: 5).fill(Palette.raised)
-            }
-        }
     }
 
     /// Soubor šipku nemá, ale místo po ní ano — jinak by se jméno nesrovnalo se jmény
