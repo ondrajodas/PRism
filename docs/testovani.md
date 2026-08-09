@@ -669,6 +669,10 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
 
   **Značku `≥` u neúplné útraty** (`RunUsageText.spent`) čtou od #181 dvě místa, takže má vlastní
   test — formát částky se netestuje, ten závisí na locale.
+- **Značky souborů ve stromu (#197)** — `Policy` výčtem. Pokazit se dá potichu jedno: **nechat
+  blokující přebít obyčejným nálezem**. Značka by pak záležela na pořadí, ve kterém nálezy
+  dorazily, takže se testuje v **obou pořadích**. K tomu nález bez cesty (patří celému PR, ne
+  souboru) a přenastavené kategorie.
 - **Zkrácená jména reviewerů (#182)** — `Policy` výčtem. To hlavní, co se dá pokazit potichu, je
   **zkrátit dvě různá id na totéž**: dva pluginy se stejně pojmenovaným skillem by v okně vypadaly
   jako jeden reviewer a nález by patřil neznámo komu. Testuje se proto kolize (obě jména zůstanou
@@ -741,6 +745,22 @@ sekce se od toho odvíjela; **je to změna proti tomu, co tu stálo do #181**, n
 osascript -e 'tell application "System Events" to tell process "PRism" to get {position, size} of window 1'
 screencapture -x -R0,34,1512,874 /cesta/do/scratchpadu/okno.png
 ```
+
+**Na stav za kliknutím se dostaneš taky** — jen se musí aplikace napřed vytáhnout dopředu.
+Okno terminálu leží na pixel přesně přes okno aplikace (obojí `0,33,1512,875`), takže klik
+`System Events` skončí v tom, co je zrovna nahoře; sám o sobě to není překážka, ale je potřeba
+pořadí ohlídat, jinak klik přistane v cizí aplikaci (jednou takhle skončil v Mailu):
+
+```bash
+osascript -e 'tell application "PRism" to activate' -e 'delay 1'
+osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'
+# … klik a screencapture …
+osascript -e 'tell application "okena" to activate'     # POVINNÉ: vrátit okno zpátky
+```
+
+**Přepnout zpátky do terminálu je součást úklidu, ne zdvořilost.** Aplikace vytažená přes celou
+obrazovku zakryje okno, ve kterém člověk zrovna čte, co se děje — a on ji musí odklikávat ručně.
+`entire contents` na SwiftUI okně vrací prázdno, takže cesta přes `AXPress` místo myši nevede.
 
 Oprávnění se uděluje **procesu, ze kterého terminál běží** (tady `Okena.app`, ne `claude`) —
 pozná se to z `ps` po rodičích. Bez něj `screencapture` skončí tou hláškou výš a soubor nevznikne.

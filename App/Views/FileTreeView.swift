@@ -9,6 +9,17 @@ import SwiftUI
 /// odsazení není z řádků poznat, co je pod čím.
 struct FileTreeView: View {
     let files: [FileDiff]
+    /// Které soubory nesou nález (#197). Prázdné = nekreslí se žádná značka.
+    var markers: [String: FileMarker] = [:]
+    /// Který soubor je zrovna vidět — řádek se podbarví. `nil` = žádný.
+    var current: String?
+    /// Úsporná sazba pro levý sloupec u diffu (#197).
+    ///
+    /// Ve sloupci 210 bodů širokém se **nevejde nic než jméno a značka**: počty `+/−` zaberou
+    /// přes padesát bodů a slovní odznak (`nový`) další čtyřicet, takže na jméno zbyde `…S.md`.
+    /// Návrh to tak taky kreslí — počty jsou u hlavičky souboru v diffu, kde je na ně místo.
+    /// Popover (420 bodů) zůstává v plné sazbě.
+    var isCompact = false
     let jump: (FileDiff) -> Void
 
     /// Sbalené složky. Výchozí je **rozbaleno** — seznam slouží ke skoku na soubor, takže
@@ -19,13 +30,20 @@ struct FileTreeView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(FileTreeNode.tree(of: files)) { node in
-                    FileTreeBranch(node: node, depth: 0, collapsed: $collapsed, jump: jump)
+                    FileTreeBranch(
+                        node: node,
+                        depth: 0,
+                        collapsed: $collapsed,
+                        markers: markers,
+                        current: current,
+                        isCompact: isCompact,
+                        jump: jump
+                    )
                 }
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 10)
         }
-        .frame(width: 420, height: 320)
     }
 }
 
@@ -34,16 +52,28 @@ private struct FileTreeBranch: View {
     let node: FileTreeNode
     let depth: Int
     @Binding var collapsed: Set<String>
+    let markers: [String: FileMarker]
+    let current: String?
+    let isCompact: Bool
     let jump: (FileDiff) -> Void
 
     /// O kolik se odsazuje každá úroveň. Šířka šipky a ikony, ať řádky drží sloupec.
-    private static let indent = 18.0
+    /// V úzkém sloupci míň — každá úroveň jinak ukousne z jména.
+    private var indent: Double { isCompact ? 11 : 18 }
 
     var body: some View {
         row
         if let children = node.children, !collapsed.contains(node.id) {
             ForEach(children) { child in
-                FileTreeBranch(node: child, depth: depth + 1, collapsed: $collapsed, jump: jump)
+                FileTreeBranch(
+                    node: child,
+                    depth: depth + 1,
+                    collapsed: $collapsed,
+                    markers: markers,
+                    current: current,
+                    isCompact: isCompact,
+                    jump: jump
+                )
             }
         }
     }
@@ -70,24 +100,44 @@ private struct FileTreeBranch: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 14)
             Text(verbatim: node.name)
-                .font(.callout)
+                .font(isCompact ? .caption : .callout)
                 .foregroundStyle(file == nil ? .secondary : .primary)
                 .lineLimit(1)
-                .truncationMode(.head)
-            if let badge = file.flatMap(badge(of:)) {
+                // **Soubor se ořezává zezadu, složka zepředu.** U jména souboru nese význam
+                // začátek (`SecretClient.php` a `SecretClientTest.php` se poznají jen podle
+                // něj), kdežto u cesty ke složce ta poslední část.
+                .truncationMode(file == nil ? .head : .tail)
+            if let marker = file.flatMap({ markers[$0.displayPath] }) {
+                // Puntík, ne text: v sloupci 210 bodů širokém je místo na cestu, ne na slovo.
+                // Barva je tatáž škála jako v řádku fronty a na kartě nálezu.
+                Circle()
+                    .fill(marker == .blocking ? Color.red : Color.orange)
+                    .frame(width: 6, height: 6)
+                    .help(marker == .blocking ? "Je tu blokující nález" : "Jsou tu nálezy")
+            }
+            if let badge = file.flatMap(badge(of:)), !isCompact {
                 Text(badge)
                     .font(.caption2)
                     .padding(.horizontal, 4)
                     .background(.quaternary, in: .capsule)
             }
-            Spacer(minLength: 8)
-            DiffCounts.text(additions: node.additions, deletions: node.deletions)
-                .font(.caption)
-                .monospacedDigit()
+            Spacer(minLength: 6)
+            if !isCompact {
+                DiffCounts.text(additions: node.additions, deletions: node.deletions)
+                    .font(.caption)
+                    .monospacedDigit()
+            }
         }
         .padding(.vertical, 2)
-        .padding(.leading, Double(depth) * Self.indent)
+        .padding(.leading, Double(depth) * indent)
         .contentShape(.rect)
+        // Kde v diffu jsem. Bez toho se u PR o padesáti souborech nedá ve stromu zorientovat —
+        // a právě kvůli tomu je sloupec trvalý (#197).
+        .background {
+            if let file, file.displayPath == current {
+                RoundedRectangle(cornerRadius: 5).fill(Palette.raised)
+            }
+        }
     }
 
     /// Soubor šipku nemá, ale místo po ní ano — jinak by se jméno nesrovnalo se jmény

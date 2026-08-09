@@ -45,11 +45,17 @@ struct DiffView: View {
     /// ukazuje, co z toho vyšlo.
     var navigation: FindingNavigation = .none
     var onlyBlocking: Binding<Bool> = .constant(false)
+    /// Rozložený panel nálezů (#197). `nil` = tlačítko se nekreslí; stav drží detail PR, protože
+    /// panel je vidět i v tabu, kde tahle lišta není.
+    var panelExpanded: Binding<Bool>?
     var stepFinding: ((NavigationStep) -> Void)?
 
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
     @State private var isPickingFile = false
+    /// Rozložený strom v levém sloupci (#197). Předvolba pohledu napříč PR, takže `UserDefaults`
+    /// — a ne stav ve store, ze stejného důvodu jako u bublin.
+    @AppStorage("diffTreeExpanded") private var isTreeExpanded = true
     /// Výška viditelné části diffu — z ní se počítá, kam skočí nález. Čte se jen měřením
     /// (`onGeometryChange`), takže do rozvržení nezasahuje: `GeometryReader` by naopak sám
     /// zabral místo a v tomhle okně už jednou nadělal škodu.
@@ -70,7 +76,13 @@ struct DiffView: View {
             VStack(alignment: .leading, spacing: 0) {
                 summary(jumpingWith: proxy)
                 Divider()
-                files
+                // Strom vlevo, diff vedle něj (#197). Do té doby byl strom jen v popoveru,
+                // takže u PR o padesáti souborech nešlo poznat, kde v něm člověk je, aniž by
+                // ho otevřel.
+                HStack(spacing: 0) {
+                    tree(jumpingWith: proxy)
+                    files
+                }
             }
             // Kam cíl skočí, řeší `jumpAnchor`: **k vršku, ale s odstupem**. Na vrch samotný
             // ne — ukotvená hlavička souboru vršek překrývá a bublina visí **pod** svým
@@ -285,6 +297,7 @@ struct DiffView: View {
                 .font(.callout)
                 .buttonStyle(.borderless)
             }
+            columnToggles
             jumpMenu(proxy)
         }
         .padding(.horizontal, 16)
@@ -368,6 +381,96 @@ struct DiffView: View {
         .foregroundStyle(.orange)
     }
 
+    /// Přepínače postranních sloupců, jak je má návrh v liště nad diffem (#197): `Strom ⌘1`
+    /// a `Nálezy ⌘2`.
+    ///
+    /// Zkratky visí jinde — ⌘1 tady, ⌘2 v detailu PR (panel je vidět i v tabu `Přehled`, kde
+    /// tahle lišta není). Tlačítka jsou proto **jen tlačítka**, popisek klávesy nese nápověda.
+    @ViewBuilder private var columnToggles: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.15)) { isTreeExpanded.toggle() }
+        } label: {
+            Image(systemName: "sidebar.left")
+                .foregroundStyle(isTreeExpanded ? Color.accentColor : Palette.ink3)
+        }
+        .buttonStyle(.borderless)
+        .help(isTreeExpanded ? "Složit strom souborů (⌘1)" : "Rozložit strom souborů (⌘1)")
+        .accessibilityLabel("Strom souborů")
+        .keyboardShortcut("1", modifiers: .command)
+
+        if let panelExpanded {
+            Button {
+                withAnimation(.snappy(duration: 0.15)) { panelExpanded.wrappedValue.toggle() }
+            } label: {
+                Image(systemName: "sidebar.right")
+                    .foregroundStyle(panelExpanded.wrappedValue ? Color.accentColor : Palette.ink3)
+            }
+            .buttonStyle(.borderless)
+            .help(panelExpanded.wrappedValue ? "Složit panel nálezů (⌘2)" : "Rozložit panel nálezů (⌘2)")
+            .accessibilityLabel("Panel nálezů")
+        }
+    }
+
+    /// Levý sloupec se stromem souborů (#197), nebo proužek, když je složený.
+    ///
+    /// Šířka 210 bodů je z návrhu (`grid-template-columns: 210px 1fr 300px`). Složený je proužek
+    /// 34 bodů — **ne zmizelý sloupec**: kolik souborů PR mění, je ta první otázka nad diffem
+    /// a bez čísla na hraně se na ni po složení nedá odpovědět.
+    @ViewBuilder private func tree(jumpingWith proxy: ScrollViewProxy) -> some View {
+        if isTreeExpanded {
+            FileTreeView(files: diff.files, markers: fileMarkers, isCompact: true) { file in
+                jump(to: file, with: proxy)
+            }
+            .frame(width: Self.treeWidth)
+            .background(Palette.chrome)
+            .overlay(alignment: .trailing) { Rectangle().fill(Palette.lineSoft).frame(width: 1) }
+        } else {
+            Button {
+                withAnimation(.snappy(duration: 0.15)) { isTreeExpanded = true }
+            } label: {
+                VStack(spacing: 9) {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Palette.ink3)
+                    Text(verbatim: "\(diff.files.count)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(Palette.ink2)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Palette.raised, in: .rect(cornerRadius: 4))
+                    Text("soubory")
+                        .font(.system(size: 10.5))
+                        .tracking(0.6)
+                        .foregroundStyle(Palette.ink3)
+                        .fixedSize()
+                        .rotationEffect(.degrees(90))
+                        .frame(width: Self.collapsedTreeWidth)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 10)
+                .frame(width: Self.collapsedTreeWidth, alignment: .top)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .background(Palette.chrome)
+            .overlay(alignment: .trailing) { Rectangle().fill(Palette.lineSoft).frame(width: 1) }
+            .help("Rozložit strom souborů (⌘1)")
+            .accessibilityLabel("Rozložit strom souborů")
+        }
+    }
+
+    /// Skok na soubor — **jedno místo pro strom i popover**, ať se sbalený soubor rozbalí v obou.
+    private func jump(to file: FileDiff, with proxy: ScrollViewProxy) {
+        // Skočit na sbalený soubor jde — hlavička zůstává — ale ukázala by se jen ona.
+        // Kdo si ho ze stromu vybral, chce ho vidět.
+        if folding.isFolded(file) { folding.toggle(file) }
+        withAnimation { proxy.scrollTo(file.id, anchor: .top) }
+    }
+
+    static let treeWidth = 210.0
+    private static let collapsedTreeWidth = 34.0
+
     /// Popover se stromem, ne rozbalovací menu: u PR přes třicet souborů je plochý seznam
     /// cest nepoužitelný a vnořená podmenu se špatně trefují.
     private func jumpMenu(_ proxy: ScrollViewProxy) -> some View {
@@ -378,14 +481,22 @@ struct DiffView: View {
         }
         .buttonStyle(.borderless)
         .popover(isPresented: $isPickingFile, arrowEdge: .bottom) {
-            FileTreeView(files: diff.files) { file in
+            FileTreeView(files: diff.files, markers: fileMarkers) { file in
                 isPickingFile = false
-                // Skočit na sbalený soubor jde — hlavička zůstává — ale ukázala by se jen
-                // ona. Kdo si ho ze stromu vybral, chce ho vidět.
-                if folding.isFolded(file) { folding.toggle(file) }
-                withAnimation { proxy.scrollTo(file.id, anchor: .top) }
+                jump(to: file, with: proxy)
             }
+            // Rozměr popoveru drží **volající**, ne strom: v levém sloupci (#197) je týž strom
+            // pružný a pevná velikost by ho v něm rozbila.
+            .frame(width: 420, height: 320)
         }
+    }
+
+    /// Které soubory nesou nález (#197). Počítá `Policy`, ať strom a panel neříkají o téže věci
+    /// každý něco jiného.
+    private var fileMarkers: [String: FileMarker] {
+        // `findings` jsou **skupiny** (shoda reviewerů na `file:line`), takže se rozbalí zpátky
+        // na platné nálezy — značka mluví o souboru, ne o skupině.
+        Policy.fileMarkers(of: findings.flatMap(\.activeFindings), categories: blockingCategories)
     }
 
     /// Celá hlavička je tlačítko, ne jen šipka — na GitHubu se kliká kamkoli do řádku

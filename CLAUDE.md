@@ -67,6 +67,13 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
 
   Napiš, **na co se mám podívat** a co v příslušné obrazovce uvidím.
 
+  **Napřed se na to ale podívej sám — screenshotem.** `screencapture -x -R<x,y,w,h>` funguje
+  a mockup se dá vyrendrovat headless Chromem a položit vedle (postup v
+  [`docs/testovani.md`](docs/testovani.md)). Ukázat mi obrazovku, na které je něco zjevně
+  rozbité, znamená použít mě jako první kolo kontroly — a to je kolo navíc, stejně jako
+  u Copilota. Platí to i pro komponentu, která se jen **přesunula do užšího místa**: jiná
+  šířka je jiný design a plné popisky, počty a odznaky se do ní obvykle nevejdou.
+
   **Když se změna v UI nijak neprojeví** (vrstva bez UI — modely, parser, protokol),
   **na pauzu mě netahej.** Neviditelnou změnu nemám jak proklikat, takže by pauza jen
   brzdila. Napiš do shrnutí jednou větou, že vidět není nic a proč, dolož to zelenými

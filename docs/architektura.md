@@ -1715,6 +1715,15 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
 - **Panel je v obou tabech.** Nálezy bez místa v kódu, průběh i moje rozdělané review
   se vážou k celému PR — schovat je za přepnutí tabu by znamenalo, že se rozepsané review
   „ztratí“ přepnutím na `Přehled`.
+- **Strom souborů je trvalý levý sloupec** (#197), ne jen popover. U PR o padesáti souborech
+  nešlo poznat, kde v něm člověk je, aniž by ho otevřel. Šířka 210 z návrhu, složený je proužek
+  34 bodů s počtem souborů; `⌘1` a tlačítko v liště nad diffem, vedle `Nálezy ⌘2`. Tři věci:
+  - **Ve sloupci se sází úsporně** (`FileTreeView.isCompact`): jen jméno a značka. Počty `+/−`
+    zaberou přes padesát bodů a slovní odznak `nový` dalších čtyřicet, takže na jméno zbyde
+    `…S.md` — vyzkoušeno na skutečném PR. Popover (420 bodů) zůstává v plné sazbě.
+  - **Soubor se ořezává zezadu, složka zepředu.** U jména souboru nese význam začátek
+    (`SecretClient.php` versus `SecretClientTest.php`), u cesty ke složce ta poslední část.
+  - **Skok na soubor je jedno místo pro strom i popover**, takže se sbalený soubor rozbalí v obou.
 - **Panel je napravo od diffu, ne pod ním** (#182). Dole si bral výšku, které je v diffu
   nejmíň: kód je dlouhý a úzký, takže spodní pruh se pere právě o to, čeho je málo. Napravo
   bere šířku — spočítané v zadání #182 pro mono 12 px: v pohledu **pod sebou** zbývá i na 14"
@@ -2407,6 +2416,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí fronty na dashboardu (#181) — podle závažnosti, ne podle času (`QueueEntry`) |
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
+| `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
 | `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
 | `Policy.changes(in:since:)` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`) |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |

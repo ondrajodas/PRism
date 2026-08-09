@@ -575,6 +575,9 @@ struct PullRequestDetailView: View {
                     categories: blockingCategories
                 ),
                 onlyBlocking: $cursor.onlyBlocking,
+                // Tlačítko `Nálezy` v liště nad diffem (#197). Stav drží detail, protože
+                // panel je vidět i v tabu `Přehled`, kde lišta není.
+                panelExpanded: $findingsExpanded,
                 stepFinding: { step($0) }
             )
         case .failed(let detail):

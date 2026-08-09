@@ -212,6 +212,10 @@ kterému nevěřím, není práce k projití. Puntík zezelená, teprve až jsi 
 ne když skončíš na posledním; a nálezy bez místa v kódu se do počtu neplete — nedá se na ně
 skočit, tak je nápověda počítá zvlášť, aby `3/3` netvrdilo hotovo nad PR, kde zbývají v panelu.
 
+**Vlevo od diffu je strom souborů** (#197): cesty, u souboru s nálezem puntík (červený, když
+blokuje). Skládá se na `⌘1` na proužek s počtem souborů. Popover `Přejít na soubor` zůstává —
+je to cesta ke stromu, když je sloupec složený.
+
 **Napravo od diffu je panel se segmenty** (#182): nálezy jako karty, Moje review a Průběh. Panel
 je jediné místo, kde jsou vidět nálezy **bez místa v kódu** — chybějící testy nebo poznámky
 k architektuře; kvůli nim samotné bubliny nestačí. Je vidět v **obou** záložkách, protože nálezy,
