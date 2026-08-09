@@ -669,6 +669,11 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
 
   **Značku `≥` u neúplné útraty** (`RunUsageText.spent`) čtou od #181 dvě místa, takže má vlastní
   test — formát částky se netestuje, ten závisí na locale.
+- **Checky z GitHub Actions (#209)** — `Policy` výčtem. Dvě věci se dají pokazit potichu:
+  **počítat přeskočený jako prošlý** (hlavička by svítila zeleně nad přeskočeným testem)
+  a **počítat většinu místo nejhoršího**. Test s dvanácti zelenými a jedním červeným je proto
+  v sadě schválně. K tomu překlad kbelíků včetně neznámého (bere se jako běžící — jediný stav,
+  který o výsledku netvrdí nic) a pořadí, ve kterém jdou spadlé nahoru a přeskočené dolů.
 - **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
   (řádek plný nul utopí to jedno číslo, na kterém záleží) a **ukázání shodné sha nálezů**, ze které
   neplyne nic. Nejcennější test je právě ten druhý: shodná se nekreslí, rozešlá ano a je označená
@@ -774,8 +779,20 @@ osascript -e 'tell application "okena" to activate'     # POVINNÉ: vrátit okno
 obrazovku zakryje okno, ve kterém člověk zrovna čte, co se děje — a on ji musí odklikávat ručně.
 `entire contents` na SwiftUI okně vrací prázdno, takže cesta přes `AXPress` místo myši nevede.
 
-Oprávnění se uděluje **procesu, ze kterého terminál běží** (tady `Okena.app`, ne `claude`) —
-pozná se to z `ps` po rodičích. Bez něj `screencapture` skončí tou hláškou výš a soubor nevznikne.
+Oprávnění se uděluje **aplikaci, ze které session běží**, ne `claude` ani `screencapture`. Která
+to je, řekne `ps` po rodičích — a **mění se to**: nejdřív to byla `Okena.app`, po přechodu na
+`ClaudeCode.app` (`~/.local/share/claude/ClaudeCode.app`) spadlo `screencapture`
+(`could not create image from display`) i `osascript` (`nemá povolen asistenční přístup`) naráz.
+
+Když se to stane, není to rozbitý příkaz, ale **jiná identita volajícího**:
+
+```bash
+ps -o comm= -p $PPID                      # kdo mě spustil
+ps -o ppid= -p $PPID | xargs ps -o comm= -p
+```
+
+Ta aplikace potřebuje **Nahrávání obrazovky** (screenshot) a **Zpřístupnění** (`osascript`,
+System Events — měření okna a klikání).
 
 **Návrh se ověřuje vedle sebe, ne po paměti** (#181). Mockup je HTML, takže se dá vyrenderovat
 headless Chromem a položit vedle screenshotu aplikace — pak se pozná i to, co se z popisu vyčíst

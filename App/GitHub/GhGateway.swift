@@ -48,6 +48,42 @@ struct GhGateway: GitHubGateway {
         return try await run(arguments, decodedAs: GhPullRequestDetail.self).pullRequest(id: id)
     }
 
+    /// `gh pr checks` končí **nenulovým kódem, když něco spadlo** — a to není chyba volání,
+    /// ale výsledek, kvůli kterému se ptáme. Selhání se proto rozlišuje podle toho, jestli
+    /// dorazil rozumný JSON; prázdný výstup u PR bez checků taky není chyba.
+    func fetchChecks(id: PRIdentifier) async throws -> [PullRequestCheck] {
+        let arguments = [
+            "pr", "checks", String(id.number),
+            "--repo", id.repo.description,
+            "--json", "name,state,bucket,link,startedAt,completedAt",
+        ]
+        // **Nenulový kód tady není chyba volání.** `gh pr checks` jím hlásí „něco spadlo“ —
+        // a JSON přesto vypíše na stdout. Kdyby se šlo přes `run(_:)`, které na nenulový kód
+        // vyhazuje, zahodil by se výstup **právě tehdy, když nějaký check spadl**, a blok by
+        // tvrdil „žádné kontroly“ ve chvíli, kdy na nich nejvíc záleží. Nález Copilota na #209.
+        let result: ProcessResult
+        do {
+            result = try await runner.run(gh, arguments: arguments, timeout: timeout)
+        } catch ProcessError.timedOut {
+            throw GitHubError.timedOut
+        } catch {
+            throw GitHubError.toolUnavailable(error.localizedDescription)
+        }
+
+        let output = result.standardOutput
+        // Prázdný výstup = PR bez checků. To je běžný stav, ne chyba; teprve když `gh` skončí
+        // nenulově **a** nic nevypíše, je to selhání, o kterém nemá smysl mlčet.
+        guard !output.isEmpty else {
+            guard result.exitCode == 0 else { throw GitHubError(failure: result) }
+            return []
+        }
+        do {
+            return try GhOutput.decoder.decode([GhCheck].self, from: Data(output.utf8)).map(\.check)
+        } catch {
+            throw GitHubError.malformedOutput("Výstupu gh pr checks nerozumím: \(error)")
+        }
+    }
+
     func fetchDiff(id: PRIdentifier) async throws -> String {
         // `--color never` je pojistka proti defaultu `auto`: kdyby `gh` usoudil, že píše
         // na terminál, přišly by v diffu ANSI escape sekvence.

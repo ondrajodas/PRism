@@ -88,7 +88,11 @@ struct PullRequestDetailView: View {
                 review
             }
             HStack(spacing: 10) {
-                PullRequestHeaderView(pullRequest: pullRequest, detail: loadedDetail)
+                PullRequestHeaderView(
+                    pullRequest: pullRequest,
+                    detail: loadedDetail,
+                    checks: store.checks[pullRequest.id] ?? []
+                )
                 Spacer(minLength: 8)
                 checkout
                 draftChip
@@ -532,6 +536,7 @@ struct PullRequestDetailView: View {
         OverviewView(
             description: store.description(of: pullRequest.id),
             facts: facts,
+            checks: store.checks[pullRequest.id] ?? [],
             changes: store.changesSinceLastVisit(for: pullRequest.id),
             lastVisit: store.visitSnapshots[pullRequest.id],
             // Obojí je „to, co mám na obrazovce, už neplatí“, takže se do banneru slévá do

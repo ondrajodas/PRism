@@ -627,6 +627,11 @@ final class AppStore {
         )
     }
 
+    /// Checky na PR (#209), klíčované PR. Prázdné pole = načetlo se a žádné nejsou; chybějící
+    /// klíč = ještě se nenačetlo. Ty dva stavy se nesmí slít, jinak by blok nad nenačteným PR
+    /// tvrdil „žádné kontroly“.
+    var checks: [PRIdentifier: [PullRequestCheck]] = [:]
+
     /// Kdy se polling zeptá znovu. `nil`, dokud smyčka poprvé neusne.
     var nextPoll: Date? { polling.state.nextPoll }
 

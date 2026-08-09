@@ -14,6 +14,9 @@ struct OverviewView: View {
     var description: String?
     /// Fakta o PR do dlaždic (#198). Prázdná = řádek se nekreslí.
     var facts: PullRequestFacts = PullRequestFacts(tiles: [])
+    /// Checky z GitHub Actions (#209). Prázdné = blok se nekreslí; PR bez checků je běžný stav
+    /// a prázdný rámeček s nadpisem by o něm tvrdil, že se něco nepovedlo.
+    var checks: [PullRequestCheck] = []
     /// Co přibylo od poslední návštěvy (#173). Prázdné = nic, nebo se ještě nenačetla
     /// konverzace; banner se v obou případech nekreslí.
     var changes: VisitChanges = .none
@@ -50,6 +53,11 @@ struct OverviewView: View {
                 // přečetlo, čísla jsou kontext k němu.
                 if !facts.isEmpty {
                     PullRequestFactsView(facts: facts)
+                }
+                // Checky **pod dlaždicemi**, jak je má návrh: je to fakt o PR, jen delší než
+                // na jednu dlaždici.
+                if !checks.isEmpty {
+                    ChecksView(checks: checks)
                 }
             }
             .padding(16)

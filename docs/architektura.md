@@ -1725,6 +1725,21 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Kolik znaků zbývá, se měří, ne bere z tabulky.** Tabulka v zadání #188 platí pro jeden
     displej a jedno nastavení; číslo v liště platí pro okno, které mám otevřené. Ukazuje se
     **jen pod slibem** (120 znaků z `CLAUDE.md`) — nad ním je to údaj, který nikoho nezajímá.
+- **`Přehled` ukazuje checky z GitHub Actions** (#209) — druhou půlku otázky „dá se to
+  mergnout“; tu první (nálezy) okno umělo, takže se nad zeleným review stejně chodilo do
+  prohlížeče. Čtyři pravidla:
+  - **Nejhorší stav vyhrává, ne většina.** Dvanáct zelených a jeden červený je červený stav.
+  - **Tři stavy, ne dva**, a `skipped` je vlastní. Běžící check není prošlý ani spadlý a
+    přeskočený není úspěch — jinak by hlavička svítila zeleně nad přeskočeným testem. Neznámý
+    kbelík se bere jako běžící: je to jediný stav, který o výsledku netvrdí nic.
+  - **Přeskočené se sbalí za číslo.** Na skutečném PR jich bývá většina — změřeno na
+    `keboola/platform-libraries#557`: 28 checků, 22 přeskočených — a rozepsané by utopily ten
+    jeden, na kterém záleží. Ze stejného důvodu jdou spadlé nahoru.
+  - **Log zůstává na GitHubu.** Odkaz je jen u toho, co se nepovedlo; stahovat megabajty kvůli
+    jednomu přečtení nedává smysl a čtení logu není doména review.
+
+  Tahá se **s detailem PR**, ne pollingem přes všechna (tatáž N+1 past), a `fetchChecks` je
+  **čtení** — restart workflow do aplikace nepatří (tvrdá podmínka č. 1).
 - **`Přehled` má dlaždice s fakty** (#198): commity (a kolik z nich je nových od minule),
   soubory (a kolik má nález), hlava PR a sha, proti které platí nálezy. **Nic se pro ně
   nedotahuje** — jsou to údaje, které v okně už jsou, jen roztroušené. Tři pravidla:
@@ -2469,6 +2484,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí fronty na dashboardu (#181) — podle závažnosti, ne podle času (`QueueEntry`) |
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
+| `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
 | `Policy.facts(commits:newCommits:files:filesWithFindings:headSha:findingsHeadSha:)` | Dlaždice s fakty o PR (#198); dlaždice, o které se nedá nic říct, se vynechá |
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
 | `Policy.charactersPerSide(contentWidth:characterWidth:layout:gutter:)` | Kolik znaků kódu se vejde na stranu (#188); vedle sebe se šířka dělí na dvě |
