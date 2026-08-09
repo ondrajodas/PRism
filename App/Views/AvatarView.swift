@@ -47,12 +47,38 @@ struct AvatarView: View {
     /// `?` u prázdného jména — nemá nastat (aktér bez jména se nekreslí vůbec), ale kolečko bez
     /// obsahu vypadá jako chyba vykreslení.
     private var initial: String {
-        // Slova jména: `github-actions[bot]` má dvě, `odinuv` jedno.
-        let words = login.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+        let words = Self.words(in: login)
         guard let first = words.first else { return "?" }
         if let second = words.dropFirst().first, let a = first.first, let b = second.first {
             return "\(a)\(b)".uppercased()
         }
         return String(first.prefix(2)).uppercased()
+    }
+
+    /// Slova jména. Dělí se na **oddělovačích i na velkém písmenu uvnitř** — přezdívky se píšou
+    /// obojím způsobem a `ErikZigo` má dát `EZ`, ne `ER`. Bez toho druhého se z každé
+    /// camelCase přezdívky stanou dvě písmena jednoho slova, což o druhém jméně neřekne nic.
+    ///
+    /// `github-actions[bot]` → `GA`, `ErikZigo` → `EZ`, `odinuv` → `OD` (jedno slovo, takže
+    /// první dvě písmena).
+    static func words(in login: String) -> [String] {
+        var words: [String] = []
+        var current = ""
+        for character in login {
+            guard character.isLetter || character.isNumber else {
+                if !current.isEmpty { words.append(current) }
+                current = ""
+                continue
+            }
+            // Velké písmeno uvnitř slova začíná nové — ale jen po malém, aby se `GHActions`
+            // nerozpadlo po písmenech.
+            if character.isUppercase, let last = current.last, last.isLowercase {
+                words.append(current)
+                current = ""
+            }
+            current.append(character)
+        }
+        if !current.isEmpty { words.append(current) }
+        return words
     }
 }
