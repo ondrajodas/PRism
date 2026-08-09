@@ -774,8 +774,20 @@ osascript -e 'tell application "okena" to activate'     # POVINNÉ: vrátit okno
 obrazovku zakryje okno, ve kterém člověk zrovna čte, co se děje — a on ji musí odklikávat ručně.
 `entire contents` na SwiftUI okně vrací prázdno, takže cesta přes `AXPress` místo myši nevede.
 
-Oprávnění se uděluje **procesu, ze kterého terminál běží** (tady `Okena.app`, ne `claude`) —
-pozná se to z `ps` po rodičích. Bez něj `screencapture` skončí tou hláškou výš a soubor nevznikne.
+Oprávnění se uděluje **aplikaci, ze které session běží**, ne `claude` ani `screencapture`. Která
+to je, řekne `ps` po rodičích — a **mění se to**: nejdřív to byla `Okena.app`, po přechodu na
+`ClaudeCode.app` (`~/.local/share/claude/ClaudeCode.app`) spadlo `screencapture`
+(`could not create image from display`) i `osascript` (`nemá povolen asistenční přístup`) naráz.
+
+Když se to stane, není to rozbitý příkaz, ale **jiná identita volajícího**:
+
+```bash
+ps -o comm= -p $PPID                      # kdo mě spustil
+ps -o ppid= -p $PPID | xargs ps -o comm= -p
+```
+
+Ta aplikace potřebuje **Nahrávání obrazovky** (screenshot) a **Zpřístupnění** (`osascript`,
+System Events — měření okna a klikání).
 
 **Návrh se ověřuje vedle sebe, ne po paměti** (#181). Mockup je HTML, takže se dá vyrenderovat
 headless Chromem a položit vedle screenshotu aplikace — pak se pozná i to, co se z popisu vyčíst
