@@ -160,7 +160,9 @@ struct PullRequestDetailView: View {
     /// vážou k celému PR, ne k diffu; schovat je za přepnutí tabu by znamenalo, že se
     /// rozepsané review přepnutím na `Přehled` „ztratí“.
     @ViewBuilder private var content: some View {
-        VStack(spacing: 0) {
+        // **Vedle sebe, ne pod sebou** (#182). Panel dole si bral výšku, které je v diffu
+        // nejmíň; napravo bere šířku, které je v okně přes celou obrazovku dost.
+        HStack(spacing: 0) {
             switch store.detailTab(for: pullRequest.id) {
             case .filesChanged: diff
             case .overview: overview
@@ -194,10 +196,10 @@ struct PullRequestDetailView: View {
                 current: cursor.current,
                 tab: $panelTab
             )
-            // Panel si o místo říká **první**: má vlastní strop (výšku, kterou si uživatel
-            // vytáhl), takže víc než ten si nevezme — a zbytek dostane diff, který se umí
-            // stáhnout na nulu. Bez priority dělí `VStack` místo mezi dva pružné prvky
-            // rovnoměrně a v nízkém okně vyjde panel na půlku obrazovky.
+            // Panel si o místo říká **první**: má vlastní šířku (tu, kterou si uživatel
+            // vytáhl), takže víc než ji si nevezme — a zbytek dostane diff, který se umí
+            // stáhnout. Bez priority dělí `HStack` místo mezi dva pružné prvky rovnoměrně
+            // a v úzkém okně vyjde panel na půlku.
             .layoutPriority(1)
         }
     }
@@ -456,6 +458,14 @@ struct PullRequestDetailView: View {
                 .keyboardShortcut(.upArrow, modifiers: .option)
             Button("Další blokující nález") { step(.forward, onlyBlocking: true) }
                 .keyboardShortcut(.downArrow, modifiers: [.option, .shift])
+            // Panel jde složit i rozložit **stejnou zkratkou** (#182), jak to má návrh v liště
+            // nad diffem. Zkratka bydlí tady, ne v `DiffView`: panel je vidět v obou tabech PR,
+            // kdežto lišta jen u diffu — a přepínač, který v půlce okna nefunguje, je horší
+            // než žádný.
+            Button("Panel nálezů") {
+                withAnimation(.snappy(duration: 0.15)) { findingsExpanded.toggle() }
+            }
+            .keyboardShortcut("2", modifiers: .command)
         }
         .opacity(0)
         .allowsHitTesting(false)

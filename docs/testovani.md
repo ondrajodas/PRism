@@ -669,6 +669,14 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
 
   **Značku `≥` u neúplné útraty** (`RunUsageText.spent`) čtou od #181 dvě místa, takže má vlastní
   test — formát částky se netestuje, ten závisí na locale.
+- **Zkrácená jména reviewerů (#182)** — `Policy` výčtem. To hlavní, co se dá pokazit potichu, je
+  **zkrátit dvě různá id na totéž**: dva pluginy se stejně pojmenovaným skillem by v okně vypadaly
+  jako jeden reviewer a nález by patřil neznámo komu. Testuje se proto kolize (obě jména zůstanou
+  celá), že kolize **nezastaví zkracování ostatních**, jméno bez dvojtečky a id končící dvojtečkou,
+  ze kterého by jinak vyšel prázdný popisek.
+
+  Samotné rozvržení panelu se neunit-testuje (je to view) — kontroluje se na běžící aplikaci proti
+  vyrenderované sekci 02 návrhu, viz níž.
 - **`WindowCentering` (#164)** — **geometrie, ne `NSWindow`**. `centered(_:in:on:)` si obrazovky
   bere parametrem (`ScreenBounds`), takže je to čistá funkce; jinak by zůstalo neotestované zrovna
   zarovnávání zpátky na viditelnou plochu, protože `NSScreen` se vyrobit nedá. Do #164 to byla
