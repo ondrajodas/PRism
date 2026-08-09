@@ -90,6 +90,12 @@ Záložky jsou podtržené jako na GitHubu a odznak u `Konverzace` říká, koli
 Volba se pamatuje **u každého PR zvlášť** a otevírá se `Přehled` — popis a diskuze se čtou dřív
 než kód, kterého se týkají.
 
+Pod dlaždicemi je blok **`Kontroly na GitHubu`** (#209): kolik checků prošlo, kolik běží a kolik
+spadlo, a pod tím řádek na každý s dobou běhu. **Nejhorší stav vyhrává** — dvanáct zelených
+a jeden červený je červený stav — a **přeskočený check není prošlý**; přeskočené se sbalí za
+číslo, protože jich na monorepu bývá většina. U spadlého je odkaz na log; ten se do aplikace
+nestahuje.
+
 Pod popisem PR jsou **dlaždice s fakty** (#198): kolik je commitů a kolik z nich přibylo od minule,
 kolik souborů se mění a v kolika je nález, hlava PR a — **jen když se rozešla** — sha, proti které
 platí nálezy. Nic se pro ně netahá z API; jsou to čísla, která v okně už byla, jen roztroušená.

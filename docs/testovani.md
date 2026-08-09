@@ -669,6 +669,11 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
 
   **Značku `≥` u neúplné útraty** (`RunUsageText.spent`) čtou od #181 dvě místa, takže má vlastní
   test — formát částky se netestuje, ten závisí na locale.
+- **Checky z GitHub Actions (#209)** — `Policy` výčtem. Dvě věci se dají pokazit potichu:
+  **počítat přeskočený jako prošlý** (hlavička by svítila zeleně nad přeskočeným testem)
+  a **počítat většinu místo nejhoršího**. Test s dvanácti zelenými a jedním červeným je proto
+  v sadě schválně. K tomu překlad kbelíků včetně neznámého (bere se jako běžící — jediný stav,
+  který o výsledku netvrdí nic) a pořadí, ve kterém jdou spadlé nahoru a přeskočené dolů.
 - **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
   (řádek plný nul utopí to jedno číslo, na kterém záleží) a **ukázání shodné sha nálezů**, ze které
   neplyne nic. Nejcennější test je právě ten druhý: shodná se nekreslí, rozešlá ano a je označená
