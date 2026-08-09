@@ -639,6 +639,36 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   na #168; při opravě se tentýž vzor našel ještě na **dvou starších místech** (useknuté vlákno
   a nevešlá konverzace nad diffem). Neosobní konstrukce („2 řádky diffu se nepodařilo přečíst“)
   je naopak správná a zůstává.
+- **Dashboard (#181)** — `Policy` výčtem, protože je to čistá funkce nad tím, co store drží
+  v paměti. Tři věci se dají pokazit potichu:
+  - **Počítat drafty jinak než stavový řádek.** První verze počítala všechny drafty na disku
+    a karta ukazovala trojku vedle jedničky ve stavovém řádku; test proto sype dohromady prázdný
+    draft, draft PR mimo frontu a jeden platný.
+  - **Vymyslet stáří draftu, který razítko nemá** (z doby před #181). Karta o něm musí mlčet,
+    ale **cíl akce `Dopsat review` zůstává vyplněný** — pokračovat se v něm dá.
+  - **Počítat nálezy z běhů mimo sedmidenní okno.** Reviewer, který v okně neběžel, v legendě
+    nemá co dělat; ten, který běžel a nic nenašel, v ní naopak **zůstává s nulou**.
+
+  **Pořadí fronty** (`Policy.byUrgency`) má vlastní sadu: celá škála naráz z obráceného vstupu,
+  blokující nad pěti kosmetickými nálezy, nedoběhlý běh nahoru **jen** s blokujícím nálezem,
+  determinismus při shodě času — a hlavně, že **zastaralé nahoru nejde ani s blokujícím nálezem**
+  (nálezy patří ke staršímu `headSha`).
+
+  Ve store: fronta dashboardu je seřazená **jinak než `pullRequests`** (obojí v jednom tvrzení,
+  jinak by se dalo splést getter), **filtr seznamu ji nezúží** a hromadné spuštění bez revieweera
+  **nespustí nic**. Sedmidenní historie útraty se ověřuje proti skutečné dočasné složce: přesun
+  včerejška po půlnoci, prázdný den, který v řadě zůstává, a ořez na sedm dní.
+
+  Kdy se polling zeptá znovu (`PollState.nextPoll`) je u `PollingService`: hodnotu zapisuje
+  smyčka, ruční obnovení ji **neposouvá**, a po rate limitu ctí backoff, ne nastavený interval.
+
+  **`ProportionalColumns`** se testuje po částech: `Layout` se bez hostitelského okna vykreslit
+  nedá, ale výpočet šířek ano — a tam se dá pokazit potichu, že se **mezery odečtou až po dělení
+  poměrem** (sloupce pak přetečou a poslední se ořízne). K tomu sloupec navíc bez poměru a šířka
+  menší než mezery, ze které nesmí vyjít záporný rozměr.
+
+  **Značku `≥` u neúplné útraty** (`RunUsageText.spent`) čtou od #181 dvě místa, takže má vlastní
+  test — formát částky se netestuje, ten závisí na locale.
 - **`WindowCentering` (#164)** — **geometrie, ne `NSWindow`**. `centered(_:in:on:)` si obrazovky
   bere parametrem (`ScreenBounds`), takže je to čistá funkce; jinak by zůstalo neotestované zrovna
   zarovnávání zpátky na viditelnou plochu, protože `NSScreen` se vyrobit nedá. Do #164 to byla
@@ -690,9 +720,35 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
 
 ## Jak si zkontrolovat, jak view vypadá
 
-**Rozvržení okna se dá změřit přes accessibility, i když screenshot nejde** (#180). `screencapture`
-na tomhle stroji pořád selhává (`could not create image from display`), ale `System Events` vrátí
-`position` a `size` každého prvku — a z těch čísel se pozná to, co by jinak řekl jedině obrázek.
+**Screenshot běžící aplikace dostaneš** — od #181, kdy terminálu přibylo oprávnění Screen
+Recording. Do té doby `screencapture` padal na `could not create image from display` a celá tahle
+sekce se od toho odvíjela; **je to změna proti tomu, co tu stálo do #181**, ne nová možnost navíc.
+
+```bash
+osascript -e 'tell application "System Events" to tell process "PRism" to get {position, size} of window 1'
+screencapture -x -R0,34,1512,874 /cesta/do/scratchpadu/okno.png
+```
+
+Oprávnění se uděluje **procesu, ze kterého terminál běží** (tady `Okena.app`, ne `claude`) —
+pozná se to z `ps` po rodičích. Bez něj `screencapture` skončí tou hláškou výš a soubor nevznikne.
+
+**Návrh se ověřuje vedle sebe, ne po paměti** (#181). Mockup je HTML, takže se dá vyrenderovat
+headless Chromem a položit vedle screenshotu aplikace — pak se pozná i to, co se z popisu vyčíst
+nedá (poměr sloupců, výška karty, kde končí proužek). Sekce se vyřízne do samostatného souboru,
+protože stránka je dlouhá a `--screenshot` bere jen viewport:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
+    --hide-scrollbars --force-device-scale-factor=2 --window-size=1200,900 \
+    --screenshot=mockup.png "file://$PWD/mockup-s01.html"
+```
+
+U #181 to našlo čtyři odchylky, kterých si předtím nikdo nevšiml: pevná šířka pravého sloupce
+místo poměru `1.45fr 1fr`, chybějící popisky v hlavičkách bloků, chybějící blok `Co teď`
+a proužek řádku odsazený od hrany.
+
+**Rozvržení okna se dá změřit i přes accessibility** (#180), a je to pořád nejrychlejší způsob,
+jak dokázat jedno konkrétní číslo: `System Events` vrátí `position` a `size` každého prvku.
 U #180 to rozhodlo spor o hlavičku okna: semafor končil na `y=66`, záložky začínaly na `y=77`,
 tedy nad nimi byl prázdný pruh. Po opravě začínala hlavička na `y=42` (horní hrana okna) a její
 obsah na `y=50`, tedy **na stejné výšce jako semafor**.
@@ -701,14 +757,11 @@ obsah na `y=50`, tedy **na stejné výšce jako semafor**.
 osascript -e 'tell application "System Events" to tell process "PRism" to get position of window 1'
 ```
 
-Vyžaduje to oprávnění Accessibility (na rozdíl od Screen Recording ho terminál má). `entire
-contents` u `AXScrollArea` občas selže na převodu typu — hierarchii je pak potřeba projít po
-patrech (`UI elements of …`).
+Vyžaduje to oprávnění Accessibility. `entire contents` u `AXScrollArea` občas selže na převodu
+typu — hierarchii je pak potřeba projít po patrech (`UI elements of …`).
 
-
-`screencapture` na tomhle stroji nefunguje (chybí oprávnění Screen Recording), takže
-screenshot běžící aplikace nedostaneš. Co funguje: dočasný test, který view vykreslí přes
-`ImageRenderer` do PNG ve scratchpadu, a ten se pak přečte. Před commitem se maže.
+Co se **nedá naklikat** (chybějící binárka, chyba sítě, prázdný stav nad plnou frontou), se dá
+vykreslit dočasným testem přes `ImageRenderer` do PNG ve scratchpadu. Před commitem se maže.
 
 Dva zádrhely, které to má:
 
@@ -765,8 +818,8 @@ EOF
 
 `value` vrátí texty, `description` popisky tlačítek (`Obnovit`, `Skrýt boční panel`).
 Takhle se dá dokázat i rozvržení: že seznam začíná pod toolbarem se pozná porovnáním
-`position` scroll areay s výškou `AXToolbar`. Když se s uživatelem lišíte v tom, co je na
-obrazovce, tohle to rozhodne — screenshot nedostaneš.
+`position` scroll areay s výškou `AXToolbar`. Je to **doplněk screenshotu**, ne náhrada:
+obrázek ukáže, že je něco jinak, čísla řeknou o kolik.
 
 **Po dočasném testovacím souboru zkontroluj `git status`.** Xcode si při jeho přidání
 přepíše `project.pbxproj` — samé přeformátování (uvozovky, pořadí sekcí), žádná změna

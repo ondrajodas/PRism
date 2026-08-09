@@ -1267,7 +1267,15 @@ na `.task` okna, takže zavření okna ji zruší.
 
 | View | Co dělá |
 |---|---|
-| `ContentView` | `NavigationSplitView`: vlevo seznam, vpravo detail vybraného PR; pod tím stavový řádek |
+| `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
+| `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) |
+| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180) |
+| `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180) |
+| `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
+| `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
+| `DashboardView` | Startovní obrazovka (#181): pozdrav, čtyři karty, fronta podle závažnosti, legenda reviewerů a `Co teď` |
+| `SpendSparkline` | Sloupcový graf útraty za posledních sedm dní; dnešek zvýrazněný, prázdný den zůstává v řadě (#181) |
+| `ProportionalColumns` | `Layout` pro sloupce v poměru z návrhu (`1.45fr 1fr`) — `HStack` umí jen rovným dílem (#181) |
 | `StatusBarView` | Stavový řádek na spodku **okna**: vlevo hlášky, vpravo puntíky služeb |
 | `ServiceHealthDot` | Puntík jedné služby; po hoveru důvod a čas poslední kontroly |
 | `NotificationStatusView` | Kdy se naposledy něco ohlásilo (#138) — zvonek s časem, `zatím nic`, nebo `vypnuto` |
@@ -1872,6 +1880,16 @@ Odpovídání do vláken (#73) drží `AppStore` ve dvou mapách klíčovaných 
 - **V řádku je jen cena**, ne trvání ani počet kol. Součet trvání paralelních session neměří nic
   (tři desetiminutové běhy naráz by daly „30 minut“ za deset uplynulých) a počet kol je trivia.
   Peníze jsou to, co se jinde v aplikaci nedozvím vůbec.
+- **Kniha si pamatuje sedm dní zpátky** (#181), ne jen dnešek: sloupcový graf v dashboardu se
+  z jednoho čísla nakreslit nedá. Tři pravidla, která u historie platí:
+  - **Včerejšek se po půlnoci přesune do historie**, jinak by graf osiřel při každém překlopení
+    dne. Soubor bez historie (z doby před #181) se přečte taky, jen s prázdným polem.
+  - **Den bez útraty v řadě zůstává.** Kdyby se vynechal, ukázal by graf dva sloupce vedle sebe
+    jako dva po sobě jdoucí dny, i kdyby mezi nimi byl týden pauzy — a sloupec by přestal
+    znamenat den.
+  - **Historie je okno, ne archiv.** Ořezává se na sedm dní; delší by byla jiná otázka („kolik mě
+    to stojí měsíčně“) a soubor by rostl o dny, které se nikde nekreslí. Dny se počítají přes
+    `Calendar`, ne odečítáním 86 400 sekund — letní čas dělá dny kratší a delší.
 
 Notifikace (#88) drží `AppStore` v `notificationFailure` a `lastDeliveredNotification` a platí
 u nich:
@@ -2249,6 +2267,11 @@ Stav je `PollStatus` (`notStarted` / `upToDate` / `failing` / `rateLimited`) plu
 tím optionalem; `PollState.isStale` z toho dělá jedno pojmenované místo, takže view nic
 neskládá.
 
+**Kdy se zeptáme znovu, zapisuje smyčka** (`nextPoll`, #181), ne odhad ve view. Dashboard to
+píše v hlavičce a `lastSuccess + interval` by po prvním rate limitu lhalo — o čekání rozhoduje
+`waitBeforeNextPoll()`, tedy backoff. Ruční obnovení hodnotu **neposouvá**: tik mimo pořadí
+smyčku nepřeplánuje, takže dokud poprvé neusne, je `nil`.
+
 **Polling netahá detail PR.** Seznam SHA nepotřebuje — potřebuje je až checkout a review,
 takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 
@@ -2348,6 +2371,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
+| `Policy.dashboard(pullRequests:records:drafts:categories:since:)` | Podklad startovní obrazovky (#181): čtyři karty a rozpad nálezů podle revieweera (`Dashboard`, `ReviewerShareOfFindings`) |
+| `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí fronty na dashboardu (#181) — podle závažnosti, ne podle času (`QueueEntry`) |
 | `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
 | `Policy.changes(in:since:)` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`) |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |
@@ -2458,6 +2483,31 @@ Nad nálezy platí navíc:
   - **Rail má jen položky, které mají obsah.** Návrh jich kreslí šest; položka, po jejímž otevření
     je prázdno, je horší než položka, která ještě není. `Přehled` přijde s dashboardem (#181),
     `Historie` a `Zdraví` potřebují napřed obsah, který v aplikaci není.
+- **Dashboard je obsah `Přehledu`, ne druhý seznam** (#181). Po spuštění bylo do té doby vidět
+  „Vyber pull request“, přestože čísla o frontě už v aplikaci byla — jen roztroušená po stavovém
+  řádku a po řádcích. Šest věcí, které se u něj nemají rozbít:
+  - **Počítá se z paměti store, nic se nedotahuje.** `Policy.dashboard` bere seznam z pollingu,
+    `reviewRecords`, drafty a `SpendLedger`; žádné nové čtení z disku ani volání `gh`.
+  - **Karty čtou plný seznam, ne zúžený filtrem** (#117) — tatáž úvaha jako u souhrnu ve
+    stavovém řádku: dashboard je tvrzení o tom, co ve frontě **je**, ne o tom, co je vidět.
+  - **Rozdělaná review se počítají stejným pravidlem jako v souhrnu** (#155): neprázdný draft na
+    PR, který ve frontě je. První verze počítala všechny drafty na disku a karta pak ukazovala
+    trojku vedle stavového řádku s jedničkou.
+  - **Fronta se řadí podle závažnosti** (`Policy.byUrgency`), na rozdíl od seznamu, který je od
+    naposledy změněného. **Zastaralé se nahoru nepouští, ani když nese blokující nález** — ten
+    patří ke staršímu `headSha` (tvrdá podmínka č. 5), takže o dnešním kódu netvrdí nic.
+  - **Řádek fronty je tentýž `PullRequestRow` jako v seznamu** (#172). Druhá podoba téhož řádku
+    by se s ním dřív nebo později rozešla.
+  - **Karta nemluví o tom, co neví.** Draft z doby před #181 razítko nemá, takže se u něj místo
+    stáří píše „čeká na dopsání“; blokující nález bez kategorie nechá kartu u čísla.
+
+  **Co teď** jsou akce, které dávají smysl teď — řádek, který by nic neudělal, se nekreslí.
+  Hromadné spuštění se **ptá na potvrzení**, protože je to jediné místo v aplikaci, kde jedno
+  kliknutí utratí víc než jednu session; návrh potvrzení nemá a je to vědomá odchylka. Zkratky
+  u akcí jsou opravdové (`keyboardShortcut`), ne nakreslené chipy.
+
+  Sloupce jsou v poměru `1.45fr 1fr` z návrhu (`ProportionalColumns`) — `HStack` umí jen rovným
+  dílem a pevná šířka pravého sloupce by se s oknem rozešla.
 - **Potvrzení odeslání vypisuje payload, ne draft** (#178). Do té doby si sheet skládal místo
   komentáře `Policy.location(of:)`, tedy **druhý** popis téhož — a `side` ani `start_line` v něm
   nebyly vůbec, přestože právě ony rozhodují, ke kterému kódu komentář na GitHubu sedne. Teď se

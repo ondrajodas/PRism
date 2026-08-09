@@ -80,3 +80,15 @@ struct DailySpend: Codable, Hashable, Sendable {
         runs == 0 && unknown == 0
     }
 }
+
+/// Útrata jednoho dne (#181) — pro sloupcový graf v dashboardu.
+///
+/// Den je `yyyy-MM-dd` v místní zóně, tedy tentýž tvar, jakým se klíčuje `SpendLedger`. Jako
+/// řetězec, ne `Date`: je to **jméno dne**, ne okamžik, a porovnávat okamžiky by u půlnoci
+/// a letního času znamenalo hádat, do kterého dne co patří.
+struct DaySpend: Codable, Hashable, Sendable, Identifiable {
+    let day: String
+    let spend: DailySpend
+
+    var id: String { day }
+}

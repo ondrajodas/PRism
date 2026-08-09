@@ -35,6 +35,9 @@ enum Palette {
     /// drží samo, protože na ní stojí identita aplikace (hranol, spektrum) — a spektrum
     /// reviewerů by se systémovým akcentem měnilo význam podle nastavení systému.
     static let accent = Color(light: 0x5B47E0, dark: 0x8B7CFF)
+    /// Druhý konec přechodu — zatím jediný, proužek nad kartou rozdělaných review (#181).
+    /// **Nikdy jako samostatná barva**: dvě akcentové barvy vedle sebe by přestaly znamenat stav.
+    static let accent2 = Color(light: 0x128FB0, dark: 0x45C8E4)
 }
 
 extension Color {

@@ -19,6 +19,15 @@ enum RunUsageText {
         value.formatted(.currency(code: "USD").presentation(.narrow).precision(.fractionLength(2)))
     }
 
+    /// Útrata za den — cena a před ní `≥`, když se do součtu nepodařilo započítat všechno.
+    ///
+    /// Je to **dolní odhad**: zabitý běh peníze stál taky, jen jeho cenu nikdo nenahlásil.
+    /// Od #181 se na to ptají dvě místa (stavový řádek a karta v dashboardu) a druhá kopie by
+    /// znamenala, že jedno z nich značku vynechá — tedy že součet vypadá jako úplný.
+    static func spent(_ spend: DailySpend) -> String {
+        (spend.unknown > 0 ? "≥ " : "") + cost(spend.cost)
+    }
+
     /// Trvání. Pod minutu vteřiny s desetinou (`11,8 s`), nad ni minuty a vteřiny (`2 m 5 s`).
     ///
     /// Desetina jen dole schválně: u jedenácti vteřin je rozdíl mezi 11 a 12 vidět, u dvou

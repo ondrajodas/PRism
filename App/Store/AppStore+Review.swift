@@ -26,6 +26,25 @@ extension AppStore {
         )
     }
 
+    /// PR ve frontě, na kterých se ještě nic nespustilo (#181).
+    ///
+    /// Bere **plný** seznam, ne zúžený filtrem: „co neběželo“ je tvrzení o frontě, ne o tom,
+    /// co je zrovna vidět — tatáž úvaha jako u dashboardu.
+    var pullRequestsNotReviewed: [PRIdentifier] {
+        pullRequests.map(\.id).filter { reviewState(for: $0) == .notStarted && reviewTasks[$0] == nil }
+    }
+
+    /// Pustí review na všem, na čem ještě neběželo (#181).
+    ///
+    /// Limit souběhu hlídá `ReviewRunner`, takže tohle jen naplní frontu — session se spustí
+    /// po tolika, kolik je nastaveno, a zbytek čeká ve stavu `queued`.
+    ///
+    /// **Stojí to peníze za každý PR**, proto se na to v dashboardu ptá potvrzení: je to jediná
+    /// akce v aplikaci, která z jednoho kliknutí utratí víc než jednu session.
+    func startReviewsForNotReviewed() {
+        for pullRequest in pullRequestsNotReviewed { startReview(for: pullRequest) }
+    }
+
     /// Zrušení uživatelem. Session dostane `SIGKILL`, rozdělané výsledky se zahodí.
     func cancelReview(for pr: PRIdentifier) {
         reviewTasks[pr]?.task.cancel()
@@ -294,6 +313,9 @@ extension AppStore {
     private func recordSpend(_ usage: RunUsage?) async {
         guard let spend else { return }
         dailySpend = await spend.record(usage)
+        // Graf se musí posunout se stejným během, jinak by karta ukazovala novou částku nad
+        // starým sloupcem.
+        spendHistory = await spend.recentDays()
     }
 
     /// Doběhlý běh jako zdravotní signál Claude — puntík ve stavovém řádku jede na skutečném

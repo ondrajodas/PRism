@@ -30,8 +30,9 @@ final class AppStore {
     /// Která záložka je vidět.
     var activeTab: WindowTab = .home
 
-    /// Co je vidět v domácí záložce.
-    var railSection: RailSection = .queue
+    /// Co je vidět v domácí záložce. Startuje se na **přehledu** (#181) — je to obrazovka,
+    /// která odpovídá na „co dneska hoří“, a to je první otázka po spuštění.
+    var railSection: RailSection = .overview
 
     /// Zúžení seznamu na vybraná repa a autory (#117).
     ///
@@ -598,6 +599,44 @@ final class AppStore {
         lastSuccess == nil ? nil : visiblePullRequests.count
     }
 
+    /// Podklad pro dashboard (#181). Počítá se **z paměti store**, žádné nové čtení z disku.
+    var dashboard: Dashboard {
+        Policy.dashboard(
+            pullRequests: pullRequests,
+            records: reviewRecords,
+            drafts: drafts,
+            categories: Set(configuration.global.blockingCategories),
+            since: Calendar.current.date(byAdding: .day, value: -7, to: time.now)
+        )
+    }
+
+    /// Fronta na dashboardu (#181) — **plný** seznam seřazený podle závažnosti.
+    ///
+    /// Ne zúžený filtrem, ze stejného důvodu jako `dashboard` výš: dashboard je tvrzení o tom,
+    /// co ve frontě je, ne o tom, co je zrovna vidět.
+    var dashboardQueue: [QueueEntry] {
+        Policy.byUrgency(
+            pullRequests.map {
+                QueueEntry(
+                    pullRequest: $0,
+                    state: reviewState(for: $0.id),
+                    row: queueRow(for: $0.id),
+                    hasDraft: hasDraft($0.id)
+                )
+            }
+        )
+    }
+
+    /// Kdy se polling zeptá znovu. `nil`, dokud smyčka poprvé neusne.
+    var nextPoll: Date? { polling.state.nextPoll }
+
+    /// Útrata po dnech pro graf. Prázdné, dokud se nenačte — sedm nul by vypadalo jako týden
+    /// bez práce, ne jako chybějící data.
+    ///
+    /// Zapisuje se ze dvou míst — při startu a po doběhlém běhu — takže `internal`, jako
+    /// ostatní stav, na který sahají extensiony `AppStore+*` (#154).
+    var spendHistory: [DaySpend] = []
+
     /// PR, na kterých leží rozdělané review — obsah sekce `Rozdělaná`.
     ///
     /// Čte **plný** seznam, ne zúžený filtrem: rozdělané review je moje práce, a ta se nemá
@@ -807,6 +846,9 @@ final class AppStore {
     func loadDailySpend() async {
         guard let spend else { return }
         dailySpend = await spend.spentToday()
+        // Historie kvůli grafu v dashboardu (#181). Čte se **jedním** dotazem spolu s dneškem,
+        // ne při každém překreslení karty: je to soubor na disku, ne hodnota v paměti.
+        spendHistory = await spend.recentDays()
     }
 
     /// Rozdělaná review z minula. Bez toho by po startu vypadalo každé PR jako nedotčené.

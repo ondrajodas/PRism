@@ -7,6 +7,12 @@ struct PollState: Sendable, Equatable {
     /// Kdy naposledy dotaz prošel. `nil` znamená „ještě nikdy“ — seznam pak není starý,
     /// jen prázdný, a to je pro uživatele něco jiného.
     var lastSuccess: Date?
+    /// Kdy se smyčka zeptá znovu (#181). `nil`, dokud poprvé neusne.
+    ///
+    /// Ukládá to **smyčka**, ne odhad ve view: interval se dá změnit v nastavení a při rate
+    /// limitu ho přebíjí backoff, takže `lastSuccess + interval` by po prvním odmítnutí lhalo.
+    /// Ruční obnovení tuhle hodnotu **neposouvá** — tik mimo pořadí smyčku nepřeplánuje.
+    var nextPoll: Date?
 
     /// Ukazujeme data, o kterých víme, že už nemusí platit?
     var isStale: Bool { lastSuccess != nil && status != .upToDate }

@@ -595,7 +595,7 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
 9. **Revize okna** (M9) — nový vizuální jazyk podle návrhu ze srpna 2026 a přestavba okna
    na záložky. Šestnáct issues ve čtyřech vlnách; **pořadí je v popisu milníku**, protože se
    podle něj rozhoduje, co se dá dělat souběžně. Hotové: řádek fronty #172, co se změnilo od
-   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180.
+   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180 a dashboard #181.
 
    Vlna A (#172, #173, #174, #175, #187) je záměrně první a **nestojí na přestavbě okna**:
    je z ní vidět, jestli nový vizuální jazyk sedí, dřív než se do něj investuje přepis
