@@ -1731,7 +1731,9 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Dlaždice, o které se nedá nic říct, se nekreslí.** Řádek plný nul je řádek, ve kterém se
     ztratí to jedno číslo, na kterém záleží — a nula u souborů navíc tvrdí, že PR nic nemění,
     i když se diff jen ještě nenačetl.
-  - **Sha nálezů jen při rozchodu s hlavou.** Shodná je údaj, který nikoho nezajímá; rozešlá je
+  - **Neúplný počet se nekreslí.** Utnutá stránka událostí znamená, že commity přesně neznáme,
+    a číslo „aspoň tolik“ vydávané za úplné je horší než prázdné místo.
+  - **Sha nálezů jen při rozchodu s hlavou** — a jedině když je hlava načtená. Shodná je údaj, který nikoho nezajímá; rozešlá je
     důvod, proč nálezy neplatí (tvrdá podmínka č. 5), a je žlutá jako stav `zastaralé`.
   - **Mřížka čtyř sloupců, ne `HStack`.** V `HStacku` se dvě dlaždice roztáhnou přes celou šířku
     a číslo v nich plave uprostřed prázdna; v mřížce si drží čtvrtinu bez ohledu na počet.

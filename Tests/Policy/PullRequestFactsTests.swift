@@ -12,6 +12,7 @@ import Testing
 struct PullRequestFactsTests {
     private func facts(
         commits: Int = 0,
+        areCommitsExact: Bool = true,
         newCommits: Int = 0,
         files: Int = 0,
         filesWithFindings: Int = 0,
@@ -23,6 +24,7 @@ struct PullRequestFactsTests {
             newCommits: newCommits,
             files: files,
             filesWithFindings: filesWithFindings,
+            areCommitsExact: areCommitsExact,
             headSha: head,
             findingsHeadSha: findingsHead
         )
@@ -50,6 +52,19 @@ struct PullRequestFactsTests {
         let tiles = facts(commits: 12, files: 7).tiles
 
         #expect(tiles.allSatisfy { $0.note == nil })
+    }
+
+    /// Utnutá stránka událostí znamená, že přesný počet **neznáme** — a menší číslo vydávané
+    /// za úplné je horší než žádná dlaždice. Nález Copilota na #198.
+    @Test("Neúplný počet commitů se nekreslí")
+    func hidesAnInexactCommitCount() {
+        #expect(facts(commits: 12, areCommitsExact: false).isEmpty)
+    }
+
+    /// Bez načtené hlavy není s čím se rozejít — dlaždice `Nálezy proti` by visela sama.
+    @Test("Sha nálezů bez hlavy se nekreslí")
+    func hidesTheFindingsShaWithoutAHead() {
+        #expect(facts(findingsHead: "4f2ac91").isEmpty)
     }
 
     @Test("Sha se krátí na sedm znaků a sází mono")

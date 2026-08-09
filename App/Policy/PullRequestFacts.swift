@@ -36,12 +36,16 @@ extension Policy {
         newCommits: Int,
         files: Int,
         filesWithFindings: Int,
+        areCommitsExact: Bool,
         headSha: String?,
         findingsHeadSha: String?
     ) -> PullRequestFacts {
         var tiles: [PullRequestFacts.Tile] = []
 
-        if commits > 0 {
+        // Utnutá stránka událostí znamená, že přesný počet commitů **neznáme** — a číslo, které
+        // je „aspoň tolik“, se do dlaždice bez značky nevejde. Radši žádná dlaždice než menší
+        // číslo vydávané za úplné (nález Copilota na #198).
+        if commits > 0, areCommitsExact {
             tiles.append(
                 .init(
                     caption: "Commity",
@@ -64,8 +68,10 @@ extension Policy {
             tiles.append(.init(caption: "Hlava", value: short(headSha), isMonospaced: true))
         }
         // Sha nálezů se ukazuje **jen když se rozešla s hlavou**: shodná je údaj, který nikoho
-        // nezajímá, a rozešlá je důvod, proč nálezy neplatí (tvrdá podmínka č. 5).
-        if let findingsHeadSha, findingsHeadSha != headSha {
+        // nezajímá, a rozešlá je důvod, proč nálezy neplatí (tvrdá podmínka č. 5). A jedině
+        // tehdy, když je hlava vůbec načtená — jinak by vznikla dlaždice `Nálezy proti` bez
+        // dlaždice `Hlava`, tedy tvrzení o rozchodu, který se nemá s čím rozejít.
+        if let headSha, let findingsHeadSha, findingsHeadSha != headSha {
             tiles.append(
                 .init(
                     caption: "Nálezy proti",

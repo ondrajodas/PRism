@@ -578,8 +578,6 @@ struct PullRequestDetailView: View {
                 categories: blockingCategories
             )
         } ?? [:]
-        // `total` z GitHubu, ne délka načtené stránky: dlaždice říká, kolik commitů PR **má**,
-        // ne kolik se jich vešlo do odpovědi.
         let events = store.conversation(for: pullRequest.id)?.events
         let changes = store.changesSinceLastVisit(for: pullRequest.id)
         return Policy.facts(
@@ -589,6 +587,8 @@ struct PullRequestDetailView: View {
             // Nálezy patří k souborům diffu, ne k cestám ze záznamu: nález na souboru, který
             // v dnešním diffu není, by dlaždici nafoukl o číslo, které nemá kde být vidět.
             filesWithFindings: diff?.files.count { markers[$0.displayPath] != nil } ?? 0,
+            // Utnutá stránka událostí = počet commitů neznáme přesně.
+            areCommitsExact: events.map { !$0.hasNextPage } ?? false,
             headSha: loadedDetail?.headSha,
             findingsHeadSha: store.reviewRecord(for: pullRequest.id)?.headSha
         )
