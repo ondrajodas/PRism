@@ -33,7 +33,7 @@ struct GhThreadReplyResponse: Decodable {
     /// `nil` = odpovědi nerozumíme, **ne** „nic se neodeslalo“.
     ///
     /// Změřeno v sandboxu, že `comment: null` přijde s exit kódem **nula** — u prázdného těla,
-    /// které publisher nepustí (`ThreadRequest.isSendable`). Jiné příčiny neznáme, takže se
+    /// které publisher nepustí (`PublishRequest.isSendable`). Jiné příčiny neznáme, takže se
     /// z toho dělá `malformedResponse`, tedy „možná odešlo, zkontroluj to“. Vydávat to za
     /// úspěch by přidalo do vlákna komentář, který tam není.
     func comment() -> ThreadComment? {

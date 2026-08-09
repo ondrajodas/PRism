@@ -32,34 +32,62 @@ struct ConversationEntryView: View {
         let row = TimelineEventRow(event: event)
         // **Symbol nese uzel na ose** (#183), takže se v řádku neopakuje — dvě ikony vedle sebe
         // vypadají jako dva různé údaje.
-        return HStack(spacing: 6) {
+        return HStack(spacing: 7) {
             if let actor = event.actor {
-                AvatarView(login: actor.login, url: actor.avatarURL)
+                AvatarView(login: actor.login, url: actor.avatarURL, size: 16)
             }
-            Text(verbatim: row.title)
-                .font(row.isTitleCode ? .system(.caption, design: .monospaced) : .caption)
-                .lineLimit(2)
+            // **Odznak `Bot` u avataru, ne za větou.** Patří k tomu, kdo událost udělal —
+            // a za větou se lepil na jméno toho, **komu** se review vyžádalo („od ondrajodas
+            // Bot“), tedy tvrdil něco jiného, než co je pravda.
             if row.isBot {
                 Text("Bot")
-                    .font(.caption2)
+                    .font(.system(size: 10))
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .background(.quaternary, in: .capsule)
-                    .foregroundStyle(.secondary)
+                    .background(Palette.raised, in: .capsule)
+                    .foregroundStyle(Palette.ink3)
+            }
+            title(of: row)
+                .font(row.isTitleCode ? .system(size: 12, design: .monospaced) : .system(size: 12))
+                .foregroundStyle(Palette.ink2)
+                .lineLimit(2)
+            // **Sha jsou odznaky vedle věty, ne údaj u pravé hrany** (#216): u force-pushe patří
+            // ke slovesu („přepsal historii z X na Y“), a odsunuté doprava se četly jako sloupec,
+            // který s větou nesouvisí.
+            ForEach(Array(row.shas.enumerated()), id: \.offset) { index, sha in
+                if index > 0 {
+                    Text(verbatim: "→").font(.system(size: 11)).foregroundStyle(Palette.ink3)
+                }
+                shaBadge(sha)
             }
             if let date = event.at {
                 Text(date, format: .relative(presentation: .named))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.ink3)
             }
             Spacer(minLength: 8)
-            if let detail = row.detail {
-                Text(verbatim: detail)
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
         }
-        .padding(.vertical, 1)
+        .frame(minHeight: 24)
+    }
+
+    /// Věta události. Tučné běhy z `attributedTitle` (jména) se dobarvují na `ink` — **barvu
+    /// rozhoduje view**, řádek nese jen to, co jméno je.
+    private func title(of row: TimelineEventRow) -> Text {
+        var value = row.attributedTitle
+        for run in value.runs where run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true {
+            value[run.range].foregroundColor = Palette.ink
+        }
+        return Text(value)
+    }
+
+    private func shaBadge(_ sha: String) -> some View {
+        Text(verbatim: sha)
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundStyle(Palette.ink2)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(Palette.raised, in: .rect(cornerRadius: 4))
+            .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(Palette.lineSoft, lineWidth: 1) }
     }
 
     /// Cizí hotové review. Verdikt je odznak, próza pod ním — a schválení s prázdným tělem
@@ -82,57 +110,26 @@ struct ConversationEntryView: View {
             badge: nil,
             body: comment.body,
             emptyNote: nil,
-            accent: .secondary,
+            accent: nil,
             url: comment.url
         )
     }
 
-    /// Vlákno bez kotvy. Kreslí ho **tatáž bublina jako u kódu**, jen bez odsazení do sloupce
-    /// s čísly řádků — jinak by se totéž vlákno na dvou místech aplikace vykreslovalo dvakrát
-    /// jinak. Nad ním je místo, kde bývalo, a pod tím úryvek kódu, ke kterému se váže (#158):
-    /// `cesta:řádek` sama o sobě neřekne, o čem je řeč, a jinde se ten kód vzít nedá — číslo
-    /// řádku je ze starého headu, takže se v diffu nekreslí.
+    /// Vlákno bez kotvy. Kreslí ho **tatáž bublina jako u kódu** — dvě podoby téhož vlákna by
+    /// se rozešly. Liší se jen `placement`: na ose musí bublina sama říct, ke kterému místu se
+    /// váže, a sama nakreslit úryvek (#158), protože nad ní žádný kód není. Cesta a odznaky jsou
+    /// od #216 **uvnitř** bubliny, ne nad ní — v návrhu je vlákno jeden celek, kdežto řádek nad
+    /// rámečkem vypadal jako popisek k něčemu, co začíná až pod ním.
     private func threadCard(_ thread: ReviewThread) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Image(systemName: "text.line.first.and.arrowtriangle.forward")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                Text(verbatim: location(of: thread))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                if thread.isOutdated {
-                    Text("zastaralé")
-                        .font(.caption2)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(.quaternary, in: .capsule)
-                        .foregroundStyle(.secondary)
-                        .help("Řádek, u kterého vlákno vzniklo, v aktuálním diffu není")
-                }
-                Spacer(minLength: 0)
-            }
-            if let snippet = Policy.snippet(of: thread) {
-                ThreadSnippetView(snippet: snippet, path: thread.path)
-            }
-            ThreadBubbleView(
-                thread: thread,
-                viewer: viewer,
-                isExpanded: threadActions.isExpanded(thread),
-                toggle: { threadActions.toggle(thread) },
-                indent: 0,
-                actions: threadActions
-            )
-        }
-    }
-
-    /// `originalLine` je u zastaralého vlákna to jediné, co zbylo — `line` je `nil` právě
-    /// u nich (ověřeno na `cli/cli#13084`: 24 ze 38 vláken).
-    private func location(of thread: ReviewThread) -> String {
-        guard let line = thread.anchorLine else { return thread.path }
-        return "\(thread.path):\(line)"
+        ThreadBubbleView(
+            thread: thread,
+            viewer: viewer,
+            isExpanded: threadActions.isExpanded(thread),
+            toggle: { threadActions.toggle(thread) },
+            indent: 0,
+            actions: threadActions,
+            placement: .timeline
+        )
     }
 
     private func card(
@@ -141,60 +138,86 @@ struct ConversationEntryView: View {
         badge: (text: String, color: Color)?,
         body: String,
         emptyNote: String?,
-        accent: Color,
+        accent: Color?,
         url: URL? = nil
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
+            // Hlavička **na vlastní ploše a oddělená linkou**, jako u popisu PR (#198) a u bloku
+            // kontrol (#209). Do #216 byla uvnitř šedého bloku bez linky, takže se od těla
+            // nedala odlišit a karta se četla jako jeden odstavec začínající jménem.
             HStack(spacing: 6) {
+                AvatarView(login: author, url: nil, size: 16)
                 Text(verbatim: author)
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 12, weight: .semibold))
                 if isMine(author) {
                     Text("já")
-                        .font(.caption2)
+                        .font(.system(size: 10.5))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(.tint.opacity(0.18), in: .capsule)
                 }
                 if let badge {
                     Text(verbatim: badge.text)
-                        .font(.caption2)
+                        .font(.system(size: 10.5))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(badge.color.opacity(0.18), in: .capsule)
                         .foregroundStyle(badge.color)
                 }
+                // **Čas až za mezerou, u pravé hrany** (`margin-left: auto` v návrhu).
+                // Nalepený na odznak se s ním četl jako jeden údaj.
+                Spacer(minLength: 8)
                 if let date {
                     Text(date, format: .relative(presentation: .named))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Palette.ink3)
                 } else {
                     // Rozdělané review na GitHubu ještě odeslané není — a je to důvod, proč
                     // odsud nejde poslat naše (změřeno u #62: 422 `one pending review`).
                     Text("neodeslané")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Palette.stale)
                 }
-                Spacer(minLength: 0)
                 if let url {
                     Link(destination: url) {
-                        Image(systemName: "arrow.up.right.square").font(.caption2)
+                        Image(systemName: "arrow.up.right.square").font(.system(size: 11))
                     }
                     .help("Otevřít na GitHubu")
                 }
             }
-            if !body.isEmpty {
-                MarkdownText(text: body)
-            } else if let emptyNote {
-                Text(verbatim: emptyNote)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.raised)
+
+            Rectangle().fill(Palette.lineSoft).frame(height: 1)
+
+            Group {
+                if !body.isEmpty {
+                    // Próza 12,5 jako všude jinde v okně — do #216 byla o stupeň větší než
+                    // sousední bloky.
+                    MarkdownText(text: body, font: .system(size: 12.5))
+                } else if let emptyNote {
+                    Text(verbatim: emptyNote)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Palette.ink3)
+                }
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.chrome, in: .rect(cornerRadius: 7))
+        .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line, lineWidth: 1) }
+        // **Verdikt nese proužek na hraně**, ne jen odznak — tatáž škála jako v řádku fronty
+        // a na kartě nálezu, takže se schválení od vyžádaných změn pozná periferně.
+        .overlay(alignment: .leading) {
+            if let accent {
+                Rectangle().fill(accent).frame(width: 3)
             }
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quinary, in: .rect(cornerRadius: 8))
-        .overlay(alignment: .leading) { Rectangle().fill(accent.opacity(0.6)).frame(width: 3) }
-        .clipShape(.rect(cornerRadius: 8))
+        .clipShape(.rect(cornerRadius: 7))
     }
 
     /// Prázdný `viewer` znamená „nevím“, ne „to jsem já“ — jinak by se u nenačtené konverzace
@@ -216,11 +239,13 @@ struct ConversationEntryView: View {
         }
     }
 
-    private func verdictColor(_ review: SubmittedReview) -> Color {
+    /// `nil` = **karta proužek nemá**. Volitelná, ne `.secondary`: „má tahle karta verdikt?“ se
+    /// jinak musí ptát porovnáním barev, a to se při první změně palety tiše rozejde.
+    private func verdictColor(_ review: SubmittedReview) -> Color? {
         switch review.state {
         case .approved: .green
         case .changesRequested: .red
-        default: .secondary
+        default: nil
         }
     }
 }

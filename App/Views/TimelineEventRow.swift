@@ -33,57 +33,79 @@ struct TimelineEventRow {
         }
     }
 
-    /// Barva **ikony**: merge fialově, zavření červeně, zbytek ztlumeně.
+    /// Barva uzlu na ose. `nil` = **bez vlastní barvy**, tedy neutrální puntík z palety.
     ///
-    /// Vlastní barvu mají jen ty dvě, protože po nich se s PR nedá dál pracovat — a kde svítí
-    /// všechno, nesvítí nic. Zbytek je `.secondary`, tedy **ztlumeně, ne barvou okolí**: ikona
-    /// je ukazatel k textu, takže v plné síle by soupeřila s tím, co označuje. Dědit barvu
-    /// okolí by u ní znamenalo totéž zvýraznění jako u věty vedle.
-    var color: Color {
+    /// Vlastní barvu mají jen tři druhy — a kde svítí všechno, nesvítí nic. Merge a zavření
+    /// proto, že po nich se s PR nedá dál pracovat; force push proto, že jím zastarají nálezy
+    /// i rozdělané review, a to je jediná událost na ose, po které je něco potřeba udělat.
+    ///
+    /// **Volitelná, ne ztlumená konstanta** (#216): návrh kreslí neutrální uzel obrysem
+    /// `--line` a symbolem `--ink-2`, tedy dvěma různými barvami. Jedna hodnota to neunese
+    /// a `color == .secondary` jako test „je neutrální?“ je porovnávání barev, které se při
+    /// první změně palety tiše rozejde.
+    var tint: Color? {
         switch event.kind {
         case .merged: .purple
         case .closed: .red
-        default: .secondary
+        case .forcePushed: Palette.stale
+        default: nil
         }
     }
 
-    /// Hlavní text řádku.
+    /// Hlavní text řádku **se zvýrazněnými účastníky** (#216).
     ///
     /// U commitu je to jeho **titulek**, ne věta o pushnutí: kdo pushnul, říká avatar
     /// a ikona, kdežto titulek je to jediné, co o commitu něco vypovídá. Ostatní druhy jsou
     /// věta, protože u nich žádný vlastní text neexistuje.
-    var title: String {
+    ///
+    /// Tučně jdou **jen jména** — kdo to udělal a komu. To je to, podle čeho se osa přejíždí
+    /// očima; sloveso zvýrazněné být nemá, jinak je tučné skoro všechno. Zvýraznění se nese
+    /// jako `inlinePresentationIntent`, tedy bez barvy a bez fontu: jak přesně se tučné kreslí,
+    /// rozhoduje view (`ConversationEntryView`), tady je jen řečeno, **co** je jméno.
+    var attributedTitle: AttributedString {
         switch event.kind {
         case .commit(_, let headline):
-            headline.isEmpty ? "commit bez popisu" : headline
+            AttributedString(headline.isEmpty ? "commit bez popisu" : headline)
         case .reviewRequested(let reviewer):
-            if event.isSelfDirected { "\(actor) si vyžádal review" }
-            else if let reviewer { "\(actor) vyžádal review od \(reviewer)" }
-            else { "\(actor) vyžádal review" }
+            if event.isSelfDirected { who() + " si vyžádal review" }
+            else if let reviewer { who() + " vyžádal review od " + name(reviewer) }
+            else { who() + " vyžádal review" }
         case .reviewRequestRemoved(let reviewer):
-            if event.isSelfDirected { "\(actor) odebral svoje vyžádané review" }
-            else if let reviewer { "\(actor) odebral vyžádané review od \(reviewer)" }
-            else { "\(actor) odebral vyžádané review" }
+            if event.isSelfDirected { who() + " odebral svoje vyžádané review" }
+            else if let reviewer { who() + " odebral vyžádané review od " + name(reviewer) }
+            else { who() + " odebral vyžádané review" }
         case .forcePushed:
-            "\(actor) přepsal historii větve"
+            who() + " přepsal historii větve"
         case .readyForReview:
-            "\(actor) označil PR za hotový k review"
+            who() + " označil PR za hotový k review"
         case .convertedToDraft:
-            "\(actor) převedl PR na draft"
+            who() + " převedl PR na draft"
         case .merged(let branch):
-            branch.map { "\(actor) mergnul PR do \($0)" } ?? "\(actor) mergnul PR"
+            branch.map { who() + " mergnul PR do " + name($0) } ?? who() + " mergnul PR"
         case .closed:
-            "\(actor) zavřel PR"
+            who() + " zavřel PR"
         case .reopened:
-            "\(actor) otevřel PR znovu"
+            who() + " otevřel PR znovu"
         case .baseChanged(let from, let to):
             switch (from, to) {
-            case (let from?, let to?): "\(actor) změnil base z \(from) na \(to)"
-            case (nil, let to?): "\(actor) změnil base na \(to)"
-            case (let from?, nil): "\(actor) změnil base z \(from)"
-            case (nil, nil): "\(actor) změnil base"
+            case (let from?, let to?): who() + " změnil base z " + name(from) + " na " + name(to)
+            case (nil, let to?): who() + " změnil base na " + name(to)
+            case (let from?, nil): who() + " změnil base z " + name(from)
+            case (nil, nil): who() + " změnil base"
             }
         }
+    }
+
+    /// Věta bez sazby. **Odvozená z `attributedTitle`**, ne psaná podruhé: dvě znění téže věty
+    /// by se rozešla a testy by hlídaly to, které není vidět.
+    var title: String { String(attributedTitle.characters) }
+
+    private func who() -> AttributedString { name(actor) }
+
+    private func name(_ value: String) -> AttributedString {
+        var text = AttributedString(value)
+        text.inlinePresentationIntent = .stronglyEmphasized
+        return text
     }
 
     /// Sází se titulek monospace?
@@ -95,19 +117,21 @@ struct TimelineEventRow {
         if case .commit = event.kind { true } else { false }
     }
 
-    /// Údaj vpravo, monospace. `nil` = není co ukázat.
-    var detail: String? {
+    /// Sha, které k události patří, **v pořadí a po jednom** — návrh je kreslí jako samostatné
+    /// odznaky se šipkou mezi nimi, takže je view potřebuje rozdělené. Prázdné = není co ukázat.
+    var shas: [String] {
         switch event.kind {
-        case .commit(let oid, _): Self.short(oid)
+        case .commit(let oid, _): [Self.short(oid)]
         case .forcePushed(let before, let after):
-            switch (before, after) {
-            case (let before?, let after?): "\(Self.short(before)) → \(Self.short(after))"
-            case (nil, let after?): Self.short(after)
-            case (let before?, nil): Self.short(before)
-            case (nil, nil): nil
-            }
-        default: nil
+            [before, after].compactMap { $0.map(Self.short) }
+        default: []
         }
+    }
+
+    /// Týž údaj jako věta. **Odvozený ze `shas`**, ať se sazba a text nemůžou rozejít.
+    /// `nil` = není co ukázat.
+    var detail: String? {
+        shas.isEmpty ? nil : shas.joined(separator: " → ")
     }
 
     /// Sha se zkracuje na sedm znaků, jako `git` a GitHub. Krátí se **až tady**, protože model

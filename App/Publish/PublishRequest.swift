@@ -80,4 +80,18 @@ enum PublishRequest {
         encoder.outputFormatting = [.sortedKeys]
         return try encoder.encode(payload)
     }
+
+    /// Dá se tenhle text odeslat jako komentář?
+    ///
+    /// **Prázdné tělo GitHub tiše spolkne** — změřeno v sandboxu u odpovědi do vlákna (#73):
+    /// mutace vrátí `comment: null`, exit kód **nula** a ve vlákně nic nepřibude. Bez téhle
+    /// kontroly by aplikace hlásila „odesláno“ nad odpovědí, která nikdy nevznikla. Text se
+    /// posílá **netrimovaný** (odsazení v ukázce kódu je součást zprávy), kontroluje se
+    /// trimovaný.
+    ///
+    /// Sdílené odpovědí do vlákna i komentářem pod PR (#216) — je to jedna otázka a dvě
+    /// kopie by se rozešly zrovna v tom, co která považuje za prázdné.
+    static func isSendable(_ body: String) -> Bool {
+        !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }

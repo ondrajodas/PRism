@@ -323,15 +323,15 @@ struct ThreadPublishingTests {
 
     @Test("Prázdné tělo se nepovažuje za odesílatelné", arguments: ["", "   ", "\n\t"])
     func rejectsBlankBodies(body: String) {
-        #expect(!ThreadRequest.isSendable(body))
+        #expect(!PublishRequest.isSendable(body))
     }
 
     /// Odsazení a nové řádky **uvnitř** textu jsou součást zprávy (ukázka kódu), takže se
     /// posílá netrimovaný text — kontroluje se jen, že v něm něco je.
     @Test("Text s obsahem projde i s odsazením")
     func acceptsIndentedText() {
-        #expect(ThreadRequest.isSendable("  díky  "))
-        #expect(ThreadRequest.isSendable("\n    if x {\n"))
+        #expect(PublishRequest.isSendable("  díky  "))
+        #expect(PublishRequest.isSendable("\n    if x {\n"))
     }
 
     /// `ID!` je v GraphQL řetězec, takže `-f`; kdyby se poslalo `-F`, `gh` by se pokusil

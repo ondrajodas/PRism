@@ -6,8 +6,9 @@ import Observation
 /// **Tady vzniká publisher a tady zaniká.** Tvrdá podmínka č. 1 říká, že `ReviewPublishing`
 /// není pole `AppStore`: kdyby ho store držel, byla by cesta ven otevřená po celou dobu běhu
 /// aplikace a stačilo by ji omylem zavolat odjinud. Takhle se skládá až uvnitř `send()`,
-/// z toho, co dostal `init`, a s koncem tohohle objektu je pryč. Že je cest ven jedna,
-/// vyjmenuje `grep ReviewPublishing`: protokol, `GhReviewPublisher` a tenhle soubor.
+/// z toho, co dostal `init`, a s koncem tohohle objektu je pryč. Odkud se odesílá, vyjmenuje
+/// `grep ReviewPublishing App/`: protokol, `GhReviewPublisher` a **tři** volající — tenhle
+/// soubor (review), `ThreadSubmission` (vlákna) a `CommentSubmission` (komentář pod PR).
 ///
 /// Objekt vzniká **kliknutím na „Odeslat review…“** a zaniká zavřením sheetu. Draft si drží
 /// jako **snímek**, ne odkaz do store: co je v sheetu vidět, to se odešle, i kdyby se draft

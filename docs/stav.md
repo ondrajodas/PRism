@@ -595,7 +595,11 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
 9. **Revize okna** (M9) — nový vizuální jazyk podle návrhu ze srpna 2026 a přestavba okna
    na záložky. Šestnáct issues ve čtyřech vlnách; **pořadí je v popisu milníku**, protože se
    podle něj rozhoduje, co se dá dělat souběžně. Hotové: řádek fronty #172, co se změnilo od
-   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180 a dashboard #181.
+   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213 a sazba položek konverzace #216.
+
+   U #216 se **rozšířila tvrdá podmínka č. 1**: `ReviewPublishing` má čtvrtou metodu
+   (`comment`), protože composer komentáře pod PR je v návrhu a bez něj se pod PR nedá napsat
+   z okna vůbec. Podrobnosti a důvod jsou v `CLAUDE.md` a ve specifikaci.
 
    Vlna A (#172, #173, #174, #175, #187) je záměrně první a **nestojí na přestavbě okna**:
    je z ní vidět, jestli nový vizuální jazyk sedí, dřív než se do něj investuje přepis

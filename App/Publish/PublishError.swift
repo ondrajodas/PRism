@@ -26,6 +26,12 @@ enum PublishError: Error, Equatable {
     /// tělo **tiše spolkne** (`comment: null`, exit 0), takže bez téhle brány by okno hlásilo
     /// odeslanou odpověď, která nikdy nevznikla.
     case blankReply
+    /// Komentář pod PR je prázdný. Nic se nevolalo (#216).
+    ///
+    /// Vlastní případ, ne `blankReply`: věta u odpovědi mluví o vlákně, kdežto tohle je
+    /// diskuze pod PR — a hláška, která pojmenuje něco jiného, než na co se člověk dívá,
+    /// vypadá jako chyba v jiné části okna. Důvod je jinak tentýž a změřený stejně.
+    case blankComment
     /// Vlákno, do kterého se odpovídá, na GitHubu není.
     ///
     /// Vlastní případ, ne `network`: hláška `Could not resolve to a node with the global id`
@@ -78,7 +84,7 @@ extension PublishError {
     var mightHaveReachedGitHub: Bool {
         switch self {
         // Nic se nevolalo (brány a pre-flight), nebo `gh` vůbec nenaběhl.
-        case .publishingNotAllowed, .staleDraft, .nothingToSend, .blankReply,
+        case .publishingNotAllowed, .staleDraft, .nothingToSend, .blankReply, .blankComment,
              .pullRequestNotOpen, .toolUnavailable:
             false
         // GitHub požadavek **odmítl** — 422 u rozřazení komentářů, 401 u přihlášení, 403 u
@@ -159,6 +165,8 @@ extension PublishError {
             // Ne „neuloží se“ ani „nepovedlo se“: GitHub prázdné tělo přijme a zahodí, takže
             // bez téhle věty by se odpověď jevila jako odeslaná. Změřeno v sandboxu.
             "Odpověď je prázdná. Napiš text — prázdný komentář GitHub tiše zahodí."
+        case .blankComment:
+            "Komentář je prázdný. Napiš text — prázdný komentář GitHub tiše zahodí."
         case .threadNotFound:
             "Vlákno na GitHubu není — někdo ho mezitím smazal, nebo je konverzace v okně stará. Načti ji znovu."
         case .lineOutsideDiff:

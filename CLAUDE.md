@@ -254,44 +254,47 @@ to si od 2026-08-01 řídíš sám, viz pracovní postup.
 Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav se a zeptej se.
 
 1. **Jediná cesta ven** (od #67; do té doby tu stálo „nikdy nic neposílat na GitHub“).
-   Aplikace **umí** odeslat review a od #73 se **ozvat do vlákna** — ale jedině přes
-   `ReviewPublishing`, jedině na výslovný pokyn člověka a jedině tam, kde se to **v nastavení
-   povolilo**. Pravidlo se skládá z šesti věcí a každá z nich je kontrolovatelná:
+   Aplikace **umí** odeslat review, od #73 se **ozvat do vlákna** a od #216 **napsat komentář
+   pod PR** — ale jedině přes `ReviewPublishing`, jedině na výslovný pokyn člověka a jedině tam,
+   kde se to **v nastavení povolilo**. Pravidlo se skládá z šesti věcí a každá z nich je
+   kontrolovatelná:
 
    1. **`GitHubGateway` zůstává bez zápisových metod.** Polling, diff, checkout ani reviewer
       tedy nemají čím něco odeslat — read-only je pořád vidět z typu.
    2. **`grep ReviewPublishing App/` vyjmenuje všechna místa, odkud to jde.** Mají to být
-      **čtyři soubory a dva volající**: protokol, `GhReviewPublisher` (implementace),
-      `ReviewSubmission.send()` (review) a `ThreadSubmission` (odpověď a vyřešení vlákna).
+      **pět souborů a tři volající**: protokol, `GhReviewPublisher` (implementace),
+      `ReviewSubmission.send()` (review), `ThreadSubmission` (odpověď a vyřešení vlákna)
+      a `CommentSubmission` (komentář pod PR).
 
-      Protokol má **tři vyjmenované metody** — `submit`, `reply`, `setResolved`. Do #73 měl
-      jednu a stálo tu, že cokoli dalšího by byla druhá cesta ven; změnilo se to proto, že
-      odpovědět kolegovi do vlákna je půlka toho, kvůli čeho se u review přepíná do
-      prohlížeče, a přes `GitHubGateway` to jít nesmí (bod 1). Co **zůstává**: výčet je
-      krátký, vyjmenovaný na jednom místě a **každá metoda si sama ověří bránu z bodu 6** —
-      proto všechny berou adresu, ze které se pozná repo. Roste-li ten výčet, roste to, co
-      aplikace umí odeslat, a to má být vidět v jednom souboru. Approve mimo review, label ani
-      komentář pod PR tam pořád nepatří.
+      Protokol má **čtyři vyjmenované metody** — `submit`, `reply`, `setResolved`, `comment`.
+      Do #73 měl jednu a stálo tu, že cokoli dalšího by byla druhá cesta ven; do #216 tři.
+      Rozšířilo se to pokaždé ze stejného důvodu: ozvat se kolegovi je půlka toho, kvůli čemu
+      se u review přepíná do prohlížeče, a přes `GitHubGateway` to jít nesmí (bod 1). Co
+      **zůstává**: výčet je krátký, vyjmenovaný na jednom místě a **každá metoda si sama ověří
+      bránu z bodu 6** — proto všechny berou adresu, ze které se pozná repo. Roste-li ten výčet,
+      roste to, co aplikace umí odeslat, a to má být vidět v jednom souboru. Approve mimo
+      review, label ani zavření PR tam pořád nepatří.
    3. **Publisher není pole `AppStore`.** Vzniká uvnitř té cesty, která odesílá, a zaniká
       s ní — nemá ho kde uložit nikdo, kdo ho nemá mít. Drží to `ReviewSubmission` (skládá se
-      až v `send()`, zaniká zavřením sheetu) a `ThreadSubmission` (skládá se v `reply(_:)`
-      a `setResolved(_:)`). `AppStore` si kvůli odesílání drží **jen cestu ke `gh`**, ne
-      publisher ani továrnu na něj — proto ho ten grep nevypíše. Platí to i pro vlákna, kde
-      `AppStore` odesílání spouští: drží **stav** (`ThreadActionState`), ne cestu ven.
+      až v `send()`, zaniká zavřením sheetu), `ThreadSubmission` (skládá se v `reply(_:)`
+      a `setResolved(_:)`) a `CommentSubmission` (skládá se v `send(_:)`). `AppStore` si kvůli
+      odesílání drží **jen cestu ke `gh`**, ne publisher ani továrnu na něj — proto ho ten grep
+      nevypíše. Platí to i pro vlákna a komentáře, kde `AppStore` odesílání spouští: drží
+      **stav** (`ThreadActionState`, `CommentActionState`), ne cestu ven.
    4. **Odeslání review si žádá hotový draft s `headSha`** a pre-flight ověří, že je to pořád
       hlava PR. Approve na kód, který jsi neviděl, tak nejde poslat ani závodem s pushnutým
       commitem. GitHub proti tomu **nechrání** — změřeno u #62, že review se zastaralým
       `commit_id` přijme.
 
-      **U odpovědi do vlákna se `headSha` neověřuje** (#73) a je to schválně: odpověď se váže
-      na vlákno, ne na commit, takže kontrola hlavy by zakázala zrovna tu situaci, kvůli které
-      se do vlákna píše („opraveno v abc123“). Ověřuje se **stav PR**, a to i tam
+      **U odpovědi do vlákna a u komentáře pod PR se `headSha` neověřuje** (#73, #216) a je to
+      schválně: obojí se váže na diskuzi, ne na commit, takže kontrola hlavy by zakázala zrovna
+      tu situaci, kvůli které se píše („opraveno v abc123“). Ověřuje se **stav PR**, a to i tam
       **striktněji než GitHub** — změřeno u #73, že odpověď na zavřeném PR projde. Aplikace
-      ukazuje PR z `review-requested`, takže mergnutý PR ze seznamu vypadne a k jeho vláknům se
+      ukazuje PR z `review-requested`, takže mergnutý PR ze seznamu vypadne a k jeho diskuzi se
       z okna nedostaneš; psát do uzavřené diskuze patří do prohlížeče.
    5. **Jedno atomické volání.** Buď odejde všechno, nebo nic; žádný částečně odeslaný stav
-      po pádu uprostřed. Změřeno u #62. U vláken je to triviálně splněné — odpověď i vyřešení
-      jsou jedna mutace.
+      po pádu uprostřed. Změřeno u #62. U vláken a komentářů je to triviálně splněné — odpověď,
+      vyřešení i komentář jsou jedno volání.
    6. **Jen tam, kde se to povolilo** — `PublishScope`, složený z `Configuration`
       (`allowsPublishing` globálně i per repo). **Výchozí stav je vypnuto**, a právě to drží
       vlastnost „samo nic neodejde“: dokud si někdo výslovně neřekne o konkrétní repo nebo
@@ -309,9 +312,11 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    neodesílá. Od #114 se jím **předvyplňuje** verdikt v panelu, takže odejít umí — ale jedině
    tou samou cestou jako cokoli jiného: dvěma kliknutími člověka v potvrzení, ve kterém je celý
    payload vidět a je u něj napsané, že hodnota je z návrhu. Odesílá tedy pořád jen člověk. **Potvrzovací sheet je jen
-   u review** — odpověď do vlákna se podle #73 nepotvrzuje, protože je to jedna věta v diskuzi,
-   dá se smazat a potvrzování každé by z okna udělalo klikačku. „Výslovný pokyn člověka“ tedy
-   u review znamená dvě kliknutí na dvou různých tlačítkech, u odpovědi jedno pojmenované.
+   u review** — odpověď do vlákna (#73) ani komentář pod PR (#216) se nepotvrzují, protože je to
+   jedna věta v diskuzi, dá se smazat a potvrzování každé by z okna udělalo klikačku. „Výslovný
+   pokyn člověka“ tedy u review znamená dvě kliknutí na dvou různých tlačítkech, u diskuze jedno
+   pojmenované. Composer komentáře přitom **nesmí splynout s tabem `Moje review`** — proto sedí
+   pod osou konverzace, ne v pravém panelu, kde ho kreslí návrh.
 2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit`, u `Bash` se uvádí
    jen `git` — a v `--disallowedTools` jsou `Bash(gh:*)` a `Bash(git push:*)`. `Skill` mezi
    povolenými je (#78); sám o sobě nic nespouští, ale skill, který se přes něj načte, si
@@ -351,7 +356,7 @@ viz tvrdá podmínka č. 1.
 | `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
-| `ReviewPublisher` | **Jediná cesta ven**: odeslat rozdělané review na GitHub, a `ReviewSubmission` jako jediný volající | `gh` CLI |
+| `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `FindingsPanel`. Mimo tuhle sedmičku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá

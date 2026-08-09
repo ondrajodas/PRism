@@ -26,6 +26,13 @@ extension Policy {
     /// nejde — komentář by se v kódu utopil a v `Přehledu` by na jedno vlákno padla obrazovka.
     static let threadSnippetContext = 5
 
+    /// Kolik řádků kontextu má úryvek **na ose konverzace** (#216).
+    ///
+    /// Kratší než u kódu schválně: v diffu je úryvek náhrada za to, že se řádek nedá ukázat
+    /// v souboru, kdežto na ose stačí **ukázat místo** — návrh kreslí dva řádky. S pěti zabralo
+    /// jedno vlákno půl obrazovky a osa se přestala dát přejet očima.
+    static let timelineSnippetContext = 1
+
     /// Úryvek kódu k vláknu, nebo `nil`, když se nemá z čeho vzít.
     ///
     /// `nil` znamená „vykresli vlákno jako dřív, bez kódu“ — u vlákna, kterému `diffHunk`

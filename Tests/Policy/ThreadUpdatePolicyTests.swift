@@ -52,12 +52,33 @@ struct ThreadUpdatePolicyTests {
         )
     }
 
-    private func conversation(_ threads: [ReviewThread]) -> Conversation {
+    /// Konverzace **vždycky s jednou událostí**: zápis do ní nesmí osu vyprázdnit, a bez
+    /// události v datech by to žádný z testů nepoznal.
+    private func conversation(
+        _ threads: [ReviewThread],
+        comments: [ThreadComment] = [],
+        commentsTotal: Int? = nil,
+        commentsHaveNextPage: Bool = false
+    ) -> Conversation {
         Conversation(
             viewer: "ondrajodas",
             reviews: ConversationPage(items: [], total: 0, hasNextPage: false),
             threads: ConversationPage(items: threads, total: threads.count, hasNextPage: false),
-            comments: ConversationPage(items: [], total: 0, hasNextPage: false)
+            comments: ConversationPage(
+                items: comments,
+                total: commentsTotal ?? comments.count,
+                hasNextPage: commentsHaveNextPage
+            ),
+            events: ConversationPage(items: [event], total: 1, hasNextPage: false)
+        )
+    }
+
+    private var event: TimelineEvent {
+        TimelineEvent(
+            id: "e1",
+            kind: .commit(oid: "aaaa1111", headline: "feat: něco"),
+            actor: EventActor(login: "autor", avatarURL: nil, isBot: false),
+            at: Date(timeIntervalSince1970: 60)
         )
     }
 
@@ -95,6 +116,57 @@ struct ThreadUpdatePolicyTests {
         #expect(after.comments.total == 6)
         #expect(after.comments.missing == 4)
         #expect(after.comments.isTruncated)
+    }
+
+    /// **Osa nesmí zmizet zápisem do vlákna** (regrese opravená u #216). `Conversation.init`
+    /// má `events` s výchozí prázdnou hodnotou kvůli odpovědím z doby před #171, takže je při
+    /// přeskládání konverzace lze vynechat bez chyby překladu — a osa se pak po odeslané
+    /// odpovědi tiše vyprázdnila o commity, pushe a vyžádaná review.
+    @Test("Zápis do vlákna nechá události na ose")
+    func keepsEventsWhenWritingToAThread() throws {
+        let original = conversation([thread()])
+
+        let replied = try #require(Policy.inserting(comment("c2"), intoThread: "PRRT_1", of: original))
+        let resolved = try #require(Policy.applying(
+            ThreadResolution(threadID: "PRRT_1", isResolved: true, canResolve: false, canUnresolve: true),
+            to: original
+        ))
+
+        #expect(replied.events.items.map(\.id) == ["e1"])
+        #expect(resolved.events.items.map(\.id) == ["e1"])
+    }
+
+    // MARK: - Komentář pod PR (#216)
+
+    @Test("Komentář se připíše na konec diskuze")
+    func appendsThePullRequestComment() throws {
+        let original = conversation([thread()], comments: [comment("ic1")])
+
+        let updated = Policy.appending(comment("ic2", author: "ondrajodas"), to: original)
+
+        #expect(updated.comments.items.map(\.id) == ["ic1", "ic2"])
+        // Vlákna a osa zůstanou, jak byly — komentář pod PR s nimi nesouvisí.
+        #expect(updated.threads.items.map(\.id) == ["PRRT_1"])
+        #expect(updated.events.items.map(\.id) == ["e1"])
+    }
+
+    /// Tatáž past jako u odpovědi: bez zvýšeného `total` by zkrácená konverzace po každém
+    /// odeslaném komentáři tvrdila, že chybí méně, než chybí.
+    @Test("Připsání komentáře nesníží, kolik jich chybí")
+    func keepsTheCommentShortfallHonest() throws {
+        let original = conversation(
+            [],
+            comments: [comment("ic1")],
+            commentsTotal: 5,
+            commentsHaveNextPage: true
+        )
+        #expect(original.comments.missing == 4)
+
+        let updated = Policy.appending(comment("ic2"), to: original)
+
+        #expect(updated.comments.total == 6)
+        #expect(updated.comments.missing == 4)
+        #expect(updated.comments.isTruncated)
     }
 
     @Test("Nezkrácené vlákno zůstane nezkrácené")

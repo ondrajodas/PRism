@@ -20,4 +20,13 @@ struct DiffLine: Hashable, Sendable {
     let newNumber: Int?
     /// Obsah řádku **bez** znaku, kterým diff určuje druh.
     let text: String
+
+    /// Týž řádek, ale jako kontext (#216).
+    ///
+    /// Používá to úryvek u vlákna na ose konverzace, kde se barví **jen komentovaný řádek**:
+    /// celý zelený blok se čte jako změna, o které vlákno není. Čísla i text zůstávají, mění se
+    /// jedině to, jak se řádek kreslí.
+    var asContext: DiffLine {
+        DiffLine(kind: .context, oldNumber: oldNumber, newNumber: newNumber, text: text)
+    }
 }
