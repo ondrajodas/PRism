@@ -58,7 +58,7 @@ struct FindingsPanel: View {
     /// Šířku si drží uživatel taháním a přežívá restart — kolik místa chce dát nálezům,
     /// ví jen on. **Vlastní klíč** (#182), ne přejmenovaná výška: uložených 220 by jako šířka
     /// dalo panel užší, než v jakém se dá nález přečíst.
-    @AppStorage("findingsPanelWidth") private var width = 300.0
+    @AppStorage("findingsPanelWidth") private var width = FindingsPanel.defaultWidth
     /// Sledovat konec časové osy. Předvolba pohledu, takže `UserDefaults`, ne store.
     @AppStorage("progressFollowsTail") private var followsTail = true
     /// Kde stojí kurzor procházení (#187). Karta na tom místě dostane rámeček, takže panel
@@ -81,11 +81,11 @@ struct FindingsPanel: View {
     /// Podlaha je **změřená na obsahu**, ne odhadnutá: karta nálezu (#175) nese kategorii, odznak
     /// a shrnutí, a pod 240 body se shrnutí láme po dvou slovech. Strop drží slib z `CLAUDE.md`,
     /// že diff dostane šířku — panel přes půl okna by ho porušil bez ohledu na displej.
-    static let defaultWidth = 300.0
+    private static let defaultWidth = 300.0
     private static let minimumWidth = 240.0
     private static let maximumWidth = 520.0
     /// Šířka složeného proužku, taky z návrhu (`.work.wide`).
-    static let collapsedWidth = 38.0
+    private static let collapsedWidth = 38.0
 
     /// Uložená šířka se ořezává **při použití**, ne jen při tažení: v `UserDefaults` může
     /// být cokoli (ruční editace, jiný rozsah ze starší verze) a `frame(width:)` se
