@@ -69,6 +69,12 @@ struct OverviewView: View {
     private var descriptionCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
+                // Kolečko s iniciálami, jak ho má návrh — hlavička bez něj vypadá jako
+                // odstavec, ne jako něčí příspěvek. **Bez adresy obrázku** (`url: nil`): shrnutí
+                // PR z vyhledávání nese jen jméno autora, ne odkaz na avatar, a dotahovat ho
+                // zvlášť by bylo volání navíc na tik. Iniciály tedy nejsou dočasný stav, ale
+                // to, co se tu kreslí vždycky.
+                AvatarView(login: pullRequest.author, url: nil, size: 18)
                 Text(verbatim: pullRequest.author)
                     .font(.system(size: 12, weight: .semibold))
                 Text(verbatim: pullRequest.state.czechLabel)

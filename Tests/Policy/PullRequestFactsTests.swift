@@ -61,10 +61,15 @@ struct PullRequestFactsTests {
         #expect(facts(commits: 12, areCommitsExact: false).isEmpty)
     }
 
-    /// Bez načtené hlavy není s čím se rozejít — dlaždice `Nálezy proti` by visela sama.
-    @Test("Sha nálezů bez hlavy se nekreslí")
-    func hidesTheFindingsShaWithoutAHead() {
-        #expect(facts(findingsHead: "4f2ac91").isEmpty)
+    /// Proti čemu nálezy platí, je fakt o PR i bez načtené hlavy. **Žlutá je i tak**: dokud
+    /// hlava nedorazí, nedá se ověřit, že nálezy platí proti dnešnímu kódu — a mlčet o tom je
+    /// horší než varovat zbytečně.
+    @Test("Sha nálezů se ukáže i bez hlavy")
+    func showsTheFindingsShaWithoutAHead() {
+        let tiles = facts(findingsHead: "4f2ac91").tiles
+
+        #expect(tiles.map(\.caption) == ["Nálezy proti"])
+        #expect(tiles[0].isStale)
     }
 
     @Test("Sha se krátí na sedm znaků a sází mono")
@@ -75,14 +80,15 @@ struct PullRequestFactsTests {
         #expect(tiles[0].isMonospaced)
     }
 
-    /// **Nejcennější test téhle sady.** Shodná sha nálezů je údaj, který nikoho nezajímá;
-    /// rozešlá je důvod, proč nálezy neplatí (tvrdá podmínka č. 5).
-    @Test("Sha nálezů se ukáže jen při rozchodu s hlavou")
-    func showsTheFindingsShaOnlyWhenItDiffers() {
+    /// **Nejcennější test téhle sady.** Dlaždice je vždycky, rozchod nese **barva** — jak to
+    /// kreslí návrh. Schovat ji při shodě znamená vzít z řádku údaj, který k němu patří.
+    @Test("Sha nálezů se kreslí vždycky, žlutá je jen při rozchodu")
+    func marksTheFindingsShaOnlyWhenItDiffers() {
         let same = facts(head: "9c1de02", findingsHead: "9c1de02").tiles
         let different = facts(head: "9c1de02", findingsHead: "4f2ac91").tiles
 
-        #expect(same.map(\.caption) == ["Hlava"])
+        #expect(same.map(\.caption) == ["Hlava", "Nálezy proti"])
+        #expect(same[1].isStale == false)
         #expect(different.map(\.caption) == ["Hlava", "Nálezy proti"])
         #expect(different[1].isStale)
     }

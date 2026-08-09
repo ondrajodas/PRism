@@ -67,17 +67,19 @@ extension Policy {
         if let headSha {
             tiles.append(.init(caption: "Hlava", value: short(headSha), isMonospaced: true))
         }
-        // Sha nálezů se ukazuje **jen když se rozešla s hlavou**: shodná je údaj, který nikoho
-        // nezajímá, a rozešlá je důvod, proč nálezy neplatí (tvrdá podmínka č. 5). A jedině
-        // tehdy, když je hlava vůbec načtená — jinak by vznikla dlaždice `Nálezy proti` bez
-        // dlaždice `Hlava`, tedy tvrzení o rozchodu, který se nemá s čím rozejít.
-        if let headSha, let findingsHeadSha, findingsHeadSha != headSha {
+        // **Dlaždice je vždycky, když nálezy jsou** — návrh ji tak kreslí a rozchod nese
+        // **barva**, ne přítomnost. Do #198 jsem ji při shodě schovával podle vlastní úvahy
+        // („shodná sha nikoho nezajímá“), jenže tím z řádku zmizel údaj, který k němu patří:
+        // proti čemu nálezy platí, je fakt o PR i tehdy, když se to shoduje.
+        if let findingsHeadSha {
             tiles.append(
                 .init(
                     caption: "Nálezy proti",
                     value: short(findingsHeadSha),
                     isMonospaced: true,
-                    isStale: true
+                    // Žlutá jedině při rozchodu — tam je to důvod, proč nálezy neplatí
+                    // (tvrdá podmínka č. 5).
+                    isStale: findingsHeadSha != headSha
                 )
             )
         }
