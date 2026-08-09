@@ -60,6 +60,9 @@ struct DiffView: View {
     /// (`onGeometryChange`), takže do rozvržení nezasahuje: `GeometryReader` by naopak sám
     /// zabral místo a v tomhle okně už jednou nadělal škodu.
     @State private var viewportHeight = 0.0
+    /// Pro který pohled už automatika sloupce složila (#188). Bez toho by se opakovala při
+    /// každém vzniku view a přebíjela ruční `⌘1`/`⌘2`.
+    @State private var appliedLayout: DiffLayout?
     /// Šířka, kterou má diff k dispozici — z ní se počítá, kolik znaků se vejde na stranu (#188).
     @State private var contentWidth = 0.0
     /// Rámečky řádků pro tažení rozsahu (#110). `@State`, aby přežily překreslení; obsah je
@@ -94,6 +97,12 @@ struct DiffView: View {
             // z nastavení), takže s `onChange` by se na PR otevřeném rovnou ve splitu nesložilo
             // nic — změna nepřišla. `task(id:)` se spustí i při vzniku.
             .task(id: layout) {
+                // **Jen jednou na pohled.** `task(id:)` se spustí i při novém vzniku view —
+                // a to nastane pokaždé, když se přepne panel vpravo, protože se tím přestaví
+                // `HStack` v detailu PR. Bez téhle stráže se ručně otevřený strom hned zase
+                // složil a nešel otevřít vůbec.
+                guard appliedLayout != layout else { return }
+                appliedLayout = layout
                 withAnimation(.snappy(duration: 0.15)) {
                     isTreeExpanded = layout != .split
                     panelExpanded?.wrappedValue = layout != .split
@@ -499,7 +508,10 @@ struct DiffView: View {
                         .foregroundStyle(Palette.ink3)
                         .fixedSize()
                         .rotationEffect(.degrees(90))
-                        .frame(height: 70)
+                        // Otočení **nemění rozvržení** — rámeček zůstává vodorovný. Bez rámečku
+                        // po otočení si tedy proužek vezme šířku nenatočeného textu a roztáhne
+                        // se; proto se tady zadává **otočený otisk** (úzký a vysoký).
+                        .frame(width: 13, height: 62)
                     Spacer(minLength: 0)
                 }
                 .padding(.vertical, 10)

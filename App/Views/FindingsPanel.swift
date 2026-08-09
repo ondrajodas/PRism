@@ -201,7 +201,9 @@ struct FindingsPanel: View {
                     // šířkou se text ořízne a přeleze přes odznak nad sebou.
                     .fixedSize()
                     .rotationEffect(.degrees(90))
-                    .frame(height: 90)
+                    // Otočený otisk (úzký a vysoký) — bez něj si proužek vezme šířku
+                    // nenatočeného textu a roztáhne se.
+                    .frame(width: 13, height: 84)
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 10)
