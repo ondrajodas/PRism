@@ -1,7 +1,7 @@
 import Foundation
 
-/// Jedna akce nad vláknem od kliknutí po odpověď GitHubu — **druhý ze dvou volajících
-/// `ReviewPublishing`** (prvním je `ReviewSubmission`).
+/// Jedna akce nad vláknem od kliknutí po odpověď GitHubu — **druhý ze tří volajících
+/// `ReviewPublishing`** (prvním je `ReviewSubmission`, třetím `CommentSubmission`).
 ///
 /// Existuje ze stejného důvodu jako `ReviewSubmission`: publisher se skládá **až uvnitř**
 /// akce a zaniká s ní, takže cesta ven není otevřená po celou dobu běhu aplikace a `AppStore`

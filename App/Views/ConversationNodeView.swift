@@ -145,7 +145,11 @@ struct ConversationNodeView: View {
         HStack(spacing: 9) {
             Text("Nálezy i rozdělané review zastaraly.").fontWeight(.semibold).foregroundColor(Palette.ink)
                 + Text(verbatim: " ")
-                + Text(verbatim: before.map { "Byly proti \(String($0.prefix(7))), která na větvi už není." }
+                // **Podstatné jméno tam musí zůstat.** Návrh píše „Byly proti `4f2ac91`, která
+                // na větvi už není“, tedy se shodou na něco, co ve větě není — a vedle druhé
+                // varianty („commitu, který“) by v jednom bloku stály dva různé rody nad touž
+                // věcí. Pojmenovaný commit shodu určí a delší o slovo to je jen v té první.
+                + Text(verbatim: before.map { "Byly proti commitu \(String($0.prefix(7))), který na větvi už není." }
                     ?? "Byly proti commitu, který na větvi už není.")
             Spacer(minLength: 8)
             if let rerun {

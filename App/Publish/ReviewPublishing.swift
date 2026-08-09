@@ -4,8 +4,10 @@ import Foundation
 ///
 /// Do #67 to vynucoval typ: `GitHubGateway` schválně neměl metodu, kterou by šlo něco
 /// odeslat. Ta vlastnost **zůstává** — zápis dostal vlastní modul, takže polling, diff,
-/// checkout ani reviewer nemají čím něco poslat. `grep ReviewPublishing` vyjmenuje všechna
-/// místa, odkud to jde; má jich být jedno.
+/// checkout ani reviewer nemají čím něco poslat. `grep ReviewPublishing App/` vyjmenuje všechna
+/// místa, odkud to jde: **pět souborů a tři volající** — protokol, `GhReviewPublisher`,
+/// `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission`. Roste-li ten výčet, roste to,
+/// co aplikace umí odeslat, a to musí být vidět z jednoho grepu.
 ///
 /// Metody jsou **vyjmenované a jsou čtyři** (do #73 jedna, do #216 tři). Každá odpovídá jedné
 /// věci, kterou člověk v okně udělá — odeslat review, odpovědět do vlákna, přepnout jeho
