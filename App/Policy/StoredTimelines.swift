@@ -3,10 +3,10 @@ import Foundation
 extension Policy {
     /// Osy poskládané z uloženého záznamu (#203).
     ///
-    /// Prázdné pole u záznamu, který osu neuložil (soubory z doby před #203) — tab `Průběh` pak
-    /// řekne totéž co dneska, tedy že se nic nedělo. **Vynechávají se běhy s prázdnou osou**:
-    /// hlavička revieweera bez jediné události by tvrdila, že běh proběhl bez toho, aby cokoli
-    /// udělal, a to z uloženého `nil` neplyne.
+    /// **Chybějící osa (`timeline == nil`) není prázdná osa.** `nil` znamená „neuložila se“ — tak
+    /// vypadají soubory z doby před #203 — kdežto `entries: []` by znamenalo „uložila se a nic
+    /// v ní nebylo“. Ani jedno se v tabu `Průběh` nekreslí: hlavička revieweera bez jediné
+    /// události tvrdí, že běh proběhl, aniž by cokoli udělal, a to z chybějícího klíče neplyne.
     ///
     /// Pořadí je **pořadí běhů v záznamu**, tedy stejné, v jakém je poskládal běh sám.
     static func timelines(of record: ReviewRecord?) -> [ReviewerTimeline] {

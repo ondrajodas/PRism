@@ -121,6 +121,18 @@ struct AppStoreTimelineTests {
         #expect(store.timelines(for: pullRequest).first?.entries.count == 1)
     }
 
+    /// Rozhoduje **existence klíče, ne prázdnost pole**: nový běh si osu nuluje ještě před
+    /// prvním eventem, takže by se v tom okně sáhlo na disk a nad rozjetým během by probliknul
+    /// průběh toho předchozího. Nález Copilota na #205.
+    @Test("Vynulovaná osa nového běhu nesáhne na disk")
+    func doesNotFallBackWhileANewRunStarts() {
+        let store = store()
+        store.reviewRecords[pullRequest] = makeRecord(runs: [makeStoredRun(timeline: stored("z disku.php"))])
+        store.reviewTimelines[pullRequest] = []
+
+        #expect(store.timelines(for: pullRequest).isEmpty)
+    }
+
     /// **Nejcennější test téhle sady.** Běžící review si osu drží v paměti a uložená patří
     /// předchozímu běhu — přebít živou tou z disku by nad novým během ukázalo starý průběh.
     @Test("Živá osa přebíjí tu uloženou")

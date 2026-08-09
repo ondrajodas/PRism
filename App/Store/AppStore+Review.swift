@@ -70,7 +70,13 @@ extension AppStore {
     func timelines(for pr: PRIdentifier) -> [ReviewerTimeline] {
         // Živá osa má přednost (#203): běžící review si ji drží v paměti a uložená patří
         // předchozímu běhu — přebít ji tou z disku by ukázalo starý průběh nad novým během.
-        if let live = reviewTimelines[pr], !live.isEmpty { return live }
+        //
+        // Rozhoduje **existence klíče, ne to, jestli je pole prázdné**. Nový běh si osu nuluje
+        // ještě před prvním eventem, takže by se v tom okně sáhlo na disk a nad rozjetým během
+        // by probliknul průběh toho předchozího — přesně to, čemu se tohle pravidlo vyhýbá.
+        // Cena: běh zrušený dřív, než cokoli dorazilo, nechá tab prázdný až do restartu. To je
+        // ale pravda o tomhle PR — poslední, co se s ním dělo, opravdu žádnou osu nemá.
+        if let live = reviewTimelines[pr] { return live }
         return Policy.timelines(of: reviewRecords[pr])
     }
 
