@@ -1719,8 +1719,11 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   nešlo poznat, kde v něm člověk je, aniž by ho otevřel. Šířka 210 z návrhu, složený je proužek
   34 bodů s počtem souborů; `⌘1` a tlačítko v liště nad diffem, vedle `Nálezy ⌘2`. Tři věci:
   - **Ve sloupci se sází úsporně** (`FileTreeView.isCompact`): jen jméno a značka. Počty `+/−`
-    zaberou přes padesát bodů a slovní odznak `nový` dalších čtyřicet, takže na jméno zbyde
-    `…S.md` — vyzkoušeno na skutečném PR. Popover (420 bodů) zůstává v plné sazbě.
+    ani slovní odznak `nový` se do 210 bodů nevejdou — vyzkoušené vedle jména (zbyde `…S.md`)
+    i pod ním (rozhodí řádkování); GitHub je ve stromu nemá taky, patří k hlavičce souboru
+    v diffu. Popover (420 bodů) zůstává v plné sazbě.
+  - **Ikona druhu změny je obarvená**: zelená přidává, červená maže, modrá přejmenovává.
+    Tvar sám se čte až po zaostření, barva periferně — a strom se přejíždí očima.
   - **Soubor se ořezává zezadu, složka zepředu.** U jména souboru nese význam začátek
     (`SecretClient.php` versus `SecretClientTest.php`), u cesty ke složce ta poslední část.
   - **Skok na soubor je jedno místo pro strom i popover**, takže se sbalený soubor rozbalí v obou.

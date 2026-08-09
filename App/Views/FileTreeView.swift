@@ -97,7 +97,12 @@ private struct FileTreeBranch: View {
             chevron
             Image(systemName: file == nil ? "folder" : symbol(of: file))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                // Ikona nese **druh změny barvou**, ne jen tvarem: zelená přidává, červená
+                // maže, modrá přejmenovává. Tvar sám se u `plus.square` a `minus.square` čte
+                // až po zaostření, kdežto barva se vezme periferně — tatáž úvaha jako
+                // u proužku v řádku fronty. Složka a obyčejná změna zůstávají tlumené,
+                // aby v seznamu svítilo jen to, co je zvláštní.
+                .foregroundStyle(file.flatMap(tint(of:)) ?? .secondary)
                 .frame(width: 14)
             Text(verbatim: node.name)
                 .font(isCompact ? .caption : .callout)
@@ -122,9 +127,13 @@ private struct FileTreeBranch: View {
                     .background(.quaternary, in: .capsule)
             }
             Spacer(minLength: 6)
+            // **Ve sloupci žádné počty** (#197). Zkoušely se vedle jména i pod ním a obojí bylo
+            // horší než nic: vedle ukously jméno, pod ním rozhodily řádkování. GitHub je ve
+            // stromu nemá taky — patří k hlavičce souboru v diffu, kde je na ně místo.
+            // V popoveru (420 bodů) zůstávají, tam se vejdou.
             if !isCompact {
                 DiffCounts.text(additions: node.additions, deletions: node.deletions)
-                    .font(.caption)
+                    .font(isCompact ? .caption2 : .caption)
                     .monospacedDigit()
             }
         }
@@ -150,6 +159,16 @@ private struct FileTreeBranch: View {
                 .frame(width: 10)
         } else {
             Color.clear.frame(width: 10, height: 1)
+        }
+    }
+
+    /// Barva ikony podle druhu změny. `nil` = beze změny odstínu (složka, upravený soubor).
+    private func tint(of file: FileDiff) -> Color? {
+        switch file.change {
+        case .added: .green
+        case .deleted: .red
+        case .renamed: .blue
+        case .modified: nil
         }
     }
 
