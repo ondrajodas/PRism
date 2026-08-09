@@ -1725,6 +1725,18 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Kolik znaků zbývá, se měří, ne bere z tabulky.** Tabulka v zadání #188 platí pro jeden
     displej a jedno nastavení; číslo v liště platí pro okno, které mám otevřené. Ukazuje se
     **jen pod slibem** (120 znaků z `CLAUDE.md`) — nad ním je to údaj, který nikoho nezajímá.
+- **Prázdné a chybové stavy mají jeden vzor** (`EmptyStateView`, #176). Bylo jich deset a každý
+  vznikl zvlášť. Tři pravidla:
+  - **Povaha není kosmetika**: `calm` (nic nechybí), `waiting` (něco je zapnuté nebo se čeká),
+    `failure` (porucha). Zelené „vyřízeno“ nad zapnutým filtrem tvrdí opak pravdy, takže filtr má
+    povahu `waiting` a **vlastní východ** — tlačítko, kterým se vypne.
+  - **Syrový text zůstává, jak přišel** (`detail`). Hláška od `gh`, `gitu` nebo dekodéru je
+    jediné, z čeho se pozná, co dělat dál; vlastní věta místo ní je hádání příčiny.
+  - **Rate limit není porucha**: nic se nerozbilo, aplikace se jen ptala moc — proto `waiting`
+    a věta o tom, že seznam zůstává takový, jaký dorazil naposled.
+
+  Selhaný checkout zůstává **banner v hlavičce PR**, ne karta: je to porucha na obrazovce, která
+  je jinak plná, kdežto tenhle vzor je pro prázdnou plochu.
 - **Strom souborů je trvalý levý sloupec** (#197), ne jen popover. U PR o padesáti souborech
   nešlo poznat, kde v něm člověk je, aniž by ho otevřel. Šířka 210 z návrhu, složený je proužek
   34 bodů s počtem souborů; `⌘1` a tlačítko v liště nad diffem, vedle `Nálezy ⌘2`. Tři věci:

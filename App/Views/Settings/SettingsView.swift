@@ -68,16 +68,17 @@ struct SettingsView: View {
     /// Soubor, který se nepodařilo přečíst, editor **nepřepíše**. Uložit přes něj výchozí
     /// hodnoty by znamenalo zahodit něco, co uživatel psal — kvůli chybějící čárce.
     private func brokenFile(_ failure: String) -> some View {
-        ContentUnavailableView {
-            Label("Konfiguraci se nepodařilo přečíst", systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(failure)
-        } actions: {
-            Button("Otevřít soubor", systemImage: "square.and.pencil") { openConfigFile() }
-            Button("Zkusit načíst znovu") {
-                Task { await store.reloadConfiguration() }
-            }
-        }
+        EmptyStateView(
+            nature: .failure,
+            symbol: "exclamationmark.triangle",
+            title: "Konfiguraci se nepodařilo přečíst",
+            message: "Soubor zůstal nedotčený — nic se do něj nezapsalo.",
+            // Hláška od dekodéru zůstává, jak přišla: `Neočekávaný znak na řádku 12` je jediné,
+            // podle čeho se dá chyba najít.
+            detail: failure,
+            primary: .init(title: "Otevřít soubor") { openConfigFile() },
+            secondary: .init(title: "Načíst znovu") { Task { await store.reloadConfiguration() } }
+        )
     }
 
     /// Boční navigace, ne záložky (#177).

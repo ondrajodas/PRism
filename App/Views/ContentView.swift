@@ -161,10 +161,14 @@ struct ContentView: View {
             if let summary = store.summary(for: id) {
                 PullRequestDetailView(store: store, pullRequest: summary, submission: $submission)
             } else {
-                ContentUnavailableView(
-                    "Pull request zmizel ze seznamu",
-                    systemImage: "questionmark.folder",
-                    description: Text("Zavři záložku, nebo počkej na další načtení.")
+                EmptyStateView(
+                    // Čekání, ne porucha: nic se nerozbilo, PR jen vypadl z výsledků hledání
+                    // (typicky po odeslaném review).
+                    nature: .waiting,
+                    symbol: "questionmark.folder",
+                    title: "Pull request zmizel ze seznamu",
+                    message: "Nejspíš se mergnul nebo už po tobě review nikdo nechce. Zavři záložku, nebo počkej na další načtení.",
+                    primary: .init(title: "Zavřít záložku") { store.closeTab(id) }
                 )
             }
         }
