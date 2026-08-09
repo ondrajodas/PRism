@@ -92,41 +92,20 @@ struct ConversationEntryView: View {
     /// jinak. Nad ním je místo, kde bývalo, a pod tím úryvek kódu, ke kterému se váže (#158):
     /// `cesta:řádek` sama o sobě neřekne, o čem je řeč, a jinde se ten kód vzít nedá — číslo
     /// řádku je ze starého headu, takže se v diffu nekreslí.
+    /// Vlákno bez kotvy. Kreslí ho **tatáž bublina jako u kódu** — dvě podoby téhož vlákna by
+    /// se rozešly. Cesta a odznak jsou od #216 **uvnitř** bubliny (hlavička `ThreadBubbleView`),
+    /// ne nad ní: v návrhu je vlákno jeden celek, kdežto řádek nad rámečkem vypadal jako
+    /// popisek k něčemu, co začíná až pod ním.
     private func threadCard(_ thread: ReviewThread) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Image(systemName: "text.line.first.and.arrowtriangle.forward")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                Text(verbatim: location(of: thread))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                if thread.isOutdated {
-                    Text("zastaralé")
-                        .font(.caption2)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(.quaternary, in: .capsule)
-                        .foregroundStyle(.secondary)
-                        .help("Řádek, u kterého vlákno vzniklo, v aktuálním diffu není")
-                }
-                Spacer(minLength: 0)
-            }
-            // Kratší úryvek než u kódu (#216): na ose se ukazuje **místo**, ne diff.
-            if let snippet = Policy.snippet(of: thread, context: Policy.timelineSnippetContext) {
-                ThreadSnippetView(snippet: snippet, path: thread.path)
-            }
-            ThreadBubbleView(
-                thread: thread,
-                viewer: viewer,
-                isExpanded: threadActions.isExpanded(thread),
-                toggle: { threadActions.toggle(thread) },
-                indent: 0,
-                actions: threadActions
-            )
-        }
+        ThreadBubbleView(
+            thread: thread,
+            viewer: viewer,
+            isExpanded: threadActions.isExpanded(thread),
+            toggle: { threadActions.toggle(thread) },
+            indent: 0,
+            actions: threadActions,
+            snippetContext: Policy.timelineSnippetContext
+        )
     }
 
     /// `originalLine` je u zastaralého vlákna to jediné, co zbylo — `line` je `nil` právě

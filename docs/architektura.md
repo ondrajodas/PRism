@@ -1763,6 +1763,13 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Komentář je bublina, ne karta s linkou.** Dělicí linka je správně u popisu PR (#198), kde
     je pod ní dlouhý text; nad dvěma větami je to rámeček navíc.
   - **Uzel je menší než avatar vedle něj.** Osu má vést, ne ji přebíjet.
+  - **Bublina vlákna je jeden celek**: cesta a odznak v hlavičce (ne `1 komentář`), úryvek
+    a komentáře uvnitř. Řádek s cestou **nad** rámečkem vypadal jako popisek k něčemu, co
+    začíná až pod ním. Úryvek si bublina kreslí sama jedině tam, kde dostane `snippetContext` —
+    u kódu ho nese diff.
+  - **Podklad z palety, ne systémová šeď**, a **bez proužku na hraně**: vyřešené vlákno hlásí
+    odznak, takže proužek říkal totéž podruhé a v ose se pletl s proužkem verdiktu u review.
+  - **Tlačítka bez ikon** a vpravo od nich počet odpovědí, jak to má návrh.
 - **Konverzace je vlastní tab s časovou osou** (#183). `Přehled` a konverzace odpovídají na dvě
   různé otázky — „jak to teď stojí“ a „co se dělo“ — a v jednom scrollu se to druhé četlo tak, že
   se přes první přerolovalo. Čtyři pravidla:

@@ -19,11 +19,17 @@ struct ThreadBubbleView: View {
     /// Odpovídání a vyřešení (#73). `nil` = bublina je jen ke čtení, což je stav, ve kterém se
     /// staví v testech skládání řádků a v náhledech.
     var actions: ThreadActions?
+    /// Kolik řádků kontextu má úryvek. `nil` = bublina úryvek nekreslí (u kódu ho nese diff),
+    /// číslo = kreslí ho sama, jak to potřebuje osa konverzace (#216).
+    var snippetContext: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
             if isExpanded {
+                if let snippetContext, let snippet = Policy.snippet(of: thread, context: snippetContext) {
+                    ThreadSnippetView(snippet: snippet, path: thread.path)
+                }
                 ForEach(Array(thread.comments.items.enumerated()), id: \.element.id) { index, comment in
                     if index > 0 { Divider() }
                     entry(comment)
@@ -36,9 +42,16 @@ struct ThreadBubbleView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(background, in: .rect(cornerRadius: 8))
-        .overlay(alignment: .leading) { accent }
-        .clipShape(.rect(cornerRadius: 8))
+        // **Plocha palety s obrysem**, ne systémová šeď (#216). `.quinary` je neutrální šedá,
+        // kdežto okno stojí na neutrálech posunutých do modrofialové — vedle karty komentáře
+        // a bloku kontrol to vypadalo jako cizí prvek.
+        //
+        // **Bez proužku na hraně:** vyřešené vlákno hlásí odznak `vyřešeno` v hlavičce, takže
+        // proužek říkal totéž podruhé — a v ose se pletl s proužkem verdiktu u review, který
+        // znamená něco jiného.
+        .background(Palette.chrome, in: .rect(cornerRadius: 7))
+        .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line, lineWidth: 1) }
+        .clipShape(.rect(cornerRadius: 7))
         .padding(.leading, indent)   // u kódu do sloupce s obsahem, v Přehledu nula
         .padding(.trailing, 16)
         .padding(.vertical, 4)
@@ -54,15 +67,15 @@ struct ThreadBubbleView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(verbatim: title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Palette.ink3)
+                // **Cesta a řádek, ne „1 komentář“** (#216): hlavička vlákna má říct, ke kterému
+                // místu se váže — počet je vidět z komentářů pod ní.
+                Text(verbatim: location)
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .foregroundStyle(Palette.ink2)
                     .lineLimit(1)
+                    .truncationMode(.head)
                 if thread.isResolved { resolvedBadge }
                 // I ve **sbalené** hlavičce: vyřešené vlákno je sbalené výchozím stavem,
                 // takže bez tohohle by useknuté vlákno vypadalo úplné a nebyl by důvod ho
@@ -74,6 +87,13 @@ struct ThreadBubbleView: View {
         }
         .buttonStyle(.plain)
         .disabled(toggle == nil)
+    }
+
+    /// Kde vlákno visí — `soubor:řádek`. U zastaralého je číslo z `originalLine`, protože `line`
+    /// mají prázdné právě ta (ověřeno na `cli/cli#13084`: 24 ze 38).
+    private var location: String {
+        guard let line = thread.line ?? thread.originalLine else { return thread.path }
+        return "\(thread.path):\(line)"
     }
 
     /// Sbalené vlákno musí ze hlavičky říct, co v něm je — jinak není důvod ho otevřít.
@@ -117,23 +137,26 @@ struct ThreadBubbleView: View {
 
     private func entry(_ comment: ThreadComment) -> some View {
         VStack(alignment: .leading, spacing: 4) {
+            // **Jméno vlevo, čas vpravo** (#216), jak to má návrh: slepené k sobě se čtou jako
+            // jeden údaj a čas se ztrácí mezi jmény.
             HStack(spacing: 6) {
+                AvatarView(login: comment.author, url: nil, size: 18)
                 Text(verbatim: comment.author)
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 12, weight: .semibold))
                 if isMine(comment) {
                     Text("já")
-                        .font(.caption2)
+                        .font(.system(size: 10.5))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(.tint.opacity(0.18), in: .capsule)
                 }
+                Spacer(minLength: 8)
                 Text(comment.createdAt, format: .relative(presentation: .named))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.ink3)
                 Link(destination: comment.url) {
                     Image(systemName: "arrow.up.right.square")
-                        .font(.caption2)
+                        .font(.system(size: 11))
                 }
                 .help("Otevřít na GitHubu")
             }
@@ -144,7 +167,7 @@ struct ThreadBubbleView: View {
             //
             // Markdown se renderuje: komentáře na GitHubu se v něm píšou a `**takhle**`
             // s dvojitými hvězdičkami se čte špatně.
-            MarkdownText(text: comment.body)
+            MarkdownText(text: comment.body, font: .system(size: 12.5))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         // Odpověď je odsazená, ať je z pohledu vidět, co je reakce na co. Strom se z toho
@@ -183,19 +206,23 @@ struct ThreadBubbleView: View {
     /// to verdikt nad celým PR.
     @ViewBuilder private var compose: some View {
         if let actions {
-            VStack(alignment: .leading, spacing: 6) {
-                Divider()
-                DraftTextEditor(
-                    text: actions.reply(thread),
-                    placeholder: "Odpovědět ve vlákně…",
-                    minHeight: 34,
-                    commit: { actions.setReply(thread, $0) }
-                )
-                // Identita per vlákno: bublina je buňka líného seznamu a po odscrollování se
-                // staví znovu, takže bez tohohle by se rozepsaný text mohl objevit u cizího
-                // vlákna. Tatáž past jako u těla review, které se klíčuje PR.
-                .id(thread.id)
-                .disabled(state?.isBusy == true)
+            VStack(alignment: .leading, spacing: 8) {
+                // **Avatar vedle pole a pole na jeden řádek** (#216). Velký box přes celou
+                // šířku vypadá jako hlavní věc v bublině, přitom hlavní je ten komentář nad ním.
+                HStack(alignment: .top, spacing: 8) {
+                    AvatarView(login: viewer, url: nil, size: 18)
+                    DraftTextEditor(
+                        text: actions.reply(thread),
+                        placeholder: "Odpovědět do vlákna…",
+                        minHeight: 26,
+                        commit: { actions.setReply(thread, $0) }
+                    )
+                    // Identita per vlákno: bublina je buňka líného seznamu a po odscrollování
+                    // se staví znovu, takže bez tohohle by se rozepsaný text mohl objevit
+                    // u cizího vlákna. Tatáž past jako u těla review, klíčovaného PR.
+                    .id(thread.id)
+                    .disabled(state?.isBusy == true)
+                }
 
                 controls(actions)
                 failureNote
@@ -207,6 +234,19 @@ struct ThreadBubbleView: View {
         HStack(spacing: 8) {
             replyButton(actions)
             resolutionButton(actions)
+            Spacer(minLength: 8)
+            // Počet odpovědí vpravo, jak ho má návrh — z vlákna je pak vidět, kolik toho je,
+            // i když je sbalené na jeden komentář.
+            if thread.comments.items.count > 1 {
+                Text(verbatim: Plural.czech(
+                    thread.comments.items.count - 1,
+                    one: "odpověď",
+                    few: "odpovědi",
+                    many: "odpovědí"
+                ))
+                .font(.system(size: 11.5))
+                .foregroundStyle(Palette.ink3)
+            }
             Spacer(minLength: 0)
             if let state, state.isBusy {
                 ProgressView().controlSize(.small)
@@ -220,9 +260,11 @@ struct ThreadBubbleView: View {
     /// Zakázané tlačítko **s důvodem**, ne schované: prázdná odpověď, běžící akce i zakázané
     /// odesílání se dají vysvětlit, kdežto chybějící tlačítko ne.
     private func replyButton(_ actions: ThreadActions) -> some View {
-        Button("Odpovědět", systemImage: "arrowshape.turn.up.left") { actions.send(thread) }
+        // **Bez ikony** (#216): návrh má holý popisek. Šipka vedle slova „Odpovědět“ říká
+        // totéž podruhé a v řadě dvou tlačítek dělá z bubliny lištu nástrojů.
+        Button("Odpovědět") { actions.send(thread) }
             .buttonStyle(.borderedProminent)
-            .font(.caption)
+            .font(.system(size: 11.5))
             .disabled(actions.block != nil || !hasText(actions) || state?.isBusy == true)
             .help(replyHelp(actions))
     }
@@ -239,14 +281,11 @@ struct ThreadBubbleView: View {
     /// tlačítko jen zabíralo místo a slibovalo akci, která nikdy nepůjde.
     @ViewBuilder private func resolutionButton(_ actions: ThreadActions) -> some View {
         if thread.canToggleResolution {
-            Button(
-                thread.isResolved ? "Znovu otevřít" : "Vyřešit",
-                systemImage: thread.isResolved ? "arrow.uturn.backward" : "checkmark.circle"
-            ) {
+            Button(thread.isResolved ? "Znovu otevřít" : "Označit jako vyřešené") {
                 actions.setResolved(thread, !thread.isResolved)
             }
             .buttonStyle(.bordered)
-            .font(.caption)
+            .font(.system(size: 11.5))
             .disabled(actions.block != nil || state?.isBusy == true)
             .help(actions.block ?? (thread.isResolved
                 ? "Otevře vlákno zpátky na GitHubu"
@@ -293,16 +332,6 @@ struct ThreadBubbleView: View {
 
     /// Vyřešené vlákno je bledší — je to historie, ne něco k vyřízení. Nemaže se
     /// z pohledu, stejně jako se nemažou zastaralé záznamy nálezů.
-    private var background: some ShapeStyle {
-        thread.isResolved ? AnyShapeStyle(.quaternary.opacity(0.5)) : AnyShapeStyle(.quinary)
-    }
-
-    private var accent: some View {
-        Rectangle()
-            .fill(thread.isResolved ? Color.green.opacity(0.5) : Color.secondary.opacity(0.6))
-            .frame(width: 3)
-    }
-
     /// Do hlavičky se vejde jeden řádek, takže se konce řádků nahradí mezerou — jinak by
     /// odřádkovaný komentář hlavičku roztáhl a rozvržení bublin by poskakovalo.
     private func oneLine(_ text: String) -> String {
