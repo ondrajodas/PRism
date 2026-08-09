@@ -12,6 +12,8 @@ import SwiftUI
 struct OverviewView: View {
     /// Popis PR. `nil` = detail se ještě nenačetl, což je jiný stav než „autor nic nenapsal“.
     var description: String?
+    /// Fakta o PR do dlaždic (#198). Prázdná = řádek se nekreslí.
+    var facts: PullRequestFacts = PullRequestFacts(tiles: [])
     /// Co přibylo od poslední návštěvy (#173). Prázdné = nic, nebo se ještě nenačetla
     /// konverzace; banner se v obou případech nekreslí.
     var changes: VisitChanges = .none
@@ -44,6 +46,11 @@ struct OverviewView: View {
                     )
                 }
                 descriptionCard
+                // Dlaždice **pod popisem**, ne nad ním: popis je to, co autor chce, aby se
+                // přečetlo, čísla jsou kontext k němu.
+                if !facts.isEmpty {
+                    PullRequestFactsView(facts: facts)
+                }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)

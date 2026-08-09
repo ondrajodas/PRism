@@ -1725,6 +1725,16 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Kolik znaků zbývá, se měří, ne bere z tabulky.** Tabulka v zadání #188 platí pro jeden
     displej a jedno nastavení; číslo v liště platí pro okno, které mám otevřené. Ukazuje se
     **jen pod slibem** (120 znaků z `CLAUDE.md`) — nad ním je to údaj, který nikoho nezajímá.
+- **`Přehled` má dlaždice s fakty** (#198): commity (a kolik z nich je nových od minule),
+  soubory (a kolik má nález), hlava PR a sha, proti které platí nálezy. **Nic se pro ně
+  nedotahuje** — jsou to údaje, které v okně už jsou, jen roztroušené. Tři pravidla:
+  - **Dlaždice, o které se nedá nic říct, se nekreslí.** Řádek plný nul je řádek, ve kterém se
+    ztratí to jedno číslo, na kterém záleží — a nula u souborů navíc tvrdí, že PR nic nemění,
+    i když se diff jen ještě nenačetl.
+  - **Sha nálezů jen při rozchodu s hlavou.** Shodná je údaj, který nikoho nezajímá; rozešlá je
+    důvod, proč nálezy neplatí (tvrdá podmínka č. 5), a je žlutá jako stav `zastaralé`.
+  - **Mřížka čtyř sloupců, ne `HStack`.** V `HStacku` se dvě dlaždice roztáhnou přes celou šířku
+    a číslo v nich plave uprostřed prázdna; v mřížce si drží čtvrtinu bez ohledu na počet.
 - **Konverzace je vlastní tab s časovou osou** (#183). `Přehled` a konverzace odpovídají na dvě
   různé otázky — „jak to teď stojí“ a „co se dělo“ — a v jednom scrollu se to druhé četlo tak, že
   se přes první přerolovalo. Čtyři pravidla:
@@ -2457,6 +2467,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí fronty na dashboardu (#181) — podle závažnosti, ne podle času (`QueueEntry`) |
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
+| `Policy.facts(commits:newCommits:files:filesWithFindings:headSha:findingsHeadSha:)` | Dlaždice s fakty o PR (#198); dlaždice, o které se nedá nic říct, se vynechá |
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
 | `Policy.charactersPerSide(contentWidth:characterWidth:layout:gutter:)` | Kolik znaků kódu se vejde na stranu (#188); vedle sebe se šířka dělí na dvě |
 | `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
