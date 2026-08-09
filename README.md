@@ -80,6 +80,12 @@ pod tím řádek s oběma — dokud se rovnají, je to trivia, jakmile se rozejd
 údaj na obrazovce, protože všechno pod ním mluví o kódu, který na větvi už není. Vpravo u záložek
 je rozsah změny (`+X −Y`).
 
+Detail PR má **tři záložky** (#183): `Přehled` říká, jak to teď stojí (popis, fakta, co se změnilo
+od minule), `Změněné soubory` je diff a `Konverzace` je **časová osa toho, co se dělo** — s uzly,
+u kterých tvar nese druh, se seskupenými commity (jedenáct pushů nesmí utopit dva komentáře),
+filtrem `Vše / Komentáře / Vlákna / Události` a značkou `Nové od tvé poslední návštěvy`. U force-pushe
+je rovnou u události napsané, že tím zastaraly nálezy, a tlačítko pustit review znovu.
+
 Detail PR má **záložky jako GitHub**: `Přehled` a `Změněné soubory`, podtržené, s odznakem
 kolik je v přehledu k přečtení. Volba se pamatuje **u každého PR zvlášť** a otevírá se
 `Přehled` — popis a diskuze se čtou dřív než kód, kterého se týkají.

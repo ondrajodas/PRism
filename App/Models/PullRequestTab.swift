@@ -13,6 +13,12 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     case overview
     /// Diff s bublinami.
     case filesChanged
+    /// Časová osa toho, co se na PR dělo (#183).
+    ///
+    /// **Vlastní tab, ne sekce v `Přehledu`.** Jsou to dvě různé otázky: `Přehled` odpovídá na
+    /// „jak to teď stojí“ (popis, fakta, co se změnilo od minule), konverzace na „co se dělo“.
+    /// V jednom scrollu se přitom to druhé čte tak, že se přes první přeroluje.
+    case conversation
 
     /// Se kterým tabem se PR otevírá.
     ///
@@ -31,6 +37,7 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
         switch self {
         case .overview: "Přehled"
         case .filesChanged: "Změněné soubory"
+        case .conversation: "Konverzace"
         }
     }
 }

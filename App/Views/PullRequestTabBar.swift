@@ -112,8 +112,10 @@ struct PullRequestTabBar: View {
     /// a `ReviewStateBadge` mapuje stav na symbol taky u sebe.
     private func symbol(of tab: PullRequestTab) -> String {
         switch tab {
-        case .overview: "text.bubble"
+        // `Přehled` je od #183 popis a fakta, takže dokument; mluví se v `Konverzaci`.
+        case .overview: "doc.text"
         case .filesChanged: "plus.forwardslash.minus"
+        case .conversation: "bubble.left.and.bubble.right"
         }
     }
 }
