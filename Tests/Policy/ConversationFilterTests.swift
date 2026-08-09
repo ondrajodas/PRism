@@ -100,6 +100,19 @@ struct ConversationFilterTests {
         #expect(nodes.first?.id.hasPrefix("commits-") == true)
     }
 
+    /// **Nález Copilota na #183.** Zúžení na události zahodí komentář mezi dvěma commity — a ty
+    /// pak vyjdou „za sebou“, přestože v plné ose za sebou nebyly. Hranice skupin se proto počítají
+    /// z plného pořadí a filtr se pouští až na hotové uzly.
+    @Test("Zúžení nesmí slít commity, mezi kterými byl komentář")
+    func doesNotMergeAcrossAHiddenComment() {
+        let nodes = Policy.conversation(
+            of: [commit("a", at: 10), comment("c1", at: 20), commit("b", at: 30)],
+            filter: .events
+        )
+
+        #expect(nodes.count == 2)
+    }
+
     @Test("Počty se berou z plné osy, ne ze zúžené")
     func countsTheWholeTimeline() {
         let counts = Policy.conversationCounts(of: [

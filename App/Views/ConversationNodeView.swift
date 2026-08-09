@@ -24,7 +24,8 @@ struct ConversationNodeView: View {
         .padding(.bottom, 10)
     }
 
-    /// Čára s puntíkem. Puntík má **tvar podle druhu**: obrys u děje, výplň u textu.
+    /// Čára s puntíkem. Druh nese **symbol uvnitř** a barva obrysu — kolečko je pro všechny
+    /// uzly stejné, aby osa držela svislou linku a nepřeskakovala v šířce.
     private var axis: some View {
         VStack(spacing: 0) {
             ZStack {

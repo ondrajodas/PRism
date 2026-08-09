@@ -2,9 +2,10 @@ import SwiftUI
 
 /// Jedna položka konverzace — cizí review, komentář pod PR, vlákno bez kotvy nebo událost.
 ///
-/// Vytažené z `OverviewView` (#183), protože položky kreslí **dvě místa**: tab `Konverzace`
-/// na časové ose a `Přehled` v seznamu. Dvě kopie by znamenaly, že totéž vlákno vypadá
-/// v aplikaci dvakrát jinak — a jediný domov konverzace se nedělí, jen stěhuje.
+/// Vytažené z `OverviewView` (#183) při stěhování konverzace do vlastního tabu. Kreslí ho
+/// **jen osa** (`ConversationNodeView`) — vlastní typ přesto, protože položka je něco jiného než
+/// uzel osy: uzel drží čáru, značku a slučování, položka obsah. Slít je do jednoho view by
+/// znamenalo, že se přidáním druhého místa (třeba náhledu vlákna) musí rozplétat.
 struct ConversationEntryView: View {
     let entry: ConversationEntry
     var viewer: String = ""

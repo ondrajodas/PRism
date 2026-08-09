@@ -61,20 +61,29 @@ extension Policy {
         of entries: [ConversationEntry],
         filter: ConversationFilter = .all
     ) -> [ConversationNode] {
+        // **Nejdřív se seskupuje, teprve pak zužuje.** Kdyby filtr běžel v témž průchodu, zahodil
+        // by komentář mezi dvěma commity — a ty by pak vyšly „za sebou“ a slily se do jednoho
+        // uzlu, přestože v plné ose za sebou nebyly. Filtr je zúžení téže osy, takže hranice
+        // skupin musí platit bez ohledu na to, co je zrovna vidět. (Nález Copilota na #183.)
         var nodes: [ConversationNode] = []
-        for entry in entries where matches(entry, filter) {
+        for entry in entries {
             guard case .event(let event) = entry, case .commit = event.kind else {
                 nodes.append(.entry(entry))
                 continue
             }
-            // Přilep k předchozí skupině, jestli je poslední na ose — jinak začni novou.
             if case .commits(let events) = nodes.last {
                 nodes[nodes.count - 1] = .commits(events + [event])
             } else {
                 nodes.append(.commits([event]))
             }
         }
-        return nodes
+        return nodes.filter { node in
+            switch node {
+            case .entry(let entry): matches(entry, filter)
+            // Skupina commitů je událost jako každá jiná — projde tam, kde projde událost.
+            case .commits: filter == .all || filter == .events
+            }
+        }
     }
 
     private static func matches(_ entry: ConversationEntry, _ filter: ConversationFilter) -> Bool {

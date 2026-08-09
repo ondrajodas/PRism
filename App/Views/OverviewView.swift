@@ -99,8 +99,6 @@ struct OverviewView: View {
         }
     }
 
-    // MARK: - Konverzace
-
 }
 
 /// Kolik se toho do stránek konverzace nevešlo, po částech.

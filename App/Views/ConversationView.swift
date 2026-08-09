@@ -135,8 +135,10 @@ struct ConversationView: View {
     /// „nové“ se nedá tvrdit, když není proti čemu.
     private func isFirstNew(_ node: ConversationNode, at index: Int, in nodes: [ConversationNode]) -> Bool {
         guard let lastVisit, let date = node.date, date > lastVisit else { return false }
-        guard index > 0 else { return false }
-        // Předchozí uzel musí být starý — jinak by se značka nakreslila u každé nové položky.
+        // První uzel značku dostat **smí**: když je nové všechno, patří značka úplně nahoru.
+        // Nález Copilota — původní `index > 0` ji v tom případě zahodil.
+        guard index > 0 else { return true }
+        // Jinak musí být předchozí uzel starý, jinak by se značka kreslila u každé nové položky.
         return nodes[index - 1].date.map { $0 <= lastVisit } ?? false
     }
 
@@ -158,11 +160,14 @@ struct ConversationView: View {
             EmptyStateView(
                 nature: .calm,
                 symbol: "bubble.left.and.bubble.right",
-                title: filter == .all ? "Zatím se nic nedělo" : "Zúžení nic nenechalo",
-                message: filter == .all
+                // **Prázdná osa a zúžená osa jsou dvě různá prázdna.** Když je konverzace
+                // opravdu prázdná, „výběr to schovává“ by tvrdilo něco, co není pravda —
+                // schovávat není co.
+                title: entries.isEmpty ? "Zatím se nic nedělo" : "Zúžení nic nenechalo",
+                message: entries.isEmpty
                     ? "Komentáře, review a to, co se s větví stalo, se objeví tady."
                     : "Na ose něco je, ale tenhle výběr to schovává.",
-                primary: filter == .all ? nil : .init(title: "Ukázat vše") { filter = .all }
+                primary: entries.isEmpty ? nil : .init(title: "Ukázat vše") { filter = .all }
             )
         }
     }
