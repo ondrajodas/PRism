@@ -26,35 +26,51 @@ struct PullRequestListView: View {
         // reviewerů` v panelu. A nabízí filtr **vypnout**, ať se z toho stavu dá vyjít jedním
         // kliknutím: schovaný PR vypadá jako vyřízený.
         case .filtered(let hidden):
-            ContentUnavailableView {
-                Label("Filtr schoval všechno", systemImage: "line.3.horizontal.decrease.circle.fill")
-            } description: {
-                Text(verbatim: "\(Plural.czech(hidden, one: "pull request čeká", few: "pull requesty čekají", many: "pull requestů čeká")) na review, ale filtr je schovává.")
-            } actions: {
-                Button("Vymazat filtr") { store.clearFilter() }
-            }
+            EmptyStateView(
+                // **Ne `calm`.** Zelené „vyřízeno“ nad zapnutým filtrem tvrdí opak toho, co je
+                // pravda: práce je, jen ji nevidím.
+                nature: .waiting,
+                symbol: "line.3.horizontal.decrease",
+                title: "Filtr schoval všechno",
+                message: "\(Plural.czech(hidden, one: "pull request čeká", few: "pull requesty čekají", many: "pull requestů čeká")) na review, ale filtr je schovává.",
+                primary: .init(title: "Vymazat filtr") { store.clearFilter() }
+            )
         case .poll(.loading):
             ProgressView("Načítám PR…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .poll(.noPullRequests):
-            ContentUnavailableView(
-                "Žádné PR k review",
-                systemImage: "checkmark.circle",
-                description: Text("Až po tobě někdo bude chtít review, objeví se tady.")
+            EmptyStateView(
+                nature: .calm,
+                symbol: "checkmark",
+                title: "Žádné PR k review",
+                message: lastTick.map { "Až po tobě někdo bude chtít review, objeví se tady. Poslední tik v \($0)." }
+                    ?? "Až po tobě někdo bude chtít review, objeví se tady."
             )
         case .poll(.failure(let reason)):
-            ContentUnavailableView(
-                "Seznam PR se nepodařilo načíst",
-                systemImage: "exclamationmark.triangle",
-                description: Text(reason.userDescription)
+            EmptyStateView(
+                nature: .failure,
+                symbol: "exclamationmark.triangle",
+                title: "Seznam PR se nepodařilo načíst",
+                message: "Zkusím to znovu při dalším tiku.",
+                // Syrový text od `gh` zůstává — je to jediné, z čeho se pozná, co dělat dál.
+                detail: reason.userDescription,
+                primary: .init(title: "Zkusit znovu") { Task { await store.refresh() } }
             )
         case .poll(.rateLimited(let retryAt)):
-            ContentUnavailableView(
-                "GitHub omezuje dotazy",
-                systemImage: "hourglass",
-                description: Text("Zkusím to znovu v \(retryAt.formatted(date: .omitted, time: .shortened)).")
+            EmptyStateView(
+                // Čekání, ne porucha: nic se nerozbilo, jen se aplikace ptala moc.
+                nature: .waiting,
+                symbol: "hourglass",
+                title: "GitHub omezuje dotazy",
+                message: "Zkusím to znovu v \(retryAt.formatted(date: .omitted, time: .shortened)). Seznam zůstává takový, jaký dorazil naposled."
             )
         }
+    }
+
+    /// Kdy naposledy tik prošel — do věty prázdného stavu, jak to má návrh. `nil`, dokud
+    /// se nepovedl ani jeden: „poslední tik nikdy“ by nebyla informace.
+    private var lastTick: String? {
+        store.lastSuccess?.formatted(date: .omitted, time: .shortened)
     }
 
     private var list: some View {

@@ -12,10 +12,11 @@ struct SettingsScene: View {
         if let store = preflight.store {
             SettingsView(store: store)
         } else {
-            ContentUnavailableView(
-                "Nastavení zatím není k dispozici",
-                systemImage: "gearshape",
-                description: Text("Otevře se, jakmile projde kontrola prostředí.")
+            EmptyStateView(
+                nature: .waiting,
+                symbol: "gearshape",
+                title: "Nastavení zatím není k dispozici",
+                message: "Otevře se, jakmile projde kontrola prostředí."
             )
             .frame(width: 480, height: 260)
         }

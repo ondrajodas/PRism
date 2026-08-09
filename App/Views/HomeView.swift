@@ -57,10 +57,11 @@ struct HomeView: View {
     @ViewBuilder private var draftList: some View {
         let rows = store.pullRequestsWithDraft
         if rows.isEmpty {
-            ContentUnavailableView(
-                "Nic rozdělaného",
-                systemImage: "square.and.pencil",
-                description: Text(verbatim: RailSection.drafts.emptyExplanation)
+            EmptyStateView(
+                nature: .calm,
+                symbol: "square.and.pencil",
+                title: "Nic rozdělaného",
+                message: RailSection.drafts.emptyExplanation
             )
         } else {
             List(rows, id: \.id, selection: $store.selection) { pullRequest in

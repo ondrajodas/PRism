@@ -27,10 +27,11 @@ struct RepositorySettingsView: View {
 
     @ViewBuilder private var list: some View {
         if repositories.isEmpty {
-            ContentUnavailableView(
-                "Žádné repozitáře",
-                systemImage: "folder",
-                description: Text("Objeví se tu, jakmile dorazí první PR.")
+            EmptyStateView(
+                nature: .calm,
+                symbol: "folder",
+                title: "Žádné repozitáře",
+                message: "Objeví se tu, jakmile dorazí první PR."
             )
         } else {
             List(repositories, id: \.self, selection: $selection) { repo in
@@ -59,10 +60,11 @@ struct RepositorySettingsView: View {
         if let repo = selection, repositories.contains(repo) {
             RepositoryDetailView(settings: settings, repo: repo)
         } else {
-            ContentUnavailableView(
-                "Vyber repozitář",
-                systemImage: "sidebar.left",
-                description: Text("Vlevo jsou repa z posledního seznamu PR i z konfigurace.")
+            EmptyStateView(
+                nature: .waiting,
+                symbol: "sidebar.left",
+                title: "Vyber repozitář",
+                message: "Vlevo jsou repa z posledního seznamu PR i z konfigurace."
             )
         }
     }

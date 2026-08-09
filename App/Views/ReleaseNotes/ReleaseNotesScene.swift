@@ -48,10 +48,11 @@ struct ReleaseNotesScene: View {
         if let model = preflight.releaseNotes {
             ReleaseNotesView(model: model)
         } else {
-            ContentUnavailableView(
-                "Novinky zatím nejsou k dispozici",
-                systemImage: "sparkles",
-                description: Text("Stahují se přes gh, takže se ukážou, až projde kontrola prostředí.")
+            EmptyStateView(
+                nature: .waiting,
+                symbol: "sparkles",
+                title: "Novinky zatím nejsou k dispozici",
+                message: "Stahují se přes gh, takže se ukážou, až projde kontrola prostředí."
             )
             .frame(width: 480, height: 260)
         }

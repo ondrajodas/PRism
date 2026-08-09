@@ -27,10 +27,11 @@ struct ReleaseNotesView: View {
         case .failed(let reason):
             failure(reason)
         case .loaded(let releases) where releases.isEmpty:
-            ContentUnavailableView(
-                "Žádná vydání",
-                systemImage: "shippingbox",
-                description: Text("V repozitáři \(Release.repository.description) zatím žádné vydání není.")
+            EmptyStateView(
+                nature: .calm,
+                symbol: "shippingbox",
+                title: "Žádná vydání",
+                message: "V repozitáři \(Release.repository.description) zatím žádné vydání není."
             )
         case .loaded(let releases):
             split(releases)
@@ -40,15 +41,14 @@ struct ReleaseNotesView: View {
     /// Selhání s důvodem a tlačítkem — ne mlčení a ne prázdný seznam. Bez sítě se nesmí
     /// z výpadku stát „nic tu není“.
     private func failure(_ reason: String) -> some View {
-        ContentUnavailableView {
-            Label("Novinky se nepodařilo načíst", systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(reason)
-        } actions: {
-            Button("Zkusit znovu") {
-                Task { await model.reload() }
-            }
-        }
+        EmptyStateView(
+            nature: .failure,
+            symbol: "exclamationmark.triangle",
+            title: "Novinky se nepodařilo načíst",
+            message: "Stahují se přes gh, takže z výpadku sítě nesmí být „nic tu není“.",
+            detail: reason,
+            primary: .init(title: "Zkusit znovu") { Task { await model.reload() } }
+        )
     }
 
     private func split(_ releases: [Release]) -> some View {
@@ -78,10 +78,11 @@ struct ReleaseNotesView: View {
         if let release = releases.first(where: { $0.tag == model.selection }) {
             ReleaseNotesDetailView(release: release)
         } else {
-            ContentUnavailableView(
-                "Vyber verzi",
-                systemImage: "sidebar.left",
-                description: Text("Vlevo je seznam vydání, vpravo se ukáže, co se v něm změnilo.")
+            EmptyStateView(
+                nature: .waiting,
+                symbol: "sidebar.left",
+                title: "Vyber verzi",
+                message: "Vlevo je seznam vydání, vpravo se ukáže, co se v něm změnilo."
             )
         }
     }
