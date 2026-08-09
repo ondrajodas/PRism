@@ -531,6 +531,7 @@ struct PullRequestDetailView: View {
     private var overview: some View {
         OverviewView(
             description: store.description(of: pullRequest.id),
+            facts: facts,
             changes: store.changesSinceLastVisit(for: pullRequest.id),
             lastVisit: store.visitSnapshots[pullRequest.id],
             // Obojí je „to, co mám na obrazovce, už neplatí“, takže se do banneru slévá do
@@ -560,6 +561,36 @@ struct PullRequestDetailView: View {
             isStale: store.reviewRecord(for: pullRequest.id)?.isStale == true
                 || store.isDraftStale(for: pullRequest.id),
             rerun: { store.startReview(for: pullRequest.id) }
+        )
+    }
+
+    /// Čísla do dlaždic (#198). Skládají se z toho, co v okně **už je** — diff, časová osa,
+    /// hlava PR a sha nálezů; nic se pro ně nedotahuje.
+    private var facts: PullRequestFacts {
+        let diff: Diff? = if case .loaded(let loaded, _) = store.diffState(for: pullRequest.id) {
+            loaded
+        } else {
+            nil
+        }
+        let markers = diff.map { _ in
+            Policy.fileMarkers(
+                of: store.reviewRecord(for: pullRequest.id)?.activeFindings ?? [],
+                categories: blockingCategories
+            )
+        } ?? [:]
+        let events = store.conversation(for: pullRequest.id)?.events
+        let changes = store.changesSinceLastVisit(for: pullRequest.id)
+        return Policy.facts(
+            commits: events?.items.count { if case .commit = $0.kind { true } else { false } } ?? 0,
+            newCommits: changes.commits.count,
+            files: diff?.files.count ?? 0,
+            // Nálezy patří k souborům diffu, ne k cestám ze záznamu: nález na souboru, který
+            // v dnešním diffu není, by dlaždici nafoukl o číslo, které nemá kde být vidět.
+            filesWithFindings: diff?.files.count { markers[$0.displayPath] != nil } ?? 0,
+            // Utnutá stránka událostí = počet commitů neznáme přesně.
+            areCommitsExact: events.map { !$0.hasNextPage } ?? false,
+            headSha: loadedDetail?.headSha,
+            findingsHeadSha: store.reviewRecord(for: pullRequest.id)?.headSha
         )
     }
 

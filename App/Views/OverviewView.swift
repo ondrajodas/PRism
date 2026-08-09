@@ -12,6 +12,8 @@ import SwiftUI
 struct OverviewView: View {
     /// Popis PR. `nil` = detail se ještě nenačetl, což je jiný stav než „autor nic nenapsal“.
     var description: String?
+    /// Fakta o PR do dlaždic (#198). Prázdná = řádek se nekreslí.
+    var facts: PullRequestFacts = PullRequestFacts(tiles: [])
     /// Co přibylo od poslední návštěvy (#173). Prázdné = nic, nebo se ještě nenačetla
     /// konverzace; banner se v obou případech nekreslí.
     var changes: VisitChanges = .none
@@ -44,6 +46,11 @@ struct OverviewView: View {
                     )
                 }
                 descriptionCard
+                // Dlaždice **pod popisem**, ne nad ním: popis je to, co autor chce, aby se
+                // přečetlo, čísla jsou kontext k němu.
+                if !facts.isEmpty {
+                    PullRequestFactsView(facts: facts)
+                }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -56,37 +63,52 @@ struct OverviewView: View {
 
     // MARK: - Popis PR
 
+    /// Karta s popisem podle návrhu (sekce 03, `.desc`): **hlavička oddělená linkou**, ne blok
+    /// šedi. Popis PR bývá dlouhý — půl obrazovky jednolitého podkladu se čte hůř než plocha
+    /// s obrysem, ve které je vidět, kde začíná a končí.
     private var descriptionCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Text(verbatim: pullRequest.author)
-                    .font(.callout.weight(.semibold))
+                    .font(.system(size: 12, weight: .semibold))
                 Text(verbatim: pullRequest.state.czechLabel)
-                    .font(.caption2)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.ink2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(.quaternary, in: .capsule)
+                    .background(Palette.raised, in: .capsule)
                 Text(pullRequest.updatedAt, format: .relative(presentation: .named))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Palette.ink3)
                 Spacer(minLength: 0)
                 Link(destination: pullRequest.url) {
                     Label("Otevřít na GitHubu", systemImage: "arrow.up.right.square")
-                        .font(.caption)
+                        .font(.system(size: 11.5))
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
+
             descriptionBody
+                .padding(.horizontal, 13)
+                .padding(.top, 11)
+                .padding(.bottom, 13)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quinary, in: .rect(cornerRadius: 8))
+        .background(Palette.chrome, in: .rect(cornerRadius: 7))
+        .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line, lineWidth: 1) }
     }
 
     /// Popis se **renderuje** (`MarkdownText`) — je to Markdown a jako holý text s `##`
     /// a `- [x]` vypadá popis PR nečitelně.
     @ViewBuilder private var descriptionBody: some View {
         if let description, !description.isEmpty {
-            MarkdownText(text: description)
+            // Písmo z návrhu: próza 12,5, nadpisy si `MarkdownText` odvodí. Popis PR je
+            // nejdelší souvislý text v okně, takže o stupeň menší než zbytek — jinak
+            // z něj na obrazovku padne polovina.
+            MarkdownText(text: description, font: .system(size: 12.5))
         } else if description == nil {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)

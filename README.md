@@ -90,6 +90,11 @@ Záložky jsou podtržené jako na GitHubu a odznak u `Konverzace` říká, koli
 Volba se pamatuje **u každého PR zvlášť** a otevírá se `Přehled` — popis a diskuze se čtou dřív
 než kód, kterého se týkají.
 
+Pod popisem PR jsou **dlaždice s fakty** (#198): kolik je commitů a kolik z nich přibylo od minule,
+kolik souborů se mění a v kolika je nález, hlava PR a — **jen když se rozešla** — sha, proti které
+platí nálezy. Nic se pro ně netahá z API; jsou to čísla, která v okně už byla, jen roztroušená.
+Dlaždice, o které se nedá nic říct, se nekreslí.
+
 Úplně nahoře v `Přehledu` je **co se změnilo od tvé poslední návštěvy** (#173): nové commity,
 cizí review, komentáře — a hlavně **přepsaná historie větve**, protože právě po ní zastarají
 nálezy i rozdělané review. Tenhle jeden případ má vlastní barvu i větu o důsledku a nabízí
