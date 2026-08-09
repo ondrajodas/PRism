@@ -9,6 +9,15 @@ import SwiftUI
 /// odsazení není z řádků poznat, co je pod čím.
 struct FileTreeView: View {
     let files: [FileDiff]
+    /// Které soubory nesou nález (#197). Prázdné = nekreslí se žádná značka.
+    var markers: [String: FileMarker] = [:]
+    /// Úsporná sazba pro levý sloupec u diffu (#197).
+    ///
+    /// Ve sloupci 210 bodů širokém se **nevejde nic než jméno a značka**: počty `+/−` zaberou
+    /// přes padesát bodů a slovní odznak (`nový`) další čtyřicet, takže na jméno zbyde `…S.md`.
+    /// Návrh to tak taky kreslí — počty jsou u hlavičky souboru v diffu, kde je na ně místo.
+    /// Popover (420 bodů) zůstává v plné sazbě.
+    var isCompact = false
     let jump: (FileDiff) -> Void
 
     /// Sbalené složky. Výchozí je **rozbaleno** — seznam slouží ke skoku na soubor, takže
@@ -19,13 +28,19 @@ struct FileTreeView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(FileTreeNode.tree(of: files)) { node in
-                    FileTreeBranch(node: node, depth: 0, collapsed: $collapsed, jump: jump)
+                    FileTreeBranch(
+                        node: node,
+                        depth: 0,
+                        collapsed: $collapsed,
+                        markers: markers,
+                        isCompact: isCompact,
+                        jump: jump
+                    )
                 }
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 10)
         }
-        .frame(width: 420, height: 320)
     }
 }
 
@@ -34,16 +49,26 @@ private struct FileTreeBranch: View {
     let node: FileTreeNode
     let depth: Int
     @Binding var collapsed: Set<String>
+    let markers: [String: FileMarker]
+    let isCompact: Bool
     let jump: (FileDiff) -> Void
 
     /// O kolik se odsazuje každá úroveň. Šířka šipky a ikony, ať řádky drží sloupec.
-    private static let indent = 18.0
+    /// V úzkém sloupci míň — každá úroveň jinak ukousne z jména.
+    private var indent: Double { isCompact ? 11 : 18 }
 
     var body: some View {
         row
         if let children = node.children, !collapsed.contains(node.id) {
             ForEach(children) { child in
-                FileTreeBranch(node: child, depth: depth + 1, collapsed: $collapsed, jump: jump)
+                FileTreeBranch(
+                    node: child,
+                    depth: depth + 1,
+                    collapsed: $collapsed,
+                    markers: markers,
+                    isCompact: isCompact,
+                    jump: jump
+                )
             }
         }
     }
@@ -67,26 +92,48 @@ private struct FileTreeBranch: View {
             chevron
             Image(systemName: file == nil ? "folder" : symbol(of: file))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                // Ikona nese **druh změny barvou**, ne jen tvarem: zelená přidává, červená
+                // maže, modrá přejmenovává. Tvar sám se u `plus.square` a `minus.square` čte
+                // až po zaostření, kdežto barva se vezme periferně — tatáž úvaha jako
+                // u proužku v řádku fronty. Složka a obyčejná změna zůstávají tlumené,
+                // aby v seznamu svítilo jen to, co je zvláštní.
+                .foregroundStyle(file.flatMap(tint(of:)) ?? .secondary)
                 .frame(width: 14)
             Text(verbatim: node.name)
-                .font(.callout)
+                .font(isCompact ? .caption : .callout)
                 .foregroundStyle(file == nil ? .secondary : .primary)
                 .lineLimit(1)
-                .truncationMode(.head)
-            if let badge = file.flatMap(badge(of:)) {
+                // **Soubor se ořezává zezadu, složka zepředu.** U jména souboru nese význam
+                // začátek (`SecretClient.php` a `SecretClientTest.php` se poznají jen podle
+                // něj), kdežto u cesty ke složce ta poslední část.
+                .truncationMode(file == nil ? .head : .tail)
+            if let marker = file.flatMap({ markers[$0.displayPath] }) {
+                // Puntík, ne text: v sloupci 210 bodů širokém je místo na cestu, ne na slovo.
+                // Barva je tatáž škála jako v řádku fronty a na kartě nálezu.
+                Circle()
+                    .fill(marker == .blocking ? Color.red : Color.orange)
+                    .frame(width: 6, height: 6)
+                    .help(marker == .blocking ? "Je tu blokující nález" : "Jsou tu nálezy")
+            }
+            if let badge = file.flatMap(badge(of:)), !isCompact {
                 Text(badge)
                     .font(.caption2)
                     .padding(.horizontal, 4)
                     .background(.quaternary, in: .capsule)
             }
-            Spacer(minLength: 8)
-            DiffCounts.text(additions: node.additions, deletions: node.deletions)
-                .font(.caption)
-                .monospacedDigit()
+            Spacer(minLength: 6)
+            // **Ve sloupci žádné počty** (#197). Zkoušely se vedle jména i pod ním a obojí bylo
+            // horší než nic: vedle ukously jméno, pod ním rozhodily řádkování. GitHub je ve
+            // stromu nemá taky — patří k hlavičce souboru v diffu, kde je na ně místo.
+            // V popoveru (420 bodů) zůstávají, tam se vejdou.
+            if !isCompact {
+                DiffCounts.text(additions: node.additions, deletions: node.deletions)
+                    .font(.caption)
+                    .monospacedDigit()
+            }
         }
         .padding(.vertical, 2)
-        .padding(.leading, Double(depth) * Self.indent)
+        .padding(.leading, Double(depth) * indent)
         .contentShape(.rect)
     }
 
@@ -100,6 +147,16 @@ private struct FileTreeBranch: View {
                 .frame(width: 10)
         } else {
             Color.clear.frame(width: 10, height: 1)
+        }
+    }
+
+    /// Barva ikony podle druhu změny. `nil` = beze změny odstínu (složka, upravený soubor).
+    private func tint(of file: FileDiff) -> Color? {
+        switch file.change {
+        case .added: .green
+        case .deleted: .red
+        case .renamed: .blue
+        case .modified: nil
         }
     }
 
