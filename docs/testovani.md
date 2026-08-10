@@ -932,16 +932,18 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   Že se okno **nerozpůlí mezi monitory**, vyšlo z testu, který nejdřív čekal opak a spadl:
   hostitel přes hranu dvou monitorů posune okno celé na ten s větším průnikem. Zapsané jako
   chování, ne jako překlep v testu.
-- **`AuxiliaryWindowLevel` (#243)** — na rozdíl od středění se tady testuje **`NSWindow`**, protože
-  obě hodnoty jsou jeho vlastnosti a nedají se z ničeho spočítat; okno se v testu jen vyrobí, nikdo
-  ho neukazuje. Nejcennější je tvrzení o **`hidesOnDeactivate`**: samo `.floating` je ta naivní
-  oprava, po které okno plave i nad cizími aplikacemi, a test jen na hladinu by o tom mlčel. Proto
-  se ověřují obě hodnoty zvlášť a k tomu, že hladina **oknem nehýbe** — středění (#164) a hladina
-  jsou dvě věci udělané témuž oknu a nemají si do sebe mluvit.
+- **`AuxiliaryWindowLevel` (#243)** — na rozdíl od středění se tady testuje i **`NSWindow`**,
+  protože hladina je jeho vlastnost; okno se v testu jen vyrobí, nikdo ho neukazuje. Nejcennější
+  jsou dvě tvrzení o tom, co se stát **nesmí**: že v neaktivní aplikaci hladina padá zpátky na
+  `.normal` (jinak by okno plavalo i nad cizími aplikacemi — to je ta naivní oprava) a že se okno
+  **neskrývá** (`hidesOnDeactivate` zůstává `false`). To druhé je zapsané chování, ne detail:
+  skryté okno se s SwiftUI umí rozejít a zůstat mimo obrazovku, ačkoli je scéna otevřená. K tomu
+  ještě, že hladina **oknem nehýbe** — středění (#164) a hladina jsou dvě věci udělané témuž oknu
+  a nemají si do sebe mluvit.
 
-  Zbytek téhle změny je chování oken, které unit test nepokryje — pořadí oken, skrytí při odchodu
-  aplikace do pozadí a to, že se zavřené okno nevrací. Ověřuje se **spuštěním**, viz *Jak změřit
-  pořadí a hladinu oken* níž.
+  Zbytek téhle změny je chování oken, které unit test nepokryje — pořadí oken, hladina za běhu
+  a to, že se zavřené okno nevrací. Ověřuje se **spuštěním**, viz *Jak změřit pořadí a hladinu
+  oken* níž.
 - **`CacheEviction`** — proti skutečné dočasné složce, ne proti fake filesystému: rozpočet
   je injektovatelný, takže stačí malé soubory. Pozor, počítá se **alokovaná** velikost, tedy
   po blocích — stobajtový soubor zabere 4 KB a testovací rozpočty musí být řádově výš.
@@ -1093,11 +1095,12 @@ CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNu
 ```
 
 Hladina je to, co dokazuje „nedá se zaklopit“ **bez klikání**: okno na `layer 3` nemá čím zakrýt
-žádné okno aplikace na `layer 0`, to je pravidlo window serveru. Pořadí z accessibility k tomu
-řekne, jestli je okno vůbec na obrazovce — skryté okno v seznamu **není**, takže „přepnul jsem do
-jiné aplikace a není vidět“ se pozná tím, že ze seznamu zmizí.
+žádné okno aplikace na `layer 0`, to je pravidlo window serveru. A protože se z `CGWindowList` čte
+hladina i pořadí, pozná se z ní obojí naráz — že okno je vpředu, a taky že po odchodu aplikace do
+pozadí **spadlo zpátky na `layer 0`**, tedy nad cizí aplikací nestojí. Pořadí z accessibility k tomu
+řekne, které okno je uvnitř aplikace před kterým.
 
-Tři pasti, každá stála kolo hledání:
+Čtyři pasti, každá stála kolo hledání:
 
 - **Procesy se nesmí adresovat jménem.** Při paralelním vývoji běží víc PRismů a všechny mají
   `application process "PRism"` — takže `tell process "PRism"` sáhne do cizí instance. Cíl se
@@ -1115,10 +1118,18 @@ Tři pasti, každá stála kolo hledání:
   před #243, kde se pořadí neměnilo ani jedním z nich, takže by z nich vyšlo, že porucha
   neexistuje.
 
-A dvě věci o měření samotném: čekat se musí **velkoryse** (aktivace aplikace a obnovení skrytého
-okna trvá i přes sekundu a s krátkou pauzou vyjde „okno se nevrátilo“ tam, kde se jen ještě
-nevrátilo), a měřit se má **z čistého stavu** — okno nechané otevřené z předchozího běhu skriptu
-posune celou posloupnost o krok a výsledek pak nejde přečíst.
+- **Zavírat se má křížkem přes accessibility** (`click button 1 of window 1 …`), ne klávesou.
+  `⌘W` zavře okno, které má **fokus**, a to po předchozím kroku nemusí být to, co si měření myslí;
+  `Esc` v textovém poli spolkne pole (ruší editaci), takže se nezavře nic. Obojí vypadá jako
+  porucha okna, přitom je to porucha měření — jméno okna se proto **ověří** dřív, než se křížek
+  zmáčkne, aby se omylem nezavřelo hlavní okno.
+
+A dvě věci o měření samotném: čekat se musí **velkoryse** (aktivace aplikace trvá i přes sekundu
+a s krátkou pauzou vyjde „okno tam není“ tam, kde se jen ještě neukázalo), a měřit se má
+**z čistého stavu** — okno nechané otevřené z předchozího běhu skriptu, nebo přebylé okno hlavní
+scény, posune celou posloupnost o krok a výsledek pak nejde přečíst. Právě takhle vzniklo
+podezření na poruchu aplikace, kde byla ve skutečnosti rozsypaná posloupnost kláves; rozhodlo až
+opakování z čistého stavu.
 
 Co se **nedá naklikat** (chybějící binárka, chyba sítě, prázdný stav nad plnou frontou), se dá
 vykreslit dočasným testem přes `ImageRenderer` do PNG ve scratchpadu. Před commitem se maže.

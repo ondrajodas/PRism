@@ -25,7 +25,7 @@ struct ReleaseNotesScene: View {
             // z menu a po aktualizaci — tedy vždycky od něj, takže tam se člověk v tu chvíli
             // kouká. Mechanismus je tentýž, jakým se od začátku středí nastavení.
             .centeredInMainWindow()
-            // **A zůstane před hlavním oknem, dokud je otevřené** (#243) — tou samou dvojicí jako
+            // **A zůstane před hlavním oknem, dokud je otevřené** (#243) — tímtéž mechanismem jako
             // nastavení, viz `AuxiliaryWindowLevel`. Bez toho se okno vystředěné v hlavním okně
             // schová za ním celé a vypadá to, že se zavřelo.
             .keptInFrontOfApp()

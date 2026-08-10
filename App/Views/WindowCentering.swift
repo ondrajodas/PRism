@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// Vystředění pomocného okna **v hlavním okně aplikace**, ne na obrazovce.
@@ -75,18 +76,27 @@ enum WindowCentering {
 /// středí v něm (#164), zmizí beze zbytku. Změřeno: hlavní okno 1296×1032, nastavení 900×452,
 /// tedy schované celé. Vypadá to jako zavřené a `⌘,` to jen znovu vytáhne dopředu.
 ///
-/// **Je to dvojice a nedá se rozdělit.** `.floating` samo by okno vyneslo i nad **cizí** aplikace,
-/// takže z „v popředí aplikace“ by bylo „v popředí všeho“; `hidesOnDeactivate` ho drží v aplikaci
-/// tím, že se okno s odchodem aplikace do pozadí skryje. Proto jsou obě hodnoty na jednom místě
-/// a je na ně test — sama o sobě je každá z nich chyba.
+/// **Hladina je funkce toho, jestli je aplikace vpředu**, ne jednorázové nastavení. `.floating`
+/// samo by okno vyneslo i nad **cizí** aplikace, takže z „v popředí aplikace“ by bylo „v popředí
+/// všeho“ — a jak aplikace přestane být vpředu, hladina proto padá zpátky na `.normal`. Okno tím
+/// nad cizí aplikací nikdy nestojí; leží pod ní jako každé jiné okno a v aplikaci si drží místo
+/// před hlavním oknem, protože se pořadí mezi okny stejné hladiny nemění.
 ///
-/// **Skrytí není zavření.** Okno se jen odsune z obrazovky (`orderOut`), obsah scény žije dál,
-/// takže se rozepsaná hodnota v nastavení neztratí a po návratu do aplikace je okno zpátky i s ní.
-/// Zavřené okno se přitom nevrací: systém ukazuje jen ta, která schoval sám.
+/// **Okno se přitom nikdy neschovává, a to je schválně** (změna proti zadání #243, které
+/// doporučovalo `hidesOnDeactivate`). Skrytí je stav, který se s SwiftUI umí rozejít: při zkoušení
+/// se okno **třikrát** ocitlo mimo obrazovku, ačkoli scéna dál žila — aktivace aplikace ho
+/// nevrátila a `⌘,` s ním nepohnulo, protože pro SwiftUI bylo pořád otevřené; vrátilo se až dalším
+/// přepnutím aplikace. To je tatáž porucha, jakou tohle issue opravuje, jen o vrstvu vedle. Hladina
+/// proti tomu žádný stav nedrží: co je zavřené, zůstane zavřené, a co je otevřené, je vidět.
 enum AuxiliaryWindowLevel {
-    static func apply(to window: NSWindow) {
-        window.level = .floating
-        window.hidesOnDeactivate = true
+    /// `.floating` dokud je aplikace vpředu, jinak `.normal`.
+    static func level(appIsActive: Bool) -> NSWindow.Level {
+        appIsActive ? .floating : .normal
+    }
+
+    /// Nastaví hladinu okna. **Nic jiného nedělá** — okno nepřesouvá ani neskrývá.
+    static func apply(to window: NSWindow, appIsActive: Bool) {
+        window.level = level(appIsActive: appIsActive)
     }
 }
 
@@ -128,7 +138,75 @@ extension View {
     /// co mluvit. Nastavení proto hladinu dostává na **scéně** — platí i pro stav před
     /// preflightem, kde se formulář ještě nemá čím naplnit — a středění zůstává u formuláře.
     func keptInFrontOfApp() -> some View {
-        background(WindowReader(onWindow: AuxiliaryWindowLevel.apply))
+        modifier(KeptInFrontOfApp())
+    }
+}
+
+/// Drží hladinu okna podle toho, jestli je aplikace vpředu.
+///
+/// Zdrojem pravdy je **`NSApp.isActive` a jeho notifikace**, ne `controlActiveState` z prostředí.
+/// To druhé bylo první verze a **nefungovalo**: nad obsahem scény zůstalo `.inactive`, i když byla
+/// aplikace vpředu a okno bylo klíčové, takže se hladina nezvedla ani jednou (změřeno — okno
+/// zůstalo na `layer 0` a nové okno hlavní scény ho zaklopilo). Hlouběji ve `SettingsView` ta
+/// hodnota chodí, ale hladina patří k oknu, ne k formuláři, a mechanismus, který funguje jen
+/// v jednom místě hierarchie, je past.
+///
+/// Aktivace aplikace **nerozlišuje, které okno je vpředu** — a to je záměr: kliknutí do hlavního
+/// okna nesmí pomocné okno poslat dozadu, protože přesně to tohle issue opravuje.
+private struct KeptInFrontOfApp: ViewModifier {
+    @State private var appIsActive = NSApp?.isActive ?? true
+
+    func body(content: Content) -> some View {
+        content
+            .background(WindowLevelSetter(appIsActive: appIsActive))
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                appIsActive = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
+                appIsActive = false
+            }
+    }
+}
+
+/// Přenese hladinu na `NSWindow`. Vlastní typ vedle `WindowReader`, protože se musí hlásit
+/// **i při změně** — `WindowReader` hlásí okno jen jednou, při vzniku obsahu, což je pravidlo
+/// středění (#164) a hladině by nestačilo.
+private struct WindowLevelSetter: NSViewRepresentable {
+    let appIsActive: Bool
+
+    func makeNSView(context: Context) -> WindowLevelView {
+        let view = WindowLevelView(frame: .zero)
+        view.appIsActive = appIsActive
+        return view
+    }
+
+    func updateNSView(_ view: WindowLevelView, context: Context) {
+        view.appIsActive = appIsActive
+    }
+}
+
+/// View, které hladinu nastavuje **ve chvíli, kdy se dozví o svém okně** (`viewDidMoveToWindow`),
+/// a pak při každé změně.
+///
+/// Odložení na `DispatchQueue.main.async` z `makeNSView`, jak to dělá `WindowReader`, tady
+/// **nestačilo**: změřeno, že okno nastavení se hned po `⌘,` otevřelo na `layer 0` a hladina se
+/// zvedla teprve při dalším překreslení scény. Okno, které je vpředu až po chvíli, je pro tohle
+/// issue polovičaté — a `viewDidMoveToWindow` je hook, který k tomu AppKit má.
+private class WindowLevelView: NSView {
+    var appIsActive: Bool = true {
+        didSet { apply() }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        apply()
+    }
+
+    /// `nil` okno znamená **nedělat nic**: view může být mimo hierarchii (náhled, offscreen
+    /// render) a hádat okno by znamenalo sáhnout na cizí.
+    private func apply() {
+        guard let window else { return }
+        AuxiliaryWindowLevel.apply(to: window, appIsActive: appIsActive)
     }
 }
 

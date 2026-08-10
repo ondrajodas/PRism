@@ -14,7 +14,7 @@ struct SettingsScene: View {
             // **Nastavení zůstává před hlavním oknem, dokud je otevřené** (#243). Hladina je
             // vlastnost okna, ne formuláře, takže se nastavuje tady — platí tím i pro stav bez
             // storu, ve kterém by se okno jinak umělo schovat za hlavní okno stejně jako předtím
-            // ten formulář. Co to dělá a proč je to dvojice, je u `AuxiliaryWindowLevel`.
+            // ten formulář. Co přesně se s hladinou děje, je u `AuxiliaryWindowLevel`.
             .keptInFrontOfApp()
     }
 
