@@ -375,6 +375,51 @@ struct DiffPerformanceMeasurement {
         measure("WordDiff.spans, celý soubor o \(lines.count) řádcích") { _ = WordDiff.spans(in: lines) }
     }
 
+    /// **Jaký podíl na skládání bloku má word-level rozdíl** — a tím pádem, kolik z ceny
+    /// projíždění diffu vedle sebe jde za #153.
+    ///
+    /// Tohle je to měření, které rozhoduje otázku „ztuhlo to kvůli #153?“. Při scrollování se
+    /// bloky recyklují, takže se `DiffPairBlockContainer.show(…)` volá na každý blok, který vjede
+    /// do okna — jeho cena je tedy cena scrollování. Měří se proto **celé skládání** proti
+    /// **samotnému `WordDiff`u** na týchž datech; podíl druhého v prvním je celý příspěvek #153.
+    ///
+    /// Naměřeno na tomhle stroji: 27 bloků po 60 řádcích **79,1 ms**, z toho `WordDiff` **14,2 ms**
+    /// — tedy **18 %**. Jsou to **samé dvojice**, takže je to nejhorší případ; ve skutečném diffu je
+    /// většina řádků kontext, u kterého `WordDiff` nedělá nic, kdežto `show` ho stejně vysází.
+    /// Zbylých 82 % je sazba v `NSTextView` a obarvení, a i ta je jen část ceny projíždění —
+    /// **u tuhnoucího okna se proto nemá sahat sem**, ale do rozvržení líného seznamu (#220, #223).
+    @MainActor
+    @Test("Podíl word-level rozdílu na skládání bloku (#153)")
+    func wordDiffShareOfBlockComposition() {
+        let language = Language(path: "Schema.swift")
+        let palette = SyntaxPalette.forScheme(.light)
+        let file = file(path: "src/Generated/Schema.swift", hunks: 1, linesPerHunk: 2400)
+        let blocks = DiffRow.blockedPairs(DiffRow.rows(of: file, layout: .split)).compactMap { row -> DiffPairBlock? in
+            if case .pairBlock(_, let block) = row { block } else { nil }
+        }
+        print("MĚŘENÍ bloků dvojic: \(blocks.count)")
+
+        // Podpis se musí lišit **pokaždé**, jinak se `show` vrátí za stráží a měří se stráž.
+        var round = 0
+        let container = DiffPairBlockContainer()
+        measure("DiffPairBlockContainer.show, \(blocks.count) bloků") {
+            round += 1
+            for (index, block) in blocks.enumerated() {
+                container.show(
+                    block,
+                    language: language,
+                    palette: palette,
+                    signature: "\(round)|\(index)",
+                    // Tatáž hodnota jako v `DiffPairBlockView` — s jinou by se měřila jiná sazba.
+                    gutter: DiffLineView.contentInset(for: .split)
+                )
+            }
+        }
+        measure("z toho WordDiff.spans(left:right:), \(blocks.count) bloků") {
+            for block in blocks { _ = WordDiff.spans(left: block.left, right: block.right) }
+        }
+    }
+
     // MARK: - Co stojí obarvení (#224)
 
     /// Před a po zavedení cache, na jednom souboru o 2400 řádcích.

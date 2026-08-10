@@ -701,8 +701,15 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   kontextový řádek nesvítí, ani když se mu rozsahy podstrčí.
 
   **Jak to vypadá, se ověřilo renderem** — `NSView` do bitmapy, viz *Jak si zkontrolovat, jak view
-  vypadá*. Z něj je i sytost pozadí: 30 % dá v tmavém režimu `#20572B` proti `#1A2B1F` řádku, při
-  20 % je rozdíl k neuvidění a při 40 % zvýraznění přebíjí to, že je řádek přidaný.
+  vypadá*.
+
+  **Sytost 30 % z toho renderu ale byla špatně a opravilo ji až okno** (viz
+  `DiffLineView.wordBackground(of:)`). Render jednoho bloku odpovídá na otázku „liší se ten kus od
+  zbytku řádku?“, jenže v okně se zvýraznění **hledá v celém diffu** a obvyklá změna je jedno
+  slovo, často jediný znak. Nahlášené nad `job-queue-daemon#858` jako „zvýraznění nevidím“, ačkoli
+  na řádku 1908 (`count: 7` → `8`) tam bylo. Je to obecnější poučení než jedna barva: **render
+  jednoho prvku neodpovídá na to, jestli se ten prvek dá v okně najít** — na to je potřeba
+  screenshot běžící aplikace nad skutečným PR. Teď je hodnota 50 % a je ověřená obojím.
 
   **Co se unit testem ověřit nedá:** vybírání textu, kontextové menu a tažení rozsahu. Kliky
   a pohyb myši se syntetizovat dají (`CGEvent` s `cgSessionEventTap` a `mouseEventClickState` —
@@ -1041,6 +1048,11 @@ a `Test run with 5 tests … passed after 0.001 seconds` je jediné, z čeho se 
 stál příkaz bez prefixu, takže vypadalo, že měření běželo. Když výpis `MĚŘENÍ` chybí, je to tenhle
 případ, ne že by se nic nenaměřilo.
 
+**Jedno měření se vybírá se závorkami: `…/wordDiffCost()`.** Bez nich `-only-testing` na funkci
+ze `swift-testing` nesedne na nic a běh skončí `Executed 0 tests` — zeleně, takže to vypadá jako
+prázdný výpis měření, ne jako špatný filtr. U celé suite (`-only-testing:PRismTests/…Measurement`)
+závorky nejsou.
+
 **Proč za přepínačem:** jeden render v hloubce 8 stojí 15 sekund CPU a tím hladoví ostatní testy.
 Bez toho přepínače z toho spadly dva časově citlivé testy v `RealEnvironmentTests`, které
 v izolaci procházejí — tedy pád bez chyby v kódu, přesně to, co test dělat nemá. Celá suite
@@ -1064,6 +1076,7 @@ Co harness měří:
 | model diffu na 2400 řádcích | dokládá, že model **není** příčina (jednotky ms) |
 | cena vykreslení podle délky bloku (#223) | z toho se vybral strop `DiffBlock.maxLines`; měří se **jeden blok** i celý soubor po blocích |
 | cena word-level rozdílu (#153) | proč se počítá až při skládání bloku: **0,42 ms** na blok o 60 řádcích samých dvojic proti **19,6 ms** za celý soubor o 2400 řádcích, což by se platilo při každém překreslení |
+| podíl word-diffu na skládání bloku (#153) | odpovídá na „ztuhlo to kvůli #153?“ — `DiffPairBlockContainer.show` na 27 blocích samých dvojic **79,1 ms**, z toho `WordDiff` **14,2 ms**, tedy **18 %** v nejhorším případě; skládání bloku je přitom jen část ceny scrollování |
 | cena obarvení se cachí a bez ní (#224) | tři čísla na jednom souboru o 2400 řádcích: `scan` bez cache **44 ms**, totéž z plné cache **0,30 ms** (~145×), naplnění prázdné cache **44 ms** — uložení se v šumu ztratí |
 | co v cache zůstane ležet (#224) | 68 kB textu run na 2400 řádků (~29 B na řádek), tedy z čeho se strop `capacity` překládá na kilobajty |
 
@@ -1080,6 +1093,34 @@ sed -n "$(grep -n 'Sort by top of stack' /tmp/hang.txt | cut -d: -f1),+30p" /tmp
 
 Rozlišit „točí se“ od „čeká“ je první krok — u #220 to bylo 100 % CPU po dvaceti minutách ve
 stejné rekurzi, což vylučuje deadlock i pomalé I/O a ukazuje na layout.
+
+**Druhý krok je vyloučit, že za to může poslední změna — a to se dělá měřením obou verzí na
+tomtéž vstupu.** Ztuhlé okno nad rozdělanou branchí svádí k tomu prohlásit tu branch za příčinu;
+u #153 to vyšlo naopak a stálo to hodinu. Co se ukázalo a co z toho platí obecně:
+
+- **Srovnání „main běží na 0 %, branch na 100 %“ nic neváží, dokud v obou nemáš tentýž PR
+  v tomtéž pohledu.** Scrollování velkého diffu vedle sebe stojí sekundy CPU v **obou** verzích;
+  aplikace, která zrovna nic nekreslí, stojí nula i tehdy, když je regrese uvnitř.
+- **Klikání přes `System Events` je moc hlučné na to, aby se z něj vyvozovala regrese.** Tentýž
+  scénář (fronta → `job-queue-daemon#858` → záložka s diffem ve splitu → rozbalit skrytý úsek →
+  sjet a vyjet) vyšel na mainu **5,4 s** a podruhé **12,5 s** CPU, na branchi **13,7 s** a **11,0 s**.
+  Rozptyl je větší než hledaný rozdíl, protože do toho mluví, kam scroll doopravdy dojel a co si
+  zrovna berou ostatní instance. Číslo, na kterém se dá stavět, musí být **bez GUI** — proto to
+  měření podílu v harnessu výš.
+- **Co bylo v sample vidět, byl obraz příčiny, ne příčina.** V zásobníku (6538 řádků, 3 s živého
+  procesu) byl náš kód **65×**, zbytek je `LazySubviewPlacements.placeSubviews` a
+  `_LazyLayoutViewCache` — tedy rozvržení líného seznamu. `WordDiff` ani `SyntaxHighlighter`
+  v něm **nebyly ani jednou**. `initializeWithCopy for DiffPairBlockView`, které tam vidět je, je
+  kopie struktury view při umísťování prvku — a ta struktura se #153 vůbec nezměnila.
+
+Vyloučené příčiny se zapisují stejně jako ta potvrzená (pravidlo z #220). Bez toho po nich sáhne
+příští session znovu — u #153 to byly tyhle tři:
+
+| Podezření | Čím padlo |
+|---|---|
+| Word-diff se počítá při každém umístění prvku | Počítá se za stráží na podpis obsahu v `DiffTextView.show(…)`; naměřeno **18 %** ceny skládání bloku v nejhorším případě (samé dvojice), na skutečném diffu méně |
+| `WordDiff.Spans` se dostalo do hodnoty, kterou SwiftUI kopíruje | `DiffPairBlockView` nemá o pole víc než před #153; spany drží `DiffTextView`, což je `NSView`, ne struktura view |
+| Nekonečná smyčka rozvržení, kterou #153 rozjelo | Tuhnutí se reprodukovalo **projížděním** velkého diffu vedle sebe a po zastavení scrollu se ustálí; na mainu se chová stejně |
 
 **Když se appka řídí přes `System Events`, ověř, že je vpředu, a klikej relativně k oknu.**
 `screencapture -R` bere **oblast obrazovky**, ne okno, takže pevné souřadnice míří po restartu

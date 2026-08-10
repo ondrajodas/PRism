@@ -689,5 +689,12 @@ bloku**, ne v modelu: blok o 60 řádcích stojí 0,42 ms, celý soubor 19,6 ms,
 každém překreslení diffu. Cenou je známé omezení — dvojici roztrženou hranicí bloku pohled pod sebou
 nezvýrazní.
 
+Při proklikání se z toho opravila **sytost zvýraznění (30 % → 50 %)**: třicet vyšlo z renderu
+jednoho bloku, jenže v okně se zvýraznění hledá v celém diffu a na jednoznakové změně se
+přehlédlo. A **vyloučilo se, že za tuhnoucí okno může tahle změna** — reprodukuje se projížděním
+velkého diffu vedle sebe a chová se stejně na mainu; `WordDiff` stojí 18 % ceny skládání bloku
+v nejhorším případě a v `sample`u ztuhlého procesu není vůbec. Tuhnutí je tedy vlastní issue
+v území #220/#223; postup a vyloučené příčiny jsou v [`testovani.md`](testovani.md).
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

@@ -377,17 +377,27 @@ struct DiffLineView: View {
     /// Tatáž barva jako u řádku, jen sytější: kus, který se přepsal, se má lišit od zbytku
     /// **svého** řádku, ne od okolí. Kreslí se přes řádkové pozadí (12 %), takže se sčítají.
     ///
-    /// **Třicet procent je z renderu, ne z odhadu** (#153). V tmavém režimu vyjde zvýrazněný kus
-    /// `#20572B` proti `#1A2B1F` zbytku řádku — zelená složka 87 proti 43. Při 20 % je to 72 proti
-    /// 43, tedy rozdíl, který se vedle sousedního řádku ztratí; při 40 % (`#23672F`, ve světlém
-    /// `#9DE1A8`) je zvýraznění sytější než pozadí celého řádku a přebíjí to, co má řádek říkat
-    /// jako první — že je přidaný, nebo odebraný.
+    /// **Padesát procent, změněno z třiceti při zkoušení #153.** Třicet vyšlo z renderu jednoho
+    /// bloku samotného, kde se zvýrazněný kus porovnává s tím vedle. V okně se ale hledá **v celém
+    /// diffu** — a tam se ukázalo, že na obvyklé změně (jedno slovo, často jediný znak) ho jde
+    /// přehlédnout: nahlášené jako „zvýraznění nevidím“ nad `job-queue-daemon#858`. Skládané barvy
+    /// (`green.opacity(x)` přes řádek 12 % přes pozadí okna):
+    ///
+    /// | | řádek | 30 % | 40 % | 50 % |
+    /// |---|---|---|---|---|
+    /// | světlý | `#E6F8EB` | `#B1E9BF` | `#9FE4B0` | `#8DDFA2` |
+    /// | tmavý | `#203324` | `#246234` | `#267239` | `#28823E` |
+    ///
+    /// Padesát je poslední hodnota, u které je zvýraznění **na první pohled** jiná plocha než
+    /// zbytek řádku; nad ní se v tmavém režimu ztrácí obarvení syntaxe pod ním. Původní námitka
+    /// (že sytější zvýraznění přebíjí to, že je řádek přidaný) **neplatí**: rozhoduje o tom pruh
+    /// celého řádku, který je pořád tam, a druh změny nese i znak `+`/`−` a číslo řádku.
     ///
     /// `nil` u kontextu a poznámky: co se nezměnilo, nemá co zvýrazňovat.
     static func wordBackground(of kind: DiffLine.Kind) -> Color? {
         switch kind {
-        case .added: .green.opacity(0.30)
-        case .removed: .red.opacity(0.30)
+        case .added: .green.opacity(0.50)
+        case .removed: .red.opacity(0.50)
         case .context, .meta: nil
         }
     }

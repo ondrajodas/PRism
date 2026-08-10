@@ -441,7 +441,14 @@ Word-level rozdíl (#153) — u přepsaného řádku svítí jen ta část, kter
   někdy cachovat mělo, klíč musí nést **obě** strany dvojice, a je to pak jiná cache než tahle.
   Hlídá to test „tentýž řádek proti jinému protějšku svítí jinde“.
 - **Dvě vrstvy si nesmí sáhnout na totéž:** syntaxe je **barva písma**, word-diff **pozadí**.
-  Ověřeno renderem, ne úvahou; sytost 30 % je z něj taky (viz `DiffLineView.wordBackground(of:)`).
+  Ověřeno renderem, ne úvahou. **Sytost je 50 %, opravená z 30 % při zkoušení** — třicet vyšlo
+  z renderu jednoho bloku, ale v okně se zvýraznění hledá v celém diffu a na jednoznakové změně se
+  přehlédlo. Skládané hodnoty i důvod jsou u `DiffLineView.wordBackground(of:)`.
+- **Word-diff **není** místo, kam sáhnout u tuhnoucího okna** (zkoušeno u #153). Počítá se za
+  stráží na podpis obsahu, takže se za něj platí jednou na obsah bloku — naměřeno **18 %** ceny
+  `DiffPairBlockContainer.show` v nejhorším případě (blok samých dvojic), a `show` je jen část
+  toho, co stojí projíždění diffu. Co v tom případě stojí za pozornost, je rozvržení líného
+  seznamu; postup a vyloučené příčiny jsou v [`testovani.md`](testovani.md).
 - **Zvýraznění nemění text.** Tentýž invariant jako „spojení run dá původní řádek“ a „z dvojic se
   poskládají přesně původní řádky“. V testech se řádek skládá zpátky z toho, co je uvnitř rozsahů
   a mimo ně.
