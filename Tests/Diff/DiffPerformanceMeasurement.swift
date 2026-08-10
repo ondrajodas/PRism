@@ -238,10 +238,17 @@ struct DiffPerformanceMeasurement {
     /// Kolik stojí vykreslit blok podle toho, kolik má řádků. Z toho se vybírá strop — číslo
     /// nemá vzniknout odhadem.
     ///
-    /// Měří se **celý soubor** o 2400 řádcích rozdělený na bloky různé délky, ne jeden blok:
-    /// otázka není „co stojí blok“, ale „co stojí soubor“, a při kratších blocích jich je víc.
+    /// **Měří se dvě různé věci a nesmí se splést:**
+    ///
+    /// 1. **Jeden blok** podle délky. Tohle je ten údaj, ze kterého se strop vybírá — je to práce,
+    ///    kterou appka zaplatí i za blok, jehož je vidět kousek, protože `LazyVStack` umí přeskočit
+    ///    jen celý blok.
+    /// 2. **Celý soubor** o 2400 řádcích rozdělený na bloky různé délky. To je kontrola, co
+    ///    rozdělení stojí — a vychází **plochá** (150–280 ms bez trendu), protože `ImageRenderer`
+    ///    nic nelení. Přínos stropu z téhle série vidět **není** a nesmí se z ní vyvozovat;
+    ///    svádí totiž k opačnému závěru, že rozdělení je dražší.
     @MainActor
-    @Test("Cena vykreslení souboru podle délky bloku")
+    @Test("Cena vykreslení podle délky bloku")
     func blockLengthCost() {
         let language = Language(path: "Schema.swift")
         let lines = (0..<2400).map { index in
