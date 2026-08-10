@@ -740,6 +740,54 @@ Skript odmítne přepsat bundle, který se hlásí cizím identifikátorem, a kd
 nepovede, radši nespustí nic — spuštěná stará verze z `/Applications` je přesně ta past
 „koukám na starý build“.
 
+### Paralelní vývoj — sloty
+
+Vývoj se zdržuje čekáním, takže se dá pracovat ve víc oknech naráz. Překáží tomu jediná věc:
+`bin/run.sh` bez dalšího zařízení instaluje pořád do stejného `/Applications/PRism.app`,
+ukončuje běžící instanci a všechny instance sdílejí jednu cache. Druhé okno by tedy
+sestřelilo aplikaci, se kterou se zrovna pracuje, a rozestavěný build by sáhl na uložené
+nálezy a rozdělané drafty.
+
+Řeší to **slot**. Pracovní strom se založí skriptem:
+
+```bash
+./bin/worktree.sh a issue-231-neco
+cd ../PRism-a && ./bin/run.sh
+```
+
+Vznikne strom `../PRism-a` s novou branchí z `origin/main` a se souborem `.prism-slot`.
+Ten pak čte `bin/run.sh` a odvodí z něj celou identitu instance:
+
+| | hlavní strom | slot `a` |
+|---|---|---|
+| bundle ID | `com.ondrajodas.prism` | `com.ondrajodas.prism.a` |
+| v `/Applications` | `PRism.app` | `PRism-a.app` |
+| jméno v Docku | `PRism` | `PRism-a` |
+| cache | `~/Library/Application Support/PRism/` | `…/PRism-a/` |
+| build | `build.noindex/` v tom stromu | vlastní, cesta je relativní |
+
+Bez souboru `.prism-slot` se nemění vůbec nic, takže hlavní strom zůstává tou aplikací,
+která se používá. Slotů může být víc; slot je libovolný řetězec z písmen, číslic a pomlček,
+protože jde do bundle ID.
+
+**Kořen cache si aplikace odvozuje z `CFBundleName`**, ne z konstanty — proto má slot vlastní
+konfiguraci, klony i uložené nálezy. Je to ta podstatná část: build s rozbitou persistencí
+nemá jak smazat rozdělaný draft, tedy ručně psanou práci.
+
+Konfigurace se do slotu zkopíruje, ale **očištěná** — bez povoleného odesílání (globálně
+i u každého repa), bez notifikací a bez automatického spouštění review. Odesílání proto, že
+výchozí stav je vypnuto a u rozestavěného buildu to platí dvojnásob; notifikace proto, že
+slot má vlastní `announced.json` a ohlásil by jako nové úplně všechny PR ve frontě; automat
+proto, že by spouštěl review, které nikdo nečte. Když na stroji není `jq`, konfigurace se
+**nezkopíruje vůbec** — kopírovat ji neočištěnou by znamenalo předat slotu povolené odesílání.
+
+Po mergnutí branche se strom i cache slotu uklidí:
+
+```bash
+git worktree remove ../PRism-a
+rm -rf ~/Library/Application\ Support/PRism-a
+```
+
 ### Ikona
 
 Ikona je **generovaná z kódu**, ne obrázek přinesený zvenčí:
@@ -850,6 +898,7 @@ Tests/                    unit testy — target PRismTests
   Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů
   Fixtures/statuspage/    skutečné components.json ze status pages (a jeden s dopsaným incidentem)
 bin/run.sh                build + spuštění jedním příkazem
+bin/worktree.sh           pracovní strom se slotem — paralelní vývoj vedle běžící aplikace
 bin/copilot-review.sh     vyžádání Copilot review na PR
 bin/setup-signing.sh      jednorázová příprava stálého podpisu (self-signed certifikát)
 bin/make-icon.swift       vykreslí ikonu do asset catalogu (bez závislosti, přes ImageRenderer)

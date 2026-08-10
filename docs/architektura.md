@@ -884,13 +884,26 @@ Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživate
 |---|---|
 | `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree`, `trackedFiles`, `removeWorktree`, `forgetPullRequest` a `trackedPullRequests`. Vše idempotentní |
 | `GitRepoCheckout` | Implementace nad `git`: první volání klonuje, další fetchuje |
-| `CacheLayout` | Kde co leží — klony, stromy **i uložené nálezy**. `root` je injektovatelný, aby testy nesáhly do skutečné cache |
+| `CacheLayout` | Kde co leží — klony, stromy **i uložené nálezy**. `root` je injektovatelný, aby testy nesáhly do skutečné cache, a u běžící instance se odvozuje z `CFBundleName` (#228) |
 | `CheckoutCoordinator` | Aktor: souběžná volání nad stejným klíčem se spojí do jedné práce |
 | `CacheEviction` | Úklid cache: repa bez otevřeného PR, pak LRU do rozpočtu (10 GB) |
 | `CheckoutError` | Typované chyby + klasifikace stderru `gitu` jako čistá funkce |
 
 Věci, které se u toho nemají rozbít:
 
+- **Kořen cache je `CFBundleName`, ne konstanta `"PRism"`** (#228). Na tom stojí sloty: build
+  ve slotu `a` se jmenuje `PRism-a`, takže má vlastní konfiguraci, klony i uložené nálezy
+  a **nesáhne na data instance, se kterou se pracuje**. Bez toho by rozestavěný build
+  s rozbitou persistencí smazal rozdělaný draft, tedy ručně psanou práci.
+
+  Chybějící `CFBundleName` **shodí aplikaci** a nespadne na `?? "PRism"`. Tichý default by
+  znamenal, že se slot potichu vrátí do cache hlavní instance — tedy přesně to, čemu se
+  vyhýbáme. Klíč je v `Info.plist` napevno, takže jeho absence není provozní stav, ale
+  rozbitý bundle.
+
+  Hlídá to test „Slot na cache hlavní instance nesáhne, ani jedním směrem“, který se ptá
+  `contains` na obě strany. Chytá i past, do které by se spadlo připojením slotu bez
+  oddělovače — `"PRism"` + `""` je pořád `"PRism"`.
 - **Soubory se vypisují `gitem` (`ls-files`), ne `FileManagerem`.** Ignorované složky
   (`vendor/`, `node_modules/`, buildy) jsou zrovna ty, kterých je nejvíc — procházení
   disku by jimi odhad jazyka převážilo. Ověřené je to integračním testem, protože
