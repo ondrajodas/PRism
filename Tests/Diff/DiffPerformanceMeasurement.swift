@@ -354,6 +354,27 @@ struct DiffPerformanceMeasurement {
         print("MĚŘENÍ největší blok: \(biggest) řádků v jednom NSTextView")
     }
 
+    // MARK: - Co stojí word-level rozdíl (#153)
+
+    /// Porovnání uvnitř dvojic — a hlavně **kolikrát se za něj platí**.
+    ///
+    /// Počítá se při skládání textu bloku, tedy jednou na obsah bloku a jen pro to, co je vidět.
+    /// Druhé číslo je totéž pro celý soubor: přesně tolik by stálo **každé** překreslení diffu,
+    /// kdyby se zvýraznění počítalo v modelu vedle `DiffRow.rows(_:)`. Diff se překresluje i při
+    /// tažení rozsahu, takže to je ten rozdíl, kvůli kterému je výpočet až v `show(…)`.
+    ///
+    /// Řádky jsou tu **samé dvojice** (`legacy` → `modern`), takže je to nejhorší případ; ve
+    /// skutečném diffu je většina řádků kontext, u kterého se nepočítá nic.
+    @Test("Cena word-level rozdílu (#153)")
+    func wordDiffCost() {
+        let big = file(path: "src/Generated/Schema.swift", hunks: 1, linesPerHunk: 2400)
+        let lines = big.hunks.flatMap(\.lines)
+        let block = Array(lines.prefix(DiffBlock.maxLines))
+
+        measure("WordDiff.spans, jeden blok o \(block.count) řádcích") { _ = WordDiff.spans(in: block) }
+        measure("WordDiff.spans, celý soubor o \(lines.count) řádcích") { _ = WordDiff.spans(in: lines) }
+    }
+
     // MARK: - Co stojí obarvení (#224)
 
     /// Před a po zavedení cache, na jednom souboru o 2400 řádcích.

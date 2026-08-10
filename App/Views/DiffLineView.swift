@@ -371,4 +371,24 @@ struct DiffLineView: View {
         case .context, .meta: .clear
         }
     }
+
+    /// Pozadí **změněného kusu** přepsaného řádku (#153) — word-level zvýraznění.
+    ///
+    /// Tatáž barva jako u řádku, jen sytější: kus, který se přepsal, se má lišit od zbytku
+    /// **svého** řádku, ne od okolí. Kreslí se přes řádkové pozadí (12 %), takže se sčítají.
+    ///
+    /// **Třicet procent je z renderu, ne z odhadu** (#153). V tmavém režimu vyjde zvýrazněný kus
+    /// `#20572B` proti `#1A2B1F` zbytku řádku — zelená složka 87 proti 43. Při 20 % je to 72 proti
+    /// 43, tedy rozdíl, který se vedle sousedního řádku ztratí; při 40 % (`#23672F`, ve světlém
+    /// `#9DE1A8`) je zvýraznění sytější než pozadí celého řádku a přebíjí to, co má řádek říkat
+    /// jako první — že je přidaný, nebo odebraný.
+    ///
+    /// `nil` u kontextu a poznámky: co se nezměnilo, nemá co zvýrazňovat.
+    static func wordBackground(of kind: DiffLine.Kind) -> Color? {
+        switch kind {
+        case .added: .green.opacity(0.30)
+        case .removed: .red.opacity(0.30)
+        case .context, .meta: nil
+        }
+    }
 }

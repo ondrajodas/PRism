@@ -667,5 +667,20 @@ po zápisu stála nad mezí až do toho dalšího (z Copilot review na #233). Ba
 nejsou, jen druhy run, takže přepnutí světlého a tmavého režimu ji nezneplatňuje. **Vidět není
 nic** — obarvení vychází stejné, jen se nepočítá znovu.
 
+**Word-level diff (#153)** — u přepsaného řádku svítí jen změněná část, v obou pohledech. Porovnává
+se **po tokenech** (jméno, mezera, operátor), a je to rozhodnuté měřením na 332 dvojicích z historie
+tohohle repa: po tokenech svítí 26,5 % znaků v 1,62 úsecích na řádek, po znacích 28,9 % ve 3,46 —
+a po znacích se přes práh podobnosti navíc dostane o 34 dvojic víc, protože společná písmena dvou
+nesouvisejících řádků vypadají jako podobnost. Nepodobná dvojice (práh 0,30 ze společných
+neprázdných znaků) zůstává obarvená celá jako dosud — je to smazání a přidání, ne přepsání.
+
+Dvě rozhodnutí, která z toho stojí za zapamatování. **Zvýraznění se nesmí přimíchat do
+`SyntaxRunCache`** (#224): závisí na protějšku dvojice, kdežto cache je klíčovaná textem řádku, takže
+by tentýž řádek proti jinému protějšku dostal cizí zvýraznění — a potichu. Kreslí se proto jako druhá
+vrstva nad hotovými runy (pozadí × barva písma u syntaxe). A **počítá se až při skládání textu
+bloku**, ne v modelu: blok o 60 řádcích stojí 0,42 ms, celý soubor 19,6 ms, a model se přepočítává při
+každém překreslení diffu. Cenou je známé omezení — dvojici roztrženou hranicí bloku pohled pod sebou
+nezvýrazní.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

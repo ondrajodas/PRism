@@ -225,6 +225,7 @@ z `GitHubGateway`, tenhle kód mu jen rozumí.
 | `DiffLine` | Druh (`context`/`added`/`removed`/`meta`), stará a nová čísla, text |
 | `DiffRow` | Diff rozbalený na řádky pro vykreslení, včetně bublin nálezů a **dvojic** pro pohled vedle sebe, + `anchor(in:file:line:)` pro skok z nálezu |
 | `DiffRow.paired(_:)` | Slití hotových řádků do dvojic (`App/Diff/DiffPairing.swift`) — čistá funkce, celý pohled `split` stojí na ní |
+| `WordDiff` | Co se uvnitř přepsané dvojice změnilo (#153): rozsahy na staré a nové straně, práh podobnosti, párování pro oba pohledy. Čistá funkce |
 | `DiffState` | Stav načtení per PR: `loading` / `loaded(Diff, updatedAt:)` / `failed` |
 | `FileTreeNode` | Soubory diffu jako strom pro navigaci; slévá složky s jediným potomkem |
 | `DiffExpander` | Skrytý úsek mimo hunky a kroky, kterými se dá odkrýt |
@@ -428,6 +429,55 @@ konstanty a barvy, které si bloky berou (`numberColumn`, `iconColumn`, `signCol
 `contentInset(for:)`, `signColor(of:)`, `background(of:)`, `rangeTint`, `dragTint`). Zůstávají
 proto jako **jediné místo, kde ty hodnoty jsou** — vyčlenit je do vlastního typu je úklid na potom,
 ne součást #157.
+
+Word-level rozdíl (#153) — u přepsaného řádku svítí jen ta část, která se změnila. `WordDiff` je
+čistá funkce v `App/Diff/`, obarvení dělá `DiffTextView`. Co se u toho nemá rozbít:
+
+- **Zvýraznění nesmí do `SyntaxRunCache`.** Tohle je celé jádro věci: cache je klíčovaná
+  `(text řádku, jméno jazyka)`, ale word-level zvýraznění závisí na **protějšku** dvojice —
+  tentýž řádek proti jinému protějšku svítí jinde. Kdyby se přimíchalo do `SyntaxRun`u, vracela by
+  cache zvýraznění patřící cizí dvojici, a **potichu**: testy obojího zvlášť projdou. Je to proto
+  **druhá vrstva nad** výsledkem z cache — atribut `.backgroundColor` přes hotové runy. Kdyby se
+  někdy cachovat mělo, klíč musí nést **obě** strany dvojice, a je to pak jiná cache než tahle.
+  Hlídá to test „tentýž řádek proti jinému protějšku svítí jinde“.
+- **Dvě vrstvy si nesmí sáhnout na totéž:** syntaxe je **barva písma**, word-diff **pozadí**.
+  Ověřeno renderem, ne úvahou; sytost 30 % je z něj taky (viz `DiffLineView.wordBackground(of:)`).
+- **Zvýraznění nemění text.** Tentýž invariant jako „spojení run dá původní řádek“ a „z dvojic se
+  poskládají přesně původní řádky“. V testech se řádek skládá zpátky z toho, co je uvnitř rozsahů
+  a mimo ně.
+- **Párování má dvě vstupní branky, ale jedno pravidlo.** Ve split pohledu dvojice existuje
+  (`DiffRow.paired(_:)`), takže se porovnává vlevo proti vpravo podle pozice; pod sebou dvojice
+  není, takže si ji `WordDiff.spans(in:)` skládá **týmž pravidlem** — blok `-` se s následujícím
+  blokem `+` páruje jeden na jednoho, `+` po `-` je přepsání a `-` po `+` už nová skupina.
+  Že se ta dvě pravidla nerozejdou, hlídá test, který obojí porovnává na skutečném diffu.
+  **Zamítnuto:** počítat dvojice i pro unified přes `paired(_:)` — to slévá řádky do jiné podoby
+  seznamu a v pohledu pod sebou se kreslí ty původní.
+- **Počítá se až při skládání textu bloku** (`DiffTextView.show(…)`), ne v modelu vedle
+  `DiffRow.rows(_:)`. Rozhodlo měření: blok o 60 řádcích samých dvojic stojí **0,42 ms**, celý
+  soubor o 2400 řádcích **19,6 ms** — a model se přepočítává při **každém** překreslení diffu
+  (i při tažení rozsahu), takže v něm by to byl rozpočet na snímek pryč. V `show(…)` se to spočítá
+  jednou na obsah bloku a jen pro to, co je vidět; proto se předává **closure**, ne hodnota — za
+  stráží na podpis se jinak počítalo i při přejezdu myší.
+- **Cena je z toho důvodu ohraničená i shora**: nad `pairBudget` (součin počtu tokenů) se
+  nejdelší společná podposloupnost nehledá vůbec a zvýrazní se celý rozdílný střed.
+- **Po tokenech, ne po znacích** — rozhodnuto měřením na skutečném diffu, ne úvahou. Na 332
+  dvojicích z historie tohohle repa: po tokenech svítí 26,5 % znaků v **1,62** úsecích na řádek,
+  po znacích 28,9 % ve **3,46** úsecích. Po znacích se navíc přes práh podobnosti dostane o 34
+  dvojic víc — společná písmena dvou nesouvisejících řádků vypadají jako podobnost.
+  **Operátor drží pohromadě** (`==` proti `!=` je jedna změna), závorky a čárky ne — jsou to
+  hranice, ne slovo.
+- **Nepodobná dvojice se nezvýrazňuje.** Smazání a přidání vedle sebe není přepsání; práh je 0,30
+  ze společných **neprázdných** znaků (odsazení mají společné skoro všechny řádky). Z ručně
+  projitého vzorku: nad 0,30 bylo všechno opravdové přepsání (`.font(.caption2)` →
+  `.font(.system(size: 10.5))` má 0,32), pod 0,27 už ne (`folding.toggle(file)` proti
+  `file: file,` má 0,20).
+- **SwiftUI cesta (`DiffLineView`) zvýraznění nemá, a nic tím nechybí.** Kreslí se jí už jen
+  úryvek u vlákna na ose konverzace, kde je řádek **jeden** — protějšek, proti kterému by se
+  porovnávalo, tam neexistuje.
+- **Známé omezení:** dvojici, kterou rozdělí **hranice bloku** (strop 60 řádků nebo bublina mezi
+  `-` a `+`), pohled pod sebou nezvýrazní — protějšek je v jiném `NSTextView`u. Ve split pohledu
+  se to nestane, protože dvojice je jeden řádek seznamu. Cena za to, že se počítá lazy nad blokem;
+  opravit to znamená počítat nad celým souborem, tedy zaplatit těch 19,6 ms při každém překreslení.
 
 Vlákna konverzace (#64) se vezou **stejnou cestou** jako nálezy (`DiffRow.thread`), ale
 v pěti věcech se chovají jinak:
@@ -722,6 +772,10 @@ Věci, které se u toho nemají rozbít:
   jeho sadu klíčových slov při každém nahlédnutí by stálo víc než samotné obarvení.
 - **V cache nejsou barvy, jen druhy.** Přepnutí světlého a tmavého režimu ji proto
   nezneplatňuje; paletu si bere view až při kreslení.
+- **Co závisí na protějšku řádku, do téhle cache nepatří** (#153). Word-level zvýraznění je
+  funkce **dvojice**, ne řádku, takže pod klíčem `(text řádku, jazyk)` by se tentýž řádek proti
+  jinému protějšku obarvil podle té cizí dvojice — a nikdo by se to nedozvěděl, protože obojí
+  zvlášť dál funguje. Kreslí se proto jako druhá vrstva nad hotovými runy, viz `App/Diff/`.
 - **Cache se nezneplatňuje, jen vyprazdňuje.** Klíčem je text, takže záznam nemůže zastarat —
   jediná otázka je růst. Hlídají ho dvě meze a při překročení kterékoli se zahodí **celá**:
   `capacity` (4000 řádků) a `budget` (4 MB součtu jejich délek). Dvě proto, že každá chytá jiný

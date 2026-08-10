@@ -647,6 +647,38 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   pohledů **nesmí zaměnit** — záměna dá prázdný diff. Dva testy nejdřív spadly: bublina rozdělila
   blok jinde, než jsem čekal (přepočítáno proti diffu), a před hlavičkou hunku stojí ještě expander.
 
+  **Word-level rozdíl (#153)** má dvě sady, a každou z jiného důvodu.
+
+  `WordDiffTests` je čistá funkce výčtem, a **zvýrazněné kusy se v nich píšou v hranatých
+  závorkách** (`let total = price * [amount]`) — jde přece o to, kde na řádku to svítí, a to se
+  z pole rozsahů nepřečte. Každé takové porovnání zároveň ověřuje invariant **„zvýraznění nemění
+  text“**: bez závorek musí vyjít původní řádek, stejně jako u obarvení platí, že spojení run dá
+  původní řádek. Případy: přepsané slovo, vložení a smazání (svítí **jen jedna** strana), dvě místa
+  na řádku, celé jméno místo písmen, změna odsazení, operátor jako celek (`==` proti `!=`), shodné
+  řádky a prázdná strana, nepodobná dvojice, krátké přepsání těsně nad prahem, práh počítaný bez
+  odsazení a obří dvojice, u které se přes strop nejde po tokenech.
+
+  Dva testy jsou tam kvůli tomu, co se rozbije **potichu**:
+
+  - **„V obou pohledech svítí totéž“** — na skutečném diffu z fixtures. Vedle sebe páruje
+    `DiffRow.paired(_:)`, pod sebou si dvojice hledá `WordDiff` sám, a kdyby se ta pravidla
+    rozešla, svítilo by v každém pohledu něco jiného.
+  - **„Přidaný řádek skupinu uzavírá“** — a skupiny v něm musí být **nestejně velké**. První
+    verze měla dvě stejné a **vloženou regresí se ukázalo, že nechytá nic**: zip po pořadí vyjde
+    u dvou stejných skupin stejně jako u jedné dlouhé. S přebytkem na jedné straně test padá.
+
+  `DiffWordHighlightTests` kreslí do `DiffTextView` a čte atributy z `textStorage`. Tady je ten
+  **nejcennější test celého issue**: *„tentýž řádek proti jinému protějšku svítí jinde“*. Zvýraznění
+  závisí na dvojici, kdežto `SyntaxRunCache` je klíčovaná textem řádku — kdyby se přimíchalo mezi
+  runy, vracela by cache zvýraznění cizí dvojice a **obojí zvlášť by dál procházelo**. Ověřeno
+  vložením regrese (memo podle textu řádku): padne přesně ten jeden test, ostatní čtyři projdou.
+  K tomu, že zvýraznění nemění text, že obarvení syntaxe zůstává pod ním (písmo × pozadí) a že
+  kontextový řádek nesvítí, ani když se mu rozsahy podstrčí.
+
+  **Jak to vypadá, se ověřilo renderem** — `NSView` do bitmapy, viz *Jak si zkontrolovat, jak view
+  vypadá*. Z něj je i sytost pozadí: 30 % dá v tmavém režimu `#20572B` proti `#1A2B1F` řádku, při
+  20 % je rozdíl k neuvidění a při 40 % zvýraznění přebíjí to, že je řádek přidaný.
+
   **Co se unit testem ověřit nedá:** vybírání textu, kontextové menu a tažení rozsahu. Kliky
   a pohyb myši se syntetizovat dají (`CGEvent` s `cgSessionEventTap` a `mouseEventClickState` —
   s `cghidEventTap` se **nedoručí**), ale **tažení ani pravý klik ne**: kontextové menu se
@@ -1006,6 +1038,7 @@ Co harness měří:
 | osa konverzace podle počtu uzlů | skutečná views, ne syntetický tvar — má být lineární |
 | model diffu na 2400 řádcích | dokládá, že model **není** příčina (jednotky ms) |
 | cena vykreslení podle délky bloku (#223) | z toho se vybral strop `DiffBlock.maxLines`; měří se **jeden blok** i celý soubor po blocích |
+| cena word-level rozdílu (#153) | proč se počítá až při skládání bloku: **0,42 ms** na blok o 60 řádcích samých dvojic proti **19,6 ms** za celý soubor o 2400 řádcích, což by se platilo při každém překreslení |
 | cena obarvení se cachí a bez ní (#224) | tři čísla na jednom souboru o 2400 řádcích: `scan` bez cache **44 ms**, totéž z plné cache **0,30 ms** (~145×), naplnění prázdné cache **44 ms** — uložení se v šumu ztratí |
 | co v cache zůstane ležet (#224) | 68 kB textu run na 2400 řádků (~29 B na řádek), tedy z čeho se strop `capacity` překládá na kilobajty |
 

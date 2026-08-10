@@ -118,10 +118,34 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
         // V buňce dvojice je číslo jedno: vlevo staré, vpravo nové.
         left.numberColumns = 1
         right.numberColumns = 1
+        // Word-level rozdíl (#153) se počítá **jednou pro obě strany** a až tehdy, když se text
+        // opravdu skládá: `show` níž se z něj vrátí hned, když se obsah nezměnil, a tahle metoda
+        // chodí i při pouhém přejezdu myší. Sloupec sám ho spočítat nemůže — protějšek je v tom
+        // druhém.
+        var computed: (left: WordDiff.Spans, right: WordDiff.Spans)?
+        func words() -> (left: WordDiff.Spans, right: WordDiff.Spans) {
+            if let computed { return computed }
+            let spans = WordDiff.spans(left: block.left, right: block.right)
+            computed = spans
+            return spans
+        }
+
         // Prázdná strana dvojice se kreslí jako **prázdný řádek**, ne jako mezera: řádky si musí
         // odpovídat i tam, kde jedna strana chybí (přidaný nebo odebraný kód).
-        left.show(DiffBlock(lines: block.left.map { $0 ?? .blank }), language: language, palette: palette, signature: "L\(signature)")
-        right.show(DiffBlock(lines: block.right.map { $0 ?? .blank }), language: language, palette: palette, signature: "R\(signature)")
+        left.show(
+            DiffBlock(lines: block.left.map { $0 ?? .blank }),
+            language: language,
+            palette: palette,
+            signature: "L\(signature)",
+            words: { words().left }
+        )
+        right.show(
+            DiffBlock(lines: block.right.map { $0 ?? .blank }),
+            language: language,
+            palette: palette,
+            signature: "R\(signature)",
+            words: { words().right }
+        )
         rowHeight = left.singleLineHeight
         needsLayout = true
         layoutColumns()
