@@ -7,13 +7,14 @@ Pravidla z [`CLAUDE.md`](../CLAUDE.md) platí beze změny — tenhle dokument je
 **kdo je plní**. Jediná výjimka je pauza na proklikání, viz níž; ta je zapsaná jako vědomá
 změna.
 
+Postup je: **posoudit nezávislost → přidělit sloty → pustit subagenty**, a každý z nich si svoje
+issue dotáhne až do mergnutého PR a releasu. Orchestrátorovi zbývá restart hlavní aplikace
+a úklid.
+
 ## Kdy se to použije
 
 Když přijde **víc než jedno issue naráz**. U jednoho se nic nemění: udělá se sériově, jak to
 popisuje `CLAUDE.md`.
-
-Postup je: **posoudit nezávislost → přidělit sloty → pustit subagenty → mergovat v pořadí →
-vydat release.**
 
 ## 1. Posoudit, co jde souběžně
 
@@ -68,41 +69,67 @@ Subagent dostane worktree (`isolation: "worktree"`) a v zadání tohle:
 - **číslo issue** a pokyn, ať si ho přečte přes `gh api` (`gh issue view` v tomhle repu padá),
 - pokyn, že platí `CLAUDE.md` — včetně dokumentace ve stejném commitu a vlastní revize diffu
   před pushem,
-- **kde končí jeho práce**: PR je otevřený a Copilot vyřízený.
+- **kde končí jeho práce**: issue je hotové, PR mergnutý a release vydaný.
 
-Co subagent dělá: implementaci, testy, vlastní revizi diffu, dokumentaci, commit, push, PR
-a reakci na Copilota.
+Co subagent dělá: implementaci, testy, vlastní revizi diffu, dokumentaci, commit, push, PR,
+reakci na Copilota — a pak **merge, zavření issue a release**. Nečeká na pokyn; zelené testy,
+vyřešené nálezy a hotové zadání stačí, přesně jak to `CLAUDE.md` říká o mergování obecně.
+
+**Změna proti první verzi tohohle dokumentu** (#247), kde stálo, že subagent nemerguje a merge
+patří orchestrátorovi, protože jediný vidí na všechny větve. V provozu se ukázalo, že to je
+špatná hranice: hotová práce ležela a čekala, až na ni orchestrátor přijde řadu — a ten mezitím
+řešil jinou větev. Zdržení rostlo s počtem běžících agentů, tedy přesně tam, kde měl paralelní
+běh pomoct. Souběžné mergování je proti tomu levné: **konflikt vyřeší git**, a když nastane
+(typicky `docs/stav.md`), subagent si **zvedne main sám** a doběhne. Rebase ne — main je
+squashnutý, takže stačí `git fetch origin && git merge origin/main`. Proti **`origin/main`**, ne
+proti lokálnímu `main`: ten je v čerstvém worktree z doby jeho vzniku, takže by merge nepřitáhl
+nic — a vypadalo by to, že konflikt zmizel.
 
 Co subagent **nedělá**:
 
-- **nemerguje** — pořadí mergů ovlivňuje ostatní běžící větve, takže je to rozhodnutí, které
-  musí dělat jeden, kdo vidí na všechny;
-- **nezavírá issue a nevydává release** — release je jeden na dávku, ne na větev;
+- **nerestartuje hlavní aplikaci** — to je jediný krok po mergi, který zůstává orchestrátorovi.
+  Vyžaduje build v hlavním stromě a přepsání `/Applications/PRism.app`, tedy sáhnutí na aplikaci,
+  se kterou uživatel právě pracuje. Zákaz sahat mimo vlastní worktree je přednější;
 - **nesahá mimo svůj worktree** — cizí strom, `/Applications` hlavní instance ani její cache;
+- **neovládá aplikaci přes `System Events`** (klikání na souřadnice, přesouvání oken). Vedle sebe
+  běží víc instancí PRismu a slepý klik na souřadnice skončí v cizím okně — jednomu agentovi se
+  takhle povedlo přesunout a zmenšit okno hlavní instance, jinému klik spadl do cizího běhu
+  a správně toho nechal. Na obrazovku se kouká **offscreen renderem** (viz
+  [`testovani.md`](testovani.md)), který nic nesdílí; ovládat se dá jedině vlastní slot, a i tam
+  jen tehdy, když je jistota, že je vpředu;
 - **nevolá další subagenty.**
 
 ## 4. Pauza na proklikání — změna pravidla
 
-`CLAUDE.md` chce pauzu **před prvním pushem**. V paralelním režimu se posouvá **před merge**
-a sbírá se za celou dávku naráz.
+`CLAUDE.md` chce pauzu **před prvním pushem**. V dávce **odpadá** a kontrola se přesouvá na
+**hlavní aplikaci po mergi**, kterou orchestrátor restartuje.
 
-Důvod: subagent nemá jak zavolat člověka, a kdyby na odpověď čekal, blokuje slot i sebe.
-Smysl pauzy je „ať si to proklikám, dokud je změna levná na přepsání“ — a **PR před mergem
-levný pořád je**. Co se nemění: subagent se na obrazovku musí podívat **sám a napřed**
-(screenshotem, viz [`testovani.md`](testovani.md)), a to i tady. Ukázat rozbitou obrazovku je
-kolo navíc bez ohledu na to, kdo ji ukazuje.
+Důvod: subagent nemá jak zavolat člověka, a kdyby na odpověď čekal, blokuje slot i sebe. Když
+navíc dotahuje issue až do mergnutého PR (#247), není kde pauzu udělat, aniž by se celý smysl
+paralelního běhu ztratil. Co se z pravidla ztratit **nesmí**: subagent se na obrazovku musí
+podívat **sám a napřed** (screenshotem nebo offscreen renderem, viz [`testovani.md`](testovani.md)).
+To je jeho práce, ne uživatelova — mergnout rozbitou obrazovku je horší než ji ukázat.
 
-Orchestrátor pak řekne jednou větou, **co je u které větve k vidění** a co si má člověk
-proklikat. Větve, na kterých není co vidět, se mergují bez pauzy.
+Když po restartu něco nesedí, **je z toho nové issue**, ne blokovaná větev. Je to levnější, než
+jak to vypadá: změna už je v mainu, takže se opravuje proti stavu, který si člověk může skutečně
+proklikat — a ne proti větvi, kterou mezitím pět dalších mergů posunulo.
 
-## 5. Mergovat v pořadí
+**Změna proti první verzi**, kde se pauza posouvala před merge a sbírala se za celou dávku.
+Padla spolu s pravidlem, že subagent nemerguje (#247).
 
-Nejdřív ta větev, **na které ostatní stojí** — když jedna mění `Policy` nebo `AppStore` stav,
-jde první, protože ostatní se pak srovnají proti ní.
+## 5. Merge, release, restart
 
-Po každém mergi platí pravidlo z `CLAUDE.md`: **main se do zbylých větví nezvedá preventivně.**
-Jen když to GitHub hlásí jako konflikt, nebo když větev na mergnuté změně stojí. Rebase ne —
-main je squashnutý, takže `git merge main` stačí a nerozbije Copilotovi komentáře.
+**Merguje si každý subagent sám**, jakmile je jeho PR zelený a Copilot vyřízený (#247) — čeká se
+tedy jen na práci, ne na frontu. Pořadí se **neurčuje předem**: kdo je dřív hotov, jde dřív.
+
+Co z toho plyne pro toho, kdo přijde druhý: **main se do větve nezvedá preventivně**, jen když to
+GitHub hlásí jako konflikt nebo když větev na mergnuté změně stojí. Rebase ne — main je squashnutý,
+takže stačí `git fetch origin && git merge origin/main` — a nerozbije to Copilotovi komentáře.
+Znovu: proti **`origin/main`**, ne proti lokálnímu `main`.
+
+Když jedna větev mění `Policy` nebo stav v `AppStore` a druhá na tom staví, **neměly být puštěné
+souběžně** (viz krok 1). Pořadí mergů to nezachrání: konflikt je tam sémantický, takže obě větve
+projdou testy samostatně a rozbijí se až po sloučení.
 
 **Release se vydá po každém mergnutém PR**, i uprostřed dávky — stejně jako mimo ni. Pravidlo
 z `CLAUDE.md` se dávkou nemění.

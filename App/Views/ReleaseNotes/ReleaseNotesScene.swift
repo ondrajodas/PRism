@@ -27,20 +27,13 @@ struct ReleaseNotesScene: View {
             .centeredInMainWindow()
             // **Esc okno zavře.** Je to okno na čtení — nic se v něm nerozepisuje a nic se
             // z něj neodesílá, takže tu není co ztratit; jinak je na to jediná cesta ⌘W.
-            // Hlavní okno ani nastavení to schválně nemají: v prvním se pracuje a druhé je
-            // `Settings`, kde by to bylo proti zvyklosti systému.
+            // Od #151 to má i nastavení, kde se rozepsaná hodnota doručí (`flush`) při zavření;
+            // hlavní okno ne, v tom se pracuje.
             //
-            // Jde to **schovaným tlačítkem**, ne `onExitCommand`: ten se váže na fokus a Esc
-            // spolkne `List` v bočním panelu dřív, než se k němu dostane (zkoušeno na běžící
-            // aplikaci — okno bylo `AXFocused` a nezavřelo se). Klávesová zkratka se naproti
-            // tomu registruje na celé okno. `opacity(0)` a nulový rámec, ne `hidden()`:
-            // schovanému view zkratka nechodí.
-            .background {
+            // Jde to **schovaným tlačítkem**, ne `onExitCommand` — proč, je u `hiddenShortcuts`.
+            .hiddenShortcuts {
                 Button("Zavřít okno") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                    .opacity(0)
-                    .frame(width: 0, height: 0)
-                    .accessibilityHidden(true)
             }
     }
 

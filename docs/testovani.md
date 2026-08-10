@@ -18,6 +18,13 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
 (`~/Library/Logs/DiagnosticReports/PRism-*.ips`, `closure #1 in …`); v logu z `xcodebuild` je jen
 `Restarting after unexpected exit`.
 
+**Druhá léčba je `nonisolated`** (#218), a u skládání textu je levnější než stěhování do `Policy`:
+`nonisolated static func` na `View` typu z izolace vystoupí, takže se uvnitř closure žádný executor
+neověřuje. Sáhne se po ní tehdy, když funkce **nerozhoduje**, jen skládá větu z hotových hodnot
+(`ReviewRunbarView.label` spojuje jména běžících reviewerů) — rozhodování patří dál do `Policy`,
+protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl přesně ten popsaný výš:
+`Failing tests` plné suit, které s tou změnou nesouvisejí, a crash report ukazující na `map`.
+
 
 - **Modely** — round-trip přes `Codable` u každého typu i každého případu `ReviewState`,
   parsování a formátování identifikátorů včetně neplatných vstupů, a kontrola skutečného
@@ -454,6 +461,13 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   nic, drží vlastní test. Plus to, že **každý důvod má
   vlastní neprázdnou větu** — prázdná by v okně vypadala jako mlčky zakázané tlačítko.
 
+  U **otevření potvrzení** (`canOpenSubmission`, #151) vyčerpávajícím výčtem: **každý** důvod,
+  proč se odeslat nedá, zavírá i potvrzení, a to i s možností přenést — přenesení spraví
+  zastarání, ne chybějící verdikt. Zastarání je jediná výjimka a jen tehdy, když je proti čemu
+  kotvy zkontrolovat. Je na to vlastní sada proto, že se od #151 na tutéž otázku ptají **dvě**
+  místa (tlačítko v panelu a zkratka `⌘⏎`); rozchod by znamenal zkratku, která otevře okno nad
+  zakázaným tlačítkem.
+
   U **předvyplněného verdiktu** (#114) to hlavní není, že s návrhem `noVerdict` zmizí, ale že
   návrh **nepřeskočí ostatní důvody** — prázdný komentář, zastarání ani bránu — a že z prázdného
   ani neexistujícího draftu nedělá „je co poslat“. `effectiveVerdict` má vlastní sadu na každý
@@ -492,6 +506,12 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   ve kterém `submission(for:)` nesmí vzniknout (zastaralý draft, chybějící verdikt, žádný
   draft), a to, že se konverzace načte znovu — bez toho by v `Přehledu` chybělo moje vlastní
   review až do přepnutí PR.
+
+  Od #151 k tomu test, že **otevření potvrzení nic neodešle** — tedy že po `submission(for:)`
+  zůstal draft v paměti i na disku a konverzace se nenačetla znovu. Jsou to obě stopy, které by
+  úspěšné odeslání zanechalo (`draftWasSubmitted`), takže se tvrdí „nestalo se“, ne „vrátilo to
+  objekt“. Je to podklad pod zkratku `⌘⏎`, která nedělá nic jiného než tohle. Ověřeno vložením
+  regrese: `discardDraft` uvnitř `submission(for:)` test shodí.
 - **`Policy` — přehled (#72)** — chronologické slití review, komentářů a vláken; že se vlákno
   **s kotvou** do přehledu nedostane (jinak se tentýž komentář čte na dvou místech); že review
   bez verdiktu a bez prózy vypadne (je to jen obálka řádkových komentářů), kdežto schválení
@@ -646,6 +666,24 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   vedle vyrenderované sekce 02 návrhu a offscreen renderem ve světlém i tmavém režimu. U #219 to
   ukázalo, že `Menu` s primární akcí si kreslí **vlastní šipku** vedle té z návrhu, takže
   `⌃ Sbalit vše ⌄` mělo dvě proti sobě.
+- **Sazba hlavičky PR (#218)** — čtyři čisté funkce, tedy výčtem a bez kreslení.
+  `Policy.diffstatBlocks` hlídá tři věci, které se dají pokazit potichu: že **zaokrouhlení jde
+  dolů** (jeden odebraný řádek proti dvěma stům si vlastní čtvereček nezaslouží), že se součet
+  drží na pěti nad celou mřížkou 21 × 21 vstupů, a že prázdný diff nedá **žádný** čtvereček —
+  pět šedých je pruh, který vypadá pořád stejně, tedy nic neříká. `Policy.progress` má nejcennější
+  test v tom, co se **nestane**: bez běhu se pruh nekreslí, ani když `reviewPhases` drží
+  `running` nebo `failed` po skončení. `ReviewRunbarView.label` a `ReviewerChipsView.label`
+  ověřují, že počet je jen tam, kde běh doběhl a dopočítal se — `0` nad nedoběhlým během je
+  tvrzení, které data neunesou — a `spokenState` to, že se stav dá **přečíst**, když ho v kapsli
+  nese jen barva puntíku. `WorkingCopyStatusView.text` tvrdí, že selhaný checkout se do stavového
+  řádku nedostane; zůstává bannerem v hlavičce, kde je místo na výstup `gitu`.
+
+  Sazba sama (rozměry, barvy, poměry) se ověřuje **obrázkem**: screenshot běžící aplikace nad
+  skutečným PR vedle vyrenderované sekce 02 návrhu, plus offscreen render pruhu v běžícím stavu
+  ve světlém i tmavém režimu a v úzkém okně. Našlo to dvě věci, které z kódu vidět nebyly —
+  `GeometryReader` v dráze průběhu si vzal veškerou šířku a jména reviewerů se zalomila **uvnitř
+  kapslí**, a popisek s hodinami se v užším okně ořezal na `1:…`. Obojí je otázka priority
+  layoutu, ne rozměru.
 - **Kopírování kódu z diffu (#157)** — `Policy` vyčerpávajícím výčtem. Dvě věci se tu dají pokazit
   potichu: **pořadí řádků** (rozsah se zvýrazňuje množinou, která pořadí nemá — ověřeno vloženou
   regresí, `Set` místo pořadí testy shodí) a **která verze se kopíruje** u rozsahu přes obě strany
@@ -690,6 +728,15 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   všechno), pořadí se nemění. U nabídky to hlavní je, že **drží hodnoty aktivního filtru, i když
   jejich PR ze seznamu zmizel** — bez toho zmizí odškrtávátko a filtr zůstane zapnutý bez cesty
   zpátky. U důvodu prázdna to, že **nad selhaným tikem vyhrává chyba načtení, ne filtr**.
+
+  **Počty u položek (#199)** patří do téhož výčtu a to nejcennější u nich je test, že se **zapnutím
+  filtru nezmění** — ze zúženého seznamu by čísla klesala podle právě odškrtaného a z nabídky by
+  nešlo poznat, co zapnutí položky udělá. Ověřuje se dvakrát, protože se to dá pokazit na dvou
+  místech: v `Policy` (nabídka nad týmž seznamem vyjde s filtrem i bez něj stejně) a v `AppStore`
+  (`filterOptions` sahá na `pullRequests`, ne na `visiblePullRequests` — tentýž rozdíl getterů
+  jako všude jinde). K tomu položka, která v nabídce zbyla jen po aktivním filtru, má počet **nula**,
+  a pořadí je podle jména i tehdy, když by počty seřadily jinak — jinak by nabídka přeskakovala
+  s každým tikem.
 
   **`AppStore` proti fakes na to, že filtr je pohled, ne mazání:** zapnutí filtru nezahodí diff
   schovaného PR (a po vypnutí se GitHubu neptá znovu), nezahodí draft, nezruší běžící review,
@@ -1058,6 +1105,30 @@ osascript -e 'tell application "System Events" to tell process "PRism" to return
 cache 2400 řádky vyšel **0 kB** — alokátor sáhne po stránkách, které proces už má, takže by to
 tvrdilo, že cache nic nestojí. Harness proto sčítá **text run**, který v ní zůstane ležet; klíč se
 nepočítá, protože je to tentýž řetězec, jaký drží model diffu (kopíruje se jen hlavička).
+
+**Klávesová zkratka se dá vyzkoušet jedině spuštěním** — a u #151 to bylo jediné, co odhalilo, že
+`⌥↓` po prvním skoku nikam nejde. Pět věcí, na kterých to stálo, a všech pět stálo kolo navíc:
+
+- **Když běží víc slotů, `process "PRism"` je nejednoznačné.** Všechny instance mají tentýž
+  název procesu (binárka se jmenuje `PRism` i ve slotu), takže se hledá podle **bundle ID** —
+  jinak se měří, klikají a zavírají cizí okna. Stalo se to: skript přesunul okno hlavní instance.
+- **`whose` nad procesy se v `System Events` láme** (`nelze načíst … -1728/-1719`). Spolehlivý je
+  obyčejný `repeat with p in (every application process whose name is "PRism")` a uvnitř
+  `if bundle identifier of p is "com.ondrajodas.prism.<slot>"`.
+- **Kliknutí do okna, které není vpředu, ho jen aktivuje** a k prvku se nedostane. Klikat se
+  proto musí dvakrát, nebo se okno napřed vytáhne — a `activate` patří do **každého** skriptu,
+  ne jednou na začátek relace: mezi dvěma `osascript` se terminál vrátí dopředu.
+- **Snímek se pořizuje uvnitř téhož skriptu** (`do shell script "screencapture …"`), jinak se
+  fotí to, co je vpředu **potom**.
+- **`NSEvent.modifierFlags` synthetickou klávesu nevidí.** Stav klávesnice se posláním události
+  ze `System Events` nemění, takže se modifikátory musí číst z `NSApp.currentEvent`. Se stavem
+  klávesnice vycházelo `⌥⇧↓` jako obyčejné `⌥↓` a vypadalo to jako chyba v aplikaci.
+
+Co se z běžící aplikace u #151 vyčetlo a jinak by se nevědělo: **SwiftUI páruje u šipek zkratku
+bez ohledu na `.shift`**, takže dvě tlačítka lišící se jen jím jsou jedna klávesa. Ověřeno oběma
+směry — po dočasném odebrání varianty se shiftem začalo `⌥↓` procházet nálezy a `⌥⇧↓` skákalo po
+tom samém. Je to platformní chování, takže na něj **test není** a drží ho jen ten zápis; kdyby se
+zkratky zase rozdělily na dvě tlačítka, projde build i testy a rozbije se to potichu.
 
 **Cena bloku se měří dvěma způsoby a je to schválně** (#223). Jeden blok podle délky je ten údaj,
 ze kterého se vybírá strop — to je práce, kterou appka zaplatí i za blok, jehož je vidět kousek.

@@ -140,12 +140,15 @@ struct DraftPanel: View {
 
     /// Zastarání je jediný důvod, se kterým se dá něco udělat **v tom okně** — proto se jím
     /// tlačítko nezakazuje.
+    ///
+    /// Obojí rozhoduje `Policy`, ne panel: od #151 se na totéž ptá i zkratka `⌘⏎` v detailu PR,
+    /// a dvě kopie téhle podmínky by znamenaly, že zkratka otevře okno nad zakázaným tlačítkem.
     private var needsTransfer: Bool {
-        actions.canTransfer && actions.sendBlock?.isStale == true
+        Policy.needsTransfer(block: actions.sendBlock, canTransfer: actions.canTransfer)
     }
 
     private var canOpenSubmission: Bool {
-        actions.sendBlock == nil || needsTransfer
+        Policy.canOpenSubmission(block: actions.sendBlock, canTransfer: actions.canTransfer)
     }
 
     /// Proč se odeslat nedá, větou pod lištou.

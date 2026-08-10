@@ -41,6 +41,22 @@ enum RunUsageText {
         return value.formatted(.units(allowed: [.hours, .minutes, .seconds], width: .narrow))
     }
 
+    /// Hodiny běžícího review — `1:12`, nad hodinu `1:02:07` (#218).
+    ///
+    /// **Ne `duration(_:)`**: to je změřený čas doběhlého běhu (`11,8 s`, `2 m 5 s`), kdežto
+    /// tohle jsou stopky, které tikají v pruhu — a stopky, u kterých se jednotka mění podle
+    /// toho, jak dlouho běží, se špatně čtou, protože se pod okem přeskládají.
+    ///
+    /// Záporný čas (posunuté systémové hodiny) je nula, ne `-0:03`.
+    static func elapsed(_ value: Duration) -> String {
+        let total = max(value.milliseconds / 1000, 0)
+        let seconds = total % 60
+        let minutes = (total / 60) % 60
+        let hours = total / 3600
+        guard hours > 0 else { return String(format: "%d:%02d", minutes, seconds) }
+        return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+    }
+
     /// Kolik kol si session vyžádala (`num_turns`).
     static func turns(_ value: Int) -> String {
         Plural.czech(value, one: "kolo", few: "kola", many: "kol")

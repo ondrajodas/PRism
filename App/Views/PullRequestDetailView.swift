@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Pravý panel: diff vybraného PR, nálezy pod ním a ovládání nahoře.
@@ -57,7 +58,7 @@ struct PullRequestDetailView: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background { navigationShortcuts }
+        .hiddenShortcuts { shortcuts }
         .task(id: highlighted) {
             guard highlighted != nil else { return }
             try? await Task.sleep(for: .seconds(2.5))
@@ -84,14 +85,28 @@ struct PullRequestDetailView: View {
         .task(id: pullRequest) { await store.loadDetail(for: pullRequest) }
     }
 
-    /// Dva řádky, ne čtyři bloky: cesta ke klonu, stav kopie i spuštění review se vejdou
-    /// vedle titulku. Místo v okně patří diffu.
+    /// Tři řádky hlavičky, jak je má návrh (#218): titulek s číslem, souřadnice PR a pruh běhu.
+    ///
+    /// **Bez pravého sloupce.** Do #218 pod sebou stály `Spustit review` (fialové), `kopie
+    /// připravená` (zelená) a `Návrh: request changes` (oranžová) — tři hlasité barvy, které
+    /// z pravé strany hlavičky dělaly semafor a přebíjely titulek vlevo. Stav pracovní kopie se
+    /// přestěhoval do stavového řádku (je to stav prostředí, ne údaj o PR), návrh verdiktu zmizel
+    /// úplně (od #114 jím panel `Moje review` verdikt předvyplňuje, takže tady byl druhou kopií
+    /// téhož) a zbylo jediné akcentové místo: `Spustit review`.
     private var controls: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(pullRequest.title)
                     .font(.title3)
                     .lineLimit(2)
+                // Číslo patří k titulku, ne dovnitř věty `owner/repo#4` (#218) — velké
+                // a tlumené, jak ho má návrh. `verbatim`, jinak locale udělá z #21663
+                // „#21 663“.
+                Text(verbatim: "#\(pullRequest.number)")
+                    .font(.title3)
+                    .foregroundStyle(Palette.ink3)
+                    .monospacedDigit()
+                    .textSelection(.enabled)
                 Spacer(minLength: 12)
                 review
             }
@@ -101,9 +116,8 @@ struct PullRequestDetailView: View {
                     detail: loadedDetail,
                     checks: store.checks[pullRequest.id] ?? []
                 )
-                Spacer(minLength: 8)
-                checkout
                 draftChip
+                Spacer(minLength: 8)
             }
             // Jen když se hlava rozešla se sha, proti které platí nálezy — jinak by to byl
             // řádek s údajem, který nikoho nezajímá.
@@ -114,7 +128,8 @@ struct PullRequestDetailView: View {
             }
             reviewers
             // Selhání checkoutu se do lišty nevejde, a právě u něj je text od `gitu`
-            // to jediné, z čeho se pozná, co dělat dál.
+            // to jediné, z čeho se pozná, co dělat dál. **Zůstává v hlavičce**, i když se
+            // ostatní stavy kopie stěhovaly do stavového řádku: porucha není stav prostředí.
             if case .failed(let detail) = store.checkoutState(for: pullRequest.repo) {
                 checkoutFailure(detail)
             }
@@ -125,27 +140,44 @@ struct PullRequestDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Záložky na úrovni PR. Sedí **pod hlavičkou**, ne nad ní: titulek, stav kopie
+    /// Záložky na úrovni PR. Sedí **pod hlavičkou**, ne nad ní: titulek, pruh běhu
     /// i spuštění review platí pro obojí, takže by se v každém tabu musely kreslit znovu.
     ///
-    /// Odznak u `Přehledu` říká, kolik je toho k přečtení.
+    /// Odznak nese **každá** záložka (#218); co který počítá, je u `count(in:)`.
     private var tabs: some View {
-        PullRequestTabBar(selection: tabSelection) { tab in
-            // Jen to, co je **k přečtení** — události časové osy se nepočítají (#171), jinak by
-            // na PR s dvaceti commity odznak ukazoval třicet a přestal by o diskuzi něco říkat.
-            // Počet je u `Konverzace` (#183), ne u `Přehledu`: odznak říká, kolik je toho
-            // k přečtení, a od #183 se čte tam. Události se do něj nepočítají — na PR
-            // s dvaceti commity by přestal o diskuzi něco říkat.
-            tab == .conversation ? store.overview(for: pullRequest.id).count { $0.isReadable } : nil
+        PullRequestTabBar(selection: tabSelection, count: count(in:))
+            .diffCounts(loadedDiffCounts)
+    }
+
+    /// Odznak u záložky. `nil` = nedá se říct, takže se nekreslí nic — nula by tvrdila, že se
+    /// spočítalo a vyšlo prázdno.
+    ///
+    /// **Každá záložka počítá něco jiného** (#218) a je to schválně: odznak odpovídá na otázku
+    /// „kolik je toho tam“, a ta má v každém tabu jiný předmět.
+    private func count(in tab: PullRequestTab) -> Int? {
+        switch tab {
+        // Co přibylo od minule — tedy přesně to, čím `Přehled` začíná. Počet **všeho**, co
+        // tab obsahuje, by byl konstanta (čtyři bloky) a neřekl by nic.
+        case .overview: store.changesSinceLastVisit(for: pullRequest.id).count
+        // Soubory v diffu, ne řádky: `+X −Y` stojí o kus dál v téže liště.
+        case .filesChanged: loadedDiff?.files.count
+        // Jen to, co je **k přečtení** — události časové osy se nepočítají (#171), jinak by
+        // na PR s dvaceti commity odznak ukazoval třicet a přestal by o diskuzi něco říkat.
+        case .conversation: store.overview(for: pullRequest.id).count { $0.isReadable }
         }
-        .diffCounts(loadedDiffCounts)
+    }
+
+    /// Načtený diff. `nil` u načítání i selhání — odznak ani rozsah změny si v obou případech
+    /// prostě nekreslí, co ještě neví.
+    private var loadedDiff: Diff? {
+        guard case .loaded(let diff, _) = store.diffState(for: pullRequest.id) else { return nil }
+        return diff
     }
 
     /// Rozsah změny pro záložky (#174). `nil`, dokud diff nedorazí — nuly by tvrdily,
     /// že PR nic nemění.
     private var loadedDiffCounts: (additions: Int, deletions: Int)? {
-        guard case .loaded(let diff, _) = store.diffState(for: pullRequest.id) else { return nil }
-        return (diff.additions, diff.deletions)
+        loadedDiff.map { ($0.additions, $0.deletions) }
     }
 
     /// Načtený detail PR. `nil` u načítání i selhání — hlavička si v obou případech
@@ -239,29 +271,24 @@ struct PullRequestDetailView: View {
         }
     }
 
-    /// Chipy reviewerů a návrh verdiktu. Ukazují se, jakmile je co říct — u PR, na kterém
-    /// review nikdy neběželo, by to byl jen řádek prázdných odznaků.
+    /// Pruh běhu: chipy reviewerů a vedle nich průběh běžícího review (#218). Ukazuje se,
+    /// jakmile je co říct — u PR, na kterém review nikdy neběželo, by to byl jen řádek
+    /// prázdných odznaků.
     @ViewBuilder private var reviewers: some View {
         let record = store.reviewRecord(for: pullRequest.id)
         if record != nil || store.isReviewing(pullRequest.id) {
-            HStack(spacing: 12) {
-                ReviewerChipsView(
-                    chips: Policy.chips(
-                        for: record,
-                        skills: store.reviewSkills(for: pullRequest.repo),
-                        running: store.runningReviewers(for: pullRequest.id)
-                    ),
-                    muted: $mutedReviewers,
-                    // Opakování jednoho revieweera (#149). Ostatní běhy zůstávají uložené,
-                    // takže se za ně neplatí znovu.
-                    rerun: { store.startReview(for: pullRequest.id, skills: [$0]) },
-                    isReviewing: store.isReviewing(pullRequest.id)
-                )
-                Spacer(minLength: 12)
-                if let record {
-                    VerdictView(record: record, blockingCategories: blockingCategories)
-                }
-            }
+            ReviewRunbarView(
+                chips: Policy.chips(
+                    for: record,
+                    skills: store.reviewSkills(for: pullRequest.repo),
+                    running: store.runningReviewers(for: pullRequest.id)
+                ),
+                muted: $mutedReviewers,
+                // Opakování jednoho revieweera (#149). Ostatní běhy zůstávají uložené,
+                // takže se za ně neplatí znovu.
+                rerun: { store.startReview(for: pullRequest.id, skills: [$0]) },
+                progress: store.reviewProgress(for: pullRequest.id)
+            )
             .padding(.top, 2)
         }
     }
@@ -326,6 +353,10 @@ struct PullRequestDetailView: View {
     ///
     /// Slovu „draft“ se v textu vyhýbá schválně: tím se v tomhle okně označuje **rozpracovaný
     /// pull request** (chip v řádku seznamu), což je něco úplně jiného.
+    ///
+    /// Od #218 stojí **v řadě souřadnic**, ne v pravém sloupci, a je tlumený: akcentová barva
+    /// v hlavičce zbyla jedné věci, a tou je `Spustit review`. Zastaralý draft je okrový
+    /// (`Palette.stale`), ne oranžový — je to „platilo to, dneska už ne“, ne výstraha.
     @ViewBuilder private var draftChip: some View {
         if store.hasDraft(pullRequest.id) {
             let isStale = store.isDraftStale(for: pullRequest.id)
@@ -337,7 +368,7 @@ struct PullRequestDetailView: View {
                     systemImage: "square.and.pencil"
                 )
                 .font(.callout)
-                .foregroundStyle(isStale ? AnyShapeStyle(.orange) : AnyShapeStyle(.tint))
+                .foregroundStyle(isStale ? Palette.stale : Palette.ink2)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -480,31 +511,79 @@ struct PullRequestDetailView: View {
         self.cursor = self.cursor.moved(to: place)
     }
 
-    /// Zkratky bydlí **na detailu**, ne na tlačítkách v liště diffu: skočit na nález jde
-    /// i z `Přehledu` (skok si tab přepne sám), a tlačítko, které v tu chvíli není v okně,
-    /// by svou zkratku nemělo kde zaregistrovat.
+    /// Zkratky bydlí **na detailu**, ne na tlačítkách, ke kterým patří: skočit na nález jde
+    /// i z `Přehledu` (skok si tab přepne sám) a rozdělané review se píše v panelu, který je
+    /// vidět v obou tabech — kdežto tlačítko, které v tu chvíli není v okně, by svou zkratku
+    /// nemělo kde zaregistrovat.
     ///
-    /// Průhledná tlačítka, ne `.hidden()`: skryté view z hierarchie zmizí i se zkratkou.
-    @ViewBuilder private var navigationShortcuts: some View {
-        VStack {
-            Button("Další nález") { step(.forward) }
-                .keyboardShortcut(.downArrow, modifiers: .option)
-            Button("Předchozí nález") { step(.backward) }
-                .keyboardShortcut(.upArrow, modifiers: .option)
-            Button("Další blokující nález") { step(.forward, onlyBlocking: true) }
-                .keyboardShortcut(.downArrow, modifiers: [.option, .shift])
-            // Panel jde složit i rozložit **stejnou zkratkou** (#182), jak to má návrh v liště
-            // nad diffem. Zkratka bydlí tady, ne v `DiffView`: panel je vidět v obou tabech PR,
-            // kdežto lišta jen u diffu — a přepínač, který v půlce okna nefunguje, je horší
-            // než žádný.
-            Button("Panel nálezů") {
-                withAnimation(.snappy(duration: 0.15)) { findingsExpanded.toggle() }
-            }
-            .keyboardShortcut("2", modifiers: .command)
+    /// Jak se schovávají, ví `hiddenShortcuts` — je to jedno místo pro celou aplikaci.
+    @ViewBuilder private var shortcuts: some View {
+        // `⌥⇧↓` je pro SwiftUI **tatáž zkratka** jako `⌥↓`, proto jedno tlačítko a shift až
+        // v akci — viz `isShiftDown`.
+        Button("Další nález") { step(.forward, onlyBlocking: isShiftDown ? true : nil) }
+            .keyboardShortcut(.downArrow, modifiers: .option)
+        Button("Předchozí nález") { step(.backward) }
+            .keyboardShortcut(.upArrow, modifiers: .option)
+        // Panel jde složit i rozložit **stejnou zkratkou** (#182), jak to má návrh v liště
+        // nad diffem. Zkratka bydlí tady, ne v `DiffView`: panel je vidět v obou tabech PR,
+        // kdežto lišta jen u diffu — a přepínač, který v půlce okna nefunguje, je horší
+        // než žádný.
+        Button("Panel nálezů") {
+            withAnimation(.snappy(duration: 0.15)) { findingsExpanded.toggle() }
         }
-        .opacity(0)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        .keyboardShortcut("2", modifiers: .command)
+        submitShortcut
+    }
+
+    /// Drží se zrovna shift? Z toho se pozná `⌥⇧↓` (další **blokující** nález) od `⌥↓`.
+    ///
+    /// **Zkratkou se to rozlišit nedá** — změřeno na běžící aplikaci u #151: SwiftUI u šipek
+    /// `.shift` při párování ignoruje, takže dvě tlačítka lišící se jen jím jsou jedna zkratka
+    /// a vyhraje to zaregistrované později. Do #151 tedy `⌥↓` dělalo „další blokující“, a protože
+    /// blokující nález bývá jeden, druhé zmáčknutí nikam neskočilo — vypadalo to, že zkratka
+    /// nefunguje. Ověřeno oběma směry: po odebrání varianty se shiftem začalo `⌥↓` procházet
+    /// nálezy **a** `⌥⇧↓` skákalo po tom samém.
+    ///
+    /// Ptá se **události, která akci spustila** (`NSApp.currentEvent`), ne stavu klávesnice
+    /// (`NSEvent.modifierFlags`). Je to přesnější otázka — „čím se to zmáčklo“ — a hlavně to
+    /// jediné funguje i pro zkoušení přes `System Events`, kde synthetická klávesa stav
+    /// klávesnice nemění: se `modifierFlags` vycházelo `⌥⇧↓` jako obyčejné `⌥↓`.
+    ///
+    /// Bez události se bere **`false`, tedy obyčejný skok**, a není to spolknutá chyba: zúžení
+    /// na blokující je zkratka navíc, takže se z ní v nejhorším stane ta základní. Opačný default
+    /// by přeskakoval nálezy, aniž by o to kdo řekl.
+    private var isShiftDown: Bool {
+        NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+    }
+
+    /// `⌘⏎` otevře **potvrzení odeslání**, nic neodesílá (#151).
+    ///
+    /// Tvrdá podmínka č. 1: review odchází dvěma kliknutími na dvou různých tlačítkách (#68)
+    /// a zkratka je obejít nesmí. Volá proto tutéž akci jako tlačítko v panelu — tu, která jen
+    /// složí snímek draftu a otevře sheet. V samotném sheetu zkratka na odeslání **není a nesmí
+    /// být**; kdyby byla, stačil by na approve jeden hmat.
+    ///
+    /// Zakázaná je ze stejného důvodu jako to tlačítko (`Policy.canOpenSubmission`) — a navíc
+    /// nad otevřeným sheetem: druhé stisknutí by složilo nový snímek a zahodilo stav rozdělaného
+    /// odesílání, tedy i hlášku, kvůli které je okno otevřené.
+    ///
+    /// Platí **v celém detailu**, tedy i když se zrovna píše do composeru komentáře nebo do
+    /// odpovědi ve vlákně — ty vlastní `⌘⏎` nemají (odesílají se pojmenovaným tlačítkem, viz
+    /// tvrdá podmínka č. 1), takže se nic nepřebíjí; jen se nad rozdělaným review otevře
+    /// potvrzení, které jde zavřít Escem.
+    private var submitShortcut: some View {
+        Button("Otevřít potvrzení odeslání") { draftActions.send() }
+            .keyboardShortcut(.return, modifiers: .command)
+            .disabled(submission != nil || !canOpenSubmission)
+    }
+
+    /// Dá se potvrzení vůbec otevřít? Rozhoduje `Policy`, ne tohle view — na totéž se ptá
+    /// tlačítko v panelu.
+    private var canOpenSubmission: Bool {
+        Policy.canOpenSubmission(
+            block: store.draftSendBlock(for: pullRequest.id),
+            canTransfer: store.canTransferDraft(for: pullRequest.id)
+        )
     }
 
     /// Nález ukazuje na `file:line`; kde to je v diffu, ví `DiffRow`. Když se místo najít
@@ -617,11 +696,7 @@ struct PullRequestDetailView: View {
     /// Čísla do dlaždic (#198). Skládají se z toho, co v okně **už je** — diff, časová osa,
     /// hlava PR a sha nálezů; nic se pro ně nedotahuje.
     private var facts: PullRequestFacts {
-        let diff: Diff? = if case .loaded(let loaded, _) = store.diffState(for: pullRequest.id) {
-            loaded
-        } else {
-            nil
-        }
+        let diff = loadedDiff
         let markers = diff.map { _ in
             Policy.fileMarkers(
                 of: store.reviewRecord(for: pullRequest.id)?.activeFindings ?? [],
@@ -714,14 +789,13 @@ struct PullRequestDetailView: View {
 
     /// Spuštění a zrušení review. Tlačítko je tady, ne v toolbaru: patří k vybranému PR
     /// a v toolbaru by nebylo vidět, ke kterému.
+    ///
+    /// Za běhu zbývá **jen `Zrušit`** (#218): kdo běží a kolik je hotovo, říká pruh pod
+    /// souřadnicemi PR, a dvě věty o tomtéž vedle sebe se přestanou číst obě.
     @ViewBuilder private var review: some View {
         if store.isReviewing(pullRequest.id) {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text(runningLabel)
-                Button("Zrušit", systemImage: "stop.circle") {
-                    store.cancelReview(for: pullRequest.id)
-                }
+            Button("Zrušit", systemImage: "stop.circle") {
+                store.cancelReview(for: pullRequest.id)
             }
         } else {
             HStack(spacing: 12) {
@@ -731,45 +805,9 @@ struct PullRequestDetailView: View {
                 if case .failed(let detail) = store.reviewPhases[pullRequest.id] {
                     Label(detail, systemImage: "exclamationmark.triangle")
                         .font(.callout)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Palette.crit)
                 }
             }
-        }
-    }
-
-    private var runningLabel: String {
-        switch store.reviewPhases[pullRequest.id] {
-        case .running(let finished, let total): "Běží review — hotovo \(finished) z \(total)"
-        default: "Připravuji pracovní kopii a stahuji commit…"
-        }
-    }
-
-    /// Stav pracovní kopie jako jeden údaj v liště. Cesta ke klonu visí na nápovědě:
-    /// potřeba je zřídka, ale jako samostatný řádek zabírala pruh, který patří diffu.
-    ///
-    /// Vždycky podle stavu ve store, nikdy podle vlastního `@State`. `PullRequestDetailView`
-    /// si SwiftUI mezi PR drží (stejná pozice ve stromu), takže vlastní příznak by přetekl
-    /// z jednoho pull requestu na druhý.
-    @ViewBuilder private var checkout: some View {
-        switch store.checkoutState(for: pullRequest.repo) {
-        case .preparing:
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text("připravuji kopii…")
-            }
-            .font(.callout)
-            .foregroundStyle(.secondary)
-        case .ready(let path):
-            Label("kopie připravená", systemImage: "checkmark.circle")
-                .font(.callout)
-                .foregroundStyle(.green)
-                .help(path.path(percentEncoded: false))
-        case .failed:
-            EmptyView()   // vypisuje se celé pod lištou, viz `checkoutFailure`
-        case .absent:
-            Button("připravit kopii", systemImage: "arrow.down.circle", action: prepare)
-                .buttonStyle(.link)
-                .font(.callout)
         }
     }
 

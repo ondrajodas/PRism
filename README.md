@@ -55,9 +55,12 @@ aktuální; při rate limitu pruh říká, kdy to zkusí znovu.
 
 **Seznam se dá zúžit filtrem** (#117) — ikona v toolbaru vlevo, odškrtávají se v ní repozitáře
 a autoři (uvnitř osy „nebo“, mezi osami „a“: dvě repa znamenají obojí, repo + autor jeho PR v tom
-repu). Že je filtr zapnutý a kolik schovává, je vidět na ikoně **bez otevírání nabídky**, protože
-skrytý filtr je způsob, jak přijít o review; a když schová všechno, řekne to a nabídne se vypnout —
-zelené „Žádné PR k review“ by nad zapnutým filtrem tvrdilo opak pravdy.
+repu). U každé položky je **počet PR, kterých se týká** (#199), takže je před kliknutím vidět, co
+se za ní schová; počítá se z **plného** seznamu, takže se odškrtáváním nemění — jinak by číslo
+říkalo něco o pohledu místo o tom, co zapnutí položky udělá. Že je filtr zapnutý a kolik schovává,
+je vidět na ikoně **bez otevírání nabídky**, protože skrytý filtr je způsob, jak přijít o review;
+a když schová všechno, řekne to a nabídne se vypnout — zelené „Žádné PR k review“ by nad zapnutým
+filtrem tvrdilo opak pravdy.
 
 Filtr je **pohled, ne seznam**: nic se tím nepřestane stahovat, nezahodí se diffy ani rozdělaná
 review, běžící review běží dál, automat plánuje dál a okno nastavení pořád vidí i schované repo.
@@ -68,17 +71,29 @@ se stahuje.
 U vybraného PR je tlačítko **Spustit review**. Za ním se stane tohle: dotáhne se head
 commit, připraví se odpojený pracovní strom a v něm se spustí headless session Claude Code
 omezená na čtení. Řádek mezitím ukazuje `ve frontě · clone` → `běží 0/1` → `čisté` nebo
-`N nálezů`; běh jde kdykoli zrušit. Nálezy se uloží na disk, takže přežijí restart, a
-v detailu je dole lišta s **návrhem verdiktu** (`approve` / `request changes` / *není
-z čeho soudit*) a rozbaleným seznamem nálezů po kategoriích, s odznakem u těch blokujících.
+`N nálezů`; běh jde kdykoli zrušit. Nálezy se uloží na disk, takže přežijí restart, a v panelu
+vedle diffu je seznam nálezů po kategoriích, s odznakem u těch blokujících. **Návrh verdiktu**
+(`approve` / `request changes` / *není z čeho soudit*) se z nich předvyplní v tabu `Moje review`
+a je u něj napsané, že je to návrh; do #218 stál navíc v hlavičce, kde byl druhou kopií téhož.
 Kliknutím na nález diff odskočí na jeho `file:line`.
 
-Nad záložkami je **hlavička s tím, kam se to merguje** (#174): stav PR jako chip, `autor chce
-sloučit větev → base`, `owner/repo#číslo` a odkaz na GitHub. Větve se do okna dostaly až s #174 a je to první věc,
-kterou u cizího PR hledám. Když se **hlava PR rozejde se sha, proti které platí nálezy**, přibude
-pod tím řádek s oběma — dokud se rovnají, je to trivia, jakmile se rozejdou, je to nejdůležitější
-údaj na obrazovce, protože všechno pod ním mluví o kódu, který na větvi už není. Vpravo u záložek
-je rozsah změny (`+X −Y`).
+Nad záložkami je **hlavička ve třech řádcích** (#174, přesázená podle návrhu u #218). Nahoře
+titulek a vedle něj číslo PR, vpravo `Spustit review` — a je to **jediné akcentové místo v celé
+hlavičce**. Pod tím souřadnice: stav PR jako plná kapsle s puntíkem, `autor chce sloučit
+větev → base`, `owner/repo`, souhrn kontrol a odkaz na GitHub. Větve se do okna dostaly až
+s #174 a je to první věc, kterou u cizího PR hledám. Třetí řádek je **pruh běhu**: kapsle
+reviewerů (`● php-review 2`, klik filtruje jejich nálezy) a za nimi — když review běží — dráha
+průběhu s popiskem `test-coverage · 2 z 3 hotovo · 1:12`.
+
+Když se **hlava PR rozejde se sha, proti které platí nálezy**, přibude pod tím řádek s oběma —
+dokud se rovnají, je to trivia, jakmile se rozejdou, je to nejdůležitější údaj na obrazovce,
+protože všechno pod ním mluví o kódu, který na větvi už není. Vpravo u záložek je rozsah změny
+(`+X −Y`) a za ním pět čtverečků v poměru přidaného a odebraného.
+
+**Stav pracovní kopie je ve stavovém řádku dole** (`Pracovní kopie připravená · HEAD 4f2ac91`),
+ne v hlavičce: je to stav prostředí, ne údaj o pull requestu. Selhaný checkout je výjimka —
+zůstává bannerem v hlavičce, protože se u něj musí vypsat celý výstup `gitu` a z něj se teprve
+pozná, co dělat dál.
 
 Detail PR má **tři záložky** (#183): `Přehled` říká, jak to teď stojí (popis, fakta, co se změnilo
 od minule), `Změněné soubory` je diff a `Konverzace` je **časová osa toho, co se dělo** — s uzly,
@@ -86,9 +101,10 @@ u kterých tvar nese druh, se seskupenými commity (jedenáct pushů nesmí utop
 filtrem `Vše / Komentáře / Vlákna / Události` a značkou `Nové od tvé poslední návštěvy`. U force-pushe
 je rovnou u události napsané, že tím zastaraly nálezy, a tlačítko pustit review znovu.
 
-Záložky jsou podtržené jako na GitHubu a odznak u `Konverzace` říká, kolik je toho k přečtení.
-Volba se pamatuje **u každého PR zvlášť** a otevírá se `Přehled` — popis a diskuze se čtou dřív
-než kód, kterého se týkají.
+Záložky jsou podtržené jako na GitHubu a **odznak má každá** (#218), jen počítá pokaždé něco
+jiného: `Přehled` novinky od poslední návštěvy, `Změněné soubory` počet souborů, `Konverzace`
+kolik je toho k přečtení. Volba se pamatuje **u každého PR zvlášť** a otevírá se `Přehled` —
+popis a diskuze se čtou dřív než kód, kterého se týkají.
 
 Pod dlaždicemi je blok **`Kontroly na GitHubu`** (#209): kolik checků prošlo, kolik běží a kolik
 spadlo, a pod tím řádek na každý s dobou běhu. **Nejhorší stav vyhrává** — dvanáct zelených
@@ -238,6 +254,12 @@ kterému nevěřím, není práce k projití. Puntík zezelená, teprve až jsi 
 ne když skončíš na posledním; a nálezy bez místa v kódu se do počtu neplete — nedá se na ně
 skočit, tak je nápověda počítá zvlášť, aby `3/3` netvrdilo hotovo nad PR, kde zbývají v panelu.
 
+**Ty zkratky do #151 fungovaly jen do prvního skoku** a stálo to za jednu poučku: SwiftUI páruje
+u šipek zkratku **bez ohledu na shift**, takže `⌥↓` a `⌥⇧↓` jsou pro něj jedna klávesa a vyhrává
+ta zaregistrovaná později. `⌥↓` tedy dělalo „další blokující“ — a protože blokující nález bývá
+jeden, druhé zmáčknutí nikam neskočilo. Obojí je proto **jedno tlačítko** a shift se čte z události,
+která akci spustila.
+
 **Vlevo od diffu je strom souborů** (#197): cesty, u souboru s nálezem puntík (červený, když
 blokuje). Skládá se na `⌘1` na proužek s počtem souborů, a týmž kliknutím se zase rozloží.
 Popover `Přejít na soubor` odešel z lišty u #219 — byla to druhá dveře do téhož: sloupec je
@@ -383,6 +405,11 @@ pár set milisekund po posledním úhozu, a změna se projeví bez restartu. Roz
 editor **nepřepíše** — místo formuláře ukáže chybu a nabídne soubor otevřít. Dokud je
 nastavení vepředu, hlavní okno se lehce rozostří.
 
+Zavírá se křížkem, ⌘W i **Escem** (#151) — sem se chodí přepnout jednu věc a jít zpátky
+k review, takže cesta ven má být pod rukou. Rozepsaná hodnota se přitom **doručí**: Escem se
+zavírá jedním hmatem uprostřed psaní, kdy těch pár set milisekund do automatického uložení
+nemuselo uběhnout.
+
 **Stavový řádek sčítá frontu** (#155): `12 PR`, `3 blokující`, `2 review` — kolik PR čeká, kolik
 z nich má blokující nález a kolik má rozdělané review. Odznak v řádku seznamu mluví za jeden PR, tenhle souhrn za celou frontu — a sčítá
 ji **celou**, ne to, co je vidět po filtru reviewerů, protože filtr je pohled, ne obsah. Blokující se
@@ -491,6 +518,12 @@ Ochrana stojí právě na tom výpisu, ne na obřadu: **žádné opisování ná
 druhý dialog nad sheetem**. Obojí se za týden odklikává poslepu a oslabí to i to první
 potvrzení. Co zůstává, je pojmenování akce — tlačítko se jmenuje
 `Odeslat APPROVE pro owner/repo#123` — a to, že **není výchozí**: Enterem se nic neodešle.
+
+**`⌘⏎` otevře to potvrzení** (#151), a jenom to — odeslání zůstává druhé kliknutí na druhém
+tlačítku, uvnitř sheetu žádná zkratka není. Dělá přesně totéž co `Odeslat review…` v panelu
+včetně toho, kdy nedělá nic: nad draftem, který se odeslat nedá (chybí verdikt, prázdný
+komentář, nepovolené repo), je zhasnutá stejně jako to tlačítko. Nad zastaralým draftem okno
+otevře, protože se v něm dá přenést na nový commit.
 
 Návrh verdiktu z nálezů stojí v potvrzení **vedle** toho odesílaného. Když je odesílaná hodnota
 z návrhu, sheet to napíše (`Je to návrh z nálezů — ručně jsi verdikt nevybral.`), aby se v posledním

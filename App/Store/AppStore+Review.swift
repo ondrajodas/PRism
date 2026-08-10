@@ -66,6 +66,15 @@ extension AppStore {
         return Set(runningSkills(for: pr)).subtracting(finished)
     }
 
+    /// Průběh běžícího review do pruhu v hlavičce (#218). `nil` = neběží nic.
+    func reviewProgress(for pr: PRIdentifier) -> ReviewRunProgress? {
+        Policy.progress(
+            startedAt: reviewTasks[pr]?.startedAt,
+            phase: reviewPhases[pr],
+            running: runningReviewers(for: pr)
+        )
+    }
+
     /// Časová osa běhů posledního review. Prázdná, dokud se nic nespustilo.
     func timelines(for pr: PRIdentifier) -> [ReviewerTimeline] {
         // Živá osa má přednost (#203): běžící review si ji drží v paměti a uložená patří

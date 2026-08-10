@@ -30,10 +30,24 @@ struct PullRequestFilter: Equatable, Sendable {
     }
 }
 
-/// Co nabídnout ve filtru — hodnoty z plného seznamu **sjednocené s aktivním filtrem**.
+/// Jedna položka nabídky filtru: hodnota a počet PR, kterých se týká (#199).
+///
+/// **Počet patří k hodnotě, ne do vedlejší mapy.** Dvě pole, která se musí párovat indexem nebo
+/// klíčem, se dřív nebo později rozejdou — a rozejdou se potichu, protože číslo u špatného repa
+/// vypadá jako platné.
+struct PullRequestFilterOption<Value: Hashable & Sendable>: Equatable, Sendable {
+    let value: Value
+    /// Kolik PR v **plném** seznamu tuhle hodnotu má. U hodnoty, která v nabídce zbyla jen po
+    /// aktivním filtru (její PR zmizel), je to **nula** — a je to ta správná odpověď: říká, že
+    /// zapnutí položky neukáže nic.
+    let count: Int
+}
+
+/// Co nabídnout ve filtru — hodnoty z plného seznamu **sjednocené s aktivním filtrem**, každá
+/// s počtem PR, kterých se týká.
 struct PullRequestFilterOptions: Equatable, Sendable {
-    let repositories: [RepoID]
-    let authors: [String]
+    let repositories: [PullRequestFilterOption<RepoID>]
+    let authors: [PullRequestFilterOption<String>]
 
     var isEmpty: Bool { repositories.isEmpty && authors.isEmpty }
 }
@@ -61,30 +75,54 @@ extension Policy {
         return pullRequests.filter(filter.matches)
     }
 
-    /// Co nabídnout ve filtru.
+    /// Co nabídnout ve filtru, včetně počtu PR u každé položky (#199).
     ///
     /// **Skládá se z plného seznamu, ne z vyfiltrovaného** — jinak vybraná hodnota z nabídky zmizí
-    /// a filtr se nedá vypnout.
+    /// a filtr se nedá vypnout. Z plného seznamu se počítají i **počty**: ze zúženého by se měnily
+    /// podle toho, co je zrovna odškrtané, takže by se z nich nedalo poznat, co zapnutí položky
+    /// udělá. Volající to má zadarmo — `AppStore.filterOptions` sem posílá `pullRequests`, ne
+    /// `visiblePullRequests`, a nic jiného tuhle funkci nevolá.
     ///
     /// **A sjednocuje se s hodnotami aktivního filtru**, přesně jako `knownRepositories` slučuje
     /// seznam PR s konfigurací: bez toho zmizí odškrtávátko u repa, jehož PR se zavřelo, a filtr
-    /// zůstane aktivní bez cesty zpátky.
+    /// zůstane aktivní bez cesty zpátky. Taková položka má počet **nula**.
     ///
     /// Řadí se podle jména bez ohledu na velikost písmen, se `description` jako druhým kritériem —
-    /// množina pořadí nemá, takže bez řazení by nabídka mezi otevřeními poskakovala.
+    /// množina pořadí nemá, takže bez řazení by nabídka mezi otevřeními poskakovala. **Ne podle
+    /// počtu**: pořadí by pak přeskakovalo s každým tikem pollingu a hledalo by se v něm očima.
     static func filterOptions(
         in pullRequests: [PullRequestSummary],
         filter: PullRequestFilter
     ) -> PullRequestFilterOptions {
-        var repositories = Set(pullRequests.map(\.repo))
-        repositories.formUnion(filter.repositories)
-        var authors = Set(pullRequests.map(\.author))
-        authors.formUnion(filter.authors)
-
-        return PullRequestFilterOptions(
-            repositories: repositories.sorted(by: shouldPrecede),
-            authors: authors.sorted(by: shouldPrecede)
+        PullRequestFilterOptions(
+            repositories: options(
+                counting: pullRequests.map(\.repo),
+                keeping: filter.repositories,
+                sortedBy: shouldPrecede
+            ),
+            authors: options(
+                counting: pullRequests.map(\.author),
+                keeping: filter.authors,
+                sortedBy: shouldPrecede
+            )
         )
+    }
+
+    /// Jedna osa nabídky: spočítat výskyty, doplnit hodnoty z aktivního filtru nulou a seřadit.
+    ///
+    /// `Hashable` kvůli tomu počítání ve slovníku, `Sendable` kvůli `PullRequestFilterOptions`.
+    private static func options<Value: Hashable & Sendable>(
+        counting values: [Value],
+        keeping selected: Set<Value>,
+        sortedBy shouldPrecede: (Value, Value) -> Bool
+    ) -> [PullRequestFilterOption<Value>] {
+        var counts: [Value: Int] = [:]
+        for value in values { counts[value, default: 0] += 1 }
+        for value in selected where counts[value] == nil { counts[value] = 0 }
+
+        return counts
+            .map { PullRequestFilterOption(value: $0.key, count: $0.value) }
+            .sorted { shouldPrecede($0.value, $1.value) }
     }
 
     /// Proč je seznam prázdný.
