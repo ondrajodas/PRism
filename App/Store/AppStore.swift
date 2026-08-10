@@ -80,6 +80,21 @@ final class AppStore {
     /// pull requesty ponechá, takže by volba přetekla z jednoho na druhý.
     var detailTabs: [PRIdentifier: PullRequestTab] = [:]
 
+    /// Je panel vpravo od diffu rozložený?
+    ///
+    /// **Globálně, ne per PR** — je to předvolba pohledu, stejně jako `diffLayout`: kolik místa
+    /// chci dát panelu, znamená u každého PR totéž.
+    ///
+    /// **Ve store, ne v `@State` detailu** (#242), a je to podmínka, ne úklid: poznámka do těla
+    /// review přidaná z diffu spadne do panelu, takže se panel musí umět **rozložit sám** —
+    /// a dokud ta rozhodnutí bydlela ve view, nešlo je otestovat. Tichá ztráta rozepsané věty je
+    /// přitom to nejdražší, co tady umí zmizet.
+    var isReviewPanelExpanded = true
+
+    /// Co je v panelu vidět. Ze stejného důvodu tady, ne ve view: doručení poznámky panel
+    /// **přepne** na rozdělané review, a to se musí dát otestovat.
+    var reviewPanelTab: ReviewPanelTab = .findings
+
     /// Rozdělané review **per PR**. Co v mapě není, se nezačalo psát.
     ///
     /// Načte se celé při startu, ne až při výběru řádku: indikátor v seznamu má být vidět

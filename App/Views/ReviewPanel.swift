@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Panel napravo od diffu: nálezy, rozdělané review a průběh běhu.
+/// Panel napravo od diffu: nálezy u kódu a rozdělané review.
 ///
-/// Je to **jediné místo pro nálezy bez `file:line`** — chybějící testy, poznámky
-/// k architektuře. Právě kvůli nim nestačí bubliny u kódu.
+/// Je to **jediné místo pro nálezy bez `file:line`** u kódu — chybějící testy, poznámky
+/// k architektuře. Právě kvůli nim nestačí bubliny.
 ///
 /// **Napravo, ne dole** (#182). Do té doby si bral výšku, které je v diffu nejmíň: kód je
 /// dlouhý a úzký, takže dole se pere o to jediné, čeho je málo. Napravo bere šířku, které je
@@ -11,26 +11,26 @@ import SwiftUI
 /// vejde 126 znaků na stranu, tedy slib „PHP na 120 znaků se vejde“ drží. V pohledu vedle sebe
 /// ho neunese žádný displej pod 27"; složení sloupců v tom režimu řeší #188.
 ///
-/// Složený je **proužek na hraně** s počtem nálezů, ne zmizelý panel: schovaná práce je práce,
-/// o které nikdo neví.
-struct FindingsPanel: View {
-    /// `nil` při **prvním** běhu, než se uloží záznam — právě tehdy je průběh
-    /// nejzajímavější, takže se na něj nesmí čekat.
+/// **Dva taby, ne tři** (#242, do té doby `FindingsPanel`). `Průběh` se odstěhoval do vlastní
+/// záložky PR: je to záznam běhu, který se u kódu nečte, a u spadlé session se do 300 bodů nevešel
+/// ani důvod, ani konec logu. Nálezy naopak **zůstávají** — tab `Nálezy` je druhý pohled na tu samou
+/// věc, ne přesun.
+///
+/// Složený je **proužek na hraně** s počtem nálezů a značkou rozdělaného review, ne zmizelý panel:
+/// schovaná práce je práce, o které nikdo neví.
+struct ReviewPanel: View {
+    /// `nil` = žádný uložený záznam. Rozhoduje o tom, proč je seznam nálezů prázdný.
     let record: ReviewRecord?
-    /// Zahodí uložené nálezy. `nil` = není co zahodit, tlačítko se nekreslí.
-    var clear: (() async throws -> Void)?
     @Binding var isExpanded: Bool
     /// Odskok do diffu na místo nálezu.
     let jump: (Finding) -> Void
-    /// Co reviewery dělaly. Prázdné, dokud se nic nespustilo.
     /// Nálezy k zobrazení — po filtru chipů, takže ne nutně všechny ze záznamu.
     var findings: [Finding] = []
-    /// Jak jsem nálezy posoudil (#113). Celá mapa ze záznamu — řádek si z ní vezme to své.
+    /// Jak jsem nálezy posoudil (#113). Celá mapa ze záznamu — karta si z ní vezme to své.
     var dismissals: [FindingKey: FindingDismissal] = [:]
     /// Odmítnutí a vrácení nálezu. Kontextové menu se bez toho nekreslí.
     var findingActions: FindingActions?
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
-    var timelines: [ReviewerTimeline] = []
     var isRunning = false
     /// Ke kterému PR panel patří. Potřebuje to tab s rozdělaným review — na identitě PR
     /// visí, kam se doručí rozepsaný text při přepnutí.
@@ -48,33 +48,21 @@ struct FindingsPanel: View {
     var draftActions = DraftActions()
     var jumpToComment: (ReviewDraftComment) -> Void = { _ in }
 
-    enum Tab: Hashable {
-        case findings
-        case progress
-        /// Rozdělané review — tělo, verdikt a řádkové komentáře.
-        case draft
-    }
-
     /// Šířku si drží uživatel taháním a přežívá restart — kolik místa chce dát nálezům,
     /// ví jen on. **Vlastní klíč** (#182), ne přejmenovaná výška: uložených 220 by jako šířka
     /// dalo panel užší, než v jakém se dá nález přečíst.
-    @AppStorage("findingsPanelWidth") private var width = FindingsPanel.defaultWidth
-    /// Sledovat konec časové osy. Předvolba pohledu, takže `UserDefaults`, ne store.
-    @AppStorage("progressFollowsTail") private var followsTail = true
+    @AppStorage("findingsPanelWidth") private var width = ReviewPanel.defaultWidth
     /// Kde stojí kurzor procházení (#187). Karta na tom místě dostane rámeček, takže panel
     /// a diff ukazují **totéž** — bez toho by po skoku šipkou nebylo v seznamu poznat, kde jsem.
     var current: FindingPlace?
 
-    /// Který tab je vidět. Drží ho detail PR, ne panel: přidání poznámky do těla review se
-    /// z diffu musí umět přepnout na tab, do kterého ta poznámka spadla — jinak text zmizí
-    /// někam, kde ho nikdo nehledá.
-    @Binding var tab: Tab
+    /// Který tab je vidět. Drží ho `AppStore` (#242): přidání poznámky do těla review se z diffu
+    /// musí umět přepnout na tab, do kterého ta poznámka spadla, **a rozložit složený panel** —
+    /// jinak text zmizí někam, kde ho nikdo nehledá.
+    @Binding var tab: ReviewPanelTab
     /// Šířka na začátku tažení. Bez ní se posun načítá z každé události znovu a panel
     /// utíká pryč.
     @State private var widthAtDragStart: Double?
-    @State private var isConfirmingClear = false
-    @State private var isClearing = false
-    @State private var clearFailure: String?
 
     /// Šířka z návrhu (`grid-template-columns: … 300px`) a meze kolem ní.
     ///
@@ -112,26 +100,15 @@ struct FindingsPanel: View {
         }
         .background(Palette.chrome)
         .overlay(alignment: .leading) { Rectangle().fill(Palette.lineSoft).frame(width: 1) }
-        // `presenting:` podá text nepovinný, takže v těle není `?? ""` — default, který se
-        // nikdy nepoužije, čte příště jako možnost prázdné hlášky.
-        .alert(
-            "Nálezy se nepodařilo zahodit",
-            isPresented: .init(get: { clearFailure != nil }, set: { if !$0 { clearFailure = nil } }),
-            presenting: clearFailure
-        ) { _ in
-            Button("Zavřít", role: .cancel) { clearFailure = nil }
-        } message: { detail in
-            Text(verbatim: detail)
-        }
     }
 
     // MARK: - Hlavička a proužek
 
-    /// Řádek nad segmenty: sbalení, stáří výsledku a zahození nálezů.
+    /// Řádek nad segmenty: sbalení a zkratka k němu.
     ///
-    /// Návrh v sekci 02 hlavičku nekreslí — jenže tyhle tři věci v aplikaci jsou a někam patří.
-    /// Do segmentů ne (přepínají obsah), do obsahu taky ne (platí pro všechny tři). Sazba je
-    /// z `.side > header` v návrhu, který na to místo v CSS pamatuje.
+    /// **Stáří výsledku a `Zahodit nálezy` se odsud odstěhovaly do tabu `Nálezy`** (#242). Platí
+    /// pro uložený záznam, ne pro panel, a v tabu přes celé okno je na ně místo — kdežto tady se
+    /// o 300 bodů praly s tím, co se čte.
     private var header: some View {
         HStack(spacing: 8) {
             Button {
@@ -145,21 +122,12 @@ struct FindingsPanel: View {
             .buttonStyle(.plain)
             .help("Složit panel (⌘2)")
             .accessibilityLabel("Složit panel")
-
-            if tab == .progress {
-                Toggle("Sledovat konec", isOn: $followsTail)
-                    .toggleStyle(.checkbox)
-                    .font(.caption)
-                    .help("Posouvat osu na nejnovější událost")
-            }
             Spacer(minLength: 4)
-            if let finishedAt = record?.finishedAt {
-                Text(finishedAt, format: .relative(presentation: .named))
-                    .font(.caption)
-                    .foregroundStyle(Palette.ink3)
-                    .lineLimit(1)
-            }
-            clearButton
+            Text(verbatim: "⌘2")
+                .font(.system(size: 9.5, design: .monospaced))
+                .padding(.horizontal, 4)
+                .foregroundStyle(Palette.ink3)
+                .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(Palette.line) }
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 9)
@@ -168,8 +136,8 @@ struct FindingsPanel: View {
 
     /// Složený panel — proužek na hraně okna, ne zmizelý panel.
     ///
-    /// Nese **počet nálezů**, takže je z něj poznat, že je co číst; červený je, když mezi nimi
-    /// něco blokuje. Bez toho čísla je složení tichá ztráta práce, kterou reviewer odvedl.
+    /// Nese **počet nálezů** a značku rozdělaného review, takže je z něj poznat, že je co číst
+    /// i že něco leží rozepsané. Bez těch značek je složení tichá ztráta práce.
     private var collapsedStrip: some View {
         Button {
             withAnimation(.snappy(duration: 0.15)) { isExpanded = true }
@@ -179,17 +147,13 @@ struct FindingsPanel: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Palette.ink3)
                 if !findings.isEmpty {
-                    Text(verbatim: "\(findings.count)")
-                        .font(.system(size: 10, design: .monospaced))
-                        .monospacedDigit()
-                        .foregroundStyle(hasBlocking ? Color.red : Palette.ink2)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(
-                            (hasBlocking ? Color.red.opacity(0.15) : Palette.raised),
-                            in: .rect(cornerRadius: 4)
-                        )
+                    stripMark(
+                        "\(findings.count)",
+                        tint: hasBlocking ? Palette.crit : Palette.ink2,
+                        background: hasBlocking ? Palette.crit.opacity(0.15) : Palette.raised
+                    )
                 }
+                draftMark
                 Text(verbatim: "nálezy · review")
                     .font(.system(size: 10.5))
                     .tracking(0.6)
@@ -211,75 +175,84 @@ struct FindingsPanel: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .help("Rozložit panel nálezů (⌘2)")
-        .accessibilityLabel("Rozložit panel nálezů")
+        .help(collapsedHelp)
+        .accessibilityLabel("Rozložit panel")
+        .accessibilityValue(collapsedHelp)
+    }
+
+    /// Značka rozdělaného review v proužku (#242).
+    ///
+    /// Počet **komentářů**, když nějaké jsou, jinak puntík: draft, ve kterém je jen vybraný verdikt
+    /// nebo tělo, je plnohodnotný (čtvrtina vzorku z #63), takže „0“ by o něm lhala. Zastaralý je
+    /// okrový — je to „platilo to, dneska už ne“, ne výstraha.
+    @ViewBuilder private var draftMark: some View {
+        if let draft {
+            let tint = isDraftStale ? Palette.stale : Palette.accent
+            if draft.comments.isEmpty {
+                Circle()
+                    .fill(tint)
+                    .frame(width: 6, height: 6)
+                    .help(draftHelp)
+            } else {
+                stripMark("\(draft.comments.count)", tint: tint, background: tint.opacity(0.15))
+                    .help(draftHelp)
+            }
+        }
+    }
+
+    private var draftHelp: String {
+        isDraftStale
+            ? "Rozdělané review je psané proti staršímu commitu"
+            : "Něco leží rozepsané v mém review"
+    }
+
+    private var collapsedHelp: String {
+        var parts: [String] = []
+        if !findings.isEmpty {
+            parts.append(Plural.czech(findings.count, one: "nález", few: "nálezy", many: "nálezů"))
+        }
+        if let draft {
+            parts.append(draft.comments.isEmpty
+                ? "rozdělané review"
+                : Plural.czech(
+                    draft.comments.count,
+                    one: "komentář v mém review",
+                    few: "komentáře v mém review",
+                    many: "komentářů v mém review"
+                ))
+        }
+        guard !parts.isEmpty else { return "Rozložit panel (⌘2)" }
+        return "\(parts.joined(separator: " · ")) — rozložit panel (⌘2)"
+    }
+
+    private func stripMark(_ text: String, tint: Color, background: Color) -> some View {
+        Text(verbatim: text)
+            .font(.system(size: 10, design: .monospaced))
+            .monospacedDigit()
+            .foregroundStyle(tint)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(background, in: .rect(cornerRadius: 4))
     }
 
     private var hasBlocking: Bool {
-        findings.contains { Policy.isBlocking($0, categories: blockingCategories) }
-    }
-
-    /// Zahození uložených nálezů.
-    ///
-    /// Vpravo, **ne vedle tabů**, jak psalo zadání #81: mazací tlačítko těsně u přepínače,
-    /// do kterého se kliká pořád, si o překlep říká. Za běhu je zakázané — doběhlý skill by
-    /// se zapsal do právě vyčištěného záznamu.
-    @ViewBuilder private var clearButton: some View {
-        if let clear {
-            Button("Zahodit nálezy", systemImage: "trash") {
-                isConfirmingClear = true
-            }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderless)
-            .font(.callout)
-            .disabled(isRunning || isClearing)
-            .help(isRunning
-                ? "Nejdřív nech review doběhnout, nebo ho zruš"
-                : "Zahodit uložené nálezy tohohle commitu a pustit review znovu")
-            // Potvrzení schválně: vrátit se k nálezům jde jedině novým během, a ten stojí
-            // session. Není to nevratné zdánlivě, je to nevratné doopravdy.
-            .confirmationDialog(
-                "Zahodit uložené nálezy?",
-                isPresented: $isConfirmingClear,
-                titleVisibility: .visible
-            ) {
-                Button("Zahodit", role: .destructive) { runClear(clear) }
-                Button("Zpět", role: .cancel) {}
-            } message: {
-                Text("Zpátky je dostaneš jedině novým review, které stojí session. Historie starších commitů zůstane.")
-            }
-        }
-    }
-
-    private func runClear(_ clear: @escaping () async throws -> Void) {
-        isClearing = true
-        Task {
-            defer { isClearing = false }
-            do {
-                try await clear()
-            } catch {
-                // Nesmazaný záznam se nesmí tvářit jako smazaný — vrátil by se po restartu
-                // a nikdo by nevěděl proč.
-                clearFailure = error.localizedDescription
-            }
-        }
+        Policy.tally(of: findings, dismissals: dismissals, categories: blockingCategories).blocking > 0
     }
 
     /// Segmenty z návrhu, ne `Picker(.segmented)`: systémový přepínač si bere výšku
-    /// i šířku podle textu a v panelu 300 bodů se `Nálezy · 12 / Průběh / Moje review ●`
-    /// nevejde. Sazba je z `.seg` — poloměr 6, 11,5 bodu, aktivní na vyvýšené ploše.
+    /// i šířku podle textu a v panelu 300 bodů se `Nálezy · 12 / Moje review ●` nevejde.
+    /// Sazba je z `.seg` — poloměr 6, 11,5 bodu, aktivní na vyvýšené ploše.
     private var segments: some View {
         HStack(spacing: 2) {
             segment("Nálezy", count: findings.isEmpty ? nil : findings.count, tag: .findings)
             segment(draftLabel, tag: .draft)
-            segment("Průběh", tag: .progress)
         }
         .padding(.horizontal, 11)
         .padding(.top, 9)
         .padding(.bottom, 4)
     }
 
-    private func segment(_ title: String, count: Int? = nil, tag: Tab) -> some View {
+    private func segment(_ title: String, count: Int? = nil, tag: ReviewPanelTab) -> some View {
         Button {
             tab = tag
             // Složený panel bez obsahu vypadá jako chyba — přepnutí segmentu ho proto otevře.
@@ -336,7 +309,6 @@ struct FindingsPanel: View {
     @ViewBuilder private var content: some View {
         switch tab {
         case .findings: findingsTab
-        case .progress: progress
         case .draft:
             DraftPanel(
                 pullRequest: pullRequest,
@@ -352,10 +324,10 @@ struct FindingsPanel: View {
     }
 
     @ViewBuilder private var findingsTab: some View {
-        if findings.isEmpty {
-            emptyExplanation
-                .padding(16)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        if let reason = emptyReason {
+            // Tatáž vysvětlivka jako v tabu `Nálezy` (#242) — dvě různé věty o tom, proč je
+            // prázdno, by se dřív nebo později rozešly a jedna z nich by tvrdila „čisto“.
+            FindingsEmptyView(reason: reason)
         } else {
             cards
         }
@@ -368,11 +340,9 @@ struct FindingsPanel: View {
     /// se vešel na dva řádky bez možnosti rozbalit. Karta má místa dost a **závažnost nese
     /// proužek na hraně**, takže se čte dřív než text — jako v řádku fronty (#172).
     ///
-    /// **Řazení podle sloupců se tím ztrácí, a je to vědomé.** Nálezů je typicky pod dvacet
-    /// a `Policy.sorted` je řadí podle závažnosti, tedy tak, jak se mají číst; zúžit je jde
-    /// filtrem reviewerů a přepínačem `jen blokující` v liště nad diffem (#187). Kdyby se
-    /// ukázalo, že řazení chybí, vrátí se jako druhý pohled — proto zůstává `FindingRow`
-    /// se svými `Comparable` klíči, ze kterých tabulka žila.
+    /// **Řazení podle sloupců se sem nevrátilo ani po #242**, kde tabulka vznikla v tabu přes celé
+    /// okno: v panelu se sloupce pořád nemají kam vejít. Platí tady pořadí z `Policy.sorted`, tedy
+    /// podle závažnosti — a kdo chce řadit, má na to tab.
     private var cards: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 6) {
@@ -389,45 +359,20 @@ struct FindingsPanel: View {
         }
     }
 
-    private var progress: some View {
-        ReviewTimelineView(timelines: timelines, followsTail: followsTail)
-    }
-
-    /// Prázdná tabulka neznamená sama o sobě čisté review — reviewer taky nemusel nálezy
-    /// nahlásit vůbec nebo se je nepodařilo přečíst. Vysvětlení se bere ze stavu, který
-    /// z toho počítá `Policy`, ne z vlastní věty tady.
-    @ViewBuilder private var emptyExplanation: some View {
-        // Schované nálezy nejsou žádné nálezy. Bez téhle věty vypadá zapnutý filtr jako
-        // čisté review — tedy jako schválený PR s neohlášenou chybou.
-        if let record, !record.findings.isEmpty {
-            Text("Nálezy jsou schované filtrem reviewerů.").foregroundStyle(.secondary)
-        } else if let record {
-            explanation(of: record)
-        } else if isRunning {
-            Text("Review běží. Co se právě děje, je v tabu Průběh.").foregroundStyle(.secondary)
-        } else {
-            Text("Nálezy k tomuhle běhu nejsou.").foregroundStyle(.secondary)
-        }
-    }
-
-    @ViewBuilder private func explanation(of record: ReviewRecord) -> some View {
-        switch Policy.reviewState(for: record, categories: blockingCategories) {
-        case .clean:
-            Text("Review doběhlo a nic nenašlo.").foregroundStyle(.secondary)
-        case .failed(let detail), .checkoutFailed(let detail):
-            Text(detail).foregroundStyle(.orange)
-        default:
-            Text("Nálezy k tomuhle běhu nejsou.").foregroundStyle(.secondary)
-        }
-    }
-
     // MARK: - Data
 
-    /// Bez řazení podle sloupce platí pořadí z `Policy` — tabulka nemá vlastní představu
-    /// o tom, co patří nahoru, včetně toho, že odmítnuté jdou naspod.
     /// Pořadí dává `Policy` — podle závažnosti, ne podle toho, co si kdo naklikal ve sloupci.
     private var rows: [FindingRow] {
         FindingRow.rows(of: findings, blocking: blockingCategories, dismissals: dismissals)
+    }
+
+    private var emptyReason: FindingsEmptyReason? {
+        Policy.findingsEmptyReason(
+            visible: findings,
+            record: record,
+            isRunning: isRunning,
+            categories: blockingCategories
+        )
     }
 
     /// Rozdělané review se hlásí **odznakem, ne počtem**: draft, ve kterém je jen vybraný
@@ -437,5 +382,4 @@ struct FindingsPanel: View {
         guard draft != nil else { return "Moje review" }
         return isDraftStale ? "Moje review ⚠︎" : "Moje review ●"
     }
-
 }

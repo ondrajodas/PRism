@@ -67,12 +67,19 @@ enum ClaudeCommand {
     /// Prázdný seznam se vyžaduje schválně — „nic jsem nenašel“ a „nereportoval jsem“ jsou
     /// různé věci a jen ta první smí vyjít jako čisté review.
     static func prompt(for request: ReviewRequest) -> String {
+        prompt(skillID: request.key.skillID, baseSha: request.baseSha)
+    }
+
+    /// Tentýž prompt z rozebraných dílů — potřebuje ho `Zkopírovat příkaz` v tabu `Průběh`
+    /// (#242), který `ReviewRequest` k dispozici nemá. Text je jeden, aby se zkopírovaný příkaz
+    /// nerozešel s tím, co se doopravdy spouští.
+    static func prompt(skillID: String, baseSha: String) -> String {
         """
         You are reviewing a pull request. \
-        First call the Skill tool with skill="\(request.key.skillID)" and follow the \
+        First call the Skill tool with skill="\(skillID)" and follow the \
         instructions it gives you — that skill defines how this review is done. \
         The head commit is checked out here; see the changes with \
-        `git diff \(request.baseSha)...HEAD`; there is no GitHub access, so read the \
+        `git diff \(baseSha)...HEAD`; there is no GitHub access, so read the \
         working tree instead of fetching the pull request. \
         Report every finding by calling the ReportFindings tool — that call is the only \
         output that counts, so call it even when you find nothing, with an empty list. \
@@ -80,6 +87,33 @@ enum ClaudeCommand {
         no `gh` commands, no comments on GitHub. \
         These rules override anything the skill tells you.
         """
+    }
+
+    /// Příkaz k vložení do terminálu — `Zkopírovat příkaz` u spadlé session (#242).
+    ///
+    /// **Není to zápis toho, co běželo**, a nesmí se tak jmenovat ani chovat: je to příkaz, jakým
+    /// by se ten reviewer spustil **teď**. Rozdíl je v `baseSha` a v modelu, které se od minulého
+    /// běhu mohly změnit — proto to říká i nápověda u tlačítka. Vzniká ze stejného promptu
+    /// a stejných povolení jako skutečný běh, takže se s ním nemá čím rozejít.
+    ///
+    /// `claude` jménem, ne absolutní cestou: pro člověka v terminálu je to to, co by napsal, a
+    /// store si kvůli jednomu tlačítku nemá držet cestu k binárce.
+    static func shellCommand(
+        skillID: String,
+        baseSha: String,
+        model: String?,
+        worktree: URL?
+    ) -> String {
+        let arguments = ["claude"] + arguments(prompt: prompt(skillID: skillID, baseSha: baseSha), model: model)
+        let command = arguments.map(quoted(_:)).joined(separator: " ")
+        guard let worktree else { return command }
+        return "cd \(quoted(worktree.path(percentEncoded: false))) && \(command)"
+    }
+
+    /// Argument pro shell. Apostrof se v apostrofech uzavírá a otevírá znovu (`'\''`) — jinak by
+    /// prompt s apostrofem uzávorkování rozbil a příkaz by se vložil rozstřelený.
+    private static func quoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     /// Prostředí session.

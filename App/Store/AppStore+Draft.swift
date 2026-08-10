@@ -91,8 +91,22 @@ extension AppStore {
                 for: pr
             )
         case .body(let path, let line):
-            appendDraftBodyItem(text: text, path: path, line: line, for: pr)
+            appendDraftNote(text: text, path: path, line: line, for: pr)
         }
+    }
+
+    /// Přidá poznámku do těla review — a **ukáže ji** (#242).
+    ///
+    /// Kam text spadl, se musí poznat: řádkový komentář je vidět hned pod řádkem, kdežto položka
+    /// v těle je jinde v okně, a od #242 klidně za složeným panelem. Proto tudy chodí obojí, co do
+    /// těla píše: převzetí nálezu bez kotvy i poznámka k řádku, na který GitHub komentář nepustí.
+    ///
+    /// **Vlastní metoda, ne `revealDraft()` u volajícího**: dvě kopie téhle dvojice by znamenaly,
+    /// že se v jedné z nich zapomene — a tichá ztráta rozepsané věty je to nejdražší, co tady umí
+    /// zmizet.
+    func appendDraftNote(text: String, path: String?, line: Int?, for pr: PRIdentifier) {
+        appendDraftBodyItem(text: text, path: path, line: line, for: pr)
+        revealDraft()
     }
 
     /// Založí řádkový komentář. Prázdný schválně — text se dopisuje v bublině.

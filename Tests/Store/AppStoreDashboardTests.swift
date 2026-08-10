@@ -118,7 +118,10 @@ struct AppStoreTimelineTests {
         store.reviewRecords[pullRequest] = makeRecord(runs: [makeStoredRun(timeline: stored("z disku.php"))])
 
         #expect(store.timelines(for: pullRequest).count == 1)
-        #expect(store.timelines(for: pullRequest).first?.entries.count == 1)
+        // Jeden uložený krok a k němu **doplněný konec** z běhu (nahlášení nálezů a výsledek) —
+        // uložený snímek osy ho v sobě nemá, viz `ReviewerTimeline.completeTail(from:)`.
+        #expect(store.timelines(for: pullRequest).first?.entries.count == 3)
+        #expect(store.timelines(for: pullRequest).first?.isFinished == true)
     }
 
     /// Rozhoduje **existence klíče, ne prázdnost pole**: nový běh si osu nuluje ještě před

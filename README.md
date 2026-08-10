@@ -105,16 +105,29 @@ ne v hlavičce: je to stav prostředí, ne údaj o pull requestu. Selhaný check
 zůstává bannerem v hlavičce, protože se u něj musí vypsat celý výstup `gitu` a z něj se teprve
 pozná, co dělat dál.
 
-Detail PR má **tři záložky** (#183): `Přehled` říká, jak to teď stojí (popis, fakta, co se změnilo
-od minule), `Změněné soubory` je diff a `Konverzace` je **časová osa toho, co se dělo** — s uzly,
+Detail PR má **pět záložek** (#183, dvě přidal #242): `Přehled` říká, jak to teď stojí (popis,
+fakta, co se změnilo od minule), `Změněné soubory` je diff a `Konverzace` je **časová osa toho,
+co se dělo** — s uzly,
 u kterých tvar nese druh, se seskupenými commity (jedenáct pushů nesmí utopit dva komentáře),
 filtrem `Vše / Komentáře / Vlákna / Události` a značkou `Nové od tvé poslední návštěvy`. U force-pushe
 je rovnou u události napsané, že tím zastaraly nálezy, a tlačítko pustit review znovu.
 
+Za nimi stojí `Nálezy` (tabulka všeho, co reviewery nahlásily) a `Průběh` (co dělaly) — a mezi
+`Konverzací` a `Nálezy` je **dělič**: nalevo je to, co je na PR a co má i GitHub, napravo to, co
+s ním udělaly naše reviewery.
+
+V `Průběhu` má dráhu **každý reviewer z nastavené sady**, ne jen ten, který už na tomhle PR běžel:
+otázka je „kde je které z mých review“ a *ještě nezačalo* je taky odpověď. Tři různá „nic tu není“
+mají proto tři různá slova — `nespuštěno` (v sadě, tady nic), `ve frontě` (review běží a tenhle čeká
+na slot) a `bez průběhu` (běh v záznamu je, ale jeho osa ne, což jsou soubory z doby, kdy se ještě
+neukládala). Dráha po skillu, který v nastavení už není, **nezmizí** — nesla by s sebou doběhlé
+review — jen je označená `mimo sadu`.
+
 Záložky jsou podtržené jako na GitHubu a **odznak má každá** (#218), jen počítá pokaždé něco
 jiného: `Přehled` novinky od poslední návštěvy, `Změněné soubory` počet souborů, `Konverzace`
-kolik je toho k přečtení. Volba se pamatuje **u každého PR zvlášť** a otevírá se `Přehled` —
-popis a diskuze se čtou dřív než kód, kterého se týkají.
+kolik je toho k přečtení, `Nálezy` kolik jich je (**červeně, když něco blokuje**) a `Průběh`
+**puntík, ne počet** — „běží“ je stav, ne množství. Volba se pamatuje **u každého PR zvlášť**
+a otevírá se `Přehled` — popis a diskuze se čtou dřív než kód, kterého se týkají.
 
 Pod dlaždicemi je blok **`Kontroly na GitHubu`** (#209): kolik checků prošlo, kolik běží a kolik
 spadlo, a pod tím řádek na každý s dobou běhu. **Nejhorší stav vyhrává** — dvanáct zelených
@@ -286,12 +299,16 @@ blokuje). Skládá se na `⌘1` na proužek s počtem souborů, a týmž kliknut
 Popover `Přejít na soubor` odešel z lišty u #219 — byla to druhá dveře do téhož: sloupec je
 na dosah jedním kliknutím a v liště bral místo, kvůli kterému se v užším okně nevešla.
 
-**Napravo od diffu je panel se segmenty** (#182): nálezy jako karty, Moje review a Průběh. Panel
+**Napravo od diffu je panel se segmenty** (#182): nálezy jako karty a Moje review. Panel
 je jediné místo, kde jsou vidět nálezy **bez místa v kódu** — chybějící testy nebo poznámky
-k architektuře; kvůli nim samotné bubliny nestačí. Je vidět v **obou** záložkách, protože nálezy,
-průběh i rozdělané review patří k celému PR, ne k diffu. Klik kamkoli do karty odscrolluje diff
+k architektuře; kvůli nim samotné bubliny nestačí. Je vidět ve **všech** záložkách, protože nálezy
+i rozdělané review patří k celému PR, ne k diffu. Klik kamkoli do karty odscrolluje diff
 (a přepne na něj, když jsi v jiném tabu) tak, aby nad nálezem zůstalo pár řádků kontextu,
 a bublinu na chvíli zvýrazní.
+
+Segmenty jsou od #242 **dva**: `Průběh` se odstěhoval do vlastní záložky PR, protože se u kódu
+nečte a u spadlé session se do 300 bodů nevešel ani důvod, ani konec logu. Nálezy v panelu
+naopak zůstávají — tab `Nálezy` je druhý pohled na tu samou věc, ne přesun.
 
 Do #182 byl panel **pod** diffem, kde si bral výšku — tedy to, čeho je u kódu nejmíň. Napravo bere
 šířku, které je v okně přes celou obrazovku dost: v pohledu pod sebou zbude i na 14" displeji 126
@@ -306,11 +323,39 @@ v kódu, ořezané **zepředu**, ať zůstane vidět jméno souboru a číslo ř
 procházení šipkami, má rámeček a popisek `tady jsi`, takže je z panelu i z lišty nad diffem
 poznat totéž místo.
 
-Do #175 to byla řaditelná tabulka. **Řazení podle sloupců se tím ztratilo, a je to vědomé:**
-nálezů je typicky pod dvacet a `Policy` je řadí podle závažnosti, tedy tak, jak se mají číst;
-zúžit je jde filtrem reviewerů a přepínačem `jen blokující`. Tabulka se při šířkách okna
-nedala nasázet rozumně — kategorie, místo a shrnutí se praly o místo a odmítnutí muselo skončit
-jako odznak u kategorie, protože nový sloupec neměl kam.
+Do #175 to byla řaditelná tabulka. **V panelu se řazení podle sloupců nevrátilo**, a je to
+vědomé: ve 300 bodech se sloupce nemají kam vejít — kategorie, místo a shrnutí se praly o místo
+a odmítnutí muselo skončit jako odznak u kategorie. Platí tam pořadí podle závažnosti, tedy to,
+v jakém se nálezy mají číst. **Tabulka se vrátila u #242, ale ve vlastní záložce** přes celou
+šířku, kde je sloupců dost, viz níž.
+
+### Záložka `Nálezy` (#242)
+
+**Přes celou šířku se nález nasází jako tabulka**, což ve 300 bodech nešlo: na jeden řádek se vejde
+závažnost, shrnutí, místo, `reviewer · kategorie` a akce. **Řadí se kliknutím na hlavičku sloupce**
+— první kliknutí tak, jak se sloupec čte (závažnost od nejvážnějšího, text od „a“), druhé otočí.
+Odmítnuté zůstávají naspod ať se klikne na cokoli: nálezu, kterému nevěřím, nemá konkurovat
+platnému ani v cizím řazení.
+
+**Řádek je místo, ne nález.** Když se dva reviewery potkají na jednom řádku kódu, je z toho jeden
+řádek s odznakem `2×` — dva řádky by tvrdily, že jsou to dva různé nálezy. Souhrn nad tabulkou
+proto počítá **nálezy** (`4 nálezy · 1 blokující · 3 místa`), a je to tentýž počet, jaký je na
+odznaku záložky a jaký je v diffu v bublinách; počítá ho `Policy` na jednom místě.
+
+**Kliknutí na shrnutí skáče do diffu** — přepne záložku a odscrolluje, tedy tentýž pohyb jako
+odkaz na nález v `Přehledu`. Šipka na konci řádku ho **rozbalí**, a to do **té samé bubliny**,
+jaká visí u kódu: celé texty, „Kdy to selže“, `Převzít do review` a odmítnutí u každého nálezu
+zvlášť. Ve sbaleném řádku je odmítnutí v `⋯` — vědomý rozdíl proti bublině, kde jsou dva odkazy
+vedle sebe: v tabulce by se šest odkazů opakovalo na každém řádku a přebily by shrnutí, kvůli
+kterému se tabulka čte.
+
+**Panel vpravo zůstává i tady**, protože smyčka nález → `Převzít` → text v mém review je ta hlavní
+práce a musí se stát naráz. A **prázdná tabulka vysvětlí, proč je prázdná**: schované filtrem
+reviewerů / reviewer nic nenahlásil / session spadla (i se `stderr`) — prázdná obrazovka se totiž
+čte jako „čisto“, a schválený PR s neohlášenou chybou je ta nejdražší chyba, jakou tohle okno umí.
+
+V **nejmenším okně odpadá sloupec `reviewer · kategorie`**: je to jediný, jehož obsah je i v bublině
+u kódu a v chipech reviewerů nad diffem. Šířka se přitom **předává, ne vyjednává** (#220).
 
 **Falešně pozitivní nález se dá odmítnout, aniž bys zahodil ostatní.** V bublině je
 `Odmítnout: neplatný · irelevantní` — `neplatný` znamená „reviewer se mýlí“, `irelevantní`
@@ -358,13 +403,29 @@ Za výsledky ostatních, které už leží na disku, se tím neplatí podruhé; 
 zůstávají. Dokud nad PR nějaké review běží, je ta položka zakázaná: je to jedna úloha na pull
 request.
 
-V tabu **Průběh** běží časová osa toho, co reviewer právě dělá — který soubor čte, co
-hledá, jaký příkaz spustil. Skládá se nativně z eventů, ne přeposíláním textu, takže
+V záložce **Průběh** má každý reviewer **vlastní dráhu** (#242): fáze `čeká na slot` /
+`session` / `prochází kód` / `hlásí nálezy` vedle sebe, takže „kdo je hotový, kdo běží a kdo
+spadl“ je jeden pohled. Do #242 to byly karty pod sebou v panelu 300 bodů širokém, ze kterých se
+to muselo sesbírat scrollováním.
+
+**Fáze jsou z toho, co v ose doopravdy je.** Fáze za tou, kam se běh dostal, zůstává nedotčená
+i u úspěšně doběhlého běhu: reviewer, který `ReportFindings` nezavolal, nálezy **nenahlásil**, a to
+není totéž jako nula. Pod dráhou je věta o tom, co se právě děje (`Právě: Read src/Cart.php`) nebo
+čím to skončilo — a ta rozlišuje tři různé konce: nahlásilo nálezy, nahlásilo prázdný seznam
+(čisto), nenahlásilo nic.
+
+**Spadlá session dostane důvod, `stderr` a dvě tlačítka** — `Pustit znovu` a `Zkopírovat příkaz`
+(příkaz, jakým by se ten reviewer spustil teď, k vložení do terminálu). Do #242 se v panelu lišila
+od proběhlé jen barvou odznaku, protože na důvod ani na konec logu nebylo místo — a `čisté`
+a `spadlo` se slít nesmí.
+
+Podrobný výpis toho, co reviewer spouštěl — který soubor čte, co hledá, jaký příkaz spustil —
+je pod rozbalením každé dráhy. Skládá se nativně z eventů, ne přeposíláním textu, takže
 aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vrátit, zkopíruje
 se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí běhu — a od #203
 **přežije i restart aplikace**: ukládá se k běhu, takže se k ní dá vrátit druhý den i s tím
 `sessionID`. Delší běh nadělá stovky událostí, proto se drží posledních 300 a kolik se jich
-nevešlo, je v hlavičce vidět; ořezává se **začátek**, protože se do osy kouká kvůli tomu, čím
+nevešlo, je u rozbalení vidět; ořezává se **začátek**, protože se do osy kouká kvůli tomu, čím
 to skončilo.
 
 U doběhlého revieweera je v hlavičce **cena, trvání a počet kol** — `0,23 $ · 11,8 s · 3 kola`.

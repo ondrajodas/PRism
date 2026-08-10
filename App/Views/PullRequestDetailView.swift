@@ -1,18 +1,13 @@
 import AppKit
 import SwiftUI
 
-/// Pravý panel: diff vybraného PR, nálezy pod ním a ovládání nahoře.
+/// Obsah záložky PR: hlavička, pruh záložek, obsah vybrané záložky a panel vpravo.
 ///
-/// Diff dostává plnou šířku — PHP na 120 znaků se má vejít. Bubliny nálezů u kódu jsou
-/// #19, tabulka nálezů #20; zatím je pod diffem surový seznam.
+/// Diff dostává plnou šířku — PHP na 120 znaků se má vejít. Bubliny nálezů u kódu jsou #19,
+/// tabulka nálezů v tabu `Nálezy` #242.
 struct PullRequestDetailView: View {
     let store: AppStore
     let pullRequest: PullRequestSummary
-
-    /// Rozbalený panel nálezů. Je to předvolba pohledu, ne údaj o PR, takže **smí**
-    /// přetéct mezi pull requesty — na rozdíl od stavu pracovní kopie, který se proto
-    /// drží ve store.
-    @State private var findingsExpanded = true
 
     /// Řádek diffu, na který se má odscrollovat po kliknutí na nález.
     @State private var scrollTarget: String?
@@ -31,10 +26,6 @@ struct PullRequestDetailView: View {
     /// PR je náhodná shoda, a „prošel jsi všechno“ se rozhoduje z toho, co je v tomhle diffu.
     /// Resetuje se proto při změně PR, viz `.task(id:)` níž.
     @State private var cursor = FindingCursor()
-
-    /// Který tab spodního panelu je vidět. Drží ho detail, ne panel: poznámka přidaná
-    /// z diffu do těla review se musí umět přepnout na tab, kam spadla.
-    @State private var panelTab: FindingsPanel.Tab = .findings
 
     /// Rozdělané odeslání review. Zakládá se tady, ale **drží ho `ContentView`** — detail
     /// zmizí, jakmile PR vypadne ze seznamu, a odeslané review `review-requested` ruší, takže
@@ -145,7 +136,7 @@ struct PullRequestDetailView: View {
     ///
     /// Odznak nese **každá** záložka (#218); co který počítá, je u `count(in:)`.
     private var tabs: some View {
-        PullRequestTabBar(selection: tabSelection, count: count(in:))
+        PullRequestTabBar(selection: tabSelection, badge: badge(in:))
             .diffCounts(loadedDiffCounts)
     }
 
@@ -154,17 +145,40 @@ struct PullRequestDetailView: View {
     ///
     /// **Každá záložka počítá něco jiného** (#218) a je to schválně: odznak odpovídá na otázku
     /// „kolik je toho tam“, a ta má v každém tabu jiný předmět.
-    private func count(in tab: PullRequestTab) -> Int? {
+    private func badge(in tab: PullRequestTab) -> PullRequestTabBadge? {
         switch tab {
         // Co přibylo od minule — tedy přesně to, čím `Přehled` začíná. Počet **všeho**, co
         // tab obsahuje, by byl konstanta (čtyři bloky) a neřekl by nic.
-        case .overview: store.changesSinceLastVisit(for: pullRequest.id).count
+        case .overview: count(store.changesSinceLastVisit(for: pullRequest.id).count)
         // Soubory v diffu, ne řádky: `+X −Y` stojí o kus dál v téže liště.
-        case .filesChanged: loadedDiff?.files.count
+        case .filesChanged: loadedDiff.flatMap { count($0.files.count) }
         // Jen to, co je **k přečtení** — události časové osy se nepočítají (#171), jinak by
         // na PR s dvaceti commity odznak ukazoval třicet a přestal by o diskuzi něco říkat.
-        case .conversation: store.overview(for: pullRequest.id).count { $0.isReadable }
+        case .conversation: count(store.overview(for: pullRequest.id).count { $0.isReadable })
+        // Počítá to **`Policy` z týchž nálezů**, jaké kreslí tabulka v tabu, karty v panelu
+        // a bubliny v diffu (#242) — jeden zdroj, aby odznak nemohl tvrdit něco jiného, než
+        // co je na obrazovce.
+        case .findings: Policy.findingsBadge(of: findingsTally)
+        // Puntík, ne počet: „běží“ je stav, ne množství — u dvou reviewerů by dvojka o průběhu
+        // neřekla nic.
+        case .progress: store.isReviewing(pullRequest.id) ? .live : nil
         }
+    }
+
+    /// Počet jako odznak. Nula se zahazuje **tady, na jednom místě** — jinak by se `> 0` psalo
+    /// u každé záložky zvlášť a jednou by se zapomnělo.
+    private func count(_ value: Int) -> PullRequestTabBadge? {
+        value > 0 ? .count(value) : nil
+    }
+
+    /// Kolik je nálezů a kolik z nich blokuje. Bere se z **toho, co je vidět** (po filtru
+    /// reviewerů), protože odznak má počítat obsah obrazovky, ne obsah souboru na disku.
+    private var findingsTally: FindingsTally {
+        Policy.tally(
+            of: visibleFindings,
+            dismissals: dismissals,
+            categories: blockingCategories
+        )
     }
 
     /// Načtený diff. `nil` u načítání i selhání — odznak ani rozsah změny si v obou případech
@@ -193,6 +207,18 @@ struct PullRequestDetailView: View {
             get: { store.detailTab(for: pullRequest.id) },
             set: { store.setDetailTab($0, for: pullRequest.id) }
         )
+    }
+
+    /// Složení panelu a jeho tab žijí **ve store** (#242), takže se sem jen podávají dál.
+    ///
+    /// Do #242 to byl `@State` detailu s odůvodněním, že je to předvolba pohledu. Pořád je —
+    /// jen na obojím visí doručení poznámky do těla review, a to se musí dát otestovat.
+    private var panelExpanded: Binding<Bool> {
+        Binding(get: { store.isReviewPanelExpanded }, set: { store.isReviewPanelExpanded = $0 })
+    }
+
+    private var panelTab: Binding<ReviewPanelTab> {
+        Binding(get: { store.reviewPanelTab }, set: { store.reviewPanelTab = $0 })
     }
 
     /// Obsah vybraného tabu a pod ním spodní panel.
@@ -227,6 +253,8 @@ struct PullRequestDetailView: View {
                     case .filesChanged: diff
                     case .overview: overview
                     case .conversation: conversation
+                    case .findings: findings
+                    case .progress: progress
                     }
                 }
                 .availableWidth(proxy.size.width)
@@ -234,21 +262,18 @@ struct PullRequestDetailView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Palette.surface)
-            // Panel se ukáže i **bez** záznamu, jakmile něco běží: při prvním review je
-            // průběh to jediné, co je, a čekat na uložený výsledek by ho schovalo.
-            let record = store.reviewRecord(for: pullRequest.id)
-            FindingsPanel(
-                record: record,
-                // `nil` = není co zahodit. Rozhoduje uložený záznam, ne to, co je vidět
-                // po filtru reviewerů — filtr je pohled, ne obsah.
-                clear: record == nil ? nil : { try await store.clearFindings(for: pullRequest.id) },
-                isExpanded: $findingsExpanded,
+            // Panel je vidět i **v tabu `Nálezy`** (#242), a je to podmínka, ne pohodlí: smyčka
+            // nález → `Převzít` → text v mém review je ta hlavní práce, takže se obojí musí stát
+            // naráz. Tabulka přes celé okno by chtěla přepínání tam a zpátky za každý převzatý
+            // nález.
+            ReviewPanel(
+                record: store.reviewRecord(for: pullRequest.id),
+                isExpanded: panelExpanded,
                 jump: jump,
                 findings: visibleFindings,
                 dismissals: dismissals,
                 findingActions: findingActions,
                 blockingCategories: blockingCategories,
-                timelines: store.timelines(for: pullRequest.id),
                 isRunning: store.isReviewing(pullRequest.id),
                 pullRequest: pullRequest.id,
                 draft: store.draft(for: pullRequest.id),
@@ -261,7 +286,7 @@ struct PullRequestDetailView: View {
                 draftActions: draftActions,
                 jumpToComment: jumpToComment,
                 current: cursor.current,
-                tab: $panelTab
+                tab: panelTab
             )
             // Panel si o místo říká **první**: má vlastní šířku (tu, kterou si uživatel
             // vytáhl), takže víc než ji si nevezme — a zbytek dostane diff, který se umí
@@ -361,7 +386,7 @@ struct PullRequestDetailView: View {
         if store.hasDraft(pullRequest.id) {
             let isStale = store.isDraftStale(for: pullRequest.id)
             Button {
-                showDraftTab()
+                store.revealDraft()
             } label: {
                 Label(
                     isStale ? "rozdělané review · starší commit" : "rozdělané review",
@@ -401,21 +426,13 @@ struct PullRequestDetailView: View {
             },
             endRangeDrag: { store.finishCommentRange() },
             draggedRange: store.commentDrag.map { (path: $0.path, anchor: $0.anchor) },
+            // Kam text spadl, se musí poznat, a od #242 to řeší **store**: `appendDraftNote`
+            // i `adoptFinding` si samy ukážou tab s rozdělaným review a rozloží složený panel.
+            // Do té doby to bylo tady ve view a nešlo to otestovat.
             addNote: { path, line in
-                store.appendDraftBodyItem(text: "", path: path, line: line, for: id)
-                showDraftTab()
+                store.appendDraftNote(text: "", path: path, line: line, for: id)
             },
-            adopt: { finding in
-                // Kam nález spadl, se musí poznat: řádkový komentář je vidět hned pod
-                // řádkem, kdežto položka v těle je jinde v okně, takže se na ni přepne.
-                let goesToBody: Bool = if case .body = store.draftTarget(for: finding, in: id) {
-                    true
-                } else {
-                    false
-                }
-                store.adoptFinding(finding, for: id)
-                if goesToBody { showDraftTab() }
-            },
+            adopt: { store.adoptFinding($0, for: id) },
             isAdopted: { store.isAdopted($0, in: id) },
             target: { store.draftTarget(for: $0, in: id) },
             updateComment: { store.updateDraftComment($0, body: $1, for: id) },
@@ -432,11 +449,6 @@ struct PullRequestDetailView: View {
             // není proti čemu kontrolovat a zůstává zakázané s důvodem.
             canTransfer: store.canTransferDraft(for: id)
         )
-    }
-
-    private func showDraftTab() {
-        panelTab = .draft
-        findingsExpanded = true
     }
 
     /// Skok na můj komentář v diffu.
@@ -525,11 +537,13 @@ struct PullRequestDetailView: View {
         Button("Předchozí nález") { step(.backward) }
             .keyboardShortcut(.upArrow, modifiers: .option)
         // Panel jde složit i rozložit **stejnou zkratkou** (#182), jak to má návrh v liště
-        // nad diffem. Zkratka bydlí tady, ne v `DiffView`: panel je vidět v obou tabech PR,
+        // nad diffem. Zkratka bydlí tady, ne v `DiffView`: panel je vidět ve všech tabech PR,
         // kdežto lišta jen u diffu — a přepínač, který v půlce okna nefunguje, je horší
         // než žádný.
-        Button("Panel nálezů") {
-            withAnimation(.snappy(duration: 0.15)) { findingsExpanded.toggle() }
+        Button("Panel s mým review") {
+            withAnimation(.snappy(duration: 0.15)) {
+                store.isReviewPanelExpanded.toggle()
+            }
         }
         .keyboardShortcut("2", modifiers: .command)
         submitShortcut
@@ -657,6 +671,82 @@ struct PullRequestDetailView: View {
         )
     }
 
+    /// Tab `Nálezy` (#242) — tabulka přes celou šířku.
+    ///
+    /// Bere **tytéž** nálezy jako panel a jako bubliny v diffu (`visibleFindings`), takže se ta tři
+    /// místa nemají čím rozejít. `clear` je `nil`, když není co zahodit; rozhoduje uložený záznam,
+    /// ne to, co zbylo po filtru reviewerů — filtr je pohled, ne obsah.
+    private var findings: some View {
+        let record = store.reviewRecord(for: pullRequest.id)
+        return FindingsTabView(
+            record: record,
+            pullRequest: pullRequest.id,
+            findings: visibleFindings,
+            dismissals: dismissals,
+            blockingCategories: blockingCategories,
+            isRunning: store.isReviewing(pullRequest.id),
+            clear: record == nil ? nil : { try await store.clearFindings(for: pullRequest.id) },
+            findingActions: findingActions,
+            // Komentáře k řádkům se z tabulky nezakládají — ty patří k diffu. Zbývá převzetí,
+            // které je ta hlavní smyčka, a to `FileDraftActions` unese i bez souboru.
+            draft: FileDraftActions(
+                canCompose: draftActions.canCompose,
+                adopt: draftActions.adopt,
+                isAdopted: draftActions.isAdopted,
+                target: draftActions.target
+            ),
+            current: cursor.current,
+            jump: jump
+        )
+    }
+
+    /// Tab `Průběh` (#242) — dráha na revieweera.
+    ///
+    /// `rerun` je `nil`, dokud něco běží: druhý běh téhož revieweera vedle prvního by se v ose
+    /// míchal s tím, co zrovna dobíhá.
+    private var progress: some View {
+        // Osy se berou **jednou** a použijí se na dráhy i na skládání příkazu: `timelines(for:)`
+        // je odvozený getter, takže druhé volání za každou dráhu je práce navíc při každém
+        // překreslení.
+        let timelines = store.timelines(for: pullRequest.id)
+        return ReviewProgressView(
+            lanes: Policy.lanes(
+                of: timelines,
+                // **Tatáž sada, ze které se review pouští** (`AppStore.reviewSkills(for:)`, přes
+                // kterou jde `runSkills`) — dvě různá místa by znamenala, že tab slibuje jinou
+                // sadu, než jaká se spustí. Bere ji i pruh běhu na chipy.
+                skills: store.reviewSkills(for: pullRequest.repo),
+                // Bez záznamu by běh, jehož osa se neuložila (soubory před #203), vypadal jako
+                // nespuštěný — a chip nad tabem by nad ním tvrdil `doběhlo`.
+                record: store.reviewRecord(for: pullRequest.id),
+                running: store.runningReviewers(for: pullRequest.id)
+            ),
+            rerun: store.isReviewing(pullRequest.id)
+                ? nil
+                : { store.startReview(for: pullRequest.id, skills: [$0]) },
+            copyCommand: copyCommand(in: timelines)
+        )
+    }
+
+    /// Zkopíruje příkaz, jakým by se reviewer spustil teď — `Zkopírovat příkaz` u spadlé session
+    /// (#242).
+    ///
+    /// `nil`, dokud nevíme, proti čemu se diffuje: příkaz bez `baseSha` by nebyl spustitelný, a
+    /// tlačítko, které zkopíruje něco nefunkčního, je horší než žádné. Příkaz se skládá **až při
+    /// kliknutí** — nese celý prompt, takže by se jinak stavěl při každém překreslení tabu.
+    private func copyCommand(in timelines: [ReviewerTimeline]) -> ((String) -> Void)? {
+        guard let baseSha = loadedDetail?.baseSha else { return nil }
+        let model = store.configuration.global.model
+        return { skill in
+            Clipboard.copy(ClaudeCommand.shellCommand(
+                skillID: skill,
+                baseSha: baseSha,
+                model: model,
+                worktree: timelines.first { $0.skill == skill }?.worktree
+            ))
+        }
+    }
+
     /// Tab `Konverzace` (#183) — časová osa. Bere **tytéž položky** jako `Přehled` bral do #183;
     /// jediný domov konverzace se nedělí, jen stěhoval.
     private var conversation: some View {
@@ -748,7 +838,7 @@ struct PullRequestDetailView: View {
                 onlyBlocking: $cursor.onlyBlocking,
                 // Tlačítko `Nálezy` v liště nad diffem (#197). Stav drží detail, protože
                 // panel je vidět i v tabu `Přehled`, kde lišta není.
-                panelExpanded: $findingsExpanded,
+                panelExpanded: panelExpanded,
                 stepFinding: { step($0) }
             )
         case .failed(let detail):

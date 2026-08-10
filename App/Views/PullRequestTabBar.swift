@@ -8,12 +8,12 @@ import SwiftUI
 /// zvyklost odjinud, takže se to nemusí učit.
 struct PullRequestTabBar: View {
     @Binding var selection: PullRequestTab
-    /// Kolik je v tabu k přečtení. `nil` i nula znamenají „bez odznaku“ — `0` by tvrdilo,
-    /// že je co číst.
+    /// Co je v tabu k vidění. `nil` = bez odznaku.
     ///
     /// Od #218 se ptá **u všech záložek**, ne jen u `Konverzace`: odznak jen u jedné vypadal
-    /// jako vlastnost té záložky, ne jako počet.
-    var count: (PullRequestTab) -> Int? = { _ in nil }
+    /// jako vlastnost té záložky, ne jako počet. Od #242 to není `Int?`, ale `PullRequestTabBadge`
+    /// — u `Nálezů` musí být poznat, že něco blokuje, a u `Průběhu` je „běží“ stav, ne množství.
+    var badge: (PullRequestTab) -> PullRequestTabBadge? = { _ in nil }
     /// Rozsah změny (#174) — `+X −Y` vpravo v řadě záložek. `nil`, dokud diff nedorazí:
     /// nuly by tvrdily, že PR nic nemění.
     private(set) var diffCounts: (additions: Int, deletions: Int)?
@@ -33,7 +33,10 @@ struct PullRequestTabBar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(PullRequestTab.allCases, id: \.self) { item($0) }
+            ForEach(Array(PullRequestTab.allCases.enumerated()), id: \.element) { index, tab in
+                if needsSeparator(before: index) { separator }
+                item(tab)
+            }
             Spacer(minLength: 8)
             if let diffCounts { diffstat(diffCounts) }
         }
@@ -41,6 +44,29 @@ struct PullRequestTabBar: View {
         // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
         // takže by se vykreslil svisle — tatáž past jako u hlaviček souborů v diffu.
         .overlay(alignment: .bottom) { Rectangle().fill(.separator).frame(height: 1) }
+    }
+
+    /// Patří před tuhle záložku dělič? (#242, `.tsep`)
+    ///
+    /// Rozhoduje **vlastnost tabu**, ne jeho index: `Kontroly` (#215) přijdou nalevo doprostřed,
+    /// takže zadrátovaná pozice by dělič tiše posunula o jedno místo vedle.
+    private func needsSeparator(before index: Int) -> Bool {
+        let tabs = PullRequestTab.allCases
+        guard index > 0 else { return false }
+        return tabs[index].isReviewerOutput && !tabs[index - 1].isReviewerOutput
+    }
+
+    /// Dělič v pruhu záložek: nalevo je to, co je na PR (a co má i GitHub), napravo to, co s ním
+    /// udělaly naše reviewery. Bez něj vypadá řada záložek jako jeden dlouhý seznam.
+    ///
+    /// **Ne `Divider()`** — ten si orientaci bere z okolní osy, takže by ve vodorovném `HStack`u
+    /// vyšel naležato; tady je potřeba svislá čárka. Tatáž past jako u linky pod záložkami.
+    private var separator: some View {
+        Rectangle()
+            .fill(Palette.line)
+            .frame(width: 1, height: 15)
+            .padding(.horizontal, 9)
+            .accessibilityHidden(true)
     }
 
     /// Rozsah změny vpravo v řadě záložek (`.diffstat`).
@@ -110,7 +136,7 @@ struct PullRequestTabBar: View {
                 .font(.caption)
             Text(verbatim: tab.czechLabel)
                 .font(.callout.weight(isActive ? .semibold : .regular))
-            if let count = count(tab), count > 0 { badge(count) }
+            if let badge = badge(tab) { mark(badge) }
         }
         .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
         .padding(.horizontal, 10)
@@ -141,16 +167,43 @@ struct PullRequestTabBar: View {
         }
     }
 
-    /// Odznak počtu (`.stab .cnt`) — mono kapsle na tiché ploše, jak ho má návrh. Tlumeně
-    /// schválně: je to počet, ne upozornění.
-    private func badge(_ count: Int) -> some View {
-        Text(verbatim: "\(count)")
+    /// Odznak u záložky (`.stab .cnt`, `.stab .live`).
+    ///
+    /// Počet je mono kapsle na tiché ploše — tlumeně schválně, je to počet, ne upozornění. **Až
+    /// na blokující nález** (#242): ten je červený, protože „3“ v tiché kapsli se čte jako údaj
+    /// o množství a přesně tohle množství množstvím není.
+    @ViewBuilder private func mark(_ badge: PullRequestTabBadge) -> some View {
+        switch badge {
+        case .count(let count): pill("\(count)", tint: Palette.ink2, background: Palette.raised)
+        case .blocking(let count):
+            pill("\(count)", tint: Palette.crit, background: Palette.crit.opacity(0.15))
+        case .live: liveDot
+        }
+    }
+
+    private func pill(_ text: String, tint: Color, background: Color) -> some View {
+        Text(verbatim: text)
             .font(.system(.caption2, design: .monospaced))
             .monospacedDigit()
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .background(Palette.raised, in: .capsule)
-            .foregroundStyle(Palette.ink2)
+            .background(background, in: .capsule)
+            .foregroundStyle(tint)
+    }
+
+    /// Puntík u záložky `Průběh`: „něco běží“ má být vidět, aniž by se do ní chodilo — a je to
+    /// **stav, ne množství**, takže tam nepatří číslo.
+    ///
+    /// Halo z návrhu (`box-shadow 0 0 0 3px`) kreslí **větší kruh pod puntíkem**, ne obtažení: to
+    /// se vykreslí dovnitř sedmibodového kruhu, takže puntík přebarví a zvenku není vidět nic —
+    /// chyceno offscreen renderem.
+    private var liveDot: some View {
+        Circle()
+            .fill(Palette.find)
+            .frame(width: 7, height: 7)
+            .background { Circle().fill(Palette.find.opacity(0.2)).frame(width: 13, height: 13) }
+            .frame(width: 13, height: 13)
+            .accessibilityLabel("běží")
     }
 
     /// Ikony jsou ve view, ne v modelu: `PullRequestTab` je volba pohledu, ne obrázek —
@@ -161,6 +214,10 @@ struct PullRequestTabBar: View {
         case .overview: "doc.text"
         case .filesChanged: "plus.forwardslash.minus"
         case .conversation: "bubble.left.and.bubble.right"
+        // Lupa nad textem je tentýž symbol, jakým se v ose hlásí `ReportFindings` — nálezy mají
+        // v okně jednu ikonu, ne dvě.
+        case .findings: "text.magnifyingglass"
+        case .progress: "chart.bar.doc.horizontal"
         }
     }
 }
@@ -169,7 +226,14 @@ struct PullRequestTabBar: View {
     @Previewable @State var selection = PullRequestTab.filesChanged
 
     return VStack(spacing: 0) {
-        PullRequestTabBar(selection: $selection) { $0 == .overview ? 3 : nil }
+        PullRequestTabBar(selection: $selection) { tab in
+            switch tab {
+            case .overview: .count(3)
+            case .findings: .blocking(2)
+            case .progress: .live
+            default: nil
+            }
+        }
         Text(verbatim: selection.czechLabel)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

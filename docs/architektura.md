@@ -49,7 +49,9 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
 | `DraftSnapshot` | Text řádků, ke kterým se komentář psal — konec rozsahu a jeho začátek. Prázdný = nevíme |
 | `DetailState` | Stav dotažení detailu PR: `loading` / `loaded(PullRequest, updatedAt:)` / `failed`. Je z něj `headSha` pro draft a popis pro `Přehled` |
-| `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged`. Jako `ReviewVerdict` **není `Codable`** |
+| `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `conversation` / `findings` / `progress` (#242). `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) můžou přijít doprostřed levé skupiny, aniž by se posunul. Jako `ReviewVerdict` **není `Codable`** |
+| `PullRequestTabBadge` | Odznak u záložky (#242): `count` / `blocking` (červeně) / `live` (puntík). Výčtem, ne strukturou s příznaky — „puntík s počtem“ ani „blokující bez počtu“ význam nemá, takže se nemá dát napsat |
+| `ReviewPanelTab` | Co je vidět v panelu vpravo: `findings` / `draft` (#242). Jako `PullRequestTab` **není `Codable`** |
 | `DiffLayout` | Jak se kreslí diff: `unified` (pod sebou) / `split` (vedle sebe). Nastavení **člověka, ne repa** — proto jen v `GlobalConfig` |
 | `NotificationEvent` | Co notifikaci vyvolalo: `newPullRequest` / `findings` / `clean` / `failure`. Nese si ji notifikace sama |
 | `NotificationSettings` | Co se má hlásit (#86) — hlavní vypínač a čtyři události. Jako `DiffLayout` jen globálně |
@@ -1445,7 +1447,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
-| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Konverzace`) — podtržené, s odznakem počtu **u každé** (#218) a vpravo `+X −Y` se čtverečky poměru |
+| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Konverzace` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru |
 | `OverviewView` | Tab `Přehled`: popis PR, fakta, kontroly a co se změnilo od minule |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka a obsah vpravo; slévá za sebou jdoucí commity |
@@ -1480,11 +1482,14 @@ na `.task` okna, takže zavření okna ji zruší.
 | `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení |
 | `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
 | `DiffLineView` | Řádek souboru: dvě čísla (v buňce dvojice jedno, podle `side`), znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
-| `FindingsPanel` | Panel **napravo od diffu** (#182): segmenty `Nálezy`/`Moje review`/`Průběh`, karty nálezů, prokliky do diffu, zahození nálezů — a složení na proužek s počtem |
+| `ReviewPanel` | Panel **napravo od diffu** (#182, do #242 `FindingsPanel`): segmenty `Nálezy`/`Moje review`, karty nálezů, prokliky do diffu — a složení na proužek s počtem nálezů a značkou rozdělaného review. `Průběh` a zahození nálezů se u #242 odstěhovaly do záložek PR |
 | `DismissedRowStyle` | Buňka tabulky: ztlumení odmítnutého řádku a kontextové menu `Označit jako…` / `Vrátit` |
 | `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak, odmítnutí |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
-| `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume`, upozornění na načtený jiný skill |
+| `ReviewProgressView`, `ReviewerLaneView` | Tab `Průběh` (#242, nahradily `ReviewTimelineView`): **dráha na revieweera** s fázemi vedle sebe, věta o tom, co se právě děje, u spadlé session důvod, `stderr` a `Pustit znovu` / `Zkopírovat příkaz`; podrobný výpis událostí pod rozbalením (`TimelineEntryRow`). Dráha po skillu **mimo nastavenou sadu** nese v hlavičce `mimo sadu`; prázdný stav mluví o **nastavení**, protože se do něj dá dojít jedině s prázdnou sadou skillů |
+| `ReviewerLaneText` | České věty dráhy — stav, co se právě děje, čím to skončilo. Rozlišuje **tři** doběhlé stavy: nahlásilo nálezy / nahlásilo nulu / nenahlásilo nic — a `nespuštěno` od `ve frontě` |
+| `FindingsTabView`, `FindingsEmptyView` | Tab `Nálezy` (#242): souhrn počtů, `Zahodit nálezy`, tabulka — a věta, **proč** je prázdno (`Policy.findingsEmptyReason`), společná s panelem |
+| `FindingsTableView`, `FindingTableRowView`, `FindingTableRow` | Tabulka nálezů přes celou šířku: řazení kliknutím na hlavičku, řádek na **místo** (shoda dvou reviewerů je odznak `2×`), rozbalení kreslí tutéž `FindingBubbleView` jako diff |
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
 | `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
@@ -2071,9 +2076,16 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   (`PullRequestTab.standard`, **změna proti zadání #72** — popis a diskuze se čte dřív než kód
   a stejně to má GitHub), takže se `filesChanged` z mapy maže a úklid podle seznamu PR ji
   nenechá růst.
-- **Panel je v obou tabech.** Nálezy bez místa v kódu, průběh i moje rozdělané review
-  se vážou k celému PR — schovat je za přepnutí tabu by znamenalo, že se rozepsané review
-  „ztratí“ přepnutím na `Přehled`.
+- **Panel je ve všech tabech**, včetně `Nálezů` (#242). Nálezy bez místa v kódu i moje rozdělané
+  review se vážou k celému PR — schovat je za přepnutí tabu by znamenalo, že se rozepsané review
+  „ztratí“ přepnutím na `Přehled`. U tabu `Nálezy` je to o důvod víc: smyčka nález → `Převzít` →
+  text v mém review je ta hlavní práce, takže se obojí musí stát naráz.
+- **Složení panelu a jeho tab drží store, ne view** (#242): `isReviewPanelExpanded`
+  a `reviewPanelTab`, globálně (ne per PR) jako `diffLayout`. Není to úklid, je to podmínka —
+  poznámka do těla review přidaná z diffu spadne do panelu, takže se panel musí umět
+  **rozložit sám** (`revealDraft()`), a dokud to bydlelo v `@State` detailu, nešlo to otestovat.
+  Tudy chodí `appendDraftNote` i `adoptFinding` s cílem `.body`; **řádkový komentář panel
+  nerozloží** — ten je vidět hned pod řádkem v diffu.
 - **Pohled vedle sebe složí postranní sloupce** (#188). Řádek se v něm dělí na dvě strany, takže
   na 14" nezbude ani 100 znaků ani se složenými sloupci; pod sebou se zase rozbalí. Tři pravidla:
   - **`task(id: layout)`, ne `onChange`.** Pohled se drží napříč pull requesty a výchozí je
@@ -2234,7 +2246,16 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     šířka dalo panel užší, než v jakém se dá nález přečíst. Ořezává se **při použití**
     (240–520), protože v `UserDefaults` může být cokoli.
   - **Segmenty jsou vlastní, ne `Picker(.segmented)`.** Systémový přepínač se sází podle textu
-    a `Nálezy · 12 / Moje review ● / Průběh` se do 300 bodů nevejde.
+    a `Nálezy · 12 / Moje review ●` se do 300 bodů nevejde.
+  - **Od #242 jsou segmenty dva, ne tři**, a v proužku je vedle počtu nálezů i značka
+    rozdělaného review (počet komentářů, jinak puntík; zastaralý okrový). `Průběh` se odstěhoval
+    do vlastní záložky PR — je to záznam běhu, který se u kódu nečte, a u spadlé session se do
+    300 bodů nevešel ani důvod, ani konec logu. `Zahodit nálezy` a stáří výsledku šly s tabem
+    `Nálezy` ze stejného důvodu: platí pro uložený záznam, ne pro panel.
+  - **Nálezy v panelu zůstávají**, i když mají od #242 vlastní záložku. Nejsou to dvě kopie
+    jednoho pohledu, ale dvě různé otázky: u kódu „co je tady“, v tabulce „co všechno se našlo“.
+    Karty proto **řazení podle sloupců nedostaly** — v 300 bodech se sloupce pořád nemají kam
+    vejít a platí pořadí z `Policy.sorted`.
   - **Rozdělané review se sází pod sebe** (tělo, pak komentáře), **změna proti #66**: tam byly
     vedle sebe, protože panel byl nízký pruh přes celé okno. Komentáře měly napevno 320 bodů,
     což je víc, než je celý panel.
@@ -2411,10 +2432,24 @@ seznam, dvojklik pošle jeden komentář a selhání drží stav i text. Dvě v�
   disk sahá jednou za den, ne jednou za minutu.
 - **Osa běhu se ukládá k běhu** (#203). Do té doby žila jen v paměti, takže ji restart smazal
   i se `sessionID`, tedy jedinou cestou zpátky do session (`claude --resume`) — a nálezy, ke
-  kterým patří, na disku zůstávaly. Čtyři pravidla:
+  kterým patří, na disku zůstávaly. Pět pravidel:
   - **Ukládá ji `StoredReviewRun`**, takže je klíčovaná `headSha` jako všechno ostatní a po novém
     commitu zestárne s nálezy. Volitelná, protože starší soubory ten klíč nemají; `nil` znamená
-    „osa se neuložila“, ne „nic se nedělo“ — proto se běh bez osy v tabu `Průběh` **nekreslí**.
+    „osa se neuložila“, ne „nic se nedělo“ — takový běh se v tabu `Průběh` kreslí jako **`bez
+    průběhu`** (#242), ne jako nespuštěný: nespuštěno by o doběhlém běhu lhalo a vynechat ho úplně
+    znamená, že tab vypíše zrovna ty reviewery, které neběžely.
+  - **Uložená osa svůj konec neobsahuje, takže se doplňuje z běhu** (`ReviewerTimeline.completeTail(from:)`,
+    #242). Snímek pro zápis se v `runSkills` bere dřív, než proud událostí dojede, takže v souboru
+    chybí `hlásí nálezy` i `doběhlo` — **změřeno na skutečné cache: 7 ze 7 os po skutečném běhu**
+    (osy vyrobené v testech konec mají, proto to testy nechytily). Bez doplnění tvrdil tab `Průběh`
+    po restartu `nedoběhlo — běh někdo zrušil` nad doběhlým review a `nálezy vůbec nenahlásilo` nad
+    tím, které nahlásilo prázdný seznam; chip vedle toho ukazoval `čisto`. Doplňuje se **jen to, co
+    běh sám ví** (jeho výsledek a jeho počet nálezů včetně nepřečtených), jen když to v ose není,
+    a **nikdy do prázdné osy** — jinak by z chybějícího průběhu vznikl vymyšlený. Běh, který
+    `ReportFindings` nezavolal, doplněnou fázi hlášení nedostane: to je vlastní stav a slít se nesmí.
+    Opravuje se to na **čtení**, ne v zápisu, protože stejně tak vypadají všechny už uložené
+    soubory; zápis by se musel synchronizovat s proudem, a to je continuation navíc v cestě, která
+    se ruší.
   - **Živá osa přebíjí uloženou.** Běžící review si ji drží v paměti, kdežto uložená patří
     předchozímu běhu; ověřeno vloženou regresí (spadne sedm testů).
   - **Ořezává se začátek, ne konec**, a strop je 300 událostí: kdo se do osy dívá po restartu,
@@ -2977,6 +3012,11 @@ Věci, které se u toho nemají rozbít:
 | `Policy.charactersPerSide(contentWidth:characterWidth:layout:gutter:)` | Kolik znaků kódu se vejde na stranu (#188); vedle sebe se šířka dělí na dvě. Gutter odečítá **jednou** — což od #236 odpovídá i tomu, kde se kód opravdu zalomí; do té doby byl ukazatel v pohledu pod sebou o 17 znaků optimističtější než skutečnost |
 | `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
 | `Policy.changes(in:since:)`, `VisitChanges.count` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`); počet sečte **všech pět kategorií**, protože ho nese odznak u záložky `Přehled` (#218) a musí slíbit totéž, co blok uvnitř vypíše |
+| `Policy.tally(of:dismissals:categories:)`, `Policy.findingsBadge(of:)` | Kolik je nálezů a kolik blokuje (#242, `FindingsTally`) — **jeden zdroj pro tři místa**: odznak na záložce, souhrn nad tabulkou a bubliny v diffu. Počítá **nálezy**, ne řádky tabulky; odmítnutý blokující se do `blocking` nepočítá |
+| `Policy.findingsEmptyReason(visible:record:isRunning:categories:)` | Proč je prázdno v nálezech (#242, `FindingsEmptyReason`) — `hiddenByReviewerFilter` se nesmí slít s `clean`, `failed` taky ne. Věta se z toho skládá ve `FindingsEmptyView`, společné pro tab i panel |
+| `Policy.sorted(_:by:categories:dismissals:)`, `FindingTableSort.toggled(_:from:)` | Řazení tabulky nálezů podle sloupce (#242). Závažnost sestupně **je** výchozí `Policy.sorted`, takže druhá škála nevzniká; **odmítnuté zůstávají naspod v obou směrech** |
+| `Policy.findingTableLayout(availableWidth:)` | Šířky sloupců tabulky (#242, `FindingTableLayout`) — spočítané, ne vyjednané (#220). Pod `findingTableReviewerBreakpoint` odpadá sloupec `reviewer · kategorie`; je to jediný, jehož obsah je i v bublině a v chipech |
+| `Policy.lanes(of:skills:running:)` | Dráhy do tabu `Průběh` (#242, `ReviewerLane`) — fáze `čeká na slot` / `session` / `prochází kód` / `hlásí nálezy` **z toho, co v ose doopravdy je**. Fáze za tou, kam se běh dostal, zůstává nedotčená i u doběhlého běhu; špatný konec se značí aspoň u `session`, aby spadlý start nevypadal jako nezačatý běh. Běžící reviewer bez osy dostane dráhu ve frontě a **nastavený reviewer, který na PR neběžel, dráhu `nespuštěno`** — sada je ta z `AppStore.reviewSkills(for:)`, tedy tatáž, ze které se review pouští. Pořadí je nastavení → osy → běžící abecedně, aby dráhy mezi tiky nepřeskakovaly |
 | `Policy.progress(startedAt:phase:running:)` | Průběh běžícího review do pruhu v hlavičce (#218, `ReviewRunProgress`). `nil` = neběží nic — rozhoduje **`startedAt` běhu**, ne fáze, protože `reviewPhases` si `failed` drží i po skončení |
 | `Policy.diffstatBlocks(additions:deletions:)` | Pět čtverečků poměru změny za `+X −Y` (#218). Zaokrouhluje se **dolů**, každá strana zvlášť, zbytek zůstává šedý; prázdný diff nedá žádný čtvereček |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |

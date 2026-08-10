@@ -34,21 +34,36 @@ struct FindingRow: Identifiable, Hashable, Sendable {
         blocking categories: Set<String> = Policy.defaultBlockingCategories,
         dismissals: [FindingKey: FindingDismissal] = [:]
     ) -> [FindingRow] {
-        Policy.sorted(findings, categories: categories, dismissals: dismissals)
-            .enumerated()
-            .map { index, finding in
-                FindingRow(
-                    id: index,
-                    finding: finding,
-                    category: finding.category ?? "bez kategorie",
-                    reviewer: finding.reviewer,
-                    location: location(of: finding),
-                    locationHelp: locationHelp(of: finding),
-                    summary: finding.summary,
-                    isBlocking: Policy.isBlocking(finding, categories: categories),
-                    dismissal: dismissals[Policy.key(of: finding)]
-                )
-            }
+        preserving(
+            Policy.sorted(findings, categories: categories, dismissals: dismissals),
+            blocking: categories,
+            dismissals: dismissals
+        )
+    }
+
+    /// Řádky **v pořadí, v jakém přišly** — bez vlastního řazení.
+    ///
+    /// Potřebuje to tabulka nálezů (#242): uvnitř skupiny už je pořadí dané tím, podle kterého
+    /// sloupce se řadí, takže druhé řazení podle závažnosti by přepsalo volbu uživatele a řádek
+    /// by se popisoval jiným nálezem, než podle kterého se zařadil.
+    static func preserving(
+        _ findings: [Finding],
+        blocking categories: Set<String> = Policy.defaultBlockingCategories,
+        dismissals: [FindingKey: FindingDismissal] = [:]
+    ) -> [FindingRow] {
+        findings.enumerated().map { index, finding in
+            FindingRow(
+                id: index,
+                finding: finding,
+                category: finding.category ?? "bez kategorie",
+                reviewer: finding.reviewer,
+                location: location(of: finding),
+                locationHelp: locationHelp(of: finding),
+                summary: finding.summary,
+                isBlocking: Policy.isBlocking(finding, categories: categories),
+                dismissal: dismissals[Policy.key(of: finding)]
+            )
+        }
     }
 
     /// Blokující **a platný**. Výstražná ikona u nálezu, který jsem odmítl, by tvrdila, že

@@ -19,6 +19,20 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// „jak to teď stojí“ (popis, fakta, co se změnilo od minule), konverzace na „co se dělo“.
     /// V jednom scrollu se přitom to druhé čte tak, že se přes první přeroluje.
     case conversation
+    /// Všechno, co reviewery nahlásily — tabulka přes celou šířku (#242).
+    ///
+    /// **Vlastní tab, i když nálezy zůstávají i v panelu vpravo.** Ve 300 bodech se nález nedá
+    /// nasázet jako tabulka, takže z něj #175 udělal karty a řazení podle sloupců zahodil; přes
+    /// celou šířku se na jeden řádek vejde závažnost, shrnutí, místo, reviewer i akce. Tab
+    /// odpovídá na jinou otázku než panel — *co všechno se na tomhle PR našlo* — a ta je na celou
+    /// obrazovku.
+    case findings
+    /// Co reviewery dělaly — dráha na revieweera s fázemi (#242).
+    ///
+    /// **Záznam běhu, ne něco, co se čte vedle kódu.** V panelu to byly karty pod sebou, ze
+    /// kterých se nedalo porovnat, kdo kde je — a u spadlé session se důvod ani konec logu
+    /// neměly kam vejít.
+    case progress
 
     /// Se kterým tabem se PR otevírá.
     ///
@@ -38,6 +52,22 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
         case .overview: "Přehled"
         case .filesChanged: "Změněné soubory"
         case .conversation: "Konverzace"
+        case .findings: "Nálezy"
+        case .progress: "Průběh"
+        }
+    }
+
+    /// Je to výstup **našich** reviewerů, ne něco, co je na PR?
+    ///
+    /// Podle toho se v pruhu záložek kreslí dělič (#242): nalevo je to, co má i GitHub, napravo
+    /// to, co s PR udělaly reviewery. Bez něj by pět záložek vypadalo jako jeden dlouhý seznam.
+    ///
+    /// Je to vlastnost tabu, ne pozice v poli: `Kontroly` (#215) přijdou **nalevo** doprostřed,
+    /// takže dělič spočítaný z indexu by se tím tiše posunul na špatné místo.
+    var isReviewerOutput: Bool {
+        switch self {
+        case .overview, .filesChanged, .conversation: false
+        case .findings, .progress: true
         }
     }
 }

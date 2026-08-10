@@ -829,5 +829,44 @@ s ním nepohnulo a vrátilo se až dalším přepnutím aplikace. To je tatáž 
 opravuje, jen o vrstvu vedle. Cena změny je, že nad cizí aplikací okno **zůstane na obrazovce**
 (leží pod ní), místo aby zmizelo.
 
+**Nálezy a Průběh jako vlastní záložky (#242)** — pruh záložek PR má pět položek a mezi
+`Konverzací` a `Nálezy` dělič: nalevo je to, co je na PR (a co má i GitHub), napravo to, co s ním
+udělaly naše reviewery. `Nálezy` jsou **tabulka přes celou šířku** i s řazením podle sloupců, které
+#175 zahodil kvůli 300 bodům panelu; `Průběh` je **dráha na revieweera** s fázemi vedle sebe, takže
+„kdo je hotový, kdo běží a kdo spadl“ je jeden pohled. Spadlá session dostala důvod, `stderr`
+a tlačítka `Pustit znovu` / `Zkopírovat příkaz` — do té doby se od proběhlé lišila jen barvou
+odznaku, protože v kartě nebylo místo, a `čisté` se `spadlo` slít nesmí.
+
+**Nálezy zůstaly i v panelu** — změna proti zadání, rozhodnutá při implementaci a **potvrzená
+člověkem v pauzi před mergem** (#256): proklikal to a segmenty nechal být. Vyžádaná nebyla (do
+doplnění #242 to tak stálo tady i ve specifikaci a bylo to vymyšlené) — schválení po proklikání
+a pokyn jsou dvě různé věci. Nejsou to dvě kopie jednoho pohledu, ale dvě různé otázky: u kódu
+„co je tady“, v tabulce „co všechno se našlo“.
+Panel tím má dva segmenty místo tří (`Průběh` se odstěhoval celý) a v proužku složeného panelu je
+vedle počtu nálezů i značka rozdělaného review.
+
+**Dráhu dostane každý nastavený reviewer** — doplněno po proklikání, protože `Průběh` se do té doby
+skládal jen ze zaznamenaných os: nastavený reviewer, který na PR ještě neběžel, dráhu nedostal vůbec
+a před prvním review byl celý tab prázdný. Sada se bere z `AppStore.reviewSkills(for:)`, tedy z téhož
+místa, ze kterého se review pouští. Tři různá „nic tu není“ mají tři různá slova a slít se nesmí:
+`nespuštěno`, `ve frontě` a `bez průběhu` — to poslední je doběhlý běh, jehož osa se neuložila
+(soubory před #203; **25 z 31 uložených běhů ve skutečné cache**, mezi nimi PR ve frontě). Osa po
+skillu, který v nastavení už není, nezmizí — nesla by s sebou doběhlé review — jen se označí
+`mimo sadu`.
+
+Cestou se u toho našla tichá chyba z #203: **uložená osa svůj konec neobsahuje**, protože se snímek
+pro zápis bere dřív, než proud událostí dojede — 7 ze 7 os po skutečném běhu. Tab `Průběh` proto po
+restartu tvrdil `nedoběhlo — běh někdo zrušil` nad doběhlým review, kterému vedle toho svítil chip
+`čisto`. Doplňuje se to na **čtení** z běhu, pod kterým osa leží; testy to nechytily proto, že osy
+vyrobené v testech konec mají.
+
+Dvě věci z toho stojí za zapamatování. **Řádek tabulky je místo, ne nález**: shoda dvou reviewerů je
+jeden řádek s odznakem `2×`, jinak by součet nad tabulkou nesouhlasil s tím, co je v diffu jako jedna
+bublina — a hlídá to test, že odznak na záložce, tabulka a bubliny počítají tytéž nálezy (jeden zdroj
+v `Policy.tally`). A **složení panelu se přestěhovalo do `AppStore`**, protože poznámka do těla review
+přidaná z diffu musí umět panel rozložit sama; dokud to rozhodnutí bydlelo v `@State`, nešlo ho
+otestovat. Jeden reálný nález přišel z testu, ne z review: session spadlá při startu neznačila
+selhání v žádné fázi, takže dráha vypadala k nerozeznání od té, co ještě nezačala.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
