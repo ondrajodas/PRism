@@ -164,7 +164,10 @@ hádat, a špatně obarvený cizí kód je horší než neobarvený.
 **`Změněné soubory`** ukazují **diff v plné šířce**: soubory pod sebou s hlavičkou, která při scrollu
 zůstává nahoře, souhrn `N souborů · +X −Y` a menu na skok mezi soubory. Přejmenování, nové,
 smazané i binární soubory jsou označené; dlouhé řádky se zalamují, protože 120 znaků se do
-plné šířky vejde. Počty `+X` a `−Y` jsou obarvené jako znak změny v samotném řádku — zeleně
+plné šířky vejde. **Zalomí se až tam, kde kód nemá kam pokračovat** (#236) — sloupce s čísly ubírají
+místo jen vlevo. Do té doby se zalamovalo o jejich šířku dřív, takže se při šířce obsahu 600 pt vešlo
+41 znaků místo 57 a u pravého okraje zůstávalo mrtvé místo; při té samé chybě se navíc bublina nálezu
+kreslila přes poslední řádky bloku. Počty `+X` a `−Y` jsou obarvené jako znak změny v samotném řádku — zeleně
 a červeně, v řadě záložek PR i v hlavičkách souborů, takže „velký přírůstek“ a „velké mazání“
 jsou poznat na první pohled.
 
