@@ -298,6 +298,15 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   s escapovanou uvozovkou i neuzavřené, komentář v řetězci a naopak, klíčová slova jen
   jako celá slova, čísla mimo jména, proměnné se sigilem i ve složených závorkách
   a diakritiku. `Language` má tabulkové testy na detekci z přípony i ze jména souboru.
+- **`SyntaxRunCache` (#224)** — zapamatované obarvení se dá pokazit dvěma způsoby a oba jsou
+  potichu. **Cizí obarvení**: `# poznámka` je v shellu komentář a ve Swiftu obyčejný text, takže
+  klíč bez jazyka by obarvil jeden soubor podle pravidel druhého — test se ptá na oba jazyky
+  a pak zpátky na první. **Růst bez hranice**: obě meze (počet řádků i rozpočet na jejich délku)
+  se přesypou stovkou řádků a hlídá se, že `count` strop nepřekročí a že po vyprázdnění vyjde
+  týž řádek stejně. K tomu je tam rovnost s `SyntaxHighlighter.scan` (cache nesmí nic změnit)
+  a souběžný běh padesáti úloh nad jednou cachí — zámek se tvrdit nedá, ale rozsypaný souběh
+  je vidět. **Obojí ověřeno vloženou regresí**: klíč bez jazyka shodí test na jazyky, vyndaná
+  kontrola meze shodí test na strop (`count` vyjde 200 místo 10).
 - **`AppStore` — diff** — proti fake gateway: načtení, cache podle `updatedAt`, opakování
   po selhání a zahození diffu PR, které zmizelo ze seznamu.
 - **`AppStore` — zahození nálezů** — proti **skutečnému** `ReviewStore`: že to zmizí
@@ -995,6 +1004,8 @@ Co harness měří:
 | osa konverzace podle počtu uzlů | skutečná views, ne syntetický tvar — má být lineární |
 | model diffu na 2400 řádcích | dokládá, že model **není** příčina (jednotky ms) |
 | cena vykreslení podle délky bloku (#223) | z toho se vybral strop `DiffBlock.maxLines`; měří se **jeden blok** i celý soubor po blocích |
+| cena obarvení se cachí a bez ní (#224) | tři čísla na jednom souboru o 2400 řádcích: `scan` bez cache **44 ms**, totéž z plné cache **0,30 ms** (~145×), naplnění prázdné cache **44 ms** — uložení se v šumu ztratí |
+| co v cache zůstane ležet (#224) | 68 kB textu run na 2400 řádků (~29 B na řádek), tedy z čeho se strop `capacity` překládá na kilobajty |
 
 **Tuhnoucí okno se diagnostikuje `sample`m, ne odhadem.** Dokud proces visí, jde z něj vytáhnout
 příčina; po zabití už ne:
@@ -1017,6 +1028,11 @@ jinam — u #220 z toho byly dva snímky cizí aplikace a klikání mimo PRism. 
 ```bash
 osascript -e 'tell application "System Events" to tell process "PRism" to return {position, size} of window 1'
 ```
+
+**Paměť cache se `task_info`em měřit nedá** (#224). Přírůstek rezidentní velikosti po naplnění
+cache 2400 řádky vyšel **0 kB** — alokátor sáhne po stránkách, které proces už má, takže by to
+tvrdilo, že cache nic nestojí. Harness proto sčítá **text run**, který v ní zůstane ležet; klíč se
+nepočítá, protože je to tentýž řetězec, jaký drží model diffu (kopíruje se jen hlavička).
 
 **Cena bloku se měří dvěma způsoby a je to schválně** (#223). Jeden blok podle délky je ten údaj,
 ze kterého se vybírá strop — to je práce, kterou appka zaplatí i za blok, jehož je vidět kousek.

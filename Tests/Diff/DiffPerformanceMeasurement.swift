@@ -344,10 +344,7 @@ struct DiffPerformanceMeasurement {
             _ = DiffRow.blocked(DiffRow.rows(of: big))
         }
         if let language = Language(path: big.displayPath) {
-            let texts = big.hunks.flatMap(\.lines).map(\.text)
-            measure("SyntaxHighlighter.runs, \(texts.count) řádků bez cache") {
-                for text in texts { _ = SyntaxHighlighter.runs(of: text, in: language) }
-            }
+            measureHighlighting(of: big.hunks.flatMap(\.lines).map(\.text), in: language)
         }
 
         // Jeden blok = jeden `NSTextView`. Bez stropu je to celý soubor.
@@ -355,6 +352,61 @@ struct DiffPerformanceMeasurement {
             if case .block(_, let block) = row { block.lines.count } else { nil }
         }.max() ?? 0
         print("MĚŘENÍ největší blok: \(biggest) řádků v jednom NSTextView")
+    }
+
+    // MARK: - Co stojí obarvení (#224)
+
+    /// Před a po zavedení cache, na jednom souboru o 2400 řádcích.
+    ///
+    /// Měří se **tři** různé věci a nesmí se splést:
+    ///
+    /// 1. **`scan` bez cache** — práce, která se do #224 dělala při každém překreslení.
+    /// 2. **`runs` z plné cache** — co se za totéž platí od #224, tedy při hoveru a při skoku
+    ///    mezi nálezy.
+    /// 3. **`runs` do prázdné cache** — jednorázová cena při prvním zobrazení souboru, tedy
+    ///    průchod plus uložení. Naměřeno stejně jako `scan` (44 ms), takže uložení se ve zbytku
+    ///    ztratí; kdyby tohle číslo od `scan` odskočilo, platí se za cache i tam, kde nepomáhá.
+    ///
+    /// **Řádky jsou tu všechny různé**, takže je to nejhorší případ. Ve skutečném diffu se
+    /// závorky, prázdné řádky a importy opakují, takže i první průchod část práce ušetří.
+    private func measureHighlighting(of texts: [String], in language: Language) {
+        measure("SyntaxHighlighter.scan, \(texts.count) řádků bez cache") {
+            for text in texts { _ = SyntaxHighlighter.scan(text, in: language) }
+        }
+
+        let warm = SyntaxRunCache()
+        for text in texts { _ = warm.runs(of: text, in: language) }
+        measure("SyntaxRunCache.runs, \(texts.count) řádků z plné cache") {
+            for text in texts { _ = warm.runs(of: text, in: language) }
+        }
+
+        // Vlastní smyčka, ne `measure`: ta si nejdřív zahřeje, což je u prázdné cache přesně to,
+        // co se měřit nemá.
+        let iterations = 10
+        let elapsed = ContinuousClock().measure {
+            for _ in 0..<iterations {
+                let cold = SyntaxRunCache()
+                for text in texts { _ = cold.runs(of: text, in: language) }
+            }
+        }
+        print("MĚŘENÍ SyntaxRunCache.runs, \(texts.count) řádků do prázdné cache: \((elapsed / iterations).milliseconds) na volání")
+
+        measureRunFootprint(of: texts, in: language)
+    }
+
+    /// Kolik textu za tenhle soubor v cache zůstane ležet — z toho se překládá strop „nejvýš
+    /// 4000 řádků“ na kilobajty.
+    ///
+    /// **Není to měření paměti procesu.** Rezidentní velikost se po naplnění cache nehne (zkoušeno
+    /// přes `task_info`: přírůstek vyšel 0 kB, protože alokátor sáhne po stránkách, které už má),
+    /// takže by to tvrdilo, že cache nic nestojí. Sčítá se proto **text run**, tedy hodnoty, které
+    /// v ní leží. Klíč se nepočítá — je to tentýž řetězec, jaký drží model diffu, takže se kopíruje
+    /// jen jeho hlavička. Režie slovníku v tom taky není, je to spodní odhad.
+    private func measureRunFootprint(of texts: [String], in language: Language) {
+        let runs = texts.flatMap { SyntaxHighlighter.scan($0, in: language) }
+        let bytes = runs.reduce(0) { $0 + $1.text.utf8.count }
+        let perLine = texts.isEmpty ? 0 : bytes / texts.count
+        print("MĚŘENÍ text run, \(texts.count) řádků: \(bytes / 1024) kB (~\(perLine) B na řádek, \(runs.count) run) — tolik zůstane v cache")
     }
 }
 

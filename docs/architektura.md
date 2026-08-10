@@ -697,13 +697,15 @@ Věci, které se u toho nemají rozbít:
 
 ## `App/Syntax/`
 
-Obarvení kódu v diffu. Čisté funkce, **žádná externí závislost** — vlastní pravidla místo
-highlight.js nebo tree-sitteru.
+Obarvení kódu v diffu. **Žádná externí závislost** — vlastní pravidla místo highlight.js nebo
+tree-sitteru. Rozhodování je čistá funkce; jediný stav je cache výsledků (#224), a ta na tom, co
+z řádku vyjde, nic nemění.
 
 | Typ | Co je |
 |---|---|
 | `Language` | Pravidla jednoho jazyka: komentáře, uvozovky, sigily proměnných, klíčová slova. `init?(path:)` pozná jazyk z cesty |
-| `SyntaxHighlighter` | Řádek → `[SyntaxRun]`. Stavový průchod po znacích |
+| `SyntaxHighlighter` | Řádek → `[SyntaxRun]`. `runs(of:in:)` jde přes cache, `scan(_:in:)` je vlastní průchod po znacích |
+| `SyntaxRunCache` | Zapamatované obarvení klíčované `(text řádku, jméno jazyka)`, se dvěma mezemi (#224) |
 | `SyntaxRun`, `SyntaxKind` | Kus řádku a jeho význam: `plain`, `comment`, `string`, `number`, `keyword`, `variable` |
 | `SyntaxPalette` | Barvy — Darcula pro tmavý režim, IntelliJ Light pro světlý |
 
@@ -711,6 +713,22 @@ Věci, které se u toho nemají rozbít:
 
 - **Spojení run musí dát původní řádek.** Je to invariant ve všech testech: obarvení
   nesmí text změnit, jinak by se v diffu tiše ztratil znak.
+- **Obarvení se pamatuje** (#224). `runs(of:in:)` se volá z computed property `content`
+  v `DiffLineView` a při složení textu bloku v `DiffTextView`, tedy **při každém překreslení** —
+  a to se děje i při pouhém přejezdu myší. Naměřeno 44 ms na 2400 řádků; z cache 0,30 ms.
+  Kdo barví řádek kvůli zobrazení, jde přes `runs`; `scan` je pro cache a pro měření.
+- **V klíči musí být jazyk.** `# poznámka` je v shellu komentář a ve Swiftu obyčejný text.
+  Klíčem je **jméno** jazyka, ne celá hodnota — `Language` se podle jména i porovnává a hashovat
+  jeho sadu klíčových slov při každém nahlédnutí by stálo víc než samotné obarvení.
+- **V cache nejsou barvy, jen druhy.** Přepnutí světlého a tmavého režimu ji proto
+  nezneplatňuje; paletu si bere view až při kreslení.
+- **Cache se nezneplatňuje, jen vyprazdňuje.** Klíčem je text, takže záznam nemůže zastarat —
+  jediná otázka je růst. Hlídají ho dvě meze a při překročení kterékoli se zahodí **celá**:
+  `capacity` (4000 řádků) a `budget` (4 MB součtu jejich délek). Dvě proto, že každá chytá jiný
+  způsob, jak přetéct: tisíce krátkých řádků z dlouhého sezení, nebo pár obřích řádků
+  z generovaného souboru. Zahodit všechno je O(1) a stojí přepočet toho, co je zrovna vidět
+  (blok o 60 řádcích ≈ 1,1 ms); LRU by pořadí zapisovala **při každém nahlédnutí**, tedy zdražila
+  přesně tu operaci, kvůli které cache vznikla.
 - **Barví se řádek po řádku, bez paměti.** Blokový komentář přes víc řádků se obarví jen
   tam, kde začíná. Diff je útržek — mezi hunky chybí řádky, ze kterých by se stav
   dopočítal.

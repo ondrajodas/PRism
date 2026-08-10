@@ -653,5 +653,17 @@ U slotů (#228) dopadly tři věci jinak, než jak byly v zadání:
   znamenal, že se slot potichu vrátí do cache hlavní instance — přesně to, čemu se sloty
   vyhýbají. Ověřeno vložením regrese: test to chytá.
 
+**Obarvení se pamatuje (#224)** — `SyntaxRunCache` klíčovaná textem řádku a jménem jazyka.
+`SyntaxHighlighter.runs` se volá z computed property `content` v `DiffLineView` a při složení
+textu bloku, takže celý průchod řádkem běžel při **každém** překreslení — i při přejezdu myší.
+Změřeno na souboru o 2400 řádcích: **44 ms bez cache, 0,30 ms z ní** (~145×), a naplnění prázdné
+cache stojí těch samých 44 ms, takže se za to neplatí ničím. Je to **otočení rozhodnutí z #48**,
+kde se cache zamítla podle odhadu, který počítal jen se scrollováním.
+
+Růst drží dvě meze — 4000 řádků a 4 MB součtu jejich délek — a po překročení kterékoli se cache
+zahodí celá (O(1), cena je přepočet toho, co je zrovna vidět, tedy ~1,1 ms na blok). Barvy uvnitř
+nejsou, jen druhy run, takže přepnutí světlého a tmavého režimu ji nezneplatňuje. **Vidět není
+nic** — obarvení vychází stejné, jen se nepočítá znovu.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
