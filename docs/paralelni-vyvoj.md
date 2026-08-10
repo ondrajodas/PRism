@@ -7,13 +7,14 @@ Pravidla z [`CLAUDE.md`](../CLAUDE.md) platí beze změny — tenhle dokument je
 **kdo je plní**. Jediná výjimka je pauza na proklikání, viz níž; ta je zapsaná jako vědomá
 změna.
 
+Postup je: **posoudit nezávislost → přidělit sloty → pustit subagenty**, a každý z nich si svoje
+issue dotáhne až do mergnutého PR a releasu. Orchestrátorovi zbývá restart hlavní aplikace
+a úklid.
+
 ## Kdy se to použije
 
 Když přijde **víc než jedno issue naráz**. U jednoho se nic nemění: udělá se sériově, jak to
 popisuje `CLAUDE.md`.
-
-Postup je: **posoudit nezávislost → přidělit sloty → pustit subagenty → mergovat v pořadí →
-vydat release.**
 
 ## 1. Posoudit, co jde souběžně
 
@@ -80,7 +81,9 @@ patří orchestrátorovi, protože jediný vidí na všechny větve. V provozu s
 řešil jinou větev. Zdržení rostlo s počtem běžících agentů, tedy přesně tam, kde měl paralelní
 běh pomoct. Souběžné mergování je proti tomu levné: **konflikt vyřeší git**, a když nastane
 (typicky `docs/stav.md`), subagent si **zvedne main sám** a doběhne. Rebase ne — main je
-squashnutý, takže `git merge main` stačí a nerozbije Copilotovi komentáře.
+squashnutý, takže stačí `git fetch origin && git merge origin/main`. Proti **`origin/main`**, ne
+proti lokálnímu `main`: ten je v čerstvém worktree z doby jeho vzniku, takže by merge nepřitáhl
+nic — a vypadalo by to, že konflikt zmizel.
 
 Co subagent **nedělá**:
 
@@ -121,7 +124,8 @@ tedy jen na práci, ne na frontu. Pořadí se **neurčuje předem**: kdo je dř�
 
 Co z toho plyne pro toho, kdo přijde druhý: **main se do větve nezvedá preventivně**, jen když to
 GitHub hlásí jako konflikt nebo když větev na mergnuté změně stojí. Rebase ne — main je squashnutý,
-takže `git merge main` stačí a nerozbije Copilotovi komentáře.
+takže stačí `git fetch origin && git merge origin/main` — a nerozbije to Copilotovi komentáře.
+Znovu: proti **`origin/main`**, ne proti lokálnímu `main`.
 
 Když jedna větev mění `Policy` nebo stav v `AppStore` a druhá na tom staví, **neměly být puštěné
 souběžně** (viz krok 1). Pořadí mergů to nezachrání: konflikt je tam sémantický, takže obě větve
