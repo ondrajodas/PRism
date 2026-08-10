@@ -9,12 +9,77 @@ a jde přes orchestrátora (§4). Je to zapsané jako vědomá změna.
 
 Postup je: **posoudit nezávislost → přidělit sloty → pustit subagenty**, a každý z nich si svoje
 issue dotáhne až do mergnutého PR a releasu — s jedinou zastávkou na proklikání těsně před mergem.
-Orchestrátorovi zbývá tlumočit připomínky, restart hlavní aplikace a úklid.
+Orchestrátorovi zbývá rozvrh, sloty, tlumočení připomínek, restart hlavní aplikace a úklid —
+**ne implementace** (sekce *Co dělá orchestrátor — a co ne*).
 
 ## Kdy se to použije
 
 Když přijde **víc než jedno issue naráz**. U jednoho se nic nemění: udělá se sériově, jak to
 popisuje `CLAUDE.md`.
+
+## Co dělá orchestrátor — a co ne
+
+**Orchestrátor v dávce neimplementuje, deleguje.** Jeho práce je celá dávka, ne jedna větev
+v ní. Jmenovitě:
+
+- **posoudí nezávislost** issues a rozhodne, co jde souběžně a co za sebou (§1);
+- **přiděluje sloty** — na běžícího subagenta, ne na issue (§2);
+- **píše zadání**, včetně slotu, čísla issue a pauzy před mergem (§3);
+- **tlumočí připomínky** — pauza vede přes něj (`SendMessage` na `main`), takže drží, kdo na co
+  čeká a komu co předat (§4);
+- **pošle nového subagenta do stromu po skončené session** (viz níž);
+- **domergne cizí větev jen v krajním případě** — když už nezbývá nic než merge, release a úklid
+  (PR zelený, Copilot vyřízený, člověk proklikal) a subagent už neběží. Kde ve stromě zbyla
+  rozdělaná práce, patří nový subagent, ne orchestrátorův merge;
+- **restartuje hlavní aplikaci po každém mergi** a **uklízí pracovní stromy** (§5). Obojí sahá do
+  hlavního stromu, a to je právě to jediné místo, kam subagent nesmí.
+
+Co orchestrátor **nedělá**: **implementaci zadání** — tedy kód, testy ani dokumentaci, které patří
+k nějakému issue. Není to zákaz psát cokoli — zakládat issues (definovat práci je jeho),
+odpovídat na PR, mergovat, uklízet a restartovat aplikaci smí. Hranice je **implementace
+zadaného issue**, ne psaní jako takové.
+
+Důvod je **kontext**, ne rozdělení rolí na papíře. Orchestrátorův kontext drží rozvrh, stav
+všech běžících větví a připomínky, které má komu předat — a to za něj nikdo neudrží, protože
+subagent vidí jen své issue. Implementace je proti tomu to, co se dá rozdat: je uzavřená v jednom
+stromě a subagent u ní může spálit 300 tisíc tokenů, aniž by to někoho dalšího zajímalo. Když si
+ji orchestrátor vezme, stane se dvojí:
+
+1. **Utopí kontext v jedné větvi** a přestane stíhat to, co za něj nikdo neudělá. Hlášení
+   ostatních agentů pak leží a čeká — tedy přesně to zdržení, kvůli kterému #247 posunul merge
+   na subagenty.
+2. **Nemá kde tu práci nechat.** Subagentův strom a slot jsou jeho, hlavní strom je uživatelův.
+   Orchestrátor tedy implementuje v cizím stromě, nebo v tom jednom, do kterého se sahat nemá.
+
+**„Jen dokumentace“ výjimka není.** Právě u takového issue je pokušení největší, a přitom se od
+kódu neliší ničím, co by tu hranici posouvalo: taky má branch, PR, Copilota a release — a taky
+sní kontext.
+
+Zapsané je to proto, že se to na M9 stalo dvakrát (#259): pravidlo #256 napsal orchestrátor sám
+a u opravy `Průběhu` (#242) začal implementovat v odumřelém stromě po předchozím agentovi, dokud
+to člověk nezastavil větou „nechceš spíš pustit nového sub-agenta?“. Do té doby byl jmenovitý
+výčet jen na straně subagenta (§3) a o orchestrátorovi tu stálo jen to, co mu *zbývá* — z toho
+zákaz nevyplýval, takže chybějící věta vypadala jako volba.
+
+### Strom po skončené session
+
+Odumřelý strom je důvod subagenta **pustit**, ne implementovat: strom stojí, rozdělanou práci
+i větev v sobě má a dá se do něj poslat nový agent. Když tedy subagentova session skončí a jeho
+strom zůstane rozdělaný, **pustí se do toho stromu nový subagent** — ne nový worktree z mainu
+(přišel by o větev i o otevřený PR a začal by od nuly) a ne orchestrátor sám, viz výš.
+
+Zadání takového agenta se od běžného (§3) liší ve třech věcech:
+
+- **bez `isolation: "worktree"`**, protože ten by mu založil nový strom. Do existujícího vstoupí
+  `EnterWorktree` s `path` — strom musí být v `git worktree list`, což ten po skončeném agentovi
+  je, harness ho sám neuklidí (§5);
+- **cesta k tomu stromu, číslo existujícího PR a stav Copilota na něm.** Slot se **nepřepisuje** —
+  strom ho má v `.prism-slot` z minula a je to tentýž, na kterém se pak bude klikat;
+- **zákaz zakládat novou větev a nový PR.** Dotahuje se ten, který stojí, a to celý: vyřízení
+  Copilota, pauza, merge, zavření issue, release a úklid slotu (§4, §5).
+
+Strom se **uklidí až po mergi**, jako každý jiný (§5). Odklizený dřív by vzal nově puštěnému
+agentovi to, kvůli čemu tam jde.
 
 ## 1. Posoudit, co jde souběžně
 
@@ -63,7 +128,9 @@ očištěnou konfigurací. Subagent ho nepoužívá, protože strom už má od h
 
 ## 3. Zadání subagenta
 
-Subagent dostane worktree (`isolation: "worktree"`) a v zadání tohle:
+Subagent dostane worktree (`isolation: "worktree"`) — **výjimka je strom po skončené session**,
+kde se nový nezakládá a zadání se liší ve třech věcech (viz *Co dělá orchestrátor — a co ne*) —
+a v zadání tohle:
 
 - **slot** jako první příkaz (viz výš),
 - **číslo issue** a pokyn, ať si ho přečte přes `gh api` (`gh issue view` v tomhle repu padá),
@@ -196,6 +263,9 @@ něm doběhl. Odklidit ho patří k mergi:
 git worktree list                       # zamčené stromy patří běžícím agentům, ty nech být
 git worktree remove <cesta> && git branch -d <větev>
 ```
+
+**Strom s rozdělanou prací se nemaže**, i když jeho agent skončil — dotáhne ho nový subagent
+puštěný do něj (viz *Co dělá orchestrátor — a co ne*). Odklízí se až po mergi jeho PR.
 
 **Svou aplikaci uklidí subagent sám** (#250), jakmile domergoval — ukončí ji, odregistruje
 z LaunchServices a smaže i s cache:
