@@ -8,7 +8,8 @@ import SwiftUI
 /// Okno se na velkém PR zaseklo na 20 minut a 100 % CPU právě v tomhle.
 ///
 /// Jakmile podstrom svou šířku **zná**, vyjednávání skončí: tentýž strom v hloubce 8 spadl
-/// z 15 700 ms na 2,8 ms.
+/// z 15 700 ms na **2,2 ms** — tedy touhle cestou, přes environment. Zadrátovaný `frame(width:)`
+/// na každé úrovni vyšel na 2,8 ms, takže předávání není o nic dražší než ta nejhrubší varianta.
 ///
 /// **Hranice na každé čtvrté úrovni nestačí** — změřeno taky (930 ms). Proto se šířka předává
 /// po celé délce cesty, ne jen na jejím začátku.
