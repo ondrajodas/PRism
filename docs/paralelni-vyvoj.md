@@ -69,7 +69,8 @@ Subagent dostane worktree (`isolation: "worktree"`) a v zadání tohle:
 - **číslo issue** a pokyn, ať si ho přečte přes `gh api` (`gh issue view` v tomhle repu padá),
 - pokyn, že platí `CLAUDE.md` — včetně dokumentace ve stejném commitu a vlastní revize diffu
   před pushem,
-- **kde končí jeho práce**: issue je hotové, PR mergnutý a release vydaný.
+- **kde končí jeho práce**: issue je hotové, PR mergnutý, release vydaný a **jeho aplikace
+  uklizená** (viz krok 5).
 
 Co subagent dělá: implementaci, testy, vlastní revizi diffu, dokumentaci, commit, push, PR,
 reakci na Copilota — a pak **merge, zavření issue a release**. Nečeká na pokyn; zelené testy,
@@ -158,9 +159,34 @@ git worktree list                       # zamčené stromy patří běžícím a
 git worktree remove <cesta> && git branch -d <větev>
 ```
 
-Aplikace slotu (`/Applications/PRism-a.app`) a jeho cache se ruší **až když slot doopravdy
-skončil**, ne po každém mergi — další subagent dostane totéž písmeno a je levnější mu nechat
-udělená povolení k notifikacím než si o ně říkat znovu.
+**Svou aplikaci uklidí subagent sám** (#250), jakmile domergoval — ukončí ji, odregistruje
+z LaunchServices a smaže i s cache:
+
+```bash
+SLOT=a   # svůj, nikdy cizí
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+
+osascript -e "tell application id \"com.ondrajodas.prism.${SLOT}\" to quit"
+"${LSREGISTER}" -u "/Applications/PRism-${SLOT}.app"
+rm -rf "/Applications/PRism-${SLOT}.app" ~/Library/"Application Support"/PRism-${SLOT}
+```
+
+Bez toho se instance hromadí: po jednom odpoledni jich byly v `/Applications` čtyři vedle hlavní
+a v Launchpadu ani Spotlightu se z nich nedá vybrat, protože se jmenují skoro stejně. Je to tentýž
+problém, jaký #139 řešil u kopie v `build.noindex/` — jen ho tentokrát vyrábí paralelní běh.
+
+**Cache se maže taky.** Není sice vidět v systému, ale zůstávají v ní data, kterými si agent
+zkoušel UI — v jednom slotu takhle zbyl vyrobený záznam nálezů pro sandbox PR, který by příštího
+agenta na tomtéž písmenu mátl. Cena je nulová: klony se dotáhnou znovu, jen když je někdo
+potřebuje.
+
+**Odregistrovat se musí před smazáním bundlu**, a jedině **vlastní** slot. Cizí instance se nesmí
+ukončit ani odregistrovat — může na ní běžet jiný agent nebo ji může mít otevřenou člověk.
+
+**Změna proti první verzi** (#250), kde stálo, že se aplikace i cache nechávají „až slot doopravdy
+skončí“, protože další subagent dostane totéž písmeno a je levnější mu nechat udělená povolení
+k notifikacím. Slot **skončil** ve chvíli, kdy agent domergoval — a nasbírané aplikace jsou horší
+než jeden dotaz na notifikace navíc.
 
 ## 6. Kde je strop
 
