@@ -36,10 +36,10 @@ struct SettingsView: View {
             // nastavení otevřelo o půl metru vedle. Od #164 to má na jednom místě
             // (`WindowCentering`) i okno s novinkami.
             //
-            // **Hladina se nechává normální.** Zkoušelo se `.floating`, ať okno zůstane nahoře
-            // až do křížku, a **zahodilo se**: kliknutí mimo ho má odklidit, protože najíždět
-            // na křížek kvůli jedné změně je otrava. Diagnostikou je přitom ověřené, že se okno
-            // nezavírá — `willClose` nepřijde nikdy, jen zaleze za hlavní okno.
+            // **Hladinu okna nastavuje `SettingsScene`** (#243) — okno zůstává před hlavním, dokud
+            // je otevřené. Do #243 tady stálo, že se hladina nechává normální a `.floating` je
+            // zamítnuté, protože kliknutí mimo má okno odklidit; jenže neodklidí, jen ho schová za
+            // hlavní okno, ve kterém je vystředěné. Proč se to změnilo, je u `AuxiliaryWindowLevel`.
             .centeredInMainWindow()
             .task { settings.sync(with: store.configuration) }
             .onChange(of: store.configuration) { _, configuration in
