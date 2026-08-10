@@ -24,9 +24,9 @@ struct VisitChanges: Hashable, Sendable {
         commits.isEmpty && forcePushes.isEmpty && events.isEmpty && reviews.isEmpty && comments.isEmpty
     }
 
-    /// Přepsala se mezitím historie větve? Kvůli tomu se banner ukazuje i tehdy, když jinak
-    /// není co říct — je to jediná změna, po které nálezy na obrazovce přestávají platit.
-    var rewroteHistory: Bool { !forcePushes.isEmpty }
+    // **`rewroteHistory` tu není** (#226). Rozhodovala se jím barva bloku „od minule“ — modrá,
+    // nebo žlutá — a s jednotným okrovým tónem z návrhu ji nečetl nikdo. Že se historie přepsala,
+    // se pozná z `forcePushes` tam, kde na tom záleží.
 }
 
 extension Policy {

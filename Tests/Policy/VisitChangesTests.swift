@@ -120,14 +120,15 @@ struct VisitChangesTests {
         #expect(changes.forcePushes.map(\.id) == ["push"])
         #expect(changes.commits.map(\.id) == ["commit"])
         #expect(changes.events.map(\.id) == ["ready"])
-        #expect(changes.rewroteHistory)
     }
 
-    @Test("Bez force-pushe se historie nepřepsala")
+    /// Force push se **nesmí přimíchat k obyčejným událostem** — na tom stojí věta o tom, že
+    /// nálezy na obrazovce platí proti commitu, který na větvi už není.
+    @Test("Bez force-pushe zůstane přihrádka prázdná")
     func withoutAForcePushNothingWasRewritten() {
         let conversation = conversation(events: [event(.commit(oid: "bbb", headline: "fix"))])
 
-        #expect(!Policy.changes(in: conversation, since: visit).rewroteHistory)
+        #expect(Policy.changes(in: conversation, since: visit).forcePushes.isEmpty)
     }
 
     @Test("Moje komentáře nejsou novinka")
