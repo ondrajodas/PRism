@@ -213,8 +213,8 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
 - **Po mergi mi restartuj hlavní aplikaci z mainu** — `./bin/run.sh` v hlavním stromě, bez
   ptaní. Je to nástroj, který používám každý den, takže co je mergnuté, mám mít i spuštěné;
   jinak se regrese pozná až za týden a proti mergnutému kódu se pak hledá v buildu, který ho
-  nemá. **Mergnutých PR v řadě za sebou se to týká jednou** — restart až po posledním, jinak
-  se okno zavírá pod rukama.
+  nemá. **Po každém mergi, i uprostřed dávky** — stejně jako release. Odkládat to na konec
+  série znamená, že ten mezitím mergnutý kód nikdo nespustí.
 
   `run.sh` ukončuje Apple eventem, takže při běžícím review se zeptá a bez odpovědi nespustí
   nic. To je záměr, ne chyba — nepřemlouvej to `killall`em. Když skript skončí nenulově,
