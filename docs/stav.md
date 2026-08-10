@@ -734,5 +734,26 @@ velkého diffu vedle sebe a chová se stejně na mainu; `WordDiff` stojí 18 % c
 v nejhorším případě a v `sample`u ztuhlého procesu není vůbec. Tuhnutí je tedy vlastní issue
 v území #220/#223; postup a vyloučené příčiny jsou v [`testovani.md`](testovani.md).
 
+**Nálezy a Průběh jako vlastní záložky (#242)** — pruh záložek PR má pět položek a mezi
+`Konverzací` a `Nálezy` dělič: nalevo je to, co je na PR (a co má i GitHub), napravo to, co s ním
+udělaly naše reviewery. `Nálezy` jsou **tabulka přes celou šířku** i s řazením podle sloupců, které
+#175 zahodil kvůli 300 bodům panelu; `Průběh` je **dráha na revieweera** s fázemi vedle sebe, takže
+„kdo je hotový, kdo běží a kdo spadl“ je jeden pohled. Spadlá session dostala důvod, `stderr`
+a tlačítka `Pustit znovu` / `Zkopírovat příkaz` — do té doby se od proběhlé lišila jen barvou
+odznaku, protože v kartě nebylo místo, a `čisté` se `spadlo` slít nesmí.
+
+**Nálezy zůstaly i v panelu** — změna proti zadání, vyžádaná při implementaci. Nejsou to dvě kopie
+jednoho pohledu, ale dvě různé otázky: u kódu „co je tady“, v tabulce „co všechno se našlo“. Panel
+tím má dva segmenty místo tří (`Průběh` se odstěhoval celý) a v proužku složeného panelu je vedle
+počtu nálezů i značka rozdělaného review.
+
+Dvě věci z toho stojí za zapamatování. **Řádek tabulky je místo, ne nález**: shoda dvou reviewerů je
+jeden řádek s odznakem `2×`, jinak by součet nad tabulkou nesouhlasil s tím, co je v diffu jako jedna
+bublina — a hlídá to test, že odznak na záložce, tabulka a bubliny počítají tytéž nálezy (jeden zdroj
+v `Policy.tally`). A **složení panelu se přestěhovalo do `AppStore`**, protože poznámka do těla review
+přidaná z diffu musí umět panel rozložit sama; dokud to rozhodnutí bydlelo v `@State`, nešlo ho
+otestovat. Jeden reálný nález přišel z testu, ne z review: session spadlá při startu neznačila
+selhání v žádné fázi, takže dráha vypadala k nerozeznání od té, co ještě nezačala.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

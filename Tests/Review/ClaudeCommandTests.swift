@@ -130,4 +130,51 @@ struct ClaudeCommandTests {
 
         #expect(environment["GIT_CONFIG_VALUE_0"] == "!'/Users/o'\\''brien/gh' auth git-credential")
     }
+
+    // MARK: - Příkaz do terminálu (#242)
+
+    /// `Zkopírovat příkaz` u spadlé session se skládá **ze stejného promptu a stejných povolení**
+    /// jako skutečný běh — jinak by se zkopírovaný příkaz rozešel s tím, co aplikace spouští.
+    @Test("Zkopírovaný příkaz nese tentýž prompt i povolení jako skutečný běh")
+    func theCopiedCommandMatchesTheRealOne() {
+        let command = ClaudeCommand.shellCommand(
+            skillID: "php-review",
+            baseSha: "bbbb2222",
+            model: nil,
+            worktree: URL(filePath: "/tmp/cache/cli-cli-42")
+        )
+
+        #expect(command.hasPrefix("cd '/tmp/cache/cli-cli-42' && 'claude'"))
+        #expect(command.contains(ClaudeCommand.allowedTools))
+        #expect(command.contains(ClaudeCommand.disallowedTools))
+        #expect(command.contains("bbbb2222...HEAD"))
+        #expect(command.contains("php-review"))
+    }
+
+    @Test("Bez pracovního stromu se příkaz nezalže o tom, kde běžet")
+    func theCommandWithoutAWorktreeHasNoCd() {
+        let command = ClaudeCommand.shellCommand(
+            skillID: "php-review",
+            baseSha: "bbbb2222",
+            model: "sonnet",
+            worktree: nil
+        )
+
+        #expect(!command.contains("cd "))
+        #expect(command.contains("'--model' 'sonnet'"))
+    }
+
+    /// Prompt jde do apostrofů, takže apostrof v cestě k pracovnímu stromu by uzávorkování rozbil
+    /// a vložený příkaz by se rozstřelil na dva.
+    @Test("Apostrof v cestě k pracovnímu stromu se odescapuje")
+    func anApostropheInTheWorktreeIsEscaped() {
+        let command = ClaudeCommand.shellCommand(
+            skillID: "php-review",
+            baseSha: "bbbb2222",
+            model: nil,
+            worktree: URL(filePath: "/Users/o'brien/strom")
+        )
+
+        #expect(command.hasPrefix("cd '/Users/o'\\''brien/strom' &&"))
+    }
 }

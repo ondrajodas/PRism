@@ -16,6 +16,16 @@ extension AppStore {
 
     func detailState(for pr: PRIdentifier) -> DetailState? { detailStates[pr] }
 
+    /// Ukáže rozdělané review v panelu — přepne na jeho tab a **rozloží složený panel**.
+    ///
+    /// Tudy chodí všechno, co do těla review něco doručí (#242). Do té doby stačilo přepnout tab,
+    /// protože nálezy měly v panelu vlastní; po přidání záložky `Nálezy` se ale panel dá složit
+    /// a rozepsaná věta by spadla za proužek na hraně okna, tedy tam, kde ji nikdo nehledá.
+    func revealDraft() {
+        reviewPanelTab = .draft
+        isReviewPanelExpanded = true
+    }
+
     /// Popis PR, jak ho napsal autor. `nil` = detail se ještě nenačetl.
     func description(of pr: PRIdentifier) -> String? {
         guard case .loaded(let detail, _) = detailStates[pr] else { return nil }

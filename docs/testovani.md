@@ -261,6 +261,35 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   a pořadí z `Policy` platí pro karty stejně. Nově k nim invariant, že **nález a jeho skupina
   dají totéž místo** (`FindingPlace`) — bez něj by lišta skákala jinam, než co je v panelu
   označené jako aktuální, a nebylo by z čeho poznat proč.
+- **Tabulka nálezů a její součty (#242)** — nejcennější je test, že **odznak na záložce, tabulka
+  a bubliny v diffu počítají totéž**: rozejdou se potichu, protože každé z těch tří míst si počet
+  umí spočítat samo, a pak odznak tvrdí pět nad čtyřmi řádky. Hlídá se to na nálezech, ne na
+  řádcích — řádek je **místo**, takže shoda dvou reviewerů je jeden řádek a dva nálezy; ověřeno
+  vložením regrese (řádek na nález místo na místo shodí obě tvrzení naráz). K tomu řazení podle
+  každého sloupce v obou směrech, invariant **odmítnuté naspod ať se klikne na cokoli**, a to, že
+  setřídění nemění počty. Šířky sloupců výčtem: co odpadne v úzkém okně, že se sloupce vejdou do
+  dané šířky a že nulová šířka nedá nulové shrnutí.
+- **Proč je prázdno v nálezech (#242)** — `Policy.findingsEmptyReason` výčtem. Testy tvrdí hlavně
+  to, co se **nesmí** stát: schované filtrem se nesmí slít s `clean` a spadlá session zůstane
+  spadlá i tehdy, když jiný reviewer ještě běží (jednořádková záměna pořadí podmínek by z ní
+  udělala „review běží“).
+- **Dráhy v tabu `Průběh` (#242)** — osy se skládají `record(_:at:)`/`finish(_:at:)`, tedy tou
+  cestou, kterou vznikají doopravdy. Pokrývá: doběhlá session má hotové fáze, kterými prošla;
+  **doběhlá bez nahlášených nálezů nemá fázi hlášení za hotovou** (reviewer, který
+  `ReportFindings` nezavolal, nálezy nenahlásil, a to není nula); prázdný seznam **je** nahlášená
+  nula; timeout, přerušení a zrušený běh mají každý vlastní stav, ne selhání; a běžící reviewer bez
+  osy dostane dráhu ve frontě, aby běžící review neukazovalo prázdný tab. Jeden reálný nález přišel
+  z testu: **session spadlá při startu** neznačila selhání v žádné fázi, takže dráha vypadala
+  k nerozeznání od té, co ještě nezačala.
+- **Věty dráhy (#242)** — `ReviewerLaneText` rozlišuje **tři** doběhlé konce (nahlásilo nálezy /
+  nahlásilo nulu / nenahlásilo nic) a test hlídá, že se u toho třetího **nikde neslíbí čisto**.
+  Plus že slova stavů jsou různá (`spadlo` ≠ `nedoběhlo`) a že se v běžícím kroku zkracuje cesta
+  o pracovní strom.
+- **Panel s mým review se rozloží sám (#242)** — a je to ten druh věci, který se rozbije potichu:
+  poznámka do těla review přidaná z diffu spadne do panelu, takže se složený panel musí rozložit,
+  jinak text zmizí za proužek na hraně okna. Testuje se ve store (proto se tam ta dvě pole
+  přestěhovala z `@State`) a spolu s tím to, co se stát **nesmí** — převzetí nálezu na řádku
+  v diffu panel nerozloží, protože komentář je vidět hned pod řádkem. Ověřeno vložením regrese.
 - **Skok na nález — cíl existuje v seznamu (#187)** — dvojice testů, která hlídá chybu z #157:
   kotva na řádek uprostřed bloku se musí přeložit na **něco, co v seznamu je**, a to v obou
   pohledech; druhý test naopak tvrdí, že **bez** překladu se netrefí. Z té dvojice je pak poznat,

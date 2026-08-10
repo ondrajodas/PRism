@@ -14,7 +14,7 @@ import SwiftUI
 /// stromu vedle a rozsah změny v řadě záložek nad ním, takže lišta o něj přišla, aniž by ten
 /// údaj z okna zmizel.
 ///
-/// **Přepínače sloupců v ní taky nejsou**, i když je návrh kreslí (`◧ Strom ⌘1`, `◨ Nálezy ⌘2`).
+/// **Přepínače sloupců v ní taky nejsou**, i když je návrh kreslí (`◧ Strom ⌘1`, `◨ Moje review ⌘2`).
 /// Strom i panel mají složení **u sebe** — tlačítko v hlavičce sloupce a proužek, kterým se zase
 /// otevřou — takže tady by to byly třetí dveře k témuž a v úzkém okně by se o místo praly
 /// s procházením. Zkratky zůstávají (`⌘1` v `DiffView`, `⌘2` v detailu PR) a jsou napsané
