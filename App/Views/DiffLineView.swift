@@ -247,8 +247,11 @@ struct DiffLineView: View {
     /// z diffu zmizel a přestala by u něj sedět čísla vedle.
     ///
     /// Obarvení se počítá **při vykreslení řádku**, ne dopředu pro celý soubor. Seznam je
-    /// líný, takže se to spočítá jen pro to, na co je vidět; nad jedním řádkem je to práce
-    /// v řádu mikrosekund.
+    /// líný, takže se to spočítá jen pro to, na co je vidět.
+    ///
+    /// Tohle je computed property, takže se to volá při **každém** překreslení — i když se hnulo
+    /// jen myší. Průchod řádkem se proto od #224 pamatuje (`SyntaxRunCache`) a zbývá tu složení
+    /// `AttributedString`u, které se cachovat nedá: barva v něm už je, a ta se s režimem mění.
     private var content: AttributedString {
         guard !line.text.isEmpty else { return AttributedString(" ") }
         guard let language, line.kind != .meta else { return AttributedString(line.text) }

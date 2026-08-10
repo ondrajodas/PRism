@@ -57,8 +57,10 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   dřív, než subagenta pustíš** — slot mu přiděluje orchestrátor a bez něj by subagent přepsal
   aplikaci, se kterou zrovna pracuju, i s její cache.
 
-  Subagent končí otevřeným PR s vyřízeným Copilotem. **Nemerguje, nezavírá issue a nevydává
-  release** — to dělá jeden, kdo vidí na všechny větve. U **jednoho** issue se nic nemění,
+  **Subagent dotáhne issue až do konce** (#247): PR, Copilot, merge, zavření issue a release.
+  Nečeká na frontu u orchestrátora — hotová práce, která leží, je to zdržení, kvůli kterému se
+  paralelně pracuje. Orchestrátorovi zůstává rozvrh, sloty, úklid stromů a **restart hlavní
+  aplikace** (sahá do hlavního stromu, což subagent nesmí). U **jednoho** issue se nic nemění,
   udělá se sériově.
 - **Všechno jde přes PR.** Žádné přímé pushe do `main` — každá změna (kód i dokumentace)
   má vlastní branch a PR, i když je malá. PR odkazuje na issue, které řeší.
@@ -75,11 +77,12 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   proklikám, dokud je změna ještě levná na přepsání. Zelené testy nejsou důkaz, že se to
   chová, jak jsem chtěl.
 
-  **V dávce se pauza posouvá před merge** (#231): subagent nemá jak zavolat člověka a čekáním
-  by blokoval sebe i slot. PR před mergem je pořád levný na přepsání, takže smysl pauzy to
-  drží. Sesbírá se za celou dávku naráz — podrobnosti v
+  **V dávce pauza odpadá** (#247, mění #231): subagent nemá jak zavolat člověka a dotahuje issue
+  až do mergnutého PR, takže není kde ji udělat. Kontrola se přesouvá na **hlavní aplikaci po
+  restartu** a co nesedí, je nové issue — podrobnosti v
   [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md). Co se **nemění**: podívat se na
-  obrazovku sám a napřed platí i tam.
+  obrazovku sám a napřed platí i tam, a o to víc — mergnout rozbitou obrazovku je horší než ji
+  ukázat.
 
   Napiš, **na co se mám podívat** a co v příslušné obrazovce uvidím.
 
@@ -210,6 +213,15 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
 - **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
   a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
   Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
+- **Po mergi mi restartuj hlavní aplikaci z mainu** — `./bin/run.sh` v hlavním stromě, bez
+  ptaní. Je to nástroj, který používám každý den, takže co je mergnuté, mám mít i spuštěné;
+  jinak se regrese pozná až za týden a proti mergnutému kódu se pak hledá v buildu, který ho
+  nemá. **Po každém mergi, i uprostřed dávky** — stejně jako release. Odkládat to na konec
+  série znamená, že ten mezitím mergnutý kód nikdo nespustí.
+
+  `run.sh` ukončuje Apple eventem, takže při běžícím review se zeptá a bez odpovědi nespustí
+  nic. To je záměr, ne chyba — nepřemlouvej to `killall`em. Když skript skončí nenulově,
+  **řekni to** a nech starou instanci běžet.
 - **Po mergnutí PR se vydá nový tag a GitHub release.** Release notes píšeme česky
   a popisují **jen to, co se v téhle verzi změnilo**: co přibylo, co se opravilo, co se
   rozhodlo jinak a proč, co se změřilo, co se zamítlo. Patří tam i to, co se změnou
@@ -440,6 +452,11 @@ Zvlášť stojí za přečtení, než sáhneš na:
   `filling` v `App/Views/AvailableWidth.swift`); pružná výška v líném seznamu je tatáž chyba.
   Tuhnoucí okno se diagnostikuje `sample`m běžícího procesu, ne odhadem — viz
   [`docs/testovani.md`](docs/testovani.md).
+- **Co se počítá při každém překreslení, se pamatuje — a cache si musí říct, co ji vyprazdňuje**
+  (#224). Obarvení řádku se volalo z computed property, takže běželo i při přejezdu myší: 44 ms
+  na soubor o 2400 řádcích, pokaždé znovu; z cache 0,30 ms. Hranice musí být v tom typu vidět
+  (`SyntaxRunCache`: strop na počet řádků i na jejich objem, po překročení se zahodí celá) —
+  cache bez vyjmenované meze je únik paměti s odkladem.
 - **V shell skriptech se proměnná v české próze píše `${VAR}`.** Uvozovka „ hned za
   `$VAR` shodí bash 3.2 (ten je v `/bin/bash`) v UTF-8 locale na `unbound variable`: její
   byty se počítají do jména proměnné. Chytí to `set -u`, ale až za běhu — `bash -n` ne.

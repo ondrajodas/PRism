@@ -595,7 +595,7 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
 9. **Revize okna** (M9) — nový vizuální jazyk podle návrhu ze srpna 2026 a přestavba okna
    na záložky. Šestnáct issues ve čtyřech vlnách; **pořadí je v popisu milníku**, protože se
    podle něj rozhoduje, co se dá dělat souběžně. Hotové: řádek fronty #172, co se změnilo od
-   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219 a sazba bloku „od minule“ #226. Mimo plán přibylo
+   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219, sazba bloku „od minule“ #226 a sazba hlavičky PR #218. Mimo plán přibylo
    **#220 — okno vytuhlo na PR s ~2000 změněnými řádky**: pružná šířka na každé úrovni zanoření
    stojí ~5,5× na úroveň, takže se šířka teď měří jednou a předává dolů. Odpadlo z toho #223
    (blok bez stropu) a #224 (barvení bez cache) do milníku Průběžné — obojí se měřením vyloučilo
@@ -605,6 +605,13 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
    zůstane. Důvod je v specifikaci; s ním odešla plná sazba stromu (`FileTreeView.isCompact`)
    a sečtené počty po složkách (`FileTreeNode.additions`/`.deletions`), protože byl jejich
    jediný čtenář.
+
+   U #218 **zmizel pravý sloupec hlavičky** a s ním `VerdictView`: návrh verdiktu se od #114
+   předvyplňuje v panelu `Moje review`, takže v hlavičce byl druhou a hlasitější kopií téhož.
+   Stav pracovní kopie se přestěhoval do stavového řádku (je to stav prostředí, ne údaj o PR),
+   selhaný checkout zůstal bannerem v hlavičce. Odchylka od návrhu je odznak u `Přehledu`:
+   mockup u něj má čtyřku, která odpovídá počtu dlaždic s fakty — a to je konstanta, takže
+   místo ní počítá novinky od poslední návštěvy. Důvod je ve specifikaci.
 
    U #216 se **rozšířila tvrdá podmínka č. 1**: `ReviewPublishing` má čtvrtou metodu
    (`comment`), protože composer komentáře pod PR je v návrhu a bez něj se pod PR nedá napsat
@@ -652,6 +659,31 @@ U slotů (#228) dopadly tři věci jinak, než jak byly v zadání:
 - **Chybějící `CFBundleName` shodí aplikaci** místo tichého `?? "PRism"`. Default by
   znamenal, že se slot potichu vrátí do cache hlavní instance — přesně to, čemu se sloty
   vyhýbají. Ověřeno vložením regrese: test to chytá.
+
+**Obarvení se pamatuje (#224)** — `SyntaxRunCache` klíčovaná textem řádku a jménem jazyka.
+`SyntaxHighlighter.runs` se volá z computed property `content` v `DiffLineView` a při složení
+textu bloku, takže celý průchod řádkem běžel při **každém** překreslení — i při přejezdu myší.
+Změřeno na souboru o 2400 řádcích: **44 ms bez cache, 0,30 ms z ní** (~145×), a naplnění prázdné
+cache stojí těch samých 44 ms, takže se za to neplatí ničím. Je to **otočení rozhodnutí z #48**,
+kde se cache zamítla podle odhadu, který počítal jen se scrollováním.
+
+Růst drží dvě meze — 4000 řádků a 4 MB součtu jejich délek — a po překročení kterékoli se cache
+zahodí celá (O(1), cena je přepočet toho, co je zrovna vidět, tedy ~1,1 ms na blok). Obě se
+počítají **včetně vkládaného řádku** a řádek delší než celý rozpočet se nepamatuje; jinak by cache
+po zápisu stála nad mezí až do toho dalšího (z Copilot review na #233). Barvy uvnitř
+nejsou, jen druhy run, takže přepnutí světlého a tmavého režimu ji nezneplatňuje. **Vidět není
+nic** — obarvení vychází stejné, jen se nepočítá znovu.
+
+**Počty u položek filtru (#199)** — u každého repa a autora v nabídce filtru je počet PR,
+kterých se týká, takže se odškrtává podle čísla, ne naslepo. Skládá je
+`Policy.filterOptions(in:filter:)` do `PullRequestFilterOption` (hodnota + počet), kreslí je
+`PullRequestFilterButton` vpravo v řádku v `Palette.ink3`, jak to má návrh v sekci 11.
+
+Počítá se to z **plného** seznamu — `AppStore.filterOptions` sahá na `pullRequests`, ne na
+`visiblePullRequests`. Ze zúženého by odškrtnutí jednoho repa srazilo počty u všech ostatních na
+nulu a čísla by se měnila při každém kliknutí, takže by z nabídky nešlo poznat, co zapnutí položky
+udělá. Je na to test v `Policy` i ve storu; položka, která v nabídce zbyla jen po aktivním filtru,
+má počet **nula** a řadí se dál podle jména, ne podle počtu.
 
 **Klávesové zkratky doplněné (#151)** — `⌘⏎` nad rozdělaným review otevře **potvrzení odeslání**
 (ne odeslání: dvě kliknutí na dvou různých tlačítkách z #68 zůstávají) a **Esc zavírá nastavení**,

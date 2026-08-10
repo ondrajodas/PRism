@@ -10,7 +10,20 @@ import Foundation
 /// Není to gramatika jazyka: cílem je, aby se v diffu chytlo oko, ne aby se prošel
 /// standard.
 enum SyntaxHighlighter {
+    /// Obarvení řádku. **Chodí přes `SyntaxRunCache`** (#224): text řádku se nemění, takže
+    /// výsledek platí, dokud platí řádek — a bez toho se celý průchod opakoval při každém
+    /// vykreslení, i když se hnulo jen myší.
+    ///
+    /// Zapamatování na výsledku nic nemění (na tentýž řádek vyjde totéž), takže tohle zůstává
+    /// funkce, kterou jde volat odkudkoli a testovat výčtem.
     static func runs(of line: String, in language: Language) -> [SyntaxRun] {
+        SyntaxRunCache.shared.runs(of: line, in: language)
+    }
+
+    /// Vlastní průchod řádkem, **bez cache**. Volá ho cache, když nález nemá, a měření, které
+    /// obojí porovnává. Kdo barví řádek kvůli zobrazení, jde přes `runs(of:in:)` — jinak se práce
+    /// dělá znovu a nikdo se to nedozví.
+    static func scan(_ line: String, in language: Language) -> [SyntaxRun] {
         var scanner = LineScanner(line: Array(line), language: language)
         scanner.scan()
         return scanner.runs
@@ -25,7 +38,8 @@ private struct LineScanner {
     private let line: [Character]
     private let language: Language
     /// Uvozující značky rozepsané na znaky **jednou za řádek**, ne při každém porovnání.
-    /// Obarvení běží při každém vykreslení řádku, takže alokace na znak je znát.
+    /// Cache (#224) ušetří opakované průchody, ale prvním musí projít každý řádek — a v něm je
+    /// alokace na znak znát.
     private let lineComments: [[Character]]
     private let blockComment: (open: [Character], close: [Character])?
     private var position = 0

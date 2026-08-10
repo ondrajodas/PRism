@@ -18,6 +18,13 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
 (`~/Library/Logs/DiagnosticReports/PRism-*.ips`, `closure #1 in …`); v logu z `xcodebuild` je jen
 `Restarting after unexpected exit`.
 
+**Druhá léčba je `nonisolated`** (#218), a u skládání textu je levnější než stěhování do `Policy`:
+`nonisolated static func` na `View` typu z izolace vystoupí, takže se uvnitř closure žádný executor
+neověřuje. Sáhne se po ní tehdy, když funkce **nerozhoduje**, jen skládá větu z hotových hodnot
+(`ReviewRunbarView.label` spojuje jména běžících reviewerů) — rozhodování patří dál do `Policy`,
+protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl přesně ten popsaný výš:
+`Failing tests` plné suit, které s tou změnou nesouvisejí, a crash report ukazující na `map`.
+
 
 - **Modely** — round-trip přes `Codable` u každého typu i každého případu `ReviewState`,
   parsování a formátování identifikátorů včetně neplatných vstupů, a kontrola skutečného
@@ -298,6 +305,17 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   s escapovanou uvozovkou i neuzavřené, komentář v řetězci a naopak, klíčová slova jen
   jako celá slova, čísla mimo jména, proměnné se sigilem i ve složených závorkách
   a diakritiku. `Language` má tabulkové testy na detekci z přípony i ze jména souboru.
+- **`SyntaxRunCache` (#224)** — zapamatované obarvení se dá pokazit dvěma způsoby a oba jsou
+  potichu. **Cizí obarvení**: `# poznámka` je v shellu komentář a ve Swiftu obyčejný text, takže
+  klíč bez jazyka by obarvil jeden soubor podle pravidel druhého — test se ptá na oba jazyky
+  a pak zpátky na první. **Růst bez hranice**: obě meze (počet řádků i rozpočet na jejich délku)
+  se přesypou stovkou řádků a hlídá se, že `count` strop nepřekročí a že po vyprázdnění vyjde
+  týž řádek stejně. K tomu **řádek delší než celý rozpočet**: musí se obarvit, ale **nezapamatovat**
+  — jinak by cache po jeho vložení stála nad mezí a při dalším zápisu by kvůli němu zahodila
+  všechno ostatní. K tomu je tam rovnost s `SyntaxHighlighter.scan` (cache nesmí nic změnit)
+  a souběžný běh padesáti úloh nad jednou cachí — zámek se tvrdit nedá, ale rozsypaný souběh
+  je vidět. **Obojí ověřeno vloženou regresí**: klíč bez jazyka shodí test na jazyky, vyndaná
+  kontrola meze shodí test na strop (`count` vyjde 200 místo 10).
 - **`AppStore` — diff** — proti fake gateway: načtení, cache podle `updatedAt`, opakování
   po selhání a zahození diffu PR, které zmizelo ze seznamu.
 - **`AppStore` — zahození nálezů** — proti **skutečnému** `ReviewStore`: že to zmizí
@@ -625,6 +643,24 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   vedle vyrenderované sekce 02 návrhu a offscreen renderem ve světlém i tmavém režimu. U #219 to
   ukázalo, že `Menu` s primární akcí si kreslí **vlastní šipku** vedle té z návrhu, takže
   `⌃ Sbalit vše ⌄` mělo dvě proti sobě.
+- **Sazba hlavičky PR (#218)** — čtyři čisté funkce, tedy výčtem a bez kreslení.
+  `Policy.diffstatBlocks` hlídá tři věci, které se dají pokazit potichu: že **zaokrouhlení jde
+  dolů** (jeden odebraný řádek proti dvěma stům si vlastní čtvereček nezaslouží), že se součet
+  drží na pěti nad celou mřížkou 21 × 21 vstupů, a že prázdný diff nedá **žádný** čtvereček —
+  pět šedých je pruh, který vypadá pořád stejně, tedy nic neříká. `Policy.progress` má nejcennější
+  test v tom, co se **nestane**: bez běhu se pruh nekreslí, ani když `reviewPhases` drží
+  `running` nebo `failed` po skončení. `ReviewRunbarView.label` a `ReviewerChipsView.label`
+  ověřují, že počet je jen tam, kde běh doběhl a dopočítal se — `0` nad nedoběhlým během je
+  tvrzení, které data neunesou — a `spokenState` to, že se stav dá **přečíst**, když ho v kapsli
+  nese jen barva puntíku. `WorkingCopyStatusView.text` tvrdí, že selhaný checkout se do stavového
+  řádku nedostane; zůstává bannerem v hlavičce, kde je místo na výstup `gitu`.
+
+  Sazba sama (rozměry, barvy, poměry) se ověřuje **obrázkem**: screenshot běžící aplikace nad
+  skutečným PR vedle vyrenderované sekce 02 návrhu, plus offscreen render pruhu v běžícím stavu
+  ve světlém i tmavém režimu a v úzkém okně. Našlo to dvě věci, které z kódu vidět nebyly —
+  `GeometryReader` v dráze průběhu si vzal veškerou šířku a jména reviewerů se zalomila **uvnitř
+  kapslí**, a popisek s hodinami se v užším okně ořezal na `1:…`. Obojí je otázka priority
+  layoutu, ne rozměru.
 - **Kopírování kódu z diffu (#157)** — `Policy` vyčerpávajícím výčtem. Dvě věci se tu dají pokazit
   potichu: **pořadí řádků** (rozsah se zvýrazňuje množinou, která pořadí nemá — ověřeno vloženou
   regresí, `Set` místo pořadí testy shodí) a **která verze se kopíruje** u rozsahu přes obě strany
@@ -669,6 +705,15 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   všechno), pořadí se nemění. U nabídky to hlavní je, že **drží hodnoty aktivního filtru, i když
   jejich PR ze seznamu zmizel** — bez toho zmizí odškrtávátko a filtr zůstane zapnutý bez cesty
   zpátky. U důvodu prázdna to, že **nad selhaným tikem vyhrává chyba načtení, ne filtr**.
+
+  **Počty u položek (#199)** patří do téhož výčtu a to nejcennější u nich je test, že se **zapnutím
+  filtru nezmění** — ze zúženého seznamu by čísla klesala podle právě odškrtaného a z nabídky by
+  nešlo poznat, co zapnutí položky udělá. Ověřuje se dvakrát, protože se to dá pokazit na dvou
+  místech: v `Policy` (nabídka nad týmž seznamem vyjde s filtrem i bez něj stejně) a v `AppStore`
+  (`filterOptions` sahá na `pullRequests`, ne na `visiblePullRequests` — tentýž rozdíl getterů
+  jako všude jinde). K tomu položka, která v nabídce zbyla jen po aktivním filtru, má počet **nula**,
+  a pořadí je podle jména i tehdy, když by počty seřadily jinak — jinak by nabídka přeskakovala
+  s každým tikem.
 
   **`AppStore` proti fakes na to, že filtr je pohled, ne mazání:** zapnutí filtru nezahodí diff
   schovaného PR (a po vypnutí se GitHubu neptá znovu), nezahodí draft, nezruší běžící review,
@@ -1008,6 +1053,8 @@ Co harness měří:
 | osa konverzace podle počtu uzlů | skutečná views, ne syntetický tvar — má být lineární |
 | model diffu na 2400 řádcích | dokládá, že model **není** příčina (jednotky ms) |
 | cena vykreslení podle délky bloku (#223) | z toho se vybral strop `DiffBlock.maxLines`; měří se **jeden blok** i celý soubor po blocích |
+| cena obarvení se cachí a bez ní (#224) | tři čísla na jednom souboru o 2400 řádcích: `scan` bez cache **44 ms**, totéž z plné cache **0,30 ms** (~145×), naplnění prázdné cache **44 ms** — uložení se v šumu ztratí |
+| co v cache zůstane ležet (#224) | 68 kB textu run na 2400 řádků (~29 B na řádek), tedy z čeho se strop `capacity` překládá na kilobajty |
 
 **Tuhnoucí okno se diagnostikuje `sample`m, ne odhadem.** Dokud proces visí, jde z něj vytáhnout
 příčina; po zabití už ne:
@@ -1030,6 +1077,11 @@ jinam — u #220 z toho byly dva snímky cizí aplikace a klikání mimo PRism. 
 ```bash
 osascript -e 'tell application "System Events" to tell process "PRism" to return {position, size} of window 1'
 ```
+
+**Paměť cache se `task_info`em měřit nedá** (#224). Přírůstek rezidentní velikosti po naplnění
+cache 2400 řádky vyšel **0 kB** — alokátor sáhne po stránkách, které proces už má, takže by to
+tvrdilo, že cache nic nestojí. Harness proto sčítá **text run**, který v ní zůstane ležet; klíč se
+nepočítá, protože je to tentýž řetězec, jaký drží model diffu (kopíruje se jen hlavička).
 
 **Klávesová zkratka se dá vyzkoušet jedině spuštěním** — a u #151 to bylo jediné, co odhalilo, že
 `⌥↓` po prvním skoku nikam nejde. Pět věcí, na kterých to stálo, a všech pět stálo kolo navíc:

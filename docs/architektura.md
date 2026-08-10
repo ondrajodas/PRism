@@ -43,7 +43,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
 | `QueueSummary` | Souhrn fronty: počet PR, PR s blokujícím nálezem a PR s rozdělaným review (#155) |
-| `PullRequestFilter`, `PullRequestFilterOptions`, `ListEmptyReason` | Zúžení seznamu na repa a autory (#117), nabídka hodnot a důvod prázdna. **Není `Codable`** — nepřežije restart |
+| `PullRequestFilter`, `PullRequestFilterOptions`, `PullRequestFilterOption`, `ListEmptyReason` | Zúžení seznamu na repa a autory (#117), nabídka hodnot **s počtem PR u každé** (#199) a důvod prázdna. **Není `Codable`** — nepřežije restart |
 | `DiffBlock`, `DiffPairBlock` | Souvislý úsek řádků jako jeden text (#157) — kvůli výběru přes víc řádků. **Není `Codable`**, je to věc vykreslení |
 | `ReviewDraft` | Rozdělané review: PR, `headSha`, tělo, verdikt, komentáře. Verdikt je vnořený `ReviewDraft.Verdict` |
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
@@ -697,13 +697,15 @@ Věci, které se u toho nemají rozbít:
 
 ## `App/Syntax/`
 
-Obarvení kódu v diffu. Čisté funkce, **žádná externí závislost** — vlastní pravidla místo
-highlight.js nebo tree-sitteru.
+Obarvení kódu v diffu. **Žádná externí závislost** — vlastní pravidla místo highlight.js nebo
+tree-sitteru. Rozhodování je čistá funkce; jediný stav je cache výsledků (#224), a ta na tom, co
+z řádku vyjde, nic nemění.
 
 | Typ | Co je |
 |---|---|
 | `Language` | Pravidla jednoho jazyka: komentáře, uvozovky, sigily proměnných, klíčová slova. `init?(path:)` pozná jazyk z cesty |
-| `SyntaxHighlighter` | Řádek → `[SyntaxRun]`. Stavový průchod po znacích |
+| `SyntaxHighlighter` | Řádek → `[SyntaxRun]`. `runs(of:in:)` jde přes cache, `scan(_:in:)` je vlastní průchod po znacích |
+| `SyntaxRunCache` | Zapamatované obarvení klíčované `(text řádku, jméno jazyka)`, se dvěma mezemi (#224) |
 | `SyntaxRun`, `SyntaxKind` | Kus řádku a jeho význam: `plain`, `comment`, `string`, `number`, `keyword`, `variable` |
 | `SyntaxPalette` | Barvy — Darcula pro tmavý režim, IntelliJ Light pro světlý |
 
@@ -711,6 +713,29 @@ Věci, které se u toho nemají rozbít:
 
 - **Spojení run musí dát původní řádek.** Je to invariant ve všech testech: obarvení
   nesmí text změnit, jinak by se v diffu tiše ztratil znak.
+- **Obarvení se pamatuje** (#224). `runs(of:in:)` se volá z computed property `content`
+  v `DiffLineView` a při složení textu bloku v `DiffTextView`, tedy **při každém překreslení** —
+  a to se děje i při pouhém přejezdu myší. Naměřeno 44 ms na 2400 řádků; z cache 0,30 ms.
+  Kdo barví řádek kvůli zobrazení, jde přes `runs`; `scan` je pro cache a pro měření.
+- **V klíči musí být jazyk.** `# poznámka` je v shellu komentář a ve Swiftu obyčejný text.
+  Klíčem je **jméno** jazyka, ne celá hodnota — `Language` se podle jména i porovnává a hashovat
+  jeho sadu klíčových slov při každém nahlédnutí by stálo víc než samotné obarvení.
+- **V cache nejsou barvy, jen druhy.** Přepnutí světlého a tmavého režimu ji proto
+  nezneplatňuje; paletu si bere view až při kreslení.
+- **Cache se nezneplatňuje, jen vyprazdňuje.** Klíčem je text, takže záznam nemůže zastarat —
+  jediná otázka je růst. Hlídají ho dvě meze a při překročení kterékoli se zahodí **celá**:
+  `capacity` (4000 řádků) a `budget` (4 MB součtu jejich délek). Dvě proto, že každá chytá jiný
+  způsob, jak přetéct: tisíce krátkých řádků z dlouhého sezení, nebo pár obřích řádků
+  z generovaného souboru. Zahodit všechno je O(1) a stojí přepočet toho, co je zrovna vidět
+  (blok o 60 řádcích ≈ 1,1 ms); LRU by pořadí zapisovala **při každém nahlédnutí**, tedy zdražila
+  přesně tu operaci, kvůli které cache vznikla.
+- **Mez se počítá včetně toho, co se právě vkládá** (z review #233). Kdyby se rozhodovalo jen
+  podle stavu před vložením, cache by po zápisu stála **nad** rozpočtem až do dalšího zápisu —
+  a to zrovna u toho jednoho obřího řádku, kvůli kterému rozpočet je. Ze stejného důvodu se řádek
+  delší než celý rozpočet **nepamatuje vůbec** (obarví se, ale neuloží): jinak by se při každém
+  dalším zápisu zahodilo všechno ostatní kvůli němu. A vyprazdňování se rozhoduje **jen při
+  vložení nového klíče** — dvě vlákna, která spočítala tentýž řádek, jinak zahodí plnou cache
+  kvůli záznamu, který v ní už je.
 - **Barví se řádek po řádku, bez paměti.** Blokový komentář přes víc řádků se obarví jen
   tam, kde začíná. Diff je útržek — mezi hunky chybí řádky, ze kterých by se stav
   dopočítal.
@@ -1127,10 +1152,12 @@ Věci, které se u toho nemají rozbít:
   těmi dvěma gettery je jediné, co dělí filtr od mazání cache**. Zúžený čte jedině seznam PR
   a detail vybraného řádku; plný čte `knownRepositories` (okno nastavení musí vidět i repo, které
   jsem si schoval — je to zrovna to, u kterého chci něco přenastavit), `queueSummary` (souhrn je
-  o obsahu fronty, ne o pohledu — #155), `handleNotificationClicks`, `startAutomaticReviews` po
-  zahození nálezů (#81) a úklid, který bere `summaries` z tiku. Kdyby na zúženém seznamu viselo
-  cokoli z úklidu (`forget(whatIsNotIn:)`, `CacheEviction`, `ReviewStore.cleanUp`, rušení
-  automatických review), **zapnutí filtru by zahodilo diffy a konverzace, smazalo cache a zrušilo
+  o obsahu fronty, ne o pohledu — #155), `filterOptions` (nabídka filtru i **počty u jejích
+  položek** — #199; ze zúženého seznamu by čísla klesala podle právě odškrtaného a nabídka by
+  přestala odpovídat na otázku „co se stane, když tohle zapnu“), `handleNotificationClicks`,
+  `startAutomaticReviews` po zahození nálezů (#81) a úklid, který bere `summaries` z tiku.
+  Kdyby na zúženém seznamu viselo cokoli z úklidu (`forget(whatIsNotIn:)`, `CacheEviction`,
+  `ReviewStore.cleanUp`, rušení automatických review), **zapnutí filtru by zahodilo diffy a konverzace, smazalo cache a zrušilo
   běžící review**. Je na to sada testů proti fakes, ne úvaha o tom, kdo dnes co čte — ověřená
   vloženou regresí (když `pullRequests` filtruje sám, spadne osm testů).
 - **Filtr nepřežije restart** a je to jediný stav v okně, který umí PR **schovat úplně** — restart
@@ -1296,14 +1323,15 @@ na `.task` okna, takže zavření okna ji zruší.
 |---|---|
 | `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
 | `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) |
-| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh |
+| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky; **zelená a červená diffu jdou dál z `DiffLineView.signColor(of:)`**, aby se `+` v řádku nerozešlo s `+12` nad ním (#156) |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180) |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
 | `DashboardView` | Startovní obrazovka (#181): pozdrav, čtyři karty, fronta podle závažnosti, legenda reviewerů a `Co teď` |
 | `SpendSparkline` | Sloupcový graf útraty za posledních sedm dní; dnešek zvýrazněný, prázdný den zůstává v řadě (#181) |
 | `ProportionalColumns` | `Layout` pro sloupce v poměru z návrhu (`1.45fr 1fr`) — `HStack` umí jen rovným dílem (#181) |
-| `StatusBarView` | Stavový řádek na spodku **okna**: vlevo hlášky, vpravo puntíky služeb |
+| `StatusBarView` | Stavový řádek na spodku **okna**: vlevo hlášky a stav pracovní kopie, vpravo puntíky služeb |
+| `WorkingCopyStatusView` | `Pracovní kopie připravená · HEAD 4f2ac91` ve stavovém řádku (#218) — přestěhováno z hlavičky PR, protože je to **stav prostředí**, ne údaj o PR. Selhaný checkout se sem nekreslí |
 | `ServiceHealthDot` | Puntík jedné služby; po hoveru důvod a čas poslední kontroly |
 | `NotificationStatusView` | Kdy se naposledy něco ohlásilo (#138) — zvonek s časem, `zatím nic`, nebo `vypnuto` |
 | `DailySpendView` | Co dneska stálo review (#148) — cena za dnešek, u neúplného součtu s `≥` |
@@ -1317,8 +1345,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
-| `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky |
-| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory`) — podtržené, s odznakem počtu |
+| `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
+| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Konverzace`) — podtržené, s odznakem počtu **u každé** (#218) a vpravo `+X −Y` se čtverečky poměru |
 | `OverviewView` | Tab `Přehled`: popis PR, fakta, kontroly a co se změnilo od minule |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka a obsah vpravo; slévá za sebou jdoucí commity |
@@ -1328,7 +1356,9 @@ na `.task` okna, takže zavření okna ji zruší.
 | `AvatarView`, `AvatarLoader` | Obrázek uživatele u události a jeho cache nad `HTTPGetting` (#171) |
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
-| `PullRequestDetailView` | Pravý panel: dvouřádková lišta (titulek, review, stav kopie), pod ní diff a nálezy |
+| `PullRequestDetailView` | Pravý panel: hlavička ve třech řádcích (titulek s číslem, souřadnice PR, pruh běhu), pod ní záložky, diff a nálezy. **Bez pravého sloupce** (#218) — zbylo v něm jediné akcentové místo, `Spustit review` |
+| `PullRequestHeaderView` | Souřadnice PR: kapsle stavu (plná, s puntíkem), autor, větev → base, repo, souhrn checků a odkaz na GitHub. `StaleHeadView` vedle něj mluví jen tehdy, když se hlava rozešla se sha nálezů |
+| `ReviewRunbarView` | Pruh běhu (#218): chipy reviewerů, za nimi dráha průběhu a popisek `test-coverage · 2 z 3 hotovo · 1:12`. Bez běhu zbude jen řada chipů |
 | `DiffView` | Diff v plné šířce: lišta, strom vlevo a soubory s ukotvenou hlavičkou, kterou jde sbalit |
 | `DiffToolbar` | Lišta nad diffem (#219): pohled, procházení nálezů, varování a `Rozbalit vše` s nabídkou. **Bez přepínačů sloupců** — ty se skládají u sebe |
 | `DiffLayoutPicker` | Přepínač pohledu — segment **s popisky** podle návrhu (`.segbtn`), ne `Picker(.segmented)` |
@@ -1356,12 +1386,51 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak, odmítnutí |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
 | `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume`, upozornění na načtený jiný skill |
-| `ReviewerChipsView` | Chipy reviewerů: stav a filtr naráz; v kontextovém menu opakování jednoho revieweera (#149) |
+| `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
 | `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
-| `VerdictView` | Návrh verdiktu jako **doporučení**; žádná GitHub akce na něm nevisí. Když stojí na odmítnutých nálezech, nese to jejich počet |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
 | `hiddenShortcuts(_:)` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení i okno novinek |
 | `AppDelegate` | Ukončení aplikace: dokud běží review, ptá se |
+
+### Hlavička PR (#218)
+
+Hlavička rostla po kusech — stav u #174, chipy u #21, počet u #183 — a každý kus se posuzoval
+sám za sebe, ne celý pruh dohromady. U #218 se přesázela podle návrhu (sekce 02) najednou.
+Co se u ní nemá rozbít:
+
+- **Tři řádky a žádný pravý sloupec.** Titulek s číslem, souřadnice PR, pruh běhu. Do #218 stály
+  vpravo pod sebou `Spustit review` (fialové), `kopie připravená` (zelená) a `Návrh: request
+  changes` (oranžová) — tři hlasité barvy, které z pravé strany dělaly semafor a přebíjely
+  titulek. Zbylo **jediné akcentové místo**, a tím je `Spustit review`.
+- **Stav pracovní kopie se přestěhoval do stavového řádku**, ne zmizel: je to stav prostředí,
+  takže patří vedle dostupnosti `gh` a `claude` (`WorkingCopyStatusView`). **Selhaný checkout
+  ale zůstává bannerem v hlavičce** — u něj se musí vypsat celý výstup `gitu` a z něj se teprve
+  pozná, co dělat dál; do pruhu se to nevejde a porucha není běžný stav.
+- **Návrh verdiktu v hlavičce není vůbec** a `VerdictView` se smazal. Od #114 se jím
+  předvyplňuje verdikt v panelu `Moje review`, takže v hlavičce to byla druhá kopie téhož —
+  a ta hlasitější z nich. Sám návrh (`Policy.suggestedVerdict`) se nemění.
+- **Číslo PR je u titulku**, ne uvnitř `owner/repo#4`. V té větě ho nikdo nehledá; řada
+  souřadnic proto nese jen `owner/repo`.
+- **Kapsle stavu je plná** (`.state-chip`): puntík, slovo, barva z palety návrhu a text v barvě
+  plochy (`Palette.surface`), ne bílý. Systémové `.green`/`.red` jsou na plnou kapsli příliš
+  světlé a bílá by na nich v tmavém režimu oslňovala.
+- **Chip revieweera je puntík a počet** (`.rchip`). Slovo `nález` a ikona bubliny padly; barvu
+  stavu nese puntík a celou větu nápověda i `accessibilityValue` — **to je jediné místo, kde se
+  `čisté` pozná od `selhalo`**, takže se nesmí vypustit. Počet je jen tam, kde běh doběhl
+  a dopočítal se; `0` nad nedoběhlým během by tvrdilo „nic nenašel“. Zkracování jména podle
+  kolizí (#182) platí i tady — v užší kapsli tím spíš.
+- **Odznak počtu je u všech záložek**, každý ale počítá něco jiného: `Přehled` novinky od
+  minule, `Změněné soubory` počet souborů, `Konverzace` položky k přečtení. **Odchylka od
+  návrhu**: v mockupu je u `Přehledu` čtyřka, která odpovídá počtu dlaždic s fakty — to je ale
+  konstanta, tedy odznak, který nikdy nic neřekne.
+- **Pruh běhu si o šířku říká v pořadí chipy → popisek → dráha.** `GeometryReader` uvnitř dráhy
+  je jinak nenasytný a jména reviewerů se zalomí uvnitř kapslí; dráha se smí stáhnout, ale ne
+  pod 44 bodů. Během přípravy pracovní kopie se dráha **nekreslí vůbec** — podíl se nemá z čeho
+  spočítat a prázdná dráha vypadá jako zaseknutý běh. Že se něco děje, drží tikající hodiny.
+- **Hodiny berou začátek z `RunningReview.startedAt`, ne z časové osy.** Osa se při opakování
+  jednoho revieweera (#149) míchá s tou z minulého běhu a reviewer, který mezitím doběhl,
+  z „běžících“ vypadne — nejstarší událost běžících os by se tím posouvala dopředu a čas by šel
+  zpátky.
 
 **Zavření aplikace se ptá, dokud běží review** (`AppDelegate`, #94). Session se ukončením
 zabije a nálezy, které reviewer už nahlásil, jsou pryč — v panelu i na disku, takže z řádku
@@ -1595,7 +1664,7 @@ Věci, které se u toho nemají rozbít:
 - **Žádný text u odesílání se nesmí dát přečíst jako „zapnout automatické odesílání“.**
   Přepínač rozhoduje **jen** o tom, jestli se tlačítko `Odeslat review…` vůbec nabídne;
   odesílá pořád člověk potvrzením, ve kterém je vidět celý payload. Patička to proto říká
-  výslovně — a je to tatáž úvaha jako u `VerdictView`, který je taky jen doporučení.
+  výslovně — a je to tatáž úvaha jako u předvyplněného verdiktu v panelu, který je taky jen návrh.
 - **V textech se píše „programovací jazyk“, ne jen „jazyk“.** Samotné „jazyk“ se plete
   s jazykem, ve kterém reviewer píše nálezy (#52) — ověřeno tím, že se to spletlo hned
   při prvním zkoušení. Delší popisek je levnější než vysvětlování.
@@ -2689,7 +2758,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.linesWithSeveralComments(in:)` | Na kolika řádcích draftu je víc komentářů — z každého budou samostatná vlákna, ne odpověď |
 | `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR, vlákna bez kotvy a **události časové osy** (#171), chronologicky (`ConversationEntry`) |
 | `Policy.displayableEvents(_:)` | Které události se kreslí — zavření po mergi zahodí, zbytek nechá (#171) |
-| `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem** |
+| `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem — **s počtem PR u každé položky** (#199), počítaným z plného seznamu, takže zapnutý filtr čísly nehne — a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem** |
 | `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
@@ -2703,7 +2772,9 @@ Věci, které se u toho nemají rozbít:
 | `Policy.fileFindings(in:categories:)` | Co je v souboru k vyřízení pro kapsli v hlavičce diffu (#219) — počítá **místa**, ne nálezy, a odmítnuté vynechá |
 | `Policy.charactersPerSide(contentWidth:characterWidth:layout:gutter:)` | Kolik znaků kódu se vejde na stranu (#188); vedle sebe se šířka dělí na dvě |
 | `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
-| `Policy.changes(in:since:)` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`) |
+| `Policy.changes(in:since:)`, `VisitChanges.count` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`); počet sečte **všech pět kategorií**, protože ho nese odznak u záložky `Přehled` (#218) a musí slíbit totéž, co blok uvnitř vypíše |
+| `Policy.progress(startedAt:phase:running:)` | Průběh běžícího review do pruhu v hlavičce (#218, `ReviewRunProgress`). `nil` = neběží nic — rozhoduje **`startedAt` běhu**, ne fáze, protože `reviewPhases` si `failed` drží i po skončení |
+| `Policy.diffstatBlocks(additions:deletions:)` | Pět čtverečků poměru změny za `+X −Y` (#218). Zaokrouhluje se **dolů**, každá strana zvlášť, zbytek zůstává šedý; prázdný diff nedá žádný čtvereček |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |
 | `Policy.snippet(of:context:)` | `diffHunk` vlákna → `ThreadSnippet`: posledních pár řádků po komentovaný a příznak zkrácení (#158). `nil` = úryvek se nemá z čeho vzít. **Není to `Policy.snapshot`** — ten je z dnešního diffu a slouží kotvám draftu |
 | `Policy.commentableSide(of:in:)` | Ke které **kanonické** straně by šel komentář; `nil` = nedá se komentovat |
