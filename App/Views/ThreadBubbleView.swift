@@ -54,7 +54,7 @@ struct ThreadBubbleView: View {
                 compose
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .filling(alignment: .leading)
         // **Plocha palety s obrysem**, ne systémová šeď (#216). `.quinary` je neutrální šedá,
         // kdežto okno stojí na neutrálech posunutých do modrofialové — vedle karty komentáře
         // a bloku kontrol to vypadalo jako cizí prvek.
@@ -107,9 +107,10 @@ struct ThreadBubbleView: View {
                 if thread.comments.isTruncated { truncationBadge }
                 Spacer(minLength: 0)
             }
+            .narrowingWidth(by: 22)
             .padding(.horizontal, 11)
             .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .filling(alignment: .leading)
             .background(Palette.raised)
             .contentShape(.rect)
         }
@@ -227,9 +228,10 @@ struct ThreadBubbleView: View {
                 }
                 .help("Otevřít na GitHubu")
             }
+            .narrowingWidth(by: 22)
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .filling(alignment: .leading)
             // Hlavička komentáře **bez linky pod sebou** — na rozdíl od hlavičky celé karty.
             // Uvnitř vlákna je linka oddělovač mezi komentáři, takže druhá hned pod jménem by
             // rozdělila jeden komentář na dva pruhy.
@@ -243,9 +245,10 @@ struct ThreadBubbleView: View {
             // Markdown se renderuje: komentáře na GitHubu se v něm píšou a `**takhle**`
             // s dvojitými hvězdičkami se čte špatně.
             MarkdownText(text: comment.body, font: .system(size: 12.5))
+                .narrowingWidth(by: 22)
                 .padding(.horizontal, 11)
                 .padding(.vertical, 9)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .filling(alignment: .leading)
         }
         // Odpověď je odsazená, ať je z pohledu vidět, co je reakce na co. Strom se z toho
         // nestaví — GitHub vrací vlákno plocho a hloubka by u dvou položek nic nepřinesla.
@@ -270,9 +273,10 @@ struct ThreadBubbleView: View {
         ) + " — otevři vlákno na GitHubu.")
             .font(.system(size: 11.5))
             .foregroundStyle(Palette.stale)
+            .narrowingWidth(by: 22)
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .filling(alignment: .leading)
     }
 
     // MARK: - Odpověď (#73)

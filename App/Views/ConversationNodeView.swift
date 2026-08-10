@@ -18,7 +18,10 @@ struct ConversationNodeView: View {
         HStack(alignment: .top, spacing: 8) {
             axis
             content
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // Šířka se bere z environmentu, když ji někdo ustavil (#220) — jinak pružně jako
+                // dřív. Osa je 24 bodů a mezera 8, takže obsah dostane o 32 méně.
+                .filling(alignment: .leading)
+                .narrowingWidth(by: 32)
                 // **Mezera patří obsahu, ne celému uzlu.** Kdyby odsazovala `HStack`, končila
                 // by linka o jedenáct bodů dřív než uzel a osa by mezi položkami měla díry —
                 // takhle se `axis` roztáhne přes celou výšku včetně mezery a linka je spojitá.

@@ -940,3 +940,59 @@ významu, ale v diffu PR je to sto řádků šumu. Smazáním souboru se to nevr
 **Když si na chvíli upravíš `RootView`, ať vidíš jiný stav, nezapomeň rebuildnout, než
 řekneš, že je hotovo.** Vrácený zdroják na běžící aplikaci nic nezmění a pak se ukazuje
 falešná obrazovka.
+
+## Jak změřit, že okno netuhne (#220)
+
+Měřicí harness je `Tests/Diff/DiffPerformanceMeasurement.swift` a **v běžném běhu se nepouští** —
+je za přepínačem:
+
+```bash
+PRISM_MEASURE=1 xcodebuild -project PRism.xcodeproj -scheme PRism \
+    -derivedDataPath build.noindex test \
+    -only-testing:PRismTests/DiffPerformanceMeasurement > /tmp/perf.log 2>&1
+grep -E "^MĚŘENÍ" /tmp/perf.log
+```
+
+**Proč za přepínačem:** jeden render v hloubce 8 stojí 15 sekund CPU a tím hladoví ostatní testy.
+Bez toho přepínače z toho spadly dva časově citlivé testy v `RealEnvironmentTests`, které
+v izolaci procházejí — tedy pád bez chyby v kódu, přesně to, co test dělat nemá. Celá suite
+s vypnutým měřením běží 6 s, s ním 41 s.
+
+**Nad hloubku 6 se v harnessu nechodí.** Cena roste ~5,5× na úroveň, takže hloubka 8 je 15 s
+a hloubka 12 hodiny. Čísla z hloubky 8 jsou zapsaná v `docs/architektura.md`, protože je nemá smysl
+platit při každém měření.
+
+**Časy se netvrdí `#expect`em.** Jsou strojově závislé a byl by z toho test padající bez chyby
+v kódu. Harness **vypisuje** a čte je člověk; co se hlídá strojově, je tvar (například kolik řádků
+skončí v jednom bloku), ne milisekundy.
+
+Co harness měří:
+
+| Měření | K čemu je |
+|---|---|
+| cena layoutu podle hloubky zanoření | ta hlavní věc — ukáže, jestli se vrátilo vyjednávání šířky |
+| která opatření exponent zabijí | dokládá, že `Spacer` ani hranice každou 4. úroveň nestačí |
+| osa konverzace podle počtu uzlů | skutečná views, ne syntetický tvar — má být lineární |
+| model diffu na 2400 řádcích | dokládá, že model **není** příčina (jednotky ms) |
+
+**Tuhnoucí okno se diagnostikuje `sample`m, ne odhadem.** Dokud proces visí, jde z něj vytáhnout
+příčina; po zabití už ne:
+
+```bash
+PID=$(pgrep -x PRism)
+ps -o %cpu,state -p "$PID"      # 100 % + R = točí se; ~0 % + S = čeká (deadlock, I/O)
+sample "$PID" 5 -file /tmp/hang.txt
+grep -A3 "Total number in stack" /tmp/hang.txt   # rekurzivní počty = hloubka
+sed -n "$(grep -n 'Sort by top of stack' /tmp/hang.txt | cut -d: -f1),+30p" /tmp/hang.txt
+```
+
+Rozlišit „točí se“ od „čeká“ je první krok — u #220 to bylo 100 % CPU po dvaceti minutách ve
+stejné rekurzi, což vylučuje deadlock i pomalé I/O a ukazuje na layout.
+
+**Když se appka řídí přes `System Events`, ověř, že je vpředu, a klikej relativně k oknu.**
+`screencapture -R` bere **oblast obrazovky**, ne okno, takže pevné souřadnice míří po restartu
+jinam — u #220 z toho byly dva snímky cizí aplikace a klikání mimo PRism. Poloha se zjistí takhle:
+
+```bash
+osascript -e 'tell application "System Events" to tell process "PRism" to return {position, size} of window 1'
+```
