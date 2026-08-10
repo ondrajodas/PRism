@@ -778,9 +778,11 @@ udělaly naše reviewery. `Nálezy` jsou **tabulka přes celou šířku** i s ř
 a tlačítka `Pustit znovu` / `Zkopírovat příkaz` — do té doby se od proběhlé lišila jen barvou
 odznaku, protože v kartě nebylo místo, a `čisté` se `spadlo` slít nesmí.
 
-**Nálezy zůstaly i v panelu** — změna proti zadání, rozhodnutá při implementaci (ne vyžádaná
-uživatelem; do doplnění #242 to tak stálo tady i ve specifikaci a bylo to vymyšlené). Nejsou to dvě
-kopie jednoho pohledu, ale dvě různé otázky: u kódu „co je tady“, v tabulce „co všechno se našlo“.
+**Nálezy zůstaly i v panelu** — změna proti zadání, rozhodnutá při implementaci a **potvrzená
+člověkem v pauzi před mergem** (#256): proklikal to a segmenty nechal být. Vyžádaná nebyla (do
+doplnění #242 to tak stálo tady i ve specifikaci a bylo to vymyšlené) — schválení po proklikání
+a pokyn jsou dvě různé věci. Nejsou to dvě kopie jednoho pohledu, ale dvě různé otázky: u kódu
+„co je tady“, v tabulce „co všechno se našlo“.
 Panel tím má dva segmenty místo tří (`Průběh` se odstěhoval celý) a v proužku složeného panelu je
 vedle počtu nálezů i značka rozdělaného review.
 
