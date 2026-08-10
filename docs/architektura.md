@@ -1424,7 +1424,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
 | `DashboardView` | Startovní obrazovka (#181): pozdrav, čtyři karty, fronta podle závažnosti, legenda reviewerů a `Co teď` |
-| `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43 s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatný `Text` |
+| `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatné view |
+| `DashboardCountdown` | Samotný odpočet — `za 43s znovu`, **bez mezery mezi číslem a jednotkou** (#260). Formát je náš (systémový mezeru má a nejde vyndat), takt dává `TimelineView`, takže se přepočítává jen tenhle `Text`. Text i rozvrh jsou statické funkce, aby se daly otestovat |
 | `SpendSparkline` | Sloupcový graf útraty za posledních sedm dní; dnešek zvýrazněný, prázdný den zůstává v řadě (#181) |
 | `ProportionalColumns` | `Layout` pro sloupce v poměru z návrhu (`1.45fr 1fr`) — `HStack` umí jen rovným dílem (#181) |
 | `StatusBarView` | Stavový řádek na spodku **okna**: vlevo hlášky a stav pracovní kopie, vpravo puntíky služeb |
@@ -2851,13 +2852,16 @@ píše v hlavičce a `lastSuccess + interval` by po prvním rate limitu lhalo �
 smyčku nepřeplánuje, takže dokud poprvé neusne, je `nil`.
 
 **Po dobu dotazu je `nextPoll` v minulosti** — zapisuje se až za `refresh()`. Od #237 je v tom
-koutě odpočet (`za 43 s znovu`), takže to přestala být kosmetika: odpočet by došel na nulu a šel
+koutě odpočet (`za 43s znovu`), takže to přestala být kosmetika: odpočet by došel na nulu a šel
 dál. Drží to `PollState.isRefreshing`, které `refresh()` zvedne na začátku a v `defer` zase
 spustí. **Proč příznak, a ne srovnání s hodinami**: odpočet ve view tiká *bez přepočtu těla*
-(`Text(_:style: .relative)`), takže `now` v něm platí jen k poslednímu přepočtu — po probuzení
-stroje by to byl uplynulý termín odpočítávaný nahoru. Změna příznaku je naopak observovatelná,
-takže hlavička se překlopí na `ptám se…` ve chvíli, kdy dotaz začne. Ověřeno na běžícím okně:
-`za 1 s` → `za 0 s` → `ptám se…` → `za 7 s`.
+(`DashboardCountdown` a jeho `TimelineView`), takže `now` v těle platí jen k poslednímu přepočtu —
+po probuzení stroje by to byl uplynulý termín, do #260 odpočítávaný nahoru a od #260 zamrzlý na
+`0s`. Ani jedno se ukázat nemá. Změna příznaku je naopak observovatelná,
+takže hlavička se překlopí na `ptám se…` ve chvíli, kdy dotaz začne. Ověřeno na běžícím okně, po
+#260 znovu i s novým formátem: `za 1s` → `ptám se…` → `za 29s` (interval snížený na 30 s, snímky
+okna po 1,1 s). U #237 to bylo `za 1 s` → `za 0 s` → `ptám se…` → `za 7 s`, tedy včetně nuly —
+hustší burst ji zachytí, protože je vidět tu poslední vteřinu před dotazem.
 
 `defer` je tam kvůli tomu, co se rozbije potichu: zaseknutý příznak znamená `ptám se…` navždycky
 a odpočet, který se nikdy nevrátí — na obrazovce k nerozeznání od zaseknuté aplikace.
@@ -3102,13 +3106,22 @@ Nad nálezy platí navíc:
   - **Karta nemluví o tom, co neví.** Draft z doby před #181 razítko nemá, takže se u něj místo
     stáří píše „čeká na dopsání“; blokující nález bez kategorie nechá kartu u čísla.
   - **Příští tik je odpočet, poslední zůstává absolutní** (#237, otáčí #181) —
-    `poslední tik 09:41 · za 43 s znovu`, jak to má návrh. Odpočet **se nesmí platit přepočtem
-    dashboardu**, takže se skládá ze tří `Text`ů a ten prostřední (`Text(_:style: .relative)`) si
-    vteřiny odtiká sám; kdyby se vpsal do interpolace, tikal by jen tak často, jak se dashboard
+    `poslední tik 09:41 · za 43s znovu`. Odpočet **se nesmí platit přepočtem dashboardu**, takže se
+    skládá ze dvou kusů a ten druhý (`DashboardCountdown`) si vteřiny odtiká sám ve svém
+    `TimelineView`; kdyby se vpsal do interpolace, tikal by jen tak často, jak se dashboard
     překresluje. Co se v tom koutě píše, rozhoduje `DashboardTick`, tedy výčet nad třemi
     hodnotami — a **uplynulý termín je `ptám se…`, ne záporné číslo**: `nextPoll` zůstává po dobu
     dotazu v minulosti, takže odpočet dojde na nulu a šel by dál. Podrobnosti u `PollingService`,
     včetně toho, proč to drží observovatelný příznak a ne srovnání s hodinami.
+  - **Mezi číslem a jednotkou není mezera** (#260) — `za 43s znovu`, nad minutu `za 12min 29s
+    znovu`, nad hodinu `za 1h znovu`. Je to výslovné přání uživatele a **vědomá odchylka od české
+    typografie i od mockupu**; kdo to „opraví“ zpátky, ruší rozhodnutí, ne překlep. Vynucuje si to
+    **vlastní formát**, protože systémový (`Text(_:style: .relative)`, `Duration.UnitsFormatStyle`,
+    `DateComponentsFormatter`) má mezeru v české locale ve všech variantách — a s vlastním formátem
+    i **vlastní takt**. Ten drží `TimelineView` ukotvený v termínu, takže hranice tiků padnou na
+    celé vteřiny odpočtu; zbývající čas se **zaokrouhluje** (časovač se probouzí později, krácení
+    by přeskočilo vteřinu) a záporný se sráží na `0s`. Cena je změřená a rozhodnutí z #237 drží:
+    tělo nad odpočtem se přepočítá jednou, formát stojí 0,12 µs na tik.
 
   **Co teď** jsou akce, které dávají smysl teď — řádek, který by nic neudělal, se nekreslí.
   Hromadné spuštění se **ptá na potvrzení**, protože je to jediné místo v aplikaci, kde jedno

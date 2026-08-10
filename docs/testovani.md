@@ -849,21 +849,35 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   Kdy se polling zeptá znovu (`PollState.nextPoll`) je u `PollingService`: hodnotu zapisuje
   smyčka, ruční obnovení ji **neposouvá**, a po rate limitu ctí backoff, ne nastavený interval.
 
-  **Odpočet příštího tiku (#237)** má dvě sady a obojí kryje něco, co se rozbije potichu:
+  **Odpočet příštího tiku (#237, #260)** má tři sady a každá kryje něco, co se rozbije potichu:
   - **`DashboardTick` výčtem** — co se v tom koutě píše, je čistá funkce nad `lastSuccess`,
     `nextPoll`, příznakem dotazu a hodinami. Nejcennější tvrzení je, že **uplynulý termín se
     neukáže jako odpočet**: v minulosti je `nextPoll` po celou dobu dotazu, takže se testuje
     termín před chvílí, termín **právě teď** (rovnost patří k uplynulým) i termín osm hodin za
     námi, tedy stav po probuzení stroje. Ověřeno vloženou regresí — bezpodmínečný `.countdown`
     shodí tři testy.
-  - **Cena odpočtu** (`DashboardCountdownRedrawTests`) — sonda v hostovaném okně, která si počítá
-    přepočty svého těla: `Text(_:style: .relative)` tiká 1,5 sekundy a tělo se přepočítá **jednou**.
-    Měří se na sondě, ne na `DashboardView`, protože počítat přepočty jde jedině tak, že si je view
-    samo počítá, a to do aplikace nepatří. **Druhý test je kontrola měřidla**: tentýž postup nad
-    odpočtem, který se v těle přepočítává (hodiny ve stavu), přepočty spočítat musí — bez něj by
-    zelený první test mohl znamenat jen to, že sonda vůbec nežije. Okno je **bez rámu a mimo
-    obrazovku**, ale skutečné: bez okna SwiftUI přepočty neplánuje a oba testy by vyšly zeleně
-    z nesprávného důvodu.
+  - **Text odpočtu** (`DashboardCountdownTests`, #260) — `DashboardCountdown.label(until:at:)` je
+    čistá funkce, takže se vyčerpá výčtem: vteřiny, celá minuta bez nul, dvě jednotky nad minutu,
+    backoff těsně pod stropem (`za 14min 59s znovu`), strop intervalu v hodinách, nula a termín osm
+    hodin za námi. Nejcennější je ale **tvrzení o tom, co se nestane**: přes celý rozsah odpočtu
+    (od −5 s do dvou hodin) nesmí za číslem stát mezera. Kvůli té mezeře issue vzniklo a bez
+    rozsahového tvrzení by se dala vrátit v jedné větvi formátu, kterou zvlášť vyjmenovaný případ
+    nekryje. Ověřeno vloženými regresemi: mezera ve vteřinové větvi shodí 19 tvrzení, v minutové
+    a hodinové 1028; krácení místo zaokrouhlení shodí vteřinu, o kterou se odpočet přeskočí, a
+    chybějící sražení nuly ukáže záporný čas.
+  - **Cena odpočtu** (`DashboardCountdownRedrawTests`) — sonda v hostovaném okně kolem
+    **skutečného** `DashboardCountdown`u, která si počítá přepočty svého těla, a k tomu bitmapa
+    téhož view na začátku a na konci. Obě poloviny musí platit naráz: tělo se za 1,5 sekundy
+    přepočítá **jednou** a bitmapa se **změní**. Jedna bez druhé se dá splnit omylem — zamrzlý
+    odpočet tělo taky nepřepočítává, a to je zrovna ta regrese, kterou samotný počet přepočtů
+    nechytá (ověřeno vyndáním `TimelineView`: bez bitmapy zůstala sada zelená). Text se z okna
+    **přečíst nedá**, accessibility tree se v něm nenaplní (změřeno: `accessibilityChildren` vrací
+    prázdno), takže se porovnávají pixely. Měří se na sondě, ne na `DashboardView`, protože počítat
+    přepočty jde jedině tak, že si je view samo počítá, a to do aplikace nepatří. **Druhý test je
+    kontrola měřidla**: tentýž postup nad odpočtem, který se v těle přepočítává (hodiny ve stavu),
+    přepočty spočítat musí — bez něj by zelený první test mohl znamenat jen to, že sonda vůbec
+    nežije. Okno je **bez rámu a mimo obrazovku**, ale skutečné: bez okna SwiftUI přepočty
+    neplánuje a oba testy by vyšly zeleně z nesprávného důvodu.
 
     U hostovaného view je jeden zádrhel, který stojí za zapamatování: **rozměr se nesmí propsat do
     okna** (`NSHostingView.sizingOptions = []` a pevný `frame`). Text sondy se s každou vteřinou
@@ -1013,10 +1027,16 @@ vyfotí hlavně cizí práci.
 ID najde `CGWindowListCopyWindowInfo` podle PID (`pgrep -f /Applications/PRism-<slot>.app`);
 pár řádků ve `swift` skriptu, `System Events` na to potřeba nejsou. Okno **nemusí být vpředu**,
 takže se u toho nepřepíná fokus. Odpočet v hlavičce se takhle dal odečíst ze dvou snímků po
-šesti sekundách (`za 9 s znovu` → `za 3 s znovu`) a burst po 0,35 s zachytil celý přechod
-`za 1 s` → `za 0 s` → `ptám se…` → `za 7 s`, tedy věc, na kterou offscreen render nestačí:
-dashboard je ve `ScrollView`, který se offscreen **nevykreslí vůbec** (viz níž), takže render
-vyšel prázdný a jediné, co zbývalo, bylo skutečné okno.
+šesti sekundách (u #237 `za 9 s znovu` → `za 3 s znovu`, ještě se systémovým formátem) a burst po
+0,35 s zachytil celý přechod přes nulu — tedy věc, na kterou offscreen render nestačí: dashboard je
+ve `ScrollView`, který se offscreen **nevykreslí vůbec** (viz níž), takže render vyšel prázdný
+a jediné, co zbývalo, bylo skutečné okno.
+
+**Řada snímků se vyplatí složit do jednoho PNG** (#260): výřez pravého horního koutu z osmi snímků
+po 1,1 s pod sebou dá filmstrip, ze kterého se celý přechod přečte naráz —
+`za 4s` → `za 2s` → `za 1s` → `ptám se…` → `za 29s` → `za 28s` (interval snížený na 30 s, což si
+slot dovolit smí). Výřez a skládání je pár řádků CoreGraphics (`CGImage.cropping`, `CGContext.draw`)
+a stojí to jeden obrázek místo osmi.
 
 **Na stav za kliknutím se dostaneš taky** — jen se musí aplikace napřed vytáhnout dopředu.
 Okno terminálu leží na pixel přesně přes okno aplikace (obojí `0,33,1512,875`), takže klik

@@ -8,9 +8,9 @@ import Foundation
 /// dlouho ještě“ — a `další tik 15:21` si na ni musí člověk odpovědět odečítáním. Do #237 tu
 /// stál absolutní čas, viz záznam rozhodnutí ve specifikaci.
 ///
-/// Vlastní typ proto, že se z hodnot skládá **view**, ne `String`: odpočet musí být samostatný
-/// `Text(_:style:)`, který si vteřiny odtiká sám. Rozhodnutí, **co** se v tom koutu píše, se pak
-/// dá vyčerpat výčtem bez kreslení.
+/// Vlastní typ proto, že se z hodnot skládá **view**, ne `String`: odpočet musí být samostatné
+/// view (`DashboardCountdown`), které si vteřiny odtiká samo. Rozhodnutí, **co** se v tom koutu
+/// píše, se pak dá vyčerpat výčtem bez kreslení.
 enum DashboardTick: Equatable {
     /// Ještě se nenačetlo nic a nikdo se zrovna neptá.
     case never
@@ -27,8 +27,10 @@ enum DashboardTick: Equatable {
     ///   - isRefreshing: Přebíjí odpočet. Po dobu dotazu je `nextPoll` v minulosti, protože ho
     ///     smyčka zapisuje až po něm.
     ///   - now: Čas přepočtu view. Odpočet **v minulosti se neukáže** ani zápornou hodnotou, ani
-    ///     tím, že by se `Text(_:style:)` obrátil a začal počítat nahoru: uplynulý termín
-    ///     znamená, že se ptáme (typicky po probuzení stroje, kde smyčka nabíhá se zpožděním).
+    ///     zamrzlou nulou: uplynulý termín znamená, že se ptáme (typicky po probuzení stroje, kde
+    ///     smyčka nabíhá se zpožděním). Do #260 by se navíc `Text(_:style:)` nad ním obrátil
+    ///     a začal počítat nahoru; vlastní formát ho srazí na `0s`, tedy na tvrzení o tiku, na
+    ///     který se nečeká — proto se tahle větev nesmí spolehnout na formát a musí rozhodnout sama.
     init(lastSuccess: Date?, nextPoll: Date?, isRefreshing: Bool, now: Date) {
         guard !isRefreshing else {
             self = .polling(last: lastSuccess)
