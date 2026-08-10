@@ -57,8 +57,10 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   dřív, než subagenta pustíš** — slot mu přiděluje orchestrátor a bez něj by subagent přepsal
   aplikaci, se kterou zrovna pracuju, i s její cache.
 
-  Subagent končí otevřeným PR s vyřízeným Copilotem. **Nemerguje, nezavírá issue a nevydává
-  release** — to dělá jeden, kdo vidí na všechny větve. U **jednoho** issue se nic nemění,
+  **Subagent dotáhne issue až do konce** (#247): PR, Copilot, merge, zavření issue a release.
+  Nečeká na frontu u orchestrátora — hotová práce, která leží, je to zdržení, kvůli kterému se
+  paralelně pracuje. Orchestrátorovi zůstává rozvrh, sloty, úklid stromů a **restart hlavní
+  aplikace** (sahá do hlavního stromu, což subagent nesmí). U **jednoho** issue se nic nemění,
   udělá se sériově.
 - **Všechno jde přes PR.** Žádné přímé pushe do `main` — každá změna (kód i dokumentace)
   má vlastní branch a PR, i když je malá. PR odkazuje na issue, které řeší.
@@ -75,11 +77,12 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   proklikám, dokud je změna ještě levná na přepsání. Zelené testy nejsou důkaz, že se to
   chová, jak jsem chtěl.
 
-  **V dávce se pauza posouvá před merge** (#231): subagent nemá jak zavolat člověka a čekáním
-  by blokoval sebe i slot. PR před mergem je pořád levný na přepsání, takže smysl pauzy to
-  drží. Sesbírá se za celou dávku naráz — podrobnosti v
+  **V dávce pauza odpadá** (#247, mění #231): subagent nemá jak zavolat člověka a dotahuje issue
+  až do mergnutého PR, takže není kde ji udělat. Kontrola se přesouvá na **hlavní aplikaci po
+  restartu** a co nesedí, je nové issue — podrobnosti v
   [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md). Co se **nemění**: podívat se na
-  obrazovku sám a napřed platí i tam.
+  obrazovku sám a napřed platí i tam, a o to víc — mergnout rozbitou obrazovku je horší než ji
+  ukázat.
 
   Napiš, **na co se mám podívat** a co v příslušné obrazovce uvidím.
 
