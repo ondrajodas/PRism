@@ -618,5 +618,27 @@ Vedle fází stojí milník **Průběžné**: koš na to, co do žádné z nich 
 podpis, stavový řádek). Nemá pořadí ani termín a verze se z něj neodvozuje — viz
 Pracovní postup.
 
+**Sloty hotové (#228)** — dá se vyvíjet ve víc oknech naráz vedle aplikace, která se zrovna
+používá. Pracovní strom si drží `.prism-slot` a z něj se odvodí bundle ID, jméno
+v `/Applications` i kořen cache; ten si aplikace bere z `CFBundleName`, ne z konstanty, takže
+rozestavěný build nesáhne na uložené nálezy ani na rozdělané drafty. Bez toho souboru se
+nemění nic. Nový je `bin/worktree.sh`, který strom založí a přenese do něj konfiguraci
+očištěnou o odesílání, notifikace a automat.
+
+Tři věci dopadly jinak, než jak byly v zadání:
+
+- **Počet slotů se neomezuje**, ačkoli issue počítalo se dvěma. Rozsah stál na odhadu, že se
+  okna poperou o pět výkonných jader — změřeno je to jinak: clean build trvá 23 s a test run
+  s 1864 testy 25 s, tedy necelá 3 % třicetiminutové iterace, a medián zátěže je 611 %
+  z 1500 % dostupných. Strop tedy není ve stroji, ale v tom, kolik je po ruce **nezávislých**
+  issues: dvě větve sahající na stav v `AppStore` nebo na `Policy` se vrátí jako sémantický
+  konflikt, samostatně zelené a po sloučení rozbité. Slot je proto parametr skriptu.
+- **Slot se používá doslova**, bez převodu na velké písmeno, a v názvu je pomlčka místo
+  mezery (`PRism-a`). Cesty bez mezer se v shellu nedají rozbít nedopatřením a `worktree.sh`
+  s cestami pracuje.
+- **Chybějící `CFBundleName` shodí aplikaci** místo tichého `?? "PRism"`. Default by
+  znamenal, že se slot potichu vrátí do cache hlavní instance — přesně to, čemu se sloty
+  vyhýbají. Ověřeno vložením regrese: test to chytá.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

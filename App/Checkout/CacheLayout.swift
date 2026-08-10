@@ -13,9 +13,39 @@ import Foundation
 struct CacheLayout: Sendable, Equatable {
     let root: URL
 
-    static let applicationSupport = CacheLayout(
-        root: URL.applicationSupportDirectory.appending(path: "PRism")
-    )
+    /// Cache té instance, která právě běží.
+    ///
+    /// Jméno složky se bere z `CFBundleName`, ne z konstanty — na tom stojí sloty (#228).
+    /// Build ve slotu `a` má v plistu `PRism-a`, takže si nese vlastní konfiguraci, klony
+    /// i uložené nálezy a **nesáhne na data instance, se kterou se pracuje**. Rozestavěný
+    /// build umí mít rozbitou persistenci a smazat rozdělaný draft je ztráta ručně psané
+    /// práce; oddělit ho je levnější než to řešit až potom.
+    static let applicationSupport = CacheLayout(named: bundleName(of: .main))
+
+    /// Cache pojmenované instance. Oddělená od `applicationSupport` proto, aby se dala
+    /// otestovat shoda dvou různých jmen bez sahání na `Bundle.main`.
+    init(named name: String) {
+        self.init(root: URL.applicationSupportDirectory.appending(path: name))
+    }
+
+    init(root: URL) {
+        self.root = root
+    }
+
+    /// Jméno bundlu, pod kterým aplikace drží svoje soubory.
+    ///
+    /// Chybějící klíč **shazuje aplikaci** a nespadne na `?? "PRism"`. Tichý default by
+    /// znamenal, že build ve slotu s rozbitým plistem sáhne do cache hlavní instance — tedy
+    /// právě to, čemu se sloty vyhýbají, a to potichu. `CFBundleName` je přitom v `Info.plist`
+    /// napsané napevno, takže jeho absence není provozní stav, ale rozbitý bundle.
+    private static func bundleName(of bundle: Bundle) -> String {
+        guard let name = bundle.object(forInfoDictionaryKey: "CFBundleName") as? String,
+            !name.isEmpty
+        else {
+            fatalError("Bundle nemá CFBundleName — bez něj není jasné, čí je cache.")
+        }
+        return name
+    }
 
     /// Kde leží klony a stromy — eviction je potřebuje projít, ne jen skládat cesty.
     var repositories: URL { root.appending(path: "repos") }

@@ -5,6 +5,42 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Slot určuje, **čí** aplikace se buildí (#228). Bez něj je to ta, se kterou se pracuje;
+# se slotem je to samostatná instance s vlastním bundle ID, vlastním jménem v /Applications
+# a — což je to hlavní — **vlastní cache**, takže rozestavěný build nesáhne na uložené nálezy
+# a rozdělané drafty. Kořen cache si aplikace odvozuje z `CFBundleName`, viz `CacheLayout`.
+#
+# Čte se ze souboru, ne z parametru: worktree si slot drží sám, takže se na něj nedá v žádném
+# okně zapomenout. Chybějící soubor znamená hlavní instanci, takže hlavní checkout se chová
+# přesně jako dřív.
+SLOT=""
+if [ -f .prism-slot ]; then
+    SLOT="$(tr -d '[:space:]' < .prism-slot)"
+fi
+
+# Slot jde do bundle ID, a to snese jen písmena, číslice a pomlčku. Kdyby se sem dostalo
+# něco jiného, build projde a rozsype se až spuštění — proto se to odmítá tady.
+case "${SLOT}" in
+*[!a-zA-Z0-9-]*)
+    echo "Slot „${SLOT}“ obsahuje znak, který v bundle ID být nesmí."
+    echo "       Povolená jsou písmena, číslice a pomlčka; oprav .prism-slot"
+    exit 1
+    ;;
+esac
+
+if [ -n "${SLOT}" ]; then
+    NAME="PRism-${SLOT}"
+    BUNDLE_ID="com.ondrajodas.prism.${SLOT}"
+    echo "Slot „${SLOT}“ — buildí se ${NAME}, cache má vlastní."
+else
+    NAME="PRism"
+    BUNDLE_ID="com.ondrajodas.prism"
+fi
+
+# Obě hodnoty se předávají vždycky, i prázdné. Prázdné pole by se pod `set -u` v bashi 3.2
+# (ten je v /bin/bash) rozbilo na „unbound variable“ při rozbalení `"${SLOT_ARGS[@]}"`.
+SLOT_ARGS=(PRISM_SLOT="${SLOT:+.${SLOT}}" PRISM_SLOT_LABEL="${SLOT:+-${SLOT}}")
+
 # **`.noindex`, ne `build`.** Bez té přípony si LaunchServices kopii v `build/` **samo
 # zaregistruje** — a je jedno, kolikrát se odregistruje: měřeno, do 25 vteřin je zpátky
 # (`.metadata_never_index` uvnitř složky s tím nehne, taky změřeno). Ve Spotlightu a v
@@ -23,14 +59,14 @@ APP="$DERIVED_DATA/Build/Products/Debug/PRism.app"
 # `denied` — bez dialogu a bez záznamu v Nastavení systému, takže se to nedá ani povolit.
 # Z `/Applications` projde na první pokus. Ověřené i na minimální cizí aplikaci s jiným
 # bundle ID, takže to není vlastnost PRismu, ale toho, odkud je aplikace spuštěná.
-INSTALLED="/Applications/PRism.app"
-BUNDLE_ID="com.ondrajodas.prism"
+INSTALLED="/Applications/${NAME}.app"
 
 xcodebuild \
     -project PRism.xcodeproj \
     -scheme PRism \
     -configuration Debug \
     -derivedDataPath "$DERIVED_DATA" \
+    "${SLOT_ARGS[@]}" \
     build
 
 # Ad-hoc podepsaná aplikace je po každém buildu pro macOS jiná aplikace, takže se dotazy
@@ -55,17 +91,37 @@ esac
 # se aplikace zabije i s rozdělaným review a nálezy, které už dorazily, se ztratí — dvakrát
 # za jedno dopoledne, než na to přišla řeč. Apple event `quit` jde tou samou cestou jako ⌘Q,
 # takže se běžící review ohlásí a rozhodnu se.
-if pgrep -x PRism > /dev/null; then
-    osascript -e 'tell application "PRism" to quit' > /dev/null 2>&1 || true
+# Hledá se **podle cesty ke spustitelnému souboru**, ne podle jména procesu. Executable se
+# jmenuje `PRism` u všech slotů (PRODUCT_NAME se se slotem nemění), takže `pgrep -x PRism` by
+# ve slotu našel i instanci, se kterou se zrovna pracuje — a skript by čekal na ukončení
+# něčeho, co ukončit nemá, nebo to rovnou ukončil.
+instance_running() {
+    pgrep -f "^${INSTALLED}/Contents/MacOS/" > /dev/null 2>&1
+}
+
+if instance_running; then
+    # Apple event míří na **bundle ID**, ne na jméno: s víc nainstalovanými PRismy by
+    # `tell application "PRism"` bylo nejednoznačné a mohlo ukončit cizí slot.
+    #
+    # Chyba se čte, ne zahazuje. Nedoručený event a odmítnuté ukončení jsou **dva různé
+    # stavy** a splynuly by do jedné hlášky o nedoběhlém review — tedy do věty, která tvrdí
+    # víc, než z čeho se dá poznat. Se slotem to navíc přestalo být hypotetické: `application
+    # id` se hledá v databázi LaunchServices, kam se slot dostane teprve první instalací.
+    QUIT_ERROR=""
+    if ! QUIT_ERROR="$(osascript -e "tell application id \"${BUNDLE_ID}\" to quit" 2>&1)"; then
+        echo "Nepovedlo se požádat ${NAME} o ukončení: ${QUIT_ERROR}"
+        echo "       Nová verze se nespustila, ať se nekouká na starý build."
+        exit 1
+    fi
 
     # Na odpověď se čeká; dialog může chvíli stát otevřený.
     for _ in $(seq 1 120); do
-        pgrep -x PRism > /dev/null || break
+        instance_running || break
         sleep 1
     done
 
-    if pgrep -x PRism > /dev/null; then
-        echo "PRism běží dál — nechal jsi doběhnout review. Nová verze se nespustila."
+    if instance_running; then
+        echo "${NAME} běží dál — nechal jsi doběhnout review. Nová verze se nespustila."
         exit 1
     fi
 fi
@@ -111,7 +167,7 @@ fi
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
 if [ -x "${LSREGISTER}" ]; then
     "${LSREGISTER}" -u "${PWD}/${APP}" > /dev/null 2>&1 \
-        || echo "Pozor: kopii v ${APP} se nepodařilo odregistrovat, ve Spotlightu bude PRism dvakrát."
+        || echo "Pozor: kopii v ${APP} se nepodařilo odregistrovat, ve Spotlightu bude ${NAME} dvakrát."
 else
     echo "Pozor: lsregister na čekané cestě není, kopie v ${APP} zůstane ve Spotlightu."
 fi

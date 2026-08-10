@@ -507,7 +507,19 @@ příští spuštění skriptu: je to **tatáž cesta**, kterou odregistrovává
                 # cizí bundle v /Applications nepřepíše a při selhání instalace
                 # radši nespustí nic, ať se nekouká na starý build
                 # a po instalaci odregistruje kopii v build.noindex/ (#139)
+                # slot z .prism-slot mění bundle ID, jméno i cache (#228)
 ```
+
+```bash
+./bin/worktree.sh a issue-231-neco    # strom pro paralelní vývoj ve slotu „a“ (#228)
+                                      # branch z origin/main, .prism-slot do stromu,
+                                      # konfigurace očištěná o odesílání, notifikace a automat
+```
+
+**Slot je jediné, co dělí paralelní okna od sebe** — bundle ID, jméno v `/Applications`
+i kořen cache (ten si aplikace bere z `CFBundleName`, ne z konstanty). Bez `.prism-slot` se
+nemění nic, takže hlavní strom zůstává tou aplikací, která se používá. Podrobnosti v README,
+sekce *Paralelní vývoj — sloty*.
 
 ```bash
 ./bin/setup-signing.sh    # jednorázově: self-signed certifikát do login keychainu

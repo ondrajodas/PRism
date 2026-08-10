@@ -15,11 +15,16 @@
 	     Proč vlastní Info.plist a ne GENERATE_INFOPLIST_FILE: CFBundleName se generuje
 	     z PRODUCT_NAME a klíč INFOPLIST_KEY_CFBundleName Xcode tiše ignoruje. Původně
 	     se tím řešil rozdíl mezi názvem produktu a názvem pro uživatele; po sjednocení
-	     na PRism ten důvod odpadl a plist by šel zrušit — viz CLAUDE.md. -->
+	     na PRism ten důvod odpadl — od #228 ho ale plní znovu, tentokrát kvůli slotům.
+
+	     PRISM_SLOT_LABEL je prázdný, dokud se nebuildí do slotu; hlavní checkout se tedy
+	     jmenuje „PRism“ jako dřív a build ve slotu „PRism A“. Není to kosmetika:
+	     CFBundleName určuje i kořen cache (CacheLayout.applicationSupport), takže prázdná
+	     hodnota znamená společnou cache s produkční instancí. -->
 	<key>CFBundleDisplayName</key>
-	<string>PRism</string>
+	<string>PRism$(PRISM_SLOT_LABEL)</string>
 	<key>CFBundleName</key>
-	<string>PRism</string>
+	<string>PRism$(PRISM_SLOT_LABEL)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

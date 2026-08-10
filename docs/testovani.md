@@ -764,6 +764,20 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
 - **`CacheEviction`** — proti skutečné dočasné složce, ne proti fake filesystému: rozpočet
   je injektovatelný, takže stačí malé soubory. Pozor, počítá se **alokovaná** velikost, tedy
   po blocích — stobajtový soubor zabere 4 KB a testovací rozpočty musí být řádově výš.
+- **`CacheLayout` a sloty** (#228) — nejcennější test je ten, který tvrdí, že se něco
+  **nestalo**: `CacheLayout(named: "PRism")` a `CacheLayout(named: "PRism-a")` se ptají
+  `contains` na obě strany a ani jedna nesmí vidět do té druhé. Chytá to i past, do které by
+  se spadlo připojením slotu bez oddělovače — `"PRism"` + `""` je pořád `"PRism"`.
+
+  Ověřeno **vložením regrese**: když `init(named:)` jméno ignoruje a vždycky složí `PRism`,
+  spadnou dva testy se čtyřmi issues. Bez toho by zelený běh nedokazoval nic, protože obě
+  cesty vedou do `Application Support` a liší se jediným řetězcem.
+
+  Zbytek slotů leží v shellu (`bin/run.sh`, `bin/worktree.sh`) a testy ho nepokryjí, takže se
+  ověřuje spuštěním: build se slotem musí vyrobit `com.ondrajodas.prism.a` a `PRism-a`,
+  instance běží **vedle** té hlavní a hlavní cache zůstane bez jediného čerstvého souboru.
+  Že se `pgrep` patterny nepletou, se pozná jen s oběma běžícími naráz — pattern hlavní
+  instance nesmí najít slot a naopak.
 - **`RepoCheckout`** — dvě vrstvy, a **obě jsou potřeba**. Fake runner ověří, co se `gitu`
   posílá za argumenty (na tocích s víc příkazy `ScriptedProcessRunner`, který odpovídá
   jinak na každé volání); integrační test (`RealRepoCheckoutTests`) klonuje z `file://`

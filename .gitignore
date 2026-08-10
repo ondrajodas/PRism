@@ -4,6 +4,10 @@
 # Podpis — jméno certifikátu je vlastnost stroje, ne repa (bin/setup-signing.sh)
 Signing.local.xcconfig
 
+# Slot pracovního stromu (#228) — vlastnost toho konkrétního stromu, ne repa. Kdyby se
+# commitl, přinesl by cizí slot do každého dalšího checkoutu.
+.prism-slot
+
 # Lokální oprávnění Claude Code — grant vázaný na účet, ne na repo. Pouští zápis do
 # soukromého sandboxu pro spike #62; do verzovaného souboru nepatří právě proto, že
 # repo má tvrdou podmínku „aplikace na GitHub nic neposílá“.
