@@ -662,6 +662,17 @@ dávka M9, kde pauza nebyla v zadání a **dva agenti ze čtyř domergovali dř�
 zpráva** — proto je od #256 v zadání od začátku. Podívat se na obrazovku sám a napřed platí dál,
 neviditelná změna pauzu nedostane.
 
+**Hranice orchestrátora zapsaná (#259):** v dávce **neimplementuje, deleguje** — kód, testy ani
+dokumentaci k žádnému issue, a „jen dokumentace“ v tom není výjimka. Do té doby dokument říkal
+jmenovitě jen to, co **nedělá subagent**, a o orchestrátorovi to, co mu *zbývá*; zákaz z toho
+nevyplýval, takže chybějící věta vypadala jako volba. Důvod je kontext: rozvrh, stav všech
+běžících větví a připomínky k předání za orchestrátora nikdo neudrží, kdežto implementace je
+uzavřená v jednom stromě a dá se rozdat. Přibyl postup pro **strom po skončené session** — pustí
+se do něj nový subagent (bez `isolation: "worktree"`, s cestou ke stromu, číslem existujícího PR
+a zákazem zakládat nový), ne nový worktree z mainu a ne orchestrátor sám. Vzniklo to z dávky M9,
+kde orchestrátor začal implementovat v odumřelém stromě po předchozím agentovi a člověk to
+zastavil.
+
 U slotů (#228) dopadly tři věci jinak, než jak byly v zadání:
 
 - **Počet slotů se neomezuje**, ačkoli issue počítalo se dvěma. Rozsah stál na odhadu, že se

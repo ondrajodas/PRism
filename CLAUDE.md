@@ -18,7 +18,7 @@ Co kam patří:
 | [`docs/architektura.md`](docs/architektura.md) | Podrobnosti po modulech — co který drží a co se u něj nemá rozbít | Změna uvnitř modulu: nový typ, nový invariant, jiné chování |
 | [`docs/testovani.md`](docs/testovani.md) | Katalog toho, co se u které oblasti testuje a proč zrovna to | Nová oblast testů, nebo nový případ, který se dá pokazit potichu |
 | [`docs/stav.md`](docs/stav.md) | Co je hotové a co zbývá | Dokončené issue |
-| [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md) | Jak se vyřizuje **seznam** issues: co jde souběžně, co dostane subagent, kdo merguje | Změna postupu při dávce, nebo toho, co si subagent nesmí dovolit |
+| [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md) | Jak se vyřizuje **seznam** issues: co jde souběžně, co dostane subagent, co si nechává orchestrátor, kdo merguje | Změna postupu při dávce, nebo toho, co si subagent ani orchestrátor nesmí dovolit |
 | `docs/superpowers/specs/` | Proč jsou rozhodnutí taková, jaká jsou — včetně zamítnutých alternativ | Změna návrhového rozhodnutí; zapsat i **proč** se změnilo, staré nechat v záznamu rozhodnutí |
 
 Když se změna nikam z toho nevejde, je to signál, že jsem si neujasnil, co vlastně měním
@@ -61,9 +61,15 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   a **úklid své aplikace** — ukončit, odregistrovat z LaunchServices a smazat i s cache (#250),
   jinak se mi v `/Applications` hromadí PRismy, ze kterých se nedá vybrat.
   Nečeká na frontu u orchestrátora — hotová práce, která leží, je to zdržení, kvůli kterému se
-  paralelně pracuje. Orchestrátorovi zůstává rozvrh, sloty, úklid stromů a **restart hlavní
-  aplikace** (sahá do hlavního stromu, což subagent nesmí). U **jednoho** issue se nic nemění,
-  udělá se sériově.
+  paralelně pracuje. Orchestrátorovi zůstává rozvrh, sloty, tlumočení připomínek, úklid stromů
+  a **restart hlavní aplikace** (sahá do hlavního stromu, což subagent nesmí).
+
+  **Orchestrátor v dávce neimplementuje, deleguje** (#259) — ani u issue, které je „jen
+  dokumentace“. Jeho kontext drží rozvrh a stav všech větví, což za něj nikdo neudrží, kdežto
+  implementace se dá rozdat; a strom po skončené session je důvod poslat do něj **nového
+  subagenta**, ne psát v něm sám. Výčet toho, co orchestrátor dělá, i postup pro předání
+  rozdělané práce jsou v [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md). U **jednoho**
+  issue se nic nemění, udělá se sériově.
 - **Všechno jde přes PR.** Žádné přímé pushe do `main` — každá změna (kód i dokumentace)
   má vlastní branch a PR, i když je malá. PR odkazuje na issue, které řeší.
 - **Branch:** anglicky, krátce, s číslem issue — např. `issue-4-github-gateway`.
