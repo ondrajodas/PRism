@@ -60,7 +60,7 @@ struct PullRequestFilterButton: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        axis("Repozitáře", values: options.repositories.map(\.description), selected: Set(filter.repositories.map(\.description))) { name, on in
+                        axis("Repozitáře", values: repositoryValues, selected: Set(filter.repositories.map(\.description))) { name, on in
                             toggleRepository(named: name, on: on)
                         }
                         if !options.authors.isEmpty {
@@ -91,6 +91,12 @@ struct PullRequestFilterButton: View {
         .padding(12)
     }
 
+    /// Repa se ukazují jménem, takže se `RepoID` překládá tady — počet u položky jde s ním, aby se
+    /// obě osy kreslily jedním kódem.
+    private var repositoryValues: [PullRequestFilterOption<String>] {
+        options.repositories.map { PullRequestFilterOption(value: $0.value.description, count: $0.count) }
+    }
+
     /// Jedna osa filtru jako seznam přepínačů.
     ///
     /// `Toggle` s vlastním bindingem, ne `Picker`: vybírá se **víc hodnot** („ukaž mi dvě repa, na
@@ -100,7 +106,7 @@ struct PullRequestFilterButton: View {
     /// nikdo nepozná, ale pole tady bylo jen proto, že se `RepoID`y mapovaly na jména.
     private func axis(
         _ title: String,
-        values: [String],
+        values: [PullRequestFilterOption<String>],
         selected: Set<String>,
         toggle: @escaping (String, Bool) -> Void
     ) -> some View {
@@ -108,18 +114,42 @@ struct PullRequestFilterButton: View {
             Text(verbatim: title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            ForEach(values, id: \.self) { value in
+            ForEach(values, id: \.value) { option in
                 Toggle(isOn: Binding(
-                    get: { selected.contains(value) },
-                    set: { toggle(value, $0) }
+                    get: { selected.contains(option.value) },
+                    set: { toggle(option.value, $0) }
                 )) {
-                    Text(verbatim: value)
-                        .font(.callout)
-                        .lineLimit(1)
-                        .truncationMode(.head)
+                    row(option)
                 }
                 .toggleStyle(.checkbox)
+                // Číslo samo o sobě VoiceOver přečte jako „PRism 2“, což zní jako část jména repa.
+                // Popisek ho proto pojmenuje; stav odškrtnutí si `Toggle` hlásí sám.
+                .accessibilityLabel("\(option.value), \(Plural.czech(option.count, one: "pull request", few: "pull requesty", many: "pull requestů"))")
             }
+        }
+    }
+
+    /// Řádek nabídky: jméno vlevo, počet PR vpravo (#199).
+    ///
+    /// **Počet je z plného seznamu**, ne z toho, co je po filtru vidět — jinak by se čísla měnila
+    /// podle právě odškrtaných položek a nedalo by se z nich poznat, co zapnutí položky udělá.
+    /// Skládá je `Policy.filterOptions(in:filter:)`, tady se jen kreslí.
+    ///
+    /// Popisek se zkracuje **zepředu** (`ondrajodas/PRism` → `…jodas/PRism`), protože v úzké
+    /// nabídce nese informaci konec jména, ne owner. Číslo se nezkracuje nikdy: `fixedSize` mu
+    /// drží místo, takže se ubírá jménu, ne jemu.
+    private func row(_ option: PullRequestFilterOption<String>) -> some View {
+        HStack(spacing: 8) {
+            Text(verbatim: option.value)
+                .font(.callout)
+                .lineLimit(1)
+                .truncationMode(.head)
+            Spacer(minLength: 0)
+            Text(verbatim: String(option.count))
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(Palette.ink3)
+                .fixedSize()
         }
     }
 
@@ -128,7 +158,7 @@ struct PullRequestFilterButton: View {
     /// Repo se hledá **podle jména z nabídky**, ne skládáním `RepoID` z textu: nabídka vznikla
     /// z `RepoID`ů, takže se to musí vrátit k témuž typu bez druhého parsování.
     private func toggleRepository(named name: String, on: Bool) {
-        guard let repo = options.repositories.first(where: { $0.description == name }) else { return }
+        guard let repo = options.repositories.first(where: { $0.value.description == name })?.value else { return }
         var updated = filter
         if on { updated.repositories.insert(repo) } else { updated.repositories.remove(repo) }
         apply(updated)

@@ -55,9 +55,12 @@ aktuální; při rate limitu pruh říká, kdy to zkusí znovu.
 
 **Seznam se dá zúžit filtrem** (#117) — ikona v toolbaru vlevo, odškrtávají se v ní repozitáře
 a autoři (uvnitř osy „nebo“, mezi osami „a“: dvě repa znamenají obojí, repo + autor jeho PR v tom
-repu). Že je filtr zapnutý a kolik schovává, je vidět na ikoně **bez otevírání nabídky**, protože
-skrytý filtr je způsob, jak přijít o review; a když schová všechno, řekne to a nabídne se vypnout —
-zelené „Žádné PR k review“ by nad zapnutým filtrem tvrdilo opak pravdy.
+repu). U každé položky je **počet PR, kterých se týká** (#199), takže je před kliknutím vidět, co
+se za ní schová; počítá se z **plného** seznamu, takže se odškrtáváním nemění — jinak by číslo
+říkalo něco o pohledu místo o tom, co zapnutí položky udělá. Že je filtr zapnutý a kolik schovává,
+je vidět na ikoně **bez otevírání nabídky**, protože skrytý filtr je způsob, jak přijít o review;
+a když schová všechno, řekne to a nabídne se vypnout — zelené „Žádné PR k review“ by nad zapnutým
+filtrem tvrdilo opak pravdy.
 
 Filtr je **pohled, ne seznam**: nic se tím nepřestane stahovat, nezahodí se diffy ani rozdělaná
 review, běžící review běží dál, automat plánuje dál a okno nastavení pořád vidí i schované repo.

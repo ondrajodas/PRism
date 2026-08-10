@@ -43,7 +43,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
 | `QueueSummary` | Souhrn fronty: počet PR, PR s blokujícím nálezem a PR s rozdělaným review (#155) |
-| `PullRequestFilter`, `PullRequestFilterOptions`, `ListEmptyReason` | Zúžení seznamu na repa a autory (#117), nabídka hodnot a důvod prázdna. **Není `Codable`** — nepřežije restart |
+| `PullRequestFilter`, `PullRequestFilterOptions`, `PullRequestFilterOption`, `ListEmptyReason` | Zúžení seznamu na repa a autory (#117), nabídka hodnot **s počtem PR u každé** (#199) a důvod prázdna. **Není `Codable`** — nepřežije restart |
 | `DiffBlock`, `DiffPairBlock` | Souvislý úsek řádků jako jeden text (#157) — kvůli výběru přes víc řádků. **Není `Codable`**, je to věc vykreslení |
 | `ReviewDraft` | Rozdělané review: PR, `headSha`, tělo, verdikt, komentáře. Verdikt je vnořený `ReviewDraft.Verdict` |
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
@@ -1152,10 +1152,12 @@ Věci, které se u toho nemají rozbít:
   těmi dvěma gettery je jediné, co dělí filtr od mazání cache**. Zúžený čte jedině seznam PR
   a detail vybraného řádku; plný čte `knownRepositories` (okno nastavení musí vidět i repo, které
   jsem si schoval — je to zrovna to, u kterého chci něco přenastavit), `queueSummary` (souhrn je
-  o obsahu fronty, ne o pohledu — #155), `handleNotificationClicks`, `startAutomaticReviews` po
-  zahození nálezů (#81) a úklid, který bere `summaries` z tiku. Kdyby na zúženém seznamu viselo
-  cokoli z úklidu (`forget(whatIsNotIn:)`, `CacheEviction`, `ReviewStore.cleanUp`, rušení
-  automatických review), **zapnutí filtru by zahodilo diffy a konverzace, smazalo cache a zrušilo
+  o obsahu fronty, ne o pohledu — #155), `filterOptions` (nabídka filtru i **počty u jejích
+  položek** — #199; ze zúženého seznamu by čísla klesala podle právě odškrtaného a nabídka by
+  přestala odpovídat na otázku „co se stane, když tohle zapnu“), `handleNotificationClicks`,
+  `startAutomaticReviews` po zahození nálezů (#81) a úklid, který bere `summaries` z tiku.
+  Kdyby na zúženém seznamu viselo cokoli z úklidu (`forget(whatIsNotIn:)`, `CacheEviction`,
+  `ReviewStore.cleanUp`, rušení automatických review), **zapnutí filtru by zahodilo diffy a konverzace, smazalo cache a zrušilo
   běžící review**. Je na to sada testů proti fakes, ne úvaha o tom, kdo dnes co čte — ověřená
   vloženou regresí (když `pullRequests` filtruje sám, spadne osm testů).
 - **Filtr nepřežije restart** a je to jediný stav v okně, který umí PR **schovat úplně** — restart
@@ -1343,7 +1345,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
-| `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky |
+| `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Konverzace`) — podtržené, s odznakem počtu **u každé** (#218) a vpravo `+X −Y` se čtverečky poměru |
 | `OverviewView` | Tab `Přehled`: popis PR, fakta, kontroly a co se změnilo od minule |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
@@ -2741,7 +2743,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.linesWithSeveralComments(in:)` | Na kolika řádcích draftu je víc komentářů — z každého budou samostatná vlákna, ne odpověď |
 | `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR, vlákna bez kotvy a **události časové osy** (#171), chronologicky (`ConversationEntry`) |
 | `Policy.displayableEvents(_:)` | Které události se kreslí — zavření po mergi zahodí, zbytek nechá (#171) |
-| `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem** |
+| `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem — **s počtem PR u každé položky** (#199), počítaným z plného seznamu, takže zapnutý filtr čísly nehne — a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem** |
 | `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
