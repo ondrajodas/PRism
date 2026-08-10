@@ -644,9 +644,12 @@ očištěnou o odesílání, notifikace a automat.
 Sloty daly paralelnímu vývoji prostředí, ale ne postup; bez zápisu by se seznam issues dál
 vyřizoval sériově, protože výchozí chování je subagenty nepouštět. Je v něm, podle čeho se
 pozná nezávislost (`ReviewPublishing` jde vždycky sám, `AppStore` stav a `Policy` jsou
-rizikové, `docs/stav.md` konfliktuje vždy a nevadí), co subagent dělá a co ne (nemerguje,
-nezavírá issue, nevydává release) a **že slot přiděluje orchestrátor** — subagent v izolovaném
-worktree `.prism-slot` nemá, takže by přepsal aplikaci, se kterou se pracuje.
+rizikové, `docs/stav.md` konfliktuje vždy a nevadí), co subagent dělá a co ne, a **že slot
+přiděluje orchestrátor** — subagent v izolovaném worktree `.prism-slot` nemá, takže by přepsal
+aplikaci, se kterou se pracuje. Hranice „co dělá a co ne“ se od #231 posunula dvakrát: v původním
+zápisu subagent nemergoval, nezavíral issue ani nevydával release, od **#247** si to všechno
+dotahuje sám a od **#250** po sobě uklidí i svou aplikaci. Orchestrátorovi zůstal rozvrh, sloty,
+úklid stromů a restart hlavní aplikace.
 
 **Mění to jedno pravidlo:** v dávce se pauza na proklikání posouvá z „před prvním pushem“ na
 „před merge“. Prošla dvěma korekcemi a platí verze z **#256**: subagent zastaví s hotovým PR

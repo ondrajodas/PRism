@@ -153,7 +153,7 @@ překryje. Cena je, že připomínka přijde nad kódem, který už prošel revi
 protože se řeší vzhled a chování, ne struktura.
 
 Co po mergi nesedí přesto, **je nové issue**, ne vracení mergnuté větve — to zůstává z #247
-v platnosti. Pauza počet takových issues zmenšuje, nenulují ho.
+v platnosti. Pauza počet takových issues zmenšuje, nenuluje ho.
 
 ## 5. Merge, release, restart
 
