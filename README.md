@@ -43,10 +43,14 @@ k nejstaršímu rozdělanému review. Nic se pro to nedotahuje; všechna ta čí
 jen roztroušená.
 
 V pravém horním koutu stojí, kdy se seznam naposledy načetl a **kolik zbývá do příštího dotazu** —
-`poslední tik 09:41 · za 43 s znovu` (#237). Poslední tik je hodina, protože je to bod
+`poslední tik 09:41 · za 43s znovu` (#237). Poslední tik je hodina, protože je to bod
 v minulosti; příští je odpočet, protože otázka u něj zní „jak dlouho ještě“ — a při rate limitu,
-kde čekání roste až na patnáct minut, je to celý obsah té informace. Zatímco se aplikace ptá, je
-tam místo čísla `ptám se…`.
+kde čekání roste až na patnáct minut, je to celý obsah té informace. Delší čekání se píše ve dvou
+jednotkách (`za 12min 29s znovu`). Zatímco se aplikace ptá, je tam místo čísla `ptám se…`.
+
+**Mezera mezi číslem a jednotkou tam schválně není** (#260) — je to vědomá odchylka od české
+typografie, kterou si aplikace platí vlastním formátováním odpočtu, protože systémový formát
+mezeru v české locale má a nejde z něj vyndat.
 
 Po startu si ověří, že má `gh`, `git` i `claude` a že je `gh` přihlášený — jinak řekne, co
 chybí a čím se to spraví. Pak se otevře seznam pull requestů napříč repozitáři, který se

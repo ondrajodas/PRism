@@ -614,10 +614,10 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
    místo ní počítá novinky od poslední návštěvy. Důvod je ve specifikaci.
 
    U #237 se **otočilo rozhodnutí z #181**: příští tik v hlavičce dashboardu je odpočet
-   (`poslední tik 09:41 · za 43 s znovu`, jak to má návrh), ne absolutní čas. Námitka, kvůli
+   (`poslední tik 09:41 · za 43s znovu`, jak to má návrh), ne absolutní čas. Námitka, kvůli
    které tam absolutní čas stál — že odpočet znamená přepočítávat dashboard každou vteřinu —
-   se **změřila a neplatí**: `Text(_:style: .relative)` tiká sám a tělo view se u toho
-   nepřepočítává. Přibylo k tomu `PollState.isRefreshing`, protože `nextPoll` je po celou dobu
+   se **změřila a neplatí**: `Text(_:style: .relative)` tikal sám a tělo view se u toho
+   nepřepočítávalo (od #260 to platí o vlastním formátu a `TimelineView`, viz níž). Přibylo k tomu `PollState.isRefreshing`, protože `nextPoll` je po celou dobu
    dotazu v minulosti a odpočet by šel přes nulu; v tu chvíli se místo čísla píše `ptám se…`.
    Důvod, proč to drží observovatelný příznak a ne srovnání s hodinami, je ve specifikaci.
 
@@ -780,6 +780,24 @@ komentáře sedm řádků pod svým kódem) a pod blokem zbývalo prázdno. Oba 
 **layout manageru**, ne proti druhému výpočtu, a oba jsou ověřené vloženou regresí (130 a 136
 padlých tvrzení). Cestou se našla past AppKitu: nastavení `textContainer.size` si AppKit vyloží jako
 změnu geometrie a **sám zavolá `setFrameSize`**, takže bez stráže se měřilo o jednu šířku pozadu.
+
+**Odpočet bez mezery mezi číslem a jednotkou (#260)** — `za 43s znovu`. Zní to na jeden znak, ale
+ten řetězec skládal systém (`Text(_:style: .relative)`) a v české locale mezeru **má ve všech
+variantách** — změřeno na čtyřech šířkách `Duration.UnitsFormatStyle` i na
+`DateComponentsFormatter`u, a na obrazovce psal nad minutu `12 min, 29 s`, tedy i s čárkou.
+Formátuje se proto vlastní funkcí (`DashboardCountdown`), nad minutu ve dvou jednotkách
+(`za 12min 29s znovu`), nad hodinu `za 1h znovu`; nulová spodní jednotka se vynechává.
+
+Je to **vědomá odchylka od české typografie i od mockupu** (ten má `za 43 s znovu`) — přání
+uživatele nad jeho osobním nástrojem, zapsané v specifikaci proto, aby se to příště
+„neopravilo“ zpátky.
+
+**Rozhodnutí z #237 přitom drží, a je to změřené**: vlastní formát si vyžádal vlastní takt, ale ten
+dává `TimelineView` uvnitř odpočtu, který přepočítává jen svůj obsah — tělo nad ním se za 1,5
+sekundy přepočítá **jednou** a formát stojí 0,12 µs na tik. Sonda z #237 na to zůstala a **umí víc**:
+kouká se i na bitmapu hostovaného view, takže chytne i zamrzlý odpočet, který samotný počet přepočtů
+nepozná (ověřeno vyndáním `TimelineView`). Text z okna přečíst nešlo — accessibility tree se
+v hostovaném okně nenaplní, změřeno.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
