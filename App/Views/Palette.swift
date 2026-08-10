@@ -31,6 +31,19 @@ enum Palette {
     static let ink2 = Color(light: 0x5A6379, dark: 0x98A1B5)
     static let ink3 = Color(light: 0x8B93A7, dark: 0x6B7488)
 
+    /// Stavy z palety návrhu (`--ok`, `--crit`) — zatím jen kapsle stavu PR v hlavičce (#218).
+    ///
+    /// **Ne systémová `.green` / `.red`.** Kapsle stavu je plná plocha s textem v barvě podkladu
+    /// (`--panel`), a systémová zelená je na to příliš světlá — bílý text na ní není čitelný.
+    /// Zelená a červená z diffu se sem naopak tahat nesmí: ty patří přidanému a odebranému
+    /// řádku a mají jeden zdroj (`DiffLineView.signColor(of:)`), aby se `+` v řádku nerozešlo
+    /// s `+12` v hlavičce nad ním.
+    static let ok = Color(light: 0x1A7F37, dark: 0x3FB950)
+    static let crit = Color(light: 0xCF222E, dark: 0xF85149)
+    /// Nález — puntík revieweera, který něco našel. Vlastní tón mezi `ok` a `crit`, protože
+    /// „něco našel“ není porucha: ta je `crit` a od nálezu se musí poznat.
+    static let find = Color(light: 0xB4560A, dark: 0xE8944A)
+
     /// Zastarání — force push, nálezy proti staré hlavě, vlákno bez místa v dnešním diffu.
     ///
     /// Vlastní token, ne `.orange` (#216): systémová oranžová je **výstraha**, kdežto `--stale`

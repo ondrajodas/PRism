@@ -21,27 +21,49 @@ struct PullRequestHeaderView: View {
             if let detail, !detail.headRef.isEmpty, !detail.baseRef.isEmpty {
                 merge(detail)
             }
-            // Číslo zůstává u repa: v detailu jinde není a `owner/repo#číslo` je tvar, kterým
-            // se PR v tomhle repu píše všude jinde (klíč nálezů, název souboru, commit).
-            // `verbatim`, jinak locale udělá z #21663 „#21 663“.
-            Text(verbatim: "\(pullRequest.repo)#\(pullRequest.number)")
-                .foregroundStyle(.secondary)
+            separator
+            // **Bez čísla** (#218). To se od #218 sází vedle titulku, velké a tlumené, jak ho
+            // má návrh; tady by byla druhá kopie téhož — a `owner/repo#4` je tvar, ve kterém
+            // číslo nikdo nehledá.
+            Text(verbatim: pullRequest.repo.description)
+                .foregroundStyle(Palette.ink2)
                 .textSelection(.enabled)
+            // Tečka jde **před** každou položkou, ne za ní: souhrn checků se u PR bez CI
+            // nekreslí, a tečka za ním by pak visela ve vzduchu.
             checksChip
+            separator
             Link("otevřít na GitHubu", destination: pullRequest.url)
         }
         .font(.callout)
     }
 
-    /// Stav PR jako chip. Slovo, ne jen barevná ikona v seznamu — v detailu je místa dost
-    /// a `draft` se od `open` musí poznat, aniž by se muselo najíždět myší.
+    /// Tečka mezi souřadnicemi, jak ji má návrh (`.pr-meta`). Sama o sobě neříká nic, takže
+    /// ji odečítání nemá číst.
+    private var separator: some View {
+        Text(verbatim: "·")
+            .foregroundStyle(Palette.ink3)
+            .accessibilityHidden(true)
+    }
+
+    /// Stav PR jako **plná kapsle** (#218, `.state-chip`): puntík, slovo a barva na podkladu,
+    /// ne tlumený odznak.
+    ///
+    /// Do #218 to byl text v barvě stavu na patnáctiprocentní výplni — tedy nejtišší prvek
+    /// pruhu, přestože je to údaj, kvůli kterému se na hlavičku dívám první. Návrh ho má jako
+    /// jediné plné pole v celém pruhu.
     private var state: some View {
-        Text(verbatim: pullRequest.state.czechLabel)
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(stateTint.opacity(0.16), in: .capsule)
-            .foregroundStyle(stateTint)
+        HStack(spacing: 5) {
+            Circle()
+                .frame(width: 6, height: 6)
+            Text(verbatim: pullRequest.state.czechLabel)
+        }
+        .font(.subheadline.weight(.semibold))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 3)
+        // Text v barvě **podkladu okna** (`--panel`), ne bíle: v tmavém režimu je bílá na
+        // zelené oslnivá a návrh na ni v obou režimech sází barvu plochy.
+        .foregroundStyle(Palette.surface)
+        .background(stateTint, in: .capsule)
     }
 
     /// `autor chce sloučit větev → base`. Větve jsou v mono, protože je to identifikátor,
@@ -51,13 +73,13 @@ struct PullRequestHeaderView: View {
             Text(verbatim: pullRequest.author)
                 .fontWeight(.medium)
             Text("chce sloučit")
-                .foregroundStyle(.secondary)
             branch(detail.headRef)
             Image(systemName: "arrow.right")
                 .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Palette.ink3)
             branch(detail.baseRef)
         }
+        .foregroundStyle(Palette.ink2)
     }
 
     private func branch(_ name: String) -> some View {
@@ -65,18 +87,24 @@ struct PullRequestHeaderView: View {
             .font(.system(.caption, design: .monospaced))
             .padding(.horizontal, 6)
             .padding(.vertical, 1)
-            .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 5))
+            .background(Palette.raised, in: .rect(cornerRadius: 5))
+            .overlay { RoundedRectangle(cornerRadius: 5).strokeBorder(Palette.lineSoft) }
             .lineLimit(1)
             .truncationMode(.middle)
             .textSelection(.enabled)
     }
 
+    /// Barva kapsle. Všechny čtyři stavy jdou z palety návrhu — systémové `.green` a `.red`
+    /// by v plné kapsli s textem v barvě plochy vyšly příliš světle, a `.purple` s `.secondary`
+    /// by do neutrálů posunutých do modrofialové nesedly vůbec.
     private var stateTint: Color {
         switch pullRequest.state {
-        case .open: .green
-        case .draft: .secondary
-        case .merged: .purple
-        case .closed: .red
+        case .open: Palette.ok
+        case .draft: Palette.ink3
+        // Fialová z návrhu je jen jedna a je to akcent; mergnutý PR je jediné místo, kde ji
+        // nese stav, a plete se s ní jen `Spustit review` o řádek výš.
+        case .merged: Palette.accent
+        case .closed: Palette.crit
         }
     }
 }
@@ -154,6 +182,7 @@ extension PullRequestHeaderView {
     @ViewBuilder fileprivate var checksChip: some View {
         let summary = Policy.summary(of: checks)
         if let worst = summary.worst {
+            separator
             HStack(spacing: 4) {
                 Image(systemName: symbol(of: worst))
                     .font(.system(size: 10))
@@ -188,10 +217,12 @@ extension PullRequestHeaderView {
         }
     }
 
+    /// Z palety návrhu, ne systémová: souhrn stojí v jedné řadě s kapslí stavu PR, a dvě
+    /// různé zelené vedle sebe vypadají jako dva různé významy.
     private func color(of outcome: PullRequestCheck.Outcome) -> Color {
         switch outcome {
-        case .passed: .green
-        case .failed, .cancelled: .red
+        case .passed: Palette.ok
+        case .failed, .cancelled: Palette.crit
         case .running: Palette.accent
         case .skipped: Palette.ink3
         }

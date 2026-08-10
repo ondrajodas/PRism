@@ -18,6 +18,10 @@ struct StatusBarView: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             AppNoticesView(store: store)
+            // Stav pracovní kopie (#218). **Za hláškami**, i když ho návrh kreslí úplně vlevo:
+            // hláška je porucha a ta má mít krajní místo, kdežto kopie je běžný stav. Bez
+            // hlášky — tedy skoro vždycky — vyjde nalevo stejně.
+            WorkingCopyStatusView(store: store)
             Spacer(minLength: 0)
             // Vlevo od útraty a puntíků: souhrn je o **práci**, ne o tom, jestli aplikace funguje.
             // `nil` = nemá se co sčítat (nenačtený seznam, prázdná fronta) — viz `queueSummary`.

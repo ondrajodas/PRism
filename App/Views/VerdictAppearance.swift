@@ -17,9 +17,10 @@ extension ReviewDraft.Verdict {
 
     /// `Vyžádat změny` je **červené**, ne oranžové.
     ///
-    /// Návrh verdiktu z nálezů (`VerdictView`) oranžový zůstává schválně: to je odhad
-    /// aplikace, kdežto tohle je rozhodnutí, které odejde na GitHub. Červená se v tomhle
-    /// okně drží pro blokující věci a GitHub barví „changes requested“ stejně.
+    /// Červená se v tomhle okně drží pro blokující věci a GitHub barví „changes requested“
+    /// stejně. Odhad aplikace se od rozhodnutí, které odejde na GitHub, odlišuje popiskem
+    /// `návrh z nálezů` v panelu (#114) — do #218 na to byl v hlavičce vlastní oranžový odznak
+    /// (`VerdictView`), který se s předvyplněným verdiktem překrýval.
     var tint: Color {
         switch self {
         case .approve: .green

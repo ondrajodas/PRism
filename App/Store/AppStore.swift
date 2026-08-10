@@ -294,6 +294,18 @@ final class AppStore {
         /// její snímek: sadu ještě může změnit odhad jazyka repa a platit má ta, se kterou běh
         /// doopravdy jede.
         let skills: [String]?
+        /// Kdy se běh spustil — hodiny v pruhu průběhu (#218).
+        ///
+        /// **Tady, ne z časové osy.** Osa se při opakování jednoho revieweera míchá s tou
+        /// z minulého běhu a reviewer, který mezitím doběhl, z „běžících“ vypadne; nejstarší
+        /// událost běžících os by se tím posouvala dopředu a hodiny by šly zpátky.
+        let startedAt: Date
+
+        init(task: Task<Void, Never>, skills: [String]?, startedAt: Date = .now) {
+            self.task = task
+            self.skills = skills
+            self.startedAt = startedAt
+        }
     }
 
     /// Review, která spustil **automat**. Ruční se pozná tím, že tady není — a jen ta

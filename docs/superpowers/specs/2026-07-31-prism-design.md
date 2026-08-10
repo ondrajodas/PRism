@@ -412,16 +412,23 @@ společné prefixy zaberou většinu šířky.
 
 Horní lišta detailu: kdo co našel a co se s tím navrhuje.
 
-- **Chip na reviewera** se stavem: `N nálezů`, `čisté`, `běží`, `selhalo`, `timeout · N`
-  a `nejisté`. Ten poslední je běh, který doběhl, ale **nezavolal `ReportFindings`** nebo
-  se mu ztratil nález — takový se nesmí tvářit jako čistý. Stejné pravidlo jako u návrhu
-  verdiktu.
+- **Chip na reviewera** je od #218 **puntík, zkrácené jméno a počet** (`● php-review 2`).
+  Barvu stavu nese puntík; slovo zůstává jen tam, kde není co počítat — `neběželo`, `selhalo`,
+  `nejisté`, `timeout`, `přerušeno`. `nejisté` je běh, který doběhl, ale **nezavolal
+  `ReportFindings`** nebo se mu ztratil nález — takový se nesmí tvářit jako čistý. Stejné
+  pravidlo jako u návrhu verdiktu.
+- **Stav se musí dát přečíst, ne jen vidět.** Nápověda i `accessibilityValue` nesou celou větu
+  (`čisté, žádný nález`), protože v kapsli po sazbě podle návrhu zbyla jen barva tečky.
 - **Klik na chip filtruje** nálezy toho reviewera z bublin i z tabulky; vypnutý je
   ztlumený. Podrobnost selhání (stderr) visí na nápovědě.
 - **Reviewer mimo nastavenou sadu** se přidá na konec — jinak by nešlo poznat, odkud se
   jeho nálezy v tabulce vzaly.
-- **Návrh verdiktu vpravo**, vizuálně jako doporučení. Aplikace na GitHub nic neposílá,
-  takže na něm nevisí žádná akce; u zastaralého záznamu se říká, proč návrh není.
+- **Vedle chipů je pruh běhu** (#218): dráha s podílem hotového a popisek
+  `test-coverage · 2 z 3 hotovo · 1:12`. Bez běhu z pruhu zbude jen řada chipů.
+- **Návrh verdiktu v hlavičce není** (#218) — změna proti původnímu znění, kde stál vpravo jako
+  doporučení. Od #114 se jím předvyplňuje verdikt v panelu `Moje review`, takže v hlavičce byl
+  druhou a hlasitější kopií téhož. Že je to jen návrh, říká panel popiskem `návrh z nálezů`;
+  aplikace na GitHub sama pořád nic neposílá.
 
 ### Tab Průběh (#22)
 
@@ -507,8 +514,9 @@ u review nejčastější otázka („dělá to totéž jako předtím?“).
 ### Stavový řádek (#31)
 
 Trvalý pruh na spodku okna, přes celou šířku a mimo `NavigationSplitView`. Vlevo hlášky
-o stavu celé aplikace (rozbitá konfigurace, pozastavený automat, nečitelné soubory), vpravo
-puntík u GitHubu a u Claude. Odpovídá na otázku „je to na mojí straně, nebo mají oni
+o stavu celé aplikace (rozbitá konfigurace, pozastavený automat, nečitelné soubory) a od #218
+**stav pracovní kopie otevřeného PR** (`Pracovní kopie připravená · HEAD 4f2ac91`, tiše a bez
+kapsle), vpravo puntík u GitHubu a u Claude. Odpovídá na otázku „je to na mojí straně, nebo mají oni
 výpadek?“ dřív, než se člověk začne prohrabávat konkrétní chybou.
 
 - **Pět stavů:** ○ nezjištěno, ● funguje, ● incident na komponentě, kterou používáme,
@@ -1328,3 +1336,13 @@ Dvě rozhodnutí, která z rozpisu M8 nejsou vidět a stála za rozdělení na p
 | V dávce se pauza na proklikání posouvá **před merge** (#231) | Nechat ji před prvním pushem, jak platí u jednoho issue; nebo ji v dávce zrušit úplně | Subagent nemá jak zavolat člověka, takže by čekáním blokoval sebe i svůj slot — a tři větve čekající na jednu odpověď je sériový běh se třemi worktrees navrch. Zrušit ji nejde: zelené testy nejsou důkaz, že se to chová, jak se chtělo. Posun obstojí proto, že smysl pauzy je „dokud je změna levná na přepsání“, a **PR před mergem levný je**. Nemění se, že se na obrazovku musí napřed podívat ten, kdo změnu udělal |
 | **Slot přiděluje orchestrátor, ne subagent** (#231) | Nechat subagenta, ať si slot zvolí sám podle jména worktree | Dva subagenti si zvolí stejně a sejdou se v jedné cache — a hlavně: subagent, který na slot zapomene, buildí **hlavní** instanci a přepíše aplikaci, se kterou se zrovna pracuje, i s jejími nálezy a drafty. Volba, která má takový nejhorší případ, nepatří tomu, kdo o ostatních bězích neví. Proto je slot první příkaz v zadání, ne položka v seznamu úkolů |
 | Subagent **nemerguje a nevydává release** (#231) | Nechat každého subagenta dotáhnout své issue až do konce, jak to dělá sériový běh | Pořadí mergů je rozhodnutí nad **všemi** běžícími větvemi: první jde ta, na které ostatní stojí, a po každém mergi se zvažuje, jestli zbylé zvedat. Subagent na ostatní větve nevidí. Release je navíc jeden na dávku — verze je značka na časové ose, takže pět verzí za jedno odpoledne by říkalo něco, co není pravda |
+| Hlavička PR **nemá pravý sloupec** (#218) | Nechat `Spustit review`, stav kopie a návrh verdiktu pod sebou vpravo, jak to vzniklo po kusech u #174, #21 a #183 | Tři hlasité barvy pod sebou (fialová, zelená, oranžová) vypadaly jako semafor a přebíjely titulek vlevo — a návrh v hlavičce žádný pravý sloupec nemá. Stav kopie je **stav prostředí**, takže se přestěhoval do stavového řádku vedle dostupnosti `gh` a `claude`; návrh verdiktu je od #114 předvyplněný v panelu `Moje review`, takže v hlavičce byl druhou a hlasitější kopií téhož. Zbylo jediné akcentové místo, `Spustit review` |
+| `VerdictView` se **smazal**, ne schoval (#218) | Nechat ho v repu pro případ, že se návrh verdiktu bude chtít ukázat ještě někde | Byl to jeho jediný čtenář, takže by z něj zbyl kód, který nikdo nekreslí — a to je přesně ta mrtvá váha, na kterou se pak někdo spolehne. Samotný návrh (`Policy.suggestedVerdict`) zůstává: čte ho `AppStore.effectiveVerdict`, kterým panel verdikt předvyplňuje |
+| Selhaný checkout **zůstal bannerem v hlavičce** (#218) | Přesunout ho do stavového řádku spolu se zbytkem stavů pracovní kopie | Je to porucha, ne stav prostředí, a jediné, z čeho se u ní pozná, co dělat dál, je celý výstup `gitu` — ten se do pruhu vysoký jeden řádek nevejde a zkrácený na větu neřekne nic. Tatáž úvaha jako u `StaleHeadView`: co se ukazuje jen výjimečně, smí zabrat místo, protože ho jindy nezabírá |
+| Odznak u `Přehledu` počítá **novinky od minule**, ne dlaždice (#218) | Vzít číslo z návrhu doslova — v mockupu je u `Přehledu` čtyřka a tab má právě čtyři dlaždice s fakty | Počet dlaždic je konstanta, takže by odznak ukazoval pořád totéž a nikdy nic neřekl. Odznak v tomhle okně znamená „kolik je toho k přečtení“ (tak ho zavedlo #183 u `Konverzace`) a v `Přehledu` je to blok „od tvé poslední návštěvy“, kterým tab začíná. `VisitChanges.count` proto sečte všech pět kategorií — odznak musí slíbit přesně to číslo, které blok uvnitř vypíše |
+| Počet v kapsli revieweera je **jen u doběhlého běhu** (#218) | Psát `0` u všech stavů, ať je řada kapslí zarovnaná | `0` znamená „doběhlo a nic nenašlo“. U běhu, který spadl, vytimeoutoval nebo nikdy nezačal, by to bylo tvrzení, které data neunesou — a od #218 nenese stav ani slovo, takže by ho nic neopravilo. Tyhle stavy proto zůstávají u slova (`neběželo`, `selhalo`, `nejisté`), a stav se dá **přečíst** z nápovědy a z `accessibilityValue` |
+| Dráha průběhu se během přípravy kopie **nekreslí** (#218) | Nakreslit ji prázdnou, jak ji má návrh, nebo ji rozhýbat animovaným přechodem | Prázdná dráha vypadá jako zaseknutý běh, přestože se zrovna klonuje — a podíl se během přípravy nemá z čeho spočítat, protože se ještě neví, kolik reviewerů poběží. Že se něco děje, drží tikající hodiny v popisku (`připravuji pracovní kopii · 0:04`), a ty říkají navíc i jak dlouho už to trvá. Jakmile se ví `finished/total`, dráha se objeví — a **běžící díl** je v ní tiše taky, jinak by nad prvním reviewerem ze tří zůstala prázdná celé minuty |
+| Hodiny běhu jdou z **`RunningReview.startedAt`**, ne z časové osy (#218) | Vzít nejstarší událost os, které tenhle běh pouští — data už v okně jsou | Osa se při opakování jednoho revieweera (#149) míchá s tou z minulého běhu, takže se filtruje podle běžících; jenže reviewer, který doběhne, z „běžících“ vypadne a nejstarší událost zbytku je pozdější — **hodiny by šly zpátky**. Začátek běhu je vlastnost běhu, takže patří k němu |
+| Poměr změny se zaokrouhluje **dolů** a zbytek zůstává šedý (#218) | Rozdělit všech pět čtverečků, ať pruh vypadá celý | Nahoru by z jednoho odebraného řádku ve dvousetřádkovém PR udělalo celý čtvereček, tedy pětinu změny — a pruh má říkat poměr, ne přítomnost. Dolů to navíc sedí s ukázkou z návrhu (`+248 −96` → tři zelené, jeden červený, jeden šedý), takže se tím zároveň ověřilo, že se čte správně. Prázdný diff dá **žádný** čtvereček: pruh, který je pořád stejný, nic neříká |
+| Čtverečky poměru berou zelenou a červenou z **`DiffLineView.signColor`**, ne z nové palety (#218) | Použít `Palette.ok` a `Palette.crit`, které u #218 stejně přibyly | Mluví o tomtéž, o čem `+X −Y` hned vedle nich, a to má od #156 jediný zdroj barvy společně se znakem změny v řádku diffu. Dvě sady by se rozešly a `+` v řádku by bylo jinak zelené než čtvereček nad ním. Nové tokeny jsou naopak pro **odznaky a puntíky** (kapsle stavu PR, chip revieweera, souhrn checků), kde plná kapsle s textem v barvě plochy systémovou zelenou neunese |
+| `Palette.ok`, `find` a `crit` **vznikly** (#218) — změna proti #219 | Držet se rozhodnutí od #219, že token pro červenou a zelenou nevzniká, dokud se nepřehodí všech třicet míst naráz | Námitka u #219 byla, že token použitý ve dvou místech vyrobí dvě „skoro stejné“ červené. Tady je ale případ, kdy systémová barva **nefunguje**, ne jen vypadá jinak: kapsle stavu PR je plná plocha s textem v barvě podkladu a systémová zelená je na to příliš světlá. Rozsah je proto vymezený tak, aby se ty dvě sady nepletly — tokeny jsou pro **odznaky a puntíky**, kdežto diff (řádky, `+X −Y`, čtverečky poměru) zůstává na `DiffLineView.signColor`. Přehození zbylých míst v `App/Views/` je pořád vlastní issue |
