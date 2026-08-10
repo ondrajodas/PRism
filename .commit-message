@@ -1,0 +1,7 @@
+fix: keep the last word when the cut lands on a space (#200)
+
+Shortening dropped the last word unconditionally, so a summary whose
+hundredth character was a space lost a word that had fit — five
+characters of the banner given away for nothing. The word is now dropped
+only when the cut splits it. Found by Copilot on #248; the new table case
+was verified by putting the old behaviour back.

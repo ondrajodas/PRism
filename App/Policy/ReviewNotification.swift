@@ -231,11 +231,25 @@ extension Policy {
     private static func shortened(_ text: String) -> String {
         guard text.count > notificationFindingLimit else { return text }
         let cut = text.prefix(notificationFindingLimit)
-        // Řeže se na hranici slova, ať poslední slovo není půlka. Jediné dlouhé slovo
-        // (cesta, hash) hranici nemá, takže se řeže natvrdo — jinak by nezbylo nic.
-        let words = cut.split(separator: " ").dropLast()
-        let trimmed = words.joined(separator: " ")
+        // Poslední slovo se zahazuje jedině tehdy, když ho řez **rozpůlil**. Když `cut` končí
+        // na hranici slova, vešlo se celé — a `dropLast()` na slepo by ho sebral zbytečně,
+        // takže by z banneru zmizel kus textu, na který bylo místo (nález Copilota na #248).
+        let kept = splitsAWord(cut, in: text)
+            ? cut.split(separator: " ").dropLast().joined(separator: " ")
+            : String(cut)
+        // Mezera před třemi tečkami vypadá jako překlep, a zbýt tam po řezu může.
+        let trimmed = kept.trimmingCharacters(in: .whitespaces)
+        // Jediné dlouhé slovo (cesta, hash) hranici nemá, takže se řeže natvrdo — jinak by
+        // nezbylo nic.
         return "\(trimmed.isEmpty ? String(cut) : trimmed)…"
+    }
+
+    /// Rozpůlil řez slovo? Ano jedině tehdy, když na obou stranách hranice stojí něco jiného
+    /// než mezera.
+    private static func splitsAWord(_ cut: Substring, in text: String) -> Bool {
+        guard let last = cut.last, !last.isWhitespace else { return false }
+        guard let next = text.dropFirst(cut.count).first else { return false }
+        return !next.isWhitespace
     }
 
     /// Věta a za ní detail, když nějaký je.

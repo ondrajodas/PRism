@@ -115,6 +115,20 @@ struct ReviewNotificationTests {
         #expect(lines?.first?.contains("autoriz…") == false)
     }
 
+    @Test("Slovo, které se do limitu vešlo celé, se nezahodí")
+    func keepsAWordThatFits() {
+        // `dropLast()` na slepo bral poslední slovo i tehdy, když řez padl přesně na mezeru —
+        // z banneru pak zmizel kus textu, na který bylo místo (nález Copilota na #248).
+        // Sto znaků tady končí za dvacátým `abcd`, takže se má vejít celé.
+        let finding = makeFinding(category: nil, summary: String(repeating: "abcd ", count: 30))
+
+        let first = body(.completed(findings: 1), topFinding: finding)?.split(separator: "\n").first
+
+        #expect(first?.hasSuffix("abcd…") == true)
+        // 99 znaků textu (20 × `abcd` a 19 mezer) plus tři tečky; se starým chováním o pět míň.
+        #expect(first?.count == Policy.notificationFindingLimit)
+    }
+
     @Test("Jediné dlouhé slovo se ořízne natvrdo, ne na nic")
     func cutsASingleLongWord() {
         // Cesta nebo hash hranici slova nemá — kdyby se řezalo jen po slovech, nezbylo by nic.

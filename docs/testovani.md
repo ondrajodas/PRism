@@ -366,7 +366,9 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
     banner — testuje se počtem řádků těla, ne obsahem. Ten druhý případ **našel test**, ne
     úvaha.
   - **Dlouhý souhrn se zkrátí**, a to na hranici slova; jediné dlouhé slovo (cesta, hash) se
-    ořízne natvrdo, ať nezbude prázdno.
+    ořízne natvrdo, ať nezbude prázdno. Třetí případ přibyl z Copilot review na #248: když řez
+    padne přesně na mezeru, **poslední slovo se vešlo celé** a nesmí se zahodit. Ověřeno
+    vloženou regresí — text se zkrátil o pět znaků, na které bylo místo.
   - **`AppStore` posílá nález i počet blokujících z téhož záznamu** — test se dvěma nálezy
     (`style` a `correctness`) hlídá, že titulek nemluví o blokujícím a řádek pod ním o kosmetice.
 
