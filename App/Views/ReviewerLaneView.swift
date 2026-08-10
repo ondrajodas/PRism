@@ -150,7 +150,8 @@ struct ReviewerLaneView: View {
         .frame(height: 23)
         .background(background(of: phase.state), in: .rect(cornerRadius: 5))
         .accessibilityElement(children: .combine)
-        .accessibilityValue(ReviewerLaneText.state(lane.state))
+        // Stav **té fáze**, ne celé dráhy: ten by u všech fází přečetl totéž.
+        .accessibilityValue(ReviewerLaneText.phase(phase.state))
     }
 
     /// Značka za popiskem. **`idle` nemá žádnou** — fáze, na kterou nedošlo, není ani hotová,

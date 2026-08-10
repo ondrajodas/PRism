@@ -22,6 +22,20 @@ enum ReviewerLaneText {
         }
     }
 
+    /// Jak dopadla **jedna fáze** — pro čtečku obrazovky, která v chipu vidí jen popisek a značku.
+    ///
+    /// Musí to být stav té fáze, ne stav celé dráhy: se stavem dráhy by čtečka u všech fází přečetla
+    /// totéž, tedy „doběhlo“ i nad fází, na kterou nedošlo. Nálezem Copilota na #258.
+    static func phase(_ state: ReviewerLane.PhaseState) -> String {
+        switch state {
+        case .done: "hotovo"
+        case .running: "právě běží"
+        case .failed: "selhalo"
+        case .stopped: "nedoběhlo"
+        case .idle: "nedošlo na ni"
+        }
+    }
+
     /// Věta pod dráhou: co se právě děje, nebo čím to skončilo. `nil` = není co dodat.
     ///
     /// U spadlé session je `nil` schválně — důvod má vlastní blok s koncem logu a dvě věty

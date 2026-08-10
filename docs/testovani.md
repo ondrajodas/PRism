@@ -268,7 +268,9 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   vložením regrese (řádek na nález místo na místo shodí obě tvrzení naráz). K tomu řazení podle
   každého sloupce v obou směrech, invariant **odmítnuté naspod ať se klikne na cokoli**, a to, že
   setřídění nemění počty. Šířky sloupců výčtem: co odpadne v úzkém okně, že se sloupce vejdou do
-  dané šířky a že nulová šířka nedá nulové shrnutí.
+  dané šířky a že nulová šířka nedá nulové shrnutí. K tomu **identita řádku přes všechna řazení**
+  (nález Copilota): index po setřídění by při kliknutí do hlavičky přepsal identitu každému řádku,
+  takže by SwiftUI vzal tabulku jako nový seznam a zahodil rozbalení.
 - **Proč je prázdno v nálezech (#242)** — `Policy.findingsEmptyReason` výčtem. Testy tvrdí hlavně
   to, co se **nesmí** stát: schované filtrem se nesmí slít s `clean` a spadlá session zůstane
   spadlá i tehdy, když jiný reviewer ještě běží (jednořádková záměna pořadí podmínek by z ní
@@ -284,7 +286,9 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
 - **Věty dráhy (#242)** — `ReviewerLaneText` rozlišuje **tři** doběhlé konce (nahlásilo nálezy /
   nahlásilo nulu / nenahlásilo nic) a test hlídá, že se u toho třetího **nikde neslíbí čisto**.
   Plus že slova stavů jsou různá (`spadlo` ≠ `nedoběhlo`) a že se v běžícím kroku zkracuje cesta
-  o pracovní strom.
+  o pracovní strom. A že **stav fáze má jiné slovo než stav dráhy** (nález Copilota): čtečka
+  obrazovky u chipu vidí jen popisek, takže se stavem dráhy by u všech fází přečetla „doběhlo“ —
+  i nad tou, na kterou nedošlo.
 - **Panel s mým review se rozloží sám (#242)** — a je to ten druh věci, který se rozbije potichu:
   poznámka do těla review přidaná z diffu spadne do panelu, takže se složený panel musí rozložit,
   jinak text zmizí za proužek na hraně okna. Testuje se ve store (proto se tam ta dvě pole

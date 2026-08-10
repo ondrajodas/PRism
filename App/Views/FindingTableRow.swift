@@ -10,9 +10,13 @@ import Foundation
 /// Texty jednotlivých nálezů si nese jako `FindingRow` — formátování místa a nápověd tím zůstává
 /// na jednom místě, společném s kartami v panelu.
 struct FindingTableRow: Identifiable, Hashable {
-    /// Pořadí ve výchozím řazení. `FindingGroup` identitu nemá a přidávat mu ji kvůli tabulce by
-    /// znamenalo měnit `Policy` kvůli zobrazení.
-    let id: Int
+    /// Identita řádku — **z místa, ne z pořadí**.
+    ///
+    /// Index po setřídění by znamenal, že kliknutí do hlavičky sloupce přepíše identitu každému
+    /// řádku: SwiftUI by pak tabulku vzal jako úplně nový seznam, zahodil rozbalení a překreslil
+    /// všechno. Nález bez místa `FindingPlace` nemá, takže tam nastupuje jeho identita napříč
+    /// běhy (`Policy.key`) — tatáž, kterou se klíčují odmítnutí. Nálezem Copilota na #258.
+    let id: String
     let group: FindingGroup
     /// Nálezy skupiny, **nikdy prázdné** — `FindingGroup` to garantuje.
     let findings: [FindingRow]
@@ -47,10 +51,9 @@ struct FindingTableRow: Identifiable, Hashable {
     ) -> [FindingTableRow] {
         let sorted = Policy.sorted(findings, by: sort, categories: categories, dismissals: dismissals)
         return Policy.groups(of: sorted, dismissals: dismissals)
-            .enumerated()
-            .map { index, group in
+            .map { group in
                 FindingTableRow(
-                    id: index,
+                    id: identity(of: group),
                     group: group,
                     findings: FindingRow.preserving(
                         group.findings,
@@ -65,5 +68,16 @@ struct FindingTableRow: Identifiable, Hashable {
                         : nil
                 )
             }
+    }
+
+    /// Identita skupiny: `file:line`, a u nálezu bez místa identita toho nálezu.
+    ///
+    /// Prefix `place`/`finding` proto, aby se ty dva prostory nemohly potkat — cesta, která by se
+    /// jmenovala jako klíč nálezu, je nepravděpodobná, ale identita nemá stát na nepravděpodobnosti.
+    private static func identity(of group: FindingGroup) -> String {
+        guard let place = FindingPlace(group) else {
+            return "finding:\(Policy.key(of: group.findings[0]).rawValue)"
+        }
+        return "place:\(place.file):\(place.line.map(String.init) ?? "")"
     }
 }

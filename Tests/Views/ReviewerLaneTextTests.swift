@@ -29,6 +29,19 @@ struct ReviewerLaneTextTests {
         #expect(ReviewerLaneText.state(.stopped) == "nedoběhlo")
     }
 
+    /// Fáze má vlastní slovo pro každý stav — se stavem dráhy by čtečka obrazovky u všech fází
+    /// přečetla totéž, tedy „doběhlo“ i nad fází, na kterou nedošlo.
+    @Test("Stav fáze má vlastní slovo, různé od stavu dráhy")
+    func phaseStates() {
+        let states: [ReviewerLane.PhaseState] = [.done, .running, .failed, .stopped, .idle]
+        let words = states.map(ReviewerLaneText.phase)
+
+        #expect(Set(words).count == states.count)
+        #expect(ReviewerLaneText.phase(.idle) == "nedošlo na ni")
+        // A nesmí to být totéž co stav dráhy: „doběhlo“ patří dráze, „hotovo“ fázi.
+        #expect(ReviewerLaneText.phase(.done) != ReviewerLaneText.state(.finished))
+    }
+
     @Test("Doběhlá session s nálezy je řekne v množném čísle")
     func finishedWithFindings() throws {
         let lane = try lane { timeline in

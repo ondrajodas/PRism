@@ -77,6 +77,29 @@ struct FindingsTallyTests {
         #expect(Policy.findingsBadge(of: tally) == .blocking(4))
     }
 
+    /// Identita řádku nesmí být pořadí: kliknutím do hlavičky sloupce by se každému řádku změnila,
+    /// takže by SwiftUI vzal tabulku jako nový seznam a zahodil rozbalení. Nálezem Copilota na #258.
+    @Test("Řádek si identitu drží přes všechna řazení")
+    func rowIdentityIsStable() {
+        let findings = [
+            makeFinding(file: "a.php", line: 10, summary: "aaa"),
+            makeFinding(file: "b.php", line: 2, category: "style", summary: "zzz"),
+            makeFinding(file: nil, line: nil, category: "docs", summary: "bez místa"),
+        ]
+
+        let identities = FindingTableRow.rows(of: findings, sort: nil).map(\.id)
+        for sort in [
+            FindingTableSort(column: .severity, isAscending: true),
+            FindingTableSort(column: .summary, isAscending: true),
+            FindingTableSort(column: .location, isAscending: false),
+        ] {
+            let sorted = FindingTableRow.rows(of: findings, sort: sort).map(\.id)
+            #expect(Set(sorted) == Set(identities), "řazení \(sort) přepsalo identity")
+        }
+        // A jsou různé — kdyby se sesypaly do jedné, `ForEach` by kreslil jeden řádek.
+        #expect(Set(identities).count == 3)
+    }
+
     /// Řazení ani filtr nesmí počet měnit — jinak by odznak po kliknutí na hlavičku sloupce
     /// ukázal něco jiného než před ním.
     @Test("Setřídění nemění, kolik řádků a nálezů z nich vyjde", arguments: [
