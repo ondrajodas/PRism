@@ -423,7 +423,10 @@ editor **nepřepíše** — místo formuláře ukáže chybu a nabídne soubor o
 nastavení vepředu, hlavní okno se lehce rozostří.
 
 **Dokud je okno otevřené a PRism je vpředu, zůstává před hlavním oknem** — kliknutí do hlavního
-okna ho nezaklopí. Nad *cizími* aplikacemi ale neplave: jak PRism přestane být vpředu, okno spadne
+okna ho nezaklopí. **Fokus tím ale přejde na hlavní okno**: titulek nastavení zešedne a klávesy
+jdou jinam, dokud se do nastavení nekliká znovu nebo se nedá `⌘,`. Není to opomenutí — klíčové okno
+je v macOS právě jedno a udržet ho ve dvou nejde; co se u toho měřilo (včetně toho, že utility panel
+nepomůže ani vzhledem), je v [`docs/architektura.md`](docs/architektura.md). Nad *cizími* aplikacemi ale neplave: jak PRism přestane být vpředu, okno spadne
 na normální hladinu a leží pod nimi jako každé jiné okno; po návratu do aplikace je zpátky vpředu
 i s rozepsanou hodnotou v poli. Zavřené okno se nevrací. Do #243 to bylo obyčejné okno, takže se za
 hlavním oknem schovalo celé (středí se v něm) a vypadalo to, že se zavřelo — přitom bylo pořád

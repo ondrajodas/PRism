@@ -1124,6 +1124,24 @@ pozadí **spadlo zpátky na `layer 0`**, tedy nad cizí aplikací nestojí. Poř
   porucha okna, přitom je to porucha měření — jméno okna se proto **ověří** dřív, než se křížek
   zmáčkne, aby se omylem nezavřelo hlavní okno.
 
+**Jestli okno „vypadá aktivně“, se pozná jedině screenshotem** (#243). Klíčové okno se od
+neklíčového liší třemi věcmi a všechny tři kreslí systém, ne aplikace: barevný semafor, jasný
+titulek a modré vybrání v seznamu. `screencapture` se musí pustit **z toho samého skriptu**, který
+aplikaci vytáhl dopředu (`do shell script` uvnitř `osascript`) — jinak se mezitím dostane vpředu
+terminál a vyfotí se on. Rám okna dá accessibility (`position`, `size` okna).
+
+```applescript
+tell application id bid to activate
+delay 2
+do shell script "screencapture -x -R" & x & "," & y & "," & w & ",34 /tmp/titulek.png"
+```
+
+Takhle se u #243 doložilo, že `.utilityWindow` v `styleMask` obyčejného okna nedělá nic a že
+i skutečnému utility panelu titulek zešedne — tedy že „aspoň ať to nevypadá deaktivovaně“ nejde.
+**Chování AppKitu se přitom nemusí zkoušet v aplikaci**: dvě okna a dva screenshoty se dají udělat
+v samostatném programu na třicet řádků (`swiftc /tmp/…swift`), který si sám sáhne na `makeKey()`
+a vyfotí se. Je to rychlejší než rebuild a odpověď je stejně platná.
+
 A dvě věci o měření samotném: čekat se musí **velkoryse** (aktivace aplikace trvá i přes sekundu
 a s krátkou pauzou vyjde „okno tam není“ tam, kde se jen ještě neukázalo), a měřit se má
 **z čistého stavu** — okno nechané otevřené z předchozího běhu skriptu, nebo přebylé okno hlavní

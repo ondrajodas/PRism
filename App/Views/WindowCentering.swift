@@ -94,7 +94,14 @@ enum AuxiliaryWindowLevel {
         appIsActive ? .floating : .normal
     }
 
-    /// Nastaví hladinu okna. **Nic jiného nedělá** — okno nepřesouvá ani neskrývá.
+    /// Nastaví hladinu okna. **Nic jiného nedělá** — okno nepřesouvá, neskrývá a nesahá mu na
+    /// `styleMask`.
+    ///
+    /// `styleMask.insert(.utilityWindow)` je tady **vyzkoušené a zamítnuté** (#243): mělo držet
+    /// „aktivní“ vzhled titulku, i když je klíčové hlavní okno, a na okně, které není `NSPanel`,
+    /// **nedělá nic** — změřeno screenshotem titulku, zešedl stejně jako předtím. A na skutečném
+    /// utility panelu (vyzkoušeno v samostatném pokusu) zešedne titulek i semafor taky, takže tou
+    /// cestou se vzhled neudrží ani u panelu.
     static func apply(to window: NSWindow, appIsActive: Bool) {
         window.level = level(appIsActive: appIsActive)
     }

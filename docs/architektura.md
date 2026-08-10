@@ -1749,6 +1749,25 @@ Věci, které se u toho nemají rozbít:
   - **Změna proti #127**, kde stálo, že se hladina nechává normální a `.floating` je vyzkoušené
     a zamítnuté, protože kliknutí mimo okno ho má odklidit. Odklidit ale znamená zavřít, a to se
     neděje: `willClose` nepřijde nikdy. Zamítnutí tedy stálo na chování, které aplikace neměla.
+  - **Fokus hladina nedrží, a držet nejde** — to je změřená hranice, ne opomenutí. Kliknutí do
+    hlavního okna z něj udělá klíčové okno, takže pomocnému oknu zešedne titulek se semaforem
+    a v seznamu vlevo zbledne modré vybrání; klávesy jdou do hlavního okna. Co se u toho změřilo:
+    - **Klíčové okno je v aplikaci právě jedno.** Vyzkoušeno v samostatném pokusu s plovoucím
+      utility panelem: po `main.makeKey()` je `panel.isKeyWindow == false`. Vrátit klíč zpátky jde
+      (`panel.makeKey()`), takže „neztratit fokus“ neznamená udržet ho, ale **vzít ho zpátky**.
+    - **Utility panel s tím nepomůže.** Titulek i semafor mu zešednou úplně stejně jako obyčejnému
+      oknu (doloženo screenshotem titulku panelu ve dvou stavech), takže ani „aspoň nevypadat
+      deaktivovaně“ tou cestou nejde. `styleMask.insert(.utilityWindow)` na okně, které `NSPanel`
+      není (a scény `Settings` i `Window` si svoje `NSWindow` vyrábějí samy), **nedělá vůbec nic** —
+      taky změřeno screenshotem.
+    - **Brát klíč zpátky se zamítlo.** Šlo by to (pozorovat `didBecomeKeyNotification` cizího okna
+      a zavolat `makeKey()` na svém), ale znamená to, že do hlavního okna nejde psát, dokud je
+      pomocné okno otevřené — a co je horší, kliknutí do rozepsaného komentáře v hlavním okně by
+      poslalo text **do pole v nastavení**. To je zápis do jiného místa, než kam se člověk kouká,
+      tedy horší vada než zešedlý titulek.
+    - **Po přepnutí aplikace zůstává klíč tam, kde byl.** Změřeno: když bylo klíčové hlavní okno,
+      je klíčové i po návratu do aplikace, ačkoli je pomocné okno vidět před ním. `⌘,`
+      (resp. položka v menu) klíč vrátí.
 - **Rozbitý soubor editor nepřepíše.** Když `configurationFailure` není `nil`, místo
   formuláře je chyba s nabídkou soubor otevřít nebo načíst znovu. Uložit přes něj výchozí
   hodnoty by zahodilo něco, co uživatel psal — kvůli chybějící čárce.
