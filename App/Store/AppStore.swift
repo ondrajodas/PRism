@@ -552,6 +552,10 @@ final class AppStore {
     }
 
     /// Co nabídnout ve filtru — z **plného** seznamu, sjednocené s aktivním filtrem.
+    ///
+    /// `pullRequests`, ne `visiblePullRequests`, a od #199 to platí i pro **počty** u položek:
+    /// ze zúženého seznamu by odškrtnutí jednoho repa srazilo počty u všech ostatních na nulu,
+    /// takže by z nabídky nešlo poznat, co zapnutí položky udělá.
     var filterOptions: PullRequestFilterOptions {
         Policy.filterOptions(in: pullRequests, filter: filter)
     }

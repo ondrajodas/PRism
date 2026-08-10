@@ -43,7 +43,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
 | `QueueSummary` | Souhrn fronty: počet PR, PR s blokujícím nálezem a PR s rozdělaným review (#155) |
-| `PullRequestFilter`, `PullRequestFilterOptions`, `ListEmptyReason` | Zúžení seznamu na repa a autory (#117), nabídka hodnot a důvod prázdna. **Není `Codable`** — nepřežije restart |
+| `PullRequestFilter`, `PullRequestFilterOptions`, `PullRequestFilterOption`, `ListEmptyReason` | Zúžení seznamu na repa a autory (#117), nabídka hodnot **s počtem PR u každé** (#199) a důvod prázdna. **Není `Codable`** — nepřežije restart |
 | `DiffBlock`, `DiffPairBlock` | Souvislý úsek řádků jako jeden text (#157) — kvůli výběru přes víc řádků. **Není `Codable`**, je to věc vykreslení |
 | `ReviewDraft` | Rozdělané review: PR, `headSha`, tělo, verdikt, komentáře. Verdikt je vnořený `ReviewDraft.Verdict` |
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
@@ -956,11 +956,22 @@ Věci, které se u toho nemají rozbít:
 
 ## `App/Support/`
 
-Sdílené drobnosti, které nepatří žádnému modulu. Zatím jedna: `WorkCoordinator` (dřív
-`CheckoutCoordinator`) — souběžná volání nad stejným klíčem spojí do jedné práce a zrušení
-posledního čekajícího zruší i tu práci. Používá ho `RepoCheckout` (klony, stromy)
-i `ReviewRunner` (běhy). Kdyby si každý držel vlastní kopii, existovala by ta jemná logika
-kolem rušení dvakrát.
+Sdílené drobnosti, které nepatří žádnému modulu:
+
+| Soubor | Co dělá |
+|---|---|
+| `WorkCoordinator` (dřív `CheckoutCoordinator`) | Souběžná volání nad stejným klíčem spojí do jedné práce a zrušení posledního čekajícího zruší i tu práci |
+| `Plural` | Počet s podstatným jménem v českém tvaru (`1 nález`, `3 nálezy`, `5 nálezů`); `word(_:one:few:many:)` dá jen tvar slova |
+| `String.singleLine` | Text bez řádkových zlomů, ty se nahradí mezerou |
+| `Collection[safely:]` | Prvek na indexu, nebo `nil` mimo rozsah |
+| `Clipboard` | Zápis do schránky |
+
+Společné je jim to, proč tady jsou: **kopie jednoho pravidla se rozejdou.** `WorkCoordinator`
+používá `RepoCheckout` (klony, stromy) i `ReviewRunner` (běhy) a dvě kopie by znamenaly dvakrát
+tu jemnou logiku kolem rušení. `Plural` vznikl ze tří `switch`ů, které se lišily; `singleLine`
+z pěti kopií téhož `split(whereSeparator: \.isNewline)` — hlavička bubliny, přehled draftu,
+jeho přenos, syntetická hlavička diffu a od #200 tělo notifikace. Stačilo by, aby jedna z nich
+řešila `\r\n` a ostatní ne.
 
 ## `RepoCheckout` (`App/Checkout/`)
 
@@ -1213,10 +1224,12 @@ Věci, které se u toho nemají rozbít:
   těmi dvěma gettery je jediné, co dělí filtr od mazání cache**. Zúžený čte jedině seznam PR
   a detail vybraného řádku; plný čte `knownRepositories` (okno nastavení musí vidět i repo, které
   jsem si schoval — je to zrovna to, u kterého chci něco přenastavit), `queueSummary` (souhrn je
-  o obsahu fronty, ne o pohledu — #155), `handleNotificationClicks`, `startAutomaticReviews` po
-  zahození nálezů (#81) a úklid, který bere `summaries` z tiku. Kdyby na zúženém seznamu viselo
-  cokoli z úklidu (`forget(whatIsNotIn:)`, `CacheEviction`, `ReviewStore.cleanUp`, rušení
-  automatických review), **zapnutí filtru by zahodilo diffy a konverzace, smazalo cache a zrušilo
+  o obsahu fronty, ne o pohledu — #155), `filterOptions` (nabídka filtru i **počty u jejích
+  položek** — #199; ze zúženého seznamu by čísla klesala podle právě odškrtaného a nabídka by
+  přestala odpovídat na otázku „co se stane, když tohle zapnu“), `handleNotificationClicks`,
+  `startAutomaticReviews` po zahození nálezů (#81) a úklid, který bere `summaries` z tiku.
+  Kdyby na zúženém seznamu viselo cokoli z úklidu (`forget(whatIsNotIn:)`, `CacheEviction`,
+  `ReviewStore.cleanUp`, rušení automatických review), **zapnutí filtru by zahodilo diffy a konverzace, smazalo cache a zrušilo
   běžící review**. Je na to sada testů proti fakes, ne úvaha o tom, kdo dnes co čte — ověřená
   vloženou regresí (když `pullRequests` filtruje sám, spadne osm testů).
 - **Filtr nepřežije restart** a je to jediný stav v okně, který umí PR **schovat úplně** — restart
@@ -1404,7 +1417,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
-| `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky |
+| `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Konverzace`) — podtržené, s odznakem počtu **u každé** (#218) a vpravo `+X −Y` se čtverečky poměru |
 | `OverviewView` | Tab `Přehled`: popis PR, fakta, kontroly a co se změnilo od minule |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
@@ -1448,6 +1461,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
 | `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
+| `hiddenShortcuts(_:)` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení i okno novinek |
 | `AppDelegate` | Ukončení aplikace: dokud běží review, ptá se |
 
 ### Hlavička PR (#218)
@@ -1596,6 +1610,20 @@ Věci, které se u toho nemají rozbít:
   samo a split view se s tím pere; tenhle vzor je v okně navíc už jednou ověřený stránkou
   `Repozitáře`. Patička dál jde přes `safeAreaInset`, jinak si formulář vyhradí místo od horní
   hrany a první řádek zůstane uříznutý.
+- **Esc okno zavře a rozepsanou hodnotu přitom doručí** (#151). Je to **změna proti #127**, kde
+  stálo, že to nastavení schválně nemá, protože je to `Settings` a byla by to odchylka od
+  zvyklosti systému; zvyklost to není (Esc zavírá i systémové nastavení) a chodí se sem přepnout
+  jednu věc a zpátky k review, takže cesta ven má být pod rukou. Tři věci, na kterých to stojí:
+  - **Schované tlačítko s `.cancelAction`**, ne `onExitCommand` — tentýž důvod jako u okna novinek,
+    viz `hiddenShortcuts`.
+  - **`flush()` je v akci výslovně, ne odkázaný na `onDisappear`.** Escem se zavírá jedním hmatem
+    uprostřed psaní, takže mezi posledním úhozem a zavřením nemusí uběhnout ani těch 600 ms, po
+    kterých se ukládá samo. `onDisappear` zůstává kvůli křížku a ⌘W, kde se o zavření dozvíme až
+    z konce view.
+  - **Zkratka je v každém stavu právě jedna.** Ve formuláři si ji drží `SettingsView` (kvůli tomu
+    doručení), nad obrazovkou „nastavení zatím není k dispozici“ `SettingsScene`. Obojí naráz by
+    byly dvě registrace téže klávesy a která vyhraje, není dané — přesně ta past, na které se
+    u #151 rozbilo `⌥↓`.
 - **Souhrn fronty (#155) sčítá, nezužuje.** Filtr reviewerů (#117) seznam zužuje a je to *pohled*;
   souhrn je tvrzení o tom, co ve frontě **je**. Kdyby se počítal z toho, co je po filtru vidět,
   tvrdil by, že práce ubyla, jen protože jsem si schoval jednoho revieweera — tatáž úvaha jako
@@ -2385,17 +2413,42 @@ Notifikace o doběhlém review (#82) k tomu přidávají:
 - **Selhaný checkout se hlásí jinými slovy než spadlá session.** Jsou to dvě různé věci
   a vedou jinam (jedna se řeší tlačítkem u repa, druhá u PR) — tatáž úvaha jako u `ReviewState`.
 - **Blokující počet se bere z platných nálezů** (`activeFindings`), takže odmítnutý nález
-  (#113) nevyrušuje. Text říká i to, když **nic** neblokuje — bez té půlky věty by „3 nálezy“
+  (#113) nevyrušuje. Text říká i to, když **nic** neblokuje — bez té půlky by „3 nálezy“
   vypadaly stejně vážně jako tři blokující.
 - **Skloňuje `Plural.czech`**, ne vlastní `switch`. Byla by to čtvrtá kopie téhož pravidla
   (odznak stavu, chipy, osa) a kopie se rozešly hned: první podoba skloňovala „blokující“
   jedničkou proti ostatním, z čehož vycházelo „3 blokujících“ (nález Copilota na #131).
-  U „blokující“ jsou tvary jen **dva** — jednotné číslo a 2–4 vyjdou stejně — takže `one`
-  a `few` jsou shodné záměrně.
-- **Titulek nese repo a číslo**, ne „Review doběhlo“: notifikací může viset víc a bez
-  identifikace se nepozná, které patří ke kterému PR. Skládá se přes `description`
-  identifikátoru, takže se číslo nikde neformátuje přes locale — z `#21663` by jinak vyšlo
-  `#21 663`. Je na to test.
+  Od #200 se skloňuje **sloveso** (`1 blokuje`, `3 blokují`, `5 blokuje`), takže shodné jsou
+  `one` a **`many`** — je to tatáž past z druhé strany a je na to tabulka v testu.
+- **Rozvržení je titulek → nález → PR** (#200):
+
+  | Řádek | Co v něm je |
+  |---|---|
+  | titulek | `3 nálezy · 1 blokuje`, u ostatních stavů krátká věta (`Čisté review`, `Review se nepovedlo`) |
+  | tělo, 1. řádek | nejzávažnější nález (`correctness: …`), u ostatních stavů detail |
+  | tělo, 2. řádek | `owner/repo#123` |
+
+  **Do #200 bylo v titulku `owner/repo#číslo`** a v těle věta o výsledku. Změnilo se to proto,
+  že titulek je první, co je vidět, a rozhodnutí „jdu k tomu hned?“ se dělá podle počtu
+  a blokujících, ne podle jména repa. Identifikace se z toho neztratila: PR **je v banneru
+  vidět** (změřeno, viz níž), notifikace o témž PR systém řadí do jednoho vlákna a klik se
+  stejně řídí `PullRequestNotification.pullRequest`, ne textem.
+
+  Jméno PR se skládá přes `description` identifikátoru, takže se číslo nikde neformátuje přes
+  locale — z `#21663` by jinak vyšlo `#21 663`. Je na to test.
+- **Banner unese čtyři řádky těla, ne dva** (#200) — změřeno v `PRism-d`, ne odhadnuto: zadání
+  vycházelo z dvouřádkového banneru, ale macOS 26 ukázal titulek a pod ním čtyři řádky.
+  Rozhodující je z toho ale něco jiného: **co se nevejde, systém uřízne i s tím, co je pod tím**,
+  takže 140znakový souhrn z banneru vymazal celý řádek s PR. Proto se nález krátí sám
+  (`Policy.notificationFindingLimit`, sto znaků, řez na hranici slova) — vlastní tři tečky
+  nechají identifikaci naživu, systémové ne.
+- **Nejzávažnější nález je `sorted(…).first`** (`Policy.mostSevereFinding`), ne vlastní škála:
+  notifikace tak ukáže přesně to, co je po otevření okna první na ráně. Bere se ze **stejného
+  záznamu** jako počet blokujících, takže titulek a řádek pod ním nemají jak říct každý něco
+  jiného; text je `shortSummary` (přesně na tohle je) se `summary` jako záložkou.
+- **Cizí text jde do těla přes `String.singleLine`.** Souhrn nálezu i detail selhání můžou mít
+  vlastní zlomy (`CheckoutError.userDescription` lepí výstup `gitu` za prázdný řádek) a jeden
+  `\n` navíc odsune PR mimo banner. Chytil to test, ne úvaha.
 
 Notifikace o novém PR (#85) drží stav na disku (`AnnouncedPullRequests`) a platí u nich:
 
@@ -2802,9 +2855,10 @@ Věci, které se u toho nemají rozbít:
 | `Policy.linesWithSeveralComments(in:)` | Na kolika řádcích draftu je víc komentářů — z každého budou samostatná vlákna, ne odpověď |
 | `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR, vlákna bez kotvy a **události časové osy** (#171), chronologicky (`ConversationEntry`) |
 | `Policy.displayableEvents(_:)` | Které události se kreslí — zavření po mergi zahodí, zbytek nechá (#171) |
-| `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem** |
+| `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem — **s počtem PR u každé položky** (#199), počítaným z plného seznamu, takže zapnutý filtr čísly nehne — a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem** |
 | `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
+| `Policy.mostSevereFinding(in:categories:)` | Nález, kterým se začíná (#200) — první ze `sorted`, tedy ten nahoře v panelu. Vlastní škála závažnosti z toho nevzniká |
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
 | `Policy.dashboard(pullRequests:records:drafts:categories:since:)` | Podklad startovní obrazovky (#181): čtyři karty a rozpad nálezů podle revieweera (`Dashboard`, `ReviewerShareOfFindings`) |
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí fronty na dashboardu (#181) — podle závažnosti, ne podle času (`QueueEntry`) |
@@ -2835,8 +2889,9 @@ Věci, které se u toho nemají rozbít:
 | `Policy.permalink(to:line:in:at:)`, `Policy.bodyItem(text:link:)`, `Policy.appendingBodyItem(_:to:)` | Odkaz na kód a skládání položek těla review |
 | `Policy.isStale(_:head:)` | Je draft psaný proti staršímu commitu? |
 | `Policy.sendBlock(for:head:)` | **Proč** se draft nedá odeslat (`DraftSendBlock`); `nil` = dá se |
+| `Policy.canOpenSubmission(block:canTransfer:)`, `Policy.needsTransfer(block:canTransfer:)` | Dá se otevřít **potvrzení** odeslání (#151) a začne kontrolou kotev? Ptá se tlačítko v panelu i zkratka `⌘⏎` — dvě kopie by znamenaly, že zkratka otevře okno nad zakázaným tlačítkem |
 | `Policy.health(of:from:)` | Puntík služby ve stavovém řádku ze tří signálů — viz `App/Health/` |
-| `Policy.reviewNotification(for:state:blocking:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět |
+| `Policy.reviewNotification(for:state:blocking:topFinding:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět. Titulek nese počty (#200), tělo nález a pod ním PR |
 | `Policy.newPullRequestNotification(for:title:isReReview:)` | Notifikace o novém PR ve frontě (#85); re-review se pozná textem (#137) |
 | `Policy.newPullRequestsNotification(for:titles:reviewed:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
 | `Policy.sortedReleases(_:)` | Vydání od nejnovějšího (#127) — podle **data**, ne podle tagu |
@@ -3005,6 +3060,21 @@ Nad nálezy platí navíc:
 
   Zvýraznění po skoku zůstává **dočasné**, jak bylo od #20: trvalý rámeček by se pletl
   s blokujícím nálezem. Kde stojím, drží lišta, ne barva v diffu.
+- **`⌥⇧↓` je pro SwiftUI tatáž zkratka jako `⌥↓`** (#151, oprava chyby z #187). U šipek se
+  `.shift` při párování **ignoruje**, takže dvě tlačítka lišící se jen jím jsou jedna klávesa
+  a vyhrává to zaregistrované později. Do #151 tedy `⌥↓` dělalo „další blokující“ — a protože
+  blokující nález bývá jeden, druhé zmáčknutí nikam neskočilo a vypadalo to, že zkratka je
+  rozbitá. Změřeno na běžící aplikaci **oběma směry**: po odebrání varianty se shiftem začalo
+  `⌥↓` procházet nálezy a `⌥⇧↓` skákalo po tom samém.
+
+  Je proto **jedno tlačítko** a shift se čte z `NSApp.currentEvent`, tedy z události, která akci
+  spustila. Ne `NSEvent.modifierFlags` (stav klávesnice): ten se u synthetických kláves ze
+  `System Events` nemění, takže by se to nedalo vyzkoušet — a vyzkoušet se to musí, protože
+  zkratka je jediné, čím se ta cesta spouští.
+
+  **Zkratky bydlí na detailu PR, ne na tlačítkách v liště** (`hiddenShortcuts`): skočit na nález
+  jde i z `Přehledu`, kde lišta v okně vůbec není, a tlačítko mimo okno svou zkratku nemá kde
+  zaregistrovat.
 - **„Od tvé poslední návštěvy“ stojí na dvou různých značkách** (#173). `VisitLedger` je to,
   co přežije restart; `AppStore.visitSnapshots` je to, **proti čemu se počítá v tomhle běhu**.
   Zapsat návštěvu se musí hned při zobrazení, jinak by o ní příští start nevěděl — jenže tím by
@@ -3192,6 +3262,16 @@ Nad odesílatelností draftu (#68) platí:
   jedno kliknutí, kterým se návrh přijme za svůj, a panel to říká větou.
 - **Návrh se do `sendBlock` předává s výchozím `nil`.** Default tam smí být, protože jeho
   zapomenutí odeslání **zablokuje**, ne otevře — u `scope` je to obráceně a proto tam žádný není.
+- **`⌘⏎` otevírá potvrzení, ne odesílá** (#151). Zkratka volá **tutéž akci jako tlačítko v panelu**
+  (`DraftActions.send`), tedy tu, která jen složí snímek a otevře sheet; druhé kliknutí uvnitř
+  sheetu zůstává jediným místem, kde se volá `ReviewPublishing.submit`, a **žádnou zkratku nemá**.
+  Dvě kliknutí na dvou různých tlačítkách (#68) tím platí dál. Kdy zkratka nedělá nic, rozhoduje
+  `Policy.canOpenSubmission` — týž výraz, jakým se zakazuje to tlačítko — a navíc je zhasnutá nad
+  už otevřeným sheetem: druhé stisknutí by složilo nový snímek a zahodilo stav rozdělaného
+  odesílání, tedy i hlášku, kvůli které je okno otevřené.
+
+  Ověřeno na běžící aplikaci: nad draftem v nepovoleném repu `⌘⏎` neudělá nic; po povolení otevře
+  potvrzení s celým payloadem a **na PR nepřibylo review** (`gh api …/reviews` má 7 před i po).
 
 ## `GitHubGateway` (`App/GitHub/`)
 

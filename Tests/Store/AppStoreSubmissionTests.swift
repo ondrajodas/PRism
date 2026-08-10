@@ -159,6 +159,30 @@ struct AppStoreSubmissionTests {
         #expect(submission.suggestion == nil)
     }
 
+    /// **Otevřít potvrzení není odeslat** — a od #151 to platí i pro `⌘⏎`, které dělá přesně
+    /// tohle a nic jiného.
+    ///
+    /// Že se nic neodeslalo, se pozná po dvou stopách, které by úspěšné odeslání zanechalo:
+    /// draft by zmizel (`draftWasSubmitted`) a konverzace by se načetla znovu. Stav `.ready`
+    /// k tomu říká, že okno čeká na druhé kliknutí.
+    @Test("Otevření potvrzení nic neodešle")
+    func openingTheSheetSendsNothing() async throws {
+        let gateway = gateway()
+        let store = await prepared(gateway)
+        store.setDraftBody("vypadá to dobře", for: pr)
+        store.setDraftVerdict(.approve, for: pr)
+        await store.loadConversation(for: summary())
+        await settle()
+
+        let submission = try #require(store.submission(for: summary()))
+
+        #expect(submission.state == .ready)
+        #expect(store.hasDraft(pr))
+        #expect(try await ReviewDraftStore(layout: layout).load(for: pr) != nil)
+        // Jediný dotaz je ten z `loadConversation` výš — po odeslání by přibyl druhý.
+        #expect(gateway.conversationRequests.count == 1)
+    }
+
     /// Sheet se nad zastaralým draftem **neotevře vůbec**. Zakázané tlačítko je první
     /// pojistka, tahle druhá — spoléhat na to, že si to pohlídá view, je o jedno místo
     /// k zapomenutí víc.

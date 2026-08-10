@@ -674,6 +674,44 @@ po zápisu stála nad mezí až do toho dalšího (z Copilot review na #233). Ba
 nejsou, jen druhy run, takže přepnutí světlého a tmavého režimu ji nezneplatňuje. **Vidět není
 nic** — obarvení vychází stejné, jen se nepočítá znovu.
 
+**Počty u položek filtru (#199)** — u každého repa a autora v nabídce filtru je počet PR,
+kterých se týká, takže se odškrtává podle čísla, ne naslepo. Skládá je
+`Policy.filterOptions(in:filter:)` do `PullRequestFilterOption` (hodnota + počet), kreslí je
+`PullRequestFilterButton` vpravo v řádku v `Palette.ink3`, jak to má návrh v sekci 11.
+
+Počítá se to z **plného** seznamu — `AppStore.filterOptions` sahá na `pullRequests`, ne na
+`visiblePullRequests`. Ze zúženého by odškrtnutí jednoho repa srazilo počty u všech ostatních na
+nulu a čísla by se měnila při každém kliknutí, takže by z nabídky nešlo poznat, co zapnutí položky
+udělá. Je na to test v `Policy` i ve storu; položka, která v nabídce zbyla jen po aktivním filtru,
+má počet **nula** a řadí se dál podle jména, ne podle počtu.
+
+**Klávesové zkratky doplněné (#151)** — `⌘⏎` nad rozdělaným review otevře **potvrzení odeslání**
+(ne odeslání: dvě kliknutí na dvou různých tlačítkách z #68 zůstávají) a **Esc zavírá nastavení**,
+včetně doručení rozepsané hodnoty. Skok mezi nálezy (`⌥↓`, `⌥↑`, `⌥⇧↓`) z issue už existoval
+z #187 — jenže **fungoval jen do prvního skoku**, a to se přišlo najevo až při ověřování:
+
+- **SwiftUI páruje u šipek zkratku bez ohledu na `.shift`**, takže `⌥↓` a `⌥⇧↓` byly pro něj jedna
+  klávesa a vyhrávala ta zaregistrovaná později. `⌥↓` tedy dělalo „další blokující“ a protože
+  blokující nález bývá jeden, druhé zmáčknutí nikam neskočilo. Teď je to jedno tlačítko a shift
+  se čte z `NSApp.currentEvent`. Změřeno na běžící aplikaci oběma směry; platformní chování
+  znamená, že na to **test není** a drží ho jen zápis v dokumentaci.
+- **Esc v nastavení je změna proti #127**, kde stálo, že to okno schválně nemá. Důvod je ve
+  specifikaci; doručení rozepsané hodnoty (`flush`) je proto v akci té zkratky, ne odkázané na
+  zánik view.
+- Pořadí skoků zůstává **podle diffu**, ne podle `Policy.sorted`, jak psalo zadání issue —
+  rozhodlo to #187 a skákat po závažnosti by v jednom souboru poskakovalo nahoru a dolů.
+
+**Notifikace o review nese počty v titulku (#200)** — `3 nálezy · 1 blokuje`, pod tím
+nejzávažnější nález (`correctness: …`) a na třetím řádku `owner/repo#123`. Do té doby byla
+v titulku identifikace PR a v těle věta o výsledku, tedy rozvržení, které na otázku „mám k tomu
+jít hned?“ odpovídalo až druhým řádkem. Návrh (sekce 10) to má takhle od začátku; issue z toho
+nevzniklo a našlo se to při kontrole návrhu proti implementaci.
+
+Dvě věci vyšly z **měření na běžící aplikaci**, ne z odhadu. Do banneru se vejde titulek
+a **čtyři řádky těla** — zadání počítalo se dvěma. A co se nevejde, macOS uřízne i s tím, co je
+pod tím: 140znakový souhrn z banneru vymazal celý řádek s PR, takže se nález krátí na sto znaků
+sám. `Čisté review` a `Review se nepovedlo` zůstávají dvě různé věty, teď jako dva různé titulky.
+
 **Word-level diff (#153)** — u přepsaného řádku svítí jen změněná část, v obou pohledech. Porovnává
 se **po tokenech** (jméno, mezera, operátor), a je to rozhodnuté měřením na 332 dvojicích z historie
 tohohle repa: po tokenech svítí 26,5 % znaků v 1,62 úsecích na řádek, po znacích 28,9 % ve 3,46 —

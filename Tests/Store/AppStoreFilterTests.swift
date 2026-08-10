@@ -280,6 +280,27 @@ struct AppStoreFilterTests {
 
         await store.keepFresh()
 
-        #expect(store.filterOptions.repositories.map(\.description).contains("ondrajodas/PRism"))
+        #expect(store.filterOptions.repositories.map(\.value.description).contains("ondrajodas/PRism"))
+    }
+
+    /// **Počty u položek jdou z plného seznamu** (#199), a je to tentýž rozdíl mezi `pullRequests`
+    /// a `visiblePullRequests` jako všude jinde v téhle sadě. Kdyby store poslal do
+    /// `Policy.filterOptions` zúžený seznam, čísla by se měnila podle právě odškrtaných položek —
+    /// odškrtnuté repo by mělo svůj počet a všechna ostatní nulu, takže by z nabídky nešlo poznat,
+    /// co zapnutí položky udělá.
+    @Test("Počty v nabídce se zapnutím filtru nezmění")
+    func countsOptionsFromTheFullList() async {
+        let (store, _) = await loaded([
+            summary(1),
+            summary(2, repo: "ondrajodas/PRism"),
+            summary(3, repo: "ondrajodas/PRism"),
+        ])
+        let before = store.filterOptions
+
+        store.setFilter(filter(repos: ["cli/cli"]))
+
+        #expect(store.filterOptions == before)
+        #expect(store.filterOptions.repositories.map(\.count) == [1, 2])
+        #expect(store.visiblePullRequests.count == 1)
     }
 }

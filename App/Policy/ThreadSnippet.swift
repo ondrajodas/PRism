@@ -81,12 +81,7 @@ extension Policy {
     /// místo cesty by hrozbu zavřel taky, ale nechal by v `FileDiff` nesmyslnou cestu jako past
     /// pro toho, kdo by ji jednou chtěl číst.
     private static func synthesizedDiff(of hunk: String, path: String) -> String {
-        "diff --git a/\(oneLine(path)) b/\(oneLine(path))\n\(hunk)"
-    }
-
-    /// Text bez řádkových zlomů — tentýž postup, jakým si hlavička bubliny krátí komentář
-    /// na jeden řádek.
-    private static func oneLine(_ text: String) -> String {
-        text.split(whereSeparator: \.isNewline).joined(separator: " ")
+        let path = path.singleLine
+        return "diff --git a/\(path) b/\(path)\n\(hunk)"
     }
 }

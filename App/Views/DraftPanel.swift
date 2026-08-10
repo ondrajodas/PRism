@@ -140,12 +140,15 @@ struct DraftPanel: View {
 
     /// Zastarání je jediný důvod, se kterým se dá něco udělat **v tom okně** — proto se jím
     /// tlačítko nezakazuje.
+    ///
+    /// Obojí rozhoduje `Policy`, ne panel: od #151 se na totéž ptá i zkratka `⌘⏎` v detailu PR,
+    /// a dvě kopie téhle podmínky by znamenaly, že zkratka otevře okno nad zakázaným tlačítkem.
     private var needsTransfer: Bool {
-        actions.canTransfer && actions.sendBlock?.isStale == true
+        Policy.needsTransfer(block: actions.sendBlock, canTransfer: actions.canTransfer)
     }
 
     private var canOpenSubmission: Bool {
-        actions.sendBlock == nil || needsTransfer
+        Policy.canOpenSubmission(block: actions.sendBlock, canTransfer: actions.canTransfer)
     }
 
     /// Proč se odeslat nedá, větou pod lištou.
@@ -449,6 +452,6 @@ struct DraftPanel: View {
         // „Zahodí se“, ne „neuloží se“: v draftu prázdný komentář chvíli je, jen nepřežije
         // odchod z bubliny ani restart. Tatáž věta je i v bublině a musí říkat totéž.
         guard !comment.body.isEmpty else { return "prázdný — zahodí se" }
-        return comment.body.split(whereSeparator: \.isNewline).joined(separator: " ")
+        return comment.body.singleLine
     }
 }

@@ -95,7 +95,29 @@ struct AppStoreReviewNotificationTests {
 
         #expect(center.delivered.count == 1)
         #expect(center.delivered.first?.pullRequest == pr)
-        #expect(center.delivered.first?.body == "1 nález, z toho 1 blokující.")
+        #expect(center.delivered.first?.title == "1 nález · 1 blokuje")
+        #expect(center.delivered.first?.body == "correctness: total() ignoruje množství\ncli/cli#42")
+    }
+
+    @Test("V notifikaci stojí ten nejzávažnější z nálezů")
+    func namesTheMostSevereFinding() async throws {
+        // Store musí do `Policy` poslat **nález i počet blokujících z téhož záznamu** (#200) —
+        // jinak by titulek mluvil o blokujícím a řádek pod ním o kosmetice.
+        let center = FakeNotificationCenter()
+        let store = store(
+            gateway: gateway(),
+            center: center,
+            reviewer: FakeReviewRunner(findings: [
+                finding(category: "style"),
+                finding(category: "correctness"),
+            ])
+        )
+
+        store.startReview(for: pr)
+        try await waitUntilIdle(store)
+
+        #expect(center.delivered.first?.title == "2 nálezy · 1 blokuje")
+        #expect(center.delivered.first?.body.hasPrefix("correctness: ") == true)
     }
 
     @Test("Dva skilly nad jedním PR dají jednu notifikaci, ne dvě")
@@ -126,7 +148,8 @@ struct AppStoreReviewNotificationTests {
         try await waitUntilIdle(store)
 
         #expect(center.delivered.count == 1)
-        #expect(center.delivered.first?.body == "Reviewer nenašel žádný nález.")
+        #expect(center.delivered.first?.title == "Čisté review")
+        #expect(center.delivered.first?.body == "Reviewer nenašel žádný nález.\ncli/cli#42")
     }
 
     @Test("Nereportující běh se nesmí ohlásit jako čistý")
@@ -143,9 +166,8 @@ struct AppStoreReviewNotificationTests {
         store.startReview(for: pr)
         try await waitUntilIdle(store)
 
-        let body = center.delivered.first?.body
-        #expect(body?.hasPrefix("Review se nepovedlo.") == true)
-        #expect(body != "Reviewer nenašel žádný nález.")
+        #expect(center.delivered.first?.title == "Review se nepovedlo")
+        #expect(center.delivered.first?.title != "Čisté review")
     }
 
     @Test("Selhaný checkout dá vědět, a jinými slovy než spadlá session")
@@ -158,7 +180,11 @@ struct AppStoreReviewNotificationTests {
         try await waitUntilIdle(store)
 
         #expect(center.delivered.count == 1)
-        #expect(center.delivered.first?.body.hasPrefix("Nepovedlo se připravit pracovní kopii.") == true)
+        #expect(center.delivered.first?.title == "Nepovedlo se připravit pracovní kopii")
+        #expect(center.delivered.first?.body.contains("Nejsi přihlášený v gh.") == true)
+        // `CheckoutError.userDescription` lepí výstup `gitu` za prázdný řádek — na dvou
+        // řádcích těla trvá i tak, jinak by se PR propadlo mimo banner.
+        #expect(center.delivered.first?.body.split(separator: "\n").count == 2)
     }
 
     @Test("Selhání GitHubu dá vědět")
@@ -173,7 +199,7 @@ struct AppStoreReviewNotificationTests {
         try await waitUntilIdle(store)
 
         #expect(center.delivered.count == 1)
-        #expect(center.delivered.first?.body.hasPrefix("Review se nepovedlo.") == true)
+        #expect(center.delivered.first?.title == "Review se nepovedlo")
     }
 
     @Test("Zrušené review se neoznamuje")

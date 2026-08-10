@@ -361,6 +361,29 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   `AppStore` na **kdy**: že dva skilly nad jedním PR dají **jednu** notifikaci, že selhání
   checkoutu i GitHubu dá vědět, a hlavně že se **zrušené review neoznamuje** — ten test je
   z celého issue nejdůležitější, protože bez něj by stačilo dát notifikaci do `defer`.
+- **Rozvržení notifikace (#200)** — od #200 se ověřuje **titulek i tělo zvlášť**, protože každý
+  odpovídá na něco jiného: titulek na „jdu k tomu hned?“, tělo na „co to je“. Čtyři věci, které
+  se dají pokazit potichu:
+  - **Sloveso u blokujících se skloňuje** — `1 blokuje`, `3 blokují`, ale `5 blokuje`. Tabulka,
+    ne jeden případ: shodné jsou `one` a **`many`**, což je tatáž past jako u „blokujících“
+    na #131, jen z druhé strany. Ověřeno **vloženou regresí** (`many: "blokují"`), po které
+    spadly dva případy z pěti.
+  - **PR zůstane na svém řádku.** Zlom v souhrnu od reviewera i víceřádkový detail selhání
+    (`CheckoutError.userDescription` lepí výstup `gitu` za prázdný řádek) by ho odsunuly mimo
+    banner — testuje se počtem řádků těla, ne obsahem. Ten druhý případ **našel test**, ne
+    úvaha.
+  - **Dlouhý souhrn se zkrátí**, a to na hranici slova; jediné dlouhé slovo (cesta, hash) se
+    ořízne natvrdo, ať nezbude prázdno. Třetí případ přibyl z Copilot review na #248: když řez
+    padne přesně na mezeru, **poslední slovo se vešlo celé** a nesmí se zahodit. Ověřeno
+    vloženou regresí — text se zkrátil o pět znaků, na které bylo místo.
+  - **`AppStore` posílá nález i počet blokujících z téhož záznamu** — test se dvěma nálezy
+    (`style` a `correctness`) hlídá, že titulek nemluví o blokujícím a řádek pod ním o kosmetice.
+
+  Co se z testů poznat nedá, je **kolik se toho do banneru vejde** — na to je jedině spuštění.
+  Změřeno v `PRism-d`: titulek a pod ním **čtyři řádky těla**, a co se nevejde, macOS uřízne
+  i s tím, co je pod tím. Odtud sto znaků v `Policy.notificationFindingLimit`. Zadání #200
+  přitom počítalo s dvouřádkovým bannerem — je to zrovna ten případ, kdy odhad délky vyjde
+  jinak než měření.
 - **`AppStore` — pohled na diff** — že se bez odchylky bere hodnota z nastavení, že ji přepnutí
   v liště přebije, že se změna nastavení projeví **bez restartu** a že odchylka **shodná**
   s nastavením přežije jeho změnu. Poslední dva potřebují skutečný `ConfigStore` nad dočasnou
@@ -438,6 +461,13 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   nic, drží vlastní test. Plus to, že **každý důvod má
   vlastní neprázdnou větu** — prázdná by v okně vypadala jako mlčky zakázané tlačítko.
 
+  U **otevření potvrzení** (`canOpenSubmission`, #151) vyčerpávajícím výčtem: **každý** důvod,
+  proč se odeslat nedá, zavírá i potvrzení, a to i s možností přenést — přenesení spraví
+  zastarání, ne chybějící verdikt. Zastarání je jediná výjimka a jen tehdy, když je proti čemu
+  kotvy zkontrolovat. Je na to vlastní sada proto, že se od #151 na tutéž otázku ptají **dvě**
+  místa (tlačítko v panelu a zkratka `⌘⏎`); rozchod by znamenal zkratku, která otevře okno nad
+  zakázaným tlačítkem.
+
   U **předvyplněného verdiktu** (#114) to hlavní není, že s návrhem `noVerdict` zmizí, ale že
   návrh **nepřeskočí ostatní důvody** — prázdný komentář, zastarání ani bránu — a že z prázdného
   ani neexistujícího draftu nedělá „je co poslat“. `effectiveVerdict` má vlastní sadu na každý
@@ -476,6 +506,12 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   ve kterém `submission(for:)` nesmí vzniknout (zastaralý draft, chybějící verdikt, žádný
   draft), a to, že se konverzace načte znovu — bez toho by v `Přehledu` chybělo moje vlastní
   review až do přepnutí PR.
+
+  Od #151 k tomu test, že **otevření potvrzení nic neodešle** — tedy že po `submission(for:)`
+  zůstal draft v paměti i na disku a konverzace se nenačetla znovu. Jsou to obě stopy, které by
+  úspěšné odeslání zanechalo (`draftWasSubmitted`), takže se tvrdí „nestalo se“, ne „vrátilo to
+  objekt“. Je to podklad pod zkratku `⌘⏎`, která nedělá nic jiného než tohle. Ověřeno vložením
+  regrese: `discardDraft` uvnitř `submission(for:)` test shodí.
 - **`Policy` — přehled (#72)** — chronologické slití review, komentářů a vláken; že se vlákno
   **s kotvou** do přehledu nedostane (jinak se tentýž komentář čte na dvou místech); že review
   bez verdiktu a bez prózy vypadne (je to jen obálka řádkových komentářů), kdežto schválení
@@ -731,6 +767,15 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   všechno), pořadí se nemění. U nabídky to hlavní je, že **drží hodnoty aktivního filtru, i když
   jejich PR ze seznamu zmizel** — bez toho zmizí odškrtávátko a filtr zůstane zapnutý bez cesty
   zpátky. U důvodu prázdna to, že **nad selhaným tikem vyhrává chyba načtení, ne filtr**.
+
+  **Počty u položek (#199)** patří do téhož výčtu a to nejcennější u nich je test, že se **zapnutím
+  filtru nezmění** — ze zúženého seznamu by čísla klesala podle právě odškrtaného a z nabídky by
+  nešlo poznat, co zapnutí položky udělá. Ověřuje se dvakrát, protože se to dá pokazit na dvou
+  místech: v `Policy` (nabídka nad týmž seznamem vyjde s filtrem i bez něj stejně) a v `AppStore`
+  (`filterOptions` sahá na `pullRequests`, ne na `visiblePullRequests` — tentýž rozdíl getterů
+  jako všude jinde). K tomu položka, která v nabídce zbyla jen po aktivním filtru, má počet **nula**,
+  a pořadí je podle jména i tehdy, když by počty seřadily jinak — jinak by nabídka přeskakovala
+  s každým tikem.
 
   **`AppStore` proti fakes na to, že filtr je pohled, ne mazání:** zapnutí filtru nezahodí diff
   schovaného PR (a po vypnutí se GitHubu neptá znovu), nezahodí draft, nezruší běžící review,
@@ -1134,6 +1179,30 @@ osascript -e 'tell application "System Events" to tell process "PRism" to return
 cache 2400 řádky vyšel **0 kB** — alokátor sáhne po stránkách, které proces už má, takže by to
 tvrdilo, že cache nic nestojí. Harness proto sčítá **text run**, který v ní zůstane ležet; klíč se
 nepočítá, protože je to tentýž řetězec, jaký drží model diffu (kopíruje se jen hlavička).
+
+**Klávesová zkratka se dá vyzkoušet jedině spuštěním** — a u #151 to bylo jediné, co odhalilo, že
+`⌥↓` po prvním skoku nikam nejde. Pět věcí, na kterých to stálo, a všech pět stálo kolo navíc:
+
+- **Když běží víc slotů, `process "PRism"` je nejednoznačné.** Všechny instance mají tentýž
+  název procesu (binárka se jmenuje `PRism` i ve slotu), takže se hledá podle **bundle ID** —
+  jinak se měří, klikají a zavírají cizí okna. Stalo se to: skript přesunul okno hlavní instance.
+- **`whose` nad procesy se v `System Events` láme** (`nelze načíst … -1728/-1719`). Spolehlivý je
+  obyčejný `repeat with p in (every application process whose name is "PRism")` a uvnitř
+  `if bundle identifier of p is "com.ondrajodas.prism.<slot>"`.
+- **Kliknutí do okna, které není vpředu, ho jen aktivuje** a k prvku se nedostane. Klikat se
+  proto musí dvakrát, nebo se okno napřed vytáhne — a `activate` patří do **každého** skriptu,
+  ne jednou na začátek relace: mezi dvěma `osascript` se terminál vrátí dopředu.
+- **Snímek se pořizuje uvnitř téhož skriptu** (`do shell script "screencapture …"`), jinak se
+  fotí to, co je vpředu **potom**.
+- **`NSEvent.modifierFlags` synthetickou klávesu nevidí.** Stav klávesnice se posláním události
+  ze `System Events` nemění, takže se modifikátory musí číst z `NSApp.currentEvent`. Se stavem
+  klávesnice vycházelo `⌥⇧↓` jako obyčejné `⌥↓` a vypadalo to jako chyba v aplikaci.
+
+Co se z běžící aplikace u #151 vyčetlo a jinak by se nevědělo: **SwiftUI páruje u šipek zkratku
+bez ohledu na `.shift`**, takže dvě tlačítka lišící se jen jím jsou jedna klávesa. Ověřeno oběma
+směry — po dočasném odebrání varianty se shiftem začalo `⌥↓` procházet nálezy a `⌥⇧↓` skákalo po
+tom samém. Je to platformní chování, takže na něj **test není** a drží ho jen ten zápis; kdyby se
+zkratky zase rozdělily na dvě tlačítka, projde build i testy a rozbije se to potichu.
 
 **Cena bloku se měří dvěma způsoby a je to schválně** (#223). Jeden blok podle délky je ten údaj,
 ze kterého se vybírá strop — to je práce, kterou appka zaplatí i za blok, jehož je vidět kousek.
