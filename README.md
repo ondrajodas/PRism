@@ -68,17 +68,29 @@ se stahuje.
 U vybraného PR je tlačítko **Spustit review**. Za ním se stane tohle: dotáhne se head
 commit, připraví se odpojený pracovní strom a v něm se spustí headless session Claude Code
 omezená na čtení. Řádek mezitím ukazuje `ve frontě · clone` → `běží 0/1` → `čisté` nebo
-`N nálezů`; běh jde kdykoli zrušit. Nálezy se uloží na disk, takže přežijí restart, a
-v detailu je dole lišta s **návrhem verdiktu** (`approve` / `request changes` / *není
-z čeho soudit*) a rozbaleným seznamem nálezů po kategoriích, s odznakem u těch blokujících.
+`N nálezů`; běh jde kdykoli zrušit. Nálezy se uloží na disk, takže přežijí restart, a v panelu
+vedle diffu je seznam nálezů po kategoriích, s odznakem u těch blokujících. **Návrh verdiktu**
+(`approve` / `request changes` / *není z čeho soudit*) se z nich předvyplní v tabu `Moje review`
+a je u něj napsané, že je to návrh; do #218 stál navíc v hlavičce, kde byl druhou kopií téhož.
 Kliknutím na nález diff odskočí na jeho `file:line`.
 
-Nad záložkami je **hlavička s tím, kam se to merguje** (#174): stav PR jako chip, `autor chce
-sloučit větev → base`, `owner/repo#číslo` a odkaz na GitHub. Větve se do okna dostaly až s #174 a je to první věc,
-kterou u cizího PR hledám. Když se **hlava PR rozejde se sha, proti které platí nálezy**, přibude
-pod tím řádek s oběma — dokud se rovnají, je to trivia, jakmile se rozejdou, je to nejdůležitější
-údaj na obrazovce, protože všechno pod ním mluví o kódu, který na větvi už není. Vpravo u záložek
-je rozsah změny (`+X −Y`).
+Nad záložkami je **hlavička ve třech řádcích** (#174, přesázená podle návrhu u #218). Nahoře
+titulek a vedle něj číslo PR, vpravo `Spustit review` — a je to **jediné akcentové místo v celé
+hlavičce**. Pod tím souřadnice: stav PR jako plná kapsle s puntíkem, `autor chce sloučit
+větev → base`, `owner/repo`, souhrn kontrol a odkaz na GitHub. Větve se do okna dostaly až
+s #174 a je to první věc, kterou u cizího PR hledám. Třetí řádek je **pruh běhu**: kapsle
+reviewerů (`● php-review 2`, klik filtruje jejich nálezy) a za nimi — když review běží — dráha
+průběhu s popiskem `test-coverage · 2 z 3 hotovo · 1:12`.
+
+Když se **hlava PR rozejde se sha, proti které platí nálezy**, přibude pod tím řádek s oběma —
+dokud se rovnají, je to trivia, jakmile se rozejdou, je to nejdůležitější údaj na obrazovce,
+protože všechno pod ním mluví o kódu, který na větvi už není. Vpravo u záložek je rozsah změny
+(`+X −Y`) a za ním pět čtverečků v poměru přidaného a odebraného.
+
+**Stav pracovní kopie je ve stavovém řádku dole** (`Pracovní kopie připravená · HEAD 4f2ac91`),
+ne v hlavičce: je to stav prostředí, ne údaj o pull requestu. Selhaný checkout je výjimka —
+zůstává bannerem v hlavičce, protože se u něj musí vypsat celý výstup `gitu` a z něj se teprve
+pozná, co dělat dál.
 
 Detail PR má **tři záložky** (#183): `Přehled` říká, jak to teď stojí (popis, fakta, co se změnilo
 od minule), `Změněné soubory` je diff a `Konverzace` je **časová osa toho, co se dělo** — s uzly,
@@ -86,9 +98,10 @@ u kterých tvar nese druh, se seskupenými commity (jedenáct pushů nesmí utop
 filtrem `Vše / Komentáře / Vlákna / Události` a značkou `Nové od tvé poslední návštěvy`. U force-pushe
 je rovnou u události napsané, že tím zastaraly nálezy, a tlačítko pustit review znovu.
 
-Záložky jsou podtržené jako na GitHubu a odznak u `Konverzace` říká, kolik je toho k přečtení.
-Volba se pamatuje **u každého PR zvlášť** a otevírá se `Přehled` — popis a diskuze se čtou dřív
-než kód, kterého se týkají.
+Záložky jsou podtržené jako na GitHubu a **odznak má každá** (#218), jen počítá pokaždé něco
+jiného: `Přehled` novinky od poslední návštěvy, `Změněné soubory` počet souborů, `Konverzace`
+kolik je toho k přečtení. Volba se pamatuje **u každého PR zvlášť** a otevírá se `Přehled` —
+popis a diskuze se čtou dřív než kód, kterého se týkají.
 
 Pod dlaždicemi je blok **`Kontroly na GitHubu`** (#209): kolik checků prošlo, kolik běží a kolik
 spadlo, a pod tím řádek na každý s dobou běhu. **Nejhorší stav vyhrává** — dvanáct zelených

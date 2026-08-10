@@ -18,6 +18,13 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
 (`~/Library/Logs/DiagnosticReports/PRism-*.ips`, `closure #1 in …`); v logu z `xcodebuild` je jen
 `Restarting after unexpected exit`.
 
+**Druhá léčba je `nonisolated`** (#218), a u skládání textu je levnější než stěhování do `Policy`:
+`nonisolated static func` na `View` typu z izolace vystoupí, takže se uvnitř closure žádný executor
+neověřuje. Sáhne se po ní tehdy, když funkce **nerozhoduje**, jen skládá větu z hotových hodnot
+(`ReviewRunbarView.label` spojuje jména běžících reviewerů) — rozhodování patří dál do `Policy`,
+protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl přesně ten popsaný výš:
+`Failing tests` plné suit, které s tou změnou nesouvisejí, a crash report ukazující na `map`.
+
 
 - **Modely** — round-trip přes `Codable` u každého typu i každého případu `ReviewState`,
   parsování a formátování identifikátorů včetně neplatných vstupů, a kontrola skutečného
@@ -623,6 +630,24 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   vedle vyrenderované sekce 02 návrhu a offscreen renderem ve světlém i tmavém režimu. U #219 to
   ukázalo, že `Menu` s primární akcí si kreslí **vlastní šipku** vedle té z návrhu, takže
   `⌃ Sbalit vše ⌄` mělo dvě proti sobě.
+- **Sazba hlavičky PR (#218)** — čtyři čisté funkce, tedy výčtem a bez kreslení.
+  `Policy.diffstatBlocks` hlídá tři věci, které se dají pokazit potichu: že **zaokrouhlení jde
+  dolů** (jeden odebraný řádek proti dvěma stům si vlastní čtvereček nezaslouží), že se součet
+  drží na pěti nad celou mřížkou 21 × 21 vstupů, a že prázdný diff nedá **žádný** čtvereček —
+  pět šedých je pruh, který vypadá pořád stejně, tedy nic neříká. `Policy.progress` má nejcennější
+  test v tom, co se **nestane**: bez běhu se pruh nekreslí, ani když `reviewPhases` drží
+  `running` nebo `failed` po skončení. `ReviewRunbarView.label` a `ReviewerChipsView.label`
+  ověřují, že počet je jen tam, kde běh doběhl a dopočítal se — `0` nad nedoběhlým během je
+  tvrzení, které data neunesou — a `spokenState` to, že se stav dá **přečíst**, když ho v kapsli
+  nese jen barva puntíku. `WorkingCopyStatusView.text` tvrdí, že selhaný checkout se do stavového
+  řádku nedostane; zůstává bannerem v hlavičce, kde je místo na výstup `gitu`.
+
+  Sazba sama (rozměry, barvy, poměry) se ověřuje **obrázkem**: screenshot běžící aplikace nad
+  skutečným PR vedle vyrenderované sekce 02 návrhu, plus offscreen render pruhu v běžícím stavu
+  ve světlém i tmavém režimu a v úzkém okně. Našlo to dvě věci, které z kódu vidět nebyly —
+  `GeometryReader` v dráze průběhu si vzal veškerou šířku a jména reviewerů se zalomila **uvnitř
+  kapslí**, a popisek s hodinami se v užším okně ořezal na `1:…`. Obojí je otázka priority
+  layoutu, ne rozměru.
 - **Kopírování kódu z diffu (#157)** — `Policy` vyčerpávajícím výčtem. Dvě věci se tu dají pokazit
   potichu: **pořadí řádků** (rozsah se zvýrazňuje množinou, která pořadí nemá — ověřeno vloženou
   regresí, `Set` místo pořadí testy shodí) a **která verze se kopíruje** u rozsahu přes obě strany

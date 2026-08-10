@@ -10,6 +10,9 @@ struct PullRequestTabBar: View {
     @Binding var selection: PullRequestTab
     /// Kolik je v tabu k přečtení. `nil` i nula znamenají „bez odznaku“ — `0` by tvrdilo,
     /// že je co číst.
+    ///
+    /// Od #218 se ptá **u všech záložek**, ne jen u `Konverzace`: odznak jen u jedné vypadal
+    /// jako vlastnost té záložky, ne jako počet.
     var count: (PullRequestTab) -> Int? = { _ in nil }
     /// Rozsah změny (#174) — `+X −Y` vpravo v řadě záložek. `nil`, dokud diff nedorazí:
     /// nuly by tvrdily, že PR nic nemění.
@@ -32,22 +35,61 @@ struct PullRequestTabBar: View {
         HStack(spacing: 2) {
             ForEach(PullRequestTab.allCases, id: \.self) { item($0) }
             Spacer(minLength: 8)
-            if let diffCounts {
-                // Stojí u záložek, ne v hlavičce: mluví o tom, co je v `Změněných souborech`,
-                // a je to tentýž údaj, jaký po souborech rozepisují hlavičky v diffu — proto
-                // `DiffCounts`, ne vlastní skládání, které by se s ním jednou rozešlo.
-                // (Souhrn nad diffem, se kterým to sedělo dřív, u #219 zmizel.)
-                DiffCounts.text(additions: diffCounts.additions, deletions: diffCounts.deletions)
-                    .font(.caption)
-                    .monospacedDigit()
-                    .padding(.trailing, 4)
-                    .help("Kolik řádků PR přidává a ubírá")
-            }
+            if let diffCounts { diffstat(diffCounts) }
         }
         .padding(.horizontal, 12)
         // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
         // takže by se vykreslil svisle — tatáž past jako u hlaviček souborů v diffu.
         .overlay(alignment: .bottom) { Rectangle().fill(.separator).frame(height: 1) }
+    }
+
+    /// Rozsah změny vpravo v řadě záložek (`.diffstat`).
+    ///
+    /// Stojí u záložek, ne v hlavičce: mluví o tom, co je v `Změněných souborech`, a je to
+    /// tentýž údaj, jaký po souborech rozepisují hlavičky v diffu — proto `DiffCounts`, ne
+    /// vlastní skládání, které by se s ním jednou rozešlo. (Souhrn nad diffem, se kterým to
+    /// sedělo dřív, u #219 zmizel.)
+    private func diffstat(_ counts: (additions: Int, deletions: Int)) -> some View {
+        HStack(spacing: 8) {
+            DiffCounts.text(additions: counts.additions, deletions: counts.deletions)
+                .font(.caption)
+                .monospacedDigit()
+            blocks(counts)
+        }
+        .padding(.trailing, 4)
+        .help("Kolik řádků PR přidává a ubírá — a v jakém poměru")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Rozsah změny")
+        .accessibilityValue("přidáno \(counts.additions), odebráno \(counts.deletions)")
+    }
+
+    /// Čtverečky poměru za počty (#218, `.diffstat .blocks`). Poměr počítá `Policy`, aby se
+    /// dal vyčerpat výčtem — je to jediné místo, kde se z čísel rozhoduje o obrázku.
+    private func blocks(_ counts: (additions: Int, deletions: Int)) -> some View {
+        HStack(spacing: 2) {
+            let blocks = Policy.diffstatBlocks(
+                additions: counts.additions,
+                deletions: counts.deletions
+            )
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(color(of: block))
+                    .frame(width: 8, height: 8)
+            }
+        }
+        // Čtverečky říkají totéž co `+X −Y` vedle nich, jen obrázkem — odečítat je dvakrát
+        // nemá cenu.
+        .accessibilityHidden(true)
+    }
+
+    /// Barvy z **téhož zdroje** jako znak změny v řádku diffu (#156): dvě sady by se rozešly
+    /// a `+` v řádku by bylo jinak zelené než čtvereček nad ním.
+    private func color(of block: DiffstatBlock) -> Color {
+        switch block {
+        case .added: DiffLineView.signColor(of: .added)
+        case .removed: DiffLineView.signColor(of: .removed)
+        case .neither: Palette.line
+        }
     }
 
     private func item(_ tab: PullRequestTab) -> some View {
@@ -99,14 +141,16 @@ struct PullRequestTabBar: View {
         }
     }
 
+    /// Odznak počtu (`.stab .cnt`) — mono kapsle na tiché ploše, jak ho má návrh. Tlumeně
+    /// schválně: je to počet, ne upozornění.
     private func badge(_ count: Int) -> some View {
         Text(verbatim: "\(count)")
-            .font(.caption2)
+            .font(.system(.caption2, design: .monospaced))
             .monospacedDigit()
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .background(.quaternary, in: .capsule)
-            .foregroundStyle(.secondary)
+            .background(Palette.raised, in: .capsule)
+            .foregroundStyle(Palette.ink2)
     }
 
     /// Ikony jsou ve view, ne v modelu: `PullRequestTab` je volba pohledu, ne obrázek —
