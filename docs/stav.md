@@ -793,6 +793,12 @@ místa, ze kterého se review pouští. Tři různá „nic tu není“ mají t�
 skillu, který v nastavení už není, nezmizí — nesla by s sebou doběhlé review — jen se označí
 `mimo sadu`.
 
+Cestou se u toho našla tichá chyba z #203: **uložená osa svůj konec neobsahuje**, protože se snímek
+pro zápis bere dřív, než proud událostí dojede — 7 ze 7 os po skutečném běhu. Tab `Průběh` proto po
+restartu tvrdil `nedoběhlo — běh někdo zrušil` nad doběhlým review, kterému vedle toho svítil chip
+`čisto`. Doplňuje se to na **čtení** z běhu, pod kterým osa leží; testy to nechytily proto, že osy
+vyrobené v testech konec mají.
+
 Dvě věci z toho stojí za zapamatování. **Řádek tabulky je místo, ne nález**: shoda dvou reviewerů je
 jeden řádek s odznakem `2×`, jinak by součet nad tabulkou nesouhlasil s tím, co je v diffu jako jedna
 bublina — a hlídá to test, že odznak na záložce, tabulka a bubliny počítají tytéž nálezy (jeden zdroj

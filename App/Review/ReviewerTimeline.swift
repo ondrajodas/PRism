@@ -60,6 +60,33 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         usage = run.usage
         entries = run.timeline?.entries ?? []
         droppedEntries = run.timeline?.dropped ?? 0
+        completeTail(from: run)
+    }
+
+    /// Doplní **konec** osy z běhu, pod kterým leží.
+    ///
+    /// **Uložená osa svůj konec neobsahuje**, a není to výjimka: snímek pro zápis se v `runSkills`
+    /// bere dřív, než proud událostí dojede, takže v souboru chybí `hlásí nálezy` i `doběhlo`.
+    /// Změřeno na skutečné cache — **7 ze 7** os po skutečném běhu je bez konce (osy vyrobené
+    /// v testech ho mají, proto to testy nechytily). Bez doplnění by tab `Průběh` po restartu tvrdil
+    /// `nedoběhlo — běh někdo zrušil` nad doběhlým review a `nálezy vůbec nenahlásilo` nad tím,
+    /// které nahlásilo prázdný seznam; chip vedle toho ukazuje `čisto`.
+    ///
+    /// Doplňuje se **jen to, co běh sám ví** — jeho výsledek a jeho počet nálezů, ne dohad — a jen
+    /// tehdy, když to v ose není. Dvě věci, které se tím zachovávají:
+    /// - `calledReportFindings == false` nedoplní **nic**: reviewer, který nálezy nenahlásil, je
+    ///   vlastní stav a `hlásí nálezy` u něj zůstává nedotčené;
+    /// - **prázdná osa se nedoplňuje**, takže běh, jehož osa se vůbec neuložila, zůstane bez osy
+    ///   (v tabu z něj je `bez průběhu`, ne vymyšlený průběh o dvou událostech).
+    private mutating func completeTail(from run: StoredReviewRun) {
+        guard !entries.isEmpty, !isFinished else { return }
+        let hasFindings = entries.contains { if case .findings = $0.kind { true } else { false } }
+        if !hasFindings, run.calledReportFindings {
+            // Nahlášený počet, ne jen ten uložený: nález, který se nepodařilo přečíst, reviewer
+            // nahlásil — jen se z něj nedal složit nález (`droppedFindings`).
+            append(.findings(count: run.findings.count + run.droppedFindings), at: run.finishedAt)
+        }
+        append(.finished(run.outcome), at: run.finishedAt)
     }
 
     /// Co se z osy uloží. Ořezává se **začátek**, ne konec: kdo se do osy dívá po restartu,
@@ -128,8 +155,11 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         append(.finished(outcome), at: time)
     }
 
+    /// Identita se počítá **z poslední události, ne z počtu**. V živé ose je to totéž, ale osa
+    /// poskládaná z uloženého běhu je zkrácená (`droppedEntries`), takže si nechává původní čísla —
+    /// a podle počtu by doplněný konec dostal číslo menší než jeho předchůdce.
     private mutating func append(_ kind: Entry.Kind, at time: Date) {
-        entries.append(Entry(id: entries.count, at: time, kind: kind))
+        entries.append(Entry(id: (entries.last?.id ?? -1) + 1, at: time, kind: kind))
     }
 }
 

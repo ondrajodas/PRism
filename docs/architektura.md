@@ -2371,10 +2371,24 @@ seznam, dvojklik pošle jeden komentář a selhání drží stav i text. Dvě v�
   disk sahá jednou za den, ne jednou za minutu.
 - **Osa běhu se ukládá k běhu** (#203). Do té doby žila jen v paměti, takže ji restart smazal
   i se `sessionID`, tedy jedinou cestou zpátky do session (`claude --resume`) — a nálezy, ke
-  kterým patří, na disku zůstávaly. Čtyři pravidla:
+  kterým patří, na disku zůstávaly. Pět pravidel:
   - **Ukládá ji `StoredReviewRun`**, takže je klíčovaná `headSha` jako všechno ostatní a po novém
     commitu zestárne s nálezy. Volitelná, protože starší soubory ten klíč nemají; `nil` znamená
-    „osa se neuložila“, ne „nic se nedělo“ — proto se běh bez osy v tabu `Průběh` **nekreslí**.
+    „osa se neuložila“, ne „nic se nedělo“ — takový běh se v tabu `Průběh` kreslí jako **`bez
+    průběhu`** (#242), ne jako nespuštěný: nespuštěno by o doběhlém běhu lhalo a vynechat ho úplně
+    znamená, že tab vypíše zrovna ty reviewery, které neběžely.
+  - **Uložená osa svůj konec neobsahuje, takže se doplňuje z běhu** (`ReviewerTimeline.completeTail(from:)`,
+    #242). Snímek pro zápis se v `runSkills` bere dřív, než proud událostí dojede, takže v souboru
+    chybí `hlásí nálezy` i `doběhlo` — **změřeno na skutečné cache: 7 ze 7 os po skutečném běhu**
+    (osy vyrobené v testech konec mají, proto to testy nechytily). Bez doplnění tvrdil tab `Průběh`
+    po restartu `nedoběhlo — běh někdo zrušil` nad doběhlým review a `nálezy vůbec nenahlásilo` nad
+    tím, které nahlásilo prázdný seznam; chip vedle toho ukazoval `čisto`. Doplňuje se **jen to, co
+    běh sám ví** (jeho výsledek a jeho počet nálezů včetně nepřečtených), jen když to v ose není,
+    a **nikdy do prázdné osy** — jinak by z chybějícího průběhu vznikl vymyšlený. Běh, který
+    `ReportFindings` nezavolal, doplněnou fázi hlášení nedostane: to je vlastní stav a slít se nesmí.
+    Opravuje se to na **čtení**, ne v zápisu, protože stejně tak vypadají všechny už uložené
+    soubory; zápis by se musel synchronizovat s proudem, a to je continuation navíc v cestě, která
+    se ruší.
   - **Živá osa přebíjí uloženou.** Běžící review si ji drží v paměti, kdežto uložená patří
     předchozímu běhu; ověřeno vloženou regresí (spadne sedm testů).
   - **Ořezává se začátek, ne konec**, a strop je 300 událostí: kdo se do osy dívá po restartu,

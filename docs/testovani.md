@@ -292,6 +292,15 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   tytéž reviewery jako chipy** v pruhu běhu (dvě odpovědi na „koho se to na tomhle PR týká“ by se
   rozešly potichu), že **pořadí je stabilní** i pro `running`, které je `Set` bez pořadí, a že
   **zdvojený skill v sadě dá jednu dráhu** — dvě by `ForEach`i daly jednu identitu dvakrát.
+- **Doplněný konec uložené osy (#242)** — sada, která vznikla z **měření, ne z návrhu**: uložená osa
+  svůj konec neobsahuje (7 ze 7 os po skutečném běhu), takže tab po restartu tvrdil `nedoběhlo` nad
+  doběhlým review. Testuje se, že se konec doplní z běhu, pod kterým leží, a hlavně to, co se
+  doplnit **nesmí**: prázdná osa (z chybějícího průběhu by vznikl vymyšlený), fáze hlášení u běhu,
+  který `ReportFindings` nezavolal, a druhý konec u osy, která ho má. Plus že identita událostí
+  zůstane rostoucí a jednoznačná — zkrácená osa si nechává původní čísla, takže by doplněný konec
+  podle počtu dostal číslo menší než jeho předchůdce. **Osy vyrobené v testech konec mají**, a proto
+  to nechytil žádný z původních testů; nová sada proto skládá osu přes `stored()`, jak vzniká
+  doopravdy. Ověřeno vložením regrese (9 padlých tvrzení).
 - **Věty dráhy (#242)** — `ReviewerLaneText` rozlišuje **tři** doběhlé konce (nahlásilo nálezy /
   nahlásilo nulu / nenahlásilo nic) a test hlídá, že se u toho třetího **nikde neslíbí čisto**.
   Plus že slova stavů jsou různá (`spadlo` ≠ `nedoběhlo`, `nespuštěno` ≠ `ve frontě`, u fází
