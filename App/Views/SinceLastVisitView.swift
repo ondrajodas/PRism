@@ -8,6 +8,15 @@ import SwiftUI
 /// Ukazuje se, jen když **opravdu něco přibylo**. Trvalý pruh s „nic nového“ by z obrazovky
 /// ubíral místo a po týdnu by se přestal číst — na rozdíl od stavového řádku, kde je trvalost
 /// smyslem, protože se tam hlásí zdraví aplikace.
+///
+/// Sazba je z návrhu (`.since`, #226): okrový tón (`--stale`), levý okraj 3 body, obrys smíchaný
+/// s tónem, poloměr 7 jako u ostatních karet `Přehledu`.
+///
+/// **Barva je jedna, ne dvě** — do #226 byl blok systémově modrý a při přepsané historii žlutý.
+/// Obojí bylo mimo paletu okna: modrá je systémový akcent, kdežto okno stojí na fialové z návrhu
+/// (#180), a systémová žlutá je **výstraha**. `--stale` znamená „platilo to, dneska už ne“, což je
+/// přesně to, co tenhle blok říká — a proto ho návrh kreslí okrový vždycky. Že se přepsala historie,
+/// nese `staleRow` větou a tlačítkem, ne odstínem pozadí.
 struct SinceLastVisitView: View {
     let changes: VisitChanges
     /// Proti čemu se to počítá. Bez toho by „od tvé poslední návštěvy“ neřeklo od kdy.
@@ -33,33 +42,46 @@ struct SinceLastVisitView: View {
                 // udělal jeden řádek.
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                     Label {
-                        Text(verbatim: line).font(.callout)
+                        Text(verbatim: line).font(.system(size: 12))
                     } icon: {
                         Image(systemName: "circle.fill").font(.system(size: 4))
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.ink2)
                 }
             }
             if isStale { staleRow }
         }
-        .padding(12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.09), in: .rect(cornerRadius: 8))
-        .overlay(alignment: .leading) { Rectangle().fill(tint).frame(width: 3) }
-        .clipShape(.rect(cornerRadius: 8))
+        .background(Palette.stale.opacity(0.09))
+        // Pruh je v návrhu **levý okraj rámečku** (`border-left: 3px`), takže se zaoblením
+        // zatáčí. `overlay` s obdélníkem by z něj udělal rovnou tyčku useknutou v rozích —
+        // proto pozadí a `clipShape`, které mu ten oblouk dá.
+        .background(alignment: .leading) { Rectangle().fill(Palette.stale).frame(width: 3) }
+        .clipShape(.rect(cornerRadius: 7))
+        // Obrys **je**, a to je půlka problému, kterou to řeší: bez něj plavala plná barevná
+        // plocha vedle obrysových karet `Přehledu`. Barva je obrys smíchaný s tónem bloku,
+        // jak to má návrh (`color-mix(--stale 45%, --line)`).
+        .overlay {
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(Palette.stale.mix(with: Palette.line, by: 0.55), lineWidth: 1)
+        }
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             Image(systemName: "clock.arrow.circlepath")
-                .foregroundStyle(tint)
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.stale)
             Text("Od tvé poslední návštěvy")
-                .font(.callout.weight(.semibold))
+                .font(.system(size: 12.5, weight: .semibold))
             Spacer(minLength: 8)
             if let since {
+                // Mono a `--ink-3`, jak to má návrh (`.since .hd .when`): je to údaj, ne věta.
                 Text(since, format: .relative(presentation: .named))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(Palette.ink3)
             }
             if let dismiss {
                 Button(action: dismiss) {
@@ -81,8 +103,8 @@ struct SinceLastVisitView: View {
     private var staleRow: some View {
         HStack(spacing: 8) {
             Text("Nálezy i rozdělané review jsou proti commitu, který na větvi už není.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 11.5))
+                .foregroundStyle(Palette.ink2)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             if let rerun {
@@ -91,12 +113,6 @@ struct SinceLastVisitView: View {
             }
         }
         .padding(.top, 2)
-    }
-
-    /// Žlutá jen tehdy, když se přepsala historie — tedy když to má **důsledek**. Jinak je to
-    /// oznámení, ne varování, a trvale žlutý pruh by z varování udělal tapetu.
-    private var tint: Color {
-        changes.rewroteHistory ? .yellow : .accentColor
     }
 
     /// Věty se skládají **tady**, ne v `Policy`: je to próza pro člověka, ne rozhodnutí.

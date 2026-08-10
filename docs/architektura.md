@@ -2871,6 +2871,16 @@ Nad nálezy platí navíc:
 
   Vedle toho jde zavřít **ručně** (`markChangesAsSeen`) křížkem — to je pro „vím to hned teď, ať
   to nezabírá místo“. Zavření posune **obě** značky, jinak by se pruh po restartu vrátil.
+
+  **Sázen je podle návrhu (`.since`, #226) a má jen jeden tón** — okrový `--stale`. Do #226 bral
+  systémový akcent (modrou) a při přepsané historii systémovou žlutou; obojí bylo mimo paletu okna,
+  protože okno stojí na fialové z návrhu (#180) a systémová žlutá je **výstraha**, kdežto tenhle
+  blok říká „platilo to, dneska už ne“ — přesně význam, na který #216 zavedlo `Palette.stale`.
+  Že se přepsala historie, proto nese `staleRow` větou a tlačítkem, ne odstínem pozadí; barvou to
+  rozlišovat nešlo, aniž by jedna z těch dvou byla mimo paletu. Graficky přibyl **obrys** (bez něj
+  plavala plná barevná plocha vedle obrysových karet `Přehledu`) a levý pruh je **okraj rámečku**,
+  ne `overlay` s obdélníkem — ten se v zaoblených rozích usekával místo aby s nimi zatočil.
+  Poloměr je 7 jako u sousedních karet, ne 8.
 - **Nové commity se nepoznají jen podle času** (#173). `TimelineEvent.at` je u commitu
   `committedDate`, ne čas pushnutí (`pushedDate` GitHub neplní, změřeno u #171), takže po rebase
   nebo cherry-picku je **starší než moje poslední návštěva** a commit z „od minule“ vypadne —
