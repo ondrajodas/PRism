@@ -210,6 +210,15 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
 - **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
   a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
   Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
+- **Po mergi mi restartuj hlavní aplikaci z mainu** — `./bin/run.sh` v hlavním stromě, bez
+  ptaní. Je to nástroj, který používám každý den, takže co je mergnuté, mám mít i spuštěné;
+  jinak se regrese pozná až za týden a proti mergnutému kódu se pak hledá v buildu, který ho
+  nemá. **Mergnutých PR v řadě za sebou se to týká jednou** — restart až po posledním, jinak
+  se okno zavírá pod rukama.
+
+  `run.sh` ukončuje Apple eventem, takže při běžícím review se zeptá a bez odpovědi nespustí
+  nic. To je záměr, ne chyba — nepřemlouvej to `killall`em. Když skript skončí nenulově,
+  **řekni to** a nech starou instanci běžet.
 - **Po mergnutí PR se vydá nový tag a GitHub release.** Release notes píšeme česky
   a popisují **jen to, co se v téhle verzi změnilo**: co přibylo, co se opravilo, co se
   rozhodlo jinak a proč, co se změřilo, co se zamítlo. Patří tam i to, co se změnou
