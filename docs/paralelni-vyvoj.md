@@ -4,12 +4,12 @@ Jak se vyřizuje **seznam** issues. Prostředí na to dalo #228 (sloty), tohle j
 posoudí, co dostane subagent a co si nechává orchestrátor.
 
 Pravidla z [`CLAUDE.md`](../CLAUDE.md) platí beze změny — tenhle dokument je nemění, jen říká,
-**kdo je plní**. Jediná výjimka je pauza na proklikání, viz níž; ta je zapsaná jako vědomá
-změna.
+**kdo je plní**. Jediná výjimka je pauza na proklikání: **nepadá, ale posouvá se před merge**
+a jde přes orchestrátora (§4). Je to zapsané jako vědomá změna.
 
 Postup je: **posoudit nezávislost → přidělit sloty → pustit subagenty**, a každý z nich si svoje
-issue dotáhne až do mergnutého PR a releasu. Orchestrátorovi zbývá restart hlavní aplikace
-a úklid.
+issue dotáhne až do mergnutého PR a releasu — s jedinou zastávkou na proklikání těsně před mergem.
+Orchestrátorovi zbývá tlumočit připomínky, restart hlavní aplikace a úklid.
 
 ## Kdy se to použije
 
@@ -69,12 +69,17 @@ Subagent dostane worktree (`isolation: "worktree"`) a v zadání tohle:
 - **číslo issue** a pokyn, ať si ho přečte přes `gh api` (`gh issue view` v tomhle repu padá),
 - pokyn, že platí `CLAUDE.md` — včetně dokumentace ve stejném commitu a vlastní revize diffu
   před pushem,
+- **pauzu na proklikání před mergem** i s tím, co má v hlášení stát (§4). Patří to do zadání ze
+  stejného důvodu jako slot: všechno ostatní subagenta tlačí k dotažení, takže pauza doháněná
+  zprávou během běhu **přijde pozdě** — na M9 tak dva ze čtyř agentů domergovali dřív, než jim
+  zpráva došla,
 - **kde končí jeho práce**: issue je hotové, PR mergnutý, release vydaný a **jeho aplikace
   uklizená** (viz krok 5).
 
 Co subagent dělá: implementaci, testy, vlastní revizi diffu, dokumentaci, commit, push, PR,
-reakci na Copilota — a pak **merge, zavření issue a release**. Nečeká na pokyn; zelené testy,
-vyřešené nálezy a hotové zadání stačí, přesně jak to `CLAUDE.md` říká o mergování obecně.
+reakci na Copilota — pak **pauzu na proklikání** a po ní **merge, zavření issue a release**. Na
+pokyn čeká **jedině u té pauzy**; na nic jiného, protože zelené testy, vyřešené nálezy a hotové
+zadání stačí, přesně jak to `CLAUDE.md` říká o mergování obecně.
 
 **Změna proti první verzi tohohle dokumentu** (#247), kde stálo, že subagent nemerguje a merge
 patří orchestrátorovi, protože jediný vidí na všechny větve. V provozu se ukázalo, že to je
@@ -102,26 +107,59 @@ Co subagent **nedělá**:
 
 ## 4. Pauza na proklikání — změna pravidla
 
-`CLAUDE.md` chce pauzu **před prvním pushem**. V dávce **odpadá** a kontrola se přesouvá na
-**hlavní aplikaci po mergi**, kterou orchestrátor restartuje.
+`CLAUDE.md` chce pauzu **před prvním pushem**. V dávce se **nezruší, jen se posune před merge**:
+subagent má hotový PR i vyřízeného Copilota, zastaví a nechá člověka proklikat **svou slotovou
+aplikaci**. Merge čeká na odpověď; všechno před ním si subagent řídí sám.
 
-Důvod: subagent nemá jak zavolat člověka, a kdyby na odpověď čekal, blokuje slot i sebe. Když
-navíc dotahuje issue až do mergnutého PR (#247), není kde pauzu udělat, aniž by se celý smysl
-paralelního běhu ztratil. Co se z pravidla ztratit **nesmí**: subagent se na obrazovku musí
-podívat **sám a napřed** (screenshotem nebo offscreen renderem, viz [`testovani.md`](testovani.md)).
-To je jeho práce, ne uživatelova — mergnout rozbitou obrazovku je horší než ji ukázat.
+Jak to technicky drží: subagent **zavolá člověka přes orchestrátora** — `SendMessage` na `main`
+— a **skončí svůj turn**. Čekáním tedy neblokuje ani slot, ani sebe: leží pasivně a zpráva
+s odpovědí ho probudí z transkriptu se zachovaným kontextem.
 
-Když po restartu něco nesedí, **je z toho nové issue**, ne blokovaná větev. Je to levnější, než
-jak to vypadá: změna už je v mainu, takže se opravuje proti stavu, který si člověk může skutečně
-proklikat — a ne proti větvi, kterou mezitím pět dalších mergů posunulo.
+Co má v hlášení stát, aby pauza k něčemu byla:
 
-**Změna proti první verzi**, kde se pauza posouvala před merge a sbírala se za celou dávku.
-Padla spolu s pravidlem, že subagent nemerguje (#247).
+- **číslo PR** a jak je vyřízený Copilot,
+- **jméno aplikace, kterou má člověk otevřít** (`/Applications/PRism-<slot>.app`) — a čerstvě
+  nainstalované, `./bin/run.sh` ve svém stromě těsně předtím, ať se nekouká na starý build,
+- **na co se má podívat**: obrazovka, cesta k ní a co v ní uvidí. Když se ke stavu nedá dojít
+  běžným používáním (šířka okna, spadlá session), tak i **jak se k němu dostat**,
+- **co si měřil sám** a co mu na tom nesedělo.
+
+Co se z pravidla ztratit **nesmí**: subagent se na obrazovku musí podívat **sám a napřed**
+(screenshotem nebo offscreen renderem, viz [`testovani.md`](testovani.md)). Pauza to nenahrazuje —
+ukázat obrazovku, na které je něco zjevně rozbité, je kolo navíc, stejně jako u Copilota.
+
+**Neviditelná změna pauzu nedostane** (vrstva bez UI — modely, parser, protokol). Subagent napíše
+do hlášení jednou větou, že vidět není nic a proč, doloží to zelenými testy a merguje. Rozhoduje,
+jestli se něco změnilo na obrazovce, ne jak je změna velká — je to tentýž rozdíl, jaký má
+`CLAUDE.md` mimo dávku.
+
+**Slot se uklízí až po mergi**, nikdy před pauzou (§5). Uklizená aplikace znamená, že není na čem
+klikat — a přesně to se na M9 stalo u #237.
+
+**Změna proti #247**, kde stálo, že pauza v dávce odpadá a kontrola se přesouvá na hlavní aplikaci
+po mergi, protože „subagent nemá jak zavolat člověka". Změnilo se to ze dvou důvodů:
+
+1. **Ta premisa byla nepravdivá.** Subagent má cestu k člověku přes orchestrátora a čekání ho nic
+   nestojí. Argument o blokovaném slotu tedy neplatil — platí jen o tom, kdyby čekal aktivně.
+2. **Směna byla nevýhodná.** Připomínka k větvi, která ještě stojí, je jedna změna v ní.
+   Tatáž připomínka po mergi je nové issue, tedy branch, PR, Copilot, merge a release znovu.
+   Pauza před mergem je proti tomu skoro zdarma, protože se vejde do okna, ve kterém stejně
+   čekáme na Copilota (latence v minutách).
+
+**Zastavuje se před mergem, ne před prvním pushem** — proti pravidlu mimo dávku je to vědomý
+posun. Mimo dávku sedí pauza před pushem, protože tam je změna nejlevnější na přepsání; v dávce by
+to ale znamenalo dvě čekání za sebou (na člověka a pak na Copilota), kdežto před mergem se obojí
+překryje. Cena je, že připomínka přijde nad kódem, který už prošel review; to je přijatelné,
+protože se řeší vzhled a chování, ne struktura.
+
+Co po mergi nesedí přesto, **je nové issue**, ne vracení mergnuté větve — to zůstává z #247
+v platnosti. Pauza počet takových issues zmenšuje, nenulují ho.
 
 ## 5. Merge, release, restart
 
-**Merguje si každý subagent sám**, jakmile je jeho PR zelený a Copilot vyřízený (#247) — čeká se
-tedy jen na práci, ne na frontu. Pořadí se **neurčuje předem**: kdo je dřív hotov, jde dřív.
+**Merguje si každý subagent sám**, jakmile je jeho PR zelený, Copilot vyřízený (#247) a člověk
+změnu proklikal (#256, §4) — čeká se tedy na práci a na jedno slovo, ne na frontu. Pořadí se
+**neurčuje předem**: kdo je dřív hotov, jde dřív.
 
 Co z toho plyne pro toho, kdo přijde druhý: **main se do větve nezvedá preventivně**, jen když to
 GitHub hlásí jako konflikt nebo když větev na mergnuté změně stojí. Rebase ne — main je squashnutý,

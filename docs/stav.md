@@ -649,9 +649,15 @@ nezavírá issue, nevydává release) a **že slot přiděluje orchestrátor** �
 worktree `.prism-slot` nemá, takže by přepsal aplikaci, se kterou se pracuje.
 
 **Mění to jedno pravidlo:** v dávce se pauza na proklikání posouvá z „před prvním pushem“ na
-„před merge“ a sbírá se za celou dávku naráz. Subagent nemá jak zavolat člověka a čekáním by
-blokoval sebe i slot; PR před mergem je přitom pořád levný na přepsání, takže smysl pauzy to
-drží. Podívat se na obrazovku sám a napřed platí dál.
+„před merge“. Prošla dvěma korekcemi a platí verze z **#256**: subagent zastaví s hotovým PR
+a vyřízeným Copilotem, nechá si proklikat **svou slotovou aplikaci** a merge na odpověď počká;
+člověka volá **přes orchestrátora**. Sbírání za celou dávku z #231 padlo s tím, že merguje každý
+sám (#247), a mezitím pauza chvíli **odpadala úplně** — s odůvodněním, že subagent nemá jak
+zavolat člověka a čekáním by blokoval sebe i slot. Obojí neplatilo: cesta k člověku vede přes
+orchestrátora a subagent u ní čeká **pasivně** (dokončí turn, zpráva ho probudí). Ukázala to
+dávka M9, kde pauza nebyla v zadání a **dva agenti ze čtyř domergovali dřív, než jim došla
+zpráva** — proto je od #256 v zadání od začátku. Podívat se na obrazovku sám a napřed platí dál,
+neviditelná změna pauzu nedostane.
 
 U slotů (#228) dopadly tři věci jinak, než jak byly v zadání:
 
