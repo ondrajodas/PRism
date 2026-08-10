@@ -25,6 +25,10 @@ struct ReleaseNotesScene: View {
             // z menu a po aktualizaci — tedy vždycky od něj, takže tam se člověk v tu chvíli
             // kouká. Mechanismus je tentýž, jakým se od začátku středí nastavení.
             .centeredInMainWindow()
+            // **A zůstane před hlavním oknem, dokud je otevřené** (#243) — tou samou dvojicí jako
+            // nastavení, viz `AuxiliaryWindowLevel`. Bez toho se okno vystředěné v hlavním okně
+            // schová za ním celé a vypadá to, že se zavřelo.
+            .keptInFrontOfApp()
             // **Esc okno zavře.** Je to okno na čtení — nic se v něm nerozepisuje a nic se
             // z něj neodesílá, takže tu není co ztratit; jinak je na to jediná cesta ⌘W.
             // Od #151 to má i nastavení, kde se rozepsaná hodnota doručí (`flush`) při zavření;

@@ -881,6 +881,16 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   Že se okno **nerozpůlí mezi monitory**, vyšlo z testu, který nejdřív čekal opak a spadl:
   hostitel přes hranu dvou monitorů posune okno celé na ten s větším průnikem. Zapsané jako
   chování, ne jako překlep v testu.
+- **`AuxiliaryWindowLevel` (#243)** — na rozdíl od středění se tady testuje **`NSWindow`**, protože
+  obě hodnoty jsou jeho vlastnosti a nedají se z ničeho spočítat; okno se v testu jen vyrobí, nikdo
+  ho neukazuje. Nejcennější je tvrzení o **`hidesOnDeactivate`**: samo `.floating` je ta naivní
+  oprava, po které okno plave i nad cizími aplikacemi, a test jen na hladinu by o tom mlčel. Proto
+  se ověřují obě hodnoty zvlášť a k tomu, že hladina **oknem nehýbe** — středění (#164) a hladina
+  jsou dvě věci udělané témuž oknu a nemají si do sebe mluvit.
+
+  Zbytek téhle změny je chování oken, které unit test nepokryje — pořadí oken, skrytí při odchodu
+  aplikace do pozadí a to, že se zavřené okno nevrací. Ověřuje se **spuštěním**, viz *Jak změřit
+  pořadí a hladinu oken* níž.
 - **`CacheEviction`** — proti skutečné dočasné složce, ne proti fake filesystému: rozpočet
   je injektovatelný, takže stačí malé soubory. Pozor, počítá se **alokovaná** velikost, tedy
   po blocích — stobajtový soubor zabere 4 KB a testovací rozpočty musí být řádově výš.
@@ -999,6 +1009,51 @@ osascript -e 'tell application "System Events" to tell process "PRism" to get po
 
 Vyžaduje to oprávnění Accessibility. `entire contents` u `AXScrollArea` občas selže na převodu
 typu — hierarchii je pak potřeba projít po patrech (`UI elements of …`).
+
+### Jak změřit pořadí a hladinu oken (#243)
+
+Chování oken — co je před čím, co je vidět a co se vrací — se nedá otestovat unit testem a nedá
+se přečíst z kódu. Měří se dvěma nástroji naráz, protože každý umí něco jiného:
+
+```bash
+# pořadí oken jedné instance zpředu dozadu (accessibility)
+osascript -e 'tell application "System Events" to return name of windows of ¬
+    (first application process whose bundle identifier is "com.ondrajodas.prism.d")'
+```
+
+```swift
+// hladina okna a skutečné z-order z window serveru — `layer 0` je normální okno,
+// `layer 3` plovoucí; CGWindowList vrací okna zpředu dozadu
+CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+```
+
+Hladina je to, co dokazuje „nedá se zaklopit“ **bez klikání**: okno na `layer 3` nemá čím zakrýt
+žádné okno aplikace na `layer 0`, to je pravidlo window serveru. Pořadí z accessibility k tomu
+řekne, jestli je okno vůbec na obrazovce — skryté okno v seznamu **není**, takže „přepnul jsem do
+jiné aplikace a není vidět“ se pozná tím, že ze seznamu zmizí.
+
+Tři pasti, každá stála kolo hledání:
+
+- **Procesy se nesmí adresovat jménem.** Při paralelním vývoji běží víc PRismů a všechny mají
+  `application process "PRism"` — takže `tell process "PRism"` sáhne do cizí instance. Cíl se
+  adresuje `bundle identifier` nebo `unix id`.
+- **Reference na prvek se nesmí vracet z `tell` bloku.** System Events do specifieru zapíše
+  `application process "PRism"` **podle jména**, takže uložená reference se při dalším použití
+  přeloží na cizí proces a spadne na „okno nelze načíst“ — u okna, které přitom je na obrazovce.
+  Prvek se proto adresuje celou cestou v jednom výrazu
+  (`text field 1 of group 1 of scroll area 2 of group 1 of window 1 of (first application process
+  whose unix id is …)`). Vnořené `whose` (proces i okno) System Events neumí vůbec.
+- **Hlavní okno se dopředu dostane bez klikání na souřadnice** — `Soubor → Nové okno scény`.
+  Nové okno hlavní scény je normální okno aplikace otevřené vpředu, takže je to tatáž situace
+  jako kliknutí do hlavního okna, a bez rizika, že klik na souřadnice skončí v okně jiné
+  instance. `AXRaise` ani `AXMain`, položka v menu `Okno` a `⌘\`` **nestačí**: měřeno na verzi
+  před #243, kde se pořadí neměnilo ani jedním z nich, takže by z nich vyšlo, že porucha
+  neexistuje.
+
+A dvě věci o měření samotném: čekat se musí **velkoryse** (aktivace aplikace a obnovení skrytého
+okna trvá i přes sekundu a s krátkou pauzou vyjde „okno se nevrátilo“ tam, kde se jen ještě
+nevrátilo), a měřit se má **z čistého stavu** — okno nechané otevřené z předchozího běhu skriptu
+posune celou posloupnost o krok a výsledek pak nejde přečíst.
 
 Co se **nedá naklikat** (chybějící binárka, chyba sítě, prázdný stav nad plnou frontou), se dá
 vykreslit dočasným testem přes `ImageRenderer` do PNG ve scratchpadu. Před commitem se maže.

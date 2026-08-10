@@ -734,5 +734,20 @@ velkého diffu vedle sebe a chová se stejně na mainu; `WordDiff` stojí 18 % c
 v nejhorším případě a v `sample`u ztuhlého procesu není vůbec. Tuhnutí je tedy vlastní issue
 v území #220/#223; postup a vyloučené příčiny jsou v [`testovani.md`](testovani.md).
 
+**Nastavení a novinky zůstávají v popředí aplikace (#243)** — `AuxiliaryWindowLevel`
+a `keptInFrontOfApp()` v `App/Views/WindowCentering.swift`, tedy další věc udělaná témuž oknu,
+ne nový mechanismus. Vzniklo to z následku středění (#164): vystředěné okno je menší než hlavní,
+takže se za ním schová beze zbytku a vypadá jako zavřené — přitom je otevřené, `willClose`
+nepřijde nikdy. Je to **změna rozhodnutí z #127**, kde se hladina nechávala normální s tím, že
+kliknutí mimo okno ho má odklidit; odklidit znamená zavřít, a to se neděje.
+
+Drží to dvojice a **nedá se rozdělit**: `.floating` samo by okno vyneslo i nad cizí aplikace,
+`hidesOnDeactivate` ho v aplikaci udrží tím, že se s jejím odchodem do pozadí skryje. Ověřeno
+spuštěním na slotu — pořadí oken z accessibility a hladina z `CGWindowList`: nad novým oknem
+hlavní scény (`layer 0`) zůstává nastavení i novinky vpředu (`layer 3`), ve Finderu nejsou
+v seznamu oken vůbec, s návratem do aplikace se vrátí i s rozepsanou hodnotou v poli a zavřené
+okno se nevrací. Naivní oprava se tím pádem pozná i v testech: `hidesOnDeactivate` má vlastní
+tvrzení, protože zelený test jen na hladinu by o ní mlčel.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

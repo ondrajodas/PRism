@@ -1411,6 +1411,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `RunUsageText` | Cena, trvání a počet kol jako text — jedno místo pro osu i stavový řádek |
 | `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory, zakázané notifikace |
 | `WindowCentering`, `WindowReader`, `ScreenBounds` | Vystředění pomocného okna **v hlavním okně**, ne na obrazovce (#164) — z jednoho místa pro nastavení i novinky |
+| `AuxiliaryWindowLevel`, `keptInFrontOfApp()` | Pomocné okno zůstává **před ostatními okny aplikace, a jedině před nimi** (#243) — `.floating` plus `hidesOnDeactivate` |
 | `DiffCopyActions`, `copyMenu(_:selectText:)` | Kopírování kódu z diffu (#157) — co nabídne kontextové menu řádku a hunku |
 | `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157) |
 | `DiffCodeBlockView`, `DiffBlockRowView` | Blok v pohledu pod sebou a k němu pilulka na komentář a tažení rozsahu |
@@ -1683,6 +1684,33 @@ Věci, které se u toho nemají rozbít:
     se okno **nerozpůlí mezi monitory**: ořez ho posune celé na tu obrazovku, na které hlavní okno
     převážně leží (podle plochy průniku — `NSRect.null` má nekonečné rozměry, takže „žádný průnik“
     musí dát nulu, jinak by vyhrála obrazovka, na které hostitel není).
+
+- **Obě pomocná okna zůstávají před ostatními okny aplikace, a jedině před nimi** (#243) —
+  `AuxiliaryWindowLevel` a `keptInFrontOfApp()`. Vzniklo to z toho, že středění (#164) samo
+  vyrobilo horší poruchu: vystředěné okno je menší než hlavní okno, takže se za ním schová
+  **beze zbytku** a vypadá jako zavřené — změřeno, hlavní okno 1296×1032 proti nastavení
+  900×452 — přitom je pořád otevřené a `⌘,` ho jen znovu vytáhne. Pět věcí, na kterých to stojí:
+  - **Je to dvojice a nedá se rozdělit.** `.floating` samo by okno vyneslo i nad **cizí**
+    aplikace, tedy z „v popředí aplikace“ by bylo „v popředí všeho“; `hidesOnDeactivate` ho
+    v aplikaci udrží tím, že se okno s jejím odchodem do pozadí skryje. Každá hodnota sama je
+    chyba, proto jsou na jednom místě a **na obě je test** — na `hidesOnDeactivate` ten
+    důležitější, protože zelený test na hladinu by o naivní opravě mlčel.
+  - **Skrytí není zavření.** Okno se odsune z obrazovky (`orderOut`) a obsah scény žije dál —
+    změřeno psaním do `SourceListEditor`: dopsaná hodnota je po návratu do aplikace v poli pořád,
+    takže `@State` formuláře cyklus přežil. Z toho plyne, že nepřichází ani `onDisappear`, na
+    kterém visí doručení rozepsané hodnoty (#151) — a taky nemá co doručovat, protože se nic
+    nezavřelo.
+  - **Zavřené okno se nevrací.** Systém při aktivaci ukazuje jen ta okna, která schoval sám,
+    takže zavřít a přepnout tam a zpátky nechá aplikaci s jediným oknem. Změřeno třikrát
+    v řadě u nastavení i u novinek, protože je to ta polovina zadání, kterou naivní oprava
+    (`.floating` a nechat to tak) rozbije.
+  - **Nastavení hladinu dostává na scéně** (`SettingsScene`), ne u formuláře, takže platí i pro
+    stav před preflightem, kde není store a formulář se nemá čím naplnit. Středění zůstává
+    u `SettingsView`, protože má vlastní pravidlo (**při vzniku obsahu**), do kterého hladina
+    nemá co mluvit. U novinek jsou obě věci nad obsahem scény — je tam jen jeden.
+  - **Změna proti #127**, kde stálo, že se hladina nechává normální a `.floating` je vyzkoušené
+    a zamítnuté, protože kliknutí mimo okno ho má odklidit. Odklidit ale znamená zavřít, a to se
+    neděje: `willClose` nepřijde nikdy. Zamítnutí tedy stálo na chování, které aplikace neměla.
 - **Rozbitý soubor editor nepřepíše.** Když `configurationFailure` není `nil`, místo
   formuláře je chyba s nabídkou soubor otevřít nebo načíst znovu. Uložit přes něj výchozí
   hodnoty by zahodilo něco, co uživatel psal — kvůli chybějící čárce.
@@ -2655,6 +2683,10 @@ Věci, které se u toho nemají rozbít:
   tedy tou samou cestou jako nastavení. Otevírá se z toolbaru hlavního okna, z menu a po
   aktualizaci, takže na velkém (nebo druhém) monitoru by vyskočilo mimo to, kam se člověk kouká.
   Podrobnosti u `WindowCentering` níž.
+- **A zůstává před hlavním oknem, dokud je otevřené** (#243) — `keptInFrontOfApp()`, tatáž
+  dvojice jako u nastavení. Bez toho platí u novinek tentýž následek středění: okno je menší než
+  hlavní okno, takže za ním zaleze celé a vypadá jako zavřené. Nad cizí aplikací přitom neplave,
+  s odchodem aplikace do pozadí se skryje. Podrobnosti u `AuxiliaryWindowLevel` níž.
 - **Aplikace neví, kolikátá je, a okno o tom mlčí.** `MARKETING_VERSION` je pořád `0.1`,
   zatímco tagy jsou na `v1.1.x` — verze v bundlu tagy nikdy nesledovala. Okno proto mluví
   o tom, **co vyšlo na GitHubu**, a číslo běžící verze nikde nevypisuje; u lokálního buildu
