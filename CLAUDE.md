@@ -414,6 +414,12 @@ Zvlášť stojí za přečtení, než sáhneš na:
   Samotný `App/Assets.xcassets` se ale v pbxproj **nevyjmenovává** — buildable folder ho
   vezme z filesystému a `actool` ho zkompiluje do `Assets.car` a `AppIcon.icns`. Ověřeno
   obsahem `.app`.
+- **V zanořeném stromu se rozměr nenechává vyjednávat, když se dá spočítat** (#220).
+  `frame(maxWidth: .infinity)` na každé úrovni zanoření stojí **~5,5× na úroveň** — okno na PR
+  s 2000 řádky tuhlo 20 minut na 100 % CPU. Šířka se předává (`availableWidth`, `narrowingWidth`,
+  `filling` v `App/Views/AvailableWidth.swift`); pružná výška v líném seznamu je tatáž chyba.
+  Tuhnoucí okno se diagnostikuje `sample`m běžícího procesu, ne odhadem — viz
+  [`docs/testovani.md`](docs/testovani.md).
 - **V shell skriptech se proměnná v české próze píše `${VAR}`.** Uvozovka „ hned za
   `$VAR` shodí bash 3.2 (ten je v `/bin/bash`) v UTF-8 locale na `unbound variable`: její
   byty se počítají do jména proměnné. Chytí to `set -u`, ale až za běhu — `bash -n` ne.

@@ -182,12 +182,23 @@ struct PullRequestDetailView: View {
             // `.diffpane` i `.convpane` na `--panel`. Bez toho prosvítalo `background`
             // (skoro černá) a obsah plaval v prázdnu. Panel vedle si maluje `chrome` sám,
             // takže se ho tohle netýká.
-            Group {
-                switch store.detailTab(for: pullRequest.id) {
-                case .filesChanged: diff
-                case .overview: overview
-                case .conversation: conversation
+            // **Šířka se tady změří a pošle dolů** (#220). Je to ta hranice, za kterou obsah tabu
+            // svou šířku **zná**, takže ji nemusí vyjednávat na každé vnořené úrovni — a právě to
+            // vyjednávání zaseklo okno na velkém PR na 20 minut. Naměřeno: strom v hloubce 8 stál
+            // 15 700 ms pružně a 2,2 ms s předanou šířkou. Podrobnosti u `AvailableWidth`.
+            //
+            // `GeometryReader` patří **sem**, ne dovnitř seznamů: tady je jeden na celý tab,
+            // uvnitř osy nebo diffu by byl na každé položce.
+            GeometryReader { proxy in
+                Group {
+                    switch store.detailTab(for: pullRequest.id) {
+                    case .filesChanged: diff
+                    case .overview: overview
+                    case .conversation: conversation
+                    }
                 }
+                .availableWidth(proxy.size.width)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Palette.surface)

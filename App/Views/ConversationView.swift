@@ -149,6 +149,9 @@ struct ConversationView: View {
                     }
                 }
                 .padding(16)
+                // Odsazení se musí odečíst, jinak by uzly dostaly šířku celé osy a přetekly
+                // o těch 16 bodů na každé straně (#220).
+                .narrowingWidth(by: 32)
             }
         }
     }

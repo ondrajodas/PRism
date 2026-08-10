@@ -185,9 +185,12 @@ struct ConversationEntryView: View {
                     .help("Otevřít na GitHubu")
                 }
             }
+            // Zúžení jde **před** odsazení, ať `filling()` níž čte plnou šířku karty a rámec
+            // na ni dosáhne; děti uvnitř vidí o 22 bodů méně (#220).
+            .narrowingWidth(by: 22)
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .filling(alignment: .leading)
             .background(Palette.raised)
 
             Rectangle().fill(Palette.lineSoft).frame(height: 1)
@@ -203,11 +206,12 @@ struct ConversationEntryView: View {
                         .foregroundStyle(Palette.ink3)
                 }
             }
+            .narrowingWidth(by: 22)
             .padding(.horizontal, 11)
             .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .filling(alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .filling(alignment: .leading)
         .background(Palette.chrome, in: .rect(cornerRadius: 7))
         .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line, lineWidth: 1) }
         // **Verdikt nese proužek na hraně**, ne jen odznak — tatáž škála jako v řádku fronty

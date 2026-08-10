@@ -1355,6 +1355,52 @@ vyjde `neběželo`, tedy totéž jako u PR, který nikdo nekontroloval. Nastalo 
   odchytit nejde. Dotažení nálezů z transcriptu zůstává v #94 jako ta drahá varianta pro
   zbytek.
 
+## Šířka v okně (`App/Views/AvailableWidth.swift`)
+
+**Pružná šířka na každé úrovni zanoření je výkonnostní chyba, ne otázka vkusu** (#220). Každá
+úroveň, která řekne `frame(maxWidth: .infinity)`, znovu vyjednává šířku se svými dětmi, a cena
+layoutu proto roste **~5,5× na úroveň zanoření**. Změřeno offscreen renderem na stromu, který
+kopíruje tvar uzlu osy konverzace:
+
+| Hloubka zanoření | Jeden layout |
+|---|---|
+| 4 | 11 ms |
+| 6 | 350 ms |
+| 8 | 15 700 ms |
+
+Okno se na PR s ~2000 změněnými řádky zaseklo na **20 minut na 100 % CPU**, a `sample` běžícího
+procesu ukázal, že čas nejde do našich funkcí: v jednom zásobníku bylo 3562× `LayoutEngineBox.
+sizeThatFits` a k tomu `StackLayout…sizeChildrenGenerallyWithConcreteMajorProposal`
+a `NSAttributedString.MetricsCache.findMetrics`. Tuhly **oba taby**, protože nešlo o obsah, ale
+o tvar stromu, který mají společný přes detail PR.
+
+**Je to tatáž třída chyby jako pružná výška v líném seznamu** (viz `App/Diff/`, buňka dvojice):
+tam byl vinen `maxHeight: .infinity` v `LazyVStack`u, který výšku nenavrhuje, a našel se taky
+`sample`m. Pravidlo je proto jedno: **v zanořeném stromu se rozměr nenechává vyjednávat, když se
+dá spočítat.**
+
+Jak to drží pohromadě:
+
+- `availableWidth(_:)` ustaví konkrétní šířku pro podstrom. Je **jediné místo**, kde se měří —
+  `GeometryReader` na hranici obsahu tabu v `PullRequestDetailView`. Dovnitř osy ani diffu
+  nepatří: tam by byl na každé položce.
+- `narrowingWidth(by:)` zúží šířku pro děti o vlastní odsazení nebo o pevného sourozence.
+- `filling(alignment:)` se roztáhne na dostupnou šířku — konkrétně, když ji zná, jinak pružně jako
+  dřív. `nil` znamená „nikdo ji nenastavil“, takže se views dají použít i mimo měřenou cestu.
+
+**Na pořadí modifikátorů záleží a plete se** (chyceno vlastní revizí u #220):
+`narrowingWidth` mění environment tomu, co obaluje, takže
+
+- `filling()` → `narrowingWidth(32)` dá rámec `šířka − 32`. To chce obsah **vedle pevného
+  sourozence** (osa 24 + mezera 8).
+- `narrowingWidth(22)` → `padding(11)` → `filling()` dá rámec plné šířky a dětem `šířka − 22`.
+  To chce **blok s vnitřním odsazením** — v obráceném pořadí nedosáhne hlavička karty na její
+  pravou hranu.
+
+**Co zatím pružné zůstalo:** poloviny v `DiffPairView`. `maxWidth: .infinity` tam drží **stejně
+široké sloupce**, takže `filling()` by každé polovině dalo plnou šířku a rozvržení by se rozsypalo.
+Potřebuje to krok „poloviční šířka“ a je to samostatná práce.
+
 ## Okno nastavení (`App/Views/Settings/`)
 
 Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisuje do téhož
