@@ -10,6 +10,7 @@ import SwiftUI
 struct SettingsView: View {
     let store: AppStore
     @Environment(\.controlActiveState) private var activeState
+    @Environment(\.dismiss) private var dismiss
     @State private var settings: SettingsModel
     /// Vybraná stránka. `@State`, ne `@AppStorage`: nastavení se otevírá kvůli konkrétní věci
     /// a vracet se do něj tam, kde jsem skončil minule, není, co člověk čeká — na rozdíl od
@@ -50,10 +51,32 @@ struct SettingsView: View {
                 store.isSettingsFrontmost = state == .key
             }
             // Zavřít okno jde dřív, než doběhne zpoždění před zápisem. Rozepsaná změna se
-            // nesmí ztratit jen proto, že jsem byl rychlejší než ono.
+            // nesmí ztratit jen proto, že jsem byl rychlejší než ono. Platí pro křížek i ⌘W,
+            // tedy pro cesty, kde se aplikace o zavření dozví až z konce view.
             .onDisappear {
                 store.isSettingsFrontmost = false
                 Task { await settings.flush() }
+            }
+            // **Esc okno zavře** (#151) — a doručení je tady **výslovně**, ne odkázané na
+            // `onDisappear` výš.
+            //
+            // Escem se zavírá jedním hmatem **uprostřed psaní**, takže je to ta cesta, u které
+            // se rozepsaná hodnota ztratí nejsnáz: mezi posledním úhozem a zavřením nemusí
+            // uběhnout ani těch 600 ms, po kterých se ukládá samo. Zapsat to na jedno pořadí
+            // (`flush`, pak `dismiss`) stojí dva řádky a nezávisí to na tom, kdy SwiftUI view
+            // zahodí — na rozdíl od `onDisappear`, který je tady pořád kvůli ostatním cestám.
+            //
+            // Zavírá se **i když zápis selhal**: křížek a ⌘W se taky nezastaví, a okno, ze
+            // kterého jedna z cest ven nejde, vypadá jako zaseknuté. Chyba zůstává v patičce,
+            // až se nastavení otevře znovu.
+            .hiddenShortcuts {
+                Button("Zavřít nastavení") {
+                    Task {
+                        await settings.flush()
+                        dismiss()
+                    }
+                }
+                .keyboardShortcut(.cancelAction)
             }
     }
 

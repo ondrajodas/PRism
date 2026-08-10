@@ -801,6 +801,48 @@ struct DraftPolicyTests {
             .contains("abcdef1"))
     }
 
+    // MARK: - Otevření potvrzení (#151)
+
+    /// Zkratka `⌘⏎` a tlačítko v panelu se musí ptát **stejně**: zkratka, která otevře okno tam,
+    /// kde je tlačítko zakázané, obchází právě tu bránu, kvůli které tlačítko zakázané je.
+    /// Proto vyčerpávající výčet — každý důvod potvrzení zavírá, s jedinou výjimkou níž.
+    @Test("Každý důvod, proč odeslat nejde, zavírá i potvrzení")
+    func everyBlockClosesTheSubmission() {
+        let blocks: [DraftSendBlock] = [
+            .nothingToSend,
+            .publishingNotAllowed(pr.repo),
+            .headUnknown(detail: nil),
+            .headUnknown(detail: "gh není přihlášený."),
+            .noVerdict,
+            .blankComment,
+        ]
+
+        for block in blocks {
+            #expect(!Policy.canOpenSubmission(block: block, canTransfer: false))
+            // Ani s možností přenést: přenesení spraví zastarání, ne chybějící verdikt.
+            #expect(!Policy.canOpenSubmission(block: block, canTransfer: true))
+        }
+        #expect(Policy.canOpenSubmission(block: nil, canTransfer: false))
+        #expect(Policy.canOpenSubmission(block: nil, canTransfer: true))
+    }
+
+    /// Zastarání je jediný důvod, se kterým se dá něco udělat **v tom okně** (#69): kontrola
+    /// kotev je jeho první stránka. Bez diffu, proti kterému se kontroluje, ale otevřít nejde —
+    /// okno by začalo krokem, který nemá z čeho složit.
+    @Test("Zastaralý draft otevře potvrzení jedině s možností přenést")
+    func onlyAStaleDraftOpensForTransfer() {
+        let stale = DraftSendBlock.stale(draft: "abc", head: "def")
+
+        #expect(Policy.canOpenSubmission(block: stale, canTransfer: true))
+        #expect(Policy.needsTransfer(block: stale, canTransfer: true))
+
+        #expect(!Policy.canOpenSubmission(block: stale, canTransfer: false))
+        #expect(!Policy.needsTransfer(block: stale, canTransfer: false))
+        // A hotový draft kontrolou kotev nezačíná, i kdyby diff po ruce byl — jméno tlačítka
+        // (`Zkontrolovat a odeslat…`) se řídí tímhle.
+        #expect(!Policy.needsTransfer(block: nil, canTransfer: true))
+    }
+
     // MARK: - Víc komentářů na jednom řádku
 
     /// Dva komentáře na tomtéž řádku **nedají odpověď**, ale dvě samostatná vlákna — změřeno

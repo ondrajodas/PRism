@@ -420,6 +420,13 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   nic, drží vlastní test. Plus to, že **každý důvod má
   vlastní neprázdnou větu** — prázdná by v okně vypadala jako mlčky zakázané tlačítko.
 
+  U **otevření potvrzení** (`canOpenSubmission`, #151) vyčerpávajícím výčtem: **každý** důvod,
+  proč se odeslat nedá, zavírá i potvrzení, a to i s možností přenést — přenesení spraví
+  zastarání, ne chybějící verdikt. Zastarání je jediná výjimka a jen tehdy, když je proti čemu
+  kotvy zkontrolovat. Je na to vlastní sada proto, že se od #151 na tutéž otázku ptají **dvě**
+  místa (tlačítko v panelu a zkratka `⌘⏎`); rozchod by znamenal zkratku, která otevře okno nad
+  zakázaným tlačítkem.
+
   U **předvyplněného verdiktu** (#114) to hlavní není, že s návrhem `noVerdict` zmizí, ale že
   návrh **nepřeskočí ostatní důvody** — prázdný komentář, zastarání ani bránu — a že z prázdného
   ani neexistujícího draftu nedělá „je co poslat“. `effectiveVerdict` má vlastní sadu na každý
@@ -458,6 +465,12 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   ve kterém `submission(for:)` nesmí vzniknout (zastaralý draft, chybějící verdikt, žádný
   draft), a to, že se konverzace načte znovu — bez toho by v `Přehledu` chybělo moje vlastní
   review až do přepnutí PR.
+
+  Od #151 k tomu test, že **otevření potvrzení nic neodešle** — tedy že po `submission(for:)`
+  zůstal draft v paměti i na disku a konverzace se nenačetla znovu. Jsou to obě stopy, které by
+  úspěšné odeslání zanechalo (`draftWasSubmitted`), takže se tvrdí „nestalo se“, ne „vrátilo to
+  objekt“. Je to podklad pod zkratku `⌘⏎`, která nedělá nic jiného než tohle. Ověřeno vložením
+  regrese: `discardDraft` uvnitř `submission(for:)` test shodí.
 - **`Policy` — přehled (#72)** — chronologické slití review, komentářů a vláken; že se vlákno
   **s kotvou** do přehledu nedostane (jinak se tentýž komentář čte na dvou místech); že review
   bez verdiktu a bez prózy vypadne (je to jen obálka řádkových komentářů), kdežto schválení
@@ -1017,6 +1030,30 @@ jinam — u #220 z toho byly dva snímky cizí aplikace a klikání mimo PRism. 
 ```bash
 osascript -e 'tell application "System Events" to tell process "PRism" to return {position, size} of window 1'
 ```
+
+**Klávesová zkratka se dá vyzkoušet jedině spuštěním** — a u #151 to bylo jediné, co odhalilo, že
+`⌥↓` po prvním skoku nikam nejde. Pět věcí, na kterých to stálo, a všech pět stálo kolo navíc:
+
+- **Když běží víc slotů, `process "PRism"` je nejednoznačné.** Všechny instance mají tentýž
+  název procesu (binárka se jmenuje `PRism` i ve slotu), takže se hledá podle **bundle ID** —
+  jinak se měří, klikají a zavírají cizí okna. Stalo se to: skript přesunul okno hlavní instance.
+- **`whose` nad procesy se v `System Events` láme** (`nelze načíst … -1728/-1719`). Spolehlivý je
+  obyčejný `repeat with p in (every application process whose name is "PRism")` a uvnitř
+  `if bundle identifier of p is "com.ondrajodas.prism.<slot>"`.
+- **Kliknutí do okna, které není vpředu, ho jen aktivuje** a k prvku se nedostane. Klikat se
+  proto musí dvakrát, nebo se okno napřed vytáhne — a `activate` patří do **každého** skriptu,
+  ne jednou na začátek relace: mezi dvěma `osascript` se terminál vrátí dopředu.
+- **Snímek se pořizuje uvnitř téhož skriptu** (`do shell script "screencapture …"`), jinak se
+  fotí to, co je vpředu **potom**.
+- **`NSEvent.modifierFlags` synthetickou klávesu nevidí.** Stav klávesnice se posláním události
+  ze `System Events` nemění, takže se modifikátory musí číst z `NSApp.currentEvent`. Se stavem
+  klávesnice vycházelo `⌥⇧↓` jako obyčejné `⌥↓` a vypadalo to jako chyba v aplikaci.
+
+Co se z běžící aplikace u #151 vyčetlo a jinak by se nevědělo: **SwiftUI páruje u šipek zkratku
+bez ohledu na `.shift`**, takže dvě tlačítka lišící se jen jím jsou jedna klávesa. Ověřeno oběma
+směry — po dočasném odebrání varianty se shiftem začalo `⌥↓` procházet nálezy a `⌥⇧↓` skákalo po
+tom samém. Je to platformní chování, takže na něj **test není** a drží ho jen ten zápis; kdyby se
+zkratky zase rozdělily na dvě tlačítka, projde build i testy a rozbije se to potichu.
 
 **Cena bloku se měří dvěma způsoby a je to schválně** (#223). Jeden blok podle délky je ten údaj,
 ze kterého se vybírá strop — to je práce, kterou appka zaplatí i za blok, jehož je vidět kousek.
