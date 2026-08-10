@@ -1437,6 +1437,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `RunUsageText` | Cena, trvání a počet kol jako text — jedno místo pro osu i stavový řádek |
 | `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory, zakázané notifikace |
 | `WindowCentering`, `WindowReader`, `ScreenBounds` | Vystředění pomocného okna **v hlavním okně**, ne na obrazovce (#164) — z jednoho místa pro nastavení i novinky |
+| `AuxiliaryWindowLevel`, `keptInFrontOfApp()` | Pomocné okno zůstává **před ostatními okny aplikace, a jedině před nimi** (#243) — `.floating` dokud je aplikace vpředu, jinak `.normal` |
 | `DiffCopyActions`, `copyMenu(_:selectText:)` | Kopírování kódu z diffu (#157) — co nabídne kontextové menu řádku a hunku |
 | `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157). Drží **šířku kontejneru i měření výšky** (`height(forWidth:)`, `height(ofRows:)`), aby se šířka pro měření nemohla rozejít s tou pro kreslení (#236) |
 | `DiffCodeBlockView`, `DiffBlockRowView` | Blok v pohledu pod sebou a k němu pilulka na komentář a tažení rozsahu |
@@ -1709,6 +1710,65 @@ Věci, které se u toho nemají rozbít:
     se okno **nerozpůlí mezi monitory**: ořez ho posune celé na tu obrazovku, na které hlavní okno
     převážně leží (podle plochy průniku — `NSRect.null` má nekonečné rozměry, takže „žádný průnik“
     musí dát nulu, jinak by vyhrála obrazovka, na které hostitel není).
+
+- **Obě pomocná okna zůstávají před ostatními okny aplikace, a jedině před nimi** (#243) —
+  `AuxiliaryWindowLevel` a `keptInFrontOfApp()`. Vzniklo to z toho, že středění (#164) samo
+  vyrobilo horší poruchu: vystředěné okno je menší než hlavní okno, takže se za ním schová
+  **beze zbytku** a vypadá jako zavřené — změřeno, hlavní okno 1296×1032 proti nastavení
+  900×452 — přitom je pořád otevřené a `⌘,` ho jen znovu vytáhne. Šest věcí, na kterých to stojí:
+  - **Hladina je funkce toho, jestli je aplikace vpředu**, ne jednorázové nastavení. `.floating`
+    dokud je vpředu, `.normal` jak přestane být. Samo `.floating` je naivní oprava, po které okno
+    plave i nad **cizími** aplikacemi — z „v popředí aplikace“ by bylo „v popředí všeho“ —
+    a proto je na pád hladiny zpátky **vlastní test**; zelený test jen na `.floating` by o té
+    naivní opravě mlčel.
+  - **Uvnitř aplikace nerozhoduje, které okno je klíčové.** Bere se aktivace **aplikace**
+    (`NSApp.isActive` a jeho notifikace), takže kliknutí do hlavního okna pomocné okno dozadu
+    nepošle — to je právě ta porucha, kterou tohle issue opravuje.
+  - **Okno se nikdy neschovává, a je to změna proti zadání**, které doporučovalo
+    `hidesOnDeactivate`. Skrytí je stav, který se s SwiftUI umí rozejít: při zkoušení se okno
+    **třikrát** ocitlo mimo obrazovku, ačkoli scéna dál žila — aktivace aplikace ho nevrátila,
+    `⌘,` s ním nepohnulo (pro SwiftUI bylo otevřené) a vrátilo se až dalším přepnutím aplikace.
+    To je tatáž porucha o vrstvu vedle. Hladina proti tomu **žádný stav nedrží**: co je zavřené,
+    zůstane zavřené, a co je otevřené, je vidět. Cena je, že nad cizí aplikací okno **zůstane na
+    obrazovce** (leží pod ní), místo aby zmizelo.
+  - **Zavřené okno se nevrací** — není co vracet, nic se neschovává. Změřeno třikrát v řadě
+    u nastavení i u novinek: zavřít křížkem a přepnout tam a zpátky nechá aplikaci s hlavním
+    oknem. Je to ta polovina zadání, kterou naivní oprava rozbije.
+  - **Hladina se nastavuje v `viewDidMoveToWindow`**, ne odloženě přes `DispatchQueue.main.async`
+    jako u středění. Změřeno: s odložením se okno nastavení otevřelo na `layer 0` a hladina se
+    zvedla teprve při dalším překreslení scény, tedy okno bylo vpředu až po chvíli.
+  - **Nastavení hladinu dostává na scéně** (`SettingsScene`), ne u formuláře, takže platí i pro
+    stav před preflightem, kde není store a formulář se nemá čím naplnit. Středění zůstává
+    u `SettingsView`, protože má vlastní pravidlo (**při vzniku obsahu**), do kterého hladina
+    nemá co mluvit. U novinek jsou obě věci nad obsahem scény — je tam jen jeden.
+
+    S tím souvisí, proč zdrojem pravdy **není `controlActiveState`** z prostředí, jak to zkoušela
+    první verze: nad obsahem scény zůstalo `.inactive`, i když byla aplikace vpředu a okno klíčové,
+    takže se hladina nezvedla vůbec (změřeno — okno na `layer 0` a nové okno hlavní scény ho
+    zaklopilo). Hlouběji ve `SettingsView` ta hodnota chodí, ale mechanismus, který funguje jen
+    v jednom místě hierarchie, je past.
+  - **Změna proti #127**, kde stálo, že se hladina nechává normální a `.floating` je vyzkoušené
+    a zamítnuté, protože kliknutí mimo okno ho má odklidit. Odklidit ale znamená zavřít, a to se
+    neděje: `willClose` nepřijde nikdy. Zamítnutí tedy stálo na chování, které aplikace neměla.
+  - **Fokus hladina nedrží, a držet nejde** — to je změřená hranice, ne opomenutí. Kliknutí do
+    hlavního okna z něj udělá klíčové okno, takže pomocnému oknu zešedne titulek se semaforem
+    a v seznamu vlevo zbledne modré vybrání; klávesy jdou do hlavního okna. Co se u toho změřilo:
+    - **Klíčové okno je v aplikaci právě jedno.** Vyzkoušeno v samostatném pokusu s plovoucím
+      utility panelem: po `main.makeKey()` je `panel.isKeyWindow == false`. Vrátit klíč zpátky jde
+      (`panel.makeKey()`), takže „neztratit fokus“ neznamená udržet ho, ale **vzít ho zpátky**.
+    - **Utility panel s tím nepomůže.** Titulek i semafor mu zešednou úplně stejně jako obyčejnému
+      oknu (doloženo screenshotem titulku panelu ve dvou stavech), takže ani „aspoň nevypadat
+      deaktivovaně“ tou cestou nejde. `styleMask.insert(.utilityWindow)` na okně, které `NSPanel`
+      není (a scény `Settings` i `Window` si svoje `NSWindow` vyrábějí samy), **nedělá vůbec nic** —
+      taky změřeno screenshotem.
+    - **Brát klíč zpátky se zamítlo.** Šlo by to (pozorovat `didBecomeKeyNotification` cizího okna
+      a zavolat `makeKey()` na svém), ale znamená to, že do hlavního okna nejde psát, dokud je
+      pomocné okno otevřené — a co je horší, kliknutí do rozepsaného komentáře v hlavním okně by
+      poslalo text **do pole v nastavení**. To je zápis do jiného místa, než kam se člověk kouká,
+      tedy horší vada než zešedlý titulek.
+    - **Po přepnutí aplikace zůstává klíč tam, kde byl.** Změřeno: když bylo klíčové hlavní okno,
+      je klíčové i po návratu do aplikace, ačkoli je pomocné okno vidět před ním. `⌘,`
+      (resp. položka v menu) klíč vrátí.
 - **Rozbitý soubor editor nepřepíše.** Když `configurationFailure` není `nil`, místo
   formuláře je chyba s nabídkou soubor otevřít nebo načíst znovu. Uložit přes něj výchozí
   hodnoty by zahodilo něco, co uživatel psal — kvůli chybějící čárce.
@@ -2681,6 +2741,11 @@ Věci, které se u toho nemají rozbít:
   tedy tou samou cestou jako nastavení. Otevírá se z toolbaru hlavního okna, z menu a po
   aktualizaci, takže na velkém (nebo druhém) monitoru by vyskočilo mimo to, kam se člověk kouká.
   Podrobnosti u `WindowCentering` níž.
+- **A zůstává před hlavním oknem, dokud je otevřené** (#243) — `keptInFrontOfApp()`, tentýž
+  mechanismus jako u nastavení. Bez toho platí u novinek tentýž následek středění: okno je menší
+  než hlavní okno, takže za ním zaleze celé a vypadá jako zavřené. Nad cizí aplikací přitom
+  neplave — jak aplikace přestane být vpředu, hladina padá zpátky na normální. Podrobnosti
+  u `AuxiliaryWindowLevel` níž.
 - **Aplikace neví, kolikátá je, a okno o tom mlčí.** `MARKETING_VERSION` je pořád `0.1`,
   zatímco tagy jsou na `v1.1.x` — verze v bundlu tagy nikdy nesledovala. Okno proto mluví
   o tom, **co vyšlo na GitHubu**, a číslo běžící verze nikde nevypisuje; u lokálního buildu

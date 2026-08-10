@@ -800,5 +800,34 @@ kouká se i na bitmapu hostovaného view, takže chytne i zamrzlý odpočet, kte
 nepozná (ověřeno vyndáním `TimelineView`). Text z okna přečíst nešlo — accessibility tree se
 v hostovaném okně nenaplní, změřeno.
 
+**Nastavení a novinky zůstávají v popředí aplikace (#243)** — `AuxiliaryWindowLevel`
+a `keptInFrontOfApp()` v `App/Views/WindowCentering.swift`, tedy další věc udělaná témuž oknu,
+ne nový mechanismus. Vzniklo to z následku středění (#164): vystředěné okno je menší než hlavní,
+takže se za ním schová beze zbytku a vypadá jako zavřené — přitom je otevřené, `willClose`
+nepřijde nikdy. Je to **změna rozhodnutí z #127**, kde se hladina nechávala normální s tím, že
+kliknutí mimo okno ho má odklidit; odklidit znamená zavřít, a to se neděje.
+
+Hladina je **funkce toho, jestli je aplikace vpředu**: `.floating` dokud je, `.normal` jak přestane
+být. Samo `.floating` je naivní oprava, po které okno plave i nad cizími aplikacemi. Ověřeno
+spuštěním na slotu — pořadí oken z accessibility a hladina z `CGWindowList`: nad novým oknem hlavní
+scény (`layer 0`) zůstává nastavení i novinky vpředu (`layer 3`), po přepnutí do Finderu jim hladina
+spadne na `layer 0`, po návratu je zpátky `layer 3` a zavřené okno se nevrací (3× v řadě u obou).
+Rozepsaná hodnota v poli přepnutí aplikace přežije.
+
+**Hladina prošla proklikáním** („jinak dobrý, že se už neschovává“), a vyšel z něj jeden požadavek
+navíc: aby pomocné okno neztrácelo fokus, když se klikne do hlavního okna. **To nejde a je to
+změřené, ne odhadnuté.** Klíčové okno je v aplikaci právě jedno (v pokusu s plovoucím utility
+panelem je po `main.makeKey()` `panel.isKeyWindow == false`), utility panelu zešedne titulek se
+semaforem úplně stejně jako obyčejnému oknu (doloženo screenshotem), `.utilityWindow` vložené do
+`styleMask` hotového okna nedělá nic, a brát klíč zpátky se zamítlo: znamenalo by to, že do hlavního
+okna nejde psát, a kliknutí do rozepsaného komentáře by poslalo text do pole v nastavení. Podrobnosti
+i s tím, co se u toho změřilo, jsou v [`architektura.md`](architektura.md) a v záznamu rozhodnutí.
+
+**`hidesOnDeactivate` ze zadání se vyzkoušelo a zamítlo.** Skrytí je stav navíc a s SwiftUI se umí
+rozejít: okno se třikrát ocitlo mimo obrazovku, ačkoli scéna dál žila — aktivace ho nevrátila, `⌘,`
+s ním nepohnulo a vrátilo se až dalším přepnutím aplikace. To je tatáž porucha, jakou issue
+opravuje, jen o vrstvu vedle. Cena změny je, že nad cizí aplikací okno **zůstane na obrazovce**
+(leží pod ní), místo aby zmizelo.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

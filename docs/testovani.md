@@ -946,6 +946,18 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   Že se okno **nerozpůlí mezi monitory**, vyšlo z testu, který nejdřív čekal opak a spadl:
   hostitel přes hranu dvou monitorů posune okno celé na ten s větším průnikem. Zapsané jako
   chování, ne jako překlep v testu.
+- **`AuxiliaryWindowLevel` (#243)** — na rozdíl od středění se tady testuje i **`NSWindow`**,
+  protože hladina je jeho vlastnost; okno se v testu jen vyrobí, nikdo ho neukazuje. Nejcennější
+  jsou dvě tvrzení o tom, co se stát **nesmí**: že v neaktivní aplikaci hladina padá zpátky na
+  `.normal` (jinak by okno plavalo i nad cizími aplikacemi — to je ta naivní oprava) a že se okno
+  **neskrývá** (`hidesOnDeactivate` zůstává `false`). To druhé je zapsané chování, ne detail:
+  skryté okno se s SwiftUI umí rozejít a zůstat mimo obrazovku, ačkoli je scéna otevřená. K tomu
+  ještě, že hladina **oknem nehýbe** — středění (#164) a hladina jsou dvě věci udělané témuž oknu
+  a nemají si do sebe mluvit.
+
+  Zbytek téhle změny je chování oken, které unit test nepokryje — pořadí oken, hladina za běhu
+  a to, že se zavřené okno nevrací. Ověřuje se **spuštěním**, viz *Jak změřit pořadí a hladinu
+  oken* níž.
 - **`CacheEviction`** — proti skutečné dočasné složce, ne proti fake filesystému: rozpočet
   je injektovatelný, takže stačí malé soubory. Pozor, počítá se **alokovaná** velikost, tedy
   po blocích — stobajtový soubor zabere 4 KB a testovací rozpočty musí být řádově výš.
@@ -1084,6 +1096,78 @@ osascript -e 'tell application "System Events" to tell process "PRism" to get po
 
 Vyžaduje to oprávnění Accessibility. `entire contents` u `AXScrollArea` občas selže na převodu
 typu — hierarchii je pak potřeba projít po patrech (`UI elements of …`).
+
+### Jak změřit pořadí a hladinu oken (#243)
+
+Chování oken — co je před čím, co je vidět a co se vrací — se nedá otestovat unit testem a nedá
+se přečíst z kódu. Měří se dvěma nástroji naráz, protože každý umí něco jiného:
+
+```bash
+# pořadí oken jedné instance zpředu dozadu (accessibility)
+osascript -e 'tell application "System Events" to return name of windows of ¬
+    (first application process whose bundle identifier is "com.ondrajodas.prism.d")'
+```
+
+```swift
+// hladina okna a skutečné z-order z window serveru — `layer 0` je normální okno,
+// `layer 3` plovoucí; CGWindowList vrací okna zpředu dozadu
+CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+```
+
+Hladina je to, co dokazuje „nedá se zaklopit“ **bez klikání**: okno na `layer 3` nemá čím zakrýt
+žádné okno aplikace na `layer 0`, to je pravidlo window serveru. A protože se z `CGWindowList` čte
+hladina i pořadí, pozná se z ní obojí naráz — že okno je vpředu, a taky že po odchodu aplikace do
+pozadí **spadlo zpátky na `layer 0`**, tedy nad cizí aplikací nestojí. Pořadí z accessibility k tomu
+řekne, které okno je uvnitř aplikace před kterým.
+
+Čtyři pasti, každá stála kolo hledání:
+
+- **Procesy se nesmí adresovat jménem.** Při paralelním vývoji běží víc PRismů a všechny mají
+  `application process "PRism"` — takže `tell process "PRism"` sáhne do cizí instance. Cíl se
+  adresuje `bundle identifier` nebo `unix id`.
+- **Reference na prvek se nesmí vracet z `tell` bloku.** System Events do specifieru zapíše
+  `application process "PRism"` **podle jména**, takže uložená reference se při dalším použití
+  přeloží na cizí proces a spadne na „okno nelze načíst“ — u okna, které přitom je na obrazovce.
+  Prvek se proto adresuje celou cestou v jednom výrazu
+  (`text field 1 of group 1 of scroll area 2 of group 1 of window 1 of (first application process
+  whose unix id is …)`). Vnořené `whose` (proces i okno) System Events neumí vůbec.
+- **Hlavní okno se dopředu dostane bez klikání na souřadnice** — `Soubor → Nové okno scény`.
+  Nové okno hlavní scény je normální okno aplikace otevřené vpředu, takže je to tatáž situace
+  jako kliknutí do hlavního okna, a bez rizika, že klik na souřadnice skončí v okně jiné
+  instance. `AXRaise` ani `AXMain`, položka v menu `Okno` a `⌘\`` **nestačí**: měřeno na verzi
+  před #243, kde se pořadí neměnilo ani jedním z nich, takže by z nich vyšlo, že porucha
+  neexistuje.
+
+- **Zavírat se má křížkem přes accessibility** (`click button 1 of window 1 …`), ne klávesou.
+  `⌘W` zavře okno, které má **fokus**, a to po předchozím kroku nemusí být to, co si měření myslí;
+  `Esc` v textovém poli spolkne pole (ruší editaci), takže se nezavře nic. Obojí vypadá jako
+  porucha okna, přitom je to porucha měření — jméno okna se proto **ověří** dřív, než se křížek
+  zmáčkne, aby se omylem nezavřelo hlavní okno.
+
+**Jestli okno „vypadá aktivně“, se pozná jedině screenshotem** (#243). Klíčové okno se od
+neklíčového liší třemi věcmi a všechny tři kreslí systém, ne aplikace: barevný semafor, jasný
+titulek a modré vybrání v seznamu. `screencapture` se musí pustit **z toho samého skriptu**, který
+aplikaci vytáhl dopředu (`do shell script` uvnitř `osascript`) — jinak se mezitím dostane vpředu
+terminál a vyfotí se on. Rám okna dá accessibility (`position`, `size` okna).
+
+```applescript
+tell application id bid to activate
+delay 2
+do shell script "screencapture -x -R" & x & "," & y & "," & w & ",34 /tmp/titulek.png"
+```
+
+Takhle se u #243 doložilo, že `.utilityWindow` v `styleMask` obyčejného okna nedělá nic a že
+i skutečnému utility panelu titulek zešedne — tedy že „aspoň ať to nevypadá deaktivovaně“ nejde.
+**Chování AppKitu se přitom nemusí zkoušet v aplikaci**: dvě okna a dva screenshoty se dají udělat
+v samostatném programu na třicet řádků (`swiftc /tmp/…swift`), který si sám sáhne na `makeKey()`
+a vyfotí se. Je to rychlejší než rebuild a odpověď je stejně platná.
+
+A dvě věci o měření samotném: čekat se musí **velkoryse** (aktivace aplikace trvá i přes sekundu
+a s krátkou pauzou vyjde „okno tam není“ tam, kde se jen ještě neukázalo), a měřit se má
+**z čistého stavu** — okno nechané otevřené z předchozího běhu skriptu, nebo přebylé okno hlavní
+scény, posune celou posloupnost o krok a výsledek pak nejde přečíst. Právě takhle vzniklo
+podezření na poruchu aplikace, kde byla ve skutečnosti rozsypaná posloupnost kláves; rozhodlo až
+opakování z čistého stavu.
 
 Co se **nedá naklikat** (chybějící binárka, chyba sítě, prázdný stav nad plnou frontou), se dá
 vykreslit dočasným testem přes `ImageRenderer` do PNG ve scratchpadu. Před commitem se maže.
