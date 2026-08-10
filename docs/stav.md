@@ -595,7 +595,7 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
 9. **Revize okna** (M9) — nový vizuální jazyk podle návrhu ze srpna 2026 a přestavba okna
    na záložky. Šestnáct issues ve čtyřech vlnách; **pořadí je v popisu milníku**, protože se
    podle něj rozhoduje, co se dá dělat souběžně. Hotové: řádek fronty #172, co se změnilo od
-   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219, sazba bloku „od minule“ #226 a sazba hlavičky PR #218. Mimo plán přibylo
+   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219, sazba bloku „od minule“ #226, sazba hlavičky PR #218 a odpočet příštího tiku #237. Mimo plán přibylo
    **#220 — okno vytuhlo na PR s ~2000 změněnými řádky**: pružná šířka na každé úrovni zanoření
    stojí ~5,5× na úroveň, takže se šířka teď měří jednou a předává dolů. Odpadlo z toho #223
    (blok bez stropu) a #224 (barvení bez cache) do milníku Průběžné — obojí se měřením vyloučilo
@@ -612,6 +612,14 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
    selhaný checkout zůstal bannerem v hlavičce. Odchylka od návrhu je odznak u `Přehledu`:
    mockup u něj má čtyřku, která odpovídá počtu dlaždic s fakty — a to je konstanta, takže
    místo ní počítá novinky od poslední návštěvy. Důvod je ve specifikaci.
+
+   U #237 se **otočilo rozhodnutí z #181**: příští tik v hlavičce dashboardu je odpočet
+   (`poslední tik 09:41 · za 43 s znovu`, jak to má návrh), ne absolutní čas. Námitka, kvůli
+   které tam absolutní čas stál — že odpočet znamená přepočítávat dashboard každou vteřinu —
+   se **změřila a neplatí**: `Text(_:style: .relative)` tiká sám a tělo view se u toho
+   nepřepočítává. Přibylo k tomu `PollState.isRefreshing`, protože `nextPoll` je po celou dobu
+   dotazu v minulosti a odpočet by šel přes nulu; v tu chvíli se místo čísla píše `ptám se…`.
+   Důvod, proč to drží observovatelný příznak a ne srovnání s hodinami, je ve specifikaci.
 
    U #216 se **rozšířila tvrdá podmínka č. 1**: `ReviewPublishing` má čtvrtou metodu
    (`comment`), protože composer komentáře pod PR je v návrhu a bez něj se pod PR nedá napsat
@@ -636,14 +644,23 @@ očištěnou o odesílání, notifikace a automat.
 Sloty daly paralelnímu vývoji prostředí, ale ne postup; bez zápisu by se seznam issues dál
 vyřizoval sériově, protože výchozí chování je subagenty nepouštět. Je v něm, podle čeho se
 pozná nezávislost (`ReviewPublishing` jde vždycky sám, `AppStore` stav a `Policy` jsou
-rizikové, `docs/stav.md` konfliktuje vždy a nevadí), co subagent dělá a co ne (nemerguje,
-nezavírá issue, nevydává release) a **že slot přiděluje orchestrátor** — subagent v izolovaném
-worktree `.prism-slot` nemá, takže by přepsal aplikaci, se kterou se pracuje.
+rizikové, `docs/stav.md` konfliktuje vždy a nevadí), co subagent dělá a co ne, a **že slot
+přiděluje orchestrátor** — subagent v izolovaném worktree `.prism-slot` nemá, takže by přepsal
+aplikaci, se kterou se pracuje. Hranice „co dělá a co ne“ se od #231 posunula dvakrát: v původním
+zápisu subagent nemergoval, nezavíral issue ani nevydával release, od **#247** si to všechno
+dotahuje sám a od **#250** po sobě uklidí i svou aplikaci. Orchestrátorovi zůstal rozvrh, sloty,
+úklid stromů a restart hlavní aplikace.
 
 **Mění to jedno pravidlo:** v dávce se pauza na proklikání posouvá z „před prvním pushem“ na
-„před merge“ a sbírá se za celou dávku naráz. Subagent nemá jak zavolat člověka a čekáním by
-blokoval sebe i slot; PR před mergem je přitom pořád levný na přepsání, takže smysl pauzy to
-drží. Podívat se na obrazovku sám a napřed platí dál.
+„před merge“. Prošla dvěma korekcemi a platí verze z **#256**: subagent zastaví s hotovým PR
+a vyřízeným Copilotem, nechá si proklikat **svou slotovou aplikaci** a merge na odpověď počká;
+člověka volá **přes orchestrátora**. Sbírání za celou dávku z #231 padlo s tím, že merguje každý
+sám (#247), a mezitím pauza chvíli **odpadala úplně** — s odůvodněním, že subagent nemá jak
+zavolat člověka a čekáním by blokoval sebe i slot. Obojí neplatilo: cesta k člověku vede přes
+orchestrátora a subagent u ní čeká **pasivně** (dokončí turn, zpráva ho probudí). Ukázala to
+dávka M9, kde pauza nebyla v zadání a **dva agenti ze čtyř domergovali dřív, než jim došla
+zpráva** — proto je od #256 v zadání od začátku. Podívat se na obrazovku sám a napřed platí dál,
+neviditelná změna pauzu nedostane.
 
 U slotů (#228) dopadly tři věci jinak, než jak byly v zadání:
 
@@ -733,6 +750,25 @@ přehlédlo. A **vyloučilo se, že za tuhnoucí okno může tahle změna** — 
 velkého diffu vedle sebe a chová se stejně na mainu; `WordDiff` stojí 18 % ceny skládání bloku
 v nejhorším případě a v `sample`u ztuhlého procesu není vůbec. Tuhnutí je tedy vlastní issue
 v území #220/#223; postup a vyloučené příčiny jsou v [`testovani.md`](testovani.md).
+
+**Blok kódu si říká o tu výšku, kterou nakreslí (#236)** — bublina nálezu se při některých šířkách
+okna kreslila přes poslední řádky bloku, oba texty naráz. Výška se měřila na kontejneru o šířku
+gutteru **širším**, než na jakém se kreslilo, takže se řádek, který se do změřené šířky ještě vešel,
+ve skutečnosti zalomil.
+
+Ze dvou cest v zadání se vybrala ta druhá: **gutter přestal být symetrický `textContainerInset`**
+a posouvá původ textu (`textContainerOrigin`), šířku kontejneru si textové view drží samo. První cesta
+(odečítat inset dvakrát i při měření) by přetečení taky spravila, ale nechala by v kódu tvrzení, které
+neplatí — a hlavně mrtvé místo u pravého okraje: změřeno, že při šířce 600 pt se do pohledu pod sebou
+vešlo 41 znaků místo 57, tedy o 17 méně. Ukazatel „N znaků na stranu“ (#188) přitom gutter odečítal
+jednou, takže o těch 17 znaků lhal; teď mluví pravdu.
+
+Byla to **třída chyby, ne jeden výskyt** — druhý byl ve split pohledu, kde výška řádku nesla svislý
+inset. Rámečky řádků tím utíkaly o 2 pt na řádek (na šedesátiřádkovém bloku 116 pt, tedy pilulka
+komentáře sedm řádků pod svým kódem) a pod blokem zbývalo prázdno. Oba případy hlídají testy proti
+**layout manageru**, ne proti druhému výpočtu, a oba jsou ověřené vloženou regresí (130 a 136
+padlých tvrzení). Cestou se našla past AppKitu: nastavení `textContainer.size` si AppKit vyloží jako
+změnu geometrie a **sám zavolá `setFrameSize`**, takže bez stráže se měřilo o jednu šířku pozadu.
 
 **Nálezy a Průběh jako vlastní záložky (#242)** — pruh záložek PR má pět položek a mezi
 `Konverzací` a `Nálezy` dělič: nalevo je to, co je na PR (a co má i GitHub), napravo to, co s ním

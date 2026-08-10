@@ -765,8 +765,31 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   K tomu, že zvýraznění nemění text, že obarvení syntaxe zůstává pod ním (písmo × pozadí) a že
   kontextový řádek nesvítí, ani když se mu rozsahy podstrčí.
 
+  **Výška bloku (#236)** má vlastní sadu (`DiffBlockHeightTests`) a referencí je v ní vždycky
+  **layout manager**, ne druhý výpočet téhož — jinak by test jen opsal chybu, kterou má chytat.
+
+  To hlavní je *„blok si řekne o tu výšku, kterou nakreslí“*, a jde **přes pásmo šířek** (300–800
+  po 17 pt × sedm délek řádku), protože se to rozejde jedině tehdy, když délka nejdelšího řádku padne
+  mezi změřenou a kreslenou šířku — u „hezké“ šířky by test prošel. Tvrdí se obojí: že se nakreslený
+  text do změřené výšky **vejde** (jinak přeteče do bubliny pod blokem) a že pod poslední řádek
+  nezbude víc než svislý inset (jinak by prošel i blok, který si o výšku řekne s rezervou a nechá pod
+  sebou mezeru). K tomu, že se kód zalomí **až** tehdy, když se nevejde za gutter — s kontrolou
+  z druhé strany, ať test neprojde bloku, který nezalamuje vůbec.
+
+  Ověřeno **vloženou regresí**: měření o gutter širší (tedy původní stav) položí 130 případů,
+  a je z nich vidět to pásmo. Prázdný řádek je zvlášť a schválně slabší tvrzení — `usedRect`
+  u prázdného textu vrací o 2 pt méně než u řádku s textem (18 proti 20), takže se u něj tvrdí jen
+  to, že výška není nulová a nakreslený řádek se do ní vejde.
+
+  **Split má sadu taky** (`DiffPairBlockHeightTests`) a je v ní ten cennější test: *„rámečky dvojic
+  sedí na text sloupce“* — porovnává, co hlásí `lineFrames()`, s tím, kde má řádek podle
+  `frame(ofLine:)` **skutečně** být, a to pro 1, 8 a 60 řádků. Vloženou regresí (svislý inset zpátky
+  do výšky řádku) padne 136 tvrzení a je v nich vidět celý rozsah: na řádku 60 je rámeček o 116 pt
+  níž než kód, ke kterému patří.
+
   **Jak to vypadá, se ověřilo renderem** — `NSView` do bitmapy, viz *Jak si zkontrolovat, jak view
-  vypadá*.
+  vypadá*. U #236 na to `NSView` nestačilo: přetečení vzniká teprve tím, jak SwiftUI poskládá blok
+  a bublinu pod sebe, takže scéna musela do `NSHostingView` — viz tamtéž.
 
   **Sytost 30 % z toho renderu ale byla špatně a opravilo ji až okno** (viz
   `DiffLineView.wordBackground(of:)`). Render jednoho bloku odpovídá na otázku „liší se ten kus od
@@ -854,6 +877,34 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
 
   Kdy se polling zeptá znovu (`PollState.nextPoll`) je u `PollingService`: hodnotu zapisuje
   smyčka, ruční obnovení ji **neposouvá**, a po rate limitu ctí backoff, ne nastavený interval.
+
+  **Odpočet příštího tiku (#237)** má dvě sady a obojí kryje něco, co se rozbije potichu:
+  - **`DashboardTick` výčtem** — co se v tom koutě píše, je čistá funkce nad `lastSuccess`,
+    `nextPoll`, příznakem dotazu a hodinami. Nejcennější tvrzení je, že **uplynulý termín se
+    neukáže jako odpočet**: v minulosti je `nextPoll` po celou dobu dotazu, takže se testuje
+    termín před chvílí, termín **právě teď** (rovnost patří k uplynulým) i termín osm hodin za
+    námi, tedy stav po probuzení stroje. Ověřeno vloženou regresí — bezpodmínečný `.countdown`
+    shodí tři testy.
+  - **Cena odpočtu** (`DashboardCountdownRedrawTests`) — sonda v hostovaném okně, která si počítá
+    přepočty svého těla: `Text(_:style: .relative)` tiká 1,5 sekundy a tělo se přepočítá **jednou**.
+    Měří se na sondě, ne na `DashboardView`, protože počítat přepočty jde jedině tak, že si je view
+    samo počítá, a to do aplikace nepatří. **Druhý test je kontrola měřidla**: tentýž postup nad
+    odpočtem, který se v těle přepočítává (hodiny ve stavu), přepočty spočítat musí — bez něj by
+    zelený první test mohl znamenat jen to, že sonda vůbec nežije. Okno je **bez rámu a mimo
+    obrazovku**, ale skutečné: bez okna SwiftUI přepočty neplánuje a oba testy by vyšly zeleně
+    z nesprávného důvodu.
+
+    U hostovaného view je jeden zádrhel, který stojí za zapamatování: **rozměr se nesmí propsat do
+    okna** (`NSHostingView.sizingOptions = []` a pevný `frame`). Text sondy se s každou vteřinou
+    mění, takže hostující view tlačí novou vnitřní velikost do mezí okna a AppKit po několika
+    kolech hodí `NSGenericException` („more Update Constraints in Window passes than there are
+    views“) — což **nepoloží test, ale celý běh**: testovací host spadne a `xcodebuild` doreportuje
+    `0 tests`. Chytilo se to tím, že jeden běh spadl a druhý ne.
+
+  U `PollingService` k tomu patří `isRefreshing`: platí **po dobu dotazu** (pozoruje se zvenčí
+  přes `afterSuccessfulTick`, který se volá uvnitř `refresh()`) a **nezůstane** ani po selhání,
+  ani po zrušení, ani mezi tiky. Ta druhá polovina je ta cennější — zaseknutý příznak znamená
+  `ptám se…` navždycky, tedy obrazovku k nerozeznání od zaseknuté aplikace.
 
   **`ProportionalColumns`** se testuje po částech: `Layout` se bez hostitelského okna vykreslit
   nedá, ale výpočet šířek ano — a tam se dá pokazit potichu, že se **mezery odečtou až po dělení
@@ -970,6 +1021,20 @@ osascript -e 'tell application "System Events" to tell process "PRism" to get {p
 screencapture -x -R0,34,1512,874 /cesta/do/scratchpadu/okno.png
 ```
 
+**Vlastní okno se dá vyfotit i zezadu, podle jeho ID** (#237), a v paralelním běhu je to ta
+správná cesta: `screencapture -x -o -l<id>` vyfotí jedno okno, i když je za ostatními, takže
+nemusí nic skákat dopředu a **do snímku se nedostane nic cizího** — ani okno druhého slotu, ani
+to, co má člověk zrovna na obrazovce. Celoobrazovkový snímek u čtyř běžících instancí naopak
+vyfotí hlavně cizí práci.
+
+ID najde `CGWindowListCopyWindowInfo` podle PID (`pgrep -f /Applications/PRism-<slot>.app`);
+pár řádků ve `swift` skriptu, `System Events` na to potřeba nejsou. Okno **nemusí být vpředu**,
+takže se u toho nepřepíná fokus. Odpočet v hlavičce se takhle dal odečíst ze dvou snímků po
+šesti sekundách (`za 9 s znovu` → `za 3 s znovu`) a burst po 0,35 s zachytil celý přechod
+`za 1 s` → `za 0 s` → `ptám se…` → `za 7 s`, tedy věc, na kterou offscreen render nestačí:
+dashboard je ve `ScrollView`, který se offscreen **nevykreslí vůbec** (viz níž), takže render
+vyšel prázdný a jediné, co zbývalo, bylo skutečné okno.
+
 **Na stav za kliknutím se dostaneš taky** — jen se musí aplikace napřed vytáhnout dopředu.
 Okno terminálu leží na pixel přesně přes okno aplikace (obojí `0,33,1512,875`), takže klik
 `System Events` skončí v tom, co je zrovna nahoře; sám o sobě to není překážka, ale je potřeba
@@ -1057,6 +1122,16 @@ Dva zádrhely, které to má:
 - **`NSViewRepresentable` se v `ImageRenderer`u nevykreslí** — vyjde žlutý placeholder přes celé
   plátno, jako `List`. Od #157 se tím kreslí bloky kódu v diffu, takže takhle se vzhled diffu
   zkontrolovat nedá.
+
+  **A celá scéna se dá vykreslit přes `NSHostingView`** (#236), což je jediná cesta, jak se podívat
+  na to, co vzniká **složením** SwiftUI a AppKitu — třeba na blok kódu a bublinu nálezu pod ním.
+  Scéna se dá do `NSHostingView`, ten do okna mimo obrazovku (`.borderless`, nikdy se neukáže)
+  a odtud `cacheDisplay(in:to:)` do PNG. Na rozdíl od `ImageRenderer`u se `NSViewRepresentable`
+  vykreslí normálně, protože kreslí AppKit, ne SwiftUI náhrada. Dvě věci, bez kterých to vyjde
+  prázdné nebo uříznuté: rámec se musí nastavit z `fittingSize` a mezi tím **nechat proběhnout
+  runloop** (`RunLoop.current.run(until:)`), protože representable hlásí rámečky řádků odloženě —
+  a pak si výšku vzít z `fittingSize` znovu. Takhle se u #236 doložilo přetečení i jeho oprava:
+  ve verzi s chybou stála hlavička bubliny přesně přes dva řádky kódu, oba texty naráz.
 
   **Samotné `NSView` ale ano, a to je cesta**: `bitmapImageRepForCachingDisplay(in:)` +
   `cacheDisplay(in:to:)` vykreslí `DiffTextView` do bitmapy, kterou si jde přečíst. U #157 to
