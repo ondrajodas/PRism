@@ -34,8 +34,9 @@ struct PullRequestTabBar: View {
             Spacer(minLength: 8)
             if let diffCounts {
                 // Stojí u záložek, ne v hlavičce: mluví o tom, co je v `Změněných souborech`,
-                // a je to tentýž údaj jako v souhrnu nad diffem — proto `DiffCounts`, ne
-                // vlastní skládání, které by se s ním jednou rozešlo.
+                // a je to tentýž údaj, jaký po souborech rozepisují hlavičky v diffu — proto
+                // `DiffCounts`, ne vlastní skládání, které by se s ním jednou rozešlo.
+                // (Souhrn nad diffem, se kterým to sedělo dřív, u #219 zmizel.)
                 DiffCounts.text(additions: diffCounts.additions, deletions: diffCounts.deletions)
                     .font(.caption)
                     .monospacedDigit()

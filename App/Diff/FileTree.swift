@@ -15,13 +15,9 @@ struct FileTreeNode: Identifiable, Hashable, Sendable {
     /// `nil` u souboru — `OutlineGroup` podle toho pozná list.
     let children: [FileTreeNode]?
 
-    var additions: Int {
-        file?.additions ?? (children ?? []).reduce(0) { $0 + $1.additions }
-    }
-
-    var deletions: Int {
-        file?.deletions ?? (children ?? []).reduce(0) { $0 + $1.deletions }
-    }
+    // **Počty `+/−` tu nejsou** (#219). Sečtené po složkách je kreslil jedině popover
+    // `Přejít na soubor`, a ten z lišty odešel; ve sloupci se nekreslí od #197, protože se do
+    // 210 bodů nevejdou. Než se přidají zpátky, musí být kam.
 
     /// Strom nad soubory diffu.
     ///

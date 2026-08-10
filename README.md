@@ -143,8 +143,17 @@ hádat, a špatně obarvený cizí kód je horší než neobarvený.
 zůstává nahoře, souhrn `N souborů · +X −Y` a menu na skok mezi soubory. Přejmenování, nové,
 smazané i binární soubory jsou označené; dlouhé řádky se zalamují, protože 120 znaků se do
 plné šířky vejde. Počty `+X` a `−Y` jsou obarvené jako znak změny v samotném řádku — zeleně
-a červeně, v souhrnu, v hlavičkách souborů i ve stromu souborů, takže „velký přírůstek“
-a „velké mazání“ jsou poznat na první pohled.
+a červeně, v řadě záložek PR i v hlavičkách souborů, takže „velký přírůstek“ a „velké mazání“
+jsou poznat na první pohled.
+
+**Hlavička souboru nese celou cestu** (#219) — složka tlumeně, jméno tučně (`src/Vault/`**`SecretClient.php`**).
+Do té doby tam bylo jen jméno, takže u dvou souborů, které se jmenují stejně, nešlo poznat, který
+je který. V úzkém sloupci ustupuje složka, ne jméno.
+
+**Lišta nad diffem** má vlevo pohled a procházení nálezů, vpravo `Rozbalit vše`. Co se používá
+jednou za čas (bubliny nálezů u řádků, `Zobrazit jen diff`), sedí v nabídce pod ním. Přepínače
+postranních sloupců v ní **nejsou**: strom i panel se skládají u sebe, takže by to byly třetí
+dveře k témuž — zkratky `⌘1` a `⌘2` platí dál a stojí v nápovědě u těch tlačítek.
 
 Diff se dá kreslit **dvěma způsoby** a přepíná se segmentovaným přepínačem v liště nad ním:
 `Pod sebou` je klasický unified diff (odebrané a přidané řádky pod sebou, dvě čísla vlevo),
@@ -174,7 +183,7 @@ Per repo se pohled nenastavuje, protože jak se čte diff, je vlastnost člověk
 
 **Klik na hlavičku souboru jeho diff sbalí a rozbalí**, jako na GitHubu — u PR přes deset
 souborů je to hlavní způsob, jak se v něm pohybovat. Hlavička zůstává vidět i se `+N −M`
-a s odznakem, kolik je v souboru nálezů (červeným, když je mezi nimi blokující). V horní
+a s kapslí, kolik je v souboru nálezů (červenou, když je mezi nimi blokující). V horní
 liště je `Sbalit vše` / `Rozbalit vše` a skok na soubor nebo na nález sbalený soubor sám
 otevře.
 
@@ -182,8 +191,8 @@ V mezerách mezi hunky jsou **šipky na rozbalení kontextu** — dotáhnou kód
 není, po dvaceti řádcích nebo celý úsek naráz. Obsah souboru se čte z GitHubu až na
 kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi zmizí.
 `Zobrazit jen diff` sbalí všechno zpátky. **Kód kolem nálezu, jehož řádek v diffu není,
-se dotáhne sám** — nález bez svého kódu se nedá posoudit. Nahoře v liště je **strom
-souborů** pro skok kamkoli v diffu.
+se dotáhne sám** — nález bez svého kódu se nedá posoudit. Skok kamkoli v diffu je **stromem souborů** vlevo.
+`Zobrazit jen diff` se schovalo do nabídky u `Rozbalit vše` (#219).
 
 **Kód se vybírá myší jako v editoru** (#157) — tažením přes libovolně mnoho řádků, ⌘C. Vybírá se jen
 obsah, ne čísla řádků a ne znak změny, takže se do schránky nepřiplete diff. Kód proto kreslí
@@ -219,9 +228,9 @@ v neznámém jazyce zůstane jednobarevný.
 revieweru a rozbalitelný scénář selhání; blokující nález má červený pruh. Shodu dvou
 reviewerů na jednom místě označí `2×`, ale jejich texty se neslučují. Nález na řádek, který
 v diffu není, se neztratí: visí u hlavičky souboru a nabídne ten řádek dotáhnout. Bubliny
-jdou vypnout přepínačem nad diffem.
+jdou vypnout v nabídce u `Rozbalit vše` (`Nálezy u řádků`) — vlákna konverzace zůstanou.
 
-**Nálezy se procházejí šipkami v liště nad diffem** (#187): `2/3` a dvě šipky, klávesově
+**Nálezy se procházejí šipkami v liště nad diffem** (#187): `2 z 3 nálezů` a dvě šipky, klávesově
 `⌥↓` a `⌥↑`, na další blokující `⌥⇧↓`. Do té doby vedla cesta k dalšímu nálezu vždycky přes
 panel — najít ho v seznamu a kliknout — takže seznam musel být pořád vidět. Zúžení
 `jen blokující` mění, kam šipky skáčou; **odmítnuté nálezy se přeskakují**, protože nález,
@@ -230,8 +239,9 @@ ne když skončíš na posledním; a nálezy bez místa v kódu se do počtu nep
 skočit, tak je nápověda počítá zvlášť, aby `3/3` netvrdilo hotovo nad PR, kde zbývají v panelu.
 
 **Vlevo od diffu je strom souborů** (#197): cesty, u souboru s nálezem puntík (červený, když
-blokuje). Skládá se na `⌘1` na proužek s počtem souborů. Popover `Přejít na soubor` zůstává —
-je to cesta ke stromu, když je sloupec složený.
+blokuje). Skládá se na `⌘1` na proužek s počtem souborů, a týmž kliknutím se zase rozloží.
+Popover `Přejít na soubor` odešel z lišty u #219 — byla to druhá dveře do téhož: sloupec je
+na dosah jedním kliknutím a v liště bral místo, kvůli kterému se v užším okně nevešla.
 
 **Napravo od diffu je panel se segmenty** (#182): nálezy jako karty, Moje review a Průběh. Panel
 je jediné místo, kde jsou vidět nálezy **bez místa v kódu** — chybějící testy nebo poznámky

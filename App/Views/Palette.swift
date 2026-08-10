@@ -42,6 +42,12 @@ enum Palette {
     /// drží samo, protože na ní stojí identita aplikace (hranol, spektrum) — a spektrum
     /// reviewerů by se systémovým akcentem měnilo význam podle nastavení systému.
     static let accent = Color(light: 0x5B47E0, dark: 0x8B7CFF)
+    /// Tichý podklad akcentu — živá šipka procházení nálezů (#219).
+    ///
+    /// **Ne `accent.opacity(…)`**: návrh má v tmavém režimu jiné krytí (14 %) než ve světlém
+    /// (10 %), protože tatáž průhlednost vyjde na tmavém podkladu slabší. Jedno číslo pro obojí
+    /// by v jednom z režimů zmizelo.
+    static let accentWeak = Color(light: 0x5B47E0, lightAlpha: 0.1, dark: 0x8B7CFF, darkAlpha: 0.14)
     /// Druhý konec přechodu — zatím jediný, proužek nad kartou rozdělaných review (#181).
     /// **Nikdy jako samostatná barva**: dvě akcentové barvy vedle sebe by přestaly znamenat stav.
     static let accent2 = Color(light: 0x128FB0, dark: 0x45C8E4)
@@ -53,22 +59,25 @@ extension Color {
     /// Přes `NSColor(name:dynamicProvider:)`, protože jen ten se přepne **za běhu**, když si
     /// člověk režim přepne v systému. `Color(uiColor:)` obdoba na macOS není a dvě konstanty
     /// s `@Environment(\.colorScheme)` by znamenaly, že barvu musí řešit každé view zvlášť.
-    init(light: UInt32, dark: UInt32) {
+    /// Krytí je u obou režimů zvlášť: návrh míchá tiché podklady (`--accent-weak`) v každém
+    /// režimu jinak, protože tatáž průhlednost vyjde na tmavém podkladu slabší.
+    init(light: UInt32, lightAlpha: Double = 1, dark: UInt32, darkAlpha: Double = 1) {
         self.init(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return NSColor(hex: isDark ? dark : light)
+            return NSColor(hex: isDark ? dark : light, alpha: isDark ? darkAlpha : lightAlpha)
         })
     }
 }
 
 extension NSColor {
-    /// `0xRRGGBB` na barvu. Bez alfa kanálu — všechny barvy palety jsou plné.
-    convenience init(hex: UInt32) {
+    /// `0xRRGGBB` na barvu. Alfa je zvlášť, protože hex ji nenese — plné barvy palety ji
+    /// nechávají na jedničce.
+    convenience init(hex: UInt32, alpha: Double = 1) {
         self.init(
             srgbRed: Double((hex >> 16) & 0xFF) / 255,
             green: Double((hex >> 8) & 0xFF) / 255,
             blue: Double(hex & 0xFF) / 255,
-            alpha: 1
+            alpha: alpha
         )
     }
 }

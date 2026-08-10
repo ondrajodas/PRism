@@ -1269,7 +1269,7 @@ na `.task` okna, takže zavření okna ji zruší.
 |---|---|
 | `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
 | `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) |
-| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180) |
+| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180) |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
@@ -1302,7 +1302,10 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
 | `PullRequestDetailView` | Pravý panel: dvouřádková lišta (titulek, review, stav kopie), pod ní diff a nálezy |
-| `DiffView` | Diff v plné šířce: souhrn, přepínač pohledu, skokové menu, soubory s ukotvenou hlavičkou, kterou jde sbalit |
+| `DiffView` | Diff v plné šířce: lišta, strom vlevo a soubory s ukotvenou hlavičkou, kterou jde sbalit |
+| `DiffToolbar` | Lišta nad diffem (#219): pohled, procházení nálezů, varování a `Rozbalit vše` s nabídkou. **Bez přepínačů sloupců** — ty se skládají u sebe |
+| `DiffLayoutPicker` | Přepínač pohledu — segment **s popisky** podle návrhu (`.segbtn`), ne `Picker(.segmented)` |
+| `DiffFileHeaderView`, `FilePathText` | Hlavička souboru (`.fhead`): celá cesta se **složkou tlumeně a jménem tučně**, odznak změny, kapsle s počtem nálezů, `+X −Y` |
 | `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek, dvojice, rozbalovací řádek nebo poznámka |
 | `DiffPairView` | Dvojice vedle sebe: dvě buňky `DiffLineView` se `side`, pozadí za celou dvojici, prázdná protistrana |
 | `RangeDragActions`, `DiffRowFrames` | Tažení rozsahu komentáře (#110) — akce a rámečky řádků **mimo observable stav** |
@@ -1327,7 +1330,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
 | `ReviewTimelineView` | Tab Průběh: sekce na revieweera, události s časem, kopírování `claude --resume`, upozornění na načtený jiný skill |
 | `ReviewerChipsView` | Chipy reviewerů: stav a filtr naráz; v kontextovém menu opakování jednoho revieweera (#149) |
-| `FileTreeView` | Popover se stromem souborů; odsazení a sbalování si řídí sám |
+| `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
 | `VerdictView` | Návrh verdiktu jako **doporučení**; žádná GitHub akce na něm nevisí. Když stojí na odmítnutých nálezech, nese to jejich počet |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
 | `AppDelegate` | Ukončení aplikace: dokud běží review, ptá se |
@@ -1625,15 +1628,52 @@ Sbalení celých souborů (`foldedFiles`) je **jiná věc než rozbalení kontex
 - **Odznak s počtem nálezů je u souboru vždycky**, ne jen u sbaleného. U sbaleného je to
   nutnost (zavřený soubor s nevyřízeným nálezem se dá zapomenout), u rozbaleného zkratka:
   projedu hlavičky a vím, kde nálezy jsou, aniž bych scrolloval obsahem.
+- **Lišta nad diffem je `DiffToolbar`** (#219), ne kus `DiffView`. Rostla po kusech — pohled
+  vedle sebe (#98), procházení (#187), strom (#197), šířka (#188) — a nikdy se neposadila podle
+  návrhu jako celek: sedm prvků, ve kterých se přepínač pohledu ztrácel mezi dvěma checkboxy,
+  a v užším okně se nevešla. Pět věcí, které se u ní nemají rozbít:
+  - **Vlevo pohled a procházení, vpravo `Rozbalit vše`.** Procházení je jediná věc v liště,
+    která se používá při každém review; zbytek se nastaví a nechá být.
+  - **Přepínač pohledu je segment s popisky** (`DiffLayoutPicker`), ne `Picker(.segmented)`.
+    Dvě ikony bez popisků neřeknou, co která dělá — pozná se to až najetím myší, tedy až po tom,
+    co si člověk vybral, na co najet. Tentýž důvod jako u segmentů panelu (#182).
+  - **Procházení je jeden prvek v rámečku** (`FindingNavigationView`, `.findnav`): puntík,
+    `1 z 3 nálezů`, šipky a `jen blokující` uvnitř. Do #219 to bylo pět samostatných věcí vedle
+    sebe, takže nebylo poznat, že patří k sobě — a `jen blokující` vypadalo jako přepínač celé
+    lišty, ne jako zúžení téhle jedné cesty.
+  - **Přepínače sloupců v liště nejsou**, i když je návrh kreslí (`◧ Strom ⌘1`, `◨ Nálezy ⌘2`).
+    Strom i panel se skládají **u sebe** — tlačítkem v hlavičce sloupce a proužkem, kterým se zase
+    otevřou — takže v liště by to byly třetí dveře k témuž a v úzkém okně by se o místo praly
+    s procházením. Zkratky zůstávají a jsou napsané v nápovědě u těch tlačítek, tedy tam, kde se
+    na sloupec sahá; `⌘1` proto **visí mimo lištu** (nemá na čem viset), stejně jako `⌘2`
+    v detailu PR.
+  - **Souhrn `1 soubor · +4 −2` v liště není.** Počet souborů je v hlavičce stromu vedle a rozsah
+    změny v řadě záložek nad ním, takže lišta o něj přišla, aniž by ten údaj z okna zmizel.
+    Varování (nepřečtené řádky, nevešlá vlákna, znaky na stranu) zůstávají — jsou vidět jen
+    tehdy, když nesedí, a to je celý jejich smysl.
+- **Kapsle s nálezy v hlavičce souboru počítá `Policy.fileFindings(in:)`** (#219), hlavička z čísel
+  jen skládá větu. Počítá se **po místech, ne po nálezech** — tři reviewery shodnutí na témž řádku
+  jsou jedna věc k rozhodnutí — a odmítnuté (#113) se vynechají. **Blokující má vlastní slovo**
+  (`1 blokuje`), ne jen červenou: kapsle je tvarem k nerozeznání od odznaku změny vedle ní.
+  Že rozhodování nesmí zůstat na view, není estetika: statická metoda na `View` typu je
+  `@MainActor` a v testu mimo hlavní vlákno **padá až za běhu** — viz
+  [`docs/testovani.md`](testovani.md).
+- **Hlavička souboru nese celou cestu** (`FilePathText`, #219): složka v `--ink-3`, jméno tučně.
+  Do #219 byla cesta jedním řezem a ořezávala se jako celek, takže u dvou souborů téhož jména
+  nešlo poznat, který je který. Jméno má proto **přednost v rozvržení** a ustupuje složka —
+  ořezaná zepředu, protože význam nese její poslední část. Strom vedle na to odpovídat nemá:
+  dá se složit a v pohledu vedle sebe se skládá sám (#188).
 - **Počty `+X −Y` skládá `DiffCounts.text`** (#156) a barvu si berou z `DiffLineView.signColor(of:)`,
-  tedy odtud, odkud ji má znak změny v samotném řádku. Míst, kde se ty počty píšou, jsou **tři**
-  a nesousedí spolu: souhrn nad diffem, hlavička souboru a strom souborů. Kdyby si to každé
-  skládalo samo, zůstalo by po první změně jedno z nich šedé — chytila to vlastní revize diffu.
+  tedy odtud, odkud ji má znak změny v samotném řádku. Míst, kde se ty počty píšou, jsou **dvě**
+  a nesousedí spolu: řada záložek PR a hlavička souboru v diffu. Kdyby si to každé skládalo samo,
+  zůstalo by po první změně jedno z nich šedé — chytila to vlastní revize diffu. Do #219 byla
+  místa tři (souhrn nad diffem a strom souborů); souhrn z lišty odešel a ve stromu se počty
+  nekreslí od #197.
   **Ne `background(of:)`**: to je
   dvanáctiprocentní výplň a jako barva písma je nečitelná; sytá barva znaku je naopak text, který
-  v diffu stojí od #18. Čitelnost v obou režimech je ověřená offscreen renderem, ne odhadem —
-  a rozhoduje o ní `.caption` v hlavičce, ne `.callout` v souhrnu. Červený odznak nálezů se s tím
-  neplete: má ikonu a slovo, a zelené `+X` mezi ně vstupuje jako předěl.
+  v diffu stojí od #18. Čitelnost v obou režimech je ověřená offscreen renderem, ne odhadem.
+  Červená kapsle s počtem nálezů se s tím neplete: má jiný tvar i podklad, a zelené `+X` za ní
+  vstupuje jako předěl.
 - **Tlačítko na komentář nesmí být vyšší než řádek diffu.** Řádek je vysoký ~15 pt (změřeno
   z renderu), takže pevná `height: 18` z něj vyčnívala **do toho následujícího** — jak na
   tlačítko myš zamířila, hover přešel na další řádek a ikonka zmizela. Komentovat pak nešlo
@@ -1853,16 +1893,20 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   je jinak plná, kdežto tenhle vzor je pro prázdnou plochu.
 - **Strom souborů je trvalý levý sloupec** (#197), ne jen popover. U PR o padesáti souborech
   nešlo poznat, kde v něm člověk je, aniž by ho otevřel. Šířka 210 z návrhu, složený je proužek
-  34 bodů s počtem souborů; `⌘1` a tlačítko v liště nad diffem, vedle `Nálezy ⌘2`. Tři věci:
-  - **Ve sloupci se sází úsporně** (`FileTreeView.isCompact`): jen jméno a značka. Počty `+/−`
-    ani slovní odznak `nový` se do 210 bodů nevejdou — vyzkoušené vedle jména (zbyde `…S.md`)
-    i pod ním (rozhodí řádkování); GitHub je ve stromu nemá taky, patří k hlavičce souboru
-    v diffu. Popover (420 bodů) zůstává v plné sazbě.
+  34 bodů s počtem souborů. Skládá se **u sebe** — šipkou v hlavičce sloupce, otevírá se kliknutím
+  na proužek — a `⌘1` dělá totéž; v liště nad diffem tlačítko **není** (do #219 bylo, viz výš).
+  Tři věci:
+  - **Sází se úsporně a jiná sazba není** (#219): jen jméno a značka. Počty `+/−` ani slovní
+    odznak `nový` se do 210 bodů nevejdou — vyzkoušené vedle jména (zbyde `…S.md`) i pod ním
+    (rozhodí řádkování); GitHub je ve stromu nemá taky, patří k hlavičce souboru v diffu.
+    Do #219 měl `FileTreeView` i plnou sazbu pro popover `Přejít na soubor`; s popoverem odešla,
+    protože po něm zbyl parametr s jediným volajícím a jedinou hodnotou. Odešly s ním
+    i `FileTreeNode.additions` / `.deletions` — sečtené počty po složkách kreslil jedině on.
   - **Ikona druhu změny je obarvená**: zelená přidává, červená maže, modrá přejmenovává.
     Tvar sám se čte až po zaostření, barva periferně — a strom se přejíždí očima.
   - **Soubor se ořezává zezadu, složka zepředu.** U jména souboru nese význam začátek
     (`SecretClient.php` versus `SecretClientTest.php`), u cesty ke složce ta poslední část.
-  - **Skok na soubor je jedno místo pro strom i popover**, takže se sbalený soubor rozbalí v obou.
+  - **Skok na soubor sbalený soubor rozbalí** — jinak by se ukázala jen jeho hlavička.
 - **Panel je napravo od diffu, ne pod ním** (#182). Dole si bral výšku, které je v diffu
   nejmíň: kód je dlouhý a úzký, takže spodní pruh se pere právě o to, čeho je málo. Napravo
   bere šířku — spočítané v zadání #182 pro mono 12 px: v pohledu **pod sebou** zbývá i na 14"
@@ -2568,6 +2612,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
 | `Policy.facts(commits:newCommits:files:filesWithFindings:headSha:findingsHeadSha:)` | Dlaždice s fakty o PR (#198); dlaždice, o které se nedá nic říct, se vynechá |
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
+| `Policy.fileFindings(in:categories:)` | Co je v souboru k vyřízení pro kapsli v hlavičce diffu (#219) — počítá **místa**, ne nálezy, a odmítnuté vynechá |
 | `Policy.charactersPerSide(contentWidth:characterWidth:layout:gutter:)` | Kolik znaků kódu se vejde na stranu (#188); vedle sebe se šířka dělí na dvě |
 | `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
 | `Policy.changes(in:since:)` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`) |

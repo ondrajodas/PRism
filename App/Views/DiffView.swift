@@ -45,14 +45,15 @@ struct DiffView: View {
     /// ukazuje, co z toho vyšlo.
     var navigation: FindingNavigation = .none
     var onlyBlocking: Binding<Bool> = .constant(false)
-    /// Rozložený panel nálezů (#197). `nil` = tlačítko se nekreslí; stav drží detail PR, protože
-    /// panel je vidět i v tabu, kde tahle lišta není.
+    /// Rozložený panel nálezů (#197). Diff ho **nepřepíná tlačítkem** (od #219 se panel skládá
+    /// u sebe), ale skládá ho automatika pohledu vedle sebe (#188) — proto tu ten binding je.
+    /// `nil` = automatika se panelu nedotkne. Stav drží detail PR, protože panel je vidět
+    /// i v tabu, kde diff není.
     var panelExpanded: Binding<Bool>?
     var stepFinding: ((NavigationStep) -> Void)?
 
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
-    @State private var isPickingFile = false
     /// Rozložený strom v levém sloupci (#197). Předvolba pohledu napříč PR, takže `UserDefaults`
     /// — a ne stav ve store, ze stejného důvodu jako u bublin.
     @AppStorage("diffTreeExpanded") private var isTreeExpanded = true
@@ -79,8 +80,7 @@ struct DiffView: View {
     var body: some View {
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 0) {
-                summary(jumpingWith: proxy)
-                Divider()
+                toolbar
                 // Strom vlevo, diff vedle něj (#197). Do té doby byl strom jen v popoveru,
                 // takže u PR o padesáti souborech nešlo poznat, kde v něm člověk je, aniž by
                 // ho otevřel.
@@ -89,6 +89,7 @@ struct DiffView: View {
                     files
                 }
             }
+            .background(alignment: .topLeading) { treeShortcut }
             // **Pohled vedle sebe složí postranní sloupce** (#188). Řádek se v něm dělí na dvě
             // strany, takže na 14" nezbude ani 100 znaků; pod sebou je zase rozbalí. Ruční
             // `⌘1`/`⌘2` to přebijí jednoduše tím, že platí až do **další** změny pohledu.
@@ -283,189 +284,34 @@ struct DiffView: View {
         }
     }
 
-    private func summary(jumpingWith proxy: ScrollViewProxy) -> some View {
-        HStack(spacing: 12) {
-            (Text(verbatim: "\(files(diff.files.count)) · ")
-                + DiffCounts.text(additions: diff.additions, deletions: diff.deletions))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            if diff.unrecognizedLines > 0 {
-                unrecognizedWarning
-            }
-            if missingThreads > 0 {
-                missingThreadsWarning
-            }
-            Spacer()
-            // Procházení stojí **vlevo od pohledu a přepínačů**: je to jediná věc v liště,
-            // která se používá při každém review, kdežto zbytek se nastaví a nechá být.
-            if let stepFinding, !navigation.isEmpty {
-                FindingNavigationView(
-                    navigation: navigation,
-                    onlyBlocking: onlyBlocking,
-                    step: stepFinding
-                )
-                Divider().frame(height: 16)
-            }
-            layoutPicker
-            if !findings.isEmpty {
-                // Jmenuje se `Nálezy`, ne `Bubliny`: schovává **jen** nálezy, kdežto
-                // „bubliny“ jsou od #64 i vlákna konverzace. Chytilo se to při zkoušení —
-                // obecný název sliboval, že vypne obojí.
-                Toggle("Nálezy", isOn: $showBubbles)
-                    .toggleStyle(.checkbox)
-                    .font(.callout)
-                    .help("Zobrazit nálezy u řádků, kterých se týkají. Vlákna konverzace zůstanou.")
-            }
-            foldAllButton
-            if let collapse = expansion.collapse {
-                Button("Zobrazit jen diff", systemImage: "arrow.down.right.and.arrow.up.left") {
-                    collapse()
-                }
-                .font(.callout)
-                .buttonStyle(.borderless)
-            }
-            widthGauge
-            columnToggles
-            jumpMenu(proxy)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-    }
-
-    /// Přepnutí pohledu na diff. Segmentovaný přepínač s ikonami, ne přepínač v nastavení:
-    /// otočit pohled je věc, která se dělá **při čtení konkrétního souboru** — chodit pro ni
-    /// do ⌘, a hledat pole je pro tenhle pohyb špatné.
-    ///
-    /// Zůstává **do zavření aplikace** a napříč pull requesty: pohled je způsob čtení, takže
-    /// přepnutím na jiný PR nemá důvod se vracet. Po restartu platí zase to, co je v nastavení.
-    private var layoutPicker: some View {
-        Picker("Pohled na diff", selection: $layout) {
-            ForEach(DiffLayout.allCases, id: \.self) { option in
-                Image(systemName: option.symbol)
-                    .accessibilityLabel(Text(verbatim: option.displayName))
-                    .tag(option)
-            }
-        }
-        .pickerStyle(.segmented)
-        // Popisek zůstává vyplněný a jen se schová: pro VoiceOver je to pořád jediný popis
-        // celého přepínače.
-        .labelsHidden()
-        .fixedSize()
-        .help("Kreslit diff vedle sebe (starý a nový obsah proti sobě), nebo pod sebou")
-    }
-
-    /// Jedno tlačítko, ne dvě. Který ze dvou stavů dává smysl, plyne z toho, co je zrovna
-    /// na obrazovce — dvě tlačítka by znamenala, že je jedno z nich pořád k ničemu.
-    ///
-    /// Nepleteme si to se „Zobrazit jen diff“ vedle: to sbaluje **kontext uvnitř** souborů,
-    /// tohle celé soubory.
-    @ViewBuilder private var foldAllButton: some View {
-        if !diff.files.isEmpty {
-            let allFolded = diff.files.allSatisfy(folding.isFolded)
-            Button {
-                if allFolded { folding.unfoldAll() } else { folding.foldAll(diff.files) }
-            } label: {
-                Label(
-                    allFolded ? "Rozbalit vše" : "Sbalit vše",
-                    systemImage: allFolded ? "rectangle.expand.vertical" : "rectangle.compress.vertical"
-                )
-            }
-            .font(.callout)
-            .buttonStyle(.borderless)
-            .help(allFolded ? "Rozbalit diffy všech souborů" : "Sbalit diffy všech souborů")
-        }
-    }
-
-    /// Vlákna, která nedorazila, nemají jak chybět **viditelně**: v diffu se prostě
-    /// neobjeví bublina a to od „nikdo tam nic nenapsal“ nikdo nepozná. Hlásí se proto
-    /// stejně jako nepřečtené řádky diffu.
-    private var missingThreadsWarning: some View {
-        // Sloveso je **v tvarech**: „2 vlákna se nevešlo“ je špatně česky.
-        let count = Plural.czech(
-            missingThreads,
-            one: "vlákno konverzace se nevešlo",
-            few: "vlákna konverzace se nevešla",
-            many: "vláken konverzace se nevešlo"
+    private var toolbar: some View {
+        DiffToolbar(
+            diff: diff,
+            layout: $layout,
+            navigation: navigation,
+            onlyBlocking: onlyBlocking,
+            stepFinding: stepFinding,
+            showBubbles: $showBubbles,
+            hasFindings: !findings.isEmpty,
+            folding: folding,
+            collapseExpansion: expansion.collapse,
+            missingThreads: missingThreads,
+            contentWidth: contentWidth
         )
-        return Label {
-            Text(verbatim: "\(count) — otevři PR na GitHubu")
-        } icon: {
-            Image(systemName: "exclamationmark.triangle")
-        }
-        .font(.caption)
-        .foregroundStyle(.orange)
     }
 
-    /// Nerozpoznaný řádek znamená, že se člověk dívá na neúplný podklad. Bez téhle věty
-    /// by neúplný diff vypadal jako úplný.
-    private var unrecognizedWarning: some View {
-        let count = Plural.czech(diff.unrecognizedLines, one: "řádek", few: "řádky", many: "řádků")
-        return Label {
-            Text(verbatim: "\(count) diffu se nepodařilo přečíst")
-        } icon: {
-            Image(systemName: "exclamationmark.triangle")
-        }
-        .font(.caption)
-        .foregroundStyle(.orange)
-    }
-
-    /// Kolik znaků se vejde na stranu (#188).
-    ///
-    /// Ukazuje se **jen tehdy, když je slib porušený** — nad 120 znaků je to číslo, které nikoho
-    /// nezajímá, kdežto pod ním je to jediné vysvětlení, proč se řádky lámou. Měří se skutečné
-    /// okno, ne tabulka z zadání: ta platí pro jeden displej a jedno nastavení.
-    @ViewBuilder private var widthGauge: some View {
-        let characters = Policy.charactersPerSide(
-            contentWidth: contentWidth,
-            characterWidth: Self.characterWidth,
-            layout: layout,
-            // Skutečná šířka sloupců vlevo, ne odhad — kreslí je `DiffLineView`.
-            gutter: DiffLineView.contentInset(for: layout)
-        )
-        if contentWidth > 0, characters < Policy.promisedCharactersPerSide {
-            Label("\(characters) znaků na stranu", systemImage: "exclamationmark.triangle")
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .monospacedDigit()
-                .help("Aplikace slibuje \(Policy.promisedCharactersPerSide) znaků. Pomůže složit sloupce nebo přepnout na pohled pod sebou.")
-        }
-    }
-
-    /// Šířka jednoho znaku písma, kterým se sází kód. Mono písmo má všechny znaky stejně široké,
-    /// takže stačí změřit jeden — a `maximumAdvancement` u něj vrací tutéž hodnotu.
-    private static let characterWidth = NSFont.monospacedSystemFont(
-        ofSize: NSFont.systemFontSize,
-        weight: .regular
-    ).maximumAdvancement.width
-
-    /// Přepínače postranních sloupců, jak je má návrh v liště nad diffem (#197): `Strom ⌘1`
-    /// a `Nálezy ⌘2`.
-    ///
-    /// Zkratky visí jinde — ⌘1 tady, ⌘2 v detailu PR (panel je vidět i v tabu `Přehled`, kde
-    /// tahle lišta není). Tlačítka jsou proto **jen tlačítka**, popisek klávesy nese nápověda.
-    @ViewBuilder private var columnToggles: some View {
-        Button {
+    /// ⌘1 na složení stromu. Bydlí **mimo lištu**, protože v ní od #219 žádné tlačítko na sloupce
+    /// není — skládají se u sebe, tlačítkem v hlavičce sloupce a proužkem, kterým se zase otevřou.
+    /// Zkratka tedy nemá na čem viset a musí být samostatně. Průhledné tlačítko, ne `.hidden()`:
+    /// skryté view z hierarchie zmizí i se zkratkou. Tentýž vzorec jako ⌘2 v detailu PR.
+    private var treeShortcut: some View {
+        Button("Strom souborů") {
             withAnimation(.snappy(duration: 0.15)) { isTreeExpanded.toggle() }
-        } label: {
-            Image(systemName: "sidebar.left")
-                .foregroundStyle(isTreeExpanded ? Color.accentColor : Palette.ink3)
         }
-        .buttonStyle(.borderless)
-        .help(isTreeExpanded ? "Složit strom souborů (⌘1)" : "Rozložit strom souborů (⌘1)")
-        .accessibilityLabel("Strom souborů")
         .keyboardShortcut("1", modifiers: .command)
-
-        if let panelExpanded {
-            Button {
-                withAnimation(.snappy(duration: 0.15)) { panelExpanded.wrappedValue.toggle() }
-            } label: {
-                Image(systemName: "sidebar.right")
-                    .foregroundStyle(panelExpanded.wrappedValue ? Color.accentColor : Palette.ink3)
-            }
-            .buttonStyle(.borderless)
-            .help(panelExpanded.wrappedValue ? "Složit panel nálezů (⌘2)" : "Rozložit panel nálezů (⌘2)")
-            .accessibilityLabel("Panel nálezů")
-        }
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     /// Levý sloupec se stromem souborů (#197), nebo proužek, když je složený.
@@ -507,7 +353,7 @@ struct DiffView: View {
                 .padding(.vertical, 9)
                 .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
 
-                FileTreeView(files: diff.files, markers: fileMarkers, isCompact: true) { file in
+                FileTreeView(files: diff.files, markers: fileMarkers) { file in
                     jump(to: file, with: proxy)
                 }
             }
@@ -561,7 +407,8 @@ struct DiffView: View {
         }
     }
 
-    /// Skok na soubor — **jedno místo pro strom i popover**, ať se sbalený soubor rozbalí v obou.
+    /// Skok na soubor ze stromu. Sbalený soubor se **nejdřív rozbalí** — jinak by se ukázala
+    /// jen jeho hlavička.
     private func jump(to file: FileDiff, with proxy: ScrollViewProxy) {
         // Skočit na sbalený soubor jde — hlavička zůstává — ale ukázala by se jen ona.
         // Kdo si ho ze stromu vybral, chce ho vidět.
@@ -571,26 +418,6 @@ struct DiffView: View {
 
     static let treeWidth = 210.0
     private static let collapsedTreeWidth = 34.0
-
-    /// Popover se stromem, ne rozbalovací menu: u PR přes třicet souborů je plochý seznam
-    /// cest nepoužitelný a vnořená podmenu se špatně trefují.
-    private func jumpMenu(_ proxy: ScrollViewProxy) -> some View {
-        Button {
-            isPickingFile = true
-        } label: {
-            Label("Přejít na soubor", systemImage: "list.bullet.indent")
-        }
-        .buttonStyle(.borderless)
-        .popover(isPresented: $isPickingFile, arrowEdge: .bottom) {
-            FileTreeView(files: diff.files, markers: fileMarkers) { file in
-                isPickingFile = false
-                jump(to: file, with: proxy)
-            }
-            // Rozměr popoveru drží **volající**, ne strom: v levém sloupci (#197) je týž strom
-            // pružný a pevná velikost by ho v něm rozbila.
-            .frame(width: 420, height: 320)
-        }
-    }
 
     /// Které soubory nesou nález (#197). Počítá `Policy`, ať strom a panel neříkají o téže věci
     /// každý něco jiného.
@@ -612,86 +439,14 @@ struct DiffView: View {
         )
     }
 
-    /// Celá hlavička je tlačítko, ne jen šipka — na GitHubu se kliká kamkoli do řádku
-    /// a trefit se do šipky u padesáti souborů je práce navíc.
     private func fileHeader(_ file: FileDiff) -> some View {
-        Button {
-            folding.toggle(file)
-        } label: {
-            headerContent(file)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(verbatim: file.displayPath))
-        .accessibilityHint(folding.isFolded(file) ? "Rozbalí diff souboru" : "Sbalí diff souboru")
-    }
-
-    private func headerContent(_ file: FileDiff) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: folding.isFolded(file) ? "chevron.right" : "chevron.down")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 10)
-            Text(verbatim: file.displayPath)
-                .font(.system(.callout, design: .monospaced).weight(.semibold))
-                .lineLimit(1)
-                .truncationMode(.head)
-            if let badge = badge(for: file) {
-                Text(badge)
-                    .font(.caption2)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(.quaternary, in: .capsule)
-            }
-            if file.change == .renamed, let oldPath = file.oldPath {
-                Text(verbatim: "← \(oldPath)")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-            }
-            Spacer()
-            fileFindings(file)
-            DiffCounts.text(additions: file.additions, deletions: file.deletions)
-                .font(.caption)
-                .monospacedDigit()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(.rect)
-        // Ukotvená hlavička jede přes obsah, takže pod ní musí být neprůhledné pozadí.
-        .background(.bar)
-        // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
-        // takže se vykreslí **svisle** — pod hlavičkami tedy nikdy nebyla čára, kterou tam
-        // tenhle kód chtěl, ale svislá čárka uprostřed. Dokud mezi hlavičkami byly řádky
-        // diffu, ztrácely se; po sbalení všech souborů (#59) se poskládaly do jedné čáry.
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(.separator).frame(height: 1)
-        }
-    }
-
-    /// Kolik nálezů v souboru je.
-    ///
-    /// Ukazuje se **vždycky**, ne jen u sbaleného. U sbaleného je to nutnost — zavřený
-    /// soubor s nevyřízeným nálezem by se dal zapomenout a tabulka nálezů je jiná
-    /// obrazovka. U rozbaleného to není šum, ale zkratka: projedu hlavičky a vím, kde
-    /// nálezy jsou, aniž bych scrolloval obsahem.
-    /// Počítá **platné** nálezy (#113). Odznak je zkratka „kde je co vyřídit“, takže odmítnutý
-    /// nález v něm nemá co dělat — a hlavně by u sbaleného souboru svítil červeně nad něčím, co
-    /// jsem už posoudil. Nemizí tím nic: bublina u řádku i řádek v tabulce zůstávají.
-    @ViewBuilder private func fileFindings(_ file: FileDiff) -> some View {
-        let groups = findings(in: file).filter { !$0.activeFindings.isEmpty }
-        if !groups.isEmpty {
-            let blocking = groups.contains { group in
-                group.activeFindings.contains { Policy.isBlocking($0, categories: blockingCategories) }
-            }
-            Label(
-                Plural.czech(groups.count, one: "nález", few: "nálezy", many: "nálezů"),
-                systemImage: blocking ? "exclamationmark.triangle.fill" : "text.magnifyingglass"
-            )
-            .font(.caption)
-            .foregroundStyle(blocking ? .red : .secondary)
-        }
+        DiffFileHeaderView(
+            file: file,
+            isFolded: folding.isFolded(file),
+            findings: findings(in: file),
+            blockingCategories: blockingCategories,
+            toggle: { folding.toggle(file) }
+        )
     }
 
     /// Nálezy patřící k souboru. Nález umí přijít pod **starou** cestou přejmenovaného
@@ -706,19 +461,5 @@ struct DiffView: View {
             guard let path = group.file else { return false }
             return path == file.newPath || path == file.oldPath
         }
-    }
-
-    private func badge(for file: FileDiff) -> String? {
-        if file.isBinary { return "binární" }
-        switch file.change {
-        case .added: return "nový"
-        case .deleted: return "smazaný"
-        case .renamed: return "přejmenovaný"
-        case .modified: return nil
-        }
-    }
-
-    private func files(_ count: Int) -> String {
-        Plural.czech(count, one: "soubor", few: "soubory", many: "souborů")
     }
 }

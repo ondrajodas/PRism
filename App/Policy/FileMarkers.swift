@@ -35,4 +35,28 @@ extension Policy {
         }
         return markers
     }
+
+    /// Co je v souboru k vyřízení — pro kapsli v hlavičce souboru v diffu (#219).
+    ///
+    /// Počítá se po **skupinách**, ne po nálezech: skupina je jedno místo v kódu, a tři reviewery,
+    /// kteří se shodli na témž řádku, jsou jedna věc k rozhodnutí, ne tři. Odmítnuté se vynechají
+    /// (#113) — kapsle je zkratka „kde je co vyřídit“, takže nález, který jsem posoudil a zamítl,
+    /// v ní nemá co dělat.
+    ///
+    /// Vrací **čísla, ne text**: jak se to napíše, je věc hlavičky. Obojí nule = v souboru není
+    /// co vyřídit a kapsle se nekreslí.
+    static func fileFindings(
+        in groups: [FindingGroup],
+        categories: Set<String> = defaultBlockingCategories
+    ) -> (blocking: Int, total: Int) {
+        var blocking = 0
+        var total = 0
+        for group in groups {
+            let active = group.activeFindings
+            guard !active.isEmpty else { continue }
+            total += 1
+            if active.contains(where: { isBlocking($0, categories: categories) }) { blocking += 1 }
+        }
+        return (blocking, total)
+    }
 }

@@ -2,9 +2,9 @@ import SwiftUI
 
 /// Počty přidaných a odebraných řádků jako obarvený text — `+X` zeleně, `−Y` červeně (#156).
 ///
-/// Vlastní typ, protože ta tři místa spolu jinak nesousedí: souhrn nad diffem a hlavička
-/// souboru (`DiffView`) a strom souborů (`FileTreeView`). Kdyby si to každé skládalo samo,
-/// zůstalo by po první změně jedno z nich šedé — a mluví přitom o tomtéž údaji.
+/// Vlastní typ, protože ta místa spolu jinak nesousedí: řada záložek PR (`PullRequestTabBar`)
+/// a hlavička souboru v diffu (`DiffFileHeaderView`). Kdyby si to každé skládalo samo, zůstalo
+/// by po první změně jedno z nich šedé — a mluví přitom o tomtéž údaji.
 enum DiffCounts {
     /// Barvu dává `DiffLineView.signColor(of:)`, tedy tentýž zdroj jako znak změny v řádku
     /// diffu. Vlastní konstanty by byly druhá sada, která se s první jednou rozejde.
