@@ -96,14 +96,18 @@ struct DashboardView: View {
     }
 
     /// Kdy se to naposledy načetlo a kolik zbývá do příštího tiku — `poslední tik 09:41 ·
-    /// za 43 s znovu`, jak to má návrh.
+    /// za 43s znovu`.
     ///
     /// **Odpočet, ne absolutní čas** (#237, otáčí rozhodnutí z #181). Námitka, kvůli které tu
     /// absolutní čas stál — že odpočet znamená překreslovat dashboard každou vteřinu — neplatí:
-    /// `Text(_:style: .relative)` se aktualizuje sám a tělo view se u toho nepřepočítává. Cena je
-    /// jiná, a je vidět tady: text se skládá ze **tří kusů**, protože ten prostřední musí zůstat
-    /// samostatný `Text`. Kdyby se odpočet vpsal do interpolace, ztratil by se ten mechanismus
-    /// a vteřiny by tikaly jen tak často, jak se dashboard překresluje.
+    /// vteřiny si odtiká `DashboardCountdown` sám ve svém `TimelineView`, a tělo dashboardu se
+    /// u toho nepřepočítává.
+    ///
+    /// Cena je vidět tady: text se skládá ze **dvou kusů**, protože ten druhý musí zůstat
+    /// samostatné view. Kdyby se odpočet vpsal do interpolace, ztratil by se ten mechanismus
+    /// a vteřiny by tikaly jen tak často, jak se dashboard překresluje. Slova kolem čísla
+    /// (`za … znovu`) drží `DashboardCountdown`, ne tenhle řetězec — bez mezery mezi číslem
+    /// a jednotkou (#260).
     ///
     /// **Poslední tik zůstává absolutní** — je to bod v minulosti, na kterém se nic neodpočítává.
     @ViewBuilder private var tick: some View {
@@ -119,9 +123,8 @@ struct DashboardView: View {
             Text(verbatim: "poslední tik \(clock(last))")
         case .countdown(let last, let deadline):
             HStack(spacing: 0) {
-                Text(verbatim: "poslední tik \(clock(last)) · za ")
-                Text(deadline, style: .relative)
-                Text(verbatim: " znovu")
+                Text(verbatim: "poslední tik \(clock(last)) · ")
+                DashboardCountdown(deadline: deadline)
             }
         case .polling(let last):
             // Věta o tom, co se děje, ne odpočet přes nulu. Do „ptám se…“ se to překlopí ve

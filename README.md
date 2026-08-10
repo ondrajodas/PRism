@@ -43,10 +43,14 @@ k nejstaršímu rozdělanému review. Nic se pro to nedotahuje; všechna ta čí
 jen roztroušená.
 
 V pravém horním koutu stojí, kdy se seznam naposledy načetl a **kolik zbývá do příštího dotazu** —
-`poslední tik 09:41 · za 43 s znovu` (#237). Poslední tik je hodina, protože je to bod
+`poslední tik 09:41 · za 43s znovu` (#237). Poslední tik je hodina, protože je to bod
 v minulosti; příští je odpočet, protože otázka u něj zní „jak dlouho ještě“ — a při rate limitu,
-kde čekání roste až na patnáct minut, je to celý obsah té informace. Zatímco se aplikace ptá, je
-tam místo čísla `ptám se…`.
+kde čekání roste až na patnáct minut, je to celý obsah té informace. Delší čekání se píše ve dvou
+jednotkách (`za 12min 29s znovu`). Zatímco se aplikace ptá, je tam místo čísla `ptám se…`.
+
+**Mezera mezi číslem a jednotkou tam schválně není** (#260) — je to vědomá odchylka od české
+typografie, kterou si aplikace platí vlastním formátováním odpočtu, protože systémový formát
+mezeru v české locale má a nejde z něj vyndat.
 
 Po startu si ověří, že má `gh`, `git` i `claude` a že je `gh` přihlášený — jinak řekne, co
 chybí a čím se to spraví. Pak se otevře seznam pull requestů napříč repozitáři, který se
@@ -483,6 +487,16 @@ pár set milisekund po posledním úhozu, a změna se projeví bez restartu. Roz
 editor **nepřepíše** — místo formuláře ukáže chybu a nabídne soubor otevřít. Dokud je
 nastavení vepředu, hlavní okno se lehce rozostří.
 
+**Dokud je okno otevřené a PRism je vpředu, zůstává před hlavním oknem** — kliknutí do hlavního
+okna ho nezaklopí. **Fokus tím ale přejde na hlavní okno**: titulek nastavení zešedne a klávesy
+jdou jinam, dokud se do nastavení nekliká znovu nebo se nedá `⌘,`. Není to opomenutí — klíčové okno
+je v macOS právě jedno a udržet ho ve dvou nejde; co se u toho měřilo (včetně toho, že utility panel
+nepomůže ani vzhledem), je v [`docs/architektura.md`](docs/architektura.md). Nad *cizími* aplikacemi ale neplave: jak PRism přestane být vpředu, okno spadne
+na normální hladinu a leží pod nimi jako každé jiné okno; po návratu do aplikace je zpátky vpředu
+i s rozepsanou hodnotou v poli. Zavřené okno se nevrací. Do #243 to bylo obyčejné okno, takže se za
+hlavním oknem schovalo celé (středí se v něm) a vypadalo to, že se zavřelo — přitom bylo pořád
+otevřené a `⌘,` ho jen znovu vytáhlo dopředu.
+
 Zavírá se křížkem, ⌘W i **Escem** (#151) — sem se chodí přepnout jednu věc a jít zpátky
 k review, takže cesta ven má být pod rukou. Rozepsaná hodnota se přitom **doručí**: Escem se
 zavírá jedním hmatem uprostřed psaní, kdy těch pár set milisekund do automatického uložení
@@ -761,6 +775,10 @@ nastavení — je to jeden mechanismus pro obě.
 Odsunuté okno **v rámci běhu zůstane, kam si ho dáš**, a po restartu je zpátky ve středu. Okno,
 které pod rukama uskakuje, je horší než okno mimo střed, takže se pozice srovnává jen při
 otevření, ne při vytažení dopředu.
+
+**A dokud je otevřené, zůstává před hlavním oknem** — stejně jako nastavení a tou samou cestou.
+Nad cizí aplikací neplave: s odchodem PRismu do pozadí spadne na normální hladinu a s návratem je
+zpátky vpředu. Zavřené okno se nevrací.
 
 Historie se tahá **jedním voláním** `gh` z vlastního repa aplikace (tělo releasu je rovnou
 v seznamu, takže se na jednotlivou verzi nechodí zvlášť) a drží se v paměti do konce běhu:

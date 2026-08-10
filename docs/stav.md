@@ -614,10 +614,11 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
    místo ní počítá novinky od poslední návštěvy. Důvod je ve specifikaci.
 
    U #237 se **otočilo rozhodnutí z #181**: příští tik v hlavičce dashboardu je odpočet
-   (`poslední tik 09:41 · za 43 s znovu`, jak to má návrh), ne absolutní čas. Námitka, kvůli
+   (`poslední tik 09:41 · za 43s znovu`), ne absolutní čas. Odpočet **návrh chtěl** už tehdy;
+   mezera mezi číslem a jednotkou v něm ale byla a od #260 tam schválně není. Námitka, kvůli
    které tam absolutní čas stál — že odpočet znamená přepočítávat dashboard každou vteřinu —
-   se **změřila a neplatí**: `Text(_:style: .relative)` tiká sám a tělo view se u toho
-   nepřepočítává. Přibylo k tomu `PollState.isRefreshing`, protože `nextPoll` je po celou dobu
+   se **změřila a neplatí**: `Text(_:style: .relative)` tikal sám a tělo view se u toho
+   nepřepočítávalo (od #260 to platí o vlastním formátu a `TimelineView`, viz níž). Přibylo k tomu `PollState.isRefreshing`, protože `nextPoll` je po celou dobu
    dotazu v minulosti a odpočet by šel přes nulu; v tu chvíli se místo čísla píše `ptám se…`.
    Důvod, proč to drží observovatelný příznak a ne srovnání s hodinami, je ve specifikaci.
 
@@ -661,6 +662,17 @@ orchestrátora a subagent u ní čeká **pasivně** (dokončí turn, zpráva ho 
 dávka M9, kde pauza nebyla v zadání a **dva agenti ze čtyř domergovali dřív, než jim došla
 zpráva** — proto je od #256 v zadání od začátku. Podívat se na obrazovku sám a napřed platí dál,
 neviditelná změna pauzu nedostane.
+
+**Hranice orchestrátora zapsaná (#259):** v dávce **neimplementuje, deleguje** — kód, testy ani
+dokumentaci k žádnému issue, a „jen dokumentace“ v tom není výjimka. Do té doby dokument říkal
+jmenovitě jen to, co **nedělá subagent**, a o orchestrátorovi to, co mu *zbývá*; zákaz z toho
+nevyplýval, takže chybějící věta vypadala jako volba. Důvod je kontext: rozvrh, stav všech
+běžících větví a připomínky k předání za orchestrátora nikdo neudrží, kdežto implementace je
+uzavřená v jednom stromě a dá se rozdat. Přibyl postup pro **strom po skončené session** — pustí
+se do něj nový subagent (bez `isolation: "worktree"`, s cestou ke stromu, číslem existujícího PR
+a zákazem zakládat nový), ne nový worktree z mainu a ne orchestrátor sám. Vzniklo to z dávky M9,
+kde orchestrátor začal implementovat v odumřelém stromě po předchozím agentovi a člověk to
+zastavil.
 
 U slotů (#228) dopadly tři věci jinak, než jak byly v zadání:
 
@@ -769,6 +781,53 @@ komentáře sedm řádků pod svým kódem) a pod blokem zbývalo prázdno. Oba 
 **layout manageru**, ne proti druhému výpočtu, a oba jsou ověřené vloženou regresí (130 a 136
 padlých tvrzení). Cestou se našla past AppKitu: nastavení `textContainer.size` si AppKit vyloží jako
 změnu geometrie a **sám zavolá `setFrameSize`**, takže bez stráže se měřilo o jednu šířku pozadu.
+
+**Odpočet bez mezery mezi číslem a jednotkou (#260)** — `za 43s znovu`. Zní to na jeden znak, ale
+ten řetězec skládal systém (`Text(_:style: .relative)`) a v české locale mezeru **má ve všech
+variantách** — změřeno na čtyřech šířkách `Duration.UnitsFormatStyle` i na
+`DateComponentsFormatter`u, a na obrazovce psal nad minutu `12 min, 29 s`, tedy i s čárkou.
+Formátuje se proto vlastní funkcí (`DashboardCountdown`), nad minutu ve dvou jednotkách
+(`za 12min 29s znovu`), nad hodinu `za 1h znovu`; nulová spodní jednotka se vynechává.
+
+Je to **vědomá odchylka od české typografie i od mockupu** (ten má `za 43 s znovu`) — přání
+uživatele nad jeho osobním nástrojem, zapsané v specifikaci proto, aby se to příště
+„neopravilo“ zpátky.
+
+**Rozhodnutí z #237 přitom drží, a je to změřené**: vlastní formát si vyžádal vlastní takt, ale ten
+dává `TimelineView` uvnitř odpočtu, který přepočítává jen svůj obsah — tělo nad ním se za 1,5
+sekundy přepočítá **jednou** a formát stojí 0,12 µs na tik. Sonda z #237 na to zůstala a **umí víc**:
+kouká se i na bitmapu hostovaného view, takže chytne i zamrzlý odpočet, který samotný počet přepočtů
+nepozná (ověřeno vyndáním `TimelineView`). Text z okna přečíst nešlo — accessibility tree se
+v hostovaném okně nenaplní, změřeno.
+
+**Nastavení a novinky zůstávají v popředí aplikace (#243)** — `AuxiliaryWindowLevel`
+a `keptInFrontOfApp()` v `App/Views/WindowCentering.swift`, tedy další věc udělaná témuž oknu,
+ne nový mechanismus. Vzniklo to z následku středění (#164): vystředěné okno je menší než hlavní,
+takže se za ním schová beze zbytku a vypadá jako zavřené — přitom je otevřené, `willClose`
+nepřijde nikdy. Je to **změna rozhodnutí z #127**, kde se hladina nechávala normální s tím, že
+kliknutí mimo okno ho má odklidit; odklidit znamená zavřít, a to se neděje.
+
+Hladina je **funkce toho, jestli je aplikace vpředu**: `.floating` dokud je, `.normal` jak přestane
+být. Samo `.floating` je naivní oprava, po které okno plave i nad cizími aplikacemi. Ověřeno
+spuštěním na slotu — pořadí oken z accessibility a hladina z `CGWindowList`: nad novým oknem hlavní
+scény (`layer 0`) zůstává nastavení i novinky vpředu (`layer 3`), po přepnutí do Finderu jim hladina
+spadne na `layer 0`, po návratu je zpátky `layer 3` a zavřené okno se nevrací (3× v řadě u obou).
+Rozepsaná hodnota v poli přepnutí aplikace přežije.
+
+**Hladina prošla proklikáním** („jinak dobrý, že se už neschovává“), a vyšel z něj jeden požadavek
+navíc: aby pomocné okno neztrácelo fokus, když se klikne do hlavního okna. **To nejde a je to
+změřené, ne odhadnuté.** Klíčové okno je v aplikaci právě jedno (v pokusu s plovoucím utility
+panelem je po `main.makeKey()` `panel.isKeyWindow == false`), utility panelu zešedne titulek se
+semaforem úplně stejně jako obyčejnému oknu (doloženo screenshotem), `.utilityWindow` vložené do
+`styleMask` hotového okna nedělá nic, a brát klíč zpátky se zamítlo: znamenalo by to, že do hlavního
+okna nejde psát, a kliknutí do rozepsaného komentáře by poslalo text do pole v nastavení. Podrobnosti
+i s tím, co se u toho změřilo, jsou v [`architektura.md`](architektura.md) a v záznamu rozhodnutí.
+
+**`hidesOnDeactivate` ze zadání se vyzkoušelo a zamítlo.** Skrytí je stav navíc a s SwiftUI se umí
+rozejít: okno se třikrát ocitlo mimo obrazovku, ačkoli scéna dál žila — aktivace ho nevrátila, `⌘,`
+s ním nepohnulo a vrátilo se až dalším přepnutím aplikace. To je tatáž porucha, jakou issue
+opravuje, jen o vrstvu vedle. Cena změny je, že nad cizí aplikací okno **zůstane na obrazovce**
+(leží pod ní), místo aby zmizelo.
 
 **Nálezy a Průběh jako vlastní záložky (#242)** — pruh záložek PR má pět položek a mezi
 `Konverzací` a `Nálezy` dělič: nalevo je to, co je na PR (a co má i GitHub), napravo to, co s ním

@@ -901,21 +901,35 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   Kdy se polling zeptá znovu (`PollState.nextPoll`) je u `PollingService`: hodnotu zapisuje
   smyčka, ruční obnovení ji **neposouvá**, a po rate limitu ctí backoff, ne nastavený interval.
 
-  **Odpočet příštího tiku (#237)** má dvě sady a obojí kryje něco, co se rozbije potichu:
+  **Odpočet příštího tiku (#237, #260)** má tři sady a každá kryje něco, co se rozbije potichu:
   - **`DashboardTick` výčtem** — co se v tom koutě píše, je čistá funkce nad `lastSuccess`,
     `nextPoll`, příznakem dotazu a hodinami. Nejcennější tvrzení je, že **uplynulý termín se
     neukáže jako odpočet**: v minulosti je `nextPoll` po celou dobu dotazu, takže se testuje
     termín před chvílí, termín **právě teď** (rovnost patří k uplynulým) i termín osm hodin za
     námi, tedy stav po probuzení stroje. Ověřeno vloženou regresí — bezpodmínečný `.countdown`
     shodí tři testy.
-  - **Cena odpočtu** (`DashboardCountdownRedrawTests`) — sonda v hostovaném okně, která si počítá
-    přepočty svého těla: `Text(_:style: .relative)` tiká 1,5 sekundy a tělo se přepočítá **jednou**.
-    Měří se na sondě, ne na `DashboardView`, protože počítat přepočty jde jedině tak, že si je view
-    samo počítá, a to do aplikace nepatří. **Druhý test je kontrola měřidla**: tentýž postup nad
-    odpočtem, který se v těle přepočítává (hodiny ve stavu), přepočty spočítat musí — bez něj by
-    zelený první test mohl znamenat jen to, že sonda vůbec nežije. Okno je **bez rámu a mimo
-    obrazovku**, ale skutečné: bez okna SwiftUI přepočty neplánuje a oba testy by vyšly zeleně
-    z nesprávného důvodu.
+  - **Text odpočtu** (`DashboardCountdownTests`, #260) — `DashboardCountdown.label(until:at:)` je
+    čistá funkce, takže se vyčerpá výčtem: vteřiny, celá minuta bez nul, dvě jednotky nad minutu,
+    backoff těsně pod stropem (`za 14min 59s znovu`), strop intervalu v hodinách, nula a termín osm
+    hodin za námi. Nejcennější je ale **tvrzení o tom, co se nestane**: přes celý rozsah odpočtu
+    (od −5 s do dvou hodin) nesmí za číslem stát mezera. Kvůli té mezeře issue vzniklo a bez
+    rozsahového tvrzení by se dala vrátit v jedné větvi formátu, kterou zvlášť vyjmenovaný případ
+    nekryje. Ověřeno vloženými regresemi: mezera ve vteřinové větvi shodí 19 tvrzení, v minutové
+    a hodinové 1028; krácení místo zaokrouhlení shodí vteřinu, o kterou se odpočet přeskočí, a
+    chybějící sražení nuly ukáže záporný čas.
+  - **Cena odpočtu** (`DashboardCountdownRedrawTests`) — sonda v hostovaném okně kolem
+    **skutečného** `DashboardCountdown`u, která si počítá přepočty svého těla, a k tomu bitmapa
+    téhož view na začátku a na konci. Obě poloviny musí platit naráz: tělo se za 1,5 sekundy
+    přepočítá **jednou** a bitmapa se **změní**. Jedna bez druhé se dá splnit omylem — zamrzlý
+    odpočet tělo taky nepřepočítává, a to je zrovna ta regrese, kterou samotný počet přepočtů
+    nechytá (ověřeno vyndáním `TimelineView`: bez bitmapy zůstala sada zelená). Text se z okna
+    **přečíst nedá**, accessibility tree se v něm nenaplní (změřeno: `accessibilityChildren` vrací
+    prázdno), takže se porovnávají pixely. Měří se na sondě, ne na `DashboardView`, protože počítat
+    přepočty jde jedině tak, že si je view samo počítá, a to do aplikace nepatří. **Druhý test je
+    kontrola měřidla**: tentýž postup nad odpočtem, který se v těle přepočítává (hodiny ve stavu),
+    přepočty spočítat musí — bez něj by zelený první test mohl znamenat jen to, že sonda vůbec
+    nežije. Okno je **bez rámu a mimo obrazovku**, ale skutečné: bez okna SwiftUI přepočty
+    neplánuje a oba testy by vyšly zeleně z nesprávného důvodu.
 
     U hostovaného view je jeden zádrhel, který stojí za zapamatování: **rozměr se nesmí propsat do
     okna** (`NSHostingView.sizingOptions = []` a pevný `frame`). Text sondy se s každou vteřinou
@@ -984,6 +998,18 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   Že se okno **nerozpůlí mezi monitory**, vyšlo z testu, který nejdřív čekal opak a spadl:
   hostitel přes hranu dvou monitorů posune okno celé na ten s větším průnikem. Zapsané jako
   chování, ne jako překlep v testu.
+- **`AuxiliaryWindowLevel` (#243)** — na rozdíl od středění se tady testuje i **`NSWindow`**,
+  protože hladina je jeho vlastnost; okno se v testu jen vyrobí, nikdo ho neukazuje. Nejcennější
+  jsou dvě tvrzení o tom, co se stát **nesmí**: že v neaktivní aplikaci hladina padá zpátky na
+  `.normal` (jinak by okno plavalo i nad cizími aplikacemi — to je ta naivní oprava) a že se okno
+  **neskrývá** (`hidesOnDeactivate` zůstává `false`). To druhé je zapsané chování, ne detail:
+  skryté okno se s SwiftUI umí rozejít a zůstat mimo obrazovku, ačkoli je scéna otevřená. K tomu
+  ještě, že hladina **oknem nehýbe** — středění (#164) a hladina jsou dvě věci udělané témuž oknu
+  a nemají si do sebe mluvit.
+
+  Zbytek téhle změny je chování oken, které unit test nepokryje — pořadí oken, hladina za běhu
+  a to, že se zavřené okno nevrací. Ověřuje se **spuštěním**, viz *Jak změřit pořadí a hladinu
+  oken* níž.
 - **`CacheEviction`** — proti skutečné dočasné složce, ne proti fake filesystému: rozpočet
   je injektovatelný, takže stačí malé soubory. Pozor, počítá se **alokovaná** velikost, tedy
   po blocích — stobajtový soubor zabere 4 KB a testovací rozpočty musí být řádově výš.
@@ -1053,10 +1079,16 @@ vyfotí hlavně cizí práci.
 ID najde `CGWindowListCopyWindowInfo` podle PID (`pgrep -f /Applications/PRism-<slot>.app`);
 pár řádků ve `swift` skriptu, `System Events` na to potřeba nejsou. Okno **nemusí být vpředu**,
 takže se u toho nepřepíná fokus. Odpočet v hlavičce se takhle dal odečíst ze dvou snímků po
-šesti sekundách (`za 9 s znovu` → `za 3 s znovu`) a burst po 0,35 s zachytil celý přechod
-`za 1 s` → `za 0 s` → `ptám se…` → `za 7 s`, tedy věc, na kterou offscreen render nestačí:
-dashboard je ve `ScrollView`, který se offscreen **nevykreslí vůbec** (viz níž), takže render
-vyšel prázdný a jediné, co zbývalo, bylo skutečné okno.
+šesti sekundách (u #237 `za 9 s znovu` → `za 3 s znovu`, ještě se systémovým formátem) a burst po
+0,35 s zachytil celý přechod přes nulu — tedy věc, na kterou offscreen render nestačí: dashboard je
+ve `ScrollView`, který se offscreen **nevykreslí vůbec** (viz níž), takže render vyšel prázdný
+a jediné, co zbývalo, bylo skutečné okno.
+
+**Řada snímků se vyplatí složit do jednoho PNG** (#260): výřez pravého horního koutu z osmi snímků
+po 1,1 s pod sebou dá filmstrip, ze kterého se celý přechod přečte naráz —
+`za 4s` → `za 2s` → `za 1s` → `ptám se…` → `za 29s` → `za 28s` (interval snížený na 30 s, což si
+slot dovolit smí). Výřez a skládání je pár řádků CoreGraphics (`CGImage.cropping`, `CGContext.draw`)
+a stojí to jeden obrázek místo osmi.
 
 **Na stav za kliknutím se dostaneš taky** — jen se musí aplikace napřed vytáhnout dopředu.
 Okno terminálu leží na pixel přesně přes okno aplikace (obojí `0,33,1512,875`), takže klik
@@ -1116,6 +1148,78 @@ osascript -e 'tell application "System Events" to tell process "PRism" to get po
 
 Vyžaduje to oprávnění Accessibility. `entire contents` u `AXScrollArea` občas selže na převodu
 typu — hierarchii je pak potřeba projít po patrech (`UI elements of …`).
+
+### Jak změřit pořadí a hladinu oken (#243)
+
+Chování oken — co je před čím, co je vidět a co se vrací — se nedá otestovat unit testem a nedá
+se přečíst z kódu. Měří se dvěma nástroji naráz, protože každý umí něco jiného:
+
+```bash
+# pořadí oken jedné instance zpředu dozadu (accessibility)
+osascript -e 'tell application "System Events" to return name of windows of ¬
+    (first application process whose bundle identifier is "com.ondrajodas.prism.d")'
+```
+
+```swift
+// hladina okna a skutečné z-order z window serveru — `layer 0` je normální okno,
+// `layer 3` plovoucí; CGWindowList vrací okna zpředu dozadu
+CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+```
+
+Hladina je to, co dokazuje „nedá se zaklopit“ **bez klikání**: okno na `layer 3` nemá čím zakrýt
+žádné okno aplikace na `layer 0`, to je pravidlo window serveru. A protože se z `CGWindowList` čte
+hladina i pořadí, pozná se z ní obojí naráz — že okno je vpředu, a taky že po odchodu aplikace do
+pozadí **spadlo zpátky na `layer 0`**, tedy nad cizí aplikací nestojí. Pořadí z accessibility k tomu
+řekne, které okno je uvnitř aplikace před kterým.
+
+Čtyři pasti, každá stála kolo hledání:
+
+- **Procesy se nesmí adresovat jménem.** Při paralelním vývoji běží víc PRismů a všechny mají
+  `application process "PRism"` — takže `tell process "PRism"` sáhne do cizí instance. Cíl se
+  adresuje `bundle identifier` nebo `unix id`.
+- **Reference na prvek se nesmí vracet z `tell` bloku.** System Events do specifieru zapíše
+  `application process "PRism"` **podle jména**, takže uložená reference se při dalším použití
+  přeloží na cizí proces a spadne na „okno nelze načíst“ — u okna, které přitom je na obrazovce.
+  Prvek se proto adresuje celou cestou v jednom výrazu
+  (`text field 1 of group 1 of scroll area 2 of group 1 of window 1 of (first application process
+  whose unix id is …)`). Vnořené `whose` (proces i okno) System Events neumí vůbec.
+- **Hlavní okno se dopředu dostane bez klikání na souřadnice** — `Soubor → Nové okno scény`.
+  Nové okno hlavní scény je normální okno aplikace otevřené vpředu, takže je to tatáž situace
+  jako kliknutí do hlavního okna, a bez rizika, že klik na souřadnice skončí v okně jiné
+  instance. `AXRaise` ani `AXMain`, položka v menu `Okno` a `⌘\`` **nestačí**: měřeno na verzi
+  před #243, kde se pořadí neměnilo ani jedním z nich, takže by z nich vyšlo, že porucha
+  neexistuje.
+
+- **Zavírat se má křížkem přes accessibility** (`click button 1 of window 1 …`), ne klávesou.
+  `⌘W` zavře okno, které má **fokus**, a to po předchozím kroku nemusí být to, co si měření myslí;
+  `Esc` v textovém poli spolkne pole (ruší editaci), takže se nezavře nic. Obojí vypadá jako
+  porucha okna, přitom je to porucha měření — jméno okna se proto **ověří** dřív, než se křížek
+  zmáčkne, aby se omylem nezavřelo hlavní okno.
+
+**Jestli okno „vypadá aktivně“, se pozná jedině screenshotem** (#243). Klíčové okno se od
+neklíčového liší třemi věcmi a všechny tři kreslí systém, ne aplikace: barevný semafor, jasný
+titulek a modré vybrání v seznamu. `screencapture` se musí pustit **z toho samého skriptu**, který
+aplikaci vytáhl dopředu (`do shell script` uvnitř `osascript`) — jinak se mezitím dostane vpředu
+terminál a vyfotí se on. Rám okna dá accessibility (`position`, `size` okna).
+
+```applescript
+tell application id bid to activate
+delay 2
+do shell script "screencapture -x -R" & x & "," & y & "," & w & ",34 /tmp/titulek.png"
+```
+
+Takhle se u #243 doložilo, že `.utilityWindow` v `styleMask` obyčejného okna nedělá nic a že
+i skutečnému utility panelu titulek zešedne — tedy že „aspoň ať to nevypadá deaktivovaně“ nejde.
+**Chování AppKitu se přitom nemusí zkoušet v aplikaci**: dvě okna a dva screenshoty se dají udělat
+v samostatném programu na třicet řádků (`swiftc /tmp/…swift`), který si sám sáhne na `makeKey()`
+a vyfotí se. Je to rychlejší než rebuild a odpověď je stejně platná.
+
+A dvě věci o měření samotném: čekat se musí **velkoryse** (aktivace aplikace trvá i přes sekundu
+a s krátkou pauzou vyjde „okno tam není“ tam, kde se jen ještě neukázalo), a měřit se má
+**z čistého stavu** — okno nechané otevřené z předchozího běhu skriptu, nebo přebylé okno hlavní
+scény, posune celou posloupnost o krok a výsledek pak nejde přečíst. Právě takhle vzniklo
+podezření na poruchu aplikace, kde byla ve skutečnosti rozsypaná posloupnost kláves; rozhodlo až
+opakování z čistého stavu.
 
 Co se **nedá naklikat** (chybějící binárka, chyba sítě, prázdný stav nad plnou frontou), se dá
 vykreslit dočasným testem přes `ImageRenderer` do PNG ve scratchpadu. Před commitem se maže.
