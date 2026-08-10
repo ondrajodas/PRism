@@ -86,9 +86,11 @@ struct ReviewRunbarView: View {
         .frame(minWidth: 44, maxWidth: .infinity, minHeight: 4, maxHeight: 4)
         .background(Palette.raised)
         .clipShape(.capsule)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Průběh review")
-        .accessibilityValue(Self.label(progress, names: shortNames, at: .now))
+        // Dráha říká totéž co popisek vedle ní, jen obrázkem — a **odečítat se nesmí**:
+        // hodnota by se skládala při vykreslení dráhy, ne po sekundě jako popisek, takže by
+        // v ní stopky zamrzly na čase z prvního snímku. Tatáž úvaha jako u čtverečků poměru
+        // v řadě záložek.
+        .accessibilityHidden(true)
     }
 
     /// Zkrácená jména do popisku. Tatáž mapa jako u chipů vedle — dvě různá zkrácení téhož
