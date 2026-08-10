@@ -31,32 +31,10 @@ struct DiffCodeBlockView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    /// Skládá se v `DiffTextView.wrappingBlock()`, ne tady: kdo drží šířku kontejneru, ten musí
+    /// držet i to, na jaké šířce se měří výška (#236) — a to je textové view.
     func makeNSView(context: Context) -> DiffTextView {
-        // **Ručně složený TextKit 1.** `NSTextView(frame:)` dostane na dnešním macOS TextKit 2,
-        // kde je `layoutManager` nil — a bez něj se nedá zjistit, kde který řádek leží, tedy ani
-        // nakreslit čísla a pozadí.
-        let storage = NSTextStorage()
-        let layout = NSLayoutManager()
-        storage.addLayoutManager(layout)
-        let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
-        container.widthTracksTextView = true
-        layout.addTextContainer(container)
-
-        let textView = DiffTextView(frame: NSRect.zero, textContainer: container)
-        textView.isEditable = false
-        // Read-only, ale **vybíratelné** — o tohle celé #157 je.
-        textView.isSelectable = true
-        textView.drawsBackground = false
-        textView.isRichText = false
-        // Zalamování místo vodorovného scrollu, jako dosud v diffu. Zalomení není znak, takže se do
-        // vybraného textu nedostane.
-        textView.isHorizontallyResizable = false
-        textView.autoresizingMask = [NSView.AutoresizingMask.width]
-        // **Výběr má být modrý i tehdy, když je fokus jinde.** AppKit u neaktivního textu kreslí
-        // šedou (`unemphasizedSelectedTextBackgroundColor`), což u diffu znamená, že vybraný kód
-        // zešedne, jak myš odjede — a vypadá to, že výběr zmizel. Vyžádané při zkoušení #157.
-        textView.selectedTextAttributes = [.backgroundColor: NSColor.selectedTextBackgroundColor]
-        return textView
+        DiffTextView.wrappingBlock()
     }
 
     func updateNSView(_ textView: DiffTextView, context: Context) {
@@ -94,16 +72,13 @@ struct DiffCodeBlockView: NSViewRepresentable {
     /// Výška bloku — SwiftUI ji z `NSTextView` sám nezjistí, protože ten si ji uvnitř `LazyVStack`
     /// nenavrhne. Počítá se z layout manageru nad **navrženou šířkou**, takže po zúžení okna
     /// vyjde vyšší.
+    ///
+    /// **Počítá si ji view samo** (#236). Dokud se šířka kontejneru skládala tady, dala se složit
+    /// jinak než při kreslení — a taky se lišila o šířku gutteru, takže blok kreslil víc řádků, než
+    /// na kolik si řekl, a přetékal do bubliny nálezu pod sebou.
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: DiffTextView, context: Context) -> CGSize? {
         let width = proposal.width ?? nsView.bounds.width
-        guard width > 0, let layout = nsView.layoutManager, let container = nsView.textContainer else { return nil }
-
-        container.size = NSSize(
-            width: width - nsView.textContainerInset.width,
-            height: CGFloat.greatestFiniteMagnitude
-        )
-        layout.ensureLayout(for: container)
-        let height = layout.usedRect(for: container).height + nsView.textContainerInset.height * 2
+        guard width > 0, let height = nsView.height(forWidth: width) else { return nil }
         return CGSize(width: width, height: height)
     }
 }

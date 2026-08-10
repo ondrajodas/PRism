@@ -365,8 +365,31 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
 - **Slučování je věc vykreslení, ne modelu.** `DiffRow.rows(of:)` vrací řádky jako dosud a slévá je
   `DiffView`. Kdyby se slévalo v modelu, musela by o blocích vědět i kotva skoku na nález a výběr
   vláken — a testy `DiffRow` mluví o řádcích (85 z nich na tom prvním pokusu spadlo).
-- **Čísla řádků a znak změny se kreslí mimo text**, do `textContainerInset` vlevo. Kdyby byly
-  součástí textu, kopírovaly by se s ním — do schránky má jít kód, ne diff.
+- **Čísla řádků a znak změny se kreslí mimo text**, do gutteru vlevo. Kdyby byly součástí textu,
+  kopírovaly by se s ním — do schránky má jít kód, ne diff.
+- **Gutter posouvá původ textu, nezužuje kontejner z obou stran** (#236). Do #236 to byl symetrický
+  `textContainerInset`, jenže ten AppKit uplatní na **obě** strany: změřeno, že při šířce view 600
+  a gutteru 136 pt vyjde kontejner 328 pt (600 − 2×136) a původ textu na 136. Vpravo se to nepoznalo,
+  protože tam nic nekreslíme — jen se kód zalamoval o šířku gutteru dřív (při šířce 600 na 41 znaků
+  místo 57) a u pravého okraje zbývalo mrtvé místo. Teď je `textContainerInset.width` nula, odsazení
+  drží `textContainerOrigin` (přepsaný) a šířku kontejneru si view nastavuje samo na
+  `šířka − gutter`. Změřeno, že to platí pro kreslení i pro klikání; ve split pohledu se nic
+  neposunulo, protože tam AppKit dával původ na `inset.width` taky.
+- **Šířka pro měření musí být šířka pro kreslení** (#236) — tohle je invariant, ne detail. Blok si
+  v `LazyVStack`u říká o výšku sám (`sizeThatFits`), takže když si řekne o menší, než jakou nakreslí,
+  položí SwiftUI další řádek (bublinu nálezu, vlákno, hlavičku hunku) do plochy, kterou textové view
+  ještě kreslí — a AppKitové view je nad SwiftUI obsahem, takže je vidět **kód přes bublinu**.
+  Proto výšku počítá `DiffTextView.height(forWidth:)`, tedy tentýž typ, který drží šířku kontejneru
+  při kreslení; složit ji jinde znamená mít dvě pravdy o jedné šířce. Že si všimne až u bubliny, je
+  vlastnost slévání do bloků: souvislé řádky jsou jeden blok, takže se přetečení projeví jedině tam,
+  kde blok končí.
+- **Rámečky řádků ve split pohledu se počítají aritmetikou, ale musí začínat tam, kde začíná text**
+  (#236). Sloupec dvojice se nezalamuje, takže je řádek vždycky jeden vizuální a
+  `index × výška řádku` je přesné — svislý inset do té výšky ale **nepatří**, patří bloku (nahoře
+  a dole, jednou). Dokud ho nesla výška řádku, utíkal každý další řádek o 2 pt: na osmi řádcích 12 pt,
+  na šedesátiřádkovém bloku 116 pt — tedy pilulka komentáře sedm řádků pod svým kódem — a pod blokem
+  zbývalo tolik prázdna, kolik měl řádků. Že aritmetika sedí na to, co hlásí layout manager, drží
+  test; kdyby přestala, patří rámečky vzít z něj.
 - **Rozvržení gutteru je jeden součet na jednom místě** (`DiffLineView.contentInset(for:)`):
   `[ikonka 18][číslo 52][číslo 52][znak 14]`, ve split jen jeden sloupec čísel. `DiffTextView`
   kreslí ručně na dané `x`, takže rozejít se to smí jen tehdy, když má být kód nakřivo — když
@@ -408,7 +431,7 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   z pilulky nešlo roztáhnout rozsah. Klik a tažení se vylučují samy, protože drag má
   `minimumDistance`; kurzor, nápovědu a accessibility trait je proto potřeba doplnit ručně.
 
-Sedm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne přečtené:
+Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne přečtené:
 
 | Past | Jak se projevila |
 |---|---|
@@ -419,6 +442,7 @@ Sedm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne 
 | `NSCursor.set()` ze SwiftUI ani `addCursorRect` si proti `NSTextView` **neporadí** | Ruka nad pilulkou blikla jen v rohu, kde se to potkalo, nebo vůbec. Jde to jen přes tracking area a `cursorUpdate` — a i tam se musí rozhodovat v `mouseMoved`, protože `cursorUpdate` chodí jen při vstupu do areay |
 | `contentShape` **před** `frame` tvaruje nulovou velikost | Gesto tažení nemělo kde začít. Vypadá to jako drobnost v pořadí modifikátorů a je z toho nefunkční gesto |
 | `NSTextView` s neomezenou šířkou si **nedopočítá rámec** | Po přesunu do `NSScrollView` zůstal nulový: nic vidět, nic vybrat |
+| Nastavení `textContainer.size` si AppKit vyloží jako změnu geometrie a **sám zavolá `setFrameSize`** | Měření výšky je dotaz na **budoucí** šířku, takže mu ten zpětný hovor změřenou šířku hned přepsal tou současnou — a měřilo se o jednu šířku pozadu (blok o dvou dlouhých řádcích si při 300 pt řekl o 36 pt a nakreslil 162). Řeší to stráž `isMeasuring` a to, že se šířka kontejneru nastavuje jen při změně (#236) |
 
 **TextKit 1, ne 2.** Geometrie řádků se čte z `NSLayoutManager` (`boundingRect(forGlyphRange:)`) —
 podle ní se kreslí pozadí, čísla i pozice pilulek — a TextKit 2 layout manager nemá. Vynutí se tím,
@@ -1412,7 +1436,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory, zakázané notifikace |
 | `WindowCentering`, `WindowReader`, `ScreenBounds` | Vystředění pomocného okna **v hlavním okně**, ne na obrazovce (#164) — z jednoho místa pro nastavení i novinky |
 | `DiffCopyActions`, `copyMenu(_:selectText:)` | Kopírování kódu z diffu (#157) — co nabídne kontextové menu řádku a hunku |
-| `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157) |
+| `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157). Drží **šířku kontejneru i měření výšky** (`height(forWidth:)`, `height(ofRows:)`), aby se šířka pro měření nemohla rozejít s tou pro kreslení (#236) |
 | `DiffCodeBlockView`, `DiffBlockRowView` | Blok v pohledu pod sebou a k němu pilulka na komentář a tažení rozsahu |
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
@@ -2868,7 +2892,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.facts(commits:newCommits:files:filesWithFindings:headSha:findingsHeadSha:)` | Dlaždice s fakty o PR (#198); dlaždice, o které se nedá nic říct, se vynechá |
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
 | `Policy.fileFindings(in:categories:)` | Co je v souboru k vyřízení pro kapsli v hlavičce diffu (#219) — počítá **místa**, ne nálezy, a odmítnuté vynechá |
-| `Policy.charactersPerSide(contentWidth:characterWidth:layout:gutter:)` | Kolik znaků kódu se vejde na stranu (#188); vedle sebe se šířka dělí na dvě |
+| `Policy.charactersPerSide(contentWidth:characterWidth:layout:gutter:)` | Kolik znaků kódu se vejde na stranu (#188); vedle sebe se šířka dělí na dvě. Gutter odečítá **jednou** — což od #236 odpovídá i tomu, kde se kód opravdu zalomí; do té doby byl ukazatel v pohledu pod sebou o 17 znaků optimističtější než skutečnost |
 | `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
 | `Policy.changes(in:since:)`, `VisitChanges.count` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`); počet sečte **všech pět kategorií**, protože ho nese odznak u záložky `Přehled` (#218) a musí slíbit totéž, co blok uvnitř vypíše |
 | `Policy.progress(startedAt:phase:running:)` | Průběh běžícího review do pruhu v hlavičce (#218, `ReviewRunProgress`). `nil` = neběží nic — rozhoduje **`startedAt` běhu**, ne fáze, protože `reviewPhases` si `failed` drží i po skončení |

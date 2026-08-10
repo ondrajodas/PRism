@@ -454,6 +454,13 @@ Zvlášť stojí za přečtení, než sáhneš na:
   `filling` v `App/Views/AvailableWidth.swift`); pružná výška v líném seznamu je tatáž chyba.
   Tuhnoucí okno se diagnostikuje `sample`m běžícího procesu, ne odhadem — viz
   [`docs/testovani.md`](docs/testovani.md).
+- **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236). Blok kódu si v `LazyVStack`u
+  navrhuje výšku sám, takže když ji spočítá na jiné šířce, než na jaké se pak zalamuje, nakreslí víc
+  řádků, než na kolik si řekl — a přeteče do řádku pod sebou (AppKitové view je nad SwiftUI obsahem,
+  takže je vidět kód přes bublinu nálezu). Měření proto patří **do toho typu, který drží šířku
+  kreslení**, ne do volajícího; dvě místa znamenají dvě pravdy o jedné šířce. Testuje se proti
+  **layout manageru** a **přes pásmo šířek** — rozejde se to jen v pásmu, takže u jedné šířky test
+  projde. Podrobnosti v [`docs/architektura.md`](docs/architektura.md).
 - **Co se počítá při každém překreslení, se pamatuje — a cache si musí říct, co ji vyprazdňuje**
   (#224). Obarvení řádku se volalo z computed property, takže běželo i při přejezdu myší: 44 ms
   na soubor o 2400 řádcích, pokaždé znovu; z cache 0,30 ms. Hranice musí být v tom typu vidět

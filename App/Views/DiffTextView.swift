@@ -3,9 +3,9 @@ import AppKit
 /// `NSTextView`, který kreslí blok řádků diffu (#157): text je jeden, ale pozadí, čísla řádků
 /// a znaky změny se kreslí **po řádcích**.
 ///
-/// **Čísla a znaky nejsou v textu**, jsou nakreslené v `textContainerInset.width` vlevo. Kdyby
-/// byly součástí textu, kopírovaly by se s ním — a do schránky má jít kód, ne diff. Je to tentýž
-/// požadavek, jaký měl `Policy.code(of:)` u kopírování z menu.
+/// **Čísla a znaky nejsou v textu**, jsou nakreslené v gutteru vlevo. Kdyby byly součástí textu,
+/// kopírovaly by se s ním — a do schránky má jít kód, ne diff. Je to tentýž požadavek, jaký měl
+/// `Policy.code(of:)` u kopírování z menu.
 ///
 /// **TextKit 1, ne 2.** Geometrie řádků se čte z `NSLayoutManager` (`boundingRect(forGlyphRange:)`),
 /// protože podle ní se kreslí pozadí i čísla — a TextKit 2 layout manager nemá. Vynutí se tím, že
@@ -22,15 +22,39 @@ final class DiffTextView: NSTextView {
     /// Kolik sloupců s čísly se kreslí: dva v pohledu pod sebou, jeden v buňce dvojice.
     var numberColumns = 2
     /// Šířka sloupců, které se kreslí vlevo: sloupec ikonky, čísla a znak změny.
+    ///
+    /// **Posouvá původ textu, nezužuje kontejner z obou stran** (#236). Do #236 se gutter dělal
+    /// symetrickým `textContainerInset`em, jenže ten AppKit uplatní na **obě** strany: změřeno, že
+    /// při šířce view 600 a gutteru 136 vyjde kontejner 328 pt, tedy o gutter užší i vpravo, kde
+    /// žádné sloupce nejsou. Text se tím zalamoval o 17 znaků dřív, než musel, a u pravého okraje
+    /// zůstávalo mrtvé místo.
     var gutterWidth: Double = 0 {
         didSet {
-            textContainerInset = NSSize(width: gutterWidth, height: 2)
-
+            guard gutterWidth != oldValue else { return }
+            invalidateTextContainerOrigin()
+            fitContainerWidth(bounds.width)
+            needsDisplay = true
         }
     }
 
+    /// Zalamuje se text na šířku view? Pod sebou ano, ve sloupci dvojice ne — tam se dlouhý kód
+    /// posouvá vodorovně, aby zůstal zarovnaný s protějškem. Rozhoduje to o šířce kontejneru, tedy
+    /// i o tom, na jaké šířce se měří výška.
+    private var wrapsText = false
+
     /// Podpis posledně složeného obsahu — z něj se pozná, že se text skládat nemusí.
     private var signature: String?
+
+    /// **Vodorovný inset je nula a zůstane nula** (#236): odsazení na gutter dělá
+    /// `textContainerOrigin`, protože `textContainerInset` platí na obě strany. Svisle symetrický
+    /// zůstává schválně — 2 pt nad prvním řádkem a pod posledním.
+    override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
+        super.init(frame: frameRect, textContainer: container)
+        textContainerInset = NSSize(width: 0, height: 2)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("jen z kódu") }
 
     /// Blok, který se má vykreslit. Text se skládá **jednou** a drží se rozsahy řádků, aby se
     /// pozadí a čísla daly kreslit bez druhého průchodu textem.
@@ -127,6 +151,16 @@ final class DiffTextView: NSTextView {
 
     // MARK: - Geometrie řádků
 
+    /// **Text začíná za gutterem** — o ten posun se stará původ kontejneru, ne inset (#236).
+    ///
+    /// Změřeno, že to platí pro kreslení i pro klikání: nakreslený text začíná na `gutterWidth`
+    /// (+ `lineFragmentPadding`) a `characterIndexForInsertion` sedí na znak. Ve sloupci dvojice
+    /// z toho vyjde přesně to, co dřív dělal inset — původ tam AppKit klade na `inset.width` taky,
+    /// takže se pohled vedle sebe nikam neposunul.
+    override var textContainerOrigin: NSPoint {
+        NSPoint(x: gutterWidth, y: textContainerInset.height)
+    }
+
     /// Rámeček řádku v souřadnicích view — z něj se kreslí pozadí i čísla, a **ven** z něj se hlásí
     /// pozice pro tlačítko na komentář a pro tažení rozsahu.
     ///
@@ -139,8 +173,9 @@ final class DiffTextView: NSTextView {
 
         let glyphs = layoutManager.glyphRange(forCharacterRange: lineRanges[index], actualCharacterRange: nil)
         var rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
-        rect.origin.x += textContainerInset.width
-        rect.origin.y += textContainerInset.height
+        // Tímtéž původem, jakým se text kreslí — jinak by rámeček řekl něco jiného, než co je vidět.
+        rect.origin.x += textContainerOrigin.x
+        rect.origin.y += textContainerOrigin.y
         // Prázdný řádek nemá glyfy, takže by vyšel nulově vysoký — vezme se výška písma.
         if rect.height == 0 { rect.size.height = layoutManager.defaultLineHeight(for: font ?? .systemFont(ofSize: 12)) }
         return rect
@@ -219,8 +254,11 @@ final class DiffTextView: NSTextView {
 
     /// **Všechno vlastní kreslení musí být před `super.draw`.** Co se nakreslí po něm, není vidět —
     /// změřeno u #157 tím, že se do gutteru nakreslil plný obdélník a taky nebyl (kdežto pruhy
-    /// pozadí kreslené před `super.draw` vidět jsou). Text ani gutter se nepřekrývají: text je
-    /// odsazený o `textContainerInset.width`, tedy přesně o šířku gutteru.
+    /// pozadí kreslené před `super.draw` vidět jsou). Text ani gutter se nepřekrývají: text začíná
+    /// na `textContainerOrigin.x`, tedy přesně na šířce gutteru.
+    ///
+    /// **Do #236 to tvrzení neplatilo**: gutter se dělal symetrickým `textContainerInset`em, takže
+    /// text byl odsazený o jeho dvojnásobek — jen se to vpravo nepoznalo, protože tam nic nekreslíme.
     override func draw(_ dirtyRect: NSRect) {
         drawRows(in: dirtyRect)
         drawGutter(in: dirtyRect)
@@ -330,32 +368,126 @@ final class DiffTextView: NSTextView {
         lines.indices.contains(index) ? lines[index] : nil
     }
 
-    /// Výška jednoho řádku textu. U nezalamovaného sloupce z ní vyjde celá výška bloku.
+    // MARK: - Výška
+
+    /// Výška, kterou blok na dané šířce view **nakreslí**.
+    ///
+    /// Měří se na téže šířce kontejneru, jakou si view nastaví při kreslení (`fitContainerWidth`),
+    /// a je to celé jádro #236: dokud se měřilo na o gutter širším kontejneru, zalomil se řádek,
+    /// který se do změřené šířky ještě vešel. Blok pak nakreslil víc vizuálních řádků, než na kolik
+    /// si řekl, a přeteklý text šel přes bublinu nálezu pod sebou — `NSTextView` je nad SwiftUI
+    /// obsahem, takže byl vidět kód přes bublinu.
+    func height(forWidth width: Double) -> Double? {
+        guard let layoutManager, let textContainer else { return nil }
+        isMeasuring = true
+        defer { isMeasuring = false }
+        textContainer.size = containerSize(forWidth: width)
+        layoutManager.ensureLayout(for: textContainer)
+        return layoutManager.usedRect(for: textContainer).height + textContainerInset.height * 2
+    }
+
+    /// Výška bloku o daném počtu **nezalomených** řádků. Sloupec dvojice se nezalamuje, takže se
+    /// nemusí měřit layout.
+    ///
+    /// Svislý inset se připočítá **celý a jen jednou** (nahoře a dole), ne po řádcích: dokud ho
+    /// nesl `singleLineHeight`, utíkal každý další řádek o 2 pt (#236) — na osmi řádcích 12 pt,
+    /// na šedesátiřádkovém bloku 116 pt, tedy pilulka komentáře sedm řádků pod svým kódem.
+    func height(ofRows rows: Int) -> Double {
+        Double(max(rows, 1)) * singleLineHeight + textContainerInset.height * 2
+    }
+
+    /// Výška jednoho řádku textu — **bez insetu**, ten platí na blok, ne na řádek.
     var singleLineHeight: Double {
         let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        return (layoutManager?.defaultLineHeight(for: font) ?? font.boundingRectForFont.height)
-            + textContainerInset.height
+        guard let layoutManager else { return font.boundingRectForFont.height }
+        return layoutManager.defaultLineHeight(for: font)
+    }
+
+    /// Rozměr kontejneru pro danou šířku view: co zbude za gutterem. Ve sloupci dvojice neomezený —
+    /// tam se nezalamuje a dlouhý kód se posouvá vodorovně.
+    private func containerSize(forWidth width: Double) -> NSSize {
+        NSSize(
+            width: wrapsText ? max(width - gutterWidth, 0) : CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+    }
+
+    /// Kontejner drží šířku view **bez gutteru**. Nechat to na `widthTracksTextView` nejde: ten
+    /// odečítá `textContainerInset.width` na obě strany (#236).
+    ///
+    /// Nastavuje se **jen při změně**, aby se to nezacyklilo: změnu geometrie kontejneru si AppKit
+    /// vyloží jako důvod zavolat `setFrameSize`, odkud se sem chodí.
+    private func fitContainerWidth(_ width: Double) {
+        guard wrapsText, let textContainer else { return }
+        let size = containerSize(forWidth: width)
+        guard textContainer.size != size else { return }
+        textContainer.size = size
+    }
+
+    /// Měří se právě teď výška? Nastavení `textContainer.size` si AppKit vyloží jako změnu geometrie
+    /// a **sám zavolá `setFrameSize`** — a ten by změřenou šířku hned přepsal tou, jakou má view
+    /// zrovna teď. Měření je přitom dotaz na **budoucí** šířku („jak vysoký bys byl na 400?“), takže
+    /// odpověď musí vydržet až do chvíle, kdy SwiftUI ten rámec nastaví.
+    ///
+    /// Změřeno u #236: bez téhle stráže se měřilo o jednu šířku pozadu — tedy zase na jiné šířce,
+    /// než na jaké se kreslí, jen jinak. Blok o dvou dlouhých řádcích si při šířce 300 řekl o 36 pt
+    /// a nakreslil 162.
+    private var isMeasuring = false
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        guard !isMeasuring else { return }
+        fitContainerWidth(newSize.width)
+    }
+
+    // MARK: - Skládání view
+
+    /// Blok pohledu **pod sebou**: zalamuje na šířku view zbylou za gutterem.
+    static func wrappingBlock() -> DiffTextView {
+        let textView = textKit1()
+        textView.wrapsText = true
+        // Zalamování místo vodorovného scrollu. Zalomení není znak, takže se do vybraného textu
+        // nedostane.
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [NSView.AutoresizingMask.width]
+        return textView
     }
 
     /// Sloupec pohledu vedle sebe: **nezalamuje** a posouvá se vodorovně, aby zůstal zarovnaný
     /// s protějškem (viz `DiffPairBlockView`).
     static func pairColumn() -> DiffTextView {
+        let textView = textKit1()
+        textView.textContainer?.size = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.isHorizontallyResizable = true
+        return textView
+    }
+
+    /// **Ručně složený TextKit 1.** `NSTextView(frame:)` dostane na dnešním macOS TextKit 2, kde je
+    /// `layoutManager` nil — a bez něj se nedá zjistit, kde který řádek leží, tedy ani nakreslit
+    /// čísla a pozadí.
+    ///
+    /// **`widthTracksTextView` je vypnuté v obou pohledech** (#236): šířku kontejneru si view drží
+    /// samo (`fitContainerWidth`), protože gutter ubírá místo jen vlevo.
+    private static func textKit1() -> DiffTextView {
         let storage = NSTextStorage()
         let layout = NSLayoutManager()
         storage.addLayoutManager(layout)
-        let container = NSTextContainer(size: NSSize(
-            width: CGFloat.greatestFiniteMagnitude,
-            height: CGFloat.greatestFiniteMagnitude
-        ))
+        let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
         container.widthTracksTextView = false
         layout.addTextContainer(container)
 
         let textView = DiffTextView(frame: NSRect.zero, textContainer: container)
         textView.isEditable = false
+        // Read-only, ale **vybíratelné** — o tohle celé #157 je.
         textView.isSelectable = true
         textView.drawsBackground = false
         textView.isRichText = false
-        textView.isHorizontallyResizable = true
+        // **Výběr má být modrý i tehdy, když je fokus jinde.** AppKit u neaktivního textu kreslí
+        // šedou (`unemphasizedSelectedTextBackgroundColor`), což u diffu znamená, že vybraný kód
+        // zešedne, jak myš odjede — a vypadá to, že výběr zmizel. Vyžádané při zkoušení #157.
         textView.selectedTextAttributes = [.backgroundColor: NSColor.selectedTextBackgroundColor]
         return textView
     }

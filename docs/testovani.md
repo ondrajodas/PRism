@@ -736,8 +736,31 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   K tomu, že zvýraznění nemění text, že obarvení syntaxe zůstává pod ním (písmo × pozadí) a že
   kontextový řádek nesvítí, ani když se mu rozsahy podstrčí.
 
+  **Výška bloku (#236)** má vlastní sadu (`DiffBlockHeightTests`) a referencí je v ní vždycky
+  **layout manager**, ne druhý výpočet téhož — jinak by test jen opsal chybu, kterou má chytat.
+
+  To hlavní je *„blok si řekne o tu výšku, kterou nakreslí“*, a jde **přes pásmo šířek** (300–800
+  po 17 pt × sedm délek řádku), protože se to rozejde jedině tehdy, když délka nejdelšího řádku padne
+  mezi změřenou a kreslenou šířku — u „hezké“ šířky by test prošel. Tvrdí se obojí: že se nakreslený
+  text do změřené výšky **vejde** (jinak přeteče do bubliny pod blokem) a že pod poslední řádek
+  nezbude víc než svislý inset (jinak by prošel i blok, který si o výšku řekne s rezervou a nechá pod
+  sebou mezeru). K tomu, že se kód zalomí **až** tehdy, když se nevejde za gutter — s kontrolou
+  z druhé strany, ať test neprojde bloku, který nezalamuje vůbec.
+
+  Ověřeno **vloženou regresí**: měření o gutter širší (tedy původní stav) položí 130 případů,
+  a je z nich vidět to pásmo. Prázdný řádek je zvlášť a schválně slabší tvrzení — `usedRect`
+  u prázdného textu vrací o 2 pt méně než u řádku s textem (18 proti 20), takže se u něj tvrdí jen
+  to, že výška není nulová a nakreslený řádek se do ní vejde.
+
+  **Split má sadu taky** (`DiffPairBlockHeightTests`) a je v ní ten cennější test: *„rámečky dvojic
+  sedí na text sloupce“* — porovnává, co hlásí `lineFrames()`, s tím, kde má řádek podle
+  `frame(ofLine:)` **skutečně** být, a to pro 1, 8 a 60 řádků. Vloženou regresí (svislý inset zpátky
+  do výšky řádku) padne 136 tvrzení a je v nich vidět celý rozsah: na řádku 60 je rámeček o 116 pt
+  níž než kód, ke kterému patří.
+
   **Jak to vypadá, se ověřilo renderem** — `NSView` do bitmapy, viz *Jak si zkontrolovat, jak view
-  vypadá*.
+  vypadá*. U #236 na to `NSView` nestačilo: přetečení vzniká teprve tím, jak SwiftUI poskládá blok
+  a bublinu pod sebe, takže scéna musela do `NSHostingView` — viz tamtéž.
 
   **Sytost 30 % z toho renderu ale byla špatně a opravilo ji až okno** (viz
   `DiffLineView.wordBackground(of:)`). Render jednoho bloku odpovídá na otázku „liší se ten kus od
@@ -1028,6 +1051,16 @@ Dva zádrhely, které to má:
 - **`NSViewRepresentable` se v `ImageRenderer`u nevykreslí** — vyjde žlutý placeholder přes celé
   plátno, jako `List`. Od #157 se tím kreslí bloky kódu v diffu, takže takhle se vzhled diffu
   zkontrolovat nedá.
+
+  **A celá scéna se dá vykreslit přes `NSHostingView`** (#236), což je jediná cesta, jak se podívat
+  na to, co vzniká **složením** SwiftUI a AppKitu — třeba na blok kódu a bublinu nálezu pod ním.
+  Scéna se dá do `NSHostingView`, ten do okna mimo obrazovku (`.borderless`, nikdy se neukáže)
+  a odtud `cacheDisplay(in:to:)` do PNG. Na rozdíl od `ImageRenderer`u se `NSViewRepresentable`
+  vykreslí normálně, protože kreslí AppKit, ne SwiftUI náhrada. Dvě věci, bez kterých to vyjde
+  prázdné nebo uříznuté: rámec se musí nastavit z `fittingSize` a mezi tím **nechat proběhnout
+  runloop** (`RunLoop.current.run(until:)`), protože representable hlásí rámečky řádků odloženě —
+  a pak si výšku vzít z `fittingSize` znovu. Takhle se u #236 doložilo přetečení i jeho oprava:
+  ve verzi s chybou stála hlavička bubliny přesně přes dva řádky kódu, oba texty naráz.
 
   **Samotné `NSView` ale ano, a to je cesta**: `bitmapImageRepForCachingDisplay(in:)` +
   `cacheDisplay(in:to:)` vykreslí `DiffTextView` do bitmapy, kterou si jde přečíst. U #157 to
