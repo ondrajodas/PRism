@@ -163,9 +163,12 @@ git worktree remove <cesta> && git branch -d <větev>
 z LaunchServices a smaže i s cache:
 
 ```bash
-osascript -e 'tell application id "com.ondrajodas.prism.<slot>" to quit'
-"$LSREGISTER" -u "/Applications/PRism-<slot>.app"     # cesta viz bin/run.sh
-rm -rf "/Applications/PRism-<slot>.app" ~/Library/"Application Support"/PRism-<slot>
+SLOT=a   # svůj, nikdy cizí
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+
+osascript -e "tell application id \"com.ondrajodas.prism.${SLOT}\" to quit"
+"${LSREGISTER}" -u "/Applications/PRism-${SLOT}.app"
+rm -rf "/Applications/PRism-${SLOT}.app" ~/Library/"Application Support"/PRism-${SLOT}
 ```
 
 Bez toho se instance hromadí: po jednom odpoledni jich byly v `/Applications` čtyři vedle hlavní
