@@ -895,11 +895,22 @@ Věci, které se u toho nemají rozbít:
 
 ## `App/Support/`
 
-Sdílené drobnosti, které nepatří žádnému modulu. Zatím jedna: `WorkCoordinator` (dřív
-`CheckoutCoordinator`) — souběžná volání nad stejným klíčem spojí do jedné práce a zrušení
-posledního čekajícího zruší i tu práci. Používá ho `RepoCheckout` (klony, stromy)
-i `ReviewRunner` (běhy). Kdyby si každý držel vlastní kopii, existovala by ta jemná logika
-kolem rušení dvakrát.
+Sdílené drobnosti, které nepatří žádnému modulu:
+
+| Soubor | Co dělá |
+|---|---|
+| `WorkCoordinator` (dřív `CheckoutCoordinator`) | Souběžná volání nad stejným klíčem spojí do jedné práce a zrušení posledního čekajícího zruší i tu práci |
+| `Plural` | Počet s podstatným jménem v českém tvaru (`1 nález`, `3 nálezy`, `5 nálezů`); `word(_:one:few:many:)` dá jen tvar slova |
+| `String.singleLine` | Text bez řádkových zlomů, ty se nahradí mezerou |
+| `Collection[safely:]` | Prvek na indexu, nebo `nil` mimo rozsah |
+| `Clipboard` | Zápis do schránky |
+
+Společné je jim to, proč tady jsou: **kopie jednoho pravidla se rozejdou.** `WorkCoordinator`
+používá `RepoCheckout` (klony, stromy) i `ReviewRunner` (běhy) a dvě kopie by znamenaly dvakrát
+tu jemnou logiku kolem rušení. `Plural` vznikl ze tří `switch`ů, které se lišily; `singleLine`
+z pěti kopií téhož `split(whereSeparator: \.isNewline)` — hlavička bubliny, přehled draftu,
+jeho přenos, syntetická hlavička diffu a od #200 tělo notifikace. Stačilo by, aby jedna z nich
+řešila `\r\n` a ostatní ne.
 
 ## `RepoCheckout` (`App/Checkout/`)
 
@@ -2282,17 +2293,42 @@ Notifikace o doběhlém review (#82) k tomu přidávají:
 - **Selhaný checkout se hlásí jinými slovy než spadlá session.** Jsou to dvě různé věci
   a vedou jinam (jedna se řeší tlačítkem u repa, druhá u PR) — tatáž úvaha jako u `ReviewState`.
 - **Blokující počet se bere z platných nálezů** (`activeFindings`), takže odmítnutý nález
-  (#113) nevyrušuje. Text říká i to, když **nic** neblokuje — bez té půlky věty by „3 nálezy“
+  (#113) nevyrušuje. Text říká i to, když **nic** neblokuje — bez té půlky by „3 nálezy“
   vypadaly stejně vážně jako tři blokující.
 - **Skloňuje `Plural.czech`**, ne vlastní `switch`. Byla by to čtvrtá kopie téhož pravidla
   (odznak stavu, chipy, osa) a kopie se rozešly hned: první podoba skloňovala „blokující“
   jedničkou proti ostatním, z čehož vycházelo „3 blokujících“ (nález Copilota na #131).
-  U „blokující“ jsou tvary jen **dva** — jednotné číslo a 2–4 vyjdou stejně — takže `one`
-  a `few` jsou shodné záměrně.
-- **Titulek nese repo a číslo**, ne „Review doběhlo“: notifikací může viset víc a bez
-  identifikace se nepozná, které patří ke kterému PR. Skládá se přes `description`
-  identifikátoru, takže se číslo nikde neformátuje přes locale — z `#21663` by jinak vyšlo
-  `#21 663`. Je na to test.
+  Od #200 se skloňuje **sloveso** (`1 blokuje`, `3 blokují`, `5 blokuje`), takže shodné jsou
+  `one` a **`many`** — je to tatáž past z druhé strany a je na to tabulka v testu.
+- **Rozvržení je titulek → nález → PR** (#200):
+
+  | Řádek | Co v něm je |
+  |---|---|
+  | titulek | `3 nálezy · 1 blokuje`, u ostatních stavů krátká věta (`Čisté review`, `Review se nepovedlo`) |
+  | tělo, 1. řádek | nejzávažnější nález (`correctness: …`), u ostatních stavů detail |
+  | tělo, 2. řádek | `owner/repo#123` |
+
+  **Do #200 bylo v titulku `owner/repo#číslo`** a v těle věta o výsledku. Změnilo se to proto,
+  že titulek je první, co je vidět, a rozhodnutí „jdu k tomu hned?“ se dělá podle počtu
+  a blokujících, ne podle jména repa. Identifikace se z toho neztratila: PR **je v banneru
+  vidět** (změřeno, viz níž), notifikace o témž PR systém řadí do jednoho vlákna a klik se
+  stejně řídí `PullRequestNotification.pullRequest`, ne textem.
+
+  Jméno PR se skládá přes `description` identifikátoru, takže se číslo nikde neformátuje přes
+  locale — z `#21663` by jinak vyšlo `#21 663`. Je na to test.
+- **Banner unese čtyři řádky těla, ne dva** (#200) — změřeno v `PRism-d`, ne odhadnuto: zadání
+  vycházelo z dvouřádkového banneru, ale macOS 26 ukázal titulek a pod ním čtyři řádky.
+  Rozhodující je z toho ale něco jiného: **co se nevejde, systém uřízne i s tím, co je pod tím**,
+  takže 140znakový souhrn z banneru vymazal celý řádek s PR. Proto se nález krátí sám
+  (`Policy.notificationFindingLimit`, sto znaků, řez na hranici slova) — vlastní tři tečky
+  nechají identifikaci naživu, systémové ne.
+- **Nejzávažnější nález je `sorted(…).first`** (`Policy.mostSevereFinding`), ne vlastní škála:
+  notifikace tak ukáže přesně to, co je po otevření okna první na ráně. Bere se ze **stejného
+  záznamu** jako počet blokujících, takže titulek a řádek pod ním nemají jak říct každý něco
+  jiného; text je `shortSummary` (přesně na tohle je) se `summary` jako záložkou.
+- **Cizí text jde do těla přes `String.singleLine`.** Souhrn nálezu i detail selhání můžou mít
+  vlastní zlomy (`CheckoutError.userDescription` lepí výstup `gitu` za prázdný řádek) a jeden
+  `\n` navíc odsune PR mimo banner. Chytil to test, ne úvaha.
 
 Notifikace o novém PR (#85) drží stav na disku (`AnnouncedPullRequests`) a platí u nich:
 
@@ -2702,6 +2738,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem** |
 | `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
+| `Policy.mostSevereFinding(in:categories:)` | Nález, kterým se začíná (#200) — první ze `sorted`, tedy ten nahoře v panelu. Vlastní škála závažnosti z toho nevzniká |
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
 | `Policy.dashboard(pullRequests:records:drafts:categories:since:)` | Podklad startovní obrazovky (#181): čtyři karty a rozpad nálezů podle revieweera (`Dashboard`, `ReviewerShareOfFindings`) |
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí fronty na dashboardu (#181) — podle závažnosti, ne podle času (`QueueEntry`) |
@@ -2731,7 +2768,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.isStale(_:head:)` | Je draft psaný proti staršímu commitu? |
 | `Policy.sendBlock(for:head:)` | **Proč** se draft nedá odeslat (`DraftSendBlock`); `nil` = dá se |
 | `Policy.health(of:from:)` | Puntík služby ve stavovém řádku ze tří signálů — viz `App/Health/` |
-| `Policy.reviewNotification(for:state:blocking:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět |
+| `Policy.reviewNotification(for:state:blocking:topFinding:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět. Titulek nese počty (#200), tělo nález a pod ním PR |
 | `Policy.newPullRequestNotification(for:title:isReReview:)` | Notifikace o novém PR ve frontě (#85); re-review se pozná textem (#137) |
 | `Policy.newPullRequestsNotification(for:titles:reviewed:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
 | `Policy.sortedReleases(_:)` | Vydání od nejnovějšího (#127) — podle **data**, ne podle tagu |

@@ -3,72 +3,185 @@ import Testing
 
 @testable import PRism
 
-/// Text notifikace o doběhlém review (#82).
+/// Text notifikace o doběhlém review (#82, rozvržení #200).
 ///
 /// Čistá funkce nad `ReviewState`, takže se nic nemockuje. To hlavní tady není, jak přesně
 /// je věta formulovaná, ale že se **nesmí slít stavy, které znamenají opak** — „nic jsem
 /// nenašel“ a „nemám co říct“ vypadají v datech podobně a v notifikaci by z druhého vyšel
 /// schválený PR s neohlášenou chybou.
+///
+/// Od #200 se ověřují **dvě místa**: titulek (první řádek banneru, podle kterého se člověk
+/// rozhoduje, jestli jde k počítači hned) a tělo (nález a pod ním PR).
 @Suite("Policy — notifikace o doběhlém review")
 struct ReviewNotificationTests {
     private let pr = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 42)
 
-    private func body(_ state: ReviewState, blocking: Int = 0) -> String? {
-        Policy.reviewNotification(for: pr, state: state, blocking: blocking)?.body
+    private func title(_ state: ReviewState, blocking: Int = 0) -> String? {
+        Policy.reviewNotification(for: pr, state: state, blocking: blocking)?.title
     }
 
-    @Test("Nálezy nesou počet i to, kolik z nich blokuje")
+    private func body(
+        _ state: ReviewState,
+        blocking: Int = 0,
+        topFinding: Finding? = nil
+    ) -> String? {
+        Policy.reviewNotification(
+            for: pr,
+            state: state,
+            blocking: blocking,
+            topFinding: topFinding
+        )?.body
+    }
+
+    @Test("Titulek nese počet i to, kolik z nich blokuje")
     func reportsFindingsAndBlockingCount() {
-        let text = body(.completed(findings: 3), blocking: 1)
-
-        #expect(text == "3 nálezy, z toho 1 blokující.")
+        // Návrh (sekce 10) to má přesně takhle a je to celý smysl #200: podle titulku se
+        // pozná, jestli jít k počítači hned.
+        #expect(title(.completed(findings: 3), blocking: 1) == "3 nálezy · 1 blokuje")
     }
 
-    @Test("Nálezy bez blokujícího to řeknou taky")
+    @Test("Když nic neblokuje, řekne se i to")
     func saysWhenNothingBlocks() {
-        // Bez té půlky věty by „3 nálezy“ vypadalo stejně vážně jako tři blokující —
+        // Bez druhé půlky by „3 nálezy“ vypadaly stejně vážně jako tři blokující —
         // a jestli je mezi nimi blokující, je zadání #82.
-        #expect(body(.completed(findings: 3)) == "3 nálezy, nic blokujícího.")
+        #expect(title(.completed(findings: 3)) == "3 nálezy · nic neblokuje")
     }
 
     @Test("Počet nálezů se skloňuje", arguments: [
-        (1, "1 nález, nic blokujícího."),
-        (2, "2 nálezy, nic blokujícího."),
-        (4, "4 nálezy, nic blokujícího."),
-        (5, "5 nálezů, nic blokujícího."),
-        (11, "11 nálezů, nic blokujícího."),
+        (1, "1 nález · nic neblokuje"),
+        (2, "2 nálezy · nic neblokuje"),
+        (4, "4 nálezy · nic neblokuje"),
+        (5, "5 nálezů · nic neblokuje"),
+        (11, "11 nálezů · nic neblokuje"),
     ])
     func inflectsTheFindingCount(count: Int, expected: String) {
         // Notifikace je krátký text, kde je špatné skloňování to jediné, co v ní je vidět.
-        #expect(body(.completed(findings: count)) == expected)
+        #expect(title(.completed(findings: count)) == expected)
     }
 
-    @Test("Skloňuje se i blokující počet", arguments: [
-        (1, "1 blokující"),
-        (2, "2 blokující"),
-        (4, "4 blokující"),
-        (5, "5 blokujících"),
-        (12, "12 blokujících"),
+    @Test("Skloňuje se i sloveso u blokujících", arguments: [
+        (1, "1 blokuje"),
+        (2, "2 blokují"),
+        (4, "4 blokují"),
+        (5, "5 blokuje"),
+        (12, "12 blokuje"),
     ])
-    func inflectsTheBlockingCount(blocking: Int, expected: String) {
-        // U „blokující“ jsou tvary **dva**, ne tři: 1 i 2–4 vyjdou stejně a teprve od pěti se
-        // mění. Původně se to skloňovalo jako „jednička proti ostatním“, z čehož vycházelo
-        // „3 blokujících“ — chytil to Copilot na #131, takže je na to tabulka.
-        #expect(body(.completed(findings: 20), blocking: blocking) == "20 nálezů, z toho \(expected).")
+    func inflectsTheBlockingVerb(blocking: Int, expected: String) {
+        // Sloveso je past, na kterou tenhle soubor už jednou došel — jen z druhé strany:
+        // do #200 tu bylo přídavné jméno („3 blokujících“, nález Copilota na #131), kde se
+        // shodovalo `one` a `few`. U slovesa se shoduje `one` a **`many`**: „1 blokuje“,
+        // „3 blokují“, ale od pěti zase „5 blokuje“. Proto tabulka, ne jeden případ.
+        #expect(title(.completed(findings: 20), blocking: blocking) == "20 nálezů · \(expected)")
+    }
+
+    @Test("Tělo nese nejzávažnější nález a pod ním PR")
+    func carriesTheTopFindingAndThePullRequest() {
+        // Návrh chce v těle konkrétní nález, ne jen jméno PR — to jde na třetí řádek.
+        let finding = makeFinding(category: "correctness", shortSummary: "?? '' schová chybějící secret")
+
+        #expect(
+            body(.completed(findings: 3), blocking: 1, topFinding: finding)
+                == "correctness: ?? '' schová chybějící secret\ncli/cli#42"
+        )
+    }
+
+    @Test("Bez zkráceného souhrnu se vezme celý")
+    func fallsBackToTheFullSummary() {
+        // `shortSummary` reviewer vyplnit nemusí a nález kvůli tomu nemá z notifikace zmizet.
+        let finding = makeFinding(category: "security", summary: "Token se loguje do stdout")
+
+        #expect(body(.completed(findings: 1), topFinding: finding)?.hasPrefix("security: Token se loguje") == true)
+    }
+
+    @Test("Dlouhý souhrn se zkrátí, ať v banneru zbude i PR")
+    func shortensALongSummary() {
+        // Změřeno v běžící aplikaci: 140znakový souhrn zabral všechny čtyři řádky těla
+        // a macOS uřízl i řádek s identifikací PR. Vlastní řez ho tam nechá.
+        let finding = makeFinding(
+            category: "correctness",
+            summary: """
+            Prázdný fallback udělá z chybějícího tokenu prázdný string a request odejde bez \
+            autorizace, takže se to pozná až podle 401 v logu.
+            """
+        )
+
+        let lines = body(.completed(findings: 1), topFinding: finding)?.split(separator: "\n")
+
+        #expect(lines?.count == 2)
+        #expect(lines?.last == "cli/cli#42")
+        #expect(lines?.first?.count ?? 0 <= Policy.notificationFindingLimit + 1)
+        #expect(lines?.first?.hasSuffix("…") == true)
+        // Řeže se na hranici slova, ne uprostřed.
+        #expect(lines?.first?.contains("autoriz…") == false)
+    }
+
+    @Test("Jediné dlouhé slovo se ořízne natvrdo, ne na nic")
+    func cutsASingleLongWord() {
+        // Cesta nebo hash hranici slova nemá — kdyby se řezalo jen po slovech, nezbylo by nic.
+        let finding = makeFinding(category: nil, summary: String(repeating: "a", count: 200))
+
+        let first = body(.completed(findings: 1), topFinding: finding)?.split(separator: "\n").first
+
+        #expect(first?.count == Policy.notificationFindingLimit + 1)
+        #expect(first?.hasSuffix("…") == true)
+    }
+
+    @Test("Nález bez kategorie nenechá v textu visící dvojtečku")
+    func omitsTheCategoryWhenThereIsNone() {
+        let finding = makeFinding(category: nil, summary: "Chybí test")
+
+        #expect(body(.completed(findings: 1), topFinding: finding) == "Chybí test\ncli/cli#42")
+    }
+
+    @Test("Zalomení v nálezu neodsune PR z dohledu")
+    func keepsThePullRequestOnTheThirdLine() {
+        // Tělo má **dva** řádky (detail a PR) a banner ukáže jen část — jeden `\n` navíc
+        // v souhrnu od reviewera by identifikaci odsunul mimo to, co je vidět.
+        let finding = makeFinding(summary: "první řádek\ndruhý řádek")
+
+        let lines = body(.completed(findings: 1), topFinding: finding)?.split(separator: "\n")
+
+        #expect(lines?.count == 2)
+        #expect(lines?.last == "cli/cli#42")
+    }
+
+    @Test("Nedodaný nález nechá v těle aspoň PR")
+    func keepsThePullRequestWithoutAFinding() {
+        // Nastat by to nemělo (store bere počet i nález z téhož záznamu), ale prázdný řádek
+        // pod titulkem by byl horší než kratší tělo.
+        #expect(body(.completed(findings: 2), blocking: 1) == "cli/cli#42")
     }
 
     @Test("Čisté review je kratší, ale poznat se musí")
     func saysCleanExplicitly() {
-        let text = body(.clean)
-
-        #expect(text == "Reviewer nenašel žádný nález.")
+        #expect(title(.clean) == "Čisté review")
+        #expect(body(.clean) == "Reviewer nenašel žádný nález.\ncli/cli#42")
     }
 
     @Test("Selhání nese důvod, se kterým se dá něco dělat")
     func carriesTheFailureReason() {
-        let text = body(.failed(detail: "Session spadla na chybějícím skillu."))
+        #expect(title(.failed(detail: "Session spadla na chybějícím skillu.")) == "Review se nepovedlo")
+        #expect(
+            body(.failed(detail: "Session spadla na chybějícím skillu."))
+                == "Session spadla na chybějícím skillu.\ncli/cli#42"
+        )
+    }
 
-        #expect(text == "Review se nepovedlo. Session spadla na chybějícím skillu.")
+    @Test("Víceřádkový důvod selhání PR z těla nevytlačí")
+    func keepsAMultilineFailureOnOneLine() {
+        // `CheckoutError.userDescription` lepí výstup `gitu` za prázdný řádek, takže bez
+        // slití by tělo mělo čtyři řádky a identifikace by se propadla mimo banner.
+        let state = ReviewState.checkoutFailed(detail: "Přihlášení odmítnuto.\n\nfatal: could not read")
+
+        #expect(body(state) == "Přihlášení odmítnuto. fatal: could not read\ncli/cli#42")
+    }
+
+    @Test("Čisté review a selhání zůstávají dvě různé věty")
+    func neverMergesCleanWithFailure() {
+        // Tvrdá podmínka z `CLAUDE.md`: „nic jsem nenašel“ a „session spadla“ říkají opak
+        // jedno o druhém a slití by z druhého udělalo schválený PR.
+        #expect(title(.clean) != title(.failed(detail: "spadlo to")))
+        #expect(body(.clean) != body(.failed(detail: "spadlo to")))
     }
 
     @Test("Nejistý výsledek se nesmí tvářit jako čistý")
@@ -77,55 +190,60 @@ struct ReviewNotificationTests {
         // notifikace řekla „nenašel žádný nález“, bylo by to schválené PR s neohlášenou
         // chybou. Tady se ověřuje, že se ta věta z Policy doopravdy propíše.
         let record = makeRecord(runs: [makeStoredRun(calledReportFindings: false)])
-        let text = body(Policy.reviewState(for: record))
+        let state = Policy.reviewState(for: record)
 
-        #expect(text?.hasPrefix("Review se nepovedlo.") == true)
-        #expect(text?.contains("nenahlásil") == true)
+        #expect(title(state) == "Review se nepovedlo")
+        #expect(body(state)?.contains("nenahlásil") == true)
     }
 
     @Test("Ztracený nález se hlásí, ne schová")
     func reportsDroppedFindings() {
         let record = makeRecord(runs: [makeStoredRun(droppedFindings: 2)])
-        let text = body(Policy.reviewState(for: record))
 
-        #expect(text?.contains("nepodařilo přečíst") == true)
+        #expect(body(Policy.reviewState(for: record))?.contains("nepodařilo přečíst") == true)
     }
 
     @Test("Timeout s nálezy řekne obojí")
     func saysBothOnTimeout() {
-        // Zabitý běh mohl mít nálezy rozepsané, takže samotné „2 nálezy“ by tvrdilo víc,
-        // než se stalo.
-        let text = body(.timedOut(findings: 2), blocking: 1)
+        // Zabitý běh mohl mít nálezy rozepsané, takže samotné „2 nálezy“ v titulku by tvrdilo
+        // víc, než se stalo — proto to detail hned pod ním doplní.
+        let finding = makeFinding(category: "correctness", summary: "total() ignoruje množství")
 
-        #expect(text == "Review nedoběhlo do limitu. 2 nálezy, z toho 1 blokující.")
+        #expect(title(.timedOut(findings: 2), blocking: 1) == "2 nálezy · 1 blokuje")
+        #expect(
+            body(.timedOut(findings: 2), blocking: 1, topFinding: finding)
+                == "Nedoběhlo do limitu. correctness: total() ignoruje množství\ncli/cli#42"
+        )
     }
 
     @Test("Timeout bez nálezů to řekne bez počtu")
     func saysTimeoutWithoutFindings() {
-        #expect(body(.timedOut(findings: 0)) == "Review nedoběhlo do limitu a nic nenahlásilo.")
+        #expect(title(.timedOut(findings: 0)) == "Review nedoběhlo do limitu")
+        #expect(body(.timedOut(findings: 0)) == "Reviewer nic nenahlásil.\ncli/cli#42")
     }
 
     /// Přerušený běh musí říct **proč** to nedoběhlo: s timeoutem se dělá něco jiného (dá se
-    /// zvednout limit) než se spadlou aplikací. A že jsou nálezy z transcriptu, taky — samotné
-    /// „3 nálezy“ by tvrdilo, že běh doběhl.
+    /// zvednout limit) než se spadlou aplikací. A že jsou nálezy z transcriptu, taky — samotný
+    /// titulek „3 nálezy“ by tvrdil, že běh doběhl.
     @Test("Přerušený běh se pozná od timeoutu i od doběhlého")
     func tellsAnInterruptedRunApart() {
-        let text = body(.interrupted(findings: 3), blocking: 1)
+        let text = body(.interrupted(findings: 3), blocking: 1, topFinding: makeFinding())
 
-        #expect(text?.contains("přerušila aplikace") == true)
-        #expect(text?.contains("3 nálezy") == true)
+        #expect(title(.interrupted(findings: 3), blocking: 1) == "3 nálezy · 1 blokuje")
+        #expect(text?.contains("Přerušila to aplikace") == true)
         #expect(text?.contains("transcriptu") == true)
-        #expect(body(.interrupted(findings: 0)) == "Review přerušila aplikace a nic nenahlásilo.")
+        #expect(text != body(.timedOut(findings: 3), blocking: 1, topFinding: makeFinding()))
+        #expect(title(.interrupted(findings: 0)) == "Review přerušila aplikace")
     }
 
     @Test("Odmítnuté nálezy nejsou totéž jako čisto")
     func distinguishesDismissedFromClean() {
         // „Našel a já to zamítl“ je jiné tvrzení než „nic nenašel“ (#113) a v notifikaci se
-        // to nesmí slít.
-        let text = body(.dismissed(findings: 2))
-
-        #expect(text == "Odmítl jsi 2 nálezy a nic jiného nezbylo.")
-        #expect(text != body(.clean))
+        // to nesmí slít — ani v titulku, ani v těle.
+        #expect(title(.dismissed(findings: 2)) == "Zbyly jen odmítnuté nálezy")
+        #expect(body(.dismissed(findings: 2)) == "Odmítl jsi 2 nálezy a nic jiného nezbylo.\ncli/cli#42")
+        #expect(title(.dismissed(findings: 2)) != title(.clean))
+        #expect(body(.dismissed(findings: 2)) != body(.clean))
     }
 
     @Test("Věta o odmítnutých unese i jediný nález")
@@ -133,16 +251,17 @@ struct ReviewNotificationTests {
         // Původní formulace („Zbyly jen nálezy, které jsi odmítl (1)“) mluvila o jednom
         // nálezu v množném čísle — tatáž třída chyby jako u blokujících, jen ji tady neřeší
         // skloňování slova, ale to, jak je věta postavená.
-        #expect(body(.dismissed(findings: 1)) == "Odmítl jsi 1 nález a nic jiného nezbylo.")
-        #expect(body(.dismissed(findings: 8)) == "Odmítl jsi 8 nálezů a nic jiného nezbylo.")
+        #expect(body(.dismissed(findings: 1))?.hasPrefix("Odmítl jsi 1 nález a") == true)
+        #expect(body(.dismissed(findings: 8))?.hasPrefix("Odmítl jsi 8 nálezů a") == true)
     }
 
     @Test("Selhaný checkout se pozná od selhané session")
     func distinguishesCheckoutFailure() {
-        let text = body(.checkoutFailed(detail: "Nejsi přihlášený v gh."))
-
-        #expect(text == "Nepovedlo se připravit pracovní kopii. Nejsi přihlášený v gh.")
-        #expect(text != body(.failed(detail: "Nejsi přihlášený v gh.")))
+        #expect(title(.checkoutFailed(detail: "Nejsi přihlášený v gh.")) == "Nepovedlo se připravit pracovní kopii")
+        #expect(
+            title(.checkoutFailed(detail: "Nejsi přihlášený v gh."))
+                != title(.failed(detail: "Nejsi přihlášený v gh."))
+        )
     }
 
     @Test("Stavy, které nejsou konec běhu, se neoznamují", arguments: [
@@ -158,22 +277,24 @@ struct ReviewNotificationTests {
         #expect(Policy.reviewNotification(for: pr, state: state) == nil)
     }
 
-    @Test("Notifikace nese PR, kterého se týká, i v titulku")
+    @Test("Notifikace nese PR, kterého se týká — v datech i na třetím řádku")
     func carriesThePullRequest() {
         let notification = Policy.reviewNotification(for: pr, state: .clean)
 
+        // Klik na notifikaci se řídí typem, ne textem; do #200 bylo PR i v titulku.
         #expect(notification?.pullRequest == pr)
-        #expect(notification?.title == "cli/cli#42")
+        #expect(notification?.body.hasSuffix("\ncli/cli#42") == true)
+        #expect(notification?.title == "Čisté review")
     }
 
     @Test("Číslo PR se neformátuje přes locale")
     func doesNotGroupTheNumber() {
         // `Text("#\(number)")` by z #21663 udělalo „#21 663“ — číslo PR není množství.
-        // Titulek jde přes `description` identifikátoru, takže se to stát nemůže; je na to
+        // Jméno jde přes `description` identifikátoru, takže se to stát nemůže; je na to
         // test, aby to tak zůstalo.
         let big = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 21663)
 
-        #expect(Policy.reviewNotification(for: big, state: .clean)?.title == "cli/cli#21663")
+        #expect(Policy.reviewNotification(for: big, state: .clean)?.body.hasSuffix("cli/cli#21663") == true)
     }
 
     @Test("Blokující se počítají jen z platných nálezů")

@@ -667,5 +667,16 @@ po zápisu stála nad mezí až do toho dalšího (z Copilot review na #233). Ba
 nejsou, jen druhy run, takže přepnutí světlého a tmavého režimu ji nezneplatňuje. **Vidět není
 nic** — obarvení vychází stejné, jen se nepočítá znovu.
 
+**Notifikace o review nese počty v titulku (#200)** — `3 nálezy · 1 blokuje`, pod tím
+nejzávažnější nález (`correctness: …`) a na třetím řádku `owner/repo#123`. Do té doby byla
+v titulku identifikace PR a v těle věta o výsledku, tedy rozvržení, které na otázku „mám k tomu
+jít hned?“ odpovídalo až druhým řádkem. Návrh (sekce 10) to má takhle od začátku; issue z toho
+nevzniklo a našlo se to při kontrole návrhu proti implementaci.
+
+Dvě věci vyšly z **měření na běžící aplikaci**, ne z odhadu. Do banneru se vejde titulek
+a **čtyři řádky těla** — zadání počítalo se dvěma. A co se nevejde, macOS uřízne i s tím, co je
+pod tím: 140znakový souhrn z banneru vymazal celý řádek s PR, takže se nález krátí na sto znaků
+sám. `Čisté review` a `Review se nepovedlo` zůstávají dvě různé věty, teď jako dva různé titulky.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

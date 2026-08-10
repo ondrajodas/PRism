@@ -164,7 +164,9 @@ struct ThreadBubbleView: View {
                 many: "komentářů"
             )
         }
-        return "\(first.author): \(oneLine(first.body))"
+        // Do hlavičky se vejde jeden řádek, takže se konce řádků nahradí mezerou — jinak by
+        // odřádkovaný komentář hlavičku roztáhl a rozvržení bublin by poskakovalo.
+        return "\(first.author): \(first.body.singleLine)"
     }
 
     private var resolvedBadge: some View {
@@ -412,13 +414,5 @@ struct ThreadBubbleView: View {
         // Selhání se hlásí větou pod tlačítky, ne popiskem u spinneru — ten už není vidět.
         case .replyFailed, .resolutionFailed: ""
         }
-    }
-
-    // MARK: - Vzhled
-
-    /// Do hlavičky se vejde jeden řádek, takže se konce řádků nahradí mezerou — jinak by
-    /// odřádkovaný komentář hlavičku roztáhl a rozvržení bublin by poskakovalo.
-    private func oneLine(_ text: String) -> String {
-        text.split(whereSeparator: \.isNewline).joined(separator: " ")
     }
 }

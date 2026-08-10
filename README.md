@@ -583,13 +583,20 @@ Co přijde a co v tom bude:
 | PR, který jsem už reviewoval, se vrátil | `Znovu požádáno o review — owner/repo#123` a název PR |
 | Víc nových PR naráz | Jeden souhrn: `4 nové PR k review` a tři z nich jménem plus `a 1 další` |
 | Víc naráz, něco z toho znovu | `4 PR k review (1 znovu)` |
-| Review našlo nálezy | `owner/repo#123` a `3 nálezy, z toho 1 blokující.` |
-| Review je čisté | `Reviewer nenašel žádný nález.` |
-| Review se nepovedlo | Důvod, se kterým se dá něco dělat — spadlá session, timeout bez nálezů, selhaná pracovní kopie |
+| Review našlo nálezy | `3 nálezy · 1 blokuje`, pod tím nejzávažnější nález (`correctness: …`) a na třetím řádku `owner/repo#123` |
+| Review našlo nálezy, ale nic nezastavuje merge | `3 nálezy · nic neblokuje` |
+| Review je čisté | `Čisté review` a `Reviewer nenašel žádný nález.` |
+| Review se nepovedlo | `Review se nepovedlo` a pod tím důvod, se kterým se dá něco dělat — spadlá session, timeout bez nálezů, selhaná pracovní kopie |
+
+**Titulek odpovídá na „mám k tomu jít hned?“** (#200) — proto v něm je počet nálezů a kolik
+z nich blokuje, ne jméno pull requestu. To je až na třetím řádku; v banneru je vidět taky
+(změřeno: vejdou se čtyři řádky těla), a co se do něj nevejde, je celé v Oznamovacím centru.
+Dlouhý souhrn nálezu se proto krátí sám — bez toho by systémový ořez sebral i řádek
+s identifikací.
 
 **Jedna notifikace na pull request**, ne jedna na skill: reviewery jedou paralelně a tři
 hlášky za jednu věc jsou tři vyrušení. Nový výsledek review přepíše ten starý, aby vedle
-`3 nálezy` nezůstala viset stará hláška `nenašel žádný nález`. Notifikace o témž PR systém řadí
+`3 nálezy` nezůstala viset stará hláška `Čisté review`. Notifikace o témž PR systém řadí
 k sobě.
 
 **Co se hlásí, se nastavuje** — stránka `Notifikace` v okně nastavení: hlavní vypínač a čtyři

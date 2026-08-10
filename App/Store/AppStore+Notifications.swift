@@ -96,19 +96,19 @@ extension AppStore {
     /// Stavy, které nejsou konec běhu, a zastaralý záznam si `Policy` odfiltruje sama.
     func notifyAboutFinishedReview(of pr: PRIdentifier) async {
         guard notifications != nil else { return }
+        // Počet blokujících i nejzávažnější nález se berou z **téhož** záznamu jako stav, takže
+        // se titulek („3 nálezy · 1 blokuje“) a řádek pod ním nemají jak rozejít. Bez záznamu
+        // vyjde nula a `nil` — není to spolknuté selhání, ale odpověď: když review nedoběhlo
+        // (selhal checkout, spadlo volání GitHubu), nemá co blokovat ani co ukázat.
+        let record = reviewRecords[pr]
+        let categories = resolved(for: pr.repo).blockingCategories
         guard let notification = Policy.reviewNotification(
             for: pr,
             state: reviewState(for: pr),
-            blocking: blockingFindingCount(for: pr)
+            blocking: record.map { Policy.blockingCount(in: $0, categories: categories) } ?? 0,
+            topFinding: record.flatMap { Policy.mostSevereFinding(in: $0, categories: categories) }
         ) else { return }
         await notify(notification)
-    }
-
-    /// Kolik nálezů PR blokuje. Bez záznamu nula — není to spolknuté selhání, ale odpověď:
-    /// když review nedoběhlo (selhal checkout, spadlo volání GitHubu), nemá co blokovat.
-    private func blockingFindingCount(for pr: PRIdentifier) -> Int {
-        guard let record = reviewRecords[pr] else { return 0 }
-        return Policy.blockingCount(in: record, categories: resolved(for: pr.repo).blockingCategories)
     }
 
     /// Dá vědět o PR, která se v seznamu objevila (#85).
