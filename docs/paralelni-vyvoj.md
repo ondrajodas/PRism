@@ -104,13 +104,20 @@ Po každém mergi platí pravidlo z `CLAUDE.md`: **main se do zbylých větví n
 Jen když to GitHub hlásí jako konflikt, nebo když větev na mergnuté změně stojí. Rebase ne —
 main je squashnutý, takže `git merge main` stačí a nerozbije Copilotovi komentáře.
 
-Release se vydá **jeden za celou dávku**, ne na každou větev. Pořadí čísel by jinak říkalo
-něco, co není pravda — verze je značka na časové ose.
+**Release se vydá po každém mergnutém PR**, i uprostřed dávky — stejně jako mimo ni. Pravidlo
+z `CLAUDE.md` se dávkou nemění.
 
-**Po posledním mergi dávky se restartuje hlavní aplikace** — `./bin/run.sh` v hlavním stromě,
-tedy v tom bez slotu. Po každém jednotlivém mergi ne: v dávce jich jde několik za sebou a každý
-restart zavírá okno, ve kterém se zrovna něco čte. Pravidlo samotné je v `CLAUDE.md`, tady je
-jen ta odchylka pro dávku.
+**Změna proti první verzi tohohle dokumentu**, kde stálo „jeden release za celou dávku“. Bylo to
+špatně a stálo to na záměně dvou věcí: release je záznam **jedné změny**, ne shrnutí odpoledne.
+Sloučený release za čtyři issues nemá jak odpovědět na otázku „co je v téhle verzi jinak“, protože
+odpovědi jsou čtyři — a přesně kvůli tomu se u #125 zahodil formát „deník projektu“. Že čísla
+verzí přibývají rychleji, není argument: verze je značka na časové ose a značek má být tolik, co
+změn.
+
+**Po každém mergi se restartuje hlavní aplikace** — `./bin/run.sh` v hlavním stromě, tedy v tom
+bez slotu. Dávka na tom nic nemění; pravidlo je v `CLAUDE.md`. Odkládat restart na konec série
+by znamenalo, že mergnutý kód mezitím nikdo nespustí — a to je zrovna to, kvůli čemu pravidlo
+vzniklo.
 
 **Sloty se restartem netknou** — mají vlastní bundle ID a `run.sh` v hlavním stromě ukončuje
 instanci podle cesty. Ověřeno v provozu: `PRism-a`, `-b`, `-c` běžely dál, hlavní instanci se
