@@ -674,5 +674,16 @@ po zápisu stála nad mezí až do toho dalšího (z Copilot review na #233). Ba
 nejsou, jen druhy run, takže přepnutí světlého a tmavého režimu ji nezneplatňuje. **Vidět není
 nic** — obarvení vychází stejné, jen se nepočítá znovu.
 
+**Počty u položek filtru (#199)** — u každého repa a autora v nabídce filtru je počet PR,
+kterých se týká, takže se odškrtává podle čísla, ne naslepo. Skládá je
+`Policy.filterOptions(in:filter:)` do `PullRequestFilterOption` (hodnota + počet), kreslí je
+`PullRequestFilterButton` vpravo v řádku v `Palette.ink3`, jak to má návrh v sekci 11.
+
+Počítá se to z **plného** seznamu — `AppStore.filterOptions` sahá na `pullRequests`, ne na
+`visiblePullRequests`. Ze zúženého by odškrtnutí jednoho repa srazilo počty u všech ostatních na
+nulu a čísla by se měnila při každém kliknutí, takže by z nabídky nešlo poznat, co zapnutí položky
+udělá. Je na to test v `Policy` i ve storu; položka, která v nabídce zbyla jen po aktivním filtru,
+má počet **nula** a řadí se dál podle jména, ne podle počtu.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

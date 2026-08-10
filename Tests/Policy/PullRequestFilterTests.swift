@@ -108,8 +108,8 @@ struct PullRequestFilterTests {
 
         let options = Policy.filterOptions(in: list, filter: PullRequestFilter())
 
-        #expect(options.repositories.map(\.description) == ["cli/cli", "ondrajodas/PRism"])
-        #expect(options.authors == ["alfa", "béta"])
+        #expect(options.repositories.map(\.value.description) == ["cli/cli", "ondrajodas/PRism"])
+        #expect(options.authors.map(\.value) == ["alfa", "béta"])
     }
 
     /// **Nejcennější test nabídky.** Bez sjednocení s aktivním filtrem zmizí odškrtávátko u repa,
@@ -121,8 +121,8 @@ struct PullRequestFilterTests {
 
         let options = Policy.filterOptions(in: list, filter: active)
 
-        #expect(options.repositories.map(\.description) == ["cli/cli", "zmizelo/repo"])
-        #expect(options.authors == ["zbylý", "zmizelý"])
+        #expect(options.repositories.map(\.value.description) == ["cli/cli", "zmizelo/repo"])
+        #expect(options.authors.map(\.value) == ["zbylý", "zmizelý"])
     }
 
     @Test("Prázdný seznam bez filtru nemá co nabídnout")
@@ -137,7 +137,71 @@ struct PullRequestFilterTests {
         let options = Policy.filterOptions(in: list, filter: PullRequestFilter())
 
         #expect(options.repositories.count == 1)
-        #expect(options.authors == ["jiný", "kdosi"])
+        #expect(options.authors.map(\.value) == ["jiný", "kdosi"])
+    }
+
+    // MARK: - Počty u položek (#199)
+
+    @Test("Položka nabídky nese počet PR, kterých se týká")
+    func countsPullRequestsBehindEachOption() {
+        let list = [
+            pullRequest(1, author: "alfa"),
+            pullRequest(2, author: "alfa"),
+            pullRequest(3, repo: "ondrajodas/PRism", author: "béta"),
+        ]
+
+        let options = Policy.filterOptions(in: list, filter: PullRequestFilter())
+
+        #expect(options.repositories.map(\.count) == [2, 1])
+        #expect(options.authors.map(\.count) == [2, 1])
+    }
+
+    /// **Nejcennější test počtů.** Ze zúženého seznamu by čísla klesala podle toho, co je zrovna
+    /// odškrtané — a zapnutá položka by hlásila počet, který o zbytku nabídky nic neříká. Zapnutý
+    /// filtr proto počty **nesmí** změnit; drží to jednak `AppStore.filterOptions`, který sem
+    /// posílá plný seznam, jednak to, že tahle funkce filtr používá jen na doplnění hodnot.
+    @Test("Zapnutý filtr počty nemění")
+    func keepsCountsIndependentOfTheActiveFilter() {
+        let list = [
+            pullRequest(1),
+            pullRequest(2, repo: "ondrajodas/PRism"),
+            pullRequest(3, repo: "ondrajodas/PRism"),
+        ]
+
+        let all = Policy.filterOptions(in: list, filter: PullRequestFilter())
+        let narrowed = Policy.filterOptions(in: list, filter: filter(repos: ["cli/cli"]))
+
+        #expect(narrowed == all)
+        #expect(narrowed.repositories.map(\.count) == [1, 2])
+    }
+
+    /// Hodnota, která v nabídce zbyla jen po aktivním filtru, má počet **nula** — a je to ta
+    /// správná odpověď: říká, že za ní nic není a filtr je proto potřeba vypnout.
+    @Test("Hodnota bez PR má v nabídce nulu")
+    func countsZeroForAValueKeptOnlyByTheFilter() {
+        let list = [pullRequest(1, repo: "cli/cli", author: "zbylý")]
+        let active = filter(repos: ["zmizelo/repo"], authors: ["zmizelý"])
+
+        let options = Policy.filterOptions(in: list, filter: active)
+
+        #expect(options.repositories.map(\.count) == [1, 0])
+        #expect(options.authors.map(\.count) == [1, 0])
+    }
+
+    /// Řadí se podle jména, **ne podle počtu**: jinak by pořadí přeskakovalo s každým tikem
+    /// pollingu a v nabídce by se hledalo očima.
+    @Test("Pořadí je podle jména, ne podle počtu")
+    func sortsByNameEvenWhenCountsDiffer() {
+        let list = [
+            pullRequest(1, repo: "zzz/repo"),
+            pullRequest(2, repo: "aaa/repo"),
+            pullRequest(3, repo: "zzz/repo"),
+        ]
+
+        let options = Policy.filterOptions(in: list, filter: PullRequestFilter())
+
+        #expect(options.repositories.map(\.value.description) == ["aaa/repo", "zzz/repo"])
+        #expect(options.repositories.map(\.count) == [1, 2])
     }
 
     // MARK: - Proč je seznam prázdný
