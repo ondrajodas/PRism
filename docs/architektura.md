@@ -347,6 +347,20 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   a blok kreslí jeden `NSTextView`. Blok **končí tam, kde do diffu něco vstoupí** — hlavička hunku,
   rozbalovací řádek, bublina nálezu, cizí vlákno, můj rozdělaný komentář — takže vybírat jde přes
   celý úsek kódu mezi nimi; u většiny řádků je to celý hunk.
+- **Blok má strop `DiffBlock.maxLines = 60`** (#223), takže dlouhý úsek se rozdělí i tam, kde do
+  diffu nic nevstoupí. Blok je totiž **nejmenší jednotka, kterou umí `LazyVStack` přeskočit** —
+  a soubor bez stropu je jeden blok, takže se nepřeskočí nikdy a rozloží se text, který není vidět.
+  Číslo je z měření: cena vykreslení bloku je **lineární v jeho délce** (~0,085 ms na řádek), tedy
+  60 řádků 7 ms a 2400 řádků 201 ms. Šedesát je zhruba obrazovka kódu a se dvěma viditelnými bloky
+  se vejde do rozpočtu na snímek; dvěstě (24 ms na blok) už ne.
+
+  **Rozdělení nešetří celkovou práci** — celý soubor po blocích stojí stejně jako v jednom
+  (150–280 ms bez trendu). Šetří ji jedině tou leností, takže z měření celého souboru se přínos
+  vyčíst nedá; offscreen render nic nelení.
+
+  **Co to bere:** výběr tažením přes víc než šedesát řádků. Vědomá cena — celý hunk se dá
+  zkopírovat z kontextového menu (`Kopírovat hunk`) i vybrat v sheetu s textem, takže na tahu myší
+  nezávisí.
 - **Slučování je věc vykreslení, ne modelu.** `DiffRow.rows(of:)` vrací řádky jako dosud a slévá je
   `DiffView`. Kdyby se slévalo v modelu, musela by o blocích vědět i kotva skoku na nález a výběr
   vláken — a testy `DiffRow` mluví o řádcích (85 z nich na tom prvním pokusu spadlo).

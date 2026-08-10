@@ -233,6 +233,60 @@ struct DiffPerformanceMeasurement {
         )))
     }
 
+    // MARK: - Cena bloku podle jeho délky (#223)
+
+    /// Kolik stojí vykreslit blok podle toho, kolik má řádků. Z toho se vybírá strop — číslo
+    /// nemá vzniknout odhadem.
+    ///
+    /// **Měří se dvě různé věci a nesmí se splést:**
+    ///
+    /// 1. **Jeden blok** podle délky. Tohle je ten údaj, ze kterého se strop vybírá — je to práce,
+    ///    kterou appka zaplatí i za blok, jehož je vidět kousek, protože `LazyVStack` umí přeskočit
+    ///    jen celý blok.
+    /// 2. **Celý soubor** o 2400 řádcích rozdělený na bloky různé délky. To je kontrola, co
+    ///    rozdělení stojí — a vychází **plochá** (150–280 ms bez trendu), protože `ImageRenderer`
+    ///    nic nelení. Přínos stropu z téhle série vidět **není** a nesmí se z ní vyvozovat;
+    ///    svádí totiž k opačnému závěru, že rozdělení je dražší.
+    @MainActor
+    @Test("Cena vykreslení podle délky bloku")
+    func blockLengthCost() {
+        let language = Language(path: "Schema.swift")
+        let lines = (0..<2400).map { index in
+            DiffLine(kind: .context, oldNumber: index + 1, newNumber: index + 1, text: "    let value\(index) = compute(\(index))")
+        }
+
+        // **Cena jednoho bloku** — to je to, co se zaplatí za blok, i když je vidět jen jeho kousek.
+        // `LazyVStack` lení po řádcích seznamu, takže nerozdělený soubor je jeden řádek a rozloží se
+        // celý. Tohle je tedy ten údaj, ze kterého se strop vybírá.
+        for size in [2400, 600, 200, 60, 20] {
+            let slice = Array(lines.prefix(size))
+            let block = DiffBlock(lines: slice, ids: slice.indices.map { "l\($0)" })
+            let view = AnyView(DiffCodeBlockView(block: block, language: language, colorScheme: .light))
+            let clock = ContinuousClock()
+            let elapsed = clock.measure { render(view, width: 900) }
+            print("MĚŘENÍ jeden blok o \(size) řádcích: \(elapsed.milliseconds)")
+        }
+
+        // A pro srovnání celý soubor rozdělený na bloky — tady se lenost neuplatní, protože
+        // `ImageRenderer` kreslí všechno. Slouží k tomu, aby bylo vidět, **co rozdělení stojí**.
+        for size in [2400, 600, 200, 60, 20] {
+            let blocks = stride(from: 0, to: lines.count, by: size).map { start in
+                let slice = Array(lines[start..<min(start + size, lines.count)])
+                return DiffBlock(lines: slice, ids: slice.indices.map { "l\(start + $0)" })
+            }
+            let view = AnyView(
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                        DiffCodeBlockView(block: block, language: language, colorScheme: .light)
+                    }
+                }
+            )
+            let clock = ContinuousClock()
+            let elapsed = clock.measure { render(view, width: 900) }
+            print("MĚŘENÍ blok po \(size) řádcích (\(blocks.count) bloků): \(elapsed.milliseconds)")
+        }
+    }
+
     // MARK: - Co se počítá při každém překreslení diffu
 
     private func hunk(start: Int, count: Int) -> DiffHunk {

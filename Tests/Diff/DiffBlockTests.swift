@@ -44,6 +44,76 @@ struct DiffBlockTests {
         )
     }
 
+    /// Soubor s jedním dlouhým hunkem — `count` řádků kontextu, žádná bublina.
+    private func longFile(count: Int, path: String = "Schema.php") throws -> FileDiff {
+        var lines = [
+            "diff --git a/\(path) b/\(path)",
+            "--- a/\(path)",
+            "+++ b/\(path)",
+            "@@ -1,\(count) +1,\(count) @@",
+        ]
+        lines += (0..<count).map { " radek \($0)" }
+        let diff = DiffParser.parse(lines.joined(separator: "\n"))
+        return try #require(diff.files.first)
+    }
+
+    // MARK: - Strop délky bloku (#223)
+
+    /// **To hlavní u #223.** Bez stropu je celý soubor jeden blok, tedy jeden `NSTextView`, který
+    /// `LazyVStack` nemůže přeskočit — rozloží se text, co není vidět.
+    @Test("Dlouhý úsek se rozdělí na bloky do stropu")
+    func capsBlockLength() throws {
+        let rows = DiffRow.blocked(DiffRow.rows(of: try longFile(count: 200)))
+
+        let blocks = blocks(rows)
+        #expect(blocks.count == 4)    // 60 + 60 + 60 + 20
+        #expect(blocks.allSatisfy { $0.lines.count <= DiffBlock.maxLines })
+        #expect(blocks.map(\.lines.count) == [60, 60, 60, 20])
+    }
+
+    /// Rozdělením se nesmí ztratit ani zdvojit řádek — tichá ztráta kusu diffu je to nejhorší,
+    /// co se tady dá pokazit: review se dělá nad tím, co je na obrazovce.
+    @Test("Rozdělení nezmění ani nezahodí řádky")
+    func keepsEveryLineWhenCapping() throws {
+        let file = try longFile(count: 200)
+        let rows = DiffRow.rows(of: file)
+        let originalLines = rows.compactMap { row -> DiffLine? in
+            guard case .line(_, let line) = row else { return nil }
+            return line
+        }
+
+        let fromBlocks = blocks(DiffRow.blocked(rows)).flatMap(\.lines)
+
+        #expect(fromBlocks == originalLines)
+        // A žádný samostatný `.line` nezůstal — jinak by se kreslil dvakrát.
+        #expect(!DiffRow.blocked(rows).contains { if case .line = $0 { true } else { false } })
+    }
+
+    /// Identita musí zůstat **jednoznačná**, jinak `ForEach` bloky poplete a při scrollování
+    /// přeskakují.
+    @Test("Rozdělené bloky mají různá id")
+    func cappedBlocksHaveDistinctIDs() throws {
+        let rows = DiffRow.blocked(DiffRow.rows(of: try longFile(count: 200)))
+
+        let ids = rows.compactMap { row -> String? in
+            guard case .block(let id, _) = row else { return nil }
+            return id
+        }
+        #expect(Set(ids).count == ids.count)
+    }
+
+    @Test("Strop platí i pro dvojice ve pohledu vedle sebe")
+    func capsPairBlocks() throws {
+        let rows = DiffRow.blockedPairs(DiffRow.rows(of: try longFile(count: 200), layout: .split))
+
+        let pairBlocks = rows.compactMap { row -> DiffPairBlock? in
+            guard case .pairBlock(_, let block) = row else { return nil }
+            return block
+        }
+        #expect(pairBlocks.count == 4)
+        #expect(pairBlocks.allSatisfy { $0.count <= DiffBlock.maxLines })
+    }
+
     @Test("Řádky bez bublin dají jeden blok")
     func mergesEverythingWithoutBubbles() throws {
         let rows = DiffRow.blocked(DiffRow.rows(of: try file()))
