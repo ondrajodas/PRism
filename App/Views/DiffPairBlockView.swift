@@ -159,7 +159,7 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
     /// Šířka je nejdelší řádek, **nejméně však šířka sloupce**: pozadí řádku i pruh rozsahu se
     /// kreslí přes celou šířku view, takže u krátkého kódu by končilo v polovině.
     private func layoutColumns() {
-        let height = max(Double(rows) * rowHeight, rowHeight)
+        let height = left.height(ofRows: rows)
         for (scroll, column) in [(leftScroll, left), (rightScroll, right)] {
             column.sizeToFit()
             column.frame = NSRect(
@@ -183,19 +183,27 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
         right.needsDisplay = true
     }
 
-    /// Výška bloku: řádky × výška řádku. Bez zalamování je to přesné, takže se nemusí měřit layout.
+    /// Výška bloku: řádky × výška řádku plus svislý inset. Bez zalamování je to přesné, takže se
+    /// nemusí měřit layout — počítá to ale **sloupec sám** (`height(ofRows:)`), aby se výška nemohla
+    /// rozejít s tím, kde sloupec kreslí text (#236). Šířka na ni nemá vliv; ve split pohledu se
+    /// nezalamuje.
     func height(forWidth width: Double) -> Double {
-        max(Double(rows) * rowHeight, rowHeight)
+        left.height(ofRows: rows)
     }
 
     /// Rámečky řádků — **jeden na dvojici**, protože sloupce jsou zarovnané. Overlay z nich staví
     /// pilulky po obou stranách.
+    ///
+    /// Počítají se aritmetikou, ne z layout manageru: sloupec se nezalamuje, takže je řádek vždycky
+    /// jeden vizuální. **Musí ale začínat tam, kde začíná text** — tedy na svislém insetu, a krok je
+    /// výška řádku bez něj (#236). Že to sedí na to, co hlásí layout manager, drží test.
     func lineFrames() -> [DiffBlockLineFrame] {
-        (0..<rows).map { index in
+        let top = left.textContainerOrigin.y
+        return (0..<rows).map { index in
             DiffBlockLineFrame(
                 index: index,
                 line: left.line(at: index) ?? .blank,
-                rect: CGRect(x: 0, y: Double(index) * rowHeight, width: bounds.width, height: rowHeight)
+                rect: CGRect(x: 0, y: top + Double(index) * rowHeight, width: bounds.width, height: rowHeight)
             )
         }
     }

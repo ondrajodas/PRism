@@ -55,7 +55,13 @@ final class PollingService {
 
     /// Jeden cyklus. Volá se i z tlačítka „obnovit teď“ — ruční obnovení není nic jiného
     /// než tik mimo pořadí.
+    ///
+    /// Po celou dobu dotazu hlásí `state.isRefreshing` (#237). Klidně by to šlo spočítat
+    /// z `nextPoll` a hodin, ale jen ve chvíli, kdy se view přepočítává — a odpočet na
+    /// dashboardu tiká právě bez toho.
     func refresh() async {
+        state.isRefreshing = true
+        defer { state.isRefreshing = false }
         do {
             let results = try await resultsBySource()
             state.pullRequests = PullRequestList.merged(from: results)

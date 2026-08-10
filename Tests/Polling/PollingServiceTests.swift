@@ -112,6 +112,56 @@ struct PollingServiceTests {
         #expect(service.state.nextPoll == nil)
     }
 
+    // MARK: - Probíhající dotaz
+
+    /// Po dobu dotazu je `nextPoll` v minulosti, takže odpočet na dashboardu (#237) potřebuje
+    /// vědět, že se ptáme — jinak by počítal přes nulu. Pozoruje se to zvenčí přes
+    /// `afterSuccessfulTick`, který se volá **uvnitř** `refresh()`.
+    @Test("Po dobu dotazu polling hlásí, že se ptá")
+    func refreshAnnouncesItselfWhileAsking() async {
+        let probe = FlagProbe()
+        let service = service(gateway: FakeGitHubGateway(always: .success([])), time: FakeTimeSource())
+        service.afterSuccessfulTick = { [weak service] _ in
+            await MainActor.run { probe.duringTick = service?.state.isRefreshing }
+        }
+
+        await service.refresh()
+
+        #expect(probe.duringTick == true)
+        #expect(service.state.isRefreshing == false)
+    }
+
+    /// **Zaseknutý příznak je to horší selhání**: dashboard by pak psal „ptám se…“ navždycky
+    /// a odpočet by se nikdy nevrátil — a to na obrazovce vypadá jako zaseknutá aplikace, ne
+    /// jako chyba v pollingu. Proto se hlídají i větve, které do stavu nic nezapíšou.
+    @Test("Po selhání ani po zrušení příznak nezůstane")
+    func flagIsClearedOnEveryPath() async {
+        let failing = service(
+            gateway: FakeGitHubGateway(always: .failure(GitHubError.network("error connecting"))),
+            time: FakeTimeSource()
+        )
+        await failing.refresh()
+        #expect(failing.state.isRefreshing == false)
+
+        let cancelled = service(
+            gateway: FakeGitHubGateway(always: .failure(CancellationError())),
+            time: FakeTimeSource()
+        )
+        await cancelled.refresh()
+        #expect(cancelled.state.isRefreshing == false)
+    }
+
+    /// Mezi dvěma tiky se aplikace neptá, takže se dashboard vrátí k odpočtu.
+    @Test("Mezi tiky se polling neptá")
+    func flagIsClearedBetweenTicks() async {
+        let time = FakeTimeSource(stopAfter: 2)
+        let service = service(gateway: FakeGitHubGateway(always: .success([])), time: time)
+
+        await service.run()
+
+        #expect(service.state.isRefreshing == false)
+    }
+
     // MARK: - Výpadek sítě
 
     @Test("Síťová chyba nezahodí poslední známá data")
@@ -288,4 +338,12 @@ struct PollingServiceTests {
 
         #expect(service.state.status == .notStarted)
     }
+}
+
+/// Kam si test odloží, co viděl **uprostřed** dotazu. Vlastní typ proto, že `@Sendable` closure
+/// do lokální proměnné zapisovat nesmí; `@MainActor` proto, že stav pollingu je na hlavním
+/// aktoru a bez toho by se z něj nedalo synchronně přečíst.
+@MainActor
+private final class FlagProbe {
+    var duringTick: Bool?
 }
