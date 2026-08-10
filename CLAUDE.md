@@ -79,12 +79,13 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   proklikám, dokud je změna ještě levná na přepsání. Zelené testy nejsou důkaz, že se to
   chová, jak jsem chtěl.
 
-  **V dávce pauza odpadá** (#247, mění #231): subagent nemá jak zavolat člověka a dotahuje issue
-  až do mergnutého PR, takže není kde ji udělat. Kontrola se přesouvá na **hlavní aplikaci po
-  restartu** a co nesedí, je nové issue — podrobnosti v
+  **V dávce se pauza nezruší, jen se posune před merge** (#256, mění #247): subagent zastaví
+  s hotovým PR a nechá mě proklikat **svou slotovou aplikaci**, protože to je jediná chvíle, kdy
+  je změna ještě ve větvi a připomínka k ní je jedna změna, ne nové issue. Zavolá mě **přes
+  orchestrátora** (`SendMessage` na `main`) — čekáním neblokuje slot. Podrobnosti v
   [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md). Co se **nemění**: podívat se na
   obrazovku sám a napřed platí i tam, a o to víc — mergnout rozbitou obrazovku je horší než ji
-  ukázat.
+  ukázat. A **neviditelná změna pauzu nedostane** ani v dávce, viz odstavec níž.
 
   Napiš, **na co se mám podívat** a co v příslušné obrazovce uvidím.
 

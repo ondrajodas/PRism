@@ -644,14 +644,23 @@ očištěnou o odesílání, notifikace a automat.
 Sloty daly paralelnímu vývoji prostředí, ale ne postup; bez zápisu by se seznam issues dál
 vyřizoval sériově, protože výchozí chování je subagenty nepouštět. Je v něm, podle čeho se
 pozná nezávislost (`ReviewPublishing` jde vždycky sám, `AppStore` stav a `Policy` jsou
-rizikové, `docs/stav.md` konfliktuje vždy a nevadí), co subagent dělá a co ne (nemerguje,
-nezavírá issue, nevydává release) a **že slot přiděluje orchestrátor** — subagent v izolovaném
-worktree `.prism-slot` nemá, takže by přepsal aplikaci, se kterou se pracuje.
+rizikové, `docs/stav.md` konfliktuje vždy a nevadí), co subagent dělá a co ne, a **že slot
+přiděluje orchestrátor** — subagent v izolovaném worktree `.prism-slot` nemá, takže by přepsal
+aplikaci, se kterou se pracuje. Hranice „co dělá a co ne“ se od #231 posunula dvakrát: v původním
+zápisu subagent nemergoval, nezavíral issue ani nevydával release, od **#247** si to všechno
+dotahuje sám a od **#250** po sobě uklidí i svou aplikaci. Orchestrátorovi zůstal rozvrh, sloty,
+úklid stromů a restart hlavní aplikace.
 
 **Mění to jedno pravidlo:** v dávce se pauza na proklikání posouvá z „před prvním pushem“ na
-„před merge“ a sbírá se za celou dávku naráz. Subagent nemá jak zavolat člověka a čekáním by
-blokoval sebe i slot; PR před mergem je přitom pořád levný na přepsání, takže smysl pauzy to
-drží. Podívat se na obrazovku sám a napřed platí dál.
+„před merge“. Prošla dvěma korekcemi a platí verze z **#256**: subagent zastaví s hotovým PR
+a vyřízeným Copilotem, nechá si proklikat **svou slotovou aplikaci** a merge na odpověď počká;
+člověka volá **přes orchestrátora**. Sbírání za celou dávku z #231 padlo s tím, že merguje každý
+sám (#247), a mezitím pauza chvíli **odpadala úplně** — s odůvodněním, že subagent nemá jak
+zavolat člověka a čekáním by blokoval sebe i slot. Obojí neplatilo: cesta k člověku vede přes
+orchestrátora a subagent u ní čeká **pasivně** (dokončí turn, zpráva ho probudí). Ukázala to
+dávka M9, kde pauza nebyla v zadání a **dva agenti ze čtyř domergovali dřív, než jim došla
+zpráva** — proto je od #256 v zadání od začátku. Podívat se na obrazovku sám a napřed platí dál,
+neviditelná změna pauzu nedostane.
 
 U slotů (#228) dopadly tři věci jinak, než jak byly v zadání:
 
