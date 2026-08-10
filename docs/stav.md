@@ -595,7 +595,7 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
 9. **Revize okna** (M9) — nový vizuální jazyk podle návrhu ze srpna 2026 a přestavba okna
    na záložky. Šestnáct issues ve čtyřech vlnách; **pořadí je v popisu milníku**, protože se
    podle něj rozhoduje, co se dá dělat souběžně. Hotové: řádek fronty #172, co se změnilo od
-   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219, sazba bloku „od minule“ #226 a sazba hlavičky PR #218. Mimo plán přibylo
+   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219, sazba bloku „od minule“ #226, sazba hlavičky PR #218 a odpočet příštího tiku #237. Mimo plán přibylo
    **#220 — okno vytuhlo na PR s ~2000 změněnými řádky**: pružná šířka na každé úrovni zanoření
    stojí ~5,5× na úroveň, takže se šířka teď měří jednou a předává dolů. Odpadlo z toho #223
    (blok bez stropu) a #224 (barvení bez cache) do milníku Průběžné — obojí se měřením vyloučilo
@@ -612,6 +612,14 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
    selhaný checkout zůstal bannerem v hlavičce. Odchylka od návrhu je odznak u `Přehledu`:
    mockup u něj má čtyřku, která odpovídá počtu dlaždic s fakty — a to je konstanta, takže
    místo ní počítá novinky od poslední návštěvy. Důvod je ve specifikaci.
+
+   U #237 se **otočilo rozhodnutí z #181**: příští tik v hlavičce dashboardu je odpočet
+   (`poslední tik 09:41 · za 43 s znovu`, jak to má návrh), ne absolutní čas. Námitka, kvůli
+   které tam absolutní čas stál — že odpočet znamená přepočítávat dashboard každou vteřinu —
+   se **změřila a neplatí**: `Text(_:style: .relative)` tiká sám a tělo view se u toho
+   nepřepočítává. Přibylo k tomu `PollState.isRefreshing`, protože `nextPoll` je po celou dobu
+   dotazu v minulosti a odpočet by šel přes nulu; v tu chvíli se místo čísla píše `ptám se…`.
+   Důvod, proč to drží observovatelný příznak a ne srovnání s hodinami, je ve specifikaci.
 
    U #216 se **rozšířila tvrdá podmínka č. 1**: `ReviewPublishing` má čtvrtou metodu
    (`comment`), protože composer komentáře pod PR je v návrhu a bez něj se pod PR nedá napsat

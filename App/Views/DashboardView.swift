@@ -52,7 +52,7 @@ struct DashboardView: View {
                     .foregroundStyle(Palette.ink2)
             }
             Spacer(minLength: 8)
-            Text(verbatim: tickText)
+            tick
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(Palette.ink3)
         }
@@ -95,14 +95,40 @@ struct DashboardView: View {
         return sentence + "."
     }
 
-    /// Kdy se to naposledy načetlo a kdy se to zeptá znovu. Čas příštího tiku je **absolutní**,
-    /// ne odpočet: odpočet by znamenal překreslovat dashboard každou vteřinu kvůli údaji, na
-    /// který se nikdo nedívá.
-    private var tickText: String {
-        guard let last = store.lastSuccess else { return "zatím se nenačetlo" }
-        var text = "poslední tik \(clock(last))"
-        if let next = store.nextPoll { text += " · další tik \(clock(next))" }
-        return text
+    /// Kdy se to naposledy načetlo a kolik zbývá do příštího tiku — `poslední tik 09:41 ·
+    /// za 43 s znovu`, jak to má návrh.
+    ///
+    /// **Odpočet, ne absolutní čas** (#237, otáčí rozhodnutí z #181). Námitka, kvůli které tu
+    /// absolutní čas stál — že odpočet znamená překreslovat dashboard každou vteřinu — neplatí:
+    /// `Text(_:style: .relative)` se aktualizuje sám a tělo view se u toho nepřepočítává. Cena je
+    /// jiná, a je vidět tady: text se skládá ze **tří kusů**, protože ten prostřední musí zůstat
+    /// samostatný `Text`. Kdyby se odpočet vpsal do interpolace, ztratil by se ten mechanismus
+    /// a vteřiny by tikaly jen tak často, jak se dashboard překresluje.
+    ///
+    /// **Poslední tik zůstává absolutní** — je to bod v minulosti, na kterém se nic neodpočítává.
+    @ViewBuilder private var tick: some View {
+        switch DashboardTick(
+            lastSuccess: store.lastSuccess,
+            nextPoll: store.nextPoll,
+            isRefreshing: store.isRefreshing,
+            now: .now
+        ) {
+        case .never:
+            Text("zatím se nenačetlo")
+        case .idle(let last):
+            Text(verbatim: "poslední tik \(clock(last))")
+        case .countdown(let last, let deadline):
+            HStack(spacing: 0) {
+                Text(verbatim: "poslední tik \(clock(last)) · za ")
+                Text(deadline, style: .relative)
+                Text(verbatim: " znovu")
+            }
+        case .polling(let last):
+            // Věta o tom, co se děje, ne odpočet přes nulu. Do „ptám se…“ se to překlopí ve
+            // chvíli, kdy dotaz opravdu začne — příznak v `PollState` je observovatelný,
+            // kdežto hodiny ve `now` výš platí jen k poslednímu přepočtu.
+            Text(verbatim: last.map { "poslední tik \(clock($0)) · ptám se…" } ?? "ptám se…")
+        }
     }
 
     private func clock(_ date: Date) -> String {

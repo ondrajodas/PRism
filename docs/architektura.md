@@ -1400,6 +1400,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
 | `DashboardView` | Startovní obrazovka (#181): pozdrav, čtyři karty, fronta podle závažnosti, legenda reviewerů a `Co teď` |
+| `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43 s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatný `Text` |
 | `SpendSparkline` | Sloupcový graf útraty za posledních sedm dní; dnešek zvýrazněný, prázdný den zůstává v řadě (#181) |
 | `ProportionalColumns` | `Layout` pro sloupce v poměru z návrhu (`1.45fr 1fr`) — `HStack` umí jen rovným dílem (#181) |
 | `StatusBarView` | Stavový řádek na spodku **okna**: vlevo hlášky a stav pracovní kopie, vpravo puntíky služeb |
@@ -2760,6 +2761,18 @@ píše v hlavičce a `lastSuccess + interval` by po prvním rate limitu lhalo �
 `waitBeforeNextPoll()`, tedy backoff. Ruční obnovení hodnotu **neposouvá**: tik mimo pořadí
 smyčku nepřeplánuje, takže dokud poprvé neusne, je `nil`.
 
+**Po dobu dotazu je `nextPoll` v minulosti** — zapisuje se až za `refresh()`. Od #237 je v tom
+koutě odpočet (`za 43 s znovu`), takže to přestala být kosmetika: odpočet by došel na nulu a šel
+dál. Drží to `PollState.isRefreshing`, které `refresh()` zvedne na začátku a v `defer` zase
+spustí. **Proč příznak, a ne srovnání s hodinami**: odpočet ve view tiká *bez přepočtu těla*
+(`Text(_:style: .relative)`), takže `now` v něm platí jen k poslednímu přepočtu — po probuzení
+stroje by to byl uplynulý termín odpočítávaný nahoru. Změna příznaku je naopak observovatelná,
+takže hlavička se překlopí na `ptám se…` ve chvíli, kdy dotaz začne. Ověřeno na běžícím okně:
+`za 1 s` → `za 0 s` → `ptám se…` → `za 7 s`.
+
+`defer` je tam kvůli tomu, co se rozbije potichu: zaseknutý příznak znamená `ptám se…` navždycky
+a odpočet, který se nikdy nevrátí — na obrazovce k nerozeznání od zaseknuté aplikace.
+
 **Polling netahá detail PR.** Seznam SHA nepotřebuje — potřebuje je až checkout a review,
 takže `gh pr view` se volá tam. Zpřesňuje to rozhodnutí z #4.
 
@@ -2999,6 +3012,14 @@ Nad nálezy platí navíc:
     by se s ním dřív nebo později rozešla.
   - **Karta nemluví o tom, co neví.** Draft z doby před #181 razítko nemá, takže se u něj místo
     stáří píše „čeká na dopsání“; blokující nález bez kategorie nechá kartu u čísla.
+  - **Příští tik je odpočet, poslední zůstává absolutní** (#237, otáčí #181) —
+    `poslední tik 09:41 · za 43 s znovu`, jak to má návrh. Odpočet **se nesmí platit přepočtem
+    dashboardu**, takže se skládá ze tří `Text`ů a ten prostřední (`Text(_:style: .relative)`) si
+    vteřiny odtiká sám; kdyby se vpsal do interpolace, tikal by jen tak často, jak se dashboard
+    překresluje. Co se v tom koutě píše, rozhoduje `DashboardTick`, tedy výčet nad třemi
+    hodnotami — a **uplynulý termín je `ptám se…`, ne záporné číslo**: `nextPoll` zůstává po dobu
+    dotazu v minulosti, takže odpočet dojde na nulu a šel by dál. Podrobnosti u `PollingService`,
+    včetně toho, proč to drží observovatelný příznak a ne srovnání s hodinami.
 
   **Co teď** jsou akce, které dávají smysl teď — řádek, který by nic neudělal, se nekreslí.
   Hromadné spuštění se **ptá na potvrzení**, protože je to jediné místo v aplikaci, kde jedno

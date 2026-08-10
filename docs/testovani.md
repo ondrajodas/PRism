@@ -826,6 +826,34 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   Kdy se polling zeptá znovu (`PollState.nextPoll`) je u `PollingService`: hodnotu zapisuje
   smyčka, ruční obnovení ji **neposouvá**, a po rate limitu ctí backoff, ne nastavený interval.
 
+  **Odpočet příštího tiku (#237)** má dvě sady a obojí kryje něco, co se rozbije potichu:
+  - **`DashboardTick` výčtem** — co se v tom koutě píše, je čistá funkce nad `lastSuccess`,
+    `nextPoll`, příznakem dotazu a hodinami. Nejcennější tvrzení je, že **uplynulý termín se
+    neukáže jako odpočet**: v minulosti je `nextPoll` po celou dobu dotazu, takže se testuje
+    termín před chvílí, termín **právě teď** (rovnost patří k uplynulým) i termín osm hodin za
+    námi, tedy stav po probuzení stroje. Ověřeno vloženou regresí — bezpodmínečný `.countdown`
+    shodí tři testy.
+  - **Cena odpočtu** (`DashboardCountdownRedrawTests`) — sonda v hostovaném okně, která si počítá
+    přepočty svého těla: `Text(_:style: .relative)` tiká 1,5 sekundy a tělo se přepočítá **jednou**.
+    Měří se na sondě, ne na `DashboardView`, protože počítat přepočty jde jedině tak, že si je view
+    samo počítá, a to do aplikace nepatří. **Druhý test je kontrola měřidla**: tentýž postup nad
+    odpočtem, který se v těle přepočítává (hodiny ve stavu), přepočty spočítat musí — bez něj by
+    zelený první test mohl znamenat jen to, že sonda vůbec nežije. Okno je **bez rámu a mimo
+    obrazovku**, ale skutečné: bez okna SwiftUI přepočty neplánuje a oba testy by vyšly zeleně
+    z nesprávného důvodu.
+
+    U hostovaného view je jeden zádrhel, který stojí za zapamatování: **rozměr se nesmí propsat do
+    okna** (`NSHostingView.sizingOptions = []` a pevný `frame`). Text sondy se s každou vteřinou
+    mění, takže hostující view tlačí novou vnitřní velikost do mezí okna a AppKit po několika
+    kolech hodí `NSGenericException` („more Update Constraints in Window passes than there are
+    views“) — což **nepoloží test, ale celý běh**: testovací host spadne a `xcodebuild` doreportuje
+    `0 tests`. Chytilo se to tím, že jeden běh spadl a druhý ne.
+
+  U `PollingService` k tomu patří `isRefreshing`: platí **po dobu dotazu** (pozoruje se zvenčí
+  přes `afterSuccessfulTick`, který se volá uvnitř `refresh()`) a **nezůstane** ani po selhání,
+  ani po zrušení, ani mezi tiky. Ta druhá polovina je ta cennější — zaseknutý příznak znamená
+  `ptám se…` navždycky, tedy obrazovku k nerozeznání od zaseknuté aplikace.
+
   **`ProportionalColumns`** se testuje po částech: `Layout` se bez hostitelského okna vykreslit
   nedá, ale výpočet šířek ano — a tam se dá pokazit potichu, že se **mezery odečtou až po dělení
   poměrem** (sloupce pak přetečou a poslední se ořízne). K tomu sloupec navíc bez poměru a šířka
@@ -940,6 +968,20 @@ sekce se od toho odvíjela; **je to změna proti tomu, co tu stálo do #181**, n
 osascript -e 'tell application "System Events" to tell process "PRism" to get {position, size} of window 1'
 screencapture -x -R0,34,1512,874 /cesta/do/scratchpadu/okno.png
 ```
+
+**Vlastní okno se dá vyfotit i zezadu, podle jeho ID** (#237), a v paralelním běhu je to ta
+správná cesta: `screencapture -x -o -l<id>` vyfotí jedno okno, i když je za ostatními, takže
+nemusí nic skákat dopředu a **do snímku se nedostane nic cizího** — ani okno druhého slotu, ani
+to, co má člověk zrovna na obrazovce. Celoobrazovkový snímek u čtyř běžících instancí naopak
+vyfotí hlavně cizí práci.
+
+ID najde `CGWindowListCopyWindowInfo` podle PID (`pgrep -f /Applications/PRism-<slot>.app`);
+pár řádků ve `swift` skriptu, `System Events` na to potřeba nejsou. Okno **nemusí být vpředu**,
+takže se u toho nepřepíná fokus. Odpočet v hlavičce se takhle dal odečíst ze dvou snímků po
+šesti sekundách (`za 9 s znovu` → `za 3 s znovu`) a burst po 0,35 s zachytil celý přechod
+`za 1 s` → `za 0 s` → `ptám se…` → `za 7 s`, tedy věc, na kterou offscreen render nestačí:
+dashboard je ve `ScrollView`, který se offscreen **nevykreslí vůbec** (viz níž), takže render
+vyšel prázdný a jediné, co zbývalo, bylo skutečné okno.
 
 **Na stav za kliknutím se dostaneš taky** — jen se musí aplikace napřed vytáhnout dopředu.
 Okno terminálu leží na pixel přesně přes okno aplikace (obojí `0,33,1512,875`), takže klik

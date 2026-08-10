@@ -661,6 +661,10 @@ final class AppStore {
     /// Kdy se polling zeptá znovu. `nil`, dokud smyčka poprvé neusne.
     var nextPoll: Date? { polling.state.nextPoll }
 
+    /// Ptá se polling právě teď? Čte to odpočet v hlavičce dashboardu (#237) — po dobu dotazu
+    /// je `nextPoll` v minulosti, takže se místo něj píše, co se děje.
+    var isRefreshing: Bool { polling.state.isRefreshing }
+
     /// Útrata po dnech pro graf. Prázdné, dokud se nenačte — sedm nul by vypadalo jako týden
     /// bez práce, ne jako chybějící data.
     ///

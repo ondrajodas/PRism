@@ -42,6 +42,12 @@ potvrzení — je to jediné kliknutí v aplikaci, které utratí víc než jedn
 k nejstaršímu rozdělanému review. Nic se pro to nedotahuje; všechna ta čísla už v aplikaci byla,
 jen roztroušená.
 
+V pravém horním koutu stojí, kdy se seznam naposledy načetl a **kolik zbývá do příštího dotazu** —
+`poslední tik 09:41 · za 43 s znovu` (#237). Poslední tik je hodina, protože je to bod
+v minulosti; příští je odpočet, protože otázka u něj zní „jak dlouho ještě“ — a při rate limitu,
+kde čekání roste až na patnáct minut, je to celý obsah té informace. Zatímco se aplikace ptá, je
+tam místo čísla `ptám se…`.
+
 Po startu si ověří, že má `gh`, `git` i `claude` a že je `gh` přihlášený — jinak řekne, co
 chybí a čím se to spraví. Pak se otevře seznam pull requestů napříč repozitáři, který se
 sám obnovuje. **Řádek začíná titulkem** (#172) a souřadnice — `repo #číslo · autor · čas
