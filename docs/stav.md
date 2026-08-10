@@ -685,5 +685,21 @@ nulu a čísla by se měnila při každém kliknutí, takže by z nabídky nešl
 udělá. Je na to test v `Policy` i ve storu; položka, která v nabídce zbyla jen po aktivním filtru,
 má počet **nula** a řadí se dál podle jména, ne podle počtu.
 
+**Klávesové zkratky doplněné (#151)** — `⌘⏎` nad rozdělaným review otevře **potvrzení odeslání**
+(ne odeslání: dvě kliknutí na dvou různých tlačítkách z #68 zůstávají) a **Esc zavírá nastavení**,
+včetně doručení rozepsané hodnoty. Skok mezi nálezy (`⌥↓`, `⌥↑`, `⌥⇧↓`) z issue už existoval
+z #187 — jenže **fungoval jen do prvního skoku**, a to se přišlo najevo až při ověřování:
+
+- **SwiftUI páruje u šipek zkratku bez ohledu na `.shift`**, takže `⌥↓` a `⌥⇧↓` byly pro něj jedna
+  klávesa a vyhrávala ta zaregistrovaná později. `⌥↓` tedy dělalo „další blokující“ a protože
+  blokující nález bývá jeden, druhé zmáčknutí nikam neskočilo. Teď je to jedno tlačítko a shift
+  se čte z `NSApp.currentEvent`. Změřeno na běžící aplikaci oběma směry; platformní chování
+  znamená, že na to **test není** a drží ho jen zápis v dokumentaci.
+- **Esc v nastavení je změna proti #127**, kde stálo, že to okno schválně nemá. Důvod je ve
+  specifikaci; doručení rozepsané hodnoty (`flush`) je proto v akci té zkratky, ne odkázané na
+  zánik view.
+- Pořadí skoků zůstává **podle diffu**, ne podle `Policy.sorted`, jak psalo zadání issue —
+  rozhodlo to #187 a skákat po závažnosti by v jednom souboru poskakovalo nahoru a dolů.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

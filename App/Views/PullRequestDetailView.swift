@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Pravý panel: diff vybraného PR, nálezy pod ním a ovládání nahoře.
@@ -57,7 +58,7 @@ struct PullRequestDetailView: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background { navigationShortcuts }
+        .hiddenShortcuts { shortcuts }
         .task(id: highlighted) {
             guard highlighted != nil else { return }
             try? await Task.sleep(for: .seconds(2.5))
@@ -510,31 +511,79 @@ struct PullRequestDetailView: View {
         self.cursor = self.cursor.moved(to: place)
     }
 
-    /// Zkratky bydlí **na detailu**, ne na tlačítkách v liště diffu: skočit na nález jde
-    /// i z `Přehledu` (skok si tab přepne sám), a tlačítko, které v tu chvíli není v okně,
-    /// by svou zkratku nemělo kde zaregistrovat.
+    /// Zkratky bydlí **na detailu**, ne na tlačítkách, ke kterým patří: skočit na nález jde
+    /// i z `Přehledu` (skok si tab přepne sám) a rozdělané review se píše v panelu, který je
+    /// vidět v obou tabech — kdežto tlačítko, které v tu chvíli není v okně, by svou zkratku
+    /// nemělo kde zaregistrovat.
     ///
-    /// Průhledná tlačítka, ne `.hidden()`: skryté view z hierarchie zmizí i se zkratkou.
-    @ViewBuilder private var navigationShortcuts: some View {
-        VStack {
-            Button("Další nález") { step(.forward) }
-                .keyboardShortcut(.downArrow, modifiers: .option)
-            Button("Předchozí nález") { step(.backward) }
-                .keyboardShortcut(.upArrow, modifiers: .option)
-            Button("Další blokující nález") { step(.forward, onlyBlocking: true) }
-                .keyboardShortcut(.downArrow, modifiers: [.option, .shift])
-            // Panel jde složit i rozložit **stejnou zkratkou** (#182), jak to má návrh v liště
-            // nad diffem. Zkratka bydlí tady, ne v `DiffView`: panel je vidět v obou tabech PR,
-            // kdežto lišta jen u diffu — a přepínač, který v půlce okna nefunguje, je horší
-            // než žádný.
-            Button("Panel nálezů") {
-                withAnimation(.snappy(duration: 0.15)) { findingsExpanded.toggle() }
-            }
-            .keyboardShortcut("2", modifiers: .command)
+    /// Jak se schovávají, ví `hiddenShortcuts` — je to jedno místo pro celou aplikaci.
+    @ViewBuilder private var shortcuts: some View {
+        // `⌥⇧↓` je pro SwiftUI **tatáž zkratka** jako `⌥↓`, proto jedno tlačítko a shift až
+        // v akci — viz `isShiftDown`.
+        Button("Další nález") { step(.forward, onlyBlocking: isShiftDown ? true : nil) }
+            .keyboardShortcut(.downArrow, modifiers: .option)
+        Button("Předchozí nález") { step(.backward) }
+            .keyboardShortcut(.upArrow, modifiers: .option)
+        // Panel jde složit i rozložit **stejnou zkratkou** (#182), jak to má návrh v liště
+        // nad diffem. Zkratka bydlí tady, ne v `DiffView`: panel je vidět v obou tabech PR,
+        // kdežto lišta jen u diffu — a přepínač, který v půlce okna nefunguje, je horší
+        // než žádný.
+        Button("Panel nálezů") {
+            withAnimation(.snappy(duration: 0.15)) { findingsExpanded.toggle() }
         }
-        .opacity(0)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        .keyboardShortcut("2", modifiers: .command)
+        submitShortcut
+    }
+
+    /// Drží se zrovna shift? Z toho se pozná `⌥⇧↓` (další **blokující** nález) od `⌥↓`.
+    ///
+    /// **Zkratkou se to rozlišit nedá** — změřeno na běžící aplikaci u #151: SwiftUI u šipek
+    /// `.shift` při párování ignoruje, takže dvě tlačítka lišící se jen jím jsou jedna zkratka
+    /// a vyhraje to zaregistrované později. Do #151 tedy `⌥↓` dělalo „další blokující“, a protože
+    /// blokující nález bývá jeden, druhé zmáčknutí nikam neskočilo — vypadalo to, že zkratka
+    /// nefunguje. Ověřeno oběma směry: po odebrání varianty se shiftem začalo `⌥↓` procházet
+    /// nálezy **a** `⌥⇧↓` skákalo po tom samém.
+    ///
+    /// Ptá se **události, která akci spustila** (`NSApp.currentEvent`), ne stavu klávesnice
+    /// (`NSEvent.modifierFlags`). Je to přesnější otázka — „čím se to zmáčklo“ — a hlavně to
+    /// jediné funguje i pro zkoušení přes `System Events`, kde synthetická klávesa stav
+    /// klávesnice nemění: se `modifierFlags` vycházelo `⌥⇧↓` jako obyčejné `⌥↓`.
+    ///
+    /// Bez události se bere **`false`, tedy obyčejný skok**, a není to spolknutá chyba: zúžení
+    /// na blokující je zkratka navíc, takže se z ní v nejhorším stane ta základní. Opačný default
+    /// by přeskakoval nálezy, aniž by o to kdo řekl.
+    private var isShiftDown: Bool {
+        NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+    }
+
+    /// `⌘⏎` otevře **potvrzení odeslání**, nic neodesílá (#151).
+    ///
+    /// Tvrdá podmínka č. 1: review odchází dvěma kliknutími na dvou různých tlačítkách (#68)
+    /// a zkratka je obejít nesmí. Volá proto tutéž akci jako tlačítko v panelu — tu, která jen
+    /// složí snímek draftu a otevře sheet. V samotném sheetu zkratka na odeslání **není a nesmí
+    /// být**; kdyby byla, stačil by na approve jeden hmat.
+    ///
+    /// Zakázaná je ze stejného důvodu jako to tlačítko (`Policy.canOpenSubmission`) — a navíc
+    /// nad otevřeným sheetem: druhé stisknutí by složilo nový snímek a zahodilo stav rozdělaného
+    /// odesílání, tedy i hlášku, kvůli které je okno otevřené.
+    ///
+    /// Platí **v celém detailu**, tedy i když se zrovna píše do composeru komentáře nebo do
+    /// odpovědi ve vlákně — ty vlastní `⌘⏎` nemají (odesílají se pojmenovaným tlačítkem, viz
+    /// tvrdá podmínka č. 1), takže se nic nepřebíjí; jen se nad rozdělaným review otevře
+    /// potvrzení, které jde zavřít Escem.
+    private var submitShortcut: some View {
+        Button("Otevřít potvrzení odeslání") { draftActions.send() }
+            .keyboardShortcut(.return, modifiers: .command)
+            .disabled(submission != nil || !canOpenSubmission)
+    }
+
+    /// Dá se potvrzení vůbec otevřít? Rozhoduje `Policy`, ne tohle view — na totéž se ptá
+    /// tlačítko v panelu.
+    private var canOpenSubmission: Bool {
+        Policy.canOpenSubmission(
+            block: store.draftSendBlock(for: pullRequest.id),
+            canTransfer: store.canTransferDraft(for: pullRequest.id)
+        )
     }
 
     /// Nález ukazuje na `file:line`; kde to je v diffu, ví `DiffRow`. Když se místo najít

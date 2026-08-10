@@ -789,6 +789,25 @@ extension Policy {
         }
         return nil
     }
+
+    /// Dá se otevřít **potvrzení odeslání**? (Ne odeslat — to je až druhé tlačítko v něm.)
+    ///
+    /// **Není to `sendBlock == nil`.** Zastaralý draft se smí otevřít, když je proti čemu
+    /// zkontrolovat kotvy (#69): okno tím začne a odeslání se odemkne až po přenesení. Ostatní
+    /// důvody se opravují v panelu, takže nad nimi otevřít okno nemá smysl.
+    ///
+    /// Ptají se na to **dvě** místa — tlačítko v panelu a zkratka `⌘⏎` v detailu PR (#151).
+    /// Do #151 to byla podmínka uvnitř `DraftPanel`; jako druhá kopie ve view by znamenala, že
+    /// zkratka otevře okno tam, kde je tlačítko zakázané.
+    static func canOpenSubmission(block: DraftSendBlock?, canTransfer: Bool) -> Bool {
+        block == nil || needsTransfer(block: block, canTransfer: canTransfer)
+    }
+
+    /// Začne okno odeslání kontrolou kotev (#69)? Rozhoduje o tom i **jméno** tlačítka
+    /// (`Zkontrolovat a odeslat…` místo `Odeslat review…`).
+    static func needsTransfer(block: DraftSendBlock?, canTransfer: Bool) -> Bool {
+        canTransfer && block?.isStale == true
+    }
 }
 
 /// Proč se rozdělané review nedá odeslat.

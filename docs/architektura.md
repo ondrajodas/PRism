@@ -1389,6 +1389,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
 | `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
+| `hiddenShortcuts(_:)` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení i okno novinek |
 | `AppDelegate` | Ukončení aplikace: dokud běží review, ptá se |
 
 ### Hlavička PR (#218)
@@ -1537,6 +1538,20 @@ Věci, které se u toho nemají rozbít:
   samo a split view se s tím pere; tenhle vzor je v okně navíc už jednou ověřený stránkou
   `Repozitáře`. Patička dál jde přes `safeAreaInset`, jinak si formulář vyhradí místo od horní
   hrany a první řádek zůstane uříznutý.
+- **Esc okno zavře a rozepsanou hodnotu přitom doručí** (#151). Je to **změna proti #127**, kde
+  stálo, že to nastavení schválně nemá, protože je to `Settings` a byla by to odchylka od
+  zvyklosti systému; zvyklost to není (Esc zavírá i systémové nastavení) a chodí se sem přepnout
+  jednu věc a zpátky k review, takže cesta ven má být pod rukou. Tři věci, na kterých to stojí:
+  - **Schované tlačítko s `.cancelAction`**, ne `onExitCommand` — tentýž důvod jako u okna novinek,
+    viz `hiddenShortcuts`.
+  - **`flush()` je v akci výslovně, ne odkázaný na `onDisappear`.** Escem se zavírá jedním hmatem
+    uprostřed psaní, takže mezi posledním úhozem a zavřením nemusí uběhnout ani těch 600 ms, po
+    kterých se ukládá samo. `onDisappear` zůstává kvůli křížku a ⌘W, kde se o zavření dozvíme až
+    z konce view.
+  - **Zkratka je v každém stavu právě jedna.** Ve formuláři si ji drží `SettingsView` (kvůli tomu
+    doručení), nad obrazovkou „nastavení zatím není k dispozici“ `SettingsScene`. Obojí naráz by
+    byly dvě registrace téže klávesy a která vyhraje, není dané — přesně ta past, na které se
+    u #151 rozbilo `⌥↓`.
 - **Souhrn fronty (#155) sčítá, nezužuje.** Filtr reviewerů (#117) seznam zužuje a je to *pohled*;
   souhrn je tvrzení o tom, co ve frontě **je**. Kdyby se počítal z toho, co je po filtru vidět,
   tvrdil by, že práce ubyla, jen protože jsem si schoval jednoho revieweera — tatáž úvaha jako
@@ -2776,6 +2791,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.permalink(to:line:in:at:)`, `Policy.bodyItem(text:link:)`, `Policy.appendingBodyItem(_:to:)` | Odkaz na kód a skládání položek těla review |
 | `Policy.isStale(_:head:)` | Je draft psaný proti staršímu commitu? |
 | `Policy.sendBlock(for:head:)` | **Proč** se draft nedá odeslat (`DraftSendBlock`); `nil` = dá se |
+| `Policy.canOpenSubmission(block:canTransfer:)`, `Policy.needsTransfer(block:canTransfer:)` | Dá se otevřít **potvrzení** odeslání (#151) a začne kontrolou kotev? Ptá se tlačítko v panelu i zkratka `⌘⏎` — dvě kopie by znamenaly, že zkratka otevře okno nad zakázaným tlačítkem |
 | `Policy.health(of:from:)` | Puntík služby ve stavovém řádku ze tří signálů — viz `App/Health/` |
 | `Policy.reviewNotification(for:state:blocking:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět |
 | `Policy.newPullRequestNotification(for:title:isReReview:)` | Notifikace o novém PR ve frontě (#85); re-review se pozná textem (#137) |
@@ -2946,6 +2962,21 @@ Nad nálezy platí navíc:
 
   Zvýraznění po skoku zůstává **dočasné**, jak bylo od #20: trvalý rámeček by se pletl
   s blokujícím nálezem. Kde stojím, drží lišta, ne barva v diffu.
+- **`⌥⇧↓` je pro SwiftUI tatáž zkratka jako `⌥↓`** (#151, oprava chyby z #187). U šipek se
+  `.shift` při párování **ignoruje**, takže dvě tlačítka lišící se jen jím jsou jedna klávesa
+  a vyhrává to zaregistrované později. Do #151 tedy `⌥↓` dělalo „další blokující“ — a protože
+  blokující nález bývá jeden, druhé zmáčknutí nikam neskočilo a vypadalo to, že zkratka je
+  rozbitá. Změřeno na běžící aplikaci **oběma směry**: po odebrání varianty se shiftem začalo
+  `⌥↓` procházet nálezy a `⌥⇧↓` skákalo po tom samém.
+
+  Je proto **jedno tlačítko** a shift se čte z `NSApp.currentEvent`, tedy z události, která akci
+  spustila. Ne `NSEvent.modifierFlags` (stav klávesnice): ten se u synthetických kláves ze
+  `System Events` nemění, takže by se to nedalo vyzkoušet — a vyzkoušet se to musí, protože
+  zkratka je jediné, čím se ta cesta spouští.
+
+  **Zkratky bydlí na detailu PR, ne na tlačítkách v liště** (`hiddenShortcuts`): skočit na nález
+  jde i z `Přehledu`, kde lišta v okně vůbec není, a tlačítko mimo okno svou zkratku nemá kde
+  zaregistrovat.
 - **„Od tvé poslední návštěvy“ stojí na dvou různých značkách** (#173). `VisitLedger` je to,
   co přežije restart; `AppStore.visitSnapshots` je to, **proti čemu se počítá v tomhle běhu**.
   Zapsat návštěvu se musí hned při zobrazení, jinak by o ní příští start nevěděl — jenže tím by
@@ -3133,6 +3164,16 @@ Nad odesílatelností draftu (#68) platí:
   jedno kliknutí, kterým se návrh přijme za svůj, a panel to říká větou.
 - **Návrh se do `sendBlock` předává s výchozím `nil`.** Default tam smí být, protože jeho
   zapomenutí odeslání **zablokuje**, ne otevře — u `scope` je to obráceně a proto tam žádný není.
+- **`⌘⏎` otevírá potvrzení, ne odesílá** (#151). Zkratka volá **tutéž akci jako tlačítko v panelu**
+  (`DraftActions.send`), tedy tu, která jen složí snímek a otevře sheet; druhé kliknutí uvnitř
+  sheetu zůstává jediným místem, kde se volá `ReviewPublishing.submit`, a **žádnou zkratku nemá**.
+  Dvě kliknutí na dvou různých tlačítkách (#68) tím platí dál. Kdy zkratka nedělá nic, rozhoduje
+  `Policy.canOpenSubmission` — týž výraz, jakým se zakazuje to tlačítko — a navíc je zhasnutá nad
+  už otevřeným sheetem: druhé stisknutí by složilo nový snímek a zahodilo stav rozdělaného
+  odesílání, tedy i hlášku, kvůli které je okno otevřené.
+
+  Ověřeno na běžící aplikaci: nad draftem v nepovoleném repu `⌘⏎` neudělá nic; po povolení otevře
+  potvrzení s celým payloadem a **na PR nepřibylo review** (`gh api …/reviews` má 7 před i po).
 
 ## `GitHubGateway` (`App/GitHub/`)
 

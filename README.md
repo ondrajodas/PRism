@@ -254,6 +254,12 @@ kterému nevěřím, není práce k projití. Puntík zezelená, teprve až jsi 
 ne když skončíš na posledním; a nálezy bez místa v kódu se do počtu neplete — nedá se na ně
 skočit, tak je nápověda počítá zvlášť, aby `3/3` netvrdilo hotovo nad PR, kde zbývají v panelu.
 
+**Ty zkratky do #151 fungovaly jen do prvního skoku** a stálo to za jednu poučku: SwiftUI páruje
+u šipek zkratku **bez ohledu na shift**, takže `⌥↓` a `⌥⇧↓` jsou pro něj jedna klávesa a vyhrává
+ta zaregistrovaná později. `⌥↓` tedy dělalo „další blokující“ — a protože blokující nález bývá
+jeden, druhé zmáčknutí nikam neskočilo. Obojí je proto **jedno tlačítko** a shift se čte z události,
+která akci spustila.
+
 **Vlevo od diffu je strom souborů** (#197): cesty, u souboru s nálezem puntík (červený, když
 blokuje). Skládá se na `⌘1` na proužek s počtem souborů, a týmž kliknutím se zase rozloží.
 Popover `Přejít na soubor` odešel z lišty u #219 — byla to druhá dveře do téhož: sloupec je
@@ -399,6 +405,11 @@ pár set milisekund po posledním úhozu, a změna se projeví bez restartu. Roz
 editor **nepřepíše** — místo formuláře ukáže chybu a nabídne soubor otevřít. Dokud je
 nastavení vepředu, hlavní okno se lehce rozostří.
 
+Zavírá se křížkem, ⌘W i **Escem** (#151) — sem se chodí přepnout jednu věc a jít zpátky
+k review, takže cesta ven má být pod rukou. Rozepsaná hodnota se přitom **doručí**: Escem se
+zavírá jedním hmatem uprostřed psaní, kdy těch pár set milisekund do automatického uložení
+nemuselo uběhnout.
+
 **Stavový řádek sčítá frontu** (#155): `12 PR`, `3 blokující`, `2 review` — kolik PR čeká, kolik
 z nich má blokující nález a kolik má rozdělané review. Odznak v řádku seznamu mluví za jeden PR, tenhle souhrn za celou frontu — a sčítá
 ji **celou**, ne to, co je vidět po filtru reviewerů, protože filtr je pohled, ne obsah. Blokující se
@@ -507,6 +518,12 @@ Ochrana stojí právě na tom výpisu, ne na obřadu: **žádné opisování ná
 druhý dialog nad sheetem**. Obojí se za týden odklikává poslepu a oslabí to i to první
 potvrzení. Co zůstává, je pojmenování akce — tlačítko se jmenuje
 `Odeslat APPROVE pro owner/repo#123` — a to, že **není výchozí**: Enterem se nic neodešle.
+
+**`⌘⏎` otevře to potvrzení** (#151), a jenom to — odeslání zůstává druhé kliknutí na druhém
+tlačítku, uvnitř sheetu žádná zkratka není. Dělá přesně totéž co `Odeslat review…` v panelu
+včetně toho, kdy nedělá nic: nad draftem, který se odeslat nedá (chybí verdikt, prázdný
+komentář, nepovolené repo), je zhasnutá stejně jako to tlačítko. Nad zastaralým draftem okno
+otevře, protože se v něm dá přenést na nový commit.
 
 Návrh verdiktu z nálezů stojí v potvrzení **vedle** toho odesílaného. Když je odesílaná hodnota
 z návrhu, sheet to napíše (`Je to návrh z nálezů — ručně jsi verdikt nevybral.`), aby se v posledním
