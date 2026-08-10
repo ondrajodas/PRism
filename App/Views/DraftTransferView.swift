@@ -115,7 +115,7 @@ struct DraftTransferView: View {
     /// Text komentáře, ať je poznat, o co se rozhoduje. Zalomení se slévá do jednoho řádku —
     /// v seznamu jde o orientaci, ne o čtení celé prózy.
     private func preview(of comment: ReviewDraftComment) -> some View {
-        Text(verbatim: comment.body.split(whereSeparator: \.isNewline).joined(separator: " "))
+        Text(verbatim: comment.body.singleLine)
             .font(.callout)
             .foregroundStyle(.secondary)
             .lineLimit(2)

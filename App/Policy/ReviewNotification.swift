@@ -16,22 +16,24 @@ extension Policy {
     /// `running`) a u `stale`. Zastaralý záznam znamená, že během běhu přišel nový commit —
     /// oznamovat výsledek proti kódu, který v PR není, by posílalo číst nálezy, které se
     /// vzápětí zneplatní.
+    ///
+    /// Rozvržení je **titulek → nález → PR** (#200), protože banner se čte odshora a dolní
+    /// řádek se ořízne. Nahoře je proto to, podle čeho se člověk rozhoduje, jestli jde
+    /// k počítači hned (kolik nálezů a kolik z nich blokuje), pod tím **ten nejzávažnější
+    /// z nich** a teprve na třetím řádku identifikace PR.
     static func reviewNotification(
         for pr: PRIdentifier,
         state: ReviewState,
-        blocking: Int = 0
+        blocking: Int = 0,
+        topFinding: Finding? = nil
     ) -> PullRequestNotification? {
-        guard let body = notificationBody(state: state, blocking: blocking),
+        guard let title = notificationTitle(state: state, blocking: blocking),
               let event = notificationEvent(for: state)
         else { return nil }
-        // Titulek nese **repo a číslo**, ne jen „Review doběhlo“: notifikací může viset víc
-        // a bez identifikace se nepozná, které patří ke kterému PR. Číslo se skládá přes
-        // `description` identifikátoru, takže se nikde neinterpoluje přes locale — z `#21663`
-        // by jinak bylo `#21 663`.
         return PullRequestNotification(
             pullRequest: pr,
-            title: pr.description,
-            body: body,
+            title: title,
+            body: notificationBody(state: state, pr: pr, topFinding: topFinding),
             event: event
         )
     }
@@ -70,33 +72,81 @@ extension Policy {
         }
     }
 
-    /// Co se v notifikaci píše. `nil` = tenhle stav se neoznamuje.
-    private static func notificationBody(state: ReviewState, blocking: Int) -> String? {
+    /// Titulek — první řádek banneru, a proto ten, který rozhoduje (#200).
+    ///
+    /// `nil` = tenhle stav se neoznamuje; množina musí odpovídat `notificationEvent(for:)`
+    /// a drží to test.
+    ///
+    /// **Do #200 tu bylo `owner/repo#číslo`.** Identifikace se přesunula na třetí řádek, protože
+    /// jméno PR neříká, jestli se má jít k počítači hned — kdežto „3 nálezy · 1 blokuje“ ano.
+    /// Ztratit se tím nemá: v banneru je PR pořád vidět (změřeno), notifikace o témž PR řadí
+    /// systém k sobě podle `threadIdentifier` a klik se řídí typem, ne textem.
+    private static func notificationTitle(state: ReviewState, blocking: Int) -> String? {
         switch state {
         case .notStarted, .queued, .cloning, .running, .stale:
             nil
         case .completed(let findings):
-            findingsText(findings, blocking: blocking)
+            findingsHeadline(findings, blocking: blocking)
+        // Nedoběhlý běh s nálezy má v titulku **taky počty**: nálezy jsou k přečtení a to
+        // rozhoduje o naléhavosti stejně jako u doběhlého. Že to nedoběhlo, řekne detail
+        // hned pod ním — v banneru je vidět, takže se ty dva stavy neslijí.
+        case .timedOut(let findings):
+            findings > 0 ? findingsHeadline(findings, blocking: blocking) : "Review nedoběhlo do limitu"
+        case .interrupted(let findings):
+            findings > 0 ? findingsHeadline(findings, blocking: blocking) : "Review přerušila aplikace"
+        case .clean:
+            "Čisté review"
+        case .dismissed:
+            // „Našel a já to zamítl“ je jiné tvrzení než „nic nenašel“ (#113) a nesmí se
+            // s ním slít ani v titulku. Počet je v detailu pod ním.
+            "Zbyly jen odmítnuté nálezy"
+        case .failed:
+            "Review se nepovedlo"
+        case .checkoutFailed:
+            "Nepovedlo se připravit pracovní kopii"
+        }
+    }
+
+    /// Tělo: **detail a pod ním PR**, každé na svém řádku (#200).
+    ///
+    /// Jméno PR se skládá přes `description` identifikátoru, takže se číslo nikde
+    /// neinterpoluje přes locale — z `#21663` by jinak bylo `#21 663`.
+    ///
+    /// Detail smí chybět (nálezy jsou, ale volající je nedodal); pak zbude samotné PR. Prázdný
+    /// řádek navíc by tam nebyl k ničemu a odsunul by identifikaci ještě níž.
+    private static func notificationBody(state: ReviewState, pr: PRIdentifier, topFinding: Finding?) -> String {
+        [notificationDetail(state: state, topFinding: topFinding), pr.description]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+    }
+
+    /// Druhý řádek — co se stalo. `nil` = není co dodat.
+    private static func notificationDetail(state: ReviewState, topFinding: Finding?) -> String? {
+        switch state {
+        case .notStarted, .queued, .cloning, .running, .stale:
+            nil
+        case .completed:
+            findingLine(topFinding)
         case .timedOut(let findings):
             // Timeout musí být poznat i tehdy, když nálezy jsou: zabitý běh je mohl mít
-            // rozepsané, takže „3 nálezy“ by tvrdilo víc, než se stalo.
+            // rozepsané, takže samotné „3 nálezy“ v titulku by tvrdilo víc, než se stalo.
             findings > 0
-                ? "Review nedoběhlo do limitu. \(findingsText(findings, blocking: blocking))"
-                : "Review nedoběhlo do limitu a nic nenahlásilo."
+                ? sentence("Nedoběhlo do limitu.", followedBy: findingLine(topFinding))
+                : "Reviewer nic nenahlásil."
         case .interrupted(let findings):
             // Říká **proč** to nedoběhlo, protože se s tím dělá něco jiného než s timeoutem:
-            // limit se dá zvednout, spadlá aplikace ne. A nálezy jsou z transcriptu, takže
-            // „3 nálezy“ samo o sobě by tvrdilo, že běh doběhl.
+            // limit se dá zvednout, spadlá aplikace ne. A že jsou nálezy z transcriptu, taky —
+            // jinak by titulek tvrdil, že běh doběhl.
             findings > 0
-                ? "Review přerušila aplikace. \(findingsText(findings, blocking: blocking)) Nálezy jsou z transcriptu."
-                : "Review přerušila aplikace a nic nenahlásilo."
+                ? sentence(
+                    "Přerušila to aplikace, nálezy jsou z transcriptu.",
+                    followedBy: findingLine(topFinding)
+                )
+                : "Reviewer nic nenahlásil."
         case .clean:
-            // Kratší a bez detailu — ale poznat se to musí, takže ne prázdné tělo.
+            // Kratší a bez detailu — ale poznat se to musí, takže ne prázdný řádek.
             "Reviewer nenašel žádný nález."
         case .dismissed(let count):
-            // „Našel a já to zamítl“ je jiné tvrzení než „nic nenašel“ (#113), takže se
-            // v textu nesmí slít. Nastane po opakovaném review, kde odmítnutí zůstala.
-            //
             // Formulace je schválně taková, aby ji unesl **každý** tvar počtu: „Zbyly jen
             // nálezy, které jsi odmítl (1)“ mluví o jednom nálezu v množném čísle. Je to
             // tatáž třída chyby, jakou u blokujících našel Copilot na #131 — jen tady ji
@@ -105,25 +155,107 @@ extension Policy {
         case .failed(let detail):
             // Sem spadá i „nemám co říct“ — spadlá session i nereportující běh. Detail
             // z `Policy` je věta, se kterou se dá něco dělat, takže se posílá celá.
-            "Review se nepovedlo. \(detail)"
+            //
+            // **Na jeden řádek**, a není to kosmetika: `CheckoutError.userDescription` lepí
+            // výstup `gitu` za prázdný řádek, takže by se PR z třetího řádku propadlo o půl
+            // obrazovky níž. Chytil to test, ne úvaha.
+            detail.singleLine
         case .checkoutFailed(let detail):
-            "Nepovedlo se připravit pracovní kopii. \(detail)"
+            detail.singleLine
         }
     }
 
-    /// „3 nálezy, z toho 1 blokující“ — a `blocking` se do textu dostane jen tehdy, když je
-    /// z čeho.
+    /// „3 nálezy · 1 blokuje“ — a když neblokuje nic, řekne se i to.
+    ///
+    /// Že **nic neblokuje**, patří do titulku ze stejného důvodu jako do těla před #200:
+    /// „3 nálezy“ bez druhé půlky vypadají stejně vážně jako tři blokující, a rozhodnutí,
+    /// jestli jít k počítači hned, se dělá právě podle toho.
     ///
     /// Skloňuje `Plural.czech`, tedy tentýž helper, jakým se řídí odznak stavu a chipy
     /// reviewerů. Vlastní `switch` tady být nesmí: byla by to čtvrtá kopie téhož pravidla
     /// a rozešly by se — tenhle soubor to zkusil a vyšlo z toho „3 blokujících“ (nález
-    /// Copilota na #131). U „blokující“ jsou přitom tvary jen **dva**, protože jednotné číslo
-    /// a 2–4 vyjdou stejně; `one` a `few` jsou proto shodné, ne opomenutí.
-    private static func findingsText(_ findings: Int, blocking: Int) -> String {
+    /// Copilota na #131).
+    ///
+    /// **Skloňuje se i sloveso** (#200): „1 blokuje“, „3 blokují“, ale od pěti zase
+    /// „5 blokuje“ — čeština u pěti a výš přechází zpátky na jednotné číslo. `one` a `many`
+    /// jsou proto shodné **záměrně**, ne překlepem; do #200 tu bylo přídavné jméno
+    /// („blokující“), u kterého se shodovaly naopak `one` a `few`. Je na to tabulka v testu.
+    private static func findingsHeadline(_ findings: Int, blocking: Int) -> String {
         let found = Plural.czech(findings, one: "nález", few: "nálezy", many: "nálezů")
-        guard blocking > 0 else { return "\(found), nic blokujícího." }
-        let blocks = Plural.czech(blocking, one: "blokující", few: "blokující", many: "blokujících")
-        return "\(found), z toho \(blocks)."
+        guard blocking > 0 else { return "\(found) · nic neblokuje" }
+        let blocks = Plural.czech(blocking, one: "blokuje", few: "blokují", many: "blokuje")
+        return "\(found) · \(blocks)"
+    }
+
+    /// Nejzávažnější nález jako jeden řádek: `correctness: ?? '' schová chybějící secret`.
+    ///
+    /// Kategorie je před dvojtečkou, protože v ní je ta půlka informace, kterou souhrn
+    /// neopakuje (a je to totéž, čím se nálezy dělí do sekcí v panelu). Text je
+    /// `shortSummary`, protože přesně na tohle je — s `summary` jako záložkou, když ho
+    /// reviewer ani překladatel nedodal.
+    ///
+    /// **Řádkové zlomy se slévají a text se krátí.** Na třetím řádku těla je jméno PR, takže
+    /// by ho jeden `\n` v souhrnu — nebo dost dlouhá věta — odsunul mimo to, co je vidět.
+    private static func findingLine(_ finding: Finding?) -> String? {
+        guard let finding else { return nil }
+        let text = summaryLine(of: finding)
+        guard let category = finding.category.map(normalized(category:)), !category.isEmpty else {
+            return text.isEmpty ? nil : shortened(text)
+        }
+        // Prázdný souhrn nechá samotnou kategorii: visící dvojtečka vypadá jako uříznutý text.
+        return text.isEmpty ? category : shortened("\(category): \(text)")
+    }
+
+    /// Souhrn nálezu na jeden řádek. Prázdný `shortSummary` se bere jako nedodaný — jinak by
+    /// z něj byl prázdný řádek pod titulkem.
+    private static func summaryLine(of finding: Finding) -> String {
+        let short = finding.shortSummary?.singleLine ?? ""
+        return short.isEmpty ? finding.summary.singleLine : short
+    }
+
+    /// Kolik znaků unese řádek s nálezem, než se z banneru vytlačí PR pod ním.
+    ///
+    /// **Změřeno v běžící aplikaci**, ne odhadnuto: do banneru se vejdou **čtyři řádky těla
+    /// po zhruba 43 znacích** a co se nevejde, macOS uřízne třemi tečkami — včetně řádku
+    /// s identifikací. Se 140 znaky dlouhým `summary` z banneru zmizelo `ondrajodas/PRism#200`
+    /// úplně. Sto znaků nechá nálezu tři řádky a PR ten čtvrtý.
+    ///
+    /// Krátí se **jen nález**, ne detail u selhání: tam je věta z `Policy` nebo z `gitu`
+    /// a rozhoduje spíš její začátek, který se vejde tak jako tak.
+    static let notificationFindingLimit = 100
+
+    /// Text zkrácený na `notificationFindingLimit`, na hranici slova.
+    ///
+    /// Vlastní tři tečky, i když macOS umí ořezat sám: systémový ořez sebere **celý zbytek
+    /// notifikace**, tedy i řádek, na kterém je PR. Tohle je řez, po kterém zbytek přežije.
+    private static func shortened(_ text: String) -> String {
+        guard text.count > notificationFindingLimit else { return text }
+        let cut = text.prefix(notificationFindingLimit)
+        // Poslední slovo se zahazuje jedině tehdy, když ho řez **rozpůlil**. Když `cut` končí
+        // na hranici slova, vešlo se celé — a `dropLast()` na slepo by ho sebral zbytečně,
+        // takže by z banneru zmizel kus textu, na který bylo místo (nález Copilota na #248).
+        let kept = splitsAWord(cut, in: text)
+            ? cut.split(separator: " ").dropLast().joined(separator: " ")
+            : String(cut)
+        // Mezera před třemi tečkami vypadá jako překlep, a zbýt tam po řezu může.
+        let trimmed = kept.trimmingCharacters(in: .whitespaces)
+        // Jediné dlouhé slovo (cesta, hash) hranici nemá, takže se řeže natvrdo — jinak by
+        // nezbylo nic.
+        return "\(trimmed.isEmpty ? String(cut) : trimmed)…"
+    }
+
+    /// Rozpůlil řez slovo? Ano jedině tehdy, když na obou stranách hranice stojí něco jiného
+    /// než mezera.
+    private static func splitsAWord(_ cut: Substring, in text: String) -> Bool {
+        guard let last = cut.last, !last.isWhitespace else { return false }
+        guard let next = text.dropFirst(cut.count).first else { return false }
+        return !next.isWhitespace
+    }
+
+    /// Věta a za ní detail, když nějaký je.
+    private static func sentence(_ text: String, followedBy detail: String?) -> String {
+        guard let detail, !detail.isEmpty else { return text }
+        return "\(text) \(detail)"
     }
 
     /// Notifikace o novém PR ve frontě (#85).
@@ -226,7 +358,7 @@ extension Policy {
     /// Vlákno, do kterého patří souhrn za víc nových PR (#87).
     static let newPullRequestsThread = "new-pull-requests"
 
-    /// Které PR souhrn jmenuje. Delší seznam se zkrátí — notifikace má dva řádky.
+    /// Které PR souhrn jmenuje. Delší seznam se zkrátí — do banneru se vejde pár řádků.
     ///
     /// **Titulky se sem nepředávají schválně.** Vypisují se identifikátory, protože tři názvy
     /// PR se do dvou řádků banneru nevejdou a `owner/repo#číslo` řekne, čeho se to týká. Do
@@ -242,8 +374,9 @@ extension Policy {
 
     /// Kolik PR se v souhrnu vypíše jménem.
     ///
-    /// Tři, protože `owner/repo#číslo` je dlouhé a macOS ukáže v banneru dva řádky — čtvrtý
-    /// identifikátor už se do nich nevejde a zbytek stejně řekne počet.
+    /// Tři, protože `owner/repo#číslo` je dlouhé a v banneru je místa na pár řádků — čtvrtý
+    /// identifikátor už se do nich nevejde a zbytek stejně řekne počet. (Kolik řádků přesně,
+    /// je změřené u #200: titulek a pod ním čtyři.)
     private static let summaryLimit = 3
 
 }

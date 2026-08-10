@@ -176,4 +176,49 @@ struct FindingOrderTests {
 
         #expect(Policy.sorted(findings, dismissals: [:]) == Policy.sorted(findings))
     }
+
+    // MARK: - Nejzávažnější nález (#200)
+
+    @Test("Nejzávažnější nález je ten, co je v panelu první")
+    func theMostSevereFindingIsTheOneOnTop() {
+        // Vlastní škála závažnosti pro notifikaci by znamenala, že banner a panel ukazují
+        // každý něco jiného — proto je to `sorted(…).first`, a proto je to na to test.
+        let record = makeRecord(runs: [makeStoredRun(findings: [
+            makeReported(category: "style", summary: "styl"),
+            makeReported(category: "correctness", summary: "chyba"),
+        ])])
+
+        #expect(Policy.mostSevereFinding(in: record)?.summary == "chyba")
+        #expect(Policy.mostSevereFinding(in: record) == Policy.sorted(record.activeFindings).first)
+    }
+
+    @Test("Odmítnutý nález se do notifikace nedostane, ani když by byl první")
+    func skipsDismissedFindings() {
+        // Blokující nález, kterému nevěřím (#113), není důvod k vyrušení — a tím spíš není
+        // to, co má stát v banneru.
+        var record = makeRecord(runs: [makeStoredRun(findings: [
+            makeReported(category: "correctness", summary: "chyba"),
+            makeReported(category: "style", summary: "styl"),
+        ])])
+        record.dismissals = makeDismissals(record.activeFindings.filter { $0.summary == "chyba" })
+
+        #expect(Policy.mostSevereFinding(in: record)?.summary == "styl")
+    }
+
+    @Test("Záznam bez platných nálezů nemá co ukázat")
+    func nothingToShowWithoutFindings() {
+        #expect(Policy.mostSevereFinding(in: makeRecord(runs: [makeStoredRun()])) == nil)
+    }
+
+    @Test("Blokující sada z konfigurace rozhoduje i tady")
+    func honoursTheConfiguredBlockingCategories() {
+        // Kdyby se sada nepředala dál, notifikace by v repu s vlastními kategoriemi ukázala
+        // jiný nález než panel vedle ní.
+        let record = makeRecord(runs: [makeStoredRun(findings: [
+            makeReported(category: "correctness", summary: "chyba"),
+            makeReported(category: "style", summary: "styl"),
+        ])])
+
+        #expect(Policy.mostSevereFinding(in: record, categories: ["style"])?.summary == "styl")
+    }
 }

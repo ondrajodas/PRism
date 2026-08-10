@@ -361,6 +361,29 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   `AppStore` na **kdy**: že dva skilly nad jedním PR dají **jednu** notifikaci, že selhání
   checkoutu i GitHubu dá vědět, a hlavně že se **zrušené review neoznamuje** — ten test je
   z celého issue nejdůležitější, protože bez něj by stačilo dát notifikaci do `defer`.
+- **Rozvržení notifikace (#200)** — od #200 se ověřuje **titulek i tělo zvlášť**, protože každý
+  odpovídá na něco jiného: titulek na „jdu k tomu hned?“, tělo na „co to je“. Čtyři věci, které
+  se dají pokazit potichu:
+  - **Sloveso u blokujících se skloňuje** — `1 blokuje`, `3 blokují`, ale `5 blokuje`. Tabulka,
+    ne jeden případ: shodné jsou `one` a **`many`**, což je tatáž past jako u „blokujících“
+    na #131, jen z druhé strany. Ověřeno **vloženou regresí** (`many: "blokují"`), po které
+    spadly dva případy z pěti.
+  - **PR zůstane na svém řádku.** Zlom v souhrnu od reviewera i víceřádkový detail selhání
+    (`CheckoutError.userDescription` lepí výstup `gitu` za prázdný řádek) by ho odsunuly mimo
+    banner — testuje se počtem řádků těla, ne obsahem. Ten druhý případ **našel test**, ne
+    úvaha.
+  - **Dlouhý souhrn se zkrátí**, a to na hranici slova; jediné dlouhé slovo (cesta, hash) se
+    ořízne natvrdo, ať nezbude prázdno. Třetí případ přibyl z Copilot review na #248: když řez
+    padne přesně na mezeru, **poslední slovo se vešlo celé** a nesmí se zahodit. Ověřeno
+    vloženou regresí — text se zkrátil o pět znaků, na které bylo místo.
+  - **`AppStore` posílá nález i počet blokujících z téhož záznamu** — test se dvěma nálezy
+    (`style` a `correctness`) hlídá, že titulek nemluví o blokujícím a řádek pod ním o kosmetice.
+
+  Co se z testů poznat nedá, je **kolik se toho do banneru vejde** — na to je jedině spuštění.
+  Změřeno v `PRism-d`: titulek a pod ním **čtyři řádky těla**, a co se nevejde, macOS uřízne
+  i s tím, co je pod tím. Odtud sto znaků v `Policy.notificationFindingLimit`. Zadání #200
+  přitom počítalo s dvouřádkovým bannerem — je to zrovna ten případ, kdy odhad délky vyjde
+  jinak než měření.
 - **`AppStore` — pohled na diff** — že se bez odchylky bere hodnota z nastavení, že ji přepnutí
   v liště přebije, že se změna nastavení projeví **bez restartu** a že odchylka **shodná**
   s nastavením přežije jeho změnu. Poslední dva potřebují skutečný `ConfigStore` nad dočasnou

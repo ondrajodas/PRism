@@ -37,6 +37,24 @@ extension Policy {
             .map(\.finding)
     }
 
+    /// Nález, kterým se začíná — první v `sorted`, tedy ten nahoře v panelu (#200).
+    ///
+    /// **Žádná nová škála závažnosti z toho nevzniká**: rozhodují tatáž kritéria, podle kterých
+    /// se nálezy kreslí, takže notifikace ukáže přesně to, co je po otevření okna první na ráně.
+    /// Druhé pravidlo pro „nejzávažnější“ by znamenalo, že banner a panel ukazují každý něco
+    /// jiného — tatáž úvaha jako u `blockingCount`, který proto bydlí u `isBlocking`.
+    ///
+    /// Počítá se z **platných** nálezů, takže odmítnutý (#113) se do notifikace nedostane ani
+    /// tehdy, když by jinak byl první. Řadí se celý seznam kvůli jedné položce schválně:
+    /// komparátor je privátní (a má být, je to jedno pravidlo), a tohle se počítá jednou za
+    /// doběhlé review, ne při každém překreslení.
+    static func mostSevereFinding(
+        in record: ReviewRecord,
+        categories: Set<String> = defaultBlockingCategories
+    ) -> Finding? {
+        sorted(record.activeFindings, categories: categories).first
+    }
+
     /// Nálezy po kategoriích, ve stejném pořadí jako `sorted`.
     ///
     /// Skupiny jsou podle `category`, tedy podle pojmenování od reviewera — aplikace si
