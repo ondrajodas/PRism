@@ -10,6 +10,23 @@ import Foundation
 /// nálezu, cizí vlákno, můj rozdělaný komentář. Selekce tedy jde přes celý úsek kódu mezi dvěma
 /// takovými věcmi — u většiny řádků je to celý hunk, protože bubliny visí jen u některých.
 struct DiffBlock: Hashable, Sendable {
+    /// **Nejvíc řádků v jednom bloku** (#223). Blok je nejmenší jednotka, kterou umí `LazyVStack`
+    /// přeskočit, takže nerozdělený soubor znamená, že se nepřeskočí nikdy — rozloží se text, který
+    /// není vidět.
+    ///
+    /// Číslo je z měření, ne z odhadu. Cena vykreslení bloku je **lineární v jeho délce**
+    /// (~0,085 ms na řádek): 20 řádků 2,6 ms, 60 → 7 ms, 200 → 24 ms, 600 → 69 ms, 2400 → 201 ms.
+    /// Šedesát je proto zhruba obrazovka kódu a se dvěma viditelnými bloky se vejde do rozpočtu na
+    /// snímek (16,7 ms); dvěstě už ne.
+    ///
+    /// Rozdělení **nešetří celkovou práci** — celý soubor vykreslený po blocích stojí stejně jako
+    /// v jednom (měřeno 150–280 ms bez zjevného trendu). Šetří ji jedině tou leností.
+    ///
+    /// **Co to bere:** výběr táhnutím přes víc než šedesát řádků. Je to vědomá cena — celý hunk se
+    /// dá zkopírovat z kontextového menu (`Kopírovat hunk`) a vybrat v sheetu s textem, takže na
+    /// tahu myší nezávisí.
+    static let maxLines = 60
+
     /// Řádky bloku v pořadí, jak jsou v souboru. Čísla řádků a znaky změny se kreslí **mimo text**
     /// (`DiffTextView`), aby se nekopírovaly — blok drží jen ty řádky.
     let lines: [DiffLine]
@@ -67,6 +84,9 @@ extension DiffRow {
         for row in rows {
             if case .line(let id, let line) = row {
                 pending.append((id, line))
+                // Strop se kontroluje **po přidání**, takže blok má nejvýš `maxLines` řádků a další
+                // řádek začne nový. Identita zůstává stabilní: nese ji první řádek úseku.
+                if pending.count == DiffBlock.maxLines { flush() }
             } else {
                 flush()
                 result.append(row)
@@ -97,6 +117,9 @@ extension DiffRow {
         for row in rows {
             if case .pair(let id, let left, let right) = row {
                 pending.append((id, left, right))
+                // Tentýž strop jako u bloků pod sebou (#223) — dvojice nese dvě strany, takže
+                // nerozdělená je dokonce dvakrát tolik textu k rozložení.
+                if pending.count == DiffBlock.maxLines { flush() }
             } else {
                 flush()
                 result.append(row)

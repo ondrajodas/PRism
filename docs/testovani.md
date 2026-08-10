@@ -947,11 +947,17 @@ Měřicí harness je `Tests/Diff/DiffPerformanceMeasurement.swift` a **v běžn�
 je za přepínačem:
 
 ```bash
-PRISM_MEASURE=1 xcodebuild -project PRism.xcodeproj -scheme PRism \
+TEST_RUNNER_PRISM_MEASURE=1 xcodebuild -project PRism.xcodeproj -scheme PRism \
     -derivedDataPath build.noindex test \
     -only-testing:PRismTests/DiffPerformanceMeasurement > /tmp/perf.log 2>&1
 grep -E "^MĚŘENÍ" /tmp/perf.log
 ```
+
+**Prefix `TEST_RUNNER_` tam musí být.** `xcodebuild` proměnné prostředí do testovacího procesu
+nepředává, jen ty s tímhle prefixem — a bez něj se měření **tiše přeskočí**: běh projde zeleně
+a `Test run with 5 tests … passed after 0.001 seconds` je jediné, z čeho se to pozná. Do #223 tu
+stál příkaz bez prefixu, takže vypadalo, že měření běželo. Když výpis `MĚŘENÍ` chybí, je to tenhle
+případ, ne že by se nic nenaměřilo.
 
 **Proč za přepínačem:** jeden render v hloubce 8 stojí 15 sekund CPU a tím hladoví ostatní testy.
 Bez toho přepínače z toho spadly dva časově citlivé testy v `RealEnvironmentTests`, které
@@ -974,6 +980,7 @@ Co harness měří:
 | která opatření exponent zabijí | dokládá, že `Spacer` ani hranice každou 4. úroveň nestačí |
 | osa konverzace podle počtu uzlů | skutečná views, ne syntetický tvar — má být lineární |
 | model diffu na 2400 řádcích | dokládá, že model **není** příčina (jednotky ms) |
+| cena vykreslení podle délky bloku (#223) | z toho se vybral strop `DiffBlock.maxLines`; měří se **jeden blok** i celý soubor po blocích |
 
 **Tuhnoucí okno se diagnostikuje `sample`m, ne odhadem.** Dokud proces visí, jde z něj vytáhnout
 příčina; po zabití už ne:
@@ -996,3 +1003,10 @@ jinam — u #220 z toho byly dva snímky cizí aplikace a klikání mimo PRism. 
 ```bash
 osascript -e 'tell application "System Events" to tell process "PRism" to return {position, size} of window 1'
 ```
+
+**Cena bloku se měří dvěma způsoby a je to schválně** (#223). Jeden blok podle délky je ten údaj,
+ze kterého se vybírá strop — to je práce, kterou appka zaplatí i za blok, jehož je vidět kousek.
+Celý soubor rozdělený na bloky je kontrola, **co rozdělení stojí**; v `ImageRenderer`u vyjde plochý
+(150–280 ms bez trendu), protože offscreen render nic nelení. Přínos stropu proto z druhé série
+vidět **není** a nesmí se z ní vyvozovat — plyne z lenosti `LazyVStack`u, kterou harness nemá jak
+napodobit.
