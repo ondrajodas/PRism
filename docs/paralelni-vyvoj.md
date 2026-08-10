@@ -41,11 +41,17 @@ sériového běhu je čas; cena sémantického konfliktu je pád, který se pozn
 rozbít destruktivně: subagent v izolovaném worktree `.prism-slot` nemá, takže by `bin/run.sh`
 buildil hlavní instanci a **přepsal aplikaci, se kterou se pracuje** — i s její cache.
 
-Slot proto patří do **prvního kroku zadání**, ne mezi věci, na které si subagent má vzpomenout:
+Slot proto patří do **prvního kroku zadání**, ne mezi věci, na které si subagent má vzpomenout.
+`<slot>` níž je zástupný znak — **dosaď za něj písmeno a u každého subagenta jiné**:
 
 ```
-Napřed, ještě před čímkoli jiným: printf 'a\n' > .prism-slot
+Napřed, ještě před čímkoli jiným: printf '<slot>\n' > .prism-slot
 ```
+
+Zástupný znak tu stojí schválně místo hotového `a`: zadání se pro druhého subagenta píše
+zkopírováním toho prvního, takže konkrétní písmeno v ukázce je návod, jak dva běhy poslat do
+jedné cache a na jednu aplikaci — tedy přesně to, čemu slot brání. Nedosazený `<slot>`
+se proti tomu **zastaví hned**, protože `run.sh` znak `<` odmítne jako nepovolený v bundle ID.
 
 Sloty jsou `a`, `b`, `c`, … a přidělují se **na běžícího subagenta**, ne na issue. Když jeden
 skončí, jeho slot se dá použít znovu — povolení k notifikacím a TCC visí na bundle ID, takže
