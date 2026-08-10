@@ -19,7 +19,8 @@ import Synchronization
 /// zastarat — otázka je jen růst. Drží ho dvě hranice a při překročení kterékoli se cache zahodí
 /// **celá**: počet zapamatovaných řádků (`capacity`) a součet jejich délek (`budget`). Dvě proto,
 /// že každá chytá jiný způsob, jak přetéct: tisíce krátkých řádků z dlouhého sezení, nebo pár
-/// obřích řádků z generovaného souboru.
+/// obřích řádků z generovaného souboru. Obě se počítají **včetně toho, co se právě vkládá**, takže
+/// se přes ně cache nedostane ani na jeden zápis; řádek delší než celý rozpočet se nepamatuje.
 ///
 /// **Zahodit všechno je schválně, ne z lenosti.** Je to O(1) a stojí jeden přepočet toho, co je
 /// zrovna vidět — blok o 60 řádcích je z naměřených 18 µs na řádek asi 1,1 ms, tedy nic, co by šlo
@@ -64,11 +65,20 @@ final class SyntaxRunCache: Sendable {
     }
 
     private func remember(_ runs: [SyntaxRun], for key: Key, size: Int) {
+        // Řádek delší, než je celý rozpočet, se nepamatuje vůbec. Uložit ho znamená přetéct hned
+        // a při dalším zápisu zase zahodit všechno — z cache by byla přihrádka na jeden řádek.
+        guard size <= budget else { return }
+
         storage.withLock { storage in
-            if storage.entries.count >= capacity || storage.bytes >= budget { storage.clear() }
-            // `updateValue` proto, že tentýž řádek můžou spočítat dvě vlákna naráz — bez téhle
-            // podmínky by se jeho délka do součtu započítala dvakrát a rozpočet by lhal.
-            if storage.entries.updateValue(runs, forKey: key) == nil { storage.bytes += size }
+            // Tentýž řádek můžou spočítat dvě vlákna naráz. To druhé už nic nepřidává, takže nesmí
+            // ani započítat jeho délku podruhé, ani kvůli němu cache vyprázdnit.
+            guard storage.entries.index(forKey: key) == nil else { return }
+            // Meze se počítají **včetně toho, co se právě vkládá** — jinak by cache po vložení
+            // stála nad rozpočtem až do příštího zápisu, tedy přesně u toho jednoho obřího řádku,
+            // kvůli kterému rozpočet je.
+            if storage.entries.count + 1 > capacity || storage.bytes + size > budget { storage.clear() }
+            storage.entries[key] = runs
+            storage.bytes += size
         }
     }
 

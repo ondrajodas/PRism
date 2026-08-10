@@ -729,6 +729,13 @@ Věci, které se u toho nemají rozbít:
   z generovaného souboru. Zahodit všechno je O(1) a stojí přepočet toho, co je zrovna vidět
   (blok o 60 řádcích ≈ 1,1 ms); LRU by pořadí zapisovala **při každém nahlédnutí**, tedy zdražila
   přesně tu operaci, kvůli které cache vznikla.
+- **Mez se počítá včetně toho, co se právě vkládá** (z review #233). Kdyby se rozhodovalo jen
+  podle stavu před vložením, cache by po zápisu stála **nad** rozpočtem až do dalšího zápisu —
+  a to zrovna u toho jednoho obřího řádku, kvůli kterému rozpočet je. Ze stejného důvodu se řádek
+  delší než celý rozpočet **nepamatuje vůbec** (obarví se, ale neuloží): jinak by se při každém
+  dalším zápisu zahodilo všechno ostatní kvůli němu. A vyprazdňování se rozhoduje **jen při
+  vložení nového klíče** — dvě vlákna, která spočítala tentýž řádek, jinak zahodí plnou cache
+  kvůli záznamu, který v ní už je.
 - **Barví se řádek po řádku, bez paměti.** Blokový komentář přes víc řádků se obarví jen
   tam, kde začíná. Diff je útržek — mezi hunky chybí řádky, ze kterých by se stav
   dopočítal.

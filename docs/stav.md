@@ -661,7 +661,9 @@ cache stojí těch samých 44 ms, takže se za to neplatí ničím. Je to **oto�
 kde se cache zamítla podle odhadu, který počítal jen se scrollováním.
 
 Růst drží dvě meze — 4000 řádků a 4 MB součtu jejich délek — a po překročení kterékoli se cache
-zahodí celá (O(1), cena je přepočet toho, co je zrovna vidět, tedy ~1,1 ms na blok). Barvy uvnitř
+zahodí celá (O(1), cena je přepočet toho, co je zrovna vidět, tedy ~1,1 ms na blok). Obě se
+počítají **včetně vkládaného řádku** a řádek delší než celý rozpočet se nepamatuje; jinak by cache
+po zápisu stála nad mezí až do toho dalšího (z Copilot review na #233). Barvy uvnitř
 nejsou, jen druhy run, takže přepnutí světlého a tmavého režimu ji nezneplatňuje. **Vidět není
 nic** — obarvení vychází stejné, jen se nepočítá znovu.
 

@@ -303,7 +303,9 @@ zůstane jen skládání věty z hotových čísel. Příčinu řekne **až cras
   klíč bez jazyka by obarvil jeden soubor podle pravidel druhého — test se ptá na oba jazyky
   a pak zpátky na první. **Růst bez hranice**: obě meze (počet řádků i rozpočet na jejich délku)
   se přesypou stovkou řádků a hlídá se, že `count` strop nepřekročí a že po vyprázdnění vyjde
-  týž řádek stejně. K tomu je tam rovnost s `SyntaxHighlighter.scan` (cache nesmí nic změnit)
+  týž řádek stejně. K tomu **řádek delší než celý rozpočet**: musí se obarvit, ale **nezapamatovat**
+  — jinak by cache po jeho vložení stála nad mezí a při dalším zápisu by kvůli němu zahodila
+  všechno ostatní. K tomu je tam rovnost s `SyntaxHighlighter.scan` (cache nesmí nic změnit)
   a souběžný běh padesáti úloh nad jednou cachí — zámek se tvrdit nedá, ale rozsypaný souběh
   je vidět. **Obojí ověřeno vloženou regresí**: klíč bez jazyka shodí test na jazyky, vyndaná
   kontrola meze shodí test na strop (`count` vyjde 200 místo 10).

@@ -77,6 +77,18 @@ struct SyntaxRunCacheTests {
         }
     }
 
+    /// Řádek delší než celý rozpočet by cache po vložení nechal nad mezí až do dalšího zápisu —
+    /// a ten by zahodil všechno ostatní, takže by z cache byla přihrádka na jeden generovaný řádek.
+    /// Nepamatuje se tedy vůbec; obarvit se ale musí, jinak by ten řádek zůstal černý.
+    @Test("Řádek delší než rozpočet se obarví, ale nezapamatuje")
+    func skipsALineLongerThanTheBudget() {
+        let cache = SyntaxRunCache(capacity: 10, budget: 32)
+        let long = String(repeating: "let x = 1; ", count: 20)
+
+        #expect(cache.runs(of: long, in: .swift) == SyntaxHighlighter.scan(long, in: .swift))
+        #expect(cache.count == 0)
+    }
+
     @Test("Po vyprázdnění se řádek spočítá znovu a vyjde stejně")
     func recomputesAfterAFlush() {
         let cache = SyntaxRunCache(capacity: 4)
