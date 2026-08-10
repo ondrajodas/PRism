@@ -107,8 +107,8 @@ main je squashnutý, takže `git merge main` stačí a nerozbije Copilotovi kome
 Release se vydá **jeden za celou dávku**, ne na každou větev. Pořadí čísel by jinak říkalo
 něco, co není pravda — verze je značka na časové ose.
 
-**Po posledním mergi dávky se restartuje hlavní aplikace** (`./bin/run.sh` v hlavním stromě,
-tom bez slotu). Po každém jednotlivém mergi ne: v dávce jich jde několik za sebou a každý
+**Po posledním mergi dávky se restartuje hlavní aplikace** — `./bin/run.sh` v hlavním stromě,
+tedy v tom bez slotu. Po každém jednotlivém mergi ne: v dávce jich jde několik za sebou a každý
 restart zavírá okno, ve kterém se zrovna něco čte. Pravidlo samotné je v `CLAUDE.md`, tady je
 jen ta odchylka pro dávku.
 
