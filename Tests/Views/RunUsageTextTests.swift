@@ -26,4 +26,29 @@ struct RunUsageTextTests {
 
         #expect(text == "≥ " + RunUsageText.cost(1.5))
     }
+
+    // MARK: - Stopky běžícího review (#218)
+
+    /// Na rozdíl od `duration(_:)` **nemění jednotku**: pruh v hlavičce se překresluje po
+    /// sekundě, a kdyby se v něm `59,8 s` přehodilo na `1 m 0 s`, přeskládá se pod okem.
+    @Test("Stopky drží tvar m:ss i pod minutou")
+    func stopwatchKeepsItsShape() {
+        #expect(RunUsageText.elapsed(.seconds(0)) == "0:00")
+        #expect(RunUsageText.elapsed(.seconds(9)) == "0:09")
+        #expect(RunUsageText.elapsed(.seconds(72)) == "1:12")
+        #expect(RunUsageText.elapsed(.seconds(599)) == "9:59")
+    }
+
+    @Test("Nad hodinu přibude hodinové pole")
+    func stopwatchAddsHours() {
+        #expect(RunUsageText.elapsed(.seconds(3600)) == "1:00:00")
+        #expect(RunUsageText.elapsed(.seconds(3727)) == "1:02:07")
+    }
+
+    /// Posunuté systémové hodiny umí dát začátek v budoucnosti. `-0:03` by vypadalo jako
+    /// chyba aplikace, přitom je to chyba hodin.
+    @Test("Záporný čas je nula, ne mínus")
+    func stopwatchNeverGoesNegative() {
+        #expect(RunUsageText.elapsed(.seconds(-5)) == "0:00")
+    }
 }

@@ -200,4 +200,31 @@ struct VisitChangesTests {
 
         #expect(Policy.changes(in: conversation, since: visit).events.map(\.id) == ["merged"])
     }
+
+    // MARK: - Odznak u záložky Přehled (#218)
+
+    /// Odznak musí slíbit **přesně to číslo**, které po rozkliknutí vypíše blok „od tvé
+    /// poslední návštěvy“ — tedy všech pět kategorií, ne jen commity.
+    @Test("Počet sečte všech pět kategorií")
+    func countsEveryCategory() {
+        let conversation = conversation(
+            reviews: [review(id: "r", by: "vondrous")],
+            comments: [comment(id: "c", by: "odinuv")],
+            events: [
+                event(id: "push", .forcePushed(before: "aaa", after: "bbb")),
+                event(id: "commit", .commit(oid: "bbb", headline: "fix")),
+                event(id: "ready", .readyForReview),
+            ]
+        )
+
+        #expect(Policy.changes(in: conversation, since: visit).count == 5)
+    }
+
+    /// `0` by u odznaku znamenalo „spočítalo se a vyšlo prázdno“, což je pravda — a proto se
+    /// odznak nekreslí. Test drží dohodu, že prázdno je nula, ne něco jiného.
+    @Test("Bez novinek je počet nula")
+    func countsNothingWhenNothingIsNew() {
+        #expect(VisitChanges.none.count == 0)
+        #expect(Policy.changes(in: conversation(), since: visit).count == 0)
+    }
 }

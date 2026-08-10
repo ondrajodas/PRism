@@ -24,6 +24,14 @@ struct VisitChanges: Hashable, Sendable {
         commits.isEmpty && forcePushes.isEmpty && events.isEmpty && reviews.isEmpty && comments.isEmpty
     }
 
+    /// Kolik toho od minule přibylo — odznak u záložky `Přehled` (#218).
+    ///
+    /// Sčítá **všech pět kategorií**, tedy přesně to, co blok „od tvé poslední návštěvy“
+    /// vypisuje. Odznak jinak slibuje jiné číslo, než po rozkliknutí vyjde.
+    var count: Int {
+        commits.count + forcePushes.count + events.count + reviews.count + comments.count
+    }
+
     // **`rewroteHistory` tu není** (#226). Rozhodovala se jím barva bloku „od minule“ — modrá,
     // nebo žlutá — a s jednotným okrovým tónem z návrhu ji nečetl nikdo. Že se historie přepsala,
     // se pozná z `forcePushes` tam, kde na tom záleží.
