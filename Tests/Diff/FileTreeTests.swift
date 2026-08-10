@@ -6,15 +6,24 @@ import Testing
 /// Strom souborů pro navigaci v diffu.
 @Suite("FileTree")
 struct FileTreeTests {
-    private func file(_ path: String, additions: Int = 1, deletions: Int = 0) -> FileDiff {
-        let lines = (0..<additions).map { DiffLine(kind: .added, oldNumber: nil, newNumber: $0 + 1, text: "+") }
-            + (0..<deletions).map { DiffLine(kind: .removed, oldNumber: $0 + 1, newNumber: nil, text: "-") }
-        return FileDiff(
+    /// Počty řádků se sem **nepředávají** (#219): strom je nezobrazuje a `FileTreeNode` je od
+    /// #219 ani nesčítá, takže parametry, které by šly nastavit, by tvrdily opak.
+    private func file(_ path: String) -> FileDiff {
+        FileDiff(
             oldPath: path,
             newPath: path,
             change: .modified,
             isBinary: false,
-            hunks: [DiffHunk(oldStart: 1, oldCount: 1, newStart: 1, newCount: 1, heading: "", lines: lines)]
+            hunks: [
+                DiffHunk(
+                    oldStart: 1,
+                    oldCount: 1,
+                    newStart: 1,
+                    newCount: 1,
+                    heading: "",
+                    lines: [DiffLine(kind: .added, oldNumber: nil, newNumber: 1, text: "+")]
+                )
+            ]
         )
     }
 
@@ -56,17 +65,9 @@ struct FileTreeTests {
         #expect(names(tree) == ["z.md", "a.md"])
     }
 
-    @Test("Složka sčítá, co je pod ní")
-    func sumsWhatIsBelowADirectory() throws {
-        let tree = FileTreeNode.tree(of: [
-            file("App/a.swift", additions: 2, deletions: 1),
-            file("App/b.swift", additions: 3, deletions: 4),
-        ])
-
-        let directory = try #require(tree.first)
-        #expect(directory.additions == 5)
-        #expect(directory.deletions == 5)
-    }
+    // Test „složka sčítá, co je pod ní“ tu byl do #219. Sečtené počty kreslil jedině popover
+    // `Přejít na soubor`; s ním odešly z modelu, takže by tenhle test hlídal vlastnost, kterou
+    // nikdo nečte.
 
     @Test("Uzel souboru nese svůj soubor, složka ne")
     func carriesTheFileOnLeavesOnly() throws {

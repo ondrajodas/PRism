@@ -7,6 +7,17 @@ jak se testy pouštějí) zůstávají v `CLAUDE.md`.
 Seznam není výčet souborů, ale **výčet toho, co se nesmí rozbít potichu** — u každé oblasti
 stojí i důvod, proč je zrovna tenhle případ v testu.
 
+**Čistá funkce nesmí bydlet na `View` typu, když nad něčím iteruje** (#219). Konformance k `View`
+udělá z celého typu `@MainActor` — a protože je to `@preconcurrency`, **překlad projde** a spadne
+se až za běhu: uvnitř closure předané do `filter`/`contains` se ověří aktuální executor a testovací
+proces umře na `dispatch_assert_queue`. Navenek to vypadá jako náhodné testy — Swift Testing pouští
+suity paralelně, takže se jako `Failing tests` nahlásí to, co zrovna běželo, a **při každém běhu
+něco jiného**. Metoda bez closures (dělení cesty na složku a jméno) projde, takže to nezavání
+systematicky. Léčba je pravidlo z `CLAUDE.md`: rozhodování nad nálezy patří do `Policy`, na view
+zůstane jen skládání věty z hotových čísel. Příčinu řekne **až crash report**
+(`~/Library/Logs/DiagnosticReports/PRism-*.ips`, `closure #1 in …`); v logu z `xcodebuild` je jen
+`Restarting after unexpected exit`.
+
 
 - **Modely** — round-trip přes `Codable` u každého typu i každého případu `ReviewState`,
   parsování a formátování identifikátorů včetně neplatných vstupů, a kontrola skutečného
@@ -590,6 +601,17 @@ stojí i důvod, proč je zrovna tenhle případ v testu.
   zvenčí formulář srovná, ale vlastní uložení ne, a že je selhání zápisu vidět. Na testech
   `flush()` je vlastní `BlockingTime`, jehož uspání samo neskončí — s okamžitým fake časem
   by odložený zápis závodil s tím okamžitým a nešlo by poznat, který zapsal.
+- **Sazba lišty diffu (#219)** — dvě čisté funkce, tedy výčtem a bez kreslení. `counter(_:)`
+  hlídá **dvě různé sady českých tvarů**: za předložkou druhý pád (`1 z 1 nálezu`), samotný počet
+  první (`3 nálezy`) — a že se před prvním skokem píše počet, ne `0 z 3`. `FilePathText.parts(of:)`
+  dělí cestu na složku a jméno; nejcennější případ je ten okrajový (cesta končící lomítkem), kde by
+  prázdné jméno nechalo hlavičku bez popisku. Obojí ověřeno **vloženou regresí**: sjednocení tvarů
+  i vypuštěná stráž nad koncem cesty testy shodí.
+
+  Sazba sama (rozměry, barvy) se ověřuje **obrázkem, ne testem** — screenshotem běžící aplikace
+  vedle vyrenderované sekce 02 návrhu a offscreen renderem ve světlém i tmavém režimu. U #219 to
+  ukázalo, že `Menu` s primární akcí si kreslí **vlastní šipku** vedle té z návrhu, takže
+  `⌃ Sbalit vše ⌄` mělo dvě proti sobě.
 - **Kopírování kódu z diffu (#157)** — `Policy` vyčerpávajícím výčtem. Dvě věci se tu dají pokazit
   potichu: **pořadí řádků** (rozsah se zvýrazňuje množinou, která pořadí nemá — ověřeno vloženou
   regresí, `Set` místo pořadí testy shodí) a **která verze se kopíruje** u rozsahu přes obě strany
@@ -855,6 +877,11 @@ Dva zádrhely, které to má:
   a vykreslí se správně, takže se dá ověřit. Gate proto používá `.plain`.
 - **`ImageRenderer` je `@MainActor`** — pomocná funkce v testu musí být taky, jinak Swift 6
   neprojde.
+- **Tmavý režim se předává `.environment(\.colorScheme, .dark)`, ne `NSAppearance`** (#219).
+  `performAsCurrentDrawingAppearance` kolem `ImageRenderer`u vypadá jako správná cesta a **tiše
+  nefunguje**: barvy z `Palette` (dynamické `NSColor`) se v něm vyhodnotí světle, takže „tmavý“
+  render vyjde k nerozeznání od světlého — a vypadá to, že paleta na režim nereaguje. Pozadí za
+  renderem se musí nastavit ručně, obojí zvlášť.
 
 - **`List` se offscreen nevykreslí vůbec** — je to AppKit tabulka a `ImageRenderer` místo
   ní nakreslí žlutý placeholder přes celé plátno. Nevypovídá to o aplikaci. Řádky se dají
