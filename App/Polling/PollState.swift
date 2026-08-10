@@ -13,6 +13,14 @@ struct PollState: Sendable, Equatable {
     /// limitu ho přebíjí backoff, takže `lastSuccess + interval` by po prvním odmítnutí lhalo.
     /// Ruční obnovení tuhle hodnotu **neposouvá** — tik mimo pořadí smyčku nepřeplánuje.
     var nextPoll: Date?
+    /// Ptáme se právě teď? (#237)
+    ///
+    /// Drží to **odpočet na dashboardu**: `nextPoll` zůstává v minulosti po celou dobu dotazu
+    /// (zapisuje ho smyčka až po `refresh()`), takže by odpočet došel na nulu a šel dál —
+    /// a samotné srovnání s hodinami to nezachrání, protože odpočet tiká **bez přepočtu view**.
+    /// Změna tohohle příznaku je naopak observovatelná, takže okno na ni sáhne ve chvíli, kdy
+    /// se to stane, a napíše, co se děje, místo čísla, které už neplatí.
+    var isRefreshing = false
 
     /// Ukazujeme data, o kterých víme, že už nemusí platit?
     var isStale: Bool { lastSuccess != nil && status != .upToDate }
