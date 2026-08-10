@@ -872,7 +872,7 @@ App/                      zdrojáky aplikace — target PRism
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno (stav v AppStore.swift, metody v AppStore+*.swift);
                           ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku
-  Syntax/                 obarvení kódu: jazyky, tokenizace, paleta
+  Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky
     ReleaseNotes/         okno s novinkami — historie vydání a release notes vybrané verze

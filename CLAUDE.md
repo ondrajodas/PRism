@@ -440,6 +440,11 @@ Zvlášť stojí za přečtení, než sáhneš na:
   `filling` v `App/Views/AvailableWidth.swift`); pružná výška v líném seznamu je tatáž chyba.
   Tuhnoucí okno se diagnostikuje `sample`m běžícího procesu, ne odhadem — viz
   [`docs/testovani.md`](docs/testovani.md).
+- **Co se počítá při každém překreslení, se pamatuje — a cache si musí říct, co ji vyprazdňuje**
+  (#224). Obarvení řádku se volalo z computed property, takže běželo i při přejezdu myší: 44 ms
+  na soubor o 2400 řádcích, pokaždé znovu; z cache 0,30 ms. Hranice musí být v tom typu vidět
+  (`SyntaxRunCache`: strop na počet řádků i na jejich objem, po překročení se zahodí celá) —
+  cache bez vyjmenované meze je únik paměti s odkladem.
 - **V shell skriptech se proměnná v české próze píše `${VAR}`.** Uvozovka „ hned za
   `$VAR` shodí bash 3.2 (ten je v `/bin/bash`) v UTF-8 locale na `unbound variable`: její
   byty se počítají do jména proměnné. Chytí to `set -u`, ale až za běhu — `bash -n` ne.
