@@ -43,10 +43,14 @@ struct ReviewProgressView: View {
 
     /// **Ne `ContentUnavailableView`** (#182): ten se vystředí, nadpis vysází na velikost titulku
     /// a nad text vloží prázdno přes půl okna. Je to vysvětlivka — patří nahoru a drobným písmem.
+    ///
+    /// Věta říká **nastavení, ne „zatím se nic nedělo“**: od té doby, co dráhu dostane každý
+    /// nastavený reviewer, se sem dá dojít jedině s prázdnou sadou skillů. „Zatím se nic nedělo“ by
+    /// nad prázdným nastavením vypadalo jako čekání na běh, který se nemá čím spustit.
     private var empty: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Zatím se nic nedělo.")
-            Text("Až se review spustí, poběží tady dráha na každého revieweera — co právě čte, kde je a jak to skončilo.")
+            Text("Pro tohle repo není nastavený žádný reviewer.")
+            Text("Dráha se kreslí na každý skill z nastavené sady. Dokud je prázdná, není co spustit ani co ukazovat — sada se mění v nastavení, globálně nebo jen pro tohle repo.")
                 .foregroundStyle(.tertiary)
         }
         .font(.callout)

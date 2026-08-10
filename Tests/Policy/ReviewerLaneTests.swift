@@ -21,6 +21,35 @@ struct ReviewerLaneTests {
         return timeline
     }
 
+    /// Uložený běh **bez osy** — tak vypadají soubory z doby před #203.
+    private func storedRun(_ skill: String, findings: Int = 0) -> StoredReviewRun {
+        var summary = StreamSummary()
+        summary.calledReportFindings = true
+        summary.findings = (0..<findings).map {
+            ReportedFinding(
+                file: "App/Main.swift",
+                line: $0 + 1,
+                category: "correctness",
+                verdict: .confirmed,
+                shortSummary: nil,
+                summary: "nález \($0)",
+                failureScenario: nil
+            )
+        }
+        return StoredReviewRun(
+            ReviewRun(
+                key: ReviewRunKey(pullRequest: PRIdentifier("cli/cli#1")!, headSha: "abc", skillID: skill),
+                summary: summary,
+                outcome: .finished
+            ),
+            finishedAt: clock
+        )
+    }
+
+    private func record(_ runs: [StoredReviewRun]) -> ReviewRecord {
+        ReviewRecord(pullRequest: PRIdentifier("cli/cli#1")!, headSha: "abc", runs: runs)
+    }
+
     // MARK: - Stav
 
     @Test("Doběhlá session má hotové všechny fáze, kterými prošla")
@@ -33,7 +62,7 @@ struct ReviewerLaneTests {
             timeline.finish(.finished, at: clock)
         }
 
-        let lane = try #require(Policy.lanes(of: [timeline]).first)
+        let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"]).first)
 
         #expect(lane.state == .finished)
         #expect(lane.reportedFindings == 2)
@@ -52,7 +81,7 @@ struct ReviewerLaneTests {
             timeline.finish(.finished, at: clock)
         }
 
-        let lane = try #require(Policy.lanes(of: [timeline]).first)
+        let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"]).first)
 
         #expect(lane.reportedFindings == nil)
         #expect(lane.phases.last?.title == "hlásí nálezy")
@@ -67,7 +96,7 @@ struct ReviewerLaneTests {
             timeline.finish(.finished, at: clock)
         }
 
-        let lane = try #require(Policy.lanes(of: [timeline]).first)
+        let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"]).first)
 
         #expect(lane.reportedFindings == 0)
         #expect(lane.phases.last?.state == .done)
@@ -80,7 +109,7 @@ struct ReviewerLaneTests {
             timeline.record(.attemptedTool(ToolAttempt(name: "Read", detail: "a.php")), at: clock)
         }
 
-        let lane = try #require(Policy.lanes(of: [timeline], running: ["code-review"]).first)
+        let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"], running: ["code-review"]).first)
 
         #expect(lane.state == .running)
         #expect(lane.phases.map(\.state) == [.done, .running, .idle])
@@ -96,7 +125,7 @@ struct ReviewerLaneTests {
             timeline.finish(.failed(detail: "Unknown skill: perf-review"), at: clock)
         }
 
-        let lane = try #require(Policy.lanes(of: [timeline]).first)
+        let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"]).first)
 
         #expect(lane.state == .failed(detail: "Unknown skill: perf-review"))
         #expect(lane.failure == "Unknown skill: perf-review")
@@ -110,7 +139,7 @@ struct ReviewerLaneTests {
             timeline.record(.attemptedTool(ToolAttempt(name: "Grep", detail: "foo")), at: clock)
         }
 
-        let lane = try #require(Policy.lanes(of: [timeline], running: []).first)
+        let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"], running: []).first)
 
         #expect(lane.state == .stopped)
         #expect(lane.failure == nil)
@@ -128,7 +157,7 @@ struct ReviewerLaneTests {
                 timeline.finish(outcome, at: clock)
             }
 
-            let lane = try #require(Policy.lanes(of: [timeline]).first)
+            let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"]).first)
 
             #expect(lane.state == expected)
             #expect(lane.failure == nil)
@@ -141,7 +170,7 @@ struct ReviewerLaneTests {
     func queued() throws {
         let timeline = timeline { $0.record(.queued, at: clock) }
 
-        let lane = try #require(Policy.lanes(of: [timeline], running: ["code-review"]).first)
+        let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"], running: ["code-review"]).first)
 
         #expect(lane.state == .queued)
         #expect(lane.phases.count == 1)
@@ -152,17 +181,169 @@ struct ReviewerLaneTests {
     /// první událost, proto dostane dráhu ve frontě.
     @Test("Běžící reviewer bez osy dostane dráhu ve frontě")
     func runningWithoutTimeline() {
-        let lanes = Policy.lanes(of: [], running: ["docs", "code-review"])
+        let lanes = Policy.lanes(of: [], skills: ["code-review", "docs"], running: ["docs", "code-review"])
 
         #expect(lanes.map(\.skill) == ["code-review", "docs"])
         #expect(lanes.allSatisfy { $0.state == .queued })
+    }
+
+    // MARK: - Nastavená sada
+
+    /// Tab odpovídá na „kde je které z **mých** review“, takže nastavený reviewer dráhu dostane,
+    /// i když na tomhle PR nikdy neběžel. Bez toho je „ještě nezačalo“ k nerozeznání od „takový
+    /// reviewer neexistuje“ — a před prvním review je celý tab prázdný.
+    @Test("Nastavený reviewer, který neběžel, dostane dráhu ve stavu nespuštěno")
+    func notStarted() throws {
+        let lanes = Policy.lanes(of: [], skills: ["code-review:code-review", "security-review"])
+
+        #expect(lanes.map(\.skill) == ["code-review:code-review", "security-review"])
+        #expect(lanes.allSatisfy { $0.state == .notStarted })
+        #expect(lanes.allSatisfy { $0.isConfigured })
+        // Nespuštěno **není** čekání ve frontě: nic neběží, takže se na nic nečeká.
+        #expect(lanes.allSatisfy { $0.state != .queued })
+
+        let lane = try #require(lanes.first)
+        // Invariant „nikdy prázdné“ platí i tady, a jsou to fáze každého běhu — ne plán a ne
+        // čekání na slot, na který se nikdy nečekalo.
+        #expect(lane.phases.map(\.title) == ["session", "prochází kód", "hlásí nálezy"])
+        #expect(lane.phases.allSatisfy { $0.state == .idle })
+        #expect(lane.entries.isEmpty)
+        #expect(lane.reportedFindings == nil)
+        #expect(lane.failure == nil)
+    }
+
+    /// Přejmenovaný nebo odebraný skill nesmí osu zahodit — jeho nálezy v záznamu jsou a v tabu
+    /// `Nálezy` je vidět, takže dráha, ze které se vzaly, musí zůstat. Jen musí být poznat, že
+    /// není z dnešního nastavení.
+    @Test("Počet drah je nastavení plus záznamy; osa po skillu mimo sadu zůstane označená")
+    func configuredPlusRecorded() throws {
+        let old = timeline(skill: "code-review") { timeline in
+            timeline.record(.started(sessionID: "abc"), at: clock)
+            timeline.record(.findings(count: 3), at: clock)
+            timeline.finish(.finished, at: clock)
+        }
+
+        let lanes = Policy.lanes(of: [old], skills: ["code-review:code-review", "security-review"])
+
+        #expect(lanes.map(\.skill) == ["code-review:code-review", "security-review", "code-review"])
+        // Osa doběhlého běhu zůstala celá — stav i počet nálezů.
+        let dropped = try #require(lanes.last)
+        #expect(dropped.state == .finished)
+        #expect(dropped.reportedFindings == 3)
+        #expect(dropped.isConfigured == false)
+        // A nastavené dráhy se tím nezmátly.
+        #expect(lanes.prefix(2).allSatisfy { $0.state == .notStarted && $0.isConfigured })
+    }
+
+    /// Přeskakující dráhy jsou horší než špatné pořadí: fáze u všech drah na stejném místě jsou
+    /// jediný důvod, proč tab vypadá takhle. `Set` sám žádné pořadí nemá, takže se běžící bez osy
+    /// musí doplnit abecedně.
+    @Test("Pořadí drah je mezi tiky stabilní — sada dává pořadí, běžící bez osy jdou abecedně")
+    func stableOrder() {
+        let second = timeline(skill: "security-review") { $0.record(.started(sessionID: "s"), at: clock) }
+        let first = timeline(skill: "code-review:code-review") { $0.record(.started(sessionID: "c"), at: clock) }
+
+        // Osy přišly v obráceném pořadí, než je sada — rozhoduje sada.
+        let ordered = Policy.lanes(
+            of: [second, first],
+            skills: ["code-review:code-review", "security-review"],
+            running: ["security-review", "code-review:code-review"]
+        )
+        #expect(ordered.map(\.skill) == ["code-review:code-review", "security-review"])
+
+        // A co v sadě ani v osách není, jde abecedně, ne v pořadí iterace `Set`u.
+        for running in [Set(["zeta", "alfa"]), Set(["alfa", "zeta"])] {
+            #expect(Policy.lanes(of: [], skills: [], running: running).map(\.skill) == ["alfa", "zeta"])
+        }
+    }
+
+    /// `ReviewerLane.id` je jméno skillu, takže dvě stejná by `ForEach`i daly dvě položky s jednou
+    /// identitou — a SwiftUI by kreslil jednu.
+    @Test("Zdvojený skill v nastavení dá jednu dráhu")
+    func duplicateSkill() {
+        let lanes = Policy.lanes(of: [], skills: ["code-review", "code-review"])
+
+        #expect(lanes.count == 1)
+    }
+
+    /// Prázdno v tabu zbývá **jen** na repo bez nastaveného skillu — a právě proto o tom prázdný
+    /// stav mluví jako o nastavení, ne jako o tom, že se „zatím nic nedělo“.
+    @Test("Prázdné dráhy zbydou jedině u prázdné sady bez záznamu")
+    func emptyOnlyWithoutSkills() {
+        #expect(Policy.lanes(of: [], skills: []).isEmpty)
+        #expect(!Policy.lanes(of: [], skills: ["code-review"]).isEmpty)
+    }
+
+    // MARK: - Běh bez uložené osy
+
+    /// Uložený běh z doby před #203 osu nemá (změřeno: 25 z 31 běhů ve skutečné cache). `nespuštěno`
+    /// by o něm lhalo — chip nad tabem u něj ukazuje `doběhlo` a nálezy v tabu `Nálezy` jsou.
+    @Test("Doběhlý běh bez uložené osy není nespuštěný — má vlastní stav")
+    func missingProgress() throws {
+        let lanes = Policy.lanes(
+            of: [],
+            skills: ["code-review:code-review", "security-review"],
+            record: record([storedRun("code-review:code-review", findings: 3)])
+        )
+
+        #expect(lanes.map(\.skill) == ["code-review:code-review", "security-review"])
+        let ran = try #require(lanes.first)
+        #expect(ran.state == .missingProgress)
+        #expect(ran.state != .notStarted)
+        #expect(ran.isConfigured)
+        // Jedna kapsle, jako u čekání ve frontě: příběh fází se tady vyprávět nedá. A `unknown`,
+        // ne `idle` — „nedošlo na ni“ by o proběhlém běhu tvrdilo nepravdu.
+        #expect(ran.phases.map(\.title) == ["průběh se neuložil"])
+        #expect(ran.phases.allSatisfy { $0.state == .unknown })
+        #expect(ran.failure == nil)
+        // A ten druhý, který doopravdy neběžel, zůstává nespuštěný.
+        #expect(lanes.last?.state == .notStarted)
+    }
+
+    /// Uložená osa přebíjí: běh, který ji má, dostane plnou dráhu, ne „bez průběhu“.
+    @Test("Běh s uloženou osou dráhu bez průběhu nedostane")
+    func recordWithTimelineKeepsTheLane() throws {
+        let saved = timeline(skill: "code-review") { timeline in
+            timeline.record(.started(sessionID: "abc"), at: clock)
+            timeline.record(.findings(count: 1), at: clock)
+            timeline.finish(.finished, at: clock)
+        }
+
+        let lanes = Policy.lanes(
+            of: [saved],
+            skills: ["code-review"],
+            record: record([storedRun("code-review", findings: 1)])
+        )
+
+        #expect(lanes.count == 1)
+        #expect(lanes.first?.state == .finished)
+    }
+
+    /// Dvě místa, jedna odpověď na „koho se to na tomhle PR týká“. Kdyby se rozešla, tvrdil by chip
+    /// `doběhlo` nad reviewerem, který v tabu `Průběh` vůbec není — a rozejde se to potichu.
+    @Test("Dráhy vypisují tytéž reviewery jako chipy v pruhu běhu")
+    func lanesMatchChips() {
+        let skills = ["code-review:code-review", "security-review"]
+        let stored = record([
+            storedRun("code-review:code-review", findings: 2),
+            // Skill, který v sadě už není — chip ho přidává na konec, dráha musí taky.
+            storedRun("php-review", findings: 1),
+        ])
+        let running: Set<String> = ["security-review"]
+
+        let lanes = Policy.lanes(of: [], skills: skills, record: stored, running: running)
+        let chips = Policy.chips(for: stored, skills: skills, running: running)
+
+        #expect(lanes.map(\.skill) == chips.map(\.skill))
+        // A `isConfigured` sedí s tím, co je v sadě.
+        #expect(lanes.map(\.isConfigured) == [true, true, false])
     }
 
     @Test("Reviewer, který osu má, se nezdvojí")
     func noDuplicateLanes() {
         let timeline = timeline { $0.record(.started(sessionID: "abc"), at: clock) }
 
-        let lanes = Policy.lanes(of: [timeline], running: ["code-review"])
+        let lanes = Policy.lanes(of: [timeline], skills: ["code-review"], running: ["code-review"])
 
         #expect(lanes.count == 1)
     }
@@ -178,7 +359,7 @@ struct ReviewerLaneTests {
             timeline.finish(.finished, at: clock)
         }
 
-        let lane = try #require(Policy.lanes(of: [timeline]).first)
+        let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"]).first)
 
         #expect(lane.phases.first { $0.title == "prochází kód" }?.detail == "2 kroky")
         #expect(lane.entries.count == 4)
@@ -194,7 +375,7 @@ struct ReviewerLaneTests {
             timeline.record(.attemptedTool(ToolAttempt(name: "Skill", detail: "code-review:code-review")), at: clock)
         }
 
-        #expect(try #require(Policy.lanes(of: [same]).first).loadedSkill == nil)
-        #expect(try #require(Policy.lanes(of: [other]).first).loadedSkill == "code-review:code-review")
+        #expect(try #require(Policy.lanes(of: [same], skills: ["code-review"]).first).loadedSkill == nil)
+        #expect(try #require(Policy.lanes(of: [other], skills: ["code-review"]).first).loadedSkill == "code-review:code-review")
     }
 }

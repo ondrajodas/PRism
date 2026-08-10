@@ -112,6 +112,13 @@ Za nimi stojí `Nálezy` (tabulka všeho, co reviewery nahlásily) a `Průběh` 
 `Konverzací` a `Nálezy` je **dělič**: nalevo je to, co je na PR a co má i GitHub, napravo to, co
 s ním udělaly naše reviewery.
 
+V `Průběhu` má dráhu **každý reviewer z nastavené sady**, ne jen ten, který už na tomhle PR běžel:
+otázka je „kde je které z mých review“ a *ještě nezačalo* je taky odpověď. Tři různá „nic tu není“
+mají proto tři různá slova — `nespuštěno` (v sadě, tady nic), `ve frontě` (review běží a tenhle čeká
+na slot) a `bez průběhu` (běh v záznamu je, ale jeho osa ne, což jsou soubory z doby, kdy se ještě
+neukládala). Dráha po skillu, který v nastavení už není, **nezmizí** — nesla by s sebou doběhlé
+review — jen je označená `mimo sadu`.
+
 Záložky jsou podtržené jako na GitHubu a **odznak má každá** (#218), jen počítá pokaždé něco
 jiného: `Přehled` novinky od poslední návštěvy, `Změněné soubory` počet souborů, `Konverzace`
 kolik je toho k přečtení, `Nálezy` kolik jich je (**červeně, když něco blokuje**) a `Průběh`

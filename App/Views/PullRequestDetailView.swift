@@ -710,7 +710,17 @@ struct PullRequestDetailView: View {
         // překreslení.
         let timelines = store.timelines(for: pullRequest.id)
         return ReviewProgressView(
-            lanes: Policy.lanes(of: timelines, running: store.runningReviewers(for: pullRequest.id)),
+            lanes: Policy.lanes(
+                of: timelines,
+                // **Tatáž sada, ze které se review pouští** (`AppStore.reviewSkills(for:)`, přes
+                // kterou jde `runSkills`) — dvě různá místa by znamenala, že tab slibuje jinou
+                // sadu, než jaká se spustí. Bere ji i pruh běhu na chipy.
+                skills: store.reviewSkills(for: pullRequest.repo),
+                // Bez záznamu by běh, jehož osa se neuložila (soubory před #203), vypadal jako
+                // nespuštěný — a chip nad tabem by nad ním tvrdil `doběhlo`.
+                record: store.reviewRecord(for: pullRequest.id),
+                running: store.runningReviewers(for: pullRequest.id)
+            ),
             rerun: store.isReviewing(pullRequest.id)
                 ? nil
                 : { store.startReview(for: pullRequest.id, skills: [$0]) },

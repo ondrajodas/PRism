@@ -53,6 +53,15 @@ struct ReviewerLaneView: View {
                 .lineLimit(1)
                 .help(lane.skill)
             statePill
+            // Dráha po skillu, který v nastavené sadě není. Nezmizí (to by zahodilo doběhlé
+            // review), ale nesmí se tvářit, že do dnešní sady patří.
+            if !lane.isConfigured {
+                Label("mimo sadu", systemImage: "slash.circle")
+                    .font(.caption)
+                    .foregroundStyle(Palette.ink3)
+                    .lineLimit(1)
+                    .help("Tenhle skill není v nastavené sadě pro tohle repo — dráha je ze zaznamenaného běhu, ne z dnešního nastavení.")
+            }
             // Hlavička tvrdí, který skill běžel. Když si session načetla jiný, musí to říct —
             // jinak je to text, co tvrdí víc, než data unesou.
             if let loaded = lane.loadedSkill {
@@ -88,6 +97,9 @@ struct ReviewerLaneView: View {
 
     private var stateTint: Color {
         switch lane.state {
+        // Nejtišší z odznaků: nic se nestalo, takže nemá co přitahovat oko. `ink2` u `queued` je
+        // proti tomu o odstín víc — tam se něco děje, jen ne tady.
+        case .notStarted, .missingProgress: Palette.ink3
         case .queued, .stopped: Palette.ink2
         case .running: Palette.accent
         case .finished: Palette.ok
@@ -123,7 +135,7 @@ struct ReviewerLaneView: View {
     }
 
     private func ratio(of phase: ReviewerLane.Phase) -> Double {
-        phase.title == "prochází kód" ? 2.6 : 1
+        phase.title == ReviewerLane.Title.code ? 2.6 : 1
     }
 
     private func phaseChip(_ phase: ReviewerLane.Phase) -> some View {
@@ -155,13 +167,14 @@ struct ReviewerLaneView: View {
     }
 
     /// Značka za popiskem. **`idle` nemá žádnou** — fáze, na kterou nedošlo, není ani hotová,
-    /// ani rozbitá, a jakýkoli symbol by o ní tvrdil, že se něco stalo.
+    /// ani rozbitá, a jakýkoli symbol by o ní tvrdil, že se něco stalo. Totéž platí o `unknown`:
+    /// tam se neví, jak dopadla, takže značka by si vybírala za nás.
     private func mark(of state: ReviewerLane.PhaseState) -> String? {
         switch state {
         case .done: "checkmark"
         case .failed: "xmark"
         case .stopped: "minus"
-        case .running, .idle: nil
+        case .running, .idle, .unknown: nil
         }
     }
 
@@ -171,13 +184,13 @@ struct ReviewerLaneView: View {
         case .running: Palette.find
         case .failed: Palette.crit
         case .stopped: Palette.stale
-        case .idle: Palette.ink3
+        case .idle, .unknown: Palette.ink3
         }
     }
 
     private func background(of state: ReviewerLane.PhaseState) -> Color {
         switch state {
-        case .idle: Palette.raised
+        case .idle, .unknown: Palette.raised
         default: tint(of: state).opacity(0.16)
         }
     }

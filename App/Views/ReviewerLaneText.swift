@@ -10,8 +10,12 @@ enum ReviewerLaneText {
     ///
     /// `spadlo` a `nedoběhlo` jsou dvě různá slova schválně: první znamená nenulový kód, druhé
     /// zrušený běh. Slít je do jednoho by bylo přesně to, co `CLAUDE.md` u chybových stavů zakazuje.
+    /// Totéž platí o `nespuštěno` a `ve frontě`: první znamená „nespustilo se“, druhé „review běží
+    /// a tenhle čeká na slot“.
     static func state(_ state: ReviewerLane.State) -> String {
         switch state {
+        case .notStarted: "nespuštěno"
+        case .missingProgress: "bez průběhu"
         case .queued: "ve frontě"
         case .running: "běží"
         case .finished: "doběhlo"
@@ -33,6 +37,7 @@ enum ReviewerLaneText {
         case .failed: "selhalo"
         case .stopped: "nedoběhlo"
         case .idle: "nedošlo na ni"
+        case .unknown: "neví se"
         }
     }
 
@@ -42,6 +47,15 @@ enum ReviewerLaneText {
     /// o tomtéž pod sebou se přestanou číst obě.
     static func last(of lane: ReviewerLane) -> String? {
         switch lane.state {
+        case .notStarted:
+            // Nesmí to znít jako čekání ve frontě: nic neběží, takže se na nic nečeká. A nesmí to
+            // znít ani jako výsledek — o kódu tenhle reviewer neřekl vůbec nic.
+            return "Nespustilo se — je v nastavené sadě, ale na tomhle PR ještě neběželo."
+        case .missingProgress:
+            // Nesmí to znít jako selhání ani jako čisto: běh proběhl a jeho výsledek uložený je,
+            // chybí jen průběh. Věta proto říká, kde se ten výsledek dá přečíst.
+            return "Běželo, ale průběh se neuložil — starší záznam osu neobsahuje. Jak to dopadlo, "
+                + "je vidět v hlavičce PR a v tabu Nálezy."
         case .queued:
             return "Nezačalo — čeká na volný slot."
         case .running:

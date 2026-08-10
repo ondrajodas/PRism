@@ -778,10 +778,20 @@ udělaly naše reviewery. `Nálezy` jsou **tabulka přes celou šířku** i s ř
 a tlačítka `Pustit znovu` / `Zkopírovat příkaz` — do té doby se od proběhlé lišila jen barvou
 odznaku, protože v kartě nebylo místo, a `čisté` se `spadlo` slít nesmí.
 
-**Nálezy zůstaly i v panelu** — změna proti zadání, vyžádaná při implementaci. Nejsou to dvě kopie
-jednoho pohledu, ale dvě různé otázky: u kódu „co je tady“, v tabulce „co všechno se našlo“. Panel
-tím má dva segmenty místo tří (`Průběh` se odstěhoval celý) a v proužku složeného panelu je vedle
-počtu nálezů i značka rozdělaného review.
+**Nálezy zůstaly i v panelu** — změna proti zadání, rozhodnutá při implementaci (ne vyžádaná
+uživatelem; do doplnění #242 to tak stálo tady i ve specifikaci a bylo to vymyšlené). Nejsou to dvě
+kopie jednoho pohledu, ale dvě různé otázky: u kódu „co je tady“, v tabulce „co všechno se našlo“.
+Panel tím má dva segmenty místo tří (`Průběh` se odstěhoval celý) a v proužku složeného panelu je
+vedle počtu nálezů i značka rozdělaného review.
+
+**Dráhu dostane každý nastavený reviewer** — doplněno po proklikání, protože `Průběh` se do té doby
+skládal jen ze zaznamenaných os: nastavený reviewer, který na PR ještě neběžel, dráhu nedostal vůbec
+a před prvním review byl celý tab prázdný. Sada se bere z `AppStore.reviewSkills(for:)`, tedy z téhož
+místa, ze kterého se review pouští. Tři různá „nic tu není“ mají tři různá slova a slít se nesmí:
+`nespuštěno`, `ve frontě` a `bez průběhu` — to poslední je doběhlý běh, jehož osa se neuložila
+(soubory před #203; **25 z 31 uložených běhů ve skutečné cache**, mezi nimi PR ve frontě). Osa po
+skillu, který v nastavení už není, nezmizí — nesla by s sebou doběhlé review — jen se označí
+`mimo sadu`.
 
 Dvě věci z toho stojí za zapamatování. **Řádek tabulky je místo, ne nález**: shoda dvou reviewerů je
 jeden řádek s odznakem `2×`, jinak by součet nad tabulkou nesouhlasil s tím, co je v diffu jako jedna

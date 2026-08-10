@@ -17,7 +17,7 @@ struct ReviewerLaneTextTests {
     ) throws -> ReviewerLane {
         var timeline = ReviewerTimeline(skill: "code-review", worktree: worktree)
         build(&timeline)
-        return try #require(Policy.lanes(of: [timeline], running: []).first)
+        return try #require(Policy.lanes(of: [timeline], skills: ["code-review"], running: []).first)
     }
 
     @Test("Stavy mají každý vlastní slovo — spadlo a nedoběhlo se nesmí slít")
@@ -27,17 +27,36 @@ struct ReviewerLaneTextTests {
         #expect(Set(words).count == words.count)
         #expect(ReviewerLaneText.state(.failed(detail: "kód 1")) == "spadlo")
         #expect(ReviewerLaneText.state(.stopped) == "nedoběhlo")
+        // A `nespuštěno` se nesmí slít s `ve frontě`: první znamená „nespustilo se“, druhé
+        // „review běží a tenhle čeká na slot“.
+        #expect(ReviewerLaneText.state(.notStarted) == "nespuštěno")
+        #expect(ReviewerLaneText.state(.queued) == "ve frontě")
+    }
+
+    /// Věta u nespuštěné dráhy nesmí tvrdit ani výsledek („nic nenašel“), ani čekání ve frontě —
+    /// tenhle reviewer o kódu neřekl vůbec nic a nic se na něj nechystá.
+    @Test("Nespuštěná dráha řekne, že je v sadě a ještě neběžela — a nic dalšího")
+    func notStarted() throws {
+        let lane = try #require(Policy.lanes(of: [], skills: ["code-review"]).first)
+
+        let text = try #require(ReviewerLaneText.last(of: lane))
+
+        #expect(text == "Nespustilo se — je v nastavené sadě, ale na tomhle PR ještě neběželo.")
+        #expect(!text.contains("čisto"))
+        #expect(!text.contains("frontě"))
     }
 
     /// Fáze má vlastní slovo pro každý stav — se stavem dráhy by čtečka obrazovky u všech fází
     /// přečetla totéž, tedy „doběhlo“ i nad fází, na kterou nedošlo.
     @Test("Stav fáze má vlastní slovo, různé od stavu dráhy")
     func phaseStates() {
-        let states: [ReviewerLane.PhaseState] = [.done, .running, .failed, .stopped, .idle]
+        let states: [ReviewerLane.PhaseState] = [.done, .running, .failed, .stopped, .idle, .unknown]
         let words = states.map(ReviewerLaneText.phase)
 
         #expect(Set(words).count == states.count)
         #expect(ReviewerLaneText.phase(.idle) == "nedošlo na ni")
+        // „Neví se“ není „nedošlo na ni“: u běhu bez uložené osy na fázi dojít mohlo.
+        #expect(ReviewerLaneText.phase(.unknown) == "neví se")
         // A nesmí to být totéž co stav dráhy: „doběhlo“ patří dráze, „hotovo“ fázi.
         #expect(ReviewerLaneText.phase(.done) != ReviewerLaneText.state(.finished))
     }
@@ -101,7 +120,7 @@ struct ReviewerLaneTextTests {
             .attemptedTool(ToolAttempt(name: "Read", detail: "/tmp/cache/cli-cli-42/src/Cart.php")),
             at: clock
         )
-        let lane = try #require(Policy.lanes(of: [timeline], running: ["code-review"]).first)
+        let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"], running: ["code-review"]).first)
 
         #expect(ReviewerLaneText.last(of: lane) == "Právě: Read src/Cart.php")
     }
@@ -110,7 +129,7 @@ struct ReviewerLaneTextTests {
     func runningWithoutTool() throws {
         var timeline = ReviewerTimeline(skill: "code-review")
         timeline.record(.started(sessionID: "abc"), at: clock)
-        let lane = try #require(Policy.lanes(of: [timeline], running: ["code-review"]).first)
+        let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"], running: ["code-review"]).first)
 
         #expect(ReviewerLaneText.last(of: lane) == "Session naběhla, první krok ještě nepřišel.")
     }
@@ -120,6 +139,7 @@ extension ReviewerLane.State {
     /// Výčet pro test úplnosti. **Není v produkčním kódu**: `State` nese u `failed` detail, takže
     /// `CaseIterable` se na něm nedá odvodit — a zástupná hodnota patří do testu, ne do modelu.
     static let allCasesForTest: [ReviewerLane.State] = [
-        .queued, .running, .finished, .timedOut, .interrupted, .failed(detail: "kód 1"), .stopped,
+        .notStarted, .missingProgress, .queued, .running, .finished, .timedOut, .interrupted,
+        .failed(detail: "kód 1"), .stopped,
     ]
 }

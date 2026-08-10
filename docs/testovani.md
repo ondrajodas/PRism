@@ -283,9 +283,19 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   osy dostane dráhu ve frontě, aby běžící review neukazovalo prázdný tab. Jeden reálný nález přišel
   z testu: **session spadlá při startu** neznačila selhání v žádné fázi, takže dráha vypadala
   k nerozeznání od té, co ještě nezačala.
+- **Dráha na každý nastavený reviewer (#242)** — tyhle testy hlídají tři různá „prázdno“, která se
+  nesmí slít: **nespuštěno** (v sadě, na tomhle PR nic), **ve frontě** (review běží, čeká na slot)
+  a **bez průběhu** (běh v záznamu je, jeho osa ne). To poslední je nejcennější a **ověřilo se
+  vložením regrese**: bez něj tab o doběhlém běhu tvrdí, že se nespustil — změřeno na skutečné
+  cache, 25 z 31 uložených běhů osu nemá. Dál se testuje, že **počet drah je sada plus záznamy**
+  (přejmenovaný skill osu doběhlého běhu nezahodí, jen ji označí `mimo sadu`), že **dráhy vypisují
+  tytéž reviewery jako chipy** v pruhu běhu (dvě odpovědi na „koho se to na tomhle PR týká“ by se
+  rozešly potichu), že **pořadí je stabilní** i pro `running`, které je `Set` bez pořadí, a že
+  **zdvojený skill v sadě dá jednu dráhu** — dvě by `ForEach`i daly jednu identitu dvakrát.
 - **Věty dráhy (#242)** — `ReviewerLaneText` rozlišuje **tři** doběhlé konce (nahlásilo nálezy /
   nahlásilo nulu / nenahlásilo nic) a test hlídá, že se u toho třetího **nikde neslíbí čisto**.
-  Plus že slova stavů jsou různá (`spadlo` ≠ `nedoběhlo`) a že se v běžícím kroku zkracuje cesta
+  Plus že slova stavů jsou různá (`spadlo` ≠ `nedoběhlo`, `nespuštěno` ≠ `ve frontě`, u fází
+  `neví se` ≠ `nedošlo na ni`) a že se v běžícím kroku zkracuje cesta
   o pracovní strom. A že **stav fáze má jiné slovo než stav dráhy** (nález Copilota): čtečka
   obrazovky u chipu vidí jen popisek, takže se stavem dráhy by u všech fází přečetla „doběhlo“ —
   i nad tou, na kterou nedošlo.
