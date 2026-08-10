@@ -57,7 +57,9 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   dřív, než subagenta pustíš** — slot mu přiděluje orchestrátor a bez něj by subagent přepsal
   aplikaci, se kterou zrovna pracuju, i s její cache.
 
-  **Subagent dotáhne issue až do konce** (#247): PR, Copilot, merge, zavření issue a release.
+  **Subagent dotáhne issue až do konce** (#247): PR, Copilot, merge, zavření issue, release
+  a **úklid své aplikace** — ukončit, odregistrovat z LaunchServices a smazat i s cache (#250),
+  jinak se mi v `/Applications` hromadí PRismy, ze kterých se nedá vybrat.
   Nečeká na frontu u orchestrátora — hotová práce, která leží, je to zdržení, kvůli kterému se
   paralelně pracuje. Orchestrátorovi zůstává rozvrh, sloty, úklid stromů a **restart hlavní
   aplikace** (sahá do hlavního stromu, což subagent nesmí). U **jednoho** issue se nic nemění,
