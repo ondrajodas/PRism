@@ -537,6 +537,7 @@ zastaral hned další verzí.
   rozbít
 - [`docs/testovani.md`](docs/testovani.md) — co se u které oblasti testuje a proč zrovna to
 - [`docs/stav.md`](docs/stav.md) — co je hotové a co zbývá
+- [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md) — jak se vyřizuje seznam issues naráz
 
 ## Jak to funguje
 

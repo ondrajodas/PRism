@@ -8,6 +8,10 @@ Signing.local.xcconfig
 # commitl, přinesl by cizí slot do každého dalšího checkoutu.
 .prism-slot
 
+# Pracovní stromy subagentů (#231). Harness je zakládá uvnitř repa, takže by je hlavní strom
+# viděl jako neverzované soubory — a `git add -A` v něm by commitl cizí rozdělanou práci.
+.claude/worktrees/
+
 # Lokální oprávnění Claude Code — grant vázaný na účet, ne na repo. Pouští zápis do
 # soukromého sandboxu pro spike #62; do verzovaného souboru nepatří právě proto, že
 # repo má tvrdou podmínku „aplikace na GitHub nic neposílá“.

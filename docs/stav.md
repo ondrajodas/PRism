@@ -625,7 +625,20 @@ rozestavěný build nesáhne na uložené nálezy ani na rozdělané drafty. Bez
 nemění nic. Nový je `bin/worktree.sh`, který strom založí a přenese do něj konfiguraci
 očištěnou o odesílání, notifikace a automat.
 
-Tři věci dopadly jinak, než jak byly v zadání:
+**Postup pro dávku issues zapsaný (#231)** — [`docs/paralelni-vyvoj.md`](paralelni-vyvoj.md).
+Sloty daly paralelnímu vývoji prostředí, ale ne postup; bez zápisu by se seznam issues dál
+vyřizoval sériově, protože výchozí chování je subagenty nepouštět. Je v něm, podle čeho se
+pozná nezávislost (`ReviewPublishing` jde vždycky sám, `AppStore` stav a `Policy` jsou
+rizikové, `docs/stav.md` konfliktuje vždy a nevadí), co subagent dělá a co ne (nemerguje,
+nezavírá issue, nevydává release) a **že slot přiděluje orchestrátor** — subagent v izolovaném
+worktree `.prism-slot` nemá, takže by přepsal aplikaci, se kterou se pracuje.
+
+**Mění to jedno pravidlo:** v dávce se pauza na proklikání posouvá z „před prvním pushem“ na
+„před merge“ a sbírá se za celou dávku naráz. Subagent nemá jak zavolat člověka a čekáním by
+blokoval sebe i slot; PR před mergem je přitom pořád levný na přepsání, takže smysl pauzy to
+drží. Podívat se na obrazovku sám a napřed platí dál.
+
+U slotů (#228) dopadly tři věci jinak, než jak byly v zadání:
 
 - **Počet slotů se neomezuje**, ačkoli issue počítalo se dvěma. Rozsah stál na odhadu, že se
   okna poperou o pět výkonných jader — změřeno je to jinak: clean build trvá 23 s a test run

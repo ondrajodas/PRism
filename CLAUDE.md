@@ -18,6 +18,7 @@ Co kam patří:
 | [`docs/architektura.md`](docs/architektura.md) | Podrobnosti po modulech — co který drží a co se u něj nemá rozbít | Změna uvnitř modulu: nový typ, nový invariant, jiné chování |
 | [`docs/testovani.md`](docs/testovani.md) | Katalog toho, co se u které oblasti testuje a proč zrovna to | Nová oblast testů, nebo nový případ, který se dá pokazit potichu |
 | [`docs/stav.md`](docs/stav.md) | Co je hotové a co zbývá | Dokončené issue |
+| [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md) | Jak se vyřizuje **seznam** issues: co jde souběžně, co dostane subagent, kdo merguje | Změna postupu při dávce, nebo toho, co si subagent nesmí dovolit |
 | `docs/superpowers/specs/` | Proč jsou rozhodnutí taková, jaká jsou — včetně zamítnutých alternativ | Změna návrhového rozhodnutí; zapsat i **proč** se změnilo, staré nechat v záznamu rozhodnutí |
 
 Když se změna nikam z toho nevejde, je to signál, že jsem si neujasnil, co vlastně měním
@@ -50,6 +51,15 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
 
 ## Pracovní postup (git)
 
+- **Víc issues naráz se dělá souběžně, ne za sebou** (#231). Když přijde seznam, posuď, co je
+  na sobě nezávislé, přiděl slot a pusť na každé nezávislé issue **subagenta ve vlastním
+  worktree**. Postup je v [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md) a **přečti si ho
+  dřív, než subagenta pustíš** — slot mu přiděluje orchestrátor a bez něj by subagent přepsal
+  aplikaci, se kterou zrovna pracuju, i s její cache.
+
+  Subagent končí otevřeným PR s vyřízeným Copilotem. **Nemerguje, nezavírá issue a nevydává
+  release** — to dělá jeden, kdo vidí na všechny větve. U **jednoho** issue se nic nemění,
+  udělá se sériově.
 - **Všechno jde přes PR.** Žádné přímé pushe do `main` — každá změna (kód i dokumentace)
   má vlastní branch a PR, i když je malá. PR odkazuje na issue, které řeší.
 - **Branch:** anglicky, krátce, s číslem issue — např. `issue-4-github-gateway`.
@@ -64,6 +74,12 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   Pak **zastav a čekej.** Ne „spustil jsem a jde to“ a hned commit — smysl je, že si to
   proklikám, dokud je změna ještě levná na přepsání. Zelené testy nejsou důkaz, že se to
   chová, jak jsem chtěl.
+
+  **V dávce se pauza posouvá před merge** (#231): subagent nemá jak zavolat člověka a čekáním
+  by blokoval sebe i slot. PR před mergem je pořád levný na přepsání, takže smysl pauzy to
+  drží. Sesbírá se za celou dávku naráz — podrobnosti v
+  [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md). Co se **nemění**: podívat se na
+  obrazovku sám a napřed platí i tam.
 
   Napiš, **na co se mám podívat** a co v příslušné obrazovce uvidím.
 
@@ -177,16 +193,20 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   Error: Prompt too big after adding PR context
   ```
 
-  `CLAUDE.md` má 315 kB, takže sám o sobě sežere většinu ze 110 tisíc tokenů rozpočtu a na
-  „PR context“ nezbude. **Nerozhoduje proto velikost diffu**: #159 (12 kB) prošel, #160
-  (70 kB) i #161 (30 kB) spadly, a opakování dopadne pokaždé stejně. Napřed to vypadalo na
-  `AppStore.swift` (128 kB, byl v obou spadlých) — log ukázal, že to je jinak; **je to tenhle
-  soubor, ne ten review**.
+  Tehdy měl `CLAUDE.md` 315 kB, takže sám o sobě sežral většinu ze 110 tisíc tokenů rozpočtu
+  a na „PR context“ nezbylo. **Nerozhodovala proto velikost diffu**: #159 (12 kB) prošel, #160
+  (70 kB) i #161 (30 kB) spadly. Napřed to vypadalo na `AppStore.swift` (128 kB, byl v obou
+  spadlých) — log ukázal, že to bylo jinak; byl to tenhle soubor, ne ten review.
 
-  Poroste to dál, takže je to k řešení, ne k obcházení. Do té doby: **nepřepisuj kvůli tomu
-  zadání ani nedělej umělé PR navíc** — dokumentace musí jít se změnou v jednom commitu, to
-  je pravidlo o řádek výš. Zbývá vlastní revize, a ta je stejně podmínkou pushnutí; napiš do
-  popisu PR, že Copilot nedoběhl a proč, ať je z PR vidět, že kontrola nechyběla omylem.
+  **Vyřešeno rozdělením do `docs/` (873bc29):** ze 316 kB zbylo 37 a Copilot od té doby běhá
+  normálně (naposledy ověřeno na #230). Zůstává z toho **pravidlo, ne výjimka**: tenhle soubor
+  se drží malý a podrobnosti patří do `docs/`. Kontroluj to měřením (`wc -c < CLAUDE.md`), ne
+  odhadem — nad ~100 kB je čas rozdělovat znovu.
+
+  Kdyby přesto spadl: **nepřepisuj kvůli tomu zadání ani nedělej umělé PR navíc** —
+  dokumentace musí jít se změnou v jednom commitu, to je pravidlo o řádek výš. Zbývá vlastní
+  revize, a ta je stejně podmínkou pushnutí; napiš do popisu PR, že Copilot nedoběhl a proč,
+  ať je z PR vidět, že kontrola nechyběla omylem.
 - **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
   a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
   Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
