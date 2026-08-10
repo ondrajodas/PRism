@@ -84,8 +84,8 @@ struct DashboardCountdown: View {
         return minutes == 0 ? "\(total / 3600)h" : "\(total / 3600)h \(minutes)min"
     }
 
-    /// Nejdelší odpočet, který se ještě vypíše (`za 99h znovu`). Přes tuhle hodnotu už jde jen
-    /// nesmyslná konfigurace, a u té je useknutý údaj lepší než pád.
+    /// Nejdelší odpočet, který se ještě vypíše — na displeji z něj vyjde `za 99h 59min znovu`.
+    /// Přes tuhle hodnotu už jde jen nesmyslná konfigurace, a u té je useknutý údaj lepší než pád.
     private static let longestCountdown: TimeInterval = 99 * 3600 + 59 * 60 + 59
 }
 

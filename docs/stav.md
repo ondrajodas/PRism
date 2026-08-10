@@ -614,7 +614,8 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
    místo ní počítá novinky od poslední návštěvy. Důvod je ve specifikaci.
 
    U #237 se **otočilo rozhodnutí z #181**: příští tik v hlavičce dashboardu je odpočet
-   (`poslední tik 09:41 · za 43s znovu`, jak to má návrh), ne absolutní čas. Námitka, kvůli
+   (`poslední tik 09:41 · za 43s znovu`), ne absolutní čas. Odpočet **návrh chtěl** už tehdy;
+   mezera mezi číslem a jednotkou v něm ale byla a od #260 tam schválně není. Námitka, kvůli
    které tam absolutní čas stál — že odpočet znamená přepočítávat dashboard každou vteřinu —
    se **změřila a neplatí**: `Text(_:style: .relative)` tikal sám a tělo view se u toho
    nepřepočítávalo (od #260 to platí o vlastním formátu a `TimelineView`, viz níž). Přibylo k tomu `PollState.isRefreshing`, protože `nextPoll` je po celou dobu

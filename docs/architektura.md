@@ -2793,8 +2793,10 @@ spustí. **Proč příznak, a ne srovnání s hodinami**: odpočet ve view tiká
 (`DashboardCountdown` a jeho `TimelineView`), takže `now` v těle platí jen k poslednímu přepočtu —
 po probuzení stroje by to byl uplynulý termín, do #260 odpočítávaný nahoru a od #260 zamrzlý na
 `0s`. Ani jedno se ukázat nemá. Změna příznaku je naopak observovatelná,
-takže hlavička se překlopí na `ptám se…` ve chvíli, kdy dotaz začne. Ověřeno na běžícím okně:
-`za 1 s` → `za 0 s` → `ptám se…` → `za 7 s`.
+takže hlavička se překlopí na `ptám se…` ve chvíli, kdy dotaz začne. Ověřeno na běžícím okně, po
+#260 znovu i s novým formátem: `za 1s` → `ptám se…` → `za 29s` (interval snížený na 30 s, snímky
+okna po 1,1 s). U #237 to bylo `za 1 s` → `za 0 s` → `ptám se…` → `za 7 s`, tedy včetně nuly —
+hustší burst ji zachytí, protože je vidět tu poslední vteřinu před dotazem.
 
 `defer` je tam kvůli tomu, co se rozbije potichu: zaseknutý příznak znamená `ptám se…` navždycky
 a odpočet, který se nikdy nevrátí — na obrazovce k nerozeznání od zaseknuté aplikace.

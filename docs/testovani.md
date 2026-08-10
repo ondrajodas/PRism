@@ -1015,10 +1015,16 @@ vyfotí hlavně cizí práci.
 ID najde `CGWindowListCopyWindowInfo` podle PID (`pgrep -f /Applications/PRism-<slot>.app`);
 pár řádků ve `swift` skriptu, `System Events` na to potřeba nejsou. Okno **nemusí být vpředu**,
 takže se u toho nepřepíná fokus. Odpočet v hlavičce se takhle dal odečíst ze dvou snímků po
-šesti sekundách (`za 9 s znovu` → `za 3 s znovu`) a burst po 0,35 s zachytil celý přechod
-`za 1 s` → `za 0 s` → `ptám se…` → `za 7 s`, tedy věc, na kterou offscreen render nestačí:
-dashboard je ve `ScrollView`, který se offscreen **nevykreslí vůbec** (viz níž), takže render
-vyšel prázdný a jediné, co zbývalo, bylo skutečné okno.
+šesti sekundách (u #237 `za 9 s znovu` → `za 3 s znovu`, ještě se systémovým formátem) a burst po
+0,35 s zachytil celý přechod přes nulu — tedy věc, na kterou offscreen render nestačí: dashboard je
+ve `ScrollView`, který se offscreen **nevykreslí vůbec** (viz níž), takže render vyšel prázdný
+a jediné, co zbývalo, bylo skutečné okno.
+
+**Řada snímků se vyplatí složit do jednoho PNG** (#260): výřez pravého horního koutu z osmi snímků
+po 1,1 s pod sebou dá filmstrip, ze kterého se celý přechod přečte naráz —
+`za 4s` → `za 2s` → `za 1s` → `ptám se…` → `za 29s` → `za 28s` (interval snížený na 30 s, což si
+slot dovolit smí). Výřez a skládání je pár řádků CoreGraphics (`CGImage.cropping`, `CGContext.draw`)
+a stojí to jeden obrázek místo osmi.
 
 **Na stav za kliknutím se dostaneš taky** — jen se musí aplikace napřed vytáhnout dopředu.
 Okno terminálu leží na pixel přesně přes okno aplikace (obojí `0,33,1512,875`), takže klik
