@@ -240,6 +240,14 @@ Darcula v tmavém režimu a IntelliJ Light ve světlém. Barví se řádek po ř
 protože diff je útržek: víceřádkový komentář se obarví jen tam, kde začíná. Soubor
 v neznámém jazyce zůstane jednobarevný.
 
+**U přepsaného řádku svítí jen ta část, která se změnila** (#153) — sytější pruh přes zelené
+nebo červené pozadí řádku, v obou pohledech. Do té doby svítil celý řádek, takže se u dlouhého
+kódu rozdíl hledal přečtením obou verzí. Porovnává se **po slovech**, ne po znacích (přepsané
+jméno svítí celé, ne po písmenech, a `==` proti `!=` je jedna změna), a jen tam, kde jsou si
+řádky dost podobné: dvojice, která je ve skutečnosti smazání a přidání vedle sebe, zůstane
+obarvená celá jako dosud. Obarvení syntaxe zůstává pod tím — word-diff je pozadí, syntaxe
+barva písma.
+
 **Nálezy visí jako bubliny u řádků, kterých se týkají** — pill kategorie, verdict, jméno
 revieweru a rozbalitelný scénář selhání; blokující nález má červený pruh. Shodu dvou
 reviewerů na jednom místě označí `2×`, ale jejich texty se neslučují. Nález na řádek, který
@@ -903,7 +911,8 @@ App/                      zdrojáky aplikace — target PRism
   GitHub/                 čtení PR a konverzace přes gh CLI: gateway, typované chyby, tvar výstupu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Config/                 config.json: globální default, override per repo, čtení a zápis
-  Diff/                   parsování unified diffu na soubory, hunky a řádky + slití do dvojic pro pohled vedle sebe
+  Diff/                   parsování unified diffu na soubory, hunky a řádky, slití do dvojic pro pohled
+                          vedle sebe a porovnání uvnitř přepsané dvojice (word-level diff)
   Health/                 dostupnost služeb pro stavový řádek: status pages, signály, monitor
   Markdown/               vykreslení Markdownu z GitHubu: bloky, inline HTML od botů
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka
@@ -923,7 +932,7 @@ Tests/                    unit testy — target PRismTests
   Environment/            testy Environment vrstvy + fakes
   Checkout/               testy klonování — proti fake runneru i skutečnému gitu
   Config/                 testy čtení, zápisu a slučování konfigurace
-  Diff/                   testy parseru diffu proti skutečným výstupům gh pr diff
+  Diff/                   testy parseru diffu proti skutečným výstupům gh pr diff a word-level rozdílu
   Health/                 testy status pages, monitoru dostupnosti a HTTP vrstvy
   Markdown/               testy parseru Markdownu (invariant: nic se neztratí) a HTML od botů
   GitHub/                 testy gateway a klasifikace chyb gh

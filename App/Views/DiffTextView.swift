@@ -39,18 +39,34 @@ final class DiffTextView: NSTextView {
     /// `setAttributedString` zruší rozdělaný výběr, a `updateNSView` se volá při každém
     /// překreslení — tedy i když myš přejede na jiný řádek a přesune se pilulka na komentář.
     /// Bez téhle podmínky se výběr rušil při každém hnutí myší (nahlášené při zkoušení #157).
-    func show(_ block: DiffBlock, language: Language?, palette: SyntaxPalette, signature: String) {
+    ///
+    /// - Parameter words: co se uvnitř přepsaných řádků změnilo (#153). Je to **closure, ne
+    ///   hodnota**, schválně: word-level rozdíl je jediná drahá věc v tomhle skládání (LCS na
+    ///   dvojici) a takhle se spočítá až za tou stráží výš, tedy jednou na obsah bloku — ne při
+    ///   každém přejezdu myší, kdy `updateNSView` doběhne až sem a vrátí se.
+    ///
+    ///   **Výchozí hodnotu nemá schválně:** kdo blok kreslí, ať se rozhodne, čím ho porovnat.
+    ///   S `{ [:] }` by nový volající zvýraznění tiše vypnul a nikdo by to nepoznal.
+    func show(
+        _ block: DiffBlock,
+        language: Language?,
+        palette: SyntaxPalette,
+        signature: String,
+        words: () -> WordDiff.Spans
+    ) {
         guard self.signature != signature else { return }
         self.signature = signature
         lines = block.lines
         lineRanges = []
 
+        let words = words()
         let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let result = NSMutableAttributedString()
         for (index, line) in block.lines.enumerated() {
             if index > 0 { result.append(NSAttributedString(string: "\n", attributes: [.font: font])) }
             let start = result.length
             append(line, to: result, font: font, language: language, palette: palette)
+            highlight(words[index] ?? [], of: line, in: result, from: start)
             lineRanges.append(NSRange(location: start, length: result.length - start))
         }
         textStorage?.setAttributedString(result)
@@ -78,6 +94,34 @@ final class DiffTextView: NSTextView {
                 attributes[.foregroundColor] = NSColor(color)
             }
             result.append(NSAttributedString(string: run.text, attributes: attributes))
+        }
+    }
+
+    /// Word-level zvýraznění jako **druhá vrstva nad** hotovým textem (#153).
+    ///
+    /// Sytější pozadí, ne jiná barva písma: písmo patří obarvení syntaxe a dvě sady barev na
+    /// tomtéž textu se čtou jako kaše. Pozadí navíc leží nad tím řádkovým (12 %), takže se
+    /// změněný kus liší od zbytku řádku, ne od okolí.
+    ///
+    /// **Do `SyntaxRunCache` to nesmí** a je to celé jádro věci: zvýraznění závisí na protějšku
+    /// dvojice, kdežto cache je klíčovaná `(text řádku, jazyk)` — tentýž řádek proti jinému
+    /// protějšku by z ní vytáhl cizí zvýraznění, a to potichu. Proto se přidává **až tady**,
+    /// atributem přes hotové runy.
+    private func highlight(
+        _ spans: [Range<String.Index>],
+        of line: DiffLine,
+        in result: NSMutableAttributedString,
+        from start: Int
+    ) {
+        guard !spans.isEmpty, let color = DiffTextView.wordBackground(of: line.kind) else { return }
+        for span in spans {
+            let range = NSRange(span, in: line.text)
+            let target = NSRange(location: start + range.location, length: range.length)
+            // Rozsah patří textu, ze kterého se počítal, takže mimo složený řetězec sáhnout nemá
+            // jak — a kdyby přece, je zvýraznění to jediné, o co se přijde. Pád uprostřed diffu
+            // je horší než neobarvené slovo.
+            guard NSMaxRange(target) <= result.length else { continue }
+            result.addAttribute(.backgroundColor, value: color, range: target)
         }
     }
 
@@ -325,6 +369,12 @@ final class DiffTextView: NSTextView {
         case .added, .removed: NSColor(DiffLineView.background(of: kind))
         case .context, .meta: nil
         }
+    }
+
+    /// Pozadí změněného kusu přepsaného řádku (#153). Barvu drží `DiffLineView`, ať se obě
+    /// vrstvy nekreslí každá z jiné palety.
+    static func wordBackground(of kind: DiffLine.Kind) -> NSColor? {
+        DiffLineView.wordBackground(of: kind).map(NSColor.init)
     }
 
     static func sign(of kind: DiffLine.Kind) -> String {

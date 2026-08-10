@@ -459,6 +459,11 @@ Zvlášť stojí za přečtení, než sáhneš na:
   na soubor o 2400 řádcích, pokaždé znovu; z cache 0,30 ms. Hranice musí být v tom typu vidět
   (`SyntaxRunCache`: strop na počet řádků i na jejich objem, po překročení se zahodí celá) —
   cache bez vyjmenované meze je únik paměti s odkladem.
+
+  **A do cache smí jen to, co je funkcí jejího klíče** (#153). `SyntaxRunCache` je klíčovaná
+  `(text řádku, jazyk)`, takže word-level zvýraznění, které závisí na **protějšku** dvojice, do ní
+  nepatří — vracela by zvýraznění cizí dvojice, a potichu. Takové věci se kreslí jako **druhá
+  vrstva nad** výsledkem z cache; podrobnosti v [`docs/architektura.md`](docs/architektura.md).
 - **V shell skriptech se proměnná v české próze píše `${VAR}`.** Uvozovka „ hned za
   `$VAR` shodí bash 3.2 (ten je v `/bin/bash`) v UTF-8 locale na `unbound variable`: její
   byty se počítají do jména proměnné. Chytí to `set -u`, ale až za běhu — `bash -n` ne.

@@ -712,5 +712,27 @@ a **čtyři řádky těla** — zadání počítalo se dvěma. A co se nevejde, 
 pod tím: 140znakový souhrn z banneru vymazal celý řádek s PR, takže se nález krátí na sto znaků
 sám. `Čisté review` a `Review se nepovedlo` zůstávají dvě různé věty, teď jako dva různé titulky.
 
+**Word-level diff (#153)** — u přepsaného řádku svítí jen změněná část, v obou pohledech. Porovnává
+se **po tokenech** (jméno, mezera, operátor), a je to rozhodnuté měřením na 332 dvojicích z historie
+tohohle repa: po tokenech svítí 26,5 % znaků v 1,62 úsecích na řádek, po znacích 28,9 % ve 3,46 —
+a po znacích se přes práh podobnosti navíc dostane o 34 dvojic víc, protože společná písmena dvou
+nesouvisejících řádků vypadají jako podobnost. Nepodobná dvojice (práh 0,30 ze společných
+neprázdných znaků) zůstává obarvená celá jako dosud — je to smazání a přidání, ne přepsání.
+
+Dvě rozhodnutí, která z toho stojí za zapamatování. **Zvýraznění se nesmí přimíchat do
+`SyntaxRunCache`** (#224): závisí na protějšku dvojice, kdežto cache je klíčovaná textem řádku, takže
+by tentýž řádek proti jinému protějšku dostal cizí zvýraznění — a potichu. Kreslí se proto jako druhá
+vrstva nad hotovými runy (pozadí × barva písma u syntaxe). A **počítá se až při skládání textu
+bloku**, ne v modelu: blok o 60 řádcích stojí 0,42 ms, celý soubor 19,6 ms, a model se přepočítává při
+každém překreslení diffu. Cenou je známé omezení — dvojici roztrženou hranicí bloku pohled pod sebou
+nezvýrazní.
+
+Při proklikání se z toho opravila **sytost zvýraznění (30 % → 50 %)**: třicet vyšlo z renderu
+jednoho bloku, jenže v okně se zvýraznění hledá v celém diffu a na jednoznakové změně se
+přehlédlo. A **vyloučilo se, že za tuhnoucí okno může tahle změna** — reprodukuje se projížděním
+velkého diffu vedle sebe a chová se stejně na mainu; `WordDiff` stojí 18 % ceny skládání bloku
+v nejhorším případě a v `sample`u ztuhlého procesu není vůbec. Tuhnutí je tedy vlastní issue
+v území #220/#223; postup a vyloučené příčiny jsou v [`testovani.md`](testovani.md).
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
