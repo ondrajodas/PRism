@@ -107,6 +107,27 @@ main je squashnutý, takže `git merge main` stačí a nerozbije Copilotovi kome
 Release se vydá **jeden za celou dávku**, ne na každou větev. Pořadí čísel by jinak říkalo
 něco, co není pravda — verze je značka na časové ose.
 
+**Po posledním mergi dávky se restartuje hlavní aplikace** — `./bin/run.sh` v hlavním stromě,
+tedy v tom bez slotu. Po každém jednotlivém mergi ne: v dávce jich jde několik za sebou a každý
+restart zavírá okno, ve kterém se zrovna něco čte. Pravidlo samotné je v `CLAUDE.md`, tady je
+jen ta odchylka pro dávku.
+
+**Sloty se restartem netknou** — mají vlastní bundle ID a `run.sh` v hlavním stromě ukončuje
+instanci podle cesty. Ověřeno v provozu: `PRism-a`, `-b`, `-c` běžely dál, hlavní instanci se
+změnil PID. Čtyři instance vedle sebe, čtyři cache.
+
+Po mergi větve subagenta zbyde jeho **pracovní strom** — harness ho sám neuklidí, jakmile na
+něm doběhl. Odklidit ho patří k mergi:
+
+```bash
+git worktree list                       # zamčené stromy patří běžícím agentům, ty nech být
+git worktree remove <cesta> && git branch -d <větev>
+```
+
+Aplikace slotu (`/Applications/PRism-a.app`) a jeho cache se ruší **až když slot doopravdy
+skončil**, ne po každém mergi — další subagent dostane totéž písmeno a je levnější mu nechat
+udělená povolení k notifikacím než si o ně říkat znovu.
+
 ## 6. Kde je strop
 
 Ne ve stroji. Změřeno u #228: clean build 23 s, test run s 1864 testy 25 s, medián zátěže
