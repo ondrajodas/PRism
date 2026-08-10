@@ -18,7 +18,8 @@
 	     na PRism ten důvod odpadl — od #228 ho ale plní znovu, tentokrát kvůli slotům.
 
 	     PRISM_SLOT_LABEL je prázdný, dokud se nebuildí do slotu; hlavní checkout se tedy
-	     jmenuje „PRism“ jako dřív a build ve slotu „PRism A“. Není to kosmetika:
+	     jmenuje „PRism“ jako dřív a build ve slotu „a“ se jmenuje „PRism-a“ — label je
+	     `-${SLOT}` a slot se používá doslova. Není to kosmetika:
 	     CFBundleName určuje i kořen cache (CacheLayout.applicationSupport), takže prázdná
 	     hodnota znamená společnou cache s produkční instancí. -->
 	<key>CFBundleDisplayName</key>
