@@ -68,8 +68,9 @@ struct MiniButtonStyle: ButtonStyle {
             // titulek řádku fronty.
             .font(.system(size: Metrics.fontSize, weight: emphasis == .primary ? .medium : .regular))
             .foregroundStyle(foreground)
-            // Popisek se **nezalamuje**: dvouřádkové tlačítko v řadě jednořádkových vypadá jako
-            // jiný prvek. Když se řada nevejde, ořeže se text, ne rozvržení.
+            // Popisek jednoho tlačítka se **nezalamuje**, a když se nevejde, zkrátí se: dvouřádkové
+            // tlačítko v řadě jednořádkových vypadá jako jiný prvek. Jak se zachová celá **řada**,
+            // je věc volajícího — u nálezu se zlomí, viz `FindingBubbleView.footer(of:)`.
             .lineLimit(1)
             .padding(.horizontal, Metrics.insetHorizontal)
             .padding(.vertical, Metrics.insetVertical)

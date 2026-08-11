@@ -333,9 +333,12 @@ Co se u toho nemá rozbít:
   změřeno renderem, že v úzkém panelu zbývá na řadu 128 bodů a ze tří tlačítek jsou pahýly o jednom
   znaku. Cena je trojnásobek layoutu footeru — u tří tlačítek zanedbatelná, protože bublina není
   na každém řádku diffu.
-- **Cíl převzetí se počítá jednou za bublinu**, v `footer(of:)`, ne uvnitř tlačítka:
-  `draft.target(_:)` hledá řádek v hunkách a `ViewThatFits` staví všechny varianty, takže uvnitř
-  by to byl průchod na každou z nich.
+- **Cíl převzetí a `isAdopted` se počítají jednou za bublinu**, v `footer(of:)`, ne uvnitř tlačítka:
+  obojí hledá řádek v hunkách (`isAdopted` si `draftTarget` počítá samo) a `ViewThatFits` staví
+  všechny varianty, takže uvnitř by to byl průchod na každou z nich.
+- **Prázdný footer se nekreslí, ani jako mezera.** Bublina ke čtení (náhledy, testy skládání řádků,
+  `canCompose == false`) by jinak měla pod textem devět bodů prázdna — a prázdno na místě, kde jinde
+  něco je, se čte jako chybějící obsah, ne jako „tady nic není“.
 - **Věta „GitHub tady řádkový komentář nepřijme“ stojí pod řadou, ne za tlačítkem.** Je to nejdelší
   prvek, takže jako ocas za tlačítkem rozhodovala o zalomení celé řady místo tlačítek — změřeno
   renderem, kde kvůli ní řada padala do sloupce i na širokém okně.

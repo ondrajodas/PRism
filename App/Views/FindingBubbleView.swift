@@ -460,7 +460,12 @@ struct FindingBubbleView: View {
     /// omyl je vratný na místě (odmítnutí nález nesundá, #113, a `Vrátit` je u něj hned) a cena
     /// byla, že odmítnutí sedělo u pravé hrany okna, metr od nálezu, ke kterému patří. Odlišuje
     /// je proto **plocha** — plné akcentové tlačítko proti obtaženým.
-    private func footer(of finding: Finding) -> some View {
+    ///
+    /// **Bez akcí se nekreslí vůbec**, ani jako mezera. Bublina ke čtení (náhledy, testy skládání
+    /// řádků, `canCompose == false`, dokud nevíme proti kterému commitu) by jinak měla pod textem
+    /// devět bodů prázdna, které nic neznamenají — a to je horší než těsný text, protože to vypadá
+    /// jako chybějící obsah.
+    @ViewBuilder private func footer(of finding: Finding) -> some View {
         // **Když se řada nevejde, zlomí se** — nejdřív na dvě řady, a když ani to nestačí, do
         // sloupce. Návrh zalomení nemá (`display: flex` bez `wrap`), ale nemá ani odpověď na
         // šířku, ve které jedna řada nemůže existovat: změřeno renderem, že v úzkém panelu zbývá
@@ -476,41 +481,46 @@ struct FindingBubbleView: View {
         // `target == nil` = do draftu se psát nedá, akce se pak nenabízí.
         let target = draft.canCompose ? draft.target(finding) : nil
         let isAdopted = target != nil && draft.isAdopted(finding)
-        return VStack(alignment: .leading, spacing: 4) {
-            ViewThatFits(in: .horizontal) {
-                // Jak to má návrh.
-                HStack(spacing: gap) {
-                    adoption(of: finding, to: target, isAdopted: isAdopted)
-                    dismissal(of: finding)
+        // Prázdný footer se nekreslí — jinak by z něj zbyla jen mezera, viz dokumentace metody.
+        if target != nil || actions != nil {
+            VStack(alignment: .leading, spacing: 4) {
+                ViewThatFits(in: .horizontal) {
+                    // Jak to má návrh.
+                    HStack(spacing: gap) {
+                        adoption(of: finding, to: target, isAdopted: isAdopted)
+                        dismissal(of: finding)
+                    }
+                    // Převzetí a odmítnutí každé na svém řádku.
+                    VStack(alignment: .leading, spacing: gap) {
+                        HStack(spacing: gap) {
+                            adoption(of: finding, to: target, isAdopted: isAdopted)
+                        }
+                        HStack(spacing: gap) { dismissal(of: finding) }
+                    }
+                    // A když nevyjde ani to, každé tlačítko samo. Popisek, ze kterého zbylo
+                    // `Nepa…`, neříká nic — sloupec je ošklivější, ale čitelný.
+                    VStack(alignment: .leading, spacing: gap) {
+                        adoption(of: finding, to: target, isAdopted: isAdopted)
+                        dismissal(of: finding)
+                    }
                 }
-                // Převzetí a odmítnutí každé na svém řádku.
-                VStack(alignment: .leading, spacing: gap) {
-                    HStack(spacing: gap) { adoption(of: finding, to: target, isAdopted: isAdopted) }
-                    HStack(spacing: gap) { dismissal(of: finding) }
-                }
-                // A když nevyjde ani to, každé tlačítko samo. Popisek, ze kterého zbylo `Nepa…`,
-                // neříká nic — sloupec je ošklivější, ale čitelný.
-                VStack(alignment: .leading, spacing: gap) {
-                    adoption(of: finding, to: target, isAdopted: isAdopted)
-                    dismissal(of: finding)
+                // Proč to nejde jako komentář u řádku, musí být vidět **bez** najetí myší: tlačítko
+                // s jiným cílem, které vypadá stejně, je horší než delší text. U převzatého nálezu
+                // ne — tam už to říká odznak (`v těle mého review`) a byla by to tatáž věta dvakrát.
+                //
+                // **Na vlastním řádku pod řadou** (#283), ne jako ocas za tlačítkem: je to nejdelší
+                // prvek řady, takže by o zalomení celé řady rozhodovala věta, ne tlačítka — změřeno
+                // renderem, kde kvůli ní řada padala do sloupce i na širokém okně.
+                if case .body = target, !isAdopted {
+                    Text(verbatim: "GitHub tady řádkový komentář nepřijme")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
             }
-            // Proč to nejde jako komentář u řádku, musí být vidět **bez** najetí myší: tlačítko
-            // s jiným cílem, které vypadá stejně, je horší než delší text. U převzatého nálezu ne —
-            // tam už to říká odznak (`v těle mého review`) a byla by to tatáž věta dvakrát.
-            //
-            // **Na vlastním řádku pod řadou** (#283), ne jako ocas za tlačítkem: je to nejdelší
-            // prvek řady, takže by o zalomení celé řady rozhodovala věta, ne tlačítka — změřeno
-            // renderem, kde kvůli ní řada padala do sloupce i na širokém okně.
-            if case .body = target, !isAdopted {
-                Text(verbatim: "GitHub tady řádkový komentář nepřijme")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
+            // Návrh má mezi textem nálezu a řadou tlačítek 9 bodů (`.txt` má padding-bottom 9,
+            // `footer` padding-top 0). `VStack` uvnitř nálezu drží 4, takže zbylých 5 si bere řada.
+            .padding(.top, 5)
         }
-        // Návrh má mezi textem nálezu a řadou tlačítek 9 bodů (`.txt` má padding-bottom 9,
-        // `footer` padding-top 0). `VStack` uvnitř nálezu drží 4, takže zbylých 5 si bere řada.
-        .padding(.top, 5)
     }
 
     /// Dva důvody vedle sebe, ne rozbalovací menu: je to jedno kliknutí místo dvou a rozdíl
