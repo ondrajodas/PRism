@@ -812,11 +812,12 @@ uživatele nad jeho osobním nástrojem, zapsané v specifikaci proto, aby se to
 „neopravilo“ zpátky.
 
 **Rozhodnutí z #237 přitom drží, a je to změřené**: vlastní formát si vyžádal vlastní takt, ale ten
-dává `TimelineView` uvnitř odpočtu, který přepočítává jen svůj obsah — tělo nad ním se za 1,5
-sekundy přepočítá **jednou** a formát stojí 0,12 µs na tik. Sonda z #237 na to zůstala a **umí víc**:
-kouká se i na bitmapu hostovaného view, takže chytne i zamrzlý odpočet, který samotný počet přepočtů
-nepozná (ověřeno vyndáním `TimelineView`). Text z okna přečíst nešlo — accessibility tree se
-v hostovaném okně nenaplní, změřeno.
+dává `TimelineView` uvnitř odpočtu, který přepočítává jen svůj obsah — tělo nad ním se přepočítá
+**jednou** a formát stojí 0,12 µs na tik. Sonda z #237 na to zůstala a **umí víc**: kouká se i na
+kresbu hostovaného view, takže chytne i zamrzlý odpočet, který samotný počet přepočtů nepozná
+(ověřeno vyndáním `TimelineView`). Text z okna přečíst nešlo — accessibility tree se v hostovaném
+okně nenaplní, změřeno. **Jak dlouho se na tu změnu kresby čeká, opravilo až #269** — do té doby
+sonda brala dva snímky 1,5 s od sebe, což je okno, do kterého se první změna nevejde.
 
 **Nastavení a novinky zůstávají v popředí aplikace (#243)** — `AuxiliaryWindowLevel`
 a `keptInFrontOfApp()` v `App/Views/WindowCentering.swift`, tedy další věc udělaná témuž oknu,
@@ -934,6 +935,22 @@ Cestou se opravila jedna věc, která by jinak vznikla novou: **skok na nález h
 by cíl skoku z panelu i z lišty byl pruh, na kterém není co přečíst — tatáž úvaha, kvůli které skok
 rozbaluje i sbalený soubor. A `Přeložit` z návrhu se **nedělalo**: překlad na vyžádání v aplikaci
 neexistuje (běží jednou po review) a byl by to nový běh `claude`, tedy vlastní issue.
+
+**Sonda odpočtu čeká na změnu kresby, neměří v pevném okamžiku (#269)** — `main` byl na téhle sondě
+červený a **rozbitý byl test, ne aplikace**. Rozhodlo to měření, ne úvaha: odpočet v aplikaci tiká
+po 1,00 s (časy tiků 2,01 → 3,00 → 4,00 → 5,00 → 6,00) a z uložených snímků se dá věta přečíst —
+v 1,5 s `za 9min 59s znovu`, ve 2,0 s `za 9min 58s znovu`. Příčinou je vlastnost `TimelineView`u:
+při nasazení vykreslí hodnotu **prvního** tiku rozvrhu, který je v budoucnosti, a další překreslení
+naplánuje až na tik po něm, takže první změna kresby přijde za **1 až 2 periody**. Sonda měřila
+1,5 s, změna přišla ve 2,01 s — zeleně to vycházelo jen tehdy, když spánek přetáhl o půl vteřiny.
+
+Sonda proto snímkuje po 100 ms, dokud nemá **dvě** změny, se **stropem 4 s**: dvě proto, že jedna
+dokazuje jen jedno překreslení, kdežto tvrdit se má přetikávání; strop proto, že bez něj by
+o vteřinovém taktu neříkala nic. Ověřeno **třemi vloženými regresemi** — vyndaný `TimelineView`
+(0 změn), odpočet přepočítávaný v těle (3 přepočty místo jednoho) a rozvrh po dvou vteřinách
+(1 změna místo dvou, změny se posunou na 4,0 s a 6,0 s). Kontrola měřidla od #269 hlídá **obě**
+měřidla, přepočty i kresbu, protože rozbité porovnání bitmap by jinak hlásilo poruchu aplikace.
+Na obrazovce se nezměnilo nic — aplikace zůstala, jak byla; celý běh je zelený (2092 testů).
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
