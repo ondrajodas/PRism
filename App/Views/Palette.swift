@@ -31,8 +31,8 @@ enum Palette {
     static let ink2 = Color(light: 0x5A6379, dark: 0x98A1B5)
     static let ink3 = Color(light: 0x8B93A7, dark: 0x6B7488)
 
-    /// Stavy z palety návrhu (`--ok`, `--crit`) — kapsle stavu PR v hlavičce (#218) a od #277
-    /// i **zelená a červená celého diffu**.
+    /// Stavy z palety návrhu (`--ok`, `--crit`) — kapsle stavu PR v hlavičce (#218), souhrn checků
+    /// (#215) a od #277 i **zelená a červená celého diffu**.
     ///
     /// **Ne systémová `.green` / `.red`.** Kapsle stavu je plná plocha s textem v barvě podkladu
     /// (`--panel`), a systémová zelená je na to příliš světlá — bílý text na ní není čitelný.

@@ -19,6 +19,17 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// „jak to teď stojí“ (popis, fakta, co se změnilo od minule), konverzace na „co se dělo“.
     /// V jednom scrollu se přitom to druhé čte tak, že se přes první přeroluje.
     case conversation
+    /// Kontroly z GitHub Actions — seznam checků a detail toho, který spadl (#215).
+    ///
+    /// **Vlastní tab, ne blok v `Přehledu`.** Se souhrnem to v `Přehledu` sedělo, ale detail
+    /// spadlého checku (#214) přidává anotace a konec logu, a tím ten blok vyroste natolik, že
+    /// vytlačí popis PR mimo obrazovku. `Přehled` má odpovídat na „jak to teď stojí“, ne být
+    /// místem, kde se scrolluje log — je to tentýž pohyb jako u `Konverzace` (#183): co začne
+    /// růst, přestane být kontextem a stane se obsahem.
+    ///
+    /// **Nekreslí se, když checky nejsou** — viz `Policy.tabs(hasChecks:)`. PR bez CI je běžná
+    /// věc a prázdný tab s nadpisem by o něm tvrdil, že se něco nepovedlo.
+    case checks
     /// Všechno, co reviewery nahlásily — tabulka přes celou šířku (#242).
     ///
     /// **Vlastní tab, i když nálezy zůstávají i v panelu vpravo.** Ve 300 bodech se nález nedá
@@ -52,6 +63,7 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
         case .overview: "Přehled"
         case .filesChanged: "Změněné soubory"
         case .conversation: "Konverzace"
+        case .checks: "Kontroly"
         case .findings: "Nálezy"
         case .progress: "Průběh"
         }
@@ -62,11 +74,12 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// Podle toho se v pruhu záložek kreslí dělič (#242): nalevo je to, co má i GitHub, napravo
     /// to, co s PR udělaly reviewery. Bez něj by pět záložek vypadalo jako jeden dlouhý seznam.
     ///
-    /// Je to vlastnost tabu, ne pozice v poli: `Kontroly` (#215) přijdou **nalevo** doprostřed,
-    /// takže dělič spočítaný z indexu by se tím tiše posunul na špatné místo.
+    /// Je to vlastnost tabu, ne pozice v poli: `Kontroly` (#215) sedí **nalevo** doprostřed,
+    /// takže dělič spočítaný z indexu by se tím tiše posunul na špatné místo. A protože se
+    /// `Kontroly` u PR bez CI vůbec nekreslí, index by se navíc měnil podle dat.
     var isReviewerOutput: Bool {
         switch self {
-        case .overview, .filesChanged, .conversation: false
+        case .overview, .filesChanged, .conversation, .checks: false
         case .findings, .progress: true
         }
     }

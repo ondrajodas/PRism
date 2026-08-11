@@ -14,9 +14,6 @@ struct OverviewView: View {
     var description: String?
     /// Fakta o PR do dlaždic (#198). Prázdná = řádek se nekreslí.
     var facts: PullRequestFacts = PullRequestFacts(tiles: [])
-    /// Checky z GitHub Actions (#209). Prázdné = blok se nekreslí; PR bez checků je běžný stav
-    /// a prázdný rámeček s nadpisem by o něm tvrdil, že se něco nepovedlo.
-    var checks: [PullRequestCheck] = []
     /// Co přibylo od poslední návštěvy (#173). Prázdné = nic, nebo se ještě nenačetla
     /// konverzace; banner se v obou případech nekreslí.
     var changes: VisitChanges = .none
@@ -54,11 +51,10 @@ struct OverviewView: View {
                 if !facts.isEmpty {
                     PullRequestFactsView(facts: facts)
                 }
-                // Checky **pod dlaždicemi**, jak je má návrh: je to fakt o PR, jen delší než
-                // na jednu dlaždici.
-                if !checks.isEmpty {
-                    ChecksView(checks: checks)
-                }
+                // **Kontroly tady nejsou vůbec** (#215). Do #215 to byl seznam (#209), pak chvíli
+                // souhrn — a nakonec ani ten: tab `Kontroly` na tu otázku odpovídá celou
+                // a „je to zelené“ nese chip v hlavičce PR, který je vidět ve všech tabech.
+                // Souhrn tu byl třetí místo o téže věci. Vyžádané při zkoušení, viz specifikace.
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)

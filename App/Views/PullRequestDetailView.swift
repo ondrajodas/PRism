@@ -171,6 +171,22 @@ struct PullRequestDetailView: View {
                     .foregroundStyle(Palette.crit)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Proč se nenačetly kontroly (#215). **V hlavičce, ne v `Přehledu`:** je to jediná
+            // věta o checcích, která zbyla mimo tab, a hlásí právě ten stav, kdy tab **není** —
+            // takže se musí ukázat i tomu, kdo se na `Přehled` vůbec nepodívá. Hlavička je vidět
+            // ve všech tabech a už jednu takovou větu nese (kontrola nálezů výš).
+            //
+            // Okrová, ne červená: kontroly jsou cizí fakt, který se nepovedlo **zjistit** —
+            // to je „nevím“, ne „je to rozbité“.
+            if let failure = store.checkFailures[pullRequest.id] {
+                Label(
+                    "Kontroly na GitHubu se nepodařilo načíst. \(failure)",
+                    systemImage: "exclamationmark.triangle"
+                )
+                .font(.caption)
+                .foregroundStyle(Palette.stale)
+                .fixedSize(horizontal: false, vertical: true)
+            }
             reviewers
             // Selhání checkoutu se do lišty nevejde, a právě u něj je text od `gitu`
             // to jediné, z čeho se pozná, co dělat dál. **Zůstává v hlavičce**, i když se
@@ -190,8 +206,14 @@ struct PullRequestDetailView: View {
     ///
     /// Odznak nese **každá** záložka (#218); co který počítá, je u `count(in:)`.
     private var tabs: some View {
-        PullRequestTabBar(selection: tabSelection, badge: badge(in:))
-            .diffCounts(loadedDiffCounts)
+        PullRequestTabBar(
+            selection: tabSelection,
+            // `Kontroly` odpadnou u PR bez CI (#215). Rozhoduje o tom store, ne tohle view:
+            // je to pravidlo o datech a na tomtéž výčtu stojí i zarovnání uložené volby.
+            tabs: store.detailTabs(of: pullRequest.id),
+            badge: badge(in:)
+        )
+        .diffCounts(loadedDiffCounts)
     }
 
     /// Odznak u záložky. `nil` = nedá se říct, takže se nekreslí nic — nula by tvrdila, že se
@@ -209,6 +231,10 @@ struct PullRequestDetailView: View {
         // Jen to, co je **k přečtení** — události časové osy se nepočítají (#171), jinak by
         // na PR s dvaceti commity odznak ukazoval třicet a přestal by o diskuzi něco říkat.
         case .conversation: count(store.overview(for: pullRequest.id).count { $0.isReadable })
+        // **Podle nejhoršího stavu, ne podle většiny** (#215) — tatáž úvaha jako u chipu
+        // v hlavičce. Anotace z CI (#214) se do něj **nepočítají**: odznak mluví o checkech,
+        // ne o tom, kolik jich mělo co říct.
+        case .checks: Policy.checksBadge(of: Policy.summary(of: store.checks[pullRequest.id] ?? []))
         // Počítá to **`Policy` z týchž nálezů**, jaké kreslí tabulka v tabu, karty v panelu
         // a bubliny v diffu (#242) — jeden zdroj, aby odznak nemohl tvrdit něco jiného, než
         // co je na obrazovce.
@@ -307,6 +333,7 @@ struct PullRequestDetailView: View {
                     case .filesChanged: diff
                     case .overview: overview
                     case .conversation: conversation
+                    case .checks: checks
                     case .findings: findings
                     case .progress: progress
                     }
@@ -770,7 +797,6 @@ struct PullRequestDetailView: View {
         OverviewView(
             description: store.description(of: pullRequest.id),
             facts: facts,
-            checks: store.checks[pullRequest.id] ?? [],
             changes: store.changesSinceLastVisit(for: pullRequest.id),
             lastVisit: store.visitSnapshots[pullRequest.id],
             // Obojí je „to, co mám na obrazovce, už neplatí“, takže se do banneru slévá do
@@ -783,6 +809,11 @@ struct PullRequestDetailView: View {
             dismissChanges: { store.markChangesAsSeen(for: pullRequest.id) },
             pullRequest: pullRequest
         )
+    }
+
+    /// Tab `Kontroly` (#215) — seznam checků z GitHub Actions a detail spadlého (#214).
+    private var checks: some View {
+        ChecksView(checks: store.checks[pullRequest.id] ?? [])
     }
 
     /// Tab `Nálezy` (#242) — tabulka přes celou šířku.
