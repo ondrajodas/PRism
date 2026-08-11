@@ -452,9 +452,10 @@ Zvlášť stojí za přečtení, než sáhneš na:
   u obou konfigurací projektu), z filesystému se nevezme.
 
   **Dva zdrojáky se stejným jménem build položí** (#184), i když leží v různých podsložkách:
-  `App/Models/CommandPalette.swift` a `App/Policy/CommandPalette.swift` skončily na
-  `Multiple commands produce … CommandPalette.stringsdata`. Jméno souboru je v jednom targetu
-  klíč, takže se soubory pojmenovávají **jednoznačně napříč celým `App/`** (a `Tests/`).
+  model palety a hledání k ní se u #184 obojí jmenovaly `CommandPalette.swift` (v `App/Models/`
+  a v `App/Policy/`) a build skončil na `Multiple commands produce … CommandPalette.stringsdata`.
+  Jméno souboru je v jednom targetu klíč, takže se soubory pojmenovávají **jednoznačně napříč
+  celým `App/`** (a `Tests/`) — proto je z toho druhého `App/Policy/CommandPaletteSearch.swift`.
 
   Druhá výjimka je `ASSETCATALOG_COMPILER_APPICON_NAME` (#83): je to **build setting**, takže
   jinudy než pbxprojem nastavit nejde. Leží na **app targetu**, ne na projektu — testovací

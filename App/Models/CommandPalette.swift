@@ -5,7 +5,7 @@ import Foundation
 /// Není to typ k instanciování, jen střecha nad tvary: `Item` je jeden řádek, `Section` je
 /// skupina řádků, `Target` je to, co se stane po `↵`, a `Jump` je žádost o odscrollování,
 /// kterou vyřídí detail PR. **Pravidla** (co na dotaz sedne a v jakém pořadí) bydlí v `Policy`
-/// — viz `App/Policy/CommandPalette.swift`.
+/// — viz `App/Policy/CommandPaletteSearch.swift`.
 ///
 /// **Jmenný prostor, ne prefix v každém názvu**: `Palette` v tomhle repu už znamená barvy okna
 /// (`App/Views/Palette.swift`), takže `PaletteItem` by se čtl jako barevný token.

@@ -514,8 +514,14 @@ struct PullRequestDetailView: View {
     /// Bez toho kliknutí na nález v `Přehledu` neudělalo nic: diff v tu chvíli v okně vůbec
     /// není, takže se nemá kde scrollovat. Přepnout tab je správnější než kliknutí ignorovat —
     /// kdo klikne na nález, chce vidět ten kód.
+    ///
+    /// **Zvýraznění se maže tady, na jednom místě** (nález si ho nastaví hned po skoku). Jinak by
+    /// zůstalo svítit u nálezu, od kterého se odskočilo — na komentář (#110) nebo na soubor
+    /// z palety (#184) — a ukazovalo by na kód, kde nikdo nic nehlásil. Nález Copilota na #184;
+    /// u skoku na komentář to bylo rozbité od #110.
     private func scroll(to anchor: String) {
         store.setDetailTab(.filesChanged, for: pullRequest.id)
+        highlighted = nil
         scrollTarget = anchor
     }
 
