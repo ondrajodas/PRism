@@ -232,6 +232,25 @@ final class AppStore {
     /// vrací. Pořadí kopíruje pořadí, ve kterém běhy začaly.
     var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
 
+    /// Je otevřená command palette ⌘K (#184)?
+    ///
+    /// **Ve store, ne v `@State` okna**, a je to podmínka, ne úklid: detail PR podle toho vypíná
+    /// svoje `⌘⏎` (potvrzení odeslání), aby paletě zbylo `⌘↵` na „otevřít na GitHubu“ — a dvě
+    /// okna, která si o téže klávese musí říct, si to jinudy nemají kde povědět. Zapisuje se
+    /// jedině `openPalette()` / `closePalette()` / `togglePalette()`.
+    ///
+    /// **Dotaz ani vybraný řádek tady nejsou**: mají zaniknout se zavřením palety, takže bydlí
+    /// v `@State` uvnitř `CommandPaletteView`. Text z minula by po ⌘K vypadal jako výsledky
+    /// k něčemu, na co se nikdo neptal.
+    var isPaletteOpen = false
+
+    /// Kam se má odscrollovat po skoku z palety (#184). `nil` = nikam.
+    ///
+    /// Rozhodnutí padá v paletě nad celým oknem, ale odscrollovat umí jedině detail PR (má kotvy
+    /// řádků a `ScrollViewProxy`) — proto se tady žádost jen **položí** a detail si ji vyzvedne
+    /// a smaže. Uklízí se s PR mimo seznam, stejně jako rozdělané tažení komentáře.
+    var paletteJump: CommandPalette.Jump?
+
     /// Má okno nastavení fokus? Hlavní okno se podle toho rozostří, aby netahalo oko.
     ///
     /// Žije tady, ne ve view: okno nastavení je **vlastní scéna**, takže si to dvě okna
@@ -1163,6 +1182,9 @@ final class AppStore {
         rangeTargets = rangeTargets.filter { wantedPullRequests.contains($0.key) }
         // Rozdělané tažení nemá s PR mimo seznam co dělat — a je to stav v řádu sekundy.
         if let drag = commentDrag, !wantedPullRequests.contains(drag.pullRequest) { commentDrag = nil }
+        // Totéž pro nevyzvednutý skok z palety (#184): PR, který ze seznamu vypadl, se nemá kde
+        // nakreslit, takže by žádost zůstala ležet a nikdo by ji nepřečetl.
+        if let jump = paletteJump, !wantedPullRequests.contains(jump.pullRequest) { paletteJump = nil }
         // Běžící review si osu drží: `reviewTasks` je pravda o tom, co ještě běží, a jeho
         // události by se jinak zapisovaly do mapy, ze které je někdo právě vyhodil.
         reviewTimelines = reviewTimelines.filter {
