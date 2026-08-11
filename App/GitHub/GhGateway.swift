@@ -34,7 +34,11 @@ struct GhGateway: GitHubGateway {
             "--json", GhSearchItem.jsonFields,
         ]
 
-        let items = try await run(arguments, decodedAs: [GhSearchItem].self)
+        let items = try await run(
+            arguments,
+            phase: "Vyhledávání pull requestů",
+            decodedAs: [GhSearchItem].self
+        )
         return try items.map { try $0.summary() }
     }
 
@@ -45,7 +49,8 @@ struct GhGateway: GitHubGateway {
             "--json", GhPullRequestDetail.jsonFields,
         ]
 
-        return try await run(arguments, decodedAs: GhPullRequestDetail.self).pullRequest(id: id)
+        return try await run(arguments, phase: "Metadata pull requestu", decodedAs: GhPullRequestDetail.self)
+            .pullRequest(id: id)
     }
 
     /// `gh pr checks` končí **nenulovým kódem, když něco spadlo** — a to není chyba volání,
@@ -80,7 +85,7 @@ struct GhGateway: GitHubGateway {
         do {
             return try GhOutput.decoder.decode([GhCheck].self, from: Data(output.utf8)).map(\.check)
         } catch {
-            throw GitHubError.malformedOutput("Výstupu gh pr checks nerozumím: \(error)")
+            throw GitHubError.malformedOutput("Kontroly pull requestu: \(error)")
         }
     }
 
@@ -108,6 +113,7 @@ struct GhGateway: GitHubGateway {
     func fetchConversation(id: PRIdentifier) async throws -> Conversation {
         let response = try await run(
             ConversationQuery.arguments(for: id),
+            phase: "Konverzace pod pull requestem",
             decodedAs: GhConversationResponse.self
         )
         return try response.conversation(id: id)
@@ -121,7 +127,7 @@ struct GhGateway: GitHubGateway {
         // je vidí, protože do vlastního repa máme zápis.
         let items = try await run([
             "api", "repos/\(Release.repository)/releases?per_page=100",
-        ], decodedAs: [GhRelease].self)
+        ], phase: "Seznam vydání", decodedAs: [GhRelease].self)
 
         // **Neřadí se tady.** Pořadí je rozhodnutí (`Policy.sortedReleases`), ne tvar
         // odpovědi — gateway vrací, co přišlo.
@@ -135,7 +141,7 @@ struct GhGateway: GitHubGateway {
         let page = 100
         let items = try await run([
             "api", "repos/\(repo)/check-runs/\(checkRunID)/annotations?per_page=\(page)",
-        ], decodedAs: [GhAnnotation].self)
+        ], phase: "Anotace check-runu", decodedAs: [GhAnnotation].self)
 
         return CheckAnnotations(
             fetched: items.map(\.annotation),
@@ -143,18 +149,23 @@ struct GhGateway: GitHubGateway {
         )
     }
 
-    func fetchJobLogSize(repo: RepoID, jobID: Int) async throws -> Int {
+    func fetchJobLogSize(repo: RepoID, jobID: Int) async throws -> Int? {
         // `-X HEAD -i` vypíše **jen hlavičky**, takže se velikost zjistí bez stažení těla —
         // a `gh` přitom následuje redirect do Azure blobu, odkud `Content-Length` doopravdy je.
-        let headers = try await run([
+        // Bez `-i` nepřijde nic: `HEAD` nemá tělo, takže hlavičky jsou celý výstup.
+        let output = try await run([
             "api", "-X", "HEAD", "-i", "repos/\(repo)/actions/jobs/\(jobID)/logs",
         ])
-        guard let size = Self.contentLength(in: headers) else {
-            // **Nehádá se.** Bez velikosti se nedá rozhodnout o stropu, a tvářit se, že log je
-            // malý, znamená stáhnout osm mega na pozadí okna.
-            throw GitHubError.malformedOutput("Odpověď na velikost logu neobsahuje Content-Length.")
+        switch GhResponseHeaders(output: output).contentLength {
+        case .bytes(let size):
+            return size
+        // **„Nevím“ není chyba** (#292). Všechny čtyři důvody, proč velikost nevyšla, končí
+        // stejně: velikost neznáme a rozhodne se ze stahování. Vyhodit tady chybu znamenalo, že
+        // jedna hlavička vypnula konec logu u **všech** checků — a rozborem hlaviček se to dá
+        // spíš minout než dotazem samotným, protože se na něm nic nespustí ani nespadne.
+        case .noOutput, .httpFailure, .missingHeader, .unreadableValue:
+            return nil
         }
-        return size
     }
 
     func fetchJobLog(repo: RepoID, jobID: Int) async throws -> String {
@@ -163,30 +174,19 @@ struct GhGateway: GitHubGateway {
         try await run(["api", "repos/\(repo)/actions/jobs/\(jobID)/logs"])
     }
 
-    /// `Content-Length` z vypsaných hlaviček.
-    ///
-    /// Bere se **poslední nenulová**: `gh -i` u redirectu vypíše hlavičky obou odpovědí a ta první
-    /// (z GitHub API) má `Content-Length: 0`. Kdyby se brala první, vyšel by každý log jako prázdný
-    /// — a strop by ho pustil ke stažení bez ohledu na velikost.
-    static func contentLength(in headers: String) -> Int? {
-        headers
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .compactMap { line -> Int? in
-                let parts = line.split(separator: ":", maxSplits: 1)
-                guard parts.count == 2,
-                      parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length"
-                else { return nil }
-                return Int(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
-            }
-            .last { $0 > 0 }
-    }
-
-    private func run<T: Decodable>(_ arguments: [String], decodedAs type: T.Type) async throws -> T {
+    /// `phase` **není dekorace**: `Výstupu gh nerozumím. keyNotFound…` neříká, co se zkoušelo,
+    /// takže se z hlášky nedá poznat ani to, která obrazovka je poloprázdná. Fáze je jediné, co
+    /// k tomu volající ví a chyba sama ne.
+    private func run<T: Decodable>(
+        _ arguments: [String],
+        phase: String,
+        decodedAs type: T.Type
+    ) async throws -> T {
         let output = try await run(arguments)
         do {
             return try GhOutput.decoder.decode(type, from: Data(output.utf8))
         } catch {
-            throw GitHubError.malformedOutput("Výstupu gh nerozumím: \(error)")
+            throw GitHubError.malformedOutput("\(phase): \(error)")
         }
     }
 

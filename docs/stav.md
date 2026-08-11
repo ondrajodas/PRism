@@ -1101,6 +1101,90 @@ nad ním je lepší než zmizelý tab) a v **hlavičce PR** je vidět, proč tab
 ve všech tabech, takže se ta věta ukáže i tomu, kdo do `Přehledu` nejde. Testů je o 32 víc (2256)
 ve dvou nových suitách.
 
+**Sazba textů z GitHubu (#279).** Citace se neparsovaly na bloky, výstrahy parser vůbec neznal
+a nadpisy měly dvě velikosti na šest úrovní. `MarkdownBlock.quote` proto nese **bloky** (tentýž tvar
+jako `details`), přibyl případ `alert` s pěti druhy, `MarkdownTypography` drží škálu nadpisů
+a mezery mezi bloky, `MarkdownAlertStyle` vzhled výstrah a `MarkdownRenderCache` zapamatovanou
+sazbu (rozklad na bloky i inline). Rozhodnutí, která v zadání nebyla: **neznámý druh výstrahy** se kreslí jako obyčejná
+citace (a ten řádek v ní zůstane), zanoření má **strop** na šesti úrovních (za ním obsah zůstane
+textem — je to proti hloubce stromu view i proti `>>>>>>…`), titulky výstrah jsou **česky**, protože
+ve zdroji je jen `[!NOTE]`, a `MarkdownText` bere velikost **číslem místo `Font`u**, protože ze
+`Font`u se velikost nedá přečíst a škála nadpisů by neměla z čeho vyjít.
+
+Barvy: `[!WARNING]` a `[!CAUTION]` mají **vlastní hex**, protože ty GitHubovy (`0x9A6700`,
+`0xCF222E`) se na hex rovnají `Palette.stale` a `Palette.crit`, tedy zastarání a blokujícímu nálezu;
+`[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`. Změřeno: rozklad dvanáctikilobajtové zprávy
+od bota **1,91 ms → 0,037 ms** z cache a konverzace o 40 zprávách **74,7 ms → 1,48 ms**; inline
+sazba jejích 44 bloků je k tomu dalších **1,81 ms**, takže se pamatuje taky — jednou cachí, ne dvěma. Testů je o 41 víc (2265). Review našlo jednu reálnou vadu, na kterou testy neměly případ: lokální počítadlo otevřených tagů v `details(from:depth:)` se jmenovalo `depth` a **zastínilo** parametr s hloubkou rekurze, takže strop zanoření skrz `<details>` nezabíral a rozbalovátko hloubku ještě resetovalo. Sonda na
+render do PNG našla dvě věci, které z kódu vidět nebyly: nerozeznatelné úrovně nadpisů 3–5 (krok se
+roztáhl na celý bod) a pruh citace, který sahal do poloviny obsahu, protože se jeho výška
+vyjednávala v `HStack`u — teď je to `overlay`, který má velikost obsahu z definice.
+
+**Akce u nálezu v diffu jsou tlačítka podle návrhu (#283).** Byly to modré systémové odkazy
+roztažené přes celou šířku okna — převzetí vlevo, `Odmítnout: neplatný irelevantní` u pravé hrany,
+tedy na velkém monitoru metr od nálezu, ke kterému patří. Teď je to řada malých tlačítek vlevo pod
+textem (`MiniButtonStyle`, `.mini` a `.mini.pri` z návrhu): jedno plné akcentové a vedle něj
+obtažená.
+
+Tři věci se u toho rozhodly a jsou i s důvody ve specifikaci. **`Spacer` mezi převzetím a
+odmítnutím padl** — to rozhodnutí je otočené, protože jeho ochrana byla funkcí šířky okna (v úzkém
+panelu splaskne na osm bodů) a omyl je vratný na místě, když odmítnutí nález nesundá (#113); hlavní
+akci teď odlišuje **plocha** a stojí první zleva. **Popisky odmítnutí** nejsou z návrhu doslova
+(`Zamítnout` je obecné „odmítnout“ podruhé a v pořadí z návrhu by `Neplatí` u `.irrelevant` tvrdilo
+nepravdu) — jsou `Neplatí` a `Nepatří sem`, kdežto přídavná jména do odznaku zůstávají.
+**`Přeložit` se dělat nebude**: překlad běží dávkově při uložení běhu podle `findingsLanguage`,
+takže by tlačítko buď nedělalo nic, nebo by z něj byla druhá cesta, kterou se text nálezu přepisuje.
+
+Shodu s návrhem ověřil render vedle vyrenderované sekce mockupu a našel dvě věci, které kontrolou
+kódu prošly: tlačítko **20 bodů proti 25** (CSS řádek 1,45 a obtažení, které v CSS leží vně
+paddingu) a věta „GitHub tady řádkový komentář nepřijme“, která jako ocas za tlačítkem shodila celou
+řadu do sloupce i na širokém okně. Do úzkého okna se řada **zlomí** (řada → dvě řady → sloupec), což
+je vědomá odchylka: na 128 bodech, které v úzkém panelu zbývají, byly ze tří tlačítek pahýly
+o jednom znaku. Testů je o 9 víc (2306).
+
+**Barvy diffu jdou z palety, ne ze systému (#277).** Pozadí řádků bylo jediné místo v okně, které
+si barvu bralo ze systémové zelené a červené s krytím 12 % — a krytí znamená, že barva **není
+hodnota, ale výsledek**: v tmavém režimu se mísila směrem k černé a plocha přidaného bloku vycházela
+`#152B22`, tedy tmavý obdélník. Je to tentýž argument, jaký #185 zapsalo u `Palette.critLine`, jen
+se u pozadí řádku neuplatnil. Nově je to pět vyčíslených tokenů: přidaný a odebraný řádek,
+word-level vrstva k oběma a šrafa prázdného protějšku.
+
+**Hodnoty jsou z návrhu** (`--add-bg`, `--add-hi`, `--del-bg`, `--del-hi`, `tr.empty-side`), a ve
+světlém režimu doslova: `#E3FBE8` / `#FFEBE9` a k tomu `#ABEFC0` / `#FFC9C6`. Měřením vyšly lépe než
+to, co v aplikaci vycházelo ze skládání — odlišení přidaného řádku od plochy ΔE **10,1 → 13,0**
+a řetězec IntelliJ Light **4,81 → 4,86**; na word-level vrstvě dokonce **3,37 → 4,01**
+a **2,44 → 3,65**.
+
+**Tmavá větev je vědomá odchylka od návrhu a je to celé jádro toho issue**: návrh má
+`rgba(63, 185, 80, 0.13)`, tedy `ok` s krytím, což nad plochou složí `#172922` a ΔE 14,6 —
+reprodukuje tedy přesně tu stížnost. Vyčíslené hodnoty vznikly mixem `ok`/`crit` **do černé**
+a odlišení jimi vyrostlo: přidaný řádek ΔE **16,0 → 21,8**, odebraný **13,2 → 19,7**, mezi sebou
+**28,9 → 36,8**, přičemž čitelnost syntaxe zůstala na svém (řetězec Darculy 3,73 → 3,76). Sedlo to
+na jedno pozorování: kontrast textu závisí jen na světlosti, kdežto odlišení plochy roste i se
+sytostí, takže sytější tón při téže světlosti odliší plochu a text nad ní nechá na pokoji.
+
+**Návrh je proto přepsaný, ne obejitý.** Ta čtyři slabá `rgba` v tmavé větvi mockupu nesou
+vyčíslené tóny (`#0F2C13`, `#1D5625`, `#371210`, `#712521`), takže paleta a návrh drží jednu
+pravdu a příští srovnání nebude tvrdit, že chybu má aplikace. Přepsaly se **obě** tmavé větve —
+`@media (prefers-color-scheme: dark)` i `:root[data-theme="dark"]` —, protože hodnota zapsaná jen
+v jedné z nich platí jen pro jeden způsob, jakým si čtenář režim vybral. Nic jiného se v mockupu
+nezměnilo: ani světlá větev, ani struktura, ani poznámky u sekcí.
+
+Znak `+`/`−` bere `Palette.ok`/`crit` (jak to má návrh, otáčí #218), takže se ve světlém režimu zvedl
+jeho kontrast **2,01 → 4,65** na řádku a **2,22 → 5,08** v hlavičce, kde nese `+12 −4`. Word-level
+vrstva drží **pravidlo** návrhu (30 % tónu nad řádkem), ne jeho hodnotu, protože se pod ní změnil
+řádek: je vědomě méně hlasitá, zato čitelná — do #277 sebralo krytí 50 % obarvení syntaxe pod sebou
+(řetězec **1,27**), teď je to ΔE 13,9 proti řádku a 2,17 na řetězci.
+
+Prázdný protějšek se v pohledu vedle sebe **do #277 nekreslil vůbec** (ΔE 0,0 proti kontextu, tedy
+tatáž plocha), takže z okna nešlo poznat, jestli se řádek nezměnil, nebo na téhle straně není. Návrh
+na to má **šrafu** — a nese ji textura, ne plocha: pod plochou obsahu není v tmavém režimu kam
+ztmavovat a světlejší plocha by křičela hlasitěji než sama změna. Testů je o 15 víc (2321 po zvednutí mainu) ve dvou
+nových suitách — jedna počítá obě míry nad skutečnými tokeny v obou režimech, druhá čte **bitmapu
+sloupce**, protože prázdný protějšek se v modelu poznat nedá. Vzhled je doložený **renderem vedle
+vyrenderované sekce návrhu**, což rozhodlo směr pruhů šrafy i to, že plocha díry zůstává plochou
+obsahu.
+
 **Detail spadlého checku: anotace a konec logu (#214).** Tab `Kontroly` (#215) říkal, **že** check
 spadl; teď říká **proč**. Řádek checku se rozbalí a pod ním jsou anotace check-runu (`soubor:řádek`
 a věta, kliknutí skočí do diffu) a konec logu — obojí **až na kliknutí a jen u toho jednoho checku**.
@@ -1126,7 +1210,29 @@ má rezervu. Cestou se ukázalo, že sazba po řádcích stojí **38 ms proti 2,
 Log se **neukládá a nepřežije ani sbalení checku**, sbalení navíc stahování **zruší**. ANSI se
 strhává, timestampy (28 znaků na skoro každém řádku) se schovávají, ořez je od konce a řekne se,
 kolik se nevešlo. Anotace se od nálezů drží zvlášť tvarem — plochý řádek se štítkem, ne bublina —
-a **nepočítají se nikam**. Testů je o 34 víc (2290).
+a **nepočítají se nikam**.
+
+Při proklikání se ukázalo, že **konec logu nefunguje u žádného checku** (#292): `HEAD` na velikost
+sice doběhl, ale `Content-Length` se z jeho výstupu nenašel, takže se nikdy nestahovalo. Příčina je
+jazyková: `gh api -i` zakončuje hlavičky **`CRLF`** a `"\r\n"` je ve Swiftu **jeden `Character`** —
+`split(separator: "\n")` na něm tedy nerozdělí a z celého bloku hlaviček zbyde jediný „řádek“.
+V shellu to šlo, protože tam hlavičky čtou oči; zelený test to nechytil, protože jeho fixture byla
+Swiftový literál, tedy `LF`.
+
+Opravené jsou tři věci. Rozbor hlaviček je **vlastní typ** (`GhResponseHeaders`): dělí na
+`Character.isNewline`, jména normalizuje na malá písmena (`HTTP/2` je nese lowercase) a bere
+**poslední blok**, protože ten před redirectem má `Content-Length: 0`; velikost vrací vyjmenovanými
+stavy (`ContentLengthReading`), ne `Int?`. Fixture je bajt za bajtem skutečný výstup `gh` a je
+v `.gitattributes` jako `-text` — jinak by ji `core.autocrlf=input` znormalizovala a test by zezelenal
+i s tou chybou. A `Policy.logLines` dělí řádky logu na jakémkoli zakončení, protože v logu z Windows
+runneru je to tatáž past.
+
+Vedle toho se **otočilo jedno pravidlo**: nezjištěná velikost už log neruší. `HEAD` je ochrana proti
+osmimegovému logu, ne podmínka toho, že se log ukáže — bez velikosti se tedy stáhne a strop se
+uplatní na tom, co doopravdy přišlo. Chyba jednoho dotazu tak nemůže vypnout celou funkci, což je
+přesně to, co se stalo. `malformedOutput` u toho dostal **fázi** (`Vyhledávání pull requestů`,
+`Anotace check-runu`, …): „Výstupu gh nerozumím“ samo neřekne ani to, která obrazovka je poloprázdná.
+Testů je o 52 víc (2373 po zvednutí mainu), z toho **18 na tuhle opravu** v jedné nové suitě.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

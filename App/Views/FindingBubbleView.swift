@@ -282,11 +282,12 @@ struct FindingBubbleView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let reveal {
+                    // Tlačítko, ne odkaz (#283) — v bublině, kde jsou ostatní akce plochy, byl
+                    // modrý text jediná věc, u které nebylo poznat, že se dá zmáčknout.
                     Button("Zobrazit ho") {
                         reveal(max(1, line - Self.context)...(line + Self.context))
                     }
-                    .font(.caption)
-                    .buttonStyle(.link)
+                    .buttonStyle(.mini)
                 }
             } else {
                 Text("Nález se váže k celému souboru, ne ke konkrétnímu řádku.")
@@ -418,9 +419,12 @@ struct FindingBubbleView: View {
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if let actions {
+                    // `Vrátit` zůstává na **konci svého řádku** (#283), ačkoli řada akcí
+                    // u platného nálezu se vlevo srovnala. Není to tentýž footer: odmítnutý
+                    // nález je jeden řádek se zkráceným textem, takže `Spacer` je to místo, do
+                    // kterého se text ořezává — a jediná akce na řádku se nemá o co srovnávat.
                     Button("Vrátit") { actions.restore(finding) }
-                        .font(.caption)
-                        .buttonStyle(.link)
+                        .buttonStyle(.mini)
                         .help("Vrátit nález mezi platné")
                 }
             }
@@ -446,31 +450,91 @@ struct FindingBubbleView: View {
         return "\(dismissal.reason.explanation) Odmítnuto \(when)."
     }
 
-    /// Co se s nálezem dá udělat: vlevo převzetí do mého review, vpravo odmítnutí. Dvě různé
-    /// věci na dvou stranách — kliknout omylem na to druhé by znamenalo zahodit nález,
-    /// o kterém jsem chtěl napsat komentář.
-    private func footer(of finding: Finding) -> some View {
-        HStack(spacing: 8) {
-            adoption(of: finding)
-            Spacer(minLength: 8)
-            dismissal(of: finding)
+    /// Co se s nálezem dá udělat: **jedna řada malých tlačítek vlevo pod textem**, jak to má návrh
+    /// (`.inline-find footer`) — hlavní akce plná, odmítnutí obtažená.
+    ///
+    /// **Do #283 byly akce na dvou stranách** (`Spacer` mezi převzetím a odmítnutím) s odůvodněním,
+    /// že kliknout omylem na odmítnutí by znamenalo zahodit nález, o kterém jsem chtěl napsat
+    /// komentář. #283 to rozhodnutí otočil a důvody jsou ve specifikaci: vzdálenost nechrání
+    /// (v úzkém okně `Spacer` splaskne na svých 8 bodů, takže ochrana byla funkcí šířky okna),
+    /// omyl je vratný na místě (odmítnutí nález nesundá, #113, a `Vrátit` je u něj hned) a cena
+    /// byla, že odmítnutí sedělo u pravé hrany okna, metr od nálezu, ke kterému patří. Odlišuje
+    /// je proto **plocha** — plné akcentové tlačítko proti obtaženým.
+    ///
+    /// **Bez akcí se nekreslí vůbec**, ani jako mezera. Bublina ke čtení (náhledy, testy skládání
+    /// řádků, `canCompose == false`, dokud nevíme proti kterému commitu) by jinak měla pod textem
+    /// devět bodů prázdna, které nic neznamenají — a to je horší než těsný text, protože to vypadá
+    /// jako chybějící obsah.
+    @ViewBuilder private func footer(of finding: Finding) -> some View {
+        // **Když se řada nevejde, zlomí se** — nejdřív na dvě řady, a když ani to nestačí, do
+        // sloupce. Návrh zalomení nemá (`display: flex` bez `wrap`), ale nemá ani odpověď na
+        // šířku, ve které jedna řada nemůže existovat: změřeno renderem, že v úzkém panelu zbývá
+        // na řadu 128 bodů a ze tří tlačítek jsou nečitelné pahýly o jednom znaku.
+        //
+        // `ViewThatFits` staví **všechny** varianty, tedy trojnásobek layoutu na footer (#220).
+        // U tří tlačítek je to zanedbatelné a bublina není na každém řádku diffu — na rozdíl od
+        // kódu, kde by se to počítat nesmělo.
+        let gap = MiniButtonStyle.Metrics.spacing
+        // Cíl a „už je v draftu“ se počítají **jednou za footer**, ne uvnitř tlačítka. Obojí hledá
+        // řádek v hunkách (`isAdopted` si `draftTarget` počítá samo), takže u velkého souboru je to
+        // průchod — a uvnitř by ho `ViewThatFits` vyvolal na každou variantu znovu.
+        // `target == nil` = do draftu se psát nedá, akce se pak nenabízí.
+        let target = draft.canCompose ? draft.target(finding) : nil
+        let isAdopted = target != nil && draft.isAdopted(finding)
+        // Prázdný footer se nekreslí — jinak by z něj zbyla jen mezera, viz dokumentace metody.
+        if target != nil || actions != nil {
+            VStack(alignment: .leading, spacing: 4) {
+                ViewThatFits(in: .horizontal) {
+                    // Jak to má návrh.
+                    HStack(spacing: gap) {
+                        adoption(of: finding, to: target, isAdopted: isAdopted)
+                        dismissal(of: finding)
+                    }
+                    // Převzetí a odmítnutí každé na svém řádku.
+                    VStack(alignment: .leading, spacing: gap) {
+                        HStack(spacing: gap) {
+                            adoption(of: finding, to: target, isAdopted: isAdopted)
+                        }
+                        HStack(spacing: gap) { dismissal(of: finding) }
+                    }
+                    // A když nevyjde ani to, každé tlačítko samo. Popisek, ze kterého zbylo
+                    // `Nepa…`, neříká nic — sloupec je ošklivější, ale čitelný.
+                    VStack(alignment: .leading, spacing: gap) {
+                        adoption(of: finding, to: target, isAdopted: isAdopted)
+                        dismissal(of: finding)
+                    }
+                }
+                // Proč to nejde jako komentář u řádku, musí být vidět **bez** najetí myší: tlačítko
+                // s jiným cílem, které vypadá stejně, je horší než delší text. U převzatého nálezu
+                // ne — tam už to říká odznak (`v těle mého review`) a byla by to tatáž věta dvakrát.
+                //
+                // **Na vlastním řádku pod řadou** (#283), ne jako ocas za tlačítkem: je to nejdelší
+                // prvek řady, takže by o zalomení celé řady rozhodovala věta, ne tlačítka — změřeno
+                // renderem, kde kvůli ní řada padala do sloupce i na širokém okně.
+                if case .body = target, !isAdopted {
+                    Text(verbatim: "GitHub tady řádkový komentář nepřijme")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            // Návrh má mezi textem nálezu a řadou tlačítek 9 bodů (`.txt` má padding-bottom 9,
+            // `footer` padding-top 0). `VStack` uvnitř nálezu drží 4, takže zbylých 5 si bere řada.
+            .padding(.top, 5)
         }
     }
 
     /// Dva důvody vedle sebe, ne rozbalovací menu: je to jedno kliknutí místo dvou a rozdíl
     /// mezi nimi vysvětlí nápověda.
+    ///
+    /// **Bez uvozujícího `Odmítnout:`** (#283). Návrh ho nemá a nepotřebuje: každý důvod má
+    /// vlastní plochu a popisek, který obstojí sám (`actionLabel`) — uvozující slovo bylo to
+    /// jediné, co ze dvou modrých textů dělalo akci.
     @ViewBuilder private func dismissal(of finding: Finding) -> some View {
         if let actions {
-            HStack(spacing: 6) {
-                Text("Odmítnout:")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                ForEach(FindingDismissal.Reason.allCases, id: \.self) { reason in
-                    Button(reason.label) { actions.dismiss(finding, reason) }
-                        .font(.caption)
-                        .buttonStyle(.link)
-                        .help(reason.explanation)
-                }
+            ForEach(FindingDismissal.Reason.allCases, id: \.self) { reason in
+                Button(reason.actionLabel) { actions.dismiss(finding, reason) }
+                    .buttonStyle(.mini)
+                    .help(reason.explanation)
             }
         }
     }
@@ -481,29 +545,23 @@ struct FindingBubbleView: View {
     /// podruhé, aniž by bylo poznat, že v draftu už jednou je.
     ///
     /// Odmítnutému nálezu se nenabízí vůbec — ta větev se do sbaleného řádku nedostane.
-    @ViewBuilder private func adoption(of finding: Finding) -> some View {
-        if draft.canCompose {
-            // Cíl se počítá **jednou**: hledá řádek v hunkách, takže u velkého souboru je to
-            // průchod, který se nemá dělat čtyřikrát za každé překreslení bubliny.
-            let target = draft.target(finding)
-            if draft.isAdopted(finding) {
+    ///
+    /// `target == nil` znamená, že se do draftu psát nedá. Cíl i `isAdopted` počítá `footer(of:)` —
+    /// obojí je průchod hunkami a má se udělat jednou za bublinu, ne jednou za variantu rozvržení.
+    @ViewBuilder private func adoption(
+        of finding: Finding,
+        to target: DraftTarget?,
+        isAdopted: Bool
+    ) -> some View {
+        if let target {
+            if isAdopted {
                 Label(adoptedLabel(for: target), systemImage: "checkmark.circle.fill")
                     .font(.caption)
                     .foregroundStyle(.tint)
             } else {
-                HStack(spacing: 8) {
-                    Button(adoptLabel(for: target)) { draft.adopt(finding) }
-                        .font(.caption)
-                        .buttonStyle(.link)
-                        .help(adoptHint(for: target))
-                    // Proč to nejde jako komentář u řádku, musí být vidět **bez** najetí myší:
-                    // tlačítko s jiným cílem, které vypadá stejně, je horší než delší text.
-                    if case .body = target {
-                        Text(verbatim: "· GitHub tady řádkový komentář nepřijme")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
+                Button(adoptLabel(for: target)) { draft.adopt(finding) }
+                    .buttonStyle(.miniPrimary)
+                    .help(adoptHint(for: target))
             }
         }
     }

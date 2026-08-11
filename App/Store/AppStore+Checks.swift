@@ -87,22 +87,34 @@ extension AppStore {
         }
     }
 
-    /// Konec logu — **až po zjištění velikosti**.
+    /// Konec logu — **až po zjištění velikosti, pokud se zjistit dá**.
     ///
-    /// Nad stropem se **nestahuje vůbec** a na místě logu je věta s konkrétní velikostí. Bez toho
-    /// by strop znamenal stáhnout 8,78 MB (4 s), jen aby se zjistilo, že se nemá ukazovat.
+    /// Nad známým stropem se **nestahuje vůbec** a na místě logu je věta s konkrétní velikostí. Bez
+    /// toho by strop znamenal stáhnout 8,78 MB (4 s), jen aby se zjistilo, že se nemá ukazovat.
+    ///
+    /// **Nezjištěná velikost ale log neruší** (#292, mění #214): `HEAD` je ochrana proti obřímu
+    /// logu, ne podmínka toho, že se log ukáže. Když velikost nepřijde, stáhne se a strop se
+    /// uplatní na tom, co doopravdy přišlo. Do #292 tady byla chyba a stálo to celou funkci — jedna
+    /// hlavička znamenala „konec logu se nepodařilo stáhnout“ u **každého** checku.
     private func loadJobLog(key: CheckKey, repo: RepoID, jobID: Int) async {
         do {
-            let bytes = try await gateway.fetchJobLogSize(repo: repo, jobID: jobID)
+            let known = try await sizeIfKnown(repo: repo, jobID: jobID)
             guard !Task.isCancelled, checkDetails[key] != nil else { return }
 
-            if case .tooLarge(let reason) = Policy.logAvailability(bytes: bytes) {
+            if let known, case .tooLarge(let reason) = Policy.logAvailability(bytes: known) {
                 checkDetails[key]?.log = .tooLarge(reason)
                 return
             }
 
             let raw = try await gateway.fetchJobLog(repo: repo, jobID: jobID)
             guard !Task.isCancelled, checkDetails[key] != nil else { return }
+            // **Strop podruhé, na skutečné velikosti.** U známé velikosti to nic nemění (je to
+            // tentýž text), u neznámé je to jediné místo, kde se mez ještě dá udržet: `Ukázat celý
+            // log` by jinak nabídl sazbu 8,78 MB v `NSTextView`, což je změřených 850 ms.
+            if case .tooLarge(let reason) = Policy.logAvailability(bytes: raw.utf8.count) {
+                checkDetails[key]?.log = .tooLarge(reason)
+                return
+            }
             // Celý text se drží kvůli `Ukázat celý log`; ořez je věc zobrazení, ne stahování.
             checkDetails[key]?.log = .loaded(full: raw, tail: Policy.logTail(raw))
         } catch is CancellationError {
@@ -113,6 +125,23 @@ extension AppStore {
             guard !Task.isCancelled, checkDetails[key] != nil else { return }
             // **Nikdy prázdno**: „log se nepodařilo stáhnout“ se nesmí čít jako „log je prázdný“.
             checkDetails[key]?.log = .failed(Self.reason(error))
+        }
+    }
+
+    /// Velikost logu, když ji jde zjistit; `nil` = nezjistila se.
+    ///
+    /// Selhání `HEAD`u se schválně **nepropisuje do stavu** a není to zapomenutá chyba: hned za ním
+    /// jde stažení, tedy ta operace, o kterou uživateli jde. Když se stažení povede, nemá se o čem
+    /// dozvídat — velikost byla jen k rozhodnutí, jestli stahovat. Když se nepovede, dostane
+    /// **chybu stažení**, která je konkrétnější než chyba dotazu na velikost (nese kód i výstup
+    /// `gh`). Zrušení se propouští dál, ať se po sbalení checku nestahuje nazdařbůh.
+    private func sizeIfKnown(repo: RepoID, jobID: Int) async throws -> Int? {
+        do {
+            return try await gateway.fetchJobLogSize(repo: repo, jobID: jobID)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return nil
         }
     }
 

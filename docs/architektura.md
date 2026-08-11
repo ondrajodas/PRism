@@ -314,6 +314,39 @@ značka na hraně řádku**. Rozhoduje `Policy.disclosure(of:categories:toggled:
   ale znamenalo by to další sloupec v gutteru, který si `DiffTextView` kreslí ručně — a ten jediný
   úzký sloupec už zabírá pilulka komentáře. Zamítnuto, viz specifikace.
 
+Řada akcí pod nálezem (#283) — **malá tlačítka vlevo pod textem, ne modré odkazy přes celou
+šířku**. Vzhled drží `MiniButtonStyle` (`.mini` a `.mini.pri` z návrhu), rozvržení `footer(of:)`.
+Co se u toho nemá rozbít:
+
+- **Hlavní akci odlišuje plocha, ne vzdálenost.** Do #283 stál mezi převzetím a odmítnutím
+  `Spacer`, aby se omylem nekliklo na to druhé. Rozhodnutí je otočené (důvody ve specifikaci) a to
+  podstatné z něj zbývá: **plné akcentové tlačítko je v řadě právě jedno** a je první zleva, takže
+  cesta myší k převzetí nevede přes odmítnutí.
+- **`Spacer` u odmítnutého nálezu zůstává.** `dismissed(_:_:)` není tentýž footer: je to jeden
+  řádek se zkráceným textem, takže `Spacer` je to místo, do kterého se text ořezává, a `Vrátit` je
+  na řádku jediná akce.
+- **Popisek má dvě podoby a nesmí splynout.** `FindingDismissal.Reason.label` je přídavné jméno do
+  odznaku a do menu tabulky (`neplatný`), `actionLabel` je tvrzení na tlačítko (`Neplatí`). Jedna
+  hodnota pro obojí by v jednom z těch dvou míst mluvila špatně — odznak stavu by řekl akci.
+- **Když se řada nevejde, zlomí se, neořeže se.** `ViewThatFits` má tři varianty (řada → dvě řady
+  → sloupec). Návrh zalomení nemá, ale nemá ani odpověď na šířku, ve které řada nemůže existovat:
+  změřeno renderem, že v úzkém panelu zbývá na řadu 128 bodů a ze tří tlačítek jsou pahýly o jednom
+  znaku. Cena je trojnásobek layoutu footeru — u tří tlačítek zanedbatelná, protože bublina není
+  na každém řádku diffu.
+- **Cíl převzetí a `isAdopted` se počítají jednou za bublinu**, v `footer(of:)`, ne uvnitř tlačítka:
+  obojí hledá řádek v hunkách (`isAdopted` si `draftTarget` počítá samo) a `ViewThatFits` staví
+  všechny varianty, takže uvnitř by to byl průchod na každou z nich.
+- **Prázdný footer se nekreslí, ani jako mezera.** Bublina ke čtení (náhledy, testy skládání řádků,
+  `canCompose == false`) by jinak měla pod textem devět bodů prázdna — a prázdno na místě, kde jinde
+  něco je, se čte jako chybějící obsah, ne jako „tady nic není“.
+- **Věta „GitHub tady řádkový komentář nepřijme“ stojí pod řadou, ne za tlačítkem.** Je to nejdelší
+  prvek, takže jako ocas za tlačítkem rozhodovala o zalomení celé řady místo tlačítek — změřeno
+  renderem, kde kvůli ní řada padala do sloupce i na širokém okně.
+- **Výška tlačítka se skládá z `line-height` a obtažení, ne z toho, co dá font sám.** CSS řádek je
+  16,7 bodu, SwiftUI dá pro `size: 11.5` dvanáct, a obtažení v CSS leží **vně** paddingu, kdežto
+  SwiftUI ho kreslí `overlay`em dovnitř. Bez obojího vycházelo tlačítko 20 bodů proti 25 v návrhu.
+  Změřeno renderem vedle sebe — z kódu se to nepozná.
+
 Pohled **vedle sebe** (#98) je `DiffRow.pair(_, left:, right:)` a platí u něj:
 
 - **Jeden model, dva pohledy.** Dvojice je case `DiffRow`, ne vlastní typ vedle něj — se
@@ -522,11 +555,80 @@ Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne p
 podle ní se kreslí pozadí, čísla i pozice pilulek — a TextKit 2 layout manager nemá. Vynutí se tím,
 že se textové view vyrobí s ručně složeným `NSTextStorage`/`NSLayoutManager`/`NSTextContainer`.
 
-**`DiffLineView` a `DiffPairView` se v aplikaci už nekreslí** (bloky je nahradily), ale drží
+**V diffu se `DiffLineView` a `DiffPairView` už nekreslí** (bloky je nahradily), ale drží
 konstanty a barvy, které si bloky berou (`numberColumn`, `iconColumn`, `signColumn`,
 `contentInset(for:)`, `signColor(of:)`, `background(of:)`, `rangeTint`, `dragTint`). Zůstávají
 proto jako **jediné místo, kde ty hodnoty jsou** — vyčlenit je do vlastního typu je úklid na potom,
 ne součást #157.
+
+Jeden čtenář `DiffLineView` ale přibyl: **úryvek kódu u vlákna** (`ThreadSnippetView`, #216) kreslí
+řádky jím, takže barvy z něj jsou vidět i mimo diff. `DiffPairView` čtenáře nemá žádného — každou
+dvojici slévá `DiffRow.blockedPairs(_:)` do `pairBlock`u, takže případ `.pair` do `DiffRowView`
+nedojde. Drží se dál kvůli konstantám a proto, že je to jediný popis toho, jak dvojice vypadá bez
+bloku; když se v něm něco mění (jako barvy u #277), mění se to **spolu s blokem**, aby se ty dvě
+cesty nerozešly.
+
+### Barvy diffu (#277)
+
+Pozadí řádků, word-level vrstva, šrafa prázdného protějšku a znak `+`/`−` jdou z `Palette` —
+vyčíslené dvojice světlá/tmavá, žádné krytí. Hodnoty jsou **z návrhu** (tokeny `--add-bg`,
+`--add-hi`, `--del-bg`, `--del-hi` a `tr.empty-side`); čísla u každé jsou u tokenů
+(`Palette.diffAdded` a dál). Tady je to, co se u nich nemá rozbít:
+
+- **Barva plochy nesmí být krytí nad podkladem.** Tohle je celé #277 a je to tentýž argument, jaký
+  #185 zapsalo u `critLine`: skrz krytí prosvítá to, na čem barva leží, takže **není hodnotou, ale
+  výsledkem**. V tmavém režimu se systémová zelená na 12 % mísila směrem k černé a plocha přidaného
+  bloku vycházela `#152B22`, tedy tmavý obdélník. Hlídá to test na **alfu** všech pěti tokenů.
+- **Odlišení ploch se měří ΔE2000, čitelnost textu nad nimi WCAG.** Jedna míra nestačí a je to
+  změřené: word-level vrstva měla do #277 v tmavém režimu ΔE 29,5 (plocha jak vyšitá) a kontrast
+  zeleného řetězce Darculy **1,27**, tedy nepřečtitelný kód právě na tom slově, které se změnilo.
+  Tvrzení jsou proto v testech vždycky dvě.
+- **Světlá větev je z návrhu doslova, tmavá je vědomá odchylka** — a ta odchylka je celé jádro #277:
+  návrh má v tmavém režimu `rgba(63, 185, 80, 0.13)`, což nad `panel` složí `#172922` a ΔE 14,6, tedy
+  **reprodukuje přesně tu stížnost** (systémová zelená měla 16,0). Vyčíslené `#0F2C13` má ΔE 21,8.
+- **Sytost je levnější než světlost.** WCAG kontrast textu závisí jen na světlosti, kdežto ΔE plochy
+  roste i se sytostí — tmavé tóny proto vznikly mixem `ok`/`crit` **do černé**, ne do plochy.
+  Odlišení tím vyrostlo (16,0 → 21,8 u přidaného) a syntaxe zůstala na svém (3,73 → 3,76). Kdo bude
+  hodnoty ladit, má tímhle směrem rezervu; zesvětlením ji nemá.
+- **Zelená a červená mají v diffu jeden zdroj**, `DiffLineView.signColor(of:)` (#156) — bere ji
+  `+`/`−` v řádku, souhrn `+X −Y` v hlavičce i čtverečky poměru (#218). Od #277 vrací
+  `Palette.ok`/`crit`, tak jak to má návrh (`tr.add td.sg { color: var(--ok) }`), takže systémová
+  zelená z diffu zmizela úplně; **plochy** řádků jsou ten tón zamíchaný do podkladu.
+- **Word-level vrstva drží pravidlo návrhu, ne jeho hodnotu.** `--add-hi` je `ok` na 30 % nad pozadím
+  řádku — a to pozadí se u #277 změnilo, takže se vrstva přepočítala (`#1D5625`). Je to vědomá výměna:
+  méně hlasitá než dřív (ΔE 13,9 proti 29,5), zato se pod ní dá číst (řetězec 2,17 proti 1,27).
+  Rozhodnutí z #153 tím drží v tom, na čem stálo: vrstva musí být na první pohled jiná plocha než
+  zbytek řádku, a práh je ΔE 10.
+- **Pruh rozsahu komentáře zůstává průhledný schválně** (`rangeTint`, `dragTint`): musí se s barvou
+  druhu řádku **smíchat**, aby pod ním zůstalo vidět, co je přidané. Je to tedy jediné krytí, které
+  v diffu zbylo, a je to jiný případ než plocha — hodnota se tu měnit *má*. Změřeno nad novým
+  pozadím: pruh je od neoznačeného řádku ΔE 9,5 a označený přidaný řádek je od označeného kontextu
+  ΔE 21,7, takže se ani jedna informace neztratí.
+- **Pruh se kreslí nad pozadím, ne pod ním.** Do #277 to bylo ve SwiftUI cestě obráceně
+  (`.background(barva).background(pruh)`) a fungovalo to jen proto, že pozadí bylo průhledné —
+  s vyčíslenou barvou by pruh zmizel. Blok kódu (`DiffTextView.drawRows`) měl správné pořadí
+  odjakživa, takže se tím obě cesty srovnaly.
+- **Prázdný protějšek odlišuje textura, ne plocha** (`DiffMissingHatch`). Návrh na to má šrafu
+  u `tr.empty-side` (`repeating-linear-gradient(45deg, transparent 0 5px, ink 5 % 5px 10px)`)
+  a v tmavém režimu to jinak ani nejde: pod plochou obsahu není kam ztmavovat (pruh je od ní ΔE 3,4)
+  a zesvětlením by díra křičela hlasitěji než změna vedle ní. **Plocha se proto nekreslí vůbec** —
+  v návrhu je pod gradientem `transparent`. Nese to **rozestup** (pruh 5 bodů, mezera 5), ne kontrast.
+- **Šrafa leží nad plochami řádků, ne pod nimi.** Kreslená před nimi zmizí pod pozadím řádku —
+  vyzkoušeno, byla to první verze #277 a chytil to test nad bitmapou.
+- **Vodorovný krok pruhů je √2× perioda.** Sklon 45° znamená, že vzdálenost napříč pruhy (kterou měří
+  CSS gradient) není ta vodorovná; bez toho přepočtu vyjde šrafa hustší, než jakou návrh kreslí.
+  A **směr pruhů je z vyrenderované sekce návrhu**, ne odvozený z `45deg`: gradient míří k pravému
+  hornímu koutu, ale pruhy leží napříč jeho osou, takže se to snadno otočí — první verze #277 je
+  měla zrcadlově.
+- **Které řádky jsou prázdné, řekne sloupci dvojice** (`DiffTextView.missingLines`), protože
+  v textu je prázdná strana složená jako prázdný **kontextový** řádek (`DiffLine.blank`) — jinak by
+  se sloupce nezarovnaly. Do #277 se ten stav nekreslil vůbec, takže „tady řádek není“ a „řádek se
+  nezměnil“ byla tatáž plocha (ΔE 0,0). **Rozšířit `DiffLine.Kind` o `missing` se zamítlo**: je to
+  vlastnost jednoho rozvržení, ne řádku souboru, a protáhla by se parserem, `Policy` i kotvami
+  komentářů.
+- **Obrys bubliny nálezu je pořád jedna barva pro všechny podklady** (`critLine`, #185), takže se po
+  každé změně pozadí musí přeměřit nad všemi: vychází 1,69 na přidaném a 1,87 na odebraném řádku
+  v tmavém režimu (do #277 to bylo 1,68 a 1,83), tedy nezměněno.
 
 Word-level rozdíl (#153) — u přepsaného řádku svítí jen ta část, která se změnila. `WordDiff` je
 čistá funkce v `App/Diff/`, obarvení dělá `DiffTextView`. Co se u toho nemá rozbít:
@@ -819,10 +921,14 @@ malá view, **žádná externí závislost**: stejná úvaha jako u `App/Syntax/
 
 | Typ | Co je |
 |---|---|
-| `MarkdownBlock` | Blok: nadpis, odstavec, položka seznamu (odrážka/číslo/zaškrtávátko), kód, citace, oddělovač, tabulka, `<details>`, HTML komentář |
-| `MarkdownParser` | Text → `[MarkdownBlock]`. **Nikdy nevyhodí výjimku** |
+| `MarkdownBlock` | Blok: nadpis, odstavec, položka seznamu (odrážka/číslo/zaškrtávátko), kód, **citace (vnořené bloky)**, **výstraha** (`Alert`: pět druhů), oddělovač, tabulka, `<details>`, HTML komentář |
+| `MarkdownParser` | Text → `[MarkdownBlock]`. **Nikdy nevyhodí výjimku**. Rekurze u citací a `<details>` má strop `nestingLimit` |
 | `MarkdownHTML` | Inline HTML na text: `<a href>` na Markdown odkaz, ostatní tagy pryč, entity dekódované |
-| `MarkdownText`, `MarkdownBlocksView`, `MarkdownBlockView` | Vykreslení; tři typy kvůli rekurzi v `<details>` |
+| `MarkdownInlineText` | Inline sazba: systémový `AttributedString` plus podložený inline `kód` |
+| `MarkdownTypography` | Sazba v číslech: šest velikostí nadpisů, velikost kódu, mezera mezi dvěma bloky |
+| `MarkdownAlertStyle` | Jak se kreslí výstraha: český titulek, SF Symbol, barva z palety |
+| `MarkdownRenderCache` | Zapamatovaná sazba: rozklad na bloky i inline `AttributedString` — klíčem je celý text (u inline i velikost) |
+| `MarkdownText`, `MarkdownBlocksView`, `MarkdownBlockView` | Vykreslení; tři typy kvůli rekurzi v citaci, výstraze a `<details>` |
 
 Věci, které se u toho nemají rozbít:
 
@@ -857,6 +963,57 @@ Věci, které se u toho nemají rozbít:
   komentáře je horší než neošetřený tag. **Doplněno po nálezu z review #72** — původně se
   strhávalo nad celým řádkem s tím, že HTML v inline kódu je vzácné. `<div>` možná, generický
   typ ne.
+
+### Citace, výstrahy a sazba (#279)
+
+- **Citace nese bloky, ne řádky.** `case quote([MarkdownBlock])`, tedy tentýž tvar, jaký má
+  `details`. Do #279 to byly surové řádky slepené ve view do jednoho `Text`u, takže `## nadpis`,
+  odrážka i `- [ ]` **uvnitř** `> …` zůstaly v okně jako zdroj — a boti do citací píšou celé
+  zprávy (CodeRabbit posílá v jedné výstraze nadpis, odstavce a dvě rozbalovátka).
+- **Za `>` se zahazuje jedna mezera, ne všechna.** Na odsazení uvnitř citace stojí úroveň
+  zanořeného seznamu. Do #279 se trimovalo všechno, což při slepení nebylo vidět; po rozdělení na
+  bloky by to každý zanořený seznam zarovnalo na nulu.
+- **Výstraha je vlastní druh bloku, ne příznak citace.** `> [!NOTE]` a čtyři další; značka musí
+  být **sama na prvním řádku** citace (jako na GitHubu) a druh se poznává bez ohledu na velikost
+  písmen. **Neznámý druh výstrahou není** — z `[!FOO]` je obyčejná citace, ve které ten řádek
+  zůstane textem. Je to tentýž princip jako u tabulky: neumět něco vysázet je lepší než to
+  zahodit.
+- **Titulek výstrahy je český, barva z palety.** Ve zdroji je jen `[!NOTE]`, takže titulek i ikona
+  jsou tvrzení aplikace, ne text z GitHubu. `[!WARNING]` a `[!CAUTION]` mají **vlastní tón**:
+  GitHub jim dává `0x9A6700` a `0xCF222E`, což je na hex `Palette.stale` a `Palette.crit` — tedy
+  zastarání a blokující nález. Hlídá to test, který porovnává **vyřešené** barvy v obou režimech.
+- **Šest úrovní nadpisů, šest velikostí** (`MarkdownTypography`), pod `#` a `##` linka. Do #279
+  z toho byly dvě velikosti (`level <= 2 ? .headline : .subheadline`), takže `Description`
+  a `Release Notes` v popisu PR vypadaly jako tučný odstavec. Škála je **poměrová k základní
+  velikosti**, protože tentýž Markdown se sází v komentáři (12,5) i v okně s novinkami (13);
+  krok mezi třetí a pátou úrovní je celý bod, protože v první verzi (0,06 bodu) byly ty úrovně na
+  vyrendrované ukázce nerozeznatelné.
+- **`MarkdownText` bere velikost číslem, ne `Font`em.** Ze `Font`u se velikost nedá přečíst, takže
+  by z něj škála nadpisů neměla z čeho vyjít — a přesně proto tam ty dvě velikosti byly.
+- **Mezera mezi bloky se řídí přechodem**, ne blokem: nadpis má nad sebou 12 bodů a pod sebou 4
+  (to, co následuje, k němu patří), dvě položky seznamu 2, zbytek 7. Jedna mezera pro všechno
+  dělá z dlouhého popisu PR jednolitou plochu. **Žádný přechod není nulový** — na to je test.
+- **Pruh citace i výstrahy je `overlay`, ne první prvek `HStack`u.** V `HStack`u se výška pruhu
+  řídila návrhem rodiče, kdežto obsah si spočítal svou vlastní: u citace s nadpisem
+  a zaškrtávátkem sahal pruh do poloviny a zbytek citace stál bez značky. Vidět to bylo až na
+  vyrendrované ukázce, ne v kódu.
+- **Zanoření má strop** (`MarkdownParser.nestingLimit`, šest úrovní). Je proti dvěma věcem naráz:
+  proti hloubce stromu view (#220 — 5,5× na úroveň) a proti rekurzi nad `>>>>>>…` z mailového
+  vlákna. Za stropem zůstane obsah **jedním odstavcem** — nevysází se, ale neztratí.
+- **Sazba se pamatuje** (`MarkdownRenderCache`), protože se počítá v `body`, tedy při každém
+  vykreslení — pravidlo #224. Změřeno (Debug, `TEST_RUNNER_PRISM_MEASURE=1`): u zprávy od bota
+  o 12 kB **1,91 ms** rozklad na bloky (z cache 0,037 ms) a **1,81 ms** inline sazba jejích 44
+  bloků; konverzace o 40 zprávách **74,7 ms** proti **1,48 ms**. Obojí je v **jedné** cache
+  schválně: meze a jejich vyprazdňování jsou to, co se dá pokazit, takže mají být na jednom místě.
+  Klíčem je **celý text**, ne hash ani `(id, délka)`: klíč, ze kterého vyjdou dva různé texty
+  stejně, znamená vysázet cizí komentář, a potichu — u inline je v klíči **i velikost**, protože
+  z ní vychází písmo inline kódu. Barvy v tom zapečené nejsou (`codeFill` je dynamický `NSColor`),
+  takže přepnutí režimu cache nezneplatňuje. Meze jsou dvě (počet záznamů, objem vstupů) a při
+  překročení kterékoli se cache zahodí celá — tatáž úvaha jako u `SyntaxRunCache`.
+- **Inline `kód` má jemný podklad** (`Palette.codeFill`, tentýž jako blok kódu). Je to **plocha za
+  písmem**, ne kapsle s odsazením: `AttributedString` umí barvu pozadí běhu, ne jeho výplň
+  a rádius, a kapsle by znamenala kreslit každý běh jako vlastní view, tedy rozpadlé zalomení
+  uprostřed věty.
 
 ## `App/Syntax/`
 
@@ -1566,7 +1723,7 @@ na `.task` okna, takže zavření okna ji zruší.
 |---|---|
 | `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
 | `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) — a od #245 **vypnutí systémových záložek oken** (`tabbingMode = .disallowed`), aby se `⌃Tab` nepřetahoval s AppKitem |
-| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky; **zelená a červená diffu jdou dál z `DiffLineView.signColor(of:)`**, aby se `+` v řádku nerozešlo s `+12` nad ním (#156) |
+| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
@@ -1614,7 +1771,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffPairView` | Dvojice vedle sebe: dvě buňky `DiffLineView` se `side`, pozadí za celou dvojici, prázdná protistrana |
 | `RangeDragActions`, `DiffRowFrames` | Tažení rozsahu komentáře (#110) — akce a rámečky řádků **mimo observable stav** |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
-| `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou |
+| `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou. Od #283 jsou akce **řada malých tlačítek vlevo pod textem** |
+| `MiniButtonStyle` | Malé tlačítko z návrhu (`.mini`, `.mini.pri`) — plné akcentové a obtažené. Rozměry v `Metrics`, aby se daly změřit testem; text plného je `Palette.surface` (`--panel`), ne bílá |
 | `FindingActions` | Co se dá dělat s nálezem — odmítnout a vrátit; jedno místo pro bublinu i tabulku |
 | `FindingDisclosureActions` | Rozbalení bubliny nálezu (#185) — stav ze store a jeho překliknutí. **Nepatří do `FindingActions`**, kterou bere i tabulka: ta rozbalení řídí sama |
 | `ThreadBubbleView` | Vlákno konverzace — u kódu i na ose (`Placement`); karta z pruhů, vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73, sazba #216) |
@@ -2520,6 +2678,16 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     takže věta není odhad. Cena rozhodnutí: nad stropem odpadá i **konec** logu, tedy zrovna
     u toho největšího — obejít to částečným stažením nejde, `Range` přes `gh` se na redirect do
     Azure blobu nepřenese a vrátí celých 8,78 MB (změřeno).
+  - **`HEAD` je ochrana, ne podmínka** (#292, mění #214). Když velikost **nepřijde**, log se přesto
+    stáhne a strop se uplatní na tom, co doopravdy přišlo (`raw.utf8.count`). Do #292 se v tom
+    případě nestahovalo — a protože rozbor hlaviček velikost nikdy nevydal, byl konec logu vypnutý
+    u **každého** checku, ne v krajním případě. Pravidlo z toho: co je jen ochrana proti drahé
+    operaci, nesmí být tím, na čem stojí, jestli se ta operace vůbec pokusí.
+
+    Nezjištěná velikost je proto `Int?`, ne chyba — a **selhání `HEAD`u se nepropisuje do stavu**.
+    Není to zapomenutá chyba: hned za ním jde stažení, tedy ta operace, o kterou uživateli jde.
+    Povede-li se, není o čem informovat; nepovede-li se, dostane **chybu stažení**, která nese kód
+    i výstup `gh` — tedy víc, než by řekla chyba dotazu na velikost.
   - **Strop je změřený, ne odhadnutý** (zadání to chtělo kvůli #275): dvoumegový ocas skutečného
     logu (5 843 řádků, nejdelší 2 003 znaků) se v `NSTextView` nasází za **220 ms**, celých 8,78 MB
     za 850 ms. 2 MB tedy zůstalo se rezervou.
@@ -3455,7 +3623,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.jobID(from:)` | Číslo jobu z odkazu na check (#214). Funguje i jako check-run ID pro anotace; `…/runs/<id>` bez `/job/` je **běh**, ne job, takže `nil` |
 | `Policy.strippingANSI(_:)`, `Policy.strippingTimestamps(_:)` | Čistka logu (#214) — bez nich je v okně `^[[36;1m` a 28 znaků timestampu na každém řádku |
 | `Policy.logTail(_:lines:)` | Konec logu a **kolik se ho nevešlo** (`LogTail`, #214). Tiše zkrácený log tvrdí, že job začal uprostřed |
-| `Policy.logAvailability(bytes:)` | Jde se pro log vůbec? (#214) Nad 2 MB ne — věta s konkrétní velikostí z `Content-Length`, změřený strop |
+| `Policy.logAvailability(bytes:)` | Jde se pro log vůbec? (#214) Nad 2 MB ne — věta s konkrétní velikostí z `Content-Length`, změřený strop. Od #292 se ptá **dvakrát**: na velikost z `HEAD`, a když ta nepřijde, na skutečnou velikost stažených bajtů |
+| `Policy.logLines(of:)` | Řádky logu **na jakémkoli zakončení** — `LF`, `CRLF` i samotné `CR` (#292). `split(separator: "\n")` na `CRLF` nerozdělí, protože `"\r\n"` je ve Swiftu jeden `Character` |
 | `Policy.facts(commits:newCommits:files:filesWithFindings:headSha:findingsHeadSha:)` | Dlaždice s fakty o PR (#198); dlaždice, o které se nedá nic říct, se vynechá |
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
 | `Policy.fileFindings(in:categories:)` | Co je v souboru k vyřízení pro kapsli v hlavičce diffu (#219) — počítá **místa**, ne nálezy, a odmítnuté vynechá |
@@ -3926,14 +4095,15 @@ Nad odesílatelností draftu (#68) platí:
 
 ## `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má sedm metod
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má jedenáct metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu.
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchDiff(id:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()` |
+| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
+| `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
 | `GhSearchQuery` | Rozdělení search dotazu na argumenty `gh` — čistá funkce |
 | `ConversationQuery` | GraphQL dotaz na konverzaci a jeho argumenty — čisté funkce |
 | `GhConversationResponse` | Tvar GraphQL odpovědi a mapování na `Conversation` |
@@ -3971,6 +4141,29 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 - **Tvar `gh` JSONu se nesmí propsat do modelů.** `PullRequest` a `PullRequestSummary` se
   kódují na disk, takže jejich `Codable` popisuje uložený tvar. Dekódují se proto DTO
   a teprve ta se mapují — jinak by změna `gh` měnila formát dat v `ReviewStore`.
+- **Hlavičky z `gh api -i` rozebírá `GhResponseHeaders`** (#292), a je to vlastní typ schválně:
+  tvar toho výstupu má tři vlastnosti, na kterých se rozbor rozbije **potichu**.
+  1. **Řádky hlaviček končí `CRLF`**, jen stavový řádek `LF` (ověřeno `od -c`, fixture
+     `gh/job-log-head.txt`). A `"\r\n"` je ve Swiftu **jeden `Character`**, takže
+     `split(separator: "\n")` na něm nerozdělí — z celého bloku zbyde jeden „řádek“. Přesně tohle
+     stálo #292: `Content-Length` nevyšel u žádného checku, přitom v shellu byl vidět, protože tam
+     ho čtou oči, a ne Swift. Dělí se proto na `Character.isNewline`.
+  2. **Jména hlaviček nemají zaručenou velikost písmen** — `HTTP/1.1` je nese Title-Case, `HTTP/2`
+     lowercase. Citlivé porovnání by selhalo jen na části odpovědí, což se hledá horší než selhání
+     vždycky. Jméno se proto normalizuje na malá písmena už při rozboru.
+  3. **Bloků hlaviček může být víc za sebou** (`-i` u redirectu vypíše i odpověď před ním, a ta má
+     `Content-Length: 0`). Rozhoduje **poslední blok**, ne první nalezená hlavička — jinak by každý
+     log vyšel jako prázdný. Hlavička z bloku před redirectem se nepoužije vůbec: popisuje redirect,
+     ne tělo.
+
+  Velikost vrací `ContentLengthReading` s **vyjmenovanými** stavy (`bytes`, `noOutput`,
+  `httpFailure`, `missingHeader`, `unreadableValue`), ne `Int?`. Čtyři různá „nevyšlo to“ sloučená
+  do jednoho `nil` se nedají ani odlišit, ani přišpendlit testem — a v okně z nich zbyla jediná věta
+  („Výstupu gh nerozumím“), se kterou se nedalo nic udělat.
+- **`malformedOutput` nese fázi**, ne jen chybu dekodéru (#292). `Výstupu gh nerozumím.
+  keyNotFound…` neříká, co se zkoušelo, takže z hlášky nejde poznat ani to, která obrazovka je
+  poloprázdná; fáze (`Vyhledávání pull requestů`, `Anotace check-runu`, …) je jediné, co k tomu
+  volající ví a chyba sama ne.
 
 Detail navíc ověří, že `gh` vrátil PR s číslem, na které jsme se ptali. Identifikátor se
 bere z dotazu (`gh pr view` repo nevrací) a tichý rozchod by nálezy naklíčoval cizímu PR.

@@ -230,24 +230,94 @@ struct AppStoreCheckDetailTests {
         }
     }
 
-    /// Selhaná velikost znamená, že se **nestahuje** — hádat, že je log malý, by znamenalo
-    /// stáhnout osm mega na pozadí okna.
-    @Test("Bez velikosti se log nestahuje")
-    func doesNotFetchWithoutKnowingTheSize() async throws {
+    // MARK: - Neznámá velikost (#292)
+
+    /// **Nejcennější test téhle sady.** Do #292 tady stálo, že se bez velikosti **nestahuje** — a
+    /// protože rozbor hlaviček velikost nikdy nevydal, byl konec logu vypnutý u každého checku, ne
+    /// v krajním případě. `HEAD` je ochrana proti obřímu logu, ne podmínka toho, že se log ukáže.
+    @Test("Bez zjištěné velikosti se log přesto stáhne")
+    func fetchesTheLogEvenWithoutTheSize() async throws {
         let gateway = gateway()
-        gateway.logSizeFailure = GitHubError.malformedOutput("bez Content-Length")
+        gateway.logSize = nil
+        gateway.jobLog = "assertace spadla"
         let store = store(gateway)
         let check = check()
 
         store.toggleCheck(check, in: pr)
         await settle(store, check: check)
 
-        #expect(gateway.logsAsked.isEmpty)
+        #expect(gateway.logsAsked.count == 1, "log se nestáhl, i když ho nic nezakazovalo")
         let detail = try #require(store.checkDetail(of: check.name, in: pr))
-        guard case .failed = detail.log else {
+        guard case .loaded(let full, let tail) = detail.log else {
+            Issue.record("mělo být .loaded, je \(detail.log)")
+            return
+        }
+        #expect(full == "assertace spadla")
+        #expect(tail.text == "assertace spadla")
+    }
+
+    /// A totéž, když dotaz na velikost rovnou **spadne**: chybu `HEAD`u nahradí chyba stažení,
+    /// pokud vůbec nějaká bude. Jinak by na vypnutou funkci stačil jeden neúspěšný dotaz navíc.
+    @Test("Spadlý dotaz na velikost log nezruší")
+    func fetchesTheLogEvenWhenTheProbeFails() async throws {
+        let gateway = gateway()
+        gateway.logSizeFailure = GitHubError.timedOut
+        gateway.jobLog = "log"
+        let store = store(gateway)
+        let check = check()
+
+        store.toggleCheck(check, in: pr)
+        await settle(store, check: check)
+
+        #expect(gateway.logsAsked.count == 1)
+        let detail = try #require(store.checkDetail(of: check.name, in: pr))
+        guard case .loaded = detail.log else {
+            Issue.record("mělo být .loaded, je \(detail.log)")
+            return
+        }
+    }
+
+    /// Strop se tím ale **nezahazuje** — jen se uplatní později, na tom, co doopravdy přišlo.
+    /// `Ukázat celý log` by jinak nabídl sazbu, kterou strop zakazuje.
+    @Test("Bez velikosti rozhodne strop až podle stažených bajtů")
+    func appliesTheLimitToWhatArrived() async throws {
+        let gateway = gateway()
+        gateway.logSize = nil
+        gateway.jobLog = String(repeating: "x", count: Policy.logSizeLimit + 1)
+        let store = store(gateway)
+        let check = check()
+
+        store.toggleCheck(check, in: pr)
+        await settle(store, check: check)
+
+        let detail = try #require(store.checkDetail(of: check.name, in: pr))
+        guard case .tooLarge(let reason) = detail.log else {
+            Issue.record("nad stropem má být .tooLarge, je \(detail.log)")
+            return
+        }
+        #expect(reason.contains("MB"), "věta má nést konkrétní velikost")
+    }
+
+    /// Když se nepovede ani stažení, je vidět **jeho** chyba — ta nese kód a výstup `gh`, kdežto
+    /// chyba dotazu na velikost mluví o hlavičkách, o které uživateli nejde.
+    @Test("Bez velikosti a bez logu je vidět chyba stažení")
+    func reportsTheDownloadFailureWhenBothFail() async throws {
+        let gateway = gateway()
+        gateway.logSizeFailure = GitHubError.malformedOutput("hlavičky")
+        gateway.jobLogFailure = GitHubError.notFound("job 90007149348 neexistuje")
+        let store = store(gateway)
+        let check = check()
+
+        store.toggleCheck(check, in: pr)
+        await settle(store, check: check)
+
+        let detail = try #require(store.checkDetail(of: check.name, in: pr))
+        guard case .failed(let reason) = detail.log else {
             Issue.record("mělo být .failed, je \(detail.log)")
             return
         }
+        #expect(reason.contains("neexistuje"), "má být vidět chyba stažení, ne chyba HEADu")
+        #expect(!reason.contains("hlavičky"))
     }
 
     // MARK: - Úklid

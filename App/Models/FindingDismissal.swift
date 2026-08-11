@@ -34,10 +34,33 @@ struct FindingDismissal: Hashable, Codable, Sendable {
 
 extension FindingDismissal.Reason {
     /// Popisek do okna. Krátký — visí v odznaku na jednom řádku vedle textu nálezu.
+    ///
+    /// **Je to přídavné jméno, protože popisuje stav nálezu**, ne akci: v odznaku odmítnutého
+    /// řádku a v kontextovém menu tabulky (`Označit jako …`) se čte jako vlastnost. Na tlačítko
+    /// se proto nehodí a má vlastní popisek (`actionLabel`) — jedna hodnota pro obojí by v jednom
+    /// z těch dvou míst mluvila špatně.
     var label: String {
         switch self {
         case .invalid: "neplatný"
         case .irrelevant: "irelevantní"
+        }
+    }
+
+    /// Popisek na tlačítko v řadě akcí u nálezu (#283). **Tvrzení o nálezu, ne přídavné jméno** —
+    /// tlačítko se mačká, takže musí říct, co se jím tvrdí.
+    ///
+    /// Do #283 byla tlačítka uvozená slovem `Odmítnout:` a nesla `label`, tedy `neplatný`
+    /// a `irelevantní`. Návrh uvozující slovo nemá, protože každé tlačítko má vlastní plochu —
+    /// a bez něj musí obstát samo.
+    ///
+    /// **`Neplatí` je z návrhu doslova**, u toho důvodu, který doopravdy pojmenovává.
+    /// `Nepatří sem` je pak tentýž tvar pro druhý důvod — návrh na jeho místě má obecné
+    /// `Zamítnout`, což je ale jen „odmítnout“ podruhé a neřeklo by, který ze dvou důvodů to je.
+    /// Odchylka je zapsaná ve specifikaci.
+    var actionLabel: String {
+        switch self {
+        case .invalid: "Neplatí"
+        case .irrelevant: "Nepatří sem"
         }
     }
 

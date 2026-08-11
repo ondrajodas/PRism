@@ -210,27 +210,39 @@ struct CheckLogTextTests {
         #expect(Policy.logAvailability(bytes: Policy.logSizeLimit + 1) != .fetchable)
     }
 
-    // MARK: - Content-Length z hlaviček
+    // MARK: - Zakončení řádků
 
-    /// `gh -i` u redirectu vypíše hlavičky **obou** odpovědí a ta první má `Content-Length: 0`.
-    /// Kdyby se brala první, vyšel by každý log jako prázdný — a strop by ho pustil bez ohledu
-    /// na velikost.
-    @Test("Bere se velikost z odpovědi za redirectem, ne nula před ním")
-    func readsTheContentLengthBehindTheRedirect() {
-        let headers = """
-            HTTP/2.0 302 Found
-            Content-Length: 0
-            Location: https://productionresultssa0.blob.core.windows.net/x
+    /// Log z Windows runneru má `CRLF`, a `"\r\n"` je ve Swiftu **jeden `Character`** — takže
+    /// `split(separator: "\n")` na něm nerozdělí a z celého logu je jediný řádek. Konec logu by pak
+    /// byl celý log a věta „nevešlo se“ by mlčela. Je to tatáž past, na které u #292 skončil rozbor
+    /// hlaviček `gh -i`.
+    @Test("Log s CRLF se pořeže po řádcích, ne vcelku")
+    func cutsLogsWithWindowsLineEndings() {
+        let raw = (1...400).map { "řádek \($0)" }.joined(separator: "\r\n")
 
-            HTTP/1.1 200 OK
-            Content-Length: 8777952
-            """
+        let tail = Policy.logTail(raw)
 
-        #expect(GhGateway.contentLength(in: headers) == 8_777_952)
+        #expect(Policy.logLines(of: tail.text).count == Policy.logTailLines)
+        #expect(tail.omittedLines == 100)
+        #expect(tail.text.hasSuffix("řádek 400"))
+        // Zakončení se přitom **znormalizuje**: v ocasu už `CR` nezbyde. Jinak by ho `NSTextView`
+        // sázel jako další zlom a počet ukázaných řádků by se rozešel s tím, co se napočítalo.
+        #expect(!tail.text.contains("\r"))
     }
 
-    @Test("Bez Content-Length se velikost nehádá")
-    func doesNotGuessWithoutContentLength() {
-        #expect(GhGateway.contentLength(in: "HTTP/1.1 200 OK\nContent-Type: text/plain") == nil)
+    /// Samotné `CR` (progress bary v CI) je taky zlom řádku — jeden desetitisícový řádek se v okně
+    /// nepřečte a z ocasu by byla nudle na vodorovném scrollu.
+    @Test("Samotné CR je taky konec řádku")
+    func treatsBareCarriageReturnAsALineBreak() {
+        #expect(Policy.logLines(of: "a\rb\nc").count == 3)
+    }
+
+    /// A timestampy se musí sundat i z `CRLF` logu — jinak by je „schování“ minulo úplně stejně
+    /// jako ořez.
+    @Test("Timestampy se sundají i z logu s CRLF")
+    func stripsTimestampsFromWindowsLineEndings() {
+        let raw = "2026-08-11T16:09:11.2636913Z první\r\n2026-08-11T16:09:12.0000000Z druhý\r\n"
+
+        #expect(Policy.strippingTimestamps(raw) == "první\ndruhý\n")
     }
 }

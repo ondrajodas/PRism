@@ -81,8 +81,10 @@ extension Policy {
                 if iterator < text.endIndex { iterator = text.index(after: iterator) }
             } else if text[iterator] == "]" {
                 // OSC končí `BEL` nebo `ESC \`; **nikdy se nepřežene za konec řádku**, aby
-                // rozbitá sekvence nesnědla zbytek logu.
-                while iterator < text.endIndex, text[iterator] != "\u{7}", text[iterator] != "\n" {
+                // rozbitá sekvence nesnědla zbytek logu. Konec řádku je `isNewline`, ne `"\n"`:
+                // v logu s `CRLF` je zlom jeden `Character` `"\r\n"`, který se `"\n"` nerovná —
+                // takže by ta pojistka nezabrala právě tam, kde je potřeba (#292).
+                while iterator < text.endIndex, text[iterator] != "\u{7}", !text[iterator].isNewline {
                     iterator = text.index(after: iterator)
                 }
                 if iterator < text.endIndex, text[iterator] == "\u{7}" {
@@ -91,6 +93,17 @@ extension Policy {
             }
         }
         return result
+    }
+
+    /// Řádky logu — **na jakémkoli zakončení**, tedy `LF`, `CRLF` i samotné `CR`.
+    ///
+    /// `split(separator: "\n")` na to nestačí: `"\r\n"` je ve Swiftu **jeden `Character`**, takže
+    /// se na něm nerozdělí a z logu z Windows runneru by byl jediný řádek — konec logu by pak byl
+    /// celý log, věta „nevešlo se“ by mlčela a v okně by z toho byla jedna nekonečná řádka. Je to
+    /// tatáž past, na které u #292 skončil rozbor hlaviček `gh -i`; v obou změřených logách z našich
+    /// repů `CR` sice není, ale zakončení řádků si vybírá runner, ne my.
+    static func logLines(of text: String) -> [Substring] {
+        text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
     }
 
     /// Sundá timestamp ze začátku řádku.
@@ -102,8 +115,7 @@ extension Policy {
     ///
     /// Kdo časy potřebuje, má celý log na GitHubu — odkaz zůstává vždycky.
     static func strippingTimestamps(_ text: String) -> String {
-        text
-            .split(separator: "\n", omittingEmptySubsequences: false)
+        logLines(of: text)
             .map { line -> Substring in
                 guard let space = line.firstIndex(of: " "), isTimestamp(line[line.startIndex..<space])
                 else { return line }
@@ -131,7 +143,7 @@ extension Policy {
         let clean = strippingTimestamps(strippingANSI(raw))
         // Poslední prázdný řádek za koncovým `\n` není řádek logu — jinak by se `nevešlo`
         // počítalo o jeden vedle a u krátkého logu by tvrdilo ořez, který nenastal.
-        var all = clean.split(separator: "\n", omittingEmptySubsequences: false)
+        var all = logLines(of: clean)
         if all.last?.isEmpty == true { all.removeLast() }
         guard all.count > limit else {
             return LogTail(text: all.joined(separator: "\n"), omittedLines: 0)

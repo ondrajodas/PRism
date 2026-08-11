@@ -461,6 +461,27 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   pohledech. Našlo to dvě věci, které se z kódu nepoznaly: ořezaný odznak (`mi…` místo
   `mimo diff`) a náhled textu ustupující verdiktu — odsud `layoutPriority` na odznacích
   a na náhledu.
+- **Akce u nálezu jako tlačítka (#283)** — `FindingActionButtonTests`. Vzhled se dá otestovat jen
+  přes čísla a texty, takže se testuje **to, co se dá zjednodušit potichu**: rozměry `.mini` proti
+  CSS návrhu (font 11,5, padding 3 × 9, poloměr 6, mezera 7, obtažení 1), že se obtažení
+  **připočítává k odsazení** (CSS ho má vně paddingu, SwiftUI ho kreslí dovnitř) a že tlačítko vyjde
+  na **25 bodů** — tedy na výšku, kterou návrh dává i vstupu do palety v hlavičce.
+
+  K tomu barvy z palety a jeden test proti záměně, která se ve světlém režimu **neprojeví**: text
+  plného tlačítka je `Palette.surface` (`--panel`), takže se rozsvítí v obou vzhledech
+  (`performAsCurrentDrawingAppearance`) a ověří se, že ve světlém je bílý a v tmavém ne. Zadrátovaná
+  `.white` by ve světlém režimu vypadala správně.
+
+  Popisky odmítnutí mají **dvě podoby** a nesmí splynout: `actionLabel` na tlačítko (velké písmeno,
+  každý důvod jiný) a `label` do odznaku (malé písmeno, přídavné jméno). Test tvrdí obojí i to, že
+  se ty dvě hodnoty u žádného důvodu nerovnají — kdyby se `label` přejmenoval na popisek z návrhu,
+  odznak odmítnutého nálezu by řekl akci. Ověřeno **vloženou regresí** ve dvou podobách: `.white`
+  místo palety (spadly dva testy) a `label` na místě `actionLabel` (spadly dva).
+
+  Jak to **vypadá**, se ověřilo renderem vedle vyrenderovaného návrhu, ne kódem — a našlo to dvě
+  věci: tlačítko **20 bodů proti 25** v návrhu (chybějící `line-height` a obtažení) a to, že věta
+  „GitHub tady řádkový komentář nepřijme“ jako ocas za tlačítkem shodí celou řadu do sloupce i na
+  širokém okně. Pásmo šířek 300–482 pak ukázalo všechny tři varianty zalomení.
 - **Notifikace (#88)** — proti `FakeNotificationCenter`, takže se **nic nedoručuje**. To hlavní
   není text notifikace, ale dvě věci, které se dají pokazit tiše: že se **odmítnuté oprávnění
   dá poznat** (a úspěch tu hlášku smaže) a že se **kliknutí neztratí, když dorazí dřív**, než
@@ -646,6 +667,56 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   včetně **zanořeného** a neuzavřeného. Plus skutečný popis PR z fixture, tedy cizí text, který
   nikdo nepsal pro test. `MarkdownHTML` má vlastní sadu: odkaz na Markdown se všemi druhy
   uvozovek, `<br>`, entity a to, že `&amp;` se dekóduje naposled.
+
+  **Citace a výstrahy (#279)** mají vyčerpávající výčet, protože je to čistá funkce: nadpis,
+  odrážka a zaškrtávátko **uvnitř** citace, vnořená citace, `<details>` v citaci, zachované
+  odsazení zanořeného seznamu, všech pět druhů výstrahy, výstraha **uvnitř** citace, bloky uvnitř
+  výstrahy a obsah **za stropem zanoření** — a to zvlášť pro citace i pro `<details>` (nevysází se,
+  ale zůstane). Ten druhý přišel až po review: počítadlo otevřených tagů se jmenovalo `depth`
+  a **zastínilo** parametr s hloubkou rekurze, takže strop nezabíral vůbec a rozbalovátko hloubku
+  ještě resetovalo. Chytil to Copilot, ne testy — proto ten test existuje. Nejcennější jsou tři, které
+  tvrdí, že se něco **NEstalo**: **neznámý druh** `[!FOO]` výstrahu nedá a ten řádek v citaci
+  zůstane, **značka s textem na témže řádku** taky ne, a nad **skutečným** komentářem od
+  `coderabbitai` (fixture `gh/comment-coderabbit.md`, veřejné `coderabbitai/ast-grep-essentials#200`)
+  se ověřuje, že v žádném odstavci nezůstal řádek začínající `>` nebo `#` — tedy že v okně nestojí
+  zdroj. Ověřeno vložením regrese: bez rekurze v citaci padnou čtyři testy, po spolknutí neznámého
+  druhu na `.note` padne i invariant (nahlásí ztracené `FOO`).
+- **`MarkdownTypography` (#279)** — že úrovní nadpisů je **šest různých a monotónně klesajících**
+  (to je celá ta vada, kterou #279 opravuje), že linka je jen pod `#`/`##`, tlumená jen šestka,
+  že úroveň mimo rozsah se přiklopí a že škála roste se základní velikostí. U rytmu: nadpis má nad
+  sebou nejvíc místa a pod sebou nejméně, první blok **nemá** mezeru, a **žádný přechod mezi dvěma
+  bloky nevyjde nula** — to je výčet přes všechny druhy bloků obojím směrem.
+- **`MarkdownAlertStyle` (#279)** — barvy se porovnávají **vyřešené na hex, v obou režimech**
+  (`NSAppearance.performAsCurrentDrawingAppearance`), protože token je dynamický a shoda může být
+  jen v jednom z nich: každý druh má vlastní barvu, `[!CAUTION]` se nerovná `crit` a `[!WARNING]`
+  se nerovná `stale`. Plus že každý druh má neprázdný titulek a **existující** SF Symbol.
+- **`MarkdownInlineText` (#279)** — že inline sází systém (tučné zůstane, odkaz zůstane klikatelný),
+  že inline `kód` dostane podklad a monospace, a hlavně že ho **nedostane nic jiného** — podklad
+  nad celým odstavcem by z prózy udělal blok kódu. Plus že rozbitý Markdown vrátí holý text.
+- **`MarkdownRenderCache` (#279)** — že vrací totéž co parser, že **dva různé texty se nepotkají
+  v jednom záznamu** (klíčem je celý text; ověřeno regresí — s klíčem podle délky test padá na
+  vysázeném cizím komentáři) a že se cache nedostane přes ani jednu ze dvou mezí. Text delší než
+  celý rozpočet se **nezapamatuje**, ale rozloží.
+- **Měření sazby (#279)** — `MarkdownPerformanceMeasurement`, gated `PRISM_MEASURE`. Nic netvrdí;
+  existuje proto, že rekurze v citacích se počítá v `body` a to rozhodnutí má být podložené číslem:
+  zpráva od bota o 12 kB 1,91 ms, z cache 0,037 ms; konverzace o 40 zprávách 74,7 ms proti 1,48 ms.
+  Čtvrté číslo rozhodlo o rozsahu cache: **inline sazba** 44 bloků té zprávy je 1,81 ms, tedy
+  stejně drahá jako rozklad — takže se pamatuje taky.
+- **Sonda sazby (#279)** — `MarkdownRenderProbe`, taky gated, vyrendruje ukázku i skutečnou zprávu
+  od bota do PNG **v obou režimech**. Barvy palety se řídí `NSAppearance`, kdežto `.primary`
+  a `.secondary` prostředím SwiftUI, takže se musí nastavit **obojí**; s jedním z toho vyjde tmavý
+  text na tmavém podkladu a vypadá to jako chyba v sazbě. Našla dvě věci, které z kódu vidět
+  nebyly: nerozeznatelné úrovně nadpisů 3–5 a pruh citace, který sahal do poloviny obsahu.
+
+  ```bash
+  TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/render \
+      xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test \
+      -only-testing:PRismTests/MarkdownRenderProbe > /tmp/probe.log 2>&1
+  ```
+
+  Pozor na dvě pasti: `PRISM_MEASURE=1` **před** `xcodebuild` nestačí (do testovacího procesu jde
+  jen to, co má prefix `TEST_RUNNER_`), a **tabulka vyjde v renderu prázdná** — je ve vodorovném
+  `ScrollView`, který se offscreen nevykreslí. Není to chyba sazby, jen mez sondy.
 - **`AppStore` — taby** — výchozí `Přehled` (proti `PullRequestTab.standard`, ať se to nerozejde),
   volba per PR, přepnutí zpátky mažící klíč a úklid s PR, které zmizelo ze seznamu.
 - **`Policy` — hledání v paletě (#184)** — vyčerpávající výčet nad hotovým katalogem, bez kreslení.
@@ -930,7 +1001,48 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   slovo, často jediný znak. Nahlášené nad `job-queue-daemon#858` jako „zvýraznění nevidím“, ačkoli
   na řádku 1908 (`count: 7` → `8`) tam bylo. Je to obecnější poučení než jedna barva: **render
   jednoho prvku neodpovídá na to, jestli se ten prvek dá v okně najít** — na to je potřeba
-  screenshot běžící aplikace nad skutečným PR. Teď je hodnota 50 % a je ověřená obojím.
+  screenshot běžící aplikace nad skutečným PR. Padesát procent pak platilo do #277, kdy se z krytí
+  stala vyčíslená barva a **hodnota se u toho změnila**, protože nad novým pozadím řádku brala pod
+  sebou obarvení syntaxe; čísla obou stavů jsou u `Palette.diffAddedWord` a hlídá je sada níž.
+
+  **Barvy diffu (#277)** mají dvě sady a měří se v nich **dvě míry naráz** — to je u nich to hlavní,
+  co se dá pokazit potichu: WCAG kontrast nad dvěma plochami podobné světlosti neřekne nic (zelený
+  a červený řádek se liší hlavně barvou), kdežto ΔE2000 zas nic neřekne o čitelnosti textu nad
+  plochou. Do #277 to bylo vidět na word-level vrstvě: ΔE 29,5 (plocha jak vyšitá) a kontrast
+  zeleného řetězce Darculy **1,27**, tedy nepřečtitelné slovo — a zrovna to, které se změnilo.
+
+  `DiffPaletteTests` počítá obojí nad **skutečnými tokeny** vyhodnocenými v obou režimech
+  (`performAsCurrentDrawingAppearance` kolem `NSColor` funguje, na rozdíl od `ImageRenderer`u —
+  viz *Jak si zkontrolovat, jak view vypadá*). Nejcennější je tvrzení o **alfě**: všech pět tokenů
+  musí být neprůhledných, protože právě krytí z barvy dělá výsledek závislý na podkladu — kdo se sem
+  vrátí s `.opacity(…)`, spadne tady, ne až na obrazovce. K tomu ΔE ploch proti sobě i proti
+  podkladu, kontrast syntaxe (řetězec, klíčové slovo, komentář, `ink`) na obou druzích řádku, znak
+  `+`/`−` na svém řádku **i na ploše hlavičky** (jedna barva, dvě místa, #156), obrys bubliny nad
+  všemi podklady, a **rozestup šrafy** (pruh 5, perioda 10, vodorovný krok √2× a směr úsečky) —
+  protože to je hodnota z návrhu, kterou barva nehlídá. Prahy jsou svázané s dnešními hodnotami, ne
+  s ideálem, takže sada padá na zhoršení, ne na zaokrouhlení. Jeden test navíc tvrdí, že se **světlá
+  a tmavá větev liší** — bez něj by celou sadu splnila i paleta, která na režim nereaguje, a je to
+  zároveň důkaz, že měřidlo režim opravdu přepíná.
+
+  `DiffMissingRowTests` čte **bitmapu sloupce**, protože v modelu prázdný protějšek poznat nejde: do
+  textu se skládá jako prázdný kontextový řádek, aby si strany odpovídaly. Vzorkuje se řádka pixelů
+  uprostřed řádku a za gutterem (čísla a kód by do vzorku vnesly barvy písma) a odstíny se počítají
+  — jednolitá plocha znamená kontext, dva odstíny šrafu. Tvrdí se u toho i **kolik plochy pruhy
+  zaberou** (kolem poloviny): jeden tenký pruh by prošel tvrzením o dvou odstínech, ale v okně by se
+  ztratil. Cennější je druhý test: **bez `missingLines` se nešrafuje žádný řádek**, jinak by stačila
+  jedna záměna podmínky v `drawRows`. Třetí drží, že šrafa leží **nad** plochou řádku a nenahrazuje
+  ji — a ten chytil reálnou chybu: v první verzi se šrafa kreslila **před** pozadím řádku, takže ji
+  pozadí přemazalo.
+
+  Ověřeno **vloženou regresí** (barvy zpátky na krytí, `drawMissing` vypnuté): padne **32 tvrzení**
+  z obou sad a je z nich vidět přesně to, na co si #277 stěžovalo — alfa 0,12, znak `+` s kontrastem
+  1,02 nad svým řádkem a prázdný protějšek s jediným odstínem.
+
+  **Vzhled se u #277 srovnával s návrhem, ne jen sám se sebou.** Sekce split diffu z mockupu se
+  vyřízne do samostatného HTML, vyrenderuje headless Chromem v obou tématech (`data-theme`) a položí
+  vedle offscreen renderu bloku z aplikace. Rozhodlo to dvě věci, na které čísla nestačí: **směr
+  pruhů šrafy** (z `45deg` se dá odvodit obojí — v návrhu jdou z levého dolního koutu do pravého
+  horního) a to, že plocha díry zůstává **plochou obsahu**, protože pod gradientem je `transparent`.
 
   **Co se unit testem ověřit nedá:** vybírání textu, kontextové menu a tažení rozsahu. Kliky
   a pohyb myši se syntetizovat dají (`CGEvent` s `cgSessionEventTap` a `mouseEventClickState` —
@@ -1154,8 +1266,15 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (`AppStoreCheckDetailTests`). Nejcennější testy tvrdí, že se něco **NEstalo**:
   - **bez kliknutí se pro log ani anotace nejde** — jinak je to N+1 past o tři řády dražší
     než u detailu PR;
-  - **nad stropem se pro log vůbec nejde** — hlídá se, že se zjistila velikost a **nestahovalo**;
-  - **bez známé velikosti se nestahuje** — hádat, že je log malý, znamená stáhnout osm mega;
+  - **nad známým stropem se pro log vůbec nejde** — hlídá se, že se zjistila velikost
+    a **nestahovalo**;
+  - **bez známé velikosti se log naopak stáhne** (#292) a strop se uplatní na tom, co přišlo. Do
+    #292 tady stálo pravidlo obrácené („bez velikosti se nestahuje“) a bylo to zeleně otestované —
+    jenže rozbor hlaviček velikost nikdy nevydal, takže tenhle test **popisoval vypnutou funkci**.
+    Poučení pro katalog: test, který tvrdí „tohle se nestane“, si musí ověřit, že ten stav je
+    **výjimka**, ne obvyklý běh. Testy k tomu jsou čtyři — velikost nepřišla, dotaz na ni spadl,
+    stažené bajty jsou nad stropem, a když spadne obojí, je vidět chyba **stažení**, ne chyba
+    `HEAD`u;
   - **sbalení stažený text zahodí a běžící stahování zruší**;
   - **selhání se nesmí tvářit jako prázdno** — ani u logu („nepodařilo se stáhnout“ ≠ „log je
     prázdný“), ani u anotací, kde prázdno je navíc **běžný** stav, protože je workflow emitovat
@@ -1165,6 +1284,33 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 
   **Regrese ověřená vložením regrese**: strop, který se ignoruje, položí dva testy; selhání
   zapsané jako prázdný log jeden.
+
+- **Rozbor hlaviček `gh api -i` (#292)** — `GhResponseHeadersTests`, výčtem, a je to **oprava chyby,
+  kterou našel až člověk v běžící aplikaci**. Stojí za to vědět proč: fixture byla vymyšlená.
+
+  Test si hlavičky psal jako Swiftový víceřádkový literál, tedy s `LF` — a `gh` je zakončuje `CRLF`.
+  `"\r\n"` je přitom ve Swiftu **jeden `Character`**, takže `split(separator: "\n")` na něm
+  nerozdělí a z celého bloku hlaviček zbyde jeden „řádek“, ve kterém se `Content-Length` nenajde.
+  Test byl zelený, v aplikaci konec logu nefungoval u **žádného** checku. V shellu to přitom šlo,
+  protože tam hlavičky čtou oči.
+
+  Odtud dvě věci do katalogu:
+  - **Fixture textového protokolu musí být skutečný výstup, bajt za bajtem** —
+    `gh/job-log-head.txt` je `gh api -X HEAD -i` na veřejný job `home-assistant/core`. Ruční
+    literál nese zakončení řádků toho, kdo ho napsal, ne toho, kdo výstup vyrábí.
+  - **Fixture, která stojí na `CRLF`, potřebuje `.gitattributes` `-text`.** `core.autocrlf=input`
+    (nastavení na tomhle stroji) by `CR` při commitu zahodilo a test by přestal testovat, kvůli čemu
+    vznikl — potichu a zeleně. Test si proto **kontroluje i tu fixture** (`output.contains("\r\n")`).
+
+  Výčet pokrývá `LF`, `CRLF` a samotné `CR`, lowercase jména (`HTTP/2`) i Title-Case, víc bloků za
+  sebou (rozhoduje **poslední**, protože ten před redirectem má `Content-Length: 0`), hodnotu
+  s dvojtečkou, rozbitý stavový řádek a všechna čtyři „velikost nevyšla“ zvlášť. Past navíc, kterou
+  ta odpověď doopravdy má: `Content-Length` je i **v hodnotě** `Access-Control-Expose-Headers`, a to
+  na řádku **před** tou skutečnou hlavičkou — hledání podřetězce by tedy vrátilo výčet jmen.
+
+  **Regrese ověřená vložením regrese**: vrácené `split(separator: "\n")` položí v téhle sadě 25
+  tvrzení, a v `CheckLogTextTests` tři (`Policy.logLines`, kde je to tatáž past nad logem
+  z Windows runneru).
 
   **Ořez logu se testuje i na koncovém `\n`** — kdyby se počítal jako řádek, tvrdil by ořez log,
   který se do stropu vešel přesně. A hláška o vynechaných řádcích se u čtyřciferného počtu

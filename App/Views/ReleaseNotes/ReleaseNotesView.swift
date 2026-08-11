@@ -180,7 +180,7 @@ struct ReleaseNotesDetailView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
         } else {
-            MarkdownText(text: release.body, font: .body)
+            MarkdownText(text: release.body, size: 13)
         }
     }
 }

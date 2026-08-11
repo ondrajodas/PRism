@@ -1,0 +1,21 @@
+HTTP/1.1 200 OK
+Accept-Ranges: bytes
+Access-Control-Allow-Origin: *
+Access-Control-Expose-Headers: x-ms-request-id,Server,x-ms-version,Content-Type,ETag,Last-Modified,x-ms-creation-time,Content-MD5,x-ms-lease-status,x-ms-lease-state,x-ms-blob-type,x-ms-server-encrypted,x-ms-access-tier,x-ms-access-tier-inferred,Accept-Ranges,Content-Length,Date,Transfer-Encoding
+Content-Length: 237141
+Content-Md5: b+3plGKO3xE+PvgQyneUUw==
+Content-Type: text/plain
+Date: Tue, 11 Aug 2026 21:55:47 GMT
+Etag: "0x8DEF7D70F073CFE"
+Last-Modified: Tue, 11 Aug 2026 18:33:37 GMT
+Server: Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0
+X-Ms-Access-Tier: Hot
+X-Ms-Access-Tier-Inferred: true
+X-Ms-Blob-Type: BlockBlob
+X-Ms-Creation-Time: Tue, 11 Aug 2026 18:33:37 GMT
+X-Ms-Lease-State: available
+X-Ms-Lease-Status: unlocked
+X-Ms-Request-Id: bf47d97f-801e-00cb-2edc-2998bf000000
+X-Ms-Server-Encrypted: true
+X-Ms-Version: 2025-11-05
+

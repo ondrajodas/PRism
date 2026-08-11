@@ -60,12 +60,17 @@ protocol GitHubGateway: Sendable {
     /// si o to řekne (problem matcher, reporter), a u běžného `phpunit`/`phpstan` často nejsou.
     func fetchAnnotations(repo: RepoID, checkRunID: Int) async throws -> CheckAnnotations
 
-    /// Kolik má log jobu bajtů, **bez jeho stažení** (#214).
+    /// Kolik má log jobu bajtů, **bez jeho stažení** (#214). `nil` = nevíme.
     ///
     /// `HEAD` na `…/actions/jobs/{id}/logs` je levný a **konstantně** levný — změřeno ~1,2 s
     /// u 33 kB i u 8,78 MB. Na tom stojí strop: věta „log má 8,4 MB“ není odhad, protože se
     /// napíše dřív, než by se stahovalo.
-    func fetchJobLogSize(repo: RepoID, jobID: Int) async throws -> Int
+    ///
+    /// **`nil` je odpověď, ne selhání** (#292). Velikost stojí na rozboru hlaviček, a ten se dá
+    /// minout snáz než dotaz sám — u #292 na něm skončil konec logu u všech checků. Volající si
+    /// proto strop uplatní na stažený text: `HEAD` je **ochrana proti osmimegovému logu, ne
+    /// podmínka toho, že se log ukáže**.
+    func fetchJobLogSize(repo: RepoID, jobID: Int) async throws -> Int?
 
     /// Log jednoho jobu (#214).
     ///

@@ -199,8 +199,9 @@ struct CheckDetailView: View {
         case .loaded(_, let tail):
             tailView(tail)
         case .tooLarge(let reason):
-            // Věta s **konkrétní velikostí** z `Content-Length` — a odkaz na GitHub vedle
-            // v akcích výš. Nestahovalo se vůbec.
+            // Věta s **konkrétní velikostí** — a odkaz na GitHub vedle v akcích výš. Velikost je
+            // z `Content-Length`, a když ji odpověď neřekla, ze stažených bajtů (#292); ukázat se
+            // log nemá v obou případech stejně, takže věta zůstává jedna.
             note("\(reason) Celý je na GitHubu.", systemImage: "doc.text.magnifyingglass")
         case .failed(let reason):
             // **Ne prázdný log.** Selhané stažení se nesmí tvářit jako log, ve kterém nic není.

@@ -111,8 +111,9 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     /// Co vrátí `fetchAnnotations`. Prázdno je běžný stav — workflow anotace emitovat nemusí.
     var annotations = CheckAnnotations()
     var annotationsFailure: (any Error)?
-    /// Kolik bajtů hlásí `HEAD`. Na tom stojí strop, takže se musí dát nastavit i „obří“.
-    var logSize = 1024
+    /// Kolik bajtů hlásí `HEAD`. Na tom stojí strop, takže se musí dát nastavit i „obří“ — **a
+    /// `nil`**, tedy „velikost neřekl“: přesně to u #292 vypnulo konec logu u všech checků.
+    var logSize: Int? = 1024
     var logSizeFailure: (any Error)?
     var jobLog = ""
     var jobLogFailure: (any Error)?
@@ -127,7 +128,7 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return annotations
     }
 
-    func fetchJobLogSize(repo: RepoID, jobID: Int) async throws -> Int {
+    func fetchJobLogSize(repo: RepoID, jobID: Int) async throws -> Int? {
         logSizesAsked.append(jobID)
         if let logSizeFailure { throw logSizeFailure }
         return logSize

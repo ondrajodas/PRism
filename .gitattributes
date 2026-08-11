@@ -1,0 +1,7 @@
+# Fixtures jsou **skutečné výstupy** a některé z nich stojí právě na zakončení řádků.
+#
+# `core.autocrlf=input` (globální nastavení na tomhle stroji) by `CRLF` při commitu zahodilo —
+# a fixture s hlavičkami `gh api -i` by tím přestala testovat to, kvůli čemu vznikla: že se
+# `"\r\n"` v Swiftu chová jako **jeden `Character`**, takže `split(separator: "\n")` na něm
+# nerozdělí (#292). Test by zezelenal na normalizovaném souboru a chyba by se vrátila.
+Tests/Fixtures/gh/job-log-head.txt -text
