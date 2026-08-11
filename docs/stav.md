@@ -641,6 +641,24 @@ rozestavěný build nesáhne na uložené nálezy ani na rozdělané drafty. Bez
 nemění nic. Nový je `bin/worktree.sh`, který strom založí a přenese do něj konfiguraci
 očištěnou o odesílání, notifikace a automat.
 
+**Očista konfigurace slotu má jedno místo a čistí obě úrovně (#262)** — `bin/slot-config.sh`.
+Do té doby byla uvnitř `worktree.sh` a u **rep** přepisovala jen `allowsPublishing`, ne `mode`,
+takže per-repo override `mode: automatic` očistou prošel a přebil globální `manual`. Slotová
+aplikace si sama pustila review, o která nikdo nežádal: **2,80 $ ve slotu `b` a 1,16 $
+v dalším**, dvakrát nezávisle na sobě v jedné dávce. Záměr byl přitom napsaný správně, jen ho
+ten řádek nedodržel — je to třída „kontrola, která jinde v repu je, a tady chybí“.
+
+Opravené je to na třech úrovních. **Výčet klíčů je úplný a je ve skriptu vidět**: pět klíčů má
+obě úrovně (`mode`, `allowsPublishing`, `findingsLanguage`, `skills`, `blockingCategories`)
+a u každého je napsané, jestli se čistí a proč; nový klíč do toho výčtu patří, i kdyby se
+nečistil. **Očista je samostatně spustitelná** (`./bin/slot-config.sh`, slot si vezme
+z `.prism-slot`), takže si ji subagent v dávce nemá proč opisovat — a opisoval si ji, protože
+strom má od harnessu a `worktree.sh` nepouští; dvě kopie znamenají opravu jen v jedné.
+A **výsledek se ověřuje nad daty**, ne přečtením filtru: po přepsání se hledá zbylý automat
+a povolené odesílání, a když se něco najde, nezapíše se nic. Přidané je i `autoRunsPerDay = 0`
+jako druhá, na režimu nezávislá brzda, a hlášení o tom, co se v konfiguraci našlo.
+Ověřeno spuštěním nad konfigurací, která `mode: automatic` u repa má, a vložením regrese.
+
 **Postup pro dávku issues zapsaný (#231)** — [`docs/paralelni-vyvoj.md`](paralelni-vyvoj.md).
 Sloty daly paralelnímu vývoji prostředí, ale ne postup; bez zápisu by se seznam issues dál
 vyřizoval sériově, protože výchozí chování je subagenty nepouštět. Je v něm, podle čeho se
