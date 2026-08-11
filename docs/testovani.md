@@ -578,6 +578,36 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   uvozovek, `<br>`, entity a to, že `&amp;` se dekóduje naposled.
 - **`AppStore` — taby** — výchozí `Přehled` (proti `PullRequestTab.standard`, ať se to nerozejde),
   volba per PR, přepnutí zpátky mažící klíč a úklid s PR, které zmizelo ze seznamu.
+- **`Policy` — hledání v paletě (#184)** — vyčerpávající výčet nad hotovým katalogem, bez kreslení.
+  To hlavní jsou tři tvrzení: **pořadí skupin je pevné** (nálezy první), **strop je na skupinu**
+  (dvacet nálezů nesmí vytlačit soubory, PR ani akce) a **prázdný dotaz vrací všechno**, protože
+  paleta je nabídka toho, co je po ruce. K tomu váhy (titulek > podtitulek > klíčové slovo, začátek
+  titulku > hranice slova > vnitřek), diakritika a velikost písmen (`nalez` najde `nález`), víc slov
+  jako **a zároveň** a to, že se zvýrazňuje **jen shoda v titulku** — u shody v podtitulku je
+  `highlight` `nil`, protože zvýraznit něco jiného by bylo tvrzení, že se to potkalo tam.
+
+  U **akcí** se testuje, co se nenabízí: bez otevřeného PR nic, co na PR visí; za běhu review
+  `Zrušit` **místo** `Pustit`; sekce railu, která je zrovna vidět v domácí záložce. A že kreslené
+  zkratky jsou jen ty dvě skutečné (`⌘2`, `⌘,`) — `⌘⇧R` z návrhu dělá v aplikaci něco jiného.
+
+  Test na **pořadí při shodných váhách** je zapsané pravidlo, ne důkaz: vložená regrese (zahozený
+  druhý klíč řazení) ho neshodí, protože dnešní `sorted` v Swiftu stabilní je, i když to nemá
+  v kontraktu.
+- **`AppStore` — command palette (#184)** — proti fake gateway. **Nejcennější test celé palety
+  tvrdí, že se nic nestalo**: po sestavení katalogu, prohledání a vykonání každého druhu cíle musí
+  mít gateway pořád tentýž počet volání (search, diff, detail, konverzace). Bez toho by stačilo,
+  aby si katalog někdy dotáhl diff druhého PR, a z každého stisku klávesy by byl podproces.
+
+  Vedle toho: nálezy ze **všech** PR s otevřeným prvním, odmítnuté nálezy se nenabízejí, soubory
+  jen z otevřeného PR, **filtr seznamu paletu nezužuje** (ověřeno vložením regrese — se
+  `visiblePullRequests` test padá), `id` katalogu jsou jednoznačná i tehdy, když týž reviewer
+  nahlásí totéž dvakrát (taky ověřeno regresí: s `Policy.key(of:)` místo indexu test padá), skok se
+  dá vyžádat **dvakrát**, nález bez místa v kódu otevře tab `Nálezy` a **o skok nežádá**,
+  nevyzvednutá žádost se uklidí s PR mimo seznam a `openSettings` se vrací **volajícímu**, aniž by
+  se ve storu cokoli změnilo.
+- **Měření hledání (#184)** — `CommandPaletteMeasurement`, gated `PRISM_MEASURE` jako měření
+  layoutu. Nic netvrdí; existuje proto, že se katalog skládá **při každém stisku klávesy** a to
+  rozhodnutí má být podložené číslem: 200 řádků 1,5 ms, 2000 řádků 17,6 ms.
 - **`AppStore` — rozdělané review** — proti **skutečnému** `ReviewDraftStore` nad dočasnou
   složkou: on rozhoduje, co je po restartu, takže fake by ověřoval sám sebe. Pokrývá cestu
   od kliknutí po disk (komentář, verdikt, tělo, převzetí nálezu do těla i na řádek), a hlavně

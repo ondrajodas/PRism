@@ -52,6 +52,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `conversation` / `findings` / `progress` (#242). `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) můžou přijít doprostřed levé skupiny, aniž by se posunul. Jako `ReviewVerdict` **není `Codable`** |
 | `PullRequestTabBadge` | Odznak u záložky (#242): `count` / `blocking` (červeně) / `live` (puntík). Výčtem, ne strukturou s příznaky — „puntík s počtem“ ani „blokující bez počtu“ význam nemá, takže se nemá dát napsat |
 | `ReviewPanelTab` | Co je vidět v panelu vpravo: `findings` / `draft` (#242). Jako `PullRequestTab` **není `Codable`** |
+| `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání), `Jump` (žádost o odscrollování) a `Effect` (co zbývá na okno). **Není `Codable`** — je to obsah jednoho otevření palety. Jmenný prostor proto, že `Palette` v repu už znamená barvy okna |
 | `DiffLayout` | Jak se kreslí diff: `unified` (pod sebou) / `split` (vedle sebe). Nastavení **člověka, ne repa** — proto jen v `GlobalConfig` |
 | `NotificationEvent` | Co notifikaci vyvolalo: `newPullRequest` / `findings` / `clean` / `failure`. Nese si ji notifikace sama |
 | `NotificationSettings` | Co se má hlásit (#86) — hlavní vypínač a čtyři události. Jako `DiffLayout` jen globálně |
@@ -1493,7 +1494,9 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
 | `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
-| `hiddenShortcuts(_:)` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení i okno novinek |
+| `hiddenShortcuts(_:)` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení, okno novinek i paletu |
+| `CommandPaletteView`, `CommandPaletteRowView` | Command palette ⌘K (#184): pole, skupiny výsledků, zvýrazněná shoda v titulku, pruh s klávesami. Karta 560 bodů jako **překryv okna**, ne sheet |
+| `PullRequestStateAppearance` | Ikona a barva stavu **pull requestu** (ne review) — jedno místo pro řádek seznamu i pro paletu |
 | `AppDelegate` | Ukončení aplikace: dokud běží review, ptá se |
 
 ### Hlavička PR (#218)
@@ -1555,6 +1558,91 @@ vyjde `neběželo`, tedy totéž jako u PR, který nikdo nekontroloval. Nastalo 
 - **Nezachytí to všechno**, a je to tak zamýšlené: pád aplikace ani zabití zvenčí takhle
   odchytit nejde. Dotažení nálezů z transcriptu zůstává v #94 jako ta drahá varianta pro
   zbytek.
+
+### Command palette ⌘K (#184)
+
+Jediná obrazovka aplikace, která nemá předobraz v ničem starším: jedno pole nad **nálezy,
+soubory otevřeného PR, pull requesty a akcemi**. Rozdělená je na tři kusy a hranice mezi nimi je
+to podstatné:
+
+| Kde | Co tam patří |
+|---|---|
+| `CommandPalette` (`App/Models/`) | Tvary: `Item`, `Group`, `Target`, `Action`, `Mark`, `Hit`, `Section`, `Jump`, `Effect`. Žádné rozhodování, žádné barvy |
+| `Policy.paletteResults`, `Policy.paletteActions` (`App/Policy/CommandPaletteSearch.swift`) | **Rozhodování**: co na dotaz sedne, jak se to váží, kolik se toho ukáže, a které akce mají teď co dělat |
+| `AppStore+Palette` | Katalog z paměti store a vykonání cíle |
+| `CommandPaletteView`, `CommandPaletteRowView` | Sazba a klávesy. Ve view **není žádné `if` nad výsledky** |
+
+Co se u ní nemá rozbít:
+
+- **Pořadí skupin je pevné a je to tvrzení, ne kreslení.** Nálezy první, protože je to jediná
+  věc, kterou tahle aplikace má a prohlížeč ne. Nese ho **pořadí případů** v `CommandPalette.Group`,
+  takže se nedá přehodit ve view.
+- **Strop je na skupinu** (`Policy.paletteGroupLimit`, šest). Celkový strop by znamenal, že dvacet
+  nálezů vytlačí soubory, PR i akce — tedy zrovna to, kvůli čemu je paleta jedno pole na všechno.
+- **Prázdný dotaz vrací všechno, ne nic.** Paleta se otevírá jako nabídka toho, co je po ruce;
+  pořadí je pořadí katalogu (nálezy od nejvážnějšího přes `Policy.sorted`, soubory v pořadí diffu,
+  PR od naposledy změněného, akce v pevném pořadí).
+- **Řazení nese pořadí katalogu v klíči výslovně.** `sorted` v Swiftu nemá stabilitu v kontraktu,
+  takže bez druhého kritéria by řádky se stejnou váhou mezi stisky klávesy poskakovaly.
+- **Hledá se bez ohledu na velikost písmen a diakritiku** (`range(of:options:)`); aplikace je
+  česká, takže `nalez` musí najít `nález`. Víc slov je **a zároveň** — jinak by se nedalo napsat
+  `vault secret`.
+- **Zvýrazňuje se jedině shoda v titulku.** Když se slovo potkalo v podtitulku nebo v klíčovém
+  slově, `Hit.highlight` je `nil` — zvýraznit něco v titulku by bylo tvrzení, že se to potkalo tam.
+- **Katalog se skládá při každém stisku klávesy, ne jednou při otevření.** Snímek by za pár sekund
+  ukazoval nálezy z review, které mezitím doběhlo. Změřeno (`CommandPaletteMeasurement`):
+  200 řádků 1,5 ms, 2000 řádků 17,6 ms na stisk — reálný katalog (dvacet PR, desítky nálezů,
+  padesát souborů) je řádově ten první případ.
+- **Paleta se nikoho nedoptává.** Nálezy jsou z `reviewRecords`, soubory z **načteného** diffu
+  otevřeného PR, PR z posledního tiku. Diff jiného PR by byl nový dotaz na GitHub — a ten zadání
+  #184 zakazuje. Je na to test, který po vykonání každého druhu cíle porovnává počty volání
+  gateway.
+- **Čte se plný seznam `pullRequests`, ne `visiblePullRequests`.** Filtr je zúžení *seznamu*,
+  kdežto paleta je způsob, jak něco najít; hledání, ze kterého vypadne schovaný PR, je
+  k nepotřebě právě tehdy, když je filtr zapnutý. Nic se tím neriskuje — paleta jen čte, úklid
+  cache na zúženém getteru nevisí (viz `AppStore`).
+- **Nálezy jsou ze všech PR, a `id` řádku se skládá z indexu.** `Policy.key(of:)` se umí zopakovat
+  (týž reviewer nahlásí totéž dvakrát) a dva řádky s jedním `id` by SwiftUI slil — zmizel by
+  nález, který se zrovna hledá. Pořadí PR: otevřený první, pak seznam z pollingu; iterace přes
+  `reviewRecords` (slovník) by pořadí měnila mezi stisky klávesy.
+- **Odmítnuté nálezy se nenabízejí** — nálezu, kterému nevěřím, není kam skákat.
+- **Nabízí se jen akce, které by něco udělaly.** Bez otevřeného PR tedy nic, co na PR visí
+  (review, pohled na diff, panel); sekce railu, která je zrovna vidět v domácí záložce, taky ne.
+  Tatáž zásada jako u bloku `Co teď` na dashboardu.
+- **Kreslená zkratka musí být skutečná.** V paletě jsou dvě (`⌘2`, `⌘,`). Návrh má u „pustit
+  review“ `⌘⇧R`, ale ta v aplikaci pouští review na **všechno, co neběželo** (dashboard) —
+  nakreslit ji tady by byla lež o tom, co okno umí.
+- **Odsud nic neodchází** (tvrdá podmínka č. 1). Ve `CommandPalette.Action` není nic, co by sahalo
+  na `ReviewPublishing`; jediná věc, kterou paleta pouští, je read-only reviewer.
+
+Klávesy a stav:
+
+- **`isPaletteOpen` je ve storu, ne v `@State` okna**, protože si o něj musí říct dvě různá místa:
+  paleta a **detail PR**, který nad otevřenou paletou zakáže svoje `⌘⏎` (potvrzení odeslání). Dvě
+  tlačítka se stejnou zkratkou v jednom okně znamenají, že vyhraje to zaregistrované později —
+  a spletená zkratka by z palety otevřela potvrzení odeslání review.
+- **Dotaz a kurzor jsou naopak `@State`** a mají zaniknout se zavřením: text z minula by po ⌘K
+  vypadal jako výsledky k něčemu, na co se nikdo neptal.
+- **Zkratky jsou tlačítka v `hiddenShortcuts`, ne `onKeyPress`.** To se váže na fokus a v tomhle
+  okně ho spolkne pole nebo seznam pod paletou (viz `HiddenShortcuts`). Plné `↵` bere `TextField`
+  přes `onSubmit` — `keyboardShortcut(.defaultAction)` se s polem o tutéž klávesu přetahuje.
+- **Skok do diffu jde přes `AppStore.paletteJump`.** Rozhodnutí „skoč sem“ padá nad celým oknem,
+  ale odscrollovat umí jedině detail PR (kotvy řádků, `ScrollViewProxy`). Žádost proto nese
+  vlastní `id` (`UUID`), aby se dala vyžádat **dvakrát** — `task(id:)` se na shodné hodnotě
+  podruhé nespustí. Klíčem té úlohy je **žádost i to, jestli je diff načtený**: paleta umí skočit
+  do PR, jehož záložka právě vznikla, takže diff v tu chvíli ještě není. Nevyzvednutá žádost se
+  uklízí s PR mimo seznam, jako rozdělané tažení komentáře.
+- **Nález bez místa v kódu otevře tab `Nálezy`**, ne diff. Skákat naslepo je horší než skočit tam,
+  kde ten nález doopravdy je.
+- **Nastavení otevírá okno, takže ho vykoná view.** `AppStore.reveal(_:)` vrátí
+  `CommandPalette.Effect.openSettings` a `ContentView` zavolá `openSettings` z environmentu; store
+  scénu otevřít neumí a nemá si to ani pamatovat.
+- **Karta je překryv okna, ne sheet.** Sheet si bere šířku okna a přijíždí jako dialog; návrh má
+  kartu 560 bodů, která visí nad obsahem a zbytek jen ztmaví. Ztmavení **bere kliknutí** (klik
+  mimo zavře) — tím se liší od ztmavení pod oknem nastavení, které klik schválně propouští.
+- **Výška seznamu se měří, šířka se předává** (#220). `ScrollView` je v ose scrollování
+  nenasytný, takže bez `onGeometryChange` by byla karta vysoká i nad dvěma výsledky; šířka jde
+  dolů přes `availableWidth(560)` a řádky ji nevyjednávají.
 
 ## Šířka v okně (`App/Views/AvailableWidth.swift`)
 
@@ -3040,6 +3128,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.reviewNotification(for:state:blocking:topFinding:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět. Titulek nese počty (#200), tělo nález a pod ním PR |
 | `Policy.newPullRequestNotification(for:title:isReReview:)` | Notifikace o novém PR ve frontě (#85); re-review se pozná textem (#137) |
 | `Policy.newPullRequestsNotification(for:titles:reviewed:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
+| `Policy.paletteResults(of:query:limit:)`, `Policy.paletteTokens(in:)` | Hledání v paletě ⌘K (#184): co na dotaz sedne, jak se to váží, kolik z každé skupiny je vidět. Prázdný dotaz vrací **všechno** v pořadí katalogu; pořadí skupin drží `CommandPalette.Group` |
+| `Policy.paletteActions(open:isReviewing:hasFindings:layout:isPanelExpanded:section:)`, `Policy.paletteLabel(of:)` | Které akce mají teď co dělat (#184) a jak se jmenují. Řádek, který by nic neudělal, se nenabízí |
 | `Policy.sortedReleases(_:)` | Vydání od nejnovějšího (#127) — podle **data**, ne podle tagu |
 | `Policy.newReleases(in:since:)` | Co vyšlo od poslední viděné verze; neznámá značka = **nic** |
 

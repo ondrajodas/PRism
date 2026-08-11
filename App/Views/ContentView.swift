@@ -57,6 +57,15 @@ struct ContentView: View {
         .sheet(item: $submission) { submission in
             ReviewSubmissionSheet(submission: submission) { self.submission = nil }
         }
+        // ⌘K (#184). Bydlí **na okně**, ne v detailu PR: paleta má jít otevřít i z domácí
+        // záložky, a zkratka, která funguje jen v půlce okna, je horší než žádná.
+        .hiddenShortcuts {
+            Button("Najít v okně") { store.togglePalette() }
+                .keyboardShortcut("k", modifiers: .command)
+        }
+        // Paleta je **překryv okna, ne sheet**: sheet si bere šířku okna a přijíždí shora jako
+        // dialog, kdežto návrh má kartu 560 bodů, která visí nad obsahem a zbytek jen ztmaví.
+        .overlay(alignment: .top) { palette }
         // **Ztmavení, ne rozostření.** `.blur()` protlačí celé okno přes offscreen
         // vykreslení, a to i s poloměrem 0 — text tím ztratí subpixelové vyhlazení a
         // v seznamu, diffu i hlavičce vypadá rozmazaně a „skáče“. Ověřeno tím, že se
@@ -116,6 +125,7 @@ struct ContentView: View {
 
     private var headerActions: some View {
         HStack(spacing: 3) {
+            paletteButton
             headerButton("sparkles", label: ReleaseNotesWindow.title, help: "Co se v které verzi změnilo") {
                 openWindow(id: ReleaseNotesWindow.id)
             }
@@ -125,6 +135,65 @@ struct ContentView: View {
             headerButton("gearshape", label: "Nastavení", help: "Nastavení aplikace (⌘,)") {
                 openSettings()
             }
+        }
+    }
+
+    /// Vstup do palety v hlavičce okna (`.tbtn.key` z návrhu) — obtažená kapsle s `⌘K`.
+    ///
+    /// Zkratka sama by stačila k používání, ne k **nalezení**: paleta je jediná obrazovka, na
+    /// kterou z okna nevede žádné kliknutí, takže bez tohohle tlačítka by o ní věděl jen ten,
+    /// kdo si přečetl release notes.
+    private var paletteButton: some View {
+        Button { store.togglePalette() } label: {
+            Text(verbatim: "⌘K")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Palette.ink3)
+                .padding(.horizontal, 9)
+                .frame(height: 25)
+                .background(Palette.surface, in: .rect(cornerRadius: 6))
+                .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.line, lineWidth: 1) }
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help("Najít nález, soubor, pull request nebo akci (⌘K)")
+        .accessibilityLabel("Najít")
+    }
+
+    /// Karta palety a ztmavený zbytek okna.
+    ///
+    /// Zavřená paleta se do hierarchie **vůbec nedostane**, a to je podmínka, ne úspora: jsou v ní
+    /// zkratky na plné šipky, které by jinak seznamu PR sebraly pohyb po řádcích.
+    @ViewBuilder private var palette: some View {
+        if store.isPaletteOpen {
+            ZStack(alignment: .top) {
+                // Ztmavení **bere kliknutí**: klik mimo kartu paletu zavře, jako v každém
+                // vyhledávacím okně. Tím se liší od ztmavení pod oknem nastavení, které klik
+                // schválně propouští, protože tam má klik vybrat okno.
+                Color.black.opacity(0.28)
+                    .onTapGesture { store.closePalette() }
+                CommandPaletteView(
+                    items: store.paletteItems,
+                    run: choose(_:),
+                    close: store.closePalette
+                )
+                // Pod hlavičkou okna (40 bodů), ne uprostřed: karta roste dolů, takže od horní
+                // hrany zůstává na stejném místě, ať je výsledků kolik chce.
+                .padding(.top, 88)
+            }
+            .ignoresSafeArea()
+        }
+    }
+
+    /// Vykonání řádku palety.
+    ///
+    /// Paleta se zavírá **vždycky**, i u akce, po které okno zůstane, jak bylo: ⌘K je jeden hmat
+    /// a otevřená karta nad hotovou akcí by ho zdvojila. Nastavení otevírá okno, a to umí jedině
+    /// view — proto ten efekt ze store chodí až sem.
+    private func choose(_ item: CommandPalette.Item) {
+        store.closePalette()
+        switch store.reveal(item.target) {
+        case .openSettings: openSettings()
+        case nil: break
         }
     }
 

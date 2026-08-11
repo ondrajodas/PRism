@@ -475,12 +475,3 @@ struct DiffPerformanceMeasurement {
         print("MĚŘENÍ text run, \(texts.count) řádků: \(bytes / 1024) kB (~\(perLine) B na řádek, \(runs.count) run) — tolik zůstane v cache")
     }
 }
-
-private extension Duration {
-    /// Milisekundy na tři desetiny — `Duration` se jinak vypisuje v attosekundách.
-    var milliseconds: String {
-        let value = Double(components.seconds) * 1000
-            + Double(components.attoseconds) / 1_000_000_000_000_000
-        return String(format: "%.3f ms", value)
-    }
-}
