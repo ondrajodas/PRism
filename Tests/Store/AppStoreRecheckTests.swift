@@ -248,6 +248,42 @@ struct AppStoreRecheckTests {
         #expect(tally.answered == 0)
     }
 
+    /// Force push **zpátky** na commit nálezů: v cache detailu leží novější hlava (tlačítko se
+    /// podle ní nakreslilo), ale čerstvě dotažená se od záznamu už neliší. Kontrola by pak
+    /// porovnávala commit sama se sebou — session za peníze, ze které nemůže vyjít nic.
+    ///
+    /// Rozhoduje proto **čerstvá** hlava, ne ta z cache: `fetchDetail` uvnitř běhu do cache
+    /// detailu nezapisuje. Nálezem Copilota na #271.
+    @Test("Hlava vrácená zpátky na commit nálezů kontrolu nespustí")
+    func aHeadForcedBackToTheFindingsCommitStopsTheRun() async throws {
+        let reviews = reviewStore()
+        _ = try await storedFindings(in: reviews)
+        let reviewer = FakeReviewRunner()
+        let gateway = FakeGitHubGateway(
+            always: .success([summary]),
+            detail: .success(detail(headSha: "new2222"))
+        )
+        let store = AppStore(
+            gateway: gateway,
+            time: time,
+            checkout: FakeRepoCheckout(),
+            reviewer: reviewer,
+            reviews: reviews
+        )
+        await prepared(store)
+        // Tlačítko se nabídlo proti `new2222`…
+        #expect(store.recheckMaterial(for: pr) != nil)
+        // …a mezi nakreslením a kliknutím se hlava vrátila na commit nálezů.
+        gateway.detailFromNowOn = .success(detail(headSha: "old1111"))
+
+        store.startRecheck(for: pr)
+        await waitUntilIdle(store)
+
+        #expect(reviewer.requests.isEmpty)
+        #expect(store.reviewRecord(for: pr)?.recheck == nil)
+        #expect(store.recheckFailures[pr] != nil)
+    }
+
     @Test("Zrušená kontrola neuloží nic")
     func acancelledRecheckStoresNothing() async throws {
         let reviews = reviewStore()

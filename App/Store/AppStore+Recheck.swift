@@ -23,7 +23,18 @@ extension AppStore {
     /// takže starší kola nepřidávají odpověď, ale cenu (delší prompt, dražší session) — a hlavně
     /// by odznaky nešlo kam ukázat, protože v okně visí nálezy z tohohle jednoho záznamu.
     func recheckMaterial(for pr: PRIdentifier) -> RecheckMaterial? {
-        guard let record = reviewRecords[pr], let head = head(of: pr), record.headSha != head else {
+        recheckMaterial(for: pr, head: head(of: pr))
+    }
+
+    /// Materiál proti **vyjmenované** hlavě, ne proti té z načteného detailu.
+    ///
+    /// Potřebuje to spuštění kontroly: to si hlavu dotahuje **znovu** (`fetchDetail`) a do cache
+    /// detailu ji nezapisuje, takže `head(of:)` by v tu chvíli vracel starší hodnotu. Rozhodovat
+    /// podle ní znamená, že by **force push zpátky na commit nálezů** kontrolu pustil — hlava
+    /// z cache se od záznamu pořád liší, kdežto čerstvá už ne. Session by pak porovnávala commit
+    /// sama se sebou a stála peníze; nálezem Copilota na #271.
+    func recheckMaterial(for pr: PRIdentifier, head: String?) -> RecheckMaterial? {
+        guard let record = reviewRecords[pr], let head, record.headSha != head else {
             return nil
         }
         let findings = record.activeFindings
@@ -72,10 +83,11 @@ extension AppStore {
             try await reviews.markCurrent(detail.headSha, of: pr)
             markStaleInMemory(for: pr, current: detail.headSha)
 
-            // Materiál se skládá **až po dotažení detailu**, tedy proti té hlavě, která platí.
-            // Když se hlava mezitím posunula na commit nálezů (force push zpátky), není co
-            // kontrolovat — a je to stav, ne chyba.
-            guard let material = recheckMaterial(for: pr) else {
+            // Materiál se skládá **až po dotažení detailu, a proti němu** — ne proti hlavě
+            // z cache detailu, kterou `fetchDetail` výš nepřepisuje. Když se hlava mezitím
+            // posunula na commit nálezů (force push zpátky), není co kontrolovat — a je to stav,
+            // ne chyba.
+            guard let material = recheckMaterial(for: pr, head: detail.headSha) else {
                 recheckFailures[pr] = "Nálezy platí pro hlavu, na které PR stojí — kontrolovat"
                     + " není co. Pusť rovnou review."
                 return

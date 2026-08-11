@@ -1051,9 +1051,13 @@ stromu by odpovídala z hlavy. Řídí to `AppStore+Recheck`.
 - **Kontrola se nespouští bez materiálu.** `AppStore.recheckMaterial(for:)` chce uložený záznam
   s platnými nálezy, známou hlavu PR a to, aby se záznam a hlava lišily. Chybějící vstup by
   skončil session, která hádá — a brána nesmí ležet jen v tom, že se tlačítko nenakreslilo.
-- **Materiál se skládá znovu po dotažení detailu.** Mezi nakreslením tlačítka a kliknutím mohl
-  přijít commit; kontrola proti hlavě, která už není, by tvrdila „vyřešeno“ o kódu, na který se
-  nikdo nekoukal.
+- **Materiál se skládá znovu po dotažení detailu — a proti němu.** Mezi nakreslením tlačítka
+  a kliknutím mohl přijít commit; kontrola proti hlavě, která už není, by tvrdila „vyřešeno“
+  o kódu, na který se nikdo nekoukal. Rozhoduje u toho **čerstvě dotažená hlava**
+  (`recheckMaterial(for:head:)`), ne ta z cache detailu, kterou `fetchDetail` uvnitř běhu
+  nepřepisuje: jinak by **force push zpátky na commit nálezů** kontrolu pustil (hlava z cache se
+  od záznamu pořád liší, čerstvá už ne) a session by porovnávala commit sama se sebou. Nálezem
+  Copilota na #271; je na to test i s vloženou regresí.
 - **Přerušený běh se nedotahuje z transcriptu** (na rozdíl od review, #97). Odpověď leží
   v posledním sdělení, které v transcriptu nemá kde vzniknout — po pádu aplikace se kontrola pustí
   znovu. Nic se tím neztrácí: kontrola nemá částečný výsledek, který by se dal zachránit.

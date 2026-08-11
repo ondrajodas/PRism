@@ -54,8 +54,11 @@ extension Policy {
 
         for finding in record.activeFindings {
             findings += 1
-            guard let status = recheck.statuses[key(of: finding)] else { continue }
-            statuses[key(of: finding)] = status
+            // Klíč se skládá **jednou na nález**: je to řetězec a tohle běží při kreslení
+            // hlavičky (#224). Nálezem Copilota na #271; tentýž vzor byl v bublině nálezu.
+            let key = key(of: finding)
+            guard let status = recheck.statuses[key] else { continue }
+            statuses[key] = status
             switch status.verdict {
             case .resolved: resolved += 1
             case .stillApplies: stillApplies += 1

@@ -231,7 +231,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     `isStale`**, chybějící soubor a symlink jsou chyba. A ten nejcennější: `save` kontrolu
     do `runs` nepustí a záznam po tom pokusu zůstane **bit po bitu stejný**.
   - **`AppStore`** — kdy se **nenabízí** (bez záznamu, nad hlavou PR, se samými odmítnutými
-    nálezy) a že se bez materiálu nespustí ani přímým voláním. Dál: že session dostane nálezy
+    nálezy), že se bez materiálu nespustí ani přímým voláním, a že ji zastaví i **hlava vrácená
+    zpátky** na commit nálezů (force push mezi nakreslením tlačítka a kliknutím) — tam se
+    rozhoduje podle čerstvě dotažené hlavy, ne podle té v cache detailu, jinak by session
+    porovnávala commit sama se sebou za peníze. Ověřeno vloženou regresí. Dál: že session dostane nálezy
     jako materiál a klíč druhu `recheck`, že se verdikty uloží k nálezům z minula, že
     **vyřešený nález nemizí** (`activeFindings` a `dismissals` se nezmění), že kontrola
     nepřidá chip ani nález, že zrušená neuloží nic, že se zabitá session nedopočítává, a že
