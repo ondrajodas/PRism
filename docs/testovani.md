@@ -1358,7 +1358,11 @@ System Events — měření okna a klikání).
 **Návrh se ověřuje vedle sebe, ne po paměti** (#181). Mockup je HTML, takže se dá vyrenderovat
 headless Chromem a položit vedle screenshotu aplikace — pak se pozná i to, co se z popisu vyčíst
 nedá (poměr sloupců, výška karty, kde končí proužek). Sekce se vyřízne do samostatného souboru,
-protože stránka je dlouhá a `--screenshot` bere jen viewport:
+protože stránka je dlouhá a `--screenshot` bere jen viewport.
+
+**Kde ten mockup vzít, říká [`docs/navrh.md`](navrh.md)** — je to artifact, ne soubor v repu, takže
+se stahuje `WebFetch`em (`curl` na něm dostane skořápku aplikace nebo 403). Tam je i to, jak se
+aktualizuje a co se do něj musí zapracovat a nechat odsouhlasit dřív, než na to vznikne issue.
 
 ```bash
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \

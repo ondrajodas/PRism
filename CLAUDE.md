@@ -17,6 +17,7 @@ Co kam patří:
 | `CLAUDE.md` | **Pravidla**: jak se v repu pracuje, tvrdé podmínky, konvence, příkazy, prostředí, tabulka modulů | Změna pravidla, konvence, příkazu nebo hranic modulů |
 | [`docs/architektura.md`](docs/architektura.md) | Podrobnosti po modulech — co který drží a co se u něj nemá rozbít | Změna uvnitř modulu: nový typ, nový invariant, jiné chování |
 | [`docs/testovani.md`](docs/testovani.md) | Katalog toho, co se u které oblasti testuje a proč zrovna to | Nová oblast testů, nebo nový případ, který se dá pokazit potichu |
+| [`docs/navrh.md`](docs/navrh.md) | Kde je vizuální návrh a jak se s ním pracuje — čtení CSS, aktualizace, render vedle screenshotu | Změna postupu při práci s mockupem (samo pravidlo je v `CLAUDE.md`) |
 | [`docs/stav.md`](docs/stav.md) | Co je hotové a co zbývá | Dokončené issue |
 | [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md) | Jak se vyřizuje **seznam** issues: co jde souběžně, co dostane subagent, co si nechává orchestrátor, kdo merguje | Změna postupu při dávce, nebo toho, co si subagent ani orchestrátor nesmí dovolit |
 | `docs/superpowers/specs/` | Proč jsou rozhodnutí taková, jaká jsou — včetně zamítnutých alternativ | Změna návrhového rozhodnutí; zapsat i **proč** se změnilo, staré nechat v záznamu rozhodnutí |
@@ -63,6 +64,10 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   Nečeká na frontu u orchestrátora — hotová práce, která leží, je to zdržení, kvůli kterému se
   paralelně pracuje. Orchestrátorovi zůstává rozvrh, sloty, tlumočení připomínek, úklid stromů
   a **restart hlavní aplikace** (sahá do hlavního stromu, což subagent nesmí).
+
+  **Odepřené povolení se neobchází, hlásí se** (#273): když permission brána subagentovi něco
+  zakáže, napíše to do hlášení jako neověřenou mezeru a nechá to na orchestrátorovi — neověřená věc
+  přitom není důvod nemergovat, protože poslední kolo kontroly dělá člověk v pauze.
 
   **Orchestrátor v dávce neimplementuje, deleguje** (#259) — ani u issue, které je „jen
   dokumentace“. Jeho kontext drží rozvrh a stav všech větví, což za něj nikdo neudrží, kdežto
@@ -267,6 +272,32 @@ potřeba „chytřejšího“ review, patří to do skillu, ne do aplikace.
 
 Plný návrh: [`docs/superpowers/specs/2026-07-31-prism-design.md`](docs/superpowers/specs/2026-07-31-prism-design.md)
 
+## Návrh (mockup)
+
+Jak má aplikace vypadat, drží **artifact `PRism — návrh vizuální revize`**:
+<https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Je to HTML —
+tokeny v `:root` jsou `App/Views/Palette.swift` jedna ku jedné, takže se z něj barvy
+i rozměry berou doslova, ne od oka.
+
+**Issue, které mění vzhled nebo přidává něco nového na obrazovku, se na GitHubu
+nezakládá, dokud ta změna není zakreslená v mockupu a odsouhlasená mnou.** Pořadí je:
+překreslit mockup → poslat mi odkaz → počkat na souhlas → **teprve pak** `gh issue create`.
+Je to **jediná schvalovací brána v tomhle repu** (výjimka z *Rozhodování* níž).
+
+Brána sedí u **zakládání issue**, ne až u prvního commitu, a je to schválně: issue je
+zadání, ne nápad — od chvíle, kdy je na GitHubu, popisuje cílový stav a podle něj se
+programuje. Kreslit mockup až po něm znamená dohánět návrhem to, co už je napsané slovy,
+a slova o vzhledu nesou vždycky míň než obrázek. Levná je změna jedině dokud je to CSS
+v mockupu.
+
+Co pod pravidlo **nespadá**: srovnat aplikaci s tím, co v mockupu **už nakreslené je**
+(#283). Tam se návrh nemění, takže není co schvalovat — jde se rovnou. Naopak nová
+obrazovka, sekce nastavení nebo tlačítko, které v mockupu není (#281), znamená napřed
+mockup.
+
+Jak se s artifactem pracuje — čtení CSS, aktualizace na tutéž adresu, render vedle
+screenshotu — je v [`docs/navrh.md`](docs/navrh.md).
+
 ## Rozhodování
 
 **Návrhová rozhodnutí děláš sám.** Neptej se na potvrzení u každého detailu — kde žije
@@ -282,6 +313,11 @@ to vynucuje skill (typicky `superpowers:brainstorming` se svým hard gate). V to
 to pravidlo neplatí: rozhodnutí zapiš do specifikace a rovnou implementuj. Tohle je
 výslovná uživatelská instrukce, a ta má přednost před skillem. Průzkum a rozmyšlení
 z brainstormingu si nech, schvalovací krok zahoď.
+
+**Jedinou výjimkou je vzhled** (viz *Návrh (mockup)* výš): co mění obrazovku nebo na ni
+něco přidává, se kreslí do mockupu a schvaluje **dřív, než na to vůbec vznikne issue**.
+Neruší to pravidlo o řádek výš — schvaluje se **obrázek**, ne návrh implementace; kam patří
+typ, kde žije kontrola a jak se to poskládá uvnitř, si pořád rozhoduješ sám.
 
 Když na něco narazíš, co návrh v issue mění (zjistíš, že to nejde, jak je napsané),
 **není to důvod se ptát** — rozhodni, zapiš do specifikace **co se změnilo a proč**,
