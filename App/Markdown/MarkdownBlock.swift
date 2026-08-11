@@ -14,7 +14,18 @@ enum MarkdownBlock: Hashable, Sendable {
     case listItem(marker: Marker, indent: Int, text: String)
     /// Blok kódu mezi ` ``` `. Uvnitř se nic neinterpretuje.
     case code(language: String?, lines: [String])
-    case quote([String])
+    /// Citace jako **vnořené bloky**, ne řádky (#279).
+    ///
+    /// Do #279 nesla surové řádky a view je slepilo do jednoho `Text`u, takže cokoli blokového
+    /// uvnitř (`## nadpis`, odrážka, `- [ ]`, vnořená citace) zůstalo v okně jako zdroj. Boti
+    /// přitom do citací píšou celé zprávy — tvar `[MarkdownBlock]` je tentýž, jaký má `details`.
+    case quote([MarkdownBlock])
+    /// GitHubová výstraha — citace, které první řádek říká `[!NOTE]` a spol. (#279).
+    ///
+    /// Vlastní případ, ne příznak u citace: kreslí se jinak (barevný rámeček, ikona, titulek)
+    /// a **neznámý druh výstrahou není** — z `[!FOO]` je obyčejná citace, ve které ten řádek
+    /// zůstane textem. Vyhodit ho by bylo přesně to tiché zahození, kterému se tady vyhýbáme.
+    case alert(kind: Alert, blocks: [MarkdownBlock])
     case rule
     /// Tabulka jako **surové řádky**. Vykreslit ji doopravdy je vlastní úloha; svislítka
     /// zůstávají, takže se to dá přečíst a nic se neztratí.
@@ -37,5 +48,19 @@ enum MarkdownBlock: Hashable, Sendable {
         case number(Int)
         /// Zaškrtávací seznam — v popisech PR je ho plno.
         case task(isDone: Bool)
+    }
+
+    /// Druh GitHubové výstrahy. Pět jich je a víc jich GitHub nezná.
+    ///
+    /// `rawValue` je zápis, jak ho má dokumentace GitHubu (velkými písmeny) — z něj se druh
+    /// poznává a v modelu se drží **normalizovaně**, takže `[!note]` a `[!NOTE]` dají tentýž
+    /// případ. Jak to napsal autor, se z modelu zpátky nedozvíme; kreslí se titulek podle druhu,
+    /// takže se tím nic neztrácí.
+    enum Alert: String, Hashable, Sendable, CaseIterable {
+        case note = "NOTE"
+        case tip = "TIP"
+        case important = "IMPORTANT"
+        case warning = "WARNING"
+        case caution = "CAUTION"
     }
 }

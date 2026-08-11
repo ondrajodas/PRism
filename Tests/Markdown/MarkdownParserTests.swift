@@ -36,7 +36,12 @@ struct MarkdownParserTests {
         case .paragraph(let text): text
         case .listItem(let marker, _, let text): "\(markerText(marker)) \(text)"
         case .code(let language, let lines): ([language ?? ""] + lines).joined(separator: "\n")
-        case .quote(let lines): lines.joined(separator: "\n")
+        // Citace i výstraha nesou od #279 **bloky**, takže se do porovnání skládají rekurzivně.
+        // U výstrahy jde do porovnání i její druh: `[!NOTE]` je ve vstupu slovo `NOTE` a v modelu
+        // `kind`, ze kterého view kreslí titulek — bez něj by ho invariant nahlásil jako ztracený.
+        case .quote(let blocks): blocks.map(text(of:)).joined(separator: "\n")
+        case .alert(let kind, let blocks):
+            ([kind.rawValue] + blocks.map(text(of:))).joined(separator: "\n")
         case .rule: ""
         case .table(let rows): rows.joined(separator: "\n")
         // Do porovnání jde i vnitřek `<details>` — je to obsah, jen zanořený.
@@ -148,9 +153,147 @@ struct MarkdownParserTests {
         #expect(parse("```\nzačátek") == [.code(language: nil, lines: ["začátek"])])
     }
 
-    @Test("Citace sbírá řádky za sebou")
+    // MARK: - Citace
+
+    @Test("Citace sbírá řádky za sebou a dá z nich odstavec")
     func parsesQuotes() {
-        #expect(parse("> první\n> druhý") == [.quote(["první", "druhý"])])
+        #expect(parse("> první\n> druhý") == [.quote([.paragraph("první\ndruhý")])])
+    }
+
+    /// To hlavní z #279: obsah citace se **parsuje na bloky**. Do té doby se řádky slepily do
+    /// jednoho `Text`u, takže `## nadpis` i `- [ ]` uvnitř `> …` zůstaly v okně jako zdroj —
+    /// a boti do citací píšou celé zprávy.
+    @Test("Nadpis, odrážka a zaškrtávátko uvnitř citace se vysázejí")
+    func parsesBlocksInsideAQuote() {
+        let blocks = parse("""
+            > ## Review skipped
+            >
+            > - [ ] 🔍 Trigger review
+            > - odrážka
+            """)
+
+        #expect(blocks == [.quote([
+            .heading(level: 2, text: "Review skipped"),
+            .listItem(marker: .task(isDone: false), indent: 0, text: "🔍 Trigger review"),
+            .listItem(marker: .bullet, indent: 0, text: "odrážka"),
+        ])])
+    }
+
+    @Test("Vnořená citace je citace v citaci")
+    func parsesANestedQuote() {
+        #expect(parse("> vnější\n>\n> > vnitřní") == [.quote([
+            .paragraph("vnější"),
+            .quote([.paragraph("vnitřní")]),
+        ])])
+    }
+
+    /// Odsazení uvnitř citace nese úroveň seznamu, takže se za `>` zahazuje **jedna** mezera,
+    /// ne všechna. Do #279 se trimovalo všechno; při slepení do jednoho `Text`u to nebylo vidět.
+    @Test("Citace si nechá odsazení zanořeného seznamu")
+    func keepsIndentationInsideAQuote() {
+        let blocks = parse("""
+            > - první
+            >   - druhá
+            """)
+
+        #expect(blocks == [.quote([
+            .listItem(marker: .bullet, indent: 0, text: "první"),
+            .listItem(marker: .bullet, indent: 1, text: "druhá"),
+        ])])
+    }
+
+    /// `<details>` posílají do citací boti (CodeRabbit v rate-limit zprávě), takže se rekurze
+    /// citace musí potkat s rekurzí rozbalovátka.
+    @Test("`<details>` uvnitř citace zůstane rozbalovátkem")
+    func parsesDetailsInsideAQuote() {
+        let blocks = parse("""
+            > text
+            >
+            > <details>
+            > <summary>popisek</summary>
+            >
+            > uvnitř
+            >
+            > </details>
+            """)
+
+        guard case .quote(let inner) = blocks.first else {
+            Issue.record("první blok není citace: \(String(describing: blocks.first))")
+            return
+        }
+        #expect(inner.contains { if case .details = $0 { true } else { false } })
+    }
+
+    /// Zanoření má strop (`nestingLimit`) — proti `>>>>…` z mailového vlákna a proti hloubce
+    /// stromu view (#220). **Obsah se přitom nesmí ztratit**, jen se nevysází.
+    @Test("Citace přes strop zanoření zůstane textem, ne prázdnem")
+    func keepsContentBeyondTheNestingLimit() {
+        let markers = String(repeating: "> ", count: MarkdownParser.nestingLimit + 3)
+        let blocks = parse("\(markers)hluboko")
+
+        // Invariant v `parse(_:)` výš už ověřil, že slovo „hluboko“ v blocích zůstalo; tady jde
+        // o to, že se rekurze zarazila a nespadla.
+        #expect(blocks.count == 1)
+    }
+
+    // MARK: - Výstrahy (#279)
+
+    @Test("Pět druhů výstrahy se pozná podle prvního řádku citace")
+    func parsesAlerts() {
+        for kind in MarkdownBlock.Alert.allCases {
+            let blocks = parse("> [!\(kind.rawValue)]\n> obsah")
+            #expect(blocks == [.alert(kind: kind, blocks: [.paragraph("obsah")])], "druh \(kind)")
+        }
+    }
+
+    @Test("Výstraha uvnitř citace je výstraha, ne text")
+    func parsesAnAlertInsideAQuote() {
+        let blocks = parse("> vnější\n>\n> > [!TIP]\n> > rada")
+
+        #expect(blocks == [.quote([
+            .paragraph("vnější"),
+            .alert(kind: .tip, blocks: [.paragraph("rada")]),
+        ])])
+    }
+
+    @Test("Obsah výstrahy se parsuje na bloky")
+    func parsesBlocksInsideAnAlert() {
+        let blocks = parse("> [!IMPORTANT]\n> ## Review skipped\n>\n> - [ ] Trigger review")
+
+        #expect(blocks == [.alert(kind: .important, blocks: [
+            .heading(level: 2, text: "Review skipped"),
+            .listItem(marker: .task(isDone: false), indent: 0, text: "Trigger review"),
+        ])])
+    }
+
+    /// **Neznámý druh se nezahazuje** — je z něj obyčejná citace, ve které ten řádek zůstane
+    /// textem. Neumět něco vysázet je lepší než to spolknout.
+    @Test("Neznámý druh výstrahy dá citaci, a řádek v ní zůstane")
+    func keepsAnUnknownAlertKind() {
+        #expect(parse("> [!FOO]\n> obsah") == [.quote([.paragraph("[!FOO]\nobsah")])])
+    }
+
+    /// Značka musí být sama na řádku, jako na GitHubu. Kdyby se brala i s pokračováním, text za ní
+    /// by se ztratil v titulku výstrahy.
+    @Test("Značka s textem na témže řádku výstrahu nedá")
+    func refusesAnAlertMarkerWithTrailingText() {
+        #expect(parse("> [!NOTE] a rovnou dál") == [.quote([.paragraph("[!NOTE] a rovnou dál")])])
+    }
+
+    @Test("Výstraha bez obsahu je výstraha bez bloků")
+    func parsesAnEmptyAlert() {
+        #expect(parse("> [!NOTE]") == [.alert(kind: .note, blocks: [])])
+    }
+
+    /// Druh se poznává bez ohledu na velikost písmen (tak to bere i GitHub) a v modelu se drží
+    /// normalizovaně. Jde to **mimo** pomocnou `parse(_:)` s invariantem schválně: ten porovnává
+    /// obsah po znacích, takže by normalizaci `note` → `NOTE` nahlásil jako ztrátu, přitom se
+    /// druh kreslí titulkem.
+    @Test("Malá písmena ve značce druh nezmění")
+    func parsesAnAlertRegardlessOfCase() {
+        #expect(MarkdownParser.parse("> [!note]\n> obsah") == [
+            .alert(kind: .note, blocks: [.paragraph("obsah")]),
+        ])
     }
 
     @Test("Tři a víc čárek dají oddělovač")
@@ -284,5 +427,40 @@ struct MarkdownParserTests {
 
         #expect(!blocks.isEmpty)
         #expect(blocks.contains { if case .heading = $0 { true } else { false } })
+    }
+
+    /// Skutečný komentář od `coderabbitai` (veřejné `coderabbitai/ast-grep-essentials#200`,
+    /// zpráva o vyčerpaném limitu). Je to přesně ten text, kvůli kterému #279 vzniklo: `[!WARNING]`
+    /// s nadpisem, odstavci, inline kódem, odkazem **a dvěma rozbalovátky uvnitř citace**.
+    ///
+    /// Tvrdí se na něm dvě věci, každá o jedné příčině z issue: že z citace vyšla **výstraha**
+    /// a že se v ní `## Rate limit exceeded` stal **nadpisem**, ne řádkem se dvěma mřížkami.
+    @Test("Skutečná zpráva od bota dá výstrahu s vysázeným obsahem")
+    func parsesARealBotComment() throws {
+        let body = try Fixture.text("gh/comment-coderabbit.md")
+
+        let blocks = parse(body)
+
+        guard case .alert(let kind, let inner) = blocks.first(where: { if case .alert = $0 { true } else { false } }) else {
+            Issue.record("v komentáři není výstraha: \(blocks.prefix(3))")
+            return
+        }
+        #expect(kind == .warning)
+        #expect(inner.contains { $0 == .heading(level: 2, text: "Rate limit exceeded") })
+        #expect(inner.contains { if case .details = $0 { true } else { false } })
+        // A hlavně: **nikde nezůstal zdroj**. Řádek začínající `>` nebo `#` v žádném odstavci
+        // znamená, že se blok nerozpoznal a v okně by stál Markdown, ne sazba.
+        #expect(!paragraphs(in: blocks).contains { $0.hasPrefix(">") || $0.hasPrefix("#") })
+    }
+
+    /// Text všech odstavců, i těch zanořených — do citací, výstrah a rozbalovátek.
+    private func paragraphs(in blocks: [MarkdownBlock]) -> [String] {
+        blocks.flatMap { block -> [String] in
+            switch block {
+            case .paragraph(let text): [text]
+            case .quote(let inner), .alert(_, let inner), .details(_, let inner): paragraphs(in: inner)
+            default: []
+            }
+        }
     }
 }

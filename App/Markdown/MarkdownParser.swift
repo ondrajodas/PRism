@@ -12,7 +12,25 @@ import Foundation
 /// vstup (až na prázdné řádky, které bloky oddělují). Je to na to test — tichá ztráta kusu
 /// cizího komentáře je přesně to, čemu se tady vyhýbáme.
 enum MarkdownParser {
+    /// Kolik úrovní zanoření se ještě sází. Hlouběji zůstane obsah **textem** — neztratí se, jen
+    /// se nevysází.
+    ///
+    /// Strop je proti dvěma věcem naráz. Za prvé proti hloubce stromu view: každá úroveň citace
+    /// je další zanořený `MarkdownBlocksView` a #220 změřilo, že vyjednávání šířky stojí 5,5× na
+    /// úroveň. Za druhé proti rekurzi samotné — `>>>>>>…` z mailového vlákna je řetěz, který by
+    /// jinak zanořoval, kolik je znaků.
+    ///
+    /// Šest proto, že hlubší citace se v komentářích nevyskytují: dvě úrovně jsou odpověď na
+    /// odpověď, tři už jsou vzácnost. Je to tatáž úvaha jako u odsazení seznamu (`min(indent / 2, 3)`).
+    static let nestingLimit = 6
+
     static func parse(_ text: String) -> [MarkdownBlock] {
+        parse(text, depth: 0)
+    }
+
+    /// - Parameter depth: kolikátá úroveň zanoření to je. Nese se, aby se rekurze u citací
+    ///   a `<details>` zarazila na `nestingLimit`.
+    private static func parse(_ text: String, depth: Int) -> [MarkdownBlock] {
         var blocks: [MarkdownBlock] = []
         var paragraph: [String] = []
         var quote: [String] = []
@@ -27,7 +45,7 @@ enum MarkdownParser {
         }
         func closeQuote() {
             guard !quote.isEmpty else { return }
-            blocks.append(.quote(quote))
+            blocks.append(quoteBlock(from: quote, depth: depth))
             quote = []
         }
         func closeTable() {
@@ -69,7 +87,7 @@ enum MarkdownParser {
             }
             if trimmed.lowercased().hasPrefix("<details") {
                 closeAll()
-                blocks.append(details(from: &lines))
+                blocks.append(details(from: &lines, depth: depth))
                 continue
             }
 
@@ -95,7 +113,7 @@ enum MarkdownParser {
             if trimmed.hasPrefix(">") {
                 closeParagraph()
                 closeTable()
-                quote.append(String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces))
+                quote.append(quoteContent(of: trimmed))
                 continue
             }
             if trimmed.hasPrefix("|") {
@@ -123,6 +141,43 @@ enum MarkdownParser {
         return blocks
     }
 
+    // MARK: - Citace a výstrahy
+
+    /// Řádek citace bez značky.
+    ///
+    /// Zahazuje se `>` a **nejvýš jedna** mezera za ním, ne všechna počáteční mezera: na odsazení
+    /// stojí zanořený seznam uvnitř citace a `> ` je jen značka, kdežto `>     - a` nese úroveň.
+    /// Do #279 se trimovalo všechno, což při slepení do jednoho `Text`u nebylo vidět — po rozdělení
+    /// na bloky by to zarovnalo každý seznam na nulu.
+    private static func quoteContent(of trimmed: String) -> String {
+        var rest = Substring(trimmed).dropFirst()
+        if let first = rest.first, first == " " || first == "\t" { rest = rest.dropFirst() }
+        return String(rest)
+    }
+
+    /// Citace jako blok: buď výstraha, nebo obyčejná citace — v obou případech s **vnořenými
+    /// bloky**, aby se nadpis a odrážka uvnitř vysázely (#279).
+    ///
+    /// Na stropu zanoření se obsah nechá jedním odstavcem: nevysází se, ale zůstane celý.
+    private static func quoteBlock(from lines: [String], depth: Int) -> MarkdownBlock {
+        guard depth < nestingLimit else { return .quote([.paragraph(lines.joined(separator: "\n"))]) }
+        if let kind = alertKind(of: lines) {
+            return .alert(kind: kind, blocks: parse(lines.dropFirst().joined(separator: "\n"), depth: depth + 1))
+        }
+        return .quote(parse(lines.joined(separator: "\n"), depth: depth + 1))
+    }
+
+    /// Druh výstrahy z **prvního** řádku citace, jak to má GitHub: `[!NOTE]` sám na řádku.
+    ///
+    /// Dvě věci se tady schválně **nepovažují** za výstrahu, a v obou případech proto, že by se
+    /// z okna ztratil text: `[!NOTE] a rovnou pokračování` (na GitHubu taky ne — značka musí být
+    /// sama) a neznámý druh `[!FOO]`. Z obojího je obyčejná citace, ve které ten řádek zůstane.
+    private static func alertKind(of lines: [String]) -> MarkdownBlock.Alert? {
+        guard let first = lines.first?.trimmingCharacters(in: .whitespaces) else { return nil }
+        guard first.hasPrefix("[!"), first.hasSuffix("]") else { return nil }
+        return MarkdownBlock.Alert(rawValue: first.dropFirst(2).dropLast().uppercased())
+    }
+
     // MARK: - HTML bloky
 
     /// `<!-- … -->`, i přes víc řádků. Neuzavřený komentář na konci textu se bere celý —
@@ -147,7 +202,7 @@ enum MarkdownParser {
     /// Vnitřek se parsuje **rekurzivně**: bývají v něm odstavce a seznamy, které by jako jeden
     /// slitý text nedávaly smysl. Neuzavřený `<details>` se uzavře koncem textu, ať se obsah
     /// neztratí.
-    private static func details(from lines: inout ArraySlice<String>) -> MarkdownBlock {
+    private static func details(from lines: inout ArraySlice<String>, depth: Int) -> MarkdownBlock {
         var summary = ""
         var inner: [String] = []
         var depth = 1
@@ -168,7 +223,13 @@ enum MarkdownParser {
             }
             inner.append(line)
         }
-        return .details(summary: summary, blocks: parse(inner.joined(separator: "\n")))
+        let body = inner.joined(separator: "\n")
+        // Na stropu zanoření zůstane vnitřek textem, ne bloky — stejně jako u citace. Prázdný
+        // vnitřek nedá odstavec: `parse` by z něj taky nic nevrátil.
+        guard depth < nestingLimit, !inner.isEmpty else {
+            return .details(summary: summary, blocks: inner.isEmpty ? [] : [.paragraph(body)])
+        }
+        return .details(summary: summary, blocks: parse(body, depth: depth + 1))
     }
 
     /// Text `<summary>`. Tagy se strhávají hned, protože z něj je popisek rozbalovátka —

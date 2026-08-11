@@ -646,6 +646,51 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   včetně **zanořeného** a neuzavřeného. Plus skutečný popis PR z fixture, tedy cizí text, který
   nikdo nepsal pro test. `MarkdownHTML` má vlastní sadu: odkaz na Markdown se všemi druhy
   uvozovek, `<br>`, entity a to, že `&amp;` se dekóduje naposled.
+
+  **Citace a výstrahy (#279)** mají vyčerpávající výčet, protože je to čistá funkce: nadpis,
+  odrážka a zaškrtávátko **uvnitř** citace, vnořená citace, `<details>` v citaci, zachované
+  odsazení zanořeného seznamu, všech pět druhů výstrahy, výstraha **uvnitř** citace, bloky uvnitř
+  výstrahy a obsah **za stropem zanoření** (nevysází se, ale zůstane). Nejcennější jsou tři, které
+  tvrdí, že se něco **NEstalo**: **neznámý druh** `[!FOO]` výstrahu nedá a ten řádek v citaci
+  zůstane, **značka s textem na témže řádku** taky ne, a nad **skutečným** komentářem od
+  `coderabbitai` (fixture `gh/comment-coderabbit.md`, veřejné `coderabbitai/ast-grep-essentials#200`)
+  se ověřuje, že v žádném odstavci nezůstal řádek začínající `>` nebo `#` — tedy že v okně nestojí
+  zdroj. Ověřeno vložením regrese: bez rekurze v citaci padnou čtyři testy, po spolknutí neznámého
+  druhu na `.note` padne i invariant (nahlásí ztracené `FOO`).
+- **`MarkdownTypography` (#279)** — že úrovní nadpisů je **šest různých a monotónně klesajících**
+  (to je celá ta vada, kterou #279 opravuje), že linka je jen pod `#`/`##`, tlumená jen šestka,
+  že úroveň mimo rozsah se přiklopí a že škála roste se základní velikostí. U rytmu: nadpis má nad
+  sebou nejvíc místa a pod sebou nejméně, první blok **nemá** mezeru, a **žádný přechod mezi dvěma
+  bloky nevyjde nula** — to je výčet přes všechny druhy bloků obojím směrem.
+- **`MarkdownAlertStyle` (#279)** — barvy se porovnávají **vyřešené na hex, v obou režimech**
+  (`NSAppearance.performAsCurrentDrawingAppearance`), protože token je dynamický a shoda může být
+  jen v jednom z nich: každý druh má vlastní barvu, `[!CAUTION]` se nerovná `crit` a `[!WARNING]`
+  se nerovná `stale`. Plus že každý druh má neprázdný titulek a **existující** SF Symbol.
+- **`MarkdownInlineText` (#279)** — že inline sází systém (tučné zůstane, odkaz zůstane klikatelný),
+  že inline `kód` dostane podklad a monospace, a hlavně že ho **nedostane nic jiného** — podklad
+  nad celým odstavcem by z prózy udělal blok kódu. Plus že rozbitý Markdown vrátí holý text.
+- **`MarkdownRenderCache` (#279)** — že vrací totéž co parser, že **dva různé texty se nepotkají
+  v jednom záznamu** (klíčem je celý text; ověřeno regresí — s klíčem podle délky test padá na
+  vysázeném cizím komentáři) a že se cache nedostane přes ani jednu ze dvou mezí. Text delší než
+  celý rozpočet se **nezapamatuje**, ale rozloží.
+- **Měření sazby (#279)** — `MarkdownPerformanceMeasurement`, gated `PRISM_MEASURE`. Nic netvrdí;
+  existuje proto, že rekurze v citacích se počítá v `body` a to rozhodnutí má být podložené číslem:
+  zpráva od bota o 12 kB 1,97 ms, z cache 0,037 ms; konverzace o 40 zprávách 74,7 ms proti 1,48 ms.
+- **Sonda sazby (#279)** — `MarkdownRenderProbe`, taky gated, vyrendruje ukázku i skutečnou zprávu
+  od bota do PNG **v obou režimech**. Barvy palety se řídí `NSAppearance`, kdežto `.primary`
+  a `.secondary` prostředím SwiftUI, takže se musí nastavit **obojí**; s jedním z toho vyjde tmavý
+  text na tmavém podkladu a vypadá to jako chyba v sazbě. Našla dvě věci, které z kódu vidět
+  nebyly: nerozeznatelné úrovně nadpisů 3–5 a pruh citace, který sahal do poloviny obsahu.
+
+  ```bash
+  TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/render \
+      xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test \
+      -only-testing:PRismTests/MarkdownRenderProbe > /tmp/probe.log 2>&1
+  ```
+
+  Pozor na dvě pasti: `PRISM_MEASURE=1` **před** `xcodebuild` nestačí (do testovacího procesu jde
+  jen to, co má prefix `TEST_RUNNER_`), a **tabulka vyjde v renderu prázdná** — je ve vodorovném
+  `ScrollView`, který se offscreen nevykreslí. Není to chyba sazby, jen mez sondy.
 - **`AppStore` — taby** — výchozí `Přehled` (proti `PullRequestTab.standard`, ať se to nerozejde),
   volba per PR, přepnutí zpátky mažící klíč a úklid s PR, které zmizelo ze seznamu.
 - **`Policy` — hledání v paletě (#184)** — vyčerpávající výčet nad hotovým katalogem, bez kreslení.

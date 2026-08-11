@@ -122,7 +122,7 @@ struct OverviewView: View {
             // Písmo z návrhu: próza 12,5, nadpisy si `MarkdownText` odvodí. Popis PR je
             // nejdelší souvislý text v okně, takže o stupeň menší než zbytek — jinak
             // z něj na obrazovku padne polovina.
-            MarkdownText(text: description, font: .system(size: 12.5))
+            MarkdownText(text: description, size: 12.5)
         } else if description == nil {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
