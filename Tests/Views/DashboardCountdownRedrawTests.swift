@@ -53,15 +53,15 @@ struct DashboardCountdownRedrawTests {
     func tickingCountdownDoesNotRecomputeTheBody() async throws {
         let counter = BodyCounter()
 
-        let redraws = try await redraws(
+        let changes = try await redraws(
             of: CountdownProbe(counter: counter, deadline: .now.addingTimeInterval(600)),
             count: 2,
             within: Self.ceiling
         )
 
         #expect(
-            redraws.count == 2,
-            "Odpočet se za \(Self.ceiling) s přetikal \(redraws.count)× místo dvakrát \(Self.stamps(redraws))."
+            changes.count == 2,
+            "Odpočet se za \(Self.ceiling) s přetikal \(changes.count)× místo dvakrát \(Self.stamps(changes))."
         )
         #expect(counter.count == 1, "Tělo sondy se přepočítalo \(counter.count)× místo jednou.")
     }
@@ -92,7 +92,7 @@ struct DashboardCountdownRedrawTests {
         }
         defer { ticker.cancel() }
 
-        let redraws = try await redraws(
+        let changes = try await redraws(
             of: RecomputingProbe(counter: counter, clock: clock, deadline: .now.addingTimeInterval(600)),
             count: 2,
             within: 1.5
@@ -103,8 +103,8 @@ struct DashboardCountdownRedrawTests {
             "Tělo se přepočítalo \(counter.count)×, tedy jen při nasazení — měřidlo přepočtů nežije."
         )
         #expect(
-            redraws.count == 2,
-            "Měřidlo kresby vidělo \(redraws.count) změn místo dvou \(Self.stamps(redraws))."
+            changes.count == 2,
+            "Měřidlo kresby vidělo \(changes.count) změn místo dvou \(Self.stamps(changes))."
         )
     }
 
