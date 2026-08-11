@@ -262,52 +262,37 @@ extension PullRequestHeaderView {
     /// Souhrn checků jedním chipem. **Barva podle nejhoršího** — dvanáct zelených a jeden
     /// červený je červený stav. Bez checků se nekreslí nic: PR bez CI je běžná věc a prázdný
     /// chip by tvrdil, že se něco nepovedlo.
+    /// **Chip zůstává i po #215**, kdy se seznam checků odstěhoval do vlastního tabu: „je to
+    /// zelené“ se musí dát přečíst i při čtení diffu, tedy z hlavičky, která je vidět ve všech
+    /// tabech. Od #215 je to navíc **jediné** místo o checcích mimo tab — souhrn v `Přehledu`
+    /// odešel s ním, protože tři místa o téže věci jsou o dvě moc.
     @ViewBuilder fileprivate var checksChip: some View {
         let summary = Policy.summary(of: checks)
-        if let worst = summary.worst {
+        // `worst` a první část poměru jsou obojí neprázdné právě u neprázdné sady, takže se
+        // ptáme na obojí a nikde nedosazujeme náhradní hodnotu.
+        if let worst = summary.worst, let headline = ChecksText.parts(of: summary).first {
             separator
             HStack(spacing: 4) {
                 Image(systemName: symbol(of: worst))
                     .font(.system(size: 10))
-                Text(verbatim: text(of: summary))
+                Text(verbatim: headline)
                     .monospacedDigit()
             }
             .font(.caption)
-            .foregroundStyle(color(of: worst))
-            .help("Kontroly na GitHubu — podrobnosti jsou v Přehledu")
+            .foregroundStyle(ChecksText.color(of: worst))
+            .help("Kontroly na GitHubu — podrobnosti jsou v tabu Kontroly")
         }
     }
 
-    /// `1 selhala` u poruchy, jinak celý poměr: když je něco špatně, je to jediné, co má
-    /// v úzké hlavičce cenu — zbytek se dočte v `Přehledu`.
-    private func text(of summary: ChecksSummary) -> String {
-        if summary.failed > 0 {
-            return Plural.czech(summary.failed, one: "selhala", few: "selhaly", many: "selhalo")
-        }
-        if summary.running > 0 { return "\(summary.running) běží" }
-        if summary.passed > 0 {
-            return Plural.czech(summary.passed, one: "prošla", few: "prošly", many: "prošlo")
-        }
-        return "\(summary.skipped) přeskočeno"
-    }
-
+    /// **S kolečkem**, na rozdíl od seznamu v tabu: chip stojí v řadě dalších kapslí, kde
+    /// obtažený symbol drží tvar. Barva je proti tomu společná (`ChecksText.color`) — dvě
+    /// zelené v jednom okně by znamenaly jednu věc.
     private func symbol(of outcome: PullRequestCheck.Outcome) -> String {
         switch outcome {
         case .passed: "checkmark.circle"
         case .failed, .cancelled: "xmark.circle"
         case .running: "circle.dashed"
         case .skipped: "minus.circle"
-        }
-    }
-
-    /// Z palety návrhu, ne systémová: souhrn stojí v jedné řadě s kapslí stavu PR, a dvě
-    /// různé zelené vedle sebe vypadají jako dva různé významy.
-    private func color(of outcome: PullRequestCheck.Outcome) -> Color {
-        switch outcome {
-        case .passed: Palette.ok
-        case .failed, .cancelled: Palette.crit
-        case .running: Palette.accent
-        case .skipped: Palette.ink3
         }
     }
 }

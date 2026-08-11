@@ -95,8 +95,16 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     /// Polling detail netahá — SHA potřebuje až review, ne seznam.
     /// Co vrátí `fetchChecks` (#209). Většina testů checky nepotřebuje, takže prázdno.
     var checks: [PullRequestCheck] = []
+    /// Čím `fetchChecks` spadne (#215). `nil` = vrátí `checks`.
+    ///
+    /// Vlastní přepínač, ne `Result`: rozdíl mezi „PR nemá CI“ (prázdno) a „nepodařilo se to
+    /// zjistit“ (chyba) je přesně to, co se u #215 nesmí slít, takže se musí dát nastavit obojí.
+    var checksFailure: (any Error)?
 
-    func fetchChecks(id: PRIdentifier) async throws -> [PullRequestCheck] { checks }
+    func fetchChecks(id: PRIdentifier) async throws -> [PullRequestCheck] {
+        if let checksFailure { throw checksFailure }
+        return checks
+    }
 
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {
         let answer: Result<PullRequest, any Error>? = lock.withLock {
