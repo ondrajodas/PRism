@@ -35,7 +35,9 @@ esac
 
 NAME="PRism-${SLOT}"
 WORKTREE="../${NAME}"
-SUPPORT="${HOME}/Library/Application Support"
+# Kořen cache slotu — aplikace si ho odvozuje z `CFBundleName`, viz `CacheLayout`. Tady je
+# jen kvůli návodu na úklid na konci skriptu; konfiguraci do něj píše `bin/slot-config.sh`.
+TARGET_DIR="${HOME}/Library/Application Support/${NAME}"
 
 if [ -e "${WORKTREE}" ]; then
     echo "V ${WORKTREE} už něco leží. Ukliď to, nebo zvol jiný slot."
@@ -55,38 +57,16 @@ fi
 printf '%s\n' "${SLOT}" > "${WORKTREE}/.prism-slot"
 
 # Konfigurace se přenese, protože bez zdrojů PR není ve slotu co zkoušet — ale **jen
-# očištěná**. Bez `jq` se radši nezkopíruje nic: prázdná cache znamená výchozí nastavení,
-# a to má odesílání vypnuté (tvrdá podmínka č. 1). Tiché `cp` by naopak slotu předalo
-# `allowsPublishing` u všech rep, na kterých je povolené.
-SOURCE_CONFIG="${SUPPORT}/PRism/config.json"
-TARGET_DIR="${SUPPORT}/${NAME}"
-TARGET_CONFIG="${TARGET_DIR}/config.json"
-
-if [ -e "${TARGET_CONFIG}" ]; then
-    echo "Konfigurace slotu už existuje, nechávám ji být: ${TARGET_CONFIG}"
-elif [ ! -f "${SOURCE_CONFIG}" ]; then
-    echo "Hlavní instance ještě konfiguraci nemá — slot si ji nastaví sám."
-elif ! command -v jq > /dev/null 2>&1; then
-    echo "Pozor: jq na stroji není, konfiguraci jsem nekopíroval."
-    echo "       Kopírovat ji neočištěnou nejde — zdědila by povolené odesílání."
-else
-    mkdir -p "${TARGET_DIR}"
-    # Co se přepisuje a proč:
-    #   allowsPublishing  — globálně i u každého repa. Rozestavěný build nemá kam odesílat.
-    #   notifications     — slot má vlastní `announced.json`, takže by při prvním spuštění
-    #                       ohlásil jako nové úplně všechny PR ve frontě.
-    #   mode              — automat ve slotu by spouštěl review, které nikdo nečte, a platily
-    #                       by se za ně tokeny.
-    #   pollIntervalSeconds — dev instance nemá důvod chodit na GitHub stejně hustě.
-    jq '.global.allowsPublishing = false
-        | .global.notifications.isEnabled = false
-        | .global.mode = "manual"
-        | .global.pollIntervalSeconds = 900
-        | if .repositories then
-              .repositories |= with_entries(.value.allowsPublishing = false)
-          else . end' \
-        "${SOURCE_CONFIG}" > "${TARGET_CONFIG}"
-    echo "Konfigurace zkopírována bez odesílání, bez notifikací a bez automatu."
+# očištěná**, a tu očistu drží `bin/slot-config.sh` (#262). Samostatně stojí schválně:
+# subagent v paralelním vývoji dostává strom od harnessu a tenhle skript nepouští, takže kdyby
+# očista žila tady, musel by si ji opisovat — a dvě kopie znamenají, že se příští oprava udělá
+# jen v jedné. Přesně tak #262 vzniklo.
+#
+# Selhání se **hlásí, ale nepokládá skript**: strom je v tu chvíli založený a použitelný, jen
+# bez konfigurace. Zamlčet ho nejde, jinak by prázdná fronta v slotu vypadala jako chyba
+# aplikace.
+if ! bin/slot-config.sh "${SLOT}"; then
+    echo "Pozor: konfigurace slotu se nepřipravila (viz výš) — slot si ji nastaví sám."
 fi
 
 echo
