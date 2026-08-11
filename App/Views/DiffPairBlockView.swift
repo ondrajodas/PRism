@@ -210,10 +210,14 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
 
     override func layout() {
         super.layout()
-        let half = (bounds.width - 1) / 2
+        // Hranice polovin se bere z `DiffGutterGeometry` (#252): podle ní se umisťují i plochy na
+        // tažení a pilulka, takže dva výpočty by znamenaly, že pilulka svítí v jedné polovině
+        // a táhne se ve druhé.
+        let right = DiffGutterGeometry.rightColumnX(inBlockOfWidth: bounds.width)
+        let half = right - 1
         leftScroll.frame = NSRect(x: 0, y: 0, width: half, height: bounds.height)
         separator.frame = NSRect(x: half, y: 0, width: 1, height: bounds.height)
-        rightScroll.frame = NSRect(x: half + 1, y: 0, width: half, height: bounds.height)
+        rightScroll.frame = NSRect(x: right, y: 0, width: half, height: bounds.height)
         // Znovu po každé změně šířky: minimální šířka sloupce se odsud odvozuje.
         layoutColumns()
     }

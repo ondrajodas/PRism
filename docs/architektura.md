@@ -490,9 +490,13 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   konec taženého rozsahu), a prvek v `ForEach`i vzniká a umisťuje se i s prázdným obsahem —
   „nekreslí se“ není totéž jako „nestojí nic“.
 - **Gesto je jedno na sloupec** a řádek, na kterém tažení začalo, se hledá podle `startLocation`.
-  Souřadnice jsou v prostoru obsahu, takže se od nich odečte poloha bloku; hranice stran je **tatáž
-  půlka**, podle které se pozná strana pod myší (jinak by pilulka svítila v jedné polovině a táhlo
-  se ve druhé).
+  Souřadnice jsou v prostoru obsahu, takže se od nich odečte poloha bloku.
+- **Hranice polovin je jeden výpočet na jednom místě** (`DiffGutterGeometry.rightColumnX(inBlockOfWidth:)`).
+  Pravý sloupec nezačíná v přesné půlce — mezi poloviny sází kontejner **1 pt dělicí čáru**, takže
+  `(šířka − 1) / 2 + 1`. Bere si to odsud jak `DiffPairBlockContainer.layout()`, tak plochy na tažení,
+  pilulka i rozpoznání strany pod myší; dva výpočty by znamenaly, že pilulka svítí v jedné polovině
+  a táhne se ve druhé. Do #252 na tom stál `HStack` se dvěma `Spacer`y a plocha vycházela o půl bodu
+  vlevo (nález Copilota na #272). Je to tatáž úvaha jako u šířky pro měření výšky (#236).
 
 Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne přečtené:
 

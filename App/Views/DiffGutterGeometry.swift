@@ -42,20 +42,26 @@ struct DiffGutterGeometry {
         )
     }
 
-    /// Kde začíná sloupec dané strany. `nil` (pohled pod sebou) i `.left` začínají na levé hraně,
-    /// `.right` v půlce bloku.
+    /// Kde začíná pravá polovina bloku — **jedno místo pro kreslení i pro trefování** (#252).
     ///
-    /// Půlka je **tatáž hranice, podle které se pozná strana pod myší** (`side(atX:)`) — jinak by
-    /// pilulka svítila v jedné polovině a táhlo se ve druhé. Kontejner kreslí pravý sloupec o půl
-    /// bodu jinam (`(šířka − 1) / 2 + 1`, aby se mezi ně vešla dělicí čára); na trefování plochy
-    /// široké 84 pt to nemá vliv a jedna hranice na jednom místě je víc než ten půlbod.
-    func x(of side: DiffSide?) -> Double {
-        side == .right ? blockWidth / 2 : 0
+    /// Není to přesná půlka: mezi poloviny sází kontejner **1 pt dělicí čáru**, takže levý sloupec
+    /// je `(šířka − 1) / 2` široký a pravý začíná o bod dál. Bere si to odsud i
+    /// `DiffPairBlockContainer.layout()`, protože dva výpočty jedné hranice znamenají, že pilulka
+    /// svítí v jedné polovině a táhne se ve druhé — je to tatáž úvaha jako u šířky pro měření
+    /// výšky (#236).
+    static func rightColumnX(inBlockOfWidth width: Double) -> Double {
+        (width - 1) / 2 + 1
     }
 
-    /// Která strana leží pod tímhle `x`.
+    /// Kde začíná sloupec dané strany. `nil` (pohled pod sebou) i `.left` začínají na levé hraně.
+    func x(of side: DiffSide?) -> Double {
+        side == .right ? Self.rightColumnX(inBlockOfWidth: blockWidth) : 0
+    }
+
+    /// Která strana leží pod tímhle `x`. Hranice je **tatáž**, na které začíná pravý sloupec —
+    /// bod v dělicí čáře patří levé straně, protože k ní sousedí kód.
     func side(atX x: Double) -> DiffSide {
-        x < blockWidth / 2 ? .left : .right
+        x < Self.rightColumnX(inBlockOfWidth: blockWidth) ? .left : .right
     }
 
     /// Svislý rozsah gutteru — od horní hrany prvního řádku po dolní hranu posledního.

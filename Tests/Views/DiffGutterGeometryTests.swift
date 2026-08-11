@@ -29,13 +29,17 @@ struct DiffGutterGeometryTests {
 
     // MARK: - Sloupce
 
-    @Test("Levá strana i pohled pod sebou začínají na levé hraně, pravá v půlce")
+    /// Pravý sloupec začíná **o dělicí čáru za půlkou**, ne přesně v půlce — tak ho umisťuje
+    /// kontejner (`(šířka − 1) / 2 + 1`) a odsud si tu hranici bere. Kdyby to byla rovná půlka,
+    /// leží plocha na tažení o půl bodu vlevo od sloupce, ve kterém se kreslí čísla.
+    @Test("Levá strana i pohled pod sebou začínají na levé hraně, pravá za dělicí čárou")
     func columnsStartWhereTheySit() {
         let geometry = geometry(frames(count: 3))
 
         #expect(geometry.x(of: nil) == 0)
         #expect(geometry.x(of: .left) == 0)
-        #expect(geometry.x(of: .right) == 400)
+        #expect(geometry.x(of: .right) == 400.5)
+        #expect(DiffGutterGeometry.rightColumnX(inBlockOfWidth: 800) == 400.5)
     }
 
     /// **Hranice stran a začátek pravého sloupce musí být tentýž bod.** Kdyby se rozešly, svítila
@@ -133,7 +137,7 @@ struct DiffGutterGeometryTests {
         let geometry = geometry(rows, gutter: 84, width: 800)
 
         #expect(geometry.rect(of: rows[1], on: .left) == CGRect(x: 0, y: 18, width: 84, height: 16))
-        #expect(geometry.rect(of: rows[1], on: .right) == CGRect(x: 400, y: 18, width: 84, height: 16))
+        #expect(geometry.rect(of: rows[1], on: .right) == CGRect(x: 400.5, y: 18, width: 84, height: 16))
         #expect(geometry.rect(of: rows[1], on: nil) == CGRect(x: 0, y: 18, width: 84, height: 16))
     }
 
@@ -148,7 +152,7 @@ struct DiffGutterGeometryTests {
 
         let rect = geometry.rect(of: rows[2], on: .right).offsetBy(dx: origin.x, dy: origin.y)
 
-        #expect(rect == CGRect(x: 412, y: 1034, width: 84, height: 16))
+        #expect(rect == CGRect(x: 412.5, y: 1034, width: 84, height: 16))
         #expect(rect.contains(CGPoint(x: 420, y: 1040)))
     }
 }
