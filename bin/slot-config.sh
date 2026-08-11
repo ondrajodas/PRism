@@ -110,7 +110,10 @@ if [ "${PUBLISHING_COUNT}" -gt 0 ]; then
 fi
 
 # Zapisuje se přes soubor vedle cílového a `mv`: `jq … > "${TARGET_CONFIG}"` nad vstupem, který
-# je tímtéž souborem, by ho utnul na nulu ještě před prvním přečtením.
+# je tímtéž souborem, by ho utnul na nulu ještě před prvním přečtením. Vedle cílového schválně,
+# ne v `TMPDIR` — `mv` má být přejmenování v jedné složce, ne kopie přes hranici svazku.
+# Výsledek má proti `config.json` hlavní instance práva `0600` místo `0644` (tak `mktemp`
+# zakládá), a je to tak dobře: je to soubor jednoho uživatele a přísnější práva mu nevadí.
 mkdir -p "${TARGET_DIR}"
 CLEANED="$(mktemp "${TARGET_DIR}/config.json.XXXXXX")"
 trap 'rm -f "${CLEANED}"' EXIT
