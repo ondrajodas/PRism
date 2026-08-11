@@ -27,8 +27,12 @@ struct PullRequestDetailView: View {
     /// Resetuje se proto při změně PR, viz `.task(id:)` níž.
     @State private var cursor = FindingCursor()
 
-    /// Celý log jobu v sheetu (#214). `@State` detailu, protože se **neukládá a nemá přežít**:
-    /// zavřením sheetu zaniká, sbalením checku se zahodí i stažený text.
+    /// Celý log jobu v sheetu (#214). `@State` detailu, protože se **neukládá a nemá přežít**.
+    ///
+    /// **Nuluje se při přepnutí checku i při přepnutí PR** (nález Copilota na #214, včetně toho
+    /// v `Suppressed comments`). Drží celý text, takže bez toho by pravidlo „log nepřežije sbalení
+    /// checku“ platilo jen ve store: sbalení zahodí `checkDetail`, ale otevřený sheet by dál držel
+    /// megabajty — a po přepnutí PR by nad novým ukazoval log z předchozího.
     @State private var logSheet: CodeText?
 
     /// Rozdělané odeslání review. Zakládá se tady, ale **drží ho `ContentView`** — detail
@@ -72,6 +76,9 @@ struct PullRequestDetailView: View {
         .task(id: pullRequest.id) { store.noteVisit(to: pullRequest.id) }
         // Kurzor procházení patří k tomuhle diffu, ne k oknu — viz `cursor`.
         .task(id: pullRequest.id) { cursor = FindingCursor(onlyBlocking: cursor.onlyBlocking) }
+        // Log jobu patří k jednomu checku jednoho PR (#214), takže při přepnutí PR **nesmí**
+        // přetéct — ani obsahem, ani tou pamětí, kterou drží.
+        .task(id: pullRequest.id) { logSheet = nil }
         // Klíčem je celé shrnutí, ne jen identifikátor: nový commit změní `updatedAt`,
         // a to je přesně chvíle, kdy se má diff načíst znovu i bez přepnutí PR.
         .task(id: pullRequest) { await store.loadDiff(for: pullRequest) }
@@ -827,7 +834,12 @@ struct PullRequestDetailView: View {
             checks: store.checks[pullRequest.id] ?? [],
             expanded: open,
             detail: open.flatMap { store.checkDetail(of: $0, in: pullRequest.id) },
-            toggle: { store.toggleCheck($0, in: pullRequest.id) },
+            toggle: { check in
+                // Sbalení i rozbalení **zavře sheet a text z něj pustí** — jinak by ho okno drželo
+                // dál, i když ho store zahodil.
+                logSheet = nil
+                store.toggleCheck(check, in: pullRequest.id)
+            },
             // Anotace ukazují na `soubor:řádek`, což je tentýž tvar, jaký okno umí kreslit — takže
             // se skáče **tou samou cestou** jako z nálezu a z palety (#184).
             jump: { path, line in

@@ -2533,6 +2533,11 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Nic z toho se neukládá** a nepřežije ani sbalení checku, ani restart. Sbalení navíc stahování
     **zruší**: čtyři vteřiny jsou za hranicí, kdy stačí přebarvit tlačítko, a nezrušený běh by dopsal
     text, který se má zapomenout.
+
+    Platí to **i pro sheet s celým logem**, a to je snazší přehlédnout: drží celý text ve `@State`
+    detailu, takže se musí nulovat při přepnutí checku **i při přepnutí PR**. Bez toho pravidlo platí
+    jen ve store — sbalení zahodí `checkDetail`, ale otevřený sheet dál drží megabajty a nad novým PR
+    by ukazoval log z předchozího. Nález Copilota na #214, a byl schovaný v `Suppressed comments`.
   - **Anotace z CI není nález z review.** Plochý řádek se štítkem (`error`/`warning`/`notice`), ne
     bublina s obrysem a levým pruhem — nález má revieweera a dá se odmítnout, anotace je cizí fakt.
     A **nepočítá se nikde**: ani v řádku fronty, ani v panelu, ani v odznaku tabu.
