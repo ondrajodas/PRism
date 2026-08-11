@@ -246,7 +246,7 @@ struct ThreadBubbleView: View {
             //
             // Markdown se renderuje: komentáře na GitHubu se v něm píšou a `**takhle**`
             // s dvojitými hvězdičkami se čte špatně.
-            MarkdownText(text: comment.body, font: .system(size: 12.5))
+            MarkdownText(text: comment.body, size: 12.5)
                 .narrowingWidth(by: 22)
                 .padding(.horizontal, 11)
                 .padding(.vertical, 9)

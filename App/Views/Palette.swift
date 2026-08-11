@@ -31,7 +31,8 @@ enum Palette {
     static let ink2 = Color(light: 0x5A6379, dark: 0x98A1B5)
     static let ink3 = Color(light: 0x8B93A7, dark: 0x6B7488)
 
-    /// Stavy z palety návrhu (`--ok`, `--crit`) — zatím jen kapsle stavu PR v hlavičce (#218).
+    /// Stavy z palety návrhu (`--ok`, `--crit`) — kapsle stavu PR v hlavičce (#218) a od #279
+    /// i `[!TIP]` v sazbě Markdownu.
     ///
     /// **Ne systémová `.green` / `.red`.** Kapsle stavu je plná plocha s textem v barvě podkladu
     /// (`--panel`), a systémová zelená je na to příliš světlá — bílý text na ní není čitelný.
@@ -58,6 +59,36 @@ enum Palette {
     /// z návrhu je okrová a znamená „platilo to, dneska už ne“. Vedle červené blokujícího nálezu
     /// se ty dvě systémové barvy pletly do jedné škály naléhavosti, kterou zastarání nemá.
     static let stale = Color(light: 0x9A6700, dark: 0xD4A72C)
+
+    /// Výstrahy z GitHubu (#279) — `> [!NOTE]` a spol. **Tři vlastní tóny, dva vypůjčené.**
+    ///
+    /// `[!TIP]` bere `ok` (rada je pozitivní sdělení a zelená v okně neznamená nic, co by radě
+    /// odporovalo) a `[!IMPORTANT]` bere `accent` (akcent je barva, kterou okno upozorňuje na to
+    /// své). Zbylé tři mají vlastní hex, protože GitHub jim dává přesně ty barvy, které v tomhle
+    /// okně **už něco znamenají**:
+    ///
+    /// - `[!WARNING]` je na GitHubu `0x9A6700`, což je **na hex shodné se `stale`**. Zastarání
+    ///   znamená „platilo to, dneska už ne“, kdežto výstraha „pozor na tohle“ — se stejným tónem
+    ///   by okrový rámeček v komentáři vypadal jako zastaralý obsah. `alertWarning` je proto
+    ///   světlejší, žlutější amber.
+    /// - `[!CAUTION]` je na GitHubu `0xCF222E`, tedy **na hex shodné s `crit`**. Červená v okně
+    ///   patří blokujícímu nálezu, takže se pro caution bere purpurová: pořád naléhavá, ale
+    ///   nezaměnitelná s tím, co review blokuje.
+    /// - `[!NOTE]` je modrá a modrou okno jinde nemá, takže se nemá s čím splést.
+    ///
+    /// Druh výstrahy nese navíc **ikonu a titulek** (`MarkdownAlertStyle`), takže význam nestojí
+    /// jen na barvě.
+    static let alertNote = Color(light: 0x0969DA, dark: 0x4493F8)
+    static let alertWarning = Color(light: 0xBF8700, dark: 0xE3B341)
+    static let alertCaution = Color(light: 0xBF3989, dark: 0xDB61A2)
+
+    /// Podklad kódu v sazbě Markdownu (#279) — inline `kód` i blok mezi ` ``` `.
+    ///
+    /// **Průhledná, a to schválně** — na rozdíl od `critLine`, kde je krytí zakázané. Tam jde
+    /// o obrys nad střídavě zeleným a červeným řádkem, tady o podklad uvnitř prózy, pod kterým je
+    /// vždycky jedna plocha (`chrome` u komentáře, `surface` u popisu). Průhlednost je tu naopak
+    /// to, co drží podklad jemný v obou režimech: 6 % inkoustu na světlém, 10 % na tmavém.
+    static let codeFill = Color(light: 0x131722, lightAlpha: 0.06, dark: 0xE7EAF2, darkAlpha: 0.1)
 
     /// Akcent. **Fialová z návrhu, ne systémový akcent**: je to jediná barva, kterou si okno
     /// drží samo, protože na ní stojí identita aplikace (hranol, spektrum) — a spektrum

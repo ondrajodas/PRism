@@ -199,7 +199,7 @@ struct ConversationEntryView: View {
                 if !body.isEmpty {
                     // Próza 12,5 jako všude jinde v okně — do #216 byla o stupeň větší než
                     // sousední bloky.
-                    MarkdownText(text: body, font: .system(size: 12.5))
+                    MarkdownText(text: body, size: 12.5)
                 } else if let emptyNote {
                     Text(verbatim: emptyNote)
                         .font(.system(size: 12))
