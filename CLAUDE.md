@@ -469,6 +469,14 @@ Zvlášť stojí za přečtení, než sáhneš na:
   `filling` v `App/Views/AvailableWidth.swift`); pružná výška v líném seznamu je tatáž chyba.
   Tuhnoucí okno se diagnostikuje `sample`m běžícího procesu, ne odhadem — viz
   [`docs/testovani.md`](docs/testovani.md).
+
+  **Nevyjednává se ani počet prvků** (#252). Overlay nad blokem kódu měl plochu, gesto a čtení
+  geometrie u **každého** řádku a strany — u šedesátiřádkového bloku přes čtyři stovky prvků,
+  které líný seznam umisťuje znovu při každém přerovnání obsahu. Polohy přitom hlásí textové view,
+  takže se dají spočítat (`DiffGutterGeometry`): zbyly dvě plochy a jedna pilulka na blok,
+  **3,05 ms → 0,12 ms**. Platí u toho dvě věci: prvek v `ForEach`i s prázdným obsahem se pořád
+  umisťuje („nekreslí se“ ≠ „nestojí nic“), a co se při scrollování mění, **nesmí být ve `@State`**
+  — poloha bloku v prostoru obsahu se drží mimo observable stav (`DiffBlockPlacement`).
 - **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236). Blok kódu si v `LazyVStack`u
   navrhuje výšku sám, takže když ji spočítá na jiné šířce, než na jaké se pak zalamuje, nakreslí víc
   řádků, než na kolik si řekl — a přeteče do řádku pod sebou (AppKitové view je nad SwiftUI obsahem,
