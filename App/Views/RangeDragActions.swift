@@ -30,29 +30,47 @@ struct RangeDragActions {
 @MainActor final class DiffRowFrames {
     private var entries: [String: (rect: CGRect, anchor: DraftAnchor)] = [:]
 
-    /// Zapíše rámeček řádku. `anchor == nil` (řádek, který komentář neunese) záznam **maže** —
-    /// jinak by po rozbalení kontextu zůstal ležet rámeček řádku, na který se komentovat nedá.
+    /// Jeden zapsaný rámeček. Řádek, který komentář neunese, se do zápisu **nedává** — a tím
+    /// z krabice vypadne (viz `note(_:covering:)`).
+    struct Entry {
+        let id: String
+        let rect: CGRect
+        let anchor: DraftAnchor
+    }
+
+    /// Zapíše rámečky **celého bloku naráz** a vyklidí jeho plochu od všeho ostatního.
     ///
-    /// **Zároveň vyhodí všechny záznamy, které se s tím novým překrývají.** Dva živé řádky se
-    /// nikdy nepřekrývají, takže překryv znamená, že ten druhý záznam je po přerovnání
-    /// **zastaralý** — po přepnutí pohledu (unified řádek jde přes celou šířku, buňka dvojice po
-    /// půlce), po sbalení souboru nebo po přepnutí PR. Bez toho padl bod do obou a vyhrál ten, na
-    /// který hledání narazilo první; a protože párování řádky slévá, netrefilo se to ani o pár
+    /// **Po blocích, ne po řádcích** (#252). Úklid je lineární v počtu záznamů, takže po řádcích
+    /// to bylo kvadratické: šedesátiřádkový blok ve split pohledu má 120 ploch a v krabici leží
+    /// řádově tisíce záznamů, tedy stovky tisíc porovnání na jeden blok, který se objeví ve
+    /// viditelném okně. Naráz je to jeden průchod na blok.
+    ///
+    /// **Vyklizení plochy je to, co drží záznamy aktuální.** Dva živé řádky se nikdy nepřekrývají,
+    /// takže záznam v ploše bloku, který blok sám nehlásí, je po přerovnání **zastaralý** — po
+    /// přepnutí pohledu (unified řádek jde přes celou šířku, buňka dvojice po půlce), po sbalení
+    /// souboru, po rozbalení kontextu nebo po přepnutí PR. Bez toho padl bod do obou a vyhrál ten,
+    /// na který hledání narazilo první; a protože párování řádky slévá, netrefilo se to ani o pár
     /// míst vedle — nahlášené při zkoušení #110 („vybere se i další 2–3 pod kurzorem“).
     ///
-    /// Uklízí se to takhle, ne vyprázdněním krabice zvenčí: `onGeometryChange` se spustí **jen
-    /// když se geometrie změní**, takže po vyprázdnění by řádky nic nenahlásily a krabice by
-    /// zůstala prázdná — tažení pak nemělo co najít a rozsah se nikdy neroztáhl. Zkoušel jsem to
-    /// a mělo to přesně tenhle následek.
-    func note(_ rect: CGRect, id: String, anchor: DraftAnchor?) {
-        guard let anchor else {
-            entries[id] = nil
-            return
-        }
-        for (key, entry) in entries where key != id && entry.rect.intersects(rect) {
+    /// Uklízí se to takhle, ne vyprázdněním krabice zvenčí: hlásí se **jen při změně** geometrie,
+    /// takže po vyprázdnění by bloky nic nenahlásily a krabice by zůstala prázdná — tažení pak
+    /// nemělo co najít a rozsah se nikdy neroztáhl. Zkoušel jsem to a mělo to přesně tenhle
+    /// následek.
+    ///
+    /// Prázdná plocha se ignoruje: rámeček bloku, který se ještě nerozložil, je nulový a vyklidil
+    /// by cizí záznamy na souřadnici nula.
+    ///
+    /// **Uklízí se před zápisem**, ne po něm — jinak by blok vyklidil sám sebe (leží celý ve své
+    /// ploše) a zbyl by z něj poslední řádek. Vynechání vlastních `id` z úklidu je proti tomu jen
+    /// úspora práce na horké cestě: blok se hlásí znovu při každém posunu, takže nemá smysl
+    /// stopadesát záznamů mazat a hned vracet.
+    func note(_ rows: [Entry], covering area: CGRect) {
+        guard !area.isEmpty else { return }
+        let live = Set(rows.map(\.id))
+        for (key, entry) in entries where !live.contains(key) && entry.rect.intersects(area) {
             entries[key] = nil
         }
-        entries[id] = (rect, anchor)
+        for row in rows { entries[row.id] = (row.rect, row.anchor) }
     }
 
     /// Kotva řádku pod bodem. `nil` = mimo řádky, na které se dá komentovat.

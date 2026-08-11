@@ -406,7 +406,7 @@ viz tvrdá podmínka č. 1.
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |
@@ -463,6 +463,12 @@ Zvlášť stojí za přečtení, než sáhneš na:
   `Signing.xcconfig` — xcconfig se dá napojit jen odkazem (`baseConfigurationReference`
   u obou konfigurací projektu), z filesystému se nevezme.
 
+  **Dva zdrojáky se stejným jménem build položí** (#184), i když leží v různých podsložkách:
+  model palety a hledání k ní se u #184 obojí jmenovaly `CommandPalette.swift` (v `App/Models/`
+  a v `App/Policy/`) a build skončil na `Multiple commands produce … CommandPalette.stringsdata`.
+  Jméno souboru je v jednom targetu klíč, takže se soubory pojmenovávají **jednoznačně napříč
+  celým `App/`** (a `Tests/`) — proto je z toho druhého `App/Policy/CommandPaletteSearch.swift`.
+
   Druhá výjimka je `ASSETCATALOG_COMPILER_APPICON_NAME` (#83): je to **build setting**, takže
   jinudy než pbxprojem nastavit nejde. Leží na **app targetu**, ne na projektu — testovací
   target ikonu mít nemá; je to tatáž úvaha jako u `CODE_SIGN_IDENTITY`, jen obráceně.
@@ -475,6 +481,14 @@ Zvlášť stojí za přečtení, než sáhneš na:
   `filling` v `App/Views/AvailableWidth.swift`); pružná výška v líném seznamu je tatáž chyba.
   Tuhnoucí okno se diagnostikuje `sample`m běžícího procesu, ne odhadem — viz
   [`docs/testovani.md`](docs/testovani.md).
+
+  **Nevyjednává se ani počet prvků** (#252). Overlay nad blokem kódu měl plochu, gesto a čtení
+  geometrie u **každého** řádku a strany — u šedesátiřádkového bloku přes čtyři stovky prvků,
+  které líný seznam umisťuje znovu při každém přerovnání obsahu. Polohy přitom hlásí textové view,
+  takže se dají spočítat (`DiffGutterGeometry`): zbyly dvě plochy a jedna pilulka na blok,
+  **3,05 ms → 0,12 ms**. Platí u toho dvě věci: prvek v `ForEach`i s prázdným obsahem se pořád
+  umisťuje („nekreslí se“ ≠ „nestojí nic“), a co se při scrollování mění, **nesmí být ve `@State`**
+  — poloha bloku v prostoru obsahu se drží mimo observable stav (`DiffBlockPlacement`).
 - **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236). Blok kódu si v `LazyVStack`u
   navrhuje výšku sám, takže když ji spočítá na jiné šířce, než na jaké se pak zalamuje, nakreslí víc
   řádků, než na kolik si řekl — a přeteče do řádku pod sebou (AppKitové view je nad SwiftUI obsahem,

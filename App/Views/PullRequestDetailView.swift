@@ -74,6 +74,51 @@ struct PullRequestDetailView: View {
         // A detail taky — z něj je `headSha`, proti kterému se píše rozdělané review a proti
         // kterému se pozná, že zastaralo.
         .task(id: pullRequest) { await store.loadDetail(for: pullRequest) }
+        // Skok z palety (#184). Klíčem je **žádost i to, jak dopadl diff**: paleta umí skočit do
+        // PR, jehož záložka se právě otevřela, takže diff v tu chvíli ještě není — a bez druhé
+        // části klíče by se úloha po jeho dorazení už nespustila.
+        .task(id: PaletteJumpAttempt(jump: store.paletteJump, isDiffSettled: isDiffSettled)) {
+            consumePaletteJump()
+        }
+    }
+
+    /// Žádost o skok a stav diffu jako jeden klíč `task(id:)`.
+    private struct PaletteJumpAttempt: Hashable {
+        let jump: CommandPalette.Jump?
+        let isDiffSettled: Bool
+    }
+
+    /// Ví se už, jak diff dopadl? Načítání se od selhání musí lišit: po selhání se skok
+    /// **nepovede nikdy**, takže se na něj nemá čekat.
+    private var isDiffSettled: Bool {
+        switch store.diffState(for: pullRequest.id) {
+        case .loaded, .failed: true
+        case .loading, nil: false
+        }
+    }
+
+    /// Vyzvedne skok z palety a odscrolluje na něj.
+    ///
+    /// Dokud se diff načítá, **žádost se nechává ležet** — jinak by se zahodila zrovna
+    /// v nejčastějším případě, kdy paleta otevřela novou záložku. Jakmile je jasno, žádost se
+    /// vyzvedne v každém případě, i když z ní nic nebude: soubor, který v diffu není (přišel nový
+    /// commit), ani nenačtený diff se druhým pokusem nespraví a nevyzvednutá žádost by tu zůstala
+    /// viset jako stav, který nikdo nepřečte.
+    private func consumePaletteJump() {
+        guard let jump = store.paletteJump, jump.pullRequest == pullRequest.id else { return }
+        guard isDiffSettled else { return }
+        store.paletteJump = nil
+
+        guard let anchor = anchor(inFile: jump.file, line: jump.line) else { return }
+        // Rozbalí se a zvýrazní jen nález — u souboru by rámeček ukazoval na místo, kde žádný
+        // nález není, a rozbalovat by nebylo co. Ve dvou krocích, protože `scroll(to:)`
+        // zvýraznění **maže** (jedno místo pro všechny odskoky), takže se musí nastavit po něm —
+        // kdežto bublina se rozbaluje před ním, ať kotva v líném seznamu vůbec je.
+        if jump.kind == .finding { reveal(bubbleAt: jump.file, line: jump.line) }
+        scroll(to: anchor)
+        if jump.kind == .finding {
+            highlighted = FindingHighlight(file: jump.file, line: jump.line)
+        }
     }
 
     /// Tři řádky hlavičky, jak je má návrh (#218): titulek s číslem, souřadnice PR a pruh běhu.
@@ -503,8 +548,14 @@ struct PullRequestDetailView: View {
     /// Bez toho kliknutí na nález v `Přehledu` neudělalo nic: diff v tu chvíli v okně vůbec
     /// není, takže se nemá kde scrollovat. Přepnout tab je správnější než kliknutí ignorovat —
     /// kdo klikne na nález, chce vidět ten kód.
+    ///
+    /// **Zvýraznění se maže tady, na jednom místě** (nález si ho nastaví hned po skoku). Jinak by
+    /// zůstalo svítit u nálezu, od kterého se odskočilo — na komentář (#110) nebo na soubor
+    /// z palety (#184) — a ukazovalo by na kód, kde nikdo nic nehlásil. Nález Copilota na #184;
+    /// u skoku na komentář to bylo rozbité od #110.
     private func scroll(to anchor: String) {
         store.setDetailTab(.filesChanged, for: pullRequest.id)
+        highlighted = nil
         scrollTarget = anchor
     }
 
@@ -615,10 +666,15 @@ struct PullRequestDetailView: View {
     /// odpovědi ve vlákně — ty vlastní `⌘⏎` nemají (odesílají se pojmenovaným tlačítkem, viz
     /// tvrdá podmínka č. 1), takže se nic nepřebíjí; jen se nad rozdělaným review otevře
     /// potvrzení, které jde zavřít Escem.
+    /// **Nad otevřenou paletou je zakázaná** (#184): tam `⌘↵` otevírá vybraný výsledek na
+    /// GitHubu. Dvě tlačítka se stejnou zkratkou v jednom okně znamenají, že vyhraje to
+    /// zaregistrované později — a spletená zkratka nad rozdělaným review by otevřela potvrzení
+    /// odeslání, tedy zrovna to okno, které se omylem otevřít nemá. Zakázané tlačítko klávesu
+    /// nebere, takže propadne paletě.
     private var submitShortcut: some View {
         Button("Otevřít potvrzení odeslání") { draftActions.send() }
             .keyboardShortcut(.return, modifiers: .command)
-            .disabled(submission != nil || !canOpenSubmission)
+            .disabled(submission != nil || !canOpenSubmission || store.isPaletteOpen)
     }
 
     /// Dá se potvrzení vůbec otevřít? Rozhoduje `Policy`, ne tohle view — na totéž se ptá
@@ -633,8 +689,24 @@ struct PullRequestDetailView: View {
     /// Nález ukazuje na `file:line`; kde to je v diffu, ví `DiffRow`. Když se místo najít
     /// nedá (soubor v diffu není), nestane se nic — skákat naslepo je horší než nehnout se.
     private func jump(to finding: Finding) {
+        guard let path = finding.file, let anchor = anchor(inFile: path, line: finding.line) else {
+            return
+        }
+        reveal(bubbleOf: finding)
+        scroll(to: anchor)
+        // Zvýraznění se porovnává s tím, co nahlásil reviewer, ne s cestou v diffu — bublina
+        // nese jeho `file`, ne `displayPath`.
+        highlighted = FindingHighlight(file: path, line: finding.line)
+    }
+
+    /// Kotva na místo v diffu — a **rozbalený soubor**, protože ve sbaleném by skok skončil
+    /// nikde: jeho řádky v líném seznamu vůbec nejsou. Rozbalit se musí **předtím**, než se
+    /// nastaví cíl, jinak `scrollTo` míří na id, které v seznamu ještě není.
+    ///
+    /// `nil` = takové místo v diffu není. Jedno místo pro skok z nálezu i pro skok z palety
+    /// (#184); dvě kopie by se rozešly zrovna v tom, na čem tenhle skok stojí.
+    private func anchor(inFile path: String, line: Int?) -> String? {
         guard case .loaded(let diff, _) = store.diffState(for: pullRequest.id),
-              let path = finding.file,
               // Rozbalený kontext je uložený pod **novou** cestou souboru, kdežto nález umí
               // přijít pod starou. Bez překladu by kotva u přejmenovaného souboru rozbalený
               // kontext neviděla a skok by spadl na hlavičku.
@@ -642,25 +714,30 @@ struct PullRequestDetailView: View {
               let anchor = DiffRow.anchor(
                   in: diff,
                   file: path,
-                  line: finding.line,
+                  line: line,
                   revealed: store.expansion(of: file.displayPath, in: pullRequest.id).revealed
               )
-        else { return }
-        // Sbalený soubor nemá řádky, takže by skok skončil nikde. Rozbalit se musí
-        // **předtím**, než se nastaví cíl — jinak `scrollTo` míří na id, které v líném
-        // seznamu ještě není.
+        else { return nil }
         store.unfold(file.displayPath, in: pullRequest.id)
-        // A sbalená bublina se rozbalí (#185), ze stejného důvodu jako sbalený soubor o řádek
-        // výš: skok na značku ukáže pruh, ne nález, na který se kliklo. Skupina se hledá podle
-        // **nálezu v ní**, ne podle místa — nález bez řádku místo nemá, a zrovna na ten se
-        // z panelu kliká běžně.
-        if let group = findingGroups.first(where: { $0.findings.contains(finding) }) {
-            store.revealFinding(group, in: pullRequest.id)
-        }
-        scroll(to: anchor)
-        // Zvýraznění se porovnává s tím, co nahlásil reviewer, ne s cestou v diffu — bublina
-        // nese jeho `file`, ne `displayPath`.
-        highlighted = FindingHighlight(file: path, line: finding.line)
+        return anchor
+    }
+
+    /// Rozbalí **sbalenou bublinu**, na kterou se skáče (#185), ze stejného důvodu jako se
+    /// rozbaluje sbalený soubor: skok na značku ukáže pruh, ne nález, na který se kliklo.
+    ///
+    /// Dvě přetížení, protože skok z lišty a z tabulky nese **nález** — ten je jednoznačný i u
+    /// nálezu bez řádku, kterých může být v jednom souboru víc — kdežto žádost z palety (#184)
+    /// nese `file:line`. Bez řádku se z palety nerozbaluje nic a nemusí: kotva pak míří na
+    /// hlavičku souboru, takže na značce se skok nezastaví.
+    private func reveal(bubbleOf finding: Finding) {
+        guard let group = findingGroups.first(where: { $0.findings.contains(finding) }) else { return }
+        store.revealFinding(group, in: pullRequest.id)
+    }
+
+    private func reveal(bubbleAt file: String, line: Int?) {
+        guard let line, let group = findingGroups.first(where: { $0.file == file && $0.line == line })
+        else { return }
+        store.revealFinding(group, in: pullRequest.id)
     }
 
     /// Co se dá dělat s vlákny (#73) — jedno místo pro diff i `Přehled`, ať se v jednom

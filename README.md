@@ -52,6 +52,9 @@ jednotkách (`za 12min 29s znovu`). Zatímco se aplikace ptá, je tam místo č�
 typografie, kterou si aplikace platí vlastním formátováním odpočtu, protože systémový formát
 mezeru v české locale má a nejde z něj vyndat.
 
+Napravo v hlavičce stojí **`⌘K`** — command palette (#184), jedno pole nad nálezy, soubory
+otevřeného PR, pull requesty a akcemi. Popsaná je níž.
+
 Po startu si ověří, že má `gh`, `git` i `claude` a že je `gh` přihlášený — jinak řekne, co
 chybí a čím se to spraví. Pak se otevře seznam pull requestů napříč repozitáři, který se
 sám obnovuje. **Řádek začíná titulkem** (#172) a souřadnice — `repo #číslo · autor · čas
@@ -605,6 +608,54 @@ GitHub neumí — v payloadu review se nedá říct „tenhle je odpověď na ta
 ještě nemá identitu, na kterou by šlo odkázat. Odpovědět jde na vlákno, které z odeslaného
 komentáře vznikne.
 
+### Command palette ⌘K (#184)
+
+**Jedno pole na všechno.** S pěti PR a sedmi soubory je klikání únosné, s dvaceti už ne —
+a paleta je zároveň jediné místo, kde se nemusí pamatovat, kde co v okně bydlí. Otevírá se
+**⌘K** (druhé zmáčknutí zavře) nebo kapslí `⌘K` v hlavičce okna; ta tam je proto, že jinak by
+o paletě věděl jen ten, kdo si přečetl release notes.
+
+Výsledky jsou ve **čtyřech skupinách a jejich pořadí je pevné**: **Nálezy**, soubory otevřeného
+PR, pull requesty, akce. Nálezy jsou první schválně — je to jediná věc, kterou tahle aplikace má
+a prohlížeč ne, takže pořadí skupin je tvrzení o tom, k čemu je okno. Z každé skupiny je vidět
+**nejvýš šest** řádků; strop je na skupinu, protože jinak by dvacet nálezů vytlačilo všechno
+ostatní.
+
+**Pole má fokus hned po ⌘K** a je **prázdné** — paleta je „začínám hledat“, ne „vracím se
+k rozdělané práci“, takže po zavření z ní nezůstane text z minula.
+
+**Prázdný dotaz není prázdné okno** — ukáže začátek každé skupiny, tedy nabídku toho, co je po
+ruce: nálezy od nejvážnějšího, soubory v pořadí diffu, PR od naposledy změněného, akce v pevném
+pořadí. Hledá se **bez ohledu na velikost písmen a diakritiku** (`nalez` najde `nález`) a víc slov
+znamená **a zároveň** — `vault secret` najde nález ve `vaultu`, i když ta slova v textu vedle sebe
+nestojí. Shoda v titulku váží víc než v podtitulku, začátek slova víc než vnitřek; nalezený úsek
+je v řádku **zvýrazněný** — a to v tom textu, ve kterém se doopravdy potkal.
+
+Hledá se i **podle autora a podle repozitáře**: autor u pull requestů, repo u pull requestů
+i u nálezů. Obojí je proto vidět v podtitulku řádku (`connection#21663 · sykora-ji`) — výsledek,
+u kterého není poznat, proč vyšel, vypadá jako chyba hledání. Soubory podle repa nejdou: jsou
+všechny z jednoho otevřeného PR, takže by se vytáhly všechny naráz a nic by to nerozlišilo.
+
+`↵` otevře (nález i soubor **odscrollují diff** na to místo, nález se navíc zvýrazní),
+`⌘↵` otevře věc na GitHubu, `esc` zavře, `↑↓` chodí po řádcích a cyklí. Když nic nesedí, řekne
+to — a napíše, **kde** se hledalo: paleta se nikoho nedoptává, hledá jen v tom, co je v paměti.
+Proto jsou soubory jen z **otevřeného** PR (diff jiného v paměti není), zato nálezy ze **všech**;
+odmítnuté se nenabízejí, protože nálezu, kterému nevěřím, není kam skákat.
+
+**Filtr seznamu paletu nezužuje.** Filtr je zúžení seznamu, kdežto paleta je způsob, jak něco
+najít — a hledání, ze kterého vypadne schovaný PR, je k nepotřebě právě tehdy, když je filtr
+zapnutý.
+
+**Akce, ne jen navigace**: pustit review na otevřený PR (nebo ho zrušit, když běží), přepnout
+pohled na diff, složit panel s mým review, otevřít sekci railu, obnovit seznam, otevřít
+nastavení. Nabízí se **jen to, co by něco udělalo** — bez otevřeného PR tedy nic, co na PR visí.
+Kreslená zkratka je **vždycky ta skutečná** (`⌘2`, `⌘,`); návrh měl u „pustit review“ `⌘⇧R`, což
+v aplikaci dělá něco jiného (pustit review na vše, co neběželo, z dashboardu), takže se
+nenakreslila.
+
+**Odsud nic neodchází.** Paleta nemá přístup k `ReviewPublishing` a nepřidává druhou cestu ven;
+jediná věc, kterou pouští, je read-only reviewer.
+
 ### Odeslání review
 
 **Dvě kliknutí, dvě různá tlačítka.** `Odeslat review…` v tabu `Moje review` nic neodesílá —
@@ -1066,7 +1117,7 @@ App/                      zdrojáky aplikace — target PRism
                           vedle sebe a porovnání uvnitř přepsané dvojice (word-level diff)
   Health/                 dostupnost služeb pro stavový řádek: status pages, signály, monitor
   Markdown/               vykreslení Markdownu z GitHubu: bloky, inline HTML od botů
-  Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka
+  Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka, hledání v paletě
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR, brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data

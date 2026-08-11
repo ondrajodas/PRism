@@ -53,6 +53,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `conversation` / `findings` / `progress` (#242). `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) můžou přijít doprostřed levé skupiny, aniž by se posunul. Jako `ReviewVerdict` **není `Codable`** |
 | `PullRequestTabBadge` | Odznak u záložky (#242): `count` / `blocking` (červeně) / `live` (puntík). Výčtem, ne strukturou s příznaky — „puntík s počtem“ ani „blokující bez počtu“ význam nemá, takže se nemá dát napsat |
 | `ReviewPanelTab` | Co je vidět v panelu vpravo: `findings` / `draft` (#242). Jako `PullRequestTab` **není `Codable`** |
+| `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání — `Hit` nese **dva** rozsahy
+zvýraznění, jeden nad titulkem a jeden nad podtitulkem), `Jump` (žádost o odscrollování) a `Effect` (co zbývá na okno). **Není `Codable`** — je to obsah jednoho otevření palety. Jmenný prostor proto, že `Palette` v repu už znamená barvy okna |
 | `DiffLayout` | Jak se kreslí diff: `unified` (pod sebou) / `split` (vedle sebe). Nastavení **člověka, ne repa** — proto jen v `GlobalConfig` |
 | `NotificationEvent` | Co notifikaci vyvolalo: `newPullRequest` / `findings` / `clean` / `failure`. Nese si ji notifikace sama |
 | `NotificationSettings` | Co se má hlásit (#86) — hlavní vypínač a čtyři události. Jako `DiffLayout` jen globálně |
@@ -287,9 +289,13 @@ značka na hraně řádku**. Rozhoduje `Policy.disclosure(of:categories:toggled:
   u nezakotvené bubliny: věta „řádek v diffu není“ je až v obsahu, takže bez odznaku vypadá
   sbalená bublina u hlavičky souboru jako nález na prvním řádku hunku. Tatáž úvaha jako u odznaku
   zkráceného vlákna.
-- **Skok na nález ho rozbalí** (`AppStore.revealFinding`), z panelu i z lišty nad diffem — jinak
-  by cíl skoku byl pruh, na kterém není co přečíst. `reveal` přitom **nikdy nesbalí**: kdyby jen
-  překlikl, skok na blokující nález by ho zavřel.
+- **Skok na nález ho rozbalí** (`AppStore.revealFinding`), z panelu, z lišty nad diffem **i z palety
+  ⌘K** (#184) — jinak by cíl skoku byl pruh, na kterém není co přečíst. `reveal` přitom **nikdy
+  nesbalí**: kdyby jen překlikl, skok na blokující nález by ho zavřel. Skupinu hledá
+  `PullRequestDetailView.reveal(bubbleOf:)` podle **nálezu**, kdežto z palety
+  `reveal(bubbleAt:line:)` podle **místa** — žádost z palety nese `file:line`, ne nález, a to je
+  jednoznačné právě s řádkem (nálezů bez řádku může být v jednom souboru víc). Bez řádku se proto
+  nerozbaluje nic a nemusí: kotva pak míří na hlavičku souboru, takže na značce se skok nezastaví.
 - **Bublina a karta vlákna leží na téže ploše, a rozlišuje je hrana.** Do #185 měl blokující
   nález červené pozadí; návrh (`.inline-find`) má neutrální plochu a závažnost nese **proužek,
   obrys a puntík** — v diffu to má důvod, protože bublina visí nad zeleným i červeným řádkem
@@ -474,6 +480,30 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
 - **Ikonka není `Button`, ale obrázek s `onTapGesture`.** `Button` si tažení bere pro sebe, takže
   z pilulky nešlo roztáhnout rozsah. Klik a tažení se vylučují samy, protože drag má
   `minimumDistance`; kurzor, nápovědu a accessibility trait je proto potřeba doplnit ručně.
+- **Overlay gutteru se skládá po blocích, ne po řádcích** (#252). Do #252 měl každý řádek vlastní
+  `Color.clear` s `contentShape`, gestem, `onGeometryChange` a skrytou pilulkou — ve split pohledu
+  dvakrát, plus `HStack` se dvěma `Spacer`y na řádek. U šedesátiřádkového bloku je to **120 ploch
+  a přes čtyři stovky prvků k umístění**, a líný seznam je při každém přerovnání obsahu umisťuje
+  znovu; projíždění splitu o 1 904 rozbalených řádcích proto drželo 100 % CPU
+  (`LazySubviewPlacements.placeSubviews` v `sample`u, a z našeho kódu zrovna ty per-řádkové
+  closures). Dnes jsou to **dvě plochy na tažení, jedna pilulka a jeden `onGeometryChange`** na
+  celý blok; polohy řádků se z rámečků a z polohy bloku **dopočítají** (`DiffGutterGeometry`).
+  Změřeno: overlay bloku **3,05 ms → 0,12 ms**. Je to tatáž úvaha jako u šířky (#220) — nevyjednává
+  se ani počet prvků, když se dá spočítat.
+- **Poloha bloku se drží mimo observable stav** (`DiffBlockPlacement`). Souřadnice v prostoru obsahu
+  se při scrollování mění, protože si líný seznam obsah přeměřuje; ve `@State` by z toho byl layout
+  bloku při každém posunu — tedy nová podoba téhož problému. Je to tentýž trik jako u `DiffRowFrames`.
+- **Pilulka je jedna, ne šedesát prázdných.** Vidět je vždycky nejvýš jedna (řádek pod myší, nebo
+  konec taženého rozsahu), a prvek v `ForEach`i vzniká a umisťuje se i s prázdným obsahem —
+  „nekreslí se“ není totéž jako „nestojí nic“.
+- **Gesto je jedno na sloupec** a řádek, na kterém tažení začalo, se hledá podle `startLocation`.
+  Souřadnice jsou v prostoru obsahu, takže se od nich odečte poloha bloku.
+- **Hranice polovin je jeden výpočet na jednom místě** (`DiffGutterGeometry.rightColumnX(inBlockOfWidth:)`).
+  Pravý sloupec nezačíná v přesné půlce — mezi poloviny sází kontejner **1 pt dělicí čáru**, takže
+  `(šířka − 1) / 2 + 1`. Bere si to odsud jak `DiffPairBlockContainer.layout()`, tak plochy na tažení,
+  pilulka i rozpoznání strany pod myší; dva výpočty by znamenaly, že pilulka svítí v jedné polovině
+  a táhne se ve druhé. Do #252 na tom stál `HStack` se dvěma `Spacer`y a plocha vycházela o půl bodu
+  vlevo (nález Copilota na #272). Je to tatáž úvaha jako u šířky pro měření výšky (#236).
 
 Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne přečtené:
 
@@ -1555,6 +1585,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157). Drží **šířku kontejneru i měření výšky** (`height(forWidth:)`, `height(ofRows:)`), aby se šířka pro měření nemohla rozejít s tou pro kreslení (#236) |
 | `DiffCodeBlockView`, `DiffBlockRowView` | Blok v pohledu pod sebou a k němu pilulka na komentář a tažení rozsahu |
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
+| `DiffGutterGeometry`, `DiffBlockPlacement` | Aritmetika gutteru (#252) — kde leží plochy na tažení a pilulka, a poloha bloku v prostoru obsahu **mimo observable stav**. Čistý typ, aby se dal změřit i otestovat bez okna |
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
@@ -1605,7 +1636,9 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
 | `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
-| `hiddenShortcuts(_:)` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení i okno novinek |
+| `hiddenShortcuts(_:)` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení, okno novinek i paletu |
+| `CommandPaletteView`, `CommandPaletteRowView` | Command palette ⌘K (#184): pole, skupiny výsledků, zvýrazněná shoda v titulku, pruh s klávesami. Karta 560 bodů jako **překryv okna**, ne sheet |
+| `PullRequestStateAppearance` | Ikona a barva stavu **pull requestu** (ne review) — jedno místo pro řádek seznamu i pro paletu |
 | `AppDelegate` | Ukončení aplikace: dokud běží review, ptá se |
 
 ### Hlavička PR (#218)
@@ -1735,6 +1768,122 @@ schválně chovají jako přerušené, ne jako zrušené:
   `startAutomaticReviews`.
 - **Nic se neukládá jako doběhlé.** To platí i u zrušení (`Task.isCancelled` před zápisem) —
   zabitý běh není doběhlý běh a `čisté` by nad ním lhalo.
+
+### Command palette ⌘K (#184)
+
+Jediná obrazovka aplikace, která nemá předobraz v ničem starším: jedno pole nad **nálezy,
+soubory otevřeného PR, pull requesty a akcemi**. Rozdělená je na tři kusy a hranice mezi nimi je
+to podstatné:
+
+| Kde | Co tam patří |
+|---|---|
+| `CommandPalette` (`App/Models/`) | Tvary: `Item`, `Group`, `Target`, `Action`, `Mark`, `Hit`, `Section`, `Jump`, `Effect`. Žádné rozhodování, žádné barvy |
+| `Policy.paletteResults`, `Policy.paletteActions` (`App/Policy/CommandPaletteSearch.swift`) | **Rozhodování**: co na dotaz sedne, jak se to váží, kolik se toho ukáže, a které akce mají teď co dělat |
+| `AppStore+Palette` | Katalog z paměti store a vykonání cíle |
+| `CommandPaletteView`, `CommandPaletteRowView` | Sazba a klávesy. Ve view **není žádné `if` nad výsledky** |
+
+Co se u ní nemá rozbít:
+
+- **Pořadí skupin je pevné a je to tvrzení, ne kreslení.** Nálezy první, protože je to jediná
+  věc, kterou tahle aplikace má a prohlížeč ne. Nese ho **pořadí případů** v `CommandPalette.Group`,
+  takže se nedá přehodit ve view.
+- **Strop je na skupinu** (`Policy.paletteGroupLimit`, šest). Celkový strop by znamenal, že dvacet
+  nálezů vytlačí soubory, PR i akce — tedy zrovna to, kvůli čemu je paleta jedno pole na všechno.
+- **Prázdný dotaz vrací všechno, ne nic.** Paleta se otevírá jako nabídka toho, co je po ruce;
+  pořadí je pořadí katalogu (nálezy od nejvážnějšího přes `Policy.sorted`, soubory v pořadí diffu,
+  PR od naposledy změněného, akce v pevném pořadí).
+- **Řazení nese pořadí katalogu v klíči výslovně.** `sorted` v Swiftu nemá stabilitu v kontraktu,
+  takže bez druhého kritéria by řádky se stejnou váhou mezi stisky klávesy poskakovaly.
+- **Hledá se bez ohledu na velikost písmen a diakritiku** (`range(of:options:)`); aplikace je
+  česká, takže `nalez` musí najít `nález`. Víc slov je **a zároveň** — jinak by se nedalo napsat
+  `vault secret`.
+- **Hledá se i podle autora a repozitáře, a obojí je v podtitulku.** Autor u pull requestů
+  (`connection#21663 · sykora-ji`), repo u nálezů i u pull requestů. **Ne** v klíčových slovech,
+  kde autor do připomínky k #184 byl: klíčové slovo se nikde nekreslí, takže dotaz na jméno
+  vytáhl PR, ve kterém to jméno nebylo vidět — a výsledek, u kterého není poznat proč, vypadá jako
+  chyba hledání. **Soubory podle repa nejdou**: jsou všechny z jednoho otevřeného PR, takže by se
+  vytáhly všechny naráz a v podtitulku mají diffstat. Autor u nálezu taky ne — jméno, které k němu
+  patří, je jméno **revieweera**.
+- **Zvýrazňuje se v tom textu, ve kterém se to potkalo.** `Hit` nese dva rozsahy
+  (`titleHighlight`, `subtitleHighlight`), každý nad svým řetězcem; v jednom textu se zvýrazní
+  **první** slovo dotazu, které v něm sedlo. Shoda v **klíčovém slově** se nezvýrazňuje, protože
+  se klíčová slova nekreslí — a právě proto váží nejmíň a patří do nich jen nadmnožina něčeho
+  viditelného (celá cesta vs. jméno souboru, `owner/repo` vs. `repo#85`) nebo synonymum titulku.
+- **Váhy: titulek (0–2) > podtitulek (3) > klíčové slovo (4).** Shoda v titulku musí zůstat před
+  shodou v autorovi nebo v repu, jinak dotaz na slovo z titulku vytáhne nahoru cizí PR od stejně
+  pojmenovaného autora. Podtitulek má **jednu** váhu, ne tři jako titulek: je to výčet dvou
+  souřadnic, takže „začátek“ v něm znamená repo a „vnitřek“ autora, a mezi těmi dvěma se nemá
+  rozhodovat podle pozice v řetězci.
+- **Podtitulek se o šířku hlásí první a nezkracuje se.** Změřeno: karta má 560 bodů, na oba texty
+  z nich zbývá ~489 a nejdelší podtitulek ve skutečných datech
+  (`prism-review-sandbox#4 · github-actions[bot]`) měří 254. Ustupuje tedy titulek — a to je
+  správné pořadí, protože shoda v autorovi je na **konci** podtitulku, takže by ji zkrácení uřízlo
+  jako první.
+- **Katalog se skládá při každém stisku klávesy, ne jednou při otevření.** Snímek by za pár sekund
+  ukazoval nálezy z review, které mezitím doběhlo. Změřeno (`CommandPaletteMeasurement`):
+  200 řádků 1,5 ms, 2000 řádků 17,6 ms na stisk — reálný katalog (dvacet PR, desítky nálezů,
+  padesát souborů) je řádově ten první případ.
+- **Paleta se nikoho nedoptává.** Nálezy jsou z `reviewRecords`, soubory z **načteného** diffu
+  otevřeného PR, PR z posledního tiku. Diff jiného PR by byl nový dotaz na GitHub — a ten zadání
+  #184 zakazuje. Je na to test, který po vykonání každého druhu cíle porovnává počty volání
+  gateway.
+- **Čte se plný seznam `pullRequests`, ne `visiblePullRequests`.** Filtr je zúžení *seznamu*,
+  kdežto paleta je způsob, jak něco najít; hledání, ze kterého vypadne schovaný PR, je
+  k nepotřebě právě tehdy, když je filtr zapnutý. Nic se tím neriskuje — paleta jen čte, úklid
+  cache na zúženém getteru nevisí (viz `AppStore`).
+- **Nálezy jsou ze všech PR, a `id` řádku se skládá z indexu.** `Policy.key(of:)` se umí zopakovat
+  (týž reviewer nahlásí totéž dvakrát) a dva řádky s jedním `id` by SwiftUI slil — zmizel by
+  nález, který se zrovna hledá. Pořadí PR: otevřený první, pak seznam z pollingu; iterace přes
+  `reviewRecords` (slovník) by pořadí měnila mezi stisky klávesy.
+- **Odmítnuté nálezy se nenabízejí** — nálezu, kterému nevěřím, není kam skákat.
+- **Nabízí se jen akce, které by něco udělaly.** Bez otevřeného PR tedy nic, co na PR visí
+  (review, pohled na diff, panel); sekce railu, která je zrovna vidět v domácí záložce, taky ne.
+  Tatáž zásada jako u bloku `Co teď` na dashboardu.
+- **Kreslená zkratka musí být skutečná.** V paletě jsou dvě (`⌘2`, `⌘,`). Návrh má u „pustit
+  review“ `⌘⇧R`, ale ta v aplikaci pouští review na **všechno, co neběželo** (dashboard) —
+  nakreslit ji tady by byla lež o tom, co okno umí.
+- **Odsud nic neodchází** (tvrdá podmínka č. 1). Ve `CommandPalette.Action` není nic, co by sahalo
+  na `ReviewPublishing`; jediná věc, kterou paleta pouští, je read-only reviewer.
+
+Klávesy a stav:
+
+- **`isPaletteOpen` je ve storu, ne v `@State` okna**, protože si o něj musí říct dvě různá místa:
+  paleta a **detail PR**, který nad otevřenou paletou zakáže svoje `⌘⏎` (potvrzení odeslání). Dvě
+  tlačítka se stejnou zkratkou v jednom okně znamenají, že vyhraje to zaregistrované později —
+  a spletená zkratka by z palety otevřela potvrzení odeslání review.
+- **Dotaz a kurzor jsou naopak `@State`** a mají zaniknout se zavřením: paleta je „začínám hledat“,
+  ne „vracím se k rozdělané práci“, takže text z minula by po ⌘K vypadal jako výsledky k něčemu, na
+  co se nikdo neptal. Není to úklid, který by někdo musel dělat — `CommandPaletteView` vzniká až
+  s otevřenou paletou.
+- **Fokus do pole se nastavuje až po jednom průchodu smyčky** — `task { await Task.yield(); … }`.
+  Přiřazení ve stejném průchodu, ve kterém pole vzniká, SwiftUI **zahodí**, takže `onAppear`
+  (a `task` bez yieldu) fokus nedá **nikdy**; `defaultFocus` taky ne, protože je na počáteční fokus
+  scény a překryv v už otevřeném okně žádná nová scéna není. Všechny tři varianty jsou změřené na
+  běžící aplikaci (`AXFocused` + znaky poslané hned po ⌘K) — s yieldem je fokus v poli ~40 ms po
+  ⌘K, a rozhoduje **počet průchodů, ne čas**.
+- **Zkratky jsou tlačítka v `hiddenShortcuts`, ne `onKeyPress`.** To se váže na fokus a v tomhle
+  okně ho spolkne pole nebo seznam pod paletou (viz `HiddenShortcuts`). Plné `↵` bere `TextField`
+  přes `onSubmit` — `keyboardShortcut(.defaultAction)` se s polem o tutéž klávesu přetahuje.
+  **Fokus v poli tomu nevadí**: změřeno, že `esc` paletu zavře i s kurzorem v poli a `↑↓` chodí dál
+  po řádcích, protože key equivalent tlačítka se vyhodnocuje dřív, než se klávesa dostane k editoru
+  textu.
+- **Skok do diffu jde přes `AppStore.paletteJump`.** Rozhodnutí „skoč sem“ padá nad celým oknem,
+  ale odscrollovat umí jedině detail PR (kotvy řádků, `ScrollViewProxy`). Žádost proto nese
+  vlastní `id` (`UUID`), aby se dala vyžádat **dvakrát** — `task(id:)` se na shodné hodnotě
+  podruhé nespustí. Klíčem té úlohy je **žádost i to, jestli je diff načtený**: paleta umí skočit
+  do PR, jehož záložka právě vznikla, takže diff v tu chvíli ještě není. Nevyzvednutá žádost se
+  uklízí s PR mimo seznam, jako rozdělané tažení komentáře.
+- **Nález bez místa v kódu otevře tab `Nálezy`**, ne diff. Skákat naslepo je horší než skočit tam,
+  kde ten nález doopravdy je.
+- **Nastavení otevírá okno, takže ho vykoná view.** `AppStore.reveal(_:)` vrátí
+  `CommandPalette.Effect.openSettings` a `ContentView` zavolá `openSettings` z environmentu; store
+  scénu otevřít neumí a nemá si to ani pamatovat.
+- **Karta je překryv okna, ne sheet.** Sheet si bere šířku okna a přijíždí jako dialog; návrh má
+  kartu 560 bodů, která visí nad obsahem a zbytek jen ztmaví. Ztmavení **bere kliknutí** (klik
+  mimo zavře) — tím se liší od ztmavení pod oknem nastavení, které klik schválně propouští.
+- **Výška seznamu se měří, šířka se předává** (#220). `ScrollView` je v ose scrollování
+  nenasytný, takže bez `onGeometryChange` by byla karta vysoká i nad dvěma výsledky; šířka jde
+  dolů přes `availableWidth(560)` a řádky ji nevyjednávají.
 
 ## Šířka v okně (`App/Views/AvailableWidth.swift`)
 
@@ -2189,7 +2338,15 @@ Sbalení celých souborů (`foldedFiles`) je **jiná věc než rozbalení kontex
   ze souřadnic. Drží je `DiffRowFrames`, a to **mimo observable stav** — zápis při každém
   přeměření by jinak překresloval celý diff, tedy tatáž třída problému, která u #98 aplikaci
   zasekla. Souřadnice jsou v prostoru **obsahu** (`DiffView.contentSpace`), ne okna: scrollování
-  s rámečky nehýbe, takže se přeměřování nespouští.
+  s rámečky nehýbe — **ale docela klidné to není**: líný seznam si obsah průběžně přeměřuje, takže
+  se poloha bloků v tom prostoru při scrollování posouvá a rámečky se hlásí znovu (změřeno u #252,
+  kde `DiffRowFrames.note` v sampleu ležel pod rozvržením líného seznamu).
+- **Hlásí se naráz za celý blok** (#252), ne po jednom rámečku. Úklid zastaralých záznamů je
+  lineární v jejich počtu, takže po řádcích to bylo kvadratické — 120 ploch bloku dvojic proti
+  tisícům záznamů velkého souboru je stovky tisíc porovnání na jeden blok, který vjede do okna
+  (změřeno **22,6 ms → 1,40 ms**). Pořadí je **napřed úklid, potom zápis**: obráceně by blok vyklidil
+  sám sebe, protože leží celý ve své ploše. Prázdná plocha se ignoruje — blok, který se ještě
+  nerozložil, hlásí nulový rámeček a vyklidil by cizí záznamy na souřadnici nula.
 - **Táhne se přes celý řádek, ne jen přes sloupec s čísly.** GitHub má gesto v číslech, ale tady
   je nad diffem vypnuté vybírání textu, takže tažení přes kód nic nepřebíjí — a úzký sloupec se
   trefuje hůř. `minimumDistance` je nenulová, aby samotný klik zůstal kliknutím (jednořádkový
@@ -3221,6 +3378,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.reviewNotification(for:state:blocking:topFinding:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět. Titulek nese počty (#200), tělo nález a pod ním PR |
 | `Policy.newPullRequestNotification(for:title:isReReview:)` | Notifikace o novém PR ve frontě (#85); re-review se pozná textem (#137) |
 | `Policy.newPullRequestsNotification(for:titles:reviewed:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
+| `Policy.paletteResults(of:query:limit:)`, `Policy.paletteTokens(in:)` | Hledání v paletě ⌘K (#184): co na dotaz sedne, jak se to váží, kolik z každé skupiny je vidět. Prázdný dotaz vrací **všechno** v pořadí katalogu; pořadí skupin drží `CommandPalette.Group`. Váhy: titulek (začátek > hranice slova > vnitřek) **před** podtitulkem (repo, autor) a ten před klíčovým slovem; vrací i **dva rozsahy zvýraznění**, aby bylo z řádku vidět, proč vyšel |
+| `Policy.paletteActions(open:isReviewing:hasRun:layout:isPanelExpanded:section:)`, `Policy.paletteLabel(of:)` | Které akce mají teď co dělat (#184) a jak se jmenují. Řádek, který by nic neudělal, se nenabízí |
 | `Policy.sortedReleases(_:)` | Vydání od nejnovějšího (#127) — podle **data**, ne podle tagu |
 | `Policy.newReleases(in:since:)` | Co vyšlo od poslední viděné verze; neznámá značka = **nic** |
 | `Policy.recheckStatuses(_:of:)` | Spáruje odpovědi kontroly (#150) s nálezy, na které se ptala — index z promptu → `Policy.key(of:)`. **Nepáruje se přes text**: model si věty přeformuluje |
