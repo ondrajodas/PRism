@@ -420,6 +420,164 @@ struct DiffPerformanceMeasurement {
         }
     }
 
+    // MARK: - Co stojí overlay gutteru (#252)
+
+    /// **Kolik stojí rozvržení overlay gutteru** — tedy ploch na tažení a pilulky, které leží nad
+    /// blokem kódu. Tohle je to měření, kvůli kterému #252 vzniklo: projíždění velkého diffu vedle
+    /// sebe drželo 100 % CPU a v sampleu byl `LazySubviewPlacements.placeSubviews`, ne naše funkce.
+    ///
+    /// Měří se **tvar stromu**, ne skutečné views — stejně jako u hloubky zanoření (#220), a ze
+    /// stejného důvodu: overlay si polohy bere z rámečků, které textové view hlásí až po layoutu,
+    /// takže z jednoho offscreen renderu by vyšel prázdný. Tvary jsou opsané z obou verzí:
+    ///
+    /// 1. `po řádcích` — do #252: `ForEach` přes řádky a v každém `HStack` se dvěma `Spacer`y, dvě
+    ///    plochy s `contentShape`, gestem a `onGeometryChange`. U bloku o 60 řádcích je to přes
+    ///    čtyři stovky prvků k umístění, a líný seznam je při scrollování umisťuje pořád dokola.
+    /// 2. `po bloku` — od #252: dvě souvislé plochy, jedna pilulka a jeden `onGeometryChange` na
+    ///    celý blok; polohy řádků se dopočítají aritmetikou (`DiffGutterGeometry`).
+    ///
+    /// Naměřeno na tomhle stroji (60 řádků, šířka 900): **po řádcích 3,05 ms, po bloku 0,12 ms** —
+    /// tedy 26×. Pro srovnání: samotný text téhož bloku stojí 2,8 ms, takže overlay býval dražší
+    /// než kód, který zdobí. Zbytek ceny projíždění je sazba textu, na kterou #252 nesahá.
+    @MainActor
+    @Test("Cena overlay gutteru podle tvaru (#252)")
+    func gutterOverlayShapeCost() {
+        let frames = (0..<DiffBlock.maxLines).map { index in
+            DiffBlockLineFrame(
+                index: index,
+                line: DiffLine(kind: .context, oldNumber: index + 1, newNumber: index + 1, text: "kód"),
+                rect: CGRect(x: 0, y: 2 + Double(index) * 16, width: 900, height: 16)
+            )
+        }
+        for variant in GutterVariant.allCases {
+            // Průměr z deseti průchodů, ne jeden render: rozdíl je v jednotkách milisekund, takže
+            // by ho jediný průchod utopil v zahřívání.
+            measure("overlay gutteru \(variant.label), \(frames.count) řádků") {
+                render(gutter(frames, variant: variant), width: 900)
+            }
+        }
+    }
+
+    enum GutterVariant: String, CaseIterable {
+        /// Tvar do #252: plocha, pilulka, gesto a čtení geometrie u **každého** řádku a strany.
+        case perLine
+        /// Tvar od #252: dvě plochy, jedna pilulka a jedno čtení geometrie na celý blok.
+        case perBlock
+
+        var label: String {
+            switch self {
+            case .perLine: "po řádcích (do #252)"
+            case .perBlock: "po bloku (od #252)"
+            }
+        }
+    }
+
+    @MainActor
+    private func gutter(_ frames: [DiffBlockLineFrame], variant: GutterVariant) -> AnyView {
+        let geometry = DiffGutterGeometry.split(frames: frames)
+        let span = geometry.span ?? (top: 0, height: 0)
+        switch variant {
+        case .perLine:
+            return AnyView(
+                Color.clear
+                    .frame(height: 962)
+                    .overlay(alignment: .topLeading) {
+                        ForEach(frames) { frame in
+                            HStack(spacing: 0) {
+                                perLineGutter(frame, geometry: geometry)
+                                Spacer(minLength: 0)
+                                perLineGutter(frame, geometry: geometry)
+                                Spacer(minLength: 0)
+                            }
+                            .frame(height: frame.rect.height)
+                            .offset(y: frame.rect.minY)
+                        }
+                    }
+                    .coordinateSpace(.named(DiffView.contentSpace))
+            )
+        case .perBlock:
+            return AnyView(
+                Color.clear
+                    .frame(height: 962)
+                    .overlay(alignment: .topLeading) {
+                        ZStack(alignment: .topLeading) {
+                            ForEach([DiffSide.left, .right], id: \.self) { side in
+                                Color.clear
+                                    .frame(width: geometry.gutterWidth, height: span.height)
+                                    .contentShape(.rect)
+                                    .offset(x: geometry.x(of: side), y: span.top)
+                                    .gesture(DragGesture(minimumDistance: 3))
+                            }
+                            Image(systemName: "plus.bubble.fill")
+                                .frame(width: 18, height: 14)
+                                .offset(y: span.top)
+                        }
+                    }
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DiffView.contentSpace)) } action: { _ in }
+                    .coordinateSpace(.named(DiffView.contentSpace))
+            )
+        }
+    }
+
+    /// Plocha jednoho řádku a strany tak, jak vypadala do #252 — s vlastním gestem i čtením
+    /// geometrie. Akce jsou prázdné schválně: měří se **umístění prvků**, ne to, co se v nich
+    /// počítá (cena zápisu do `DiffRowFrames` se měří zvlášť, viz `rangeFrameNoteCost`).
+    @MainActor
+    private func perLineGutter(_ frame: DiffBlockLineFrame, geometry: DiffGutterGeometry) -> some View {
+        Color.clear
+            .frame(width: geometry.gutterWidth, height: frame.rect.height)
+            .contentShape(.rect)
+            .overlay(alignment: .leading) { Color.clear.frame(width: 18, height: 14) }
+            .gesture(DragGesture(minimumDistance: 3))
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DiffView.contentSpace)) } action: { _ in }
+    }
+
+    /// **Cena zápisu ploch do `DiffRowFrames`** podle toho, jestli se hlásí po řádcích, nebo za
+    /// celý blok naráz (#252).
+    ///
+    /// Úklid zastaralých záznamů je lineární v jejich počtu, takže po řádcích to je kvadratické:
+    /// blok dvojic o 60 řádcích má 120 ploch a v krabici velkého souboru leží tisíce záznamů.
+    /// Volá se to při každém přerovnání obsahu líného seznamu, tedy při scrollování pořád.
+    ///
+    /// Naměřeno na tomhle stroji (krabice s 4000 záznamy, blok o 120 plochách): **po řádcích
+    /// 22,6 ms, naráz 1,40 ms** — 16×.
+    @MainActor
+    @Test("Cena zápisu ploch pro tažení (#252)")
+    func rangeFrameNoteCost() {
+        // Krabice jako u velkého souboru: 2000 dvojic × 2 strany.
+        let filler = (0..<4000).map { index in
+            DiffRowFrames.Entry(
+                id: "filler\(index)",
+                rect: CGRect(x: index.isMultiple(of: 2) ? 0 : 450, y: Double(index / 2) * 16, width: 84, height: 16),
+                anchor: DraftAnchor(line: index / 2 + 1, side: index.isMultiple(of: 2) ? .left : .right)
+            )
+        }
+        // Blok, který právě vjel do okna — leží pod tou náplní, aby se s ní nepřekrýval.
+        let block = (0..<120).map { index in
+            DiffRowFrames.Entry(
+                id: "block\(index)",
+                rect: CGRect(x: index.isMultiple(of: 2) ? 0 : 450, y: 40_000 + Double(index / 2) * 16, width: 84, height: 16),
+                anchor: DraftAnchor(line: 3000 + index / 2, side: index.isMultiple(of: 2) ? .left : .right)
+            )
+        }
+        let area = CGRect(x: 0, y: 40_000, width: 900, height: 960)
+
+        func filled() -> DiffRowFrames {
+            let box = DiffRowFrames()
+            box.note(filler, covering: CGRect(x: 0, y: 0, width: 900, height: 32_000))
+            return box
+        }
+
+        measure("zápis ploch po řádcích, \(block.count) ploch do krabice s \(filler.count) záznamy") {
+            let box = filled()
+            for row in block { box.note([row], covering: row.rect) }
+        }
+        measure("zápis ploch naráz, \(block.count) ploch do krabice s \(filler.count) záznamy") {
+            let box = filled()
+            box.note(block, covering: area)
+        }
+    }
+
     // MARK: - Co stojí obarvení (#224)
 
     /// Před a po zavedení cache, na jednom souboru o 2400 řádcích.

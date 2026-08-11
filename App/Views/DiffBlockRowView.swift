@@ -27,6 +27,8 @@ struct DiffBlockRowView: View {
     @State private var frames: [DiffBlockLineFrame] = []
     /// Řádek pod myší — jen jeho pilulka je vidět, jako dosud u `DiffLineView`.
     @State private var hovered: Int?
+    /// Poloha bloku v prostoru obsahu, **mimo observable stav** — viz `DiffBlockPlacement` (#252).
+    @State private var placement = DiffBlockPlacement()
 
     var body: some View {
         DiffCodeBlockView(
@@ -35,17 +37,23 @@ struct DiffBlockRowView: View {
             colorScheme: colorScheme,
             commentRangeLines: rows(in: commentRangeCells),
             draggedLines: rows(in: draggedCells),
-            noteFrames: { frames = $0 }
+            noteFrames: { frames = $0; noteRows() }
         )
-        // Pilulky a plochy na tažení leží nad textem, každá u svého řádku.
+        // Plocha na tažení a pilulka leží nad textem, pozicované podle rámečků řádků.
         .overlay(alignment: .topLeading) { gutter }
+        // Rámeček **celého bloku** v souřadnicích obsahu diffu — jeden na blok, ne jeden na řádek
+        // (#252). Plochy řádků se z něj dopočítají aritmetikou (`DiffGutterGeometry`).
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DiffView.contentSpace)) } action: { rect in
+            placement.rect = rect
+            noteRows()
+        }
         // **Rozhoduje jen `y`, ne celý rámeček řádku.** Rámečky jsou rámečky *textu*, takže začínají
         // až za sloupcem s čísly — a `contains(point)` znamenalo, že jak myš zamířila na pilulku,
         // hover zhasl a pilulka zmizela pod rukou. Nedalo se na ni kliknout (nahlášené při zkoušení
         // #157); je to tatáž past jako u #98, kde tlačítko vyčnívalo do dalšího řádku.
         .onContinuousHover { phase in
             switch phase {
-            case .active(let point): hovered = frames.first { row(at: point.y, in: $0) }?.index
+            case .active(let point): hovered = geometry.line(atY: point.y)?.index
             case .ended: hovered = nil
             }
         }
@@ -67,52 +75,88 @@ struct DiffBlockRowView: View {
 
     /// Sloupec s čísly: plocha na tažení rozsahu a v ní pilulka na komentář.
     ///
-    /// Kreslí se **absolutně podle rámečků řádků**, ne ve `VStack`u: řádky mají různou výšku
-    /// (dlouhý kód se zalomí) a jediný zdroj pravdy o jejich poloze je layout textového view.
-    private var gutter: some View {
-        ForEach(frames) { frame in
+    /// Poloha se **počítá z rámečků řádků**, které hlásí layout textového view — jediný zdroj
+    /// pravdy o tom, kde řádek je (dlouhý kód se v tomhle pohledu zalomí, takže řádky mají různou
+    /// výšku a `index × výška` by lhal).
+    ///
+    /// **Jeden prvek na blok a jedna pilulka, ne prvek na každý řádek** (#252): plocha na tažení je
+    /// souvislá, takže ji nemá smysl skládat z šedesáti dílů, které pak líný seznam při každém
+    /// posunu znovu umisťuje.
+    @ViewBuilder private var gutter: some View {
+        if let span = geometry.span {
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                    .frame(width: geometry.gutterWidth, height: span.height)
+                    .contentShape(.rect)
+                    .offset(y: span.top)
+                    .gesture(rangeGesture)
+                pill
+            }
+        }
+    }
+
+    /// Pilulka na komentář — **nejvýš jedna**: normálně u řádku pod myší, při tažení na konci
+    /// rozsahu (jinak by svítila na dvou místech a poskakovala).
+    ///
+    /// Sedí v prázdné ploše svého řádku a v ní `.leading` — tedy tam, kde ji držel `overlay` uvnitř
+    /// gutteru řádku do #252. Odsadit ji přímo by znamenalo dopočítat svislé vystředění ručně, a to
+    /// je druhé místo, které se s výškou řádku umí rozejít (viz #98). Řádek se tady navíc zalamuje,
+    /// takže výšky nejsou stejné.
+    @ViewBuilder private var pill: some View {
+        if let spot = pilled {
             Color.clear
-                .frame(width: DiffLineView.contentInset(for: .unified), height: frame.rect.height)
-                .contentShape(.rect)
-                .overlay(alignment: .leading) { pill(for: frame) }
-                .offset(y: frame.rect.minY)
-                .gesture(rangeGesture(for: frame))
-                // Rámeček řádku pro tažení — v souřadnicích **obsahu** diffu, jako u `DiffLineView`.
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DiffView.contentSpace)) } action: { rect in
-                    rangeDrag.frames?.note(rect, id: id(of: frame), anchor: anchor(of: frame))
+                .frame(width: geometry.gutterWidth, height: spot.frame.rect.height)
+                .overlay(alignment: .leading) {
+                    Image(systemName: symbol(of: spot.action))
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .frame(width: 18, height: max(spot.frame.rect.height - 2, 14))
+                        .background(.tint, in: .rect(cornerRadius: 4))
+                        .contentShape(.rect)
+                        // `onTapGesture`, ne `Button`: `Button` si tažení bere pro sebe, takže by
+                        // z pilulky nešlo roztáhnout rozsah (#157).
+                        .onTapGesture {
+                            performDraftAction(spot.action, NSEvent.modifierFlags.contains(.shift))
+                        }
+                        .help(spot.action.hint)
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityLabel(spot.action.hint)
                 }
+                .offset(y: spot.frame.rect.minY)
         }
     }
 
-    @ViewBuilder private func pill(for frame: DiffBlockLineFrame) -> some View {
-        if let action = draft.action(for: frame.line), shows(frame) {
-            Image(systemName: symbol(of: action))
-                .font(.caption)
-                .foregroundStyle(.white)
-                .frame(width: 18, height: max(frame.rect.height - 2, 14))
-                .background(.tint, in: .rect(cornerRadius: 4))
-                .contentShape(.rect)
-                // `onTapGesture`, ne `Button`: `Button` si tažení bere pro sebe, takže by z pilulky
-                // nešlo roztáhnout rozsah (#157).
-                .onTapGesture {
-                    performDraftAction(action, NSEvent.modifierFlags.contains(.shift))
-                }
-                .help(action.hint)
-                .accessibilityAddTraits(.isButton)
-                .accessibilityLabel(action.hint)
+    private var geometry: DiffGutterGeometry { .unified(frames: frames) }
+
+    /// Kde svítí pilulka a co udělá.
+    private var pilled: (frame: DiffBlockLineFrame, action: LineDraftAction)? {
+        if let dragEnd {
+            for frame in frames where anchor(of: frame)?.end == dragEnd {
+                if let action = draft.action(for: frame.line) { return (frame, action) }
+            }
+            return nil
         }
+        guard let hovered,
+              let frame = frames.first(where: { $0.index == hovered }),
+              let action = draft.action(for: frame.line)
+        else { return nil }
+        return (frame, action)
     }
 
-    /// Leží myš ve svislém rozsahu tohohle řádku? Vodorovně se neptáme schválně — pilulka i čísla
-    /// stojí vlevo od textu a musí na myš reagovat taky.
-    private func row(at y: Double, in frame: DiffBlockLineFrame) -> Bool {
-        y >= frame.rect.minY && y < frame.rect.maxY
-    }
-
-    /// Kdy je pilulka vidět: normálně nad řádkem pod myší, **při tažení jen na konci rozsahu** —
-    /// jinak by svítila na dvou místech a poskakovala.
-    private func shows(_ frame: DiffBlockLineFrame) -> Bool {
-        if let dragEnd { anchor(of: frame)?.end == dragEnd } else { hovered == frame.index }
+    /// Zapíše plochy řádků do krabice pro tažení — **naráz za celý blok** (#252).
+    private func noteRows() {
+        guard let box = rangeDrag.frames else { return }
+        let gutter = geometry
+        let origin = placement.rect.origin
+        let rows = frames.compactMap { frame -> DiffRowFrames.Entry? in
+            guard let anchor = anchor(of: frame) else { return nil }
+            return DiffRowFrames.Entry(
+                id: id(of: frame),
+                rect: gutter.rect(of: frame, on: nil).offsetBy(dx: origin.x, dy: origin.y),
+                anchor: anchor
+            )
+        }
+        box.note(rows, covering: placement.rect)
     }
 
     private func anchor(of frame: DiffBlockLineFrame) -> DraftAnchor? {
@@ -124,10 +168,14 @@ struct DiffBlockRowView: View {
         "\(blockID)l\(frame.index)"
     }
 
-    private func rangeGesture(for frame: DiffBlockLineFrame) -> some Gesture {
+    /// Tažení rozsahu. Gesto je **jedno na blok**, ne na každý řádek (#252), takže se řádek, na
+    /// kterém tažení začalo, hledá podle `startLocation` — v souřadnicích obsahu, ze kterých se
+    /// poloha bloku odečte.
+    private var rangeGesture: some Gesture {
         DragGesture(minimumDistance: 3, coordinateSpace: .named(DiffView.contentSpace))
             .onChanged { value in
-                guard let anchor = anchor(of: frame) else { return }
+                let y = value.startLocation.y - placement.rect.minY
+                guard let frame = geometry.line(atY: y), let anchor = anchor(of: frame) else { return }
                 rangeDrag.move(anchor, rangeDrag.frames?.anchor(at: value.location, on: nil))
             }
             .onEnded { _ in rangeDrag.end() }
