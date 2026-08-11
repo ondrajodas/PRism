@@ -595,7 +595,7 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
 9. **Revize okna** (M9) — nový vizuální jazyk podle návrhu ze srpna 2026 a přestavba okna
    na záložky. Šestnáct issues ve čtyřech vlnách; **pořadí je v popisu milníku**, protože se
    podle něj rozhoduje, co se dá dělat souběžně. Hotové: řádek fronty #172, co se změnilo od
-   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219, sazba bloku „od minule“ #226, sazba hlavičky PR #218, odpočet příštího tiku #237, přišpendlený blokující nález #185 a command palette ⌘K #184. Mimo plán přibylo
+   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219, sazba bloku „od minule“ #226, sazba hlavičky PR #218, odpočet příštího tiku #237, přišpendlený blokující nález #185, command palette ⌘K #184 a přepínání záložek ⌃Tab #245. Mimo plán přibylo
    **#220 — okno vytuhlo na PR s ~2000 změněnými řádky**: pružná šířka na každé úrovni zanoření
    stojí ~5,5× na úroveň, takže se šířka teď měří jednou a předává dolů. Odpadlo z toho #223
    (blok bez stropu) a #224 (barvení bez cache) do milníku Průběžné — obojí se měřením vyloučilo
@@ -625,6 +625,15 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
    U #216 se **rozšířila tvrdá podmínka č. 1**: `ReviewPublishing` má čtvrtou metodu
    (`comment`), protože composer komentáře pod PR je v návrhu a bez něj se pod PR nedá napsat
    z okna vůbec. Podrobnosti a důvod jsou v `CLAUDE.md` a ve specifikaci.
+
+   U #245 se **nepřidal fallback `⌘⇧]` / `⌘⇧[`**, který zadání chystalo pro případ, že by `⌃Tab`
+   spolkl textový editor: změřeno, že ho nespolkne — přepne záložku i s kurzorem v těle review
+   a v composeru komentáře, do textu nevloží tabulátor a nepřehodí fokus. Místo toho vyšla ven
+   jiná past: **`⌃⇧⇥` je pro AppKit jiná klávesa než `⌃⇥`** (`U+0019`, backTab), takže zpětná
+   zkratka zapsaná jako `.tab` se shiftem nezabere vůbec. A `tabbingMode = .disallowed` ze zadání
+   **dnes nic nerozhoduje** — nabídka `Okno` má systémové záložky zakázané i bez něj, protože
+   schovaná titulková lišta dělá okno netabovatelným; zůstal jako vyslovený záměr. Všechno tři je
+   změřené, podrobnosti v [`testovani.md`](testovani.md) a ve specifikaci.
 
    Vlna A (#172, #173, #174, #175, #187) je záměrně první a **nestojí na přestavbě okna**:
    je z ní vidět, jestli nový vizuální jazyk sedí, dřív než se do něj investuje přepis

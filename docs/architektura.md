@@ -1503,9 +1503,9 @@ na `.task` okna, takže zavření okna ji zruší.
 | View | Co dělá |
 |---|---|
 | `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
-| `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) |
+| `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) — a od #245 **vypnutí systémových záložek oken** (`tabbingMode = .disallowed`), aby se `⌃Tab` nepřetahoval s AppKitem |
 | `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky; **zelená a červená diffu jdou dál z `DiffLineView.signColor(of:)`**, aby se `+` v řádku nerozešlo s `+12` nad ním (#156) |
-| `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180) |
+| `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
 | `DashboardView` | Startovní obrazovka (#181): pozdrav, čtyři karty, fronta podle závažnosti, legenda reviewerů a `Co teď` |
@@ -1578,7 +1578,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
 | `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
-| `hiddenShortcuts(_:)` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení, okno novinek i paletu |
+| `hiddenShortcuts(_:)`, `KeyEquivalent.backTab` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení, okno novinek, paletu i přepínání záložek (#245). `backTab` je tam proto, že `⌃⇧⇥` doručí `U+0019`, tedy jinou klávesu než `⇥` |
 | `CommandPaletteView`, `CommandPaletteRowView` | Command palette ⌘K (#184): pole, skupiny výsledků, zvýrazněná shoda v titulku, pruh s klávesami. Karta 560 bodů jako **překryv okna**, ne sheet |
 | `PullRequestStateAppearance` | Ikona a barva stavu **pull requestu** (ne review) — jedno místo pro řádek seznamu i pro paletu |
 | `AppDelegate` | Ukončení aplikace: dokud běží review, ptá se |
@@ -3288,6 +3288,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.newPullRequestsNotification(for:titles:reviewed:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
 | `Policy.paletteResults(of:query:limit:)`, `Policy.paletteTokens(in:)` | Hledání v paletě ⌘K (#184): co na dotaz sedne, jak se to váží, kolik z každé skupiny je vidět. Prázdný dotaz vrací **všechno** v pořadí katalogu; pořadí skupin drží `CommandPalette.Group`. Váhy: titulek (začátek > hranice slova > vnitřek) **před** podtitulkem (repo, autor) a ten před klíčovým slovem; vrací i **dva rozsahy zvýraznění**, aby bylo z řádku vidět, proč vyšel |
 | `Policy.paletteActions(open:isReviewing:hasRun:layout:isPanelExpanded:section:)`, `Policy.paletteLabel(of:)` | Které akce mají teď co dělat (#184) a jak se jmenují. Řádek, který by nic neudělal, se nenabízí |
+| `Policy.tabStrip(open:)`, `Policy.tab(_:after:open:)` | Cyklení pruhem záložek `⌃Tab` / `⌃⇧Tab` (#245): pruh je `[.home] + openTabs` a soused se bere **dokola**. `nil` = nikam se nehýbe — jediná záložka, nebo aktivní záložka, která v pruhu není |
 | `Policy.sortedReleases(_:)` | Vydání od nejnovějšího (#127) — podle **data**, ne podle tagu |
 | `Policy.newReleases(in:since:)` | Co vyšlo od poslední viděné verze; neznámá značka = **nic** |
 
@@ -3376,6 +3377,31 @@ Nad nálezy platí navíc:
   - **Rail má jen položky, které mají obsah.** Návrh jich kreslí šest; položka, po jejímž otevření
     je prázdno, je horší než položka, která ještě není. `Přehled` přijde s dashboardem (#181),
     `Historie` a `Zdraví` potřebují napřed obsah, který v aplikaci není.
+- **Pruhem se přepíná `⌃Tab` a `⌃⇧Tab`** (#245), dokola a **včetně domácí záložky**. Pět věcí, na
+  kterých to stojí:
+  - **Cyklí se celý pruh, ne jen PR.** Pruh domácí záložku kreslí, chodí se na ni nejčastěji (je
+    za ní fronta) a bez ní by `⌃Tab` nad jediným otevřeným PR nedělal nic. Pořadí je **pořadí
+    pruhu** (`openTabs`, tedy pořadí otevření), ne pořadí použití: MRU je u dvou záložek
+    nerozeznatelné a u pěti překvapivé.
+  - **Zkratka nastavuje jedině `activeTab`, jako kliknutí na záložku** (`AppStore.selectTab(_:)`).
+    Výběr řádku v seznamu (`selection`) je jiná věc a kliknutí s ním nehýbe — kdyby s ním hýbala
+    zkratka, byly by dvě pravdy o tom, co je vybrané, a platila by ta, kterou se člověk zrovna
+    přepnul. Je na to test, který srovnává stav store po zkratce se stavem po kliknutí.
+  - **Rozhoduje `Policy.tab(_:after:open:)`**, ne `if` ve view: pruh je `[.home] + openTabs`
+    a nad jedinou záložkou vrací `nil`, tedy „nestane se nic“ — ne pípnutí a ne propadnutí domů.
+  - **`⌃⇧⇥` je pro AppKit jiná klávesa než `⌃⇥`** — doručí `U+0019` (backTab), ne `U+0009`.
+    Zpětná zkratka proto visí na `KeyEquivalent.backTab`; zapsaná jako `.tab` s `[.control,
+    .shift]` **nezabere vůbec**. Změřeno na běžící aplikaci i samostatným pokusem s `NSButton`em
+    (podrobnosti a rozdíl proti pasti s `⌥⇧↓` z #151 jsou u `KeyEquivalent.backTab`).
+  - **Fokus v textovém editoru tomu nevadí.** Změřeno v těle review i v composeru komentáře:
+    `⌃Tab` přepne záložku, **do textu nevloží tabulátor** a nepřehodí fokus na jiný prvek —
+    key equivalent tlačítka se vyhodnocuje dřív, než se klávesa dostane k `NSTextView`. Fallback
+    `⌘⇧]` / `⌘⇧[` ze zadání issue proto **nebyl potřeba** a nepřidal se.
+
+  Zkratky stojí v nápovědě u **domácí záložky** (`ReviewTabsView.homeTab`), protože `⌃Tab` po sobě
+  v okně nenechává viditelnou stopu. Na pruhu samotném to nejde — `.help` nad `ScrollView`em se
+  neprojeví ani v accessibility (`AXScrollArea` hlavičky zůstal bez `AXHelp`), kdežto tlačítka
+  záložek svoje nápovědy nesou.
 - **Dashboard je obsah `Přehledu`, ne druhý seznam** (#181). Po spuštění bylo do té doby vidět
   „Vyber pull request“, přestože čísla o frontě už v aplikaci byla — jen roztroušená po stavovém
   řádku a po řádcích. Šest věcí, které se u něj nemají rozbít:

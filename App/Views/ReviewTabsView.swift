@@ -46,7 +46,15 @@ struct ReviewTabsView: View {
             .chrome(isActive: active == .home)
         }
         .buttonStyle(.plain)
-        .help("Fronta a rozdělaná review")
+        // Nese i **zkratky pruhu** (#245), protože `⌃Tab` po sobě v okně nenechává žádnou
+        // viditelnou stopu — bez tohohle by se dala najít jedině v release notes. Sedí to na
+        // domácí záložce ze dvou důvodů: v pruhu je **vždycky** a jako jediná mluví o pruhu, ne
+        // o pull requestu (u těch je v nápovědě titulek, který je tam potřebnější).
+        //
+        // **Na samotném pruhu to nejde** — `.help` nad `ScrollView`em se nikde neprojeví;
+        // změřeno na běžící aplikaci: `AXScrollArea` hlavičky zůstal bez `AXHelp`, kdežto
+        // tlačítka záložek svoje nápovědy nesou.
+        .help("Fronta a rozdělaná review — mezi záložkami přepíná ⌃Tab a ⌃⇧Tab")
     }
 
 

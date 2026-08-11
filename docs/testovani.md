@@ -258,6 +258,15 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   umělo zahodit rozepsanou práci jedním kliknutím na křížek. Past při jeho psaní: draft nevznikne
   bez známé hlavy PR, takže se musí napřed dotáhnout detail; první verze testu selhala už na
   přípravě a vypadalo to jako chyba v zavírání.
+- **Cyklení pruhem `⌃Tab` (#245)** — dvě sady. V `Policy` **vyčerpávající výčet** nad `openTabs`:
+  oba směry z každé záložky pruhu, obě obtočení (za poslední je domácí, před domácí poslední),
+  jediná záložka nevede nikam a aktivní záložka mimo pruh taky ne. K nim invariant „krok tam
+  a zpátky se vrátí na tutéž záložku“, který jde přes celý pruh, protože se to nejsnáz pokazí na
+  okrajích. Ve store pak to, co z čisté funkce vidět není: že zkratka **nastaví jedině
+  `activeTab`** — test srovnává výsledný stav se stavem po kliknutí na záložku (`activeTab`
+  i `selection`), takže se `selection` nemůže rozejít s tím, co dělá klik. Vloženou regresí
+  ověřeno obojí: `selection = next.pullRequest` v `selectTab` shodí ten srovnávací test,
+  `-1` místo `count - 1` v `Policy` shodí obtočení dozadu (index mimo pole).
 - **Detail PR — větve (#174)** — fixture `pr-view-open.json` dostal `headRefName`/`baseRefName`
   ze skutečného volání téhož PR (mergem se větve nemění), takže testy dál stojí na reálném
   výstupu. Vedle toho test, že **detail bez těch polí se pořád přečte**: přibyla až s #174
@@ -1666,6 +1675,59 @@ bez ohledu na `.shift`**, takže dvě tlačítka lišící se jen jím jsou jedn
 směry — po dočasném odebrání varianty se shiftem začalo `⌥↓` procházet nálezy a `⌥⇧↓` skákalo po
 tom samém. Je to platformní chování, takže na něj **test není** a drží ho jen ten zápis; kdyby se
 zkratky zase rozdělily na dvě tlačítka, projde build i testy a rozbije se to potichu.
+
+### `⌃Tab` a shift, který mění klávesu (#245)
+
+**Shift u `⇥` nedělá modifikátor, dělá jinou klávesu.** `⌃⇥` doručí `characters == U+0009`, kdežto
+`⌃⇧⇥` **`U+0019`** (backTab) — takže zkratka zapsaná jako `.tab` s `[.control, .shift]` nezabere
+**vůbec**: žádná událost se s ní nepotká a v okně to vypadá, jako by tam nebyla. Zpětná zkratka
+proto potřebuje `KeyEquivalent("\u{19}")`. **Není to past z #151**: tam byl problém v párování,
+tady se klávesy doopravdy liší znakem a modifikátory se porovnávají přesně (`U+0019` s maskou bez
+shiftu v pokusu taky nezabralo).
+
+Změřeno dvakrát, protože jedno bez druhého nestačí:
+
+- **v aplikaci** — `⌃⇧Tab` neudělal nic, `⌃Tab` přepnul; to řekne, **že** je něco špatně,
+  ne co;
+- **samostatným pokusem na 40 řádků** (`swiftc /tmp/…swift`) — okno se čtyřmi `NSButton`y
+  (`⇥`/backTab × s shiftem/bez) a lokálním monitorem `keyDown`. Ten vypsal znaky obou událostí
+  a které tlačítko zabralo. Tohle je ta odpověď, kterou z aplikace nevytáhneš.
+
+**Zkratka nad textovým editorem se musí vyzkoušet nad skutečným editorem, ne odvodit.** V PRismu
+jsou všechna čtyři místa tentýž `DraftTextEditor` (`TextEditor`, tedy `NSTextView`), takže stačí
+změřit jedno a doložit, že jsou to tytéž komponenty. Postup bez klikání na souřadnice:
+
+```bash
+# fokus se dá nastavit přes accessibility — AXTextArea má AXFocused zapisovatelné
+swift /tmp/prism-a-ax.swift focus AXTextArea 0
+swift /tmp/prism-a-keys.swift "type:abc" "ctrl+tab" "wait:1.5" "shot:/tmp/f-01.png"
+swift /tmp/prism-a-ax.swift textareas    # `\t` se vypisuje jako «TAB», takže je vidět i vložený tabulátor
+```
+
+Vyšlo z toho: `⌃Tab` přepne záložku i s kurzorem v editoru, **do textu nevloží tabulátor**
+a nepřehodí fokus na jiný prvek — key equivalent tlačítka se vyhodnocuje dřív, než se klávesa
+dostane k `NSTextView`. Kdyby to editor spolkl, byl by fallback `⌘⇧]` / `⌘⇧[`; nebyl potřeba.
+
+**Že se stav pruhu doopravdy změnil, ukáže filmstrip.** Výřez pruhu záložek z několika snímků
+složený pod sebe se přečte naráz a je z něj vidět celý okruh — z poslední záložky domů, dál na
+první, a zpátky přes domů na poslední. Snímky se pořizují **uvnitř téhož skriptu**, který slot
+vytáhl dopředu; snímek okna, které není vpředu, umí být z předchozího stavu (stalo se: snímek
+tvrdil prázdný pruh nad oknem, které už dvě záložky mělo).
+
+**Že je slot vpředu, se ověřuje před každým stiskem, ne jednou na začátku skriptu** (#245).
+Aktivace se umí vrátit zpátky uprostřed posloupnosti a klávesy pak jdou do cizí aplikace: ze
+čtyř snímků vyšel pruh nedotčený (a semafor na nich šedý, což je ta jediná stopa) a z předchozího
+běhu vypadalo přepnutí, jako by šlo **opačným směrem**. Obojí byla porucha měření, ne aplikace —
+po přidání kontroly `NSWorkspace.frontmostApplication` do každého stisku vyšla posloupnost napoprvé
+a znovu. Šedý semafor na snímku proto znamená **zahodit celé měření**, ne hledat chybu v okně.
+
+**Systémové záložky oken se nedají otestovat, jen změřit** — a měří se to na položkách nabídky
+`Okno` z accessibility (`kAXMenuBarAttribute`), ne kliknutím do menu. Nad **dvěma** otevřenými
+okny je `Sloučit všechna okna` i `Zobrazit další panel` zakázané, a to **i bez**
+`tabbingMode = .disallowed`: schovaná titulková lišta dělá okno netabovatelným (`tabGroup == nil`
+hned po vzniku, u obyčejného titulkového okna ho okno má). Obojí je změřené, protože z toho plyne
+opačná věc, než by se čekalo — `.disallowed` je vyslovený záměr, ne to, co dnes dveře zavírá.
+Zkoušet to nad **jedním** oknem nemá cenu: tam je ta položka zakázaná vždycky.
 
 **Cena bloku se měří dvěma způsoby a je to schválně** (#223). Jeden blok podle délky je ten údaj,
 ze kterého se vybírá strop — to je práce, kterou appka zaplatí i za blok, jehož je vidět kousek.
