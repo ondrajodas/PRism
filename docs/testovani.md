@@ -583,8 +583,14 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   (dvacet nálezů nesmí vytlačit soubory, PR ani akce) a **prázdný dotaz vrací všechno**, protože
   paleta je nabídka toho, co je po ruce. K tomu váhy (titulek > podtitulek > klíčové slovo, začátek
   titulku > hranice slova > vnitřek), diakritika a velikost písmen (`nalez` najde `nález`), víc slov
-  jako **a zároveň** a to, že se zvýrazňuje **jen shoda v titulku** — u shody v podtitulku je
-  `highlight` `nil`, protože zvýraznit něco jiného by bylo tvrzení, že se to potkalo tam.
+  jako **a zároveň** a to, že se zvýrazňuje **v tom textu, ve kterém se to potkalo** — u shody
+  v podtitulku je `titleHighlight` `nil` a naopak, protože zvýraznit něco jinde by bylo tvrzení, že
+  se to potkalo tam.
+
+  Hledání podle **autora a repozitáře** má vlastní výčet: shoda jen v autorovi, jen v repu, v obojím
+  naráz (platí jako **a zároveň**, takže `vault sykora` nesmí vytáhnout PR téhož autora z jiného
+  repa) a kolize titulek × autor — ta musí skončit titulkem první, jinak by dotaz na slovo z titulku
+  vytáhl nahoru PR, ve kterém to slovo není nikde vidět.
 
   U **akcí** se testuje, co se nenabízí: bez otevřeného PR nic, co na PR visí; za běhu review
   `Zrušit` **místo** `Pustit`; sekce railu, která je zrovna vidět v domácí záložce. A že kreslené
@@ -598,7 +604,11 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   mít gateway pořád tentýž počet volání (search, diff, detail, konverzace). Bez toho by stačilo,
   aby si katalog někdy dotáhl diff druhého PR, a z každého stisku klávesy by byl podproces.
 
-  Vedle toho: nálezy ze **všech** PR s otevřeným prvním, odmítnuté nálezy se nenabízejí, soubory
+  Vedle toho: autor je v **podtitulku** PR řádku (a v klíčových slovech zůstává jen vlastník repa,
+  který v podtitulku není), dotaz na jméno autora najde **jen pull request** a dotaz na jméno repa
+  nálezy i PR, ale **ne soubory** — ty jsou všechny z jednoho otevřeného PR, takže by se vytáhly
+  všechny naráz a v řádku by nebylo poznat proč. Dál: nálezy ze **všech** PR s otevřeným prvním,
+  odmítnuté nálezy se nenabízejí, soubory
   jen z otevřeného PR, **filtr seznamu paletu nezužuje** (ověřeno vložením regrese — se
   `visiblePullRequests` test padá), `id` katalogu jsou jednoznačná i tehdy, když týž reviewer
   nahlásí totéž dvakrát (taky ověřeno regresí: s `Policy.key(of:)` místo indexu test padá), skok se
@@ -1299,6 +1309,33 @@ a s krátkou pauzou vyjde „okno tam není“ tam, kde se jen ještě neukázal
 scény, posune celou posloupnost o krok a výsledek pak nejde přečíst. Právě takhle vzniklo
 podezření na poruchu aplikace, kde byla ve skutečnosti rozsypaná posloupnost kláves; rozhodlo až
 opakování z čistého stavu.
+
+### Jak změřit fokus a klávesy (#184)
+
+**„Kde je fokus“ se z kódu nepřečte a offscreen renderem se nezměří** — je to stav skutečného okna.
+Měří se dvěma věcmi naráz a obojí jde ze `swift` skriptu na třicet řádků, bez `System Events`:
+
+- **kde fokus je** — `AXFocused` v accessibility stromu (`AXUIElementCopyAttributeValue`). U pole se
+  vedle toho čte `AXValue`, takže je vidět i **co v něm je**;
+- **klávesy** — `CGEvent(keyboardEventSource:virtualKey:keyDown:)` + `post(tap: .cghidEventTap)`.
+  Adresuje se aktivní aplikací (`NSRunningApplication.activate()`), takže se nikam neklikne na
+  souřadnice — což v paralelním běhu není detail, viz [`paralelni-vyvoj.md`](paralelni-vyvoj.md).
+
+Tři věci, které z toho u #184 vyšly a bez měření by se neodhadly:
+
+- **Fokus nastavený ve stejném průchodu, ve kterém pole vzniká, SwiftUI zahodí.** `onAppear`,
+  `task` bez yieldu i `defaultFocus` daly `AXFocused = false` **navždycky**, ne později. Rozhoduje
+  **počet průchodů, ne čas**: bez `Task.yield()` nepomůže žádná pauza.
+- **Latence se měří dvojicí ⌘K + znaky s proměnnou pauzou mezi nimi**, ne pollováním fokusu:
+  polling po zavřené paletě vrací fokus z předchozího stavu a vyjde z toho „0 ms“. Vyzkoušené
+  hodnoty pauzy dají hranici — u palety fokus sedne ~40 ms po ⌘K (od 50 ms je v poli celý text,
+  pod 30 ms znak vykreslení předběhne, což ale znamená psát rychleji, než se dá pustit ⌘K).
+- **`esc` a `↑↓` nad textovým polem se musí vyzkoušet, ne odvodit.** Pole si `esc` umí vzít pro sebe
+  (`cancelOperation`) — tady si ho vzalo tlačítko se zkratkou, protože key equivalent se vyhodnocuje
+  dřív. Sled `⌘K → znaky → ↓ ↓ ↑ → esc → ⌘K` se dá projít v jednom skriptu a po každém stisku
+  vypsat stav (paleta otevřená?, obsah pole, fokus, vybraný řádek). `AXSelected` se ale musí hledat
+  **jen v tom podstromu, o který jde** — v okně ho nese i záložka detailu PR, takže bez zúžení
+  vypadá vybraný řádek jako `Průběh`.
 
 Co se **nedá naklikat** (chybějící binárka, chyba sítě, prázdný stav nad plnou frontou), se dá
 vykreslit dočasným testem přes `ImageRenderer` do PNG ve scratchpadu. Před commitem se maže.

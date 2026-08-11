@@ -8,9 +8,10 @@ import SwiftUI
 /// pole, kurzor a klávesy.
 ///
 /// **Dotaz i kurzor jsou `@State`, ne stav ve storu**, a je to schválně: mají zaniknout se
-/// zavřením palety. Text z minula by po ⌘K vypadal jako výsledky k něčemu, na co se nikdo
-/// neptal — a `CommandPaletteView` vzniká až s otevřenou paletou, takže se pokaždé začíná
-/// naprázdno.
+/// zavřením palety. Paleta je „začínám hledat“, ne „vracím se k rozdělané práci“, takže text
+/// z minula by po ⌘K vypadal jako výsledky k něčemu, na co se nikdo neptal — a `CommandPaletteView`
+/// vzniká až s otevřenou paletou, takže se pokaždé začíná naprázdno. Ověřeno na běžící aplikaci
+/// dvěma otevřeními za sebou: podruhé je pole prázdné a fokus je v něm zase.
 struct CommandPaletteView: View {
     /// Co je k prohledání. Skládá se z paměti store, žádný dotaz na GitHub.
     let items: [CommandPalette.Item]
@@ -58,8 +59,22 @@ struct CommandPaletteView: View {
         .shadow(color: .black.opacity(0.28), radius: 30, y: 12)
         .availableWidth(Self.width)
         .hiddenShortcuts { shortcuts(in: sections, selected: selected) }
-        // Fokus musí skončit v poli: paleta bez blikajícího kurzoru vypadá jako obrázek.
-        .onAppear { isFieldFocused = true }
+        // Fokus musí skončit v poli, jinak paleta není „⌘K a piš“, ale „⌘K, klikni a piš“.
+        //
+        // **Až po jednom průchodu smyčky**, a ten `Task.yield()` je to jediné, co tady funguje:
+        // přiřazení ve stejném průchodu, ve kterém pole vzniká, SwiftUI **zahodí**. Změřeno na
+        // běžící aplikaci accessibilitou (`AXFocused`) a znaky poslanými hned po ⌘K:
+        //
+        // - `onAppear` i `task` bez yieldu — fokus v poli **nikdy**, ani po 300 ms;
+        // - `defaultFocus($isFieldFocused, true)` — **taky nikdy**; je na počáteční fokus scény,
+        //   a překryv, který se objeví v už otevřeném okně, žádná nová scéna není;
+        // - s yieldem — fokus v poli pokaždé, ~40 ms po ⌘K (celý text v poli od mezery 50 ms;
+        //   pod 30 ms znak předběhne vykreslení, což ale znamená psát rychleji, než se dá pustit
+        //   ⌘K). Rozhoduje **počet průchodů, ne čas** — bez yieldu nepomůže žádná pauza.
+        .task {
+            await Task.yield()
+            isFieldFocused = true
+        }
         // Po změně dotazu se začíná nahoře. Kurzor uprostřed nových výsledků by znamenal, že
         // `↵` otevře něco, na co se nikdo nedíval.
         .onChange(of: query) { cursor = 0 }

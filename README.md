@@ -612,12 +612,20 @@ a prohlížeč ne, takže pořadí skupin je tvrzení o tom, k čemu je okno. Z 
 **nejvýš šest** řádků; strop je na skupinu, protože jinak by dvacet nálezů vytlačilo všechno
 ostatní.
 
+**Pole má fokus hned po ⌘K** a je **prázdné** — paleta je „začínám hledat“, ne „vracím se
+k rozdělané práci“, takže po zavření z ní nezůstane text z minula.
+
 **Prázdný dotaz není prázdné okno** — ukáže začátek každé skupiny, tedy nabídku toho, co je po
 ruce: nálezy od nejvážnějšího, soubory v pořadí diffu, PR od naposledy změněného, akce v pevném
 pořadí. Hledá se **bez ohledu na velikost písmen a diakritiku** (`nalez` najde `nález`) a víc slov
 znamená **a zároveň** — `vault secret` najde nález ve `vaultu`, i když ta slova v textu vedle sebe
 nestojí. Shoda v titulku váží víc než v podtitulku, začátek slova víc než vnitřek; nalezený úsek
-je v řádku **zvýrazněný**.
+je v řádku **zvýrazněný** — a to v tom textu, ve kterém se doopravdy potkal.
+
+Hledá se i **podle autora a podle repozitáře**: autor u pull requestů, repo u pull requestů
+i u nálezů. Obojí je proto vidět v podtitulku řádku (`connection#21663 · sykora-ji`) — výsledek,
+u kterého není poznat, proč vyšel, vypadá jako chyba hledání. Soubory podle repa nejdou: jsou
+všechny z jednoho otevřeného PR, takže by se vytáhly všechny naráz a nic by to nerozlišilo.
 
 `↵` otevře (nález i soubor **odscrollují diff** na to místo, nález se navíc zvýrazní),
 `⌘↵` otevře věc na GitHubu, `esc` zavře, `↑↓` chodí po řádcích a cyklí. Když nic nesedí, řekne

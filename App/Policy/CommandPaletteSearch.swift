@@ -34,7 +34,11 @@ extension Policy {
         let ranked = items.enumerated().compactMap { order, item -> RankedHit? in
             guard let match = paletteMatch(item, tokens: tokens) else { return nil }
             return RankedHit(
-                hit: CommandPalette.Hit(item: item, highlight: match.highlight),
+                hit: CommandPalette.Hit(
+                    item: item,
+                    titleHighlight: match.title,
+                    subtitleHighlight: match.subtitle
+                ),
                 rank: match.rank,
                 order: order
             )
@@ -59,7 +63,7 @@ extension Policy {
         query.split(whereSeparator: \.isWhitespace).map(String.init)
     }
 
-    /// Váha položky a místo shody v titulku. `nil` = nesedí.
+    /// Váha položky a místa shody. `nil` = nesedí.
     ///
     /// Váha je **nejlepší** ze slov dotazu: stačí, aby se jedno z nich potkalo s začátkem
     /// titulku, a řádek jde nahoru. Nejhorší z nich by naopak srazila silnou shodu kvůli slovu,
@@ -67,41 +71,58 @@ extension Policy {
     private static func paletteMatch(
         _ item: CommandPalette.Item,
         tokens: [String]
-    ) -> (rank: Int, highlight: Range<String.Index>?)? {
-        guard !tokens.isEmpty else { return (paletteCatalogRank, nil) }
+    ) -> PaletteMatch? {
+        guard !tokens.isEmpty else { return PaletteMatch(rank: paletteCatalogRank) }
 
         var best = Int.max
-        var highlight: Range<String.Index>?
+        var title: Range<String.Index>?
+        var subtitle: Range<String.Index>?
         for token in tokens {
             guard let match = paletteMatch(token, in: item) else { return nil }
             best = min(best, match.rank)
-            // Zvýrazní se **první** slovo, které se potkalo v titulku. Zvýraznit jich víc by
-            // znamenalo dělit titulek na libovolně mnoho úseků; na jeden řádek je to šum.
-            if highlight == nil { highlight = match.highlight }
+            // Zvýrazní se **první** slovo, které se potkalo — v každém textu zvlášť, takže
+            // `vault secret` umí zvýraznit repo v podtitulku i slovo v titulku. Víc úseků
+            // v jednom textu by ho rozsekalo na skvrny; na jeden řádek je to šum.
+            if title == nil { title = match.title }
+            if subtitle == nil { subtitle = match.subtitle }
         }
-        return (best, highlight)
+        return PaletteMatch(rank: best, title: title, subtitle: subtitle)
     }
 
     /// Váha jednoho slova proti položce.
     ///
     /// Pořadí kritérií: začátek titulku, začátek slova v titulku, cokoli v titulku, podtitulek,
     /// klíčové slovo. Je to pořadí podle toho, jak **jistá** ta shoda je — `Secret` na začátku
-    /// jména souboru znamená víc než `secret` uprostřed věty.
+    /// jména souboru znamená víc než `secret` uprostřed věty, a shoda v titulku znamená víc než
+    /// shoda v autorovi nebo v repu. Bez toho by dotaz na slovo z titulku vytáhl nahoru cizí PR
+    /// od stejně pojmenovaného autora.
     private static func paletteMatch(
         _ token: String,
         in item: CommandPalette.Item
-    ) -> (rank: Int, highlight: Range<String.Index>?)? {
+    ) -> PaletteMatch? {
         if let range = paletteRange(of: token, in: item.title) {
-            if range.lowerBound == item.title.startIndex { return (0, range) }
-            return (paletteStartsWord(at: range, in: item.title) ? 1 : 2, range)
+            if range.lowerBound == item.title.startIndex { return PaletteMatch(rank: 0, title: range) }
+            return PaletteMatch(rank: paletteStartsWord(at: range, in: item.title) ? 1 : 2, title: range)
         }
-        if let subtitle = item.subtitle, paletteRange(of: token, in: subtitle) != nil {
-            return (3, nil)
+        // Podtitulek má **jednu** váhu, ne tři jako titulek. Je to výčet dvou souřadnic
+        // (`vault#85 · sykora-ji`), takže „začátek“ v něm znamená repo a „vnitřek“ autora — a mezi
+        // těmi dvěma se nemá rozhodovat podle pozice v řetězci. Váhy oddělují **druh** shody.
+        if let subtitle = item.subtitle, let range = paletteRange(of: token, in: subtitle) {
+            return PaletteMatch(rank: 3, subtitle: range)
         }
         if item.keywords.contains(where: { paletteRange(of: token, in: $0) != nil }) {
-            return (4, nil)
+            return PaletteMatch(rank: 4)
         }
         return nil
+    }
+
+    /// Váha a místa shody jednoho slova (nebo celé položky, po sloučení přes slova dotazu).
+    private struct PaletteMatch {
+        let rank: Int
+        /// Rozsahy jsou `var` kvůli implicitnímu `nil` v memberwise initu: shoda v klíčovém slově
+        /// nemá kde zvýrazňovat, takže se `PaletteMatch` musí dát složit i bez nich.
+        var title: Range<String.Index>?
+        var subtitle: Range<String.Index>?
     }
 
     /// Váha položky bez dotazu — jedna pro všechny, takže rozhoduje pořadí katalogu.

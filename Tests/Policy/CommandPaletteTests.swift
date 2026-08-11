@@ -154,29 +154,105 @@ struct CommandPaletteTests {
         #expect(hits.map(\.id) == ["vault"])
     }
 
-    @Test("Zvýrazňuje se shoda v titulku, jinde nic")
-    func highlightPointsIntoTheTitle() {
-        // Zvýraznit něco v titulku, když se to potkalo v podtitulku, by bylo tvrzení, že se to
-        // potkalo tam.
-        let inTitle = item("src/Vault/SecretClient.php", group: .files, id: "title")
-        let elsewhere = item("nález", subtitle: "SecretClient.php:81", id: "subtitle")
-
-        let hits = Policy.paletteResults(of: [inTitle, elsewhere], query: "secret")
-            .flatMap(\.hits)
-
-        let highlighted = hits.first { $0.id == "title" }
-        #expect(highlighted?.highlight.map { String(inTitle.title[$0]) } == "Secret")
-        #expect(hits.first { $0.id == "subtitle" }?.highlight == nil)
+    /// Co je v titulku, resp. v podtitulku **tučně** — text vyříznutý tím rozsahem, který hledání
+    /// vrátilo. Přes zkratku, aby v testech nebyl `!` nad `subtitle`: rozsahy jsou dva a každý
+    /// platí nad svým řetězcem, takže se nesmí zaměnit.
+    private func highlighted(inTitle hit: CommandPalette.Hit) -> String? {
+        hit.titleHighlight.map { String(hit.item.title[$0]) }
     }
 
-    @Test("Zvýrazní se první slovo, které se potkalo v titulku")
-    func highlightUsesTheFirstMatchingToken() {
-        let hit = Policy.paletteResults(
-            of: [item("SecretClient v souboru", subtitle: "vault#85")],
-            query: "vault client"
-        ).first?.hits.first
+    private func highlighted(inSubtitle hit: CommandPalette.Hit) -> String? {
+        guard let subtitle = hit.item.subtitle, let range = hit.subtitleHighlight else { return nil }
+        return String(subtitle[range])
+    }
 
-        #expect(hit?.highlight.map { String(hit!.item.title[$0]) } == "Client")
+    @Test("Zvýrazní se ten text, ve kterém se to potkalo")
+    func highlightPointsWhereTheMatchHappened() throws {
+        // Zvýraznit něco v titulku, když se to potkalo v podtitulku, by bylo tvrzení, že se to
+        // potkalo tam — a nezvýraznit nic by z řádku udělalo výsledek, u kterého není poznat proč.
+        let inTitle = item("src/Vault/SecretClient.php", group: .files, id: "title")
+        let inSubtitle = item("nález", subtitle: "SecretClient.php:81", id: "subtitle")
+
+        let hits = Policy.paletteResults(of: [inTitle, inSubtitle], query: "secret")
+            .flatMap(\.hits)
+
+        let fromTitle = try #require(hits.first { $0.id == "title" })
+        #expect(highlighted(inTitle: fromTitle) == "Secret")
+        #expect(highlighted(inSubtitle: fromTitle) == nil)
+
+        let fromSubtitle = try #require(hits.first { $0.id == "subtitle" })
+        #expect(highlighted(inTitle: fromSubtitle) == nil)
+        #expect(highlighted(inSubtitle: fromSubtitle) == "Secret")
+    }
+
+    @Test("Zvýrazní se první slovo, které se potkalo — v každém textu zvlášť")
+    func highlightUsesTheFirstMatchingTokenInEachText() throws {
+        // `vault client` má zvýraznit repo v podtitulku i slovo v titulku: obojí je důvod, proč
+        // řádek vyšel, a každý je vidět jinde.
+        let hits = Policy.paletteResults(
+            of: [item("SecretClient v souboru", subtitle: "vault#85 · kdosi")],
+            query: "vault client"
+        ).flatMap(\.hits)
+        let found = try #require(hits.first)
+
+        #expect(highlighted(inTitle: found) == "Client")
+        #expect(highlighted(inSubtitle: found) == "vault")
+    }
+
+    // MARK: - Autor a repozitář (#184, po připomínce)
+
+    @Test("Shoda jen v autorovi řádek najde")
+    func matchInTheAuthorAlone() throws {
+        // Autor bydlí v podtitulku PR řádku, takže dotaz na jméno musí PR vytáhnout — a shoda
+        // musí být vidět zrovna tam, kde to jméno je.
+        let pr = item("fix: nezahazovat token", group: .pullRequests, subtitle: "connection#21663 · sykora-ji")
+
+        let hits = Policy.paletteResults(of: [pr], query: "sykora").flatMap(\.hits)
+        let found = try #require(hits.first)
+
+        #expect(highlighted(inTitle: found) == nil)
+        #expect(highlighted(inSubtitle: found) == "sykora")
+    }
+
+    @Test("Shoda jen v repozitáři řádek najde")
+    func matchInTheRepositoryAlone() throws {
+        // Repo je v podtitulku u nálezu i u PR, takže dotaz na jeho jméno musí zabrat na obojí.
+        let finding = item("schází secret", subtitle: "vault#85 · SecretClient.php:81")
+
+        let hits = Policy.paletteResults(of: [finding], query: "vault").flatMap(\.hits)
+        let found = try #require(hits.first)
+
+        #expect(highlighted(inSubtitle: found) == "vault")
+    }
+
+    @Test("Repozitář a autor naráz platí jako a zároveň")
+    func matchInBothRepositoryAndAuthor() {
+        // Dvě slova z jednoho podtitulku se musí potkat obě — jinak by `vault sykora` vytáhlo
+        // i PR toho autora v jiném repu.
+        let mine = item("fix: token", group: .pullRequests, subtitle: "vault#85 · sykora-ji", id: "mine")
+        let elsewhere = item("fix: token", group: .pullRequests, subtitle: "connection#21663 · sykora-ji", id: "elsewhere")
+
+        let hits = Policy.paletteResults(of: [mine, elsewhere], query: "vault sykora").flatMap(\.hits)
+
+        #expect(hits.map(\.id) == ["mine"])
+    }
+
+    @Test("Shoda v titulku jde před shodou v autorovi i v repu")
+    func titleBeatsAuthorAndRepository() {
+        // Kdyby to bylo naopak, dotaz na slovo z titulku by vytáhl nahoru cizí PR od stejně
+        // pojmenovaného autora — tedy PR, ve kterém to slovo není nikde vidět.
+        let byName = item("fix: nezahazovat token", group: .pullRequests, subtitle: "connection#21663 · vault-bot", id: "author")
+        let byRepo = item("fix: přepsat log", group: .pullRequests, subtitle: "vault#85 · kdosi", id: "repo")
+        let inTitle = item("feat: vault umí rotovat", group: .pullRequests, subtitle: "connection#21664 · kdosi", id: "title")
+
+        let hits = Policy.paletteResults(of: [byName, byRepo, inTitle], query: "vault").flatMap(\.hits)
+
+        // Titulek první; mezi autorem a repem rozhoduje pořadí katalogu, protože podtitulek má
+        // jednu váhu — je to výčet dvou souřadnic, ne věta, kde by začátek něco znamenal.
+        //
+        // **Ověřeno vložením regrese**: když podtitulek dostane váhu titulku, tenhle test padá
+        // s pořadím `["author", "repo", "title"]`.
+        #expect(hits.map(\.id) == ["title", "author", "repo"])
     }
 
     // MARK: - Akce

@@ -101,7 +101,12 @@ extension AppStore {
             mark: isBlocking ? .blockingFinding : .finding,
             url: paletteURL(of: pr),
             // Celá cesta a reviewer se do podtitulku nevejdou (je v něm jen jméno souboru),
-            // ale hledat se podle nich musí dát — `SecretClient.php` je v `src/Vault/…`.
+            // ale hledat se podle nich musí dát — `SecretClient.php` je v `src/Vault/…`. Repo
+            // je v podtitulku (`vault#85`), tady je kvůli vlastníkovi (`keboola/vault`).
+            //
+            // **Autor PR tu není** schválně: v řádku nálezu žádné jméno vidět není, a to jediné,
+            // které k němu patří, je jméno revieweera. Shoda na autora by tedy vytáhla nález,
+            // ve kterém se to jméno nikde nevyskytuje.
             keywords: [finding.file, finding.reviewer, pr.repo.description].compactMap { $0 },
             target: .finding(pr, file: finding.file, line: finding.line)
         )
@@ -120,6 +125,11 @@ extension AppStore {
 
     /// Soubory **jen z otevřeného PR**: diff jiného PR v paměti není a dotáhnout si ho by byl
     /// ten nový dotaz na GitHub, který zadání zakazuje.
+    ///
+    /// **Podle repa se soubory nehledají**, i když z nějakého repa samozřejmě jsou. Jsou všechny
+    /// z jednoho otevřeného PR, takže shoda na jméno repa by je vytáhla **všechny naráz** a nic by
+    /// mezi nimi nerozlišila — a v podtitulku je diffstat, takže by z řádku nebylo poznat, proč
+    /// vyšel. U nálezu a u PR je to naopak: repo v podtitulku vidět je.
     private func paletteFiles(of open: PRIdentifier?) -> [CommandPalette.Item] {
         guard let open, let diff = loadedDiff(for: open) else { return [] }
         return diff.files.map { file in
@@ -155,13 +165,23 @@ extension AppStore {
                 id: "pr:\(summary.id)",
                 group: .pullRequests,
                 title: summary.title,
-                subtitle: Policy.paletteLabel(of: summary.id),
+                subtitle: paletteSubtitle(of: summary),
                 mark: .pullRequest(summary.state),
                 url: summary.url,
-                keywords: [summary.id.repo.description, summary.author],
+                // Vlastník repa je jen tady: v podtitulku je `vault#85`, ne `keboola/vault`.
+                keywords: [summary.id.repo.description],
                 target: .pullRequest(summary.id)
             )
         }
+    }
+
+    /// `connection#21663 · sykora-ji` — souřadnice a **autor**.
+    ///
+    /// Autor je v podtitulku, ne v klíčových slovech (do #184 byl tam): hledat podle jména se musí
+    /// dát, ale klíčové slovo se nikde nekreslí, takže by u dotazu na jméno nebylo z řádku poznat,
+    /// proč vyšel. Bere se z `PullRequestSummary`, tedy z posledního tiku — žádný nový dotaz.
+    private func paletteSubtitle(of summary: PullRequestSummary) -> String {
+        "\(Policy.paletteLabel(of: summary.id)) · \(summary.author)"
     }
 
     /// Adresa PR z posledního tiku, jinak ze snímku otevřené záložky. `nil` = o tomhle PR

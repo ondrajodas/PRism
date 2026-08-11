@@ -911,6 +911,19 @@ Cestou vyšlo najevo, že **dva zdrojáky se stejným jménem položí build**, 
 podsložkách (`Multiple commands produce … CommandPalette.stringsdata`) — zapsané v `CLAUDE.md`
 u buildable folderů.
 
+**Tři věci se dodělaly po proklikání** (pořád #184). **Fokus do pole hned po ⌘K** — paleta, do které
+se musí kliknout, není „⌘K a piš“. Vybráno měřením na běžícím okně, ne přečtením: `onAppear`, `task`
+bez yieldu i `defaultFocus` nedají fokus **nikdy** (ne později), protože přiřazení ve stejném
+průchodu, ve kterém pole vzniká, SwiftUI zahodí; s `task { await Task.yield(); … }` je fokus v poli
+~40 ms po ⌘K. U toho se změřilo i to, co u fokusu v textovém poli praská jinde: `esc` paletu zavírá
+dál a `↑↓` chodí po řádcích, protože key equivalent tlačítka se vyhodnocuje dřív než editor textu.
+A **hledá se i podle autora a repozitáře** — s tím, že obojí přesídlilo do **podtitulku** řádku
+(`connection#21663 · sykora-ji`) a shoda se v něm **zvýrazňuje**. Autor v klíčových slovech totiž
+hledání umožňoval už předtím, jen se nikde nekreslil: dotaz na jméno vytáhl PR, ve kterém to jméno
+nebylo vidět, a to je k nerozeznání od chyby hledání. Soubory podle repa nejdou (jsou všechny
+z jednoho otevřeného PR, takže by se vytáhly všechny naráz) a autor u nálezu taky ne — jméno, které
+k nálezu patří, je jméno revieweera.
+
 **Ukončení aplikace zabíjí běžící session (#264)** — do té doby to dělal jen dialog z #94, který
 tvrdil, že se session zabije, ale nikdo ji nezabíjel: `applicationShouldTerminate` vrátil
 `terminateNow` a `claude` se přerodil na `launchd`. Platily se tokeny za review, které už nemá komu

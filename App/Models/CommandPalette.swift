@@ -99,9 +99,12 @@ extension CommandPalette {
         /// být **jednoznačná v celém katalogu** — dva řádky se stejným `id` by SwiftUI slil.
         let id: String
         let group: Group
-        /// Hlavní text. Jen v něm se zvýrazňuje shoda, viz `Hit.highlight`.
+        /// Hlavní text.
         let title: String
-        /// Souřadnice pod titulkem — `vault#85 · SecretClient.php:81`, `+18 −6`, `connection#21663`.
+        /// Souřadnice pod titulkem — `vault#85 · SecretClient.php:81`, `+18 −6`,
+        /// `connection#21663 · sykora-ji`. Hledá se v něm stejně jako v titulku (jen za nižší
+        /// váhu) a shoda se v něm **zvýrazňuje**: bydlí tady repo a autor, takže bez zvýraznění
+        /// by u dotazu na jméno nebylo z řádku poznat, proč vyšel.
         let subtitle: String?
         let mark: Mark
         /// Zkratka, kterou má řádek nakreslenou. **Jen skutečná** — popiska klávesy, která nic
@@ -110,8 +113,10 @@ extension CommandPalette {
         /// Kam vede `⌘↵`. `nil` = na GitHubu to nikde není (akce), takže `⌘↵` neudělá nic.
         let url: URL?
         /// Co se prohledává **kromě** titulku a podtitulku: celá cesta souboru, `owner/repo`,
-        /// jméno revieweera, synonyma u akcí. Do titulku by se to nevešlo a bez toho by se
-        /// nálezy nedaly najít podle repa.
+        /// jméno revieweera, synonyma u akcí. Nikde se to nekreslí, takže shoda v klíčovém slově
+        /// se nedá zvýraznit — proto váží nejmíň a patří sem jen to, co je **nadmnožinou** něčeho
+        /// viditelného (celá cesta vs. jméno souboru, `owner/repo` vs. `repo#85`) nebo synonymum
+        /// titulku. Co má samo rozhodovat o tom, jestli řádek vyjde, patří do podtitulku.
         let keywords: [String]
         let target: Target
 
@@ -138,15 +143,29 @@ extension CommandPalette {
         }
     }
 
-    /// Řádek, který na dotaz sedl — i s tím, kde se to v titulku potkalo.
+    /// Řádek, který na dotaz sedl — i s tím, kde se to potkalo.
+    ///
+    /// Dva rozsahy, ne jeden: zvýrazňuje se **v tom textu, ve kterém se to doopravdy potkalo**.
+    /// Zvýraznit v titulku shodu z podtitulku by bylo tvrzení, že se to potkalo tam, a nezvýraznit
+    /// ji vůbec by z řádku udělalo výsledek, u kterého není poznat, proč vyšel.
     struct Hit: Identifiable, Hashable, Sendable {
         let item: Item
-        /// Rozsah v `item.title` ke zvýraznění. `nil` = potkalo se to jinde (podtitulek nebo
-        /// klíčové slovo), takže v titulku není co zvýraznit — zvýraznit něco jiného by bylo
-        /// tvrzení, že se to potkalo tam.
-        let highlight: Range<String.Index>?
+        /// Rozsah v `item.title`. `nil` = v titulku se nepotkalo nic.
+        let titleHighlight: Range<String.Index>?
+        /// Rozsah v `item.subtitle`. `nil` = v podtitulku se nepotkalo nic (nebo tam žádný není).
+        let subtitleHighlight: Range<String.Index>?
 
         var id: String { item.id }
+
+        init(
+            item: Item,
+            titleHighlight: Range<String.Index>? = nil,
+            subtitleHighlight: Range<String.Index>? = nil
+        ) {
+            self.item = item
+            self.titleHighlight = titleHighlight
+            self.subtitleHighlight = subtitleHighlight
+        }
     }
 
     /// Skupina výsledků, jak se kreslí.

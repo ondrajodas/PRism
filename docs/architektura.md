@@ -52,7 +52,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `conversation` / `findings` / `progress` (#242). `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) můžou přijít doprostřed levé skupiny, aniž by se posunul. Jako `ReviewVerdict` **není `Codable`** |
 | `PullRequestTabBadge` | Odznak u záložky (#242): `count` / `blocking` (červeně) / `live` (puntík). Výčtem, ne strukturou s příznaky — „puntík s počtem“ ani „blokující bez počtu“ význam nemá, takže se nemá dát napsat |
 | `ReviewPanelTab` | Co je vidět v panelu vpravo: `findings` / `draft` (#242). Jako `PullRequestTab` **není `Codable`** |
-| `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání), `Jump` (žádost o odscrollování) a `Effect` (co zbývá na okno). **Není `Codable`** — je to obsah jednoho otevření palety. Jmenný prostor proto, že `Palette` v repu už znamená barvy okna |
+| `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání — `Hit` nese **dva** rozsahy
+zvýraznění, jeden nad titulkem a jeden nad podtitulkem), `Jump` (žádost o odscrollování) a `Effect` (co zbývá na okno). **Není `Codable`** — je to obsah jednoho otevření palety. Jmenný prostor proto, že `Palette` v repu už znamená barvy okna |
 | `DiffLayout` | Jak se kreslí diff: `unified` (pod sebou) / `split` (vedle sebe). Nastavení **člověka, ne repa** — proto jen v `GlobalConfig` |
 | `NotificationEvent` | Co notifikaci vyvolalo: `newPullRequest` / `findings` / `clean` / `failure`. Nese si ji notifikace sama |
 | `NotificationSettings` | Co se má hlásit (#86) — hlavní vypínač a čtyři události. Jako `DiffLayout` jen globálně |
@@ -1633,8 +1634,28 @@ Co se u ní nemá rozbít:
 - **Hledá se bez ohledu na velikost písmen a diakritiku** (`range(of:options:)`); aplikace je
   česká, takže `nalez` musí najít `nález`. Víc slov je **a zároveň** — jinak by se nedalo napsat
   `vault secret`.
-- **Zvýrazňuje se jedině shoda v titulku.** Když se slovo potkalo v podtitulku nebo v klíčovém
-  slově, `Hit.highlight` je `nil` — zvýraznit něco v titulku by bylo tvrzení, že se to potkalo tam.
+- **Hledá se i podle autora a repozitáře, a obojí je v podtitulku.** Autor u pull requestů
+  (`connection#21663 · sykora-ji`), repo u nálezů i u pull requestů. **Ne** v klíčových slovech,
+  kde autor do připomínky k #184 byl: klíčové slovo se nikde nekreslí, takže dotaz na jméno
+  vytáhl PR, ve kterém to jméno nebylo vidět — a výsledek, u kterého není poznat proč, vypadá jako
+  chyba hledání. **Soubory podle repa nejdou**: jsou všechny z jednoho otevřeného PR, takže by se
+  vytáhly všechny naráz a v podtitulku mají diffstat. Autor u nálezu taky ne — jméno, které k němu
+  patří, je jméno **revieweera**.
+- **Zvýrazňuje se v tom textu, ve kterém se to potkalo.** `Hit` nese dva rozsahy
+  (`titleHighlight`, `subtitleHighlight`), každý nad svým řetězcem; v jednom textu se zvýrazní
+  **první** slovo dotazu, které v něm sedlo. Shoda v **klíčovém slově** se nezvýrazňuje, protože
+  se klíčová slova nekreslí — a právě proto váží nejmíň a patří do nich jen nadmnožina něčeho
+  viditelného (celá cesta vs. jméno souboru, `owner/repo` vs. `repo#85`) nebo synonymum titulku.
+- **Váhy: titulek (0–2) > podtitulek (3) > klíčové slovo (4).** Shoda v titulku musí zůstat před
+  shodou v autorovi nebo v repu, jinak dotaz na slovo z titulku vytáhne nahoru cizí PR od stejně
+  pojmenovaného autora. Podtitulek má **jednu** váhu, ne tři jako titulek: je to výčet dvou
+  souřadnic, takže „začátek“ v něm znamená repo a „vnitřek“ autora, a mezi těmi dvěma se nemá
+  rozhodovat podle pozice v řetězci.
+- **Podtitulek se o šířku hlásí první a nezkracuje se.** Změřeno: karta má 560 bodů, na oba texty
+  z nich zbývá ~489 a nejdelší podtitulek ve skutečných datech
+  (`prism-review-sandbox#4 · github-actions[bot]`) měří 254. Ustupuje tedy titulek — a to je
+  správné pořadí, protože shoda v autorovi je na **konci** podtitulku, takže by ji zkrácení uřízlo
+  jako první.
 - **Katalog se skládá při každém stisku klávesy, ne jednou při otevření.** Snímek by za pár sekund
   ukazoval nálezy z review, které mezitím doběhlo. Změřeno (`CommandPaletteMeasurement`):
   200 řádků 1,5 ms, 2000 řádků 17,6 ms na stisk — reálný katalog (dvacet PR, desítky nálezů,
@@ -1667,11 +1688,22 @@ Klávesy a stav:
   paleta a **detail PR**, který nad otevřenou paletou zakáže svoje `⌘⏎` (potvrzení odeslání). Dvě
   tlačítka se stejnou zkratkou v jednom okně znamenají, že vyhraje to zaregistrované později —
   a spletená zkratka by z palety otevřela potvrzení odeslání review.
-- **Dotaz a kurzor jsou naopak `@State`** a mají zaniknout se zavřením: text z minula by po ⌘K
-  vypadal jako výsledky k něčemu, na co se nikdo neptal.
+- **Dotaz a kurzor jsou naopak `@State`** a mají zaniknout se zavřením: paleta je „začínám hledat“,
+  ne „vracím se k rozdělané práci“, takže text z minula by po ⌘K vypadal jako výsledky k něčemu, na
+  co se nikdo neptal. Není to úklid, který by někdo musel dělat — `CommandPaletteView` vzniká až
+  s otevřenou paletou.
+- **Fokus do pole se nastavuje až po jednom průchodu smyčky** — `task { await Task.yield(); … }`.
+  Přiřazení ve stejném průchodu, ve kterém pole vzniká, SwiftUI **zahodí**, takže `onAppear`
+  (a `task` bez yieldu) fokus nedá **nikdy**; `defaultFocus` taky ne, protože je na počáteční fokus
+  scény a překryv v už otevřeném okně žádná nová scéna není. Všechny tři varianty jsou změřené na
+  běžící aplikaci (`AXFocused` + znaky poslané hned po ⌘K) — s yieldem je fokus v poli ~40 ms po
+  ⌘K, a rozhoduje **počet průchodů, ne čas**.
 - **Zkratky jsou tlačítka v `hiddenShortcuts`, ne `onKeyPress`.** To se váže na fokus a v tomhle
   okně ho spolkne pole nebo seznam pod paletou (viz `HiddenShortcuts`). Plné `↵` bere `TextField`
   přes `onSubmit` — `keyboardShortcut(.defaultAction)` se s polem o tutéž klávesu přetahuje.
+  **Fokus v poli tomu nevadí**: změřeno, že `esc` paletu zavře i s kurzorem v poli a `↑↓` chodí dál
+  po řádcích, protože key equivalent tlačítka se vyhodnocuje dřív, než se klávesa dostane k editoru
+  textu.
 - **Skok do diffu jde přes `AppStore.paletteJump`.** Rozhodnutí „skoč sem“ padá nad celým oknem,
   ale odscrollovat umí jedině detail PR (kotvy řádků, `ScrollViewProxy`). Žádost proto nese
   vlastní `id` (`UUID`), aby se dala vyžádat **dvakrát** — `task(id:)` se na shodné hodnotě
@@ -3174,7 +3206,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.reviewNotification(for:state:blocking:topFinding:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět. Titulek nese počty (#200), tělo nález a pod ním PR |
 | `Policy.newPullRequestNotification(for:title:isReReview:)` | Notifikace o novém PR ve frontě (#85); re-review se pozná textem (#137) |
 | `Policy.newPullRequestsNotification(for:titles:reviewed:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
-| `Policy.paletteResults(of:query:limit:)`, `Policy.paletteTokens(in:)` | Hledání v paletě ⌘K (#184): co na dotaz sedne, jak se to váží, kolik z každé skupiny je vidět. Prázdný dotaz vrací **všechno** v pořadí katalogu; pořadí skupin drží `CommandPalette.Group` |
+| `Policy.paletteResults(of:query:limit:)`, `Policy.paletteTokens(in:)` | Hledání v paletě ⌘K (#184): co na dotaz sedne, jak se to váží, kolik z každé skupiny je vidět. Prázdný dotaz vrací **všechno** v pořadí katalogu; pořadí skupin drží `CommandPalette.Group`. Váhy: titulek (začátek > hranice slova > vnitřek) **před** podtitulkem (repo, autor) a ten před klíčovým slovem; vrací i **dva rozsahy zvýraznění**, aby bylo z řádku vidět, proč vyšel |
 | `Policy.paletteActions(open:isReviewing:hasFindings:layout:isPanelExpanded:section:)`, `Policy.paletteLabel(of:)` | Které akce mají teď co dělat (#184) a jak se jmenují. Řádek, který by nic neudělal, se nenabízí |
 | `Policy.sortedReleases(_:)` | Vydání od nejnovějšího (#127) — podle **data**, ne podle tagu |
 | `Policy.newReleases(in:since:)` | Co vyšlo od poslední viděné verze; neznámá značka = **nic** |

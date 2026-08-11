@@ -17,13 +17,13 @@ struct CommandPaletteRowView: View {
                     .font(.system(size: markFontSize))
                     .foregroundStyle(markColor)
                     .frame(width: 15)
-                title
+                highlighted(hit.item.title, at: hit.titleHighlight)
                     .font(.system(size: 12.5))
                     .foregroundStyle(isSelected ? Palette.ink : Palette.ink2)
                     .lineLimit(1)
                     .truncationMode(titleTruncation)
                 if let subtitle = hit.item.subtitle {
-                    Text(verbatim: subtitle)
+                    highlighted(subtitle, at: hit.subtitleHighlight)
                         .font(.system(size: 11.5))
                         .foregroundStyle(Palette.ink3)
                         .lineLimit(1)
@@ -32,6 +32,13 @@ struct CommandPaletteRowView: View {
                         // z něj udělá nesmysl — kdežto věta v titulku se zkrátit dá a pořád se
                         // přečte. Naměřeno na skutečném okně: bez priority z něj vycházelo
                         // `…m-review-sandbox#4` a `…-queue#725`.
+                        //
+                        // Od doby, co v něm bydlí autor, na tom stojí ještě víc: shoda v autorovi
+                        // je **na konci** podtitulku, takže by ji zkrácení uřízlo jako první — a to
+                        // je zrovna ten důvod, proč řádek vyšel. Změřeno, že se to nestane: karta
+                        // má 560 bodů, na oba texty z nich zbývá ~489 a nejdelší podtitulek ve
+                        // skutečných datech (`prism-review-sandbox#4 · github-actions[bot]`) měří
+                        // 254. Zkracovat by se začal až nad ~80 znaky; do té doby ustupuje titulek.
                         .layoutPriority(1)
                 }
                 Spacer(minLength: 8)
@@ -50,13 +57,16 @@ struct CommandPaletteRowView: View {
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 
-    /// Titulek se zvýrazněnou shodou, jak ho má návrh (`src/Vault/<b>Secret</b>Client.php`).
+    /// Text se zvýrazněnou shodou, jak ho má návrh (`src/Vault/<b>Secret</b>Client.php`).
+    ///
+    /// Používá se na titulek i na podtitulek: shoda v repu nebo v autorovi musí být vidět stejně
+    /// jako shoda v titulku, jinak vypadá výsledek, u kterého není poznat proč vyšel, jako chyba
+    /// hledání. Rozsahy jsou dva a každý platí nad svým řetězcem — viz `CommandPalette.Hit`.
     ///
     /// Skládá se ze tří `Text`ů, ne z `AttributedString`u: rozsah přišel jako `Range<String.Index>`
     /// nad tímhle řetězcem, takže rozdělení je přesné a nepřevádí se mezi dvěma indexovými světy.
-    private var title: Text {
-        let text = hit.item.title
-        guard let range = hit.highlight else { return Text(verbatim: text) }
+    private func highlighted(_ text: String, at range: Range<String.Index>?) -> Text {
+        guard let range else { return Text(verbatim: text) }
         return Text(verbatim: String(text[text.startIndex..<range.lowerBound]))
             + Text(verbatim: String(text[range])).bold()
             + Text(verbatim: String(text[range.upperBound...]))

@@ -130,8 +130,11 @@ struct AppStorePaletteTests {
         #expect(gateway.diffRequests == [vault])
     }
 
-    @Test("Pull requesty jdou v pořadí seznamu a nesou repo i autora k hledání")
+    @Test("Pull requesty jdou v pořadí seznamu a autora nesou v podtitulku")
     func pullRequestItems() async {
+        // Autor je **vidět**, ne jen v klíčových slovech: hledat podle jména se musí dát a z řádku
+        // pak musí být poznat, proč vyšel. V klíčových slovech zůstává jen vlastník repa, kterého
+        // v podtitulku nikde není.
         let (store, _) = await loaded([
             summary(connection, title: "fix: nezahazovat token", updatedAt: 200),
             summary(vault, title: "feat: šifrovaný secret"),
@@ -140,8 +143,30 @@ struct AppStorePaletteTests {
         let items = items(of: store, group: .pullRequests)
 
         #expect(items.map(\.title) == ["fix: nezahazovat token", "feat: šifrovaný secret"])
-        #expect(items.first?.subtitle == "connection#21663")
-        #expect(items.first?.keywords == ["keboola/connection", "kdosi"])
+        #expect(items.first?.subtitle == "connection#21663 · kdosi")
+        #expect(items.first?.keywords == ["keboola/connection"])
+    }
+
+    @Test("Podle autora se najde pull request, podle repa i nález")
+    func searchingByAuthorAndRepository() async throws {
+        // Připomínka k #184: hledat se má i podle jména autora a podle jména repozitáře. Autor je
+        // jen u PR (u nálezu je jméno v řádku reviewer, ne autor), repo je u nálezu i u PR.
+        let text = try Fixture.text("gh/pr-diff-ordinary.diff")
+        let (store, _) = await loaded([summary(vault, title: "feat: šifrovaný secret")], diffs: [.success(text)])
+        await store.loadDiff(for: summary(vault))
+        store.openTab(vault)
+        store.reviewRecords[vault] = record([makeReported(file: "src/Vault.php", line: 8, summary: "schází secret")])
+
+        let byAuthor = Policy.paletteResults(of: store.paletteItems, query: "kdosi")
+        #expect(byAuthor.map(\.group) == [.pullRequests])
+        #expect(byAuthor.first?.hits.first?.item.title == "feat: šifrovaný secret")
+
+        let byRepository = Policy.paletteResults(of: store.paletteItems, query: "vault")
+        // Nálezy a PR ano; **soubory ne** — jsou všechny z jednoho otevřeného PR, takže by se
+        // vytáhly všechny naráz a v řádku (diffstat v podtitulku) by nebylo poznat proč. Ověřeno
+        // vložením regrese: s repem v klíčových slovech souborů tenhle test padá, protože ve
+        // výsledku přebude skupina `.files`.
+        #expect(byRepository.map(\.group) == [.findings, .pullRequests, .actions])
     }
 
     @Test("Filtr seznamu paletu nezužuje")
