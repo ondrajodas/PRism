@@ -981,5 +981,13 @@ staršímu commitu; chybějící vstup nesmí skončit session, která hádá. P
 **nedotahuje z transcriptu** jako review (#97) — odpověď leží v posledním sdělení, které
 v transcriptu není, takže se kontrola prostě pustí znovu. Testů je o 50 víc (2142) v pěti suitách.
 
+Po proklikání k tomu přibyl **vzhled vyřešeného nálezu**: shrnutí se přeškrtne a v odznaku
+závažnosti stojí `vyřešeno`. Přeškrtává se **jen text nálezu**, ne celý řádek, jak zněl původní
+nápad — celořádkové „nepočítá se“ už znamená **odmítnutí** (#113), tedy rozhodnutí člověka, a dát
+modelu tentýž obrázek by smazalo rozdíl, na kterém tohle issue stojí. A `blokuje` se k `vyřešeno`
+**přidává, nenahrazuje**: vyřešený nález se dál počítá i dál blokuje, takže odznak bez `blokuje` by
+tvrdil „hotovo“ nad věcí, která drží merge. Rozhoduje o tom `Policy.severityBadge(…)`, protože
+odznak kreslí čtyři místa. Testů je o 13 víc (2155).
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

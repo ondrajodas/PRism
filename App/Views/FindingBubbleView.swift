@@ -45,8 +45,11 @@ struct FindingBubbleView: View {
     }
 
     var body: some View {
+        // Odznak závažnosti se skládá **jednou za bublinu**: jde přes `activeFindings`, což je
+        // filtr, a bublina se překresluje i při přejezdu myší (#224).
+        let badge = Policy.severityBadge(of: group, categories: blockingCategories)
         VStack(alignment: .leading, spacing: 0) {
-            if showsMark { mark }
+            if showsMark { mark(badge) }
             if state != .collapsed {
                 if showsMark { separator }
                 details
@@ -106,7 +109,7 @@ struct FindingBubbleView: View {
     ///
     /// Klikací celý, ne jen šipka: sbalená bublina je úzký pruh a trefit se do deseti bodů šipky
     /// je zbytečná práce — tatáž úvaha jako u hlavičky vlákna.
-    private var mark: some View {
+    private func mark(_ badge: FindingSeverityBadge) -> some View {
         Button {
             toggle?()
         } label: {
@@ -119,7 +122,7 @@ struct FindingBubbleView: View {
                 Circle()
                     .fill(accent)
                     .frame(width: 7, height: 7)
-                if isBlocking { pill("blokuje", color: Palette.crit) }
+                severity(badge)
                 if group.agreement > 1 { pill("\(group.agreement)×", color: Palette.accent) }
                 // **I ve sbalené značce**, a je to podmínka, ne ozdoba: nezakotvená bublina visí
                 // u hlavičky souboru, takže bez odznaku vypadá jako nález na prvním řádku hunku.
@@ -136,7 +139,7 @@ struct FindingBubbleView: View {
                     pill(status.verdict.label, color: status.verdict.tint)
                         .help(status.help)
                 }
-                headline
+                headline(strikesFindingText: badge.strikesFindingText)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 11)
@@ -150,6 +153,27 @@ struct FindingBubbleView: View {
         .accessibilityLabel(markHint)
     }
 
+    /// Odznak závažnosti — `blokuje`, a od #150 i `vyřešeno` z kontroly nových commitů.
+    ///
+    /// Sází se na **dvou** místech (ve značce nad obsahem a v hlavičce nálezu uvnitř), takže je na
+    /// jednom místě v kódu — a co v něm stojí, rozhoduje `Policy`, ne tohle view. `vyřešeno` je
+    /// **před** `blokuje`, protože odpovídá na „musím se na to ještě koukat“; `blokuje` za ním
+    /// zůstává, protože je to fakt, kdežto `vyřešeno` je tvrzení modelu.
+    @ViewBuilder private func severity(_ badge: FindingSeverityBadge) -> some View {
+        switch badge {
+        case .resolved(let status, let blocking):
+            pill(FindingSeverityBadge.resolvedLabel, color: FindingSeverityBadge.resolvedTint)
+                .help(status.help)
+            if blocking { pill("blokuje", color: Palette.crit) }
+        case .blocking:
+            pill("blokuje", color: Palette.crit)
+        // Odmítnutá skupina značku nekreslí vůbec (`showsMark`) a odmítnutý nález má vlastní řádek
+        // s důvodem, takže tady není co ukázat.
+        case .dismissed, .none:
+            EmptyView()
+        }
+    }
+
     /// Co je ve značce napsané, rozhoduje **počet nálezů ve skupině**:
     ///
     /// - **jeden** (běžný případ) → celá hlavička nálezu, jak ji má návrh: kategorie, verdikt,
@@ -159,7 +183,7 @@ struct FindingBubbleView: View {
     ///
     /// A ve sbaleném stavu k tomu **náhled textu**. Bez něj by značka říkala „tady něco je“, ale
     /// ne co — tedy přesně to, kvůli čemu by se rozbalovala naslepo.
-    @ViewBuilder private var headline: some View {
+    @ViewBuilder private func headline(strikesFindingText: Bool) -> some View {
         if let finding = representative, group.findings.count == 1 {
             attributes(of: finding)
         } else if let count = countLabel {
@@ -170,6 +194,9 @@ struct FindingBubbleView: View {
         }
         if state == .collapsed, let preview {
             Text(verbatim: preview)
+                // Náhled **je** text nálezu, takže se přeškrtává s ním (#150) — sbalená značka
+                // jinak jako jediná tvrdila, že se nic nezměnilo.
+                .strikethrough(strikesFindingText, color: Palette.ink3)
                 .font(.system(size: 11.5))
                 .foregroundStyle(Palette.ink2)
                 .lineLimit(1)
@@ -203,15 +230,22 @@ struct FindingBubbleView: View {
         group.activeFindings.first
     }
 
-    /// Stav z kontroly do značky (#150) — **jen u skupiny s jediným platným nálezem**.
+    /// Stav z kontroly do značky (#150) — **jen u skupiny s jediným platným nálezem, a jen když ho
+    /// neřekl odznak závažnosti**.
     ///
     /// U víc nálezů na jednom řádku by odznak mluvil za všechny, a to je zrovna ten případ, kdy
     /// se výsledky liší: jeden nález může být opravený a druhý pořád platit. Tam si stav nese
     /// každá položka uvnitř bubliny.
+    ///
+    /// `vyřešeno` stojí v odznaku závažnosti pár bodů vlevo, takže by tu byly dvě kapsle o jedné
+    /// věci; plný popisek `kontrola: vyřešeno` se místo toho kreslí **uvnitř** bubliny, kde je pro
+    /// něj místo — a s ním i to, kdo „vyřešeno“ tvrdí. `pořád platí` a `nejasné` závažnost nemění,
+    /// takže ve značce zůstávají.
     private var markStatus: RecheckStatus? {
         let active = group.activeFindings
         guard active.count == 1, let finding = active.first else { return nil }
-        return group.recheck(of: finding)
+        guard let status = group.recheck(of: finding), status.verdict != .resolved else { return nil }
+        return status
     }
 
     private var markHint: String {
@@ -276,22 +310,32 @@ struct FindingBubbleView: View {
     }
 
     private func active(_ finding: Finding) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        // Stav z kontroly se čte **jednou na nález**: `group.recheck(of:)` skládá klíč, a ten je
+        // řetězec (#224). Odznak i přeškrtnutí textu se pak řídí tímtéž.
+        // Sem se odmítnutý nález nedostane (má vlastní větev), takže `dismissal` je `nil`.
+        let status = group.recheck(of: finding)
+        let badge = Policy.severityBadge(
+            isBlocking: Policy.isBlocking(finding, categories: blockingCategories),
+            recheck: status,
+            dismissal: nil
+        )
+        return VStack(alignment: .leading, spacing: 4) {
             // Hlavička jen tehdy, když ji neřekla značka nad bublinou. U jednoho nálezu jsou
             // kategorie, verdikt a reviewer vlastností celé bubliny, takže by se psaly dvakrát.
             if showsEntryHeaders {
                 HStack(spacing: 6) {
-                    if Policy.isBlocking(finding, categories: blockingCategories) {
-                        pill("blokuje", color: Palette.crit)
-                    }
+                    severity(badge)
                     attributes(of: finding)
                     Spacer()
                 }
             }
+            // Přeškrtnuté **jen shrnutí nálezu** (#150). Celý řádek ztlumit patří odmítnutí (#113),
+            // za kterým stojí člověk — tvrzení modelu ten obrázek dostat nesmí.
             Text(finding.summary)
+                .strikethrough(badge.strikesFindingText, color: Palette.ink3)
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
-            if let status = group.recheck(of: finding) { recheck(status) }
+            if let status { recheck(status) }
             if let scenario = finding.failureScenario, !scenario.isEmpty {
                 DisclosureGroup("Kdy to selže") {
                     Text(scenario)
@@ -312,9 +356,14 @@ struct FindingBubbleView: View {
     /// **Nález nemizí ani se nepřesouvá.** „Vyřešeno“ je tvrzení modelu, ne fakt; sundat nález
     /// smí jedině odmítnutí (#113), za kterým stojí člověk. Kdyby ho odznak schoval, přišel bych
     /// o něj tím, že se modelu něco zdálo — a to je nejdražší chyba, jakou tohle okno umí.
+    ///
+    /// U `vyřešeno` se ten odznak kreslí **vždycky**, i když závažnost nad bublinou říká
+    /// `vyřešeno`: krátké slovo v odznaku závažnosti neříká, kdo to tvrdí, a `kontrola: …` je
+    /// jediné místo, kde je to vidět bez najetí myší.
     @ViewBuilder private func recheck(_ status: RecheckStatus) -> some View {
         // Odznak ze značky se čte **jednou**: `activeFindings` je filtr, takže druhé volání je
-        // další průchod skupinou při každém překreslení bubliny (#224).
+        // další průchod skupinou při každém překreslení bubliny (#224). U `vyřešeno` je `nil`
+        // schválně — značka ho nese jako závažnost, ne jako odznak kontroly.
         let inMark = markStatus != nil
         // Prázdný řádek se nekreslí: u jediného nálezu bez věty odznak nese značka nad bublinou.
         if !inMark || status.note != nil {

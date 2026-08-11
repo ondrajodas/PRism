@@ -35,6 +35,13 @@ struct FindingTableRow: Identifiable, Hashable {
     /// ztlumit řádek, ve kterém pořád něco platí, by ten platný nález schovalo.
     let dismissal: FindingDismissal?
 
+    /// Co stojí ve sloupci `závažnost` a jestli se shrnutí přeškrtne (#150).
+    ///
+    /// Mluví za **celé místo**, takže `vyřešeno` vydá jedině tehdy, když ho kontrola dala všem
+    /// platným nálezům řádku — jinak by se shrnutí přeškrtlo nad nálezem, který pořád platí.
+    /// Rozhoduje o tom `Policy`, stejně jako u karty v panelu a u bubliny.
+    let severityBadge: FindingSeverityBadge
+
     /// Je co rozbalit? Rozbalená část ukazuje celé nálezy — s „Kdy to selže“, převzetím
     /// a odmítnutím — takže má smysl vždycky, když nález nějaký text nese.
     var isExpandable: Bool { true }
@@ -67,7 +74,8 @@ struct FindingTableRow: Identifiable, Hashable {
                     },
                     dismissal: group.activeFindings.isEmpty
                         ? group.dismissal(of: group.findings[0])
-                        : nil
+                        : nil,
+                    severityBadge: Policy.severityBadge(of: group, categories: categories)
                 )
             }
     }

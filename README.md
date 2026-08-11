@@ -721,6 +721,11 @@ read-only nástroje jako review. U každého nálezu pak stojí odznak `kontrola
 `kontrola: pořád platí` nebo `kontrola: nejasné` a k němu věta, jak k tomu běh došel; v hlavičce
 je souhrn (`3 vyřešené, 1 pořád platí, 1 bez odpovědi`).
 
+Vyřešený nález je poznat na první pohled: **shrnutí je přeškrtnuté** a v odznaku závažnosti stojí
+`vyřešeno`. Přeškrtne se u toho jen text nálezu, ne celý řádek — celá plocha se ztlumí jedině
+u nálezu, který jsem **odmítl** sám, a ty dva stavy se nesmí plést. A když nález blokuje, zůstává
+u něj `blokuje` i nadále: „vyřešeno“ je tvrzení modelu, kdežto to, že se PR pořád nemerguje, je fakt.
+
 Tři věci, které z toho **neplynou**. Odznak nálezy **nemaže ani neschovává** — je to tvrzení
 modelu, ne fakt, a sundat nález smí jedině odmítnutí (#113), za kterým stojí člověk. Kontrola se
 **nenabízí**, dokud není uložený záznam proti staršímu commitu, protože bez nálezů by se session

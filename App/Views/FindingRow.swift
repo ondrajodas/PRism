@@ -79,9 +79,18 @@ struct FindingRow: Identifiable, Hashable, Sendable {
         }
     }
 
+    /// Co u nálezu stojí v odznaku závažnosti a jestli se jeho text přeškrtne (#150).
+    /// Rozhoduje `Policy` — ten odznak kreslí víc míst a každé z nich se dívá sem.
+    var severityBadge: FindingSeverityBadge {
+        Policy.severityBadge(isBlocking: isBlocking, recheck: recheck, dismissal: dismissal)
+    }
+
     /// Blokující **a platný**. Výstražná ikona u nálezu, který jsem odmítl, by tvrdila, že
     /// PR pořád na něčem stojí — a přitom se z něj právě proto nepočítá.
-    var showsBlockingWarning: Bool { isBlocking && dismissal == nil }
+    ///
+    /// Odvozené z odznaku, ne druhou podmínkou: „blokuje“ je fakt, který se nesmí ztratit ani
+    /// tehdy, když kontrola nález má za opravený, a dvě pravidla pro jednu věc se rozejdou.
+    var showsBlockingWarning: Bool { severityBadge.showsBlocking }
 
     /// Co se o kategorii dozvíš z nápovědy. U odmítnutého nálezu i to, proč neplatí — sloupec
     /// unese odznak, ale ne celou větu.

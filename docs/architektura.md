@@ -1664,6 +1664,22 @@ Co se u ní nemá rozbít:
   spočítanou šířku (#220) a odznak by si vzal místo shrnutí. **Na kartě je pod textem, ne
   v hlavičce** — změřeno offscreen renderem, že se ve 300 bodech vedle `blokuje`, kategorie
   a revieweera zkrátí na `kontrola…` a `blokuje` se zalomí na dva řádky.
+- **Vyřešený nález má přeškrtnuté shrnutí a `vyřešeno` v odznaku závažnosti.** Rozhoduje o tom
+  `Policy.severityBadge(…)`, protože ten odznak kreslí **čtyři** místa: hlavička karty v panelu,
+  sloupec `závažnost` v tabulce, značka bubliny a hlavička nálezu uvnitř bubliny. Platí u toho
+  čtyři věci a každá z nich má důvod:
+  - **`blokuje` zůstává vedle `vyřešeno`**, nikdy se nenahrazuje: první je fakt o tom, co drží
+    merge, druhé tvrzení modelu — a vyřešený nález se dál počítá i dál blokuje. Ve sloupci tabulky
+    jsou obě kapsle **pod sebou** (92 bodů na šířku nestačí, na výšku ano), jinde vedle sebe.
+  - **Přeškrtává se jen text nálezu** (shrnutí a jeho náhled ve sbalené značce), ne celý řádek:
+    ztlumení celé plochy má `DismissedRowStyle`, tedy odmítnutí, za kterým stojí člověk. Odmítnutý
+    nález se proto **nepřeškrtává** a odznak `vyřešeno` nedostane — o něm je rozhodnuto.
+  - **`pořád platí` a `nejasné` závažnost nemění.** Dobrá zpráva je jen jedna a jen ta smí
+    z odznaku ubrat pozornost.
+  - **V odznaku závažnosti stojí krátké `vyřešeno`, ne `kontrola: vyřešeno`** (~110 bodů, tedy
+    `kontrola…` ve sloupci i v hlavičce karty). Odkud to je, nese zelená a nápověda; plný odznak
+    zůstává na kartě pod textem a v obsahu bubliny. **Ze sbalené značky bubliny plný odznak ubyl**
+    — stál by pár bodů od `vyřešeno`, takže se kreslí až v rozbaleném obsahu.
 
 **Zavření aplikace se ptá, dokud běží review** (`AppDelegate`, #94), a **session u toho zabije**
 (#264). Do #264 dělalo jen to první: dialog tvrdil, že se session zabije, ale nikdo ji nezabíjel —
@@ -3208,6 +3224,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.sortedReleases(_:)` | Vydání od nejnovějšího (#127) — podle **data**, ne podle tagu |
 | `Policy.newReleases(in:since:)` | Co vyšlo od poslední viděné verze; neznámá značka = **nic** |
 | `Policy.recheckStatuses(_:of:)` | Spáruje odpovědi kontroly (#150) s nálezy, na které se ptala — index z promptu → `Policy.key(of:)`. **Nepáruje se přes text**: model si věty přeformuluje |
+| `Policy.severityBadge(isBlocking:recheck:dismissal:)`, `Policy.severityBadge(of:categories:)` | Co stojí v odznaku závažnosti u nálezu a jestli se jeho text přeškrtne (`FindingSeverityBadge`, #150): `dismissed` / `resolved(_, blocking:)` / `blocking` / `none`. **`blokuje` se k `vyřešeno` přidává, nenahrazuje** — první je fakt, druhé tvrzení modelu. Odmítnutí přebíjí kontrolu a **nepřeškrtává** (celořádkové „nepočítá se“ patří člověku). Skupinová varianta vydá `resolved` jedině tehdy, když ho kontrola dala **všem platným** nálezům místa |
 | `Policy.recheck(of:head:)` | Co o uložených nálezech říká poslední kontrola (`RecheckReport`, `RecheckTally`): `none` / `outdated(againstHeadSha:)` / `current`. **Platí jen pro hlavu, proti které běžela** — jinak se odznaky nevydají (tvrdá podmínka č. 5); počítá se z **platných** nálezů, takže odmítnutý (#113) se nepočítá, a nález bez odpovědi jde do `unanswered` |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.

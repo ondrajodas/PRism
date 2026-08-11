@@ -213,6 +213,15 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
     pravidla v testu), včetně nálezu, který se mezitím přeložil. A kdy se odznaky **nesmí**
     ukázat: kontrola proti jiné hlavě, nenačtený detail (hlava neznámá). Počty se ověřují i na
     odmítnutém nálezu (nepočítá se) a na nálezu bez odpovědi (`unanswered`).
+  - **Odznak závažnosti** (`Policy.severityBadge`) — vyčerpávajícím výčtem, a to nejcennější
+    tvrzení sady je, že **`vyřešeno` nesundá `blokuje`**: obojí vypadá na obrazovce správně, takže
+    kdyby to `vyřešeno` spolklo, poznalo by se to až u PR, který se nemergoval bez důvodu.
+    Ověřeno vložením regrese (`blocking: false` v produkční funkci) — spadnou z toho čtyři testy,
+    včetně toho o kartě. Dál: odmítnutí přebíjí kontrolu a **nepřeškrtává** (dva různé „nepočítá
+    se“ se nesmí slít do jednoho obrázku), `pořád platí` a `nejasné` závažnost nemění, a skupinová
+    varianta vydá `vyřešeno` jedině tehdy, když ho kontrola dala **všem platným** nálezům místa —
+    jinak by se přeškrtlo shrnutí nálezu, který pořád platí. A že se karta v panelu a řádek
+    tabulky ptají **téže** funkce, tedy že se ta dvě místa nemají čím rozejít.
   - **`ReviewStore`** — kontrola se ukládá k záznamu nálezů, přežije restart, **nesrovná
     `isStale`**, chybějící soubor a symlink jsou chyba. A ten nejcennější: `save` kontrolu
     do `runs` nepustí a záznam po tom pokusu zůstane **bit po bitu stejný**.

@@ -17,7 +17,10 @@ struct FindingCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             header
+            // Přeškrtnuté jen **shrnutí**, ne celá karta (#150): celořádkové „nepočítá se“ nosí
+            // `DismissedRowStyle`, tedy rozhodnutí člověka, a tvrzení modelu ho nesmí napodobit.
             Text(verbatim: row.summary)
+                .strikethrough(row.severityBadge.strikesFindingText, color: .secondary)
                 .font(.callout)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -52,22 +55,7 @@ struct FindingCardView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            if row.showsBlockingWarning {
-                Label("blokuje", systemImage: "exclamationmark.triangle.fill")
-                    .labelStyle(.titleAndIcon)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.red)
-                    .help("Blokující nález — kvůli němu se PR nemerguje")
-            }
-            if let dismissal = row.dismissal {
-                Text(verbatim: dismissal.reason.label)
-                    .font(.caption2)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(.secondary.opacity(0.15), in: .capsule)
-                    .foregroundStyle(.secondary)
-                    .help(row.categoryHelp)
-            }
+            severity
             Text(verbatim: row.category)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -86,6 +74,52 @@ struct FindingCardView: View {
                     .foregroundStyle(.tint)
             }
         }
+    }
+
+    /// Odznak závažnosti: `blokuje`, důvod odmítnutí, nebo `vyřešeno` z kontroly (#150).
+    ///
+    /// Co v něm stojí, rozhoduje `Policy` — tady se to jen kreslí. `vyřešeno` je **před**
+    /// `blokuje`, protože odpovídá na otázku „musím se na to ještě koukat“; `blokuje` zůstává
+    /// hned za ním, aby se karta nečetla jako hotová věc, která pořád drží merge.
+    @ViewBuilder private var severity: some View {
+        switch row.severityBadge {
+        case .dismissed(let reason):
+            pill(reason.label, tint: .secondary).help(row.categoryHelp)
+        case .resolved(let status, let blocking):
+            pill(FindingSeverityBadge.resolvedLabel, tint: FindingSeverityBadge.resolvedTint)
+                .help(status.help)
+            if blocking { blockingWarning }
+        case .blocking:
+            blockingWarning
+        case .none:
+            EmptyView()
+        }
+    }
+
+    /// **Nezalomí se a neustoupí** (`fixedSize`, `layoutPriority`): ve 300 bodech panelu se vedle
+    /// `vyřešeno` zalomilo na `blo-kuje` a odznak vyšel jako `vyřeše…` (offscreen render). Odznak
+    /// je jedno slovo, které buď je čitelné, nebo neříká nic, takže v úzkém panelu ustupují texty
+    /// vedle něj — kategorie a reviewer. Tatáž úvaha jako u odznaků v bublině.
+    private var blockingWarning: some View {
+        Label("blokuje", systemImage: "exclamationmark.triangle.fill")
+            .labelStyle(.titleAndIcon)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.red)
+            .fixedSize()
+            .layoutPriority(2)
+            .help("Blokující nález — kvůli němu se PR nemerguje")
+    }
+
+    private func pill(_ text: String, tint: Color) -> some View {
+        Text(verbatim: text)
+            .font(.caption2)
+            .lineLimit(1)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(tint.opacity(0.15), in: .capsule)
+            .foregroundStyle(tint)
+            .fixedSize()
+            .layoutPriority(2)
     }
 
     /// Co o nálezu řekla kontrola z minula (#150) — **vlastní řádek pod textem**, ne odznak
