@@ -868,5 +868,32 @@ přidaná z diffu musí umět panel rozložit sama; dokud to rozhodnutí bydlelo
 otestovat. Jeden reálný nález přišel z testu, ne z review: session spadlá při startu neznačila
 selhání v žádné fázi, takže dráha vypadala k nerozeznání od té, co ještě nezačala.
 
+**Ukončení aplikace zabíjí běžící session (#264)** — do té doby to dělal jen dialog z #94, který
+tvrdil, že se session zabije, ale nikdo ji nezabíjel: `applicationShouldTerminate` vrátil
+`terminateNow` a `claude` se přerodil na `launchd`. Platily se tokeny za review, které už nemá komu
+doručit nálezy, a osamocený proces držel pracovní strom v cache. Změřeno na stroji: dvě takové
+session běžely **čtyři dny**.
+
+Zabíjí se **tou samou cestou jako u zrušení** (`task.cancel()` → `onTermination` proudu →
+`SIGKILL`) — druhý `kill` v delegátovi by byl druhá pravda o tom, jak se běh zastavuje. Co je nové,
+je **čekání**: signál se nese přes `WorkCoordinator`, který práci drží ve vlastním tasku, takže
+`terminateNow` hned po `cancel()` aplikaci zavře dřív, než signál odejde. Delegát proto vrací
+`terminateLater` a odpovídá systému až po zabití — **dotaz zůstává synchronní**, odkládá se jen to
+za ním. Čekání má strop dvou sekund, protože ze zaseknuté session nesmí vzniknout aplikace, která se
+nedá zavřít; v praxi se vrací po prvním dvacetimilisekundovém kole.
+
+Jedna věc dopadla **jinak, než jak stálo v zadání**. Nedokončený běh se neměl „uložit stejně jako
+u zrušení“, protože zrušení značku rozdělaného běhu (#97) **maže** — schválně, aby příští start
+nevzkřísil nálezy, které si člověk zrušil. Kdyby tudy šlo i zavírání, přišlo by se přesně o to, co
+dneska funguje: z „přerušeno se dvěma nálezy“ by vyšlo „neběželo“. Zavření aplikace je pro běh totéž
+jako pád, takže se značky nemažou (`AppStore.isTerminating`) a nálezy se dotáhnou z transcriptu.
+Během zavírání se navíc **nic nespouští** — tik pollingu dorazí i uprostřed a jeho automatický běh
+by aplikaci přežil.
+
+Ověřeno spuštěním, ne přečtením: session se zabila (`pgrep` prázdný, žádný `ppid 1`), značka
+v `interrupted.json` zůstala a po restartu vyšel řádek `přerušeno`. Testů je o deset víc (2072)
+ve třech suitách a všechny čtyři brány jsou ověřené **vloženou regresí**. Na obrazovce se změnil
+jeden odstavec v dialogu: do #264 sliboval, že se nálezy ztratí, což od #97 není pravda.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

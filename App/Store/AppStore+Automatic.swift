@@ -21,7 +21,9 @@ extension AppStore {
     /// Volá se **jen po úspěšném tiku**: po výpadku sítě je seznam prázdný, takže by se
     /// nespustilo nic a `consideredForAutomation` by se rozešlo se skutečností.
     func startAutomaticReviews(for summaries: [PullRequestSummary]) async {
-        guard let autoRuns else { return }
+        // Zavírá se aplikace (#264): plánovat běh, který ji přežije, je zrovna to, co se tím
+        // zavíráním zastavuje. Ruční cesta má tutéž bránu v `startReview`.
+        guard let autoRuns, !isTerminating else { return }
         let limit = configuration.global.autoRunsPerDay
         let anyAutomatic = summaries.contains { resolved(for: $0.repo).mode == .automatic }
         automaticRunsToday = anyAutomatic ? await autoRuns.used() : nil

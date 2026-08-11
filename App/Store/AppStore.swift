@@ -295,6 +295,14 @@ final class AppStore {
     /// Běžící review podle PR — drží se kvůli zrušení.
     var reviewTasks: [PRIdentifier: RunningReview] = [:]
 
+    /// Aplikace se zavírá (#264). Čte se na dvou místech a obojí je podmínka, ne kosmetika:
+    ///
+    /// - **nic nového se nespustí** — tik pollingu uprostřed zavírání by pustil automatické
+    ///   review, které by aplikaci přežilo, tedy zrovna to, co se tímhle zavírá;
+    /// - **značky rozdělaných běhů (#97) se nemažou** — zavření je pro běh totéž jako pád, takže
+    ///   se nálezy mají dotáhnout z transcriptu po dalším startu (viz `AppStore+Review`).
+    var isTerminating = false
+
     /// Běžící review jednoho PR — úloha a to, které reviewery pouští.
     ///
     /// **Jedna úloha na PR, ne na `(PR, skill)`**, i když #149 pouští i podmnožinu. Na

@@ -1058,6 +1058,41 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   nemusí ladit. Ověřuje se to **opakováním**, ne jedním zeleným během: 20 běhů suity v řadě,
   protože u flaky s 25 % je pět zelených běhů ještě čtvrtina případů.
 - **`ReviewSlots`** — limit, pořadí ve frontě a zrušený čekatel, který nesmí frontu ucpat.
+- **Zavření aplikace** (#264) — tři suity, protože se to láme ve třech různých místech:
+  - **`AppDelegateTerminationTests`** — rozhodnutí o ukončení. Že se bez běžícího review neptá
+    a nic nezabíjí, že `Zpět` nezabije nic, a hlavně že se **ukončení povolí teprve po zabití**
+    (`.terminateLater` a `reply` až po něm). Jde to jedině proto, že dotaz i odpověď systému jsou
+    v delegátovi **vlastnosti**: `runModal()` by v testu čekal na kliknutí, které nikdo neudělá,
+    a `reply(toApplicationShouldTerminate:)` mimo odložené ukončení by ukončil hosta testů.
+    Poslední test suity tvrdí, že odpověď dorazí **i s nezapojeným zabíjením** — nezavíratelná
+    aplikace je horší porucha než přežilá session.
+  - **`AppStoreTerminationTests`** — co po zavírání zůstane: nic neběží, nic nového se nespustí
+    (ruční tlačítko **i** tik automatu) a **značka rozdělaného běhu (#97) se nesmaže**. K tomu
+    protějšek, že **zrušení člověkem ji smazat musí** — bez něj by šlo „nemazat při zavírání“
+    splnit tím, že se nemaže nikdy, a příští start by vzkřísil nálezy, které si někdo zrušil.
+    Store je proto v **automatickém** režimu i tam, kde se spouští ručně: s `autoRuns: nil` by
+    plánovač vypadl na první závoře a test o něm netvrdil nic.
+  - **`AppStoreTerminationProcessTests`** — celý produkční řetěz proti **skutečnému procesu**
+    (`AppStore` → `ClaudeReviewRunner` → `SubprocessStreamer` → `Process`), kde za `claude` stojí
+    skript, který vypíše svoje PID a čeká. `exec sleep`, ne `sleep`: PID pak patří tomu procesu,
+    který má umřít, a nezůstane pod ním potomek, který by výsledek rozmazal.
+
+    **Pořadí tvrzení je tu podstatná část testu.** `runningReviews == 0` musí být **první a bez
+    jediného `await`u** — v provozu po téhle metodě následuje zavření aplikace, takže víc času
+    než „nic“ běh nedostane. Když se to napsalo obráceně (napřed polling na PID), test prošel
+    i nad verzí, která na zabití nečeká: polling sám tomu běhu dal čas, který v provozu nemá.
+    Teprve po tom tvrzení se kouká na proces, a tam se čekat smí — mezi doručeným `SIGKILL`em
+    a zmizením z tabulky je ještě sklizení, které s aplikací nesouvisí.
+
+  Ověřeno **vložením regrese**, ve čtyřech podobách: bez čekání po `cancel()` (spadnou čtyři
+  testy včetně toho nad skutečným procesem), bez brány na mazání značek (spadne ta o značce),
+  bez brány v `startReview` a bez brány ve `startAutomaticReviews` (spadne ta o novém běhu)
+  a s `terminateNow` místo odloženého ukončení (spadne celá delegátí suita).
+
+  Co testy nepokryjí, je **osamocený proces po zmizelé aplikaci** — na to se nedá napsat test,
+  který by nezabíjel vlastního hosta, takže se to ověřuje spuštěním: pustit review, ukončit
+  aplikaci a podívat se, jestli po ní zbyl `claude` s `ppid 1`. Změřeno u #264 na slotu — session
+  zmizela, značka v `interrupted.json` zůstala a po restartu vyšel řádek `přerušeno`.
 
 ## Jak si zkontrolovat, jak view vypadá
 

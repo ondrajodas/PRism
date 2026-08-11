@@ -2,16 +2,37 @@ import AppKit
 
 /// Zachytí ukončení aplikace, dokud běží review.
 ///
-/// Session se zavřením aplikace **zabije** a nálezy, které reviewer už nahlásil, jsou pryč
-/// — v panelu i na disku. Ověřeno v provozu (#94): PR se dvěma nálezy, z toho jedním
-/// `correctness`, skončil po restartu jako `neběželo`.
+/// Dělá u toho dvě věci a každá řeší jinou ztrátu:
 ///
-/// Dialog to nevyřeší úplně (pád aplikace ani zabití zvenčí se takhle zachytit nedají), ale
-/// pokrývá to, co způsobí uživatel svým jednáním — a to je většina případů. Dotažení nálezů
-/// z transcriptu zůstává v #94 jako ta drahá varianta pro zbytek.
+/// 1. **Zeptá se** (#94). Nálezy, které reviewer nahlásil, jsou v běžící session, ne na disku,
+///    a zavřít okno uprostřed review je obvykle omyl. Dialog nepokrývá pád aplikace ani zabití
+///    zvenčí — to dotahuje #97 z transcriptu — ale pokrývá to, co uživatel způsobí svým
+///    jednáním, a to je většina případů.
+/// 2. **Zabije běžící session** (#264). Do té doby se `claude` zavřením aplikace **nezabil**:
+///    osiřelý proces se přerodil na `launchd` a běžel dál — platilo se za review, které už
+///    nemá komu doručit nálezy, a držel pracovní strom v cache, který se proto nesmí uklidit.
+///    Změřeno: dvě takové session běžely na stroji čtyři dny.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kolik review právě běží. Doplní `PRismApp`, jakmile má store; do té doby nic neběží.
     @MainActor var runningReviews: () -> Int = { 0 }
+
+    /// Zabije běžící review a vrátí se, teprve když po nich nic nezůstalo (#264). Doplní
+    /// `PRismApp` ze stejného důvodu jako `runningReviews`.
+    @MainActor var stopReviews: @MainActor () async -> Void = {}
+
+    /// Jak se zeptat. Vlastnost, ne jen metoda, kvůli testům: `NSAlert.runModal()` v nich čeká
+    /// na kliknutí, které nikdo neudělá.
+    @MainActor var confirmQuit: @MainActor (Int) -> Bool = { AppDelegate.ask(about: $0) }
+
+    /// Odpověď systému, že se aplikace smí zavřít. Taky vlastnost, a taky kvůli testům:
+    /// `reply(toApplicationShouldTerminate:)` mimo odložené ukončení by hosta testů ukončil
+    /// doopravdy.
+    @MainActor var allowTermination: @MainActor () -> Void = {
+        NSApp.reply(toApplicationShouldTerminate: true)
+    }
+
+    /// Zabíjení už běží, takže se na nic nečeká a nic se nepotvrzuje podruhé.
+    @MainActor private var isStoppingReviews = false
 
     /// Delegát notifikací musí stát dřív, než systém doručí první kliknutí (#88).
     ///
@@ -25,25 +46,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         MainActor.assumeIsolated {
+            // Druhý pokus během těch dvou sekund, co se zabíjí, jen zopakuje odpověď. Jinak by
+            // otevřel druhý dialog nad ukončením, které už běží, a systému by se odpovědělo
+            // dvakrát — `reply(toApplicationShouldTerminate:)` je na jedno odložené ukončení.
+            guard !isStoppingReviews else { return .terminateLater }
+
             let running = runningReviews()
             guard running > 0 else { return .terminateNow }
-            return ask(about: running) ? .terminateNow : .terminateCancel
+            guard confirmQuit(running) else { return .terminateCancel }
+            isStoppingReviews = true
+
+            // **Odloží se jen zabíjení, ne dotaz.** Dotaz musí padnout synchronně, jinak by se
+            // aplikace zavřela dřív, než se kdokoli zeptá (#94); zabití session je proti tomu
+            // `async` — jde přes zrušení běhu, které si musí projít několik hopů mezi aktory.
+            // `terminateNow` hned po něm by aplikaci zavřel dřív, než signál odejde, a přesně
+            // to bylo #264. Odpověď dorazí vždycky: `stopReviewsBeforeTermination` má vlastní
+            // strop, takže ze zaseknuté session nevznikne aplikace, která se nedá zavřít.
+            Task { @MainActor in
+                await stopReviews()
+                allowTermination()
+            }
+            return .terminateLater
         }
     }
 
-    /// `NSAlert` a `runModal()` schválně, ne SwiftUI: `applicationShouldTerminate` musí
-    /// odpovědět **synchronně**, jinak se aplikace ukončí, než se kdokoli zeptá.
-    @MainActor private func ask(about running: Int) -> Bool {
+    /// `NSAlert` a `runModal()` schválně, ne SwiftUI: dotaz musí padnout **synchronně**, jinak
+    /// se aplikace ukončí, než se kdokoli zeptá.
+    @MainActor private static func ask(about running: Int) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = running == 1
             ? "Běží review. Ukončit teď?"
             : "Běží \(running) review. Ukončit teď?"
-        // Text říká, co se ztratí, ne jen že se něco děje. „Běží review“ samo o sobě nedává
-        // důvod kliknout na Zpět.
+        // Text říká, co se stane, ne jen že se něco děje. „Běží review“ samo o sobě nedává
+        // důvod kliknout na Zpět. **Neslibuje ale ani víc, než co data unesou:** dotáhne se to,
+        // co reviewer do zabití nahlásil, a jen z běhu, který stihl ohlásit svoje id session.
         alert.informativeText = """
-        Ukončením se session zabije a nálezy, které už reviewer nahlásil, se ztratí. \
-        Co doběhlo, zůstane uložené.
+        Běžící session se ukončením zabijí. Co doběhlo, zůstane uložené; z nedoběhlého se po \
+        dalším spuštění dotáhne, co reviewer nahlásil do té chvíle.
         """
         alert.addButton(withTitle: "Ukončit")
         alert.addButton(withTitle: "Zpět")
