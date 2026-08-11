@@ -978,17 +978,47 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
     chybějící sražení nuly ukáže záporný čas.
   - **Cena odpočtu** (`DashboardCountdownRedrawTests`) — sonda v hostovaném okně kolem
     **skutečného** `DashboardCountdown`u, která si počítá přepočty svého těla, a k tomu bitmapa
-    téhož view na začátku a na konci. Obě poloviny musí platit naráz: tělo se za 1,5 sekundy
-    přepočítá **jednou** a bitmapa se **změní**. Jedna bez druhé se dá splnit omylem — zamrzlý
-    odpočet tělo taky nepřepočítává, a to je zrovna ta regrese, kterou samotný počet přepočtů
-    nechytá (ověřeno vyndáním `TimelineView`: bez bitmapy zůstala sada zelená). Text se z okna
-    **přečíst nedá**, accessibility tree se v něm nenaplní (změřeno: `accessibilityChildren` vrací
-    prázdno), takže se porovnávají pixely. Měří se na sondě, ne na `DashboardView`, protože počítat
-    přepočty jde jedině tak, že si je view samo počítá, a to do aplikace nepatří. **Druhý test je
-    kontrola měřidla**: tentýž postup nad odpočtem, který se v těle přepočítává (hodiny ve stavu),
-    přepočty spočítat musí — bez něj by zelený první test mohl znamenat jen to, že sonda vůbec
-    nežije. Okno je **bez rámu a mimo obrazovku**, ale skutečné: bez okna SwiftUI přepočty
-    neplánuje a oba testy by vyšly zeleně z nesprávného důvodu.
+    téhož view snímkovaná po 100 ms. Obě poloviny musí platit naráz: kresba se **dvakrát změní**
+    (odpočet se tedy přetiká, ne jen jednou překreslí) a tělo se u toho přepočítá **jednou**. Jedna
+    bez druhé se dá splnit omylem — zamrzlý odpočet tělo taky nepřepočítává, a to je zrovna ta
+    regrese, kterou samotný počet přepočtů nechytá (ověřeno vyndáním `TimelineView`: bez bitmapy
+    zůstala sada zelená). Text se z okna **přečíst nedá**, accessibility tree se v něm nenaplní
+    (změřeno: `accessibilityChildren` vrací prázdno), takže se porovnávají pixely. Měří se na sondě,
+    ne na `DashboardView`, protože počítat přepočty jde jedině tak, že si je view samo počítá, a to
+    do aplikace nepatří. **Druhý test je kontrola měřidla**: tentýž postup nad odpočtem, který se
+    v těle přepočítává (hodiny ve stavu), musí přepočty spočítat **a vidět u nich měnící se
+    kresbu** — bez něj by zelený první test mohl znamenat jen to, že sonda vůbec nežije. Okno je
+    **bez rámu a mimo obrazovku**, ale skutečné: bez okna SwiftUI přepočty neplánuje a oba testy by
+    vyšly zeleně z nesprávného důvodu.
+
+    **Na kresbu se čeká, neměří se v pevném okamžiku** (#269, mění #260). Do #269 sonda vzala dva
+    snímky **1,5 s** od sebe a tvrdila, že se liší — a `main` na tom byl červený, protože se lišit
+    **nemohly**: `TimelineView` vykreslí při nasazení hodnotu **prvního** tiku rozvrhu, který je
+    v budoucnosti, a další překreslení naplánuje až na tik po něm, takže první změna kresby přijde
+    za **1 až 2 periody**. Změřeno s termínem 600,0 s daleko (mřížka tiků padne na celé vteřiny od
+    nasazení): kresba se změní ve **2,01 s**, pak 3,00 s, 4,00 s a dál po vteřině — tedy nikdy
+    v tom 1,5 s okně; s termínem 600,4 s daleko v 1,41 s, tedy 90 ms před koncem okna. Zeleně
+    vycházela jedině tehdy, když spánek přetáhl o půl vteřiny, což je na vytíženém stroji běžné —
+    a to je celé vysvětlení, jak mohla u #260 projít a na čistém `mainu` padat. **Aplikace v tom
+    byla celou dobu v pořádku**: odpočet tiká po 1,00 s (změřeno na časech tiků 2,01 → 3,00 → 4,00
+    → 5,00 → 6,00) a věta v obou snímcích je čitelná — `za 9min 59s znovu` v 1,5 s, `za 9min 58s
+    znovu` ve 2,0 s.
+
+    Sonda proto snímkuje po 100 ms, dokud nenajde **dvě** změny, se **stropem 4 s** — a strop je
+    to, co z čekání dělá tvrzení o **vteřinovém** taktu, ne jen o tom, že se něco někdy překreslí:
+    rozvrh po dvou vteřinách posune změny na 4,0 s a 6,0 s, tedy za strop (ověřeno vloženou regresí
+    `by: 2` — sonda viděla jednu změnu místo dvou). Ověřeno i druhou stranou: opakované
+    `cacheDisplay` samo přepočty nestojí ani takt neposouvá (tělo se přes šest vteřin snímkování
+    přepočítalo jednou), a odpočet v těle kontroly měřidla je na **desetiny vteřiny**, protože
+    s celými by se text za 1,5 s změnil nejvýš jednou. Uplynulý čas se u toho měří **monotónně**
+    (`ContinuousClock`, jako v `DiffPerformanceMeasurement`): termín odpočtu `Date` být musí, jinak
+    by rozvrh netikal podle týchž hodin jako aplikace, ale strop sondy na nástěnných hodinách stát
+    nesmí — přestavení hodin nebo korekce z NTP by ho posunuly.
+
+    Co z toho platí pro **příští sondu nad `TimelineView`em**: pevný okamžik měření je vždycky
+    závod s fází mřížky tiků, kterou určuje ukotvení rozvrhu (u nás termín, ne `.now`) — čeká se
+    tedy **na jev se stropem**, ne na hodiny. A strop musí být z čeho spočítat: perioda × 2 +
+    rezerva. Sonda, která by se místo toho jen „nechala doběhnout“, tvrdí to, co zrovna stihla.
 
     U hostovaného view je jeden zádrhel, který stojí za zapamatování: **rozměr se nesmí propsat do
     okna** (`NSHostingView.sizingOptions = []` a pevný `frame`). Text sondy se s každou vteřinou
@@ -1409,6 +1439,14 @@ Dva zádrhely, které to má:
   a kód pod ní ne; po vytažení `Text`u ze `ScrollView` se vykreslil. **Než začneš hledat chybu
   v layoutu, zkus obsah vyjmout ze `ScrollView`** — u #157 to stálo dvě zbytečné opravy
   (vodorovný scroll, `textSelection`), než se ukázalo, že v aplikaci je všechno v pořádku.
+- **`cacheDisplay` nad `NSHostingView` kreslí i obyčejný SwiftUI `Text`** (#269) — na rozdíl od
+  `ImageRenderer`u nad `List`em nebo representablem tady prázdná bitmapa nevzniká: z 56320 pixelů
+  se 1904 lišilo od pozadí a věta `za 9min 59s znovu` se z uloženého PNG dá přečíst okem. **Když
+  se dva snímky neliší, nehledej chybu v kreslení, ale v čase snímkování** — u #269 to stálo celý
+  červený `main`, protože sonda měřila 1,5 s od nasazení a `TimelineView` mění kresbu až na druhém
+  tiku rozvrhu, tedy ve 2,0 s. **Ukládej si snímky do souboru a podívej se na ně** (`/tmp`, PNG
+  z `representation(using: .png)`); počet bytů řekne jen to, že se něco liší, kdežto z obrázku je
+  vidět, co v něm doopravdy stojí — a tím se rozhodne mezi „rozbitá aplikace“ a „rozbitá sonda“.
 
 Stav běžící aplikace jde vyčíst i přes accessibility — a je to **spolehlivější než render**,
 protože měří skutečné okno. Chodí se po `UI elements` po úrovních; `entire contents` na

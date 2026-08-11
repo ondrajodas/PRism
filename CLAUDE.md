@@ -546,6 +546,13 @@ Zásady, které platí všude:
   nespustil druhý reviewer, že se značka nesmazala. Ty se totiž rozbijí potichu.
 - **Regrese se ověřuje vložením regrese.** Zelený běh nedokazuje, že test chytá to, co má —
   u pravidel, na kterých něco stojí, se ta chyba dočasně vrátí a kouká se, jestli test spadne.
+- **Test, který čeká na jev, se neváže na pevný okamžik** (#269). Sonda odpočtu brala dva snímky
+  1,5 s od sebe a tvrdila, že se liší — přitom první změna kresby přijde ve 2,01 s, takže zeleně
+  vycházela jedině tehdy, když spánek přetáhl, a `main` skončil červený. Čeká se **na jev se
+  stropem** (snímek po 100 ms, dokud jich není dost) a strop musí být z čeho spočítat. A když sonda
+  padne, **napřed se podívej, co v ní doopravdy je** — u kresby uložený PNG, ne počet bytů; z toho
+  se pozná, jestli je rozbitá aplikace, nebo sonda. Podrobnosti v
+  [`docs/testovani.md`](docs/testovani.md).
 - **Testy se nespouštějí rourou do `grepu`** — viz *Příkazy* níž, umí to zaseknout na neurčito.
 
 ## Příkazy
