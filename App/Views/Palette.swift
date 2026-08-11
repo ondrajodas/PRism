@@ -44,6 +44,14 @@ enum Palette {
     /// „něco našel“ není porucha: ta je `crit` a od nálezu se musí poznat.
     static let find = Color(light: 0xB4560A, dark: 0xE8944A)
 
+    /// Obrys bubliny blokujícího nálezu u kódu (#185) — `color-mix(in srgb, crit 35 %, line)`
+    /// z návrhu, vyčíslené.
+    ///
+    /// **Ne `crit.opacity(0.35)`**: skrz krytí prosvítá to, na čem obrys leží, takže by se barva
+    /// měnila podle podkladu — a bublina visí střídavě nad přidaným řádkem (zelený), odebraným
+    /// (červený) i kontextem. Mix je jedna barva, která vyjde všude stejně.
+    static let critLine = Color(light: 0xD89FAA, dark: 0x70393F)
+
     /// Zastarání — force push, nálezy proti staré hlavě, vlákno bez místa v dnešním diffu.
     ///
     /// Vlastní token, ne `.orange` (#216): systémová oranžová je **výstraha**, kdežto `--stale`

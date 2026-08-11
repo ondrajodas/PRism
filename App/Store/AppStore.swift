@@ -152,6 +152,18 @@ final class AppStore {
     /// se po výpadku sítě (`.failed`) vyprázdnila a uživateli naskočilo výchozí rozbalení.
     var toggledThreads: [PRIdentifier: Set<String>] = [:]
 
+    /// Nálezy, u kterých si uživatel překlikl rozbalení proti výchozímu stavu, **per PR** (#185).
+    ///
+    /// Zase **odchylka**, ne seznam rozbalených, a ze stejného důvodu jako u vláken: výchozí
+    /// stav se odvozuje z nálezů (blokující rozbalený, ostatní značka na hraně řádku), takže
+    /// seznam rozbalených by se musel plnit při každém načtení záznamu — a nový běh review by
+    /// uživateli zahodil, co si otevřel. Rozhoduje `Policy.disclosure(of:categories:toggled:)`.
+    ///
+    /// Klíčem je **místo v kódu** (`Policy.disclosureKey(of:)`), ne klíč nálezu: ten nese
+    /// `summary`, které si reviewer v dalším běhu přeformuluje. A klíčem mapy je **PR**, aby
+    /// se dalo uklízet podle toho, co zmizelo ze seznamu — tatáž úvaha jako u `toggledThreads`.
+    var toggledFindings: [PRIdentifier: Set<String>] = [:]
+
     /// Rozepsané odpovědi do vláken (#73). Co v mapě není, nikdo nerozepsal.
     ///
     /// Žije tady, ne v bublině: ta je buňka líného seznamu nad diffem, takže `@State` v ní
@@ -1148,6 +1160,9 @@ final class AppStore {
         // konverzacích. Podle konverzací to nešlo: PR ve stavu `.failed` v mapě zůstane, ale
         // žádná vlákna nedá, takže by výpadek sítě uživateli zahodil, co si zavřel.
         toggledThreads = toggledThreads.filter { wantedPullRequests.contains($0.key) }
+        // Překliknuté rozbalení nálezů (#185) jde tou samou cestou: je to stav okna k jednomu
+        // PR, takže s PR mimo seznam nemá co držet.
+        toggledFindings = toggledFindings.filter { wantedPullRequests.contains($0.key) }
         // Rozepsané odpovědi a stavy odesílání jdou s konverzací, ke které patří. Klíč nese PR
         // právě kvůli tomuhle — z `id` vlákna by se nepoznalo, ke kterému PR patří.
         threadReplies = threadReplies.filter { wantedPullRequests.contains($0.key.pullRequest) }

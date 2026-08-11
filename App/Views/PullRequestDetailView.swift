@@ -110,8 +110,12 @@ struct PullRequestDetailView: View {
         store.paletteJump = nil
 
         guard let anchor = anchor(inFile: jump.file, line: jump.line) else { return }
+        // Rozbalí se a zvýrazní jen nález — u souboru by rámeček ukazoval na místo, kde žádný
+        // nález není, a rozbalovat by nebylo co. Ve dvou krocích, protože `scroll(to:)`
+        // zvýraznění **maže** (jedno místo pro všechny odskoky), takže se musí nastavit po něm —
+        // kdežto bublina se rozbaluje před ním, ať kotva v líném seznamu vůbec je.
+        if jump.kind == .finding { reveal(bubbleAt: jump.file, line: jump.line) }
         scroll(to: anchor)
-        // Zvýrazní se jen nález — u souboru by rámeček ukazoval na místo, kde žádný nález není.
         if jump.kind == .finding {
             highlighted = FindingHighlight(file: jump.file, line: jump.line)
         }
@@ -395,6 +399,17 @@ struct PullRequestDetailView: View {
         )
     }
 
+    /// Rozbalení bublin nálezů v diffu (#185). Jde do diffu **zvlášť**, ne přes `FindingActions`:
+    /// tu bere i tabulka nálezů, která rozbalení řídí sama, a sdílená hodnota by jí zavřela nález,
+    /// který si v ní člověk otevřel.
+    private var findingDisclosure: FindingDisclosureActions {
+        let id = pullRequest.id
+        return FindingDisclosureActions(
+            state: { store.findingDisclosure(of: $0, in: id) },
+            toggle: { store.toggleFinding($0, in: id) }
+        )
+    }
+
     /// Pohled na diff. Žije ve store (globálně, do zavření aplikace), takže si ho vlastní
     /// binding jen podává dál — stejně jako volbu tabu.
     private var diffLayout: Binding<DiffLayout> {
@@ -658,6 +673,7 @@ struct PullRequestDetailView: View {
         guard let path = finding.file, let anchor = anchor(inFile: path, line: finding.line) else {
             return
         }
+        reveal(bubbleOf: finding)
         scroll(to: anchor)
         // Zvýraznění se porovnává s tím, co nahlásil reviewer, ne s cestou v diffu — bublina
         // nese jeho `file`, ne `displayPath`.
@@ -685,6 +701,24 @@ struct PullRequestDetailView: View {
         else { return nil }
         store.unfold(file.displayPath, in: pullRequest.id)
         return anchor
+    }
+
+    /// Rozbalí **sbalenou bublinu**, na kterou se skáče (#185), ze stejného důvodu jako se
+    /// rozbaluje sbalený soubor: skok na značku ukáže pruh, ne nález, na který se kliklo.
+    ///
+    /// Dvě přetížení, protože skok z lišty a z tabulky nese **nález** — ten je jednoznačný i u
+    /// nálezu bez řádku, kterých může být v jednom souboru víc — kdežto žádost z palety (#184)
+    /// nese `file:line`. Bez řádku se z palety nerozbaluje nic a nemusí: kotva pak míří na
+    /// hlavičku souboru, takže na značce se skok nezastaví.
+    private func reveal(bubbleOf finding: Finding) {
+        guard let group = findingGroups.first(where: { $0.findings.contains(finding) }) else { return }
+        store.revealFinding(group, in: pullRequest.id)
+    }
+
+    private func reveal(bubbleAt file: String, line: Int?) {
+        guard let line, let group = findingGroups.first(where: { $0.file == file && $0.line == line })
+        else { return }
+        store.revealFinding(group, in: pullRequest.id)
     }
 
     /// Co se dá dělat s vlákny (#73) — jedno místo pro diff i `Přehled`, ať se v jednom
@@ -882,6 +916,7 @@ struct PullRequestDetailView: View {
                 folding: foldingActions,
                 findings: findingGroups,
                 findingActions: findingActions,
+                findingDisclosure: findingDisclosure,
                 blockingCategories: blockingCategories,
                 highlighted: highlighted,
                 threads: store.anchoredThreads(for: pullRequest.id),

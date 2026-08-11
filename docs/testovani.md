@@ -391,6 +391,25 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   review týmž skillem odmítnutí nezahodí** — `replace(_:)` je přesně to místo, kde by se ztratilo;
   ověřeno dočasně vloženou regresí, po které spadly tři testy na třech vrstvách. K tomu, že
   odmítnutí **nevyjme převzatý komentář** z draftu a že selhání zápisu je vidět.
+- **Rozbalení bublin nálezů (#185)** — dvě vrstvy. `Policy` výčtem: blokující rozbalený, ostatní
+  sbalené (včetně `PLAUSIBLE` v blokující kategorii), sada z konfigurace, jeden blokující ve
+  skupině rozbalí celou. K tomu tři testy na to, co se stát **nemá**: shoda `2×` sama nerozbaluje,
+  odmítnutá skupina se nerozbalí **ani po překliknutí** a odmítnutí blokujícího nálezu bublinu
+  odpřišpendlí. A klíč: je to **místo**, takže se nemění s textem nálezů na něm ani s odmítnutím
+  jednoho z nich, kdežto dva nálezy **bez řádku** mají klíč každý svůj (jinak by se rozbalením
+  jednoho otevřely oba) a s klíčem místa se nesejdou.
+
+  `AppStore` na to, že se drží **odchylka** (tatáž hodnota v množině sbalí blokující i rozbalí
+  ostatní), že prázdná množina z mapy zmizí a že překliknutí zmizelého PR se uklidí. Nejcennější
+  je test, že **skok bublinu nikdy nesbalí**: `revealFinding` implementovaný jako obyčejné
+  překliknutí by u blokujícího nálezu zavřel právě to, na co se kliklo. Ověřeno vloženou regresí —
+  po vyndané stráži spadlo devět testů na obou vrstvách.
+
+  Jak to **vypadá**, se ověřilo offscreen renderem přes `NSHostingView` (blok kódu je
+  `NSViewRepresentable`, takže `ImageRenderer` nestačí) přes pásmo šířek 460–1200 v obou
+  pohledech. Našlo to dvě věci, které se z kódu nepoznaly: ořezaný odznak (`mi…` místo
+  `mimo diff`) a náhled textu ustupující verdiktu — odsud `layoutPriority` na odznacích
+  a na náhledu.
 - **Notifikace (#88)** — proti `FakeNotificationCenter`, takže se **nic nedoručuje**. To hlavní
   není text notifikace, ale dvě věci, které se dají pokazit tiše: že se **odmítnuté oprávnění
   dá poznat** (a úspěch tu hlášku smaže) a že se **kliknutí neztratí, když dorazí dřív**, než

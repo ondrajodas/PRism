@@ -67,4 +67,45 @@ extension AppStore {
             dismissalFailure = "Posouzení nálezu se nepodařilo uložit. \(error.localizedDescription)"
         }
     }
+
+    // MARK: - Rozbalení bubliny (#185)
+
+    /// Jak je nález u kódu rozbalený. Kategorie se berou z konfigurace **toho repa**, protože
+    /// blokující sada je per repo — s konstantou by bublina v jednom repu přišpendlila něco,
+    /// co v druhém neblokuje.
+    func findingDisclosure(of group: FindingGroup, in pr: PRIdentifier) -> FindingDisclosure {
+        Policy.disclosure(
+            of: group,
+            categories: resolved(for: pr.repo).blockingCategories,
+            toggled: toggledFindings[pr] ?? []
+        )
+    }
+
+    /// Překlikne rozbalení. Drží se **odchylka** od výchozího stavu, takže tatáž hodnota
+    /// v množině sbalí blokující nález i rozbalí ten ostatní.
+    func toggleFinding(_ group: FindingGroup, in pr: PRIdentifier) {
+        let key = Policy.disclosureKey(of: group)
+        var toggled = toggledFindings[pr] ?? []
+        if toggled.contains(key) {
+            toggled.remove(key)
+        } else {
+            toggled.insert(key)
+        }
+        // Prázdná množina se maže, ať v mapě nezůstávají klíče bez obsahu — stejně jako
+        // u vláken.
+        toggledFindings[pr] = toggled.isEmpty ? nil : toggled
+    }
+
+    /// Rozbalí nález, na který se právě skočilo — z lišty nad diffem i z tabulky.
+    ///
+    /// Bez toho by skok na sbalený nález ukázal **značku** místo nálezu, na který se kliklo. Je
+    /// to tatáž úvaha, kvůli které skok rozbaluje i sbalený soubor: cíl, na kterém není co
+    /// přečíst, je k nerozeznání od skoku, který se nepovedl.
+    ///
+    /// Odmítnutá skupina se **nerozbaluje** ani takhle: rozbalovat u ní není co a její jediný
+    /// řádek už tam je.
+    func revealFinding(_ group: FindingGroup, in pr: PRIdentifier) {
+        guard findingDisclosure(of: group, in: pr) == .collapsed else { return }
+        toggleFinding(group, in: pr)
+    }
 }
