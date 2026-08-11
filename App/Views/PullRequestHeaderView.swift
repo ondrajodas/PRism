@@ -264,7 +264,8 @@ extension PullRequestHeaderView {
     /// chip by tvrdil, že se něco nepovedlo.
     /// **Chip zůstává i po #215**, kdy se seznam checků odstěhoval do vlastního tabu: „je to
     /// zelené“ se musí dát přečíst i při čtení diffu, tedy z hlavičky, která je vidět ve všech
-    /// tabech.
+    /// tabech. Od #215 je to navíc **jediné** místo o checcích mimo tab — souhrn v `Přehledu`
+    /// odešel s ním, protože tři místa o téže věci jsou o dvě moc.
     @ViewBuilder fileprivate var checksChip: some View {
         let summary = Policy.summary(of: checks)
         // `worst` a první část poměru jsou obojí neprázdné právě u neprázdné sady, takže se
@@ -274,7 +275,7 @@ extension PullRequestHeaderView {
             HStack(spacing: 4) {
                 Image(systemName: symbol(of: worst))
                     .font(.system(size: 10))
-                Text(verbatim: headline.text)
+                Text(verbatim: headline)
                     .monospacedDigit()
             }
             .font(.caption)

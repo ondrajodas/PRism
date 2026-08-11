@@ -1123,15 +1123,15 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   - **spočítat odznak podle většiny** — tentýž test s dvanácti zelenými a jedním červeným jako
     u chipu, plus že zelené a přeskočené CI odznak **nedostanou** (šum by přebil ty dva, které
     něco říkají) a že spadlé přebijí běžící;
-  - **rozejít poměr mezi tabem a `Přehledem`** — souhrn se skládá z týchž částí (`ChecksText.parts`)
-    a spadlá část je označená jen jedna, jinak by v `Přehledu` svítil červeně celý poměr. Barvy
-    se hlídají proti `Palette`, protože do #215 kreslil seznam `.green`/`.red` ze SwiftUI, kdežto
-    chip barvy z palety návrhu;
+  - **rozejít poměr mezi tabem a chipem v hlavičce** — obojí bere text z týchž částí
+    (`ChecksText.parts`) a chip z nich ukazuje **tu první**, takže se hlídá i to, že části jdou
+    od nejhoršího stavu. Barvy se hlídají proti `Palette`, protože do #215 kreslil seznam
+    `.green`/`.red` ze SwiftUI, kdežto chip barvy z palety návrhu;
   - **zapsat selhané načtení jako prázdno** — to je nejcennější test téhle sady, protože z toho
     tiše vyjde tvrzení „tenhle PR nemá CI“ a **zmizí celý tab**. Hlídá se ze čtyř stran: porucha
     se zapíše do `checkFailures` a `checks` zůstane nenačtené; PR bez CI naopak **žádnou poruchu
     nehlásí**; selhaný pokus **nezahodí** to, co už bylo (tab tedy nezmizí kvůli chybě sítě);
-    a povedený pokus starou poruchu smaže, aby věta v `Přehledu` nesvítila nad načtenými checky.
+    a povedený pokus starou poruchu smaže, aby věta v hlavičce nesvítila nad načtenými checky.
     Fake gateway má na to vlastní přepínač (`checksFailure`) **vedle** `checks` — kdyby to byl
     jeden `Result`, nešlo by nastavit „prázdno bez chyby“, tedy zrovna ten stav, který se
     s chybou nesmí slít.
@@ -1141,10 +1141,15 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   by tvrdil něco o formátování čísel, ne o téhle sazbě.
 
   Jak to **vypadá**, se ověřilo offscreen renderem přes `NSHostingView` (`ScrollView` ani `Link`
-  se v `ImageRenderer`u nevykreslí) ve světlém i tmavém režimu: tři podoby odznaku, souhrn nad
-  zeleným i spadlým CI a pruh záložek přes pásmo šířek 620–1020. Šest záložek se vejde na jeden
-  řádek od ~920 bodů, pět od ~820 — pod tím se popisky **zalamují**, neřežou, a bylo to tak
-  i před #215.
+  se v `ImageRenderer`u nevykreslí) ve světlém i tmavém režimu: tři podoby odznaku, tab se seznamem
+  a pruh záložek přes pásmo šířek 620–1020. Šest záložek se vejde na jeden řádek od ~920 bodů, pět
+  od ~820 — pod tím se popisky **zalamují**, neřežou, a bylo to tak i před #215.
+
+  **`Přehled` se po odebrání souhrnu vyrendroval znovu, před a po** — je to jediný způsob, jak se
+  pozná, že po odebrání bloku zbyla úplná obrazovka a ne děravá. Kontrolovaly se u toho **prázdné
+  stavy**, protože právě ty se odebráním bloku dají potichu rozbít: `Načítám popis…` (detail
+  nedorazil) a `Autor k PR nic nenapsal.` (autor nic nenapsal) musí zůstat **dva různé stavy**,
+  a k tomu nejchudší možný `Přehled` — bez dlaždic i bez checků — nesmí být prázdná plocha.
 - **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
   (řádek plný nul utopí to jedno číslo, na kterém záleží) a **ukázání shodné sha nálezů**, ze které
   neplyne nic. Nejcennější test je právě ten druhý: shodná se nekreslí, rozešlá ano a je označená

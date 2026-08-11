@@ -2460,11 +2460,14 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   **čtení** — restart workflow do aplikace nepatří (tvrdá podmínka č. 1).
 
   **Co k tomu přidalo stěhování do tabu** (#215):
-  - **`Přehledu` zbyl souhrn, ne seznam** (`ChecksSummaryView`): hlavička s poměrem a pod ní
-    **jeden řádek s nejhorším checkem** jako ukazatel, kam jít dál. U zeleného CI zbývá jen ta
-    hlavička — řádek je pro to, co se má řešit, a u zeleného PR by jmenoval náhodný job
-    z dvanácti. **Chip v hlavičce zůstává** taky: „je to zelené“ se musí dát přečíst i při
-    čtení diffu, tedy z hlavičky, která je vidět ve všech tabech.
+  - **V `Přehledu` nezbylo nic.** Zadání #215 tam chtělo nechat **souhrn** (hlavičku s poměrem
+    a jeden řádek s nejhorším checkem) a chvíli tam byl; při zkoušení se ale ukázalo, že je to
+    **třetí místo o téže věci** — tab odpovídá na celou otázku a „je to zelené“ nese chip
+    v hlavičce. Souhrn proto odešel celý, i s tou hlavičkou. `Přehled` tak o checcích nemluví
+    vůbec.
+  - **Chip v hlavičce zůstává** a je od #215 **jediným** místem o checcích mimo tab: „je to
+    zelené“ se musí dát přečíst i při čtení diffu, tedy z hlavičky, která je vidět ve všech
+    tabech. Je to rozhodnutí z #209 a odebrání souhrnu se ho netýká.
   - **Tab se nekreslí, když checky nejsou** (`Policy.tabs(hasChecks:)`). PR bez CI je běžná věc
     a prázdný tab s nadpisem by o něm tvrdil, že se něco nepovedlo. „Nenačteno“ a „žádné“ jsou
     ve `AppStore.checks` schválně dva různé stavy, ale **pro pruh záložek z obou plyne totéž** —
@@ -2480,10 +2483,13 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     tichá kapsle by se čtla jako údaj o množství), běžící → puntík jako u `Průběhu` („běží“ je
     stav, ne množství), zelené i přeskočené → **nic**. Zelené CI je výchozí stav a číslo u něj
     by byl šum, kvůli kterému by se přestaly čít i ty ostatní dva.
-  - **Texty a barvy checků jsou na jednom místě** (`ChecksText`) — tab, souhrn i chip. Do #215
-    měl každý kus okna vlastní kopii a **už tehdy se rozešly**: blok kreslil `.green`/`.red` ze
-    SwiftUI, chip `Palette.ok`/`Palette.crit` z palety návrhu, takže dvě zelené v jednom okně
-    znamenaly jednu věc. Se třemi kopiemi by se to rozešlo znovu.
+  - **Texty a barvy checků jsou na jednom místě** (`ChecksText`) — tab i chip. Do #215 měl každý
+    kus okna vlastní kopii a **už tehdy se rozešly**: blok kreslil `.green`/`.red` ze SwiftUI, chip
+    `Palette.ok`/`Palette.crit` z palety návrhu, takže dvě zelené v jednom okně znamenaly jednu věc.
+
+    Poměr se skládá **po částech** (`ChecksText.parts`) kvůli chipu, který ukazuje jen tu první,
+    tedy nejhorší stav. Příznak `isFailure` u částí **zmizel s odebraným souhrnem**: existoval
+    jen proto, aby `Přehled` obarvil spadlou část, a bez souhrnu ho nikdo nečetl.
   - **Selhané načtení checků má vlastní stav** (`checkFailures`), ne prázdné pole. Do #215 to bylo
     `(try? await gateway.fetchChecks(id:)) ?? []` a dalo se to obhájit tím, že checky jsou doplněk
     k PR; od #215 je ale prázdno **tvrzení** — visí na něm, jestli se nakreslí tab —, takže by
@@ -2491,7 +2497,13 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     (prázdný výstup s nulovým kódem = bez CI, nenulový s prázdným výstupem = chyba), takže by ho
     zahazoval až store. Dvě pravidla k tomu: po selhání se **stará sada nechává být** (zastaralý
     seznam s větou nad ním je lepší než zmizelý tab) a **zrušení se nezapisuje** — `.task` se ruší
-    při přepnutí PR, což není porucha. Věta je v `Přehledu`, tedy tam, kde by jinak stál souhrn.
+    při přepnutí PR, což není porucha.
+
+    Věta o poruše je **v hlavičce PR**, ne v `Přehledu`: po odebrání souhrnu je to jediná věta
+    o checcích mimo tab a hlásí právě ten stav, kdy tab **není** — takže se musí ukázat i tomu, kdo
+    se na `Přehled` vůbec nepodívá. Hlavička je vidět ve všech tabech a už jednu takovou větu nese
+    (kontrola nálezů, #150). Okrová, ne červená: nepovedlo se to **zjistit**, což je „nevím“, ne
+    „je to rozbité“.
 - **`Přehled` má dlaždice s fakty** (#198): commity (a kolik z nich je nových od minule),
   soubory (a kolik má nález), hlava PR a sha, proti které platí nálezy. **Nic se pro ně
   nedotahuje** — jsou to údaje, které v okně už jsou, jen roztroušené. Tři pravidla:

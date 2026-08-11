@@ -11,47 +11,32 @@ import SwiftUI
 /// **Není to `Policy`**: vrací text a barvu, tedy kreslení, ne rozhodnutí. To, co se
 /// rozhoduje — nejhorší stav, počty, odznak — je v `ChecksSummary` a `Policy.checksBadge`.
 enum ChecksText {
-    /// Jedna položka poměru — `1 selhala`, `2 běží`, …
+    /// Poměr po částech — **od nejhoršího** a jen to, čeho je aspoň jeden. Nula v souhrnu je
+    /// slovo navíc, ze kterého nic neplyne.
     ///
-    /// Vlastní typ, ne `String`: v `Přehledu` se spadlá část **obarvuje** (návrh, sekce 02),
-    /// takže se poměr musí dát složit po částech. Jinak by ho `Přehled` psal sám a rozešel by
-    /// se s tabem v pořadí i ve skloňování.
-    struct Part: Hashable {
-        let text: String
-        /// Mluví o spadlých? Podle toho se v `Přehledu` obarvuje.
-        let isFailure: Bool
-    }
-
-    /// Poměr po částech — jen to, čeho je aspoň jeden. Nula v souhrnu je slovo navíc, ze
-    /// kterého nic neplyne.
+    /// Po částech, ne jednou větou, kvůli **chipu v hlavičce**: ten ukazuje jen tu první, tedy
+    /// nejhorší stav, protože v úzké hlavičce má cenu právě ta. Kdyby si ji skládal sám, rozešel
+    /// by se s tabem ve skloňování.
     ///
-    /// **Spadlé jsou první**, i v `Přehledu`, kde je návrh kreslí poslední. Je to vědomá
-    /// odchylka: dvě různá pořadí téhož poměru se čtou jako dva různé údaje, a zvýraznění
-    /// v `Přehledu` nese barva, ne pozice.
-    static func parts(of summary: ChecksSummary) -> [Part] {
-        var parts: [Part] = []
+    /// Do #215 to byl `[Part]` s příznakem `isFailure`, protože souhrn v `Přehledu` spadlou část
+    /// obarvoval. Souhrn z `Přehledu` odešel celý, takže příznak neměl čtenáře — a stav, který se
+    /// drží a nikdo ho nečte, je mrtvá váha, která svádí spolehnout se na ni.
+    static func parts(of summary: ChecksSummary) -> [String] {
+        var parts: [String] = []
         if summary.failed > 0 {
-            parts.append(Part(
-                text: Plural.czech(summary.failed, one: "selhala", few: "selhaly", many: "selhalo"),
-                isFailure: true
-            ))
+            parts.append(Plural.czech(summary.failed, one: "selhala", few: "selhaly", many: "selhalo"))
         }
-        if summary.running > 0 { parts.append(Part(text: "\(summary.running) běží", isFailure: false)) }
+        if summary.running > 0 { parts.append("\(summary.running) běží") }
         if summary.passed > 0 {
-            parts.append(Part(
-                text: Plural.czech(summary.passed, one: "prošla", few: "prošly", many: "prošlo"),
-                isFailure: false
-            ))
+            parts.append(Plural.czech(summary.passed, one: "prošla", few: "prošly", many: "prošlo"))
         }
-        if summary.skipped > 0 {
-            parts.append(Part(text: "\(summary.skipped) přeskočeno", isFailure: false))
-        }
+        if summary.skipped > 0 { parts.append("\(summary.skipped) přeskočeno") }
         return parts
     }
 
     /// `1 selhala · 2 běží · 12 prošlo · 22 přeskočeno` — poměr na jeden řádek.
     static func summary(of summary: ChecksSummary) -> String {
-        parts(of: summary).map(\.text).joined(separator: " · ")
+        parts(of: summary).joined(separator: " · ")
     }
 
     /// Co je za jménem checku: jak dopadl a jak dlouho běžel.

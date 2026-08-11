@@ -152,7 +152,8 @@ struct AppStoreTabTests {
 
         #expect(store.checks[first] == nil, "porucha se zapsala jako „žádné checky“")
         #expect(store.checkFailures[first] != nil)
-        // A tab se nekreslí — ale je u toho vidět proč, což zajišťuje `checksFailure` v Přehledu.
+        // A tab se nekreslí — ale je u toho vidět proč: `checkFailures` čte věta v hlavičce PR,
+        // která je na obrazovce ve všech tabech.
         #expect(!store.detailTabs(of: first).contains(.checks))
     }
 

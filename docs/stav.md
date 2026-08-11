@@ -1059,9 +1059,14 @@ naměřených; postup i to, co nefunguje (syntetické scroll eventy, `Page Down`
 **Kontroly jsou vlastní tab s odznakem (#215).** Blok z `Přehledu` (#209) se odstěhoval do čtvrté
 záložky, protože detail spadlého checku (#214) přidá anotace a konec logu — a tím by vytlačil popis
 PR mimo obrazovku. Je to tentýž pohyb jako u konverzace (#183): co začne růst, přestane být
-kontextem a stane se obsahem. V `Přehledu` zbyl **souhrn** (hlavička s poměrem a jeden řádek
-s nejhorším checkem), chip v hlavičce zůstal beze změny — „je to zelené“ se musí dát přečíst i při
-čtení diffu.
+kontextem a stane se obsahem.
+
+**V `Přehledu` nakonec nezbylo nic** — a to je změna proti zadání, které tam chtělo souhrn nechat.
+Chvíli tam byl (hlavička s poměrem a jeden řádek s nejhorším checkem), ale při proklikání se ukázalo,
+že je to **třetí místo o téže věci**: tab odpovídá na celou otázku a „je to zelené“ nese chip
+v hlavičce, který je vidět ve všech tabech. Chip proto zůstal beze změny a je od téhle verze jediným
+místem o checcích mimo tab. Odešel s tím i příznak `isFailure` u částí poměru — existoval jen proto,
+aby souhrn obarvil spadlou část, takže bez souhrnu neměl čtenáře.
 
 Odznak počítá **podle nejhoršího stavu**, jako chip: spadlé červeně s počtem, běžící puntíkem jako
 u `Průběhu`, zelené a přeskočené bez odznaku (číslo u zeleného CI je šum, kvůli kterému by se
@@ -1076,7 +1081,8 @@ Vlastní revize k tomu našla jednu věc, kterou #215 zhoršilo: store dotahoval
 se tab nakreslí. Tiše by z poruchy vyšlo tvrzení „tenhle PR nemá CI“, přitom gateway ten rozdíl
 drží (prázdný výstup s nulovým kódem = bez CI, nenulový s prázdným výstupem = chyba). Selhání má
 proto vlastní mapu (`checkFailures`), po něm se **stará sada nechává být** (zastaralý seznam s větou
-nad ním je lepší než zmizelý tab) a v `Přehledu` je vidět, proč tab není. Testů je o 32 víc (2256)
+nad ním je lepší než zmizelý tab) a v **hlavičce PR** je vidět, proč tab není — hlavička je vidět
+ve všech tabech, takže se ta věta ukáže i tomu, kdo do `Přehledu` nejde. Testů je o 32 víc (2256)
 ve dvou nových suitách.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak

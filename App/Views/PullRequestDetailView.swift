@@ -171,6 +171,22 @@ struct PullRequestDetailView: View {
                     .foregroundStyle(Palette.crit)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Proč se nenačetly kontroly (#215). **V hlavičce, ne v `Přehledu`:** je to jediná
+            // věta o checcích, která zbyla mimo tab, a hlásí právě ten stav, kdy tab **není** —
+            // takže se musí ukázat i tomu, kdo se na `Přehled` vůbec nepodívá. Hlavička je vidět
+            // ve všech tabech a už jednu takovou větu nese (kontrola nálezů výš).
+            //
+            // Okrová, ne červená: kontroly jsou cizí fakt, který se nepovedlo **zjistit** —
+            // to je „nevím“, ne „je to rozbité“.
+            if let failure = store.checkFailures[pullRequest.id] {
+                Label(
+                    "Kontroly na GitHubu se nepodařilo načíst. \(failure)",
+                    systemImage: "exclamationmark.triangle"
+                )
+                .font(.caption)
+                .foregroundStyle(Palette.stale)
+                .fixedSize(horizontal: false, vertical: true)
+            }
             reviewers
             // Selhání checkoutu se do lišty nevejde, a právě u něj je text od `gitu`
             // to jediné, z čeho se pozná, co dělat dál. **Zůstává v hlavičce**, i když se
@@ -781,13 +797,6 @@ struct PullRequestDetailView: View {
         OverviewView(
             description: store.description(of: pullRequest.id),
             facts: facts,
-            checks: store.checks[pullRequest.id] ?? [],
-            // Souhrn v `Přehledu` odkazuje do tabu `Kontroly` (#215). `nil`, když tab není —
-            // z prázdných checků se souhrn nekreslí vůbec, takže se to nemá čím rozejít.
-            openChecks: store.hasChecks(pullRequest.id)
-                ? { store.setDetailTab(.checks, for: pullRequest.id) }
-                : nil,
-            checksFailure: store.checkFailures[pullRequest.id],
             changes: store.changesSinceLastVisit(for: pullRequest.id),
             lastVisit: store.visitSnapshots[pullRequest.id],
             // Obojí je „to, co mám na obrazovce, už neplatí“, takže se do banneru slévá do

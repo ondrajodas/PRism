@@ -58,42 +58,36 @@ struct ChecksTextTests {
         #expect(ChecksText.summary(of: summary(Array(repeating: "fail", count: 2))) == "2 selhaly")
     }
 
-    /// V `Přehledu` se spadlá část **obarvuje**, takže se musí dát rozeznat — a smí to být
-    /// **jedině ta jedna**, jinak by červeně svítil celý poměr.
-    @Test("Spadlá část je označená, ostatní ne")
-    func marksTheFailingPart() {
-        let parts = ChecksText.parts(of: summary(["fail", "pending", "pass"]))
-
-        #expect(parts.map(\.text) == ["1 selhala", "1 běží", "1 prošla"])
-        #expect(parts.map(\.isFailure) == [true, false, false])
+    /// Pořadí částí je **od nejhoršího** a na tom stojí chip v hlavičce: bere jen tu první.
+    @Test("Části jdou od nejhoršího stavu")
+    func ordersPartsBySeverity() {
+        #expect(ChecksText.parts(of: summary(["fail", "pending", "pass"]))
+            == ["1 selhala", "1 běží", "1 prošla"])
     }
 
-    /// Zrušený běh se počítá ke spadlým, takže se i obarvuje — z obojího plyne totéž.
+    /// Zrušený běh se počítá ke spadlým — z obojího plyne totéž.
     @Test("Zrušený se do spadlé části počítá")
     func countsCancelledAsFailure() {
-        let parts = ChecksText.parts(of: summary(["cancel"]))
-
-        #expect(parts.map(\.text) == ["1 selhala"])
-        #expect(parts.map(\.isFailure) == [true])
+        #expect(ChecksText.parts(of: summary(["cancel"])) == ["1 selhala"])
     }
 
-    /// Souhrn v `Přehledu` a hlavička tabu skládají poměr z týchž částí — kdyby se lišily,
-    /// tvrdila by dvě místa v okně o jedné sadě checků něco jiného.
-    @Test("Věta je složená z týchž částí, ze kterých se kreslí souhrn")
+    /// Hlavička tabu a chip v hlavičce PR berou text z týchž částí — kdyby se lišily, tvrdila by
+    /// dvě místa v okně o jedné sadě checků něco jiného.
+    @Test("Věta je složená z týchž částí, ze kterých bere chip tu svou")
     func summaryIsJoinedParts() {
         let summary = summary(["fail", "pending", "pass", "skipping"])
 
         #expect(ChecksText.summary(of: summary)
-            == ChecksText.parts(of: summary).map(\.text).joined(separator: " · "))
+            == ChecksText.parts(of: summary).joined(separator: " · "))
     }
 
     /// Chip v hlavičce ukazuje **první část poměru**, tedy to nejhorší. Nesmí se rozejít
     /// s `worst`, na kterém stojí jeho barva.
     @Test("První část poměru mluví o nejhorším stavu")
     func headlineMatchesTheWorstState() {
-        #expect(ChecksText.parts(of: summary(["pass", "fail"])).first?.isFailure == true)
-        #expect(ChecksText.parts(of: summary(["pass", "pending"])).first?.text == "1 běží")
-        #expect(ChecksText.parts(of: summary(["pass", "skipping"])).first?.text == "1 prošla")
+        #expect(ChecksText.parts(of: summary(["pass", "fail"])).first == "1 selhala")
+        #expect(ChecksText.parts(of: summary(["pass", "pending"])).first == "1 běží")
+        #expect(ChecksText.parts(of: summary(["pass", "skipping"])).first == "1 prošla")
         // Prázdná sada nemá ani `worst`, ani první část — chip se pak nekreslí.
         #expect(ChecksText.parts(of: summary([])).first == nil)
         #expect(summary([]).worst == nil)

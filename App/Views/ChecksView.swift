@@ -7,7 +7,11 @@ import SwiftUI
 ///
 /// **Do #215 to byl blok v `Přehledu`** (#209). Se souhrnem to tam sedělo, ale detail spadlého
 /// checku (#214) přidává anotace a konec logu, a tím blok vyroste natolik, že vytlačí popis PR
-/// mimo obrazovku. V `Přehledu` zůstává souhrn (`ChecksSummaryView`), seznam je tady.
+/// mimo obrazovku.
+///
+/// V `Přehledu` po tom stěhování **nezbylo nic** — ani souhrn, který tam zadání #215 chtělo nechat.
+/// Tab odpovídá na celou otázku a „je to zelené“ nese chip v hlavičce PR, takže souhrn byl třetí
+/// místo o téže věci. Rozhodnuto při zkoušení, viz specifikace.
 ///
 /// **Log se nestahuje.** Spadlý check nabídne odkaz na GitHub; stahování konce logu je #214.
 struct ChecksView: View {
