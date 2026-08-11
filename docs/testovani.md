@@ -1331,7 +1331,7 @@ protože stránka je dlouhá a `--screenshot` bere jen viewport.
 
 **Kde ten mockup vzít, říká [`docs/navrh.md`](navrh.md)** — je to artifact, ne soubor v repu, takže
 se stahuje `WebFetch`em (`curl` na něm dostane skořápku aplikace nebo 403). Tam je i to, jak se
-aktualizuje a co se do něj musí zapracovat dřív, než se začne programovat.
+aktualizuje a co se do něj musí zapracovat a nechat odsouhlasit dřív, než na to vznikne issue.
 
 ```bash
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
