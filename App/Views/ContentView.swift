@@ -59,9 +59,18 @@ struct ContentView: View {
         }
         // ⌘K (#184). Bydlí **na okně**, ne v detailu PR: paleta má jít otevřít i z domácí
         // záložky, a zkratka, která funguje jen v půlce okna, je horší než žádná.
+        // ⌃Tab / ⌃⇧Tab (#245) bydlí na okně ze stejného důvodu jako ⌘K: pruh záložek je nad
+        // obsahem, ale zkratka má chodit i z domácí záložky a z každého tabu PR — a tlačítko
+        // v pruhu by ji registrovalo jen tam, kde je pruh sám.
         .hiddenShortcuts {
             Button("Najít v okně") { store.togglePalette() }
                 .keyboardShortcut("k", modifiers: .command)
+            Button("Další záložka") { store.selectTab(.forward) }
+                .keyboardShortcut(.tab, modifiers: .control)
+            // `.backTab`, ne `.tab` se shiftem: `⌃⇧⇥` je pro AppKit jiná klávesa (`U+0019`) —
+            // podrobnosti i měření u `KeyEquivalent.backTab`.
+            Button("Předchozí záložka") { store.selectTab(.backward) }
+                .keyboardShortcut(.backTab, modifiers: [.control, .shift])
         }
         // Paleta je **překryv okna, ne sheet**: sheet si bere šířku okna a přijíždí shora jako
         // dialog, kdežto návrh má kartu 560 bodů, která visí nad obsahem a zbytek jen ztmaví.

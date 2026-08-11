@@ -142,6 +142,9 @@ extension Policy {
     }
 }
 
+/// Kterým směrem se posunout. **Schválně bez domény v názvu** — kromě nálezů (#187) ho od #245
+/// bere i cyklení pruhem záložek. Druhý výčet `.forward` / `.backward` vedle tohohle by byl jen
+/// jméno navíc pro tutéž věc.
 enum NavigationStep: Hashable, Sendable {
     case forward
     case backward

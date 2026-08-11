@@ -28,3 +28,18 @@ extension View {
         }
     }
 }
+
+extension KeyEquivalent {
+    /// `⇧⇥` — pro AppKit **jiná klávesa než `⇥`**, ne tab se shiftem (#245).
+    ///
+    /// Změřeno na běžící aplikaci a doloženo samostatným pokusem s `NSButton`em: `⌃⇥` doručí
+    /// `characters == U+0009`, kdežto `⌃⇧⇥` **`U+0019`** (backTab). Zkratka zapsaná jako
+    /// `.tab` s `[.control, .shift]` proto nezabere **vůbec** — žádná událost se s ní nepotká,
+    /// takže se nic nestane a vypadá to, jako by tam ta zkratka nebyla.
+    ///
+    /// **Není to tatáž past jako `⌥⇧↓` u #151.** Tam SwiftUI shift při párování ignoruje, takže
+    /// dvě tlačítka jsou jedna klávesa a jedno z nich vyhraje; tady se klávesy dvě doopravdy
+    /// **liší znakem** a modifikátory se porovnávají přesně — `U+0019` s maskou bez shiftu
+    /// v pokusu taky nezabralo. Zpětná zkratka proto potřebuje **svůj znak i svůj shift**.
+    static let backTab = KeyEquivalent("\u{19}")
+}

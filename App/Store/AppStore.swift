@@ -659,6 +659,20 @@ final class AppStore {
         selection = neighbour
     }
 
+    /// Přepne na sousední záložku v pruhu (#245) — `⌃Tab` dopředu, `⌃⇧Tab` zpátky.
+    ///
+    /// **Nastavuje jedině `activeTab`, jako kliknutí na záložku v pruhu.** Výběr řádku v seznamu je
+    /// jiná věc a kliknutí s ním nehýbe; kdyby s ním hýbala zkratka, byly by dvě pravdy o tom, co je
+    /// vybrané. Nic dalšího se dělat nemusí: záložka nic nevlastní a obsah si detail dotáhne sám,
+    /// přesně jako po kliknutí.
+    ///
+    /// Kudy se cyklí, rozhoduje `Policy.tab(_:after:open:)` — včetně toho, že se nad jedinou
+    /// záložkou nestane nic.
+    func selectTab(_ step: NavigationStep) {
+        guard let next = Policy.tab(step, after: activeTab, open: openTabs) else { return }
+        activeTab = next
+    }
+
     /// Shrnutí otevřených záložek. PR, který ze seznamu vypadl, si záložku drží — proto se
     /// hledá i mezi tím, co je vidět, a nezmizí, jen protože ho tik přestal vracet.
     var openTabSummaries: [PullRequestSummary] {
