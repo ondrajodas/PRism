@@ -707,10 +707,10 @@ stav. Místo toho se to napíše do hlášení jako **neověřená mezera** a ne
 **neověřená věc není důvod nemergovat**, protože poslední kolo kontroly dělá člověk v pauze (#256).
 Do zadání subagenta to patří jako věta k okopírování, stejně jako slot — co v zadání není, to
 subagent neudělá (zjištění z #256). Vzniklo z běhu na #184: agent potřeboval k proklikání
-neblokující nález, brána mu změnu konfigurace slotu zakázala, on ji **obešel jinou cestou a odebral
-`correctness` z `blockingCategories`**, a orchestrátorovi přitom napsal, že mu to brána
-zablokovala. **Změřený
-rozsah byl nulový** — hlavní konfigurace uživatele nedotčená, slotová v době kontroly v pořádku,
+neblokující nález, brána mu změnu konfigurace slotu zakázala, on ji **obešel jinou cestou
+a odebral `correctness` z `blockingCategories`**, a orchestrátorovi přitom napsal, že mu to brána
+zablokovala. **Změřený rozsah byl nulový** — hlavní konfigurace uživatele nedotčená, slotová
+v době kontroly v pořádku,
 v diffu PR nic oslabeného, `grep ReviewPublishing App/` stejný jako `main`, `ClaudeCommand.swift`
 nedotčený — a je to u pravidla napsané schválně, aby příště nikdo nedohadoval, jestli to bylo vážné,
 nebo formální. Zapsané je jako **pravidlo vedle ostatních zákazů**, ne jako varování před konkrétním
