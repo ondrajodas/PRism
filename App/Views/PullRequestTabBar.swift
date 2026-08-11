@@ -8,6 +8,11 @@ import SwiftUI
 /// zvyklost odjinud, takže se to nemusí učit.
 struct PullRequestTabBar: View {
     @Binding var selection: PullRequestTab
+    /// Které záložky se kreslí. Ne `allCases`, protože `Kontroly` u PR bez CI odpadnou (#215) —
+    /// rozhoduje o tom `Policy.tabs(hasChecks:)`, ne tenhle pruh: je to pravidlo o datech.
+    ///
+    /// Výchozí hodnota je celý výčet kvůli náhledům a testům, kde se o checky nikdo neptá.
+    var tabs: [PullRequestTab] = PullRequestTab.allCases
     /// Co je v tabu k vidění. `nil` = bez odznaku.
     ///
     /// Od #218 se ptá **u všech záložek**, ne jen u `Konverzace`: odznak jen u jedné vypadal
@@ -33,7 +38,7 @@ struct PullRequestTabBar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(Array(PullRequestTab.allCases.enumerated()), id: \.element) { index, tab in
+            ForEach(Array(tabs.enumerated()), id: \.element) { index, tab in
                 if needsSeparator(before: index) { separator }
                 item(tab)
             }
@@ -48,10 +53,13 @@ struct PullRequestTabBar: View {
 
     /// Patří před tuhle záložku dělič? (#242, `.tsep`)
     ///
-    /// Rozhoduje **vlastnost tabu**, ne jeho index: `Kontroly` (#215) přijdou nalevo doprostřed,
-    /// takže zadrátovaná pozice by dělič tiše posunula o jedno místo vedle.
+    /// Rozhoduje **vlastnost tabu**, ne jeho index: `Kontroly` (#215) sedí nalevo doprostřed
+    /// a u PR bez CI se vůbec nekreslí, takže zadrátovaná pozice by dělič posunula o jedno místo
+    /// vedle — a podle dat, tedy jednou tak a jednou jinak.
+    ///
+    /// Počítá se nad **kreslenými** záložkami (`tabs`), ne nad `allCases`: přeskočená záložka
+    /// nemá dělič po čem posunout.
     private func needsSeparator(before index: Int) -> Bool {
-        let tabs = PullRequestTab.allCases
         guard index > 0 else { return false }
         return tabs[index].isReviewerOutput && !tabs[index - 1].isReviewerOutput
     }
@@ -214,6 +222,10 @@ struct PullRequestTabBar: View {
         case .overview: "doc.text"
         case .filesChanged: "plus.forwardslash.minus"
         case .conversation: "bubble.left.and.bubble.right"
+        // Seznam s odškrtnutím, ne `checkmark.circle`: kolečko se v hlavičce používá na **výsledek**
+        // (zelené prošlo, červené spadlo), kdežto ikona záložky má říkat, co v ní je — a to je
+        // seznam kontrol, ať dopadly jakkoli.
+        case .checks: "checklist"
         // Lupa nad textem je tentýž symbol, jakým se v ose hlásí `ReportFindings` — nálezy mají
         // v okně jednu ikonu, ne dvě.
         case .findings: "text.magnifyingglass"

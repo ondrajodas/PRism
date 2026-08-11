@@ -6,10 +6,12 @@ import Testing
 /// Záložky PR (#242): jak se jmenují a kde je mezi nimi dělič.
 @Suite("Záložky PR")
 struct PullRequestTabTests {
-    @Test("Pruh má pět záložek v pořadí, ve kterém se čtou")
+    /// `Kontroly` (#215) sedí **mezi `Konverzací` a `Nálezy`**, tedy nalevo od děliče: je to
+    /// něco, co je na PR, ne výstup našich reviewerů.
+    @Test("Pruh má šest záložek v pořadí, ve kterém se čtou")
     func order() {
         #expect(PullRequestTab.allCases.map(\.czechLabel)
-            == ["Přehled", "Změněné soubory", "Konverzace", "Nálezy", "Průběh"])
+            == ["Přehled", "Změněné soubory", "Konverzace", "Kontroly", "Nálezy", "Průběh"])
     }
 
     @Test("Otevírá se Přehledem")
@@ -18,13 +20,23 @@ struct PullRequestTabTests {
     }
 
     /// Dělič odděluje to, co je na PR (a co má i GitHub), od toho, co s ním udělaly naše reviewery.
-    /// Když `Kontroly` (#215) přijdou doprostřed levé skupiny, nesmí se tím posunout.
+    /// `Kontroly` (#215) přišly doprostřed levé skupiny a nesmí se tím posunout.
     @Test("Výstup reviewerů je jedna souvislá skupina na konci")
     func reviewerOutputIsOneGroup() {
         let flags = PullRequestTab.allCases.map(\.isReviewerOutput)
 
-        #expect(flags == [false, false, false, true, true])
+        #expect(flags == [false, false, false, false, true, true])
         // Jeden přechod, tedy jeden dělič — ne dva a ne žádný.
+        #expect(zip(flags, flags.dropFirst()).count { $0 != $1 } == 1)
+    }
+
+    /// Platí to i po vypadnutí `Kontrol` u PR bez CI: dělič se počítá z kreslených záložek,
+    /// takže z něj nesmí být ani dva, ani žádný.
+    @Test("Bez Kontrol zbývá dělič pořád jeden")
+    func reviewerOutputIsOneGroupWithoutChecks() {
+        let flags = Policy.tabs(hasChecks: false).map(\.isReviewerOutput)
+
+        #expect(flags == [false, false, false, true, true])
         #expect(zip(flags, flags.dropFirst()).count { $0 != $1 } == 1)
     }
 
@@ -35,5 +47,7 @@ struct PullRequestTabTests {
         #expect(!PullRequestTab.overview.isReviewerOutput)
         #expect(!PullRequestTab.filesChanged.isReviewerOutput)
         #expect(!PullRequestTab.conversation.isReviewerOutput)
+        // Kontroly jsou fakt o PR, ne výstup reviewerů — proto nalevo od děliče.
+        #expect(!PullRequestTab.checks.isReviewerOutput)
     }
 }

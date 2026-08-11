@@ -852,10 +852,14 @@ malá view, **žádná externí závislost**: stejná úvaha jako u `App/Syntax/
 
 | Typ | Co je |
 |---|---|
-| `MarkdownBlock` | Blok: nadpis, odstavec, položka seznamu (odrážka/číslo/zaškrtávátko), kód, citace, oddělovač, tabulka, `<details>`, HTML komentář |
-| `MarkdownParser` | Text → `[MarkdownBlock]`. **Nikdy nevyhodí výjimku** |
+| `MarkdownBlock` | Blok: nadpis, odstavec, položka seznamu (odrážka/číslo/zaškrtávátko), kód, **citace (vnořené bloky)**, **výstraha** (`Alert`: pět druhů), oddělovač, tabulka, `<details>`, HTML komentář |
+| `MarkdownParser` | Text → `[MarkdownBlock]`. **Nikdy nevyhodí výjimku**. Rekurze u citací a `<details>` má strop `nestingLimit` |
 | `MarkdownHTML` | Inline HTML na text: `<a href>` na Markdown odkaz, ostatní tagy pryč, entity dekódované |
-| `MarkdownText`, `MarkdownBlocksView`, `MarkdownBlockView` | Vykreslení; tři typy kvůli rekurzi v `<details>` |
+| `MarkdownInlineText` | Inline sazba: systémový `AttributedString` plus podložený inline `kód` |
+| `MarkdownTypography` | Sazba v číslech: šest velikostí nadpisů, velikost kódu, mezera mezi dvěma bloky |
+| `MarkdownAlertStyle` | Jak se kreslí výstraha: český titulek, SF Symbol, barva z palety |
+| `MarkdownRenderCache` | Zapamatovaná sazba: rozklad na bloky i inline `AttributedString` — klíčem je celý text (u inline i velikost) |
+| `MarkdownText`, `MarkdownBlocksView`, `MarkdownBlockView` | Vykreslení; tři typy kvůli rekurzi v citaci, výstraze a `<details>` |
 
 Věci, které se u toho nemají rozbít:
 
@@ -890,6 +894,57 @@ Věci, které se u toho nemají rozbít:
   komentáře je horší než neošetřený tag. **Doplněno po nálezu z review #72** — původně se
   strhávalo nad celým řádkem s tím, že HTML v inline kódu je vzácné. `<div>` možná, generický
   typ ne.
+
+### Citace, výstrahy a sazba (#279)
+
+- **Citace nese bloky, ne řádky.** `case quote([MarkdownBlock])`, tedy tentýž tvar, jaký má
+  `details`. Do #279 to byly surové řádky slepené ve view do jednoho `Text`u, takže `## nadpis`,
+  odrážka i `- [ ]` **uvnitř** `> …` zůstaly v okně jako zdroj — a boti do citací píšou celé
+  zprávy (CodeRabbit posílá v jedné výstraze nadpis, odstavce a dvě rozbalovátka).
+- **Za `>` se zahazuje jedna mezera, ne všechna.** Na odsazení uvnitř citace stojí úroveň
+  zanořeného seznamu. Do #279 se trimovalo všechno, což při slepení nebylo vidět; po rozdělení na
+  bloky by to každý zanořený seznam zarovnalo na nulu.
+- **Výstraha je vlastní druh bloku, ne příznak citace.** `> [!NOTE]` a čtyři další; značka musí
+  být **sama na prvním řádku** citace (jako na GitHubu) a druh se poznává bez ohledu na velikost
+  písmen. **Neznámý druh výstrahou není** — z `[!FOO]` je obyčejná citace, ve které ten řádek
+  zůstane textem. Je to tentýž princip jako u tabulky: neumět něco vysázet je lepší než to
+  zahodit.
+- **Titulek výstrahy je český, barva z palety.** Ve zdroji je jen `[!NOTE]`, takže titulek i ikona
+  jsou tvrzení aplikace, ne text z GitHubu. `[!WARNING]` a `[!CAUTION]` mají **vlastní tón**:
+  GitHub jim dává `0x9A6700` a `0xCF222E`, což je na hex `Palette.stale` a `Palette.crit` — tedy
+  zastarání a blokující nález. Hlídá to test, který porovnává **vyřešené** barvy v obou režimech.
+- **Šest úrovní nadpisů, šest velikostí** (`MarkdownTypography`), pod `#` a `##` linka. Do #279
+  z toho byly dvě velikosti (`level <= 2 ? .headline : .subheadline`), takže `Description`
+  a `Release Notes` v popisu PR vypadaly jako tučný odstavec. Škála je **poměrová k základní
+  velikosti**, protože tentýž Markdown se sází v komentáři (12,5) i v okně s novinkami (13);
+  krok mezi třetí a pátou úrovní je celý bod, protože v první verzi (0,06 bodu) byly ty úrovně na
+  vyrendrované ukázce nerozeznatelné.
+- **`MarkdownText` bere velikost číslem, ne `Font`em.** Ze `Font`u se velikost nedá přečíst, takže
+  by z něj škála nadpisů neměla z čeho vyjít — a přesně proto tam ty dvě velikosti byly.
+- **Mezera mezi bloky se řídí přechodem**, ne blokem: nadpis má nad sebou 12 bodů a pod sebou 4
+  (to, co následuje, k němu patří), dvě položky seznamu 2, zbytek 7. Jedna mezera pro všechno
+  dělá z dlouhého popisu PR jednolitou plochu. **Žádný přechod není nulový** — na to je test.
+- **Pruh citace i výstrahy je `overlay`, ne první prvek `HStack`u.** V `HStack`u se výška pruhu
+  řídila návrhem rodiče, kdežto obsah si spočítal svou vlastní: u citace s nadpisem
+  a zaškrtávátkem sahal pruh do poloviny a zbytek citace stál bez značky. Vidět to bylo až na
+  vyrendrované ukázce, ne v kódu.
+- **Zanoření má strop** (`MarkdownParser.nestingLimit`, šest úrovní). Je proti dvěma věcem naráz:
+  proti hloubce stromu view (#220 — 5,5× na úroveň) a proti rekurzi nad `>>>>>>…` z mailového
+  vlákna. Za stropem zůstane obsah **jedním odstavcem** — nevysází se, ale neztratí.
+- **Sazba se pamatuje** (`MarkdownRenderCache`), protože se počítá v `body`, tedy při každém
+  vykreslení — pravidlo #224. Změřeno (Debug, `TEST_RUNNER_PRISM_MEASURE=1`): u zprávy od bota
+  o 12 kB **1,91 ms** rozklad na bloky (z cache 0,037 ms) a **1,81 ms** inline sazba jejích 44
+  bloků; konverzace o 40 zprávách **74,7 ms** proti **1,48 ms**. Obojí je v **jedné** cache
+  schválně: meze a jejich vyprazdňování jsou to, co se dá pokazit, takže mají být na jednom místě.
+  Klíčem je **celý text**, ne hash ani `(id, délka)`: klíč, ze kterého vyjdou dva různé texty
+  stejně, znamená vysázet cizí komentář, a potichu — u inline je v klíči **i velikost**, protože
+  z ní vychází písmo inline kódu. Barvy v tom zapečené nejsou (`codeFill` je dynamický `NSColor`),
+  takže přepnutí režimu cache nezneplatňuje. Meze jsou dvě (počet záznamů, objem vstupů) a při
+  překročení kterékoli se cache zahodí celá — tatáž úvaha jako u `SyntaxRunCache`.
+- **Inline `kód` má jemný podklad** (`Palette.codeFill`, tentýž jako blok kódu). Je to **plocha za
+  písmem**, ne kapsle s odsazením: `AttributedString` umí barvu pozadí běhu, ne jeho výplň
+  a rádius, a kapsle by znamenala kreslit každý běh jako vlastní view, tedy rozpadlé zalomení
+  uprostřed věty.
 
 ## `App/Syntax/`
 
@@ -1599,7 +1654,7 @@ na `.task` okna, takže zavření okna ji zruší.
 |---|---|
 | `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
 | `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) — a od #245 **vypnutí systémových záložek oken** (`tabbingMode = .disallowed`), aby se `⌃Tab` nepřetahoval s AppKitem |
-| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky; **zelená a červená diffu jdou dál z `DiffLineView.signColor(of:)`**, aby se `+` v řádku nerozešlo s `+12` nad ním (#156) |
+| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky; **zelená a červená diffu jdou dál z `DiffLineView.signColor(of:)`**, aby se `+` v řádku nerozešlo s `+12` nad ním (#156). Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
@@ -2476,10 +2531,11 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Kolik znaků zbývá, se měří, ne bere z tabulky.** Tabulka v zadání #188 platí pro jeden
     displej a jedno nastavení; číslo v liště platí pro okno, které mám otevřené. Ukazuje se
     **jen pod slibem** (120 znaků z `CLAUDE.md`) — nad ním je to údaj, který nikoho nezajímá.
-- **`Přehled` ukazuje checky z GitHub Actions** (#209) — druhou půlku otázky „dá se to
-  mergnout“; tu první (nálezy) okno umělo, takže se nad zeleným review stejně chodilo do
-  prohlížeče. Čtyři pravidla:
+- **Checky z GitHub Actions mají vlastní tab `Kontroly`** (#215; do #215 to byl blok
+  v `Přehledu` — #209) — druhou půlku otázky „dá se to mergnout“; tu první (nálezy) okno umělo,
+  takže se nad zeleným review stejně chodilo do prohlížeče. Čtyři pravidla:
   - **Nejhorší stav vyhrává, ne většina.** Dvanáct zelených a jeden červený je červený stav.
+    Platí to pro chip v hlavičce i pro **odznak tabu** (`Policy.checksBadge`).
   - **Tři stavy, ne dva**, a `skipped` je vlastní. Běžící check není prošlý ani spadlý a
     přeskočený není úspěch — jinak by hlavička svítila zeleně nad přeskočeným testem. Neznámý
     kbelík se bere jako běžící: je to jediný stav, který o výsledku netvrdí nic.
@@ -2491,6 +2547,52 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
 
   Tahá se **s detailem PR**, ne pollingem přes všechna (tatáž N+1 past), a `fetchChecks` je
   **čtení** — restart workflow do aplikace nepatří (tvrdá podmínka č. 1).
+
+  **Co k tomu přidalo stěhování do tabu** (#215):
+  - **V `Přehledu` nezbylo nic.** Zadání #215 tam chtělo nechat **souhrn** (hlavičku s poměrem
+    a jeden řádek s nejhorším checkem) a chvíli tam byl; při zkoušení se ale ukázalo, že je to
+    **třetí místo o téže věci** — tab odpovídá na celou otázku a „je to zelené“ nese chip
+    v hlavičce. Souhrn proto odešel celý, i s tou hlavičkou. `Přehled` tak o checcích nemluví
+    vůbec.
+  - **Chip v hlavičce zůstává** a je od #215 **jediným** místem o checcích mimo tab: „je to
+    zelené“ se musí dát přečíst i při čtení diffu, tedy z hlavičky, která je vidět ve všech
+    tabech. Je to rozhodnutí z #209 a odebrání souhrnu se ho netýká.
+  - **Tab se nekreslí, když checky nejsou** (`Policy.tabs(hasChecks:)`). PR bez CI je běžná věc
+    a prázdný tab s nadpisem by o něm tvrdil, že se něco nepovedlo. „Nenačteno“ a „žádné“ jsou
+    ve `AppStore.checks` schválně dva různé stavy, ale **pro pruh záložek z obou plyne totéž** —
+    není čím tab naplnit.
+  - **Uložená volba se zarovnává na kreslené záložky, ne maže** (`AppStore.detailTab(for:)`).
+    Kdyby se nezarovnávala, po zmizení checků by v okně nesvítila žádná záložka a plocha tabu by
+    zůstala prázdná; kdyby se mazala, vypadl by člověk z tabu `Kontroly` při každém příchodu na
+    PR, protože checky se dotahují s detailem a chvíli nejsou.
+  - **Dělič v pruhu se počítá z vlastnosti tabu, ne z indexu** (`isReviewerOutput`). `Kontroly`
+    sedí nalevo doprostřed **a někdy tam nejsou**, takže zadrátovaná pozice by dělič posunula
+    podle dat.
+  - **Odznak má tři podoby, ne jednu**: spadlé → červená kapsle s počtem (blokuje merge, takže
+    tichá kapsle by se čtla jako údaj o množství), běžící → puntík jako u `Průběhu` („běží“ je
+    stav, ne množství), zelené i přeskočené → **nic**. Zelené CI je výchozí stav a číslo u něj
+    by byl šum, kvůli kterému by se přestaly čít i ty ostatní dva.
+  - **Texty a barvy checků jsou na jednom místě** (`ChecksText`) — tab i chip. Do #215 měl každý
+    kus okna vlastní kopii a **už tehdy se rozešly**: blok kreslil `.green`/`.red` ze SwiftUI, chip
+    `Palette.ok`/`Palette.crit` z palety návrhu, takže dvě zelené v jednom okně znamenaly jednu věc.
+
+    Poměr se skládá **po částech** (`ChecksText.parts`) kvůli chipu, který ukazuje jen tu první,
+    tedy nejhorší stav. Příznak `isFailure` u částí **zmizel s odebraným souhrnem**: existoval
+    jen proto, aby `Přehled` obarvil spadlou část, a bez souhrnu ho nikdo nečetl.
+  - **Selhané načtení checků má vlastní stav** (`checkFailures`), ne prázdné pole. Do #215 to bylo
+    `(try? await gateway.fetchChecks(id:)) ?? []` a dalo se to obhájit tím, že checky jsou doplněk
+    k PR; od #215 je ale prázdno **tvrzení** — visí na něm, jestli se nakreslí tab —, takže by
+    z chyby sítě tiše vyšlo „tenhle PR nemá CI“. `GhGateway.fetchChecks` ten rozdíl drží schválně
+    (prázdný výstup s nulovým kódem = bez CI, nenulový s prázdným výstupem = chyba), takže by ho
+    zahazoval až store. Dvě pravidla k tomu: po selhání se **stará sada nechává být** (zastaralý
+    seznam s větou nad ním je lepší než zmizelý tab) a **zrušení se nezapisuje** — `.task` se ruší
+    při přepnutí PR, což není porucha.
+
+    Věta o poruše je **v hlavičce PR**, ne v `Přehledu`: po odebrání souhrnu je to jediná věta
+    o checcích mimo tab a hlásí právě ten stav, kdy tab **není** — takže se musí ukázat i tomu, kdo
+    se na `Přehled` vůbec nepodívá. Hlavička je vidět ve všech tabech a už jednu takovou větu nese
+    (kontrola nálezů, #150). Okrová, ne červená: nepovedlo se to **zjistit**, což je „nevím“, ne
+    „je to rozbité“.
 - **`Přehled` má dlaždice s fakty** (#198): commity (a kolik z nich je nových od minule),
   soubory (a kolik má nález), hlava PR a sha, proti které platí nálezy. **Nic se pro ně
   nedotahuje** — jsou to údaje, které v okně už jsou, jen roztroušené. Tři pravidla:
@@ -3387,6 +3489,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
+| `Policy.tabs(hasChecks:)` | Které záložky PR se kreslí (#215) — `Kontroly` odpadnou u PR bez CI. Pořadí je z `allCases`, ať se nedá rozejít s výčtem |
+| `Policy.checksBadge(of:)` | Odznak u záložky `Kontroly` (#215) — spadlé červeně s počtem, běžící puntíkem, zelené a přeskočené bez odznaku |
 | `Policy.facts(commits:newCommits:files:filesWithFindings:headSha:findingsHeadSha:)` | Dlaždice s fakty o PR (#198); dlaždice, o které se nedá nic říct, se vynechá |
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
 | `Policy.fileFindings(in:categories:)` | Co je v souboru k vyřízení pro kapsli v hlavičce diffu (#219) — počítá **místa**, ne nálezy, a odmítnuté vynechá |

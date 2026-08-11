@@ -188,6 +188,18 @@ a odkazy zůstávají klikatelné. Tabulky zůstávají jako monospace řádky a
 neobarvuje: jazyk z fence je volný řetězec, takže mapovat ho na obarvovací pravidla znamená
 hádat, a špatně obarvený cizí kód je horší než neobarvený.
 
+**Citace se sázejí do hloubky a GitHubové výstrahy mají rámeček** (#279). Obsah `> …` se parsuje
+na bloky, takže `## nadpis`, odrážka i `- [ ]` **uvnitř** citace se vysázejí — do #279 z nich byl
+jeden slitý `Text`, a protože boti do citací píšou celé zprávy, stál v okně místo komentáře od
+`coderabbitai` jeho zdroj. `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` a `[!CAUTION]` se
+kreslí jako barevná výstraha s ikonou a titulkem; **neznámý druh se nakreslí jako obyčejná
+citace**, ne spolkne. Nadpisy mají **šest velikostí** (do #279 dvě) a pod `#`/`##` linku, takže se
+v dlouhém popisu PR dá skákat po struktuře, a inline `kód` má jemný podklad jako na GitHubu.
+Barvy výstrah jsou z palety a u dvou druhů **vědomě jiné než ty GitHubovy**: `[!WARNING]` by se
+jinak na hex sešlo se zastaráním a `[!CAUTION]` s blokujícím nálezem, tedy s barvami, které v okně
+už něco znamenají. Sazba se **pamatuje** — u dvanáctikilobajtové zprávy od bota je
+rozklad na bloky 1,91 ms proti 0,04 ms z cache a inline sazba jejích bloků dalších 1,81 ms.
+
 **`Změněné soubory`** ukazují **diff v plné šířce**: soubory pod sebou s hlavičkou, která při scrollu
 zůstává nahoře, souhrn `N souborů · +X −Y` a menu na skok mezi soubory. Přejmenování, nové,
 smazané i binární soubory jsou označené; dlouhé řádky se zalamují, protože 120 znaků se do
@@ -1127,7 +1139,8 @@ App/                      zdrojáky aplikace — target PRism
   Diff/                   parsování unified diffu na soubory, hunky a řádky, slití do dvojic pro pohled
                           vedle sebe a porovnání uvnitř přepsané dvojice (word-level diff)
   Health/                 dostupnost služeb pro stavový řádek: status pages, signály, monitor
-  Markdown/               vykreslení Markdownu z GitHubu: bloky, inline HTML od botů
+  Markdown/               vykreslení Markdownu z GitHubu: bloky (včetně citací a výstrah), inline HTML
+                          od botů, škála nadpisů a mezer, zapamatované rozložení na bloky
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka, hledání v paletě
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR, brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy
@@ -1147,7 +1160,8 @@ Tests/                    unit testy — target PRismTests
   Config/                 testy čtení, zápisu a slučování konfigurace
   Diff/                   testy parseru diffu proti skutečným výstupům gh pr diff a word-level rozdílu
   Health/                 testy status pages, monitoru dostupnosti a HTTP vrstvy
-  Markdown/               testy parseru Markdownu (invariant: nic se neztratí) a HTML od botů
+  Markdown/               testy parseru Markdownu (invariant: nic se neztratí), HTML od botů, sazby
+                          (nadpisy, mezery, barvy výstrah) a cache; sonda na render do PNG
   GitHub/                 testy gateway a klasifikace chyb gh
   Policy/                 testy čistých funkcí
   Review/                 testy parseru a runneru proti skutečným streamům

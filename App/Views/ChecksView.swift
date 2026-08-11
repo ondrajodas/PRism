@@ -1,12 +1,19 @@
 import SwiftUI
 
-/// Blok `Kontroly na GitHubu` v tabu `Přehled` (#209).
+/// Tab `Kontroly` (#215) — seznam checků z GitHub Actions.
 ///
 /// Odpovídá na druhou půlku otázky „dá se to mergnout“ — tu první (nálezy) v okně už je, takže
 /// se nad zeleným review pořád muselo do prohlížeče.
 ///
-/// **Log se nestahuje.** Spadlý check nabídne odkaz; megabajty logu kvůli jednomu přečtení do
-/// aplikace nepatří a čtení logu není doména review.
+/// **Do #215 to byl blok v `Přehledu`** (#209). Se souhrnem to tam sedělo, ale detail spadlého
+/// checku (#214) přidává anotace a konec logu, a tím blok vyroste natolik, že vytlačí popis PR
+/// mimo obrazovku.
+///
+/// V `Přehledu` po tom stěhování **nezbylo nic** — ani souhrn, který tam zadání #215 chtělo nechat.
+/// Tab odpovídá na celou otázku a „je to zelené“ nese chip v hlavičce PR, takže souhrn byl třetí
+/// místo o téže věci. Rozhodnuto při zkoušení, viz specifikace.
+///
+/// **Log se nestahuje.** Spadlý check nabídne odkaz na GitHub; stahování konce logu je #214.
 struct ChecksView: View {
     let checks: [PullRequestCheck]
 
@@ -16,6 +23,18 @@ struct ChecksView: View {
     @State private var showsSkipped = false
 
     var body: some View {
+        ScrollView {
+            card
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        // Jména jobů a časy si člověk kopíruje do issue; je to několik řádků textu, ne líný
+        // seznam tisíců `Text`ů jako diff.
+        .textSelection(.enabled)
+    }
+
+    /// Rámeček ze návrhu (`.checks`): obrys a `chrome`, ať je vidět, kde seznam začíná a končí.
+    private var card: some View {
         VStack(spacing: 0) {
             header
             ForEach(visible) { check in
@@ -30,33 +49,36 @@ struct ChecksView: View {
         .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line, lineWidth: 1) }
     }
 
+    /// Hlavička s poměrem (`.checks > header`). Nadpis zůstává i v tabu: pruh záložek nese jen
+    /// `Kontroly`, kdežto tady má být vidět, že jsou to kontroly **na GitHubu**, ne naše review.
     private var header: some View {
         HStack(spacing: 8) {
             Text("Kontroly na GitHubu")
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
             Spacer(minLength: 8)
-            Text(verbatim: summaryText)
+            Text(verbatim: ChecksText.summary(of: Policy.summary(of: checks)))
                 .font(.system(size: 11.5))
                 .foregroundStyle(Palette.ink2)
                 .monospacedDigit()
         }
-        .padding(.horizontal, 13)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
     }
 
     private func row(_ check: PullRequestCheck) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol(of: check.outcome))
+        HStack(spacing: 9) {
+            Image(systemName: ChecksText.symbol(of: check.outcome))
                 .font(.system(size: 11))
-                .foregroundStyle(color(of: check.outcome))
-                .frame(width: 14)
+                .foregroundStyle(ChecksText.color(of: check.outcome))
+                .frame(width: 13)
             Text(verbatim: check.name)
-                .font(.system(size: 12.5))
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.ink2)
                 .lineLimit(1)
             Spacer(minLength: 8)
-            Text(verbatim: detail(of: check))
-                .font(.system(size: 11, design: .monospaced))
+            Text(verbatim: ChecksText.detail(of: check))
+                .font(.system(size: 10.5, design: .monospaced))
                 .foregroundStyle(Palette.ink3)
             // Odkaz jen u toho, co se nepovedlo — u zeleného checku není proč chodit pryč.
             if let link = check.link, check.outcome == .failed || check.outcome == .cancelled {
@@ -66,26 +88,26 @@ struct ChecksView: View {
                 .help("Otevřít log na GitHubu")
             }
         }
-        .padding(.horizontal, 13)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
     private var skippedRow: some View {
         Button {
             withAnimation(.snappy(duration: 0.15)) { showsSkipped.toggle() }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 9) {
                 Image(systemName: showsSkipped ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10))
                     .foregroundStyle(Palette.ink3)
-                    .frame(width: 14)
+                    .frame(width: 13)
                 Text(verbatim: "\(skipped) přeskočeno")
                     .font(.system(size: 12))
                     .foregroundStyle(Palette.ink2)
                 Spacer(minLength: 8)
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -97,53 +119,32 @@ struct ChecksView: View {
     }
 
     private var skipped: Int { checks.count { $0.outcome == .skipped } }
+}
 
-    /// `2 prošly · 1 běží · 1 selhala` — jen to, čeho je aspoň jeden. Nula v souhrnu je slovo
-    /// navíc, ze kterého nic neplyne.
-    private var summaryText: String {
-        let summary = Policy.summary(of: checks)
-        var parts: [String] = []
-        if summary.failed > 0 {
-            parts.append(Plural.czech(summary.failed, one: "selhala", few: "selhaly", many: "selhalo"))
-        }
-        if summary.running > 0 { parts.append("\(summary.running) běží") }
-        if summary.passed > 0 {
-            parts.append(Plural.czech(summary.passed, one: "prošla", few: "prošly", many: "prošlo"))
-        }
-        if summary.skipped > 0 { parts.append("\(summary.skipped) přeskočeno") }
-        return parts.joined(separator: " · ")
-    }
-
-    private func detail(of check: PullRequestCheck) -> String {
-        let state = switch check.outcome {
-        case .passed: "prošlo"
-        case .failed: "selhalo"
-        case .running: "běží"
-        case .skipped: "přeskočeno"
-        case .cancelled: "zrušeno"
-        }
-        guard let duration = check.duration else { return state }
-        return "\(state) · \(RunUsageText.duration(.seconds(duration)))"
-    }
-
-    private func symbol(of outcome: PullRequestCheck.Outcome) -> String {
-        switch outcome {
-        case .passed: "checkmark"
-        case .failed: "xmark"
-        case .running: "circle.dashed"
-        case .skipped: "minus"
-        case .cancelled: "slash.circle"
-        }
-    }
-
-    /// Tatáž škála jako všude jinde v okně: červená se musí řešit teď, fialová běží, zelená je
-    /// v pořádku, šedá nic netvrdí.
-    private func color(of outcome: PullRequestCheck.Outcome) -> Color {
-        switch outcome {
-        case .passed: .green
-        case .failed, .cancelled: .red
-        case .running: Palette.accent
-        case .skipped: Palette.ink3
-        }
-    }
+#Preview {
+    ChecksView(checks: [
+        PullRequestCheck(
+            name: "phpstan (level 8)",
+            outcome: .failed,
+            link: URL(string: "https://github.com/cli/cli/actions/runs/1/job/2"),
+            startedAt: Date(timeIntervalSince1970: 0),
+            completedAt: Date(timeIntervalSince1970: 134)
+        ),
+        PullRequestCheck(
+            name: "phpunit / 8.4",
+            outcome: .running,
+            link: nil,
+            startedAt: Date(timeIntervalSince1970: 0),
+            completedAt: nil
+        ),
+        PullRequestCheck(
+            name: "phpcs",
+            outcome: .passed,
+            link: nil,
+            startedAt: Date(timeIntervalSince1970: 0),
+            completedAt: Date(timeIntervalSince1970: 41)
+        ),
+        PullRequestCheck(name: "deploy", outcome: .skipped, link: nil, startedAt: nil, completedAt: nil),
+    ])
+    .frame(width: 720, height: 260)
 }

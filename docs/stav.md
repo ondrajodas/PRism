@@ -1072,6 +1072,54 @@ navíc past: řídit se muselo přes accessibility a **samotné to řízení je 
 naměřených; postup i to, co nefunguje (syntetické scroll eventy, `Page Down`), je v
 [`docs/testovani.md`](testovani.md).
 
+**Kontroly jsou vlastní tab s odznakem (#215).** Blok z `Přehledu` (#209) se odstěhoval do čtvrté
+záložky, protože detail spadlého checku (#214) přidá anotace a konec logu — a tím by vytlačil popis
+PR mimo obrazovku. Je to tentýž pohyb jako u konverzace (#183): co začne růst, přestane být
+kontextem a stane se obsahem.
+
+**V `Přehledu` nakonec nezbylo nic** — a to je změna proti zadání, které tam chtělo souhrn nechat.
+Chvíli tam byl (hlavička s poměrem a jeden řádek s nejhorším checkem), ale při proklikání se ukázalo,
+že je to **třetí místo o téže věci**: tab odpovídá na celou otázku a „je to zelené“ nese chip
+v hlavičce, který je vidět ve všech tabech. Chip proto zůstal beze změny a je od téhle verze jediným
+místem o checcích mimo tab. Odešel s tím i příznak `isFailure` u částí poměru — existoval jen proto,
+aby souhrn obarvil spadlou část, takže bez souhrnu neměl čtenáře.
+
+Odznak počítá **podle nejhoršího stavu**, jako chip: spadlé červeně s počtem, běžící puntíkem jako
+u `Průběhu`, zelené a přeskočené bez odznaku (číslo u zeleného CI je šum, kvůli kterému by se
+přestaly čít i ty dva ostatní). **Tab se u PR bez CI nekreslí** a uložená volba se na to zarovnává,
+ne maže — checky se dotahují s detailem, takže po přepnutí PR chvíli nejsou, a mazání by z tabu
+vyhazovalo při každém příchodu. Cestou se sjednotily texty a barvy (`ChecksText`): seznam kreslil
+`.green`/`.red` ze SwiftUI, kdežto chip barvy z palety návrhu, takže v okně byly dvě zelené pro
+jednu věc.
+
+Vlastní revize k tomu našla jednu věc, kterou #215 zhoršilo: store dotahoval checky přes
+`(try? …) ?? []`, takže se **chyba sítě zapsala jako prázdno** — a na prázdnu teď visí, jestli
+se tab nakreslí. Tiše by z poruchy vyšlo tvrzení „tenhle PR nemá CI“, přitom gateway ten rozdíl
+drží (prázdný výstup s nulovým kódem = bez CI, nenulový s prázdným výstupem = chyba). Selhání má
+proto vlastní mapu (`checkFailures`), po něm se **stará sada nechává být** (zastaralý seznam s větou
+nad ním je lepší než zmizelý tab) a v **hlavičce PR** je vidět, proč tab není — hlavička je vidět
+ve všech tabech, takže se ta věta ukáže i tomu, kdo do `Přehledu` nejde. Testů je o 32 víc (2256)
+ve dvou nových suitách.
+
+**Sazba textů z GitHubu (#279).** Citace se neparsovaly na bloky, výstrahy parser vůbec neznal
+a nadpisy měly dvě velikosti na šest úrovní. `MarkdownBlock.quote` proto nese **bloky** (tentýž tvar
+jako `details`), přibyl případ `alert` s pěti druhy, `MarkdownTypography` drží škálu nadpisů
+a mezery mezi bloky, `MarkdownAlertStyle` vzhled výstrah a `MarkdownRenderCache` zapamatovanou
+sazbu (rozklad na bloky i inline). Rozhodnutí, která v zadání nebyla: **neznámý druh výstrahy** se kreslí jako obyčejná
+citace (a ten řádek v ní zůstane), zanoření má **strop** na šesti úrovních (za ním obsah zůstane
+textem — je to proti hloubce stromu view i proti `>>>>>>…`), titulky výstrah jsou **česky**, protože
+ve zdroji je jen `[!NOTE]`, a `MarkdownText` bere velikost **číslem místo `Font`u**, protože ze
+`Font`u se velikost nedá přečíst a škála nadpisů by neměla z čeho vyjít.
+
+Barvy: `[!WARNING]` a `[!CAUTION]` mají **vlastní hex**, protože ty GitHubovy (`0x9A6700`,
+`0xCF222E`) se na hex rovnají `Palette.stale` a `Palette.crit`, tedy zastarání a blokujícímu nálezu;
+`[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`. Změřeno: rozklad dvanáctikilobajtové zprávy
+od bota **1,91 ms → 0,037 ms** z cache a konverzace o 40 zprávách **74,7 ms → 1,48 ms**; inline
+sazba jejích 44 bloků je k tomu dalších **1,81 ms**, takže se pamatuje taky — jednou cachí, ne dvěma. Testů je o 41 víc (2265). Review našlo jednu reálnou vadu, na kterou testy neměly případ: lokální počítadlo otevřených tagů v `details(from:depth:)` se jmenovalo `depth` a **zastínilo** parametr s hloubkou rekurze, takže strop zanoření skrz `<details>` nezabíral a rozbalovátko hloubku ještě resetovalo. Sonda na
+render do PNG našla dvě věci, které z kódu vidět nebyly: nerozeznatelné úrovně nadpisů 3–5 (krok se
+roztáhl na celý bod) a pruh citace, který sahal do poloviny obsahu, protože se jeho výška
+vyjednávala v `HStack`u — teď je to `overlay`, který má velikost obsahu z definice.
+
 **Akce u nálezu v diffu jsou tlačítka podle návrhu (#283).** Byly to modré systémové odkazy
 roztažené přes celou šířku okna — převzetí vlevo, `Odmítnout: neplatný irelevantní` u pravé hrany,
 tedy na velkém monitoru metr od nálezu, ke kterému patří. Teď je to řada malých tlačítek vlevo pod
@@ -1092,7 +1140,7 @@ kódu prošly: tlačítko **20 bodů proti 25** (CSS řádek 1,45 a obtažení, 
 paddingu) a věta „GitHub tady řádkový komentář nepřijme“, která jako ocas za tlačítkem shodila celou
 řadu do sloupce i na širokém okně. Do úzkého okna se řada **zlomí** (řada → dvě řady → sloupec), což
 je vědomá odchylka: na 128 bodech, které v úzkém panelu zbývají, byly ze tří tlačítek pahýly
-o jednom znaku. Testů je o 9 víc (2233).
+o jednom znaku. Testů je o 9 víc (2306).
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

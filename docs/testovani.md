@@ -667,6 +667,56 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   včetně **zanořeného** a neuzavřeného. Plus skutečný popis PR z fixture, tedy cizí text, který
   nikdo nepsal pro test. `MarkdownHTML` má vlastní sadu: odkaz na Markdown se všemi druhy
   uvozovek, `<br>`, entity a to, že `&amp;` se dekóduje naposled.
+
+  **Citace a výstrahy (#279)** mají vyčerpávající výčet, protože je to čistá funkce: nadpis,
+  odrážka a zaškrtávátko **uvnitř** citace, vnořená citace, `<details>` v citaci, zachované
+  odsazení zanořeného seznamu, všech pět druhů výstrahy, výstraha **uvnitř** citace, bloky uvnitř
+  výstrahy a obsah **za stropem zanoření** — a to zvlášť pro citace i pro `<details>` (nevysází se,
+  ale zůstane). Ten druhý přišel až po review: počítadlo otevřených tagů se jmenovalo `depth`
+  a **zastínilo** parametr s hloubkou rekurze, takže strop nezabíral vůbec a rozbalovátko hloubku
+  ještě resetovalo. Chytil to Copilot, ne testy — proto ten test existuje. Nejcennější jsou tři, které
+  tvrdí, že se něco **NEstalo**: **neznámý druh** `[!FOO]` výstrahu nedá a ten řádek v citaci
+  zůstane, **značka s textem na témže řádku** taky ne, a nad **skutečným** komentářem od
+  `coderabbitai` (fixture `gh/comment-coderabbit.md`, veřejné `coderabbitai/ast-grep-essentials#200`)
+  se ověřuje, že v žádném odstavci nezůstal řádek začínající `>` nebo `#` — tedy že v okně nestojí
+  zdroj. Ověřeno vložením regrese: bez rekurze v citaci padnou čtyři testy, po spolknutí neznámého
+  druhu na `.note` padne i invariant (nahlásí ztracené `FOO`).
+- **`MarkdownTypography` (#279)** — že úrovní nadpisů je **šest různých a monotónně klesajících**
+  (to je celá ta vada, kterou #279 opravuje), že linka je jen pod `#`/`##`, tlumená jen šestka,
+  že úroveň mimo rozsah se přiklopí a že škála roste se základní velikostí. U rytmu: nadpis má nad
+  sebou nejvíc místa a pod sebou nejméně, první blok **nemá** mezeru, a **žádný přechod mezi dvěma
+  bloky nevyjde nula** — to je výčet přes všechny druhy bloků obojím směrem.
+- **`MarkdownAlertStyle` (#279)** — barvy se porovnávají **vyřešené na hex, v obou režimech**
+  (`NSAppearance.performAsCurrentDrawingAppearance`), protože token je dynamický a shoda může být
+  jen v jednom z nich: každý druh má vlastní barvu, `[!CAUTION]` se nerovná `crit` a `[!WARNING]`
+  se nerovná `stale`. Plus že každý druh má neprázdný titulek a **existující** SF Symbol.
+- **`MarkdownInlineText` (#279)** — že inline sází systém (tučné zůstane, odkaz zůstane klikatelný),
+  že inline `kód` dostane podklad a monospace, a hlavně že ho **nedostane nic jiného** — podklad
+  nad celým odstavcem by z prózy udělal blok kódu. Plus že rozbitý Markdown vrátí holý text.
+- **`MarkdownRenderCache` (#279)** — že vrací totéž co parser, že **dva různé texty se nepotkají
+  v jednom záznamu** (klíčem je celý text; ověřeno regresí — s klíčem podle délky test padá na
+  vysázeném cizím komentáři) a že se cache nedostane přes ani jednu ze dvou mezí. Text delší než
+  celý rozpočet se **nezapamatuje**, ale rozloží.
+- **Měření sazby (#279)** — `MarkdownPerformanceMeasurement`, gated `PRISM_MEASURE`. Nic netvrdí;
+  existuje proto, že rekurze v citacích se počítá v `body` a to rozhodnutí má být podložené číslem:
+  zpráva od bota o 12 kB 1,91 ms, z cache 0,037 ms; konverzace o 40 zprávách 74,7 ms proti 1,48 ms.
+  Čtvrté číslo rozhodlo o rozsahu cache: **inline sazba** 44 bloků té zprávy je 1,81 ms, tedy
+  stejně drahá jako rozklad — takže se pamatuje taky.
+- **Sonda sazby (#279)** — `MarkdownRenderProbe`, taky gated, vyrendruje ukázku i skutečnou zprávu
+  od bota do PNG **v obou režimech**. Barvy palety se řídí `NSAppearance`, kdežto `.primary`
+  a `.secondary` prostředím SwiftUI, takže se musí nastavit **obojí**; s jedním z toho vyjde tmavý
+  text na tmavém podkladu a vypadá to jako chyba v sazbě. Našla dvě věci, které z kódu vidět
+  nebyly: nerozeznatelné úrovně nadpisů 3–5 a pruh citace, který sahal do poloviny obsahu.
+
+  ```bash
+  TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/render \
+      xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test \
+      -only-testing:PRismTests/MarkdownRenderProbe > /tmp/probe.log 2>&1
+  ```
+
+  Pozor na dvě pasti: `PRISM_MEASURE=1` **před** `xcodebuild` nestačí (do testovacího procesu jde
+  jen to, co má prefix `TEST_RUNNER_`), a **tabulka vyjde v renderu prázdná** — je ve vodorovném
+  `ScrollView`, který se offscreen nevykreslí. Není to chyba sazby, jen mez sondy.
 - **`AppStore` — taby** — výchozí `Přehled` (proti `PullRequestTab.standard`, ať se to nerozejde),
   volba per PR, přepnutí zpátky mažící klíč a úklid s PR, které zmizelo ze seznamu.
 - **`Policy` — hledání v paletě (#184)** — vyčerpávající výčet nad hotovým katalogem, bez kreslení.
@@ -1130,6 +1180,47 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a **počítat většinu místo nejhoršího**. Test s dvanácti zelenými a jedním červeným je proto
   v sadě schválně. K tomu překlad kbelíků včetně neznámého (bere se jako běžící — jediný stav,
   který o výsledku netvrdí nic) a pořadí, ve kterém jdou spadlé nahoru a přeskočené dolů.
+- **Tab `Kontroly` a jeho odznak (#215)** — `Policy` výčtem (`PullRequestTabListTests`), volba tabu
+  ve store (`AppStoreTabTests`) a sazba (`ChecksTextTests`). Co se dá pokazit potichu:
+  - **nakreslit tab u PR bez CI** — prázdný tab s nadpisem tvrdí, že se něco nepovedlo. Testuje se
+    z obou stran: chybějící klíč **i** prázdné pole znamenají „bez checků“, a odpadnout smí
+    **jedině** `Kontroly` (ostatní záložky se kreslí i prázdné, protože „žádný nález“ je sama
+    odpověď);
+  - **rozejít dělič v pruhu** — počet přechodů `isReviewerOutput` musí být přesně jeden
+    i po vypadnutí `Kontrol`, jinak by v pruhu byly dva děliče nebo žádný;
+  - **nechat volbu ukazovat na nekreslený tab** — po zmizení checků by nesvítila žádná záložka
+    a plocha tabu by zůstala prázdná. Druhý test k tomu hlídá opačnou chybu: volba se **nemaže**,
+    takže po dotažení checků je člověk zpátky tam, kde byl;
+  - **spočítat odznak podle většiny** — tentýž test s dvanácti zelenými a jedním červeným jako
+    u chipu, plus že zelené a přeskočené CI odznak **nedostanou** (šum by přebil ty dva, které
+    něco říkají) a že spadlé přebijí běžící;
+  - **rozejít poměr mezi tabem a chipem v hlavičce** — obojí bere text z týchž částí
+    (`ChecksText.parts`) a chip z nich ukazuje **tu první**, takže se hlídá i to, že části jdou
+    od nejhoršího stavu. Barvy se hlídají proti `Palette`, protože do #215 kreslil seznam
+    `.green`/`.red` ze SwiftUI, kdežto chip barvy z palety návrhu;
+  - **zapsat selhané načtení jako prázdno** — to je nejcennější test téhle sady, protože z toho
+    tiše vyjde tvrzení „tenhle PR nemá CI“ a **zmizí celý tab**. Hlídá se ze čtyř stran: porucha
+    se zapíše do `checkFailures` a `checks` zůstane nenačtené; PR bez CI naopak **žádnou poruchu
+    nehlásí**; selhaný pokus **nezahodí** to, co už bylo (tab tedy nezmizí kvůli chybě sítě);
+    a povedený pokus starou poruchu smaže, aby věta v hlavičce nesvítila nad načtenými checky.
+    Fake gateway má na to vlastní přepínač (`checksFailure`) **vedle** `checks` — kdyby to byl
+    jeden `Result`, nešlo by nastavit „prázdno bez chyby“, tedy zrovna ten stav, který se
+    s chybou nesmí slít.
+
+  **Trvání se porovnává proti `RunUsageText`, ne proti napsanému číslu.** Naivní `"prošlo · 41 s"`
+  je červené, protože formátovač v českém locale sází `41,0 s` a mezery jsou nezlomitelné — test
+  by tvrdil něco o formátování čísel, ne o téhle sazbě.
+
+  Jak to **vypadá**, se ověřilo offscreen renderem přes `NSHostingView` (`ScrollView` ani `Link`
+  se v `ImageRenderer`u nevykreslí) ve světlém i tmavém režimu: tři podoby odznaku, tab se seznamem
+  a pruh záložek přes pásmo šířek 620–1020. Šest záložek se vejde na jeden řádek od ~920 bodů, pět
+  od ~820 — pod tím se popisky **zalamují**, neřežou, a bylo to tak i před #215.
+
+  **`Přehled` se po odebrání souhrnu vyrendroval znovu, před a po** — je to jediný způsob, jak se
+  pozná, že po odebrání bloku zbyla úplná obrazovka a ne děravá. Kontrolovaly se u toho **prázdné
+  stavy**, protože právě ty se odebráním bloku dají potichu rozbít: `Načítám popis…` (detail
+  nedorazil) a `Autor k PR nic nenapsal.` (autor nic nenapsal) musí zůstat **dva různé stavy**,
+  a k tomu nejchudší možný `Přehled` — bez dlaždic i bez checků — nesmí být prázdná plocha.
 - **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
   (řádek plný nul utopí to jedno číslo, na kterém záleží) a **ukázání shodné sha nálezů**, ze které
   neplyne nic. Nejcennější test je právě ten druhý: shodná se nekreslí, rozešlá ano a je označená
