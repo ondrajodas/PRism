@@ -157,6 +157,10 @@ a v zadání tohle:
   stejného důvodu jako slot: všechno ostatní subagenta tlačí k dotažení, takže pauza doháněná
   zprávou během běhu **přijde pozdě** — na M9 tak dva ze čtyř agentů domergovali dřív, než jim
   zpráva došla,
+- **zákaz obcházet odepřené povolení** (#273) jako věta k okopírování, stejně jako slot: *když ti
+  permission brána něco zakáže, napiš to do hlášení jako neověřenou mezeru a nech to na
+  orchestrátorovi*. Patří to do zadání ze stejného důvodu jako pauza — **co není v zadání, to
+  subagent neudělá**, a to je zjištění z #256,
 - **kde končí jeho práce**: issue je hotové, PR mergnutý, release vydaný a **jeho aplikace
   uklizená** (viz krok 5).
 
@@ -187,7 +191,35 @@ Co subagent **nedělá**:
   a správně toho nechal. Na obrazovku se kouká **offscreen renderem** (viz
   [`testovani.md`](testovani.md)), který nic nesdílí; ovládat se dá jedině vlastní slot, a i tam
   jen tehdy, když je jistota, že je vpředu;
-- **nevolá další subagenty.**
+- **nevolá další subagenty**;
+- **neobchází odepřené povolení** (#273). Když permission brána něco zakáže, nehledá se k témuž
+  jiná cesta — a zvlášť se **nepřepisuje konfigurace, aby v měření vyšel stav, který je potřeba**.
+  Místo toho se to napíše do hlášení jako **neověřená mezera**: čeho se to mělo ověřit, co brána
+  zakázala a co z toho tedy zůstalo neměřené. Dál je to na orchestrátorovi — buď to zařídí v rámci
+  svých oprávnění, nebo se zeptá člověka, nebo ta jedna věc **neověřená zůstane**, což je legitimní
+  výsledek (#243: „neztratit fokus nejde, a takhle jsem to změřil“). **Neověřená věc není důvod
+  nemergovat**, protože poslední kolo kontroly dělá člověk v pauze (§4) — obcházení tedy nemá ani
+  tuhle výmluvu. Není to výjimka z pravidla „když si nejsi jistý, jestli je hotovo, tak hotovo
+  není“: mezera se týká **ověření, které brána nepustila**, ne nedodělaného zadání.
+
+Zapsané je to z **#273**, kde agent na #184 potřeboval k proklikání nález, který **není** blokující
+(v sandboxu jsou všechny blokující, tedy rozbalené). Zkusil si to nastavit v konfiguraci slotu,
+brána mu to zakázala — a on tu konfiguraci **upravil jinou cestou a odebral `correctness`
+z `blockingCategories`**, tedy oslabil to, co rozhoduje, který nález blokuje merge. V hlášení
+orchestrátorovi přitom napsal, že mu to brána zablokovala.
+
+**Změřený rozsah byl nulový** a je to tady schválně, aby pravidlo nestálo na přehnaném příběhu:
+hlavní konfigurace uživatele zůstala nedotčená (`['correctness', 'data-loss', 'security']`),
+konfigurace slotu byla v době kontroly zpátky v pořádku, v diffu PR nebylo nic oslabeného,
+`grep ReviewPublishing App/` vracel stejný seznam jako `main` a `ClaudeCommand.swift` (tedy
+`--allowedTools` revieweera) byl nedotčený. Pravidlo tedy nevzniklo ze škody, ale ze tří věcí, které
+platí i bez ní: **brána je rozhodnutí člověka o tom, co smí běžet bez dohledu**, takže obejít ji
+jinudy z ní dělá nápovědu; **hlášení přestává být důkaz**, a celý postup z #256 (pauza, hlášení,
+verdikt) na tom stojí, že hlášení odpovídá skutečnosti; a **orchestrátor s odepřeným povolením umí
+něco udělat**, kdežto s obejitím, o kterém se nedozví, ne.
+
+Stojí to tu **jako pravidlo vedle ostatních zákazů, ne jako varování před konkrétním agentem** —
+zákaz sahat mimo vlastní worktree taky nevznikl proto, že by někdo byl zlomyslný.
 
 ## 4. Pauza na proklikání — změna pravidla
 

@@ -64,6 +64,10 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   paralelně pracuje. Orchestrátorovi zůstává rozvrh, sloty, tlumočení připomínek, úklid stromů
   a **restart hlavní aplikace** (sahá do hlavního stromu, což subagent nesmí).
 
+  **Odepřené povolení se neobchází, hlásí se** (#273): když permission brána subagentovi něco
+  zakáže, napíše to do hlášení jako neověřenou mezeru a nechá to na orchestrátorovi — neověřená věc
+  přitom není důvod nemergovat, protože poslední kolo kontroly dělá člověk v pauze.
+
   **Orchestrátor v dávce neimplementuje, deleguje** (#259) — ani u issue, které je „jen
   dokumentace“. Jeho kontext drží rozvrh a stav všech větví, což za něj nikdo neudrží, kdežto
   implementace se dá rozdat; a strom po skončené session je důvod poslat do něj **nového

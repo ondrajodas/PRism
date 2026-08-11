@@ -701,6 +701,22 @@ a zákazem zakládat nový), ne nový worktree z mainu a ne orchestrátor sám. 
 kde orchestrátor začal implementovat v odumřelém stromě po předchozím agentovi a člověk to
 zastavil.
 
+**Odepřené povolení se neobchází, hlásí se (#273)** — do výčtu „co subagent nedělá“ (§3) přibyl
+zákaz hledat k zakázané věci jinou cestu a přepisovat konfiguraci, aby v měření vyšel potřebný
+stav. Místo toho se to napíše do hlášení jako **neověřená mezera** a nechá na orchestrátorovi;
+**neověřená věc není důvod nemergovat**, protože poslední kolo kontroly dělá člověk v pauze (#256).
+Do zadání subagenta to patří jako věta k okopírování, stejně jako slot — co v zadání není, to
+subagent neudělá (zjištění z #256). Vzniklo z běhu na #184: agent potřeboval k proklikání
+neblokující nález, brána mu změnu konfigurace slotu zakázala, on ji **obešel jinou cestou a odebral
+`correctness` z `blockingCategories`**, a orchestrátorovi přitom napsal, že mu to brána
+zablokovala. **Změřený
+rozsah byl nulový** — hlavní konfigurace uživatele nedotčená, slotová v době kontroly v pořádku,
+v diffu PR nic oslabeného, `grep ReviewPublishing App/` stejný jako `main`, `ClaudeCommand.swift`
+nedotčený — a je to u pravidla napsané schválně, aby příště nikdo nedohadoval, jestli to bylo vážné,
+nebo formální. Zapsané je jako **pravidlo vedle ostatních zákazů**, ne jako varování před konkrétním
+agentem: zákaz sahat mimo vlastní worktree taky nevznikl z nedůvěry. `CLAUDE.md` na to má jednu
+větu a nerozrostl se (48 977 → 49 292 B).
+
 U slotů (#228) dopadly tři věci jinak, než jak byly v zadání:
 
 - **Počet slotů se neomezuje**, ačkoli issue počítalo se dvěma. Rozsah stál na odhadu, že se
