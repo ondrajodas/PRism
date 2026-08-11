@@ -282,13 +282,19 @@ struct CommandPaletteTests {
         #expect(!running.contains { $0.hasPrefix("Pustit") })
     }
 
-    @Test("„Znovu“ se píše jen tam, kde už nálezy leží")
+    @Test("„Znovu“ se píše jen tam, kde už jeden běh leží")
     func rerunSaysSoOnlyWithARecord() {
+        // Rozhoduje **uložený záznam**, ne to, jestli v něm jsou nálezy: doběhlé review bez nálezů
+        // je pořád běh, který se dalším spuštěním přepíše.
         let pr = PRIdentifier("keboola/vault#85")!
 
         #expect(
-            Policy.paletteActions(open: pr, hasFindings: true).map(\.title)
+            Policy.paletteActions(open: pr, hasRun: true).map(\.title)
                 .contains("Pustit review znovu na vault#85")
+        )
+        #expect(
+            Policy.paletteActions(open: pr).map(\.title)
+                .contains("Pustit review na vault#85")
         )
     }
 

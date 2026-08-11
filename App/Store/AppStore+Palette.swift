@@ -39,7 +39,7 @@ extension AppStore {
             + Policy.paletteActions(
                 open: open,
                 isReviewing: open.map(isReviewing) ?? false,
-                hasFindings: open.flatMap { reviewRecords[$0] } != nil,
+                hasRun: open.flatMap { reviewRecords[$0] } != nil,
                 layout: diffLayout,
                 isPanelExpanded: isReviewPanelExpanded,
                 section: railSection

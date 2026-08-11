@@ -160,14 +160,17 @@ extension Policy {
     ///   - open: PR v otevřené záložce. `nil` = je vidět domácí záložka, takže akce vázané na
     ///     pull request (review, pohled na diff, panel) se nenabízejí — neměly by na čem
     ///     zabrat.
-    ///   - hasFindings: leží na PR uložený záznam? Podle toho se review „pouští“, nebo „pouští
-    ///     znovu“ — text má říkat, co se stane.
+    ///   - hasRun: leží na PR uložený záznam z nějakého předchozího běhu? Podle toho se review
+    ///     „pouští“, nebo „pouští znovu“ — text má říkat, co se stane. **Ne „jsou nálezy“**:
+    ///     doběhlé review bez nálezů je pořád běh, který se dalším spuštěním přepíše, takže
+    ///     chybějící „znovu“ by to zamlčelo. Pojmenované takhle proto, že jako `hasFindings` se
+    ///     to při review PR přečetlo obráceně.
     ///   - section: která sekce railu je vidět. Nabízí se **jen ta, která něco změní**: nad
     ///     otevřeným PR změní všechny (přepnou i záložku), v domácí záložce ta právě viditelná ne.
     static func paletteActions(
         open: PRIdentifier?,
         isReviewing: Bool = false,
-        hasFindings: Bool = false,
+        hasRun: Bool = false,
         layout: DiffLayout = .unified,
         isPanelExpanded: Bool = true,
         section: RailSection = .overview
@@ -175,7 +178,7 @@ extension Policy {
         var items: [CommandPalette.Item] = []
 
         if let open {
-            items.append(isReviewing ? cancelReviewItem(open) : runReviewItem(open, hasFindings: hasFindings))
+            items.append(isReviewing ? cancelReviewItem(open) : runReviewItem(open, hasRun: hasRun))
             items.append(diffLayoutItem(from: layout))
             items.append(reviewPanelItem(isExpanded: isPanelExpanded))
         }
@@ -187,12 +190,12 @@ extension Policy {
         return items
     }
 
-    private static func runReviewItem(_ pr: PRIdentifier, hasFindings: Bool) -> CommandPalette.Item {
+    private static func runReviewItem(_ pr: PRIdentifier, hasRun: Bool) -> CommandPalette.Item {
         action(
             id: "run-review",
             // „Znovu“ jen tam, kde se opravdu opakuje: nad PR bez záznamu by to tvrdilo, že už
             // něco běželo, a nad PR se záznamem by chybějící slovo zamlčelo, že se přepíše.
-            title: hasFindings
+            title: hasRun
                 ? "Pustit review znovu na \(paletteLabel(of: pr))"
                 : "Pustit review na \(paletteLabel(of: pr))",
             symbol: "play.circle",
