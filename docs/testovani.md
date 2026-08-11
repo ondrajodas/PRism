@@ -970,7 +970,10 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
     `by: 2` — sonda viděla jednu změnu místo dvou). Ověřeno i druhou stranou: opakované
     `cacheDisplay` samo přepočty nestojí ani takt neposouvá (tělo se přes šest vteřin snímkování
     přepočítalo jednou), a odpočet v těle kontroly měřidla je na **desetiny vteřiny**, protože
-    s celými by se text za 1,5 s změnil nejvýš jednou.
+    s celými by se text za 1,5 s změnil nejvýš jednou. Uplynulý čas se u toho měří **monotónně**
+    (`ContinuousClock`, jako v `DiffPerformanceMeasurement`): termín odpočtu `Date` být musí, jinak
+    by rozvrh netikal podle týchž hodin jako aplikace, ale strop sondy na nástěnných hodinách stát
+    nesmí — přestavení hodin nebo korekce z NTP by ho posunuly.
 
     Co z toho platí pro **příští sondu nad `TimelineView`em**: pevný okamžik měření je vždycky
     závod s fází mřížky tiků, kterou určuje ukotvení rozvrhu (u nás termín, ne `.now`) — čeká se

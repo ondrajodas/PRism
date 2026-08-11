@@ -121,15 +121,19 @@ struct DashboardCountdownRedrawTests {
     /// jedině tehdy, když spánek přetáhl o půl vteřiny. Test na hodinách takhle nesmí stát: buď se
     /// čeká na jev, nebo se fáze mřížky spočítá, a čekání je to, co přežije jiný stroj.
     ///
-    /// Hodiny jsou schválně `Date`, ne `ContinuousClock`: rozvrh `TimelineView`u tiká podle
-    /// nástěnných hodin, takže se sonda musí koukat na tytéž.
+    /// **Termín odpočtu je `Date`, ale uplynulý čas se měří monotónně** (`elapsed(since:)`). Jsou to
+    /// dva různé účely: rozvrh `TimelineView`u tiká podle nástěnných hodin, takže termín jinými být
+    /// nemůže, kdežto strop sondy by s nimi umělo posunout každé přestavení hodin nebo korekce
+    /// z NTP. Monotónní hodiny na měření intervalu jsou v testech tohohle repa zavedené
+    /// (`DiffPerformanceMeasurement`, `RealEnvironmentTests`).
     ///
     /// Opakované snímkování samo přepočty **nestojí** ani takt neposouvá — změřeno: tělo se přes
     /// šest vteřin snímkování po 100 ms přepočítalo jednou a tiky chodily po 1,00 s.
     ///
-    /// Strop platí **s přesností na jeden krok** snímkování: poslední snímek se bere za podmínkou,
-    /// takže může padnout až 100 ms za stropem. Tvrzení nad tím se proto opírá o **počet** změn, ne
-    /// o samotný čas té poslední.
+    /// Strop **není přesná hranice**: poslední snímek se bere až za podmínkou a spánek umí na
+    /// vytíženém stroji přetáhnout o víc než o krok, takže změna zapsaná za stropem není vyloučená.
+    /// Tvrzení nad tím se proto opírá o **počet** změn, ne o čas té poslední — a čas je v hlášce
+    /// jen proto, aby se z červeného testu poznalo, jestli takt chybí, nebo přišel pozdě.
     private func redraws(
         of view: some View,
         count: Int,
@@ -140,17 +144,24 @@ struct DashboardCountdownRedrawTests {
         defer { window.orderOut(nil) }
         let hosting = try #require(window.contentView)
 
-        let start = Date.now
+        let start = ContinuousClock.now
         var last = try bitmap(of: hosting)
         var changes: [TimeInterval] = []
-        while changes.count < count, Date.now.timeIntervalSince(start) < limit {
+        while changes.count < count, Self.elapsed(since: start) < limit {
             try await Task.sleep(for: step)
             let frame = try bitmap(of: hosting)
             guard frame != last else { continue }
             last = frame
-            changes.append(Date.now.timeIntervalSince(start))
+            changes.append(Self.elapsed(since: start))
         }
         return changes
+    }
+
+    /// Kolik vteřin uplynulo na monotónních hodinách — ve vteřinách, aby se to dalo porovnat se
+    /// stropem a vypsat do hlášky.
+    private static func elapsed(since start: ContinuousClock.Instant) -> TimeInterval {
+        let components = start.duration(to: .now).components
+        return TimeInterval(components.seconds) + TimeInterval(components.attoseconds) / 1e18
     }
 
     /// Sonda v okně, protože bez okna SwiftUI přepočty neplánuje. Okno je bez rámu a mimo
