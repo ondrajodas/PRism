@@ -753,7 +753,17 @@ final class AppStore {
     /// Checky na PR (#209), klíčované PR. Prázdné pole = načetlo se a žádné nejsou; chybějící
     /// klíč = ještě se nenačetlo. Ty dva stavy se nesmí slít, jinak by blok nad nenačteným PR
     /// tvrdil „žádné kontroly“.
+    ///
+    /// Od #215 na prázdnu visí i to, jestli se nakreslí tab `Kontroly` — tím spíš se nesmí slít
+    /// se **selháním**, které drží `checkFailures`.
     var checks: [PRIdentifier: [PullRequestCheck]] = [:]
+
+    /// Proč se checky nepodařilo načíst (#215). Chybějící klíč = poslední pokus prošel.
+    ///
+    /// **Vlastní mapa, ne prázdné pole v `checks`.** Prázdno znamená „PR nemá CI“, což je běžný
+    /// stav, kdežto tohle je porucha — a od #215 se ty dva rozcházejí i v tom, co je vidět: bez
+    /// CI se tab nekreslí a je to správně, po chybě sítě by zmizel tab, který tam patří.
+    var checkFailures: [PRIdentifier: String] = [:]
 
     /// Kdy se polling zeptá znovu. `nil`, dokud smyčka poprvé neusne.
     var nextPoll: Date? { polling.state.nextPoll }
@@ -1244,6 +1254,13 @@ final class AppStore {
         // ukázat. Běžící kontrola se naopak **neruší**, stejně jako ruční review: vyžádal si ji
         // člověk a zrušit mu ji proto, že PR mezitím někdo mergnul, je horší než session navíc.
         recheckFailures = recheckFailures.filter { wantedPullRequests.contains($0.key) }
+
+        // Checky a důvod, proč se nenačetly (#209, #215). Obojí platí k jednomu PR a drží klíč
+        // s celým identifikátorem, takže by mapy bez úklidu rostly donekonečna — stejně jako
+        // u volby tabu. Uklízí se **spolu**: kdyby zůstal jen důvod, hlásilo by okno poruchu
+        // u PR, které v seznamu není.
+        checks = checks.filter { wantedPullRequests.contains($0.key) }
+        checkFailures = checkFailures.filter { wantedPullRequests.contains($0.key) }
 
         // Zavřený nebo mergnutý PR nemá co blokovat slot. Ruší se **jen automatická**
         // review: to ruční si vyžádal člověk a zrušit mu ho pod rukama proto, že PR mezitím
