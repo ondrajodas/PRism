@@ -1025,7 +1025,7 @@ nápad — celořádkové „nepočítá se“ už znamená **odmítnutí** (#11
 modelu tentýž obrázek by smazalo rozdíl, na kterém tohle issue stojí. A `blokuje` se k `vyřešeno`
 **přidává, nenahrazuje**: vyřešený nález se dál počítá i dál blokuje, takže odznak bez `blokuje` by
 tvrdil „hotovo“ nad věcí, která drží merge. Rozhoduje o tom `Policy.severityBadge(…)`, protože
-odznak kreslí čtyři místa. Testů je o 13 víc (2155).
+odznak kreslí čtyři místa. Testů je o 13 víc (2211 po zvednutí mainu).
 
 **Overlay gutteru se skládá po blocích, ne po řádcích (#252).** Projíždění velkého splitu drželo
 100 % CPU a `sample` ukazoval na rozvržení líného seznamu; příčina byla v tom, **kolik prvků** ten
