@@ -365,7 +365,7 @@ Nález visí u řádku, kterého se týká, jako review komentář u kódu.
 - **Bublina pod svým řádkem**: pill kategorie, verdict, jméno revieweru, `summary`
   a rozbalitelný `failure_scenario`. Blokující nález má červený pruh po straně.
 - **Blokující je rozbalený rovnou, ostatní jsou značka** (#185). Značka je pruh s odznaky,
-  kategorií, revieweerem a náhledem textu; kliknutím se rozbalí. Odmítnutý se nerozbaluje
+  kategorií, reviewerem a náhledem textu; kliknutím se rozbalí. Odmítnutý se nerozbaluje
   nikdy — jeho jediný řádek i s `Vrátit` je vidět tak jako tak. Rozhoduje
   `Policy.disclosure(of:categories:toggled:)`, stav drží `AppStore.toggledFindings` per PR.
 - **Shoda patří bublině, ne nálezu.** Odznak `2×` je jednou nahoře i se jmény; texty

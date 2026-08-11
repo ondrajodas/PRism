@@ -281,7 +281,7 @@ v diffu není, se neztratí: visí u hlavičky souboru a nabídne ten řádek do
 jdou vypnout v nabídce u `Rozbalit vše` (`Nálezy u řádků`) — vlákna konverzace zůstanou.
 
 **Blokující nález je rozbalený rovnou, ostatní jsou značka na hraně řádku** (#185). Značka je
-pruh s odznaky, kategorií, revieweerem a náhledem textu — kliknutím se rozbalí celá bublina
+pruh s odznaky, kategorií, reviewerem a náhledem textu — kliknutím se rozbalí celá bublina
 i s akcemi, druhým kliknutím se zavře. Rozbalit všechny by z diffu udělalo seznam nálezů
 proložený kódem; sbalit i ten blokující je zase kliknutí navíc právě u toho jednoho, kvůli
 kterému se PR nemerguje. **Odmítnutý se nerozbaluje nikdy** — je to jeden řádek s důvodem
