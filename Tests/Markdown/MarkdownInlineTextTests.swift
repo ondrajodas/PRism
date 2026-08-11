@@ -13,7 +13,7 @@ struct MarkdownInlineTextTests {
     }
 
     @Test("Tučné a odkaz zůstávají, značky mizí")
-    func lettsTheSystemDoInline() {
+    func letsTheSystemDoInline() {
         let text = rendered("**tučně** a [odkaz](https://x)")
 
         #expect(String(text.characters) == "tučně a odkaz")

@@ -236,6 +236,29 @@ struct MarkdownParserTests {
         #expect(blocks.count == 1)
     }
 
+    /// Strop musí platit **i skrz `<details>`**, ne jen v citacích.
+    ///
+    /// Doplněno po nálezu z review #279: lokální počítadlo otevřených tagů se jmenovalo `depth`
+    /// a zastínilo tím parametr s hloubkou rekurze, takže se strop porovnával s počtem tagů (po
+    /// uzavření nula) — nezabral vůbec a `<details>` hloubku rekurze ještě resetoval. Ověřeno
+    /// vrácením regrese: se stíněním tenhle test padá.
+    @Test("Rozbalovátka přes strop zanoření zůstanou textem")
+    func keepsContentBeyondTheNestingLimitInDetails() {
+        let levels = MarkdownParser.nestingLimit + 2
+        let opening = (0..<levels).map { "<details>\n<summary>úroveň \($0)</summary>" }
+        let text = (opening + ["nejhlubší text"] + Array(repeating: "</details>", count: levels))
+            .joined(separator: "\n")
+
+        let blocks = parse(text)
+
+        // Za stropem se vnitřek nechá textem, takže se v odstavci objeví surový tag. Dokud strop
+        // nezabíral, šla rozbalovátka až na dno a žádný odstavec `<details>` neobsahoval.
+        #expect(
+            paragraphs(in: blocks).contains { $0.contains("<details") },
+            "strop nezabral, zanoření šlo až na dno: \(paragraphs(in: blocks))"
+        )
+    }
+
     // MARK: - Výstrahy (#279)
 
     @Test("Pět druhů výstrahy se pozná podle prvního řádku citace")

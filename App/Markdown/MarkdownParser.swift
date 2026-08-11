@@ -202,22 +202,28 @@ enum MarkdownParser {
     /// Vnitřek se parsuje **rekurzivně**: bývají v něm odstavce a seznamy, které by jako jeden
     /// slitý text nedávaly smysl. Neuzavřený `<details>` se uzavře koncem textu, ať se obsah
     /// neztratí.
+    ///
+    /// Otevřené tagy se počítají v `openTags`, **ne v `depth`**: `depth` je hloubka rekurze a nese
+    /// se dovnitř. Do prvního kola review #279 se ta lokální proměnná jmenovala taky `depth`
+    /// a parametr **zastínila** — strop zanoření se pak porovnával s počtem tagů (po uzavření nula),
+    /// takže nezabral vůbec, a `<details>` navíc hloubku rekurze **resetoval**. Chytil to Copilot,
+    /// ne testy; test na to je od té doby taky.
     private static func details(from lines: inout ArraySlice<String>, depth: Int) -> MarkdownBlock {
         var summary = ""
         var inner: [String] = []
-        var depth = 1
+        var openTags = 1
 
         while let line = lines.first {
             lines = lines.dropFirst()
             let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
-            if trimmed.hasPrefix("<details") { depth += 1 }
+            if trimmed.hasPrefix("<details") { openTags += 1 }
             if trimmed.hasPrefix("</details") {
-                depth -= 1
-                if depth == 0 { break }
+                openTags -= 1
+                if openTags == 0 { break }
             }
             // Vlastní `<summary>` má jen ten `<details>`, který zpracováváme — vnořený patří
             // k vnořenému bloku, takže projde dovnitř jako obyčejný řádek.
-            if depth == 1, summary.isEmpty, let text = summaryText(line) {
+            if openTags == 1, summary.isEmpty, let text = summaryText(line) {
                 summary = text
                 continue
             }

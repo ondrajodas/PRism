@@ -650,7 +650,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Citace a výstrahy (#279)** mají vyčerpávající výčet, protože je to čistá funkce: nadpis,
   odrážka a zaškrtávátko **uvnitř** citace, vnořená citace, `<details>` v citaci, zachované
   odsazení zanořeného seznamu, všech pět druhů výstrahy, výstraha **uvnitř** citace, bloky uvnitř
-  výstrahy a obsah **za stropem zanoření** (nevysází se, ale zůstane). Nejcennější jsou tři, které
+  výstrahy a obsah **za stropem zanoření** — a to zvlášť pro citace i pro `<details>` (nevysází se,
+  ale zůstane). Ten druhý přišel až po review: počítadlo otevřených tagů se jmenovalo `depth`
+  a **zastínilo** parametr s hloubkou rekurze, takže strop nezabíral vůbec a rozbalovátko hloubku
+  ještě resetovalo. Chytil to Copilot, ne testy — proto ten test existuje. Nejcennější jsou tři, které
   tvrdí, že se něco **NEstalo**: **neznámý druh** `[!FOO]` výstrahu nedá a ten řádek v citaci
   zůstane, **značka s textem na témže řádku** taky ne, a nad **skutečným** komentářem od
   `coderabbitai` (fixture `gh/comment-coderabbit.md`, veřejné `coderabbitai/ast-grep-essentials#200`)
@@ -675,7 +678,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   celý rozpočet se **nezapamatuje**, ale rozloží.
 - **Měření sazby (#279)** — `MarkdownPerformanceMeasurement`, gated `PRISM_MEASURE`. Nic netvrdí;
   existuje proto, že rekurze v citacích se počítá v `body` a to rozhodnutí má být podložené číslem:
-  zpráva od bota o 12 kB 1,97 ms, z cache 0,037 ms; konverzace o 40 zprávách 74,7 ms proti 1,48 ms.
+  zpráva od bota o 12 kB 1,91 ms, z cache 0,037 ms; konverzace o 40 zprávách 74,7 ms proti 1,48 ms.
+  Čtvrté číslo rozhodlo o rozsahu cache: **inline sazba** 44 bloků té zprávy je 1,81 ms, tedy
+  stejně drahá jako rozklad — takže se pamatuje taky.
 - **Sonda sazby (#279)** — `MarkdownRenderProbe`, taky gated, vyrendruje ukázku i skutečnou zprávu
   od bota do PNG **v obou režimech**. Barvy palety se řídí `NSAppearance`, kdežto `.primary`
   a `.secondary` prostředím SwiftUI, takže se musí nastavit **obojí**; s jedním z toho vyjde tmavý

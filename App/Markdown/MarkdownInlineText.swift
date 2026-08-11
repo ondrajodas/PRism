@@ -36,7 +36,7 @@ enum MarkdownInlineText {
     ///
     /// Podklad je **plocha za písmem**, ne kapsle s odsazením — `AttributedString` umí nastavit
     /// barvu pozadí běhu, ale ne jeho výplň a rádius. Kapsle by znamenala kreslit každý běh jako
-    /// vlastní view, tedy rozpadlé zalomení uprostřed větty; podklad je z toho ta část, kterou jde
+    /// vlastní view, tedy rozpadlé zalomení uprostřed věty; podklad je z toho ta část, kterou jde
     /// mít, a je to zrovna ta, kvůli které se inline kód pozná.
     ///
     /// Rozsahy se **posbírají dopředu** — mutace uprostřed procházení `runs` by kolekci pod rukama
