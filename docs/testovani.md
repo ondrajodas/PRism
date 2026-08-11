@@ -200,6 +200,31 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   vstup. Fixtures ze skutečných běhů už v repu jsou
   (`Tests/Fixtures/stream-json/`, viz [`docs/claude-cli.md`](claude-cli.md)): běh
   s nálezy, čistý běh, zabitý běh a odmítnutý zápis. Parser se testuje proti nim.
+- **Kontrola nálezů z minula (#150)** — čtyři oblasti, každá na jinou tichou poruchu:
+  - **`RecheckCommand`** — prompt a **čtení odpovědi**. Odpověď je volný text od modelu, takže
+    se testuje každý způsob, jak může přijít jinak, než se o ni prompt řekl: `id` číslem
+    i řetězcem, mimo rozsah, `still_applies` i `Still Applies`, prázdná věta, JSON v ```-bloku,
+    věta okolo, chybějící `result` event (zabitá session). **Neznámý stav se nesmí domyslet** —
+    z „fixed“ se `resolved` nedělá, protože „vyřešeno“ u nálezu, na který se nikdo nekoukal, je
+    ta dražší polovina té chyby. A vlastní test drží, že **prompt review se nezměnil**: požadavek
+    bez materiálu dostane přesně tentýž text jako do #150. Pojistka o jazyku platí pro **oba**
+    prompty.
+  - **`Policy`** — párování odpovědí na nálezy **produkční** funkcí (`Policy.key(of:)`, ne kopií
+    pravidla v testu), včetně nálezu, který se mezitím přeložil. A kdy se odznaky **nesmí**
+    ukázat: kontrola proti jiné hlavě, nenačtený detail (hlava neznámá). Počty se ověřují i na
+    odmítnutém nálezu (nepočítá se) a na nálezu bez odpovědi (`unanswered`).
+  - **`ReviewStore`** — kontrola se ukládá k záznamu nálezů, přežije restart, **nesrovná
+    `isStale`**, chybějící soubor a symlink jsou chyba. A ten nejcennější: `save` kontrolu
+    do `runs` nepustí a záznam po tom pokusu zůstane **bit po bitu stejný**.
+  - **`AppStore`** — kdy se **nenabízí** (bez záznamu, nad hlavou PR, se samými odmítnutými
+    nálezy) a že se bez materiálu nespustí ani přímým voláním. Dál: že session dostane nálezy
+    jako materiál a klíč druhu `recheck`, že se verdikty uloží k nálezům z minula, že
+    **vyřešený nález nemizí** (`activeFindings` a `dismissals` se nezmění), že kontrola
+    nepřidá chip ani nález, že zrušená neuloží nic, že se zabitá session nedopočítává, a že
+    běžící kontrola drží `runningReviews`, chrání repo před eviction a zavírání ji zabije.
+  - **Sazba** — věty o počtech, nápověda u odznaku a u tlačítka (`nonisolated static` funkce,
+    takže bez kreslení). Hlídá se hlavně to, aby text netvrdil víc, než data unesou: nálezy bez
+    odpovědi jsou ve větě, spadlý běh to řekne v nápovědě a odznak nese v sobě `kontrola:`.
 - **`DiffParser`** — proti **skutečným** výstupům `gh pr diff` z veřejných repozitářů
   (`Tests/Fixtures/gh/pr-diff-*.diff`: běžný diff, přejmenování včetně `similarity index
   100%` bez hunků, 44 binárek vedle textových souborů, smazaný soubor). U každé fixture se

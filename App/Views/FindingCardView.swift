@@ -22,6 +22,7 @@ struct FindingCardView: View {
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            recheck
             footer
         }
         .padding(.vertical, 8)
@@ -84,6 +85,39 @@ struct FindingCardView: View {
                     .font(.caption2)
                     .foregroundStyle(.tint)
             }
+        }
+    }
+
+    /// Co o nálezu řekla kontrola z minula (#150) — **vlastní řádek pod textem**, ne odznak
+    /// v hlavičce.
+    ///
+    /// Do hlavičky se to nevešlo, a je to změřené, ne odhadnuté: panel je 300 bodů, takže se
+    /// v ní vedle `blokuje`, kategorie a revieweera odznak zkrátil na `kontrola…` a `blokuje` se
+    /// zalomilo na dva řádky (offscreen render). Pod textem je místa dost a je to **tatáž sazba
+    /// jako v bublině u kódu**: odznak a za ním věta.
+    ///
+    /// Odmítnutý nález odznak nedostane — o něm už rozhodl člověk a druhý stav vedle sebe se plete.
+    @ViewBuilder private var recheck: some View {
+        if row.dismissal == nil, let status = row.recheck {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(verbatim: status.verdict.label)
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(status.verdict.tint.opacity(0.15), in: .capsule)
+                    .foregroundStyle(status.verdict.tint)
+                if let note = status.note {
+                    // Jeden řádek: karta je náhled, ne celý nález. Celá věta je v bublině u kódu
+                    // a v nápovědě, takže se tady nic neztrácí.
+                    Text(verbatim: note)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .help(status.help)
         }
     }
 

@@ -307,6 +307,35 @@ final class AppStore {
     /// Běžící review podle PR — drží se kvůli zrušení.
     var reviewTasks: [PRIdentifier: RunningReview] = [:]
 
+    /// Běžící kontrola nálezů z minula podle PR (#150). Co v mapě není, neběží.
+    ///
+    /// **Vlastní mapa, ne `reviewTasks`**, a je to rozhodnutí: na `reviewTasks` visí chipy
+    /// reviewerů, pruh průběhu, `runningSkills` i podmnožina k opakování (#149) — kontrola žádný
+    /// skill nepouští, takže by ve všech čtyřech tvrdila něco, co není. Co si naopak vzít musí, je
+    /// všechno, co platí pro **běžící session**: ochrana repa před eviction, zabití při zavírání
+    /// aplikace (#264) a počet běhů, na který se ptá dialog při ukončení.
+    var recheckTasks: [PRIdentifier: RunningRecheck] = [:]
+
+    /// Proč kontrola nálezů nedoběhla (#150). Chybějící záznam = nic se nepokazilo.
+    ///
+    /// Drží se, dokud si někdo neřekne o další kontrolu: spolknutá chyba by vypadala jako běh,
+    /// který nic nenašel — tedy jako „nálezy pořád platí“, což je zrovna to tvrzení, které se
+    /// z ničeho vyrábět nesmí.
+    var recheckFailures: [PRIdentifier: String] = [:]
+
+    /// Běžící kontrola nálezů (#150) — úloha a kdy začala.
+    struct RunningRecheck {
+        let task: Task<Void, Never>
+        /// Kdy se běh spustil — hodiny u tlačítka. Bez nich je patnáctiminutová session
+        /// k nerozeznání od zaseknutého okna.
+        let startedAt: Date
+
+        init(task: Task<Void, Never>, startedAt: Date) {
+            self.task = task
+            self.startedAt = startedAt
+        }
+    }
+
     /// Aplikace se zavírá (#264). Čte se na dvou místech a obojí je podmínka, ne kosmetika:
     ///
     /// - **nic nového se nespustí** — tik pollingu uprostřed zavírání by pustil automatické
@@ -969,10 +998,12 @@ final class AppStore {
     /// při první, která doběhne.
     ///
     /// Patří sem i repa s **běžícím review**, ne jen ta, která se právě klonují: smazat klon
-    /// pod běžící session by jí vzalo pracovní strom pod rukama.
+    /// pod běžící session by jí vzalo pracovní strom pod rukama. A od #150 stejně tak repa
+    /// s běžící kontrolou nálezů — je to tatáž session nad tímtéž stromem.
     var busyRepositories: Set<RepoID> {
         Set(checkoutStates.filter { $0.value == .preparing }.keys)
             .union(reviewTasks.keys.map(\.repo))
+            .union(recheckTasks.keys.map(\.repo))
     }
 
     func checkoutState(for repo: RepoID) -> CheckoutState {
@@ -1031,11 +1062,15 @@ final class AppStore {
     /// bylo z čeho ukázat důvod.
     func isReviewing(_ pr: PRIdentifier) -> Bool { reviewTasks[pr] != nil }
 
-    /// Kolik review běží napříč PR. Podle toho se ptá dialog při ukončení aplikace (#94).
+    /// Kolik běhů běží napříč PR. Podle toho se ptá dialog při ukončení aplikace (#94).
     ///
     /// Ze stejného zdroje jako `isReviewing`, ne z vlastního počitadla: dvě místa, která se
     /// můžou rozejít, by v nejhorším nechala aplikaci zavřít bez zeptání.
-    var runningReviews: Int { reviewTasks.count }
+    ///
+    /// **Počítá i kontroly nálezů** (#150): dialog se ptá kvůli tomu, že se zavřením zabije
+    /// session, a kontrola je session jako každá jiná. Vynechat ji by znamenalo zavřít aplikaci
+    /// bez zeptání nad běžícím `claude`.
+    var runningReviews: Int { reviewTasks.count + recheckTasks.count }
 
     /// Které reviewery běžící review pouští. Celá nastavená sada, když neběží nic — chipy pak
     /// ukazují to, co by se spustilo.
@@ -1168,6 +1203,11 @@ final class AppStore {
         reviewTimelines = reviewTimelines.filter {
             wantedPullRequests.contains($0.key) || reviewTasks[$0.key] != nil
         }
+
+        // Proč kontrola nálezů selhala (#150), platí k jednomu PR — bez něj v okně není kde to
+        // ukázat. Běžící kontrola se naopak **neruší**, stejně jako ruční review: vyžádal si ji
+        // člověk a zrušit mu ji proto, že PR mezitím někdo mergnul, je horší než session navíc.
+        recheckFailures = recheckFailures.filter { wantedPullRequests.contains($0.key) }
 
         // Zavřený nebo mergnutý PR nemá co blokovat slot. Ruší se **jen automatická**
         // review: to ruční si vyžádal člověk a zrušit mu ho pod rukama proto, že PR mezitím

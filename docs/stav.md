@@ -952,5 +952,34 @@ o vteřinovém taktu neříkala nic. Ověřeno **třemi vloženými regresemi** 
 měřidla, přepočty i kresbu, protože rozbité porovnání bitmap by jinak hlásilo poruchu aplikace.
 Na obrazovce se nezměnilo nic — aplikace zůstala, jak byla; celý běh je zelený (2092 testů).
 
+**Kontrola nálezů z minula (#150)** — nad zastaralými nálezy se v hlavičce nabídne
+`Zkontrolovat nálezy`: session dostane **uložené nálezy z předchozího commitu** jako číslovaný
+seznam a proti pracovní kopii na hlavě PR u každého řekne `vyřešeno` / `pořád platí` / `nejasné`
+i s větou proč. Vlastní prompt, **tytéž read-only nástroje** jako review; nálezy jsou materiál
+v promptu, ne nový nástroj (tvrdá podmínka č. 2).
+
+Tři otevřené otázky ze zadání dopadly takhle. **Vlastní druh běhu s vlastním klíčem**
+(`ReviewRunKey.kind`), protože kontrola nad tímtéž `(PR, headSha)` by se s běžným během slila ve
+`WorkCoordinatoru` a přepsala by jeho výsledek; ukládá se mimo `runs`, jako `ReviewRecord.recheck`,
+aby si nepřidala chip ani nálezy — a `ReviewStore.save` ji do `runs` vůbec nepustí. **Odznak
+u nálezu, ne další tab**, a nese v sobě `kontrola:`, protože samotné „vyřešeno“ vedle nálezu by se
+čtlo jako fakt; nález přitom **nemizí ani se nepřeskupuje** — sundat ho smí jedině odmítnutí (#113).
+A bere se **nejbližší předchozí záznam**, tedy ten, který je v okně: otázka zní „co se změnilo od
+minula“, takže starší kola nepřidávají odpověď, ale cenu — a odznaky by nešlo kam ukázat, protože
+v okně visí nálezy z tohohle jednoho záznamu.
+
+Dvě věci, které vyšly z toho, jak `claude` odpovídá. Verdikt o nálezu **není nález**, takže
+`ReportFindings` na něj nemá pole — odpověď proto chodí **posledním sdělením session** (`result`
+event) a čte se defenzivně jako u překladu nálezů. A **páruje se přes index**, ne přes text: prompt
+nese `id`, odpověď ho vrací a klíč z něj skládá `Policy.key(of:)`, protože hledat nález podle věty,
+kterou model opíše, by rozbilo jedno přeformulování.
+
+Kontrola **platí jen pro hlavu, proti které běžela** (`againstHeadSha`, tvrdá podmínka č. 5): po
+dalším commitu odznaky zmizí a v hlavičce zbyde věta, že se dá pustit znovu — mlčení by vypadalo,
+že nikdy neběžela, a pustila by se podruhé za peníze. Nenabízí se bez uloženého záznamu proti
+staršímu commitu; chybějící vstup nesmí skončit session, která hádá. Přerušený běh se
+**nedotahuje z transcriptu** jako review (#97) — odpověď leží v posledním sdělení, které
+v transcriptu není, takže se kontrola prostě pustí znovu. Testů je o 49 víc (2141) v pěti suitách.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

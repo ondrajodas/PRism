@@ -51,8 +51,17 @@ actor ReviewStore {
     /// Zároveň se tím aplikace dozvěděla aktuální `headSha`, takže starší záznamy téhož PR
     /// zestárnou. Kdyby se to nechalo jen na `markCurrent`, stačilo by ho jednou zapomenout
     /// zavolat a nálezy proti neexistujícímu kódu by se ukazovaly jako platné.
+    ///
+    /// - Parameter run: **jen běžné review** (#150). Kontrola nálezů tudy neprojde: její výsledek
+    ///   je tvrzení o nálezech, ne nález, takže by se v `runs` tvářila jako reviewer — přepsala by
+    ///   běh téhož skillu (`replace(_:)`), přidala si chip a její „nálezy“ (`ReviewRun.findings`
+    ///   nad prázdným seznamem) by se počítaly do návrhu verdiktu. Kontrola má vlastní cestu,
+    ///   `saveRecheck(_:for:at:)`.
     @discardableResult
     func save(_ run: ReviewRun, timeline: StoredTimeline? = nil) throws -> ReviewRecord {
+        guard run.key.kind == .review else {
+            throw ReviewStoreError.notAReviewRun(kind: run.key.kind)
+        }
         let pullRequest = run.key.pullRequest
         try markStale(everythingBut: run.key.headSha, of: pullRequest)
 
@@ -89,6 +98,44 @@ actor ReviewStore {
         guard layout.contains(url), FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
         else { return }
         try FileManager.default.removeItem(at: url)
+    }
+
+    /// Uloží kontrolu nálezů (#150) a vrátí záznam, jak po ní vypadá.
+    ///
+    /// Zapisuje se do záznamu **těch nálezů**, na které se kontrola ptala — `headSha` je proto
+    /// commit, na kterém nálezy vznikly, ne hlava, proti které se kontrolovalo (tu nese
+    /// `StoredRecheck.againstHeadSha`).
+    ///
+    /// Chybějící soubor je **chyba**, ne prázdný záznam, a je to tatáž úvaha jako u odmítnutí:
+    /// nálezy, na které se kontrola ptala, byly vidět v okně, takže na disku být musí — a nový
+    /// prázdný záznam by je všechny zahodil. Kontrola sama by v něm navíc mluvila o nálezech,
+    /// které v něm nejsou.
+    ///
+    /// `isStale` se **nesrovnává**, na rozdíl od `save`: nálezy dál patří staršímu commitu a to,
+    /// že se na ně někdo ptal, na tom nic nemění.
+    @discardableResult
+    func saveRecheck(
+        _ recheck: StoredRecheck,
+        for pullRequest: PRIdentifier,
+        at headSha: String
+    ) throws -> ReviewRecord {
+        let url = layout.reviewFile(for: pullRequest, at: headSha)
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+            throw ReviewStoreError.recordNotFound(pullRequest, headSha: headSha)
+        }
+        // Odkaz je totéž co chybějící soubor: **náš** záznam tam není a přečíst cizí kvůli
+        // zápisu do něj je to poslední, co chceme (#106). Tatáž kontrola jako u odmítnutí.
+        guard !layout.isSymbolicLink(url) else {
+            throw ReviewStoreError.recordNotFound(pullRequest, headSha: headSha)
+        }
+
+        var record = try read(at: url)
+        guard record.pullRequest == pullRequest else {
+            throw ReviewStoreError.recordNotFound(pullRequest, headSha: headSha)
+        }
+        record.recheck = recheck
+        try write(record, to: url)
+        return record
     }
 
     /// Odmítne nález jako falešně pozitivní (#113) a vrátí záznam, jak po tom vypadá.
@@ -305,12 +352,19 @@ actor ReviewStore {
 enum ReviewStoreError: LocalizedError, Equatable {
     /// Záznam, do kterého se má zapsat, na disku není.
     case recordNotFound(PRIdentifier, headSha: String)
+    /// Do `runs` se pokusil zapsat běh, který není review (#150).
+    ///
+    /// Není to chyba uživatele, ale chyba v kódu — a hlásí se právě proto, že tichý zápis by
+    /// z kontroly nálezů udělal reviewera se nálezy, které nikdy nenahlásila.
+    case notAReviewRun(kind: ReviewRunKind)
 
     var errorDescription: String? {
         switch self {
         case .recordNotFound(let pullRequest, let headSha):
             "Uložené nálezy pro \(pullRequest) na commitu \(headSha.prefix(7)) se nenašly. "
                 + "Zkus review pustit znovu."
+        case .notAReviewRun(let kind):
+            "Běh druhu \(kind.rawValue) se neukládá jako review."
         }
     }
 }

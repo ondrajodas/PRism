@@ -47,10 +47,11 @@ struct FindingTableRow: Identifiable, Hashable {
         of findings: [Finding],
         sort: FindingTableSort?,
         blocking categories: Set<String> = Policy.defaultBlockingCategories,
-        dismissals: [FindingKey: FindingDismissal] = [:]
+        dismissals: [FindingKey: FindingDismissal] = [:],
+        rechecks: [FindingKey: RecheckStatus] = [:]
     ) -> [FindingTableRow] {
         let sorted = Policy.sorted(findings, by: sort, categories: categories, dismissals: dismissals)
-        return Policy.groups(of: sorted, dismissals: dismissals)
+        return Policy.groups(of: sorted, dismissals: dismissals, rechecks: rechecks)
             .map { group in
                 FindingTableRow(
                     id: identity(of: group),
@@ -58,7 +59,8 @@ struct FindingTableRow: Identifiable, Hashable {
                     findings: FindingRow.preserving(
                         group.findings,
                         blocking: categories,
-                        dismissals: group.dismissals
+                        dismissals: group.dismissals,
+                        rechecks: group.rechecks
                     ),
                     isBlocking: group.activeFindings.contains {
                         Policy.isBlocking($0, categories: categories)

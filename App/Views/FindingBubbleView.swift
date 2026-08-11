@@ -130,6 +130,12 @@ struct FindingBubbleView: View {
                     pill("mimo diff", color: Palette.ink2)
                         .help("Řádek nálezu v diffu není — bublina proto visí u hlavičky souboru.")
                 }
+                // **I ve sbalené značce** (#150): nálezy, které neblokují, jsou v diffu sbalené,
+                // takže by za kliknutím zůstalo zrovna to, kvůli čemu se kontrola pouštěla.
+                if let status = markStatus {
+                    pill(status.verdict.label, color: status.verdict.tint)
+                        .help(status.help)
+                }
                 headline
                 Spacer(minLength: 0)
             }
@@ -195,6 +201,17 @@ struct FindingBubbleView: View {
     /// nesměl: značka by nesla kategorii nálezu, kterému nevěřím.
     private var representative: Finding? {
         group.activeFindings.first
+    }
+
+    /// Stav z kontroly do značky (#150) — **jen u skupiny s jediným platným nálezem**.
+    ///
+    /// U víc nálezů na jednom řádku by odznak mluvil za všechny, a to je zrovna ten případ, kdy
+    /// se výsledky liší: jeden nález může být opravený a druhý pořád platit. Tam si stav nese
+    /// každá položka uvnitř bubliny.
+    private var markStatus: RecheckStatus? {
+        let active = group.activeFindings
+        guard active.count == 1, let finding = active.first else { return nil }
+        return group.recheck(of: finding)
     }
 
     private var markHint: String {
@@ -274,6 +291,7 @@ struct FindingBubbleView: View {
             Text(finding.summary)
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
+            if let status = group.recheck(of: finding) { recheck(status) }
             if let scenario = finding.failureScenario, !scenario.isEmpty {
                 DisclosureGroup("Kdy to selže") {
                     Text(scenario)
@@ -287,6 +305,36 @@ struct FindingBubbleView: View {
             footer(of: finding)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Co o nálezu řekla kontrola z minula (#150) — odznak a věta pod textem nálezu.
+    ///
+    /// **Nález nemizí ani se nepřesouvá.** „Vyřešeno“ je tvrzení modelu, ne fakt; sundat nález
+    /// smí jedině odmítnutí (#113), za kterým stojí člověk. Kdyby ho odznak schoval, přišel bych
+    /// o něj tím, že se modelu něco zdálo — a to je nejdražší chyba, jakou tohle okno umí.
+    @ViewBuilder private func recheck(_ status: RecheckStatus) -> some View {
+        // Odznak ze značky se čte **jednou**: `activeFindings` je filtr, takže druhé volání je
+        // další průchod skupinou při každém překreslení bubliny (#224).
+        let inMark = markStatus != nil
+        // Prázdný řádek se nekreslí: u jediného nálezu bez věty odznak nese značka nad bublinou.
+        if !inMark || status.note != nil {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                // Odznak jen tehdy, když ho značka neřekla — u jednoho nálezu je to vlastnost celé
+                // bubliny a psal by se dvakrát. Věta k němu patří sem vždycky: do značky se
+                // nevejde a je to to jediné, z čeho se pozná, jak k verdiktu došel.
+                if !inMark {
+                    pill(status.verdict.label, color: status.verdict.tint)
+                }
+                if let note = status.note {
+                    Text(verbatim: note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .help(status.help)
+        }
     }
 
     /// Kategorie, verdikt a reviewer — v návrhu jeden řádek hlavičky. Sází se na dvou místech

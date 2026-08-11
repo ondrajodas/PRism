@@ -32,6 +32,16 @@ struct ReviewRecord: Codable, Hashable, Sendable {
     /// Čte a mění se přes `activeFindings` a `setDismissal(_:of:)`, viz
     /// `App/Policy/FindingDismissalPolicy.swift`.
     var dismissals: [FindingKey: FindingDismissal]
+    /// Co o **těchhle** nálezech řekla kontrola nových commitů (#150). `nil` = neběžela.
+    ///
+    /// Bydlí to na záznamu s nálezy, ne na tom pro novou hlavu, a je to rozhodnutí: kontrola je
+    /// tvrzení o těchhle nálezech, takže patří k nim. Záznam pro novou hlavu by navíc musel
+    /// vzniknout bez jediného běhu — a takový záznam vyhrává v `Policy.currentRecords`, takže by
+    /// nálezy z minula z okna zmizely právě ve chvíli, kdy se na ně ptám.
+    ///
+    /// Nálezy tím **nemizí ani se nepřeskupují**: jediné, co kontrola dělá, je odznak u nálezu
+    /// a věta v hlavičce. Sundat nález smí jedině odmítnutí (#113), za kterým stojí člověk.
+    var recheck: StoredRecheck?
 
     init(
         pullRequest: PRIdentifier,
@@ -39,7 +49,8 @@ struct ReviewRecord: Codable, Hashable, Sendable {
         runs: [StoredReviewRun] = [],
         isStale: Bool = false,
         closedAt: Date? = nil,
-        dismissals: [FindingKey: FindingDismissal] = [:]
+        dismissals: [FindingKey: FindingDismissal] = [:],
+        recheck: StoredRecheck? = nil
     ) {
         self.pullRequest = pullRequest
         self.headSha = headSha
@@ -47,13 +58,14 @@ struct ReviewRecord: Codable, Hashable, Sendable {
         self.isStale = isStale
         self.closedAt = closedAt
         self.dismissals = dismissals
+        self.recheck = recheck
     }
 
     /// Dekóduje se ručně **jen kvůli `dismissals`**: syntetizovaný `init(from:)` sahá na
     /// každý neoptional klíč bez ohledu na výchozí hodnotu, takže by starší soubor (a je
     /// jich na disku plno) skončil `keyNotFound` — tedy ztracenými nálezy kvůli poli, které
     /// v něm být nemůže. Tatáž úvaha jako u `Finding.translation`, jen tam to obstará
-    /// optional.
+    /// optional — a stejně tak u `recheck` (#150), který proto stačí `decodeIfPresent`.
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         pullRequest = try container.decode(PRIdentifier.self, forKey: .pullRequest)
@@ -65,6 +77,7 @@ struct ReviewRecord: Codable, Hashable, Sendable {
             [FindingKey: FindingDismissal].self,
             forKey: .dismissals
         ) ?? [:]
+        recheck = try container.decodeIfPresent(StoredRecheck.self, forKey: .recheck)
     }
 
     /// Nálezy ze všech reviewerů dohromady. Neslučují se — každý si nese, kdo ho našel.

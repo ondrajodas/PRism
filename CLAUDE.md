@@ -363,6 +363,11 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    povolenými je (#78); sám o sobě nic nespouští, ale skill, který se přes něj načte, si
    o odeslání na GitHub umí říct — proto ten zákaz.
 
+   **Platí to i pro kontrolu nálezů z minula** (#150), která má vlastní prompt: bere **tytéž
+   konstanty** `ClaudeCommand.allowedTools` a `disallowedTools`, žádné vlastní povolení si
+   neskládá. Předchozí nálezy dostane jako **materiál v promptu**, ne jako nástroj — druhá sada
+   povolení by znamenala druhé místo, kde se ta podmínka dá porušit.
+
    Ověřeno spuštěním (#12, **opraveno u #17**; podrobnosti v `docs/claude-cli.md`):
    - Co je **mimo** povolený vzor, se odmítne, pokud to není na vestavěném seznamu čtecích
      příkazů. `ls` a `cat` projdou, `gh` ne.
@@ -382,6 +387,12 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 5. **Nálezy jsou klíčované `headSha`.** Nové commity nálezy zneplatní (stav
    „zastaralé“), nikdy se nesmí tiše zobrazovat proti kódu, který už neexistuje.
 
+   **Kontrola nálezů (#150) na tom stojí, ne obchází to**: nese `againstHeadSha` — hlavu, proti
+   které běžela —, a jak se hlava posune, `Policy.recheck(of:head:)` odznaky nevydá a v hlavičce
+   zbyde věta, že se dá pustit znovu. Ukládá se navíc k záznamu **těch nálezů**, na které se
+   ptala, takže starší commit zůstane starší; „vyřešeno“ přitom nikdy nález nesundá, to smí
+   jedině odmítnutí (#113).
+
 ## Architektura
 
 Osm modulů. Čtyři, které sahají do vnějšího světa, jsou za protokolem, aby byly v testech
@@ -392,7 +403,7 @@ viz tvrdá podmínka č. 1.
 |---|---|---|
 | `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` | `claude` CLI |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), rozbalení bubliny nálezu (#185) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
@@ -420,7 +431,7 @@ Zvlášť stojí za přečtení, než sáhneš na:
 - **`AppStore` je rozdělený na `extension` po zodpovědnostech** (#154), takže se hledá podle
   souboru, ne v jednom dvoutisícovém: `AppStore.swift` drží **stav, init a polling**,
   `+Diff`, `+DiffExpansion`, `+Detail`, `+Conversation`, `+Draft`, `+DraftTransfer`,
-  `+Submission`, `+Review`, `+Findings`, `+Notifications` a `+Automatic` metody. **Dělí se
+  `+Submission`, `+Review`, `+Recheck`, `+Findings`, `+Notifications` a `+Automatic` metody. **Dělí se
   metody, ne data** — uložený stav zůstává na jednom místě. Cena je, že `private` členy, na
   které extensiony sahají, musely být `internal`; nic se tím neotevírá ven z aplikace (jeden
   modul) a tvrdou podmínku č. 1 to nemění, protože publisher polem storu není.

@@ -26,6 +26,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `Finding` | `ReportedFinding` + **kdo** ho našel (skill) a **proti čemu** (`headSha`) |
 | `FindingKey` | Identita nálezu napříč běhy. Skládá ji **jen** `Policy.key(of:)` |
 | `FindingDismissal` | „Tenhle nález neplatí“ — důvod (`invalid`/`irrelevant`) a čas. **Bez volného textu** |
+| `RecheckStatus` | Co o nálezu řekla kontrola nových commitů (#150): verdikt (`resolved`/`still-applies`/`unclear`) a věta k němu. **Není nález** a nesmí se za něj vydávat — je to tvrzení *o* nálezu |
 | `PullRequestState` | `open` / `draft` / `merged` / `closed` |
 | `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
 | `ReviewVerdict` | Návrh, co s PR udělat: `approve` / `requestChanges`. Jako jediný **není `Codable`** — neukládá se, odvozuje se z uložených nálezů |
@@ -930,8 +931,10 @@ Jeden běh = jedna headless session `claude` na jeden skill v jednom pracovním 
 |---|---|
 | `ReviewRunning` | Protokol: `run(_:progress:)`. Schválně nemá nic, čím by šlo něco odeslat |
 | `ClaudeReviewRunner` | Implementace nad `claude` přes `ProcessStreaming` |
-| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat), jazyk nálezů |
-| `ReviewRunKey` | `(PR, headSha, skillID)` — identita běhu |
+| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat), jazyk nálezů; u kontroly nálezů (#150) navíc `recheck: RecheckMaterial?` |
+| `ReviewRunKey` | `(PR, headSha, skillID, kind)` — identita běhu; `kind` je `review` / `recheck` (#150) |
+| `RecheckMaterial` | Vstup kontroly (#150): commit, na kterém nálezy vznikly, a nálezy v pořadí, ve kterém se na ně ptáme |
+| `RecheckCommand` | **Čisté funkce**: prompt kontroly a defenzivní čtení její odpovědi (#150) |
 | `ReviewRun` | Výsledek: klíč, `StreamSummary`, `ReviewRunOutcome`; `findings` doplní reviewera a `headSha` |
 | `ReviewRunOutcome` | `finished` / `timedOut` / `failed(detail:)` |
 | `ReviewProgress` | `queued`, `started(sessionID:)`, `attemptedTool(ToolAttempt)`, `findings(count:)` |
@@ -989,6 +992,45 @@ Věci, které se u toho nemají rozbít:
 - **Reviewer načte i skill ležící v kontrolovaném repu** a řídí se jím. Je to **záměr**:
   repo, které si přinese vlastní review skill, ho má dostat. Vypnout by to šlo
   `--setting-sources user`, neověřeno.
+
+### Kontrola nálezů z minula (#150)
+
+Druhá podoba běhu: session dostane **uložené nálezy z předchozího commitu** a řekne u každého,
+jestli to nové commity spravily. Jde to **tou samou cestou** jako review (`ReviewRunning`,
+pracovní strom na hlavě PR, slot, timeout, zrušení), protože kontrola musí **číst kód** — bez
+stromu by odpovídala z hlavy. Řídí to `AppStore+Recheck`.
+
+- **Vlastní druh běhu, ne review s jiným promptem.** `ReviewRunKey.kind` je součást identity,
+  takže se kontrola nad tímtéž `(PR, headSha)` neslije s běžným během ve `WorkCoordinatoru`
+  (klíčem je `description`, které u kontroly končí `!recheck`) a neuloží se na jeho místo.
+  Vyhrazený `skillID` by udělal totéž, ale dal by se potkat se skutečným skillem toho jména;
+  `skillID` proto u kontroly nikdo nečte.
+- **Sada nástrojů se nemění** (tvrdá podmínka č. 2). `RecheckCommand` skládá jen prompt; povolení
+  i prostředí zůstávají v `ClaudeCommand` a jsou to tytéž konstanty.
+- **Prompt zakazuje `ReportFindings` a hledání nových nálezů.** Kontrola odpovídá na vyjmenovaný
+  seznam a nálezy z ní vzniknout nemají — `ReviewStore.save` je z téhle větve nepustí, takže by
+  se stejně neměly kam uložit.
+- **Odpověď je v posledním sdělení session** (`result` event), ne v tool callu. Verdikt o nálezu
+  není nález, takže `ReportFindings` na něj nemá pole; obalit stav do jeho polí by znamenalo
+  tvrdit něco jiného, než jak se ta pole jmenují. Čte se defenzivně jako u překladu
+  (`RecheckCommand.parse`): první `[` po poslední `]`, `id` číslem i řetězcem, stav se srovná na
+  velikost písmen a oddělovač. **Neznámý stav se nehádá** — z „fixed“ se `resolved` nedělá.
+- **Páruje se přes index, ne přes text.** Prompt nese `id` a odpověď ho vrací; klíč nálezu z toho
+  skládá `Policy.recheckStatuses(_:of:)` přes `Policy.key(of:)`. Hledat nález podle věty, kterou
+  model opíše, by stačilo jedno přeformulování a verdikt by spadl mimo.
+- **Kontrola se nespouští bez materiálu.** `AppStore.recheckMaterial(for:)` chce uložený záznam
+  s platnými nálezy, známou hlavu PR a to, aby se záznam a hlava lišily. Chybějící vstup by
+  skončil session, která hádá — a brána nesmí ležet jen v tom, že se tlačítko nenakreslilo.
+- **Materiál se skládá znovu po dotažení detailu.** Mezi nakreslením tlačítka a kliknutím mohl
+  přijít commit; kontrola proti hlavě, která už není, by tvrdila „vyřešeno“ o kódu, na který se
+  nikdo nekoukal.
+- **Přerušený běh se nedotahuje z transcriptu** (na rozdíl od review, #97). Odpověď leží
+  v posledním sdělení, které v transcriptu nemá kde vzniknout — po pádu aplikace se kontrola pustí
+  znovu. Nic se tím neztrácí: kontrola nemá částečný výsledek, který by se dal zachránit.
+- **Běžící kontrola je běh jako každý jiný**: chrání repo před eviction (`busyRepositories`),
+  počítá se do `runningReviews` (dialog při zavření aplikace) a zavírání ji zabíjí (#264).
+  Vlastní mapa (`recheckTasks`) je proto, že na `reviewTasks` visí chipy reviewerů, pruh průběhu
+  i podmnožina k opakování (#149) — kontrola žádný skill nepouští.
 
 ## Překlad nálezů (`App/Review/`)
 
@@ -1175,8 +1217,9 @@ Výsledky review na disku: jeden JSON soubor na `(repo, PR, headSha)` pod
 | `AnnouncedPullRequests` | Aktor: které PR se už ohlásily jako nové (#85). **Snímek** poslední fronty na disku, ne rostoucí log |
 | `SpendLedger` | Aktor: co dneska stálo review (#148). **Na disku**, aby součet nevynuloval restart |
 | `InterruptedRuns` | Aktor: běhy, které začaly a neví se, jestli doběhly (#97). Co v souboru po startu zbylo, aplikaci nepřežilo |
-| `ReviewRecord` | Obsah jednoho souboru: PR, `headSha`, běhy, `isStale`, `closedAt` |
+| `ReviewRecord` | Obsah jednoho souboru: PR, `headSha`, běhy, `isStale`, `closedAt`, odmítnutí, **kontrola nálezů** (#150, volitelná) |
 | `StoredReviewRun` | Jeden běh: skill, `outcome`, session id, nálezy, `droppedFindings`, čas, **cena** (#148, volitelná) |
+| `StoredRecheck` | Kontrola nálezů (#150): `againstHeadSha`, `outcome`, session id, stavy klíčované `Policy.key(of:)`, čas, cena |
 
 Vedle něj stojí **`ReviewDraftStore`** (#65) — rozdělaná review, jeden soubor na PR pod
 `drafts/<owner>/<repo>/<pr>.json`:
@@ -1215,6 +1258,21 @@ Věci, které se u toho nemají rozbít:
 
 - **Store je aktor.** Uložení je čtení, změna a zápis téhož souboru a dva skilly nad jedním
   commitem doběhnou klidně naráz — bez serializace by si výsledky přepsaly.
+- **Kontrola nálezů se ukládá k záznamu těch nálezů** (#150, `saveRecheck(_:for:at:)`), tedy
+  k commitu, na kterém vznikly — ne k hlavě, proti které se kontrolovalo (tu nese
+  `againstHeadSha`). Záznam pro novou hlavu by musel vzniknout **bez jediného běhu**, a takový
+  vyhrává v `Policy.currentRecords` (není zastaralý), takže by nálezy z minula z okna zmizely
+  právě ve chvíli, kdy se na ně ptám.
+- **`save` kontrolu do `runs` nepustí** (`ReviewStoreError.notAReviewRun`). Kdyby se to povedlo,
+  přepsala by běh téhož skillu (`replace(_:)`), přidala si chip a její „nálezy“ by se počítaly do
+  návrhu verdiktu — reviewer, který nikdy nic nenahlásil. Je na to test, který tvrdí, že se
+  záznam **nezměnil**.
+- **`saveRecheck` nesrovnává `isStale`**, na rozdíl od `save`: nálezy dál patří staršímu commitu
+  a to, že se na ně někdo ptal, na tom nic nemění. Chybějící soubor je přitom **chyba**, ne nový
+  záznam — tatáž úvaha jako u odmítnutí.
+- **Počet nezodpovězených nálezů se neukládá.** Spočítá se proti záznamu
+  (`Policy.recheck(of:head:)`), protože jen tak odpovídá tomu, co je vidět: uložené číslo by po
+  odmítnutí nálezu (#113) přestalo platit.
 - **`isStale` je uložené, ne odvozené.** Odvodit by ho šlo jen porovnáním s aktuálním
   `headSha`, jenže ten aplikace z vyhledávání **nedostane** (`gh search prs` ho neumí, viz
   #4). Zjistí ho teprve při dotažení detailu — a to je právě chvíle, kdy se příznak nastaví.
@@ -1589,6 +1647,23 @@ Co se u ní nemá rozbít:
   jednoho revieweera (#149) míchá s tou z minulého běhu a reviewer, který mezitím doběhl,
   z „běžících“ vypadne — nejstarší událost běžících os by se tím posouvala dopředu a čas by šel
   zpátky.
+- **`Zkontrolovat nálezy` (#150) stojí vlevo od `Spustit review` a je tlumené.** Akcentová barva
+  v hlavičce zbyla jedné věci, takže dvě fialová tlačítka vedle sebe by z ní udělala dvě.
+  Nenabízí se, dokud není co kontrolovat (`AppStore.recheckMaterial(for:)`), a za běhu je z něj
+  `Zrušit kontrolu` s hodinami — vlastní pruh průběhu kontrola nemá, protože nepouští žádného
+  revieweera a pruh mluví o chipech.
+- **Výsledek kontroly visí v `StaleHeadView`**, tedy u řádku, který říká, že nálezy patří
+  staršímu commitu — je to o týchž nálezech a hlavička je vidět ve **všech** tabech PR. Souhrn
+  vyjmenuje i nálezy **bez odpovědi**; bez nich by „3 vyřešené“ nad pěti nálezy vypadalo, že
+  o zbytku kontrola něco řekla. Zastaralá kontrola **nemlčí**: odznaky u nálezů zmizí, ale věta
+  řekne, proti čemu běžela a že se dá pustit znovu.
+- **Odznak u nálezu nálezy nemaže ani nepřeskupuje.** Kreslí se v bublině u kódu (ve značce
+  i u položek), na kartě v panelu a v rozbaleném řádku tabulky — a všude nese v sobě, **odkud
+  to je** (`kontrola: vyřešeno`). Samotné „vyřešeno“ vedle nálezu by se čtlo jako fakt, a schovat
+  nález smí jedině odmítnutí (#113). **Ve sbaleném řádku tabulky odznak není**: sloupce mají
+  spočítanou šířku (#220) a odznak by si vzal místo shrnutí. **Na kartě je pod textem, ne
+  v hlavičce** — změřeno offscreen renderem, že se ve 300 bodech vedle `blokuje`, kategorie
+  a revieweera zkrátí na `kontrola…` a `blokuje` se zalomí na dva řádky.
 
 **Zavření aplikace se ptá, dokud běží review** (`AppDelegate`, #94), a **session u toho zabije**
 (#264). Do #264 dělalo jen to první: dialog tvrdil, že se session zabije, ale nikdo ji nezabíjel —
@@ -1617,9 +1692,10 @@ běžely na stroji čtyři dny.
 - **Text říká, co se stane — a nic víc.** „Běží review“ samo o sobě nedává důvod kliknout na
   Zpět; od #264 v něm ale nestojí, že se nálezy **ztratí**, protože se z transcriptu dotáhnou
   (viz níž a #97). Slibuje proto jen to, co reviewer nahlásil do zabití.
-- **Počítá se z `reviewTasks`**, ze stejného zdroje jako `isReviewing`. Vlastní počitadlo je
-  druhé místo, které se s prvním může rozejít — a rozejít se v tomhle znamená zavřít bez
-  zeptání.
+- **Počítá se z `reviewTasks`** (a od #150 i z `recheckTasks`), ze stejného zdroje jako
+  `isReviewing`. Vlastní počitadlo je druhé místo, které se s prvním může rozejít — a rozejít se
+  v tomhle znamená zavřít bez zeptání. Kontrola nálezů se počítá proto, že dialog se ptá kvůli
+  zabíjení session, a kontrola je session jako každá jiná.
 - **Dotaz i odpověď systému jsou v delegátovi vlastnosti, ne přímá volání AppKitu** (#264).
   Jinak by se to nedalo testovat: `runModal()` v testu čeká na kliknutí, které nikdo neudělá,
   a `reply(toApplicationShouldTerminate:)` mimo odložené ukončení by ukončil hosta testů.
@@ -3131,6 +3207,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.newPullRequestsNotification(for:titles:reviewed:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
 | `Policy.sortedReleases(_:)` | Vydání od nejnovějšího (#127) — podle **data**, ne podle tagu |
 | `Policy.newReleases(in:since:)` | Co vyšlo od poslední viděné verze; neznámá značka = **nic** |
+| `Policy.recheckStatuses(_:of:)` | Spáruje odpovědi kontroly (#150) s nálezy, na které se ptala — index z promptu → `Policy.key(of:)`. **Nepáruje se přes text**: model si věty přeformuluje |
+| `Policy.recheck(of:head:)` | Co o uložených nálezech říká poslední kontrola (`RecheckReport`, `RecheckTally`): `none` / `outdated(againstHeadSha:)` / `current`. **Platí jen pro hlavu, proti které běžela** — jinak se odznaky nevydají (tvrdá podmínka č. 5); počítá se z **platných** nálezů, takže odmítnutý (#113) se nepočítá, a nález bez odpovědi jde do `unanswered` |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
   Volající pak nic nespojuje a z typu je vidět, že jde o několik nezávislých dotazů.
