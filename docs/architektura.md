@@ -1391,7 +1391,7 @@ Opakování jednoho revieweera (#149) k tomu přidává:
   chipy ostatních přepnula na spinner a přestaly by ukazovat výsledek, který mají uložený.
 - **Značky přerušených běhů (#97) se mažou jen za spuštěné reviewery.** Značka po skillu, který
   tenhle běh nepouštěl, pořád platí — smazat ji znamená přijít o nálezy, které po něm zbyly
-  v transcriptu.
+  v transcriptu. A **při zavírání aplikace se nemažou vůbec** (#264, viz sekce o okně).
 - **Prázdná podmnožina nespustí nic.** Byl by to běh, který utratí checkout a nic nezjistí.
 - **Denní rozpočet se opakování netýká**, jako každého jiného ručního spuštění.
 
@@ -1415,6 +1415,9 @@ Opakování jednoho revieweera (#149) k tomu přidává:
   způsobí uživatel; pád aplikace, `kill` ani restart Macu odchytit nejdou — a nálezy se tam
   ztrácely stejně. Značka (`InterruptedRuns`) se zapíše, jakmile dorazí `session_id`, a co
   v souboru po startu zbylo, se přečte z transcriptu a uloží jako `interrupted`.
+  **Od #264 tudy chodí i zavření aplikace**: zabitá session je nedoběhlý běh jako každý jiný,
+  takže se její značka nemaže. Ověřeno spuštěním — po zabití vyšel řádek `přerušeno`, ne
+  `neběželo`.
   - **Značka se zapisuje v proudu událostí a s `await`**, ne ve vlastním tasku. Odložený zápis
     se umí propsat až po tom, co běh doběhl a značku smazal — pak zůstane ležet nad hotovým
     během. Chytil to test, ne úvaha.
@@ -1422,7 +1425,8 @@ Opakování jednoho revieweera (#149) k tomu přidává:
     proud, uložení výsledku ne, takže by se smazání umělo předběhnout. Celá sada proto, že sem
     se dojde jedině po skončeném review: pokrývá to i **zrušený** běh, který se schválně
     neukládá, takže by mu značka zbyla a příští start by z transcriptu vzkřísil nálezy, které si
-    člověk zrušil. Po pádu se sem naopak nedojde vůbec, a o to jde.
+    člověk zrušil. Po pádu se sem naopak nedojde vůbec, a o to jde. **Výjimka je zavírání
+    aplikace** (#264): tam se sem dojde, ale mazat se nesmí — proto `isTerminating`.
   - **Značka nad uloženým během nic nepřepíše.** Pád mezi zápisem výsledku a smazáním značky
     jinak z hotového review udělá nedodělek (`interrupted` přes `finished`). Je to důležitější
     pojistka než pořadí mazání, protože to okno zavřít nejde.
@@ -1586,25 +1590,59 @@ Co se u ní nemá rozbít:
   z „běžících“ vypadne — nejstarší událost běžících os by se tím posouvala dopředu a čas by šel
   zpátky.
 
-**Zavření aplikace se ptá, dokud běží review** (`AppDelegate`, #94). Session se ukončením
-zabije a nálezy, které reviewer už nahlásil, jsou pryč — v panelu i na disku, takže z řádku
-vyjde `neběželo`, tedy totéž jako u PR, který nikdo nekontroloval. Nastalo to v provozu.
+**Zavření aplikace se ptá, dokud běží review** (`AppDelegate`, #94), a **session u toho zabije**
+(#264). Do #264 dělalo jen to první: dialog tvrdil, že se session zabije, ale nikdo ji nezabíjel —
+osamocený `claude` se přerodil na `launchd` a běžel dál, počítal tokeny za review, které už nemá
+komu doručit, a držel pracovní strom, který se proto nesměl uklidit. Změřeno: dvě takové session
+běžely na stroji čtyři dny.
 
 - **`NSAlert` a `runModal()`, ne SwiftUI.** `applicationShouldTerminate` musí odpovědět
   **synchronně**; asynchronní cesta by aplikaci zavřela dřív, než se kdokoli zeptá.
+- **Odloží se jen zabíjení, ne dotaz** (#264). Dotaz zůstává synchronní, ale po kliknutí na
+  `Ukončit` se vrací `.terminateLater` a odpověď (`reply(toApplicationShouldTerminate:)`) přijde
+  teprve po `AppStore.stopReviewsBeforeTermination()`. `terminateNow` hned po zrušení běhů
+  nestačí: signál k procesu se nese přes `WorkCoordinator` a několik hopů mezi aktory, takže by
+  aplikace zmizela dřív, než odejde.
+- **Zabíjí se tou samou cestou jako u zrušení** — `task.cancel()`, ze kterého se přes
+  `continuation.onTermination` dojde na `SIGKILL`. Druhý `kill` v delegátovi by byl druhá pravda
+  o tom, jak se běh zastavuje, a `SIGTERM` volba proti té, která u zrušení už padla.
+- **Ze zaseknuté session nesmí vzniknout nezavíratelná aplikace.** Čekání má strop
+  (`terminationChecks × terminationStep`, tedy dvě sekundy) a odpověď systému odejde i tehdy,
+  když po něm něco zůstalo. V praxi se to vrací po prvním kole.
+- **Druhý pokus o ukončení během těch dvou sekund jen zopakuje odpověď.** Jinak by nad
+  ukončením, které už běží, otevřel druhý dialog a systému by se odpovědělo dvakrát — a
+  `reply(toApplicationShouldTerminate:)` je na jedno odložené ukončení.
 - **Výchozí tlačítko je `Zpět`**, ne `Ukončit`. Ztracený nález je dražší než jedno kliknutí
   navíc, takže omylem odklepnutý `Enter` nemá nic zahodit.
-- **Text říká, co se ztratí.** „Běží review“ samo o sobě nedává důvod kliknout na Zpět.
+- **Text říká, co se stane — a nic víc.** „Běží review“ samo o sobě nedává důvod kliknout na
+  Zpět; od #264 v něm ale nestojí, že se nálezy **ztratí**, protože se z transcriptu dotáhnou
+  (viz níž a #97). Slibuje proto jen to, co reviewer nahlásil do zabití.
 - **Počítá se z `reviewTasks`**, ze stejného zdroje jako `isReviewing`. Vlastní počitadlo je
   druhé místo, které se s prvním může rozejít — a rozejít se v tomhle znamená zavřít bez
   zeptání.
+- **Dotaz i odpověď systému jsou v delegátovi vlastnosti, ne přímá volání AppKitu** (#264).
+  Jinak by se to nedalo testovat: `runModal()` v testu čeká na kliknutí, které nikdo neudělá,
+  a `reply(toApplicationShouldTerminate:)` mimo odložené ukončení by ukončil hosta testů.
 - **`bin/run.sh` proto nepoužívá `killall`.** SIGTERM `applicationShouldTerminate`
   **neprochází**, takže rebuild při vývoji zabíjel review i s nálezy — dvakrát za jedno
   dopoledne. Skript posílá Apple event `quit`, tedy tou samou cestou jako ⌘Q, čeká na
   odpověď a když aplikace zůstane běžet, novou verzi nespustí.
 - **Nezachytí to všechno**, a je to tak zamýšlené: pád aplikace ani zabití zvenčí takhle
-  odchytit nejde. Dotažení nálezů z transcriptu zůstává v #94 jako ta drahá varianta pro
-  zbytek.
+  odchytit nejde. Dotažení nálezů z transcriptu (#97) je pro ně ta drahá varianta — a od #264
+  slouží **oběma** cestám, protože zavření aplikace je pro běh totéž jako pád.
+
+**Zavírání se přitom nesmí lišit od pádu v tom, co po sobě nechá** (#264). Zabité běhy se
+schválně chovají jako přerušené, ne jako zrušené:
+
+- **Značky rozdělaných běhů (#97) se při zavírání nemažou.** Úklid, který zrušení dělá, by
+  z „přerušeno se dvěma nálezy“ udělal „neběželo“ — tedy zahodil nálezy, které leží
+  v transcriptu. Zrušení člověkem je jiná otázka a maže dál: ty nálezy si nikdo nevyžádal.
+  Drží to `AppStore.isTerminating`, které je právě proto stav, ne lokální proměnná.
+- **Během zavírání se nic nespouští.** Tik pollingu dorazí i uprostřed a jeho automatický běh
+  by aplikaci přežil, protože zabíjení už proběhlo. Brána je proto v `startReview` i ve
+  `startAutomaticReviews`.
+- **Nic se neukládá jako doběhlé.** To platí i u zrušení (`Task.isCancelled` před zápisem) —
+  zabitý běh není doběhlý běh a `čisté` by nad ním lhalo.
 
 ## Šířka v okně (`App/Views/AvailableWidth.swift`)
 
@@ -3859,6 +3897,13 @@ nezavolají, by musely dopsat všechny. `workingDirectory` je jen v `ProcessStre
   jádra a proces se zasekne na zápisu.
 - **Zrušení musí proces zabít.** Bez toho čekání na EOF drží volání, dokud proces nedoběhne
   sám. Řeší `withTaskCancellationHandler`, u proudu `continuation.onTermination`.
+- **A stejně tak ukončení aplikace** (#264). Je to tentýž invariant a **tentýž `SIGKILL`** —
+  zavírání jde přes `AppStore.stopReviewsBeforeTermination()`, které běhy jen **zruší**; druhý
+  `kill` v delegátovi by byl druhá pravda o tom, jak se běh zastavuje. Co zavírání přidává,
+  je **čekání**: zrušení se přenáší přes `WorkCoordinator`, který práci drží ve vlastním tasku,
+  takže mezi `cancel()` a odeslaným signálem je několik hopů mezi aktory. Do #264 se nečekalo
+  vůbec (nezabíjelo se) a osamocený `claude` se přerodil na `launchd` — změřeno, dvě takové
+  session běžely na stroji čtyři dny. Podrobnosti o té cestě jsou v sekci `AppStore`.
 - **Proud smí skončit teprve po EOF na obou rourách, ne po exitu procesu.** Skončit hned po
   exitu by uřízlo řádky, které ještě leží v rouře — u review přesně ty poslední, ve kterých
   bývají nálezy.

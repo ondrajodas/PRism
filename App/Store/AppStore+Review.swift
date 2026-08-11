@@ -12,7 +12,9 @@ extension AppStore {
     /// `nil` znamená celou nastavenou sadu, a to **není totéž jako její snímek**: sadu ještě
     /// může změnit odhad jazyka repa, který běží až nad pracovní kopií.
     func startReview(for pr: PRIdentifier, skills: [String]? = nil) {
-        guard reviewer != nil, reviewTasks[pr] == nil else { return }
+        // Během zavírání už se nic nespouští (#264): session, která se rozjede po tom, co se
+        // ostatní zabily, aplikaci přežije — a to je celý ten problém.
+        guard !isTerminating, reviewer != nil, reviewTasks[pr] == nil else { return }
         // Prázdná podmnožina by spustila review bez jediného revieweera — tedy běh, který
         // utratí checkout a nic nezjistí.
         guard skills.map({ !$0.isEmpty }) ?? true else { return }
@@ -49,6 +51,48 @@ extension AppStore {
     func cancelReview(for pr: PRIdentifier) {
         reviewTasks[pr]?.task.cancel()
     }
+
+    /// Zabije všechna běžící review, protože se zavírá aplikace (#264).
+    ///
+    /// **Tou samou cestou jako zrušení** — `task.cancel()`, ze kterého se přes
+    /// `continuation.onTermination` proudu dojde na `SIGKILL` v `LaunchedProcess`. Druhý `kill`
+    /// v delegátovi by byl druhá pravda o tom, jak se běh zastavuje, a `SIGTERM` by tu byl
+    /// vlastní volba proti té, která u zrušení už padla: `claude` se nemá komu dokončovat,
+    /// protože aplikace, která na jeho výstup čekala, za chvíli nebude.
+    ///
+    /// **Musí se na to počkat.** Zrušení jde přes `WorkCoordinator`, který práci drží ve vlastním
+    /// tasku, takže než signál odejde, proběhne několik hopů mezi aktory. Ukončit aplikaci hned
+    /// po `cancel()` znamená zavřít ji dřív — a `claude` se pak přerodí na `launchd` a běží dál
+    /// (změřeno u #264: dvě takové session běžely na stroji čtyři dny).
+    ///
+    /// **Ale ne donekonečna.** Po `terminationChecks × terminationStep` se vrací, i když něco
+    /// zůstalo: ze zaseknuté session nesmí vzniknout aplikace, která se nedá zavřít.
+    func stopReviewsBeforeTermination() async {
+        isTerminating = true
+        for review in reviewTasks.values { review.task.cancel() }
+
+        var remaining = Self.terminationChecks
+        while !reviewTasks.isEmpty, remaining > 0 {
+            remaining -= 1
+            // `Task.sleep`, ne `time.sleep`: čeká se na skutečný proces, ne na rozvrh. Fake
+            // hodiny čekání přeskočí, a test, který má tvrdit, že po zavření nic neběží, by
+            // pak prošel i nad živou session.
+            //
+            // `try?` tu nic neschovává: uspání selže jedině zrušením a zrušit tohle čekání
+            // nemá kdo (task drží delegát a zaniká s aplikací). I kdyby k tomu došlo, musí se
+            // dojít až na konec — ukončení, které se nedokončí, je nezavíratelná aplikace,
+            // a to je horší porucha než přežilá session.
+            try? await Task.sleep(for: Self.terminationStep)
+        }
+    }
+
+    /// Jak dlouho se čeká, než se běhy zastaví — 100 × 20 ms, tedy dvě sekundy.
+    ///
+    /// Zabití je v praxi otázka jednotek milisekund, takže se to skoro vždycky vrátí po prvním
+    /// kole; strop je tu proti zaseknuté session, ne proti pomalému zabíjení. Dvě sekundy jsou
+    /// tolik jako `gracePeriod` u timeoutu — stejný řád, stejný důvod.
+    static let terminationChecks = 100
+    static let terminationStep = Duration.milliseconds(20)
 
     /// Sada skillů pro repo. Chipy z ní berou pořadí i to, co ještě neběželo.
     func reviewSkills(for repo: RepoID) -> [String] { resolved(for: repo).skills }
@@ -267,10 +311,17 @@ extension AppStore {
         // Maže se jen za **spuštěné** reviewery (#149): značka po skillu, který tenhle běh
         // nepouštěl, pořád platí — a smazat ji znamená přijít o nálezy, které po něm zbyly
         // v transcriptu.
-        for skill in skills {
-            await interrupted?.forget(
-                ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill)
-            )
+        // **Při zavírání aplikace se značky nemažou** (#264). Ukončení je pro běh totéž jako pád:
+        // session se zabila a co reviewer nahlásil, leží v transcriptu, odkud to příští start
+        // dotáhne jako `přerušeno` (#97). Smazat značku tady by z „přerušeno se dvěma nálezy“
+        // udělalo „neběželo“ — tedy ztrátu, kterou dneska zavření aplikace nedělá a dělat nemá.
+        // Zrušení člověkem je jiná otázka: tam se maže dál, protože si ty nálezy nikdo nevyžádal.
+        if !isTerminating {
+            for skill in skills {
+                await interrupted?.forget(
+                    ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill)
+                )
+            }
         }
 
         if let failure { throw failure }

@@ -19,17 +19,24 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
     /// Co „leží v pracovním stromě“ — podklad pro detekci jazyka.
     private let files: Result<[String], CheckoutError>
 
+    /// Pracovní strom, který se vydá místo vymyšlené cesty. Potřebuje ho jediný test —
+    /// ten, který pouští **skutečný** podproces (#264): `Process` složku, která neexistuje,
+    /// odmítne, takže by se běh rozsypal na `launchFailed` místo aby se rozjel.
+    private let worktree: URL?
+
     init(
         tracked: [RepoID: [Int]] = [:],
         outcome: Result<URL, CheckoutError> = .success(URL(filePath: "/tmp/klon")),
         existing: [RepoID: URL] = [:],
         files: Result<[String], CheckoutError> = .success([]),
+        worktree: URL? = nil,
         gate: AsyncGate? = nil
     ) {
         self.tracked = tracked
         self.outcome = outcome
         self.existing = existing
         self.files = files
+        self.worktree = worktree
         self.gate = gate
     }
 
@@ -49,6 +56,7 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
     /// Stejné selhání jako u přípravy — `worktree` ji volá, takže co položí ji, položí i ho.
     func worktree(for pr: PRIdentifier, at headSha: String) async throws -> URL {
         _ = try outcome.get()
+        if let worktree { return worktree }
         return URL(filePath: "/tmp/\(pr)-\(headSha)")
     }
 

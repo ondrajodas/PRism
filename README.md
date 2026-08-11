@@ -698,11 +698,18 @@ zastaral hned další verzí.
 6. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
    a o doběhlém review. Klik na notifikaci ten pull request vybere a dá okno dopředu.
 
-**Co nedoběhlo, se neztratí.** Když se aplikace zavře, ptá se — session se ukončením zabije
-a nahlášené nálezy by byly pryč. Na pád aplikace nebo `kill` se ptát nedá, takže se nálezy
-**dotáhnou z transcriptu**, který si `claude` vede na disku: běh se poznamená, jakmile nahlásí
-id session, a po startu se z něj přečte, co stihl. Takový výsledek je v řádku `přerušeno`, ne
-`timeout` ani `čisté` — nedoběhl, takže se z něj nesmí soudit, že je hotovo.
+**Co nedoběhlo, se neztratí.** Když se aplikace zavře, ptá se — a když se ukončení potvrdí,
+**běžící session zabije** a čeká, dokud po nich nezůstane běžet nic. Bez toho `claude` aplikaci
+přežil: osiřelý proces počítal tokeny za review, které už nemá komu doručit, a držel pracovní
+strom v cache (změřeno, dvě takové session běžely čtyři dny). Ze zaseknuté session přitom nesmí
+vzniknout aplikace, která se nedá zavřít, takže čekání má strop dvou sekund.
+
+Nálezy z takového běhu se pak **dotáhnou z transcriptu**, který si `claude` vede na disku: běh se
+poznamená, jakmile nahlásí id session, a po startu se z něj přečte, co stihl. Platí to i pro pád
+aplikace nebo `kill`, na které se ptát nedá — zavření aplikace se od nich v tomhle záměrně neliší.
+Takový výsledek je v řádku `přerušeno`, ne `timeout` ani `čisté` — nedoběhl, takže se z něj nesmí
+soudit, že je hotovo. Zrušení review člověkem je proti tomu jiná odpověď: tam se nedotahuje nic,
+protože o ty nálezy si nikdo neřekl.
 
 Nálezy jsou klíčované head commitem PR. Když přijdou nové commity, předchozí nálezy se
 označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
