@@ -432,7 +432,9 @@ Zvlášť stojí za přečtení, než sáhneš na:
   viselo cokoli z úklidu, zapnutí filtru by zahodilo diffy a konverzace, smazalo cache a zrušilo
   běžící review;
 - **`Environment`** — podprocesy: blokující I/O nesmí na kooperativní pool, oba pipy se musí
-  číst souběžně, zrušení musí proces zabít.
+  číst souběžně, **zrušení i ukončení aplikace musí proces zabít** (#264 — obě cesty, jedním
+  `SIGKILL`em z `LaunchedProcess`; zavírání se na něj navíc musí **počkat**, jinak `claude`
+  osiří na `launchd` a běží dál).
 
 ## Konvence
 
