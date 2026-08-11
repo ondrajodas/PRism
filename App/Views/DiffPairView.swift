@@ -95,16 +95,13 @@ struct DiffPairView: View {
                 .frame(maxWidth: .infinity)
         } else {
             // Díra, ne prázdno: „tady žádný řádek není“ se od „je tu prázdný řádek“ jinak
-            // nepozná. Od #277 z palety a se šrafou, protože samotná plocha na to v tmavém
-            // režimu nestačí (ΔE 3,3) — podrobnosti u `Palette.diffMissing`.
-            Palette.diffMissing
-                .overlay {
-                    DiffMissingHatch()
-                        .stroke(Palette.diffMissingStripe, lineWidth: DiffMissingHatch.lineWidth)
-                        // Pruhy jsou o výšku rámečku posunuté doleva (sklon 45°), takže bez
-                        // ořezu přetečou do řádku vedle. V bloku kódu to dělá `setClip`.
-                        .clipped()
-                }
+            // nepozná. Od #277 **šrafou z návrhu** (`tr.empty-side`), ne plochou — ta pod ní
+            // zůstává z obsahu. Podrobnosti u `Palette.diffMissingStripe`.
+            DiffMissingHatch()
+                .stroke(Palette.diffMissingStripe, lineWidth: DiffMissingHatch.lineWidth)
+                // Pruhy jsou o výšku rámečku posunuté doleva (sklon 45°), takže bez ořezu
+                // přetečou do řádku vedle. V bloku kódu to dělá `setClip`.
+                .clipped()
                 .frame(maxWidth: .infinity)
         }
     }

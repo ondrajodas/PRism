@@ -333,7 +333,7 @@ struct DiffLineView: View {
     /// **Od #277 z `Palette`, ne systémová `.green`/`.red`.** Byl to poslední kus diffu, který si
     /// barvu bral ze systému, a u znaku to bylo měřitelně špatně: systémová zelená měla ve světlém
     /// režimu na pozadí přidaného řádku kontrast **2,01** a v hlavičce nad diffem **2,22**, tedy
-    /// znak `+` k přečtení jen podle polohy. S `Palette.ok` je to **4,60** a **5,08**; v tmavém
+    /// znak `+` k přečtení jen podle polohy. S `Palette.ok` je to **4,65** a **5,08**; v tmavém
     /// režimu 7,42 → 5,95, tedy pořád s rezervou. Podrobnosti u `Palette.ok`.
     static func signColor(of kind: DiffLine.Kind) -> Color {
         switch kind {

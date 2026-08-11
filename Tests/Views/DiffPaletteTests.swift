@@ -117,7 +117,7 @@ struct DiffPaletteTests {
         let window: Measured
         let added: Measured, removed: Measured
         let addedWord: Measured, removedWord: Measured
-        let missing: Measured, stripe: Measured
+        let stripe: Measured
         let addedSign: Measured, removedSign: Measured
         let critLine: Measured
         let syntax: (string: Measured, keyword: Measured, comment: Measured)
@@ -129,7 +129,7 @@ struct DiffPaletteTests {
                 ("plocha", surface), ("pozadí okna", window),
                 ("přidaný řádek", added), ("odebraný řádek", removed),
                 ("word-level přidaný", addedWord), ("word-level odebraný", removedWord),
-                ("prázdný protějšek", missing), ("šrafa", stripe),
+                ("šrafa prázdného protějšku", stripe),
                 ("znak +", addedSign), ("znak −", removedSign),
                 ("obrys bubliny", critLine),
                 ("řetězec", syntax.string), ("klíčové slovo", syntax.keyword), ("komentář", syntax.comment),
@@ -155,7 +155,6 @@ struct DiffPaletteTests {
                 removed: Measured(DiffLineView.background(of: .removed)),
                 addedWord: Measured(addedWord),
                 removedWord: Measured(removedWord),
-                missing: Measured(Palette.diffMissing),
                 stripe: Measured(Palette.diffMissingStripe),
                 addedSign: Measured(DiffLineView.signColor(of: .added)),
                 removedSign: Measured(DiffLineView.signColor(of: .removed)),
@@ -188,7 +187,7 @@ struct DiffPaletteTests {
             for (label, color) in [
                 ("přidaný řádek", scheme.added), ("odebraný řádek", scheme.removed),
                 ("word-level přidaný", scheme.addedWord), ("word-level odebraný", scheme.removedWord),
-                ("prázdný protějšek", scheme.missing), ("šrafa", scheme.stripe),
+                ("šrafa prázdného protějšku", scheme.stripe),
             ] {
                 #expect(color.alpha == 1, "\(scheme.name) režim: \(label) má krytí \(color.alpha) místo jedničky.")
             }
@@ -216,17 +215,18 @@ struct DiffPaletteTests {
         let light = try #require(schemes.first), dark = try #require(schemes.last)
         #expect(deltaE(light.added, dark.added) > 20)
         #expect(deltaE(light.removed, dark.removed) > 20)
-        #expect(deltaE(light.missing, dark.missing) > 20)
+        #expect(deltaE(light.stripe, dark.stripe) > 20)
     }
 
     /// Přidaný a odebraný řádek proti ploše, na které diff leží, a proti sobě.
     ///
-    /// Prahy: ΔE 9 proti ploše ve světlém (vychází 10,1 a 10,6) a **18 v tmavém** (21,8 a 19,7),
-    /// mezi sebou 20 (21,8 světlý, 36,8 tmavý). Do #277 vycházelo v tmavém 16,0 a 13,2.
+    /// Prahy: ΔE 8,5 proti ploše ve světlém (vychází 13,0 u přidaného a 8,9 u odebraného — hodnoty
+    /// jsou z návrhu, ne z optimalizace) a **18 v tmavém** (21,8 a 19,7), mezi sebou 20 (22,8 světlý,
+    /// 36,8 tmavý). Do #277 vycházelo v tmavém 16,0 a 13,2.
     @Test("Přidaný a odebraný řádek se odlišují od plochy i od sebe")
     func changedLinesStandOut() throws {
         for scheme in try schemes() {
-            let floor = scheme.name == "tmavý" ? 18.0 : 9.0
+            let floor = scheme.name == "tmavý" ? 18.0 : 8.5
             let addedFromSurface = deltaE(scheme.added, scheme.surface)
             let removedFromSurface = deltaE(scheme.removed, scheme.surface)
             #expect(addedFromSurface >= floor, "\(scheme.name): přidaný řádek je od plochy jen ΔE \(addedFromSurface).")
@@ -237,8 +237,8 @@ struct DiffPaletteTests {
     }
 
     /// Word-level vrstva (#153) se nesmí slít s pozadím svého řádku — a nesmí pod sebou zhasnout
-    /// obarvení syntaxe. Práh ΔE 12 (vychází 16,1 a 15,5 v tmavém, 18,6 a 22,6 ve světlém)
-    /// a kontrast řetězce 1,9 (vychází 1,97 tmavý, 2,44 světlý; do #277 to bylo 1,27).
+    /// obarvení syntaxe. Práh ΔE 11 (vychází 13,9 a 13,2 v tmavém, 12,0 a 11,4 ve světlém)
+    /// a kontrast řetězce 2,1 (vychází 2,16 tmavý, 4,01 světlý; do #277 to bylo 1,27).
     @Test("Word-level vrstva je jiná plocha než řádek a text na ní nezhasne")
     func wordLayerDiffersFromItsLine() throws {
         for scheme in try schemes() {
@@ -247,9 +247,9 @@ struct DiffPaletteTests {
                 ("odebraný", scheme.removedWord, scheme.removed),
             ] {
                 let distance = deltaE(word, line)
-                #expect(distance >= 12, "\(scheme.name), \(label): word-level je od řádku jen ΔE \(distance).")
+                #expect(distance >= 11, "\(scheme.name), \(label): word-level je od řádku jen ΔE \(distance).")
                 let readable = contrast(scheme.syntax.string, word)
-                #expect(readable >= 1.9, "\(scheme.name), \(label): řetězec na word-level má kontrast \(readable).")
+                #expect(readable >= 2.1, "\(scheme.name), \(label): řetězec na word-level má kontrast \(readable).")
             }
         }
     }
@@ -318,7 +318,7 @@ struct DiffPaletteTests {
         for scheme in try schemes() {
             for (label, line) in [
                 ("přidaný", scheme.added), ("odebraný", scheme.removed),
-                ("kontext", scheme.surface), ("prázdný protějšek", scheme.missing),
+                ("kontext", scheme.surface), ("šrafu prázdného protějšku", scheme.stripe),
             ] {
                 let value = contrast(scheme.critLine, line)
                 #expect(value >= 1.6, "\(scheme.name): obrys nad \(label) řádkem má kontrast \(value).")
@@ -326,21 +326,44 @@ struct DiffPaletteTests {
         }
     }
 
-    /// Prázdný protějšek (#277) je **tišší** než změněný řádek — díra nemá křičet hlasitěji než
-    /// změna — a odlišuje se **šrafou**, protože na plochu samotnou v tmavém režimu není světlost.
-    /// Proto se tvrdí obojí: plocha je od plochy obsahu jen kousek (a k tomu z druhé strany, tedy
-    /// tmavší), zato pruh je od díry vzdálený ΔE 8 a víc (vychází 11,3 v tmavém, 5,4 ve světlém).
-    @Test("Prázdný protějšek je tišší než změna, ale pozná se šrafou")
+    /// Prázdný protějšek (#277) nese **šrafa, ne plocha** — tak to kreslí návrh (`tr.empty-side`),
+    /// a v tmavém režimu to jinak ani nejde: pod plochou obsahu není kam ztmavovat a zesvětlit ji by
+    /// znamenalo, že díra křičí hlasitěji než změna vedle ní.
+    ///
+    /// Tvrdí se proto obojí naráz: pruh je od plochy **rozeznatelný** (ΔE 2 a víc — vychází 2,4 ve
+    /// světlém a 3,3 v tmavém, do #277 to bylo 0,0, protože se nekreslilo nic) a zároveň **tišší než
+    /// změna**, jinak by prázdné místo přebíjelo to, kvůli čemu se diff otevírá. Že se pozná i při
+    /// takhle malém rozdílu, nese rozestup pruhů, ne kontrast — a to hlídá `DiffMissingRowTests`
+    /// nad bitmapou.
+    @Test("Prázdný protějšek se pozná šrafou, a je tišší než změna")
     func missingCounterpartIsQuietButVisible() throws {
         for scheme in try schemes() {
-            let hole = deltaE(scheme.missing, scheme.surface)
+            let stripe = deltaE(scheme.stripe, scheme.surface)
             let added = deltaE(scheme.added, scheme.surface)
-            #expect(hole < added, "\(scheme.name): díra (ΔE \(hole)) křičí víc než přidaný řádek (ΔE \(added)).")
-            #expect(scheme.missing.luminance <= scheme.surface.luminance, "\(scheme.name): díra je světlejší než plocha obsahu.")
-            let stripe = deltaE(scheme.stripe, scheme.missing)
-            let floor = scheme.name == "tmavý" ? 8.0 : 5.0
-            #expect(stripe >= floor, "\(scheme.name): šrafa je od plochy díry jen ΔE \(stripe).")
+            #expect(stripe >= 2, "\(scheme.name): šrafa je od plochy jen ΔE \(stripe).")
+            #expect(stripe < added, "\(scheme.name): šrafa (ΔE \(stripe)) křičí víc než přidaný řádek (ΔE \(added)).")
         }
+    }
+
+    /// Šrafa má z návrhu **rozestup, ne jen barvu**: pruh 5 bodů, mezera 5 bodů, sklon 45°. Kdyby se
+    /// přepočet vodorovného kroku ztratil (√2 kvůli sklonu), vyšla by hustší, než jakou návrh kreslí
+    /// — a to je rozdíl, který se na obrázku pozná, ale v barvě ne.
+    @Test("Šrafa má rozestup z návrhu")
+    func hatchKeepsTheDesignSpacing() {
+        #expect(DiffMissingHatch.lineWidth == 5)
+        #expect(DiffMissingHatch.period == 10)
+        #expect(abs(DiffMissingHatch.step - 14.142) < 0.01)
+
+        // Sklon 45°: úsečka se po výšce rámečku posune o tutéž výšku i vodorovně, a jde z levého
+        // **dolního** koutu do pravého horního — směr je z vyrenderované sekce návrhu, ne z `45deg`
+        // (gradient míří k pravému hornímu koutu, ale pruhy leží napříč jeho osou).
+        let segments = DiffMissingHatch.segments(in: CGRect(x: 0, y: 0, width: 100, height: 20))
+        let first = segments.first
+        #expect(first?.from.y == 20)
+        #expect(first?.to.y == 0)
+        #expect(first.map { $0.to.x - $0.from.x } == 20)
+        // Prošrafovaný musí být i levý kout, takže pruhy začínají o výšku vlevo od rámečku.
+        #expect(first.map { $0.from.x <= -20 } == true)
     }
 
     private func appearance(_ name: String, _ body: () -> Void) {

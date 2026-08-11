@@ -42,7 +42,7 @@ enum Palette {
     /// stálo, že se sem zelená a červená z diffu tahat nesmí, protože tokeny jsou pro odznaky
     /// a puntíky. Otočilo to měření: systémová zelená měla ve světlém režimu na znaku `+` kontrast
     /// **2,01** proti pozadí přidaného řádku a **2,22** na ploše hlavičky, tedy pod hranicí
-    /// čitelnosti; `ok` má na týchž místech **4,60** a **5,08**. V tmavém režimu je to výměna
+    /// čitelnosti; `ok` má na týchž místech **4,65** a **5,08**. V tmavém režimu je to výměna
     /// 7,42 → 5,95, tedy pořád s velkou rezervou. Dvě sady barev z toho nevznikly — je to naopak
     /// o jednu méň.
     static let ok = Color(light: 0x1A7F37, dark: 0x3FB950)
@@ -59,72 +59,80 @@ enum Palette {
     /// (červený) i kontextem. Mix je jedna barva, která vyjde všude stejně.
     static let critLine = Color(light: 0xD89FAA, dark: 0x70393F)
 
-    /// Pozadí přidaného a odebraného řádku diffu, jeho word-level vrstvy (#153) a prázdného
-    /// protějšku v pohledu vedle sebe (#277).
+    /// Pozadí přidaného a odebraného řádku diffu (#277) — `--add-bg` a `--del-bg` z návrhu.
     ///
     /// **Ne `.green.opacity(0.12)`**, jak to bylo do #277 — tedy tentýž důvod jako u `critLine`
     /// o pár řádků výš: skrz krytí prosvítá podklad, takže barva **není hodnota, ale výsledek**.
-    /// Tady to bylo vidět v tmavém režimu, kde se systémová zelená mísí směrem k černé: plocha
-    /// přidaného bloku vycházela `#152B22`, tedy tmavý obdélník, ze kterého „přidáno“ nebylo
-    /// poznat. Hodnoty jsou proto vyčíslené, zvlášť pro každý režim.
+    /// Bylo to vidět v tmavém režimu, kde se systémová zelená mísí směrem k černé: plocha přidaného
+    /// bloku vycházela `#152B22`, tedy tmavý obdélník, ze kterého „přidáno“ nebylo poznat.
     ///
-    /// **Tmavá vznikla mixem `ok`/`crit` do černé, ne do plochy** (24 % u přidaného, 22 %
-    /// u odebraného). Rozhodlo měření a stojí na tom, že WCAG kontrast textu závisí **jen na
-    /// světlosti**, kdežto odlišení plochy roste i se **sytostí** (ΔE2000). Sytější tón při téže
-    /// světlosti tedy odliší plochu a text nad ní nechá na pokoji — proti mixu do plochy
-    /// (`#1B3827`) vychází stejné odlišení při ΔE 21,0, ale řetězec Darculy na něm spadne na 3,17
-    /// místo 3,76.
+    /// **Světlá je z návrhu doslova** (`--add-bg: #E3FBE8`, `--del-bg: #FFEBE9`) a měřením vyšla
+    /// lépe než to, co v aplikaci vycházelo ze skládání: odlišení od plochy ΔE 13,0 proti 10,1
+    /// u přidaného a řetězec IntelliJ Light 4,86 proti 4,81. U odebraného je ΔE 8,9 proti 10,6, zato
+    /// řetězec 4,63 proti 4,52 — a rozhoduje návrh, ne o dvě desetiny lepší číslo.
+    ///
+    /// **Tmavá je vědomá odchylka od návrhu** a je to celý důvod, proč #277 vzniklo: návrh má
+    /// v tmavém režimu `rgba(63, 185, 80, 0.13)`, tedy `ok` s krytím — a to nad `panel` složí
+    /// `#172922`, čímž **reprodukuje přesně tu stížnost** (ΔE 14,6, tedy ještě o kus slabší než
+    /// systémová zelená, kterou aplikace měla). Hodnota je proto vyčíslená a vznikla mixem
+    /// `ok`/`crit` **do černé**, ne do plochy (24 % u přidaného, 22 % u odebraného). Sám mockup se
+    /// u toho **nepřekresluje potichu** — návrh schvaluje uživatel (#286), takže se ta čtyři tmavá
+    /// `rgba` nabízejí k překreslení, ne mění; do té doby drží odchylku tenhle komentář a záznam
+    /// rozhodnutí ve specifikaci.
+    ///
+    /// Stojí to na jednom pozorování: WCAG kontrast textu závisí **jen na světlosti**, kdežto
+    /// odlišení plochy roste i se **sytostí** (ΔE2000) — sytější tón při téže světlosti tedy odliší
+    /// plochu a text nad ní nechá na pokoji. Proti mixu do plochy (`#1B3827`) vychází stejné
+    /// odlišení, ale řetězec Darculy na něm spadne na 3,17 místo 3,76.
     ///
     /// | tmavý režim | ΔE proti ploše | přidaný ↔ odebraný | řetězec | klíč. slovo |
     /// |---|---|---|---|---|
+    /// | návrh (`rgba(ok, 0.13)` → `#172922`) | 14,6 / 13,0 | 26,3 | 3,78 | 4,56 |
     /// | do #277 (`#152B22` / `#2E1A20`) | 16,0 / 13,2 | 28,9 | 3,73 | 4,50 |
     /// | od #277 (`#0F2C13` / `#371210`) | 21,8 / 19,7 | 36,8 | 3,76 | 4,53 |
-    ///
-    /// **Světlá zůstala na hodnotách, které vycházely dosud** (`#E7F8EB` / `#FFE7E8`, tedy složený
-    /// výsledek dvanáctiprocentní systémové zelené nad bílou). Není to opomenutí: přepočet z `ok`
-    /// do bílé vyjde na obou mírách **horší** (ΔE 10,1 → 8,3 a řetězec 4,82 → 4,52), protože `ok`
-    /// je pro světlý režim tmavá zelená a nad bílou z ní je šedozelená. Světlý režim se tím nemá jak
-    /// zhoršit: na renderu se plocha liší o **jednu až dvě hodnoty z 255** — skládání krytí
-    /// v renderu není tentýž výpočet jako v gamma prostoru, takže na hodnotu to nesedne, ale pod
-    /// rozdílem, který jde vidět, to je.
-    static let diffAdded = Color(light: 0xE7F8EB, dark: 0x0F2C13)
-    static let diffRemoved = Color(light: 0xFFE7E8, dark: 0x371210)
+    static let diffAdded = Color(light: 0xE3FBE8, dark: 0x0F2C13)
+    static let diffRemoved = Color(light: 0xFFEBE9, dark: 0x371210)
 
-    /// Word-level vrstva (#153): **druhá vrstva nad pozadím řádku**, ne jiná barva písma.
+    /// Word-level vrstva (#153) — `--add-hi` a `--del-hi` z návrhu: **druhá vrstva nad pozadím
+    /// řádku**, ne jiná barva písma.
     ///
-    /// Sytější tón téže barvy — změněný kus se má lišit od zbytku **svého** řádku. Do #277 to bylo
-    /// krytí 50 % nad řádkem, což v tmavém režimu dávalo `#227E3D`: plocha na první pohled jiná
-    /// (ΔE 29,5), ale **obarvení syntaxe pod ní zmizelo** — řetězec Darculy na ní měl kontrast
-    /// **1,27**, tedy text k nepřečtení právě na tom slově, kvůli kterému se člověk kouká.
+    /// **Světlá je z návrhu doslova** (`#ABEFC0` / `#FFC9C6`) a je na obou mírách lepší než to, co
+    /// v aplikaci vycházelo z krytí 50 %: řetězec 4,01 proti 3,37 u přidaného a 3,65 proti 2,44
+    /// u odebraného, při ΔE 12,0 a 11,4 proti svému řádku.
+    ///
+    /// **Tmavá drží pravidlo návrhu, ne jeho hodnotu**: `--add-hi` je `ok` na 30 % nad pozadím
+    /// řádku, a to pozadí se u #277 změnilo (viz `diffAdded`), takže se přepočítalo — `#1D5625` je
+    /// právě těch 30 % nad novým řádkem. Do #277 to bylo krytí **50 %** nad slabším pozadím, což
+    /// dávalo `#227E3D`: plocha na první pohled jiná (ΔE 29,5), ale **obarvení syntaxe pod ní
+    /// zmizelo** — řetězec Darculy měl kontrast **1,27**, tedy text k nepřečtení právě na tom
+    /// slově, kvůli kterému se člověk kouká.
     ///
     /// | tmavý režim | ΔE proti řádku | řetězec | klíč. slovo |
     /// |---|---|---|---|
     /// | do #277 (`#227E3D` / `#962E33`) | 29,5 / 24,4 | 1,27 / 1,91 | 1,53 / 2,30 |
-    /// | od #277 (`#205D28` / `#7C2925`) | 16,1 / 15,5 | 1,97 / 2,37 | 2,37 / 2,86 |
+    /// | od #277 (`#1D5625` / `#712521`) | 13,9 / 13,2 | 2,16 / 2,63 | 2,60 / 3,17 |
     ///
-    /// **Je to vědomá výměna**: vrstva je méně hlasitá, zato se pod ní dá číst. Odlišení zůstává
-    /// nad hranicí „na první pohled jiná plocha“ (ΔE 16 z 10) a proti **ploše** okna je ten kus
-    /// vzdálený ΔE 35, protože pozadí řádku pod ním zesílilo. Světlá varianta se nemění.
-    static let diffAddedWord = Color(light: 0x8DE0A2, dark: 0x205D28)
-    static let diffRemovedWord = Color(light: 0xFF9092, dark: 0x7C2925)
+    /// **Je to vědomá výměna**: vrstva je méně hlasitá, zato se pod ní dá číst. Odlišení zůstává nad
+    /// hranicí „na první pohled jiná plocha“ (ΔE 13,9 z 10 potřebných) a proti **ploše** okna je ten
+    /// kus vzdálený ΔE 33, protože pozadí řádku pod ním zesílilo.
+    static let diffAddedWord = Color(light: 0xABEFC0, dark: 0x1D5625)
+    static let diffRemovedWord = Color(light: 0xFFC9C6, dark: 0x712521)
 
-    /// Prázdný protějšek dvojice v pohledu vedle sebe (#277) — tam, kde na téhle straně řádek
-    /// **není**.
+    /// Šrafa prázdného protějšku dvojice v pohledu vedle sebe (#277) — tam, kde na téhle straně
+    /// řádek **není**.
     ///
-    /// Do #277 se v bloku kódu nekreslil vůbec, takže „tady řádek není“ bylo od „řádek se
-    /// nezměnil“ k nerozeznání (ΔE 0,0 — tatáž plocha). Plocha je proto **tmavší** než plocha
-    /// obsahu, ne světlejší: co v souboru je, leží nad podkladem, kdežto díra je podklad sám
-    /// (hodnota je `background`, tedy nejtmavší patro okna).
+    /// Do #277 se v bloku kódu nekreslilo nic, takže „tady řádek není“ bylo od „řádek se nezměnil“
+    /// k nerozeznání — tatáž plocha, ΔE 0,0. Návrh na to má šrafu
+    /// (`repeating-linear-gradient(45deg, …)` u `tr.empty-side`) a nese ji **textura, ne plocha**:
+    /// pod plochou obsahu už v tmavém režimu není kam ztmavovat a zesvětlit ji znamená, že díra
+    /// křičí hlasitěji než změna vedle ní.
     ///
-    /// **Sama plocha na to ale nestačí** a je to změřené: v tmavém režimu je od plochy vzdálená
-    /// jen ΔE 3,3, protože pod `surface` už není kam ztmavovat. Rozhoduje proto **šrafa**
-    /// (`DiffMissingHatch`), tedy odlišení **texturou** místo světlostí — pruh je od plochy díry
-    /// vzdálený ΔE 11,3. Zesvětlit plochu by šlo, jen by tím díra začala křičet hlasitěji než
-    /// přidaný řádek vedle ní (ΔE 7,3 u `#242A36`), a to je obrácená hierarchie.
-    static let diffMissing = Color(light: 0xF4F6FA, dark: 0x080A0F)
-    /// Pruh šrafy prázdného protějšku. Hodnota je `line`, tedy barva obrysů — díra je prázdné
-    /// místo, ne plocha se stavem, takže si vlastní tón nezaslouží.
-    static let diffMissingStripe = Color(light: 0xDDE2ED, dark: 0x262C3A)
+    /// Hodnota je `ink` na 5 % z návrhu, ale **vyčíslená** — díra leží vždycky na `surface`, takže
+    /// složený výsledek je přesný a nezávisí na podkladu. Pruh je od plochy vzdálený ΔE 2,5 ve
+    /// světlém a 3,4 v tmavém režimu; nese to **rozestup** (pruh 5 bodů, mezera 5 bodů), ne
+    /// kontrast — polovina plochy, na které se textura pozná i u jediného řádku. Geometrii drží
+    /// `DiffMissingHatch`.
+    static let diffMissingStripe = Color(light: 0xF3F3F4, dark: 0x1C1F26)
 
     /// Zastarání — force push, nálezy proti staré hlavě, vlákno bez místa v dnešním diffu.
     ///

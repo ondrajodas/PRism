@@ -92,8 +92,8 @@ struct DiffMissingRowTests {
         return try #require(result)
     }
 
-    /// Prázdný protějšek má vlastní plochu **a** šrafu, takže v jeho pruhu leží víc než jeden
-    /// odstín — kdežto kontextový řádek zůstává jednolitý.
+    /// Prázdný protějšek je prošrafovaný, takže v jeho pruhu leží víc než jeden odstín — kdežto
+    /// kontextový řádek zůstává jednolitý. Plocha se u něj **nemění**, tak to kreslí návrh.
     @Test("Prázdný protějšek se kreslí jinak než kontext")
     func missingRowIsDrawnDifferentlyThanContext() throws {
         let view = column(missing: [1])
@@ -103,12 +103,15 @@ struct DiffMissingRowTests {
         #expect(context.count == 1, "Kontextový řádek má \(context.count) odstínů místo jednoho.")
         #expect(missing.count >= 2, "Prázdný protějšek má \(missing.count) odstínů, takže se nešrafuje.")
 
-        let hole = try #require(missing.first).color
-        #expect(close(hole, try dark(Palette.diffMissing)), "Plocha díry je \(hole) místo Palette.diffMissing.")
-        #expect(!close(hole, try #require(context.first).color), "Díra má tutéž plochu jako kontext.")
+        let stripe = try dark(Palette.diffMissingStripe)
+        let hit = missing.first { close($0.color, stripe) }
+        #expect(hit != nil, "V prázdném protějšku není pruh Palette.diffMissingStripe, jen \(missing.map(\.color)).")
 
-        let stripe = try #require(missing.dropFirst().first).color
-        #expect(!close(stripe, hole), "Šrafa má tutéž barvu jako plocha díry.")
+        // **Rozestup nese odlišení, ne kontrast** (pruh 5 bodů, mezera 5), takže pruhy musí zabírat
+        // kolem poloviny řádku. Jeden tenký pruh by prošel tvrzením o dvou odstínech, ale v okně by
+        // se ztratil.
+        let covered = Double(hit?.count ?? 0) / Double(missing.reduce(0) { $0 + $1.count })
+        #expect(covered > 0.25 && covered < 0.75, "Šrafa zabírá \(covered) řádku místo asi poloviny.")
     }
 
     /// **Tenhle test tvrdí, že se něco nestalo**: bez `missingLines` se nešrafuje nic. Jinak by
@@ -123,16 +126,15 @@ struct DiffMissingRowTests {
         }
     }
 
-    /// Plocha díry **nahrazuje** pozadí druhu řádku, nesčítá se s ním: prázdná strana se skládá jako
-    /// kontext, ale kdyby se ta množina spletla s přidaným řádkem, kreslila by se šrafa nad zelenou
-    /// a řádek by tvrdil obojí naráz.
-    @Test("Plocha díry nahrazuje pozadí druhu řádku")
-    func holeReplacesTheKindBackground() throws {
+    /// Šrafa leží **nad** plochou řádku, nenahrazuje ji: plocha díry je v návrhu `transparent`,
+    /// takže pod pruhy prosvítá to, co je pod nimi. Tvrdí se to na přidaném řádku, protože tam je ta
+    /// plocha vidět — a kdyby ji šrafa překrývala celou, zmizela by zelená.
+    @Test("Šrafa se kreslí nad plochou řádku, ne místo ní")
+    func hatchDrawsOverTheRowPlane() throws {
         let view = column(missing: [2])
         let added = try shades(ofRow: 2, in: view)
-        let plane = try #require(added.first).color
-        #expect(close(plane, try dark(Palette.diffMissing)), "Na díře leží \(plane) místo Palette.diffMissing.")
-        #expect(!close(plane, try dark(Palette.diffAdded)), "Na díře leží pozadí přidaného řádku.")
+        #expect(added.contains { close($0.color, try! dark(Palette.diffAdded)) }, "Pozadí přidaného řádku zmizelo pod šrafou.")
+        #expect(added.contains { close($0.color, try! dark(Palette.diffMissingStripe)) }, "Na řádku není pruh šrafy.")
     }
 
     /// Které řádky jsou prázdné, ví jedině dvojice — přepis pole na množinu indexů.

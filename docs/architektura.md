@@ -537,26 +537,35 @@ cesty nerozešly.
 
 ### Barvy diffu (#277)
 
-Pozadí řádků, word-level vrstva, prázdný protějšek a znak `+`/`−` jdou z `Palette` — vyčíslené
-dvojice světlá/tmavá, žádné krytí. Hodnoty a jejich čísla jsou u tokenů (`Palette.diffAdded`
-a dál); tady je to, co se u toho nemá rozbít:
+Pozadí řádků, word-level vrstva, šrafa prázdného protějšku a znak `+`/`−` jdou z `Palette` —
+vyčíslené dvojice světlá/tmavá, žádné krytí. Hodnoty jsou **z návrhu** (tokeny `--add-bg`,
+`--add-hi`, `--del-bg`, `--del-hi` a `tr.empty-side`); čísla u každé jsou u tokenů
+(`Palette.diffAdded` a dál). Tady je to, co se u nich nemá rozbít:
 
 - **Barva plochy nesmí být krytí nad podkladem.** Tohle je celé #277 a je to tentýž argument, jaký
   #185 zapsalo u `critLine`: skrz krytí prosvítá to, na čem barva leží, takže **není hodnotou, ale
   výsledkem**. V tmavém režimu se systémová zelená na 12 % mísila směrem k černé a plocha přidaného
-  bloku vycházela `#152B22`, tedy tmavý obdélník. Hlídá to test na **alfu** všech šesti tokenů.
+  bloku vycházela `#152B22`, tedy tmavý obdélník. Hlídá to test na **alfu** všech pěti tokenů.
 - **Odlišení ploch se měří ΔE2000, čitelnost textu nad nimi WCAG.** Jedna míra nestačí a je to
   změřené: word-level vrstva měla do #277 v tmavém režimu ΔE 29,5 (plocha jak vyšitá) a kontrast
   zeleného řetězce Darculy **1,27**, tedy nepřečtitelný kód právě na tom slově, které se změnilo.
   Tvrzení jsou proto v testech vždycky dvě.
-- **Sytost je levnější než světlost.** WCAG kontrast textu závisí jen na světlosti, kdežto ΔE
-  plochy roste i se sytostí — tmavé tóny proto vznikly mixem `ok`/`crit` **do černé**, ne do plochy.
-  Odlišení tím vyrostlo (ΔE 16,0 → 21,8 u přidaného) a syntaxe zůstala na svém (3,73 → 3,76).
-  Kdo bude hodnoty ladit, má tímhle směrem rezervu; zesvětlením ji nemá.
+- **Světlá větev je z návrhu doslova, tmavá je vědomá odchylka** — a ta odchylka je celé jádro #277:
+  návrh má v tmavém režimu `rgba(63, 185, 80, 0.13)`, což nad `panel` složí `#172922` a ΔE 14,6, tedy
+  **reprodukuje přesně tu stížnost** (systémová zelená měla 16,0). Vyčíslené `#0F2C13` má ΔE 21,8.
+- **Sytost je levnější než světlost.** WCAG kontrast textu závisí jen na světlosti, kdežto ΔE plochy
+  roste i se sytostí — tmavé tóny proto vznikly mixem `ok`/`crit` **do černé**, ne do plochy.
+  Odlišení tím vyrostlo (16,0 → 21,8 u přidaného) a syntaxe zůstala na svém (3,73 → 3,76). Kdo bude
+  hodnoty ladit, má tímhle směrem rezervu; zesvětlením ji nemá.
 - **Zelená a červená mají v diffu jeden zdroj**, `DiffLineView.signColor(of:)` (#156) — bere ji
   `+`/`−` v řádku, souhrn `+X −Y` v hlavičce i čtverečky poměru (#218). Od #277 vrací
-  `Palette.ok`/`crit`, takže systémová zelená z diffu zmizela úplně; **plochy** řádků jsou ten tón
-  zamíchaný do podkladu, tedy tatáž rodina.
+  `Palette.ok`/`crit`, tak jak to má návrh (`tr.add td.sg { color: var(--ok) }`), takže systémová
+  zelená z diffu zmizela úplně; **plochy** řádků jsou ten tón zamíchaný do podkladu.
+- **Word-level vrstva drží pravidlo návrhu, ne jeho hodnotu.** `--add-hi` je `ok` na 30 % nad pozadím
+  řádku — a to pozadí se u #277 změnilo, takže se vrstva přepočítala (`#1D5625`). Je to vědomá výměna:
+  méně hlasitá než dřív (ΔE 13,9 proti 29,5), zato se pod ní dá číst (řetězec 2,17 proti 1,27).
+  Rozhodnutí z #153 tím drží v tom, na čem stálo: vrstva musí být na první pohled jiná plocha než
+  zbytek řádku, a práh je ΔE 10.
 - **Pruh rozsahu komentáře zůstává průhledný schválně** (`rangeTint`, `dragTint`): musí se s barvou
   druhu řádku **smíchat**, aby pod ním zůstalo vidět, co je přidané. Je to tedy jediné krytí, které
   v diffu zbylo, a je to jiný případ než plocha — hodnota se tu měnit *má*. Změřeno nad novým
@@ -566,25 +575,27 @@ a dál); tady je to, co se u toho nemá rozbít:
   (`.background(barva).background(pruh)`) a fungovalo to jen proto, že pozadí bylo průhledné —
   s vyčíslenou barvou by pruh zmizel. Blok kódu (`DiffTextView.drawRows`) měl správné pořadí
   odjakživa, takže se tím obě cesty srovnaly.
-- **Prázdný protějšek se odlišuje texturou, ne světlostí** (`DiffMissingHatch`). V tmavém režimu už
-  pod `surface` není kam ztmavovat (plocha díry je od plochy obsahu ΔE 3,3) a zesvětlení by
-  znamenalo, že díra křičí hlasitěji než změna vedle ní. Plocha proto zůstává **tišší** (tmavší než
-  obsah) a poznávacím znakem je šrafa, která je od ní ΔE 11,3.
+- **Prázdný protějšek odlišuje textura, ne plocha** (`DiffMissingHatch`). Návrh na to má šrafu
+  u `tr.empty-side` (`repeating-linear-gradient(45deg, transparent 0 5px, ink 5 % 5px 10px)`)
+  a v tmavém režimu to jinak ani nejde: pod plochou obsahu není kam ztmavovat (pruh je od ní ΔE 3,4)
+  a zesvětlením by díra křičela hlasitěji než změna vedle ní. **Plocha se proto nekreslí vůbec** —
+  v návrhu je pod gradientem `transparent`. Nese to **rozestup** (pruh 5 bodů, mezera 5), ne kontrast.
+- **Šrafa leží nad plochami řádků, ne pod nimi.** Kreslená před nimi zmizí pod pozadím řádku —
+  vyzkoušeno, byla to první verze #277 a chytil to test nad bitmapou.
+- **Vodorovný krok pruhů je √2× perioda.** Sklon 45° znamená, že vzdálenost napříč pruhy (kterou měří
+  CSS gradient) není ta vodorovná; bez toho přepočtu vyjde šrafa hustší, než jakou návrh kreslí.
+  A **směr pruhů je z vyrenderované sekce návrhu**, ne odvozený z `45deg`: gradient míří k pravému
+  hornímu koutu, ale pruhy leží napříč jeho osou, takže se to snadno otočí — první verze #277 je
+  měla zrcadlově.
 - **Které řádky jsou prázdné, řekne sloupci dvojice** (`DiffTextView.missingLines`), protože
   v textu je prázdná strana složená jako prázdný **kontextový** řádek (`DiffLine.blank`) — jinak by
   se sloupce nezarovnaly. Do #277 se ten stav nekreslil vůbec, takže „tady řádek není“ a „řádek se
   nezměnil“ byla tatáž plocha (ΔE 0,0). **Rozšířit `DiffLine.Kind` o `missing` se zamítlo**: je to
   vlastnost jednoho rozvržení, ne řádku souboru, a protáhla by se parserem, `Policy` i kotvami
   komentářů.
-- **Plocha díry nahrazuje pozadí druhu řádku, nesčítá se s ním.** Prázdná strana je složená jako
-  kontext (tedy bez pozadí), ale kdyby se ta množina spletla s přidaným řádkem, kreslila by se
-  šrafa nad zelenou a řádek by tvrdil obojí naráz. Hlídá to test.
 - **Obrys bubliny nálezu je pořád jedna barva pro všechny podklady** (`critLine`, #185), takže se po
   každé změně pozadí musí přeměřit nad všemi: vychází 1,69 na přidaném a 1,87 na odebraném řádku
   v tmavém režimu (do #277 to bylo 1,68 a 1,83), tedy nezměněno.
-- **Světlý režim se nemění.** Plochy zůstaly na hodnotách, které vycházely dosud — přepočet z `ok`
-  do bílé je na obou mírách horší (ΔE 10,1 → 8,3, řetězec 4,82 → 4,52), protože `ok` je pro světlý
-  režim tmavá zelená. Změnil se v něm jedině **znak** `+`/`−`, a to k lepšímu: 2,01 → 4,60.
 
 Word-level rozdíl (#153) — u přepsaného řádku svítí jen ta část, která se změnila. `WordDiff` je
 čistá funkce v `App/Diff/`, obarvení dělá `DiffTextView`. Co se u toho nemá rozbít:

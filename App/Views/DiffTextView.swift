@@ -284,19 +284,12 @@ final class DiffTextView: NSTextView {
     /// Přes **celou šířku** view, ne jen za textem: pozadí, které končí s posledním znakem, čte se
     /// jako podtržení, ne jako řádek diffu.
     private func drawRows(in dirtyRect: NSRect) {
-        for run in missingRuns() where run.intersects(dirtyRect) {
-            drawMissing(in: run)
-        }
         for (index, line) in lines.enumerated() {
             guard let rect = frame(ofLine: index) else { continue }
             let strip = NSRect(x: 0, y: rect.minY, width: bounds.width, height: rect.height)
             guard strip.intersects(dirtyRect) else { continue }
 
-            // Prázdný protějšek dostal plochu i šrafu výš, po úsecích — pozadí druhu řádku by mu
-            // ji překreslilo. **Pruh rozsahu se mu ale nebere**: dneska na prázdnou stranu
-            // nepadne (kotvu nemá, viz `DiffPairBlockRowView.rows(in:on:)`), a kdyby to někdy
-            // padnout mělo, má se kreslit, ne tiše zmizet.
-            if !missingLines.contains(index), let background = DiffTextView.background(of: line.kind) {
+            if let background = DiffTextView.background(of: line.kind) {
                 background.setFill()
                 strip.fill()
             }
@@ -304,6 +297,11 @@ final class DiffTextView: NSTextView {
                 tint.setFill()
                 strip.fill()
             }
+        }
+        // **Šrafa až nad plochami**, jako v návrhu, kde je to gradient nad `transparent`. Kreslená
+        // před nimi by zmizela pod pozadím řádku — vyzkoušeno, byla to první verze #277.
+        for run in missingRuns() where run.intersects(dirtyRect) {
+            drawMissing(in: run)
         }
     }
 
@@ -330,16 +328,12 @@ final class DiffTextView: NSTextView {
         return result
     }
 
-    /// Prázdný protějšek dvojice (#277): plocha díry a nad ní šrafa.
+    /// Prázdný protějšek dvojice (#277): šrafa přes celý úsek.
     ///
-    /// Kreslí se **místo** pozadí druhu řádku, ne přes něj — prázdná strana se do textu skládá jako
-    /// prázdný kontextový řádek, takže by se jinak nakreslila plocha obsahu a šrafa nad ní by
-    /// tvrdila obojí naráz. Šrafa se ořezává na úsek, protože pruhy jsou o jeho výšku posunuté
-    /// doleva (sklon 45°) a bez ořezu by přetekly nad něj a pod něj.
+    /// **Plocha se nekreslí**, jen pruhy — v návrhu je pod gradientem `transparent`, takže tam, kde
+    /// řádek není, prosvítá plocha obsahu. Šrafa se ořezává na úsek, protože pruhy jsou o jeho výšku
+    /// posunuté doleva (sklon 45°) a bez ořezu by přetekly nad něj a pod něj.
     private func drawMissing(in run: NSRect) {
-        NSColor(Palette.diffMissing).setFill()
-        run.fill()
-
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: run).setClip()
         NSColor(Palette.diffMissingStripe).setStroke()
