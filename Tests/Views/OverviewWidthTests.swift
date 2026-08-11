@@ -144,6 +144,12 @@ struct OverviewWidthTests {
     /// `ImageRenderer`u je v systémovém barevném prostoru, takže literál `1,0,1` v ní přesně
     /// nesedí — a test by pak hlásil přetečení přes celé plátno i tam, kde se nic nenakreslilo.
     /// První verze sondy na tom stála a vypadalo to jako chyba v aplikaci.
+    ///
+    /// **Čtou se surové bajty, ne `NSColor` na pixel** (nález Copilota). `colorAt(x:y:)`
+    /// s `usingColorSpace(.sRGB)` vyrobí na každý bod dva objekty, a plocha k prohledání je
+    /// `přesah × výška` u každého případu a každé šířky — celkem ~5,4 milionu bodů, tedy ~21 milionů
+    /// `NSColor`ů. Změřeno: **13,2 s → 2,5 s** za celou suitu; převod barevného prostoru přitom
+    /// nebyl na nic potřeba, protože oba rendery jdou stejnou cestou a porovnávají se navzájem.
     private func rightmostPaintedColumn(
         of image: NSBitmapImageRep,
         against empty: NSBitmapImageRep,
@@ -152,32 +158,35 @@ struct OverviewWidthTests {
         let start = Int(width.rounded())
         // **Nesedící plátna se ohlásí, nevrátí nulu.** Nula by znamenala „nic nepřeteklo“, takže
         // by rozbitá sonda vyšla jako zelený test — a to je ten nejhorší možný způsob, jak se
-        // tenhle test může pokazit: přestane měřit a nikdo se to nedozví.
+        // tenhle test může pokazit: přestane měřit a nikdo se to nedozví. Platí to i o rozvržení
+        // bajtů: bez shody v něm by se porovnávaly různé pixely.
         try #require(image.pixelsWide == empty.pixelsWide, "plátna se rozešla v šířce")
         try #require(image.pixelsHigh == empty.pixelsHigh, "plátna se rozešla ve výšce")
+        try #require(image.bytesPerRow == empty.bytesPerRow, "plátna se rozešla v délce řádku")
+        try #require(image.bitsPerPixel == empty.bitsPerPixel, "plátna se rozešla v bitech na pixel")
+        try #require(!image.isPlanar && !empty.isPlanar, "planární bitmapa má jiné rozvržení bajtů")
         try #require(image.pixelsWide > start, "plátno není širší než tab, přesah se nemá kam vejít")
+
+        let bytesPerPixel = image.bitsPerPixel / 8
+        try #require(bytesPerPixel > 0, "bitmapa hlásí nulovou velikost pixelu")
+        let painted = try #require(image.bitmapData, "z renderu obsahu se nedají čít bajty")
+        let background = try #require(empty.bitmapData, "z renderu podkladu se nedají čít bajty")
+
         for x in stride(from: image.pixelsWide - 1, through: start, by: -1) {
-            for y in 0..<image.pixelsHigh
-            where !Self.matches(image.colorAt(x: x, y: y), empty.colorAt(x: x, y: y)) {
-                return x - start + 1
+            for y in 0..<image.pixelsHigh {
+                let offset = y * image.bytesPerRow + x * bytesPerPixel
+                for byte in 0..<bytesPerPixel
+                where abs(Int(painted[offset + byte]) - Int(background[offset + byte])) > Self.tolerance {
+                    return x - start + 1
+                }
             }
         }
         return 0
     }
 
-    /// Sedí pixel na referenční podklad? Tolerance je kvůli antialiasingu na hraně tabu.
-    ///
-    /// **Nečitelný pixel se počítá jako nakreslený**, tedy jako přesah. Je to schválně ta strana,
-    /// na které se sonda ozve: kdyby se počítal jako podklad, bitmapa, ze které se nedá čít, by
-    /// vyšla jako čistý `Přehled`.
-    private static func matches(_ pixel: NSColor?, _ reference: NSColor?) -> Bool {
-        guard let pixel = pixel?.usingColorSpace(.sRGB), let reference = reference?.usingColorSpace(.sRGB) else {
-            return false
-        }
-        return abs(pixel.redComponent - reference.redComponent) < 0.02
-            && abs(pixel.greenComponent - reference.greenComponent) < 0.02
-            && abs(pixel.blueComponent - reference.blueComponent) < 0.02
-    }
+    /// O kolik se smí bajt lišit, než se to počítá za nakreslené. Pět z 255 je kvůli antialiasingu
+    /// na hraně tabu; odpovídá to 0,02 v podílu, na kterém sonda stála, dokud četla `NSColor`.
+    private static let tolerance = 5
 
     /// Snímek do scratchpadu, když si o to sonda řekne (`PRISM_RENDER_DIR`). Kouká se na to okem:
     /// z počtu bodů se nepozná, **co** přeteklo.

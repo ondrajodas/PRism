@@ -1218,6 +1218,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     `ImageRenderer`u je v systémovém barevném prostoru, takže literál `1,0,1` v ní přesně nesedí.
     První verze sondy na tom stála a hlásila přetečení přes celé plátno i tam, kde se nic
     nenakreslilo — vypadalo to jako chyba v aplikaci, a byla v sondě.
+  - **Čtou se surové bajty (`bitmapData`), ne `NSColor` na pixel** (nález Copilota na #291).
+    Plocha k prohledání je `přesah × výška` u každého případu a každé šířky, tedy ~5,4 milionu
+    bodů; `colorAt(x:y:)` s `usingColorSpace(.sRGB)` z toho udělá ~21 milionů objektů. Změřeno
+    **13,2 s → 2,5 s** za suitu (a celý běh 17,5 s → 7,5 s, protože tyhle tři testy byly úzké
+    hrdlo). Převod barevného prostoru přitom nebyl na nic potřeba: oba rendery jdou stejnou cestou
+    a porovnávají se navzájem. Cenou je, že se musí ověřit i **rozvržení bajtů** (`bytesPerRow`,
+    `bitsPerPixel`, `isPlanar`) — bez shody v něm by se porovnávaly různé pixely.
 
   **Vyzkoušené vložením regrese** (obě poloviny opravy zvlášť): bez `narrowingWidth(by: 32)` u tabu
   16 bodů přesahu, bez `narrowingWidth(by: 26)` u karty 10 bodů. A z toho vyšlo i jedno pravidlo
