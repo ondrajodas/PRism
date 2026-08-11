@@ -1200,6 +1200,40 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   stavy**, protože právě ty se odebráním bloku dají potichu rozbít: `Načítám popis…` (detail
   nedorazil) a `Autor k PR nic nenapsal.` (autor nic nenapsal) musí zůstat **dva různé stavy**,
   a k tomu nejchudší možný `Přehled` — bez dlaždic i bez checků — nesmí být prázdná plocha.
+- **Šířka `Přehledu` (#291)** — `OverviewWidthTests`, přes pásmo šířek 128–1180. Tvrdí jedinou věc:
+  **za pravou hranou tabu se nekreslí nic**. Vzniklo z regrese po #279, kdy sazba Markdownu přešla
+  na `filling()`, `Přehled` si nezúžil předávanou šířku o svá odsazení a karta s popisem vyšla
+  o 42 bodů širší než tab.
+
+  Tři věci, na kterých ten test stojí a bez kterých je slepý:
+
+  - **Měří se pixely, ne rámečky.** `frame(width:)` z `filling()` je tvrdý rámec, takže dítě, které
+    se do něj nevejde, přeteče **vizuálně** a rodičova velikost se nezmění — ptát se rodiče na
+    `fittingSize` znamená ptát se toho, kdo o chybě neví. Obsah se proto kreslí na plátno **širší**
+    než tab a v tom přesahu se hledají pixely.
+  - **Bez `ScrollView`u** (`OverviewView.content`, ne `body`). `NSScrollView` obsah na svou šířku
+    ukrojí, takže rozbitý stav vyjde na renderu skoro jako opravený — jen bez pravé hrany karty.
+    Přesně tím je tahle regrese v aplikaci tak nenápadná; `content` je `internal` kvůli tomu.
+  - **Podklad se porovnává proti druhému renderu**, ne proti zapsané purpurové: bitmapa z
+    `ImageRenderer`u je v systémovém barevném prostoru, takže literál `1,0,1` v ní přesně nesedí.
+    První verze sondy na tom stála a hlásila přetečení přes celé plátno i tam, kde se nic
+    nenakreslilo — vypadalo to jako chyba v aplikaci, a byla v sondě.
+
+  **Vyzkoušené vložením regrese** (obě poloviny opravy zvlášť): bez `narrowingWidth(by: 32)` u tabu
+  16 bodů přesahu, bez `narrowingWidth(by: 26)` u karty 10 bodů. A z toho vyšlo i jedno pravidlo
+  do kódu: rámec, ve kterém se má přetečení dát změřit, **musí zůstat pružný** — s `filling()` na
+  odsazeném těle popisu zůstal test zelený i po smazání toho zúžení.
+
+  **Prázdné a nedoručené stavy se měří zvlášť** (`nil` proti `""`), protože jsou to jiné podstromy
+  než sazba a nesmí se slít. Že přetečení bylo doopravdy v sazbě, se poznalo právě po nich: zeleně
+  vycházely i před opravou.
+- **Sonda `Přehledu` (#291)** — `OverviewRenderProbe`, gated `PRISM_MEASURE`. Nic netvrdí, jen
+  vyrendruje tab přes `NSHostingView` ve třech šířkách a obou režimech, aby se dal **vidět**.
+  Existuje vedle měření proto, že „vejde se hlavička do zúženého tabu“ je otázka na vzhled —
+  a `ImageRenderer` na ni odpovědět neumí: `Link` v něm vyjde jako **žlutý placeholder**, takže se
+  z něj šířka popisku `Otevřít na GitHubu` nepozná. A byl to zrovna ten popisek, který v #291
+  chyběl. `NSHostingView` kreslí skutečnou hierarchii, takže odkaz v něm stojí ve své šířce —
+  ověřeno, čitelný celý.
 - **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
   (řádek plný nul utopí to jedno číslo, na kterém záleží) a **ukázání shodné sha nálezů**, ze které
   neplyne nic. Nejcennější test je právě ten druhý: shodná se nekreslí, rozešlá ano a je označená
@@ -1581,7 +1615,16 @@ Dva zádrhely, které to má:
   vypadá, že se stav vůbec nezobrazil. Stejná kategorie jako `.borderless`. Kde na kontrole
   záleží, se hodí vlastní rámeček (`background(…, in: .rect(cornerRadius:))`), který
   SwiftUI kreslí sám.
-- **`Link` vyjde jako žlutý placeholder.** V aplikaci je v pořádku, offscreen ne.
+- **`Link` vyjde jako žlutý placeholder.** V aplikaci je v pořádku, offscreen ne. **V `NSHostingView`
+  se ale vykreslí celý** (#291) — i s popiskem a v jeho skutečné šířce, protože tam vzniká pravá
+  hierarchie, ne SwiftUI náhrada. Kde na šířce popisku v odkazu záleží, je to jediná cesta;
+  z `ImageRenderer`u se jen pozná, **že** tam odkaz je.
+- **Přetečení šířky se nezměří tam, kde je nad ním tvrdý rámec** (#291). `frame(width:)` — tedy
+  i `filling()` s ustavenou šířkou — drží svůj rozměr i nad dítětem, které se do něj nevejde: dítě
+  přeteče **vizuálně** a rodič o tom nic nehlásí. Sonda proto nesmí stát na `fittingSize` rodiče
+  a nesmí mít mezi měřeným místem a plátnem konkrétní rámec; kreslí se na plátno **širší** než
+  měřená šířka a v přesahu se počítají pixely. `ScrollView` na cestě má tentýž efekt, jen horší —
+  ten přesah **ukrojí**, takže rozbitý stav vyjde jako opravený.
 - **`NSViewRepresentable` se v `ImageRenderer`u nevykreslí** — vyjde žlutý placeholder přes celé
   plátno, jako `List`. Od #157 se tím kreslí bloky kódu v diffu, takže takhle se vzhled diffu
   zkontrolovat nedá.

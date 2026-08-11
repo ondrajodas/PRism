@@ -1649,7 +1649,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Konverzace` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru |
-| `OverviewView` | Tab `Přehled`: popis PR, fakta, kontroly a co se změnilo od minule |
+| `OverviewView` | Tab `Přehled`: popis PR, fakta a co se změnilo od minule (kontroly mají od #215 vlastní tab). Obsah je v `content` **mimo `ScrollView`** a `internal` schválně — přes `body` se šířka změřit nedá, viz #291 |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka a obsah vpravo; slévá za sebou jdoucí commity |
 | `ConversationEntryView` | Položka osy: karta cizího review nebo komentáře, řádek události, vlákno bez kotvy |
@@ -1994,6 +1994,34 @@ Jak to drží pohromadě:
 **Co zatím pružné zůstalo:** poloviny v `DiffPairView`. `maxWidth: .infinity` tam drží **stejně
 široké sloupce**, takže `filling()` by každé polovině dalo plnou šířku a rozvržení by se rozsypalo.
 Potřebuje to krok „poloviční šířka“ a je to samostatná práce.
+
+### Kdo přejde na `filling()`, musí přejít i na `narrowingWidth()` (#291)
+
+**`filling()` je konkrétní rámec, takže si `availableWidth` bere doslova** — a to je oprava proti
+tomu, co dělal `frame(maxWidth: .infinity)`. Pružný rámec **přijme návrh**, takže se sám přizpůsobí
+tomu, kolik místa rodič dává; konkrétní rámec si vezme šířku z prostředí a **rodičovo odsazení ho
+nezajímá**. Kdo tedy vymění jedno za druhé někde uvnitř odsazeného bloku, přidá k němu tolik bodů,
+kolik má ten blok odsazení.
+
+Takhle vznikla #291: #279 nahradila v sazbě Markdownu (`MarkdownText`) šest pružných rámců za
+`filling()`. V konverzaci to prošlo, protože `ConversationEntryView` a `ThreadBubbleView` mají
+`narrowingWidth(by: 22)` z #220. `OverviewView` ho ale nemá **ani na svém `padding(16)`, ani na
+`padding(.horizontal, 13)` karty s popisem**, takže popis PR dostal šířku celého tabu a karta kolem
+něj vyšla o 42 bodů širší, než jaké je místo. V okně to nebylo vidět jako přetečení, ale jako
+**neukončený boxík**: `ScrollView` je `NSScrollView`, takže těch 42 bodů uřízl — a s nimi pravou
+hranu karty a popisek `Otevřít na GitHubu`.
+
+Dvě věci, které z toho platí dál:
+
+- **Zúžení se přidává na každé odsazení na cestě**, ne jen na tom vnějším. `Přehled` má dvě
+  (`narrowingWidth(by: 32)` u tabu, `narrowingWidth(by: 26)` u karty) a chyběla obě.
+- **Rámec, ve kterém se má přetečení dát změřit, musí zůstat pružný.** `Přehled` proto **schválně**
+  drží `frame(maxWidth: .infinity)` na hranici `ScrollView`u a na obou rámcích karty: konkrétní
+  rámec si drží svůj rozměr i nad dítětem, které se do něj nevejde, takže by chybějící zúžení
+  **schoval** — sazba by ležela na pravém obrysu a karta by zvenčí vypadala v pořádku. Vyzkoušené
+  vložením regrese: s `filling()` na odsazeném těle popisu zůstaly `OverviewWidthTests` zelené
+  i po smazání `narrowingWidth(by: 26)`. Cena je jedna úroveň vyjednávání na tab, což proti
+  ~5,5× na úroveň v zanořeném seznamu není nic — tady jde o jeden blok, ne o tisíc řádků.
 
 ## Okno nastavení (`App/Views/Settings/`)
 
@@ -2571,6 +2599,24 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     důvod, proč nálezy neplatí (tvrdá podmínka č. 5), a je žlutá jako stav `zastaralé`.
   - **Mřížka čtyř sloupců, ne `HStack`.** V `HStacku` se dvě dlaždice roztáhnou přes celou šířku
     a číslo v nich plave uprostřed prázdna; v mřížce si drží čtvrtinu bez ohledu na počet.
+- **Karta s popisem musí skončit uvnitř tabu** (#291) — obojí odsazení na cestě k sazbě se
+  odečítá z předávané šířky, viz *Kdo přejde na `filling()`* v sekci o šířce. Co k tomu drží
+  hlavička karty:
+  - **Prázdné a nedoručené se nesmí slít.** `nil` je `Načítám popis…` se spinnerem, prázdný řetězec
+    `Autor k PR nic nenapsal.` — PR bez popisu je běžný stav, kdežto nenačtený detail je stav, ve
+    kterém se ještě čeká.
+  - **Hlavička je jeden řádek, ať je tab jak chce úzký** (`ViewThatFits`, dvě podoby). Se správnou
+    šířkou se čtyři údaje do zúženého tabu nevejdou — a `HStack` je nakrájí **uvnitř slov**:
+    `otevře/ný` v pilulce stavu a `Otevřít na / GitHub / u` v odkazu, tedy tři řádky navíc v kartě,
+    která má být hlavička a linka. Druhá podoba je **bez relativního času**: ze čtyř údajů je
+    nejméně potřebný a stejný nese i řádek ve frontě a hlavička PR nad tabem. Vypadnout celý je
+    čitelnější než jeho zbytek — pokus nechat ho zkracovat skončil osamoceným `r` z `minulý rok`.
+  - **Odkaz ustupuje poslední, ale pružný zůstává.** Je to jediná věc v hlavičce, na kterou se dá
+    kliknout (`layoutPriority(1)`), takže popisek na půl slova je horší než zkrácené jméno autora.
+    Rigidní být přesto nesmí: tab se dá stlačit až na ~128 bodů (okno na podlaze 700, rail 52,
+    panel vytažený na 520) a nezkratitelný odkaz by kartu roztlačil, tedy vyrobil zpátky #291.
+  - **`lineLimit` z řádku pod `Link` nedosáhne.** Změřeno renderem: odkaz se zalomil na tři řádky,
+    i když ho `HStack` nad ním měl zakázaný. Musí být uvnitř, na `Label`u.
 - **Sazba položek konverzace je z návrhu** (#216). U #183 se konverzace přestěhovala, ale
   položky zůstaly, jak vypadaly v `Přehledu` od #72 — a vedle sebe s návrhem to bylo zřetelné.
   Ověřovalo se to **vyrenderovaným mockupem vedle offscreen renderu** položek, ne po paměti;
