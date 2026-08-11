@@ -1655,6 +1655,13 @@ první, a zpátky přes domů na poslední. Snímky se pořizují **uvnitř téh
 vytáhl dopředu; snímek okna, které není vpředu, umí být z předchozího stavu (stalo se: snímek
 tvrdil prázdný pruh nad oknem, které už dvě záložky mělo).
 
+**Že je slot vpředu, se ověřuje před každým stiskem, ne jednou na začátku skriptu** (#245).
+Aktivace se umí vrátit zpátky uprostřed posloupnosti a klávesy pak jdou do cizí aplikace: ze
+čtyř snímků vyšel pruh nedotčený (a semafor na nich šedý, což je ta jediná stopa) a z předchozího
+běhu vypadalo přepnutí, jako by šlo **opačným směrem**. Obojí byla porucha měření, ne aplikace —
+po přidání kontroly `NSWorkspace.frontmostApplication` do každého stisku vyšla posloupnost napoprvé
+a znovu. Šedý semafor na snímku proto znamená **zahodit celé měření**, ne hledat chybu v okně.
+
 **Systémové záložky oken se nedají otestovat, jen změřit** — a měří se to na položkách nabídky
 `Okno` z accessibility (`kAXMenuBarAttribute`), ne kliknutím do menu. Nad **dvěma** otevřenými
 okny je `Sloučit všechna okna` i `Zobrazit další panel` zakázané, a to **i bez**
