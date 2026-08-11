@@ -595,7 +595,7 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
 9. **Revize okna** (M9) — nový vizuální jazyk podle návrhu ze srpna 2026 a přestavba okna
    na záložky. Šestnáct issues ve čtyřech vlnách; **pořadí je v popisu milníku**, protože se
    podle něj rozhoduje, co se dá dělat souběžně. Hotové: řádek fronty #172, co se změnilo od
-   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219, sazba bloku „od minule“ #226, sazba hlavičky PR #218, odpočet příštího tiku #237 a přišpendlený blokující nález #185. Mimo plán přibylo
+   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219, sazba bloku „od minule“ #226, sazba hlavičky PR #218, odpočet příštího tiku #237, přišpendlený blokující nález #185 a command palette ⌘K #184. Mimo plán přibylo
    **#220 — okno vytuhlo na PR s ~2000 změněnými řádky**: pružná šířka na každé úrovni zanoření
    stojí ~5,5× na úroveň, takže se šířka teď měří jednou a předává dolů. Odpadlo z toho #223
    (blok bez stropu) a #224 (barvení bez cache) do milníku Průběžné — obojí se měřením vyloučilo
@@ -886,6 +886,44 @@ v `Policy.tally`). A **složení panelu se přestěhovalo do `AppStore`**, proto
 přidaná z diffu musí umět panel rozložit sama; dokud to rozhodnutí bydlelo v `@State`, nešlo ho
 otestovat. Jeden reálný nález přišel z testu, ne z review: session spadlá při startu neznačila
 selhání v žádné fázi, takže dráha vypadala k nerozeznání od té, co ještě nezačala.
+
+**Command palette ⌘K (#184)** — jediná obrazovka revize okna, která v aplikaci neměla předobraz.
+Jedno pole nad **nálezy, soubory otevřeného PR, pull requesty a akcemi**, ve čtyřech skupinách
+s pevným pořadím: nálezy první, protože je to jediná věc, kterou tahle aplikace má a prohlížeč ne.
+Rozdělení je `Policy` (co sedne, jak se to váží, které akce mají teď co dělat), `AppStore+Palette`
+(katalog z paměti a vykonání) a view, ve kterém **není žádné `if` nad výsledky**.
+
+Tři rozhodnutí, která nebyla v zadání a stojí za zapsání. **Katalog se skládá při každém stisku
+klávesy**, ne jednou při otevření: snímek by za pár sekund ukazoval nálezy z review, které mezitím
+doběhlo — a je to změřené, ne odhadnuté (200 řádků 1,5 ms, 2000 řádků 17,6 ms na stisk, gated
+`PRISM_MEASURE`). **Nálezy se hledají ve všech PR, soubory jen v otevřeném**, protože diff jiného
+v paměti není a dotáhnout si ho by byl ten nový dotaz na GitHub, který zadání zakazuje. A **filtr
+seznamu paletu nezužuje** — filtr je zúžení seznamu, kdežto paleta je způsob, jak něco najít;
+hledání, ze kterého vypadne schovaný PR, je k nepotřebě právě tehdy, když je filtr zapnutý.
+
+Zkratka `⌘↵` (otevřít na GitHubu) se musela **vzít detailu PR**, který na ní má potvrzení odeslání
+review: dvě tlačítka se stejnou zkratkou v jednom okně znamenají, že vyhraje to zaregistrované
+později. Detail ji proto nad otevřenou paletou zakazuje, a právě kvůli tomu je `isPaletteOpen` ve
+storu, ne v `@State` okna. Návrh měl u „pustit review“ `⌘⇧R`; nakreslená není, protože ta zkratka
+v aplikaci pouští review na **všechno, co neběželo** (dashboard) — popiska klávesy, která dělá něco
+jiného, je lež o tom, co okno umí.
+
+Cestou vyšlo najevo, že **dva zdrojáky se stejným jménem položí build**, i když leží v různých
+podsložkách (`Multiple commands produce … CommandPalette.stringsdata`) — zapsané v `CLAUDE.md`
+u buildable folderů.
+
+**Tři věci se dodělaly po proklikání** (pořád #184). **Fokus do pole hned po ⌘K** — paleta, do které
+se musí kliknout, není „⌘K a piš“. Vybráno měřením na běžícím okně, ne přečtením: `onAppear`, `task`
+bez yieldu i `defaultFocus` nedají fokus **nikdy** (ne později), protože přiřazení ve stejném
+průchodu, ve kterém pole vzniká, SwiftUI zahodí; s `task { await Task.yield(); … }` je fokus v poli
+~40 ms po ⌘K. U toho se změřilo i to, co u fokusu v textovém poli praská jinde: `esc` paletu zavírá
+dál a `↑↓` chodí po řádcích, protože key equivalent tlačítka se vyhodnocuje dřív než editor textu.
+A **hledá se i podle autora a repozitáře** — s tím, že obojí přesídlilo do **podtitulku** řádku
+(`connection#21663 · sykora-ji`) a shoda se v něm **zvýrazňuje**. Autor v klíčových slovech totiž
+hledání umožňoval už předtím, jen se nikde nekreslil: dotaz na jméno vytáhl PR, ve kterém to jméno
+nebylo vidět, a to je k nerozeznání od chyby hledání. Soubory podle repa nejdou (jsou všechny
+z jednoho otevřeného PR, takže by se vytáhly všechny naráz) a autor u nálezu taky ne — jméno, které
+k nálezu patří, je jméno revieweera.
 
 **Ukončení aplikace zabíjí běžící session (#264)** — do té doby to dělal jen dialog z #94, který
 tvrdil, že se session zabije, ale nikdo ji nezabíjel: `applicationShouldTerminate` vrátil

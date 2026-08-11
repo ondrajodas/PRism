@@ -36,9 +36,9 @@ struct PullRequestRow: View {
 
     private var headline: some View {
         HStack(spacing: 6) {
-            Image(systemName: "arrow.triangle.pull")
+            Image(systemName: PullRequestStateAppearance.symbol)
                 .font(.caption)
-                .foregroundStyle(stateTint)
+                .foregroundStyle(PullRequestStateAppearance.color(of: pullRequest.state))
                 .help(pullRequest.state.czechLabel)
                 .accessibilityLabel(pullRequest.state.czechLabel)
             Text(pullRequest.title)
@@ -84,16 +84,6 @@ struct PullRequestRow: View {
         .foregroundStyle(.tertiary)
     }
 
-    /// Barva ikony pull requestu — stav **PR**, ne review. Ty dva se nesmí slít: PR může být
-    /// otevřený a review selhané zároveň.
-    private var stateTint: Color {
-        switch pullRequest.state {
-        case .open: .green
-        case .draft: .secondary
-        case .merged: .purple
-        case .closed: .red
-        }
-    }
 }
 
 #Preview {
