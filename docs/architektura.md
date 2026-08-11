@@ -479,6 +479,30 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
 - **Ikonka není `Button`, ale obrázek s `onTapGesture`.** `Button` si tažení bere pro sebe, takže
   z pilulky nešlo roztáhnout rozsah. Klik a tažení se vylučují samy, protože drag má
   `minimumDistance`; kurzor, nápovědu a accessibility trait je proto potřeba doplnit ručně.
+- **Overlay gutteru se skládá po blocích, ne po řádcích** (#252). Do #252 měl každý řádek vlastní
+  `Color.clear` s `contentShape`, gestem, `onGeometryChange` a skrytou pilulkou — ve split pohledu
+  dvakrát, plus `HStack` se dvěma `Spacer`y na řádek. U šedesátiřádkového bloku je to **120 ploch
+  a přes čtyři stovky prvků k umístění**, a líný seznam je při každém přerovnání obsahu umisťuje
+  znovu; projíždění splitu o 1 904 rozbalených řádcích proto drželo 100 % CPU
+  (`LazySubviewPlacements.placeSubviews` v `sample`u, a z našeho kódu zrovna ty per-řádkové
+  closures). Dnes jsou to **dvě plochy na tažení, jedna pilulka a jeden `onGeometryChange`** na
+  celý blok; polohy řádků se z rámečků a z polohy bloku **dopočítají** (`DiffGutterGeometry`).
+  Změřeno: overlay bloku **3,05 ms → 0,12 ms**. Je to tatáž úvaha jako u šířky (#220) — nevyjednává
+  se ani počet prvků, když se dá spočítat.
+- **Poloha bloku se drží mimo observable stav** (`DiffBlockPlacement`). Souřadnice v prostoru obsahu
+  se při scrollování mění, protože si líný seznam obsah přeměřuje; ve `@State` by z toho byl layout
+  bloku při každém posunu — tedy nová podoba téhož problému. Je to tentýž trik jako u `DiffRowFrames`.
+- **Pilulka je jedna, ne šedesát prázdných.** Vidět je vždycky nejvýš jedna (řádek pod myší, nebo
+  konec taženého rozsahu), a prvek v `ForEach`i vzniká a umisťuje se i s prázdným obsahem —
+  „nekreslí se“ není totéž jako „nestojí nic“.
+- **Gesto je jedno na sloupec** a řádek, na kterém tažení začalo, se hledá podle `startLocation`.
+  Souřadnice jsou v prostoru obsahu, takže se od nich odečte poloha bloku.
+- **Hranice polovin je jeden výpočet na jednom místě** (`DiffGutterGeometry.rightColumnX(inBlockOfWidth:)`).
+  Pravý sloupec nezačíná v přesné půlce — mezi poloviny sází kontejner **1 pt dělicí čáru**, takže
+  `(šířka − 1) / 2 + 1`. Bere si to odsud jak `DiffPairBlockContainer.layout()`, tak plochy na tažení,
+  pilulka i rozpoznání strany pod myší; dva výpočty by znamenaly, že pilulka svítí v jedné polovině
+  a táhne se ve druhé. Do #252 na tom stál `HStack` se dvěma `Spacer`y a plocha vycházela o půl bodu
+  vlevo (nález Copilota na #272). Je to tatáž úvaha jako u šířky pro měření výšky (#236).
 
 Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne přečtené:
 
@@ -1503,6 +1527,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157). Drží **šířku kontejneru i měření výšky** (`height(forWidth:)`, `height(ofRows:)`), aby se šířka pro měření nemohla rozejít s tou pro kreslení (#236) |
 | `DiffCodeBlockView`, `DiffBlockRowView` | Blok v pohledu pod sebou a k němu pilulka na komentář a tažení rozsahu |
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
+| `DiffGutterGeometry`, `DiffBlockPlacement` | Aritmetika gutteru (#252) — kde leží plochy na tažení a pilulka, a poloha bloku v prostoru obsahu **mimo observable stav**. Čistý typ, aby se dal změřit i otestovat bez okna |
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
@@ -2221,7 +2246,15 @@ Sbalení celých souborů (`foldedFiles`) je **jiná věc než rozbalení kontex
   ze souřadnic. Drží je `DiffRowFrames`, a to **mimo observable stav** — zápis při každém
   přeměření by jinak překresloval celý diff, tedy tatáž třída problému, která u #98 aplikaci
   zasekla. Souřadnice jsou v prostoru **obsahu** (`DiffView.contentSpace`), ne okna: scrollování
-  s rámečky nehýbe, takže se přeměřování nespouští.
+  s rámečky nehýbe — **ale docela klidné to není**: líný seznam si obsah průběžně přeměřuje, takže
+  se poloha bloků v tom prostoru při scrollování posouvá a rámečky se hlásí znovu (změřeno u #252,
+  kde `DiffRowFrames.note` v sampleu ležel pod rozvržením líného seznamu).
+- **Hlásí se naráz za celý blok** (#252), ne po jednom rámečku. Úklid zastaralých záznamů je
+  lineární v jejich počtu, takže po řádcích to bylo kvadratické — 120 ploch bloku dvojic proti
+  tisícům záznamů velkého souboru je stovky tisíc porovnání na jeden blok, který vjede do okna
+  (změřeno **22,6 ms → 1,40 ms**). Pořadí je **napřed úklid, potom zápis**: obráceně by blok vyklidil
+  sám sebe, protože leží celý ve své ploše. Prázdná plocha se ignoruje — blok, který se ještě
+  nerozložil, hlásí nulový rámeček a vyklidil by cizí záznamy na souřadnici nula.
 - **Táhne se přes celý řádek, ne jen přes sloupec s čísly.** GitHub má gesto v číslech, ale tady
   je nad diffem vypnuté vybírání textu, takže tažení přes kód nic nepřebíjí — a úzký sloupec se
   trefuje hůř. `minimumDistance` je nenulová, aby samotný klik zůstal kliknutím (jednořádkový

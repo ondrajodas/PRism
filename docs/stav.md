@@ -990,5 +990,25 @@ o vteřinovém taktu neříkala nic. Ověřeno **třemi vloženými regresemi** 
 měřidla, přepočty i kresbu, protože rozbité porovnání bitmap by jinak hlásilo poruchu aplikace.
 Na obrazovce se nezměnilo nic — aplikace zůstala, jak byla; celý běh je zelený (2092 testů).
 
+**Overlay gutteru se skládá po blocích, ne po řádcích (#252).** Projíždění velkého splitu drželo
+100 % CPU a `sample` ukazoval na rozvržení líného seznamu; příčina byla v tom, **kolik prvků** ten
+overlay má. Každý řádek měl vlastní plochu s `contentShape`, gestem, `onGeometryChange` a skrytou
+pilulkou — ve split pohledu dvakrát, plus `HStack` se dvěma `Spacer`y, tedy u bloku o 60 řádcích
+přes čtyři stovky prvků k umístění. Polohy přitom hlásí textové view samo, takže se **dají
+spočítat**: zbyly dvě plochy na tažení, **jedna** pilulka a jeden `onGeometryChange` na celý blok,
+a aritmetika k tomu je čistý typ (`DiffGutterGeometry`), takže se dá otestovat bez okna.
+
+Změřeno: overlay bloku **3,05 ms → 0,12 ms** (26×) a zápis ploch do `DiffRowFrames` **22,6 ms →
+1,40 ms** (16×; hlásí se naráz za blok, protože úklid je lineární v počtu záznamů). V aplikaci na
+scénáři z issue vlastní práce při projetí diffu **6,4 s → 4,2 s** CPU — zbytek je sazba textu bloku,
+na kterou #252 nesahá. Vyloučené příčiny z issue (#153 a cache obarvení) se **znovu neotvíraly**.
+
+Dvě věci k zapamatování: prvek v `ForEach`i s prázdným obsahem se pořád umisťuje, a poloha bloku
+v prostoru obsahu se při scrollování **mění**, takže patří mimo observable stav
+(`DiffBlockPlacement`) — ve `@State` by z ní byl layout bloku při každém posunu. Měření GUI má
+navíc past: řídit se muselo přes accessibility a **samotné to řízení je 9,3 s z 15,6 s**
+naměřených; postup i to, co nefunguje (syntetické scroll eventy, `Page Down`), je v
+[`docs/testovani.md`](testovani.md).
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

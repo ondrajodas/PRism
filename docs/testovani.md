@@ -25,6 +25,11 @@ neověřuje. Sáhne se po ní tehdy, když funkce **nerozhoduje**, jen skládá 
 protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl přesně ten popsaný výš:
 `Failing tests` plné suit, které s tou změnou nesouvisejí, a crash report ukazující na `map`.
 
+**`#expect` nad `Double` a `CGFloat` naráz vyjde nepravdivě** (#252) — i pro dvě dvojky. Ve výpisu
+je pak `Expectation failed: (span.top → 2.0) == (rows[0].rect.minY → 2.0)`, tedy tvrzení, které
+o sobě říká, že neplatí. Mimo makro tatáž podmínka projde (vyzkoušeno), takže je to jeho
+přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Double(rect.minY)`).
+
 
 - **Modely** — round-trip přes `Codable` u každého typu i každého případu `ReviewState`,
   parsování a formátování identifikátorů včetně neplatných vstupů, a kontrola skutečného
@@ -894,6 +899,20 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   vlastní kotvu (hover v renderu není) a porovnat s tímtéž renderem nad `git stash`nutou verzí.
   U #157 to ukázalo, že ikonka byla na čísle řádku **už předtím** — a teprve pak se posunula do
   vlastního sloupce.
+
+  **Aritmetika gutteru (#252)** má vlastní sadu (`DiffGutterGeometryTests`) a testuje se proto, že
+  **nahradila views**: polohu ploch a pilulky hlásil do #252 SwiftUI u každého řádku, teď se počítá.
+  Rozejít se to může potichu — pilulka o pár bodů vedle je vidět jen tomu, kdo si ji zkusí trefit.
+  Ve výčtu je: sloupce (levý na hraně, pravý v půlce, pohled pod sebou jediný) a hlavně **že hranice
+  stran a začátek pravého sloupce jsou tentýž bod** (jinak svítí pilulka v jedné polovině a táhne se
+  ve druhé); svislý rozsah od **prvního řádku**, ne od nuly (svislý inset patří bloku, #236), i pro
+  řádky různé výšky; půlotevřený interval při hledání řádku pod bodem (s uzavřeným koncem vyhrají na
+  hranici dva); a že plocha na tažení pokrývá **právě** všechny řádky — ani o řádek méně, ani víc.
+
+  **`DiffRowFrames` má sadu z #110** a #252 do ní přidal dvě věci, které se dají pokazit naráz:
+  že blok **nevyklidí sám sebe** (vyzkoušeno regresí — se zápisem před úklidem z něj zbude poslední
+  řádek) a že **nulová plocha nevyklidí nic** (blok, který se ještě nerozložil, jinak sebere záznamy
+  na souřadnici nula, tedy první řádky diffu).
 - **Filtr seznamu PR (#117)** — dvě vrstvy, a **ta druhá je z celého issue nejdůležitější**.
 
   `Policy` vyčerpávajícím výčtem: prázdný filtr propustí **všechno** (ne nic), dvě repa dají
@@ -1526,6 +1545,8 @@ Co harness měří:
 | cena vykreslení podle délky bloku (#223) | z toho se vybral strop `DiffBlock.maxLines`; měří se **jeden blok** i celý soubor po blocích |
 | cena word-level rozdílu (#153) | proč se počítá až při skládání bloku: **0,42 ms** na blok o 60 řádcích samých dvojic proti **19,6 ms** za celý soubor o 2400 řádcích, což by se platilo při každém překreslení |
 | podíl word-diffu na skládání bloku (#153) | odpovídá na „ztuhlo to kvůli #153?“ — `DiffPairBlockContainer.show` na 27 blocích samých dvojic **79,1 ms**, z toho `WordDiff` **14,2 ms**, tedy **18 %** v nejhorším případě; skládání bloku je přitom jen část ceny scrollování |
+| cena overlay gutteru podle tvaru (#252) | dvě čísla na bloku o 60 řádcích: `po řádcích` (do #252) **3,05 ms**, `po bloku` (od #252) **0,12 ms**, tedy 26× — a pro srovnání, samotný text téhož bloku stojí 2,8 ms, takže overlay býval dražší než kód, který zdobí |
+| cena zápisu ploch pro tažení (#252) | `DiffRowFrames` s 4000 záznamy a blok o 120 plochách: **po řádcích 22,6 ms, naráz 1,40 ms** (16×). Je to ta kvadratická část — úklid je lineární v počtu záznamů, takže po řádcích se platí za každý |
 | cena obarvení se cachí a bez ní (#224) | tři čísla na jednom souboru o 2400 řádcích: `scan` bez cache **44 ms**, totéž z plné cache **0,30 ms** (~145×), naplnění prázdné cache **44 ms** — uložení se v šumu ztratí |
 | co v cache zůstane ležet (#224) | 68 kB textu run na 2400 řádků (~29 B na řádek), tedy z čeho se strop `capacity` překládá na kilobajty |
 
@@ -1570,6 +1591,44 @@ příští session znovu — u #153 to byly tyhle tři:
 | Word-diff se počítá při každém umístění prvku | Počítá se za stráží na podpis obsahu v `DiffTextView.show(…)`; naměřeno **18 %** ceny skládání bloku v nejhorším případě (samé dvojice), na skutečném diffu méně |
 | `WordDiff.Spans` se dostalo do hodnoty, kterou SwiftUI kopíruje | `DiffPairBlockView` nemá o pole víc než před #153; spany drží `DiffTextView`, což je `NSView`, ne struktura view |
 | Nekonečná smyčka rozvržení, kterou #153 rozjelo | Tuhnutí se reprodukovalo **projížděním** velkého diffu vedle sebe a po zastavení scrollu se ustálí; na mainu se chová stejně |
+
+### Jak změřit projíždění diffu, když se ho nedá dotknout (#252)
+
+Scénář z #252 (velký split, sjet a vyjet) se musel řídit **nastavením posuvníku přes
+accessibility** — `set value of scroll bar …`. Ostatní cesty se vyzkoušely a nefungují:
+
+- **Syntetické scroll eventy nedoručí nic.** `CGEvent(scrollWheelEvent2Source:)` +
+  `postToPid` (i s dosazenou `location` nad diffem) posuvníkem nehnul — proces, který je posílá,
+  na to nemá oprávnění a `CGEventPost` selže **potichu**.
+- **`Page Down` a `Page Up` `ScrollView` neobsluhuje.** Přes `System Events` dojdou (aplikace je
+  vpředu, žádná chyba), ale posuvník zůstane na nule.
+- **Myš nad diffem na tom nic nemění.** Kurzor se dá bez oprávnění přenést
+  (`CGWarpMouseCursorPosition`) a vrátit, ale při programovém scrollování se žádné `mouseMoved`
+  negeneruje, takže `onContinuousHover` (a s ním přestavění bloku) se nespustí. Naměřeno **3,54 s
+  proti 3,55 s** — tedy nic.
+
+Tři věci, bez kterých z toho vyjde nesmysl:
+
+- **Řízení přes accessibility je samo většina naměřeného času.** V `sample`u zabírá
+  `mshMIGPerform → _XCopyAttributeNames` (AppKit odpovídá na dotazy AX) **58 %** vzorků hlavního
+  vlákna. Změřit se to dá zvlášť: tolikrát zapsat posuvníku hodnotu, **na které už je** — 601
+  zápisů stálo 9,3 s CPU. Číslo z GUI se proto bere jako **rozdíl** proti téhle režii, a ta se
+  musí změřit v obou verzích (v té s méně prvky je AX taky levnější).
+- **Rozhoduje hustota kroků.** 60 kroků tam a zpět skáče o půl obrazovky, takže líný seznam
+  přerovnává obsah málokdy a rozdíl mezi verzemi se utopí (3,6 s proti 3,4 s). S 300 kroky je
+  vidět: **15,6 s proti 13,5 s** celkem, tedy po odečtení režie AX **6,4 s proti 4,2 s**.
+- **Stav aplikace to mění násobně.** Tentýž build a tentýž scénář vyšel na 10,8 s v okně se
+  **čtyřmi otevřenými záložkami PR** a na 3,6 s po čerstvém spuštění s jednou. Měření se proto
+  pouští ze **stejného výchozího stavu** (spustit, otevřít jeden PR, rozbalit úsek) a čísla ze
+  dvou různých sezení se nesrovnávají. Že cena projíždění roste s počtem otevřených záložek, je
+  samostatné zjištění — #252 ho neřeší.
+
+**`window 1 of (first application process whose unix id is …)` sáhne do cizí instance.** System
+Events si proces přepíše podle **jména**, a to mají všechny sloty stejné, takže `window 1` vrátí
+okno prvního PRismu v seznamu — změřeno na poloze okna (32,33 místo 1593,130). Funguje
+`item 1 of (every window of (first application process whose unix id is …))`, a **potomci se
+nesmí iterovat přes vrácené reference**: ty jsou taky podle jména a čtení jejich vlastností spadne
+na „nelze načíst“. Každý potomek se adresuje znovu celou cestou (`UI element i of …`).
 
 **Když se appka řídí přes `System Events`, ověř, že je vpředu, a klikej relativně k oknu.**
 `screencapture -R` bere **oblast obrazovky**, ne okno, takže pevné souřadnice míří po restartu
