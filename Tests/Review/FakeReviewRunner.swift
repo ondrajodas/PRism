@@ -19,6 +19,9 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
     /// Co běh nahlásí jako průběh. Prázdné u testů, které se na časovou osu neptají —
     /// samotné `.queued` hlásí runner vždycky.
     private let reported: [ReviewProgress]
+    /// Poslední sdělení session, tedy `result` event (#150). `nil` = nedorazil, což je stav
+    /// zabitého běhu — kontrola nálezů z něj nevyčte nic, a to je správná odpověď.
+    private let resultText: String?
     private let lock = NSLock()
     private var recorded: [ReviewRequest] = []
     private var released = false
@@ -30,7 +33,8 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         failing failure: (any Error)? = nil,
         holdsUntilRelease: Bool = false,
         usage: RunUsage? = nil,
-        progress reported: [ReviewProgress] = []
+        progress reported: [ReviewProgress] = [],
+        resultText: String? = nil
     ) {
         self.outcome = outcome
         self.findings = findings
@@ -39,6 +43,7 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         self.usage = usage
         holds = holdsUntilRelease
         self.reported = reported
+        self.resultText = resultText
     }
 
     var requests: [ReviewRequest] { lock.withLock { recorded } }
@@ -69,6 +74,9 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         summary.calledReportFindings = calledReportFindings
         summary.findings = findings
         summary.usage = usage
+        if let resultText {
+            summary.outcome = ReviewOutcome(isError: false, subtype: "success", text: resultText)
+        }
         return ReviewRun(key: request.key, summary: summary, outcome: outcome)
     }
 

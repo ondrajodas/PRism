@@ -205,6 +205,43 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   vstup. Fixtures ze skutečných běhů už v repu jsou
   (`Tests/Fixtures/stream-json/`, viz [`docs/claude-cli.md`](claude-cli.md)): běh
   s nálezy, čistý běh, zabitý běh a odmítnutý zápis. Parser se testuje proti nim.
+- **Kontrola nálezů z minula (#150)** — čtyři oblasti, každá na jinou tichou poruchu:
+  - **`RecheckCommand`** — prompt a **čtení odpovědi**. Odpověď je volný text od modelu, takže
+    se testuje každý způsob, jak může přijít jinak, než se o ni prompt řekl: `id` číslem
+    i řetězcem, mimo rozsah, `still_applies` i `Still Applies`, prázdná věta, JSON v ```-bloku,
+    věta okolo, chybějící `result` event (zabitá session). **Neznámý stav se nesmí domyslet** —
+    z „fixed“ se `resolved` nedělá, protože „vyřešeno“ u nálezu, na který se nikdo nekoukal, je
+    ta dražší polovina té chyby. A vlastní test drží, že **prompt review se nezměnil**: požadavek
+    bez materiálu dostane přesně tentýž text jako do #150. Pojistka o jazyku platí pro **oba**
+    prompty.
+  - **`Policy`** — párování odpovědí na nálezy **produkční** funkcí (`Policy.key(of:)`, ne kopií
+    pravidla v testu), včetně nálezu, který se mezitím přeložil. A kdy se odznaky **nesmí**
+    ukázat: kontrola proti jiné hlavě, nenačtený detail (hlava neznámá). Počty se ověřují i na
+    odmítnutém nálezu (nepočítá se) a na nálezu bez odpovědi (`unanswered`).
+  - **Odznak závažnosti** (`Policy.severityBadge`) — vyčerpávajícím výčtem, a to nejcennější
+    tvrzení sady je, že **`vyřešeno` nesundá `blokuje`**: obojí vypadá na obrazovce správně, takže
+    kdyby to `vyřešeno` spolklo, poznalo by se to až u PR, který se nemergoval bez důvodu.
+    Ověřeno vložením regrese (`blocking: false` v produkční funkci) — spadnou z toho čtyři testy,
+    včetně toho o kartě. Dál: odmítnutí přebíjí kontrolu a **nepřeškrtává** (dva různé „nepočítá
+    se“ se nesmí slít do jednoho obrázku), `pořád platí` a `nejasné` závažnost nemění, a skupinová
+    varianta vydá `vyřešeno` jedině tehdy, když ho kontrola dala **všem platným** nálezům místa —
+    jinak by se přeškrtlo shrnutí nálezu, který pořád platí. A že se karta v panelu a řádek
+    tabulky ptají **téže** funkce, tedy že se ta dvě místa nemají čím rozejít.
+  - **`ReviewStore`** — kontrola se ukládá k záznamu nálezů, přežije restart, **nesrovná
+    `isStale`**, chybějící soubor a symlink jsou chyba. A ten nejcennější: `save` kontrolu
+    do `runs` nepustí a záznam po tom pokusu zůstane **bit po bitu stejný**.
+  - **`AppStore`** — kdy se **nenabízí** (bez záznamu, nad hlavou PR, se samými odmítnutými
+    nálezy), že se bez materiálu nespustí ani přímým voláním, a že ji zastaví i **hlava vrácená
+    zpátky** na commit nálezů (force push mezi nakreslením tlačítka a kliknutím) — tam se
+    rozhoduje podle čerstvě dotažené hlavy, ne podle té v cache detailu, jinak by session
+    porovnávala commit sama se sebou za peníze. Ověřeno vloženou regresí. Dál: že session dostane nálezy
+    jako materiál a klíč druhu `recheck`, že se verdikty uloží k nálezům z minula, že
+    **vyřešený nález nemizí** (`activeFindings` a `dismissals` se nezmění), že kontrola
+    nepřidá chip ani nález, že zrušená neuloží nic, že se zabitá session nedopočítává, a že
+    běžící kontrola drží `runningReviews`, chrání repo před eviction a zavírání ji zabije.
+  - **Sazba** — věty o počtech, nápověda u odznaku a u tlačítka (`nonisolated static` funkce,
+    takže bez kreslení). Hlídá se hlavně to, aby text netvrdil víc, než data unesou: nálezy bez
+    odpovědi jsou ve větě, spadlý běh to řekne v nápovědě a odznak nese v sobě `kontrola:`.
 - **`DiffParser`** — proti **skutečným** výstupům `gh pr diff` z veřejných repozitářů
   (`Tests/Fixtures/gh/pr-diff-*.diff`: běžný diff, přejmenování včetně `similarity index
   100%` bez hunků, 44 binárek vedle textových souborů, smazaný soubor). U každé fixture se
@@ -1314,6 +1351,17 @@ osascript -e 'tell application "System Events" to tell process "PRism" to get po
 
 Vyžaduje to oprávnění Accessibility. `entire contents` u `AXScrollArea` občas selže na převodu
 typu — hierarchii je pak potřeba projít po patrech (`UI elements of …`).
+
+**Offscreen render celého detailu PR umí zhasnout stav, který mu sonda nastavila** (#150), a je to
+past, která vypadá jako chyba v aplikaci. `PullRequestDetailView` má na sobě `.task(id: pullRequest)`,
+který si dotahuje detail PR — `ImageRenderer` ho **spustí a hned zruší**, a `loadDetail` na zrušení
+maže rozdělaný stav (`detailStates[id] = nil`). V renderu pak chybí všechno, co na hlavě PR visí:
+`StaleHeadView` i tlačítko `Zkontrolovat nálezy`. Nespustí se to, když `hasCurrentDetail` vyjde
+pravdivě — takže shrnutí PR musí být v sondě **`let`, ne computed property**: `Date(timeIntervalSinceNow:)`
+uvnitř getteru dá jiné `updatedAt` při každém přístupu a cache detailu se tím rozejde. Poznat se to dá
+jedině `print`em **z těla view** (`let _ = print(…)`), ne z hodnot ve store před renderem: ty jsou
+v pořádku. Vedle toho zůstává platné, že AppKitem hostované části (avatar v hlavičce) vyjdou jako žlutý
+placeholder — render se z nich nemá co dozvědět.
 
 ### Jak změřit pořadí a hladinu oken (#243)
 

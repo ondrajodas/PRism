@@ -66,8 +66,16 @@ enum ClaudeCommand {
     ///
     /// Prázdný seznam se vyžaduje schválně — „nic jsem nenašel“ a „nereportoval jsem“ jsou
     /// různé věci a jen ta první smí vyjít jako čisté review.
+    ///
+    /// **Druhá podoba promptu je kontrola nálezů z minula** (#150). Rozhoduje o ní materiál
+    /// v požadavku, ne příznak vedle něj: prompt, který se ptá na nálezy, je bez nich nesmysl.
+    /// Text i čtení odpovědi bydlí v `RecheckCommand`; tady zůstává jediné místo, které
+    /// odpovídá na „jaký prompt tenhle běh dostane“.
     static func prompt(for request: ReviewRequest) -> String {
-        prompt(skillID: request.key.skillID, baseSha: request.baseSha)
+        guard let material = request.recheck else {
+            return prompt(skillID: request.key.skillID, baseSha: request.baseSha)
+        }
+        return RecheckCommand.prompt(for: material, baseSha: request.baseSha)
     }
 
     /// Tentýž prompt z rozebraných dílů — potřebuje ho `Zkopírovat příkaz` v tabu `Průběh`

@@ -117,20 +117,103 @@ struct PullRequestHeaderView: View {
 struct StaleHeadView: View {
     let head: String
     let findingsHead: String
+    /// Co o těch nálezech řekla kontrola nových commitů (#150). `.none` = neběžela a řádek pak
+    /// mluví jen o sha, jako do #150.
+    var recheck: Policy.RecheckReport = .none
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.yellow)
-                .font(.caption)
-            Text("Nálezy jsou proti")
-            sha(findingsHead)
-            Text(", hlava PR je")
-            sha(head)
+        // Věta o kontrole patří **pod** řádek o sha, ne za něj: mluví o týchž nálezech, ale je
+        // delší, a v jednom řádku by se v úzkém okně ořezala zrovna ona.
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+                    .font(.caption)
+                Text("Nálezy jsou proti")
+                sha(findingsHead)
+                Text(", hlava PR je")
+                sha(head)
+            }
+            .help("Co je na obrazovce, platí ke staršímu commitu. Nové review je proti aktuální hlavě.")
+            recheckLine
         }
         .font(.caption)
         .foregroundStyle(.secondary)
-        .help("Co je na obrazovce, platí ke staršímu commitu. Nové review je proti aktuální hlavě.")
+    }
+
+    /// Co kontrola zjistila — nebo že už neplatí.
+    ///
+    /// Zastaralá kontrola **nemlčí**: odznaky u nálezů zmizely (`Policy.recheck(of:head:)` je
+    /// nevydá), takže bez téhle věty by vypadalo, že kontrola nikdy neběžela — a pustila by se
+    /// podruhé za peníze, aniž by kdo věděl, že první výsledek existoval.
+    @ViewBuilder private var recheckLine: some View {
+        switch recheck {
+        case .none:
+            EmptyView()
+        case .outdated(let againstHeadSha):
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath").font(.caption2)
+                Text("Kontrola nálezů běžela proti")
+                sha(againstHeadSha)
+                Text(verbatim: "— pro tenhle commit neplatí, pusť ji znovu.")
+            }
+        case .current(let tally):
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle").font(.caption2)
+                Text(verbatim: Self.label(of: tally))
+                Text(tally.finishedAt, format: .relative(presentation: .named))
+                    .foregroundStyle(.tertiary)
+            }
+            .help(Self.hint(of: tally))
+        }
+    }
+
+    /// Věta o počtech. Skládá se z hotových čísel, takže `nonisolated static` — testuje se bez
+    /// kreslení a rozhodování zůstává v `Policy`.
+    ///
+    /// **Nezodpovězené nálezy se vyjmenují.** Bez nich by „3 vyřešené“ nad pěti nálezy vypadalo,
+    /// že ty dva zbylé platí — a to kontrola neřekla.
+    ///
+    /// Skloňuje se přes `Plural.czech` všude, kde se tvar mění. `pořád platí` a `bez odpovědi`
+    /// jsou nesklonné obraty (`1 pořád platí`, `2 pořád platí`), takže u nich není co skloňovat —
+    /// zbytek jde tabulkou tvarů, protože jazyk aplikace je čeština a `1 nejasných` praští do očí
+    /// hned (nálezem Copilota na #150).
+    nonisolated static func label(of tally: Policy.RecheckTally) -> String {
+        var parts: [String] = []
+        if tally.resolved > 0 {
+            parts.append(Plural.czech(
+                tally.resolved,
+                one: "vyřešený",
+                few: "vyřešené",
+                many: "vyřešených"
+            ))
+        }
+        if tally.stillApplies > 0 { parts.append("\(tally.stillApplies) pořád platí") }
+        if tally.unclear > 0 {
+            parts.append(Plural.czech(
+                tally.unclear,
+                one: "nejasný",
+                few: "nejasné",
+                many: "nejasných"
+            ))
+        }
+        if tally.unanswered > 0 { parts.append("\(tally.unanswered) bez odpovědi") }
+        guard !parts.isEmpty else { return "Kontrola nálezů neodpověděla na nic" }
+        return "Kontrola nálezů: " + parts.joined(separator: ", ")
+    }
+
+    /// Nápověda k větě: odkud to je a co z toho **neplyne**.
+    ///
+    /// Že kontrola nedoběhla, se do věty nevejde, a mlčet o tom nejde: běh zabitý po dvou
+    /// odpovědích za zbytek nemluví.
+    nonisolated static func hint(of tally: Policy.RecheckTally) -> String {
+        let base = "Tvrzení kontroly nových commitů, ne fakt — nález sundá jedině tvoje odmítnutí."
+        switch tally.outcome {
+        case .finished: return base
+        case .timedOut: return "Kontrola nedoběhla (timeout), takže za zbytek nemluví. " + base
+        case .interrupted: return "Kontrola skončila s aplikací, takže za zbytek nemluví. " + base
+        case .failed(let detail): return "Kontrola spadla: \(detail) " + base
+        }
     }
 
     private func sha(_ value: String) -> some View {

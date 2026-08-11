@@ -17,10 +17,21 @@ struct FindingGroup: Hashable, Sendable {
     /// změnilo odmítnutí nálezu v úplně jiném souboru — a líný seznam by překresloval bubliny,
     /// se kterými se nic nestalo.
     var dismissals: [FindingKey: FindingDismissal] = [:]
+    /// Co o nálezech **v téhle skupině** říká kontrola z minula (#150).
+    ///
+    /// Filtrovaná mapa ze stejného důvodu jako u odmítnutí: skupina je hodnota v `DiffRow`, takže
+    /// by ji celá mapa překreslovala kvůli nálezu v jiném souboru.
+    var rechecks: [FindingKey: RecheckStatus] = [:]
 
     /// Platí na nálezu odmítnutí? Bublina se podle toho kreslí sbalená.
     func dismissal(of finding: Finding) -> FindingDismissal? {
         dismissals[Policy.key(of: finding)]
+    }
+
+    /// Co o nálezu řekla kontrola. `nil` = neběžela, neplatí pro hlavu PR, nebo se k němu
+    /// nevyjádřila — pro odznak je to jedno, kreslit se nemá.
+    func recheck(of finding: Finding) -> RecheckStatus? {
+        rechecks[Policy.key(of: finding)]
     }
 
     /// Nálezy, které pořád platí. Ty odmítnuté ze skupiny **nemizí** — schovaný nález se nedá
@@ -44,10 +55,13 @@ extension Policy {
     /// Pořadí skupin kopíruje pořadí, ve kterém se místa poprvé objevila ve vstupu — takže
     /// setříděný vstup dá setříděný výstup a `Policy` nemá dvě různá řazení.
     ///
-    /// - Parameter dismissals: celá mapa ze záznamu; každá skupina si z ní vezme jen to své.
+    /// - Parameters:
+    ///   - dismissals: celá mapa ze záznamu; každá skupina si z ní vezme jen to své.
+    ///   - rechecks: totéž pro stavy z kontroly nálezů (#150).
     static func groups(
         of findings: [Finding],
-        dismissals: [FindingKey: FindingDismissal] = [:]
+        dismissals: [FindingKey: FindingDismissal] = [:],
+        rechecks: [FindingKey: RecheckStatus] = [:]
     ) -> [FindingGroup] {
         var groups: [FindingGroup] = []
         var index: [Location: Int] = [:]
@@ -67,19 +81,21 @@ extension Policy {
             }
         }
 
-        guard !dismissals.isEmpty else { return groups }
-        // Jde se po **nálezech ve skupině** a mapa se jen dotazuje, ne filtruje: filtr přes
+        guard !dismissals.isEmpty || !rechecks.isEmpty else { return groups }
+        // Jde se po **nálezech ve skupině** a mapy se jen dotazují, ne filtrují: filtr přes
         // celou mapu s lineárním hledáním uvnitř je O(skupiny × odmítnutí × nálezy) a tohle
-        // běží při každém překreslení diffu.
+        // běží při každém překreslení diffu. Klíč se skládá **jednou na nález** pro obě mapy.
         return groups.map { group in
             var group = group
             var mine: [FindingKey: FindingDismissal] = [:]
+            var myRechecks: [FindingKey: RecheckStatus] = [:]
             for finding in group.findings {
                 let key = Policy.key(of: finding)
-                guard let dismissal = dismissals[key] else { continue }
-                mine[key] = dismissal
+                if let dismissal = dismissals[key] { mine[key] = dismissal }
+                if let status = rechecks[key] { myRechecks[key] = status }
             }
             group.dismissals = mine
+            group.rechecks = myRechecks
             return group
         }
     }

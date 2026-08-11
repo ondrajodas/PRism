@@ -70,9 +70,12 @@ extension AppStore {
     func stopReviewsBeforeTermination() async {
         isTerminating = true
         for review in reviewTasks.values { review.task.cancel() }
+        // Kontrola nálezů (#150) je tatáž `claude` session, takže se zavírá stejně — bez toho by
+        // přežila aplikaci a běžela dál na `launchd`, což je celý ten problém z #264.
+        for recheck in recheckTasks.values { recheck.task.cancel() }
 
         var remaining = Self.terminationChecks
-        while !reviewTasks.isEmpty, remaining > 0 {
+        while !reviewTasks.isEmpty || !recheckTasks.isEmpty, remaining > 0 {
             remaining -= 1
             // `Task.sleep`, ne `time.sleep`: čeká se na skutečný proces, ne na rozvrh. Fake
             // hodiny čekání přeskočí, a test, který má tvrdit, že po zavření nic neběží, by
@@ -379,7 +382,10 @@ extension AppStore {
 
     /// Přičte, co běh stál. Jde to **proudem událostí mimo**, přímo na aktor: útrata se neváže
     /// na osu ani na uložený záznam, takže by ji zdržovalo pořadí, na kterém jí nezáleží.
-    private func recordSpend(_ usage: RunUsage?) async {
+    ///
+    /// `internal`, protože to čte i kontrola nálezů (`AppStore+Recheck`, #150) — je to tatáž
+    /// session a stejné peníze, takže druhé počítání by o mém účtu lhalo.
+    func recordSpend(_ usage: RunUsage?) async {
         guard let spend else { return }
         dailySpend = await spend.record(usage)
         // Graf se musí posunout se stejným během, jinak by karta ukazovala novou částku nad
@@ -518,7 +524,10 @@ extension AppStore {
     ///
     /// Volá se po každé fázi, která ho mohla nechat v `.preparing` — a to je i zrušení.
     /// Zapomenout na to znamená řádek, který do restartu ukazuje „ve frontě · clone“.
-    private func syncCheckoutState(for repo: RepoID, using checkout: any RepoCheckout) async {
+    ///
+    /// `internal` kvůli kontrole nálezů (`AppStore+Recheck`, #150): připravuje strom tou samou
+    /// cestou, takže po sobě musí stav srovnat stejně.
+    func syncCheckoutState(for repo: RepoID, using checkout: any RepoCheckout) async {
         if let clone = await checkout.existingClone(for: repo) {
             checkoutStates[repo] = .ready(clone)
         } else {
@@ -540,7 +549,10 @@ extension AppStore {
 
     /// Nový head commit zneplatní i to, co držíme v paměti — jinak by řádek do konce běhu
     /// ukazoval nálezy proti kódu, který v PR není.
-    private func markStaleInMemory(for pr: PRIdentifier, current headSha: String) {
+    ///
+    /// `internal` kvůli kontrole nálezů (`AppStore+Recheck`, #150): ta si taky dotahuje detail,
+    /// takže se v tu chvíli může dozvědět novou hlavu — a tvrdá podmínka č. 5 platí i tam.
+    func markStaleInMemory(for pr: PRIdentifier, current headSha: String) {
         guard var record = reviewRecords[pr], record.headSha != headSha else { return }
         record.isStale = true
         reviewRecords[pr] = record

@@ -35,6 +35,13 @@ struct FindingTableRow: Identifiable, Hashable {
     /// ztlumit řádek, ve kterém pořád něco platí, by ten platný nález schovalo.
     let dismissal: FindingDismissal?
 
+    /// Co stojí ve sloupci `závažnost` a jestli se shrnutí přeškrtne (#150).
+    ///
+    /// Mluví za **celé místo**, takže `vyřešeno` vydá jedině tehdy, když ho kontrola dala všem
+    /// platným nálezům řádku — jinak by se shrnutí přeškrtlo nad nálezem, který pořád platí.
+    /// Rozhoduje o tom `Policy`, stejně jako u karty v panelu a u bubliny.
+    let severityBadge: FindingSeverityBadge
+
     /// Je co rozbalit? Rozbalená část ukazuje celé nálezy — s „Kdy to selže“, převzetím
     /// a odmítnutím — takže má smysl vždycky, když nález nějaký text nese.
     var isExpandable: Bool { true }
@@ -47,10 +54,11 @@ struct FindingTableRow: Identifiable, Hashable {
         of findings: [Finding],
         sort: FindingTableSort?,
         blocking categories: Set<String> = Policy.defaultBlockingCategories,
-        dismissals: [FindingKey: FindingDismissal] = [:]
+        dismissals: [FindingKey: FindingDismissal] = [:],
+        rechecks: [FindingKey: RecheckStatus] = [:]
     ) -> [FindingTableRow] {
         let sorted = Policy.sorted(findings, by: sort, categories: categories, dismissals: dismissals)
-        return Policy.groups(of: sorted, dismissals: dismissals)
+        return Policy.groups(of: sorted, dismissals: dismissals, rechecks: rechecks)
             .map { group in
                 FindingTableRow(
                     id: identity(of: group),
@@ -58,14 +66,16 @@ struct FindingTableRow: Identifiable, Hashable {
                     findings: FindingRow.preserving(
                         group.findings,
                         blocking: categories,
-                        dismissals: group.dismissals
+                        dismissals: group.dismissals,
+                        rechecks: group.rechecks
                     ),
                     isBlocking: group.activeFindings.contains {
                         Policy.isBlocking($0, categories: categories)
                     },
                     dismissal: group.activeFindings.isEmpty
                         ? group.dismissal(of: group.findings[0])
-                        : nil
+                        : nil,
+                    severityBadge: Policy.severityBadge(of: group, categories: categories)
                 )
             }
     }

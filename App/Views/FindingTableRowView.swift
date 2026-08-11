@@ -70,31 +70,55 @@ struct FindingTableRowView: View {
         return row.isBlocking ? Palette.crit : Palette.find
     }
 
-    /// Sloupec závažnosti nese **jen to, co je vidět na první pohled**: blokuje / neplatný.
-    /// Kategorie do něj nepatří, ta je u reviewera — jinak by se ve 92 bodech nevešlo ani jedno.
+    /// Sloupec závažnosti nese **jen to, co je vidět na první pohled**: blokuje / neplatný,
+    /// a od #150 i `vyřešeno` z kontroly. Kategorie do něj nepatří, ta je u reviewera — jinak by se
+    /// ve 92 bodech nevešlo ani jedno.
+    ///
+    /// `vyřešeno` a `blokuje` jsou **pod sebou, ne vedle sebe**: dvě kapsle za sebou mají ~105
+    /// bodů, takže by se do sloupce nevešly, kdežto na výšku je místa dost (řádek drží dvouřádkové
+    /// shrnutí). A vejít se musí obojí — „vyřešeno“ je tvrzení modelu, „blokuje“ fakt, takže první
+    /// nesmí to druhé nahradit.
     ///
     /// Prázdno se kreslí `Color.clear`, ne prázdným `Group`em: **`EmptyView` `frame(width:)`
     /// ignoruje**, takže by se u nálezu bez odznaku sloupec sesypal a celý řádek by se posunul
     /// o 92 bodů vlevo — tabulka by pak měla dva různé rastry. Chyceno offscreen renderem.
     private var severity: some View {
         HStack(spacing: 0) {
-            if let dismissal = row.dismissal {
-                pill(dismissal.reason.label, tint: Palette.ink2, background: Palette.raised)
-                    .help(row.representative.categoryHelp)
-            } else if row.isBlocking {
-                pill("blokuje", tint: Palette.crit, background: Palette.crit.opacity(0.15))
-                    .help("Blokující nález — kvůli němu se PR nemerguje")
-            } else {
-                Color.clear.frame(height: 1)
+            VStack(alignment: .leading, spacing: 2) {
+                switch row.severityBadge {
+                case .dismissed(let reason):
+                    pill(reason.label, tint: Palette.ink2, background: Palette.raised)
+                        .help(row.representative.categoryHelp)
+                case .resolved(let status, let blocking):
+                    pill(
+                        FindingSeverityBadge.resolvedLabel,
+                        tint: FindingSeverityBadge.resolvedTint,
+                        background: FindingSeverityBadge.resolvedTint.opacity(0.15)
+                    )
+                    .help(status.help)
+                    if blocking { blockingPill }
+                case .blocking:
+                    blockingPill
+                case .none:
+                    Color.clear.frame(height: 1)
+                }
             }
             Spacer(minLength: 0)
         }
         .frame(width: layout.severity, alignment: .leading)
     }
 
+    private var blockingPill: some View {
+        pill("blokuje", tint: Palette.crit, background: Palette.crit.opacity(0.15))
+            .help("Blokující nález — kvůli němu se PR nemerguje")
+    }
+
     private var summary: some View {
         Button(action: jump) {
             Text(verbatim: row.representative.summary)
+                // Přeškrtnuté **jen shrnutí** (#150), a jedině když kontrola má za opravené
+                // všechno, co na tom místě platí. Ztlumení celého řádku patří odmítnutí.
+                .strikethrough(row.severityBadge.strikesFindingText, color: Palette.ink3)
                 .font(.callout)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)

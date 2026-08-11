@@ -27,17 +27,25 @@ struct FindingRow: Identifiable, Hashable, Sendable {
     /// Nový sloupec kvůli tomu **není**: při šířkách z #60 nemá kam, takže stav visí
     /// u `Kategorie` jako odznak a v nápovědě.
     let dismissal: FindingDismissal?
+    /// Co o nálezu řekla kontrola z minula (#150). `nil` = neběžela nebo se k němu nevyjádřila.
+    ///
+    /// **Neřadí ani neschovává** — je to odznak, který karta kreslí **pod textem** nálezu
+    /// (v hlavičce se ve 300 bodech zkrátil, viz `FindingCardView`). „Vyřešeno“ je tvrzení
+    /// modelu, takže z nálezu nesmí ubrat nic než pozornost.
+    let recheck: RecheckStatus?
 
     /// Nálezy v pořadí, ve kterém je řadí `Policy`.
     static func rows(
         of findings: [Finding],
         blocking categories: Set<String> = Policy.defaultBlockingCategories,
-        dismissals: [FindingKey: FindingDismissal] = [:]
+        dismissals: [FindingKey: FindingDismissal] = [:],
+        rechecks: [FindingKey: RecheckStatus] = [:]
     ) -> [FindingRow] {
         preserving(
             Policy.sorted(findings, categories: categories, dismissals: dismissals),
             blocking: categories,
-            dismissals: dismissals
+            dismissals: dismissals,
+            rechecks: rechecks
         )
     }
 
@@ -49,10 +57,14 @@ struct FindingRow: Identifiable, Hashable, Sendable {
     static func preserving(
         _ findings: [Finding],
         blocking categories: Set<String> = Policy.defaultBlockingCategories,
-        dismissals: [FindingKey: FindingDismissal] = [:]
+        dismissals: [FindingKey: FindingDismissal] = [:],
+        rechecks: [FindingKey: RecheckStatus] = [:]
     ) -> [FindingRow] {
         findings.enumerated().map { index, finding in
-            FindingRow(
+            // Klíč se skládá **jednou** pro obě mapy: `Policy.key(of:)` sype řetězec, takže
+            // dvojí složení na nález je práce navíc při každém překreslení panelu.
+            let key = Policy.key(of: finding)
+            return FindingRow(
                 id: index,
                 finding: finding,
                 category: finding.category ?? "bez kategorie",
@@ -61,14 +73,24 @@ struct FindingRow: Identifiable, Hashable, Sendable {
                 locationHelp: locationHelp(of: finding),
                 summary: finding.summary,
                 isBlocking: Policy.isBlocking(finding, categories: categories),
-                dismissal: dismissals[Policy.key(of: finding)]
+                dismissal: dismissals[key],
+                recheck: rechecks[key]
             )
         }
     }
 
+    /// Co u nálezu stojí v odznaku závažnosti a jestli se jeho text přeškrtne (#150).
+    /// Rozhoduje `Policy` — ten odznak kreslí víc míst a každé z nich se dívá sem.
+    var severityBadge: FindingSeverityBadge {
+        Policy.severityBadge(isBlocking: isBlocking, recheck: recheck, dismissal: dismissal)
+    }
+
     /// Blokující **a platný**. Výstražná ikona u nálezu, který jsem odmítl, by tvrdila, že
     /// PR pořád na něčem stojí — a přitom se z něj právě proto nepočítá.
-    var showsBlockingWarning: Bool { isBlocking && dismissal == nil }
+    ///
+    /// Odvozené z odznaku, ne druhou podmínkou: „blokuje“ je fakt, který se nesmí ztratit ani
+    /// tehdy, když kontrola nález má za opravený, a dvě pravidla pro jednu věc se rozejdou.
+    var showsBlockingWarning: Bool { severityBadge.showsBlocking }
 
     /// Co se o kategorii dozvíš z nápovědy. U odmítnutého nálezu i to, proč neplatí — sloupec
     /// unese odznak, ale ne celou větu.

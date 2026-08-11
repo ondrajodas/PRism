@@ -772,6 +772,24 @@ protože o ty nálezy si nikdo neřekl.
 Nálezy jsou klíčované head commitem PR. Když přijdou nové commity, předchozí nálezy se
 označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 
+**A dá se u nich zjistit, co nové commity spravily** (#150). Nad zastaralými nálezy se v hlavičce
+nabídne `Zkontrolovat nálezy`: pustí to session, která dostane **uložené nálezy z předchozího
+commitu** jako seznam a projde je proti pracovní kopii na hlavě PR — vlastní prompt, tytéž
+read-only nástroje jako review. U každého nálezu pak stojí odznak `kontrola: vyřešeno`,
+`kontrola: pořád platí` nebo `kontrola: nejasné` a k němu věta, jak k tomu běh došel; v hlavičce
+je souhrn (`3 vyřešené, 1 pořád platí, 1 bez odpovědi`).
+
+Vyřešený nález je poznat na první pohled: **shrnutí je přeškrtnuté** a v odznaku závažnosti stojí
+`vyřešeno`. Přeškrtne se u toho jen text nálezu, ne celý řádek — celá plocha se ztlumí jedině
+u nálezu, který jsem **odmítl** sám, a ty dva stavy se nesmí plést. A když nález blokuje, zůstává
+u něj `blokuje` i nadále: „vyřešeno“ je tvrzení modelu, kdežto to, že se PR pořád nemerguje, je fakt.
+
+Tři věci, které z toho **neplynou**. Odznak nálezy **nemaže ani neschovává** — je to tvrzení
+modelu, ne fakt, a sundat nález smí jedině odmítnutí (#113), za kterým stojí člověk. Kontrola se
+**nenabízí**, dokud není uložený záznam proti staršímu commitu, protože bez nálezů by se session
+neměla na co ptát. A **platí jen pro tu hlavu, proti které běžela**: po dalším commitu odznaky
+zmizí a v hlavičce zbyde věta, že se dá pustit znovu.
+
 ### Notifikace
 
 Co přijde a co v tom bude:

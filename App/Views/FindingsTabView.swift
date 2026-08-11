@@ -15,6 +15,14 @@ struct FindingsTabView: View {
     /// Nálezy po filtru reviewerů, tedy to, co má být vidět.
     var findings: [Finding] = []
     var dismissals: [FindingKey: FindingDismissal] = [:]
+    /// Co o nálezech řekla kontrola z minula (#150). Prázdné = neběžela, nebo pro hlavu PR
+    /// neplatí.
+    ///
+    /// **Ve sbaleném řádku odznak není** a je to rozhodnutí: sloupce mají spočítanou šířku
+    /// (#220) a odznak by si vzal místo shrnutí, kvůli kterému se tabulka čte. Stav je proto
+    /// v rozbalené bublině (tedy tou samou sazbou jako u kódu) a věta o počtech visí nad tabulkou
+    /// v hlavičce PR, která je vidět ve všech tabech.
+    var rechecks: [FindingKey: RecheckStatus] = [:]
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     var isRunning = false
     /// Zahodí uložené nálezy. `nil` = není co zahodit, tlačítko se nekreslí.
@@ -186,7 +194,8 @@ struct FindingsTabView: View {
             of: findings,
             sort: sort,
             blocking: blockingCategories,
-            dismissals: dismissals
+            dismissals: dismissals,
+            rechecks: rechecks
         )
     }
 

@@ -160,7 +160,16 @@ struct PullRequestDetailView: View {
             if let head = loadedDetail?.headSha,
                let findingsHead = store.reviewRecord(for: pullRequest.id)?.headSha,
                head != findingsHead {
-                StaleHeadView(head: head, findingsHead: findingsHead)
+                StaleHeadView(head: head, findingsHead: findingsHead, recheck: recheck)
+            }
+            // Proč kontrola nálezů (#150) neproběhla. **Vlastní řádek, ne nápověda u tlačítka:**
+            // spadlá kontrola vypadá jinak než kontrola, která nic nenašla, a to druhé by se
+            // čtlo jako „nálezy pořád platí“.
+            if let failure = store.recheckFailures[pullRequest.id] {
+                Label(failure, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(Palette.crit)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             reviewers
             // Selhání checkoutu se do lišty nevejde, a právě u něj je text od `gitu`
@@ -317,6 +326,7 @@ struct PullRequestDetailView: View {
                 jump: jump,
                 findings: visibleFindings,
                 dismissals: dismissals,
+                rechecks: recheck.statuses,
                 findingActions: findingActions,
                 blockingCategories: blockingCategories,
                 isRunning: store.isReviewing(pullRequest.id),
@@ -384,6 +394,15 @@ struct PullRequestDetailView: View {
     /// ne pohled.
     private var dismissals: [FindingKey: FindingDismissal] {
         store.reviewRecord(for: pullRequest.id)?.dismissals ?? [:]
+    }
+
+    /// Co o nálezech řekla kontrola z minula (#150).
+    ///
+    /// Skládá se **jednou** a jde do všech tří míst, která nálezy kreslí (bubliny, karty
+    /// v panelu, tabulka): odznak u nálezu a věta v hlavičce mají mluvit o tomtéž. Prázdná mapa
+    /// znamená, že kontrola neběžela nebo pro tuhle hlavu neplatí — a odznaky pak nejsou.
+    private var recheck: Policy.RecheckReport {
+        store.recheckReport(for: pullRequest.id)
     }
 
     /// Odmítnutí nálezu (#113) — jedno místo pro bubliny u kódu i pro tabulku v panelu.
@@ -553,7 +572,7 @@ struct PullRequestDetailView: View {
     /// **i** procházení — dvě volání `Policy.groups` by se mohla rozejít v tom, co je jedno
     /// místo, a lišta by pak počítala něco jiného, než na co skáče.
     private var findingGroups: [FindingGroup] {
-        Policy.groups(of: visibleFindings, dismissals: dismissals)
+        Policy.groups(of: visibleFindings, dismissals: dismissals, rechecks: recheck.statuses)
     }
 
     /// Skok na další nebo předchozí nález (#187).
@@ -778,6 +797,7 @@ struct PullRequestDetailView: View {
             pullRequest: pullRequest.id,
             findings: visibleFindings,
             dismissals: dismissals,
+            rechecks: recheck.statuses,
             blockingCategories: blockingCategories,
             isRunning: store.isReviewing(pullRequest.id),
             clear: record == nil ? nil : { try await store.clearFindings(for: pullRequest.id) },
@@ -973,28 +993,85 @@ struct PullRequestDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    /// Spuštění a zrušení review. Tlačítko je tady, ne v toolbaru: patří k vybranému PR
+    /// Spuštění a zrušení běhů. Tlačítka jsou tady, ne v toolbaru: patří k vybranému PR
     /// a v toolbaru by nebylo vidět, ke kterému.
     ///
-    /// Za běhu zbývá **jen `Zrušit`** (#218): kdo běží a kolik je hotovo, říká pruh pod
+    /// **Kontrola nálezů stojí vlevo od `Spustit review`** (#150) a je tlumená, ne akcentová:
+    /// akcentová barva v hlavičce zbyla jedné věci (#218) a dvě fialová tlačítka vedle sebe by
+    /// z ní udělala dvě.
+    private var review: some View {
+        HStack(spacing: 12) {
+            recheckControl
+            reviewControl
+            if case .failed(let detail) = store.reviewPhases[pullRequest.id] {
+                Label(detail, systemImage: "exclamationmark.triangle")
+                    .font(.callout)
+                    .foregroundStyle(Palette.crit)
+            }
+        }
+    }
+
+    /// Za běhu review zbývá **jen `Zrušit`** (#218): kdo běží a kolik je hotovo, říká pruh pod
     /// souřadnicemi PR, a dvě věty o tomtéž vedle sebe se přestanou číst obě.
-    @ViewBuilder private var review: some View {
+    @ViewBuilder private var reviewControl: some View {
         if store.isReviewing(pullRequest.id) {
             Button("Zrušit", systemImage: "stop.circle") {
                 store.cancelReview(for: pullRequest.id)
             }
         } else {
-            HStack(spacing: 12) {
-                Button("Spustit review", systemImage: "play.circle") {
-                    store.startReview(for: pullRequest.id)
-                }
-                if case .failed(let detail) = store.reviewPhases[pullRequest.id] {
-                    Label(detail, systemImage: "exclamationmark.triangle")
-                        .font(.callout)
-                        .foregroundStyle(Palette.crit)
-                }
+            Button("Spustit review", systemImage: "play.circle") {
+                store.startReview(for: pullRequest.id)
             }
         }
+    }
+
+    /// Kontrola nálezů z minula (#150).
+    ///
+    /// **Nenabízí se, dokud není co kontrolovat** — bez uloženého záznamu proti staršímu commitu
+    /// by se z chybějícího vstupu stala session, která hádá. Rozhoduje o tom store
+    /// (`recheckMaterial(for:)`), ne tenhle soubor: je to podmínka o datech, ne o kreslení.
+    ///
+    /// Za běhu se z tlačítka stane `Zrušit kontrolu` s hodinami. Bez nich je patnáctiminutová
+    /// session k nerozeznání od zaseknutého okna — a vlastní pruh průběhu kontrola nemá, protože
+    /// nepouští žádného revieweera (pruh mluví o chipech).
+    @ViewBuilder private var recheckControl: some View {
+        if store.isRechecking(pullRequest.id) {
+            HStack(spacing: 6) {
+                Button("Zrušit kontrolu", systemImage: "stop.circle") {
+                    store.cancelRecheck(for: pullRequest.id)
+                }
+                if let startedAt = store.recheckStartedAt(for: pullRequest.id) {
+                    // Hodiny tikají v `TimelineView`, ne z časovače ve store: překresluje se
+                    // jeden popisek, ne celé okno. Tatáž úvaha jako u pruhu běhu (#218).
+                    TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                        Text(verbatim: RunUsageText.elapsed(
+                            .seconds(context.date.timeIntervalSince(startedAt))
+                        ))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(Palette.ink2)
+                    }
+                }
+            }
+        } else if let material = store.recheckMaterial(for: pullRequest.id) {
+            Button("Zkontrolovat nálezy", systemImage: "checkmark.circle.badge.questionmark") {
+                store.startRecheck(for: pullRequest.id)
+            }
+            .help(Self.recheckHint(for: material))
+        }
+    }
+
+    /// Co tlačítko udělá — a hlavně **kolik to je nálezů a proti čemu**, protože je to session
+    /// za peníze. Skládá se z hotových čísel, takže `nonisolated static`: dá se vyčerpat testem.
+    nonisolated static func recheckHint(for material: RecheckMaterial) -> String {
+        let findings = Plural.czech(
+            material.findings.count,
+            one: "nález",
+            few: "nálezy",
+            many: "nálezů"
+        )
+        return "Pustí session, která projde \(findings) z commitu "
+            + "\(material.headSha.prefix(7)) a řekne, co nové commity spravily. "
+            + "Nálezy tím nemizí — sundá je jedině tvoje odmítnutí."
     }
 
     /// Vlastní rámeček místo `GroupBox`u: ten je AppKit kontejner a `ImageRenderer` ho

@@ -28,6 +28,9 @@ struct ReviewPanel: View {
     var findings: [Finding] = []
     /// Jak jsem nálezy posoudil (#113). Celá mapa ze záznamu — karta si z ní vezme to své.
     var dismissals: [FindingKey: FindingDismissal] = [:]
+    /// Co o nálezech řekla kontrola z minula (#150). Prázdné = neběžela, nebo pro hlavu PR
+    /// neplatí; karta pak žádný odznak nekreslí.
+    var rechecks: [FindingKey: RecheckStatus] = [:]
     /// Odmítnutí a vrácení nálezu. Kontextové menu se bez toho nekreslí.
     var findingActions: FindingActions?
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
@@ -363,7 +366,12 @@ struct ReviewPanel: View {
 
     /// Pořadí dává `Policy` — podle závažnosti, ne podle toho, co si kdo naklikal ve sloupci.
     private var rows: [FindingRow] {
-        FindingRow.rows(of: findings, blocking: blockingCategories, dismissals: dismissals)
+        FindingRow.rows(
+            of: findings,
+            blocking: blockingCategories,
+            dismissals: dismissals,
+            rechecks: rechecks
+        )
     }
 
     private var emptyReason: FindingsEmptyReason? {
