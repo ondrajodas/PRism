@@ -280,6 +280,15 @@ reviewerů na jednom místě označí `2×`, ale jejich texty se neslučují. N�
 v diffu není, se neztratí: visí u hlavičky souboru a nabídne ten řádek dotáhnout. Bubliny
 jdou vypnout v nabídce u `Rozbalit vše` (`Nálezy u řádků`) — vlákna konverzace zůstanou.
 
+**Blokující nález je rozbalený rovnou, ostatní jsou značka na hraně řádku** (#185). Značka je
+pruh s odznaky, kategorií, revieweerem a náhledem textu — kliknutím se rozbalí celá bublina
+i s akcemi, druhým kliknutím se zavře. Rozbalit všechny by z diffu udělalo seznam nálezů
+proložený kódem; sbalit i ten blokující je zase kliknutí navíc právě u toho jednoho, kvůli
+kterému se PR nemerguje. **Odmítnutý se nerozbaluje nikdy** — je to jeden řádek s důvodem
+a `Vrátit`, takže rozbalovat u něj není co. Skok z panelu i šipkami z lišty sbalenou bublinu
+**rozbalí**, jinak by cíl skoku byl pruh, na kterém není co přečíst. Rozbalení se pamatuje
+per PR, dokud PR nezmizí ze seznamu.
+
 **Nálezy se procházejí šipkami v liště nad diffem** (#187): `2 z 3 nálezů` a dvě šipky, klávesově
 `⌥↓` a `⌥↑`, na další blokující `⌥⇧↓`. Do té doby vedla cesta k dalšímu nálezu vždycky přes
 panel — najít ho v seznamu a kliknout — takže seznam musel být pořád vidět. Zúžení

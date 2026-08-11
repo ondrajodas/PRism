@@ -354,6 +354,17 @@ struct PullRequestDetailView: View {
         )
     }
 
+    /// Rozbalení bublin nálezů v diffu (#185). Jde do diffu **zvlášť**, ne přes `FindingActions`:
+    /// tu bere i tabulka nálezů, která rozbalení řídí sama, a sdílená hodnota by jí zavřela nález,
+    /// který si v ní člověk otevřel.
+    private var findingDisclosure: FindingDisclosureActions {
+        let id = pullRequest.id
+        return FindingDisclosureActions(
+            state: { store.findingDisclosure(of: $0, in: id) },
+            toggle: { store.toggleFinding($0, in: id) }
+        )
+    }
+
     /// Pohled na diff. Žije ve store (globálně, do zavření aplikace), takže si ho vlastní
     /// binding jen podává dál — stejně jako volbu tabu.
     private var diffLayout: Binding<DiffLayout> {
@@ -620,6 +631,13 @@ struct PullRequestDetailView: View {
         // **předtím**, než se nastaví cíl — jinak `scrollTo` míří na id, které v líném
         // seznamu ještě není.
         store.unfold(file.displayPath, in: pullRequest.id)
+        // A sbalená bublina se rozbalí (#185), ze stejného důvodu jako sbalený soubor o řádek
+        // výš: skok na značku ukáže pruh, ne nález, na který se kliklo. Skupina se hledá podle
+        // **nálezu v ní**, ne podle místa — nález bez řádku místo nemá, a zrovna na ten se
+        // z panelu kliká běžně.
+        if let group = findingGroups.first(where: { $0.findings.contains(finding) }) {
+            store.revealFinding(group, in: pullRequest.id)
+        }
         scroll(to: anchor)
         // Zvýraznění se porovnává s tím, co nahlásil reviewer, ne s cestou v diffu — bublina
         // nese jeho `file`, ne `displayPath`.
@@ -821,6 +839,7 @@ struct PullRequestDetailView: View {
                 folding: foldingActions,
                 findings: findingGroups,
                 findingActions: findingActions,
+                findingDisclosure: findingDisclosure,
                 blockingCategories: blockingCategories,
                 highlighted: highlighted,
                 threads: store.anchoredThreads(for: pullRequest.id),

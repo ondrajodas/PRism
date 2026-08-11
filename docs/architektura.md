@@ -266,6 +266,47 @@ Věci, které se u toho nemají rozbít:
 - **Nezakotvené bubliny se řadí podle čísla řádku.** Slovník pořadí nemá, takže by jinak
   mezi překresleními poskakovaly.
 
+Rozbalení bubliny (#185) — **blokující nález je rozbalený rovnou pod svým řádkem, ostatní jsou
+značka na hraně řádku**. Rozhoduje `Policy.disclosure(of:categories:toggled:)`, kreslí
+`FindingBubbleView` a stav drží `AppStore.toggledFindings`. Co se u toho nemá rozbít:
+
+- **Rozhoduje se za skupinu, ne za nález.** Bublina slévá nálezy na jednom řádku do jedné
+  (odznak `2×`), takže rozbalení po nálezech by znamenalo místo napůl otevřené — a odznak shody
+  by mluvil o dvou nálezech, ze kterých je vidět jeden. Stačí proto **jeden** blokující ve
+  skupině a rozbalí se celá.
+- **Odmítnutá skupina se nerozbaluje nikdy** (`FindingDisclosure.dismissed`), a není to sbalený
+  stav bez šipky: odmítnutý nález **je** jeden řádek s důvodem a s `Vrátit`, takže rozbalovat není
+  co — a pod značkou by se `Vrátit` schovalo, tedy jediná akce, která u něj zbývá. Odmítnutí
+  blokujícího nálezu bublinu naopak **odpřišpendlí**: nález, kterému nevěřím, nemá zabírat řádky.
+  Hlídá si to i view (`state`), ať to platí i tam, kde rozbalení řídí volající (tabulka nálezů).
+- **Shoda `2×` sama nerozbaluje.** Přišpendlení je o tom, co zastaví merge; shoda o tom, jak moc
+  nálezu věřit. Odznak `2×` je proto ve **značce**, aby byl vidět i sbalený.
+- **Značka musí říct, co je pod ní.** Kategorie, verdikt, reviewer a náhled textu
+  (`shortSummary ?? summary`) — bez toho by se rozbalovala naslepo. A **odznak `mimo diff`**
+  u nezakotvené bubliny: věta „řádek v diffu není“ je až v obsahu, takže bez odznaku vypadá
+  sbalená bublina u hlavičky souboru jako nález na prvním řádku hunku. Tatáž úvaha jako u odznaku
+  zkráceného vlákna.
+- **Skok na nález ho rozbalí** (`AppStore.revealFinding`), z panelu i z lišty nad diffem — jinak
+  by cíl skoku byl pruh, na kterém není co přečíst. `reveal` přitom **nikdy nesbalí**: kdyby jen
+  překlikl, skok na blokující nález by ho zavřel.
+- **Bublina a karta vlákna leží na téže ploše, a rozlišuje je hrana.** Do #185 měl blokující
+  nález červené pozadí; návrh (`.inline-find`) má neutrální plochu a závažnost nese **proužek,
+  obrys a puntík** — v diffu to má důvod, protože bublina visí nad zeleným i červeným řádkem
+  a třetí barevná plocha vedle nich je kaše. Invariant „nález a cizí komentář nesmí splynout“
+  (viz `ThreadBubbleView`) tím **neodpadá**: karta vlákna proužek schválně nemá a její obrys je
+  neutrální, kdežto nález má vždycky barevný proužek podle závažnosti (`crit` / `find` /
+  tlumený) a u blokujícího i barevný obrys (`Palette.critLine`). Tak je to i v návrhu.
+- **Hlavičku nálezu říká buď značka, nebo řádek uvnitř — nikdy obojí a nikdy nic.** U jednoho
+  nálezu je kategorie, verdikt a reviewer vlastností celé bubliny, takže je nese značka; jenže
+  značka se kreslí jen tam, kde se dá sbalit, a v tabulce nálezů žádná není. Podmínka je proto
+  „buď značka, nebo hlavičky“ (`showsEntryHeaders`), ne „jeden nález“ — jinak by v tabulce
+  z rozbaleného nálezu zmizel verdikt.
+- **Sbalená bublina blok kódu pořád dělí.** Je to řádek seznamu (`DiffRow.finding`) jako dřív,
+  jen nižší — takže se struktura bloků #185 nemění a s ní ani výška, o kterou si blok říká.
+  Kreslit značku jako **vrstvu** nad blokem (a blok nedělit) by selekci přes celý hunk vrátilo,
+  ale znamenalo by to další sloupec v gutteru, který si `DiffTextView` kreslí ručně — a ten jediný
+  úzký sloupec už zabírá pilulka komentáře. Zamítnuto, viz specifikace.
+
 Pohled **vedle sebe** (#98) je `DiffRow.pair(_, left:, right:)` a platí u něj:
 
 - **Jeden model, dva pohledy.** Dvojice je case `DiffRow`, ne vlastní typ vedle něj — se
@@ -1468,8 +1509,9 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffPairView` | Dvojice vedle sebe: dvě buňky `DiffLineView` se `side`, pozadí za celou dvojici, prázdná protistrana |
 | `RangeDragActions`, `DiffRowFrames` | Tažení rozsahu komentáře (#110) — akce a rámečky řádků **mimo observable stav** |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
-| `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit` |
+| `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou |
 | `FindingActions` | Co se dá dělat s nálezem — odmítnout a vrátit; jedno místo pro bublinu i tabulku |
+| `FindingDisclosureActions` | Rozbalení bubliny nálezu (#185) — stav ze store a jeho překliknutí. **Nepatří do `FindingActions`**, kterou bere i tabulka: ta rozbalení řídí sama |
 | `ThreadBubbleView` | Vlákno konverzace — u kódu i na ose (`Placement`); karta z pruhů, vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73, sazba #216) |
 | `ThreadSnippetView` | Úryvek kódu k vláknu na ose (#158) — pás uvnitř bubliny, řádky kreslí `DiffLineView`, nad nimi značka zkrácení |
 | `ThreadActions` | Co se dá dělat s vláknem — rozbalení, odpověď, vyřešení a důvod, proč odesílat nejde |
@@ -2987,6 +3029,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.effectiveVerdict(of:suggestion:)` | Který verdikt **platí** a odkud je — moje volba, jinak návrh (#114) |
 | `Policy.prefillableSuggestion(_:author:viewer:)`, `Policy.isOwn(author:viewer:)` | Smí se návrhem předvyplnit? Na vlastním PR ne |
 | `Policy.groups(of:)` | Shoda reviewerů na `file:line` → `FindingGroup` s odznakem `2×` |
+| `Policy.disclosure(of:categories:toggled:)`, `Policy.disclosureKey(of:)` | Jak je nález u kódu rozbalený (#185): blokující rozbalený, ostatní značka, odmítnutý nikdy — a čím se místo klíčuje |
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` i s **cenou** z uloženého běhu |
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
 | `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |

@@ -4,6 +4,10 @@ import SwiftUI
 ///
 /// Texty se **neslučují**: když se dva reviewery potkají na jednom řádku, jsou v bublině
 /// pod sebou a odznak říká, kolik jich je. Nesouhlas dvou reviewerů je informace.
+///
+/// **Blokující nález je rozbalený rovnou, ostatní jsou značka na hraně řádku** (#185). Rozhoduje
+/// o tom `disclosure`, kterou skládá `Policy` — tady se jen kreslí. Značka je tentýž pruh jako
+/// hlavička rozbalené bubliny, takže kliknutím nic nepřeskočí: přibude pod ní obsah.
 struct FindingBubbleView: View {
     let group: FindingGroup
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
@@ -21,33 +25,198 @@ struct FindingBubbleView: View {
     /// Odsazení do sloupce s obsahem. Ve split pohledu je v buňce jedno číslo řádku místo
     /// dvou, takže je kratší — stejný parametr jako u `ThreadBubbleView`.
     var indent: Double = DiffLineView.contentInset(for: .unified)
+    /// Jak je bublina rozbalená (#185). Výchozí `.expanded` platí tam, kde o rozbalení
+    /// rozhoduje volající — tabulka nálezů kreslí bublinu až po rozbalení řádku.
+    var disclosure: FindingDisclosure = .expanded
+    /// Překliknutí rozbalení. `nil` = rozbalení řídí někdo jiný (tabulka) nebo nikdo (náhledy),
+    /// a pruh se pak nekreslí jako tlačítko.
+    var toggle: (() -> Void)?
 
     /// Kolik řádků kolem nálezu se ukáže, když si o to uživatel řekne. Samotný řádek bez
     /// okolí se čte špatně.
     private static let context = 3
 
+    /// Rozbalení po zohlednění **dat**: skupina, ze které nezbyl platný nález, je odmítnutá, ať
+    /// si volající řekl cokoli. Bez toho by ji tabulka (která rozbalení řídí sama) mohla vykreslit
+    /// jako rozbalenou a sbalená značka by naopak schovala `Vrátit`, tedy jediné, co se s
+    /// odmítnutým nálezem dá udělat.
+    private var state: FindingDisclosure {
+        group.activeFindings.isEmpty ? .dismissed : disclosure
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if !isAnchored { missingLine }
-            if group.agreement > 1 { agreementHeader }
-            ForEach(Array(group.findings.enumerated()), id: \.offset) { index, finding in
-                if index > 0 { Divider() }
-                entry(finding)
+        VStack(alignment: .leading, spacing: 0) {
+            if showsMark { mark }
+            if state != .collapsed {
+                if showsMark { separator }
+                details
             }
         }
-        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(background, in: .rect(cornerRadius: 8))
-        .overlay(alignment: .leading) { accent }
-        .clipShape(.rect(cornerRadius: 8))
+        // **Neutrální plocha a barevná hrana**, jak to má návrh (`.inline-find`): závažnost nese
+        // proužek, obrys a puntík, ne podbarvení celé bubliny. Do #185 měl blokující nález
+        // červené pozadí — vedle přidaného řádku diffu, který je taky barevný, z toho byla
+        // druhá barevná plocha na jednom místě.
+        .background(Palette.chrome, in: .rect(cornerRadius: 7))
+        .overlay(alignment: .leading) { Rectangle().fill(accent).frame(width: 3) }
+        .clipShape(.rect(cornerRadius: 7))
+        .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(border, lineWidth: 1) }
         .overlay {
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 7)
                 .strokeBorder(.tint, lineWidth: isHighlighted ? 2 : 0)
         }
         .animation(.easeOut(duration: 0.2), value: isHighlighted)
         .padding(.leading, indent)   // odsazení do sloupce s obsahem, vedle čísel řádků
         .padding(.trailing, 16)
         .padding(.vertical, 4)
+    }
+
+    /// Kreslí se pruh se značkou?
+    ///
+    /// Sbalená bublina je **jen** on, takže bez něj by nebylo nic. Rozbalená ho má tehdy, když
+    /// se dá sbalit — v tabulce nálezů rozbalení řídí řádek nad bublinou, takže by tam byl druhý
+    /// ovladač téhož a hlavička by v ní psala podruhé to, co je ve sloupcích.
+    ///
+    /// Odmítnutá skupina ho nemá vůbec: rozbalovat u ní není co (`FindingDisclosure.dismissed`)
+    /// a její obsah **je** jeden řádek na nález.
+    private var showsMark: Bool {
+        guard state != .dismissed else { return false }
+        return toggle != nil || state == .collapsed
+    }
+
+    /// Mají jednotlivé nálezy vlastní hlavičku?
+    ///
+    /// **Když je nález jeden, říká ji značka** — kategorie, verdikt a reviewer jsou pak vlastností
+    /// celé bubliny a uvnitř by stály podruhé. Jenže značka se kreslí jen tam, kde se dá sbalit:
+    /// v tabulce nálezů (kde rozbalení řídí řádek) žádná není, takže by hlavička zmizela úplně
+    /// a s ní verdikt. Podmínka je proto **„buď značka, nebo hlavičky“**, ne „jeden nález“.
+    private var showsEntryHeaders: Bool {
+        group.findings.count > 1 || !showsMark
+    }
+
+    /// Linka mezi pruhy — `--line-soft` z palety, jako oddělovače uvnitř ploch všude jinde
+    /// v okně. `Divider()` si bere barvu ze systému a vedle karty vlákna vypadal jako cizí.
+    private var separator: some View {
+        Rectangle().fill(Palette.lineSoft).frame(height: 1)
+    }
+
+    // MARK: - Značka
+
+    /// Pruh, ze kterého se pozná, co v bublině je, aniž by se rozbalovala.
+    ///
+    /// Klikací celý, ne jen šipka: sbalená bublina je úzký pruh a trefit se do deseti bodů šipky
+    /// je zbytečná práce — tatáž úvaha jako u hlavičky vlákna.
+    private var mark: some View {
+        Button {
+            toggle?()
+        } label: {
+            HStack(spacing: 6) {
+                if toggle != nil {
+                    Image(systemName: state == .collapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Palette.ink3)
+                }
+                Circle()
+                    .fill(accent)
+                    .frame(width: 7, height: 7)
+                if isBlocking { pill("blokuje", color: Palette.crit) }
+                if group.agreement > 1 { pill("\(group.agreement)×", color: Palette.accent) }
+                // **I ve sbalené značce**, a je to podmínka, ne ozdoba: nezakotvená bublina visí
+                // u hlavičky souboru, takže bez odznaku vypadá jako nález na prvním řádku hunku.
+                // Věta „řádek v diffu není“ je až v obsahu, tedy za kliknutím — a utnutá pravda
+                // nesmí vypadat jako úplná ani na jeden pohled (tatáž úvaha jako u zkráceného
+                // vlákna).
+                if !isAnchored {
+                    pill("mimo diff", color: Palette.ink2)
+                        .help("Řádek nálezu v diffu není — bublina proto visí u hlavičky souboru.")
+                }
+                headline
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(toggle == nil)
+        .help(markHint)
+        .accessibilityLabel(markHint)
+    }
+
+    /// Co je ve značce napsané, rozhoduje **počet nálezů ve skupině**:
+    ///
+    /// - **jeden** (běžný případ) → celá hlavička nálezu, jak ji má návrh: kategorie, verdikt,
+    ///   reviewer. Uvnitř se pak nekreslí podruhé.
+    /// - **víc** → kolik jich je. Kategorie, verdikt ani reviewer nejsou vlastnost skupiny —
+    ///   liší se po nálezech, takže si je nesou jednotlivé hlavičky uvnitř.
+    ///
+    /// A ve sbaleném stavu k tomu **náhled textu**. Bez něj by značka říkala „tady něco je“, ale
+    /// ne co — tedy přesně to, kvůli čemu by se rozbalovala naslepo.
+    @ViewBuilder private var headline: some View {
+        if let finding = representative, group.findings.count == 1 {
+            attributes(of: finding)
+        } else if let count = countLabel {
+            Text(verbatim: count)
+                .font(.caption2)
+                .foregroundStyle(Palette.ink2)
+                .lineLimit(1)
+        }
+        if state == .collapsed, let preview {
+            Text(verbatim: preview)
+                .font(.system(size: 11.5))
+                .foregroundStyle(Palette.ink2)
+                .lineLimit(1)
+                // Náhled si o místo říká dřív než verdikt a reviewer: v úzkém okně se ořezává
+                // to, co je nejmíň užitečné, ne to, kvůli čemu se značka čte.
+                .layoutPriority(1)
+        }
+    }
+
+    /// Kolik nálezů ve skupině je — a jen tehdy, když to odznak `2×` neříká už sám.
+    ///
+    /// Shoda počítá **reviewery**, počet **nálezy**, takže se ta dvě čísla rozcházejí (jeden
+    /// reviewer se dvěma nálezy na řádku má `2 nálezy` a shodu 1). Když jsou stejná, `2× 2 nálezy`
+    /// vedle sebe je totéž dvakrát.
+    private var countLabel: String? {
+        guard group.findings.count != group.agreement else { return nil }
+        return Plural.czech(group.findings.count, one: "nález", few: "nálezy", many: "nálezů")
+    }
+
+    /// Náhled do sbalené značky — **krátká věta, když ji reviewer napsal**, jinak začátek
+    /// shrnutí. `shortSummary` je přesně na tohle: jeden řádek do seznamu.
+    private var preview: String? {
+        guard let finding = representative else { return nil }
+        let text = finding.shortSummary ?? finding.summary
+        return text.isEmpty ? nil : text
+    }
+
+    /// Nález, který za skupinu mluví ve značce — první **platný**. Odmítnutý by za ni mluvit
+    /// nesměl: značka by nesla kategorii nálezu, kterému nevěřím.
+    private var representative: Finding? {
+        group.activeFindings.first
+    }
+
+    private var markHint: String {
+        switch state {
+        case .collapsed: "Rozbalit nález"
+        case .expanded: "Sbalit nález"
+        case .dismissed: "Odmítnutý nález"
+        }
+    }
+
+    // MARK: - Obsah
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !isAnchored { missingLine }
+            if group.agreement > 1 { agreementNote }
+            ForEach(Array(group.findings.enumerated()), id: \.offset) { index, finding in
+                if index > 0 { separator }
+                entry(finding)
+            }
+        }
+        .padding(10)
     }
 
     /// Nález mimo diff. Reviewer čte celý pracovní strom, takže tohle není chyba — jen se
@@ -91,7 +260,17 @@ struct FindingBubbleView: View {
 
     private func active(_ finding: Finding) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            header(finding)
+            // Hlavička jen tehdy, když ji neřekla značka nad bublinou. U jednoho nálezu jsou
+            // kategorie, verdikt a reviewer vlastností celé bubliny, takže by se psaly dvakrát.
+            if showsEntryHeaders {
+                HStack(spacing: 6) {
+                    if Policy.isBlocking(finding, categories: blockingCategories) {
+                        pill("blokuje", color: Palette.crit)
+                    }
+                    attributes(of: finding)
+                    Spacer()
+                }
+            }
             Text(finding.summary)
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
@@ -110,6 +289,21 @@ struct FindingBubbleView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// Kategorie, verdikt a reviewer — v návrhu jeden řádek hlavičky. Sází se na dvou místech
+    /// (ve značce u jednoho nálezu, v hlavičce uvnitř u víc nálezů), a proto na jednom místě
+    /// v kódu: dvě sazby téhož by se rozešly.
+    @ViewBuilder private func attributes(of finding: Finding) -> some View {
+        if let category = finding.category {
+            pill(category, color: Palette.ink2)
+        }
+        // Verdikt a reviewer jsou **jeden** `Text`, ne dva: v úzkém okně se pak ořeže jako celek
+        // („CONFIRMED · code-rev…“) místo toho, aby se každý zkracoval na svém konci.
+        Text(verbatim: "\(finding.verdict?.rawValue ?? "?") · \(finding.reviewer)")
+            .font(.caption2)
+            .foregroundStyle(Palette.ink3)
+            .lineLimit(1)
+    }
+
     /// Jeden řádek: proč neplatí, čeho se to týkalo a jak to vzít zpátky.
     ///
     /// Text nálezu zůstává (na jeden řádek), protože bez něj by se nedalo poznat, co jsem
@@ -120,7 +314,7 @@ struct FindingBubbleView: View {
                 Image(systemName: "slash.circle")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
-                pill(dismissal.reason.label, color: .secondary)
+                pill(dismissal.reason.label, color: Palette.ink2)
                 Text(verbatim: finding.summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -242,58 +436,51 @@ struct FindingBubbleView: View {
         }
     }
 
-    private func header(_ finding: Finding) -> some View {
-        HStack(spacing: 6) {
-            if Policy.isBlocking(finding, categories: blockingCategories) {
-                pill("blokuje", color: .red)
-            }
-            if let category = finding.category {
-                pill(category, color: .secondary)
-            }
-            Text(verbatim: finding.verdict?.rawValue ?? "?")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-            Text(verbatim: "· \(finding.reviewer)")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-            Spacer()
-        }
-    }
-
     /// Shoda patří **bublině**, ne jednotlivému nálezu — u každého zvlášť by odznak
-    /// tvrdil, že si přikyvuje sám se sebou.
-    private var agreementHeader: some View {
+    /// tvrdil, že si přikyvuje sám se sebou. Odznak `2×` nese značka nad obsahem, takže tady
+    /// zbývá jen věta, kdo se shodl.
+    private var agreementNote: some View {
         HStack(spacing: 6) {
-            pill("\(group.agreement)×", color: .accentColor)
-            Text(verbatim: "nezávisle nahlásili \(reviewers)")
+            Text(verbatim: "Nezávisle nahlásili \(reviewers).")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
         }
     }
 
+    /// Odznak. **Ořezává se poslední**: je to jedno slovo, které buď je čitelné, nebo nemá
+    /// smysl — `mi…` místo `mimo diff` neřekne nic. V úzkém okně proto ustupují texty vedle něj
+    /// (verdikt, reviewer, náhled), ne on.
     private func pill(_ text: String, color: Color) -> some View {
         Text(verbatim: text)
             .font(.caption2)
+            .lineLimit(1)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
             .background(color.opacity(0.15), in: .capsule)
             .foregroundStyle(color)
+            .layoutPriority(2)
     }
 
-    /// Červený pruh po straně u blokujícího nálezu — ať je hned poznat, na co se dívat
-    /// dřív.
-    @ViewBuilder private var accent: some View {
-        if isBlocking {
-            Rectangle().fill(.red).frame(width: 3)
-        }
+    /// Barva hrany: blokující červená, platný nález `find`, odmítnutý tlumený. **Tatáž škála
+    /// jako u karty v panelu** (#175) a u řádku fronty (#172), aby tři místa neříkala o téže
+    /// věci každé něco jiného.
+    ///
+    /// Proužek má bublina **vždycky**, ne jen když blokuje: je to zároveň to, co ze sbalené
+    /// značky dělá značku na hraně řádku, a ne jen další pruh v diffu.
+    private var accent: Color {
+        if state == .dismissed { return Palette.ink3 }
+        return isBlocking ? Palette.crit : Palette.find
     }
 
-    private var background: Color {
-        isBlocking ? .red.opacity(0.07) : .gray.opacity(0.12)
+    /// Obrys. U blokujícího je `color-mix(crit 35 %, line)` z návrhu — vyčíslený v paletě, ne
+    /// průhledná červená: skrz krytí by prosvítalo pozadí, na kterém bublina leží, takže by se
+    /// obrys měnil podle toho, jestli je pod ním kód, nebo panel.
+    private var border: Color {
+        isBlocking ? Palette.critLine : Palette.line
     }
 
-    /// Červený pruh a pozadí se řídí **platnými** nálezy: bublina, jejíž jediný blokující
+    /// Červený pruh a obrys se řídí **platnými** nálezy: bublina, jejíž jediný blokující
     /// nález jsem odmítl, nemá dál křičet, že se na ni má koukat dřív.
     private var isBlocking: Bool {
         group.activeFindings.contains { Policy.isBlocking($0, categories: blockingCategories) }

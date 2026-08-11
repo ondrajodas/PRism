@@ -595,7 +595,7 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
 9. **Revize okna** (M9) — nový vizuální jazyk podle návrhu ze srpna 2026 a přestavba okna
    na záložky. Šestnáct issues ve čtyřech vlnách; **pořadí je v popisu milníku**, protože se
    podle něj rozhoduje, co se dá dělat souběžně. Hotové: řádek fronty #172, co se změnilo od
-   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219, sazba bloku „od minule“ #226, sazba hlavičky PR #218 a odpočet příštího tiku #237. Mimo plán přibylo
+   poslední návštěvy #173, procházení nálezů šipkami #187, nálezy jako karty #175, hlavička PR s větvemi #174. **Vlna A je hotová**; **vlna B je hotová** (#178, #177, #179). Z vlny C rail a záložky #180, dashboard #181, tab konverzace #183, dlaždice faktů #211, iniciály na kartě popisu #212, kontroly v `Přehledu` #213, sazba položek konverzace #216, sazba lišty diffu s hlavičkou souboru #219, sazba bloku „od minule“ #226, sazba hlavičky PR #218, odpočet příštího tiku #237 a přišpendlený blokující nález #185. Mimo plán přibylo
    **#220 — okno vytuhlo na PR s ~2000 změněnými řádky**: pružná šířka na každé úrovni zanoření
    stojí ~5,5× na úroveň, takže se šířka teď měří jednou a předává dolů. Odpadlo z toho #223
    (blok bez stropu) a #224 (barvení bez cache) do milníku Průběžné — obojí se měřením vyloučilo
@@ -867,6 +867,28 @@ v `Policy.tally`). A **složení panelu se přestěhovalo do `AppStore`**, proto
 přidaná z diffu musí umět panel rozložit sama; dokud to rozhodnutí bydlelo v `@State`, nešlo ho
 otestovat. Jeden reálný nález přišel z testu, ne z review: session spadlá při startu neznačila
 selhání v žádné fázi, takže dráha vypadala k nerozeznání od té, co ještě nezačala.
+
+**Blokující nález přišpendlený pod řádkem (#185)** — bublina u kódu se rozpadla na **značku**
+(pruh s odznaky, kategorií, reviewerem a náhledem textu) a obsah pod ní. Blokující nález je
+rozbalený rovnou, ostatní se rozbalí kliknutím a odmítnutý se nerozbaluje nikdy — jeho jediný řádek
+i s `Vrátit` je vidět tak jako tak.
+
+Tři rozhodnutí, která v zadání nebyla. **Rozbaluje se místo, ne nález**: dva nálezy na jednom řádku
+jsou jedna bublina s odznakem `2×`, takže by se jinak dala otevřít napůl. **Shoda `2×`
+nepřišpendluje** — přišpendlení je o tom, co zastaví merge, kdežto shoda o tom, jak moc nálezu
+věřit; odznak proto sedí ve značce, aby byl vidět i sbalený. A **pohled vedle sebe se nechová
+jinak**: nález stranu nemá (hlásí se proti nové verzi), takže bublina zůstává přes celou šířku, jen
+s kratším odsazením — což platilo už od #98.
+
+Sbalená bublina blok kódu **pořád dělí**, tedy struktura řádků se nemění a s ní ani výška, o kterou
+si blok říká (#236). Kreslit značku jako vrstvu nad blokem by vrátilo výběr přes celý hunk, ale
+chtělo by to další sloupec v gutteru, který `DiffTextView` kreslí ručně — a ten jeden úzký sloupec
+už zabírá pilulka komentáře. Zamítnuto, důvod je ve specifikaci.
+
+Cestou se opravila jedna věc, která by jinak vznikla novou: **skok na nález ho rozbalí**. Bez toho
+by cíl skoku z panelu i z lišty byl pruh, na kterém není co přečíst — tatáž úvaha, kvůli které skok
+rozbaluje i sbalený soubor. A `Přeložit` z návrhu se **nedělalo**: překlad na vyžádání v aplikaci
+neexistuje (běží jednou po review) a byl by to nový běh `claude`, tedy vlastní issue.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
