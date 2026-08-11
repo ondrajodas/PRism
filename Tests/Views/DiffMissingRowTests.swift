@@ -133,8 +133,12 @@ struct DiffMissingRowTests {
     func hatchDrawsOverTheRowPlane() throws {
         let view = column(missing: [2])
         let added = try shades(ofRow: 2, in: view)
-        #expect(added.contains { close($0.color, try! dark(Palette.diffAdded)) }, "Pozadí přidaného řádku zmizelo pod šrafou.")
-        #expect(added.contains { close($0.color, try! dark(Palette.diffMissingStripe)) }, "Na řádku není pruh šrafy.")
+        // Barvy se vyhodnotí **jednou a mimo `#expect`**: `try!` uvnitř closure by z převodu, který
+        // se nepovede, udělal pád místo červeného tvrzení — a počítal by se u každého vzorku.
+        let plane = try dark(Palette.diffAdded)
+        let stripe = try dark(Palette.diffMissingStripe)
+        #expect(added.contains { close($0.color, plane) }, "Pozadí přidaného řádku zmizelo pod šrafou.")
+        #expect(added.contains { close($0.color, stripe) }, "Na řádku není pruh šrafy.")
     }
 
     /// Které řádky jsou prázdné, ví jedině dvojice — přepis pole na množinu indexů.

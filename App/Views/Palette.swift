@@ -44,7 +44,7 @@ enum Palette {
     /// **2,01** proti pozadí přidaného řádku a **2,22** na ploše hlavičky, tedy pod hranicí
     /// čitelnosti; `ok` má na týchž místech **4,65** a **5,08**. V tmavém režimu je to výměna
     /// 7,42 → 5,95, tedy pořád s velkou rezervou. Dvě sady barev z toho nevznikly — je to naopak
-    /// o jednu méň.
+    /// o jednu méně.
     static let ok = Color(light: 0x1A7F37, dark: 0x3FB950)
     static let crit = Color(light: 0xCF222E, dark: 0xF85149)
     /// Nález — puntík revieweera, který něco našel. Vlastní tón mezi `ok` a `crit`, protože
