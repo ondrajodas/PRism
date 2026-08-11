@@ -574,6 +574,12 @@ příští spuštění skriptu: je to **tatáž cesta**, kterou odregistrovává
                                       # konfigurace očištěná o odesílání, notifikace a automat
 ```
 
+```bash
+./bin/slot-config.sh    # očištěná konfigurace do cache slotu; slot z .prism-slot (#262)
+                        # jediné místo, kde ta očista je — nepiš vlastní `jq` filtr
+                        # subagent v dávce ji volá takhle: strom má od harnessu
+```
+
 **Slot je jediné, co dělí paralelní okna od sebe** — bundle ID, jméno v `/Applications`
 i kořen cache (ten si aplikace bere z `CFBundleName`, ne z konstanty). Bez `.prism-slot` se
 nemění nic, takže hlavní strom zůstává tou aplikací, která se používá. Podrobnosti v README,
