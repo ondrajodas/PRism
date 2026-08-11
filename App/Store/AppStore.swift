@@ -765,6 +765,25 @@ final class AppStore {
     /// CI se tab nekreslí a je to správně, po chybě sítě by zmizel tab, který tam patří.
     var checkFailures: [PRIdentifier: String] = [:]
 
+    /// Který check je v tabu `Kontroly` rozbalený (#214), na PR nejvýš jeden.
+    ///
+    /// Dva otevřené konce logu pod sebou znamenají scrollování přes to, co se zrovna nečte — a dvě
+    /// sady megabajtů v paměti.
+    var expandedChecks: [PRIdentifier: String] = [:]
+
+    /// Anotace a log rozbaleného checku (#214).
+    ///
+    /// **Neukládá se na disk a nemá přežít sbalení checku ani restart.** Log není nález: neplatí
+    /// proti `headSha`, nedá se odmítnout a příště se stáhne znovu, takže v cache vedle nálezů nemá
+    /// co dělat. Drží ho tenhle stav a zaniká s oknem.
+    var checkDetails: [CheckKey: CheckDetailState] = [:]
+
+    /// Běžící stahování detailu checku — kvůli **zrušení** při sbalení a při úklidu.
+    ///
+    /// Bez něj by osmimegový log dobíhal do stavu, který už nikdo nečte, a zapsal by text, který se
+    /// má zapomenout. Čtyři vteřiny jsou za hranicí, kdy stačí přebarvit tlačítko.
+    var checkTasks: [CheckKey: Task<Void, Never>] = [:]
+
     /// Kdy se polling zeptá znovu. `nil`, dokud smyčka poprvé neusne.
     var nextPoll: Date? { polling.state.nextPoll }
 
@@ -1261,6 +1280,16 @@ final class AppStore {
         // u PR, které v seznamu není.
         checks = checks.filter { wantedPullRequests.contains($0.key) }
         checkFailures = checkFailures.filter { wantedPullRequests.contains($0.key) }
+
+        // Rozbalený check a jeho detail (#214). Stahování se **ruší**, ne opouští: osmimegový log
+        // by dojel do stavu, který už nikdo nečte. Text se u toho zahazuje schválně — nemá přežít
+        // ani sbalení checku, natož vypadnutí PR ze seznamu.
+        for (key, task) in checkTasks where !wantedPullRequests.contains(key.pullRequest) {
+            task.cancel()
+            checkTasks[key] = nil
+        }
+        expandedChecks = expandedChecks.filter { wantedPullRequests.contains($0.key) }
+        checkDetails = checkDetails.filter { wantedPullRequests.contains($0.key.pullRequest) }
 
         // Zavřený nebo mergnutý PR nemá co blokovat slot. Ruší se **jen automatická**
         // review: to ruční si vyžádal člověk a zrušit mu ho pod rukama proto, že PR mezitím

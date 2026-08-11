@@ -128,6 +128,59 @@ struct GhGateway: GitHubGateway {
         return items.compactMap { $0.release() }
     }
 
+    func fetchAnnotations(repo: RepoID, checkRunID: Int) async throws -> CheckAnnotations {
+        // `per_page=100` je strop GitHubu. Bere se **jedna stránka**: víc než sto anotací na jeden
+        // check nikdo nečte a stránkování by bylo volání navíc za nic — z plné stránky se místo
+        // toho pozná, že jich může být víc (`mayHaveMore`).
+        let page = 100
+        let items = try await run([
+            "api", "repos/\(repo)/check-runs/\(checkRunID)/annotations?per_page=\(page)",
+        ], decodedAs: [GhAnnotation].self)
+
+        return CheckAnnotations(
+            fetched: items.map(\.annotation),
+            pageWasFull: items.count >= page
+        )
+    }
+
+    func fetchJobLogSize(repo: RepoID, jobID: Int) async throws -> Int {
+        // `-X HEAD -i` vypíše **jen hlavičky**, takže se velikost zjistí bez stažení těla —
+        // a `gh` přitom následuje redirect do Azure blobu, odkud `Content-Length` doopravdy je.
+        let headers = try await run([
+            "api", "-X", "HEAD", "-i", "repos/\(repo)/actions/jobs/\(jobID)/logs",
+        ])
+        guard let size = Self.contentLength(in: headers) else {
+            // **Nehádá se.** Bez velikosti se nedá rozhodnout o stropu, a tvářit se, že log je
+            // malý, znamená stáhnout osm mega na pozadí okna.
+            throw GitHubError.malformedOutput("Odpověď na velikost logu neobsahuje Content-Length.")
+        }
+        return size
+    }
+
+    func fetchJobLog(repo: RepoID, jobID: Int) async throws -> String {
+        // Přímé API, ne `gh run view --job --log` — změřeno 1,50 s proti 4,77 s za tentýž obsah
+        // (#214). Bez dekódování: odpověď je **plain text**, ne JSON.
+        try await run(["api", "repos/\(repo)/actions/jobs/\(jobID)/logs"])
+    }
+
+    /// `Content-Length` z vypsaných hlaviček.
+    ///
+    /// Bere se **poslední nenulová**: `gh -i` u redirectu vypíše hlavičky obou odpovědí a ta první
+    /// (z GitHub API) má `Content-Length: 0`. Kdyby se brala první, vyšel by každý log jako prázdný
+    /// — a strop by ho pustil ke stažení bez ohledu na velikost.
+    static func contentLength(in headers: String) -> Int? {
+        headers
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .compactMap { line -> Int? in
+                let parts = line.split(separator: ":", maxSplits: 1)
+                guard parts.count == 2,
+                      parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length"
+                else { return nil }
+                return Int(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            .last { $0 > 0 }
+    }
+
     private func run<T: Decodable>(_ arguments: [String], decodedAs type: T.Type) async throws -> T {
         let output = try await run(arguments)
         do {

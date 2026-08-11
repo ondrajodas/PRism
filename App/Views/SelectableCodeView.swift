@@ -57,6 +57,16 @@ struct SelectableCodeView: NSViewRepresentable {
         let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let language = Language(path: path)
         let palette = SyntaxPalette.forScheme(colorScheme)
+
+        // **Bez známého jazyka se text neskládá po řádcích** (#214). Dělení a slepování řádek po
+        // řádce nic nepřidá, když se nemá co obarvovat — a u velkého textu je to celá cena: změřeno
+        // na dvoumegovém logu z Actions **38 ms po řádcích proti 2,2 ms jednolitě** (17×), na
+        // 8,78 MB 155 ms proti 7,9 ms. Konec logu (#214) tudy chodí vždycky, protože `.log` žádný
+        // jazyk nemá; sheetu s kódem to pomůže u souborů, které `Language` nezná.
+        guard let language else {
+            return NSAttributedString(string: code, attributes: [.font: font])
+        }
+
         let result = NSMutableAttributedString()
 
         // `omittingEmptySubsequences: false`, ať prázdné řádky nezmizí — v kódu drží strukturu
@@ -64,10 +74,6 @@ struct SelectableCodeView: NSViewRepresentable {
         for (index, line) in code.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
             if index > 0 {
                 result.append(NSAttributedString(string: "\n", attributes: [.font: font]))
-            }
-            guard let language else {
-                result.append(NSAttributedString(string: String(line), attributes: [.font: font]))
-                continue
             }
             for run in SyntaxHighlighter.runs(of: String(line), in: language) {
                 var attributes: [NSAttributedString.Key: Any] = [.font: font]

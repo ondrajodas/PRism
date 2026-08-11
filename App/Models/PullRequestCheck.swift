@@ -28,12 +28,21 @@ struct PullRequestCheck: Hashable, Sendable, Identifiable {
 
     let name: String
     let outcome: Outcome
-    /// Odkaz na běh na GitHubu. Log se **nestahuje** — jsou to megabajty a čte se jednou.
+    /// Odkaz na běh na GitHubu. Od #214 je z něj i `jobID`, tedy to, čím se dá dojít k anotacím
+    /// a ke konci logu — `gh pr checks` samo číslo jobu nedává.
     let link: URL?
     let startedAt: Date?
     let completedAt: Date?
 
     var id: String { name }
+
+    /// Číslo jobu z `link`u (#214). `nil` = detail se **nenabízí**.
+    ///
+    /// Rozborem odkazu, ne druhým voláním: `…/actions/runs/<runId>/job/<jobId>` nese číslo, které
+    /// funguje **i jako check-run ID** pro anotace. Že ho `link` mít nemusí, je ověřené (CodeQL má
+    /// `/runs/<id>` bez `/job/`, bors odkazuje úplně mimo GitHub) — proto se nabídka detailu váže
+    /// na **tohle číslo, ne na `outcome`**: tlačítko, které skončí chybou, je horší než žádné.
+    var jobID: Int? { Policy.jobID(from: link) }
 
     /// Jak dlouho běžel. `nil`, dokud neskončil nebo když čas nedorazil.
     var duration: TimeInterval? {

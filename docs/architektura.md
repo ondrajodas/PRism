@@ -2504,6 +2504,51 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     se na `Přehled` vůbec nepodívá. Hlavička je vidět ve všech tabech a už jednu takovou větu nese
     (kontrola nálezů, #150). Okrová, ne červená: nepovedlo se to **zjistit**, což je „nevím“, ne
     „je to rozbité“.
+
+  **Detail jednoho checku** (#214) — anotace a konec logu, `AppStore+Checks` a `CheckDetailView`:
+  - **Až na kliknutí a jen na ten jeden check.** Log celého běhu je log všech jeho jobů (u změřeného
+    PR 23), takže tahat ho pro seznam je N+1 past o tři řády dražší než u detailu PR. Rozbalený je
+    **jeden na PR** — dvě sady megabajtů v paměti nemají důvod.
+  - **Nabídka detailu visí na `jobID`, ne na `outcome`.** Číslo se rozborem vytáhne z `link`u
+    (`…/runs/<runId>/job/<jobId>`) a **totéž číslo funguje jako check-run ID** pro anotace, takže se
+    pro něj nechodí zvlášť. Že ho odkaz mít nemusí, je ověřené (CodeQL má `/runs/<id>` bez `/job/`,
+    bors odkazuje mimo GitHub) — u takového checku se detail nenabízí, protože tlačítko, které
+    skončí chybou, je horší než žádné. Pozor na past: `…/runs/<runId>` končí taky číslem, ale je to
+    **běh**, ne job.
+  - **Nad 2 MB se log nestahuje vůbec** a na jeho místě je věta s konkrétní velikostí. Rozhoduje
+    `Content-Length` z `HEAD`, který je levný a **konstantně** levný (~1,2 s u 33 kB i u 8,78 MB),
+    takže věta není odhad. Cena rozhodnutí: nad stropem odpadá i **konec** logu, tedy zrovna
+    u toho největšího — obejít to částečným stažením nejde, `Range` přes `gh` se na redirect do
+    Azure blobu nepřenese a vrátí celých 8,78 MB (změřeno).
+  - **Strop je změřený, ne odhadnutý** (zadání to chtělo kvůli #275): dvoumegový ocas skutečného
+    logu (5 843 řádků, nejdelší 2 003 znaků) se v `NSTextView` nasází za **220 ms**, celých 8,78 MB
+    za 850 ms. 2 MB tedy zůstalo se rezervou.
+  - **Log se ořezává od konce a řekne se, kolik se nevešlo** (`LogTail`) — tiše zkrácený log tvrdí,
+    že job začal uprostřed. Ořez je věc **zobrazení, ne úspory stahování**: API vrací celý log
+    jedním requestem, takže celý text zůstává pro `Ukázat celý log`.
+  - **ANSI se strhává a timestampy se schovávají.** ANSI je v obou změřených logách (116 řádků
+    v 8,78MB) a bez toho se v okně objeví `^[[36;1m` uprostřed věty. Timestamp má skoro každý řádek
+    (25 528 z 25 534) a zabírá 28 znaků, tedy ukrajuje šířku zrovna tam, kde je potřeba přečíst konec
+    assertace; zadání nabízelo schovat nebo zešednout, schovává se — zešednutí by šířku nevrátilo.
+  - **Nic z toho se neukládá** a nepřežije ani sbalení checku, ani restart. Sbalení navíc stahování
+    **zruší**: čtyři vteřiny jsou za hranicí, kdy stačí přebarvit tlačítko, a nezrušený běh by dopsal
+    text, který se má zapomenout.
+  - **Anotace z CI není nález z review.** Plochý řádek se štítkem (`error`/`warning`/`notice`), ne
+    bublina s obrysem a levým pruhem — nález má revieweera a dá se odmítnout, anotace je cizí fakt.
+    A **nepočítá se nikde**: ani v řádku fronty, ani v panelu, ani v odznaku tabu.
+  - **Dvě různá „chybí“ u anotací**, protože se o nich ví různě moc: přesný počet stažených, které
+    se nekreslí, a `mayHaveMore` bez počtu, když přišla plná stránka. Je to tentýž případ jako
+    `ConversationShortfall.events` (#171) — mlčet nejde, ale číslo si vymyslet nesmíme.
+  - **Konec logu má omezenou výšku a scrolluje se v něm.** Tři stovky řádků nasazených naplno odtlačí
+    zbytek seznamu checků mimo obrazovku, tedy zrovna to, kvůli čemu se detail z `Přehledu` stěhoval.
+    Zarovnání doleva u toho **potřebuje spočítanou šířku** (`availableWidth`, #220): `ScrollView`
+    obsah užší než viewport vystředí a uvnitž dvouosého scrollu se šířka vyjednat nedá, protože
+    obsah dostane neomezenou nabídku. `Spacer` ani `frame(maxWidth:)` to nespraví — chyceno
+    offscreen renderem.
+  - **Log nejde přes obarvování po řádcích.** `SelectableCodeView` bez známého jazyka sází text
+    jednolitě: změřeno **38 ms proti 2,2 ms** na dvoumegovém logu (17×), na 8,78 MB 155 ms proti
+    7,9 ms. `.log` žádný jazyk nemá, takže tudy chodí každý log — a sheetu s kódem to pomůže
+    u souborů, které `Language` nezná.
 - **`Přehled` má dlaždice s fakty** (#198): commity (a kolik z nich je nových od minule),
   soubory (a kolik má nález), hlava PR a sha, proti které platí nálezy. **Nic se pro ně
   nedotahuje** — jsou to údaje, které v okně už jsou, jen roztroušené. Tři pravidla:
@@ -3402,6 +3447,10 @@ Věci, které se u toho nemají rozbít:
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
 | `Policy.tabs(hasChecks:)` | Které záložky PR se kreslí (#215) — `Kontroly` odpadnou u PR bez CI. Pořadí je z `allCases`, ať se nedá rozejít s výčtem |
 | `Policy.checksBadge(of:)` | Odznak u záložky `Kontroly` (#215) — spadlé červeně s počtem, běžící puntíkem, zelené a přeskočené bez odznaku |
+| `Policy.jobID(from:)` | Číslo jobu z odkazu na check (#214). Funguje i jako check-run ID pro anotace; `…/runs/<id>` bez `/job/` je **běh**, ne job, takže `nil` |
+| `Policy.strippingANSI(_:)`, `Policy.strippingTimestamps(_:)` | Čistka logu (#214) — bez nich je v okně `^[[36;1m` a 28 znaků timestampu na každém řádku |
+| `Policy.logTail(_:lines:)` | Konec logu a **kolik se ho nevešlo** (`LogTail`, #214). Tiše zkrácený log tvrdí, že job začal uprostřed |
+| `Policy.logAvailability(bytes:)` | Jde se pro log vůbec? (#214) Nad 2 MB ne — věta s konkrétní velikostí z `Content-Length`, změřený strop |
 | `Policy.facts(commits:newCommits:files:filesWithFindings:headSha:findingsHeadSha:)` | Dlaždice s fakty o PR (#198); dlaždice, o které se nedá nic říct, se vynechá |
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
 | `Policy.fileFindings(in:categories:)` | Co je v souboru k vyřízení pro kapsli v hlavičce diffu (#219) — počítá **místa**, ne nálezy, a odmítnuté vynechá |

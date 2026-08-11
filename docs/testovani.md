@@ -1150,6 +1150,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   stavy**, protože právě ty se odebráním bloku dají potichu rozbít: `Načítám popis…` (detail
   nedorazil) a `Autor k PR nic nenapsal.` (autor nic nenapsal) musí zůstat **dva různé stavy**,
   a k tomu nejchudší možný `Přehled` — bez dlaždic i bez checků — nesmí být prázdná plocha.
+- **Detail spadlého checku (#214)** — `Policy` výčtem (`CheckLogTextTests`) a store
+  (`AppStoreCheckDetailTests`). Nejcennější testy tvrdí, že se něco **NEstalo**:
+  - **bez kliknutí se pro log ani anotace nejde** — jinak je to N+1 past o tři řády dražší
+    než u detailu PR;
+  - **nad stropem se pro log vůbec nejde** — hlídá se, že se zjistila velikost a **nestahovalo**;
+  - **bez známé velikosti se nestahuje** — hádat, že je log malý, znamená stáhnout osm mega;
+  - **sbalení stažený text zahodí a běžící stahování zruší**;
+  - **selhání se nesmí tvářit jako prázdno** — ani u logu („nepodařilo se stáhnout“ ≠ „log je
+    prázdný“), ani u anotací, kde prázdno je navíc **běžný** stav, protože je workflow emitovat
+    nemusí. K tomu, že spadlé anotace **nepoloží log** — jsou to dvě samostatné cesty;
+  - **číslo běhu se nevydává za číslo jobu** (`…/runs/<id>` bez `/job/`) — log běhu je log všech
+    jeho jobů. Ověřeno na skutečných odkazech CodeQL a borsu.
+
+  **Regrese ověřená vložením regrese**: strop, který se ignoruje, položí dva testy; selhání
+  zapsané jako prázdný log jeden.
+
+  **Ořez logu se testuje i na koncovém `\n`** — kdyby se počítal jako řádek, tvrdil by ořez log,
+  který se do stropu vešel přesně. A hláška o vynechaných řádcích se u čtyřciferného počtu
+  porovnává **po částech**: `Plural.czech` dělí tisíce nezlomitelnou mezerou, takže napsaná
+  `3 812` je červená a test by tvrdil něco o formátování čísel.
+
+  Vzhled je doložený offscreen renderem ve světlém i tmavém režimu přes všech pět stavů detailu
+  (načítá se, bez anotací, nad stropem, selhalo, „nevešlo se“). Chytil dvě věci, které z kódu
+  vidět nejsou: **konec logu se vystředil** místo zarovnání doleva (`ScrollView` centruje obsah
+  užší než viewport a `Spacer` ani `frame(maxWidth:)` to uvnitř dvouosého scrollu nespraví) a
+  **tři stovky řádků odtlačily zbytek seznamu** mimo obrazovku.
+
+  **Cena sazby logu má vlastní měření** (`CheckLogPerformanceMeasurement`, `PRISM_MEASURE=1`) —
+  není to test, netvrdí časy. Log v něm je syntetický podle skutečných rozměrů; dvoumegový soubor
+  se do repa nepřikládá.
+
 - **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
   (řádek plný nul utopí to jedno číslo, na kterém záleží) a **ukázání shodné sha nálezů**, ze které
   neplyne nic. Nejcennější test je právě ten druhý: shodná se nekreslí, rozešlá ano a je označená
