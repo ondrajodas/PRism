@@ -461,6 +461,27 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   pohledech. Našlo to dvě věci, které se z kódu nepoznaly: ořezaný odznak (`mi…` místo
   `mimo diff`) a náhled textu ustupující verdiktu — odsud `layoutPriority` na odznacích
   a na náhledu.
+- **Akce u nálezu jako tlačítka (#283)** — `FindingActionButtonTests`. Vzhled se dá otestovat jen
+  přes čísla a texty, takže se testuje **to, co se dá zjednodušit potichu**: rozměry `.mini` proti
+  CSS návrhu (font 11,5, padding 3 × 9, poloměr 6, mezera 7, obtažení 1), že se obtažení
+  **připočítává k odsazení** (CSS ho má vně paddingu, SwiftUI ho kreslí dovnitř) a že tlačítko vyjde
+  na **25 bodů** — tedy na výšku, kterou návrh dává i vstupu do palety v hlavičce.
+
+  K tomu barvy z palety a jeden test proti záměně, která se ve světlém režimu **neprojeví**: text
+  plného tlačítka je `Palette.surface` (`--panel`), takže se rozsvítí v obou vzhledech
+  (`performAsCurrentDrawingAppearance`) a ověří se, že ve světlém je bílý a v tmavém ne. Zadrátovaná
+  `.white` by ve světlém režimu vypadala správně.
+
+  Popisky odmítnutí mají **dvě podoby** a nesmí splynout: `actionLabel` na tlačítko (velké písmeno,
+  každý důvod jiný) a `label` do odznaku (malé písmeno, přídavné jméno). Test tvrdí obojí i to, že
+  se ty dvě hodnoty u žádného důvodu nerovnají — kdyby se `label` přejmenoval na popisek z návrhu,
+  odznak odmítnutého nálezu by řekl akci. Ověřeno **vloženou regresí** ve dvou podobách: `.white`
+  místo palety (spadly dva testy) a `label` na místě `actionLabel` (spadly dva).
+
+  Jak to **vypadá**, se ověřilo renderem vedle vyrenderovaného návrhu, ne kódem — a našlo to dvě
+  věci: tlačítko **20 bodů proti 25** v návrhu (chybějící `line-height` a obtažení) a to, že věta
+  „GitHub tady řádkový komentář nepřijme“ jako ocas za tlačítkem shodí celou řadu do sloupce i na
+  širokém okně. Pásmo šířek 300–482 pak ukázalo všechny tři varianty zalomení.
 - **Notifikace (#88)** — proti `FakeNotificationCenter`, takže se **nic nedoručuje**. To hlavní
   není text notifikace, ale dvě věci, které se dají pokazit tiše: že se **odmítnuté oprávnění
   dá poznat** (a úspěch tu hlášku smaže) a že se **kliknutí neztratí, když dorazí dřív**, než
