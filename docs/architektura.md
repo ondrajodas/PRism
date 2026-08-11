@@ -2442,10 +2442,11 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Kolik znaků zbývá, se měří, ne bere z tabulky.** Tabulka v zadání #188 platí pro jeden
     displej a jedno nastavení; číslo v liště platí pro okno, které mám otevřené. Ukazuje se
     **jen pod slibem** (120 znaků z `CLAUDE.md`) — nad ním je to údaj, který nikoho nezajímá.
-- **`Přehled` ukazuje checky z GitHub Actions** (#209) — druhou půlku otázky „dá se to
-  mergnout“; tu první (nálezy) okno umělo, takže se nad zeleným review stejně chodilo do
-  prohlížeče. Čtyři pravidla:
+- **Checky z GitHub Actions mají vlastní tab `Kontroly`** (#215; do #215 to byl blok
+  v `Přehledu` — #209) — druhou půlku otázky „dá se to mergnout“; tu první (nálezy) okno umělo,
+  takže se nad zeleným review stejně chodilo do prohlížeče. Čtyři pravidla:
   - **Nejhorší stav vyhrává, ne většina.** Dvanáct zelených a jeden červený je červený stav.
+    Platí to pro chip v hlavičce i pro **odznak tabu** (`Policy.checksBadge`).
   - **Tři stavy, ne dva**, a `skipped` je vlastní. Běžící check není prošlý ani spadlý a
     přeskočený není úspěch — jinak by hlavička svítila zeleně nad přeskočeným testem. Neznámý
     kbelík se bere jako běžící: je to jediný stav, který o výsledku netvrdí nic.
@@ -2457,6 +2458,40 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
 
   Tahá se **s detailem PR**, ne pollingem přes všechna (tatáž N+1 past), a `fetchChecks` je
   **čtení** — restart workflow do aplikace nepatří (tvrdá podmínka č. 1).
+
+  **Co k tomu přidalo stěhování do tabu** (#215):
+  - **`Přehledu` zbyl souhrn, ne seznam** (`ChecksSummaryView`): hlavička s poměrem a pod ní
+    **jeden řádek s nejhorším checkem** jako ukazatel, kam jít dál. U zeleného CI zbývá jen ta
+    hlavička — řádek je pro to, co se má řešit, a u zeleného PR by jmenoval náhodný job
+    z dvanácti. **Chip v hlavičce zůstává** taky: „je to zelené“ se musí dát přečíst i při
+    čtení diffu, tedy z hlavičky, která je vidět ve všech tabech.
+  - **Tab se nekreslí, když checky nejsou** (`Policy.tabs(hasChecks:)`). PR bez CI je běžná věc
+    a prázdný tab s nadpisem by o něm tvrdil, že se něco nepovedlo. „Nenačteno“ a „žádné“ jsou
+    ve `AppStore.checks` schválně dva různé stavy, ale **pro pruh záložek z obou plyne totéž** —
+    není čím tab naplnit.
+  - **Uložená volba se zarovnává na kreslené záložky, ne maže** (`AppStore.detailTab(for:)`).
+    Kdyby se nezarovnávala, po zmizení checků by v okně nesvítila žádná záložka a plocha tabu by
+    zůstala prázdná; kdyby se mazala, vypadl by člověk z tabu `Kontroly` při každém příchodu na
+    PR, protože checky se dotahují s detailem a chvíli nejsou.
+  - **Dělič v pruhu se počítá z vlastnosti tabu, ne z indexu** (`isReviewerOutput`). `Kontroly`
+    sedí nalevo doprostřed **a někdy tam nejsou**, takže zadrátovaná pozice by dělič posunula
+    podle dat.
+  - **Odznak má tři podoby, ne jednu**: spadlé → červená kapsle s počtem (blokuje merge, takže
+    tichá kapsle by se čtla jako údaj o množství), běžící → puntík jako u `Průběhu` („běží“ je
+    stav, ne množství), zelené i přeskočené → **nic**. Zelené CI je výchozí stav a číslo u něj
+    by byl šum, kvůli kterému by se přestaly čít i ty ostatní dva.
+  - **Texty a barvy checků jsou na jednom místě** (`ChecksText`) — tab, souhrn i chip. Do #215
+    měl každý kus okna vlastní kopii a **už tehdy se rozešly**: blok kreslil `.green`/`.red` ze
+    SwiftUI, chip `Palette.ok`/`Palette.crit` z palety návrhu, takže dvě zelené v jednom okně
+    znamenaly jednu věc. Se třemi kopiemi by se to rozešlo znovu.
+  - **Selhané načtení checků má vlastní stav** (`checkFailures`), ne prázdné pole. Do #215 to bylo
+    `(try? await gateway.fetchChecks(id:)) ?? []` a dalo se to obhájit tím, že checky jsou doplněk
+    k PR; od #215 je ale prázdno **tvrzení** — visí na něm, jestli se nakreslí tab —, takže by
+    z chyby sítě tiše vyšlo „tenhle PR nemá CI“. `GhGateway.fetchChecks` ten rozdíl drží schválně
+    (prázdný výstup s nulovým kódem = bez CI, nenulový s prázdným výstupem = chyba), takže by ho
+    zahazoval až store. Dvě pravidla k tomu: po selhání se **stará sada nechává být** (zastaralý
+    seznam s větou nad ním je lepší než zmizelý tab) a **zrušení se nezapisuje** — `.task` se ruší
+    při přepnutí PR, což není porucha. Věta je v `Přehledu`, tedy tam, kde by jinak stál souhrn.
 - **`Přehled` má dlaždice s fakty** (#198): commity (a kolik z nich je nových od minule),
   soubory (a kolik má nález), hlava PR a sha, proti které platí nálezy. **Nic se pro ně
   nedotahuje** — jsou to údaje, které v okně už jsou, jen roztroušené. Tři pravidla:
@@ -3353,6 +3388,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
+| `Policy.tabs(hasChecks:)` | Které záložky PR se kreslí (#215) — `Kontroly` odpadnou u PR bez CI. Pořadí je z `allCases`, ať se nedá rozejít s výčtem |
+| `Policy.checksBadge(of:)` | Odznak u záložky `Kontroly` (#215) — spadlé červeně s počtem, běžící puntíkem, zelené a přeskočené bez odznaku |
 | `Policy.facts(commits:newCommits:files:filesWithFindings:headSha:findingsHeadSha:)` | Dlaždice s fakty o PR (#198); dlaždice, o které se nedá nic říct, se vynechá |
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
 | `Policy.fileFindings(in:categories:)` | Co je v souboru k vyřízení pro kapsli v hlavičce diffu (#219) — počítá **místa**, ne nálezy, a odmítnuté vynechá |

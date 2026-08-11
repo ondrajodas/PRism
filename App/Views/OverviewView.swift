@@ -14,9 +14,17 @@ struct OverviewView: View {
     var description: String?
     /// Fakta o PR do dlaždic (#198). Prázdná = řádek se nekreslí.
     var facts: PullRequestFacts = PullRequestFacts(tiles: [])
-    /// Checky z GitHub Actions (#209). Prázdné = blok se nekreslí; PR bez checků je běžný stav
+    /// Checky z GitHub Actions (#209). Prázdné = souhrn se nekreslí; PR bez checků je běžný stav
     /// a prázdný rámeček s nadpisem by o něm tvrdil, že se něco nepovedlo.
     var checks: [PullRequestCheck] = []
+    /// Přepne do tabu `Kontroly` (#215). `nil` = tab tam není, takže se odkaz nekreslí.
+    var openChecks: (() -> Void)?
+    /// Proč se checky nenačetly (#215). `nil` = načetly se, nebo se o ně nikdo neptal.
+    ///
+    /// Kreslí se **i když je `checks` prázdné** — a právě proto to tady je: prázdno se od #215
+    /// čte jako „tenhle PR nemá CI“ a tab `Kontroly` se u něj nekreslí, takže bez téhle věty by
+    /// z chyby sítě vyšlo tvrzení o pull requestu.
+    var checksFailure: String?
     /// Co přibylo od poslední návštěvy (#173). Prázdné = nic, nebo se ještě nenačetla
     /// konverzace; banner se v obou případech nekreslí.
     var changes: VisitChanges = .none
@@ -55,9 +63,21 @@ struct OverviewView: View {
                     PullRequestFactsView(facts: facts)
                 }
                 // Checky **pod dlaždicemi**, jak je má návrh: je to fakt o PR, jen delší než
-                // na jednu dlaždici.
+                // na jednu dlaždici. Od #215 jen **souhrn** — seznam a detail spadlého checku
+                // bydlí v tabu `Kontroly`, protože rostou a vytlačovaly by popis PR z obrazovky.
                 if !checks.isEmpty {
-                    ChecksView(checks: checks)
+                    ChecksSummaryView(checks: checks, openChecks: openChecks)
+                }
+                // Porucha se hlásí **i vedle prázdna**: zmizelý tab `Kontroly` se bez toho
+                // nedá odlišit od PR, který CI nemá.
+                if let checksFailure {
+                    Label(
+                        "Kontroly na GitHubu se nepodařilo načíst. \(checksFailure)",
+                        systemImage: "exclamationmark.triangle"
+                    )
+                    .font(.callout)
+                    .foregroundStyle(Palette.stale)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(16)
