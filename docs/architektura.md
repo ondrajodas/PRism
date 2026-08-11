@@ -314,6 +314,39 @@ značka na hraně řádku**. Rozhoduje `Policy.disclosure(of:categories:toggled:
   ale znamenalo by to další sloupec v gutteru, který si `DiffTextView` kreslí ručně — a ten jediný
   úzký sloupec už zabírá pilulka komentáře. Zamítnuto, viz specifikace.
 
+Řada akcí pod nálezem (#283) — **malá tlačítka vlevo pod textem, ne modré odkazy přes celou
+šířku**. Vzhled drží `MiniButtonStyle` (`.mini` a `.mini.pri` z návrhu), rozvržení `footer(of:)`.
+Co se u toho nemá rozbít:
+
+- **Hlavní akci odlišuje plocha, ne vzdálenost.** Do #283 stál mezi převzetím a odmítnutím
+  `Spacer`, aby se omylem nekliklo na to druhé. Rozhodnutí je otočené (důvody ve specifikaci) a to
+  podstatné z něj zbývá: **plné akcentové tlačítko je v řadě právě jedno** a je první zleva, takže
+  cesta myší k převzetí nevede přes odmítnutí.
+- **`Spacer` u odmítnutého nálezu zůstává.** `dismissed(_:_:)` není tentýž footer: je to jeden
+  řádek se zkráceným textem, takže `Spacer` je to místo, do kterého se text ořezává, a `Vrátit` je
+  na řádku jediná akce.
+- **Popisek má dvě podoby a nesmí splynout.** `FindingDismissal.Reason.label` je přídavné jméno do
+  odznaku a do menu tabulky (`neplatný`), `actionLabel` je tvrzení na tlačítko (`Neplatí`). Jedna
+  hodnota pro obojí by v jednom z těch dvou míst mluvila špatně — odznak stavu by řekl akci.
+- **Když se řada nevejde, zlomí se, neořeže se.** `ViewThatFits` má tři varianty (řada → dvě řady
+  → sloupec). Návrh zalomení nemá, ale nemá ani odpověď na šířku, ve které řada nemůže existovat:
+  změřeno renderem, že v úzkém panelu zbývá na řadu 128 bodů a ze tří tlačítek jsou pahýly o jednom
+  znaku. Cena je trojnásobek layoutu footeru — u tří tlačítek zanedbatelná, protože bublina není
+  na každém řádku diffu.
+- **Cíl převzetí a `isAdopted` se počítají jednou za bublinu**, v `footer(of:)`, ne uvnitř tlačítka:
+  obojí hledá řádek v hunkách (`isAdopted` si `draftTarget` počítá samo) a `ViewThatFits` staví
+  všechny varianty, takže uvnitř by to byl průchod na každou z nich.
+- **Prázdný footer se nekreslí, ani jako mezera.** Bublina ke čtení (náhledy, testy skládání řádků,
+  `canCompose == false`) by jinak měla pod textem devět bodů prázdna — a prázdno na místě, kde jinde
+  něco je, se čte jako chybějící obsah, ne jako „tady nic není“.
+- **Věta „GitHub tady řádkový komentář nepřijme“ stojí pod řadou, ne za tlačítkem.** Je to nejdelší
+  prvek, takže jako ocas za tlačítkem rozhodovala o zalomení celé řady místo tlačítek — změřeno
+  renderem, kde kvůli ní řada padala do sloupce i na širokém okně.
+- **Výška tlačítka se skládá z `line-height` a obtažení, ne z toho, co dá font sám.** CSS řádek je
+  16,7 bodu, SwiftUI dá pro `size: 11.5` dvanáct, a obtažení v CSS leží **vně** paddingu, kdežto
+  SwiftUI ho kreslí `overlay`em dovnitř. Bez obojího vycházelo tlačítko 20 bodů proti 25 v návrhu.
+  Změřeno renderem vedle sebe — z kódu se to nepozná.
+
 Pohled **vedle sebe** (#98) je `DiffRow.pair(_, left:, right:)` a platí u něj:
 
 - **Jeden model, dva pohledy.** Dvojice je case `DiffRow`, ne vlastní typ vedle něj — se
@@ -522,11 +555,80 @@ Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne p
 podle ní se kreslí pozadí, čísla i pozice pilulek — a TextKit 2 layout manager nemá. Vynutí se tím,
 že se textové view vyrobí s ručně složeným `NSTextStorage`/`NSLayoutManager`/`NSTextContainer`.
 
-**`DiffLineView` a `DiffPairView` se v aplikaci už nekreslí** (bloky je nahradily), ale drží
+**V diffu se `DiffLineView` a `DiffPairView` už nekreslí** (bloky je nahradily), ale drží
 konstanty a barvy, které si bloky berou (`numberColumn`, `iconColumn`, `signColumn`,
 `contentInset(for:)`, `signColor(of:)`, `background(of:)`, `rangeTint`, `dragTint`). Zůstávají
 proto jako **jediné místo, kde ty hodnoty jsou** — vyčlenit je do vlastního typu je úklid na potom,
 ne součást #157.
+
+Jeden čtenář `DiffLineView` ale přibyl: **úryvek kódu u vlákna** (`ThreadSnippetView`, #216) kreslí
+řádky jím, takže barvy z něj jsou vidět i mimo diff. `DiffPairView` čtenáře nemá žádného — každou
+dvojici slévá `DiffRow.blockedPairs(_:)` do `pairBlock`u, takže případ `.pair` do `DiffRowView`
+nedojde. Drží se dál kvůli konstantám a proto, že je to jediný popis toho, jak dvojice vypadá bez
+bloku; když se v něm něco mění (jako barvy u #277), mění se to **spolu s blokem**, aby se ty dvě
+cesty nerozešly.
+
+### Barvy diffu (#277)
+
+Pozadí řádků, word-level vrstva, šrafa prázdného protějšku a znak `+`/`−` jdou z `Palette` —
+vyčíslené dvojice světlá/tmavá, žádné krytí. Hodnoty jsou **z návrhu** (tokeny `--add-bg`,
+`--add-hi`, `--del-bg`, `--del-hi` a `tr.empty-side`); čísla u každé jsou u tokenů
+(`Palette.diffAdded` a dál). Tady je to, co se u nich nemá rozbít:
+
+- **Barva plochy nesmí být krytí nad podkladem.** Tohle je celé #277 a je to tentýž argument, jaký
+  #185 zapsalo u `critLine`: skrz krytí prosvítá to, na čem barva leží, takže **není hodnotou, ale
+  výsledkem**. V tmavém režimu se systémová zelená na 12 % mísila směrem k černé a plocha přidaného
+  bloku vycházela `#152B22`, tedy tmavý obdélník. Hlídá to test na **alfu** všech pěti tokenů.
+- **Odlišení ploch se měří ΔE2000, čitelnost textu nad nimi WCAG.** Jedna míra nestačí a je to
+  změřené: word-level vrstva měla do #277 v tmavém režimu ΔE 29,5 (plocha jak vyšitá) a kontrast
+  zeleného řetězce Darculy **1,27**, tedy nepřečtitelný kód právě na tom slově, které se změnilo.
+  Tvrzení jsou proto v testech vždycky dvě.
+- **Světlá větev je z návrhu doslova, tmavá je vědomá odchylka** — a ta odchylka je celé jádro #277:
+  návrh má v tmavém režimu `rgba(63, 185, 80, 0.13)`, což nad `panel` složí `#172922` a ΔE 14,6, tedy
+  **reprodukuje přesně tu stížnost** (systémová zelená měla 16,0). Vyčíslené `#0F2C13` má ΔE 21,8.
+- **Sytost je levnější než světlost.** WCAG kontrast textu závisí jen na světlosti, kdežto ΔE plochy
+  roste i se sytostí — tmavé tóny proto vznikly mixem `ok`/`crit` **do černé**, ne do plochy.
+  Odlišení tím vyrostlo (16,0 → 21,8 u přidaného) a syntaxe zůstala na svém (3,73 → 3,76). Kdo bude
+  hodnoty ladit, má tímhle směrem rezervu; zesvětlením ji nemá.
+- **Zelená a červená mají v diffu jeden zdroj**, `DiffLineView.signColor(of:)` (#156) — bere ji
+  `+`/`−` v řádku, souhrn `+X −Y` v hlavičce i čtverečky poměru (#218). Od #277 vrací
+  `Palette.ok`/`crit`, tak jak to má návrh (`tr.add td.sg { color: var(--ok) }`), takže systémová
+  zelená z diffu zmizela úplně; **plochy** řádků jsou ten tón zamíchaný do podkladu.
+- **Word-level vrstva drží pravidlo návrhu, ne jeho hodnotu.** `--add-hi` je `ok` na 30 % nad pozadím
+  řádku — a to pozadí se u #277 změnilo, takže se vrstva přepočítala (`#1D5625`). Je to vědomá výměna:
+  méně hlasitá než dřív (ΔE 13,9 proti 29,5), zato se pod ní dá číst (řetězec 2,17 proti 1,27).
+  Rozhodnutí z #153 tím drží v tom, na čem stálo: vrstva musí být na první pohled jiná plocha než
+  zbytek řádku, a práh je ΔE 10.
+- **Pruh rozsahu komentáře zůstává průhledný schválně** (`rangeTint`, `dragTint`): musí se s barvou
+  druhu řádku **smíchat**, aby pod ním zůstalo vidět, co je přidané. Je to tedy jediné krytí, které
+  v diffu zbylo, a je to jiný případ než plocha — hodnota se tu měnit *má*. Změřeno nad novým
+  pozadím: pruh je od neoznačeného řádku ΔE 9,5 a označený přidaný řádek je od označeného kontextu
+  ΔE 21,7, takže se ani jedna informace neztratí.
+- **Pruh se kreslí nad pozadím, ne pod ním.** Do #277 to bylo ve SwiftUI cestě obráceně
+  (`.background(barva).background(pruh)`) a fungovalo to jen proto, že pozadí bylo průhledné —
+  s vyčíslenou barvou by pruh zmizel. Blok kódu (`DiffTextView.drawRows`) měl správné pořadí
+  odjakživa, takže se tím obě cesty srovnaly.
+- **Prázdný protějšek odlišuje textura, ne plocha** (`DiffMissingHatch`). Návrh na to má šrafu
+  u `tr.empty-side` (`repeating-linear-gradient(45deg, transparent 0 5px, ink 5 % 5px 10px)`)
+  a v tmavém režimu to jinak ani nejde: pod plochou obsahu není kam ztmavovat (pruh je od ní ΔE 3,4)
+  a zesvětlením by díra křičela hlasitěji než změna vedle ní. **Plocha se proto nekreslí vůbec** —
+  v návrhu je pod gradientem `transparent`. Nese to **rozestup** (pruh 5 bodů, mezera 5), ne kontrast.
+- **Šrafa leží nad plochami řádků, ne pod nimi.** Kreslená před nimi zmizí pod pozadím řádku —
+  vyzkoušeno, byla to první verze #277 a chytil to test nad bitmapou.
+- **Vodorovný krok pruhů je √2× perioda.** Sklon 45° znamená, že vzdálenost napříč pruhy (kterou měří
+  CSS gradient) není ta vodorovná; bez toho přepočtu vyjde šrafa hustší, než jakou návrh kreslí.
+  A **směr pruhů je z vyrenderované sekce návrhu**, ne odvozený z `45deg`: gradient míří k pravému
+  hornímu koutu, ale pruhy leží napříč jeho osou, takže se to snadno otočí — první verze #277 je
+  měla zrcadlově.
+- **Které řádky jsou prázdné, řekne sloupci dvojice** (`DiffTextView.missingLines`), protože
+  v textu je prázdná strana složená jako prázdný **kontextový** řádek (`DiffLine.blank`) — jinak by
+  se sloupce nezarovnaly. Do #277 se ten stav nekreslil vůbec, takže „tady řádek není“ a „řádek se
+  nezměnil“ byla tatáž plocha (ΔE 0,0). **Rozšířit `DiffLine.Kind` o `missing` se zamítlo**: je to
+  vlastnost jednoho rozvržení, ne řádku souboru, a protáhla by se parserem, `Policy` i kotvami
+  komentářů.
+- **Obrys bubliny nálezu je pořád jedna barva pro všechny podklady** (`critLine`, #185), takže se po
+  každé změně pozadí musí přeměřit nad všemi: vychází 1,69 na přidaném a 1,87 na odebraném řádku
+  v tmavém režimu (do #277 to bylo 1,68 a 1,83), tedy nezměněno.
 
 Word-level rozdíl (#153) — u přepsaného řádku svítí jen ta část, která se změnila. `WordDiff` je
 čistá funkce v `App/Diff/`, obarvení dělá `DiffTextView`. Co se u toho nemá rozbít:
@@ -1621,7 +1723,7 @@ na `.task` okna, takže zavření okna ji zruší.
 |---|---|
 | `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
 | `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) — a od #245 **vypnutí systémových záložek oken** (`tabbingMode = .disallowed`), aby se `⌃Tab` nepřetahoval s AppKitem |
-| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky; **zelená a červená diffu jdou dál z `DiffLineView.signColor(of:)`**, aby se `+` v řádku nerozešlo s `+12` nad ním (#156). Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit` |
+| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
@@ -1669,7 +1771,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffPairView` | Dvojice vedle sebe: dvě buňky `DiffLineView` se `side`, pozadí za celou dvojici, prázdná protistrana |
 | `RangeDragActions`, `DiffRowFrames` | Tažení rozsahu komentáře (#110) — akce a rámečky řádků **mimo observable stav** |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
-| `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou |
+| `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou. Od #283 jsou akce **řada malých tlačítek vlevo pod textem** |
+| `MiniButtonStyle` | Malé tlačítko z návrhu (`.mini`, `.mini.pri`) — plné akcentové a obtažené. Rozměry v `Metrics`, aby se daly změřit testem; text plného je `Palette.surface` (`--panel`), ne bílá |
 | `FindingActions` | Co se dá dělat s nálezem — odmítnout a vrátit; jedno místo pro bublinu i tabulku |
 | `FindingDisclosureActions` | Rozbalení bubliny nálezu (#185) — stav ze store a jeho překliknutí. **Nepatří do `FindingActions`**, kterou bere i tabulka: ta rozbalení řídí sama |
 | `ThreadBubbleView` | Vlákno konverzace — u kódu i na ose (`Placement`); karta z pruhů, vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73, sazba #216) |
