@@ -772,6 +772,14 @@ Věci, které se u toho nemají rozbít:
 - **Výchozí hodnoty musí odpovídat konstantám, které nahradily** — je na to test, jinak by
   se aplikace po zavedení konfigurace začala chovat jinak. Výchozí `mode` je `manual`:
   zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
+- **Nový klíč v `RepositoryConfig` má druhého čtenáře mimo aplikaci: očistu konfigurace slotu**
+  (#262, `bin/slot-config.sh`). Klíčů, které mají obě úrovně, je pět — `mode`,
+  `allowsPublishing`, `findingsLanguage`, `skills`, `blockingCategories` — a u každého z nich je
+  ve skriptu napsané, jestli se čistí a proč. Očistit jen globální úroveň **nestačí**: per-repo
+  override je přednější, takže `mode: automatic` u jednoho repa přebije globální `manual` —
+  a slotová aplikace si na M9 takhle sama pustila review za 2,80 $ a 1,16 $, dvakrát nezávisle
+  na sobě. Když klíč přibude, patří do toho výčtu, i kdyby se nakonec nečistil; nevyplněné
+  místo v něm je celá ta chyba.
 
 ## `App/Markdown/`
 

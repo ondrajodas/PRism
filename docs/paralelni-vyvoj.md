@@ -126,6 +126,20 @@ opakované použití téhož písmene je levnější než nové.
 `bin/worktree.sh` je proti tomu na **ruční** práci: zakládá strom v `../PRism-<slot>` i s
 očištěnou konfigurací. Subagent ho nepoužívá, protože strom už má od harnessu.
 
+**Konfiguraci do slotu si ale subagent připraví tímtéž skriptem jako on** (#262), jen tou
+samostatnou částí — a až ve chvíli, kdy aplikaci doopravdy chce spustit:
+
+```bash
+./bin/slot-config.sh    # slot si vezme z .prism-slot, takže se nedá minout
+```
+
+Bez toho má slot prázdnou cache, tedy výchozí nastavení bez zdrojů PR — okno je prázdné
+a není v něm co proklikat. **Očistu si neopisuj a nepiš vlastní `jq`.** Do #262 to tak bylo
+a stálo to peníze: filtr žil uvnitř `worktree.sh`, kopie v zadáních subagentů se s ním
+rozešly a per-repo `mode: automatic` očistou prošel, takže si slotová aplikace **sama pustila
+review za 2,80 $ a v dalším slotu za 1,16 $**. Skript vypíše, co našel, a když by očista
+nebyla úplná, nezapíše nic a skončí nenulově.
+
 ## 3. Zadání subagenta
 
 Subagent dostane worktree (`isolation: "worktree"`) — **výjimka je strom po skončené session**,
@@ -133,6 +147,9 @@ kde se nový nezakládá a zadání se liší ve třech věcech (viz *Co dělá 
 a v zadání tohle:
 
 - **slot** jako první příkaz (viz výš),
+- **`./bin/slot-config.sh`** jako způsob, jak si připravit konfiguraci, když bude appku
+  spouštět (#262) — nikdy ne vlastní `jq` filtr v zadání. Filtr v zadání je druhá kopie očisty
+  a rozešel se s tou ve skriptu; co to stálo, je v §2,
 - **číslo issue** a pokyn, ať si ho přečte přes `gh api` (`gh issue view` v tomhle repu padá),
 - pokyn, že platí `CLAUDE.md` — včetně dokumentace ve stejném commitu a vlastní revize diffu
   před pushem,

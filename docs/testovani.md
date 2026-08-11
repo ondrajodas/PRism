@@ -1041,11 +1041,25 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   spadnou dva testy se čtyřmi issues. Bez toho by zelený běh nedokazoval nic, protože obě
   cesty vedou do `Application Support` a liší se jediným řetězcem.
 
-  Zbytek slotů leží v shellu (`bin/run.sh`, `bin/worktree.sh`) a testy ho nepokryjí, takže se
-  ověřuje spuštěním: build se slotem musí vyrobit `com.ondrajodas.prism.a` a `PRism-a`,
-  instance běží **vedle** té hlavní a hlavní cache zůstane bez jediného čerstvého souboru.
-  Že se `pgrep` patterny nepletou, se pozná jen s oběma běžícími naráz — pattern hlavní
+  Zbytek slotů leží v shellu (`bin/run.sh`, `bin/worktree.sh`, `bin/slot-config.sh`) a testy ho
+  nepokryjí, takže se ověřuje spuštěním: build se slotem musí vyrobit `com.ondrajodas.prism.a`
+  a `PRism-a`, instance běží **vedle** té hlavní a hlavní cache zůstane bez jediného čerstvého
+  souboru. Že se `pgrep` patterny nepletou, se pozná jen s oběma běžícími naráz — pattern hlavní
   instance nesmí najít slot a naopak.
+
+  **Očista konfigurace slotu se ověřuje nad konfigurací, která per-repo override má** (#262).
+  Filtr přečtený očima projde — přesně tak v něm deset dnů leželo chybějící `mode` u rep, které
+  stálo 2,80 $ a 1,16 $ ve dvou slotech. Pouští se proto `bin/slot-config.sh` nad skutečnou
+  konfigurací (`ondrajodas/prism-review-sandbox` v ní `mode: automatic` má) a ve výsledku se
+  hledá, co v něm **nesmí být**: žádný automat na žádné úrovni, žádné povolené odesílání.
+  Do uživatelovy konfigurace se přitom nezapisuje — je to jen vstup, cílem je cache slotu.
+
+  Ověřovat se musí i to, co skript hlásí **jen výjimečně**, jinak je „nic nevypsal“
+  k nerozeznání od „funguje“: prázdný slot (cílem by byla konfigurace hlavní instance) a slot
+  se zakázaným znakem musí odmítnout dřív, než složí cestu; chybějící `jq` nesmí zkopírovat
+  nic; a **kontrola nad výsledkem se ověřuje vložením regrese** — když se z filtru vyndá
+  `mode` u rep, musí skript skončit nenulově a nezapsat nic. Zapsaná očista, která spadne
+  na půl cesty, je horší než žádná: vypadá jako hotová.
 - **`RepoCheckout`** — dvě vrstvy, a **obě jsou potřeba**. Fake runner ověří, co se `gitu`
   posílá za argumenty (na tocích s víc příkazy `ScriptedProcessRunner`, který odpovídá
   jinak na každé volání); integrační test (`RealRepoCheckoutTests`) klonuje z `file://`
