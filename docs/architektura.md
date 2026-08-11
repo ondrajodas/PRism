@@ -3252,6 +3252,13 @@ Nad nálezy platí navíc:
     by přeskočilo vteřinu) a záporný se sráží na `0s`. Cena je změřená a rozhodnutí z #237 drží:
     tělo nad odpočtem se přepočítá jednou, formát stojí 0,12 µs na tik.
 
+    **První změna hodnoty přijde až na druhém tiku rozvrhu** (změřeno u #269): `TimelineView`
+    vykreslí při nasazení hodnotu **prvního** tiku, který leží v budoucnosti, a další překreslení
+    naplánuje až na tik po něm — po otevření okna tedy první hodnota vydrží 1 až 2 vteřiny a teprve
+    pak jde odpočet po vteřině. Od pravdy se přitom neodchýlí o víc než vteřinu, takže na obrazovce
+    to není poznat; **poznat je to v testech**, kde na tu změnu musí sonda čekat, a stálo to jeden
+    červený `main` (viz [`docs/testovani.md`](testovani.md)).
+
   **Co teď** jsou akce, které dávají smysl teď — řádek, který by nic neudělal, se nekreslí.
   Hromadné spuštění se **ptá na potvrzení**, protože je to jediné místo v aplikaci, kde jedno
   kliknutí utratí víc než jednu session; návrh potvrzení nemá a je to vědomá odchylka. Zkratky
