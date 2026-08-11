@@ -721,6 +721,8 @@ zastaral hned další verzí.
 
 - [Návrh (specifikace)](docs/superpowers/specs/2026-07-31-prism-design.md) — plný
   návrh včetně záznamu rozhodnutí a zamítnutých alternativ
+- [`docs/navrh.md`](docs/navrh.md) — kde je **vizuální** návrh (mockup) a jak se s ním
+  pracuje; co mění vzhled, se do něj kreslí a schvaluje dřív, než na to vznikne issue
 - [`docs/claude-cli.md`](docs/claude-cli.md) — ověřené chování `claude` CLI
 - [`docs/github-review-api.md`](docs/github-review-api.md) — ověřené chování zápisového
   review API GitHubu; podklad pro odesílání review (M6)
@@ -1168,6 +1170,7 @@ PRism.entitlements        vypnutý App Sandbox
 Signing.xcconfig          podpis: ad-hoc default + volitelný Signing.local.xcconfig
 docs/architektura.md      podrobnosti po modulech
 docs/testovani.md         co se u které oblasti testuje
+docs/navrh.md             kde je vizuální návrh (mockup) a jak se s ním pracuje
 docs/stav.md              co je hotové a co zbývá
 docs/claude-cli.md        ověřené chování claude CLI (flagy, tvar eventů)
 docs/github-review-api.md ověřené chování zápisového review API GitHubu (spike k M6)
