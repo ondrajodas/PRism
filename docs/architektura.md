@@ -1714,6 +1714,11 @@ Co se u ní nemá rozbít:
     zůstává na kartě pod textem a v obsahu bubliny. **Ze sbalené značky bubliny plný odznak ubyl**
     — stál by pár bodů od `vyřešeno`, takže se kreslí až v rozbaleném obsahu.
 
+  **Paleta ⌘K (#184) v tom není** a je to záměr: řádek nálezu v ní není odznak závažnosti, ale
+  jednořádkový cíl skoku, kde je blokující příznak jen barevný puntík. Odmítnuté nálezy do ní
+  nejdou vůbec (nechci na ně skákat), kdežto vyřešené ano — „vyřešeno“ je tvrzení modelu, takže
+  nález zůstává místem, kam se dá jít podívat.
+
 **Zavření aplikace se ptá, dokud běží review** (`AppDelegate`, #94), a **session u toho zabije**
 (#264). Do #264 dělalo jen to první: dialog tvrdil, že se session zabije, ale nikdo ji nezabíjel —
 osamocený `claude` se přerodil na `launchd` a běžel dál, počítal tokeny za review, které už nemá
