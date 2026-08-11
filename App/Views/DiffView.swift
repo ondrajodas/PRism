@@ -18,6 +18,10 @@ struct DiffView: View {
     var findings: [FindingGroup] = []
     /// Odmítnutí a vrácení nálezu (#113). Skupiny si stav nesou samy, tudy jdou jen akce.
     var findingActions: FindingActions?
+    /// Rozbalení bublin nálezů (#185) — blokující je rozbalený rovnou, ostatní jsou značka na
+    /// hraně řádku. Rozhoduje store, protože bublina je buňka líného seznamu a diff sám se
+    /// přestaví při každém složení panelu vpravo.
+    var findingDisclosure = FindingDisclosureActions()
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     /// Místo, na které se právě skočilo z tabulky nálezů.
     var highlighted: FindingHighlight?
@@ -253,6 +257,7 @@ struct DiffView: View {
                 highlighted: highlighted,
                 blockingCategories: blockingCategories,
                 findingActions: findingActions,
+                findingDisclosure: findingDisclosure,
                 viewer: viewer,
                 threads: threadActions,
                 draft: fileDraft,

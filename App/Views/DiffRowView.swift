@@ -20,6 +20,9 @@ struct DiffRowView: View {
     /// Odmítnutí a vrácení nálezu (#113). Rozhoduje store, ne tenhle view — ze stejného
     /// důvodu jako u vláken.
     var findingActions: FindingActions?
+    /// Rozbalení bubliny nálezu (#185). Taky ze store: buňka líného seznamu si vlastní stav
+    /// při odscrollování zahodí.
+    var findingDisclosure = FindingDisclosureActions()
     /// Přihlášený uživatel — kvůli odlišení mých komentářů ve vláknech.
     var viewer: String = ""
     /// Co se dá dělat s vlákny. Rozhoduje store, ne tenhle view: buňka líného seznamu se při
@@ -118,7 +121,9 @@ struct DiffRowView: View {
                 isHighlighted: highlighted?.matches(group) ?? false,
                 draft: draft,
                 actions: findingActions,
-                indent: indent
+                indent: indent,
+                disclosure: findingDisclosure.state(group),
+                toggle: { findingDisclosure.toggle(group) }
             )
         case .thread(_, let thread):
             ThreadBubbleView(
