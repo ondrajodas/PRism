@@ -1141,6 +1141,13 @@ a odlišení jimi vyrostlo: přidaný řádek ΔE **16,0 → 21,8**, odebraný *
 na jedno pozorování: kontrast textu závisí jen na světlosti, kdežto odlišení plochy roste i se
 sytostí, takže sytější tón při téže světlosti odliší plochu a text nad ní nechá na pokoji.
 
+**Návrh je proto přepsaný, ne obejitý.** Ta čtyři slabá `rgba` v tmavé větvi mockupu nesou
+vyčíslené tóny (`#0F2C13`, `#1D5625`, `#371210`, `#712521`), takže paleta a návrh drží jednu
+pravdu a příští srovnání nebude tvrdit, že chybu má aplikace. Přepsaly se **obě** tmavé větve —
+`@media (prefers-color-scheme: dark)` i `:root[data-theme="dark"]` —, protože hodnota zapsaná jen
+v jedné z nich platí jen pro jeden způsob, jakým si čtenář režim vybral. Nic jiného se v mockupu
+nezměnilo: ani světlá větev, ani struktura, ani poznámky u sekcí.
+
 Znak `+`/`−` bere `Palette.ok`/`crit` (jak to má návrh, otáčí #218), takže se ve světlém režimu zvedl
 jeho kontrast **2,01 → 4,65** na řádku a **2,22 → 5,08** v hlavičce, kde nese `+12 −4`. Word-level
 vrstva drží **pravidlo** návrhu (30 % tónu nad řádkem), ne jeho hodnotu, protože se pod ní změnil
