@@ -1272,6 +1272,17 @@ osascript -e 'tell application "System Events" to tell process "PRism" to get po
 Vyžaduje to oprávnění Accessibility. `entire contents` u `AXScrollArea` občas selže na převodu
 typu — hierarchii je pak potřeba projít po patrech (`UI elements of …`).
 
+**Offscreen render celého detailu PR umí zhasnout stav, který mu sonda nastavila** (#150), a je to
+past, která vypadá jako chyba v aplikaci. `PullRequestDetailView` má na sobě `.task(id: pullRequest)`,
+který si dotahuje detail PR — `ImageRenderer` ho **spustí a hned zruší**, a `loadDetail` na zrušení
+maže rozdělaný stav (`detailStates[id] = nil`). V renderu pak chybí všechno, co na hlavě PR visí:
+`StaleHeadView` i tlačítko `Zkontrolovat nálezy`. Nespustí se to, když `hasCurrentDetail` vyjde
+pravdivě — takže shrnutí PR musí být v sondě **`let`, ne computed property**: `Date(timeIntervalSinceNow:)`
+uvnitř getteru dá jiné `updatedAt` při každém přístupu a cache detailu se tím rozejde. Poznat se to dá
+jedině `print`em **z těla view** (`let _ = print(…)`), ne z hodnot ve store před renderem: ty jsou
+v pořádku. Vedle toho zůstává platné, že AppKitem hostované části (avatar v hlavičce) vyjdou jako žlutý
+placeholder — render se z nich nemá co dozvědět.
+
 ### Jak změřit pořadí a hladinu oken (#243)
 
 Chování oken — co je před čím, co je vidět a co se vrací — se nedá otestovat unit testem a nedá

@@ -979,7 +979,7 @@ dalším commitu odznaky zmizí a v hlavičce zbyde věta, že se dá pustit zno
 že nikdy neběžela, a pustila by se podruhé za peníze. Nenabízí se bez uloženého záznamu proti
 staršímu commitu; chybějící vstup nesmí skončit session, která hádá. Přerušený běh se
 **nedotahuje z transcriptu** jako review (#97) — odpověď leží v posledním sdělení, které
-v transcriptu není, takže se kontrola prostě pustí znovu. Testů je o 49 víc (2141) v pěti suitách.
+v transcriptu není, takže se kontrola prostě pustí znovu. Testů je o 50 víc (2142) v pěti suitách.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

@@ -173,6 +173,11 @@ struct StaleHeadView: View {
     ///
     /// **Nezodpovězené nálezy se vyjmenují.** Bez nich by „3 vyřešené“ nad pěti nálezy vypadalo,
     /// že ty dva zbylé platí — a to kontrola neřekla.
+    ///
+    /// Skloňuje se přes `Plural.czech` všude, kde se tvar mění. `pořád platí` a `bez odpovědi`
+    /// jsou nesklonné obraty (`1 pořád platí`, `2 pořád platí`), takže u nich není co skloňovat —
+    /// zbytek jde tabulkou tvarů, protože jazyk aplikace je čeština a `1 nejasných` praští do očí
+    /// hned (nálezem Copilota na #150).
     nonisolated static func label(of tally: Policy.RecheckTally) -> String {
         var parts: [String] = []
         if tally.resolved > 0 {
@@ -184,7 +189,14 @@ struct StaleHeadView: View {
             ))
         }
         if tally.stillApplies > 0 { parts.append("\(tally.stillApplies) pořád platí") }
-        if tally.unclear > 0 { parts.append("\(tally.unclear) nejasných") }
+        if tally.unclear > 0 {
+            parts.append(Plural.czech(
+                tally.unclear,
+                one: "nejasný",
+                few: "nejasné",
+                many: "nejasných"
+            ))
+        }
         if tally.unanswered > 0 { parts.append("\(tally.unanswered) bez odpovědi") }
         guard !parts.isEmpty else { return "Kontrola nálezů neodpověděla na nic" }
         return "Kontrola nálezů: " + parts.joined(separator: ", ")

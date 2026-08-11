@@ -45,6 +45,21 @@ struct RecheckTextTests {
             == "Kontrola nálezů: 3 vyřešené, 2 bez odpovědi")
     }
 
+    /// Jazyk aplikace je čeština, takže `1 nejasných` praští do očí hned — a stejně tak `2
+    /// nejasných`. Nálezem Copilota na #150; `pořád platí` a `bez odpovědi` jsou nesklonné obraty,
+    /// takže u nich není co skloňovat.
+    @Test("Počty se skloňují")
+    func theCountsAreDeclined() {
+        #expect(StaleHeadView.label(of: tally(unclear: 1)) == "Kontrola nálezů: 1 nejasný")
+        #expect(StaleHeadView.label(of: tally(unclear: 3)) == "Kontrola nálezů: 3 nejasné")
+        #expect(StaleHeadView.label(of: tally(unclear: 7)) == "Kontrola nálezů: 7 nejasných")
+        #expect(StaleHeadView.label(of: tally(resolved: 1)) == "Kontrola nálezů: 1 vyřešený")
+        #expect(StaleHeadView.label(of: tally(resolved: 2)) == "Kontrola nálezů: 2 vyřešené")
+        #expect(StaleHeadView.label(of: tally(resolved: 5)) == "Kontrola nálezů: 5 vyřešených")
+        #expect(StaleHeadView.label(of: tally(stillApplies: 1)) == "Kontrola nálezů: 1 pořád platí")
+        #expect(StaleHeadView.label(of: tally(unanswered: 1)) == "Kontrola nálezů: 1 bez odpovědi")
+    }
+
     /// Prázdná věta by vypadala jako chybějící sazba, ne jako běh, ze kterého nic nepřišlo.
     @Test("Kontrola bez jediné odpovědi to řekne")
     func anEmptyRecheckSaysSo() {
