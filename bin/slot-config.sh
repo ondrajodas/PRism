@@ -6,6 +6,12 @@
 #     ./bin/slot-config.sh      # slot se přečte z .prism-slot v tomhle stromě
 #     ./bin/slot-config.sh d    # slot výslovně (takhle to volá bin/worktree.sh)
 #
+# Návratový kód je součást rozhraní, protože ho čte `worktree.sh` i subagent: 0 = hotovo (nebo
+# není co kopírovat), 1 = nepoužitelný slot, 2 = chybí `jq`, 3 = očista neprošla kontrolou,
+# 4 = rozbitý JSON na vstupu. **Nenulový kód vždycky znamená, že se nic nezapsalo** — tedy že
+# slot zůstane bez konfigurace, což je bezpečný stav (výchozí nastavení nemá kam odesílat
+# a nemá co pouštět), ne stav napůl očištěný.
+#
 # **Očista žije tady, a je to jediné místo, ze kterého existuje** (#262). Do #262 byla uvnitř
 # `bin/worktree.sh`, takže si ji subagent v paralelním vývoji opisoval do svého zadání — strom
 # dostává od harnessu a `worktree.sh` nepouští. Dvě kopie znamenají, že se příští oprava udělá
