@@ -73,7 +73,7 @@ struct AppDelegateTerminationTests {
     }
 
     @Test("Druhý pokus o ukončení se nezeptá ani neodpoví dvakrát")
-    func asecondAttemptChangesNothing() async {
+    func aSecondAttemptChangesNothing() async {
         let asked = Recorder()
         let stopped = Recorder()
         let allowed = Recorder()
