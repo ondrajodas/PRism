@@ -106,6 +106,11 @@ struct ChecksSummaryView: View {
     ///
     /// Řadí to `Policy.sorted` (spadlé nahoru), ne vlastní hledání: pořadí v tabu a ten jeden
     /// řádek v `Přehledu` musí ukazovat na tentýž check.
+    ///
+    /// **`.cancelled` je dnes nedosažitelné a zůstává schválně** (nález Copilota na #215): `worst`
+    /// ho nevrátí, protože `Policy.summary` počítá zrušené ke spadlým. Odpověď pro něj ale musí být
+    /// „ukázat řádek“ — zrušený check je věc, kterou se má někdo zabývat, takže spadnout do tiché
+    /// větve by znamenalo, že se u něj po případné změně v `summary` přestane kreslit.
     private func worst(of summary: ChecksSummary) -> PullRequestCheck? {
         switch summary.worst {
         case .failed, .cancelled, .running: Policy.sorted(checks).first

@@ -31,6 +31,12 @@ extension Policy {
     ///
     /// Bere `ChecksSummary`, ne pole checků: souhrn už umí `worst` a počítá ho jedno místo —
     /// druhé počítání by se s chipem v hlavičce rozešlo.
+    ///
+    /// **`.cancelled` je dnes nedosažitelné a zůstává schválně** (nález Copilota na #215): `worst`
+    /// ho nevrátí, protože `Policy.summary` počítá zrušené ke spadlým. Je to ale switch nad
+    /// **cizím** výčtem, takže odpověď musí mít každý jeho případ — a odpověď pro zrušený check je
+    /// „červeně“, ne „mlčet“. Přidat ho k tiché větvi by znamenalo, že se z něj po případné změně
+    /// v `summary` stane check bez odznaku, a to potichu.
     static func checksBadge(of summary: ChecksSummary) -> PullRequestTabBadge? {
         switch summary.worst {
         case .failed, .cancelled: .blocking(summary.failed)

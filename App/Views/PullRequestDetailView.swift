@@ -216,7 +216,7 @@ struct PullRequestDetailView: View {
         // na PR s dvaceti commity odznak ukazoval třicet a přestal by o diskuzi něco říkat.
         case .conversation: count(store.overview(for: pullRequest.id).count { $0.isReadable })
         // **Podle nejhoršího stavu, ne podle většiny** (#215) — tatáž úvaha jako u chipu
-        // v hlavičce. Anotace z CI (#214) se do něj **nepočítají**: odznak mluví o checcích,
+        // v hlavičce. Anotace z CI (#214) se do něj **nepočítají**: odznak mluví o checkech,
         // ne o tom, kolik jich mělo co říct.
         case .checks: Policy.checksBadge(of: Policy.summary(of: store.checks[pullRequest.id] ?? []))
         // Počítá to **`Policy` z týchž nálezů**, jaké kreslí tabulka v tabu, karty v panelu
