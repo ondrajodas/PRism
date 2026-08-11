@@ -132,6 +132,12 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
 
         // Prázdná strana dvojice se kreslí jako **prázdný řádek**, ne jako mezera: řádky si musí
         // odpovídat i tam, kde jedna strana chybí (přidaný nebo odebraný kód).
+        //
+        // **Které řádky to jsou, se sloupci musí říct** (#277): v textu je z prázdné strany
+        // nerozeznatelný prázdný kontextový řádek, takže „tady řádek není“ ví jedině dvojice.
+        // Nastavuje se před složením textu, protože se to složením nemění.
+        left.missingLines = Self.missing(in: block.left)
+        right.missingLines = Self.missing(in: block.right)
         left.show(
             DiffBlock(lines: block.left.map { $0 ?? .blank }),
             language: language,
@@ -225,6 +231,12 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
     private func clearSelection(in column: DiffTextView?) {
         guard let column, column.selectedRange().length > 0 else { return }
         column.setSelectedRange(NSRange(location: 0, length: 0))
+    }
+
+    /// Indexy řádků, na kterých na téhle straně dvojice nic není (#277). Statická, protože je to
+    /// čistý přepis pole na množinu — a `DiffTextView` si to spočítat nemůže, viz `missingLines`.
+    static func missing(in side: [DiffLine?]) -> Set<Int> {
+        Set(side.indices.filter { side[$0] == nil })
     }
 
     /// Záloha pro výběr klávesnicí (⇧+šipky, ⌘A) — tam žádný stisk myši není. `mouseDown` výš to

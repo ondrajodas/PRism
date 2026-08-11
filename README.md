@@ -38,7 +38,11 @@ vyhodnocuje dřív, než se klávesa dostane k textovému editoru. Zkratky stoj�
 záložky, protože jinak by po nich v okně nebyla žádná stopa.
 
 Barvy si okno drží samo (`Palette`), včetně fialového akcentu — systémová šedá je neutrální,
-kdežto tenhle návrh stojí na neutrálech posunutých do modrofialové.
+kdežto tenhle návrh stojí na neutrálech posunutých do modrofialové. **Od #277 z ní jdou i barvy
+diffu**: pozadí přidaného a odebraného řádku byla do té doby systémová zelená a červená s krytím,
+takže se v tmavém režimu mísila směrem k černé a blok změny vypadal jako tmavý obdélník. Teď jsou to
+vyčíslené hodnoty z návrhu a řádky se v tmavém režimu odlišují o třetinu víc (ΔE 16,0 → 21,8), aniž
+by se zhoršila čitelnost obarveného kódu.
 
 Obsahem domácí záložky je **dashboard** (#181), ne prázdné „Vyber pull request“. Odpovídá na tři
 otázky, na které se do té doby muselo hledat po okně: **kolik toho čeká**, **co z toho blokuje**
@@ -294,7 +298,14 @@ kódu rozdíl hledal přečtením obou verzí. Porovnává se **po slovech**, ne
 jméno svítí celé, ne po písmenech, a `==` proti `!=` je jedna změna), a jen tam, kde jsou si
 řádky dost podobné: dvojice, která je ve skutečnosti smazání a přidání vedle sebe, zůstane
 obarvená celá jako dosud. Obarvení syntaxe zůstává pod tím — word-diff je pozadí, syntaxe
-barva písma.
+barva písma. **Od #277 je ta vrstva o kus tišší**, protože v tmavém režimu pod sebou zhasínala
+právě ten kód, kvůli kterému se člověk kouká: kontrast řetězce na ní byl 1,27, teď je 2,17.
+
+**Prázdná strana dvojice je v pohledu vedle sebe prošrafovaná** (#277) — tam, kde je kód jen na
+jedné straně, druhá polovina není hladká plocha, ale šikmé pruhy. Do té doby vypadala stejně jako
+nezměněný řádek, takže z okna nešlo poznat, jestli se řádek nezměnil, nebo tam vůbec není. Odlišuje
+se **texturou, ne světlostí** (a tak to má i návrh): v tmavém režimu už není kam ztmavovat
+a světlejší plocha by křičela hlasitěji než sama změna.
 
 **Nálezy visí jako bubliny u řádků, kterých se týkají** — pill kategorie, verdict, jméno
 revieweru a rozbalitelný scénář selhání; blokující nález má červený pruh. Shodu dvou

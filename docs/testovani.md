@@ -1001,7 +1001,48 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   slovo, často jediný znak. Nahlášené nad `job-queue-daemon#858` jako „zvýraznění nevidím“, ačkoli
   na řádku 1908 (`count: 7` → `8`) tam bylo. Je to obecnější poučení než jedna barva: **render
   jednoho prvku neodpovídá na to, jestli se ten prvek dá v okně najít** — na to je potřeba
-  screenshot běžící aplikace nad skutečným PR. Teď je hodnota 50 % a je ověřená obojím.
+  screenshot běžící aplikace nad skutečným PR. Padesát procent pak platilo do #277, kdy se z krytí
+  stala vyčíslená barva a **hodnota se u toho změnila**, protože nad novým pozadím řádku brala pod
+  sebou obarvení syntaxe; čísla obou stavů jsou u `Palette.diffAddedWord` a hlídá je sada níž.
+
+  **Barvy diffu (#277)** mají dvě sady a měří se v nich **dvě míry naráz** — to je u nich to hlavní,
+  co se dá pokazit potichu: WCAG kontrast nad dvěma plochami podobné světlosti neřekne nic (zelený
+  a červený řádek se liší hlavně barvou), kdežto ΔE2000 zas nic neřekne o čitelnosti textu nad
+  plochou. Do #277 to bylo vidět na word-level vrstvě: ΔE 29,5 (plocha jak vyšitá) a kontrast
+  zeleného řetězce Darculy **1,27**, tedy nepřečtitelné slovo — a zrovna to, které se změnilo.
+
+  `DiffPaletteTests` počítá obojí nad **skutečnými tokeny** vyhodnocenými v obou režimech
+  (`performAsCurrentDrawingAppearance` kolem `NSColor` funguje, na rozdíl od `ImageRenderer`u —
+  viz *Jak si zkontrolovat, jak view vypadá*). Nejcennější je tvrzení o **alfě**: všech pět tokenů
+  musí být neprůhledných, protože právě krytí z barvy dělá výsledek závislý na podkladu — kdo se sem
+  vrátí s `.opacity(…)`, spadne tady, ne až na obrazovce. K tomu ΔE ploch proti sobě i proti
+  podkladu, kontrast syntaxe (řetězec, klíčové slovo, komentář, `ink`) na obou druzích řádku, znak
+  `+`/`−` na svém řádku **i na ploše hlavičky** (jedna barva, dvě místa, #156), obrys bubliny nad
+  všemi podklady, a **rozestup šrafy** (pruh 5, perioda 10, vodorovný krok √2× a směr úsečky) —
+  protože to je hodnota z návrhu, kterou barva nehlídá. Prahy jsou svázané s dnešními hodnotami, ne
+  s ideálem, takže sada padá na zhoršení, ne na zaokrouhlení. Jeden test navíc tvrdí, že se **světlá
+  a tmavá větev liší** — bez něj by celou sadu splnila i paleta, která na režim nereaguje, a je to
+  zároveň důkaz, že měřidlo režim opravdu přepíná.
+
+  `DiffMissingRowTests` čte **bitmapu sloupce**, protože v modelu prázdný protějšek poznat nejde: do
+  textu se skládá jako prázdný kontextový řádek, aby si strany odpovídaly. Vzorkuje se řádka pixelů
+  uprostřed řádku a za gutterem (čísla a kód by do vzorku vnesly barvy písma) a odstíny se počítají
+  — jednolitá plocha znamená kontext, dva odstíny šrafu. Tvrdí se u toho i **kolik plochy pruhy
+  zaberou** (kolem poloviny): jeden tenký pruh by prošel tvrzením o dvou odstínech, ale v okně by se
+  ztratil. Cennější je druhý test: **bez `missingLines` se nešrafuje žádný řádek**, jinak by stačila
+  jedna záměna podmínky v `drawRows`. Třetí drží, že šrafa leží **nad** plochou řádku a nenahrazuje
+  ji — a ten chytil reálnou chybu: v první verzi se šrafa kreslila **před** pozadím řádku, takže ji
+  pozadí přemazalo.
+
+  Ověřeno **vloženou regresí** (barvy zpátky na krytí, `drawMissing` vypnuté): padne **32 tvrzení**
+  z obou sad a je z nich vidět přesně to, na co si #277 stěžovalo — alfa 0,12, znak `+` s kontrastem
+  1,02 nad svým řádkem a prázdný protějšek s jediným odstínem.
+
+  **Vzhled se u #277 srovnával s návrhem, ne jen sám se sebou.** Sekce split diffu z mockupu se
+  vyřízne do samostatného HTML, vyrenderuje headless Chromem v obou tématech (`data-theme`) a položí
+  vedle offscreen renderu bloku z aplikace. Rozhodlo to dvě věci, na které čísla nestačí: **směr
+  pruhů šrafy** (z `45deg` se dá odvodit obojí — v návrhu jdou z levého dolního koutu do pravého
+  horního) a to, že plocha díry zůstává **plochou obsahu**, protože pod gradientem je `transparent`.
 
   **Co se unit testem ověřit nedá:** vybírání textu, kontextové menu a tažení rozsahu. Kliky
   a pohyb myši se syntetizovat dají (`CGEvent` s `cgSessionEventTap` a `mouseEventClickState` —
