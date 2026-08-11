@@ -164,6 +164,86 @@ struct AppStoreTabsTests {
         #expect(store.openTabSnapshots.isEmpty)
     }
 
+    @Test("⌃Tab jde na další záložku v pruhu a dokola")
+    func steppingForwardWalksTheStrip() {
+        // Pruh je `Přehled`, `#1`, `#2`, takže z poslední záložky vede krok dopředu domů.
+        let store = store()
+        store.openTab(first)
+        store.openTab(second)
+
+        store.selectTab(.forward)
+        #expect(store.activeTab == .home)
+
+        store.selectTab(.forward)
+        #expect(store.activeTab == .pullRequest(first))
+    }
+
+    @Test("⌃⇧Tab jde na předchozí záložku")
+    func steppingBackwardWalksTheStrip() {
+        let store = store()
+        store.openTab(first)
+        store.openTab(second)
+
+        store.selectTab(.backward)
+        #expect(store.activeTab == .pullRequest(first))
+
+        store.selectTab(.backward)
+        #expect(store.activeTab == .home)
+    }
+
+    @Test("Nad jedinou záložkou zkratka nic neudělá")
+    func steppingWithASingleTabDoesNothing() {
+        // Nic neznamená nic: ne přeskok domů (tam už jsme) a ne výběr, který by se objevil
+        // v seznamu bez toho, že by na něj někdo klikl.
+        let store = store()
+
+        store.selectTab(.forward)
+        store.selectTab(.backward)
+
+        #expect(store.activeTab == .home)
+        #expect(store.selection == nil)
+    }
+
+    @Test("Přepnutí zkratkou dělá totéž, co kliknutí na záložku")
+    func steppingMatchesAClick() {
+        // Nejcennější tvrzení k #245: `selection` se nesmí rozejít s tím, co dělá klik. Kliknutí
+        // v `ReviewTabsView` sahá **jedině** na `activeTab` (výběr řádku v seznamu je jiná věc),
+        // takže kdyby zkratka hýbala i výběrem, byly by dvě pravdy o tom, co je vybrané — a která
+        // platí, by záleželo na tom, čím se člověk zrovna přepnul.
+        let byShortcut = store()
+        byShortcut.openTab(first)
+        byShortcut.openTab(second)
+        let selectionBefore = byShortcut.selection
+
+        byShortcut.selectTab(.backward)
+
+        let byClick = store()
+        byClick.openTab(first)
+        byClick.openTab(second)
+        // Celé, co dělá kliknutí na záložku `#1`.
+        byClick.activeTab = .pullRequest(first)
+
+        #expect(byShortcut.activeTab == byClick.activeTab)
+        #expect(byShortcut.selection == byClick.selection)
+        #expect(byShortcut.selection == selectionBefore)
+    }
+
+    @Test("Přepnutí záložky nezahodí rozdělané review")
+    func steppingKeepsTheDraft() async throws {
+        // Tatáž vlastnost jako u zavření: záložka nic nevlastní. Zkratkou se dá projet pruh
+        // rychle, takže by ztráta draftu byla o to snazší.
+        let store = storeWithDetail(of: first)
+        store.openTab(first)
+        await store.loadDetail(for: summary(first))
+        store.setDraftBody("rozepsané", for: first)
+
+        store.selectTab(.forward)
+        store.selectTab(.backward)
+
+        #expect(store.activeTab == .pullRequest(first))
+        #expect(store.draft(for: first)?.body == "rozepsané")
+    }
+
     @Test("Odznak fronty mlčí, dokud se seznam nenačte")
     func theQueueBadgeStaysQuietUntilLoaded() {
         // Nula nad nenačtenými daty vypadá jako „hotovo“ — tatáž úvaha jako u souhrnu fronty.

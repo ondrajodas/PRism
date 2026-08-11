@@ -30,6 +30,13 @@ je obsahem domácí záložky, takže diff dostane celou šířku okna. Otevřen
 a tečka u záložky nese jeho stav; u běžícího se točí prstýnek, u rozdělaného je pero. **Zavření
 záložky nic nezahodí.**
 
+**Pruhem se přepíná `⌃Tab` a `⌃⇧Tab`** (#245) — dokola a **včetně domácí záložky**, protože se na
+ni chodí nejčastěji (je za ní fronta) a bez ní by zkratka nad jediným otevřeným PR nedělala nic.
+Pořadí je pořadí pruhu, ne pořadí použití. Funguje to i **s kurzorem v rozepsaném review**:
+změřeno, že se do textu nevloží tabulátor ani nepřeskočí fokus — key equivalent tlačítka se
+vyhodnocuje dřív, než se klávesa dostane k textovému editoru. Zkratky stojí v nápovědě u domácí
+záložky, protože jinak by po nich v okně nebyla žádná stopa.
+
 Barvy si okno drží samo (`Palette`), včetně fialového akcentu — systémová šedá je neutrální,
 kdežto tenhle návrh stojí na neutrálech posunutých do modrofialové.
 
