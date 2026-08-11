@@ -641,6 +641,24 @@ rozestavěný build nesáhne na uložené nálezy ani na rozdělané drafty. Bez
 nemění nic. Nový je `bin/worktree.sh`, který strom založí a přenese do něj konfiguraci
 očištěnou o odesílání, notifikace a automat.
 
+**Očista konfigurace slotu má jedno místo a čistí obě úrovně (#262)** — `bin/slot-config.sh`.
+Do té doby byla uvnitř `worktree.sh` a u **rep** přepisovala jen `allowsPublishing`, ne `mode`,
+takže per-repo override `mode: automatic` očistou prošel a přebil globální `manual`. Slotová
+aplikace si sama pustila review, o která nikdo nežádal: **2,80 $ ve slotu `b` a 1,16 $
+v dalším**, dvakrát nezávisle na sobě v jedné dávce. Záměr byl přitom napsaný správně, jen ho
+ten řádek nedodržel — je to třída „kontrola, která jinde v repu je, a tady chybí“.
+
+Opravené je to na třech úrovních. **Výčet klíčů je úplný a je ve skriptu vidět**: pět klíčů má
+obě úrovně (`mode`, `allowsPublishing`, `findingsLanguage`, `skills`, `blockingCategories`)
+a u každého je napsané, jestli se čistí a proč; nový klíč do toho výčtu patří, i kdyby se
+nečistil. **Očista je samostatně spustitelná** (`./bin/slot-config.sh`, slot si vezme
+z `.prism-slot`), takže si ji subagent v dávce nemá proč opisovat — a opisoval si ji, protože
+strom má od harnessu a `worktree.sh` nepouští; dvě kopie znamenají opravu jen v jedné.
+A **výsledek se ověřuje nad daty**, ne přečtením filtru: po přepsání se hledá zbylý automat
+a povolené odesílání, a když se něco najde, nezapíše se nic. Přidané je i `autoRunsPerDay = 0`
+jako druhá, na režimu nezávislá brzda, a hlášení o tom, co se v konfiguraci našlo.
+Ověřeno spuštěním nad konfigurací, která `mode: automatic` u repa má, a vložením regrese.
+
 **Postup pro dávku issues zapsaný (#231)** — [`docs/paralelni-vyvoj.md`](paralelni-vyvoj.md).
 Sloty daly paralelnímu vývoji prostředí, ale ne postup; bez zápisu by se seznam issues dál
 vyřizoval sériově, protože výchozí chování je subagenty nepouštět. Je v něm, podle čeho se
@@ -892,6 +910,33 @@ jiného, je lež o tom, co okno umí.
 Cestou vyšlo najevo, že **dva zdrojáky se stejným jménem položí build**, i když leží v různých
 podsložkách (`Multiple commands produce … CommandPalette.stringsdata`) — zapsané v `CLAUDE.md`
 u buildable folderů.
+
+**Ukončení aplikace zabíjí běžící session (#264)** — do té doby to dělal jen dialog z #94, který
+tvrdil, že se session zabije, ale nikdo ji nezabíjel: `applicationShouldTerminate` vrátil
+`terminateNow` a `claude` se přerodil na `launchd`. Platily se tokeny za review, které už nemá komu
+doručit nálezy, a osamocený proces držel pracovní strom v cache. Změřeno na stroji: dvě takové
+session běžely **čtyři dny**.
+
+Zabíjí se **tou samou cestou jako u zrušení** (`task.cancel()` → `onTermination` proudu →
+`SIGKILL`) — druhý `kill` v delegátovi by byl druhá pravda o tom, jak se běh zastavuje. Co je nové,
+je **čekání**: signál se nese přes `WorkCoordinator`, který práci drží ve vlastním tasku, takže
+`terminateNow` hned po `cancel()` aplikaci zavře dřív, než signál odejde. Delegát proto vrací
+`terminateLater` a odpovídá systému až po zabití — **dotaz zůstává synchronní**, odkládá se jen to
+za ním. Čekání má strop dvou sekund, protože ze zaseknuté session nesmí vzniknout aplikace, která se
+nedá zavřít; v praxi se vrací po prvním dvacetimilisekundovém kole.
+
+Jedna věc dopadla **jinak, než jak stálo v zadání**. Nedokončený běh se neměl „uložit stejně jako
+u zrušení“, protože zrušení značku rozdělaného běhu (#97) **maže** — schválně, aby příští start
+nevzkřísil nálezy, které si člověk zrušil. Kdyby tudy šlo i zavírání, přišlo by se přesně o to, co
+dneska funguje: z „přerušeno se dvěma nálezy“ by vyšlo „neběželo“. Zavření aplikace je pro běh totéž
+jako pád, takže se značky nemažou (`AppStore.isTerminating`) a nálezy se dotáhnou z transcriptu.
+Během zavírání se navíc **nic nespouští** — tik pollingu dorazí i uprostřed a jeho automatický běh
+by aplikaci přežil.
+
+Ověřeno spuštěním, ne přečtením: session se zabila (`pgrep` prázdný, žádný `ppid 1`), značka
+v `interrupted.json` zůstala a po restartu vyšel řádek `přerušeno`. Testů je o deset víc (2072)
+ve třech suitách a všechny čtyři brány jsou ověřené **vloženou regresí**. Na obrazovce se změnil
+jeden odstavec v dialogu: do #264 sliboval, že se nálezy ztratí, což od #97 není pravda.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

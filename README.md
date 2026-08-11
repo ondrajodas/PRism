@@ -732,11 +732,18 @@ zastaral hned další verzí.
 6. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
    a o doběhlém review. Klik na notifikaci ten pull request vybere a dá okno dopředu.
 
-**Co nedoběhlo, se neztratí.** Když se aplikace zavře, ptá se — session se ukončením zabije
-a nahlášené nálezy by byly pryč. Na pád aplikace nebo `kill` se ptát nedá, takže se nálezy
-**dotáhnou z transcriptu**, který si `claude` vede na disku: běh se poznamená, jakmile nahlásí
-id session, a po startu se z něj přečte, co stihl. Takový výsledek je v řádku `přerušeno`, ne
-`timeout` ani `čisté` — nedoběhl, takže se z něj nesmí soudit, že je hotovo.
+**Co nedoběhlo, se neztratí.** Když se aplikace zavře, ptá se — a když se ukončení potvrdí,
+**běžící session zabije** a čeká, dokud po nich nezůstane běžet nic. Bez toho `claude` aplikaci
+přežil: osiřelý proces počítal tokeny za review, které už nemá komu doručit, a držel pracovní
+strom v cache (změřeno, dvě takové session běžely čtyři dny). Ze zaseknuté session přitom nesmí
+vzniknout aplikace, která se nedá zavřít, takže čekání má strop dvou sekund.
+
+Nálezy z takového běhu se pak **dotáhnou z transcriptu**, který si `claude` vede na disku: běh se
+poznamená, jakmile nahlásí id session, a po startu se z něj přečte, co stihl. Platí to i pro pád
+aplikace nebo `kill`, na které se ptát nedá — zavření aplikace se od nich v tomhle záměrně neliší.
+Takový výsledek je v řádku `přerušeno`, ne `timeout` ani `čisté` — nedoběhl, takže se z něj nesmí
+soudit, že je hotovo. Zrušení review člověkem je proti tomu jiná odpověď: tam se nedotahuje nic,
+protože o ty nálezy si nikdo neřekl.
 
 Nálezy jsou klíčované head commitem PR. Když přijdou nové commity, předchozí nálezy se
 označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
@@ -954,12 +961,41 @@ protože jde do bundle ID.
 konfiguraci, klony i uložené nálezy. Je to ta podstatná část: build s rozbitou persistencí
 nemá jak smazat rozdělaný draft, tedy ručně psanou práci.
 
-Konfigurace se do slotu zkopíruje, ale **očištěná** — bez povoleného odesílání (globálně
-i u každého repa), bez notifikací a bez automatického spouštění review. Odesílání proto, že
-výchozí stav je vypnuto a u rozestavěného buildu to platí dvojnásob; notifikace proto, že
-slot má vlastní `announced.json` a ohlásil by jako nové úplně všechny PR ve frontě; automat
-proto, že by spouštěl review, které nikdo nečte. Když na stroji není `jq`, konfigurace se
-**nezkopíruje vůbec** — kopírovat ji neočištěnou by znamenalo předat slotu povolené odesílání.
+Konfigurace se do slotu zkopíruje, ale **očištěná** — bez povoleného odesílání, bez
+notifikací a bez automatického spouštění review, a to **na obou úrovních**: globálně
+i u každého repa. Odesílání proto, že výchozí stav je vypnuto a u rozestavěného buildu to
+platí dvojnásob; notifikace proto, že slot má vlastní `announced.json` a ohlásil by jako nové
+úplně všechny PR ve frontě; automat proto, že by spouštěl review, které nikdo nečte a za které
+se platí. Když na stroji není `jq`, konfigurace se **nezkopíruje vůbec** — kopírovat ji
+neočištěnou by znamenalo předat slotu povolené odesílání.
+
+Očistu drží **`bin/slot-config.sh`** a je to jediné místo, kde existuje (#262):
+
+```bash
+./bin/slot-config.sh      # slot se přečte z .prism-slot v tomhle stromě
+./bin/slot-config.sh d    # slot výslovně; takhle to volá bin/worktree.sh
+```
+
+Samostatný skript je proto, že do slotu se nedostane každý přes `worktree.sh` — subagent
+v paralelním vývoji má strom od harnessu, takže si očistu do #262 opisoval, a dvě kopie
+znamenají, že se příští oprava udělá jen v jedné. Přesně to se stalo: `mode` se čistil
+globálně, ale ne u rep, takže per-repo override `mode: automatic` očistou prošel a přebil
+globální `manual` (per-repo override je přednější — je to celý smysl `resolved(for:)`).
+Slotová aplikace si sama pustila review za **2,80 $ v jednom slotu a 1,16 $ v dalším**.
+
+Tři vlastnosti, kterými se ta chyba splácí:
+
+- **Vypíše, co našlo.** Repa s automatem jmenovitě, počet rep s povoleným odesíláním — očista,
+  která proběhne potichu, se nedá zkontrolovat.
+- **Ověří výsledek, ne filtr.** Po přepsání se v datech hledá zbylý automat a povolené
+  odesílání; když se něco najde, **nezapíše se nic** a skript skončí nenulově.
+- **Existující konfiguraci slotu nepřepíše tou hlavní** (proklikané nastavení je ruční práce),
+  ale **pustí na ni tutéž očistu** — sloty se používají opakovaně a v cache může ležet
+  konfigurace z doby, kdy očista automat u repa nechytala.
+
+Co se čistí a co ne, je vyjmenované v komentáři skriptu — **celý `GlobalConfig`**, včetně
+klíčů, které se nechávají být, a důvodu u každého. Nový klíč, který má obě úrovně
+(`GlobalConfig` i `RepositoryConfig`), do toho výčtu patří, i kdyby se nakonec nečistil.
 
 Po mergnutí branche se strom i cache slotu uklidí:
 
@@ -1080,6 +1116,7 @@ Tests/                    unit testy — target PRismTests
   Fixtures/statuspage/    skutečné components.json ze status pages (a jeden s dopsaným incidentem)
 bin/run.sh                build + spuštění jedním příkazem
 bin/worktree.sh           pracovní strom se slotem — paralelní vývoj vedle běžící aplikace
+bin/slot-config.sh        očištěná konfigurace do cache slotu (jediné místo, kde ta očista je)
 bin/copilot-review.sh     vyžádání Copilot review na PR
 bin/setup-signing.sh      jednorázová příprava stálého podpisu (self-signed certifikát)
 bin/make-icon.swift       vykreslí ikonu do asset catalogu (bez závislosti, přes ImageRenderer)

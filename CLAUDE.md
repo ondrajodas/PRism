@@ -432,7 +432,9 @@ Zvlášť stojí za přečtení, než sáhneš na:
   viselo cokoli z úklidu, zapnutí filtru by zahodilo diffy a konverzace, smazalo cache a zrušilo
   běžící review;
 - **`Environment`** — podprocesy: blokující I/O nesmí na kooperativní pool, oba pipy se musí
-  číst souběžně, zrušení musí proces zabít.
+  číst souběžně, **zrušení i ukončení aplikace musí proces zabít** (#264 — obě cesty, jedním
+  `SIGKILL`em z `LaunchedProcess`; zavírání se na něj navíc musí **počkat**, jinak `claude`
+  osiří na `launchd` a běží dál).
 
 ## Konvence
 
@@ -577,6 +579,12 @@ příští spuštění skriptu: je to **tatáž cesta**, kterou odregistrovává
 ./bin/worktree.sh a issue-231-neco    # strom pro paralelní vývoj ve slotu „a“ (#228)
                                       # branch z origin/main, .prism-slot do stromu,
                                       # konfigurace očištěná o odesílání, notifikace a automat
+```
+
+```bash
+./bin/slot-config.sh    # očištěná konfigurace do cache slotu; slot z .prism-slot (#262)
+                        # jediné místo, kde ta očista je — nepiš vlastní `jq` filtr
+                        # subagent v dávce ji volá takhle: strom má od harnessu
 ```
 
 **Slot je jediné, co dělí paralelní okna od sebe** — bundle ID, jméno v `/Applications`

@@ -1052,11 +1052,25 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   spadnou dva testy se čtyřmi issues. Bez toho by zelený běh nedokazoval nic, protože obě
   cesty vedou do `Application Support` a liší se jediným řetězcem.
 
-  Zbytek slotů leží v shellu (`bin/run.sh`, `bin/worktree.sh`) a testy ho nepokryjí, takže se
-  ověřuje spuštěním: build se slotem musí vyrobit `com.ondrajodas.prism.a` a `PRism-a`,
-  instance běží **vedle** té hlavní a hlavní cache zůstane bez jediného čerstvého souboru.
-  Že se `pgrep` patterny nepletou, se pozná jen s oběma běžícími naráz — pattern hlavní
+  Zbytek slotů leží v shellu (`bin/run.sh`, `bin/worktree.sh`, `bin/slot-config.sh`) a testy ho
+  nepokryjí, takže se ověřuje spuštěním: build se slotem musí vyrobit `com.ondrajodas.prism.a`
+  a `PRism-a`, instance běží **vedle** té hlavní a hlavní cache zůstane bez jediného čerstvého
+  souboru. Že se `pgrep` patterny nepletou, se pozná jen s oběma běžícími naráz — pattern hlavní
   instance nesmí najít slot a naopak.
+
+  **Očista konfigurace slotu se ověřuje nad konfigurací, která per-repo override má** (#262).
+  Filtr přečtený očima projde — přesně tak v něm deset dnů leželo chybějící `mode` u rep, které
+  stálo 2,80 $ a 1,16 $ ve dvou slotech. Pouští se proto `bin/slot-config.sh` nad skutečnou
+  konfigurací (`ondrajodas/prism-review-sandbox` v ní `mode: automatic` má) a ve výsledku se
+  hledá, co v něm **nesmí být**: žádný automat na žádné úrovni, žádné povolené odesílání.
+  Do uživatelovy konfigurace se přitom nezapisuje — je to jen vstup, cílem je cache slotu.
+
+  Ověřovat se musí i to, co skript hlásí **jen výjimečně**, jinak je „nic nevypsal“
+  k nerozeznání od „funguje“: prázdný slot (cílem by byla konfigurace hlavní instance) a slot
+  se zakázaným znakem musí odmítnout dřív, než složí cestu; chybějící `jq` nesmí zkopírovat
+  nic; a **kontrola nad výsledkem se ověřuje vložením regrese** — když se z filtru vyndá
+  `mode` u rep, musí skript skončit nenulově a nezapsat nic. Zapsaná očista, která spadne
+  na půl cesty, je horší než žádná: vypadá jako hotová.
 - **`RepoCheckout`** — dvě vrstvy, a **obě jsou potřeba**. Fake runner ověří, co se `gitu`
   posílá za argumenty (na tocích s víc příkazy `ScriptedProcessRunner`, který odpovídá
   jinak na každé volání); integrační test (`RealRepoCheckoutTests`) klonuje z `file://`
@@ -1088,6 +1102,41 @@ protože tam se testuje bez kreslení. Naražené znovu u #218 a příznak byl p
   nemusí ladit. Ověřuje se to **opakováním**, ne jedním zeleným během: 20 běhů suity v řadě,
   protože u flaky s 25 % je pět zelených běhů ještě čtvrtina případů.
 - **`ReviewSlots`** — limit, pořadí ve frontě a zrušený čekatel, který nesmí frontu ucpat.
+- **Zavření aplikace** (#264) — tři suity, protože se to láme ve třech různých místech:
+  - **`AppDelegateTerminationTests`** — rozhodnutí o ukončení. Že se bez běžícího review neptá
+    a nic nezabíjí, že `Zpět` nezabije nic, a hlavně že se **ukončení povolí teprve po zabití**
+    (`.terminateLater` a `reply` až po něm). Jde to jedině proto, že dotaz i odpověď systému jsou
+    v delegátovi **vlastnosti**: `runModal()` by v testu čekal na kliknutí, které nikdo neudělá,
+    a `reply(toApplicationShouldTerminate:)` mimo odložené ukončení by ukončil hosta testů.
+    Poslední test suity tvrdí, že odpověď dorazí **i s nezapojeným zabíjením** — nezavíratelná
+    aplikace je horší porucha než přežilá session.
+  - **`AppStoreTerminationTests`** — co po zavírání zůstane: nic neběží, nic nového se nespustí
+    (ruční tlačítko **i** tik automatu) a **značka rozdělaného běhu (#97) se nesmaže**. K tomu
+    protějšek, že **zrušení člověkem ji smazat musí** — bez něj by šlo „nemazat při zavírání“
+    splnit tím, že se nemaže nikdy, a příští start by vzkřísil nálezy, které si někdo zrušil.
+    Store je proto v **automatickém** režimu i tam, kde se spouští ručně: s `autoRuns: nil` by
+    plánovač vypadl na první závoře a test o něm netvrdil nic.
+  - **`AppStoreTerminationProcessTests`** — celý produkční řetěz proti **skutečnému procesu**
+    (`AppStore` → `ClaudeReviewRunner` → `SubprocessStreamer` → `Process`), kde za `claude` stojí
+    skript, který vypíše svoje PID a čeká. `exec sleep`, ne `sleep`: PID pak patří tomu procesu,
+    který má umřít, a nezůstane pod ním potomek, který by výsledek rozmazal.
+
+    **Pořadí tvrzení je tu podstatná část testu.** `runningReviews == 0` musí být **první a bez
+    jediného `await`u** — v provozu po téhle metodě následuje zavření aplikace, takže víc času
+    než „nic“ běh nedostane. Když se to napsalo obráceně (napřed polling na PID), test prošel
+    i nad verzí, která na zabití nečeká: polling sám tomu běhu dal čas, který v provozu nemá.
+    Teprve po tom tvrzení se kouká na proces, a tam se čekat smí — mezi doručeným `SIGKILL`em
+    a zmizením z tabulky je ještě sklizení, které s aplikací nesouvisí.
+
+  Ověřeno **vložením regrese**, ve čtyřech podobách: bez čekání po `cancel()` (spadnou čtyři
+  testy včetně toho nad skutečným procesem), bez brány na mazání značek (spadne ta o značce),
+  bez brány v `startReview` a bez brány ve `startAutomaticReviews` (spadne ta o novém běhu)
+  a s `terminateNow` místo odloženého ukončení (spadne celá delegátí suita).
+
+  Co testy nepokryjí, je **osamocený proces po zmizelé aplikaci** — na to se nedá napsat test,
+  který by nezabíjel vlastního hosta, takže se to ověřuje spuštěním: pustit review, ukončit
+  aplikaci a podívat se, jestli po ní zbyl `claude` s `ppid 1`. Změřeno u #264 na slotu — session
+  zmizela, značka v `interrupted.json` zůstala a po restartu vyšel řádek `přerušeno`.
 
 ## Jak si zkontrolovat, jak view vypadá
 
