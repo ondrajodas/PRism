@@ -314,6 +314,39 @@ značka na hraně řádku**. Rozhoduje `Policy.disclosure(of:categories:toggled:
   ale znamenalo by to další sloupec v gutteru, který si `DiffTextView` kreslí ručně — a ten jediný
   úzký sloupec už zabírá pilulka komentáře. Zamítnuto, viz specifikace.
 
+Řada akcí pod nálezem (#283) — **malá tlačítka vlevo pod textem, ne modré odkazy přes celou
+šířku**. Vzhled drží `MiniButtonStyle` (`.mini` a `.mini.pri` z návrhu), rozvržení `footer(of:)`.
+Co se u toho nemá rozbít:
+
+- **Hlavní akci odlišuje plocha, ne vzdálenost.** Do #283 stál mezi převzetím a odmítnutím
+  `Spacer`, aby se omylem nekliklo na to druhé. Rozhodnutí je otočené (důvody ve specifikaci) a to
+  podstatné z něj zbývá: **plné akcentové tlačítko je v řadě právě jedno** a je první zleva, takže
+  cesta myší k převzetí nevede přes odmítnutí.
+- **`Spacer` u odmítnutého nálezu zůstává.** `dismissed(_:_:)` není tentýž footer: je to jeden
+  řádek se zkráceným textem, takže `Spacer` je to místo, do kterého se text ořezává, a `Vrátit` je
+  na řádku jediná akce.
+- **Popisek má dvě podoby a nesmí splynout.** `FindingDismissal.Reason.label` je přídavné jméno do
+  odznaku a do menu tabulky (`neplatný`), `actionLabel` je tvrzení na tlačítko (`Neplatí`). Jedna
+  hodnota pro obojí by v jednom z těch dvou míst mluvila špatně — odznak stavu by řekl akci.
+- **Když se řada nevejde, zlomí se, neořeže se.** `ViewThatFits` má tři varianty (řada → dvě řady
+  → sloupec). Návrh zalomení nemá, ale nemá ani odpověď na šířku, ve které řada nemůže existovat:
+  změřeno renderem, že v úzkém panelu zbývá na řadu 128 bodů a ze tří tlačítek jsou pahýly o jednom
+  znaku. Cena je trojnásobek layoutu footeru — u tří tlačítek zanedbatelná, protože bublina není
+  na každém řádku diffu.
+- **Cíl převzetí a `isAdopted` se počítají jednou za bublinu**, v `footer(of:)`, ne uvnitř tlačítka:
+  obojí hledá řádek v hunkách (`isAdopted` si `draftTarget` počítá samo) a `ViewThatFits` staví
+  všechny varianty, takže uvnitř by to byl průchod na každou z nich.
+- **Prázdný footer se nekreslí, ani jako mezera.** Bublina ke čtení (náhledy, testy skládání řádků,
+  `canCompose == false`) by jinak měla pod textem devět bodů prázdna — a prázdno na místě, kde jinde
+  něco je, se čte jako chybějící obsah, ne jako „tady nic není“.
+- **Věta „GitHub tady řádkový komentář nepřijme“ stojí pod řadou, ne za tlačítkem.** Je to nejdelší
+  prvek, takže jako ocas za tlačítkem rozhodovala o zalomení celé řady místo tlačítek — změřeno
+  renderem, kde kvůli ní řada padala do sloupce i na širokém okně.
+- **Výška tlačítka se skládá z `line-height` a obtažení, ne z toho, co dá font sám.** CSS řádek je
+  16,7 bodu, SwiftUI dá pro `size: 11.5` dvanáct, a obtažení v CSS leží **vně** paddingu, kdežto
+  SwiftUI ho kreslí `overlay`em dovnitř. Bez obojího vycházelo tlačítko 20 bodů proti 25 v návrhu.
+  Změřeno renderem vedle sebe — z kódu se to nepozná.
+
 Pohled **vedle sebe** (#98) je `DiffRow.pair(_, left:, right:)` a platí u něj:
 
 - **Jeden model, dva pohledy.** Dvojice je case `DiffRow`, ne vlastní typ vedle něj — se
@@ -1738,7 +1771,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffPairView` | Dvojice vedle sebe: dvě buňky `DiffLineView` se `side`, pozadí za celou dvojici, prázdná protistrana |
 | `RangeDragActions`, `DiffRowFrames` | Tažení rozsahu komentáře (#110) — akce a rámečky řádků **mimo observable stav** |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
-| `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou |
+| `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou. Od #283 jsou akce **řada malých tlačítek vlevo pod textem** |
+| `MiniButtonStyle` | Malé tlačítko z návrhu (`.mini`, `.mini.pri`) — plné akcentové a obtažené. Rozměry v `Metrics`, aby se daly změřit testem; text plného je `Palette.surface` (`--panel`), ne bílá |
 | `FindingActions` | Co se dá dělat s nálezem — odmítnout a vrátit; jedno místo pro bublinu i tabulku |
 | `FindingDisclosureActions` | Rozbalení bubliny nálezu (#185) — stav ze store a jeho překliknutí. **Nepatří do `FindingActions`**, kterou bere i tabulka: ta rozbalení řídí sama |
 | `ThreadBubbleView` | Vlákno konverzace — u kódu i na ose (`Placement`); karta z pruhů, vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73, sazba #216) |
