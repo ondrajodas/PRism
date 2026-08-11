@@ -19,6 +19,20 @@ final class DiffTextView: NSTextView {
     var commentRangeLines: Set<Int> = []
     /// Totéž pro rozsah, který se právě táhne — svítí výrazněji.
     var draggedLines: Set<Int> = []
+    /// Řádky, na kterých v tomhle sloupci **žádný řádek souboru není** (#277) — prázdný protějšek
+    /// dvojice v pohledu vedle sebe.
+    ///
+    /// Vlastní množina, ne druh řádku: prázdná strana se do textu skládá jako prázdný **kontextový**
+    /// řádek (`DiffPairBlockContainer.blank`), aby si sloupce odpovídaly, takže z modelu se „tady
+    /// nic není“ poznat nedá — a rozšiřovat `DiffLine.Kind` o případ, který existuje jen v jednom
+    /// rozvržení, by ten rozdíl protáhlo parserem, `Policy` i kotvami komentářů. Do #277 se tenhle
+    /// stav nekreslil vůbec, takže díra byla od nezměněného řádku k nerozeznání.
+    var missingLines: Set<Int> = [] {
+        didSet {
+            guard missingLines != oldValue else { return }
+            needsDisplay = true
+        }
+    }
     /// Kolik sloupců s čísly se kreslí: dva v pohledu pod sebou, jeden v buňce dvojice.
     var numberColumns = 2
     /// Šířka sloupců, které se kreslí vlevo: sloupec ikonky, čísla a znak změny.
@@ -270,12 +284,19 @@ final class DiffTextView: NSTextView {
     /// Přes **celou šířku** view, ne jen za textem: pozadí, které končí s posledním znakem, čte se
     /// jako podtržení, ne jako řádek diffu.
     private func drawRows(in dirtyRect: NSRect) {
+        for run in missingRuns() where run.intersects(dirtyRect) {
+            drawMissing(in: run)
+        }
         for (index, line) in lines.enumerated() {
             guard let rect = frame(ofLine: index) else { continue }
             let strip = NSRect(x: 0, y: rect.minY, width: bounds.width, height: rect.height)
             guard strip.intersects(dirtyRect) else { continue }
 
-            if let background = DiffTextView.background(of: line.kind) {
+            // Prázdný protějšek dostal plochu i šrafu výš, po úsecích — pozadí druhu řádku by mu
+            // ji překreslilo. **Pruh rozsahu se mu ale nebere**: dneska na prázdnou stranu
+            // nepadne (kotvu nemá, viz `DiffPairBlockRowView.rows(in:on:)`), a kdyby to někdy
+            // padnout mělo, má se kreslit, ne tiše zmizet.
+            if !missingLines.contains(index), let background = DiffTextView.background(of: line.kind) {
                 background.setFill()
                 strip.fill()
             }
@@ -284,6 +305,52 @@ final class DiffTextView: NSTextView {
                 strip.fill()
             }
         }
+    }
+
+    /// Souvislé úseky prázdných protějšků jako jeden rámeček na úsek.
+    ///
+    /// **Po úsecích, ne po řádcích**, a je to obojí najednou: šrafa je tím **spojitá** (pruh přes
+    /// hranici řádku pokračuje, nezačíná znovu) a je jí řádově méně — u přidaného bloku o šedesáti
+    /// řádcích jeden rámeček místo šedesáti, tedy stovky úseček místo tisíců, a to při **každém**
+    /// překreslení. Je to tatáž úvaha jako u overlay gutteru (#252): co se dá spočítat naráz, se
+    /// nemá dělat na každý řádek.
+    private func missingRuns() -> [NSRect] {
+        var result: [NSRect] = []
+        for index in lines.indices {
+            guard missingLines.contains(index), let rect = frame(ofLine: index) else { continue }
+            let strip = NSRect(x: 0, y: rect.minY, width: bounds.width, height: rect.height)
+            // Navazuje na předchozí úsek? Porovnává se **poloha**, ne index — mezi dvěma prázdnými
+            // řádky může být řádek bez rámečku, a ten úsek přerušuje.
+            if let last = result.last, abs(last.maxY - strip.minY) < 0.5 {
+                result[result.count - 1] = last.union(strip)
+            } else {
+                result.append(strip)
+            }
+        }
+        return result
+    }
+
+    /// Prázdný protějšek dvojice (#277): plocha díry a nad ní šrafa.
+    ///
+    /// Kreslí se **místo** pozadí druhu řádku, ne přes něj — prázdná strana se do textu skládá jako
+    /// prázdný kontextový řádek, takže by se jinak nakreslila plocha obsahu a šrafa nad ní by
+    /// tvrdila obojí naráz. Šrafa se ořezává na úsek, protože pruhy jsou o jeho výšku posunuté
+    /// doleva (sklon 45°) a bez ořezu by přetekly nad něj a pod něj.
+    private func drawMissing(in run: NSRect) {
+        NSColor(Palette.diffMissing).setFill()
+        run.fill()
+
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: run).setClip()
+        NSColor(Palette.diffMissingStripe).setStroke()
+        let path = NSBezierPath()
+        path.lineWidth = DiffMissingHatch.lineWidth
+        for segment in DiffMissingHatch.segments(in: run) {
+            path.move(to: segment.from)
+            path.line(to: segment.to)
+        }
+        path.stroke()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     /// Čísla řádků a znak změny — v insetu vlevo, kam text nezasahuje.

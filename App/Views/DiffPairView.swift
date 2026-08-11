@@ -89,14 +89,23 @@ struct DiffPairView: View {
         if let line {
             DiffLineView.background(of: line.kind)
                 // Pruh rozsahu jde **přes** barvu druhu řádku, ať zůstane vidět, co je přidané
-                // a co odebrané.
-                .background(tint)
+                // a co odebrané. Od #277 `overlay`, ne `background`: barva druhu řádku je
+                // vyčíslená, tedy neprůhledná, takže pruh pod ní zmizel — viz `DiffLineView`.
+                .overlay(tint)
                 .frame(maxWidth: .infinity)
         } else {
-            // Neutrální plocha, ne prázdno: „tady žádný řádek není“ se od „je tu prázdný
-            // řádek“ jinak nepozná. `Color.primary` funguje v obou režimech — v tmavém je
-            // bílá, ve světlém černá, takže odstín vyjde vždycky proti pozadí okna.
-            Color.primary.opacity(0.05).frame(maxWidth: .infinity)
+            // Díra, ne prázdno: „tady žádný řádek není“ se od „je tu prázdný řádek“ jinak
+            // nepozná. Od #277 z palety a se šrafou, protože samotná plocha na to v tmavém
+            // režimu nestačí (ΔE 3,3) — podrobnosti u `Palette.diffMissing`.
+            Palette.diffMissing
+                .overlay {
+                    DiffMissingHatch()
+                        .stroke(Palette.diffMissingStripe, lineWidth: DiffMissingHatch.lineWidth)
+                        // Pruhy jsou o výšku rámečku posunuté doleva (sklon 45°), takže bez
+                        // ořezu přetečou do řádku vedle. V bloku kódu to dělá `setClip`.
+                        .clipped()
+                }
+                .frame(maxWidth: .infinity)
         }
     }
 }

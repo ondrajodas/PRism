@@ -522,11 +522,69 @@ Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne p
 podle ní se kreslí pozadí, čísla i pozice pilulek — a TextKit 2 layout manager nemá. Vynutí se tím,
 že se textové view vyrobí s ručně složeným `NSTextStorage`/`NSLayoutManager`/`NSTextContainer`.
 
-**`DiffLineView` a `DiffPairView` se v aplikaci už nekreslí** (bloky je nahradily), ale drží
+**V diffu se `DiffLineView` a `DiffPairView` už nekreslí** (bloky je nahradily), ale drží
 konstanty a barvy, které si bloky berou (`numberColumn`, `iconColumn`, `signColumn`,
 `contentInset(for:)`, `signColor(of:)`, `background(of:)`, `rangeTint`, `dragTint`). Zůstávají
 proto jako **jediné místo, kde ty hodnoty jsou** — vyčlenit je do vlastního typu je úklid na potom,
 ne součást #157.
+
+Jeden čtenář `DiffLineView` ale přibyl: **úryvek kódu u vlákna** (`ThreadSnippetView`, #216) kreslí
+řádky jím, takže barvy z něj jsou vidět i mimo diff. `DiffPairView` čtenáře nemá žádného — každou
+dvojici slévá `DiffRow.blockedPairs(_:)` do `pairBlock`u, takže případ `.pair` do `DiffRowView`
+nedojde. Drží se dál kvůli konstantám a proto, že je to jediný popis toho, jak dvojice vypadá bez
+bloku; když se v něm něco mění (jako barvy u #277), mění se to **spolu s blokem**, aby se ty dvě
+cesty nerozešly.
+
+### Barvy diffu (#277)
+
+Pozadí řádků, word-level vrstva, prázdný protějšek a znak `+`/`−` jdou z `Palette` — vyčíslené
+dvojice světlá/tmavá, žádné krytí. Hodnoty a jejich čísla jsou u tokenů (`Palette.diffAdded`
+a dál); tady je to, co se u toho nemá rozbít:
+
+- **Barva plochy nesmí být krytí nad podkladem.** Tohle je celé #277 a je to tentýž argument, jaký
+  #185 zapsalo u `critLine`: skrz krytí prosvítá to, na čem barva leží, takže **není hodnotou, ale
+  výsledkem**. V tmavém režimu se systémová zelená na 12 % mísila směrem k černé a plocha přidaného
+  bloku vycházela `#152B22`, tedy tmavý obdélník. Hlídá to test na **alfu** všech šesti tokenů.
+- **Odlišení ploch se měří ΔE2000, čitelnost textu nad nimi WCAG.** Jedna míra nestačí a je to
+  změřené: word-level vrstva měla do #277 v tmavém režimu ΔE 29,5 (plocha jak vyšitá) a kontrast
+  zeleného řetězce Darculy **1,27**, tedy nepřečtitelný kód právě na tom slově, které se změnilo.
+  Tvrzení jsou proto v testech vždycky dvě.
+- **Sytost je levnější než světlost.** WCAG kontrast textu závisí jen na světlosti, kdežto ΔE
+  plochy roste i se sytostí — tmavé tóny proto vznikly mixem `ok`/`crit` **do černé**, ne do plochy.
+  Odlišení tím vyrostlo (ΔE 16,0 → 21,8 u přidaného) a syntaxe zůstala na svém (3,73 → 3,76).
+  Kdo bude hodnoty ladit, má tímhle směrem rezervu; zesvětlením ji nemá.
+- **Zelená a červená mají v diffu jeden zdroj**, `DiffLineView.signColor(of:)` (#156) — bere ji
+  `+`/`−` v řádku, souhrn `+X −Y` v hlavičce i čtverečky poměru (#218). Od #277 vrací
+  `Palette.ok`/`crit`, takže systémová zelená z diffu zmizela úplně; **plochy** řádků jsou ten tón
+  zamíchaný do podkladu, tedy tatáž rodina.
+- **Pruh rozsahu komentáře zůstává průhledný schválně** (`rangeTint`, `dragTint`): musí se s barvou
+  druhu řádku **smíchat**, aby pod ním zůstalo vidět, co je přidané. Je to tedy jediné krytí, které
+  v diffu zbylo, a je to jiný případ než plocha — hodnota se tu měnit *má*. Změřeno nad novým
+  pozadím: pruh je od neoznačeného řádku ΔE 9,5 a označený přidaný řádek je od označeného kontextu
+  ΔE 21,7, takže se ani jedna informace neztratí.
+- **Pruh se kreslí nad pozadím, ne pod ním.** Do #277 to bylo ve SwiftUI cestě obráceně
+  (`.background(barva).background(pruh)`) a fungovalo to jen proto, že pozadí bylo průhledné —
+  s vyčíslenou barvou by pruh zmizel. Blok kódu (`DiffTextView.drawRows`) měl správné pořadí
+  odjakživa, takže se tím obě cesty srovnaly.
+- **Prázdný protějšek se odlišuje texturou, ne světlostí** (`DiffMissingHatch`). V tmavém režimu už
+  pod `surface` není kam ztmavovat (plocha díry je od plochy obsahu ΔE 3,3) a zesvětlení by
+  znamenalo, že díra křičí hlasitěji než změna vedle ní. Plocha proto zůstává **tišší** (tmavší než
+  obsah) a poznávacím znakem je šrafa, která je od ní ΔE 11,3.
+- **Které řádky jsou prázdné, řekne sloupci dvojice** (`DiffTextView.missingLines`), protože
+  v textu je prázdná strana složená jako prázdný **kontextový** řádek (`DiffLine.blank`) — jinak by
+  se sloupce nezarovnaly. Do #277 se ten stav nekreslil vůbec, takže „tady řádek není“ a „řádek se
+  nezměnil“ byla tatáž plocha (ΔE 0,0). **Rozšířit `DiffLine.Kind` o `missing` se zamítlo**: je to
+  vlastnost jednoho rozvržení, ne řádku souboru, a protáhla by se parserem, `Policy` i kotvami
+  komentářů.
+- **Plocha díry nahrazuje pozadí druhu řádku, nesčítá se s ním.** Prázdná strana je složená jako
+  kontext (tedy bez pozadí), ale kdyby se ta množina spletla s přidaným řádkem, kreslila by se
+  šrafa nad zelenou a řádek by tvrdil obojí naráz. Hlídá to test.
+- **Obrys bubliny nálezu je pořád jedna barva pro všechny podklady** (`critLine`, #185), takže se po
+  každé změně pozadí musí přeměřit nad všemi: vychází 1,69 na přidaném a 1,87 na odebraném řádku
+  v tmavém režimu (do #277 to bylo 1,68 a 1,83), tedy nezměněno.
+- **Světlý režim se nemění.** Plochy zůstaly na hodnotách, které vycházely dosud — přepočet z `ok`
+  do bílé je na obou mírách horší (ΔE 10,1 → 8,3, řetězec 4,82 → 4,52), protože `ok` je pro světlý
+  režim tmavá zelená. Změnil se v něm jedině **znak** `+`/`−`, a to k lepšímu: 2,01 → 4,60.
 
 Word-level rozdíl (#153) — u přepsaného řádku svítí jen ta část, která se změnila. `WordDiff` je
 čistá funkce v `App/Diff/`, obarvení dělá `DiffTextView`. Co se u toho nemá rozbít:
@@ -1566,7 +1624,7 @@ na `.task` okna, takže zavření okna ji zruší.
 |---|---|
 | `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
 | `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) — a od #245 **vypnutí systémových záložek oken** (`tabbingMode = .disallowed`), aby se `⌃Tab` nepřetahoval s AppKitem |
-| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky; **zelená a červená diffu jdou dál z `DiffLineView.signColor(of:)`**, aby se `+` v řádku nerozešlo s `+12` nad ním (#156) |
+| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému. Pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissing`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |

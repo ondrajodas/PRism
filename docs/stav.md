@@ -1056,5 +1056,32 @@ navíc past: řídit se muselo přes accessibility a **samotné to řízení je 
 naměřených; postup i to, co nefunguje (syntetické scroll eventy, `Page Down`), je v
 [`docs/testovani.md`](testovani.md).
 
+**Barvy diffu jdou z palety, ne ze systému (#277).** Pozadí řádků bylo jediné místo v okně, které
+si barvu bralo ze systémové zelené a červené s krytím 12 % — a krytí znamená, že barva **není
+hodnota, ale výsledek**: v tmavém režimu se mísila směrem k černé a plocha přidaného bloku vycházela
+`#152B22`, tedy tmavý obdélník. Je to tentýž argument, jaký #185 zapsalo u `Palette.critLine`, jen
+se u pozadí řádku neuplatnil. Nově je to šest vyčíslených tokenů: přidaný a odebraný řádek,
+word-level vrstva k oběma, prázdný protějšek a jeho šrafa.
+
+Měřilo se dvěma mírami naráz, protože jedna nestačí — **ΔE2000 na plochy** (WCAG kontrast nad dvěma
+plochami podobné světlosti neřekne nic) a **WCAG na text nad nimi**. V tmavém režimu vyrostlo
+odlišení přidaného řádku od plochy ΔE **16,0 → 21,8**, odebraného **13,2 → 19,7** a rozdíl mezi nimi
+**28,9 → 36,8**, přičemž čitelnost syntaxe zůstala na svém (řetězec Darculy 3,73 → 3,76). Sedlo to
+na jedno pozorování: kontrast textu závisí jen na světlosti, kdežto odlišení plochy roste i se
+sytostí — tóny proto vznikly mixem `ok`/`crit` **do černé**, ne do plochy.
+
+Znak `+`/`−` bere od #277 `Palette.ok`/`crit` (otáčí #218), takže se ve světlém režimu zvedl jeho
+kontrast **2,01 → 4,60** na řádku a **2,22 → 5,08** v hlavičce, kde nese `+12 −4`. Word-level vrstva
+je vědomě **méně hlasitá, zato čitelná**: 50 % nad novým pozadím sebralo obarvení syntaxe pod sebou
+(řetězec **1,27**), teď je to ΔE 16,1 proti řádku a 1,97 na řetězci. **Světlý režim se nemění** —
+přepočet z `ok` do bílé vyjde na obou mírách horší, takže plochy zůstaly, jak byly.
+
+Prázdný protějšek se v pohledu vedle sebe **do #277 nekreslil vůbec** (ΔE 0,0 proti kontextu, tedy
+tatáž plocha), takže z okna nešlo poznat, jestli se řádek nezměnil, nebo na téhle straně není.
+Odlišuje se **šrafou, ne světlostí**: pod `surface` už není kam ztmavovat a světlejší plocha by
+křičela hlasitěji než změna vedle ní. Testů je o 14 víc (2238) ve dvou nových suitách — jedna počítá
+obě míry nad skutečnými tokeny v obou režimech, druhá čte **bitmapu sloupce**, protože prázdný
+protějšek se v modelu poznat nedá.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

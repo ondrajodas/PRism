@@ -930,7 +930,38 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   slovo, často jediný znak. Nahlášené nad `job-queue-daemon#858` jako „zvýraznění nevidím“, ačkoli
   na řádku 1908 (`count: 7` → `8`) tam bylo. Je to obecnější poučení než jedna barva: **render
   jednoho prvku neodpovídá na to, jestli se ten prvek dá v okně najít** — na to je potřeba
-  screenshot běžící aplikace nad skutečným PR. Teď je hodnota 50 % a je ověřená obojím.
+  screenshot běžící aplikace nad skutečným PR. Padesát procent pak platilo do #277, kdy se z krytí
+  stala vyčíslená barva a **hodnota se u toho změnila**, protože nad novým pozadím řádku brala pod
+  sebou obarvení syntaxe; čísla obou stavů jsou u `Palette.diffAddedWord` a hlídá je sada níž.
+
+  **Barvy diffu (#277)** mají dvě sady a měří se v nich **dvě míry naráz** — to je u nich to hlavní,
+  co se dá pokazit potichu: WCAG kontrast nad dvěma plochami podobné světlosti neřekne nic (zelený
+  a červený řádek se liší hlavně barvou), kdežto ΔE2000 zas nic neřekne o čitelnosti textu nad
+  plochou. Do #277 to bylo vidět na word-level vrstvě: ΔE 29,5 (plocha jak vyšitá) a kontrast
+  zeleného řetězce Darculy **1,27**, tedy nepřečtitelné slovo — a zrovna to, které se změnilo.
+
+  `DiffPaletteTests` počítá obojí nad **skutečnými tokeny** vyhodnocenými v obou režimech
+  (`performAsCurrentDrawingAppearance` kolem `NSColor` funguje, na rozdíl od `ImageRenderer`u —
+  viz *Jak si zkontrolovat, jak view vypadá*). Nejcennější je tvrzení o **alfě**: všech šest tokenů
+  musí být neprůhledných, protože právě krytí z barvy dělá výsledek závislý na podkladu — kdo se sem
+  vrátí s `.opacity(…)`, spadne tady, ne až na obrazovce. K tomu ΔE ploch proti sobě i proti
+  podkladu, kontrast syntaxe (řetězec, klíčové slovo, komentář, `ink`) na obou druzích řádku, znak
+  `+`/`−` na svém řádku **i na ploše hlavičky** (jedna barva, dvě místa, #156), obrys bubliny nad
+  všemi čtyřmi podklady a to, že prázdný protějšek je **tišší** než změna. Prahy jsou svázané
+  s dnešními hodnotami, ne s ideálem, takže sada padá na zhoršení, ne na zaokrouhlení. Jeden test
+  navíc tvrdí, že se **světlá a tmavá větev liší** — bez něj by celou sadu splnila i paleta, která na
+  režim nereaguje, a je to zároveň důkaz, že měřidlo režim opravdu přepíná.
+
+  `DiffMissingRowTests` čte **bitmapu sloupce**, protože v modelu prázdný protějšek poznat nejde: do
+  textu se skládá jako prázdný kontextový řádek, aby si strany odpovídaly. Vzorkuje se řádka pixelů
+  uprostřed řádku a za gutterem (čísla a kód by do vzorku vnesly barvy písma) a odstíny se počítají
+  — jednolitá plocha znamená kontext, dva odstíny šrafu. Cennější je druhý test: **bez `missingLines`
+  se nešrafuje žádný řádek**, jinak by stačila jedna záměna podmínky v `drawRows`. Třetí drží, že
+  plocha díry pozadí druhu řádku **nahrazuje**, ne že se s ním sčítá.
+
+  Ověřeno **vloženou regresí** (barvy zpátky na krytí, `drawMissing` vypnuté): padne **32 tvrzení**
+  z obou sad a je z nich vidět přesně to, na co si #277 stěžovalo — alfa 0,12, znak `+` s kontrastem
+  1,02 nad svým řádkem a prázdný protějšek s jediným odstínem.
 
   **Co se unit testem ověřit nedá:** vybírání textu, kontextové menu a tažení rozsahu. Kliky
   a pohyb myši se syntetizovat dají (`CGEvent` s `cgSessionEventTap` a `mouseEventClickState` —

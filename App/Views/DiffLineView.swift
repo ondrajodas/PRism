@@ -60,8 +60,7 @@ struct DiffLineView: View {
         .font(.system(.callout, design: .monospaced))
         .foregroundStyle(line.kind == .meta ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
         .padding(.horizontal, 8)
-        .background(background)
-        .background(side == nil ? Self.tint(dragged: isInDraggedRange, saved: isInCommentRange) : .clear)
+        .background { background }
         // **Na myš reaguje celý obdélník řádku, ne jen plocha textů.** Bez tohohle drží hover
         // jen nad číslicemi a nad glyfy kódu — kontextový řádek má průhledné pozadí a `Text`
         // uvnitř pružného rámce si hit-test nese jen na svou velikost, takže mezera za koncem
@@ -328,20 +327,36 @@ struct DiffLineView: View {
     /// a hlavička souboru na počty `+X −Y` (#156). Dvě sady barev by se rozešly a `+` v řádku
     /// by bylo jinak zelené než `+12` v hlavičce nad ním.
     ///
-    /// **Ne `background(of:)`** — to je dvanáctiprocentní výplň, tedy barva, která je jako
-    /// písmo nečitelná. Sytá barva znaku je to, co v diffu už dneska stojí jako text.
+    /// **Ne `background(of:)`** — to je plocha řádku, tedy barva, která je jako písmo nečitelná.
+    /// Sytá barva znaku je to, co v diffu už dneska stojí jako text.
+    ///
+    /// **Od #277 z `Palette`, ne systémová `.green`/`.red`.** Byl to poslední kus diffu, který si
+    /// barvu bral ze systému, a u znaku to bylo měřitelně špatně: systémová zelená měla ve světlém
+    /// režimu na pozadí přidaného řádku kontrast **2,01** a v hlavičce nad diffem **2,22**, tedy
+    /// znak `+` k přečtení jen podle polohy. S `Palette.ok` je to **4,60** a **5,08**; v tmavém
+    /// režimu 7,42 → 5,95, tedy pořád s rezervou. Podrobnosti u `Palette.ok`.
     static func signColor(of kind: DiffLine.Kind) -> Color {
         switch kind {
-        case .added: .green
-        case .removed: .red
+        case .added: Palette.ok
+        case .removed: Palette.crit
         case .context, .meta: .secondary
         }
     }
 
     /// V pohledu vedle sebe kreslí pozadí `DiffPairView` za celou dvojici, ne buňka — viz
-    /// `side`. Tady tedy zbývá průhledno, aby se barvy nesčítaly.
-    private var background: Color {
-        side == nil ? Self.background(of: line.kind) : .clear
+    /// `side`. Tady tedy nezbývá nic, aby se barvy nesčítaly.
+    ///
+    /// **Pruh rozsahu leží nad barvou druhu řádku, ne pod ní** (#277). Do té doby to bylo obráceně
+    /// (`.background(background).background(tint)` staví pruh **pod** pozadí) a fungovalo to jen
+    /// proto, že pozadí bylo z dvanácti procent průhledné — pruh jím prosvítal. S vyčíslenou
+    /// barvou by pod ní zmizel, a s ním jediná zpětná vazba o tom, co se zrovna vybírá. Blok kódu
+    /// (`DiffTextView.drawRows`) kreslil v tomhle pořadí odjakživa, takže se tím obě cesty
+    /// srovnaly na jedno.
+    @ViewBuilder private var background: some View {
+        if side == nil {
+            Self.background(of: line.kind)
+                .overlay(Self.tint(dragged: isInDraggedRange, saved: isInCommentRange))
+        }
     }
 
     /// Pruh přes celý řádek u komentovaného rozsahu (#110) — jinak by u víceřádkového komentáře
@@ -367,10 +382,13 @@ struct DiffLineView: View {
     /// Statická schválně: tutéž barvu si bere `DiffPairView`, který ve split pohledu kreslí
     /// pozadí za dvojici. Dvě palety by se rozešly a přidaný řádek by v jednom pohledu
     /// vypadal jinak než v druhém.
+    ///
+    /// **Z `Palette`, ne krytí nad podkladem** (#277) — proč a s jakými čísly, je u
+    /// `Palette.diffAdded`.
     static func background(of kind: DiffLine.Kind) -> Color {
         switch kind {
-        case .added: .green.opacity(0.12)
-        case .removed: .red.opacity(0.12)
+        case .added: Palette.diffAdded
+        case .removed: Palette.diffRemoved
         case .context, .meta: .clear
         }
     }
@@ -378,29 +396,20 @@ struct DiffLineView: View {
     /// Pozadí **změněného kusu** přepsaného řádku (#153) — word-level zvýraznění.
     ///
     /// Tatáž barva jako u řádku, jen sytější: kus, který se přepsal, se má lišit od zbytku
-    /// **svého** řádku, ne od okolí. Kreslí se přes řádkové pozadí (12 %), takže se sčítají.
+    /// **svého** řádku, ne od okolí. Kreslí se jako druhá vrstva nad pozadím řádku.
     ///
-    /// **Padesát procent, změněno z třiceti při zkoušení #153.** Třicet vyšlo z renderu jednoho
-    /// bloku samotného, kde se zvýrazněný kus porovnává s tím vedle. V okně se ale hledá **v celém
-    /// diffu** — a tam se ukázalo, že na obvyklé změně (jedno slovo, často jediný znak) ho jde
-    /// přehlédnout: nahlášené jako „zvýraznění nevidím“ nad `job-queue-daemon#858`. Skládané barvy
-    /// (`green.opacity(x)` přes řádek 12 % přes pozadí okna):
-    ///
-    /// | | řádek | 30 % | 40 % | 50 % |
-    /// |---|---|---|---|---|
-    /// | světlý | `#E6F8EB` | `#B1E9BF` | `#9FE4B0` | `#8DDFA2` |
-    /// | tmavý | `#203324` | `#246234` | `#267239` | `#28823E` |
-    ///
-    /// Padesát je poslední hodnota, u které je zvýraznění **na první pohled** jiná plocha než
-    /// zbytek řádku; nad ní se v tmavém režimu ztrácí obarvení syntaxe pod ním. Původní námitka
-    /// (že sytější zvýraznění přebíjí to, že je řádek přidaný) **neplatí**: rozhoduje o tom pruh
-    /// celého řádku, který je pořád tam, a druh změny nese i znak `+`/`−` a číslo řádku.
+    /// **Od #277 je to vyčíslená barva, ne krytí 50 %** — a hodnota se přitom změnila, protože
+    /// padesát procent nad novým pozadím řádku sebralo pod sebou obarvení syntaxe. Čísla obou
+    /// stavů i to, co se za to vyměnilo, jsou u `Palette.diffAddedWord`. **Rozhodnutí z #153
+    /// zůstává v platnosti** v tom, na čem stálo: vrstva musí být na první pohled jiná plocha než
+    /// zbytek řádku (ΔE 16 z 10 potřebných), protože zvýraznění se hledá **v celém diffu**, ne
+    /// v jednom bloku vedle sebe.
     ///
     /// `nil` u kontextu a poznámky: co se nezměnilo, nemá co zvýrazňovat.
     static func wordBackground(of kind: DiffLine.Kind) -> Color? {
         switch kind {
-        case .added: .green.opacity(0.50)
-        case .removed: .red.opacity(0.50)
+        case .added: Palette.diffAddedWord
+        case .removed: Palette.diffRemovedWord
         case .context, .meta: nil
         }
     }
