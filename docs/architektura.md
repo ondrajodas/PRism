@@ -245,6 +245,10 @@ Věci, které se u toho nemají rozbít:
   řádku se v kódu i v textu vyskytuje běžně.
 - **Nerozpoznaný řádek se počítá** (`unrecognizedLines`) a UI to hlásí. Diff, ze kterého
   kus tiše vypadl, vypadá jako úplný.
+- **Zakončení řádků si vybírá cizí repo, ne my** (#295). Diff se proto dělí `TextLines`, ne
+  `split(separator: "\n")` — na `CRLF` by z celého diffu byl **jeden** řádek. `CR` se do textu
+  řádku nedostane, takže tentýž diff se `CRLF` a s `LF` dá **stejný model**; hlídá to test proti
+  skutečné fixture (`gh/pr-diff-crlf.diff`). Podrobnosti u `TextLines` v `App/Support/`.
 - **Cesty se berou z `rename from`/`rename to` a `---`/`+++`.** Hlavička
   `diff --git a/… b/…` je u cest s mezerou nejednoznačná a slouží jen jako záchrana tam,
   kde ostatní řádky chybí (binárky, přejmenování beze změny obsahu).
@@ -1291,6 +1295,7 @@ Sdílené drobnosti, které nepatří žádnému modulu:
 | `String.singleLine` | Text bez řádkových zlomů, ty se nahradí mezerou |
 | `Collection[safely:]` | Prvek na indexu, nebo `nil` mimo rozsah |
 | `Clipboard` | Zápis do schránky |
+| `TextLines` + `Character.isLineTerminator` | Dělení textu na řádky — **jedno místo pro celou aplikaci** (#295) |
 
 Společné je jim to, proč tady jsou: **kopie jednoho pravidla se rozejdou.** `WorkCoordinator`
 používá `RepoCheckout` (klony, stromy) i `ReviewRunner` (běhy) a dvě kopie by znamenaly dvakrát
@@ -1298,6 +1303,54 @@ tu jemnou logiku kolem rušení. `Plural` vznikl ze tří `switch`ů, které se 
 z pěti kopií téhož `split(whereSeparator: \.isNewline)` — hlavička bubliny, přehled draftu,
 jeho přenos, syntetická hlavička diffu a od #200 tělo notifikace. Stačilo by, aby jedna z nich
 řešila `\r\n` a ostatní ne.
+
+### `TextLines` — co je řádek (#295)
+
+Přesně to „stačilo by, aby jedna z nich“ se stalo — u #292 a pak ještě na pěti dalších místech.
+`"\r\n"` je ve Swiftu **jeden `Character`**, takže `split(separator: "\n")` na textu s `CRLF`
+**nerozdělí vůbec**: z celého vstupu zbyde jediný „řádek“. Ne o jeden vedle, celý.
+
+Kde to leželo, než to #295 svedlo na jedno místo:
+
+| Kde | Co se dělo na `CRLF` vstupu |
+|---|---|
+| `DiffParser` | Diff souboru s `CRLF` = **jeden** řádek, tedy soubor s jedním nesmyslným kontextovým řádkem místo hunků |
+| `FileExpansion` | Obsah souboru = jeden řádek, odkrytý rozsah se ořezal na první, z rozbaleného kontextu byla jedna nekonečná řádka |
+| `SelectableCodeView` | Kód v sheetu se obarvil jako jeden řádek a celý jeho objem šel do `SyntaxRunCache` jako **jeden klíč** (#224) |
+| `CopyPolicy` | Popisek `Kopírovat rozsah (1 řádek)` nad rozsahem o dvaceti |
+| `MarkdownParser`, `TranscriptStore` | Jiná past, tentýž druh: `components(separatedBy: .newlines)` dělí po **skalárech**, takže `CRLF` jsou pro ni dva oddělovače a mezi ně vloží prázdný řádek. V markdownu je prázdný řádek konec odstavce — takže se každý řádek cizího komentáře vysázel jako vlastní odstavec. Těla komentářů z GitHubu `CRLF` mají, je ve třech fixtures konverzací |
+
+Tři funkce, ne jedna s přepínačem — liší se tím, **co je řádek** pro volajícího, a to má být vidět
+na místě volání: `all` (všechno včetně prázdného posledního), `content` (bez prázdného posledního za
+koncovým zakončením — soubory a diffy) a `nonEmpty` (výpisy, kde je řádek jeden záznam).
+
+Věci, které se u toho nemají rozbít:
+
+- **Řádek končí `LF`, `CRLF` nebo samotným `CR` — a ničím jiným.** `Character.isNewline` je pravda
+  i pro `VT`, `FF`, `NEL`, `U+2028` a `U+2029`, ale pro `git` jsou to **znaky obsahu**. Rozdělit se
+  na nich znamená vyrobit řádek, který v souboru není — a protože se čísla řádků počítají tím, kolik
+  jich hunk vydal, jeden `U+2028` v cizím zdrojáku by posunul všechna čísla pod sebou; druhá půlka
+  řádku by navíc nezačínala `+`/`-`/mezerou, takže by se spočítala jako ztracená
+  (`unrecognizedLines`).
+- **`String.singleLine` si `isNewline` schválně nechává.** Jsou to dvě různé otázky: „kde končí
+  řádek v bajtech, které mi někdo poslal“ a „co mi zalomí popisek“. `U+2028` popisek zalomí, takže
+  se srazit musí. Hlídá to test, ať to někdo omylem nesrovná.
+- **`CR` se do textu řádku nedostane** — je součást zakončení, ne obsahu. Kdyby zůstal, nesly by
+  neviditelný znak klíče do `SyntaxRunCache` (#153, #224), word-level rozdíl i sazba, a v sazbě by
+  z něj byl prázdný řádek pod každým řádkem kódu. Cena rozhodnutí: **kopie do schránky nese `LF`,
+  i když soubor měl `CRLF`** (zapsané u `Policy.code(of:)`). Unese to, protože ten text jde do
+  terminálu nebo do komentáře jako **kód** a aplikace do souborů nezapisuje (tvrdá podmínka č. 1).
+- **Není to na cestě překreslování**, takže rozhodovala čitelnost, ne rychlost — ale je to změřené.
+  Na 2,26 MB / 25 000 řádcích: `split(separator: "\n")` **22,2 ms** (a na `CRLF` vydá **jeden**
+  řádek), `isNewline` **24,4 ms**, `isLineTerminator` **27,1 ms**. Rychlejší varianta **existuje
+  a je zamítnutá**: test prvního skaláru (`unicodeScalars.first`) dá **22,0 ms**, tedy rychleji než
+  to, co tam bylo, ale za cenu komentáře vysvětlujícího, že `"\r\n"` má první skalár `\r`.
+  `Policy.logTail` je jediné místo, kde jde o megabajty, a běží **jednou po stažení**
+  v `Task.detached`, ne v `body` — takže ta 4 ms na největším logu nikdo nepozná. Kdyby se dělení
+  jednou na cestu překreslování dostalo, je to změna na jednom místě.
+- **`Policy.logLines(of:)` zůstává jako jméno pro volající**, ne jako druhé pravidlo — dělí
+  `TextLines.all`. Smazat by šlo, ale znamenalo by to sáhnout do `logTail`
+  a `strippingTimestamps`.
 
 ## `RepoCheckout` (`App/Checkout/`)
 

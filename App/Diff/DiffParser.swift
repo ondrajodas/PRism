@@ -10,18 +10,17 @@ import Foundation
 enum DiffParser {
     static func parse(_ text: String) -> Diff {
         var parser = Parser()
-        for line in lines(of: text) {
+        // **Dělí `TextLines`, ne `split(separator: "\n")`** (#295). Zakončení řádků si vybírá cizí
+        // repo, ne my: v `gh pr diff` na `microsoft/terminal#20524` je `CRLF` na 70 řádcích ze 76
+        // a `"\r\n"` je ve Swiftu jeden `Character` — z takového diffu by byl **jediný** řádek,
+        // tedy soubor s jedním nesmyslným kontextovým řádkem místo dvou hunků.
+        //
+        // `content(_:)`, protože text zakončený novým řádkem dá prázdný poslední prvek. To není
+        // řádek diffu — počítat ho jako nerozpoznaný by hlásilo ztrátu u každého úplného vstupu.
+        for line in TextLines.content(text) {
             parser.consume(line)
         }
         return parser.finish()
-    }
-
-    private static func lines(of text: String) -> [Substring] {
-        var lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        // Text zakončený novým řádkem dá prázdný poslední prvek. To není řádek diffu —
-        // počítat ho jako nerozpoznaný by hlásilo ztrátu u každého úplného vstupu.
-        if lines.last?.isEmpty == true { lines.removeLast() }
-        return lines
     }
 }
 

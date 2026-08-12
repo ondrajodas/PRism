@@ -45,7 +45,10 @@ struct TranscriptStore: TranscriptReading {
         // se značka nemá zahodit. Proto se nečte přes `try?`.
         let text = try String(contentsOf: url, encoding: .utf8)
 
-        let summary = parser.summarize(text.components(separatedBy: .newlines))
+        // `TextLines`, ne `components(separatedBy: .newlines)` (#295) — jedno místo, kde se
+        // rozhoduje, co je řádek. Ta druhá cesta dělí po skalárech, takže na `CRLF` prostříká mezi
+        // záznamy prázdné řetězce.
+        let summary = parser.summarize(TextLines.all(text).map(String.init))
         // Prázdný souhrn se nevydává za výsledek. Transcript bez jediného `ReportFindings`
         // znamená, že session nálezy nikdy nenahlásila — uložit z toho běh by v řádku vypadalo
         // jako „reviewer nic nenašel“, což je přesně to tvrzení, kterému se #97 vyhýbá.

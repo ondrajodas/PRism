@@ -91,6 +91,18 @@ struct MarkdownParserTests {
         #expect(parse("první\ndruhý\n\ntřetí") == [.paragraph("první\ndruhý"), .paragraph("třetí")])
     }
 
+    /// **`CRLF` z GitHubu nesmí odstavec rozsekat** (#295). Těla komentářů `CRLF` doopravdy mají
+    /// (je ve třech fixtures konverzací) a do #295 se dělilo `components(separatedBy: .newlines)`,
+    /// která pracuje po skalárech — takže `CRLF` byly **dva** oddělovače a mezi ně vložila prázdný
+    /// řádek. A prázdný řádek je konec odstavce, takže se každý řádek cizího komentáře vysázel jako
+    /// vlastní odstavec, tedy s mezerou pod sebou.
+    @Test("CRLF dá tytéž bloky jako LF", arguments: ["\r\n", "\r"])
+    func parsesCRLFSameAsLF(_ terminator: String) {
+        let source = "## Popis\n\nprvní\ndruhý\n\n- odrážka\n"
+
+        #expect(parse(source.replacingOccurrences(of: "\n", with: terminator)) == parse(source))
+    }
+
     @Test("Odrážky, čísla a zaškrtávátka")
     func parsesListItems() {
         let blocks = parse("""

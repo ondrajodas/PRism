@@ -16,10 +16,13 @@ struct FileExpansion: Equatable, Sendable {
 
     /// Text souboru na řádky. Zakončení novým řádkem nedělá prázdný poslední řádek —
     /// jinak by soubor „měl“ o řádek víc, než kolik jich číslují hunky.
+    ///
+    /// **Dělí `TextLines`** (#295): soubor s `CRLF` by se přes `split(separator: "\n")` načetl jako
+    /// **jeden** řádek, takže by se odkrytý rozsah ořezal na první řádek a z rozbaleného kontextu
+    /// by byla jedna nekonečná řádka. Je to tatáž past jako v `DiffParser` — a musí se řešit
+    /// stejně, protože číslování odsud se páruje s čísly z hunků.
     static func lines(of text: String) -> [String] {
-        var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        if lines.last?.isEmpty == true { lines.removeLast() }
-        return lines
+        TextLines.content(text).map(String.init)
     }
 }
 
