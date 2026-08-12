@@ -80,6 +80,13 @@ struct CheckLogRoomProbe {
                     """)
             }
         }
+
+        // **Krátký log si nemá vzít celý strop.** Je to tvrzení `LogTailHeightTests`, ale ta počítají
+        // výšku — jak to vypadá, se počítáním nezjistí, a od #303 se okýnko skládá ručně
+        // (`makeScrollView`), takže se to má vidět na kresbě, ne dovodit.
+        let url = directory.appending(path: "kontroly-log-kratky.png")
+        let short = try render(store: store, height: 700 - Self.windowHeaderHeight - statusBarHeight, to: url, log: "PHPUnit 11.5.0\nOK (3 tests, 5 assertions)\n##[error]Process completed with exit code 1.")
+        print("MĚŘENÍ krátký log (3 řádky): okýnko \(fmt(short.log)) bodů, pod ním zbylo \(fmt(short.below)) bodů — \(url.lastPathComponent)")
     }
 
     // MARK: - Měření
@@ -109,7 +116,7 @@ struct CheckLogRoomProbe {
     /// okna a `scrollToEndOfDocument` má na čem pracovat. Když se text podá hned při stavbě,
     /// okýnko zůstane na **začátku** ocasu — a to je vlastnost sondy, ne aplikace (změřeno u #303,
     /// obě cesty vedle sebe).
-    private func render(store: AppStore, height: CGFloat, to url: URL) throws -> Room {
+    private func render(store: AppStore, height: CGFloat, to url: URL, log: String = Self.log) throws -> Room {
         // Každý render začíná bez logu, i ten druhý a třetí v řadě — jinak by se do nově postavené
         // hierarchie podal text hned a okýnko by zůstalo na začátku ocasu.
         store.checkDetails[Self.logKey]?.log = .loading(bytes: 1_695_207)
@@ -138,7 +145,7 @@ struct CheckLogRoomProbe {
         // a konverzaci z fake gatewaye.
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))
         // Teprve teď log — jako v aplikaci, kde dorazí ze sítě do rozloženého okna.
-        store.checkDetails[Self.logKey]?.log = .loaded(full: Self.log, tail: Policy.logTail(Self.log))
+        store.checkDetails[Self.logKey]?.log = .loaded(full: log, tail: Policy.logTail(log))
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))
         let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
