@@ -144,16 +144,13 @@ struct FindingTableTests {
         #expect(layout.summary > 0)
     }
 
+    /// **Přes pásmo, ne přes čtyři body** (#294): tab dostal skrytím panelu jinou šířku, takže je
+    /// potřeba vědět, že se sloupce vejdou v celém rozsahu, ve kterém tab stojí — od 648 (okno 700
+    /// bez railu 52) nahoru, včetně obou stran prahové hodnoty 900, kde přibývá sloupec reviewera.
     @Test("Sloupce se vejdou do dané šířky, ne mimo ni")
     func fitsWidth() {
-        for width in [700.0, 900, 1100, 1400] {
-            let layout = Policy.findingTableLayout(availableWidth: width)
-            let columns = [layout.severity, layout.summary, layout.location, layout.reviewer, layout.actions]
-                .compactMap { $0 }
-            let total = columns.reduce(FindingTableLayout.bar, +)
-                + FindingTableLayout.spacing * Double(columns.count)
-                + FindingTableLayout.inset * 2
-
+        for width in stride(from: 648.0, through: 1800, by: 8) {
+            let total = Self.tableWidth(at: width)
             #expect(total <= width + 0.5, "šířka \(width) přetekla na \(total)")
         }
     }
@@ -163,5 +160,38 @@ struct FindingTableTests {
     @Test("Nesmyslná šířka nedá nulové shrnutí")
     func zeroWidth() {
         #expect(Policy.findingTableLayout(availableWidth: 0).summary > 0)
+    }
+
+    /// Podlaha shrnutí (120 bodů) je **schválně přetečení**: v šířce, ve které i po odpadnutí
+    /// sloupce nezbývá místo, je nečitelně úzké shrnutí lepší než nulová šířka. Tenhle test říká,
+    /// **od které šířky se to děje** — a že tab `Nálezy` se pod ni po #294 nedostane.
+    ///
+    /// Do #294 se dostat mohl a doopravdy se dostával: panel se dá vytáhnout na 520, takže v okně
+    /// o podlaze 700 zbývalo tabu ~122 bodů a tabulka přetékala o ~468. Skrytí panelu (#294) tu
+    /// šířku zvedlo na 648, tedy nad práh — a je to vlastnost, kterou má hlídat test, ne úvaha
+    /// v hlavičce.
+    @Test("Podlaha shrnutí je pod šířkou, na kterou tab po #294 dosáhne")
+    func summaryFloorIsOutOfReach() {
+        // Nejužší tab bez panelu: okno 700 bez railu 52.
+        let narrowestTab = 648.0
+
+        #expect(Self.tableWidth(at: narrowestTab) <= narrowestTab + 0.5)
+        // A tady je vidět, co dělala podlaha v době, kdy panel šířku ukrajoval.
+        #expect(Self.tableWidth(at: 122) > 122)
+        // Práh sedí mezi tím: pod 590 už se shrnutí opírá o podlahu.
+        #expect(Self.tableWidth(at: 590) <= 590.5)
+        #expect(Self.tableWidth(at: 580) > 580)
+    }
+
+    /// Šířka, kterou tabulka doopravdy nakreslí: proužek, sloupce, mezery mezi nimi a odsazení.
+    /// Skládá se **z hodnot z `Policy`**, ne z opsaných čísel — jinak by test hlídal svou kopii
+    /// sazby.
+    private static func tableWidth(at width: Double) -> Double {
+        let layout = Policy.findingTableLayout(availableWidth: width)
+        let columns = [layout.severity, layout.summary, layout.location, layout.reviewer, layout.actions]
+            .compactMap { $0 }
+        return columns.reduce(FindingTableLayout.bar, +)
+            + FindingTableLayout.spacing * Double(columns.count)
+            + FindingTableLayout.inset * 2
     }
 }

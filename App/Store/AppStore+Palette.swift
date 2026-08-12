@@ -41,9 +41,20 @@ extension AppStore {
                 isReviewing: open.map(isReviewing) ?? false,
                 hasRun: open.flatMap { reviewRecords[$0] } != nil,
                 layout: diffLayout,
-                isPanelExpanded: isReviewPanelExpanded,
+                isPanelExpanded: palettePanelExpansion(open: open),
                 section: railSection
             )
+    }
+
+    /// Rozložení panelu pro paletu — `nil` v tabech, kde panel v okně **není** (#294).
+    ///
+    /// Uložený stav se přitom nemění: panel zůstává rozložený i tehdy, když se v otevřeném tabu
+    /// nekreslí, takže se po přepnutí zpátky najde tak, jak se nechal. Nabídnout ho k přepnutí ale
+    /// nejde — z klávesnice by se tím přestavěl tab, do kterého se člověk vrátí, a v okně by po tom
+    /// nezůstala žádná stopa.
+    private func palettePanelExpansion(open: PRIdentifier?) -> Bool? {
+        guard let open, detailTab(for: open).showsReviewPanel else { return nil }
+        return isReviewPanelExpanded
     }
 
     /// Nálezy **ze všech PR**, ne jen z otevřeného: nález je to jediné, co tahle aplikace má

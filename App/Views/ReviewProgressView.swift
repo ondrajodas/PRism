@@ -25,20 +25,28 @@ struct ReviewProgressView: View {
             empty
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 11) {
-                    ForEach(lanes) { lane in
-                        ReviewerLaneView(
-                            lane: lane,
-                            shortName: shortNames[lane.skill] ?? lane.skill,
-                            rerun: rerun.map { rerun in { rerun(lane.skill) } },
-                            copyCommand: copyCommand.map { copy in { copy(lane.skill) } }
-                        )
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                content
             }
         }
+    }
+
+    /// Dráhy bez `ScrollView`u — **`internal` schválně, kvůli měření** (#294), stejně jako
+    /// u `OverviewView` (#291): `NSScrollView` si obsah na svou šířku ukrojí, takže by se přesah
+    /// nenakreslil a rozbitá šířka by od opravené nešla poznat. Prázdný stav ve scrollu není,
+    /// takže se měří přímo z `body`.
+    @ViewBuilder var content: some View {
+        LazyVStack(alignment: .leading, spacing: 11) {
+            ForEach(lanes) { lane in
+                ReviewerLaneView(
+                    lane: lane,
+                    shortName: shortNames[lane.skill] ?? lane.skill,
+                    rerun: rerun.map { rerun in { rerun(lane.skill) } },
+                    copyCommand: copyCommand.map { copy in { copy(lane.skill) } }
+                )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
     /// **Ne `ContentUnavailableView`** (#182): ten se vystředí, nadpis vysází na velikost titulku
