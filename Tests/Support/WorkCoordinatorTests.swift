@@ -19,7 +19,7 @@ struct WorkCoordinatorTests {
         }
 
         func waitUntilStarted() async {
-            while started == 0 { await Task.yield() }
+            await waitUntil("práce se rozběhne") { self.started > 0 }
         }
 
         func finish() { release?.resume(); release = nil }
@@ -35,7 +35,7 @@ struct WorkCoordinatorTests {
         async let first = coordinator.run(key: "keboola/vault", kind: "clone") { await work.run() }
         await work.waitUntilStarted()
         async let second = coordinator.run(key: "keboola/vault", kind: "clone") { await work.run() }
-        await Task.yield()
+        await settle()
         await work.finish()
 
         let results = try await [first, second]
@@ -72,13 +72,14 @@ struct WorkCoordinatorTests {
 
         func run() async -> URL {
             started = true
-            while !Task.isCancelled { await Task.yield() }
+            // Držení, ne čekání na jev: práce běží, dokud ji někdo nezruší.
+            while !Task.isCancelled { await TestWait.pause() }
             sawCancellation = true
             return URL(filePath: "/zruseno")
         }
 
         func waitUntilStarted() async {
-            while !started { await Task.yield() }
+            await waitUntil("práce se rozběhne") { self.started }
         }
     }
 
@@ -106,11 +107,11 @@ struct WorkCoordinatorTests {
         let first = Task { try await coordinator.run(key: "a", kind: "clone") { await work.run() } }
         await work.waitUntilStarted()
         let second = Task { try await coordinator.run(key: "a", kind: "clone") { await work.run() } }
-        await Task.yield()
+        await settle()
         first.cancel()
 
         // Druhý čekající drží práci naživu, takže se nezruší ani po zrušení prvního.
-        await Task.yield()
+        await settle()
         #expect(await work.sawCancellation == false)
 
         second.cancel()

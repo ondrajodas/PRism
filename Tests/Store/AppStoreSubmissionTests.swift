@@ -105,11 +105,6 @@ struct AppStoreSubmissionTests {
         return store
     }
 
-    /// Zápis draftu běží v tasku, takže se na něj musí počkat točením.
-    private func settle() async {
-        for _ in 0..<50 { await Task.yield() }
-    }
-
     // MARK: - Kdy sheet vznikne
 
     /// **Nejdůležitější test celého #107 na úrovni store.** Ve výchozím nastavení se

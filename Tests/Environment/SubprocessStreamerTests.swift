@@ -8,6 +8,11 @@ import Testing
 /// Fake ověří, co se `claude` posílá; jestli tomu rozumí `Process` — že řádky přijdou
 /// v pořadí, že EOF dorazí dřív než konec proudu a že zabitý proces skončí timeoutem —
 /// se dá zjistit jen spuštěním. Přesně tohle unit testy `RepoCheckoutu` nechytly.
+///
+/// **Timeout, po kterém se čeká výsledek, je velkorysý a je to strop proti zátěži** (#296) — tatáž
+/// úvaha jako v `RealEnvironmentTests`, kde se při souběžném buildu tří slotů nestihl do 10 s
+/// spustit a posbírat `/bin/echo`. Krátké timeouty v téhle suitě jsou naopak **předmětem** testu:
+/// tam se ověřuje, že se zaseknutý proces ukončí, takže se musí předávat vlastní.
 @Suite("SubprocessStreamer")
 struct SubprocessStreamerTests {
     private let shell = URL(filePath: "/bin/sh")
@@ -16,7 +21,7 @@ struct SubprocessStreamerTests {
     private func collect(
         _ script: String,
         workingDirectory: URL? = nil,
-        timeout: Duration = .seconds(10)
+        timeout: Duration = .seconds(60)
     ) async throws -> [ProcessEvent] {
         var events: [ProcessEvent] = []
         for try await event in streamer.stream(
@@ -152,15 +157,18 @@ struct SubprocessStreamerTests {
     /// `echo $$`, a `pid_t(_:)` je failable, takže rozbitý text vede na další kolo pollingu, ne
     /// na nulu), ale stojí to jednu podmínku.
     private func pid(from file: URL) async throws -> pid_t {
-        for _ in 0..<250 {
-            if let text = try? String(contentsOf: file, encoding: .utf8),
-               let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
-               pid > 0 {
-                return pid
-            }
-            try await Task.sleep(for: .milliseconds(20))
+        var found: pid_t?
+        await waitUntil("proces se rozběhne a napíše svoje PID") {
+            guard
+                let text = try? String(contentsOf: file, encoding: .utf8),
+                let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+                pid > 0
+            else { return false }
+            found = pid
+            return true
         }
-        throw ProcessTestFailure.processNeverStarted
+        guard let found else { throw ProcessTestFailure.processNeverStarted }
+        return found
     }
 
     /// Zmizel proces? `kill(pid, 0)` jen ověřuje existenci, nic neposílá.
@@ -169,11 +177,7 @@ struct SubprocessStreamerTests {
     /// vrátí to po prvním kole. Deadline je velkorysý schválně — je tu proti zátěži, ne proti
     /// pomalému zabíjení.
     private func isGone(_ pid: pid_t) async -> Bool {
-        for _ in 0..<250 {
-            if kill(pid, 0) != 0 { return true }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        return false
+        await waitUntil("proces \(pid) zmizí") { kill(pid, 0) != 0 }
     }
 }
 

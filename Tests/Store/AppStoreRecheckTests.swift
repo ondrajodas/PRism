@@ -90,7 +90,7 @@ struct AppStoreRecheckTests {
     }
 
     private func waitUntilIdle(_ store: AppStore) async {
-        for _ in 0..<100_000 where store.isRechecking(pr) { await Task.yield() }
+        await waitUntil("kontrola nálezů doběhne") { !store.isRechecking(pr) }
         #expect(!store.isRechecking(pr))
     }
 

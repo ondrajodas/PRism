@@ -35,8 +35,8 @@ struct AppStoreExpansionTests {
     }
 
     private func waitForContent(_ store: AppStore) async {
-        for _ in 0..<200 where store.expansion(of: path, in: pr).content.isEmpty {
-            await Task.yield()
+        await waitUntil("obsah souboru dorazí") {
+            !store.expansion(of: path, in: pr).content.isEmpty
         }
     }
 
@@ -76,8 +76,8 @@ struct AppStoreExpansionTests {
         let store = store(gateway)
 
         store.reveal(1...2, of: path, in: pr)
-        for _ in 0..<200 where store.expansion(of: path, in: pr).failure == nil {
-            await Task.yield()
+        await waitUntil("selhání se ohlásí") {
+            store.expansion(of: path, in: pr).failure != nil
         }
 
         let expansion = store.expansion(of: path, in: pr)
@@ -121,8 +121,8 @@ struct AppStoreExpansionTests {
         store.reveal(1...1, of: path, in: pr)
         await waitForContent(store)
         store.reveal(1...1, of: path, in: other)
-        for _ in 0..<200 where store.expansion(of: path, in: other).content.isEmpty {
-            await Task.yield()
+        await waitUntil("obsah souboru dorazí") {
+            !store.expansion(of: path, in: other).content.isEmpty
         }
 
         store.collapseRevealedLines(in: pr)

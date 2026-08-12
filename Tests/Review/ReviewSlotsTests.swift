@@ -28,7 +28,7 @@ struct ReviewSlotsTests {
         await work.waitForStarts(2)
         // Při rozbitém limitu by se rozjely všechny; pár otočení plánovače jim na to dá
         // příležitost.
-        for _ in 0..<100 { await Task.yield() }
+        await settle()
         #expect(work.startedCount == 2)
 
         work.releaseAll()
@@ -47,9 +47,9 @@ struct ReviewSlotsTests {
         let first = Task { try await slots.withSlot { await work.run(0) } }
         await work.waitForStarts(1)
         let second = Task { try await slots.withSlot { await work.run(1) } }
-        for _ in 0..<100 { await Task.yield() }
+        await settle()
         let third = Task { try await slots.withSlot { await work.run(2) } }
-        for _ in 0..<100 { await Task.yield() }
+        await settle()
 
         work.releaseAll()
         try await first.value
@@ -100,13 +100,13 @@ struct ReviewSlotsTests {
         let waiting = (0..<2).map { index in
             Task { try await slots.withSlot { await queued.run(index) } }
         }
-        for _ in 0..<100 { await Task.yield() }
+        await settle()
 
         first.releaseAll()
         for task in running { try await task.value }
         // Tři doběhlé běhy uvolnily tři sloty, ale strop je teď jeden.
         await queued.waitForStarts(1)
-        for _ in 0..<100 { await Task.yield() }
+        await settle()
         #expect(queued.startedCount == 1)
 
         queued.releaseAll()
@@ -122,7 +122,7 @@ struct ReviewSlotsTests {
         let holder = Task { try await slots.withSlot { await work.run(0) } }
         await work.waitForStarts(1)
         let waiting = Task { try await slots.withSlot { await work.run(1) } }
-        for _ in 0..<100 { await Task.yield() }
+        await settle()
         waiting.cancel()
 
         await #expect(throws: CancellationError.self) { try await waiting.value }
@@ -150,10 +150,8 @@ private final class HoldingWork: @unchecked Sendable {
 
     func releaseAll() { lock.withLock { released = true } }
 
-    /// Točení přes `Task.yield()` schválně: test, který se nedočká, uvízne — což je
-    /// srozumitelnější selhání než čekání na hodiny, které v testech nejdou.
     func waitForStarts(_ count: Int) async {
-        while startedCount < count { await Task.yield() }
+        await waitUntil("rozběhne se \(count) běhů") { self.startedCount >= count }
     }
 
     func run(_ index: Int) async {
@@ -162,7 +160,8 @@ private final class HoldingWork: @unchecked Sendable {
             active += 1
             highWaterMark = max(highWaterMark, active)
         }
-        while !isReleased { await Task.yield() }
+        // Držení, ne čekání na jev: běh se pustí dál teprve tím, že si o to test řekne.
+        while !isReleased { await TestWait.pause() }
         lock.withLock { active -= 1 }
     }
 

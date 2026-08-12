@@ -29,12 +29,24 @@ import Testing
 @Suite("Cena odpočtu na dashboardu", .serialized)
 @MainActor
 struct DashboardCountdownRedrawTests {
-    /// Strop čekání na dvě změny kresby. Rozvrh je ukotvený v termínu, ten je celý počet vteřin
-    /// daleko, takže tiky padnou na celé vteřiny od nasazení sondy a změny na 2,0 s a 3,0 s
-    /// (změřeno). Strop je o vteřinu dál, aby vytížený stroj sondu nebarvil na červeno — a přitom
-    /// pořád tvrdí **vteřinový** takt: rozvrh po dvou vteřinách by změny posunul na 4,0 s a 6,0 s,
-    /// tedy za strop (změřeno vloženou regresí).
-    private static let ceiling: TimeInterval = 4
+    /// Strop čekání na dvě změny kresby. **Je to strop proti kontenci, ne tvrzení o taktu** —
+    /// kdo ho bude chtít snížit jako „přebujelý“, ať si napřed pustí plný běh testů při souběžném
+    /// buildu tří slotů (#296).
+    ///
+    /// Z čeho je: na volném stroji sonda doběhne za **3,0–3,1 s** (změny na 2,0 s a 3,0 s, protože
+    /// rozvrh je ukotvený v termínu celý počet vteřin daleko). Zbytek je rezerva na hladovění
+    /// `MainActoru` — v plném běhu si sonda vyžádala odmlku 100 ms a probudila se za **7,5 až
+    /// 8,6 s**, takže za celý čtyřsekundový strop stihla **jediný** snímek a hlásila „odpočet se
+    /// nepřetikal“ o aplikaci, která byla v pořádku. Dvacet sekund je proti tomu dvojnásobek toho
+    /// nejdelšího hladovění na dva snímky, které sonda potřebuje.
+    ///
+    /// **Vteřinový takt strop netvrdí a tvrdit nemá** (mění #269, kde tuhle roli měl). Rozvrh se dá
+    /// přečíst přímo — `DashboardCountdownTests.ticksLandOnWholeSeconds` a
+    /// `consecutiveTicksShowConsecutiveSeconds` čtou `entries(from:mode:)` a rozvrh po dvou
+    /// vteřinách shodí; ověřeno vloženou regresí `by: 2` (dva pády, bez hodin a bez kreslení).
+    /// Tvrdit takt časem tady znamenalo držet strop těsně u naměřených 3 s — tedy postavit
+    /// deterministicky ověřitelnou věc na tom, kolik zbylo procesoru.
+    private static let ceiling: TimeInterval = 20
 
     /// `TimelineView` uvnitř `DashboardCountdown`u přepočítává jen svůj obsah — jeden krátký
     /// `Text`. Tělo nad ním (v aplikaci celý dashboard: karty, sparkline, fronta) o vteřinách neví.
@@ -53,15 +65,15 @@ struct DashboardCountdownRedrawTests {
     func tickingCountdownDoesNotRecomputeTheBody() async throws {
         let counter = BodyCounter()
 
-        let changes = try await redraws(
+        let redraws = try await redraws(
             of: CountdownProbe(counter: counter, deadline: .now.addingTimeInterval(600)),
             count: 2,
             within: Self.ceiling
         )
 
         #expect(
-            changes.count == 2,
-            "Odpočet se za \(Self.ceiling) s přetikal \(changes.count)× místo dvakrát \(Self.stamps(changes))."
+            redraws.changes.count == 2,
+            "Odpočet se za \(Self.ceiling) s přetikal \(redraws.changes.count)× místo dvakrát \(redraws.report)."
         )
         #expect(counter.count == 1, "Tělo sondy se přepočítalo \(counter.count)× místo jednou.")
     }
@@ -75,9 +87,13 @@ struct DashboardCountdownRedrawTests {
     /// zdržení, kvůli kterému #269 vzniklo.
     ///
     /// Odpočet v těle je tady na **desetiny**, ne na celé vteřiny: hodiny se posouvají po 200 ms,
-    /// takže s celými vteřinami by se text za 1,5 s změnil nejvýš jednou a dvě změny kresby by se
-    /// nemohly stihnout. Sonda modeluje **odpočet spočítaný v těle**, ne formát z aplikace, takže
-    /// jemnější dělení nic neubírá.
+    /// takže s celými vteřinami by se text stihl změnit nejvýš jednou. Sonda modeluje **odpočet
+    /// spočítaný v těle**, ne formát z aplikace, takže jemnější dělení nic neubírá.
+    ///
+    /// **Hodiny tikají, dokud je někdo nezruší** (#296; do té doby `for _ in 0..<10`, tedy 2 s
+    /// hodin proti 1,5 s stropu). Rozpočet tiků je pevný okamžik v přestrojení: pod zátěží se
+    /// vyčerpal dřív, než sonda stihla dva snímky, a měřidlo pak hlásilo, že nežije. Uklízí se
+    /// `defer`em, takže tikání skončí s testem.
     @Test("Kontrola měřidla: odpočet přepočítaný v těle přepočty stojí a kresbu mění")
     func recomputingCountdownIsDetected() async throws {
         let counter = BodyCounter()
@@ -85,17 +101,17 @@ struct DashboardCountdownRedrawTests {
         // `try?` je tady na místě: jediné, co spánek vyhodí, je zrušení z `defer` níž, a to
         // je normální konec sondy, ne selhání.
         let ticker = Task { @MainActor in
-            for _ in 0..<10 {
+            while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(200))
                 clock.now = .now
             }
         }
         defer { ticker.cancel() }
 
-        let changes = try await redraws(
+        let redraws = try await redraws(
             of: RecomputingProbe(counter: counter, clock: clock, deadline: .now.addingTimeInterval(600)),
             count: 2,
-            within: 1.5
+            within: Self.ceiling
         )
 
         #expect(
@@ -103,8 +119,8 @@ struct DashboardCountdownRedrawTests {
             "Tělo se přepočítalo \(counter.count)×, tedy jen při nasazení — měřidlo přepočtů nežije."
         )
         #expect(
-            changes.count == 2,
-            "Měřidlo kresby vidělo \(changes.count) změn místo dvou \(Self.stamps(changes))."
+            redraws.changes.count == 2,
+            "Měřidlo kresby vidělo \(redraws.changes.count) změn místo dvou \(redraws.report)."
         )
     }
 
@@ -134,27 +150,48 @@ struct DashboardCountdownRedrawTests {
     /// vytíženém stroji přetáhnout o víc než o krok, takže změna zapsaná za stropem není vyloučená.
     /// Tvrzení nad tím se proto opírá o **počet** změn, ne o čas té poslední — a čas je v hlášce
     /// jen proto, aby se z červeného testu poznalo, jestli takt chybí, nebo přišel pozdě.
+    ///
+    /// **Počítá se i to, kolik snímků se vůbec podařilo vzít** (#296), a je to ta část hlášky, ze
+    /// které se pozná, jestli je rozbitá aplikace, nebo jen nebyl procesor: sonda si žádá o odmlku
+    /// 100 ms, ale v plném běhu se probouzela za 7,5 až 8,6 s, takže za původní strop vzala jediný
+    /// snímek. Bez toho čísla je „změn 0“ k nerozeznání od zamrzlého odpočtu — a přesně tohle
+    /// rozhodování stálo za jednu dávku pět kol.
     private func redraws(
         of view: some View,
         count: Int,
         within limit: TimeInterval,
         step: Duration = .milliseconds(100)
-    ) async throws -> [TimeInterval] {
+    ) async throws -> Redraws {
         let window = window(hosting: view)
         defer { window.orderOut(nil) }
         let hosting = try #require(window.contentView)
 
         let start = ContinuousClock.now
         var last = try bitmap(of: hosting)
-        var changes: [TimeInterval] = []
-        while changes.count < count, Self.elapsed(since: start) < limit {
+        var result = Redraws()
+        while result.changes.count < count, Self.elapsed(since: start) < limit {
             try await Task.sleep(for: step)
             let frame = try bitmap(of: hosting)
+            result.samples += 1
             guard frame != last else { continue }
             last = frame
-            changes.append(Self.elapsed(since: start))
+            result.changes.append(Self.elapsed(since: start))
         }
-        return changes
+        return result
+    }
+
+    /// Co sonda naměřila: kdy se kresba změnila a **kolik snímků k tomu vůbec stihla vzít**.
+    private struct Redraws {
+        var changes: [TimeInterval] = []
+        var samples = 0
+
+        /// Věta do hlášky o selhání. Málo snímků znamená vyhladovělou sondu, ne zamrzlý odpočet.
+        var report: String {
+            let times = changes.isEmpty
+                ? "kresba se nezměnila ani jednou"
+                : "změny po \(changes.map { String(format: "%.2f", $0) }.joined(separator: " s, ")) s"
+            return "(\(times); snímků \(samples))"
+        }
     }
 
     /// Kolik vteřin uplynulo na monotónních hodinách — ve vteřinách, aby se to dalo porovnat se
@@ -195,13 +232,6 @@ struct DashboardCountdownRedrawTests {
         let rep = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: rep)
         return try #require(rep.representation(using: .png, properties: [:]))
-    }
-
-    /// Časy změn do hlášky o selhání — bez nich se z červeného testu nepozná, jestli takt chybí,
-    /// nebo jen přišel pozdě.
-    private static func stamps(_ changes: [TimeInterval]) -> String {
-        guard !changes.isEmpty else { return "(kresba se nezměnila ani jednou)" }
-        return "(změny po \(changes.map { String(format: "%.2f", $0) }.joined(separator: " s, ")) s)"
     }
 }
 

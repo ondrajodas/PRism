@@ -77,9 +77,7 @@ struct AppStoreProgressTests {
 
     private func runReview(_ store: AppStore) async {
         store.startReview(for: pr)
-        for _ in 0..<400 where store.isReviewing(pr) {
-            await Task.yield()
-        }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
     }
 
     /// Nastavené id, které na nic nemapuje, si model nahradí nejbližším — a hlavička osy

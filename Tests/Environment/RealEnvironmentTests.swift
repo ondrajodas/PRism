@@ -5,10 +5,19 @@ import Testing
 
 /// Integrační testy proti skutečnému filesystému a skutečným procesům. Malý počet — kryjí
 /// právě to, co se fake implementacemi ověřit nedá. Nic z nich nechodí na síť.
+///
+/// **Timeouty se sem předávají velkorysé a je to strop proti zátěži, ne míra rychlosti** (#296).
+/// Testy spouštějí `/bin/echo` a `/bin/sh`, tedy práci na jednotky milisekund — ale při souběžném
+/// buildu tří slotů se `/bin/echo` nestihl spustit a posbírat do **10 s** a suita hlásila
+/// `.timedOut` u tří testů naráz. Timeout tady tedy nic netvrdí; je tu proto, aby zaseknutý
+/// podproces test položil, ne aby držel běh navěky.
 @Suite("Environment proti skutečnému systému")
 struct RealEnvironmentTests {
     private let probe = FileSystemExecutableProbe()
     private let runner = SubprocessRunner()
+
+    /// Kolik času dostane podproces, po kterém se čeká výsledek. Viz komentář u suity.
+    private static let generousTimeout: Duration = .seconds(60)
 
     @Test("Spustitelná složka se nesmí splést s binárkou")
     func probeRejectsDirectory() {
@@ -39,7 +48,7 @@ struct RealEnvironmentTests {
         let result = try await runner.run(
             URL(filePath: "/bin/echo"),
             arguments: ["ahoj"],
-            timeout: .seconds(10)
+            timeout: Self.generousTimeout
         )
 
         #expect(result.exitCode == 0)
@@ -52,7 +61,7 @@ struct RealEnvironmentTests {
         let result = try await runner.run(
             URL(filePath: "/bin/sh"),
             arguments: ["-c", "echo chyba >&2; exit 3"],
-            timeout: .seconds(10)
+            timeout: Self.generousTimeout
         )
 
         #expect(result.exitCode == 3)
@@ -71,16 +80,22 @@ struct RealEnvironmentTests {
         }
     }
 
+    /// **Strop se odvozuje od těch 30 s, které by proces žil sám** (#296), ne od toho, jak rychle
+    /// zabití obvykle proběhne. Rozhoduje se totiž mezi „zabilo se“ a „čekalo se na EOF“, a to jsou
+    /// desetiny vteřiny proti třiceti — cokoli mezi tím je pořád odpověď „zabilo se“. Do #296 tu
+    /// stálo 5 s, tedy hodnota odvozená od volného stroje: při souběžném buildu tří slotů vycházelo
+    /// **5,95 / 8,23 / 11,03 s** a suita byla červená, přitom aplikace fungovala.
     @Test("Zrušené volání proces zabije, místo aby čekalo, až doběhne sám")
     func runnerKillsProcessOnCancellation() async throws {
         // Bez zabití by `run()` čekalo na EOF na pipách, tedy plných 30 s — čtení skončí
         // teprve tím, že proces pipy zavře.
+        let lifetime = Duration.seconds(30)
         let elapsed = await ContinuousClock().measure {
             let running = Task {
                 try? await runner.run(
                     URL(filePath: "/bin/sleep"),
-                    arguments: ["30"],
-                    timeout: .seconds(60)
+                    arguments: ["\(lifetime.components.seconds)"],
+                    timeout: Self.generousTimeout
                 )
             }
             try? await Task.sleep(for: .milliseconds(300))
@@ -88,7 +103,7 @@ struct RealEnvironmentTests {
             _ = await running.value
         }
 
-        #expect(elapsed < .seconds(5))
+        #expect(elapsed < lifetime / 2, "trvalo to \(elapsed.milliseconds)")
     }
 
     @Test("Runner ohlásí, že binárku nešlo spustit")
@@ -97,7 +112,7 @@ struct RealEnvironmentTests {
             _ = try await runner.run(
                 URL(filePath: "/usr/bin/prism-neexistuje"),
                 arguments: [],
-                timeout: .seconds(10)
+                timeout: Self.generousTimeout
             )
             Issue.record("Spuštění neexistující binárky mělo selhat.")
         } catch ProcessError.launchFailed {
@@ -107,9 +122,16 @@ struct RealEnvironmentTests {
         }
     }
 
+    /// **Timeout se předává, nebere se výchozí** (#296). Produkční pětisekundový default je
+    /// rozhodnutí o startu aplikace („zaseknutý shell nesmí položit start“) a zvětšovat se nemá —
+    /// jenže při souběžném buildu tří slotů ho login shell přetáhl a čtení vrátilo prázdno, tedy
+    /// pád testu o parsování `PATH`. Test se ptá na to, jestli se skutečný `PATH` přečte a rozebere,
+    /// ne na to, jestli se to stihne za produkční rozpočet.
     @Test("Login shell vrátí neprázdný PATH")
     func loginShellReportsNonEmptyPath() async {
-        let directories = await LoginShellPathReader(runner: runner).loginShellPath()
+        let reader = LoginShellPathReader(runner: runner, timeout: Self.generousTimeout)
+
+        let directories = await reader.loginShellPath()
 
         #expect(directories.isEmpty == false)
     }

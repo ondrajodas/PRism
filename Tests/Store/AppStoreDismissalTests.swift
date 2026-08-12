@@ -58,7 +58,7 @@ struct AppStoreDismissalTests {
 
     private func runReview(_ store: AppStore) async {
         store.startReview(for: pr)
-        for _ in 0..<100_000 where store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
     }
 
     @Test("Odmítnutí posune návrh verdiktu a přežije restart")
@@ -150,7 +150,7 @@ struct AppStoreDismissalTests {
         await store.loadDetail(for: summary())
         let finding = try #require(store.reviewRecord(for: pr)?.findings.first)
         store.adoptFinding(finding, for: pr)
-        for _ in 0..<1000 { await Task.yield() }
+        await settle()
         #expect(store.draft(for: pr) != nil)
 
         await store.dismissFinding(finding, as: .invalid, for: pr)

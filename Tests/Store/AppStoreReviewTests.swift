@@ -67,7 +67,7 @@ struct AppStoreReviewTests {
 
     /// Počká, až review doběhne — ale ne donekonečna.
     private func waitUntilIdle(_ store: AppStore) async throws {
-        for _ in 0..<100_000 where store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
         #expect(!store.isReviewing(pr))
     }
 
@@ -167,7 +167,7 @@ struct AppStoreReviewTests {
         #expect(store.runningReviews == 2)
 
         reviewer.releaseAll()
-        for _ in 0..<100_000 where store.runningReviews > 0 { await Task.yield() }
+        await waitUntil("oba běhy doběhnou") { store.runningReviews == 0 }
         #expect(store.runningReviews == 0)
     }
 

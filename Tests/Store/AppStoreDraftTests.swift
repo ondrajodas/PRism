@@ -756,11 +756,4 @@ struct AppStoreDraftTests {
 
         #expect(store.hasDraft(pr))
     }
-
-    /// Uložení běží v tasku, takže se na něj musí počkat, než se sáhne na disk. Točení přes
-    /// `Task.yield()` je stejná cesta jako u ostatních testů store — čekat na continuation
-    /// by znamenalo, že se test při chybě zasekne místo aby spadl.
-    private func settle() async {
-        for _ in 0..<100 { await Task.yield() }
-    }
 }

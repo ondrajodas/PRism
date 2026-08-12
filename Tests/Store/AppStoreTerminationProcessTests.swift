@@ -105,15 +105,18 @@ struct AppStoreTerminationProcessTests {
     /// existence jednoho procesu udělala něco úplně jiného. Je to tatáž pojistka jako
     /// v `SubprocessStreamerTests`.
     private func pid(from file: URL) async throws -> pid_t {
-        for _ in 0..<250 {
-            if let text = try? String(contentsOf: file, encoding: .utf8),
-               let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
-               pid > 0 {
-                return pid
-            }
-            try await Task.sleep(for: .milliseconds(20))
+        var found: pid_t?
+        await waitUntil("session se rozběhne a napíše svoje PID") {
+            guard
+                let text = try? String(contentsOf: file, encoding: .utf8),
+                let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+                pid > 0
+            else { return false }
+            found = pid
+            return true
         }
-        throw TerminationTestFailure.sessionNeverStarted
+        guard let found else { throw TerminationTestFailure.sessionNeverStarted }
+        return found
     }
 
     /// Zmizel proces? `kill(pid, 0)` jen ověřuje existenci, nic neposílá.
@@ -121,11 +124,7 @@ struct AppStoreTerminationProcessTests {
     /// Po `stopReviewsBeforeTermination` už má být mrtvý — metoda se vrací teprve tehdy, když
     /// běhy skončily. Deadline je tu proti zátěži, ne proti pomalému zabíjení.
     private func isGone(_ pid: pid_t) async -> Bool {
-        for _ in 0..<250 {
-            if kill(pid, 0) != 0 { return true }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        return false
+        await waitUntil("proces \(pid) zmizí") { kill(pid, 0) != 0 }
     }
 }
 

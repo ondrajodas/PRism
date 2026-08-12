@@ -54,14 +54,7 @@ struct AppStoreNotificationTests {
         )
     }
 
-    /// Ohraničené čekání: test, který se nedočká, má spadnout na `#expect`, ne viset.
-    /// Neomezený spin přes `Task.yield()` na `MainActoru` položil suitu u #68.
-    private func waitUntil(_ condition: () -> Bool) async {
-        for _ in 0 ..< 200 {
-            if condition() { return }
-            try? await Task.sleep(for: .milliseconds(1))
-        }
-    }
+
 
     @Test("Notifikace se doručí tak, jak se o ni řeklo")
     func deliversWhatItWasAskedFor() async {
@@ -136,7 +129,7 @@ struct AppStoreNotificationTests {
         let watching = Task { await store.handleNotificationClicks() }
 
         center.click(pr)
-        await waitUntil { store.selection == pr }
+        await waitUntil("klik na notifikaci vybere PR") { store.selection == pr }
 
         #expect(store.selection == pr)
         watching.cancel()
@@ -153,7 +146,7 @@ struct AppStoreNotificationTests {
 
         center.click(pr)
         let watching = Task { await store.handleNotificationClicks() }
-        await waitUntil { store.selection == pr }
+        await waitUntil("klik na notifikaci vybere PR") { store.selection == pr }
 
         #expect(store.selection == pr)
         watching.cancel()
@@ -170,7 +163,7 @@ struct AppStoreNotificationTests {
         let watching = Task { await store.handleNotificationClicks() }
 
         center.click(pr)
-        await waitUntil { store.selection == pr }
+        await waitUntil("klik na notifikaci vybere PR") { store.selection == pr }
 
         #expect(store.selection == pr)
         watching.cancel()
@@ -189,9 +182,9 @@ struct AppStoreNotificationTests {
         let watching = Task { await store.handleNotificationClicks() }
 
         center.click(pr)
-        // Není na co čekat — ověřuje se, že se nic nestane. Krátká odmlka dá klikům šanci
-        // projít, kdyby se přece jen zpracovávaly.
-        try? await Task.sleep(for: .milliseconds(20))
+        // Není na co čekat — ověřuje se, že se nic nestane. Odmlka dá klikům šanci projít,
+        // kdyby se přece jen zpracovávaly.
+        await settle()
 
         #expect(store.selection == listed)
         watching.cancel()

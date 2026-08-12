@@ -58,17 +58,8 @@ struct AppStoreHealthTests {
         )
     }
 
-    /// Počká, až review doběhne — **odmlkami, ne `Task.yield()`**.
-    ///
-    /// Spin by běžel na `MainActoru` a Swift Testing pouští suity paralelně, takže by
-    /// vyhladověl testy, které čekají na skutečné procesy. Změřeno: s `yield()` padal
-    /// `SubprocessStreamerTests` („Zrušení proces zabije“), protože se zabíjený proces
-    /// nestihl zabít dřív, než mu doběhl `sleep 1`. Tatáž lekce jako u `ReviewSubmission`.
     private func waitUntilIdle(_ store: AppStore) async throws {
-        for _ in 0..<2_000 where store.isReviewing(pr) {
-            try await Task.sleep(for: .milliseconds(1))
-        }
-        #expect(!store.isReviewing(pr))
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
     }
 
     @Test("Bez monitoru řádek žádné puntíky neukazuje")
