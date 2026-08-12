@@ -326,6 +326,23 @@ struct CommandPaletteTests {
         #expect(expanded.first { $0.title.hasSuffix("panel s mým review") }?.shortcut == "⌘2")
     }
 
+    /// V tabech, kde panel není vůbec (#294), se položka **nenabízí**: „složit panel“ by slibovalo
+    /// něco, co se nemá kde stát, a nešlo by to poznat. `nil` proto není totéž jako `false` —
+    /// složený panel v okně **je**, jen jako proužek na hraně.
+    @Test("Bez panelu v tabu se položka nenabízí vůbec")
+    func reviewPanelActionIsOmittedWithoutThePanel() {
+        let pr = PRIdentifier("keboola/vault#85")!
+
+        let items = Policy.paletteActions(open: pr, isPanelExpanded: nil)
+
+        #expect(!items.contains { $0.title.hasSuffix("panel s mým review") })
+        #expect(!items.contains { $0.target == .action(.setReviewPanel(expanded: true)) })
+        #expect(!items.contains { $0.target == .action(.setReviewPanel(expanded: false)) })
+        // Ostatní akce nad PR zůstávají — vypadla jedna položka, ne celá skupina.
+        #expect(items.contains { $0.target == .action(.runReview(pr)) })
+        #expect(items.contains { $0.target == .action(.setDiffLayout(.split)) })
+    }
+
     @Test("Viditelná sekce railu se v domácí záložce nenabízí, nad PR ano")
     func visibleSectionIsOfferedOnlyWhenItWouldChangeSomething() {
         let home = Policy.paletteActions(open: nil, section: .queue).map(\.title)

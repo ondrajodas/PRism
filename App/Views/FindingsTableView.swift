@@ -37,33 +37,38 @@ struct FindingsTableView: View {
     @State private var expandedWithoutPlace: Set<FindingKey> = []
 
     var body: some View {
-        content
-            .task(id: pullRequest) {
-                expanded = []
-                expandedWithoutPlace = []
-            }
+        ScrollView {
+            content
+        }
+        .task(id: pullRequest) {
+            expanded = []
+            expandedWithoutPlace = []
+        }
     }
 
-    private var content: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                Section {
-                    ForEach(rows) { row in
-                        FindingTableRowView(
-                            row: row,
-                            layout: layout,
-                            blockingCategories: blockingCategories,
-                            isCurrent: isCurrent(row),
-                            isExpanded: isExpanded(row),
-                            findingActions: findingActions,
-                            draft: draft,
-                            toggle: { toggle(row) },
-                            jump: { jump(row.representative.finding) }
-                        )
-                    }
-                } header: {
-                    header
+    /// Tabulka bez `ScrollView`u — **`internal` schválně, kvůli měření** (#294), stejně jako
+    /// u `OverviewView` (#291): `NSScrollView` si obsah na svou šířku ukrojí, takže by se přesah
+    /// nenakreslil a rozbitá šířka by od opravené nešla poznat. A zrovna tady je co měřit: šířky
+    /// sloupců jsou **spočítané** z předané šířky (`Policy.findingTableLayout`), takže se dají
+    /// spočítat i vedle.
+    @ViewBuilder var content: some View {
+        LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+            Section {
+                ForEach(rows) { row in
+                    FindingTableRowView(
+                        row: row,
+                        layout: layout,
+                        blockingCategories: blockingCategories,
+                        isCurrent: isCurrent(row),
+                        isExpanded: isExpanded(row),
+                        findingActions: findingActions,
+                        draft: draft,
+                        toggle: { toggle(row) },
+                        jump: { jump(row.representative.finding) }
+                    )
                 }
+            } header: {
+                header
             }
         }
     }

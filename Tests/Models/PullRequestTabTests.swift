@@ -40,6 +40,45 @@ struct PullRequestTabTests {
         #expect(zip(flags, flags.dropFirst()).count { $0 != $1 } == 1)
     }
 
+    // MARK: - Panel s mým review (#294)
+
+    /// Vyčerpávající výčet, ne tři reprezentanti: je to šest případů a jediné, co tuhle vlastnost
+    /// drží, je právě ten výčet — přidaný sedmý tab by jinak mlčky dostal panel podle toho, kam ho
+    /// někdo napsal.
+    @Test("Panel je jen v Přehledu, Změněných souborech a Konverzaci")
+    func panelTabs() {
+        let withPanel = PullRequestTab.allCases.filter(\.showsReviewPanel)
+
+        #expect(withPanel == [.overview, .filesChanged, .conversation])
+        #expect(!PullRequestTab.checks.showsReviewPanel)
+        #expect(!PullRequestTab.findings.showsReviewPanel)
+        #expect(!PullRequestTab.progress.showsReviewPanel)
+    }
+
+    /// **Tohle je ten test, který tvrdí, že se něco NEstalo**: že se `showsReviewPanel` neohnul na
+    /// `isReviewerOutput`. Ty dvě vlastnosti se rozcházejí právě v `Kontrolách` — jsou fakt o PR,
+    /// takže **nalevo od děliče**, a panel přesto mít nemají. Kdyby se sloučily, dělič v pruhu
+    /// záložek by se posunul a `Kontroly` by skočily do pravé skupiny.
+    @Test("Panel se neřídí příznakem výstupu reviewerů")
+    func panelIsNotReviewerOutput() {
+        #expect(PullRequestTab.checks.isReviewerOutput == false)
+        #expect(PullRequestTab.checks.showsReviewPanel == false)
+
+        let sameEverywhere = PullRequestTab.allCases.allSatisfy { $0.showsReviewPanel == !$0.isReviewerOutput }
+        #expect(!sameEverywhere, "vlastnosti splynuly — jedna z nich pak mluví o něčem jiném, než co dělá")
+    }
+
+    /// Tři a tři: kdyby panel zmizel odevšad nebo zůstal všude, obojí by prošlo výčtem výš jen
+    /// s jeho přepsáním — tohle je pojistka na to, že se výčet nepřepíše „aby test prošel“.
+    @Test("Panel je ve třech tabech, ne ve všech a ne v žádném")
+    func panelIsPartial() {
+        let count = PullRequestTab.allCases.count(where: \.showsReviewPanel)
+
+        #expect(count == 3)
+        #expect(count < PullRequestTab.allCases.count)
+        #expect(count > 0)
+    }
+
     @Test("Nálezy a Průběh jsou výstup reviewerů, zbytek ne")
     func classification() {
         #expect(PullRequestTab.findings.isReviewerOutput)

@@ -301,18 +301,22 @@ struct PullRequestDetailView: View {
         Binding(get: { store.reviewPanelTab }, set: { store.reviewPanelTab = $0 })
     }
 
-    /// Obsah vybraného tabu a pod ním spodní panel.
+    /// Obsah vybraného tabu a vedle něj panel s nálezy a mým review.
     ///
-    /// Panel je vidět **vždycky**, i u PR, na kterém review nikdy neběželo (**změna proti
-    /// #20**): od #66 v něm bydlí i rozdělané review, a to se zakládá od nuly. Kdyby se panel
-    /// ukazoval až s prvním nálezem, nebylo by kde vybrat verdikt ani napsat tělo.
+    /// Panel je vidět, i když na PR review nikdy neběželo (**změna proti #20**): od #66 v něm
+    /// bydlí i rozdělané review, a to se zakládá od nuly. Kdyby se panel ukazoval až s prvním
+    /// nálezem, nebylo by kde vybrat verdikt ani napsat tělo.
     ///
-    /// A je vidět **v obou tabech**, ne jen u diffu (**doplněno proti zadání #72**, které
-    /// psalo, že `Změněné soubory` jsou dnešní obrazovka beze změny — v té době ještě panel
-    /// draft neobsahoval). Nálezy bez místa v kódu, průběh běhu i moje rozdělané review se
-    /// vážou k celému PR, ne k diffu; schovat je za přepnutí tabu by znamenalo, že se
-    /// rozepsané review přepnutím na `Přehled` „ztratí“.
+    /// **Ve kterých tabech je, rozhoduje `PullRequestTab.showsReviewPanel`** (#294) — tam je i
+    /// napsané proč. V `Kontrolách`, `Nálezech` a `Průběhu` se schová **celý**, tedy i složený
+    /// proužek: ten je úzký, ale bere šířku, a v těch třech tabech je vedle něj buď duplikát
+    /// týchž dat, nebo obsah, který šířku potřebuje.
+    ///
+    /// **Šířku si tab nepočítá, dostane ji změřenou.** `GeometryReader` níž měří to, co po panelu
+    /// zbylo, takže se zmizením panelu roztáhne sám a není tu žádné odečítání, které by se dalo
+    /// splést — právě na takovém odečítání se rozbila #291.
     @ViewBuilder private var content: some View {
+        let tab = store.detailTab(for: pullRequest.id)
         // **Vedle sebe, ne pod sebou** (#182). Panel dole si bral výšku, které je v diffu
         // nejmíň; napravo bere šířku, které je v okně přes celou obrazovku dost.
         HStack(spacing: 0) {
@@ -329,7 +333,7 @@ struct PullRequestDetailView: View {
             // uvnitř osy nebo diffu by byl na každé položce.
             GeometryReader { proxy in
                 Group {
-                    switch store.detailTab(for: pullRequest.id) {
+                    switch tab {
                     case .filesChanged: diff
                     case .overview: overview
                     case .conversation: conversation
@@ -343,39 +347,42 @@ struct PullRequestDetailView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Palette.surface)
-            // Panel je vidět i **v tabu `Nálezy`** (#242), a je to podmínka, ne pohodlí: smyčka
-            // nález → `Převzít` → text v mém review je ta hlavní práce, takže se obojí musí stát
-            // naráz. Tabulka přes celé okno by chtěla přepínání tam a zpátky za každý převzatý
-            // nález.
-            ReviewPanel(
-                record: store.reviewRecord(for: pullRequest.id),
-                isExpanded: panelExpanded,
-                jump: jump,
-                findings: visibleFindings,
-                dismissals: dismissals,
-                rechecks: recheck.statuses,
-                findingActions: findingActions,
-                blockingCategories: blockingCategories,
-                isRunning: store.isReviewing(pullRequest.id),
-                pullRequest: pullRequest.id,
-                draft: store.draft(for: pullRequest.id),
-                // Verdikt jde vedle draftu, ne z něj: předvyplněný návrh (#114) se neukládá,
-                // takže v draftu není a panel by nad ním ukazoval „nevybráno“.
-                draftVerdict: store.effectiveVerdict(for: pullRequest.id),
-                isDraftStale: store.isDraftStale(for: pullRequest.id),
-                isOwnPullRequest: store.isOwnPullRequest(pullRequest.id),
-                draftUnavailable: draftUnavailable,
-                draftActions: draftActions,
-                jumpToComment: jumpToComment,
-                current: cursor.current,
-                tab: panelTab
-            )
-            // Panel si o místo říká **první**: má vlastní šířku (tu, kterou si uživatel
-            // vytáhl), takže víc než ji si nevezme — a zbytek dostane diff, který se umí
-            // stáhnout. Bez priority dělí `HStack` místo mezi dva pružné prvky rovnoměrně
-            // a v úzkém okně vyjde panel na půlku.
-            .layoutPriority(1)
+            if tab.showsReviewPanel { panel }
         }
+    }
+
+    /// Panel vpravo. Vlastní vlastnost, ne blok uvnitř `content`: kreslí se podmíněně (#294)
+    /// a `if` s dvacetiřádkovým tělem uvnitř by z místa, kde se rozhoduje, udělal místo, kde se
+    /// skládají parametry.
+    private var panel: some View {
+        ReviewPanel(
+            record: store.reviewRecord(for: pullRequest.id),
+            isExpanded: panelExpanded,
+            jump: jump,
+            findings: visibleFindings,
+            dismissals: dismissals,
+            rechecks: recheck.statuses,
+            findingActions: findingActions,
+            blockingCategories: blockingCategories,
+            isRunning: store.isReviewing(pullRequest.id),
+            pullRequest: pullRequest.id,
+            draft: store.draft(for: pullRequest.id),
+            // Verdikt jde vedle draftu, ne z něj: předvyplněný návrh (#114) se neukládá,
+            // takže v draftu není a panel by nad ním ukazoval „nevybráno“.
+            draftVerdict: store.effectiveVerdict(for: pullRequest.id),
+            isDraftStale: store.isDraftStale(for: pullRequest.id),
+            isOwnPullRequest: store.isOwnPullRequest(pullRequest.id),
+            draftUnavailable: draftUnavailable,
+            draftActions: draftActions,
+            jumpToComment: jumpToComment,
+            current: cursor.current,
+            tab: panelTab
+        )
+        // Panel si o místo říká **první**: má vlastní šířku (tu, kterou si uživatel
+        // vytáhl), takže víc než ji si nevezme — a zbytek dostane diff, který se umí
+        // stáhnout. Bez priority dělí `HStack` místo mezi dva pružné prvky rovnoměrně
+        // a v úzkém okně vyjde panel na půlku.
+        .layoutPriority(1)
     }
 
     /// Pruh běhu: chipy reviewerů a vedle nich průběh běžícího review (#218). Ukazuje se,
@@ -488,7 +495,7 @@ struct PullRequestDetailView: View {
         if store.hasDraft(pullRequest.id) {
             let isStale = store.isDraftStale(for: pullRequest.id)
             Button {
-                store.revealDraft()
+                store.revealDraft(in: pullRequest.id)
             } label: {
                 Label(
                     isStale ? "rozdělané review · starší commit" : "rozdělané review",
@@ -645,15 +652,20 @@ struct PullRequestDetailView: View {
         Button("Předchozí nález") { step(.backward) }
             .keyboardShortcut(.upArrow, modifiers: .option)
         // Panel jde složit i rozložit **stejnou zkratkou** (#182), jak to má návrh v liště
-        // nad diffem. Zkratka bydlí tady, ne v `DiffView`: panel je vidět ve všech tabech PR,
+        // nad diffem. Zkratka bydlí tady, ne v `DiffView`: panel je vidět ve víc tabech,
         // kdežto lišta jen u diffu — a přepínač, který v půlce okna nefunguje, je horší
         // než žádný.
+        //
+        // **V tabech bez panelu je zakázaná** (#294), a je to tatáž úvaha: složit něco, co v okně
+        // není, se nedá poznat od rozbité zkratky — a hlavně by to potichu přestavělo tab, do
+        // kterého se člověk vrátí. Zakázané tlačítko klávesu nebere, takže propadne dál.
         Button("Panel s mým review") {
             withAnimation(.snappy(duration: 0.15)) {
                 store.isReviewPanelExpanded.toggle()
             }
         }
         .keyboardShortcut("2", modifiers: .command)
+        .disabled(!store.detailTab(for: pullRequest.id).showsReviewPanel)
         submitShortcut
     }
 

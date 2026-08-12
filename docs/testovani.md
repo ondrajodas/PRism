@@ -364,6 +364,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   jinak text zmizí za proužek na hraně okna. Testuje se ve store (proto se tam ta dvě pole
   přestěhovala z `@State`) a spolu s tím to, co se stát **nesmí** — převzetí nálezu na řádku
   v diffu panel nerozloží, protože komentář je vidět hned pod řádkem. Ověřeno vložením regrese.
+
+  **Od #294 k tomu patří tři testy o tabech bez panelu**, a dva z nich tvrdí, že se něco
+  **NE**stalo: rozbalený panel **přežije** průchod `Nálezy` a `Průběhem` (skrytí je věc pohledu, ne
+  uložený stav) a složený se přepnutím tabu **nerozloží**. Třetí je ta viditelná půlka: poznámka
+  z tabu bez panelu si **přepne tab** na `Přehled`, kdežto z `Změněných souborů` tab nemění —
+  jinak by převzetí v diffu vyhodilo člověka z kódu. K tomu jeden test na paletu: v tabu bez panelu
+  položku `Složit panel` **nenabízí**, ale pohled na diff nabízí dál, takže nevypadla celá skupina.
 - **Skok na nález — cíl existuje v seznamu (#187)** — dvojice testů, která hlídá chybu z #157:
   kotva na řádek uprostřed bloku se musí přeložit na **něco, co v seznamu je**, a to v obou
   pohledech; druhý test naopak tvrdí, že **bez** překladu se netrefí. Z té dvojice je pak poznat,
@@ -1264,6 +1271,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     odpověď);
   - **rozejít dělič v pruhu** — počet přechodů `isReviewerOutput` musí být přesně jeden
     i po vypadnutí `Kontrol`, jinak by v pruhu byly dva děliče nebo žádný;
+  - **slít `showsReviewPanel` s `isReviewerOutput`** (#294) — vlastnosti se rozcházejí právě
+    v `Kontrolách` (fakt o PR, takže nalevo od děliče, a panel přesto nemají). Test to tvrdí
+    **negativně**: hledá tab, ve kterém se ty dva příznaky neshodují, takže sloučení do jedné
+    vlastnosti spadne — a spadlo by na děliči, tedy jinde, než by vzniklo. K tomu vyčerpávající
+    výčet („panel je v `Přehledu`, `Změněných souborech` a `Konverzaci`“) a pojistka na počet
+    (tři ze šesti), aby výčet nešlo „opravit“ na všechny nebo na žádný;
   - **nechat volbu ukazovat na nekreslený tab** — po zmizení checků by nesvítila žádná záložka
     a plocha tabu by zůstala prázdná. Druhý test k tomu hlídá opačnou chybu: volba se **nemaže**,
     takže po dotažení checků je člověk zpátky tam, kde byl;
@@ -1331,6 +1344,45 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Prázdné a nedoručené stavy se měří zvlášť** (`nil` proti `""`), protože jsou to jiné podstromy
   než sazba a nesmí se slít. Že přetečení bylo doopravdy v sazbě, se poznalo právě po nich: zeleně
   vycházely i před opravou.
+
+  **Od #294 to měření nebydlí v téhle suitě, ale v `OverflowProbe`** — plátno, podklad, předaná
+  šířka i hledání nakreslených bajtů na jednom místě. Druhá kopie by se rozešla zrovna v tom, na
+  čem to stojí (viz odrážky výš), a měřila by pak jiný tab než ta první.
+- **Šířka tabů bez panelu (#294)** — `PanelFreeTabWidthTests`, přes pásmo **648–1800**. Tvrdí totéž
+  co suita `Přehledu` (za pravou hranou tabu se nekreslí nic), jen o `Kontrolách`, `Nálezech`
+  a `Průběhu`, kterým #294 sebrala postranní lištu — takže se v nich najednou sází v širším místě.
+
+  **Jiné pásmo než u `Přehledu`, a je spočítané**: spodní kraj je 648 bodů (okno má podlahu 700,
+  rail bere 52) a panel se z něj neodečítá, protože v těch třech tabech není. Suita `Přehledu`
+  začíná dál na 128, protože tam vytažený panel 520 bodů ukrojit umí.
+
+  Co se u toho ukázalo:
+
+  - **Riskantní je jediný z těch tří tabů.** `Kontroly` a `Průběh` sázejí pružně, takže přetéct
+    nemají čím; `Nálezy` si šířky sloupců **počítají** (`Policy.findingTableLayout`), a to je jediné
+    místo, kde se dá spočítat špatně. Změřené jsou přesto všechny — „pružné nemůže přetéct“ je
+    úvaha, ne měření.
+  - **Vytažený podstrom měří něco jiného než tab.** `FindingsTabView` bere šířku z prostředí
+    (`@Environment(\.availableWidth)`), a to dorazí jedině do view, které SwiftUI doopravdy skládá.
+    První verze testu proto sázela na výchozích 1000 bodů a hlásila **120 bodů přesahu ve třech
+    šířkách, ve kterých je v okně nula** — bylo to přetečení sondy, ne tabu. Odtud parametr
+    `FindingsTabView.scrolls`: tab se rendruje celý, jen bez `ScrollView`u. `OverviewView.content`
+    zvenčí vytáhnout jde právě proto, že si z prostředí nebere nic.
+  - **Podlaha shrnutí v tabulce je vědomé přetečení a je potřeba vědět, od kdy.** Hlídá to
+    `FindingTableTests` (pásmo po 8 bodech): pod 590 se shrnutí opře o podlahu 120 a tabulka
+    přeteče, nad ní se sloupce vejdou přesně. Po #294 je 590 **mimo dosah**, protože nejužší tab má
+    648; s vytaženým panelem se tam dostával (~122 bodů, přesah ~468).
+
+  **Vyzkoušené vložením regrese**: po smazání `inset * 2` z rozpočtu sloupců hlásí měření **32 bodů
+  přesahu ve všech šesti šířkách** a `FindingTableTests` 145 porušení. Sonda tedy měří.
+- **Sonda tabů detailu (#294)** — `DetailTabRenderProbe`, gated `PRISM_MEASURE`. Vyrendruje **celý
+  detail PR ve všech šesti tabech** (`NSHostingView`), v širokém i v nejužším okně a v tom úzkém
+  i se **složeným** panelem. Nic netvrdí; je to způsob, jak vidět, kde lišta je a kde není.
+
+  Rendruje se **celý detail, ne jednotlivé taby**, a to je u téhle změny podstatné: co se schovává,
+  není obsah tabu, ale jeho **sourozenec** v `HStack`u — render samotného tabu by o tom neřekl nic.
+  Složený proužek má vlastní scénář proto, že je úzký: z jednoho renderu se nepozná od hrany okna,
+  takže „schoval se“ a „je tam pořád“ vypadají stejně.
 - **Sonda `Přehledu` (#291)** — `OverviewRenderProbe`, gated `PRISM_MEASURE`. Nic netvrdí, jen
   vyrendruje tab přes `NSHostingView` ve třech šířkách a obou režimech, aby se dal **vidět**.
   Existuje vedle měření proto, že „vejde se hlavička do zúženého tabu“ je otázka na vzhled —
