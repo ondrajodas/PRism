@@ -1335,23 +1335,39 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a **počítat většinu místo nejhoršího**. Test s dvanácti zelenými a jedním červeným je proto
   v sadě schválně. K tomu překlad kbelíků včetně neznámého (bere se jako běžící — jediný stav,
   který o výsledku netvrdí nic) a pořadí, ve kterém jdou spadlé nahoru a přeskočené dolů.
-- **Tab `Kontroly` a jeho odznak (#215)** — `Policy` výčtem (`PullRequestTabListTests`), volba tabu
-  ve store (`AppStoreTabTests`) a sazba (`ChecksTextTests`). Co se dá pokazit potichu:
-  - **nakreslit tab u PR bez CI** — prázdný tab s nadpisem tvrdí, že se něco nepovedlo. Testuje se
-    z obou stran: chybějící klíč **i** prázdné pole znamenají „bez checků“, a odpadnout smí
-    **jedině** `Kontroly` (ostatní záložky se kreslí i prázdné, protože „žádný nález“ je sama
-    odpověď);
-  - **rozejít dělič v pruhu** — počet přechodů `isReviewerOutput` musí být přesně jeden
-    i po vypadnutí `Kontrol`, jinak by v pruhu byly dva děliče nebo žádný;
+- **Tab `Kontroly` a jeho odznak (#215, přepnuto #306)** — `Policy` výčtem (`ChecksTabStateTests`,
+  do #306 `PullRequestTabListTests`), volba tabu ve store (`AppStoreTabTests`) a sazba
+  (`ChecksTextTests`). Co se dá pokazit potichu:
+  - **říct, že PR nemá CI, dokud se čeká na odpověď** (#306) — to je nejcennější test téhle sady.
+    Tab se od #306 kreslí vždycky, takže musí mít odpověď na každý stav dat, a nenačteno je zvenku
+    k nerozeznání od prázdna: rozhoduje **chybějící klíč**, ne počet prvků. Testuje se **celou
+    mřížkou** vstupů — `checks` nenačtené / prázdné / neprázdné krát `failure` je / není, tedy šest
+    kombinací a čtyři odpovědi — a k tomu dvě pravidla o pořadí: neprázdný seznam přebíjí poruchu,
+    porucha přebíjí obě prázdna (i `checks == []`, jinak by z chyby sítě vyšlo „nemá CI“);
+  - **nakreslit odznak nad tabem, ve kterém není seznam** (#306) — druhý test, který tvrdí, že se
+    něco NEstalo: `checksBadge` je `nil` u `loading`, `empty` **i** `failed`. Do #306 to platilo jen
+    shodou okolností (tab se u prázdných checků nekreslil, takže se odznak neměl kde nakreslit), teď
+    to drží `guard case .list` — a zastaralý seznam odznak naopak **má**, protože mluví o tom, co je
+    pod ním vidět;
+  - **zúžit pruh záložek podle dat** (#306) — `PullRequestTabBar` kreslí `PullRequestTab.allCases`
+    a **nemá parametr**, kterým by se dal seznam podat, takže membership se z dat nedá ovlivnit ani
+    omylem; testem se hlídá druhá polovina toho tvrzení, tedy že se výčet nezmenšil (počet 6
+    a jmenovitě `.checks`). Že se pruh nepřeskládá, je vidět na renderu ze všech čtyř stavů —
+    `ChecksTabRenderProbe`, viz níž;
+  - **rozejít dělič v pruhu** — počet přechodů `isReviewerOutput` musí být přesně jeden, jinak by
+    v pruhu byly dva děliče nebo žádný. Do #306 se to hlídalo i nad zúženým pruhem bez `Kontrol`;
+    ten stav už neexistuje, takže test odpadl s ním;
   - **slít `showsReviewPanel` s `isReviewerOutput`** (#294) — vlastnosti se rozcházejí právě
     v `Kontrolách` (fakt o PR, takže nalevo od děliče, a panel přesto nemají). Test to tvrdí
     **negativně**: hledá tab, ve kterém se ty dva příznaky neshodují, takže sloučení do jedné
     vlastnosti spadne — a spadlo by na děliči, tedy jinde, než by vzniklo. K tomu vyčerpávající
     výčet („panel je v `Přehledu`, `Změněných souborech` a `Konverzaci`“) a pojistka na počet
     (tři ze šesti), aby výčet nešlo „opravit“ na všechny nebo na žádný;
-  - **nechat volbu ukazovat na nekreslený tab** — po zmizení checků by nesvítila žádná záložka
-    a plocha tabu by zůstala prázdná. Druhý test k tomu hlídá opačnou chybu: volba se **nemaže**,
-    takže po dotažení checků je člověk zpátky tam, kde byl;
+  - **zarovnat volbu tabu na data** (#306) — volba `Kontroly` musí přežít **všechny čtyři** stavy
+    checků, protože zarovnání by se dalo vrátit u kteréhokoli z nich. Do #306 se tu testoval opak
+    (volba na nekreslený tab spadne na `Přehled`) a k tomu, že se přitom **nemaže**, aby byl člověk
+    po dotažení checků zpátky tam, kde byl — obojí odpadlo se zarovnáním, protože tab nemizí. Druhý
+    test hlídá, že volba dál nepřetéká na jiné PR;
   - **spočítat odznak podle většiny** — tentýž test s dvanácti zelenými a jedním červeným jako
     u chipu, plus že zelené a přeskočené CI odznak **nedostanou** (šum by přebil ty dva, které
     něco říkají) a že spadlé přebijí běžící;
@@ -1359,14 +1375,27 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     (`ChecksText.parts`) a chip z nich ukazuje **tu první**, takže se hlídá i to, že části jdou
     od nejhoršího stavu. Barvy se hlídají proti `Palette`, protože do #215 kreslil seznam
     `.green`/`.red` ze SwiftUI, kdežto chip barvy z palety návrhu;
-  - **zapsat selhané načtení jako prázdno** — to je nejcennější test téhle sady, protože z toho
-    tiše vyjde tvrzení „tenhle PR nemá CI“ a **zmizí celý tab**. Hlídá se ze čtyř stran: porucha
-    se zapíše do `checkFailures` a `checks` zůstane nenačtené; PR bez CI naopak **žádnou poruchu
-    nehlásí**; selhaný pokus **nezahodí** to, co už bylo (tab tedy nezmizí kvůli chybě sítě);
-    a povedený pokus starou poruchu smaže, aby věta v hlavičce nesvítila nad načtenými checky.
-    Fake gateway má na to vlastní přepínač (`checksFailure`) **vedle** `checks` — kdyby to byl
-    jeden `Result`, nešlo by nastavit „prázdno bez chyby“, tedy zrovna ten stav, který se
-    s chybou nesmí slít.
+  - **zapsat selhané načtení jako prázdno** — z toho tiše vyjde tvrzení „tenhle PR nemá CI“.
+    Hlídá se z šesti stran: porucha se zapíše do `checkFailures` a `checks` zůstane nenačtené
+    (a v tabu je `failed`, ne `empty`); PR bez CI naopak **žádnou poruchu nehlásí**; selhaný pokus
+    **nezahodí** to, co už bylo (seznam zůstane vidět, jen s větou nad ním); povedený pokus starou
+    poruchu smaže; `Zkusit znovu` poruchu **opravdu přepíše** (#306 — `loadDetail` má cache podle
+    `updatedAt`, takže bez vlastní cesty k `loadChecks` by se po chybě sítě nedotáhlo nic až do
+    dalšího commitu); a **spadlý detail načtení checků nezastaví** (#306), protože jinak by v tabu
+    svítilo `Načítám kontroly…` navždycky;
+  - **nechat zrušené načtení checků nedotažené** (#306) — `loadChecks` běží až po detailu, takže
+    přepnutí PR uprostřed toho volání ho zruší a zrušení se schválně nezapisuje; po návratu je ale
+    detail z cache, takže se checky bez dotažení v `guardu` nedotáhnou už nikdy. Testuje se přes
+    `checksFailure = CancellationError()` a **druhý test hlídá opačnou chybu**: hotová odpověď
+    (prázdno i porucha) se návratem na PR **nepřepisuje**, jinak by z checků byl polling.
+
+    U obou platí, že fake gateway musí vracet **úspěšný detail** — bez něj `hasCurrentDetail`
+    zůstane `false`, cesta z cache se nikdy neprojde a test měří něco jiného, než co má v titulku.
+    Chyceno tím, že druhý z těch testů kvůli tomu spadl.
+
+  Fake gateway má na selhání checků **vlastní přepínač** (`checksFailure`) vedle `checks` — kdyby to
+  byl jeden `Result`, nešlo by nastavit „prázdno bez chyby“, tedy zrovna ten stav, který se s chybou
+  nesmí slít.
 
   **Trvání se porovnává proti `RunUsageText`, ne proti napsanému číslu.** Naivní `"prošlo · 41 s"`
   je červené, protože formátovač v českém locale sází `41,0 s` a mezery jsou nezlomitelné — test
@@ -1376,6 +1405,23 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   se v `ImageRenderer`u nevykreslí) ve světlém i tmavém režimu: tři podoby odznaku, tab se seznamem
   a pruh záložek přes pásmo šířek 620–1020. Šest záložek se vejde na jeden řádek od ~920 bodů, pět
   od ~820 — pod tím se popisky **zalamují**, neřežou, a bylo to tak i před #215.
+
+  **Od #306 je z toho renderu trvalá sonda** — `ChecksTabRenderProbe`, gatovaná `PRISM_MEASURE`
+  jako `DetailTabRenderProbe` (do test hosta se pouští `TEST_RUNNER_PRISM_MEASURE=1`
+  a `TEST_RUNNER_PRISM_RENDER_DIR`, jinak se proměnná k testu nedostane a suita se tiše přeskočí).
+  Dělá dvě věci:
+
+  - **detail PR v tabu `Kontroly` ve všech pěti podobách stavu** (nenačteno, bez CI, seznam, porucha,
+    zastaralý seznam) ve dvou šířkách. Na jednom snímku je vidět obojí, na čem #306 stojí: že pruh
+    má šest záložek pokaždé a že odznak je jedině nad seznamem. Pořadí ve scéně je podmínka:
+    `loadDetail` si checky dotahuje sám, takže se **nastavují až po něm** — jinak by je přepsal.
+    Během renderu už se nespustí (cache podle `updatedAt`), a právě proto se tudy dá vyrobit i stav
+    „nenačteno“, ke kterému se v aplikaci normálním používáním vrátit nedá;
+  - **pruh záložek přes pásmo šířek 620–1020, bez odznaků i se všemi**. Změřeno: bez odznaků se pruh
+    vejde na jeden řádek od ~780 bodů, se všemi od ~920; pod tím se popisky **zkracují**
+    (`Změněné soub…`) a `+X −Y` se zalomí. Detail má šířku okna minus rail (53), takže ve výchozím
+    okně 1100 je to bez dopadu a projeví se to u okna stáhnutého k podlaze (700). Tuhle cenu platila
+    do #306 jen PR s CI, od #306 všechna — proto je to změřené, ne odhadnuté.
 
   **`Přehled` se po odebrání souhrnu vyrendroval znovu, před a po** — je to jediný způsob, jak se
   pozná, že po odebrání bloku zbyla úplná obrazovka a ne děravá. Kontrolovaly se u toho **prázdné

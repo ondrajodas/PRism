@@ -8,16 +8,16 @@ extension AppStore {
     /// Který tab je vidět. Výchozí drží `PullRequestTab.standard`, ať je odpověď na jednom
     /// místě — čte ji i test, který hlídá, že se to nerozejde.
     ///
-    /// **Volba se zarovná na to, co je v pruhu** (#215): `Kontroly` se u PR bez CI nekreslí,
-    /// takže uložená volba na ně smí ukazovat jen tehdy, když tam ta záložka je. Bez toho by
-    /// v okně nesvítila žádná záložka a plocha tabu by zůstala prázdná.
-    ///
-    /// Uložená volba se přitom **nemaže** — jen se nepoužije. Checky se dotahují s detailem, takže
-    /// jsou chvíli po přepnutí PR ještě neznámé; smazat kvůli tomu volbu by znamenalo, že se
-    /// z tabu `Kontroly` vypadne při každém příchodu na PR, i když se checky za chvíli objeví.
+    /// **Nezarovnává se na data** (#306). Do #306 tu bylo zarovnání na `Policy.tabs(hasChecks:)`,
+    /// protože se `Kontroly` u PR bez CI nekreslily a uložená volba na ně nesměla ukazovat — bez
+    /// zarovnání by v okně nesvítila žádná záložka a plocha tabu by zůstala prázdná. Ta záložka je
+    /// od #306 v pruhu vždycky, takže zarovnání ztratilo předmět; s ním odpadl i jeho vedlejší
+    /// účinek, kvůli kterému se volba schválně **nemazala**: člověk z tabu `Kontroly` vypadával
+    /// při každém příchodu na PR, dokud checky nedorazily (dotahují se s detailem, takže chvíli
+    /// nejsou). Zůstalo z toho pravidlo, ne úklid — volba je odpověď na „kam se koukám“ a ta se
+    /// nesmí měnit tím, co zrovna dorazilo ze sítě.
     func detailTab(for pr: PRIdentifier) -> PullRequestTab {
-        let selected = detailTabs[pr] ?? .standard
-        return Policy.tabs(hasChecks: hasChecks(pr)).contains(selected) ? selected : .standard
+        detailTabs[pr] ?? .standard
     }
 
     func setDetailTab(_ tab: PullRequestTab, for pr: PRIdentifier) {
@@ -25,17 +25,13 @@ extension AppStore {
         detailTabs[pr] = tab == .standard ? nil : tab
     }
 
-    /// Které záložky se u tohohle PR kreslí (#215). Jedno místo pro pruh i pro zarovnání volby
-    /// výš — dvě různá pravidla by znamenala tab, na který se dá přepnout, ale nekreslí se.
-    func detailTabs(of pr: PRIdentifier) -> [PullRequestTab] {
-        Policy.tabs(hasChecks: hasChecks(pr))
-    }
-
-    /// Je u PR aspoň jeden check? **Chybějící klíč i prázdné pole znamenají „ne“** — pruh
-    /// záložek na tom rozdílu nestojí (není čím tab naplnit ani v jednom případě), kdežto
-    /// `AppStore.checks` ty dva stavy drží odděleně kvůli souhrnu v `Přehledu`.
-    func hasChecks(_ pr: PRIdentifier) -> Bool {
-        !(checks[pr] ?? []).isEmpty
+    /// Co je v tabu `Kontroly` k vidění (#306).
+    ///
+    /// Skládá se **ve store, ne ve view**: čtou to dvě místa — odznak v pruhu záložek a plocha
+    /// tabu — a obě mapy, ze kterých se to skládá, drží store. Dvě různá skládání by znamenala
+    /// odznak, který mluví o jiném stavu než plocha pod ním.
+    func checksTabState(for pr: PRIdentifier) -> ChecksTabState {
+        Policy.checksTab(checks: checks[pr], failure: checkFailures[pr])
     }
 
     func detailState(for pr: PRIdentifier) -> DetailState? { detailStates[pr] }
@@ -83,7 +79,16 @@ extension AppStore {
     /// cache jako u diffu.
     func loadDetail(for pullRequest: PullRequestSummary) async {
         let id = pullRequest.id
-        guard !hasCurrentDetail(for: pullRequest) else { return }
+        guard !hasCurrentDetail(for: pullRequest) else {
+            // Detail je z cache, ale o checcích **nemusíme vědět nic** (#306): `loadChecks` běží až
+            // po něm, takže přepnutí PR uprostřed toho volání ho zruší — a zrušení se schválně
+            // nezapisuje. Bez tohohle dotažení by v tabu `Kontroly` po návratu na PR svítilo
+            // `Načítám kontroly…` navždycky, protože detail se už znovu nenačítá. Ptá se jedině
+            // tehdy, když **není ani seznam, ani porucha**: obojí je hotová odpověď a přepisovat ji
+            // při každém příchodu na PR by z checků udělalo polling.
+            if checks[id] == nil, checkFailures[id] == nil { await loadChecks(for: id) }
+            return
+        }
         detailStates[id] = .loading
 
         do {
@@ -92,31 +97,45 @@ extension AppStore {
             // Hlavu si pamatuje i návštěva (#173): datum commitu na poznání nových commitů
             // nestačí, protože po rebase je starší než moje poslední návštěva.
             noteHead(detail.headSha, for: id)
-            // Checky se tahají **s detailem** (#209), ne pollingem přes všechna PR: to je
-            // tatáž N+1 past, kvůli které se netahá ani detail.
-            await loadChecks(for: id)
         } catch is CancellationError {
             // Maže se **jen** rozdělaný stav: mezitím spuštěné načtení už mohlo doběhnout.
             if detailStates[id] == .loading { detailStates[id] = nil }
+            // Odchod z obrazovky, ne porucha — a checky se pak nemají proč tahat.
+            return
         } catch let error as GitHubError {
             detailStates[id] = .failed(error.userDescription)
         } catch {
             detailStates[id] = .failed(error.localizedDescription)
         }
+
+        // Checky se tahají **s detailem** (#209), ne pollingem přes všechna PR: to je tatáž N+1
+        // past, kvůli které se netahá ani detail.
+        //
+        // **I tehdy, když detail spadl** (#306). Do #306 byly uvnitř `do` bloku, protože se tab
+        // `Kontroly` u nenačtených checků vůbec nekreslil — po spadlém detailu tedy nebylo kde
+        // lhát. Teď se kreslí vždycky, takže by v něm nad spadlým detailem svítilo `Načítám
+        // kontroly…` navždycky, a to je text, který tvrdí víc, než data unesou. Volání navíc to
+        // není zdarma, ale `gh pr checks` na `gh pr view` nestojí: jsou to dva různé dotazy a
+        // není důvod, aby se checky nedaly načíst kvůli tomu, že se nepodařila hlavička.
+        await loadChecks(for: id)
     }
 
     /// Dotáhne checky k PR. **Selhání se neschovává do prázdna** (#215).
     ///
     /// Do #215 tu stálo `(try? await gateway.fetchChecks(id: id)) ?? []` s tím, že checky jsou
     /// doplněk k PR, ne důvod položit načtení hlavičky. To první pořád platí — pád se sem
-    /// nepropaguje —, ale prázdno je od #215 **tvrzení**: na něm visí, jestli se nakreslí tab
-    /// `Kontroly`, takže z chyby sítě by tiše vyšlo „tenhle PR nemá CI“. Gateway se přitom
-    /// snaží ten rozdíl udržet (prázdný výstup s nulovým kódem = PR bez checků, nenulový
-    /// s prázdným výstupem = chyba), takže by ho zahodilo právě tohle místo.
+    /// nepropaguje —, ale prázdno je od #215 **tvrzení**: znamená „tenhle PR nemá CI“, takže by
+    /// z chyby sítě tiše vyšlo zrovna ono (do #306 na tom navíc viselo, jestli se tab vůbec
+    /// nakreslí). Gateway se přitom snaží ten rozdíl udržet (prázdný výstup s nulovým kódem = PR
+    /// bez checků, nenulový s prázdným výstupem = chyba), takže by ho zahodilo právě tohle místo.
     ///
     /// Po selhání se **stará sada nechává být**: zastaralý seznam s větou nad ním je pořád
-    /// lepší než zmizelý tab. Zrušení (`.task` při přepnutí PR) se nezapisuje vůbec — to není
-    /// porucha, to je odchod z obrazovky.
+    /// lepší než plocha s chybou místo checků, které se před chvílí načetly. Zrušení (`.task` při
+    /// přepnutí PR) se nezapisuje vůbec — to není porucha, to je odchod z obrazovky.
+    ///
+    /// **Volá se i z tabu** (#306, `Zkusit znovu`): dokud běželo jen z `loadDetail`, nešel selhaný
+    /// pokus zopakovat, protože detail má cache podle `updatedAt` — po chybě sítě tedy tab zůstal
+    /// v poruše až do dalšího commitu.
     func loadChecks(for id: PRIdentifier) async {
         do {
             checks[id] = try await gateway.fetchChecks(id: id)
