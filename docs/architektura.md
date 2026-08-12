@@ -2750,8 +2750,8 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     Není to zapomenutá chyba: hned za ním jde stažení, tedy ta operace, o kterou uživateli jde.
     Povede-li se, není o čem informovat; nepovede-li se, dostane **chybu stažení**, která nese kód
     i výstup `gh` — tedy víc, než by řekla chyba dotazu na velikost.
-  - **Stropy jsou 10 MB a 4 000 řádků, a obojí je změřené** (#292; do té doby 2 MB a 300 řádků).
-    Rozhodly dvě věci, které #214 neměřilo:
+  - **Stropy jsou 10 MB a 6 000 řádků, a obojí je změřené** (#292 a #303; do té doby 2 MB a 300,
+    pak 4 000 řádků). Rozhodly dvě věci, které #214 neměřilo:
 
     | Co | 2 MB | 8,78 MB (největší log na našich repech) |
     |---|---|---|
@@ -2777,15 +2777,23 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Log se ořezává od konce a řekne se, kolik se nevešlo** (`LogTail`) — tiše zkrácený log tvrdí,
     že job začal uprostřed. Ořez je věc **zobrazení, ne úspory stahování**: API vrací celý log
     jedním requestem, takže celý text zůstává pro `Ukázat celý log`.
+
+    **Mez ocasu se proto poměřuje skutečnými logy, ne odhadem** (#303). Devět změřených logů z našich
+    repů (`keboola/job-queue-daemon#858`, `keboola/sandboxes-service#650` a největší, jaký na repech
+    je): 2 / 1 515 / 2 174 / 5 899 / 5 920 / 5 933 / 16 013 / 16 270 / 25 533 řádků. Z toho plynou dvě
+    věci naráz: `Tests` joby sedí v pásmu **5 899–5 933**, takže se se 6 000 ukážou **celé** (se 4 000
+    se ořezávaly), a nad mezí zůstávají **tři** největší, takže `Ukázat celý log` i hlavička „starších
+    N řádků se nevešlo“ mají u nich co dodat. Kdyby mez přelezla i je, sheet a okýnko by ukazovaly
+    totéž — a to je ta chvíle, kdy se mez zvedat nemá.
   - **Konec logu kreslí `LogTailTextView` (`NSTextView`), ne SwiftUI `Text`** (#292) — a je to to
     jediné, co dovoluje ukázat tisíce řádků:
 
     | Řádků konce logu | SwiftUI `Text` se `.fixedSize()` | `NSTextView` |
     |---|---|---|
-    | 300 | 107,85 ms | **2,06 ms** |
-    | 2 000 | 6 210,22 ms | **1,96 ms** |
-    | 4 000 (dnešní `logTailLines`) | — | **2,61 ms** |
-    | 10 000 | 156 432,33 ms | **6,81 ms** |
+    | 300 | 121,75 ms | **2,58 ms** |
+    | 2 000 | 6 392,79 ms | **2,02 ms** |
+    | 6 000 (dnešní `logTailLines`) | 57 554,33 ms | **5,45 ms** |
+    | 10 000 | 202 533,12 ms | **14,34 ms** |
 
     Dvě a půl minuty na deseti tisících řádcích není opomenutí, které by šlo doladit: `Text` musí znát
     velikost celku dopředu (a u řádků o 2 258 znacích je ta velikost 13 930 bodů na šířku), kdežto
@@ -2794,10 +2802,29 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     není co vyjednávat.
 
     Dvě věci, které to view musí dělat a z kódu nejsou zjevné. **Otevírá se na konci logu**
-    (vodorovně na nule): to, kvůli čemu se log otevírá, je na posledních řádcích a se dvěma tisíci
-    řádků je začátek ocasu sto obrazovek daleko; skok na konec dokumentu přitom sám zůstane u konce
-    nejdelšího řádku, tedy uprostřed slova (chyceno vykreslením `NSScrollView`u do PNG). A **text se
-    přepisuje jen při změně** (`Coordinator`), protože přepsání zahodí výběr i polohu scrollu.
+    (vodorovně na nule): to, kvůli čemu se log otevírá, je na posledních řádcích a se šesti tisíci
+    řádků je začátek ocasu dvě stě obrazovek daleko; skok na konec dokumentu přitom sám zůstane
+    u konce nejdelšího řádku, tedy uprostřed slova. A **text se přepisuje jen při změně**
+    (`Coordinator`), protože přepsání zahodí výběr i polohu scrollu.
+
+    **Skok se dělá z `layout()`, ne z `DispatchQueue.main.async` — a do #303 se v aplikaci nedělal
+    vůbec.** `LogTailTextView` vzniká teprve ve chvíli, kdy log dorazí, takže při `updateNSView` mu
+    SwiftUI ještě nedalo výšku: `scrollToEndOfDocument` do nulového `clipView`u dokument nasází
+    (výška vyjde přesně), ale **posun zahodí** a okýnko zůstane na začátku ocasu. Změřeno vedle sebe,
+    obě cesty: s framem předem `origin.y = 71 680`, s framem až po skoku `0`. Proto má okýnko vlastní
+    `LogTailScrollView`, který hlásí rozložení, a `Coordinator` nese **nevyřízenou žádost o skok**.
+
+    Žádost se přitom zahodí **teprve tehdy, když je konec doopravdy vidět**: když se vodorovný
+    scroller objeví až po skoku, viewport se o jeho 13 bodů zmenší a okýnko zůstane o řádek nad
+    koncem. Chyceno plným během testů pod zátěží (samostatně to vycházelo).
+
+    Cena, ať je zapsaná: skok **vynutí sazbu až na konec dokumentu**, což je na šesti tisících řádcích
+    **128 ms** (2 000 řádků 47 ms, 300 řádků 11 ms) — jednorázově, při rozbalení checku, po vteřinách
+    čekání na stažení. Do #303 se neplatila, ale taky se nikam neskočilo.
+
+    **Proč to #292 nechytilo**, ať je zapsané: jeho sonda skládala `NSScrollView` ručně a **rozměr mu
+    dala předem**, tedy měřila cestu, kterou aplikace nejde — tatáž chyba jako u vynucené sazby celého
+    dokumentu, jen o vrstvu vedle.
 
     Vedlejší zisk, který se nehledal: konec logu je **vybíratelný**, takže se z něj kopíruje bez
     otevírání sheetu.
@@ -2810,11 +2837,35 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     regrese; přes obrazovku sheet nejde nikdy. Zamítnuto měřit nejdelší řádek obsahu: scan megabajtů
     na hlavním vlákně při otevření, a prospělo by to jen hunkům kódu.
   - **Výška okýnka se počítá z metriky fontu, kterým se kreslí** (#236, `LogTailTextView.height`):
-    krátký log si vezme jen tolik, kolik má řádků, dlouhý se zastropuje na 320 bodech a scrolluje
-    uvnitř. Rezerva na vodorovný scroller je opsané číslo (13 bodů), protože `NSScroller.scrollerWidth`
-    je vázaná na hlavní vlákno — **drží ji test**, který ji porovnává se systémem, ne odhad. Na
-    `preferredScrollerStyle` se schválně neptáme: mění se připojením myši, a okýnko, kterému se tím
-    mění výška, je horší než pár bodů rezervy.
+    krátký log si vezme jen tolik, kolik má řádků, dlouhý se zastropuje na `CheckDetailView.logMaxHeight`
+    a scrolluje uvnitř. Rezerva na vodorovný scroller je opsané číslo (13 bodů), protože
+    `NSScroller.scrollerWidth` je vázaná na hlavní vlákno — **drží ji test**, který ji porovnává se
+    systémem, ne odhad. Na `preferredScrollerStyle` se schválně neptáme: mění se připojením myši,
+    a okýnko, kterému se tím mění výška, je horší než pár bodů rezervy.
+  - **Strop výšky je 441 bodů, tedy přesně 30 řádků** (#303; do té doby 320 bodů = 21 řádků). Zvednuto
+    na výslovné přání po proklikání, ale **kolik přesně, rozhodlo měření** (`CheckLogRoomProbe`): sonda
+    vyrendruje tab `Kontroly` s rozbaleným spadlým checkem a z hierarchie vyčte, kolik bodů viewportu
+    zbylo **pod** okýnkem. Nad okýnkem je vždycky 173 bodů (hlavička karty, řádek checku, anotace, akce
+    a hlavička „nevešlo se“) a spadlý check stojí v seznamu první, takže je to nejhorší případ:
+
+    | Okno | Viewport tabu | Zbylo při 320 | Zbylo při 441 |
+    |---|---|---|---|
+    | 952 (okno na tomhle stroji) | 786 | 293 b = 10 řádků | **172 b = 6 řádků** |
+    | 810 | 644 | 151 b = 5 řádků | 30 b = 1 řádek |
+    | 700 (`defaultSize`) | 534 | 41 b = 1 řádek | −80 b |
+    | 400 (podlaha `RootView`) | 234 | −259 b | −380 b |
+
+    Rozhodlo první řádek tabulky: na okně, ve kterém se aplikace používá, zbývá **6 řádků seznamu**,
+    takže důvod, kvůli kterému se detail stěhoval do vlastního tabu (#215), platí dál. Cena je zapsaná:
+    ve výchozím okně 700 se seznam odscrolluje (při 320 tam byl jeden řádek) — ale není to ztráta logu,
+    z okýnka je i tam vidět 24 řádků bez dotčení vnějšího scrollu, pořád víc než dřívějších 21.
+    Zamítnuto **525 bodů** (36 řádků: na skutečném okně zbydou 3 řádky, v okně 810 nic — z okýnka by byl
+    celý tab) a **357 bodů** (24 řádků, největší hodnota, u které se okýnko celé vejde i do výchozího
+    okna: +3 řádky nejsou změna, o kterou se prosilo).
+
+    Strop je vždycky **celý počet řádků** (`14N + 21`), protože okýnko se otevírá na konci logu —
+    půlka řádku na spodní hraně by byla zrovna na tom řádku, kvůli kterému se log otevírá. Drží to
+    test, ne komentář.
   - **ANSI se strhává a timestampy se schovávají.** ANSI je v obou změřených logách (116 řádků
     v 8,78MB) a bez toho se v okně objeví `^[[36;1m` uprostřed věty. Timestamp má skoro každý řádek
     (25 528 z 25 534) a zabírá 28 znaků, tedy ukrajuje šířku zrovna tam, kde je potřeba přečíst konec

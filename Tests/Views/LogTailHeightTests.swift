@@ -3,20 +3,22 @@ import Testing
 
 @testable import PRism
 
-/// Výška okýnka s koncem logu (#292).
+/// Výška okýnka s koncem logu (#292, strop zvednutý u #303).
 ///
 /// Počítá se z metriky **toho fontu, kterým se kreslí** (#236) — kdo si říká o velikost, musí ji
 /// měřit na tom, na čem kreslí. Bez zalamování je to přesné, takže se to dá tvrdit: jeden řádek
 /// textu je jeden řádek sazby.
 ///
-/// Co se dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým logem by zbylo 320 bodů
-/// prázdna) a **nezastropovat dlouhý** (dva tisíce řádků naplno odtlačí seznam checků mimo
+/// Co se dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým logem by zbylo 441 bodů
+/// prázdna) a **nezastropovat dlouhý** (šest tisíc řádků naplno odtlačí seznam checků mimo
 /// obrazovku, což je zrovna to, kvůli čemu se detail stěhoval z `Přehledu`).
 @Suite("Výška konce logu")
 struct LogTailHeightTests {
-    private let fontSize: CGFloat = 10.5
-    private let spacing: CGFloat = 2
-    private let limit: CGFloat = 320
+    private let fontSize = CheckDetailView.logFontSize
+    private let spacing = CheckDetailView.logLineSpacing
+    /// **Skutečný strop z aplikace, ne opsané číslo.** Kdyby se zvedl bez rozmyslu, spadne
+    /// `capIsAWholeNumberOfLines` níž — a to je to jediné, co u téhle konstanty jde tvrdit testem.
+    private let limit = CheckDetailView.logMaxHeight
 
     private func height(_ lines: Int) -> CGFloat {
         LogTailTextView.height(forLines: lines, fontSize: fontSize, lineSpacing: spacing, limit: limit)
@@ -58,10 +60,27 @@ struct LogTailHeightTests {
         #expect(height(0) == height(1))
     }
 
-    /// **Tohle je ta mez, na které záleží.** Dva tisíce řádků je od #292 běžný stav, ne krajní.
-    @Test("Dlouhý log se zastropuje", arguments: [300, 2_000, 10_000, 25_000])
+    /// **Tohle je ta mez, na které záleží.** Šest tisíc řádků je od #303 běžný stav, ne krajní.
+    @Test("Dlouhý log se zastropuje", arguments: [300, 2_000, 6_000, 10_000, 25_000])
     func longLogIsCapped(lines: Int) {
         #expect(height(lines) == limit)
+    }
+
+    /// **Strop musí padnout na celý řádek** (#303). Půl řádku na spodní hraně okýnka není jen
+    /// nevzhledné: okýnko se otevírá **na konci logu**, takže by ta půlka byla zrovna na tom řádku,
+    /// kvůli kterému se log otevírá. Kontroluje se to výpočtem, ne opsanou hodnotou — jinak by test
+    /// jen zopakoval konstantu.
+    @Test("Strop je celý počet řádků")
+    func capIsAWholeNumberOfLines() {
+        let manager = NSLayoutManager()
+        let lineHeight = manager.defaultLineHeight(for: LogTailTextView.font(size: fontSize)) + spacing
+        let usable = limit - 2 * LogTailTextView.inset.height - LogTailTextView.horizontalScrollerHeight
+        let lines = (usable / lineHeight).rounded(.down)
+        #expect(
+            abs(usable - lines * lineHeight) < 0.01,
+            "strop \(limit) končí uprostřed řádku — celé řádky jsou na 14N + 21"
+        )
+        #expect(lines == 30, "strop \(limit) má ukázat 30 řádků, ukazuje \(lines)")
     }
 
     /// Výška je **monotónní** a nikdy nepřeteče strop — kdyby se scroller přičítal nad strop,

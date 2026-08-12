@@ -4,27 +4,37 @@ import Testing
 
 @testable import PRism
 
-/// Měření, ne test (#214, rozšířeno u #292) — kolik stojí ukázat log jobu. Nic netvrdí, vypisuje
+/// Měření, ne test (#214, rozšířeno u #292 a #303) — kolik stojí ukázat log jobu. Nic netvrdí, vypisuje
 /// čísla.
 ///
 /// Existuje proto, že stropy na velikost logu mají být **změřené, ne odhadnuté** (viz #275 o ceně
 /// sazby textu). Časy se nehlídají `#expect`em: na jiném stroji vyjdou jinak a byl by z toho test,
 /// který padá bez chyby v kódu.
 ///
-/// **Jak to pustit.** Suita je vypnutá, dokud není `PRISM_MEASURE` — a pozor, `xcodebuild` tu
-/// proměnnou do testovacího procesu **nepředá** (změřeno u #292: ani `PRISM_MEASURE=1 xcodebuild`,
-/// ani `TEST_RUNNER_PRISM_MEASURE=1` k `ProcessInfo` nedorazí, protože `TestAction` má
-/// `shouldUseLaunchSchemeArgsEnv`). Pouští se tedy z Xcode, nebo se ta jedna podmínka na dobu
-/// měření dočasně smaže. Není to zbytečná ochrana: měření SwiftUI `Text`u na deseti tisících řádcích
-/// trvá dvě a půl minuty **na hlavním vlákně**, takže v běžném běhu vyhladoví celou sadu.
+/// **Jak to pustit.** Suita je vypnutá, dokud není `PRISM_MEASURE`, a předává se s prefixem
+/// `TEST_RUNNER_` — jen to `xcodebuild` do testovacího procesu pustí:
+///
+/// ```bash
+/// TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_LOG_FILE=/cesta/job.log \
+///     xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test \
+///     -only-testing:PRismTests/CheckLogPerformanceMeasurement > /tmp/mereni.log 2>&1
+/// ```
+///
+/// **Opraveno u #303**: do té doby tu stálo, že to `xcodebuild` nepředá ani s prefixem a že se musí
+/// pouštět z Xcode. Není to pravda — vyzkoušeno, `TEST_RUNNER_PRISM_MEASURE=1` k `ProcessInfo`
+/// dorazí (a stejně to má popsané `docs/testovani.md` u sondy sazby). Vypnutá suita přitom nevypadá
+/// jinak než proběhlá, takže ta domněnka stála za to, že se měření po #292 nepustilo znovu.
+///
+/// Ochrana sama zbytečná není: měření SwiftUI `Text`u na deseti tisících řádcích trvá dvě a půl
+/// minuty **na hlavním vlákně**, takže v běžném běhu vyhladoví celou sadu.
 ///
 /// **Log je syntetický, ale podle skutečného** — a když je po ruce ten skutečný, vezme se on:
-/// `PRISM_LOG_FILE` (opět: cesta se dá jen z Xcode). Tvar je změřený na `keboola/job-queue-daemon`,
+/// `PRISM_LOG_FILE`. Tvar je změřený na `keboola/job-queue-daemon`,
 /// job `93844012547` — největší log na našich repech: 8,78 MB, 25 533 řádků, nejdelší řádek 2 258
 /// znaků, 272 řádků nad tisíc znaků, timestamp na 25 528 z nich. Osmimegový soubor se do repa
 /// nepřikládá (fixtures jsou skutečné výstupy, ale ne takhle velké).
 @Suite(
-    "Měření ceny logu (#214, #292)",
+    "Měření ceny logu (#214, #292, #303)",
     .enabled(if: ProcessInfo.processInfo.environment["PRISM_MEASURE"] != nil),
     .serialized
 )
@@ -81,16 +91,19 @@ struct CheckLogPerformanceMeasurement {
     ///
     /// | Řádků | SwiftUI `Text` | `NSTextView` |
     /// |---|---|---|
-    /// | 300 | 108 ms | 0,23 ms |
-    /// | 2 000 | 6 019 ms | 1,12 ms |
-    /// | 10 000 | 151 284 ms | 4,06 ms |
-    /// | 25 000 | — | 5,50 ms |
+    /// | 300 | 123,77 ms | 2,58 ms |
+    /// | 2 000 | 6 392,79 ms | 2,02 ms |
+    /// | 6 000 (dnešní mez) | 57 554,33 ms | **5,45 ms** |
+    /// | 10 000 | 202 533,12 ms | 14,34 ms |
     ///
-    /// Proto konec logu kreslí `LogTailTextView` a `Policy.logTailLines` může být 2 000.
+    /// Proto konec logu kreslí `LogTailTextView` a `Policy.logTailLines` může být 6 000.
+    ///
+    /// **`Policy.logTailLines` je v tom výčtu jmenovitě**, ne opsané číslo: cena dnešní mezi je to
+    /// jediné, co se z tohohle měření doopravdy používá při rozhodování, jestli se dá zvednout.
     @Test("Cena sazby konce logu")
     func tailRenderingCost() {
         let text = realLog() ?? log(lines: 25_000)
-        for lines in [300, 2_000, 10_000] {
+        for lines in [300, 2_000, Policy.logTailLines, 10_000] {
             let tail = Policy.logTail(text, lines: lines)
             let swiftUI = ms {
                 let view = Text(verbatim: tail.text)
@@ -115,8 +128,8 @@ struct CheckLogPerformanceMeasurement {
     @Test("Cena otevření a projíždění celého logu")
     func scrollingCost() {
         let text = realLog() ?? log(lines: 25_000)
-        let two = Policy.logTail(text, lines: 6_000).text
-        for (label, content) in [("2 MB", two), ("celý", text)] {
+        let tail = Policy.logTail(text, lines: Policy.logTailLines).text
+        for (label, content) in [("ocas \(Policy.logTailLines) řádků", tail), ("celý", text)] {
             let (scroll, textView) = tailView()
             let attributed = SelectableCodeView.attributed(content, path: "job.log", colorScheme: .dark)
             let open = ms {
@@ -144,6 +157,35 @@ struct CheckLogPerformanceMeasurement {
         }
     }
 
+    // MARK: - Skok na konec logu
+
+    /// **Od #303 je skok na konec skutečná cena, ne mrtvý kód.** Do té doby se v aplikaci nedělal
+    /// vůbec (skákalo se do okýnka, které ještě nemělo výšku, a posun se zahodil), takže se za něj
+    /// neplatilo — a taky se nikam neskočilo. Teď se platí při každém rozbalení checku, a je proto
+    /// potřeba vědět kolik: `scrollToEndOfDocument` **vynutí sazbu až na konec dokumentu**, tedy tu
+    /// jedinou drahou věc, kterou aplikace jinak nedělá.
+    @Test("Cena skoku na konec logu")
+    func jumpToEndCost() {
+        let text = realLog() ?? log(lines: 25_000)
+        // **Jen meze, které aplikace doopravdy má** (300 do #292, 2 000 chvíli u #292, dnešních
+        // 6 000). Celý log v tom výčtu být nemá: na 25 000 řádcích s dlouhými řádky vynucená sazba
+        // testovacího hosta **položila** (změřeno u #303, 595 ms a pak pád), a hlavně je to cesta,
+        // kterou se nikdy nejde — ocas je vždycky nejvýš `Policy.logTailLines`.
+        for lines in [300, 2_000, Policy.logTailLines] {
+            let tail = Policy.logTail(text, lines: lines)
+            let scroll = populatedTailView(tail.text)
+            guard let textView = scroll.documentView as? NSTextView else { continue }
+            let jump = ms {
+                textView.scrollToEndOfDocument(nil)
+                scroll.reflectScrolledClipView(scroll.contentView)
+            }
+            print("""
+                MĚŘENÍ skok na konec, \(lines) řádků (\(tail.text.utf8.count) B): \(jump) ms, \
+                origin.y \(String(format: "%.0f", scroll.contentView.bounds.origin.y))
+                """)
+        }
+    }
+
     // MARK: - Obarvování
 
     /// Proč log nejde přes obarvování po řádcích: naměřeno **38 ms proti 2,2 ms** na dvoumegovém
@@ -163,24 +205,16 @@ struct CheckLogPerformanceMeasurement {
 
     // MARK: - Pomůcky
 
-    /// View nastavené stejně jako `LogTailTextView`: bez zalamování, dvouosý scroll.
+    /// **Okýnko z aplikace, ne jeho kopie** (#303): staví ho `LogTailTextView.makeScrollView()`, tedy
+    /// tatáž továrnička, kterou jde `makeNSView`. Do #303 tu stála ruční kopie s komentářem
+    /// „nastavené stejně jako `LogTailTextView`“ — druhé místo, kde se to dá nastavit jinak, a měření
+    /// by pak popisovalo view, které aplikace nekreslí. Je to tentýž vzor, jakým #214 naměřilo strop
+    /// o řád vedle: **měřit se musí ta cesta, kterou kód doopravdy jde.**
     private func tailView() -> (NSScrollView, NSTextView) {
-        let scroll = NSTextView.scrollableTextView()
-        scroll.frame = NSRect(x: 0, y: 0, width: 900, height: 320)
-        scroll.hasVerticalScroller = true
-        scroll.hasHorizontalScroller = true
+        let scroll = LogTailTextView.makeScrollView()
+        // Rozměry z aplikace, ne opsaná čísla: měří se to, na čem se kreslí.
+        scroll.frame = NSRect(x: 0, y: 0, width: 900, height: CheckDetailView.logMaxHeight)
         guard let textView = scroll.documentView as? NSTextView else { return (scroll, NSTextView()) }
-        textView.isEditable = false
-        textView.isHorizontallyResizable = true
-        textView.textContainer?.widthTracksTextView = false
-        textView.textContainer?.size = NSSize(
-            width: CGFloat.greatestFiniteMagnitude,
-            height: CGFloat.greatestFiniteMagnitude
-        )
-        textView.maxSize = NSSize(
-            width: CGFloat.greatestFiniteMagnitude,
-            height: CGFloat.greatestFiniteMagnitude
-        )
         return (scroll, textView)
     }
 

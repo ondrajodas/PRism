@@ -214,9 +214,13 @@ struct CheckLogTextTests {
     func limitsAreWhereMeasurementLeftThem() {
         #expect(Policy.logSizeLimit == 10 * 1024 * 1024)
         #expect(Policy.logAvailability(bytes: Policy.logSizeLimit + 1) != .fetchable)
-        // 4 000 je **volba uživatele**, kterou měření unese (2,61 ms proti 1,14 ms u 2 000) —
-        // ne odhad, viz důvody u té konstanty.
-        #expect(Policy.logTailLines == 4_000)
+        // 6 000 je **volba uživatele**, kterou měření unese (5,45 ms sazby proti 2,02 ms u 2 000
+        // v témže běhu) — ne odhad, viz důvody u té konstanty.
+        #expect(Policy.logTailLines == 6_000)
+        // A hlavně: **`Ukázat celý log` musí zůstat k něčemu** (#303). Tři z devíti změřených logů
+        // z našich repů zůstávají nad mezí (16 013 / 16 270 / 25 533 řádků), takže se u nich pořád
+        // ukáže, kolik se nevešlo. Kdyby mez přelezla i je, sheet a okýnko by ukazovaly totéž.
+        #expect(Policy.logTailLines < 16_013, "nad mezí musí zůstat i největší skutečné logy")
     }
 
     // MARK: - Věta, dokud se stahuje

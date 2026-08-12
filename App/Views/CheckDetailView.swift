@@ -210,9 +210,39 @@ struct CheckDetailView: View {
     ///
     /// Drží se pohromadě, protože **výška se z prvních dvou počítá** (#236): kdo si říká o velikost,
     /// musí ji měřit na tom, na čem kreslí.
-    static let logFontSize: CGFloat = 10.5
-    static let logLineSpacing: CGFloat = 2
-    static let logMaxHeight: CGFloat = 320
+    /// `nonisolated` schválně: výška se počítá i mimo hlavní vlákno (`LogTailTextView.height`) a
+    /// testy nad ní jsou nonisolated. Jsou to čísla, ne stav.
+    nonisolated static let logFontSize: CGFloat = 10.5
+    nonisolated static let logLineSpacing: CGFloat = 2
+
+    /// Strop na výšku okýnka: **441 bodů, tedy přesně 30 řádků** (`30 × 14 + 2 × 4 + 13`).
+    ///
+    /// **Zvednuto z 320 bodů (21 řádků) u #303**, na výslovné přání po proklikání — a kolik přesně,
+    /// rozhodlo měření (`CheckLogRoomProbe`), ne odhad. Číslo padne na **celý řádek**, ne na půlku:
+    /// hodnoty jsou `14N + 21`, takže se okýnko nezavírá uprostřed písmen.
+    ///
+    /// **Co se měřilo: kolik zbude na seznam checků.** Původní 320 má zapsaný důvod — 300 řádků
+    /// nasázených naplno odtlačilo zbytek seznamu mimo obrazovku, tedy zrovna to, kvůli čemu se
+    /// detail checku stěhoval z `Přehledu` do vlastního tabu (#215). Rozbalený spadlý check stojí
+    /// v seznamu první, takže je to nejhorší případ; nad okýnkem je vždycky 173 bodů (hlavička
+    /// karty, řádek checku, anotace, akce a hlavička „nevešlo se“):
+    ///
+    /// | Okno | Viewport tabu | Zbylo při 320 | Zbylo při 441 |
+    /// |---|---|---|---|
+    /// | 952 (okno na tomhle stroji) | 786 | 293 b = 10 řádků | **172 b = 6 řádků** |
+    /// | 810 | 644 | 151 b = 5 řádků | 30 b = 1 řádek |
+    /// | 700 (`defaultSize`) | 534 | 41 b = 1 řádek | −80 b |
+    /// | 400 (podlaha `RootView`) | 234 | −259 b | −380 b |
+    ///
+    /// **Cena je zapsaná**: v okně od ~810 bodů výš seznam pod okýnkem pořád je, ve výchozím 700 se
+    /// odscrolluje (a při 320 tam byl jeden řádek). Není to ale ztráta logu — z okýnka je i tam
+    /// vidět 24 řádků bez dotčení vnějšího scrollu, tedy pořád víc než dnešních 21.
+    ///
+    /// **Zamítnuto 525 bodů (36 řádků)**: na skutečném okně zbydou 3 řádky seznamu a v okně 810 už
+    /// nezbude nic — z okýnka by byl celý tab. A **zamítnuto 357 bodů (24 řádků)**, tedy největší
+    /// hodnota, u které se okýnko celé vejde i do výchozího okna: +3 řádky nejsou změna, o kterou
+    /// se prosilo.
+    nonisolated static let logMaxHeight: CGFloat = 441
 
     /// Konec logu (`.logtail`): mono, bez zalamování, s vodorovným scrollem.
     ///
@@ -232,10 +262,11 @@ struct CheckDetailView: View {
                     .font(.system(size: Self.logFontSize, design: .monospaced))
                     .foregroundStyle(Palette.ink3)
             }
-            // **Výška je zastropovaná a scrolluje se uvnitř.** Dva tisíce řádků nasazených naplno by
+            // **Výška je zastropovaná a scrolluje se uvnitř.** Šest tisíc řádků nasazených naplno by
             // odtlačily zbytek seznamu checků mimo obrazovku — a to je zrovna to, kvůli čemu se
             // detail stěhoval z `Přehledu` (#215). Návrh tuhle mez nekreslí, protože v něm je log
-            // ukázaný na osmi řádcích; s `Policy.logTailLines` řádky je potřeba.
+            // ukázaný na osmi řádcích; s `Policy.logTailLines` řádky je potřeba. Kolik ten strop je
+            // a co po něm zbývá vidět ze seznamu, je u `logMaxHeight` — i s měřením.
             //
             // Krátký log si přitom vezme jen tolik, kolik má řádků, takže pod třířádkovým logem
             // nezbyde prázdné okýnko.
