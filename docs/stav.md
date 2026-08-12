@@ -1359,5 +1359,43 @@ mediánový řádek (333 znaků proti mediánu 327), a zvedl se z původně odha
 obrazovce, na které se aplikace používá (3 440 bodů) — tam 1 600 nechávalo polovinu scrollování navíc.
 Je to tentýž vzor jako u vynucené sazby: **měřit se musí ta konfigurace, ve které se to používá.**
 
-Testů je o 64 víc (2385 po zvednutí mainu), z toho **30 na tuhle opravu** ve dvou nových suitách.Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
+Testů je o 64 víc (2385 po zvednutí mainu), z toho **30 na tuhle opravu** ve dvou nových suitách.
+
+### CRLF past mimo #214 — dělení řádků má jedno místo (#295)
+
+`#292` opravil `CRLF` tam, kde se to projevilo (hlavičky `gh api -i`), a **tatáž past ležela dál na
+pěti dalších místech**. `"\r\n"` je ve Swiftu jeden `Character`, takže `split(separator: "\n")` na
+textu s `CRLF` **nerozdělí vůbec** — z celého vstupu zbyde jediný „řádek“.
+
+**Není to teorie.** Fixture, na které to teď stojí, je skutečné `gh pr diff` na veřejný
+`microsoft/terminal#20524`: `CRLF` je tam na **70 řádcích ze 76**. Do #295 by se z takového diffu
+stal jeden soubor s jedním nesmyslným kontextovým řádkem místo dvou hunků — a totéž se dělo s obsahem
+souboru při rozbalování kontextu, s kódem v sheetu (obarvil se jako jeden řádek a šel do
+`SyntaxRunCache` jako jeden klíč) a s popiskem `Kopírovat rozsah`, který nad rozsahem o dvaceti
+řádcích hlásil `1 řádek`.
+
+**Sešla se u toho i druhá past.** `components(separatedBy: .newlines)` dělí po unicode skalárech,
+takže `CRLF` jsou pro ni **dva** oddělovače a mezi ně vloží prázdný řádek. V markdownu je prázdný
+řádek konec odstavce, a těla komentářů z GitHubu `CRLF` mají — takže se každý řádek cizího komentáře
+sázel jako vlastní odstavec. Dvě různé pasti, jeden důvod: dělit řádky se dá čtyřmi způsoby a tři
+z nich jsou špatné. Proto je to od #295 na **jednom místě** (`TextLines` v `App/Support/`), včetně
+toho, co už opravené bylo — výčet nemá výjimky.
+
+**Řádek u nás končí `LF`, `CRLF` nebo samotným `CR`, ne `Character.isNewline`.** `isNewline` je
+pravda i pro `U+2028` a spol., což jsou pro `git` znaky **obsahu**: rozdělit se na nich znamená
+vyrobit řádek, který v souboru není, a posunout tím čísla všech řádků pod ním. `String.singleLine` si
+`isNewline` naopak schválně nechává — sráží cizí text do jednoho popisku a `U+2028` popisek zalomí.
+Dvě různé otázky, dvě odpovědi, a na obě je test.
+
+**Vidět není nic** a je to tak správně: na `LF` vstupech se nezměnilo nic (přišpendleno testem, že
+tentýž diff se `CRLF` a s `LF` dá **stejný model**) a `CRLF` PR v naší frontě není. Zapsaná cena
+rozhodnutí: kopie do schránky nese `LF`, i když soubor měl `CRLF`, protože `CR` v textu řádku by
+znamenal neviditelný znak v klíčích `SyntaxRunCache`, ve word-level rozdílu i v sazbě.
+
+Testů je o 26 víc (2449), ve třech nových suitách. **Regrese ověřená vložením regrese dvakrát**:
+vrácené `split(separator: "\n")` položí 41 testů v 8 suitách (mezi nimi i obě sady z #292, což
+dokládá, že jejich převedení nic neztratilo), a rozšíření na `isNewline` položí přesně ty dva testy
+o unicode oddělovačích.
+
+Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

@@ -4,4 +4,7 @@
 # a fixture s hlavičkami `gh api -i` by tím přestala testovat to, kvůli čemu vznikla: že se
 # `"\r\n"` v Swiftu chová jako **jeden `Character`**, takže `split(separator: "\n")` na něm
 # nerozdělí (#292). Test by zezelenal na normalizovaném souboru a chyba by se vrátila.
+# Vyjmenované po jedné, ne vzorem: `-text` na celé `Tests/Fixtures/` by vypnulo normalizaci
+# i tam, kde na zakončení nezáleží — a tím by přestalo být vidět, které fixtures na něm stojí.
 Tests/Fixtures/gh/job-log-head.txt -text
+Tests/Fixtures/gh/pr-diff-crlf.diff -text

@@ -249,6 +249,39 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   vstupy pokrývají, co se z reálného PR nedá sehnat: odebraný řádek začínající `---`,
   hunk bez počtu řádků, `\ No newline at end of file`, prázdný kontextový řádek, změna
   jen práv a nesmysl mezi soubory.
+
+  **Diff s `CRLF` má vlastní fixture, a je to skutečné `gh pr diff`** (#295):
+  `gh/pr-diff-crlf.diff` je veřejný `microsoft/terminal#20524`, kde je `CRLF` na **70 řádcích ze
+  76** — struktura (`diff --git`, `---`, `+++`, `@@`) má `LF`, obsah `CRLF`, takže tatáž fixture
+  ověřuje i míchaná zakončení v jednom textu. Do #295 by se z celého toho diffu stal **jeden**
+  řádek. Fixture si test **kontroluje** (`text.contains("\r\n")`) a `.gitattributes` jí drží
+  `-text`, jinak by ji `core.autocrlf=input` při commitu normalizoval a test by zezelenal nad
+  vrácenou chybou — tatáž pojistka jako u `gh/job-log-head.txt`.
+
+  Nejcennější tvrzení té sady je **„tentýž diff se `CRLF` a s `LF` dá stejný model“**: je to
+  zároveň odpověď na „nezměnilo se něco na `LF` vstupech?“, protože z rovnosti modelů plyne i to,
+  že texty řádků — a s nimi klíče do `SyntaxRunCache` (#153, #224) a vstup do word-level
+  rozdílu — jsou stejné. Vedle toho výčtem: počty řádků obou hunků, čísla řádků, nadpis sekce za
+  druhým `@@` a že **v textu řádku `CR` nezůstal**.
+- **`TextLines` (#295)** — vyčerpávající výčet nad jediným místem, kde se rozhoduje, co je řádek.
+  `LF`, `CRLF` i samotné `CR`, míchaná zakončení, prázdné řádky (`all` / `content` / `nonEmpty`),
+  prázdný vstup, `Substring` místo `String` — a hlavně **dva testy, které tvrdí, že se něco
+  NEstane**: že `U+2028`, `U+2029`, `NEL`, `VT` a `FF` řádek **nedělí** (pro `git` je to obsah,
+  takže rozdělit se na nich znamená posunout čísla všech řádků pod tím), a že `String.singleLine`
+  je přesto **srazí** — ta dvě pravidla se schválně liší a bez testu by je někdo srovnal.
+
+  Volající mají svoje: `FileExpansionTests` (obsah souboru s `CRLF`, `CRLF` = `LF`, koncové
+  zakončení nedělá řádek navíc), `SelectableCodeTextTests` (text v sheetu se sází po řádcích,
+  `CRLF` = `LF`, a že **bez známého jazyka se text nedělí vůbec** — tou cestou chodí log),
+  `CopyPolicyTests` (počet v popisku `Kopírovat rozsah` nad souborem s `CRLF` a že do schránky jde
+  text bez `CR`) a `MarkdownParserTests` (`CRLF` dá tytéž bloky jako `LF` — do #295 dělalo
+  `components(separatedBy: .newlines)` z každého řádku cizího komentáře vlastní odstavec).
+
+  **Regrese ověřená vložením regrese, dvakrát.** Vrácené `split(separator: "\n")` v `TextLines`
+  položí **41 testů v 8 suitách** — a mezi nimi i `GhResponseHeadersTests` (14 tvrzení)
+  a `Příprava logu checku` (5), tedy sady z #292; tím je zároveň doložené, že jejich převedení na
+  `TextLines` neztratilo, co hlídaly. Druhá regrese: rozšíření `isLineTerminator` na `isNewline`
+  položí přesně ty dva testy o unicode oddělovačích, a nic jiného.
 - **`DiffRow`** — skok z nálezu: na změněný řádek, na soubor u nálezu bez čísla i mimo
   hunky, `nil` u souboru mimo diff, a přejmenovaný soubor nalezený pod starou cestou.
   Rozbalení kontextu má vlastní sadu: kde skryté úseky jsou (nad prvním hunkem, mezi
@@ -759,6 +792,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   Pozor na dvě pasti: `PRISM_MEASURE=1` **před** `xcodebuild` nestačí (do testovacího procesu jde
   jen to, co má prefix `TEST_RUNNER_`), a **tabulka vyjde v renderu prázdná** — je ve vodorovném
   `ScrollView`, který se offscreen nevykreslí. Není to chyba sazby, jen mez sondy.
+
+  **Od #295 má sonda i vzorek s `CRLF`** — skutečné tělo komentáře z `cli/cli`, ve kterém je jedno
+  `CRLF` uvnitř odstavce a `CRLF CRLF` mezi odstavci. Je to jediný způsob, jak tu opravu **vidět**:
+  do #295 vyšly tři odstavce se stejnými mezerami, od #295 jsou to dva a to zalomení uvnitř prvního
+  zůstalo zalomením. Rozdíl se dá reprodukovat bez sahání do parseru — stačí do sondy přidat druhý
+  vzorek s `\r\n` nahrazeným `\n\n`, což je přesně to, co `components(separatedBy: .newlines)`
+  vyráběla.
 - **`AppStore` — taby** — výchozí `Přehled` (proti `PullRequestTab.standard`, ať se to nerozejde),
   volba per PR, přepnutí zpátky mažící klíč a úklid s PR, které zmizelo ze seznamu.
 - **`Policy` — hledání v paletě (#184)** — vyčerpávající výčet nad hotovým katalogem, bez kreslení.

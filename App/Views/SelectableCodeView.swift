@@ -69,9 +69,12 @@ struct SelectableCodeView: NSViewRepresentable {
 
         let result = NSMutableAttributedString()
 
-        // `omittingEmptySubsequences: false`, ať prázdné řádky nezmizí — v kódu drží strukturu
-        // a bez nich by se vložený text rozešel s originálem.
-        for (index, line) in code.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+        // `TextLines.all`, ať prázdné řádky nezmizí — v kódu drží strukturu a bez nich by se
+        // vložený text rozešel s originálem. A dělí se **na jakémkoli zakončení** (#295): text
+        // s `CRLF` by přes `split(separator: "\n")` zůstal jeden, takže by se obarvoval jako jediný
+        // řádek — a jeho celý objem by se uložil jako jeden klíč do `SyntaxRunCache`, který je
+        // klíčovaný textem řádku (#224).
+        for (index, line) in TextLines.all(code).enumerated() {
             if index > 0 {
                 result.append(NSAttributedString(string: "\n", attributes: [.font: font]))
             }

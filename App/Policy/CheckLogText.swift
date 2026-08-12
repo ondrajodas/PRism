@@ -100,10 +100,10 @@ extension Policy {
                 if iterator < text.endIndex { iterator = text.index(after: iterator) }
             } else if text[iterator] == "]" {
                 // OSC končí `BEL` nebo `ESC \`; **nikdy se nepřežene za konec řádku**, aby
-                // rozbitá sekvence nesnědla zbytek logu. Konec řádku je `isNewline`, ne `"\n"`:
-                // v logu s `CRLF` je zlom jeden `Character` `"\r\n"`, který se `"\n"` nerovná —
-                // takže by ta pojistka nezabrala právě tam, kde je potřeba (#292).
-                while iterator < text.endIndex, text[iterator] != "\u{7}", !text[iterator].isNewline {
+                // rozbitá sekvence nesnědla zbytek logu. Konec řádku je `isLineTerminator`, ne
+                // `"\n"`: v logu s `CRLF` je zlom jeden `Character` `"\r\n"`, který se `"\n"`
+                // nerovná — takže by ta pojistka nezabrala právě tam, kde je potřeba (#292).
+                while iterator < text.endIndex, text[iterator] != "\u{7}", !text[iterator].isLineTerminator {
                     iterator = text.index(after: iterator)
                 }
                 if iterator < text.endIndex, text[iterator] == "\u{7}" {
@@ -121,8 +121,12 @@ extension Policy {
     /// celý log, věta „nevešlo se“ by mlčela a v okně by z toho byla jedna nekonečná řádka. Je to
     /// tatáž past, na které u #292 skončil rozbor hlaviček `gh -i`; v obou změřených logách z našich
     /// repů `CR` sice není, ale zakončení řádků si vybírá runner, ne my.
+    ///
+    /// **Samotné dělení je od #295 v `TextLines`** a tady zůstává jen jméno pro volající. Do té doby
+    /// tu bylo `whereSeparator: \.isNewline`, tedy druhé místo, kde se rozhodovalo, co je řádek —
+    /// a `isNewline` je navíc širší, než co runner vyrábí (viz `Character.isLineTerminator`).
     static func logLines(of text: String) -> [Substring] {
-        text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        TextLines.all(text)
     }
 
     /// Sundá timestamp ze začátku řádku.

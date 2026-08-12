@@ -59,7 +59,12 @@ enum MarkdownParser {
             closeTable()
         }
 
-        var lines = text.components(separatedBy: .newlines)[...]
+        // **Dělí `TextLines`, ne `components(separatedBy: .newlines)`** (#295). Ta pracuje po
+        // skalárech, takže `CRLF` jsou pro ni **dva** oddělovače a mezi ně vloží prázdný řádek —
+        // a prázdný řádek je v markdownu konec odstavce. Těla komentářů z GitHubu `CRLF` mají
+        // (je v třech fixtures konverzací), takže tohle nebyla teorie: každý řádek cizího
+        // komentáře se sázel jako vlastní odstavec, tedy s mezerou pod sebou.
+        var lines = TextLines.all(text).map(String.init)[...]
         while let line = lines.first {
             lines = lines.dropFirst()
             // Uvnitř fence se **nic** neinterpretuje, jinak by `# komentář` v kódu vyšel jako

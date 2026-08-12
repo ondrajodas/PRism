@@ -145,6 +145,92 @@ struct DiffParserTests {
         #expect(diff.deletions == 2)
     }
 
+    // MARK: - Diff s CRLF (#295)
+
+    /// **Skutečný `gh pr diff` na veřejný `microsoft/terminal#20524`**, kde je `CRLF` na 70 řádcích
+    /// ze 76 — a je to schválně tenhle tvar, ne vymyšlený literál. Přesně na tom u #292 stálo, že
+    /// test svítil zeleně nad vypnutou funkcí: fixture napsaná jako Swiftový víceřádkový literál
+    /// nese `LF`, tedy popisuje formát, který `gh` nevyrábí.
+    ///
+    /// Do #295 by se z celého tohohle diffu stal **jeden** řádek: `"\r\n"` je ve Swiftu jeden
+    /// `Character`, takže `split(separator: "\n")` na něm nerozdělí. V okně by z toho byl jeden
+    /// soubor s jedním nekonečným kontextovým řádkem místo dvou hunků.
+    @Test("Diff s CRLF se rozparsuje na řádky, ne na jediný řádek")
+    func parsesDiffWithCRLF() throws {
+        let text = try Fixture.text("gh/pr-diff-crlf.diff")
+        // Kontrola samotné fixture: kdyby v ní `CR` nebyl, test by zezelenal i s tou chybou,
+        // kvůli které vznikl — tatáž pojistka jako u `gh/job-log-head.txt`.
+        #expect(text.contains("\r\n"), "fixture přišla o CRLF — viz .gitattributes")
+
+        let diff = DiffParser.parse(text)
+
+        #expect(diff.unrecognizedLines == 0)
+        #expect(diff.files.count == 1)
+        let file = try #require(diff.files.first)
+        #expect(file.displayPath == "src/cascadia/TerminalApp/AppCommandlineArgs.cpp")
+        #expect(file.change == .modified)
+        #expect(file.hunks.count == 2)
+        #expect(file.hunks.map(\.lines.count) == [55, 15])
+        #expect(diff.additions == 50)
+        #expect(diff.deletions == 8)
+    }
+
+    /// Rozhodnutí #295, přišpendlené: `CR` je **součást zakončení řádku, ne obsahu**. Kdyby zůstal
+    /// v textu, nesly by ho klíče do `SyntaxRunCache` (#153, #224), word-level rozdíl i sazba —
+    /// a v sazbě by z něj byl prázdný řádek pod každým řádkem kódu. Cena je zapsaná
+    /// u `Policy.code(of:)`: úryvek do schránky nese `LF`.
+    @Test("Text řádku z CRLF diffu nenese CR")
+    func stripsCarriageReturnFromLineText() throws {
+        let diff = DiffParser.parse(try Fixture.text("gh/pr-diff-crlf.diff"))
+        let lines = try #require(diff.files.first?.hunks.first?.lines)
+
+        #expect(lines.allSatisfy { !$0.text.unicodeScalars.contains("\r") })
+        #expect(lines.first?.text == "using namespace winrt::Microsoft::Terminal::Settings::Model;")
+        #expect(lines.first?.kind == .context)
+    }
+
+    /// Hunk s `CRLF` musí čísla řádků přidělit stejně jako každý jiný — a právě to by se rozbilo
+    /// tiše: kdyby se řádky nerozdělily, hunk by měl jeden řádek a čísla by nikam neukazovala.
+    @Test("Čísla řádků v CRLF hunku jdou po sobě")
+    func numbersLinesInCRLFHunk() throws {
+        let diff = DiffParser.parse(try Fixture.text("gh/pr-diff-crlf.diff"))
+        let hunk = try #require(diff.files.first?.hunks.first)
+
+        #expect(hunk.oldStart == 9)
+        #expect(hunk.oldCount == 6)
+        #expect(hunk.newStart == 9)
+        #expect(hunk.newCount == 55)
+        #expect(hunk.lines.compactMap(\.oldNumber) == Array(9...14))
+        #expect(hunk.lines.compactMap(\.newNumber) == Array(9...63))
+    }
+
+    /// Hlavička hunku má `LF`, jeho obsah `CRLF` — takže tenhle diff **zároveň** ověřuje, že
+    /// míchaná zakončení v jednom textu parser nerozhodí. Nadpis sekce za druhým `@@` navíc
+    /// dokládá, že se `CR` nepřilepil na konec nadpisu.
+    @Test("Míchaná zakončení v jednom diffu: hlavička LF, obsah CRLF")
+    func readsMixedTerminators() throws {
+        let diff = DiffParser.parse(try Fixture.text("gh/pr-diff-crlf.diff"))
+        let second = try #require(diff.files.first?.hunks.last)
+
+        #expect(second.heading == "void AppCommandlineArgs::_buildSaveSnippetParser()")
+        #expect(second.oldStart == 572)
+        #expect(second.newStart == 621)
+        #expect(second.lines.last?.text == "                args.Commandline(winrt::to_hstring(cmdlineBuffer.str()));")
+    }
+
+    /// **Tenhle test je odpověď na „nezměnilo se něco na `LF` vstupech?“** Tentýž diff se `CRLF`
+    /// a s `LF` musí dát **bit za bit stejný model** — tedy stejné texty řádků, a proto i stejné
+    /// klíče do `SyntaxRunCache` (#153, #224) a stejný vstup do word-level rozdílu. Kdyby se
+    /// zakončení dostalo do textu řádku, tahle rovnost padne.
+    @Test("Diff s CRLF dá stejný model jako tentýž diff s LF")
+    func parsesCRLFSameAsLF() throws {
+        let crlf = try Fixture.text("gh/pr-diff-crlf.diff")
+        let lf = crlf.replacingOccurrences(of: "\r\n", with: "\n")
+
+        #expect(lf != crlf, "předpoklad testu: fixture má CRLF")
+        #expect(DiffParser.parse(crlf) == DiffParser.parse(lf))
+    }
+
     // MARK: - Rozbité a okrajové vstupy
 
     @Test("Prázdný vstup není chyba ani ztráta")
