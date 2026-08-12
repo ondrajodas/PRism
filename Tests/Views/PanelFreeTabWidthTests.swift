@@ -160,6 +160,9 @@ struct PanelFreeTabWidthTests {
     }
 
     private static var findingsTab: FindingsTabView {
+        // Jedno pole na všechna tři použití: `findings` je computed, takže dva přístupy dají dvě
+        // různé instance a odmítnutí by se klíčovalo proti jiné z nich.
+        let findings = Self.findings
         let record = makeRecord(runs: [makeStoredRun(findings: findings.map(\.reported))])
         return FindingsTabView(
             record: record,
