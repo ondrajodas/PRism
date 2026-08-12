@@ -104,15 +104,8 @@ struct AppStoreVerdictTests {
         let store = self.store(findings: findings, drafts: drafts, conversations: conversations)
         await store.loadDetail(for: summary())
         store.startReview(for: pr)
-        for _ in 0..<100_000 where store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
         return store
-    }
-
-    /// Uložení draftu běží v tasku, takže se na něj musí počkat, než se sáhne na disk. Točení
-    /// přes `Task.yield()` je stejná cesta jako u ostatních testů store — čekat na continuation
-    /// by znamenalo, že se test při chybě zasekne místo aby spadl.
-    private func settle() async {
-        for _ in 0..<100 { await Task.yield() }
     }
 
     // MARK: - Předvyplnění

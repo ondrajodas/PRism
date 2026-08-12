@@ -67,7 +67,7 @@ struct AppDelegateTerminationTests {
         // a poběží dál pod `launchd` (#264).
         #expect(allowed.count == 0)
 
-        for _ in 0..<100_000 where allowed.count == 0 { await Task.yield() }
+        await waitUntil("systém dostane odpověď") { allowed.count > 0 }
         #expect(stopped.count == 1)
         #expect(allowed.count == 1)
     }
@@ -91,7 +91,7 @@ struct AppDelegateTerminationTests {
         // klikačka a druhá odpověď systému je na jedno odložené ukončení navíc.
         #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
 
-        for _ in 0..<100_000 where allowed.count == 0 { await Task.yield() }
+        await waitUntil("systém dostane odpověď") { allowed.count > 0 }
         #expect(asked.count == 1)
         #expect(stopped.count == 1)
         #expect(allowed.count == 1)
@@ -107,7 +107,7 @@ struct AppDelegateTerminationTests {
         delegate.allowTermination = { allowed.record() }
 
         #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
-        for _ in 0..<100_000 where allowed.count == 0 { await Task.yield() }
+        await waitUntil("systém dostane odpověď") { allowed.count > 0 }
         #expect(allowed.count == 1)
     }
 }

@@ -5,10 +5,19 @@ import Testing
 
 /// Integrační testy proti skutečnému filesystému a skutečným procesům. Malý počet — kryjí
 /// právě to, co se fake implementacemi ověřit nedá. Nic z nich nechodí na síť.
+///
+/// **Timeouty se sem předávají velkorysé a je to strop proti zátěži, ne míra rychlosti** (#296).
+/// Testy spouštějí `/bin/echo` a `/bin/sh`, tedy práci na jednotky milisekund — ale při souběžném
+/// buildu tří slotů se `/bin/echo` nestihl spustit a posbírat do **10 s** a suita hlásila
+/// `.timedOut` u tří testů naráz. Timeout tady tedy nic netvrdí; je tu proto, aby zaseknutý
+/// podproces test položil, ne aby držel běh navěky.
 @Suite("Environment proti skutečnému systému")
 struct RealEnvironmentTests {
     private let probe = FileSystemExecutableProbe()
     private let runner = SubprocessRunner()
+
+    /// Kolik času dostane podproces, po kterém se čeká výsledek. Viz komentář u suity.
+    private static let generousTimeout: Duration = .seconds(60)
 
     @Test("Spustitelná složka se nesmí splést s binárkou")
     func probeRejectsDirectory() {
@@ -39,7 +48,7 @@ struct RealEnvironmentTests {
         let result = try await runner.run(
             URL(filePath: "/bin/echo"),
             arguments: ["ahoj"],
-            timeout: .seconds(10)
+            timeout: Self.generousTimeout
         )
 
         #expect(result.exitCode == 0)
@@ -52,7 +61,7 @@ struct RealEnvironmentTests {
         let result = try await runner.run(
             URL(filePath: "/bin/sh"),
             arguments: ["-c", "echo chyba >&2; exit 3"],
-            timeout: .seconds(10)
+            timeout: Self.generousTimeout
         )
 
         #expect(result.exitCode == 3)
@@ -71,24 +80,48 @@ struct RealEnvironmentTests {
         }
     }
 
-    @Test("Zrušené volání proces zabije, místo aby čekalo, až doběhne sám")
+    /// **Zabití se ověřuje na PID, ne na naměřeném čase volání** (#296, mění #220). Do #296 tady
+    /// stálo `elapsed < .seconds(5)` — tedy hodnota odvozená od volného stroje, kde celé kolo trvá
+    /// 0,3 s. Při souběžném buildu tří slotů vycházelo **5,95 / 8,23 / 11,03 s**, po zvětšení stropu
+    /// na 15 s pak **17,7 / 19,4 / 20,4 / 26,7 s**: měřený čas volání je pod zátěží nečitelný a
+    /// zvětšování stropu je hra, ve které zátěž pokaždé přesáhne poslední odhad.
+    ///
+    /// Zmizelý PID je navíc **silnější tvrzení**: naměřený čas říká jen „vrátilo se to brzo“, takže
+    /// by prošla i implementace, která na proces zapomene a nechá ho běžet dál. Tady se ptáme přímo
+    /// na to, co od zrušení chceme — proces už neexistuje. Je to tatáž cesta, jakou to od #101 dělá
+    /// `SubprocessStreamerTests`; ta pod zátěží prošla 5× z 5.
+    @Test("Zrušené volání proces zabije, místo aby čekalo, až doběhne sám", .timeLimit(.minutes(3)))
     func runnerKillsProcessOnCancellation() async throws {
-        // Bez zabití by `run()` čekalo na EOF na pipách, tedy plných 30 s — čtení skončí
-        // teprve tím, že proces pipy zavře.
-        let elapsed = await ContinuousClock().measure {
-            let running = Task {
-                try? await runner.run(
-                    URL(filePath: "/bin/sleep"),
-                    arguments: ["30"],
-                    timeout: .seconds(60)
-                )
-            }
-            try? await Task.sleep(for: .milliseconds(300))
-            running.cancel()
-            _ = await running.value
-        }
+        // Bez zabití by `run()` čekalo na EOF na pipách — čtení skončí teprve tím, že proces
+        // pipy zavře, tedy až mu doběhne `sleep`.
+        let pidFile = temporaryPIDFile("runner-cancel")
+        defer { try? FileManager.default.removeItem(at: pidFile) }
+        let script = "echo $$ > '\(pidFile.path(percentEncoded: false))'; exec sleep 300"
 
-        #expect(elapsed < .seconds(5))
+        let running = Task {
+            try? await runner.run(
+                URL(filePath: "/bin/sh"),
+                arguments: ["-c", script],
+                timeout: Self.generousTimeout
+            )
+        }
+        // Rušit se má proces, který **doopravdy běží** — jinak by test prošel i tehdy, kdyby se
+        // nespustil vůbec. `exec` je tam proto, aby PID patřil tomu procesu, který má umřít,
+        // a nezůstal pod ním potomek, který by výsledek rozmazal.
+        let pid = try await processID(writtenTo: pidFile)
+
+        running.cancel()
+
+        // **Pořadí je tady podstatná část testu.** Na proces se musí kouknout **dřív**, než se
+        // počká na `running.value`: to čekání totiž skončí i tím, že procesu doběhne `sleep`, a
+        // „zmizel“ pak platí samo, bez ohledu na to, jestli ho někdo zabil. Změřeno vloženou
+        // regresí — s vyndaným `requestKill()` test v opačném pořadí **prošel** za 300 s. Je to
+        // tatáž past, kterou `docs/testovani.md` popisuje u `AppStoreTerminationProcessTests`.
+        #expect(await processHasGone(pid), "proces \(pid) po zrušení pořád běží")
+
+        // `.timeLimit` u testu je tu proto, že tohle čekání je v **rozbitém** stavu dlouhé: když
+        // se nezabíjí, vrátí se teprve po `sleep`u. Zelený běh se jím nezdrží ani o milisekundu.
+        _ = await running.value
     }
 
     @Test("Runner ohlásí, že binárku nešlo spustit")
@@ -97,7 +130,7 @@ struct RealEnvironmentTests {
             _ = try await runner.run(
                 URL(filePath: "/usr/bin/prism-neexistuje"),
                 arguments: [],
-                timeout: .seconds(10)
+                timeout: Self.generousTimeout
             )
             Issue.record("Spuštění neexistující binárky mělo selhat.")
         } catch ProcessError.launchFailed {
@@ -107,9 +140,16 @@ struct RealEnvironmentTests {
         }
     }
 
+    /// **Timeout se předává, nebere se výchozí** (#296). Produkční pětisekundový default je
+    /// rozhodnutí o startu aplikace („zaseknutý shell nesmí položit start“) a zvětšovat se nemá —
+    /// jenže při souběžném buildu tří slotů ho login shell přetáhl a čtení vrátilo prázdno, tedy
+    /// pád testu o parsování `PATH`. Test se ptá na to, jestli se skutečný `PATH` přečte a rozebere,
+    /// ne na to, jestli se to stihne za produkční rozpočet.
     @Test("Login shell vrátí neprázdný PATH")
     func loginShellReportsNonEmptyPath() async {
-        let directories = await LoginShellPathReader(runner: runner).loginShellPath()
+        let reader = LoginShellPathReader(runner: runner, timeout: Self.generousTimeout)
+
+        let directories = await reader.loginShellPath()
 
         #expect(directories.isEmpty == false)
     }

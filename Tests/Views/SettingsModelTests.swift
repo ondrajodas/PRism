@@ -41,12 +41,9 @@ struct SettingsModelTests {
         }
     }
 
-    /// Čeká, dokud se něco nezapíše. Točí se přes `Task.yield()`, ne přes continuation —
-    /// test, který se nedočká, uvízne, a to je srozumitelnější než náhodné padání.
+    /// Čeká, dokud se něco nezapíše — odmlkami se stropem, ne přes continuation.
     private func waitForWrite(_ recorder: Recorder, count: Int) async {
-        while recorder.written.count < count {
-            await Task.yield()
-        }
+        await waitUntil("zapíše se \(count) konfigurací") { recorder.written.count >= count }
     }
 
     @Test("Změna se uloží")

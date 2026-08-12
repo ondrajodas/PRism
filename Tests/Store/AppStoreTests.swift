@@ -130,7 +130,7 @@ extension AppStoreTests {
         let pr = PRIdentifier("cli/cli#1")!
 
         let running = Task { await store.prepareCheckout(for: pr) }
-        try await gate.waitUntilReached()
+        await gate.waitUntilReached()
 
         #expect(store.reviewState(for: pr) == .cloning)
 
@@ -196,7 +196,7 @@ extension AppStoreTests {
         )
 
         let preparing = Task { await store.prepareCheckout(for: PRIdentifier("cli/cli#1")!) }
-        try await gate.waitUntilReached()
+        await gate.waitUntilReached()
         await store.keepFresh()   // tik s prázdným seznamem by jinak klon smazal
 
         #expect(FileManager.default.fileExists(atPath: clone.path(percentEncoded: false)))
@@ -326,7 +326,7 @@ extension AppStoreTests {
         )
 
         let preparing = Task { await store.prepareCheckout(for: PRIdentifier("cli/cli#1")!) }
-        try await gate.waitUntilReached()
+        await gate.waitUntilReached()
         await store.keepFresh()
 
         #expect(store.checkoutState(for: cli) == .preparing)

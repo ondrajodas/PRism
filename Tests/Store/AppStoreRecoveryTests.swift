@@ -330,7 +330,7 @@ struct AppStoreInterruptedMarkerTests {
     }
 
     private func waitUntilIdle(_ store: AppStore) async throws {
-        while store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
     }
 
     /// Zrušené review se schválně neukládá („rozdělané review je horší než žádné“). Kdyby si

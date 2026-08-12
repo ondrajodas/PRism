@@ -94,7 +94,7 @@ struct AppStoreTranslationTests {
 
     private func runReview(_ store: AppStore) async throws {
         store.startReview(for: pr)
-        for _ in 0..<100_000 where store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
         #expect(!store.isReviewing(pr))
     }
 

@@ -706,6 +706,17 @@ zaseknuté testy — přitom testy doběhnou za sekundu. Stálo to jednou přes 
 hledání neexistující chyby v testech. Když se zdá, že test run visí, první věc je pustit
 ho do souboru.
 
+**Čekání v testech má jedno místo: `Tests/Support/TestWaiting.swift`** (#296). `waitUntil`,
+`settle()`, `TestWait.pause()` — nic vlastního nepiš. Nové čekání **nikdy** přes `Task.yield()`
+ani přes rozpočet kol (`for _ in 0..<N`): pod souběžným buildem tří slotů se odmlka o 100 ms
+probouzí i za 8,6 s, takže jakýkoli strop odvozený od volného stroje je falešně červený `main`.
+Za jednu dávku jich bylo pět. Podrobnosti i naměřená čísla v
+[`docs/testovani.md`](docs/testovani.md), sekce *Čekání na jev*.
+
+**Když běh umře před prvním testem** — `Early unexpected exit, operation never finished
+bootstrapping` bez chyby kompilace a bez jediného `✘` — je to **zátěž, ne rozbitý build**.
+Pusť ho znovu, viz tatáž sekce.
+
 ## Prostředí
 
 - macOS 26, Xcode 26, Swift 6.3

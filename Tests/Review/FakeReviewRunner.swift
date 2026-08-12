@@ -1,12 +1,13 @@
 import Foundation
+import Testing
 
 @testable import PRism
 
 /// Reviewer, který nic nespouští — vrátí, co si test předepsal, a pamatuje si zadání.
 ///
-/// Umí běh **pozdržet**, aby šlo zkontrolovat stav „běží“ a zrušení. Čeká se točením přes
-/// `Task.yield()`, ne na continuation: zrušený běh musí z čekání vypadnout sám, jinak by
-/// test na cancel visel místo aby spadl.
+/// Umí běh **pozdržet**, aby šlo zkontrolovat stav „běží“ a zrušení. Drží se **odmlkami**, ne na
+/// continuation: zrušený běh musí z čekání vypadnout sám, jinak by test na cancel visel místo aby
+/// spadl. Odmlka místo `Task.yield()` je z #296 — spin bere procesor ostatním suitám.
 final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
     private let outcome: ReviewRunOutcome
     private let findings: [ReportedFinding]
@@ -51,7 +52,7 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
     func releaseAll() { lock.withLock { released = true } }
 
     func waitForStarts(_ count: Int) async {
-        while requests.count < count { await Task.yield() }
+        await waitUntil("rozběhne se \(count) běhů") { self.requests.count >= count }
     }
 
     func run(
@@ -65,7 +66,8 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         progress(.queued)
         for event in reported { progress(event) }
 
-        while holds, !isReleased, !Task.isCancelled { await Task.yield() }
+        // Držení, ne čekání na jev — proto bez stropu, ale s odmlkou.
+        while holds, !isReleased, !Task.isCancelled { await TestWait.pause() }
         try Task.checkCancellation()
         if let failure { throw failure }
 

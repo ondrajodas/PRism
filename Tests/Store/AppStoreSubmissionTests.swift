@@ -105,11 +105,6 @@ struct AppStoreSubmissionTests {
         return store
     }
 
-    /// Zápis draftu běží v tasku, takže se na něj musí počkat točením.
-    private func settle() async {
-        for _ in 0..<50 { await Task.yield() }
-    }
-
     // MARK: - Kdy sheet vznikne
 
     /// **Nejdůležitější test celého #107 na úrovni store.** Ve výchozím nastavení se
@@ -227,7 +222,7 @@ struct AppStoreSubmissionTests {
         let drafts = ReviewDraftStore(layout: layout)
         let prepared = await prepared(gateway())
         prepared.setDraftVerdict(.approve, for: pr)
-        await settle()
+        await waitForStoredDraft(of: pr, in: drafts)
 
         // Draft z disku existuje, ale detail se nepovedl — psát se do něj dá, odeslat ne.
         let failing = AppStore(
@@ -261,22 +256,26 @@ struct AppStoreSubmissionTests {
 
     /// Draft se maže **až po potvrzené odpovědi** — a musí zmizet i z disku, jinak by se po
     /// restartu vrátilo review, které už na GitHubu leží.
+    /// **Na disk se čeká podmínkou, ne odmlkou** (#296): zápis draftu si store rozjede vlastním
+    /// `Task`em, takže slepý drain platí za to, kolik zbylo procesoru — pod zátěží tří paralelních
+    /// slotů se do 50 ms nestihl a test hlásil, že draft na disku není, ještě než se cokoli
+    /// odeslalo. Soubor je přitom jev, na který se čekat dá.
     @Test("Po odeslání draft zmizí z paměti i z disku")
     func clearsTheDraftAfterSubmitting() async throws {
         let store = await prepared(gateway())
         store.setDraftBody("vypadá to dobře", for: pr)
         store.setDraftVerdict(.approve, for: pr)
-        await settle()
 
         // Čte se **novým** storem nad tou samou složkou — tedy to, co by našel restart.
-        #expect(try await ReviewDraftStore(layout: layout).load(for: pr) != nil)
+        let drafts = ReviewDraftStore(layout: layout)
+        await waitForStoredDraft(of: pr, in: drafts)
 
         await store.draftWasSubmitted(for: summary())
-        await settle()
+        await waitForStoredDraft(of: pr, in: drafts, exists: false)
 
         #expect(store.draft(for: pr) == nil)
         #expect(!store.hasDraft(pr))
-        #expect(try await ReviewDraftStore(layout: layout).load(for: pr) == nil)
+        #expect(try await drafts.load(for: pr) == nil)
     }
 
     /// Od odeslání leží v konverzaci moje vlastní review. `updatedAt` se tím měnit nemusí,
