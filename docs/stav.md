@@ -1185,5 +1185,28 @@ sloupce**, protože prázdný protějšek se v modelu poznat nedá. Vzhled je do
 vyrenderované sekce návrhu**, což rozhodlo směr pruhů šrafy i to, že plocha díry zůstává plochou
 obsahu.
 
+**Neukončený boxík v `Přehledu` (#291).** Karta s popisem PR sahala 42 bodů za pravou hranu tabu,
+takže jí `ScrollView` uřízl pravou hranu i popisek `Otevřít na GitHubu` — v okně to vypadalo, že
+boxík nemá konec a obsah mizí pod panelem s nálezy. **Způsobila to #279**, ne #215: sazba Markdownu
+v ní přešla z pružného `frame(maxWidth: .infinity)` na `filling()`, tedy na konkrétní šířku
+z prostředí — a `OverviewView` tu šířku nezúžil ani o svých 16 bodů odsazení tabu, ani o 13 bodů
+odsazení karty. V konverzaci to prošlo, protože její karty `narrowingWidth(by: 22)` z #220 mají.
+Oprava jsou ty dva chybějící řádky (`narrowingWidth(by: 32)` a `narrowingWidth(by: 26)`).
+
+Naměřeno na pásmu šířek 128–1180: **42 bodů přesahu ve všech**, po opravě nula. Vyzkoušené vložením
+regrese po polovinách (bez zúžení u tabu 16 bodů, bez zúžení u karty 10). Ke změření musel obsah tabu
+ven ze `ScrollView`u (`OverviewView.content`) — `NSScrollView` přesah ukrojí, takže rozbitý stav vyjde
+na renderu skoro jako opravený, a přesně tím je tahle regrese nenápadná. Ze stejného důvodu zůstávají
+rámce karty **schválně pružné**: s `filling()` nad odsazeným tělem popisu zůstal test zelený i po
+smazání zúžení, protože tvrdý rámec chybějící zúžení schová.
+
+Se správnou šířkou se do zúženého tabu nevešly čtyři údaje v hlavičce karty a `HStack` je nakrájel
+uvnitř slov (`otevře/ný` v pilulce, `Otevřít na / GitHub / u` v odkazu). Hlavička proto drží **jeden
+řádek ve dvou podobách** (`ViewThatFits`) a v té úzké zahodí relativní čas — ze čtyř údajů je nejméně
+potřebný a nese ho i řádek ve frontě. Odkaz ustupuje poslední, ale pružný zůstává: tab se dá stlačit
+až na ~128 bodů a nezkratitelný odkaz by kartu roztlačil, tedy vyrobil #291 znovu. Testů je o 3 víc
+(2325 po zvednutí mainu) v jedné nové suitě, k tomu sonda na render tabu přes `NSHostingView` — v něm se `Link`
+vykreslí celý, na rozdíl od `ImageRenderer`u.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
