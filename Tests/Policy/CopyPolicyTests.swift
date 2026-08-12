@@ -352,6 +352,42 @@ struct CopyPolicyTests {
         #expect(targets.last?.title == "Kopírovat rozsah (4 řádky)")
     }
 
+    /// Počet v popisku nad souborem s **`CRLF`** (#295). Do #295 se počítal
+    /// `split(separator: "\n")` nad hotovým textem — a protože `"\r\n"` je ve Swiftu jeden
+    /// `Character`, vyšel by nad rozsahem z takového souboru **„1 řádek“** bez ohledu na to,
+    /// kolik jich tam je. Dvojí pojistka: parser `CR` sundá a počet jde přes `TextLines`.
+    @Test("Rozsah v souboru s CRLF řekne správný počet")
+    func countsTheRangeInACRLFFile() throws {
+        let path = "src/App.cs"
+        let diff = DiffParser.parse(
+            "diff --git a/\(path) b/\(path)\r\n"
+                + "--- a/\(path)\r\n"
+                + "+++ b/\(path)\r\n"
+                + "@@ -10,3 +10,4 @@ class App\r\n"
+                + "     public int Total()\r\n"
+                + "-        return sum;\r\n"
+                + "+        return sum + tax;\r\n"
+                + "+    }\r\n"
+                + "     // konec\r\n"
+        )
+        let file = try #require(diff.files.first)
+        let comments = [comment(
+            path: path,
+            from: DraftAnchor.Endpoint(line: 10, side: .right),
+            to: DraftAnchor.Endpoint(line: 13, side: .right)
+        )]
+        let line = try #require(file.hunks.flatMap(\.lines).first { $0.newNumber == 12 })
+
+        let targets = Policy.copyTargets(for: line, in: file, comments: comments)
+
+        #expect(targets.last?.title == "Kopírovat rozsah (4 řádky)")
+        // A do schránky jde kód **bez `CR`** — rozhodnutí #295, zapsané u `Policy.code(of:)`:
+        // kopie nese `LF`, protože jde do terminálu nebo do komentáře jako kód.
+        let text = try #require(targets.last?.text)
+        #expect(!text.unicodeScalars.contains("\r"))
+        #expect(TextLines.all(text).count == 4)
+    }
+
     /// Nad poznámkou `git`u se menu **nekreslí vůbec** — není to obsah souboru, takže by
     /// „Kopírovat řádek“ dalo do schránky text, který v kódu není.
     @Test("Poznámka gitu nenabídne nic")

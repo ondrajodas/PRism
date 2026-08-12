@@ -542,17 +542,29 @@ Zvlášť stojí za přečtení, než sáhneš na:
   `(text řádku, jazyk)`, takže word-level zvýraznění, které závisí na **protějšku** dvojice, do ní
   nepatří — vracela by zvýraznění cizí dvojice, a potichu. Takové věci se kreslí jako **druhá
   vrstva nad** výsledkem z cache; podrobnosti v [`docs/architektura.md`](docs/architektura.md).
-- **Text z cizího nástroje se nedělí na `"\n"`** (#292). `"\r\n"` je ve Swiftu **jeden
-  `Character`**, takže `split(separator: "\n")` na `CRLF` **nerozdělí** — z celého bloku zbyde jeden
-  „řádek“ a nenajde se v něm nic. Stálo to celou funkci: hlavičky `gh api -i` mají `CRLF`, takže se
-  `Content-Length` nenašel u žádného checku, a v shellu bylo všechno vidět, protože tam ho čtou oči.
-  Dělí se na `Character.isNewline` (`split(whereSeparator: \.isNewline)`).
+- **Řádky dělí `TextLines`, nikdy `split(separator: "\n")` ani `components(separatedBy: .newlines)`**
+  (#292, na jedno místo svedeno #295). `"\r\n"` je ve Swiftu **jeden `Character`**, takže
+  `split(separator: "\n")` na `CRLF` **nerozdělí vůbec** — z celého vstupu zbyde jeden „řádek“. Ta
+  druhá cesta dělí po skalárech, takže `CRLF` jsou pro ni dva oddělovače a vloží mezi ně prázdný
+  řádek. Stálo to dvě funkce: `Content-Length` se nenašel u žádného checku (#292) a každý řádek
+  cizího komentáře se sázel jako vlastní odstavec.
 
-  Platí to na **všechno, co zakončení řádků nevybírá aplikace**: hlavičky, logy z CI (Windows
-  runnery), diffy souborů s `CRLF`. Grep na ten vzor:
-  `grep -rn 'split(separator: "\\n"' App`. A **fixture takového formátu musí být skutečný výstup** —
-  ruční literál nese `LF` toho, kdo ho napsal, takže test zezelená i nad rozbitým rozborem; když na
-  `CRLF` stojí, patří do `.gitattributes` jako `-text`, jinak ho `core.autocrlf` zahodí při commitu.
+  Platí to na **všechno, co zakončení řádků nevybírá aplikace**: hlavičky, logy z CI, diffy
+  a obsah souborů z cizích repozitářů (`gh pr diff` na `microsoft/terminal` má `CRLF` na 70 řádcích
+  ze 76). Grep na ten vzor — **musí vyjít prázdný**, filtr zahazuje ty vzory v komentářích, které
+  vysvětlují proč:
+
+  ```bash
+  grep -rn 'split(separator: "\\n"\|separatedBy: .newlines' App | grep -vE ':[0-9]+: *//'
+  ```
+
+  Výjimka je `String.singleLine`, a to **schválně**: sráží cizí text do popisku, takže potřebuje
+  širší `isNewline` (grep ji nechytá, dělí přes `whereSeparator`). Zdůvodnění obojího je
+  u `Character.isLineTerminator` a v [`docs/architektura.md`](docs/architektura.md).
+
+  A **fixture takového formátu musí být skutečný výstup** — ruční literál nese `LF` toho, kdo ho
+  napsal, takže test zezelená i nad rozbitým rozborem; když na `CRLF` stojí, patří do
+  `.gitattributes` jako `-text`, jinak ho `core.autocrlf` zahodí při commitu.
 - **V shell skriptech se proměnná v české próze píše `${VAR}`.** Uvozovka „ hned za
   `$VAR` shodí bash 3.2 (ten je v `/bin/bash`) v UTF-8 locale na `unbound variable`: její
   byty se počítají do jména proměnné. Chytí to `set -u`, ale až za běhu — `bash -n` ne.

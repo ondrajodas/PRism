@@ -60,13 +60,28 @@ struct MarkdownRenderProbe {
         > Neznámý druh zůstane citací.
         """
 
+    /// Skutečné tělo komentáře s `CRLF` z `cli/cli` (#295) — takhle je posílá webové okno GitHubu,
+    /// protože HTML `textarea` zakončení normalizuje na `CRLF`. Jsou v něm oba případy naráz: jedno
+    /// `CRLF` uvnitř odstavce (má vyjít jako zalomení) a `CRLF CRLF` mezi odstavci (má odstavec
+    /// ukončit). Do #295 z toho byly **tři** odstavce s mezerami, protože
+    /// `components(separatedBy: .newlines)` udělala z každého `CRLF` prázdný řádek.
+    private let crlf = """
+        When fetching the ref SHA of a tag, a partial semver match returns a 200 response with \
+        an empty body, which causes the JSON decode to fail.\r
+        For example, if the tag is v1.0.0, only refs/tags/v1.0.0 will work — v1 or v1.0 will \
+        return 200 with empty body.\r
+        \r
+        This behavior aligns with other gh release commands, which also require the exact tag \
+        name, otherwise would return release not found.
+        """
+
     @MainActor
     @Test("Vyrendrovat sazbu do PNG")
     func rendersSamples() throws {
         let directory = URL(filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory())
         let bot = try Fixture.text("gh/comment-coderabbit.md")
 
-        for (name, text) in [("ukazka", sample), ("bot", bot)] {
+        for (name, text) in [("ukazka", sample), ("bot", bot), ("crlf", crlf)] {
             for dark in [false, true] {
                 let url = directory.appending(path: "markdown-\(name)-\(dark ? "tmavy" : "svetly").png")
                 try write(text, dark: dark, to: url)

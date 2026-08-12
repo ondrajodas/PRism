@@ -83,14 +83,19 @@ struct GitRepoCheckout: RepoCheckout {
             "-C", clone.path(percentEncoded: false),
             "for-each-ref", "--format=%(refname)", "refs/prism/pr",
         ])
-        return output.split(separator: "\n").compactMap { Int($0.split(separator: "/").last ?? "") }
+        // Řádky přes `TextLines` (#295) — jedno místo, kde se rozhoduje, co je řádek. Tady `git`
+        // `LF` posílá vždycky, ale druhá cesta k dělení je druhé místo, kde se to dá zapomenout.
+        return TextLines.nonEmpty(output).compactMap { Int($0.split(separator: "/").last ?? "") }
     }
 
     func trackedFiles(in worktree: URL) async throws -> [String] {
         // `-c` je sice výchozí, ale vypsané je z příkazu vidět, že jde o index, ne o to,
         // co zrovna leží na disku.
         let output = try await run(["-C", worktree.path(percentEncoded: false), "ls-files", "-c"])
-        return output.split(separator: "\n").map(String.init)
+        // Dělení na `CR` tady jméno souboru rozdělit nemůže: `core.quotePath` je ve výchozím stavu
+        // zapnutý, takže `git ls-files` řídicí znaky **odcituje** — ověřeno na souboru
+        // `a<CR>b.swift`, ze kterého vypadlo `"a\rb.swift"` s doslovným zpětným lomítkem.
+        return TextLines.nonEmpty(output).map(String.init)
     }
 
     func existingClone(for repo: RepoID) async -> URL? {

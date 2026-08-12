@@ -63,9 +63,11 @@ struct LoginShellPathReader: ShellPathReading {
             .map { URL(filePath: String($0)) }
     }
 
+    /// Řádky přes `TextLines` (#295), ne `split(separator: "\n")` — jedno místo, kde se rozhoduje,
+    /// co je řádek. Přihlašovací shell `CR` sám neposílá, ale druhá cesta k dělení je druhé místo,
+    /// kde se to dá zapomenout.
     private static func lastNonEmptyLine(of output: String) -> String? {
-        output
-            .split(separator: "\n")
+        TextLines.nonEmpty(output)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .last { !$0.isEmpty }
     }
