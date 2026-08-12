@@ -45,7 +45,11 @@ struct DiffCodeBlockView: NSViewRepresentable {
             block,
             language: language,
             palette: SyntaxPalette.forScheme(colorScheme),
-            signature: "\(block.hashValue)|\(language?.name ?? "")|\(colorScheme)",
+            signature: DiffBlockSignature.of(
+                blockHash: block.hashValue,
+                language: language,
+                colorScheme: colorScheme
+            ),
             // Word-level rozdíl (#153) se počítá **až uvnitř** — `show` se z něj hned vrátí, když
             // se obsah nezměnil, a tahle metoda chodí i při pouhém přejezdu myší. Do podpisu
             // přidávat nic netřeba: zvýraznění je funkce obsahu bloku, a ten v podpisu už je.

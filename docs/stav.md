@@ -1208,5 +1208,25 @@ až na ~128 bodů a nezkratitelný odkaz by kartu roztlačil, tedy vyrobil #291 
 (2325 po zvednutí mainu) v jedné nové suitě, k tomu sonda na render tabu přes `NSHostingView` — v něm se `Link`
 vykreslí celý, na rozdíl od `ImageRenderer`u.
 
+**Přepínač vzhledu (#278).** Vzhled se do #278 řídil **jen** systémem a nedal se přebít, takže
+porovnat, jak se diff čte ve světlém a v tmavém (což je celé #277), znamenalo přehodit celý systém.
+Nastavení má proto stránku `Vzhled` se třemi volbami — `Světlý`, `Tmavý`, `Podle systému` —
+a rozhoduje se jediným řádkem: `NSApp.appearance`. Barvy se nikde nevětví, `Palette` zůstala
+nedotčená; přepínač volí režim, ne paletu.
+
+Uplatňuje se v `AppStore.apply(_:)`, tedy tou jedinou cestou, kterou konfigurace vchází do běžící
+aplikace — ne ve view. Ve view by se změna minula okna, které zrovna není otevřené, a nastavení se
+dá otevřít i se zavřeným hlavním oknem. `NSApp.appearance` navíc pokrývá **všechna** okna naráz,
+takže se nemusí obcházet scéna po scéně.
+
+Změřeno sondou, která vzhled přepne **za běhu nad složenou hierarchií** (`AppearanceSwitchProbe`):
+`@Environment(\.colorScheme)` se pohne spolu s paletou, takže se obarvení kódu nerozejde s chromem —
+to byla ta jediná otázka, kterou z kódu přečíst nešlo. Na tomtéž renderu je vidět i přebarvený diff
+včetně syntaxe: vysázený text se přeskakuje podle podpisu a v tom podpisu režim je, takže se sází
+znovu. Podpis se u toho sloučil do jednoho místa (`DiffBlockSignature`), protože ho obě podoby diffu
+skládaly každá svým řetězcem. Testů je o 22 víc (2347) v pěti nových suitách, z nichž dvě jsou
+**sondy za přepínačem**: render stránky nastavení v obou režimech a ve dvou šířkách, a to přepnutí
+za běhu.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

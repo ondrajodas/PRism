@@ -813,6 +813,22 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 - **Jazyk nálezů** — u konfigurace výchozí čeština, override per repo a to, že se vlastní
   hodnota nesmaže jako shodná s globální (stejná past jako u režimu). U promptu naopak to,
   že o jazyku **mlčí** — kdyby se to vrátilo, stálo by to nálezy.
+- **Vzhled okna (#278)** — přečtení obou vynucených hodnot, chybějící klíč i překlep (obojí znamená
+  `system`, ne pád), a že překlep nezahodí zbytek souboru. K tomu dvě tvrzení, že se něco
+  **nestalo**, protože vzhled je vlastnost člověka, ne repa: v zapsaném JSONu je klíč `appearance`
+  právě jednou a v záznamu repa není, a klíč napsaný pod repem se nepromítne nikam. Kdyby přibyl do
+  `RepositoryConfig`, jedno repo by přebarvilo celé okno — a poznalo by se to až v provozu.
+- **Cesta vzhledu do aplikace (#278)** — `AppStoreAppearanceTests` na tu jedinou cestu
+  (`AppStore.apply(_:)`): volba ze souboru při načtení, uložení z okna nastavení, přežití restartu
+  a překlep, který skončí na `system`. Cíl je **fake**, ne `NSApp`: živý cíl je hostitel testů, takže
+  vynucený režim by přetekl do render sond, které si režim nastavují samy. Vedle toho
+  `AppAppearanceTests` na mapování — `.light` → `aqua`, `.dark` → `darkAqua` a hlavně, že `nil`
+  (tedy „nevynucuj nic“) vyjde **jedině** u `.system`; jinak by volba tiše nezabrala a byla by
+  k nerozeznání od výchozího stavu.
+- **Podpis bloku kódu (#157, #278)** — `DiffBlockSignatureTests`: světlý a tmavý režim, jiný obsah,
+  jiný jazyk a blok bez jazyka musí mít **různý** podpis, tentýž stav ten **samý**. Kdyby se dva
+  stavy sešly, blok by se přeskočil jako nezměněný a v okně by po přepnutí vzhledu zbyly barvy
+  z předchozího režimu — potichu, protože text ani jazyk se nezměnily.
 - **Překlad** — `TranslationCommand` na každou podobu nesmyslu, kterou model umí vrátit:
   prohozená `id`, `id` mimo rozsah, chybějící položka, code fence, prázdno, položka bez
   `summary`. `ClaudeFindingTranslator` proti fake procesu na to, že nenulový exit ani
@@ -1676,6 +1692,26 @@ Dva zádrhely, které to má:
   nefunguje**: barvy z `Palette` (dynamické `NSColor`) se v něm vyhodnotí světle, takže „tmavý“
   render vyjde k nerozeznání od světlého — a vypadá to, že paleta na režim nereaguje. Pozadí za
   renderem se musí nastavit ručně, obojí zvlášť.
+
+- **Přepnutí režimu za běhu se dá změřit bez toho, aby se hýbalo systémem** (#278). Nad hierarchií
+  v `NSHostingView` stačí přiřadit `NSApp.appearance` a nechat proběhnout runloop:
+  `@Environment(\.colorScheme)` **se pohne spolu s paletou** — změřeno `AppearanceSwitchProbe`, které
+  hostuje skutečný blok diffu a bere bitmapu před a po. To je odpověď na jedinou otázku, kterou se
+  z kódu přečíst nedá: `Palette` se ptá `appearance.bestMatch(from:)`, kdežto obarvení kódu jde přes
+  prostředí, takže kdyby se ty dvě cesty rozešly, vznikne okno s tmavým chromem a světlým kódem.
+
+  Tři věci, bez kterých to nedává odpověď. **Vynuť si oba režimy** (nejdřív `.aqua`, pak
+  `.darkAqua`), ne jen ten druhý — na tmavém stroji by „změnilo se to“ vyšlo pravdivě i tehdy, kdyby
+  se nepřepnulo nic. **Vrať `NSApp.appearance` zpátky** (`defer`), protože v testech je to hostitel
+  testů a vynucený režim by přetekl do ostatních sond. A **hostuj to, na čem záleží**: pozadí okna
+  se přebarví i tak, kdežto obarvená syntaxe jde přes cache vysázeného textu, takže tu je vidět
+  jedině na skutečném `DiffBlockRowView`.
+
+  Proto jsou obě sondy k #278 **za přepínačem** (`PRISM_MEASURE`), stejně jako sonda `Přehledu`:
+  jedna kreslí stránku nastavení v obou režimech a ve dvou šířkách (a dá se jí přeměřit i to, kolik
+  místa si vezme který styl přepínače), druhá dělá to přepnutí za běhu. Pouští se
+  `TEST_RUNNER_PRISM_MEASURE=1`, protože `xcodebuild` posílá do testovacího procesu jen proměnné
+  s tímhle prefixem — bez něj se suita **tiše přeskočí** a v logu to vypadá jako zelený běh.
 
 - **`List` se offscreen nevykreslí vůbec** — je to AppKit tabulka a `ImageRenderer` místo
   ní nakreslí žlutý placeholder přes celé plátno. Nevypovídá to o aplikaci. Řádky se dají

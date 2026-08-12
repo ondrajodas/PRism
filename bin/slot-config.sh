@@ -150,6 +150,9 @@ trap 'rm -f "${CLEANED}"' EXIT
 #   sources                  ne    bez zdrojů PR není ve slotu co zkoušet
 #   skillsByLanguage         ne    totéž jako `skills`
 #   diffLayout               ne    jak se čte diff
+#   appearance               ne    tmavý/světlý/podle systému (#278); nic neutratí a nic
+#                                  neodešle — a vynutit slotu vzhled, o který nikdo neřekl,
+#                                  je změna, ne očista
 #   maxConcurrentReviews     ne    limit souběhu, ne brána
 #   cacheBudgetMegabytes     ne    cache slotu je vlastní a uklidí si ji eviction
 #   model                    ne    čím se review pouští, se ve slotu zkouší

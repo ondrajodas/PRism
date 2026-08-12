@@ -33,6 +33,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `EffectiveVerdict` | Verdikt, který na draftu **platí**, a jeho původ (`suggested`/`chosen`). Taky **není `Codable`** — počítá se, viz níž |
 | `ProjectLanguage` | Čím je repo psané — klíč mapy „jazyk → sada skillů“. **Není to `Syntax.Language`**, viz níž |
 | `FindingsLanguage` | Jazyk prózy v nálezech (`cs`/`en`). Ani tohle **není `ProjectLanguage`** |
+| `AppearanceMode` | Jaký vzhled má okno mít (#278): `light`, `dark`, `system`. **Volí režim, ne barvy** — ty zůstávají v `Palette` |
 | `FindingTranslation` | Přeložená próza nálezu. Visí vedle originálu, nepřepisuje ho |
 | `Conversation` | Cizí konverzace pod PR: review ostatních, vlákna, komentáře, **události časové osy** (#171) + `viewer` |
 | `ConversationPage` | Kus seznamu a kolik ho je celkem — nese **zkrácení** |
@@ -832,7 +833,7 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
+| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
 | `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
@@ -899,6 +900,16 @@ Věci, které se u toho nemají rozbít:
   ho nemá schválně: `mode` nebo `skills` jsou vlastnost repa, kdežto jak se čte diff, je
   vlastnost člověka, který ho čte. **Přepínač v liště do souboru nezapisuje** — odchylka žije
   v `AppStore` (viz níž), jinak by hodnota tady přestala být tou, které se říká výchozí.
+- **Vzhled okna (#278) se čte tolerantně jako pohled na diff a per repo se nenastavuje.** Neznámá
+  hodnota znamená `system`, tedy stav, ve kterém aplikace běžela před #278 — a celý soubor kvůli ní
+  nezmizí. Přísnost jako u režimu nebo odesílání by tady nechránila nic: vzhledem nic neodejde a nic
+  se nespustí, nejhorší následek překlepu je světlé okno, které se přepne jedním kliknutím.
+  `RepositoryConfig` ho nemá schválně — vzhled je vlastnost člověka, který se kouká, ne repozitáře,
+  na který se kouká. **Je na to test, který tvrdí, že se nic nestalo**: v zapsaném JSONu smí klíč
+  `appearance` být právě jednou, a napsaný pod repem nesmí udělat nic. Do výčtu
+  v `bin/slot-config.sh` patří přesto — ten vyjmenovává i klíče s jedinou úrovní — a je u něj
+  napsané, že se **nečistí**: vzhledem se nic neutratí a nic neodejde, a vynutit slotu vzhled,
+  o který nikdo neřekl, je změna, ne očista. Kde se volba uplatní, je u `AppStore` níž.
 - **Rozbitá hodnota režimu se sráží na `manual`, ne na globální default.** Chybějící klíč
   je „ber globální“, ale překlep v hodnotě, kterou se někdo pokoušel automat **vypnout**,
   ho nesmí nechat zapnutý. Platí i globálně.
@@ -1041,7 +1052,8 @@ Věci, které se u toho nemají rozbít:
   Klíčem je **jméno** jazyka, ne celá hodnota — `Language` se podle jména i porovnává a hashovat
   jeho sadu klíčových slov při každém nahlédnutí by stálo víc než samotné obarvení.
 - **V cache nejsou barvy, jen druhy.** Přepnutí světlého a tmavého režimu ji proto
-  nezneplatňuje; paletu si bere view až při kreslení.
+  nezneplatňuje; paletu si bere view až při kreslení. Co režim v klíči **mít musí**, je podpis
+  vysázeného bloku (`DiffBlockSignature`) — tam už barvy zapečené jsou, viz `App/Views/` níž.
 - **Co závisí na protějšku řádku, do téhle cache nepatří** (#153). Word-level zvýraznění je
   funkce **dvojice**, ne řádku, takže pod klíčem `(text řádku, jazyk)` by se tentýž řádek proti
   jinému protějšku obarvil podle té cizí dvojice — a nikdo by se to nedozvěděl, protože obojí
@@ -1575,6 +1587,14 @@ Věci, které se u toho nemají rozbít:
 - **Důvod prázdna skládá store, ne polling** (`listEmptyReason`): polling o stavu okna neví a vědět
   nemá. Pořadí rozhoduje `Policy.listEmptyReason` a **nad selhaným tikem vyhrává chyba načtení, ne
   filtr** — „schoval jsem ti to filtrem“ nad daty, která nedorazila, je nepravda.
+- **Konfigurace vchází do běžící aplikace jednou cestou** (`apply(_:)`), ať přišla z disku, nebo
+  z okna nastavení. Kdyby byly dvě, jedna z nich by časem zapomněla něco přepsat. Proto se tam
+  nastavuje i **vzhled okna** (#278): `NSApp.appearance` platí naráz pro všechna okna, tedy i pro
+  to, které v době přepnutí není vpředu, a nastavení se dá otevřít i se zavřeným hlavním oknem —
+  ve view by se změna minula obojí. Cíl je za protokolem (`AppearanceApplying`) a v testech
+  **chybí**: živý cíl je `NSApp`, tedy hostitel testů, a vynucený režim by přetekl do render sond,
+  které si režim nastavují samy. Ta cesta je celá v `AppAppearance.swift`, takže `App/Store/`
+  nemusí znát AppKit.
 - **Repo s běžícím review je pro eviction nedotknutelné.** `busyRepositories` proto nejsou
   jen repa ve stavu `preparing`, ale i všechna, nad kterými běží review — smazat klon pod
   běžící session by jí vzalo pracovní strom pod rukama.
@@ -1723,6 +1743,7 @@ na `.task` okna, takže zavření okna ji zruší.
 |---|---|
 | `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
 | `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) — a od #245 **vypnutí systémových záložek oken** (`tabbingMode = .disallowed`), aby se `⌃Tab` nepřetahoval s AppKitem |
+| `AppAppearance`, `AppearanceApplying` | Přepnutí vzhledu celé aplikace (#278) — `NSApp.appearance`, a za protokolem, aby si na hostitele testů nesáhly testy |
 | `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
@@ -1746,6 +1767,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157). Drží **šířku kontejneru i měření výšky** (`height(forWidth:)`, `height(ofRows:)`), aby se šířka pro měření nemohla rozejít s tou pro kreslení (#236) |
 | `DiffCodeBlockView`, `DiffBlockRowView` | Blok v pohledu pod sebou a k němu pilulka na komentář a tažení rozsahu |
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
+| `DiffBlockSignature` | Podpis bloku, podle kterého se text **znovu nesází** (#157) — a v němž je schválně barevný režim (#278), protože barvy jsou v tom textu zapečené |
 | `DiffGutterGeometry`, `DiffBlockPlacement` | Aritmetika gutteru (#252) — kde leží plochy na tažení a pilulka, a poloha bloku v prostoru obsahu **mimo observable stav**. Čistý typ, aby se dal změřit i otestovat bez okna |
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
@@ -2135,11 +2157,12 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 |---|---|
 | `SettingsScene` | Obsah scény; dokud neprošel preflight, není store a okno to řekne |
 | `SettingsView` | Boční navigace (#177), patička s cestou a stavem uložení, zámek na rozbitý soubor |
-| `SettingsSection` | Sedm stránek ve třech skupinách — `Co se hlídá`, `Co jde ven`, `Prostředí` |
+| `SettingsSection` | Osm stránek ve třech skupinách — `Co se hlídá`, `Co jde ven`, `Prostředí` |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
 | `SourcesSettingsView` | Zdroje PR (search dotazy) |
 | `ReviewSettingsView` | Výchozí režim a jazyk nálezů, skilly, sady podle jazyka, blokující kategorie |
 | `DiffSettingsView` | **Pohled na diff** — nastavení člověka, ne repa, proto jen globálně |
+| `AppearanceSettingsView` | **Vzhled okna** (#278) — tmavý, světlý, podle systému; taky nastavení člověka, proto jen globálně |
 | `PublishingSettingsView` | **Odesílání na GitHub** — vlastní stránka, viz níž |
 | `RuntimeSettingsView` | Interval pollingu, rozpočet cache, souběžné session, denní limit, model |
 | `NotificationSettingsView` | Stránka `Notifikace` (#86): hlavní vypínač a čtyři události |
@@ -2150,15 +2173,32 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 
 Věci, které se u toho nemají rozbít:
 
-- **Sedm stránek, ne devět** (#177). Návrh kreslí i `Cache a úklid` a `Zdraví služeb`; obojí
-  je vynechané, protože pro ně v aplikaci **není obsah** — cache se dnes uklízí sama podle
-  rozpočtu a zdraví služeb žije ve stavovém řádku. Prázdná stránka je horší než chybějící,
+- **Sedm stránek, ne devět** (#177; osmá přibyla u #278). Návrh kreslí i `Cache a úklid` a `Zdraví
+  služeb`; obojí je vynechané, protože pro ně v aplikaci **není obsah** — cache se dnes uklízí sama
+  podle rozpočtu a zdraví služeb žije ve stavovém řádku. Prázdná stránka je horší než chybějící,
   a tahle úvaha platí i pro rail (#180).
 - **Dělí se podle otázky, na kterou se odpovídá** (#177), ne podle typu ovládacího prvku.
   `Odesílání` je proto vlastní stránka, i když je to jeden přepínač a jeden seznam: je to jediné
   místo, kde se rozhoduje, jestli z aplikace **může něco odejít** (tvrdá podmínka č. 1), a text
   je tam důležitější než přepínač. Do #177 to byly tři záložky, ze kterých `Obecné` nesla osm
   sekcí a hledalo se v ní scrollováním.
+- **`Vzhled` (#278) je vlastní stránka a je v `Prostředí`.** Vlastní proto, že přepínač platí pro
+  **celé okno** — hlavičku, rail, nastavení, novinky i sheety — takže na stránce pojmenované `Diff`
+  by lhal, i když tam tématem („jak se to čte“) patří; je to tatáž úvaha jako u `Odesílání`.
+  A v `Prostředí` proto, že nic nehlídá a nic neodesílá, takže na otázku obou ostatních skupin
+  odpověď nemá.
+
+  **Prvek je radio group, ne segmentovaný přepínač**, a rozhodla shoda se stránkou `Diff`, která
+  nese tentýž druh volby (globální předvolba pohledu) tímtéž prvkem — dva různé prvky na dvou
+  stránkách vedle sebe vypadají jako dvě různá rozhodnutí. **Šířka to nerozhodla**: segmentovaný
+  přepínač si řekne o 330 bodů proti 110 u radio groupu, ale vejdou se do řádku oba i na nejužší
+  stránce nastavení (okno 720 minus navigace 210). Naměřeno `AppearanceRenderProbe`, kterou se dá
+  vyrendrovat i to, jak která varianta vypadá.
+
+  **Ukládá se hned, ne se zpožděním.** Odložený zápis v `SettingsModel` je kvůli psaní do textových
+  polí; kliknutí do přepínače je hotová volba a čekat 600 ms na přebarvení okna vypadá, jako by
+  přepínač nefungoval. Jde to pořád tou jedinou cestou (`AppStore.apply(_:)`) — stránka si vzhled
+  nenastavuje sama, jen si vynutí zápis.
 - **Vybraná stránka se nepamatuje mezi spuštěními.** Nastavení se otevírá kvůli konkrétní věci;
   vrátit se do něj tam, kde jsem skončil minule, není, co člověk čeká — na rozdíl od výšky
   panelu, kterou si vytáhne jednou a chce ji mít.
