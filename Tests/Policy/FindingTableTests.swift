@@ -150,10 +150,8 @@ struct FindingTableTests {
     @Test("Sloupce se vejdou do dané šířky, ne mimo ni")
     func fitsWidth() {
         for width in stride(from: 648.0, through: 1800, by: 8) {
-            #expect(
-                Self.tableWidth(at: width) <= width + 0.5,
-                "šířka \(width) přetekla na \(Self.tableWidth(at: width))"
-            )
+            let total = Self.tableWidth(at: width)
+            #expect(total <= width + 0.5, "šířka \(width) přetekla na \(total)")
         }
     }
 
