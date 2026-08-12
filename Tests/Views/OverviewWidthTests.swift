@@ -12,14 +12,8 @@ import Testing
 /// tu šířku nezúžil o svá odsazení, takže popis dostal celou šířku tabu a karta kolem něj vyšla
 /// o 58 bodů širší. Vpravo pak chyběla hrana a `Otevřít na GitHubu` bylo odříznuté.
 ///
-/// **Měří se pixely, ne rámečky.** `frame(width:)` z `filling()` je tvrdý rámec: dítě, které se do
-/// něj nevejde, přeteče **vizuálně**, aniž by se rodičova velikost změnila. Ptát se rodiče na
-/// `fittingSize` proto na tuhle chybu nestačí; ptá se toho, kdo o ní neví. Přetečení se dá spočítat
-/// jedině tak, že se obsah nakreslí na plátno **širší** než tab a v tom přesahu se hledají pixely.
-///
-/// **Bez `ScrollView`u** (`content`, ne `body`): `NSScrollView` obsah na svou šířku ukrojí, takže
-/// by se přetečení nekreslilo a rozbitý stav by od opraveného nešlo poznat — přesně to dělá tuhle
-/// regresi v aplikaci tak nenápadnou.
+/// **Jak se to měří, drží `OverflowProbe`** — jedno místo pro tuhle suitu i pro taby bez panelu
+/// (#294), včetně toho, proč se čtou pixely a proč se obsah bere bez `ScrollView`u.
 ///
 /// **Pásmo šířek, ne jedna** (poučení z #236): chyba tohohle druhu je konstantní přesah, ale text
 /// se v každé šířce zalomí jinak, takže jediná šířka umí projít náhodou.
@@ -27,12 +21,9 @@ import Testing
 @Suite("Šířka Přehledu (#291)")
 struct OverviewWidthTests {
     /// Šířky, ve kterých `Přehled` doopravdy stojí. Spodní kraj je 128 bodů, a není to teoretické
-    /// číslo: okno má podlahu 700, rail bere 52 a panel nálezů se dá vytáhnout na 520.
+    /// číslo: okno má podlahu 700, rail bere 52 a panel nálezů se dá vytáhnout na 520. `Přehled`
+    /// panel má i po #294, takže to pásmo platí dál.
     private let widths: [CGFloat] = [128, 200, 320, 420, 560, 720, 900, 1180]
-
-    /// Kolik se vpravo nechá volného místa na to, aby se přesah měl kam nakreslit. Přesah z #291
-    /// dělal 42 bodů (13 + 13 odsazení karty a 16 na pravé straně tabu), takže 120 je s rezervou.
-    private let margin: CGFloat = 120
 
     @Test("Popis PR nepřeteče mimo tab v žádné šířce")
     func markdownDescriptionStaysInside() throws {
@@ -75,7 +66,6 @@ struct OverviewWidthTests {
 
     // MARK: - Měření
 
-    /// Kolik bodů se nakreslilo vpravo za hranou tabu. Nula = nic nepřeteklo.
     private func overflow(
         width: CGFloat,
         description: String?,
@@ -84,123 +74,16 @@ struct OverviewWidthTests {
         movedHead: String? = nil,
         label: String
     ) throws -> Int {
-        let image = try render(
-            width: width,
+        let probe = OverflowProbe(width: width, name: "prehled-\(label)-\(Int(width))")
+        return try probe.overflow(of: OverviewView(
             description: description,
             facts: facts,
             changes: changes,
-            movedHead: movedHead
-        )
-        let empty = try render(
-            width: width,
-            description: nil,
-            facts: PullRequestFacts(tiles: []),
-            changes: .none,
-            movedHead: nil,
-            hidesContent: true
-        )
-        try dump(image, as: "prehled-\(label)-\(Int(width))")
-        return try rightmostPaintedColumn(of: image, against: empty, beyond: width)
+            lastVisit: Date(timeIntervalSince1970: 1_754_000_000),
+            movedHead: movedHead,
+            pullRequest: Self.pullRequest
+        ).content)
     }
-
-    /// Obsah tabu na plátně širším než tab, na purpurovém podkladu. `hidesContent` vykreslí **jen
-    /// ten podklad** — z něj se pak bere referenční barva pixelu.
-    private func render(
-        width: CGFloat,
-        description: String?,
-        facts: PullRequestFacts,
-        changes: VisitChanges,
-        movedHead: String?,
-        hidesContent: Bool = false
-    ) throws -> NSBitmapImageRep {
-        let scene = ZStack(alignment: .topLeading) {
-            Rectangle().fill(Self.probeBackground)
-            if !hidesContent {
-                OverviewView(
-                    description: description,
-                    facts: facts,
-                    changes: changes,
-                    lastVisit: Date(timeIntervalSince1970: 1_754_000_000),
-                    movedHead: movedHead,
-                    pullRequest: Self.pullRequest
-                )
-                .content
-                .availableWidth(width)
-                .frame(width: width, alignment: .topLeading)
-            }
-        }
-        .frame(width: width + margin, height: Self.canvasHeight, alignment: .topLeading)
-
-        let renderer = ImageRenderer(content: scene)
-        renderer.scale = 1
-        let image = try #require(renderer.nsImage)
-        return try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
-    }
-
-    /// Nejvzdálenější sloupec, ve kterém se obsah liší od čistého podkladu, měřeno od hrany tabu.
-    /// Vrací počet bodů přesahu, ať se z červeného testu pozná, **o kolik** to přeteklo.
-    ///
-    /// Porovnává se **proti druhému renderu**, ne proti zapsané hodnotě purpurové: bitmapa z
-    /// `ImageRenderer`u je v systémovém barevném prostoru, takže literál `1,0,1` v ní přesně
-    /// nesedí — a test by pak hlásil přetečení přes celé plátno i tam, kde se nic nenakreslilo.
-    /// První verze sondy na tom stála a vypadalo to jako chyba v aplikaci.
-    ///
-    /// **Čtou se surové bajty, ne `NSColor` na pixel** (nález Copilota). `colorAt(x:y:)`
-    /// s `usingColorSpace(.sRGB)` vyrobí na každý bod dva objekty, a plocha k prohledání je
-    /// `přesah × výška` u každého případu a každé šířky — celkem ~5,4 milionu bodů, tedy ~21 milionů
-    /// `NSColor`ů. Změřeno: **13,2 s → 2,5 s** za celou suitu; převod barevného prostoru přitom
-    /// nebyl na nic potřeba, protože oba rendery jdou stejnou cestou a porovnávají se navzájem.
-    private func rightmostPaintedColumn(
-        of image: NSBitmapImageRep,
-        against empty: NSBitmapImageRep,
-        beyond width: CGFloat
-    ) throws -> Int {
-        let start = Int(width.rounded())
-        // **Nesedící plátna se ohlásí, nevrátí nulu.** Nula by znamenala „nic nepřeteklo“, takže
-        // by rozbitá sonda vyšla jako zelený test — a to je ten nejhorší možný způsob, jak se
-        // tenhle test může pokazit: přestane měřit a nikdo se to nedozví. Platí to i o rozvržení
-        // bajtů: bez shody v něm by se porovnávaly různé pixely.
-        try #require(image.pixelsWide == empty.pixelsWide, "plátna se rozešla v šířce")
-        try #require(image.pixelsHigh == empty.pixelsHigh, "plátna se rozešla ve výšce")
-        try #require(image.bytesPerRow == empty.bytesPerRow, "plátna se rozešla v délce řádku")
-        try #require(image.bitsPerPixel == empty.bitsPerPixel, "plátna se rozešla v bitech na pixel")
-        try #require(!image.isPlanar && !empty.isPlanar, "planární bitmapa má jiné rozvržení bajtů")
-        try #require(image.pixelsWide > start, "plátno není širší než tab, přesah se nemá kam vejít")
-
-        let bytesPerPixel = image.bitsPerPixel / 8
-        try #require(bytesPerPixel > 0, "bitmapa hlásí nulovou velikost pixelu")
-        let painted = try #require(image.bitmapData, "z renderu obsahu se nedají čít bajty")
-        let background = try #require(empty.bitmapData, "z renderu podkladu se nedají čít bajty")
-
-        for x in stride(from: image.pixelsWide - 1, through: start, by: -1) {
-            for y in 0..<image.pixelsHigh {
-                let offset = y * image.bytesPerRow + x * bytesPerPixel
-                for byte in 0..<bytesPerPixel
-                where abs(Int(painted[offset + byte]) - Int(background[offset + byte])) > Self.tolerance {
-                    return x - start + 1
-                }
-            }
-        }
-        return 0
-    }
-
-    /// O kolik se smí bajt lišit, než se to počítá za nakreslené. Pět z 255 je kvůli antialiasingu
-    /// na hraně tabu; odpovídá to 0,02 v podílu, na kterém sonda stála, dokud četla `NSColor`.
-    private static let tolerance = 5
-
-    /// Snímek do scratchpadu, když si o to sonda řekne (`PRISM_RENDER_DIR`). Kouká se na to okem:
-    /// z počtu bodů se nepozná, **co** přeteklo.
-    private func dump(_ image: NSBitmapImageRep, as name: String) throws {
-        guard let directory = ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] else { return }
-        let url = URL(filePath: directory).appending(path: "\(name).png")
-        try #require(image.representation(using: .png, properties: [:])).write(to: url)
-    }
-
-    private static let probeBackground = Color(.sRGB, red: 1, green: 0, blue: 1, opacity: 1)
-
-    /// Plátno musí být vyšší než nejdelší popis, jinak by se dolní část neměla kam nakreslit
-    /// a přesah v ní by se nezměřil.
-    private static let canvasHeight: CGFloat = 1400
 
     private static let pullRequest = PullRequestSummary(
         id: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 14013),

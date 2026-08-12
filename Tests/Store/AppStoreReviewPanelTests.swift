@@ -127,10 +127,91 @@ struct AppStoreReviewPanelTests {
         let store = await prepared()
         collapsed(store)
 
-        store.revealDraft()
+        store.revealDraft(in: pr)
 
         #expect(store.isReviewPanelExpanded)
         #expect(store.reviewPanelTab == .draft)
+    }
+
+    // MARK: - Taby, ve kterých panel není (#294)
+
+    /// **Skrytí je věc pohledu, ne uložený stav.** Kdo má panel rozbalený, přepne na `Nálezy`
+    /// a zpět, musí ho najít rozbalený — jinak by se přepnutím tabu tiše zahodilo nastavení, které
+    /// si člověk vytáhl.
+    @Test("Rozbalený panel přežije průchod tabem, ve kterém není")
+    func expansionSurvivesAHidingTab() async throws {
+        let store = await prepared()
+        store.isReviewPanelExpanded = true
+        store.reviewPanelTab = .draft
+
+        store.setDetailTab(.findings, for: pr)
+        store.setDetailTab(.progress, for: pr)
+        store.setDetailTab(.overview, for: pr)
+
+        #expect(store.isReviewPanelExpanded)
+        #expect(store.reviewPanelTab == .draft)
+    }
+
+    /// A totéž složeným: přepnutí tabu ho **nesmí** rozložit. Kdyby to dělalo, „složeno“ by
+    /// znamenalo „dokud nepřepneš tab“.
+    @Test("Složený panel přepnutím tabu nezmizí ani se nerozloží")
+    func collapseSurvivesAHidingTab() async throws {
+        let store = await prepared()
+        collapsed(store)
+
+        store.setDetailTab(.checks, for: pr)
+        store.setDetailTab(.filesChanged, for: pr)
+
+        #expect(!store.isReviewPanelExpanded)
+    }
+
+    /// V tabu bez panelu by rozložení nebylo vidět, takže se k němu **přepne tab**. Bez toho by
+    /// `Převzít` v tabu `Nálezy` neudělalo nic viditelného — a tichá ztráta rozepsané věty je to
+    /// nejdražší, co tady umí zmizet (#242).
+    @Test("Poznámka z tabu bez panelu přepne do tabu, ve kterém panel je")
+    func noteLeavesAHidingTab() async throws {
+        let store = await prepared()
+        collapsed(store)
+        store.setDetailTab(.findings, for: pr)
+
+        store.appendDraftNote(text: "chybí test", path: nil, line: nil, for: pr)
+        await settle()
+
+        #expect(store.detailTab(for: pr).showsReviewPanel)
+        #expect(store.detailTab(for: pr) == .overview)
+        #expect(store.isReviewPanelExpanded)
+        #expect(store.reviewPanelTab == .draft)
+        #expect(store.draft(for: pr)?.body.contains("chybí test") == true)
+    }
+
+    /// A **z tabu, kde panel je, se nepřepíná nikam**: převzetí nálezu v diffu nesmí člověka
+    /// vyhodit z kódu, který zrovna čte.
+    @Test("Poznámka z tabu s panelem tab nemění")
+    func noteKeepsATabThatHasThePanel() async throws {
+        let store = await prepared()
+        store.setDetailTab(.filesChanged, for: pr)
+
+        store.appendDraftNote(text: "poznámka", path: nil, line: nil, for: pr)
+        await settle()
+
+        #expect(store.detailTab(for: pr) == .filesChanged)
+    }
+
+    /// Paleta ⌘K nabízí přepnutí panelu **jen tam, kde panel je**: z klávesnice by se jinak
+    /// přestavěl tab, do kterého se člověk vrátí, a v okně by po tom nezůstala žádná stopa.
+    @Test("Paleta nenabízí přepnutí panelu v tabu, kde panel není")
+    func paletteOmitsThePanelActionInAHidingTab() async throws {
+        let store = await prepared()
+        store.openTab(pr)
+        store.setDetailTab(.overview, for: pr)
+        #expect(store.paletteItems.contains { $0.target == .action(.setReviewPanel(expanded: false)) })
+
+        store.setDetailTab(.findings, for: pr)
+
+        #expect(!store.paletteItems.contains { $0.target == .action(.setReviewPanel(expanded: false)) })
+        #expect(!store.paletteItems.contains { $0.target == .action(.setReviewPanel(expanded: true)) })
+        // Pohled na diff se nabízí dál — je to nastavení diffu, ne věc na téhle obrazovce.
+        #expect(store.paletteItems.contains { $0.target == .action(.setDiffLayout(.split)) })
     }
 
     /// Rozložený panel se doručením poznámky nesmí složit — je to `reveal`, ne přepínač.

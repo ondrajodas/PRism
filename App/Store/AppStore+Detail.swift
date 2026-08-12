@@ -40,14 +40,27 @@ extension AppStore {
 
     func detailState(for pr: PRIdentifier) -> DetailState? { detailStates[pr] }
 
-    /// Ukáže rozdělané review v panelu — přepne na jeho tab a **rozloží složený panel**.
+    /// Ukáže rozdělané review v panelu — přepne na jeho tab, **rozloží složený panel** a od #294
+    /// si i **přepne do tabu, ve kterém panel vůbec je**.
     ///
-    /// Tudy chodí všechno, co do těla review něco doručí (#242). Do té doby stačilo přepnout tab,
-    /// protože nálezy měly v panelu vlastní; po přidání záložky `Nálezy` se ale panel dá složit
-    /// a rozepsaná věta by spadla za proužek na hraně okna, tedy tam, kde ji nikdo nehledá.
-    func revealDraft() {
+    /// Tudy chodí všechno, co do těla review něco doručí (#242). Do té doby stačilo přepnout tab
+    /// panelu, protože nálezy měly v panelu vlastní; po přidání záložky `Nálezy` se ale panel dá
+    /// složit a rozepsaná věta by spadla za proužek na hraně okna, tedy tam, kde ji nikdo nehledá.
+    ///
+    /// **Třetí krok přidala #294**, která panel v `Kontrolách`, `Nálezech` a `Průběhu` schovává
+    /// celý. Bez něj by `Převzít` v tabu `Nálezy` neudělalo nic viditelného — a to je horší než
+    /// složený panel: složený je vidět aspoň jako proužek. Cílem je `PullRequestTab.standard`,
+    /// protože panel je v každém povoleném tabu tentýž, a `Přehled` je ten, který nepotřebuje
+    /// načtený diff. Je to tatáž úvaha jako u skoku na nález, který si přepne do diffu:
+    /// **přepnout tab je správnější než kliknutí ignorovat.**
+    ///
+    /// Z tabu, kde panel je, se **nepřepíná nikam** — jinak by převzetí nálezu v diffu člověka
+    /// vyhodilo z kódu, který zrovna čte.
+    func revealDraft(in pr: PRIdentifier) {
         reviewPanelTab = .draft
         isReviewPanelExpanded = true
+        guard !detailTab(for: pr).showsReviewPanel else { return }
+        setDetailTab(.standard, for: pr)
     }
 
     /// Popis PR, jak ho napsal autor. `nil` = detail se ještě nenačetl.
