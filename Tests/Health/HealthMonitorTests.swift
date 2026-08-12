@@ -114,12 +114,12 @@ struct HealthMonitorTests {
         monitor.lastCall = { _ in ServiceCall(since: Date(timeIntervalSince1970: 1_000_000)) }
 
         let task = Task { await monitor.run() }
-        while monitor.isOnline == nil { try await Self.pause() }
+        await waitUntil("monitor zjistí stav sítě") { monitor.isOnline != nil }
 
         #expect(monitor.reports.allSatisfy { $0.state == .offline })
 
         reachability.send(true)
-        while monitor.isOnline != true { try await Self.pause() }
+        await waitUntil("monitor uvidí síť zpátky") { monitor.isOnline == true }
         // Kolo se dožaduje výslovně, ne přes smyčku monitoru: `FakeTimeSource` neuspává,
         // takže na pořadí, ve kterém plánovač pustí obě větve `run()`, není spoleh.
         await monitor.refresh()
@@ -168,23 +168,14 @@ struct HealthMonitorTests {
     /// Pustí smyčku, počká na daný počet uspání a uklidí ji.
     ///
     /// Zrušení je potřeba i po vyčerpaných uspáních: kontrola stavu skončí sama, ale hlídání
-    /// sítě běží dál, takže `run()` bez něj nevrátí. Čeká se v smyčce bez horní hranice —
-    /// test, který se nedočká, uvízne, a to je srozumitelnější než náhodné padání.
+    /// sítě běží dál, takže `run()` bez něj nevrátí.
     private func run(_ monitor: HealthMonitor, until time: FakeTimeSource, sleeps: Int) async throws {
         let task = Task { await monitor.run() }
-        while time.requestedSleeps.count < sleeps { try await Self.pause() }
+        await waitUntil("monitor si vyžádá \(sleeps) uspání") {
+            time.requestedSleeps.count >= sleeps
+        }
         task.cancel()
         await task.value
-    }
-
-    /// Krátká odmlka, **ne `Task.yield()`**.
-    ///
-    /// Suita je `@MainActor` a Swift Testing pouští suity paralelně, takže spin bez odmlky
-    /// vyhladoví testy, které čekají na skutečné procesy — změřeno na `SubprocessStreamerTests`,
-    /// kde se zabíjený proces nestihl zabít dřív, než mu doběhl `sleep 1`. Tatáž lekce jako
-    /// u `ReviewSubmission`.
-    private static func pause() async throws {
-        try await Task.sleep(for: .milliseconds(1))
     }
 
     @Test("Ve výchozím stavu se kontroluje po deseti minutách")

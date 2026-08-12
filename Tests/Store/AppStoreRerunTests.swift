@@ -52,7 +52,7 @@ struct AppStoreRerunTests {
     }
 
     private func waitUntilIdle(_ store: AppStore) async throws {
-        for _ in 0..<100_000 where store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
         #expect(!store.isReviewing(pr))
     }
 

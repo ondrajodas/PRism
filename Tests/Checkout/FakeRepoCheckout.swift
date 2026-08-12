@@ -1,4 +1,5 @@
 import Foundation
+import Testing
 
 @testable import PRism
 
@@ -99,16 +100,12 @@ actor AsyncGate {
     /// k závoře nedostala“ u **tří** suit naráz, přitom samostatně proběhly za 0,094 s. Je to tatáž
     /// chyba, jakou #269 vyndalo ze sondy odpočtu: kdo čeká na jev, čeká **na jev se stropem** —
     /// a spánek k tomu na rozdíl od `yield`ování pustí procesor jinam.
-    nonisolated func waitUntilReached(timeout: Duration = .seconds(10)) async throws {
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: timeout)
-        while clock.now < deadline {
-            if await hasArrived { return }
-            try? await Task.sleep(for: .milliseconds(5))
-        }
-        throw NSError(domain: "AsyncGate", code: 1, userInfo: [
-            NSLocalizedDescriptionKey: "Práce se k závoře nedostala.",
-        ])
+    ///
+    /// Od #296 je z toho `waitUntil` v `TestWaiting.swift`, protože týž strop potřebovala i pětice
+    /// dalších míst a každé si ho psalo po svém. Vlastní implementace by tady znamenala, že se
+    /// příští oprava udělá jen v jedné z nich.
+    nonisolated func waitUntilReached() async {
+        await waitUntil("práce dorazí k závoře") { await self.hasArrived }
     }
 
     private var hasArrived: Bool { arrived }

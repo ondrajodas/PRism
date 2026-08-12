@@ -43,23 +43,21 @@ struct ReviewSubmissionTests {
         )
     }
 
-    /// Závora, kterou test drží odeslání rozběhnuté. Čeká se **odmlkami, ne `Task.yield()`**.
+    /// Závora, kterou test drží odeslání rozběhnuté. **Drží se, nečeká na jev**, takže je bez
+    /// stropu — pustí ji teprve test.
     ///
-    /// Točení přes `yield()` je jinde v testech tohohle repa běžné, ale tady by běželo
-    /// **na `MainActoru`** (`ReviewSubmission` je `@MainActor`) a **bez horní hranice** —
-    /// dokud závoru někdo nepustí. Swift Testing pouští suity paralelně, takže takový hot
-    /// spin ubírá čas všem ostatním: `SubprocessStreamerTests` na něm začaly padat, protože
-    /// zrušený proces se nestihl zabít dřív, než mu doběhl `sleep 1`. Millisekundová odmlka
-    /// vlákno pustí a vlastnost, kvůli které se `yield()` používá, zůstává — test, který se
-    /// nedočká, uvízne, což je srozumitelnější než náhodné padání.
-    private final class AsyncGate: @unchecked Sendable {
+    /// Točení přes `yield()` tady dřív bylo a odešlo (#296 to zapsalo jako pravidlo pro celé
+    /// `Tests/`): běželo by **na `MainActoru`** (`ReviewSubmission` je `@MainActor`) a **bez horní
+    /// hranice**, takže by hot spin ubíral čas všem ostatním suitám — `SubprocessStreamerTests` na
+    /// něm začaly padat, protože zrušený proces se nestihl zabít dřív, než mu doběhl `sleep 1`.
+    private final class SendGate: @unchecked Sendable {
         private let lock = NSLock()
         private var isOpen = false
 
         func open() { lock.withLock { isOpen = true } }
 
         func wait() async {
-            while !lock.withLock({ isOpen }) { try? await Task.sleep(for: .milliseconds(1)) }
+            while !lock.withLock({ isOpen }) { await TestWait.pause() }
         }
     }
 
@@ -425,11 +423,11 @@ struct ReviewSubmissionTests {
     func refusesToSendWhileSending() async {
         let publisher = FakeReviewPublisher(always: .success(review()))
         let submission = submission(publisher)
-        let release = AsyncGate()
+        let release = SendGate()
         publisher.hold { await release.wait() }
 
         async let first: Void = submission.send()
-        while publisher.submitted.isEmpty { try? await Task.sleep(for: .milliseconds(1)) }
+        await waitUntil("odeslání se rozběhne") { !publisher.submitted.isEmpty }
 
         #expect(submission.state == .sending)
         #expect(!submission.canSend)

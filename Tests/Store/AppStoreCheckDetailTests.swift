@@ -293,7 +293,7 @@ struct AppStoreCheckDetailTests {
         let check = check()
 
         store.toggleCheck(check, in: pr)
-        try await gate.waitUntilReached()
+        await gate.waitUntilReached()
 
         let detail = try #require(store.checkDetail(of: check.name, in: pr))
         guard case .loading(let bytes) = detail.log else {

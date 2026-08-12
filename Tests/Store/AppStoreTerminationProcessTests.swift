@@ -34,7 +34,7 @@ struct AppStoreTerminationProcessTests {
         store.startReview(for: pr)
         // Zabíjet se má proces, který **doopravdy běží** — jinak by test prošel i tehdy, kdyby
         // se žádná session nespustila.
-        let pid = try await pid(from: pidFile)
+        let pid = try await processID(writtenTo: pidFile)
 
         await store.stopReviewsBeforeTermination()
 
@@ -45,7 +45,7 @@ struct AppStoreTerminationProcessTests {
         #expect(store.runningReviews == 0)
         // Až potom se kouká na proces. Tady se čekat smí: mezi doručeným `SIGKILL`em a tím, že
         // proces zmizí z tabulky, je ještě sklizení, které nemá s aplikací co dělat.
-        #expect(await isGone(pid), "session \(pid) po zavření aplikace pořád běží")
+        #expect(await processHasGone(pid), "session \(pid) po zavření aplikace pořád běží")
     }
 
     // MARK: - Řetěz
@@ -97,38 +97,6 @@ struct AppStoreTerminationProcessTests {
 
     // MARK: - Sledování procesu
 
-    /// PID z běžícího procesu. Čeká na něj pollingem, ne pevnou odmlkou — start trvá jednotky
-    /// milisekund, ale pod zátěží klidně stovky.
-    ///
-    /// **Nekladné číslo se nepřijme**: `kill(0, …)` míří na celou procesovou skupinu volajícího
-    /// a negativní PID taky na skupinu, takže hodnota, která se sem omylem dostane, by z kontroly
-    /// existence jednoho procesu udělala něco úplně jiného. Je to tatáž pojistka jako
-    /// v `SubprocessStreamerTests`.
-    private func pid(from file: URL) async throws -> pid_t {
-        for _ in 0..<250 {
-            if let text = try? String(contentsOf: file, encoding: .utf8),
-               let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
-               pid > 0 {
-                return pid
-            }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        throw TerminationTestFailure.sessionNeverStarted
-    }
-
-    /// Zmizel proces? `kill(pid, 0)` jen ověřuje existenci, nic neposílá.
-    ///
-    /// Po `stopReviewsBeforeTermination` už má být mrtvý — metoda se vrací teprve tehdy, když
-    /// běhy skončily. Deadline je tu proti zátěži, ne proti pomalému zabíjení.
-    private func isGone(_ pid: pid_t) async -> Bool {
-        for _ in 0..<250 {
-            if kill(pid, 0) != 0 { return true }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        return false
-    }
-}
-
-private enum TerminationTestFailure: Error {
-    case sessionNeverStarted
+    // Sonda na PID i její důvod jsou v `Tests/Support/ProcessProbing.swift` — tentýž postup
+    // potřebují tři suity, takže tři kopie by znamenaly, že se příští oprava udělá v jedné (#296).
 }

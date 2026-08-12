@@ -89,11 +89,19 @@ struct LogTailOpeningTests {
     }
 
     /// Čeká **na jev se stropem, ne na pevný okamžik** (#269): okýnko v hierarchii vznikne až po kole
-    /// smyčky a skok přijde s jeho rozložením, což je pod zátěží jinak daleko než naprázdno. Strop je
-    /// z čeho spočítat — je to pár kol smyčky, takže dvě vteřiny jsou o dva řády víc, než co se čeká.
+    /// smyčky a skok přijde s jeho rozložením, což je pod zátěží jinak daleko než naprázdno.
+    ///
+    /// **Strop je `TestWait.deadline`** (#296; do té doby 40 kol po 50 ms, tedy 2 s — „o dva řády víc,
+    /// než co se čeká“). Dva řády nestačí: u #296 se změřilo, že vyžádaná odmlka o 100 ms se pod třemi
+    /// souběžnými buildy probouzí i za 8,6 s, tedy že zpoždění umí být **stonásobné**. Čeká se tady
+    /// pumpováním smyčky, ne `waitUntil` — okýnko se rozloží jedině tak, že smyčka doopravdy poběží —,
+    /// ale strop je tentýž a je na jednom místě. Cena je, že **skutečná** regrese spadne pomaleji;
+    /// zelený běh se nezdrží, protože se vrací hned, jak skok přijde.
     private func settled(in hosting: NSView) throws -> LogTailScrollView {
-        for _ in 0..<40 {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        let step: TimeInterval = 0.05
+        let limit = ContinuousClock.now.advanced(by: TestWait.deadline)
+        while ContinuousClock.now < limit {
+            RunLoop.current.run(until: Date().addingTimeInterval(step))
             if let scroll = Self.scrollView(in: hosting), scroll.contentView.bounds.origin.y > 0 {
                 return scroll
             }

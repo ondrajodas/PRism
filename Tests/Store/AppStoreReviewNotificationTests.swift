@@ -77,7 +77,7 @@ struct AppStoreReviewNotificationTests {
     }
 
     private func waitUntilIdle(_ store: AppStore) async throws {
-        for _ in 0 ..< 100_000 where store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
         #expect(!store.isReviewing(pr))
     }
 
@@ -211,7 +211,7 @@ struct AppStoreReviewNotificationTests {
         let store = store(gateway: gateway(), center: center, reviewer: reviewer)
 
         store.startReview(for: pr)
-        for _ in 0 ..< 100_000 where !store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review se rozběhne") { store.isReviewing(pr) }
         store.cancelReview(for: pr)
         try await waitUntilIdle(store)
 

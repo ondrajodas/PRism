@@ -69,7 +69,7 @@ struct AppStoreClearFindingsTests {
 
     private func runReview(_ store: AppStore) async {
         store.startReview(for: pr)
-        for _ in 0..<100_000 where store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
     }
 
     @Test("Zahození vyprázdní panel, řádek i disk")
@@ -144,11 +144,11 @@ struct AppStoreClearFindingsTests {
             autoRuns: AutoRunLedger(layout: layout, time: FakeTimeSource())
         )
         await store.refresh()
-        for _ in 0..<100_000 where store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
         #expect(reviewer.requests.count == 1)
 
         try await store.clearFindings(for: pr)
-        for _ in 0..<100_000 where store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
 
         #expect(reviewer.requests.count == 2)
     }
@@ -169,7 +169,7 @@ struct AppStoreClearFindingsTests {
         await runReview(store)
 
         try await store.clearFindings(for: pr)
-        for _ in 0..<1000 { await Task.yield() }
+        await settle()
 
         #expect(reviewer.requests.count == 1)
     }

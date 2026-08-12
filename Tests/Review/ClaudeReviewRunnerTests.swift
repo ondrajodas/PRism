@@ -164,9 +164,9 @@ struct ClaudeReviewRunnerTests {
         }
 
         await streamer.waitForStarts(3)
-        // Čtvrtý běh by se při rozbitém limitu rozjel spolu s ostatními; pár otočení
-        // plánovače mu na to dá příležitost.
-        for _ in 0..<100 { await Task.yield() }
+        // Čtvrtý běh by se při rozbitém limitu rozjel spolu s ostatními; odmlka mu na to dá
+        // příležitost.
+        await settle()
         #expect(streamer.startedCount == 3)
 
         streamer.releaseAll()
@@ -188,7 +188,7 @@ struct ClaudeReviewRunnerTests {
         let first = Task { try await runner.run(target) }
         await streamer.waitForStarts(1)
         let second = Task { try await runner.run(target) }
-        for _ in 0..<100 { await Task.yield() }
+        await settle()
 
         streamer.releaseAll()
         let results = try await (first.value, second.value)

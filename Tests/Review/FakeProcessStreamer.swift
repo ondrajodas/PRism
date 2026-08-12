@@ -1,4 +1,5 @@
 import Foundation
+import Testing
 
 @testable import PRism
 
@@ -56,11 +57,8 @@ final class FakeProcessStreamer: ProcessStreaming, @unchecked Sendable {
     func releaseAll() { lock.withLock { released = true } }
 
     /// Počká, až se rozběhne zadaný počet běhů.
-    ///
-    /// Točení přes `Task.yield()` schválně: test, který se nedočká, uvízne — což je ale
-    /// srozumitelnější selhání než čekání na razítko hodin, které v testech nejdou.
     func waitForStarts(_ count: Int) async {
-        while startedCount < count { await Task.yield() }
+        await waitUntil("rozběhne se \(count) běhů") { self.startedCount >= count }
     }
 
     func stream(
@@ -85,7 +83,8 @@ final class FakeProcessStreamer: ProcessStreaming, @unchecked Sendable {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 self.markStarted()
-                while self.holds, !self.isReleased, !Task.isCancelled { await Task.yield() }
+                // Držení, ne čekání na jev — proto bez stropu, ale s odmlkou.
+                while self.holds, !self.isReleased, !Task.isCancelled { await TestWait.pause() }
                 self.emit(script, into: continuation)
                 self.markFinished()
             }

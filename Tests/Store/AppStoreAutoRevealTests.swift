@@ -88,15 +88,11 @@ struct AppStoreAutoRevealTests {
 
     private func runReview(_ store: AppStore) async {
         store.startReview(for: pr)
-        for _ in 0..<400 where store.isReviewing(pr) {
-            await Task.yield()
-        }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
     }
 
     private func waitForFile(_ gateway: FakeGitHubGateway) async {
-        for _ in 0..<400 where gateway.fileRequests.isEmpty {
-            await Task.yield()
-        }
+        await waitUntil("soubor se dotáhne") { !gateway.fileRequests.isEmpty }
     }
 
     @Test("Nález mimo hunky si dotáhne okolí sám")
@@ -112,8 +108,8 @@ struct AppStoreAutoRevealTests {
 
         await store.loadDiff(for: summary())
         await waitForFile(gateway)
-        for _ in 0..<400 where store.expansion(of: "App/Main.swift", in: pr).revealed.ranges.isEmpty {
-            await Task.yield()
+        await waitUntil("okolí nálezu se rozbalí") {
+            !store.expansion(of: "App/Main.swift", in: pr).revealed.ranges.isEmpty
         }
 
         #expect(gateway.fileRequests.map(\.path) == ["App/Main.swift"])
@@ -130,7 +126,7 @@ struct AppStoreAutoRevealTests {
         await runReview(store)
 
         await store.loadDiff(for: summary())
-        for _ in 0..<200 { await Task.yield() }
+        await settle()
 
         #expect(gateway.fileRequests.isEmpty)
     }
@@ -142,7 +138,7 @@ struct AppStoreAutoRevealTests {
         await runReview(store)
 
         await store.loadDiff(for: summary())
-        for _ in 0..<200 { await Task.yield() }
+        await settle()
 
         #expect(gateway.fileRequests.isEmpty)
     }
@@ -154,7 +150,7 @@ struct AppStoreAutoRevealTests {
         await runReview(store)
 
         await store.loadDiff(for: summary())
-        for _ in 0..<200 { await Task.yield() }
+        await settle()
 
         #expect(gateway.fileRequests.isEmpty)
     }
@@ -173,8 +169,8 @@ struct AppStoreAutoRevealTests {
         await runReview(store)
 
         await store.loadDiff(for: summary())
-        for _ in 0..<400 where store.expansion(of: "App/Main.swift", in: pr).content.isEmpty {
-            await Task.yield()
+        await waitUntil("obsah souboru dorazí") {
+            !store.expansion(of: "App/Main.swift", in: pr).content.isEmpty
         }
 
         let revealed = store.expansion(of: "App/Main.swift", in: pr).revealed
@@ -194,8 +190,8 @@ struct AppStoreAutoRevealTests {
         await runReview(store)
 
         await store.loadDiff(for: summary())
-        for _ in 0..<400 where store.expansion(of: "App/Main.swift", in: pr).content.isEmpty {
-            await Task.yield()
+        await waitUntil("obsah souboru dorazí") {
+            !store.expansion(of: "App/Main.swift", in: pr).content.isEmpty
         }
 
         #expect(gateway.fileRequests.count == 1)

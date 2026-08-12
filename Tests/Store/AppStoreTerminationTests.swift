@@ -156,7 +156,7 @@ struct AppStoreTerminationTests {
         try await waitForMark(in: interrupted)
 
         store.cancelReview(for: pr)
-        for _ in 0..<100_000 where store.isReviewing(pr) { await Task.yield() }
+        await waitUntil("review doběhne") { !store.isReviewing(pr) }
         #expect(!store.isReviewing(pr))
 
         #expect(await interrupted.pending().isEmpty)
@@ -164,11 +164,9 @@ struct AppStoreTerminationTests {
 
     /// Počká, až si běh poznamená rozdělanou session — ale ne donekonečna.
     private func waitForMark(in interrupted: InterruptedRuns) async throws {
-        for _ in 0..<100_000 {
-            if await !interrupted.pending().isEmpty { return }
-            await Task.yield()
+        await waitUntil("značka rozdělaného běhu se zapíše") {
+            await !interrupted.pending().isEmpty
         }
-        Issue.record("Značka rozdělaného běhu se nezapsala.")
     }
 
     private func finding() -> ReportedFinding {

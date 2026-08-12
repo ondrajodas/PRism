@@ -66,7 +66,7 @@ struct AppStoreAutomaticTests {
 
     /// Počká, až doběhne všechno, co tik rozjel.
     private func settle(_ store: AppStore) async {
-        for _ in 0..<100_000 where !store.busyRepositories.isEmpty { await Task.yield() }
+        await waitUntil("tik doběhne") { store.busyRepositories.isEmpty }
     }
 
     @Test("PR z automatického repa se zreviduje bez kliknutí")
