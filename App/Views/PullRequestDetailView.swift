@@ -27,6 +27,14 @@ struct PullRequestDetailView: View {
     /// Resetuje se proto při změně PR, viz `.task(id:)` níž.
     @State private var cursor = FindingCursor()
 
+    /// Celý log jobu v sheetu (#214). `@State` detailu, protože se **neukládá a nemá přežít**.
+    ///
+    /// **Nuluje se při přepnutí checku i při přepnutí PR** (nález Copilota na #214, včetně toho
+    /// v `Suppressed comments`). Drží celý text, takže bez toho by pravidlo „log nepřežije sbalení
+    /// checku“ platilo jen ve store: sbalení zahodí `checkDetail`, ale otevřený sheet by dál držel
+    /// megabajty — a po přepnutí PR by nad novým ukazoval log z předchozího.
+    @State private var logSheet: CodeText?
+
     /// Rozdělané odeslání review. Zakládá se tady, ale **drží ho `ContentView`** — detail
     /// zmizí, jakmile PR vypadne ze seznamu, a odeslané review `review-requested` ruší, takže
     /// se to na příštím tiku stane. Sheet by tím zmizel i s hláškou, kvůli které je otevřený.
@@ -49,6 +57,9 @@ struct PullRequestDetailView: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // Celý log jobu (#214) — tentýž sheet, jakým se kopíruje hunk z diffu (#157): jeden
+        // read-only `NSTextView`, tedy přesně na tohle.
+        .sheet(item: $logSheet) { CodeTextSheet(content: $0) }
         .hiddenShortcuts { shortcuts }
         .task(id: highlighted) {
             guard highlighted != nil else { return }
@@ -65,6 +76,9 @@ struct PullRequestDetailView: View {
         .task(id: pullRequest.id) { store.noteVisit(to: pullRequest.id) }
         // Kurzor procházení patří k tomuhle diffu, ne k oknu — viz `cursor`.
         .task(id: pullRequest.id) { cursor = FindingCursor(onlyBlocking: cursor.onlyBlocking) }
+        // Log jobu patří k jednomu checku jednoho PR (#214), takže při přepnutí PR **nesmí**
+        // přetéct — ani obsahem, ani tou pamětí, kterou drží.
+        .task(id: pullRequest.id) { logSheet = nil }
         // Klíčem je celé shrnutí, ne jen identifikátor: nový commit změní `updatedAt`,
         // a to je přesně chvíle, kdy se má diff načíst znovu i bez přepnutí PR.
         .task(id: pullRequest) { await store.loadDiff(for: pullRequest) }
@@ -824,8 +838,39 @@ struct PullRequestDetailView: View {
     }
 
     /// Tab `Kontroly` (#215) — seznam checků z GitHub Actions a detail spadlého (#214).
+    ///
+    /// Detail se tahá **až na kliknutí a jen na ten jeden check**; podrobnosti u `AppStore+Checks`.
     private var checks: some View {
-        ChecksView(checks: store.checks[pullRequest.id] ?? [])
+        let open = store.expandedCheck(in: pullRequest.id)
+        return ChecksView(
+            checks: store.checks[pullRequest.id] ?? [],
+            expanded: open,
+            detail: open.flatMap { store.checkDetail(of: $0, in: pullRequest.id) },
+            toggle: { check in
+                // Sbalení i rozbalení **zavře sheet a text z něj pustí** — jinak by ho okno drželo
+                // dál, i když ho store zahodil.
+                logSheet = nil
+                store.toggleCheck(check, in: pullRequest.id)
+            },
+            // Anotace ukazují na `soubor:řádek`, což je tentýž tvar, jaký okno umí kreslit — takže
+            // se skáče **tou samou cestou** jako z nálezu a z palety (#184).
+            jump: { path, line in
+                guard let anchor = anchor(inFile: path, line: line) else { return }
+                scroll(to: anchor)
+            },
+            showFullLog: { check, full in
+                logSheet = CodeText(
+                    id: "log:\(check.name)",
+                    // Jméno checku, ne cesta k souboru — a to je zároveň důvod, proč se log nasází
+                    // **jednolitě**: `Language(path:)` v něm žádný jazyk nepozná, takže
+                    // `SelectableCodeView` obarvování po řádcích přeskočí (2,2 ms místo 38 ms
+                    // na dvoumegovém logu, změřeno u #214).
+                    path: check.name,
+                    heading: "job.log",
+                    code: full
+                )
+            }
+        )
     }
 
     /// Tab `Nálezy` (#242) — tabulka přes celou šířku.

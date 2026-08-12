@@ -92,14 +92,26 @@ actor AsyncGate {
 
     /// Počká, až práce dorazí k závoře — ale ne donekonečna. Bez stropu by se test při
     /// chybě zasekl místo aby spadl.
-    func waitUntilReached() async throws {
-        for _ in 0..<100_000 where !arrived { await Task.yield() }
-        guard arrived else {
-            throw NSError(domain: "AsyncGate", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Práce se k závoře nedostala.",
-            ])
+    ///
+    /// **Strop je čas, ne počet `yield`ů** (#292; do té doby `for _ in 0..<100_000`). Rozpočet
+    /// yieldů je pevný okamžik v přestrojení: pod zátěží (druhý paralelní build na stroji) se
+    /// vyčerpá dřív, než se čekaná práce vůbec dostane na procesor — závora pak hlásila „práce se
+    /// k závoře nedostala“ u **tří** suit naráz, přitom samostatně proběhly za 0,094 s. Je to tatáž
+    /// chyba, jakou #269 vyndalo ze sondy odpočtu: kdo čeká na jev, čeká **na jev se stropem** —
+    /// a spánek k tomu na rozdíl od `yield`ování pustí procesor jinam.
+    nonisolated func waitUntilReached(timeout: Duration = .seconds(10)) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if await hasArrived { return }
+            try? await Task.sleep(for: .milliseconds(5))
         }
+        throw NSError(domain: "AsyncGate", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "Práce se k závoře nedostala.",
+        ])
     }
+
+    private var hasArrived: Bool { arrived }
 
     func release() {
         open = true

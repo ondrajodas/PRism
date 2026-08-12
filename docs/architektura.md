@@ -347,6 +347,11 @@ Co se u toho nemá rozbít:
   16,7 bodu, SwiftUI dá pro `size: 11.5` dvanáct, a obtažení v CSS leží **vně** paddingu, kdežto
   SwiftUI ho kreslí `overlay`em dovnitř. Bez obojího vycházelo tlačítko 20 bodů proti 25 v návrhu.
   Změřeno renderem vedle sebe — z kódu se to nepozná.
+- **Plochu má bublina, barvu má celé okno** (#298). #283 převedlo na tlačítka jen bublinu, takže
+  v tabulce nálezů zbyly `.buttonStyle(.link)`, tedy **systémová modrá** — a v okně dvě různá „klikni
+  sem“ naráz. Barvu drží od #298 `AccentLinkButtonStyle` (`Palette.accent`, jako plné `.mini`), tvar
+  zůstává různý: plocha v bublině, holý text v tabulce. `.tint(Palette.accent)` z kořene okna na to
+  **nestačilo** — `.link` si tint nebere.
 
 Pohled **vedle sebe** (#98) je `DiffRow.pair(_, left:, right:)` a platí u něj:
 
@@ -1816,6 +1821,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou. Od #283 jsou akce **řada malých tlačítek vlevo pod textem** |
 | `MiniButtonStyle` | Malé tlačítko z návrhu (`.mini`, `.mini.pri`) — plné akcentové a obtažené. Rozměry v `Metrics`, aby se daly změřit testem; text plného je `Palette.surface` (`--panel`), ne bílá |
+| `AccentLinkButtonStyle` | Textová akce v barvě akcentu (`.go` z návrhu) — **místo systémového `.link`** (#298). Barva z `Palette.accent`, ztlumení při zmáčknutí jako u `.mini`, kurzor `pointerStyle(.link)`. Font si drží volající. Tři výskyty ve dvou souborech: `Převzít` a `Vrátit` v tabulce nálezů, `Připravit` ve stavovém řádku — `grep -rn "buttonStyle(.link)" App/` po #298 vrací jen komentáře |
 | `FindingActions` | Co se dá dělat s nálezem — odmítnout a vrátit; jedno místo pro bublinu i tabulku |
 | `FindingDisclosureActions` | Rozbalení bubliny nálezu (#185) — stav ze store a jeho překliknutí. **Nepatří do `FindingActions`**, kterou bere i tabulka: ta rozbalení řídí sama |
 | `ThreadBubbleView` | Vlákno konverzace — u kódu i na ose (`Placement`); karta z pruhů, vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73, sazba #216) |
@@ -1837,7 +1843,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ReviewProgressView`, `ReviewerLaneView` | Tab `Průběh` (#242, nahradily `ReviewTimelineView`): **dráha na revieweera** s fázemi vedle sebe, věta o tom, co se právě děje, u spadlé session důvod, `stderr` a `Pustit znovu` / `Zkopírovat příkaz`; podrobný výpis událostí pod rozbalením (`TimelineEntryRow`). Dráha po skillu **mimo nastavenou sadu** nese v hlavičce `mimo sadu`; prázdný stav mluví o **nastavení**, protože se do něj dá dojít jedině s prázdnou sadou skillů |
 | `ReviewerLaneText` | České věty dráhy — stav, co se právě děje, čím to skončilo. Rozlišuje **tři** doběhlé stavy: nahlásilo nálezy / nahlásilo nulu / nenahlásilo nic — a `nespuštěno` od `ve frontě` |
 | `FindingsTabView`, `FindingsEmptyView` | Tab `Nálezy` (#242): souhrn počtů, `Zahodit nálezy`, tabulka — a věta, **proč** je prázdno (`Policy.findingsEmptyReason`), společná s panelem |
-| `FindingsTableView`, `FindingTableRowView`, `FindingTableRow` | Tabulka nálezů přes celou šířku: řazení kliknutím na hlavičku, řádek na **místo** (shoda dvou reviewerů je odznak `2×`), rozbalení kreslí tutéž `FindingBubbleView` jako diff |
+| `FindingsTableView`, `FindingTableRowView`, `FindingTableRow` | Tabulka nálezů přes celou šířku: řazení kliknutím na hlavičku, řádek na **místo** (shoda dvou reviewerů je odznak `2×`), rozbalení kreslí tutéž `FindingBubbleView` jako diff. Akce (`Převzít`, `Vrátit`) jsou **barevný text z palety** (`AccentLinkButtonStyle`, #298), ne plocha jako v bublině a ne systémová modrá; krytí odmítnutého řádku drží `dismissedOpacity` (`.frow.done` z návrhu), ze kterého měří i sonda kontrastu |
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
 | `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
@@ -2761,6 +2767,125 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     se na `Přehled` vůbec nepodívá. Hlavička je vidět ve všech tabech a už jednu takovou větu nese
     (kontrola nálezů, #150). Okrová, ne červená: nepovedlo se to **zjistit**, což je „nevím“, ne
     „je to rozbité“.
+
+  **Detail jednoho checku** (#214) — anotace a konec logu, `AppStore+Checks` a `CheckDetailView`:
+  - **Až na kliknutí a jen na ten jeden check.** Log celého běhu je log všech jeho jobů (u změřeného
+    PR 23), takže tahat ho pro seznam je N+1 past o tři řády dražší než u detailu PR. Rozbalený je
+    **jeden na PR** — dvě sady megabajtů v paměti nemají důvod.
+  - **Nabídka detailu visí na `jobID`, ne na `outcome`.** Číslo se rozborem vytáhne z `link`u
+    (`…/runs/<runId>/job/<jobId>`) a **totéž číslo funguje jako check-run ID** pro anotace, takže se
+    pro něj nechodí zvlášť. Že ho odkaz mít nemusí, je ověřené (CodeQL má `/runs/<id>` bez `/job/`,
+    bors odkazuje mimo GitHub) — u takového checku se detail nenabízí, protože tlačítko, které
+    skončí chybou, je horší než žádné. Pozor na past: `…/runs/<runId>` končí taky číslem, ale je to
+    **běh**, ne job.
+  - **Nad 10 MB se log nestahuje vůbec** a na jeho místě je věta s konkrétní velikostí. Rozhoduje
+    `Content-Length` z `HEAD`, který je levný a **konstantně** levný (~1,2 s u 33 kB i u 8,78 MB),
+    takže věta není odhad. Cena rozhodnutí: nad stropem odpadá i **konec** logu — obejít to částečným
+    stažením nejde, `Range` přes `gh` se na redirect do Azure blobu nepřenese a vrátí celých 8,78 MB
+    (změřeno).
+  - **`HEAD` je ochrana, ne podmínka** (#292, mění #214). Když velikost **nepřijde**, log se přesto
+    stáhne a strop se uplatní na tom, co doopravdy přišlo (`raw.utf8.count`). Do #292 se v tom
+    případě nestahovalo — a protože rozbor hlaviček velikost nikdy nevydal, byl konec logu vypnutý
+    u **každého** checku, ne v krajním případě. Pravidlo z toho: co je jen ochrana proti drahé
+    operaci, nesmí být tím, na čem stojí, jestli se ta operace vůbec pokusí.
+
+    Nezjištěná velikost je proto `Int?`, ne chyba — a **selhání `HEAD`u se nepropisuje do stavu**.
+    Není to zapomenutá chyba: hned za ním jde stažení, tedy ta operace, o kterou uživateli jde.
+    Povede-li se, není o čem informovat; nepovede-li se, dostane **chybu stažení**, která nese kód
+    i výstup `gh` — tedy víc, než by řekla chyba dotazu na velikost.
+  - **Stropy jsou 10 MB a 4 000 řádků, a obojí je změřené** (#292; do té doby 2 MB a 300 řádků).
+    Rozhodly dvě věci, které #214 neměřilo:
+
+    | Co | 2 MB | 8,78 MB (největší log na našich repech) |
+    |---|---|---|
+    | otevření sheetu (`setAttributedString` + kresba) | 3,92 ms | **6,57 ms** |
+    | projíždění, medián snímku | 0,00 ms | **0,00 ms** |
+    | projíždění, nejhorší snímek | 0,01 ms | **0,01 ms** |
+    | *vynucená* sazba celého dokumentu | 145,84 ms | 631,91 ms |
+
+    **Poslední řádek té tabulky je to, co #214 měřilo** (`ensureLayout` + `usedRect`) — a je to
+    jediná věc, kterou aplikace nedělá: `SelectableCodeView` text jen předá a TextKit sází **líně po
+    viewportu**. Odtud tehdy vyšel strop o řád nižší, než je potřeba. Poučení, které přežije tenhle
+    strop: **měřit se musí ta cesta, kterou kód doopravdy jde.**
+
+    Strop tedy nedrží kreslení, ale **stahování**: 8,78 MB stahuje `gh` ve třech měřeních za sebou
+    **5,75 / 27,44 / 10,67 s** (síť, ne CPU) a celý text zůstává v paměti okna. Proto se dokud se
+    stahuje, píše velikost do hlášky (`Policy.logDownloadNotice`) — mlčící spinner je po půl minutě
+    k nerozeznání od zamrznutí — a proto **sbalení checku `gh` zabije** (změřeno: procesů 0 → 1 → 0).
+  - **Příprava textu běží mimo hlavní vlákno** (#292). `Policy.logTail` na 8,78MB logu stojí
+    **814 ms** (ANSI 198 ms, timestampy 372 ms, zbytek dělení a slepení řádků) a `AppStore` je
+    `@MainActor`, takže by okno tu dobu stálo. Je to čistá funkce nad `String`em, takže `Task.detached`
+    nic nedrží; zrušení se po návratu kontroluje jako všude jinde. Cena **nezávisí na počtu řádků
+    ocasu** (300 i 25 000 řádků → 814 ms), protože rozhoduje velikost vstupu, ne výřezu.
+  - **Log se ořezává od konce a řekne se, kolik se nevešlo** (`LogTail`) — tiše zkrácený log tvrdí,
+    že job začal uprostřed. Ořez je věc **zobrazení, ne úspory stahování**: API vrací celý log
+    jedním requestem, takže celý text zůstává pro `Ukázat celý log`.
+  - **Konec logu kreslí `LogTailTextView` (`NSTextView`), ne SwiftUI `Text`** (#292) — a je to to
+    jediné, co dovoluje ukázat tisíce řádků:
+
+    | Řádků konce logu | SwiftUI `Text` se `.fixedSize()` | `NSTextView` |
+    |---|---|---|
+    | 300 | 107,85 ms | **2,06 ms** |
+    | 2 000 | 6 210,22 ms | **1,96 ms** |
+    | 4 000 (dnešní `logTailLines`) | — | **2,61 ms** |
+    | 10 000 | 156 432,33 ms | **6,81 ms** |
+
+    Dvě a půl minuty na deseti tisících řádcích není opomenutí, které by šlo doladit: `Text` musí znát
+    velikost celku dopředu (a u řádků o 2 258 znacích je ta velikost 13 930 bodů na šířku), kdežto
+    TextKit sází líně po viewportu. Odtud plyne i to, co v tom view **zmizelo**: dvouosý `ScrollView`,
+    `fixedSize()` a dolní mez šířky z `availableWidth` (#220) — zarovnání doleva ani scrollování už
+    není co vyjednávat.
+
+    Dvě věci, které to view musí dělat a z kódu nejsou zjevné. **Otevírá se na konci logu**
+    (vodorovně na nule): to, kvůli čemu se log otevírá, je na posledních řádcích a se dvěma tisíci
+    řádků je začátek ocasu sto obrazovek daleko; skok na konec dokumentu přitom sám zůstane u konce
+    nejdelšího řádku, tedy uprostřed slova (chyceno vykreslením `NSScrollView`u do PNG). A **text se
+    přepisuje jen při změně** (`Coordinator`), protože přepsání zahodí výběr i polohu scrollu.
+
+    Vedlejší zisk, který se nehledal: konec logu je **vybíratelný**, takže se z něj kopíruje bez
+    otevírání sheetu.
+  - **Sheet `Ukázat celý log` je široký podle obrazovky** (`Policy.codeSheetWidth`, #292), ne 820 bodů
+    jako od #157. Sheet **zalamuje**, takže úzké okno znamená víc řádků sazby na jeden řádek logu:
+    změřeno 3,89× při 820 bodech, 2,63× při 1 360 a **1,54× na stropu 2 700** (o 60 % méně
+    scrollování). Strop je zrovna tam, kde přestane zalamovat **mediánový řádek** Actions logu
+    (333 znaků na řádek proti mediánu 327) — a zvedl se z původních 1 600 po měření na té obrazovce,
+    na které se aplikace používá (3 440 bodů). Dolní mez je dřívějších 820, protože užší by byla
+    regrese; přes obrazovku sheet nejde nikdy. Zamítnuto měřit nejdelší řádek obsahu: scan megabajtů
+    na hlavním vlákně při otevření, a prospělo by to jen hunkům kódu.
+  - **Výška okýnka se počítá z metriky fontu, kterým se kreslí** (#236, `LogTailTextView.height`):
+    krátký log si vezme jen tolik, kolik má řádků, dlouhý se zastropuje na 320 bodech a scrolluje
+    uvnitř. Rezerva na vodorovný scroller je opsané číslo (13 bodů), protože `NSScroller.scrollerWidth`
+    je vázaná na hlavní vlákno — **drží ji test**, který ji porovnává se systémem, ne odhad. Na
+    `preferredScrollerStyle` se schválně neptáme: mění se připojením myši, a okýnko, kterému se tím
+    mění výška, je horší než pár bodů rezervy.
+  - **ANSI se strhává a timestampy se schovávají.** ANSI je v obou změřených logách (116 řádků
+    v 8,78MB) a bez toho se v okně objeví `^[[36;1m` uprostřed věty. Timestamp má skoro každý řádek
+    (25 528 z 25 534) a zabírá 28 znaků, tedy ukrajuje šířku zrovna tam, kde je potřeba přečíst konec
+    assertace; zadání nabízelo schovat nebo zešednout, schovává se — zešednutí by šířku nevrátilo.
+  - **Nic z toho se neukládá** a nepřežije ani sbalení checku, ani restart. Sbalení navíc stahování
+    **zruší**: čtyři vteřiny jsou za hranicí, kdy stačí přebarvit tlačítko, a nezrušený běh by dopsal
+    text, který se má zapomenout.
+
+    Platí to **i pro sheet s celým logem**, a to je snazší přehlédnout: drží celý text ve `@State`
+    detailu, takže se musí nulovat při přepnutí checku **i při přepnutí PR**. Bez toho pravidlo platí
+    jen ve store — sbalení zahodí `checkDetail`, ale otevřený sheet dál drží megabajty a nad novým PR
+    by ukazoval log z předchozího. Nález Copilota na #214, a byl schovaný v `Suppressed comments`.
+  - **Anotace z CI není nález z review.** Plochý řádek se štítkem (`error`/`warning`/`notice`), ne
+    bublina s obrysem a levým pruhem — nález má revieweera a dá se odmítnout, anotace je cizí fakt.
+    A **nepočítá se nikde**: ani v řádku fronty, ani v panelu, ani v odznaku tabu.
+  - **Dvě různá „chybí“ u anotací**, protože se o nich ví různě moc: přesný počet stažených, které
+    se nekreslí, a `mayHaveMore` bez počtu, když přišla plná stránka. Je to tentýž případ jako
+    `ConversationShortfall.events` (#171) — mlčet nejde, ale číslo si vymyslet nesmíme.
+  - **Konec logu má omezenou výšku a scrolluje se v něm.** Tři stovky řádků nasazených naplno odtlačí
+    zbytek seznamu checků mimo obrazovku, tedy zrovna to, kvůli čemu se detail z `Přehledu` stěhoval.
+    Zarovnání doleva u toho **potřebuje spočítanou šířku** (`availableWidth`, #220): `ScrollView`
+    obsah užší než viewport vystředí a uvnitž dvouosého scrollu se šířka vyjednat nedá, protože
+    obsah dostane neomezenou nabídku. `Spacer` ani `frame(maxWidth:)` to nespraví — chyceno
+    offscreen renderem.
+  - **Log nejde přes obarvování po řádcích.** `SelectableCodeView` bez známého jazyka sází text
+    jednolitě: změřeno **38 ms proti 2,2 ms** na dvoumegovém logu (17×), na 8,78 MB 155 ms proti
+    7,9 ms. `.log` žádný jazyk nemá, takže tudy chodí každý log — a sheetu s kódem to pomůže
+    u souborů, které `Language` nezná.
 - **`Přehled` má dlaždice s fakty** (#198): commity (a kolik z nich je nových od minule),
   soubory (a kolik má nález), hlava PR a sha, proti které platí nálezy. **Nic se pro ně
   nedotahuje** — jsou to údaje, které v okně už jsou, jen roztroušené. Tři pravidla:
@@ -3677,6 +3802,11 @@ Věci, které se u toho nemají rozbít:
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
 | `Policy.tabs(hasChecks:)` | Které záložky PR se kreslí (#215) — `Kontroly` odpadnou u PR bez CI. Pořadí je z `allCases`, ať se nedá rozejít s výčtem |
 | `Policy.checksBadge(of:)` | Odznak u záložky `Kontroly` (#215) — spadlé červeně s počtem, běžící puntíkem, zelené a přeskočené bez odznaku |
+| `Policy.jobID(from:)` | Číslo jobu z odkazu na check (#214). Funguje i jako check-run ID pro anotace; `…/runs/<id>` bez `/job/` je **běh**, ne job, takže `nil` |
+| `Policy.strippingANSI(_:)`, `Policy.strippingTimestamps(_:)` | Čistka logu (#214) — bez nich je v okně `^[[36;1m` a 28 znaků timestampu na každém řádku |
+| `Policy.logTail(_:lines:)` | Konec logu a **kolik se ho nevešlo** (`LogTail`, #214). Tiše zkrácený log tvrdí, že job začal uprostřed |
+| `Policy.logAvailability(bytes:)` | Jde se pro log vůbec? (#214) Nad 2 MB ne — věta s konkrétní velikostí z `Content-Length`, změřený strop. Od #292 se ptá **dvakrát**: na velikost z `HEAD`, a když ta nepřijde, na skutečnou velikost stažených bajtů |
+| `Policy.logLines(of:)` | Řádky logu **na jakémkoli zakončení** — `LF`, `CRLF` i samotné `CR` (#292). `split(separator: "\n")` na `CRLF` nerozdělí, protože `"\r\n"` je ve Swiftu jeden `Character` |
 | `Policy.facts(commits:newCommits:files:filesWithFindings:headSha:findingsHeadSha:)` | Dlaždice s fakty o PR (#198); dlaždice, o které se nedá nic říct, se vynechá |
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
 | `Policy.fileFindings(in:categories:)` | Co je v souboru k vyřízení pro kapsli v hlavičce diffu (#219) — počítá **místa**, ne nálezy, a odmítnuté vynechá |
@@ -4147,14 +4277,15 @@ Nad odesílatelností draftu (#68) platí:
 
 ## `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má sedm metod
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má jedenáct metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu.
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchDiff(id:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()` |
+| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
+| `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
 | `GhSearchQuery` | Rozdělení search dotazu na argumenty `gh` — čistá funkce |
 | `ConversationQuery` | GraphQL dotaz na konverzaci a jeho argumenty — čisté funkce |
 | `GhConversationResponse` | Tvar GraphQL odpovědi a mapování na `Conversation` |
@@ -4192,6 +4323,29 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 - **Tvar `gh` JSONu se nesmí propsat do modelů.** `PullRequest` a `PullRequestSummary` se
   kódují na disk, takže jejich `Codable` popisuje uložený tvar. Dekódují se proto DTO
   a teprve ta se mapují — jinak by změna `gh` měnila formát dat v `ReviewStore`.
+- **Hlavičky z `gh api -i` rozebírá `GhResponseHeaders`** (#292), a je to vlastní typ schválně:
+  tvar toho výstupu má tři vlastnosti, na kterých se rozbor rozbije **potichu**.
+  1. **Řádky hlaviček končí `CRLF`**, jen stavový řádek `LF` (ověřeno `od -c`, fixture
+     `gh/job-log-head.txt`). A `"\r\n"` je ve Swiftu **jeden `Character`**, takže
+     `split(separator: "\n")` na něm nerozdělí — z celého bloku zbyde jeden „řádek“. Přesně tohle
+     stálo #292: `Content-Length` nevyšel u žádného checku, přitom v shellu byl vidět, protože tam
+     ho čtou oči, a ne Swift. Dělí se proto na `Character.isNewline`.
+  2. **Jména hlaviček nemají zaručenou velikost písmen** — `HTTP/1.1` je nese Title-Case, `HTTP/2`
+     lowercase. Citlivé porovnání by selhalo jen na části odpovědí, což se hledá horší než selhání
+     vždycky. Jméno se proto normalizuje na malá písmena už při rozboru.
+  3. **Bloků hlaviček může být víc za sebou** (`-i` u redirectu vypíše i odpověď před ním, a ta má
+     `Content-Length: 0`). Rozhoduje **poslední blok**, ne první nalezená hlavička — jinak by každý
+     log vyšel jako prázdný. Hlavička z bloku před redirectem se nepoužije vůbec: popisuje redirect,
+     ne tělo.
+
+  Velikost vrací `ContentLengthReading` s **vyjmenovanými** stavy (`bytes`, `noOutput`,
+  `httpFailure`, `missingHeader`, `unreadableValue`), ne `Int?`. Čtyři různá „nevyšlo to“ sloučená
+  do jednoho `nil` se nedají ani odlišit, ani přišpendlit testem — a v okně z nich zbyla jediná věta
+  („Výstupu gh nerozumím“), se kterou se nedalo nic udělat.
+- **`malformedOutput` nese fázi**, ne jen chybu dekodéru (#292). `Výstupu gh nerozumím.
+  keyNotFound…` neříká, co se zkoušelo, takže z hlášky nejde poznat ani to, která obrazovka je
+  poloprázdná; fáze (`Vyhledávání pull requestů`, `Anotace check-runu`, …) je jediné, co k tomu
+  volající ví a chyba sama ne.
 
 Detail navíc ověří, že `gh` vrátil PR s číslem, na které jsme se ptali. Identifikátor se
 bere z dotazu (`gh pr view` repo nevrací) a tichý rozchod by nálezy naklíčoval cizímu PR.

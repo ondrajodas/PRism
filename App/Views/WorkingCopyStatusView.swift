@@ -36,7 +36,13 @@ struct WorkingCopyStatusView: View {
                     Button("Připravit") {
                         Task { await store.prepareCheckout(for: id) }
                     }
-                    .buttonStyle(.link)
+                    // **Akcent z palety, i když návrh o téhle akci nic neříká** (#298): `Připravit`
+                    // v mockupu nakreslené není, jeho stavový řádek zná jen texty a puntíky. Mlčení
+                    // návrhu ale není povolení k systémové modré — „jedna barva pro klikni sem“ je
+                    // vlastnost **celého okna**, takže ponechat tady `.link` znamená přestěhovat ta
+                    // dvě různá „klikni sem“ o pruh níž, ne je zrušit. Že paleta do stavového řádku
+                    // dosahuje, návrh potvrzuje sám: zastaralé nálezy v něm barví `var(--stale)`.
+                    .buttonStyle(.accentLink)
                     .font(.caption)
                 }
             }

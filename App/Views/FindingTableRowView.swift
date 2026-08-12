@@ -19,6 +19,13 @@ struct FindingTableRowView: View {
     /// Skok do diffu na místo nálezu.
     let jump: () -> Void
 
+    /// Krytí odmítnutého řádku — `.frow.done { opacity: 0.52 }` z návrhu.
+    ///
+    /// Pojmenovaná konstanta, protože ji čte i test kontrastu (`AccentLinkButtonTests`): akce
+    /// `Vrátit` se kreslí **jen** na odmítnutém řádku, takže se měří skrz tohle ztlumení. Kdyby si
+    /// číslo držel test sám, měřil by po první změně jiný řádek, než jaký se kreslí.
+    static let dismissedOpacity = 0.52
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             columns
@@ -30,7 +37,7 @@ struct FindingTableRowView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
         // Ztlumit, ne schovat: odmítnutý řádek zůstává k přečtení, protože jinak by se nedalo
         // zkontrolovat, co jsem odmítl. Tatáž úvaha jako `DismissedRowStyle` u karet.
-        .opacity(row.dismissal == nil ? 1 : 0.52)
+        .opacity(row.dismissal == nil ? 1 : Self.dismissedOpacity)
     }
 
     // MARK: - Sbalený řádek
@@ -178,6 +185,11 @@ struct FindingTableRowView: View {
     /// `Převzít` se nabízí **jen u řádku s jediným nálezem**: u shody dvou reviewerů není co
     /// převzít „za celý řádek“ — texty jsou dva a převzít jeden potichu by byla polovina akce.
     /// Od toho je rozbalená část, kde má každý nález svoje tlačítko.
+    ///
+    /// **Barevný text, ne tlačítko** (`.go` z návrhu) — a barva je z palety, ne systémová modrá
+    /// (#298). Plocha jako v bublině (#283) by se tady opakovala na každém řádku a přebila shrnutí;
+    /// barvu ale mají mít obě formy stejnou, jinak jsou v okně dvě různá „klikni sem“. Drží to
+    /// `AccentLinkButtonStyle`, ať se to nedá na jednom ze dvou výskytů zapomenout.
     private var actions: some View {
         HStack(spacing: 9) {
             Spacer(minLength: 0)
@@ -196,7 +208,7 @@ struct FindingTableRowView: View {
     @ViewBuilder private var restore: some View {
         if let findingActions {
             Button("Vrátit") { findingActions.restore(row.representative.finding) }
-                .buttonStyle(.link)
+                .buttonStyle(.accentLink)
                 .help("Vrátit nález mezi platné")
         }
     }
@@ -210,7 +222,7 @@ struct FindingTableRowView: View {
                     .help("Text je už v rozdělaném review")
             } else {
                 Button("Převzít") { draft.adopt(finding.finding) }
-                    .buttonStyle(.link)
+                    .buttonStyle(.accentLink)
                     .help("Vloží text nálezu do mého review. Text jde přepsat.")
             }
         }

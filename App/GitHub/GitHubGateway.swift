@@ -52,4 +52,35 @@ protocol GitHubGateway: Sendable {
     /// Sedmá **čtecí** metoda protokolu, takže tvrdá podmínka č. 1 platí dál: gateway pořád
     /// nemá nic, čím by šlo něco odeslat.
     func fetchReleases() async throws -> [Release]
+
+    /// Anotace check-runu (#214) — `soubor:řádek` a věta od CI.
+    ///
+    /// `checkRunID` je **totéž číslo jako job ID** z odkazu na check (ověřeno na živém API),
+    /// takže se pro něj nechodí zvlášť. Prázdno je běžný stav: anotace emituje jen workflow, které
+    /// si o to řekne (problem matcher, reporter), a u běžného `phpunit`/`phpstan` často nejsou.
+    func fetchAnnotations(repo: RepoID, checkRunID: Int) async throws -> CheckAnnotations
+
+    /// Kolik má log jobu bajtů, **bez jeho stažení** (#214). `nil` = nevíme.
+    ///
+    /// `HEAD` na `…/actions/jobs/{id}/logs` je levný a **konstantně** levný — změřeno ~1,2 s
+    /// u 33 kB i u 8,78 MB. Na tom stojí strop: věta „log má 8,4 MB“ není odhad, protože se
+    /// napíše dřív, než by se stahovalo.
+    ///
+    /// **`nil` je odpověď, ne selhání** (#292). Velikost stojí na rozboru hlaviček, a ten se dá
+    /// minout snáz než dotaz sám — u #292 na něm skončil konec logu u všech checků. Volající si
+    /// proto strop uplatní na stažený text: `HEAD` je **ochrana proti osmimegovému logu, ne
+    /// podmínka toho, že se log ukáže**.
+    func fetchJobLogSize(repo: RepoID, jobID: Int) async throws -> Int?
+
+    /// Log jednoho jobu (#214).
+    ///
+    /// **Přímé API, ne `gh run view --job --log`**: změřeno 1,50 s / 237 kB proti 4,77 s / 430 kB
+    /// za tentýž obsah — `gh run view` k němu jde oklikou a každý řádek prefixuje jménem jobu.
+    ///
+    /// Vrací **celý** log jedním requestem, takže ořez na konec je věc zobrazení, ne úspory
+    /// stahování. Volá se **jen na vyžádání a jen na jeden job** — log celého běhu je log všech
+    /// jeho jobů (u změřeného PR 23), tedy N+1 past o tři řády dražší.
+    ///
+    /// Desátá **čtecí** metoda; tvrdá podmínka č. 1 platí dál — restart workflow tady není.
+    func fetchJobLog(repo: RepoID, jobID: Int) async throws -> String
 }

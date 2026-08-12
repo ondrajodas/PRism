@@ -42,7 +42,10 @@ kdežto tenhle návrh stojí na neutrálech posunutých do modrofialové. **Od #
 diffu**: pozadí přidaného a odebraného řádku byla do té doby systémová zelená a červená s krytím,
 takže se v tmavém režimu mísila směrem k černé a blok změny vypadal jako tmavý obdélník. Teď jsou to
 vyčíslené hodnoty z návrhu a řádky se v tmavém režimu odlišují o třetinu víc (ΔE 16,0 → 21,8), aniž
-by se zhoršila čitelnost obarveného kódu.
+by se zhoršila čitelnost obarveného kódu. **Od #298 z ní jde i „klikni sem“**: akce u nálezu byly do
+té doby dvě různé barvy — fialové tlačítko v bublině u kódu (#283) a systémově modrý odkaz v tabulce
+nálezů, protože `.buttonStyle(.link)` si akcent okna nebere. Teď je barva jedna a **tvar zůstává
+různý**, jak ho má návrh: v bublině plocha, v tabulce holý text, který se opakuje na každém řádku.
 
 Obsahem domácí záložky je **dashboard** (#181), ne prázdné „Vyber pull request“. Odpovídá na tři
 otázky, na které se do té doby muselo hledat po okně: **kolik toho čeká**, **co z toho blokuje**

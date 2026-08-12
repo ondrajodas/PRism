@@ -106,6 +106,45 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return checks
     }
 
+    // MARK: - Detail checku (#214)
+
+    /// Co vrátí `fetchAnnotations`. Prázdno je běžný stav — workflow anotace emitovat nemusí.
+    var annotations = CheckAnnotations()
+    var annotationsFailure: (any Error)?
+    /// Kolik bajtů hlásí `HEAD`. Na tom stojí strop, takže se musí dát nastavit i „obří“ — **a
+    /// `nil`**, tedy „velikost neřekl“: přesně to u #292 vypnulo konec logu u všech checků.
+    var logSize: Int? = 1024
+    var logSizeFailure: (any Error)?
+    var jobLog = ""
+    var jobLogFailure: (any Error)?
+    /// Na co se kdo ptal, v pořadí — z toho se pozná, že se **pro log nad stropem nešlo**.
+    private(set) var logSizesAsked: [Int] = []
+    private(set) var logsAsked: [Int] = []
+    private(set) var annotationsAsked: [Int] = []
+
+    func fetchAnnotations(repo: RepoID, checkRunID: Int) async throws -> CheckAnnotations {
+        annotationsAsked.append(checkRunID)
+        if let annotationsFailure { throw annotationsFailure }
+        return annotations
+    }
+
+    func fetchJobLogSize(repo: RepoID, jobID: Int) async throws -> Int? {
+        logSizesAsked.append(jobID)
+        if let logSizeFailure { throw logSizeFailure }
+        return logSize
+    }
+
+    /// Závora **před** vrácením logu. Na ní se dá pozorovat mezistav `.loading` — tedy to, jestli se
+    /// do hlášky dostala velikost z `HEAD`u; bez ní se dá zkontrolovat jen výsledek.
+    var jobLogGate: AsyncGate?
+
+    func fetchJobLog(repo: RepoID, jobID: Int) async throws -> String {
+        logsAsked.append(jobID)
+        if let jobLogGate { await jobLogGate.wait() }
+        if let jobLogFailure { throw jobLogFailure }
+        return jobLog
+    }
+
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {
         let answer: Result<PullRequest, any Error>? = lock.withLock {
             detailsAsked.append(id)
