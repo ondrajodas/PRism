@@ -35,7 +35,10 @@ struct GhResponseHeaders: Equatable, Sendable {
     init(output: String) {
         var blocks: [Block] = []
         // **Dělí se na jakémkoli zakončení řádku**, ne na `"\n"` — viz bod 1 v dokumentaci typu.
-        for line in output.split(whereSeparator: \.isNewline) {
+        // Pravidlo drží `TextLines` (#295): do té doby tady stálo `isNewline`, což je oproti tomu,
+        // co `gh` vyrábí, širší (viz `Character.isLineTerminator`) — a hlavně to bylo **druhé**
+        // místo, kde se dělení rozhodovalo.
+        for line in TextLines.nonEmpty(output) {
             if let status = Self.statusCode(in: line) {
                 blocks.append(Block(statusCode: status))
             } else if let field = Self.field(in: line) {

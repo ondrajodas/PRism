@@ -33,6 +33,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `EffectiveVerdict` | Verdikt, který na draftu **platí**, a jeho původ (`suggested`/`chosen`). Taky **není `Codable`** — počítá se, viz níž |
 | `ProjectLanguage` | Čím je repo psané — klíč mapy „jazyk → sada skillů“. **Není to `Syntax.Language`**, viz níž |
 | `FindingsLanguage` | Jazyk prózy v nálezech (`cs`/`en`). Ani tohle **není `ProjectLanguage`** |
+| `AppearanceMode` | Jaký vzhled má okno mít (#278): `light`, `dark`, `system`. **Volí režim, ne barvy** — ty zůstávají v `Palette`. Nese i ikonu do railu (`railSymbol`) a pořadí cyklu (`next`) |
 | `FindingTranslation` | Přeložená próza nálezu. Visí vedle originálu, nepřepisuje ho |
 | `Conversation` | Cizí konverzace pod PR: review ostatních, vlákna, komentáře, **události časové osy** (#171) + `viewer` |
 | `ConversationPage` | Kus seznamu a kolik ho je celkem — nese **zkrácení** |
@@ -244,6 +245,10 @@ Věci, které se u toho nemají rozbít:
   řádku se v kódu i v textu vyskytuje běžně.
 - **Nerozpoznaný řádek se počítá** (`unrecognizedLines`) a UI to hlásí. Diff, ze kterého
   kus tiše vypadl, vypadá jako úplný.
+- **Zakončení řádků si vybírá cizí repo, ne my** (#295). Diff se proto dělí `TextLines`, ne
+  `split(separator: "\n")` — na `CRLF` by z celého diffu byl **jeden** řádek. `CR` se do textu
+  řádku nedostane, takže tentýž diff se `CRLF` a s `LF` dá **stejný model**; hlídá to test proti
+  skutečné fixture (`gh/pr-diff-crlf.diff`). Podrobnosti u `TextLines` v `App/Support/`.
 - **Cesty se berou z `rename from`/`rename to` a `---`/`+++`.** Hlavička
   `diff --git a/… b/…` je u cest s mezerou nejednoznačná a slouží jen jako záchrana tam,
   kde ostatní řádky chybí (binárky, přejmenování beze změny obsahu).
@@ -837,7 +842,7 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
+| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
 | `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
@@ -904,6 +909,17 @@ Věci, které se u toho nemají rozbít:
   ho nemá schválně: `mode` nebo `skills` jsou vlastnost repa, kdežto jak se čte diff, je
   vlastnost člověka, který ho čte. **Přepínač v liště do souboru nezapisuje** — odchylka žije
   v `AppStore` (viz níž), jinak by hodnota tady přestala být tou, které se říká výchozí.
+- **Vzhled okna (#278) se čte tolerantně jako pohled na diff a per repo se nenastavuje.** Neznámá
+  hodnota znamená `system`, tedy stav, ve kterém aplikace běžela před #278 — a celý soubor kvůli ní
+  nezmizí. Přísnost jako u režimu nebo odesílání by tady nechránila nic: vzhledem nic neodejde a nic
+  se nespustí, nejhorší následek překlepu je světlé okno, které se přepne jedním kliknutím.
+  `RepositoryConfig` ho nemá schválně — vzhled je vlastnost člověka, který se kouká, ne repozitáře,
+  na který se kouká. **Je na to test, který tvrdí, že se nic nestalo**: v zapsaném JSONu smí klíč
+  `appearance` být právě jednou, a napsaný pod repem nesmí udělat nic. Do výčtu
+  v `bin/slot-config.sh` patří přesto — ten vyjmenovává i klíče s jedinou úrovní — a je u něj
+  napsané, že se **nečistí**: vzhledem se nic neutratí a nic neodejde, a vynutit slotu vzhled,
+  o který nikdo neřekl, je změna, ne očista. **Stránku v nastavení volba nemá** — ovládá se z railu,
+  viz `AppStore` a `App/Views/` níž. Kde se uplatní, je taky tam.
 - **Rozbitá hodnota režimu se sráží na `manual`, ne na globální default.** Chybějící klíč
   je „ber globální“, ale překlep v hodnotě, kterou se někdo pokoušel automat **vypnout**,
   ho nesmí nechat zapnutý. Platí i globálně.
@@ -1046,7 +1062,8 @@ Věci, které se u toho nemají rozbít:
   Klíčem je **jméno** jazyka, ne celá hodnota — `Language` se podle jména i porovnává a hashovat
   jeho sadu klíčových slov při každém nahlédnutí by stálo víc než samotné obarvení.
 - **V cache nejsou barvy, jen druhy.** Přepnutí světlého a tmavého režimu ji proto
-  nezneplatňuje; paletu si bere view až při kreslení.
+  nezneplatňuje; paletu si bere view až při kreslení. Co režim v klíči **mít musí**, je podpis
+  vysázeného bloku (`DiffBlockSignature`) — tam už barvy zapečené jsou, viz `App/Views/` níž.
 - **Co závisí na protějšku řádku, do téhle cache nepatří** (#153). Word-level zvýraznění je
   funkce **dvojice**, ne řádku, takže pod klíčem `(text řádku, jazyk)` by se tentýž řádek proti
   jinému protějšku obarvil podle té cizí dvojice — a nikdo by se to nedozvěděl, protože obojí
@@ -1278,6 +1295,7 @@ Sdílené drobnosti, které nepatří žádnému modulu:
 | `String.singleLine` | Text bez řádkových zlomů, ty se nahradí mezerou |
 | `Collection[safely:]` | Prvek na indexu, nebo `nil` mimo rozsah |
 | `Clipboard` | Zápis do schránky |
+| `TextLines` + `Character.isLineTerminator` | Dělení textu na řádky — **jedno místo pro celou aplikaci** (#295) |
 
 Společné je jim to, proč tady jsou: **kopie jednoho pravidla se rozejdou.** `WorkCoordinator`
 používá `RepoCheckout` (klony, stromy) i `ReviewRunner` (běhy) a dvě kopie by znamenaly dvakrát
@@ -1285,6 +1303,54 @@ tu jemnou logiku kolem rušení. `Plural` vznikl ze tří `switch`ů, které se 
 z pěti kopií téhož `split(whereSeparator: \.isNewline)` — hlavička bubliny, přehled draftu,
 jeho přenos, syntetická hlavička diffu a od #200 tělo notifikace. Stačilo by, aby jedna z nich
 řešila `\r\n` a ostatní ne.
+
+### `TextLines` — co je řádek (#295)
+
+Přesně to „stačilo by, aby jedna z nich“ se stalo — u #292 a pak ještě na pěti dalších místech.
+`"\r\n"` je ve Swiftu **jeden `Character`**, takže `split(separator: "\n")` na textu s `CRLF`
+**nerozdělí vůbec**: z celého vstupu zbyde jediný „řádek“. Ne o jeden vedle, celý.
+
+Kde to leželo, než to #295 svedlo na jedno místo:
+
+| Kde | Co se dělo na `CRLF` vstupu |
+|---|---|
+| `DiffParser` | Diff souboru s `CRLF` = **jeden** řádek, tedy soubor s jedním nesmyslným kontextovým řádkem místo hunků |
+| `FileExpansion` | Obsah souboru = jeden řádek, odkrytý rozsah se ořezal na první, z rozbaleného kontextu byla jedna nekonečná řádka |
+| `SelectableCodeView` | Kód v sheetu se obarvil jako jeden řádek a celý jeho objem šel do `SyntaxRunCache` jako **jeden klíč** (#224) |
+| `CopyPolicy` | Popisek `Kopírovat rozsah (1 řádek)` nad rozsahem o dvaceti |
+| `MarkdownParser`, `TranscriptStore` | Jiná past, tentýž druh: `components(separatedBy: .newlines)` dělí po **skalárech**, takže `CRLF` jsou pro ni dva oddělovače a mezi ně vloží prázdný řádek. V markdownu je prázdný řádek konec odstavce — takže se každý řádek cizího komentáře vysázel jako vlastní odstavec. Těla komentářů z GitHubu `CRLF` mají, je ve třech fixtures konverzací |
+
+Tři funkce, ne jedna s přepínačem — liší se tím, **co je řádek** pro volajícího, a to má být vidět
+na místě volání: `all` (všechno včetně prázdného posledního), `content` (bez prázdného posledního za
+koncovým zakončením — soubory a diffy) a `nonEmpty` (výpisy, kde je řádek jeden záznam).
+
+Věci, které se u toho nemají rozbít:
+
+- **Řádek končí `LF`, `CRLF` nebo samotným `CR` — a ničím jiným.** `Character.isNewline` je pravda
+  i pro `VT`, `FF`, `NEL`, `U+2028` a `U+2029`, ale pro `git` jsou to **znaky obsahu**. Rozdělit se
+  na nich znamená vyrobit řádek, který v souboru není — a protože se čísla řádků počítají tím, kolik
+  jich hunk vydal, jeden `U+2028` v cizím zdrojáku by posunul všechna čísla pod sebou; druhá půlka
+  řádku by navíc nezačínala `+`/`-`/mezerou, takže by se spočítala jako ztracená
+  (`unrecognizedLines`).
+- **`String.singleLine` si `isNewline` schválně nechává.** Jsou to dvě různé otázky: „kde končí
+  řádek v bajtech, které mi někdo poslal“ a „co mi zalomí popisek“. `U+2028` popisek zalomí, takže
+  se srazit musí. Hlídá to test, ať to někdo omylem nesrovná.
+- **`CR` se do textu řádku nedostane** — je součást zakončení, ne obsahu. Kdyby zůstal, nesly by
+  neviditelný znak klíče do `SyntaxRunCache` (#153, #224), word-level rozdíl i sazba, a v sazbě by
+  z něj byl prázdný řádek pod každým řádkem kódu. Cena rozhodnutí: **kopie do schránky nese `LF`,
+  i když soubor měl `CRLF`** (zapsané u `Policy.code(of:)`). Unese to, protože ten text jde do
+  terminálu nebo do komentáře jako **kód** a aplikace do souborů nezapisuje (tvrdá podmínka č. 1).
+- **Není to na cestě překreslování**, takže rozhodovala čitelnost, ne rychlost — ale je to změřené.
+  Na 2,26 MB / 25 000 řádcích: `split(separator: "\n")` **22,2 ms** (a na `CRLF` vydá **jeden**
+  řádek), `isNewline` **24,4 ms**, `isLineTerminator` **27,1 ms**. Rychlejší varianta **existuje
+  a je zamítnutá**: test prvního skaláru (`unicodeScalars.first`) dá **22,0 ms**, tedy rychleji než
+  to, co tam bylo, ale za cenu komentáře vysvětlujícího, že `"\r\n"` má první skalár `\r`.
+  `Policy.logTail` je jediné místo, kde jde o megabajty, a běží **jednou po stažení**
+  v `Task.detached`, ne v `body` — takže ta 4 ms na největším logu nikdo nepozná. Kdyby se dělení
+  jednou na cestu překreslování dostalo, je to změna na jednom místě.
+- **`Policy.logLines(of:)` zůstává jako jméno pro volající**, ne jako druhé pravidlo — dělí
+  `TextLines.all`. Smazat by šlo, ale znamenalo by to sáhnout do `logTail`
+  a `strippingTimestamps`.
 
 ## `RepoCheckout` (`App/Checkout/`)
 
@@ -1529,6 +1595,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Diff.swift` | Načtení diffu, pohled a sbalování souborů | 95 |
 | `AppStore+Automatic.swift` | Automatický režim a denní rozpočet (#25) | 89 |
 | `AppStore+Findings.swift` | Zahození záznamu (#81) a odmítnutí nálezu (#113) | 70 |
+| `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
 
 Čtyři věci, na kterých to rozdělení stojí:
@@ -1580,6 +1647,37 @@ Věci, které se u toho nemají rozbít:
 - **Důvod prázdna skládá store, ne polling** (`listEmptyReason`): polling o stavu okna neví a vědět
   nemá. Pořadí rozhoduje `Policy.listEmptyReason` a **nad selhaným tikem vyhrává chyba načtení, ne
   filtr** — „schoval jsem ti to filtrem“ nad daty, která nedorazila, je nepravda.
+- **Konfigurace vchází do běžící aplikace jednou cestou** (`apply(_:)`), ať přišla z disku, nebo
+  z okna nastavení. Kdyby byly dvě, jedna z nich by časem zapomněla něco přepsat. Proto se tam
+  nastavuje i **vzhled okna** (#278): `NSApp.appearance` platí naráz pro všechna okna, tedy i pro
+  to, které v době přepnutí není vpředu, a nastavení se dá otevřít i se zavřeným hlavním oknem —
+  ve view by se změna minula obojí. Cíl je za protokolem (`AppearanceApplying`) a v testech
+  **chybí**: živý cíl je `NSApp`, tedy hostitel testů, a vynucený režim by přetekl do render sond,
+  které si režim nastavují samy. Ta cesta je celá v `AppAppearance.swift`, takže `App/Store/`
+  nemusí znát AppKit.
+- **Přepínač vzhledu v railu je volba, ne sekce** (#278). Rail kreslí sekce z `RailSection.allCases`
+  a přepínač stojí **pod oddělovačem**, mimo ten výčet — kdyby byl jeho případem, šlo by na vzhled
+  „přepnout jako na obrazovku“, nabídl by se v ⌘K mezi sekcemi (`Policy.paletteActions` staví
+  položky sekcí z týchž `allCases`) a v okně by zbyla prázdná plocha. Drží to dva testy, oba
+  negativní: výčet sekcí je pořád tříprvkový a v paletě není položka se slovem „vzhled“.
+
+  **Rail nedrží vlastní stav** — čte `configuration.global.appearance` a zapisuje
+  `AppStore.setAppearance(_:)`, takže v okně není druhá pravda o tom, jaký režim platí. Zápis jde do
+  souboru (ne jen do paměti jako odchylka pohledu na diff v liště), protože volba má přežít restart;
+  shodná hodnota se zahazuje, aby výběr toho, co už platí, nepřepsal ručně editovaný soubor.
+  **Selhání zápisu se hlásí** (`appearanceFailure` v `AppNoticesView`): vzhled se totiž uplatňuje až
+  po úspěšném uložení, takže bez hlášky by klik do railu nic neudělal a nic neřekl.
+
+  **Ovládací prvek je tlačítko, které klikem cykluje** (`světlý → tmavý → podle systému → …`), ne
+  nabídka: nabídka byla první verze a uživatel ji zamítl. Stav proto nese **ikona** — slunce, měsíc,
+  kolečko s „A“ pro automat (`AppearanceMode.railSymbol`) —, což je **vědomá odchylka od návrhu**,
+  který kreslí jedno půlkolečko bez ohledu na stav; do mockupu se to doplní při jeho překreslení
+  (#299). Tři ikony si u toho hlídají **srovnatelnou velikost** (naměřeno 16 × 16, 15 × 16, 16 × 16),
+  jinak by tlačítko při cyklení poskakovalo.
+
+  Cyklící tlačítko říká **kde jsem, ne kam se dostanu**, takže to nese nápověda (`Vzhled: tmavý ·
+  kliknutím podle systému`) a pro VoiceOver `accessibilityValue` se stavem plus `accessibilityHint`
+  s tím, co klik udělá. Bez toho je z tlačítka hádanka.
 - **Repo s běžícím review je pro eviction nedotknutelné.** `busyRepositories` proto nejsou
   jen repa ve stavu `preparing`, ale i všechna, nad kterými běží review — smazat klon pod
   běžící session by jí vzalo pracovní strom pod rukama.
@@ -1728,9 +1826,10 @@ na `.task` okna, takže zavření okna ji zruší.
 |---|---|
 | `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
 | `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) — a od #245 **vypnutí systémových záložek oken** (`tabbingMode = .disallowed`), aby se `⌃Tab` nepřetahoval s AppKitem |
+| `AppAppearance`, `AppearanceApplying` | Přepnutí vzhledu celé aplikace (#278) — `NSApp.appearance`, a za protokolem, aby si na hostitele testů nesáhly testy |
 | `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
-| `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
+| `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
 | `DashboardView` | Startovní obrazovka (#181): pozdrav, čtyři karty, fronta podle závažnosti, legenda reviewerů a `Co teď` |
 | `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatné view |
@@ -1751,6 +1850,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157). Drží **šířku kontejneru i měření výšky** (`height(forWidth:)`, `height(ofRows:)`), aby se šířka pro měření nemohla rozejít s tou pro kreslení (#236) |
 | `DiffCodeBlockView`, `DiffBlockRowView` | Blok v pohledu pod sebou a k němu pilulka na komentář a tažení rozsahu |
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
+| `DiffBlockSignature` | Podpis bloku, podle kterého se text **znovu nesází** (#157) — a v němž je schválně barevný režim (#278), protože barvy jsou v tom textu zapečené |
 | `DiffGutterGeometry`, `DiffBlockPlacement` | Aritmetika gutteru (#252) — kde leží plochy na tažení a pilulka, a poloha bloku v prostoru obsahu **mimo observable stav**. Čistý typ, aby se dal změřit i otestovat bez okna |
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |

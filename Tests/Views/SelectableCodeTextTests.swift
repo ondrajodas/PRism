@@ -1,0 +1,70 @@
+import AppKit
+import SwiftUI
+import Testing
+
+@testable import PRism
+
+/// Text v `CodeTextSheet`u — skládá ho `SelectableCodeView.attributed` a je to jediné místo
+/// v okně, kde se kód sází **jednolitě** a přitom obarvuje po řádcích (#295).
+///
+/// Testuje se výsledný `NSAttributedString`, ne kresba: je to `static func` nad textem, takže se
+/// dá zavolat bez okna.
+@Suite("Text v sheetu s kódem")
+@MainActor
+struct SelectableCodeTextTests {
+
+    /// Do #295 se dělilo `split(separator: "\n")`, takže text s `CRLF` zůstal **jeden** řádek —
+    /// obarvoval se jako jeden a celý jeho objem šel do `SyntaxRunCache` jako **jeden klíč**,
+    /// přitom cache je klíčovaná textem řádku (#153, #224).
+    @Test("Text s CRLF se sází po řádcích, ne jako jeden řádek")
+    func splitsCRLFIntoLines() {
+        let code = "let a = 1\r\nlet b = 2\r\nlet c = 3"
+
+        let attributed = SelectableCodeView.attributed(code, path: "x.swift", colorScheme: .dark)
+
+        // Sazba vkládá mezi řádky `\n`, takže dva zlomy znamenají tři řádky.
+        #expect(TextLines.all(attributed.string).count == 3)
+    }
+
+    /// Tentýž kód se `CRLF` a s `LF` musí dát **tentýž** text — to je ta věta „na `LF` vstupech se
+    /// nic nezměnilo“, jen z druhé strany.
+    @Test("CRLF a LF dají stejný text")
+    func typesetsCRLFSameAsLF() {
+        let fromCRLF = SelectableCodeView.attributed(
+            "let a = 1\r\n\r\nlet b = 2\r\n",
+            path: "x.swift",
+            colorScheme: .dark
+        )
+        let fromLF = SelectableCodeView.attributed(
+            "let a = 1\n\nlet b = 2\n",
+            path: "x.swift",
+            colorScheme: .dark
+        )
+
+        #expect(fromCRLF.string == fromLF.string)
+    }
+
+    /// Prázdné řádky v kódu drží strukturu — bez nich by se vložený text rozešel s originálem.
+    @Test("Prázdné řádky zůstávají")
+    func keepsEmptyLines() {
+        let attributed = SelectableCodeView.attributed(
+            "let a = 1\r\n\r\n\r\nlet b = 2",
+            path: "x.swift",
+            colorScheme: .dark
+        )
+
+        #expect(attributed.string == "let a = 1\n\n\nlet b = 2")
+    }
+
+    /// **Bez známého jazyka se text neskládá po řádcích vůbec** (#214, kvůli ceně) — takže tam
+    /// `CR` projde do textu tak, jak přišel. Je to tady zapsané schválně: sheet s logem chodí
+    /// touhle cestou (`path` je jméno checku) a `NSTextView` `CR` jako zlom zobrazí sám.
+    @Test("Bez známého jazyka se text nedělí, jde jednolitě")
+    func keepsUnknownLanguageTextIntact() {
+        let code = "řádek jedna\r\nřádek dva"
+
+        let attributed = SelectableCodeView.attributed(code, path: "job.log", colorScheme: .dark)
+
+        #expect(attributed.string == code)
+    }
+}

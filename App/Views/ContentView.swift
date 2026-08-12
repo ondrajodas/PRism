@@ -34,7 +34,11 @@ struct ContentView: View {
                 SidebarRail(
                     section: $store.railSection,
                     queueCount: store.railQueueCount,
-                    draftCount: store.pullRequestsWithDraft.count
+                    draftCount: store.pullRequestsWithDraft.count,
+                    // Vzhled se čte z konfigurace a zapisuje do ní (#278) — rail je ovládání, ne
+                    // druhé místo, kde by se stav držel.
+                    appearance: store.configuration.global.appearance,
+                    setAppearance: { mode in Task { await store.setAppearance(mode) } }
                 )
                 content
             }

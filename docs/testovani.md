@@ -249,6 +249,39 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   vstupy pokrývají, co se z reálného PR nedá sehnat: odebraný řádek začínající `---`,
   hunk bez počtu řádků, `\ No newline at end of file`, prázdný kontextový řádek, změna
   jen práv a nesmysl mezi soubory.
+
+  **Diff s `CRLF` má vlastní fixture, a je to skutečné `gh pr diff`** (#295):
+  `gh/pr-diff-crlf.diff` je veřejný `microsoft/terminal#20524`, kde je `CRLF` na **70 řádcích ze
+  76** — struktura (`diff --git`, `---`, `+++`, `@@`) má `LF`, obsah `CRLF`, takže tatáž fixture
+  ověřuje i míchaná zakončení v jednom textu. Do #295 by se z celého toho diffu stal **jeden**
+  řádek. Fixture si test **kontroluje** (`text.contains("\r\n")`) a `.gitattributes` jí drží
+  `-text`, jinak by ji `core.autocrlf=input` při commitu normalizoval a test by zezelenal nad
+  vrácenou chybou — tatáž pojistka jako u `gh/job-log-head.txt`.
+
+  Nejcennější tvrzení té sady je **„tentýž diff se `CRLF` a s `LF` dá stejný model“**: je to
+  zároveň odpověď na „nezměnilo se něco na `LF` vstupech?“, protože z rovnosti modelů plyne i to,
+  že texty řádků — a s nimi klíče do `SyntaxRunCache` (#153, #224) a vstup do word-level
+  rozdílu — jsou stejné. Vedle toho výčtem: počty řádků obou hunků, čísla řádků, nadpis sekce za
+  druhým `@@` a že **v textu řádku `CR` nezůstal**.
+- **`TextLines` (#295)** — vyčerpávající výčet nad jediným místem, kde se rozhoduje, co je řádek.
+  `LF`, `CRLF` i samotné `CR`, míchaná zakončení, prázdné řádky (`all` / `content` / `nonEmpty`),
+  prázdný vstup, `Substring` místo `String` — a hlavně **dva testy, které tvrdí, že se něco
+  NEstane**: že `U+2028`, `U+2029`, `NEL`, `VT` a `FF` řádek **nedělí** (pro `git` je to obsah,
+  takže rozdělit se na nich znamená posunout čísla všech řádků pod tím), a že `String.singleLine`
+  je přesto **srazí** — ta dvě pravidla se schválně liší a bez testu by je někdo srovnal.
+
+  Volající mají svoje: `FileExpansionTests` (obsah souboru s `CRLF`, `CRLF` = `LF`, koncové
+  zakončení nedělá řádek navíc), `SelectableCodeTextTests` (text v sheetu se sází po řádcích,
+  `CRLF` = `LF`, a že **bez známého jazyka se text nedělí vůbec** — tou cestou chodí log),
+  `CopyPolicyTests` (počet v popisku `Kopírovat rozsah` nad souborem s `CRLF` a že do schránky jde
+  text bez `CR`) a `MarkdownParserTests` (`CRLF` dá tytéž bloky jako `LF` — do #295 dělalo
+  `components(separatedBy: .newlines)` z každého řádku cizího komentáře vlastní odstavec).
+
+  **Regrese ověřená vložením regrese, dvakrát.** Vrácené `split(separator: "\n")` v `TextLines`
+  položí **41 testů v 8 suitách** — a mezi nimi i `GhResponseHeadersTests` (14 tvrzení)
+  a `Příprava logu checku` (5), tedy sady z #292; tím je zároveň doložené, že jejich převedení na
+  `TextLines` neztratilo, co hlídaly. Druhá regrese: rozšíření `isLineTerminator` na `isNewline`
+  položí přesně ty dva testy o unicode oddělovačích, a nic jiného.
 - **`DiffRow`** — skok z nálezu: na změněný řádek, na soubor u nálezu bez čísla i mimo
   hunky, `nil` u souboru mimo diff, a přejmenovaný soubor nalezený pod starou cestou.
   Rozbalení kontextu má vlastní sadu: kde skryté úseky jsou (nad prvním hunkem, mezi
@@ -759,6 +792,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   Pozor na dvě pasti: `PRISM_MEASURE=1` **před** `xcodebuild` nestačí (do testovacího procesu jde
   jen to, co má prefix `TEST_RUNNER_`), a **tabulka vyjde v renderu prázdná** — je ve vodorovném
   `ScrollView`, který se offscreen nevykreslí. Není to chyba sazby, jen mez sondy.
+
+  **Od #295 má sonda i vzorek s `CRLF`** — skutečné tělo komentáře z `cli/cli`, ve kterém je jedno
+  `CRLF` uvnitř odstavce a `CRLF CRLF` mezi odstavci. Je to jediný způsob, jak tu opravu **vidět**:
+  do #295 vyšly tři odstavce se stejnými mezerami, od #295 jsou to dva a to zalomení uvnitř prvního
+  zůstalo zalomením. Rozdíl se dá reprodukovat bez sahání do parseru — stačí do sondy přidat druhý
+  vzorek s `\r\n` nahrazeným `\n\n`, což je přesně to, co `components(separatedBy: .newlines)`
+  vyráběla.
 - **`AppStore` — taby** — výchozí `Přehled` (proti `PullRequestTab.standard`, ať se to nerozejde),
   volba per PR, přepnutí zpátky mažící klíč a úklid s PR, které zmizelo ze seznamu.
 - **`Policy` — hledání v paletě (#184)** — vyčerpávající výčet nad hotovým katalogem, bez kreslení.
@@ -855,6 +895,38 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 - **Jazyk nálezů** — u konfigurace výchozí čeština, override per repo a to, že se vlastní
   hodnota nesmaže jako shodná s globální (stejná past jako u režimu). U promptu naopak to,
   že o jazyku **mlčí** — kdyby se to vrátilo, stálo by to nálezy.
+- **Vzhled okna (#278)** — přečtení obou vynucených hodnot, chybějící klíč i překlep (obojí znamená
+  `system`, ne pád), a že překlep nezahodí zbytek souboru. K tomu dvě tvrzení, že se něco
+  **nestalo**, protože vzhled je vlastnost člověka, ne repa: v zapsaném JSONu je klíč `appearance`
+  právě jednou a v záznamu repa není, a klíč napsaný pod repem se nepromítne nikam. Kdyby přibyl do
+  `RepositoryConfig`, jedno repo by přebarvilo celé okno — a poznalo by se to až v provozu.
+- **Cesta vzhledu do aplikace (#278)** — `AppStoreAppearanceTests` na tu jedinou cestu
+  (`AppStore.apply(_:)`): volba ze souboru při načtení, přepnutí z railu, přežití restartu a překlep,
+  který skončí na `system`. K tomu dvě věci, které se **nesmí stát**: volba, která už platí, nesmí nic
+  zapsat (hlídá se datum souboru — nabídka hlásí i výběr toho, co platí, a zápis beze změny by
+  přepsal ručně editovaný soubor), a **selhaný zápis nesmí projít tiše** (`appearanceFailure` je
+  vidět a vzhled se nepřepnul). Cíl je **fake**, ne `NSApp`: živý cíl je hostitel testů, takže
+  vynucený režim by přetekl do render sond, které si režim nastavují samy. Vedle toho
+  `AppAppearanceTests` na mapování — `.light` → `aqua`, `.dark` → `darkAqua` a hlavně, že `nil`
+  (tedy „nevynucuj nic“) vyjde **jedině** u `.system`; jinak by volba tiše nezabrala a byla by
+  k nerozeznání od výchozího stavu.
+- **Rail a přepínač v něm (#278)** — `SidebarRailTests`. Dvě tvrzení jsou negativní: vzhled **není**
+  `RailSection` (výčet sekcí zůstává tříprvkový) a v paletě ⌘K se **nenabízí jako sekce** — kdyby byl
+  jeho případem, přišel by tam sám, protože položky sekcí se staví z `allCases`. Zbytek je **poloha
+  z bitmapy**: oddělovač 20 × 1 bod vystředěný, jak ho má návrh, ikona pod ním ve stejné svislici
+  jako ikony sekcí (střed 26 na railu o 52 bodech) a v témž rámu 34 × 30. K tomu **srovnatelná
+  velikost všech tří ikon** (16 × 16, 15 × 16, 16 × 16, práh 2 body): klik je vyměňuje na tomtéž
+  místě, takže větší rozdíl znamená tlačítko, které při cyklení poskakuje. Rámečky by na tyhle chyby
+  neodpověděly — `fittingSize` railu je pevných 52 bodů a accessibility tree se v okně mimo obrazovku
+  nenaplní. Vyzkoušené vložením regrese: se stylem `.borderlessButton` vyjde střed 25 a test spadne.
+- **Cyklus a ikony režimů (#278)** — `AppAppearanceTests`: pořadí `světlý → tmavý → podle systému`
+  a hlavně to, že je **uzavřené a projde všechny tři** (jinak by se do jednoho režimu klikáním nešlo
+  dostat), tři **různé** ikony a to, že všechny tři symboly v systému existují — chybějící SF Symbol
+  se v okně kreslí jako prázdno, tedy tlačítko, ze kterého zmizel stav.
+- **Podpis bloku kódu (#157, #278)** — `DiffBlockSignatureTests`: světlý a tmavý režim, jiný obsah,
+  jiný jazyk a blok bez jazyka musí mít **různý** podpis, tentýž stav ten **samý**. Kdyby se dva
+  stavy sešly, blok by se přeskočil jako nezměněný a v okně by po přepnutí vzhledu zbyly barvy
+  z předchozího režimu — potichu, protože text ani jazyk se nezměnily.
 - **Překlad** — `TranslationCommand` na každou podobu nesmyslu, kterou model umí vrátit:
   prohozená `id`, `id` mimo rozsah, chybějící položka, code fence, prázdno, položka bez
   `summary`. `ClaudeFindingTranslator` proti fake procesu na to, že nenulový exit ani
@@ -1924,6 +1996,32 @@ Dva zádrhely, které to má:
   nefunguje**: barvy z `Palette` (dynamické `NSColor`) se v něm vyhodnotí světle, takže „tmavý“
   render vyjde k nerozeznání od světlého — a vypadá to, že paleta na režim nereaguje. Pozadí za
   renderem se musí nastavit ručně, obojí zvlášť.
+
+- **Přepnutí režimu za běhu se dá změřit bez toho, aby se hýbalo systémem** (#278). Nad hierarchií
+  v `NSHostingView` stačí přiřadit `NSApp.appearance` a nechat proběhnout runloop:
+  `@Environment(\.colorScheme)` **se pohne spolu s paletou** — změřeno `AppearanceSwitchProbe`, které
+  hostuje skutečný blok diffu a bere bitmapu před a po. To je odpověď na jedinou otázku, kterou se
+  z kódu přečíst nedá: `Palette` se ptá `appearance.bestMatch(from:)`, kdežto obarvení kódu jde přes
+  prostředí, takže kdyby se ty dvě cesty rozešly, vznikne okno s tmavým chromem a světlým kódem.
+
+  Tři věci, bez kterých to nedává odpověď. **Vynuť si oba režimy** (nejdřív `.aqua`, pak
+  `.darkAqua`), ne jen ten druhý — na tmavém stroji by „změnilo se to“ vyšlo pravdivě i tehdy, kdyby
+  se nepřepnulo nic. **Vrať `NSApp.appearance` zpátky** (`defer`), protože v testech je to hostitel
+  testů a vynucený režim by přetekl do ostatních sond. A **hostuj to, na čem záleží**: pozadí okna
+  se přebarví i tak, kdežto obarvená syntaxe jde přes cache vysázeného textu, takže tu je vidět
+  jedině na skutečném `DiffBlockRowView`.
+
+  Proto jsou obě sondy k #278 **za přepínačem** (`PRISM_MEASURE`), stejně jako sonda `Přehledu`:
+  jedna kreslí **rail** ve všech třech stavech volby a v obou režimech, druhá dělá to přepnutí za
+  běhu. Pouští se `TEST_RUNNER_PRISM_MEASURE=1`, protože `xcodebuild` posílá do testovacího procesu
+  jen proměnné s tímhle prefixem — bez něj se suita **tiše přeskočí** a v logu to vypadá jako zelený
+  běh.
+
+  **Na render se u toho koukat musí, čísla nestačí.** Polohu i velikost ikony v railu změřit jde (a je
+  na ně test), ale to, **jestli je v té velikosti poznat, co ikona je**, ne — slunce, měsíc a kolečko
+  s „A“ mají v pruhu 16 bodů srovnatelnou plochu, a přesto se od sebe musí přečíst. A barvu čísla
+  nechytila vůbec: `.menuStyle(.borderlessButton)` obarvil popisek **akcentem**, takže ikona vyšla
+  fialová jako aktivní sekce a rail tvrdil, že je vzhled „zapnutý“. Z obrázku obojí vidět je.
 
 - **`List` se offscreen nevykreslí vůbec** — je to AppKit tabulka a `ImageRenderer` místo
   ní nakreslí žlutý placeholder přes celé plátno. Nevypovídá to o aplikaci. Řádky se dají
