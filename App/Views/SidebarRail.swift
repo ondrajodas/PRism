@@ -13,6 +13,9 @@ import SwiftUI
 /// (půlkolečko za `.sep`), a je to jediná položka railu, která nic neotevírá — proto **není**
 /// případem `RailSection`. Kdyby byla, šlo by na vzhled „přepnout jako na obrazovku“, nabídla by
 /// se v ⌘K mezi sekcemi a v okně by zbyla prázdná plocha; je na to test.
+///
+/// Klikem **cykluje** a ikona se s režimem mění (slunce / měsíc / kolečko s „A“) — vědomá odchylka
+/// od návrhu, který tam kreslí jednu ikonu; viz `AppearanceMode.railSymbol` a specifikace.
 struct SidebarRail: View {
     @Binding var section: RailSection
     /// Kolik PR čeká ve frontě. `nil` = ještě se nenačetlo; nula se **nekreslí**, protože
@@ -53,46 +56,35 @@ struct SidebarRail: View {
 
     /// Přepínač vzhledu okna (#278).
     ///
-    /// **Nabídka, ne cyklení tří stavů klikem.** Cyklení by v ikoně, která se nemění, nechalo
-    /// aktuální stav neviditelný a cesta ke konkrétnímu režimu by byla až tři kliknutí. Nabídka
-    /// stavy **pojmenuje** a ten platný v ní má odškrtnutí, takže se dá přečíst — a `Picker`
-    /// uvnitř `Menu` to odškrtnutí kreslí sám, takže druhá pravda o vybraném režimu nevzniká.
+    /// **Tlačítko, které klikem cykluje** — ne nabídka ani popover. Stav nese **ikona** (slunce,
+    /// měsíc, kolečko s „A“ pro automat), takže je vidět bez kliknutí; to je celý důvod, proč se
+    /// ikona s režimem mění, i když jich návrh kreslí jednu.
     ///
-    /// Rám je tentýž jako u položek nad oddělovačem (34 × 30), aby rail nedržel dvě velikosti
-    /// ikon. Zvýrazněný stav (`.ri.on` z návrhu) **nedostává**: to znamená „jsem na téhle
-    /// obrazovce“, a vzhled žádnou neotevírá.
+    /// Cyklící tlačítko má jednu slabinu: z ikony je vidět, **kde jsem**, ne **kam se dostanu**.
+    /// Nese to proto nápověda (`Vzhled: tmavý · kliknutím podle systému`) a pro VoiceOver
+    /// `accessibilityValue` se stavem plus `accessibilityHint` s tím, co klik udělá. Cyklící
+    /// tlačítko bez toho je hádanka.
+    ///
+    /// Rám je tentýž jako u položek nad oddělovačem (34 × 30), aby rail nedržel dvě velikosti ikon.
+    /// Zvýrazněný stav (`.ri.on` z návrhu) **nedostává**: to znamená „jsem na téhle obrazovce“,
+    /// a vzhled žádnou neotevírá.
     private var appearanceItem: some View {
-        Menu {
-            Picker("Vzhled okna", selection: appearanceSelection) {
-                ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                    Text(verbatim: mode.displayName).tag(mode)
-                }
-            }
-            .pickerStyle(.inline)
-        } label: {
-            Image(systemName: AppearanceMode.railSymbol)
+        Button { setAppearance(appearance.next) } label: {
+            Image(systemName: appearance.railSymbol)
                 .font(.system(size: 15))
                 .frame(width: 34, height: 30)
                 .foregroundStyle(.secondary)
         }
-        // **`.button` + `.plain`, ne `.borderlessButton`.** Borderless styl si popisek obarví
-        // akcentem, takže půlkolečko vyšlo fialové jako aktivní sekce — a rail by tvrdil, že je
-        // vzhled „zapnutý“. Změřeno renderem, viz `AppearanceRenderProbe`.
-        .menuStyle(.button)
         .buttonStyle(.plain)
-        // Bez tohohle si nabídka nakreslí do railu šipku a ikona se v něm posune ze středu.
-        .menuIndicator(.hidden)
-        .frame(width: 34, height: 30)
-        // Aktuální režim patří i do nápovědy: ikona je jedna pro všechny tři stavy, takže bez
-        // toho by se stav dal přečíst jedině otevřením nabídky.
-        .help("Vzhled okna: \(appearance.displayName)")
+        .help(appearanceHelp)
         .accessibilityLabel("Vzhled okna")
         .accessibilityValue(appearance.displayName)
+        .accessibilityHint("Kliknutím přepneš na \(appearance.next.displayName.lowercased())")
     }
 
-    /// Vybraná volba jde **rovnou do konfigurace**, ne do lokálního stavu — rail je jen ovládání.
-    private var appearanceSelection: Binding<AppearanceMode> {
-        Binding { appearance } set: { setAppearance($0) }
+    /// Nápověda nese **stav i to, kam klik povede** — z ikony je poznat jen to první.
+    private var appearanceHelp: String {
+        "Vzhled: \(appearance.displayName.lowercased()) · kliknutím \(appearance.next.displayName.lowercased())"
     }
 
     private func item(for item: RailSection) -> some View {

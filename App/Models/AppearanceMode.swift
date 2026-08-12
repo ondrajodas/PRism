@@ -34,14 +34,36 @@ enum AppearanceMode: String, CaseIterable, Codable, Hashable, Sendable {
         }
     }
 
-    /// Ikona přepínače v railu — půlkolečko (`◐`), jak ho kreslí návrh.
+    /// Ikona v railu — **jedna na režim**, protože z ní se pozná, co platí.
     ///
-    /// **Jedna ikona pro všechny tři stavy, ne tři.** Návrh má v railu jedno půlkolečko, takže se
-    /// stav nečte z ikony, ale z nabídky (odškrtnutá volba) a z nápovědy po hoveru. Tři ikony —
-    /// slunce, měsíc, půlkolečko — by byly na první pohled čitelnější, ale je to skladba, kterou
-    /// návrh nemá; kdyby to bylo málo, patří to na návrh, ne do railu.
+    /// Tlačítko v railu klikem cykluje a popisek u sebe nemá, takže ikona je jediné místo, kde je
+    /// stav vidět bez hoveru. Vybrané jsou obrysové varianty, ne plné: rail má obrysové i ostatní
+    /// ikony (`square.grid.2x2`, `tray.full`, `square.and.pencil`), takže plná by v pruhu ztěžkla.
+    /// `a.circle` je „auto“ — kolečko s písmenem, tedy tvar, který se v té velikosti nepřečte jako
+    /// slunce ani měsíc.
     ///
-    /// **Statická**, ne vlastnost případu, právě proto: na případu by čtenář čekal, že se ikona
-    /// s režimem mění.
-    static let railSymbol = "circle.lefthalf.filled"
+    /// **Je to vědomá odchylka od návrhu**: mockup má v railu jedno půlkolečko bez ohledu na stav
+    /// (`◐`). Vyžádal si to uživatel, důvod je v záznamu rozhodnutí ve specifikaci a do mockupu se
+    /// to doplní při jeho překreslení (#299).
+    var railSymbol: String {
+        switch self {
+        case .light: "sun.max"
+        case .dark: "moon"
+        case .system: "a.circle"
+        }
+    }
+
+    /// Kam klik v railu povede.
+    ///
+    /// Pořadí je **světlý → tmavý → podle systému → světlý**: jde od nejsvětlejšího k nejtmavšímu
+    /// a automat je až za nimi, protože není třetí stupeň jasu, ale odpověď „rozhodni ty“. Tři
+    /// klikáním dosažitelné stavy znamenají, že se z každého dostaneš do každého nejvýš dvěma
+    /// kliknutími, takže na pořadí nezáleží kvůli rychlosti, ale kvůli tomu, aby bylo **předvídatelné**.
+    var next: AppearanceMode {
+        switch self {
+        case .light: .dark
+        case .dark: .system
+        case .system: .light
+        }
+    }
 }

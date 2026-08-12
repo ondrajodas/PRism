@@ -252,8 +252,10 @@ proti tomu jen odchylka: platí napříč pull requesty do zavření aplikace a 
 nezapisuje — nastavení říká „takhle to chci mít“, přepínač „teď se na to podívám jinak“.
 Per repo se pohled nenastavuje, protože jak se čte diff, je vlastnost člověka, ne repozitáře.
 
-**Světlý a tmavý režim se přepínají v aplikaci** — půlkolečkem v **levé liště**, pod
-oddělovačem: `Světlý`, `Tmavý`, nebo `Podle systému`, což je výchozí. Platí to pro všechna okna —
+**Světlý a tmavý režim se přepínají v aplikaci** — jedním tlačítkem v **levé liště**, pod
+oddělovačem. Klik cykluje `Světlý → Tmavý → Podle systému` (výchozí je `Podle systému`) a **stav
+nese ikona**: slunce, měsíc, kolečko s „A“ pro automat. Kam klik povede, je v nápovědě po hoveru
+(`Vzhled: tmavý · kliknutím podle systému`). Platí to pro všechna okna —
 hlavní, nastavení, novinky i sheety — a uplatní se hned, bez restartu, včetně otevřeného diffu
 i jeho obarvené syntaxe. Vzniklo to kvůli diffu: v obou režimech se čte jinak a přehazovat kvůli
 jednomu PR celý systém je nepřiměřené. Přepínač volí **režim, ne barvy** — ty zůstávají tam, kde

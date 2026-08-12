@@ -50,8 +50,9 @@ struct SidebarRailTests {
         #expect(separator.center == 26)
     }
 
-    /// Přepínač stojí **pod oddělovačem** a v téže svislici jako ikony sekcí. Kdyby si nabídka
-    /// rozšířila rám o indikátor, ikona se ze středu posune — a přesně to tady spadne.
+    /// Přepínač stojí **pod oddělovačem** a v téže svislici jako ikony sekcí. Kdyby si tlačítko
+    /// rozšířilo rám (nebo se do railu vešel indikátor nabídky), ikona se ze středu posune — a přesně
+    /// to tady spadne.
     @Test("Přepínač vzhledu stojí pod oddělovačem a ve středu railu")
     func placesTheAppearanceItemBelowTheSeparator() throws {
         for mode in AppearanceMode.allCases {
@@ -66,6 +67,27 @@ struct SidebarRailTests {
             // A je to poslední věc v railu — pod přepínačem už nic není.
             #expect(bands.last?.top == below.top)
         }
+    }
+
+    /// Tři ikony na tři stavy (#278) **nesmí poskakovat**: klik je vyměňuje na tomtéž místě, takže
+    /// když se liší velikostí, tlačítko při cyklení „skáče“ a rail vypadá roztřeseně.
+    ///
+    /// Naměřeno: slunce `16 × 16`, měsíc `15 × 16`, kolečko s „A“ `16 × 16` — tedy bod rozdílu na
+    /// šířku a nic na výšku. Práh je 2 body, ne rovnost: SF Symbols se mezi verzemi systému
+    /// překreslují a test má chytat **jinou** ikonu, ne zaokrouhlení.
+    @Test("Tři ikony mají srovnatelnou velikost")
+    func keepsTheThreeIconsComparable() throws {
+        var icons: [AppearanceMode: Band] = [:]
+        for mode in AppearanceMode.allCases {
+            let bands = try bands(mode: mode)
+            let separator = try #require(bands.first { $0.height == 1 })
+            icons[mode] = try #require(bands.first { $0.top > separator.top })
+        }
+
+        let widths = icons.values.map(\.width)
+        let heights = icons.values.map(\.height)
+        #expect(try (widths.max() ?? 0) - #require(widths.min()) <= 2)
+        #expect(try (heights.max() ?? 0) - #require(heights.min()) <= 2)
     }
 
     // MARK: - měřidlo

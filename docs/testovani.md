@@ -873,11 +873,16 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 - **Rail a přepínač v něm (#278)** — `SidebarRailTests`. Dvě tvrzení jsou negativní: vzhled **není**
   `RailSection` (výčet sekcí zůstává tříprvkový) a v paletě ⌘K se **nenabízí jako sekce** — kdyby byl
   jeho případem, přišel by tam sám, protože položky sekcí se staví z `allCases`. Zbytek je **poloha
-  z bitmapy**: oddělovač 20 × 1 bod vystředěný, jak ho má návrh, a půlkolečko pod ním ve stejné
-  svislici jako ikony sekcí (střed 26 na railu o 52 bodech) a v témž rámu 34 × 30. Rámečky by na
-  tuhle chybu neodpověděly — `fittingSize` railu je pevných 52 bodů a accessibility tree se v okně
-  mimo obrazovku nenaplní. Vyzkoušené vložením regrese: se stylem `.borderlessButton` vyjde střed 25
-  a test spadne.
+  z bitmapy**: oddělovač 20 × 1 bod vystředěný, jak ho má návrh, ikona pod ním ve stejné svislici
+  jako ikony sekcí (střed 26 na railu o 52 bodech) a v témž rámu 34 × 30. K tomu **srovnatelná
+  velikost všech tří ikon** (16 × 16, 15 × 16, 16 × 16, práh 2 body): klik je vyměňuje na tomtéž
+  místě, takže větší rozdíl znamená tlačítko, které při cyklení poskakuje. Rámečky by na tyhle chyby
+  neodpověděly — `fittingSize` railu je pevných 52 bodů a accessibility tree se v okně mimo obrazovku
+  nenaplní. Vyzkoušené vložením regrese: se stylem `.borderlessButton` vyjde střed 25 a test spadne.
+- **Cyklus a ikony režimů (#278)** — `AppAppearanceTests`: pořadí `světlý → tmavý → podle systému`
+  a hlavně to, že je **uzavřené a projde všechny tři** (jinak by se do jednoho režimu klikáním nešlo
+  dostat), tři **různé** ikony a to, že všechny tři symboly v systému existují — chybějící SF Symbol
+  se v okně kreslí jako prázdno, tedy tlačítko, ze kterého zmizel stav.
 - **Podpis bloku kódu (#157, #278)** — `DiffBlockSignatureTests`: světlý a tmavý režim, jiný obsah,
   jiný jazyk a blok bez jazyka musí mít **různý** podpis, tentýž stav ten **samý**. Kdyby se dva
   stavy sešly, blok by se přeskočil jako nezměněný a v okně by po přepnutí vzhledu zbyly barvy
@@ -1924,10 +1929,11 @@ Dva zádrhely, které to má:
   jen proměnné s tímhle prefixem — bez něj se suita **tiše přeskočí** a v logu to vypadá jako zelený
   běh.
 
-  **Na render se u toho koukat musí, čísla nestačí.** Polohu ikony v railu změřit jde (a je na ni
-  test), barvu ne: `.menuStyle(.borderlessButton)` obarví popisek nabídky **akcentem**, takže
-  půlkolečko vyšlo fialové jako aktivní sekce a rail tvrdil, že je vzhled „zapnutý“. Z čísel to
-  nevypadlo, z obrázku ano.
+  **Na render se u toho koukat musí, čísla nestačí.** Polohu i velikost ikony v railu změřit jde (a je
+  na ně test), ale to, **jestli je v té velikosti poznat, co ikona je**, ne — slunce, měsíc a kolečko
+  s „A“ mají v pruhu 16 bodů srovnatelnou plochu, a přesto se od sebe musí přečíst. A barvu čísla
+  nechytila vůbec: `.menuStyle(.borderlessButton)` obarvil popisek **akcentem**, takže ikona vyšla
+  fialová jako aktivní sekce a rail tvrdil, že je vzhled „zapnutý“. Z obrázku obojí vidět je.
 
 - **`List` se offscreen nevykreslí vůbec** — je to AppKit tabulka a `ImageRenderer` místo
   ní nakreslí žlutý placeholder přes celé plátno. Nevypovídá to o aplikaci. Řádky se dají

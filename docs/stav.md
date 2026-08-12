@@ -1363,9 +1363,15 @@ Testů je o 64 víc (2385 po zvednutí mainu), z toho **30 na tuhle opravu** ve 
 
 **Přepínač vzhledu (#278).** Vzhled se do #278 řídil **jen** systémem a nedal se přebít, takže
 porovnat, jak se diff čte ve světlém a v tmavém (což je celé #277), znamenalo přehodit celý systém.
-Přepínač je **v levé liště pod oddělovačem**, jak ho kreslí návrh: půlkolečko, po kliknutí nabídka
-se třemi volbami (`Světlý`, `Tmavý`, `Podle systému`). Rozhoduje jediný řádek — `NSApp.appearance`;
-barvy se nikde nevětví, `Palette` zůstala nedotčená.
+Přepínač je **v levé liště pod oddělovačem**, jak ho kreslí návrh — a je to **jedno tlačítko, které
+klikem cykluje** `světlý → tmavý → podle systému`. Stav nese **ikona**: slunce, měsíc, kolečko s „A“
+pro automat; kam klik povede, říká nápověda. Rozhoduje jediný řádek — `NSApp.appearance`; barvy se
+nikde nevětví, `Palette` zůstala nedotčená.
+
+**Tři ikony jsou vědomá odchylka od návrhu**, který v railu kreslí jedno půlkolečko bez ohledu na
+stav. Vyžádal si ji uživatel a důvod je dobrý: tlačítko, které cykluje, jinak neřekne, co platí.
+Mezitím z toho byla i **nabídka s třemi volbami** — ta padla ze stejného důvodu, kvůli kterému
+uživatel chtěl klikání. Do mockupu se to doplní při jeho překreslení (#299), potichu ho neměním.
 
 **Nejdřív z toho byla stránka v nastavení a bylo to špatně.** Rozhodl jsem to sám, protože zadání
 říkalo „rozhodni a zapiš“ — jenže návrh to místo určuje a já si ho k tomu prvku nepřečetl. Zpětně
@@ -1390,7 +1396,7 @@ skládaly každá svým řetězcem.
 Poloha v railu je **změřená z bitmapy** (oddělovač 20 × 1 bod, ikona ve středu railu, tedy 26
 z 52) a vyzkoušená vložením regrese; barvu ikony ale čísla nechytila — `.menuStyle(.borderlessButton)`
 ji obarvilo akcentem, takže vypadala jako aktivní sekce, a poznalo se to jedině z renderu. Testů je
-o 27 víc (2446 po zvednutí mainu) ve šesti nových suitách, z nichž dvě jsou **sondy za přepínačem**: render railu ve všech
+o 30 víc (2449 po zvednutí mainu) ve šesti nových suitách, z nichž dvě jsou **sondy za přepínačem**: render railu ve všech
 třech stavech a v obou režimech, a to přepnutí za běhu.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak

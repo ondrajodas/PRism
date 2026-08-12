@@ -42,6 +42,37 @@ struct AppAppearanceTests {
         #expect(AppAppearance.application === NSApplication.shared)
     }
 
+    /// Cyklus musí být **předvídatelný a uzavřený**: tlačítko v railu klikem přechází po něm, takže
+    /// z každého stavu musí být dosažitelný každý — jinak by se do jednoho režimu klikáním nešlo
+    /// dostat vůbec.
+    @Test("Klikání projde všechny tři režimy a vrátí se")
+    func cyclesThroughEveryMode() {
+        #expect(AppearanceMode.light.next == .dark)
+        #expect(AppearanceMode.dark.next == .system)
+        #expect(AppearanceMode.system.next == .light)
+
+        var visited: [AppearanceMode] = [.light]
+        while visited.count <= AppearanceMode.allCases.count, let last = visited.last {
+            let next = last.next
+            if next == visited.first { break }
+            visited.append(next)
+        }
+        #expect(Set(visited) == Set(AppearanceMode.allCases))
+    }
+
+    /// Ikona nese stav, takže dvě stejné by z přepínače udělaly hádanku — a stane se to tichou
+    /// opravou překlepu v názvu symbolu. Chybějící symbol se navíc v okně kreslí jako prázdno.
+    @Test("Každý režim má v railu vlastní ikonu")
+    func hasItsOwnRailSymbol() {
+        #expect(AppearanceMode.light.railSymbol == "sun.max")
+        #expect(AppearanceMode.dark.railSymbol == "moon")
+        #expect(AppearanceMode.system.railSymbol == "a.circle")
+        #expect(Set(AppearanceMode.allCases.map(\.railSymbol)).count == AppearanceMode.allCases.count)
+        for mode in AppearanceMode.allCases {
+            #expect(NSImage(systemSymbolName: mode.railSymbol, accessibilityDescription: nil) != nil)
+        }
+    }
+
     @Test("Každý režim má vlastní jméno v okně")
     func namesEveryModeInTheWindow() {
         #expect(AppearanceMode.light.displayName == "Světlý")

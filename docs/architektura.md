@@ -33,7 +33,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `EffectiveVerdict` | Verdikt, který na draftu **platí**, a jeho původ (`suggested`/`chosen`). Taky **není `Codable`** — počítá se, viz níž |
 | `ProjectLanguage` | Čím je repo psané — klíč mapy „jazyk → sada skillů“. **Není to `Syntax.Language`**, viz níž |
 | `FindingsLanguage` | Jazyk prózy v nálezech (`cs`/`en`). Ani tohle **není `ProjectLanguage`** |
-| `AppearanceMode` | Jaký vzhled má okno mít (#278): `light`, `dark`, `system`. **Volí režim, ne barvy** — ty zůstávají v `Palette` |
+| `AppearanceMode` | Jaký vzhled má okno mít (#278): `light`, `dark`, `system`. **Volí režim, ne barvy** — ty zůstávají v `Palette`. Nese i ikonu do railu (`railSymbol`) a pořadí cyklu (`next`) |
 | `FindingTranslation` | Přeložená próza nálezu. Visí vedle originálu, nepřepisuje ho |
 | `Conversation` | Cizí konverzace pod PR: review ostatních, vlákna, komentáře, **události časové osy** (#171) + `viewer` |
 | `ConversationPage` | Kus seznamu a kolik ho je celkem — nese **zkrácení** |
@@ -1615,12 +1615,16 @@ Věci, které se u toho nemají rozbít:
   **Selhání zápisu se hlásí** (`appearanceFailure` v `AppNoticesView`): vzhled se totiž uplatňuje až
   po úspěšném uložení, takže bez hlášky by klik do railu nic neudělal a nic neřekl.
 
-  **Ovládací prvek je nabídka** (`Menu` s `Pickerem`), ne cyklení tří stavů klikem: ikona je jedna
-  pro všechny tři stavy — jak ji má návrh —, takže by při cyklení nebylo z čeho poznat, co platí,
-  a ke konkrétnímu režimu by vedla až tři kliknutí. Styl je `.button` + `.plain`;
-  `.borderlessButton` popisek obarví akcentem, takže půlkolečko vypadá jako aktivní sekce, a navíc
-  si přikreslí indikátor, kterým se ikona posune ze středu railu (změřeno, viz
-  [`testovani.md`](testovani.md)).
+  **Ovládací prvek je tlačítko, které klikem cykluje** (`světlý → tmavý → podle systému → …`), ne
+  nabídka: nabídka byla první verze a uživatel ji zamítl. Stav proto nese **ikona** — slunce, měsíc,
+  kolečko s „A“ pro automat (`AppearanceMode.railSymbol`) —, což je **vědomá odchylka od návrhu**,
+  který kreslí jedno půlkolečko bez ohledu na stav; do mockupu se to doplní při jeho překreslení
+  (#299). Tři ikony si u toho hlídají **srovnatelnou velikost** (naměřeno 16 × 16, 15 × 16, 16 × 16),
+  jinak by tlačítko při cyklení poskakovalo.
+
+  Cyklící tlačítko říká **kde jsem, ne kam se dostanu**, takže to nese nápověda (`Vzhled: tmavý ·
+  kliknutím podle systému`) a pro VoiceOver `accessibilityValue` se stavem plus `accessibilityHint`
+  s tím, co klik udělá. Bez toho je z tlačítka hádanka.
 - **Repo s běžícím review je pro eviction nedotknutelné.** `busyRepositories` proto nejsou
   jen repa ve stavu `preparing`, ale i všechna, nad kterými běží review — smazat klon pod
   běžící session by jí vzalo pracovní strom pod rukama.
@@ -1772,7 +1776,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `AppAppearance`, `AppearanceApplying` | Přepnutí vzhledu celé aplikace (#278) — `NSApp.appearance`, a za protokolem, aby si na hostitele testů nesáhly testy |
 | `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
-| `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) a pod oddělovačem **přepínač vzhledu okna** (#278), který sekce railu není |
+| `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
 | `DashboardView` | Startovní obrazovka (#181): pozdrav, čtyři karty, fronta podle závažnosti, legenda reviewerů a `Co teď` |
 | `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatné view |
