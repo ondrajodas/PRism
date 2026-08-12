@@ -1430,7 +1430,7 @@ tentýž diff se `CRLF` a s `LF` dá **stejný model**) a `CRLF` PR v naší fro
 rozhodnutí: kopie do schránky nese `LF`, i když soubor měl `CRLF`, protože `CR` v textu řádku by
 znamenal neviditelný znak v klíčích `SyntaxRunCache`, ve word-level rozdílu i v sazbě.
 
-Testů je o 26 víc (2449), ve třech nových suitách. **Regrese ověřená vložením regrese dvakrát**:
+Testů je o 26 víc (2479), ve třech nových suitách. **Regrese ověřená vložením regrese dvakrát**:
 vrácené `split(separator: "\n")` položí 41 testů v 8 suitách (mezi nimi i obě sady z #292, což
 dokládá, že jejich převedení nic neztratilo), a rozšíření na `isNewline` položí přesně ty dva testy
 o unicode oddělovačích.
