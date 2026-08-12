@@ -1208,6 +1208,74 @@ až na ~128 bodů a nezkratitelný odkaz by kartu roztlačil, tedy vyrobil #291 
 (2325 po zvednutí mainu) v jedné nové suitě, k tomu sonda na render tabu přes `NSHostingView` — v něm se `Link`
 vykreslí celý, na rozdíl od `ImageRenderer`u.
 
+**Postranní lišta panelu jen ve třech tabech (#294).** Panel s nálezy (i složený na proužek) se
+kreslil ve všech šesti tabech detailu, přitom ve třech z nich odpovídá na otázku, na kterou už
+odpovídá obsah tabu: `Nálezy` jsou tytéž nálezy přes celou šířku, `Průběh` záznam týchž běhů —
+a v `Kontrolách` ukrajuje šířku detailu spadlého checku, který nese konec logu (#214). Rozhoduje
+o tom **vlastnost tabu** (`PullRequestTab.showsReviewPanel`), ne `Policy` a hlavně ne existující
+`isReviewerOutput`: ten má u `Kontrol` `false`, takže sloučení do jedné vlastnosti by posunulo dělič
+v pruhu záložek — chyba by se objevila jinde, než by vznikla, a drží to test, který tvrdí, že se ty
+dva příznaky **nerovnají**.
+
+Šířka se u toho **nepřepočítává**: panel je sourozenec `GeometryReader`u v tomtéž `HStack`u, takže
+jeho zmizení změní to, co se změří. Vlastní odečítání šířky panelu je zrovna ta cesta, ze které
+vzniklo #291. Naměřeno na pásmu 648–1800 (spodní kraj je okno 700 bez railu 52): **nula bodů
+přesahu** ve všech třech tabech, ve tabulce nálezů i v jejím prázdném stavu. Vyzkoušené vložením
+regrese — bez `inset * 2` v rozpočtu sloupců hlásí měření 32 bodů ve všech šířkách. Vedlejší
+zjištění: podlaha shrnutí v tabulce (120 bodů, vědomé přetečení) je od téhle změny **mimo dosah**,
+protože se zapíná pod 590 a nejužší tab má 648 — s vytaženým panelem se tam tab dostával (~122
+bodů, přesah ~468).
+
+Dvě věci navíc proti zadání. `revealDraft(in:)` si z tabu bez panelu **přepne tab** na `Přehled` —
+bez toho by `Převzít` v tabu `Nálezy` neudělalo nic viditelného, což je tatáž tichá ztráta
+rozepsané věty, jakou řešil #242 u složeného panelu. A `⌘2` i položka v ⌘K jsou v těch třech tabech
+**vypnuté**: klávesa by potichu přestavěla tab, do kterého se člověk vrátí. Uložený stav panelu se
+přepnutím tabu nemění, což tvrdí dva testy negativně (rozbalený přežije, složený se nerozloží).
+
+Testů je o 16 víc (2341) ve dvou nových suitách; měření přetečení se přestěhovalo do sdílené
+`OverflowProbe`, kterou teď používá i `OverviewWidthTests`. K tomu sonda, která vyrendruje **celý
+detail ve všech šesti tabech** — render samotného tabu by o schované liště neřekl nic, protože je to
+jeho sourozenec. Past, na kterou se u toho narazilo: `FindingsTabView` bere šířku z prostředí, takže
+podstrom vytažený zvenčí měří výchozích 1000 bodů a hlásí přetečení, které v okně není.
+
+**Akce v tabulce nálezů berou akcent z palety (#298).** #283 převedlo na tlačítka podle návrhu jen
+bublinu u kódu, takže v `FindingTableRowView` (2×) a ve `WorkingCopyStatusView` zbyl
+`.buttonStyle(.link)` — a ten kreslí **systémovou `NSColor.linkColor`** (`#0068DA` ve světlém,
+`#419CFF` v tmavém). V okně tedy byla dvě různá „klikni sem“ naráz: fialová na tlačítku v bublině
+a modrá na akci v tabulce o kus vedle. `.tint(Palette.accent)`, který okno drží na kořeni od #180,
+na to **nestačí** — `.link` si tint nebere, což je zrovna důvod, proč to tak dlouho vydrželo.
+
+**Tvar zůstává různý, barva je jedna.** Návrh má u akce v tabulce `.go { color: var(--accent) }`,
+tedy holý text, kdežto v bublině plochu (`.mini`) — plocha zopakovaná na každém řádku by přebila
+shrnutí, kvůli kterému se tabulka čte. Mění se proto jen barva, a drží ji `AccentLinkButtonStyle`
+(`Palette.accent`, ztlumení při zmáčknutí jako u `.mini`, `pointerStyle(.link)`): kurzor je vědomý
+přídavek, protože po zrušení systémového odkazu nese „dá se kliknout“ jedině barva. V `App/` po tom
+nezůstal žádný `.buttonStyle(.link)` — jediný výskyt toho řetězce je záznam v komentáři
+`MiniButtonStyle`.
+
+`WorkingCopyStatusView` **dostal tutéž barvu, i když návrh o `Připravit` nic neříká** (v jeho
+stavovém řádku ta akce nakreslená není). Mlčení návrhu není povolení k systémové modré: „jedna barva
+pro klikni sem“ je vlastnost celého okna, takže ponechat tam `.link` by ta dvě „klikni sem“
+přestěhovalo o pruh níž, ne zrušilo. Že paleta do stavového řádku dosahuje, potvrzuje sám návrh —
+zastaralé nálezy v něm barví `var(--stale)`.
+
+Naměřeno v obou režimech (světlý / tmavý): plocha řádku **6,14 / 5,64**, podbarvený živý řádek
+procházení **5,30 / 4,70**, stavový řádek **5,82 / 5,33**. Systémová modrá měla 5,26 / 4,54 / 4,99
+a 6,51 / 5,43 / 6,16, takže **v tmavém režimu je to výměna**, ne zlepšení — přijatá proto, že rezerva
+nad WCAG AA (4,5) zůstává na všech třech podkladech a jedna barva pro „klikni sem“ váží víc než
+o desetiny lepší číslo v jednom režimu. Je to tatáž úvaha jako u zelené diffu v #277 (7,42 → 5,95).
+`Vrátit` na odmítnutém řádku vychází na 2,35 / 2,40, ale to je vlastnost **ztlumení řádku** (0,52,
+`.frow.done`), ne barvy — systémová modrá tam měla 2,26 / 2,63 a vyjmout akci ze ztlumení by
+znamenalo, že odmítnutý řádek křičí jednou barvou víc než platný.
+
+Testů je o 8 víc (2349 po zvednutí mainu) v jedné nové suitě a jedné sondě; ověřeno vloženou regresí — po dosazení
+`.linkColor` zpátky padnou obě tvrzení v obou režimech. Vzhled je doložený renderem, na kterém stojí
+**tabulka, bublina a stavový řádek na jednom plátně** v obou režimech, vedle vyrenderované sekce
+návrhu. Ten render našel dvě věci navíc, které #298 **neřeší**: odznak `2×` a `✓ v mém review` chce
+návrh v `--mint` (`#0E8F80` / `#2DD4BF`), kdežto aplikace u prvního kreslí systémovou modrou
+(`Color.accentColor` za `.tint()` nejde) a u druhého akcent. Chybí na to token `Palette.mint`
+a rozhodnutí o něm patří k sobě, takže se to nechává na vlastní issue.
+
 **Detail spadlého checku: anotace a konec logu (#214).** Tab `Kontroly` (#215) říkal, **že** check
 spadl; teď říká **proč**. Řádek checku se rozbalí a pod ním jsou anotace check-runu (`soubor:řádek`
 a věta, kliknutí skočí do diffu) a konec logu — obojí **až na kliknutí a jen u toho jednoho checku**.
@@ -1291,6 +1359,5 @@ mediánový řádek (333 znaků proti mediánu 327), a zvedl se z původně odha
 obrazovce, na které se aplikace používá (3 440 bodů) — tam 1 600 nechávalo polovinu scrollování navíc.
 Je to tentýž vzor jako u vynucené sazby: **měřit se musí ta konfigurace, ve které se to používá.**
 
-Testů je o 64 víc (2385 po zvednutí mainu), z toho **30 na tuhle opravu** ve dvou nových suitách.
-Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
+Testů je o 64 víc (2385 po zvednutí mainu), z toho **30 na tuhle opravu** ve dvou nových suitách.Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

@@ -31,6 +31,17 @@ struct FindingsTabView: View {
     var draft = FileDraftActions()
     var current: FindingPlace?
     let jump: (Finding) -> Void
+    /// Kreslí se tabulka ve `ScrollView`u? **`false` jedině kvůli měření přetečení** (#294):
+    /// `NSScrollView` si obsah na svou šířku ukrojí, takže by se v něm přesah nenakreslil a rozbitá
+    /// šířka by od opravené nešla poznat.
+    ///
+    /// **Parametr, ne vytažený `content` jako u `OverviewView`** (#291), a je to podstatný rozdíl:
+    /// tenhle tab bere šířku z **prostředí**, a to dorazí jedině do view, které SwiftUI doopravdy
+    /// skládá. Podstrom vytažený zvenčí (`FindingsTabView(…).content`) by měl `availableWidth`
+    /// nenastavenou, takže by sázel na výchozích 1000 bodů — a přetečení, které by z toho vyšlo,
+    /// by bylo přetečení sondy, ne tabu. Změřeno při psaní testu: hlásil 120 bodů ve třech
+    /// šířkách, ve kterých je v okně nula.
+    var scrolls = true
 
     /// Podle čeho je tabulka setříděná. `nil` = pořadí z `Policy.sorted`, tedy podle závažnosti.
     ///
@@ -46,24 +57,7 @@ struct FindingsTabView: View {
     @Environment(\.availableWidth) private var availableWidth
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            summaryBar
-            if let reason = emptyReason {
-                FindingsEmptyView(reason: reason)
-            } else {
-                FindingsTableView(
-                    rows: rows,
-                    layout: layout,
-                    pullRequest: pullRequest,
-                    sort: $sort,
-                    blockingCategories: blockingCategories,
-                    current: current,
-                    findingActions: findingActions,
-                    draft: draft,
-                    jump: jump
-                )
-            }
-        }
+        stack
         // `presenting:` podá text nepovinný, takže v těle není `?? ""` — default, který se nikdy
         // nepoužije, čte příště jako možnost prázdné hlášky.
         .alert(
@@ -75,6 +69,35 @@ struct FindingsTabView: View {
         } message: { detail in
             Text(verbatim: detail)
         }
+    }
+
+    /// Souhrn a pod ním tabulka. **Jedno složení, ať se měřená podoba tabu neliší od té v okně** —
+    /// jinak by měření přestalo být důkaz. Rozhoduje se v něm jediná věc, a to `scrolls`.
+    @ViewBuilder private var stack: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            summaryBar
+            if let reason = emptyReason {
+                FindingsEmptyView(reason: reason)
+            } else if scrolls {
+                table
+            } else {
+                table.content
+            }
+        }
+    }
+
+    private var table: FindingsTableView {
+        FindingsTableView(
+            rows: rows,
+            layout: layout,
+            pullRequest: pullRequest,
+            sort: $sort,
+            blockingCategories: blockingCategories,
+            current: current,
+            findingActions: findingActions,
+            draft: draft,
+            jump: jump
+        )
     }
 
     // MARK: - Souhrn

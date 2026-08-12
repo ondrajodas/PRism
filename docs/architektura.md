@@ -50,7 +50,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
 | `DraftSnapshot` | Text řádků, ke kterým se komentář psal — konec rozsahu a jeho začátek. Prázdný = nevíme |
 | `DetailState` | Stav dotažení detailu PR: `loading` / `loaded(PullRequest, updatedAt:)` / `failed`. Je z něj `headSha` pro draft a popis pro `Přehled` |
-| `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `conversation` / `findings` / `progress` (#242). `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) můžou přijít doprostřed levé skupiny, aniž by se posunul. Jako `ReviewVerdict` **není `Codable`** |
+| `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `conversation` / `findings` / `progress` (#242). `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) můžou přijít doprostřed levé skupiny, aniž by se posunul. `showsReviewPanel` říká, jestli je v tabu vidět panel s nálezy (#294) — a **s tím prvním se to nesmí slít**: `Kontroly` mají `isReviewerOutput == false` a panel přesto nemají, takže jedna vlastnost pro dvě otázky by posunula dělič. Jako `ReviewVerdict` **není `Codable`** |
 | `PullRequestTabBadge` | Odznak u záložky (#242): `count` / `blocking` (červeně) / `live` (puntík). Výčtem, ne strukturou s příznaky — „puntík s počtem“ ani „blokující bez počtu“ význam nemá, takže se nemá dát napsat |
 | `ReviewPanelTab` | Co je vidět v panelu vpravo: `findings` / `draft` (#242). Jako `PullRequestTab` **není `Codable`** |
 | `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání — `Hit` nese **dva** rozsahy
@@ -346,6 +346,11 @@ Co se u toho nemá rozbít:
   16,7 bodu, SwiftUI dá pro `size: 11.5` dvanáct, a obtažení v CSS leží **vně** paddingu, kdežto
   SwiftUI ho kreslí `overlay`em dovnitř. Bez obojího vycházelo tlačítko 20 bodů proti 25 v návrhu.
   Změřeno renderem vedle sebe — z kódu se to nepozná.
+- **Plochu má bublina, barvu má celé okno** (#298). #283 převedlo na tlačítka jen bublinu, takže
+  v tabulce nálezů zbyly `.buttonStyle(.link)`, tedy **systémová modrá** — a v okně dvě různá „klikni
+  sem“ naráz. Barvu drží od #298 `AccentLinkButtonStyle` (`Palette.accent`, jako plné `.mini`), tvar
+  zůstává různý: plocha v bublině, holý text v tabulce. `.tint(Palette.accent)` z kořene okna na to
+  **nestačilo** — `.link` si tint nebere.
 
 Pohled **vedle sebe** (#98) je `DiffRow.pair(_, left:, right:)` a platí u něj:
 
@@ -1773,6 +1778,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou. Od #283 jsou akce **řada malých tlačítek vlevo pod textem** |
 | `MiniButtonStyle` | Malé tlačítko z návrhu (`.mini`, `.mini.pri`) — plné akcentové a obtažené. Rozměry v `Metrics`, aby se daly změřit testem; text plného je `Palette.surface` (`--panel`), ne bílá |
+| `AccentLinkButtonStyle` | Textová akce v barvě akcentu (`.go` z návrhu) — **místo systémového `.link`** (#298). Barva z `Palette.accent`, ztlumení při zmáčknutí jako u `.mini`, kurzor `pointerStyle(.link)`. Font si drží volající. Tři výskyty ve dvou souborech: `Převzít` a `Vrátit` v tabulce nálezů, `Připravit` ve stavovém řádku — `grep -rn "buttonStyle(.link)" App/` po #298 vrací jen komentáře |
 | `FindingActions` | Co se dá dělat s nálezem — odmítnout a vrátit; jedno místo pro bublinu i tabulku |
 | `FindingDisclosureActions` | Rozbalení bubliny nálezu (#185) — stav ze store a jeho překliknutí. **Nepatří do `FindingActions`**, kterou bere i tabulka: ta rozbalení řídí sama |
 | `ThreadBubbleView` | Vlákno konverzace — u kódu i na ose (`Placement`); karta z pruhů, vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73, sazba #216) |
@@ -1787,14 +1793,14 @@ na `.task` okna, takže zavření okna ji zruší.
 | `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení |
 | `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
 | `DiffLineView` | Řádek souboru: dvě čísla (v buňce dvojice jedno, podle `side`), znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
-| `ReviewPanel` | Panel **napravo od diffu** (#182, do #242 `FindingsPanel`): segmenty `Nálezy`/`Moje review`, karty nálezů, prokliky do diffu — a složení na proužek s počtem nálezů a značkou rozdělaného review. `Průběh` a zahození nálezů se u #242 odstěhovaly do záložek PR |
+| `ReviewPanel` | Panel **napravo od diffu** (#182, do #242 `FindingsPanel`): segmenty `Nálezy`/`Moje review`, karty nálezů, prokliky do diffu — a složení na proužek s počtem nálezů a značkou rozdělaného review. `Průběh` a zahození nálezů se u #242 odstěhovaly do záložek PR. **Kreslí se jen ve třech tabech** (#294, `PullRequestTab.showsReviewPanel`) — sám o tom nerozhoduje, podmínku má detail |
 | `DismissedRowStyle` | Buňka tabulky: ztlumení odmítnutého řádku a kontextové menu `Označit jako…` / `Vrátit` |
 | `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak, odmítnutí |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
 | `ReviewProgressView`, `ReviewerLaneView` | Tab `Průběh` (#242, nahradily `ReviewTimelineView`): **dráha na revieweera** s fázemi vedle sebe, věta o tom, co se právě děje, u spadlé session důvod, `stderr` a `Pustit znovu` / `Zkopírovat příkaz`; podrobný výpis událostí pod rozbalením (`TimelineEntryRow`). Dráha po skillu **mimo nastavenou sadu** nese v hlavičce `mimo sadu`; prázdný stav mluví o **nastavení**, protože se do něj dá dojít jedině s prázdnou sadou skillů |
 | `ReviewerLaneText` | České věty dráhy — stav, co se právě děje, čím to skončilo. Rozlišuje **tři** doběhlé stavy: nahlásilo nálezy / nahlásilo nulu / nenahlásilo nic — a `nespuštěno` od `ve frontě` |
 | `FindingsTabView`, `FindingsEmptyView` | Tab `Nálezy` (#242): souhrn počtů, `Zahodit nálezy`, tabulka — a věta, **proč** je prázdno (`Policy.findingsEmptyReason`), společná s panelem |
-| `FindingsTableView`, `FindingTableRowView`, `FindingTableRow` | Tabulka nálezů přes celou šířku: řazení kliknutím na hlavičku, řádek na **místo** (shoda dvou reviewerů je odznak `2×`), rozbalení kreslí tutéž `FindingBubbleView` jako diff |
+| `FindingsTableView`, `FindingTableRowView`, `FindingTableRow` | Tabulka nálezů přes celou šířku: řazení kliknutím na hlavičku, řádek na **místo** (shoda dvou reviewerů je odznak `2×`), rozbalení kreslí tutéž `FindingBubbleView` jako diff. Akce (`Převzít`, `Vrátit`) jsou **barevný text z palety** (`AccentLinkButtonStyle`, #298), ne plocha jako v bublině a ne systémová modrá; krytí odmítnutého řádku drží `dismissedOpacity` (`.frow.done` z návrhu), ze kterého měří i sonda kontrastu |
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
 | `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
@@ -2097,6 +2103,15 @@ Jak to drží pohromadě:
 **Co zatím pružné zůstalo:** poloviny v `DiffPairView`. `maxWidth: .infinity` tam drží **stejně
 široké sloupce**, takže `filling()` by každé polovině dalo plnou šířku a rozvržení by se rozsypalo.
 Potřebuje to krok „poloviční šířka“ a je to samostatná práce.
+
+**Když se vedle tabu něco přestane kreslit, šířka se nepřepočítává** (#294). Panel vpravo je
+**sourozenec** `GeometryReader`u v tom samém `HStack`u, takže jeho zmizení změní to, co se změří —
+a tab dostane správnou šířku bez jediného odečtení. Vlastní aritmetika („odeber šířku panelu“) je
+zrovna ta cesta, kterou vzniklo #291. Platí to i naopak: **čísla o šířce v komentářích zastarají**,
+protože se počítají z toho, co v okně vedle sebe stojí. Po #294 je nejužší `Nálezy`, `Kontroly`
+a `Průběh` **648 bodů** (okno 700 − rail 52), kdežto `Přehled`, `Změněné soubory` a `Konverzace`
+mají pořád 128 (okno 700 − rail 52 − vytažený panel 520). Testy proto měří **každé pásmo zvlášť**
+(`OverviewWidthTests` proti `PanelFreeTabWidthTests`).
 
 ### Kdo přejde na `filling()`, musí přejít i na `narrowingWidth()` (#291)
 
@@ -2608,16 +2623,35 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   (`PullRequestTab.standard`, **změna proti zadání #72** — popis a diskuze se čte dřív než kód
   a stejně to má GitHub), takže se `filesChanged` z mapy maže a úklid podle seznamu PR ji
   nenechá růst.
-- **Panel je ve všech tabech**, včetně `Nálezů` (#242). Nálezy bez místa v kódu i moje rozdělané
-  review se vážou k celému PR — schovat je za přepnutí tabu by znamenalo, že se rozepsané review
-  „ztratí“ přepnutím na `Přehled`. U tabu `Nálezy` je to o důvod víc: smyčka nález → `Převzít` →
-  text v mém review je ta hlavní práce, takže se obojí musí stát naráz.
+- **Panel je ve třech tabech ze šesti** — `Přehled`, `Změněné soubory`, `Konverzace` (#294,
+  `PullRequestTab.showsReviewPanel`). Nálezy bez místa v kódu i moje rozdělané review se vážou
+  k celému PR, takže se za přepnutí tabu schovat nesmí; panel ale odpovídá na „co k tomu, co právě
+  čtu, nahlásily reviewery“, a to má smysl jen tam, kde se vedle něj čte **něco jiného**.
+  V `Kontrolách`, `Nálezech` a `Průběhu` je vedle něj buď duplikát týchž dat, nebo obsah, který
+  šířku potřebuje (konec logu spadlého checku, #214) — schovává se proto **celý, i složený
+  proužek**. Tři věci, které z toho platí:
+  - **Šířka se nepřepočítává.** `GeometryReader` v detailu měří to, co po panelu zbylo, takže se
+    tab roztáhne sám; vlastní odečítání šířky panelu je zrovna ta chyba, ze které vzniklo #291.
+  - **Uložený stav panelu se přepnutím tabu nemění** — složení ani vybraný segment. Skrytí je věc
+    *pohledu*, takže kdo si panel vytáhl, najde ho po návratu tak, jak ho nechal.
+  - **`⌘2` a položka v ⌘K jsou tam vypnuté.** Klávesa by potichu přestavěla tab, do kterého se
+    člověk vrátí, a v okně by po tom nezůstala stopa. Paleta proto rozlišuje `nil` (panel v tabu
+    není) od `false` (je, jen složený).
+
+  **Změna proti #242**, kde panel byl ve všech tabech s odůvodněním, že smyčka nález → `Převzít` →
+  text v mém review se musí stát naráz. Ta smyčka platí dál, jen jí přibyl třetí krok, viz níž.
 - **Složení panelu a jeho tab drží store, ne view** (#242): `isReviewPanelExpanded`
   a `reviewPanelTab`, globálně (ne per PR) jako `diffLayout`. Není to úklid, je to podmínka —
   poznámka do těla review přidaná z diffu spadne do panelu, takže se panel musí umět
-  **rozložit sám** (`revealDraft()`), a dokud to bydlelo v `@State` detailu, nešlo to otestovat.
-  Tudy chodí `appendDraftNote` i `adoptFinding` s cílem `.body`; **řádkový komentář panel
-  nerozloží** — ten je vidět hned pod řádkem v diffu.
+  **rozložit sám** (`revealDraft(in:)`), a dokud to bydlelo v `@State` detailu, nešlo to
+  otestovat. Tudy chodí `appendDraftNote` i `adoptFinding` s cílem `.body`; **řádkový komentář
+  panel nerozloží** — ten je vidět hned pod řádkem v diffu.
+
+  Od #294 má `revealDraft(in:)` **třetí krok**: z tabu, ve kterém panel není, si **přepne tab**
+  (na `PullRequestTab.standard`). Bez něj by `Převzít` v tabu `Nálezy` neudělalo nic viditelného,
+  což je tatáž tichá ztráta rozepsané věty, jakou #242 řešil u složeného panelu — jen o stupeň
+  horší, protože složený panel je aspoň vidět jako proužek. Z tabu, kde panel je, se
+  **nepřepíná nikam**: převzetí nálezu v diffu nesmí vyhodit člověka z kódu, který čte.
 - **Pohled vedle sebe složí postranní sloupce** (#188). Řádek se v něm dělí na dvě strany, takže
   na 14" nezbude ani 100 znaků ani se složenými sloupci; pod sebou se zase rozbalí. Tři pravidla:
   - **`task(id: layout)`, ne `onChange`.** Pohled se drží napříč pull requesty a výchozí je

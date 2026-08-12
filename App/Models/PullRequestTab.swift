@@ -83,4 +83,35 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
         case .findings, .progress: true
         }
     }
+
+    /// Je v tomhle tabu vidět panel s nálezy a mým review (#294)?
+    ///
+    /// Panel odpovídá na otázku „co k tomu, co právě čtu, nahlásily reviewery“, a ta má smysl jen
+    /// tam, kde se vedle něj čte **něco jiného**: popis PR, diff, diskuze. Ve zbylých třech tabech
+    /// je buď **duplikát** (`Nálezy` jsou tytéž nálezy přes celou šířku, `Průběh` je záznam týchž
+    /// běhů), nebo **ukrajuje šířku obsahu, který ji potřebuje** — detail spadlého checku
+    /// v `Kontrolách` nese konec logu (#214). Složený proužek je úzký, ale ne zdarma: bere šířku,
+    /// a v úzkém okně je to zrovna to místo, kde se obsah láme.
+    ///
+    /// **Změna proti #242**, kde stálo, že panel je vidět ve všech tabech včetně `Nálezů` — s
+    /// odůvodněním, že smyčka nález → `Převzít` → text v mém review je ta hlavní práce a musí se
+    /// stát naráz. Ta smyčka se nezahazuje, jen se přestěhovala: `AppStore.revealDraft(in:)` si
+    /// z tabu, ve kterém panel není, **přepne do tabu, ve kterém je** — jinak by rozepsaná věta
+    /// spadla někam, kde ji nikdo nehledá, což je přesně to, co #242 řešil.
+    ///
+    /// **Není to `isReviewerOutput`** a nesmí se na něj ohnout: `Kontroly` jsou fakt o PR
+    /// (`isReviewerOutput == false`), a panel tam přesto být nemá. Jedna vlastnost pro dvě otázky
+    /// by posunula dělič v pruhu záložek — kreslí se z týchž příznaků, takže by `Kontroly` skočily
+    /// do pravé skupiny a chyba by byla vidět jinde, než by vznikla.
+    ///
+    /// Vlastnost tabu, ne funkce v `Policy`: není co vážit ani z čeho počítat — je to konstantní
+    /// fakt o každém z šesti případů, tedy tentýž druh věci jako `czechLabel`
+    /// a `isReviewerOutput`. `Policy` by na totéž potřebovala týž `switch` a druhé místo, kam se
+    /// chodit podívat.
+    var showsReviewPanel: Bool {
+        switch self {
+        case .overview, .filesChanged, .conversation: true
+        case .checks, .findings, .progress: false
+        }
+    }
 }

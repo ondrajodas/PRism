@@ -33,13 +33,20 @@ struct ChecksView: View {
 
     var body: some View {
         ScrollView {
-            card
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            content
         }
         // Jména jobů a časy si člověk kopíruje do issue; je to několik řádků textu, ne líný
         // seznam tisíců `Text`ů jako diff.
         .textSelection(.enabled)
+    }
+
+    /// Obsah bez `ScrollView`u — **`internal` schválně, kvůli měření** (#294), stejně jako
+    /// u `OverviewView` (#291): `NSScrollView` si obsah na svou šířku ukrojí, takže by se přesah
+    /// nenakreslil a rozbitá šířka by od opravené nešla poznat.
+    @ViewBuilder var content: some View {
+        card
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Rámeček ze návrhu (`.checks`): obrys a `chrome`, ať je vidět, kde seznam začíná a končí.

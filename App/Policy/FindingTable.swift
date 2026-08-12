@@ -56,8 +56,13 @@ extension Policy {
     ///
     /// Číslo je z rozpočtu, ne z citu: pod ním by shrnutí zbylo méně než `minimumSummary`, a to je
     /// šířka, ve které se dlouhá věta láme po dvou slovech. Tabulka je uvnitř tabu, takže obsahová
-    /// šířka = okno bez railu a bez panelu vpravo — v nejmenším okně (700) tedy sloupec odpadá
-    /// vždycky, a to je správně.
+    /// šířka = okno bez railu — **panel vpravo se od #294 v tomhle tabu nekreslí**, takže se z ní
+    /// neubírá. V nejmenším okně (700 − 52 = 648) tedy sloupec odpadá vždycky, a to je správně.
+    ///
+    /// Co #294 na téhle sazbě změnila: podlaha shrnutí (120) je od té doby **mimo dosah**. Do ní se
+    /// tab dostal jedině s vytaženým panelem (okno 700 − rail 52 − panel 526 ≈ 122 bodů), kde
+    /// tabulka přetékala o ~468; nejužší tab bez panelu má 648, tedy nad prahem 590, od kterého se
+    /// shrnutí o podlahu opírá. Hlídá to `FindingTableTests`, ne tenhle odstavec.
     static let findingTableReviewerBreakpoint = 900.0
     /// Nejmenší šířka, ve které je shrnutí ještě věta, ne svislý sloupec slov.
     static let findingTableMinimumSummary = 280.0
