@@ -471,6 +471,41 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   plného tlačítka je `Palette.surface` (`--panel`), takže se rozsvítí v obou vzhledech
   (`performAsCurrentDrawingAppearance`) a ověří se, že ve světlém je bílý a v tmavém ne. Zadrátovaná
   `.white` by ve světlém režimu vypadala správně.
+- **Barva akcí v tabulce nálezů (#298)** — `AccentLinkButtonTests`. Že akce **není systémová modrá**,
+  se dojmem neuhlídá, takže se měří dvojím tvrzením: barva se rovná `Palette.accent` a zároveň se
+  **nerovná `NSColor.linkColor`**. Samotná rovnost s tokenem by po posunu palety k modré pořád
+  platila a rozpor by zmizel z dohledu; ověřeno vloženou regresí — po dosazení `.linkColor` zpátky
+  padnou obě tvrzení v obou režimech.
+
+  Kontrast se měří na **všech třech podkladech, na které akce může padnout** (práh WCAG AA 4,5,
+  protože akce je `.caption`): plocha řádku 6,14 / 5,64, **podbarvený živý řádek** procházení
+  (`accentWeak` složený nad plochou, tedy akcent na akcentu) 5,30 / 4,70 a stavový řádek
+  5,82 / 5,33 — světlý / tmavý. Systémová modrá tam měla 5,26 / 4,54 / 4,99 a 6,51 / 5,43 / 6,16,
+  takže **v tmavém režimu je to výměna**, ne zlepšení; zapsaná, protože rezerva nad AA zůstává.
+
+  Zvlášť stojí `Vrátit` na **odmítnutém** řádku: ten se celý ztlumí na `dismissedOpacity` (0,52,
+  `.frow.done` z návrhu), takže kontrast klesá na 2,35 / 2,40. Práh je proto 2,2 a je to hlídání
+  **zhoršení**, ne čitelnosti — akci ze ztlumení vyjmout nelze (#113), a kdyby se akcent posunul
+  blíž k ploše, `Vrátit` by zmizel právě tam a nikde jinde. Krytí si test bere **z view**
+  (`FindingTableRowView.dismissedOpacity`), ne z vlastní konstanty — jinak by po první změně měřil
+  jiný řádek, než jaký se kreslí.
+
+  Dvě pasti měřidla, obě chycené za běhu: **dynamické `NSColor` se rozsvítí až při čtení**, takže
+  `Palette.accent` přečtený mimo `performAsCurrentDrawingAppearance` vyjde v režimu **stroje** —
+  sada kvůli tomu nejdřív tvrdila, že akce nemá barvu akcentu (vlevo světlá `#5B47E0`, vpravo tmavá
+  `#8B7CFF` z nastavení systému). A `Color.accentColor` **za `.tint()` nejde**, takže odznak `2×`
+  zůstává systémově modrý i pod `.tint(Palette.accent)` z kořene okna; `.foregroundStyle(.tint)`
+  naopak jde. Doloženo renderem, kde v jednom obrázku stojí obojí vedle sebe.
+- **Sonda barvy akcí (#298)** — `FindingActionColourProbe`, gated `PRISM_MEASURE`. Nic netvrdí,
+  vyrendruje **tabulku, bublinu a stavový řádek na jedno plátno** v obou režimech, protože „vypadají
+  obě formy akce jako táž věc“ je otázka na vzhled a dva snímky pod sebou se porovnávají po paměti.
+  `NSHostingView`, ne `ImageRenderer`: tabulka je ve `ScrollView`u (ten se offscreen nevykreslí) a
+  odkaz by vyšel jako žlutý placeholder.
+
+  Sonda musí nést **`.tint(Palette.accent)`**, protože ho skutečné okno má na kořeni (`ContentView`)
+  — bez něj vyjde `✓ v mém review` systémově modré a sonda ukazuje rozpor, který v aplikaci není.
+  A převzatý nález musí mít **jediného revieweera**: u shody `2×` se `adoption(of:)` nekreslí vůbec,
+  takže odznak by v renderu chyběl. Obojí se ukázalo až na prvním obrázku.
 
   Popisky odmítnutí mají **dvě podoby** a nesmí splynout: `actionLabel` na tlačítko (velké písmeno,
   každý důvod jiný) a `label` do odznaku (malé písmeno, přídavné jméno). Test tvrdí obojí i to, že

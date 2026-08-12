@@ -8,6 +8,10 @@ import SwiftUI
 /// Návrh má místo toho **řadu malých tlačítek** a hlavní akci odlišuje **plochou** — plné akcentové
 /// proti obtaženému.
 ///
+/// **Platí to jen o bublině.** V tabulce nálezů zůstávají akce holým textem, protože se tam opakují
+/// na každém řádku — barvu ale mají mít stejnou, a od #298 ji drží `AccentLinkButtonStyle`. Zmínka
+/// o `.link` výš je tedy záznam o tom, co v aplikaci bylo; v `App/` už systémový `.link` není nikde.
+///
 /// Rozměry jsou z CSS návrhu 1 : 1 a leží v `Metrics`, ne rozeseté v `makeBody`: jsou to čísla, na
 /// která se dá napsat test, a shoda s návrhem je jediné, co je drží.
 ///
