@@ -343,6 +343,9 @@ struct ConfigurationTests {
         // Výchozí pohled na diff je ten, který aplikace kreslila před #98 — nový pohled se
         // nemá zapnout sám.
         #expect(standard.diffLayout == .unified)
+        // Vzhled se řídí systémem, dokud si někdo neřekne jinak (#278) — vynutit režim sama od
+        // sebe aplikace nemá proč.
+        #expect(standard.appearance == .system)
         #expect(standard.pollIntervalSeconds == 60)
         #expect(standard.maxConcurrentReviews == 3)
         #expect(standard.cacheBudgetMegabytes == 10 * 1024)
@@ -379,6 +382,45 @@ struct ConfigurationTests {
         let global = try #require(json["global"] as? [String: Any])
         let byLanguage = try #require(global["skillsByLanguage"] as? [String: Any])
         #expect(Array(byLanguage.keys) == ["php"])
+    }
+
+    // MARK: - Vzhled (#278)
+
+    /// Vzhled je vlastnost **člověka**, ne repozitáře — a tohle je to tvrzení, které se dá
+    /// pokazit potichu: stačilo by přidat klíč do `RepositoryConfig` a jedno repo by si
+    /// přebarvilo celé okno. Měří se na zapsaném JSONu, protože právě ten je tím, co se pak
+    /// nabízí k ruční editaci.
+    @Test("Vzhled se nezapisuje do overridu per repo")
+    func neverWritesTheAppearanceIntoARepositoryOverride() throws {
+        var original = configuration([cli: RepositoryConfig(mode: .automatic, allowsPublishing: true)])
+        original.global.appearance = .dark
+
+        let data = try JSONEncoder().encode(original)
+        let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        let global = try #require(json["global"] as? [String: Any])
+        #expect(global["appearance"] as? String == "dark")
+        let repositories = try #require(json["repositories"] as? [String: Any])
+        let repository = try #require(repositories["cli/cli"] as? [String: Any])
+        #expect(repository["appearance"] == nil)
+        // A z druhé strany: v celém souboru je ten klíč právě jednou, takže se nedá přidat
+        // druhá úroveň, aniž by to tady spadlo.
+        let text = try #require(String(data: data, encoding: .utf8))
+        #expect(text.components(separatedBy: "\"appearance\"").count - 1 == 1)
+    }
+
+    /// Klíč v souboru repa **nic neudělá** — ani nezahodí zbytek override, ani nepřebije
+    /// globální volbu.
+    @Test("Vzhled napsaný u repa se nepromítne nikam")
+    func ignoresAnAppearanceWrittenUnderARepository() throws {
+        let configuration = try JSONDecoder().decode(
+            Configuration.self,
+            from: Data(#"{"repositories": {"cli/cli": {"appearance": "dark", "skills": ["go-review"]}}}"#.utf8)
+        )
+
+        let repo = try #require(RepoID("cli/cli"))
+        #expect(configuration.global.appearance == .system)
+        #expect(configuration.resolved(for: repo).skills == ["go-review"])
     }
 }
 
@@ -519,6 +561,37 @@ struct RepositoryConfigDecodingTests {
         )
 
         #expect(configuration.global.diffLayout == .unified)
+        #expect(configuration.global.mode == .automatic)
+    }
+
+    // MARK: - Vzhled (#278)
+
+    @Test("Vzhled ze souboru se přečte", arguments: [("light", AppearanceMode.light), ("dark", .dark)])
+    func readsTheAppearance(json: String, expected: AppearanceMode) throws {
+        let configuration = try self.configuration(#"{"global": {"appearance": "\#(json)"}}"#)
+
+        #expect(configuration.global.appearance == expected)
+    }
+
+    /// Chybějící klíč znamená dnešní chování — konfigurace bez `appearance` je ta, kterou má na
+    /// disku každý, kdo aplikaci používal před #278.
+    @Test("Chybějící vzhled bere podle systému")
+    func fallsBackOnAMissingAppearance() throws {
+        let configuration = try self.configuration(#"{"global": {"mode": "automatic"}}"#)
+
+        #expect(configuration.global.appearance == .system)
+    }
+
+    /// Tolerantně jako pohled na diff: neznámá hodnota znamená „podle systému“, ne pád — a celý
+    /// soubor kvůli ní zmizet nesmí. Přísnost jako u režimu nebo odesílání by tady nechránila nic,
+    /// protože vzhledem nic neodejde a nic se nespustí.
+    @Test("Rozbitý vzhled nezahodí zbytek konfigurace")
+    func survivesABrokenAppearance() throws {
+        let configuration = try self.configuration(
+            #"{"global": {"appearance": "tmavy", "mode": "automatic"}}"#
+        )
+
+        #expect(configuration.global.appearance == .system)
         #expect(configuration.global.mode == .automatic)
     }
 }

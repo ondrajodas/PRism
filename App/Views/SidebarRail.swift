@@ -8,6 +8,14 @@ import SwiftUI
 ///
 /// Šířka je 52 bodů a je to celé místo, které si bere: ikony se popiskem by z něj udělaly druhý
 /// sloupec vedle seznamu, a ten už jednou v okně je.
+///
+/// **Pod oddělovačem stojí volba, ne obrazovka** (#278): přepínač vzhledu okna. Návrh ho tam má
+/// (půlkolečko za `.sep`), a je to jediná položka railu, která nic neotevírá — proto **není**
+/// případem `RailSection`. Kdyby byla, šlo by na vzhled „přepnout jako na obrazovku“, nabídla by
+/// se v ⌘K mezi sekcemi a v okně by zbyla prázdná plocha; je na to test.
+///
+/// Klikem **cykluje** a ikona se s režimem mění (slunce / měsíc / kolečko s „A“) — vědomá odchylka
+/// od návrhu, který tam kreslí jednu ikonu; viz `AppearanceMode.railSymbol` a specifikace.
 struct SidebarRail: View {
     @Binding var section: RailSection
     /// Kolik PR čeká ve frontě. `nil` = ještě se nenačetlo; nula se **nekreslí**, protože
@@ -15,10 +23,21 @@ struct SidebarRail: View {
     var queueCount: Int?
     /// Kolik PR má rozdělané review.
     var draftCount: Int?
+    /// Vybraný vzhled okna (#278). Čte se z konfigurace, takže rail **nedrží vlastní kopii** —
+    /// jinak by v okně byla druhá pravda o tom, jaký režim platí.
+    var appearance: AppearanceMode = .system
+    /// Přepnutí vzhledu. Zapisuje do konfigurace a odtud to jde tou jedinou cestou do aplikace,
+    /// takže rail sám nic nepřebarvuje.
+    var setAppearance: (AppearanceMode) -> Void = { _ in }
 
     var body: some View {
         VStack(spacing: 4) {
             ForEach(RailSection.allCases) { item(for: $0) }
+            // Oddělovač z návrhu (`.rail .sep`): 20 × 1 bod, 6 bodů nad i pod — s mezerou
+            // `VStack`u tedy 10, jak to má návrh (`gap: 4` + `margin: 6px 0`). Dělí **navigaci od
+            // volby**: nad ním jsou obrazovky, pod ním věc, která žádnou neotevírá.
+            separator
+            appearanceItem
             Spacer(minLength: 0)
         }
         .padding(.vertical, 10)
@@ -26,6 +45,46 @@ struct SidebarRail: View {
         .frame(maxHeight: .infinity)
         .background(Palette.chrome)
         .overlay(alignment: .trailing) { Rectangle().fill(Palette.line).frame(width: 1) }
+    }
+
+    private var separator: some View {
+        Rectangle()
+            .fill(Palette.line)
+            .frame(width: 20, height: 1)
+            .padding(.vertical, 6)
+    }
+
+    /// Přepínač vzhledu okna (#278).
+    ///
+    /// **Tlačítko, které klikem cykluje** — ne nabídka ani popover. Stav nese **ikona** (slunce,
+    /// měsíc, kolečko s „A“ pro automat), takže je vidět bez kliknutí; to je celý důvod, proč se
+    /// ikona s režimem mění, i když jich návrh kreslí jednu.
+    ///
+    /// Cyklící tlačítko má jednu slabinu: z ikony je vidět, **kde jsem**, ne **kam se dostanu**.
+    /// Nese to proto nápověda (`Vzhled: tmavý · kliknutím podle systému`) a pro VoiceOver
+    /// `accessibilityValue` se stavem plus `accessibilityHint` s tím, co klik udělá. Cyklící
+    /// tlačítko bez toho je hádanka.
+    ///
+    /// Rám je tentýž jako u položek nad oddělovačem (34 × 30), aby rail nedržel dvě velikosti ikon.
+    /// Zvýrazněný stav (`.ri.on` z návrhu) **nedostává**: to znamená „jsem na téhle obrazovce“,
+    /// a vzhled žádnou neotevírá.
+    private var appearanceItem: some View {
+        Button { setAppearance(appearance.next) } label: {
+            Image(systemName: appearance.railSymbol)
+                .font(.system(size: 15))
+                .frame(width: 34, height: 30)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(appearanceHelp)
+        .accessibilityLabel("Vzhled okna")
+        .accessibilityValue(appearance.displayName)
+        .accessibilityHint("Kliknutím přepneš na \(appearance.next.displayName.lowercased())")
+    }
+
+    /// Nápověda nese **stav i to, kam klik povede** — z ikony je poznat jen to první.
+    private var appearanceHelp: String {
+        "Vzhled: \(appearance.displayName.lowercased()) · kliknutím \(appearance.next.displayName.lowercased())"
     }
 
     private func item(for item: RailSection) -> some View {
