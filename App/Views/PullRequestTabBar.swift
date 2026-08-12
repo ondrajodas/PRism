@@ -6,13 +6,14 @@ import SwiftUI
 /// jedné hodnoty ze sady (tak se v tomhle okně přepínají reviewery a taby panelu), kdežto
 /// tohle přepíná **celou obrazovku**. Podtržená záložka to říká na první pohled a je to
 /// zvyklost odjinud, takže se to nemusí učit.
+///
+/// **Které záložky kreslí, se nedá zvenku nastavit** (#306) — je to vždycky celý
+/// `PullRequestTab.allCases`. Do #306 to byl parametr, protože `Kontroly` u PR bez CI odpadly
+/// (#215), a pruh se tím při každém otevření PR **přeskládal**: nejdřív pět záložek, pak šest.
+/// Parametr zmizel schválně a je to ta podstatná část opravy: dokud existoval, dal se počet
+/// záložek znovu udělat funkcí dat, a mizející záložka je horší než jedna prázdná.
 struct PullRequestTabBar: View {
     @Binding var selection: PullRequestTab
-    /// Které záložky se kreslí. Ne `allCases`, protože `Kontroly` u PR bez CI odpadnou (#215) —
-    /// rozhoduje o tom `Policy.tabs(hasChecks:)`, ne tenhle pruh: je to pravidlo o datech.
-    ///
-    /// Výchozí hodnota je celý výčet kvůli náhledům a testům, kde se o checky nikdo neptá.
-    var tabs: [PullRequestTab] = PullRequestTab.allCases
     /// Co je v tabu k vidění. `nil` = bez odznaku.
     ///
     /// Od #218 se ptá **u všech záložek**, ne jen u `Konverzace`: odznak jen u jedné vypadal
@@ -38,7 +39,7 @@ struct PullRequestTabBar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(Array(tabs.enumerated()), id: \.element) { index, tab in
+            ForEach(Array(PullRequestTab.allCases.enumerated()), id: \.element) { index, tab in
                 if needsSeparator(before: index) { separator }
                 item(tab)
             }
@@ -53,14 +54,14 @@ struct PullRequestTabBar: View {
 
     /// Patří před tuhle záložku dělič? (#242, `.tsep`)
     ///
-    /// Rozhoduje **vlastnost tabu**, ne jeho index: `Kontroly` (#215) sedí nalevo doprostřed
-    /// a u PR bez CI se vůbec nekreslí, takže zadrátovaná pozice by dělič posunula o jedno místo
-    /// vedle — a podle dat, tedy jednou tak a jednou jinak.
-    ///
-    /// Počítá se nad **kreslenými** záložkami (`tabs`), ne nad `allCases`: přeskočená záložka
-    /// nemá dělič po čem posunout.
+    /// Rozhoduje **vlastnost tabu**, ne jeho index: `Kontroly` (#215) sedí nalevo doprostřed,
+    /// takže zadrátovaná pozice by dělič posunula o jedno místo vedle. Od #306 je pruh konstantní,
+    /// takže by se dala spočítat i z indexu — vlastnost přesto zůstává, protože o tom, kde dělič
+    /// patří, rozhoduje **čí výstup záložka ukazuje**, a to je odpověď, která přežije i sedmou
+    /// záložku vloženou doprostřed.
     private func needsSeparator(before index: Int) -> Bool {
         guard index > 0 else { return false }
+        let tabs = PullRequestTab.allCases
         return tabs[index].isReviewerOutput && !tabs[index - 1].isReviewerOutput
     }
 

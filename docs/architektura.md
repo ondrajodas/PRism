@@ -51,8 +51,9 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
 | `DraftSnapshot` | Text řádků, ke kterým se komentář psal — konec rozsahu a jeho začátek. Prázdný = nevíme |
 | `DetailState` | Stav dotažení detailu PR: `loading` / `loaded(PullRequest, updatedAt:)` / `failed`. Je z něj `headSha` pro draft a popis pro `Přehled` |
-| `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `conversation` / `findings` / `progress` (#242). `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) můžou přijít doprostřed levé skupiny, aniž by se posunul. `showsReviewPanel` říká, jestli je v tabu vidět panel s nálezy (#294) — a **s tím prvním se to nesmí slít**: `Kontroly` mají `isReviewerOutput == false` a panel přesto nemají, takže jedna vlastnost pro dvě otázky by posunula dělič. Jako `ReviewVerdict` **není `Codable`** |
+| `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `conversation` / `checks` / `findings` / `progress` (#242, `checks` přidalo #215). **Všech šest se kreslí vždycky** (#306) — pruh nemá čím měnit počet položek podle dat. `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) můžou přijít doprostřed levé skupiny, aniž by se posunul. `showsReviewPanel` říká, jestli je v tabu vidět panel s nálezy (#294) — a **s tím prvním se to nesmí slít**: `Kontroly` mají `isReviewerOutput == false` a panel přesto nemají, takže jedna vlastnost pro dvě otázky by posunula dělič. Jako `ReviewVerdict` **není `Codable`** |
 | `PullRequestTabBadge` | Odznak u záložky (#242): `count` / `blocking` (červeně) / `live` (puntík). Výčtem, ne strukturou s příznaky — „puntík s počtem“ ani „blokující bez počtu“ význam nemá, takže se nemá dát napsat |
+| `ChecksTabState` | Co je v tabu `Kontroly` k vidění (#306): `loading` / `empty` / `list([PullRequestCheck], failure:)` / `failed`. Tab se kreslí i u PR bez CI, takže musí mít odpověď na **každý** stav dat — `empty` znamená „tenhle PR CI nemá“, kdežto `loading` o CI netvrdí nic. Skládá to `Policy.checksTab(checks:failure:)` ze **dvou** map ve store (`checks`, `checkFailures`), jinak by se prázdno slilo s poruchou. Není `Codable` — je to odvozený stav, ne data |
 | `ReviewPanelTab` | Co je vidět v panelu vpravo: `findings` / `draft` (#242). Jako `PullRequestTab` **není `Codable`** |
 | `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání — `Hit` nese **dva** rozsahy
 zvýraznění, jeden nad titulkem a jeden nad podtitulkem), `Jump` (žádost o odscrollování) a `Effect` (co zbývá na okno). **Není `Codable`** — je to obsah jednoho otevření palety. Jmenný prostor proto, že `Palette` v repu už znamená barvy okna |
@@ -1855,7 +1856,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
-| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Konverzace` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru |
+| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat |
 | `OverviewView` | Tab `Přehled`: popis PR, fakta a co se změnilo od minule (kontroly mají od #215 vlastní tab). Obsah je v `content` **mimo `ScrollView`** a `internal` schválně — přes `body` se šířka změřit nedá, viz #291 |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka a obsah vpravo; slévá za sebou jdoucí commity |
@@ -2723,6 +2724,12 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   (`PullRequestTab.standard`, **změna proti zadání #72** — popis a diskuze se čte dřív než kód
   a stejně to má GitHub), takže se `filesChanged` z mapy maže a úklid podle seznamu PR ji
   nenechá růst.
+- **Volba se nezarovnává na data** (#306). Do #306 ji `detailTab(for:)` prohánělo
+  `Policy.tabs(hasChecks:)`, protože `Kontroly` u PR bez CI v pruhu nebyly a volba na ně nesměla
+  ukazovat. Se trvale přítomnou záložkou to ztratilo předmět — a s ním odpadl i vedlejší účinek,
+  kvůli kterému se volba schválně **nemazala**: z tabu `Kontroly` se vypadávalo při **každém**
+  příchodu na PR, dokud checky nedorazily (tahají se s detailem, takže chvíli nejsou). Zůstává
+  z toho pravidlo: volba je odpověď na „kam se koukám“ a nesmí se měnit tím, co dorazilo ze sítě.
 - **Panel je ve třech tabech ze šesti** — `Přehled`, `Změněné soubory`, `Konverzace` (#294,
   `PullRequestTab.showsReviewPanel`). Nálezy bez místa v kódu i moje rozdělané review se vážou
   k celému PR, takže se za přepnutí tabu schovat nesmí; panel ale odpovídá na „co k tomu, co právě
@@ -2788,17 +2795,21 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Chip v hlavičce zůstává** a je od #215 **jediným** místem o checcích mimo tab: „je to
     zelené“ se musí dát přečíst i při čtení diffu, tedy z hlavičky, která je vidět ve všech
     tabech. Je to rozhodnutí z #209 a odebrání souhrnu se ho netýká.
-  - **Tab se nekreslí, když checky nejsou** (`Policy.tabs(hasChecks:)`). PR bez CI je běžná věc
-    a prázdný tab s nadpisem by o něm tvrdil, že se něco nepovedlo. „Nenačteno“ a „žádné“ jsou
-    ve `AppStore.checks` schválně dva různé stavy, ale **pro pruh záložek z obou plyne totéž** —
-    není čím tab naplnit.
-  - **Uložená volba se zarovnává na kreslené záložky, ne maže** (`AppStore.detailTab(for:)`).
-    Kdyby se nezarovnávala, po zmizení checků by v okně nesvítila žádná záložka a plocha tabu by
-    zůstala prázdná; kdyby se mazala, vypadl by člověk z tabu `Kontroly` při každém příchodu na
-    PR, protože checky se dotahují s detailem a chvíli nejsou.
+  - **Tab se kreslí vždycky** (#306, otáčí #215). Do #306 se u PR bez CI nekreslil
+    (`Policy.tabs(hasChecks:)`) s odůvodněním, že prázdný tab s nadpisem by o něm tvrdil, že se
+    něco nepovedlo. Cena za to byla horší než ten prázdný tab: pruh záložek **problikl při každém
+    otevření PR** — pět záložek, pak šest — protože checky se tahají s detailem, a obsah se pod tím
+    přeskládal. Prázdný tab s **vysvětlující hláškou** ten původní argument ruší: neříká „něco se
+    nepovedlo“, ale „není co ověřovat, a není to porucha“. Co v tabu je, rozhoduje
+    `Policy.checksTab(checks:failure:)` — čtyři stavy, viz níž.
+  - **Uložená volba se nezarovnává** (`AppStore.detailTab(for:)`, #306). Zarovnání existovalo jen
+    kvůli mizející záložce a mělo vedlejší účinek, se kterým se u #215 smířilo: z tabu `Kontroly`
+    se vypadávalo při každém příchodu na PR, dokud checky nedorazily. Podrobnosti v sekci
+    `AppStore` výš.
   - **Dělič v pruhu se počítá z vlastnosti tabu, ne z indexu** (`isReviewerOutput`). `Kontroly`
-    sedí nalevo doprostřed **a někdy tam nejsou**, takže zadrátovaná pozice by dělič posunula
-    podle dat.
+    sedí nalevo doprostřed, takže zadrátovaná pozice by dělič posunula o jedno místo vedle. Do #306
+    se index navíc měnil **podle dat** (záložka někdy nebyla); to už neplatí, ale první důvod stačí
+    — vlastnost přežije i sedmou záložku vloženou doprostřed.
   - **Odznak má tři podoby, ne jednu**: spadlé → červená kapsle s počtem (blokuje merge, takže
     tichá kapsle by se čtla jako údaj o množství), běžící → puntík jako u `Průběhu` („běží“ je
     stav, ne množství), zelené i přeskočené → **nic**. Zelené CI je výchozí stav a číslo u něj
@@ -2812,18 +2823,44 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     jen proto, aby `Přehled` obarvil spadlou část, a bez souhrnu ho nikdo nečetl.
   - **Selhané načtení checků má vlastní stav** (`checkFailures`), ne prázdné pole. Do #215 to bylo
     `(try? await gateway.fetchChecks(id:)) ?? []` a dalo se to obhájit tím, že checky jsou doplněk
-    k PR; od #215 je ale prázdno **tvrzení** — visí na něm, jestli se nakreslí tab —, takže by
-    z chyby sítě tiše vyšlo „tenhle PR nemá CI“. `GhGateway.fetchChecks` ten rozdíl drží schválně
-    (prázdný výstup s nulovým kódem = bez CI, nenulový s prázdným výstupem = chyba), takže by ho
-    zahazoval až store. Dvě pravidla k tomu: po selhání se **stará sada nechává být** (zastaralý
-    seznam s větou nad ním je lepší než zmizelý tab) a **zrušení se nezapisuje** — `.task` se ruší
-    při přepnutí PR, což není porucha.
+    k PR; od #215 je ale prázdno **tvrzení** („tenhle PR nemá CI“), takže by z chyby sítě tiše vyšlo
+    zrovna ono. `GhGateway.fetchChecks` ten rozdíl drží schválně (prázdný výstup s nulovým kódem =
+    bez CI, nenulový s prázdným výstupem = chyba), takže by ho zahazoval až store. Dvě pravidla
+    k tomu: po selhání se **stará sada nechává být** (zastaralý seznam s větou nad ním je lepší než
+    plocha s chybou místo checků, které se před chvílí načetly) a **zrušení se nezapisuje** — `.task`
+    se ruší při přepnutí PR, což není porucha.
+  - **Tab má čtyři stavy, ne dva** (`Policy.checksTab(checks:failure:)`, #306). Trvale přítomný tab
+    musí mít odpověď na každý stav dat, a šest kombinací vstupů (`checks` nenačtené / prázdné /
+    neprázdné krát `failure` je / není) dává čtvero — v tabu je z toho **pět podob**, protože
+    `list` se kreslí se zastaralostí i bez ní:
 
-    Věta o poruše je **v hlavičce PR**, ne v `Přehledu`: po odebrání souhrnu je to jediná věta
-    o checcích mimo tab a hlásí právě ten stav, kdy tab **není** — takže se musí ukázat i tomu, kdo
-    se na `Přehled` vůbec nepodívá. Hlavička je vidět ve všech tabech a už jednu takovou větu nese
-    (kontrola nálezů, #150). Okrová, ne červená: nepovedlo se to **zjistit**, což je „nevím“, ne
-    „je to rozbité“.
+    | Stav | Kdy | Co je v tabu |
+    |---|---|---|
+    | `loading` | `checks` nenačtené, bez poruchy | `Načítám kontroly…` — **o CI netvrdí nic** |
+    | `empty` | `checks == []` | klidný prázdný stav: `Tenhle PR nemá kontroly` a věta, že to není porucha |
+    | `list(_, failure: nil)` | neprázdné `checks` | seznam checků, jak ho zavedlo #215 |
+    | `list(_, failure: reason)` | neprázdné `checks` + porucha | seznam a **nad `ScrollView`em** okrová věta, že je to poslední známý stav |
+    | `failed(reason)` | porucha a není co ukázat | červený prázdný stav s textem od `gh` a `Zkusit znovu` |
+
+    Dvě rozhodnutí o pořadí: **neprázdný seznam přebíjí poruchu** (zastaralá sada je lepší než plocha
+    s chybou) a **porucha přebíjí obě prázdna**, tedy i `checks == []` — prázdno je z předchozího
+    načtení, kdežto porucha je to, co víme teď, takže z chyby sítě nikdy nevyjde „nemá CI“.
+
+    **Věta o poruše je v tabu, ne v hlavičce PR** (#306, mění #215). Do #306 stála v hlavičce
+    a jediný důvod byl ten, že tab mizel: „bez ní je zmizelý tab k nerozeznání od PR bez CI“. Jakmile
+    tab nemizí, musí poruchu umět říct sám — jinak by nad ní tvrdil „nemá CI“ — a tím se z věty
+    v hlavičce stává druhé místo o téže věci. Je to tentýž vzor, jaký má diff i konverzace: co se
+    nepovedlo načíst, hlásí ten tab, ve kterém to mělo být vidět. Cena je zapsaná: při čtení diffu
+    už není z hlavičky vidět, že se checky nenačetly — hlavička o nich mluví jedině chipem, a ten
+    (jako odznak tabu) mlčí, dokud není seznam.
+  - **Selhaný pokus se dá zopakovat** (#306). `Zkusit znovu` v tabu volá `AppStore.loadChecks(for:)`
+    přímo, protože `loadDetail` má cache podle `updatedAt` — po chybě sítě by se checky samy
+    nedotáhly až do dalšího commitu. Tatáž cesta jako u diffu a konverzace.
+  - **Checky se tahají i tehdy, když detail spadl** (#306). Do #306 bylo `loadChecks` uvnitř `do`
+    bloku po úspěšném `fetchDetail`, což nevadilo, dokud se tab u nenačtených checků nekreslil. Teď
+    by v něm nad spadlým detailem svítilo `Načítám kontroly…` navždycky, a to je text, který tvrdí
+    víc, než data unesou. `gh pr checks` na `gh pr view` nestojí, takže není důvod jedno vázat na
+    druhé; zrušení (`CancellationError`) je proti tomu odchod z obrazovky a checky se po něm netahají.
 
   **Detail jednoho checku** (#214) — anotace a konec logu, `AppStore+Checks` a `CheckDetailView`:
   - **Až na kliknutí a jen na ten jeden check.** Log celého běhu je log všech jeho jobů (u změřeného
@@ -3908,8 +3945,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
-| `Policy.tabs(hasChecks:)` | Které záložky PR se kreslí (#215) — `Kontroly` odpadnou u PR bez CI. Pořadí je z `allCases`, ať se nedá rozejít s výčtem |
-| `Policy.checksBadge(of:)` | Odznak u záložky `Kontroly` (#215) — spadlé červeně s počtem, běžící puntíkem, zelené a přeskočené bez odznaku |
+| `Policy.checksTab(checks:failure:)` | Co je v tabu `Kontroly` k vidění (#306) — čtyři stavy z šesti kombinací vstupů (`ChecksTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí obě prázdna. **Nahradila `Policy.tabs(hasChecks:)`** (#215), která vracela zúžený pruh záložek: od #306 se kreslí všech šest vždycky, takže seznam záložek není funkcí dat a rozhodovat se má **obsah** tabu |
+| `Policy.checksBadge(of:)` | Odznak u záložky `Kontroly` (#215) — spadlé červeně s počtem, běžící puntíkem, zelené a přeskočené bez odznaku. Bere **stav tabu**, ne `ChecksSummary` (#306): jeden `guard` na začátku drží prázdnou kapsli i nulu mimo pruh nad nenačteným, prázdným i spadlým stavem |
 | `Policy.jobID(from:)` | Číslo jobu z odkazu na check (#214). Funguje i jako check-run ID pro anotace; `…/runs/<id>` bez `/job/` je **běh**, ne job, takže `nil` |
 | `Policy.strippingANSI(_:)`, `Policy.strippingTimestamps(_:)` | Čistka logu (#214) — bez nich je v okně `^[[36;1m` a 28 znaků timestampu na každém řádku |
 | `Policy.logTail(_:lines:)` | Konec logu a **kolik se ho nevešlo** (`LogTail`, #214). Tiše zkrácený log tvrdí, že job začal uprostřed |

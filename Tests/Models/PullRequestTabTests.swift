@@ -30,14 +30,15 @@ struct PullRequestTabTests {
         #expect(zip(flags, flags.dropFirst()).count { $0 != $1 } == 1)
     }
 
-    /// Platí to i po vypadnutí `Kontrol` u PR bez CI: dělič se počítá z kreslených záložek,
-    /// takže z něj nesmí být ani dva, ani žádný.
-    @Test("Bez Kontrol zbývá dělič pořád jeden")
-    func reviewerOutputIsOneGroupWithoutChecks() {
-        let flags = Policy.tabs(hasChecks: false).map(\.isReviewerOutput)
-
-        #expect(flags == [false, false, false, true, true])
-        #expect(zip(flags, flags.dropFirst()).count { $0 != $1 } == 1)
+    /// **Počet záložek není funkcí dat** (#306). `PullRequestTabBar` kreslí `allCases` a nemá
+    /// parametr, kterým by se dal pruh zúžit — do #306 ho měl a pruh se tím při **každém** otevření
+    /// PR přeskládal z pěti záložek na šest. Test hlídá druhou polovinu toho tvrzení: že se výčet,
+    /// ze kterého pruh kreslí, nezmenšil. Sám o sobě by prošel i po smazání jednoho prvku z testu
+    /// pořadí výš, proto počet i jmenovitě `Kontroly`.
+    @Test("Kontroly jsou ve výčtu, ze kterého pruh kreslí, vždycky")
+    func stripAlwaysHasTheChecksTab() {
+        #expect(PullRequestTab.allCases.count == 6)
+        #expect(PullRequestTab.allCases.contains(.checks))
     }
 
     // MARK: - Panel s mým review (#294)

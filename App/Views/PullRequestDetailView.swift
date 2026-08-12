@@ -185,22 +185,12 @@ struct PullRequestDetailView: View {
                     .foregroundStyle(Palette.crit)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            // Proč se nenačetly kontroly (#215). **V hlavičce, ne v `Přehledu`:** je to jediná
-            // věta o checcích, která zbyla mimo tab, a hlásí právě ten stav, kdy tab **není** —
-            // takže se musí ukázat i tomu, kdo se na `Přehled` vůbec nepodívá. Hlavička je vidět
-            // ve všech tabech a už jednu takovou větu nese (kontrola nálezů výš).
-            //
-            // Okrová, ne červená: kontroly jsou cizí fakt, který se nepovedlo **zjistit** —
-            // to je „nevím“, ne „je to rozbité“.
-            if let failure = store.checkFailures[pullRequest.id] {
-                Label(
-                    "Kontroly na GitHubu se nepodařilo načíst. \(failure)",
-                    systemImage: "exclamationmark.triangle"
-                )
-                .font(.caption)
-                .foregroundStyle(Palette.stale)
-                .fixedSize(horizontal: false, vertical: true)
-            }
+            // Věta o selhaném načtení kontrol tady **není** (#306, mění #215). Do #306 sem patřila
+            // proto, že tab `Kontroly` u nenačtených checků mizel — a „bez ní je zmizelý tab
+            // k nerozeznání od PR bez CI“ byl celý její důvod. Tab je od #306 v pruhu vždycky
+            // a poruchu hlásí sám (`Policy.checksTab`), takže věta v hlavičce by byla druhé místo
+            // o téže věci. Je to tentýž vzor jako u diffu a konverzace: co se nepovedlo načíst,
+            // řekne ten tab, ve kterém to mělo být vidět.
             reviewers
             // Selhání checkoutu se do lišty nevejde, a právě u něj je text od `gitu`
             // to jediné, z čeho se pozná, co dělat dál. **Zůstává v hlavičce**, i když se
@@ -219,15 +209,11 @@ struct PullRequestDetailView: View {
     /// i spuštění review platí pro obojí, takže by se v každém tabu musely kreslit znovu.
     ///
     /// Odznak nese **každá** záložka (#218); co který počítá, je u `count(in:)`.
+    /// **Kolik jich je, se nepředává** (#306): pruh kreslí všech šest vždycky, takže se počet
+    /// záložek nemá čím měnit podle toho, co zrovna dorazilo ze sítě.
     private var tabs: some View {
-        PullRequestTabBar(
-            selection: tabSelection,
-            // `Kontroly` odpadnou u PR bez CI (#215). Rozhoduje o tom store, ne tohle view:
-            // je to pravidlo o datech a na tomtéž výčtu stojí i zarovnání uložené volby.
-            tabs: store.detailTabs(of: pullRequest.id),
-            badge: badge(in:)
-        )
-        .diffCounts(loadedDiffCounts)
+        PullRequestTabBar(selection: tabSelection, badge: badge(in:))
+            .diffCounts(loadedDiffCounts)
     }
 
     /// Odznak u záložky. `nil` = nedá se říct, takže se nekreslí nic — nula by tvrdila, že se
@@ -247,8 +233,9 @@ struct PullRequestDetailView: View {
         case .conversation: count(store.overview(for: pullRequest.id).count { $0.isReadable })
         // **Podle nejhoršího stavu, ne podle většiny** (#215) — tatáž úvaha jako u chipu
         // v hlavičce. Anotace z CI (#214) se do něj **nepočítají**: odznak mluví o checkech,
-        // ne o tom, kolik jich mělo co říct.
-        case .checks: Policy.checksBadge(of: Policy.summary(of: store.checks[pullRequest.id] ?? []))
+        // ne o tom, kolik jich mělo co říct. Ze **stavu tabu** (#306), ať se nedá nakreslit nula
+        // nad tabem, ve kterém se zrovna čeká na odpověď — a ať odznak mluví o tom, co je pod ním.
+        case .checks: Policy.checksBadge(of: store.checksTabState(for: pullRequest.id))
         // Počítá to **`Policy` z týchž nálezů**, jaké kreslí tabulka v tabu, karty v panelu
         // a bubliny v diffu (#242) — jeden zdroj, aby odznak nemohl tvrdit něco jiného, než
         // co je na obrazovce.
@@ -837,13 +824,98 @@ struct PullRequestDetailView: View {
         )
     }
 
-    /// Tab `Kontroly` (#215) — seznam checků z GitHub Actions a detail spadlého (#214).
+    /// Tab `Kontroly` (#215) — a od #306 ve **všech čtyřech stavech**, protože se kreslí i u PR
+    /// bez CI a musí mít odpověď na každý stav dat (`Policy.checksTab`). Podob je z toho **pět**:
+    /// `list` kreslí seznam se zastaralostí i bez ní.
+    ///
+    /// Rozdíl mezi „ještě nedorazily“ a „žádné nejsou“ je ten podstatný: dokud se čeká na odpověď,
+    /// **nesmí v tabu stát, že PR CI nemá**. Je to tentýž vzor jako `čisté` proti `failed`
+    /// u review.
+    ///
+    /// Switch je tady, ne v `ChecksView`: je to tatáž stavba jako u `diffu` (načítám / nepovedlo se
+    /// / obsah), takže se prázdné stavy hledají v obou tabech na jednom místě — a `ChecksView`
+    /// zůstává tím, co kreslí **seznam**, tedy i tím, co se dá měřit bez obcházení stavů (#294).
+    @ViewBuilder private var checks: some View {
+        switch store.checksTabState(for: pullRequest.id) {
+        case .loading:
+            // Tatáž hláška jako u diffu, a schválně bez zmínky o CI: „nedorazily“ o kontrolách
+            // netvrdí nic, což je přesně to, co se v tuhle chvíli ví.
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Načítám kontroly…")
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        case .empty:
+            EmptyStateView(
+                nature: .calm,
+                symbol: "checklist",
+                title: "Tenhle PR nemá kontroly",
+                // **Klidná povaha a věta o tom, že to není porucha** — právě na tom stojí obrat
+                // proti #215, kde prázdný tab s nadpisem tvrdil, že se něco nepovedlo.
+                message: "Na GitHubu se k němu neváže žádný check. "
+                    + "Není to porucha — repo CI nemá, nebo se na tuhle větev nepouští."
+            )
+        case .failed(let reason):
+            EmptyStateView(
+                nature: .failure,
+                symbol: "exclamationmark.triangle",
+                title: "Kontroly se nepodařilo načíst",
+                message: "Bez nich není poznat, jestli PR žádné nemá, nebo se jen nenačetly.",
+                // Text od `gh` zůstává, jak přišel: je to jediné, z čeho se pozná, co dělat dál.
+                detail: reason,
+                primary: .init(title: "Zkusit znovu", run: reloadChecks)
+            )
+        case .list(let list, let failure):
+            VStack(spacing: 0) {
+                if let failure { staleChecksNotice(failure) }
+                checksList(list)
+            }
+        }
+    }
+
+    /// Poslední pokus o načtení selhal, ale stará sada zůstala (#215) — takže je vidět **poslední
+    /// známý stav**, ne dnešní.
+    ///
+    /// Sedí **nad `ScrollView`em** seznamu, ne v něm: věta o tom, že obsah pod ní může být
+    /// zastaralý, nesmí odscrollovat pryč od obsahu, o kterém mluví.
+    ///
+    /// Okrová, ne červená: kontroly jsou cizí fakt, který se nepovedlo **zjistit** — to je „nevím“,
+    /// ne „je to rozbité“.
+    private func staleChecksNotice(_ reason: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Label(
+                "Kontroly se nepodařilo načíst znovu, tohle je poslední známý stav. \(reason)",
+                systemImage: "exclamationmark.triangle"
+            )
+            .font(.caption)
+            .foregroundStyle(Palette.stale)
+            .fixedSize(horizontal: false, vertical: true)
+            // Tlačítko **hned za větou**, ne u pravé hrany: u širokého okna by mezi nimi zbylo
+            // půl obrazovky a přestalo by být vidět, k čemu ta akce je.
+            Button("Zkusit znovu", action: reloadChecks)
+                .font(.caption)
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+    }
+
+    /// Zopakuje načtení kontrol (#306).
+    ///
+    /// Vlastní cesta k `loadChecks`, ne přes `loadDetail`: ten má cache podle `updatedAt`, takže
+    /// po chybě sítě už znovu nic nedotáhne a tab by v poruše zůstal až do dalšího commitu.
+    private func reloadChecks() {
+        Task { await store.loadChecks(for: pullRequest.id) }
+    }
+
+    /// Seznam checků z GitHub Actions a detail spadlého (#214).
     ///
     /// Detail se tahá **až na kliknutí a jen na ten jeden check**; podrobnosti u `AppStore+Checks`.
-    private var checks: some View {
+    private func checksList(_ list: [PullRequestCheck]) -> some View {
         let open = store.expandedCheck(in: pullRequest.id)
         return ChecksView(
-            checks: store.checks[pullRequest.id] ?? [],
+            checks: list,
             expanded: open,
             detail: open.flatMap { store.checkDetail(of: $0, in: pullRequest.id) },
             toggle: { check in

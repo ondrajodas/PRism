@@ -1500,5 +1500,46 @@ samostatně (1 pád z 8 běhů, za 0,038 s) — pozdní události průběhu **vz
 zahodil, takže je to otázka na `AppStore`, ne strop v testu. A `Early unexpected exit … bootstrapping`
 se nereprodukovalo; zapsané je aspoň to, jak se pozná.
 
+**A pruh záložek přestal problikávat: tab `Kontroly` je v něm od začátku** (#306). Checky se tahají
+s detailem PR, takže se šestá záložka objevovala až po otevření PR — pruh se přeskládal z pěti na
+šest a obsah pod ním s ním. Otáčí to výslovné rozhodnutí z #215 („tab se nekreslí, když checky
+nejsou, protože prázdný tab by o PR tvrdil, že se něco nepovedlo“) a otočilo ho **chování**:
+problikávání je při každém otevření PR, kdežto prázdný tab jen u těch pár PR bez CI — a prázdný tab
+s hláškou, ve které stojí, že to **není porucha**, ten původní argument ruší.
+
+Trvale přítomný tab si vynutil odpověď na **každý** stav dat, ne na dva: `Policy.checksTab` mapuje
+šest kombinací vstupů na čtyři stavy (nenačteno / bez CI / seznam / porucha, a seznam ještě
+se zastaralostí i bez ní), přičemž „ještě nedorazily“ o CI netvrdí nic — je to tentýž rozdíl jako
+mezi `čisté` a `failed` u review. Odznak se proto počítá **ze stavu tabu**, ne ze souhrnu: do #306
+mlčel nad prázdnem jen shodou okolností, protože se tab neměl kde nakreslit.
+
+**Zkontroloval se i řetěz, který na tom zmizení visel.** Věta o selhaném načtení checků se
+z hlavičky PR vrátila **do tabu**, protože její jediný důvod byl ten, že tab mizí — a tab, který
+nemizí, musí poruchu umět říct sám, jinak by nad chybou sítě tvrdil „nemá CI“. Zarovnání uložené
+volby tabu odpadlo celé: ztratilo předmět a s ním i vedlejší účinek, se kterým se u #215 smířilo
+(z `Kontrol` se vypadávalo při každém příchodu na PR). Cestou se našly dvě věci, které do té doby
+nebylo z okna vidět: po chybě sítě se checky **nedotáhly nikdy** (`loadDetail` má cache podle
+`updatedAt`), takže tab dostal `Zkusit znovu`; a po spadlém detailu se `loadChecks` nespustil vůbec,
+takže by v tabu svítilo `Načítám kontroly…` navždycky — teď se checky tahají i tehdy.
+
+Šestou záložku od téhle změny platí i PR bez CI, a je to **změřené**: nová sonda
+(`ChecksTabRenderProbe`) rendruje tab ve všech pěti podobách stavu a pruh přes pásmo šířek. Bez
+odznaků se pruh vejde na jeden řádek od ~780 bodů, se všemi od ~920; ve výchozím okně (1100 minus
+rail) je to bez dopadu, projeví se to u okna stáhnutého k podlaze.
+
+**A vlastní revize diffu našla ještě jednu díru**, kterou trvale přítomný tab teprve odhalil:
+`loadChecks` běží až po detailu, takže **přepnutí PR uprostřed toho volání ho zrušilo** — a zrušení
+se schválně nezapisuje. Po návratu na PR se detail vzal z cache, checky se už nedotáhly a v tabu by
+`Načítám kontroly…` svítilo navždycky, aniž by cokoli běželo. Do #306 to nebylo vidět (tab se
+nekreslil), teď se checky v té větvi z cache dotáhnou — ale **jen když není ani seznam, ani
+porucha**, aby z nich nebyl polling při každém příchodu na PR.
+
+Testů je 2490 (o 6 víc: šest kombinací vstupů, mlčící odznak nad každým stavem bez seznamu, volba
+přežívající všechny čtyři stavy, `Zkusit znovu`, načtení checků po spadlém detailu i po zrušení
+a pojistka, že hotovou odpověď návrat nepřepíše — zarovnání volby, zúžený pruh a jeho dělič odpadly,
+protože ten stav už nejde vyrobit; dvě z toho jsou testy sondy). **Regrese ověřená vložením regrese
+třikrát**: vrácené zarovnání volby položí tři tvrzení v jednom testu, zahozené dotažení z cache
+položí test o zrušení a `loadChecks` vrácený do `do` bloku položí oba testy o spadlém detailu.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
