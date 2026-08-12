@@ -30,8 +30,12 @@ struct SubprocessStreamerTests {
     /// **Nezdržuje to zelený běh** — testy končí timeoutem po 200 ms a proces se zabíjí. Zdržel by
     /// jedině běh, ve kterém se timeout nezapojí vůbec, a tam by test čekal na konec `sleepu`, tedy
     /// deset minut. Proto k tomu patří `.timeLimit`: rozbitý timeout **spadne**, nezasekne běh.
-    /// Dvě minuty schválně, ne jedna — pod třemi souběžnými buildy trvaly tyhle testy 20 až 27 s,
-    /// takže minuta by byla další strop odvozený od volného stroje.
+    ///
+    /// **Tři minuty, ne dvě**, a je to podmínka, ne estetika: strop musí být **nad**
+    /// `TestWait.deadline` (2 min). Když se rovnaly, vypršely naráz a v hlášce stály dva různé
+    /// důvody pádu („nedočkalo se“ i „time limit exceeded“) — změřeno vloženou regresí. A jedna
+    /// minuta by byl další strop odvozený od volného stroje: pod třemi souběžnými buildy trvaly
+    /// tyhle testy 20 až 27 s.
     private static let longerThanTheTest = 600
 
     private func collect(
@@ -83,14 +87,14 @@ struct SubprocessStreamerTests {
         #expect(events.first == .line("/usr/lib"))
     }
 
-    @Test("Zaseknutý proces skončí timeoutem", .timeLimit(.minutes(2)))
+    @Test("Zaseknutý proces skončí timeoutem", .timeLimit(.minutes(3)))
     func aStuckProcessTimesOut() async throws {
         await #expect(throws: ProcessError.timedOut) {
             _ = try await collect("sleep \(Self.longerThanTheTest)", timeout: .milliseconds(200))
         }
     }
 
-    @Test("Řádky vypsané před timeoutem zůstanou doručené", .timeLimit(.minutes(2)))
+    @Test("Řádky vypsané před timeoutem zůstanou doručené", .timeLimit(.minutes(3)))
     func linesBeforeATimeoutSurvive() async throws {
         var events: [ProcessEvent] = []
         let stream = streamer.stream(
@@ -110,7 +114,7 @@ struct SubprocessStreamerTests {
     /// Sleepy jsou **dva**, protože se testuje potomek na pozadí — délka je z `longerThanTheTest`
     /// a proč, stojí u ní. Do #296 tady bylo `sleep 5 & sleep 5`, tedy nejkratší rezerva v suitě,
     /// a padalo to jako první.
-    @Test("Timeout ukončí proud, i když roura zůstane otevřená", .timeLimit(.minutes(2)))
+    @Test("Timeout ukončí proud, i když roura zůstane otevřená", .timeLimit(.minutes(3)))
     func aTimeoutEndsTheStreamEvenWithAnOpenPipe() async throws {
         // Potomek na pozadí zdědí stdout a zabitý shell ho nepřežije — EOF tedy nedorazí.
         // Bez posledního slova timeoutu by proud čekal navždy a review by viselo.
@@ -140,7 +144,7 @@ struct SubprocessStreamerTests {
     /// pětisekundový a test přesto skončí v desítkách milisekund. Zároveň testuje víc než dřív:
     /// nepřítomnost souboru dokazovala jen to, že `touch` neproběhl, kdežto zmizelý PID je
     /// přímo to tvrzení, které od zrušení chceme.
-    @Test("Zrušení proces zabije", .timeLimit(.minutes(2)))
+    @Test("Zrušení proces zabije", .timeLimit(.minutes(3)))
     func cancellationKillsTheProcess() async throws {
         let pidFile = temporaryPIDFile("streamer-cancel")
         let path = pidFile.path(percentEncoded: false)
@@ -160,9 +164,13 @@ struct SubprocessStreamerTests {
         // kdyby se nespustil vůbec.
         let pid = try await processID(writtenTo: pidFile)
         task.cancel()
-        _ = try? await task.value
 
+        // **Na proces se kouká dřív, než se počká na konec proudu** (#296): to čekání skončí i
+        // tím, že procesu doběhne `sleep`, takže „zmizel“ by platilo samo. V opačném pořadí
+        // procházel i runner s vyndaným zabíjením (změřeno vloženou regresí).
         #expect(await processHasGone(pid), "proces \(pid) po zrušení pořád běží")
+
+        _ = try? await task.value
     }
 
     // Sonda na PID i její důvod jsou v `Tests/Support/ProcessProbing.swift` (#296).

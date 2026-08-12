@@ -222,7 +222,7 @@ struct AppStoreSubmissionTests {
         let drafts = ReviewDraftStore(layout: layout)
         let prepared = await prepared(gateway())
         prepared.setDraftVerdict(.approve, for: pr)
-        await settle()
+        await waitForStoredDraft(of: pr, in: drafts)
 
         // Draft z disku existuje, ale detail se nepovedl — psát se do něj dá, odeslat ne.
         let failing = AppStore(
@@ -268,10 +268,10 @@ struct AppStoreSubmissionTests {
 
         // Čte se **novým** storem nad tou samou složkou — tedy to, co by našel restart.
         let drafts = ReviewDraftStore(layout: layout)
-        await waitUntil("draft dosedne na disk") { (try? await drafts.load(for: pr)) ?? nil != nil }
+        await waitForStoredDraft(of: pr, in: drafts)
 
         await store.draftWasSubmitted(for: summary())
-        await waitUntil("draft z disku zmizí") { (try? await drafts.load(for: pr)) ?? nil == nil }
+        await waitForStoredDraft(of: pr, in: drafts, exists: false)
 
         #expect(store.draft(for: pr) == nil)
         #expect(!store.hasDraft(pr))

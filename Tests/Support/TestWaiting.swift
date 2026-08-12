@@ -80,15 +80,14 @@ func waitUntil(
     _ condition: () async -> Bool
 ) async -> Bool {
     let clock = ContinuousClock()
-    let started = clock.now
     let limit = clock.now.advanced(by: deadline)
     while clock.now < limit {
-        if await condition() {
-            let waited = started.duration(to: clock.now)
-            if waited > .seconds(1) { print("MĚŘENÍ čekání \(waited.milliseconds): \(event)") }
-            return true
-        }
-        try? await Task.sleep(for: step)
+        if await condition() { return true }
+        // **Zrušení čekání ukončí**, a není to detail: `Task.sleep` na zrušeném tasku vyhodí
+        // hned, takže bez téhle podmínky by se ze smyčky stal hot spin na celý strop — tedy
+        // zrovna to pálení procesoru, kvůli kterému #296 vzniklo. Nastane to při `.timeLimit`
+        // nebo když test zruší task, ve kterém se čeká.
+        guard (try? await Task.sleep(for: step)) != nil else { return await condition() }
     }
     // Poslední kontrola za stropem: spánek umí na vytíženém stroji přetáhnout, takže by se jev,
     // který nastal těsně před koncem, jinak ohlásil jako nenastalý.

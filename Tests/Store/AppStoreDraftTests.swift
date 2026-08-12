@@ -98,7 +98,7 @@ struct AppStoreDraftTests {
         let store = await prepared(drafts)
 
         store.addDraftComment(at: anchor, path: "Cart.php", body: "tady chybí kontrola", for: pr)
-        await settle()
+        await waitForStoredDraft(of: pr, in: drafts)
 
         #expect(store.draftComments(for: pr).map(\.body) == ["tady chybí kontrola"])
         let restarted = self.store(drafts)
@@ -127,7 +127,7 @@ struct AppStoreDraftTests {
         await store.loadDetail(for: summary())
 
         store.addDraftComment(at: anchor, path: "Cart.php", body: "text", for: pr)
-        await settle()
+        await waitForStoredDrafts(0, in: drafts)
 
         #expect(!store.canComposeDraft(for: pr))
         #expect(!store.hasDraft(pr))
@@ -143,7 +143,7 @@ struct AppStoreDraftTests {
         let id = try #require(store.draftComments(for: pr).first?.id)
 
         store.updateDraftComment(id, body: "   ", for: pr)
-        await settle()
+        await waitForStoredDrafts(0, in: drafts)
 
         #expect(store.draftComments(for: pr).isEmpty)
         // A s ním celý draft, protože v něm nic jiného nebylo.
@@ -157,12 +157,12 @@ struct AppStoreDraftTests {
         let drafts = drafts()
         let store = await prepared(drafts)
         store.addDraftComment(at: anchor, path: "Cart.php", body: "něco", for: pr)
-        await settle()
+        await waitForStoredDrafts(1, in: drafts)
         #expect(try await drafts.load().drafts.count == 1)
         let id = try #require(store.draftComments(for: pr).first?.id)
 
         store.removeDraftComment(id, for: pr)
-        await settle()
+        await waitForStoredDrafts(0, in: drafts)
 
         #expect(!store.hasDraft(pr))
         #expect(try await drafts.load().drafts.isEmpty)
@@ -183,12 +183,12 @@ struct AppStoreDraftTests {
             body: " \n ",
             for: pr
         )
-        await settle()
+        await waitForStoredDrafts(1, in: drafts)
         #expect(store.draftComments(for: pr).count == 2)
 
         let restarted = self.store(drafts)
         await restarted.loadStoredDrafts()
-        await settle()
+        await waitForStoredDraft(of: pr, in: drafts)
 
         #expect(restarted.draftComments(for: pr).map(\.body) == ["napsané"])
         // A srovná se i disk, ať se to nemusí dělat po každém startu znovu.
@@ -203,12 +203,12 @@ struct AppStoreDraftTests {
         let drafts = drafts()
         let store = await prepared(drafts)
         store.addDraftComment(at: anchor, path: "Cart.php", body: "   ", for: pr)
-        await settle()
+        await waitForStoredDrafts(1, in: drafts)
         #expect(try await drafts.load().drafts.count == 1)
 
         let restarted = self.store(drafts)
         await restarted.loadStoredDrafts()
-        await settle()
+        await waitForStoredDrafts(0, in: drafts)
 
         #expect(!restarted.hasDraft(pr))
         #expect(try await drafts.load().drafts.isEmpty)
@@ -223,7 +223,7 @@ struct AppStoreDraftTests {
         let store = await prepared(drafts)
 
         store.setDraftVerdict(.approve, for: pr)
-        await settle()
+        await waitForStoredDraft(of: pr, in: drafts)
 
         let restarted = self.store(drafts)
         await restarted.loadStoredDrafts()
@@ -236,10 +236,10 @@ struct AppStoreDraftTests {
         let drafts = drafts()
         let store = await prepared(drafts)
         store.setDraftVerdict(.approve, for: pr)
-        await settle()
+        await waitForStoredDraft(of: pr, in: drafts)
 
         store.setDraftVerdict(nil, for: pr)
-        await settle()
+        await waitForStoredDrafts(0, in: drafts)
 
         #expect(!store.hasDraft(pr))
         #expect(try await drafts.load().drafts.isEmpty)
@@ -252,10 +252,10 @@ struct AppStoreDraftTests {
         store.setDraftBody("celkem dobré", for: pr)
         store.setDraftVerdict(.comment, for: pr)
         store.addDraftComment(at: anchor, path: "Cart.php", body: "poznámka", for: pr)
-        await settle()
+        await waitForStoredDraft(of: pr, in: drafts)
 
         store.discardDraft(for: pr)
-        await settle()
+        await waitForStoredDrafts(0, in: drafts)
 
         #expect(!store.hasDraft(pr))
         #expect(try await drafts.load().drafts.isEmpty)
@@ -295,7 +295,7 @@ struct AppStoreDraftTests {
 
         store.addDraftComment(at: DraftAnchor(line: 25, side: .right), path: "Cart.php", body: "blok", for: pr)
         store.extendDraftComment(to: DraftAnchor(line: 27, side: .right), path: "Cart.php", for: pr)
-        await settle()
+        await waitForStoredDraft(of: pr, in: drafts)
 
         let restarted = self.store(drafts)
         await restarted.loadStoredDrafts()
@@ -630,7 +630,7 @@ struct AppStoreDraftTests {
         await store.loadDiff(for: summary())
 
         store.transferDraft(for: pr, choices: [comment.id: .delete])
-        await settle()
+        await waitForStoredDrafts(0, in: drafts)
 
         #expect(!store.hasDraft(pr))
         #expect(try await drafts.load().drafts.isEmpty)
@@ -728,7 +728,7 @@ struct AppStoreDraftTests {
         let drafts = drafts()
         let prepared = await prepared(drafts)
         prepared.setDraftBody("rozepsané", for: pr)
-        await settle()
+        await waitForStoredDraft(of: pr, in: drafts)
 
         let restarted = store(drafts, detail: .failure(GitHubError.notFound("nic")))
         await restarted.loadStoredDrafts()

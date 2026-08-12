@@ -90,7 +90,7 @@ struct RealEnvironmentTests {
     /// by prošla i implementace, která na proces zapomene a nechá ho běžet dál. Tady se ptáme přímo
     /// na to, co od zrušení chceme — proces už neexistuje. Je to tatáž cesta, jakou to od #101 dělá
     /// `SubprocessStreamerTests`; ta pod zátěží prošla 5× z 5.
-    @Test("Zrušené volání proces zabije, místo aby čekalo, až doběhne sám")
+    @Test("Zrušené volání proces zabije, místo aby čekalo, až doběhne sám", .timeLimit(.minutes(3)))
     func runnerKillsProcessOnCancellation() async throws {
         // Bez zabití by `run()` čekalo na EOF na pipách — čtení skončí teprve tím, že proces
         // pipy zavře, tedy až mu doběhne `sleep`.
@@ -111,9 +111,17 @@ struct RealEnvironmentTests {
         let pid = try await processID(writtenTo: pidFile)
 
         running.cancel()
-        _ = await running.value
 
+        // **Pořadí je tady podstatná část testu.** Na proces se musí kouknout **dřív**, než se
+        // počká na `running.value`: to čekání totiž skončí i tím, že procesu doběhne `sleep`, a
+        // „zmizel“ pak platí samo, bez ohledu na to, jestli ho někdo zabil. Změřeno vloženou
+        // regresí — s vyndaným `requestKill()` test v opačném pořadí **prošel** za 300 s. Je to
+        // tatáž past, kterou `docs/testovani.md` popisuje u `AppStoreTerminationProcessTests`.
         #expect(await processHasGone(pid), "proces \(pid) po zrušení pořád běží")
+
+        // `.timeLimit` u testu je tu proto, že tohle čekání je v **rozbitém** stavu dlouhé: když
+        // se nezabíjí, vrátí se teprve po `sleep`u. Zelený běh se jím nezdrží ani o milisekundu.
+        _ = await running.value
     }
 
     @Test("Runner ohlásí, že binárku nešlo spustit")

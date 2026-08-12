@@ -1435,5 +1435,44 @@ vrácené `split(separator: "\n")` položí 41 testů v 8 suitách (mezi nimi i 
 dokládá, že jejich převedení nic neztratilo), a rozšíření na `isNewline` položí přesně ty dva testy
 o unicode oddělovačích.
 
+### Časové sondy pod zátěží — čekání na jev má jedno místo (#296)
+
+Za jednu dávku paralelního vývoje vyrobily časově citlivé testy **pět falešně červených `mainů`**.
+Rozhodovalo se měřením pod zátěží, ne odhadem, a diagnóza vyšla jinak, než jak issue znělo: nebyl to
+přetažený strop, ale **vyhladovělý `MainActor`**. Sonda odpočtu si v plném běhu vyžádala odmlku
+100 ms a probudila se za **7,5 až 8,6 s**, přitom její vlastní práce (bitmapa) stála 1 ms — takže za
+čtyřsekundový strop stihla **jediný snímek** a hlásila „odpočet se nepřetikal“ o aplikaci, která byla
+v pořádku. Hladověl kvůli ostatním suitám: `Task.yield()` práci nepustí na procesor, jen ji přeřadí
+na konec fronty téhož aktoru, a Swift Testing pouští suity paralelně.
+
+Takových míst mělo `Tests/` **56** a tentýž problém tam našlo **šest** míst zvlášť (#292, #269 a čtyři
+suity, které si každá psala vlastní odmlku). Proto je z toho jedno místo — `Tests/Support/TestWaiting.swift`
+se třemi primitivy (`waitUntil`, `settle`, `TestWait.pause`) — a ne šestá kopie. Strop **2 minuty** je
+změřený: při třech souběžných clean buildech (load 24–36 na patnácti jádrech) trvala čekání, která se
+**dočkala**, až **42,3 s**; se stropem 30 s padly tři plné běhy ze tří.
+
+**Dvě rozhodnutí se cestou změnila proti zadání.** Sonda odpočtu **přestala tvrdit vteřinový takt
+stropem** — tuhle roli jí dalo #269 a nefungovala, protože sonda potřebuje tři kola na `MainActoru`;
+takt se dá ověřit deterministicky a bez hodin na `entries(from:mode:)` (rozvrh `by: 2` tam vyjde
+`[42, 40, 38]`, dva pády za 0,001 s). A test zrušeného podprocesu **přestal měřit čas volání**
+(5 s → pod zátěží 5,95 / 8,23 / 11,03 s, po zvětšení na 15 s pak až 26,7 s) a ptá se na **zmizelý
+PID**, což je i silnější tvrzení: naměřený čas říká jen „vrátilo se to brzo“, takže by prošla i
+implementace, která na proces zapomene.
+
+U toho se našlo, že **pořadí tvrzení je součást testu**: `#expect(processHasGone)` musí být před
+`await running.value`, protože to čekání skončí i tím, že procesu doběhne `sleep` — v opačném pořadí
+test s vyndaným `requestKill()` **prošel** za 300 s. Sonda odpočtu proto od teď píše do hlášky i
+**počet snímků**: nad zamrzlým odpočtem vyjde `snímků 1157` (zdravá sonda, rozbitá aplikace), pod
+zátěží by tam stálo `snímků 1`. Bez toho čísla je „změn 0“ k nerozeznání od zamrzlého odpočtu.
+
+**Vidět není nic** — je to změna v `Tests/`, `App/` zůstalo nedotčené. Doloženo plným během pod
+souběžným buildem tří slotů a čtyřmi vloženými regresemi (vyndané zabíjení v runneru i ve streameru,
+zamrzlý odpočet, rozvrh `by: 2`).
+
+**Co #296 neopravilo a patří do vlastního issue:** `AppStoreProgressTests` je flaky i bez zátěže a i
+samostatně (1 pád z 8 běhů, za 0,038 s) — pozdní události průběhu **vzkřísí** osu, kterou `keepFresh()`
+zahodil, takže je to otázka na `AppStore`, ne strop v testu. A `Early unexpected exit … bootstrapping`
+se nereprodukovalo; zapsané je aspoň to, jak se pozná.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

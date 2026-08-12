@@ -1295,21 +1295,36 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     → 5,00 → 6,00) a věta v obou snímcích je čitelná — `za 9min 59s znovu` v 1,5 s, `za 9min 58s
     znovu` ve 2,0 s.
 
-    Sonda proto snímkuje po 100 ms, dokud nenajde **dvě** změny, se **stropem 4 s** — a strop je
-    to, co z čekání dělá tvrzení o **vteřinovém** taktu, ne jen o tom, že se něco někdy překreslí:
-    rozvrh po dvou vteřinách posune změny na 4,0 s a 6,0 s, tedy za strop (ověřeno vloženou regresí
-    `by: 2` — sonda viděla jednu změnu místo dvou). Ověřeno i druhou stranou: opakované
-    `cacheDisplay` samo přepočty nestojí ani takt neposouvá (tělo se přes šest vteřin snímkování
-    přepočítalo jednou), a odpočet v těle kontroly měřidla je na **desetiny vteřiny**, protože
-    s celými by se text za 1,5 s změnil nejvýš jednou. Uplynulý čas se u toho měří **monotónně**
-    (`ContinuousClock`, jako v `DiffPerformanceMeasurement`): termín odpočtu `Date` být musí, jinak
-    by rozvrh netikal podle týchž hodin jako aplikace, ale strop sondy na nástěnných hodinách stát
-    nesmí — přestavení hodin nebo korekce z NTP by ho posunuly.
+    Sonda proto snímkuje po 100 ms, dokud nenajde **dvě** změny, se stropem `TestWait.deadline`.
+    Uplynulý čas se u toho měří **monotónně** (`ContinuousClock`, jako v `DiffPerformanceMeasurement`):
+    termín odpočtu `Date` být musí, jinak by rozvrh netikal podle týchž hodin jako aplikace, ale strop
+    sondy na nástěnných hodinách stát nesmí — přestavení hodin nebo korekce z NTP by ho posunuly.
+    Ověřeno i druhou stranou: opakované `cacheDisplay` samo přepočty nestojí ani takt neposouvá (tělo
+    se přes šest vteřin snímkování přepočítalo jednou), a odpočet v těle kontroly měřidla je na
+    **desetiny vteřiny**, protože s celými by se text stihl změnit nejvýš jednou.
+
+    **Strop netvrdí vteřinový takt a tvrdit nemá** (#296, mění #269). Do #296 tu stálo, že právě
+    strop 4 s z čekání dělá tvrzení o vteřinovém taktu, protože rozvrh po dvou vteřinách posune změny
+    na 4,0 s a 6,0 s. Znělo to dobře a **nefungovalo to**: sonda potřebuje **tři kola na
+    `MainActoru`** (první snímek a dva různé) a pod třemi souběžnými clean buildy trvalo jedno kolo
+    8,6 s, takže za celý strop vzala **jediný snímek** a tvrdila „odpočet se nepřetikal“ o aplikaci,
+    která byla v pořádku. Za jednu dávku z toho bylo **pět** falešně červených `mainů`. Takt se
+    přitom dá ověřit **deterministicky a bez hodin**: `DashboardCountdownTests` čtou
+    `entries(from:mode:)` a rozvrh `by: 2` jim vyjde `[42, 40, 38]` místo `[43, 42, 41]` — ověřeno
+    vloženou regresí, dva pády za 0,001 s. Držet kvůli tomu strop těsně u naměřených 3 s znamenalo
+    postavit deterministicky ověřitelnou věc na tom, kolik zbylo procesoru.
+
+    Sonda proto od #296 **počítá i snímky** a píše je do hlášky, protože právě z toho čísla se pozná,
+    jestli je rozbitá aplikace, nebo nebyl procesor. Nad zamrzlým odpočtem (vyndaný `TimelineView`)
+    vyjde `přetikal 0× místo dvakrát (kresba se nezměnila ani jednou; snímků 1157)` — zdravá sonda
+    nad rozbitou aplikací. Pod zátěží by na tomtéž místě stálo `snímků 1`. Bez toho čísla je „změn 0“
+    k nerozeznání od zamrzlého odpočtu a rozhodování mezi „flake, nebo regrese?“ stojí kolo navíc.
 
     Co z toho platí pro **příští sondu nad `TimelineView`em**: pevný okamžik měření je vždycky
     závod s fází mřížky tiků, kterou určuje ukotvení rozvrhu (u nás termín, ne `.now`) — čeká se
-    tedy **na jev se stropem**, ne na hodiny. A strop musí být z čeho spočítat: perioda × 2 +
-    rezerva. Sonda, která by se místo toho jen „nechala doběhnout“, tvrdí to, co zrovna stihla.
+    tedy **na jev se stropem**. Strop ale patří k zátěži, ne k periodě: co se dá tvrdit o rozvrhu,
+    se tvrdí na `entries`, a na kreslení zbyde jen „přetiká se to“. Sonda, která by se místo toho
+    jen „nechala doběhnout“, tvrdí to, co zrovna stihla.
 
     U hostovaného view je jeden zádrhel, který stojí za zapamatování: **rozměr se nesmí propsat do
     okna** (`NSHostingView.sizingOptions = []` a pevný `frame`). Text sondy se s každou vteřinou
@@ -1554,6 +1569,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   #269 vyndalo ze sondy odpočtu; spánek navíc na rozdíl od `yield`ování pustí procesor jinam. Strop
   zůstává, aby se test při skutečné chybě **položil, ne zasekl**.
 
+  **Od #296 to není závora, ale pravidlo pro celé `Tests/`** — a bydlí v `Tests/Support/TestWaiting.swift`.
+  Viz sekce *Čekání na jev* níž; `AsyncGate` z ní jen volá `waitUntil`, aby v repu nebyly dvě
+  implementace jedné věci.
+
 - **Šířka sheetu s kódem (#292)** — `DiffWidthTests`, výčtem nad `Policy.codeSheetWidth`. Hlídá čtyři
   meze, z nichž každá se dá porušit zvlášť: **na běžné obrazovce je širší než dřív**, **nikdy užší než
   dřívějších 820** (zúžení by byla regrese, ne kompromis), **na malý displej se vejde** (tam rozhoduje
@@ -1727,6 +1746,109 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   který by nezabíjel vlastního hosta, takže se to ověřuje spuštěním: pustit review, ukončit
   aplikaci a podívat se, jestli po ní zbyl `claude` s `ppid 1`. Změřeno u #264 na slotu — session
   zmizela, značka v `interrupted.json` zůstala a po restartu vyšel řádek `přerušeno`.
+
+## Čekání na jev (#296)
+
+Sem patří všechno, co v testu znamená „počkej, až se něco stane“. Je to **jedno místo**
+(`Tests/Support/TestWaiting.swift`) a jsou k tomu tři primitiva:
+
+| Co | Kdy | Strop |
+|---|---|---|
+| `waitUntil("jev") { podmínka }` | čeká se na jev, který nastat **má** | `TestWait.deadline` = 2 min |
+| `settle()` | není na co čekat — tvrdí se, že se **nic nestalo**, nebo se čeká na zápis bez handle | bez stropu, 100 ms |
+| `TestWait.pause()` | smyčka, která práci **drží** rozběhnutou, dokud ji test nepustí | bez stropu (držení stropovat nejde) |
+
+**Čeká se odmlkami, ne `Task.yield()`.** Yield práci nepustí na procesor — přeřadí ji na konec
+fronty téhož aktoru —, takže hot spin na `MainActoru` vyhladoví hlavní smyčku a s ní časovače.
+Změřeno u #296 na sondě odpočtu v plném běhu: vyžádaná odmlka **100 ms** se probudila za **7,5 až
+8,6 s**, přitom vlastní práce sondy (bitmapa) stála 1 ms. Nebyla to pomalá aplikace, byl to
+vyhladovělý `MainActor` — a hladověl kvůli ostatním suitám, protože Swift Testing je pouští
+paralelně. Do #296 mělo `Tests/` **56 takových míst**; tentýž problém našlo šest míst zvlášť
+(`AsyncGate` #292, `ReviewSubmissionTests`, `HealthMonitorTests`, `AppStoreHealthTests`,
+`AppStoreNotificationTests`, sonda odpočtu #269) a každé si psalo vlastní odmlku, takže se oprava
+dělala pokaždé znovu a každý další test začal zase od `yield()`.
+
+**Strop je čas, ne počet kol** (#292), a **je odvozený od zátěže, ne od volného stroje** (#296).
+Rozpočet kol se pod zátěží vyčerpá dřív, než se čekaná práce dostane na procesor. Rozpočet odmlek
+(`for _ in 0..<250` se spánkem) je proti tomu odolný, ale z kódu se nedá přečíst, jaký strop platí.
+
+**Z čeho jsou ta dvě minuty:** patnáctijádrový stroj, tři souběžné clean buildy (load average
+24–36, přeobsazení ~4×). Čekání, která se **dočkala**, trvala až **42,3 s**; se stropem 30 s padly
+tři plné běhy ze tří. Cena za velkorysost se platí **jen když je něco rozbité** — co se dočká,
+dočká se hned. Kdo ho bude chtít snížit jako „přebujelý“, ať si napřed pustí plný běh při souběžném
+buildu tří slotů.
+
+**Nedočkání se hlásí, nezasekává.** `waitUntil` zapíše `Issue` s větou „Nedočkalo se: …“, takže je
+z hlášky poznat, **co** se nestalo. Do #296 tady byly dva horší tvary: neomezený `while` (test
+visel, což je pod zátěží k nerozeznání od zaseknutého běhu) a odtikaný rozpočet, po kterém se šlo
+dál a spadlo se o pár řádků níž na tvrzení, ze kterého nebylo poznat, že se jen nedočkalo.
+
+**Kde jev existuje, nepatří tam `settle()`.** Drain naslepo platí za to, kolik zbylo procesoru:
+u #296 na něm padl test draftu na disku, protože se zápis do 100 ms nestihl. Zápis draftu si store
+rozjede `Task`em bez handle (`AppStore.persistDraft`), takže jediný jev je **soubor** — na to je
+`waitForStoredDraft(of:in:exists:)`. `settle()` zůstává jen tam, kde se tvrdí, že se nic nestalo:
+tam jev neexistuje, a je to zapsaná slabina, ne nedodělek — pod zátěží ověřuje méně, ale **červeně
+obarvit nemůže**.
+
+**Časové tvrzení se nahrazuje jevem, kde to jde.** `RealEnvironmentTests` tvrdily „zrušené volání se
+vrátí do 5 s“; pod zátěží vycházelo 5,95 / 8,23 / 11,03 s a po zvětšení stropu na 15 s pak 17,7 až
+26,7 s. Naměřený čas volání je pod zátěží nečitelný a zvětšování stropu je hra, ve které zátěž
+pokaždé přesáhne poslední odhad. Teď se ptá na **zmizelý PID** (`processHasGone`), což je i silnější
+tvrzení: naměřený čas říká jen „vrátilo se to brzo“, takže by prošla i implementace, která na proces
+zapomene a nechá ho běžet.
+
+**Pořadí tvrzení je u toho podstatná část testu**, a stálo to jedno kolo. `#expect(processHasGone)`
+musí být **před** `await running.value`: to čekání skončí i tím, že procesu doběhne `sleep`, takže
+„zmizel“ pak platí samo. Změřeno vloženou regresí — s vyndaným `requestKill()` test v opačném pořadí
+**prošel** za 300 s. Je to tatáž past, která je u `AppStoreTerminationProcessTests` popsaná výš.
+
+**Rezerva mezi timeoutem a životem procesu je taky strop proti zátěži.** `SubprocessStreamerTests`
+tvrdí, že proud ukončil **timeout**, a to je vidět jedině tehdy, když proces nedoběhne dřív — do
+#296 tam bylo `sleep 30` proti timeoutu 200 ms (stonásobek) a **nestačilo to**: časovač se probudil
+až po skončení `sleepu`, proud dojel normálně a suita hlásila „chyba se čekala, ale žádná nepřišla“
+nad kódem, který funguje. Teď je to `longerThanTheTest` = 600 s, tedy 2000×, a k tomu
+`.timeLimit(.minutes(3))`, aby rozbitý timeout **spadl** a nezasekl běh. Ten strop musí být **nad**
+`TestWait.deadline`; když se rovnaly, vypršely naráz a v hlášce stály dva různé důvody pádu.
+
+**Produkční timeouty se do testů nepředávají jako výchozí.** `LoginShellPathReader` má default 5 s
+a je to rozhodnutí o startu aplikace („zaseknutý shell nesmí položit start“) — jenže pod zátěží ho
+skutečný login shell přetáhl a test o parsování `PATH` spadl na prázdném výsledku. Test si proto
+předává vlastní velkorysý timeout: ptá se, jestli se `PATH` přečte a rozebere, ne jestli se to
+stihne za produkční rozpočet. Totéž u `/bin/echo`, které se při třech souběžných buildech nestihlo
+spustit a posbírat do 10 s.
+
+**Ověřeno vložením regrese, čtyřmi:** vyndaný `requestKill()` v `SubprocessRunneru` (spadne
+`RealEnvironmentTests` — „proces po zrušení pořád běží“), vyndaný `requestKill()` v
+`SubprocessStreameru` (spadne `cancellationKillsTheProcess`), zamrzlý odpočet bez `TimelineView`
+(spadne sonda odpočtu, viz níž) a rozvrh `by: 2` (spadnou dva testy `DashboardCountdownTests`
+za 0,001 s).
+
+### Co tím opravené není
+
+**`AppStoreProgressTests` je flaky i bez zátěže**, a je to **jiná třída** — pořadí, ne čas, takže na
+to strop nemá vliv a #296 to neopravuje. Měřeno samostatně (`-only-testing`), osm běhů: jeden pád,
+za **0,038 s**, na `forgetsTheTimelineOfAPullRequestThatLeftTheList`. Kolega u #295 to samé viděl na
+čistém `mainu` (tři různé kombinace pádů ve třech bězích, mimo jiné `Časová osa zůstane i po
+doběhnutí`), takže to není z převodu na `waitUntil`.
+
+Z hlášky je vidět mechanismus: osa dropnutého PR obsahovala `[queued, findings(0), finished]` —
+tedy **bez** `.started`, který fake hlásí jako první, a s razítky ze dvou různých hodin (`queued`
+v roce 1970 z `FakeTimeSource`, zbytek ve skutečném čase). To není přežilá osa, ale **nová**: události
+průběhu dorazily až po konci běhu, `keepFresh()` mezitím osu zahodil (PR ze seznamu zmizel) a pozdní
+události ji **postavily znovu**. Test pak vidí neprázdnou osu tam, kde má být prázdno.
+
+Čekat na `!isReviewing(pr)` proti tomu nepomůže: `reviewTasks[pr] = nil` je v `defer`u `review()`,
+takže „už neběží“ nastane dřív, než dojdou poslední události průběhu. Opravit se to dá jedině
+rozhodnutím o tom, jestli **smí pozdní událost průběhu vzkřísit zahozenou osu** — a to je otázka na
+`AppStore`, ne na strop v testu. Patří to do vlastního issue.
+
+**Testovací host umře při startu** (`Early unexpected exit, operation never finished bootstrapping —
+test runner exited with code 0 while preparing to run tests`). Zaznamenáno u #298 při třech
+souběžných slotech; **v #296 se to nereprodukovalo** ani při třech clean buildech, takže o tom není
+co tvrdit kromě toho, jak se to pozná: **žádná chyba kompilace, žádné `✘`, nespustil se ani jeden
+test**, a druhý běh nad tímtéž commitem projde. Je to zátěž, ne rozbitý build — pustit znovu.
+Odstranění spinů (#296 vyndalo 56 míst, která na `yield()` točila procesor) tomu podle všeho pomáhá,
+ale **změřené to není**; kdyby se to vrátilo, tohle je záznam, u kterého se dá začít.
 
 ## Jak si zkontrolovat, jak view vypadá
 
