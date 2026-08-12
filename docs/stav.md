@@ -1541,5 +1541,51 @@ protože ten stav už nejde vyrobit; dvě z toho jsou testy sondy). **Regrese ov
 třikrát**: vrácené zarovnání volby položí tři tvrzení v jednom testu, zahozené dotažení z cache
 položí test o zrušení a `loadChecks` vrácený do `do` bloku položí oba testy o spadlém detailu.
 
+### README proti dnešnímu okně (#297)
+
+`README.md` je první soubor, který kdokoli přečte, a `CLAUDE.md` má jako podmínku, že se aplikace
+musí dát pochopit **z dokumentace bez čtení kódu** — takže dokumentace, která o obrazovce tvrdí
+něco, co tam není, je horší než chybějící: čtenář podle ní hledá blok, který neexistuje. Ohlášené
+byly dvě věty z #215, ale prošel se **celý soubor** a našlo se **třináct** nepravd — a **sedm z nich
+bylo starších než #215**, tedy ohlášené to nebylo ani náhodou.
+
+Z #215 a #214: **pět záložek místo šesti**, dělič mezi `Konverzací` a `Nálezy` (dnes mezi
+`Kontrolami` a `Nálezy`), chybějící odznak `Kontrol` a blok `Kontroly na GitHubu` popsaný jako část
+`Přehledu`, kde po #215 **nezbylo nic**. Místo té jedné odstavcové zmínky má tab vlastní sekci —
+anotace, konec logu, sheet, a hlavně tři věci, které se u logu **nedělají** (nestahuje se dopředu,
+neukládá na disk, nad 10 MB vůbec). Z #294: panel s nálezy byl na **dvou** místech popsaný jako
+viditelný ve všech tabech, přitom je ve třech ze šesti.
+
+**#306 se mezitím mergnul do `mainu` a sekce se po něm přepsala**, ne přidala vedle: napsané v ní
+bylo, že se `Kontroly` u PR bez CI nekreslí, což byl pravdivý stav v době, kdy se ta sekce psala,
+a nepravdivý o hodinu později. Dokumentace o mizející záložce vydaná po tom, co mizet přestala, je
+zrovna ten druh věty, kvůli které #297 vzniklo — takže popsané je to dnešní chování (kreslí se
+vždycky, čtyři stavy dat, okrová věta nad zastaralým seznamem) a přechod je v ní zapsaný jako obrat
+proti #215, ne zamlčený.
+
+Starší nepravdy, které to vyplavilo: dlaždice `Nálezy proti` se podle README kreslila „jen když se
+hlava rozešla“ (od **#198** je vždycky a rozchod nese barva); `Zahodit nálezy` bylo v liště panelu
+(od **#242** v hlavičce tabu `Nálezy`); okno nastavení mělo „dvě záložky“ (od **#177** je to boční
+navigace se sedmi stránkami); filtr fronty byl „ikona v toolbaru vlevo“ (je vpravo v liště nad
+frontou, a jen u fronty); a v `Požadavcích` stálo, že aplikace chodí na síť **jediným** vlastním
+voláním — na téže cestě (`HTTPGetting`) jsou i **avatary**. K tomu „toolbar“ na dalších pěti
+místech, který od **#180** neexistuje (okno má vlastní hlavičku), a stav proti milníkům: README
+pořád tvrdil, že M6–M8 jsou to, „co přijde po v1“, přitom jsou všechny tři hotové.
+
+Vedle nepravd se doplnilo, co v souboru **chybělo**: `.gitattributes`, `Tests/Fixtures/transcript/`
+a `docs/paralelni-vyvoj.md` ve výpisu struktury a šest klíčů v seznamu toho, co drží `config.json`.
+
+**Ověřovalo se pohledem, ne čtením kódu**, jak chtělo zadání: dashboard a rail ze snímku běžící
+slotové aplikace (`screencapture -o -l<id>`, tedy zezadu a bez cizího obsahu na snímku) a všech šest
+tabů z `DetailTabRenderProbe`. Z kódu se dobralo jen to, na co se přes kliknutí nedá dostat bez
+skutečných dat — stropy logu, tvar konfigurace, umístění filtru v `HomeView`.
+
+**Vidět není nic** — je to dokumentace, `App/` i `Tests/` zůstaly nedotčené, takže počet testů se
+nemění. Cestou se opravila i jedna buňka v [`docs/architektura.md`](architektura.md), která
+u `PullRequestTab` vypisovala pět případů a `checks` zmiňovala až v témže odstavci o dvě věty dál.
+
+**Co se našlo a nespravilo** (patří jinam, ne do diffu o README): doc komentář u `SettingsView`
+pořád říká „Tři záložky“, tedy stav před #177.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

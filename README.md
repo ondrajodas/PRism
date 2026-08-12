@@ -25,7 +25,8 @@ názoru.
 **Aplikace dělá to, kvůli čemu vznikla: pustí review na moje skutečné PR a ukáže nálezy.**
 
 Okno má **vlastní hlavičku se záložkami** (#180): vlevo semafor, vedle něj domácí záložka
-`Přehled` a otevřená review, vpravo novinky, obnovení a nastavení. Seznam PR není trvalý sloupec —
+`Přehled` a otevřená review, vpravo kapsle `⌘K`, novinky, obnovení a nastavení. Systémová
+titulková lišta je schovaná, takže okno se tahá za tuhle hlavičku. Seznam PR není trvalý sloupec —
 je obsahem domácí záložky, takže diff dostane celou šířku okna. Otevřené review zůstává otevřené
 a tečka u záložky nese jeho stav; u běžícího se točí prstýnek, u rozdělaného je pero. **Zavření
 záložky nic nezahodí.**
@@ -80,9 +81,9 @@ nebo se na nich shodli dva. Blokující nález má vlastní barvu i text (`3 ná
 výpadku sítě zůstanou poslední známá data a nad seznamem se objeví pruh, že nejsou
 aktuální; při rate limitu pruh říká, kdy to zkusí znovu.
 
-**Seznam se dá zúžit filtrem** (#117) — ikona v toolbaru vlevo, odškrtávají se v ní repozitáře
-a autoři (uvnitř osy „nebo“, mezi osami „a“: dvě repa znamenají obojí, repo + autor jeho PR v tom
-repu). U každé položky je **počet PR, kterých se týká** (#199), takže je před kliknutím vidět, co
+**Seznam se dá zúžit filtrem** (#117) — ikona vpravo v liště nad frontou, a jen tam: nad
+rozdělanými review není co zúžit. Odškrtávají se v ní repozitáře a autoři (uvnitř osy „nebo“, mezi
+osami „a“: dvě repa znamenají obojí, repo + autor jeho PR v tom repu). U každé položky je **počet PR, kterých se týká** (#199), takže je před kliknutím vidět, co
 se za ní schová; počítá se z **plného** seznamu, takže se odškrtáváním nemění — jinak by číslo
 říkalo něco o pohledu místo o tom, co zapnutí položky udělá. Že je filtr zapnutý a kolik schovává,
 je vidět na ikoně **bez otevírání nabídky**, protože skrytý filtr je způsob, jak přijít o review;
@@ -107,7 +108,8 @@ Kliknutím na nález diff odskočí na jeho `file:line`.
 Nad záložkami je **hlavička ve třech řádcích** (#174, přesázená podle návrhu u #218). Nahoře
 titulek a vedle něj číslo PR, vpravo `Spustit review` — a je to **jediné akcentové místo v celé
 hlavičce**. Pod tím souřadnice: stav PR jako plná kapsle s puntíkem, `autor chce sloučit
-větev → base`, `owner/repo`, souhrn kontrol a odkaz na GitHub. Větve se do okna dostaly až
+větev → base`, `owner/repo`, souhrn kontrol (podrobnosti jsou v záložce `Kontroly`) a odkaz na
+GitHub. Větve se do okna dostaly až
 s #174 a je to první věc, kterou u cizího PR hledám. Třetí řádek je **pruh běhu**: kapsle
 reviewerů (`● php-review 2`, klik filtruje jejich nálezy) a za nimi — když review běží — dráha
 průběhu s popiskem `test-coverage · 2 z 3 hotovo · 1:12`.
@@ -122,16 +124,19 @@ ne v hlavičce: je to stav prostředí, ne údaj o pull requestu. Selhaný check
 zůstává bannerem v hlavičce, protože se u něj musí vypsat celý výstup `gitu` a z něj se teprve
 pozná, co dělat dál.
 
-Detail PR má **pět záložek** (#183, dvě přidal #242): `Přehled` říká, jak to teď stojí (popis,
-fakta, co se změnilo od minule), `Změněné soubory` je diff a `Konverzace` je **časová osa toho,
-co se dělo** — s uzly,
+Detail PR má **šest záložek** (#183, dvě přidal #242 a jednu #215): `Přehled` říká, jak to teď
+stojí (popis, fakta, co se změnilo od minule), `Změněné soubory` je diff a `Konverzace` je
+**časová osa toho, co se dělo** — s uzly,
 u kterých tvar nese druh, se seskupenými commity (jedenáct pushů nesmí utopit dva komentáře),
 filtrem `Vše / Komentáře / Vlákna / Události` a značkou `Nové od tvé poslední návštěvy`. U force-pushe
-je rovnou u události napsané, že tím zastaraly nálezy, a tlačítko pustit review znovu.
+je rovnou u události napsané, že tím zastaraly nálezy, a tlačítko pustit review znovu. Čtvrtá je
+`Kontroly` — checky z GitHub Actions a detail toho, na který se klikne (popsaná níž).
 
 Za nimi stojí `Nálezy` (tabulka všeho, co reviewery nahlásily) a `Průběh` (co dělaly) — a mezi
-`Konverzací` a `Nálezy` je **dělič**: nalevo je to, co je na PR a co má i GitHub, napravo to, co
-s ním udělaly naše reviewery.
+`Kontrolami` a `Nálezy` je **dělič**: nalevo je to, co je na PR a co má i GitHub, napravo to, co
+s ním udělaly naše reviewery. Kreslí se z **vlastnosti záložky**, ne z její pozice — `Kontroly`
+sedí nalevo doprostřed, takže zadrátovaný index by ho posunul o jedno místo vedle. **Všech šest
+záložek je v pruhu vždycky** (#306), takže se jejich počet nemění podle dat.
 
 V `Průběhu` má dráhu **každý reviewer z nastavené sady**, ne jen ten, který už na tomhle PR běžel:
 otázka je „kde je které z mých review“ a *ještě nezačalo* je taky odpověď. Tři různá „nic tu není“
@@ -142,20 +147,17 @@ review — jen je označená `mimo sadu`.
 
 Záložky jsou podtržené jako na GitHubu a **odznak má každá** (#218), jen počítá pokaždé něco
 jiného: `Přehled` novinky od poslední návštěvy, `Změněné soubory` počet souborů, `Konverzace`
-kolik je toho k přečtení, `Nálezy` kolik jich je (**červeně, když něco blokuje**) a `Průběh`
+kolik je toho k přečtení, `Kontroly` **kolik checků spadlo** (červeně; u běžícího puntík, nad
+zeleným CI nic — a dokud není seznam, taky nic: nula nad nenačtenými daty by tvrdila, že se
+spočítalo), `Nálezy` kolik jich je (**červeně, když něco blokuje**) a `Průběh`
 **puntík, ne počet** — „běží“ je stav, ne množství. Volba se pamatuje **u každého PR zvlášť**
 a otevírá se `Přehled` — popis a diskuze se čtou dřív než kód, kterého se týkají.
 
-Pod dlaždicemi je blok **`Kontroly na GitHubu`** (#209): kolik checků prošlo, kolik běží a kolik
-spadlo, a pod tím řádek na každý s dobou běhu. **Nejhorší stav vyhrává** — dvanáct zelených
-a jeden červený je červený stav — a **přeskočený check není prošlý**; přeskočené se sbalí za
-číslo, protože jich na monorepu bývá většina. U spadlého je odkaz na log; ten se do aplikace
-nestahuje.
-
 Pod popisem PR jsou **dlaždice s fakty** (#198): kolik je commitů a kolik z nich přibylo od minule,
-kolik souborů se mění a v kolika je nález, hlava PR a — **jen když se rozešla** — sha, proti které
-platí nálezy. Nic se pro ně netahá z API; jsou to čísla, která v okně už byla, jen roztroušená.
-Dlaždice, o které se nedá nic říct, se nekreslí.
+kolik souborů se mění a v kolika je nález, hlava PR a sha, proti které platí nálezy. Nic se pro ně
+netahá z API; jsou to čísla, která v okně už byla, jen roztroušená. Dlaždice, o které se nedá nic
+říct, se nekreslí — kdežto ta se sha nálezů je vždycky, když nálezy jsou, a **rozchod nese barva,
+ne přítomnost**: proti čemu nálezy platí, je fakt o PR i tehdy, když se hlava shoduje.
 
 Úplně nahoře v `Přehledu` je **co se změnilo od tvé poslední návštěvy** (#173): nové commity,
 cizí review, komentáře — a hlavně **přepsaná historie větve**, protože právě po ní zastarají
@@ -206,6 +208,58 @@ Barvy výstrah jsou z palety a u dvou druhů **vědomě jiné než ty GitHubovy*
 jinak na hex sešlo se zastaráním a `[!CAUTION]` s blokujícím nálezem, tedy s barvami, které v okně
 už něco znamenají. Sazba se **pamatuje** — u dvanáctikilobajtové zprávy od bota je
 rozklad na bloky 1,91 ms proti 0,04 ms z cache a inline sazba jejích bloků dalších 1,81 ms.
+
+### Záložka `Kontroly` (#215, #214, #306)
+
+**Vlastní záložka, ne blok v `Přehledu`.** Do #215 to byl seznam checků pod dlaždicemi (#209), pak
+chvíli jen souhrn — a nakonec ani ten: v `Přehledu` po tom stěhování **nezbylo nic**. Důvod je
+detail spadlého checku (#214), kterým blok vyrostl natolik, že popis PR vytlačil mimo obrazovku;
+`Přehled` má odpovídat na „jak to teď stojí“, ne být místem, kde se scrolluje log. Je to tentýž
+pohyb jako u `Konverzace` (#183): co začne růst, přestane být kontextem a stane se obsahem. „Je to
+zelené“ přitom z okna nezmizelo — nese ho **chip v hlavičce PR**, který je vidět ve všech
+záložkách, takže souhrn v `Přehledu` byl třetí místo o téže věci.
+
+**Kreslí se vždycky, i u PR bez CI** (#306) — a u něj v ní stojí `Tenhle PR nemá kontroly` s větou,
+že to **není porucha**. Do #306 se u PR bez CI nekreslila vůbec, právě aby o něm netvrdila, že se
+něco nepovedlo; otočilo to chování: pruh záložek problikával z pěti na šest při **každém** otevření
+PR (checky dorazí až s detailem), kdežto prázdná záložka je jen u těch pár PR bez CI — a s tou větou
+původní argument padá. Trvale přítomná záložka si vynutila odpověď na **každý** stav dat: čeká se na
+odpověď (`Načítám kontroly…`, a to o CI netvrdí nic), PR CI nemá, seznam, nebo se ho nepodařilo
+načíst. Když se nepovede načíst **znovu**, seznam zůstane a nad ním je okrová věta, že je to
+poslední známý stav — okrová, ne červená, protože „nevím“ není „je to rozbité“.
+
+V tabu je karta `Kontroly na GitHubu`: v hlavičce poměr (`1 selhala · 1 prošla · 1 přeskočeno`),
+pod ním řádek na každý check s dobou běhu. **Nejhorší stav vyhrává** — dvanáct zelených a jeden
+červený je červený stav — a **přeskočený check není prošlý**; přeskočené se sbalí za číslo, protože
+jich na monorepu bývá většina (změřeno: 22 z 28). Odkaz na GitHub je jen u toho, co se nepovedlo.
+
+**Kliknutím se check rozbalí na anotace a konec logu** (#214). Rozbalit jde každý, u kterého se dá
+z odkazu vyčíst číslo jobu — i prošlý, protože `phpunit`, který prošel, ale trval dvacet minut, je
+taky důvod se do logu podívat; u checku bez čísla (CodeQL, bors) zbývá odkaz ven, protože tlačítko,
+které skončí chybou, je horší než tlačítko, které tam není. **Anotace z CI není nález z review** a
+nesmí s ním splynout: je to plochý řádek se štítkem `error`/`warning`/`notice`, ne bublina — nedá
+se odmítnout a nepočítá se nikam. Když anotace ukazuje na místo v diffu, je z ní odkaz, který tam
+skočí; kolik se jich nevešlo, je pod nimi napsané. **Prázdno je běžný stav**, ne porucha: anotace
+emituje jen workflow, které si o to řekne, a proto je log ta hlavní cesta.
+
+**Konec logu je 6 000 řádků** (#303, do té doby 4 000 a před #292 tři stovky) v okýnku o třiceti
+řádcích, které scrolluje samo — nasázet je naplno by odtlačilo seznam checků mimo obrazovku, tedy
+zrovna to, kvůli čemu se detail z `Přehledu` stěhoval. Kolik se nevešlo, je nad okýnkem napsané
+(`— starších N řádků se nevešlo —`): **tiše zkrácený log tvrdí, že job začal uprostřed**. ANSI se
+strhává a timestampy se schovávají.
+Celý text je v `Ukázat celý log`, sheet široký podle obrazovky (úzký sheet znamená víc řádků sazby
+na jeden řádek logu), a vedle je odkaz na log na GitHubu.
+
+Tři věci, které se u logu **nedělají**. Nestahuje se **dopředu ani pro celý seznam** — jen pro ten
+jeden check, na který se kliklo; log běhu je log všech jeho jobů, takže seznam by byl N+1 past o tři
+řády dražší. **Neukládá se na disk**: log není nález, neplatí proti `headSha` a nedá se odmítnout,
+takže v cache vedle nálezů nemá co dělat — nepřežije ani sbalení checku, které stahování navíc
+**zruší**. A nad **10 MB** se nestahuje vůbec: velikost se zjistí předem samostatným dotazem, který
+se vrátí za ~1,2 s bez ohledu na to, jak je log velký, takže věta `Log má 8,4 MB, na zobrazení je
+moc velký.` není odhad. Když velikost neřekne, **stáhne se i tak** a strop se uplatní na tom, co
+doopravdy přišlo — `HEAD` je ochrana proti osmimegovému logu, ne podmínka toho, že se log ukáže
+(#292: chyba jednoho dotazu tehdy vypnula celou funkci). Cena je zapsaná: u toho největšího logu
+odpadá i jeho konec, tedy zrovna tam, kde je odchod do prohlížeče nejotravnější.
 
 **`Změněné soubory`** ukazují **diff v plné šířce**: soubory pod sebou s hlavičkou, která při scrollu
 zůstává nahoře, souhrn `N souborů · +X −Y` a menu na skok mezi soubory. Přejmenování, nové,
@@ -358,10 +412,21 @@ na dosah jedním kliknutím a v liště bral místo, kvůli kterému se v užš�
 
 **Napravo od diffu je panel se segmenty** (#182): nálezy jako karty a Moje review. Panel
 je jediné místo, kde jsou vidět nálezy **bez místa v kódu** — chybějící testy nebo poznámky
-k architektuře; kvůli nim samotné bubliny nestačí. Je vidět ve **všech** záložkách, protože nálezy
-i rozdělané review patří k celému PR, ne k diffu. Klik kamkoli do karty odscrolluje diff
+k architektuře; kvůli nim samotné bubliny nestačí. Klik kamkoli do karty odscrolluje diff
 (a přepne na něj, když jsi v jiném tabu) tak, aby nad nálezem zůstalo pár řádků kontextu,
 a bublinu na chvíli zvýrazní.
+
+**Vidět je ve třech záložkách ze šesti** (#294): v `Přehledu`, ve `Změněných souborech` a
+v `Konverzaci` — tedy tam, kde se vedle něj čte **něco jiného** a otázka „co k tomu nahlásily
+reviewery“ má smysl. V `Kontrolách`, `Nálezech` a `Průběhu` se schová **celý, i se složeným
+proužkem**: v prvním případě ukrajuje šířku obsahu, který ji potřebuje (konec logu), ve zbylých
+dvou je to duplikát — `Nálezy` jsou tytéž nálezy přes celou šířku a `Průběh` záznam týchž běhů.
+Proužek je úzký, ale ne zdarma, a v úzkém okně je to zrovna to místo, kde se obsah láme. Do #242
+tu stálo, že panel je vidět všude; **smyčka nález → `Převzít` → text v mém review se tím nezahodila,
+jen se přestěhovala** — z tabu bez panelu si `Převzít` přepne do tabu, ve kterém panel je, jinak by
+rozepsaná věta spadla někam, kde ji nikdo nehledá. Ze stejného důvodu je `⌘2` v těch třech tabech
+zakázaná a ⌘K v nich složení panelu nenabízí: přestavět tab, do kterého se člověk vrátí, a nenechat
+po tom v okně stopu je horší než zkratka, která nedělá nic.
 
 Segmenty jsou od #242 **dva**: `Průběh` se odstěhoval do vlastní záložky PR, protože se u kódu
 nečte a u spadlé session se do 300 bodů nevešel ani důvod, ani konec logu. Nálezy v panelu
@@ -406,10 +471,14 @@ zvlášť. Ve sbaleném řádku je odmítnutí v `⋯` — vědomý rozdíl prot
 vedle sebe: v tabulce by se šest ovladačů opakovalo na každém řádku a přebily by shrnutí, kvůli
 kterému se tabulka čte.
 
-**Panel vpravo zůstává i tady**, protože smyčka nález → `Převzít` → text v mém review je ta hlavní
-práce a musí se stát naráz. A **prázdná tabulka vysvětlí, proč je prázdná**: schované filtrem
-reviewerů / reviewer nic nenahlásil / session spadla (i se `stderr`) — prázdná obrazovka se totiž
-čte jako „čisto“, a schválený PR s neohlášenou chybou je ta nejdražší chyba, jakou tohle okno umí.
+**Panel vpravo je tady schovaný** (#294) — je to tatáž sada nálezů přes celou šířku, takže by vedle
+sebe stály dvakrát. Smyčka nález → `Převzít` → text v mém review to nezruší: `Převzít` si přepne do
+tabu, ve kterém panel je, a rozepsaná věta tedy skončí na obrazovce. Do #294 tu stálo, že panel
+zůstává, protože se ta smyčka musí stát naráz — děje se pořád naráz, jen o tab vedle.
+
+A **prázdná tabulka vysvětlí, proč je prázdná**: schované filtrem reviewerů / reviewer nic
+nenahlásil / session spadla (i se `stderr`) — prázdná obrazovka se totiž čte jako „čisto“, a
+schválený PR s neohlášenou chybou je ta nejdražší chyba, jakou tohle okno umí.
 
 V **nejmenším okně odpadá sloupec `reviewer · kategorie`**: je to jediný, jehož obsah je i v bublině
 u kódu a v chipech reviewerů nad diffem. Šířka se přitom **předává, ne vyjednává** (#220).
@@ -438,10 +507,13 @@ revieweera nesundá nález druhého; odznak `2×` proto spadne na `1×`. A komen
 z nálezu už převzal do svého review, se odmítnutím **nevyjme** — je to tvoje próza, vyjímá
 se v `Moje review` a bublina to u takového nálezu napíše.
 
-V liště panelu je **koš**, kterým se uložené nálezy zahodí — hodí se, když se změnila sada
-skillů a v záznamu leží nálezy od revieweera, který už neběží. Je to hrubší nástroj než
-odmítnutí: maže celý záznam viditelného commitu, historie starších zůstává, a na repu
-v automatickém režimu se review vzápětí pustí samo.
+V hlavičce záložky `Nálezy` je **`Zahodit nálezy`**, kterým se uložený záznam zahodí — hodí se, když
+se změnila sada skillů a v záznamu leží nálezy od revieweera, který už neběží. Je to hrubší nástroj
+než odmítnutí: maže celý záznam viditelného commitu, historie starších zůstává, a na repu
+v automatickém režimu se review vzápětí pustí samo. Ptá se proto na potvrzení a za běhu je zakázané
+— doběhlý skill by se zapsal do právě vyčištěného záznamu. **Do #242 to byl koš v liště panelu**;
+odstěhoval se spolu se stářím výsledku, protože obojí platí pro uložený záznam, ne pro panel, a
+o 300 bodů se pralo s tím, co se čte.
 
 **Zavřít aplikaci během review se musí potvrdit.** Ukončení session zabije a nálezy, které
 už reviewer nahlásil, se ztratí — z řádku pak vyjde `neběželo`, tedy totéž jako u PR, který
@@ -516,9 +588,11 @@ nepovede, nic se nezablokuje: puntík se řídí voláními a nápověda po hove
 nepovedlo a kdy se to zjišťovalo.
 
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
-PR, sada skillů, blokující kategorie, výchozí režim review, interval pollingu, kolik
-session smí běžet naráz, rozpočet cache a model. Repozitář si může přebít režim
-(`manual`/`automatic`), jazyk nálezů, skilly i kategorie.
+PR, sada skillů, blokující kategorie, výchozí režim review, jazyk nálezů, povolení odesílání,
+notifikace, výchozí pohled na diff, vzhled okna, interval pollingu, kolik session smí běžet
+naráz, denní strop automatu, rozpočet cache a model. Repozitář si může přebít režim
+(`manual`/`automatic`), povolení odesílání, jazyk nálezů, skilly i kategorie — a nic víc:
+pohled na diff, vzhled okna a notifikace jsou vlastnost člověka, ne repozitáře.
 
 **Nálezy chodí česky**, protože okno je české — u firemního repa s mezinárodním týmem se
 dá přepnout na angličtinu, globálně i jen pro to jedno repo. Překládají se **až po
@@ -538,10 +612,13 @@ stavu prázdná, takže dokud se nevyplní, detekce na nic nesahá. Soubor se za
 hodnotami, načítá se při startu i při návratu do aplikace, a když je rozbitý, běží se na
 defaultech a je to vidět.
 
-Editovat ho jde ručně, nebo **oknem nastavení** (⌘, nebo ozubené kolo v toolbaru). Okno
-má dvě záložky: globální hodnoty a per repo, kde se u každého repa z posledního seznamu PR
-nastavuje režim a případný override skillů a kategorií. Ukládá se samo do téhož souboru,
-pár set milisekund po posledním úhozu, a změna se projeví bez restartu. Rozbitý soubor
+Editovat ho jde ručně, nebo **oknem nastavení** (⌘, nebo ozubené kolo v hlavičce okna). Okno
+má **boční navigaci se sedmi stránkami** (#177, do té doby tři záložky): `Zdroje PR`,
+`Review a skilly`, `Diff`, `Odesílání`, `Notifikace`, `Repozitáře` a `Běh`, seskupené podle otázky,
+na kterou odpovídají (`Co se hlídá` / `Co jde ven` / `Prostředí`). Na stránce `Repozitáře` se
+u každého repa z posledního seznamu PR nastavuje režim a případný override skillů a kategorií.
+Ukládá se samo do téhož souboru, pár set milisekund po posledním úhozu, a změna se projeví bez
+restartu. Rozbitý soubor
 editor **nepřepíše** — místo formuláře ukáže chybu a nabídne soubor otevřít. Dokud je
 nastavení vepředu, hlavní okno se lehce rozostří.
 
@@ -575,10 +652,10 @@ Uložené nálezy jsou klíčované head commitem: nové commity je označí jak
 a záznamy PR, který ze seznamu zmizel, se po třiceti dnech uklidí.
 
 **Rozsah v1 podle specifikace je hotový** — všech pět fází (viz [`docs/stav.md`](docs/stav.md)).
-Co přijde po něm, je v milnících M6 až M8.
+Hotové jsou i milníky **M6** (odesílání review), **M7** (konverzace) a **M8** (notifikace), tedy
+poslední naplánované; co přijde teď, jde přes issues.
 
-Z nich už je hotové čtení konverzace: **vlákna od kolegů visí jako bubliny u svých řádků**,
-vedle nálezů. Vyřešená jsou sbalená na jeden pruh s odznakem `vyřešeno` (nemažou se — je to
+Z M7 je čtení konverzace: **vlákna od kolegů visí jako bubliny u svých řádků**, vedle nálezů. Vyřešená jsou sbalená na jeden pruh s odznakem `vyřešeno` (nemažou se — je to
 historie), moje komentáře mají odznak `já` a z každého se dá odskočit na GitHub. Konverzace
 se načte při výběru PR a drží se, dokud se nezmění `updatedAt`; pollingem se netahá, aby
 z jednoho tiku nebylo N podprocesů.
@@ -751,9 +828,8 @@ do kódu nekotví — jejich čísla platila pro starý head, takže by bublina 
 Domov mají v záložce `Konverzace` spolu s review ostatních a komentáři pod PR, a je u nich vidět
 kód, ke kterému se vážou — ten ze **starého** commitu, ne z dnešního.
 
-Co se ve které verzi změnilo, ukazuje **okno `Novinky v PRism`** přímo v aplikaci (✨
-v toolbaru, nebo menu aplikace): vlevo celá historie vydání, vpravo release notes
-té vybrané. **Po aktualizaci se otevře samo**, jednou, s vybranou nejnovější verzí — jinak
+Co se ve které verzi změnilo, ukazuje **okno `Novinky v PRism`** přímo v aplikaci (✨ v hlavičce
+okna, nebo menu aplikace): vlevo celá historie vydání, vpravo release notes té vybrané. **Po aktualizaci se otevře samo**, jednou, s vybranou nejnovější verzí — jinak
 by o novinkách nikdo nevěděl. Podrobnosti jsou v sekci [Novinky](#novinky) níž; totéž je
 i v [releases](https://github.com/ondrajodas/PRism/releases) na GitHubu. Kde projekt je
 jako celek, říká [`docs/stav.md`](docs/stav.md), ne release notes: ten stav by v nich
@@ -889,7 +965,7 @@ Notifikace fungují jedině z `/Applications` — `bin/run.sh` tam aplikaci inst
 
 ## Novinky
 
-Okno `Novinky v PRism` (menu aplikace hned pod `O aplikaci PRism`, nebo ✨ v toolbaru)
+Okno `Novinky v PRism` (menu aplikace hned pod `O aplikaci PRism`, nebo ✨ v hlavičce okna)
 je jedno okno nad jedněmi daty: vlevo seznam všech vydání s tagem, názvem a časem vydání,
 vpravo release notes té vybrané, vykreslené jako Markdown. Dvě obrazovky — „co je nového“
 zvlášť a „historie“ zvlášť — by se dřív nebo později rozešly. **Čas u data je tam schválně:**
@@ -897,10 +973,10 @@ verzí vyjde za jeden den klidně šest, takže samotné `5. 8. 2026` o pořadí
 
 **Po aktualizaci se otevře samo, jednou**, s vybranou nejnovější verzí; vydání novější než to
 naposledy viděné mají v seznamu odznak `nové`. Jinak by o novinkách nikdo nevěděl — a otevřít
-se dá kdykoli — z menu aplikace nebo tlačítkem v toolbaru hlavního okna, hned vedle
+se dá kdykoli — z menu aplikace nebo tlačítkem v hlavičce hlavního okna, hned vedle
 ozubeného kola. Zavírá se **Escem** i ⌘W: je to okno na čtení, takže v něm není co ztratit.
 
-**Otevře se vystředěné v hlavním okně**, ne doprostřed obrazovky — otevírá se z jeho toolbaru,
+**Otevře se vystředěné v hlavním okně**, ne doprostřed obrazovky — otevírá se z jeho hlavičky,
 z menu a po aktualizaci, takže tam se člověk v tu chvíli kouká; na velkém (nebo druhém) monitoru
 by jinak vyskočilo někde vedle. S hlavním oknem u kraje obrazovky se zarovná zpátky na viditelnou
 plochu a bez hlavního okna se otevře tak, jak rozhodne systém. Stejně se od začátku středí okno
@@ -955,10 +1031,12 @@ jinak by po startu vypadala jako nová celá historie.
 - `claude` — Claude Code CLI
 - `git`
 
-Kromě těch tří binárek chodí aplikace na síť **jediným vlastním voláním**: stahuje si stav
-komponent ze status pages GitHubu a Claude pro stavový řádek. Jsou to veřejné endpointy, jde
-o `GET` bez tokenu a bez cookies, a když se nepovede, aplikace o něj nezavadí — puntík se
-pak řídí jen skutečnými voláními. Vše ostatní jde přes podprocesy `gh`, `git` a `claude`.
+Kromě těch tří binárek chodí aplikace na síť **jedinou vlastní cestou** (`HTTPGetting`) a jsou na
+ní dvě věci: stav komponent ze status pages GitHubu a Claude pro stavový řádek, a **avatary**
+autorů a komentujících. Obojí jsou veřejné endpointy, jde o `GET` bez tokenu a bez cookies, a když
+se nepovede, aplikace o něj nezavadí — puntík se pak řídí jen skutečnými voláními a místo avataru
+se nakreslí zástupný symbol. Vše ostatní — včetně anotací a logu spadlého checku — jde přes
+podprocesy `gh`, `git` a `claude`.
 
 Aplikace binárky hledá absolutní cestou, protože GUI aplikace spuštěná z Finderu nedědí
 `PATH` z shellu. Nejdřív zkusí známá místa (`/opt/homebrew/bin`, `/usr/local/bin`,
@@ -1201,6 +1279,7 @@ Tests/                    unit testy — target PRismTests
   Fixtures/gh/            skutečné výstupy gh z veřejných repozitářů (JSON i diffy)
   Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů
   Fixtures/statuspage/    skutečné components.json ze status pages (a jeden s dopsaným incidentem)
+  Fixtures/transcript/    skutečné transcripty claude — dotažení nálezů z přerušeného běhu
 bin/run.sh                build + spuštění jedním příkazem
 bin/worktree.sh           pracovní strom se slotem — paralelní vývoj vedle běžící aplikace
 bin/slot-config.sh        očištěná konfigurace do cache slotu (jediné místo, kde ta očista je)
@@ -1215,12 +1294,14 @@ docs/architektura.md      podrobnosti po modulech
 docs/testovani.md         co se u které oblasti testuje
 docs/navrh.md             kde je vizuální návrh (mockup) a jak se s ním pracuje
 docs/stav.md              co je hotové a co zbývá
+docs/paralelni-vyvoj.md   jak se vyřizuje seznam issues naráz — sloty, subagenti, merge
 docs/claude-cli.md        ověřené chování claude CLI (flagy, tvar eventů)
 docs/github-review-api.md ověřené chování zápisového review API GitHubu (spike k M6)
 docs/superpowers/specs/   návrh a specifikace
 CLAUDE.md                 pravidla pro práci v repu
 README.md                 tento soubor
 .gitignore                artefakty Xcode buildu, SPM, .DS_Store, Signing.local.xcconfig
+.gitattributes            fixtures, které stojí na zakončení řádků (-text, ať je CRLF nedotčené)
 ```
 
 `App/` a `Tests/` jsou v projektu napojené jako **buildable folders** — obsah se do
