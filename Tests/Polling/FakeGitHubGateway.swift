@@ -134,8 +134,13 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return logSize
     }
 
+    /// Závora **před** vrácením logu. Na ní se dá pozorovat mezistav `.loading` — tedy to, jestli se
+    /// do hlášky dostala velikost z `HEAD`u; bez ní se dá zkontrolovat jen výsledek.
+    var jobLogGate: AsyncGate?
+
     func fetchJobLog(repo: RepoID, jobID: Int) async throws -> String {
         logsAsked.append(jobID)
+        if let jobLogGate { await jobLogGate.wait() }
         if let jobLogFailure { throw jobLogFailure }
         return jobLog
     }

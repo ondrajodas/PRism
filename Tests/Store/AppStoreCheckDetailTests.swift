@@ -167,7 +167,9 @@ struct AppStoreCheckDetailTests {
     @Test("Nad stropem se pro log vůbec nejde")
     func doesNotFetchLogsOverTheLimit() async throws {
         let gateway = gateway()
-        gateway.logSize = 8_777_952
+        // Nad stropem, který od #292 stojí na 10 MB — největší log na našich repech (8,78 MB) se
+        // dneska **vejde**, takže se na něj tenhle test už nedá postavit.
+        gateway.logSize = 12_000_000
         gateway.jobLog = "tohle se nemá stáhnout"
         let store = store(gateway)
         let check = check()
@@ -273,6 +275,37 @@ struct AppStoreCheckDetailTests {
         let detail = try #require(store.checkDetail(of: check.name, in: pr))
         guard case .loaded = detail.log else {
             Issue.record("mělo být .loaded, je \(detail.log)")
+            return
+        }
+    }
+
+    /// **Mezistav, ne jen výsledek** (#292): dokud se stahuje, drží se velikost z `HEAD`u, aby se
+    /// dala napsat do hlášky. Se stropem na 10 MB se čeká vteřiny až desítky vteřin, takže spinner
+    /// bez čísla je k nerozeznání od zamrznutí.
+    @Test("Dokud se stahuje, drží se velikost z HEADu")
+    func keepsTheKnownSizeWhileDownloading() async throws {
+        let gateway = gateway()
+        gateway.logSize = 8_777_952
+        gateway.jobLog = "log"
+        let gate = AsyncGate()
+        gateway.jobLogGate = gate
+        let store = store(gateway)
+        let check = check()
+
+        store.toggleCheck(check, in: pr)
+        try await gate.waitUntilReached()
+
+        let detail = try #require(store.checkDetail(of: check.name, in: pr))
+        guard case .loading(let bytes) = detail.log else {
+            Issue.record("během stahování má být .loading, je \(detail.log)")
+            return
+        }
+        #expect(bytes == 8_777_952)
+
+        await gate.release()
+        await settle(store, check: check)
+        guard case .loaded = store.checkDetail(of: check.name, in: pr)?.log else {
+            Issue.record("po uvolnění závory se log nenačetl")
             return
         }
     }

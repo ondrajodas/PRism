@@ -20,12 +20,6 @@ struct CheckDetailView: View {
     /// 34px` u `.ann`, `.chkacts` i `.logtail`).
     private let indent: CGFloat = 34
 
-    /// Šířka, kterou tab dostal (#220). Konec logu ji potřebuje, aby se dal **zarovnat doleva**:
-    /// `ScrollView` obsah užší než viewport vystředí a uvnitř dvouosého scrollu se šířka
-    /// vyjednat nedá (obsah dostane neomezenou nabídku). `nil` = nikdo neměřil (náhledy, testy),
-    /// pak se nechá být.
-    @Environment(\.availableWidth) private var availableWidth
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             annotations
@@ -194,8 +188,11 @@ struct CheckDetailView: View {
 
     @ViewBuilder private var log: some View {
         switch detail.log {
-        case .loading:
-            note("Stahuji konec logu…", systemImage: nil, spinner: true)
+        case .loading(let bytes):
+            // Věta se skládá v `Policy`, ne tady: je to rozhodnutí o tom, co se smí slíbit, když
+            // velikost neznáme (#292). Sbalení checku stahování zruší, takže je to čekání, ze
+            // kterého je cesta pryč.
+            note(Policy.logDownloadNotice(bytes: bytes), systemImage: nil, spinner: true)
         case .loaded(_, let tail):
             tailView(tail)
         case .tooLarge(let reason):
@@ -209,40 +206,51 @@ struct CheckDetailView: View {
         }
     }
 
+    /// Sazba konce logu — velikost, prokládání a strop na výšku okýnka.
+    ///
+    /// Drží se pohromadě, protože **výška se z prvních dvou počítá** (#236): kdo si říká o velikost,
+    /// musí ji měřit na tom, na čem kreslí.
+    static let logFontSize: CGFloat = 10.5
+    static let logLineSpacing: CGFloat = 2
+    static let logMaxHeight: CGFloat = 320
+
     /// Konec logu (`.logtail`): mono, bez zalamování, s vodorovným scrollem.
     ///
-    /// **Jeden `Text` na celý ocas**, ne `Text` na řádek: tři stovky řádků jako tři stovky views
-    /// je tatáž chyba, jakou #252 vyndal z gutteru diffu. Jeden text si SwiftUI nasází sám.
+    /// **Kreslí to `NSTextView`, ne SwiftUI `Text`** (#292) — a je to to jediné, co dovoluje ukázat
+    /// tisíce řádků: `Text` se `.fixedSize()` roste kvadraticky (2 000 řádků 6 s, 10 000 řádků dvě
+    /// a půl minuty), kdežto TextKit sází **líně po viewportu** (2 000 řádků 1,12 ms). Čísla i rozbor
+    /// jsou u `LogTailTextView`.
+    ///
+    /// Odtud plyne i to, co odsud **zmizelo**: dvouosý `ScrollView`, `fixedSize()` a dolní mez šířky
+    /// z `availableWidth` (#220). Zarovnání doleva ani scrollování už není co vyjednávat — obojí
+    /// dělá `NSScrollView` sám, a proto je tenhle kus kódu kratší než dřív.
     private func tailView(_ tail: LogTail) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             // **Tiše zkrácený log tvrdí, že job začal uprostřed** — proto hlavička s počtem.
             if let notice = Policy.logTailNotice(tail) {
                 Text(verbatim: notice)
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(.system(size: Self.logFontSize, design: .monospaced))
                     .foregroundStyle(Palette.ink3)
             }
-            // **Výška je omezená a scrolluje se uvnitř.** Tři stovky řádků nasazených naplno
-            // odtlačí zbytek seznamu checků mimo obrazovku — a to je zrovna to, kvůli čemu se
+            // **Výška je zastropovaná a scrolluje se uvnitř.** Dva tisíce řádků nasazených naplno by
+            // odtlačily zbytek seznamu checků mimo obrazovku — a to je zrovna to, kvůli čemu se
             // detail stěhoval z `Přehledu` (#215). Návrh tuhle mez nekreslí, protože v něm je log
             // ukázaný na osmi řádcích; s `Policy.logTailLines` řádky je potřeba.
-            ScrollView([.horizontal, .vertical], showsIndicators: true) {
-                // **Doleva, ne na střed.** `ScrollView` obsah užší než viewport vystředí, takže
-                // krátké řádky logu skončily v polovině plochy — chyceno offscreen renderem.
-                // `frame(maxWidth:alignment:)` to nespraví: `fixedSize()` velikost zamkne, takže
-                // rámeček nad ním nemá co roztáhnout. Zabere až `Spacer` **vedle** textu.
-                Text(verbatim: tail.text)
-                    .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(Palette.ink2)
-                    .lineSpacing(2)
-                    .textSelection(.enabled)
-                    .fixedSize()
-                    // Šířka **spočítaná, ne vyjednaná** (#220): obsah musí být aspoň tak široký
-                    // jako viewport, jinak ho `ScrollView` vystředí. `Spacer` to nespraví —
-                    // uvnitř dvouosého scrollu dostane obsah neomezenou nabídku, takže se
-                    // `Spacer` stáhne na nulu; chyceno offscreen renderem.
-                    .frame(minWidth: contentWidth, alignment: .leading)
-            }
-            .frame(maxHeight: 320)
+            //
+            // Krátký log si přitom vezme jen tolik, kolik má řádků, takže pod třířádkovým logem
+            // nezbyde prázdné okýnko.
+            LogTailTextView(
+                text: tail.text,
+                fontSize: Self.logFontSize,
+                lineSpacing: Self.logLineSpacing,
+                color: Palette.ink2
+            )
+            .frame(height: LogTailTextView.height(
+                forLines: tail.lineCount,
+                fontSize: Self.logFontSize,
+                lineSpacing: Self.logLineSpacing,
+                limit: Self.logMaxHeight
+            ))
         }
         .padding(.leading, indent)
         .padding(.trailing, 12)
@@ -250,14 +258,6 @@ struct CheckDetailView: View {
         .padding(.bottom, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Palette.raised)
-    }
-
-    /// Kolik místa má obsah logu k dispozici — šířka tabu bez odsazení a bez rámečku karty.
-    /// `0` znamená „nevím“, tedy žádná dolní mez: text si vezme svou vlastní šířku.
-    private var contentWidth: CGFloat {
-        guard let availableWidth else { return 0 }
-        // 16 na každou stranu je padding tabu, 1 obrys karty, `indent` + 12 je odsazení detailu.
-        return max(0, availableWidth - 2 * 16 - 2 - indent - 12)
     }
 
     private func note(_ text: String, systemImage: String?, spinner: Bool = false) -> some View {

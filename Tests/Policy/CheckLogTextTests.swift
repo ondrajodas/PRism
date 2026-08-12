@@ -171,10 +171,10 @@ struct CheckLogTextTests {
     /// a test by přitom tvrdil něco o formátování čísel, ne o téhle větě.
     @Test("Hláška o vynechaných řádcích se skloňuje")
     func noticeIsDeclined() {
-        #expect(Policy.logTailNotice(LogTail(text: "", omittedLines: 1)) == "— starších 1 řádek se nevešlo —")
-        #expect(Policy.logTailNotice(LogTail(text: "", omittedLines: 3)) == "— starších 3 řádky se nevešlo —")
+        #expect(Policy.logTailNotice(LogTail(text: "", omittedLines: 1, lineCount: 0)) == "— starších 1 řádek se nevešlo —")
+        #expect(Policy.logTailNotice(LogTail(text: "", omittedLines: 3, lineCount: 0)) == "— starších 3 řádky se nevešlo —")
 
-        let many = try? #require(Policy.logTailNotice(LogTail(text: "", omittedLines: 3_812)))
+        let many = try? #require(Policy.logTailNotice(LogTail(text: "", omittedLines: 3_812, lineCount: 0)))
         #expect(many?.hasPrefix("— starších ") == true)
         #expect(many?.hasSuffix(" řádků se nevešlo —") == true)
         #expect(many?.contains("812") == true)
@@ -184,10 +184,14 @@ struct CheckLogTextTests {
 
     /// Strop je **změřený, ne odhadnutý** (#275): dvoumegový ocas skutečného logu se v `NSTextView`
     /// nasází za 220 ms, celých 8,78 MB za 850 ms — 2 MB tedy má rezervu.
-    @Test("Do dvou megabajtů se log stahuje")
+    @Test("Do deseti megabajtů se log stahuje")
     func fetchesUpToTheLimit() {
         #expect(Policy.logAvailability(bytes: 1_024) == .fetchable)
         #expect(Policy.logAvailability(bytes: 237_000) == .fetchable, "změřený malý log")
+        // **Největší log na našich repech se od #292 vejde.** Do té doby byl 4× nad stropem,
+        // a přitom se v sheetu otevře za 6,20 ms — 850 ms z #214 měřilo vynucenou sazbu, kterou
+        // aplikace nedělá.
+        #expect(Policy.logAvailability(bytes: 8_777_952) == .fetchable, "změřený největší log")
         #expect(Policy.logAvailability(bytes: Policy.logSizeLimit) == .fetchable)
     }
 
@@ -195,19 +199,61 @@ struct CheckLogTextTests {
     /// takže to není odhad.
     @Test("Nad stropem se log nestahuje a řekne se, jak je velký")
     func refusesTooLargeLogs() throws {
-        guard case .tooLarge(let reason) = Policy.logAvailability(bytes: 8_777_952) else {
-            Issue.record("osmimegový log má být nad stropem")
+        guard case .tooLarge(let reason) = Policy.logAvailability(bytes: 12_000_000) else {
+            Issue.record("dvanáctimegový log má být nad stropem")
             return
         }
 
-        #expect(reason.contains("8"), "věta má nést konkrétní velikost, ne jen „moc velký“")
+        #expect(reason.contains("12"), "věta má nést konkrétní velikost, ne jen „moc velký“")
         #expect(reason.contains("MB"))
     }
 
-    @Test("Strop je zrovna na dvou megabajtech")
-    func limitIsTwoMegabytes() {
-        #expect(Policy.logSizeLimit == 2 * 1024 * 1024)
+    /// Hodnoty stropů jsou **změřená rozhodnutí**, ne náhoda, takže se tvrdí přímo — kdo je změní,
+    /// má u toho projít i důvody v dokumentaci té konstanty.
+    @Test("Stropy jsou tam, kde je měření nechalo")
+    func limitsAreWhereMeasurementLeftThem() {
+        #expect(Policy.logSizeLimit == 10 * 1024 * 1024)
         #expect(Policy.logAvailability(bytes: Policy.logSizeLimit + 1) != .fetchable)
+        #expect(Policy.logTailLines == 2_000)
+    }
+
+    // MARK: - Věta, dokud se stahuje
+
+    /// **Velikost se slíbí, jen když je známá** (#292). Se stropem na 10 MB se čeká vteřiny až
+    /// desítky vteřin, takže mlčící spinner vypadá jako zamrznutí — ale odhad by tvrdil víc, než
+    /// data unesou.
+    @Test("Hláška o stahování nese velikost, když ji známe")
+    func downloadNoticeCarriesTheSize() throws {
+        let known = Policy.logDownloadNotice(bytes: 8_777_952)
+
+        #expect(known.contains("8"), "věta má nést konkrétní velikost")
+        #expect(known.contains("MB"))
+        #expect(known.hasSuffix("…"))
+    }
+
+    @Test("Bez známé velikosti hláška nic neslibuje")
+    func downloadNoticeSaysNothingWithoutTheSize() {
+        let unknown = Policy.logDownloadNotice(bytes: nil)
+
+        #expect(unknown == "Stahuji konec logu…")
+        #expect(!unknown.contains("MB"))
+        #expect(!unknown.contains("0"))
+    }
+
+    // MARK: - Počet řádků ocasu
+
+    /// `lineCount` nese ocas s sebou, protože **z něj se počítá výška okýnka při každém
+    /// překreslení** (#292) — scan megabajtového textu v `body` je to, co #224 zakazuje. Musí tedy
+    /// odpovídat textu, jinak by okýnko mělo jinou výšku, než kolik je v něm řádků.
+    @Test("Počet řádků odpovídá textu")
+    func lineCountMatchesTheText() {
+        let short = Policy.logTail("a\nb\nc", lines: 300)
+        #expect(short.lineCount == 3)
+        #expect(short.lineCount == Policy.logLines(of: short.text).count)
+
+        let long = Policy.logTail((1...1_000).map(String.init).joined(separator: "\n"), lines: 300)
+        #expect(long.lineCount == 300)
+        #expect(long.lineCount == Policy.logLines(of: long.text).count)
     }
 
     // MARK: - Zakončení řádků
@@ -220,9 +266,12 @@ struct CheckLogTextTests {
     func cutsLogsWithWindowsLineEndings() {
         let raw = (1...400).map { "řádek \($0)" }.joined(separator: "\r\n")
 
-        let tail = Policy.logTail(raw)
+        // Strop se předává **výslovně**: tenhle test je o zakončení řádků, ne o hodnotě konstanty,
+        // takže se nemá rozbít, když se `logTailLines` pohne (a u #292 se pohnul).
+        let tail = Policy.logTail(raw, lines: 300)
 
-        #expect(Policy.logLines(of: tail.text).count == Policy.logTailLines)
+        #expect(Policy.logLines(of: tail.text).count == 300)
+        #expect(tail.lineCount == 300)
         #expect(tail.omittedLines == 100)
         #expect(tail.text.hasSuffix("řádek 400"))
         // Zakončení se přitom **znormalizuje**: v ocasu už `CR` nezbyde. Jinak by ho `NSTextView`

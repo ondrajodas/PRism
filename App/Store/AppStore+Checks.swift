@@ -105,18 +105,27 @@ extension AppStore {
                 checkDetails[key]?.log = .tooLarge(reason)
                 return
             }
+            // **Dokud se stahuje, řekne se velikost** (#292). Stažení 8,78 MB trvalo ve třech
+            // měřeních za sebou 5,75 / 27,44 / 10,67 s — a spinner bez vysvětlení je po půl minutě
+            // k nerozeznání od zamrznutí. U desetimegového stropu je to běžný případ, ne krajní.
+            checkDetails[key]?.log = .loading(bytes: known)
 
             let raw = try await gateway.fetchJobLog(repo: repo, jobID: jobID)
             guard !Task.isCancelled, checkDetails[key] != nil else { return }
             // **Strop podruhé, na skutečné velikosti.** U známé velikosti to nic nemění (je to
-            // tentýž text), u neznámé je to jediné místo, kde se mez ještě dá udržet: `Ukázat celý
-            // log` by jinak nabídl sazbu 8,78 MB v `NSTextView`, což je změřených 850 ms.
+            // tentýž text), u neznámé je to jediné místo, kde se mez ještě dá udržet.
             if case .tooLarge(let reason) = Policy.logAvailability(bytes: raw.utf8.count) {
                 checkDetails[key]?.log = .tooLarge(reason)
                 return
             }
+            // **Příprava textu jde mimo hlavní vlákno** (#292): na 8,78MB logu stojí `logTail`
+            // **808 ms** (ANSI 192 ms, timestampy 348 ms, zbytek dělení a slepení), a `AppStore` je
+            // `@MainActor` — okno by tu dobu stálo. Je to čistá funkce nad `String`em, takže mimo
+            // actor nic nedrží; zrušení se po návratu kontroluje jako všude jinde.
+            let tail = await Task.detached { Policy.logTail(raw) }.value
+            guard !Task.isCancelled, checkDetails[key] != nil else { return }
             // Celý text se drží kvůli `Ukázat celý log`; ořez je věc zobrazení, ne stahování.
-            checkDetails[key]?.log = .loaded(full: raw, tail: Policy.logTail(raw))
+            checkDetails[key]?.log = .loaded(full: raw, tail: tail)
         } catch is CancellationError {
             // Sbalený check není porucha.
         } catch {
@@ -161,7 +170,7 @@ struct CheckKey: Hashable, Sendable {
 /// Co se ví o rozbaleném checku (#214). Dvě nezávislé cesty, každá se svým stavem.
 struct CheckDetailState: Hashable, Sendable {
     var annotations: AnnotationsState = .loading
-    var log: LogState = .loading
+    var log: LogState = .loading(bytes: nil)
 
     /// Anotace check-runu. **Selhání je vlastní stav**, ne prázdno: prázdno znamená „workflow je
     /// neemituje“, což je běžné, kdežto chyba znamená „nevíme“.
@@ -174,7 +183,10 @@ struct CheckDetailState: Hashable, Sendable {
     /// Log jobu. Čtyři stavy, protože „moc velký“ není chyba ani prázdno — je to rozhodnutí
     /// s vysvětlením, u kterého se ani nestahovalo.
     enum LogState: Hashable, Sendable {
-        case loading
+        /// Stahuje se. `bytes` je velikost z `HEAD`u, když ji řekl — kreslí se do hlášky, protože
+        /// u desetimegového stropu se čeká vteřiny až desítky vteřin (#292) a mlčící spinner je
+        /// k nerozeznání od zamrznutí. `nil` = velikost neznáme, věta ji tedy neslíbí.
+        case loading(bytes: Int?)
         case loaded(full: String, tail: LogTail)
         /// Nad stropem — věta s konkrétní velikostí, log se **nestahoval**.
         case tooLarge(String)

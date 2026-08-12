@@ -2673,11 +2673,11 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     bors odkazuje mimo GitHub) — u takového checku se detail nenabízí, protože tlačítko, které
     skončí chybou, je horší než žádné. Pozor na past: `…/runs/<runId>` končí taky číslem, ale je to
     **běh**, ne job.
-  - **Nad 2 MB se log nestahuje vůbec** a na jeho místě je věta s konkrétní velikostí. Rozhoduje
+  - **Nad 10 MB se log nestahuje vůbec** a na jeho místě je věta s konkrétní velikostí. Rozhoduje
     `Content-Length` z `HEAD`, který je levný a **konstantně** levný (~1,2 s u 33 kB i u 8,78 MB),
-    takže věta není odhad. Cena rozhodnutí: nad stropem odpadá i **konec** logu, tedy zrovna
-    u toho největšího — obejít to částečným stažením nejde, `Range` přes `gh` se na redirect do
-    Azure blobu nepřenese a vrátí celých 8,78 MB (změřeno).
+    takže věta není odhad. Cena rozhodnutí: nad stropem odpadá i **konec** logu — obejít to částečným
+    stažením nejde, `Range` přes `gh` se na redirect do Azure blobu nepřenese a vrátí celých 8,78 MB
+    (změřeno).
   - **`HEAD` je ochrana, ne podmínka** (#292, mění #214). Když velikost **nepřijde**, log se přesto
     stáhne a strop se uplatní na tom, co doopravdy přišlo (`raw.utf8.count`). Do #292 se v tom
     případě nestahovalo — a protože rozbor hlaviček velikost nikdy nevydal, byl konec logu vypnutý
@@ -2688,12 +2688,62 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     Není to zapomenutá chyba: hned za ním jde stažení, tedy ta operace, o kterou uživateli jde.
     Povede-li se, není o čem informovat; nepovede-li se, dostane **chybu stažení**, která nese kód
     i výstup `gh` — tedy víc, než by řekla chyba dotazu na velikost.
-  - **Strop je změřený, ne odhadnutý** (zadání to chtělo kvůli #275): dvoumegový ocas skutečného
-    logu (5 843 řádků, nejdelší 2 003 znaků) se v `NSTextView` nasází za **220 ms**, celých 8,78 MB
-    za 850 ms. 2 MB tedy zůstalo se rezervou.
+  - **Stropy jsou 10 MB a 2 000 řádků, a obojí je změřené** (#292; do té doby 2 MB a 300 řádků).
+    Rozhodly dvě věci, které #214 neměřilo:
+
+    | Co | 2 MB | 8,78 MB (největší log na našich repech) |
+    |---|---|---|
+    | otevření sheetu (`setAttributedString` + kresba) | 3,92 ms | **6,57 ms** |
+    | projíždění, medián snímku | 0,00 ms | **0,00 ms** |
+    | projíždění, nejhorší snímek | 0,01 ms | **0,01 ms** |
+    | *vynucená* sazba celého dokumentu | 145,84 ms | 631,91 ms |
+
+    **Poslední řádek té tabulky je to, co #214 měřilo** (`ensureLayout` + `usedRect`) — a je to
+    jediná věc, kterou aplikace nedělá: `SelectableCodeView` text jen předá a TextKit sází **líně po
+    viewportu**. Odtud tehdy vyšel strop o řád nižší, než je potřeba. Poučení, které přežije tenhle
+    strop: **měřit se musí ta cesta, kterou kód doopravdy jde.**
+
+    Strop tedy nedrží kreslení, ale **stahování**: 8,78 MB stahuje `gh` ve třech měřeních za sebou
+    **5,75 / 27,44 / 10,67 s** (síť, ne CPU) a celý text zůstává v paměti okna. Proto se dokud se
+    stahuje, píše velikost do hlášky (`Policy.logDownloadNotice`) — mlčící spinner je po půl minutě
+    k nerozeznání od zamrznutí — a proto **sbalení checku `gh` zabije** (změřeno: procesů 0 → 1 → 0).
+  - **Příprava textu běží mimo hlavní vlákno** (#292). `Policy.logTail` na 8,78MB logu stojí
+    **814 ms** (ANSI 198 ms, timestampy 372 ms, zbytek dělení a slepení řádků) a `AppStore` je
+    `@MainActor`, takže by okno tu dobu stálo. Je to čistá funkce nad `String`em, takže `Task.detached`
+    nic nedrží; zrušení se po návratu kontroluje jako všude jinde. Cena **nezávisí na počtu řádků
+    ocasu** (300 i 25 000 řádků → 814 ms), protože rozhoduje velikost vstupu, ne výřezu.
   - **Log se ořezává od konce a řekne se, kolik se nevešlo** (`LogTail`) — tiše zkrácený log tvrdí,
     že job začal uprostřed. Ořez je věc **zobrazení, ne úspory stahování**: API vrací celý log
     jedním requestem, takže celý text zůstává pro `Ukázat celý log`.
+  - **Konec logu kreslí `LogTailTextView` (`NSTextView`), ne SwiftUI `Text`** (#292) — a je to to
+    jediné, co dovoluje ukázat tisíce řádků:
+
+    | Řádků konce logu | SwiftUI `Text` se `.fixedSize()` | `NSTextView` |
+    |---|---|---|
+    | 300 | 107,85 ms | **2,06 ms** |
+    | 2 000 | 6 210,22 ms | **1,96 ms** |
+    | 10 000 | 156 432,33 ms | **6,81 ms** |
+
+    Dvě a půl minuty na deseti tisících řádcích není opomenutí, které by šlo doladit: `Text` musí znát
+    velikost celku dopředu (a u řádků o 2 258 znacích je ta velikost 13 930 bodů na šířku), kdežto
+    TextKit sází líně po viewportu. Odtud plyne i to, co v tom view **zmizelo**: dvouosý `ScrollView`,
+    `fixedSize()` a dolní mez šířky z `availableWidth` (#220) — zarovnání doleva ani scrollování už
+    není co vyjednávat.
+
+    Dvě věci, které to view musí dělat a z kódu nejsou zjevné. **Otevírá se na konci logu**
+    (vodorovně na nule): to, kvůli čemu se log otevírá, je na posledních řádcích a se dvěma tisíci
+    řádků je začátek ocasu sto obrazovek daleko; skok na konec dokumentu přitom sám zůstane u konce
+    nejdelšího řádku, tedy uprostřed slova (chyceno vykreslením `NSScrollView`u do PNG). A **text se
+    přepisuje jen při změně** (`Coordinator`), protože přepsání zahodí výběr i polohu scrollu.
+
+    Vedlejší zisk, který se nehledal: konec logu je **vybíratelný**, takže se z něj kopíruje bez
+    otevírání sheetu.
+  - **Výška okýnka se počítá z metriky fontu, kterým se kreslí** (#236, `LogTailTextView.height`):
+    krátký log si vezme jen tolik, kolik má řádků, dlouhý se zastropuje na 320 bodech a scrolluje
+    uvnitř. Rezerva na vodorovný scroller je opsané číslo (13 bodů), protože `NSScroller.scrollerWidth`
+    je vázaná na hlavní vlákno — **drží ji test**, který ji porovnává se systémem, ne odhad. Na
+    `preferredScrollerStyle` se schválně neptáme: mění se připojením myši, a okýnko, kterému se tím
+    mění výška, je horší než pár bodů rezervy.
   - **ANSI se strhává a timestampy se schovávají.** ANSI je v obou změřených logách (116 řádků
     v 8,78MB) a bez toho se v okně objeví `^[[36;1m` uprostřed věty. Timestamp má skoro každý řádek
     (25 528 z 25 534) a zabírá 28 znaků, tedy ukrajuje šířku zrovna tam, kde je potřeba přečíst konec

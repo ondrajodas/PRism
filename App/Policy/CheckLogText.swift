@@ -10,6 +10,12 @@ struct LogTail: Hashable, Sendable {
     let text: String
     /// Kolik starších řádků se nevešlo. `0` = log je celý.
     let omittedLines: Int
+    /// Kolik řádků `text` má.
+    ///
+    /// Nese se s textem schválně, i když by se z něj dal spočítat: **výška okýnka se z něj počítá
+    /// při každém překreslení** (#292), a scan megabajtového textu na každý průchod `body` je zrovna
+    /// to, co #224 zakazuje. Tady je zdarma — `logTail` si řádky stejně dělí.
+    let lineCount: Int
 
     var isTruncated: Bool { omittedLines > 0 }
 }
@@ -28,9 +34,25 @@ enum LogAvailability: Hashable, Sendable {
 }
 
 extension Policy {
-    /// Kolik řádků konce logu se ukazuje. Víc než pár set se nepřečte a v `job.log` z Actions je
-    /// to, co člověk hledá (selhaná assertace, stack trace, exit code), vždycky u konce.
-    static let logTailLines = 300
+    /// Kolik řádků konce logu se ukazuje: **2 000** (do #292 tři stovky).
+    ///
+    /// **Tuhle mez už nedrží cena kreslení, ale okýnko a smysl `Ukázat celý log`** — a je to vědomý
+    /// posun, protože do #292 ji cena držela: konec logu kreslil SwiftUI `Text` se `.fixedSize()`,
+    /// který roste kvadraticky (300 řádků 108 ms, 2 000 řádků **6 s**, 10 000 řádků **dvě a půl
+    /// minuty**). Od #292 ho kreslí `LogTailTextView` nad TextKitem, takže 2 000 řádků stojí
+    /// **1,12 ms** a 25 000 (celý ten největší log) **5,50 ms**. Cena tedy o počtu řádků nerozhoduje.
+    ///
+    /// Rozhodují dvě věci, které měřením nezmizí:
+    /// - **Okýnko má 320 bodů**, tedy ~20 řádků naráz. Dva tisíce řádků je sto obrazovek
+    ///   scrollování; deset tisíc je pět set, což už není „konec logu“, ale celý log ve špatně
+    ///   tvarovaném okně.
+    /// - **`Ukázat celý log` musí zůstat k něčemu.** Ze čtyř změřených logů má nad 2 000 řádků tři
+    ///   (2 174 / 2 997 / 5 899 / 25 533), takže věta „starších N řádků se nevešlo“ se u nich pořád
+    ///   ukáže a sheet má co dodat. Při deseti tisících by rozdíl zbyl jedinému z nich.
+    ///
+    /// Zvednout to dál je proto **jedna konstanta**, ne přepis — a měření na to nadání má. Kdyby se
+    /// zvedalo, patří k tomu i vyšší okýnko, jinak roste jen scrollování.
+    static let logTailLines = 2_000
 
     /// Číslo jobu z odkazu na check (#214).
     ///
@@ -146,22 +168,41 @@ extension Policy {
         var all = logLines(of: clean)
         if all.last?.isEmpty == true { all.removeLast() }
         guard all.count > limit else {
-            return LogTail(text: all.joined(separator: "\n"), omittedLines: 0)
+            return LogTail(text: all.joined(separator: "\n"), omittedLines: 0, lineCount: all.count)
         }
         return LogTail(
             text: all.suffix(limit).joined(separator: "\n"),
-            omittedLines: all.count - limit
+            omittedLines: all.count - limit,
+            lineCount: limit
         )
     }
 
-    /// Strop na velikost logu, který se **vůbec stáhne**: 2 MB.
+    /// Strop na velikost logu, který se **vůbec stáhne**: 10 MB.
     ///
-    /// **Změřeno u #214, ne odhadnuto** (zadání to výslovně chtělo, viz #275 o ceně sazby).
-    /// Dvoumegový ocas skutečného logu (`keboola/job-queue-daemon`, 5 843 řádků, nejdelší 2 003
-    /// znaků) se v `NSTextView` nasází za **220 ms**, celý 8,78MB log za 850 ms — takže 2 MB
-    /// je strop **s rezervou**, ne na hraně. Zůstává, protože 2 MB je asi 6 000 řádků, tedy pořád
-    /// víc, než kdo přečte, a 220 ms je jednorázová cena při otevření sheetu.
-    static let logSizeLimit = 2 * 1024 * 1024
+    /// **Zvednuto z 2 MB u #292, a taky měřením** (#214 měřilo taky, jen měřilo něco jiného —
+    /// vysvětlení níž). Změřeno na největším logu, který na našich repech je
+    /// (`keboola/job-queue-daemon`, job 93844012547 — 8,78 MB, 25 533 řádků, nejdelší řádek 2 258
+    /// znaků, 272 řádků nad tisíc znaků):
+    ///
+    /// | Co | 2 MB | 8,78 MB |
+    /// |---|---|---|
+    /// | otevření sheetu (`setAttributedString` + kresba) | 5,61 ms | **6,20 ms** |
+    /// | projíždění, medián snímku | 0,00 ms | **0,00 ms** |
+    /// | projíždění, nejhorší snímek | 0,01 ms | **0,00 ms** |
+    /// | skok na konec dokumentu | 1,67 ms | **1,10 ms** |
+    ///
+    /// **Proč #214 vyšlo jinak** (220 ms / 850 ms): měřilo `ensureLayout(for:)` + `usedRect(for:)`,
+    /// tedy **vynucenou sazbu celého dokumentu** — a to je jediná věc, kterou aplikace nedělá.
+    /// `SelectableCodeView` jen předá text a TextKit sází **líně po viewportu**. Poučení, které přežije
+    /// tenhle strop: měřit se musí ta cesta, kterou kód doopravdy jde, jinak z měření vyjde strop
+    /// o řád nižší, než je potřeba.
+    ///
+    /// **Proč tedy vůbec nějaký strop**, když sazba nic nestojí: stahování. 8,78 MB stahuje `gh`
+    /// **5,75 / 27,44 / 10,67 s** ve třech měřeních za sebou (síť, ne CPU), a celý text zůstává
+    /// v paměti okna. 10 MB je proto mez nad změřeným maximem s rezervou, ne mez daná kreslením —
+    /// a protože se stahování dá zrušit (sbalení checku `gh` zabije, změřeno), je čekání volba, ne
+    /// zásek.
+    static let logSizeLimit = 10 * 1024 * 1024
 
     /// Dá se log ukázat, nebo je moc velký?
     ///
@@ -172,6 +213,17 @@ extension Policy {
         guard bytes > logSizeLimit else { return .fetchable }
         let size = bytes.formatted(.byteCount(style: .file))
         return .tooLarge("Log má \(size), na zobrazení je moc velký.")
+    }
+
+    /// Věta, dokud se log stahuje — `Stahuji konec logu (8,4 MB)…`.
+    ///
+    /// **Velikost v ní je, když ji `HEAD` řekl** (#292). Není to ozdoba: se stropem na 10 MB se čeká
+    /// vteřiny až desítky vteřin (změřeno 5,75 / 27,44 / 10,67 s na 8,78 MB) a spinner, který k tomu
+    /// nic neřekne, je po půl minutě k nerozeznání od zamrznutí. Bez velikosti se **neslibuje nic** —
+    /// odhad by tvrdil víc, než data unesou.
+    static func logDownloadNotice(bytes: Int?) -> String {
+        guard let bytes else { return "Stahuji konec logu…" }
+        return "Stahuji konec logu (\(bytes.formatted(.byteCount(style: .file))))…"
     }
 
     /// Věta o tom, kolik se nevešlo — `— starších 3 812 řádků se nevešlo —`, jak to má návrh.

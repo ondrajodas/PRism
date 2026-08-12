@@ -1232,7 +1232,34 @@ osmimegovému logu, ne podmínka toho, že se log ukáže — bez velikosti se t
 uplatní na tom, co doopravdy přišlo. Chyba jednoho dotazu tak nemůže vypnout celou funkci, což je
 přesně to, co se stalo. `malformedOutput` u toho dostal **fázi** (`Vyhledávání pull requestů`,
 `Anotace check-runu`, …): „Výstupu gh nerozumím“ samo neřekne ani to, která obrazovka je poloprázdná.
-Testů je o 52 víc (2373 po zvednutí mainu), z toho **18 na tuhle opravu** v jedné nové suitě.
+
+**A po proklikání se zvedly stropy: 2 MB → 10 MB a 300 → 2 000 řádků** (#292). Otázka byla „nešlo by
+zobrazovat víc, nesekne se to?“, a odpověď dalo měření na největším logu, který na našich repech je
+(8,78 MB, 25 533 řádků, nejdelší řádek 2 258 znaků).
+
+**Sekla by se — ale na něčem jiném, než kde stál strop.** Konec logu kreslil SwiftUI `Text`
+se `.fixedSize()`, který roste kvadraticky: 300 řádků 108 ms, 2 000 řádků **6,2 s**, 10 000 řádků
+**156 s**. Deset tisíc řádků by tedy okno zamrzlo na dvě a půl minuty. Kreslí ho proto `NSTextView`
+(`LogTailTextView`), kde tytéž tři velikosti stojí 2,06 / 1,96 / 6,81 ms, protože TextKit sází líně po
+viewportu — a projíždění, tedy ta cena, na kterou si stěžuje #275, má medián snímku 0,00 ms
+a nejhorší 0,01 ms i na celých 8,78 MB.
+
+**Strop na velikost mohl jít nahoru, protože #214 měřilo něco jiného, než co aplikace dělá:**
+`ensureLayout` + `usedRect`, tedy vynucenou sazbu celého dokumentu (631 ms), kdežto sheet text jen
+předá (6,57 ms). Poučení, které tomu stropu přežije: měřit se musí ta cesta, kterou kód doopravdy
+jde. Strop tedy nedrží kreslení, ale **stahování** — 8,78 MB stahuje `gh` ve třech měřeních 5,75 /
+27,44 / 10,67 s, takže se velikost píše do hlášky, dokud se stahuje, a sbalení checku `gh` **zabije**
+(změřeno 0 → 1 → 0 procesů). Příprava textu (814 ms na 8,78 MB) šla mimo hlavní vlákno, jinak by okno
+stálo o tu dobu.
+
+**Řádků je 2 000, ne 10 000, a nedrží to cena** (25 000 řádků stojí 5,50 ms). Drží to okýnko a smysl
+sheetu: 320 bodů ukáže ~20 řádků, takže dva tisíce jsou sto obrazovek a deset tisíc pět set — a nad
+2 000 řádků jsou tři ze čtyř změřených logů, takže věta „starších N řádků se nevešlo“ i `Ukázat celý
+log` mají pořád co říct. Zvednout to dál je jedna konstanta. S delším ocasem k tomu patřilo ještě
+jedno: okýnko se **otevírá na konci logu**, ne na začátku ocasu, protože jinak by hledaná assertace
+byla sto obrazovek daleko.
+
+Testů je o 64 víc (2385 po zvednutí mainu), z toho **30 na tuhle opravu** ve dvou nových suitách.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

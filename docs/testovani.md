@@ -1268,6 +1268,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     než u detailu PR;
   - **nad známým stropem se pro log vůbec nejde** — hlídá se, že se zjistila velikost
     a **nestahovalo**;
+  - **dokud se stahuje, drží se velikost z `HEAD`u** (#292), aby se dala napsat do hlášky — testuje
+    se to na **mezistavu** přes `AsyncGate`, ne na výsledku, protože jinak by se dalo zkontrolovat
+    jen to, co zbylo na konci. Věta sama je čistá funkce (`Policy.logDownloadNotice`) a testuje se
+    výčtem: se známou velikostí ji nese, bez ní **neslibuje nic** — ani nulu;
   - **bez známé velikosti se log naopak stáhne** (#292) a strop se uplatní na tom, co přišlo. Do
     #292 tady stálo pravidlo obrácené („bez velikosti se nestahuje“) a bylo to zeleně otestované —
     jenže rozbor hlaviček velikost nikdy nevydal, takže tenhle test **popisoval vypnutou funkci**.
@@ -1324,8 +1328,40 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **tři stovky řádků odtlačily zbytek seznamu** mimo obrazovku.
 
   **Cena sazby logu má vlastní měření** (`CheckLogPerformanceMeasurement`, `PRISM_MEASURE=1`) —
-  není to test, netvrdí časy. Log v něm je syntetický podle skutečných rozměrů; dvoumegový soubor
-  se do repa nepřikládá.
+  není to test, netvrdí časy. Log v něm je syntetický podle skutečných rozměrů, a když je po ruce
+  ten skutečný, vezme se on (`PRISM_LOG_FILE`); osmimegový soubor se do repa nepřikládá.
+
+  **Dvě pasti u toho měření, obojí zaplacené u #292.**
+
+  - **`xcodebuild` proměnnou do testovacího procesu nepředá** — ani `PRISM_MEASURE=1 xcodebuild`,
+    ani `TEST_RUNNER_PRISM_MEASURE=1` (scheme má `shouldUseLaunchSchemeArgsEnv`). Suita se tedy
+    tiše **přeskočí** a vypadá to, že proběhla. Pouští se z Xcode, nebo se ta podmínka na dobu
+    měření dočasně smaže. Že ochrana není zbytečná, se taky ověřilo: bez ní běželo měření SwiftUI
+    `Text`u na hlavním vlákně **199 s** a vyhladovělo celou sadu — čtyři nesouvisející testy spadly
+    na timeout a vypadalo to jako regrese v nich.
+  - **Měření musí měřit tu cestu, kterou kód jde.** #214 měřilo sazbu logu přes
+    `ensureLayout(for:)` + `usedRect(for:)`, tedy **vynucenou sazbu celého dokumentu** — jedinou věc,
+    kterou aplikace nedělá. Vyšlo 850 ms tam, kde skutečná cesta stojí 6,57 ms, a z toho vzešel
+    strop o řád nižší, než bylo potřeba. Tatáž chyba byla v měření obarvování: srovnávalo `job.log`
+    se `job.log`, tedy dvě jednolité cesty, a tvrdilo „0,04 proti 0,02 ms“; po řádcích se teď měří
+    pod `job.swift`, kde `Language` jazyk najde.
+
+- **Výška okýnka konce logu (#292)** — `LogTailHeightTests`, výčtem. Počítá se z metriky **toho**
+  fontu, kterým se kreslí (#236), takže se dá tvrdit přesná hodnota proti `NSLayoutManager`u. Co se
+  dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým by zbylo 320 bodů prázdna) a
+  **nezastropovat dlouhý** (dva tisíce řádků naplno odtlačí seznam checků mimo obrazovku, tedy
+  zrovna to, kvůli čemu se detail stěhoval z `Přehledu`). Regrese ověřená vložením regrese: vyndaný
+  `min(limit, …)` položí sedm tvrzení.
+
+  Je u toho **kontrola měřidla**: rezerva na vodorovný scroller je v kódu opsané číslo, protože
+  `NSScroller.scrollerWidth` je vázaná na hlavní vlákno — test ji porovnává se systémem, aby se
+  okýnko nemohlo potichu rozejít se scrollerem.
+
+  **Jak konec logu doopravdy vypadá, `ImageRenderer` neukáže** — obsah `NSScrollView`u nerasterizuje
+  (prázdná plocha v renderu je omezení sondy, ne aplikace, a ověřilo se to i na třířádkovém logu).
+  Kreslí se proto přes `bitmapImageRepForCachingDisplay` + `cacheDisplay(in:to:)` na samotném
+  `NSScrollView`u. Právě tak se u #292 chytilo, že okýnko po skoku na konec dokumentu začínalo
+  **uprostřed slova**, protože zůstalo u konce nejdelšího řádku.
 
 - **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
   (řádek plný nul utopí to jedno číslo, na kterém záleží) a **ukázání shodné sha nálezů**, ze které
