@@ -1395,6 +1395,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   #269 vyndalo ze sondy odpočtu; spánek navíc na rozdíl od `yield`ování pustí procesor jinam. Strop
   zůstává, aby se test při skutečné chybě **položil, ne zasekl**.
 
+- **Šířka sheetu s kódem (#292)** — `DiffWidthTests`, výčtem nad `Policy.codeSheetWidth`. Hlídá čtyři
+  meze, z nichž každá se dá porušit zvlášť: **na běžné obrazovce je širší než dřív**, **nikdy užší než
+  dřívějších 820** (zúžení by byla regrese, ne kompromis), **na malý displej se vejde** (tam rozhoduje
+  displej, ne konstanta z většího) a **na ultrawide se zastropuje**. K tomu monotonie přes pásmo
+  600–3 400 bodů, protože jednotlivé případy minou aritmetickou chybu uprostřed.
+
 - **Výška okýnka konce logu (#292)** — `LogTailHeightTests`, výčtem. Počítá se z metriky **toho**
   fontu, kterým se kreslí (#236), takže se dá tvrdit přesná hodnota proti `NSLayoutManager`u. Co se
   dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým by zbylo 320 bodů prázdna) a

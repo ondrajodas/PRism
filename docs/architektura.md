@@ -2716,7 +2716,7 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     Není to zapomenutá chyba: hned za ním jde stažení, tedy ta operace, o kterou uživateli jde.
     Povede-li se, není o čem informovat; nepovede-li se, dostane **chybu stažení**, která nese kód
     i výstup `gh` — tedy víc, než by řekla chyba dotazu na velikost.
-  - **Stropy jsou 10 MB a 2 000 řádků, a obojí je změřené** (#292; do té doby 2 MB a 300 řádků).
+  - **Stropy jsou 10 MB a 4 000 řádků, a obojí je změřené** (#292; do té doby 2 MB a 300 řádků).
     Rozhodly dvě věci, které #214 neměřilo:
 
     | Co | 2 MB | 8,78 MB (největší log na našich repech) |
@@ -2750,6 +2750,7 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     |---|---|---|
     | 300 | 107,85 ms | **2,06 ms** |
     | 2 000 | 6 210,22 ms | **1,96 ms** |
+    | 4 000 (dnešní `logTailLines`) | — | **2,61 ms** |
     | 10 000 | 156 432,33 ms | **6,81 ms** |
 
     Dvě a půl minuty na deseti tisících řádcích není opomenutí, které by šlo doladit: `Text` musí znát
@@ -2766,6 +2767,14 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
 
     Vedlejší zisk, který se nehledal: konec logu je **vybíratelný**, takže se z něj kopíruje bez
     otevírání sheetu.
+  - **Sheet `Ukázat celý log` je široký podle obrazovky** (`Policy.codeSheetWidth`, #292), ne 820 bodů
+    jako od #157. Sheet **zalamuje**, takže úzké okno znamená víc řádků sazby na jeden řádek logu:
+    změřeno 3,89× při 820 bodech, 2,63× při 1 360 a **1,54× na stropu 2 700** (o 60 % méně
+    scrollování). Strop je zrovna tam, kde přestane zalamovat **mediánový řádek** Actions logu
+    (333 znaků na řádek proti mediánu 327) — a zvedl se z původních 1 600 po měření na té obrazovce,
+    na které se aplikace používá (3 440 bodů). Dolní mez je dřívějších 820, protože užší by byla
+    regrese; přes obrazovku sheet nejde nikdy. Zamítnuto měřit nejdelší řádek obsahu: scan megabajtů
+    na hlavním vlákně při otevření, a prospělo by to jen hunkům kódu.
   - **Výška okýnka se počítá z metriky fontu, kterým se kreslí** (#236, `LogTailTextView.height`):
     krátký log si vezme jen tolik, kolik má řádků, dlouhý se zastropuje na 320 bodech a scrolluje
     uvnitř. Rezerva na vodorovný scroller je opsané číslo (13 bodů), protože `NSScroller.scrollerWidth`

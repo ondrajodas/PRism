@@ -214,7 +214,9 @@ struct CheckLogTextTests {
     func limitsAreWhereMeasurementLeftThem() {
         #expect(Policy.logSizeLimit == 10 * 1024 * 1024)
         #expect(Policy.logAvailability(bytes: Policy.logSizeLimit + 1) != .fetchable)
-        #expect(Policy.logTailLines == 2_000)
+        // 4 000 je **volba uživatele**, kterou měření unese (2,61 ms proti 1,14 ms u 2 000) —
+        // ne odhad, viz důvody u té konstanty.
+        #expect(Policy.logTailLines == 4_000)
     }
 
     // MARK: - Věta, dokud se stahuje

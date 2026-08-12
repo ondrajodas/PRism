@@ -1256,7 +1256,7 @@ uplatní na tom, co doopravdy přišlo. Chyba jednoho dotazu tak nemůže vypnou
 přesně to, co se stalo. `malformedOutput` u toho dostal **fázi** (`Vyhledávání pull requestů`,
 `Anotace check-runu`, …): „Výstupu gh nerozumím“ samo neřekne ani to, která obrazovka je poloprázdná.
 
-**A po proklikání se zvedly stropy: 2 MB → 10 MB a 300 → 2 000 řádků** (#292). Otázka byla „nešlo by
+**A po proklikání se zvedly stropy: 2 MB → 10 MB a 300 → 4 000 řádků** (#292). Otázka byla „nešlo by
 zobrazovat víc, nesekne se to?“, a odpověď dalo měření na největším logu, který na našich repech je
 (8,78 MB, 25 533 řádků, nejdelší řádek 2 258 znaků).
 
@@ -1275,12 +1275,21 @@ jde. Strop tedy nedrží kreslení, ale **stahování** — 8,78 MB stahuje `gh`
 (změřeno 0 → 1 → 0 procesů). Příprava textu (814 ms na 8,78 MB) šla mimo hlavní vlákno, jinak by okno
 stálo o tu dobu.
 
-**Řádků je 2 000, ne 10 000, a nedrží to cena** (25 000 řádků stojí 5,50 ms). Drží to okýnko a smysl
-sheetu: 320 bodů ukáže ~20 řádků, takže dva tisíce jsou sto obrazovek a deset tisíc pět set — a nad
-2 000 řádků jsou tři ze čtyř změřených logů, takže věta „starších N řádků se nevešlo“ i `Ukázat celý
-log` mají pořád co říct. Zvednout to dál je jedna konstanta. S delším ocasem k tomu patřilo ještě
-jedno: okýnko se **otevírá na konci logu**, ne na začátku ocasu, protože jinak by hledaná assertace
-byla sto obrazovek daleko.
+**Řádků je 4 000 a cena o tom nerozhoduje** (2,61 ms proti 1,14 ms u dvou tisíc; celý ten největší
+log 5,50 ms). Nejdřív jsem rozhodl 2 000 s odůvodněním, že okýnko má 320 bodů a `Ukázat celý log` musí
+zůstat k něčemu; uživatel si vyžádal 4 000 a **je to jeho volba, kterou měření unese** — původní
+argument byl o ergonomii, ne o výkonu. Zapsaná cena zůstává: 4 000 řádků je v okýnku 175 obrazovek
+scrollování (2 000 bylo 88), takže k dalšímu zvedání patří i vyšší okýnko. Rozdíl proti sheetu se
+nesetřel, největší log má 25 533 řádků. S delším ocasem k tomu patřilo ještě jedno: okýnko se
+**otevírá na konci logu**, ne na začátku ocasu, protože jinak by hledaná assertace byla sto obrazovek
+daleko.
+
+**Sheet `Ukázat celý log` je nově široký podle obrazovky**, ne 820 bodů. Sheet zalamuje, takže úzké
+okno znamená víc řádků sazby na jeden řádek logu — změřeno **3,89×** při 820 bodech, 2,63× při 1 360
+a **1,54×** na stropu 2 700, tedy o 60 % méně scrollování. Strop je tam, kde přestane zalamovat
+mediánový řádek (333 znaků proti mediánu 327), a zvedl se z původně odhadnutých 1 600 po měření na
+obrazovce, na které se aplikace používá (3 440 bodů) — tam 1 600 nechávalo polovinu scrollování navíc.
+Je to tentýž vzor jako u vynucené sazby: **měřit se musí ta konfigurace, ve které se to používá.**
 
 Testů je o 64 víc (2385 po zvednutí mainu), z toho **30 na tuhle opravu** ve dvou nových suitách.
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak

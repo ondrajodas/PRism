@@ -34,25 +34,22 @@ enum LogAvailability: Hashable, Sendable {
 }
 
 extension Policy {
-    /// Kolik řádků konce logu se ukazuje: **2 000** (do #292 tři stovky).
+    /// Kolik řádků konce logu se ukazuje: **4 000** (do #292 tři stovky, chvíli 2 000).
     ///
-    /// **Tuhle mez už nedrží cena kreslení, ale okýnko a smysl `Ukázat celý log`** — a je to vědomý
-    /// posun, protože do #292 ji cena držela: konec logu kreslil SwiftUI `Text` se `.fixedSize()`,
-    /// který roste kvadraticky (300 řádků 108 ms, 2 000 řádků **6 s**, 10 000 řádků **dvě a půl
-    /// minuty**). Od #292 ho kreslí `LogTailTextView` nad TextKitem, takže 2 000 řádků stojí
-    /// **1,12 ms** a 25 000 (celý ten největší log) **5,50 ms**. Cena tedy o počtu řádků nerozhoduje.
+    /// **Cena o tom nerozhoduje.** Do #292 rozhodovala: konec logu kreslil SwiftUI `Text`
+    /// se `.fixedSize()`, který roste kvadraticky (300 řádků 108 ms, 2 000 řádků **6 s**, 10 000
+    /// řádků **dvě a půl minuty**). Od #292 ho kreslí `LogTailTextView` nad TextKitem, takže
+    /// **2 000 řádků stojí 1,14 ms, 4 000 řádků 2,61 ms** a celý ten největší log (25 000 řádků)
+    /// 5,50 ms; projíždění má medián snímku 0,00 ms u všech.
     ///
-    /// Rozhodují dvě věci, které měřením nezmizí:
-    /// - **Okýnko má 320 bodů**, tedy ~20 řádků naráz. Dva tisíce řádků je sto obrazovek
-    ///   scrollování; deset tisíc je pět set, což už není „konec logu“, ale celý log ve špatně
-    ///   tvarovaném okně.
-    /// - **`Ukázat celý log` musí zůstat k něčemu.** Ze čtyř změřených logů má nad 2 000 řádků tři
-    ///   (2 174 / 2 997 / 5 899 / 25 533), takže věta „starších N řádků se nevešlo“ se u nich pořád
-    ///   ukáže a sheet má co dodat. Při deseti tisících by rozdíl zbyl jedinému z nich.
-    ///
-    /// Zvednout to dál je proto **jedna konstanta**, ne přepis — a měření na to nadání má. Kdyby se
-    /// zvedalo, patří k tomu i vyšší okýnko, jinak roste jen scrollování.
-    static let logTailLines = 2_000
+    /// **Změna proti prvnímu rozhodnutí u #292**, kde tady stály 2 000 s odůvodněním, že okýnko má
+    /// 320 bodů (~20 řádků naráz) a že `Ukázat celý log` musí zůstat k něčemu. Uživatel si po
+    /// proklikání vyžádal 4 000 a **je to jeho volba, kterou měření unese** — cena je 2,61 ms proti
+    /// 1,14 ms. Zůstává z toho jen zapsaná cena rozhodnutí: v okýnku o 320 bodech je 4 000 řádků
+    /// **175 obrazovek** scrollování (2 000 bylo 88), takže k dalšímu zvedání patří i vyšší okýnko —
+    /// jinak roste jen scrollování. Rozdíl proti sheetu zůstává: největší log má 25 533 řádků, takže
+    /// se pořád ukáže „starších 21 533 řádků se nevešlo“.
+    static let logTailLines = 4_000
 
     /// Číslo jobu z odkazu na check (#214).
     ///
