@@ -47,6 +47,12 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// tomuhle jen odchylka do zavření aplikace — do souboru nezapisuje, jinak by hodnota
     /// tady přestala být tou, které se říká výchozí.
     var diffLayout: DiffLayout
+    /// Jaký vzhled má mít okno (#278). Výchozí `system`, tedy chování před #278.
+    ///
+    /// Per repo se to **nenastavuje**, ze stejného důvodu jako `diffLayout` a notifikace:
+    /// vzhled je vlastnost člověka, který se kouká, ne repozitáře, na který se kouká.
+    /// `RepositoryConfig` ho proto nemá a je na to test.
+    var appearance: AppearanceMode
     /// V sekundách, ne `Duration` — soubor se edituje ručně a `Duration` se do JSONu
     /// kóduje jako dvojice čísel, kterou nikdo nenapíše.
     var pollIntervalSeconds: Int
@@ -70,6 +76,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         allowsPublishing: Bool = false,
         findingsLanguage: FindingsLanguage = .czech,
         diffLayout: DiffLayout = .unified,
+        appearance: AppearanceMode = .system,
         pollIntervalSeconds: Int,
         maxConcurrentReviews: Int,
         autoRunsPerDay: Int = 20,
@@ -85,6 +92,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.allowsPublishing = allowsPublishing
         self.findingsLanguage = findingsLanguage
         self.diffLayout = diffLayout
+        self.appearance = appearance
         self.pollIntervalSeconds = pollIntervalSeconds
         self.maxConcurrentReviews = maxConcurrentReviews
         self.autoRunsPerDay = autoRunsPerDay
@@ -119,6 +127,12 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // následek překlepu je jiný pohled na diff, který se otočí jedním kliknutím
         // v liště — nespustí review ani neotevře cestu ven.
         diffLayout = (try? container.decode(DiffLayout.self, forKey: .diffLayout)) ?? standard.diffLayout
+        // Tolerantně jako pohled na diff, a se stejným odůvodněním: neznámá hodnota znamená
+        // **podle systému**, tedy stav, ve kterém aplikace běžela před #278. Není to spolknutá
+        // chyba — je to vědomě ta nejmírnější odpověď, protože nejhorší následek překlepu je
+        // světlé okno, které se přepne jedním kliknutím v liště. Přísnost jako u režimu
+        // nebo odesílání by tady nechránila nic: vzhledem nic neodejde a nic se nespustí.
+        appearance = (try? container.decode(AppearanceMode.self, forKey: .appearance)) ?? standard.appearance
         pollIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds)
             ?? standard.pollIntervalSeconds
         maxConcurrentReviews = try container.decodeIfPresent(Int.self, forKey: .maxConcurrentReviews)
@@ -234,6 +248,7 @@ struct Configuration: Codable, Equatable, Sendable {
             allowsPublishing: false,
             findingsLanguage: .czech,
             diffLayout: .unified,
+            appearance: .system,
             pollIntervalSeconds: 60,
             maxConcurrentReviews: 3,
             autoRunsPerDay: 20,
