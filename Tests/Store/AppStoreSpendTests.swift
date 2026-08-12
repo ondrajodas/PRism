@@ -45,8 +45,6 @@ struct AppStoreSpendTests {
         SpendLedger(layout: layout, time: FakeTimeSource())
     }
 
-    /// Čeká se točením: zrušený běh musí z čekání vypadnout sám, jinak by test visel místo
-    /// aby spadl.
     private func waitUntilIdle(_ store: AppStore) async throws {
         await waitUntil("review doběhne") { !store.isReviewing(pr) }
         #expect(!store.isReviewing(pr))

@@ -26,7 +26,7 @@ struct ReviewSlotsTests {
             Task { try await slots.withSlot { await work.run(index) } }
         }
         await work.waitForStarts(2)
-        // Při rozbitém limitu by se rozjely všechny; pár otočení plánovače jim na to dá
+        // Při rozbitém limitu by se rozjely všechny; odmlka jim na to dá
         // příležitost.
         await settle()
         #expect(work.startedCount == 2)

@@ -164,8 +164,8 @@ struct ClaudeReviewRunnerTests {
         }
 
         await streamer.waitForStarts(3)
-        // Čtvrtý běh by se při rozbitém limitu rozjel spolu s ostatními; pár otočení
-        // plánovače mu na to dá příležitost.
+        // Čtvrtý běh by se při rozbitém limitu rozjel spolu s ostatními; odmlka mu na to dá
+        // příležitost.
         await settle()
         #expect(streamer.startedCount == 3)
 
