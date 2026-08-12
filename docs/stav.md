@@ -1240,23 +1240,35 @@ podstrom vytažený zvenčí měří výchozích 1000 bodů a hlásí přetečen
 
 **Přepínač vzhledu (#278).** Vzhled se do #278 řídil **jen** systémem a nedal se přebít, takže
 porovnat, jak se diff čte ve světlém a v tmavém (což je celé #277), znamenalo přehodit celý systém.
-Nastavení má proto stránku `Vzhled` se třemi volbami — `Světlý`, `Tmavý`, `Podle systému` —
-a rozhoduje se jediným řádkem: `NSApp.appearance`. Barvy se nikde nevětví, `Palette` zůstala
-nedotčená; přepínač volí režim, ne paletu.
+Přepínač je **v levé liště pod oddělovačem**, jak ho kreslí návrh: půlkolečko, po kliknutí nabídka
+se třemi volbami (`Světlý`, `Tmavý`, `Podle systému`). Rozhoduje jediný řádek — `NSApp.appearance`;
+barvy se nikde nevětví, `Palette` zůstala nedotčená.
 
-Uplatňuje se v `AppStore.apply(_:)`, tedy tou jedinou cestou, kterou konfigurace vchází do běžící
-aplikace — ne ve view. Ve view by se změna minula okna, které zrovna není otevřené, a nastavení se
-dá otevřít i se zavřeným hlavním oknem. `NSApp.appearance` navíc pokrývá **všechna** okna naráz,
-takže se nemusí obcházet scéna po scéně.
+**Nejdřív z toho byla stránka v nastavení a bylo to špatně.** Rozhodl jsem to sám, protože zadání
+říkalo „rozhodni a zapiš“ — jenže návrh to místo určuje a já si ho k tomu prvku nepřečetl. Zpětně
+vzato je to tentýž druh chyby, kvůli které vzniklo #286: kde ovládací prvek je, není otázka vkusu.
+Stránka v nastavení proto **není** — dvě místa na tutéž volbu by znamenala dvě tvrzení o jednom
+stavu a návrh druhé z nich nezná.
+
+**Rail nedrží vlastní stav**: čte `configuration.global.appearance`, zapisuje
+`AppStore.setAppearance(_:)` a to jde do souboru (volba přežije restart). Přepínač **není**
+`RailSection` — sekce jsou obrazovky, kdežto vzhled žádnou neotevírá; kdyby byl jejím případem,
+šlo by na něj „přepnout jako na obrazovku“ a nabídl by se v ⌘K mezi sekcemi. Uplatňuje se
+v `AppStore.apply(_:)`, tedy tou jedinou cestou, kterou konfigurace vchází do běžící aplikace, což
+pokrývá i okno, které v době přepnutí není vpředu.
 
 Změřeno sondou, která vzhled přepne **za běhu nad složenou hierarchií** (`AppearanceSwitchProbe`):
 `@Environment(\.colorScheme)` se pohne spolu s paletou, takže se obarvení kódu nerozejde s chromem —
 to byla ta jediná otázka, kterou z kódu přečíst nešlo. Na tomtéž renderu je vidět i přebarvený diff
 včetně syntaxe: vysázený text se přeskakuje podle podpisu a v tom podpisu režim je, takže se sází
 znovu. Podpis se u toho sloučil do jednoho místa (`DiffBlockSignature`), protože ho obě podoby diffu
-skládaly každá svým řetězcem. Testů je o 22 víc (2363 po zvednutí mainu) v pěti nových suitách, z nichž dvě jsou
-**sondy za přepínačem**: render stránky nastavení v obou režimech a ve dvou šířkách, a to přepnutí
-za běhu.
+skládaly každá svým řetězcem.
+
+Poloha v railu je **změřená z bitmapy** (oddělovač 20 × 1 bod, ikona ve středu railu, tedy 26
+z 52) a vyzkoušená vložením regrese; barvu ikony ale čísla nechytila — `.menuStyle(.borderlessButton)`
+ji obarvilo akcentem, takže vypadala jako aktivní sekce, a poznalo se to jedině z renderu. Testů je
+o 27 víc (2368) ve šesti nových suitách, z nichž dvě jsou **sondy za přepínačem**: render railu ve všech
+třech stavech a v obou režimech, a to přepnutí za běhu.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

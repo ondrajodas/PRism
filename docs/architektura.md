@@ -909,7 +909,8 @@ Věci, které se u toho nemají rozbít:
   `appearance` být právě jednou, a napsaný pod repem nesmí udělat nic. Do výčtu
   v `bin/slot-config.sh` patří přesto — ten vyjmenovává i klíče s jedinou úrovní — a je u něj
   napsané, že se **nečistí**: vzhledem se nic neutratí a nic neodejde, a vynutit slotu vzhled,
-  o který nikdo neřekl, je změna, ne očista. Kde se volba uplatní, je u `AppStore` níž.
+  o který nikdo neřekl, je změna, ne očista. **Stránku v nastavení volba nemá** — ovládá se z railu,
+  viz `AppStore` a `App/Views/` níž. Kde se uplatní, je taky tam.
 - **Rozbitá hodnota režimu se sráží na `manual`, ne na globální default.** Chybějící klíč
   je „ber globální“, ale překlep v hodnotě, kterou se někdo pokoušel automat **vypnout**,
   ho nesmí nechat zapnutý. Platí i globálně.
@@ -1536,6 +1537,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Diff.swift` | Načtení diffu, pohled a sbalování souborů | 95 |
 | `AppStore+Automatic.swift` | Automatický režim a denní rozpočet (#25) | 89 |
 | `AppStore+Findings.swift` | Zahození záznamu (#81) a odmítnutí nálezu (#113) | 70 |
+| `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
 
 Čtyři věci, na kterých to rozdělení stojí:
@@ -1595,6 +1597,25 @@ Věci, které se u toho nemají rozbít:
   **chybí**: živý cíl je `NSApp`, tedy hostitel testů, a vynucený režim by přetekl do render sond,
   které si režim nastavují samy. Ta cesta je celá v `AppAppearance.swift`, takže `App/Store/`
   nemusí znát AppKit.
+- **Přepínač vzhledu v railu je volba, ne sekce** (#278). Rail kreslí sekce z `RailSection.allCases`
+  a přepínač stojí **pod oddělovačem**, mimo ten výčet — kdyby byl jeho případem, šlo by na vzhled
+  „přepnout jako na obrazovku“, nabídl by se v ⌘K mezi sekcemi (`Policy.paletteActions` staví
+  položky sekcí z týchž `allCases`) a v okně by zbyla prázdná plocha. Drží to dva testy, oba
+  negativní: výčet sekcí je pořád tříprvkový a v paletě není položka se slovem „vzhled“.
+
+  **Rail nedrží vlastní stav** — čte `configuration.global.appearance` a zapisuje
+  `AppStore.setAppearance(_:)`, takže v okně není druhá pravda o tom, jaký režim platí. Zápis jde do
+  souboru (ne jen do paměti jako odchylka pohledu na diff v liště), protože volba má přežít restart;
+  shodná hodnota se zahazuje, aby výběr toho, co už platí, nepřepsal ručně editovaný soubor.
+  **Selhání zápisu se hlásí** (`appearanceFailure` v `AppNoticesView`): vzhled se totiž uplatňuje až
+  po úspěšném uložení, takže bez hlášky by klik do railu nic neudělal a nic neřekl.
+
+  **Ovládací prvek je nabídka** (`Menu` s `Pickerem`), ne cyklení tří stavů klikem: ikona je jedna
+  pro všechny tři stavy — jak ji má návrh —, takže by při cyklení nebylo z čeho poznat, co platí,
+  a ke konkrétnímu režimu by vedla až tři kliknutí. Styl je `.button` + `.plain`;
+  `.borderlessButton` popisek obarví akcentem, takže půlkolečko vypadá jako aktivní sekce, a navíc
+  si přikreslí indikátor, kterým se ikona posune ze středu railu (změřeno, viz
+  [`testovani.md`](testovani.md)).
 - **Repo s běžícím review je pro eviction nedotknutelné.** `busyRepositories` proto nejsou
   jen repa ve stavu `preparing`, ale i všechna, nad kterými běží review — smazat klon pod
   běžící session by jí vzalo pracovní strom pod rukama.
@@ -1746,7 +1767,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `AppAppearance`, `AppearanceApplying` | Přepnutí vzhledu celé aplikace (#278) — `NSApp.appearance`, a za protokolem, aby si na hostitele testů nesáhly testy |
 | `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
-| `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) |
+| `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) a pod oddělovačem **přepínač vzhledu okna** (#278), který sekce railu není |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
 | `DashboardView` | Startovní obrazovka (#181): pozdrav, čtyři karty, fronta podle závažnosti, legenda reviewerů a `Co teď` |
 | `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatné view |
@@ -2166,12 +2187,11 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 |---|---|
 | `SettingsScene` | Obsah scény; dokud neprošel preflight, není store a okno to řekne |
 | `SettingsView` | Boční navigace (#177), patička s cestou a stavem uložení, zámek na rozbitý soubor |
-| `SettingsSection` | Osm stránek ve třech skupinách — `Co se hlídá`, `Co jde ven`, `Prostředí` |
+| `SettingsSection` | Sedm stránek ve třech skupinách — `Co se hlídá`, `Co jde ven`, `Prostředí` |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
 | `SourcesSettingsView` | Zdroje PR (search dotazy) |
 | `ReviewSettingsView` | Výchozí režim a jazyk nálezů, skilly, sady podle jazyka, blokující kategorie |
 | `DiffSettingsView` | **Pohled na diff** — nastavení člověka, ne repa, proto jen globálně |
-| `AppearanceSettingsView` | **Vzhled okna** (#278) — tmavý, světlý, podle systému; taky nastavení člověka, proto jen globálně |
 | `PublishingSettingsView` | **Odesílání na GitHub** — vlastní stránka, viz níž |
 | `RuntimeSettingsView` | Interval pollingu, rozpočet cache, souběžné session, denní limit, model |
 | `NotificationSettingsView` | Stránka `Notifikace` (#86): hlavní vypínač a čtyři události |
@@ -2182,32 +2202,15 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 
 Věci, které se u toho nemají rozbít:
 
-- **Sedm stránek, ne devět** (#177; osmá přibyla u #278). Návrh kreslí i `Cache a úklid` a `Zdraví
-  služeb`; obojí je vynechané, protože pro ně v aplikaci **není obsah** — cache se dnes uklízí sama
-  podle rozpočtu a zdraví služeb žije ve stavovém řádku. Prázdná stránka je horší než chybějící,
+- **Sedm stránek, ne devět** (#177). Návrh kreslí i `Cache a úklid` a `Zdraví služeb`; obojí
+  je vynechané, protože pro ně v aplikaci **není obsah** — cache se dnes uklízí sama podle
+  rozpočtu a zdraví služeb žije ve stavovém řádku. Prázdná stránka je horší než chybějící,
   a tahle úvaha platí i pro rail (#180).
 - **Dělí se podle otázky, na kterou se odpovídá** (#177), ne podle typu ovládacího prvku.
   `Odesílání` je proto vlastní stránka, i když je to jeden přepínač a jeden seznam: je to jediné
   místo, kde se rozhoduje, jestli z aplikace **může něco odejít** (tvrdá podmínka č. 1), a text
   je tam důležitější než přepínač. Do #177 to byly tři záložky, ze kterých `Obecné` nesla osm
   sekcí a hledalo se v ní scrollováním.
-- **`Vzhled` (#278) je vlastní stránka a je v `Prostředí`.** Vlastní proto, že přepínač platí pro
-  **celé okno** — hlavičku, rail, nastavení, novinky i sheety — takže na stránce pojmenované `Diff`
-  by lhal, i když tam tématem („jak se to čte“) patří; je to tatáž úvaha jako u `Odesílání`.
-  A v `Prostředí` proto, že nic nehlídá a nic neodesílá, takže na otázku obou ostatních skupin
-  odpověď nemá.
-
-  **Prvek je radio group, ne segmentovaný přepínač**, a rozhodla shoda se stránkou `Diff`, která
-  nese tentýž druh volby (globální předvolba pohledu) tímtéž prvkem — dva různé prvky na dvou
-  stránkách vedle sebe vypadají jako dvě různá rozhodnutí. **Šířka to nerozhodla**: segmentovaný
-  přepínač si řekne o 330 bodů proti 110 u radio groupu, ale vejdou se do řádku oba i na nejužší
-  stránce nastavení (okno 720 minus navigace 210). Naměřeno `AppearanceRenderProbe`, kterou se dá
-  vyrendrovat i to, jak která varianta vypadá.
-
-  **Ukládá se hned, ne se zpožděním.** Odložený zápis v `SettingsModel` je kvůli psaní do textových
-  polí; kliknutí do přepínače je hotová volba a čekat 600 ms na přebarvení okna vypadá, jako by
-  přepínač nefungoval. Jde to pořád tou jedinou cestou (`AppStore.apply(_:)`) — stránka si vzhled
-  nenastavuje sama, jen si vynutí zápis.
 - **Vybraná stránka se nepamatuje mezi spuštěními.** Nastavení se otevírá kvůli konkrétní věci;
   vrátit se do něj tam, kde jsem skončil minule, není, co člověk čeká — na rozdíl od výšky
   panelu, kterou si vytáhne jednou a chce ji mít.

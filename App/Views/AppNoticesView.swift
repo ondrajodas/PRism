@@ -55,6 +55,12 @@ struct AppNoticesView: View {
                 if let failure = store.dismissalFailure {
                     notice(failure, icon: "exclamationmark.triangle")
                 }
+                // Neuložený vzhled okna (#278) taky ne: zápis selhal, takže se režim
+                // **nepřepnul** — a klik do railu, po kterém se nic nestane, vypadá jako rozbitá
+                // aplikace.
+                if let failure = store.appearanceFailure {
+                    notice(failure, icon: "exclamationmark.triangle")
+                }
                 // Notifikace, které nechodí (#88). Odmítnuté oprávnění aplikaci nepoloží, takže
                 // bez tohohle je „nic mi nepřišlo“ k nerozeznání od „nic se nestalo“ — a spravit
                 // se to dá jedině v Nastavení systému, kam aplikace nedosáhne. Vlastní ikona:
@@ -80,6 +86,7 @@ struct AppNoticesView: View {
             || store.unreadableDraftFiles > 0
             || store.draftFailure != nil
             || store.dismissalFailure != nil
+            || store.appearanceFailure != nil
             || store.notificationFailure != nil
     }
 

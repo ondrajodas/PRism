@@ -324,6 +324,13 @@ final class AppStore {
     /// nastavují samy.
     private let appearance: (any AppearanceApplying)?
 
+    /// Proč se nepodařilo uložit vzhled okna (#278).
+    ///
+    /// Musí být vidět: když zápis selže, vzhled se **nepřepne** (uplatňuje se až po úspěšném
+    /// uložení), a klik do railu, po kterém se nic nestane a nic se neřekne, vypadá jako rozbitá
+    /// aplikace. Kreslí to `AppNoticesView`.
+    var appearanceFailure: String?
+
     /// Rozdělané běhy (#97). `nil` = odsud se nedotahuje (testy).
     let interrupted: InterruptedRuns?
 

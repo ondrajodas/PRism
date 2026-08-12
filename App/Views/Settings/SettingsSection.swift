@@ -8,15 +8,13 @@ import Foundation
 ///
 /// Dělení je podle **otázky, na kterou se odpovídá**, ne podle typu ovládacího prvku: `Odesílání`
 /// je vlastní stránka, i když je to jeden přepínač a jeden seznam, protože je to jediné místo,
-/// kde se rozhoduje, jestli z aplikace něco může odejít. Totéž platí o `Vzhledu` (#278) — jeden
-/// přepínač, který ale platí pro **celé okno**, takže na stránku `Diff` nepatří.
+/// kde se rozhoduje, jestli z aplikace něco může odejít.
 enum SettingsSection: String, CaseIterable, Identifiable, Sendable {
     case sources
     case review
     case diff
     case publishing
     case notifications
-    case appearance
     case repositories
     case runtime
 
@@ -29,7 +27,6 @@ enum SettingsSection: String, CaseIterable, Identifiable, Sendable {
         case .diff: "Diff"
         case .publishing: "Odesílání"
         case .notifications: "Notifikace"
-        case .appearance: "Vzhled"
         case .repositories: "Repozitáře"
         case .runtime: "Běh"
         }
@@ -42,23 +39,18 @@ enum SettingsSection: String, CaseIterable, Identifiable, Sendable {
         case .diff: "rectangle.split.2x1"
         case .publishing: "arrow.up.circle"
         case .notifications: "bell"
-        case .appearance: "circle.lefthalf.filled"
         case .repositories: "folder"
         case .runtime: "gauge.with.dots.needle.33percent"
         }
     }
 
     /// Skupina v seznamu. Odděluje **co se hlídá** od **jak se to dělá** a od **provozu** —
-    /// bez nadpisů je osm položek pod sebou jen seznam.
-    ///
-    /// `Vzhled` (#278) je v `Prostředí`, ne v `Co se hlídá`: nic nehlídá a nic neodesílá, je to
-    /// vlastnost okna, ve kterém se čte. Vedle `Diffu` by sedl tématem („jak se to čte“), ale ta
-    /// skupina odpovídá na otázku, **co** aplikace sleduje — a na tu vzhled odpověď nemá.
+    /// bez nadpisů je sedm položek pod sebou jen seznam.
     var group: Group {
         switch self {
         case .sources, .review, .diff: .work
         case .publishing, .notifications: .output
-        case .appearance, .repositories, .runtime: .setup
+        case .repositories, .runtime: .setup
         }
     }
 

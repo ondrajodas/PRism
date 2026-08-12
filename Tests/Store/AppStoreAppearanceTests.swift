@@ -25,6 +25,12 @@ struct AppStoreAppearanceTests {
         )
     }
 
+    /// Kdy se souboru naposled sáhlo — z toho se pozná, že se **nezapsalo**.
+    private func modified(in workspace: TemporaryDirectory) throws -> Date {
+        let url = CacheLayout(root: workspace.url).configFile
+        return try #require(try FileManager.default.attributesOfItem(atPath: url.path(percentEncoded: false))[.modificationDate] as? Date)
+    }
+
     private func configuration(_ mode: AppearanceMode) -> Configuration {
         var configuration = Configuration.standard
         configuration.global.appearance = mode
@@ -44,14 +50,15 @@ struct AppStoreAppearanceTests {
         #expect(target.applied == [.dark])
     }
 
-    /// Restart nesmí volbu ztratit: přežívá v souboru, ne v paměti okna.
-    @Test("Volba přežije restart aplikace")
+    /// Restart nesmí volbu ztratit: přežívá v souboru, ne v paměti okna. **Přepíná se railem**,
+    /// tedy tou cestou, kterou má člověk pod rukou.
+    @Test("Volba z railu přežije restart aplikace")
     func survivesARestart() async throws {
         let workspace = try TemporaryDirectory()
         let target = FakeAppearanceTarget()
         let store = store(in: workspace, appearance: target)
         await store.reloadConfiguration()
-        try await store.updateConfiguration(configuration(.light))
+        await store.setAppearance(.light)
 
         let restartTarget = FakeAppearanceTarget()
         let restarted = self.store(in: workspace, appearance: restartTarget)
@@ -61,20 +68,57 @@ struct AppStoreAppearanceTests {
         #expect(restartTarget.applied == [.light])
     }
 
-    /// Uložení z okna nastavení se musí projevit **hned**, ne po restartu — celý smysl toho, že
-    /// `Palette` jde přes dynamického poskytovatele.
-    @Test("Uložení z okna nastavení přepne vzhled hned")
-    func appliesAnEditFromTheSettingsWindow() async throws {
+    /// Přepnutí z railu se musí projevit **hned**, ne po restartu — celý smysl toho, že `Palette`
+    /// jde přes dynamického poskytovatele.
+    @Test("Přepnutí z railu přepne vzhled hned")
+    func appliesASwitchFromTheRail() async throws {
         let workspace = try TemporaryDirectory()
         let target = FakeAppearanceTarget()
         let store = store(in: workspace, appearance: target)
         await store.reloadConfiguration()
 
-        try await store.updateConfiguration(configuration(.dark))
-        try await store.updateConfiguration(configuration(.system))
+        await store.setAppearance(.dark)
+        await store.setAppearance(.system)
 
         // První je z načtení prázdné konfigurace, tedy výchozí `system`.
         #expect(target.applied == [.system, .dark, .system])
+        #expect(store.appearanceFailure == nil)
+    }
+
+    /// Nabídka v railu hlásí i výběr toho, co už platí — a to **nesmí** nic udělat: zápis beze
+    /// změny by přepsal ručně editovaný soubor a `apply(_:)` by proběhl pro nic.
+    @Test("Volba, která už platí, nic nepřepíše")
+    func ignoresAChoiceThatAlreadyHolds() async throws {
+        let workspace = try TemporaryDirectory()
+        try await write(configuration(.dark), to: workspace)
+        let target = FakeAppearanceTarget()
+        let store = store(in: workspace, appearance: target)
+        await store.reloadConfiguration()
+        let stamp = try modified(in: workspace)
+
+        await store.setAppearance(.dark)
+
+        #expect(target.applied == [.dark])
+        #expect(try modified(in: workspace) == stamp)
+    }
+
+    /// Neuložená volba **nesmí projít tiše**: vzhled se nepřepnul (uplatňuje se až po úspěšném
+    /// zápisu), takže bez hlášky vypadá rail jako rozbitý — klik, a nic.
+    @Test("Selhání zápisu je vidět a vzhled se nepřepne")
+    func surfacesAFailedWrite() async throws {
+        let target = FakeAppearanceTarget()
+        // Store bez `ConfigStore` nemá kam zapsat — `updateConfiguration` na to má vlastní chybu.
+        let store = AppStore(
+            gateway: FakeGitHubGateway(always: .success([])),
+            time: FakeTimeSource(),
+            appearance: target
+        )
+
+        await store.setAppearance(.dark)
+
+        #expect(target.applied.isEmpty)
+        #expect(store.appearanceFailure?.isEmpty == false)
+        #expect(store.configuration.global.appearance == .system)
     }
 
     /// Rozbitá hodnota v souboru znamená **podle systému**, ne pád a ne vynucený režim.

@@ -249,13 +249,15 @@ proti tomu jen odchylka: platí napříč pull requesty do zavření aplikace a 
 nezapisuje — nastavení říká „takhle to chci mít“, přepínač „teď se na to podívám jinak“.
 Per repo se pohled nenastavuje, protože jak se čte diff, je vlastnost člověka, ne repozitáře.
 
-**Světlý a tmavý režim se přepínají v aplikaci** (`Vzhled → Vzhled okna`, v souboru
-`global.appearance`): `Světlý`, `Tmavý`, nebo `Podle systému`, což je výchozí. Platí to pro
-všechna okna — hlavní, nastavení, novinky i sheety — a uplatní se hned, bez restartu, včetně
-otevřeného diffu i jeho obarvené syntaxe. Vzniklo to kvůli diffu: v obou režimech se čte jinak
-a přehazovat kvůli jednomu PR celý systém je nepřiměřené. Přepínač volí **režim, ne barvy** —
-ty zůstávají tam, kde byly, a jsou v obou režimech tytéž jako ve vizuálním návrhu. Per repo se
-to nenastavuje ze stejného důvodu jako pohled na diff.
+**Světlý a tmavý režim se přepínají v aplikaci** — půlkolečkem v **levé liště**, pod
+oddělovačem: `Světlý`, `Tmavý`, nebo `Podle systému`, což je výchozí. Platí to pro všechna okna —
+hlavní, nastavení, novinky i sheety — a uplatní se hned, bez restartu, včetně otevřeného diffu
+i jeho obarvené syntaxe. Vzniklo to kvůli diffu: v obou režimech se čte jinak a přehazovat kvůli
+jednomu PR celý systém je nepřiměřené. Přepínač volí **režim, ne barvy** — ty zůstávají tam, kde
+byly, a jsou v obou režimech tytéž jako ve vizuálním návrhu. V souboru je to `global.appearance`
+a **v nastavení stránku nemá**: ovládá se z lišty, kde ho má návrh, a druhé místo na tutéž volbu
+by znamenalo dvě tvrzení o jednom stavu. Per repo se to nenastavuje ze stejného důvodu jako
+pohled na diff.
 
 **Klik na hlavičku souboru jeho diff sbalí a rozbalí**, jako na GitHubu — u PR přes deset
 souborů je to hlavní způsob, jak se v něm pohybovat. Hlavička zůstává vidět i se `+N −M`
@@ -937,7 +939,7 @@ jinak by po startu vypadala jako nová celá historie.
 | **Odesílání na GitHub** | Platí pro review, odpovědi do vláken i komentáře pod PR. Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl. |
 | **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |
 | **Novinky v aplikaci** | Okno mluví o tom, co vyšlo na GitHubu, ne o spuštěném buildu — verze v bundlu tagy nikdy nesledovala, takže by tvrdila `0.1`. Značka je poslední **viděný tag** v předvolbách aplikace (stav aplikace, ne nastavení k editaci) a historie se drží v paměti do konce běhu: disková cache by dala offline režim, ale je to další store s vlastním úklidem. |
-| **Vzhled okna** | Tmavý, světlý, nebo podle systému — a rozhoduje o tom jediný řádek (`NSApp.appearance`), ne větvení podle režimu. Barvy zůstávají v paletě, kde jednu hodnotu vybírá dynamická systémová barva podle vzhledu, ve kterém se zrovna kreslí; přepínač proto volí režim, ne paletu, a platí naráz pro všechna okna. Uplatňuje se na tom jednom místě, kterým konfigurace vchází do běžící aplikace — ve view by se minul okna, které zrovna není otevřené. |
+| **Vzhled okna** | Tmavý, světlý, nebo podle systému — ovládá se **z levé lišty**, kde ho má návrh, a rozhoduje o tom jediný řádek (`NSApp.appearance`), ne větvení podle režimu. Barvy zůstávají v paletě, kde jednu hodnotu vybírá dynamická systémová barva podle vzhledu, ve kterém se zrovna kreslí; přepínač proto volí režim, ne paletu, a platí naráz pro všechna okna. Uplatňuje se na tom jednom místě, kterým konfigurace vchází do běžící aplikace — ve view by se minul okna, které zrovna není otevřené. |
 | **Rozměry v okně** | Šířka se v zanořeném stromu **předává, ne vyjednává**. `frame(maxWidth: .infinity)` na každé úrovni zanoření stojí ~5,5× na úroveň, takže okno na PR s 2000 změněnými řádky tuhlo dvacet minut na plném CPU — a to v obou tabech, protože o obsah vůbec nešlo, jen o tvar stromu. Šířka se proto měří jednou na hranici obsahu tabu a posílá dolů. Pružná výška v líném seznamu je tatáž chyba a řešila se dřív u dvojice řádků diffu. |
 | **Dostupnost služeb** | Jede na skutečném provozu, ne na sondě: `gh auth status` na timeru by stál spawn procesu a přístup do keychainu — a projde i tehdy, když skutečné volání selže na rate limitu. Status pages jsou proti tomu levné (`components.json` s `ETagem`) a odpovídají na to, co z volání nezjistíme: jestli je problém na jejich straně. |
 
@@ -1171,7 +1173,7 @@ App/                      zdrojáky aplikace — target PRism
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky
     ReleaseNotes/         okno s novinkami — historie vydání a release notes vybrané verze
-    Settings/             okno nastavení (⌘,) — osm stránek v boční navigaci (#177, #278)
+    Settings/             okno nastavení (⌘,) — sedm stránek v boční navigaci (#177)
   Assets.xcassets/        ikona aplikace (generovaná, viz bin/make-icon.swift)
 Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip

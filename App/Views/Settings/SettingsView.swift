@@ -154,7 +154,6 @@ struct SettingsView: View {
         case .diff: DiffSettingsView(settings: settings)
         case .publishing: PublishingSettingsView(settings: settings)
         case .notifications: NotificationSettingsView(settings: settings)
-        case .appearance: AppearanceSettingsView(settings: settings)
         case .repositories: RepositorySettingsView(settings: settings, repositories: store.knownRepositories)
         case .runtime: RuntimeSettingsView(settings: settings)
         }

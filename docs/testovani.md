@@ -826,12 +826,23 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   právě jednou a v záznamu repa není, a klíč napsaný pod repem se nepromítne nikam. Kdyby přibyl do
   `RepositoryConfig`, jedno repo by přebarvilo celé okno — a poznalo by se to až v provozu.
 - **Cesta vzhledu do aplikace (#278)** — `AppStoreAppearanceTests` na tu jedinou cestu
-  (`AppStore.apply(_:)`): volba ze souboru při načtení, uložení z okna nastavení, přežití restartu
-  a překlep, který skončí na `system`. Cíl je **fake**, ne `NSApp`: živý cíl je hostitel testů, takže
+  (`AppStore.apply(_:)`): volba ze souboru při načtení, přepnutí z railu, přežití restartu a překlep,
+  který skončí na `system`. K tomu dvě věci, které se **nesmí stát**: volba, která už platí, nesmí nic
+  zapsat (hlídá se datum souboru — nabídka hlásí i výběr toho, co platí, a zápis beze změny by
+  přepsal ručně editovaný soubor), a **selhaný zápis nesmí projít tiše** (`appearanceFailure` je
+  vidět a vzhled se nepřepnul). Cíl je **fake**, ne `NSApp`: živý cíl je hostitel testů, takže
   vynucený režim by přetekl do render sond, které si režim nastavují samy. Vedle toho
   `AppAppearanceTests` na mapování — `.light` → `aqua`, `.dark` → `darkAqua` a hlavně, že `nil`
   (tedy „nevynucuj nic“) vyjde **jedině** u `.system`; jinak by volba tiše nezabrala a byla by
   k nerozeznání od výchozího stavu.
+- **Rail a přepínač v něm (#278)** — `SidebarRailTests`. Dvě tvrzení jsou negativní: vzhled **není**
+  `RailSection` (výčet sekcí zůstává tříprvkový) a v paletě ⌘K se **nenabízí jako sekce** — kdyby byl
+  jeho případem, přišel by tam sám, protože položky sekcí se staví z `allCases`. Zbytek je **poloha
+  z bitmapy**: oddělovač 20 × 1 bod vystředěný, jak ho má návrh, a půlkolečko pod ním ve stejné
+  svislici jako ikony sekcí (střed 26 na railu o 52 bodech) a v témž rámu 34 × 30. Rámečky by na
+  tuhle chybu neodpověděly — `fittingSize` railu je pevných 52 bodů a accessibility tree se v okně
+  mimo obrazovku nenaplní. Vyzkoušené vložením regrese: se stylem `.borderlessButton` vyjde střed 25
+  a test spadne.
 - **Podpis bloku kódu (#157, #278)** — `DiffBlockSignatureTests`: světlý a tmavý režim, jiný obsah,
   jiný jazyk a blok bez jazyka musí mít **různý** podpis, tentýž stav ten **samý**. Kdyby se dva
   stavy sešly, blok by se přeskočil jako nezměněný a v okně by po přepnutí vzhledu zbyly barvy
@@ -1760,10 +1771,15 @@ Dva zádrhely, které to má:
   jedině na skutečném `DiffBlockRowView`.
 
   Proto jsou obě sondy k #278 **za přepínačem** (`PRISM_MEASURE`), stejně jako sonda `Přehledu`:
-  jedna kreslí stránku nastavení v obou režimech a ve dvou šířkách (a dá se jí přeměřit i to, kolik
-  místa si vezme který styl přepínače), druhá dělá to přepnutí za běhu. Pouští se
-  `TEST_RUNNER_PRISM_MEASURE=1`, protože `xcodebuild` posílá do testovacího procesu jen proměnné
-  s tímhle prefixem — bez něj se suita **tiše přeskočí** a v logu to vypadá jako zelený běh.
+  jedna kreslí **rail** ve všech třech stavech volby a v obou režimech, druhá dělá to přepnutí za
+  běhu. Pouští se `TEST_RUNNER_PRISM_MEASURE=1`, protože `xcodebuild` posílá do testovacího procesu
+  jen proměnné s tímhle prefixem — bez něj se suita **tiše přeskočí** a v logu to vypadá jako zelený
+  běh.
+
+  **Na render se u toho koukat musí, čísla nestačí.** Polohu ikony v railu změřit jde (a je na ni
+  test), barvu ne: `.menuStyle(.borderlessButton)` obarví popisek nabídky **akcentem**, takže
+  půlkolečko vyšlo fialové jako aktivní sekce a rail tvrdil, že je vzhled „zapnutý“. Z čísel to
+  nevypadlo, z obrázku ano.
 
 - **`List` se offscreen nevykreslí vůbec** — je to AppKit tabulka a `ImageRenderer` místo
   ní nakreslí žlutý placeholder přes celé plátno. Nevypovídá to o aplikaci. Řádky se dají

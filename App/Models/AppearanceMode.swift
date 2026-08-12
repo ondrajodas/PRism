@@ -22,7 +22,7 @@ enum AppearanceMode: String, CaseIterable, Codable, Hashable, Sendable {
     /// Podle systému — **výchozí**, tedy chování před #278.
     case system
 
-    /// Jak se režim jmenuje v okně nastavení.
+    /// Jak se režim jmenuje v okně.
     ///
     /// Vedle `rawValue` schválně, stejně jako u `DiffLayout` nebo `FindingsLanguage`: v souboru
     /// je anglický klíč, v okně česká věta a dvě místa by se rozešla.
@@ -33,4 +33,15 @@ enum AppearanceMode: String, CaseIterable, Codable, Hashable, Sendable {
         case .system: "Podle systému"
         }
     }
+
+    /// Ikona přepínače v railu — půlkolečko (`◐`), jak ho kreslí návrh.
+    ///
+    /// **Jedna ikona pro všechny tři stavy, ne tři.** Návrh má v railu jedno půlkolečko, takže se
+    /// stav nečte z ikony, ale z nabídky (odškrtnutá volba) a z nápovědy po hoveru. Tři ikony —
+    /// slunce, měsíc, půlkolečko — by byly na první pohled čitelnější, ale je to skladba, kterou
+    /// návrh nemá; kdyby to bylo málo, patří to na návrh, ne do railu.
+    ///
+    /// **Statická**, ne vlastnost případu, právě proto: na případu by čtenář čekal, že se ikona
+    /// s režimem mění.
+    static let railSymbol = "circle.lefthalf.filled"
 }
