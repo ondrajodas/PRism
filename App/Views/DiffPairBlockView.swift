@@ -33,7 +33,11 @@ struct DiffPairBlockView: NSViewRepresentable {
 
     func updateNSView(_ container: DiffPairBlockContainer, context: Context) {
         let palette = SyntaxPalette.forScheme(colorScheme)
-        let signature = "\(block.hashValue)|\(language?.name ?? "")|\(colorScheme)"
+        let signature = DiffBlockSignature.of(
+            blockHash: block.hashValue,
+            language: language,
+            colorScheme: colorScheme
+        )
 
         container.show(
             block,

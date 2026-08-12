@@ -10,8 +10,10 @@ import SwiftUI
 /// **Jeden zdroj pro celou aplikaci.** Barva se nesmí skládat v každém view zvlášť — dvě místa
 /// se rozejdou a okno pak má dvě různé „skoro stejné“ šedé. Kdo potřebuje barvu, bere ji odsud.
 ///
-/// Světlá i tmavá varianta se řídí systémem (`Color(light:dark:)` níž), takže se nic nezadrátuje
-/// natvrdo do jednoho režimu.
+/// Světlá i tmavá varianta se řídí **vzhledem, ve kterém se zrovna kreslí** (`Color(light:dark:)`
+/// níž), takže se nic nezadrátuje natvrdo do jednoho režimu. Ten vzhled je od #278 buď systémový,
+/// nebo vynucený přepínačem v railu — pro paletu je to jedno a **musí to tak zůstat**:
+/// přepínač volí režim, ne barvy, takže tady kvůli němu nepřibývá žádné větvení.
 enum Palette {
     /// Pozadí okna — to nejtmavší patro.
     static let background = Color(light: 0xF4F6FA, dark: 0x080A0F)
@@ -189,8 +191,10 @@ enum Palette {
 extension Color {
     /// Barva ze dvou hexů — pro světlý a tmavý režim.
     ///
-    /// Přes `NSColor(name:dynamicProvider:)`, protože jen ten se přepne **za běhu**, když si
-    /// člověk režim přepne v systému. `Color(uiColor:)` obdoba na macOS není a dvě konstanty
+    /// Přes `NSColor(name:dynamicProvider:)`, protože jen ten se přepne **za běhu** — když si
+    /// člověk režim přepne v systému, i když si ho od #278 vynutí v railu (`NSApp.appearance`;
+    /// uzávěr se ptá na vzhled, ne na systém, takže mu je jedno, odkud přišel).
+    /// `Color(uiColor:)` obdoba na macOS není a dvě konstanty
     /// s `@Environment(\.colorScheme)` by znamenaly, že barvu musí řešit každé view zvlášť.
     /// Krytí je u obou režimů zvlášť: návrh míchá tiché podklady (`--accent-weak`) v každém
     /// režimu jinak, protože tatáž průhlednost vyjde na tmavém podkladu slabší.

@@ -317,6 +317,20 @@ final class AppStore {
     /// Které PR už se ohlásily jako nové (#85). `nil` = odsud se nehlásí (testy).
     let announced: AnnouncedPullRequests?
 
+    /// Komu se nastaví vzhled okna (#278). `nil` = odsud se nenastavuje (testy).
+    ///
+    /// Nepovinné z **jiného** důvodu než `notifications`: živý cíl je `NSApp`, tedy v testech
+    /// hostitel testů — vynucený režim by z jednoho testu přetekl do render sond, které si režim
+    /// nastavují samy.
+    private let appearance: (any AppearanceApplying)?
+
+    /// Proč se nepodařilo uložit vzhled okna (#278).
+    ///
+    /// Musí být vidět: když zápis selže, vzhled se **nepřepne** (uplatňuje se až po úspěšném
+    /// uložení), a klik do railu, po kterém se nic nestane a nic se neřekne, vypadá jako rozbitá
+    /// aplikace. Kreslí to `AppNoticesView`.
+    var appearanceFailure: String?
+
     /// Rozdělané běhy (#97). `nil` = odsud se nedotahuje (testy).
     let interrupted: InterruptedRuns?
 
@@ -450,9 +464,11 @@ final class AppStore {
         announced: AnnouncedPullRequests? = nil,
         interrupted: InterruptedRuns? = nil,
         transcripts: (any TranscriptReading)? = nil,
+        appearance: (any AppearanceApplying)? = nil,
         visits: VisitLedger = VisitLedger(preferences: UserDefaults.standard)
     ) {
         self.visits = visits
+        self.appearance = appearance
         self.time = time
         self.gh = gh
         self.health = health
@@ -548,7 +564,8 @@ final class AppStore {
             notifications: SystemNotificationCenter.shared,
             announced: AnnouncedPullRequests(),
             interrupted: InterruptedRuns(),
-            transcripts: TranscriptStore()
+            transcripts: TranscriptStore(),
+            appearance: AppAppearance.application
         )
         self.configurationBox = box
     }
@@ -601,6 +618,11 @@ final class AppStore {
     private func apply(_ configuration: Configuration) async {
         self.configuration = configuration
         configurationBox?.value = configuration
+        // Vzhled (#278) patří sem, a ne do view: `NSApp.appearance` platí pro **všechna** okna,
+        // takže se to musí stát na tom jednom místě, kterým konfigurace do aplikace vchází.
+        // Ve view by to znamenalo, že se změna neuplatní, když je hlavní okno zavřené a člověk
+        // přepíná v nastavení.
+        appearance?.applyAppearance(configuration.global.appearance)
         polling.sources = configuration.activeSources
         polling.interval = .seconds(configuration.global.pollIntervalSeconds)
         // Limit souběhu se čte při každém pokusu o slot, ale kdo už čeká ve frontě, spí.
