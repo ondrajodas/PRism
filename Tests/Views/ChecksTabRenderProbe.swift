@@ -5,8 +5,12 @@ import Testing
 
 @testable import PRism
 
-/// Sonda, ne test (#306): vyrendruje **tab `Kontroly` ve všech čtyřech stavech** a k tomu **pruh
+/// Sonda, ne test (#306): vyrendruje **tab `Kontroly` v každé podobě, jakou umí** a k tomu **pruh
 /// záložek přes pásmo šířek**, aby se dalo vidět, co se v okně stane s trvale přítomnou záložkou.
+///
+/// Podob je **pět, i když `ChecksTabState` má čtyři případy**: `list` se kreslí dvakrát, se
+/// zastaralostí a bez ní, a je to zrovna ten rozdíl, který se z kódu nepozná — okrová věta nad
+/// `ScrollView`em je jediné, co říká, že seznam pod ní je poslední známý, ne dnešní.
 ///
 /// Proč sonda a ne měření: „netvrdí prázdný tab, že se něco nepovedlo?“ a „vejde se šest popisků
 /// na jeden řádek?“ jsou otázky na obrázek. Co se **dá** tvrdit číslem, je v `ChecksTabStateTests`
@@ -26,7 +30,8 @@ import Testing
 struct ChecksTabRenderProbe {
     private let pr = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 14013)
 
-    /// Čtyři stavy `Policy.checksTab`, každý pod svým jménem v souboru.
+    /// Podoby tabu, každá pod svým jménem v souboru. Čtyři případy `ChecksTabState` a k tomu
+    /// `stale`, což je `list(_, failure:)` — tedy pátá podoba téhož stavu, ne pátý stav.
     private enum Scenario: String, CaseIterable {
         case loading = "nenacteno"
         case empty = "bez-ci"

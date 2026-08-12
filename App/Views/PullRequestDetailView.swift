@@ -825,7 +825,8 @@ struct PullRequestDetailView: View {
     }
 
     /// Tab `Kontroly` (#215) — a od #306 ve **všech čtyřech stavech**, protože se kreslí i u PR
-    /// bez CI a musí mít odpověď na každý stav dat (`Policy.checksTab`).
+    /// bez CI a musí mít odpověď na každý stav dat (`Policy.checksTab`). Podob je z toho **pět**:
+    /// `list` kreslí seznam se zastaralostí i bez ní.
     ///
     /// Rozdíl mezi „ještě nedorazily“ a „žádné nejsou“ je ten podstatný: dokud se čeká na odpověď,
     /// **nesmí v tabu stát, že PR CI nemá**. Je to tentýž vzor jako `čisté` proti `failed`

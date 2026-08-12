@@ -2831,7 +2831,8 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     se ruší při přepnutí PR, což není porucha.
   - **Tab má čtyři stavy, ne dva** (`Policy.checksTab(checks:failure:)`, #306). Trvale přítomný tab
     musí mít odpověď na každý stav dat, a šest kombinací vstupů (`checks` nenačtené / prázdné /
-    neprázdné krát `failure` je / není) dává čtvero:
+    neprázdné krát `failure` je / není) dává čtvero — v tabu je z toho **pět podob**, protože
+    `list` se kreslí se zastaralostí i bez ní:
 
     | Stav | Kdy | Co je v tabu |
     |---|---|---|
