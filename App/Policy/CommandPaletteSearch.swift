@@ -165,6 +165,10 @@ extension Policy {
     ///     doběhlé review bez nálezů je pořád běh, který se dalším spuštěním přepíše, takže
     ///     chybějící „znovu“ by to zamlčelo. Pojmenované takhle proto, že jako `hasFindings` se
     ///     to při review PR přečetlo obráceně.
+    ///   - isPanelExpanded: je panel s mým review rozložený? **`nil` znamená, že v otevřeném tabu
+    ///     není vůbec** (#294) — pak se položka nenabízí, protože „složit panel“ by slibovalo něco,
+    ///     co se nemá kde stát. Není to totéž jako `false`: složený panel v okně je, jen jako
+    ///     proužek.
     ///   - section: která sekce railu je vidět. Nabízí se **jen ta, která něco změní**: nad
     ///     otevřeným PR změní všechny (přepnou i záložku), v domácí záložce ta právě viditelná ne.
     static func paletteActions(
@@ -172,15 +176,20 @@ extension Policy {
         isReviewing: Bool = false,
         hasRun: Bool = false,
         layout: DiffLayout = .unified,
-        isPanelExpanded: Bool = true,
+        isPanelExpanded: Bool? = true,
         section: RailSection = .overview
     ) -> [CommandPalette.Item] {
         var items: [CommandPalette.Item] = []
 
         if let open {
             items.append(isReviewing ? cancelReviewItem(open) : runReviewItem(open, hasRun: hasRun))
+            // Pohled na diff se nabízí i mimo tab `Změněné soubory`: je to **nastavení diffu**,
+            // což mu říká i titulek, takže se z něj pozná, kde zabere. Panel je proti tomu věc na
+            // obrazovce, a ta se v tabech bez panelu nenabízí.
             items.append(diffLayoutItem(from: layout))
-            items.append(reviewPanelItem(isExpanded: isPanelExpanded))
+            if let isPanelExpanded {
+                items.append(reviewPanelItem(isExpanded: isPanelExpanded))
+            }
         }
         items += RailSection.allCases
             .filter { open != nil || $0 != section }
