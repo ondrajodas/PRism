@@ -1435,5 +1435,32 @@ vrácené `split(separator: "\n")` položí 41 testů v 8 suitách (mezi nimi i 
 dokládá, že jejich převedení nic neztratilo), a rozšíření na `isNewline` položí přesně ty dva testy
 o unicode oddělovačích.
 
+**A po dalším proklikání se zvedly obě meze u konce logu: 4 000 → 6 000 řádků a okýnko 320 → 441 bodů**
+(#303). Obojí bylo výslovné přání; **kolik přesně, rozhodlo měření**, ne odhad.
+
+U řádků měření jen potvrdilo, že to cena unese (6 000 řádků 5,45 ms proti 2,02 ms u dvou tisíc, celý
+největší log by byl 14,34 ms u desetitisícového ocasu) — rozhodla ale **skutečná data**. Devět
+změřených logů z našich repů má 2 / 1 515 / 2 174 / 5 899 / 5 920 / 5 933 / 16 013 / 16 270 / 25 533
+řádků, takže `Tests` joby sedí zrovna v pásmu, které stará mez ořezávala a nová ukáže celé — a nad mezí
+zůstávají tři největší, takže `Ukázat celý log` i hlavička „starších N řádků se nevešlo“ mají dál co
+dodat. Kdyby mez přelezla i je, sheet a okýnko by ukazovaly totéž a mez se zvedat neměla.
+
+U výšky rozhodlo, **kolik zbude na seznam checků** — to je ta věc, kvůli které se detail checku
+stěhoval do vlastního tabu (#215). Nová sonda (`CheckLogRoomProbe`) to čte z vyrendrované hierarchie:
+na okně, ve kterém se aplikace používá (952 bodů), zbývá pod okýnkem **172 bodů, tedy 6 řádků**
+seznamu; ve výchozím okně 700 se seznam odscrolluje, a to je zapsaná cena. Zamítnuto 525 bodů (z okýnka
+by byl celý tab) i 357 bodů (+3 řádky nejsou změna, o kterou se prosilo).
+
+**A cestou se našlo, že okýnko se na konci logu neotvíralo** — ta úmluva z #292 v aplikaci nikdy
+nefungovala. Skákalo se z `DispatchQueue.main.async` hned po vsazení textu, ale okýnko vzniká teprve
+ve chvíli, kdy log dorazí, takže v tu chvíli nemá výšku a `scrollToEndOfDocument` posun zahodí. #292 to
+nechytilo proto, že jeho sonda dala `NSScrollView`u rozměr **předem** — tedy tatáž chyba jako u vynucené
+sazby, jen o vrstvu vedle: měřila cestu, kterou aplikace nejde. Opraveno skokem z `layout()` a žádost se
+zahodí teprve tehdy, když je konec **doopravdy vidět** (jinak se okýnko zastaví o řádek nad koncem,
+když se vodorovný scroller objeví až po skoku). Cena, kterou to přineslo, je zapsaná: skok vynutí sazbu
+až na konec dokumentu, 128 ms na šesti tisících řádcích.
+
+Testů je 2484 (o 5 víc, z toho 3 skutečné a 2 za měření).
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

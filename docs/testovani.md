@@ -1532,14 +1532,30 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   není to test, netvrdí časy. Log v něm je syntetický podle skutečných rozměrů, a když je po ruce
   ten skutečný, vezme se on (`PRISM_LOG_FILE`); osmimegový soubor se do repa nepřikládá.
 
-  **Dvě pasti u toho měření, obojí zaplacené u #292.**
+  Od #303 je v něm i **cena skoku na konec logu** — do té doby se v aplikaci nedělal vůbec (skákalo se
+  do okýnka bez výšky a posun se zahodil), takže se za něj neplatilo, ale taky se nikam neskočilo.
+  Naměřeno 11 / 47 / **128 ms** pro 300 / 2 000 / 6 000 řádků: `scrollToEndOfDocument` vynutí sazbu až
+  na konec dokumentu, tedy tu jedinou drahou věc, kterou aplikace jinak nedělá. Je to jednorázově, při
+  rozbalení checku, po vteřinách čekání na stažení.
 
-  - **`xcodebuild` proměnnou do testovacího procesu nepředá** — ani `PRISM_MEASURE=1 xcodebuild`,
-    ani `TEST_RUNNER_PRISM_MEASURE=1` (scheme má `shouldUseLaunchSchemeArgsEnv`). Suita se tedy
-    tiše **přeskočí** a vypadá to, že proběhla. Pouští se z Xcode, nebo se ta podmínka na dobu
-    měření dočasně smaže. Že ochrana není zbytečná, se taky ověřilo: bez ní běželo měření SwiftUI
-    `Text`u na hlavním vlákně **199 s** a vyhladovělo celou sadu — čtyři nesouvisející testy spadly
-    na timeout a vypadalo to jako regrese v nich.
+  **Tři pasti u toho měření.**
+
+  - **Prefix `TEST_RUNNER_` je podmínka, ne ozdoba** — `PRISM_MEASURE=1 xcodebuild` do testovacího
+    procesu nedojde, `TEST_RUNNER_PRISM_MEASURE=1` ano (a `TEST_RUNNER_PRISM_LOG_FILE` taky). Suita
+    bez proměnné se tiše **přeskočí** a vypadá to, že proběhla, takže se to nepozná z výsledku.
+
+    **Opraveno u #303**: do té doby tu (a v komentáři té suity) stálo, že to `xcodebuild` nepředá ani
+    s prefixem a že se měření pouští jedině z Xcode. Není to pravda — vyzkoušeno; a stejně to má
+    popsané sonda sazby o pár odstavců výš, takže tu dvě místa tvrdila dvě různé věci. Cena té
+    domněnky: měření se po #292 nepustilo znovu, protože to vypadalo, že to z příkazové řádky nejde.
+
+    Že ochrana sama zbytečná není, se taky ověřilo: bez ní běželo měření SwiftUI `Text`u na hlavním
+    vlákně **199 s** a vyhladovělo celou sadu — čtyři nesouvisející testy spadly na timeout a vypadalo
+    to jako regrese v nich.
+  - **Měřit se má jen to, co aplikace umí** (#303). Skok na konec logu se měřil i na celých 25 000
+    řádcích a vynucená sazba **položila testovacího hosta** (595 ms a pak pád) — přitom ocas je vždycky
+    nejvýš `Policy.logTailLines`, takže se tou cestou nikdy nejde. Výčet je proto z mezí, které
+    aplikace doopravdy měla: 300, 2 000 a dnešních 6 000.
   - **Měření musí měřit tu cestu, kterou kód jde.** #214 měřilo sazbu logu přes
     `ensureLayout(for:)` + `usedRect(for:)`, tedy **vynucenou sazbu celého dokumentu** — jedinou věc,
     kterou aplikace nedělá. Vyšlo 850 ms tam, kde skutečná cesta stojí 6,57 ms, a z toho vzešel
@@ -1560,22 +1576,54 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   displej, ne konstanta z většího) a **na ultrawide se zastropuje**. K tomu monotonie přes pásmo
   600–3 400 bodů, protože jednotlivé případy minou aritmetickou chybu uprostřed.
 
-- **Výška okýnka konce logu (#292)** — `LogTailHeightTests`, výčtem. Počítá se z metriky **toho**
-  fontu, kterým se kreslí (#236), takže se dá tvrdit přesná hodnota proti `NSLayoutManager`u. Co se
-  dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým by zbylo 320 bodů prázdna) a
-  **nezastropovat dlouhý** (dva tisíce řádků naplno odtlačí seznam checků mimo obrazovku, tedy
-  zrovna to, kvůli čemu se detail stěhoval z `Přehledu`). Regrese ověřená vložením regrese: vyndaný
-  `min(limit, …)` položí sedm tvrzení.
+- **Výška okýnka konce logu (#292, strop zvednutý u #303)** — `LogTailHeightTests`, výčtem. Počítá se
+  z metriky **toho** fontu, kterým se kreslí (#236), takže se dá tvrdit přesná hodnota proti
+  `NSLayoutManager`u. Co se dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým by zbylo
+  441 bodů prázdna) a **nezastropovat dlouhý** (šest tisíc řádků naplno odtlačí seznam checků mimo
+  obrazovku, tedy zrovna to, kvůli čemu se detail stěhoval z `Přehledu`). Regrese ověřená vložením
+  regrese: vyndaný `min(limit, …)` položí sedm tvrzení.
+
+  **Strop se v sadě bere z aplikace, ne opisuje** (#303) — jinak by se s ním test rozešel potichu.
+  Tvrdí se u něj to jediné, co tvrdit jde: že padne na **celý počet řádků** (`14N + 21`) a že jich je
+  30. Půlka řádku na spodní hraně by byla zrovna na tom řádku, kvůli kterému se log otevírá — okýnko
+  se otevírá na konci.
 
   Je u toho **kontrola měřidla**: rezerva na vodorovný scroller je v kódu opsané číslo, protože
   `NSScroller.scrollerWidth` je vázaná na hlavní vlákno — test ji porovnává se systémem, aby se
   okýnko nemohlo potichu rozejít se scrollerem.
 
+- **Otevření konce logu (#303)** — `LogTailOpeningTests`. Tvrdí dvě věci, které se dají pokazit
+  potichu: okýnko se otevře **na konci logu** a **vodorovně na nule**. Testuje se to přes
+  `NSHostingView`, a to je celý smysl té sady: na `NSScrollView`u, kterému se rozměr dá **předem**,
+  skok fungoval i **před** opravou — rozbité to bylo jedině tou cestou, kterou jde aplikace (SwiftUI
+  okýnko postaví, teprve když log dorazí, a výšku mu dá až při rozložení).
+
+  Tvrdí se, že je **vidět poslední řádek**, ne konkrétní `origin.y`: přesnou hodnotu určuje odsazení
+  textu a vodorovný scroller, takže by z toho byl test na aritmetiku AppKitu. Čeká se **na jev se
+  stropem** (#269), protože okýnko v hierarchii vznikne až po kole smyčky.
+
+  Regrese ověřená vložením regrese: vrácený `DispatchQueue.main.async` z #292 položí dvě tvrzení
+  („zůstalo na začátku ocasu“ a „poslední řádek není vidět“). Tvrzení o vodorovné nule s tou regresí
+  **projde**, a je to tak správně — hlídá jinou chybu (`x` u konce nejdelšího řádku).
+
+- **Sonda místa pro konec logu (#303)** — `CheckLogRoomProbe`, gated `PRISM_MEASURE`. Nic netvrdí;
+  odpovídá na otázku „kolik po vyšším okýnku zbude na seznam checků“, a to **měřením v hierarchii**,
+  ne odhadem: v rendrovaném tabu najde `NSScrollView` viewportu i okýnko logu (pozná se podle
+  `documentView is NSTextView`) a vypíše, kolik bodů zbylo pod ním — a kolik je to řádků seznamu
+  (výška řádku se bere **rozdílem dvou sazeb**, ne z konstant ve view).
+
+  Dvě věci, které se u ní zaplatily. **Kandidáti na výšku se nerendrují jeden po druhém**: vše kromě
+  okýnka je ve výšce pevné, takže z jednoho renderu vyjde konstanta a zbytek je odčítání. A **log musí
+  dorazit až po prvním rozložení**, jako v aplikaci — když se text podá hned při stavbě hierarchie,
+  okýnko zůstane na začátku ocasu, a to je vlastnost sondy, ne aplikace.
+
   **Jak konec logu doopravdy vypadá, `ImageRenderer` neukáže** — obsah `NSScrollView`u nerasterizuje
   (prázdná plocha v renderu je omezení sondy, ne aplikace, a ověřilo se to i na třířádkovém logu).
-  Kreslí se proto přes `bitmapImageRepForCachingDisplay` + `cacheDisplay(in:to:)` na samotném
-  `NSScrollView`u. Právě tak se u #292 chytilo, že okýnko po skoku na konec dokumentu začínalo
-  **uprostřed slova**, protože zůstalo u konce nejdelšího řádku.- **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
+  Kreslí se proto přes `bitmapImageRepForCachingDisplay` + `cacheDisplay(in:to:)`. Právě tak se u #292
+  chytilo, že okýnko po skoku na konec dokumentu začínalo **uprostřed slova**, a u #303, že se v okně
+  o výšce 700 bodů odscrolluje seznam checků celý.
+
+- **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
   (řádek plný nul utopí to jedno číslo, na kterém záleží) a **ukázání shodné sha nálezů**, ze které
   neplyne nic. Nejcennější test je právě ten druhý: shodná se nekreslí, rozešlá ano a je označená
   jako zastaralá.

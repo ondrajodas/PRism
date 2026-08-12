@@ -34,22 +34,25 @@ enum LogAvailability: Hashable, Sendable {
 }
 
 extension Policy {
-    /// Kolik řádků konce logu se ukazuje: **4 000** (do #292 tři stovky, chvíli 2 000).
+    /// Kolik řádků konce logu se ukazuje: **6 000** (do #292 tři stovky, pak 2 000, do #303 4 000).
     ///
     /// **Cena o tom nerozhoduje.** Do #292 rozhodovala: konec logu kreslil SwiftUI `Text`
-    /// se `.fixedSize()`, který roste kvadraticky (300 řádků 108 ms, 2 000 řádků **6 s**, 10 000
-    /// řádků **dvě a půl minuty**). Od #292 ho kreslí `LogTailTextView` nad TextKitem, takže
-    /// **2 000 řádků stojí 1,14 ms, 4 000 řádků 2,61 ms** a celý ten největší log (25 000 řádků)
-    /// 5,50 ms; projíždění má medián snímku 0,00 ms u všech.
+    /// se `.fixedSize()`, který roste kvadraticky. Od #292 ho kreslí `LogTailTextView` nad TextKitem,
+    /// takže na největším logu z našich repů (8,78 MB) stojí v jednom běhu **300 řádků 2,58 ms,
+    /// 2 000 řádků 2,02 ms, 6 000 řádků 5,45 ms a 10 000 řádků 14,34 ms** — proti 124 ms, 6,4 s,
+    /// 57,6 s a 206 s u SwiftUI `Text`u. Projíždění má medián snímku 0,00 ms u všech.
     ///
-    /// **Změna proti prvnímu rozhodnutí u #292**, kde tady stály 2 000 s odůvodněním, že okýnko má
-    /// 320 bodů (~20 řádků naráz) a že `Ukázat celý log` musí zůstat k něčemu. Uživatel si po
-    /// proklikání vyžádal 4 000 a **je to jeho volba, kterou měření unese** — cena je 2,61 ms proti
-    /// 1,14 ms. Zůstává z toho jen zapsaná cena rozhodnutí: v okýnku o 320 bodech je 4 000 řádků
-    /// **175 obrazovek** scrollování (2 000 bylo 88), takže k dalšímu zvedání patří i vyšší okýnko —
-    /// jinak roste jen scrollování. Rozdíl proti sheetu zůstává: největší log má 25 533 řádků, takže
-    /// se pořád ukáže „starších 21 533 řádků se nevešlo“.
-    static let logTailLines = 4_000
+    /// **Zvednuto na výslovné přání po proklikání** (#303, do té doby 4 000 — a u #292 chvíli 2 000
+    /// s odůvodněním, že se do okýnka vejde jen ~20 řádků naráz). Měření to unese a **skutečné logy
+    /// tomu dávají smysl**: `Tests` joby na našich repech mají 5 899 / 5 920 / 5 933 řádků, tedy sedí
+    /// zrovna v pásmu mezi starou a novou mezí — se 4 000 se ořezávaly, se 6 000 se ukážou **celé**.
+    ///
+    /// **`Ukázat celý log` tím o smysl nepřišel** a je to změřené, ne odhadnuté: z devíti změřených
+    /// logů zůstávají nad mezí tři (16 013 / 16 270 / 25 533 řádků), takže se u nich pořád ukáže
+    /// „starších N řádků se nevešlo“ a sheet má co dodat. Cena zvednutí, ať je zapsaná: v okýnku
+    /// o 441 bodech (30 řádků) je 6 000 řádků **200 obrazovek** scrollování, takže dál se nezvedá
+    /// samotný ocas — od téhle mezi výš je to práce pro sheet a pro odkaz na GitHub.
+    static let logTailLines = 6_000
 
     /// Číslo jobu z odkazu na check (#214).
     ///
