@@ -130,7 +130,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // Tolerantně jako pohled na diff, a se stejným odůvodněním: neznámá hodnota znamená
         // **podle systému**, tedy stav, ve kterém aplikace běžela před #278. Není to spolknutá
         // chyba — je to vědomě ta nejmírnější odpověď, protože nejhorší následek překlepu je
-        // světlé okno, které se přepne jedním kliknutím v nastavení. Přísnost jako u režimu
+        // světlé okno, které se přepne jedním kliknutím v liště. Přísnost jako u režimu
         // nebo odesílání by tady nechránila nic: vzhledem nic neodejde a nic se nespustí.
         appearance = (try? container.decode(AppearanceMode.self, forKey: .appearance)) ?? standard.appearance
         pollIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds)
