@@ -1262,6 +1262,48 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   stavy**, protože právě ty se odebráním bloku dají potichu rozbít: `Načítám popis…` (detail
   nedorazil) a `Autor k PR nic nenapsal.` (autor nic nenapsal) musí zůstat **dva různé stavy**,
   a k tomu nejchudší možný `Přehled` — bez dlaždic i bez checků — nesmí být prázdná plocha.
+- **Šířka `Přehledu` (#291)** — `OverviewWidthTests`, přes pásmo šířek 128–1180. Tvrdí jedinou věc:
+  **za pravou hranou tabu se nekreslí nic**. Vzniklo z regrese po #279, kdy sazba Markdownu přešla
+  na `filling()`, `Přehled` si nezúžil předávanou šířku o svá odsazení a karta s popisem vyšla
+  o 42 bodů širší než tab.
+
+  Tři věci, na kterých ten test stojí a bez kterých je slepý:
+
+  - **Měří se pixely, ne rámečky.** `frame(width:)` z `filling()` je tvrdý rámec, takže dítě, které
+    se do něj nevejde, přeteče **vizuálně** a rodičova velikost se nezmění — ptát se rodiče na
+    `fittingSize` znamená ptát se toho, kdo o chybě neví. Obsah se proto kreslí na plátno **širší**
+    než tab a v tom přesahu se hledají pixely.
+  - **Bez `ScrollView`u** (`OverviewView.content`, ne `body`). `NSScrollView` obsah na svou šířku
+    ukrojí, takže rozbitý stav vyjde na renderu skoro jako opravený — jen bez pravé hrany karty.
+    Přesně tím je tahle regrese v aplikaci tak nenápadná; `content` je `internal` kvůli tomu.
+  - **Podklad se porovnává proti druhému renderu**, ne proti zapsané purpurové: bitmapa z
+    `ImageRenderer`u je v systémovém barevném prostoru, takže literál `1,0,1` v ní přesně nesedí.
+    První verze sondy na tom stála a hlásila přetečení přes celé plátno i tam, kde se nic
+    nenakreslilo — vypadalo to jako chyba v aplikaci, a byla v sondě.
+  - **Čtou se surové bajty (`bitmapData`), ne `NSColor` na pixel** (nález Copilota na #291).
+    Plocha k prohledání je `přesah × výška` u každého případu a každé šířky, tedy ~5,4 milionu
+    bodů; `colorAt(x:y:)` s `usingColorSpace(.sRGB)` z toho udělá ~21 milionů objektů. Změřeno
+    **13,2 s → 2,5 s** za suitu (a celý běh 17,5 s → 7,5 s, protože tyhle tři testy byly úzké
+    hrdlo). Převod barevného prostoru přitom nebyl na nic potřeba: oba rendery jdou stejnou cestou
+    a porovnávají se navzájem. Cenou je, že se musí ověřit i **rozvržení bajtů** (`bytesPerRow`,
+    `bitsPerPixel`, `isPlanar`) — bez shody v něm by se porovnávaly různé pixely.
+
+  **Vyzkoušené vložením regrese** (obě poloviny opravy zvlášť): bez `narrowingWidth(by: 32)` u tabu
+  16 bodů přesahu, bez `narrowingWidth(by: 26)` u karty 10 bodů. A z toho vyšlo i jedno pravidlo
+  do kódu: rámec, ve kterém se má přetečení dát změřit, **musí zůstat pružný** — s `filling()` na
+  odsazeném těle popisu zůstal test zelený i po smazání toho zúžení.
+
+  **Prázdné a nedoručené stavy se měří zvlášť** (`nil` proti `""`), protože jsou to jiné podstromy
+  než sazba a nesmí se slít. Že přetečení bylo doopravdy v sazbě, se poznalo právě po nich: zeleně
+  vycházely i před opravou.
+- **Sonda `Přehledu` (#291)** — `OverviewRenderProbe`, gated `PRISM_MEASURE`. Nic netvrdí, jen
+  vyrendruje tab přes `NSHostingView` ve třech šířkách a obou režimech, aby se dal **vidět**.
+  Existuje vedle měření proto, že „vejde se hlavička do zúženého tabu“ je otázka na vzhled —
+  a `ImageRenderer` na ni odpovědět neumí: `Link` v něm vyjde jako **žlutý placeholder**, takže se
+  z něj šířka popisku `Otevřít na GitHubu` nepozná. A byl to zrovna ten popisek, který v #291
+  chyběl. `NSHostingView` kreslí skutečnou hierarchii, takže odkaz v něm stojí ve své šířce —
+  ověřeno, čitelný celý.
+
 - **Detail spadlého checku (#214)** — `Policy` výčtem (`CheckLogTextTests`) a store
   (`AppStoreCheckDetailTests`). Nejcennější testy tvrdí, že se něco **NEstalo**:
   - **bez kliknutí se pro log ani anotace nejde** — jinak je to N+1 past o tři řády dražší
@@ -1346,6 +1388,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     se `job.log`, tedy dvě jednolité cesty, a tvrdilo „0,04 proti 0,02 ms“; po řádcích se teď měří
     pod `job.swift`, kde `Language` jazyk najde.
 
+- **Závora `AsyncGate` čeká na jev se stropem v čase, ne v `yield`ech** (#292). Rozpočet yieldů
+  (`for _ in 0..<100_000`) je pevný okamžik v přestrojení: pod zátěží druhého paralelního buildu se
+  vyčerpal dřív, než se čekaná práce dostala na procesor, a závora položila **tři suity naráz**
+  („práce se k závoře nedostala“) — přitom samostatně proběhly za 0,094 s. Je to tatáž chyba, kterou
+  #269 vyndalo ze sondy odpočtu; spánek navíc na rozdíl od `yield`ování pustí procesor jinam. Strop
+  zůstává, aby se test při skutečné chybě **položil, ne zasekl**.
+
 - **Výška okýnka konce logu (#292)** — `LogTailHeightTests`, výčtem. Počítá se z metriky **toho**
   fontu, kterým se kreslí (#236), takže se dá tvrdit přesná hodnota proti `NSLayoutManager`u. Co se
   dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým by zbylo 320 bodů prázdna) a
@@ -1361,9 +1410,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (prázdná plocha v renderu je omezení sondy, ne aplikace, a ověřilo se to i na třířádkovém logu).
   Kreslí se proto přes `bitmapImageRepForCachingDisplay` + `cacheDisplay(in:to:)` na samotném
   `NSScrollView`u. Právě tak se u #292 chytilo, že okýnko po skoku na konec dokumentu začínalo
-  **uprostřed slova**, protože zůstalo u konce nejdelšího řádku.
-
-- **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
+  **uprostřed slova**, protože zůstalo u konce nejdelšího řádku.- **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
   (řádek plný nul utopí to jedno číslo, na kterém záleží) a **ukázání shodné sha nálezů**, ze které
   neplyne nic. Nejcennější test je právě ten druhý: shodná se nekreslí, rozešlá ano a je označená
   jako zastaralá.
@@ -1744,7 +1791,16 @@ Dva zádrhely, které to má:
   vypadá, že se stav vůbec nezobrazil. Stejná kategorie jako `.borderless`. Kde na kontrole
   záleží, se hodí vlastní rámeček (`background(…, in: .rect(cornerRadius:))`), který
   SwiftUI kreslí sám.
-- **`Link` vyjde jako žlutý placeholder.** V aplikaci je v pořádku, offscreen ne.
+- **`Link` vyjde jako žlutý placeholder.** V aplikaci je v pořádku, offscreen ne. **V `NSHostingView`
+  se ale vykreslí celý** (#291) — i s popiskem a v jeho skutečné šířce, protože tam vzniká pravá
+  hierarchie, ne SwiftUI náhrada. Kde na šířce popisku v odkazu záleží, je to jediná cesta;
+  z `ImageRenderer`u se jen pozná, **že** tam odkaz je.
+- **Přetečení šířky se nezměří tam, kde je nad ním tvrdý rámec** (#291). `frame(width:)` — tedy
+  i `filling()` s ustavenou šířkou — drží svůj rozměr i nad dítětem, které se do něj nevejde: dítě
+  přeteče **vizuálně** a rodič o tom nic nehlásí. Sonda proto nesmí stát na `fittingSize` rodiče
+  a nesmí mít mezi měřeným místem a plátnem konkrétní rámec; kreslí se na plátno **širší** než
+  měřená šířka a v přesahu se počítají pixely. `ScrollView` na cestě má tentýž efekt, jen horší —
+  ten přesah **ukrojí**, takže rozbitý stav vyjde jako opravený.
 - **`NSViewRepresentable` se v `ImageRenderer`u nevykreslí** — vyjde žlutý placeholder přes celé
   plátno, jako `List`. Od #157 se tím kreslí bloky kódu v diffu, takže takhle se vzhled diffu
   zkontrolovat nedá.
