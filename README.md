@@ -134,9 +134,9 @@ je rovnou u události napsané, že tím zastaraly nálezy, a tlačítko pustit 
 
 Za nimi stojí `Nálezy` (tabulka všeho, co reviewery nahlásily) a `Průběh` (co dělaly) — a mezi
 `Kontrolami` a `Nálezy` je **dělič**: nalevo je to, co je na PR a co má i GitHub, napravo to, co
-s ním udělaly naše reviewery. Dělič se počítá z **vlastnosti záložky**, ne z její pozice: `Kontroly`
-sedí nalevo doprostřed a u PR bez CI se **vůbec nekreslí**, takže zadrátovaný index by ho posunul
-o jedno místo vedle — a podle dat.
+s ním udělaly naše reviewery. Kreslí se z **vlastnosti záložky**, ne z její pozice — `Kontroly`
+sedí nalevo doprostřed, takže zadrátovaný index by ho posunul o jedno místo vedle. **Všech šest
+záložek je v pruhu vždycky** (#306), takže se jejich počet nemění podle dat.
 
 V `Průběhu` má dráhu **každý reviewer z nastavené sady**, ne jen ten, který už na tomhle PR běžel:
 otázka je „kde je které z mých review“ a *ještě nezačalo* je taky odpověď. Tři různá „nic tu není“
@@ -148,7 +148,8 @@ review — jen je označená `mimo sadu`.
 Záložky jsou podtržené jako na GitHubu a **odznak má každá** (#218), jen počítá pokaždé něco
 jiného: `Přehled` novinky od poslední návštěvy, `Změněné soubory` počet souborů, `Konverzace`
 kolik je toho k přečtení, `Kontroly` **kolik checků spadlo** (červeně; u běžícího puntík, nad
-zeleným CI nic), `Nálezy` kolik jich je (**červeně, když něco blokuje**) a `Průběh`
+zeleným CI nic — a dokud není seznam, taky nic: nula nad nenačtenými daty by tvrdila, že se
+spočítalo), `Nálezy` kolik jich je (**červeně, když něco blokuje**) a `Průběh`
 **puntík, ne počet** — „běží“ je stav, ne množství. Volba se pamatuje **u každého PR zvlášť**
 a otevírá se `Přehled` — popis a diskuze se čtou dřív než kód, kterého se týkají.
 
@@ -208,7 +209,7 @@ jinak na hex sešlo se zastaráním a `[!CAUTION]` s blokujícím nálezem, tedy
 už něco znamenají. Sazba se **pamatuje** — u dvanáctikilobajtové zprávy od bota je
 rozklad na bloky 1,91 ms proti 0,04 ms z cache a inline sazba jejích bloků dalších 1,81 ms.
 
-### Záložka `Kontroly` (#215, #214)
+### Záložka `Kontroly` (#215, #214, #306)
 
 **Vlastní záložka, ne blok v `Přehledu`.** Do #215 to byl seznam checků pod dlaždicemi (#209), pak
 chvíli jen souhrn — a nakonec ani ten: v `Přehledu` po tom stěhování **nezbylo nic**. Důvod je
@@ -218,8 +219,14 @@ pohyb jako u `Konverzace` (#183): co začne růst, přestane být kontextem a st
 zelené“ přitom z okna nezmizelo — nese ho **chip v hlavičce PR**, který je vidět ve všech
 záložkách, takže souhrn v `Přehledu` byl třetí místo o téže věci.
 
-**U PR bez CI se záložka vůbec nekreslí.** Prázdný tab s nadpisem by o něm tvrdil, že se něco
-nepovedlo, a PR bez workflow je běžná věc — je to tatáž úvaha jako u chipu.
+**Kreslí se vždycky, i u PR bez CI** (#306) — a u něj v ní stojí `Tenhle PR nemá kontroly` s větou,
+že to **není porucha**. Do #306 se u PR bez CI nekreslila vůbec, právě aby o něm netvrdila, že se
+něco nepovedlo; otočilo to chování: pruh záložek problikával z pěti na šest při **každém** otevření
+PR (checky dorazí až s detailem), kdežto prázdná záložka je jen u těch pár PR bez CI — a s tou větou
+původní argument padá. Trvale přítomná záložka si vynutila odpověď na **každý** stav dat: čeká se na
+odpověď (`Načítám kontroly…`, a to o CI netvrdí nic), PR CI nemá, seznam, nebo se ho nepodařilo
+načíst. Když se nepovede načíst **znovu**, seznam zůstane a nad ním je okrová věta, že je to
+poslední známý stav — okrová, ne červená, protože „nevím“ není „je to rozbité“.
 
 V tabu je karta `Kontroly na GitHubu`: v hlavičce poměr (`1 selhala · 1 prošla · 1 přeskočeno`),
 pod ním řádek na každý check s dobou běhu. **Nejhorší stav vyhrává** — dvanáct zelených a jeden

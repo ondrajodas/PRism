@@ -27,8 +27,12 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// místem, kde se scrolluje log — je to tentýž pohyb jako u `Konverzace` (#183): co začne
     /// růst, přestane být kontextem a stane se obsahem.
     ///
-    /// **Nekreslí se, když checky nejsou** — viz `Policy.tabs(hasChecks:)`. PR bez CI je běžná
-    /// věc a prázdný tab s nadpisem by o něm tvrdil, že se něco nepovedlo.
+    /// **Kreslí se vždycky, i u PR bez CI** (#306) — a u něj v tabu zůstane hláška, že kontroly
+    /// nejsou. Do #306 se u PR bez CI nekreslil (`Policy.tabs(hasChecks:)`), protože prázdný tab
+    /// s nadpisem `Kontroly` by o něm tvrdil, že se něco nepovedlo. Otočilo to problikávání pruhu
+    /// při **každém** otevření PR (nejdřív pět záložek, pak šest) a hláška, která ten prázdný stav
+    /// vysvětlí. Co v tabu je, rozhoduje `Policy.checksTab(checks:failure:)` — čtyři stavy, ze
+    /// kterých „ještě nedorazily“ o CI netvrdí nic.
     case checks
     /// Všechno, co reviewery nahlásily — tabulka přes celou šířku (#242).
     ///
@@ -75,8 +79,10 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// to, co s PR udělaly reviewery. Bez něj by pět záložek vypadalo jako jeden dlouhý seznam.
     ///
     /// Je to vlastnost tabu, ne pozice v poli: `Kontroly` (#215) sedí **nalevo** doprostřed,
-    /// takže dělič spočítaný z indexu by se tím tiše posunul na špatné místo. A protože se
-    /// `Kontroly` u PR bez CI vůbec nekreslí, index by se navíc měnil podle dat.
+    /// takže dělič spočítaný z indexu by se tím tiše posunul na špatné místo. Do #306 se navíc
+    /// index měnil podle dat, protože se `Kontroly` u PR bez CI nekreslily — to už neplatí, ale
+    /// první důvod stačí: vlastnost přežije i sedmou záložku vloženou doprostřed, zadrátovaná
+    /// pozice ne.
     var isReviewerOutput: Bool {
         switch self {
         case .overview, .filesChanged, .conversation, .checks: false
