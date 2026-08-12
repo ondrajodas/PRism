@@ -1390,7 +1390,120 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   z něj šířka popisku `Otevřít na GitHubu` nepozná. A byl to zrovna ten popisek, který v #291
   chyběl. `NSHostingView` kreslí skutečnou hierarchii, takže odkaz v něm stojí ve své šířce —
   ověřeno, čitelný celý.
-- **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
+
+- **Detail spadlého checku (#214)** — `Policy` výčtem (`CheckLogTextTests`) a store
+  (`AppStoreCheckDetailTests`). Nejcennější testy tvrdí, že se něco **NEstalo**:
+  - **bez kliknutí se pro log ani anotace nejde** — jinak je to N+1 past o tři řády dražší
+    než u detailu PR;
+  - **nad známým stropem se pro log vůbec nejde** — hlídá se, že se zjistila velikost
+    a **nestahovalo**;
+  - **dokud se stahuje, drží se velikost z `HEAD`u** (#292), aby se dala napsat do hlášky — testuje
+    se to na **mezistavu** přes `AsyncGate`, ne na výsledku, protože jinak by se dalo zkontrolovat
+    jen to, co zbylo na konci. Věta sama je čistá funkce (`Policy.logDownloadNotice`) a testuje se
+    výčtem: se známou velikostí ji nese, bez ní **neslibuje nic** — ani nulu;
+  - **bez známé velikosti se log naopak stáhne** (#292) a strop se uplatní na tom, co přišlo. Do
+    #292 tady stálo pravidlo obrácené („bez velikosti se nestahuje“) a bylo to zeleně otestované —
+    jenže rozbor hlaviček velikost nikdy nevydal, takže tenhle test **popisoval vypnutou funkci**.
+    Poučení pro katalog: test, který tvrdí „tohle se nestane“, si musí ověřit, že ten stav je
+    **výjimka**, ne obvyklý běh. Testy k tomu jsou čtyři — velikost nepřišla, dotaz na ni spadl,
+    stažené bajty jsou nad stropem, a když spadne obojí, je vidět chyba **stažení**, ne chyba
+    `HEAD`u;
+  - **sbalení stažený text zahodí a běžící stahování zruší**;
+  - **selhání se nesmí tvářit jako prázdno** — ani u logu („nepodařilo se stáhnout“ ≠ „log je
+    prázdný“), ani u anotací, kde prázdno je navíc **běžný** stav, protože je workflow emitovat
+    nemusí. K tomu, že spadlé anotace **nepoloží log** — jsou to dvě samostatné cesty;
+  - **číslo běhu se nevydává za číslo jobu** (`…/runs/<id>` bez `/job/`) — log běhu je log všech
+    jeho jobů. Ověřeno na skutečných odkazech CodeQL a borsu.
+
+  **Regrese ověřená vložením regrese**: strop, který se ignoruje, položí dva testy; selhání
+  zapsané jako prázdný log jeden.
+
+- **Rozbor hlaviček `gh api -i` (#292)** — `GhResponseHeadersTests`, výčtem, a je to **oprava chyby,
+  kterou našel až člověk v běžící aplikaci**. Stojí za to vědět proč: fixture byla vymyšlená.
+
+  Test si hlavičky psal jako Swiftový víceřádkový literál, tedy s `LF` — a `gh` je zakončuje `CRLF`.
+  `"\r\n"` je přitom ve Swiftu **jeden `Character`**, takže `split(separator: "\n")` na něm
+  nerozdělí a z celého bloku hlaviček zbyde jeden „řádek“, ve kterém se `Content-Length` nenajde.
+  Test byl zelený, v aplikaci konec logu nefungoval u **žádného** checku. V shellu to přitom šlo,
+  protože tam hlavičky čtou oči.
+
+  Odtud dvě věci do katalogu:
+  - **Fixture textového protokolu musí být skutečný výstup, bajt za bajtem** —
+    `gh/job-log-head.txt` je `gh api -X HEAD -i` na veřejný job `home-assistant/core`. Ruční
+    literál nese zakončení řádků toho, kdo ho napsal, ne toho, kdo výstup vyrábí.
+  - **Fixture, která stojí na `CRLF`, potřebuje `.gitattributes` `-text`.** `core.autocrlf=input`
+    (nastavení na tomhle stroji) by `CR` při commitu zahodilo a test by přestal testovat, kvůli čemu
+    vznikl — potichu a zeleně. Test si proto **kontroluje i tu fixture** (`output.contains("\r\n")`).
+
+  Výčet pokrývá `LF`, `CRLF` a samotné `CR`, lowercase jména (`HTTP/2`) i Title-Case, víc bloků za
+  sebou (rozhoduje **poslední**, protože ten před redirectem má `Content-Length: 0`), hodnotu
+  s dvojtečkou, rozbitý stavový řádek a všechna čtyři „velikost nevyšla“ zvlášť. Past navíc, kterou
+  ta odpověď doopravdy má: `Content-Length` je i **v hodnotě** `Access-Control-Expose-Headers`, a to
+  na řádku **před** tou skutečnou hlavičkou — hledání podřetězce by tedy vrátilo výčet jmen.
+
+  **Regrese ověřená vložením regrese**: vrácené `split(separator: "\n")` položí v téhle sadě 25
+  tvrzení, a v `CheckLogTextTests` tři (`Policy.logLines`, kde je to tatáž past nad logem
+  z Windows runneru).
+
+  **Ořez logu se testuje i na koncovém `\n`** — kdyby se počítal jako řádek, tvrdil by ořez log,
+  který se do stropu vešel přesně. A hláška o vynechaných řádcích se u čtyřciferného počtu
+  porovnává **po částech**: `Plural.czech` dělí tisíce nezlomitelnou mezerou, takže napsaná
+  `3 812` je červená a test by tvrdil něco o formátování čísel.
+
+  Vzhled je doložený offscreen renderem ve světlém i tmavém režimu přes všech pět stavů detailu
+  (načítá se, bez anotací, nad stropem, selhalo, „nevešlo se“). Chytil dvě věci, které z kódu
+  vidět nejsou: **konec logu se vystředil** místo zarovnání doleva (`ScrollView` centruje obsah
+  užší než viewport a `Spacer` ani `frame(maxWidth:)` to uvnitř dvouosého scrollu nespraví) a
+  **tři stovky řádků odtlačily zbytek seznamu** mimo obrazovku.
+
+  **Cena sazby logu má vlastní měření** (`CheckLogPerformanceMeasurement`, `PRISM_MEASURE=1`) —
+  není to test, netvrdí časy. Log v něm je syntetický podle skutečných rozměrů, a když je po ruce
+  ten skutečný, vezme se on (`PRISM_LOG_FILE`); osmimegový soubor se do repa nepřikládá.
+
+  **Dvě pasti u toho měření, obojí zaplacené u #292.**
+
+  - **`xcodebuild` proměnnou do testovacího procesu nepředá** — ani `PRISM_MEASURE=1 xcodebuild`,
+    ani `TEST_RUNNER_PRISM_MEASURE=1` (scheme má `shouldUseLaunchSchemeArgsEnv`). Suita se tedy
+    tiše **přeskočí** a vypadá to, že proběhla. Pouští se z Xcode, nebo se ta podmínka na dobu
+    měření dočasně smaže. Že ochrana není zbytečná, se taky ověřilo: bez ní běželo měření SwiftUI
+    `Text`u na hlavním vlákně **199 s** a vyhladovělo celou sadu — čtyři nesouvisející testy spadly
+    na timeout a vypadalo to jako regrese v nich.
+  - **Měření musí měřit tu cestu, kterou kód jde.** #214 měřilo sazbu logu přes
+    `ensureLayout(for:)` + `usedRect(for:)`, tedy **vynucenou sazbu celého dokumentu** — jedinou věc,
+    kterou aplikace nedělá. Vyšlo 850 ms tam, kde skutečná cesta stojí 6,57 ms, a z toho vzešel
+    strop o řád nižší, než bylo potřeba. Tatáž chyba byla v měření obarvování: srovnávalo `job.log`
+    se `job.log`, tedy dvě jednolité cesty, a tvrdilo „0,04 proti 0,02 ms“; po řádcích se teď měří
+    pod `job.swift`, kde `Language` jazyk najde.
+
+- **Závora `AsyncGate` čeká na jev se stropem v čase, ne v `yield`ech** (#292). Rozpočet yieldů
+  (`for _ in 0..<100_000`) je pevný okamžik v přestrojení: pod zátěží druhého paralelního buildu se
+  vyčerpal dřív, než se čekaná práce dostala na procesor, a závora položila **tři suity naráz**
+  („práce se k závoře nedostala“) — přitom samostatně proběhly za 0,094 s. Je to tatáž chyba, kterou
+  #269 vyndalo ze sondy odpočtu; spánek navíc na rozdíl od `yield`ování pustí procesor jinam. Strop
+  zůstává, aby se test při skutečné chybě **položil, ne zasekl**.
+
+- **Šířka sheetu s kódem (#292)** — `DiffWidthTests`, výčtem nad `Policy.codeSheetWidth`. Hlídá čtyři
+  meze, z nichž každá se dá porušit zvlášť: **na běžné obrazovce je širší než dřív**, **nikdy užší než
+  dřívějších 820** (zúžení by byla regrese, ne kompromis), **na malý displej se vejde** (tam rozhoduje
+  displej, ne konstanta z většího) a **na ultrawide se zastropuje**. K tomu monotonie přes pásmo
+  600–3 400 bodů, protože jednotlivé případy minou aritmetickou chybu uprostřed.
+
+- **Výška okýnka konce logu (#292)** — `LogTailHeightTests`, výčtem. Počítá se z metriky **toho**
+  fontu, kterým se kreslí (#236), takže se dá tvrdit přesná hodnota proti `NSLayoutManager`u. Co se
+  dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým by zbylo 320 bodů prázdna) a
+  **nezastropovat dlouhý** (dva tisíce řádků naplno odtlačí seznam checků mimo obrazovku, tedy
+  zrovna to, kvůli čemu se detail stěhoval z `Přehledu`). Regrese ověřená vložením regrese: vyndaný
+  `min(limit, …)` položí sedm tvrzení.
+
+  Je u toho **kontrola měřidla**: rezerva na vodorovný scroller je v kódu opsané číslo, protože
+  `NSScroller.scrollerWidth` je vázaná na hlavní vlákno — test ji porovnává se systémem, aby se
+  okýnko nemohlo potichu rozejít se scrollerem.
+
+  **Jak konec logu doopravdy vypadá, `ImageRenderer` neukáže** — obsah `NSScrollView`u nerasterizuje
+  (prázdná plocha v renderu je omezení sondy, ne aplikace, a ověřilo se to i na třířádkovém logu).
+  Kreslí se proto přes `bitmapImageRepForCachingDisplay` + `cacheDisplay(in:to:)` na samotném
+  `NSScrollView`u. Právě tak se u #292 chytilo, že okýnko po skoku na konec dokumentu začínalo
+  **uprostřed slova**, protože zůstalo u konce nejdelšího řádku.- **Fakta o PR (#198)** — `Policy` výčtem. Pokazit se dá potichu **nakreslení dlaždice s nulou**
   (řádek plný nul utopí to jedno číslo, na kterém záleží) a **ukázání shodné sha nálezů**, ze které
   neplyne nic. Nejcennější test je právě ten druhý: shodná se nekreslí, rozešlá ano a je označená
   jako zastaralá.

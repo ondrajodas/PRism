@@ -67,4 +67,58 @@ struct DiffWidthTests {
     func promisesOneHundredAndTwenty() {
         #expect(Policy.promisedCharactersPerSide == 120)
     }
+
+    // MARK: - Šířka sheetu s kódem (#292)
+
+    /// Na téhle obrazovce (1512 bodů) má sheet **1 360 bodů** místo dřívějších 820 — a je to
+    /// změřené: ubude tím třetina řádků sazby, protože sheet zalamuje.
+    @Test("Na běžné obrazovce je sheet o třetinu širší než dřív")
+    func widensTheSheetOnAnOrdinaryScreen() {
+        #expect(Policy.codeSheetWidth(screenWidth: 1_512) == 1_360)
+        #expect(Policy.codeSheetWidth(screenWidth: 1_512) > Policy.previousCodeSheetWidth)
+    }
+
+    /// **Nikdy užší než dřív.** Zúžení by byla regrese, ne kompromis.
+    @Test("Sheet se nezúží pod dřívější šířku", arguments: [1_000.0, 972.0, 900.0] as [CGFloat])
+    func neverNarrowerThanBefore(screen: CGFloat) {
+        #expect(Policy.codeSheetWidth(screenWidth: screen) >= Policy.previousCodeSheetWidth)
+    }
+
+    /// Na malém displeji rozhoduje **obrazovka, ne konstanta z většího** — sheet, který se
+    /// nevejde, je horší než užší sheet.
+    @Test("Na malou obrazovku se sheet vejde")
+    func fitsSmallScreens() {
+        #expect(Policy.codeSheetWidth(screenWidth: 800) <= 800 - Policy.codeSheetEdge)
+        #expect(Policy.codeSheetWidth(screenWidth: 600) <= 600 - Policy.codeSheetEdge)
+        #expect(Policy.codeSheetWidth(screenWidth: 600) > 0)
+    }
+
+    /// Strop drží širokoúhlé monitory: nad ním už to pro log nic nepřidá (celá obrazovka proti
+    /// 1 360 bodům přidala 4 %) a sheet kreslí i hunky kódu, kde je řádek ~120 znaků.
+    @Test("Na širokoúhlém monitoru se sheet zastropuje")
+    func capsOnUltrawideScreens() {
+        #expect(Policy.codeSheetWidth(screenWidth: 3_440) == Policy.codeSheetWidthCap)
+        #expect(Policy.codeSheetWidth(screenWidth: 5_120) == Policy.codeSheetWidthCap)
+    }
+
+    /// Bez známé obrazovky (náhledy, testy) se vrací dřívější šířka — **žádná nula**, jinak by
+    /// sheet neměl co kreslit.
+    @Test("Bez známé obrazovky zůstane dřívější šířka")
+    func fallsBackWithoutAScreen() {
+        #expect(Policy.codeSheetWidth(screenWidth: nil) == Policy.previousCodeSheetWidth)
+        #expect(Policy.codeSheetWidth(screenWidth: 0) == Policy.previousCodeSheetWidth)
+    }
+
+    /// Šířka **roste s obrazovkou** až do stropu; kdyby někde klesla, byla by v tom aritmetická
+    /// chyba, kterou jednotlivé případy výš minou.
+    @Test("Šířka s obrazovkou neklesá")
+    func widthIsMonotonic() {
+        var previous: CGFloat = 0
+        for screen in stride(from: 600.0, through: 3_400.0, by: 50.0) {
+            let current = Policy.codeSheetWidth(screenWidth: screen)
+            #expect(current >= previous, "u obrazovky \(screen) šířka klesla")
+            #expect(current <= max(screen - Policy.codeSheetEdge, Policy.codeSheetWidthCap))
+            previous = current
+        }
+    }
 }

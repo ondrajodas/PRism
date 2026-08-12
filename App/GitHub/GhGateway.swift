@@ -34,7 +34,11 @@ struct GhGateway: GitHubGateway {
             "--json", GhSearchItem.jsonFields,
         ]
 
-        let items = try await run(arguments, decodedAs: [GhSearchItem].self)
+        let items = try await run(
+            arguments,
+            phase: "Vyhledávání pull requestů",
+            decodedAs: [GhSearchItem].self
+        )
         return try items.map { try $0.summary() }
     }
 
@@ -45,7 +49,8 @@ struct GhGateway: GitHubGateway {
             "--json", GhPullRequestDetail.jsonFields,
         ]
 
-        return try await run(arguments, decodedAs: GhPullRequestDetail.self).pullRequest(id: id)
+        return try await run(arguments, phase: "Metadata pull requestu", decodedAs: GhPullRequestDetail.self)
+            .pullRequest(id: id)
     }
 
     /// `gh pr checks` končí **nenulovým kódem, když něco spadlo** — a to není chyba volání,
@@ -80,7 +85,7 @@ struct GhGateway: GitHubGateway {
         do {
             return try GhOutput.decoder.decode([GhCheck].self, from: Data(output.utf8)).map(\.check)
         } catch {
-            throw GitHubError.malformedOutput("Výstupu gh pr checks nerozumím: \(error)")
+            throw GitHubError.malformedOutput("Kontroly pull requestu: \(error)")
         }
     }
 
@@ -108,6 +113,7 @@ struct GhGateway: GitHubGateway {
     func fetchConversation(id: PRIdentifier) async throws -> Conversation {
         let response = try await run(
             ConversationQuery.arguments(for: id),
+            phase: "Konverzace pod pull requestem",
             decodedAs: GhConversationResponse.self
         )
         return try response.conversation(id: id)
@@ -121,19 +127,66 @@ struct GhGateway: GitHubGateway {
         // je vidí, protože do vlastního repa máme zápis.
         let items = try await run([
             "api", "repos/\(Release.repository)/releases?per_page=100",
-        ], decodedAs: [GhRelease].self)
+        ], phase: "Seznam vydání", decodedAs: [GhRelease].self)
 
         // **Neřadí se tady.** Pořadí je rozhodnutí (`Policy.sortedReleases`), ne tvar
         // odpovědi — gateway vrací, co přišlo.
         return items.compactMap { $0.release() }
     }
 
-    private func run<T: Decodable>(_ arguments: [String], decodedAs type: T.Type) async throws -> T {
+    func fetchAnnotations(repo: RepoID, checkRunID: Int) async throws -> CheckAnnotations {
+        // `per_page=100` je strop GitHubu. Bere se **jedna stránka**: víc než sto anotací na jeden
+        // check nikdo nečte a stránkování by bylo volání navíc za nic — z plné stránky se místo
+        // toho pozná, že jich může být víc (`mayHaveMore`).
+        let page = 100
+        let items = try await run([
+            "api", "repos/\(repo)/check-runs/\(checkRunID)/annotations?per_page=\(page)",
+        ], phase: "Anotace check-runu", decodedAs: [GhAnnotation].self)
+
+        return CheckAnnotations(
+            fetched: items.map(\.annotation),
+            pageWasFull: items.count >= page
+        )
+    }
+
+    func fetchJobLogSize(repo: RepoID, jobID: Int) async throws -> Int? {
+        // `-X HEAD -i` vypíše **jen hlavičky**, takže se velikost zjistí bez stažení těla —
+        // a `gh` přitom následuje redirect do Azure blobu, odkud `Content-Length` doopravdy je.
+        // Bez `-i` nepřijde nic: `HEAD` nemá tělo, takže hlavičky jsou celý výstup.
+        let output = try await run([
+            "api", "-X", "HEAD", "-i", "repos/\(repo)/actions/jobs/\(jobID)/logs",
+        ])
+        switch GhResponseHeaders(output: output).contentLength {
+        case .bytes(let size):
+            return size
+        // **„Nevím“ není chyba** (#292). Všechny čtyři důvody, proč velikost nevyšla, končí
+        // stejně: velikost neznáme a rozhodne se ze stahování. Vyhodit tady chybu znamenalo, že
+        // jedna hlavička vypnula konec logu u **všech** checků — a rozborem hlaviček se to dá
+        // spíš minout než dotazem samotným, protože se na něm nic nespustí ani nespadne.
+        case .noOutput, .httpFailure, .missingHeader, .unreadableValue:
+            return nil
+        }
+    }
+
+    func fetchJobLog(repo: RepoID, jobID: Int) async throws -> String {
+        // Přímé API, ne `gh run view --job --log` — změřeno 1,50 s proti 4,77 s za tentýž obsah
+        // (#214). Bez dekódování: odpověď je **plain text**, ne JSON.
+        try await run(["api", "repos/\(repo)/actions/jobs/\(jobID)/logs"])
+    }
+
+    /// `phase` **není dekorace**: `Výstupu gh nerozumím. keyNotFound…` neříká, co se zkoušelo,
+    /// takže se z hlášky nedá poznat ani to, která obrazovka je poloprázdná. Fáze je jediné, co
+    /// k tomu volající ví a chyba sama ne.
+    private func run<T: Decodable>(
+        _ arguments: [String],
+        phase: String,
+        decodedAs type: T.Type
+    ) async throws -> T {
         let output = try await run(arguments)
         do {
             return try GhOutput.decoder.decode(type, from: Data(output.utf8))
         } catch {
-            throw GitHubError.malformedOutput("Výstupu gh nerozumím: \(error)")
+            throw GitHubError.malformedOutput("\(phase): \(error)")
         }
     }
 

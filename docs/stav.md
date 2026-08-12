@@ -1276,5 +1276,88 @@ návrh v `--mint` (`#0E8F80` / `#2DD4BF`), kdežto aplikace u prvního kreslí s
 (`Color.accentColor` za `.tint()` nejde) a u druhého akcent. Chybí na to token `Palette.mint`
 a rozhodnutí o něm patří k sobě, takže se to nechává na vlastní issue.
 
-Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
+**Detail spadlého checku: anotace a konec logu (#214).** Tab `Kontroly` (#215) říkal, **že** check
+spadl; teď říká **proč**. Řádek checku se rozbalí a pod ním jsou anotace check-runu (`soubor:řádek`
+a věta, kliknutí skočí do diffu) a konec logu — obojí **až na kliknutí a jen u toho jednoho checku**.
+Vedle konce logu jsou `Ukázat celý log` (sheet, ve kterém se dá vybírat) a odkaz na GitHub.
+
+Zadání předpokládalo, že anotace jsou hlavní cesta a log doplněk. **Vyšlo to naopak** a je to
+potvrzené na skutečném selhání: spadlý job vrátil dvě anotace a ani jedna neříká, co je špatně
+(`Process completed with exit code 1` a deprecation warning k Node.js 20) — to, co člověk hledá, bylo
+v logu. Anotace tedy zůstávají jako bonus, když je workflow emituje.
+
+Změřeno u toho několik věcí. `gh api …/actions/jobs/{id}/logs` je **1,50 s / 237 kB** proti 4,77 s
+u `gh run view --job --log`, které zadání předepisovalo — použilo se přímé API. Číslo jobu se
+**vytáhne z odkazu** na check, protože `gh pr checks` ho nedává, a **totéž číslo funguje jako
+check-run ID** pro anotace, takže druhé volání to nestojí. `HEAD` na log vrátí `Content-Length` za
+~1,2 s bez ohledu na velikost, takže se nad stropem **vůbec nestahuje** a věta „log má 8,4 MB“ není
+odhad.
+
+**Strop 2 MB se potvrdil měřením, ne odhadem** (zadání to výslovně chtělo kvůli #275): dvoumegový
+ocas skutečného logu se v `NSTextView` nasází za **220 ms**, celých 8,78 MB za 850 ms — strop tedy
+má rezervu. Cestou se ukázalo, že sazba po řádcích stojí **38 ms proti 2,2 ms** jednolitého textu
+(17×), takže `SelectableCodeView` bez známého jazyka po řádcích neskládá; pomůže to i sheetu s kódem.
+
+Log se **neukládá a nepřežije ani sbalení checku**, sbalení navíc stahování **zruší**. ANSI se
+strhává, timestampy (28 znaků na skoro každém řádku) se schovávají, ořez je od konce a řekne se,
+kolik se nevešlo. Anotace se od nálezů drží zvlášť tvarem — plochý řádek se štítkem, ne bublina —
+a **nepočítají se nikam**.
+
+Při proklikání se ukázalo, že **konec logu nefunguje u žádného checku** (#292): `HEAD` na velikost
+sice doběhl, ale `Content-Length` se z jeho výstupu nenašel, takže se nikdy nestahovalo. Příčina je
+jazyková: `gh api -i` zakončuje hlavičky **`CRLF`** a `"\r\n"` je ve Swiftu **jeden `Character`** —
+`split(separator: "\n")` na něm tedy nerozdělí a z celého bloku hlaviček zbyde jediný „řádek“.
+V shellu to šlo, protože tam hlavičky čtou oči; zelený test to nechytil, protože jeho fixture byla
+Swiftový literál, tedy `LF`.
+
+Opravené jsou tři věci. Rozbor hlaviček je **vlastní typ** (`GhResponseHeaders`): dělí na
+`Character.isNewline`, jména normalizuje na malá písmena (`HTTP/2` je nese lowercase) a bere
+**poslední blok**, protože ten před redirectem má `Content-Length: 0`; velikost vrací vyjmenovanými
+stavy (`ContentLengthReading`), ne `Int?`. Fixture je bajt za bajtem skutečný výstup `gh` a je
+v `.gitattributes` jako `-text` — jinak by ji `core.autocrlf=input` znormalizovala a test by zezelenal
+i s tou chybou. A `Policy.logLines` dělí řádky logu na jakémkoli zakončení, protože v logu z Windows
+runneru je to tatáž past.
+
+Vedle toho se **otočilo jedno pravidlo**: nezjištěná velikost už log neruší. `HEAD` je ochrana proti
+osmimegovému logu, ne podmínka toho, že se log ukáže — bez velikosti se tedy stáhne a strop se
+uplatní na tom, co doopravdy přišlo. Chyba jednoho dotazu tak nemůže vypnout celou funkci, což je
+přesně to, co se stalo. `malformedOutput` u toho dostal **fázi** (`Vyhledávání pull requestů`,
+`Anotace check-runu`, …): „Výstupu gh nerozumím“ samo neřekne ani to, která obrazovka je poloprázdná.
+
+**A po proklikání se zvedly stropy: 2 MB → 10 MB a 300 → 4 000 řádků** (#292). Otázka byla „nešlo by
+zobrazovat víc, nesekne se to?“, a odpověď dalo měření na největším logu, který na našich repech je
+(8,78 MB, 25 533 řádků, nejdelší řádek 2 258 znaků).
+
+**Sekla by se — ale na něčem jiném, než kde stál strop.** Konec logu kreslil SwiftUI `Text`
+se `.fixedSize()`, který roste kvadraticky: 300 řádků 108 ms, 2 000 řádků **6,2 s**, 10 000 řádků
+**156 s**. Deset tisíc řádků by tedy okno zamrzlo na dvě a půl minuty. Kreslí ho proto `NSTextView`
+(`LogTailTextView`), kde tytéž tři velikosti stojí 2,06 / 1,96 / 6,81 ms, protože TextKit sází líně po
+viewportu — a projíždění, tedy ta cena, na kterou si stěžuje #275, má medián snímku 0,00 ms
+a nejhorší 0,01 ms i na celých 8,78 MB.
+
+**Strop na velikost mohl jít nahoru, protože #214 měřilo něco jiného, než co aplikace dělá:**
+`ensureLayout` + `usedRect`, tedy vynucenou sazbu celého dokumentu (631 ms), kdežto sheet text jen
+předá (6,57 ms). Poučení, které tomu stropu přežije: měřit se musí ta cesta, kterou kód doopravdy
+jde. Strop tedy nedrží kreslení, ale **stahování** — 8,78 MB stahuje `gh` ve třech měřeních 5,75 /
+27,44 / 10,67 s, takže se velikost píše do hlášky, dokud se stahuje, a sbalení checku `gh` **zabije**
+(změřeno 0 → 1 → 0 procesů). Příprava textu (814 ms na 8,78 MB) šla mimo hlavní vlákno, jinak by okno
+stálo o tu dobu.
+
+**Řádků je 4 000 a cena o tom nerozhoduje** (2,61 ms proti 1,14 ms u dvou tisíc; celý ten největší
+log 5,50 ms). Nejdřív jsem rozhodl 2 000 s odůvodněním, že okýnko má 320 bodů a `Ukázat celý log` musí
+zůstat k něčemu; uživatel si vyžádal 4 000 a **je to jeho volba, kterou měření unese** — původní
+argument byl o ergonomii, ne o výkonu. Zapsaná cena zůstává: 4 000 řádků je v okýnku 175 obrazovek
+scrollování (2 000 bylo 88), takže k dalšímu zvedání patří i vyšší okýnko. Rozdíl proti sheetu se
+nesetřel, největší log má 25 533 řádků. S delším ocasem k tomu patřilo ještě jedno: okýnko se
+**otevírá na konci logu**, ne na začátku ocasu, protože jinak by hledaná assertace byla sto obrazovek
+daleko.
+
+**Sheet `Ukázat celý log` je nově široký podle obrazovky**, ne 820 bodů. Sheet zalamuje, takže úzké
+okno znamená víc řádků sazby na jeden řádek logu — změřeno **3,89×** při 820 bodech, 2,63× při 1 360
+a **1,54×** na stropu 2 700, tedy o 60 % méně scrollování. Strop je tam, kde přestane zalamovat
+mediánový řádek (333 znaků proti mediánu 327), a zvedl se z původně odhadnutých 1 600 po měření na
+obrazovce, na které se aplikace používá (3 440 bodů) — tam 1 600 nechávalo polovinu scrollování navíc.
+Je to tentýž vzor jako u vynucené sazby: **měřit se musí ta konfigurace, ve které se to používá.**
+
+Testů je o 64 víc (2385 po zvednutí mainu), z toho **30 na tuhle opravu** ve dvou nových suitách.Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

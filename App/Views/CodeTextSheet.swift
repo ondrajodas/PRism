@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Celý hunk jako **jeden** text, ve kterém se dá vybírat i **přes bubliny** (#157).
@@ -23,13 +24,25 @@ struct CodeTextSheet: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var didCopy = false
 
+    /// Šířka **spočítaná z obrazovky**, ne zadrátovaná (#292). Sheet zalamuje, takže úzké okno
+    /// neznamená, že se text nevejde — znamená, že jeden řádek logu je pár řádků sazby: ze 820 na
+    /// 1 360 bodů ubude **třetina** řádků sazby (změřeno, čísla u `Policy.codeSheetWidth`). A sheet
+    /// není roztažitelný myší, takže ideální šířka je jediná, kterou dostane.
+    ///
+    /// `NSScreen.main` je ta s klávesovým oknem, tedy ta, na které sheet vyjede.
+    private var width: CGFloat {
+        Policy.codeSheetWidth(screenWidth: NSScreen.main?.visibleFrame.width)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
             code
         }
-        .frame(minWidth: 560, idealWidth: 820, minHeight: 320, idealHeight: 520)
+        .frame(minWidth: 560, idealWidth: width, minHeight: 320, idealHeight: 520)
+        // Ať uvnitř sheetu nikdo šířku nevyjednává (#220) — obsah ji má znát.
+        .availableWidth(width)
     }
 
     private var header: some View {

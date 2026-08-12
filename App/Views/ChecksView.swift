@@ -13,9 +13,18 @@ import SwiftUI
 /// Tab odpovídá na celou otázku a „je to zelené“ nese chip v hlavičce PR, takže souhrn byl třetí
 /// místo o téže věci. Rozhodnuto při zkoušení, viz specifikace.
 ///
-/// **Log se nestahuje.** Spadlý check nabídne odkaz na GitHub; stahování konce logu je #214.
+/// **Log se stahuje až na kliknutí a jen u toho jednoho checku** (#214) — nikdy dopředu a nikdy
+/// pro všechny. Podrobnosti u `AppStore+Checks` a v `CheckDetailView`.
 struct ChecksView: View {
     let checks: [PullRequestCheck]
+    /// Který check je rozbalený (#214). `nil` = žádný.
+    var expanded: String?
+    /// Co se ví o rozbaleném checku.
+    var detail: CheckDetailState?
+    /// Rozbalí nebo sbalí check. `nil` = detail se nenabízí vůbec (nemáme `AppStore`, náhledy).
+    var toggle: ((PullRequestCheck) -> Void)?
+    var jump: ((String, Int?) -> Void)?
+    var showFullLog: ((PullRequestCheck, String) -> Void)?
 
     /// Přeskočené se sbalí za číslo. Na skutečném PR jich bývá většina (změřeno na
     /// `keboola/platform-libraries#557`: 28 checků, 22 přeskočených) a rozepsané by utopily
@@ -46,6 +55,15 @@ struct ChecksView: View {
             header
             ForEach(visible) { check in
                 row(check)
+                if expanded == check.name, let detail {
+                    CheckDetailView(
+                        detail: detail,
+                        link: check.link,
+                        jump: jump,
+                        showFullLog: showFullLog.map { show in { show(check, $0) } },
+                        collapse: { toggle?(check) }
+                    )
+                }
                 if check.id != visible.last?.id || skipped > 0 {
                     Rectangle().fill(Palette.lineSoft).frame(height: 1)
                 }
@@ -73,16 +91,36 @@ struct ChecksView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
     }
 
-    private func row(_ check: PullRequestCheck) -> some View {
-        HStack(spacing: 9) {
+    /// Řádek checku. **Rozbalovací jen tehdy, když má číslo jobu** (#214) — u checku bez něj
+    /// (CodeQL, bors) zbývá jen odkaz ven, protože tlačítko, které skončí chybou, je horší než
+    /// tlačítko, které tam není.
+    @ViewBuilder private func row(_ check: PullRequestCheck) -> some View {
+        if canExpand(check) {
+            Button { toggle?(check) } label: { rowContent(check) }
+                .buttonStyle(.plain)
+                .help(expanded == check.name ? "Sbalit detail" : "Ukázat anotace a konec logu")
+        } else {
+            rowContent(check)
+        }
+    }
+
+    private func rowContent(_ check: PullRequestCheck) -> some View {
+        let isOpen = expanded == check.name
+        return HStack(spacing: 9) {
             Image(systemName: ChecksText.symbol(of: check.outcome))
                 .font(.system(size: 11))
                 .foregroundStyle(ChecksText.color(of: check.outcome))
                 .frame(width: 13)
             Text(verbatim: check.name)
-                .font(.system(size: 12))
-                .foregroundStyle(Palette.ink2)
+                // Rozbalený nese jméno výrazněji (návrh: `.chk.open .nm` má `--ink` a 560).
+                .font(.system(size: 12, weight: isOpen ? .medium : .regular))
+                .foregroundStyle(isOpen ? Palette.ink : Palette.ink2)
                 .lineLimit(1)
+            if canExpand(check) {
+                Image(systemName: isOpen ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.ink3)
+            }
             Spacer(minLength: 8)
             Text(verbatim: ChecksText.detail(of: check))
                 .font(.system(size: 10.5, design: .monospaced))
@@ -97,6 +135,18 @@ struct ChecksView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+        // Rozbalený řádek je podbarvený (návrh: `.chk.open`), ať je vidět, ke kterému checku
+        // detail pod ním patří.
+        .background(isOpen ? Palette.crit.opacity(0.06) : .clear)
+        .contentShape(.rect)
+    }
+
+    /// Dá se u checku otevřít detail? Rozhoduje **číslo jobu**, ne `outcome`.
+    ///
+    /// Nabízí se u všeho, co číslo má — i u prošlého checku: `phpunit`, který prošel, ale trval
+    /// dvacet minut, je taky důvod se do logu podívat.
+    private func canExpand(_ check: PullRequestCheck) -> Bool {
+        toggle != nil && check.jobID != nil
     }
 
     private var skippedRow: some View {
