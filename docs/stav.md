@@ -1254,7 +1254,7 @@ Změřeno sondou, která vzhled přepne **za běhu nad složenou hierarchií** (
 to byla ta jediná otázka, kterou z kódu přečíst nešlo. Na tomtéž renderu je vidět i přebarvený diff
 včetně syntaxe: vysázený text se přeskakuje podle podpisu a v tom podpisu režim je, takže se sází
 znovu. Podpis se u toho sloučil do jednoho místa (`DiffBlockSignature`), protože ho obě podoby diffu
-skládaly každá svým řetězcem. Testů je o 22 víc (2347) v pěti nových suitách, z nichž dvě jsou
+skládaly každá svým řetězcem. Testů je o 22 víc (2363 po zvednutí mainu) v pěti nových suitách, z nichž dvě jsou
 **sondy za přepínačem**: render stránky nastavení v obou režimech a ve dvou šířkách, a to přepnutí
 za běhu.
 
