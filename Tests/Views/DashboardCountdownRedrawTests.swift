@@ -29,24 +29,23 @@ import Testing
 @Suite("Cena odpočtu na dashboardu", .serialized)
 @MainActor
 struct DashboardCountdownRedrawTests {
-    /// Strop čekání na dvě změny kresby. **Je to strop proti kontenci, ne tvrzení o taktu** —
-    /// kdo ho bude chtít snížit jako „přebujelý“, ať si napřed pustí plný běh testů při souběžném
-    /// buildu tří slotů (#296).
+    /// Strop čekání na dvě změny kresby. **Je to `TestWait.deadline`, tedy tentýž strop proti zátěži,
+    /// jaký v testech tohohle repa platí pro každé čekání na jev** (#296) — a schválně ne vlastní
+    /// číslo, protože druhá konstanta by se od té první rozešla při první opravě.
     ///
-    /// Z čeho je: na volném stroji sonda doběhne za **3,0–3,1 s** (změny na 2,0 s a 3,0 s, protože
-    /// rozvrh je ukotvený v termínu celý počet vteřin daleko). Zbytek je rezerva na hladovění
-    /// `MainActoru` — v plném běhu si sonda vyžádala odmlku 100 ms a probudila se za **7,5 až
-    /// 8,6 s**, takže za celý čtyřsekundový strop stihla **jediný** snímek a hlásila „odpočet se
-    /// nepřetikal“ o aplikaci, která byla v pořádku. Dvacet sekund je proti tomu dvojnásobek toho
-    /// nejdelšího hladovění na dva snímky, které sonda potřebuje.
+    /// Z čeho je. Sonda potřebuje **tři kola na `MainActoru`**: první snímek, pak dva, na kterých se
+    /// kresba liší. Na volném stroji je má za 3,0–3,1 s (změny na 2,0 s a 3,0 s, protože rozvrh je
+    /// ukotvený v termínu celý počet vteřin daleko). Pod třemi souběžnými clean buildy ale jedno kolo
+    /// trvalo **8,6 s** a čekání jinde v repu se dočkala až za **42,3 s** — takže vlastní strop 4 s
+    /// (do #296) i 20 s (v průběhu #296) padal na tom, že sonda vzala jediný snímek a hlásila
+    /// „odpočet se nepřetikal“ o aplikaci, která byla v pořádku.
     ///
     /// **Vteřinový takt strop netvrdí a tvrdit nemá** (mění #269, kde tuhle roli měl). Rozvrh se dá
     /// přečíst přímo — `DashboardCountdownTests.ticksLandOnWholeSeconds` a
-    /// `consecutiveTicksShowConsecutiveSeconds` čtou `entries(from:mode:)` a rozvrh po dvou
-    /// vteřinách shodí; ověřeno vloženou regresí `by: 2` (dva pády, bez hodin a bez kreslení).
-    /// Tvrdit takt časem tady znamenalo držet strop těsně u naměřených 3 s — tedy postavit
-    /// deterministicky ověřitelnou věc na tom, kolik zbylo procesoru.
-    private static let ceiling: TimeInterval = 20
+    /// `consecutiveTicksShowConsecutiveSeconds` čtou `entries(from:mode:)` a rozvrh po dvou vteřinách
+    /// shodí; ověřeno vloženou regresí `by: 2` (dva pády, bez hodin a bez kreslení). Tvrdit takt
+    /// časem tady znamenalo držet strop těsně u naměřených 3 s — tedy postavit deterministicky
+    /// ověřitelnou věc na tom, kolik zbylo procesoru.
 
     /// `TimelineView` uvnitř `DashboardCountdown`u přepočítává jen svůj obsah — jeden krátký
     /// `Text`. Tělo nad ním (v aplikaci celý dashboard: karty, sparkline, fronta) o vteřinách neví.
@@ -67,13 +66,12 @@ struct DashboardCountdownRedrawTests {
 
         let redraws = try await redraws(
             of: CountdownProbe(counter: counter, deadline: .now.addingTimeInterval(600)),
-            count: 2,
-            within: Self.ceiling
+            count: 2
         )
 
         #expect(
             redraws.changes.count == 2,
-            "Odpočet se za \(Self.ceiling) s přetikal \(redraws.changes.count)× místo dvakrát \(redraws.report)."
+            "Odpočet se za \(TestWait.deadline) přetikal \(redraws.changes.count)× místo dvakrát \(redraws.report)."
         )
         #expect(counter.count == 1, "Tělo sondy se přepočítalo \(counter.count)× místo jednou.")
     }
@@ -110,8 +108,7 @@ struct DashboardCountdownRedrawTests {
 
         let redraws = try await redraws(
             of: RecomputingProbe(counter: counter, clock: clock, deadline: .now.addingTimeInterval(600)),
-            count: 2,
-            within: Self.ceiling
+            count: 2
         )
 
         #expect(
@@ -159,7 +156,7 @@ struct DashboardCountdownRedrawTests {
     private func redraws(
         of view: some View,
         count: Int,
-        within limit: TimeInterval,
+        within limit: Duration = TestWait.deadline,
         step: Duration = .milliseconds(100)
     ) async throws -> Redraws {
         let window = window(hosting: view)
@@ -169,7 +166,7 @@ struct DashboardCountdownRedrawTests {
         let start = ContinuousClock.now
         var last = try bitmap(of: hosting)
         var result = Redraws()
-        while result.changes.count < count, Self.elapsed(since: start) < limit {
+        while result.changes.count < count, start.duration(to: .now) < limit {
             try await Task.sleep(for: step)
             let frame = try bitmap(of: hosting)
             result.samples += 1

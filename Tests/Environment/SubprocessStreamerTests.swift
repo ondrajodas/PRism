@@ -18,6 +18,22 @@ struct SubprocessStreamerTests {
     private let shell = URL(filePath: "/bin/sh")
     private let streamer = SubprocessStreamer()
 
+    /// Jak dlouho „spí“ proces, který v testu **nemá skončit sám** — ve vteřinách pro `sleep`.
+    ///
+    /// Je to ta rezerva, ve které se rozhoduje: testy níž tvrdí, že proud ukončil **timeout**, a to
+    /// je vidět jedině tehdy, když proces svůj `sleep` nedoběhne dřív. Do #296 tu bylo 30 s proti
+    /// timeoutu 200–300 ms, tedy stonásobek — a **nestačilo to**: při třech souběžných clean
+    /// buildech se časovač probudil až po skončení `sleepu`, proud dojel normálně a suita hlásila
+    /// „chyba se čekala, ale žádná nepřišla“ nad kódem, který funguje. Deset minut je proti tomu
+    /// rezerva 2000×.
+    ///
+    /// **Nezdržuje to zelený běh** — testy končí timeoutem po 200 ms a proces se zabíjí. Zdržel by
+    /// jedině běh, ve kterém se timeout nezapojí vůbec, a tam by test čekal na konec `sleepu`, tedy
+    /// deset minut. Proto k tomu patří `.timeLimit`: rozbitý timeout **spadne**, nezasekne běh.
+    /// Dvě minuty schválně, ne jedna — pod třemi souběžnými buildy trvaly tyhle testy 20 až 27 s,
+    /// takže minuta by byla další strop odvozený od volného stroje.
+    private static let longerThanTheTest = 600
+
     private func collect(
         _ script: String,
         workingDirectory: URL? = nil,
@@ -67,19 +83,19 @@ struct SubprocessStreamerTests {
         #expect(events.first == .line("/usr/lib"))
     }
 
-    @Test("Zaseknutý proces skončí timeoutem")
+    @Test("Zaseknutý proces skončí timeoutem", .timeLimit(.minutes(2)))
     func aStuckProcessTimesOut() async throws {
         await #expect(throws: ProcessError.timedOut) {
-            _ = try await collect("sleep 30", timeout: .milliseconds(200))
+            _ = try await collect("sleep \(Self.longerThanTheTest)", timeout: .milliseconds(200))
         }
     }
 
-    @Test("Řádky vypsané před timeoutem zůstanou doručené")
+    @Test("Řádky vypsané před timeoutem zůstanou doručené", .timeLimit(.minutes(2)))
     func linesBeforeATimeoutSurvive() async throws {
         var events: [ProcessEvent] = []
         let stream = streamer.stream(
             shell,
-            arguments: ["-c", "echo nalez; sleep 30"],
+            arguments: ["-c", "echo nalez; sleep \(Self.longerThanTheTest)"],
             environment: [:],
             workingDirectory: nil,
             timeout: .milliseconds(300)
@@ -91,7 +107,10 @@ struct SubprocessStreamerTests {
         #expect(events == [.line("nalez")])
     }
 
-    @Test("Timeout ukončí proud, i když roura zůstane otevřená")
+    /// Sleepy jsou **dva**, protože se testuje potomek na pozadí — délka je z `longerThanTheTest`
+    /// a proč, stojí u ní. Do #296 tady bylo `sleep 5 & sleep 5`, tedy nejkratší rezerva v suitě,
+    /// a padalo to jako první.
+    @Test("Timeout ukončí proud, i když roura zůstane otevřená", .timeLimit(.minutes(2)))
     func aTimeoutEndsTheStreamEvenWithAnOpenPipe() async throws {
         // Potomek na pozadí zdědí stdout a zabitý shell ho nepřežije — EOF tedy nedorazí.
         // Bez posledního slova timeoutu by proud čekal navždy a review by viselo.
@@ -100,7 +119,7 @@ struct SubprocessStreamerTests {
         await #expect(throws: ProcessError.timedOut) {
             for try await _ in streamer.stream(
                 shell,
-                arguments: ["-c", "sleep 5 & sleep 5"],
+                arguments: ["-c", "sleep \(Self.longerThanTheTest) & sleep \(Self.longerThanTheTest)"],
                 environment: [:],
                 workingDirectory: nil,
                 timeout: .milliseconds(200)
@@ -121,18 +140,16 @@ struct SubprocessStreamerTests {
     /// pětisekundový a test přesto skončí v desítkách milisekund. Zároveň testuje víc než dřív:
     /// nepřítomnost souboru dokazovala jen to, že `touch` neproběhl, kdežto zmizelý PID je
     /// přímo to tvrzení, které od zrušení chceme.
-    @Test("Zrušení proces zabije")
+    @Test("Zrušení proces zabije", .timeLimit(.minutes(2)))
     func cancellationKillsTheProcess() async throws {
-        let pidFile = URL(
-            filePath: NSTemporaryDirectory()
-        ).appending(path: "prism-streamer-\(UUID().uuidString).pid")
+        let pidFile = temporaryPIDFile("streamer-cancel")
         let path = pidFile.path(percentEncoded: false)
         defer { try? FileManager.default.removeItem(at: pidFile) }
 
         let task = Task {
             for try await _ in streamer.stream(
                 shell,
-                arguments: ["-c", "echo $$ > '\(path)'; sleep 30"],
+                arguments: ["-c", "echo $$ > '\(path)'; sleep \(Self.longerThanTheTest)"],
                 environment: [:],
                 workingDirectory: nil,
                 timeout: .seconds(60)
@@ -141,46 +158,12 @@ struct SubprocessStreamerTests {
 
         // Rušit se má proces, který **doopravdy běží** — jinak by test mohl projít i tehdy,
         // kdyby se nespustil vůbec.
-        let pid = try await pid(from: pidFile)
+        let pid = try await processID(writtenTo: pidFile)
         task.cancel()
         _ = try? await task.value
 
-        #expect(await isGone(pid), "proces \(pid) po zrušení pořád běží")
+        #expect(await processHasGone(pid), "proces \(pid) po zrušení pořád běží")
     }
 
-    /// PID z běžícího procesu. Čeká na něj pollingem, ne pevnou odmlkou — start `/bin/sh` trvá
-    /// jednotky milisekund, ale pod zátěží klidně stovky.
-    /// **Nekladné číslo se nepřijme**, i když ho `echo $$` dát nemůže. `kill(0, …)` míří na celou
-    /// **procesovou skupinu** volajícího a negativní PID taky na skupinu — takže hodnota, která
-    /// se sem omylem dostane, by z kontroly existence jednoho procesu udělala něco úplně jiného.
-    /// Upozornil na to Copilot na #121; past by se tady sice neotevřela (soubor se plní jedním
-    /// `echo $$`, a `pid_t(_:)` je failable, takže rozbitý text vede na další kolo pollingu, ne
-    /// na nulu), ale stojí to jednu podmínku.
-    private func pid(from file: URL) async throws -> pid_t {
-        var found: pid_t?
-        await waitUntil("proces se rozběhne a napíše svoje PID") {
-            guard
-                let text = try? String(contentsOf: file, encoding: .utf8),
-                let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
-                pid > 0
-            else { return false }
-            found = pid
-            return true
-        }
-        guard let found else { throw ProcessTestFailure.processNeverStarted }
-        return found
-    }
-
-    /// Zmizel proces? `kill(pid, 0)` jen ověřuje existenci, nic neposílá.
-    ///
-    /// Čeká se na **výsledek**, ne pevnou dobu: když zrušení zabije proces hned (běžný případ),
-    /// vrátí to po prvním kole. Deadline je velkorysý schválně — je tu proti zátěži, ne proti
-    /// pomalému zabíjení.
-    private func isGone(_ pid: pid_t) async -> Bool {
-        await waitUntil("proces \(pid) zmizí") { kill(pid, 0) != 0 }
-    }
-}
-
-private enum ProcessTestFailure: Error {
-    case processNeverStarted
+    // Sonda na PID i její důvod jsou v `Tests/Support/ProcessProbing.swift` (#296).
 }

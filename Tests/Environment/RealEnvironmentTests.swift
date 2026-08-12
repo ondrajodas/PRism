@@ -80,30 +80,40 @@ struct RealEnvironmentTests {
         }
     }
 
-    /// **Strop se odvozuje od těch 30 s, které by proces žil sám** (#296), ne od toho, jak rychle
-    /// zabití obvykle proběhne. Rozhoduje se totiž mezi „zabilo se“ a „čekalo se na EOF“, a to jsou
-    /// desetiny vteřiny proti třiceti — cokoli mezi tím je pořád odpověď „zabilo se“. Do #296 tu
-    /// stálo 5 s, tedy hodnota odvozená od volného stroje: při souběžném buildu tří slotů vycházelo
-    /// **5,95 / 8,23 / 11,03 s** a suita byla červená, přitom aplikace fungovala.
+    /// **Zabití se ověřuje na PID, ne na naměřeném čase volání** (#296, mění #220). Do #296 tady
+    /// stálo `elapsed < .seconds(5)` — tedy hodnota odvozená od volného stroje, kde celé kolo trvá
+    /// 0,3 s. Při souběžném buildu tří slotů vycházelo **5,95 / 8,23 / 11,03 s**, po zvětšení stropu
+    /// na 15 s pak **17,7 / 19,4 / 20,4 / 26,7 s**: měřený čas volání je pod zátěží nečitelný a
+    /// zvětšování stropu je hra, ve které zátěž pokaždé přesáhne poslední odhad.
+    ///
+    /// Zmizelý PID je navíc **silnější tvrzení**: naměřený čas říká jen „vrátilo se to brzo“, takže
+    /// by prošla i implementace, která na proces zapomene a nechá ho běžet dál. Tady se ptáme přímo
+    /// na to, co od zrušení chceme — proces už neexistuje. Je to tatáž cesta, jakou to od #101 dělá
+    /// `SubprocessStreamerTests`; ta pod zátěží prošla 5× z 5.
     @Test("Zrušené volání proces zabije, místo aby čekalo, až doběhne sám")
     func runnerKillsProcessOnCancellation() async throws {
-        // Bez zabití by `run()` čekalo na EOF na pipách, tedy plných 30 s — čtení skončí
-        // teprve tím, že proces pipy zavře.
-        let lifetime = Duration.seconds(30)
-        let elapsed = await ContinuousClock().measure {
-            let running = Task {
-                try? await runner.run(
-                    URL(filePath: "/bin/sleep"),
-                    arguments: ["\(lifetime.components.seconds)"],
-                    timeout: Self.generousTimeout
-                )
-            }
-            try? await Task.sleep(for: .milliseconds(300))
-            running.cancel()
-            _ = await running.value
-        }
+        // Bez zabití by `run()` čekalo na EOF na pipách — čtení skončí teprve tím, že proces
+        // pipy zavře, tedy až mu doběhne `sleep`.
+        let pidFile = temporaryPIDFile("runner-cancel")
+        defer { try? FileManager.default.removeItem(at: pidFile) }
+        let script = "echo $$ > '\(pidFile.path(percentEncoded: false))'; exec sleep 300"
 
-        #expect(elapsed < lifetime / 2, "trvalo to \(elapsed.milliseconds)")
+        let running = Task {
+            try? await runner.run(
+                URL(filePath: "/bin/sh"),
+                arguments: ["-c", script],
+                timeout: Self.generousTimeout
+            )
+        }
+        // Rušit se má proces, který **doopravdy běží** — jinak by test prošel i tehdy, kdyby se
+        // nespustil vůbec. `exec` je tam proto, aby PID patřil tomu procesu, který má umřít,
+        // a nezůstal pod ním potomek, který by výsledek rozmazal.
+        let pid = try await processID(writtenTo: pidFile)
+
+        running.cancel()
+        _ = await running.value
+
+        #expect(await processHasGone(pid), "proces \(pid) po zrušení pořád běží")
     }
 
     @Test("Runner ohlásí, že binárku nešlo spustit")

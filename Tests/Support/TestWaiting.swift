@@ -22,13 +22,20 @@ import Testing
 enum TestWait {
     /// Strop čekání na jev. **Je velkorysý schválně a je to strop proti zátěži, ne míra rychlosti** —
     /// kdo ho bude chtít snížit jako „přebujelý“, ať si napřed pustí plný běh testů při souběžném
-    /// buildu tří slotů.
+    /// buildu tří slotů (#296).
     ///
-    /// Z čeho je: jevy, na které se tady čeká, jsou nad fake implementacemi a na volném stroji
-    /// nastanou v jednotkách milisekund. Strop tedy neměří práci, ale **hladovění** — a to bylo
-    /// u #296 změřené na **8,6 s** pro jedinou odmlku. Třicet sekund je proti tomu 3,5× rezerva
-    /// a zároveň pořád tak málo, že se pád nedá zaměnit za zaseknutý běh (plný běh trvá ~12 s).
-    static let deadline: Duration = .seconds(30)
+    /// Z čeho je. Jevy, na které se tady čeká, jsou nad fake implementacemi a na volném stroji
+    /// nastanou v jednotkách milisekund, takže strop neměří práci, ale **hladovění**. Změřeno na
+    /// patnáctijádrovém stroji při třech souběžných clean buildech (load average 24–36, tedy
+    /// přeobsazení asi 4×): jediná odmlka o 100 ms se probudila za **8,6 s** a čekání, která se
+    /// nakonec **dočkala**, trvala až **24,6 s** — a to jsou ještě čísla ocenzurovaná stropem, který
+    /// u toho měření byl 30 s a pod kterým padly tři běhy ze tří.
+    ///
+    /// Dvě minuty jsou proti tomu ~5× rezerva. Cena za velkorysost se platí **jen když je něco
+    /// rozbité**: co se dočká, se dočká hned, takže strop nezdržuje zelený běh ani o milisekundu.
+    /// A pořád platí to hlavní — rozbitý test **spadne**, nezasekne se, což je oproti neomezenému
+    /// `while` cyklu, který tady byl do #296, celý rozdíl.
+    static let deadline: Duration = .seconds(120)
 
     /// Jak často se sonda ptá. Milisekunda je dost na to, aby čekaná práce dostala vlákno,
     /// a málo na to, aby se test zdržel o víc, než na kolik se ptá.
@@ -36,7 +43,13 @@ enum TestWait {
 
     /// Kolik času dostane rozdělaná práce v testu, který tvrdí, že se **nic nestalo** — viz
     /// `settle()`.
-    static let settling: Duration = .milliseconds(50)
+    ///
+    /// Sto milisekund je kompromis, ne měřená hodnota, a je to slabé místo, které se nedá zesílit:
+    /// „nic se nestalo“ nemá jev, na který by se čekalo, takže drain naslepo platí za to, kolik
+    /// zbylo procesoru. Pod zátěží tedy ověřuje méně — ale **nemůže obarvit na červeno**, jen
+    /// oslabit tvrzení. Kde jev existuje, patří tam `waitUntil`; přesně tak se u #296 opravil test
+    /// draftu na disku, který na 50 ms drainu padal.
+    static let settling: Duration = .milliseconds(100)
 
     /// Jedna odmlka pro smyčku, která **drží** práci rozběhnutou, dokud ji test nepustí.
     ///
@@ -67,9 +80,14 @@ func waitUntil(
     _ condition: () async -> Bool
 ) async -> Bool {
     let clock = ContinuousClock()
+    let started = clock.now
     let limit = clock.now.advanced(by: deadline)
     while clock.now < limit {
-        if await condition() { return true }
+        if await condition() {
+            let waited = started.duration(to: clock.now)
+            if waited > .seconds(1) { print("MĚŘENÍ čekání \(waited.milliseconds): \(event)") }
+            return true
+        }
         try? await Task.sleep(for: step)
     }
     // Poslední kontrola za stropem: spánek umí na vytíženém stroji přetáhnout, takže by se jev,
