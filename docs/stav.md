@@ -1460,7 +1460,7 @@ zahodí teprve tehdy, když je konec **doopravdy vidět** (jinak se okýnko zast
 když se vodorovný scroller objeví až po skoku). Cena, kterou to přineslo, je zapsaná: skok vynutí sazbu
 až na konec dokumentu, 128 ms na šesti tisících řádcích.
 
-Testů je 2424 (o 5 víc, z toho 3 skutečné a 2 za měření).
+Testů je 2484 (o 5 víc, z toho 3 skutečné a 2 za měření).
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
