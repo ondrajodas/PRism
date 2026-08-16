@@ -87,9 +87,13 @@ Tři věci, které se u nich nemají rozbít:
   `dismissed(findings:)`, `failed(detail:)`, `timedOut(findings:)`, `interrupted(findings:)`,
   `stale`.
 - **`interrupted` není `timedOut`** (#97). Oba znamenají „nedoběhlo, částečné nálezy zůstaly“,
-  ale vedou jinam: timeout říká, že je review pomalé (dá se zvednout limit), přerušení že spadla
-  aplikace (nedá se dělat nic než pustit znovu). A odznak by u přerušeného běhu tvrdil
-  `timeout`, což je nepravda.
+  ale vedou jinam: timeout říká, že je review pomalé — a limit **jde zvednout v nastavení** na
+  stránce `Review a skilly`, globálně i per repo (#320) —, přerušení že spadla aplikace (nedá se
+  dělat nic než pustit znovu). A odznak by u přerušeného běhu tvrdil `timeout`, což je nepravda.
+
+  Do #320 byl limit zadrátovaný v kódu, takže ta věta v závorce slibovala něco, co uživatel neměl
+  jak udělat. **Konkrétní číslo v UI u výsledku běhu ale nestojí** a je to schválně — viz
+  `ReviewRunner` níž.
 - **`clean` vzniká jen přes `ReviewState.finished(findingCount:)`.** Jinak se dřív nebo
   později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
 - **`dismissed` není `clean`** (#113). „Reviewer nic nenašel“ a „našel a já to všechno
@@ -884,8 +888,8 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `reviewPrompt`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
-| `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie — **všechno volitelné** |
+| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `reviewPrompt`, `reviewTimeoutMinutes`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
+| `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie, `reviewTimeoutMinutes` — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
 | `ConfigurationBox` | Aktuální konfigurace pro kód mimo hlavní vlákno (limit souběhu, rozpočet, model) |
@@ -975,6 +979,17 @@ Věci, které se u toho nemají rozbít:
   opačně než u seznamů, kde prázdno je vlastní odpověď; seznam se prázdný nechává, kdežto text se
   prázdný jen prochází. `RepositoryConfig` prompt nemá, ze stejného důvodu jako vzhled: je to
   vlastnost člověka, ne repozitáře, a je na to test.
+- **Časový limit běhu (#320) se čte jako ostatní čísla a per repo se nastavuje.** Chybějící klíč
+  znamená patnáct minut, tedy chování před #320; hodnota jiného typu čtení **položí** (`try`, ne
+  `try?`), stejně jako u intervalu nebo rozpočtu. Dvě věci navíc:
+  - **Číslo mimo meze soubor nepoloží a v konfiguraci zůstane syrové.** Sráží se až
+    `resolved(for:)` přes `Policy.reviewTimeout(minutes:)` — a je to jediné místo, kde se sráží,
+    takže i override pod repem dostane tentýž strop. Kdyby se sráželo při čtení, přišlo by se
+    o rozdíl mezi „napsal jsem 120“ a „mám 60“ a nastavení by neměl kdo pojmenovat.
+  - **Override per repo tady je** (na rozdíl od promptu, vzhledu a pohledu na diff): velké repo
+    potřebuje delší limit a je to vlastnost **repa**, ne člověka, který se kouká. `nil` znamená
+    „ber globální“, jako u režimu a sad. Přísnost jako u režimu se nehodí — delší limit nic
+    nespustí a nic neodešle, jen dovolí běhu doběhnout.
 - **Rozbitá hodnota režimu se sráží na `manual`, ne na globální default.** Chybějící klíč
   je „ber globální“, ale překlep v hodnotě, kterou se někdo pokoušel automat **vypnout**,
   ho nesmí nechat zapnutý. Platí i globálně.
@@ -982,9 +997,10 @@ Věci, které se u toho nemají rozbít:
   se aplikace po zavedení konfigurace začala chovat jinak. Výchozí `mode` je `manual`:
   zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
 - **Nový klíč v `RepositoryConfig` má druhého čtenáře mimo aplikaci: očistu konfigurace slotu**
-  (#262, `bin/slot-config.sh`). Klíčů, které mají obě úrovně, je pět — `mode`,
-  `allowsPublishing`, `findingsLanguage`, `skills`, `blockingCategories` — a u každého z nich je
-  ve skriptu napsané, jestli se čistí a proč. Očistit jen globální úroveň **nestačí**: per-repo
+  (#262, `bin/slot-config.sh`). Klíčů, které mají obě úrovně, je šest — `mode`,
+  `allowsPublishing`, `findingsLanguage`, `skills`, `blockingCategories`
+  a `reviewTimeoutMinutes` (#320) — a u každého z nich je ve skriptu napsané, jestli se čistí
+  a proč. Očistit jen globální úroveň **nestačí**: per-repo
   override je přednější, takže `mode: automatic` u jednoho repa přebije globální `manual` —
   a slotová aplikace si na M9 takhle sama pustila review za 2,80 $ a 1,16 $, dvakrát nezávisle
   na sobě. Když klíč přibude, patří do toho výčtu, i kdyby se nakonec nečistil; nevyplněné
@@ -1202,7 +1218,7 @@ Jeden běh = jedna headless session `claude` na jeden skill v jednom pracovním 
 |---|---|
 | `ReviewRunning` | Protokol: `run(_:progress:)`. Schválně nemá nic, čím by šlo něco odeslat |
 | `ClaudeReviewRunner` | Implementace nad `claude` přes `ProcessStreaming` |
-| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat), `promptTemplate` z nastavení (#281); u kontroly nálezů (#150) navíc `recheck: RecheckMaterial?` |
+| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat), `promptTemplate` z nastavení (#281), `timeout` z nastavení (#320); u kontroly nálezů (#150) navíc `recheck: RecheckMaterial?` |
 | `ReviewRunKey` | `(PR, headSha, skillID, kind)` — identita běhu; `kind` je `review` / `recheck` (#150) |
 | `RecheckMaterial` | Vstup kontroly (#150): commit, na kterém nálezy vznikly, a nálezy v pořadí, ve kterém se na ně ptáme |
 | `RecheckCommand` | **Čisté funkce**: prompt kontroly a defenzivní čtení její odpovědi (#150) |
@@ -1223,7 +1239,36 @@ Věci, které se u toho nemají rozbít:
   Vyhodí se jen `CancellationError`. Kdyby selhání létalo jako chyba, `clean` a `failed`
   by se v UI slily do jednoho „nepovedlo se“.
 - **Timeout si nechá, co stihl.** Proto se stream čte průběžně a `StreamSummary` se plní
-  po řádcích: u zabitého běhu jsou částečné nálezy jediné, co je.
+  po řádcích: u zabitého běhu jsou částečné nálezy jediné, co je. Nastavitelný limit (#320) na
+  tom nemění nic — mění se jen číslo, po kterém se zabíjí.
+- **Časový limit je v nastavení a putuje s požadavkem** (#320, `ReviewTimeout` v `App/Policy/`).
+  Do #320 to byla konstanta `ClaudeReviewRunner.defaultTimeout`; teď je to
+  `GlobalConfig.reviewTimeoutMinutes` s override per repo, a runner **žádné vlastní pole nemá** —
+  bere `request.timeout`. Pět věcí, které se u toho nemají rozbít:
+  - **Běh doběhne s limitem, se kterým začal.** Skládá se v `AppStore` jednou pro celý běh
+    (`resolved(for: pr.repo).reviewTimeout`), takže uložené nastavení uprostřed review session
+    nezkrátí. Je to tatáž úvaha i tentýž mechanismus jako u šablony promptu.
+  - **Meze jsou bezpečnostní, ne kosmetické.** 5–60 minut, „bez limitu“ **není volba**. Timeout je
+    jediná pojistka proti session, která se zacyklí — `autoRunsPerDay` a `maxConcurrentReviews`
+    omezují **počet** běhů, ne délku jednoho. Čísla i jejich odůvodnění (naměřená doba běhů, cena
+    za minutu, vazba stropu na denní limit) jsou v dokumentačním komentáři `ReviewTimeout`.
+  - **Sráží se na jednom místě, a až při použití.** `Configuration.resolved(for:)` přes
+    `Policy.reviewTimeout(minutes:)`. V konfiguraci zůstane **syrová hodnota**, protože jen tak jde
+    rozlišit „napsal jsem 120“ od „mám 60“ — a nastavení to pod polem pojmenuje
+    (`Policy.reviewTimeoutProblem(in:)`).
+  - **Kontrola nálezů (#150) má tentýž limit.** Je to tatáž session, tentýž pracovní strom a tytéž
+    peníze; kdo limit zvedá u pomalého repa, zvedá ho kvůli tomu repu, ne kvůli jednomu ze dvou
+    druhů běhu. Že kontrola v praxi trvá kratší dobu, nic nemění: nevyčerpaný strop nestojí nic,
+    kdežto vlastní kratší strop by z pomalé kontroly udělal `timedOut`.
+  - **Překladač nálezů (`ClaudeFindingTranslator`, 120 s) zůstává natvrdo.** Není to opomenutí:
+    uvažuje se o tom, že se jazyk nálezů přesune do promptu review a překladač **zanikne**, takže
+    nastavení pro něj by se za chvíli zahazovalo. A je to jiný druh běhu — krátké volání bez
+    pracovního stromu, kde delší limit nic nezachrání.
+- **Číslo limitu v UI u výsledku běhu nestojí** (#320) — ani u `timedOut`. Uložený běh limit
+  **nenese**, takže by se dalo napsat jedině to, co je nastavené *teď*, a to je o starším běhu
+  nepravda. Přidat ho do `StoredReviewRun` by znamenalo, že u všech dosavadních záznamů je `nil`
+  a stejně by se muselo psát „neznámý limit“; hodnota za to nestojí. Kde se limit **říct dá**, je
+  nastavení, protože tam je to tvrzení o příštím běhu.
 - **Zrušený proud skončí bez chyby**, takže po smyčce musí přijít `Task.checkCancellation()`
   — jinak by ze zrušeného review vypadl výsledek, jako by doběhlo.
 - **Slučování stejného klíče je nad frontou**, ne pod ní. Připojený požadavek jinak zabere
@@ -2340,14 +2385,15 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsSection` | Sedm stránek ve třech skupinách — `Co se hlídá`, `Co jde ven`, `Prostředí` |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
 | `SourcesSettingsView` | Zdroje PR (search dotazy) |
-| `ReviewSettingsView` | Výchozí režim a jazyk nálezů, skilly, sady podle jazyka, **prompt review** (#281), blokující kategorie |
+| `ReviewSettingsView` | Výchozí režim, jazyk nálezů a **časový limit běhu** (#320), skilly, sady podle jazyka, **prompt review** (#281), blokující kategorie |
 | `ReviewPromptEditor` | Psaná šablona, legenda zástupných textů, `Obnovit výchozí`, náhled složeného promptu a zamčené jádro (#281) |
+| `ReviewTimeoutField` | Číslo v minutách a stížnost, když je hodnota v souboru mimo meze (#320). **Jedno view pro obě místa**, kde se limit nastavuje |
 | `DiffSettingsView` | **Pohled na diff** — nastavení člověka, ne repa, proto jen globálně |
 | `PublishingSettingsView` | **Odesílání na GitHub** — vlastní stránka, viz níž |
 | `RuntimeSettingsView` | Interval pollingu, rozpočet cache, souběžné session, denní limit, model |
 | `NotificationSettingsView` | Stránka `Notifikace` (#86): hlavní vypínač a čtyři události |
 | `LanguageSkillsEditor` | Mapa „programovací jazyk → sada skillů“; ukazuje jen nastavené jazyky |
-| `RepositorySettingsView` | Seznam rep vlevo, režim, povolení odesílání a override vpravo |
+| `RepositorySettingsView` | Seznam rep vlevo, režim, povolení odesílání, override sad a **vlastní časový limit** (#320) vpravo |
 | `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
 | `SettingsNumberField` | Číslo se šipkami **i** přepsáním; ořezává na povolený rozsah |
 
@@ -2376,6 +2422,25 @@ Věci, které se u toho nemají rozbít:
     může — proto s ní `AppStore.review(_:skills:)` review **nespustí** a fáze zůstane
     `failed(detail:)` s tou samou větou. Text hlášky je jeden (`ReviewPromptTemplate.Problem`),
     aby se okno a hlava PR nerozešly.
+- **Časový limit běhu sedí na `Review a skilly`, ne na `Běh`** (#320). Stránka `Běh` je hrst čísel
+  o **stroji a prostředí** (interval, souběh, rozpočet cache) a žádné z nich nemá override; limit
+  je proti tomu třetí věc o **spuštěném review**, kterou si repo smí přebít — vedle režimu a jazyka
+  nálezů, a proto stojí v téže sekci jako ony, ne ve vlastní. Tři věci, na kterých to stojí:
+  - **Z okna se hodnota mimo meze zapsat nedá** (`SettingsNumberField` ořezává), ale ze souboru
+    přijít může. Pod polem se proto vypíše, **kolik je v konfiguraci** a **s čím se doopravdy
+    poběží** — spolknout to by znamenalo, že si někdo napíše 120 minut, poběží mu 60 a nic to
+    neřekne. Text skládá `Policy.reviewTimeoutProblem(in:)`, aby byl jeden pro obě místa.
+  - **Obě místa kreslí `ReviewTimeoutField`.** Věta o mezích má být jedna; dvě formulace téhož by
+    se rozešly a z okna by nebylo poznat, že jde o totéž pravidlo.
+  - **Per repo je to přepínač a číslo, ne tříhodnotový picker** jako u režimu. Hodnot je 56, takže
+    „ber globální“ mezi ně nepatří jako další položka; zapnutí přepínače začíná od globální
+    hodnoty, ze stejného důvodu jako u sad — override se obvykle dělá posunutím, ne psaním od nuly.
+  - **„Bere globální: X min“ vypisuje sraženou hodnotu, ne tu ze souboru** (nálezem Copilota na
+    #324). Když je globální číslo mimo meze, poběží se s mezí — a věta o tom, co repo dostane, by
+    jinak tvrdila víc, než data unesou. Ze stejného důvodu se sraženou hodnotou **začíná i zapnutý
+    přepínač**: seed z globálního nesmyslu by ten nesmysl zkopíroval do repa a hned si na sebe
+    stěžoval. Obojí počítá `Policy.reviewTimeoutMinutes(from:)`, tedy totéž místo, kterým hodnota
+    projde na cestě do běhu.
 - **Vybraná stránka se nepamatuje mezi spuštěními.** Nastavení se otevírá kvůli konkrétní věci;
   vrátit se do něj tam, kde jsem skončil minule, není, co člověk čeká — na rozdíl od výšky
   panelu, kterou si vytáhne jednou a chce ji mít.
@@ -4157,6 +4222,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` i s **cenou** z uloženého běhu |
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
 | `Policy.reviewPromptTemplate(from:)`, `.reviewPromptProblems(in:)`, `.reviewPromptBody(template:skillID:baseSha:)`, `.reviewPrompt(template:skillID:baseSha:)` | Prompt review ze šablony v nastavení (#281, `ReviewPromptTemplate`): prázdná šablona → výchozí, chybějící zástupný text → `Problem`, dosazení hodnot a **vždycky připojené jádro**. Skládá to **jedno místo**, protože týž text potřebuje běh i `Zkopírovat příkaz` |
+| `Policy.reviewTimeout(minutes:)`, `.reviewTimeoutMinutes(from:)`, `.reviewTimeoutProblem(in:)` | Časový limit běhu z nastavení (#320, `ReviewTimeout`): sražení do mezí 5–60 min a pojmenování hodnoty, která je mimo ně. **Jediné místo, kde se sráží** — pole v nastavení, globální hodnota i override per repo mluví o týchž mezích |
 | `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
 | `Policy.matches(_:_:)` | Patří vlákno (nebo můj rozdělaný komentář) k tomuhle řádku diffu — **jedno místo** pro výběr i umístění |

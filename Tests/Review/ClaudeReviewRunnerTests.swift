@@ -130,6 +130,39 @@ struct ClaudeReviewRunnerTests {
         #expect(invocation.environment["GIT_TERMINAL_PROMPT"] == "0")
     }
 
+    /// Limit bere runner **z požadavku** (#320), ne z vlastní konstanty. Kdyby si držel svůj,
+    /// běžela by session s jiným limitem, než jaký si vyžádal ten, kdo ji spustil — a nastavení
+    /// by nedělalo nic.
+    @Test("Limit z požadavku dojede až k procesu")
+    func theRequestedTimeoutReachesTheProcess() async throws {
+        let streamer = FakeProcessStreamer(lines: try lines(of: "review-clean"))
+        let target = ReviewRequest(
+            key: ReviewRunKey(
+                pullRequest: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 42),
+                headSha: "aaaa1111",
+                skillID: "code-review"
+            ),
+            worktree: URL(filePath: "/tmp/prism/worktrees/cli/cli/42-aaaa1111"),
+            baseSha: "bbbb2222",
+            timeout: .seconds(2400)
+        )
+
+        _ = try await runner(streamer).run(target)
+
+        #expect(try #require(streamer.invocations.first).timeout == .seconds(2400))
+    }
+
+    /// A požadavek bez vyplněného limitu běží s patnácti minutami — tedy s hodnotou, se kterou
+    /// aplikace běžela do #320.
+    @Test("Požadavek bez limitu běží s patnácti minutami")
+    func aRequestWithoutATimeoutRunsWithFifteenMinutes() async throws {
+        let streamer = FakeProcessStreamer(lines: try lines(of: "review-clean"))
+
+        _ = try await runner(streamer).run(request())
+
+        #expect(try #require(streamer.invocations.first).timeout == .seconds(900))
+    }
+
     // MARK: - Průběh
 
     @Test("Průběh chodí ven, jak stream přichází")

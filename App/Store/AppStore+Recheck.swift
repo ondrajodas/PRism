@@ -104,7 +104,13 @@ extension AppStore {
                     at: detail.headSha,
                     worktree: worktree,
                     baseSha: detail.baseSha,
-                    material: material
+                    material: material,
+                    // **Tentýž limit jako review** (#320), ne vlastní. Je to tatáž session, tentýž
+                    // pracovní strom a tytéž peníze — a kdo u pomalého repa limit zvedá, zvedá ho
+                    // kvůli tomu repu, ne kvůli jednomu ze dvou druhů běhu. Že je kontrola v praxi
+                    // kratší, na tom nic nemění: strop, který se nevyčerpá, nic nestojí, kdežto
+                    // vlastní kratší strop by z pomalé kontroly udělal `timedOut`.
+                    timeout: resolved(for: pr.repo).reviewTimeout
                 )
             )
             // Útrata se zapisuje **před** kontrolou zrušení, jako u review: session, která

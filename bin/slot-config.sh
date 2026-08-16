@@ -127,14 +127,21 @@ trap 'rm -f "${CLEANED}"' EXIT
 # **Výčet klíčů je úplný a je to tady vidět** (#262). Rozhodující jsou ty, které mají obě
 # úrovně (`GlobalConfig` i `RepositoryConfig`), protože u nich očista jedné úrovně nestačí —
 # per-repo override je přednější, to je celý smysl `Configuration.resolved(for:)`. Takových
-# klíčů je **pět** a všech pět je tady:
+# klíčů je **šest** a všech šest je tady:
 #
-#   klíč                obě úrovně   čistí se   proč
-#   mode                ano          ANO        automat by pustil review, které nikdo nečte
-#   allowsPublishing    ano          ANO        brána z tvrdé podmínky č. 1
-#   findingsLanguage    ano          ne         jazyk prózy; nic nespustí ani neodešle
-#   skills              ano          ne         zrovna to je to, co se ve slotu zkouší
-#   blockingCategories  ano          ne         mění jen příznak u nálezu
+#   klíč                  obě úrovně   čistí se   proč
+#   mode                  ano          ANO        automat by pustil review, které nikdo nečte
+#   allowsPublishing      ano          ANO        brána z tvrdé podmínky č. 1
+#   findingsLanguage      ano          ne         jazyk prózy; nic nespustí ani neodešle
+#   skills                ano          ne         zrovna to je to, co se ve slotu zkouší
+#   blockingCategories    ano          ne         mění jen příznak u nálezu
+#   reviewTimeoutMinutes  ano          ne         strop délky běhu (#320), ne brána. Sám nic
+#                                                 nespustí a ve slotu pouští běhy jedině člověk
+#                                                 (`mode: manual` a `autoRunsPerDay: 0` výš).
+#                                                 Horní mez je navíc v kódu (`ReviewTimeout`,
+#                                                 5–60 min), takže se ze souboru nedá roztáhnout
+#                                                 donekonečna — očista by srážela hodnotu, která
+#                                                 strop už má
 #
 # Zbytek `GlobalConfig` per repo být nemůže, takže tam jedna úroveň stačí:
 #

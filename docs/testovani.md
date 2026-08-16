@@ -1008,6 +1008,47 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   kterému sonda vznikla. Chytila jednu reálnou chybu: náhled i jádro se ve `Form`u srazily na tři
   řádky a zbytek promptu uřízly třemi tečkami — tedy náhled, který zamlčí zrovna to, kvůli čemu se
   do něj kouká. Léčba je `fixedSize(horizontal: false, vertical: true)`.
+- **Časový limit běhu (#320)** — tři sady a **nejcennější tvrzení je zase o tom, že se nic
+  nezměnilo**: patnáct minut je hodnota, se kterou aplikace běžela do #320, a zavedení nastavení ji
+  nesmí posunout.
+
+  `ReviewTimeoutTests` (`Policy`, vyčerpávajícím výčtem):
+  - **Výchozí limit se porovnává s číslem, ne s `ReviewTimeout.standardMinutes`** — konstanta sama
+    se sebou projde i po přepsání. K tomu druhá strana téhož: `Configuration.standard` tu hodnotu
+    doopravdy nese a `resolved(for:)` z ní vydá 900 sekund.
+  - **Výchozí hodnota leží uvnitř mezí.** Kdyby ne, srazila by se — a aplikace by po zavedení pole
+    běžela s jiným limitem než před ním, aniž by to kdokoli napsal.
+  - **„Bez limitu“ nejde nastavit ničím**: nula, záporné číslo, `Int.min` i `Int.max` skončí uvnitř
+    rozsahu. Vypsané jsou i obě hranice a hodnoty těsně vedle nich.
+  - **Co hláška slibuje, to se použije** — `problem.applied` se pro každou hodnotu mimo meze
+    porovnává s tím, co vrátí sráření. Dvě místa, kde se sráží, by se rozešla a v okně by stálo
+    jedno, běželo by druhé.
+
+  `ClaudeReviewRunnerTests` — že limit **dojede z požadavku až k procesu** (`FakeProcessStreamer`
+  si ho kvůli tomu od #320 pamatuje) a že požadavek bez vyplněného limitu běží s patnácti minutami.
+  Runner vlastní pole nemá, takže je to jediné místo, kde se to dá zkontrolovat.
+
+  `AppStoreTimeoutTests` — limit z konfigurace dojede k běhu, override repa přebije globální,
+  hodnota mimo meze dojde **sražená** (jinak by se strop dal obejít zápisem pod repem), **rozjeté
+  review doběhne s limitem, se kterým začalo** (soubor se přepíše uprostřed běhu a `resolved` už
+  hlásí novou hodnotu, ale požadavek drží tu starou) a **kontrola nálezů běží s tímtéž limitem**.
+
+  V `ConfigurationTests` k tomu chybějící klíč (patnáct minut), přečtení hodnoty, **hodnota jiného
+  typu, která čtení položí** (řetězec, pole i objekt), **číslo mimo meze, které soubor nepoloží
+  a v konfiguraci zůstane syrové** (sráží se až `resolved`), override per repo, `nil` jako „ber
+  globální“ a override mimo meze sražený týmž místem jako globální.
+
+  Ověřeno **vloženou regresí** — posunutá výchozí hodnota, runner beroucí vlastní konstantu místo
+  `request.timeout` a `resolved(for:)` bez sráření naráz: padne **18 tvrzení v 10 testech** napříč
+  všemi třemi sadami.
+
+  **Jak to vypadá, se ověřilo renderem** — `ReviewTimeoutRenderProbe` (gated `PRISM_MEASURE`)
+  vykreslí obě místa, kde se limit nastavuje, v osmi stavech (globálně výchozí, zvednutý, pod mezí,
+  nad mezí; repo bez override, bez override nad sraženou globální hodnotou, s vlastním limitem
+  a s override mimo meze), ve dvou šířkách obsahové části okna a v obou režimech. **Stavy mimo meze
+  se klikáním nevyrobí vůbec** — pole je ořezává —, a přitom je to zrovna to, kvůli čemu stížnost
+  existuje. Šestý stav přibyl po nálezu Copilota: „Bere globální: 240 min“ nad během, který poběží
+  60, je text, který tvrdí víc, než data unesou.
 - **Vzhled okna (#278)** — přečtení obou vynucených hodnot, chybějící klíč i překlep (obojí znamená
   `system`, ne pád), a že překlep nezahodí zbytek souboru. K tomu dvě tvrzení, že se něco
   **nestalo**, protože vzhled je vlastnost člověka, ne repa: v zapsaném JSONu je klíč `appearance`

@@ -24,10 +24,19 @@ struct ReviewSettingsView: View {
                         Text(verbatim: language.displayName).tag(language)
                     }
                 }
+
+                // Sem, ne na stránku `Běh` (#320): je to třetí věc o **spuštěném** review, kterou
+                // si repo smí přebít — vedle režimu a jazyka nálezů. Čísla na stránce `Běh` jsou
+                // proti tomu vlastnost stroje a člověka (interval, souběh, rozpočet cache)
+                // a override nemají.
+                ReviewTimeoutField(
+                    label: "Časový limit běhu (min)",
+                    minutes: $settings.draft.global.reviewTimeoutMinutes
+                )
             } header: {
                 Text("Režim review")
             } footer: {
-                Text("Platí pro repa, která si neřeknou o jiný. Manuální čeká na tlačítko, automatický spustí review, jakmile se PR objeví v seznamu. Jazyk se týká textu nálezů; `category` zůstává vždycky anglicky, protože je to slug, na který se váže blokující sada.")
+                Text("Platí pro repa, která si neřeknou o jiný. Manuální čeká na tlačítko, automatický spustí review, jakmile se PR objeví v seznamu. Jazyk se týká textu nálezů; `category` zůstává vždycky anglicky, protože je to slug, na který se váže blokující sada. Limit platí na jednu session — tedy na každý skill zvlášť a stejně tak na kontrolu nálezů. Zabitý běh si nechá, co stihl nahlásit. Rozsah je \(ReviewTimeout.minimumMinutes)–\(ReviewTimeout.maximumMinutes) min a „bez limitu“ mezi volbami není: je to jediná pojistka proti session, která se zacyklí a utrácí.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
