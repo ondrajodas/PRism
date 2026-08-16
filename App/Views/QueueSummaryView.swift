@@ -49,7 +49,12 @@ struct QueueSummaryView: View {
                     count: summary.drafts,
                     // „review“ se neskloňuje; co je na něm rozdělané, řekne ikona pera a nápověda.
                     label: "review",
-                    tint: .accentColor,
+                    // **Mint, ne akcent** (#309). Souhrn je počet, na který se neklikne — a ve
+                    // stejném pruhu, o pár desítek bodů vedle, sedí `Připravit` z
+                    // `WorkingCopyStatusView` jako akcentový odkaz, na který se klikat má.
+                    // Do #309 měly obě věci tutéž barvu (a tahle ještě k tomu systémovou modrou),
+                    // takže pruh nabízel klik na číslo.
+                    tint: Palette.mint,
                     help: "\(Plural.czech(summary.drafts, one: "pull request má", few: "pull requesty mají", many: "pull requestů má")) rozdělané review"
                 )
             }

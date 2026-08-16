@@ -534,18 +534,44 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `Palette.accent` přečtený mimo `performAsCurrentDrawingAppearance` vyjde v režimu **stroje** —
   sada kvůli tomu nejdřív tvrdila, že akce nemá barvu akcentu (vlevo světlá `#5B47E0`, vpravo tmavá
   `#8B7CFF` z nastavení systému). A `Color.accentColor` **za `.tint()` nejde**, takže odznak `2×`
-  zůstává systémově modrý i pod `.tint(Palette.accent)` z kořene okna; `.foregroundStyle(.tint)`
-  naopak jde. Doloženo renderem, kde v jednom obrázku stojí obojí vedle sebe.
-- **Sonda barvy akcí (#298)** — `FindingActionColourProbe`, gated `PRISM_MEASURE`. Nic netvrdí,
-  vyrendruje **tabulku, bublinu a stavový řádek na jedno plátno** v obou režimech, protože „vypadají
-  obě formy akce jako táž věc“ je otázka na vzhled a dva snímky pod sebou se porovnávají po paměti.
-  `NSHostingView`, ne `ImageRenderer`: tabulka je ve `ScrollView`u (ten se offscreen nevykreslí) a
-  odkaz by vyšel jako žlutý placeholder.
+  zůstával systémově modrý i pod `.tint(Palette.accent)` z kořene okna; `.foregroundStyle(.tint)`
+  naopak jde. Doloženo renderem, kde v jednom obrázku stálo obojí vedle sebe — a je to celý důvod,
+  proč #309 sáhlo rovnou na token, ne na tint.
+- **Barva stavů u nálezu (#309)** — `MintTokenTests`. Ptá se na dvě různé věci a měří je dvěma
+  mírami: **ΔE2000** na „nesplynul mint s něčím, co v okně už něco znamená“ (proti `ok` 16,6 světlá
+  / 21,1 tmavá, proti `stale` 37,9 / 39,4, proti akcentu 39,7 / 43,9) a **WCAG** na „dá se to
+  přečíst“ (na ploše řádku 4,95 / 9,90, na `chrome` 4,70 / 9,35, na podbarveném živém řádku 4,29 /
+  8,23; na vlastní kapsli odznaku 4,06 / 7,42).
 
-  Sonda musí nést **`.tint(Palette.accent)`**, protože ho skutečné okno má na kořeni (`ContentView`)
-  — bez něj vyjde `✓ v mém review` systémově modré a sonda ukazuje rozpor, který v aplikaci není.
+  **Prahy nejsou všude 4,5, a je to zapsané u každé výjimky.** Živý řádek (4,0) stahuje pod AA
+  celou rodinu — `ok` tam má 4,40, `find` 4,25 —, takže vyjmout z toho mint by znamenalo jeden
+  odznak, který svítí jinak než ostatní. Kapsle (3,4) je tatáž úvaha: `color-mix(… 15 %,
+  transparent)` z návrhu ztmavuje text u **všech** odznaků. Hlídá se tam **zhoršení**, ne AA.
+
+  Tři věci, které sada tvrdí a bez kterých by šlo #309 potichu zrušit: že odznak u nálezu je mint
+  a **není** akcent (ověřeno vloženou regresí — s `Palette.accent` v `FindingBadgeAppearance` padá
+  v obou režimech), že `běží` **zůstalo** akcentem (mint je pro konstatování, ne pro každý stav)
+  a že pruh rozsahu v diffu drží akcent i po `.opacity()` **a po převodu na `NSColor`**, kterým si
+  ho bere `DiffTextView` — kdyby se na té cestě ztratila dynamika, pruh by v jednom režimu zůstal
+  z toho druhého a poznalo by se to jedině tažením myší přes diff.
+
+  **Porovnává se přes `Measured`, ne syrové `NSColor`**: `NSColor(dynamickáBarva)` vrací katalogovou
+  barvu, která se sobě samé nerovná ani po vyhodnocení v témže režimu, takže bez převodu do sRGB
+  padá sada na typu obálky, ne na barvě.
+- **Sonda barvy akcí a stavů (#298, rozšířeno #309)** — `FindingActionColourProbe`, gated
+  `PRISM_MEASURE`. Nic netvrdí, vyrendruje **tabulku, dvě bubliny, stavový řádek a odznaky stavu na
+  jedno plátno** v obou režimech, protože „pozná se stav od akce“ je otázka na vzhled a dva snímky
+  pod sebou se porovnávají po paměti. `NSHostingView`, ne `ImageRenderer`: tabulka je ve `ScrollView`u
+  (ten se offscreen nevykreslí) a odkaz by vyšel jako žlutý placeholder.
+
+  Sonda musí nést **`.tint(Palette.accent)`**, protože ho skutečné okno má na kořeni (`ContentView`).
   A převzatý nález musí mít **jediného revieweera**: u shody `2×` se `adoption(of:)` nekreslí vůbec,
   takže odznak by v renderu chyběl. Obojí se ukázalo až na prvním obrázku.
+
+  **Druhá bublina je od #309 a musí mít `toggle`**: `2×` sedí ve značce nad obsahem a ta se kreslí
+  jen tam, kde se bublina dá sbalit (`showsMark`) — bez uzávěru vyjde bublina bez odznaku a sonda
+  mlčky neukáže zrovna to místo, na které se ptá. Skupina je proto dvojice se shodou a **obě její
+  položky jsou převzaté**, aby v jednom obrázku stálo `2×`, `✓ v mém review` i akcentové tlačítko.
 
   Popisky odmítnutí mají **dvě podoby** a nesmí splynout: `actionLabel` na tlačítko (velké písmeno,
   každý důvod jiný) a `label` do odznaku (malé písmeno, přídavné jméno). Test tvrdí obojí i to, že

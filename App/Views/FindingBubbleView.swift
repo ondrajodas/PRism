@@ -123,7 +123,10 @@ struct FindingBubbleView: View {
                     .fill(accent)
                     .frame(width: 7, height: 7)
                 severity(badge)
-                if group.agreement > 1 { pill("\(group.agreement)×", color: Palette.accent) }
+                // **Mint jako v tabulce** (#309): je to tentýž odznak o téže věci, jen na druhé
+                // ploše. Dvě barvy pro jedno sdělení by znamenaly, že se `2×` u kódu čte jinak
+                // než `2×` v seznamu.
+                if group.agreement > 1 { pill("\(group.agreement)×", color: FindingBadgeAppearance.stateTint) }
                 // **I ve sbalené značce**, a je to podmínka, ne ozdoba: nezakotvená bublina visí
                 // u hlavičky souboru, takže bez odznaku vypadá jako nález na prvním řádku hunku.
                 // Věta „řádek v diffu není“ je až v obsahu, tedy za kliknutím — a utnutá pravda
@@ -555,9 +558,12 @@ struct FindingBubbleView: View {
     ) -> some View {
         if let target {
             if isAdopted {
+                // **Mint, ne akcent** (#309) — a tady je ten rozdíl vidět nejvíc: `Převzít` je
+                // vedle jako plné tlačítko v akcentu (`.miniPrimary`), takže dokud měly obojí
+                // tutéž barvu, vypadala hotová věc jako tlačítko, které se nepovedlo zmáčknout.
                 Label(adoptedLabel(for: target), systemImage: "checkmark.circle.fill")
                     .font(.caption)
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(FindingBadgeAppearance.stateTint)
             } else {
                 Button(adoptLabel(for: target)) { draft.adopt(finding) }
                     .buttonStyle(.miniPrimary)

@@ -362,14 +362,22 @@ struct DiffLineView: View {
     /// Pruh přes celý řádek u komentovaného rozsahu (#110) — jinak by u víceřádkového komentáře
     /// nebylo poznat, kam až sahá. Kreslí se **přes** pozadí druhu řádku, aby zůstalo vidět, co
     /// je přidané a co odebrané; ve split pohledu ho stejně jako to pozadí kreslí dvojice.
-    static let rangeTint = Color.accentColor.opacity(0.12)
+    ///
+    /// **Akcent z palety, ne `Color.accentColor`** (#309): systémová modrá byla i tady, jen ji
+    /// dvanáct procent krytí schovalo natolik, že to nebylo vidět na první pohled — a nad zeleným
+    /// řádkem se modrá míchá do jiného tónu než fialová. Krytí zůstává **záměrně**: pruh má být
+    /// vrstva nad barvou řádku, ne místo ní, takže je to jediné místo v paletě, kde je
+    /// prosvítající podklad ta žádaná vlastnost. Že se dynamická barva krytím nerozbije (a tmavá
+    /// větev zůstane tmavá i po převodu na `NSColor` v `DiffTextView`), hlídá `MintTokenTests`.
+    static let rangeTint = Palette.accent.opacity(0.12)
 
     /// Právě tažený rozsah svítí **výrazněji** než hotový komentář: u hotového je vidět i bublina,
     /// kdežto při tažení je pruh jediná zpětná vazba o tom, co se vybírá.
     ///
     /// Ne o mnoho výrazněji: při 0,3 pruh přebil zelenou a červenou u změněných řádků, tedy to
-    /// hlavní, co má diff říkat. Vyladěné na offscreen renderu.
-    static let dragTint = Color.accentColor.opacity(0.16)
+    /// hlavní, co má diff říkat. Vyladěné na offscreen renderu — a **procenta se u #309 nehnula**,
+    /// změnila se jen barva pod nimi.
+    static let dragTint = Palette.accent.opacity(0.16)
 
     /// Barva pruhu rozsahu, nebo průhledno. Tažení přebíjí hotový komentář — je to to, co se
     /// zrovna děje.
