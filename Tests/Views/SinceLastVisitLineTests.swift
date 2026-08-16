@@ -50,6 +50,22 @@ struct SinceLastVisitLineTests {
         ])
     }
 
+    /// **Commit bez autora se počítá jako někdo jiný**, ne jako by tam nebyl (nález Copilota
+    /// na #284). `compactMap` ho zahodil, takže dávka „odinuv + smazaný účet“ vyšla jako jeden
+    /// login a věta mlčela o tom, že tam byl ještě někdo.
+    @Test("Commit bez autora jméno v dávce zruší")
+    func omitsTheAuthorWhenOneIsUnknown() {
+        let lines = SinceLastVisitLines(
+            changes: changes(commits: [commit("aaa1111", by: actor), commit("bbb2222", by: nil, anonymous: true)])
+        ).lines
+
+        #expect(lines[0].parts == [
+            .strong("2 nové commity"),
+            .plain(" — poslední "),
+            .sha("bbb2222"),
+        ])
+    }
+
     @Test("Commit bez sha nekreslí prázdnou kapsli")
     func skipsAnEmptySha() {
         let lines = SinceLastVisitLines(changes: changes(commits: [commit("")])).lines
@@ -195,11 +211,15 @@ struct SinceLastVisitLineTests {
         )
     }
 
-    private func commit(_ oid: String, by author: EventActor? = nil) -> TimelineEvent {
+    private func commit(
+        _ oid: String,
+        by author: EventActor? = nil,
+        anonymous: Bool = false
+    ) -> TimelineEvent {
         TimelineEvent(
             id: oid.isEmpty ? "empty" : oid,
             kind: .commit(oid: oid, headline: "fix: něco"),
-            actor: author ?? actor,
+            actor: anonymous ? nil : (author ?? actor),
             at: Date(timeIntervalSince1970: 1_000)
         )
     }

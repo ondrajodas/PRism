@@ -54,7 +54,7 @@ struct IncrementalDiffBar: View {
 
     /// Kolik ta která podoba potřebuje.
     static func width(of layout: Layout) -> CGFloat {
-        let button = TextWidth.miniButton(wayOutLabel)
+        let button = TextWidth.miniButton(wayOutLabel, emphasis: .secondary)
         switch layout {
         case .wayOut:
             return button
@@ -95,8 +95,10 @@ struct IncrementalDiffBar: View {
 
     private var shas: String { "\(Self.short(range.seen)) → \(Self.short(range.head))" }
 
-    private static let label = "Jen to, co přibylo od tvé poslední návštěvy"
-    private static let wayOutLabel = "Ukázat celý diff"
+    /// Popisky **nejsou `private`** ze stejného důvodu jako u pruhu: kontroluje je test proti
+    /// tomu, co se nakreslí.
+    static let label = "Jen to, co přibylo od tvé poslední návštěvy"
+    static let wayOutLabel = "Ukázat celý diff"
     private static let horizontalPadding = 14.0
     private static let gap = 9.0
     /// Symbol se nekreslí do textového rámečku, takže se jeho šířka **ustaví**, ne měří — a je to

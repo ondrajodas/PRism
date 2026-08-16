@@ -19,9 +19,13 @@ enum TextWidth {
         NSAttributedString(string: value, attributes: [.font: font]).size().width.rounded(.up)
     }
 
-    /// Šířka popisku malého tlačítka (`.mini`) i s jeho odsazením a obtažením.
-    static func miniButton(_ label: String) -> CGFloat {
-        of(label, font: .systemFont(ofSize: MiniButtonStyle.Metrics.fontSize))
+    /// Šířka popisku malého tlačítka i s jeho odsazením a obtažením.
+    ///
+    /// **Řez se bere ze stylu** (`MiniButtonStyle.labelFont`), ne z vlastního `systemFont`: plné
+    /// tlačítko se kreslí mediumem, takže měřit ho regularem znamená spočítat menší šířku, než
+    /// jaká se nakreslí — a přesně to je chyba, kterou má měření chytat.
+    static func miniButton(_ label: String, emphasis: MiniButtonStyle.Emphasis) -> CGFloat {
+        of(label, font: MiniButtonStyle.labelFont(of: emphasis))
             + 2 * MiniButtonStyle.Metrics.insetHorizontal
     }
 }

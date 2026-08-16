@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import PRism
@@ -72,5 +73,34 @@ struct SinceLastVisitActionsTests {
         for part in SinceLastVisitView.ActionPart.allCases {
             #expect(SinceLastVisitView.width(of: part) > 0, "\(part) má nulovou šířku")
         }
+    }
+
+    /// **Spočítaná šířka nesmí být menší než nakreslená** — jinak si řada řekne „vejdu se“ a pak
+    /// se zkrátí, tedy přesně ta chyba, kvůli které se šířka počítá.
+    ///
+    /// Vzniklo z nálezu Copilota na #284: `TextWidth.miniButton` měřil regularem, kdežto plné
+    /// tlačítko (`.miniPrimary`) se kreslí mediumem, takže `Pustit review znovu` vycházelo užší,
+    /// než jaké je. Ostatní testy téhle sady to nechytaly — porovnávaly `fits` proti `width(of:)`,
+    /// tedy dvě strany **téhož** výpočtu. Tenhle jediný sahá na to, co se doopravdy nakreslí.
+    ///
+    /// Kreslí se přes `NSHostingView`, protože měří skutečnou hierarchii i se stylem tlačítka;
+    /// `fittingSize` je jeho přirozená šířka.
+    @Test("Spočítaná šířka není menší než nakreslená")
+    func measuresWhatIsDrawn() {
+        let drawn: [(SinceLastVisitView.ActionPart, CGFloat)] = [
+            (.badge, width(of: SinceLastVisitView.stalePill)),
+            (.rerun, width(of: Button(SinceLastVisitView.rerunLabel) {}.buttonStyle(.miniPrimary))),
+            (.showAdded, width(of: Button(SinceLastVisitView.showAddedLabel) {}.buttonStyle(.mini))),
+        ]
+        for (part, drawn) in drawn {
+            #expect(
+                SinceLastVisitView.width(of: part) >= drawn,
+                "\(part): spočítáno \(Int(SinceLastVisitView.width(of: part))), nakresleno \(Int(drawn))"
+            )
+        }
+    }
+
+    private func width(of view: some View) -> CGFloat {
+        NSHostingView(rootView: view).fittingSize.width
     }
 }

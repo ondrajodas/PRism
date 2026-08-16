@@ -118,11 +118,18 @@ struct SinceLastVisitLines {
         return SinceLastVisitLine(parts)
     }
 
-    /// Kdo ty commity pushnul — **jen když je to jeden člověk**. U smíšené dávky se jméno
-    /// vynechá: „od odinuv“ nad commity dvou lidí by tvrdilo něco, co v datech není.
+    /// Kdo ty commity pushnul — **jen když je to jeden člověk a víme to o všech**.
+    ///
+    /// U smíšené dávky se jméno vynechá: „od odinuv“ nad commity dvou lidí by tvrdilo něco, co
+    /// v datech není. **Commit bez autora se počítá jako někdo jiný**, ne jako by tam nebyl
+    /// (nález Copilota na #284): `compactMap` by ho zahodil, takže dávka „odinuv + smazaný účet“
+    /// by vyšla jako jeden login a věta by mlčela o tom, že tam byl ještě někdo.
     private var author: String? {
-        let logins = Set(changes.commits.compactMap { $0.actor?.login })
-        return logins.count == 1 ? logins.first : nil
+        let logins = changes.commits.map { $0.actor?.login ?? "" }
+        guard let first = logins.first, !first.isEmpty, logins.allSatisfy({ $0 == first }) else {
+            return nil
+        }
+        return first
     }
 
     /// „vondrous **schválil** PR“ — autor ztlumeně, verdikt tučně, jak to má návrh.

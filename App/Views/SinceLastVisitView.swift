@@ -197,7 +197,7 @@ struct SinceLastVisitView: View {
     }
 
     @ViewBuilder private var row: some View {
-        if hasStaleFindings { stalePill }
+        if hasStaleFindings { Self.stalePill }
         if offersRerun, let rerun {
             Button(Self.rerunLabel, action: rerun)
                 .buttonStyle(.miniPrimary)
@@ -236,14 +236,17 @@ struct SinceLastVisitView: View {
     static func width(of part: ActionPart) -> CGFloat {
         switch part {
         case .badge: badgeWidth
-        case .rerun: TextWidth.miniButton(rerunLabel)
-        case .showAdded: TextWidth.miniButton(showAddedLabel)
+        case .rerun: TextWidth.miniButton(rerunLabel, emphasis: .primary)
+        case .showAdded: TextWidth.miniButton(showAddedLabel, emphasis: .secondary)
         }
     }
 
-    private static let rerunLabel = "Pustit review znovu"
-    private static let showAddedLabel = "Ukázat, co přibylo"
-    private static let badgeLabel = "nálezy zastaraly"
+    /// Popisky **nejsou `private`**: měří je `width(of:)` a **kontroluje je test** proti tomu, co
+    /// se doopravdy nakreslí (`SinceLastVisitActionsTests`). Opsat je v testu by znamenalo měřit
+    /// jiný text než ten v okně.
+    static let rerunLabel = "Pustit review znovu"
+    static let showAddedLabel = "Ukázat, co přibylo"
+    static let badgeLabel = "nálezy zastaraly"
     private static let horizontalPadding = 12.0
     /// Odznak i s odsazením kapsle (`.pill { padding: 2px 7px }`).
     private static let badgeWidth = TextWidth.of(
@@ -259,7 +262,10 @@ struct SinceLastVisitView: View {
     }
 
     /// `.pill.stale` z návrhu: mono, malé, okrové na vlastním tichém podkladu.
-    private var stalePill: some View {
+    ///
+    /// **`static` a `internal`, ať se dá změřit** — test porovnává `width(of: .badge)` s tím, co
+    /// se doopravdy nakreslí, a kdyby si odznak skládal sám, měřil by jinou věc než okno.
+    static var stalePill: some View {
         Text(verbatim: Self.badgeLabel)
             .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
             .lineLimit(1)

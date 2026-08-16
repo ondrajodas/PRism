@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import PRism
@@ -71,5 +72,18 @@ struct IncrementalDiffBarLayoutTests {
         let widths = IncrementalDiffBar.Layout.allCases.map(IncrementalDiffBar.width(of:))
         #expect(widths.allSatisfy { $0 > 0 })
         #expect(widths == widths.sorted(by: >), "podoby nejsou seřazené od nejširší: \(widths)")
+    }
+
+    /// **Spočítaná šířka nesmí být menší než nakreslená** — tatáž pojistka jako u řady ovládání
+    /// v pruhu, a ze stejného důvodu: zbytek téhle sady porovnává dvě strany **téhož** výpočtu,
+    /// takže špatně změřený font by v něm prošel. Nález Copilota na #284 byl přesně tenhle druh
+    /// chyby (plné tlačítko se měřilo regularem a kreslilo mediumem).
+    @Test("Spočítaná šířka není menší než nakreslená")
+    func measuresWhatItDraws() {
+        let drawn = NSHostingView(
+            rootView: Button(IncrementalDiffBar.wayOutLabel) {}.buttonStyle(.mini)
+        ).fittingSize.width
+
+        #expect(IncrementalDiffBar.width(of: .wayOut) >= drawn)
     }
 }

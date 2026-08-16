@@ -445,6 +445,14 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `IncrementalDiffBarLayoutTests` na totéž u lišty nad rozsahovým diffem — a k tomu na to, že
   **cesta ven přežije i nejužší tab**: lišta je jediné místo, odkud se z rozsahu vrátí na celý
   diff, takže tlačítko musí ustupovat poslední.
+
+  **Obě sady mají navíc jeden test, který sahá na kresbu** (`NSHostingView.fittingSize`): spočítaná
+  šířka nesmí být menší než nakreslená. Je to jediné tvrzení, které nestojí na dvou stranách téhož
+  výpočtu — zbytek porovnává `fits` proti `width(of:)`, takže **špatně změřený font by v něm
+  prošel**. A přesně to se stalo: `TextWidth.miniButton` měřil regularem, kdežto plné tlačítko se
+  kreslí mediumem, takže `Pustit review znovu` vycházelo o tři body užší (126 proti 129). Našel to
+  Copilot na #284; od té doby si řez bere obojí z `MiniButtonStyle.labelFont`. Regrese ověřena
+  vložením — po návratu k regularu ten jeden test spadne a ostatní zůstanou zelené.
 - **`Policy.incrementalDiff` (#284)** — kdy se `Ukázat, co přibylo` nabídne. Vyčerpávajícím
   výčtem, protože každý z důvodů, proč tlačítko nemá být, se dá zrušit jedním znakem v podmínce.
   **Nejcennější jsou záporné**: bez viděné hlavy, bez dnešní hlavy, při shodě obou a **po přepsané

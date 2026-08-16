@@ -1902,7 +1902,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `SinceLastVisitView` | Pruh „co se změnilo od minule“ nahoře v `Přehledu` (#173, sazba #226 a #284) — odrážky po částech a pod nimi odznak `nálezy zastaraly` s tlačítky `Pustit review znovu` a `Ukázat, co přibylo` |
 | `SinceLastVisitLine`, `SinceLastVisitLines` | Odrážka po typovaných částech a jejich skládání (#284). Mimo view a testovatelné, jako `TimelineEventRow` |
 | `IncrementalDiffBar` | Lišta nad rozsahovým diffem (#284) — rozsah dvěma sha a cesta zpátky na celý diff. Podobu vybírá **spočítaná** šířka, ne `ViewThatFits` |
-| `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde |
+| `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde. Řez si bere z `MiniButtonStyle.labelFont`, aby se měření a kresba nemohly rozejít |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka a obsah vpravo; slévá za sebou jdoucí commity |
 | `ConversationEntryView` | Položka osy: karta cizího review nebo komentáře, řádek události, vlákno bez kotvy |
