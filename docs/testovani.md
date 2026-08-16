@@ -2454,17 +2454,32 @@ System Events — měření okna a klikání).
 
 **Návrh se ověřuje vedle sebe, ne po paměti** (#181). Mockup je HTML, takže se dá vyrenderovat
 headless Chromem a položit vedle screenshotu aplikace — pak se pozná i to, co se z popisu vyčíst
-nedá (poměr sloupců, výška karty, kde končí proužek). Sekce se vyřízne do samostatného souboru,
-protože stránka je dlouhá a `--screenshot` bere jen viewport.
+nedá (poměr sloupců, výška karty, kde končí proužek).
 
-**Kde ten mockup vzít, říká [`docs/navrh.md`](navrh.md)** — je to artifact, ne soubor v repu, takže
-se stahuje `WebFetch`em (`curl` na něm dostane skořápku aplikace nebo 403). Tam je i to, jak se
-aktualizuje a co se do něj musí zapracovat a nechat odsouhlasit dřív, než na to vznikne issue.
+**Mockup je [`docs/navrh.html`](navrh.html)** — od #332 soubor v repu; `docs/navrh.md` říká, jak
+se aktualizuje a co se do něj musí zapracovat a nechat odsouhlasit dřív, než na to vznikne issue.
+
+**Sekce se vyřízne do samostatného souboru** (i s `<style>`), protože `--screenshot` bere viewport
+**od horní hrany dokumentu**: po odrolování na sekci vrací prázdný obrázek, i když je sekce
+v okně. Změřeno u #332 — sonda ve stejném běhu hlásila sekci 18 bodů pod horní hranou a snímek
+přesto vyšel jednobarevný. Stránkování dokumentu na tom nic nemění.
+
+```bash
+python3 - <<'PY'
+import io, re
+doc = io.open('docs/navrh.html', encoding='utf-8').read()
+style = re.search(r'<style>.*?</style>', doc, re.S).group(0)
+sec = re.search(r'<section class="section" id="s01">.*?</section>', doc, re.S).group(0)
+io.open('/tmp/mockup-s01.html', 'w', encoding='utf-8').write(
+    '<!doctype html><html data-theme="dark"><head><meta charset=utf8>'
+    + style + '</head><body><div class="wrap">' + sec + '</div></body></html>')
+PY
+```
 
 ```bash
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
     --hide-scrollbars --force-device-scale-factor=2 --window-size=1200,900 \
-    --screenshot=mockup.png "file://$PWD/mockup-s01.html"
+    --screenshot=mockup.png "file:///tmp/mockup-s01.html"
 ```
 
 U #181 to našlo čtyři odchylky, kterých si předtím nikdo nevšiml: pevná šířka pravého sloupce

@@ -276,10 +276,12 @@ Plný návrh: [`docs/superpowers/specs/2026-07-31-prism-design.md`](docs/superpo
 
 ## Návrh (mockup)
 
-Jak má aplikace vypadat, drží **artifact `PRism — návrh vizuální revize`**:
-<https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Je to HTML —
-tokeny v `:root` jsou `App/Views/Palette.swift` jedna ku jedné, takže se z něj barvy
-i rozměry berou doslova, ne od oka.
+Jak má aplikace vypadat, drží **[`docs/navrh.html`](docs/navrh.html)** — od #332 je zdroj
+v repu a artifact `PRism — návrh vizuální revize` je jeho publikovaná kopie:
+<https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Čte se tedy grepem
+nad souborem, ne `WebFetch`em. Tokeny v `:root` jsou `App/Views/Palette.swift` jedna ku jedné,
+takže se z něj barvy i rozměry berou doslova, ne od oka. **Úprava návrhu je jeden commit
+a jedno publikování** — jinak v repu leží jiný návrh než na odkazu.
 
 **Issue, které mění vzhled nebo přidává něco nového na obrazovku, se na GitHubu
 nezakládá, dokud ta změna není zakreslená v mockupu a odsouhlasená mnou.** Pořadí je:
