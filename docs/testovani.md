@@ -1596,36 +1596,30 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 
   Jak to **vypadá**, se ověřilo offscreen renderem přes `NSHostingView` (`ScrollView` ani `Link`
   se v `ImageRenderer`u nevykreslí) ve světlém i tmavém režimu: tři podoby odznaku, tab se seznamem
-  a pruh záložek přes pásmo šířek 620–1020. Šest záložek se vejde na jeden řádek od ~920 bodů, pět
-  od ~820 — pod tím se popisky **zalamují**, neřežou, a bylo to tak i před #215.
+  a pruh záložek přes pásmo šířek 620–1020. Šest záložek se vešlo na jeden řádek od ~920 bodů, pět
+  od ~820 — pod tím se popisky **zalamovaly**, neřezaly. Od #318 se pruh v úzkém okně přepne na
+  ikony a nezalomí se nikdy; přesná čísla jsou v `TabStripWidthTests`.
 
   **Od #306 je z toho renderu trvalá sonda** — `ChecksTabRenderProbe`, gatovaná `PRISM_MEASURE`
   jako `DetailTabRenderProbe` (do test hosta se pouští `TEST_RUNNER_PRISM_MEASURE=1`
   a `TEST_RUNNER_PRISM_RENDER_DIR`, jinak se proměnná k testu nedostane a suita se tiše přeskočí).
-  Dělá dvě věci:
+  Vyrendruje **detail PR v tabu `Kontroly` ve všech pěti podobách stavu** (nenačteno, bez CI,
+  seznam, porucha, zastaralý seznam) ve dvou šířkách. Na jednom snímku je vidět obojí, na čem #306
+  stojí: že pruh má sedm záložek pokaždé a že odznak je jedině nad seznamem. Pořadí ve scéně je
+  podmínka: `loadDetail` si checky dotahuje sám, takže se **nastavují až po něm** — jinak by je
+  přepsal. Během renderu už se nespustí (cache podle `updatedAt`), a právě proto se tudy dá vyrobit
+  i stav „nenačteno“, ke kterému se v aplikaci normálním používáním vrátit nedá.
 
-  - **detail PR v tabu `Kontroly` ve všech pěti podobách stavu** (nenačteno, bez CI, seznam, porucha,
-    zastaralý seznam) ve dvou šířkách. Na jednom snímku je vidět obojí, na čem #306 stojí: že pruh
-    má šest záložek pokaždé a že odznak je jedině nad seznamem. Pořadí ve scéně je podmínka:
-    `loadDetail` si checky dotahuje sám, takže se **nastavují až po něm** — jinak by je přepsal.
-    Během renderu už se nespustí (cache podle `updatedAt`), a právě proto se tudy dá vyrobit i stav
-    „nenačteno“, ke kterému se v aplikaci normálním používáním vrátit nedá;
-  - **pruh záložek přes pásmo šířek 620–1020, bez odznaků i se všemi**. Změřeno: bez odznaků se pruh
-    vejde na jeden řádek od ~780 bodů, se všemi od ~920; pod tím se popisky **zalamují**
-    a `+X −Y` se zalomí. Detail má šířku okna minus rail (53), takže ve výchozím
-    okně 1100 je to bez dopadu a projeví se to u okna stáhnutého k podlaze (700). Tuhle cenu platila
-    do #306 jen PR s CI, od #306 všechna — proto je to změřené, ne odhadnuté.
+  **Pruh záložek sonda od #318 nerendruje** — přestěhoval se do `TabStripRenderProbe`, kde je na
+  jednom pásmu šířek a se všemi aktivními záložkami. Z toho, co o něm stálo tady, zůstávají dvě
+  opravy, protože obě mluví o číslech, která se v repu opakovala:
 
-    **Oprava (návrh tabu `Commity`):** stálo tu, že se popisky *zkracují* (`Změněné soub…`).
-    Nezkracují — `PullRequestTabBar` nikde nemá `lineLimit`, takže se popisek láme **uvnitř
-    záložky** a pruh povyroste. Pásmo, od kterého se pruh vejde na jeden řádek, ta oprava nemění;
-    mění to, co se stane pod ním.
-
-    **Druhá oprava (#316), a tentokrát i těch čísel.** Hranice „~920“ výš je z repliky pruhu
-    a z měření po stovkách; skutečný `PullRequestTabBar` se šesti záložkami a všemi odznaky se
-    vejde na jeden řádek od tabu **884 b**, tedy od okna **937 b**. Naměřeno po jednom bodu šířky
-    na `NSHostingView.fittingSize` — proti replice o 17 bodů výš. Sedm záložek a co je stálo drží
-    `TabStripWidthTests` níž.
+  - **popisky se nezkracují** (`Změněné soub…`), jak tu stálo do návrhu tabu `Commity` —
+    `PullRequestTabBar` nikde nemá `lineLimit`, takže se popisek do #318 lámal **uvnitř záložky**
+    a pruh povyrostl. Od #318 se místo toho přepne na ikony;
+  - **hranice „~780“ a „~920“ výš byly z repliky pruhu** a z měření po stovkách. Skutečný
+    `PullRequestTabBar` se šesti záložkami a všemi odznaky se vešel na jeden řádek od tabu **884 b**
+    (okno 937), tedy o 17 bodů výš, než replika tvrdila. Dnešní čísla drží `TabStripWidthTests` níž.
 
   **`Přehled` se po odebrání souhrnu vyrendroval znovu, před a po** — je to jediný způsob, jak se
   pozná, že po odebrání bloku zbyla úplná obrazovka a ne děravá. Kontrolovaly se u toho **prázdné
@@ -1806,50 +1800,81 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     s počty a **prázdný diff s vysvětlením**, protože to je jiný podstrom a hlavička v něm stojí
     bez počtů. Řádek meta se v úzkém okně musí zalomit přes `ViewThatFits`; kdyby se zvolila podoba
     na jeden řádek, přeteče tichá věta „Jen ke čtení…“ vpravo.
-- **Šířka pruhu se sedmou záložkou (#316)** — `TabStripWidthTests`. Jediná věc, kterou tab
-  `Commity` doopravdy stojí, a proto se měří, ne odhaduje: `NSHostingView.fittingSize` nad
-  **skutečným** `PullRequestTabBar`em, po jednom bodu šířky.
+- **Podoby pruhu záložek podle šířky (#316, #318)** — `TabStripWidthTests`. Měří se, neodhaduje:
+  `NSHostingView.fittingSize` nad **skutečným** `PullRequestTabBar`em, po jednom bodu šířky.
 
-  | Pruh | Šířka tabu, od které je jeden řádek | Okno (+ rail 53) |
+  | Podoba | Ideální šířka tabu | Okno (+ rail 53) |
   |---|---|---|
-  | 6 záložek se všemi odznaky a `+X −Y` — `origin/main` před #316 | 884 b | 937 b |
-  | **7 záložek se všemi odznaky, `+X −Y` ustupuje** | **886 b** | **939 b** |
-  | 7 záložek bez odznaků | 729 b | 782 b |
-  | 7 záložek se všemi odznaky a `+X −Y` (dopočet) | ~996 b | ~1049 b |
+  | `full` — popisky a `+X −Y` | 996–998 b | 1049–1051 b |
+  | `labels` — popisky, bez `+X −Y` | 886–888 b | 939–941 b |
+  | **`icons` — ikony, popisek u aktivní** (#318) | **498–564 b** | **551–617 b** |
 
-  Pilulka `+X −Y` stojí **110 bodů** (na `origin/main` 774 b bez ní, 884 b s ní) a sedmá záložka
-  s odznakem **112** (886 − 774) — na té shodě stojí celý ten obchod. Sada tvrdí čtyři věci:
+  Čísla jsou pásma, protože šířka závisí na tom, **která záložka je aktivní**: v `icons` je aktivní
+  popisek jediný, co se kreslí, a je polotučný. Horní konec drží `Změněné soubory`, dolní `Nálezy`.
+  S trojmístnými odznaky u **všech** záložek vyjde `icons` na 636 b, tedy okno 689 — pořád pod
+  podlahou okna (700), a **právě proto pruh nemá čtvrtou podobu** bez popisku i u aktivní.
 
-  - **od okna 940 zůstává pruh na jednom řádku** (pásmo 940–1400, mezi tím 1035, tedy hranice,
-    kterou předpovídala specifikace **bez** té výměny);
-  - **bez odznaků se vejde už od 785**, měřeno zvlášť — kdyby se odznaky počítaly vždycky,
-    přehlédlo by se, že se pruh rozbil zrovna v tom nejběžnějším stavu;
-  - **v okně 700 se pruh zalomí**, a je to tvrzeno schválně: kdyby někdo přidal `lineLimit(1)`,
-    popisky by se začaly řezat, pruh by zůstal nízký a tenhle test zčervená. To je správně — je to
-    jiná obrazovka, než jakou má návrh;
-  - **v úzkém pruhu se `+X −Y` nekreslí, v širokém ano.** Obojí porovnáním dvou renderů (s počty
-    a bez nich): shodné bitmapy znamenají, že tam pilulka není. Druhá půlka je stejně důležitá —
-    bez ní by `ViewThatFits` mohl vybírat užší podobu pořád a #174 by tiše zmizela.
+  Z #316 platí dál cena pilulky a sedmé záložky: `+X −Y` stojí **110 bodů** (na `origin/main` před
+  #316 se pruh vešel od 774 b bez ní a od 884 b s ní), sedmá záložka s odznakem **112** — na té
+  shodě stojí první stupeň. Sada tvrdí šest věcí:
+
+  - **pruh se nezalomí v žádném povoleném okně** (700–1400, přes **všech sedm** aktivních záložek).
+    Do #318 to platilo od 939 nahoru a v okně 700 byl pruh 90 bodů místo 30 — se šesti záložkami
+    75, takže to nebyla cena sedmé, ale stav rozbitý i bez ní;
+  - **nezalomí se ani s trojmístnými odznaky**, tedy nad tím, co v okně kdy nastane. Je to strop,
+    a zároveň to jediné, co drží tvrzení „čtvrtá podoba je nedosažitelná“;
+  - **nezalomí se ani bez odznaků** — PR, na kterém ještě nic nedorazilo, je nejběžnější stav;
+  - **v jaké šířce se kreslí která podoba** — porovnáním renderu celého pruhu proti té jedné podobě
+    vykreslené napřímo (`bar(_:)`), pixel po pixelu, v šesti šířkách. Test tím nezávisí na tom,
+    **čím** se podoby liší, jen na tom, že se vybrala ta správná;
+  - **v úzkém pruhu se `+X −Y` nekreslí, v širokém ano.** Vlastní test vedle žebříku výš, protože
+    ten by prošel i tehdy, kdyby `full` přestala rozsah změny kreslit úplně — porovnává obě strany
+    proti témuž kódu. Tenhle porovnává render s počty proti renderu bez nich;
+  - **popisky mizí, nekrátí se, a aktivní zůstává.** Zkrácený popisek nikam nepřeteče a pruh po něm
+    zůstane nízký, takže na to nestačí ani měření přesahu, ani výška (poučení z #284). Hlídá se to
+    porovnáním **ideální šířky vybrané podoby** s dostupnou šířkou: když se podoba vejde celá, nemá
+    se co smršťovat. K tomu dvě tvrzení o `icons` — s aktivními `Změněnými soubory` je o víc než
+    50 b širší než s aktivními `Nálezy` (tedy aktivní popisek se kreslí) a o víc než 250 b užší než
+    `labels` (tedy těch šest ostatních se nekreslí).
+
+  **`ViewThatFits` tady na rozdíl od #284 stačí, a je to změřené, ne předpokládané.** V #284 byly
+  popisky v řadě se `lineLimit`em, takže se **zkracovaly** a `ViewThatFits` vybíral pořád nejširší
+  variantu; rozhodovat proto musela spočítaná šířka (`TextWidth`). Pruh záložek `lineLimit` nikde
+  nemá, takže se **zalamuje** — ideální šířka zůstává šířkou celého popisku a je to přesně to, co
+  `ViewThatFits` porovnává. Tvrdí to ten žebřík výš: kdyby vybíral nejširší variantu, v tabu 647 b
+  by nakreslil `full` a render by se s `bar(.icons)` nerovnal.
 
   **Měří se na `NSHostingView`, ne `ImageRenderer`u**: ten `ViewThatFits` vyhodnocuje jinak než
   skutečné okno, takže by test měřil něco jiného, než co je vidět.
 
-  **Vyzkoušené vložením regrese**: po smazání druhé podoby z `ViewThatFits` (tedy toho, čím se
-  sedmá záložka platí) padne pásmo **ve třech šířkách** — 940, 1000 i 1035 dá pruh o řádek nebo
-  dva vyšší — a k tomu test na nekreslený `+X −Y`. Sada tedy měří přesně tu vlastnost, kvůli které
-  vznikla.
+  **Vyzkoušené vložením regrese**, dvakrát:
+  - **smazání `bar(.icons)` z `ViewThatFits`** položí čtyři testy: pruh vyjde v okně 700 na 90–105
+    bodů (podle aktivní záložky), zalomí se i bez odznaků a žebřík přestane sedět ve dvou šířkách;
+  - **`showsLabel = layout != .icons`**, tedy zahození popisku i u aktivní záložky, položí `Aktivní
+    záložka si popisek nechá` (451 b proti 501 b) — chyba, kterou by výška pruhu nechytla, protože
+    kratší pruh se nezalomí tím spíš.
 
   **Absolutní čísla ze specifikace se nepoužila** — měřila je replika pruhu a vyšla o 17 bodů níž
-  (867/920 a 872/925). Rozdíl, o který jde, replika odhadla dobře (+5 bodů okna proti skutečným
-  +2), ale hranice se z ní brát nedají.
+  (867/920 a 872/925 u #316; 602/655 pro `icons` u #318 proti naměřeným 564/617). Rozdíl, o který
+  u #316 šlo, replika odhadla dobře (+5 bodů okna proti skutečným +2), ale hranice se z ní brát
+  nedají.
+- **Sonda pruhu záložek (#318)** — `TabStripRenderProbe`, gated `PRISM_MEASURE`. Nic netvrdí;
+  vyrendruje pruh přes **pásmo šířek tabu** (647–1347) s odznaky i bez, **ikonový stupeň s každou
+  ze sedmi aktivních záložek** a tři šířky v **tmavém režimu**. „Pozná se záložka bez popisku?“ je
+  otázka na obrázek, ne na číslo.
+
+  **Je to jedno místo pro celý pruh.** Do #318 se tentýž pruh rendroval ve dvou sondách tabů
+  (`ChecksTabRenderProbe` v pásmu 620–1020 s aktivními `Kontrolami`, `CommitsTabRenderProbe`
+  v 647–1047 s aktivními `Commity`), takže se obrázky nedaly položit vedle sebe — a obě sondy měly
+  u sebe text o tom, jak se pruh zalomí, což od #318 neplatí. Pruh není součást žádného z těch
+  tabů; stojí nad všemi sedmi.
 - **Sonda tabu `Commity` (#316, rozšířeno #317)** — `CommitsTabRenderProbe`, gated `PRISM_MEASURE`.
   Nic netvrdí; vyrendruje **detail PR v tabu `Commity` ve všech podobách stavu** (nenačteno, seznam,
   porucha, zastaralý seznam, **PR s jedním commitem**, a od #317 **rozkliknutý commit** ve čtyřech
-  stavech — diff, prázdný diff sloučení, nenačteno, porucha) ve dvou šířkách, seznam a diff commitu
-  navíc v **tmavém režimu**, a k tomu **pruh se sedmi záložkami přes pásmo šířek** 647–1047 bodů
-  tabu. Scénář drží commity
-  v pořadí z API, takže je na snímcích vidět i to, že je tab **otáčí sám** — nejnovější nahoře,
-  a mátová pilulka `hlava` s ním.
+  stavech — diff, prázdný diff sloučení, nenačteno, porucha) ve dvou šířkách; seznam a diff commitu
+  navíc v **tmavém režimu**. Scénář drží commity v pořadí z API, takže je na snímcích vidět i to, že
+  je tab **otáčí sám** — nejnovější nahoře, a mátová pilulka `hlava` s ním. Pruh záložek se od #318
+  rendruje jinde, v `TabStripRenderProbe`.
 
   Podob je pět, i když `CommitsTabState` má tři případy: `list` se kreslí dvakrát (se zastaralostí
   a bez ní) a `jeden-commit` je tentýž stav s jinými daty — je to ale zrovna to, co se z čísel

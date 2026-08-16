@@ -144,13 +144,22 @@ s ním udělaly naše reviewery. Kreslí se z **vlastnosti záložky**, ne z jej
 i `Commity` sedí nalevo doprostřed, takže zadrátovaný index by ho posunul o jedno místo vedle.
 **Všech sedm záložek je v pruhu vždycky** (#306, #316), takže se jejich počet nemění podle dat.
 
-**Sedmou záložku zaplatila pilulka `+X −Y`** (#316). Pruh popisky nezkracuje, jen zalamuje, takže
-na šířce záleží: se šesti záložkami a všemi odznaky se vejde na jeden řádek od okna **937 bodů**,
-se sedmi by potřeboval ~1049. Rozsah změny se proto v úzkém pruhu **nekreslí** (`ViewThatFits` se
-dvěma podobami) a hranice zůstala na **939 bodech** — sedmá záložka tedy stojí dva body okna, ne
-sto dvanáct. Ustupuje zrovna `+X −Y`, protože mluví o rozsahu celého PR, a to je odpověď na otázku
-`Změněných souborů`; ve výchozím okně 1100 je vidět všechno. Pod 939 se pruh zalomí — bylo to tak
-i před #316, jen o řádek míň.
+**Pruh se v užším okně zúží ve dvou stupních** (#316, #318). Popisky se nezkracují, jen zalamují,
+takže na šířce záleží — a pruh proto ustupuje po kusech, vždycky celý naráz:
+
+| Okno | Co je v pruhu vidět |
+|---|---|
+| od **1051** | popisky u všech sedmi záložek a vpravo `+X −Y` |
+| **941–1050** | popisky, bez `+X −Y` (#316) |
+| do **940** | ikony s odznaky, popisek jen u aktivní záložky (#318) |
+
+**První ustupuje `+X −Y`**, protože mluví o rozsahu celého PR, a to je odpověď na otázku
+`Změněných souborů`; v `Commitech`, `Kontrolách` ani `Průběhu` není o čem. Sedmá záložka se tím
+zaplatila skoro na nulu — pilulka stojí 110 bodů, záložka s odznakem 112. **Druhý stupeň jsou
+ikony** a spravuje něco jiného: do #318 se pruh pod 939 body **zalamoval** a v nejužším povoleném
+okně (700) byl vysoký 90 bodů místo 30 — se šesti záložkami 75, takže to nebyla cena sedmé
+záložky. S ikonami se nezalomí nikdy: vejdou se do okna od **617 bodů**, a i s trojmístnými odznaky
+u všech záložek od 689. Odznaky v nich zůstávají a jméno záložky říká nápověda pod kurzorem.
 
 V `Průběhu` má dráhu **každý reviewer z nastavené sady**, ne jen ten, který už na tomhle PR běžel:
 otázka je „kde je které z mých review“ a *ještě nezačalo* je taky odpověď. Tři různá „nic tu není“

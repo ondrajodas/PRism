@@ -11,7 +11,7 @@ import Testing
 /// s diakritikou, tedy ne úplně zdarma. Číslo je z toho důvodu měřené, ne odhadnuté.
 ///
 /// Časy se **netvrdí** `#expect`em: na jiném stroji vyjdou jinak. Pouští se ručně,
-/// `PRISM_MEASURE=1`, ze stejného důvodu jako `DiffPerformanceMeasurement`.
+/// `TEST_RUNNER_PRISM_MEASURE=1`, ze stejného důvodu jako `DiffPerformanceMeasurement`.
 @Suite(
     "Měření hledání v paletě (#184)",
     .enabled(if: ProcessInfo.processInfo.environment["PRISM_MEASURE"] != nil)

@@ -1809,8 +1809,8 @@ případy dopsané do stávajících suit. Pět z těch čtyřiačtyřiceti hlí
 i zastaralého seznamu, že se otáčí a neřadí, že v pruhu nezbylo staré slovo, a že mapa ve store drží
 pořadí z API.
 
-Rozkliknutí commitu přidalo **#317** (níž); zbývá smrsknutí pruhu na ikony v úzkém okně
-(**#318**) — v okně 700 se pruh pořád zalamuje, stejně jako před #316.
+Rozkliknutí commitu přidalo **#317** a smrsknutí pruhu na ikony v úzkém okně **#318** — obojí níž.
+Tab `Commity` je tím hotový celý.
 
 ### #320 — časový limit běhu do nastavení
 
@@ -1935,7 +1935,42 @@ neprocházela naprázdno. Ověřeno vložením regrese: dosazené `findings:` a 
 tři testy z pěti a 50 tvrzení. Druhá a třetí regrese (obsah z hlavy PR místo z commitu, `unfoldAll`
 bez filtru na commit) padnou v `AppStoreCommitDiffTests`.
 
-Zbývá smrsknutí pruhu záložek na ikony v úzkém okně (**#318**).
+### #318 — pruh záložek se v úzkém okně smrskne na ikony
+
+Pruh se do #318 v užším okně **zalamoval**: `PullRequestTabBar` nikde nemá `lineLimit`, takže se
+popisek lámal uvnitř záložky a v nejužším povoleném okně (700) byl pruh vysoký **90 bodů místo 30**.
+Nebyla to cena sedmé záložky (#316) — se šesti to bylo 75 —, ale stav rozbitý i bez ní, a proto to
+bylo vlastní issue.
+
+Pruh má teď **tři podoby** místo dvou (`PullRequestTabBar.Layout`, pořád `ViewThatFits`), a bere se
+první, která se vejde:
+
+| Podoba | Ideální šířka tabu | Okno (+ rail 53) |
+|---|---|---|
+| `full` — popisky a `+X −Y` | 996–998 b | 1049–1051 b |
+| `labels` — popisky, bez `+X −Y` (#316) | 886–888 b | 939–941 b |
+| **`icons` — ikony s odznaky, popisek jen u aktivní** | **498–564 b** | **551–617 b** |
+
+Pásma jsou tam proto, že v `icons` je aktivní popisek jediný, který se kreslí — horní konec drží
+`Změněné soubory`, dolní `Nálezy`. **Pruh se tím nezalomí ani v nejužším okně**: s trojmístnými
+odznaky u všech záložek naráz vyjde `icons` na 636 b (okno 689), pořád pod podlahou 700, a **proto
+pruh nemá čtvrtou podobu** bez popisku i u aktivní — na tu se nedá přijít.
+
+Tři rozhodnutí, o která si issue řeklo. **Popisky ustupují všechny naráz**, ne po jednom od
+nejdelšího: postupně by z toho bylo sedm podob podle šířky místo tří. **Popisek u aktivní záložky
+zůstává**, protože odpovídá na jinou otázku než ostatní — ne „kam se dá jít“, ale „kde jsem“ —
+a podtržení samo mezi sedmi ikonami je málo. A **`ViewThatFits` zůstal**, i když u #284 na tutéž
+úlohu nestačil: tam byly popisky v řadě se `lineLimit`em, takže se zkracovaly, kdežto pruh se
+zalamuje a jeho ideální šířka tedy zůstává šířkou celého popisku. Není to úvaha — test porovnává
+render celého pruhu proti jedné podobě vykreslené napřímo, v šesti šířkách, pixel po pixelu.
+
+Odznaky zůstávají ve všech podobách a jméno záložky bez popisku nese **ikona** (`accessibilityLabel`)
+a **nápověda** pod kurzorem, obojí jen v úzkém stupni. Sonda pruhu se u toho sloučila do jednoho
+místa (`TabStripRenderProbe`) — do #318 se tentýž pruh rendroval ve dvou sondách tabů, pokaždé
+v jiném pásmu, takže se obrázky nedaly položit vedle sebe.
+
+Testů je **2669**; regrese ověřena vložením dvou (smazaná podoba `icons`, zahozený popisek
+u aktivní) — první položí čtyři testy, druhá to tvrzení, které by výška pruhu nechytla.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

@@ -19,7 +19,7 @@ import Testing
 /// `NSHostingView`, ne `ImageRenderer`: `Form` je `ScrollView`, jehož obsah se offscreen
 /// nerasterizuje.
 ///
-/// **Pouští se ručně**: `PRISM_MEASURE=1`, cesta ven přes `PRISM_RENDER_DIR`.
+/// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes `TEST_RUNNER_PRISM_RENDER_DIR`.
 @MainActor
 @Suite(
     "Sonda promptu review (#281)",
