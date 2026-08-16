@@ -404,6 +404,15 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    neskládá. Předchozí nálezy dostane jako **materiál v promptu**, ne jako nástroj — druhá sada
    povolení by znamenala druhé místo, kde se ta podmínka dá porušit.
 
+   **Editovatelný prompt review (#281) na tom nemění nic.** Otevřel se **prompt, ne povolení**:
+   šablona z nastavení se dosadí do textu a skončí v **jednom argumentu za `-p`**, kdežto sada
+   nástrojů se pořád skládá z těch dvou konstant v kódu — ze šablony se do nich nedá sáhnout a nic
+   v ní nedokáže nástroj povolit (je na to test s šablonou, která si o `Write,Edit,Bash` říká).
+   Věta o zákazu zápisu v promptu je vedle toho **pojistka, ne brána**, a proto se **připojuje
+   vždycky** mimo šablonu: skill načtený přes `Skill` si o odeslání říct umí, ale zavírá to
+   `--disallowedTools`. Co jádro drží doopravdy, je **sběr nálezů** — bez `ReportFindings` by
+   nálezy přišly textem a v okně by stálo „čisté review“.
+
    Ověřeno spuštěním (#12, **opraveno u #17**; podrobnosti v `docs/claude-cli.md`):
    - Co je **mimo** povolený vzor, se odmítne, pokud to není na vestavěném seznamu čtecích
      příkazů. `ls` a `cat` projdou, `gh` ne.
@@ -442,7 +451,7 @@ viz tvrdá podmínka č. 1.
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |

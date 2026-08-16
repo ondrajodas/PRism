@@ -149,6 +149,10 @@ trap 'rm -f "${CLEANED}"' EXIT
 #                                  větev se u #262 zaplatilo 3,96 $, tak ať jsou brzdy dvě
 #   sources                  ne    bez zdrojů PR není ve slotu co zkoušet
 #   skillsByLanguage         ne    totéž jako `skills`
+#   reviewPrompt             ne    čím se reviewer osloví (#281) — totéž jako `skills` a `model`,
+#                                  tedy zrovna to, co se ve slotu zkouší. Nic neutratí a nic
+#                                  neodešle: jádro s `ReportFindings` a zákazem zápisu připojuje
+#                                  kód a povolení nástrojů jsou konstanty, ne text z konfigurace
 #   diffLayout               ne    jak se čte diff
 #   appearance               ne    tmavý/světlý/podle systému (#278); nic neutratí a nic
 #                                  neodešle — a vynutit slotu vzhled, o který nikdo neřekl,
