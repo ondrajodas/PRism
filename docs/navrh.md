@@ -73,8 +73,8 @@ grep -n "inline-find" -A 20 docs/navrh.html
 
 **Soubor nemá `<!doctype>` ani `<html>`** — publikování si obal doplňuje samo a vlastní by se
 zdvojil. Otevřený z disku proto běží v **quirks mode** (`document.compatMode === "BackCompat"`).
-Změřeno u #332, že to na rozměry nesedá: karta, rám okna, proužek řádku i sloupec mikrografu
-vyšly v obou režimech na bod stejně. Kdyby na tom někdy něco stálo, obal se přidá při renderu
+Změřeno u #332, že se to **na rozměrech neprojeví**: karta, rám okna, proužek řádku i sloupec
+mikrografu vyšly v obou režimech na bod stejně. Kdyby na tom někdy něco stálo, obal se přidá při renderu
 (viz *Jak se ověří*), ne do souboru.
 
 **`WebFetch` je na publikovanou kopii, ne na zdroj** (a `curl` na ni nefunguje — artifacty jsou
