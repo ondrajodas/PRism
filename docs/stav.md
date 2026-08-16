@@ -1842,7 +1842,7 @@ v souboru a s čím se doopravdy poběží. **Popisek „Bere globální“ na s
 sraženou hodnotu** — nálezem Copilota; „Bere globální: 240 min“ nad během, který poběží 60, je text,
 který tvrdí víc, než data unesou.
 
-Testů je **2565**; regrese ověřena vložením tří naráz (posunutá výchozí hodnota, runner s vlastní
+Testů je **2663**; regrese ověřena vložením tří naráz (posunutá výchozí hodnota, runner s vlastní
 konstantou, `resolved` bez sráření) — padne 18 tvrzení v 10 testech.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
