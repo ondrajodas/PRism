@@ -137,8 +137,59 @@ private struct RepositoryDetailView: View {
                 addLabel: "Přidat kategorii",
                 emptyMeaning: "Prázdný seznam znamená, že tady nic neblokuje."
             )
+
+            timeoutOverride
         }
         .formStyle(.grouped)
+    }
+
+    /// Vlastní časový limit běhu (#320).
+    ///
+    /// Přepínač a číslo, ne tříhodnotový picker jako u režimu: hodnot je 56 a „ber globální“ je
+    /// mezi nimi jen jedna z odpovědí. Zapnutí začíná od globální hodnoty ze stejného důvodu jako
+    /// u sad — nejčastější důvod pro override je posunout ji, ne psát od nuly.
+    private var timeoutOverride: some View {
+        Section {
+            Toggle("Vlastní limit", isOn: isOverridden)
+            if config.reviewTimeoutMinutes.wrappedValue != nil {
+                ReviewTimeoutField(label: "Časový limit běhu (min)", minutes: unwrappedTimeout)
+            }
+        } header: {
+            Text("Časový limit běhu")
+        } footer: {
+            if config.reviewTimeoutMinutes.wrappedValue == nil {
+                Text("Bere globální: \(settings.draft.global.reviewTimeoutMinutes) min")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Platí na jednu session — na každý skill zvlášť a stejně tak na kontrolu nálezů. Projeví se na dalším běhu; ten, který právě běží, doběhne s limitem, se kterým začal.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var isOverridden: Binding<Bool> {
+        Binding(
+            get: { config.reviewTimeoutMinutes.wrappedValue != nil },
+            set: { on in
+                config.reviewTimeoutMinutes.wrappedValue = on
+                    ? settings.draft.global.reviewTimeoutMinutes
+                    : nil
+            }
+        )
+    }
+
+    /// Odvozený `Binding` bez `nil`, se stejnou pojistkou jako u sad: doběhlá editace už
+    /// zrušeného override ho nesmí vzkřísit.
+    private var unwrappedTimeout: Binding<Int> {
+        Binding(
+            get: { config.reviewTimeoutMinutes.wrappedValue ?? settings.draft.global.reviewTimeoutMinutes },
+            set: { newValue in
+                guard config.reviewTimeoutMinutes.wrappedValue != nil else { return }
+                config.reviewTimeoutMinutes.wrappedValue = newValue
+            }
+        )
     }
 
     /// Sekce s vlastní sadou, nebo jen výpis té globální.

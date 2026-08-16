@@ -439,7 +439,12 @@ extension AppStore {
         skills: [String],
         reporting reporter: AsyncStream<ReviewEvent>.Continuation
     ) async -> (any Error)? {
-        await withTaskGroup(of: ReviewRun?.self) { group in
+        // Limit se bere **tady a jednou** (#320), ze stejného důvodu jako šablona o pár řádků níž:
+        // všechny session tohohle běhu poběží s tímtéž limitem, i kdyby se mezitím uložilo
+        // nastavení. Přes `resolved(for:)`, protože je to hodnota **repa** — velké repo si o víc
+        // říct smí, zbytek fronty se tím měnit nemá.
+        let timeout = resolved(for: pr.repo).reviewTimeout
+        return await withTaskGroup(of: ReviewRun?.self) { group in
             for skill in skills {
                 let request = ReviewRequest(
                     key: ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill),
@@ -448,7 +453,8 @@ extension AppStore {
                     // Šablona se bere **tady a jednou** (#281): všechny session tohohle běhu
                     // dostanou tutéž, i kdyby se mezitím uložilo nastavení. Runner si ji
                     // nečte sám — viz `ReviewRequest.promptTemplate`.
-                    promptTemplate: configuration.global.reviewPrompt
+                    promptTemplate: configuration.global.reviewPrompt,
+                    timeout: timeout
                 )
                 // Protokol slibuje, že selhání session se vrací jako výsledek a vyhodí se
                 // jen zrušení — ale spolehnout se na to znamená, že jakákoli jiná chyba

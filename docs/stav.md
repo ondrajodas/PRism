@@ -1727,6 +1727,35 @@ i novým způsobem a porovnal `isEqual(to:)` na 400 řádcích ve dvou paletách
 v UTF-16, takže emoji je dva kódy; regrese ověřena vložením (`count` místo `utf16.count` položí tři
 testy). Testů je **2540**.
 
+### #320 — časový limit běhu do nastavení
+
+Limit jedné `claude` session byl do #320 zadrátovaný (`ClaudeReviewRunner.defaultTimeout`, patnáct
+minut), takže se dal zvednout jedině přeložením aplikace — a přitom `docs/architektura.md`
+u rozlišení `timedOut` proti `interrupted` už tehdy tvrdila, že „dá se zvednout limit“. Teď je to
+`GlobalConfig.reviewTimeoutMinutes` s **override per repo**, na stránce `Review a skilly` v sekci
+`Režim review`. Výchozích patnáct minut je doslova ta hodnota, co byla v kódu, takže zavedení pole
+nic nemění; hlídá to test porovnávající číslo, ne konstantu.
+
+**Meze jsou 5–60 minut a „bez limitu“ mezi volbami není** — timeout je jediná pojistka proti
+session, která se zacyklí, kdežto `autoRunsPerDay` a `maxConcurrentReviews` omezují jen **počet**
+běhů. Obě čísla jsou naměřená, ne odhadnutá: 19 běhů z provozní cache dalo medián **2,5 min**
+a nejdelší doběhlý **6,8 min** (dolní mez), a cena vyšla na ~**0,40 $/min** u běžného běhu, přičemž
+v cache leží session za **14,67 $ pod minutou** — peníze tedy nejsou funkcí času, ale hodina navíc
+je hodina utrácení bez dozoru (horní mez, ve vazbě na denní strop automatu).
+
+Dvě rozhodnutí, o která si issue řeklo: **kontrola nálezů (#150) limit sdílí** — tatáž session,
+tentýž strom, tytéž peníze, a spouští se jedině ručně —, a **překladače nálezů se to nedotýká**,
+protože se uvažuje o jeho zániku (jazyk nálezů by přešel do promptu review). Číslo limitu se
+navíc **nepíše k výsledku běhu**: uložený běh ho nenese, takže by šlo napsat jen to, co je
+nastavené teď, a to je o starším timeoutu nepravda.
+
+Limit **putuje s požadavkem** jako šablona promptu (#281), takže rozjeté review doběhne s tím
+svým; runner po #320 vlastní pole nemá. Hodnota mimo meze soubor nepoloží, ale ani se nespolkne —
+v konfiguraci zůstane syrová, srazí se až v `resolved(for:)` a nastavení pod polem napíše, kolik je
+v souboru a s čím se doopravdy poběží. Testů je **2565**; regrese ověřena vložením tří naráz
+(posunutá výchozí hodnota, runner s vlastní konstantou, `resolved` bez sráření) — padne 18 tvrzení
+v 10 testech.
+
 ### Tab `Commity` — nakreslený, čeká na implementaci
 
 Sedmá záložka detailu PR (seznam commitů a diff jednoho z nich) je **nakreslená v mockupu**,

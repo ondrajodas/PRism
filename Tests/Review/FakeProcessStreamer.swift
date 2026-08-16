@@ -13,6 +13,9 @@ final class FakeProcessStreamer: ProcessStreaming, @unchecked Sendable {
         let arguments: [String]
         let environment: [String: String]
         let workingDirectory: URL?
+        /// S jakým limitem se proces spustil (#320). Je to jediné místo, kde se dá zkontrolovat,
+        /// že hodnota z požadavku doopravdy došla až k procesu — runner si ji nikam neukládá.
+        let timeout: Duration
     }
 
     /// Co proud udělá. Poslední scénář se opakuje, takže test předepisuje jen to, co ho
@@ -74,7 +77,8 @@ final class FakeProcessStreamer: ProcessStreaming, @unchecked Sendable {
                     executable: executable,
                     arguments: arguments,
                     environment: environment,
-                    workingDirectory: workingDirectory
+                    workingDirectory: workingDirectory,
+                    timeout: timeout
                 )
             )
             return scripts[min(recorded.count - 1, scripts.count - 1)]

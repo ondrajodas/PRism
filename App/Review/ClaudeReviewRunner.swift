@@ -6,16 +6,12 @@ import Foundation
 /// čte průběžně, takže zabitý běh si nálezy, které stihl vypsat, **nechá** — a UI ví
 /// o postupu dřív, než session skončí.
 struct ClaudeReviewRunner: ReviewRunning {
-    /// Patnáct minut. Delší běh už nedává smysl hlídat: buď se reviewer zacyklil, nebo
-    /// analyzuje něco, na co se stejně nedá čekat u otevřeného okna.
-    static let defaultTimeout = Duration.seconds(15 * 60)
     /// Tři souběžné session. Víc zahltí stroj i účet; konfigurovatelné to bude v #23.
     static let defaultConcurrency = 3
 
     private let claude: URL
     private let gh: URL
     private let runner: any ProcessStreaming
-    private let timeout: Duration
     private let parser = StreamParser()
     /// Stejný klíč se nespouští dvakrát — souběžný požadavek se k běžícímu **připojí**.
     private let coordinator = WorkCoordinator()
@@ -27,14 +23,12 @@ struct ClaudeReviewRunner: ReviewRunning {
         claude: URL,
         gh: URL,
         runner: any ProcessStreaming,
-        timeout: Duration = ClaudeReviewRunner.defaultTimeout,
         maxConcurrent: @escaping @Sendable () -> Int = { ClaudeReviewRunner.defaultConcurrency },
         model: @escaping @Sendable () -> String? = { nil }
     ) {
         self.claude = claude
         self.gh = gh
         self.runner = runner
-        self.timeout = timeout
         slots = ReviewSlots(limit: maxConcurrent)
         self.model = model
     }
@@ -70,7 +64,10 @@ struct ClaudeReviewRunner: ReviewRunning {
             arguments: ClaudeCommand.arguments(prompt: ClaudeCommand.prompt(for: request), model: model()),
             environment: ClaudeCommand.environment(gh: gh),
             workingDirectory: request.worktree,
-            timeout: timeout
+            // Limit bere **z požadavku** (#320), ne z vlastního pole: runner konfiguraci nečte
+            // a běh má doběhnout s tím limitem, se kterým začal. Vlastní pole by bylo druhé
+            // místo, ze kterého se limit dá vzít — a to druhé by o běhu lhalo.
+            timeout: request.timeout
         )
 
         do {

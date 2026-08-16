@@ -349,6 +349,9 @@ struct ConfigurationTests {
         // Doslova ten text, co byl do #281 v kódu. Že složí týž prompt jako předtím, hlídá
         // `ReviewPromptTemplateTests` porovnáním znak po znaku.
         #expect(standard.reviewPrompt == ReviewPromptTemplate.standard)
+        // Patnáct minut je doslova ta hodnota, co byla do #320 v `ClaudeReviewRunner` —
+        // porovnává se s číslem, ne s konstantou, aby to nebylo tvrzení sebe o sobě.
+        #expect(standard.reviewTimeoutMinutes == 15)
         #expect(standard.pollIntervalSeconds == 60)
         #expect(standard.maxConcurrentReviews == 3)
         #expect(standard.cacheBudgetMegabytes == 10 * 1024)
@@ -432,6 +435,8 @@ struct ConfigurationTests {
 /// na `mode` by kvůli němu zahodil **celou** konfiguraci včetně toho, co je správně.
 @Suite("Configuration — tolerantní čtení repa")
 struct RepositoryConfigDecodingTests {
+    private let cli = RepoID(owner: "cli", name: "cli")
+
     private func configuration(_ json: String) throws -> Configuration {
         try JSONDecoder().decode(Configuration.self, from: Data(json.utf8))
     }
@@ -669,5 +674,93 @@ struct RepositoryConfigDecodingTests {
         let repo = try #require(RepoID("cli/cli"))
         #expect(configuration.global.reviewPrompt == ReviewPromptTemplate.standard)
         #expect(configuration.resolved(for: repo).skills == ["go-review"])
+    }
+
+    // MARK: - Časový limit běhu (#320)
+
+    /// Chybějící klíč znamená dnešní chování — konfigurace bez `reviewTimeoutMinutes` je ta,
+    /// kterou má na disku každý, kdo aplikaci používal před #320.
+    @Test("Chybějící limit bere patnáct minut")
+    func fallsBackOnAMissingReviewTimeout() throws {
+        let configuration = try self.configuration(#"{"global": {"mode": "automatic"}}"#)
+
+        #expect(configuration.global.reviewTimeoutMinutes == 15)
+        #expect(configuration.resolved(for: cli).reviewTimeout == .seconds(900))
+    }
+
+    @Test("Limit ze souboru se přečte a projeví se ve `resolved`")
+    func readsTheReviewTimeout() throws {
+        let configuration = try self.configuration(#"{"global": {"reviewTimeoutMinutes": 40}}"#)
+
+        #expect(configuration.global.reviewTimeoutMinutes == 40)
+        #expect(configuration.resolved(for: cli).reviewTimeout == .seconds(2400))
+    }
+
+    /// **Syrová hodnota v konfiguraci zůstane, sráží se až `resolved(for:)`.** Kdyby se sráželo
+    /// při čtení, přišlo by se o rozdíl mezi „napsal jsem 120“ a „mám 60“ — a nastavení by neměl
+    /// kdo pojmenovat.
+    @Test(
+        "Hodnota mimo meze soubor nepoloží, ale běží se s mezí",
+        arguments: [(1, Duration.seconds(300)), (0, .seconds(300)), (600, .seconds(3600))]
+    )
+    func clampsAnOutOfRangeReviewTimeout(configured: Int, expected: Duration) throws {
+        let configuration = try self.configuration(
+            #"{"global": {"reviewTimeoutMinutes": \#(configured)}}"#
+        )
+
+        #expect(configuration.global.reviewTimeoutMinutes == configured)
+        #expect(configuration.resolved(for: cli).reviewTimeout == expected)
+        #expect(Policy.reviewTimeoutProblem(in: configuration.global.reviewTimeoutMinutes) != nil)
+    }
+
+    /// **Přísně, ne tolerantně** — stejně jako u ostatních čísel. Tiše podstrčených patnáct minut
+    /// by znamenalo limit, o který nikdo neřekl.
+    @Test(
+        "Limit, který není číslo, čtení položí",
+        arguments: ["\"patnáct\"", "[15]", "{\"minutes\": 15}"]
+    )
+    func refusesAReviewTimeoutThatIsNotANumber(_ json: String) {
+        #expect(throws: (any Error).self) {
+            try self.configuration(#"{"global": {"reviewTimeoutMinutes": \#(json)}}"#)
+        }
+    }
+
+    /// Na rozdíl od promptu, vzhledu a pohledu na diff **override per repo má** — velké repo
+    /// potřebuje víc a je to vlastnost repa, ne člověka.
+    @Test("Repo si limit přebít smí")
+    func aRepositoryMayOverrideTheReviewTimeout() throws {
+        let configuration = try self.configuration(
+            #"{"global": {"reviewTimeoutMinutes": 20},"#
+                + #""repositories": {"cli/cli": {"reviewTimeoutMinutes": 45}}}"#
+        )
+
+        let other = try #require(RepoID("keboola/vault"))
+        #expect(configuration.resolved(for: cli).reviewTimeout == .seconds(2700))
+        // A zbytku fronty se to netýká.
+        #expect(configuration.resolved(for: other).reviewTimeout == .seconds(1200))
+    }
+
+    /// `nil` u repa je „ber globální“, ne „ber výchozí“ — tatáž úmluva jako u režimu a sad.
+    @Test("Repo bez vlastního limitu bere globální")
+    func aRepositoryWithoutAnOverrideTakesTheGlobalTimeout() throws {
+        let configuration = try self.configuration(
+            #"{"global": {"reviewTimeoutMinutes": 30},"#
+                + #""repositories": {"cli/cli": {"skills": ["go-review"]}}}"#
+        )
+
+        #expect(configuration.repositories[cli]?.reviewTimeoutMinutes == nil)
+        #expect(configuration.resolved(for: cli).reviewTimeout == .seconds(1800))
+    }
+
+    /// Meze platí i na override, a sráží je totéž místo — jinak by se dala horní mez obejít
+    /// zápisem pod repem, tedy zrovna tou cestou, kterou se do souboru píše ručně.
+    @Test("Override mimo meze se srazí stejně jako globální")
+    func clampsAnOutOfRangeOverride() throws {
+        let configuration = try self.configuration(
+            #"{"repositories": {"cli/cli": {"reviewTimeoutMinutes": 999}}}"#
+        )
+
+        #expect(configuration.repositories[cli]?.reviewTimeoutMinutes == 999)
+        #expect(configuration.resolved(for: cli).reviewTimeout == .seconds(3600))
     }
 }

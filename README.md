@@ -602,11 +602,35 @@ nepovede, nic se nezablokuje: puntík se řídí voláními a nápověda po hove
 nepovedlo a kdy se to zjišťovalo.
 
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
-PR, sada skillů, **prompt review**, blokující kategorie, výchozí režim review, jazyk nálezů,
-povolení odesílání, notifikace, výchozí pohled na diff, vzhled okna, interval pollingu, kolik
-session smí běžet naráz, denní strop automatu, rozpočet cache a model. Repozitář si může přebít
-režim (`manual`/`automatic`), povolení odesílání, jazyk nálezů, skilly i kategorie — a nic víc:
-prompt, pohled na diff, vzhled okna a notifikace jsou vlastnost člověka, ne repozitáře.
+PR, sada skillů, **prompt review**, **časový limit běhu**, blokující kategorie, výchozí režim
+review, jazyk nálezů, povolení odesílání, notifikace, výchozí pohled na diff, vzhled okna, interval
+pollingu, kolik session smí běžet naráz, denní strop automatu, rozpočet cache a model. Repozitář si
+může přebít režim (`manual`/`automatic`), povolení odesílání, jazyk nálezů, skilly, kategorie
+i časový limit — a nic víc: prompt, pohled na diff, vzhled okna a notifikace jsou vlastnost
+člověka, ne repozitáře.
+
+**Časový limit běhu se dá nastavit** (#320) na stránce `Review a skilly`, v sekci `Režim review`.
+Do té doby byl zadrátovaný v kódu (patnáct minut), takže dlouhé review skončilo `timeout`
+a jedinou odpovědí bylo „pusť to znovu a doufej“. Platí **na jednu session** — tedy na každý skill
+zvlášť a stejně tak na kontrolu nálezů; zabitý běh si přitom pořád nechá, co stihl nahlásit.
+Rozsah je **5–60 minut** a „bez limitu“ mezi volbami **není**:
+
+- **Horní mez je vazba na účet.** Timeout je jediná pojistka proti session, která se zacyklí —
+  denní strop automatu a limit souběhu omezují **počet** běhů, ne délku jednoho. Strop krát
+  `autoRunsPerDay` je nejhorší možný den: při 15 minutách a výchozích 20 automatických bězích je
+  to pět hodin session denně, při 60 minutách dvacet.
+- **Dolní mez je proti falešným timeoutům.** Naměřeno na 19 bězích: medián 2,5 min, nejdelší
+  doběhlý 6,8 min. Pod pěti minutami by `timedOut` přestal být zprávou o pomalém review a stal se
+  vlastností nastavení — vypadalo by to jako porucha aplikace. Zkracovat limit se navíc nevyplácí:
+  zabitá session už utratila, co utratila, jen z ní místo hotových nálezů zbydou částečné.
+
+Hodnota mimo rozsah, napsaná ručně do `config.json`, soubor nepoloží — **srazí se do mezí a je to
+pod polem vidět**, i s tím, kolik v souboru doopravdy je. Limit **putuje s požadavkem** jako
+šablona promptu, takže rozjeté review doběhne s tím, se kterým začalo, i když se mezitím nastavení
+uloží. Číslo se naopak **nikde nepíše k výsledku běhu**: uložený běh limit nenese, takže by šlo
+napsat jen to, co je nastavené teď — a to je o starším timeoutu nepravda. **Překladač nálezů**
+(dnes 120 s) nastavení nemá schválně: uvažuje se o tom, že se jazyk nálezů přesune do promptu
+review a překladač zanikne.
 
 **Prompt review se dá psát** (#281) na stránce `Review a skilly`, hned pod sadami skillů. Do té
 doby byl natvrdo v kódu, takže se dal změnit jedině commitem — a přitom je to zrovna to, co se
@@ -655,7 +679,8 @@ Editovat ho jde ručně, nebo **oknem nastavení** (⌘, nebo ozubené kolo v hl
 má **boční navigaci se sedmi stránkami** (#177, do té doby tři záložky): `Zdroje PR`,
 `Review a skilly`, `Diff`, `Odesílání`, `Notifikace`, `Repozitáře` a `Běh`, seskupené podle otázky,
 na kterou odpovídají (`Co se hlídá` / `Co jde ven` / `Prostředí`). Na stránce `Repozitáře` se
-u každého repa z posledního seznamu PR nastavuje režim a případný override skillů a kategorií.
+u každého repa z posledního seznamu PR nastavuje režim, případný override skillů a kategorií
+a vlastní časový limit běhu.
 Ukládá se samo do téhož souboru, pár set milisekund po posledním úhozu, a změna se projeví bez
 restartu. Rozbitý soubor
 editor **nepřepíše** — místo formuláře ukáže chybu a nabídne soubor otevřít. Dokud je
@@ -1057,7 +1082,8 @@ jinak by po startu vypadala jako nová celá historie.
 | **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
 | **Prompt review** | Psaná **šablona** se zástupnými texty a **jádro**, které se připojí vždycky. Dělí se to proto, že věta o `ReportFindings` není styl, ale kontrakt: bez ní reviewer nálezy napíše textem a rozbitý sběr vypadá jako čisté review. Výchozí šablona je doslova ten text, co byl v kódu, prázdná znamená „ber výchozí“ a chybějící zástupný text je chyba u pole — neplatná šablona se neuloží a review se s ní nespustí. Globálně, ne per repo: prompt je „jak vypadá review u mě“, ne vlastnost repozitáře. |
-| **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
+| **Časový limit běhu** | V nastavení, globálně i per repo, s rozsahem 5–60 minut a **bez volby „bez limitu“**: timeout je jediná pojistka proti session, která se zacyklí, kdežto denní strop a limit souběhu omezují jen počet běhů. Horní mez je vazba na účet (strop krát denní limit je nejhorší den), dolní proti tomu, aby limit dělal `timedOut` z review, které fungovalo. Putuje s požadavkem, takže rozjetý běh doběhne s tím svým; ke staršímu výsledku se číslo nepíše, protože uložený běh limit nenese. Sdílí ho kontrola nálezů — tatáž session, tentýž strom, tytéž peníze. |
+| **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie, časový limit). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
 | **Odesílání na GitHub** | Platí pro review, odpovědi do vláken i komentáře pod PR. Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl. |
 | **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |
 | **Novinky v aplikaci** | Okno mluví o tom, co vyšlo na GitHubu, ne o spuštěném buildu — verze v bundlu tagy nikdy nesledovala, takže by tvrdila `0.1`. Značka je poslední **viděný tag** v předvolbách aplikace (stav aplikace, ne nastavení k editaci) a historie se drží v paměti do konce běhu: disková cache by dala offline režim, ale je to další store s vlastním úklidem. |
