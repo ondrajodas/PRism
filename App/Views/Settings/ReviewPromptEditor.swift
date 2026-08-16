@@ -156,20 +156,22 @@ struct ReviewPromptEditor: View {
             Text("Neuloží se — v konfiguraci zůstává poslední platná šablona.")
                 .foregroundStyle(Palette.ink3)
         }
-        .font(.caption)
+        // 11,5 bodu je velikost vysvětlivky pod sekcí z návrhu (`.set-sec > .note`), ne `.caption`:
+        // stížnost stojí uvnitř bloku a má číst stejně jako popisky kolem něj.
+        .font(.system(size: 11.5))
         .fixedSize(horizontal: false, vertical: true)
     }
 
     private func hint(_ text: String) -> some View {
         Label(text, systemImage: "info.circle")
-            .font(.caption)
+            .font(.system(size: 11.5))
             .foregroundStyle(Palette.ink3)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private func chip(_ placeholder: String) -> some View {
         Text(verbatim: placeholder)
-            .font(.system(size: 10, design: .monospaced))
+            .font(.system(size: 10.5, design: .monospaced))
             .foregroundStyle(Palette.ink2)
             .padding(.vertical, 2)
             .padding(.horizontal, 7)
