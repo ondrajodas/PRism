@@ -74,8 +74,12 @@ struct PullRequestRow: View {
             Text(pullRequest.updatedAt, format: .relative(presentation: .named))
             Spacer(minLength: 8)
             if hasDraft {
+                // **Mint, ne akcent** (#309), a to ze dvou důvodů naráz. Je to **totéž sdělení**
+                // jako `2 review` v souhrnu fronty, a jedna věc nesmí mít v okně dvě barvy.
+                // A v tomhle řádku akcent už něco znamená: `ReviewStateBadge` jím kreslí `běží`,
+                // takže akcentové pero vedle něj tvrdilo „něco se tu děje“ místo „něco tu leží“.
                 Image(systemName: "square.and.pencil")
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(Palette.mint)
                     .help("Leží tu rozdělané review, které jsi ještě neodeslal")
                     .accessibilityLabel("Rozdělané review")
             }

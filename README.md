@@ -47,6 +47,11 @@ by se zhoršila čitelnost obarveného kódu. **Od #298 z ní jde i „klikni se
 té doby dvě různé barvy — fialové tlačítko v bublině u kódu (#283) a systémově modrý odkaz v tabulce
 nálezů, protože `.buttonStyle(.link)` si akcent okna nebere. Teď je barva jedna a **tvar zůstává
 různý**, jak ho má návrh: v bublině plocha, v tabulce holý text, který se opakuje na každém řádku.
+**Od #309 má akcent dvojici**: `mint`. Akcent je to, co se nabízí udělat nebo co zrovna běží, mint
+to, co se jen konstatuje — odznak shody `2×`, `✓ v mém review`, počet rozdělaných review ve stavovém
+řádku, odmítnuté review. Do té doby měly stavy barvu akcí, a osm z nich dokonce systémovou modrou:
+`.tint()` z kořene okna se na `Color.accentColor` nevztahuje, takže tam, kde ho někdo použil, byl
+akcent okna jen zamýšlený.
 
 Obsahem domácí záložky je **dashboard** (#181), ne prázdné „Vyber pull request“. Odpovídá na tři
 otázky, na které se do té doby muselo hledat po okně: **kolik toho čeká**, **co z toho blokuje**

@@ -360,10 +360,17 @@ struct TimelineEntryRow: View {
         }
     }
 
+    /// **Akcent, ne mint** (#309), i když „nahlásil nálezy“ je stav: mint dělí stav od akce
+    /// **tam, kde stojí vedle sebe**, a na ose žádná akce není — je to výpis toho, co se stalo.
+    /// Akcent tu má svou druhou roli, tu samou jako `stateTint` u běžícího reviewera o pár set
+    /// řádků výš: „tohle je ten krok, kvůli kterému se sem chodí“.
+    ///
+    /// Do #309 to byla `Color.accentColor`, tedy systémová modrá — barva, kterou okno jinak nemá
+    /// (`.tint(Palette.accent)` z kořene na `accentColor` nezabírá).
     private var color: Color {
         switch entry.kind {
         case .finished(let outcome): outcome == .finished ? Palette.ok : Palette.stale
-        case .findings: .accentColor
+        case .findings: Palette.accent
         default: .secondary
         }
     }

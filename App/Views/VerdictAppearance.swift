@@ -21,11 +21,23 @@ extension ReviewDraft.Verdict {
     /// stejně. Odhad aplikace se od rozhodnutí, které odejde na GitHub, odlišuje popiskem
     /// `návrh z nálezů` v panelu (#114) — do #218 na to byl v hlavičce vlastní oranžový odznak
     /// (`VerdictView`), který se s předvyplněným verdiktem překrýval.
+    ///
+    /// **`Komentář` bere akcent z palety** (#309), ne `Color.accentColor`. Verdikt je **volba**,
+    /// tedy akce: tři tlačítka, ze kterých se jedno zmáčkne, takže mint (konstatování) by tu měl
+    /// obrácený význam. Systémová modrá tu byla jediná barva, kterou si okno neurčuje samo —
+    /// `.tint(Palette.accent)` z kořene na `Color.accentColor` nezabírá.
+    ///
+    /// `.green` a `.red` zůstávají **systémové**, a je to vědomé, ne opomenutí: převést celou
+    /// sémantickou škálu na paletu je jiná otázka, kterou #218 a #277 zodpověděly měřením pro
+    /// kapsli stavu a pro diff. Ve zbytku `App/` se zelená a červená pořád berou ze systému na
+    /// desítkách míst, takže převod zrovna tady by z tohohle souboru udělal výjimku, ne pravidlo.
+    /// #309 řeší **akcent**, u kterého to pravidlo platí (`Palette.accent`) — a mint, který
+    /// vzniká teď.
     var tint: Color {
         switch self {
         case .approve: .green
         case .requestChanges: .red
-        case .comment: .accentColor
+        case .comment: Palette.accent
         }
     }
 }

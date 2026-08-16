@@ -1587,5 +1587,43 @@ u `PullRequestTab` vypisovala pět případů a `checks` zmiňovala až v témž
 **Co se našlo a nespravilo** (patří jinam, ne do diffu o README): doc komentář u `SettingsView`
 pořád říká „Tři záložky“, tedy stav před #177.
 
+### Akcent z palety a token `mint` — stav se pozná od akce (#309)
+
+V okně byly na jednu věc **tři barvy místo dvou**. `Color.accentColor` sedělo na osmi místech
+v `App/` a všechna kreslila **systémovou modrou**: `.tint(Palette.accent)` z kořene okna se na něj
+nevztahuje (zabírá jedině `.foregroundStyle(.tint)`, změřeno renderem u #298). K tomu chyběl token
+pro **konstatování**, takže odznak shody `2×` a značka `✓ v mém review` — dvě věci, na které se
+neklikne — vypadaly jako `Převzít` vedle nich.
+
+**Akcent je vlastní barva aplikace** (vyžádané při proklikání #298) a `Palette.mint` je jeho
+dvojice: akcent je to, co se nabízí udělat nebo co běží, mint to, co se jen konstatuje. Rozdělení
+osmi míst nešlo udělat podle jména — rozhodovalo, jestli ta věc stojí **vedle akce**: mint dostal
+`2×`, `✓ v mém review` (obojí v tabulce i v bublině, přes `FindingBadgeAppearance.stateTint`),
+souhrn rozdělaných review ve stavovém řádku (pár desítek bodů od akcentového `Připravit`)
+a odznak `odmítnuto`; akcent si nechal běžící review, událost „nahlásil nálezy“ na ose `Průběhu`,
+verdikt `Komentář` a oba pruhy rozsahu v diffu. Návrh to nese stejně — mint v něm je na celé
+stránce **dvakrát** a obojí je v řádku tabulky nálezů.
+
+**Světlá větev mintu je vědomá odchylka od návrhu** (`#0E8F80` → `#0C7E71`): hodnota z mockupu měla
+na ploše řádku kontrast 3,99, tedy pod AA, a byla jediným stavovým tokenem palety pod tou hranicí.
+Ztmavení je na rodinu, ne na hranici — vychází na všech podkladech stejně jako `find` vedle něj.
+Tmavá je z návrhu doslova. Mockup se překreslí v #299, ne potichu tady.
+
+**Komentář u `ReviewStateAppearance`**, který tvrdil, že barva má jít se systémovým akcentem,
+zmizel i s důvodem: `Color(light:dark:)` se režimu přizpůsobí taky, takže první polovina toho
+odůvodnění nebyla důvod pro systém, a druhá je zrovna to, co se zamítlo. Zbytek škály
+(`.green`, `.orange`, `.red`, `.yellow`) **zůstává systémový vědomě** — převod je jiná otázka,
+jinde v repu se zodpovídá měřením (#218, #277) a zelenou s červenou bere ze systému ještě zhruba
+padesát míst v `App/`.
+
+**Vidět to je**, takže se to ukazovalo renderem: tabulka, dvě bubliny, stavový řádek a odznaky
+stavu na jednom plátně v obou režimech, položené vedle vyrenderované sekce 06 návrhu. Měření drží
+`MintTokenTests` (2 504 testů celkem) — ΔE proti `ok` 16,6 / 21,1 a proti `stale` 37,9 / 39,4,
+kontrasty 4,95 / 9,90 na ploše. Že odznak nesmí být akcent, je ověřené **vloženou regresí**.
+
+**Co se našlo a nespravilo:** `✓ v mém review` je v tabulce kreslené jen jako ikona
+(`.labelStyle(.iconOnly)`), kdežto návrh má v tom sloupci celý text; a `.stale: .yellow` je ve
+světlém režimu na hranici čitelnosti.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
