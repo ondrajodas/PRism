@@ -618,6 +618,114 @@ protože jinak si o release notes nikdo neřekne.
 - **Na síť se sahá dvakrát za běh**, oboje na vyžádání: jednou při startu kvůli značce,
   jednou při otevření okna (a to už je z paměti). V pollingu ani na pozadí nikdy.
 
+### Tab Commity — návrh (zatím jen v mockupu)
+
+Sedmá záložka detailu PR: **seznam commitů** a **diff jednoho z nich**. Nakreslená je
+v mockupu, sekce 19 (*Review — Commity*, viz [`docs/navrh.md`](../../navrh.md)); v kódu
+zatím není nic. Zapsané je to tady, protože rozhodnutí padla dřív, než na ně vzniknou
+issues — pravidlo *Návrh (mockup)* v `CLAUDE.md` chce nakreslit a nechat schválit napřed.
+
+**Proč vzniká.** `Změněné soubory` odpovídají na „co je na PR jinak proti základu“ — jeden
+slitý diff, ze kterého je vidět výsledek, ne cesta. Otázka „proč tenhle řádek zmizel“ nebo
+„kdy se sem dostala ta migrace“ má odpověď v jednotlivých commitech, a ta se dnes hledá
+v prohlížeči. Je to tedy tentýž pohyb jako u `Konverzace` (#183) a `Kontrol` (#215): další
+věc, kvůli které se z okna odchází.
+
+**Je to prohlížeč, ne review.** V diffu commitu nejsou bubliny nálezů, není tam rozdělaný
+komentář a do řádků se nedá klikat. Čte se, kopíruje a rozbaluje kontext. Důvod není
+„zjednodušení první verze“, jsou to dvě věci:
+
+- **Komentář k řádku commitu by potřeboval jiný klíč.** Rozdělaný komentář se váže na
+  `(soubor, řádek)` diffu PR; u commitu by se musel klíčovat i sha, jinak by se dva
+  komentáře k témuž řádku ve dvou commitech přepsaly.
+- **Odeslat by ho šla jedině pátá metoda v `ReviewPublishing`** — a tvrdá podmínka č. 1
+  říká, že ten výčet je krátký schválně. Tím, že je tab celý čtecí, se **tvrdé podmínky
+  č. 1 nedotýká vůbec**: `GitHubGateway` zůstává bez zápisových metod, `grep
+  ReviewPublishing App/` vrací tentýž seznam a protokol má dál čtyři metody.
+
+**Panel s nálezy se nekreslí** — čtvrtý takový tab po `Kontrolách`, `Nálezech` a `Průběhu`
+(#294). Důvod je tu ale vlastní: nálezy jsou klíčované `headSha` (tvrdá podmínka č. 5),
+takže u staršího commitu by panel ukazoval nálezy k **jinému kódu**. Není to jen
+duplikát jako u `Nálezů`, je to tvrzení, které by neplatilo.
+
+**Rozkliknutý commit přepne obsah tabu**, jako to má GitHub — seznam zmizí, diff dostane
+celou plochu a nahoře je hlavička se sha, zprávou, autorem, počty a cestou zpět.
+
+**Data jdou přes `GitHubGateway`** (tedy čtení), ne přes klon v cache. Změřeno na
+`keboola/job-queue-daemon#858`:
+
+| Co | Volání | Čas | Co dává |
+|---|---|---|---|
+| seznam commitů | `gh api repos/{o}/{r}/pulls/{n}/commits` | 1,20 s | sha, `commit.author.name`, `commit.author.date`, `commit.message`, `author.avatar_url` — sedm commitů **jedním** voláním |
+| diff commitu | `gh api repos/{o}/{r}/commits/{sha}` s `Accept: application/vnd.github.diff` | 0,99 s | **unified diff**, tedy tvar, kterému `DiffParser` už rozumí |
+
+Klon v cache to neumí spolehlivě: `RepoCheckout` fetchuje `refs/pull/<n>/head` do
+`refs/prism/pr/<n>`, ale jen když proběhl checkout kvůli review, a `forgetPullRequest` ten
+ref maže — ověřeno, `job-queue-daemon.git` v cache je a `refs/prism/pr` prázdný. Tab by
+tedy u poloviny PR neměl data.
+
+**V pruhu sedí mezi `Změněnými soubory` a `Konverzací`**, tedy nalevo od děliče
+(`isReviewerOutput == false` — je to fakt o PR, ne výstup našich revieweerů). Vedle
+`Změněných souborů` schválně: obojí odpovídá na „co se v kódu změnilo“, jen jednou naráz
+a jednou po krocích, takže se ta dvojice čte jako pár a přepíná se jedním skokem. Dělič se
+tím neposune, protože se počítá z vlastnosti tabu, ne z indexu (#242, #215) — což
+`PullRequestTab.isReviewerOutput` předvídalo doslova: „vlastnost přežije i sedmou záložku
+vloženou doprostřed“.
+
+**V mockupu je to poslední sekce (19), i když v pruhu je třetí.** Přečíslovat osmnáct sekcí
+kvůli jedné vložené doprostřed by rozbilo odkazy, které na ně míří (issues, `docs/`,
+skoky uvnitř stránky).
+
+**Seznam nedává `stats` ani `files`** (ověřeno na živém API: `stats_present: false`,
+`files_present: false`), takže **v řádku není počet souborů ani `+X −Y`**. Dotahovat je po
+commitu je N+1 — u sedmi commitů sedm dalších volání k jedné otevřené záložce. Objeví se až
+v hlavičce rozkliknutého commitu, kde se spočítají ze staženého diffu zadarmo.
+
+#### Cena sedmé záložky — změřeno, ne odhadnuto
+
+Jediné, co ten tab doopravdy stojí, je šířka pruhu záložek. Změřeno replikou
+`PullRequestTabBar` (tytéž fonty, odsazení a symboly, `fittingSize` přes pásmo šířek).
+Replika sedí s tím, co naměřilo #306: šest záložek bez odznaků vyšlo na 750 b (#306 hlásí
+„vejde se od ~780“, tedy měřeno po stovkách), se všemi odznaky na 867 b („od ~920“).
+
+| Pruh | Šířka pruhu | Potřebné okno (+ rail 53) |
+|---|---|---|
+| 6 záložek, bez odznaků — dnešek | 750 b | 803 b |
+| 6 záložek, všechny odznaky — dnešek | 867 b | 920 b |
+| **7 záložek, bez odznaků** | 842 b | 895 b |
+| **7 záložek, všechny odznaky** | 982 b | **1035 b** |
+| 7 záložek bez `+X −Y` | 872 b | 925 b |
+| 7 záložek, ikony a popisek jen u aktivní | 602 b | 655 b |
+
+Z toho plyne:
+
+- **Ve výchozím okně 1100 se nemění nic** — sedm záložek se všemi odznaky potřebuje 1035,
+  takže zbývá 65 bodů rezervy. Nové je pásmo **920–1035**, kde se pruh dnes vejde a se
+  sedmou záložkou by se zalomil.
+- **Zaplatí to `+X −Y`.** Pilulka s poměrem je 108 bodů, `Commity` s odznakem 115 — tedy
+  skoro přesně cena sedmé záložky. Je to i ten správný kus, který má ustoupit první: mluví
+  o rozsahu celého PR, což je odpověď na otázku `Změněných souborů`; v `Commitech`,
+  `Kontrolách` ani `Průběhu` není o čem.
+- **Pruh se zalamuje, nezkracuje.** `PullRequestTabBar` nikde nemá `lineLimit`, takže
+  popisek se láme uvnitř záložky — u sedmi záložek v nejužším okně (700, `RootView`) je to
+  pruh vysoký **150 b** místo 34, se slovy rozpadlými po písmenech. Šest záložek tam dnes
+  dá 75 b, tedy taky rozbito, jen míň. **Oprava v `docs/testovani.md`**, kde u #306 stálo,
+  že se popisky „zkracují (`Změněné soub…`)“; renderem to nevyšlo.
+- **Druhý stupeň** (ikony, popisek jen u aktivní, 655 b) srazí pruh **pod nejužší povolené
+  okno**, takže by se nezalomil nikdy. Sedmé záložky se ale netýká — tu zaplatí první
+  stupeň — a spravuje to, co je rozbité už dnes. Je to proto vlastní issue.
+
+#### Co se zamítlo
+
+| Zamítnuto | Proč |
+|---|---|
+| Rozbalení diffu pod řádkem seznamu | Seznam by zůstal nad diffem, scrollovaly by se dvě plochy nad sebou a hlavička commitu by se odrolovala pryč zrovna ve chvíli, kdy se čte kód |
+| Komentář k řádku commitu | Jiný klíč draftu a pátá metoda v `ReviewPublishing` — viz výš. Komentář patří do `Změněných souborů` a hlavička commitu na to jednou větou odkazuje |
+| `+X −Y` u každého commitu v seznamu | Seznam je nenese; dotažení je N+1. Čísla jsou o jedno kliknutí dál a tam zadarmo |
+| Zkrátit `Změněné soubory` na `Soubory` | Ušetří 55 bodů, tedy skoro polovinu ceny sedmé záložky — ale `Soubory` se plete se stromem souborů v liště diffu, což je zapsaný důvod, proč ten popisek takhle zní (`PullRequestTab.czechLabel`) |
+| `Commity` jako přepínač uvnitř `Změněných souborů` | Ušetřilo by sedmou záložku celou, ale `Změněné soubory` jsou obrazovka na review (strom, panel, bubliny, draft) a přepínač uvnitř by polovinu z toho zhasínal. Skrytý stav, ve kterém obrazovka umí míň, je horší než záložka, na které je vidět, kde jsem |
+| Data z klonu v cache | `refs/prism/pr/<n>` existuje jen po checkoutu kvůli review a `forgetPullRequest` ho maže — ověřeno |
+
 ## Platformová rozhodnutí
 
 - **SwiftUI**, target macOS 26, Xcode projekt v repu. Bundle id

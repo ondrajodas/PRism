@@ -1587,5 +1587,23 @@ u `PullRequestTab` vypisovala pět případů a `checks` zmiňovala až v témž
 **Co se našlo a nespravilo** (patří jinam, ne do diffu o README): doc komentář u `SettingsView`
 pořád říká „Tři záložky“, tedy stav před #177.
 
+### Tab `Commity` — nakreslený, nezaložený
+
+Sedmá záložka detailu PR (seznam commitů a diff jednoho z nich) je **nakreslená v mockupu**,
+sekce 19, a rozhodnutí i zamítnuté alternativy jsou v
+[specifikaci](superpowers/specs/2026-07-31-prism-design.md), sekce *Tab Commity*. **V kódu není
+nic** a issues na to zatím nevznikly — pravidlo *Návrh (mockup)* v `CLAUDE.md` chce nakreslit
+a nechat schválit dřív, než se issue založí, takže tohle je zastávka mezi tím.
+
+Cena je změřená, ne odhadnutá: sedmá záložka posune šířku, od které se pruh vejde na jeden
+řádek, z 920 na **1035 bodů** okna. Ve výchozím okně (1100) je to tedy bez dopadu; nové je
+pásmo 920–1035 a zaplatí ho `+X −Y` (108 b, tedy skoro přesně cena té záložky). Vedle toho se
+ukázalo, že pruh se pod tou hranicí **zalamuje, nezkracuje** — oprava jedné věty
+v [`docs/testovani.md`](testovani.md).
+
+Až se založí, mají to být **dvě issues dělené datovou cestou**: seznam commitů
+(`pulls/{n}/commits`, jedno volání, 1,20 s) a rozkliknutí na diff commitu (`commits/{sha}`
+s `Accept: application/vnd.github.diff`, 0,99 s, unified diff pro dnešní `DiffParser`).
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

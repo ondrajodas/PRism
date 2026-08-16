@@ -9,10 +9,14 @@ issue** — je v [`CLAUDE.md`](../CLAUDE.md), sekce *Návrh (mockup)*.
 **Artifact `PRism — návrh vizuální revize`:**
 <https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi osmnáct sekcí. Většina kreslí jednu
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi devatenáct sekcí. Většina kreslí jednu
 obrazovku nebo jeden stav v rámu okna (`.win`) a vedle sebe má poznámky (`.notes`), proč je to
 tak; zbytek rozhodnutí vysvětluje — *Dvanáct stavů, které se nesmí slít*, *Kde jsem si vybral,
 a co to stálo*, *Co by se muselo přepsat*.
+
+**Poslední sekce nemusí být poslední obrazovka.** Sekce 19 (*Review — Commity*) kreslí tab,
+který v okně sedí třetí zleva; přečíslovat kvůli němu osmnáct sekcí by rozbilo odkazy, které
+na ně míří. Pořadí sekcí je tedy pořadí, ve kterém vznikly, ne pořadí v UI.
 
 **V repu ten soubor není a nemá být.** Návrh je živý dokument, který se překresluje častěji než
 kód; kdyby ležel v repu, byl by z každé úpravy návrhu commit, review a merge. Cena za to je, že
