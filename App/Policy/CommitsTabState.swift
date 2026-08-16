@@ -12,8 +12,13 @@ import Foundation
 enum CommitsTabState: Equatable, Sendable {
     /// Ještě nedorazily. **Nesmí tvrdit, že commity nejsou.**
     case loading
-    /// Seznam, od nejstaršího. `failure` = poslední pokus o načtení selhal, takže je to **poslední
-    /// známý stav**; stará sada se po selhání nechává být, stejně jako u checků (#215).
+    /// Seznam **v pořadí, ve kterém se kreslí** — od nejnovějšího, viz `Policy.commitsNewestFirst`.
+    /// `failure` = poslední pokus o načtení selhal, takže je to **poslední známý stav**; stará sada
+    /// se po selhání nechává být, stejně jako u checků (#215).
+    ///
+    /// Že je to pořadí kresby, a ne pořadí z API, je vlastnost typu schválně: store drží to, co
+    /// přišlo, view kreslí to, co dostane, a **otočit se to smí jen na jednom místě**. Dvě místa by
+    /// znamenala dvě pravdy o tom, který řádek je nahoře.
     ///
     /// Neprázdný vždycky — prázdný seznam se sem nedostane, viz `Policy.commitsTab`.
     case list([PullRequestCommit], failure: String?)
@@ -40,7 +45,7 @@ extension Policy {
     /// Co ukázat v tabu `Commity` (#316).
     ///
     /// Čtyři rozhodnutí v pořadí, ve kterém se ptají — první dvě jsou tatáž jako u `checksTab`,
-    /// poslední je ta, kvůli které je tahle funkce vlastní:
+    /// čtvrté je to, kvůli kterému je tahle funkce vlastní:
     ///
     /// 1. **Neprázdný seznam přebíjí poruchu.** Zastaralý seznam s větou nad sebou je pořád lepší
     ///    než plocha s chybou místo commitů, které se před chvílí načetly.
@@ -52,11 +57,35 @@ extension Policy {
     ///    prázdná odpověď znamená, že se seznam nesehnal — a to se má říct, ne nakreslit klidnou
     ///    prázdnou plochu. Je to obrácená volba než u `Kontrol`, kde prázdno **je** odpověď (PR bez
     ///    CI), a rozdíl je právě v tom, jestli ten prázdný stav umí v realitě nastat.
+    ///
+    /// **Pořadí se otáčí tady, a jedině tady** (`commitsNewestFirst`): je to jediná cesta, kterou se
+    /// seznam dostane do okna, takže odznak i plocha tabu mluví o témž a view nemá co rozhodovat.
     static func commitsTab(commits: [PullRequestCommit]?, failure: String?) -> CommitsTabState {
-        if let commits, !commits.isEmpty { return .list(commits, failure: failure) }
+        if let commits, !commits.isEmpty { return .list(commitsNewestFirst(commits), failure: failure) }
         if let failure { return .failed(failure) }
         if commits == nil { return .loading }
         return .failed("GitHub vrátil prázdný seznam commitů. Pull request bez commitů neexistuje.")
+    }
+
+    /// Pořadí, ve kterém se seznam commitů kreslí: **od nejnovějšího**.
+    ///
+    /// **Otočeno proti návrhu** (#316). Mockup, sekce 19, i specifikace měly „od nejstaršího, jako
+    /// na GitHubu, protože PR se čte jako postup“. Neobstálo to na hotové obrazovce: v tomhle okně
+    /// se PR nečte od začátku, ale **od toho, co přibylo naposled** — je to tentýž pohyb, jaký dělá
+    /// pruh „Od tvé poslední návštěvy“, a tentýž důvod, proč jsou fakta v `Přehledu` nahoře (#280).
+    /// Postup se z otočeného seznamu přečte pořád, jen odspodu; kdežto „co se stalo teď“ by se
+    /// v původním pořadí u dlouhého PR muselo doscrollovat.
+    ///
+    /// **Otáčí se, neřadí.** Pořadí z API je topologické, takže po rebase nebo cherry-picku je
+    /// datum starší než pozice — seřadit podle `committedAt` by ten postup rozházelo. Otočení
+    /// pořadí zachovává, jen ho čte z druhé strany.
+    ///
+    /// **Nepamatuje se to, a je to změřené, ne odhadnuté.** `commitsTab` běží při každém překreslení
+    /// (odznak i plocha tabu), takže otočení je práce na redraw — jenže **18,7 µs** pro 250 commitů
+    /// (strop API, Debug) proti **54 ms**, co stojí sazba téhož seznamu (#316). Cache by tady stála
+    /// víc pozornosti, než kolik ušetří.
+    static func commitsNewestFirst(_ commits: [PullRequestCommit]) -> [PullRequestCommit] {
+        commits.reversed()
     }
 
     /// Odznak u záložky `Commity` — **prostý počet, ne upozornění**.
@@ -72,16 +101,25 @@ extension Policy {
     /// Který commit v seznamu je **hlava PR** — tedy ten, proti kterému jsou klíčované nálezy
     /// (tvrdá podmínka č. 5). `nil` = žádný se tak označit nesmí.
     ///
-    /// Rozhoduje **`headSha` z detailu, ne pozice v poli**. Poslední commit je hlavou jedině
-    /// tehdy, když je seznam čerstvý; po pushnutém commitu je v seznamu pořád ten starý a pilulka
-    /// `hlava` by u něj tvrdila přesně to, čemu má klíčování nálezů bránit. Když se hlava v seznamu
-    /// nenajde, **neoznačí se nic** — mlčet je správnější než ukázat na commit, o kterém to neplatí.
+    /// Rozhoduje **`headSha` z detailu, ne pozice v poli** — a od otočení seznamu na „nejnovější
+    /// nahoře“ je ten rozdíl o to snazší přehlédnout: pilulka **bývá** na prvním řádku, ale je to
+    /// **důsledek** toho, jak seznam přišel, ne pravidlo. Nahoře je nejnovější commit **z toho, co
+    /// GitHub vydal**; hlava je ten, proti kterému jsou klíčované nálezy. Rozejdou se ve dvou
+    /// běžných situacích, a v obou by pilulka nahoře lhala:
     ///
-    /// Dokud detail nedorazil (`head == nil`), platí definice endpointu: GitHub vrací commity od
-    /// nejstaršího, takže hlavou je poslední. Je to jediný okamžik, kdy se to bere z pořadí, a je
-    /// krátký — detail se tahá spolu se seznamem.
+    /// - po pushnutém commitu je seznam o krok pozadu, takže nahoře stojí commit, proti kterému
+    ///   nálezy neplatí;
+    /// - nad stropem API (`commitListCap`) chybí v seznamu zrovna ta novější část, takže hlava
+    ///   v něm není vůbec.
+    ///
+    /// V obou se **neoznačí nic** — mlčet je správnější než ukázat na commit, o kterém to neplatí.
+    ///
+    /// `commits` se čeká v pořadí, ve kterém se kreslí (`commitsNewestFirst`). Rozhoduje to jen
+    /// v jediném případě: dokud detail nedorazil (`head == nil`), platí definice endpointu — GitHub
+    /// vrací od nejstaršího a otočením je nejnovější první, takže hlavou je první. Je to **jediný
+    /// okamžik, kdy pozice rozhoduje**, a je krátký, protože se detail tahá spolu se seznamem.
     static func headCommit(in commits: [PullRequestCommit], head: String?) -> PullRequestCommit? {
-        guard let head else { return commits.last }
+        guard let head else { return commits.first }
         return commits.first { $0.sha == head }
     }
 
@@ -95,18 +133,24 @@ extension Policy {
     /// rozdíl, který zadání jmenuje mezi stavy, co se nesmí slít — „PR má jeden commit“ nemá znít
     /// jako chyba sazby.
     ///
+    /// **Pořadí je v té větě proto, že se dá otočit** — a od #316 otočené je (`commitsNewestFirst`).
+    /// Pruh je jediné místo, které o pořadí něco tvrdí, takže se s ním musí měnit: „od nejstaršího“
+    /// nad seznamem od nejnovějšího je lež o tom, co je pod ní vidět.
+    ///
     /// **Na stropu API to řekne.** Když se počet trefí do `commitListCap`, seznam nemusí být celý;
     /// věta o „250 commitech“ by pak tvrdila víc, než data unesou, takže se doplní, odkud ten strop
-    /// je. Ověřovat to druhým voláním nemá cenu — GitHub další stránku nevydá, takže se pravdivější
-    /// číslo stejně nedozvíme.
+    /// je. Zůstává u toho `prvních`, protože GitHub vydá **prvních** 250 commitů PR — pořadí kresby
+    /// s tím nehýbe a nahoře je pak nejnovější z nich, ne hlava PR (viz `headCommit`). Ověřovat to
+    /// druhým voláním nemá cenu — GitHub další stránku nevydá, takže se pravdivější číslo stejně
+    /// nedozvíme.
     static func commitsHeadline(count: Int) -> CommitsHeadline {
         let noun = commitNoun(count)
         guard count >= commitListCap else {
-            return CommitsHeadline(count: "\(count) \(noun)", detail: "od nejstaršího")
+            return CommitsHeadline(count: "\(count) \(noun)", detail: "od nejnovějšího")
         }
         return CommitsHeadline(
             count: "prvních \(count) \(noun)",
-            detail: "od nejstaršího · víc jich GitHub přes API nevydá"
+            detail: "od nejnovějšího · víc jich GitHub přes API nevydá"
         )
     }
 

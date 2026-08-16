@@ -3147,7 +3147,7 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     | Stav | Kdy | Co je v tabu |
     |---|---|---|
     | `loading` | `commits` nenačtené, bez poruchy | `Načítám commity…` — o commitech netvrdí nic |
-    | `list(_, failure: nil)` | neprázdné `commits` | seznam od nejstaršího |
+    | `list(_, failure: nil)` | neprázdné `commits` | seznam od nejnovějšího |
     | `list(_, failure: reason)` | neprázdné `commits` + porucha | seznam a **nad ním** okrová věta, že je to poslední známý stav |
     | `failed(reason)` | porucha, nebo prázdná odpověď | červený prázdný stav s textem od `gh` a `Zkusit znovu` |
 
@@ -3162,10 +3162,35 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     `Načítám commity…` navždycky. A **zrušené načtení se dotáhne po návratu na PR**, protože detail
     je pak z cache a sám by `loadCommits` už nespustil. Obojí je doslova tatáž past jako u checků
     (#306), jen o jedno volání vedle.
-  - **Pilulka `hlava` se bere z `headSha`, ne z pozice v seznamu** (`Policy.headCommit(in:head:)`).
-    Poslední commit je hlavou jedině tehdy, když je seznam čerstvý; po pushnutém commitu by
-    pilulka tvrdila přesně to, čemu má klíčování nálezů bránit (tvrdá podmínka č. 5). Hlava mimo
-    seznam → **neoznačí se nic**; mlčet je správnější než ukázat na commit, o kterém to neplatí.
+  - **Seznam je od nejnovějšího, a otáčí se na jednom místě** (`Policy.commitsNewestFirst`, volané
+    z `commitsTab`). Gateway vydá, co přišlo z API (od nejstaršího), store to tak i uloží — pořadí
+    kresby je rozhodnutí, ne vlastnost dat, takže se dá změnit jednou funkcí a nedá se rozejít mezi
+    odznakem a plochou tabu. **Otáčí se, neřadí**: pořadí z API je topologické, takže po rebase nebo
+    cherry-picku je datum staršího commitu novější než datum toho za ním a `sorted(by: committedAt)`
+    by postup rozházel.
+
+    **Nepamatuje se to, a je to změřené.** `commitsTab` běží při každém překreslení (odznak i plocha),
+    takže otočení je práce na redraw — **18,7 µs** pro 250 commitů (strop API, Debug) proti **54 ms**,
+    co stojí sazba téhož seznamu. Cache by tady stála víc pozornosti, než kolik ušetří.
+
+    **Je to otočení proti návrhu** (sekce 19 mockupu i specifikace měly „od nejstaršího, jako na
+    GitHubu, protože PR se čte jako postup“). Neobstálo to na hotové obrazovce: v okně se PR nečte
+    od začátku, ale od toho, co přibylo naposled — tentýž pohyb, jaký dělá pruh
+    „Od tvé poslední návštěvy“, a tentýž důvod, proč jsou fakta v `Přehledu` nahoře (#280). Postup
+    se z otočeného seznamu přečte pořád, jen odspodu. **Mockup se nepřekresluje** (řeší #299),
+    odchylka je zapsaná ve specifikaci.
+  - **Pilulka `hlava` se bere z `headSha`, ne z pozice v seznamu** (`Policy.headCommit(in:head:)`),
+    a po otočení je to o to snazší přehlédnout: hlava **bývá** nahoře, ale je to důsledek toho, jak
+    seznam přišel, ne pravidlo. Rozejdou se ve dvou běžných situacích — po pushnutém commitu je
+    seznam o krok pozadu, a nad stropem API (250) chybí zrovna ta novější část. V obou → **neoznačí
+    se nic**; mlčet je správnější než ukázat na commit, o kterém to neplatí. Bere se z pořadí jedině
+    tehdy, když hlava ještě není známá (detail nedorazil): tehdy je jí první řádek, protože GitHub
+    vrací od nejstaršího a otočením je nejnovější první.
+  - **Pruh nad seznamem o pořadí mluví, takže se s ním mění** (`Policy.commitsHeadline`). Věta
+    `7 commitů · od nejnovějšího` je jediné místo, které pořadí pojmenovává — „od nejstaršího“ nad
+    otočeným seznamem by bylo tvrzení, které se dá vyvrátit pohledem pod něj. Na stropu API zůstává
+    `prvních 250 commitů`: GitHub vydá **prvních** 250 commitů PR a pořadí kresby s tím nehýbe, takže
+    nahoře je pak nejnovější **z nich**, ne hlava PR.
   - **Pilulka `sloučení` musí být dopředu.** Diff sloučení se počítá proti prvnímu rodiči a umí
     vyjít prázdný — bez upozornění by se prázdný diff četl jako porucha. Je to tentýž rozdíl jako
     mezi `čisté` a `spadlo` u review.
@@ -4146,10 +4171,11 @@ Věci, které se u toho nemají rozbít:
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
 | `Policy.checksTab(checks:failure:)` | Co je v tabu `Kontroly` k vidění (#306) — čtyři stavy z šesti kombinací vstupů (`ChecksTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí obě prázdna. **Nahradila `Policy.tabs(hasChecks:)`** (#215), která vracela zúžený pruh záložek: od #306 se kreslí všech sedm vždycky, takže seznam záložek není funkcí dat a rozhodovat se má **obsah** tabu |
 | `Policy.checksBadge(of:)` | Odznak u záložky `Kontroly` (#215) — spadlé červeně s počtem, běžící puntíkem, zelené a přeskočené bez odznaku. Bere **stav tabu**, ne `ChecksSummary` (#306): jeden `guard` na začátku drží prázdnou kapsli i nulu mimo pruh nad nenačteným, prázdným i spadlým stavem |
-| `Policy.commitsTab(commits:failure:)` | Co je v tabu `Commity` k vidění (#316) — **tři** stavy z šesti kombinací vstupů (`CommitsTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí nenačteno i prázdno, a **prázdné pole bez poruchy je samo porucha**: pull request bez commitů neexistuje, takže klidná hláška o prázdnu by tvrdila nemožný stav. Jediný řádek, ve kterém se liší od `checksTab` |
+| `Policy.commitsTab(commits:failure:)` | Co je v tabu `Commity` k vidění (#316) — **tři** stavy z šesti kombinací vstupů (`CommitsTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí nenačteno i prázdno, a **prázdné pole bez poruchy je samo porucha**: pull request bez commitů neexistuje, takže klidná hláška o prázdnu by tvrdila nemožný stav. Jediný řádek, ve kterém se liší od `checksTab`. Je to zároveň jediná cesta seznamu do okna, takže se v ní **otáčí pořadí** (`commitsNewestFirst`) |
+| `Policy.commitsNewestFirst(_:)` | Pořadí, ve kterém se seznam commitů kreslí (#316) — **od nejnovějšího**, otočením proti návrhu, který měl „od nejstaršího, jako na GitHubu“. V okně se PR nečte od začátku, ale od toho, co přibylo naposled (tentýž pohyb jako pruh „Od tvé poslední návštěvy“ a fakta nahoře v `Přehledu`, #280). **Otáčí, neřadí**: pořadí z API je topologické, takže `sorted(by: committedAt)` by po rebase nebo cherry-picku postup rozházel |
 | `Policy.commitsBadge(of:)` | Odznak u záložky `Commity` (#316) — prostý počet, a jen nad seznamem. Tichá kapsle: kolik je commitů, je množství, ne upozornění; nad nenačteným ani spadlým stavem **nic**, protože nula by tvrdila, že se spočítalo |
-| `Policy.headCommit(in:head:)` | Který řádek nese pilulku `hlava` (#316). Rozhoduje **`headSha` z detailu, ne pozice v poli** — po pushnutém commitu je seznam o krok pozadu a poslední řádek už hlavou není; nálezy jsou klíčované `headSha` (tvrdá podmínka č. 5), takže by to bylo tvrzení, ne dekorace. Hlava mimo seznam → **nic se neoznačí**. Bez známé hlavy (detail ještě nedorazil) platí definice endpointu: GitHub vrací od nejstaršího, takže poslední |
-| `Policy.commitsHeadline(count:)`, `Policy.commitNoun(_:)` | Věta nad seznamem commitů (#316) ve **dvou kusech** (`CommitsHeadline`), protože počet je tmavý a polotučný a zbytek tlumený. Skloňování má tři tvary (`1 commit` / `2 commity` / `7 commitů`) — `1 commitů` je jeden ze stavů, které se podle zadání nesmí slít. Na **stropu API** (250) věta řekne, že seznam nemusí být celý |
+| `Policy.headCommit(in:head:)` | Který řádek nese pilulku `hlava` (#316). Rozhoduje **`headSha` z detailu, ne pozice v poli** — „nahoře“ a „hlava“ nejsou totéž, jen nad čerstvým seznamem vycházejí nastejno: po pushnutém commitu je seznam o krok pozadu a nad stropem API v něm hlava není vůbec. Nálezy jsou klíčované `headSha` (tvrdá podmínka č. 5), takže by to bylo tvrzení, ne dekorace; hlava mimo seznam → **nic se neoznačí**. Bez známé hlavy (detail ještě nedorazil) platí definice endpointu: GitHub vrací od nejstaršího a `commitsNewestFirst` to otáčí, takže **první** — jediný okamžik, kdy rozhoduje pozice |
+| `Policy.commitsHeadline(count:)`, `Policy.commitNoun(_:)` | Věta nad seznamem commitů (#316) ve **dvou kusech** (`CommitsHeadline`), protože počet je tmavý a polotučný a zbytek tlumený. Skloňování má tři tvary (`1 commit` / `2 commity` / `7 commitů`) — `1 commitů` je jeden ze stavů, které se podle zadání nesmí slít. **Pojmenovává pořadí** (`· od nejnovějšího`), takže se s ním musí měnit — jinak okno lže o tom, co ukazuje. Na **stropu API** (250) věta řekne, že seznam nemusí být celý |
 | `Policy.jobID(from:)` | Číslo jobu z odkazu na check (#214). Funguje i jako check-run ID pro anotace; `…/runs/<id>` bez `/job/` je **běh**, ne job, takže `nil` |
 | `Policy.strippingANSI(_:)`, `Policy.strippingTimestamps(_:)` | Čistka logu (#214) — bez nich je v okně `^[[36;1m` a 28 znaků timestampu na každém řádku |
 | `Policy.logTail(_:lines:)` | Konec logu a **kolik se ho nevešlo** (`LogTail`, #214). Tiše zkrácený log tvrdí, že job začal uprostřed |
@@ -4672,10 +4698,11 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   API). Nad **250 commitů** GitHub nevydá nic, ať se stránkuje jak chce; že se na strop narazilo,
   se pozná z počtu a **řekne se to v tabu** (`Policy.commitsHeadline`).
 
-  **Neřadí se tady ani nikde jinde.** GitHub vrací commity topologicky od nejstaršího, což je
-  zrovna to pořadí, ve kterém se PR čte jako postup; přerovnat je podle data by po rebase nebo
-  cherry-picku ten postup rozházelo. Zahazují se jen položky **bez sha**, ze kterých se řádek
-  udělat nedá.
+  **Neřadí se tady, a nikde jinde ani podle data.** GitHub vrací commity topologicky od nejstaršího
+  a přerovnat je podle času by po rebase nebo cherry-picku ten postup rozházelo. Pořadí, ve kterém
+  se kreslí, je rozhodnutí, ne tvar odpovědi: gateway vydá, co přišlo, a `Policy.commitsNewestFirst`
+  to na jednom místě **otočí** (nejnovější nahoře) — topologické pořadí se tím zachová, jen se čte
+  z druhé strany. Zahazují se jen položky **bez sha**, ze kterých se řádek udělat nedá.
 - **Obsah souboru se čte přes ref pull requestu**, ne přes `headSha`:
   `gh api repos/…/contents/<cesta>?ref=refs/pull/<n>/head` s hlavičkou
   `Accept: application/vnd.github.raw`. Ověřeno na živém API — ten ref má každý PR včetně

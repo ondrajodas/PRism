@@ -93,8 +93,9 @@ protocol GitHubGateway: Sendable {
     /// ale jen když proběhl checkout kvůli review, a `forgetPullRequest` ten ref maže — ověřeno,
     /// takže by tab u poloviny PR neměl data.
     ///
-    /// Vrací je **v pořadí, v jakém přišly** (GitHub je dává od nejstaršího); řazení je rozhodnutí,
-    /// ne tvar odpovědi — tatáž hranice jako u `fetchReleases`.
+    /// Vrací je **v pořadí, v jakém přišly** (GitHub je dává od nejstaršího); pořadí, ve kterém se
+    /// kreslí, je **rozhodnutí, ne tvar odpovědi** — otáčí ho `Policy.commitsNewestFirst`. Tatáž
+    /// hranice jako u `fetchReleases` a `Policy.sortedReleases`.
     ///
     /// Jedenáctá **čtecí** metoda; tvrdá podmínka č. 1 platí dál — gateway pořád nemá nic, čím by
     /// šlo něco odeslat.

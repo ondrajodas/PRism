@@ -5,26 +5,33 @@ import Testing
 
 /// Co je v tabu `Commity`, jaký nad ním svítí odznak a která věta je nad seznamem (#316).
 ///
-/// Čtyři věci se tu dají pokazit potichu:
+/// Pět věcí se tu dá pokazit potichu:
 ///
 /// - **nakreslit klidnou hlášku o prázdnu.** Pull request bez commitů neexistuje, takže by
 ///   „tenhle PR nemá commity“ tvrdila něco, co platit nemůže — je to obrácená volba než
 ///   u `Kontrol`, kde prázdno **je** odpověď;
 /// - **udělat z poruchy nenačteno**, tedy nechat nad chybou sítě věčně točit `Načítám commity…`;
-/// - **označit poslední řádek jako `hlava`, i když se hlava mezitím posunula.** Nálezy jsou
+/// - **nakreslit seznam v pořadí z API a nechat nad ním větu, že je otočený** — pořadí a věta
+///   o pořadí jsou dvě místa, která se dají rozejít, a okno by pak lhalo o tom, co ukazuje;
+/// - **označit první řádek jako `hlava`, i když se hlava mezitím posunula.** Nálezy jsou
 ///   klíčované `headSha` (tvrdá podmínka č. 5), takže je to tvrzení, ne dekorace;
 /// - **splést české skloňování**, kvůli kterému by `1 commit` znělo jako chyba sazby — a to je
 ///   jeden ze tří stavů, které se podle zadání nesmí slít.
 @Suite("Tab Commity, jeho odznak a věta nad seznamem")
 struct CommitsTabStateTests {
-    private func commit(_ sha: String, message: String = "feat: něco", merge: Bool = false) -> PullRequestCommit {
+    private func commit(
+        _ sha: String,
+        message: String = "feat: něco",
+        merge: Bool = false,
+        days: Double = 0
+    ) -> PullRequestCommit {
         PullRequestCommit(
             sha: sha,
             message: message,
             authorName: "Odin Uv",
             authorLogin: "odinuv",
             avatarURL: nil,
-            committedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            committedAt: Date(timeIntervalSince1970: 1_700_000_000 + days * 86_400),
             isMerge: merge
         )
     }
@@ -83,6 +90,48 @@ struct CommitsTabStateTests {
         #expect(failure == "timeout", "bez důvodu by seznam vypadal jako čerstvý")
     }
 
+    // MARK: - Pořadí: nejnovější nahoře
+
+    /// **Otočeno proti návrhu** (#316): mockup, sekce 19, i specifikace měly „od nejstaršího, jako
+    /// na GitHubu, protože PR se čte jako postup“. Na hotové obrazovce to neobstálo — v tomhle okně
+    /// se PR nečte od začátku, ale od toho, co přibylo naposled. Test tvrdí **to nové**: co přišlo
+    /// z API poslední, je v tabu první.
+    @Test("Seznam jde do tabu od nejnovějšího")
+    func listComesOutNewestFirst() {
+        let fromApi = [commit("aaa"), commit("bbb"), commit("ccc")]
+
+        guard case .list(let list, _) = Policy.commitsTab(commits: fromApi, failure: nil) else {
+            Issue.record("neprázdný seznam se nedostal do `list`")
+            return
+        }
+        #expect(list.map(\.sha) == ["ccc", "bbb", "aaa"])
+        #expect(list.first?.sha == fromApi.last?.sha, "nahoře má být to, co přišlo z API poslední")
+    }
+
+    /// Otočí se i seznam, nad kterým visí porucha — jinak by se zastaralý seznam kreslil obráceně
+    /// než čerstvý a věta nad ním by mluvila o tom druhém.
+    @Test("Zastaralý seznam se otáčí stejně jako čerstvý")
+    func flipsTheStaleListToo() {
+        guard case .list(let list, let failure) =
+            Policy.commitsTab(commits: [commit("aaa"), commit("bbb")], failure: "timeout")
+        else {
+            Issue.record("seznam se po selhání zahodil")
+            return
+        }
+        #expect(list.map(\.sha) == ["bbb", "aaa"])
+        #expect(failure == "timeout")
+    }
+
+    /// **Otáčí se, neřadí.** Pořadí z API je topologické, takže po rebase nebo cherry-picku má
+    /// commit uprostřed novější datum než ten za ním. Seřadit podle času by ten postup rozházelo —
+    /// tenhle test spadne, kdyby se z otočení stalo `sorted(by: committedAt)`.
+    @Test("Pořadí se otáčí, neřadí podle data")
+    func flipsTheOrderInsteadOfSortingByDate() {
+        let fromApi = [commit("aaa", days: -5), commit("bbb", days: -1), commit("ccc", days: -3)]
+
+        #expect(Policy.commitsNewestFirst(fromApi).map(\.sha) == ["ccc", "bbb", "aaa"])
+    }
+
     // MARK: - Odznak
 
     @Test("Odznak je prostý počet, a jen nad seznamem")
@@ -107,22 +156,24 @@ struct CommitsTabStateTests {
     // MARK: - Která hlava (tvrdá podmínka č. 5)
 
     /// **Druhý nejcennější test**: pilulka `hlava` se nesmí objevit u commitu, který hlavou není.
-    /// Po pushnutém commitu je seznam o krok pozadu a poslední řádek už hlavou není — označit ho
-    /// by znamenalo tvrdit, že nálezy platí proti němu.
+    /// Od otočení seznamu (#316) je „nahoře“ a „hlava“ obvykle tentýž řádek, a právě proto se to
+    /// dá splést — po pushnutém commitu je seznam o krok pozadu a nahoře stojí commit, proti
+    /// kterému nálezy neplatí. Test proto hledá hlavu **všude jinde než nahoře**.
     @Test("Hlava se bere ze sha, ne z pozice v poli")
     func headComesFromTheShaNotTheOrder() {
-        let list = [commit("aaa"), commit("bbb"), commit("ccc")]
+        let list = Policy.commitsNewestFirst([commit("aaa"), commit("bbb"), commit("ccc")])
+        #expect(list.first?.sha == "ccc", "nahoře je nejnovější — a přesto o pilulce nerozhoduje")
 
         #expect(Policy.headCommit(in: list, head: "bbb")?.sha == "bbb", "hlava uprostřed se má najít")
-        #expect(Policy.headCommit(in: list, head: "ccc")?.sha == "ccc")
+        #expect(Policy.headCommit(in: list, head: "aaa")?.sha == "aaa", "hlava naspod se má najít")
         #expect(Policy.headCommit(in: list, head: "ddd") == nil, "hlava mimo seznam se nesmí označit")
     }
 
-    /// Dokud detail nedorazil, platí definice endpointu: GitHub vrací commity od nejstaršího,
-    /// takže hlavou je poslední. Je to jediný okamžik, kdy se bere z pořadí.
-    @Test("Bez známé hlavy se označí poslední commit")
-    func fallsBackToTheLastCommit() {
-        let list = [commit("aaa"), commit("bbb")]
+    /// Dokud detail nedorazil, platí definice endpointu: GitHub vrací commity od nejstaršího a tab
+    /// je otáčí, takže hlavou je **první**. Je to jediný okamžik, kdy o pilulce rozhoduje pozice.
+    @Test("Bez známé hlavy se označí první commit")
+    func fallsBackToTheFirstCommit() {
+        let list = Policy.commitsNewestFirst([commit("aaa"), commit("bbb")])
         #expect(Policy.headCommit(in: list, head: nil)?.sha == "bbb")
         #expect(Policy.headCommit(in: [], head: nil) == nil)
         #expect(Policy.headCommit(in: [], head: "aaa") == nil)
@@ -148,8 +199,19 @@ struct CommitsTabStateTests {
     @Test("Věta nad seznamem říká počet i pořadí")
     func headlineSaysCountAndOrder() {
         #expect(Policy.commitsHeadline(count: 1).count == "1 commit")
-        #expect(Policy.commitsHeadline(count: 1).sentence == "1 commit · od nejstaršího")
-        #expect(Policy.commitsHeadline(count: 7).sentence == "7 commitů · od nejstaršího")
+        #expect(Policy.commitsHeadline(count: 1).sentence == "1 commit · od nejnovějšího")
+        #expect(Policy.commitsHeadline(count: 7).sentence == "7 commitů · od nejnovějšího")
+    }
+
+    /// **Tvrdí, že se něco NEstalo**: pruh je jediné místo, které o pořadí něco říká, takže se
+    /// s otočením musel změnit. Kdyby v něm zůstalo staré slovo, okno by lhalo o tom, co ukazuje —
+    /// a poznalo by se to jedině přečtením obrazovky, ne z testu na pořadí.
+    @Test("Věta nikde netvrdí staré pořadí")
+    func headlineNeverClaimsTheOldOrder() {
+        for count in [1, 7, Policy.commitListCap] {
+            #expect(!Policy.commitsHeadline(count: count).sentence.contains("nejstarš"),
+                    "věta nad seznamem od nejnovějšího mluví o nejstarším (\(count))")
+        }
     }
 
     /// **Text nesmí tvrdit víc, než data unesou.** GitHub vydá na PR nejvýš 250 commitů, takže

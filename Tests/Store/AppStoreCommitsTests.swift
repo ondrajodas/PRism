@@ -12,7 +12,8 @@ import Testing
 ///   o sobě nemožný stav, takže tiché prázdno by z chyby sítě udělalo nesmysl;
 /// - **zapsat zrušení jako poruchu.** Přepnutí PR není chyba;
 /// - **tahat seznam při každém příchodu na PR**, tedy udělat z commitů polling;
-/// - **nedotáhnout to, co zrušení minulo** — bez toho svítí `Načítám commity…` navždycky.
+/// - **nedotáhnout to, co zrušení minulo** — bez toho svítí `Načítám commity…` navždycky;
+/// - **otočit pořadí už při ukládání.** Pořadí kresby je rozhodnutí `Policy`, ne vlastnost dat.
 @Suite("AppStore — commity PR")
 @MainActor
 struct AppStoreCommitsTests {
@@ -87,6 +88,25 @@ struct AppStoreCommitsTests {
 
         store.commits[first] = nil
         #expect(store.commitsTabState(for: first) == .failed("timeout"))
+    }
+
+    /// **Kdo drží co**: mapa nese pořadí z API (od nejstaršího), stav tabu je v pořadí kresby (od
+    /// nejnovějšího, #316). Kdyby se otáčelo už při ukládání, stalo by se z pořadí kresby uložená
+    /// vlastnost dat — a nešlo by ho pak změnit na jednom místě.
+    @Test("Store drží pořadí z API, tab ho otočí")
+    func keepsTheApiOrderAndFlipsItForTheTab() async {
+        let gateway = gateway(commits: [commit("aaa"), commit("bbb"), commit("ccc")])
+        let store = store(gateway)
+
+        await store.loadCommits(for: first)
+
+        #expect(store.commits[first]?.map(\.sha) == ["aaa", "bbb", "ccc"],
+                "mapa přerovnala to, co přišlo z API")
+        guard case .list(let list, _) = store.commitsTabState(for: first) else {
+            Issue.record("seznam se nedostal do tabu")
+            return
+        }
+        #expect(list.map(\.sha) == ["ccc", "bbb", "aaa"], "tab kreslí v pořadí z API")
     }
 
     // MARK: - Selhání

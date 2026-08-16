@@ -49,8 +49,10 @@ struct GhCommitTests {
         #expect(merge.authorLogin == "imkp1")
     }
 
-    /// Pořadí zůstává, jak přišlo — GitHub vrací commity od nejstaršího a přerovnat je podle data
-    /// by po rebase rozházelo postup, kvůli kterému se ten seznam čte.
+    /// Pořadí zůstává, jak přišlo — GitHub vrací commity od nejstaršího a dekódování s tím nehýbe.
+    /// **Otočení na „nejnovější nahoře“ je rozhodnutí `Policy`** (`commitsNewestFirst`, #316), takže
+    /// kdyby se pořadí měnilo už tady, byla by ta místa dvě. A přerovnat je podle data by po rebase
+    /// rozházelo postup, kvůli kterému se ten seznam čte.
     @Test("Pořadí se nemění")
     func keepsTheOrder() throws {
         let commits = try decode(Fixture.text("gh/pr-commits.json"))

@@ -739,6 +739,29 @@ Rozhodnutí zapsaná dřív, než se psal kód, platí; tohle je to, co se u imp
   proto **+2 body okna**, ne +5, jak vycházelo z repliky, a rozhodně ne +115. Hranice se
   z repliky brát nedají; drží je test.
 
+- **Seznam je od nejnovějšího — otočeno proti tomuhle návrhu i proti mockupu.** Sekce 19 i text
+  výš měly „od nejstaršího, jako na GitHubu, protože PR se takhle čte jako postup, ne jako
+  hromada“. **Ten důvod neobstál na hotové obrazovce**: v tomhle okně se PR nečte od začátku, ale
+  od toho, co přibylo naposled — je to tentýž pohyb, jaký dělá pruh „Od tvé poslední návštěvy“,
+  a tentýž důvod, proč jsou fakta v `Přehledu` nahoře (#280). Postup se z otočeného seznamu přečte
+  pořád, jen odspodu; kdežto „co se stalo teď“ by se v původním pořadí u dlouhého PR muselo
+  doscrollovat. Rozhodnuto po proklikání hotové záložky, ne v návrhu — proto to stojí tady.
+
+  Co u toho platí:
+
+  - **Otáčí se, neřadí** (`Policy.commitsNewestFirst`). Pořadí z API je topologické, takže po
+    rebase nebo cherry-picku má commit uprostřed novější datum než ten za ním; `sorted(by:
+    committedAt)` by ten postup rozházel. Otočení pořadí zachovává, jen ho čte z druhé strany.
+  - **Otáčí se na jednom místě**, v `Policy.commitsTab` — což je jediná cesta seznamu do okna.
+    Gateway i store drží pořadí z API, takže je pořadí kresby rozhodnutí, ne uložená vlastnost dat.
+  - **Pruh nad seznamem to říká textem** (`7 commitů · od nejnovějšího`), takže se musel změnit
+    s ním. Je to jediné místo, které pořadí pojmenovává — stará věta nad otočeným seznamem by byla
+    tvrzení vyvratitelné pohledem o řádek níž.
+  - **Pilulka `hlava` se pořád váže na `headSha`**, ne na první řádek. Nahoře **bývá**, ale je to
+    důsledek toho, jak seznam přišel; po pushnutém commitu a nad stropem API se to rozejde a tehdy
+    se neoznačí nic. Viz bod níž.
+  - **Mockup se kvůli tomu nepřekresluje** — sekce 19 zůstává, jak je, a překreslení řeší #299.
+
 - **`CommitsTabState` nemá `empty` a prázdná odpověď je porucha.** Zadání jmenovalo tři stavy
   („načítá se“, „jeden commit“, „nepodařilo se načíst“) a napsalo, že hláška o prázdnu by lhala —
   neřeklo ale, co se stane, když prázdné pole přesto přijde. Rozhodnuto: **`failed` s vlastní
@@ -747,12 +770,17 @@ Rozhodnutí zapsaná dřív, než se psal kód, platí; tohle je to, co se u imp
   Je to obrácená volba než u `ChecksTabState`, kde prázdno **je** odpověď, a rozdíl je právě v tom,
   jestli ten prázdný stav umí v realitě nastat.
 
-- **Pilulka `hlava` se bere z `headSha`, ne z posledního řádku.** Návrh říká „poslední commit nese
+- **Pilulka `hlava` se bere z `headSha`, ne z pozice řádku.** Návrh říká „poslední commit nese
   pilulku *hlava*“; to platí jedině nad čerstvým seznamem. Po pushnutém commitu je seznam o krok
   pozadu, takže by pilulka ukázala na commit, proti kterému nálezy neplatí — a to je zrovna to,
-  čemu má klíčování `headSha` bránit (tvrdá podmínka č. 5). `Policy.headCommit(in:head:)` proto
-  hledá sha; když ho v seznamu nenajde, **neoznačí nic**. Poslední řádek se bere jen tehdy, když
-  hlava ještě není známá (detail nedorazil), protože to plyne z definice endpointu.
+  čemu má klíčování `headSha` bránit (tvrdá podmínka č. 5). Druhá taková situace je **strop API**:
+  nad 250 commitů chybí v seznamu zrovna ta novější část, takže v něm hlava není vůbec.
+  `Policy.headCommit(in:head:)` proto hledá sha; když ho v seznamu nenajde, **neoznačí nic**.
+
+  Po otočení seznamu na „nejnovější nahoře“ je hlava obvykle **první** řádek — ale je to důsledek
+  toho, jak seznam přišel, ne pravidlo, a v obou situacích výš se to rozejde. Z pořadí se bere
+  jedině tehdy, když hlava ještě není známá (detail nedorazil), protože to plyne z definice
+  endpointu.
 
 - **Řádek nemá šipku `›`, kterou návrh kreslí.** Rozkliknutí je #317, takže by šipka slibovala
   interakci, která tam není — tatáž úvaha jako u checku bez čísla jobu (#214): tlačítko, které nic

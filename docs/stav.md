@@ -1729,7 +1729,7 @@ testy). Testů je **2540**.
 
 ### Tab `Commity` — seznam hotový (#316)
 
-Sedmá záložka detailu PR je v okně: **seznam commitů PR, od nejstaršího**, řádek s obrázkem
+Sedmá záložka detailu PR je v okně: **seznam commitů PR, od nejnovějšího**, řádek s obrázkem
 autora, první řádkou zprávy, jménem, relativním časem a sha, pilulkami `sloučení` a `hlava`
 a pruhem s počtem nad tím. Sedí mezi `Změněnými soubory` a `Konverzací`, tedy nalevo od děliče —
 a **dělič se tím neposunul**, protože se počítá z `isReviewerOutput`, ne z indexu. Data jsou
@@ -1742,16 +1742,27 @@ Specifikace měla z repliky 920 → 1035 bodů okna; naměřeno po jednom bodu �
 a pilulka stojí skoro přesně tolik co ta záložka (110 proti 112 bodům). Absolutní čísla
 ze specifikace byla o 17 bodů níž — replika je odhad, ne měření; **rozdíl** ale odhadla dobře.
 
+**Pořadí se proti návrhu otočilo: nejnovější nahoře.** Mockup (sekce 19) i specifikace měly „od
+nejstaršího, jako na GitHubu, protože PR se čte jako postup“ — ten důvod ale neobstál na hotové
+obrazovce: v okně se PR nečte od začátku, ale od toho, co přibylo naposled, tedy tentýž pohyb jako
+u pruhu `Od tvé poslední návštěvy` a tentýž důvod, proč jsou fakta v `Přehledu` nahoře (#280).
+Otáčí se **na jednom místě** (`Policy.commitsNewestFirst` v `commitsTab`) a **otáčí, neřadí** —
+pořadí z API je topologické, takže řazení podle data by po rebase postup rozházelo. Změnil se s tím
+i pruh nad seznamem (`7 commitů · od nejnovějšího`), protože je to jediné místo, které pořadí
+pojmenovává. Mockup se **nepřekresluje**, to řeší #299.
+
 **Tři rozhodnutí, která zadání upřesnila.** Prázdná odpověď se hlásí jako **porucha**, ne jako
 prázdný stav (pull request bez commitů neexistuje, takže hláška o prázdnu by tvrdila nemožný
 stav — a `CommitsTabState` proto **nemá** `empty`, na rozdíl od `ChecksTabState`). Pilulku `hlava`
-dostává commit, jehož sha se rovná `headSha` z detailu, **ne poslední řádek** — po pushnutém
-commitu je seznam o krok pozadu a nálezy jsou klíčované `headSha`. A **šipka u řádku se
-nenakreslila**, protože rozkliknutí je #317: šipka, za kterou se nic nestane, slibuje interakci,
-která tam není.
+dostává commit, jehož sha se rovná `headSha` z detailu, **ne první řádek** — nahoře sice obvykle
+stojí, ale po pushnutém commitu je seznam o krok pozadu a nad stropem API v něm hlava chybí úplně;
+nálezy jsou klíčované `headSha`, takže se tehdy neoznačí nic. A **šipka u řádku se nenakreslila**,
+protože rozkliknutí je #317: šipka, za kterou se nic nestane, slibuje interakci, která tam není.
 
-Testů je **2579** (+39: pět nových suit — stav tabu, model commitu, dekódování odpovědi, načítání
-ve store a šířka pruhu — plus render sonda a dva případy dopsané do stávajících suit).
+Testů je **2584** (+44: pět nových suit — stav tabu, model commitu, dekódování odpovědi, načítání
+ve store a šířka pruhu — plus render sonda a dva případy dopsané do stávajících suit). Pět z toho
+hlídá pořadí: otočení čerstvého i zastaralého seznamu, že se otáčí a neřadí, že v pruhu nezbylo
+staré slovo, a že mapa ve store drží pořadí z API.
 
 Zbývá rozkliknutí commitu na jeho diff (**#317**, `commits/{sha}` s
 `Accept: application/vnd.github.diff`, 0,99 s, unified diff pro dnešní `DiffParser`) a smrsknutí

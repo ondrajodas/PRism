@@ -6,9 +6,10 @@ import SwiftUI
 /// jeden slitý diff, ze kterého je vidět výsledek, ne cesta. Otázka „proč tenhle řádek zmizel“ má
 /// odpověď v jednotlivých commitech a dneska se hledá v prohlížeči.
 ///
-/// **Od nejstaršího**, jak to vrací GitHub — PR se takhle čte jako postup, ne jako hromada.
-/// Nepřerovnává se ani podle data: po rebase nebo cherry-picku je datum starší než pořadí a postup
-/// by se rozházel.
+/// **Od nejnovějšího** — pořadí přiděluje `Policy.commitsNewestFirst`, tenhle typ jen kreslí, co
+/// dostane. Je to otočení proti návrhu (sekce 19 měla „od nejstaršího, jako na GitHubu“) a důvod
+/// je u té funkce. Nepřerovnává se ani podle data: po rebase nebo cherry-picku je datum starší než
+/// pořadí, takže se otáčí to topologické, neřadí se podle času.
 ///
 /// **Co v řádku není:** počet souborů ani `+X −Y`. Seznam z GitHubu je nenese (`stats` ani `files`
 /// v odpovědi nejsou, ověřeno) a dotahovat je po commitu je N+1 past — u sedmi commitů sedm dalších
@@ -21,8 +22,9 @@ import SwiftUI
 struct CommitListView: View {
     let commits: [PullRequestCommit]
     /// Hlava PR z detailu. `nil` = detail ještě nedorazil; kdo pilulku `hlava` dostane, rozhoduje
-    /// `Policy.headCommit(in:head:)`, ne pozice v poli — po pushnutém commitu by poslední řádek
-    /// tvrdil něco, co o něm neplatí.
+    /// `Policy.headCommit(in:head:)`, ne pozice v poli — **„nahoře“ a „hlava“ nejsou totéž**, jen
+    /// nad čerstvým seznamem vycházejí nastejno. Po pushnutém commitu by první řádek tvrdil něco,
+    /// co o něm neplatí.
     var head: String?
 
     var body: some View {
@@ -195,8 +197,10 @@ struct CommitListView: View {
 }
 
 #Preview {
+    // Přes `Policy.commitsNewestFirst`, ne ručně otočené pole: náhled má ukázat totéž pořadí jako
+    // okno, a jediné místo, kde se o něm rozhoduje, je `Policy`.
     CommitListView(
-        commits: [
+        commits: Policy.commitsNewestFirst([
             PullRequestCommit(
                 sha: "a1c9f0431f6c0a2a7f2f0a1b3c4d5e6f70819293",
                 message: "chore: bump php-vault-client to 4.2",
@@ -224,7 +228,7 @@ struct CommitListView: View {
                 committedAt: Date(timeIntervalSinceNow: -3_600),
                 isMerge: false
             ),
-        ],
+        ]),
         head: "e8d4a6031f6c0a2a7f2f0a1b3c4d5e6f70819294"
     )
     .frame(width: 760, height: 260)

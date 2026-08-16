@@ -933,7 +933,7 @@ struct PullRequestDetailView: View {
         )
     }
 
-    /// Tab `Commity` (#316) — seznam commitů PR, od nejstaršího.
+    /// Tab `Commity` (#316) — seznam commitů PR, **od nejnovějšího** (`Policy.commitsNewestFirst`).
     ///
     /// **Tři stavy, a prázdný mezi nimi není**: pull request bez commitů neexistuje, takže by
     /// klidná hláška o prázdnu tvrdila něco, co platit nemůže — prázdná odpověď je proto porucha

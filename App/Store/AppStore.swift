@@ -791,7 +791,9 @@ final class AppStore {
     ///
     /// **Prázdné pole tady nemá význam „PR nemá commity“** — takový pull request neexistuje. Je to
     /// rozdíl proti `checks`, kde prázdno je odpověď; rozhoduje o něm `Policy.commitsTab`, ne tenhle
-    /// stav. Mapa jen věrně nese to, co přišlo.
+    /// stav. Mapa jen věrně nese to, co přišlo — **včetně pořadí**: drží se pořadí z API (od
+    /// nejstaršího) a otáčí ho až `Policy.commitsNewestFirst` cestou do tabu. Kdyby se otočilo
+    /// tady, byla by z pořadí kresby uložená vlastnost dat a nešlo by ho změnit na jednom místě.
     var commits: [PRIdentifier: [PullRequestCommit]] = [:]
 
     /// Proč se commity nepodařilo načíst (#316). Chybějící klíč = poslední pokus prošel.

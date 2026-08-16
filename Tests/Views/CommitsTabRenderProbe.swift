@@ -221,7 +221,9 @@ struct CommitsTabRenderProbe {
         state: .open
     )
 
-    /// Hlava sedí na posledním commitu, takže nese pilulku `hlava`.
+    /// Hlava sedí na **posledním commitu z API**, tedy na tom, který tab kreslí nahoře (#316) —
+    /// nese pilulku `hlava`. Že „nahoře“ a „hlava“ nejsou totéž, tvrdí `CommitsTabStateTests`;
+    /// sonda je od toho, aby se ta mátová pilulka dala v seznamu **najít okem**.
     private static let detail = PullRequest(
         id: summary.id,
         title: summary.title,
@@ -245,8 +247,10 @@ struct CommitsTabRenderProbe {
          	}
         """
 
-    /// Commity ze skutečného PR (`cli/cli#13899`): sedm, z toho tři sloučení. Poslední je hlava.
-    /// Jeden má `authorLogin == nil`, aby byl na snímku vidět i monogram místo obrázku.
+    /// Commity ze skutečného PR (`cli/cli#13899`): sedm, z toho tři sloučení. **V pořadí z API**,
+    /// tedy od nejstaršího — store drží, co přišlo, a tab to otočí sám (`Policy.commitsNewestFirst`),
+    /// takže na snímku je poslední z nich nahoře. Poslední je zároveň hlava. Jeden má
+    /// `authorLogin == nil`, aby byl na snímku vidět i monogram místo obrázku.
     private static let commits: [PullRequestCommit] = [
         commit("c82266c2dcc3285033605501837434af1faeddfe",
                "Warn instead of failing when issue fields can't be set", days: -23),

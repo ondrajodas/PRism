@@ -1629,15 +1629,32 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     tvrdila nemožný stav. Vedle výčtu stojí test, který tvrdí, že se něco **NEstalo**: prázdné pole
     se nikdy nedostane do `list`, ať je `failure` jakékoli. Kdyby `CommitsTabState` dostal `empty`,
     spadne to tam, ne až v okně.
+  - **Pořadí: nejnovější nahoře** (`Policy.commitsNewestFirst` a `commitsTab`). Tři případy, protože
+    otočení se dá pokazit třemi způsoby. Že **co přišlo z API poslední, je v tabu první** — a totéž
+    nad zastaralým seznamem, jinak by se otáčel jen ten čerstvý a věta nad ním by mluvila o tom
+    druhém. Že se **otáčí, neřadí**: nad seznamem, kde má prostřední commit nejnovější datum
+    (cherry-pick), musí zůstat topologické pořadí pozpátku — `sorted(by: committedAt)` ten test
+    položí. A ve store, že **mapa drží pořadí z API** a otáčí až tab; kdyby se otáčelo při ukládání,
+    stalo by se z pořadí kresby uložená vlastnost dat.
+
+    **Vyzkoušené vložením regrese, obojí zvlášť**: `commits.reversed()` vyměněné za `commits` položí
+    pět testů (včetně toho na pilulku `hlava`), a stará věta `od nejstaršího` v pruhu položí dva
+    další. Jsou to dvě různé regrese schválně — pořadí a věta o pořadí se dají rozejít každé na svou
+    stranu a jedna sada by tu druhou nechytila.
   - **Která pilulka `hlava`** (`Policy.headCommit(in:head:)`) — druhý nejcennější test sady, protože
-    to je **tvrzení**, ne dekorace: nálezy jsou klíčované `headSha`. Hlídají se tři případy:
-    hlava uprostřed seznamu se najde (takže se nebere poslední), hlava **mimo seznam** se neoznačí
-    vůbec (po pushnutém commitu je seznam o krok pozadu) a bez známé hlavy se vezme poslední, jak
-    to plyne z definice endpointu.
+    to je **tvrzení**, ne dekorace: nálezy jsou klíčované `headSha`. Po otočení seznamu je ta past
+    horší, ne menší: hlava obvykle **je** nahoře, takže by se prohlédnutí `first` místo hledání sha
+    nepoznalo. Test proto hledá hlavu **všude jinde než nahoře** — uprostřed seznamu i na jeho
+    konci —, hlava **mimo seznam** se neoznačí vůbec (po pushnutém commitu je seznam o krok pozadu,
+    nad stropem API v něm hlava chybí) a bez známé hlavy se vezme **první**, jak to plyne z definice
+    endpointu a otočení.
   - **Skloňování** — `1 commit` / `2 commity` / `7 commitů`, k tomu `21 commitů` (v češtině nikoli
     `commit`) a nula. „PR má jeden commit“ je jeden ze tří stavů, které se podle zadání nesmí slít,
     a `1 commitů` by z něj udělalo chybu sazby. K tomu **strop API**: nad 250 commitů věta řekne,
-    že seznam nemusí být celý — text, který by jinak tvrdil víc, než data unesou.
+    že seznam nemusí být celý — text, který by jinak tvrdil víc, než data unesou. A k tomu jeden
+    test, který tvrdí, že se něco **NEstalo**: v žádné podobě té věty nesmí zbýt „nejstarší“. Pruh
+    je jediné místo, které pořadí pojmenovává, takže rozejít se s ním umí potichu — pozná se to
+    jedině přečtením obrazovky, ne z testu na pořadí.
   - **Dekódování odpovědi** (`GhCommitTests`) nad **skutečnou** fixture `gh/pr-commits.json`
     (`cli/cli#13899` — sedm commitů, z toho tři sloučení; veřejné repo schválně). Tvrdí se čtyři
     věci: seznam se přeloží na řádky včetně `parents` → `isMerge`, **pořadí se nemění**, chybějící
@@ -1654,7 +1671,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     zrušení se nezapisuje jako chyba, selhaný pokus **nezahodí** starou sadu, `Zkusit znovu`
     poruchu přepíše, spadlý detail načtení nezastaví a **zrušené načtení se dotáhne po návratu na
     PR**. Šestý je ten, který tvrdí, že se něco NEstalo: `loadDetail` třikrát za sebou = **jedno**
-    volání `fetchCommits`, jinak by z commitů byl polling.
+    volání `fetchCommits`, jinak by z commitů byl polling. Sedmý hlídá **hranici mezi daty
+    a kresbou**: mapa nese pořadí z API, stav tabu je otočený.
   - **Šířka tabu** — `Commity` jsou čtvrtý tab bez panelu, takže mají vlastní případ
     v `PanelFreeTabWidthTests` (pásmo 648–1800). Perou se o šířku dvě věci naráz: dlouhá první
     řádka zprávy (`Merge branch 'trunk' into fix/13804-…`) a pilulka se sha u pravé hrany. Zpráva
@@ -1701,7 +1719,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 - **Sonda tabu `Commity` (#316)** — `CommitsTabRenderProbe`, gated `PRISM_MEASURE`. Nic netvrdí;
   vyrendruje **detail PR v tabu `Commity` ve všech podobách stavu** (nenačteno, seznam, porucha,
   zastaralý seznam, **PR s jedním commitem**) ve dvou šířkách, seznam navíc v **tmavém režimu**,
-  a k tomu **pruh se sedmi záložkami přes pásmo šířek** 647–1047 bodů tabu.
+  a k tomu **pruh se sedmi záložkami přes pásmo šířek** 647–1047 bodů tabu. Scénář drží commity
+  v pořadí z API, takže je na snímcích vidět i to, že je tab **otáčí sám** — nejnovější nahoře,
+  a mátová pilulka `hlava` s ním.
 
   Podob je pět, i když `CommitsTabState` má tři případy: `list` se kreslí dvakrát (se zastaralostí
   a bez ní) a `jeden-commit` je tentýž stav s jinými daty — je to ale zrovna to, co se z čísel

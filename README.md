@@ -242,18 +242,23 @@ to tentýž pohyb jako u `Konverzace` (#183) a `Kontrol` (#215): další věc, k
 odcházelo. V pruhu proto sedí **hned vedle `Změněných souborů`** — obojí odpovídá na „co se
 v kódu změnilo“, jen jednou naráz a jednou po krocích.
 
-**Řádek na commit, od nejstaršího**, jak to má i GitHub: PR se takhle čte jako postup, ne jako
-hromada. Nepřerovnává se ani podle data — po rebase nebo cherry-picku je datum starší než pořadí.
-V řádku je obrázek autora (monogram, dokud nedorazí nebo když k commitu není účet), **první řádka
-zprávy**, jméno autora, relativní čas a zkrácené sha; celá zpráva se z řádku dá zkopírovat spolu
-s ním. Nad seznamem je pruh s počtem (`7 commitů · od nejstaršího`) a vpravo `hlava` se sha, proti
-které platí nálezy.
+**Řádek na commit, od nejnovějšího.** Návrh měl původně pořadí z GitHubu (od nejstaršího, „PR se
+takhle čte jako postup“), jenže v okně se PR nečte od začátku — čte se od toho, co přibylo
+naposled. Je to tentýž pohyb, jaký dělá pruh `Od tvé poslední návštěvy`, a tentýž důvod, proč jsou
+fakta v `Přehledu` nahoře; postup se z otočeného seznamu přečte pořád, jen odspodu. **Otáčí se,
+neřadí:** pořadí z API je topologické, takže přerovnat ho podle data by po rebase nebo cherry-picku
+ten postup rozházelo. V řádku je obrázek autora (monogram, dokud nedorazí nebo když k commitu není
+účet), **první řádka zprávy**, jméno autora, relativní čas a zkrácené sha; celá zpráva se z řádku dá
+zkopírovat spolu s ním. Nad seznamem je pruh s počtem (`7 commitů · od nejnovějšího`) a vpravo
+`hlava` se sha, proti které platí nálezy.
 
 **Dvě pilulky, a obě něco tvrdí.** `sloučení` u commitu s víc rodiči, protože jeho diff se počítá
 proti prvnímu rodiči a umí vyjít prázdný — bez upozornění dopředu by prázdný diff vypadal jako
 porucha. `hlava` u toho commitu, který je **opravdu** hlavou PR: bere se z `headSha` v detailu, ne
-z pozice v seznamu, takže po pushnutém commitu (kdy je seznam o krok pozadu) se neoznačí nikdo.
-Nálezy jsou klíčované `headSha`, takže by pilulka na špatném řádku byla tvrzení, ne dekorace.
+z pozice v seznamu. Nahoře **bývá**, ale je to důsledek toho, jak seznam přišel, ne pravidlo — po
+pushnutém commitu (kdy je seznam o krok pozadu) i nad stropem API (kde novější část chybí) se
+neoznačí nikdo. Nálezy jsou klíčované `headSha`, takže by pilulka na špatném řádku byla tvrzení,
+ne dekorace.
 
 **Panel s nálezy se v téhle záložce nekreslí** — je čtvrtá taková po #294 a má vlastní důvod:
 u staršího commitu by panel ukazoval nálezy k **jinému kódu**, protože platí proti `headSha`.

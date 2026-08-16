@@ -188,10 +188,12 @@ struct GhGateway: GitHubGateway {
             "api", "repos/\(id.repo)/pulls/\(id.number)/commits?per_page=100", "--paginate",
         ], phase: "Commity pull requestu", decodedAs: [GhCommit].self)
 
-        // **Neřadí se tady ani nikde jinde.** GitHub vrací commity topologicky od nejstaršího, což
-        // je zrovna to pořadí, ve kterém se PR čte jako postup; přerovnat je podle data by po
-        // rebase nebo cherry-picku ten postup rozházelo. Zahazují se jen položky bez sha, ze
-        // kterých se řádek udělat nedá.
+        // **Neřadí se tady, a nikde jinde ani podle data.** GitHub vrací commity topologicky od
+        // nejstaršího a přerovnat je podle času by po rebase nebo cherry-picku ten postup rozházelo.
+        // Pořadí, ve kterém se kreslí, je rozhodnutí, ne tvar odpovědi: gateway vydá, co přišlo,
+        // a `Policy.commitsNewestFirst` to na jednom místě **otočí** (nejnovější nahoře, #316) —
+        // topologické pořadí se tím zachová, jen se čte z druhé strany. Zahazují se jen položky
+        // bez sha, ze kterých se řádek udělat nedá.
         return items.compactMap(\.pullRequestCommit)
     }
 
