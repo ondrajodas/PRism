@@ -810,6 +810,18 @@ final class AppStore {
     /// prázdno a porucha jsou tři různé odpovědi a nesmí se slít.
     var commitFailures: [PRIdentifier: String] = [:]
 
+    /// Který commit je v tabu `Commity` rozkliknutý (#317). Chybějící klíč = v tabu je seznam.
+    ///
+    /// **Jen žádost okna**, ne tvrzení o PR: že ten commit na PR pořád je, rozhoduje
+    /// `Policy.openCommit(_:in:)` proti čerstvému seznamu.
+    var openCommits: [PRIdentifier: String] = [:]
+
+    /// Poslední stažený diff commitu, **nejvýš jeden na PR** (#317).
+    ///
+    /// Strop je v klíči schválně — proč, je u `CommitDiff`. Návratem do seznamu se nezahazuje:
+    /// je to zároveň paměť na to, kde v seznamu člověk byl (`lastOpenedCommit(in:)`).
+    var commitDiffs: [PRIdentifier: CommitDiff] = [:]
+
     /// Který check je v tabu `Kontroly` rozbalený (#214), na PR nejvýš jeden.
     ///
     /// Dva otevřené konce logu pod sebou znamenají scrollování přes to, co se zrovna nečte — a dvě
@@ -1335,6 +1347,15 @@ final class AppStore {
         // výš. Uklízí se **spolu**, jinak by po vypadlém PR zbyl osamocený důvod poruchy.
         commits = commits.filter { wantedPullRequests.contains($0.key) }
         commitFailures = commitFailures.filter { wantedPullRequests.contains($0.key) }
+
+        // Rozkliknutý commit a jeho diff (#317). Diff jsou megabajty, takže jde stejnou cestou
+        // jako diff PR — a rozdělané stahování přežije ze stejného důvodu: doběhlé volání by si
+        // ho zapsalo zpátky. Otevřený commit se uklízí **spolu s ním**, jinak by po vrácení PR do
+        // seznamu tab rovnou skočil do commitu, o který si nikdo neřekl.
+        openCommits = openCommits.filter { wantedPullRequests.contains($0.key) }
+        commitDiffs = commitDiffs.filter {
+            wantedPullRequests.contains($0.key) || $0.value.content == .loading
+        }
 
         // Rozbalený check a jeho detail (#214). Stahování se **ruší**, ne opouští: osmimegový log
         // by dojel do stavu, který už nikdo nečte. Text se u toho zahazuje schválně — nemá přežít

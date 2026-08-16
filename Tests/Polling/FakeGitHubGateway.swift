@@ -138,6 +138,52 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return commits
     }
 
+    // MARK: - Diff commitu (#317)
+
+    /// Co vrátí `fetchDiff(repo:commit:)`. Výchozí **prázdný text** není lenost: prázdná odpověď
+    /// je u commitu platný výsledek (změřeno na `git commit --allow-empty`), takže je to zároveň
+    /// ten stav, který se nesmí splést s poruchou.
+    var commitDiff = ""
+    var commitDiffFailure: (any Error)?
+    /// Na které sha se kdo ptal, v pořadí. Na počtu stojí test, že se stažený diff **drží** —
+    /// druhé otevření téhož commitu se ptát nemá.
+    var commitDiffRequests: [String] { lock.withLock { commitDiffsAsked } }
+
+    private var commitDiffsAsked: [String] = []
+
+    /// Závora **před** vrácením diffu. Na ní se dá pozorovat mezistav `loading`.
+    var commitDiffGate: AsyncGate?
+
+    func fetchDiff(repo: RepoID, commit sha: String) async throws -> String {
+        lock.withLock { commitDiffsAsked.append(sha) }
+        if let commitDiffGate { await commitDiffGate.wait() }
+        if let commitDiffFailure { throw commitDiffFailure }
+        return commitDiff
+    }
+
+    /// Obsah souborů v konkrétním commitu (#317) — v pořadí, poslední se opakuje. Vlastní pole
+    /// vedle `files`, protože „soubor na hlavě PR“ a „soubor v commitu“ jsou dvě různé otázky
+    /// a test má poznat, kterou se kdo ptal.
+    var commitFiles: [Result<String, any Error>] = []
+    /// Na co se kdo ptal — z toho se pozná, že se rozbalený kontext bere **z toho commitu**,
+    /// ne z hlavy PR.
+    var commitFileRequests: [(repo: RepoID, path: String, commit: String)] {
+        lock.withLock { commitFilesAsked }
+    }
+
+    private var commitFilesAsked: [(repo: RepoID, path: String, commit: String)] = []
+
+    func fetchFile(repo: RepoID, path: String, at commit: String) async throws -> String {
+        let index: Int = lock.withLock {
+            commitFilesAsked.append((repo, path, commit))
+            return commitFilesAsked.count - 1
+        }
+        guard !commitFiles.isEmpty else {
+            throw GitHubError.notFound("Fake gateway obsah souboru v commitu nezná.")
+        }
+        return try commitFiles[min(index, commitFiles.count - 1)].get()
+    }
+
     // MARK: - Detail checku (#214)
 
     /// Co vrátí `fetchAnnotations`. Prázdno je běžný stav — workflow anotace emitovat nemusí.

@@ -16,9 +16,9 @@ import SwiftUI
 /// volání k jedné otevřené záložce. Objeví se až v hlavičce rozkliknutého commitu (#317), kde se
 /// spočítají ze staženého diffu zadarmo.
 ///
-/// **Řádek se zatím nedá rozkliknout, a proto se u něj nekreslí šipka.** Návrh (sekce 19) ji má,
-/// ale diff commitu je #317; šipka, za kterou se nic nestane, slibuje interakci, která tam není —
-/// je to tentýž důvod, proč se v `Kontrolách` nenabízí detail u checku bez čísla jobu.
+/// **Řádek se dá rozkliknout od #317** — a teprve tím dostal šipku `›`, kterou návrh kreslí.
+/// Do té doby žádná nebyla schválně: šipka, za kterou se nic nestane, slibuje interakci, která
+/// tam není. Kliknutí **přepne obsah tabu** (`CommitDiffView`), seznam zmizí.
 struct CommitListView: View {
     let commits: [PullRequestCommit]
     /// Hlava PR z detailu. `nil` = detail ještě nedorazil; kdo pilulku `hlava` dostane, rozhoduje
@@ -26,10 +26,25 @@ struct CommitListView: View {
     /// nad čerstvým seznamem vycházejí nastejno. Po pushnutém commitu by první řádek tvrdil něco,
     /// co o něm neplatí.
     var head: String?
+    /// Naposledy rozkliknutý commit (#317) — podbarvený řádek (`.crow.on`) a **místo, na které se
+    /// seznam po návratu odscrolluje**. `nil` = ještě se nikam nešlo.
+    var opened: String?
+    /// Rozkliknutí řádku. `nil` = seznam je jen k prohlížení, řádky pak nejsou tlačítka a nemají
+    /// šipku — na tom stojí náhledy a měření šířky, které store nemají.
+    var open: ((PullRequestCommit) -> Void)?
 
     var body: some View {
         ScrollView {
-            content
+            // Návrat z diffu commitu musí skončit **tam, kde člověk byl**. Scrolluje se na
+            // rozkliknutý řádek, ne na uloženou pozici v bodech: pozice v líném seznamu po
+            // přestavění obsahu nesedí, kdežto řádek je přesně to místo, ze kterého se odešlo.
+            ScrollViewReader { proxy in
+                content
+                    .task(id: opened) {
+                        guard let opened else { return }
+                        proxy.scrollTo(opened, anchor: .center)
+                    }
+            }
         }
         // Sha a zprávy si člověk kopíruje do issue a do commit messages; je to pár řádků textu,
         // ne líný seznam tisíců `Text`ů jako diff.
@@ -53,13 +68,38 @@ struct CommitListView: View {
         LazyVStack(alignment: .leading, spacing: 0) {
             headline
             ForEach(commits) { commit in
-                row(commit, isHead: commit.id == head?.id)
+                openable(commit, isHead: commit.id == head?.id)
+                    // Kotva pro návrat z diffu commitu. Na `ForEach`i, ne na řádku uvnitř:
+                    // `scrollTo` hledá id položky seznamu, a tou je celá dvojice řádek + linka.
+                    .id(commit.id)
                 if commit.id != last {
                     Rectangle().fill(Palette.lineSoft).frame(height: 1)
                 }
             }
         }
         .filling(alignment: .topLeading)
+    }
+
+    /// Řádek jako tlačítko, když je kam kliknout — jinak holý řádek.
+    ///
+    /// **`Button` se stylem `.plain`**, ne `onTapGesture`: nese zvýraznění při zmáčknutí, chodí
+    /// z klávesnice a čtečka ho přečte jako akci. Podbarvení rozkliknutého řádku je `accentWeak`
+    /// z návrhu (`.crow.on`) a drží se **i po návratu**, protože je to zároveň značka „tady jsem
+    /// byl“.
+    @ViewBuilder private func openable(_ commit: PullRequestCommit, isHead: Bool) -> some View {
+        let isOpen = commit.sha == opened
+        if let open {
+            Button { open(commit) } label: {
+                row(commit, isHead: isHead, showsChevron: true)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .background(isOpen ? Palette.accentWeak : .clear)
+            .help("Ukázat diff tohohle commitu")
+        } else {
+            row(commit, isHead: isHead, showsChevron: false)
+                .background(isOpen ? Palette.accentWeak : .clear)
+        }
     }
 
     /// Který řádek nese pilulku `hlava`. Rozhoduje `Policy`, ne pozice v poli.
@@ -111,7 +151,7 @@ struct CommitListView: View {
     }
 
     /// Řádek commitu (`.crow`): obrázek autora, první řádka zprávy, autor s časem a sha.
-    private func row(_ commit: PullRequestCommit, isHead: Bool) -> some View {
+    private func row(_ commit: PullRequestCommit, isHead: Bool, showsChevron: Bool) -> some View {
         HStack(alignment: .center, spacing: 11) {
             // **Monogram se bere ze jména, ne z přezdívky**, i když účet známe: dokud obrázek
             // nedorazí (a u `author: null` nedorazí nikdy), je monogram tím, co v kolečku stojí —
@@ -132,6 +172,13 @@ struct CommitListView: View {
                 .background(Palette.raised, in: .rect(cornerRadius: 5))
                 .overlay { RoundedRectangle(cornerRadius: 5).strokeBorder(Palette.lineSoft, lineWidth: 1) }
                 .help("Celý sha: \(commit.sha)")
+            if showsChevron {
+                Text(verbatim: "›")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Palette.ink3)
+                    // Šipka je značka, ne sdělení — čtečka už akci přečte z tlačítka kolem.
+                    .accessibilityHidden(true)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
@@ -151,9 +198,9 @@ struct CommitListView: View {
             // Bez toho by dlouhý `Merge branch … into …` roztáhl řádek na tři.
             .lineLimit(1)
             .truncationMode(.tail)
-            // **Uříznutý text musí jít někde dočíst.** Dokud rozkliknutí commitu není (#317), je
-            // tooltip jediná cesta k tělu zprávy — a zároveň jediný důvod, proč model drží celou
-            // `message`, ne jen `subject`.
+            // **Uříznutý text musí jít někde dočíst.** Od #317 je hlavní cestou rozkliknutí, kde
+            // je zpráva celá i s tělem; tooltip zůstává jako ta levnější — najet myší je míň než
+            // přepnout obsah tabu kvůli jedné řádce.
             .help(subject.isEmpty ? "Commit nemá zprávu" : commit.message)
     }
 
@@ -229,7 +276,9 @@ struct CommitListView: View {
                 isMerge: false
             ),
         ]),
-        head: "e8d4a6031f6c0a2a7f2f0a1b3c4d5e6f70819294"
+        head: "e8d4a6031f6c0a2a7f2f0a1b3c4d5e6f70819294",
+        opened: "9f3d7c21f6c0a2a7f2f0a1b3c4d5e6f708192939",
+        open: { _ in }
     )
     .frame(width: 760, height: 260)
 }

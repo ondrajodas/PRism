@@ -1809,9 +1809,8 @@ případy dopsané do stávajících suit. Pět z těch čtyřiačtyřiceti hlí
 i zastaralého seznamu, že se otáčí a neřadí, že v pruhu nezbylo staré slovo, a že mapa ve store drží
 pořadí z API.
 
-Zbývá rozkliknutí commitu na jeho diff (**#317**, `commits/{sha}` s
-`Accept: application/vnd.github.diff`, 0,99 s, unified diff pro dnešní `DiffParser`) a smrsknutí
-pruhu na ikony v úzkém okně (**#318**) — v okně 700 se pruh pořád zalamuje, stejně jako před #316.
+Rozkliknutí commitu přidalo **#317** (níž); zbývá smrsknutí pruhu na ikony v úzkém okně
+(**#318**) — v okně 700 se pruh pořád zalamuje, stejně jako před #316.
 
 ### #320 — časový limit běhu do nastavení
 
@@ -1844,6 +1843,58 @@ který tvrdí víc, než data unesou.
 
 Testů je **2663**; regrese ověřena vložením tří naráz (posunutá výchozí hodnota, runner s vlastní
 konstantou, `resolved` bez sráření) — padne 18 tvrzení v 10 testech.
+
+### Tab `Commity` — diff jednoho commitu (#317)
+
+Kliknutí na řádek v tabu **přepne obsah tabu**: seznam zmizí a diff toho jednoho commitu dostane
+celou plochu, jako to má GitHub. Nahoře hlavička se sha, zprávou i jejím tělem, autorem, časem,
+počtem souborů, `+X −Y` a cestou zpět (`‹ Commity 2 ze 7`, plus `⎋`); pod ní `DiffView`, tedy oba
+pohledy, word-level zvýraznění, sbalování, rozbalování kontextu, kopírování i strom souborů (`⌘1`).
+Počty jsou **ze staženého diffu**, takže nestojí volání navíc.
+
+**Je to prohlížeč, ne review — a je to vidět z typu, ne jen z chování.** `CommitDiffView` nedostane
+`AppStore` ani identifikátor PR, takže nemá čím vyrobit bublinu nálezu ani rozdělaný komentář.
+Důvody jsou dva a oba jsou tvrdé: komentář ke commitu by potřeboval **jiný klíč draftu** a **pátou
+metodu v `ReviewPublishing`** (podmínka č. 1), a nálezy jsou klíčované `headSha` (podmínka č. 5),
+takže by u staršího commitu ukazovaly na jiný kód. Tab se tvrdé podmínky č. 1 **nedotýká vůbec**:
+`GitHubGateway` zůstal bez zápisových metod a `grep ReviewPublishing App/` vrací tentýž výčet.
+V hlavičce je jedna tichá věta s odkazem do `Změněných souborů`, protože kdo přijde odtamtud, bude
+do řádku chtít kliknout.
+
+**Prázdný diff vychází z prázdných commitů, ne ze sloučení — a to je oprava zadání, ne detail.**
+Zadání i návrh čekaly prázdno hlavně u sloučení. Změřeno na `keboola/job-queue#727`: tři sloučení
+vrátila diff proti prvnímu rodiči o **842 B, 514 kB a 760 kB**, kdežto tři commity z
+`git commit --allow-empty` (přetáčení CI) vrátily **nula bajtů** s nulovým návratovým kódem.
+Prázdno je tedy stav odpovědi, ne vlastnost sloučení — obě vysvětlující věty proto musí obstát samy
+o sobě a obě říkají „není to porucha“.
+
+**Dvě čtecí metody gateway navíc, ne jedna společná.** `fetchDiff(repo:commit:)` vypadá jako totéž
+co rozsah z #284 (týž `gh api`, táž hlavička), ale `compare/<a>...<b>` počítá od společného předka,
+kdežto `commits/<sha>` je diff proti **prvnímu rodiči** — jedno napsané přes druhé by u sloučení
+tiše ukázalo i přisloučenou větev. Sdílené je proto jen složení příkazu. Totéž u
+`fetchFile(repo:path:at:)`: **ref není parametr**, protože „soubor na hlavě PR“ a „soubor v tomhle
+commitu“ mají jinou záruku. Gateway má teď **čtrnáct** čtecích metod a pořád ani jednu zápisovou.
+
+**Rozbalování kontextu se muselo klíčovat commitem.** Do #317 se obsah tahal z
+`refs/pull/<n>/head`, takže by v diffu staršího commitu byly odkryté řádky z **dnešní** hlavy —
+posunuté o všechno, co mezitím přibylo, a přitom naprosto věrohodné. `FileExpansionKey` proto nese
+`commit: String?`; tentýž klíč drží i **sbalené soubory**, takže se sbalení mezi diffem PR a diffem
+commitu nesdílí.
+
+**Dvě rozhodnutí o paměti a o návratu.** V okně se drží **nejvýš jeden diff commitu na PR** (klíčem
+je pull request, sha je v hodnotě) — mapa klíčovaná `(PR, sha)` by u PR se stovkou commitů rostla
+o každý proklik. A „kde v seznamu jsem byl“ se **neukládá zvlášť**: je to sha posledního staženého
+diffu, tedy táž hodnota, ze které se diff kreslí. Řádek se podle ní podbarví a seznam na něj
+odscrolluje.
+
+Testů je **2696**; tohle issue z nich přidalo **33**. Nejcennější je `CommitDiffReadOnlyTests` —
+tvrdí, že se v tabu **nedá nic napsat**, a to ve třech vrstvách (co se `DiffView`u předá, co z toho
+vyjde v řádcích, a že žádný řádek nenabídne akci), každá s protipólem v režimu review, aby
+neprocházela naprázdno. Ověřeno vložením regrese: dosazené `findings:` a `canCompose: true` položí
+tři testy z pěti a 50 tvrzení. Druhá a třetí regrese (obsah z hlavy PR místo z commitu, `unfoldAll`
+bez filtru na commit) padnou v `AppStoreCommitDiffTests`.
+
+Zbývá smrsknutí pruhu záložek na ikony v úzkém okně (**#318**).
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

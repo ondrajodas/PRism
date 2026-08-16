@@ -104,19 +104,41 @@ struct GhGateway: GitHubGateway {
         // Proti hlavě, která je potomkem té viděné, dá trojtečka přesně to, co se pushnulo;
         // po přepsané historii by dala víc, a tam se `Ukázat, co přibylo` nenabízí
         // (`Policy.incrementalDiff`).
-        try await run([
-            "api", "repos/\(repo)/compare/\(base)...\(head)",
-            "--header", "Accept: application/vnd.github.diff",
-        ])
+        try await diffText(at: "repos/\(repo)/compare/\(base)...\(head)")
+    }
+
+    func fetchDiff(repo: RepoID, commit sha: String) async throws -> String {
+        // **`commits/<sha>`, ne `compare/<sha>^...<sha>`** — proč, stojí u protokolu: trojtečka
+        // počítá od společného předka, takže by u sloučení ukázala i přisloučenou větev.
+        try await diffText(at: "repos/\(repo)/commits/\(sha)")
+    }
+
+    /// Syrový unified diff z `gh api`. Jediný rozdíl mezi rozsahem (#284) a commitem (#317) je
+    /// cesta, takže hlavička i způsob spuštění bydlí na jednom místě — dvě kopie by se rozešly
+    /// při první úpravě (třeba kdyby přibyl parametr proti přejmenováním).
+    private func diffText(at path: String) async throws -> String {
+        try await run(["api", path, "--header", "Accept: application/vnd.github.diff"])
     }
 
     func fetchFile(id: PRIdentifier, path: String) async throws -> String {
         // `refs/pull/<n>/head` má na GitHubu každý PR včetně forků, takže se `headSha`
-        // shánět nemusí — ověřeno na živém API. Cesta se procentuje: mezera v názvu
-        // souboru by jinak URL rozbila.
+        // shánět nemusí — ověřeno na živém API.
+        try await fileText(repo: id.repo, path: path, ref: "refs/pull/\(id.number)/head")
+    }
+
+    func fetchFile(repo: RepoID, path: String, at commit: String) async throws -> String {
+        // Sha je platná hodnota `ref` u `contents` (ověřeno na živém API), takže se soubor dá
+        // přečíst tak, jak vypadal v tom commitu — a rozbalený kontext pak sedí na čísla řádků
+        // z jeho hunků.
+        try await fileText(repo: repo, path: path, ref: commit)
+    }
+
+    /// Obsah souboru na dané referenci. Cesta se procentuje: mezera v názvu souboru by jinak
+    /// URL rozbila.
+    private func fileText(repo: RepoID, path: String, ref: String) async throws -> String {
         let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
         return try await run([
-            "api", "repos/\(id.repo)/contents/\(encoded)?ref=refs/pull/\(id.number)/head",
+            "api", "repos/\(repo)/contents/\(encoded)?ref=\(ref)",
             "--header", "Accept: application/vnd.github.raw",
         ])
     }

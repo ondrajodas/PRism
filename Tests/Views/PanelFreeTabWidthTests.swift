@@ -47,6 +47,52 @@ struct PanelFreeTabWidthTests {
         }
     }
 
+    /// Hlavička rozkliknutého commitu (#317). V šířce se pere o čtyři věci naráz: **dlouhá první
+    /// řádka zprávy**, kapsle se sha s odkazem na GitHub, počty ze staženého diffu a tichá věta
+    /// o tom, že tu není kam kliknout. Návrh je má na jednom řádku s `flex-wrap`, který SwiftUI
+    /// nemá — proto `ViewThatFits`, a proto se to musí měřit **přes pásmo**: podoba na jeden řádek
+    /// se v úzkém okně nesmí zvolit a přetéct.
+    @Test("Hlavička commitu nepřeteče v žádné šířce")
+    func theCommitHeaderStaysInside() throws {
+        for width in widths {
+            let probe = OverflowProbe(width: width, name: "commit-hlavicka-\(Int(width))")
+            let header = CommitHeaderView(
+                commit: Self.commits[1],
+                position: "2 ze 7",
+                facts: CommitDiffFacts(files: "3 soubory", additions: 64, deletions: 18),
+                url: Policy.commitURL(of: Self.commits[1].sha, in: RepoID(owner: "cli", name: "cli")),
+                back: {},
+                showFiles: {}
+            )
+            let overflow = try probe.overflow(of: header)
+            #expect(overflow == 0, "šířka \(Int(width)): hlavička commitu přetekla o \(overflow) bodů")
+        }
+    }
+
+    /// Prázdný diff je jiný podstrom (věta místo diffu) a hlavička v něm stojí **bez počtů**,
+    /// takže se v ní řádek sází jinak — měří se proto zvlášť. Text věty je od `Policy`, tedy ten,
+    /// který uvidí člověk.
+    @Test("Prázdný diff commitu nepřeteče ani s vysvětlením")
+    func theEmptyCommitDiffStaysInside() throws {
+        for width in widths {
+            let probe = OverflowProbe(width: width, name: "commit-prazdny-\(Int(width))")
+            let view = CommitDiffView(
+                commit: Self.commits[1],
+                state: .nothing(Policy.emptyCommitDiff(isMerge: true)),
+                position: "2 ze 7",
+                url: nil,
+                expansion: DiffExpansionActions(state: { _ in FileExpansion() }, reveal: { _, _ in }, collapse: nil),
+                folding: DiffFoldingActions(isFolded: { _ in false }, toggle: { _ in }, foldAll: { _ in }, unfoldAll: {}),
+                layout: .constant(.unified),
+                back: {},
+                showFiles: {},
+                retry: {}
+            )
+            let overflow = try probe.overflow(of: view)
+            #expect(overflow == 0, "šířka \(Int(width)): prázdný diff commitu přetekl o \(overflow) bodů")
+        }
+    }
+
     /// Tabulka nálezů je z těch tří jediná, která si šířku **počítá** (`Policy.findingTableLayout`),
     /// takže je to jediné místo, kde se dá spočítat špatně. Sloupec `reviewer · kategorie` navíc
     /// v pásmu přeskočí prahovou hodnotu 900, takže se měří obě sazby.

@@ -33,7 +33,7 @@ import Testing
 struct CommitsTabRenderProbe {
     private let pr = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 13899)
 
-    private enum Scenario: String, CaseIterable {
+    enum Scenario: String, CaseIterable {
         case loading = "nenacteno"
         case list = "seznam"
         case failed = "porucha"
@@ -41,6 +41,15 @@ struct CommitsTabRenderProbe {
         /// PR s **jedním** commitem — jeden ze tří stavů, které se podle zadání nesmí slít.
         /// Kontroluje se na něm skloňování (`1 commit`, ne `1 commitů`).
         case single = "jeden-commit"
+        /// Rozkliknutý commit (#317): hlavička s cestou zpět a pod ní diff přes celou plochu.
+        case commitDiff = "diff-commitu"
+        /// **Prázdný diff** — ten stav, který se z prázdné plochy nedá odlišit od poruchy, takže
+        /// je na snímku vidět věta místo diffu. Sloučení, protože má vlastní znění.
+        case emptyMerge = "diff-commitu-prazdne-slouceni"
+        /// Stahuje se. Na snímku se posuzuje, že hlavička už stojí (sha, zpráva, cesta zpět)
+        /// a čeká se jen na kód pod ní.
+        case commitLoading = "diff-commitu-nenacteno"
+        case commitFailed = "diff-commitu-porucha"
     }
 
     @Test("Vyrendrovat tab Commity ve všech stavech")
@@ -64,19 +73,22 @@ struct CommitsTabRenderProbe {
     /// **Režim se nastavuje dvakrát**: `NSAppearance` kvůli paletě (dynamické `NSColor`) a
     /// `colorScheme` kvůli `.primary`/`.secondary`. S jedním z toho vyjde tmavý text na tmavém —
     /// poučení z `AppearanceRenderProbe` (#278).
-    @Test("Vyrendrovat seznam v tmavém režimu")
-    func rendersTheListInDarkMode() async throws {
-        let (store, cache) = try await prepared(.list)
+    @Test(
+        "Vyrendrovat seznam a diff commitu v tmavém režimu",
+        arguments: [Scenario.list, .commitDiff, .emptyMerge]
+    )
+    func rendersInDarkMode(scenario: Scenario) async throws {
+        let (store, cache) = try await prepared(scenario)
         defer { _ = cache }
         let appearance = try #require(NSAppearance(named: .darkAqua))
-        let url = Self.outputDirectory.appending(path: "commity-seznam-tmavy-1400.png")
+        let url = Self.outputDirectory.appending(path: "commity-\(scenario.rawValue)-tmavy-1400.png")
 
         var thrown: (any Error)?
         appearance.performAsCurrentDrawingAppearance {
             do { try capture(store: store, width: 1400, dark: true, to: url) } catch { thrown = error }
         }
         if let thrown { throw thrown }
-        print("SONDA \(url.path) — seznam, tmavý režim")
+        print("SONDA \(url.path) — \(scenario.rawValue), tmavý režim")
     }
 
     /// Pruh záložek sám, přes pásmo šířek — **bez odznaků i se všemi**.
@@ -161,8 +173,27 @@ struct CommitsTabRenderProbe {
         case .single:
             store.commits[pr] = [Self.commits[0]]
             store.commitFailures[pr] = nil
+        case .commitDiff, .emptyMerge, .commitLoading, .commitFailed:
+            store.commits[pr] = Self.commits
+            store.commitFailures[pr] = nil
+            // Stav diffu se **staví přímo**, ne přes `openCommit`: ten spouští `Task`, na který by
+            // render čekal, a rozdělaný stav (`nenacteno`) by se tudy nedal vyrobit vůbec.
+            let sha = Self.openSha(for: scenario)
+            store.openCommits[pr] = sha
+            store.commitDiffs[pr] = CommitDiff(sha: sha, content: content(for: scenario))
         }
         return (store, directory)
+    }
+
+    /// Obsah diffu commitu pro scénář. Sloučení dostane **prázdný** diff, protože právě u něj má
+    /// věta jiné znění než u obyčejného commitu.
+    private func content(for scenario: Scenario) -> CommitDiff.Content {
+        switch scenario {
+        case .emptyMerge: .loaded(DiffParser.parse(""))
+        case .commitLoading: .loading
+        case .commitFailed: .failed(Self.failure)
+        default: .loaded(DiffParser.parse(Self.commitDiffText))
+        }
     }
 
     private func capture(store: AppStore, width: CGFloat, dark: Bool = false, to url: URL) throws {
@@ -236,6 +267,47 @@ struct CommitsTabRenderProbe {
         body: "Popis PR."
     )
 
+    /// Který commit je na snímku rozkliknutý (#317).
+    ///
+    /// Běžně ten **s tělem zprávy**, protože na jeho hlavičce je co posuzovat; u prázdného diffu
+    /// **sloučení**, protože právě u něj má věta jiné znění — a snímek má ukázat to znění, které
+    /// k tomu commitu patří.
+    private static func openSha(for scenario: Scenario) -> String {
+        scenario == .emptyMerge
+            ? "96a469b6bd159d4cff137d5eab4d13ceee4c9807"
+            : "745dc68b1c2d3e4f5061728394a5b6c7d8e9f012"
+    }
+
+    /// Diff rozkliknutého commitu: **dva soubory**, aby byl vidět strom vlevo i druhá hlavička,
+    /// a jeden řádek přepsaný, aby bylo na čem posoudit word-level zvýraznění.
+    private static let commitDiffText = """
+        diff --git a/pkg/cmd/issue/create/create.go b/pkg/cmd/issue/create/create.go
+        --- a/pkg/cmd/issue/create/create.go
+        +++ b/pkg/cmd/issue/create/create.go
+        @@ -128,7 +128,11 @@ func createRun(opts *CreateOptions) error {
+         	if err != nil {
+         		return err
+         	}
+        -	issue, err := api.IssueCreate(apiClient, repo, params)
+        +	issue, err := api.IssueCreate(apiClient, repo, resolved)
+        +	if err != nil {
+        +		return fmt.Errorf("could not create issue: %w", err)
+        +	}
+         	fmt.Fprintln(opts.IO.Out, issue.URL)
+         	return nil
+         }
+        diff --git a/pkg/cmd/issue/create/fields.go b/pkg/cmd/issue/create/fields.go
+        new file mode 100644
+        --- /dev/null
+        +++ b/pkg/cmd/issue/create/fields.go
+        @@ -0,0 +1,5 @@
+        +package create
+        +
+        +func resolveFields(params map[string]interface{}) (map[string]interface{}, error) {
+        +	return params, nil
+        +}
+        """
+
     private static let diffText = """
         diff --git a/pkg/cmd/issue/create/create.go b/pkg/cmd/issue/create/create.go
         --- a/pkg/cmd/issue/create/create.go
@@ -256,9 +328,16 @@ struct CommitsTabRenderProbe {
                "Warn instead of failing when issue fields can't be set", days: -23),
         commit("8fbdb9b1a2c3d4e5f60718293a4b5c6d7e8f9012",
                "Skip issue type picker without triage access", days: -22),
+        // **Jediný s tělem zprávy** — kvůli #317: v seznamu se tělo nekreslí, v hlavičce
+        // rozkliknutého commitu ano, a je to ten blok, který se nejsnáz nasází špatně.
         commit("745dc68b1c2d3e4f5061728394a5b6c7d8e9f012",
-               "Resolve deferred issue fields before creating the issue", days: -18, login: nil,
-               name: "Kumar Prateek"),
+               """
+               Resolve deferred issue fields before creating the issue
+
+               Fields that need triage access were resolved after the issue was
+               created, so a failure left an issue with half the fields set.
+               """,
+               days: -18, login: nil, name: "Kumar Prateek"),
         commit("96a469b6bd159d4cff137d5eab4d13ceee4c9807",
                "Merge branch 'trunk' into fix/13804-gh-issue-create-errors-after-successful",
                days: -18, merge: true, name: "Kumar Prateek"),

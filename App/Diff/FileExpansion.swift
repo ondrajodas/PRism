@@ -4,7 +4,12 @@ import Foundation
 struct FileExpansion: Equatable, Sendable {
     /// Které skryté řádky si uživatel nechal dotáhnout.
     var revealed = RevealedLines()
-    /// Obsah souboru na hlavě PR, po řádcích. Prázdný, dokud se nenačetl.
+    /// Obsah souboru, po řádcích. Prázdný, dokud se nenačetl.
+    ///
+    /// **Z které verze souboru je, říká klíč** (`FileExpansionKey.commit`), ne tenhle typ:
+    /// v `Změněných souborech` je to hlava PR, v diffu commitu (#317) ten commit. Dvě verze
+    /// pod jedním klíčem by znamenaly rozbalený kontext posunutý o všechno, co mezi commitem
+    /// a hlavou přibylo — a to potichu.
     var content: [String] = []
     /// Rozsahy vyžádané, **než** dorazil obsah. Bez nich by se druhý nález v témže
     /// souboru během načítání ztratil.
@@ -31,4 +36,10 @@ struct FileExpansion: Equatable, Sendable {
 struct FileExpansionKey: Hashable, Sendable {
     let pullRequest: PRIdentifier
     let path: String
+    /// Ze kterého commitu se obsah čte (#317). `nil` = **hlava PR**, tedy `Změněné soubory`.
+    ///
+    /// Je to součást klíče, ne údaj vedle: týž soubor má v tabu `Commity` a v `Změněných
+    /// souborech` jiný obsah i jiná čísla řádků, takže sdílený záznam by u staršího commitu
+    /// odkryl řádky z dnešní hlavy. Úklid se tím nemění — jede pořád podle `pullRequest`.
+    var commit: String?
 }
