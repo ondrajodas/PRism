@@ -1502,10 +1502,18 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     Během renderu už se nespustí (cache podle `updatedAt`), a právě proto se tudy dá vyrobit i stav
     „nenačteno“, ke kterému se v aplikaci normálním používáním vrátit nedá;
   - **pruh záložek přes pásmo šířek 620–1020, bez odznaků i se všemi**. Změřeno: bez odznaků se pruh
-    vejde na jeden řádek od ~780 bodů, se všemi od ~920; pod tím se popisky **zkracují**
-    (`Změněné soub…`) a `+X −Y` se zalomí. Detail má šířku okna minus rail (53), takže ve výchozím
+    vejde na jeden řádek od ~780 bodů, se všemi od ~920; pod tím se popisky **zalamují**
+    a `+X −Y` se zalomí. Detail má šířku okna minus rail (53), takže ve výchozím
     okně 1100 je to bez dopadu a projeví se to u okna stáhnutého k podlaze (700). Tuhle cenu platila
     do #306 jen PR s CI, od #306 všechna — proto je to změřené, ne odhadnuté.
+
+    **Oprava (návrh tabu `Commity`):** stálo tu, že se popisky *zkracují* (`Změněné soub…`).
+    Nezkracují — `PullRequestTabBar` nikde nemá `lineLimit`, takže se popisek láme **uvnitř
+    záložky** a pruh povyroste. Změřeno vykreslením: šest záložek se všemi odznaky dá
+    v nejužším okně (700, tedy tab 647 b) pruh vysoký **75 bodů** místo 34. Pásmo, od kterého se
+    pruh vejde na jeden řádek, ta oprava nemění; mění to, co se stane pod ním. Přesné hodnoty
+    ideální šířky (750 b bez odznaků, 867 b se všemi) i cenu sedmé záložky drží
+    [specifikace](superpowers/specs/2026-07-31-prism-design.md), sekce *Tab Commity*.
 
   **`Přehled` se po odebrání souhrnu vyrendroval znovu, před a po** — je to jediný způsob, jak se
   pozná, že po odebrání bloku zbyla úplná obrazovka a ne děravá. Kontrolovaly se u toho **prázdné

@@ -1697,5 +1697,24 @@ srazil na tři řádky a zbytek promptu uřízl. Testů je **2519**; regrese ov�
 ve výchozí šabloně, nepřipojené jádro a vyhozený `guard` v `AppStore` naráz padne 22 tvrzení
 v 15 testech).
 
+### Tab `Commity` — nakreslený, čeká na implementaci
+
+Sedmá záložka detailu PR (seznam commitů a diff jednoho z nich) je **nakreslená v mockupu**,
+sekce 19, a rozhodnutí i zamítnuté alternativy jsou v
+[specifikaci](superpowers/specs/2026-07-31-prism-design.md), sekce *Tab Commity*. **V kódu není
+nic** — pravidlo *Návrh (mockup)* v `CLAUDE.md` chce nakreslit a nechat schválit dřív, než se
+issue založí, takže tohle je zastávka mezi tím.
+
+Cena je změřená, ne odhadnutá: sedmá záložka posune šířku, od které se pruh vejde na jeden
+řádek, z 920 na **1035 bodů** okna. Ve výchozím okně (1100) je to tedy bez dopadu; nové je
+pásmo 920–1035 a zaplatí ho `+X −Y` (108 b, tedy skoro přesně cena té záložky). Vedle toho se
+ukázalo, že pruh se pod tou hranicí **zalamuje, nezkracuje** — oprava jedné věty
+v [`docs/testovani.md`](testovani.md).
+
+Implementace je rozdělená na **dvě issues dělené datovou cestou**: seznam commitů
+(**#316**, `pulls/{n}/commits`, jedno volání, 1,20 s) a rozkliknutí na diff commitu
+(**#317**, `commits/{sha}` s `Accept: application/vnd.github.diff`, 0,99 s, unified diff pro
+dnešní `DiffParser`). Smrsknutí pruhu na ikony v úzkém okně je odložené do **#318**.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
