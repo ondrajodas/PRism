@@ -5,13 +5,13 @@ import Testing
 
 @testable import PRism
 
-/// Sonda, ne test (#316): vyrendruje **tab `Commity` ve všech třech podobách** a k tomu **pruh
-/// záložek se sedmou záložkou přes pásmo šířek**.
+/// Sonda, ne test (#316): vyrendruje **tab `Commity` ve všech třech podobách**.
 ///
-/// Proč sonda a ne měření: „pozná se seznam od poruchy?“ a „nevypadá zalomený pruh jako rozsypaná
-/// čaj?“ jsou otázky na obrázek. Co se **dá** tvrdit číslem, je v `CommitsTabStateTests` (tři stavy),
-/// `AppStoreCommitsTests` (kdy se pro ně jde) a `TabStripWidthTests` (od jaké šířky je pruh na
-/// jednom řádku) — sonda je k tomu, aby se ty tři stavy daly **přečíst vedle sebe**.
+/// Proč sonda a ne měření: „pozná se seznam od poruchy?“ je otázka na obrázek. Co se **dá** tvrdit
+/// číslem, je v `CommitsTabStateTests` (tři stavy) a `AppStoreCommitsTests` (kdy se pro ně jde) —
+/// sonda je k tomu, aby se ty tři stavy daly **přečíst vedle sebe**. Pruh záložek se od #318
+/// rendruje jinde, v `TabStripRenderProbe`: stojí nad všemi sedmi taby, takže dvě sondy s ním
+/// znamenaly dvě pásma šířek, která se nedají porovnat.
 ///
 /// **Podoby jsou čtyři, i když `CommitsTabState` má tři případy**: `list` se kreslí dvakrát, se
 /// zastaralostí a bez ní, a je to zrovna ten rozdíl, který se z kódu nepozná — okrová věta nad
@@ -21,8 +21,8 @@ import Testing
 /// odpověď je porucha; na snímku `porucha` je vidět, že se tak i hlásí.
 ///
 /// `NSHostingView`, ne `ImageRenderer`, ze dvou důvodů zděděných po #294: obsah `ScrollView`u se
-/// offscreen nerasterizuje a `ViewThatFits` v pruhu se v `ImageRenderer`u vyhodnocuje jinak než ve
-/// skutečném okně.
+/// offscreen nerasterizuje a `ViewThatFits` v pruhu nad tabem se v `ImageRenderer`u vyhodnocuje
+/// jinak než ve skutečném okně.
 ///
 /// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes `TEST_RUNNER_PRISM_RENDER_DIR`.
 @MainActor
@@ -77,45 +77,6 @@ struct CommitsTabRenderProbe {
         }
         if let thrown { throw thrown }
         print("SONDA \(url.path) — seznam, tmavý režim")
-    }
-
-    /// Pruh záložek sám, přes pásmo šířek — **bez odznaků i se všemi**.
-    ///
-    /// Změřené hranice drží `TabStripWidthTests`; tady jde o to, jak zalomený pruh **vypadá**,
-    /// protože právě to je cena, kterou sedmá záložka v úzkém okně platí.
-    @Test("Vyrendrovat pruh se sedmi záložkami přes pásmo šířek")
-    func rendersTheStrip() throws {
-        let directory = Self.outputDirectory
-        // Šířky **tabu**, ne okna: 647 je nejužší povolené okno (700) bez railu, 886 je hranice
-        // jednoho řádku se všemi odznaky, 1047 je výchozí okno (1100).
-        for width in [647.0, 729.0, 800.0, 886.0, 947.0, 1047.0] as [CGFloat] {
-            for badges in [false, true] {
-                let bar = PullRequestTabBar(
-                    selection: .constant(.commits),
-                    badge: badges ? Self.badge(of:) : { _ in nil }
-                )
-                .diffCounts((additions: 248, deletions: 96))
-                .frame(width: width)
-                .background(Palette.surface)
-
-                let name = "pruh7-\(Int(width))-\(badges ? "s-odznaky" : "bez-odznaku")"
-                let url = directory.appending(path: "\(name).png")
-                let size = try render(bar, width: width, height: 180, to: url)
-                print("SONDA \(url.path) — tab \(Int(width)) b, výška pruhu \(size.height)")
-            }
-        }
-    }
-
-    private static func badge(of tab: PullRequestTab) -> PullRequestTabBadge? {
-        switch tab {
-        case .overview: .count(4)
-        case .filesChanged: .count(7)
-        case .commits: .count(7)
-        case .conversation: .count(2)
-        case .checks: .blocking(1)
-        case .findings: .blocking(3)
-        case .progress: .live
-        }
     }
 
     // MARK: - Scéna

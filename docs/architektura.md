@@ -1980,7 +1980,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
-| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Od #316 má **dvě podoby** (`ViewThatFits`): se `+X −Y` a bez ní — viz níž |
+| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Od #316 má **tři podoby** (`ViewThatFits`, `Layout`): s popisky a `+X −Y`, s popisky bez ní a od #318 **ikony s odznaky a popiskem jen u aktivní** — díky té třetí se pruh nezalomí ani v nejužším povoleném okně. Viz *Pruh záložek — tři podoby podle šířky* |
 | `StaleNoticeView` | Okrová věta „tohle je poslední známý stav“ nad seznamem, který se nepovedlo načíst **znovu** — jedno místo pro `Kontroly` (#215) i `Commity` (#316). Sedí **nad `ScrollView`em**, aby neodscrollovala pryč od obsahu, o kterém mluví |
 | `CommitListView` | Seznam commitů v tabu `Commity` (#316): pruh s počtem a hlavou, řádek na commit (obrázek autora, první řádka zprávy, jméno, relativní čas, sha) a pilulky `sloučení` a `hlava`. `content` je `internal` kvůli měření přesahu — `NSScrollView` by přesah ukrojil |
 | `OverviewView` | Tab `Přehled`, odshora **co se změnilo od minule → fakta → popis PR** (#280; kontroly mají od #215 vlastní tab). Obsah je v `content` **mimo `ScrollView`** a `internal` schválně — přes `body` se šířka změřit nedá, viz #291 |
@@ -2372,6 +2372,64 @@ Dvě věci, které z toho platí dál:
   vložením regrese: s `filling()` na odsazeném těle popisu zůstaly `OverviewWidthTests` zelené
   i po smazání `narrowingWidth(by: 26)`. Cena je jedna úroveň vyjednávání na tab, což proti
   ~5,5× na úroveň v zanořeném seznamu není nic — tady jde o jeden blok, ne o tisíc řádků.
+
+### Pruh záložek — tři podoby podle šířky (#316, #318)
+
+`PullRequestTabBar` je jediné místo v okně, kde se o podobě rozhoduje **`ViewThatFits`em**, a ne
+spočítanou šířkou. Kandidáti jsou tři a jmenují se `Layout`; bere se **první, který se vejde**,
+takže pořadí je to, co říká, co ustupuje dřív:
+
+| Podoba | Co kreslí | Ideální šířka tabu | Okno (+ rail 53) |
+|---|---|---|---|
+| `full` | popisky u všech záložek a vpravo `+X −Y` | 996–998 b | 1049–1051 b |
+| `labels` | popisky, bez `+X −Y` (#316) | 886–888 b | 939–941 b |
+| `icons` | ikony s odznaky, popisek jen u aktivní (#318) | 498–564 b | 551–617 b |
+
+Pásma jsou tam proto, že šířka závisí na tom, **která záložka je aktivní** — její popisek je
+polotučný a v `icons` je jediný, co se kreslí. Horní konec drží `Změněné soubory`, dolní `Nálezy`.
+
+Co se u toho nemá rozbít:
+
+- **`+X −Y` ustupuje první, a je to ten správný kus** (#316). Mluví o rozsahu **celého PR**, což je
+  odpověď na otázku `Změněných souborů`; v `Commitech`, `Kontrolách` ani `Průběhu` není o čem.
+  Záložka je proti tomu cesta k obsahu, který jinudy vidět není. Ta výměna vyšla skoro na nulu:
+  pilulka stojí 110 bodů a sedmá záložka s odznakem 112, takže hranice povyrostla o **dva body
+  okna**, ne o sto dvanáct.
+- **Popisky ustupují druhé, a všechny naráz** (#318). Ustupovat po jednom (nejdřív `Změněné
+  soubory`, pak `Konverzace`…) by znamenalo pruh, ve kterém část záložek text má a část ne — tedy
+  sedm podob podle šířky místo tří, a v každé jinak dlouhý skok mezi sousedy.
+- **Popisek u aktivní záložky zůstává.** Odpovídá na jinou otázku než ostatní: ne „kam se dá jít“,
+  ale „kde jsem“. Podtržení to říká taky, jenže samo o sobě mezi sedmi ikonami — a je to zrovna ten
+  údaj, kvůli kterému se do pruhu kouká nejčastěji.
+- **Odznaky zůstávají ve všech třech podobách.** Počet nálezů, červený počet u `Kontrol`, puntík
+  u běžícího `Průběhu` a počet commitů jsou ta informace, kvůli které se do pruhu kouká; kdyby
+  padly s popisky, byla by z ikonového stupně řada ozdob.
+- **Bez popisku musí záložku pojmenovat něco jiného.** Ikona přebírá `accessibilityLabel`
+  a tlačítko dostane nápovědu (`help`) — obojí **jen tehdy, když se popisek nekreslí**, ať se jméno
+  nečte a neukazuje dvakrát. Prázdný řetězec by nechal prázdný tooltip, takže je to `ViewModifier`
+  s `if let`, ne `help("")`.
+- **Čtvrtá podoba (samotné ikony) tu není, a je to podložené měřením.** `icons` se s nejdelším
+  popiskem vejde do tabu od 564 b (okno 617), a i s trojmístnými odznaky u všech záložek od 636 b
+  (okno 689) — pod podlahu okna (700). Na čtvrtou podobu se tedy nedá přijít; kód, který nikdo
+  neuvidí, je horší než měření, které to hlídá (`TabStripWidthTests`).
+- **Kandidáti se vypisují, nedělají se `ForEach`em.** `ViewThatFits` vybírá mezi **svými dětmi**
+  a jedna `ForEach` je jedno dítě.
+- **`bar(_:)` je `internal` a nese i okraj a linku pod pruhem.** Okraj je šířka, která se taky musí
+  vejít, takže patří dovnitř kandidáta; a `internal` proto, aby si test mohl vyrendrovat **jednu
+  podobu** bez skládání vlastní chromě — dvě místa s toutéž chromí znamenají, že měření kontroluje
+  něco jiného, než co se kreslí (#236).
+
+**Proč tady `ViewThatFits` stačí, když u #284 nestačil.** V #284 byly popisky v řadě se
+`lineLimit`em, takže se **zkracovaly**: `Text` přijal menší šířku místo toho, aby nahlásil, že se
+nevejde, `ViewThatFits` vybíral pořád nejširší variantu a rozhodovat musela spočítaná šířka
+(`TextWidth`, `IncrementalDiffBar.layout(in:)`). Pruh záložek `lineLimit` nikde nemá, takže se
+**zalamuje** — ideální šířka zůstává šířkou nezalomeného popisku, a to je přesně ta hodnota, kterou
+`ViewThatFits` porovnává. **Není to úvaha, je to změřené**: `TabStripWidthTests` porovnávají render
+celého pruhu proti jedné podobě vykreslené napřímo, v šesti šířkách, pixel po pixelu.
+
+Do #318 se pruh pod 939 body okna **zalamoval** — v nejužším povoleném okně (700) byl vysoký
+90 bodů místo 30, se šesti záložkami 75. Nebyla to tedy cena sedmé záložky, ale stav rozbitý
+i bez ní, a proto se to opravovalo zvlášť.
 
 ## Okno nastavení (`App/Views/Settings/`)
 
@@ -3274,35 +3332,16 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Řádek nemá šipku, protože se nedá rozkliknout.** Návrh (sekce 19) ji kreslí, ale diff jednoho
     commitu je vlastní issue; šipka, za kterou se nic nestane, slibuje interakci, která tam není —
     tatáž úvaha jako u checku bez čísla jobu (#214).
-  - **Sedmá záložka stojí jedinou věc: šířku pruhu záložek — a ta se zaplatila.** Pruh nikde nemá
-    `lineLimit`, takže se popisek pod hranicí **zalomí uvnitř záložky** a pruh povyroste. Naměřeno
-    na skutečném `PullRequestTabBar`u (`NSHostingView.fittingSize`, po jednom bodu šířky):
-
-    | Pruh | Šířka tabu, od které je jeden řádek | Okno (+ rail 53) |
-    |---|---|---|
-    | 6 záložek se všemi odznaky a `+X −Y` — dnešek před #316 | 884 b | 937 b |
-    | **7 záložek se všemi odznaky, `+X −Y` ustupuje** | **886 b** | **939 b** |
-    | 7 záložek bez odznaků | 729 b | 782 b |
-    | 7 záložek se všemi odznaky a `+X −Y` (dopočet) | ~996 b | ~1049 b |
-
-    Poslední řádek je dopočet z **naměřené ceny pilulky**: `+X −Y` stojí 110 bodů (na `origin/main`
-    se pruh se všemi odznaky vejde od 774 b bez ní a od 884 b s ní), a sedmá záložka s odznakem
-    112 bodů (886 − 774). Ta shoda je celý ten obchod: `PullRequestTabBar` má proto **dvě podoby**
-    v `ViewThatFits` — se `+X −Y` a bez ní — takže se v úzkém pruhu nekreslí rozsah změny místo
-    toho, aby se lámaly popisky. Hranice se tím posunula o **dva body okna**, ne o sto dvanáct.
-
-    **Ustupuje zrovna `+X −Y`, a je to ten správný kus.** Mluví o rozsahu **celého PR**, což je
-    odpověď na otázku `Změněných souborů`; v `Commitech`, `Kontrolách` ani `Průběhu` není o čem.
-    Záložka je proti tomu cesta k obsahu, který jinudy vidět není.
-
-    **Pod 939 se pruh zalomí** (v nejužším okně 700 na 90 bodů místo 30) — a je to tak i před
-    #316, jen o řádek míň. Spravuje to až druhý stupeň (ikony a popisek jen u aktivní záložky),
-    který sedmé záložce nepředchází, protože je to obrazovka rozbitá i bez ní.
+  - **Sedmá záložka stojí jedinou věc: šířku pruhu záložek — a ta se zaplatila.** Pilulka `+X −Y`
+    stojí 110 bodů a `Commity` s odznakem 112, takže se jedna zaplatila druhou a hranice povyrostla
+    o **dva body okna** (937 → 939), ne o sto dvanáct. Podrobnosti i s tím, co přidal druhý stupeň
+    (#318), jsou v *Pruh záložek — tři podoby podle šířky* níž; naměřená čísla drží
+    `TabStripWidthTests`, viz [`docs/testovani.md`](testovani.md).
 
     **Specifikace měla o 17 bodů nižší absolutní čísla**, protože je měřila na **replice** pruhu
-    (867/920 pro dnešek, 872/925 se sedmou záložkou). Rozdíl, o který jde, replika odhadla dobře —
-    předpovídala +5 bodů okna, ve skutečnosti jsou to +2 —, ale absolutní hranice se z repliky brát
-    nedají; drží je `TabStripWidthTests`, viz [`docs/testovani.md`](testovani.md).
+    (867/920 pro stav před #316, 872/925 se sedmou záložkou). Rozdíl, o který jde, replika odhadla
+    dobře — předpovídala +5 bodů okna, ve skutečnosti jsou to +2 —, ale absolutní hranice se z ní
+    brát nedají.
 
 - **`Přehled` má dlaždice s fakty** (#198): commity (a kolik z nich je nových od minule),
   soubory (a kolik má nález), hlava PR a sha, proti které platí nálezy. **Nic se pro ně

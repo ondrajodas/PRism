@@ -18,7 +18,7 @@ import Testing
 /// Šířky odpovídají obsahové části okna nastavení, stejně jako u `ReviewPromptRenderProbe`:
 /// 669 při `idealWidth` a 509 při `minWidth`.
 ///
-/// **Pouští se ručně**: `PRISM_MEASURE=1`, cesta ven přes `PRISM_RENDER_DIR`.
+/// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes `TEST_RUNNER_PRISM_RENDER_DIR`.
 @MainActor
 @Suite(
     "Sonda časového limitu (#320)",

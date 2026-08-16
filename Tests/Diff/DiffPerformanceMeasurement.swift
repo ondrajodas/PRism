@@ -13,8 +13,8 @@ import Testing
 ///
 /// Časy se **netvrdí** `#expect`em: na jiném stroji vyjdou jinak a byl by z toho test, který padá
 /// bez chyby v kódu. Prahovou hodnotu má smysl hlídat až tam, kde se ukáže, co je horké.
-/// **Pouští se ručně**, ne v běžném běhu: `PRISM_MEASURE=1`. Jeden render v hloubce 8 stojí
-/// 15 sekund CPU, což ostatním testům bere stroj — u #220 z toho spadly dva časově citlivé testy
+/// **Pouští se ručně**, ne v běžném běhu: `TEST_RUNNER_PRISM_MEASURE=1`. Jeden render v hloubce
+/// 8 stojí 15 sekund CPU, což ostatním testům bere stroj — u #220 z toho spadly dva časově citlivé testy
 /// v `RealEnvironmentTests`, které v izolaci procházejí. Měření tedy nesmí být součástí suite.
 @Suite(
     "Měření výkonu (#220)",

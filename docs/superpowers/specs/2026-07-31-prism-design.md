@@ -629,9 +629,9 @@ v mockupu, sekce 19 (*Review — Commity*, viz [`docs/navrh.md`](../../navrh.md)
 tady, protože rozhodnutí padla dřív, než na ně vznikly issues — pravidlo *Návrh (mockup)*
 v `CLAUDE.md` chce nakreslit a nechat schválit napřed.
 
-**Seznam je od #316 hotový**; diff jednoho commitu zbývá (#317) a smrsknutí pruhu na ikony
-v úzkém okně taky (#318). Co implementace upřesnila nebo změnila, je v pododdílu *Co se při
-implementaci rozhodlo jinak (#316)* níž.
+**Seznam je od #316 hotový** a **smrsknutí pruhu na ikony od #318**; diff jednoho commitu zbývá
+(#317). Co implementace upřesnila nebo změnila, je v pododdílech *Co se při implementaci rozhodlo
+jinak* (#316, #318) níž.
 
 **Proč vzniká.** `Změněné soubory` odpovídají na „co je na PR jinak proti základu“ — jeden
 slitý diff, ze kterého je vidět výsledek, ne cesta. Otázka „proč tenhle řádek zmizel“ nebo
@@ -719,9 +719,15 @@ Z toho plyne:
   pruh vysoký **150 b** místo 34, se slovy rozpadlými po písmenech. Šest záložek tam dnes
   dá 75 b, tedy taky rozbito, jen míň. **Oprava v `docs/testovani.md`**, kde u #306 stálo,
   že se popisky „zkracují (`Změněné soub…`)“; renderem to nevyšlo.
+
+  **Oprava těch dvou čísel (#318):** na skutečném pruhu vyšlo v okně 700 **90 b** se sedmi
+  záložkami a **75 b** se šesti, ne 150 a 75. Replika tedy zalomení u sedmi záložek
+  přestřelila o řádek — závěr („rozbité i bez sedmé záložky“) platí, číslo ne.
 - **Druhý stupeň** (ikony, popisek jen u aktivní, 655 b) srazí pruh **pod nejužší povolené
   okno**, takže by se nezalomil nikdy. Sedmé záložky se ale netýká — tu zaplatí první
-  stupeň — a spravuje to, co je rozbité už dnes. Je to proto vlastní issue.
+  stupeň — a spravuje to, co je rozbité už dnes. Je to proto vlastní issue. **Hotové v #318**;
+  naměřená čísla i to, co se rozhodlo jinak, jsou v pododdílu *Co se při implementaci rozhodlo
+  jinak (#318, druhý stupeň pruhu)* níž.
 
 #### Co se při implementaci rozhodlo jinak (#316)
 
@@ -809,6 +815,46 @@ Rozhodnutí zapsaná dřív, než se psal kód, platí; tohle je to, co se u imp
 - **Čas v řádku je relativní** (`před 3 dny`), ne `dnes 9:12` jako v mockupu. Zbytek okna používá
   `.relative(presentation: .named)` všude (osa, vlákna, seznam PR), a dva různé způsoby, jak
   v jednom okně napsat „kdy“, jsou horší než odchylka od jedné buňky návrhu.
+
+#### Co se při implementaci rozhodlo jinak (#318, druhý stupeň pruhu)
+
+Druhý stupeň — ikony s odznaky a popisek jen u aktivní záložky — je od #318 v aplikaci. Čtyři věci
+se u něj rozhodly nebo naměřily jinak, než jak stálo výš.
+
+- **Ikonový pruh je o 53 bodů užší, než říkala replika.** Návrh měl 602 b pruhu / 655 b okna;
+  na skutečném `PullRequestTabBar`u vychází **564 b / 617 b** s nejdelším popiskem (`Změněné
+  soubory` aktivní) a 498 b / 551 b s nejkratším (`Nálezy`). Rozdíl mezi krajními hodnotami je
+  právě ten aktivní popisek — replika měřila jednu konfiguraci, ne pásmo. Závěr se tím nemění, jen
+  posiluje: pruh je pod podlahou okna (700) s rezervou 83 bodů místo 45.
+
+- **Podobu vybírá `ViewThatFits`, ne spočítaná šířka — a je to změřené.** Zadání to připouštělo
+  („`ViewThatFits` na to je, ale pořadí podob je rozhodnutí“), zároveň ale varovalo, že u #284 ten
+  mechanismus **nefungoval**: popisky se ve zúžené řadě raději zkrátily, než by nahlásily, že se
+  nevejdou, takže se vybírala pořád nejširší varianta a rozhodovat musela `TextWidth`. Rozhodnuto
+  **ponechat `ViewThatFits`**, protože ten rozdíl má jasnou příčinu: řada u #284 měla `lineLimit`,
+  takže se **zkracovala**, kdežto pruh záložek `lineLimit` nikde nemá a **zalamuje se** — a ideální
+  šířka, kterou `ViewThatFits` porovnává, tedy zůstává šířkou celého nezalomeného popisku.
+
+  Není to úvaha, je to ověřené: `TabStripWidthTests` porovnávají render **celého** pruhu proti
+  jedné podobě vykreslené napřímo, v šesti šířkách, pixel po pixelu. Kdyby `ViewThatFits` vybíral
+  nejširší variantu, v tabu 647 b by nakreslil `full` a rovnost by neplatila. Spočítaná šířka by
+  navíc znamenala měřit sedm popisků, sedm symbolů a šest odznaků a držet to v souběhu s kresbou —
+  tedy druhé místo o téže šířce, přesně to, čemu se #236 vyhýbá.
+
+- **Popisky ustupují všechny naráz, ne po jednom od nejdelšího.** Postupné ustupování by dalo sedm
+  podob podle šířky místo tří, pruh s částí záložek otextovanou a částí ne, a v každé podobě jinak
+  dlouhý skok mezi sousedy. Tři podoby jsou tři obrazovky, které se dají popsat větou.
+
+- **Čtvrtá podoba (samotné ikony, bez popisku i u aktivní) se nepřidala.** Uvažovalo se o ní jako
+  o pojistce pro krajní případy — jenže i s **trojmístnými odznaky u všech** záložek naráz vyjde
+  ikonový pruh na 636 b, tedy okno 689, pořád pod podlahou 700. Podoba, na kterou se nedá přijít,
+  je kód, který nikdo neuvidí; pojistkou je místo ní **měření** (`Nezalomí se ani s trojmístnými
+  odznaky u všech záložek`), které zčervená, kdyby se ta rezerva vyčerpala.
+
+- **Jméno záložky se bez popisku nesmí ztratit.** Ikona přebírá `accessibilityLabel` a tlačítko
+  dostane nápovědu — obojí **jen v úzkém stupni**, ať se jméno nečte a neukazuje dvakrát. Mockup
+  má na neaktivních záložkách `title`, takže je to zapracování návrhu, ne přídavek; navíc k tomu
+  jde odečítání, které mockup neřeší.
 
 #### Co se zamítlo
 
@@ -1876,7 +1922,7 @@ Dvě rozhodnutí, která z rozpisu M8 nejsou vidět a stála za rozdělení na p
 | Uložená volba tabu se **nezarovnává na data** (#306) — otáčí #215 | Nechat zarovnání, i když už nemá co zarovnávat; nebo ho nechat jako pojistku pro budoucí podmíněné záložky | **Otáčí rozhodnutí z #215** („volba se zarovnává, nemaže“), a je to čistý důsledek trvale přítomné záložky: zarovnání ztratilo předmět, takže by zbyl kód, který nic nerozhoduje. Odpadl s ním i jeho vedlejší účinek, se kterým se u #215 smířilo — z tabu `Kontroly` se vypadávalo do `Přehledu` při **každém** příchodu na PR, dokud checky nedorazily. Pojistka pro budoucí podmíněné záložky zamítnuta: žádná není, a kód, který se drží pro případ, že se pravidlo vrátí, je mrtvá váha, která navíc svádí spolehnout se na ni. Zůstává z toho pravidlo: volba je odpověď na „kam se koukám“ a nesmí se měnit tím, co dorazilo ze sítě |
 | Selhaný pokus se dá **zopakovat z tabu** (#306) | Nechat to na příštím načtení detailu, jak to bylo od #215 | Příští načtení detailu **nepřijde**: `loadDetail` má cache podle `updatedAt`, takže po chybě sítě se checky samy nedotáhnou až do dalšího commitu — přepnutí PR a návrat s tím nic nedělá. Do #306 to vadilo méně (věta v hlavičce byla stejně bez akce), teď by z toho byl tab, ze kterého nevede cesta dál. `Zkusit znovu` proto volá `AppStore.loadChecks(for:)` přímo, tatáž cesta jako u diffu a konverzace — a je to zároveň ta „kontrola, která jinde v repu je“: každé jiné selhané načtení v okně tlačítko má |
 | Checky se tahají **i tehdy, když detail spadl** (#306) | Nechat `loadChecks` uvnitř `do` bloku po úspěšném `fetchDetail`, jak to bylo od #209 | Nad spadlým detailem by v tabu svítilo `Načítám kontroly…` **navždycky**, protože `loadChecks` by se nespustil vůbec — a to je text, který tvrdí víc, než data unesou. Do #306 to nešlo poznat: tab se u nenačtených checků nekreslil. `gh pr checks` přitom na `gh pr view` nestojí (jsou to dva dotazy), takže není důvod jedno vázat na druhé; cena je jeden podproces navíc v případě, kdy je `gh` nebo síť rozbitá, a výsledkem je poznatelný stav s akcí. Zrušení (`CancellationError`) je proti tomu odchod z obrazovky a checky se po něm netahají |
-| Šestou záložku platí od #306 **i PR bez CI** — a měří se to, neodhaduje | Zúžit popisky nebo v úzkém okně schovat ikony, ať se pruh vejde vždycky | Změřeno offscreen renderem přes pásmo šířek (`ChecksTabRenderProbe`): pruh **bez odznaků** se vejde na jeden řádek od ~780 bodů šířky tabu, **se všemi odznaky** od ~920; pod tím se popisky zkracují na `Změněné soub…` a `+X −Y` se zalomí. Detail PR má šířku okna minus rail (53 bodů), takže ve výchozím okně (1100) je to bez dopadu a projeví se to až u okna stáhnutého k podlaze (700). Tuhle cenu platila do #306 jen PR s CI; od #306 všechna. Zúžení popisků ani mizení ikon zamítnuto — obojí je nová odchylka od návrhu kvůli okrajové šířce, a záložky se čtou podle jména |
+| Šestou záložku platí od #306 **i PR bez CI** — a měří se to, neodhaduje | Zúžit popisky nebo v úzkém okně schovat ikony, ať se pruh vejde vždycky | Změřeno offscreen renderem přes pásmo šířek (`ChecksTabRenderProbe`): pruh **bez odznaků** se vejde na jeden řádek od ~780 bodů šířky tabu, **se všemi odznaky** od ~920; pod tím se popisky zkracují na `Změněné soub…` a `+X −Y` se zalomí. Detail PR má šířku okna minus rail (53 bodů), takže ve výchozím okně (1100) je to bez dopadu a projeví se to až u okna stáhnutého k podlaze (700). Tuhle cenu platila do #306 jen PR s CI; od #306 všechna. Zúžení popisků ani mizení ikon zamítnuto — obojí je nová odchylka od návrhu kvůli okrajové šířce, a záložky se čtou podle jména. **Dvě opravy k tomuhle řádku.** Popisky se nezkracují, **zalamují** (pruh nikde nemá `lineLimit`) a čísla „~780/~920“ jsou z repliky — skutečné jsou 782/937 okna. A **mizení popisků se od #318 nezamítá**: nakreslil se do návrhu (sekce 19, druhý stupeň), takže to přestala být odchylka a stalo se z toho zadání. Ikony přitom **nemizí** — mizí popisky a záložku pojmenovává nápověda; zamítnutá varianta byla obrácená |
 | Věta o selhaném načtení checků je **v hlavičce PR**, ne v `Přehledu` (#215) | Nechat ji v `Přehledu`, kde původně stála pod souhrnem; nebo ji vypustit, když v `Přehledu` po odebrání souhrnu o checcích nic není | Po odebrání souhrnu je to jediná věta o checcích mimo tab — a hlásí právě ten stav, kdy tab **není**, takže se musí ukázat i tomu, kdo se na `Přehled` vůbec nepodívá (třeba proto, že otevírá PR rovnou v diffu). Hlavička je vidět ve všech tabech a už jednu takovou větu nese (kontrola nálezů, #150), takže se k ní přidává na místo, kde se takové věci hlásí. Vypustit ji nešlo: bez ní je zmizelý tab k nerozeznání od PR bez CI, což je zrovna ta záměna, kvůli které `checkFailures` vznikly. Okrová jako `Palette.stale`, ne červená — nepovedlo se to **zjistit**, což je „nevím“, ne „je to rozbité“ |
 | **Vzhled se schvaluje, ostatní návrhová rozhodnutí ne — a brána sedí u zakládání issue** (#285) | Nechat i vzhled na běžné pravidlo „rozhodni a implementuj“, jak to platilo do teď; nebo bránu posadit až před první commit, kdy je jasné, co se doopravdy bude psát | Je to **výjimka z jediné věty**, na které stojí tempo v tomhle repu (*Rozhodování*: žádná schvalovací brána), takže musí být napsaná i tam, kde ta věta je — dvě pravidla, která si protiřečí, znamenají, že platí to, které se přečte první. Důvod pro výjimku je asymetrie ceny: funkci lze přepsat za minuty a rozhodnutí o ní se koriguje podle běžící aplikace, kdežto obrazovka, kterou nikdo nenakreslil, se opravuje po kusech a s okolím nesedí. **Před issue, ne před commitem**, protože issue je zadání: od chvíle, kdy je na GitHubu, popisuje cílový stav a implementace se řídí jím — mockup kreslený po něm už jen dohání slova, a slova o vzhledu nesou míň než obrázek. Schvaluje se přitom **obrázek**, ne návrh implementace: kam patří typ, kde žije kontrola a jak se to skládá uvnitř, zůstává na tom, kdo to píše. Hranice je v tom, jestli se návrh **mění**: srovnat aplikaci s tím, co v mockupu je (#283), je oprava odchylky a issue se založí rovnou; přidat, co v něm není (#281), znamená napřed mockup |
 | Mockup **není v repu**, je to artifact (#285) | Přiložit HTML do repa, ať se verzuje spolu s kódem a dá se číst bez sítě | Návrh se překresluje častěji než kód a **není to zdrojový soubor**: každá úprava by byla commit, review a merge, tedy cena změny *pravidla* za změnu *obrázku*. Cena rozhodnutí je, že adresa musí být zapsaná (jinak ji session nemá kde vzít — u #283 se doptávala) a že se čte přes síť `WebFetch`em, protože `curl` na soukromém artifactu dostane skořápku aplikace nebo 403. Odtud [`docs/navrh.md`](../../navrh.md). Tokeny mockupu jsou přitom `App/Views/Palette.swift` jedna ku jedné, takže rozejít se můžou — a když se mění barva, mění se obojí |

@@ -24,7 +24,8 @@ import Testing
 /// z jednoho renderu vyjde konstanta a zbytek je odčítání — a druhý render (s už zvolenou výškou)
 /// slouží k tomu, aby se to dalo **vidět**.
 ///
-/// **Pouští se ručně**, `PRISM_MEASURE` jako ostatní sondy; PNG jde do `PRISM_RENDER_DIR`:
+/// **Pouští se ručně**, `TEST_RUNNER_PRISM_MEASURE` jako ostatní sondy; PNG jde do
+/// `TEST_RUNNER_PRISM_RENDER_DIR`:
 ///
 /// ```bash
 /// TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/render \
