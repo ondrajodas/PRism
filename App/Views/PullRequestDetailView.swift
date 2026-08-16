@@ -693,13 +693,17 @@ struct PullRequestDetailView: View {
 
     /// `⎋` zavře diff commitu a vrátí seznam (#317) — druhá cesta zpět vedle tlačítka v hlavičce.
     ///
+    /// **`.cancelAction`, ne `.escape` s prázdnými modifikátory**: je to táž klávesa, ale v tomhle
+    /// okně je zavedená ta první — bere ji paleta (#184) i sheety —, a míchat dva zápisy téhož
+    /// znamená hádat, který z nich AppKit spáruje dřív.
+    ///
     /// **Zakázaná, kdykoli Esc patří něčemu jinému**: mimo tab `Commity`, nad seznamem (není co
     /// zavírat), nad otevřenou paletou a nad potvrzením odeslání. Zakázané tlačítko klávesu nebere,
-    /// takže propadne dál — tentýž vzorec jako u `⌘⏎` a `⌘2`. Sheety si Esc berou samy, protože
-    /// jsou to vlastní okna; tady se hlídají jen ty stavy, které bydlí v témž okně.
+    /// takže propadne dál — tentýž vzorec jako u `⌘⏎` a `⌘2`. Sheety se tady nevyjmenovávají,
+    /// protože jsou to vlastní okna a klávesu si berou samy; hlídají se jen stavy z tohohle okna.
     private var backFromCommitShortcut: some View {
         Button("Zpět na seznam commitů") { store.closeCommit(in: pullRequest.id) }
-            .keyboardShortcut(.escape, modifiers: [])
+            .keyboardShortcut(.cancelAction)
             .disabled(!canCloseCommit)
     }
 

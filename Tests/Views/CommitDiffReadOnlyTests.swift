@@ -12,14 +12,19 @@ import Testing
 /// jde jedním přidaným parametrem u `DiffView` — a na obrazovce by se to poznalo až tehdy, když by
 /// někdo bublinu uviděl.
 ///
-/// Testuje se ve **dvou vrstvách**, protože jedna sama by prošla naprázdno:
+/// Testuje se ve **třech vrstvách**, protože žádná z nich sama by nestačila:
 ///
 /// 1. **Co tab `DiffView`u předá** — všechny kanály, kterými se do diffu dostane psaní, musí být
 ///    prázdné.
 /// 2. **Co z toho vyjde v řádcích** — z týchž hodnot se poskládají řádky diffu a nesmí mezi nimi
-///    být bublina nálezu ani rozdělaný komentář. Ke každému tvrzení stojí **protipól se stejnými
-///    daty v režimu review**, který bublinu vyrobit **musí**; bez něj by test procházel i tehdy,
-///    kdyby se bubliny přestaly kreslit úplně.
+///    být bublina nálezu ani rozdělaný komentář.
+/// 3. **Že žádný řádek nenabídne akci**, kterou by komentář vznikl. Bubliny se dají odebrat i tak,
+///    že tlačítko u řádku zůstane — a tiše založený komentář je horší než bublina, protože se
+///    odesílá.
+///
+/// U druhé a třetí vrstvy stojí **protipól se stejnými daty v režimu review**, který bublinu
+/// (resp. akci) vyrobit **musí**; bez něj by test procházel i tehdy, kdyby se bubliny přestaly
+/// kreslit úplně.
 @MainActor
 @Suite("Diff commitu je jen ke čtení (#317)")
 struct CommitDiffReadOnlyTests {
@@ -88,9 +93,7 @@ struct CommitDiffReadOnlyTests {
         #expect(Self.draftComments(in: reviewRows) > 0, "bez komentáře by test výš prošel naprázdno")
     }
 
-    /// A z třetí strany: **na žádném řádku se nenabídne akce, kterou by komentář vznikl.**
-    /// Bubliny se dají odebrat i tak, že by tlačítko u řádku zůstalo — a tichý komentář založený
-    /// omylem je horší než bublina, protože se odesílá.
+    /// Třetí vrstva: **na žádném řádku se nenabídne akce, kterou by komentář vznikl.**
     @Test("Žádný řádek diffu commitu nenabízí komentář ani poznámku")
     func offersNoCommentActionOnAnyLine() throws {
         let file = try Self.file()

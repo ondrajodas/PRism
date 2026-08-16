@@ -176,6 +176,11 @@ struct CommitHeaderView: View {
 
     /// „Jen ke čtení“ (návrh: `.ronote`). Odkaz přepne do `Změněných souborů` — kdo sem přišel
     /// s tím, že chce komentovat, se tím dostane tam, kde to jde.
+    /// **Text a tlačítko zůstávají dva prvky, ne jeden slitý.** `accessibilityElement(children:
+    /// .combine)` by z věty a odkazu udělalo jeden popisek — a odkaz by se ve VoiceOveru hůř
+    /// hledal, případně by nešel aktivovat vůbec (nález Copilota). Věta se tedy přečte jako věta,
+    /// tlačítko jako akce; jeho vlastní popisek je proto celý, ne jen ten skloňovaný konec, který
+    /// samostatně nedává smysl.
     private var readOnlyNote: some View {
         HStack(spacing: 4) {
             Text(verbatim: "Jen ke čtení — nález i rozdělaný komentář patří do")
@@ -184,9 +189,9 @@ struct CommitHeaderView: View {
             Button("Změněných souborů", action: showFiles)
                 .buttonStyle(.accentLink)
                 .font(.system(size: 11.5))
+                .accessibilityLabel("Otevřít tab Změněné soubory")
         }
         .lineLimit(1)
-        .accessibilityElement(children: .combine)
     }
 
     /// Tělo zprávy, tedy všechno pod první řádkou. Prázdné u jednořádkové zprávy — a pak se
