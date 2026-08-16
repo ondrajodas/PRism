@@ -923,8 +923,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   žádný požadavek a fáze je `failed` s tou samou větou, jaká stojí u pole v nastavení.
 
   V `ConfigurationTests` k tomu chybějící klíč (výchozí text), prázdný řetězec (platná hodnota),
-  **hodnota, která není řetězec a čtení položí** — jediné místo v souboru, kde je čtení přísné —
-  a že klíč napsaný pod repem nedělá nic.
+  **hodnota jiného typu, která čtení položí** (číslo, pole i objekt — jeden případ by prošel
+  i implementaci hlídající zrovna ten jeden typ), **`null` jako chybějící klíč** (vědomě: je to
+  výslovné „nic tu není“, ne nesrozumitelná hodnota — a test je tu, aby se ta úvaha nemusela dělat
+  znovu) a že klíč napsaný pod repem nedělá nic.
 
   Ověřeno **vloženou regresí** — znak navíc ve výchozí šabloně, nepřipojené jádro a vyhozený
   `guard` v `AppStore` naráz: padne **22 tvrzení v 15 testech** napříč všemi třemi sadami.

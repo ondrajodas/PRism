@@ -1655,7 +1655,7 @@ takže by editovatelný prompt rozbil čtení, ne jen výsledek.
 
 Vidět to je na stránce `Review a skilly`; stavy, na které se klikáním nedostane snadno, hlídá
 render sonda (`ReviewPromptRenderProbe`) — a jednu reálnou chybu chytila: náhled se ve `Form`u
-srazil na tři řádky a zbytek promptu uřízl. Testů je **2516**; regrese ověřena vložením (znak navíc
+srazil na tři řádky a zbytek promptu uřízl. Testů je **2519**; regrese ověřena vložením (znak navíc
 ve výchozí šabloně, nepřipojené jádro a vyhozený `guard` v `AppStore` naráz padne 22 tvrzení
 v 15 testech).
 

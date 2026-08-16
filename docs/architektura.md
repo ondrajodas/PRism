@@ -921,10 +921,13 @@ Věci, které se u toho nemají rozbít:
   napsané, že se **nečistí**: vzhledem se nic neutratí a nic neodejde, a vynutit slotu vzhled,
   o který nikdo neřekl, je změna, ne očista. **Stránku v nastavení volba nemá** — ovládá se z railu,
   viz `AppStore` a `App/Views/` níž. Kde se uplatní, je taky tam.
-- **Šablona promptu (#281) je jediná hodnota, u které je čtení přísné.** Chybějící klíč znamená
-  výchozí text — tedy dnešní chování u každého, kdo aplikaci používal před #281. **Hodnota, která
-  není řetězec, ale čtení položí** (`try`, ne `try?`): tiše podstrčený výchozí prompt by znamenal,
-  že se reviewer ptá na něco jiného, než co má někdo v souboru, a nic by na to neupozornilo.
+- **Šablona promptu (#281) se čte přísně**, jako `sources` a `skills`. Chybějící klíč znamená
+  výchozí text — tedy dnešní chování u každého, kdo aplikaci používal před #281. **Hodnota jiného typu
+  (číslo, pole, objekt) čtení položí** (`try`, ne `try?`): tiše podstrčený výchozí prompt by
+  znamenal, že se reviewer ptá na něco jiného, než co má někdo v souboru, a nic by na to
+  neupozornilo. **`null` se počítá jako chybějící klíč** a je to vědomé — není to hodnota, které by
+  se nedalo rozumět, ale výslovné „nic tu není“, tedy totéž, co znamená prázdný řetězec; chová se
+  tak i `sources` a `skills`, zbylé dva klíče s hlášenou rozbitou hodnotou.
   Takhle se okno zamkne s „Konfiguraci se nepodařilo přečíst“ a soubor se nepřepíše. Tolerance se
   tím neporušuje: tolerantní je čtení vůči **chybějícímu** klíči, ne vůči hodnotě, které se nedá
   rozumět. **Prázdný řetězec je platná hodnota** a znamená „ber výchozí“, ne prompt bez zadání —

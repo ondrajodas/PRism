@@ -618,15 +618,34 @@ struct RepositoryConfigDecodingTests {
         #expect(configuration.global.reviewPrompt == ReviewPromptTemplate.standard)
     }
 
-    /// **Přísně, ne tolerantně** — a je to jediná hodnota v souboru, u které se to vyplatí:
-    /// tiše podstrčený výchozí prompt by znamenal, že se reviewer ptá na něco jiného, než co má
-    /// někdo napsané v poli, a nic by na to neupozornilo. Takhle se okno zamkne s hláškou
-    /// „Konfiguraci se nepodařilo přečíst“ a soubor se **nepřepíše**.
-    @Test("Šablona, která není text, čtení položí")
-    func refusesAReviewPromptThatIsNotAString() {
+    /// **Přísně, ne tolerantně** — tiše podstrčený výchozí prompt by znamenal, že se reviewer ptá
+    /// na něco jiného, než co má někdo napsané v souboru, a nic by na to neupozornilo. Takhle se
+    /// okno zamkne s hláškou „Konfiguraci se nepodařilo přečíst“ a soubor se **nepřepíše**.
+    ///
+    /// Vyjmenované schválně: číslo, pole i objekt. Jeden případ by prošel i implementaci, která
+    /// hlídá zrovna ten jeden typ.
+    @Test(
+        "Šablona, která není text, čtení položí",
+        arguments: ["5", "[\"a\"]", "{\"text\": \"a\"}"]
+    )
+    func refusesAReviewPromptThatIsNotAString(_ json: String) {
         #expect(throws: (any Error).self) {
-            try self.configuration(#"{"global": {"reviewPrompt": 5}}"#)
+            try self.configuration(#"{"global": {"reviewPrompt": \#(json)}}"#)
         }
+    }
+
+    /// **`null` je proti tomu chybějící klíč**, ne rozbitá hodnota — a bere se z něj výchozí text.
+    ///
+    /// Je to vědomé: `null` není hodnota, které by se nedalo rozumět, ale výslovné „nic tu není“,
+    /// tedy totéž, co u téhle šablony znamená prázdný řetězec. Chová se tak i `sources` a `skills`,
+    /// zbylé dva klíče, u kterých se rozbitá hodnota hlásí, takže třetí odpověď na tutéž otázku
+    /// tady nevzniká. Test je tu proto, aby se ta úvaha nemusela dělat znovu — a aby se změna
+    /// v jednu nebo druhou stranu musela udělat vědomě.
+    @Test("Šablona zapsaná jako null se bere jako chybějící")
+    func treatsANullReviewPromptAsMissing() throws {
+        let configuration = try self.configuration(#"{"global": {"reviewPrompt": null}}"#)
+
+        #expect(configuration.global.reviewPrompt == ReviewPromptTemplate.standard)
     }
 
     /// Prázdný řetězec je platná hodnota a znamená „ber výchozí“ — ne prompt bez zadání.

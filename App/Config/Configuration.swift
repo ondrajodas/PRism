@@ -125,12 +125,19 @@ struct GlobalConfig: Codable, Equatable, Sendable {
             ?? standard.skillsByLanguage
         blockingCategories = try container.decodeIfPresent([String].self, forKey: .blockingCategories)
             ?? standard.blockingCategories
-        // Chybějící klíč = výchozí text. **Rozbitá hodnota položí celé čtení** — `try`, ne
-        // `try?`, a je to schválně: kdyby se místo čísla nebo objektu tiše dosadil výchozí
+        // Chybějící klíč = výchozí text. **Hodnota jiného typu položí celé čtení** — `try`, ne
+        // `try?`, a je to schválně: kdyby se místo čísla, pole nebo objektu tiše dosadil výchozí
         // prompt, běželo by review s jiným zadáním, než jaké si někdo napsal, a nic by na to
         // neupozornilo. Takhle se v okně ukáže „Konfiguraci se nepodařilo přečíst“ a soubor
         // se nepřepíše. Tolerantní čtení tím neporušuje: tolerantní je vůči **chybějícímu**
         // klíči, ne vůči hodnotě, které se nedá rozumět.
+        //
+        // **`null` se přitom počítá jako chybějící klíč** (`decodeIfPresent` ho tak bere) a je to
+        // tak správně, ne opomenutí: `null` není hodnota, které by se nedalo rozumět — je to
+        // výslovné „nic tu není“, tedy totéž, co u téhle šablony znamená prázdný řetězec
+        // („ber výchozí“). Rozlišovat je přes `container.contains(_:)` by tady vyrobilo třetí
+        // odpověď na tutéž otázku a odchýlilo se od `sources` a `skills`, tedy zbylých dvou klíčů,
+        // u kterých se rozbitá hodnota hlásí. Je na to test, aby se ta úvaha nemusela dělat znovu.
         reviewPrompt = try container.decodeIfPresent(String.self, forKey: .reviewPrompt)
             ?? standard.reviewPrompt
         // Neznámý režim se bere jako `manual` ze stejného důvodu jako u repa: samo od sebe
