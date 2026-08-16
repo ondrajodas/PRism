@@ -1845,6 +1845,47 @@ který tvrdí víc, než data unesou.
 Testů je **2663**; regrese ověřena vložením tří naráz (posunutá výchozí hodnota, runner s vlastní
 konstantou, `resolved` bez sráření) — padne 18 tvrzení v 10 testech.
 
+### Tab `Průběh` — živý výpis a surová session nakreslené, čekají na implementaci
+
+Druhá vrstva dráhy v tabu `Průběh` (okno s kroky session pod fázemi, u běžícího reviewera
+rozbalené) je **nakreslená v mockupu**, sekce 20, a rozhodnutí i zamítnuté alternativy jsou
+ve [specifikaci](superpowers/specs/2026-07-31-prism-design.md), sekce *Tab Průběh — živý výpis
+kroků*. **V kódu není nic** — pravidlo *Návrh (mockup)* v `CLAUDE.md` chce nakreslit a nechat
+schválit dřív, než se issue založí.
+
+**Není to nová funkce, je to nedodělané #22.** Specifikace tab popisuje jako živý pohled na to,
+co reviewer dělá, od začátku; ze dvou z jeho pěti odrážek zbývá dodělat výpis událostí a
+`Sledovat konec`. Data přitom už tečou (`ReviewProgress.attemptedTool` chodí do osy během běhu),
+takže nová datová cesta ani závislost z toho nevychází. **Vestavěný terminál to není** a zůstává
+tam, kde byl — řeší zásah do session, tohle sledování.
+
+Tři věci se u kreslení našly v kódu a nesou se do zadání: **živá osa nemá strop** (uložená má 300,
+takže se za běhu drží stovky událostí, které po restartu zmizí, a nikde to není napsané),
+**odmítnutý nástroj vypadá jako provedený** až do konce běhu (ve streamu je vidět hned, jako
+`tool_result` s `is_error`, ale `StreamParser` `user` eventy nečte) a
+**`ReviewerTimeline.newestEntry(in:)` po zrušeném přepínači (#242) v aplikaci nemá volajícího** —
+drží ho naživu jen tři testy. Zkracování cest se u toho opravuje v číslech: prefix pracovního
+stromu není sedmdesát znaků, ale **131**, u `Bash` třikrát (změřeno 461 → 57 znaků, 8×).
+
+**Druhá obrazovka téže sekce: surová session.** Výpis kroků je záměrně úzký (jen nástroje), takže
+pro chvíli, kdy nestačí — review dopadlo divně, session spadla —, je pod ním **záchranná brzda**:
+přepis celého transcriptu v sheetu, postavený na vzoru `Ukázat celý log` u spadlého checku. Ani
+tohle není nová datová cesta: `TranscriptLocation` cestu odvodí a `TranscriptStore` soubor umí
+otevřít, dneska z něj po pádu čte jen `ReportFindings` (#97).
+
+Rozhodl to **rozbor 922 transcriptů na disku**: největší má 53,3 MB, ale jen **2 348 řádků** —
+a jeden řádek v něm má **7,5 MB**. Řádek je tedy špatná jednotka a ocas o 6 000 řádcích z
+`Policy.logTailLines` by nezabral vůbec; čte se proto **okno posledních 4 MB** plus **8 kB na
+událost**, a protože je soubor lokální, stav „moc velký“ úplně odpadá. Objem přitom nedělá próza
+modelu (**61 kB z 53 MB**, 0,11 %), ale výstupy nástrojů, a z mediánového řádku je **86 % obálka**
+— proto přepis, ne syrové řádky. Podrobnosti i zamítnuté alternativy jsou ve
+[specifikaci](superpowers/specs/2026-07-31-prism-design.md), sekce *Surová session — přepis
+transcriptu*.
+
+Implementace se dělí na **tři issues dělené vrstvou**: samotný výpis se stropem a sledováním konce
+(UI a `Policy`), čtení `tool_result` ze streamu (`StreamParser`, model kroku) a surová session
+(sheet nad `TranscriptStore`). Issues zatím **nejsou založené** — čeká se na souhlas s návrhem.
+
 ### #318 — pruh záložek se v úzkém okně smrskne na ikony
 
 Pruh se do #318 v užším okně **zalamoval**: `PullRequestTabBar` nikde nemá `lineLimit`, takže se

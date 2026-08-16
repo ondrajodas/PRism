@@ -452,6 +452,10 @@ Proto v1 nepotřebuje vestavěný terminál.
 - **Cesty se zkracují proti pracovnímu stromu** a `cd <strom> &&` z příkazů mizí. Bez toho
   začíná každý řádek stejnými sedmdesáti znaky cache.
 
+**Dvě z těch odrážek nejsou hotové** — živý výpis událostí a sledování konce. Znění výš zůstává,
+jak bylo; co k němu zbývá a jak to má vypadat, je v *Tab Průběh — živý výpis kroků* níž
+(mockup, sekce 20). Sedmdesát znaků je tam opravených na změřených 131.
+
 ### Obarvení kódu (#48)
 
 Vlastní pravidla v `App/Syntax/`, žádná závislost. Komentáře, řetězce, čísla, klíčová
@@ -862,6 +866,159 @@ se u něj rozhodly nebo naměřily jinak, než jak stálo výš.
 | Zkrátit `Změněné soubory` na `Soubory` | Ušetří 55 bodů, tedy skoro polovinu ceny sedmé záložky — ale `Soubory` se plete se stromem souborů v liště diffu, což je zapsaný důvod, proč ten popisek takhle zní (`PullRequestTab.czechLabel`) |
 | `Commity` jako přepínač uvnitř `Změněných souborů` | Ušetřilo by sedmou záložku celou, ale `Změněné soubory` jsou obrazovka na review (strom, panel, bubliny, draft) a přepínač uvnitř by polovinu z toho zhasínal. Skrytý stav, ve kterém obrazovka umí míň, je horší než záložka, na které je vidět, kde jsem |
 | Data z klonu v cache | `refs/prism/pr/<n>` existuje jen po checkoutu kvůli review a `forgetPullRequest` ho maže — ověřeno |
+
+### Tab Průběh — živý výpis kroků (návrh, zatím jen v mockupu)
+
+Druhá vrstva dráhy z *Tab Průběh (#22)* výš: pod fázemi visí **okno s kroky session**, u běžícího
+reviewera rozbalené. Nakreslené je v mockupu, **sekce 20** (*Review — Průběh · živý výpis*, viz
+[`docs/navrh.md`](../../navrh.md)); v kódu zatím není nic. Znění #22 se **nepřepisuje** — platí dál
+a tahle sekce je jeho dodělání.
+
+**Není to nová funkce, je to nedodělaná.** Odrážky u #22 chtěly „sekce na reviewera, v ní události
+pod sebou: čas, nástroj a to, nad čím běžel“ a „**sledovat konec**, dá se vypnout“. Události se
+kreslí (`TimelineEntryRow`), ale pod **zavřeným** rozbalením `N kroků session`, které nemá strop
+ani scroll — takže se za běhu nekouká nikdo. Nová datová cesta z toho nevychází: tool cally chodí
+do osy živě (`ReviewProgress.attemptedTool` → `ReviewerTimeline.record`) už od #22.
+
+Že je to nedodělané, se dá **ověřit, ne jen tvrdit**: #22 je zavřené (2026-08-02), ale z jeho tří
+podmínek „hotovo když“ platí dvě — `Zkopírovat resume` funguje a historie po doběhnutí zůstává.
+Třetí, *„při běžícím review je vidět aktivita v reálném čase“*, neplatí: aktivita je pod zavřeným
+rozbalením. A ze zadání navíc vypadl *„auto-scroll na konec (vypnutelný)“*, který zrušilo #242.
+Nové issue tedy nezadává novou funkci, dovírá tuhle.
+
+Co proti dnešku přibývá:
+
+- **Okno má pevnou výšku, ne rostoucí.** Blok, který roste s každou událostí, posune všechno pod
+  sebou — a to je přerovnání celého tabu několikrát za vteřinu. Výpis je vlastní scroll, takže
+  přibývající řádek hýbe jen s ním a dráha nad ním se nehne.
+- **Rozbalený je jen ten, kdo běží**, a rozbalení **patří tabu, ne dráze**. Dneska je to `@State`
+  uvnitř `ReviewerLaneView`, a dráhy jsou v `LazyVStack`u: odrolovaná dráha se zahodí i se svým
+  stavem, takže se výpis po návratu sám zavře. Množina rozbalených skillů se proto drží o patro
+  výš, klíčovaná jménem skillu. Při doběhnutí se výpis **nezavírá sám**.
+- **Jeden strop, 300, pro živou i uloženou osu.** Uložená ho má (`ReviewerTimeline.storedEntryLimit`)
+  a zkrácení přiznává (`droppedEntries`, #203); **živá ho nemá vůbec** — `record` přidává bez
+  omezení. Se stejným číslem platí, že co bylo vidět za běhu, je vidět i po restartu. Ořezává se
+  **začátek** a `droppedEntries` roste průběžně, ne až při ukládání. Zkrácení se přiznává **dvakrát**:
+  v hlavičce výpisu a řezem na jeho začátku, tedy na místě, kde ta useknutá část byla — tatáž úmluva
+  jako `Policy.logTail` (#214, #303) a `ConversationShortfall`.
+- **Krok je pokus, dokud nepřijde `tool_result`.** Poslední řádek nese `běží…`, ne trvání. Dneska se
+  odmítnutý nástroj pozná až z `permission_denials` v `result` eventu, tedy o minuty později; ve
+  streamu je přitom vidět **hned**, jako `tool_result` s `is_error` (`docs/claude-cli.md`, fixture
+  `review-denied-write.jsonl`, párování přes `tool_use_id`). Znamená to číst i `user` eventy, které
+  `StreamParser` dnes zahazuje. Odmítnutí je **štítek, ne červený řádek**: read-only reviewer je
+  tvrdá podmínka č. 2, takže `Bash(gh:*)` odmítnout **má** a session přesto skončí úspěchem.
+- **Sledovat konec se vrací — do paměti, ne do konfigurace.** Viz záznam rozhodnutí.
+- **Zkracování cest zůstává** (`ToolAttempt.shortened(inside:)`), jen se u něj opravuje číslo:
+  #22 psalo „stejnými sedmdesáti znaky cache“, ve skutečnosti je prefix stromu **131 znaků**
+  (`worktrees/<owner>/<repo>/<pr>-<celá sha>`; celá sha je tam schválně, viz `CacheLayout.worktree`).
+  U `Bash` se objeví **třikrát** — v `cd` a u každé cesty v argumentech: změřený příkaz **461 → 57**
+  znaků (8×), čtení souboru **159 → 27** (5,9×). Zkracuje se **jen prefix pracovního stromu**: žádné
+  `~` místo domovské složky a nic mimo strom — cesta ven z pracovní kopie je zrovna ta, u které má
+  člověk zpozornět, a uklizená by vypadala jako domácí.
+
+**Co se překresluje, je řádek, ne tab.** Je to tatáž třída úlohy jako #275 (sazba textu bloku) a #224
+(co se počítá při každém překreslení, se pamatuje). Dnešní tab při každé události skládá dráhy znovu
+a `Policy.lanes` u toho projde celou osu **pětkrát** (`reachedStage`, `laneState`, `lastTool`,
+`reportedFindings`, `finishTime`, plus počet kroků ve `phases`). Odvozené údaje se proto mají počítat
+**při zápisu události**, přírůstkově. Řádky jsou hodnoty, takže se vkládá jeden a ostatní se nesází
+znovu; okno má **líný** seznam, protože prvek s prázdným obsahem se pořád umisťuje (#252). A poloha
+scrollu **nesmí být v observable stavu** (#252) — sledování konce je `Bool` a posun je jedno
+`scrollTo`. Měří se to offscreen renderem výpisu o 300 řádcích, před a po, jako u #275.
+
+**Vestavěný terminál se tím neodkládá ani nepřibližuje — zůstává, kde byl.** V *Co přijde později*
+a s tímtéž odůvodněním z tabulky rozhodnutí: „`stream-json` vykreslený nativně je pro sledování
+lepší; zásah je vzácný.“ Terminál je o **zásahu** do běžící session, výpis o **sledování**; do výpisu
+se nedá psát a cesta zpátky do session zůstává `Zkopírovat resume`.
+
+#### Co se zamítlo
+
+| Zamítnuto | Proč |
+|---|---|
+| Vykreslovat i `text` bloky `assistant` eventu (próza modelu) | Otázka, kvůli které se do `Průběhu` chodí, je „koukal se tam, kam měl“ — a odpověď jsou nástroje, ne úvahy. Próza je řádově víc dat a zalomená v okně o pevné výšce by kroky vytlačila z dohledu, tedy zhoršila přesně to, kvůli čemu výpis vzniká. Ztráta je „o krok dál“, ne „nikde“: celá session je v `claude --resume`, a to je ten levný terminál, o kterém mluví #22 |
+| Jeden společný výpis přes všechny reviewery | Reviewery běží paralelně, takže by se tři session propletly do copánku, ve kterém se nedá číst ani jedna. #22 chce **sekci na reviewera** a to pravidlo platí dál — je to tentýž argument, jakým #242 zamítlo `ReviewTimelineView` |
+| Výpis jako třetí sloupec vedle drah | Rozbilo by srovnání „kdo kde je“, což je jediný důvod, proč fáze stojí vedle sebe (#242). A ve 300 bodech by se cesty nevešly, tedy stejná past, kvůli které se `Průběh` z panelu stěhoval |
+| Uložit předvolbu `Sledovat konec` | #242 klíč `progressFollowsTail` zrušilo jako „stav, který se drží a nikdo ho nečte“, a ten důvod trvá. Je to gesto v jednom běhu, ne nastavení |
+| Vstupní pole do běžící session | Znamenalo by, že okno umí session **řídit** — jiná schopnost s jiným rizikem, a ne ta, kterou #22 chtělo. Zásah patří do terminálu |
+| Vyšší strop pro živou osu než pro uloženou | Sliboval by, že se ke krokům dá vrátit; nižší by zahodil kroky, které v souboru zůstanou. Obojí je rozpor mezi tím, co je vidět za běhu, a tím, co zbude |
+
+### Surová session — přepis transcriptu (návrh, zatím jen v mockupu)
+
+**Druhá obrazovka téže sekce**, ne varianta té první. Výpis kroků výš odpovídá na „koukal se tam,
+kam měl“; tohle je **záchranná brzda** pro chvíli, kdy to nestačí — review dopadlo divně, session
+spadla — a otázka zní „co model doopravdy dělal“. Nakreslené v mockupu, **sekce 20**, blok
+*Surová session*; v kódu není nic.
+
+**Nová datová cesta z toho nevychází.** `TranscriptLocation` odvodí cestu k souboru z pracovního
+stromu a `session_id`, `TranscriptStore` ho umí otevřít — dneska z něj po pádu čte jen
+`ReportFindings` (#97). Přibývá **zobrazení souboru, který aplikace zná**, a staví se na vzoru
+`Ukázat celý log` u spadlého checku (#214, #303): sheet nad `NSTextView`, konec místo celku,
+přiznané zkrácení.
+
+**Změřeno na disku, protože na tom stojí všechna čísla níž** (922 transcriptů pod
+`~/.claude/projects`, rekurzivně — víc než půlka z nich leží o patro hlouběji, takže `*/*.jsonl`
+jich napočítá jen 380):
+
+| Co | Kolik |
+|---|---|
+| medián / nad 1 MB / nad 10 MB | 271 kB / 123 souborů / 14 souborů |
+| největší tři | 53,3 MB, 39,2 MB, 21,6 MB |
+| řádků v tom největším | **2 348** |
+| nejdelší řádek | **7,5 MB**; 53 řádků nad 100 kB, medián řádku **1 604 B** |
+| kolik z řádku je obálka | mediánový řádek nese **247 B čitelného obsahu z 1 604 B**, tedy **86 % obálky**; přes řádky v pásmu ±20 % kolem mediánu 86,2 % |
+| bajty podle druhu obsahu | `tool_result` 19,1 MB (z toho 18,6 MB obrázky vrácené nástroji), samostatné obrázky 2,8 MB, text uživatele 7,5 MB, `tool_use` 736 kB, `thinking` 389 kB, **próza modelu 61 kB** |
+
+Velikosti jsou v MiB psané jako MB — tatáž (volná) úmluva, jakou drží zbytek repa, kde
+`Policy.logSizeLimit = 10 * 1024 * 1024` je „strop 10 MB“. Kdyby se to počítalo dekadicky, je
+největší transcript 55,9 MB.
+
+Z toho plynou tři věci, které rozhodly návrh: **řádek je špatná jednotka** (ocas o 6 000 řádcích
+z `Policy.logTailLines` by na 2 348 řádcích nezabral vůbec, takže „ocas“ = celých 53 MB), **objem
+nedělá próza, ale výstupy nástrojů** (0,11 % bajtů je text modelu) a **většina řádku je obálka**,
+takže syrový JSONL ukáže na obrazovku míň informace, ne víc.
+
+**Obálka se počítá proti čitelnému obsahu, a je to potřeba říct**, protože jinak to číslo nic
+neznamená: „obálka“ = všechno, co v řádku není text zprávy (`uuid`, `parentUuid`, `cwd`,
+`version`, `requestId` a struktura JSONu). Dřívější zápis mluvil o **76 %** — to nesedí ani na
+jednu z definic, kterými se to dá spočítat (mimo klíč `message` je to 32 % mediánového řádku,
+mimo čitelný obsah 86 %), takže se to **přeměřilo**. Platí ta druhá definice, protože o to
+v tom rozhodnutí jde: kolik z řádku **není** to, co chci číst.
+
+Rozhodnutí:
+
+- **Přepis, ne syrový JSONL.** Sází se jedna hlavička na událost (čas, druh, čeho se týká), tělo
+  je text tak, jak v transcriptu stojí — takže je to pořád jen text v `NSTextView`, ne další
+  vykreslování. „Surová“ znamená **úplná**, ne *v JSONu*.
+- **Kreslí se přesně to, co výpis kroků zahazuje**: próza, `thinking`, výstupy nástrojů, systémové
+  události. Kdyby přepis dělal tytéž škrty, byl by to druhý pohled na totéž.
+- **Snímek k okamžiku otevření, ne sledování rostoucího souboru.** Za běhu se otevře normálně, jen
+  to hlavička říká; patička hlásí, kolik od té chvíle přibylo, a vedle je `Načíst znovu`.
+- **Strop je okno posledních 4 MB** zarovnané na začátek řádku, plus **8 kB na jednu událost**.
+  Protože je soubor lokální, **stav „moc velký“ tím mizí úplně**. Přiznává se to **třikrát**:
+  v hlavičce, řezem na začátku textu a u ořezané události na místě řezu.
+- **Zapíná se z hlavičky výpisu** (`Ukázat surovou session`) a **z jejího sbaleného řádku** — tam,
+  kde má ovládání výpis sám, stejně jako `Ukázat celý log` sedí v akcích nad logem. Bez známého
+  `session_id` tlačítko **není**, jako u `Zkopírovat resume`.
+- **Tři různá „přepis tu není“**, která se nesmí slít ani hláškou, ani nabídnutými akcemi: *není*
+  (konečná odpověď, bez `Načíst znovu` — a s poznámkou, že tím padá i `claude --resume`, protože
+  čte tentýž soubor; **změřeno**: na neznámou session odpoví `No conversation found with session
+  ID: …`), *nedá se přečíst* (soubor leží dál → opakování i `Ukázat v Finderu`)
+  a *prázdný* (`TranscriptStore` ho nerozlišuje, protože nepotřeboval — prázdný soubor se přečte
+  v pořádku a vydá nic, což by v sheetu vypadalo jako „session nic nedělala“).
+- **Odmítnutí je štítek, ne červený řádek** — tatáž úvaha jako u výpisu kroků, jen v přepisu je
+  vedle něj i to, co `tool_result` doopravdy napsal.
+
+#### Co se zamítlo
+
+| Zamítnuto | Proč |
+|---|---|
+| Vypsat syrové řádky JSONL tak, jak jsou | Nejdelší řádek má **7,5 MB** a z mediánového řádku (1 604 B) je **86 % obálka** (`uuid`, `parentUuid`, `cwd`, `version`) — na obrazovku by se vešlo **míň** informace, ne víc. Doslovnost tu není přesnost, je to horší čitelnost |
+| Druhý režim sheetu (přepínač *Přepis / JSONL*) | Doslovný JSON je potřeba na chybu harnessu, ne na review — a soubor je **lokální**, takže na to stačí `Zkopírovat cestu` a `Ukázat v Finderu` v patičce. Druhý režim je druhá sada stropů a druhé místo, kde se dá rozejít s tím, co se ukazuje. Na `jq` si aplikace hrát nebude |
+| Sledovat rostoucí soubor (tail za běhu) | Sledování už v okně **je**, o patro výš, a dvě věci nad touž session jsou dvě místa, kde se dá splést pořadí. Poslední řádek rostoucího souboru je navíc běžně rozepsaný, takže by tail ukazoval půlku události jako událost |
+| Převzít strop od logu jobu (velikost souboru + ocas 6 000 řádků) | Řádek je špatná jednotka: soubor o 53 MB má 2 348 řádků, takže by se „ocas“ rovnal celku. A strop na velikost je u lokálního souboru zbytečný — u logu ho vynutila síť (`Range` přes `gh` se na redirect nepřenese, změřeno u #214) |
+| Jeden strop bez druhého na událost | Jeden `tool_result` umí mít 7,5 MB, takže by sežral celé okno a z ocasu session by byl výpis jednoho souboru |
+| Vypisovat base64 obrázků | 2,8 MB v jednom změřeném transcriptu, a k přečtení z toho není nic. Přizná se, že obrázek je a kolik váží |
+| Jedna společná hláška „transcript se nepodařilo načíst“ | Slila by tři různé situace s **různým dalším krokem** — je to tatáž chyba, jaké se vyhýbá rozdíl mezi `čisté` a `failed` |
+| Vestavěný terminál (podruhé) | Přepis je pořád jen **čtení**: nedá se do něj psát a cesta zpátky do session zůstává `Zkopírovat resume`. Surová session je *víc dat*, ne *jiná schopnost* |
 
 ## Platformová rozhodnutí
 
@@ -1900,3 +2057,11 @@ Dvě rozhodnutí, která z rozpisu M8 nejsou vidět a stála za rozdělení na p
 | **Překladač nálezů se nedotýká** (#320) | Zavést mu vlastní nastavení, když už se limity nastavují | `ClaudeFindingTranslator` má dnes 120 s a uvažuje se o tom, že se jazyk nálezů přesune do promptu review a překladač **zanikne** — nastavení pro něj by se za chvíli zahazovalo. Je to navíc jiný druh běhu: krátké volání bez pracovního stromu, kde delší limit nic nezachrání, protože selhání je tam „model neodpověděl ve tvaru, který parser čte“, ne „nestihl to“ |
 | Číslo limitu se **nepíše k výsledku běhu** (#320) | U `timedOut` napsat, po kolika minutách se to zabilo | Uložený běh limit **nenese**, takže by se dalo napsat jedině to, co je nastavené *teď* — a to je o běhu z minulého týdne nepravda; přesně ten vzor, na který si `CLAUDE.md` stěžuje („text tvrdí víc, než data unesou“). Přidat limit do `StoredReviewRun` by znamenalo `nil` u všech dosavadních záznamů a stejně by se muselo psát „neznámý limit“, takže hodnota za to nestojí. Kde se limit **říct dá**, je nastavení: tam je to tvrzení o příštím běhu |
 | Limit sedí na stránce **`Review a skilly`**, ne na `Běh` (#320) | Mezi ostatní čísla na stránce `Běh` (interval, souběh, rozpočet, denní limit) | `Běh` je hrst čísel o stroji a prostředí a **žádné z nich nemá override per repo**. Limit je proti tomu třetí věc o *spuštěném review*, kterou si repo smí přebít — vedle režimu a jazyka nálezů —, takže stojí v téže sekci jako ony. Vlastní sekci nedostal ze stejného důvodu: byla by to čtvrtá sekce na stránce kvůli jednomu číslu |
+| **Živý výpis kroků je druhá vrstva dráhy** (návrh, sekce 20 mockupu) | Nechat ho pod rozbalením, jak je od #242 — je to detail, ne hlavní obsah; nebo dát mu vlastní sloupec vedle drah | Rozbalení je dneska **zavřené a bez stropu**, takže „živý pohled na to, co reviewer právě dělá“ (#22) se za běhu nekouká nikdo. Vlastní sloupec by rozbil srovnání „kdo kde je“, což je jediný důvod, proč fáze stojí vedle sebe (#242), a ve 300 bodech by se cesty nevešly — tatáž past, kvůli které se `Průběh` z panelu stěhoval. Druhá vrstva drží obojí: dráha odpovídá na *kdo kde je*, výpis pod ní na *co dělá teď* |
+| Okno výpisu má **pevnou výšku a vlastní scroll** (návrh) | Nechat ho růst s událostmi, jak roste dnešní `VStack` pod rozbalením | Rostoucí blok posune všechno pod sebou při **každé** události, tedy přerovnání celého tabu několikrát za vteřinu. Pevná výška to zavře do jednoho scrollu; je to tatáž úvaha jako #220 a #252 — co se dá spočítat, se nevyjednává |
+| **Sledovat konec se vrací, ale jen do paměti** (návrh; mění #242) | Nechat to, jak #242 rozhodlo — přepínač i klíč `progressFollowsTail` zrušené | #242 mělo pravdu **v tom, co tehdy platilo**: s dráhami nebylo co následovat, protože fáze nescrollují. Se scrollujícím výpisem je, takže první důvod odpadá; druhý (uložená předvolba, kterou nikdo nečte, je mrtvá váha) trvá, a proto se **nic neukládá**. Výchozí stav zapnuto, vypíná se odrolováním nahoru (ne jen klikem — jinak přepínač zápasí s kolečkem myši), na konci se zase zapne. Po `ReviewerTimeline.newestEntry(in:)` tím zmizí i to, že v aplikaci nemá volajícího a drží ho naživu jen testy |
+| **Jeden strop 300 pro živou i uloženou osu** (návrh) | Nechat živou bez stropu, jak je — v paměti to nikomu nevadí; nebo dát živé vyšší strop, ať se za běhu vidí víc | Dneska se za běhu drží stovky událostí, které po restartu zmizí, a **nikde to není napsané**. Vyšší živý strop by sliboval, že se ke krokům dá vrátit; nižší by zahodil kroky, které v souboru zůstanou. Se stejným číslem platí „co bylo vidět za běhu, je vidět i po restartu“ — a zkrácení se přiznává v hlavičce i řezem na začátku výpisu, tedy tak, jak to dělá `Policy.logTail` (#214) a `ConversationShortfall` |
+| **Krok je pokus, dokud nedorazí `tool_result`** (návrh) | Nechat to, jak je: odmítnutí se dozvíme z `permission_denials` v `result` eventu na konci běhu | Řádek, který se tváří jako hotový krok, je „text, který tvrdí víc, než data unesou“ — a `ToolAttempt` to o sobě říká vlastním komentářem („pokus, ne použití“). Ve streamu je odmítnutí vidět **hned** (`tool_result` s `is_error`, párování přes `tool_use_id`; fixture `review-denied-write.jsonl`), takže cena je číst i `user` eventy, které `StreamParser` dnes zahazuje. Odmítnutí zůstává **štítkem, ne červeným řádkem**: read-only reviewer je tvrdá podmínka č. 2, takže `Bash(gh:*)` odmítnout **má** a session přesto skončí úspěchem |
+| **Próza modelu se nekreslí** (návrh) | Vypisovat i `text` bloky `assistant` eventu, ať je vidět, proč reviewer sáhl zrovna tam | Otázka, kvůli které se do `Průběhu` chodí, je „koukal se tam, kam měl“, a odpověď jsou nástroje, ne úvahy. Próza je řádově víc dat a v okně o pevné výšce by kroky vytlačila z dohledu, tedy zhoršila přesně to, kvůli čemu výpis vzniká. Ztráta je „o krok dál“, ne „nikde“ — celá session je v `claude --resume` |
+| **Vestavěný terminál zůstává odložený** (návrh potvrzuje rozhodnutí z v1) | Když už se kreslí kroky session, vykreslit rovnou celou v SwiftTermu nad PTY | Terminál je o **zásahu** do běžící session, výpis o **sledování** — a to je přesně to dělení, které tabulka rozhodnutí zapsala už v v1 („`stream-json` vykreslený nativně je pro sledování lepší; zásah je vzácný“). Vstupní pole by navíc znamenalo, že okno umí session **řídit**: jiná schopnost s jiným rizikem, a ne ta, kterou #22 chtělo |
+| Zkracování cest se **nerozšiřuje na `~` ani mimo strom** (návrh) | Zkracovat i domovskou složku a dlouhé cesty mimo pracovní kopii, ať je řádek krátký vždycky | Cesta ven z pracovní kopie je zrovna ta, u které má člověk zpozornět; uklizená by vypadala jako domácí. Opravuje se u toho jen číslo v #22: prefix stromu není sedmdesát znaků, ale **131** (`worktrees/<owner>/<repo>/<pr>-<celá sha>`) — u `Bash` třikrát, tedy změřeně 461 → 57 znaků |
