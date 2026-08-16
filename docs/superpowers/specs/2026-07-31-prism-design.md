@@ -804,6 +804,85 @@ se nedá psát a cesta zpátky do session zůstává `Zkopírovat resume`.
 | Vstupní pole do běžící session | Znamenalo by, že okno umí session **řídit** — jiná schopnost s jiným rizikem, a ne ta, kterou #22 chtělo. Zásah patří do terminálu |
 | Vyšší strop pro živou osu než pro uloženou | Sliboval by, že se ke krokům dá vrátit; nižší by zahodil kroky, které v souboru zůstanou. Obojí je rozpor mezi tím, co je vidět za běhu, a tím, co zbude |
 
+### Surová session — přepis transcriptu (návrh, zatím jen v mockupu)
+
+**Druhá obrazovka téže sekce**, ne varianta té první. Výpis kroků výš odpovídá na „koukal se tam,
+kam měl“; tohle je **záchranná brzda** pro chvíli, kdy to nestačí — review dopadlo divně, session
+spadla — a otázka zní „co model doopravdy dělal“. Nakreslené v mockupu, **sekce 20**, blok
+*Surová session*; v kódu není nic.
+
+**Nová datová cesta z toho nevychází.** `TranscriptLocation` odvodí cestu k souboru z pracovního
+stromu a `session_id`, `TranscriptStore` ho umí otevřít — dneska z něj po pádu čte jen
+`ReportFindings` (#97). Přibývá **zobrazení souboru, který aplikace zná**, a staví se na vzoru
+`Ukázat celý log` u spadlého checku (#214, #303): sheet nad `NSTextView`, konec místo celku,
+přiznané zkrácení.
+
+**Změřeno na disku, protože na tom stojí všechna čísla níž** (922 transcriptů pod
+`~/.claude/projects`, rekurzivně — víc než půlka z nich leží o patro hlouběji, takže `*/*.jsonl`
+jich napočítá jen 380):
+
+| Co | Kolik |
+|---|---|
+| medián / nad 1 MB / nad 10 MB | 271 kB / 123 souborů / 14 souborů |
+| největší tři | 53,3 MB, 39,2 MB, 21,6 MB |
+| řádků v tom největším | **2 348** |
+| nejdelší řádek | **7,5 MB**; 53 řádků nad 100 kB, medián řádku **1 604 B** |
+| kolik z řádku je obálka | mediánový řádek nese **247 B čitelného obsahu z 1 604 B**, tedy **86 % obálky**; přes řádky v pásmu ±20 % kolem mediánu 86,2 % |
+| bajty podle druhu obsahu | `tool_result` 19,1 MB (z toho 18,6 MB obrázky vrácené nástroji), samostatné obrázky 2,8 MB, text uživatele 7,5 MB, `tool_use` 736 kB, `thinking` 389 kB, **próza modelu 61 kB** |
+
+Velikosti jsou v MiB psané jako MB — tatáž (volná) úmluva, jakou drží zbytek repa, kde
+`Policy.logSizeLimit = 10 * 1024 * 1024` je „strop 10 MB“. Kdyby se to počítalo dekadicky, je
+největší transcript 55,9 MB.
+
+Z toho plynou tři věci, které rozhodly návrh: **řádek je špatná jednotka** (ocas o 6 000 řádcích
+z `Policy.logTailLines` by na 2 348 řádcích nezabral vůbec, takže „ocas“ = celých 53 MB), **objem
+nedělá próza, ale výstupy nástrojů** (0,11 % bajtů je text modelu) a **většina řádku je obálka**,
+takže syrový JSONL ukáže na obrazovku míň informace, ne víc.
+
+**Obálka se počítá proti čitelnému obsahu, a je to potřeba říct**, protože jinak to číslo nic
+neznamená: „obálka“ = všechno, co v řádku není text zprávy (`uuid`, `parentUuid`, `cwd`,
+`version`, `requestId` a struktura JSONu). Dřívější zápis mluvil o **76 %** — to nesedí ani na
+jednu z definic, kterými se to dá spočítat (mimo klíč `message` je to 32 % mediánového řádku,
+mimo čitelný obsah 86 %), takže se to **přeměřilo**. Platí ta druhá definice, protože o to
+v tom rozhodnutí jde: kolik z řádku **není** to, co chci číst.
+
+Rozhodnutí:
+
+- **Přepis, ne syrový JSONL.** Sází se jedna hlavička na událost (čas, druh, čeho se týká), tělo
+  je text tak, jak v transcriptu stojí — takže je to pořád jen text v `NSTextView`, ne další
+  vykreslování. „Surová“ znamená **úplná**, ne *v JSONu*.
+- **Kreslí se přesně to, co výpis kroků zahazuje**: próza, `thinking`, výstupy nástrojů, systémové
+  události. Kdyby přepis dělal tytéž škrty, byl by to druhý pohled na totéž.
+- **Snímek k okamžiku otevření, ne sledování rostoucího souboru.** Za běhu se otevře normálně, jen
+  to hlavička říká; patička hlásí, kolik od té chvíle přibylo, a vedle je `Načíst znovu`.
+- **Strop je okno posledních 4 MB** zarovnané na začátek řádku, plus **8 kB na jednu událost**.
+  Protože je soubor lokální, **stav „moc velký“ tím mizí úplně**. Přiznává se to **třikrát**:
+  v hlavičce, řezem na začátku textu a u ořezané události na místě řezu.
+- **Zapíná se z hlavičky výpisu** (`Ukázat surovou session`) a **z jejího sbaleného řádku** — tam,
+  kde má ovládání výpis sám, stejně jako `Ukázat celý log` sedí v akcích nad logem. Bez známého
+  `session_id` tlačítko **není**, jako u `Zkopírovat resume`.
+- **Tři různá „přepis tu není“**, která se nesmí slít ani hláškou, ani nabídnutými akcemi: *není*
+  (konečná odpověď, bez `Načíst znovu` — a s poznámkou, že tím padá i `claude --resume`, protože
+  čte tentýž soubor; **změřeno**: na neznámou session odpoví `No conversation found with session
+  ID: …`), *nedá se přečíst* (soubor leží dál → opakování i `Ukázat v Finderu`)
+  a *prázdný* (`TranscriptStore` ho nerozlišuje, protože nepotřeboval — prázdný soubor se přečte
+  v pořádku a vydá nic, což by v sheetu vypadalo jako „session nic nedělala“).
+- **Odmítnutí je štítek, ne červený řádek** — tatáž úvaha jako u výpisu kroků, jen v přepisu je
+  vedle něj i to, co `tool_result` doopravdy napsal.
+
+#### Co se zamítlo
+
+| Zamítnuto | Proč |
+|---|---|
+| Vypsat syrové řádky JSONL tak, jak jsou | Nejdelší řádek má **7,5 MB** a z mediánového řádku (1 604 B) je **86 % obálka** (`uuid`, `parentUuid`, `cwd`, `version`) — na obrazovku by se vešlo **míň** informace, ne víc. Doslovnost tu není přesnost, je to horší čitelnost |
+| Druhý režim sheetu (přepínač *Přepis / JSONL*) | Doslovný JSON je potřeba na chybu harnessu, ne na review — a soubor je **lokální**, takže na to stačí `Zkopírovat cestu` a `Ukázat v Finderu` v patičce. Druhý režim je druhá sada stropů a druhé místo, kde se dá rozejít s tím, co se ukazuje. Na `jq` si aplikace hrát nebude |
+| Sledovat rostoucí soubor (tail za běhu) | Sledování už v okně **je**, o patro výš, a dvě věci nad touž session jsou dvě místa, kde se dá splést pořadí. Poslední řádek rostoucího souboru je navíc běžně rozepsaný, takže by tail ukazoval půlku události jako událost |
+| Převzít strop od logu jobu (velikost souboru + ocas 6 000 řádků) | Řádek je špatná jednotka: soubor o 53 MB má 2 348 řádků, takže by se „ocas“ rovnal celku. A strop na velikost je u lokálního souboru zbytečný — u logu ho vynutila síť (`Range` přes `gh` se na redirect nepřenese, změřeno u #214) |
+| Jeden strop bez druhého na událost | Jeden `tool_result` umí mít 7,5 MB, takže by sežral celé okno a z ocasu session by byl výpis jednoho souboru |
+| Vypisovat base64 obrázků | 2,8 MB v jednom změřeném transcriptu, a k přečtení z toho není nic. Přizná se, že obrázek je a kolik váží |
+| Jedna společná hláška „transcript se nepodařilo načíst“ | Slila by tři různé situace s **různým dalším krokem** — je to tatáž chyba, jaké se vyhýbá rozdíl mezi `čisté` a `failed` |
+| Vestavěný terminál (podruhé) | Přepis je pořád jen **čtení**: nedá se do něj psát a cesta zpátky do session zůstává `Zkopírovat resume`. Surová session je *víc dat*, ne *jiná schopnost* |
+
 ## Platformová rozhodnutí
 
 - **SwiftUI**, target macOS 26, Xcode projekt v repu. Bundle id

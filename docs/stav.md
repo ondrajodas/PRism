@@ -1746,7 +1746,7 @@ Implementace je rozdělená na **dvě issues dělené datovou cestou**: seznam c
 (**#317**, `commits/{sha}` s `Accept: application/vnd.github.diff`, 0,99 s, unified diff pro
 dnešní `DiffParser`). Smrsknutí pruhu na ikony v úzkém okně je odložené do **#318**.
 
-### Tab `Průběh` — živý výpis kroků nakreslený, čeká na implementaci
+### Tab `Průběh` — živý výpis a surová session nakreslené, čekají na implementaci
 
 Druhá vrstva dráhy v tabu `Průběh` (okno s kroky session pod fázemi, u běžícího reviewera
 rozbalené) je **nakreslená v mockupu**, sekce 20, a rozhodnutí i zamítnuté alternativy jsou
@@ -1768,9 +1768,24 @@ takže se za běhu drží stovky událostí, které po restartu zmizí, a nikde 
 drží ho naživu jen tři testy. Zkracování cest se u toho opravuje v číslech: prefix pracovního
 stromu není sedmdesát znaků, ale **131**, u `Bash` třikrát (změřeno 461 → 57 znaků, 8×).
 
-Implementace se dělí na **dvě issues dělené vrstvou**: samotný výpis se stropem a sledováním konce
-(UI a `Policy`) a čtení `tool_result` ze streamu (`StreamParser`, model kroku). Issues zatím
-**nejsou založené** — čeká se na souhlas s návrhem.
+**Druhá obrazovka téže sekce: surová session.** Výpis kroků je záměrně úzký (jen nástroje), takže
+pro chvíli, kdy nestačí — review dopadlo divně, session spadla —, je pod ním **záchranná brzda**:
+přepis celého transcriptu v sheetu, postavený na vzoru `Ukázat celý log` u spadlého checku. Ani
+tohle není nová datová cesta: `TranscriptLocation` cestu odvodí a `TranscriptStore` soubor umí
+otevřít, dneska z něj po pádu čte jen `ReportFindings` (#97).
+
+Rozhodl to **rozbor 922 transcriptů na disku**: největší má 53,3 MB, ale jen **2 348 řádků** —
+a jeden řádek v něm má **7,5 MB**. Řádek je tedy špatná jednotka a ocas o 6 000 řádcích z
+`Policy.logTailLines` by nezabral vůbec; čte se proto **okno posledních 4 MB** plus **8 kB na
+událost**, a protože je soubor lokální, stav „moc velký“ úplně odpadá. Objem přitom nedělá próza
+modelu (**61 kB z 53 MB**, 0,11 %), ale výstupy nástrojů, a z mediánového řádku je **86 % obálka**
+— proto přepis, ne syrové řádky. Podrobnosti i zamítnuté alternativy jsou ve
+[specifikaci](superpowers/specs/2026-07-31-prism-design.md), sekce *Surová session — přepis
+transcriptu*.
+
+Implementace se dělí na **tři issues dělené vrstvou**: samotný výpis se stropem a sledováním konce
+(UI a `Policy`), čtení `tool_result` ze streamu (`StreamParser`, model kroku) a surová session
+(sheet nad `TranscriptStore`). Issues zatím **nejsou založené** — čeká se na souhlas s návrhem.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

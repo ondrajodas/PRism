@@ -18,12 +18,17 @@ a co to stálo*, *Co by se muselo přepsat*.
 který v okně sedí třetí zleva; přečíslovat kvůli němu osmnáct sekcí by rozbilo odkazy, které
 na ně míří. Pořadí sekcí je tedy pořadí, ve kterém vznikly, ne pořadí v UI.
 
-**Jedna obrazovka může mít víc sekcí.** Sekce 20 (*Review — Průběh · živý výpis*) kreslí druhou
+**Jedna obrazovka může mít víc sekcí.** Sekce 20 (*Průběh · výpis a surová session*) kreslí druhou
 vrstvu téhož tabu jako sekce 07 a stojí **vedle ní, ne místo ní**: 07 je záznam toho, jak tab
 vypadá dneska, a ten je potřeba právě k porovnání — proto v ní zůstávají i starší popisky fází
 (`klon`, `čte diff`), které se při implementaci zamítly. Když tedy dvě sekce ukazují totéž jinak,
 poznává se návrh podle toho, že k němu je záznam rozhodnutí ve
 [specifikaci](superpowers/specs/2026-07-31-prism-design.md).
+
+**A jedna sekce může mít víc obrazovek.** Sekce 20 jich má dvě — živý výpis kroků a surovou
+session —, protože **odpovídají na jinou otázku nad týmž místem** a druhá je východ z první.
+Rozdělit je na dvě sekce by ten vztah zahodilo; dokud spolu obrazovky takhle souvisejí, patří
+k sobě. Poznají se podle vlastního `<h3>` a vlastního bloku `.notes`.
 
 **V repu ten soubor není a nemá být.** Návrh je živý dokument, který se překresluje častěji než
 kód; kdyby ležel v repu, byl by z každé úpravy návrhu commit, review a merge. Cena za to je, že
