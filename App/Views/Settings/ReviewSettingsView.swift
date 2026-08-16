@@ -62,6 +62,19 @@ struct ReviewSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            // Pod sadami skillů, ne mezi ně (#281): je to totéž rozhodnutí („co se pustí a co
+            // tomu řekneme“), kdežto blokující kategorie o kus níž jsou už o tom, co z výsledku
+            // je vážné.
+            Section {
+                ReviewPromptEditor(stored: $settings.draft.global.reviewPrompt)
+            } header: {
+                Text("Prompt review")
+            } footer: {
+                Text("Zástupné texty dosadí aplikace při spuštění. Co je pod zámkem, drží sběr nálezů — připojí se i tehdy, když si to někdo ze šablony smaže; bez `ReportFindings` by reviewer nálezy napsal textem a v okně by stálo „čisté review“. Povolení nástrojů se šablonou nemění, reviewer zůstává read-only — ta sada se skládá v kódu.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 StringListEditor(
                     items: $settings.draft.global.blockingCategories,

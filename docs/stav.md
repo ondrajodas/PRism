@@ -1587,5 +1587,37 @@ u `PullRequestTab` vypisovala pět případů a `checks` zmiňovala až v témž
 **Co se našlo a nespravilo** (patří jinam, ne do diffu o README): doc komentář u `SettingsView`
 pořád říká „Tři záložky“, tedy stav před #177.
 
+### Prompt review z nastavení (#281)
+
+Prompt review byl natvrdo v `ClaudeCommand`, takže se dal změnit jedině commitem — a přitom je to
+zrovna to, co se u review mění nejčastěji a posuzuje se podle výsledku. Od #281 se píše v nastavení
+na stránce `Review a skilly`, hned pod sadami skillů.
+
+**Není to jedno pole na celý prompt.** Tři věty v tom textu nejsou styl, ale kontrakt aplikace,
+takže se to dělí na **šablonu** se zástupnými texty `{{skill}}` a `{{baseSha}}` a na **jádro**
+(`ReportFindings` i s prázdným seznamem, zákaz zápisu a odesílání, přebití skillu), které se
+připojí **vždycky** a ze šablony se vyhodit nedá. Jádro přitom **není bezpečnostní opatření** —
+read-only reviewera drží `--allowedTools` a `--disallowedTools`, tedy konstanty v kódu, se kterými
+se šablona nikde nepotká. Chrání **sběr nálezů**: bez `ReportFindings` reviewer nálezy napíše
+textem, sběr tiše nefunguje a v okně stojí „čisté review“.
+
+Výchozí šablona je **doslova ten text, co byl v kódu**, a hlídá to test, který složený prompt
+porovnává znak po znaku s literálem opsaným z minulé verze. Prázdná šablona znamená „ber výchozí“;
+chybějící zástupný text je chyba **u pole** a taková šablona se **neuloží**. Do ručně editovaného
+`config.json` se přesto dostat může, takže ji podruhé chytá `AppStore` a review s ní **nespustí** —
+spadnout potichu na výchozí by znamenalo, že „nic se nestalo“ vypadá jako „funguje“. Pod polem je
+**náhled**: šablona s ukázkovými hodnotami a pod ní zamčené jádro.
+
+Šablona **putuje s požadavkem** jako `baseSha` a skládá ji jedna čistá funkce v `Policy`, takže
+`Zkopírovat příkaz` v tabu `Průběh` (#242) dává tentýž text jako skutečný běh. Prompt **kontroly
+nálezů** (#150) a **překladu nálezů** zůstává natvrdo: jejich odpověď nenese nástroj, ale parser,
+takže by editovatelný prompt rozbil čtení, ne jen výsledek.
+
+Vidět to je na stránce `Review a skilly`; stavy, na které se klikáním nedostane snadno, hlídá
+render sonda (`ReviewPromptRenderProbe`) — a jednu reálnou chybu chytila: náhled se ve `Form`u
+srazil na tři řádky a zbytek promptu uřízl. Testů je **2516**; regrese ověřena vložením (znak navíc
+ve výchozí šabloně, nepřipojené jádro a vyhozený `guard` v `AppStore` naráz padne 22 tvrzení
+v 15 testech).
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

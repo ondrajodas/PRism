@@ -143,6 +143,16 @@ extension AppStore {
         }
         guard let reviewer, let checkout, let reviews else { return }
 
+        // Šablona bez zástupného textu se **nepustí** (#281). Okno neplatnou neuloží, takže
+        // sem se dá dostat jedině ručně editovaným `config.json` — a tam platí, že tolerantní
+        // čtení neznamená tiché: běh s promptem bez base sha by reviewer odpracoval proti
+        // ničemu a v okně by z toho vyšlo „čisté review“. Osa se u toho **nemaže**: nic se
+        // nespustilo, takže poslední průběh je pořád pravda o tomhle PR.
+        if let problem = Policy.reviewPromptProblems(in: configuration.global.reviewPrompt).first {
+            reviewPhases[pr] = .failed(detail: problem.reason)
+            return
+        }
+
         // Nový běh začíná s čistou osou — míchat dohromady, co dělaly dva různé běhy, by
         // z časové osy udělalo nesmysl.
         //
@@ -434,7 +444,11 @@ extension AppStore {
                 let request = ReviewRequest(
                     key: ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill),
                     worktree: worktree,
-                    baseSha: detail.baseSha
+                    baseSha: detail.baseSha,
+                    // Šablona se bere **tady a jednou** (#281): všechny session tohohle běhu
+                    // dostanou tutéž, i kdyby se mezitím uložilo nastavení. Runner si ji
+                    // nečte sám — viz `ReviewRequest.promptTemplate`.
+                    promptTemplate: configuration.global.reviewPrompt
                 )
                 // Protokol slibuje, že selhání session se vrací jako výsledek a vyhodí se
                 // jen zrušení — ale spolehnout se na to znamená, že jakákoli jiná chyba

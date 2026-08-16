@@ -588,11 +588,36 @@ nepovede, nic se nezablokuje: puntík se řídí voláními a nápověda po hove
 nepovedlo a kdy se to zjišťovalo.
 
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
-PR, sada skillů, blokující kategorie, výchozí režim review, jazyk nálezů, povolení odesílání,
-notifikace, výchozí pohled na diff, vzhled okna, interval pollingu, kolik session smí běžet
-naráz, denní strop automatu, rozpočet cache a model. Repozitář si může přebít režim
-(`manual`/`automatic`), povolení odesílání, jazyk nálezů, skilly i kategorie — a nic víc:
-pohled na diff, vzhled okna a notifikace jsou vlastnost člověka, ne repozitáře.
+PR, sada skillů, **prompt review**, blokující kategorie, výchozí režim review, jazyk nálezů,
+povolení odesílání, notifikace, výchozí pohled na diff, vzhled okna, interval pollingu, kolik
+session smí běžet naráz, denní strop automatu, rozpočet cache a model. Repozitář si může přebít
+režim (`manual`/`automatic`), povolení odesílání, jazyk nálezů, skilly i kategorie — a nic víc:
+prompt, pohled na diff, vzhled okna a notifikace jsou vlastnost člověka, ne repozitáře.
+
+**Prompt review se dá psát** (#281) na stránce `Review a skilly`, hned pod sadami skillů. Do té
+doby byl natvrdo v kódu, takže se dal změnit jedině commitem — a přitom je to zrovna to, co se
+mění nejčastěji a posuzuje se podle výsledku. Není to ale jedno textové pole na celý prompt:
+
+- **Šablona** se zástupnými texty `{{skill}}` a `{{baseSha}}`, které aplikace dosadí při
+  spuštění. Výchozí obsah je **doslova ten text, co byl v kódu** — po zavedení pole se aplikace
+  nesmí začít chovat jinak. Prázdné pole znamená „ber výchozí“, ne „pusť reviewera bez zadání“.
+- **Jádro** — věta o `ReportFindings` (i s prázdným seznamem) a zákaz zápisu a odesílání — se
+  připojuje **vždycky** a ze šablony se vyhodit nedá. Není to bezpečnostní opatření (to drží
+  `--disallowedTools`, viz *Oprávnění* níž): chrání to **sběr nálezů**, protože bez
+  `ReportFindings` reviewer nálezy napíše textem, sběr tiše nefunguje a v okně stojí „čisté
+  review“.
+- **Náhled** pod polem ukazuje, jak se prompt poskládá — šablonu s dosazenými ukázkovými
+  hodnotami a pod ní jádro, které jde přečíst, ale ne přepsat.
+- **Chybějící zástupný text je chyba u pole** a taková šablona se **neuloží**; v konfiguraci
+  zůstane poslední platná. Kdyby se do souboru dostala ručně, review se s ní **nespustí** a v PR
+  stojí, který zástupný text chybí — spadnout potichu na výchozí by znamenalo, že „nic se
+  nestalo“ vypadá jako „funguje“.
+
+Šablona **putuje s požadavkem** stejně jako `baseSha`, takže běh doběhne s tou, se kterou začal,
+a `Zkopírovat příkaz` v tabu `Průběh` skládá text toutéž funkcí — dvě místa s vlastní kopií by se
+rozešla první úpravou věty. Prompt **kontroly nálezů** (#150) a **překladu nálezů** zůstává
+natvrdo: jejich odpověď nenese nástroj, ale parser, takže by editovatelný prompt rozbil čtení,
+ne jen výsledek.
 
 **Nálezy chodí česky**, protože okno je české — u firemního repa s mezinárodním týmem se
 dá přepnout na angličtinu, globálně i jen pro to jedno repo. Překládají se **až po
@@ -859,7 +884,8 @@ zastaral hned další verzí.
 3. **Review** — nakonfigurované skilly se spustí jako paralelní headless session
    Claude Code v tom worktree, omezené na read-only nástroje. Prompt si o skill říká
    nástrojem `Skill` výslovně, takže v konfiguraci jsou jeho id (`plugin:skill`), ne
-   slash commandy. Které to jsou, může záviset
+   slash commandy; **jeho text se dá psát v nastavení** (#281), jádro s `ReportFindings`
+   a zákazem zápisu se k němu připojí vždycky. Které skilly to jsou, může záviset
    na programovacím jazyce repa; ten se odhaduje z `git ls-files`. Spouští se **tlačítkem**,
    nebo samo, když je repo v automatickém režimu — ten se zapíná globálně i zvlášť pro každé
    repo a výchozí je manuální, aby neznámé repo nespálilo panel session bez dozoru.
@@ -1016,6 +1042,7 @@ jinak by po startu vypadala jako nová celá historie.
 | **Falešně pozitivní nálezy** | Normální provoz, ne chyba. Jeden nález se dá odmítnout jako `neplatný` nebo `irelevantní` a ostatní platí dál; do verdiktu a do řádku seznamu se nepočítá, ale z okna nezmizí — sbalí se. Označení bydlí na záznamu, ne na nálezu, aby ho nesmazalo opakované review týmž skillem, a platí jen pro ten commit: nálezy jsou klíčované head commitem. |
 | **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
+| **Prompt review** | Psaná **šablona** se zástupnými texty a **jádro**, které se připojí vždycky. Dělí se to proto, že věta o `ReportFindings` není styl, ale kontrakt: bez ní reviewer nálezy napíše textem a rozbitý sběr vypadá jako čisté review. Výchozí šablona je doslova ten text, co byl v kódu, prázdná znamená „ber výchozí“ a chybějící zástupný text je chyba u pole — neplatná šablona se neuloží a review se s ní nespustí. Globálně, ne per repo: prompt je „jak vypadá review u mě“, ne vlastnost repozitáře. |
 | **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
 | **Odesílání na GitHub** | Platí pro review, odpovědi do vláken i komentáře pod PR. Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl. |
 | **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |

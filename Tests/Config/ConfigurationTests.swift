@@ -346,6 +346,9 @@ struct ConfigurationTests {
         // Vzhled se řídí systémem, dokud si někdo neřekne jinak (#278) — vynutit režim sama od
         // sebe aplikace nemá proč.
         #expect(standard.appearance == .system)
+        // Doslova ten text, co byl do #281 v kódu. Že složí týž prompt jako předtím, hlídá
+        // `ReviewPromptTemplateTests` porovnáním znak po znaku.
+        #expect(standard.reviewPrompt == ReviewPromptTemplate.standard)
         #expect(standard.pollIntervalSeconds == 60)
         #expect(standard.maxConcurrentReviews == 3)
         #expect(standard.cacheBudgetMegabytes == 10 * 1024)
@@ -593,5 +596,59 @@ struct RepositoryConfigDecodingTests {
 
         #expect(configuration.global.appearance == .system)
         #expect(configuration.global.mode == .automatic)
+    }
+
+    // MARK: - Prompt review (#281)
+
+    @Test("Šablona promptu ze souboru se přečte")
+    func readsTheReviewPrompt() throws {
+        let configuration = try self.configuration(
+            #"{"global": {"reviewPrompt": "Look at {{skill}} over {{baseSha}}."}}"#
+        )
+
+        #expect(configuration.global.reviewPrompt == "Look at {{skill}} over {{baseSha}}.")
+    }
+
+    /// Chybějící klíč znamená dnešní chování — konfigurace bez `reviewPrompt` je ta, kterou má
+    /// na disku každý, kdo aplikaci používal před #281.
+    @Test("Chybějící šablona bere výchozí text")
+    func fallsBackOnAMissingReviewPrompt() throws {
+        let configuration = try self.configuration(#"{"global": {"mode": "automatic"}}"#)
+
+        #expect(configuration.global.reviewPrompt == ReviewPromptTemplate.standard)
+    }
+
+    /// **Přísně, ne tolerantně** — a je to jediná hodnota v souboru, u které se to vyplatí:
+    /// tiše podstrčený výchozí prompt by znamenal, že se reviewer ptá na něco jiného, než co má
+    /// někdo napsané v poli, a nic by na to neupozornilo. Takhle se okno zamkne s hláškou
+    /// „Konfiguraci se nepodařilo přečíst“ a soubor se **nepřepíše**.
+    @Test("Šablona, která není text, čtení položí")
+    func refusesAReviewPromptThatIsNotAString() {
+        #expect(throws: (any Error).self) {
+            try self.configuration(#"{"global": {"reviewPrompt": 5}}"#)
+        }
+    }
+
+    /// Prázdný řetězec je platná hodnota a znamená „ber výchozí“ — ne prompt bez zadání.
+    @Test("Prázdná šablona v souboru projde a bere výchozí")
+    func acceptsAnEmptyReviewPrompt() throws {
+        let configuration = try self.configuration(#"{"global": {"reviewPrompt": ""}}"#)
+
+        #expect(configuration.global.reviewPrompt.isEmpty)
+        #expect(Policy.reviewPromptTemplate(from: configuration.global.reviewPrompt)
+            == ReviewPromptTemplate.standard)
+    }
+
+    /// Prompt je „jak vypadá review u mě“, ne vlastnost repozitáře — tatáž úvaha jako u vzhledu
+    /// a pohledu na diff. Klíč u repa proto nic neudělá.
+    @Test("Šablona napsaná u repa se nepromítne nikam")
+    func ignoresAReviewPromptWrittenUnderARepository() throws {
+        let configuration = try self.configuration(
+            #"{"repositories": {"cli/cli": {"reviewPrompt": "cokoli", "skills": ["go-review"]}}}"#
+        )
+
+        let repo = try #require(RepoID("cli/cli"))
+        #expect(configuration.global.reviewPrompt == ReviewPromptTemplate.standard)
+        #expect(configuration.resolved(for: repo).skills == ["go-review"])
     }
 }

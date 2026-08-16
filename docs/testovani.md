@@ -895,6 +895,47 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 - **Jazyk nálezů** — u konfigurace výchozí čeština, override per repo a to, že se vlastní
   hodnota nesmaže jako shodná s globální (stejná past jako u režimu). U promptu naopak to,
   že o jazyku **mlčí** — kdyby se to vrátilo, stálo by to nálezy.
+- **Prompt review ze šablony (#281)** — tři sady a **nejcennější tvrzení jsou o tom, že se nic
+  nezměnilo a nedá se nic odebrat**.
+
+  `ReviewPromptTemplateTests` (`Policy`, vyčerpávajícím výčtem):
+  - **Výchozí šablona složí znak po znaku ten prompt, který aplikace posílala do #281.** Text je
+    v testu **literálem opsaným z minulé verze**, ne odkazem na `ReviewPromptTemplate.standard` —
+    porovnávat konstantu se sebou samou by prošlo i po přepsání textu. K tomu druhá strana téhož:
+    `Configuration.standard` tu šablonu doopravdy nese (prázdná hodnota by se chovala stejně jen do
+    chvíle, než se `standard` změní).
+  - **Jádro je v poskládaném promptu i u šablony, ve které po něm není ani stopa** — a z druhé
+    strany **výchozí šablona jádro sama nenese**. Bez toho druhého by se dalo jádro přesunout do
+    šablony, kde by se dalo smazat, a první test by to nepoznal.
+  - Prázdná šablona (i samá mezera) bere výchozí a **není to chyba**; dosazení na každém výskytu;
+    oříznutí, aby v jednořádkovém promptu nevznikly dvě mezery; chybějící zástupný text
+    pojmenovaný jednotlivě i oba naráz v pevném pořadí; hláška, která nese **který** zástupný text
+    chybí **a proč**.
+
+  `ClaudeCommandTests` — že běh bere prompt **ze šablony v požadavku** (ne z konstanty), že
+  `Zkopírovat příkaz` skládá tentýž text toutéž cestou, a **že šablona nemá jak sáhnout na
+  povolení**: nepřátelský text s `--allowedTools Write,Edit,Bash` skončí v jednom argumentu za
+  `-p` a seznam přepínačů zůstane přesně ten z konstant (tvrdá podmínka č. 2). `RecheckCommandTests`
+  k tomu drží, že požadavek kontroly šablonu nemá kam propašovat a její prompt z ní nevzniká.
+
+  `AppStorePromptTests` — šablona z konfigurace dojede až k běhu (`FakeReviewRunner.requests`),
+  prázdná proběhne s výchozím textem, a **s neplatnou se nespustí nic**: fake reviewer nedostane
+  žádný požadavek a fáze je `failed` s tou samou větou, jaká stojí u pole v nastavení.
+
+  V `ConfigurationTests` k tomu chybějící klíč (výchozí text), prázdný řetězec (platná hodnota),
+  **hodnota, která není řetězec a čtení položí** — jediné místo v souboru, kde je čtení přísné —
+  a že klíč napsaný pod repem nedělá nic.
+
+  Ověřeno **vloženou regresí** — znak navíc ve výchozí šabloně, nepřipojené jádro a vyhozený
+  `guard` v `AppStore` naráz: padne **22 tvrzení v 15 testech** napříč všemi třemi sadami.
+
+  **Jak to vypadá, se ověřilo renderem** — `ReviewPromptRenderProbe` (gated `PRISM_MEASURE`)
+  vykreslí stránku `Review a skilly` ve čtyřech stavech promptu (výchozí, vlastní, chybějící
+  zástupný text, prázdná), ve dvou šířkách obsahové části okna (669 a 509 bodů) a v obou režimech.
+  Tři z těch stavů se klikáním vyrábějí těžko a **chybějící zástupný text** je zrovna ten, kvůli
+  kterému sonda vznikla. Chytila jednu reálnou chybu: náhled i jádro se ve `Form`u srazily na tři
+  řádky a zbytek promptu uřízly třemi tečkami — tedy náhled, který zamlčí zrovna to, kvůli čemu se
+  do něj kouká. Léčba je `fixedSize(horizontal: false, vertical: true)`.
 - **Vzhled okna (#278)** — přečtení obou vynucených hodnot, chybějící klíč i překlep (obojí znamená
   `system`, ne pád), a že překlep nezahodí zbytek souboru. K tomu dvě tvrzení, že se něco
   **nestalo**, protože vzhled je vlastnost člověka, ne repa: v zapsaném JSONu je klíč `appearance`

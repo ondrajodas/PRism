@@ -88,10 +88,30 @@ struct RecheckCommandTests {
             baseSha: "bbbb2222"
         )
 
-        #expect(ClaudeCommand.prompt(for: request) == ClaudeCommand.prompt(
+        #expect(ClaudeCommand.prompt(for: request) == Policy.reviewPrompt(
+            template: ReviewPromptTemplate.standard,
             skillID: "code-review",
             baseSha: "bbbb2222"
         ))
+    }
+
+    /// Kontrola nálezů **šablonu z nastavení nebere** (#281) a je to schválně: její odpověď
+    /// nenese nástroj, ale parser o pár řádků níž, takže by editovatelný prompt rozbil čtení,
+    /// ne jen výsledek. Požadavek kontroly proto šablonu ani nemá kam uložit.
+    @Test("Kontrola nálezů šablonu z nastavení nebere")
+    func theRecheckIgnoresTheConfiguredTemplate() {
+        let request = ReviewRequest.recheck(
+            of: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 7),
+            at: "new3333",
+            worktree: URL(filePath: "/tmp/strom"),
+            baseSha: "bbbb2222",
+            material: material
+        )
+
+        // Šablonu si požadavek kontroly nenese vůbec — není kam ji propašovat.
+        #expect(request.promptTemplate.isEmpty)
+        // A prompt kontroly z ní nevzniká: nemá v sobě nic z psané půlky review.
+        #expect(!ClaudeCommand.prompt(for: request).contains("First call the Skill tool"))
     }
 
     @Test("Požadavek s materiálem dostane prompt kontroly")

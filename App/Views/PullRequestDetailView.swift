@@ -1012,8 +1012,12 @@ struct PullRequestDetailView: View {
     private func copyCommand(in timelines: [ReviewerTimeline]) -> ((String) -> Void)? {
         guard let baseSha = loadedDetail?.baseSha else { return nil }
         let model = store.configuration.global.model
+        // Tatáž šablona, jakou dostane skutečný běh (#281), a poskládá se toutéž funkcí —
+        // dvě místa s vlastním textem by se rozešla první úpravou věty.
+        let promptTemplate = store.configuration.global.reviewPrompt
         return { skill in
             Clipboard.copy(ClaudeCommand.shellCommand(
+                promptTemplate: promptTemplate,
                 skillID: skill,
                 baseSha: baseSha,
                 model: model,
