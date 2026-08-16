@@ -1440,13 +1440,18 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     `ChecksTabRenderProbe`, viz níž;
   - **rozejít dělič v pruhu** — počet přechodů `isReviewerOutput` musí být přesně jeden, jinak by
     v pruhu byly dva děliče nebo žádný. Do #306 se to hlídalo i nad zúženým pruhem bez `Kontrol`;
-    ten stav už neexistuje, takže test odpadl s ním;
-  - **slít `showsReviewPanel` s `isReviewerOutput`** (#294) — vlastnosti se rozcházejí právě
-    v `Kontrolách` (fakt o PR, takže nalevo od děliče, a panel přesto nemají). Test to tvrdí
+    ten stav už neexistuje, takže test odpadl s ním. Od #316 se k tomu tvrdí i to, **kde** ten
+    jediný dělič stojí (před `Nálezy`) a že na indexu 4 je `Kontroly` — sedmá záložka vložená
+    doprostřed je zrovna ta změna, po které by zadrátovaný index posunul dělič o místo vedle;
+  - **slít `showsReviewPanel` s `isReviewerOutput`** (#294) — vlastnosti se rozcházejí ve dvou
+    tabech: `Kontroly` a od #316 `Commity` (obojí fakt o PR, takže nalevo od děliče, a panel přesto
+    nemají). Test to tvrdí
     **negativně**: hledá tab, ve kterém se ty dva příznaky neshodují, takže sloučení do jedné
     vlastnosti spadne — a spadlo by na děliči, tedy jinde, než by vzniklo. K tomu vyčerpávající
     výčet („panel je v `Přehledu`, `Změněných souborech` a `Konverzaci`“) a pojistka na počet
-    (tři ze šesti), aby výčet nešlo „opravit“ na všechny nebo na žádný;
+    (tři ze sedmi), aby výčet nešlo „opravit“ na všechny nebo na žádný. Od #316 se to hlídá
+    **nad dvěma taby**, ne nad jedním: `Kontroly` i `Commity` mají `isReviewerOutput == false`
+    a panel přesto nemají;
   - **zarovnat volbu tabu na data** (#306) — volba `Kontroly` musí přežít **všechny čtyři** stavy
     checků, protože zarovnání by se dalo vrátit u kteréhokoli z nich. Do #306 se tu testoval opak
     (volba na nekreslený tab spadne na `Přehled`) a k tomu, že se přitom **nemaže**, aby byl člověk
@@ -1509,11 +1514,14 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 
     **Oprava (návrh tabu `Commity`):** stálo tu, že se popisky *zkracují* (`Změněné soub…`).
     Nezkracují — `PullRequestTabBar` nikde nemá `lineLimit`, takže se popisek láme **uvnitř
-    záložky** a pruh povyroste. Změřeno vykreslením: šest záložek se všemi odznaky dá
-    v nejužším okně (700, tedy tab 647 b) pruh vysoký **75 bodů** místo 34. Pásmo, od kterého se
-    pruh vejde na jeden řádek, ta oprava nemění; mění to, co se stane pod ním. Přesné hodnoty
-    ideální šířky (750 b bez odznaků, 867 b se všemi) i cenu sedmé záložky drží
-    [specifikace](superpowers/specs/2026-07-31-prism-design.md), sekce *Tab Commity*.
+    záložky** a pruh povyroste. Pásmo, od kterého se pruh vejde na jeden řádek, ta oprava nemění;
+    mění to, co se stane pod ním.
+
+    **Druhá oprava (#316), a tentokrát i těch čísel.** Hranice „~920“ výš je z repliky pruhu
+    a z měření po stovkách; skutečný `PullRequestTabBar` se šesti záložkami a všemi odznaky se
+    vejde na jeden řádek od tabu **884 b**, tedy od okna **937 b**. Naměřeno po jednom bodu šířky
+    na `NSHostingView.fittingSize` — proti replice o 17 bodů výš. Sedm záložek a co je stálo drží
+    `TabStripWidthTests` níž.
 
   **`Přehled` se po odebrání souhrnu vyrendroval znovu, před a po** — je to jediný způsob, jak se
   pozná, že po odebrání bloku zbyla úplná obrazovka a ne děravá. Kontrolovaly se u toho **prázdné
@@ -1586,13 +1594,106 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Vyzkoušené vložením regrese**: po smazání `inset * 2` z rozpočtu sloupců hlásí měření **32 bodů
   přesahu ve všech šesti šířkách** a `FindingTableTests` 145 porušení. Sonda tedy měří.
 - **Sonda tabů detailu (#294)** — `DetailTabRenderProbe`, gated `PRISM_MEASURE`. Vyrendruje **celý
-  detail PR ve všech šesti tabech** (`NSHostingView`), v širokém i v nejužším okně a v tom úzkém
+  detail PR ve všech sedmi tabech** (`NSHostingView`), v širokém i v nejužším okně a v tom úzkém
   i se **složeným** panelem. Nic netvrdí; je to způsob, jak vidět, kde lišta je a kde není.
 
   Rendruje se **celý detail, ne jednotlivé taby**, a to je u téhle změny podstatné: co se schovává,
   není obsah tabu, ale jeho **sourozenec** v `HStack`u — render samotného tabu by o tom neřekl nic.
   Složený proužek má vlastní scénář proto, že je úzký: z jednoho renderu se nepozná od hrany okna,
   takže „schoval se“ a „je tam pořád“ vypadají stejně.
+- **Tab `Commity` (#316)** — čtyři sady, každá o něčem jiném.
+
+  - **Tři stavy tabu, vyčerpávajícím výčtem** (`CommitsTabStateTests`). Šest kombinací vstupů
+    (`commits` nenačtené / prázdné / neprázdné krát `failure` je / není) dává **tři** odpovědi, ne
+    čtyři. Jediný řádek, ve kterém se to liší od `checksTab`, je **prázdné pole bez poruchy**: tam
+    vyjde `failed`, protože pull request bez commitů neexistuje a klidná hláška o prázdnu by
+    tvrdila nemožný stav. Vedle výčtu stojí test, který tvrdí, že se něco **NEstalo**: prázdné pole
+    se nikdy nedostane do `list`, ať je `failure` jakékoli. Kdyby `CommitsTabState` dostal `empty`,
+    spadne to tam, ne až v okně.
+  - **Která pilulka `hlava`** (`Policy.headCommit(in:head:)`) — druhý nejcennější test sady, protože
+    to je **tvrzení**, ne dekorace: nálezy jsou klíčované `headSha`. Hlídají se tři případy:
+    hlava uprostřed seznamu se najde (takže se nebere poslední), hlava **mimo seznam** se neoznačí
+    vůbec (po pushnutém commitu je seznam o krok pozadu) a bez známé hlavy se vezme poslední, jak
+    to plyne z definice endpointu.
+  - **Skloňování** — `1 commit` / `2 commity` / `7 commitů`, k tomu `21 commitů` (v češtině nikoli
+    `commit`) a nula. „PR má jeden commit“ je jeden ze tří stavů, které se podle zadání nesmí slít,
+    a `1 commitů` by z něj udělalo chybu sazby. K tomu **strop API**: nad 250 commitů věta řekne,
+    že seznam nemusí být celý — text, který by jinak tvrdil víc, než data unesou.
+  - **Dekódování odpovědi** (`GhCommitTests`) nad **skutečnou** fixture `gh/pr-commits.json`
+    (`cli/cli#13899` — sedm commitů, z toho tři sloučení; veřejné repo schválně). Tvrdí se čtyři
+    věci: seznam se přeloží na řádky včetně `parents` → `isMerge`, **pořadí se nemění**, chybějící
+    pole seznam nepoloží (zbývá jediná tvrdá podmínka — `sha`) a `avatar_url` se čte ze
+    `snake_case` klíče, protože REST píše jinak než `gh … --json` a převod klíčů se na sdíleném
+    dekodéru zapnout nesmí.
+
+    **`author: null` se testuje inline JSONem**, ne fixture, a je u toho napsané proč: veřejné
+    repo tenhle tvar nemá a titulky firemních PR do fixture nepatří. Změřeno na
+    `keboola/job-queue-daemon#858`, kde je `null` u **všech sedmi** commitů — takže to není
+    kuriozita, ale běžný stav, ve kterém musí zbýt jméno z gitu a monogram místo obrázku.
+  - **Načítání ve store** (`AppStoreCommitsTests`) — pět stejných pastí jako u checků a jedna
+    navíc: porucha se nesmí zapsat jako prázdno (u commitů o to hůř, prázdno je tam nemožný stav),
+    zrušení se nezapisuje jako chyba, selhaný pokus **nezahodí** starou sadu, `Zkusit znovu`
+    poruchu přepíše, spadlý detail načtení nezastaví a **zrušené načtení se dotáhne po návratu na
+    PR**. Šestý je ten, který tvrdí, že se něco NEstalo: `loadDetail` třikrát za sebou = **jedno**
+    volání `fetchCommits`, jinak by z commitů byl polling.
+  - **Šířka tabu** — `Commity` jsou čtvrtý tab bez panelu, takže mají vlastní případ
+    v `PanelFreeTabWidthTests` (pásmo 648–1800). Perou se o šířku dvě věci naráz: dlouhá první
+    řádka zprávy (`Merge branch 'trunk' into fix/13804-…`) a pilulka se sha u pravé hrany. Zpráva
+    se řeže, sha ne — takže kdyby se řez ztratil, přeteče to vpravo. **Vyzkoušené vložením
+    regrese**: `lineLimit(1)` vyměněné za `fixedSize()` dá v nejužší šířce (648) přesah 14 bodů.
+    Chytá to jen tam, a je to tak správně — v širokém tabu se ta zpráva vejde, takže přetečení
+    v něm neexistuje.
+- **Šířka pruhu se sedmou záložkou (#316)** — `TabStripWidthTests`. Jediná věc, kterou tab
+  `Commity` doopravdy stojí, a proto se měří, ne odhaduje: `NSHostingView.fittingSize` nad
+  **skutečným** `PullRequestTabBar`em, po jednom bodu šířky.
+
+  | Pruh | Šířka tabu, od které je jeden řádek | Okno (+ rail 53) |
+  |---|---|---|
+  | 6 záložek se všemi odznaky a `+X −Y` — `origin/main` před #316 | 884 b | 937 b |
+  | **7 záložek se všemi odznaky, `+X −Y` ustupuje** | **886 b** | **939 b** |
+  | 7 záložek bez odznaků | 729 b | 782 b |
+  | 7 záložek se všemi odznaky a `+X −Y` (dopočet) | ~996 b | ~1049 b |
+
+  Pilulka `+X −Y` stojí **110 bodů** (na `origin/main` 774 b bez ní, 884 b s ní) a sedmá záložka
+  s odznakem **112** (886 − 774) — na té shodě stojí celý ten obchod. Sada tvrdí čtyři věci:
+
+  - **od okna 940 zůstává pruh na jednom řádku** (pásmo 940–1400, mezi tím 1035, tedy hranice,
+    kterou předpovídala specifikace **bez** té výměny);
+  - **bez odznaků se vejde už od 785**, měřeno zvlášť — kdyby se odznaky počítaly vždycky,
+    přehlédlo by se, že se pruh rozbil zrovna v tom nejběžnějším stavu;
+  - **v okně 700 se pruh zalomí**, a je to tvrzeno schválně: kdyby někdo přidal `lineLimit(1)`,
+    popisky by se začaly řezat, pruh by zůstal nízký a tenhle test zčervená. To je správně — je to
+    jiná obrazovka, než jakou má návrh;
+  - **v úzkém pruhu se `+X −Y` nekreslí, v širokém ano.** Obojí porovnáním dvou renderů (s počty
+    a bez nich): shodné bitmapy znamenají, že tam pilulka není. Druhá půlka je stejně důležitá —
+    bez ní by `ViewThatFits` mohl vybírat užší podobu pořád a #174 by tiše zmizela.
+
+  **Měří se na `NSHostingView`, ne `ImageRenderer`u**: ten `ViewThatFits` vyhodnocuje jinak než
+  skutečné okno, takže by test měřil něco jiného, než co je vidět.
+
+  **Vyzkoušené vložením regrese**: po smazání druhé podoby z `ViewThatFits` (tedy toho, čím se
+  sedmá záložka platí) padne pásmo **ve třech šířkách** — 940, 1000 i 1035 dá pruh o řádek nebo
+  dva vyšší — a k tomu test na nekreslený `+X −Y`. Sada tedy měří přesně tu vlastnost, kvůli které
+  vznikla.
+
+  **Absolutní čísla ze specifikace se nepoužila** — měřila je replika pruhu a vyšla o 17 bodů níž
+  (867/920 a 872/925). Rozdíl, o který jde, replika odhadla dobře (+5 bodů okna proti skutečným
+  +2), ale hranice se z ní brát nedají.
+- **Sonda tabu `Commity` (#316)** — `CommitsTabRenderProbe`, gated `PRISM_MEASURE`. Nic netvrdí;
+  vyrendruje **detail PR v tabu `Commity` ve všech podobách stavu** (nenačteno, seznam, porucha,
+  zastaralý seznam, **PR s jedním commitem**) ve dvou šířkách, seznam navíc v **tmavém režimu**,
+  a k tomu **pruh se sedmi záložkami přes pásmo šířek** 647–1047 bodů tabu.
+
+  Podob je pět, i když `CommitsTabState` má tři případy: `list` se kreslí dvakrát (se zastaralostí
+  a bez ní) a `jeden-commit` je tentýž stav s jinými daty — je to ale zrovna to, co se z čísel
+  nepozná, protože skloňování je vidět až v sazbě. **Prázdný stav mezi nimi není schválně**; na
+  snímku `porucha` je vidět, že se prázdná odpověď hlásí jako porucha.
+
+  Pořadí ve scéně je podmínka, tatáž jako u `ChecksTabRenderProbe`: `loadDetail` si commity
+  dotahuje sám, takže se **nastavují až po něm**, jinak by je přepsal. Tmavý režim se nastavuje
+  **dvakrát** (`NSAppearance` kvůli paletě a `colorScheme` kvůli `.primary`/`.secondary`) —
+  s jedním z toho vyjde tmavý text na tmavém, poučení z #278.
+
 - **Sonda `Přehledu` (#291)** — `OverviewRenderProbe`, gated `PRISM_MEASURE`. Nic netvrdí, jen
   vyrendruje tab přes `NSHostingView` ve třech šířkách a obou režimech, aby se dal **vidět**.
   Existuje vedle měření proto, že „vejde se hlavička do zúženého tabu“ je otázka na vzhled —

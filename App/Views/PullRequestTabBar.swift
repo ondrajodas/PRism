@@ -38,18 +38,41 @@ struct PullRequestTabBar: View {
     @State private var hovered: PullRequestTab?
 
     var body: some View {
+        // **Dvě podoby, ne zúžení jednoho pruhu** (#316). Sedmá záložka (`Commity`) stojí 112 bodů
+        // šířky a pilulka `+X −Y` 110, takže se jedna zaplatí druhou: dokud je místo, kreslí se
+        // obojí, a jakmile není, ustoupí rozsah změny. Je to i ten správný kus, který má jít první
+        // — mluví o rozsahu **celého PR**, což je odpověď na otázku `Změněných souborů`, kdežto
+        // záložka je cesta k obsahu, který jinudy není vidět.
+        //
+        // Změřeno na tomhle view (`TabStripWidthTests`, po jednom bodu šířky): sedm záložek se
+        // všemi odznaky se vejde na jeden řádek od **886 bodů** tabu, tedy od okna 939 — proti
+        // dnešním 884 / 937 se šesti. Bez téhle výměny by na to potřebovaly ~996 / ~1049.
+        //
+        // **`ViewThatFits` měří ideální šířku obou podob**, a ta je u pruhu bez `lineLimit`u šířka
+        // nezalomeného textu — přesně to, co potřebujeme vědět. Pod 886 body se ani druhá podoba
+        // nevejde a popisky se zalomí; spravuje to až druhý stupeň (#318), který sedmé záložce
+        // nepředchází, protože je rozbitý stejně i dneska se šesti.
+        ViewThatFits(in: .horizontal) {
+            strip(showsDiffstat: true)
+            strip(showsDiffstat: false)
+        }
+        .padding(.horizontal, 12)
+        // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
+        // takže by se vykreslil svisle — tatáž past jako u hlaviček souborů v diffu.
+        .overlay(alignment: .bottom) { Rectangle().fill(.separator).frame(height: 1) }
+    }
+
+    /// Jedna podoba pruhu. Záložky jsou v obou tytéž — liší se **jen** tím, jestli je za nimi
+    /// rozsah změny; kdyby se lišilo i něco jiného, byly by to dvě obrazovky místo jedné.
+    private func strip(showsDiffstat: Bool) -> some View {
         HStack(spacing: 2) {
             ForEach(Array(PullRequestTab.allCases.enumerated()), id: \.element) { index, tab in
                 if needsSeparator(before: index) { separator }
                 item(tab)
             }
             Spacer(minLength: 8)
-            if let diffCounts { diffstat(diffCounts) }
+            if showsDiffstat, let diffCounts { diffstat(diffCounts) }
         }
-        .padding(.horizontal, 12)
-        // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
-        // takže by se vykreslil svisle — tatáž past jako u hlaviček souborů v diffu.
-        .overlay(alignment: .bottom) { Rectangle().fill(.separator).frame(height: 1) }
     }
 
     /// Patří před tuhle záložku dělič? (#242, `.tsep`)
@@ -222,6 +245,11 @@ struct PullRequestTabBar: View {
         // `Přehled` je od #183 popis a fakta, takže dokument; mluví se v `Konverzaci`.
         case .overview: "doc.text"
         case .filesChanged: "plus.forwardslash.minus"
+        // Cesta od bodu k bodu — `Commity` jsou **postup**, ne historie. Hodiny by mluvily o čase,
+        // což je otázka `Konverzace`, a větev (`arrow.trianglehead.branch`) o topologii, kterou tab
+        // neukazuje. Je to zároveň nejužší z uvažovaných (13 b proti 14–17), a šířka je u sedmé
+        // záložky to jediné, co doopravdy stojí.
+        case .commits: "point.topleft.down.to.point.bottomright.curvepath"
         case .conversation: "bubble.left.and.bubble.right"
         // Seznam s odškrtnutím, ne `checkmark.circle`: kolečko se v hlavičce používá na **výsledek**
         // (zelené prošlo, červené spadlo), kdežto ikona záložky má říkat, co v ní je — a to je

@@ -13,6 +13,21 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     case overview
     /// Diff s bublinami.
     case filesChanged
+    /// Commity pull requestu — co se stalo v kterém kroku (#316).
+    ///
+    /// **Vedle `Změněných souborů` schválně.** Obojí odpovídá na „co se v kódu změnilo“, jen
+    /// jednou naráz a jednou po krocích, takže se ta dvojice čte jako pár a přepíná se jedním
+    /// skokem. Slitý diff ukazuje výsledek, ne cestu; otázka „proč tenhle řádek zmizel“ nebo „kdy
+    /// se sem dostala ta migrace“ má odpověď v jednotlivých commitech a dneska se hledá
+    /// v prohlížeči — tentýž pohyb jako u `Konverzace` (#183) a `Kontrol` (#215).
+    ///
+    /// **Vložení doprostřed dělič neposune** — kreslí se z `isReviewerOutput`, ne z indexu (#215,
+    /// #242). Přesně tuhle situaci ta vlastnost předvídala doslova.
+    ///
+    /// Stojí to **šířku pruhu záložek**, a je to jediné, co to stojí: sedm záložek se všemi odznaky
+    /// by potřebovalo okno ~1049 bodů proti dnešním 937. Zaplatila to pilulka `+X −Y`, která se
+    /// v úzkém pruhu nekreslí, takže hranice zůstala na 939 — viz `PullRequestTabBar`.
+    case commits
     /// Časová osa toho, co se na PR dělo (#183).
     ///
     /// **Vlastní tab, ne sekce v `Přehledu`.** Jsou to dvě různé otázky: `Přehled` odpovídá na
@@ -66,6 +81,7 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
         switch self {
         case .overview: "Přehled"
         case .filesChanged: "Změněné soubory"
+        case .commits: "Commity"
         case .conversation: "Konverzace"
         case .checks: "Kontroly"
         case .findings: "Nálezy"
@@ -85,7 +101,7 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// pozice ne.
     var isReviewerOutput: Bool {
         switch self {
-        case .overview, .filesChanged, .conversation, .checks: false
+        case .overview, .filesChanged, .commits, .conversation, .checks: false
         case .findings, .progress: true
         }
     }
@@ -93,11 +109,15 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// Je v tomhle tabu vidět panel s nálezy a mým review (#294)?
     ///
     /// Panel odpovídá na otázku „co k tomu, co právě čtu, nahlásily reviewery“, a ta má smysl jen
-    /// tam, kde se vedle něj čte **něco jiného**: popis PR, diff, diskuze. Ve zbylých třech tabech
+    /// tam, kde se vedle něj čte **něco jiného**: popis PR, diff, diskuze. Ve zbylých čtyřech tabech
     /// je buď **duplikát** (`Nálezy` jsou tytéž nálezy přes celou šířku, `Průběh` je záznam týchž
     /// běhů), nebo **ukrajuje šířku obsahu, který ji potřebuje** — detail spadlého checku
     /// v `Kontrolách` nese konec logu (#214). Složený proužek je úzký, ale ne zdarma: bere šířku,
     /// a v úzkém okně je to zrovna to místo, kde se obsah láme.
+    ///
+    /// **`Commity` mají důvod navíc** (#316), a je silnější než šířka: nálezy jsou klíčované
+    /// `headSha` (tvrdá podmínka č. 5), takže by panel vedle staršího commitu ukazoval nálezy
+    /// k **jinému kódu**. Není to duplikát, je to tvrzení, které by neplatilo.
     ///
     /// **Změna proti #242**, kde stálo, že panel je vidět ve všech tabech včetně `Nálezů` — s
     /// odůvodněním, že smyčka nález → `Převzít` → text v mém review je ta hlavní práce a musí se
@@ -111,13 +131,13 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// do pravé skupiny a chyba by byla vidět jinde, než by vznikla.
     ///
     /// Vlastnost tabu, ne funkce v `Policy`: není co vážit ani z čeho počítat — je to konstantní
-    /// fakt o každém z šesti případů, tedy tentýž druh věci jako `czechLabel`
+    /// fakt o každém ze sedmi případů, tedy tentýž druh věci jako `czechLabel`
     /// a `isReviewerOutput`. `Policy` by na totéž potřebovala týž `switch` a druhé místo, kam se
     /// chodit podívat.
     var showsReviewPanel: Bool {
         switch self {
         case .overview, .filesChanged, .conversation: true
-        case .checks, .findings, .progress: false
+        case .commits, .checks, .findings, .progress: false
         }
     }
 }

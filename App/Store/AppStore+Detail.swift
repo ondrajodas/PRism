@@ -87,6 +87,12 @@ extension AppStore {
             // tehdy, když **není ani seznam, ani porucha**: obojí je hotová odpověď a přepisovat ji
             // při každém příchodu na PR by z checků udělalo polling.
             if checks[id] == nil, checkFailures[id] == nil { await loadChecks(for: id) }
+            // Commity mají tentýž problém i tutéž odpověď (#316): `loadCommits` běží až po detailu,
+            // takže se dá zrušit přepnutím PR — a bez tohohle dotažení by v tabu `Commity` po
+            // návratu na PR svítilo `Načítám commity…` navždycky. Ptá se jedině tehdy, když **není
+            // ani seznam, ani porucha**; obojí je hotová odpověď a přepisovat ji při každém příchodu
+            // na PR by z commitů udělalo polling.
+            if commits[id] == nil, commitFailures[id] == nil { await loadCommits(for: id) }
             return
         }
         detailStates[id] = .loading
@@ -118,6 +124,16 @@ extension AppStore {
         // není zdarma, ale `gh pr checks` na `gh pr view` nestojí: jsou to dva různé dotazy a
         // není důvod, aby se checky nedaly načíst kvůli tomu, že se nepodařila hlavička.
         await loadChecks(for: id)
+
+        // Commity taky (#316), a taky **i po spadlém detailu**: tab `Commity` je v pruhu vždycky,
+        // takže bez tohohle volání by nad nenačtenou hlavičkou svítilo `Načítám commity…` navždycky.
+        // Je to jedno volání (`per_page=100`, změřeno 1,20 s pro sedm commitů) a platí se za odznak
+        // s počtem, který má být vidět, aniž by se do tabu chodilo.
+        //
+        // **Za checky, ne souběžně.** Sériově proto, že obojí je `gh` podproces a paralelní
+        // spouštění by jich na jeden výběr řádku zvedlo počet naráz běžících; přínos by byl
+        // sekunda, cena dva procesy místo jednoho v nejužším místě aplikace.
+        await loadCommits(for: id)
     }
 
     /// Dotáhne checky k PR. **Selhání se neschovává do prázdna** (#215).

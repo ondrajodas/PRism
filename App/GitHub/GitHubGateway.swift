@@ -83,4 +83,20 @@ protocol GitHubGateway: Sendable {
     ///
     /// Desátá **čtecí** metoda; tvrdá podmínka č. 1 platí dál — restart workflow tady není.
     func fetchJobLog(repo: RepoID, jobID: Int) async throws -> String
+
+    /// Commity pull requestu (#316) — seznam do tabu `Commity`.
+    ///
+    /// **Jedno volání na celý seznam**: sha, zpráva, jméno a datum autora i adresa jeho obrázku
+    /// jsou v téže odpovědi. Změřeno 1,20 s pro sedm commitů.
+    ///
+    /// **Ne přes klon v cache.** `RepoCheckout` fetchuje `refs/pull/<n>/head` do `refs/prism/pr/<n>`,
+    /// ale jen když proběhl checkout kvůli review, a `forgetPullRequest` ten ref maže — ověřeno,
+    /// takže by tab u poloviny PR neměl data.
+    ///
+    /// Vrací je **v pořadí, v jakém přišly** (GitHub je dává od nejstaršího); řazení je rozhodnutí,
+    /// ne tvar odpovědi — tatáž hranice jako u `fetchReleases`.
+    ///
+    /// Jedenáctá **čtecí** metoda; tvrdá podmínka č. 1 platí dál — gateway pořád nemá nic, čím by
+    /// šlo něco odeslat.
+    func fetchCommits(id: PRIdentifier) async throws -> [PullRequestCommit]
 }
