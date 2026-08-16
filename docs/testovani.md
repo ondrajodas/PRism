@@ -1524,6 +1524,42 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   chyběl. `NSHostingView` kreslí skutečnou hierarchii, takže odkaz v něm stojí ve své šířce —
   ověřeno, čitelný celý.
 
+  **Od #280 má každá šířka i variantu s bannerem „od minule“** (`-od-minule.png`). Důvod je
+  sousedství, ne úplnost: řada faktů se přesunula nad popis, takže jejím novým sousedem shora je
+  ten pruh — a ten je okrový (`Palette.stale`) zrovna tak jako zastaralá sha v posledním boxíku.
+  Dvě okrové plochy nad sebou se posuzují okem, ne z kódu.
+- **Pořadí v `Přehledu` (#280)** — `OverviewOrderTests`: **řada faktů stojí nad kartou s popisem.**
+  Je to jediné, co #280 mění, a rozbije se to potichu — přehozený `VStack` build nepoloží
+  a `OverviewWidthTests` projdou v obou pořadích, protože přesah je v obou nulový.
+
+  Měří se **z pixelů, ne z hierarchie**, a využívá se k tomu tvar obou částí: řada faktů je mřížka
+  čtyř dlaždic s mezerami 9 bodů, takže ve svislém pruhu **mezi** dlaždicemi nekreslí nic, kdežto
+  karta s popisem je jedna plocha přes celou šířku a kreslí tam. Stačí tedy porovnat, kde obsah
+  začíná uprostřed první dlaždice (= vrchol řady faktů) s tím, kde začíná v mezeře za ní
+  (= vrchol karty). Fakta jsou nad popisem právě tehdy, když je první číslo menší.
+
+  **Měří to `OverflowProbe`, ne vlastní scéna.** Je to druhá otázka nad **týmž plátnem** — ne
+  „přeteklo něco vpravo“, ale „co je výš“ — takže tam přibyla metoda, ne nová sonda vedle:
+  plátno, purpurový podklad, porovnání proti druhému renderu i tolerance 5 z 255 mají zůstat jedny.
+  Dvě sondy nad stejnou scénou znamenají dvě měřítka toho, co se počítá za nakreslené, a ta se
+  rozejdou potichu. Sloupce se přitom předávají **najednou**: jeden dotaz stojí dva rendery (obsah
+  a podklad), takže ptát se dvakrát na totéž plátno je čtyřnásobek práce za tutéž odpověď —
+  změřeno, 5,8 s proti 1,3 s přes osm šířek.
+
+  Banner „od minule“ se v téhle suitě **schválně nekreslí**: je to další plocha přes celou šířku,
+  takže by v mezeře mezi dlaždicemi začínal dřív než popis a měřil by se místo popisu on.
+
+  **Ověřeno vloženou regresí**: po prohození obou prvků ve `VStacku` vyjdou obě čísla na 16
+  (plná plocha karty kreslí v obou sloupcích) a suita spadne ve **všech osmi šířkách**. Druhý
+  test je pojistka proti tomu, že by měření vracelo „nic se nenakreslilo“ a suita byla zelená
+  omylem.
+
+  Že se u toho **nezměnila sazba ani šířka**, se dokázalo jinak než testem: render `Přehledu`
+  před změnou a po ní má při každé ze tří šířek, obou tématech i obou stavech banneru **shodnou
+  velikost plátna a shodnou multimnožinu otisků vodorovných řádků**. Řádky se tedy jen přesunuly
+  (~580 z nich při 900 bodech), žádný se nepřekreslil — což je přesně to tvrzení, které diff
+  s přehozeným pořadím musí unést.
+
 - **Detail spadlého checku (#214)** — `Policy` výčtem (`CheckLogTextTests`) a store
   (`AppStoreCheckDetailTests`). Nejcennější testy tvrdí, že se něco **NEstalo**:
   - **bez kliknutí se pro log ani anotace nejde** — jinak je to N+1 past o tři řády dražší

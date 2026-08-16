@@ -28,9 +28,14 @@ struct OverviewRenderProbe {
         let directory = URL(filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory())
         for width in widths {
             for dark in [false, true] {
-                let url = directory.appending(path: "prehled-\(Int(width))-\(dark ? "tmavy" : "svetly").png")
-                try write(width: width, dark: dark, to: url)
-                print("SONDA \(url.path)")
+                for withBanner in [false, true] {
+                    let variant = withBanner ? "-od-minule" : ""
+                    let url = directory.appending(
+                        path: "prehled-\(Int(width))-\(dark ? "tmavy" : "svetly")\(variant).png"
+                    )
+                    try write(width: width, dark: dark, withBanner: withBanner, to: url)
+                    print("SONDA \(url.path)")
+                }
             }
         }
     }
@@ -40,11 +45,18 @@ struct OverviewRenderProbe {
     ///
     /// **Barevný režim se nastavuje dvakrát**: `NSAppearance` kvůli paletě (dynamické `NSColor`)
     /// a `colorScheme` kvůli `.primary`/`.secondary`. S jedním z toho vyjde tmavý text na tmavém.
-    private func write(width: CGFloat, dark: Bool, to url: URL) throws {
+    private func write(width: CGFloat, dark: Bool, withBanner: Bool, to url: URL) throws {
         let scene = OverviewView(
             description: Self.description,
             facts: Self.facts,
+            // **Varianta s bannerem je kvůli #280.** Řada faktů se přesunula nad popis, takže jejím
+            // novým sousedem shora je pruh „Od tvé poslední návštěvy“ — a ten je okrový
+            // (`Palette.stale`) zrovna tak jako zastaralá sha v posledním boxíku. Dvě okrové plochy
+            // nad sebou se posuzují okem, ne z kódu, takže se musí dát vidět.
+            changes: withBanner ? Self.changes : .none,
             lastVisit: Date(timeIntervalSince1970: 1_754_000_000),
+            isStale: withBanner,
+            movedHead: withBanner ? "9c1de0212ab" : nil,
             pullRequest: Self.pullRequest
         )
         .content
@@ -122,5 +134,22 @@ struct OverviewRenderProbe {
             .init(caption: "Hlava", value: "abc1234", isMonospaced: true),
             .init(caption: "Nálezy proti", value: "def5678", isMonospaced: true, isStale: true),
         ]
+    )
+
+    /// Force push je na banner nejhustší případ — nese i větu o tom, která sha na větvi už není,
+    /// takže je pruh nad řadou faktů tak vysoký, jak jen umí být.
+    private static let changes = VisitChanges(
+        commits: [],
+        forcePushes: [
+            TimelineEvent(
+                id: "1",
+                kind: .forcePushed(before: "4f2ac9188cd", after: "9c1de0212ab"),
+                actor: EventActor(login: "odinuv", avatarURL: nil, isBot: false),
+                at: Date(timeIntervalSince1970: 1_753_900_000)
+            )
+        ],
+        events: [],
+        reviews: [],
+        comments: []
     )
 }

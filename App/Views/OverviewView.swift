@@ -60,12 +60,20 @@ struct OverviewView: View {
                     dismiss: dismissChanges
                 )
             }
-            descriptionCard
-            // Dlaždice **pod popisem**, ne nad ním: popis je to, co autor chce, aby se
-            // přečetlo, čísla jsou kontext k němu.
+            // Dlaždice **nad popisem** (#280, návrh sekce 18): popis PR je libovolně dlouhý —
+            // u pracovních PR běžně padesát řádků — kdežto fakta jsou tři čísla a dvě sha.
+            // Pod popisem se k nim tedy scrolluje přes prózu, jejíž délku neurčujeme my, a jedno
+            // z nich (`Nálezy proti`) odpovídá na otázku „platí to, co v okně vidím?“. Odpověď
+            // na ni nepatří za odrolování. Boxíky jsou přehled, popis je čtení.
+            //
+            // Do #280 to bylo obráceně, s odůvodněním „popis je to, co autor chce, aby se
+            // přečetlo“. Nezrušilo se to proto, že by to bylo špatně, ale proto, že pořadí
+            // řeší **cenu za odrolování**, a ta je nesouměrná: fakta jsou vždycky krátká,
+            // popis vždycky ne.
             if !facts.isEmpty {
                 PullRequestFactsView(facts: facts)
             }
+            descriptionCard
             // **Kontroly tady nejsou vůbec** (#215). Do #215 to byl seznam (#209), pak chvíli
             // souhrn — a nakonec ani ten: tab `Kontroly` na tu otázku odpovídá celou
             // a „je to zelené“ nese chip v hlavičce PR, který je vidět ve všech tabech.

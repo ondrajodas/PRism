@@ -5,7 +5,13 @@ import Testing
 
 @testable import PRism
 
-/// Měření přetečení šířky — **jedno místo** pro `Přehled` (#291) i pro taby bez panelu (#294).
+/// Měření nad vyrendrovaným tabem — **jedno místo** pro `Přehled` (#291), taby bez panelu (#294)
+/// i pořadí prvků v `Přehledu` (#280).
+///
+/// Odpovídá na dvě otázky nad **týmž plátnem**: „přeteklo něco vpravo za hranu tabu“
+/// (`overflow(of:)`) a „kde v tomhle sloupci obsah začíná“ (`firstPaintedRow(of:atColumn:)`).
+/// Držet je pohromadě je záměr — plátno, podklad i tolerance toho, co se počítá za nakreslené,
+/// mají být jedny. Dvě sondy nad stejnou scénou znamenají dvě měřítka, která se rozejdou potichu.
 ///
 /// **Měří se pixely, ne rámečky.** `frame(width:)` z `filling()` je tvrdý rámec: dítě, které se do
 /// něj nevejde, přeteče **vizuálně**, aniž by se rodičova velikost změnila. Ptát se rodiče na
@@ -35,10 +41,50 @@ struct OverflowProbe {
 
     /// Kolik bodů se nakreslilo vpravo za hranou tabu. Nula = nic nepřeteklo.
     func overflow(of content: some View) throws -> Int {
+        let (painted, empty) = try canvases(of: content)
+        return try rightmostPaintedColumn(of: painted, against: empty)
+    }
+
+    /// Nejvyšší řádek, ve kterém se v zadaných **sloupcích** obsah liší od čistého podkladu —
+    /// v tomtéž pořadí, v jakém sloupce přišly. `-1` = v tom sloupci se nenakreslilo nic.
+    ///
+    /// Je to druhá otázka nad tímtéž plátnem (#280): ne „přeteklo to vpravo“, ale „co je výš“.
+    /// Sedí tady, aby plátno, podklad a tolerance zůstaly na jednom místě — dvě sondy nad stejnou
+    /// scénou by znamenaly dvě různá měřítka toho, co se počítá za nakreslené.
+    ///
+    /// **Svislý pruh je ta rozlišovací pomůcka.** Prvky přes celou šířku (karta, banner) kreslí
+    /// v každém sloupci, kdežto mřížka dlaždic nechává mezi nimi mezeru nedotčenou — z porovnání
+    /// dvou sloupců se tedy pozná pořadí, aniž by se sahalo do hierarchie.
+    ///
+    /// **Bere sloupce najednou, ne po jednom, a je to podstatné**: jeden dotaz znamená dva rendery
+    /// (obsah a podklad), takže ptát se dvakrát na totéž plátno je čtyřnásobek práce za tutéž
+    /// odpověď — u osmi šířek to bylo měřitelné, 5,8 s proti 2,9 s.
+    func firstPaintedRows(of content: some View, atColumns columns: [CGFloat]) throws -> [Int] {
+        let (painted, empty) = try canvases(of: content)
+        return try columns.map {
+            try firstPaintedRow(of: painted, against: empty, atColumn: $0)
+        }
+    }
+
+    /// Obsah a čistý podklad na jednom plátně — a ověřené, že se dají porovnávat bajt po bajtu.
+    private func canvases(of content: some View) throws -> (NSBitmapImageRep, NSBitmapImageRep) {
         let painted = try render(scene(of: content))
         let empty = try render(scene(of: EmptyView()))
         if let name { try dump(painted, as: name) }
-        return try rightmostPaintedColumn(of: painted, against: empty)
+        try requireComparable(painted, empty)
+        return (painted, empty)
+    }
+
+    /// **Nesedící plátna se ohlásí, nevrátí nulu.** Nula by znamenala „nic nepřeteklo“, takže by
+    /// rozbitá sonda vyšla jako zelený test — a to je ten nejhorší možný způsob, jak se tahle
+    /// třída může pokazit: přestane měřit a nikdo se to nedozví. Platí to i o rozvržení bajtů:
+    /// bez shody v něm by se porovnávaly různé pixely.
+    private func requireComparable(_ image: NSBitmapImageRep, _ empty: NSBitmapImageRep) throws {
+        try #require(image.pixelsWide == empty.pixelsWide, "plátna se rozešla v šířce")
+        try #require(image.pixelsHigh == empty.pixelsHigh, "plátna se rozešla ve výšce")
+        try #require(image.bytesPerRow == empty.bytesPerRow, "plátna se rozešla v délce řádku")
+        try #require(image.bitsPerPixel == empty.bitsPerPixel, "plátna se rozešla v bitech na pixel")
+        try #require(!image.isPlanar && !empty.isPlanar, "planární bitmapa má jiné rozvržení bajtů")
     }
 
     /// Obsah na plátně širším než tab, na purpurovém podkladu.
@@ -77,15 +123,6 @@ struct OverflowProbe {
         against empty: NSBitmapImageRep
     ) throws -> Int {
         let start = Int(width.rounded())
-        // **Nesedící plátna se ohlásí, nevrátí nulu.** Nula by znamenala „nic nepřeteklo“, takže
-        // by rozbitá sonda vyšla jako zelený test — a to je ten nejhorší možný způsob, jak se
-        // tenhle test může pokazit: přestane měřit a nikdo se to nedozví. Platí to i o rozvržení
-        // bajtů: bez shody v něm by se porovnávaly různé pixely.
-        try #require(image.pixelsWide == empty.pixelsWide, "plátna se rozešla v šířce")
-        try #require(image.pixelsHigh == empty.pixelsHigh, "plátna se rozešla ve výšce")
-        try #require(image.bytesPerRow == empty.bytesPerRow, "plátna se rozešla v délce řádku")
-        try #require(image.bitsPerPixel == empty.bitsPerPixel, "plátna se rozešla v bitech na pixel")
-        try #require(!image.isPlanar && !empty.isPlanar, "planární bitmapa má jiné rozvržení bajtů")
         try #require(image.pixelsWide > start, "plátno není širší než tab, přesah se nemá kam vejít")
 
         let bytesPerPixel = image.bitsPerPixel / 8
@@ -103,6 +140,31 @@ struct OverflowProbe {
             }
         }
         return 0
+    }
+
+    /// Nejvyšší nakreslený řádek v jednom sloupci — svislá obdoba `rightmostPaintedColumn`.
+    /// Čte se stejně: surové bajty proti druhému renderu, ne `NSColor` a ne zapsaná barva.
+    private func firstPaintedRow(
+        of image: NSBitmapImageRep,
+        against empty: NSBitmapImageRep,
+        atColumn column: CGFloat
+    ) throws -> Int {
+        let x = Int(column.rounded())
+        try #require(x >= 0 && x < image.pixelsWide, "měřený sloupec \(x) je mimo plátno")
+
+        let bytesPerPixel = image.bitsPerPixel / 8
+        try #require(bytesPerPixel > 0, "bitmapa hlásí nulovou velikost pixelu")
+        let painted = try #require(image.bitmapData, "z renderu obsahu se nedají čít bajty")
+        let background = try #require(empty.bitmapData, "z renderu podkladu se nedají čít bajty")
+
+        for y in 0..<image.pixelsHigh {
+            let offset = y * image.bytesPerRow + x * bytesPerPixel
+            for byte in 0..<bytesPerPixel
+            where abs(Int(painted[offset + byte]) - Int(background[offset + byte])) > Self.tolerance {
+                return y
+            }
+        }
+        return -1
     }
 
     /// O kolik se smí bajt lišit, než se to počítá za nakreslené. Pět z 255 je kvůli antialiasingu
