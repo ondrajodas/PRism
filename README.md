@@ -1029,8 +1029,10 @@ zastaral hned další verzí.
 
 - [Návrh (specifikace)](docs/superpowers/specs/2026-07-31-prism-design.md) — plný
   návrh včetně záznamu rozhodnutí a zamítnutých alternativ
-- [`docs/navrh.md`](docs/navrh.md) — kde je **vizuální** návrh (mockup) a jak se s ním
-  pracuje; co mění vzhled, se do něj kreslí a schvaluje dřív, než na to vznikne issue
+- [`docs/navrh.html`](docs/navrh.html) — **vizuální** návrh (mockup): 23 sekcí rozdělených
+  do stránek podle místa v aplikaci. Publikovaná kopie je artifact, na který se posílá odkaz
+- [`docs/navrh.md`](docs/navrh.md) — jak se s mockupem pracuje: čím se čte, jak se
+  aktualizuje; co mění vzhled, se do něj kreslí a schvaluje dřív, než na to vznikne issue
 - [`docs/claude-cli.md`](docs/claude-cli.md) — ověřené chování `claude` CLI
 - [`docs/github-review-api.md`](docs/github-review-api.md) — ověřené chování zápisového
   review API GitHubu; podklad pro odesílání review (M6)
@@ -1487,7 +1489,8 @@ PRism.entitlements        vypnutý App Sandbox
 Signing.xcconfig          podpis: ad-hoc default + volitelný Signing.local.xcconfig
 docs/architektura.md      podrobnosti po modulech
 docs/testovani.md         co se u které oblasti testuje
-docs/navrh.md             kde je vizuální návrh (mockup) a jak se s ním pracuje
+docs/navrh.html           vizuální návrh (mockup) — zdroj, artifact je publikovaná kopie
+docs/navrh.md             jak se s mockupem pracuje (čtení, aktualizace, schvalování)
 docs/stav.md              co je hotové a co zbývá
 docs/paralelni-vyvoj.md   jak se vyřizuje seznam issues naráz — sloty, subagenti, merge
 docs/claude-cli.md        ověřené chování claude CLI (flagy, tvar eventů)
