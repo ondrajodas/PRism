@@ -1750,7 +1750,7 @@ commitu je seznam o krok pozadu a nálezy jsou klíčované `headSha`. A **šipk
 nenakreslila**, protože rozkliknutí je #317: šipka, za kterou se nic nestane, slibuje interakci,
 která tam není.
 
-Testů je **2572** (+39: pět nových suit — stav tabu, model commitu, dekódování odpovědi, načítání
+Testů je **2579** (+39: pět nových suit — stav tabu, model commitu, dekódování odpovědi, načítání
 ve store a šířka pruhu — plus render sonda a dva případy dopsané do stávajících suit).
 
 Zbývá rozkliknutí commitu na jeho diff (**#317**, `commits/{sha}` s
