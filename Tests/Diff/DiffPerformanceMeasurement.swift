@@ -383,14 +383,15 @@ struct DiffPerformanceMeasurement {
     /// do okna — jeho cena je tedy cena scrollování. Měří se proto **celé skládání** proti
     /// **samotnému `WordDiff`u** na týchž datech; podíl druhého v prvním je celý příspěvek #153.
     ///
-    /// Naměřeno na tomhle stroji: 27 bloků po 60 řádcích **60,3 ms**, z toho `WordDiff` **13,8 ms**
+    /// Naměřeno na tomhle stroji: 27 bloků po 60 řádcích **61,5 ms**, z toho `WordDiff` **14,0 ms**
     /// — tedy **23 %**. Jsou to **samé dvojice**, takže je to nejhorší případ; ve skutečném diffu je
     /// většina řádků kontext, u kterého `WordDiff` nedělá nic, kdežto `show` ho stejně vysází.
     /// Zbytek je sazba v `NSTextView` a obarvení, a i ta je jen část ceny projíždění —
     /// **u tuhnoucího okna se proto nemá sahat sem**, ale do rozvržení líného seznamu (#220, #223).
     ///
     /// **Podíl vzrostl u #275 z 18 % na 23 %, a `WordDiff` se přitom nezměnil** — zlevnilo se to,
-    /// s čím se poměřuje (79,2 → 60,3 ms). Rozpad celku po fázích je v `blockTypesettingBreakdown`.
+    /// s čím se poměřuje (86,3 → 61,5 ms na témž stroji). Rozpad po fázích je
+    /// v `blockTypesettingBreakdown`.
     @MainActor
     @Test("Podíl word-level rozdílu na skládání bloku (#153)")
     func wordDiffShareOfBlockComposition() {
@@ -434,16 +435,22 @@ struct DiffPerformanceMeasurement {
     /// oklikou — `show(…)` si o překreslení řekne a `NSLayoutManager` si rozvržení vynutí sám,
     /// takže se z ní nedá vyříznout.
     ///
-    /// Naměřeno na tomhle stroji (27 bloků po 60 řádcích, **samé dvojice**, tedy nejhorší případ):
+    /// Naměřeno na tomhle stroji (27 bloků po 60 řádcích, **samé dvojice**, tedy nejhorší případ),
+    /// medián ze tří běhů:
     ///
-    /// | fáze | do #275 | od #275 |
-    /// |---|---|---|
-    /// | celkem `show` (kontejner znovu) | 79,2 ms | 60,1 ms |
-    /// | celkem s čerstvým kontejnerem | 96,8 ms | 71,4 ms |
-    /// | z toho `WordDiff.spans` (#153) | 13,9 ms | 13,8 ms |
-    /// | z toho složení atributovaného textu | 22,2 ms | 4,1 ms |
-    /// | z toho nasazení do `NSTextStorage` | 3,8 ms | 3,7 ms |
-    /// | z toho sazba (`NSLayoutManager`) | 35,6 ms | 35,0 ms |
+    /// | fáze | ms |
+    /// |---|---|
+    /// | celkem `show` do znovupoužitého kontejneru | 61,5 |
+    /// | celkem s čerstvým kontejnerem | 72,4 |
+    /// | z toho `WordDiff.spans` (#153) | 14,0 |
+    /// | z toho složení atributovaného textu | 4,5 |
+    /// | z toho nasazení do `NSTextStorage` | 3,8 |
+    /// | z toho nasazení + sazba (`NSLayoutManager`) | 39,5 |
+    ///
+    /// **Do #275 stálo celé `show` 86,3 ms** a složení textu z toho **22,2 ms**; ostatní fáze se
+    /// nezměnily. Obojí je měřené týmž měřidlem na témž stroji tentýž den — a je to podstatné,
+    /// protože **absolutní čísla se hýbou se zátěží**: na volnějším stroji vyšla tatáž dvojice
+    /// 79,2 → 60,0 ms. Co z měření platí, je **poměr** (−29 %), ne milisekundy.
     ///
     /// **Co se zlevnit nepodařilo, je sazba** — a je to změřené, ne odhadnuté. Vynucuje si ji
     /// `layoutColumns()` přes `sizeToFit()`, protože z ní čte přirozenou šířku sloupce pro vodorovný
@@ -453,7 +460,7 @@ struct DiffPerformanceMeasurement {
     /// co sazba.
     ///
     /// Ze stejného měření vyšlo najevo i to, že **stavění view není hlavní položka**: rozdíl mezi
-    /// znovupoužitým a čerstvým kontejnerem je 16 ms na 27 blocích (0,34 ms na kontejner, z toho
+    /// znovupoužitým a čerstvým kontejnerem je 11 ms na 27 blocích (0,34 ms na kontejner, z toho
     /// většina jsou dva `NSScrollView`y). Fond kontejnerů by tedy ubral desetinu, ne polovinu.
     @MainActor
     @Test("Z čeho se skládá cena sazby bloku (#275)")

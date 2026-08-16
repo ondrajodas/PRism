@@ -497,9 +497,10 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   test; kdyby přestala, patří rámečky vzít z něj.
 - **Text bloku vzniká jako jeden řetězec a barvy se do něj dopisují** (#275), ne slepením
   `NSAttributedString`u za každý run. Slepováním se u velkého diffu vyrobilo 16 000 objektů na jedno
-  projetí a stálo to **22,2 ms z 79** na 27 blocích; jeden řetězec a `addAttribute` na rozsah dělá
-  totéž za **4,1 ms**. Ověřeno, že výsledek je `isEqual` se starým na 400 řádcích ve dvou paletách,
-  takže se kresba nezměnila — zlevnila.
+  projetí a stálo to **22,2 ms z 86** na 27 blocích; jeden řetězec a `addAttribute` na rozsah dělá
+  totéž za **4,5 ms** (celé `show` **86,3 → 61,5 ms**, tentýž stroj tentýž den — absolutní číslo se
+  hýbe se zátěží, poměr ne). Ověřeno, že výsledek je `isEqual` se starým na 400 řádcích ve dvou
+  paletách, takže se kresba nezměnila — zlevnila.
 
   **Rozsahy se počítají v UTF-16**, protože v nich měří `NSAttributedString`. Je to ta nová třída
   chyby, kterou přepis přinesl: emoji je jeden `Character`, ale **dva** kódy, takže `count` místo
@@ -509,8 +510,8 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   **Skládání je `static func compose(…)`, tedy čistá funkce nad řádky** — zvlášť od `show(…)`
   schválně: je to ta polovina, kterou jde změřit bez sazby, a bez toho seamu se nedá poznat, kolik
   z ceny projíždění je skládání textu a kolik už `NSLayoutManager`.
-- **Sazbu textu se zlevnit nepodařilo a je to změřené, ne odhadnuté** (#275). Ze 79 ms na 27 blocích
-  je **35 ms** rozvržení v `NSLayoutManager`u a vynucuje si ho `layoutColumns()` přes `sizeToFit()`,
+- **Sazbu textu se zlevnit nepodařilo a je to změřené, ne odhadnuté** (#275). Z 86 ms na 27 blocích
+  je **36 ms** rozvržení v `NSLayoutManager`u a vynucuje si ho `layoutColumns()` přes `sizeToFit()`,
   protože z něj čte přirozenou šířku sloupce pro vodorovný posun. **Vyhodit `sizeToFit()` cenu
   nesmaže, jen ji přesune do kreslení**: `super.draw` rozvržení potřebuje taky a blok, který vjel
   do okna, se kreslí — samotné vykreslení sloupce do bitmapy stojí 108,7 ms na 54 stranách, tedy
@@ -519,7 +520,7 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   CJK a emoji by šířku podstřelilo, takže by konec dlouhého řádku nešel doscrollovat.
 - **Fond kontejnerů by ubral desetinu, ne polovinu** (#275, zamítnuto). `LazyVStack` view nerecykluje,
   takže blok, který vjede do okna, dostane nový `DiffPairBlockContainer` — jenže postavit ho stojí
-  0,34 ms (většinu z toho dva `NSScrollView`y), dohromady 11 ms z 71 na 27 blocích. Znovupoužívat je
+  0,34 ms (většinu z toho dva `NSScrollView`y), dohromady 11 ms ze 72 na 27 blocích. Znovupoužívat je
   přes `NSViewRepresentable` znamená statický fond a hlídání životního cyklu, což je na jednu sedminu
   ceny moc.
 - **Rozvržení gutteru je jeden součet na jednom místě** (`DiffLineView.contentInset(for:)`):

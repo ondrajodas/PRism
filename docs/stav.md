@@ -1699,23 +1699,26 @@ v 15 testech).
 
 ### Sazba textu bloku — složení textu zlevněno, sazba zůstala (#275)
 
-Po #252 byl `DiffPairBlockContainer.show` hlavní položkou ceny projíždění velkého diffu: **79,2 ms
+Po #252 byl `DiffPairBlockContainer.show` hlavní položkou ceny projíždění velkého diffu: **86,3 ms
 na 27 blocích** po 60 řádcích samých dvojic (harness bez GUI, nejhorší případ). Nedalo se z kódu
 poznat, kolik z toho je co, takže první práce byla **rozpad na fáze** — a ten teď v repu zůstává
 jako měřidlo (`DiffPerformanceMeasurement.blockTypesettingBreakdown`, gated `PRISM_MEASURE`).
 
-Vyšlo: `WordDiff` 13,9 ms, složení atributovaného textu 22,2 ms, nasazení do `NSTextStorage`
-3,8 ms, **sazba v `NSLayoutManager`u 35,6 ms**. Zlevnilo se **složení**: text bloku vzniká jako
+Vyšlo: `WordDiff` 14,0 ms, složení atributovaného textu 22,2 ms, nasazení do `NSTextStorage`
+3,8 ms, **sazba v `NSLayoutManager`u ~36 ms**. Zlevnilo se **složení**: text bloku vzniká jako
 jeden řetězec a barvy se do něj dopisují na rozsahy, místo aby se slepoval z `NSAttributedString`u
 za každý run (16 000 objektů na projetí). K tomu se `NSColor(Color)` převádí jednou na blok, ne na
-run (`SyntaxColors`). **22,2 → 4,1 ms**, celek **79,2 → 60,1 ms**; s čerstvým kontejnerem, jak to
-platí projíždění, **96,8 → 71,4 ms**.
+run (`SyntaxColors`). **22,2 → 4,5 ms**, celek **86,3 → 61,5 ms** (−29 %); s čerstvým kontejnerem,
+jak to platí projíždění, **72,4 ms**.
+
+**Absolutní čísla se hýbou se zátěží stroje**, poměr ne: tatáž dvojice vyšla na volnějším stroji
+79,2 → 60,0 ms. Proto se obojí měřilo týmž měřidlem tentýž den a čte se z toho ten poměr.
 
 **Sazba se zlevnit nepodařila a je to změřené, ne odložené.** Vynucuje si ji `sizeToFit()`, ze
 kterého se čte přirozená šířka sloupce pro vodorovný posun — jenže vyhodit ho cenu nesmaže, jen ji
 přesune do kreslení, protože `super.draw` rozvržení potřebuje taky (vykreslení sloupce do bitmapy
 stojí 108,7 ms na 54 stranách). Zamítnutý je i fond kontejnerů, který zadání navrhovalo jako třetí
-krok: postavit kontejner stojí 0,34 ms, tedy 11 ms ze 71 — desetina, ne polovina. Důvody
+krok: postavit kontejner stojí 0,34 ms, tedy 11 ms ze 72 — desetina, ne polovina. Důvody
 i zamítnuté alternativy jsou v [specifikaci](superpowers/specs/2026-07-31-prism-design.md).
 
 **Vidět není nic a je to doložené rovností, ne pohledem**: dočasný test složil týž blok starým

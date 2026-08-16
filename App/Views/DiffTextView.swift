@@ -80,8 +80,8 @@ final class DiffTextView: NSTextView {
     ///
     /// **Text vzniká jako jeden řetězec a barvy se do něj dopisují** (#275), ne jako řetězec
     /// slepený z run. Do #275 se za každý run vyrobil `NSAttributedString` a připojil — u velkého
-    /// diffu 16 000 objektů na jedno projetí, tedy **22,2 ms z 79** na 27 blocích. Jeden řetězec
-    /// a `addAttribute` na rozsah dělá totéž za **4,1 ms**; text i atributy z toho vyjdou znak po
+    /// diffu 16 000 objektů na jedno projetí, tedy **22,2 ms z 86** na 27 blocích. Jeden řetězec
+    /// a `addAttribute` na rozsah dělá totéž za **4,5 ms**; text i atributy z toho vyjdou znak po
     /// znaku stejné, což drží `DiffWordHighlightTests` a `DiffBlockCompositionTests`.
     ///
     /// - Parameter words: co se uvnitř přepsaných řádků změnilo (#153). Je to **closure, ne
