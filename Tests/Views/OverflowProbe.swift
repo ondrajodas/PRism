@@ -9,7 +9,7 @@ import Testing
 /// i pořadí prvků v `Přehledu` (#280).
 ///
 /// Odpovídá na dvě otázky nad **týmž plátnem**: „přeteklo něco vpravo za hranu tabu“
-/// (`overflow(of:)`) a „kde v tomhle sloupci obsah začíná“ (`firstPaintedRow(of:atColumn:)`).
+/// (`overflow(of:)`) a „kde v těchhle sloupcích obsah začíná“ (`firstPaintedRows(of:atColumns:)`).
 /// Držet je pohromadě je záměr — plátno, podklad i tolerance toho, co se počítá za nakreslené,
 /// mají být jedny. Dvě sondy nad stejnou scénou znamenají dvě měřítka, která se rozejdou potichu.
 ///
@@ -58,7 +58,7 @@ struct OverflowProbe {
     ///
     /// **Bere sloupce najednou, ne po jednom, a je to podstatné**: jeden dotaz znamená dva rendery
     /// (obsah a podklad), takže ptát se dvakrát na totéž plátno je čtyřnásobek práce za tutéž
-    /// odpověď — u osmi šířek to bylo měřitelné, 5,8 s proti 2,9 s.
+    /// odpověď — u osmi šířek to bylo měřitelné, **5,8 s proti 1,3 s**.
     func firstPaintedRows(of content: some View, atColumns columns: [CGFloat]) throws -> [Int] {
         let (painted, empty) = try canvases(of: content)
         return try columns.map {
