@@ -854,7 +854,7 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
+| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `reviewPrompt`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
 | `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
@@ -932,6 +932,19 @@ Věci, které se u toho nemají rozbít:
   napsané, že se **nečistí**: vzhledem se nic neutratí a nic neodejde, a vynutit slotu vzhled,
   o který nikdo neřekl, je změna, ne očista. **Stránku v nastavení volba nemá** — ovládá se z railu,
   viz `AppStore` a `App/Views/` níž. Kde se uplatní, je taky tam.
+- **Šablona promptu (#281) se čte přísně**, jako `sources` a `skills`. Chybějící klíč znamená
+  výchozí text — tedy dnešní chování u každého, kdo aplikaci používal před #281. **Hodnota jiného typu
+  (číslo, pole, objekt) čtení položí** (`try`, ne `try?`): tiše podstrčený výchozí prompt by
+  znamenal, že se reviewer ptá na něco jiného, než co má někdo v souboru, a nic by na to
+  neupozornilo. **`null` se počítá jako chybějící klíč** a je to vědomé — není to hodnota, které by
+  se nedalo rozumět, ale výslovné „nic tu není“, tedy totéž, co znamená prázdný řetězec; chová se
+  tak i `sources` a `skills`, zbylé dva klíče s hlášenou rozbitou hodnotou.
+  Takhle se okno zamkne s „Konfiguraci se nepodařilo přečíst“ a soubor se nepřepíše. Tolerance se
+  tím neporušuje: tolerantní je čtení vůči **chybějícímu** klíči, ne vůči hodnotě, které se nedá
+  rozumět. **Prázdný řetězec je platná hodnota** a znamená „ber výchozí“, ne prompt bez zadání —
+  opačně než u seznamů, kde prázdno je vlastní odpověď; seznam se prázdný nechává, kdežto text se
+  prázdný jen prochází. `RepositoryConfig` prompt nemá, ze stejného důvodu jako vzhled: je to
+  vlastnost člověka, ne repozitáře, a je na to test.
 - **Rozbitá hodnota režimu se sráží na `manual`, ne na globální default.** Chybějící klíč
   je „ber globální“, ale překlep v hodnotě, kterou se někdo pokoušel automat **vypnout**,
   ho nesmí nechat zapnutý. Platí i globálně.
@@ -1152,7 +1165,7 @@ Jeden běh = jedna headless session `claude` na jeden skill v jednom pracovním 
 |---|---|
 | `ReviewRunning` | Protokol: `run(_:progress:)`. Schválně nemá nic, čím by šlo něco odeslat |
 | `ClaudeReviewRunner` | Implementace nad `claude` přes `ProcessStreaming` |
-| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat), jazyk nálezů; u kontroly nálezů (#150) navíc `recheck: RecheckMaterial?` |
+| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat), `promptTemplate` z nastavení (#281); u kontroly nálezů (#150) navíc `recheck: RecheckMaterial?` |
 | `ReviewRunKey` | `(PR, headSha, skillID, kind)` — identita běhu; `kind` je `review` / `recheck` (#150) |
 | `RecheckMaterial` | Vstup kontroly (#150): commit, na kterém nálezy vznikly, a nálezy v pořadí, ve kterém se na ně ptáme |
 | `RecheckCommand` | **Čisté funkce**: prompt kontroly a defenzivní čtení její odpovědi (#150) |
@@ -1194,6 +1207,22 @@ Věci, které se u toho nemají rozbít:
   to, co reviewer najde — a ověřit, že neovlivnilo, je drahé: tři běhy nad týmž commitem
   daly 1, 2 a 3 nálezy, takže rozptyl schová jakýkoli efekt menší než ten. Jazyk se proto
   řeší až za review, viz `FindingTranslating` níž. Je na to test, aby se to nevrátilo.
+- **Prompt se skládá ze šablony a jádra** (#281, `ReviewPromptTemplate` v `App/Policy/`).
+  Psaná půlka je v konfiguraci (`GlobalConfig.reviewPrompt`) a **putuje s požadavkem**, ne se
+  čte v runneru: běh má doběhnout s tou šablonou, se kterou začal, i kdyby se během něj uložilo
+  nastavení. Jádro (`ReportFindings` i s prázdným seznamem, zákaz zápisu a odesílání, přebití
+  skillu) připojuje `Policy.reviewPrompt` **vždycky**, takže se ze šablony nedá vyhodit.
+  Tři věci, které se u toho nemají rozbít:
+  - **Jádro není bezpečnostní opatření.** Tvrdou podmínku č. 2 drží `--disallowedTools`, ne
+    věta v promptu. Šablona se nikde nepotkává s `allowedTools`/`disallowedTools` — ty se
+    skládají z konstant v `ClaudeCommand` a text z konfigurace končí v **jednom** argumentu za
+    `-p`. Jádro chrání **sběr nálezů**: bez `ReportFindings` reviewer nálezy napíše textem
+    a v okně z toho vyjde „čisté review“.
+  - **Text je jeden.** `Zkopírovat příkaz` (#242) i skutečný běh volají tutéž funkci; dvě místa
+    s vlastní kopií textu by se rozešla první úpravou věty.
+  - **Editovatelný je jen tenhle prompt.** `RecheckCommand` (#150) a `TranslationCommand` mají
+    prompt natvrdo, protože jejich odpověď nenese nástroj, ale parser o pár řádků níž —
+    přepsaný prompt by tam rozbil čtení, ne jen výsledek.
 - **Prompt si o skill říká výslovně** (`First call the Skill tool with skill="…"`), ne
   jménem v próze. Do #78 tam bylo jen jméno a skill se načetl v **5 ze 14** běhů — jenže
   příčina nebyla zapomnětlivost modelu: nakonfigurované `code-review` **není skill**, takže
@@ -2266,7 +2295,8 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsSection` | Sedm stránek ve třech skupinách — `Co se hlídá`, `Co jde ven`, `Prostředí` |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
 | `SourcesSettingsView` | Zdroje PR (search dotazy) |
-| `ReviewSettingsView` | Výchozí režim a jazyk nálezů, skilly, sady podle jazyka, blokující kategorie |
+| `ReviewSettingsView` | Výchozí režim a jazyk nálezů, skilly, sady podle jazyka, **prompt review** (#281), blokující kategorie |
+| `ReviewPromptEditor` | Psaná šablona, legenda zástupných textů, `Obnovit výchozí`, náhled složeného promptu a zamčené jádro (#281) |
 | `DiffSettingsView` | **Pohled na diff** — nastavení člověka, ne repa, proto jen globálně |
 | `PublishingSettingsView` | **Odesílání na GitHub** — vlastní stránka, viz níž |
 | `RuntimeSettingsView` | Interval pollingu, rozpočet cache, souběžné session, denní limit, model |
@@ -2287,6 +2317,20 @@ Věci, které se u toho nemají rozbít:
   místo, kde se rozhoduje, jestli z aplikace **může něco odejít** (tvrdá podmínka č. 1), a text
   je tam důležitější než přepínač. Do #177 to byly tři záložky, ze kterých `Obecné` nesla osm
   sekcí a hledalo se v ní scrollováním.
+- **Neplatná šablona promptu se neuloží** (#281, `ReviewPromptEditor`). Je to jediné pole v okně,
+  které si drží vlastní `@State` místo `Binding`u do konfigurace — a je to schválně: šablona bez
+  `{{baseSha}}` by běhu sebrala to, proti čemu diffuje, takže se zapíše teprve platná hodnota
+  a v souboru zatím zůstává poslední, se kterou se dá běžet. Neznamená to mlčet: u pole stojí,
+  **který** zástupný text chybí a proč to vadí, plus věta, že se to neukládá — „nic se nestalo“
+  je jinak k nerozeznání od „funguje“. Tři věci, na kterých to stojí:
+  - **Prázdná šablona chyba není.** Znamená „ber výchozí“, takže se u ní vypisuje poznámka, ne
+    stížnost, a validuje se to, s čím se doopravdy poběží (`Policy.reviewPromptTemplate(from:)`).
+  - **Změna zvenčí pole srovná.** Soubor jde editovat ručně, takže `onChange` na uložené hodnotě
+    přepíše `@State`; vlastní zápis se vrátí se shodnou hodnotou, takže nic nepřepíše.
+  - **Ručně napsaná neplatná šablona se hlídá jinde.** Okno ji nezapíše, ale do souboru se dostat
+    může — proto s ní `AppStore.review(_:skills:)` review **nespustí** a fáze zůstane
+    `failed(detail:)` s tou samou větou. Text hlášky je jeden (`ReviewPromptTemplate.Problem`),
+    aby se okno a hlava PR nerozešly.
 - **Vybraná stránka se nepamatuje mezi spuštěními.** Nastavení se otevírá kvůli konkrétní věci;
   vrátit se do něj tam, kde jsem skončil minule, není, co člověk čeká — na rozdíl od výšky
   panelu, kterou si vytáhne jednou a chce ji mít.
@@ -3960,6 +4004,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.disclosure(of:categories:toggled:)`, `Policy.disclosureKey(of:)` | Jak je nález u kódu rozbalený (#185): blokující rozbalený, ostatní značka, odmítnutý nikdy — a čím se místo klíčuje |
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` i s **cenou** z uloženého běhu |
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
+| `Policy.reviewPromptTemplate(from:)`, `.reviewPromptProblems(in:)`, `.reviewPromptBody(template:skillID:baseSha:)`, `.reviewPrompt(template:skillID:baseSha:)` | Prompt review ze šablony v nastavení (#281, `ReviewPromptTemplate`): prázdná šablona → výchozí, chybějící zástupný text → `Problem`, dosazení hodnot a **vždycky připojené jádro**. Skládá to **jedno místo**, protože týž text potřebuje běh i `Zkopírovat příkaz` |
 | `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
 | `Policy.matches(_:_:)` | Patří vlákno (nebo můj rozdělaný komentář) k tomuhle řádku diffu — **jedno místo** pro výběr i umístění |

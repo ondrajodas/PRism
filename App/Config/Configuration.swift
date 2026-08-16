@@ -26,6 +26,16 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// Výchozí sada podle rozpoznaného jazyka projektu. Prázdná mapa = detekce nic nemění.
     var skillsByLanguage: [ProjectLanguage: [String]]
     var blockingCategories: [String]
+    /// Psaná půlka zadání pro reviewera (#281) se zástupnými texty `{{skill}}` a `{{baseSha}}`.
+    ///
+    /// **Globálně, ne per repo**, a je to vědomé rozhodnutí: per repo se řídí *co* se pouští
+    /// (skilly, blokující kategorie), kdežto prompt je „jak vypadá review u mě“. Další override
+    /// na místě, kde by se skoro nikdy nelišil, jen zdražuje čtení `config.json` —
+    /// `RepositoryConfig` ho proto nemá a je na to test.
+    ///
+    /// **Prázdná hodnota znamená „ber výchozí“**, ne „pusť reviewera bez zadání“; jádro
+    /// kontraktu se připojuje mimo šablonu, viz `ReviewPromptTemplate`.
+    var reviewPrompt: String
     /// Výchozí režim pro repo, které si neřeklo o jiný. Ve výchozím stavu `manual` —
     /// zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
     var mode: ReviewMode
@@ -72,6 +82,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         skills: [String],
         skillsByLanguage: [ProjectLanguage: [String]] = [:],
         blockingCategories: [String],
+        reviewPrompt: String = ReviewPromptTemplate.standard,
         mode: ReviewMode,
         allowsPublishing: Bool = false,
         findingsLanguage: FindingsLanguage = .czech,
@@ -88,6 +99,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.skills = skills
         self.skillsByLanguage = skillsByLanguage
         self.blockingCategories = blockingCategories
+        self.reviewPrompt = reviewPrompt
         self.mode = mode
         self.allowsPublishing = allowsPublishing
         self.findingsLanguage = findingsLanguage
@@ -113,6 +125,21 @@ struct GlobalConfig: Codable, Equatable, Sendable {
             ?? standard.skillsByLanguage
         blockingCategories = try container.decodeIfPresent([String].self, forKey: .blockingCategories)
             ?? standard.blockingCategories
+        // Chybějící klíč = výchozí text. **Hodnota jiného typu položí celé čtení** — `try`, ne
+        // `try?`, a je to schválně: kdyby se místo čísla, pole nebo objektu tiše dosadil výchozí
+        // prompt, běželo by review s jiným zadáním, než jaké si někdo napsal, a nic by na to
+        // neupozornilo. Takhle se v okně ukáže „Konfiguraci se nepodařilo přečíst“ a soubor
+        // se nepřepíše. Tolerantní čtení tím neporušuje: tolerantní je vůči **chybějícímu**
+        // klíči, ne vůči hodnotě, které se nedá rozumět.
+        //
+        // **`null` se přitom počítá jako chybějící klíč** (`decodeIfPresent` ho tak bere) a je to
+        // tak správně, ne opomenutí: `null` není hodnota, které by se nedalo rozumět — je to
+        // výslovné „nic tu není“, tedy totéž, co u téhle šablony znamená prázdný řetězec
+        // („ber výchozí“). Rozlišovat je přes `container.contains(_:)` by tady vyrobilo třetí
+        // odpověď na tutéž otázku a odchýlilo se od `sources` a `skills`, tedy zbylých dvou klíčů,
+        // u kterých se rozbitá hodnota hlásí. Je na to test, aby se ta úvaha nemusela dělat znovu.
+        reviewPrompt = try container.decodeIfPresent(String.self, forKey: .reviewPrompt)
+            ?? standard.reviewPrompt
         // Neznámý režim se bere jako `manual` ze stejného důvodu jako u repa: samo od sebe
         // se nemá spouštět nic, a překlep v souboru není důvod pustit reviewery na všechno.
         mode = (try? container.decode(ReviewMode.self, forKey: .mode)) ?? standard.mode
@@ -244,6 +271,9 @@ struct Configuration: Codable, Equatable, Sendable {
             sources: [.reviewRequested],
             skills: ["code-review:code-review"],
             blockingCategories: Policy.defaultBlockingCategories.sorted(),
+            // Doslova ten text, co byl do #281 v kódu — po zavedení pole se aplikace nesmí
+            // začít chovat jinak. Hlídá to test, který složený prompt porovnává znak po znaku.
+            reviewPrompt: ReviewPromptTemplate.standard,
             mode: .manual,
             allowsPublishing: false,
             findingsLanguage: .czech,

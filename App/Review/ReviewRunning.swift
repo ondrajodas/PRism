@@ -9,16 +9,33 @@ struct ReviewRequest: Sendable, Equatable {
     /// Commit, proti kterému se diffuje. Do klíče nepatří: identitu běhu určuje `headSha`,
     /// base se může změnit rebasem cílové větve, aniž by šlo o jiné review.
     let baseSha: String
+    /// Psaná půlka zadání z nastavení (#281). Prázdná = výchozí text.
+    ///
+    /// Putuje **s požadavkem**, přesně jako `baseSha`, a ze stejného důvodu: runner si ji
+    /// nemá kde přečíst sám, takže běh doběhne s tou šablonou, se kterou začal — a nezmění
+    /// se mu pod rukama, když se během běhu uloží nastavení.
+    ///
+    /// Jádro kontraktu v ní **není** a nedá se z ní vyhodit; připojuje ho `Policy.reviewPrompt`.
+    /// Povolení nástrojů se šablonou nemění vůbec (tvrdá podmínka č. 2) — skládají se
+    /// v `ClaudeCommand` z konstant.
+    ///
+    /// U kontroly nálezů (#150) se **nepoužívá**: `RecheckCommand` má vlastní, natvrdo psaný
+    /// prompt, protože jeho odpověď čte parser.
+    let promptTemplate: String
     /// Nálezy z minula, které má běh posoudit (#150). `nil` = běžné review.
     ///
     /// Je to **materiál v promptu**, ne nový nástroj: sada povolení zůstává tatáž (tvrdá
     /// podmínka č. 2).
     let recheck: RecheckMaterial?
 
-    init(key: ReviewRunKey, worktree: URL, baseSha: String) {
+    /// - Parameter promptTemplate: prázdná znamená **výchozí šablonu**, ne prompt bez zadání
+    ///   (#281). Výchozí hodnota parametru je tu kvůli testům; produkční cesta jde přes
+    ///   `AppStore`, který sem dává hodnotu z konfigurace.
+    init(key: ReviewRunKey, worktree: URL, baseSha: String, promptTemplate: String = "") {
         self.key = key
         self.worktree = worktree
         self.baseSha = baseSha
+        self.promptTemplate = promptTemplate
         recheck = nil
     }
 
@@ -26,6 +43,7 @@ struct ReviewRequest: Sendable, Equatable {
         self.key = key
         self.worktree = worktree
         self.baseSha = baseSha
+        promptTemplate = ""
         self.recheck = recheck
     }
 

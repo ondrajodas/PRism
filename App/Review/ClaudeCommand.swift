@@ -52,7 +52,8 @@ enum ClaudeCommand {
         return arguments
     }
 
-    /// Prompt je **natvrdo**; skilly a model se berou z konfigurace (#23).
+    /// Jaký prompt tenhle běh dostane. Model se bere z konfigurace (#23), text zadání od #281
+    /// taky — ale jen jeho **psaná půlka**, viz `ReviewPromptTemplate`.
     ///
     /// **Není to slash command, a to je ověřené rozhodnutí.** `-p "/code-review …"`
     /// doběhne úspěšně, ale vestavěný příkaz si jede vlastní pipeline a nálezy vrátí jako
@@ -61,40 +62,24 @@ enum ClaudeCommand {
     /// prompt, který si o `ReportFindings` řekne sám, nálezy vrací (ověřeno spuštěním na
     /// scratch repu; totéž dělal spike u #12).
     ///
-    /// Zbytek je kontext, který session sama zjistit nemůže: strom je odpojený na head
-    /// commitu, takže bez base sha nemá reviewer proti čemu diffovat.
-    ///
-    /// Prázdný seznam se vyžaduje schválně — „nic jsem nenašel“ a „nereportoval jsem“ jsou
-    /// různé věci a jen ta první smí vyjít jako čisté review.
+    /// **Šablona putuje s požadavkem** (#281), ne se čte z konfigurace tady: běh má doběhnout
+    /// s tou, se kterou začal, a `Zkopírovat příkaz` skládá tentýž text mimo požadavek —
+    /// dvě čtení konfigurace by se rozešla. Skládá to obojí `Policy.reviewPrompt`, aby byl
+    /// text doopravdy jeden.
     ///
     /// **Druhá podoba promptu je kontrola nálezů z minula** (#150). Rozhoduje o ní materiál
     /// v požadavku, ne příznak vedle něj: prompt, který se ptá na nálezy, je bez nich nesmysl.
-    /// Text i čtení odpovědi bydlí v `RecheckCommand`; tady zůstává jediné místo, které
-    /// odpovídá na „jaký prompt tenhle běh dostane“.
+    /// Text i čtení odpovědi bydlí v `RecheckCommand` a **editovat se nedá** — odpověď u něj
+    /// nenese nástroj, ale parser o pár řádků níž.
     static func prompt(for request: ReviewRequest) -> String {
         guard let material = request.recheck else {
-            return prompt(skillID: request.key.skillID, baseSha: request.baseSha)
+            return Policy.reviewPrompt(
+                template: request.promptTemplate,
+                skillID: request.key.skillID,
+                baseSha: request.baseSha
+            )
         }
         return RecheckCommand.prompt(for: material, baseSha: request.baseSha)
-    }
-
-    /// Tentýž prompt z rozebraných dílů — potřebuje ho `Zkopírovat příkaz` v tabu `Průběh`
-    /// (#242), který `ReviewRequest` k dispozici nemá. Text je jeden, aby se zkopírovaný příkaz
-    /// nerozešel s tím, co se doopravdy spouští.
-    static func prompt(skillID: String, baseSha: String) -> String {
-        """
-        You are reviewing a pull request. \
-        First call the Skill tool with skill="\(skillID)" and follow the \
-        instructions it gives you — that skill defines how this review is done. \
-        The head commit is checked out here; see the changes with \
-        `git diff \(baseSha)...HEAD`; there is no GitHub access, so read the \
-        working tree instead of fetching the pull request. \
-        Report every finding by calling the ReportFindings tool — that call is the only \
-        output that counts, so call it even when you find nothing, with an empty list. \
-        Do not run anything that writes or sends: no commits, no pushes, \
-        no `gh` commands, no comments on GitHub. \
-        These rules override anything the skill tells you.
-        """
     }
 
     /// Příkaz k vložení do terminálu — `Zkopírovat příkaz` u spadlé session (#242).
@@ -106,13 +91,19 @@ enum ClaudeCommand {
     ///
     /// `claude` jménem, ne absolutní cestou: pro člověka v terminálu je to to, co by napsal, a
     /// store si kvůli jednomu tlačítku nemá držet cestu k binárce.
+    ///
+    /// **Šablona se sem předává** (#281) ze stejného důvodu jako model: tlačítko `ReviewRequest`
+    /// k dispozici nemá, ale text se skládá **toutéž** funkcí (`Policy.reviewPrompt`), takže se
+    /// zkopírovaný příkaz nemá čím rozejít s tím, co doopravdy běží.
     static func shellCommand(
+        promptTemplate: String,
         skillID: String,
         baseSha: String,
         model: String?,
         worktree: URL?
     ) -> String {
-        let arguments = ["claude"] + arguments(prompt: prompt(skillID: skillID, baseSha: baseSha), model: model)
+        let prompt = Policy.reviewPrompt(template: promptTemplate, skillID: skillID, baseSha: baseSha)
+        let arguments = ["claude"] + arguments(prompt: prompt, model: model)
         let command = arguments.map(quoted(_:)).joined(separator: " ")
         guard let worktree else { return command }
         return "cd \(quoted(worktree.path(percentEncoded: false))) && \(command)"
