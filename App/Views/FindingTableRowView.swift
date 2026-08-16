@@ -151,11 +151,24 @@ struct FindingTableRowView: View {
     ///
     /// Odznak, ne dva řádky: dva řádky by tvrdily, že jsou to dva různé nálezy. Kdo přesně to byl,
     /// je v rozbalené části a v bublině u kódu.
+    ///
+    /// **Mint, ne akcent** (#309, `.pill.mint` z návrhu). `2×` je konstatování — nálezy nahlásili
+    /// dva reviewery nezávisle na sobě —, kdežto akcent v tomhle řádku znamená „klikni sem“
+    /// (`Převzít`, `Vrátit`). Do #309 byl odznak dokonce systémově modrý: `.tint(Palette.accent)`
+    /// z kořene okna se na `Color.accentColor` nevztahuje, takže se v řádku potkávaly tři barvy
+    /// tam, kde mají být dvě.
     @ViewBuilder private var reviewer: some View {
         if let width = layout.reviewer {
             VStack(alignment: .leading, spacing: 2) {
                 if row.agreement > 1 {
-                    pill("\(row.agreement)×", tint: .accentColor, background: .accentColor.opacity(0.15))
+                    // Krytí je tu **wash pod textem**, ne nositel barvy: návrh ho píše jako
+                    // `color-mix(in srgb, var(--mint) 15%, transparent)`, tedy stejně jako
+                    // u `blokuje` o pár řádků výš. Barvu nese neprůhledný token.
+                    pill(
+                        "\(row.agreement)×",
+                        tint: FindingBadgeAppearance.stateTint,
+                        background: FindingBadgeAppearance.stateTint.opacity(0.15)
+                    )
                         .help("Nezávisle nahlásili \(reviewers)")
                 } else {
                     Text(verbatim: row.representative.reviewer)
@@ -213,12 +226,15 @@ struct FindingTableRowView: View {
         }
     }
 
+    /// `Převzít` je akce, `✓ v mém review` **není** — a od #309 to jde poznat i barvou
+    /// (`.frow .acts .in` z návrhu je mint). Obojí stojí ve stejném sloupci a střídá se na tomtéž
+    /// místě, takže do #309 vypadala hotová věc jako další tlačítko, jen zaškrtnuté.
     @ViewBuilder private func adoption(of finding: FindingRow) -> some View {
         if draft.canCompose {
             if draft.isAdopted(finding.finding) {
                 Label("v mém review", systemImage: "checkmark.circle.fill")
                     .labelStyle(.iconOnly)
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(FindingBadgeAppearance.stateTint)
                     .help("Text je už v rozdělaném review")
             } else {
                 Button("Převzít") { draft.adopt(finding.finding) }

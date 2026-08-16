@@ -35,7 +35,10 @@ struct ReviewStateAppearanceTests {
     func dismissedIsNotClean() {
         // #113: „nic jsem nenašel" a „našel a já to zamítl" jsou dvě tvrzení.
         #expect(ReviewStateAppearance.label(of: .dismissed(findings: 3)) == "odmítnuto · 3")
-        #expect(ReviewStateAppearance.color(of: .dismissed(findings: 3)) == .mint)
+        // Od #309 tyrkysová **z palety**, ne systémová `.mint`: v okně má být jedna tyrkysová,
+        // ne dvě skoro stejné. Že to je opravdu jiná barva a že je čitelnější, měří `MintTokenTests`.
+        #expect(ReviewStateAppearance.color(of: .dismissed(findings: 3)) == Palette.mint)
+        #expect(ReviewStateAppearance.color(of: .dismissed(findings: 3)) != .mint)
     }
 
     @Test("Přerušené není timeout")
@@ -76,7 +79,11 @@ struct ReviewStateAppearanceTests {
     func aRunningStateIgnoresBlocking() {
         // Během běhu se počty přepisují, takže se z nich nic netvrdí.
         #expect(ReviewStateAppearance.label(of: .running(finished: 2, total: 3), blocking: 1) == "běží 2/3")
-        #expect(ReviewStateAppearance.color(of: .running(finished: 2, total: 3), blocking: 1) == .accentColor)
+        // Od #309 akcent **z palety**, ne systémový: `.tint(Palette.accent)` z kořene okna na
+        // `Color.accentColor` nezabírá, takže se odznak kreslil systémovou modrou. Že běžící stav
+        // zůstává akcentem (a nedostal mint, i když je to stav), zdůvodňuje `ReviewStateAppearance`.
+        #expect(ReviewStateAppearance.color(of: .running(finished: 2, total: 3), blocking: 1) == Palette.accent)
+        #expect(ReviewStateAppearance.color(of: .running(finished: 2, total: 3), blocking: 1) != .accentColor)
     }
 
     @Test("Zastaralé zůstává žluté")
@@ -93,7 +100,7 @@ struct ReviewStateAppearanceTests {
         #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.clean) == .green)
         // Odmítnuté má stejnou barvu jako `ReviewState.dismissed` — řádek a odznak nesmí
         // o tomtéž říkat každý něco jiného.
-        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.dismissed) == .mint)
+        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.dismissed) == Palette.mint)
         #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.dismissed)
             == ReviewStateAppearance.color(of: .dismissed(findings: 1)))
         #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.inconclusive) == .secondary)
