@@ -9,7 +9,7 @@ import Testing
 /// smí počítat v `body`, nebo se to musí pamatovat. Odpověď je číslo, ne dojem.
 ///
 /// Časy se **netvrdí** `#expect`em: na jiném stroji vyjdou jinak a byl by z toho test, který padá
-/// bez chyby v kódu. **Pouští se ručně**: `PRISM_MEASURE=1`.
+/// bez chyby v kódu. **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`.
 @Suite(
     "Měření sazby Markdownu (#279)",
     .enabled(if: ProcessInfo.processInfo.environment["PRISM_MEASURE"] != nil)
