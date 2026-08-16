@@ -999,10 +999,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   všemi třemi sadami.
 
   **Jak to vypadá, se ověřilo renderem** — `ReviewTimeoutRenderProbe` (gated `PRISM_MEASURE`)
-  vykreslí obě místa, kde se limit nastavuje, v sedmi stavech (globálně výchozí, zvednutý, pod
-  mezí, nad mezí; repo bez override, s vlastním limitem a s override mimo meze), ve dvou šířkách
-  obsahové části okna a v obou režimech. **Stavy mimo meze se klikáním nevyrobí vůbec** — pole je
-  ořezává —, a přitom je to zrovna to, kvůli čemu stížnost existuje.
+  vykreslí obě místa, kde se limit nastavuje, v osmi stavech (globálně výchozí, zvednutý, pod mezí,
+  nad mezí; repo bez override, bez override nad sraženou globální hodnotou, s vlastním limitem
+  a s override mimo meze), ve dvou šířkách obsahové části okna a v obou režimech. **Stavy mimo meze
+  se klikáním nevyrobí vůbec** — pole je ořezává —, a přitom je to zrovna to, kvůli čemu stížnost
+  existuje. Šestý stav přibyl po nálezu Copilota: „Bere globální: 240 min“ nad během, který poběží
+  60, je text, který tvrdí víc, než data unesou.
 - **Vzhled okna (#278)** — přečtení obou vynucených hodnot, chybějící klíč i překlep (obojí znamená
   `system`, ne pád), a že překlep nezahodí zbytek souboru. K tomu dvě tvrzení, že se něco
   **nestalo**, protože vzhled je vlastnost člověka, ne repa: v zapsaném JSONu je klíč `appearance`

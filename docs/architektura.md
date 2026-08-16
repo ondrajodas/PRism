@@ -2425,6 +2425,12 @@ Věci, které se u toho nemají rozbít:
   - **Per repo je to přepínač a číslo, ne tříhodnotový picker** jako u režimu. Hodnot je 56, takže
     „ber globální“ mezi ně nepatří jako další položka; zapnutí přepínače začíná od globální
     hodnoty, ze stejného důvodu jako u sad — override se obvykle dělá posunutím, ne psaním od nuly.
+  - **„Bere globální: X min“ vypisuje sraženou hodnotu, ne tu ze souboru** (nálezem Copilota na
+    #324). Když je globální číslo mimo meze, poběží se s mezí — a věta o tom, co repo dostane, by
+    jinak tvrdila víc, než data unesou. Ze stejného důvodu se sraženou hodnotou **začíná i zapnutý
+    přepínač**: seed z globálního nesmyslu by ten nesmysl zkopíroval do repa a hned si na sebe
+    stěžoval. Obojí počítá `Policy.reviewTimeoutMinutes(from:)`, tedy totéž místo, kterým hodnota
+    projde na cestě do běhu.
 - **Vybraná stránka se nepamatuje mezi spuštěními.** Nastavení se otevírá kvůli konkrétní věci;
   vrátit se do něj tam, kde jsem skončil minule, není, co člověk čeká — na rozdíl od výšky
   panelu, kterou si vytáhne jednou a chce ji mít.

@@ -38,6 +38,9 @@ struct ReviewTimeoutRenderProbe {
         case tooLong = "globalni-nad-mezi"
         /// Stránka `Repozitáře` bez override — vypsaná globální hodnota.
         case repositoryInherited = "repo-bere-globalni"
+        /// Bez override, ale **globální hodnota je mimo meze**. Popisek musí říct, co repo
+        /// doopravdy dostane, ne co je v souboru — nálezem Copilota na #324.
+        case repositoryInheritsClamped = "repo-bere-globalni-srazenou"
         /// Stránka `Repozitáře` s vlastním limitem.
         case repositoryOverride = "repo-vlastni"
         /// Override mimo meze — tatáž stížnost jako globálně, jen o patro níž.
@@ -45,7 +48,8 @@ struct ReviewTimeoutRenderProbe {
 
         var isRepositoryPage: Bool {
             switch self {
-            case .repositoryInherited, .repositoryOverride, .repositoryTooLong: true
+            case .repositoryInherited, .repositoryInheritsClamped,
+                 .repositoryOverride, .repositoryTooLong: true
             default: false
             }
         }
@@ -58,6 +62,7 @@ struct ReviewTimeoutRenderProbe {
         case .raised: configuration.global.reviewTimeoutMinutes = 45
         case .tooShort: configuration.global.reviewTimeoutMinutes = 2
         case .tooLong: configuration.global.reviewTimeoutMinutes = 240
+        case .repositoryInheritsClamped: configuration.global.reviewTimeoutMinutes = 240
         case .repositoryOverride:
             configuration.setRepository(RepositoryConfig(reviewTimeoutMinutes: 45), for: repo)
         case .repositoryTooLong:
