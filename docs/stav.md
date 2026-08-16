@@ -1746,5 +1746,31 @@ Implementace je rozdělená na **dvě issues dělené datovou cestou**: seznam c
 (**#317**, `commits/{sha}` s `Accept: application/vnd.github.diff`, 0,99 s, unified diff pro
 dnešní `DiffParser`). Smrsknutí pruhu na ikony v úzkém okně je odložené do **#318**.
 
+### Tab `Průběh` — živý výpis kroků nakreslený, čeká na implementaci
+
+Druhá vrstva dráhy v tabu `Průběh` (okno s kroky session pod fázemi, u běžícího reviewera
+rozbalené) je **nakreslená v mockupu**, sekce 20, a rozhodnutí i zamítnuté alternativy jsou
+ve [specifikaci](superpowers/specs/2026-07-31-prism-design.md), sekce *Tab Průběh — živý výpis
+kroků*. **V kódu není nic** — pravidlo *Návrh (mockup)* v `CLAUDE.md` chce nakreslit a nechat
+schválit dřív, než se issue založí.
+
+**Není to nová funkce, je to nedodělané #22.** Specifikace tab popisuje jako živý pohled na to,
+co reviewer dělá, od začátku; ze dvou z jeho pěti odrážek zbývá dodělat výpis událostí a
+`Sledovat konec`. Data přitom už tečou (`ReviewProgress.attemptedTool` chodí do osy během běhu),
+takže nová datová cesta ani závislost z toho nevychází. **Vestavěný terminál to není** a zůstává
+tam, kde byl — řeší zásah do session, tohle sledování.
+
+Tři věci se u kreslení našly v kódu a nesou se do zadání: **živá osa nemá strop** (uložená má 300,
+takže se za běhu drží stovky událostí, které po restartu zmizí, a nikde to není napsané),
+**odmítnutý nástroj vypadá jako provedený** až do konce běhu (ve streamu je vidět hned, jako
+`tool_result` s `is_error`, ale `StreamParser` `user` eventy nečte) a
+**`ReviewerTimeline.newestEntry(in:)` po zrušeném přepínači (#242) v aplikaci nemá volajícího** —
+drží ho naživu jen tři testy. Zkracování cest se u toho opravuje v číslech: prefix pracovního
+stromu není sedmdesát znaků, ale **131**, u `Bash` třikrát (změřeno 461 → 57 znaků, 8×).
+
+Implementace se dělí na **dvě issues dělené vrstvou**: samotný výpis se stropem a sledováním konce
+(UI a `Policy`) a čtení `tool_result` ze streamu (`StreamParser`, model kroku). Issues zatím
+**nejsou založené** — čeká se na souhlas s návrhem.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
