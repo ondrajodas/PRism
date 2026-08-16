@@ -1857,7 +1857,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat |
-| `OverviewView` | Tab `Přehled`: popis PR, fakta a co se změnilo od minule (kontroly mají od #215 vlastní tab). Obsah je v `content` **mimo `ScrollView`** a `internal` schválně — přes `body` se šířka změřit nedá, viz #291 |
+| `OverviewView` | Tab `Přehled`, odshora **co se změnilo od minule → fakta → popis PR** (#280; kontroly mají od #215 vlastní tab). Obsah je v `content` **mimo `ScrollView`** a `internal` schválně — přes `body` se šířka změřit nedá, viz #291 |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka a obsah vpravo; slévá za sebou jdoucí commity |
 | `ConversationEntryView` | Položka osy: karta cizího review nebo komentáře, řádek události, vlákno bez kotvy |
@@ -3033,7 +3033,27 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     u souborů, které `Language` nezná.
 - **`Přehled` má dlaždice s fakty** (#198): commity (a kolik z nich je nových od minule),
   soubory (a kolik má nález), hlava PR a sha, proti které platí nálezy. **Nic se pro ně
-  nedotahuje** — jsou to údaje, které v okně už jsou, jen roztroušené. Tři pravidla:
+  nedotahuje** — jsou to údaje, které v okně už jsou, jen roztroušené. Pořadí v tabu je
+  **banner „od minule“ → řada dlaždic → karta s popisem** (#280). Pravidla:
+  - **Dlaždice jsou nad popisem, ne pod ním** (#280, návrh sekce 18). Do #280 to bylo obráceně;
+    rozhodla **nesouměrnost délek**, ne důležitost obsahu: dlaždice jsou vždycky tři čísla a dvě
+    sha, kdežto popis je libovolně dlouhý — u pracovních PR běžně padesát řádků — takže cenu za
+    odrolování platil vždycky ten kratší obsah. `Nálezy proti` navíc odpovídá na otázku „platí
+    to, co v okně vidím?“ a ta odpověď nepatří za odrolování.
+
+    Co se u toho **nesmí rozbít**: mění se pořadí, ne sazba. Popis se nezúžil ani neosekal
+    (`MarkdownText` a písmo 12,5 zůstávají, sazbu řeší #279), řada nedostala pružné rozměry,
+    které v ní nebyly (#220 — a je to zrovna to, na čem se `Přehled` rozbil u #291), a **prázdný
+    popis se nesmí slít s nenačteným** — pod řadou faktů o důvod víc, protože prázdná plocha se
+    tam čte jako „nic tu není“ ještě snáz. Doloženo tím, že render **před** a **po** má při každé
+    šířce i tématu **shodnou velikost plátna a shodnou multimnožinu vodorovných řádků**: řádky se
+    přesunuly, ale žádný se nepřekreslil.
+  - **Úzké okno se tím neřeší** — návrh (sekce 18) ho nechává `odloženo`. Čtyři dlaždice se
+    v úzkém tabu drtí (popisky se lámou na `COMMIT/Y`, hodnoty se utínají na `abc12…`), jenže
+    **stejně jako předtím**: řada je po přehození stejně široká, jen stojí jinde, takže se tím
+    nic nezhoršilo. Kdyby se to řešilo, ve hře je mřížka 2×2 (nic nezmizí, řada je dvakrát vyšší,
+    takže popis začíná níž) nebo tři dlaždice s tím, že `Commity` odpadnou první — a rozhodnout
+    se to musí **dopředu**, protože šířka se předává, ne vyjednává.
   - **Dlaždice, o které se nedá nic říct, se nekreslí.** Řádek plný nul je řádek, ve kterém se
     ztratí to jedno číslo, na kterém záleží — a nula u souborů navíc tvrdí, že PR nic nemění,
     i když se diff jen ještě nenačetl.

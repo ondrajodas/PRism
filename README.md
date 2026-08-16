@@ -153,11 +153,20 @@ spočítalo), `Nálezy` kolik jich je (**červeně, když něco blokuje**) a `Pr
 **puntík, ne počet** — „běží“ je stav, ne množství. Volba se pamatuje **u každého PR zvlášť**
 a otevírá se `Přehled` — popis a diskuze se čtou dřív než kód, kterého se týkají.
 
-Pod popisem PR jsou **dlaždice s fakty** (#198): kolik je commitů a kolik z nich přibylo od minule,
+Nad popisem PR jsou **dlaždice s fakty** (#198): kolik je commitů a kolik z nich přibylo od minule,
 kolik souborů se mění a v kolika je nález, hlava PR a sha, proti které platí nálezy. Nic se pro ně
 netahá z API; jsou to čísla, která v okně už byla, jen roztroušená. Dlaždice, o které se nedá nic
 říct, se nekreslí — kdežto ta se sha nálezů je vždycky, když nálezy jsou, a **rozchod nese barva,
 ne přítomnost**: proti čemu nálezy platí, je fakt o PR i tehdy, když se hlava shoduje.
+
+**Nad popisem, ne pod ním** (#280). Do #280 to bylo obráceně, s odůvodněním, že popis je to, co
+autor chce, aby se přečetlo. Rozhodla nesouměrnost délek: dlaždice jsou vždycky tři čísla a dvě
+sha, kdežto popis je libovolně dlouhý — u pracovních PR běžně padesát řádků — takže se k faktům
+scrollovalo přes prózu, jejíž délku neurčujeme my. A jedna z nich, `Nálezy proti`, odpovídá na
+otázku „platí to, co v okně vidím?“; odpověď na ni nepatří za odrolování. Přehled patří nad čtení.
+Mění se **jen pořadí**: dlaždice ani popis se nezúžily a prázdný popis (`Autor k PR nic nenapsal.`)
+se dál neplete s nenačteným (`Načítám popis…`) — pod řadou faktů o to víc, protože prázdná plocha
+se tam čte jako „nic tu není“ ještě snáz.
 
 Úplně nahoře v `Přehledu` je **co se změnilo od tvé poslední návštěvy** (#173): nové commity,
 cizí review, komentáře — a hlavně **přepsaná historie větve**, protože právě po ní zastarají
