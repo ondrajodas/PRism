@@ -38,40 +38,81 @@ struct PullRequestTabBar: View {
     @State private var hovered: PullRequestTab?
 
     var body: some View {
-        // **Dvě podoby, ne zúžení jednoho pruhu** (#316). Sedmá záložka (`Commity`) stojí 112 bodů
-        // šířky a pilulka `+X −Y` 110, takže se jedna zaplatí druhou: dokud je místo, kreslí se
-        // obojí, a jakmile není, ustoupí rozsah změny. Je to i ten správný kus, který má jít první
-        // — mluví o rozsahu **celého PR**, což je odpověď na otázku `Změněných souborů`, kdežto
-        // záložka je cesta k obsahu, který jinudy není vidět.
+        // **Tři podoby, ne zúžení jednoho pruhu** (#316, třetí od #318). Co ustupuje a v jakém
+        // pořadí, je u `Layout`.
         //
-        // Změřeno na tomhle view (`TabStripWidthTests`, po jednom bodu šířky): sedm záložek se
-        // všemi odznaky se vejde na jeden řádek od **886 bodů** tabu, tedy od okna 939 — proti
-        // dnešním 884 / 937 se šesti. Bez téhle výměny by na to potřebovaly ~996 / ~1049.
+        // **`ViewThatFits` měří ideální šířku každé podoby**, a ta je u pruhu bez `lineLimit`u
+        // šířka nezalomeného textu — přesně to, co potřebujeme vědět. **Že to tady doopravdy
+        // platí, je změřené**, ne předpokládané (`TabStripWidthTests`): pruh v tabu 1347 b nakreslí
+        // `bar(.full)`, v 947 b `bar(.labels)` a v 647 b `bar(.icons)`, pixel po pixelu. To je ten
+        // rozdíl proti #284, kde `ViewThatFits` vybíral pořád nejširší variantu a rozhodovat musela
+        // spočítaná šířka (`TextWidth`): tam byly popisky v řadě se `lineLimit`em, takže se
+        // **zkracovaly** a ideální šířka o zúžení nic neřekla. Tady se pruh **zalomí**, a proto
+        // ideální šířka zůstává šířkou celého popisku.
         //
-        // **`ViewThatFits` měří ideální šířku obou podob**, a ta je u pruhu bez `lineLimit`u šířka
-        // nezalomeného textu — přesně to, co potřebujeme vědět. Pod 886 body se ani druhá podoba
-        // nevejde a popisky se zalomí; spravuje to až druhý stupeň (#318), který sedmé záložce
-        // nepředchází, protože je rozbitý stejně i dneska se šesti.
+        // Podoby jsou vypsané, ne `ForEach` přes `Layout.allCases`: `ViewThatFits` vybírá mezi
+        // **svými dětmi**, a jedna `ForEach` je jedno dítě — kandidáti by se z ní stali leda
+        // shodou okolností, kterou by nikdo nekontroloval.
         ViewThatFits(in: .horizontal) {
-            strip(showsDiffstat: true)
-            strip(showsDiffstat: false)
+            bar(.full)
+            bar(.labels)
+            bar(.icons)
         }
-        .padding(.horizontal, 12)
-        // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
-        // takže by se vykreslil svisle — tatáž past jako u hlaviček souborů v diffu.
-        .overlay(alignment: .bottom) { Rectangle().fill(.separator).frame(height: 1) }
     }
 
-    /// Jedna podoba pruhu. Záložky jsou v obou tytéž — liší se **jen** tím, jestli je za nimi
-    /// rozsah změny; kdyby se lišilo i něco jiného, byly by to dvě obrazovky místo jedné.
-    private func strip(showsDiffstat: Bool) -> some View {
+    /// Jedna podoba i s okrajem a linkou pod sebou — tedy **celý** pruh, ne jen jeho obsah.
+    ///
+    /// Okraj je uvnitř kandidáta schválně: je to šířka, která se taky musí vejít, takže patří
+    /// k tomu, co `ViewThatFits` porovnává. A `internal` je proto, aby se dala **změřit
+    /// a vyrendrovat jedna podoba** bez toho, aby si test skládal okraj a linku sám — dvě místa
+    /// s toutéž chromí by znamenala, že měření kontroluje něco jiného, než co se kreslí (#236).
+    func bar(_ layout: Layout) -> some View {
+        strip(layout)
+            .padding(.horizontal, 12)
+            // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
+            // takže by se vykreslil svisle — tatáž past jako u hlaviček souborů v diffu.
+            .overlay(alignment: .bottom) { Rectangle().fill(.separator).frame(height: 1) }
+    }
+
+    /// Co z pruhu zbyde, jak se okno zužuje. **Pořadí je rozhodnutí**, ne vedlejší efekt: bere se
+    /// první podoba, která se vejde, takže pořadí říká, co ustupuje dřív.
+    ///
+    /// **`+X −Y` jde první** (#316) — mluví o rozsahu **celého PR**, což je odpověď na otázku
+    /// `Změněných souborů`; v `Commitech`, `Kontrolách` ani `Průběhu` není o čem. Záložka je proti
+    /// tomu cesta k obsahu, který jinudy vidět není.
+    ///
+    /// **Popisky jdou druhé, a všechny naráz** (#318). Ustupovat po jednom (nejdřív `Změněné
+    /// soubory`, pak `Konverzace`…) by znamenalo pruh, ve kterém část záložek má text a část ne —
+    /// tedy sedm různých podob podle šířky místo tří, a v každé jinak dlouhý skok mezi sousedy.
+    ///
+    /// **Popisek u aktivní záložky zůstává**, protože odpovídá na jinou otázku než ostatní: ne
+    /// „kam se dá jít“, ale „kde jsem“. Podtržení to říká taky, jenže samo o sobě jen u jedné ze
+    /// sedmi ikon — a to je zrovna ten údaj, kvůli kterému se do pruhu kouká nejčastěji.
+    ///
+    /// **Čtvrtá podoba (samotné ikony, bez popisku i u aktivní) tu není schválně.** Změřeno
+    /// (`TabStripWidthTests`): `icons` se s nejdelším popiskem (`Změněné soubory`) vejde do tabu
+    /// od **564 b**, tedy do okna od 617 — a i s trojmístnými odznaky u všech záložek od 636 b,
+    /// tedy okna 689. Podlaha okna je 700, takže na čtvrtou podobu se **nedá přijít**; kód, který
+    /// nikdo nikdy neuvidí, je horší než měření, které to hlídá.
+    enum Layout: CaseIterable {
+        /// Jak to má být: popisky u všech záložek a vpravo `+X −Y`.
+        case full
+        /// Bez rozsahu změny. Popisky zůstávají.
+        case labels
+        /// Ikony s odznaky; popisek jen u aktivní záložky.
+        case icons
+    }
+
+    /// Jedna podoba pruhu. Záložky jsou ve všech tytéž — liší se **jen** tím, co se u nich
+    /// nakreslí; kdyby se lišilo i něco jiného, byly by to tři obrazovky místo jedné.
+    private func strip(_ layout: Layout) -> some View {
         HStack(spacing: 2) {
             ForEach(Array(PullRequestTab.allCases.enumerated()), id: \.element) { index, tab in
                 if needsSeparator(before: index) { separator }
-                item(tab)
+                item(tab, layout: layout)
             }
             Spacer(minLength: 8)
-            if showsDiffstat, let diffCounts { diffstat(diffCounts) }
+            if layout == .full, let diffCounts { diffstat(diffCounts) }
         }
     }
 
@@ -150,24 +191,55 @@ struct PullRequestTabBar: View {
         }
     }
 
-    private func item(_ tab: PullRequestTab) -> some View {
+    private func item(_ tab: PullRequestTab, layout: Layout) -> some View {
         let isActive = selection == tab
+        let showsLabel = layout != .icons || isActive
         return Button {
             withAnimation(.easeOut(duration: 0.18)) { selection = tab }
         } label: {
-            content(tab, isActive: isActive)
+            content(tab, isActive: isActive, showsLabel: showsLabel)
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 ? tab : (hovered == tab ? nil : hovered) }
         .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
+        // Bez popisku je ikona jediné, co záložku pojmenovává — a to je na kurzor málo. Nápověda
+        // se proto přidává **jen v úzkém pruhu**; nad vypsaným popiskem by opakovala, co je vidět.
+        .modifier(TabTooltip(label: showsLabel ? nil : tab.czechLabel))
     }
 
-    private func content(_ tab: PullRequestTab, isActive: Bool) -> some View {
+    /// Nápověda, která tam **buď je, nebo není** — `help("")` by na `NSView` nechalo prázdný
+    /// tooltip, tedy obdélník bez textu.
+    private struct TabTooltip: ViewModifier {
+        let label: String?
+
+        @ViewBuilder func body(content: Content) -> some View {
+            if let label { content.help(label) } else { content }
+        }
+    }
+
+    /// Jméno pro odečítání na ikoně — taky **buď, anebo**. Prázdný řetězec by u ikony nastavil
+    /// prázdné jméno, a tím by se v širokém pruhu měnilo chování, které se měnit nemá: tam popisek
+    /// je a ikona má zůstat tichá přesně tak, jako byla.
+    private struct TabIconName: ViewModifier {
+        let label: String?
+
+        @ViewBuilder func body(content: Content) -> some View {
+            if let label { content.accessibilityLabel(label) } else { content }
+        }
+    }
+
+    private func content(_ tab: PullRequestTab, isActive: Bool, showsLabel: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: symbol(of: tab))
                 .font(.caption)
-            Text(verbatim: tab.czechLabel)
-                .font(.callout.weight(isActive ? .semibold : .regular))
+                // **Jméno záložky nesmí zmizet i pro odečítání** (#318). Když se popisek nekreslí,
+                // převezme ho ikona — jinak by VoiceOver četl jen odznak, tedy „3“ bez toho, čeho
+                // tři. Nad vypsaným popiskem se nenastavuje nic, ať se jméno nečte dvakrát.
+                .modifier(TabIconName(label: showsLabel ? nil : tab.czechLabel))
+            if showsLabel {
+                Text(verbatim: tab.czechLabel)
+                    .font(.callout.weight(isActive ? .semibold : .regular))
+            }
             if let badge = badge(tab) { mark(badge) }
         }
         .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
@@ -266,17 +338,23 @@ struct PullRequestTabBar: View {
 #Preview {
     @Previewable @State var selection = PullRequestTab.filesChanged
 
-    return VStack(spacing: 0) {
-        PullRequestTabBar(selection: $selection) { tab in
-            switch tab {
-            case .overview: .count(3)
-            case .findings: .blocking(2)
-            case .progress: .live
-            default: nil
+    // Přes pásmo šířek, ať jsou všechny tři podoby vedle sebe: 1047 je výchozí okno bez railu,
+    // 947 je pásmo bez `+X −Y` a 647 je nejužší povolené okno, tedy stupeň s ikonami.
+    return VStack(spacing: 24) {
+        ForEach([1047.0, 947.0, 647.0] as [CGFloat], id: \.self) { width in
+            PullRequestTabBar(selection: $selection) { tab in
+                switch tab {
+                case .overview: .count(3)
+                case .filesChanged: .count(7)
+                case .findings: .blocking(2)
+                case .progress: .live
+                default: nil
+                }
             }
+            .diffCounts((additions: 248, deletions: 96))
+            .frame(width: width)
         }
         Text(verbatim: selection.czechLabel)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    .frame(width: 520, height: 200)
+    .padding(.vertical, 20)
 }

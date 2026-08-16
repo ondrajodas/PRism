@@ -5,17 +5,17 @@ import Testing
 
 @testable import PRism
 
-/// Sonda, ne test (#306): vyrendruje **tab `Kontroly` v každé podobě, jakou umí** a k tomu **pruh
-/// záložek přes pásmo šířek**, aby se dalo vidět, co se v okně stane s trvale přítomnou záložkou.
+/// Sonda, ne test (#306): vyrendruje **tab `Kontroly` v každé podobě, jakou umí**.
 ///
 /// Podob je **pět, i když `ChecksTabState` má čtyři případy**: `list` se kreslí dvakrát, se
 /// zastaralostí a bez ní, a je to zrovna ten rozdíl, který se z kódu nepozná — okrová věta nad
 /// `ScrollView`em je jediné, co říká, že seznam pod ní je poslední známý, ne dnešní.
 ///
-/// Proč sonda a ne měření: „netvrdí prázdný tab, že se něco nepovedlo?“ a „vejde se šest popisků
-/// na jeden řádek?“ jsou otázky na obrázek. Co se **dá** tvrdit číslem, je v `ChecksTabStateTests`
-/// (čtyři stavy) a v `AppStoreTabTests` (volba tabu přežije každý stav) — sonda je k tomu, aby se
-/// prázdný a nenačtený stav daly **přečíst** vedle sebe.
+/// Proč sonda a ne měření: „netvrdí prázdný tab, že se něco nepovedlo?“ je otázka na obrázek. Co se
+/// **dá** tvrdit číslem, je v `ChecksTabStateTests` (čtyři stavy) a v `AppStoreTabTests` (volba tabu
+/// přežije každý stav) — sonda je k tomu, aby se prázdný a nenačtený stav daly **přečíst** vedle
+/// sebe. Pruh záložek se od #318 rendruje jinde, v `TabStripRenderProbe`: stojí nad všemi sedmi
+/// taby, takže dvě sondy s ním znamenaly dvě pásma šířek, která se nedají porovnat.
 ///
 /// `NSHostingView`, ne `ImageRenderer`, ze dvou důvodů zděděných po #294: obsah `ScrollView`u se
 /// offscreen nerasterizuje a `Link` v `ImageRenderer`u vyjde jako žlutý placeholder — obojí je
@@ -52,43 +52,6 @@ struct ChecksTabRenderProbe {
                 print("SONDA \(url.path) — \(scenario.rawValue), \(Int(width)) b, "
                     + "stav \(store.checksTabState(for: pr))")
             }
-        }
-    }
-
-    /// Pruh záložek sám, přes pásmo šířek — **bez odznaků i s nimi**.
-    ///
-    /// Bez odznaků je to zrovna PR bez CI, tedy ten případ, který od #306 platí šestou záložku
-    /// taky: do #215 se mu pruh vešel na jeden řádek od ~820 bodů, s šesti záložkami až od ~920.
-    /// S odznaky je pruh nejširší, jaký může být.
-    @Test("Vyrendrovat pruh záložek přes pásmo šířek")
-    func rendersTheStrip() throws {
-        let directory = Self.outputDirectory
-        for width in [620.0, 720.0, 780.0, 820.0, 920.0, 1020.0] as [CGFloat] {
-            for badges in [false, true] {
-                let bar = PullRequestTabBar(
-                    selection: .constant(.checks),
-                    badge: badges ? Self.badge(of:) : { _ in nil }
-                )
-                .diffCounts((additions: 128, deletions: 34))
-                .frame(width: width)
-                .background(Palette.surface)
-
-                let name = "pruh-\(Int(width))-\(badges ? "s-odznaky" : "bez-odznaku")"
-                let url = directory.appending(path: "\(name).png")
-                let size = try render(bar, width: width, height: 44, to: url)
-                print("SONDA \(url.path) — \(Int(width)) b, výška pruhu \(size.height)")
-            }
-        }
-    }
-
-    private static func badge(of tab: PullRequestTab) -> PullRequestTabBadge? {
-        switch tab {
-        case .overview: .count(3)
-        case .conversation: .count(12)
-        case .checks: .blocking(1)
-        case .findings: .blocking(2)
-        case .progress: .live
-        default: nil
         }
     }
 

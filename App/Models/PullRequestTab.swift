@@ -25,8 +25,10 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// #242). Přesně tuhle situaci ta vlastnost předvídala doslova.
     ///
     /// Stojí to **šířku pruhu záložek**, a je to jediné, co to stojí: sedm záložek se všemi odznaky
-    /// by potřebovalo okno ~1049 bodů proti dnešním 937. Zaplatila to pilulka `+X −Y`, která se
-    /// v úzkém pruhu nekreslí, takže hranice zůstala na 939 — viz `PullRequestTabBar`.
+    /// by potřebovalo okno ~1049 bodů proti tehdejším 937. Zaplatila to pilulka `+X −Y`, která se
+    /// v úzkém pruhu nekreslí, takže hranice zůstala na 939. Od #318 se pod ní pruh přepíná na
+    /// **ikony s popiskem jen u aktivní záložky** a nezalomí se ani v nejužším okně —
+    /// viz `PullRequestTabBar`.
     case commits
     /// Časová osa toho, co se na PR dělo (#183).
     ///
