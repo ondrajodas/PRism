@@ -12,8 +12,8 @@ struct PullRequestCommit: Hashable, Sendable, Identifiable {
     /// Plný sha. Klíč řádku, takže se zkrácený nepoužívá ani tam: dva commity se stejnými sedmi
     /// znaky jsou vzácné, ale sloučily by se potichu.
     let sha: String
-    /// Celá zpráva, jak ji napsal autor. V seznamu se kreslí jen `subject`; tělo patří do hlavičky
-    /// rozkliknutého commitu (#317), takže se nezahazuje.
+    /// Celá zpráva, jak ji napsal autor. V řádku je vidět jen `subject`, celá se dá přečíst
+    /// v tooltipu — a tělo patří do hlavičky rozkliknutého commitu (#317), takže se nezahazuje.
     let message: String
     /// Jméno z `commit.author.name` — **git ho má vždycky** a účet na GitHubu k němu být nemusí.
     let authorName: String
@@ -21,7 +21,9 @@ struct PullRequestCommit: Hashable, Sendable, Identifiable {
     /// `keboola/job-queue-daemon#858`, kde je `author: null` u **všech sedmi** commitů.
     let authorLogin: String?
     /// Obrázek autora. Přijde v téže odpovědi jako zbytek, takže nestojí volání navíc; `nil` jde
-    /// ruku v ruce s `authorLogin` a znamená, že se kreslí monogram z `authorName`.
+    /// ruku v ruce s `authorLogin`. Zástupný monogram kreslí `AvatarView` **vždycky, dokud obrázek
+    /// nedorazí** — u `nil` tedy napořád —, a bere si ho ze `authorName`, ať se neshoduje s jiným
+    /// jménem, než jaké je v řádku vidět.
     let avatarURL: URL?
     /// Kdy commit vznikl (`commit.author.date`). **Datum commitu, ne pushnutí** — tentýž
     /// kompromis jako u časové osy (#171): `pushedDate` GitHub už neplní.
@@ -35,7 +37,10 @@ struct PullRequestCommit: Hashable, Sendable, Identifiable {
     /// První řádka zprávy. To, co se v seznamu kreslí; zbytek je tělo.
     ///
     /// **Prázdná zpráva dá prázdný `subject`**, ne zástupný text: vymyslet za autora větu by
-    /// znamenalo tvrdit něco, co v datech není. Řádek v tom případě ukáže jen sha.
+    /// znamenalo tvrdit něco, co v datech není. Že se v řádku místo prázdna nakreslí
+    /// `(commit bez zprávy)`, je rozhodnutí **view** (`CommitListView`) — prázdné místo vedle
+    /// avataru vypadá jako chyba kreslení, ale závorka je tam vidět jako zástupný text a model se
+    /// tím nešpiní.
     var subject: String {
         String(message.prefix(while: { !$0.isNewline }))
     }
