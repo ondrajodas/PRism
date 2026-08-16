@@ -36,6 +36,18 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// **Prázdná hodnota znamená „ber výchozí“**, ne „pusť reviewera bez zadání“; jádro
     /// kontraktu se připojuje mimo šablonu, viz `ReviewPromptTemplate`.
     var reviewPrompt: String
+    /// Za jak dlouho se běh revieweera zabije (#320), **v minutách**.
+    ///
+    /// V minutách ze stejného důvodu, z jakého je interval v sekundách a rozpočet
+    /// v megabajtech: soubor se edituje ručně a `Duration` se do JSONu kóduje jako dvojice
+    /// čísel, kterou nikdo nenapíše. Jméno nese jednotku, aby se nedalo splést s `Duration`.
+    ///
+    /// **Per repo se přebít dá** (na rozdíl od promptu): velké repo potřebuje víc a je to
+    /// vlastnost repa, ne člověka.
+    ///
+    /// Meze a jejich důvod drží `ReviewTimeout`; hodnota mimo ně se sráží dovnitř
+    /// (`Policy.reviewTimeout(minutes:)`) a pojmenuje se pod polem v nastavení.
+    var reviewTimeoutMinutes: Int
     /// Výchozí režim pro repo, které si neřeklo o jiný. Ve výchozím stavu `manual` —
     /// zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
     var mode: ReviewMode
@@ -83,6 +95,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         skillsByLanguage: [ProjectLanguage: [String]] = [:],
         blockingCategories: [String],
         reviewPrompt: String = ReviewPromptTemplate.standard,
+        reviewTimeoutMinutes: Int = ReviewTimeout.standardMinutes,
         mode: ReviewMode,
         allowsPublishing: Bool = false,
         findingsLanguage: FindingsLanguage = .czech,
@@ -100,6 +113,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.skillsByLanguage = skillsByLanguage
         self.blockingCategories = blockingCategories
         self.reviewPrompt = reviewPrompt
+        self.reviewTimeoutMinutes = reviewTimeoutMinutes
         self.mode = mode
         self.allowsPublishing = allowsPublishing
         self.findingsLanguage = findingsLanguage
@@ -140,6 +154,17 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // u kterých se rozbitá hodnota hlásí. Je na to test, aby se ta úvaha nemusela dělat znovu.
         reviewPrompt = try container.decodeIfPresent(String.self, forKey: .reviewPrompt)
             ?? standard.reviewPrompt
+        // Chybějící klíč = patnáct minut, tedy chování před #320. Číslo **mimo meze se
+        // nezahazuje ani nepoloží čtení** — sráží ho `Policy.reviewTimeout(minutes:)` až tam, kde
+        // se používá, a nastavení u pole napíše, kolik je v souboru a s čím se poběží. Držet
+        // v konfiguraci syrovou hodnotu je podmínka toho, aby se to dalo napsat: sražená při čtení
+        // by z „napsal jsem 120“ udělala „vždycky tam bylo 60“.
+        //
+        // Hodnota **jiného typu** čtení položí (`try`, ne `try?`), stejně jako u ostatních čísel:
+        // `"patnáct"` není hodnota, které by se dalo rozumět, a tiše podstrčený default by znamenal
+        // limit, o který nikdo neřekl.
+        reviewTimeoutMinutes = try container.decodeIfPresent(Int.self, forKey: .reviewTimeoutMinutes)
+            ?? standard.reviewTimeoutMinutes
         // Neznámý režim se bere jako `manual` ze stejného důvodu jako u repa: samo od sebe
         // se nemá spouštět nic, a překlep v souboru není důvod pustit reviewery na všechno.
         mode = (try? container.decode(ReviewMode.self, forKey: .mode)) ?? standard.mode
@@ -195,19 +220,24 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
     /// „ber globální“.
     var skills: [String]?
     var blockingCategories: [String]?
+    /// `nil` = ber globální. Velké repo potřebuje delší limit a je to vlastnost **repa**, ne
+    /// člověka — proto to má override, na rozdíl od promptu, pohledu na diff a vzhledu okna.
+    var reviewTimeoutMinutes: Int?
 
     init(
         mode: ReviewMode? = nil,
         allowsPublishing: Bool? = nil,
         findingsLanguage: FindingsLanguage? = nil,
         skills: [String]? = nil,
-        blockingCategories: [String]? = nil
+        blockingCategories: [String]? = nil,
+        reviewTimeoutMinutes: Int? = nil
     ) {
         self.mode = mode
         self.allowsPublishing = allowsPublishing
         self.findingsLanguage = findingsLanguage
         self.skills = skills
         self.blockingCategories = blockingCategories
+        self.reviewTimeoutMinutes = reviewTimeoutMinutes
     }
 
     /// Tolerantní ze stejného důvodu jako `GlobalConfig`, a tady na tom záleží nejvíc:
@@ -240,6 +270,10 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         findingsLanguage = try? container.decodeIfPresent(FindingsLanguage.self, forKey: .findingsLanguage)
         skills = try container.decodeIfPresent([String].self, forKey: .skills)
         blockingCategories = try container.decodeIfPresent([String].self, forKey: .blockingCategories)
+        // Jako globální úroveň: chybějící klíč je „ber globální“, hodnota jiného typu položí čtení
+        // a číslo mimo meze se drží syrové a srazí se až při použití. Přísnost jako u režimu tu
+        // nemá co chránit — delší limit nic nespustí a nic neodešle, jen dovolí běhu doběhnout.
+        reviewTimeoutMinutes = try container.decodeIfPresent(Int.self, forKey: .reviewTimeoutMinutes)
     }
 }
 
@@ -274,6 +308,9 @@ struct Configuration: Codable, Equatable, Sendable {
             // Doslova ten text, co byl do #281 v kódu — po zavedení pole se aplikace nesmí
             // začít chovat jinak. Hlídá to test, který složený prompt porovnává znak po znaku.
             reviewPrompt: ReviewPromptTemplate.standard,
+            // Patnáct minut — doslova ta hodnota, co byla do #320 v `ClaudeReviewRunner`.
+            // Hlídá to test, který ji porovnává s číslem, ne s konstantou.
+            reviewTimeoutMinutes: ReviewTimeout.standardMinutes,
             mode: .manual,
             allowsPublishing: false,
             findingsLanguage: .czech,
@@ -313,7 +350,13 @@ struct Configuration: Codable, Equatable, Sendable {
             allowsPublishing: overrides?.allowsPublishing ?? global.allowsPublishing,
             findingsLanguage: overrides?.findingsLanguage ?? global.findingsLanguage,
             skills: Self.nonBlank(overrides?.skills ?? global.skills),
-            blockingCategories: Set(Self.nonBlank(overrides?.blockingCategories ?? global.blockingCategories))
+            blockingCategories: Set(Self.nonBlank(overrides?.blockingCategories ?? global.blockingCategories)),
+            // Sráží se **až tady**, na jednom místě a pro obě úrovně naráz: kdyby se sráželo při
+            // čtení souboru, přišlo by se o rozdíl mezi „napsal jsem 120“ a „mám 60“, a nastavení
+            // by neměl kdo pojmenovat.
+            reviewTimeout: Policy.reviewTimeout(
+                minutes: overrides?.reviewTimeoutMinutes ?? global.reviewTimeoutMinutes
+            )
         )
     }
 
@@ -370,4 +413,7 @@ struct ResolvedConfig: Equatable, Sendable {
     let findingsLanguage: FindingsLanguage
     let skills: [String]
     let blockingCategories: Set<String>
+    /// Limit jednoho běhu (#320), **už sražený do mezí** — kdo si ho odsud vezme, nemá co dál
+    /// kontrolovat. Předává se do `ReviewRequest`, ne čte v runneru.
+    let reviewTimeout: Duration
 }

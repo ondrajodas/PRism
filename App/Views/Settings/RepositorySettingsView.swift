@@ -137,8 +137,81 @@ private struct RepositoryDetailView: View {
                 addLabel: "Přidat kategorii",
                 emptyMeaning: "Prázdný seznam znamená, že tady nic neblokuje."
             )
+
+            timeoutOverride
         }
         .formStyle(.grouped)
+    }
+
+    /// Vlastní časový limit běhu (#320).
+    ///
+    /// Přepínač a číslo, ne tříhodnotový picker jako u režimu: hodnot je 56 a „ber globální“ je
+    /// mezi nimi jen jedna z odpovědí. Zapnutí začíná od globální hodnoty ze stejného důvodu jako
+    /// u sad — nejčastější důvod pro override je posunout ji, ne psát od nuly.
+    private var timeoutOverride: some View {
+        Section {
+            Toggle("Vlastní limit", isOn: isOverridden)
+            if config.reviewTimeoutMinutes.wrappedValue != nil {
+                ReviewTimeoutField(label: "Časový limit běhu (min)", minutes: unwrappedTimeout)
+            }
+        } header: {
+            Text("Časový limit běhu")
+        } footer: {
+            if config.reviewTimeoutMinutes.wrappedValue == nil {
+                Text(verbatim: inheritedTimeout)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Platí na jednu session — na každý skill zvlášť a stejně tak na kontrolu nálezů. Projeví se na dalším běhu; ten, který právě běží, doběhne s limitem, se kterým začal.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Co repo bez vlastního limitu doopravdy dostane.
+    ///
+    /// **Sražená hodnota, ne ta ze souboru.** Globální číslo může být mimo meze (napsané ručně) —
+    /// a napsat sem „Bere globální: 240 min“ nad během, který poběží 60, je přesně ten text, který
+    /// tvrdí víc, než data unesou. Sráží to `Policy`, tedy totéž místo, kterým hodnota projde na
+    /// cestě do běhu; a když se srazilo, je to tady vidět i s tím, co v souboru stojí.
+    private var inheritedTimeout: String {
+        let global = settings.draft.global.reviewTimeoutMinutes
+        guard Policy.reviewTimeoutProblem(in: global) != nil else {
+            return "Bere globální: \(inheritedMinutes) min"
+        }
+        return "Bere globální: \(inheritedMinutes) min — globálně je nastaveno \(global) min,"
+            + " což je mimo rozsah \(ReviewTimeout.allowedMinutes.lowerBound)"
+            + "–\(ReviewTimeout.allowedMinutes.upperBound) min."
+    }
+
+    /// Zapnutí začíná od **sražené** globální hodnoty, ne od té ze souboru — jinak by override
+    /// zapnutý nad globálním nesmyslem ten nesmysl zkopíroval a hned si na sebe stěžoval.
+    private var isOverridden: Binding<Bool> {
+        Binding(
+            get: { config.reviewTimeoutMinutes.wrappedValue != nil },
+            set: { on in
+                config.reviewTimeoutMinutes.wrappedValue = on ? inheritedMinutes : nil
+            }
+        )
+    }
+
+    /// Odvozený `Binding` bez `nil`, se stejnou pojistkou jako u sad: doběhlá editace už
+    /// zrušeného override ho nesmí vzkřísit.
+    private var unwrappedTimeout: Binding<Int> {
+        Binding(
+            get: { config.reviewTimeoutMinutes.wrappedValue ?? inheritedMinutes },
+            set: { newValue in
+                guard config.reviewTimeoutMinutes.wrappedValue != nil else { return }
+                config.reviewTimeoutMinutes.wrappedValue = newValue
+            }
+        )
+    }
+
+    /// Kolik minut repo bez override doopravdy dostane. Jedno místo pro popisek i pro seed
+    /// zapnutého přepínače.
+    private var inheritedMinutes: Int {
+        Policy.reviewTimeoutMinutes(from: settings.draft.global.reviewTimeoutMinutes)
     }
 
     /// Sekce s vlastní sadou, nebo jen výpis té globální.

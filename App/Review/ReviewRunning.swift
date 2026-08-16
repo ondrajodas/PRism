@@ -22,6 +22,16 @@ struct ReviewRequest: Sendable, Equatable {
     /// U kontroly nálezů (#150) se **nepoužívá**: `RecheckCommand` má vlastní, natvrdo psaný
     /// prompt, protože jeho odpověď čte parser.
     let promptTemplate: String
+    /// Za jak dlouho se session zabije (#320). Putuje **s požadavkem**, ze stejného důvodu jako
+    /// šablona: runner si ji nemá kde přečíst sám, takže běh doběhne s tím limitem, se kterým
+    /// začal, i kdyby se během něj uložilo nastavení.
+    ///
+    /// Je už **sražená do mezí** — skládá ji `Configuration.resolved(for:)` přes
+    /// `Policy.reviewTimeout(minutes:)`, takže tady se nic nekontroluje.
+    ///
+    /// **Kontrola nálezů (#150) má tentýž limit.** Je to tatáž session, tentýž strom a tytéž
+    /// peníze; druhé číslo by znamenalo druhé místo, kde se u pomalého repa zvedá limit.
+    let timeout: Duration
     /// Nálezy z minula, které má běh posoudit (#150). `nil` = běžné review.
     ///
     /// Je to **materiál v promptu**, ne nový nástroj: sada povolení zůstává tatáž (tvrdá
@@ -31,19 +41,35 @@ struct ReviewRequest: Sendable, Equatable {
     /// - Parameter promptTemplate: prázdná znamená **výchozí šablonu**, ne prompt bez zadání
     ///   (#281). Výchozí hodnota parametru je tu kvůli testům; produkční cesta jde přes
     ///   `AppStore`, který sem dává hodnotu z konfigurace.
-    init(key: ReviewRunKey, worktree: URL, baseSha: String, promptTemplate: String = "") {
+    /// - Parameter timeout: výchozí hodnota je tu ze stejného důvodu — produkční cesta bere
+    ///   limit z konfigurace repa.
+    init(
+        key: ReviewRunKey,
+        worktree: URL,
+        baseSha: String,
+        promptTemplate: String = "",
+        timeout: Duration = ReviewTimeout.standard
+    ) {
         self.key = key
         self.worktree = worktree
         self.baseSha = baseSha
         self.promptTemplate = promptTemplate
+        self.timeout = timeout
         recheck = nil
     }
 
-    private init(key: ReviewRunKey, worktree: URL, baseSha: String, recheck: RecheckMaterial) {
+    private init(
+        key: ReviewRunKey,
+        worktree: URL,
+        baseSha: String,
+        timeout: Duration,
+        recheck: RecheckMaterial
+    ) {
         self.key = key
         self.worktree = worktree
         self.baseSha = baseSha
         promptTemplate = ""
+        self.timeout = timeout
         self.recheck = recheck
     }
 
@@ -60,12 +86,14 @@ struct ReviewRequest: Sendable, Equatable {
         at headSha: String,
         worktree: URL,
         baseSha: String,
-        material: RecheckMaterial
+        material: RecheckMaterial,
+        timeout: Duration = ReviewTimeout.standard
     ) -> ReviewRequest {
         ReviewRequest(
             key: .recheck(of: pullRequest, at: headSha),
             worktree: worktree,
             baseSha: baseSha,
+            timeout: timeout,
             recheck: material
         )
     }

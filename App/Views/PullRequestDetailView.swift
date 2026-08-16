@@ -170,11 +170,10 @@ struct PullRequestDetailView: View {
                 Spacer(minLength: 8)
             }
             // Jen když se hlava rozešla se sha, proti které platí nálezy — jinak by to byl
-            // řádek s údajem, který nikoho nezajímá.
-            if let head = loadedDetail?.headSha,
-               let findingsHead = store.reviewRecord(for: pullRequest.id)?.headSha,
-               head != findingsHead {
-                StaleHeadView(head: head, findingsHead: findingsHead, recheck: recheck)
+            // řádek s údajem, který nikoho nezajímá. **Rozchod počítá store** (#284), protože
+            // o témže stavu mluví i odznak v pruhu „od tvé poslední návštěvy“.
+            if let stale = store.staleFindings(for: pullRequest.id) {
+                StaleHeadView(head: stale.head, findingsHead: stale.findingsHead, recheck: recheck)
             }
             // Proč kontrola nálezů (#150) neproběhla. **Vlastní řádek, ne nápověda u tlačítka:**
             // spadlá kontrola vypadá jinak než kontrola, která nic nenašla, a to druhé by se
@@ -227,7 +226,11 @@ struct PullRequestDetailView: View {
         // tab obsahuje, by byl konstanta (čtyři bloky) a neřekl by nic.
         case .overview: count(store.changesSinceLastVisit(for: pullRequest.id).count)
         // Soubory v diffu, ne řádky: `+X −Y` stojí o kus dál v téže liště.
-        case .filesChanged: loadedDiff.flatMap { count($0.files.count) }
+        case .filesChanged: shownDiff.flatMap { count($0.files.count) }
+        // Prostý počet commitů, ze **stavu tabu** (#316) — nad nenačteným ani spadlým seznamem
+        // nic, ať odznak nemluví o něčem jiném než plocha pod ním. Tichá kapsle: kolik je commitů,
+        // je údaj o množství, ne důvod někam jít.
+        case .commits: Policy.commitsBadge(of: store.commitsTabState(for: pullRequest.id))
         // Jen to, co je **k přečtení** — události časové osy se nepočítají (#171), jinak by
         // na PR s dvaceti commity odznak ukazoval třicet a přestal by o diskuzi něco říkat.
         case .conversation: count(store.overview(for: pullRequest.id).count { $0.isReadable })
@@ -269,10 +272,26 @@ struct PullRequestDetailView: View {
         return diff
     }
 
+    /// Diff, který je v tabu **vidět** — celý, nebo rozsah „co přibylo“ (#284).
+    ///
+    /// Odznak u záložky a `+X −Y` v pruhu stojí kousek nad tím diffem, takže musí počítat to,
+    /// co je pod nimi. Kdyby držely čísla celého PR i nad rozsahem, pruh by tvrdil sedm souborů
+    /// nad dvěma — a to je přesně ten druh čísla, které se pak nedá s ničím srovnat.
+    ///
+    /// Dlaždice v `Přehledu` z toho **nečtou**: „Soubory: 7“ je fakt o PR a `Přehled` navíc rozsah
+    /// nikdy nekreslí.
+    private var shownDiff: Diff? {
+        // **Ne `?? loadedDiff` nad rozsahem**: dokud se rozsah načítá nebo selhal, je odpověď
+        // „nevím“, ne „tak tedy celý diff“ — jinak by odznak u záložky na okamžik ukázal počet
+        // souborů celého PR nad prázdným tabem.
+        guard let incremental = store.incrementalDiff(for: pullRequest.id) else { return loadedDiff }
+        return incremental.loaded
+    }
+
     /// Rozsah změny pro záložky (#174). `nil`, dokud diff nedorazí — nuly by tvrdily,
     /// že PR nic nemění.
     private var loadedDiffCounts: (additions: Int, deletions: Int)? {
-        loadedDiff.map { ($0.additions, $0.deletions) }
+        shownDiff.map { ($0.additions, $0.deletions) }
     }
 
     /// Načtený detail PR. `nil` u načítání i selhání — hlavička si v obou případech
@@ -337,6 +356,7 @@ struct PullRequestDetailView: View {
                     switch tab {
                     case .filesChanged: diff
                     case .overview: overview
+                    case .commits: commits
                     case .conversation: conversation
                     case .checks: checks
                     case .findings: findings
@@ -812,16 +832,33 @@ struct PullRequestDetailView: View {
             facts: facts,
             changes: store.changesSinceLastVisit(for: pullRequest.id),
             lastVisit: store.visitSnapshots[pullRequest.id],
-            // Obojí je „to, co mám na obrazovce, už neplatí“, takže se do banneru slévá do
-            // jedné věty — rozdíl mezi zastaralými nálezy a zastaralým draftem se řeší
-            // v panelu, kde se s nimi něco dělá.
+            // Obojí je „to, co mám na obrazovce, už neplatí“, takže se z toho stává **jedna
+            // nabídka**: pustit review znovu. Rozdíl mezi zastaralými nálezy a zastaralým draftem
+            // se řeší v panelu, kde se s nimi něco dělá.
             isStale: store.reviewRecord(for: pullRequest.id)?.isStale == true
                 || store.isDraftStale(for: pullRequest.id),
+            // Odznak `nálezy zastaraly` naopak mluví **jen o nálezech**, a bere je z téhož místa
+            // jako hlavička nad taby (#284) — jinak by o témže stavu tvrdily každá něco jiného.
+            hasStaleFindings: store.staleFindings(for: pullRequest.id)?.hasFindings == true,
             movedHead: store.movedHead(for: pullRequest.id),
             rerun: { store.startReview(for: pullRequest.id) },
+            showAdded: showAdded,
             dismissChanges: { store.markChangesAsSeen(for: pullRequest.id) },
             pullRequest: pullRequest
         )
+    }
+
+    /// `Ukázat, co přibylo` (#284) — `nil`, když se nová hlava nemá s čím porovnat.
+    ///
+    /// Přepnutí tabu patří **sem**, ne do store: který tab je vidět, je věc okna, kdežto store
+    /// jen drží rozsah a jeho načtení. Načítá se `Task`em, tab se přepne hned — jinak by kliknutí
+    /// na sekundu nic neudělalo a vypadalo by to jako zaseklé tlačítko.
+    private var showAdded: (() -> Void)? {
+        guard store.incrementalDiffRange(for: pullRequest.id) != nil else { return nil }
+        return {
+            store.setDetailTab(.filesChanged, for: pullRequest.id)
+            Task { await store.showIncrementalDiff(for: pullRequest) }
+        }
     }
 
     /// Tab `Kontroly` (#215) — a od #306 ve **všech čtyřech stavech**, protože se kreslí i u PR
@@ -875,30 +912,13 @@ struct PullRequestDetailView: View {
     }
 
     /// Poslední pokus o načtení selhal, ale stará sada zůstala (#215) — takže je vidět **poslední
-    /// známý stav**, ne dnešní.
-    ///
-    /// Sedí **nad `ScrollView`em** seznamu, ne v něm: věta o tom, že obsah pod ní může být
-    /// zastaralý, nesmí odscrollovat pryč od obsahu, o kterém mluví.
-    ///
-    /// Okrová, ne červená: kontroly jsou cizí fakt, který se nepovedlo **zjistit** — to je „nevím“,
-    /// ne „je to rozbité“.
+    /// známý stav**, ne dnešní. Sazbu drží `StaleNoticeView`, protože totéž potřebují i `Commity`
+    /// (#316) a dvě kopie téže věty se rozejdou při první úpravě.
     private func staleChecksNotice(_ reason: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Label(
-                "Kontroly se nepodařilo načíst znovu, tohle je poslední známý stav. \(reason)",
-                systemImage: "exclamationmark.triangle"
-            )
-            .font(.caption)
-            .foregroundStyle(Palette.stale)
-            .fixedSize(horizontal: false, vertical: true)
-            // Tlačítko **hned za větou**, ne u pravé hrany: u širokého okna by mezi nimi zbylo
-            // půl obrazovky a přestalo by být vidět, k čemu ta akce je.
-            Button("Zkusit znovu", action: reloadChecks)
-                .font(.caption)
-            Spacer(minLength: 8)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
+        StaleNoticeView(
+            text: "Kontroly se nepodařilo načíst znovu, tohle je poslední známý stav. \(reason)",
+            retry: reloadChecks
+        )
     }
 
     /// Zopakuje načtení kontrol (#306).
@@ -943,6 +963,57 @@ struct PullRequestDetailView: View {
                 )
             }
         )
+    }
+
+    /// Tab `Commity` (#316) — seznam commitů PR, **od nejnovějšího** (`Policy.commitsNewestFirst`).
+    ///
+    /// **Tři stavy, a prázdný mezi nimi není**: pull request bez commitů neexistuje, takže by
+    /// klidná hláška o prázdnu tvrdila něco, co platit nemůže — prázdná odpověď je proto porucha
+    /// (`Policy.commitsTab`). Panel s nálezy se v tomhle tabu nekreslí a je to zapsané
+    /// u `PullRequestTab.showsReviewPanel`.
+    @ViewBuilder private var commits: some View {
+        switch store.commitsTabState(for: pullRequest.id) {
+        case .loading:
+            // Tatáž hláška jako u diffu a kontrol, a schválně bez počtu: dokud odpověď nedorazila,
+            // o commitech nevíme nic.
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Načítám commity…")
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        case .failed(let reason):
+            EmptyStateView(
+                nature: .failure,
+                symbol: "exclamationmark.triangle",
+                title: "Commity se nepodařilo načíst",
+                message: "Seznam je jediné místo, ze kterého je vidět, v jakém kroku se co stalo.",
+                // Text od `gh` zůstává, jak přišel: je to jediné, z čeho se pozná, co dělat dál.
+                detail: reason,
+                primary: .init(title: "Zkusit znovu", run: reloadCommits)
+            )
+        case .list(let list, let failure):
+            VStack(spacing: 0) {
+                if let failure { staleCommitsNotice(failure) }
+                CommitListView(commits: list, head: store.head(of: pullRequest.id))
+            }
+        }
+    }
+
+    /// Poslední pokus o načtení commitů selhal, ale stará sada zůstala (#316) — takže je vidět
+    /// **poslední známý stav**, ne dnešní. Tentýž `StaleNoticeView` jako u kontrol.
+    private func staleCommitsNotice(_ reason: String) -> some View {
+        StaleNoticeView(
+            text: "Commity se nepodařilo načíst znovu, tohle je poslední známý stav. \(reason)",
+            retry: reloadCommits
+        )
+    }
+
+    /// Zopakuje načtení commitů (#316). Vlastní cesta k `loadCommits`, ne přes `loadDetail`: ten má
+    /// cache podle `updatedAt`, takže by po chybě sítě už znovu nic nedotáhl a tab by v poruše
+    /// zůstal až do dalšího commitu.
+    private func reloadCommits() {
+        Task { await store.loadCommits(for: pullRequest.id) }
     }
 
     /// Tab `Nálezy` (#242) — tabulka přes celou šířku.
@@ -1088,49 +1159,121 @@ struct PullRequestDetailView: View {
         )
     }
 
+    /// Tab `Změněné soubory` — celý diff PR, nebo **jen to, co od minule přibylo** (#284).
+    ///
+    /// Rozsah nedostal vlastní tab a ve store nenahrazuje celý diff: je to **pohled** na tentýž
+    /// tab, ze kterého se vyskočí jedním tlačítkem v liště. Review se pořád píše proti celému
+    /// diffu, takže co se v rozsahu napíše, sedí na tomtéž místě jako všude jinde — čísla řádků
+    /// jsou v obou případech čísla na dnešní hlavě.
     @ViewBuilder private var diff: some View {
+        if let incremental = store.incrementalDiff(for: pullRequest.id) {
+            VStack(alignment: .leading, spacing: 0) {
+                IncrementalDiffBar(
+                    range: incremental.range,
+                    showAll: { store.hideIncrementalDiff(for: pullRequest.id) }
+                )
+                incrementalDiff(incremental)
+            }
+            // **Šířku předat, ne vyjednávat** (#220): pod tímhle uzlem visí celý diff, takže
+            // `maxWidth: .infinity` by nad ním přidalo úroveň vyjednávání navíc. Výška pružná
+            // zůstává — o tu se nikdo nepře.
+            .filling(alignment: .topLeading)
+            .frame(maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            fullDiff
+        }
+    }
+
+    @ViewBuilder private var fullDiff: some View {
         switch store.diffState(for: pullRequest.id) {
         case .loaded(let diff, _) where diff.isEmpty:
             placeholder("Diff je prázdný — tenhle pull request nic nemění.")
         case .loaded(let diff, _):
-            DiffView(
-                diff: diff,
-                scrollTarget: $scrollTarget,
-                expansion: expansionActions,
-                folding: foldingActions,
-                findings: findingGroups,
-                findingActions: findingActions,
-                findingDisclosure: findingDisclosure,
-                blockingCategories: blockingCategories,
-                highlighted: highlighted,
-                threads: store.anchoredThreads(for: pullRequest.id),
-                missingThreads: store.conversation(for: pullRequest.id)?.threads.missing ?? 0,
-                viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
-                threadActions: threadActions,
-                comments: store.draftComments(for: pullRequest.id),
-                draft: draftActions,
-                layout: diffLayout,
-                navigation: Policy.navigation(
-                    over: findingGroups,
-                    cursor: cursor,
-                    categories: blockingCategories
-                ),
-                onlyBlocking: $cursor.onlyBlocking,
-                // Tlačítko `Nálezy` v liště nad diffem (#197). Stav drží detail, protože
-                // panel je vidět i v tabu `Přehled`, kde lišta není.
-                panelExpanded: panelExpanded,
-                stepFinding: { step($0) }
-            )
+            diffView(of: diff)
         case .failed(let detail):
             diffFailure(detail)
         case .loading, nil:
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Načítám diff…")
-            }
-            .padding(20)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            loading("Načítám diff…")
         }
+    }
+
+    /// Rozsah „co přibylo“. Prázdný výsledek je **vlastní hláška**, ne ta od celého diffu:
+    /// „tenhle pull request nic nemění“ by nad rozsahem bylo tvrzení o něčem jiném.
+    @ViewBuilder private func incrementalDiff(_ incremental: IncrementalDiff) -> some View {
+        switch incremental.content {
+        case .loaded(let diff) where diff.isEmpty:
+            placeholder("Od tvé poslední návštěvy se v souborech nic nezměnilo.")
+        case .loaded(let diff):
+            diffView(of: diff)
+        case .failed(let detail):
+            incrementalDiffFailure(detail)
+        case .loading:
+            loading("Načítám, co přibylo…")
+        }
+    }
+
+    /// Jeden diff se všemi bublinami. Bere ho **celý diff i rozsah** — nálezy, vlákna
+    /// i rozdělané komentáře se kotví na `soubor:řádek` dnešní hlavy, takže se v obou pohledech
+    /// pověsí na totéž místo; co v rozsahu není vidět, se chová stejně jako soubor mimo diff.
+    private func diffView(of diff: Diff) -> some View {
+        DiffView(
+            diff: diff,
+            scrollTarget: $scrollTarget,
+            expansion: expansionActions,
+            folding: foldingActions,
+            findings: findingGroups,
+            findingActions: findingActions,
+            findingDisclosure: findingDisclosure,
+            blockingCategories: blockingCategories,
+            highlighted: highlighted,
+            threads: store.anchoredThreads(for: pullRequest.id),
+            missingThreads: store.conversation(for: pullRequest.id)?.threads.missing ?? 0,
+            viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
+            threadActions: threadActions,
+            comments: store.draftComments(for: pullRequest.id),
+            draft: draftActions,
+            layout: diffLayout,
+            navigation: Policy.navigation(
+                over: findingGroups,
+                cursor: cursor,
+                categories: blockingCategories
+            ),
+            onlyBlocking: $cursor.onlyBlocking,
+            // Tlačítko `Nálezy` v liště nad diffem (#197). Stav drží detail, protože
+            // panel je vidět i v tabu `Přehled`, kde lišta není.
+            panelExpanded: panelExpanded,
+            stepFinding: { step($0) }
+        )
+    }
+
+    private func loading(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(verbatim: text)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// Rozsah se **nezkouší znovu sám** — pouští ho člověk, takže i opakování je jeho rozhodnutí.
+    /// Vedle je cesta zpátky na celý diff: ten je načtený a je to to, co se v tabu čeká.
+    private func incrementalDiffFailure(_ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Nepodařilo se zjistit, co přibylo", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+            Text(verbatim: detail)
+                .font(.system(.callout, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button("Zkusit znovu", systemImage: "arrow.clockwise") {
+                    Task { await store.showIncrementalDiff(for: pullRequest) }
+                }
+                Button("Ukázat celý diff") { store.hideIncrementalDiff(for: pullRequest.id) }
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func diffFailure(_ detail: String) -> some View {

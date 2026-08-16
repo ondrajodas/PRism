@@ -1727,24 +1727,123 @@ i novým způsobem a porovnal `isEqual(to:)` na 400 řádcích ve dvou paletách
 v UTF-16, takže emoji je dva kódy; regrese ověřena vložením (`count` místo `utf16.count` položí tři
 testy). Testů je **2540**.
 
-### Tab `Commity` — nakreslený, čeká na implementaci
+### Pruh „Od tvé poslední návštěvy“ podle návrhu (#284)
 
-Sedmá záložka detailu PR (seznam commitů a diff jednoho z nich) je **nakreslená v mockupu**,
-sekce 19, a rozhodnutí i zamítnuté alternativy jsou v
-[specifikaci](superpowers/specs/2026-07-31-prism-design.md), sekce *Tab Commity*. **V kódu není
-nic** — pravidlo *Návrh (mockup)* v `CLAUDE.md` chce nakreslit a nechat schválit dřív, než se
-issue založí, takže tohle je zastávka mezi tím.
+Pruh nahoře v `Přehledu` seděl proti návrhu (sekce 02) čtyřmi věcmi a všechny čtyři jsou hotové.
 
-Cena je změřená, ne odhadnutá: sedmá záložka posune šířku, od které se pruh vejde na jeden
-řádek, z 920 na **1035 bodů** okna. Ve výchozím okně (1100) je to tedy bez dopadu; nové je
-pásmo 920–1035 a zaplatí ho `+X −Y` (108 b, tedy skoro přesně cena té záložky). Vedle toho se
-ukázalo, že pruh se pod tou hranicí **zalamuje, nezkracuje** — oprava jedné věty
-v [`docs/testovani.md`](testovani.md).
+**Sazba odrážek.** `lines` byl `[String]` a jeden `Text(verbatim:)`, takže v řádku nešlo nic
+zdůraznit. Řádek se teď skládá z typovaných částí (`SinceLastVisitLine.Part`: `strong` / `plain` /
+`sha`) a skládá je `SinceLastVisitLines` — **mimo view a mimo `Policy`**, jako `TimelineEventRow`:
+je to próza pro člověka, ne rozhodnutí, takže se rozdělilo jedno skládání, nepřestěhovalo se.
+U vět, které si pruh píše sám, je tučně **co se stalo**; u událostí časové osy se bere věta i s jejím
+zvýrazněním z `TimelineEventRow`, tedy tučná **jména** — dvě různá pravidla schválně, protože druhé
+znění téže věty by se s tím prvním rozešlo. Autor commitů se uvádí, **jen když je jeden**.
 
-Implementace je rozdělená na **dvě issues dělené datovou cestou**: seznam commitů
-(**#316**, `pulls/{n}/commits`, jedno volání, 1,20 s) a rozkliknutí na diff commitu
-(**#317**, `commits/{sha}` s `Accept: application/vnd.github.diff`, 0,99 s, unified diff pro
-dnešní `DiffParser`). Smrsknutí pruhu na ikony v úzkém okně je odložené do **#318**.
+**Sha je podklad za písmem, ne kapsle s odsazením** — vědomá odchylka od návrhu a tatáž volba, jakou
+už udělal inline kód v sazbě Markdownu (#279): `AttributedString` umí u běhu nastavit barvu pozadí,
+ne jeho výplň a rádius, takže kapsle by znamenala kreslit každou sha jako vlastní view a tím
+rozpadlé zalomení uprostřed věty. Odrážka je v úzkém `Přehledu` zalomená vždycky.
+
+**Odznak místo věty.** `nálezy zastaraly` (`.pill.stale`) čte `AppStore.staleFindings(for:)`, tedy
+**tentýž zdroj** jako hlavička nad taby — a rozsvítí se jedině tehdy, když nálezy doopravdy jsou.
+`Pustit review znovu` se naopak nabízí **i bez nálezů**, když se přepsala historie: do #284 se
+v takovém případě neukázalo nic, což byl třetí bod zadání.
+
+**`Ukázat, co přibylo`** je nová datová cesta. Rozhodlo měření mezi dvěma nabízenými: klon v cache
+**prohrál**, protože `refs/prism/pr/<n>` v něm vzniká teprve při checkoutu kvůli review a
+`forgetPullRequest` ho maže (u většiny PR by se tlačítko nenabídlo), klon je `--filter=blob:none`
+(takže by si `git diff` obsah stejně dotáhl ze sítě) a u PR z forku by v něm hlava nebyla vůbec.
+Přibyla proto **dvanáctá čtecí metoda** na `GitHubGateway` — `compare/<viděná>...<dnešní>`
+s `Accept: application/vnd.github.diff`, jedno volání, ~0,7 s. Rozsah se kreslí v tabu `Změněné
+soubory` s lištou, ze které se jedním tlačítkem vrátíš na celý diff; celý diff se u toho **nezahazuje**,
+je to to, proti čemu se píše review.
+
+**Po přepsané historii se tlačítko nenabídne**, a je to změřené: trojtečkový `compare` začíná na
+společném předku, takže by po force pushi vrátil **víc než celý diff PR** — na `cli/cli#14062` 102 kB
+ve 22 souborech proti 15 kB ve třech. Tedy přesně to, co zadání zakazuje. Rozhoduje o tom čistá
+funkce `Policy.incrementalDiff`; `rewroteHistory: nil` (nenačtená časová osa) se chová jako
+„přepsala“.
+
+Cestou vypadlo jedno poučení k šířkám: **`ViewThatFits` se na řadu s pružnými popisky spolehnout
+nedá.** Odznak i tlačítka se ve zúžené řadě radši zkrátí, než by nahlásily, že se nevejdou — v liště
+rozsahového diffu z toho vyšlo `Jen t…`, a `lineLimit(1)` ani `fixedSize` s tím nehnuly. Rozhoduje
+proto **spočítaná** šířka popisků (`TextWidth`), jak to má #220. `OverflowProbe` na tuhle třídu chyb
+**nestačí** — zkrácený popisek nikam nepřeteče —, ověřeno vloženou regresí, po které zůstaly
+`OverviewWidthTests` zelené. Testů je **2584**.
+
+### Tab `Commity` — seznam hotový (#316)
+
+Sedmá záložka detailu PR je v okně: **seznam commitů PR, od nejnovějšího**, řádek s obrázkem
+autora, první řádkou zprávy, jménem, relativním časem a sha, pilulkami `sloučení` a `hlava`
+a pruhem s počtem nad tím. Sedí mezi `Změněnými soubory` a `Konverzací`, tedy nalevo od děliče —
+a **dělič se tím neposunul**, protože se počítá z `isReviewerOutput`, ne z indexu. Data jsou
+z nové čtecí metody `GitHubGateway.fetchCommits(id:)`, tahají se s detailem a jedním voláním;
+tvrdá podmínka č. 1 se tím nemění, gateway pořád nemá čím něco odeslat.
+
+**Cena sedmé záložky vyšla líp, než odhad předpovídal, a je změřená na skutečném pruhu.**
+Specifikace měla z repliky 920 → 1035 bodů okna; naměřeno po jednom bodu šířky je to
+**937 → 939**, protože `+X −Y` se v úzkém pruhu nekreslí (`ViewThatFits` se dvěma podobami)
+a pilulka stojí skoro přesně tolik co ta záložka (110 proti 112 bodům). Absolutní čísla
+ze specifikace byla o 17 bodů níž — replika je odhad, ne měření; **rozdíl** ale odhadla dobře.
+
+**Pořadí se proti návrhu otočilo: nejnovější nahoře.** Mockup (sekce 19) i specifikace měly „od
+nejstaršího, jako na GitHubu, protože PR se čte jako postup“ — ten důvod ale neobstál na hotové
+obrazovce: v okně se PR nečte od začátku, ale od toho, co přibylo naposled, tedy tentýž pohyb jako
+u pruhu `Od tvé poslední návštěvy` a tentýž důvod, proč jsou fakta v `Přehledu` nahoře (#280).
+Otáčí se **na jednom místě** (`Policy.commitsNewestFirst` v `commitsTab`) a **otáčí, neřadí** —
+pořadí z API je topologické, takže řazení podle data by po rebase postup rozházelo. Změnil se s tím
+i pruh nad seznamem (`7 commitů · od nejnovějšího`), protože je to jediné místo, které pořadí
+pojmenovává. Mockup se **nepřekresluje**, to řeší #299.
+
+**Tři rozhodnutí, která zadání upřesnila.** Prázdná odpověď se hlásí jako **porucha**, ne jako
+prázdný stav (pull request bez commitů neexistuje, takže hláška o prázdnu by tvrdila nemožný
+stav — a `CommitsTabState` proto **nemá** `empty`, na rozdíl od `ChecksTabState`). Pilulku `hlava`
+dostává commit, jehož sha se rovná `headSha` z detailu, **ne první řádek** — nahoře sice obvykle
+stojí, ale po pushnutém commitu je seznam o krok pozadu a nad stropem API v něm hlava chybí úplně;
+nálezy jsou klíčované `headSha`, takže se tehdy neoznačí nic. A **šipka u řádku se nenakreslila**,
+protože rozkliknutí je #317: šipka, za kterou se nic nestane, slibuje interakci, která tam není.
+
+Testů je po sloučení s `main` **2638**; tohle issue z nich přidalo **44** — pět nových suit (stav
+tabu, model commitu, dekódování odpovědi, načítání ve store a šířka pruhu) plus render sonda a dva
+případy dopsané do stávajících suit. Pět z těch čtyřiačtyřiceti hlídá pořadí: otočení čerstvého
+i zastaralého seznamu, že se otáčí a neřadí, že v pruhu nezbylo staré slovo, a že mapa ve store drží
+pořadí z API.
+
+Zbývá rozkliknutí commitu na jeho diff (**#317**, `commits/{sha}` s
+`Accept: application/vnd.github.diff`, 0,99 s, unified diff pro dnešní `DiffParser`) a smrsknutí
+pruhu na ikony v úzkém okně (**#318**) — v okně 700 se pruh pořád zalamuje, stejně jako před #316.
+
+### #320 — časový limit běhu do nastavení
+
+Limit jedné `claude` session byl do #320 zadrátovaný (`ClaudeReviewRunner.defaultTimeout`, patnáct
+minut), takže se dal zvednout jedině přeložením aplikace — a přitom `docs/architektura.md`
+u rozlišení `timedOut` proti `interrupted` už tehdy tvrdila, že „dá se zvednout limit“. Teď je to
+`GlobalConfig.reviewTimeoutMinutes` s **override per repo**, na stránce `Review a skilly` v sekci
+`Režim review`. Výchozích patnáct minut je doslova ta hodnota, co byla v kódu, takže zavedení pole
+nic nemění; hlídá to test porovnávající číslo, ne konstantu.
+
+**Meze jsou 5–60 minut a „bez limitu“ mezi volbami není** — timeout je jediná pojistka proti
+session, která se zacyklí, kdežto `autoRunsPerDay` a `maxConcurrentReviews` omezují jen **počet**
+běhů. Obě čísla jsou naměřená, ne odhadnutá: 19 běhů z provozní cache dalo medián **2,5 min**
+a nejdelší doběhlý **6,8 min** (dolní mez), a cena vyšla na ~**0,40 $/min** u běžného běhu, přičemž
+v cache leží session za **14,67 $ pod minutou** — peníze tedy nejsou funkcí času, ale hodina navíc
+je hodina utrácení bez dozoru (horní mez, ve vazbě na denní strop automatu).
+
+Dvě rozhodnutí, o která si issue řeklo: **kontrola nálezů (#150) limit sdílí** — tatáž session,
+tentýž strom, tytéž peníze, a spouští se jedině ručně —, a **překladače nálezů se to nedotýká**,
+protože se uvažuje o jeho zániku (jazyk nálezů by přešel do promptu review). Číslo limitu se
+navíc **nepíše k výsledku běhu**: uložený běh ho nenese, takže by šlo napsat jen to, co je
+nastavené teď, a to je o starším timeoutu nepravda.
+
+Limit **putuje s požadavkem** jako šablona promptu (#281), takže rozjeté review doběhne s tím
+svým; runner po #320 vlastní pole nemá. Hodnota mimo meze soubor nepoloží, ale ani se nespolkne —
+v konfiguraci zůstane syrová, srazí se až v `resolved(for:)` a nastavení pod polem napíše, kolik je
+v souboru a s čím se doopravdy poběží. **Popisek „Bere globální“ na stránce `Repozitáře` vypisuje
+sraženou hodnotu** — nálezem Copilota; „Bere globální: 240 min“ nad během, který poběží 60, je text,
+který tvrdí víc, než data unesou.
+
+Testů je **2663**; regrese ověřena vložením tří naráz (posunutá výchozí hodnota, runner s vlastní
+konstantou, `resolved` bez sráření) — padne 18 tvrzení v 10 testech.
 
 ### Tab `Průběh` — živý výpis a surová session nakreslené, čekají na implementaci
 

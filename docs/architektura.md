@@ -51,9 +51,11 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
 | `DraftSnapshot` | Text řádků, ke kterým se komentář psal — konec rozsahu a jeho začátek. Prázdný = nevíme |
 | `DetailState` | Stav dotažení detailu PR: `loading` / `loaded(PullRequest, updatedAt:)` / `failed`. Je z něj `headSha` pro draft a popis pro `Přehled` |
-| `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `conversation` / `checks` / `findings` / `progress` (#242, `checks` přidalo #215). **Všech šest se kreslí vždycky** (#306) — pruh nemá čím měnit počet položek podle dat. `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) můžou přijít doprostřed levé skupiny, aniž by se posunul. `showsReviewPanel` říká, jestli je v tabu vidět panel s nálezy (#294) — a **s tím prvním se to nesmí slít**: `Kontroly` mají `isReviewerOutput == false` a panel přesto nemají, takže jedna vlastnost pro dvě otázky by posunula dělič. Jako `ReviewVerdict` **není `Codable`** |
+| `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `commits` / `conversation` / `checks` / `findings` / `progress` (#242, `checks` přidalo #215, `commits` #316). **Všech sedm se kreslí vždycky** (#306) — pruh nemá čím měnit počet položek podle dat. `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) i `Commity` (#316) můžou přijít doprostřed levé skupiny, aniž by se posunul. `showsReviewPanel` říká, jestli je v tabu vidět panel s nálezy (#294) — a **s tím prvním se to nesmí slít**: `Kontroly` i `Commity` mají `isReviewerOutput == false` a panel přesto nemají, takže jedna vlastnost pro dvě otázky by posunula dělič. Jako `ReviewVerdict` **není `Codable`** |
 | `PullRequestTabBadge` | Odznak u záložky (#242): `count` / `blocking` (červeně) / `live` (puntík). Výčtem, ne strukturou s příznaky — „puntík s počtem“ ani „blokující bez počtu“ význam nemá, takže se nemá dát napsat |
 | `ChecksTabState` | Co je v tabu `Kontroly` k vidění (#306): `loading` / `empty` / `list([PullRequestCheck], failure:)` / `failed`. Tab se kreslí i u PR bez CI, takže musí mít odpověď na **každý** stav dat — `empty` znamená „tenhle PR CI nemá“, kdežto `loading` o CI netvrdí nic. Skládá to `Policy.checksTab(checks:failure:)` ze **dvou** map ve store (`checks`, `checkFailures`), jinak by se prázdno slilo s poruchou. Není `Codable` — je to odvozený stav, ne data |
+| `PullRequestCommit` | Jeden commit PR (#316): plné `sha`, celá `message`, `authorName` (z gitu, **vždycky je**), `authorLogin` a `avatarURL` (z účtu, **umí být `nil`**), `committedAt` a `isMerge`. `subject` je první řádka zprávy, `shortSha` sedm znaků. Klíčuje se **celým sha**, ne zkráceným — dvě sha se stejnými sedmi znaky by se v `ForEach`i slila potichu. Počet souborů ani `+X −Y` v něm **nejsou**: seznam z GitHubu je nenese a dotahovat je po commitu je N+1 |
+| `CommitsTabState` | Co je v tabu `Commity` k vidění (#316): `loading` / `list([PullRequestCommit], failure:)` / `failed`. **Tři stavy, ne čtyři** — `empty` tu chybí schválně: pull request bez commitů neexistuje, takže prázdná odpověď je **porucha**, ne stav PR. Je to obrácená volba než u `ChecksTabState`, kde prázdno odpověď **je**. Skládá to `Policy.commitsTab(commits:failure:)` ze dvou map ve store. Není `Codable` |
 | `ReviewPanelTab` | Co je vidět v panelu vpravo: `findings` / `draft` (#242). Jako `PullRequestTab` **není `Codable`** |
 | `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání — `Hit` nese **dva** rozsahy
 zvýraznění, jeden nad titulkem a jeden nad podtitulkem), `Jump` (žádost o odscrollování) a `Effect` (co zbývá na okno). **Není `Codable`** — je to obsah jednoho otevření palety. Jmenný prostor proto, že `Palette` v repu už znamená barvy okna |
@@ -85,9 +87,13 @@ Tři věci, které se u nich nemají rozbít:
   `dismissed(findings:)`, `failed(detail:)`, `timedOut(findings:)`, `interrupted(findings:)`,
   `stale`.
 - **`interrupted` není `timedOut`** (#97). Oba znamenají „nedoběhlo, částečné nálezy zůstaly“,
-  ale vedou jinam: timeout říká, že je review pomalé (dá se zvednout limit), přerušení že spadla
-  aplikace (nedá se dělat nic než pustit znovu). A odznak by u přerušeného běhu tvrdil
-  `timeout`, což je nepravda.
+  ale vedou jinam: timeout říká, že je review pomalé — a limit **jde zvednout v nastavení** na
+  stránce `Review a skilly`, globálně i per repo (#320) —, přerušení že spadla aplikace (nedá se
+  dělat nic než pustit znovu). A odznak by u přerušeného běhu tvrdil `timeout`, což je nepravda.
+
+  Do #320 byl limit zadrátovaný v kódu, takže ta věta v závorce slibovala něco, co uživatel neměl
+  jak udělat. **Konkrétní číslo v UI u výsledku běhu ale nestojí** a je to schválně — viz
+  `ReviewRunner` níž.
 - **`clean` vzniká jen přes `ReviewState.finished(findingCount:)`.** Jinak se dřív nebo
   později objeví `completed(findings: 0)`, což je totéž vyjádřené hůř.
 - **`dismissed` není `clean`** (#113). „Reviewer nic nenašel“ a „našel a já to všechno
@@ -882,8 +888,8 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `reviewPrompt`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
-| `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie — **všechno volitelné** |
+| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `reviewPrompt`, `reviewTimeoutMinutes`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
+| `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie, `reviewTimeoutMinutes` — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
 | `ConfigurationBox` | Aktuální konfigurace pro kód mimo hlavní vlákno (limit souběhu, rozpočet, model) |
@@ -973,6 +979,17 @@ Věci, které se u toho nemají rozbít:
   opačně než u seznamů, kde prázdno je vlastní odpověď; seznam se prázdný nechává, kdežto text se
   prázdný jen prochází. `RepositoryConfig` prompt nemá, ze stejného důvodu jako vzhled: je to
   vlastnost člověka, ne repozitáře, a je na to test.
+- **Časový limit běhu (#320) se čte jako ostatní čísla a per repo se nastavuje.** Chybějící klíč
+  znamená patnáct minut, tedy chování před #320; hodnota jiného typu čtení **položí** (`try`, ne
+  `try?`), stejně jako u intervalu nebo rozpočtu. Dvě věci navíc:
+  - **Číslo mimo meze soubor nepoloží a v konfiguraci zůstane syrové.** Sráží se až
+    `resolved(for:)` přes `Policy.reviewTimeout(minutes:)` — a je to jediné místo, kde se sráží,
+    takže i override pod repem dostane tentýž strop. Kdyby se sráželo při čtení, přišlo by se
+    o rozdíl mezi „napsal jsem 120“ a „mám 60“ a nastavení by neměl kdo pojmenovat.
+  - **Override per repo tady je** (na rozdíl od promptu, vzhledu a pohledu na diff): velké repo
+    potřebuje delší limit a je to vlastnost **repa**, ne člověka, který se kouká. `nil` znamená
+    „ber globální“, jako u režimu a sad. Přísnost jako u režimu se nehodí — delší limit nic
+    nespustí a nic neodešle, jen dovolí běhu doběhnout.
 - **Rozbitá hodnota režimu se sráží na `manual`, ne na globální default.** Chybějící klíč
   je „ber globální“, ale překlep v hodnotě, kterou se někdo pokoušel automat **vypnout**,
   ho nesmí nechat zapnutý. Platí i globálně.
@@ -980,9 +997,10 @@ Věci, které se u toho nemají rozbít:
   se aplikace po zavedení konfigurace začala chovat jinak. Výchozí `mode` je `manual`:
   zapnout automat plošně je vědomé rozhodnutí, ne to, do čeho aplikace spadne sama.
 - **Nový klíč v `RepositoryConfig` má druhého čtenáře mimo aplikaci: očistu konfigurace slotu**
-  (#262, `bin/slot-config.sh`). Klíčů, které mají obě úrovně, je pět — `mode`,
-  `allowsPublishing`, `findingsLanguage`, `skills`, `blockingCategories` — a u každého z nich je
-  ve skriptu napsané, jestli se čistí a proč. Očistit jen globální úroveň **nestačí**: per-repo
+  (#262, `bin/slot-config.sh`). Klíčů, které mají obě úrovně, je šest — `mode`,
+  `allowsPublishing`, `findingsLanguage`, `skills`, `blockingCategories`
+  a `reviewTimeoutMinutes` (#320) — a u každého z nich je ve skriptu napsané, jestli se čistí
+  a proč. Očistit jen globální úroveň **nestačí**: per-repo
   override je přednější, takže `mode: automatic` u jednoho repa přebije globální `manual` —
   a slotová aplikace si na M9 takhle sama pustila review za 2,80 $ a 1,16 $, dvakrát nezávisle
   na sobě. Když klíč přibude, patří do toho výčtu, i kdyby se nakonec nečistil; nevyplněné
@@ -1200,7 +1218,7 @@ Jeden běh = jedna headless session `claude` na jeden skill v jednom pracovním 
 |---|---|
 | `ReviewRunning` | Protokol: `run(_:progress:)`. Schválně nemá nic, čím by šlo něco odeslat |
 | `ClaudeReviewRunner` | Implementace nad `claude` přes `ProcessStreaming` |
-| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat), `promptTemplate` z nastavení (#281); u kontroly nálezů (#150) navíc `recheck: RecheckMaterial?` |
+| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat), `promptTemplate` z nastavení (#281), `timeout` z nastavení (#320); u kontroly nálezů (#150) navíc `recheck: RecheckMaterial?` |
 | `ReviewRunKey` | `(PR, headSha, skillID, kind)` — identita běhu; `kind` je `review` / `recheck` (#150) |
 | `RecheckMaterial` | Vstup kontroly (#150): commit, na kterém nálezy vznikly, a nálezy v pořadí, ve kterém se na ně ptáme |
 | `RecheckCommand` | **Čisté funkce**: prompt kontroly a defenzivní čtení její odpovědi (#150) |
@@ -1221,7 +1239,36 @@ Věci, které se u toho nemají rozbít:
   Vyhodí se jen `CancellationError`. Kdyby selhání létalo jako chyba, `clean` a `failed`
   by se v UI slily do jednoho „nepovedlo se“.
 - **Timeout si nechá, co stihl.** Proto se stream čte průběžně a `StreamSummary` se plní
-  po řádcích: u zabitého běhu jsou částečné nálezy jediné, co je.
+  po řádcích: u zabitého běhu jsou částečné nálezy jediné, co je. Nastavitelný limit (#320) na
+  tom nemění nic — mění se jen číslo, po kterém se zabíjí.
+- **Časový limit je v nastavení a putuje s požadavkem** (#320, `ReviewTimeout` v `App/Policy/`).
+  Do #320 to byla konstanta `ClaudeReviewRunner.defaultTimeout`; teď je to
+  `GlobalConfig.reviewTimeoutMinutes` s override per repo, a runner **žádné vlastní pole nemá** —
+  bere `request.timeout`. Pět věcí, které se u toho nemají rozbít:
+  - **Běh doběhne s limitem, se kterým začal.** Skládá se v `AppStore` jednou pro celý běh
+    (`resolved(for: pr.repo).reviewTimeout`), takže uložené nastavení uprostřed review session
+    nezkrátí. Je to tatáž úvaha i tentýž mechanismus jako u šablony promptu.
+  - **Meze jsou bezpečnostní, ne kosmetické.** 5–60 minut, „bez limitu“ **není volba**. Timeout je
+    jediná pojistka proti session, která se zacyklí — `autoRunsPerDay` a `maxConcurrentReviews`
+    omezují **počet** běhů, ne délku jednoho. Čísla i jejich odůvodnění (naměřená doba běhů, cena
+    za minutu, vazba stropu na denní limit) jsou v dokumentačním komentáři `ReviewTimeout`.
+  - **Sráží se na jednom místě, a až při použití.** `Configuration.resolved(for:)` přes
+    `Policy.reviewTimeout(minutes:)`. V konfiguraci zůstane **syrová hodnota**, protože jen tak jde
+    rozlišit „napsal jsem 120“ od „mám 60“ — a nastavení to pod polem pojmenuje
+    (`Policy.reviewTimeoutProblem(in:)`).
+  - **Kontrola nálezů (#150) má tentýž limit.** Je to tatáž session, tentýž pracovní strom a tytéž
+    peníze; kdo limit zvedá u pomalého repa, zvedá ho kvůli tomu repu, ne kvůli jednomu ze dvou
+    druhů běhu. Že kontrola v praxi trvá kratší dobu, nic nemění: nevyčerpaný strop nestojí nic,
+    kdežto vlastní kratší strop by z pomalé kontroly udělal `timedOut`.
+  - **Překladač nálezů (`ClaudeFindingTranslator`, 120 s) zůstává natvrdo.** Není to opomenutí:
+    uvažuje se o tom, že se jazyk nálezů přesune do promptu review a překladač **zanikne**, takže
+    nastavení pro něj by se za chvíli zahazovalo. A je to jiný druh běhu — krátké volání bez
+    pracovního stromu, kde delší limit nic nezachrání.
+- **Číslo limitu v UI u výsledku běhu nestojí** (#320) — ani u `timedOut`. Uložený běh limit
+  **nenese**, takže by se dalo napsat jedině to, co je nastavené *teď*, a to je o starším běhu
+  nepravda. Přidat ho do `StoredReviewRun` by znamenalo, že u všech dosavadních záznamů je `nil`
+  a stejně by se muselo psát „neznámý limit“; hodnota za to nestojí. Kde se limit **říct dá**, je
+  nastavení, protože tam je to tvrzení o příštím běhu.
 - **Zrušený proud skončí bez chyby**, takže po smyčce musí přijít `Task.checkCancellation()`
   — jinak by ze zrušeného review vypadl výsledek, jako by doběhlo.
 - **Slučování stejného klíče je nad frontou**, ne pod ní. Připojený požadavek jinak zabere
@@ -1669,10 +1716,12 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+DiffExpansion.swift` | Rozbalování kontextu mimo hunky (#47) | 112 |
 | `AppStore+DraftTransfer.swift` | Přenesení draftu na nový commit (#69) | 103 |
 | `AppStore+Diff.swift` | Načtení diffu, pohled a sbalování souborů | 95 |
+| `AppStore+IncrementalDiff.swift` | Diff „co od minule přibylo“ (#284) — nabídnout, načíst, zavřít | 87 |
 | `AppStore+Automatic.swift` | Automatický režim a denní rozpočet (#25) | 89 |
 | `AppStore+Findings.swift` | Zahození záznamu (#81) a odmítnutí nálezu (#113) | 70 |
 | `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
+| `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
 
 Čtyři věci, na kterých to rozdělení stojí:
 
@@ -1931,8 +1980,14 @@ na `.task` okna, takže zavření okna ji zruší.
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
-| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat |
+| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Od #316 má **dvě podoby** (`ViewThatFits`): se `+X −Y` a bez ní — viz níž |
+| `StaleNoticeView` | Okrová věta „tohle je poslední známý stav“ nad seznamem, který se nepovedlo načíst **znovu** — jedno místo pro `Kontroly` (#215) i `Commity` (#316). Sedí **nad `ScrollView`em**, aby neodscrollovala pryč od obsahu, o kterém mluví |
+| `CommitListView` | Seznam commitů v tabu `Commity` (#316): pruh s počtem a hlavou, řádek na commit (obrázek autora, první řádka zprávy, jméno, relativní čas, sha) a pilulky `sloučení` a `hlava`. `content` je `internal` kvůli měření přesahu — `NSScrollView` by přesah ukrojil |
 | `OverviewView` | Tab `Přehled`, odshora **co se změnilo od minule → fakta → popis PR** (#280; kontroly mají od #215 vlastní tab). Obsah je v `content` **mimo `ScrollView`** a `internal` schválně — přes `body` se šířka změřit nedá, viz #291 |
+| `SinceLastVisitView` | Pruh „co se změnilo od minule“ nahoře v `Přehledu` (#173, sazba #226 a #284) — odrážky po částech a pod nimi odznak `nálezy zastaraly` s tlačítky `Pustit review znovu` a `Ukázat, co přibylo` |
+| `SinceLastVisitLine`, `SinceLastVisitLines` | Odrážka po typovaných částech a jejich skládání (#284). Mimo view a testovatelné, jako `TimelineEventRow` |
+| `IncrementalDiffBar` | Lišta nad rozsahovým diffem (#284) — rozsah dvěma sha a cesta zpátky na celý diff. Podobu vybírá **spočítaná** šířka, ne `ViewThatFits` |
+| `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde. Řez si bere z `MiniButtonStyle.labelFont`, aby se měření a kresba nemohly rozejít |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka a obsah vpravo; slévá za sebou jdoucí commity |
 | `ConversationEntryView` | Položka osy: karta cizího review nebo komentáře, řádek události, vlákno bez kotvy |
@@ -2330,14 +2385,15 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsSection` | Sedm stránek ve třech skupinách — `Co se hlídá`, `Co jde ven`, `Prostředí` |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
 | `SourcesSettingsView` | Zdroje PR (search dotazy) |
-| `ReviewSettingsView` | Výchozí režim a jazyk nálezů, skilly, sady podle jazyka, **prompt review** (#281), blokující kategorie |
+| `ReviewSettingsView` | Výchozí režim, jazyk nálezů a **časový limit běhu** (#320), skilly, sady podle jazyka, **prompt review** (#281), blokující kategorie |
 | `ReviewPromptEditor` | Psaná šablona, legenda zástupných textů, `Obnovit výchozí`, náhled složeného promptu a zamčené jádro (#281) |
+| `ReviewTimeoutField` | Číslo v minutách a stížnost, když je hodnota v souboru mimo meze (#320). **Jedno view pro obě místa**, kde se limit nastavuje |
 | `DiffSettingsView` | **Pohled na diff** — nastavení člověka, ne repa, proto jen globálně |
 | `PublishingSettingsView` | **Odesílání na GitHub** — vlastní stránka, viz níž |
 | `RuntimeSettingsView` | Interval pollingu, rozpočet cache, souběžné session, denní limit, model |
 | `NotificationSettingsView` | Stránka `Notifikace` (#86): hlavní vypínač a čtyři události |
 | `LanguageSkillsEditor` | Mapa „programovací jazyk → sada skillů“; ukazuje jen nastavené jazyky |
-| `RepositorySettingsView` | Seznam rep vlevo, režim, povolení odesílání a override vpravo |
+| `RepositorySettingsView` | Seznam rep vlevo, režim, povolení odesílání, override sad a **vlastní časový limit** (#320) vpravo |
 | `StringListEditor`, `SourceListEditor` | Editory seznamů — řetězců a zdrojů |
 | `SettingsNumberField` | Číslo se šipkami **i** přepsáním; ořezává na povolený rozsah |
 
@@ -2366,6 +2422,25 @@ Věci, které se u toho nemají rozbít:
     může — proto s ní `AppStore.review(_:skills:)` review **nespustí** a fáze zůstane
     `failed(detail:)` s tou samou větou. Text hlášky je jeden (`ReviewPromptTemplate.Problem`),
     aby se okno a hlava PR nerozešly.
+- **Časový limit běhu sedí na `Review a skilly`, ne na `Běh`** (#320). Stránka `Běh` je hrst čísel
+  o **stroji a prostředí** (interval, souběh, rozpočet cache) a žádné z nich nemá override; limit
+  je proti tomu třetí věc o **spuštěném review**, kterou si repo smí přebít — vedle režimu a jazyka
+  nálezů, a proto stojí v téže sekci jako ony, ne ve vlastní. Tři věci, na kterých to stojí:
+  - **Z okna se hodnota mimo meze zapsat nedá** (`SettingsNumberField` ořezává), ale ze souboru
+    přijít může. Pod polem se proto vypíše, **kolik je v konfiguraci** a **s čím se doopravdy
+    poběží** — spolknout to by znamenalo, že si někdo napíše 120 minut, poběží mu 60 a nic to
+    neřekne. Text skládá `Policy.reviewTimeoutProblem(in:)`, aby byl jeden pro obě místa.
+  - **Obě místa kreslí `ReviewTimeoutField`.** Věta o mezích má být jedna; dvě formulace téhož by
+    se rozešly a z okna by nebylo poznat, že jde o totéž pravidlo.
+  - **Per repo je to přepínač a číslo, ne tříhodnotový picker** jako u režimu. Hodnot je 56, takže
+    „ber globální“ mezi ně nepatří jako další položka; zapnutí přepínače začíná od globální
+    hodnoty, ze stejného důvodu jako u sad — override se obvykle dělá posunutím, ne psaním od nuly.
+  - **„Bere globální: X min“ vypisuje sraženou hodnotu, ne tu ze souboru** (nálezem Copilota na
+    #324). Když je globální číslo mimo meze, poběží se s mezí — a věta o tom, co repo dostane, by
+    jinak tvrdila víc, než data unesou. Ze stejného důvodu se sraženou hodnotou **začíná i zapnutý
+    přepínač**: seed z globálního nesmyslu by ten nesmysl zkopíroval do repa a hned si na sebe
+    stěžoval. Obojí počítá `Policy.reviewTimeoutMinutes(from:)`, tedy totéž místo, kterým hodnota
+    projde na cestě do běhu.
 - **Vybraná stránka se nepamatuje mezi spuštěními.** Nastavení se otevírá kvůli konkrétní věci;
   vrátit se do něj tam, kde jsem skončil minule, není, co člověk čeká — na rozdíl od výšky
   panelu, kterou si vytáhne jednou a chce ji mít.
@@ -2821,13 +2896,16 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   kvůli kterému se volba schválně **nemazala**: z tabu `Kontroly` se vypadávalo při **každém**
   příchodu na PR, dokud checky nedorazily (tahají se s detailem, takže chvíli nejsou). Zůstává
   z toho pravidlo: volba je odpověď na „kam se koukám“ a nesmí se měnit tím, co dorazilo ze sítě.
-- **Panel je ve třech tabech ze šesti** — `Přehled`, `Změněné soubory`, `Konverzace` (#294,
+- **Panel je ve třech tabech ze sedmi** — `Přehled`, `Změněné soubory`, `Konverzace` (#294, #316,
   `PullRequestTab.showsReviewPanel`). Nálezy bez místa v kódu i moje rozdělané review se vážou
   k celému PR, takže se za přepnutí tabu schovat nesmí; panel ale odpovídá na „co k tomu, co právě
   čtu, nahlásily reviewery“, a to má smysl jen tam, kde se vedle něj čte **něco jiného**.
   V `Kontrolách`, `Nálezech` a `Průběhu` je vedle něj buď duplikát týchž dat, nebo obsah, který
   šířku potřebuje (konec logu spadlého checku, #214) — schovává se proto **celý, i složený
-  proužek**. Tři věci, které z toho platí:
+  proužek**. **`Commity` (#316) mají k tomu důvod navíc, a tvrdší než šířka**: nálezy jsou
+  klíčované `headSha` (tvrdá podmínka č. 5), takže by panel u staršího commitu ukazoval nálezy
+  k **jinému kódu**. Není to duplikát, je to tvrzení, které by neplatilo. Tři věci, které z toho
+  platí:
   - **Šířka se nepřepočítává.** `GeometryReader` v detailu měří to, co po panelu zbylo, takže se
     tab roztáhne sám; vlastní odečítání šířky panelu je zrovna ta chyba, ze které vzniklo #291.
   - **Uložený stav panelu se přepnutím tabu nemění** — složení ani vybraný segment. Skrytí je věc
@@ -2898,7 +2976,7 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     se vypadávalo při každém příchodu na PR, dokud checky nedorazily. Podrobnosti v sekci
     `AppStore` výš.
   - **Dělič v pruhu se počítá z vlastnosti tabu, ne z indexu** (`isReviewerOutput`). `Kontroly`
-    sedí nalevo doprostřed, takže zadrátovaná pozice by dělič posunula o jedno místo vedle. Do #306
+    sedí nalevo doprostřed — a od #316 i `Commity`, které tu předpověď vyzkoušely doslova. Do #306
     se index navíc měnil **podle dat** (záložka někdy nebyla); to už neplatí, ale první důvod stačí
     — vlastnost přežije i sedmou záložku vloženou doprostřed.
   - **Odznak má tři podoby, ne jednu**: spadlé → červená kapsle s počtem (blokuje merge, takže
@@ -3122,6 +3200,110 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     jednolitě: změřeno **38 ms proti 2,2 ms** na dvoumegovém logu (17×), na 8,78 MB 155 ms proti
     7,9 ms. `.log` žádný jazyk nemá, takže tudy chodí každý log — a sheetu s kódem to pomůže
     u souborů, které `Language` nezná.
+- **Tab `Commity`** (#316) — seznam commitů PR, `AppStore+Commits` a `CommitListView`.
+
+  **Prohlížeč, ne review.** `Změněné soubory` odpovídají na „co je na PR jinak proti základu“; slitý
+  diff ukazuje výsledek, ne cestu. Otázka „proč tenhle řádek zmizel“ má odpověď v jednotlivých
+  commitech, a ta se do #316 hledala v prohlížeči — tentýž pohyb jako u `Konverzace` (#183)
+  a `Kontrol` (#215). V pruhu sedí **vedle `Změněných souborů`**: obojí odpovídá na „co se v kódu
+  změnilo“, jen jednou naráz a jednou po krocích, takže se to čte jako pár.
+
+  - **Tab má tři stavy, ne čtyři** (`Policy.commitsTab(commits:failure:)`). Prázdný mezi nimi
+    **není schválně**: pull request bez commitů neexistuje, takže klidná hláška o prázdnu by
+    tvrdila nemožný stav — prázdná odpověď je proto hlášená jako **porucha** s vlastní větou. Je to
+    obrácená volba než u `Kontrol`, kde prázdno **je** odpověď (PR bez CI), a rozdíl je právě
+    v tom, jestli ten prázdný stav umí v realitě nastat.
+
+    | Stav | Kdy | Co je v tabu |
+    |---|---|---|
+    | `loading` | `commits` nenačtené, bez poruchy | `Načítám commity…` — o commitech netvrdí nic |
+    | `list(_, failure: nil)` | neprázdné `commits` | seznam od nejnovějšího |
+    | `list(_, failure: reason)` | neprázdné `commits` + porucha | seznam a **nad ním** okrová věta, že je to poslední známý stav |
+    | `failed(reason)` | porucha, nebo prázdná odpověď | červený prázdný stav s textem od `gh` a `Zkusit znovu` |
+
+  - **Odznak je prostý počet, a jen nad seznamem.** Tichá kapsle: kolik je commitů, je množství, ne
+    upozornění. Nad nenačteným ani spadlým stavem nic — tatáž lekce jako u `Kontrol` (#306).
+  - **Tahá se s detailem, ne pollingem ani na kliknutí.** Pollingem přes všechna PR by to byla
+    N+1 past; na kliknutí by se odznak s počtem objevil až v tabu, který má člověk zrovna otevřený,
+    tedy zrovna tehdy, kdy ho nepotřebuje. Je to jedno volání (1,20 s pro sedm commitů) a jde
+    **za** checky, ne souběžně: paralelně by na jeden výběr řádku běžely dva `gh` podprocesy místo
+    jednoho, za úsporu jedné vteřiny.
+  - **I když detail spadne** — tab je v pruhu vždycky, takže by nad nenačtenou hlavičkou svítilo
+    `Načítám commity…` navždycky. A **zrušené načtení se dotáhne po návratu na PR**, protože detail
+    je pak z cache a sám by `loadCommits` už nespustil. Obojí je doslova tatáž past jako u checků
+    (#306), jen o jedno volání vedle.
+  - **Seznam je od nejnovějšího, a otáčí se na jednom místě** (`Policy.commitsNewestFirst`, volané
+    z `commitsTab`). Gateway vydá, co přišlo z API (od nejstaršího), store to tak i uloží — pořadí
+    kresby je rozhodnutí, ne vlastnost dat, takže se dá změnit jednou funkcí a nedá se rozejít mezi
+    odznakem a plochou tabu. **Otáčí se, neřadí**: pořadí z API je topologické, takže po rebase nebo
+    cherry-picku je datum staršího commitu novější než datum toho za ním a `sorted(by: committedAt)`
+    by postup rozházel.
+
+    **Nepamatuje se to, a je to změřené.** `commitsTab` běží při každém překreslení (odznak i plocha),
+    takže otočení je práce na redraw — **18,7 µs** pro 250 commitů (strop API, Debug) proti **54 ms**,
+    co stojí sazba téhož seznamu. Cache by tady stála víc pozornosti, než kolik ušetří.
+
+    **Je to otočení proti návrhu** (sekce 19 mockupu i specifikace měly „od nejstaršího, jako na
+    GitHubu, protože PR se čte jako postup“). Neobstálo to na hotové obrazovce: v okně se PR nečte
+    od začátku, ale od toho, co přibylo naposled — tentýž pohyb, jaký dělá pruh
+    „Od tvé poslední návštěvy“, a tentýž důvod, proč jsou fakta v `Přehledu` nahoře (#280). Postup
+    se z otočeného seznamu přečte pořád, jen odspodu. **Mockup se nepřekresluje** (řeší #299),
+    odchylka je zapsaná ve specifikaci.
+  - **Pilulka `hlava` se bere z `headSha`, ne z pozice v seznamu** (`Policy.headCommit(in:head:)`),
+    a po otočení je to o to snazší přehlédnout: hlava **bývá** nahoře, ale je to důsledek toho, jak
+    seznam přišel, ne pravidlo. Rozejdou se ve dvou běžných situacích — po pushnutém commitu je
+    seznam o krok pozadu, a nad stropem API (250) chybí zrovna ta novější část. V obou → **neoznačí
+    se nic**; mlčet je správnější než ukázat na commit, o kterém to neplatí. Bere se z pořadí jedině
+    tehdy, když hlava ještě není známá (detail nedorazil): tehdy je jí první řádek, protože GitHub
+    vrací od nejstaršího a otočením je nejnovější první.
+  - **Pruh nad seznamem o pořadí mluví, takže se s ním mění** (`Policy.commitsHeadline`). Věta
+    `7 commitů · od nejnovějšího` je jediné místo, které pořadí pojmenovává — „od nejstaršího“ nad
+    otočeným seznamem by bylo tvrzení, které se dá vyvrátit pohledem pod něj. Na stropu API zůstává
+    `prvních 250 commitů`: GitHub vydá **prvních** 250 commitů PR a pořadí kresby s tím nehýbe, takže
+    nahoře je pak nejnovější **z nich**, ne hlava PR.
+  - **Pilulka `sloučení` musí být dopředu.** Diff sloučení se počítá proti prvnímu rodiči a umí
+    vyjít prázdný — bez upozornění by se prázdný diff četl jako porucha. Je to tentýž rozdíl jako
+    mezi `čisté` a `spadlo` u review.
+  - **Monogram v kolečku se bere ze jména, ne z přezdívky.** Dokud obrázek nedorazí — a u commitu
+    bez účtu (`author: null`) nedorazí nikdy — je monogram tím, co v kolečku stojí, takže `IM`
+    vedle jména `Kumar Prateek` vypadá jako řádek o dvou různých lidech. Není to kuriozita:
+    sloučení commituje GitHub pod celým jménem, kdežto `author.login` je přezdívka téhož člověka.
+  - **Panel s nálezy se nekreslí** (`PullRequestTab.showsReviewPanel`) — čtvrtý takový tab po #294,
+    s vlastním důvodem: nálezy platí proti `headSha`, takže by u staršího commitu ukazoval nálezy
+    k jinému kódu.
+  - **Řádek nemá šipku, protože se nedá rozkliknout.** Návrh (sekce 19) ji kreslí, ale diff jednoho
+    commitu je vlastní issue; šipka, za kterou se nic nestane, slibuje interakci, která tam není —
+    tatáž úvaha jako u checku bez čísla jobu (#214).
+  - **Sedmá záložka stojí jedinou věc: šířku pruhu záložek — a ta se zaplatila.** Pruh nikde nemá
+    `lineLimit`, takže se popisek pod hranicí **zalomí uvnitř záložky** a pruh povyroste. Naměřeno
+    na skutečném `PullRequestTabBar`u (`NSHostingView.fittingSize`, po jednom bodu šířky):
+
+    | Pruh | Šířka tabu, od které je jeden řádek | Okno (+ rail 53) |
+    |---|---|---|
+    | 6 záložek se všemi odznaky a `+X −Y` — dnešek před #316 | 884 b | 937 b |
+    | **7 záložek se všemi odznaky, `+X −Y` ustupuje** | **886 b** | **939 b** |
+    | 7 záložek bez odznaků | 729 b | 782 b |
+    | 7 záložek se všemi odznaky a `+X −Y` (dopočet) | ~996 b | ~1049 b |
+
+    Poslední řádek je dopočet z **naměřené ceny pilulky**: `+X −Y` stojí 110 bodů (na `origin/main`
+    se pruh se všemi odznaky vejde od 774 b bez ní a od 884 b s ní), a sedmá záložka s odznakem
+    112 bodů (886 − 774). Ta shoda je celý ten obchod: `PullRequestTabBar` má proto **dvě podoby**
+    v `ViewThatFits` — se `+X −Y` a bez ní — takže se v úzkém pruhu nekreslí rozsah změny místo
+    toho, aby se lámaly popisky. Hranice se tím posunula o **dva body okna**, ne o sto dvanáct.
+
+    **Ustupuje zrovna `+X −Y`, a je to ten správný kus.** Mluví o rozsahu **celého PR**, což je
+    odpověď na otázku `Změněných souborů`; v `Commitech`, `Kontrolách` ani `Průběhu` není o čem.
+    Záložka je proti tomu cesta k obsahu, který jinudy vidět není.
+
+    **Pod 939 se pruh zalomí** (v nejužším okně 700 na 90 bodů místo 30) — a je to tak i před
+    #316, jen o řádek míň. Spravuje to až druhý stupeň (ikony a popisek jen u aktivní záložky),
+    který sedmé záložce nepředchází, protože je to obrazovka rozbitá i bez ní.
+
+    **Specifikace měla o 17 bodů nižší absolutní čísla**, protože je měřila na **replice** pruhu
+    (867/920 pro dnešek, 872/925 se sedmou záložkou). Rozdíl, o který jde, replika odhadla dobře —
+    předpovídala +5 bodů okna, ve skutečnosti jsou to +2 —, ale absolutní hranice se z repliky brát
+    nedají; drží je `TabStripWidthTests`, viz [`docs/testovani.md`](testovani.md).
+
 - **`Přehled` má dlaždice s fakty** (#198): commity (a kolik z nich je nových od minule),
   soubory (a kolik má nález), hlava PR a sha, proti které platí nálezy. **Nic se pro ně
   nedotahuje** — jsou to údaje, které v okně už jsou, jen roztroušené. Pořadí v tabu je
@@ -4040,6 +4222,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` i s **cenou** z uloženého běhu |
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
 | `Policy.reviewPromptTemplate(from:)`, `.reviewPromptProblems(in:)`, `.reviewPromptBody(template:skillID:baseSha:)`, `.reviewPrompt(template:skillID:baseSha:)` | Prompt review ze šablony v nastavení (#281, `ReviewPromptTemplate`): prázdná šablona → výchozí, chybějící zástupný text → `Problem`, dosazení hodnot a **vždycky připojené jádro**. Skládá to **jedno místo**, protože týž text potřebuje běh i `Zkopírovat příkaz` |
+| `Policy.reviewTimeout(minutes:)`, `.reviewTimeoutMinutes(from:)`, `.reviewTimeoutProblem(in:)` | Časový limit běhu z nastavení (#320, `ReviewTimeout`): sražení do mezí 5–60 min a pojmenování hodnoty, která je mimo ně. **Jediné místo, kde se sráží** — pole v nastavení, globální hodnota i override per repo mluví o týchž mezích |
 | `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
 | `Policy.matches(_:_:)` | Patří vlákno (nebo můj rozdělaný komentář) k tomuhle řádku diffu — **jedno místo** pro výběr i umístění |
@@ -4057,8 +4240,13 @@ Věci, které se u toho nemají rozbít:
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
-| `Policy.checksTab(checks:failure:)` | Co je v tabu `Kontroly` k vidění (#306) — čtyři stavy z šesti kombinací vstupů (`ChecksTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí obě prázdna. **Nahradila `Policy.tabs(hasChecks:)`** (#215), která vracela zúžený pruh záložek: od #306 se kreslí všech šest vždycky, takže seznam záložek není funkcí dat a rozhodovat se má **obsah** tabu |
+| `Policy.checksTab(checks:failure:)` | Co je v tabu `Kontroly` k vidění (#306) — čtyři stavy z šesti kombinací vstupů (`ChecksTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí obě prázdna. **Nahradila `Policy.tabs(hasChecks:)`** (#215), která vracela zúžený pruh záložek: od #306 se kreslí všech sedm vždycky, takže seznam záložek není funkcí dat a rozhodovat se má **obsah** tabu |
 | `Policy.checksBadge(of:)` | Odznak u záložky `Kontroly` (#215) — spadlé červeně s počtem, běžící puntíkem, zelené a přeskočené bez odznaku. Bere **stav tabu**, ne `ChecksSummary` (#306): jeden `guard` na začátku drží prázdnou kapsli i nulu mimo pruh nad nenačteným, prázdným i spadlým stavem |
+| `Policy.commitsTab(commits:failure:)` | Co je v tabu `Commity` k vidění (#316) — **tři** stavy z šesti kombinací vstupů (`CommitsTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí nenačteno i prázdno, a **prázdné pole bez poruchy je samo porucha**: pull request bez commitů neexistuje, takže klidná hláška o prázdnu by tvrdila nemožný stav. Jediný řádek, ve kterém se liší od `checksTab`. Je to zároveň jediná cesta seznamu do okna, takže se v ní **otáčí pořadí** (`commitsNewestFirst`) |
+| `Policy.commitsNewestFirst(_:)` | Pořadí, ve kterém se seznam commitů kreslí (#316) — **od nejnovějšího**, otočením proti návrhu, který měl „od nejstaršího, jako na GitHubu“. V okně se PR nečte od začátku, ale od toho, co přibylo naposled (tentýž pohyb jako pruh „Od tvé poslední návštěvy“ a fakta nahoře v `Přehledu`, #280). **Otáčí, neřadí**: pořadí z API je topologické, takže `sorted(by: committedAt)` by po rebase nebo cherry-picku postup rozházel |
+| `Policy.commitsBadge(of:)` | Odznak u záložky `Commity` (#316) — prostý počet, a jen nad seznamem. Tichá kapsle: kolik je commitů, je množství, ne upozornění; nad nenačteným ani spadlým stavem **nic**, protože nula by tvrdila, že se spočítalo |
+| `Policy.headCommit(in:head:)` | Který řádek nese pilulku `hlava` (#316). Rozhoduje **`headSha` z detailu, ne pozice v poli** — „nahoře“ a „hlava“ nejsou totéž, jen nad čerstvým seznamem vycházejí nastejno: po pushnutém commitu je seznam o krok pozadu a nad stropem API v něm hlava není vůbec. Nálezy jsou klíčované `headSha` (tvrdá podmínka č. 5), takže by to bylo tvrzení, ne dekorace; hlava mimo seznam → **nic se neoznačí**. Bez známé hlavy (detail ještě nedorazil) platí definice endpointu: GitHub vrací od nejstaršího a `commitsNewestFirst` to otáčí, takže **první** — jediný okamžik, kdy rozhoduje pozice |
+| `Policy.commitsHeadline(count:)`, `Policy.commitNoun(_:)` | Věta nad seznamem commitů (#316) ve **dvou kusech** (`CommitsHeadline`), protože počet je tmavý a polotučný a zbytek tlumený. Skloňování má tři tvary (`1 commit` / `2 commity` / `7 commitů`) — `1 commitů` je jeden ze stavů, které se podle zadání nesmí slít. **Pojmenovává pořadí** (`· od nejnovějšího`), takže se s ním musí měnit — jinak okno lže o tom, co ukazuje. Na **stropu API** (250) věta řekne, že seznam nemusí být celý |
 | `Policy.jobID(from:)` | Číslo jobu z odkazu na check (#214). Funguje i jako check-run ID pro anotace; `…/runs/<id>` bez `/job/` je **běh**, ne job, takže `nil` |
 | `Policy.strippingANSI(_:)`, `Policy.strippingTimestamps(_:)` | Čistka logu (#214) — bez nich je v okně `^[[36;1m` a 28 znaků timestampu na každém řádku |
 | `Policy.logTail(_:lines:)` | Konec logu a **kolik se ho nevešlo** (`LogTail`, #214). Tiše zkrácený log tvrdí, že job začal uprostřed |
@@ -4105,6 +4293,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.newReleases(in:since:)` | Co vyšlo od poslední viděné verze; neznámá značka = **nic** |
 | `Policy.recheckStatuses(_:of:)` | Spáruje odpovědi kontroly (#150) s nálezy, na které se ptala — index z promptu → `Policy.key(of:)`. **Nepáruje se přes text**: model si věty přeformuluje |
 | `Policy.severityBadge(isBlocking:recheck:dismissal:)`, `Policy.severityBadge(of:categories:)` | Co stojí v odznaku závažnosti u nálezu a jestli se jeho text přeškrtne (`FindingSeverityBadge`, #150): `dismissed` / `resolved(_, blocking:)` / `blocking` / `none`. **`blokuje` se k `vyřešeno` přidává, nenahrazuje** — první je fakt, druhé tvrzení modelu. Odmítnutí přebíjí kontrolu a **nepřeškrtává** (celořádkové „nepočítá se“ patří člověku). Skupinová varianta vydá `resolved` jedině tehdy, když ho kontrola dala **všem platným** nálezům místa |
+| `Policy.incrementalDiff(from:to:rewroteHistory:)` | Dá se ukázat **jen to, co od minule přibylo** (#284)? `nil` = tlačítko se nenabídne. Chce viděnou hlavu, dnešní hlavu, rozdílné a **nepřepsanou historii**; `rewroteHistory: nil` (nenačtená osa) se chová jako „přepsala“ |
 | `Policy.recheck(of:head:)` | Co o uložených nálezech říká poslední kontrola (`RecheckReport`, `RecheckTally`): `none` / `outdated(againstHeadSha:)` / `current`. **Platí jen pro hlavu, proti které běžela** — jinak se odznaky nevydají (tvrdá podmínka č. 5); počítá se z **platných** nálezů, takže odmítnutý (#113) se nepočítá, a nález bez odpovědi jde do `unanswered` |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
@@ -4358,12 +4547,61 @@ Nad nálezy platí navíc:
   Vedle toho jde zavřít **ručně** (`markChangesAsSeen`) křížkem — to je pro „vím to hned teď, ať
   to nezabírá místo“. Zavření posune **obě** značky, jinak by se pruh po restartu vrátil.
 
+  **Odrážky se od #284 sázejí po částech.** Do #284 to byl `[String]` a jeden `Text(verbatim:)`,
+  takže v řádku nešlo nic zdůraznit. Návrh (sekce 02, `.since li`) přitom sází tři různé věci:
+  **co se stalo** tučně a plnou barvou (`li b`), zbytek věty ztlumeně a sha jako kód. Řádek proto
+  skládá `SinceLastVisitLines` do typovaných částí (`SinceLastVisitLine.Part`) — mimo view, jako
+  `TimelineEventRow`, aby se text testoval bez kreslení. Čtyři věci, které se u toho nemají
+  rozbít:
+  - **Věty se pořád skládají ve view, ne v `Policy`.** Je to próza pro člověka, ne rozhodnutí;
+    #284 rozdělil jedno skládání na části, nepřestěhoval ho.
+  - **Tučné znamená „co se stalo“** u vět, které si pruh skládá sám (počet commitů, přepsaná
+    historie, verdikt review), ale u **událostí časové osy** znamená **jméno** — ty berou větu
+    i s jejím zvýrazněním z `TimelineEventRow.attributedTitle`. Dvě různá pravidla schválně:
+    druhé znění téže věty by se s tím prvním rozešlo a testy by hlídaly to, které není vidět.
+  - **Autor commitů se uvádí, jen když je jeden.** „od odinuv“ nad commity dvou lidí je tvrzení,
+    které v datech není; jméno pak vypadne celé a počet se sha zůstanou.
+  - **Sha je podklad za písmem, ne kapsle s odsazením** — vědomá odchylka od návrhu
+    (`code { border-radius: 5px; padding: 1px 5px }`) a **tatáž volba, jakou už udělal inline kód
+    v sazbě Markdownu** (`MarkdownInlineText.highlightCode`, #279): `AttributedString` umí u běhu
+    nastavit barvu pozadí, ne jeho výplň a rádius, takže kapsle by znamenala kreslit každou sha
+    jako vlastní view — a tím rozpadlé zalomení uprostřed věty. Odrážka je v úzkém `Přehledu`
+    (128 bodů) zalomená vždycky, takže je to výměna „zaoblené rohy“ za „věta se dá přečíst“.
+    Barva podkladu i písma je z návrhu (`--accent-weak`, `--ink`), velikost z jednoho zdroje se
+    sazbou Markdownu (`MarkdownTypography.codeSize`).
+
+  **Pod odrážkami stojí řada ovládání** (`.since .row`, #284) — do #284 to byla věta a tlačítko,
+  které visely na jednom `isStale`. Tři kusy a každý má vlastní podmínku:
+  - **odznak `nálezy zastaraly`** (`.pill.stale`) jedině tehdy, když nálezy proti staršímu commitu
+    doopravdy jsou. Čte `AppStore.staleFindings(for:)`, tedy **tentýž zdroj** jako hlavička
+    `StaleHeadView` nad taby — dvě porovnání sha by znamenala dvě pravdy o jedné věci. Nula nálezů
+    je běžný stav (review doběhlo čistě) a odznak se u něj nerozsvítí, kdežto hlavička o rozchodu
+    mluvit má: `StaleFindings.hasFindings` je právě ta hranice mezi nimi;
+  - **`Pustit review znovu`** i tehdy, když **žádné nálezy zatím nejsou** — po přepsané historii
+    je to ta rozumná další věc. Do #284 se v takovém případě nenabídlo nic, což byl bod 3 zadání;
+  - **`Ukázat, co přibylo`** jedině tehdy, když je co s čím porovnat (`Policy.incrementalDiff`).
+
+  **Řada se v úzkém tabu zlomí do sloupce a rozhoduje o tom spočítaná šířka** (`SinceLastVisitView
+  .fits(_:in:)`), ne `ViewThatFits`. Ten se na to spolehnout nedá a je to změřené: odznak i popisky
+  tlačítek jsou vodorovně pružné, takže se ve zúžené řadě radši zkrátí, než by nahlásily, že se
+  nevejdou — v liště rozsahového diffu z toho u #284 vyšlo `Jen t…` a `lineLimit(1)` ani `fixedSize`
+  s tím nehnuly. Popisky jsou konstanty, takže se dají změřit (`TextWidth`) a o podobě řady se dá
+  rozhodnout z jednoho čísla, jak to má #220. **Přetečení tuhle chybu nechytá** — zkrácený popisek
+  nikam nepřeteče —, takže na ni je vlastní výčet (`SinceLastVisitActionsTests`) vedle měření
+  přetečení (`OverviewWidthTests`).
+
+  **Časový údaj a `×` v návrhu nejsou, v aplikaci ano, a zůstávají** (#284): bez `×` by pruh visel,
+  dokud je aplikace spuštěná, a bez času by „od tvé poslední návštěvy“ neřeklo od kdy. Obojí sedí
+  v hlavičce vpravo, tedy tam, kde návrh kreslí `.when` — přibývá k němu křížek, ne druhé místo.
+  Ikona je od #284 `⟲` z návrhu (`arrow.counterclockwise`), ne hodiny: pruh mluví o tom, co se
+  s větví stalo, ne o čase.
+
   **Sázen je podle návrhu (`.since`, #226) a má jen jeden tón** — okrový `--stale`. Do #226 bral
   systémový akcent (modrou) a při přepsané historii systémovou žlutou; obojí bylo mimo paletu okna,
   protože okno stojí na fialové z návrhu (#180) a systémová žlutá je **výstraha**, kdežto tenhle
   blok říká „platilo to, dneska už ne“ — přesně význam, na který #216 zavedlo `Palette.stale`.
-  Že se přepsala historie, proto nese `staleRow` větou a tlačítkem, ne odstínem pozadí; barvou to
-  rozlišovat nešlo, aniž by jedna z těch dvou byla mimo paletu. Graficky přibyl **obrys** (bez něj
+  Že se přepsala historie, proto nese **odrážka a řada ovládání** (do #284 věta s tlačítkem), ne
+  odstín pozadí; barvou to rozlišovat nešlo, aniž by jedna z těch dvou byla mimo paletu. Graficky přibyl **obrys** (bez něj
   plavala plná barevná plocha vedle obrysových karet `Přehledu`) a levý pruh je **okraj rámečku**,
   ne `overlay` s obdélníkem — ten se v zaoblených rozích usekával místo aby s nimi zatočil.
   Poloměr je 7 jako u sousedních karet, ne 8.
@@ -4385,6 +4623,33 @@ Nad nálezy platí navíc:
   na obou — `changes` na čase, „hlava se posunula“ na sha — takže po posunutí jen jedné zůstane
   viset kvůli té zapomenuté. „Přečteno“ i „návrat je nová návštěva“ by pak přestaly platit přesně
   v tom případě, kvůli kterému sha existuje: po rebase, kde časová osa mlčí.
+- **`Ukázat, co přibylo` je diff mezi dvěma hlavami, ne výřez z toho celého** (#284). Aplikace
+  uměla jedině `fetchDiff(id:)`, tedy `baseSha...HEAD`; rozsah z něj nijak nevyřízneme, takže
+  přibyla čtecí metoda na `GitHubGateway` — proč zrovna přes `compare` a ne přes klon v cache, je
+  u `GitHubGateway`.
+
+  **Nabízí se jen tehdy, když je co s čím porovnat**, a rozhoduje o tom čistá funkce
+  `Policy.incrementalDiff(from:to:rewroteHistory:)`. Potřebuje hlavu z minulé návštěvy
+  (`seenHeads`), dnešní hlavu z detailu a to, že se **nepřepsala historie**; `rewroteHistory: nil`
+  (nenačtená časová osa) se chová jako „přepsala“, protože nabídnout rozsah, o kterém nevíme,
+  jestli dává smysl, je horší než ho nenabídnout. Tlačítko, které se nabídne a otevře celý diff,
+  jaký člověk už viděl, je přesně to, co zadání #284 zakazuje.
+
+  **Kreslí se v tabu `Změněné soubory`, ne ve vlastním tabu ani v sheetu.** Je to **pohled** na
+  tentýž tab: `AppStore.incrementalDiffs` drží rozsah **vedle** `diffStates`, ne místo nich, takže
+  celý diff — to, proti čemu se píše review — zůstává načtený a vrací se jedním tlačítkem v liště
+  (`IncrementalDiffBar`). Nálezy, vlákna i rozdělané komentáře se předávají **beze změny**: kotví
+  se na `soubor:řádek` **dnešní hlavy**, a čísla řádků na nové straně jsou v obou diffech tatáž,
+  takže se pověsí na totéž místo; co v rozsahu není vidět, se chová jako soubor mimo diff.
+
+  **Odznak u záložky a `+X −Y` v pruhu počítají to, co je vidět** (`shownDiff`), ne celý PR — pruh
+  kousek nad diffem by jinak tvrdil sedm souborů nad dvěma. Dlaždice v `Přehledu` z toho **nečtou**:
+  „Soubory: 7“ je fakt o PR a `Přehled` rozsah nikdy nekreslí.
+
+  Rozsah se **drží** a druhé kliknutí ho nestahuje znovu (klíčem jsou dvě sha), **selhání se ale
+  zkusit znovu smí** — jinak by tlačítko `Zkusit znovu` u chyby nic neudělalo. Doběhlé volání
+  navíc zapisuje, jen když se mezitím rozsah nezměnil: jinak by v okně ležel diff, který k popisku
+  nad ním nepatří.
 - **`suggestedVerdict` vrací `nil`, když není z čeho soudit** — a je to vlastní odpověď, ne
   opatrné `approve`. Schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou
   aplikace umí udělat. Z běhu se dá vyvodit „je čisto“, jen když **doběhl**, **zavolal
@@ -4534,12 +4799,12 @@ Nad odesílatelností draftu (#68) platí:
 
 ## `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má jedenáct metod
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má dvanáct metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu.
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)` |
+| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
@@ -4548,6 +4813,7 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 | `GhConversationResponse` | Tvar GraphQL odpovědi a mapování na `Conversation` |
 | `GhSearchItem`, `GhPullRequestDetail` | Tvar JSONu z `gh` a převod na doménové modely |
 | `GhRelease` | Tvar jedné položky `GET /repos/…/releases` a převod na `Release` |
+| `GhCommit` | Tvar jedné položky `GET /repos/…/pulls/{n}/commits` a převod na `PullRequestCommit` (#316). **Skoro všechno optional**: odpověď má přes šedesát polí a bereme šest, takže chybějící pole nesmí položit seznam kvůli něčemu, co se nekreslí |
 | `PullRequestState(ghState:isDraft:)` | Mapování stavu — `gh` ho popisuje dvěma poli |
 
 Čtyři věci, které se u toho nemají rozbít:
@@ -4572,6 +4838,34 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   na rozdíl od `--json` polí, kde si říkáme, co má přijít. Rozumí mu až `DiffParser`.
   Volá se `gh pr diff <n> --repo … --color never`; to `never` je pojistka proti defaultu
   `auto`, který by při zápisu na terminál poslal ANSI escape sekvence.
+- **Rozsah „co přibylo“ jde přes `compare`, ne přes klon v cache** (#284).
+  `gh api repos/{o}/{r}/compare/<viděná>...<dnešní>` s hlavičkou `Accept: application/vnd.github.diff`
+  — jedno volání, změřeno ~0,7 s. Klon v cache byl druhá schůdná cesta a **prohrál na měření**:
+  `refs/prism/pr/<n>` v něm vzniká teprve při checkoutu kvůli review a `forgetPullRequest` ho maže,
+  takže u většiny PR by se tlačítko nenabídlo; klon je navíc `--filter=blob:none`, takže by si
+  `git diff` obsah stejně dotáhl ze sítě — jen oklikou přes cestu, která se lazy fetchi schválně
+  brání (`GIT_NO_LAZY_FETCH`), a u PR z forku by v něm hlava nebyla vůbec (`prepare` tahá jen
+  `refs/heads/*`).
+
+  **Trojtečka schválně** — dvojtečkový rozsah `compare` nezná a vrací 404 (změřeno). Trojtečka
+  začíná na společném předku obou hlav, takže proti hlavě, která je potomkem té viděné, dá přesně
+  to, co se pushnulo; po přepsané historii by dala **víc než celý diff PR**, a proto se
+  `Ukázat, co přibylo` v takovém případě nenabízí (`Policy.incrementalDiff`). Změřeno na
+  `cli/cli#14062`: 102 kB ve 22 souborech proti 15 kB ve třech, které má celý PR. Osiřelá stará
+  hlava přitom **problém není** — `compare` ji po force pushi zná (změřeno na témže PR).
+- **Seznam commitů se stránkuje, i když se to skoro nikdy neprojeví** (#316).
+  `gh api repos/…/pulls/<n>/commits?per_page=100 --paginate`: bez `per_page` by přišlo **prvních
+  třicet** (výchozí stránka GitHubu) a odznak by nad stovkou commitů tvrdil třicet, tedy text
+  přes to, co data unesou. U běžného PR je to pořád **jedno** volání — změřeno 1,20 s pro sedm
+  commitů — a stránky `gh` slévá do jednoho pole, takže se dekóduje `[GhCommit]` (ověřeno na živém
+  API). Nad **250 commitů** GitHub nevydá nic, ať se stránkuje jak chce; že se na strop narazilo,
+  se pozná z počtu a **řekne se to v tabu** (`Policy.commitsHeadline`).
+
+  **Neřadí se tady, a nikde jinde ani podle data.** GitHub vrací commity topologicky od nejstaršího
+  a přerovnat je podle času by po rebase nebo cherry-picku ten postup rozházelo. Pořadí, ve kterém
+  se kreslí, je rozhodnutí, ne tvar odpovědi: gateway vydá, co přišlo, a `Policy.commitsNewestFirst`
+  to na jednom místě **otočí** (nejnovější nahoře) — topologické pořadí se tím zachová, jen se čte
+  z druhé strany. Zahazují se jen položky **bez sha**, ze kterých se řádek udělat nedá.
 - **Obsah souboru se čte přes ref pull requestu**, ne přes `headSha`:
   `gh api repos/…/contents/<cesta>?ref=refs/pull/<n>/head` s hlavičkou
   `Accept: application/vnd.github.raw`. Ověřeno na živém API — ten ref má každý PR včetně

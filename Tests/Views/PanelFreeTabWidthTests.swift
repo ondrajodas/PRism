@@ -34,6 +34,19 @@ struct PanelFreeTabWidthTests {
         }
     }
 
+    /// `Commity` (#316) jsou čtvrtý tab bez panelu a v šířce se perou o dvě věci naráz: **dlouhá
+    /// první řádka zprávy** (typicky `Merge branch 'main' into …`) a pilulka se sha u pravé hrany.
+    /// Zpráva se řeže, sha ne — takže kdyby se řez ztratil, přeteče to vpravo.
+    @Test("Commity nepřetečou v žádné šířce")
+    func commitsStayInside() throws {
+        for width in widths {
+            let probe = OverflowProbe(width: width, name: "commity-\(Int(width))")
+            let list = CommitListView(commits: Self.commits, head: Self.commits.last?.sha)
+            let overflow = try probe.overflow(of: list.content)
+            #expect(overflow == 0, "šířka \(Int(width)): Commity přetekly o \(overflow) bodů")
+        }
+    }
+
     /// Tabulka nálezů je z těch tří jediná, která si šířku **počítá** (`Policy.findingTableLayout`),
     /// takže je to jediné místo, kde se dá spočítat špatně. Sloupec `reviewer · kategorie` navíc
     /// v pásmu přeskočí prahovou hodnotu 900, takže se měří obě sazby.
@@ -122,6 +135,41 @@ struct PanelFreeTabWidthTests {
             completedAt: Date(timeIntervalSince1970: 41)
         ),
         PullRequestCheck(name: "deploy", outcome: .skipped, link: nil, startedAt: nil, completedAt: nil),
+    ]
+
+    /// Commity ze skutečného PR (`cli/cli#13899`, sedm commitů a mezi nimi tři sloučení), zkrácené
+    /// na jeden od každého druhu — a s nejdelší zprávou, jakou tam GitHub sám vyrobil: `Merge
+    /// branch 'trunk' into fix/13804-…` je ten řádek, který se do úzkého okna nemá kam vejít.
+    private static let commits: [PullRequestCommit] = [
+        PullRequestCommit(
+            sha: "c82266c2dcc3285033605501837434af1faeddfe",
+            message: "Warn instead of failing when issue fields can't be set\n\nTělo, které se v seznamu nekreslí.",
+            authorName: "imkp1",
+            authorLogin: "imkp1",
+            avatarURL: URL(string: "https://avatars.githubusercontent.com/u/28646172?v=4"),
+            committedAt: Date(timeIntervalSince1970: 1_784_230_763),
+            isMerge: false
+        ),
+        PullRequestCommit(
+            sha: "96a469b6bd159d4cff137d5eab4d13ceee4c9807",
+            message: "Merge branch 'trunk' into fix/13804-gh-issue-create-errors-after-successful",
+            authorName: "Kumar Prateek",
+            authorLogin: "imkp1",
+            avatarURL: URL(string: "https://avatars.githubusercontent.com/u/28646172?v=4"),
+            committedAt: Date(timeIntervalSince1970: 1_784_636_710),
+            isMerge: true
+        ),
+        // Bez účtu na GitHubu — `author: null`, tedy monogram místo obrázku (změřeno na
+        // `keboola/job-queue-daemon#858`, kde je `null` u všech commitů).
+        PullRequestCommit(
+            sha: "0834fedb0a1c2d3e4f50617283940516273849a0",
+            message: "fix(daemon): AJDA-2719 return job mock from createNewJob callback in per-row retry tests",
+            authorName: "Jiří Novák",
+            authorLogin: nil,
+            avatarURL: nil,
+            committedAt: Date(timeIntervalSince1970: 1_784_637_072),
+            isMerge: false
+        ),
     ]
 
     /// Konec logu, jak ho vrátí spadlá session: dlouhé nezlomitelné cesty jsou to nejtvrdší, co má

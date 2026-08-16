@@ -22,9 +22,13 @@ struct OverviewView: View {
     /// Zastaraly nálezy nebo rozdělané review? Tvrzení o **uložených datech**, ne o časové ose,
     /// takže ho počítá store.
     var isStale = false
+    /// Jsou zastaralé zrovna **nálezy**, a je aspoň jeden? Viz `SinceLastVisitView`.
+    var hasStaleFindings = false
     /// Nová hlava PR, pokud se od minule posunula — viz `SinceLastVisitView`.
     var movedHead: String?
     var rerun: (() -> Void)?
+    /// Ukázat diff jen toho, co od minule přibylo (#284). `nil` = nedá se, tlačítko se nenabídne.
+    var showAdded: (() -> Void)?
     /// „Přečteno“ — viz `SinceLastVisitView`.
     var dismissChanges: (() -> Void)?
 
@@ -55,8 +59,10 @@ struct OverviewView: View {
                     changes: changes,
                     since: lastVisit,
                     isStale: isStale,
+                    hasStaleFindings: hasStaleFindings,
                     movedHead: movedHead,
                     rerun: rerun,
+                    showAdded: showAdded,
                     dismiss: dismissChanges
                 )
             }

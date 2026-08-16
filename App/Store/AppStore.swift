@@ -67,6 +67,14 @@ final class AppStore {
     /// Diff **per PR**. Co v mapě není, se ještě nenačítalo.
     var diffStates: [PRIdentifier: DiffState] = [:]
 
+    /// Diff „co od minule přibylo“ **per PR** (#284). Co v mapě není, se nevyžádalo — a tab
+    /// `Změněné soubory` pak kreslí celý diff.
+    ///
+    /// **Vedle `diffStates`, ne místo nich**: celý diff je to, proti čemu se píše review, takže
+    /// ho pohled na rozsah nesmí zahodit. Zapíná se výhradně tlačítkem v pruhu „od tvé poslední
+    /// návštěvy“ a vypíná se v liště nad rozsahem.
+    var incrementalDiffs: [PRIdentifier: IncrementalDiff] = [:]
+
     /// Detail **per PR** — kvůli `headSha`, proti kterému se píše rozdělané review.
     ///
     /// Dotahuje se při výběru řádku, ne pollingem: pro všech N PR by to byla tatáž N+1 past,
@@ -787,6 +795,21 @@ final class AppStore {
     /// CI se tab nekreslí a je to správně, po chybě sítě by zmizel tab, který tam patří.
     var checkFailures: [PRIdentifier: String] = [:]
 
+    /// Commity na PR (#316), klíčované PR. Chybějící klíč = ještě se nenačetlo.
+    ///
+    /// **Prázdné pole tady nemá význam „PR nemá commity“** — takový pull request neexistuje. Je to
+    /// rozdíl proti `checks`, kde prázdno je odpověď; rozhoduje o něm `Policy.commitsTab`, ne tenhle
+    /// stav. Mapa jen věrně nese to, co přišlo — **včetně pořadí**: drží se pořadí z API (od
+    /// nejstaršího) a otáčí ho až `Policy.commitsNewestFirst` cestou do tabu. Kdyby se otočilo
+    /// tady, byla by z pořadí kresby uložená vlastnost dat a nešlo by ho změnit na jednom místě.
+    var commits: [PRIdentifier: [PullRequestCommit]] = [:]
+
+    /// Proč se commity nepodařilo načíst (#316). Chybějící klíč = poslední pokus prošel.
+    ///
+    /// **Vlastní mapa, ne prázdné pole v `commits`**, ze stejného důvodu jako u checků: nenačteno,
+    /// prázdno a porucha jsou tři různé odpovědi a nesmí se slít.
+    var commitFailures: [PRIdentifier: String] = [:]
+
     /// Který check je v tabu `Kontroly` rozbalený (#214), na PR nejvýš jeden.
     ///
     /// Dva otevřené konce logu pod sebou znamenají scrollování přes to, co se zrovna nečte — a dvě
@@ -1237,6 +1260,11 @@ final class AppStore {
         // ho doběhlé volání zapsalo zpátky a v mapě by zůstalo tak jako tak.
         let wantedPullRequests = Set(summaries.map(\.id))
         diffStates = diffStates.filter { wantedPullRequests.contains($0.key) || $0.value == .loading }
+        // Rozsahový diff (#284) jde tou samou cestou a ze stejného důvodu — jsou to tytéž
+        // megabajty a rozdělané načítání by si sebe zapsalo zpátky.
+        incrementalDiffs = incrementalDiffs.filter {
+            wantedPullRequests.contains($0.key) || $0.value.content == .loading
+        }
         expansions = expansions.filter {
             wantedPullRequests.contains($0.key.pullRequest) || $0.value.isLoading
         }
@@ -1302,6 +1330,11 @@ final class AppStore {
         // u PR, které v seznamu není.
         checks = checks.filter { wantedPullRequests.contains($0.key) }
         checkFailures = checkFailures.filter { wantedPullRequests.contains($0.key) }
+
+        // Commity a důvod, proč se nenačetly (#316) — tatáž dvojice a tentýž důvod jako o řádek
+        // výš. Uklízí se **spolu**, jinak by po vypadlém PR zbyl osamocený důvod poruchy.
+        commits = commits.filter { wantedPullRequests.contains($0.key) }
+        commitFailures = commitFailures.filter { wantedPullRequests.contains($0.key) }
 
         // Rozbalený check a jeho detail (#214). Stahování se **ruší**, ne opouští: osmimegový log
         // by dojel do stavu, který už nikdo nečte. Text se u toho zahazuje schválně — nemá přežít

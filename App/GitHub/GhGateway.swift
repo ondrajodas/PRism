@@ -99,6 +99,17 @@ struct GhGateway: GitHubGateway {
         ])
     }
 
+    func fetchDiff(repo: RepoID, from base: String, to head: String) async throws -> String {
+        // **Trojtečka schválně** — dvojtečkový rozsah `compare` nezná a vrací 404 (změřeno).
+        // Proti hlavě, která je potomkem té viděné, dá trojtečka přesně to, co se pushnulo;
+        // po přepsané historii by dala víc, a tam se `Ukázat, co přibylo` nenabízí
+        // (`Policy.incrementalDiff`).
+        try await run([
+            "api", "repos/\(repo)/compare/\(base)...\(head)",
+            "--header", "Accept: application/vnd.github.diff",
+        ])
+    }
+
     func fetchFile(id: PRIdentifier, path: String) async throws -> String {
         // `refs/pull/<n>/head` má na GitHubu každý PR včetně forků, takže se `headSha`
         // shánět nemusí — ověřeno na živém API. Cesta se procentuje: mezera v názvu
@@ -172,6 +183,29 @@ struct GhGateway: GitHubGateway {
         // Přímé API, ne `gh run view --job --log` — změřeno 1,50 s proti 4,77 s za tentýž obsah
         // (#214). Bez dekódování: odpověď je **plain text**, ne JSON.
         try await run(["api", "repos/\(repo)/actions/jobs/\(jobID)/logs"])
+    }
+
+    func fetchCommits(id: PRIdentifier) async throws -> [PullRequestCommit] {
+        // `per_page=100` je strop GitHubu a `--paginate` je tu kvůli PR, které ho přerostou:
+        // bez něj by přišlo **prvních třicet** (výchozí stránka) a odznak by nad stovkou commitů
+        // tvrdil třicet. U běžného PR je to pořád **jedno** volání, takže se za to neplatí nic —
+        // změřeno 1,20 s pro sedm commitů. Stránky `gh` slévá do jednoho pole (ověřeno na živém
+        // API), takže se dekóduje pořád `[GhCommit]`.
+        //
+        // Sám GitHub vydá nejvýš 250 commitů na PR, ať se stránkuje jak chce; že se na ten strop
+        // narazilo, se pozná z počtu a **řekne se to v tabu** (`Policy.commitsHeadline`) — jinak
+        // by seznam tvrdil, že je celý.
+        let items = try await run([
+            "api", "repos/\(id.repo)/pulls/\(id.number)/commits?per_page=100", "--paginate",
+        ], phase: "Commity pull requestu", decodedAs: [GhCommit].self)
+
+        // **Neřadí se tady, a nikde jinde ani podle data.** GitHub vrací commity topologicky od
+        // nejstaršího a přerovnat je podle času by po rebase nebo cherry-picku ten postup rozházelo.
+        // Pořadí, ve kterém se kreslí, je rozhodnutí, ne tvar odpovědi: gateway vydá, co přišlo,
+        // a `Policy.commitsNewestFirst` to na jednom místě **otočí** (nejnovější nahoře, #316) —
+        // topologické pořadí se tím zachová, jen se čte z druhé strany. Zahazují se jen položky
+        // bez sha, ze kterých se řádek udělat nedá.
+        return items.compactMap(\.pullRequestCommit)
     }
 
     /// `phase` **není dekorace**: `Výstupu gh nerozumím. keyNotFound…` neříká, co se zkoušelo,
