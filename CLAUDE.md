@@ -554,6 +554,11 @@ Zvlášť stojí za přečtení, než sáhneš na:
   `(text řádku, jazyk)`, takže word-level zvýraznění, které závisí na **protějšku** dvojice, do ní
   nepatří — vracela by zvýraznění cizí dvojice, a potichu. Takové věci se kreslí jako **druhá
   vrstva nad** výsledkem z cache; podrobnosti v [`docs/architektura.md`](docs/architektura.md).
+- **Zlevnění, které práci jen přesune jinam, není zlevnění — a pozná se to jedině změřením obou
+  konců** (#275). U sazby bloku si rozvržení vynucuje `sizeToFit()` (35 ms ze 79), takže ho vyhodit
+  vypadá jako polovina ceny pryč. Jenže `super.draw` rozvržení potřebuje taky a blok, který vjel do
+  okna, se kreslí — číslo by spadlo v harnessu a v okně ne. **Měř tu cestu, kterou kód doopravdy
+  jde**, a co se nepodařilo zlevnit, napiš i s důvodem: bez toho to příště někdo zkusí znovu.
 - **Řádky dělí `TextLines`, nikdy `split(separator: "\n")` ani `components(separatedBy: .newlines)`**
   (#292, na jedno místo svedeno #295). `"\r\n"` je ve Swiftu **jeden `Character`**, takže
   `split(separator: "\n")` na `CRLF` **nerozdělí vůbec** — z celého vstupu zbyde jeden „řádek“. Ta
