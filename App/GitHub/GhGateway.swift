@@ -99,6 +99,17 @@ struct GhGateway: GitHubGateway {
         ])
     }
 
+    func fetchDiff(repo: RepoID, from base: String, to head: String) async throws -> String {
+        // **Trojtečka schválně** — dvojtečkový rozsah `compare` nezná a vrací 404 (změřeno).
+        // Proti hlavě, která je potomkem té viděné, dá trojtečka přesně to, co se pushnulo;
+        // po přepsané historii by dala víc, a tam se `Ukázat, co přibylo` nenabízí
+        // (`Policy.incrementalDiff`).
+        try await run([
+            "api", "repos/\(repo)/compare/\(base)...\(head)",
+            "--header", "Accept: application/vnd.github.diff",
+        ])
+    }
+
     func fetchFile(id: PRIdentifier, path: String) async throws -> String {
         // `refs/pull/<n>/head` má na GitHubu každý PR včetně forků, takže se `headSha`
         // shánět nemusí — ověřeno na živém API. Cesta se procentuje: mezera v názvu

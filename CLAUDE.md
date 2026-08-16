@@ -447,11 +447,11 @@ viz tvrdá podmínka č. 1.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
-| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff | `gh` CLI |
+| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |
@@ -476,8 +476,9 @@ Zvlášť stojí za přečtení, než sáhneš na:
   chybové stavy schválně;
 - **`AppStore` je rozdělený na `extension` po zodpovědnostech** (#154), takže se hledá podle
   souboru, ne v jednom dvoutisícovém: `AppStore.swift` drží **stav, init a polling**,
-  `+Diff`, `+DiffExpansion`, `+Detail`, `+Conversation`, `+Draft`, `+DraftTransfer`,
-  `+Submission`, `+Review`, `+Recheck`, `+Findings`, `+Notifications` a `+Automatic` metody. **Dělí se
+  `+Diff`, `+IncrementalDiff`, `+DiffExpansion`, `+Detail`, `+Conversation`, `+Draft`,
+  `+DraftTransfer`, `+Submission`, `+Review`, `+Recheck`, `+Findings`, `+Notifications`
+  a `+Automatic` metody. **Dělí se
   metody, ne data** — uložený stav zůstává na jednom místě. Cena je, že `private` členy, na
   které extensiony sahají, musely být `internal`; nic se tím neotevírá ven z aplikace (jeden
   modul) a tvrdou podmínku č. 1 to nemění, protože publisher polem storu není.

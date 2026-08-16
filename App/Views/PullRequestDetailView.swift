@@ -170,11 +170,10 @@ struct PullRequestDetailView: View {
                 Spacer(minLength: 8)
             }
             // Jen když se hlava rozešla se sha, proti které platí nálezy — jinak by to byl
-            // řádek s údajem, který nikoho nezajímá.
-            if let head = loadedDetail?.headSha,
-               let findingsHead = store.reviewRecord(for: pullRequest.id)?.headSha,
-               head != findingsHead {
-                StaleHeadView(head: head, findingsHead: findingsHead, recheck: recheck)
+            // řádek s údajem, který nikoho nezajímá. **Rozchod počítá store** (#284), protože
+            // o témže stavu mluví i odznak v pruhu „od tvé poslední návštěvy“.
+            if let stale = store.staleFindings(for: pullRequest.id) {
+                StaleHeadView(head: stale.head, findingsHead: stale.findingsHead, recheck: recheck)
             }
             // Proč kontrola nálezů (#150) neproběhla. **Vlastní řádek, ne nápověda u tlačítka:**
             // spadlá kontrola vypadá jinak než kontrola, která nic nenašla, a to druhé by se
@@ -227,7 +226,7 @@ struct PullRequestDetailView: View {
         // tab obsahuje, by byl konstanta (čtyři bloky) a neřekl by nic.
         case .overview: count(store.changesSinceLastVisit(for: pullRequest.id).count)
         // Soubory v diffu, ne řádky: `+X −Y` stojí o kus dál v téže liště.
-        case .filesChanged: loadedDiff.flatMap { count($0.files.count) }
+        case .filesChanged: shownDiff.flatMap { count($0.files.count) }
         // Jen to, co je **k přečtení** — události časové osy se nepočítají (#171), jinak by
         // na PR s dvaceti commity odznak ukazoval třicet a přestal by o diskuzi něco říkat.
         case .conversation: count(store.overview(for: pullRequest.id).count { $0.isReadable })
@@ -269,10 +268,26 @@ struct PullRequestDetailView: View {
         return diff
     }
 
+    /// Diff, který je v tabu **vidět** — celý, nebo rozsah „co přibylo“ (#284).
+    ///
+    /// Odznak u záložky a `+X −Y` v pruhu stojí kousek nad tím diffem, takže musí počítat to,
+    /// co je pod nimi. Kdyby držely čísla celého PR i nad rozsahem, pruh by tvrdil sedm souborů
+    /// nad dvěma — a to je přesně ten druh čísla, které se pak nedá s ničím srovnat.
+    ///
+    /// Dlaždice v `Přehledu` z toho **nečtou**: „Soubory: 7“ je fakt o PR a `Přehled` navíc rozsah
+    /// nikdy nekreslí.
+    private var shownDiff: Diff? {
+        // **Ne `?? loadedDiff` nad rozsahem**: dokud se rozsah načítá nebo selhal, je odpověď
+        // „nevím“, ne „tak tedy celý diff“ — jinak by odznak u záložky na okamžik ukázal počet
+        // souborů celého PR nad prázdným tabem.
+        guard let incremental = store.incrementalDiff(for: pullRequest.id) else { return loadedDiff }
+        return incremental.loaded
+    }
+
     /// Rozsah změny pro záložky (#174). `nil`, dokud diff nedorazí — nuly by tvrdily,
     /// že PR nic nemění.
     private var loadedDiffCounts: (additions: Int, deletions: Int)? {
-        loadedDiff.map { ($0.additions, $0.deletions) }
+        shownDiff.map { ($0.additions, $0.deletions) }
     }
 
     /// Načtený detail PR. `nil` u načítání i selhání — hlavička si v obou případech
@@ -812,16 +827,33 @@ struct PullRequestDetailView: View {
             facts: facts,
             changes: store.changesSinceLastVisit(for: pullRequest.id),
             lastVisit: store.visitSnapshots[pullRequest.id],
-            // Obojí je „to, co mám na obrazovce, už neplatí“, takže se do banneru slévá do
-            // jedné věty — rozdíl mezi zastaralými nálezy a zastaralým draftem se řeší
-            // v panelu, kde se s nimi něco dělá.
+            // Obojí je „to, co mám na obrazovce, už neplatí“, takže se z toho stává **jedna
+            // nabídka**: pustit review znovu. Rozdíl mezi zastaralými nálezy a zastaralým draftem
+            // se řeší v panelu, kde se s nimi něco dělá.
             isStale: store.reviewRecord(for: pullRequest.id)?.isStale == true
                 || store.isDraftStale(for: pullRequest.id),
+            // Odznak `nálezy zastaraly` naopak mluví **jen o nálezech**, a bere je z téhož místa
+            // jako hlavička nad taby (#284) — jinak by o témže stavu tvrdily každá něco jiného.
+            hasStaleFindings: store.staleFindings(for: pullRequest.id)?.hasFindings == true,
             movedHead: store.movedHead(for: pullRequest.id),
             rerun: { store.startReview(for: pullRequest.id) },
+            showAdded: showAdded,
             dismissChanges: { store.markChangesAsSeen(for: pullRequest.id) },
             pullRequest: pullRequest
         )
+    }
+
+    /// `Ukázat, co přibylo` (#284) — `nil`, když se nová hlava nemá s čím porovnat.
+    ///
+    /// Přepnutí tabu patří **sem**, ne do store: který tab je vidět, je věc okna, kdežto store
+    /// jen drží rozsah a jeho načtení. Načítá se `Task`em, tab se přepne hned — jinak by kliknutí
+    /// na sekundu nic neudělalo a vypadalo by to jako zaseklé tlačítko.
+    private var showAdded: (() -> Void)? {
+        guard store.incrementalDiffRange(for: pullRequest.id) != nil else { return nil }
+        return {
+            store.setDetailTab(.filesChanged, for: pullRequest.id)
+            Task { await store.showIncrementalDiff(for: pullRequest) }
+        }
     }
 
     /// Tab `Kontroly` (#215) — a od #306 ve **všech čtyřech stavech**, protože se kreslí i u PR
@@ -1088,49 +1120,121 @@ struct PullRequestDetailView: View {
         )
     }
 
+    /// Tab `Změněné soubory` — celý diff PR, nebo **jen to, co od minule přibylo** (#284).
+    ///
+    /// Rozsah nedostal vlastní tab a ve store nenahrazuje celý diff: je to **pohled** na tentýž
+    /// tab, ze kterého se vyskočí jedním tlačítkem v liště. Review se pořád píše proti celému
+    /// diffu, takže co se v rozsahu napíše, sedí na tomtéž místě jako všude jinde — čísla řádků
+    /// jsou v obou případech čísla na dnešní hlavě.
     @ViewBuilder private var diff: some View {
+        if let incremental = store.incrementalDiff(for: pullRequest.id) {
+            VStack(alignment: .leading, spacing: 0) {
+                IncrementalDiffBar(
+                    range: incremental.range,
+                    showAll: { store.hideIncrementalDiff(for: pullRequest.id) }
+                )
+                incrementalDiff(incremental)
+            }
+            // **Šířku předat, ne vyjednávat** (#220): pod tímhle uzlem visí celý diff, takže
+            // `maxWidth: .infinity` by nad ním přidalo úroveň vyjednávání navíc. Výška pružná
+            // zůstává — o tu se nikdo nepře.
+            .filling(alignment: .topLeading)
+            .frame(maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            fullDiff
+        }
+    }
+
+    @ViewBuilder private var fullDiff: some View {
         switch store.diffState(for: pullRequest.id) {
         case .loaded(let diff, _) where diff.isEmpty:
             placeholder("Diff je prázdný — tenhle pull request nic nemění.")
         case .loaded(let diff, _):
-            DiffView(
-                diff: diff,
-                scrollTarget: $scrollTarget,
-                expansion: expansionActions,
-                folding: foldingActions,
-                findings: findingGroups,
-                findingActions: findingActions,
-                findingDisclosure: findingDisclosure,
-                blockingCategories: blockingCategories,
-                highlighted: highlighted,
-                threads: store.anchoredThreads(for: pullRequest.id),
-                missingThreads: store.conversation(for: pullRequest.id)?.threads.missing ?? 0,
-                viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
-                threadActions: threadActions,
-                comments: store.draftComments(for: pullRequest.id),
-                draft: draftActions,
-                layout: diffLayout,
-                navigation: Policy.navigation(
-                    over: findingGroups,
-                    cursor: cursor,
-                    categories: blockingCategories
-                ),
-                onlyBlocking: $cursor.onlyBlocking,
-                // Tlačítko `Nálezy` v liště nad diffem (#197). Stav drží detail, protože
-                // panel je vidět i v tabu `Přehled`, kde lišta není.
-                panelExpanded: panelExpanded,
-                stepFinding: { step($0) }
-            )
+            diffView(of: diff)
         case .failed(let detail):
             diffFailure(detail)
         case .loading, nil:
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Načítám diff…")
-            }
-            .padding(20)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            loading("Načítám diff…")
         }
+    }
+
+    /// Rozsah „co přibylo“. Prázdný výsledek je **vlastní hláška**, ne ta od celého diffu:
+    /// „tenhle pull request nic nemění“ by nad rozsahem bylo tvrzení o něčem jiném.
+    @ViewBuilder private func incrementalDiff(_ incremental: IncrementalDiff) -> some View {
+        switch incremental.content {
+        case .loaded(let diff) where diff.isEmpty:
+            placeholder("Od tvé poslední návštěvy se v souborech nic nezměnilo.")
+        case .loaded(let diff):
+            diffView(of: diff)
+        case .failed(let detail):
+            incrementalDiffFailure(detail)
+        case .loading:
+            loading("Načítám, co přibylo…")
+        }
+    }
+
+    /// Jeden diff se všemi bublinami. Bere ho **celý diff i rozsah** — nálezy, vlákna
+    /// i rozdělané komentáře se kotví na `soubor:řádek` dnešní hlavy, takže se v obou pohledech
+    /// pověsí na totéž místo; co v rozsahu není vidět, se chová stejně jako soubor mimo diff.
+    private func diffView(of diff: Diff) -> some View {
+        DiffView(
+            diff: diff,
+            scrollTarget: $scrollTarget,
+            expansion: expansionActions,
+            folding: foldingActions,
+            findings: findingGroups,
+            findingActions: findingActions,
+            findingDisclosure: findingDisclosure,
+            blockingCategories: blockingCategories,
+            highlighted: highlighted,
+            threads: store.anchoredThreads(for: pullRequest.id),
+            missingThreads: store.conversation(for: pullRequest.id)?.threads.missing ?? 0,
+            viewer: store.conversation(for: pullRequest.id)?.viewer ?? "",
+            threadActions: threadActions,
+            comments: store.draftComments(for: pullRequest.id),
+            draft: draftActions,
+            layout: diffLayout,
+            navigation: Policy.navigation(
+                over: findingGroups,
+                cursor: cursor,
+                categories: blockingCategories
+            ),
+            onlyBlocking: $cursor.onlyBlocking,
+            // Tlačítko `Nálezy` v liště nad diffem (#197). Stav drží detail, protože
+            // panel je vidět i v tabu `Přehled`, kde lišta není.
+            panelExpanded: panelExpanded,
+            stepFinding: { step($0) }
+        )
+    }
+
+    private func loading(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(verbatim: text)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// Rozsah se **nezkouší znovu sám** — pouští ho člověk, takže i opakování je jeho rozhodnutí.
+    /// Vedle je cesta zpátky na celý diff: ten je načtený a je to to, co se v tabu čeká.
+    private func incrementalDiffFailure(_ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Nepodařilo se zjistit, co přibylo", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+            Text(verbatim: detail)
+                .font(.system(.callout, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button("Zkusit znovu", systemImage: "arrow.clockwise") {
+                    Task { await store.showIncrementalDiff(for: pullRequest) }
+                }
+                Button("Ukázat celý diff") { store.hideIncrementalDiff(for: pullRequest.id) }
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func diffFailure(_ detail: String) -> some View {

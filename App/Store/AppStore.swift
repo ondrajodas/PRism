@@ -67,6 +67,14 @@ final class AppStore {
     /// Diff **per PR**. Co v mapě není, se ještě nenačítalo.
     var diffStates: [PRIdentifier: DiffState] = [:]
 
+    /// Diff „co od minule přibylo“ **per PR** (#284). Co v mapě není, se nevyžádalo — a tab
+    /// `Změněné soubory` pak kreslí celý diff.
+    ///
+    /// **Vedle `diffStates`, ne místo nich**: celý diff je to, proti čemu se píše review, takže
+    /// ho pohled na rozsah nesmí zahodit. Zapíná se výhradně tlačítkem v pruhu „od tvé poslední
+    /// návštěvy“ a vypíná se v liště nad rozsahem.
+    var incrementalDiffs: [PRIdentifier: IncrementalDiff] = [:]
+
     /// Detail **per PR** — kvůli `headSha`, proti kterému se píše rozdělané review.
     ///
     /// Dotahuje se při výběru řádku, ne pollingem: pro všech N PR by to byla tatáž N+1 past,
@@ -1237,6 +1245,11 @@ final class AppStore {
         // ho doběhlé volání zapsalo zpátky a v mapě by zůstalo tak jako tak.
         let wantedPullRequests = Set(summaries.map(\.id))
         diffStates = diffStates.filter { wantedPullRequests.contains($0.key) || $0.value == .loading }
+        // Rozsahový diff (#284) jde tou samou cestou a ze stejného důvodu — jsou to tytéž
+        // megabajty a rozdělané načítání by si sebe zapsalo zpátky.
+        incrementalDiffs = incrementalDiffs.filter {
+            wantedPullRequests.contains($0.key) || $0.value.content == .loading
+        }
         expansions = expansions.filter {
             wantedPullRequests.contains($0.key.pullRequest) || $0.value.isLoading
         }

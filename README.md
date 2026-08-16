@@ -175,14 +175,31 @@ se tam čte jako „nic tu není“ ještě snáz.
 
 Úplně nahoře v `Přehledu` je **co se změnilo od tvé poslední návštěvy** (#173): nové commity,
 cizí review, komentáře — a hlavně **přepsaná historie větve**, protože právě po ní zastarají
-nálezy i rozdělané review. Tenhle jeden případ má vlastní barvu i větu o důsledku a nabízí
-pustit review znovu; jinak je to tiché oznámení. Banner se ukáže, **jen když opravdu něco
-přibylo**, a u PR otevřeného poprvé nikdy — „od tvé poslední návštěvy" by tam znamenalo „od
-začátku věků". Značka se posune hned při zobrazení, ale to, co je vidět, se během běhu aplikace
-nemění — odskok do `Změněných souborů` a zpátky o něj nepřipraví. **Odchod na jiný PR a návrat
-už je nová návštěva**, takže se banner podruhé neukazuje; projetí seznamu šipkami ho ale
-nespotřebuje, protože se posouvá jen u PR, u kterého se stihla načíst konverzace. Odklidit ho jde
-i rovnou křížkem vpravo.
+nálezy i rozdělané review. Banner se ukáže, **jen když opravdu něco přibylo**, a u PR otevřeného
+poprvé nikdy — „od tvé poslední návštěvy" by tam znamenalo „od začátku věků". Značka se posune
+hned při zobrazení, ale to, co je vidět, se během běhu aplikace nemění — odskok do `Změněných
+souborů` a zpátky o něj nepřipraví. **Odchod na jiný PR a návrat už je nová návštěva**, takže se
+banner podruhé neukazuje; projetí seznamu šipkami ho ale nespotřebuje, protože se posouvá jen
+u PR, u kterého se stihla načíst konverzace. Odklidit ho jde i rovnou křížkem vpravo.
+
+**Odrážky jsou sázené** (#284, návrh sekce 02): tučně to, co se stalo („3 nové commity",
+„Přepsaná historie větve", verdikt cizího review), ztlumeně kdo, a **sha jako kód** na tichém
+podkladu. Pod nimi stojí řada ovládání:
+
+- odznak **`nálezy zastaraly`** — jedině tehdy, když nálezy proti staršímu commitu doopravdy
+  jsou. Čte tentýž stav jako věta v hlavičce nad taby, takže si ty dvě nemají jak odporovat;
+  nad PR, na kterém review nikdy neběželo, se nerozsvítí;
+- **`Pustit review znovu`** — i tehdy, když ještě žádné nálezy nejsou: po přepsané historii je to
+  ta rozumná další věc;
+- **`Ukázat, co přibylo`** — diff **jen toho, co od minule přibylo**, otevřený v tabu `Změněné
+  soubory` s lištou, ze které se jedním tlačítkem vrátíš na celý diff. Nabídne se **jen když je
+  co s čím porovnat**: potřebuje hlavu z minulé návštěvy, dnešní hlavu a načtenou časovou osu.
+  **Po přepsané historii se nenabídne** — porovnání by v takovém případě vrátilo víc než celý
+  diff PR (změřeno na `cli/cli#14062`: 102 kB ve 22 souborech proti 15 kB ve třech), tedy přesně
+  to, co už člověk viděl.
+
+V úzkém `Přehledu` se řada zlomí pod sebe; rozhoduje o tom **spočítaná** šířka popisků, ne
+vyjednávání s rodičem (#220).
 
 **`Konverzace`** nese to, co se neváže k žádnému řádku: review ostatních s odznakem (`schválil`,
 `vyžádal změny`), komentáře pod PR a vlákna, jejichž řádek v aktuálním diffu není (typicky
