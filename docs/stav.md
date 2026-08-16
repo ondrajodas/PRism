@@ -1771,24 +1771,47 @@ proto **spočítaná** šířka popisků (`TextWidth`), jak to má #220. `Overfl
 **nestačí** — zkrácený popisek nikam nepřeteče —, ověřeno vloženou regresí, po které zůstaly
 `OverviewWidthTests` zelené. Testů je **2584**.
 
-### Tab `Commity` — nakreslený, čeká na implementaci
+### Tab `Commity` — seznam hotový (#316)
 
-Sedmá záložka detailu PR (seznam commitů a diff jednoho z nich) je **nakreslená v mockupu**,
-sekce 19, a rozhodnutí i zamítnuté alternativy jsou v
-[specifikaci](superpowers/specs/2026-07-31-prism-design.md), sekce *Tab Commity*. **V kódu není
-nic** — pravidlo *Návrh (mockup)* v `CLAUDE.md` chce nakreslit a nechat schválit dřív, než se
-issue založí, takže tohle je zastávka mezi tím.
+Sedmá záložka detailu PR je v okně: **seznam commitů PR, od nejnovějšího**, řádek s obrázkem
+autora, první řádkou zprávy, jménem, relativním časem a sha, pilulkami `sloučení` a `hlava`
+a pruhem s počtem nad tím. Sedí mezi `Změněnými soubory` a `Konverzací`, tedy nalevo od děliče —
+a **dělič se tím neposunul**, protože se počítá z `isReviewerOutput`, ne z indexu. Data jsou
+z nové čtecí metody `GitHubGateway.fetchCommits(id:)`, tahají se s detailem a jedním voláním;
+tvrdá podmínka č. 1 se tím nemění, gateway pořád nemá čím něco odeslat.
 
-Cena je změřená, ne odhadnutá: sedmá záložka posune šířku, od které se pruh vejde na jeden
-řádek, z 920 na **1035 bodů** okna. Ve výchozím okně (1100) je to tedy bez dopadu; nové je
-pásmo 920–1035 a zaplatí ho `+X −Y` (108 b, tedy skoro přesně cena té záložky). Vedle toho se
-ukázalo, že pruh se pod tou hranicí **zalamuje, nezkracuje** — oprava jedné věty
-v [`docs/testovani.md`](testovani.md).
+**Cena sedmé záložky vyšla líp, než odhad předpovídal, a je změřená na skutečném pruhu.**
+Specifikace měla z repliky 920 → 1035 bodů okna; naměřeno po jednom bodu šířky je to
+**937 → 939**, protože `+X −Y` se v úzkém pruhu nekreslí (`ViewThatFits` se dvěma podobami)
+a pilulka stojí skoro přesně tolik co ta záložka (110 proti 112 bodům). Absolutní čísla
+ze specifikace byla o 17 bodů níž — replika je odhad, ne měření; **rozdíl** ale odhadla dobře.
 
-Implementace je rozdělená na **dvě issues dělené datovou cestou**: seznam commitů
-(**#316**, `pulls/{n}/commits`, jedno volání, 1,20 s) a rozkliknutí na diff commitu
-(**#317**, `commits/{sha}` s `Accept: application/vnd.github.diff`, 0,99 s, unified diff pro
-dnešní `DiffParser`). Smrsknutí pruhu na ikony v úzkém okně je odložené do **#318**.
+**Pořadí se proti návrhu otočilo: nejnovější nahoře.** Mockup (sekce 19) i specifikace měly „od
+nejstaršího, jako na GitHubu, protože PR se čte jako postup“ — ten důvod ale neobstál na hotové
+obrazovce: v okně se PR nečte od začátku, ale od toho, co přibylo naposled, tedy tentýž pohyb jako
+u pruhu `Od tvé poslední návštěvy` a tentýž důvod, proč jsou fakta v `Přehledu` nahoře (#280).
+Otáčí se **na jednom místě** (`Policy.commitsNewestFirst` v `commitsTab`) a **otáčí, neřadí** —
+pořadí z API je topologické, takže řazení podle data by po rebase postup rozházelo. Změnil se s tím
+i pruh nad seznamem (`7 commitů · od nejnovějšího`), protože je to jediné místo, které pořadí
+pojmenovává. Mockup se **nepřekresluje**, to řeší #299.
+
+**Tři rozhodnutí, která zadání upřesnila.** Prázdná odpověď se hlásí jako **porucha**, ne jako
+prázdný stav (pull request bez commitů neexistuje, takže hláška o prázdnu by tvrdila nemožný
+stav — a `CommitsTabState` proto **nemá** `empty`, na rozdíl od `ChecksTabState`). Pilulku `hlava`
+dostává commit, jehož sha se rovná `headSha` z detailu, **ne první řádek** — nahoře sice obvykle
+stojí, ale po pushnutém commitu je seznam o krok pozadu a nad stropem API v něm hlava chybí úplně;
+nálezy jsou klíčované `headSha`, takže se tehdy neoznačí nic. A **šipka u řádku se nenakreslila**,
+protože rozkliknutí je #317: šipka, za kterou se nic nestane, slibuje interakci, která tam není.
+
+Testů je po sloučení s `main` **2638**; tohle issue z nich přidalo **44** — pět nových suit (stav
+tabu, model commitu, dekódování odpovědi, načítání ve store a šířka pruhu) plus render sonda a dva
+případy dopsané do stávajících suit. Pět z těch čtyřiačtyřiceti hlídá pořadí: otočení čerstvého
+i zastaralého seznamu, že se otáčí a neřadí, že v pruhu nezbylo staré slovo, a že mapa ve store drží
+pořadí z API.
+
+Zbývá rozkliknutí commitu na jeho diff (**#317**, `commits/{sha}` s
+`Accept: application/vnd.github.diff`, 0,99 s, unified diff pro dnešní `DiffParser`) a smrsknutí
+pruhu na ikony v úzkém okně (**#318**) — v okně 700 se pruh pořád zalamuje, stejně jako před #316.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

@@ -227,6 +227,10 @@ struct PullRequestDetailView: View {
         case .overview: count(store.changesSinceLastVisit(for: pullRequest.id).count)
         // Soubory v diffu, ne řádky: `+X −Y` stojí o kus dál v téže liště.
         case .filesChanged: shownDiff.flatMap { count($0.files.count) }
+        // Prostý počet commitů, ze **stavu tabu** (#316) — nad nenačteným ani spadlým seznamem
+        // nic, ať odznak nemluví o něčem jiném než plocha pod ním. Tichá kapsle: kolik je commitů,
+        // je údaj o množství, ne důvod někam jít.
+        case .commits: Policy.commitsBadge(of: store.commitsTabState(for: pullRequest.id))
         // Jen to, co je **k přečtení** — události časové osy se nepočítají (#171), jinak by
         // na PR s dvaceti commity odznak ukazoval třicet a přestal by o diskuzi něco říkat.
         case .conversation: count(store.overview(for: pullRequest.id).count { $0.isReadable })
@@ -352,6 +356,7 @@ struct PullRequestDetailView: View {
                     switch tab {
                     case .filesChanged: diff
                     case .overview: overview
+                    case .commits: commits
                     case .conversation: conversation
                     case .checks: checks
                     case .findings: findings
@@ -907,30 +912,13 @@ struct PullRequestDetailView: View {
     }
 
     /// Poslední pokus o načtení selhal, ale stará sada zůstala (#215) — takže je vidět **poslední
-    /// známý stav**, ne dnešní.
-    ///
-    /// Sedí **nad `ScrollView`em** seznamu, ne v něm: věta o tom, že obsah pod ní může být
-    /// zastaralý, nesmí odscrollovat pryč od obsahu, o kterém mluví.
-    ///
-    /// Okrová, ne červená: kontroly jsou cizí fakt, který se nepovedlo **zjistit** — to je „nevím“,
-    /// ne „je to rozbité“.
+    /// známý stav**, ne dnešní. Sazbu drží `StaleNoticeView`, protože totéž potřebují i `Commity`
+    /// (#316) a dvě kopie téže věty se rozejdou při první úpravě.
     private func staleChecksNotice(_ reason: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Label(
-                "Kontroly se nepodařilo načíst znovu, tohle je poslední známý stav. \(reason)",
-                systemImage: "exclamationmark.triangle"
-            )
-            .font(.caption)
-            .foregroundStyle(Palette.stale)
-            .fixedSize(horizontal: false, vertical: true)
-            // Tlačítko **hned za větou**, ne u pravé hrany: u širokého okna by mezi nimi zbylo
-            // půl obrazovky a přestalo by být vidět, k čemu ta akce je.
-            Button("Zkusit znovu", action: reloadChecks)
-                .font(.caption)
-            Spacer(minLength: 8)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
+        StaleNoticeView(
+            text: "Kontroly se nepodařilo načíst znovu, tohle je poslední známý stav. \(reason)",
+            retry: reloadChecks
+        )
     }
 
     /// Zopakuje načtení kontrol (#306).
@@ -975,6 +963,57 @@ struct PullRequestDetailView: View {
                 )
             }
         )
+    }
+
+    /// Tab `Commity` (#316) — seznam commitů PR, **od nejnovějšího** (`Policy.commitsNewestFirst`).
+    ///
+    /// **Tři stavy, a prázdný mezi nimi není**: pull request bez commitů neexistuje, takže by
+    /// klidná hláška o prázdnu tvrdila něco, co platit nemůže — prázdná odpověď je proto porucha
+    /// (`Policy.commitsTab`). Panel s nálezy se v tomhle tabu nekreslí a je to zapsané
+    /// u `PullRequestTab.showsReviewPanel`.
+    @ViewBuilder private var commits: some View {
+        switch store.commitsTabState(for: pullRequest.id) {
+        case .loading:
+            // Tatáž hláška jako u diffu a kontrol, a schválně bez počtu: dokud odpověď nedorazila,
+            // o commitech nevíme nic.
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Načítám commity…")
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        case .failed(let reason):
+            EmptyStateView(
+                nature: .failure,
+                symbol: "exclamationmark.triangle",
+                title: "Commity se nepodařilo načíst",
+                message: "Seznam je jediné místo, ze kterého je vidět, v jakém kroku se co stalo.",
+                // Text od `gh` zůstává, jak přišel: je to jediné, z čeho se pozná, co dělat dál.
+                detail: reason,
+                primary: .init(title: "Zkusit znovu", run: reloadCommits)
+            )
+        case .list(let list, let failure):
+            VStack(spacing: 0) {
+                if let failure { staleCommitsNotice(failure) }
+                CommitListView(commits: list, head: store.head(of: pullRequest.id))
+            }
+        }
+    }
+
+    /// Poslední pokus o načtení commitů selhal, ale stará sada zůstala (#316) — takže je vidět
+    /// **poslední známý stav**, ne dnešní. Tentýž `StaleNoticeView` jako u kontrol.
+    private func staleCommitsNotice(_ reason: String) -> some View {
+        StaleNoticeView(
+            text: "Commity se nepodařilo načíst znovu, tohle je poslední známý stav. \(reason)",
+            retry: reloadCommits
+        )
+    }
+
+    /// Zopakuje načtení commitů (#316). Vlastní cesta k `loadCommits`, ne přes `loadDetail`: ten má
+    /// cache podle `updatedAt`, takže by po chybě sítě už znovu nic nedotáhl a tab by v poruše
+    /// zůstal až do dalšího commitu.
+    private func reloadCommits() {
+        Task { await store.loadCommits(for: pullRequest.id) }
     }
 
     /// Tab `Nálezy` (#242) — tabulka přes celou šířku.

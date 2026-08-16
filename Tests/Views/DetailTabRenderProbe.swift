@@ -5,7 +5,7 @@ import Testing
 
 @testable import PRism
 
-/// Sonda, ne test (#294): vyrendruje **detail PR ve všech šesti tabech**, aby se dalo vidět, kde
+/// Sonda, ne test (#294): vyrendruje **detail PR ve všech sedmi tabech**, aby se dalo vidět, kde
 /// postranní lišta panelu je a kde není.
 ///
 /// Existuje vedle `PanelFreeTabWidthTests` proto, že měření odpovídá na „přeteklo, nebo ne“, kdežto
@@ -15,7 +15,7 @@ import Testing
 ///
 /// Dvě věci, kvůli kterým je to `NSHostingView` a ne `ImageRenderer`:
 ///
-/// - `ImageRenderer` **nerasterizuje obsah `ScrollView`u**, a všech šest tabů v něm sedí;
+/// - `ImageRenderer` **nerasterizuje obsah `ScrollView`u**, a všech sedm tabů v něm sedí;
 /// - `Link` v něm vyjde jako žlutý placeholder (poučení z #291), a odkazy jsou i v `Kontrolách`.
 ///
 /// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes `TEST_RUNNER_PRISM_RENDER_DIR`.
@@ -37,7 +37,7 @@ struct DetailTabRenderProbe {
 
     private let pr = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 14013)
 
-    @Test("Vyrendrovat všech šest tabů detailu")
+    @Test("Vyrendrovat všech sedm tabů detailu")
     func rendersEveryTab() async throws {
         let directory = URL(filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory())
         let (store, cache) = try await prepared()
@@ -113,7 +113,7 @@ struct DetailTabRenderProbe {
     }
 
     /// Store s načteným detailem, diffem, checky, uloženými nálezy **a rozdělaným review** — tedy
-    /// se všemi šesti taby, ve kterých je co vidět.
+    /// se všemi sedmi taby, ve kterých je co vidět.
     ///
     /// Draft je v tom schválně: složený proužek panelu nese kromě počtu nálezů i **značku
     /// rozdělaného review**, a v tabech, kde proužek není, se ta informace musí dát přečíst odjinud.
@@ -125,6 +125,7 @@ struct DetailTabRenderProbe {
             diffs: [.success(Self.diffText)]
         )
         gateway.checks = Self.checks
+        gateway.commits = Self.commits
         let directory = try TemporaryDirectory()
         let store = AppStore(
             gateway: gateway,
@@ -147,6 +148,7 @@ struct DetailTabRenderProbe {
         switch tab {
         case .overview: "prehled"
         case .filesChanged: "soubory"
+        case .commits: "commity"
         case .conversation: "konverzace"
         case .checks: "kontroly"
         case .findings: "nalezy"
@@ -192,6 +194,39 @@ struct DetailTabRenderProbe {
         +	resp, err := client.REST(host, "GET", path, nil, &response)
          	return err
         """
+
+    /// Commity do tabu `Commity` (#316): jeden obyčejný, jedno sloučení a jeden bez účtu na
+    /// GitHubu — tedy všechny tři podoby řádku, které se od sebe mají poznat. Poslední je hlava
+    /// (`headSha` v `detail`), takže nese pilulku `hlava`.
+    private static let commits: [PullRequestCommit] = [
+        PullRequestCommit(
+            sha: "c82266c2dcc3285033605501837434af1faeddfe",
+            message: "Warn instead of failing when issue fields can't be set",
+            authorName: "imkp1",
+            authorLogin: "imkp1",
+            avatarURL: nil,
+            committedAt: Date(timeIntervalSince1970: 1_753_900_000),
+            isMerge: false
+        ),
+        PullRequestCommit(
+            sha: "96a469b6bd159d4cff137d5eab4d13ceee4c9807",
+            message: "Merge branch 'trunk' into fix/13804-gh-issue-create-errors-after-successful",
+            authorName: "Kumar Prateek",
+            authorLogin: "imkp1",
+            avatarURL: nil,
+            committedAt: Date(timeIntervalSince1970: 1_753_950_000),
+            isMerge: true
+        ),
+        PullRequestCommit(
+            sha: "aaaa1111",
+            message: "Resolve deferred issue fields before creating the issue",
+            authorName: "Jiří Novák",
+            authorLogin: nil,
+            avatarURL: nil,
+            committedAt: Date(timeIntervalSince1970: 1_753_990_000),
+            isMerge: false
+        ),
+    ]
 
     private static let checks: [PullRequestCheck] = [
         PullRequestCheck(

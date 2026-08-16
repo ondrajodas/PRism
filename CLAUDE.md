@@ -478,7 +478,7 @@ Zvlášť stojí za přečtení, než sáhneš na:
   chybové stavy schválně;
 - **`AppStore` je rozdělený na `extension` po zodpovědnostech** (#154), takže se hledá podle
   souboru, ne v jednom dvoutisícovém: `AppStore.swift` drží **stav, init a polling**,
-  `+Diff`, `+IncrementalDiff`, `+DiffExpansion`, `+Detail`, `+Conversation`, `+Draft`,
+  `+Diff`, `+IncrementalDiff`, `+DiffExpansion`, `+Detail`, `+Commits`, `+Conversation`, `+Draft`,
   `+DraftTransfer`, `+Submission`, `+Review`, `+Recheck`, `+Findings`, `+Notifications`
   a `+Automatic` metody. **Dělí se
   metody, ne data** — uložený stav zůstává na jednom místě. Cena je, že `private` členy, na

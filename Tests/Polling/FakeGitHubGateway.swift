@@ -114,6 +114,30 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return checks
     }
 
+    // MARK: - Commity (#316)
+
+    /// Co vrátí `fetchCommits`. Většina testů commity nepotřebuje, takže prázdno.
+    var commits: [PullRequestCommit] = []
+
+    /// Čím `fetchCommits` spadne. `nil` = vrátí `commits`.
+    ///
+    /// Vlastní přepínač, ne `Result`, ze stejného důvodu jako u checků: „prázdná odpověď“
+    /// a „nepodařilo se to načíst“ jsou dva stavy, které se nesmí slít — u commitů o to víc, že
+    /// prázdno je tam samo o sobě porucha.
+    var commitsFailure: (any Error)?
+
+    /// Na co se kdo ptal, v pořadí. Na počtu stojí test, že se seznam **nedotahuje znovu při
+    /// každém příchodu na PR**.
+    var commitRequests: [PRIdentifier] { lock.withLock { commitsAsked } }
+
+    private var commitsAsked: [PRIdentifier] = []
+
+    func fetchCommits(id: PRIdentifier) async throws -> [PullRequestCommit] {
+        lock.withLock { commitsAsked.append(id) }
+        if let commitsFailure { throw commitsFailure }
+        return commits
+    }
+
     // MARK: - Detail checku (#214)
 
     /// Co vrátí `fetchAnnotations`. Prázdno je běžný stav — workflow anotace emitovat nemusí.

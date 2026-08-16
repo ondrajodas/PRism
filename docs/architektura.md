@@ -51,9 +51,11 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
 | `DraftSnapshot` | Text řádků, ke kterým se komentář psal — konec rozsahu a jeho začátek. Prázdný = nevíme |
 | `DetailState` | Stav dotažení detailu PR: `loading` / `loaded(PullRequest, updatedAt:)` / `failed`. Je z něj `headSha` pro draft a popis pro `Přehled` |
-| `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `conversation` / `checks` / `findings` / `progress` (#242, `checks` přidalo #215). **Všech šest se kreslí vždycky** (#306) — pruh nemá čím měnit počet položek podle dat. `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) můžou přijít doprostřed levé skupiny, aniž by se posunul. `showsReviewPanel` říká, jestli je v tabu vidět panel s nálezy (#294) — a **s tím prvním se to nesmí slít**: `Kontroly` mají `isReviewerOutput == false` a panel přesto nemají, takže jedna vlastnost pro dvě otázky by posunula dělič. Jako `ReviewVerdict` **není `Codable`** |
+| `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `commits` / `conversation` / `checks` / `findings` / `progress` (#242, `checks` přidalo #215, `commits` #316). **Všech sedm se kreslí vždycky** (#306) — pruh nemá čím měnit počet položek podle dat. `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) i `Commity` (#316) můžou přijít doprostřed levé skupiny, aniž by se posunul. `showsReviewPanel` říká, jestli je v tabu vidět panel s nálezy (#294) — a **s tím prvním se to nesmí slít**: `Kontroly` i `Commity` mají `isReviewerOutput == false` a panel přesto nemají, takže jedna vlastnost pro dvě otázky by posunula dělič. Jako `ReviewVerdict` **není `Codable`** |
 | `PullRequestTabBadge` | Odznak u záložky (#242): `count` / `blocking` (červeně) / `live` (puntík). Výčtem, ne strukturou s příznaky — „puntík s počtem“ ani „blokující bez počtu“ význam nemá, takže se nemá dát napsat |
 | `ChecksTabState` | Co je v tabu `Kontroly` k vidění (#306): `loading` / `empty` / `list([PullRequestCheck], failure:)` / `failed`. Tab se kreslí i u PR bez CI, takže musí mít odpověď na **každý** stav dat — `empty` znamená „tenhle PR CI nemá“, kdežto `loading` o CI netvrdí nic. Skládá to `Policy.checksTab(checks:failure:)` ze **dvou** map ve store (`checks`, `checkFailures`), jinak by se prázdno slilo s poruchou. Není `Codable` — je to odvozený stav, ne data |
+| `PullRequestCommit` | Jeden commit PR (#316): plné `sha`, celá `message`, `authorName` (z gitu, **vždycky je**), `authorLogin` a `avatarURL` (z účtu, **umí být `nil`**), `committedAt` a `isMerge`. `subject` je první řádka zprávy, `shortSha` sedm znaků. Klíčuje se **celým sha**, ne zkráceným — dvě sha se stejnými sedmi znaky by se v `ForEach`i slila potichu. Počet souborů ani `+X −Y` v něm **nejsou**: seznam z GitHubu je nenese a dotahovat je po commitu je N+1 |
+| `CommitsTabState` | Co je v tabu `Commity` k vidění (#316): `loading` / `list([PullRequestCommit], failure:)` / `failed`. **Tři stavy, ne čtyři** — `empty` tu chybí schválně: pull request bez commitů neexistuje, takže prázdná odpověď je **porucha**, ne stav PR. Je to obrácená volba než u `ChecksTabState`, kde prázdno odpověď **je**. Skládá to `Policy.commitsTab(commits:failure:)` ze dvou map ve store. Není `Codable` |
 | `ReviewPanelTab` | Co je vidět v panelu vpravo: `findings` / `draft` (#242). Jako `PullRequestTab` **není `Codable`** |
 | `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání — `Hit` nese **dva** rozsahy
 zvýraznění, jeden nad titulkem a jeden nad podtitulkem), `Jump` (žádost o odscrollování) a `Effect` (co zbývá na okno). **Není `Codable`** — je to obsah jednoho otevření palety. Jmenný prostor proto, že `Palette` v repu už znamená barvy okna |
@@ -1674,6 +1676,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Findings.swift` | Zahození záznamu (#81) a odmítnutí nálezu (#113) | 70 |
 | `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
+| `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
 
 Čtyři věci, na kterých to rozdělení stojí:
 
@@ -1932,7 +1935,9 @@ na `.task` okna, takže zavření okna ji zruší.
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R) |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
-| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat |
+| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Od #316 má **dvě podoby** (`ViewThatFits`): se `+X −Y` a bez ní — viz níž |
+| `StaleNoticeView` | Okrová věta „tohle je poslední známý stav“ nad seznamem, který se nepovedlo načíst **znovu** — jedno místo pro `Kontroly` (#215) i `Commity` (#316). Sedí **nad `ScrollView`em**, aby neodscrollovala pryč od obsahu, o kterém mluví |
+| `CommitListView` | Seznam commitů v tabu `Commity` (#316): pruh s počtem a hlavou, řádek na commit (obrázek autora, první řádka zprávy, jméno, relativní čas, sha) a pilulky `sloučení` a `hlava`. `content` je `internal` kvůli měření přesahu — `NSScrollView` by přesah ukrojil |
 | `OverviewView` | Tab `Přehled`, odshora **co se změnilo od minule → fakta → popis PR** (#280; kontroly mají od #215 vlastní tab). Obsah je v `content` **mimo `ScrollView`** a `internal` schválně — přes `body` se šířka změřit nedá, viz #291 |
 | `SinceLastVisitView` | Pruh „co se změnilo od minule“ nahoře v `Přehledu` (#173, sazba #226 a #284) — odrážky po částech a pod nimi odznak `nálezy zastaraly` s tlačítky `Pustit review znovu` a `Ukázat, co přibylo` |
 | `SinceLastVisitLine`, `SinceLastVisitLines` | Odrážka po typovaných částech a jejich skládání (#284). Mimo view a testovatelné, jako `TimelineEventRow` |
@@ -2826,13 +2831,16 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   kvůli kterému se volba schválně **nemazala**: z tabu `Kontroly` se vypadávalo při **každém**
   příchodu na PR, dokud checky nedorazily (tahají se s detailem, takže chvíli nejsou). Zůstává
   z toho pravidlo: volba je odpověď na „kam se koukám“ a nesmí se měnit tím, co dorazilo ze sítě.
-- **Panel je ve třech tabech ze šesti** — `Přehled`, `Změněné soubory`, `Konverzace` (#294,
+- **Panel je ve třech tabech ze sedmi** — `Přehled`, `Změněné soubory`, `Konverzace` (#294, #316,
   `PullRequestTab.showsReviewPanel`). Nálezy bez místa v kódu i moje rozdělané review se vážou
   k celému PR, takže se za přepnutí tabu schovat nesmí; panel ale odpovídá na „co k tomu, co právě
   čtu, nahlásily reviewery“, a to má smysl jen tam, kde se vedle něj čte **něco jiného**.
   V `Kontrolách`, `Nálezech` a `Průběhu` je vedle něj buď duplikát týchž dat, nebo obsah, který
   šířku potřebuje (konec logu spadlého checku, #214) — schovává se proto **celý, i složený
-  proužek**. Tři věci, které z toho platí:
+  proužek**. **`Commity` (#316) mají k tomu důvod navíc, a tvrdší než šířka**: nálezy jsou
+  klíčované `headSha` (tvrdá podmínka č. 5), takže by panel u staršího commitu ukazoval nálezy
+  k **jinému kódu**. Není to duplikát, je to tvrzení, které by neplatilo. Tři věci, které z toho
+  platí:
   - **Šířka se nepřepočítává.** `GeometryReader` v detailu měří to, co po panelu zbylo, takže se
     tab roztáhne sám; vlastní odečítání šířky panelu je zrovna ta chyba, ze které vzniklo #291.
   - **Uložený stav panelu se přepnutím tabu nemění** — složení ani vybraný segment. Skrytí je věc
@@ -2903,7 +2911,7 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     se vypadávalo při každém příchodu na PR, dokud checky nedorazily. Podrobnosti v sekci
     `AppStore` výš.
   - **Dělič v pruhu se počítá z vlastnosti tabu, ne z indexu** (`isReviewerOutput`). `Kontroly`
-    sedí nalevo doprostřed, takže zadrátovaná pozice by dělič posunula o jedno místo vedle. Do #306
+    sedí nalevo doprostřed — a od #316 i `Commity`, které tu předpověď vyzkoušely doslova. Do #306
     se index navíc měnil **podle dat** (záložka někdy nebyla); to už neplatí, ale první důvod stačí
     — vlastnost přežije i sedmou záložku vloženou doprostřed.
   - **Odznak má tři podoby, ne jednu**: spadlé → červená kapsle s počtem (blokuje merge, takže
@@ -3127,6 +3135,110 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     jednolitě: změřeno **38 ms proti 2,2 ms** na dvoumegovém logu (17×), na 8,78 MB 155 ms proti
     7,9 ms. `.log` žádný jazyk nemá, takže tudy chodí každý log — a sheetu s kódem to pomůže
     u souborů, které `Language` nezná.
+- **Tab `Commity`** (#316) — seznam commitů PR, `AppStore+Commits` a `CommitListView`.
+
+  **Prohlížeč, ne review.** `Změněné soubory` odpovídají na „co je na PR jinak proti základu“; slitý
+  diff ukazuje výsledek, ne cestu. Otázka „proč tenhle řádek zmizel“ má odpověď v jednotlivých
+  commitech, a ta se do #316 hledala v prohlížeči — tentýž pohyb jako u `Konverzace` (#183)
+  a `Kontrol` (#215). V pruhu sedí **vedle `Změněných souborů`**: obojí odpovídá na „co se v kódu
+  změnilo“, jen jednou naráz a jednou po krocích, takže se to čte jako pár.
+
+  - **Tab má tři stavy, ne čtyři** (`Policy.commitsTab(commits:failure:)`). Prázdný mezi nimi
+    **není schválně**: pull request bez commitů neexistuje, takže klidná hláška o prázdnu by
+    tvrdila nemožný stav — prázdná odpověď je proto hlášená jako **porucha** s vlastní větou. Je to
+    obrácená volba než u `Kontrol`, kde prázdno **je** odpověď (PR bez CI), a rozdíl je právě
+    v tom, jestli ten prázdný stav umí v realitě nastat.
+
+    | Stav | Kdy | Co je v tabu |
+    |---|---|---|
+    | `loading` | `commits` nenačtené, bez poruchy | `Načítám commity…` — o commitech netvrdí nic |
+    | `list(_, failure: nil)` | neprázdné `commits` | seznam od nejnovějšího |
+    | `list(_, failure: reason)` | neprázdné `commits` + porucha | seznam a **nad ním** okrová věta, že je to poslední známý stav |
+    | `failed(reason)` | porucha, nebo prázdná odpověď | červený prázdný stav s textem od `gh` a `Zkusit znovu` |
+
+  - **Odznak je prostý počet, a jen nad seznamem.** Tichá kapsle: kolik je commitů, je množství, ne
+    upozornění. Nad nenačteným ani spadlým stavem nic — tatáž lekce jako u `Kontrol` (#306).
+  - **Tahá se s detailem, ne pollingem ani na kliknutí.** Pollingem přes všechna PR by to byla
+    N+1 past; na kliknutí by se odznak s počtem objevil až v tabu, který má člověk zrovna otevřený,
+    tedy zrovna tehdy, kdy ho nepotřebuje. Je to jedno volání (1,20 s pro sedm commitů) a jde
+    **za** checky, ne souběžně: paralelně by na jeden výběr řádku běžely dva `gh` podprocesy místo
+    jednoho, za úsporu jedné vteřiny.
+  - **I když detail spadne** — tab je v pruhu vždycky, takže by nad nenačtenou hlavičkou svítilo
+    `Načítám commity…` navždycky. A **zrušené načtení se dotáhne po návratu na PR**, protože detail
+    je pak z cache a sám by `loadCommits` už nespustil. Obojí je doslova tatáž past jako u checků
+    (#306), jen o jedno volání vedle.
+  - **Seznam je od nejnovějšího, a otáčí se na jednom místě** (`Policy.commitsNewestFirst`, volané
+    z `commitsTab`). Gateway vydá, co přišlo z API (od nejstaršího), store to tak i uloží — pořadí
+    kresby je rozhodnutí, ne vlastnost dat, takže se dá změnit jednou funkcí a nedá se rozejít mezi
+    odznakem a plochou tabu. **Otáčí se, neřadí**: pořadí z API je topologické, takže po rebase nebo
+    cherry-picku je datum staršího commitu novější než datum toho za ním a `sorted(by: committedAt)`
+    by postup rozházel.
+
+    **Nepamatuje se to, a je to změřené.** `commitsTab` běží při každém překreslení (odznak i plocha),
+    takže otočení je práce na redraw — **18,7 µs** pro 250 commitů (strop API, Debug) proti **54 ms**,
+    co stojí sazba téhož seznamu. Cache by tady stála víc pozornosti, než kolik ušetří.
+
+    **Je to otočení proti návrhu** (sekce 19 mockupu i specifikace měly „od nejstaršího, jako na
+    GitHubu, protože PR se čte jako postup“). Neobstálo to na hotové obrazovce: v okně se PR nečte
+    od začátku, ale od toho, co přibylo naposled — tentýž pohyb, jaký dělá pruh
+    „Od tvé poslední návštěvy“, a tentýž důvod, proč jsou fakta v `Přehledu` nahoře (#280). Postup
+    se z otočeného seznamu přečte pořád, jen odspodu. **Mockup se nepřekresluje** (řeší #299),
+    odchylka je zapsaná ve specifikaci.
+  - **Pilulka `hlava` se bere z `headSha`, ne z pozice v seznamu** (`Policy.headCommit(in:head:)`),
+    a po otočení je to o to snazší přehlédnout: hlava **bývá** nahoře, ale je to důsledek toho, jak
+    seznam přišel, ne pravidlo. Rozejdou se ve dvou běžných situacích — po pushnutém commitu je
+    seznam o krok pozadu, a nad stropem API (250) chybí zrovna ta novější část. V obou → **neoznačí
+    se nic**; mlčet je správnější než ukázat na commit, o kterém to neplatí. Bere se z pořadí jedině
+    tehdy, když hlava ještě není známá (detail nedorazil): tehdy je jí první řádek, protože GitHub
+    vrací od nejstaršího a otočením je nejnovější první.
+  - **Pruh nad seznamem o pořadí mluví, takže se s ním mění** (`Policy.commitsHeadline`). Věta
+    `7 commitů · od nejnovějšího` je jediné místo, které pořadí pojmenovává — „od nejstaršího“ nad
+    otočeným seznamem by bylo tvrzení, které se dá vyvrátit pohledem pod něj. Na stropu API zůstává
+    `prvních 250 commitů`: GitHub vydá **prvních** 250 commitů PR a pořadí kresby s tím nehýbe, takže
+    nahoře je pak nejnovější **z nich**, ne hlava PR.
+  - **Pilulka `sloučení` musí být dopředu.** Diff sloučení se počítá proti prvnímu rodiči a umí
+    vyjít prázdný — bez upozornění by se prázdný diff četl jako porucha. Je to tentýž rozdíl jako
+    mezi `čisté` a `spadlo` u review.
+  - **Monogram v kolečku se bere ze jména, ne z přezdívky.** Dokud obrázek nedorazí — a u commitu
+    bez účtu (`author: null`) nedorazí nikdy — je monogram tím, co v kolečku stojí, takže `IM`
+    vedle jména `Kumar Prateek` vypadá jako řádek o dvou různých lidech. Není to kuriozita:
+    sloučení commituje GitHub pod celým jménem, kdežto `author.login` je přezdívka téhož člověka.
+  - **Panel s nálezy se nekreslí** (`PullRequestTab.showsReviewPanel`) — čtvrtý takový tab po #294,
+    s vlastním důvodem: nálezy platí proti `headSha`, takže by u staršího commitu ukazoval nálezy
+    k jinému kódu.
+  - **Řádek nemá šipku, protože se nedá rozkliknout.** Návrh (sekce 19) ji kreslí, ale diff jednoho
+    commitu je vlastní issue; šipka, za kterou se nic nestane, slibuje interakci, která tam není —
+    tatáž úvaha jako u checku bez čísla jobu (#214).
+  - **Sedmá záložka stojí jedinou věc: šířku pruhu záložek — a ta se zaplatila.** Pruh nikde nemá
+    `lineLimit`, takže se popisek pod hranicí **zalomí uvnitř záložky** a pruh povyroste. Naměřeno
+    na skutečném `PullRequestTabBar`u (`NSHostingView.fittingSize`, po jednom bodu šířky):
+
+    | Pruh | Šířka tabu, od které je jeden řádek | Okno (+ rail 53) |
+    |---|---|---|
+    | 6 záložek se všemi odznaky a `+X −Y` — dnešek před #316 | 884 b | 937 b |
+    | **7 záložek se všemi odznaky, `+X −Y` ustupuje** | **886 b** | **939 b** |
+    | 7 záložek bez odznaků | 729 b | 782 b |
+    | 7 záložek se všemi odznaky a `+X −Y` (dopočet) | ~996 b | ~1049 b |
+
+    Poslední řádek je dopočet z **naměřené ceny pilulky**: `+X −Y` stojí 110 bodů (na `origin/main`
+    se pruh se všemi odznaky vejde od 774 b bez ní a od 884 b s ní), a sedmá záložka s odznakem
+    112 bodů (886 − 774). Ta shoda je celý ten obchod: `PullRequestTabBar` má proto **dvě podoby**
+    v `ViewThatFits` — se `+X −Y` a bez ní — takže se v úzkém pruhu nekreslí rozsah změny místo
+    toho, aby se lámaly popisky. Hranice se tím posunula o **dva body okna**, ne o sto dvanáct.
+
+    **Ustupuje zrovna `+X −Y`, a je to ten správný kus.** Mluví o rozsahu **celého PR**, což je
+    odpověď na otázku `Změněných souborů`; v `Commitech`, `Kontrolách` ani `Průběhu` není o čem.
+    Záložka je proti tomu cesta k obsahu, který jinudy vidět není.
+
+    **Pod 939 se pruh zalomí** (v nejužším okně 700 na 90 bodů místo 30) — a je to tak i před
+    #316, jen o řádek míň. Spravuje to až druhý stupeň (ikony a popisek jen u aktivní záložky),
+    který sedmé záložce nepředchází, protože je to obrazovka rozbitá i bez ní.
+
+    **Specifikace měla o 17 bodů nižší absolutní čísla**, protože je měřila na **replice** pruhu
+    (867/920 pro dnešek, 872/925 se sedmou záložkou). Rozdíl, o který jde, replika odhadla dobře —
+    předpovídala +5 bodů okna, ve skutečnosti jsou to +2 —, ale absolutní hranice se z repliky brát
+    nedají; drží je `TabStripWidthTests`, viz [`docs/testovani.md`](testovani.md).
+
 - **`Přehled` má dlaždice s fakty** (#198): commity (a kolik z nich je nových od minule),
   soubory (a kolik má nález), hlava PR a sha, proti které platí nálezy. **Nic se pro ně
   nedotahuje** — jsou to údaje, které v okně už jsou, jen roztroušené. Pořadí v tabu je
@@ -4062,8 +4174,13 @@ Věci, které se u toho nemají rozbít:
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
-| `Policy.checksTab(checks:failure:)` | Co je v tabu `Kontroly` k vidění (#306) — čtyři stavy z šesti kombinací vstupů (`ChecksTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí obě prázdna. **Nahradila `Policy.tabs(hasChecks:)`** (#215), která vracela zúžený pruh záložek: od #306 se kreslí všech šest vždycky, takže seznam záložek není funkcí dat a rozhodovat se má **obsah** tabu |
+| `Policy.checksTab(checks:failure:)` | Co je v tabu `Kontroly` k vidění (#306) — čtyři stavy z šesti kombinací vstupů (`ChecksTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí obě prázdna. **Nahradila `Policy.tabs(hasChecks:)`** (#215), která vracela zúžený pruh záložek: od #306 se kreslí všech sedm vždycky, takže seznam záložek není funkcí dat a rozhodovat se má **obsah** tabu |
 | `Policy.checksBadge(of:)` | Odznak u záložky `Kontroly` (#215) — spadlé červeně s počtem, běžící puntíkem, zelené a přeskočené bez odznaku. Bere **stav tabu**, ne `ChecksSummary` (#306): jeden `guard` na začátku drží prázdnou kapsli i nulu mimo pruh nad nenačteným, prázdným i spadlým stavem |
+| `Policy.commitsTab(commits:failure:)` | Co je v tabu `Commity` k vidění (#316) — **tři** stavy z šesti kombinací vstupů (`CommitsTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí nenačteno i prázdno, a **prázdné pole bez poruchy je samo porucha**: pull request bez commitů neexistuje, takže klidná hláška o prázdnu by tvrdila nemožný stav. Jediný řádek, ve kterém se liší od `checksTab`. Je to zároveň jediná cesta seznamu do okna, takže se v ní **otáčí pořadí** (`commitsNewestFirst`) |
+| `Policy.commitsNewestFirst(_:)` | Pořadí, ve kterém se seznam commitů kreslí (#316) — **od nejnovějšího**, otočením proti návrhu, který měl „od nejstaršího, jako na GitHubu“. V okně se PR nečte od začátku, ale od toho, co přibylo naposled (tentýž pohyb jako pruh „Od tvé poslední návštěvy“ a fakta nahoře v `Přehledu`, #280). **Otáčí, neřadí**: pořadí z API je topologické, takže `sorted(by: committedAt)` by po rebase nebo cherry-picku postup rozházel |
+| `Policy.commitsBadge(of:)` | Odznak u záložky `Commity` (#316) — prostý počet, a jen nad seznamem. Tichá kapsle: kolik je commitů, je množství, ne upozornění; nad nenačteným ani spadlým stavem **nic**, protože nula by tvrdila, že se spočítalo |
+| `Policy.headCommit(in:head:)` | Který řádek nese pilulku `hlava` (#316). Rozhoduje **`headSha` z detailu, ne pozice v poli** — „nahoře“ a „hlava“ nejsou totéž, jen nad čerstvým seznamem vycházejí nastejno: po pushnutém commitu je seznam o krok pozadu a nad stropem API v něm hlava není vůbec. Nálezy jsou klíčované `headSha` (tvrdá podmínka č. 5), takže by to bylo tvrzení, ne dekorace; hlava mimo seznam → **nic se neoznačí**. Bez známé hlavy (detail ještě nedorazil) platí definice endpointu: GitHub vrací od nejstaršího a `commitsNewestFirst` to otáčí, takže **první** — jediný okamžik, kdy rozhoduje pozice |
+| `Policy.commitsHeadline(count:)`, `Policy.commitNoun(_:)` | Věta nad seznamem commitů (#316) ve **dvou kusech** (`CommitsHeadline`), protože počet je tmavý a polotučný a zbytek tlumený. Skloňování má tři tvary (`1 commit` / `2 commity` / `7 commitů`) — `1 commitů` je jeden ze stavů, které se podle zadání nesmí slít. **Pojmenovává pořadí** (`· od nejnovějšího`), takže se s ním musí měnit — jinak okno lže o tom, co ukazuje. Na **stropu API** (250) věta řekne, že seznam nemusí být celý |
 | `Policy.jobID(from:)` | Číslo jobu z odkazu na check (#214). Funguje i jako check-run ID pro anotace; `…/runs/<id>` bez `/job/` je **běh**, ne job, takže `nil` |
 | `Policy.strippingANSI(_:)`, `Policy.strippingTimestamps(_:)` | Čistka logu (#214) — bez nich je v okně `^[[36;1m` a 28 znaků timestampu na každém řádku |
 | `Policy.logTail(_:lines:)` | Konec logu a **kolik se ho nevešlo** (`LogTail`, #214). Tiše zkrácený log tvrdí, že job začal uprostřed |
@@ -4621,7 +4738,7 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)` |
+| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
@@ -4630,6 +4747,7 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 | `GhConversationResponse` | Tvar GraphQL odpovědi a mapování na `Conversation` |
 | `GhSearchItem`, `GhPullRequestDetail` | Tvar JSONu z `gh` a převod na doménové modely |
 | `GhRelease` | Tvar jedné položky `GET /repos/…/releases` a převod na `Release` |
+| `GhCommit` | Tvar jedné položky `GET /repos/…/pulls/{n}/commits` a převod na `PullRequestCommit` (#316). **Skoro všechno optional**: odpověď má přes šedesát polí a bereme šest, takže chybějící pole nesmí položit seznam kvůli něčemu, co se nekreslí |
 | `PullRequestState(ghState:isDraft:)` | Mapování stavu — `gh` ho popisuje dvěma poli |
 
 Čtyři věci, které se u toho nemají rozbít:
@@ -4669,6 +4787,19 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   `Ukázat, co přibylo` v takovém případě nenabízí (`Policy.incrementalDiff`). Změřeno na
   `cli/cli#14062`: 102 kB ve 22 souborech proti 15 kB ve třech, které má celý PR. Osiřelá stará
   hlava přitom **problém není** — `compare` ji po force pushi zná (změřeno na témže PR).
+- **Seznam commitů se stránkuje, i když se to skoro nikdy neprojeví** (#316).
+  `gh api repos/…/pulls/<n>/commits?per_page=100 --paginate`: bez `per_page` by přišlo **prvních
+  třicet** (výchozí stránka GitHubu) a odznak by nad stovkou commitů tvrdil třicet, tedy text
+  přes to, co data unesou. U běžného PR je to pořád **jedno** volání — změřeno 1,20 s pro sedm
+  commitů — a stránky `gh` slévá do jednoho pole, takže se dekóduje `[GhCommit]` (ověřeno na živém
+  API). Nad **250 commitů** GitHub nevydá nic, ať se stránkuje jak chce; že se na strop narazilo,
+  se pozná z počtu a **řekne se to v tabu** (`Policy.commitsHeadline`).
+
+  **Neřadí se tady, a nikde jinde ani podle data.** GitHub vrací commity topologicky od nejstaršího
+  a přerovnat je podle času by po rebase nebo cherry-picku ten postup rozházelo. Pořadí, ve kterém
+  se kreslí, je rozhodnutí, ne tvar odpovědi: gateway vydá, co přišlo, a `Policy.commitsNewestFirst`
+  to na jednom místě **otočí** (nejnovější nahoře) — topologické pořadí se tím zachová, jen se čte
+  z druhé strany. Zahazují se jen položky **bez sha**, ze kterých se řádek udělat nedá.
 - **Obsah souboru se čte přes ref pull requestu**, ne přes `headSha`:
   `gh api repos/…/contents/<cesta>?ref=refs/pull/<n>/head` s hlavičkou
   `Accept: application/vnd.github.raw`. Ověřeno na živém API — ten ref má každý PR včetně

@@ -618,12 +618,16 @@ protože jinak si o release notes nikdo neřekne.
 - **Na síť se sahá dvakrát za běh**, oboje na vyžádání: jednou při startu kvůli značce,
   jednou při otevření okna (a to už je z paměti). V pollingu ani na pozadí nikdy.
 
-### Tab Commity — návrh (zatím jen v mockupu)
+### Tab Commity
 
 Sedmá záložka detailu PR: **seznam commitů** a **diff jednoho z nich**. Nakreslená je
-v mockupu, sekce 19 (*Review — Commity*, viz [`docs/navrh.md`](../../navrh.md)); v kódu
-zatím není nic. Zapsané je to tady, protože rozhodnutí padla dřív, než na ně vzniknou
-issues — pravidlo *Návrh (mockup)* v `CLAUDE.md` chce nakreslit a nechat schválit napřed.
+v mockupu, sekce 19 (*Review — Commity*, viz [`docs/navrh.md`](../../navrh.md)). Zapsané je to
+tady, protože rozhodnutí padla dřív, než na ně vznikly issues — pravidlo *Návrh (mockup)*
+v `CLAUDE.md` chce nakreslit a nechat schválit napřed.
+
+**Seznam je od #316 hotový**; diff jednoho commitu zbývá (#317) a smrsknutí pruhu na ikony
+v úzkém okně taky (#318). Co implementace upřesnila nebo změnila, je v pododdílu *Co se při
+implementaci rozhodlo jinak (#316)* níž.
 
 **Proč vzniká.** `Změněné soubory` odpovídají na „co je na PR jinak proti základu“ — jeden
 slitý diff, ze kterého je vidět výsledek, ne cesta. Otázka „proč tenhle řádek zmizel“ nebo
@@ -714,6 +718,93 @@ Z toho plyne:
 - **Druhý stupeň** (ikony, popisek jen u aktivní, 655 b) srazí pruh **pod nejužší povolené
   okno**, takže by se nezalomil nikdy. Sedmé záložky se ale netýká — tu zaplatí první
   stupeň — a spravuje to, co je rozbité už dnes. Je to proto vlastní issue.
+
+#### Co se při implementaci rozhodlo jinak (#316)
+
+Rozhodnutí zapsaná dřív, než se psal kód, platí; tohle je to, co se u implementace ukázalo jinak.
+
+- **Naměřené šířky sedí o 17 bodů výš, než říkala replika — závěr platí, absolutní čísla ne.**
+  Tabulka výš vznikla na replice `PullRequestTabBar`u; měření na **něm samotném**
+  (`NSHostingView.fittingSize`, po jednom bodu šířky, `TabStripWidthTests`) dává:
+
+  | Pruh | Šířka tabu | Okno (+ rail 53) |
+  |---|---|---|
+  | 6 záložek se všemi odznaky a `+X −Y` — před #316 | 884 b | 937 b |
+  | **7 záložek se všemi odznaky, `+X −Y` ustupuje** | **886 b** | **939 b** |
+  | 7 záložek bez odznaků | 729 b | 782 b |
+  | 7 záložek se všemi odznaky a `+X −Y` (dopočet) | ~996 b | ~1049 b |
+
+  Pilulka `+X −Y` stojí **110 bodů** (774 → 884 na `origin/main`), sedmá záložka s odznakem
+  **112** (886 − 774) — replika předpovídala 108 a 115, tedy poměr správně. Cena té záložky je
+  proto **+2 body okna**, ne +5, jak vycházelo z repliky, a rozhodně ne +115. Hranice se
+  z repliky brát nedají; drží je test.
+
+- **Seznam je od nejnovějšího — otočeno proti tomuhle návrhu i proti mockupu.** Sekce 19 i text
+  výš měly „od nejstaršího, jako na GitHubu, protože PR se takhle čte jako postup, ne jako
+  hromada“. **Ten důvod neobstál na hotové obrazovce**: v tomhle okně se PR nečte od začátku, ale
+  od toho, co přibylo naposled — je to tentýž pohyb, jaký dělá pruh „Od tvé poslední návštěvy“,
+  a tentýž důvod, proč jsou fakta v `Přehledu` nahoře (#280). Postup se z otočeného seznamu přečte
+  pořád, jen odspodu; kdežto „co se stalo teď“ by se v původním pořadí u dlouhého PR muselo
+  doscrollovat. Rozhodnuto po proklikání hotové záložky, ne v návrhu — proto to stojí tady.
+
+  Co u toho platí:
+
+  - **Otáčí se, neřadí** (`Policy.commitsNewestFirst`). Pořadí z API je topologické, takže po
+    rebase nebo cherry-picku má commit uprostřed novější datum než ten za ním; `sorted(by:
+    committedAt)` by ten postup rozházel. Otočení pořadí zachovává, jen ho čte z druhé strany.
+  - **Otáčí se na jednom místě**, v `Policy.commitsTab` — což je jediná cesta seznamu do okna.
+    Gateway i store drží pořadí z API, takže je pořadí kresby rozhodnutí, ne uložená vlastnost dat.
+  - **Pruh nad seznamem to říká textem** (`7 commitů · od nejnovějšího`), takže se musel změnit
+    s ním. Je to jediné místo, které pořadí pojmenovává — stará věta nad otočeným seznamem by byla
+    tvrzení vyvratitelné pohledem o řádek níž.
+  - **Pilulka `hlava` se pořád váže na `headSha`**, ne na první řádek. Nahoře **bývá**, ale je to
+    důsledek toho, jak seznam přišel; po pushnutém commitu a nad stropem API se to rozejde a tehdy
+    se neoznačí nic. Viz bod níž.
+  - **Mockup se kvůli tomu nepřekresluje** — sekce 19 zůstává, jak je, a překreslení řeší #299.
+
+- **`CommitsTabState` nemá `empty` a prázdná odpověď je porucha.** Zadání jmenovalo tři stavy
+  („načítá se“, „jeden commit“, „nepodařilo se načíst“) a napsalo, že hláška o prázdnu by lhala —
+  neřeklo ale, co se stane, když prázdné pole přesto přijde. Rozhodnuto: **`failed` s vlastní
+  větou** („GitHub vrátil prázdný seznam commitů. Pull request bez commitů neexistuje.“). `loading`
+  by nad ním točil navždycky a čtvrtý klidný stav by tvrdil něco, co o pull requestu platit nemůže.
+  Je to obrácená volba než u `ChecksTabState`, kde prázdno **je** odpověď, a rozdíl je právě v tom,
+  jestli ten prázdný stav umí v realitě nastat.
+
+- **Pilulka `hlava` se bere z `headSha`, ne z pozice řádku.** Návrh říká „poslední commit nese
+  pilulku *hlava*“; to platí jedině nad čerstvým seznamem. Po pushnutém commitu je seznam o krok
+  pozadu, takže by pilulka ukázala na commit, proti kterému nálezy neplatí — a to je zrovna to,
+  čemu má klíčování `headSha` bránit (tvrdá podmínka č. 5). Druhá taková situace je **strop API**:
+  nad 250 commitů chybí v seznamu zrovna ta novější část, takže v něm hlava není vůbec.
+  `Policy.headCommit(in:head:)` proto hledá sha; když ho v seznamu nenajde, **neoznačí nic**.
+
+  Po otočení seznamu na „nejnovější nahoře“ je hlava obvykle **první** řádek — ale je to důsledek
+  toho, jak seznam přišel, ne pravidlo, a v obou situacích výš se to rozejde. Z pořadí se bere
+  jedině tehdy, když hlava ještě není známá (detail nedorazil), protože to plyne z definice
+  endpointu.
+
+- **Řádek nemá šipku `›`, kterou návrh kreslí.** Rozkliknutí je #317, takže by šipka slibovala
+  interakci, která tam není — tatáž úvaha jako u checku bez čísla jobu (#214): tlačítko, které nic
+  neudělá, je horší než tlačítko, které tam není. Přibude s #317, spolu s podbarvením vybraného
+  řádku (`.crow.on`).
+
+- **Seznam se stránkuje** (`per_page=100 --paginate`). V zadání stálo „jedno volání“ a u běžného
+  PR to jedno volání zůstává; bez `per_page` by ale GitHub vrátil **prvních třicet** a odznak by
+  nad stovkou commitů tvrdil třicet. Nad 250 commitů GitHub nevydá nic — že se na strop narazilo,
+  se pozná z počtu a **řekne se to nad seznamem**, jinak by text tvrdil víc, než data unesou.
+
+- **Monogram v kolečku se bere ze jména z gitu, ne z `author.login`.** Kolečko ukazuje monogram,
+  dokud obrázek nedorazí — a u `author: null` nedorazí nikdy. `IM` vedle jména `Kumar Prateek`
+  vypadá jako řádek o dvou různých lidech, a není to kuriozita: sloučení commituje GitHub pod celým
+  jménem, kdežto `author.login` je přezdívka téhož člověka (vidět na fixture `cli/cli#13899`).
+
+- **Commity se tahají s detailem, ne až při otevření tabu.** Odznak u záložky je počet commitů,
+  takže při lazy načtení by se objevil až v tabu, který má člověk zrovna otevřený — tedy zrovna
+  tehdy, kdy ho nepotřebuje. Jde to **za** checky, ne souběžně: paralelně by na jeden výběr řádku
+  běžely dva `gh` podprocesy místo jednoho, za úsporu jedné vteřiny.
+
+- **Čas v řádku je relativní** (`před 3 dny`), ne `dnes 9:12` jako v mockupu. Zbytek okna používá
+  `.relative(presentation: .named)` všude (osa, vlákna, seznam PR), a dva různé způsoby, jak
+  v jednom okně napsat „kdy“, jsou horší než odchylka od jedné buňky návrhu.
 
 #### Co se zamítlo
 
