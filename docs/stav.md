@@ -1587,6 +1587,47 @@ u `PullRequestTab` vypisovala pět případů a `checks` zmiňovala až v témž
 **Co se našlo a nespravilo** (patří jinam, ne do diffu o README): doc komentář u `SettingsView`
 pořád říká „Tři záložky“, tedy stav před #177.
 
+### Fakta nad popis PR (#280)
+
+Řada čtyř dlaždic s fakty se v tabu `Přehled` přesunula **nad kartu s popisem**. Pořadí je odshora
+banner „od minule“ → fakta → popis. Rozhodla **nesouměrnost délek**, ne důležitost obsahu: dlaždice
+jsou vždycky tři čísla a dvě sha, kdežto popis je libovolně dlouhý — u pracovních PR běžně padesát
+řádků — takže cenu za odrolování platil vždycky ten kratší obsah. A `Nálezy proti` odpovídá na
+otázku „platí to, co v okně vidím?“, jejíž odpověď nepatří za prózu, jejíž délku neurčujeme my.
+
+**Zadání se cestou zúžilo a to je na téhle změně to podstatné.** Původní znění issue chtělo čtyři
+věci: přehodit pořadí, **sloučit** `HLAVA` a `NÁLEZY PROTI` do jednoho boxíku, uvolněné místo dát
+**diffstatu** (`ZMĚNA +142 −38`) a **rozhodnout úzké okno**. Uživatel to o dvaadvacet minut později
+přepsal na pouhé přehození pořadí a zbylé tři zapsal jako zamítnuté; v mockupu je to sekce 18
+s odznaky `nedělá se` / `odloženo` a sekce 02 je překreslená do nového pořadí. Zamítnuté je zapsané
+schválně, aby se příště nenavrhovalo znovu jako nový nápad — argumenty pro sloučení tím nezmizely,
+jen se neuplatnily.
+
+Implementace je proto **dva prvky prohozené ve `VStacku`** a zbytek je důkaz, že se u toho nic
+jiného nestalo:
+
+- **`OverviewOrderTests`** měří pořadí z pixelů (mezera mezi dlaždicemi je nekreslená, karta
+  s popisem kreslí přes celou šířku — z toho se pozná, co je výš) přes osm šířek 128–1180.
+  Ověřeno vloženou regresí: po prohození zpátky spadne ve všech osmi.
+- **Render před a po** má při každé ze tří šířek, obou tématech i obou stavech banneru shodnou
+  velikost plátna a **shodnou multimnožinu otisků vodorovných řádků** — řádky se jen přesunuly,
+  žádný se nepřekreslil. To je doklad, že se popis nezúžil ani neosekal a že řada nedostala pružné
+  rozměry, které v ní nebyly (#220, tedy to, na čem se `Přehled` rozbil u #291).
+- **`OverviewWidthTests`** dál hlásí nulový přesah ve všech osmi šířkách.
+
+**Úzké okno se nerozhodovalo** — návrh ho nechává `odloženo` a přehození se ho netýká: řada je
+stejně široká jako předtím, jen stojí jinde. Že se v úzkém tabu drtí (`COMMIT/Y`, `abc12…`), platilo
+i před změnou.
+
+**Co se našlo a nespravilo** (patří jinam, ne do diffu o pořadí): zastaralá sha v dlaždici je
+`Color.yellow`, kdežto mockup na ní má token `--stale` a zbytek okna `Palette.stale` (okrová
+`0x9A6700`/`0xD4A72C`). Po přesunu nahoru to bije do očí víc, protože dlaždice teď sousedí s okrovým
+pruhem „od minule“ — dvě různé žluté nad sebou. Není to ale chyba jedné dlaždice: `.yellow` používá
+i stav `zastaralé` v řádku fronty (`ReviewStateAppearance`) a hlavička PR, takže jsou v okně **dvě
+rodiny žluté** a sjednotit se musí naráz. Vedle toho je řada faktů od popisu vzdálená 16 bodů,
+kdežto návrh má mezi prvky `Přehledu` 13 (`.ovpane { gap: 13px }`) — taky předchozí stav, ne
+následek přehození.
+
 ### Akcent z palety a token `mint` — stav se pozná od akce (#309)
 
 V okně byly na jednu věc **tři barvy místo dvou**. `Color.accentColor` sedělo na osmi místech
