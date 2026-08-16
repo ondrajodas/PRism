@@ -1922,14 +1922,28 @@ posunuté o všechno, co mezitím přibylo, a přitom naprosto věrohodné. `Fil
 `commit: String?`; tentýž klíč drží i **sbalené soubory**, takže se sbalení mezi diffem PR a diffem
 commitu nesdílí.
 
+**Hlavička jde sbalit — a sbaluje se tělo zprávy, ne celá.** Vyžádané po proklikání hotové
+obrazovky, aby diff dostal víc místa. Sbalují se **odstavce pod první řádkou**, protože to je
+jediná část, která roste bez omezení: sha, autor, čas a počty jsou pořád tři řádky, kdežto tělo
+squashnutého merge commitu má klidně třicet. Hlavička sbalená celá by se smrskla na pruh
+s tlačítkem zpět a přestala odpovídat na „na co se to koukám“, tedy na to, kvůli čemu nad diffem
+je. Ve sbaleném stavu proto zůstává cesta zpět, titulek, sha, odkaz na GitHub, autor, čas, počty
+i tichá věta o čtení; **získá se 54 bodů u dvouřádkového těla a víc u delšího**, změřeno renderem.
+
+Přepínač je **vlastní řádek s popiskem** (`⌄ Tělo zprávy` / `› Tělo zprávy · 6 řádků`), ne holá
+šipka: po sbalení musí zbýt něco, na co se dá kliknout, a počet řádků je jediné, co o schovaném
+textu řekne, kolik ho je. Volba je **globální ve store** — předvolba pohledu jako rozložený panel,
+tedy ne mapa per PR a hlavně ne `@State`, který mezi pull requesty přetéká. **Výchozí stav je
+rozbaleno** a u jednořádkové zprávy se nekreslí ani přepínač.
+
 **Dvě rozhodnutí o paměti a o návratu.** V okně se drží **nejvýš jeden diff commitu na PR** (klíčem
 je pull request, sha je v hodnotě) — mapa klíčovaná `(PR, sha)` by u PR se stovkou commitů rostla
 o každý proklik. A „kde v seznamu jsem byl“ se **neukládá zvlášť**: je to sha posledního staženého
 diffu, tedy táž hodnota, ze které se diff kreslí. Řádek se podle ní podbarví a seznam na něj
 odscrolluje.
 
-Testů je **2696**; tohle issue z nich přidalo **33**. Nejcennější je `CommitDiffReadOnlyTests` —
-tvrdí, že se v tabu **nedá nic napsat**, a to ve třech vrstvách (co se `DiffView`u předá, co z toho
+Testů je **2710**; tohle issue z nich přidalo **41**, z toho **8** sbalovací hlavička. Nejcennější
+je `CommitDiffReadOnlyTests` — tvrdí, že se v tabu **nedá nic napsat**, a to ve třech vrstvách (co se `DiffView`u předá, co z toho
 vyjde v řádcích, a že žádný řádek nenabídne akci), každá s protipólem v režimu review, aby
 neprocházela naprázdno. Ověřeno vložením regrese: dosazené `findings:` a `canCompose: true` položí
 tři testy z pěti a 50 tvrzení. Druhá a třetí regrese (obsah z hlavy PR místo z commitu, `unfoldAll`

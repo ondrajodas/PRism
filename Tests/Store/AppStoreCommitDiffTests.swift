@@ -261,4 +261,32 @@ struct AppStoreCommitDiffTests {
         store.unfoldAll(in: pr)
         #expect(store.isFolded("Cart.php", in: pr, commit: "aaa"), "rozbalit vše sáhlo do cizího diffu")
     }
+
+    // MARK: - Sbalené tělo zprávy
+
+    /// Výchozí stav je **rozbaleno**: tělo zprávy je odpověď na „proč“, tedy to, kvůli čemu se do
+    /// commitu chodí. Výchozí sbaleno by schovalo obsah tomu, kdo si o to neřekl.
+    @Test("Tělo zprávy je ve výchozím stavu vidět")
+    func showsTheMessageBodyByDefault() {
+        #expect(store(gateway()).isCommitMessageExpanded)
+    }
+
+    /// Test o tom, že se něco **NEstalo**: sbalení je předvolba pohledu, ne vlastnost pull requestu,
+    /// takže ho nesmí zahodit ani úklid, který PR i s jeho diffem vyhodí ze store. Kdyby volba
+    /// bydlela v `@State` detailu, tenhle rozdíl by se z okna nedal poznat — SwiftUI si view mezi
+    /// pull requesty ponechá, takže by se to chovalo správně jen náhodou.
+    @Test("Sbalení zprávy nezmizí s pull requestem")
+    func keepsTheChoiceWhenThePullRequestIsForgotten() async {
+        let gateway = FakeGitHubGateway(always: .success([]))
+        gateway.commitDiff = Self.diffText
+        let store = AppStore(gateway: gateway, time: FakeTimeSource(stopAfter: 1))
+        store.isCommitMessageExpanded = false
+        store.openCommit("aaa", in: pr)
+        await waitUntil("diff dorazí") { self.isLoaded(store) }
+
+        await store.keepFresh()   // tik, ve kterém to PR není
+
+        #expect(store.commitDiffs[pr] == nil, "jinak úklid neproběhl a test nic nedokazuje")
+        #expect(store.isCommitMessageExpanded == false, "sbalení zprávy zmizelo s pull requestem")
+    }
 }

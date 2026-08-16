@@ -316,6 +316,14 @@ počtem souborů, `+X −Y` a odkazem na GitHub; vlevo v ní je cesta zpět `‹
 (`2 ze 7`), která funguje i klávesou `⎋`. Počty jsou spočítané **ze staženého diffu**, takže
 nestojí volání navíc — a proto v seznamu být nemůžou, ale tady ano.
 
+**Tělo zprávy jde sbalit** (`⌄ Tělo zprávy` / `› Tělo zprávy · 6 řádků`), a sbaluje se zrovna ono:
+je to jediná část hlavičky, která roste bez omezení — sha, autor a počty jsou pořád tři řádky,
+kdežto tělo squashnutého merge commitu má klidně třicet. Sbalená hlavička proto pořád odpovídá na
+„na co se to koukám“: zůstává v ní cesta zpět, titulek, sha, odkaz na GitHub, autor, čas i počty.
+Volba **platí napříč commity i pull requesty** a drží se do zavření aplikace, protože „kolik místa
+nechat zprávě“ znamená u každého commitu totéž; výchozí stav je rozbaleno a u jednořádkové zprávy
+se přepínač nekreslí vůbec.
+
 Pod hlavičkou je **týž diff jako ve `Změněných souborech`**: pohled pod sebou i vedle sebe,
 zvýraznění změněných slov, sbalování souborů, rozbalování kontextu, kopírování i strom souborů
 vlevo (`⌘1`) — commit s třiceti soubory ho potřebuje.

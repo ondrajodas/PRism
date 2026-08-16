@@ -43,6 +43,11 @@ struct CommitsTabRenderProbe {
         case single = "jeden-commit"
         /// Rozkliknutý commit (#317): hlavička s cestou zpět a pod ní diff přes celou plochu.
         case commitDiff = "diff-commitu"
+        /// Tentýž commit se **sbaleným tělem zprávy** (#317). Na snímku se posuzuje to jediné, co
+        /// se o sbalování nedá tvrdit číslem: že sbalená hlavička pořád odpovídá na „na co se to
+        /// koukám“ — cesta zpět, titulek, sha, autor, čas i počty v ní zůstávají a zmizí jen
+        /// odstavce pod titulkem. Kolik místa se tím získá, je vidět vedle snímku `diff-commitu`.
+        case commitDiffCollapsed = "diff-commitu-sbalena-hlavicka"
         /// **Prázdný diff** — ten stav, který se z prázdné plochy nedá odlišit od poruchy, takže
         /// je na snímku vidět věta místo diffu. Sloučení, protože má vlastní znění.
         case emptyMerge = "diff-commitu-prazdne-slouceni"
@@ -75,7 +80,7 @@ struct CommitsTabRenderProbe {
     /// poučení z `AppearanceRenderProbe` (#278).
     @Test(
         "Vyrendrovat seznam a diff commitu v tmavém režimu",
-        arguments: [Scenario.list, .commitDiff, .emptyMerge]
+        arguments: [Scenario.list, .commitDiff, .commitDiffCollapsed, .emptyMerge]
     )
     func rendersInDarkMode(scenario: Scenario) async throws {
         let (store, cache) = try await prepared(scenario)
@@ -134,7 +139,7 @@ struct CommitsTabRenderProbe {
         case .single:
             store.commits[pr] = [Self.commits[0]]
             store.commitFailures[pr] = nil
-        case .commitDiff, .emptyMerge, .commitLoading, .commitFailed:
+        case .commitDiff, .commitDiffCollapsed, .emptyMerge, .commitLoading, .commitFailed:
             store.commits[pr] = Self.commits
             store.commitFailures[pr] = nil
             // Stav diffu se **staví přímo**, ne přes `openCommit`: ten spouští `Task`, na který by
@@ -142,6 +147,7 @@ struct CommitsTabRenderProbe {
             let sha = Self.openSha(for: scenario)
             store.openCommits[pr] = sha
             store.commitDiffs[pr] = CommitDiff(sha: sha, content: content(for: scenario))
+            store.isCommitMessageExpanded = scenario != .commitDiffCollapsed
         }
         return (store, directory)
     }
@@ -233,6 +239,8 @@ struct CommitsTabRenderProbe {
     /// Běžně ten **s tělem zprávy**, protože na jeho hlavičce je co posuzovat; u prázdného diffu
     /// **sloučení**, protože právě u něj má věta jiné znění — a snímek má ukázat to znění, které
     /// k tomu commitu patří.
+    /// Sbalená hlavička dostane **týž commit s tělem** jako `diff-commitu`, jinak by se snímky
+    /// nedaly položit vedle sebe a nebylo by vidět, kolik místa se sbalením získá.
     private static func openSha(for scenario: Scenario) -> String {
         scenario == .emptyMerge
             ? "96a469b6bd159d4cff137d5eab4d13ceee4c9807"

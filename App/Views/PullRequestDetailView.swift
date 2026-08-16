@@ -490,6 +490,13 @@ struct PullRequestDetailView: View {
         Binding(get: { store.diffLayout }, set: { store.setDiffLayout($0) })
     }
 
+    /// Tělo zprávy v hlavičce rozkliknutého commitu (#317). Taky ve store a taky globálně, ze
+    /// stejného důvodu jako pohled na diff a rozložený panel — a hlavně proto, že `@State` v tomhle
+    /// view přetéká mezi pull requesty.
+    private var commitMessageExpanded: Binding<Bool> {
+        Binding(get: { store.isCommitMessageExpanded }, set: { store.isCommitMessageExpanded = $0 })
+    }
+
     /// Rozbaluje se obsah souboru **na hlavě PR**, takže u přejmenovaného souboru platí
     /// nová cesta — a `displayPath` je právě ona.
     private var expansionActions: DiffExpansionActions {
@@ -1047,6 +1054,7 @@ struct PullRequestDetailView: View {
             state: store.commitDiffState(of: commit, in: pullRequest.id),
             position: Policy.commitPosition(of: commit.sha, in: list),
             url: Policy.commitURL(of: commit.sha, in: pullRequest.repo),
+            isMessageExpanded: commitMessageExpanded,
             expansion: commitExpansion(of: commit.sha),
             folding: commitFolding(of: commit.sha),
             layout: diffLayout,

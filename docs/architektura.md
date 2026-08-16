@@ -3363,6 +3363,15 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
       takže nestojí volání navíc. Vlevo je cesta zpět `‹ Commity` s pozicí (`2 ze 7`), vpravo tichá
       věta „Jen ke čtení…“ s odkazem do `Změněných souborů` — kdo přijde odtamtud, bude do řádku
       chtít kliknout.
+    - **Sbaluje se tělo zprávy, ne celá hlavička.** Je to jediná část, která roste bez omezení —
+      zbytek jsou tři řádky pevné výšky —, a hlavička sbalená celá by se smrskla na pruh
+      s tlačítkem zpět, tedy přestala odpovídat na „na co se to koukám“. Přepínač je **vlastní
+      řádek s popiskem** (`⌄ Tělo zprávy` / `› Tělo zprávy · 6 řádků`, `Policy.commitMessageToggle`),
+      protože po sbalení musí zbýt něco, na co se dá kliknout; počet řádků nese jen sbalený stav.
+      Volba je **globální ve store** (`AppStore.isCommitMessageExpanded`) — předvolba pohledu jako
+      `isReviewPanelExpanded`, tedy ne mapa per PR a hlavně ne `@State`, který mezi pull requesty
+      přetéká. **Výchozí stav je rozbaleno** a u jednořádkové zprávy se nekreslí ani přepínač
+      (`Policy.commitMessageBody` vrátí prázdno).
     - **Prázdný diff dostane větu, ne prázdnou plochu** (`CommitDiffTabState.nothing`), a jinou
       podle toho, jestli je to sloučení. Změřeno: prázdno vracejí hlavně **prázdné commity**
       (`--allow-empty`), ne sloučení — podrobnosti u gateway a ve specifikaci.

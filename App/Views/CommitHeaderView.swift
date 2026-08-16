@@ -6,6 +6,11 @@ import SwiftUI
 /// a **cestu zpět**. Čísla jsou ze staženého diffu, tedy zadarmo; seznam je nést nemůže, protože
 /// je odpověď GitHubu nenese (#316).
 ///
+/// **Sbaluje se tělo zprávy, ne celá hlavička.** Zbytek jsou tři řádky pevné výšky, kdežto tělo
+/// roste bez omezení — a hlavička sbalená na pruh s tlačítkem by přestala odpovídat na „na co se
+/// to koukám“, což je jediný důvod, proč nad diffem vůbec je. Ve sbaleném stavu tedy zůstává cesta
+/// zpět, titulek, sha, odkaz na GitHub, autor, čas i počty; zmizí jen odstavce pod titulkem.
+///
 /// **Jedna tichá věta o tom, že tu není kam kliknout.** Kdo přijde ze `Změněných souborů`, bude do
 /// řádku chtít kliknout — a zjišťovat pokusem, že se nic neděje, je dražší než ji přečíst. Odkaz
 /// v ní vede tam, kde to jde, takže to není omluva, ale rozcestník.
@@ -19,6 +24,9 @@ struct CommitHeaderView: View {
     var facts: CommitDiffFacts?
     /// Adresa commitu na GitHubu. `nil` = nedá se složit, tlačítko se pak nekreslí.
     var url: URL?
+    /// Je vidět tělo zprávy? Drží to store globálně (`AppStore.isCommitMessageExpanded`), protože
+    /// `@State` v detailu PR přetéká mezi pull requesty.
+    @Binding var isMessageExpanded: Bool
     let back: () -> Void
     /// Skok do `Změněných souborů` — cíl té tiché věty.
     let showFiles: () -> Void
@@ -27,7 +35,7 @@ struct CommitHeaderView: View {
         VStack(alignment: .leading, spacing: 8) {
             backLink
             title
-            if !messageTail.isEmpty { messageBody(messageTail) }
+            message
             meta
         }
         .padding(.horizontal, 18)
@@ -100,6 +108,49 @@ struct CommitHeaderView: View {
         }
         .buttonStyle(.plain)
         .help("Zkopírovat celý sha: \(commit.sha)")
+    }
+
+    /// Přepínač a pod ním tělo zprávy. **U jednořádkové zprávy se nekreslí nic** — ani přepínač,
+    /// protože sbalovat prázdno nemá co říct.
+    @ViewBuilder private var message: some View {
+        let text = Policy.commitMessageBody(of: commit)
+        if !text.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                messageToggle(text)
+                if isMessageExpanded { messageBody(text) }
+            }
+        }
+    }
+
+    /// `⌄ Tělo zprávy` / `› Tělo zprávy · 6 řádků` — tentýž tvar jako přeskočené checky
+    /// (`ChecksView`) a sbalené vlákno (`ThreadBubbleView`).
+    ///
+    /// **Vlastní řádek, ne holá šipka u linky vlevo.** Šipka sama by ušetřila těch patnáct bodů,
+    /// které řádek v rozbaleném stavu stojí, jenže ve sbaleném by po zprávě nezbylo nic, na co se
+    /// dá kliknout — a přepínač, na který se nedá přijít, je stejně dobrý jako žádný. Popisek
+    /// zároveň nese počet řádků, tedy jediný údaj o tom, co je schované.
+    ///
+    /// **Není součástí těla**: tělo má `textSelection(.enabled)`, protože se z něj kopírují odkazy
+    /// na issue, a `Button` kolem vybíratelného textu výběr sebere.
+    private func messageToggle(_ text: String) -> some View {
+        Button {
+            withAnimation(.snappy(duration: 0.15)) { isMessageExpanded.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isMessageExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.ink3)
+                    .frame(width: 9)
+                Text(verbatim: Policy.commitMessageToggle(text, expanded: isMessageExpanded))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.ink2)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help(isMessageExpanded ? "Sbalit tělo zprávy a nechat víc místa diffu" : "Rozbalit tělo zprávy")
     }
 
     /// Tělo zprávy pod titulkem — mono, s linkou vlevo (návrh: `.chead .body`).
@@ -193,14 +244,6 @@ struct CommitHeaderView: View {
         }
         .lineLimit(1)
     }
-
-    /// Tělo zprávy, tedy všechno pod první řádkou. Prázdné u jednořádkové zprávy — a pak se
-    /// nekreslí nic, ne prázdný blok s linkou.
-    private var messageTail: String {
-        commit.message
-            .drop(while: { !$0.isNewline })
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
 }
 
 #Preview {
@@ -222,6 +265,7 @@ struct CommitHeaderView: View {
         position: "2 ze 7",
         facts: CommitDiffFacts(files: "3 soubory", additions: 64, deletions: 18),
         url: URL(string: "https://github.com/keboola/vault/commit/5e2b1aa"),
+        isMessageExpanded: .constant(true),
         back: {},
         showFiles: {}
     )

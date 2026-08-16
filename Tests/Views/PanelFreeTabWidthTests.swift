@@ -52,6 +52,9 @@ struct PanelFreeTabWidthTests {
     /// o tom, že tu není kam kliknout. Návrh je má na jednom řádku s `flex-wrap`, který SwiftUI
     /// nemá — proto `ViewThatFits`, a proto se to musí měřit **přes pásmo**: podoba na jeden řádek
     /// se v úzkém okně nesmí zvolit a přetéct.
+    ///
+    /// **Commit bez těla zprávy**, takže sbalený a rozbalený stav dají tentýž podstrom — sbalování
+    /// se u něj nekreslí vůbec. Oba stavy měří test pod ním, na commitu, který tělo má.
     @Test("Hlavička commitu nepřeteče v žádné šířce")
     func theCommitHeaderStaysInside() throws {
         for width in widths {
@@ -61,11 +64,38 @@ struct PanelFreeTabWidthTests {
                 position: "2 ze 7",
                 facts: CommitDiffFacts(files: "3 soubory", additions: 64, deletions: 18),
                 url: Policy.commitURL(of: Self.commits[1].sha, in: RepoID(owner: "cli", name: "cli")),
+                isMessageExpanded: .constant(true),
                 back: {},
                 showFiles: {}
             )
             let overflow = try probe.overflow(of: header)
             #expect(overflow == 0, "šířka \(Int(width)): hlavička commitu přetekla o \(overflow) bodů")
+        }
+    }
+
+    /// Tělo zprávy se od #317 dá **sbalit**, takže hlavička má dvě podoby — a obě musí obstát
+    /// v celém pásmu. Sbalená není „ta samá o kus nižší“: místo odstavců v ní stojí přepínač
+    /// s počtem řádků, tedy jiný řádek s jiným zalomením.
+    ///
+    /// Fixture nese to, co tělo umí do hlavičky přinést a co se nikde jinde neměří: **odstavce**,
+    /// **odrážky** a hlavně **dlouhý nezlomitelný token** (URL na issue), který se do úzkého tabu
+    /// nemá kam vejít. Tělo se zalamuje, netrunkuje — takže kdyby se ztratila šířka, přeteče vpravo.
+    @Test("Hlavička s tělem zprávy nepřeteče ani sbalená, ani rozbalená", arguments: [true, false])
+    func theCommitHeaderWithBodyStaysInside(expanded: Bool) throws {
+        let state = expanded ? "rozbalena" : "sbalena"
+        for width in widths {
+            let probe = OverflowProbe(width: width, name: "commit-telo-\(state)-\(Int(width))")
+            let header = CommitHeaderView(
+                commit: Self.commitWithBody,
+                position: "3 ze 7",
+                facts: CommitDiffFacts(files: "12 souborů", additions: 640, deletions: 188),
+                url: Policy.commitURL(of: Self.commitWithBody.sha, in: RepoID(owner: "cli", name: "cli")),
+                isMessageExpanded: .constant(expanded),
+                back: {},
+                showFiles: {}
+            )
+            let overflow = try probe.overflow(of: header)
+            #expect(overflow == 0, "šířka \(Int(width)), \(state) hlavička přetekla o \(overflow) bodů")
         }
     }
 
@@ -81,6 +111,7 @@ struct PanelFreeTabWidthTests {
                 state: .nothing(Policy.emptyCommitDiff(isMerge: true)),
                 position: "2 ze 7",
                 url: nil,
+                isMessageExpanded: .constant(true),
                 expansion: DiffExpansionActions(state: { _ in FileExpansion() }, reveal: { _, _ in }, collapse: nil),
                 folding: DiffFoldingActions(isFolded: { _ in false }, toggle: { _ in }, foldAll: { _ in }, unfoldAll: {}),
                 layout: .constant(.unified),
@@ -217,6 +248,28 @@ struct PanelFreeTabWidthTests {
             isMerge: false
         ),
     ]
+
+    /// Commit s **dlouhým tělem zprávy** — to jediné v hlavičce, co roste bez omezení, a proto to
+    /// jediné, co se od #317 dá sbalit. Odstavce, odrážka a odkaz na issue, který se nedá zalomit.
+    private static let commitWithBody = PullRequestCommit(
+        sha: "745dc68b1c2d3e4f5061728394a5b6c7d8e9f012",
+        message: """
+            Resolve deferred issue fields before creating the issue
+
+            Fields that need triage access were resolved after the issue was created, so a failure
+            left an issue with half the fields set.
+
+            - the picker is skipped without triage access
+            - the retry no longer creates a second issue
+
+            Refs https://github.com/cli/cli/issues/13804#issuecomment-2847193055
+            """,
+        authorName: "Kumar Prateek",
+        authorLogin: nil,
+        avatarURL: nil,
+        committedAt: Date(timeIntervalSince1970: 1_784_637_072),
+        isMerge: false
+    )
 
     /// Konec logu, jak ho vrátí spadlá session: dlouhé nezlomitelné cesty jsou to nejtvrdší, co má
     /// blok o šířku poprosit.

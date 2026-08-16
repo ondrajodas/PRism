@@ -30,6 +30,9 @@ struct CommitDiffView: View {
     var position: String?
     /// Adresa commitu na GitHubu.
     var url: URL?
+    /// Je v hlavičce vidět tělo zprávy? Předvolba pohledu, tedy globální ve store — proč, je
+    /// u `AppStore.isCommitMessageExpanded`.
+    @Binding var isMessageExpanded: Bool
     /// Rozbalování kontextu — **z obsahu souboru v tomhle commitu**, ne na hlavě PR. Skládá ho
     /// volající, protože klíč zná store.
     let expansion: DiffExpansionActions
@@ -46,6 +49,7 @@ struct CommitDiffView: View {
                 position: position,
                 facts: facts,
                 url: url,
+                isMessageExpanded: $isMessageExpanded,
                 back: back,
                 showFiles: showFiles
             )

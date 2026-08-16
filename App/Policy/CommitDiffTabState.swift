@@ -88,6 +88,33 @@ extension Policy {
         )
     }
 
+    /// Tělo zprávy commitu — všechno pod první řádkou (#317).
+    ///
+    /// **Prázdné u jednořádkové zprávy**, a pak hlavička nekreslí ani blok s linkou, ani přepínač
+    /// pod titulkem: první řádka **je** ten titulek, takže by se sbalovalo prázdno. Tělo je zároveň
+    /// jediná část hlavičky, která roste bez omezení — sha, autor a počty jsou pořád tři řádky.
+    static func commitMessageBody(of commit: PullRequestCommit) -> String {
+        commit.message
+            .drop(while: { !$0.isNewline })
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Popisek přepínače, kterým se tělo zprávy sbaluje (#317).
+    ///
+    /// **Počet řádků je jen ve sbaleném stavu.** Je to jediné, co o schovaném textu řekne, kolik ho
+    /// je — tedy jestli se vyplatí ho rozbalit. V rozbaleném stavu si to člověk přečte sám a číslo
+    /// by bylo šum vedle textu, o kterém mluví.
+    ///
+    /// Počítají se **řádky zprávy včetně prázdných** mezi odstavci: tělo je useknuté z obou stran
+    /// (`commitMessageBody`), takže prázdný řádek uvnitř je odstavcová mezera, a ta v hlavičce místo
+    /// zabírá stejně jako text. Zalomení sazbou se do počtu nepromítá — číslo mluví o zprávě, ne
+    /// o tom, jak široké je zrovna okno.
+    static func commitMessageToggle(_ body: String, expanded: Bool) -> String {
+        guard !expanded else { return "Tělo zprávy" }
+        let lines = body.split(separator: "\n", omittingEmptySubsequences: false).count
+        return "Tělo zprávy · \(Plural.czech(lines, one: "řádek", few: "řádky", many: "řádků"))"
+    }
+
     /// Kolik souborů a `+X −Y` — do hlavičky rozkliknutého commitu.
     static func commitDiffFacts(of diff: Diff) -> CommitDiffFacts {
         CommitDiffFacts(

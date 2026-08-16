@@ -873,6 +873,35 @@ podrobněji.
   takže se přepnutím obsahu nehne. Samostatná akce `kopírovat sha` odpadla: kopíruje kapsle a říká
   to nápovědou.
 
+- **Sbaluje se tělo zprávy, ne celá hlavička.** Návrh hlavičku kreslí napevno; po proklikání
+  hotové obrazovky si vyžádala možnost ji **zabalit**, aby diff dostal víc místa. Rozhodnuto sbalit
+  **jen tělo** — tedy odstavce pod první řádkou —, protože to je jediná část, která roste bez
+  omezení: sha, autor, čas a počty jsou pořád tři řádky pevné výšky, kdežto tělo squashnutého
+  merge commitu má klidně třicet. Hlavička sbalená celá by se navíc smrskla na **pruh s tlačítkem
+  zpět** a přestala odpovídat na „na co se to koukám“, což je jediný důvod, proč nad diffem je.
+  Ve sbaleném stavu tedy zůstává cesta zpět s pozicí, titulek, kapsle se sha, odkaz na GitHub,
+  autor, čas, počty i tichá věta o čtení; zmizí jen odstavce. Změřeno renderem: u dvouřádkového
+  těla je to 54 bodů, u delšího víc.
+
+  Tři věci, které si to vyžádalo:
+
+  - **Přepínač je vlastní řádek s popiskem** (`⌄ Tělo zprávy` / `› Tělo zprávy · 6 řádků`), ne holá
+    šipka u linky vlevo. Šipka by ušetřila těch patnáct bodů, které řádek v rozbaleném stavu stojí,
+    jenže ve sbaleném by po zprávě nezbylo nic, na co se dá kliknout — a přepínač, na který se nedá
+    přijít, je stejně dobrý jako žádný. Počet řádků je **jen ve sbaleném** popisku: je to jediné, co
+    o schovaném textu řekne, kolik ho je. Tvar je převzatý z přeskočených checků a sbalených vláken.
+  - **Volba je globální a bydlí ve store** (`AppStore.isCommitMessageExpanded`), ne v `@State`
+    detailu a ne per PR. „Kolik místa nechat zprávě“ znamená u každého commitu totéž — je to tatáž
+    úvaha jako u `isReviewPanelExpanded` a `diffLayout`. Per PR by to byla mapa navíc k uklízení za
+    odpověď na otázku, kterou si nikdo neklade zvlášť pro každý pull request; ve `@State` by
+    přetekla mezi pull requesty (SwiftUI si `PullRequestDetailView` ponechá), tedy „náhodou správně“,
+    ale bez možnosti to otestovat. Do `Configuration` se **neukládá**, ze stejného důvodu jako
+    rozložení panelu: je to okamžité „udělej teď místo“, ne standing předvolba se řádkem v nastavení.
+  - **Výchozí stav je rozbaleno.** Tělo zprávy je odpověď na „proč“, tedy to, kvůli čemu se do
+    commitu chodí; sbalí se jedním kliknutím a drží to celou session, takže výchozí sbaleno by jen
+    schovalo obsah tomu, kdo si o to neřekl. **U jednořádkové zprávy se nekreslí ani přepínač** —
+    sbalovat prázdno nemá co říct.
+
 - **Čas v hlavičce je relativní, přesný je v nápovědě.** Návrh tu má `12. 8. 2026 11:32`; dva
   způsoby, jak v jednom tabu napsat „kdy“, jsou horší než odchylka od jedné buňky návrhu — tentýž
   závěr jako u řádku seznamu (#316).

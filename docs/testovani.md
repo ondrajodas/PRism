@@ -1785,7 +1785,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     `nothing` s větou**, ne porucha. Sloučení a obyčejný commit dostanou **různé** věty a obě říkají
     „není to porucha“ — testuje se, že se liší, ne jen že nejsou prázdné. K tomu commit, který
     ze seznamu zmizel (force push) → tab spadne na seznam, skloňování počtu souborů, pozice
-    `2 ze 7` v pořadí kresby a adresa commitu na GitHubu.
+    `2 ze 7` v pořadí kresby a adresa commitu na GitHubu. K tomu **tělo zprávy a jeho sbalování**:
+    že tělo je všechno pod první řádkou (titulek nad ním je ta první), že jednořádková zpráva tělo
+    **nemá** — a tedy že se nekreslí ani přepínač —, a že počet řádků je **jen ve sbaleném**
+    popisku, i s prázdnými řádky mezi odstavci a se skloňováním.
   - **Načítání ve store** (`AppStoreCommitDiffTests`) — sedm pastí. Že se **stažený diff drží**
     (druhé otevření téhož commitu se neptá znovu, jinak by z jednoho kliknutí byl polling), že se
     po selhání **ptá znovu** (jinak by `Zkusit znovu` nic neudělalo), že doběhlé volání **nepřepíše
@@ -1796,10 +1799,22 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 
     **Vyzkoušené vložením regrese, obojí zvlášť**: obsah tažený z hlavy PR položí test na ref, a
     `unfoldAll` bez filtru na commit položí test na sbalení.
-  - **Šířka hlavičky** — dva další případy v `PanelFreeTabWidthTests` (pásmo 648–1800): hlavička
-    s počty a **prázdný diff s vysvětlením**, protože to je jiný podstrom a hlavička v něm stojí
-    bez počtů. Řádek meta se v úzkém okně musí zalomit přes `ViewThatFits`; kdyby se zvolila podoba
-    na jeden řádek, přeteče tichá věta „Jen ke čtení…“ vpravo.
+
+    Devátý a desátý jsou o **sbaleném těle zprávy**: že je ve výchozím stavu vidět, a — to je ten
+    o tom, že se něco **NEstalo** — že volbu nezahodí úklid, který PR i s jeho diffem vyhodí ze
+    store. Sbalení je předvolba pohledu, ne vlastnost pull requestu; kdyby bydlelo v `@State`
+    detailu, chovalo by se správně jen náhodou (SwiftUI si view mezi pull requesty ponechá) a tenhle
+    rozdíl by se z okna nedal poznat.
+  - **Šířka hlavičky** — tři další případy v `PanelFreeTabWidthTests` (pásmo 648–1800): hlavička
+    s počty, **prázdný diff s vysvětlením** (jiný podstrom, hlavička v něm stojí bez počtů) a od
+    sbalovacího těla i **obě podoby hlavičky se zprávou**, sbalená a rozbalená. Řádek meta se
+    v úzkém okně musí zalomit přes `ViewThatFits`; kdyby se zvolila podoba na jeden řádek, přeteče
+    tichá věta „Jen ke čtení…“ vpravo.
+
+    **Sbalená hlavička není „ta samá o kus nižší“** — místo odstavců v ní stojí přepínač s počtem
+    řádků, tedy jiný řádek s jiným zalomením, takže se měří obě. Fixture nese to, co tělo umí do
+    hlavičky přinést a co se nikde jinde neměří: odstavce, odrážky a **dlouhý nezlomitelný token**
+    (odkaz na issue). Tělo se zalamuje, netrunkuje, takže ztracená šířka přeteče vpravo.
 - **Podoby pruhu záložek podle šířky (#316, #318)** — `TabStripWidthTests`. Měří se, neodhaduje:
   `NSHostingView.fittingSize` nad **skutečným** `PullRequestTabBar`em, po jednom bodu šířky.
 
@@ -1870,9 +1885,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   tabů; stojí nad všemi sedmi.
 - **Sonda tabu `Commity` (#316, rozšířeno #317)** — `CommitsTabRenderProbe`, gated `PRISM_MEASURE`.
   Nic netvrdí; vyrendruje **detail PR v tabu `Commity` ve všech podobách stavu** (nenačteno, seznam,
-  porucha, zastaralý seznam, **PR s jedním commitem**, a od #317 **rozkliknutý commit** ve čtyřech
-  stavech — diff, prázdný diff sloučení, nenačteno, porucha) ve dvou šířkách; seznam a diff commitu
-  navíc v **tmavém režimu**. Scénář drží commity v pořadí z API, takže je na snímcích vidět i to, že
+  porucha, zastaralý seznam, **PR s jedním commitem**, a od #317 **rozkliknutý commit** v pěti
+  stavech — diff, **týž diff se sbalenou hlavičkou**, prázdný diff sloučení, nenačteno, porucha) ve
+  dvou šířkách; seznam a diff commitu obojí navíc v **tmavém režimu**. Sbalená hlavička dostane
+  **týž commit** jako rozbalená, jinak by se snímky nedaly položit vedle sebe a nebylo by z nich
+  vidět, kolik místa se sbalením získá. Scénář drží commity v pořadí z API, takže je na snímcích vidět i to, že
   je tab **otáčí sám** — nejnovější nahoře, a mátová pilulka `hlava` s ním. Pruh záložek se od #318
   rendruje jinde, v `TabStripRenderProbe`.
 

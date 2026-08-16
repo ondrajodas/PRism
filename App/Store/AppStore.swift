@@ -822,6 +822,25 @@ final class AppStore {
     /// je to zároveň paměť na to, kde v seznamu člověk byl (`lastOpenedCommit(in:)`).
     var commitDiffs: [PRIdentifier: CommitDiff] = [:]
 
+    /// Je v hlavičce rozkliknutého commitu vidět **tělo zprávy** (#317)?
+    ///
+    /// **Globálně, ne per PR ani per commit** — je to předvolba pohledu, stejně jako
+    /// `isReviewPanelExpanded` a `diffLayout`: „kolik místa nechat zprávě a kolik diffu“ znamená
+    /// u každého commitu totéž. Mapa by navíc byla další stav k uklízení ve `forgetPullRequest`,
+    /// a to za odpověď na otázku, kterou si nikdo neklade zvlášť pro každý pull request.
+    ///
+    /// **Ve store, ne v `@State` detailu**, a je to podmínka: `PullRequestDetailView` si SwiftUI
+    /// mezi pull requesty ponechá (stejná pozice ve stromu), takže by volba přetekla z jednoho PR
+    /// na druhý — tatáž past jako u `detailTabs` a u rozbalení dráhy v #294. Tady by přetekla
+    /// „náhodou správně“, protože je stejně globální, ale nešlo by to otestovat ani vypnout.
+    ///
+    /// **Výchozí stav je rozbaleno.** Tělo zprávy je odpověď na „proč“, tedy to, kvůli čemu se do
+    /// commitu chodí; sbalí se jedním kliknutím a drží to celou session, takže výchozí sbaleno by
+    /// jen schovalo obsah tomu, kdo si o to neřekl. **Neukládá se do `Configuration`** ze stejného
+    /// důvodu jako `isReviewPanelExpanded`: je to okamžité „udělej teď místo“, ne standing
+    /// předvolba, která by si zasloužila řádek v nastavení.
+    var isCommitMessageExpanded = true
+
     /// Který check je v tabu `Kontroly` rozbalený (#214), na PR nejvýš jeden.
     ///
     /// Dva otevřené konce logu pod sebou znamenají scrollování přes to, co se zrovna nečte — a dvě

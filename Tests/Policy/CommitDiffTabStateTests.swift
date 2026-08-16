@@ -8,10 +8,10 @@ import Testing
 struct CommitDiffTabStateTests {
     private static let repo = RepoID(owner: "keboola", name: "job-queue")
 
-    private func commit(_ sha: String, merge: Bool = false) -> PullRequestCommit {
+    private func commit(_ sha: String, message: String = "feat: něco", merge: Bool = false) -> PullRequestCommit {
         PullRequestCommit(
             sha: sha,
-            message: "feat: něco",
+            message: message,
             authorName: "Odin Uv",
             authorLogin: "odinuv",
             avatarURL: nil,
@@ -159,5 +159,48 @@ struct CommitDiffTabStateTests {
             Policy.commitURL(of: "5e2b1aa", in: Self.repo)?.absoluteString
                 == "https://github.com/keboola/job-queue/commit/5e2b1aa"
         )
+    }
+
+    // MARK: - Tělo zprávy a jeho sbalování
+
+    /// Titulek hlavičky **je** první řádka, takže tělo je všechno pod ní — jinak by hlavička
+    /// tvrdila totéž dvakrát.
+    @Test("Tělo zprávy je všechno pod první řádkou")
+    func takesEverythingBelowTheFirstLine() {
+        let message = "feat: cache secrets\n\nKaždý požadavek si sáhne do Vaultu za každým klíčem."
+        #expect(Policy.commitMessageBody(of: commit("aaa", message: message))
+            == "Každý požadavek si sáhne do Vaultu za každým klíčem.")
+    }
+
+    /// Většina commitů má jednořádkovou zprávu. Prázdné tělo je signál pro hlavičku, že nemá
+    /// kreslit **ani přepínač** — sbalovat prázdno nemá co říct.
+    @Test("Jednořádková zpráva nemá tělo", arguments: ["feat: něco", "feat: něco\n", "feat: něco\n\n  \n"])
+    func hasNoBodyForASingleLineMessage(message: String) {
+        #expect(Policy.commitMessageBody(of: commit("aaa", message: message)).isEmpty)
+    }
+
+    /// Rozbalený stav počet neuvádí: text je vidět, takže by číslo bylo šum vedle toho, o čem
+    /// mluví. **Sbalený ho uvádí**, protože je to jediné, co o schovaném textu něco říká.
+    @Test("Počet řádků je jen ve sbaleném popisku")
+    func countsLinesOnlyWhenCollapsed() {
+        let body = "první\ndruhá\ntřetí"
+        #expect(Policy.commitMessageToggle(body, expanded: true) == "Tělo zprávy")
+        #expect(Policy.commitMessageToggle(body, expanded: false) == "Tělo zprávy · 3 řádky")
+    }
+
+    /// Prázdný řádek mezi odstavci se počítá: v hlavičce zabírá místo jako každý jiný, a počet
+    /// odpovídá na otázku „kolik toho schovávám“.
+    @Test("Prázdné řádky mezi odstavci se počítají")
+    func countsBlankLinesBetweenParagraphs() {
+        #expect(Policy.commitMessageToggle("první\n\ntřetí", expanded: false) == "Tělo zprávy · 3 řádky")
+    }
+
+    @Test(
+        "Počet řádků se skloňuje",
+        arguments: [(1, "1 řádek"), (2, "2 řádky"), (5, "5 řádků")]
+    )
+    func inflectsTheLineCount(count: Int, expected: String) {
+        let body = (1...count).map { "řádka \($0)" }.joined(separator: "\n")
+        #expect(Policy.commitMessageToggle(body, expanded: false) == "Tělo zprávy · \(expected)")
     }
 }

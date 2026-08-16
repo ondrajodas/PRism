@@ -120,6 +120,7 @@ struct CommitDiffReadOnlyTests {
             state: .diff(try Self.diff()),
             position: "2 ze 7",
             url: Policy.commitURL(of: Self.commit.sha, in: Self.repo),
+            isMessageExpanded: .constant(true),
             expansion: DiffExpansionActions(state: { _ in FileExpansion() }, reveal: { _, _ in }, collapse: nil),
             folding: DiffFoldingActions(isFolded: { _ in false }, toggle: { _ in }, foldAll: { _ in }, unfoldAll: {}),
             layout: .constant(.unified),
