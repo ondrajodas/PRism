@@ -1152,6 +1152,25 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   K tomu, že zvýraznění nemění text, že obarvení syntaxe zůstává pod ním (písmo × pozadí) a že
   kontextový řádek nesvítí, ani když se mu rozsahy podstrčí.
 
+  **Skládání textu bloku (#275)** má vlastní sadu (`DiffBlockCompositionTests`), a je v ní jediná
+  otázka: **trefí se obarvení na tytéž znaky jako předtím?** Do #275 se rozsahy nepočítaly — atribut
+  jel s kusem textu, protože se text slepoval z `NSAttributedString`u za každý run. Od #275 je text
+  jeden řetězec a barvy se do něj dopisují na spočítané rozsahy, a spočítaný rozsah se dá spočítat
+  špatně.
+
+  **Znaky mimo ASCII jsou v té sadě jádro věci**, ne ozdoba: `NSAttributedString` měří v UTF-16,
+  takže emoji je **dva** kódy. Ověřeno vloženou regresí (`count` místo `utf16.count`
+  v `lineRanges(of:)`): padnou tři testy — rozsah řádku, obarvený řetězec za emoji a zvýrazněný kus
+  za emoji —, kdežto tytéž případy v ASCII projdou, tedy přesně tak, jak by se ta chyba projevila
+  v okně. K tomu meta řádek ztlumený celý a **jen on**, a soubor bez rozpoznaného jazyka, ve kterém
+  se nesmí obarvit nic.
+
+  **Že se kresba přepisem nezměnila, se ověřilo rovností, ne pohledem**: dočasným testem, který
+  složil týž blok starým i novým způsobem a porovnal `isEqual(to:)` — 400 řádků s emoji, diakritikou,
+  komentáři, řetězci, čísly a meta řádky, ve dvou paletách a na obou stranách dvojice. V repu
+  nezůstal (staré skládání by se muselo držet naživo jen kvůli němu), ale je to ten důvod, proč
+  u #275 pauza na proklikání nebyla.
+
   **Výška bloku (#236)** má vlastní sadu (`DiffBlockHeightTests`) a referencí je v ní vždycky
   **layout manager**, ne druhý výpočet téhož — jinak by test jen opsal chybu, kterou má chytat.
 
@@ -2440,7 +2459,8 @@ Co harness měří:
 | model diffu na 2400 řádcích | dokládá, že model **není** příčina (jednotky ms) |
 | cena vykreslení podle délky bloku (#223) | z toho se vybral strop `DiffBlock.maxLines`; měří se **jeden blok** i celý soubor po blocích |
 | cena word-level rozdílu (#153) | proč se počítá až při skládání bloku: **0,42 ms** na blok o 60 řádcích samých dvojic proti **19,6 ms** za celý soubor o 2400 řádcích, což by se platilo při každém překreslení |
-| podíl word-diffu na skládání bloku (#153) | odpovídá na „ztuhlo to kvůli #153?“ — `DiffPairBlockContainer.show` na 27 blocích samých dvojic **79,1 ms**, z toho `WordDiff` **14,2 ms**, tedy **18 %** v nejhorším případě; skládání bloku je přitom jen část ceny scrollování |
+| podíl word-diffu na skládání bloku (#153) | odpovídá na „ztuhlo to kvůli #153?“ — `DiffPairBlockContainer.show` na 27 blocích samých dvojic **61,5 ms**, z toho `WordDiff` **14,0 ms**, tedy **23 %** v nejhorším případě; skládání bloku je přitom jen část ceny scrollování. Podíl vzrostl u #275 z 18 %, a `WordDiff` se přitom nezměnil — zlevnilo se to, s čím se poměřuje |
+| z čeho se skládá cena sazby bloku (#275) | rozpad `show` na fáze, aby se dalo poznat, co je co: `WordDiff` **14,0 ms**, složení atributovaného textu **4,5 ms** (do #275 **22,2 ms**), nasazení do `NSTextStorage` **3,8 ms**, nasazení + sazba **39,5 ms**. Fáze se měří **za sebou v pořadí, v jakém běží**, takže se dají odečítat. Měří i **čerstvý kontejner** (72,4 ms proti 61,5 ms), protože `LazyVStack` view nerecykluje — a to je, co platí projíždění. Celé `show` stálo do #275 **86,3 ms**; absolutní čísla se hýbou se zátěží stroje (na volnějším vyšla tatáž dvojice 79,2 → 60,0), takže se čte **poměr**, ne milisekundy |
 | cena overlay gutteru podle tvaru (#252) | dvě čísla na bloku o 60 řádcích: `po řádcích` (do #252) **3,05 ms**, `po bloku` (od #252) **0,12 ms**, tedy 26× — a pro srovnání, samotný text téhož bloku stojí 2,8 ms, takže overlay býval dražší než kód, který zdobí |
 | cena zápisu ploch pro tažení (#252) | `DiffRowFrames` s 4000 záznamy a blok o 120 plochách: **po řádcích 22,6 ms, naráz 1,40 ms** (16×). Je to ta kvadratická část — úklid je lineární v počtu záznamů, takže po řádcích se platí za každý |
 | cena obarvení se cachí a bez ní (#224) | tři čísla na jednom souboru o 2400 řádcích: `scan` bez cache **44 ms**, totéž z plné cache **0,30 ms** (~145×), naplnění prázdné cache **44 ms** — uložení se v šumu ztratí |
