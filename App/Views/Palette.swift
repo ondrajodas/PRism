@@ -186,6 +186,52 @@ enum Palette {
     /// Druhý konec přechodu — zatím jediný, proužek nad kartou rozdělaných review (#181).
     /// **Nikdy jako samostatná barva**: dvě akcentové barvy vedle sebe by přestaly znamenat stav.
     static let accent2 = Color(light: 0x128FB0, dark: 0x45C8E4)
+
+    /// Konstatování — **stav, se kterým se nic nedělá** (#309). `--mint` z návrhu.
+    ///
+    /// Dvojice k akcentu, a je to celý důvod, proč token vznikl: v řádku tabulky nálezů stojí
+    /// vedle sebe věci, na které se **klikne** (`Převzít`, `Vrátit`, `⋯`), a věci, které se jen
+    /// **čtou** (`2×`, `✓ v mém review`). Do #309 měly obojí barvu akcentu, takže se na odznak
+    /// shody dvou reviewerů dalo zkoušet klikat. Dělí je proto barva:
+    ///
+    /// - **`accent`** = co aplikace nabízí udělat, nebo co zrovna dělá (akce, běžící review,
+    ///   živý řádek, aktivní záložka);
+    /// - **`mint`** = co aplikace tvrdí, že platí (odznak shody, převzatý nález, odmítnuté
+    ///   review).
+    ///
+    /// Návrh to nese stejně a **nikde jinde mint nemá**: `.pill.mint` u `2×` a `.frow .acts .in`
+    /// u `✓ v mém review` jsou jeho jediné dva výskyty na celé stránce. Mint proto **není barva
+    /// stavů obecně** — běžící review je v návrhu `.pill.run`, tedy akcent.
+    ///
+    /// **Ne `accent.opacity(…)`** — tatáž úvaha jako u `critLine` a `diffAdded`: skrz krytí
+    /// prosvítá podklad, takže by odznak vyšel jinak na ploše řádku než na podbarveném živém
+    /// řádku.
+    ///
+    /// **Tmavá je z návrhu doslova** (`--mint: #2DD4BF`) a měřením vychází jako nejčitelnější
+    /// token v celé rodině: 9,90 na ploše řádku proti 7,25 u `ok` a 5,64 u akcentu.
+    ///
+    /// **Světlá je vědomá odchylka od návrhu** (`--mint: #0E8F80` → `#0C7E71`, ΔE 6,2). Hodnota
+    /// z návrhu měla na ploše řádku kontrast **3,99**, a byla tím **jediným** stavovým tokenem
+    /// pod hranicí AA 4,5: `ok` má 5,08, `crit` 5,36, `find` 4,91, `stale` 4,87, akcent 6,14.
+    /// Odznak stavu by tak byl to nejsvětlejší v řádku — zrovna ten, který má říct, že se s tím
+    /// nic dělat nemusí, by se četl hůř než všechno kolem. Ztmavení je proto **na rodinu, ne na
+    /// hranici**: na všech čtyřech podkladech vychází do 0,05 stejně jako `find` vedle něj
+    /// (4,95 / 4,70 / 4,29 / 4,06 proti 4,91 / 4,66 / 4,25 / 4,02).
+    ///
+    /// Mockup se u toho **nepřekresluje potichu** — návrh schvaluje uživatel (#286), takže se
+    /// `--mint` ve světlé větvi nabízí k překreslení (#299), a do té doby drží odchylku tenhle
+    /// komentář a záznam rozhodnutí ve specifikaci.
+    ///
+    /// **Ne systémová `.mint`**, kterou do #309 brala `ReviewStateAppearance` na odmítnuté review.
+    /// Byly by to dvě tyrkysové pro jedno sdělení — a k tomu ta nejhorší možná dvojice: v tmavém
+    /// režimu je systémová (`#00DAC3`) od tokenu vzdálená **ΔE 1,6**, tedy k nerozeznání, kdežto
+    /// ve světlém (`#00C8B3`) ΔE 22,9. Odmítnuté review by tak vypadalo jednou stejně a jednou
+    /// jinak než ostatní tyrkysová v okně. Ta světlá je navíc **nečitelná**: kontrast **2,12**
+    /// proti ploše řádku, kdežto token má 4,95.
+    ///
+    /// **Nesplyne s tím, co v okně už něco znamená**: proti `ok` (prošlý check) ΔE 16,6 světlá /
+    /// 21,1 tmavá, proti `stale` (zastarání) 37,9 / 39,4. Všechna čísla drží `MintTokenTests`.
+    static let mint = Color(light: 0x0C7E71, dark: 0x2DD4BF)
 }
 
 extension Color {

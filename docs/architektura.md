@@ -357,6 +357,17 @@ Co se u toho nemá rozbít:
   sem“ naráz. Barvu drží od #298 `AccentLinkButtonStyle` (`Palette.accent`, jako plné `.mini`), tvar
   zůstává různý: plocha v bublině, holý text v tabulce. `.tint(Palette.accent)` z kořene okna na to
   **nestačilo** — `.link` si tint nebere.
+- **Akce má akcent, konstatování mint** (#309). V řadě akcí stojí dvě věci, na které se **neklikne**:
+  odznak shody `2×` a značka `✓ v mém review`. Do #309 měly barvu akcí (odznak dokonce systémově
+  modrou, protože `.tint()` na `Color.accentColor` nezabírá), takže se na ně dalo zkoušet klikat.
+  Barvu drží `FindingBadgeAppearance.stateTint`, ať se nedá přebarvit jen na jednom ze čtyř
+  vykreslení — tabulka a bublina kreslí obě značky každá po svém.
+
+  **Mint není barva stavů obecně.** Návrh ho má na celé stránce dvakrát, a obojí je právě tady
+  (`.pill.mint`, `.frow .acts .in`); běžící review je v něm `.pill.run`, tedy akcent. Dělí to stav
+  od akce **tam, kde stojí vedle sebe** — proto ho z okna dostal ještě souhrn fronty ve stavovém
+  řádku (sedí pár desítek bodů od akcentového `Připravit`) a odznak `odmítnuto`, ne ale osa
+  `Průběhu`, kde žádná akce není.
 
 Pohled **vedle sebe** (#98) je `DiffRow.pair(_, left:, right:)` a platí u něj:
 
@@ -1857,7 +1868,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
 | `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) — a od #245 **vypnutí systémových záložek oken** (`tabbingMode = .disallowed`), aby se `⌃Tab` nepřetahoval s AppKitem |
 | `AppAppearance`, `AppearanceApplying` | Přepnutí vzhledu celé aplikace (#278) — `NSApp.appearance`, a za protokolem, aby si na hostitele testů nesáhly testy |
-| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit` |
+| `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit`. Od #309 `mint` — **dvojice k akcentu**: akcent je to, co se nabízí udělat nebo co běží, mint to, co se jen konstatuje (`2×`, `✓ v mém review`, `odmítnuto`). Světlá větev je **vědomá odchylka od návrhu** (`#0E8F80` → `#0C7E71`), protože hodnota z mockupu byla jediný stavový token pod AA — čísla u `Palette.mint` a v `MintTokenTests` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181) |
@@ -1871,7 +1882,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ServiceHealthDot` | Puntík jedné služby; po hoveru důvod a čas poslední kontroly |
 | `NotificationStatusView` | Kdy se naposledy něco ohlásilo (#138) — zvonek s časem, `zatím nic`, nebo `vypnuto` |
 | `DailySpendView` | Co dneska stálo review (#148) — cena za dnešek, u neúplného součtu s `≥` |
-| `QueueSummaryView` | Souhrn fronty (#155) — kolik PR čeká, kolik má blokující nález a kolik rozdělané review |
+| `QueueSummaryView` | Souhrn fronty (#155) — kolik PR čeká, kolik má blokující nález a kolik rozdělané review. Počet rozdělaných je od #309 **mint**, ne akcent: je to číslo, na které se neklikne, a ve stejném pruhu sedí akcentové `Připravit` |
 | `RunUsageText` | Cena, trvání a počet kol jako text — jedno místo pro osu i stavový řádek |
 | `AppNoticesView` | Hlášky ve stavovém řádku: rozbitá konfigurace, pozastavený automat, nečitelné soubory, zakázané notifikace |
 | `WindowCentering`, `WindowReader`, `ScreenBounds` | Vystředění pomocného okna **v hlavním okně**, ne na obrazovce (#164) — z jednoho místa pro nastavení i novinky |
@@ -1909,6 +1920,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou. Od #283 jsou akce **řada malých tlačítek vlevo pod textem** |
 | `MiniButtonStyle` | Malé tlačítko z návrhu (`.mini`, `.mini.pri`) — plné akcentové a obtažené. Rozměry v `Metrics`, aby se daly změřit testem; text plného je `Palette.surface` (`--panel`), ne bílá |
 | `AccentLinkButtonStyle` | Textová akce v barvě akcentu (`.go` z návrhu) — **místo systémového `.link`** (#298). Barva z `Palette.accent`, ztlumení při zmáčknutí jako u `.mini`, kurzor `pointerStyle(.link)`. Font si drží volající. Tři výskyty ve dvou souborech: `Převzít` a `Vrátit` v tabulce nálezů, `Připravit` ve stavovém řádku — `grep -rn "buttonStyle(.link)" App/` po #298 vrací jen komentáře |
+| `FindingBadgeAppearance` | Barva **konstatování** u nálezu (#309) — jedno místo pro `2×` a `✓ v mém review` v tabulce i v bublině. Vlastní jméno proto, aby šlo testem tvrdit, že se odznak nepřebarvil zpátky na akcent; uvnitř `body` se to tvrdit nedá |
 | `FindingActions` | Co se dá dělat s nálezem — odmítnout a vrátit; jedno místo pro bublinu i tabulku |
 | `FindingDisclosureActions` | Rozbalení bubliny nálezu (#185) — stav ze store a jeho překliknutí. **Nepatří do `FindingActions`**, kterou bere i tabulka: ta rozbalení řídí sama |
 | `ThreadBubbleView` | Vlákno konverzace — u kódu i na ose (`Placement`); karta z pruhů, vyřešené sbalené s odznakem, moje komentáře odlišené, pole na odpověď a `Vyřešit` (#73, sazba #216) |
@@ -1920,7 +1932,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt **předvyplněný návrhem z nálezů** (obtažený, s popiskem), tělo, seznam komentářů, `Odeslat review…` (u zastaralého `Zkontrolovat a odeslat…`). Obsah scrolluje, jen když se nevejde |
 | `ReviewSubmissionSheet` | Potvrzení odeslání: **kontrola kotev u zastaralého draftu** (#69), pak úplný výpis payloadu, průběh, typované chyby |
 | `DraftTransferView` | První stránka toho potvrzení: stav každé kotvy (sedí / posunulo se / nevím / ztraceno) a volba, co s ní |
-| `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení |
+| `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení. `Komentář` bere od #309 `Palette.accent` (verdikt je volba, tedy akce); `.green`/`.red` zůstávají systémové vědomě — převod celé škály je jiná otázka a jinde v `App/` se zelená a červená berou ze systému na desítkách míst |
 | `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
 | `DiffLineView` | Řádek souboru: dvě čísla (v buňce dvojice jedno, podle `side`), znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
 | `ReviewPanel` | Panel **napravo od diffu** (#182, do #242 `FindingsPanel`): segmenty `Nálezy`/`Moje review`, karty nálezů, prokliky do diffu — a složení na proužek s počtem nálezů a značkou rozdělaného review. `Průběh` a zahození nálezů se u #242 odstěhovaly do záložek PR. **Kreslí se jen ve třech tabech** (#294, `PullRequestTab.showsReviewPanel`) — sám o tom nerozhoduje, podmínku má detail |

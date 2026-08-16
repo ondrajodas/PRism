@@ -10,16 +10,38 @@ import SwiftUI
 /// `completed(findings: 3)` s jedním blokujícím liší jen tím, co s tím mám udělat — proto se
 /// počet blokujících přidává až tady, a `ReviewState` zůstává, jak je.
 enum ReviewStateAppearance {
-    /// Barva stavu. Bere se **sémantická systémová**, ne hex z návrhu: v light i dark režimu
-    /// se přizpůsobí sama a při změně akcentu systému jde `accentColor` s ní.
+    /// Barva stavu.
+    ///
+    /// **Akcent a mint jdou z palety, zbytek škály ze systému** — a ta hranice je vědomá (#309).
+    /// Do #309 tu stálo, že se bere sémantická systémová barva, „protože se přizpůsobí režimu
+    /// a při změně akcentu systému jde `accentColor` s ní“. **Obojí padlo:** `Color(light:dark:)`
+    /// se režimu přizpůsobí taky, takže první polovina nebyla důvod pro systém — a druhá je
+    /// zrovna to, co se u #298 zamítlo. Akcent je jediná barva, kterou si okno drží samo (stojí na
+    /// ní identita aplikace a spektrum reviewerů), takže se se systémem měnit **nemá**. Ono to
+    /// stejně nefungovalo, jak ten komentář sliboval: `.tint(Palette.accent)` z kořene okna na
+    /// `Color.accentColor` nezabírá, takže odznak kreslil systémovou modrou i v okně, které je
+    /// jinak celé fialové.
+    ///
+    /// `.green`, `.orange`, `.red`, `.yellow` a `.secondary` **zůstávají systémové**. Převod celé
+    /// škály na `Palette.ok`/`find`/`crit`/`stale` je jiná otázka a jinde v repu se zodpovídá
+    /// měřením (#218 kapsle stavu, #277 diff); „mají to i tokeny“ samo o sobě důvod není, protože
+    /// zelenou a červenou bere ze systému ještě pár desítek míst v `App/`. Převést je zrovna tady
+    /// by z tohohle souboru udělalo výjimku, ne pravidlo.
     static func color(of state: ReviewState, blocking: Int = 0) -> Color {
         switch state {
         case .notStarted, .queued, .cloning: .secondary
-        case .running: .accentColor
+        // Akcent, ne mint: běžící review je to, co aplikace **dělá**, a návrh to kreslí jako
+        // `.pill.run`, tedy v akcentu. Mint je konstatování — viz `Palette.mint`.
+        case .running: Palette.accent
         case .clean: .green
         // Vlastní barva, ne zelená ani oranžová: vyřízeno to je, ale ne tím, že by bylo
         // čisto — a od nálezů, které čekají, se to musí poznat i bez čtení textu.
-        case .dismissed: .mint
+        //
+        // **Z palety, ne systémová `.mint`** (#309): odmítnuté review je konstatování, tedy přesně
+        // to, co `Palette.mint` znamená, a dvě „skoro stejné“ tyrkysové v jednom okně jsou to,
+        // čemu paleta brání. Systémová byla ve světlém režimu k tomu špatně čitelná — čísla jsou
+        // v `MintTokenTests`.
+        case .dismissed: Palette.mint
         // Blokující nález je červený jako selhání schválně (#172): obojí znamená „tímhle se
         // musíš zabývat teď“, kdežto oranžová znamená „něco se našlo“. Do #172 se tyhle dvě
         // situace v řádku nedaly rozeznat vůbec.
@@ -34,12 +56,15 @@ enum ReviewStateAppearance {
 
     /// Barva jednoho dílu proužku reviewerů. Stejná škála jako u stavu, jen o jedno patro níž:
     /// červená blokuje, oranžová našla, zelená je čistá, šedá nemá co říct.
+    ///
+    /// **Odmítnuté bere `Palette.mint` z téhož důvodu jako u stavu** (#309) — jsou to dvě kresby
+    /// jedné věci (odznak a díl proužku), takže se nesmí lišit ani o odstín.
     static func color(of outcome: ReviewerShare.Outcome) -> Color {
         switch outcome {
         case .blocking: .red
         case .findings: .orange
         case .clean: .green
-        case .dismissed: .mint
+        case .dismissed: Palette.mint
         case .inconclusive: .secondary
         }
     }
