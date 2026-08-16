@@ -4,26 +4,41 @@ import Foundation
 ///
 /// Vlastní soubor, ne součást `AppStore+Diff`: je to jediná část diffu, která si sama chodí
 /// na GitHub pro obsah souboru, a má vlastní stav odhalených řádků.
+///
+/// **Od #317 se totéž používá i v diffu commitu**, jen s jiným klíčem: `commit` v
+/// `FileExpansionKey` říká, ze které verze souboru se čte. Jedna cesta pro obojí schválně —
+/// druhá kopie by se rozešla zrovna v ořezávání rozsahů, na kterém stojí, že kotva ukazuje na
+/// řádek, který se doopravdy vykreslí.
 extension AppStore {
-    func expansion(of path: String, in pr: PRIdentifier) -> FileExpansion {
-        expansions[FileExpansionKey(pullRequest: pr, path: path)] ?? FileExpansion()
+    /// Co je u souboru rozbalené. `commit == nil` = hlava PR (`Změněné soubory`).
+    func expansion(of path: String, in pr: PRIdentifier, commit: String? = nil) -> FileExpansion {
+        expansions[FileExpansionKey(pullRequest: pr, path: path, commit: commit)] ?? FileExpansion()
     }
 
     /// Je v diffu vidět něco navíc proti tomu, co poslal `gh`?
-    func hasRevealedLines(in pr: PRIdentifier) -> Bool {
-        expansions.contains { $0.key.pullRequest == pr && !$0.value.revealed.ranges.isEmpty }
+    ///
+    /// Ptá se **na jeden diff**, ne na celé PR: rozbalený kontext v diffu commitu nesmí
+    /// rozsvítit `Zobrazit jen diff` nad diffem PR, protože tam by nebylo co sbalit.
+    func hasRevealedLines(in pr: PRIdentifier, commit: String? = nil) -> Bool {
+        expansions.contains {
+            $0.key.pullRequest == pr && $0.key.commit == commit && !$0.value.revealed.ranges.isEmpty
+        }
     }
 
     /// Sbalí všechen rozbalený kontext zpátky na samotný diff.
     ///
     /// Načtený obsah souborů si **nechá**: kdyby ho zahodila, druhé rozbalení by znovu
     /// chodilo po síti pro něco, co už jednou dorazilo.
-    func collapseRevealedLines(in pr: PRIdentifier) {
+    ///
+    /// Sbaluje **jen ten diff, ve kterém se na tlačítko kliklo** (stejný filtr jako
+    /// `hasRevealedLines`) — jinak by tlačítko v `Změněných souborech` sbalilo i to, co si člověk
+    /// rozbalil v diffu commitu, tedy na obrazovce, která zrovna není vidět.
+    func collapseRevealedLines(in pr: PRIdentifier, commit: String? = nil) {
         // Zápis do `expansions` uprostřed iterace je bezpečný: slovník je hodnotový typ,
         // takže smyčka jede přes snapshot pořízený na jejím začátku. Ověřeno spuštěním
         // (1000 prvků, žádný přeskočený). Podmínka na prázdné rozsahy tu není kvůli
         // výkonu — zbytečný zápis by hlásil změnu i tam, kde se nic nezměnilo.
-        for (key, expansion) in expansions where key.pullRequest == pr {
+        for (key, expansion) in expansions where key.pullRequest == pr && key.commit == commit {
             guard !expansion.revealed.ranges.isEmpty else { continue }
             expansions[key]?.revealed = RevealedLines()
         }
@@ -33,8 +48,13 @@ extension AppStore {
     ///
     /// Rozsah se zapíše **až po** načtení: kdyby se zapsal hned, zmizel by rozbalovací
     /// řádek i se spinnerem a zůstalo by po něm prázdno.
-    func reveal(_ lines: ClosedRange<Int>, of path: String, in pr: PRIdentifier) {
-        let key = FileExpansionKey(pullRequest: pr, path: path)
+    func reveal(
+        _ lines: ClosedRange<Int>,
+        of path: String,
+        in pr: PRIdentifier,
+        commit: String? = nil
+    ) {
+        let key = FileExpansionKey(pullRequest: pr, path: path, commit: commit)
         var state = expansions[key] ?? FileExpansion()
 
         guard state.content.isEmpty else {
@@ -58,7 +78,7 @@ extension AppStore {
 
     private func loadFile(_ key: FileExpansionKey) async {
         do {
-            let text = try await gateway.fetchFile(id: key.pullRequest, path: key.path)
+            let text = try await content(of: key)
             // Stav se čte **až po** awaitu: mezitím mohly přibýt další vyžádané rozsahy.
             var state = expansions[key] ?? FileExpansion()
             state.isLoading = false
@@ -82,6 +102,17 @@ extension AppStore {
             state.failure = (error as? GitHubError)?.userDescription ?? error.localizedDescription
             expansions[key] = state
         }
+    }
+
+    /// Obsah souboru z té verze, o které klíč mluví — hlava PR, nebo konkrétní commit (#317).
+    ///
+    /// Rozhoduje se **tady, na jednom místě**, a ne u volajícího: `reveal` je tatáž operace pro
+    /// obojí a jediné, co se liší, je odkud se text vezme.
+    private func content(of key: FileExpansionKey) async throws -> String {
+        guard let commit = key.commit else {
+            return try await gateway.fetchFile(id: key.pullRequest, path: key.path)
+        }
+        return try await gateway.fetchFile(repo: key.pullRequest.repo, path: key.path, at: commit)
     }
 
     /// Dotáhne kód k nálezům, jejichž řádek v diffu není.

@@ -490,6 +490,13 @@ struct PullRequestDetailView: View {
         Binding(get: { store.diffLayout }, set: { store.setDiffLayout($0) })
     }
 
+    /// Tělo zprávy v hlavičce rozkliknutého commitu (#317). Taky ve store a taky globálně, ze
+    /// stejného důvodu jako pohled na diff a rozložený panel — a hlavně proto, že `@State` v tomhle
+    /// view přetéká mezi pull requesty.
+    private var commitMessageExpanded: Binding<Bool> {
+        Binding(get: { store.isCommitMessageExpanded }, set: { store.isCommitMessageExpanded = $0 })
+    }
+
     /// Rozbaluje se obsah souboru **na hlavě PR**, takže u přejmenovaného souboru platí
     /// nová cesta — a `displayPath` je právě ona.
     private var expansionActions: DiffExpansionActions {
@@ -687,7 +694,31 @@ struct PullRequestDetailView: View {
         }
         .keyboardShortcut("2", modifiers: .command)
         .disabled(!store.detailTab(for: pullRequest.id).showsReviewPanel)
+        backFromCommitShortcut
         submitShortcut
+    }
+
+    /// `⎋` zavře diff commitu a vrátí seznam (#317) — druhá cesta zpět vedle tlačítka v hlavičce.
+    ///
+    /// **`.cancelAction`, ne `.escape` s prázdnými modifikátory**: je to táž klávesa, ale v tomhle
+    /// okně je zavedená ta první — bere ji paleta (#184) i sheety —, a míchat dva zápisy téhož
+    /// znamená hádat, který z nich AppKit spáruje dřív.
+    ///
+    /// **Zakázaná, kdykoli Esc patří něčemu jinému**: mimo tab `Commity`, nad seznamem (není co
+    /// zavírat), nad otevřenou paletou a nad potvrzením odeslání. Zakázané tlačítko klávesu nebere,
+    /// takže propadne dál — tentýž vzorec jako u `⌘⏎` a `⌘2`. Sheety se tady nevyjmenovávají,
+    /// protože jsou to vlastní okna a klávesu si berou samy; hlídají se jen stavy z tohohle okna.
+    private var backFromCommitShortcut: some View {
+        Button("Zpět na seznam commitů") { store.closeCommit(in: pullRequest.id) }
+            .keyboardShortcut(.cancelAction)
+            .disabled(!canCloseCommit)
+    }
+
+    private var canCloseCommit: Bool {
+        store.detailTab(for: pullRequest.id) == .commits
+            && store.openedCommit(in: pullRequest.id) != nil
+            && submission == nil
+            && !store.isPaletteOpen
     }
 
     /// Drží se zrovna shift? Z toho se pozná `⌥⇧↓` (další **blokující** nález) od `⌥↓`.
@@ -993,11 +1024,71 @@ struct PullRequestDetailView: View {
                 primary: .init(title: "Zkusit znovu", run: reloadCommits)
             )
         case .list(let list, let failure):
-            VStack(spacing: 0) {
-                if let failure { staleCommitsNotice(failure) }
-                CommitListView(commits: list, head: store.head(of: pullRequest.id))
+            // **Rozkliknutý commit přebíjí seznam, ne poruchu nad ním** (#317): okrová věta
+            // o zastaralém seznamu patří k seznamu, a v diffu commitu by mluvila o něčem, co
+            // zrovna není vidět.
+            if let open = Policy.openCommit(store.openedCommit(in: pullRequest.id), in: list) {
+                commitDiff(of: open, in: list)
+            } else {
+                VStack(spacing: 0) {
+                    if let failure { staleCommitsNotice(failure) }
+                    CommitListView(
+                        commits: list,
+                        head: store.head(of: pullRequest.id),
+                        opened: store.lastOpenedCommit(in: pullRequest.id),
+                        open: { store.openCommit($0.sha, in: pullRequest.id) }
+                    )
+                }
             }
         }
+    }
+
+    /// Diff jednoho commitu (#317) — obsah tabu po rozkliknutí řádku.
+    ///
+    /// Skládá se tady, protože klíč rozbalování a sbalování zná store: obojí se v tomhle tabu
+    /// klíčuje **i sha commitu**, aby se kontext nebral z hlavy PR a sbalení souboru nepřeteklo
+    /// do `Změněných souborů`.
+    private func commitDiff(of commit: PullRequestCommit, in list: [PullRequestCommit]) -> some View {
+        CommitDiffView(
+            commit: commit,
+            state: store.commitDiffState(of: commit, in: pullRequest.id),
+            position: Policy.commitPosition(of: commit.sha, in: list),
+            url: Policy.commitURL(of: commit.sha, in: pullRequest.repo),
+            isMessageExpanded: commitMessageExpanded,
+            expansion: commitExpansion(of: commit.sha),
+            folding: commitFolding(of: commit.sha),
+            layout: diffLayout,
+            back: { store.closeCommit(in: pullRequest.id) },
+            showFiles: { store.setDetailTab(.filesChanged, for: pullRequest.id) },
+            // Zopakování jde **touž cestou jako první otevření** (`openCommit`), ne přímo na
+            // `loadCommitDiff`: jinak by tlačítko stáhlo diff, ale nechalo v okně starou chybu,
+            // protože stav by se nikdy nevrátil na `loading`.
+            retry: { store.openCommit(commit.sha, in: pullRequest.id) }
+        )
+    }
+
+    /// Rozbalování kontextu v diffu commitu — obsah souborů **z toho commitu**.
+    private func commitExpansion(of sha: String) -> DiffExpansionActions {
+        let id = pullRequest.id
+        return DiffExpansionActions(
+            state: { store.expansion(of: $0.displayPath, in: id, commit: sha) },
+            reveal: { store.reveal($1, of: $0.displayPath, in: id, commit: sha) },
+            collapse: store.hasRevealedLines(in: id, commit: sha)
+                ? { store.collapseRevealedLines(in: id, commit: sha) }
+                : nil
+        )
+    }
+
+    /// Sbalování souborů v diffu commitu. Vlastní klíč, takže se sbalení nesdílí se
+    /// `Změněnými soubory` — proč, je u `AppStore.isFolded(_:in:commit:)`.
+    private func commitFolding(of sha: String) -> DiffFoldingActions {
+        let id = pullRequest.id
+        return DiffFoldingActions(
+            isFolded: { store.isFolded($0.displayPath, in: id, commit: sha) },
+            toggle: { store.toggleFolded($0.displayPath, in: id, commit: sha) },
+            foldAll: { store.foldAll($0.map(\.displayPath), in: id, commit: sha) },
+            unfoldAll: { store.unfoldAll(in: id, commit: sha) }
+        )
     }
 
     /// Poslední pokus o načtení commitů selhal, ale stará sada zůstala (#316) — takže je vidět

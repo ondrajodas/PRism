@@ -43,11 +43,47 @@ protocol GitHubGateway: Sendable {
     /// nic, čím by šlo něco odeslat.
     func fetchDiff(repo: RepoID, from base: String, to head: String) async throws -> String
 
+    /// Diff **jednoho commitu** (#317) — co přinesl tenhle krok.
+    ///
+    /// **Vlastní metoda vedle `fetchDiff(repo:from:to:)`, ne parametr navíc.** Obojí jde na
+    /// `gh api` s `Accept: application/vnd.github.diff`, takže je pokušení mít jednu — jenže to
+    /// nejsou dvě podoby téže otázky. `compare/<a>...<b>` odpovídá na „co je mezi dvěma hlavami“,
+    /// `commits/<sha>` na „co přinesl tenhle commit“, tedy diff **proti prvnímu rodiči**. Napsat
+    /// druhé přes první (`<sha>^...<sha>`) by u sloučení odpověď tiše změnilo: trojtečka počítá od
+    /// společného předka, takže by ukázala i to, co přinesla přisloučená větev. Sdílené je proto
+    /// jen to, co doopravdy sdílené je — složení příkazu, viz `GhGateway.diffText(at:)`.
+    ///
+    /// Počet souborů a `+X −Y` se počítají **z tohohle textu**, takže hlavička rozkliknutého
+    /// commitu nestojí volání navíc. Změřeno 0,70–1,78 s na `keboola/job-queue#727`.
+    ///
+    /// **Prázdná odpověď je platný výsledek, ne porucha** — změřeno na témž PR: tři commity
+    /// z `git commit --allow-empty` (přetočení CI) vrátily **nula bajtů** s nulovým návratovým
+    /// kódem. Volající to musí umět říct větou, viz `Policy.commitDiffTab`.
+    ///
+    /// Třináctá **čtecí** metoda protokolu; tvrdá podmínka č. 1 platí dál — gateway pořád nemá
+    /// nic, čím by šlo něco odeslat.
+    func fetchDiff(repo: RepoID, commit sha: String) async throws -> String
+
     /// Obsah souboru na hlavě pull requestu — kvůli rozbalení kontextu mimo hunky.
     ///
     /// Diff sám okolní řádky nenese a pracovní kopie v tu chvíli existovat nemusí, takže
     /// se soubor čte přímo z GitHubu.
     func fetchFile(id: PRIdentifier, path: String) async throws -> String
+
+    /// Obsah souboru **v konkrétním commitu** (#317) — kvůli rozbalení kontextu v diffu commitu.
+    ///
+    /// **Vlastní metoda vedle `fetchFile(id:path:)`, a gitová reference schválně není parametr.**
+    /// „Soubor na hlavě PR“ a „soubor v tomhle commitu“ jsou dvě různé otázky s různou zárukou:
+    /// první se posune s každým pushnutím, druhá je zmrazená. Kdyby se ref předával jako řetězec,
+    /// věděl by o syntaxi gitových referencí `AppStore` a kterýkoli volající by si mohl říct
+    /// o cokoli; takhle je z podpisu vidět, na co se dá zeptat.
+    ///
+    /// Bez ní by rozbalený kontext u staršího commitu ukazoval řádky z **dnešní** hlavy, tedy
+    /// posunuté o všechno, co mezitím přibylo — a to potichu, protože kód okolo hunku vypadá
+    /// stejně věrohodně, ať je z kteréhokoli commitu.
+    ///
+    /// Čtrnáctá **čtecí** metoda protokolu; tvrdá podmínka č. 1 platí dál.
+    func fetchFile(repo: RepoID, path: String, at commit: String) async throws -> String
 
     /// Konverzace pod PR — review ostatních, vlákna u řádků a komentáře.
     ///

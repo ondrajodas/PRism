@@ -56,6 +56,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `ChecksTabState` | Co je v tabu `Kontroly` k vidění (#306): `loading` / `empty` / `list([PullRequestCheck], failure:)` / `failed`. Tab se kreslí i u PR bez CI, takže musí mít odpověď na **každý** stav dat — `empty` znamená „tenhle PR CI nemá“, kdežto `loading` o CI netvrdí nic. Skládá to `Policy.checksTab(checks:failure:)` ze **dvou** map ve store (`checks`, `checkFailures`), jinak by se prázdno slilo s poruchou. Není `Codable` — je to odvozený stav, ne data |
 | `PullRequestCommit` | Jeden commit PR (#316): plné `sha`, celá `message`, `authorName` (z gitu, **vždycky je**), `authorLogin` a `avatarURL` (z účtu, **umí být `nil`**), `committedAt` a `isMerge`. `subject` je první řádka zprávy, `shortSha` sedm znaků. Klíčuje se **celým sha**, ne zkráceným — dvě sha se stejnými sedmi znaky by se v `ForEach`i slila potichu. Počet souborů ani `+X −Y` v něm **nejsou**: seznam z GitHubu je nenese a dotahovat je po commitu je N+1 |
 | `CommitsTabState` | Co je v tabu `Commity` k vidění (#316): `loading` / `list([PullRequestCommit], failure:)` / `failed`. **Tři stavy, ne čtyři** — `empty` tu chybí schválně: pull request bez commitů neexistuje, takže prázdná odpověď je **porucha**, ne stav PR. Je to obrácená volba než u `ChecksTabState`, kde prázdno odpověď **je**. Skládá to `Policy.commitsTab(commits:failure:)` ze dvou map ve store. Není `Codable` |
+| `CommitDiff` | Diff **jednoho commitu** (#317): `sha` a `content` (`loading` / `loaded(Diff)` / `failed`). Sha je **v hodnotě, ne v klíči** — mapa ve store je klíčovaná pull requestem, takže se v okně drží nejvýš jeden diff commitu na PR. Klíč `(PR, sha)` by u PR se stovkou commitů rostl o každý proklik a byly by to megabajty za obrazovky, které nikdo nemá vidět (tatáž úvaha jako u `expandedChecks`). Návratem do seznamu se **nezahazuje**: je to i paměť na to, kde v seznamu člověk byl |
+| `CommitDiffTabState`, `CommitDiffEmpty`, `CommitDiffFacts` | Co je vidět po rozkliknutí commitu (#317): `loading` / `diff(Diff)` / `nothing(CommitDiffEmpty)` / `failed`. **Čtvrtý stav je ten podstatný** — diff, který se stáhl a nic v něm není, není porucha ani načítání, takže mu patří věta, ne prázdná plocha; a je to **měřený** případ, ne teoretický (commity z `git commit --allow-empty` vracejí nula bajtů). `CommitDiffEmpty` nese titulek i větu, protože sloučení a prázdný commit mají každý jiné znění. `CommitDiffFacts` je počet souborů (už vyskloňovaný) a `+X −Y` **ze staženého diffu**, tedy bez volání navíc |
 | `ReviewPanelTab` | Co je vidět v panelu vpravo: `findings` / `draft` (#242). Jako `PullRequestTab` **není `Codable`** |
 | `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání — `Hit` nese **dva** rozsahy
 zvýraznění, jeden nad titulkem a jeden nad podtitulkem), `Jump` (žádost o odscrollování) a `Effect` (co zbývá na okno). **Není `Codable`** — je to obsah jednoho otevření palety. Jmenný prostor proto, že `Palette` v repu už znamená barvy okna |
@@ -243,7 +245,7 @@ z `GitHubGateway`, tenhle kód mu jen rozumí.
 | `FileTreeNode` | Soubory diffu jako strom pro navigaci; slévá složky s jediným potomkem |
 | `DiffExpander` | Skrytý úsek mimo hunky a kroky, kterými se dá odkrýt |
 | `RevealedLines` | Které skryté řádky jsou odkryté; slučuje rozsahy a dělí jimi mezeru |
-| `FileExpansion` | Rozbalování jednoho souboru: odkryté rozsahy, obsah, načítání, chyba |
+| `FileExpansion`, `FileExpansionKey` | Rozbalování jednoho souboru: odkryté rozsahy, obsah, načítání, chyba. Klíč je `(PR, cesta, commit)` — `commit: nil` je hlava PR, jinak konkrétní commit (#317). **Ze které verze souboru obsah je, říká klíč, ne hodnota**: týž soubor má v `Změněných souborech` a v diffu commitu jiná čísla řádků, takže sdílený záznam by u staršího commitu odkryl řádky z dnešní hlavy. Tentýž klíč drží **sbalené soubory** (`AppStore.foldedFiles`), takže se ani sbalení mezi těmi dvěma diffy nesdílí |
 
 Věci, které se u toho nemají rozbít:
 
@@ -1713,7 +1715,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Draft.swift` | Rozdělané review (#65, #66) a tažení rozsahu (#110) | 190 |
 | `AppStore+Submission.swift` | Odeslání review na GitHub (#67, #68) | 172 |
 | `AppStore+Notifications.swift` | Co se ohlásí, když se do okna nikdo nedívá (#82, #85, #87) | 166 |
-| `AppStore+DiffExpansion.swift` | Rozbalování kontextu mimo hunky (#47) | 112 |
+| `AppStore+DiffExpansion.swift` | Rozbalování kontextu mimo hunky (#47), od #317 i v diffu commitu | 139 |
 | `AppStore+DraftTransfer.swift` | Přenesení draftu na nový commit (#69) | 103 |
 | `AppStore+Diff.swift` | Načtení diffu, pohled a sbalování souborů | 95 |
 | `AppStore+IncrementalDiff.swift` | Diff „co od minule přibylo“ (#284) — nabídnout, načíst, zavřít | 87 |
@@ -1722,6 +1724,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
 | `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
+| `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
 
 Čtyři věci, na kterých to rozdělení stojí:
 
@@ -1983,6 +1986,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Od #316 má **tři podoby** (`ViewThatFits`, `Layout`): s popisky a `+X −Y`, s popisky bez ní a od #318 **ikony s odznaky a popiskem jen u aktivní** — díky té třetí se pruh nezalomí ani v nejužším povoleném okně. Viz *Pruh záložek — tři podoby podle šířky* |
 | `StaleNoticeView` | Okrová věta „tohle je poslední známý stav“ nad seznamem, který se nepovedlo načíst **znovu** — jedno místo pro `Kontroly` (#215) i `Commity` (#316). Sedí **nad `ScrollView`em**, aby neodscrollovala pryč od obsahu, o kterém mluví |
 | `CommitListView` | Seznam commitů v tabu `Commity` (#316): pruh s počtem a hlavou, řádek na commit (obrázek autora, první řádka zprávy, jméno, relativní čas, sha) a pilulky `sloučení` a `hlava`. `content` je `internal` kvůli měření přesahu — `NSScrollView` by přesah ukrojil |
+| `CommitDiffView` | Diff jednoho commitu (#317) — hlavička a pod ní `DiffView`. **Nedostane `AppStore` ani identifikátor PR**, takže nemá čím vyrobit bublinu nálezu ani rozdělaný komentář; `reading(_:)` je `internal` kvůli testu, který tvrdí právě to, co `DiffView` **nedostane** |
+| `CommitHeaderView` | Hlavička rozkliknutého commitu (`.chead`, #317): cesta zpět s pozicí, zpráva i její tělo, kapsle se sha (kliknutím se kopíruje), odkaz na GitHub, autor, čas, počet souborů a `+X −Y`, a tichá věta „Jen ke čtení…“ s odkazem do `Změněných souborů`. Řádek meta se v úzkém okně zalomí přes `ViewThatFits` — `.chead .meta` má v CSS `flex-wrap`, který SwiftUI nemá |
 | `OverviewView` | Tab `Přehled`, odshora **co se změnilo od minule → fakta → popis PR** (#280; kontroly mají od #215 vlastní tab). Obsah je v `content` **mimo `ScrollView`** a `internal` schválně — přes `body` se šířka změřit nedá, viz #291 |
 | `SinceLastVisitView` | Pruh „co se změnilo od minule“ nahoře v `Přehledu` (#173, sazba #226 a #284) — odrážky po částech a pod nimi odznak `nálezy zastaraly` s tlačítky `Pustit review znovu` a `Ukázat, co přibylo` |
 | `SinceLastVisitLine`, `SinceLastVisitLines` | Odrážka po typovaných částech a jejich skládání (#284). Mimo view a testovatelné, jako `TimelineEventRow` |
@@ -3329,9 +3334,57 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Panel s nálezy se nekreslí** (`PullRequestTab.showsReviewPanel`) — čtvrtý takový tab po #294,
     s vlastním důvodem: nálezy platí proti `headSha`, takže by u staršího commitu ukazoval nálezy
     k jinému kódu.
-  - **Řádek nemá šipku, protože se nedá rozkliknout.** Návrh (sekce 19) ji kreslí, ale diff jednoho
-    commitu je vlastní issue; šipka, za kterou se nic nestane, slibuje interakci, která tam není —
-    tatáž úvaha jako u checku bez čísla jobu (#214).
+  - **Řádek se od #317 dá rozkliknout, a teprve tím dostal šipku `›`.** Do té doby žádná nebyla
+    schválně: šipka, za kterou se nic nestane, slibuje interakci, která tam není — tatáž úvaha jako
+    u checku bez čísla jobu (#214). Co se rozkliknutím stane, je v odstavci níž.
+  - **Rozkliknutý commit přepne obsah tabu** (#317) — seznam zmizí a diff jednoho commitu dostane
+    celou plochu, jako to má GitHub. Kreslí to `CommitDiffView` (hlavička `CommitHeaderView` a pod
+    ní `DiffView`), stav drží `AppStore+CommitDiff`, rozhoduje `Policy.commitDiffTab`.
+
+    - **Je to prohlížeč, a je to vidět z typu.** `CommitDiffView` nedostane `AppStore` ani
+      identifikátor PR, takže **nemá čím** vyrobit bublinu nálezu ani rozdělaný komentář; `DiffView`
+      od něj dostane jen čtecí parametry a prázdné hodnoty se **nevypisují** (mají default), aby
+      nebylo druhé místo, kde se dá `findings:` omylem naplnit. Drží to `CommitDiffReadOnlyTests`
+      ve třech vrstvách — co se předá, co z toho vyjde v řádcích, a že žádný řádek nenabídne akci.
+      Důvody jsou dva a oba jsou tvrdé: komentář ke commitu by potřeboval **jiný klíč draftu**
+      a **pátou metodu v `ReviewPublishing`** (podmínka č. 1), a nálezy jsou klíčované `headSha`
+      (podmínka č. 5). Tím, že je tab celý čtecí, se podmínky č. 1 **nedotýká vůbec**.
+    - **Co zůstává**: oba pohledy, word-level zvýraznění, sbalování souborů, rozbalování kontextu,
+      kopírování i strom souborů vlevo (`⌘1`) — commit s třiceti soubory ho potřebuje. Všechno
+      z `DiffView`, tedy jedna cesta pro obě obrazovky.
+    - **Rozbalený kontext se čte z toho commitu**, ne z hlavy PR: `FileExpansionKey` nese
+      `commit: String?` a `AppStore.reveal(_:of:in:commit:)` podle něj vybere
+      `fetchFile(repo:path:at:)`. Bez toho by odkryté řádky byly z dnešní hlavy, tedy posunuté
+      o všechno, co mezitím přibylo — a vypadaly by věrohodně. **Tentýž klíč drží sbalené soubory**,
+      takže se sbalení mezi diffem PR a diffem commitu nesdílí (a `Zobrazit jen diff` se nabízí jen
+      v tom diffu, kde je co sbalit).
+    - **Hlavička nese to, co v seznamu není**: tělo zprávy, kapsli se sha (kliknutím se kopíruje),
+      odkaz na GitHub, autora, čas, počet souborů a `+X −Y`. **Čísla jsou ze staženého diffu**,
+      takže nestojí volání navíc. Vlevo je cesta zpět `‹ Commity` s pozicí (`2 ze 7`), vpravo tichá
+      věta „Jen ke čtení…“ s odkazem do `Změněných souborů` — kdo přijde odtamtud, bude do řádku
+      chtít kliknout.
+    - **Sbaluje se tělo zprávy, ne celá hlavička.** Je to jediná část, která roste bez omezení —
+      zbytek jsou tři řádky pevné výšky —, a hlavička sbalená celá by se smrskla na pruh
+      s tlačítkem zpět, tedy přestala odpovídat na „na co se to koukám“. Přepínač je **vlastní
+      řádek s popiskem** (`⌄ Tělo zprávy` / `› Tělo zprávy · 6 řádků`, `Policy.commitMessageToggle`),
+      protože po sbalení musí zbýt něco, na co se dá kliknout; počet řádků nese jen sbalený stav.
+      Volba je **globální ve store** (`AppStore.isCommitMessageExpanded`) — předvolba pohledu jako
+      `isReviewPanelExpanded`, tedy ne mapa per PR a hlavně ne `@State`, který mezi pull requesty
+      přetéká. **Výchozí stav je rozbaleno** a u jednořádkové zprávy se nekreslí ani přepínač
+      (`Policy.commitMessageBody` vrátí prázdno).
+    - **Prázdný diff dostane větu, ne prázdnou plochu** (`CommitDiffTabState.nothing`), a jinou
+      podle toho, jestli je to sloučení. Změřeno: prázdno vracejí hlavně **prázdné commity**
+      (`--allow-empty`), ne sloučení — podrobnosti u gateway a ve specifikaci.
+    - **Návrat nezapomene, kde jsi byl.** Podbarvený řádek i cíl scrollu je sha posledního
+      staženého diffu (`lastOpenedCommit(in:)`), tedy táž hodnota, ze které se diff kreslí — druhá
+      paměť by uměla tvrdit něco jiného. Zpátky vede tlačítko i `⎋`; zkratka bydlí na detailu PR
+      a je **zakázaná** mimo tab, nad seznamem, nad paletou a nad potvrzením odeslání.
+    - **Commit, který ze seznamu zmizel** (force push), se nekreslí — `Policy.openCommit(_:in:)`
+      vrátí `nil` a tab spadne na seznam.
+    - **V okně se drží nejvýš jeden diff commitu na PR** (klíč `commitDiffs` je pull request, sha je
+      v hodnotě). Přeskakování mezi dvěma commity tedy stahuje pokaždé znovu; návrat do seznamu
+      naopak diff **nezahodí**, takže zpátky do téhož commitu je zadarmo.
+
   - **Sedmá záložka stojí jedinou věc: šířku pruhu záložek — a ta se zaplatila.** Pilulka `+X −Y`
     stojí 110 bodů a `Commity` s odznakem 112, takže se jedna zaplatila druhou a hranice povyrostla
     o **dva body okna** (937 → 939), ne o sto dvanáct. Podrobnosti i s tím, co přidal druhý stupeň
@@ -4286,6 +4339,10 @@ Věci, které se u toho nemají rozbít:
 | `Policy.commitsBadge(of:)` | Odznak u záložky `Commity` (#316) — prostý počet, a jen nad seznamem. Tichá kapsle: kolik je commitů, je množství, ne upozornění; nad nenačteným ani spadlým stavem **nic**, protože nula by tvrdila, že se spočítalo |
 | `Policy.headCommit(in:head:)` | Který řádek nese pilulku `hlava` (#316). Rozhoduje **`headSha` z detailu, ne pozice v poli** — „nahoře“ a „hlava“ nejsou totéž, jen nad čerstvým seznamem vycházejí nastejno: po pushnutém commitu je seznam o krok pozadu a nad stropem API v něm hlava není vůbec. Nálezy jsou klíčované `headSha` (tvrdá podmínka č. 5), takže by to bylo tvrzení, ne dekorace; hlava mimo seznam → **nic se neoznačí**. Bez známé hlavy (detail ještě nedorazil) platí definice endpointu: GitHub vrací od nejstaršího a `commitsNewestFirst` to otáčí, takže **první** — jediný okamžik, kdy rozhoduje pozice |
 | `Policy.commitsHeadline(count:)`, `Policy.commitNoun(_:)` | Věta nad seznamem commitů (#316) ve **dvou kusech** (`CommitsHeadline`), protože počet je tmavý a polotučný a zbytek tlumený. Skloňování má tři tvary (`1 commit` / `2 commity` / `7 commitů`) — `1 commitů` je jeden ze stavů, které se podle zadání nesmí slít. **Pojmenovává pořadí** (`· od nejnovějšího`), takže se s ním musí měnit — jinak okno lže o tom, co ukazuje. Na **stropu API** (250) věta řekne, že seznam nemusí být celý |
+| `Policy.openCommit(_:in:)` | Který commit je rozkliknutý (#317) — hledá se **podle sha v čerstvém seznamu**, ne podle uložené pozice. Po force pushi umí commit z PR zmizet a tab pak spadne zpátky na seznam; kreslit dál jeho hlavičku by znamenalo obrazovku, ze které se nedá poznat, že už neplatí. Tatáž úvaha jako u `headCommit(in:head:)` |
+| `Policy.commitDiffTab(_:of:)` | Co je vidět místo seznamu (#317) — čtyři stavy `CommitDiffTabState`. **Cizí sha je `loading`, ne prázdno**: v okně leží nejvýš jeden diff commitu na PR, takže hned po kliknutí na jiný commit tam ještě chvíli je ten předchozí, a nakreslit ho pod novou hlavičkou by byl diff, který k ní nepatří. Prázdný diff je **`nothing` s větou**, ne porucha |
+| `Policy.emptyCommitDiff(isMerge:)` | Proč je diff prázdný (#317) — **dvě věty**, protože u sloučení je prázdno vlastnost toho, jak se diff počítá, a u obyčejného commitu vlastnost commitu. Obě říkají „není to porucha“. Změřeno na `keboola/job-queue#727`: prázdno vracejí **prázdné commity** (`--allow-empty`), sloučení tam prázdná nebyla — takže se rozhoduje z `isMerge`, ne z dohadu, co je běžnější |
+| `Policy.commitDiffFacts(of:)`, `Policy.commitPosition(of:in:)`, `Policy.commitURL(of:in:)` | Čísla a adresy do hlavičky rozkliknutého commitu (#317): počet souborů se skloňováním a `+X −Y` **ze staženého diffu** (tedy zadarmo), `2 ze 7` v pořadí, ve kterém je seznam **nakreslený**, a adresa commitu na GitHubu přes `URLComponents` (jako `permalink`) |
 | `Policy.jobID(from:)` | Číslo jobu z odkazu na check (#214). Funguje i jako check-run ID pro anotace; `…/runs/<id>` bez `/job/` je **běh**, ne job, takže `nil` |
 | `Policy.strippingANSI(_:)`, `Policy.strippingTimestamps(_:)` | Čistka logu (#214) — bez nich je v okně `^[[36;1m` a 28 znaků timestampu na každém řádku |
 | `Policy.logTail(_:lines:)` | Konec logu a **kolik se ho nevešlo** (`LogTail`, #214). Tiše zkrácený log tvrdí, že job začal uprostřed |
@@ -4838,12 +4895,12 @@ Nad odesílatelností draftu (#68) platí:
 
 ## `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má dvanáct metod
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má čtrnáct metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu.
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)` |
+| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
@@ -4905,11 +4962,28 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   se kreslí, je rozhodnutí, ne tvar odpovědi: gateway vydá, co přišlo, a `Policy.commitsNewestFirst`
   to na jednom místě **otočí** (nejnovější nahoře) — topologické pořadí se tím zachová, jen se čte
   z druhé strany. Zahazují se jen položky **bez sha**, ze kterých se řádek udělat nedá.
+- **Diff jednoho commitu jde na `commits/<sha>`, ne na `compare`** (#317).
+  `gh api repos/{o}/{r}/commits/<sha>` s touž hlavičkou `Accept: application/vnd.github.diff` —
+  změřeno 0,70–1,78 s na `keboola/job-queue#727`. Vypadá to jako totéž co rozsah o odstavec výš
+  a **schválně to jedna metoda není**: `compare/<a>...<b>` počítá od společného předka, kdežto
+  `commits/<sha>` je diff **proti prvnímu rodiči**, takže `<sha>^...<sha>` by u sloučení ukázalo
+  i přisloučenou větev. Sdílené je jen složení příkazu (`GhGateway.diffText(at:)`).
+
+  **Prázdná odpověď je platný výsledek.** Změřeno na témž PR: tři commity z
+  `git commit --allow-empty` (přetočení CI) vrátily **nula bajtů** s nulovým návratovým kódem,
+  kdežto tři sloučení vrátila 842 B, 514 kB a 760 kB. Prázdno je tedy stav odpovědi, ne vlastnost
+  sloučení — vysvětluje ho `Policy.commitDiffTab`, ne prázdná plocha.
 - **Obsah souboru se čte přes ref pull requestu**, ne přes `headSha`:
   `gh api repos/…/contents/<cesta>?ref=refs/pull/<n>/head` s hlavičkou
   `Accept: application/vnd.github.raw`. Ověřeno na živém API — ten ref má každý PR včetně
   forků, takže odpadá `gh pr view` jen kvůli SHA. Cesta se procentuje, jinak ji mezera
   v názvu rozbije.
+
+  **Od #317 je vedle toho `fetchFile(repo:path:at:)`**, který čte soubor v konkrétním commitu
+  (`?ref=<sha>`) — kvůli rozbalování kontextu v diffu commitu. **Ref není parametr jedné metody**,
+  a je to rozhodnutí: „soubor na hlavě PR“ a „soubor v tomhle commitu“ mají jinou záruku (první se
+  posune s každým pushnutím, druhý je zmrazený) a `ref: String` by dal syntaxi gitových referencí
+  do `AppStore`. Sdílené je zase jen složení příkazu (`GhGateway.fileText(repo:path:ref:)`).
 - **Tvar `gh` JSONu se nesmí propsat do modelů.** `PullRequest` a `PullRequestSummary` se
   kódují na disk, takže jejich `Codable` popisuje uložený tvar. Dekódují se proto DTO
   a teprve ta se mapují — jinak by změna `gh` měnila formát dat v `ReviewStore`.

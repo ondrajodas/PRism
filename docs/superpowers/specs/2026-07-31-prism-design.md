@@ -629,9 +629,9 @@ v mockupu, sekce 19 (*Review — Commity*, viz [`docs/navrh.md`](../../navrh.md)
 tady, protože rozhodnutí padla dřív, než na ně vznikly issues — pravidlo *Návrh (mockup)*
 v `CLAUDE.md` chce nakreslit a nechat schválit napřed.
 
-**Seznam je od #316 hotový** a **smrsknutí pruhu na ikony od #318**; diff jednoho commitu zbývá
-(#317). Co implementace upřesnila nebo změnila, je v pododdílech *Co se při implementaci rozhodlo
-jinak* (#316, #318) níž.
+**Hotové celé**: seznam od #316, diff jednoho commitu od #317, smrsknutí pruhu na ikony v úzkém
+okně od #318. Co implementace upřesnila nebo změnila, je v pododdílech *Co se při implementaci
+rozhodlo jinak* (#316, #317, #318) níž — jeden na issue.
 
 **Proč vzniká.** `Změněné soubory` odpovídají na „co je na PR jinak proti základu“ — jeden
 slitý diff, ze kterého je vidět výsledek, ne cesta. Otázka „proč tenhle řádek zmizel“ nebo
@@ -815,6 +815,114 @@ Rozhodnutí zapsaná dřív, než se psal kód, platí; tohle je to, co se u imp
 - **Čas v řádku je relativní** (`před 3 dny`), ne `dnes 9:12` jako v mockupu. Zbytek okna používá
   `.relative(presentation: .named)` všude (osa, vlákna, seznam PR), a dva různé způsoby, jak
   v jednom okně napsat „kdy“, jsou horší než odchylka od jedné buňky návrhu.
+
+#### Co se při implementaci rozhodlo jinak (#317)
+
+Diff jednoho commitu. Návrh výš platí; tohle je to, co se u implementace ukázalo jinak nebo
+podrobněji.
+
+- **Prázdný diff přichází od prázdných commitů, ne od sloučení — změřeno.** Zadání i tenhle návrh
+  čekaly prázdno hlavně u sloučení („diff je proti prvnímu rodiči a umí vyjít prázdný“). Na
+  `keboola/job-queue#727` to vyšlo **obráceně**: tři sloučení vrátila diff proti prvnímu rodiči
+  o **842 B, 514 kB a 760 kB**, kdežto tři commity z `git commit --allow-empty` (přetočení CI)
+  vrátily **nula bajtů** s nulovým návratovým kódem. Prázdno je tedy **stav odpovědi**, ne
+  vlastnost sloučení — a obě vysvětlující věty proto musí obstát samy o sobě
+  (`Policy.emptyCommitDiff(isMerge:)`). Zůstává, že je to platný výsledek: obě říkají „není to
+  porucha“ a stav je vlastní (`CommitDiffTabState.nothing`), aby nesplynul s načítáním ani
+  s chybou.
+
+- **Dvě čtecí metody gateway navíc, ne jedna společná.** `fetchDiff(repo:from:to:)` z #284 jde na
+  `gh api` s touž hlavičkou `Accept: application/vnd.github.diff`, takže se sloučení nabízelo.
+  Neudělalo se, protože to nejsou dvě podoby téže otázky: `compare/<a>...<b>` počítá od
+  **společného předka**, kdežto `commits/<sha>` je diff proti **prvnímu rodiči** — jedno napsané
+  přes druhé (`<sha>^...<sha>`) by u sloučení tiše ukázalo i přisloučenou větev. Sdílené je proto
+  **jen složení příkazu** (`GhGateway.diffText(at:)`), tedy to, co doopravdy sdílené je.
+
+  Totéž u obsahu souboru: `fetchFile(repo:path:at:)` stojí vedle `fetchFile(id:path:)` a **ref
+  není parametr**. „Soubor na hlavě PR“ a „soubor v tomhle commitu“ mají jinou záruku (první se
+  posune s pushnutím, druhý je zmrazený) a `ref: String` by dal syntaxi gitových referencí do
+  `AppStore`. Gateway má tedy **čtrnáct** čtecích metod a pořád ani jednu zápisovou — tvrdé
+  podmínky č. 1 se tab nedotýká.
+
+- **Rozbalování kontextu se muselo klíčovat commitem.** Zadání ho jmenuje mezi tím, co v tabu
+  zůstává, jenže obsah se do #317 tahal z `refs/pull/<n>/head`; v diffu staršího commitu by
+  odkryté řádky byly z **dnešní hlavy**, tedy posunuté o všechno, co mezitím přibylo — a vypadaly
+  by úplně věrohodně. `FileExpansionKey` proto nese `commit: String?` (`nil` = hlava PR). Tentýž
+  klíč drží **sbalené soubory**, takže se sbalení mezi diffem PR a diffem commitu nesdílí: sbalit
+  si `Foo.php` při čtení commitu neznamená, že ho nechci vidět v review.
+
+- **V okně se drží nejvýš jeden diff commitu na PR.** Klíčem `commitDiffs` je pull request, sha je
+  v hodnotě. Mapa klíčovaná `(PR, sha)` by u PR se stovkou commitů rostla o každý proklik a byly by
+  to megabajty za obrazovky, které nikdo nemá vidět — tatáž úvaha jako u `expandedChecks`. Cena je
+  jedna: přeskakování mezi dvěma commity stahuje pokaždé znovu. Návratem do seznamu se naopak
+  **nezahazuje**, takže zpátky do téhož commitu je zadarmo.
+
+- **„Kde jsem v seznamu byl“ se neukládá zvlášť** — je to sha posledního staženého diffu
+  (`lastOpenedCommit(in:)`). Druhá mapa by uměla tvrdit něco jiného než ta, ze které se kreslí.
+  Řádek se podle ní podbarví (`.crow.on`) a seznam na něj po návratu odscrolluje; scrolluje se
+  **na řádek, ne na uloženou pozici v bodech**, protože pozice v líném seznamu po přestavění obsahu
+  nesedí.
+
+- **Commit, který ze seznamu zmizel, se nekreslí.** Po force pushi umí z PR vypadnout; tab pak
+  spadne zpátky na seznam (`Policy.openCommit(_:in:)`). Kreslit dál jeho hlavičku by znamenalo
+  obrazovku, ze které se nedá poznat, že už neplatí — tatáž úvaha jako u pilulky `hlava` (#316).
+
+- **Sha je v hlavičce vpravo, ne hned za titulkem, a kopíruje sama kapsle.** Návrh má `.chead .t`
+  s `flex-wrap`, který SwiftUI nemá, takže by se v úzkém okně titulek pral se sha, s `⧉ kopírovat
+  sha` i s odkazem na GitHub. Vpravo je to navíc **totéž místo, kde kapsle stála v řádku seznamu**,
+  takže se přepnutím obsahu nehne. Samostatná akce `kopírovat sha` odpadla: kopíruje kapsle a říká
+  to nápovědou.
+
+- **Sbaluje se tělo zprávy, ne celá hlavička.** Návrh hlavičku kreslí napevno; po proklikání
+  hotové obrazovky si vyžádala možnost ji **zabalit**, aby diff dostal víc místa. Rozhodnuto sbalit
+  **jen tělo** — tedy odstavce pod první řádkou —, protože to je jediná část, která roste bez
+  omezení: sha, autor, čas a počty jsou pořád tři řádky pevné výšky, kdežto tělo squashnutého
+  merge commitu má klidně třicet. Hlavička sbalená celá by se navíc smrskla na **pruh s tlačítkem
+  zpět** a přestala odpovídat na „na co se to koukám“, což je jediný důvod, proč nad diffem je.
+  Ve sbaleném stavu tedy zůstává cesta zpět s pozicí, titulek, kapsle se sha, odkaz na GitHub,
+  autor, čas, počty i tichá věta o čtení; zmizí jen odstavce. Změřeno renderem: u dvouřádkového
+  těla je to 54 bodů, u delšího víc.
+
+  Tři věci, které si to vyžádalo:
+
+  - **Přepínač je vlastní řádek s popiskem** (`⌄ Tělo zprávy` / `› Tělo zprávy · 6 řádků`), ne holá
+    šipka u linky vlevo. Šipka by ušetřila těch patnáct bodů, které řádek v rozbaleném stavu stojí,
+    jenže ve sbaleném by po zprávě nezbylo nic, na co se dá kliknout — a přepínač, na který se nedá
+    přijít, je stejně dobrý jako žádný. Počet řádků je **jen ve sbaleném** popisku: je to jediné, co
+    o schovaném textu řekne, kolik ho je. Tvar je převzatý z přeskočených checků a sbalených vláken.
+  - **Volba je globální a bydlí ve store** (`AppStore.isCommitMessageExpanded`), ne v `@State`
+    detailu a ne per PR. „Kolik místa nechat zprávě“ znamená u každého commitu totéž — je to tatáž
+    úvaha jako u `isReviewPanelExpanded` a `diffLayout`. Per PR by to byla mapa navíc k uklízení za
+    odpověď na otázku, kterou si nikdo neklade zvlášť pro každý pull request; ve `@State` by
+    přetekla mezi pull requesty (SwiftUI si `PullRequestDetailView` ponechá), tedy „náhodou správně“,
+    ale bez možnosti to otestovat. Do `Configuration` se **neukládá**, ze stejného důvodu jako
+    rozložení panelu: je to okamžité „udělej teď místo“, ne standing předvolba se řádkem v nastavení.
+  - **Výchozí stav je rozbaleno.** Tělo zprávy je odpověď na „proč“, tedy to, kvůli čemu se do
+    commitu chodí; sbalí se jedním kliknutím a drží to celou session, takže výchozí sbaleno by jen
+    schovalo obsah tomu, kdo si o to neřekl. **U jednořádkové zprávy se nekreslí ani přepínač** —
+    sbalovat prázdno nemá co říct.
+
+- **Čas v hlavičce je relativní, přesný je v nápovědě.** Návrh tu má `12. 8. 2026 11:32`; dva
+  způsoby, jak v jednom tabu napsat „kdy“, jsou horší než odchylka od jedné buňky návrhu — tentýž
+  závěr jako u řádku seznamu (#316).
+
+- **Řádek meta se v úzkém okně zalomí přes `ViewThatFits`.** `.chead .meta` má v CSS `flex-wrap`;
+  bez náhrady by tichá věta „Jen ke čtení…“ přetekla. Dvě podoby (na jeden řádek a s větou pod ním)
+  drží `PanelFreeTabWidthTests` přes pásmo šířek 648–1800.
+
+- **Hlavička stromu zůstává `2 SOUBORY`, ne `3 soubory · commit` z návrhu.** Strom je `FileTreeView`
+  z diffu PR i s hlavičkou; přidat mu popisek „z čeho ty soubory jsou“ by znamenalo parametr napříč
+  `DiffView`em kvůli jednomu slovu — a hned nad ním stojí hlavička commitu, která tutéž otázku
+  zodpovídá jménem i sha.
+
+- **`+X −Y` v pruhu záložek se rozkliknutím commitu nemění**, a je to schválně: mluví o rozsahu
+  **celého PR**, což je odpověď na otázku `Změněných souborů`. Čísla commitu jsou v jeho hlavičce.
+  Návrh to má stejně (`+248 −96` v pruhu nad `+64 −18` v hlavičce).
+
+- **`⎋` se zakazuje, ne přebíjí.** Zpátky na seznam vede tlačítko v hlavičce i `⎋`; zkratka bydlí
+  na detailu PR (jako `⌘2` a `⌘⏎`) a je **zakázaná** mimo tab `Commity`, nad seznamem, nad
+  otevřenou paletou a nad potvrzením odeslání. Zakázané tlačítko klávesu nebere, takže propadne
+  dál — jinak by `⎋` přestalo zavírat to, co zavírat má.
 
 #### Co se při implementaci rozhodlo jinak (#318, druhý stupeň pruhu)
 

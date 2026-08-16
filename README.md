@@ -131,7 +131,7 @@ pozná, co dělat dál.
 
 Detail PR má **sedm záložek** (#183, dvě přidal #242, jednu #215 a jednu #316): `Přehled` říká,
 jak to teď stojí (popis, fakta, co se změnilo od minule), `Změněné soubory` je diff, `Commity`
-je seznam commitů PR (popsaný níž) a `Konverzace` je
+je seznam commitů PR a diff toho, na který se klikne (popsané níž), a `Konverzace` je
 **časová osa toho, co se dělo** — s uzly,
 u kterých tvar nese druh, se seskupenými commity (jedenáct pushů nesmí utopit dva komentáře),
 filtrem `Vše / Komentáře / Vlákna / Události` a značkou `Nové od tvé poslední návštěvy`. U force-pushe
@@ -259,7 +259,7 @@ jinak na hex sešlo se zastaráním a `[!CAUTION]` s blokujícím nálezem, tedy
 už něco znamenají. Sazba se **pamatuje** — u dvanáctikilobajtové zprávy od bota je
 rozklad na bloky 1,91 ms proti 0,04 ms z cache a inline sazba jejích bloků dalších 1,81 ms.
 
-### Záložka `Commity` (#316)
+### Záložka `Commity` (#316, #317)
 
 **Proč vznikla.** `Změněné soubory` odpovídají na „co je na PR jinak proti základu“ — jeden slitý
 diff, ze kterého je vidět výsledek, ne cesta. Otázka „proč tenhle řádek zmizel“ nebo „kdy se sem
@@ -306,9 +306,49 @@ tvrdila něco, co platit nemůže — prázdná odpověď je proto hlášená ja
 načíst **znovu**, seznam zůstane a nad ním je okrová věta, že je to poslední známý stav, stejně
 jako u `Kontrol`.
 
-**Rozkliknout commit na jeho diff zatím nejde** a řádek proto nemá ani šipku — návrh ji kreslí, ale
-šipka, za kterou se nic nestane, slibuje interakci, která tam není. Diff jednoho commitu má vlastní
-issue.
+**Kliknutí na řádek ukáže diff jen toho jednoho commitu** (#317) — a teprve tím řádek dostal šipku
+`›`, kterou návrh kreslí. Do #317 žádná nebyla schválně: šipka, za kterou se nic nestane, slibuje
+interakci, která tam není.
+
+Rozkliknutí **přepne obsah záložky**, jako to má GitHub: seznam zmizí a diff dostane celou plochu.
+Nahoře je hlavička se sha (kliknutím se zkopíruje celé), zprávou i jejím tělem, autorem, časem,
+počtem souborů, `+X −Y` a odkazem na GitHub; vlevo v ní je cesta zpět `‹ Commity` s pozicí
+(`2 ze 7`), která funguje i klávesou `⎋`. Počty jsou spočítané **ze staženého diffu**, takže
+nestojí volání navíc — a proto v seznamu být nemůžou, ale tady ano.
+
+**Tělo zprávy jde sbalit** (`⌄ Tělo zprávy` / `› Tělo zprávy · 6 řádků`), a sbaluje se zrovna ono:
+je to jediná část hlavičky, která roste bez omezení — sha, autor a počty jsou pořád tři řádky,
+kdežto tělo squashnutého merge commitu má klidně třicet. Sbalená hlavička proto pořád odpovídá na
+„na co se to koukám“: zůstává v ní cesta zpět, titulek, sha, odkaz na GitHub, autor, čas i počty.
+Volba **platí napříč commity i pull requesty** a drží se do zavření aplikace, protože „kolik místa
+nechat zprávě“ znamená u každého commitu totéž; výchozí stav je rozbaleno a u jednořádkové zprávy
+se přepínač nekreslí vůbec.
+
+Pod hlavičkou je **týž diff jako ve `Změněných souborech`**: pohled pod sebou i vedle sebe,
+zvýraznění změněných slov, sbalování souborů, rozbalování kontextu, kopírování i strom souborů
+vlevo (`⌘1`) — commit s třiceti soubory ho potřebuje.
+
+**Nejsou tam ale bubliny nálezů ani rozdělaný komentář a do řádků se nedá klikat.** Není to
+zjednodušení: komentář k řádku commitu by se musel klíčovat i sha (dnešní draft se váže na
+`(soubor, řádek)` diffu PR) a odeslat by šel jedině pátou cestou ven z aplikace — a ten výčet je
+krátký schválně. Nálezy navíc platí proti hlavě PR, takže by u staršího commitu ukazovaly na jiný
+kód. Záložka je proto celá čtecí a v hlavičce je jedna tichá věta, která odkáže do `Změněných
+souborů` — kdo přijde odtamtud, bude do řádku chtít kliknout.
+
+**Rozbalený kontext se čte z toho commitu**, ne z hlavy PR. Bez toho by odkryté řádky kolem hunku
+byly z dnešní hlavy, tedy posunuté o všechno, co mezitím přibylo — a vypadaly by úplně věrohodně.
+
+**Prázdný diff dostane větu, ne prázdnou plochu**, a jinou podle toho, jestli je to sloučení.
+U sloučení se diff počítá proti prvnímu rodiči, takže co přišlo z druhé větve, je vidět v jejích
+vlastních commitech; u obyčejného commitu je to prostě prázdný commit (`git commit --allow-empty`,
+kterým se běžně přetáčí CI). Změřeno na `keboola/job-queue#727`: prázdno vracely zrovna ty prázdné
+commity, kdežto všechna tři sloučení diff měla.
+
+**Návrat do seznamu si pamatuje, kde jsi byl** — řádek zůstane podbarvený a seznam na něj
+odscrolluje. V okně se u jednoho PR drží nejvýš jeden stažený diff commitu, takže zpátky do téhož
+commitu je zadarmo, kdežto přeskakování mezi dvěma si ho pokaždé stáhne znovu (jedno volání,
+změřeno 0,7–1,8 s). Commit, který mezitím z PR zmizel (force push), se nekreslí a záložka spadne
+zpátky na seznam.
 
 ### Záložka `Kontroly` (#215, #214, #306)
 

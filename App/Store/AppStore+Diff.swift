@@ -56,12 +56,18 @@ extension AppStore {
         diffLayoutOverride = layout
     }
 
-    func isFolded(_ path: String, in pr: PRIdentifier) -> Bool {
-        foldedFiles.contains(FileExpansionKey(pullRequest: pr, path: path))
+    /// Je soubor sbalený? `commit == nil` = diff PR (`Změněné soubory`), jinak diff commitu (#317).
+    ///
+    /// **Sbalení se mezi těmi dvěma diffy nesdílí**, i když jde o týž soubor: jsou to dvě různé
+    /// obrazovky a sbalit si `Foo.php` při čtení commitu neznamená, že ho nechci vidět v review.
+    /// Rozhoduje o tom `FileExpansionKey`, tedy tentýž klíč jako u rozbaleného kontextu — jedna
+    /// hranice pro obojí, ať se nedá zapomenout jen v jednom z nich.
+    func isFolded(_ path: String, in pr: PRIdentifier, commit: String? = nil) -> Bool {
+        foldedFiles.contains(FileExpansionKey(pullRequest: pr, path: path, commit: commit))
     }
 
-    func toggleFolded(_ path: String, in pr: PRIdentifier) {
-        let key = FileExpansionKey(pullRequest: pr, path: path)
+    func toggleFolded(_ path: String, in pr: PRIdentifier, commit: String? = nil) {
+        let key = FileExpansionKey(pullRequest: pr, path: path, commit: commit)
         if foldedFiles.contains(key) {
             foldedFiles.remove(key)
         } else {
@@ -71,21 +77,27 @@ extension AppStore {
 
     /// Rozbalí soubor, ať se dá skočit dovnitř. Skok na sbalený soubor by jinak skončil
     /// nikde — jeho řádky v líném seznamu vůbec nejsou.
+    ///
+    /// Bez `commit`u schválně: skáče se jedině v diffu PR (z nálezu, z palety, z anotace CI),
+    /// takže parametr, který by tady nikdo nevyplnil jinak než `nil`, by byl jen další místo,
+    /// kde se dá splést.
     func unfold(_ path: String, in pr: PRIdentifier) {
         foldedFiles.remove(FileExpansionKey(pullRequest: pr, path: path))
     }
 
     /// Sbalí vyjmenované soubory. Cesty dodává volající, protože co je v diffu, store neví.
-    func foldAll(_ paths: [String], in pr: PRIdentifier) {
-        foldedFiles.formUnion(paths.map { FileExpansionKey(pullRequest: pr, path: $0) })
+    func foldAll(_ paths: [String], in pr: PRIdentifier, commit: String? = nil) {
+        foldedFiles.formUnion(paths.map {
+            FileExpansionKey(pullRequest: pr, path: $0, commit: commit)
+        })
     }
 
-    /// Rozbalí všechno v tomhle PR. Cesty netřeba — rozbalené je to, co v množině není.
+    /// Rozbalí všechno v tomhle diffu. Cesty netřeba — rozbalené je to, co v množině není.
     ///
-    /// Sahá **jen na tohle PR**: sbalení v jiném je cizí stav a smazat ho při „rozbalit vše“
-    /// by znamenalo, že se tlačítko v jednom okně projeví jinde.
-    func unfoldAll(in pr: PRIdentifier) {
-        foldedFiles = foldedFiles.filter { $0.pullRequest != pr }
+    /// Sahá **jen na tohle PR a jen na tenhle diff**: sbalení v jiném je cizí stav a smazat ho
+    /// při „rozbalit vše“ by znamenalo, že se tlačítko v jednom okně projeví jinde.
+    func unfoldAll(in pr: PRIdentifier, commit: String? = nil) {
+        foldedFiles = foldedFiles.filter { $0.pullRequest != pr || $0.commit != commit }
     }
 
     func loadedDiff(for pr: PRIdentifier) -> Diff? {
