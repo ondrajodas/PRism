@@ -426,6 +426,50 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   nedal opravit. A `AppStore` na **posunutou hlavu**: že se pozná i tehdy, když časová osa nic
   nedá (rebase), že se nezměněná hlava za posun nevydává a že se bez znalosti té minulé netvrdí
   nic — poslední z nich odhalil past s dvojitým optionalem, kterou čtení kódu minulo.
+- **Odrážky a řada ovládání „od minule“ (#284)** — tři sady, každá na něco jiného.
+
+  `SinceLastVisitLineTests` na **sazbu odrážek po částech**: že je tučný počet commitů a verdikt
+  review, že je autor ztlumený a sha zkrácená na sedm znaků v kapsli, a hlavně dvě věci, které se
+  dají pokazit potichu — **commity od víc lidí jméno neuvádějí** (jinak by „od odinuv“ tvrdilo něco,
+  co v datech není) a **věta události se bere z `TimelineEventRow`**, ne píše podruhé. Plus pořadí
+  odrážek a prázdno bez změn, protože pruh se nesmí ukázat prázdný.
+
+  `SinceLastVisitActionsTests` na **to, jestli se řada vejde**, výčtem přes pásmo šířek × všech osm
+  kombinací toho, co v ní může stát. Vzniklo z měření: `ViewThatFits` na tuhle řadu **nestačí**,
+  protože odznak i popisky tlačítek jsou vodorovně pružné a ve zúžené řadě se radši zkrátí, než by
+  nahlásily, že se nevejdou. A co je horší, **`OverflowProbe` tu chybu nechytá** — ověřeno vloženou
+  regresí: s pevnou řadou zůstala `OverviewWidthTests` zelená, protože zkrácený popisek nikam
+  nepřeteče, jen v pruhu stojí `Pust…`. Proto je vedle měření přetečení ještě tenhle výčet nad
+  `SinceLastVisitView.fits(_:in:)`; obojí je potřeba, jsou to dvě různé chyby.
+
+  `IncrementalDiffBarLayoutTests` na totéž u lišty nad rozsahovým diffem — a k tomu na to, že
+  **cesta ven přežije i nejužší tab**: lišta je jediné místo, odkud se z rozsahu vrátí na celý
+  diff, takže tlačítko musí ustupovat poslední.
+
+  **Obě sady mají navíc jeden test, který sahá na kresbu** (`NSHostingView.fittingSize`): spočítaná
+  šířka nesmí být menší než nakreslená. Je to jediné tvrzení, které nestojí na dvou stranách téhož
+  výpočtu — zbytek porovnává `fits` proti `width(of:)`, takže **špatně změřený font by v něm
+  prošel**. A přesně to se stalo: `TextWidth.miniButton` měřil regularem, kdežto plné tlačítko se
+  kreslí mediumem, takže `Pustit review znovu` vycházelo o tři body užší (126 proti 129). Našel to
+  Copilot na #284; od té doby si řez bere obojí z `MiniButtonStyle.labelFont`. Regrese ověřena
+  vložením — po návratu k regularu ten jeden test spadne a ostatní zůstanou zelené.
+- **`Policy.incrementalDiff` (#284)** — kdy se `Ukázat, co přibylo` nabídne. Vyčerpávajícím
+  výčtem, protože každý z důvodů, proč tlačítko nemá být, se dá zrušit jedním znakem v podmínce.
+  **Nejcennější jsou záporné**: bez viděné hlavy, bez dnešní hlavy, při shodě obou a **po přepsané
+  historii** se nenabízí nic — a `rewroteHistory: nil` (nenačtená časová osa) se chová jako
+  „přepsala“. Poslední dva mají číslo: po force pushi vrátí trojtečkový `compare` **víc než celý
+  diff PR** (změřeno na `cli/cli#14062`: 102 kB ve 22 souborech proti 15 kB ve třech), tedy přesně
+  to, co tlačítko slíbit nesmí.
+- **Rozsahový diff ve store (#284)** — `AppStoreIncrementalDiffTests`: že se ptáme na **viděnou
+  hlavu proti dnešní** (obráceně by `compare` vrátil, co z větve zmizelo), že se načtený rozsah
+  drží a nestahuje podruhé, že **po selhání se zkusit znovu smí** (jinak tlačítko `Zkusit znovu`
+  nic neudělá) a že **celý diff zůstane netknutý** — je to to, proti čemu se píše review. Dva testy
+  tvrdí, že se něco NEstalo: bez načtené konverzace a bez viděné hlavy se **nestáhne nic**.
+- **Zastaralé nálezy z jednoho zdroje (#284)** — `AppStoreStaleFindingsTests`: hlavička nad taby
+  a odznak `nálezy zastaraly` v pruhu čtou tentýž `AppStore.staleFindings(for:)`. Hranice mezi nimi
+  je `hasFindings`: **čisté review proti staršímu commitu je pořád zastaralé** (hlavička o něm mluvit
+  má), ale odznak se u něj nerozsvítí, protože žádné nálezy nejsou. A bez záznamu review ani bez
+  načteného detailu se netvrdí nic.
 - **`ToolAttempt`** — zkrácení proti pracovnímu stromu: relativní cesta, zahozené
   `cd <strom> &&`, cesta uvnitř příkazu, a že se bez stromu nic nemění. Pozor na past
   v testu: skutečný nástroj dostane cestu **nekódovanou**, takže `URL.path()` v přípravě
@@ -1620,10 +1664,23 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   chyběl. `NSHostingView` kreslí skutečnou hierarchii, takže odkaz v něm stojí ve své šířce —
   ověřeno, čitelný celý.
 
-  **Od #280 má každá šířka i variantu s bannerem „od minule“** (`-od-minule.png`). Důvod je
-  sousedství, ne úplnost: řada faktů se přesunula nad popis, takže jejím novým sousedem shora je
-  ten pruh — a ten je okrový (`Palette.stale`) zrovna tak jako zastaralá sha v posledním boxíku.
-  Dvě okrové plochy nad sebou se posuzují okem, ne z kódu.
+  **Od #280 má každá šířka i variantu s pruhem „od minule“.** Důvod je sousedství, ne úplnost:
+  řada faktů se přesunula nad popis, takže jejím novým sousedem shora je ten pruh — a ten je okrový
+  (`Palette.stale`) zrovna tak jako zastaralá sha v posledním boxíku. Dvě okrové plochy nad sebou
+  se posuzují okem, ne z kódu.
+
+  **Od #284 je těch variant pět** (`Scenario`), protože se liší **řadou pod odrážkami** a ta se
+  z kódu nepozná: `bez-pruhu`, `nove-commity` (jen `Ukázat, co přibylo`), `zastarale-nalezy`
+  (odznak a obě tlačítka, tedy nejširší řada), `prepsana-historie` (jen `Pustit review znovu`,
+  odznak ne — nálezy nejsou) a `prepsana-se-zastaralymi` (odznak a `Pustit review znovu`, rozsah
+  ne). Že se `Ukázat, co přibylo` po přepsané historii nenabízí, je rozhodnutí — a rozhodnutí se
+  ukazují, ne popisují.
+- **Sonda rozsahového diffu (#284)** — `DetailTabRenderProbe.rendersTheIncrementalDiff`, dvě šířky.
+  Návrh tuhle obrazovku nekreslí (sekce 02 má tlačítko, ne stav po jeho stisknutí), takže je to
+  jediné místo, kde se dá posoudit: rozsahový diff vypadá jako celý diff, jen kratší, a jestli je
+  z lišty poznat proč, se z kódu nezjistí. **Pozor u obou sond**: `-only-testing` se u swift-testing
+  musí zadat **na suitu**, ne na jeden test — se jménem metody proběhne „0 tests“ a v adresáři
+  zůstanou staré PNG, takže to vypadá, že se změna neprojevila.
 - **Pořadí v `Přehledu` (#280)** — `OverviewOrderTests`: **řada faktů stojí nad kartou s popisem.**
   Je to jediné, co #280 mění, a rozbije se to potichu — přehozený `VStack` build nepoloží
   a `OverviewWidthTests` projdou v obou pořadích, protože přesah je v obou nulový.

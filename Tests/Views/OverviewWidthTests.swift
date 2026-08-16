@@ -64,6 +64,35 @@ struct OverviewWidthTests {
         }
     }
 
+    /// Řada pod odrážkami — odznak `nálezy zastaraly` a dvě tlačítka (#284).
+    ///
+    /// Je to nejužší místo `Přehledu`: tři prvky vedle sebe mají dohromady přes 300 bodů, kdežto
+    /// tab začíná na 128.
+    ///
+    /// **Tvrdí to jen to, co změří: nic se nenakreslilo mimo tab.** Že se řada v úzkém tabu
+    /// *zlomí do sloupce* místo aby se popisky zkrátily na `Pust…`, tenhle test **nechytá** —
+    /// ověřeno vložením regrese, s pevnou řadou zůstal zelený, protože zkrácený popisek nepřeteče.
+    /// Na to je `SinceLastVisitActionsTests`, který počítá šířky. Obojí je potřeba: přetečení je
+    /// jiná chyba než zkrácení a `NSScrollView` z něj navíc na renderu udělá skoro opravený
+    /// stav (to je celá #291).
+    @Test("Odznak a obě tlačítka se vejdou do každé šířky")
+    func sinceLastVisitActionsStayInside() throws {
+        for width in widths {
+            let overflow = try overflow(
+                width: width,
+                description: Self.description,
+                facts: Self.facts,
+                changes: Self.changes,
+                isStale: true,
+                hasStaleFindings: true,
+                movedHead: "9c1de0212ab",
+                offersAdded: true,
+                label: "akce"
+            )
+            #expect(overflow == 0, "šířka \(Int(width)): přeteklo \(overflow) bodů vpravo")
+        }
+    }
+
     // MARK: - Měření
 
     private func overflow(
@@ -71,7 +100,10 @@ struct OverviewWidthTests {
         description: String?,
         facts: PullRequestFacts = PullRequestFacts(tiles: []),
         changes: VisitChanges = .none,
+        isStale: Bool = false,
+        hasStaleFindings: Bool = false,
         movedHead: String? = nil,
+        offersAdded: Bool = false,
         label: String
     ) throws -> Int {
         let probe = OverflowProbe(width: width, name: "prehled-\(label)-\(Int(width))")
@@ -80,7 +112,11 @@ struct OverviewWidthTests {
             facts: facts,
             changes: changes,
             lastVisit: Date(timeIntervalSince1970: 1_754_000_000),
+            isStale: isStale,
+            hasStaleFindings: hasStaleFindings,
             movedHead: movedHead,
+            rerun: isStale ? {} : nil,
+            showAdded: offersAdded ? {} : nil,
             pullRequest: Self.pullRequest
         ).content)
     }

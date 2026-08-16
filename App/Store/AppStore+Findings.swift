@@ -68,6 +68,30 @@ extension AppStore {
         }
     }
 
+    // MARK: - Zastaralé nálezy (#174)
+
+    /// Rozešly se nálezy s hlavou PR? `nil` = nerozešly, nebo se to nedá říct.
+    ///
+    /// **Jediné místo, kde se ty dvě sha porovnávají** (#284). Čte to hlavička nad taby
+    /// (`StaleHeadView`) i odznak v pruhu „od tvé poslední návštěvy“, a obojí mluví o témže
+    /// stavu — dvě porovnání by znamenala dvě pravdy o jedné věci.
+    ///
+    /// Bez načteného detailu je odpověď `nil`, ne „zastaralo“: dokud neznáme dnešní hlavu,
+    /// nevíme o rozchodu nic. Záznam bez review v mapě není vůbec, takže PR, na kterém se
+    /// review nikdy nepustilo, tudy nikdy neprojde.
+    func staleFindings(for pr: PRIdentifier) -> StaleFindings? {
+        guard
+            let record = reviewRecords[pr],
+            case .loaded(let detail, _) = detailState(for: pr),
+            record.headSha != detail.headSha
+        else { return nil }
+        return StaleFindings(
+            head: detail.headSha,
+            findingsHead: record.headSha,
+            hasFindings: !record.findings.isEmpty
+        )
+    }
+
     // MARK: - Rozbalení bubliny (#185)
 
     /// Jak je nález u kódu rozbalený. Kategorie se berou z konfigurace **toho repa**, protože

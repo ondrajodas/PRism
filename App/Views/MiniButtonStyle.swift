@@ -27,6 +27,22 @@ struct MiniButtonStyle: ButtonStyle {
         case primary
     }
 
+    /// Písmo popisku — **jedno místo pro kresbu i pro měření** (#284).
+    ///
+    /// Plné tlačítko má `font-weight: 560`, v repu `.medium`; obtažené regular. Dokud ten řez
+    /// bydlel jen v `makeBody`, měřilo se plné tlačítko **regularem** a kreslilo mediumem, takže
+    /// spočítaná šířka vycházela menší než skutečná — a řada, která si o sobě řekla „vejdu se“,
+    /// skončila zkrácená na `Pust…`. Nález Copilota na #284.
+    ///
+    /// Vrací `NSFont`, protože z něj se dá **měřit** (`TextWidth`); kresba si ho zabalí do `Font`,
+    /// takže je to pořád tentýž font, ne dva shodně nastavené.
+    ///
+    /// `nonisolated` proto, že měření se z `TextWidth` volá při vzniku statických konstant, tedy
+    /// mimo hlavní aktér; `NSFont` se u toho nesdílí, každé volání vrací vlastní.
+    nonisolated static func labelFont(of emphasis: Emphasis) -> NSFont {
+        .systemFont(ofSize: Metrics.fontSize, weight: emphasis == .primary ? .medium : .regular)
+    }
+
     /// Rozměry a mezery z CSS návrhu (`.mini`, `.inline-find footer`). Body 1 : 1 s pixely, jak to
     /// má tenhle repo zvykem — viz `docs/navrh.md`.
     enum Metrics {
@@ -69,8 +85,8 @@ struct MiniButtonStyle: ButtonStyle {
     func makeBody(configuration: ButtonStyleConfiguration) -> some View {
         configuration.label
             // `font-weight: 560` u plného tlačítka — v repu se překládá na `.medium`, stejně jako
-            // titulek řádku fronty.
-            .font(.system(size: Metrics.fontSize, weight: emphasis == .primary ? .medium : .regular))
+            // titulek řádku fronty. **Z `labelFont`, ať se kresba a měření nemůžou rozejít** (#284).
+            .font(Font(Self.labelFont(of: emphasis)))
             .foregroundStyle(foreground)
             // Popisek jednoho tlačítka se **nezalamuje**, a když se nevejde, zkrátí se: dvouřádkové
             // tlačítko v řadě jednořádkových vypadá jako jiný prvek. Jak se zachová celá **řada**,

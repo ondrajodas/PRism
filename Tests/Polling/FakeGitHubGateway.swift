@@ -14,6 +14,9 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     /// Co vrátí `fetchDiff` — v pořadí, poslední se opakuje. Na střídání selhání a
     /// úspěchu stojí test, že „zkusit znovu“ opravdu načte.
     private let diffs: [Result<String, any Error>]
+    /// Co vrátí `fetchDiff(repo:from:to:)`, tedy rozsah „co přibylo“ (#284) — v pořadí,
+    /// poslední se opakuje.
+    private let rangeDiffs: [Result<String, any Error>]
     /// Co vrátí `fetchFile` — v pořadí, poslední se opakuje.
     private let files: [Result<String, any Error>]
     /// Co vrátí `fetchConversation` — v pořadí, poslední se opakuje.
@@ -26,6 +29,7 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     private var detailsAsked: [PRIdentifier] = []
     private var overriddenDetail: Result<PullRequest, any Error>?
     private var diffsAsked: [PRIdentifier] = []
+    private var rangeDiffsAsked: [(repo: RepoID, base: String, head: String)] = []
     private var filesAsked: [(id: PRIdentifier, path: String)] = []
     private var conversationsAsked: [PRIdentifier] = []
     private var releasesAsked = 0
@@ -34,6 +38,7 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         _ outcomes: [Outcome],
         detail: Result<PullRequest, any Error>? = nil,
         diffs: [Result<String, any Error>] = [],
+        rangeDiffs: [Result<String, any Error>] = [],
         files: [Result<String, any Error>] = [],
         conversations: [Result<Conversation, any Error>] = [],
         releases: [Result<[Release], any Error>] = []
@@ -41,6 +46,7 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         self.outcomes = outcomes
         self.detail = detail
         self.diffs = diffs
+        self.rangeDiffs = rangeDiffs
         self.files = files
         self.conversations = conversations
         self.releases = releases
@@ -50,6 +56,7 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         always outcome: Outcome,
         detail: Result<PullRequest, any Error>? = nil,
         diffs: [Result<String, any Error>] = [],
+        rangeDiffs: [Result<String, any Error>] = [],
         files: [Result<String, any Error>] = [],
         conversations: [Result<Conversation, any Error>] = [],
         releases: [Result<[Release], any Error>] = []
@@ -58,6 +65,7 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
             [outcome],
             detail: detail,
             diffs: diffs,
+            rangeDiffs: rangeDiffs,
             files: files,
             conversations: conversations,
             releases: releases
@@ -174,6 +182,23 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         }
         guard !diffs.isEmpty else { throw GitHubError.notFound("Fake gateway diff nezná.") }
         return try diffs[min(index, diffs.count - 1)].get()
+    }
+
+    /// Na co se někdo ptal u rozsahového diffu (#284), v pořadí. Na obsahu stojí test, že se
+    /// ptáme na **viděnou** hlavu proti dnešní, ne obráceně.
+    var rangeDiffRequests: [(repo: RepoID, base: String, head: String)] {
+        lock.withLock { rangeDiffsAsked }
+    }
+
+    func fetchDiff(repo: RepoID, from base: String, to head: String) async throws -> String {
+        let index: Int = lock.withLock {
+            rangeDiffsAsked.append((repo, base, head))
+            return rangeDiffsAsked.count - 1
+        }
+        guard !rangeDiffs.isEmpty else {
+            throw GitHubError.notFound("Fake gateway rozsahový diff nezná.")
+        }
+        return try rangeDiffs[min(index, rangeDiffs.count - 1)].get()
     }
 
     /// Na co se někdo ptal, v pořadí.
