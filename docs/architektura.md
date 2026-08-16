@@ -495,6 +495,33 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   na šedesátiřádkovém bloku 116 pt — tedy pilulka komentáře sedm řádků pod svým kódem — a pod blokem
   zbývalo tolik prázdna, kolik měl řádků. Že aritmetika sedí na to, co hlásí layout manager, drží
   test; kdyby přestala, patří rámečky vzít z něj.
+- **Text bloku vzniká jako jeden řetězec a barvy se do něj dopisují** (#275), ne slepením
+  `NSAttributedString`u za každý run. Slepováním se u velkého diffu vyrobilo 16 000 objektů na jedno
+  projetí a stálo to **22,2 ms z 79** na 27 blocích; jeden řetězec a `addAttribute` na rozsah dělá
+  totéž za **4,1 ms**. Ověřeno, že výsledek je `isEqual` se starým na 400 řádcích ve dvou paletách,
+  takže se kresba nezměnila — zlevnila.
+
+  **Rozsahy se počítají v UTF-16**, protože v nich měří `NSAttributedString`. Je to ta nová třída
+  chyby, kterou přepis přinesl: emoji je jeden `Character`, ale **dva** kódy, takže `count` místo
+  `utf16.count` posune obarvení i word-level vrstvu o kus doprava. Hlídají to
+  `DiffBlockCompositionTests` a je to ověřené vloženou regresí.
+
+  **Skládání je `static func compose(…)`, tedy čistá funkce nad řádky** — zvlášť od `show(…)`
+  schválně: je to ta polovina, kterou jde změřit bez sazby, a bez toho seamu se nedá poznat, kolik
+  z ceny projíždění je skládání textu a kolik už `NSLayoutManager`.
+- **Sazbu textu se zlevnit nepodařilo a je to změřené, ne odhadnuté** (#275). Ze 79 ms na 27 blocích
+  je **35 ms** rozvržení v `NSLayoutManager`u a vynucuje si ho `layoutColumns()` přes `sizeToFit()`,
+  protože z něj čte přirozenou šířku sloupce pro vodorovný posun. **Vyhodit `sizeToFit()` cenu
+  nesmaže, jen ji přesune do kreslení**: `super.draw` rozvržení potřebuje taky a blok, který vjel
+  do okna, se kreslí — samotné vykreslení sloupce do bitmapy stojí 108,7 ms na 54 stranách, tedy
+  zhruba dvojnásobek toho, co sazba. **Zamítnuto** proto i počítání šířky z kroku monospace písma
+  (`nejdelší řádek × advance`): ušetřilo by rozvržení jen u bloků, které se nedokreslí, a u tabulátorů,
+  CJK a emoji by šířku podstřelilo, takže by konec dlouhého řádku nešel doscrollovat.
+- **Fond kontejnerů by ubral desetinu, ne polovinu** (#275, zamítnuto). `LazyVStack` view nerecykluje,
+  takže blok, který vjede do okna, dostane nový `DiffPairBlockContainer` — jenže postavit ho stojí
+  0,34 ms (většinu z toho dva `NSScrollView`y), dohromady 11 ms z 71 na 27 blocích. Znovupoužívat je
+  přes `NSViewRepresentable` znamená statický fond a hlídání životního cyklu, což je na jednu sedminu
+  ceny moc.
 - **Rozvržení gutteru je jeden součet na jednom místě** (`DiffLineView.contentInset(for:)`):
   `[ikonka 18][číslo 52][číslo 52][znak 14]`, ve split jen jeden sloupec čísel. `DiffTextView`
   kreslí ručně na dané `x`, takže rozejít se to smí jen tehdy, když má být kód nakřivo — když
@@ -1074,6 +1101,7 @@ z řádku vyjde, nic nemění.
 | `SyntaxRunCache` | Zapamatované obarvení klíčované `(text řádku, jméno jazyka)`, se dvěma mezemi (#224) |
 | `SyntaxRun`, `SyntaxKind` | Kus řádku a jeho význam: `plain`, `comment`, `string`, `number`, `keyword`, `variable` |
 | `SyntaxPalette` | Barvy — Darcula pro tmavý režim, IntelliJ Light pro světlý |
+| `SyntaxColors` | Tatáž paleta v `NSColor`ech (#275) — převádí se **jednou na blok**, ne na run |
 
 Věci, které se u toho nemají rozbít:
 
@@ -1118,6 +1146,12 @@ Věci, které se u toho nemají rozbít:
 - **Proměnné jen tam, kde je poznat sigil** (`$` v PHP a shellu).
 - **Obyčejný text vlastní barvu nemá** — dědí ji z okolí, takže soubor bez rozpoznaného
   jazyka nevypadá jinak než ten s ním.
+- **`NSColor(Color)` je most, ne přístup k hodnotě** (#275). `SyntaxPalette` drží SwiftUI barvy,
+  ale text bloku se skládá v AppKitu — a do #275 se převádělo **na každý run**, tedy u velkého
+  diffu 16 000× na jedno projetí (3,59 ms na 27 blocích). Barev je přitom pět a na runu nezávisí
+  vůbec, takže `SyntaxColors` je převede jednou na blok. **Není to cache**: je to hodnota složená
+  z palety, kterou volající zrovna drží, takže po přepnutí vzhledu (#278) nemá jak vrátit barvy
+  z předchozího režimu — kdežto zapamatovaná podle klíče by to udělala potichu.
 
 ## `StreamParser` (`App/Review/`)
 
@@ -1888,7 +1922,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `WindowCentering`, `WindowReader`, `ScreenBounds` | Vystředění pomocného okna **v hlavním okně**, ne na obrazovce (#164) — z jednoho místa pro nastavení i novinky |
 | `AuxiliaryWindowLevel`, `keptInFrontOfApp()` | Pomocné okno zůstává **před ostatními okny aplikace, a jedině před nimi** (#243) — `.floating` dokud je aplikace vpředu, jinak `.normal` |
 | `DiffCopyActions`, `copyMenu(_:selectText:)` | Kopírování kódu z diffu (#157) — co nabídne kontextové menu řádku a hunku |
-| `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157). Drží **šířku kontejneru i měření výšky** (`height(forWidth:)`, `height(ofRows:)`), aby se šířka pro měření nemohla rozejít s tou pro kreslení (#236) |
+| `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157). Drží **šířku kontejneru i měření výšky** (`height(forWidth:)`, `height(ofRows:)`), aby se šířka pro měření nemohla rozejít s tou pro kreslení (#236). Text skládá `compose(…)` — **čistá funkce nad řádky** (#275), aby šla změřit bez sazby |
 | `DiffCodeBlockView`, `DiffBlockRowView` | Blok v pohledu pod sebou a k němu pilulka na komentář a tažení rozsahu |
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
 | `DiffBlockSignature` | Podpis bloku, podle kterého se text **znovu nesází** (#157) — a v němž je schválně barevný režim (#278), protože barvy jsou v tom textu zapečené |

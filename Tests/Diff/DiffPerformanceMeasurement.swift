@@ -383,11 +383,14 @@ struct DiffPerformanceMeasurement {
     /// do okna — jeho cena je tedy cena scrollování. Měří se proto **celé skládání** proti
     /// **samotnému `WordDiff`u** na týchž datech; podíl druhého v prvním je celý příspěvek #153.
     ///
-    /// Naměřeno na tomhle stroji: 27 bloků po 60 řádcích **79,1 ms**, z toho `WordDiff` **14,2 ms**
-    /// — tedy **18 %**. Jsou to **samé dvojice**, takže je to nejhorší případ; ve skutečném diffu je
+    /// Naměřeno na tomhle stroji: 27 bloků po 60 řádcích **60,3 ms**, z toho `WordDiff` **13,8 ms**
+    /// — tedy **23 %**. Jsou to **samé dvojice**, takže je to nejhorší případ; ve skutečném diffu je
     /// většina řádků kontext, u kterého `WordDiff` nedělá nic, kdežto `show` ho stejně vysází.
-    /// Zbylých 82 % je sazba v `NSTextView` a obarvení, a i ta je jen část ceny projíždění —
+    /// Zbytek je sazba v `NSTextView` a obarvení, a i ta je jen část ceny projíždění —
     /// **u tuhnoucího okna se proto nemá sahat sem**, ale do rozvržení líného seznamu (#220, #223).
+    ///
+    /// **Podíl vzrostl u #275 z 18 % na 23 %, a `WordDiff` se přitom nezměnil** — zlevnilo se to,
+    /// s čím se poměřuje (79,2 → 60,3 ms). Rozpad celku po fázích je v `blockTypesettingBreakdown`.
     @MainActor
     @Test("Podíl word-level rozdílu na skládání bloku (#153)")
     func wordDiffShareOfBlockComposition() {
@@ -417,6 +420,110 @@ struct DiffPerformanceMeasurement {
         }
         measure("z toho WordDiff.spans(left:right:), \(blocks.count) bloků") {
             for block in blocks { _ = WordDiff.spans(left: block.left, right: block.right) }
+        }
+    }
+
+    // MARK: - Z čeho se skládá cena sazby bloku (#275)
+
+    /// **Rozpad ceny `DiffPairBlockContainer.show` na fáze.** Tohle je to měření, kvůli kterému
+    /// #275 vzniklo: po #252 byla sazba bloku hlavní položkou ceny projíždění a nedalo se z kódu
+    /// poznat, kolik z ní je co.
+    ///
+    /// Fáze se měří **za sebou v pořadí, v jakém běží**, takže se dají odečítat: `celkem` obsahuje
+    /// všechny, `nasazení + sazba` obsahuje `nasazení`. Sazbu samotnou jde změřit jedině takhle
+    /// oklikou — `show(…)` si o překreslení řekne a `NSLayoutManager` si rozvržení vynutí sám,
+    /// takže se z ní nedá vyříznout.
+    ///
+    /// Naměřeno na tomhle stroji (27 bloků po 60 řádcích, **samé dvojice**, tedy nejhorší případ):
+    ///
+    /// | fáze | do #275 | od #275 |
+    /// |---|---|---|
+    /// | celkem `show` (kontejner znovu) | 79,2 ms | 60,1 ms |
+    /// | celkem s čerstvým kontejnerem | 96,8 ms | 71,4 ms |
+    /// | z toho `WordDiff.spans` (#153) | 13,9 ms | 13,8 ms |
+    /// | z toho složení atributovaného textu | 22,2 ms | 4,1 ms |
+    /// | z toho nasazení do `NSTextStorage` | 3,8 ms | 3,7 ms |
+    /// | z toho sazba (`NSLayoutManager`) | 35,6 ms | 35,0 ms |
+    ///
+    /// **Co se zlevnit nepodařilo, je sazba** — a je to změřené, ne odhadnuté. Vynucuje si ji
+    /// `layoutColumns()` přes `sizeToFit()`, protože z ní čte přirozenou šířku sloupce pro vodorovný
+    /// posun. Vyhodit `sizeToFit()` cenu **nesmaže, jen ji přesune do kreslení**: `super.draw`
+    /// rozvržení potřebuje taky, a blok, který vjel do okna, se kreslí. Změřeno u #275: samotné
+    /// vykreslení sloupce do bitmapy stojí 108,7 ms na 54 stranách, tedy zhruba dvojnásobek toho,
+    /// co sazba.
+    ///
+    /// Ze stejného měření vyšlo najevo i to, že **stavění view není hlavní položka**: rozdíl mezi
+    /// znovupoužitým a čerstvým kontejnerem je 16 ms na 27 blocích (0,34 ms na kontejner, z toho
+    /// většina jsou dva `NSScrollView`y). Fond kontejnerů by tedy ubral desetinu, ne polovinu.
+    @MainActor
+    @Test("Z čeho se skládá cena sazby bloku (#275)")
+    func blockTypesettingBreakdown() {
+        let language = Language(path: "Schema.swift")
+        let palette = SyntaxPalette.forScheme(.light)
+        let file = file(path: "src/Generated/Schema.swift", hunks: 1, linesPerHunk: 2400)
+        let blocks = DiffRow.blockedPairs(DiffRow.rows(of: file, layout: .split)).compactMap { row -> DiffPairBlock? in
+            if case .pairBlock(_, let block) = row { block } else { nil }
+        }
+        let gutter = DiffLineView.contentInset(for: .split)
+        print("MĚŘENÍ bloků dvojic: \(blocks.count) po \(blocks.first?.count ?? 0) řádcích")
+
+        // Podpis se musí lišit **pokaždé**, jinak se `show` vrátí za stráží a měří se stráž.
+        var round = 0
+        let container = DiffPairBlockContainer()
+        measure("celkem show do znovupoužitého kontejneru, \(blocks.count) bloků") {
+            round += 1
+            for (index, block) in blocks.enumerated() {
+                container.show(block, language: language, palette: palette, signature: "\(round)|\(index)", gutter: gutter)
+            }
+        }
+
+        // Co doopravdy platí projíždění: `LazyVStack` view nerecykluje, takže blok, který vjede do
+        // okna, dostane **nový** kontejner. Rozdíl proti řádku výš je cena jeho postavení.
+        measure("celkem s čerstvým kontejnerem, \(blocks.count) bloků") {
+            round += 1
+            for (index, block) in blocks.enumerated() {
+                let fresh = DiffPairBlockContainer()
+                fresh.frame = NSRect(x: 0, y: 0, width: 900, height: 962)
+                fresh.show(block, language: language, palette: palette, signature: "\(round)|\(index)", gutter: gutter)
+            }
+        }
+
+        measure("z toho WordDiff.spans(left:right:), \(blocks.count) bloků") {
+            for block in blocks { _ = WordDiff.spans(left: block.left, right: block.right) }
+        }
+
+        // Dál se měří to, co přijde **po** word-diffu, takže ho dostanou fáze hotový.
+        let words = blocks.map { WordDiff.spans(left: $0.left, right: $0.right) }
+        let sides: [(lines: [DiffLine], spans: WordDiff.Spans)] = blocks.enumerated().flatMap { index, block in
+            [
+                (block.left.map { $0 ?? .blank }, words[index].left),
+                (block.right.map { $0 ?? .blank }, words[index].right),
+            ]
+        }
+
+        measure("z toho složení textu (DiffTextView.compose), \(sides.count) stran") {
+            for side in sides {
+                _ = DiffTextView.compose(side.lines, words: side.spans, language: language, palette: palette)
+            }
+        }
+
+        let composed = sides.map {
+            DiffTextView.compose($0.lines, words: $0.spans, language: language, palette: palette).text
+        }
+        let column = DiffTextView.pairColumn()
+        column.gutterWidth = gutter
+        column.numberColumns = 1
+
+        measure("z toho nasazení do NSTextStorage, \(composed.count) stran") {
+            for text in composed { column.textStorage?.setAttributedString(text) }
+        }
+        measure("z toho nasazení + sazba (ensureLayout), \(composed.count) stran") {
+            for text in composed {
+                column.textStorage?.setAttributedString(text)
+                if let layout = column.layoutManager, let container = column.textContainer {
+                    layout.ensureLayout(for: container)
+                }
+            }
         }
     }
 

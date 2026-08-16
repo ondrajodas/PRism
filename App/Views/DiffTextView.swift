@@ -78,6 +78,12 @@ final class DiffTextView: NSTextView {
     /// překreslení — tedy i když myš přejede na jiný řádek a přesune se pilulka na komentář.
     /// Bez téhle podmínky se výběr rušil při každém hnutí myší (nahlášené při zkoušení #157).
     ///
+    /// **Text vzniká jako jeden řetězec a barvy se do něj dopisují** (#275), ne jako řetězec
+    /// slepený z run. Do #275 se za každý run vyrobil `NSAttributedString` a připojil — u velkého
+    /// diffu 16 000 objektů na jedno projetí, tedy **22,2 ms z 79** na 27 blocích. Jeden řetězec
+    /// a `addAttribute` na rozsah dělá totéž za **4,1 ms**; text i atributy z toho vyjdou znak po
+    /// znaku stejné, což drží `DiffWordHighlightTests` a `DiffBlockCompositionTests`.
+    ///
     /// - Parameter words: co se uvnitř přepsaných řádků změnilo (#153). Je to **closure, ne
     ///   hodnota**, schválně: word-level rozdíl je jediná drahá věc v tomhle skládání (LCS na
     ///   dvojici) a takhle se spočítá až za tou stráží výš, tedy jednou na obsah bloku — ne při
@@ -95,43 +101,88 @@ final class DiffTextView: NSTextView {
         guard self.signature != signature else { return }
         self.signature = signature
         lines = block.lines
-        lineRanges = []
 
-        let words = words()
-        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        let result = NSMutableAttributedString()
-        for (index, line) in block.lines.enumerated() {
-            if index > 0 { result.append(NSAttributedString(string: "\n", attributes: [.font: font])) }
-            let start = result.length
-            append(line, to: result, font: font, language: language, palette: palette)
-            highlight(words[index] ?? [], of: line, in: result, from: start)
-            lineRanges.append(NSRange(location: start, length: result.length - start))
-        }
-        textStorage?.setAttributedString(result)
+        let composed = Self.compose(block.lines, words: words(), language: language, palette: palette)
+        lineRanges = composed.ranges
+        textStorage?.setAttributedString(composed.text)
         needsDisplay = true
+    }
+
+    /// Text bloku i s obarvením, a k němu rozsahy řádků v něm — **čistá funkce nad řádky**, žádný
+    /// stav view.
+    ///
+    /// Zvlášť od `show(…)` schválně (#275): je to ta polovina, kterou jde změřit bez sazby, takže
+    /// se dá poznat, kolik z ceny projíždění je skládání textu a kolik už `NSLayoutManager`.
+    /// Měřidlo je `DiffPerformanceMeasurement.blockTypesettingBreakdown`.
+    ///
+    /// **Rozsahy se vracejí, ne přijímají**, a je to celá pojistka: počítají se z týchž řádků, ze
+    /// kterých se skládá text, takže se s ním nemají jak rozejít. Jako parametr by to byla povinnost
+    /// volajícího, a ta se dá nesplnit potichu — obarvení by pak sedělo o kus vedle.
+    static func compose(
+        _ lines: [DiffLine],
+        words: WordDiff.Spans,
+        language: Language?,
+        palette: SyntaxPalette
+    ) -> (text: NSAttributedString, ranges: [NSRange]) {
+        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        // Pět převodů na blok místo jednoho na run (#275) — viz `SyntaxColors`.
+        let colors = SyntaxColors(palette)
+        let ranges = lineRanges(of: lines)
+        let result = NSMutableAttributedString(
+            string: lines.map(\.text).joined(separator: "\n"),
+            attributes: [.font: font]
+        )
+        for (index, line) in lines.enumerated() {
+            colorize(line, in: result, over: ranges[index], language: language, colors: colors)
+            highlight(words[index] ?? [], of: line, in: result, from: ranges[index].location)
+        }
+        return (result, ranges)
+    }
+
+    /// Rozsahy řádků ve složeném textu, **bez** zalomení mezi nimi.
+    ///
+    /// Počítá se v UTF-16, protože v nich měří `NSAttributedString`. Je to ta nová třída chyby,
+    /// kterou #275 přineslo: emoji je jeden `Character`, ale **dva** kódy, takže s `count` by
+    /// obarvení i word-level vrstva skončily o kus doprava.
+    private static func lineRanges(of lines: [DiffLine]) -> [NSRange] {
+        var result: [NSRange] = []
+        result.reserveCapacity(lines.count)
+        var location = 0
+        for line in lines {
+            let length = line.text.utf16.count
+            result.append(NSRange(location: location, length: length))
+            // Zalomení patří mezi řádky, do rozsahu ani jednoho z nich.
+            location += length + 1
+        }
+        return result
     }
 
     /// Jeden řádek obarvený stejnými pravidly jako v diffu — jedno místo, kde se rozhoduje, co je
     /// klíčové slovo. Poznámka `git`u (`meta`) je ztlumená, jako v `DiffLineView`.
-    private func append(
+    private static func colorize(
         _ line: DiffLine,
-        to result: NSMutableAttributedString,
-        font: NSFont,
+        in result: NSMutableAttributedString,
+        over range: NSRange,
         language: Language?,
-        palette: SyntaxPalette
+        colors: SyntaxColors
     ) {
-        guard let language, line.kind != .meta else {
-            var attributes: [NSAttributedString.Key: Any] = [.font: font]
-            if line.kind == .meta { attributes[.foregroundColor] = NSColor.tertiaryLabelColor }
-            result.append(NSAttributedString(string: line.text, attributes: attributes))
+        if line.kind == .meta {
+            result.addAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor, range: range)
             return
         }
+        // Soubor bez rozpoznaného jazyka zůstane v barvě okolí — font už na řádku je.
+        guard let language else { return }
+        var location = range.location
         for run in SyntaxHighlighter.runs(of: line.text, in: language) {
-            var attributes: [NSAttributedString.Key: Any] = [.font: font]
-            if let color = palette.color(for: run.kind) {
-                attributes[.foregroundColor] = NSColor(color)
+            let length = run.text.utf16.count
+            // Runy se z definice skládají zpátky na řádek (`SyntaxRun`), takže se za jeho konec
+            // dostat nemají. Kdyby přece, je barva to jediné, o co se přijde — pád uprostřed diffu
+            // je horší než neobarvené slovo, tatáž úvaha jako u `highlight(_:of:in:from:)`.
+            guard location + length <= NSMaxRange(range) else { return }
+            if let color = colors.color(for: run.kind) {
+                result.addAttribute(.foregroundColor, value: color, range: NSRange(location: location, length: length))
             }
-            result.append(NSAttributedString(string: run.text, attributes: attributes))
+            location += length
         }
     }
 
@@ -145,7 +196,7 @@ final class DiffTextView: NSTextView {
     /// dvojice, kdežto cache je klíčovaná `(text řádku, jazyk)` — tentýž řádek proti jinému
     /// protějšku by z ní vytáhl cizí zvýraznění, a to potichu. Proto se přidává **až tady**,
     /// atributem přes hotové runy.
-    private func highlight(
+    private static func highlight(
         _ spans: [Range<String.Index>],
         of line: DiffLine,
         in result: NSMutableAttributedString,
@@ -566,9 +617,20 @@ final class DiffTextView: NSTextView {
 
     /// Pozadí změněného kusu přepsaného řádku (#153). Barvu drží `DiffLineView`, ať se obě
     /// vrstvy nekreslí každá z jiné palety.
+    ///
+    /// **Převádí se jednou** (#275): `NSColor(Color)` je most ze SwiftUI a tohle se ptá na každý
+    /// přepsaný řádek bloku. Na paletě obarvení to nezávisí, takže se to dá držet staticky —
+    /// a dynamická barva zůstane dynamická, režim se v ní nezmrazí.
     static func wordBackground(of kind: DiffLine.Kind) -> NSColor? {
-        DiffLineView.wordBackground(of: kind).map(NSColor.init)
+        switch kind {
+        case .added: addedWordBackground
+        case .removed: removedWordBackground
+        case .context, .meta: nil
+        }
     }
+
+    private static let addedWordBackground = DiffLineView.wordBackground(of: .added).map(NSColor.init)
+    private static let removedWordBackground = DiffLineView.wordBackground(of: .removed).map(NSColor.init)
 
     static func sign(of kind: DiffLine.Kind) -> String {
         switch kind {
