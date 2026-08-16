@@ -640,8 +640,8 @@ komentář a do řádků se nedá klikat. Čte se, kopíruje a rozbaluje kontext
   komentáře k témuž řádku ve dvou commitech přepsaly.
 - **Odeslat by ho šla jedině pátá metoda v `ReviewPublishing`** — a tvrdá podmínka č. 1
   říká, že ten výčet je krátký schválně. Tím, že je tab celý čtecí, se **tvrdé podmínky
-  č. 1 nedotýká vůbec**: `GitHubGateway` zůstává bez zápisových metod, `grep
-  ReviewPublishing App/` vrací tentýž seznam a protokol má dál čtyři metody.
+  č. 1 nedotýká vůbec**: `GitHubGateway` zůstává bez zápisových metod,
+  `grep ReviewPublishing App/` vrací tentýž seznam a protokol má dál čtyři metody.
 
 **Panel s nálezy se nekreslí** — čtvrtý takový tab po `Kontrolách`, `Nálezech` a `Průběhu`
 (#294). Důvod je tu ale vlastní: nálezy jsou klíčované `headSha` (tvrdá podmínka č. 5),
@@ -665,7 +665,7 @@ ref maže — ověřeno, `job-queue-daemon.git` v cache je a `refs/prism/pr` pr�
 tedy u poloviny PR neměl data.
 
 **V pruhu sedí mezi `Změněnými soubory` a `Konverzací`**, tedy nalevo od děliče
-(`isReviewerOutput == false` — je to fakt o PR, ne výstup našich revieweerů). Vedle
+(`isReviewerOutput == false` — je to fakt o PR, ne výstup našich reviewerů). Vedle
 `Změněných souborů` schválně: obojí odpovídá na „co se v kódu změnilo“, jen jednou naráz
 a jednou po krocích, takže se ta dvojice čte jako pár a přepíná se jedním skokem. Dělič se
 tím neposune, protože se počítá z vlastnosti tabu, ne z indexu (#242, #215) — což
