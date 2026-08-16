@@ -1671,6 +1671,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+DiffExpansion.swift` | Rozbalování kontextu mimo hunky (#47) | 112 |
 | `AppStore+DraftTransfer.swift` | Přenesení draftu na nový commit (#69) | 103 |
 | `AppStore+Diff.swift` | Načtení diffu, pohled a sbalování souborů | 95 |
+| `AppStore+IncrementalDiff.swift` | Diff „co od minule přibylo“ (#284) — nabídnout, načíst, zavřít | 87 |
 | `AppStore+Automatic.swift` | Automatický režim a denní rozpočet (#25) | 89 |
 | `AppStore+Findings.swift` | Zahození záznamu (#81) a odmítnutí nálezu (#113) | 70 |
 | `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
@@ -1938,6 +1939,10 @@ na `.task` okna, takže zavření okna ji zruší.
 | `StaleNoticeView` | Okrová věta „tohle je poslední známý stav“ nad seznamem, který se nepovedlo načíst **znovu** — jedno místo pro `Kontroly` (#215) i `Commity` (#316). Sedí **nad `ScrollView`em**, aby neodscrollovala pryč od obsahu, o kterém mluví |
 | `CommitListView` | Seznam commitů v tabu `Commity` (#316): pruh s počtem a hlavou, řádek na commit (obrázek autora, první řádka zprávy, jméno, relativní čas, sha) a pilulky `sloučení` a `hlava`. `content` je `internal` kvůli měření přesahu — `NSScrollView` by přesah ukrojil |
 | `OverviewView` | Tab `Přehled`, odshora **co se změnilo od minule → fakta → popis PR** (#280; kontroly mají od #215 vlastní tab). Obsah je v `content` **mimo `ScrollView`** a `internal` schválně — přes `body` se šířka změřit nedá, viz #291 |
+| `SinceLastVisitView` | Pruh „co se změnilo od minule“ nahoře v `Přehledu` (#173, sazba #226 a #284) — odrážky po částech a pod nimi odznak `nálezy zastaraly` s tlačítky `Pustit review znovu` a `Ukázat, co přibylo` |
+| `SinceLastVisitLine`, `SinceLastVisitLines` | Odrážka po typovaných částech a jejich skládání (#284). Mimo view a testovatelné, jako `TimelineEventRow` |
+| `IncrementalDiffBar` | Lišta nad rozsahovým diffem (#284) — rozsah dvěma sha a cesta zpátky na celý diff. Podobu vybírá **spočítaná** šířka, ne `ViewThatFits` |
+| `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde. Řez si bere z `MiniButtonStyle.labelFont`, aby se měření a kresba nemohly rozejít |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka a obsah vpravo; slévá za sebou jdoucí commity |
 | `ConversationEntryView` | Položka osy: karta cizího review nebo komentáře, řádek události, vlákno bez kotvy |
@@ -4222,6 +4227,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.newReleases(in:since:)` | Co vyšlo od poslední viděné verze; neznámá značka = **nic** |
 | `Policy.recheckStatuses(_:of:)` | Spáruje odpovědi kontroly (#150) s nálezy, na které se ptala — index z promptu → `Policy.key(of:)`. **Nepáruje se přes text**: model si věty přeformuluje |
 | `Policy.severityBadge(isBlocking:recheck:dismissal:)`, `Policy.severityBadge(of:categories:)` | Co stojí v odznaku závažnosti u nálezu a jestli se jeho text přeškrtne (`FindingSeverityBadge`, #150): `dismissed` / `resolved(_, blocking:)` / `blocking` / `none`. **`blokuje` se k `vyřešeno` přidává, nenahrazuje** — první je fakt, druhé tvrzení modelu. Odmítnutí přebíjí kontrolu a **nepřeškrtává** (celořádkové „nepočítá se“ patří člověku). Skupinová varianta vydá `resolved` jedině tehdy, když ho kontrola dala **všem platným** nálezům místa |
+| `Policy.incrementalDiff(from:to:rewroteHistory:)` | Dá se ukázat **jen to, co od minule přibylo** (#284)? `nil` = tlačítko se nenabídne. Chce viděnou hlavu, dnešní hlavu, rozdílné a **nepřepsanou historii**; `rewroteHistory: nil` (nenačtená osa) se chová jako „přepsala“ |
 | `Policy.recheck(of:head:)` | Co o uložených nálezech říká poslední kontrola (`RecheckReport`, `RecheckTally`): `none` / `outdated(againstHeadSha:)` / `current`. **Platí jen pro hlavu, proti které běžela** — jinak se odznaky nevydají (tvrdá podmínka č. 5); počítá se z **platných** nálezů, takže odmítnutý (#113) se nepočítá, a nález bez odpovědi jde do `unanswered` |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
@@ -4475,12 +4481,61 @@ Nad nálezy platí navíc:
   Vedle toho jde zavřít **ručně** (`markChangesAsSeen`) křížkem — to je pro „vím to hned teď, ať
   to nezabírá místo“. Zavření posune **obě** značky, jinak by se pruh po restartu vrátil.
 
+  **Odrážky se od #284 sázejí po částech.** Do #284 to byl `[String]` a jeden `Text(verbatim:)`,
+  takže v řádku nešlo nic zdůraznit. Návrh (sekce 02, `.since li`) přitom sází tři různé věci:
+  **co se stalo** tučně a plnou barvou (`li b`), zbytek věty ztlumeně a sha jako kód. Řádek proto
+  skládá `SinceLastVisitLines` do typovaných částí (`SinceLastVisitLine.Part`) — mimo view, jako
+  `TimelineEventRow`, aby se text testoval bez kreslení. Čtyři věci, které se u toho nemají
+  rozbít:
+  - **Věty se pořád skládají ve view, ne v `Policy`.** Je to próza pro člověka, ne rozhodnutí;
+    #284 rozdělil jedno skládání na části, nepřestěhoval ho.
+  - **Tučné znamená „co se stalo“** u vět, které si pruh skládá sám (počet commitů, přepsaná
+    historie, verdikt review), ale u **událostí časové osy** znamená **jméno** — ty berou větu
+    i s jejím zvýrazněním z `TimelineEventRow.attributedTitle`. Dvě různá pravidla schválně:
+    druhé znění téže věty by se s tím prvním rozešlo a testy by hlídaly to, které není vidět.
+  - **Autor commitů se uvádí, jen když je jeden.** „od odinuv“ nad commity dvou lidí je tvrzení,
+    které v datech není; jméno pak vypadne celé a počet se sha zůstanou.
+  - **Sha je podklad za písmem, ne kapsle s odsazením** — vědomá odchylka od návrhu
+    (`code { border-radius: 5px; padding: 1px 5px }`) a **tatáž volba, jakou už udělal inline kód
+    v sazbě Markdownu** (`MarkdownInlineText.highlightCode`, #279): `AttributedString` umí u běhu
+    nastavit barvu pozadí, ne jeho výplň a rádius, takže kapsle by znamenala kreslit každou sha
+    jako vlastní view — a tím rozpadlé zalomení uprostřed věty. Odrážka je v úzkém `Přehledu`
+    (128 bodů) zalomená vždycky, takže je to výměna „zaoblené rohy“ za „věta se dá přečíst“.
+    Barva podkladu i písma je z návrhu (`--accent-weak`, `--ink`), velikost z jednoho zdroje se
+    sazbou Markdownu (`MarkdownTypography.codeSize`).
+
+  **Pod odrážkami stojí řada ovládání** (`.since .row`, #284) — do #284 to byla věta a tlačítko,
+  které visely na jednom `isStale`. Tři kusy a každý má vlastní podmínku:
+  - **odznak `nálezy zastaraly`** (`.pill.stale`) jedině tehdy, když nálezy proti staršímu commitu
+    doopravdy jsou. Čte `AppStore.staleFindings(for:)`, tedy **tentýž zdroj** jako hlavička
+    `StaleHeadView` nad taby — dvě porovnání sha by znamenala dvě pravdy o jedné věci. Nula nálezů
+    je běžný stav (review doběhlo čistě) a odznak se u něj nerozsvítí, kdežto hlavička o rozchodu
+    mluvit má: `StaleFindings.hasFindings` je právě ta hranice mezi nimi;
+  - **`Pustit review znovu`** i tehdy, když **žádné nálezy zatím nejsou** — po přepsané historii
+    je to ta rozumná další věc. Do #284 se v takovém případě nenabídlo nic, což byl bod 3 zadání;
+  - **`Ukázat, co přibylo`** jedině tehdy, když je co s čím porovnat (`Policy.incrementalDiff`).
+
+  **Řada se v úzkém tabu zlomí do sloupce a rozhoduje o tom spočítaná šířka** (`SinceLastVisitView
+  .fits(_:in:)`), ne `ViewThatFits`. Ten se na to spolehnout nedá a je to změřené: odznak i popisky
+  tlačítek jsou vodorovně pružné, takže se ve zúžené řadě radši zkrátí, než by nahlásily, že se
+  nevejdou — v liště rozsahového diffu z toho u #284 vyšlo `Jen t…` a `lineLimit(1)` ani `fixedSize`
+  s tím nehnuly. Popisky jsou konstanty, takže se dají změřit (`TextWidth`) a o podobě řady se dá
+  rozhodnout z jednoho čísla, jak to má #220. **Přetečení tuhle chybu nechytá** — zkrácený popisek
+  nikam nepřeteče —, takže na ni je vlastní výčet (`SinceLastVisitActionsTests`) vedle měření
+  přetečení (`OverviewWidthTests`).
+
+  **Časový údaj a `×` v návrhu nejsou, v aplikaci ano, a zůstávají** (#284): bez `×` by pruh visel,
+  dokud je aplikace spuštěná, a bez času by „od tvé poslední návštěvy“ neřeklo od kdy. Obojí sedí
+  v hlavičce vpravo, tedy tam, kde návrh kreslí `.when` — přibývá k němu křížek, ne druhé místo.
+  Ikona je od #284 `⟲` z návrhu (`arrow.counterclockwise`), ne hodiny: pruh mluví o tom, co se
+  s větví stalo, ne o čase.
+
   **Sázen je podle návrhu (`.since`, #226) a má jen jeden tón** — okrový `--stale`. Do #226 bral
   systémový akcent (modrou) a při přepsané historii systémovou žlutou; obojí bylo mimo paletu okna,
   protože okno stojí na fialové z návrhu (#180) a systémová žlutá je **výstraha**, kdežto tenhle
   blok říká „platilo to, dneska už ne“ — přesně význam, na který #216 zavedlo `Palette.stale`.
-  Že se přepsala historie, proto nese `staleRow` větou a tlačítkem, ne odstínem pozadí; barvou to
-  rozlišovat nešlo, aniž by jedna z těch dvou byla mimo paletu. Graficky přibyl **obrys** (bez něj
+  Že se přepsala historie, proto nese **odrážka a řada ovládání** (do #284 věta s tlačítkem), ne
+  odstín pozadí; barvou to rozlišovat nešlo, aniž by jedna z těch dvou byla mimo paletu. Graficky přibyl **obrys** (bez něj
   plavala plná barevná plocha vedle obrysových karet `Přehledu`) a levý pruh je **okraj rámečku**,
   ne `overlay` s obdélníkem — ten se v zaoblených rozích usekával místo aby s nimi zatočil.
   Poloměr je 7 jako u sousedních karet, ne 8.
@@ -4502,6 +4557,33 @@ Nad nálezy platí navíc:
   na obou — `changes` na čase, „hlava se posunula“ na sha — takže po posunutí jen jedné zůstane
   viset kvůli té zapomenuté. „Přečteno“ i „návrat je nová návštěva“ by pak přestaly platit přesně
   v tom případě, kvůli kterému sha existuje: po rebase, kde časová osa mlčí.
+- **`Ukázat, co přibylo` je diff mezi dvěma hlavami, ne výřez z toho celého** (#284). Aplikace
+  uměla jedině `fetchDiff(id:)`, tedy `baseSha...HEAD`; rozsah z něj nijak nevyřízneme, takže
+  přibyla čtecí metoda na `GitHubGateway` — proč zrovna přes `compare` a ne přes klon v cache, je
+  u `GitHubGateway`.
+
+  **Nabízí se jen tehdy, když je co s čím porovnat**, a rozhoduje o tom čistá funkce
+  `Policy.incrementalDiff(from:to:rewroteHistory:)`. Potřebuje hlavu z minulé návštěvy
+  (`seenHeads`), dnešní hlavu z detailu a to, že se **nepřepsala historie**; `rewroteHistory: nil`
+  (nenačtená časová osa) se chová jako „přepsala“, protože nabídnout rozsah, o kterém nevíme,
+  jestli dává smysl, je horší než ho nenabídnout. Tlačítko, které se nabídne a otevře celý diff,
+  jaký člověk už viděl, je přesně to, co zadání #284 zakazuje.
+
+  **Kreslí se v tabu `Změněné soubory`, ne ve vlastním tabu ani v sheetu.** Je to **pohled** na
+  tentýž tab: `AppStore.incrementalDiffs` drží rozsah **vedle** `diffStates`, ne místo nich, takže
+  celý diff — to, proti čemu se píše review — zůstává načtený a vrací se jedním tlačítkem v liště
+  (`IncrementalDiffBar`). Nálezy, vlákna i rozdělané komentáře se předávají **beze změny**: kotví
+  se na `soubor:řádek` **dnešní hlavy**, a čísla řádků na nové straně jsou v obou diffech tatáž,
+  takže se pověsí na totéž místo; co v rozsahu není vidět, se chová jako soubor mimo diff.
+
+  **Odznak u záložky a `+X −Y` v pruhu počítají to, co je vidět** (`shownDiff`), ne celý PR — pruh
+  kousek nad diffem by jinak tvrdil sedm souborů nad dvěma. Dlaždice v `Přehledu` z toho **nečtou**:
+  „Soubory: 7“ je fakt o PR a `Přehled` rozsah nikdy nekreslí.
+
+  Rozsah se **drží** a druhé kliknutí ho nestahuje znovu (klíčem jsou dvě sha), **selhání se ale
+  zkusit znovu smí** — jinak by tlačítko `Zkusit znovu` u chyby nic neudělalo. Doběhlé volání
+  navíc zapisuje, jen když se mezitím rozsah nezměnil: jinak by v okně ležel diff, který k popisku
+  nad ním nepatří.
 - **`suggestedVerdict` vrací `nil`, když není z čeho soudit** — a je to vlastní odpověď, ne
   opatrné `approve`. Schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou
   aplikace umí udělat. Z běhu se dá vyvodit „je čisto“, jen když **doběhl**, **zavolal
@@ -4656,7 +4738,7 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)` |
+| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchFile(id:path:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
@@ -4690,6 +4772,21 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   na rozdíl od `--json` polí, kde si říkáme, co má přijít. Rozumí mu až `DiffParser`.
   Volá se `gh pr diff <n> --repo … --color never`; to `never` je pojistka proti defaultu
   `auto`, který by při zápisu na terminál poslal ANSI escape sekvence.
+- **Rozsah „co přibylo“ jde přes `compare`, ne přes klon v cache** (#284).
+  `gh api repos/{o}/{r}/compare/<viděná>...<dnešní>` s hlavičkou `Accept: application/vnd.github.diff`
+  — jedno volání, změřeno ~0,7 s. Klon v cache byl druhá schůdná cesta a **prohrál na měření**:
+  `refs/prism/pr/<n>` v něm vzniká teprve při checkoutu kvůli review a `forgetPullRequest` ho maže,
+  takže u většiny PR by se tlačítko nenabídlo; klon je navíc `--filter=blob:none`, takže by si
+  `git diff` obsah stejně dotáhl ze sítě — jen oklikou přes cestu, která se lazy fetchi schválně
+  brání (`GIT_NO_LAZY_FETCH`), a u PR z forku by v něm hlava nebyla vůbec (`prepare` tahá jen
+  `refs/heads/*`).
+
+  **Trojtečka schválně** — dvojtečkový rozsah `compare` nezná a vrací 404 (změřeno). Trojtečka
+  začíná na společném předku obou hlav, takže proti hlavě, která je potomkem té viděné, dá přesně
+  to, co se pushnulo; po přepsané historii by dala **víc než celý diff PR**, a proto se
+  `Ukázat, co přibylo` v takovém případě nenabízí (`Policy.incrementalDiff`). Změřeno na
+  `cli/cli#14062`: 102 kB ve 22 souborech proti 15 kB ve třech, které má celý PR. Osiřelá stará
+  hlava přitom **problém není** — `compare` ji po force pushi zná (změřeno na témže PR).
 - **Seznam commitů se stránkuje, i když se to skoro nikdy neprojeví** (#316).
   `gh api repos/…/pulls/<n>/commits?per_page=100 --paginate`: bez `per_page` by přišlo **prvních
   třicet** (výchozí stránka GitHubu) a odznak by nad stovkou commitů tvrdil třicet, tedy text

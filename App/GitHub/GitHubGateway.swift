@@ -28,6 +28,21 @@ protocol GitHubGateway: Sendable {
     /// reviewery čtou skutečné soubory v pracovním stromě.
     func fetchDiff(id: PRIdentifier) async throws -> String
 
+    /// Diff **mezi dvěma commity** — „co od minule přibylo“ (#284).
+    ///
+    /// Vlastní metoda, protože `fetchDiff(id:)` umí jedině celý PR (`baseSha...HEAD`) a rozsah
+    /// z něj nijak nevyřízneme.
+    ///
+    /// **Přes GitHub, ne přes klon v cache**, a je to změřené rozhodnutí, ne pohodlí:
+    /// `refs/prism/pr/<n>` v klonu vzniká teprve při checkoutu kvůli review a `forgetPullRequest`
+    /// ho maže, takže u většiny PR by se tlačítko nenabídlo; klon je navíc `--filter=blob:none`,
+    /// takže by si `git diff` musel obsah stejně dotáhnout ze sítě — jen oklikou přes cestu,
+    /// která se lazy fetchi schválně brání. `gh api compare` je jedno volání, ~0,7 s.
+    ///
+    /// Jedenáctá **čtecí** metoda protokolu; tvrdá podmínka č. 1 platí dál — gateway pořád nemá
+    /// nic, čím by šlo něco odeslat.
+    func fetchDiff(repo: RepoID, from base: String, to head: String) async throws -> String
+
     /// Obsah souboru na hlavě pull requestu — kvůli rozbalení kontextu mimo hunky.
     ///
     /// Diff sám okolní řádky nenese a pracovní kopie v tu chvíli existovat nemusí, takže
@@ -97,7 +112,7 @@ protocol GitHubGateway: Sendable {
     /// kreslí, je **rozhodnutí, ne tvar odpovědi** — otáčí ho `Policy.commitsNewestFirst`. Tatáž
     /// hranice jako u `fetchReleases` a `Policy.sortedReleases`.
     ///
-    /// Jedenáctá **čtecí** metoda; tvrdá podmínka č. 1 platí dál — gateway pořád nemá nic, čím by
-    /// šlo něco odeslat.
+    /// **Dvanáctá** čtecí metoda (jedenáctá, než se vedle přidal `fetchDiff(repo:from:to:)` z #284);
+    /// tvrdá podmínka č. 1 platí dál — gateway pořád nemá nic, čím by šlo něco odeslat.
     func fetchCommits(id: PRIdentifier) async throws -> [PullRequestCommit]
 }

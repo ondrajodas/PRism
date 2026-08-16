@@ -1727,6 +1727,50 @@ i novým způsobem a porovnal `isEqual(to:)` na 400 řádcích ve dvou paletách
 v UTF-16, takže emoji je dva kódy; regrese ověřena vložením (`count` místo `utf16.count` položí tři
 testy). Testů je **2540**.
 
+### Pruh „Od tvé poslední návštěvy“ podle návrhu (#284)
+
+Pruh nahoře v `Přehledu` seděl proti návrhu (sekce 02) čtyřmi věcmi a všechny čtyři jsou hotové.
+
+**Sazba odrážek.** `lines` byl `[String]` a jeden `Text(verbatim:)`, takže v řádku nešlo nic
+zdůraznit. Řádek se teď skládá z typovaných částí (`SinceLastVisitLine.Part`: `strong` / `plain` /
+`sha`) a skládá je `SinceLastVisitLines` — **mimo view a mimo `Policy`**, jako `TimelineEventRow`:
+je to próza pro člověka, ne rozhodnutí, takže se rozdělilo jedno skládání, nepřestěhovalo se.
+U vět, které si pruh píše sám, je tučně **co se stalo**; u událostí časové osy se bere věta i s jejím
+zvýrazněním z `TimelineEventRow`, tedy tučná **jména** — dvě různá pravidla schválně, protože druhé
+znění téže věty by se s tím prvním rozešlo. Autor commitů se uvádí, **jen když je jeden**.
+
+**Sha je podklad za písmem, ne kapsle s odsazením** — vědomá odchylka od návrhu a tatáž volba, jakou
+už udělal inline kód v sazbě Markdownu (#279): `AttributedString` umí u běhu nastavit barvu pozadí,
+ne jeho výplň a rádius, takže kapsle by znamenala kreslit každou sha jako vlastní view a tím
+rozpadlé zalomení uprostřed věty. Odrážka je v úzkém `Přehledu` zalomená vždycky.
+
+**Odznak místo věty.** `nálezy zastaraly` (`.pill.stale`) čte `AppStore.staleFindings(for:)`, tedy
+**tentýž zdroj** jako hlavička nad taby — a rozsvítí se jedině tehdy, když nálezy doopravdy jsou.
+`Pustit review znovu` se naopak nabízí **i bez nálezů**, když se přepsala historie: do #284 se
+v takovém případě neukázalo nic, což byl třetí bod zadání.
+
+**`Ukázat, co přibylo`** je nová datová cesta. Rozhodlo měření mezi dvěma nabízenými: klon v cache
+**prohrál**, protože `refs/prism/pr/<n>` v něm vzniká teprve při checkoutu kvůli review a
+`forgetPullRequest` ho maže (u většiny PR by se tlačítko nenabídlo), klon je `--filter=blob:none`
+(takže by si `git diff` obsah stejně dotáhl ze sítě) a u PR z forku by v něm hlava nebyla vůbec.
+Přibyla proto **dvanáctá čtecí metoda** na `GitHubGateway` — `compare/<viděná>...<dnešní>`
+s `Accept: application/vnd.github.diff`, jedno volání, ~0,7 s. Rozsah se kreslí v tabu `Změněné
+soubory` s lištou, ze které se jedním tlačítkem vrátíš na celý diff; celý diff se u toho **nezahazuje**,
+je to to, proti čemu se píše review.
+
+**Po přepsané historii se tlačítko nenabídne**, a je to změřené: trojtečkový `compare` začíná na
+společném předku, takže by po force pushi vrátil **víc než celý diff PR** — na `cli/cli#14062` 102 kB
+ve 22 souborech proti 15 kB ve třech. Tedy přesně to, co zadání zakazuje. Rozhoduje o tom čistá
+funkce `Policy.incrementalDiff`; `rewroteHistory: nil` (nenačtená časová osa) se chová jako
+„přepsala“.
+
+Cestou vypadlo jedno poučení k šířkám: **`ViewThatFits` se na řadu s pružnými popisky spolehnout
+nedá.** Odznak i tlačítka se ve zúžené řadě radši zkrátí, než by nahlásily, že se nevejdou — v liště
+rozsahového diffu z toho vyšlo `Jen t…`, a `lineLimit(1)` ani `fixedSize` s tím nehnuly. Rozhoduje
+proto **spočítaná** šířka popisků (`TextWidth`), jak to má #220. `OverflowProbe` na tuhle třídu chyb
+**nestačí** — zkrácený popisek nikam nepřeteče —, ověřeno vloženou regresí, po které zůstaly
+`OverviewWidthTests` zelené. Testů je **2584**.
+
 ### Tab `Commity` — seznam hotový (#316)
 
 Sedmá záložka detailu PR je v okně: **seznam commitů PR, od nejnovějšího**, řádek s obrázkem
@@ -1759,10 +1803,11 @@ stojí, ale po pushnutém commitu je seznam o krok pozadu a nad stropem API v n�
 nálezy jsou klíčované `headSha`, takže se tehdy neoznačí nic. A **šipka u řádku se nenakreslila**,
 protože rozkliknutí je #317: šipka, za kterou se nic nestane, slibuje interakci, která tam není.
 
-Testů je **2584** (+44: pět nových suit — stav tabu, model commitu, dekódování odpovědi, načítání
-ve store a šířka pruhu — plus render sonda a dva případy dopsané do stávajících suit). Pět z toho
-hlídá pořadí: otočení čerstvého i zastaralého seznamu, že se otáčí a neřadí, že v pruhu nezbylo
-staré slovo, a že mapa ve store drží pořadí z API.
+Testů je po sloučení s `main` **2638**; tohle issue z nich přidalo **44** — pět nových suit (stav
+tabu, model commitu, dekódování odpovědi, načítání ve store a šířka pruhu) plus render sonda a dva
+případy dopsané do stávajících suit. Pět z těch čtyřiačtyřiceti hlídá pořadí: otočení čerstvého
+i zastaralého seznamu, že se otáčí a neřadí, že v pruhu nezbylo staré slovo, a že mapa ve store drží
+pořadí z API.
 
 Zbývá rozkliknutí commitu na jeho diff (**#317**, `commits/{sha}` s
 `Accept: application/vnd.github.diff`, 0,99 s, unified diff pro dnešní `DiffParser`) a smrsknutí

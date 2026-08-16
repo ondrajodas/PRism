@@ -56,6 +56,29 @@ struct DetailTabRenderProbe {
         }
     }
 
+    /// Tab `Změněné soubory` v rozsahovém pohledu (#284) — **lišta nad diffem**.
+    ///
+    /// Návrh tuhle obrazovku nekreslí (sekce 02 má jen tlačítko, ne stav po jeho stisknutí), takže
+    /// je to jediné místo, kde se dá posoudit: rozsahový diff vypadá jako celý diff, jen kratší,
+    /// a jestli je z lišty poznat proč, se z kódu nezjistí.
+    @Test("Vyrendrovat rozsahový diff")
+    func rendersTheIncrementalDiff() async throws {
+        let directory = URL(filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory())
+        let (store, cache) = try await prepared()
+        defer { _ = cache }
+
+        store.setDetailTab(.filesChanged, for: pr)
+        store.incrementalDiffs[pr] = IncrementalDiff(
+            range: IncrementalDiffRange(seen: "4f2ac9188cd", head: "aaaa1111"),
+            content: .loaded(DiffParser.parse(Self.diffText))
+        )
+        for width in [1400.0, 648.0] as [CGFloat] {
+            let url = directory.appending(path: "detail-soubory-rozsah-\(Int(width)).png")
+            try capture(store: store, width: width, to: url)
+            print("SONDA \(url.path) — rozsahový diff")
+        }
+    }
+
     /// Scéna do okna mimo obrazovku a odtud `cacheDisplay` do PNG — tatáž cesta jako u `Přehledu`
     /// (#291), bloku kódu (#236) a odpočtu (#269), viz `docs/testovani.md`.
     private func capture(store: AppStore, width: CGFloat, to url: URL) throws {
