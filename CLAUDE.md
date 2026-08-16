@@ -138,6 +138,8 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   ```
 
   `gh pr create`, `gh pr list` a `gh api` fungují normálně — zlobí jen ty dva příkazy.
+  Pozor jen na jednu REST cestu: `pulls/comments/{id}/replies` vrací **404** — odpověď na
+  inline komentář se posílá jako `POST pulls/{n}/comments` s `in_reply_to`.
 
   Když Copilot nálezy má, projdi je, řekni, co je reálné a co šum, a co je reálné oprav.
 
