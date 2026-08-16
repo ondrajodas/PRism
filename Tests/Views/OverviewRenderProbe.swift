@@ -23,17 +23,33 @@ struct OverviewRenderProbe {
     /// nad ním. Sazba se v každé zalomí jinak, takže jedna nestačí.
     private let widths: [CGFloat] = [320, 560, 900]
 
+    /// Stavy pruhu „od tvé poslední návštěvy“ (#284). **Všechny se posuzují okem**, protože se liší
+    /// právě tím, co je v řadě pod odrážkami — a to se z kódu nepozná: odznak `nálezy zastaraly` má
+    /// být jedině tam, kde nálezy doopravdy jsou, a `Ukázat, co přibylo` jedině tam, kde je co
+    /// porovnat.
+    private enum Scenario: String, CaseIterable {
+        /// Bez pruhu — kvůli #280 zůstává: řada faktů má nad sebou buď pruh, nebo nic.
+        case none = "bez-pruhu"
+        /// Tři nové commity, review na PR ještě neběželo. Řada má jen `Ukázat, co přibylo`.
+        case commits = "nove-commity"
+        /// Nové commity a nálezy, které jimi zastaraly. **Nejširší řada** — odznak a dvě tlačítka.
+        case staleFindings = "zastarale-nalezy"
+        /// Přepsaná historie bez nálezů: `Pustit review znovu` ano, odznak ne, rozsah ne.
+        case rewritten = "prepsana-historie"
+        /// Přepsaná historie nad nálezy: odznak a `Pustit review znovu`, rozsah pořád ne.
+        case rewrittenWithFindings = "prepsana-se-zastaralymi"
+    }
+
     @Test("Vyrendrovat Přehled do PNG")
     func rendersOverview() throws {
         let directory = URL(filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory())
         for width in widths {
             for dark in [false, true] {
-                for withBanner in [false, true] {
-                    let variant = withBanner ? "-od-minule" : ""
+                for scenario in Scenario.allCases {
                     let url = directory.appending(
-                        path: "prehled-\(Int(width))-\(dark ? "tmavy" : "svetly")\(variant).png"
+                        path: "prehled-\(Int(width))-\(dark ? "tmavy" : "svetly")-\(scenario.rawValue).png"
                     )
-                    try write(width: width, dark: dark, withBanner: withBanner, to: url)
+                    try write(width: width, dark: dark, scenario: scenario, to: url)
                     print("SONDA \(url.path)")
                 }
             }
@@ -45,18 +61,23 @@ struct OverviewRenderProbe {
     ///
     /// **Barevný režim se nastavuje dvakrát**: `NSAppearance` kvůli paletě (dynamické `NSColor`)
     /// a `colorScheme` kvůli `.primary`/`.secondary`. S jedním z toho vyjde tmavý text na tmavém.
-    private func write(width: CGFloat, dark: Bool, withBanner: Bool, to url: URL) throws {
+    private func write(width: CGFloat, dark: Bool, scenario: Scenario, to url: URL) throws {
         let scene = OverviewView(
             description: Self.description,
             facts: Self.facts,
-            // **Varianta s bannerem je kvůli #280.** Řada faktů se přesunula nad popis, takže jejím
+            // **Varianta s pruhem je kvůli #280.** Řada faktů se přesunula nad popis, takže jejím
             // novým sousedem shora je pruh „Od tvé poslední návštěvy“ — a ten je okrový
             // (`Palette.stale`) zrovna tak jako zastaralá sha v posledním boxíku. Dvě okrové plochy
             // nad sebou se posuzují okem, ne z kódu, takže se musí dát vidět.
-            changes: withBanner ? Self.changes : .none,
+            changes: Self.changes(in: scenario),
             lastVisit: Date(timeIntervalSince1970: 1_754_000_000),
-            isStale: withBanner,
-            movedHead: withBanner ? "9c1de0212ab" : nil,
+            isStale: scenario == .staleFindings || scenario == .rewrittenWithFindings,
+            hasStaleFindings: scenario == .staleFindings || scenario == .rewrittenWithFindings,
+            movedHead: scenario == .none ? nil : "9c1de0212ab",
+            rerun: scenario == .none ? nil : {},
+            // Rozsah se nabízí jedině tam, kde se dnešní hlava dá s čím porovnat — po přepsané
+            // historii ne (`Policy.incrementalDiff`), takže se to tak musí i vyrendrovat.
+            showAdded: scenario == .commits || scenario == .staleFindings ? {} : nil,
             pullRequest: Self.pullRequest
         )
         .content
@@ -136,20 +157,53 @@ struct OverviewRenderProbe {
         ]
     )
 
-    /// Force push je na banner nejhustší případ — nese i větu o tom, která sha na větvi už není,
-    /// takže je pruh nad řadou faktů tak vysoký, jak jen umí být.
-    private static let changes = VisitChanges(
-        commits: [],
-        forcePushes: [
-            TimelineEvent(
-                id: "1",
-                kind: .forcePushed(before: "4f2ac9188cd", after: "9c1de0212ab"),
-                actor: EventActor(login: "odinuv", avatarURL: nil, isBot: false),
-                at: Date(timeIntervalSince1970: 1_753_900_000)
+    /// Co pruh v tom kterém stavu vypisuje. Force push je nejhustší odrážka — nese i to, která sha
+    /// na větvi už není — kdežto commity nesou autora a poslední sha, tedy sazbu z návrhu celou.
+    private static func changes(in scenario: Scenario) -> VisitChanges {
+        switch scenario {
+        case .none:
+            .none
+        case .commits, .staleFindings:
+            VisitChanges(
+                commits: (0..<3).map { index in
+                    TimelineEvent(
+                        id: "c\(index)",
+                        kind: .commit(oid: "9c1de0212ab", headline: "fix: nevracet prázdný secret"),
+                        actor: author,
+                        at: Date(timeIntervalSince1970: 1_753_900_000)
+                    )
+                },
+                forcePushes: [],
+                events: [],
+                reviews: [approval],
+                comments: []
             )
-        ],
-        events: [],
-        reviews: [],
-        comments: []
+        case .rewritten, .rewrittenWithFindings:
+            VisitChanges(
+                commits: [],
+                forcePushes: [
+                    TimelineEvent(
+                        id: "1",
+                        kind: .forcePushed(before: "4f2ac9188cd", after: "9c1de0212ab"),
+                        actor: author,
+                        at: Date(timeIntervalSince1970: 1_753_900_000)
+                    )
+                ],
+                events: [],
+                reviews: [approval],
+                comments: []
+            )
+        }
+    }
+
+    private static let author = EventActor(login: "odinuv", avatarURL: nil, isBot: false)
+
+    /// Třetí odrážka z návrhu — „vondrous **schválil** PR“.
+    private static let approval = SubmittedReview(
+        id: "r1",
+        author: "vondrous",
+        state: .approved,
+        body: "",
+        submittedAt: Date(timeIntervalSince1970: 1_753_950_000)
     )
 }

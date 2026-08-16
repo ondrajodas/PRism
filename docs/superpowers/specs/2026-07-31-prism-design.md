@@ -618,12 +618,16 @@ protože jinak si o release notes nikdo neřekne.
 - **Na síť se sahá dvakrát za běh**, oboje na vyžádání: jednou při startu kvůli značce,
   jednou při otevření okna (a to už je z paměti). V pollingu ani na pozadí nikdy.
 
-### Tab Commity — návrh (zatím jen v mockupu)
+### Tab Commity
 
 Sedmá záložka detailu PR: **seznam commitů** a **diff jednoho z nich**. Nakreslená je
-v mockupu, sekce 19 (*Review — Commity*, viz [`docs/navrh.md`](../../navrh.md)); v kódu
-zatím není nic. Zapsané je to tady, protože rozhodnutí padla dřív, než na ně vzniknou
-issues — pravidlo *Návrh (mockup)* v `CLAUDE.md` chce nakreslit a nechat schválit napřed.
+v mockupu, sekce 19 (*Review — Commity*, viz [`docs/navrh.md`](../../navrh.md)). Zapsané je to
+tady, protože rozhodnutí padla dřív, než na ně vznikly issues — pravidlo *Návrh (mockup)*
+v `CLAUDE.md` chce nakreslit a nechat schválit napřed.
+
+**Seznam je od #316 hotový**; diff jednoho commitu zbývá (#317) a smrsknutí pruhu na ikony
+v úzkém okně taky (#318). Co implementace upřesnila nebo změnila, je v pododdílu *Co se při
+implementaci rozhodlo jinak (#316)* níž.
 
 **Proč vzniká.** `Změněné soubory` odpovídají na „co je na PR jinak proti základu“ — jeden
 slitý diff, ze kterého je vidět výsledek, ne cesta. Otázka „proč tenhle řádek zmizel“ nebo
@@ -714,6 +718,93 @@ Z toho plyne:
 - **Druhý stupeň** (ikony, popisek jen u aktivní, 655 b) srazí pruh **pod nejužší povolené
   okno**, takže by se nezalomil nikdy. Sedmé záložky se ale netýká — tu zaplatí první
   stupeň — a spravuje to, co je rozbité už dnes. Je to proto vlastní issue.
+
+#### Co se při implementaci rozhodlo jinak (#316)
+
+Rozhodnutí zapsaná dřív, než se psal kód, platí; tohle je to, co se u implementace ukázalo jinak.
+
+- **Naměřené šířky sedí o 17 bodů výš, než říkala replika — závěr platí, absolutní čísla ne.**
+  Tabulka výš vznikla na replice `PullRequestTabBar`u; měření na **něm samotném**
+  (`NSHostingView.fittingSize`, po jednom bodu šířky, `TabStripWidthTests`) dává:
+
+  | Pruh | Šířka tabu | Okno (+ rail 53) |
+  |---|---|---|
+  | 6 záložek se všemi odznaky a `+X −Y` — před #316 | 884 b | 937 b |
+  | **7 záložek se všemi odznaky, `+X −Y` ustupuje** | **886 b** | **939 b** |
+  | 7 záložek bez odznaků | 729 b | 782 b |
+  | 7 záložek se všemi odznaky a `+X −Y` (dopočet) | ~996 b | ~1049 b |
+
+  Pilulka `+X −Y` stojí **110 bodů** (774 → 884 na `origin/main`), sedmá záložka s odznakem
+  **112** (886 − 774) — replika předpovídala 108 a 115, tedy poměr správně. Cena té záložky je
+  proto **+2 body okna**, ne +5, jak vycházelo z repliky, a rozhodně ne +115. Hranice se
+  z repliky brát nedají; drží je test.
+
+- **Seznam je od nejnovějšího — otočeno proti tomuhle návrhu i proti mockupu.** Sekce 19 i text
+  výš měly „od nejstaršího, jako na GitHubu, protože PR se takhle čte jako postup, ne jako
+  hromada“. **Ten důvod neobstál na hotové obrazovce**: v tomhle okně se PR nečte od začátku, ale
+  od toho, co přibylo naposled — je to tentýž pohyb, jaký dělá pruh „Od tvé poslední návštěvy“,
+  a tentýž důvod, proč jsou fakta v `Přehledu` nahoře (#280). Postup se z otočeného seznamu přečte
+  pořád, jen odspodu; kdežto „co se stalo teď“ by se v původním pořadí u dlouhého PR muselo
+  doscrollovat. Rozhodnuto po proklikání hotové záložky, ne v návrhu — proto to stojí tady.
+
+  Co u toho platí:
+
+  - **Otáčí se, neřadí** (`Policy.commitsNewestFirst`). Pořadí z API je topologické, takže po
+    rebase nebo cherry-picku má commit uprostřed novější datum než ten za ním; `sorted(by:
+    committedAt)` by ten postup rozházel. Otočení pořadí zachovává, jen ho čte z druhé strany.
+  - **Otáčí se na jednom místě**, v `Policy.commitsTab` — což je jediná cesta seznamu do okna.
+    Gateway i store drží pořadí z API, takže je pořadí kresby rozhodnutí, ne uložená vlastnost dat.
+  - **Pruh nad seznamem to říká textem** (`7 commitů · od nejnovějšího`), takže se musel změnit
+    s ním. Je to jediné místo, které pořadí pojmenovává — stará věta nad otočeným seznamem by byla
+    tvrzení vyvratitelné pohledem o řádek níž.
+  - **Pilulka `hlava` se pořád váže na `headSha`**, ne na první řádek. Nahoře **bývá**, ale je to
+    důsledek toho, jak seznam přišel; po pushnutém commitu a nad stropem API se to rozejde a tehdy
+    se neoznačí nic. Viz bod níž.
+  - **Mockup se kvůli tomu nepřekresluje** — sekce 19 zůstává, jak je, a překreslení řeší #299.
+
+- **`CommitsTabState` nemá `empty` a prázdná odpověď je porucha.** Zadání jmenovalo tři stavy
+  („načítá se“, „jeden commit“, „nepodařilo se načíst“) a napsalo, že hláška o prázdnu by lhala —
+  neřeklo ale, co se stane, když prázdné pole přesto přijde. Rozhodnuto: **`failed` s vlastní
+  větou** („GitHub vrátil prázdný seznam commitů. Pull request bez commitů neexistuje.“). `loading`
+  by nad ním točil navždycky a čtvrtý klidný stav by tvrdil něco, co o pull requestu platit nemůže.
+  Je to obrácená volba než u `ChecksTabState`, kde prázdno **je** odpověď, a rozdíl je právě v tom,
+  jestli ten prázdný stav umí v realitě nastat.
+
+- **Pilulka `hlava` se bere z `headSha`, ne z pozice řádku.** Návrh říká „poslední commit nese
+  pilulku *hlava*“; to platí jedině nad čerstvým seznamem. Po pushnutém commitu je seznam o krok
+  pozadu, takže by pilulka ukázala na commit, proti kterému nálezy neplatí — a to je zrovna to,
+  čemu má klíčování `headSha` bránit (tvrdá podmínka č. 5). Druhá taková situace je **strop API**:
+  nad 250 commitů chybí v seznamu zrovna ta novější část, takže v něm hlava není vůbec.
+  `Policy.headCommit(in:head:)` proto hledá sha; když ho v seznamu nenajde, **neoznačí nic**.
+
+  Po otočení seznamu na „nejnovější nahoře“ je hlava obvykle **první** řádek — ale je to důsledek
+  toho, jak seznam přišel, ne pravidlo, a v obou situacích výš se to rozejde. Z pořadí se bere
+  jedině tehdy, když hlava ještě není známá (detail nedorazil), protože to plyne z definice
+  endpointu.
+
+- **Řádek nemá šipku `›`, kterou návrh kreslí.** Rozkliknutí je #317, takže by šipka slibovala
+  interakci, která tam není — tatáž úvaha jako u checku bez čísla jobu (#214): tlačítko, které nic
+  neudělá, je horší než tlačítko, které tam není. Přibude s #317, spolu s podbarvením vybraného
+  řádku (`.crow.on`).
+
+- **Seznam se stránkuje** (`per_page=100 --paginate`). V zadání stálo „jedno volání“ a u běžného
+  PR to jedno volání zůstává; bez `per_page` by ale GitHub vrátil **prvních třicet** a odznak by
+  nad stovkou commitů tvrdil třicet. Nad 250 commitů GitHub nevydá nic — že se na strop narazilo,
+  se pozná z počtu a **řekne se to nad seznamem**, jinak by text tvrdil víc, než data unesou.
+
+- **Monogram v kolečku se bere ze jména z gitu, ne z `author.login`.** Kolečko ukazuje monogram,
+  dokud obrázek nedorazí — a u `author: null` nedorazí nikdy. `IM` vedle jména `Kumar Prateek`
+  vypadá jako řádek o dvou různých lidech, a není to kuriozita: sloučení commituje GitHub pod celým
+  jménem, kdežto `author.login` je přezdívka téhož člověka (vidět na fixture `cli/cli#13899`).
+
+- **Commity se tahají s detailem, ne až při otevření tabu.** Odznak u záložky je počet commitů,
+  takže při lazy načtení by se objevil až v tabu, který má člověk zrovna otevřený — tedy zrovna
+  tehdy, kdy ho nepotřebuje. Jde to **za** checky, ne souběžně: paralelně by na jeden výběr řádku
+  běžely dva `gh` podprocesy místo jednoho, za úsporu jedné vteřiny.
+
+- **Čas v řádku je relativní** (`před 3 dny`), ne `dnes 9:12` jako v mockupu. Zbytek okna používá
+  `.relative(presentation: .named)` všude (osa, vlákna, seznam PR), a dva různé způsoby, jak
+  v jednom okně napsat „kdy“, jsou horší než odchylka od jedné buňky návrhu.
 
 #### Co se zamítlo
 
@@ -1740,6 +1831,19 @@ Dvě rozhodnutí, která z rozpisu M8 nejsou vidět a stála za rozdělení na p
 | **Náhled ukazuje ukázkové hodnoty, ne skutečné** (#281) | Dosadit první nakonfigurovaný skill a base sha vybraného PR, aby byl náhled konkrétní | Náhled odpovídá na „jak bude text vypadat po dosazení“, ne „co se spustí na tomhle PR“ — v nastavení navíc žádné vybrané PR být nemusí. S hodnotami z konfigurace by se navíc měnil podle toho, který skill stojí v sadě první, a to je tvrzení o konkrétním běhu, které to není. Pevné hodnoty (`code-review:code-review`, `a1b2c3d`) jsou předvídatelné a je u nich v popisku napsané, že jsou ukázkové |
 | Náhled kreslí **šablonu a jádro odděleně**, ne jeden slepený text (#281) | Ukázat rovnou celý poskládaný prompt v jednom bloku | Smysl náhledu je, aby bylo vidět **kde končí psané a začíná připojované** — jinak by z něj nešlo poznat, že se jádro připojí i po jeho smazání ze šablony. Kreslí se proto dvě plochy: psaná světlá a ohraničená, připojovaná tmavší a čárkovaná se zámkem v popisku, přesně jak to má návrh (sekce 10). Cena je, že `Policy` musí umět vrátit i psanou půlku samotnou (`reviewPromptBody`) — dosazovat zástupné texty ve view by bylo druhé místo, kde se to dělá |
 | Zástupné texty se v poli **nezvýrazňují**, jen se vypisují jako legenda pod ním (#281) | Obarvit `{{skill}}` a `{{baseSha}}` přímo v poli akcentem, jak to kreslí návrh (`.tmpl-ph`) | Editovatelný text s obarvenými úseky znamená `TextEditor` nad `AttributedString` a vlastní přebarvování při každém úhozu — tedy kus práce a další místo, kde se dá rozejít s tím, co `Policy` opravdu dosazuje. Legenda pod polem (dvě pilulky, které návrh má taky, v `.tmpl-foot`) odpovídá na tutéž otázku „co se dá napsat“, a **náhled hned pod ní ukazuje výsledek** — tedy to, kvůli čemu se zvýraznění kreslilo. Je to zapsaná odchylka od návrhu, ne opomenutí; kdyby chyběl náhled, rozhodlo by se to jinak |
+| **Odrážky pruhu „od minule“ se skládají po částech, pořád ve view** (#284) | Přesunout skládání do `Policy`, když se z toho stává typovaná struktura | Věty jsou próza pro člověka, ne rozhodnutí — a to pravidlo bylo u `lines` zapsané od #173. #284 rozdělil **jedno** skládání na části (`SinceLastVisitLine.Part`), aby šel tučný začátek a sha odlišit; nepřestěhoval ho. Typ leží v `App/Views/` a není `View`, jako `TimelineEventRow` — takže se text testuje bez kreslení |
+| Tučné znamená **„co se stalo“ u vět pruhu, ale „jméno“ u událostí osy** (#284) | Sjednotit obojí na jedno pravidlo, ať se pruh čte konzistentně | Věta události má **jeden zdroj** (`TimelineEventRow.attributedTitle`) a ten bolduje jména; napsat ji v pruhu podruhé s jiným zvýrazněním znamená dvě znění, která se rozejdou — a testy by hlídaly to, které není vidět. Jedna věta, jeden zdroj i za cenu dvou důvodů k tučnému |
+| **Sha je podklad za písmem, ne kapsle s odsazením** (#284) | Kreslit `<code>` z návrhu doslova, tedy s poloměrem 5 a odsazením 1/5 bodu | `AttributedString` umí u běhu nastavit **barvu pozadí**, ne jeho výplň a rádius, takže kapsle znamená kreslit každou sha jako vlastní view — a tím rozpadlé zalomení uprostřed věty. Odrážka je v úzkém `Přehledu` (128 bodů) zalomená vždycky, takže je to výměna „zaoblené rohy“ za „věta se dá přečíst“. **Tatáž volba, jakou už udělal inline kód v sazbě Markdownu** (#279), takže v okně nevzniká druhé chování; barvy a velikost jsou z návrhu |
+| Odznak `nálezy zastaraly` a hlavička nad taby čtou **jeden `staleFindings`** (#284) | Nechat hlavičku, jak byla (porovnává sha inline), a odznaku dát vlastní podmínku | Obojí mluví o témže stavu a tvrdá podmínka č. 5 zakazuje druhou pravdu o tom, proti čemu nálezy platí. Přibyl proto jeden přístupový bod ve store; hranicí mezi „hlavička mluví“ a „odznak svítí“ je `hasFindings`, protože **čisté review proti staršímu commitu je pořád zastaralé**, ale nálezy u něj žádné nejsou |
+| `Pustit review znovu` se nabízí **i bez nálezů** po přepsané historii (#284) | Nechat celou řadu viset na `isStale`, jak to bylo do #284 | Na PR, kde review nikdy neběželo, byl force push tou nejsilnější pobídkou review pustit — a okno nenabídlo nic. `isStale` je tvrzení o **uložených datech**, kdežto přepsaná historie je fakt o větvi; jsou to dvě různé podmínky a slít je znamená ztratit tu, na které záleží |
+| `Ukázat, co přibylo` jde přes **novou čtecí metodu gatewaye**, ne přes klon v cache (#284) | `git diff <stará>...<nová>` v bare klonu, protože commity tam jsou a modul s gitem už pracuje | Změřeno: `refs/prism/pr/<n>` v klonu vzniká teprve při checkoutu kvůli review a `forgetPullRequest` ho maže, takže u většiny PR by se tlačítko **nenabídlo**; klon je `--filter=blob:none`, takže by si `git diff` obsah stejně dotáhl ze sítě — jen oklikou přes cestu, která se lazy fetchi schválně brání; a u PR z forku by hlava v klonu nebyla vůbec (`prepare` tahá `refs/heads/*`). `gh api compare` je jedno volání, ~0,7 s, a **dostupnost se pozná bez I/O**: buď starou sha máme, nebo ne |
+| Po přepsané historii se `Ukázat, co přibylo` **nenabídne** (#284) | Nabídnout ho vždycky, když se hlava posunula — rozsah je pořád lepší než celý diff | REST `compare` umí jedině **trojtečku** (dvojtečka vrací 404, změřeno), a ta začíná na společném předku. Po force pushi spadne předek k místu, kde větev vznikla, takže rozsah vyjde **větší než celý diff PR**: na `cli/cli#14062` 102 kB ve 22 souborech proti 15 kB ve třech. Tlačítko by tedy slíbilo „co přibylo“ a otevřelo víc, než co člověk už viděl. Nabídka pro ten případ je `Pustit review znovu`, kterou pruh vedle má |
+| Rozsah je **pohled v tabu `Změněné soubory`**, ne vlastní tab ani sheet (#284) | Sedmá záložka, nebo modální okno s diffem | Je to tentýž obsah v jiném rozsahu, ne jiná otázka — a review se pořád píše proti celému diffu, takže by vlastní tab znamenal dvě místa, kde se dá komentovat. Rozsah proto leží **vedle** celého diffu (`incrementalDiffs`, ne místo `diffStates`) a vrací se jedním tlačítkem v liště; nálezy i vlákna se předávají beze změny, protože kotví na řádky **dnešní hlavy**, a ta je v obou diffech tatáž |
+| Lišta nad rozsahem je **akcentová, ne okrová** (#284) | Vzít `--stale` jako pruh „od minule“, ze kterého se na rozsah kliklo | Okrová v tomhle okně znamená „platilo to, dneska už ne“ — a o rozsahu to neplatí, je to **zapnutý pohled**. Akcent je podle palety to, co aplikace nabízí nebo co zrovna dělá. Návrh tuhle obrazovku nekreslí (sekce 02 má tlačítko, ne stav po jeho stisknutí), takže je to rozhodnutí, ne odchylka |
+| O podobě řady rozhoduje **spočítaná šířka**, ne `ViewThatFits` (#284) | Nechat zalomení na `ViewThatFits`, jak to dělá řada akcí pod nálezem (#283) | Změřeno, že to u řady s pružnými popisky **nefunguje**: `Text` i popisek tlačítka se ve zúžené řadě radši zkrátí, než by nahlásily, že se nevejdou, takže `ViewThatFits` vybere nejširší variantu — v liště z toho vyšlo `Jen t…` a `lineLimit(1)` ani `fixedSize` s tím nehnuly. Popisky jsou konstanty, takže se dají změřit (`TextWidth`) a rozhodnout z jednoho čísla, jak to má #220. Přidanou hodnotou je testovatelnost: `OverflowProbe` tuhle chybu **nechytá**, protože zkrácený popisek nikam nepřeteče — ověřeno vloženou regresí |
+| **Časový údaj a `×` v pruhu zůstávají**, i když je návrh nemá (#284) | Smazat je kvůli shodě s návrhem sekce 02 | Bez `×` by pruh visel, dokud je aplikace spuštěná (zapsaný důvod od #173), a bez času by „od tvé poslední návštěvy“ neřeklo od kdy. Obojí sedí tam, kde návrh kreslí `.when`, takže k němu **přibývá**, nezakládá druhé místo |
+| Řez popisku tlačítka drží **`MiniButtonStyle.labelFont`**, ne `makeBody` (#284) | Nechat řez v `makeBody` a v měření napsat `systemFont(ofSize:)` — je to jeden řádek na každé straně | Ty dvě strany se rozešly hned: plné tlačítko se kreslí mediumem a měřilo se regularem, takže `Pustit review znovu` vycházelo o tři body užší (126 proti 129) a řada si mohla říct „vejdu se“ a pak se zkrátit — přesně chyba, kterou to měření má chytat. Nález Copilota. Vrací se `NSFont`, protože z něj se měří; kresba si ho zabalí do `Font`, takže je to **tentýž font**, ne dva shodně nastavené |
+| Autora commitů zruší **i jeden commit bez autora** (#284) | `compactMap` na loginy a porovnat, jestli zbyl jeden | Smazaný účet nebo bot bez loginu by z dávky vypadl, takže „odinuv + někdo neznámý“ by vyšlo jako jeden login a věta by o tom druhém mlčela. Nález Copilota; jméno se proto uvádí, jen když ho mají **všechny** commity a je shodné |
 | Časový limit běhu je **nastavení, ne konstanta** (#320) | Nechat `ClaudeReviewRunner.defaultTimeout` v kódu a měnit ho commitem | `docs/architektura.md` u rozlišení `timedOut` proti `interrupted` už dřív tvrdila, že „timeout říká, že je review pomalé (dá se zvednout limit)“ — a to byl slib, který uživatel neměl jak uplatnit. Rozdíl mezi těmi dvěma stavy je celý o tom, že s jedním se dá něco dělat; dokud se limit zvednout nedal, byla to informace bez pokračování |
 | Pole se jmenuje **`reviewTimeoutMinutes`**, ne `reviewTimeout` (#320) | Jméno bez jednotky, jak ho navrhovalo zadání issue | V témže `GlobalConfig` stojí `pollIntervalSeconds` a `cacheBudgetMegabytes` a je u nich napsané proč: soubor se edituje ručně a `Duration` se do JSONu kóduje jako dvojice čísel, kterou nikdo nenapíše. `reviewTimeout` s hodnotou `15` by se v takovém sousedství četlo jako sekundy nebo jako `Duration` — jednotka v názvu je jediné, co tomu brání. **Vědomá odchylka od zadání**, ne přehlédnutí |
 | Meze **5–60 minut** a „bez limitu“ jako volba **neexistuje** (#320) | Nechat rozsah otevřený, případně nabídnout `0` = bez hlídání | Timeout je jediná pojistka proti session, která se zacyklí a utrácí; `autoRunsPerDay` a `maxConcurrentReviews` omezují **počet** běhů, ne délku jednoho. Horní mez je proto vazba na rozpočet: strop krát denní limit je nejhorší možný den (při 15 min a 20 bězích pět hodin session, při 60 min dvacet), a naměřený běžný běh stojí ~0,40 $/min, session která se utrhne násobky toho (v cache leží běh za 14,67 $ pod minutou). Dolní mez je proti falešným timeoutům: naměřeno 19 běhů, medián 2,5 min, nejdelší doběhlý 6,8 min — pod pěti minutami by `timedOut` přestal být zprávou o pomalém review a stal se vlastností nastavení. Zkracovat limit navíc **nešetří peníze**: zabitá session už utratila, co utratila, jen z ní místo hotových nálezů zbydou částečné |

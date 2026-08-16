@@ -129,19 +129,28 @@ ne v hlavičce: je to stav prostředí, ne údaj o pull requestu. Selhaný check
 zůstává bannerem v hlavičce, protože se u něj musí vypsat celý výstup `gitu` a z něj se teprve
 pozná, co dělat dál.
 
-Detail PR má **šest záložek** (#183, dvě přidal #242 a jednu #215): `Přehled` říká, jak to teď
-stojí (popis, fakta, co se změnilo od minule), `Změněné soubory` je diff a `Konverzace` je
+Detail PR má **sedm záložek** (#183, dvě přidal #242, jednu #215 a jednu #316): `Přehled` říká,
+jak to teď stojí (popis, fakta, co se změnilo od minule), `Změněné soubory` je diff, `Commity`
+je seznam commitů PR (popsaný níž) a `Konverzace` je
 **časová osa toho, co se dělo** — s uzly,
 u kterých tvar nese druh, se seskupenými commity (jedenáct pushů nesmí utopit dva komentáře),
 filtrem `Vše / Komentáře / Vlákna / Události` a značkou `Nové od tvé poslední návštěvy`. U force-pushe
-je rovnou u události napsané, že tím zastaraly nálezy, a tlačítko pustit review znovu. Čtvrtá je
+je rovnou u události napsané, že tím zastaraly nálezy, a tlačítko pustit review znovu. Pátá je
 `Kontroly` — checky z GitHub Actions a detail toho, na který se klikne (popsaná níž).
 
 Za nimi stojí `Nálezy` (tabulka všeho, co reviewery nahlásily) a `Průběh` (co dělaly) — a mezi
 `Kontrolami` a `Nálezy` je **dělič**: nalevo je to, co je na PR a co má i GitHub, napravo to, co
 s ním udělaly naše reviewery. Kreslí se z **vlastnosti záložky**, ne z její pozice — `Kontroly`
-sedí nalevo doprostřed, takže zadrátovaný index by ho posunul o jedno místo vedle. **Všech šest
-záložek je v pruhu vždycky** (#306), takže se jejich počet nemění podle dat.
+i `Commity` sedí nalevo doprostřed, takže zadrátovaný index by ho posunul o jedno místo vedle.
+**Všech sedm záložek je v pruhu vždycky** (#306, #316), takže se jejich počet nemění podle dat.
+
+**Sedmou záložku zaplatila pilulka `+X −Y`** (#316). Pruh popisky nezkracuje, jen zalamuje, takže
+na šířce záleží: se šesti záložkami a všemi odznaky se vejde na jeden řádek od okna **937 bodů**,
+se sedmi by potřeboval ~1049. Rozsah změny se proto v úzkém pruhu **nekreslí** (`ViewThatFits` se
+dvěma podobami) a hranice zůstala na **939 bodech** — sedmá záložka tedy stojí dva body okna, ne
+sto dvanáct. Ustupuje zrovna `+X −Y`, protože mluví o rozsahu celého PR, a to je odpověď na otázku
+`Změněných souborů`; ve výchozím okně 1100 je vidět všechno. Pod 939 se pruh zalomí — bylo to tak
+i před #316, jen o řádek míň.
 
 V `Průběhu` má dráhu **každý reviewer z nastavené sady**, ne jen ten, který už na tomhle PR běžel:
 otázka je „kde je které z mých review“ a *ještě nezačalo* je taky odpověď. Tři různá „nic tu není“
@@ -151,7 +160,8 @@ neukládala). Dráha po skillu, který v nastavení už není, **nezmizí** — 
 review — jen je označená `mimo sadu`.
 
 Záložky jsou podtržené jako na GitHubu a **odznak má každá** (#218), jen počítá pokaždé něco
-jiného: `Přehled` novinky od poslední návštěvy, `Změněné soubory` počet souborů, `Konverzace`
+jiného: `Přehled` novinky od poslední návštěvy, `Změněné soubory` počet souborů, `Commity` kolik
+je commitů (tiše — je to množství, ne upozornění), `Konverzace`
 kolik je toho k přečtení, `Kontroly` **kolik checků spadlo** (červeně; u běžícího puntík, nad
 zeleným CI nic — a dokud není seznam, taky nic: nula nad nenačtenými daty by tvrdila, že se
 spočítalo), `Nálezy` kolik jich je (**červeně, když něco blokuje**) a `Průběh`
@@ -175,14 +185,31 @@ se tam čte jako „nic tu není“ ještě snáz.
 
 Úplně nahoře v `Přehledu` je **co se změnilo od tvé poslední návštěvy** (#173): nové commity,
 cizí review, komentáře — a hlavně **přepsaná historie větve**, protože právě po ní zastarají
-nálezy i rozdělané review. Tenhle jeden případ má vlastní barvu i větu o důsledku a nabízí
-pustit review znovu; jinak je to tiché oznámení. Banner se ukáže, **jen když opravdu něco
-přibylo**, a u PR otevřeného poprvé nikdy — „od tvé poslední návštěvy" by tam znamenalo „od
-začátku věků". Značka se posune hned při zobrazení, ale to, co je vidět, se během běhu aplikace
-nemění — odskok do `Změněných souborů` a zpátky o něj nepřipraví. **Odchod na jiný PR a návrat
-už je nová návštěva**, takže se banner podruhé neukazuje; projetí seznamu šipkami ho ale
-nespotřebuje, protože se posouvá jen u PR, u kterého se stihla načíst konverzace. Odklidit ho jde
-i rovnou křížkem vpravo.
+nálezy i rozdělané review. Banner se ukáže, **jen když opravdu něco přibylo**, a u PR otevřeného
+poprvé nikdy — „od tvé poslední návštěvy" by tam znamenalo „od začátku věků". Značka se posune
+hned při zobrazení, ale to, co je vidět, se během běhu aplikace nemění — odskok do `Změněných
+souborů` a zpátky o něj nepřipraví. **Odchod na jiný PR a návrat už je nová návštěva**, takže se
+banner podruhé neukazuje; projetí seznamu šipkami ho ale nespotřebuje, protože se posouvá jen
+u PR, u kterého se stihla načíst konverzace. Odklidit ho jde i rovnou křížkem vpravo.
+
+**Odrážky jsou sázené** (#284, návrh sekce 02): tučně to, co se stalo („3 nové commity",
+„Přepsaná historie větve", verdikt cizího review), ztlumeně kdo, a **sha jako kód** na tichém
+podkladu. Pod nimi stojí řada ovládání:
+
+- odznak **`nálezy zastaraly`** — jedině tehdy, když nálezy proti staršímu commitu doopravdy
+  jsou. Čte tentýž stav jako věta v hlavičce nad taby, takže si ty dvě nemají jak odporovat;
+  nad PR, na kterém review nikdy neběželo, se nerozsvítí;
+- **`Pustit review znovu`** — i tehdy, když ještě žádné nálezy nejsou: po přepsané historii je to
+  ta rozumná další věc;
+- **`Ukázat, co přibylo`** — diff **jen toho, co od minule přibylo**, otevřený v tabu `Změněné
+  soubory` s lištou, ze které se jedním tlačítkem vrátíš na celý diff. Nabídne se **jen když je
+  co s čím porovnat**: potřebuje hlavu z minulé návštěvy, dnešní hlavu a načtenou časovou osu.
+  **Po přepsané historii se nenabídne** — porovnání by v takovém případě vrátilo víc než celý
+  diff PR (změřeno na `cli/cli#14062`: 102 kB ve 22 souborech proti 15 kB ve třech), tedy přesně
+  to, co už člověk viděl.
+
+V úzkém `Přehledu` se řada zlomí pod sebe; rozhoduje o tom **spočítaná** šířka popisků, ne
+vyjednávání s rodičem (#220).
 
 **`Konverzace`** nese to, co se neváže k žádnému řádku: review ostatních s odznakem (`schválil`,
 `vyžádal změny`), komentáře pod PR a vlákna, jejichž řádek v aktuálním diffu není (typicky
@@ -222,6 +249,57 @@ Barvy výstrah jsou z palety a u dvou druhů **vědomě jiné než ty GitHubovy*
 jinak na hex sešlo se zastaráním a `[!CAUTION]` s blokujícím nálezem, tedy s barvami, které v okně
 už něco znamenají. Sazba se **pamatuje** — u dvanáctikilobajtové zprávy od bota je
 rozklad na bloky 1,91 ms proti 0,04 ms z cache a inline sazba jejích bloků dalších 1,81 ms.
+
+### Záložka `Commity` (#316)
+
+**Proč vznikla.** `Změněné soubory` odpovídají na „co je na PR jinak proti základu“ — jeden slitý
+diff, ze kterého je vidět výsledek, ne cesta. Otázka „proč tenhle řádek zmizel“ nebo „kdy se sem
+dostala ta migrace“ má odpověď v jednotlivých commitech, a ta se do #316 hledala v prohlížeči. Je
+to tentýž pohyb jako u `Konverzace` (#183) a `Kontrol` (#215): další věc, kvůli které se z okna
+odcházelo. V pruhu proto sedí **hned vedle `Změněných souborů`** — obojí odpovídá na „co se
+v kódu změnilo“, jen jednou naráz a jednou po krocích.
+
+**Řádek na commit, od nejnovějšího.** Návrh měl původně pořadí z GitHubu (od nejstaršího, „PR se
+takhle čte jako postup“), jenže v okně se PR nečte od začátku — čte se od toho, co přibylo
+naposled. Je to tentýž pohyb, jaký dělá pruh `Od tvé poslední návštěvy`, a tentýž důvod, proč jsou
+fakta v `Přehledu` nahoře; postup se z otočeného seznamu přečte pořád, jen odspodu. **Otáčí se,
+neřadí:** pořadí z API je topologické, takže přerovnat ho podle data by po rebase nebo cherry-picku
+ten postup rozházelo. V řádku je obrázek autora (monogram, dokud nedorazí nebo když k commitu není
+účet), **první řádka zprávy**, jméno autora, relativní čas a zkrácené sha; celá zpráva se z řádku dá
+zkopírovat spolu s ním. Nad seznamem je pruh s počtem (`7 commitů · od nejnovějšího`) a vpravo
+`hlava` se sha, proti které platí nálezy.
+
+**Dvě pilulky, a obě něco tvrdí.** `sloučení` u commitu s víc rodiči, protože jeho diff se počítá
+proti prvnímu rodiči a umí vyjít prázdný — bez upozornění dopředu by prázdný diff vypadal jako
+porucha. `hlava` u toho commitu, který je **opravdu** hlavou PR: bere se z `headSha` v detailu, ne
+z pozice v seznamu. Nahoře **bývá**, ale je to důsledek toho, jak seznam přišel, ne pravidlo — po
+pushnutém commitu (kdy je seznam o krok pozadu) i nad stropem API (kde novější část chybí) se
+neoznačí nikdo. Nálezy jsou klíčované `headSha`, takže by pilulka na špatném řádku byla tvrzení,
+ne dekorace.
+
+**Panel s nálezy se v téhle záložce nekreslí** — je čtvrtá taková po #294 a má vlastní důvod:
+u staršího commitu by panel ukazoval nálezy k **jinému kódu**, protože platí proti `headSha`.
+
+**Co v řádku není:** počet souborů ani `+X −Y`. GitHub je v seznamu nedává (`stats` ani `files`
+v odpovědi nejsou) a dotahovat je po commitu je N+1 — u sedmi commitů sedm dalších volání
+k jedné otevřené záložce.
+
+**Jedno volání na celý seznam** (`gh api repos/{o}/{r}/pulls/{n}/commits`, změřeno 1,20 s pro sedm
+commitů), a tahá se **spolu s detailem**, aby byl odznak s počtem vidět, aniž by se do záložky
+chodilo. Klon v cache se nepoužije: `refs/prism/pr/<n>` v něm existuje jen po checkoutu kvůli
+review a úklid ho maže, takže by záložka u poloviny PR neměla data. GitHub vydá na jeden PR nejvýš
+250 commitů — když se na ten strop narazí, je to nad seznamem napsané, jinak by počet tvrdil, že
+je seznam celý.
+
+**Tři stavy, a prázdný mezi nimi není.** Čeká se na odpověď (`Načítám commity…`), seznam, nebo se
+ho nepodařilo načíst. Pull request bez commitů neexistuje, takže klidná hláška o prázdnu by
+tvrdila něco, co platit nemůže — prázdná odpověď je proto hlášená jako porucha. Když se nepovede
+načíst **znovu**, seznam zůstane a nad ním je okrová věta, že je to poslední známý stav, stejně
+jako u `Kontrol`.
+
+**Rozkliknout commit na jeho diff zatím nejde** a řádek proto nemá ani šipku — návrh ji kreslí, ale
+šipka, za kterou se nic nestane, slibuje interakci, která tam není. Diff jednoho commitu má vlastní
+issue.
 
 ### Záložka `Kontroly` (#215, #214, #306)
 
@@ -430,11 +508,12 @@ k architektuře; kvůli nim samotné bubliny nestačí. Klik kamkoli do karty od
 (a přepne na něj, když jsi v jiném tabu) tak, aby nad nálezem zůstalo pár řádků kontextu,
 a bublinu na chvíli zvýrazní.
 
-**Vidět je ve třech záložkách ze šesti** (#294): v `Přehledu`, ve `Změněných souborech` a
+**Vidět je ve třech záložkách ze sedmi** (#294, #316): v `Přehledu`, ve `Změněných souborech` a
 v `Konverzaci` — tedy tam, kde se vedle něj čte **něco jiného** a otázka „co k tomu nahlásily
-reviewery“ má smysl. V `Kontrolách`, `Nálezech` a `Průběhu` se schová **celý, i se složeným
-proužkem**: v prvním případě ukrajuje šířku obsahu, který ji potřebuje (konec logu), ve zbylých
-dvou je to duplikát — `Nálezy` jsou tytéž nálezy přes celou šířku a `Průběh` záznam týchž běhů.
+reviewery“ má smysl. V `Commitech`, `Kontrolách`, `Nálezech` a `Průběhu` se schová **celý, i se
+složeným proužkem**: v `Kontrolách` ukrajuje šířku obsahu, který ji potřebuje (konec logu),
+v `Nálezech` a `Průběhu` je to duplikát — tytéž nálezy přes celou šířku a záznam týchž běhů — a
+v `Commitech` by u staršího commitu ukazoval nálezy k jinému kódu, protože platí proti `headSha`.
 Proužek je úzký, ale ne zdarma, a v úzkém okně je to zrovna to místo, kde se obsah láme. Do #242
 tu stálo, že panel je vidět všude; **smyčka nález → `Převzít` → text v mém review se tím nezahodila,
 jen se přestěhovala** — z tabu bez panelu si `Převzít` přepne do tabu, ve kterém panel je, jinak by
