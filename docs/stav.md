@@ -2242,7 +2242,7 @@ to doměřilo, ať se nezakazuje naslepo: `write(to:options: .atomic)` odkaz **n
 nechá být, kdežto **bez** `.atomic` ho přepíše — zápis tedy díra nebyl, ale visel na příznaku
 místo na vyjmenované kontrole, takže `isSymbolicLink` je i tam.
 
-Testů je **2761** a jsou zelené. Odkazy se testují na **skutečných linkbacích** ze dvou nových fixtures — popis
+Testů je **2764** a jsou zelené (po sloučení s #274). Odkazy se testují na **skutečných linkbacích** ze dvou nových fixtures — popis
 `metalbear-co/mirrord#4702` (markdownový odkaz se slugem) a linkback od `linear[bot]` na
 `zcash/zcash-swift-wallet-sdk#1893` (HTML, sedm adres **bez** slugu). Regrese ověřena vložením:
 zapomenuté `request.intentFile`, `try?` nad selhaným zápisem a odfiltrované `.md` v `allWorktrees()`
