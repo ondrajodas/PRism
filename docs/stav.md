@@ -1385,10 +1385,11 @@ klikem cykluje** `světlý → tmavý → podle systému`. Stav nese **ikona**: 
 pro automat; kam klik povede, říká nápověda. Rozhoduje jediný řádek — `NSApp.appearance`; barvy se
 nikde nevětví, `Palette` zůstala nedotčená.
 
-**Tři ikony jsou vědomá odchylka od návrhu**, který v railu kreslí jedno půlkolečko bez ohledu na
+**Tři ikony byly vědomá odchylka od návrhu**, který v railu kreslil jedno půlkolečko bez ohledu na
 stav. Vyžádal si ji uživatel a důvod je dobrý: tlačítko, které cykluje, jinak neřekne, co platí.
 Mezitím z toho byla i **nabídka s třemi volbami** — ta padla ze stejného důvodu, kvůli kterému
-uživatel chtěl klikání. Do mockupu se to doplní při jeho překreslení (#299), potichu ho neměním.
+uživatel chtěl klikání. **Odchylka už žádná není**: #299 to do mockupu dokreslilo (rail nese
+kolečko s „A“, tedy výchozí automat, a poznámka u sekce 01 popisuje cyklení).
 
 **Nejdřív z toho byla stránka v nastavení a bylo to špatně.** Rozhodl jsem to sám, protože zadání
 říkalo „rozhodni a zapiš“ — jenže návrh to místo určuje a já si ho k tomu prvku nepřečetl. Zpětně
@@ -1661,10 +1662,11 @@ a odznak `odmítnuto`; akcent si nechal běžící review, událost „nahlásil
 verdikt `Komentář` a oba pruhy rozsahu v diffu. Návrh to nese stejně — mint v něm je na celé
 stránce **dvakrát** a obojí je v řádku tabulky nálezů.
 
-**Světlá větev mintu je vědomá odchylka od návrhu** (`#0E8F80` → `#0C7E71`): hodnota z mockupu měla
+**Světlá větev mintu se proti návrhu ztmavila** (`#0E8F80` → `#0C7E71`): hodnota z mockupu měla
 na ploše řádku kontrast 3,99, tedy pod AA, a byla jediným stavovým tokenem palety pod tou hranicí.
 Ztmavení je na rodinu, ne na hranici — vychází na všech podkladech stejně jako `find` vedle něj.
-Tmavá je z návrhu doslova. Mockup se překreslí v #299, ne potichu tady.
+Tmavá je z návrhu doslova. **Odchylka už žádná není**: #299 tu hodnotu dopsalo i do obou světlých
+větví mockupu, takže paleta a návrh drží jednu pravdu.
 
 **Komentář u `ReviewStateAppearance`**, který tvrdil, že barva má jít se systémovým akcentem,
 zmizel i s důvodem: `Color(light:dark:)` se režimu přizpůsobí taky, takže první polovina toho
@@ -1810,7 +1812,8 @@ u pruhu `Od tvé poslední návštěvy` a tentýž důvod, proč jsou fakta v `P
 Otáčí se **na jednom místě** (`Policy.commitsNewestFirst` v `commitsTab`) a **otáčí, neřadí** —
 pořadí z API je topologické, takže řazení podle data by po rebase postup rozházelo. Změnil se s tím
 i pruh nad seznamem (`7 commitů · od nejnovějšího`), protože je to jediné místo, které pořadí
-pojmenovává. Mockup se **nepřekresluje**, to řeší #299.
+pojmenovává. Mockup to **od #299 kreslí stejně** — seznam v sekci 19 jde od nejnovějšího a pruh
+nad ním s ním.
 
 **Tři rozhodnutí, která zadání upřesnila.** Prázdná odpověď se hlásí jako **porucha**, ne jako
 prázdný stav (pull request bez commitů neexistuje, takže hláška o prázdnu by tvrdila nemožný
@@ -2078,6 +2081,65 @@ vložením regrese, dvakrát zvlášť**: vrácený `split(separator: "\n")` pol
 parametrizovaný spadne na 3 případech ze 4, protože `LF` projde, a to je přesně ten důvod, proč se
 chyba nechytila dřív —, a `isNewline` zpátky v obou půlkách rozdělení položí test o `U+2028` třemi
 tvrzeními naráz (titulek `feat: cache`, `secrets` přelité do těla, počet `3 řádky` místo `1 řádek`).
+
+### #299 — mockup dohnal aplikaci, favicon je zapsaný
+
+Mockup se po dávce s aplikací rozešel na šesti místech a **v kódu se nemění nic než komentáře** —
+je to `docs/navrh.html`, dokumentace a záznam rozhodnutí. Pět z těch šesti odchylek bylo zapsaných
+větou „mockup se překreslí v #299“ (v `Palette.swift`, `SidebarRail`, `AppearanceMode`,
+`docs/architektura.md` a `docs/stav.md`), takže tohle issue je hlavně **splacení toho dluhu**.
+
+**Sekce 02 už nekreslí souhrn `Kontroly na GitHubu`**, který #215 z `Přehledu` odebral celý (nejdřív
+to byl seznam z #209, pak chvíli souhrn, nakonec ani ten). Do #299 to bylo zapsané jako „vědomě
+zastaralé“, jenže mockup se čte obrázkem: čtenář v návrhu viděl blok, který v okně není. Z toho
+vyšlo pravidlo do [`navrh.md`](navrh.md) — „novější sekce se do starší nepřekresluje“ platí
+u **dvou variant vedle sebe** (dashboard 01 proti 21, průběh 07 proti 20), kdežto sekce, která
+žádnou novější variantu vedle sebe nemá, **je záznam dneška a mění se s aplikací**.
+
+**Hlavička karty popisu je nakreslená v širší ze dvou podob** (#291) a přibyla jí pilulka stavu,
+kterou aplikace má od #111. Že se v úzkém tabu (320 bodů) zahodí celý relativní čas, nese věta
+v poznámce — obě podoby vedle sebe by se čtly jako spor, ne jako reakce na šířku. Čas je u toho
+**bez uvozujícího `otevřel`**: aplikace tam sází `updatedAt`, tedy poslední změnu, takže původní
+popisek tvrdil víc, než data unesou.
+
+**Patička nálezu nese popisky z aplikace po #283** — `Převzít do review`, `Neplatí`, `Nepatří sem`
+—, a `Přeložit` z ní odešlo, protože se dělat nebude. Proč zrovna takhle, zůstává v záznamu
+rozhodnutí u #283; návrh nese to, co v okně stojí.
+
+**Osiřelá patička mimo `.doc-page` se smazala.** Byl to zbytek po přeskládání dokumentu do stránek
+(#332) a router ho nikdy neskryje, takže se ta čtyři stará tlačítka kreslila **pod rozcestníkem
+i pod každou obrazovkou**. Ve výřezu jedné sekce to vidět nebylo a grep na to nesedne, takže se
+z toho stalo druhé pravidlo do `navrh.md`: po úpravě se **vyrendruje i celý dokument**, ne jen
+vyříznutá sekce.
+
+**Přepínač vzhledu v railu je kolečko s „A“**, ne půlkolečko — dluh z #278, který byl zapsaný na
+třech místech s poznámkou „doplní se při překreslení (#299)“. Kreslí se automat, protože to je
+výchozí režim; ostatních položek railu se to netýká (`◷` a `⚙` jsou návrh, ne dnešní stav).
+
+**Seznam commitů v sekci 19 jde od nejnovějšího** (#316) a s ním i pruh nad ním
+(`7 commitů · od nejnovějšího`). Původní důvod pro nejstarší nahoře v próze **zůstal** i s tím,
+proč neobstál — záznam rozhodnutí se nemaže, jen se k němu dopíše, co se změnilo.
+
+**Světlý `--mint` je `#0C7E71`**, jak ho aplikace má od #309. Tohle je jediná odchylka, kterou by
+obrázek neprozradil — a přesně proto na ni existuje pravidlo, že tokeny v `:root` jsou `Palette`
+jedna ku jedné. Mění se **obě** světlé větve (`:root` i `:root[data-theme="light"]`), jako se
+u #277 měnily obě tmavé; **tmavých se tohle issue nedotklo** a vyčíslené hodnoty z #277
+(`#0F2C13`, `#1D5625`, `#371210`, `#712521`) v nich zůstaly.
+
+**Favicon je 🎨 a je zapsaný v [`navrh.md`](navrh.md)**, aby se příště nehádal. Dohledat ho nešlo
+už u #277 — není v repu, v `Artifact`u ani ve výpisu artifactů —, přitom publikování si ho vynucuje
+jako povinný parametr. Ikonka v tabu je součást identity stránky zrovna jako titulek, a ten
+zapsaný byl.
+
+Testů je **2716** a jsou zelené; na tomhle issue se v aplikaci nemění nic, takže žádný nepřibyl.
+Shoda se ověřila **obrázkem vedle obrázku**: sekce 02, 03 a 19 vyříznuté a vyrenderované headless
+Chromem proti renderu `OverviewRenderProbe`, `FindingActionColourProbe` a `CommitsTabRenderProbe`
+z běžící hierarchie. A **jedna vada se ukázala až na renderu celého dokumentu** — osiřelá patička
+mimo `.doc-page`, kterou ve výřezu jedné sekce nebylo jak vidět.
+
+Že se v publikované kopii nezměnilo nic dalšího, je ověřené **diffem stažené stránky**: před
+publikováním byla bajt na bajt shodná s `main`, po něm s tímhle commitem, a diff „před × po“
+obsahuje jen změny vypsané výš.
 
 ### #274 — otevřená záložka zdražovala projíždění diffu
 
