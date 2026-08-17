@@ -2580,5 +2580,40 @@ Testů je **2881** a jsou zelené (+38). K tomu sonda `OwnPullRequestsRenderProb
 podoby sekce), protože ke dvěma z těch stavů se klikáním nedostaneš a dashboard se ve skutečném okně
 s třiceti PR ve frontě celý nevyfotí.
 
+### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
+
+Táž signatura jako #358 (`flushObservers → beginTransaction → flushTransactions`, nula na animaci
+i na timeru), ale pohonem už není náš zápis: v hover podstromu obou vzorků **není ani jeden rámec
+aplikace**. Issue proto žádalo měření, ne opravu — a **oprava z toho nevyšla**, protože se stav
+nepodařilo vyrobit. Zapsané je, co se vyloučilo a čím:
+
+- **Akce `onGeometryChange` do třídy chyb z #358 nepatří.** Změřeno novou sondou
+  (`Tests/Views/LayoutCallbackProbe.swift`): 80 zašpinění grafu → **80× výpočet hodnoty, 0× zápis**;
+  kontrolní scénář s měnící se geometrií dá 80× zápis, takže měřidlo počítá. Sedí to na vzorek, ve
+  kterém je vidět jen ten výpočet (`DiffPairBlockRowView.swift:50`), ne akce.
+- **Scéna sama kolo nezavírá.** `Tests/Views/IdleDiffSpinProbe.swift` hostuje plné okno na obrazovce
+  (1512×874, `ContentView`, tři záložky, nálezy, konverzace, split diff, odscrollováno o 8000 pt):
+  **3,26 % CPU v prvních pěti sekundách, pak 0,00 % po 35 s**. To první je usazení po posunu — proto
+  se měří po úsecích; jedno číslo za třicet sekund by tvrdilo, že okno hoří.
+- **Hover callbacky sonda nedosáhne**, a to je změřené, ne odhad: aplikace na pozadí je nedostává
+  (80 zašpinění grafu → `onHover` 0×, `onContinuousHover` 0×, kurzor přitom v okně ležel).
+- **Pod kurzorem přitom žádný náš zápis z hoveru nebyl.** 28 bodů od horní hrany okna je
+  `ContentView.header` s `ReviewTabsView` a tlačítky, a tam `onHover` **není** — jen `.help()`.
+  `PullRequestTabBar.swift:203` (jediné místo, které do hoveru píše bezpodmínečně, včetně **téže**
+  hodnoty) sedí **pod** hlavičkou, uvnitř detailu. Je to vada k opravě, ale #361 nevysvětluje.
+  Nejsilnější zbylá nitka je re-arm `NSHostingView.requestUpdate(after:)`, ke kterému se dostane
+  `signalPrefetch` a — ze zásobníku AppKitové výjimky při stavbě sondy — taky
+  `ViewGraph.invalidateTransform() → graphDidChange()`; transformaci si přitom v aplikaci vyžaduje
+  jedině čtení **pojmenovaného** souřadnicového prostoru v seznamu řádků. Ověřit to jde jen na živém
+  okně, takže se to neopravovalo: oprava neověřené domněnky se od opravy pozná jedině tím, že se změří.
+
+Vedle toho vyšly z sondy tři pasti, kvůli kterým měřila prázdno a tvrdila, že je čisto (velikost okna
+až za `contentViewController`em, předepsaný rozměr scény, PR do `ContentView` jen frontou) a dvě věci
+k mechanice sond (pumpa musí být `Timer`, ne `Task.sleep`; sonda píše do `UserDefaults` skutečné
+aplikace). Všechno v [`testovani.md`](testovani.md), sekce *Co je u #361 změřené a co z toho zbývá*.
+
+Testů je **2849** a jsou zelené. **Vidět není nic** — nezměnilo se ani jedno view, přidaly se dvě
+ruční sondy (obě za `PRISM_MEASURE`, takže se v běžném běhu přeskočí) a zápis měření.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
