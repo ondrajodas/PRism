@@ -2002,5 +2002,39 @@ v jiném pásmu, takže se obrázky nedaly položit vedle sebe.
 Testů je **2669**; regrese ověřena vložením dvou (smazaná podoba `icons`, zahozený popisek
 u aktivní) — první položí čtyři testy, druhá to tvrzení, které by výška pruhu nechytla.
 
+### #343 — konec logu „o řádek vedle“ byl artefakt harnessu, ne vada aplikace
+
+`LogTailOpeningTests.opensAtTheEndOfTheLog` padal nahodile: `documentVisibleRect.maxY` **83 989**
+proti poslednímu řádku končícímu na **84 002**, tedy o jednu řádku nad koncem. Vyvolal to diff #339
+(`main` 6× ze 6 zeleně, ta větev 4× ze 7) a pády byly **pokaždé na týchž číslech** — což je známka
+skutečného stavu, ne zátěže.
+
+**Příčina je v prostředí procesu, ne v `jumpToEnd`.** `NSScroller.preferredScrollerStyle` je po startu
+procesu chvíli `overlay` a teprve za pár kol smyčky se doresolvuje na `legacy` — a legacy scroller
+místo doopravdy zabírá. Když ta změna přijde *až po* dosazení cíle skoku, viewport se zmenší
+(`clip.h` **441 → 424**, tedy 17 bodů, ne 13 jako rezerva ve `height`), `origin.y` zůstane a okýnko je
+o řádku nad koncem — a **nikdo to nepřerovná**, protože další `layout()` přijít nemusí. Diff #339
+na tom nic nezpůsobil, jen posunul, které suity běží v tom startovacím okně.
+
+**Zadání se tím obrátilo, a je to zapsané jako vědomá odchylka.** #343 to popisovalo jako vadu
+aplikace („ležící žádost nikdo nedovolá“) a chtělo **dosadit cíl dvakrát**. Zamítnuto po měření: obě
+kola běží v témže průchodu, tedy pořád před doresolvováním stylu, takže na měřeném stavu nemění nic —
+tři zelené běhy, na kterých ten návrh stál, byly shoda. Změřeno naopak, že když se styl nechá usadit
+**před** postavením okýnka, je poloha správná **od nultého kola** (`origin.y = 83 582`,
+`maxY = 84 006`) a **beze změny v aplikaci**. V aplikaci je totiž ten stav nedosažitelný: styl
+scrollerů je usazený dávno předtím, než se dá otevřít detail checku.
+
+Opraveno tedy **v testu** (`awaitSettledScrollerStyle()`), aplikace zůstala nedotčená. Zamítnuto i
+čekat na „konec je vidět“ místo na `origin.y > 0`: bez změny v aplikaci to dojede na 120s strop a celý
+běh má **184 issues**, protože pumpování smyčky vyhladoví `MainActor`.
+
+**Vidět není nic** — je to čistě testovací vrstva, aplikace se nezměnila ani o řádek. Testů zůstává
+**2710** (žádný nový; sada měla flake, ne mezeru). Regrese ověřena vložením regrese, a od #343
+**deterministicky**: cíl spočítaný ze zastaralé výšky viewportu (`- 17`) položí tvrzení o posledním
+řádku na téže signatuře jako původní flake (`83 989` proti `84 001`). Tři zelené plné běhy po opravě.
+
+Poučení, které z toho zbývá i mimo tuhle sadu: **pády pokaždé na týchž číslech nejsou zátěž**, a kdo
+staví AppKitovou hierarchii v testu, musí počítat s tím, že proces po startu ještě není usazený.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

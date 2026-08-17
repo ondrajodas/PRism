@@ -3184,8 +3184,22 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     `LogTailScrollView`, který hlásí rozložení, a `Coordinator` nese **nevyřízenou žádost o skok**.
 
     Žádost se přitom zahodí **teprve tehdy, když je konec doopravdy vidět**: když se vodorovný
-    scroller objeví až po skoku, viewport se o jeho 13 bodů zmenší a okýnko zůstane o řádek nad
+    scroller objeví až po skoku, viewport se o jeho body zmenší a okýnko zůstane o řádek nad
     koncem. Chyceno plným během testů pod zátěží (samostatně to vycházelo).
+
+    **Ta pojistka se ale v testech umí spustit z důvodu, který v aplikaci neexistuje** (#343), a stálo
+    to jedno vyšetřování, tak ať je zapsané, na co se u toho koukat. `NSScroller.preferredScrollerStyle`
+    je **po startu procesu chvíli `overlay`** a teprve za pár kol smyčky se doresolvuje na `legacy` —
+    a legacy scroller místo doopravdy zabírá. Když ta změna přijde *až po* dosazení cíle, viewport se
+    zmenší (změřeno `clip.h` **441 → 424**, tedy **17 bodů**, ne 13 jako rezerva ve `height`),
+    `origin.y` zůstane a okýnko je o řádku nad koncem (`maxY` 84 006 → 83 989 proti poslednímu řádku
+    na 84 002) — a **nikdo to nepřerovná**, protože další `layout()` přijít nemusí.
+
+    V aplikaci je to nedosažitelné: styl scrollerů je usazený dávno předtím, než se dá otevřít detail
+    checku. **Je to tedy vlastnost harnessu**, a proto se to opravilo v testu (nechat styl usadit dřív,
+    než se okýnko postaví), ne tady — podrobnosti i zamítnuté varianty v
+    [`testovani.md`](testovani.md). Kdo sem přijde s tím, že se okýnko otevírá o řádek vedle, ať
+    napřed změří `preferredScrollerStyle` v prvních kolech smyčky.
 
     Cena, ať je zapsaná: skok **vynutí sazbu až na konec dokumentu**, což je na šesti tisících řádcích
     **128 ms** (2 000 řádků 47 ms, 300 řádků 11 ms) — jednorázově, při rozbalení checku, po vteřinách
