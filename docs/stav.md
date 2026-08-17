@@ -2567,8 +2567,8 @@ až za `contentViewController`em, předepsaný rozměr scény, PR do `ContentVie
 k mechanice sond (pumpa musí být `Timer`, ne `Task.sleep`; sonda píše do `UserDefaults` skutečné
 aplikace). Všechno v [`testovani.md`](testovani.md), sekce *Co je u #361 změřené a co z toho zbývá*.
 
-Testů je **2818** a jsou zelené. **Vidět není nic** — nezměnilo se ani jedno view, přidaly se dvě
-ruční sondy a zápis měření.
+Testů je **2849** a jsou zelené. **Vidět není nic** — nezměnilo se ani jedno view, přidaly se dvě
+ruční sondy (obě za `PRISM_MEASURE`, takže se v běžném běhu přeskočí) a zápis měření.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
