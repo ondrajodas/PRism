@@ -51,11 +51,17 @@ struct DiffBlockRowView: View {
         // až za sloupcem s čísly — a `contains(point)` znamenalo, že jak myš zamířila na pilulku,
         // hover zhasl a pilulka zmizela pod rukou. Nedalo se na ni kliknout (nahlášené při zkoušení
         // #157); je to tatáž past jako u #98, kde tlačítko vyčnívalo do dalšího řádku.
+        //
+        // **Zapisuje se jedině při změně** (#358) — viz `Policy.hoverChange(from:to:)`. Tady je
+        // hodnota `Int?`, tedy porovnatelná odjakživa; ve split pohledu na to musel vzniknout
+        // `HoveredCell`. Podmínka je v obou stejná a je na jednom místě schválně: druhá kopie by se
+        // s tou první rozešla a poznalo by se to až na 99 % CPU.
         .onContinuousHover { phase in
-            switch phase {
-            case .active(let point): hovered = geometry.line(atY: point.y)?.index
-            case .ended: hovered = nil
+            let next: Int? = switch phase {
+            case .active(let point): geometry.line(atY: point.y)?.index
+            case .ended: nil
             }
+            if case .write(let index) = Policy.hoverChange(from: hovered, to: next) { hovered = index }
         }
         // **Menu se připojuje bezpodmínečně**, ne přes `copyMenu(_:selectText:)`. Ten podle stavu
         // vybírá mezi `self` a `contextMenu`, čímž mění **strukturu** view — a jak myš odjede z bloku

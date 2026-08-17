@@ -3188,7 +3188,10 @@ tvrzení nebo jmenovitá cesta:
    pouští akce, které si transakce naplánovala — a právě jimi se zavírá kolo. U #358 bylo 1630 z 1690
    vzorků v `EventBindingManager.enqueueHoverUpdateIfNeeded()` → `NSHostingView.didRequestHoverUpdate()`
    a přes `HoverResponder.updatePhase(_:)` se z něj volalo `.onContinuousHover` v našem view. Druhý
-   re-arm ležel vedle: `LazyLayoutViewCache.signalPrefetch()` → `NSHostingView.requestUpdate(after:)`.
+   re-arm ležel vedle: `LazyLayoutViewCache.signalPrefetch()` → `NSHostingView.requestUpdate(after:)`
+   — a ten se opravou hlavního pohonu **ztratil sám** (po opravě nula vzorků), protože si o další kolo
+   říkal jen kvůli tomu, že se rozvržení pořád přepočítávalo. Vedlejší re-arm tedy nemusí mít vlastní
+   opravu; napřed se opraví ten, který drží většinu vzorků, a znovu se změří.
 3. **Najděte v tom podstromu rámec aplikace a dohledejte, co zapisuje.** Naše closure je ve `sample`u
    číslovaná v pořadí literálů v `body` (`closure #5 in DiffPairBlockRowView.body.getter`), takže se
    podle pořadí dopočítá řádek. U #358 to byl bezpodmínečný zápis do `@State hovered` — a ten typ je
@@ -3217,9 +3220,54 @@ se zjistí bez zásahu do aplikace:
 swift mouse.swift
 ```
 
-Podmínkou je dál **split diff** (jen `DiffPairBlockRowView` má ten tuple stav); velký diff kolo
+Podmínkou je dál **split diff** (jen `DiffPairBlockRowView` měl ten tuple stav); velký diff kolo
 zdraží, ale nezpůsobí. A **běžící review je zhoršovák, ne podmínka** — doloženo tím, že potomek
 `claude` skončil a okno zůstalo minutu dál na 98,2–100,5 % CPU s nulou potomků.
+
+#### Proč na #358 není sonda, a je to změřené (#358)
+
+Nabízelo se postavit sondu jako u #350 — okno na obrazovce, kurzor nad blokem, změřit CPU. **Nejde
+to a stálo to dvě zjištění, která se tady zapisují, aby to příště nikdo nezkoušel znovu:**
+
+| Pokus | Co se stalo |
+|---|---|
+| Syntetická `.mouseMoved` do okna (`window.sendEvent`) | `onContinuousHover` se **nevyvolal ani jednou** (0 zásahů) |
+| Totéž přes frontu aplikace (`NSApp.postEvent`) | Taky **0 zásahů** |
+| Okno postavené pod skutečný kurzor | Kurzor patří člověku u stroje: mezi postavením okna a měřením se posunul o desítky bodů, a jeho pohyb **sám mění** hodnotu hoveru, takže by se neměřila smyčka |
+
+SwiftUI si hover řeší z **tracking areas a skutečné polohy kurzoru**, ne z podstrčené události.
+Zavřít to kolo v testu by tedy znamenalo warpovat kurzor (`CGWarpMouseCursorPosition`), tedy sebrat
+myš člověku, který u stroje pracuje — to sonda dělat nemá, stejně jako si nebere klávesnici (#350).
+
+Sonda, která tohle nedokáže, přitom **není neutrální, je škodlivá**: první podoba téhle sondy tvrdila
+0 % CPU i nad buildem s **vrácenou regresí** — tedy přesně to, na co si tenhle dokument stěžuje
+u kontrol, které se nespustily ve výjimečném stavu. Proto se zahodila, ne odložila. (Chytila u toho
+jednu svou vlastní vadu, která se hodí znát: `contentViewController` **přebije** `contentRect`, takže
+okno spadlo na 295×207 a žádný blok kódu v něm nebyl. Velikost se nastavuje **až za** kontrolérem.)
+
+Testuje se místo toho **ta čistá funkce a hodnota, kterou dostane** — `Policy.hoverChange(from:to:)`
+vyčerpaná výčtem (`HoverChangeTests`) a `DiffGutterGeometry.hoveredCell(at:)` s tvrzením, že tentýž
+bod nad tímtéž blokem vydá **rovnou** hodnotu. To druhé je to podstatné: kdyby si buňka nesla cokoli
+nestálého (identitu, čas, referenci), porovnání by nikdy nesedlo, zápis by proběhl každé kolo a smyčka
+by se vrátila — a **všechny ostatní testy by zůstaly zelené**. Ověřeno vložením regrese: `hoverChange`,
+která vrací vždycky `.write`, položí **6 tvrzení ve dvou sadách**. Poslední kolo dělá člověk na běžící
+aplikaci, protože skutečnou myš má jedině on.
+
+**Jak to poslední kolo vypadá, ať se příště nehádá o metodiku.** Aplikace **vpředu** (přepnutá přes
+`activate` na bundle ID, ne klikáním na souřadnice), kurzor **zaparkovaný nad blokem kódu ve split
+diffu**, ruce pryč — a měří se **rozdíl kumulativního CPU času**, ne `%cpu`:
+
+```bash
+P=$(pgrep -f 'PRism-c.app/Contents/MacOS/PRism')
+A=$(ps -o time= -p $P); sleep 20; B=$(ps -o time= -p $P); echo "$A -> $B"
+```
+
+`%cpu` z `ps` je **klouzavý průměr**, takže po zaparkování myši chvíli ukazuje starou hodnotu a po
+odjezdu myši ji naopak ještě drží — u jevu, který se zapíná a vypíná polohou kurzoru, je to zrovna ta
+veličina, která lže v obou směrech. U #358 vyšlo `0:09.58 → 0:09.58`, tedy **0,00 s za 20 s**, a ve
+`sample`u **4394 ze 4394** vzorků v `mach_msg2_trap`. Co se u toho **nepovedlo ověřit programově**, je
+poloha kurzoru (systémový `python3` tu nemá `Quartz`) — takže „myš ležela nad kódem“ zůstává z lidského
+slova; aplikace vpředu a ta nulová čísla ověřená jsou.
 
 **A že jsou to doopravdy dvě věci, se ověří vložením regrese**, ne úsudkem: vrátit opravenou příčinu
 zpátky a vzít `sample` **testovacího hosta** při běžící sondě (`sample <pid> 4`, PID se najde jako
