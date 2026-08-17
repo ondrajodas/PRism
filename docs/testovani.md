@@ -2140,6 +2140,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (`- 17`) položí tvrzení o posledním řádku na téže signatuře jako původní flake (`83 989` proti
   `84 001`), tedy sada dál chytá to, kvůli čemu #303 vznikl.
 
+  A **když se styl neusadí do stropu, sada to řekne** — `Issue.record` s poslední přečtenou hodnotou,
+  ne tiché pokračování (nález Copilota na #344). Bez toho by se návrat toho flaku projevil jako pád
+  tvrzení o posledním řádku, tedy přesně tou nevysvětlitelnou podobou, kterou #343 rozmotávalo.
+  **Vyzkoušeno spuštěním v tom výjimečném stavu** (strop stažený na 1 ms) — hlásí
+  `Nedočkalo se: styl scrollerů se neusadil (…, poslední hodnota 0)` a padne na místě volání, ne
+  o třicet řádků níž; jinak by „nic nevypsalo“ bylo k nerozeznání od „funguje“.
+
 - **Sonda místa pro konec logu (#303)** — `CheckLogRoomProbe`, gated `PRISM_MEASURE`. Nic netvrdí;
   odpovídá na otázku „kolik po vyšším okýnku zbude na seznam checků“, a to **měřením v hierarchii**,
   ne odhadem: v rendrovaném tabu najde `NSScrollView` viewportu i okýnko logu (pozná se podle

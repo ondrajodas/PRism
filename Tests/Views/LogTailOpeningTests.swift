@@ -89,17 +89,31 @@ struct LogTailOpeningTests {
     ///
     /// Čeká se pumpováním smyčky, protože styl se doresolvuje jejím během — strop je `TestWait.deadline`
     /// jako všude jinde (#296) a je to **jev se stropem**, ne pevný okamžik (#269).
-    private func awaitSettledScrollerStyle() {
+    private func awaitSettledScrollerStyle(sourceLocation: SourceLocation = #_sourceLocation) {
+        // Pět **shodných kol za sebou**: jedno by „usazeno“ tvrdilo i o hodnotě, kterou smyčka ještě
+        // nezměnila. Počítá se od hodnoty přečtené předem, takže „pět kol“ je doopravdy pět kol.
+        let requiredRounds = 5
         let step: TimeInterval = 0.05
         let limit = ContinuousClock.now.advanced(by: TestWait.deadline)
-        var previous: NSScroller.Style?
-        var stableRounds = 0
-        // Pět shodných kol: jedno by „usazeno“ tvrdilo i o hodnotě, kterou smyčka ještě nezměnila.
-        while ContinuousClock.now < limit, stableRounds < 5 {
+        var previous = NSScroller.preferredScrollerStyle
+        var matchingRounds = 0
+        while ContinuousClock.now < limit, matchingRounds < requiredRounds {
             RunLoop.current.run(until: Date().addingTimeInterval(step))
             let style = NSScroller.preferredScrollerStyle
-            stableRounds = style == previous ? stableRounds + 1 : 0
+            matchingRounds = style == previous ? matchingRounds + 1 : 0
             previous = style
+        }
+        // **Nedočkání se hlásí, ne přechází.** Kdyby se styl přestal usazovat, vrátí se flake
+        // z #343 — a bez téhle věty by to vypadalo na tentýž nevysvětlitelný pád jako předtím,
+        // tedy „nic nevypsalo“ k nerozeznání od „funguje“.
+        if matchingRounds < requiredRounds {
+            Issue.record(
+                """
+                Nedočkalo se: styl scrollerů se neusadil (strop \(TestWait.deadline), \
+                poslední hodnota \(previous.rawValue)). Tvrzení níž tím ztrácejí platnost.
+                """,
+                sourceLocation: sourceLocation
+            )
         }
     }
 

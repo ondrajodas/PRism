@@ -3184,8 +3184,9 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     `LogTailScrollView`, který hlásí rozložení, a `Coordinator` nese **nevyřízenou žádost o skok**.
 
     Žádost se přitom zahodí **teprve tehdy, když je konec doopravdy vidět**: když se vodorovný
-    scroller objeví až po skoku, viewport se o jeho body zmenší a okýnko zůstane o řádek nad
-    koncem. Chyceno plným během testů pod zátěží (samostatně to vycházelo).
+    scroller objeví až po skoku, viewport se o jeho body zmenší a okýnko zůstane o řádek nad koncem.
+    Chyceno plným během testů, kdežto samostatně to vycházelo — což se do #343 čtlo jako zátěž;
+    **byla to ale pořadová věc, ne časová**, viz odstavec níž.
 
     **Ta pojistka se ale v testech umí spustit z důvodu, který v aplikaci neexistuje** (#343), a stálo
     to jedno vyšetřování, tak ať je zapsané, na co se u toho koukat. `NSScroller.preferredScrollerStyle`
