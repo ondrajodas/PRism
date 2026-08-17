@@ -361,6 +361,12 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
       `ReviewSubmission.send()` (review), `ThreadSubmission` (odpověď a vyřešení vlákna)
       a `CommentSubmission` (komentář pod PR).
 
+      **Od #333 je na to test, ne jen tenhle grep** (`SingleWayOutTests`): čte zdrojáky v `App/`
+      a tvrdí právě těch pět souborů, čtyři metody protokolu a že soubory zadání pro agenta nezná
+      publisher, payload, API ani podproces. Komentáře se u toho zahazují stejně jako v grepu
+      (`grep -vE ':[0-9]+: *//'`) — o publisheru se v dokumentaci mluví na dalších čtyřech
+      místech a právě ta vysvětlení podmínku drží pochopitelnou.
+
       Protokol má **čtyři vyjmenované metody** — `submit`, `reply`, `setResolved`, `comment`.
       Do #73 měl jednu a stálo tu, že cokoli dalšího by byla druhá cesta ven; do #216 tři.
       Rozšířilo se to pokaždé ze stejného důvodu: ozvat se kolegovi je půlka toho, kvůli čemu
@@ -476,7 +482,7 @@ viz tvrdá podmínka č. 1.
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), čí je PR podle autora (#330) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), čí je PR podle autora (#330), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |
@@ -502,8 +508,8 @@ Zvlášť stojí za přečtení, než sáhneš na:
 - **`AppStore` je rozdělený na `extension` po zodpovědnostech** (#154), takže se hledá podle
   souboru, ne v jednom dvoutisícovém: `AppStore.swift` drží **stav, init a polling**,
   `+Diff`, `+IncrementalDiff`, `+DiffExpansion`, `+Detail`, `+Commits`, `+Conversation`, `+Draft`,
-  `+DraftTransfer`, `+Submission`, `+Review`, `+Recheck`, `+Findings`, `+Notifications`
-  a `+Automatic` metody. **Dělí se
+  `+DraftTransfer`, `+Submission`, `+Review`, `+Recheck`, `+Findings`, `+Notifications`,
+  `+Ownership`, `+AgentPrompt` a `+Automatic` metody. **Dělí se
   metody, ne data** — uložený stav zůstává na jednom místě. Cena je, že `private` členy, na
   které extensiony sahají, musely být `internal`; nic se tím neotevírá ven z aplikace (jeden
   modul) a tvrdou podmínku č. 1 to nemění, protože publisher polem storu není.

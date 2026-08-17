@@ -101,7 +101,18 @@ final class AppStore {
 
     /// Co je v panelu vidět. Ze stejného důvodu tady, ne ve view: doručení poznámky panel
     /// **přepne** na rozdělané review, a to se musí dát otestovat.
+    ///
+    /// Který ze dvou tabů to na daném PR je, překládá `Policy.reviewPanelTab(_:for:)` (#333) —
+    /// `draft` na vlastním PR není a `agentPrompt` na cizím.
     var reviewPanelTab: ReviewPanelTab = .findings
+
+    /// Co jde do zadání pro agenta (#333).
+    ///
+    /// **Globálně, ne per PR** — je to předvolba, jak si zadání nechávám skládat, stejně jako
+    /// `diffLayout`. A **neukládá se**: výchozí volba (všechno nevyřízené a diff hunk) je ta
+    /// správná pro převažující případ, takže by uložený stav jen tiše přenášel „u toho jednoho PR
+    /// jsem si přibral vyřešená vlákna“ na všechna další.
+    var agentPromptOptions = AgentPromptOptions.standard
 
     /// Rozdělané review **per PR**. Co v mapě není, se nezačalo psát.
     ///

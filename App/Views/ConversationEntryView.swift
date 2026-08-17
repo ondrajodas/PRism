@@ -230,16 +230,24 @@ struct ConversationEntryView: View {
         !viewer.isEmpty && author == viewer
     }
 
+    /// Odznak s verdiktem. **Popisek je z modelu** (`State.czechLabel`), tady se rozhoduje jen
+    /// o barvě a o tom, jestli odznak vůbec je — od #333 čte tytéž popisky i zadání pro agenta
+    /// a dvě tabulky týchž slov by se rozešly.
     private func verdictBadge(_ review: SubmittedReview) -> (text: String, color: Color)? {
-        switch review.state {
-        case .approved: ("schválil", .green)
-        case .changesRequested: ("vyžádal změny", .red)
-        case .dismissed: ("zamítnuté review", .secondary)
-        case .pending: ("rozdělané review", .orange)
-        // `commented` odznak nemá: je to komentář jako každý jiný a odznak „komentoval“ by
-        // vedle jména autora neřekl nic. Neznámý stav (`nil`) taky ne — vymýšlet si k němu
-        // popisek by znamenalo tvrdit něco, co jsme nedostali.
-        case .commented, nil: nil
+        guard let state = review.state, let color = badgeColor(of: state) else { return nil }
+        return (state.czechLabel, color)
+    }
+
+    /// `nil` = odznak není. `commented` ho nemá: je to komentář jako každý jiný a odznak
+    /// „komentoval“ by vedle jména autora neřekl nic. Neznámý stav (`nil` u `state`) taky ne —
+    /// vymýšlet si k němu popisek by znamenalo tvrdit něco, co jsme nedostali.
+    private func badgeColor(of state: SubmittedReview.State) -> Color? {
+        switch state {
+        case .approved: .green
+        case .changesRequested: .red
+        case .dismissed: .secondary
+        case .pending: .orange
+        case .commented: nil
         }
     }
 

@@ -54,9 +54,22 @@ extension AppStore {
     /// Dá se do draftu psát?
     ///
     /// Nový draft potřebuje `headSha` — bez něj by nešlo poznat, proti čemu je psaný, ani ho
-    /// odeslat. Do rozepsaného se psát dá vždycky, ten svůj commit už zná.
+    /// odeslat. Do rozepsaného se psát dá, ten svůj commit už zná.
+    ///
+    /// **Na vlastním PR ne, a to i nad rozepsaným draftem** (#333). Review na vlastní PR odejít
+    /// nemůže (`APPROVE` i `REQUEST_CHANGES` vrátí GitHub jako 422, změřeno u #62), takže draft,
+    /// který by tam vznikl, je stav, který nikdo nepřečte — PR uvízlý v sekci `Rozdělaná`, ze které
+    /// se nedá nic udělat. Je to **jediná brána**: draft se zakládá čtyřmi cestami (`adoptFinding`,
+    /// `appendDraftNote`, `addDraftComment`, `dragCommentRange`) a všechny vedou přes diff, takže
+    /// se zavírají tím, že se ta tlačítka u vlastního PR **vůbec nekreslí** (dva volající
+    /// v `PullRequestDetailView`).
+    ///
+    /// Co to **nezakazuje**: existující draft se nemaže a zůstává vidět i smazatelný — bubliny
+    /// v diffu ho kreslí z `draft.comments`, ne z téhle brány, a panel se zadáním k němu nabízí
+    /// `Zahodit review`. Tiše zmizelá data jsou horší než data, která nejdou odeslat.
     func canComposeDraft(for pr: PRIdentifier) -> Bool {
-        drafts[pr] != nil || head(of: pr) != nil
+        guard ownership(of: pr) != .mine else { return false }
+        return drafts[pr] != nil || head(of: pr) != nil
     }
 
     /// Kam by převzatý nález šel. Bublina podle toho pojmenuje tlačítko a řekne proč.

@@ -25,6 +25,28 @@ extension AppStore {
         Policy.ownership(of: summary, mine: ownLogins)
     }
 
+    /// Tatáž otázka nad samotnou identitou PR — pro místa, která shrnutí po ruce nemají (#333):
+    /// který segment kreslí panel a jestli se smí zakládat draft.
+    ///
+    /// **Bere autora ze seznamu, a teprve když tam není, z detailu.** Shrnutí je u zobrazeného PR
+    /// vždycky (přišlo z hledání), kdežto detail dorazí až po něm — a brána na zakládání draftu
+    /// musí platit **od první obtažené obrazovky**, ne až od chvíle, kdy dojde `gh pr view`.
+    func ownership(of pr: PRIdentifier) -> PullRequestOwnership {
+        Policy.ownership(ofAuthor: author(of: pr), mine: ownLogins)
+    }
+
+    /// Autor PR — ze seznamu, jinak z dotaženého detailu. `nil` = ještě nevíme.
+    ///
+    /// **Jedno místo pro obojí**, protože se na autora ptají dvě různé otázky (co GitHub udělá
+    /// s review a čí PR to je) a dvě cesty k němu by znamenaly, že jedna z nich odpoví jinak.
+    /// Plný seznam, ne `visiblePullRequests`: čí je PR nesmí záviset na tom, co je zrovna po
+    /// filtru vidět.
+    func author(of pr: PRIdentifier) -> String? {
+        if let summary = pullRequests.first(where: { $0.id == pr }) { return summary.author }
+        guard case .loaded(let detail, _) = detailStates[pr] else { return nil }
+        return detail.author
+    }
+
     /// Je mezi zdroji ten, který přináší vlastní PR (#330)?
     ///
     /// Prázdná sekce `Moje PR` bez něj znamená „zdroj chybí“, ne „nic tam neleží“ — a to jsou dvě

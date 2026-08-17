@@ -86,6 +86,43 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   dotazech, ne po tikech** — s druhým výchozím zdrojem by tik, který má vidět `updatedAt: 100`,
   dostal rovnou `200`. Ostatní sady store si zdroje pinují už dneska; tahle jediná brala
   `Configuration.standard`.
+- **Zadání pro agenta na vlastním PR (#333)** — tři sady a v každé je to nejcennější negativní.
+
+  `Policy` výčtem (`AgentPromptTests`): že se **vyřešená vlákna a odmítnuté nálezy do textu
+  nedostanou, ale spočítají se** (bez počtu by se nedalo napsat „vynecháno“ a tiché zahození vypadá
+  jako „tohle je všechno“); že komentář pod PR a souhrn review skončí v sekci **bez souboru**, ne
+  přišpendlené k náhodnému; že zastaralé vlákno **řekne, že jeho číslo platí pro starší commit**;
+  že hlava PR je v hlavičce textu, a když ji neznáme, je tam **věta o tom**; že nenačtená konverzace
+  je přiznaná i v textu; že vypnutý hunk zmizí **u nálezu i u vlákna**; a že odmítnutý nález
+  neblokuje. K tomu pořadí sekcí a souborů (blokující první, pak abecedně, uvnitř podle řádku
+  s položkou bez řádku nahoře) a název souboru bez lomítka.
+
+  `AppStore` proti fake gateway a **skutečnému** `ReviewDraftStore` (`AppStoreAgentPromptTests`):
+  že se na vlastním PR **draft nedá založit, ani když je hlava známá** — to je celé issue —, že se
+  brána nezavře, dokud není znám login (bezpečná strana z #330), a že **draft z dřívějška zůstane
+  čitelný a smazatelný**. Draft se v tom testu zakládá jako cizí PR, tedy tou cestou, kterou
+  doopravdy vznikl, a až potom se z PR stane vlastní: přesně stav, do kterého se dostane, kdo si
+  dopsal `author:@me`. Předfiltr pro zkratku `⌘⇧P` se ověřuje proti hotovému zadání, aby zkratka
+  nebyla zakázaná nad neprázdným panelem.
+
+  **Tvrdá podmínka č. 1 má od #333 test, ne jen grep** (`SingleWayOutTests`). Čte zdrojáky v `App/`
+  (komentáře zahazuje stejně jako grep v `CLAUDE.md`) a tvrdí čtyři věci: `ReviewPublishing` zná
+  **právě pět souborů**, protokol má **čtyři metody**, žádný ze sedmi souborů zadání nezná publisher,
+  payload, API ani `Process(`, a mimo úložiště zapisuje soubor **jen** `TextFileExport` přes
+  `NSSavePanel`. Je to test o struktuře kódu, protože „odkud se dá odeslat“ se za běhu zjistit nedá.
+
+  **Ověřeno vložením regrese, dvakrát:** vyhození `.mine` z `canComposeDraft` shodí tři testy store
+  (mezi nimi ten o velikosti písmen, takže je vidět, že brána chodí přes `Policy.ownership`)
+  a jediné `(any ReviewPublishing)?` v `AppStore+AgentPrompt.swift` shodí obě poloviny
+  `SingleWayOutTests` — výčet pěti souborů i zákaz publisheru v zadání.
+
+  **Vzhled má sondu, ne tvrzení** (`AgentPromptRenderProbe`, `TEST_RUNNER_PRISM_MEASURE=1`): panel se
+  rendruje v **obou mezích šířky** (240 a 520 bodů), protože sedm popisků s počty se do užší vejít
+  musí — `lineLimit(1)` by rozdíl mezi `Vyřešená vlákna` a `Odmítnuté nálezy` schoval do „…“. Sheet
+  se rendruje zvlášť a **s pozadím a tmavým režimem nasazeným sondou**: sám si plochu nemaluje
+  (v okně ji dává sheet), takže bez toho vyjde titulek světle na světlém a vypadá to jako chybějící
+  prvek — na to se u #333 spálilo jedno kolo. Sonda tiskne i celý text zadání, takže se dá přečíst
+  vedle mockupu.
 - **Konverzace** — proti fixtures, které jsou surové odpovědi z veřejných PR `cli/cli`
   sebrané **tím dotazem, který posílá aplikace** (`ConversationQuery.document`). Kdyby se
   sbíraly jinak, testovaly by tvar, který v provozu nikdy nepřijde; ověřené je to i tak, že
