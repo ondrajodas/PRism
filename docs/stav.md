@@ -717,6 +717,22 @@ nebo formální. Zapsané je jako **pravidlo vedle ostatních zákazů**, ne jak
 agentem: zákaz sahat mimo vlastní worktree taky nevznikl z nedůvěry. `CLAUDE.md` na to má jednu
 větu a nerozrostl se (48 977 → 49 292 B).
 
+**Větší objem práce dostane vlastní milník (#340)** — orientačně tři a víc issues, které patří
+k sobě; nenechává se nasypaný v `Průběžné` a nečeká se, až o milník někdo požádá. Pravidlo je
+v `CLAUDE.md` (jeden bod v *Pracovním postupu*, hned u verzování — milníky se jinde v pravidlech
+neřeší), podoba milníku v [`paralelni-vyvoj.md`](paralelni-vyvoj.md) jako podsekce **§1**, protože
+`POŘADÍ PRÁCE` je trvalá podoba právě toho rozvrhu, který v §1 vzniká. Zapsané je: titulek
+`M<číslo> — <název>` s pokračujícím číslem, popis česky se sekcí `POŘADÍ PRÁCE` (formát z **M9**),
+zakládání a přesouvání přes **REST** (`gh issue edit` padá na deprecated Projects classic) a to, že
+odstavec do `docs/stav.md` patří do **prvního PR milníku**, ne do zvláštního úklidového. **Verzování
+se nemění** — od `v1.0.0` běží jedna řada `v1.1.x` a číslo milníku v ní roli nehraje. Změřené jsou
+u toho dvě věci o té REST cestě: `milestone=` bere `.number` milníku, ne `.id` (s `.id` přijde
+`422 Validation Failed` a issue zůstane, kde byla), a řetězec v `-f` u toho celočíselného pole
+projde stejně jako `-F`. Vzniklo z **M10** (milník #12), kde sedm provázaných issues #330–#336
+leželo v `Průběžné` vedle drobností jako #152 a #299 — z takového seznamu není vidět rozsah ani
+závislosti. `CLAUDE.md` narostl o jeden bod a odstavec u verzování (55 753 → 56 881 B), tedy
+pořád hluboko pod stropem, kde Copilotovi praská kontext.
+
 U slotů (#228) dopadly tři věci jinak, než jak byly v zadání:
 
 - **Počet slotů se neomezuje**, ačkoli issue počítalo se dvěma. Rozsah stál na odhadu, že se

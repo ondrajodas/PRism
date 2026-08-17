@@ -1,7 +1,7 @@
 # Paralelní vývoj
 
 Jak se vyřizuje **seznam** issues. Prostředí na to dalo #228 (sloty), tohle je postup: co se
-posoudí, co dostane subagent a co si nechává orchestrátor.
+posoudí, kam se ten rozvrh zapíše, co dostane subagent a co si nechává orchestrátor.
 
 Pravidla z [`CLAUDE.md`](../CLAUDE.md) platí beze změny — tenhle dokument je nemění, jen říká,
 **kdo je plní**. Jediná výjimka je pauza na proklikání: **nepadá, ale posouvá se před merge**
@@ -100,6 +100,58 @@ mechanický konflikt dvou odstavců. Počítej s ním při mergování, ne při 
 
 Když si nejsi jistý, jestli se dvě issues potkají, **je to důvod je udělat za sebou.** Cena
 sériového běhu je čas; cena sémantického konfliktu je pád, který se pozná až po mergi.
+
+### Rozvrh se zapisuje do milníku, ne jen do kontextu
+
+**Větší objem práce — orientačně tři a víc issues, které patří k sobě — dostane vlastní
+milník** (#340). Nenechává se nasypaný v `Průběžné` a nečeká se, až o milník někdo požádá.
+Samo pravidlo je v [`CLAUDE.md`](../CLAUDE.md), tady je jeho podoba.
+
+Důvod je tentýž jako u celé téhle sekce: rozvrh, který z tabulky výš vyleze, **si jinak drží
+jen orchestrátor v kontextu** — a ten skončí se session. Milník je jediné místo, kde ta
+informace přežije napříč nimi. Vzniklo to z **M10** (milník #12), kde sedm provázaných issues
+#330–#336 leželo v `Průběžné` vedle drobností jako #152 (hledání v diffu) a #299 (mockup po
+dávce): z takového seznamu není vidět ani rozsah, ani co na čem stojí, takže kdo k němu přijde
+za týden, přečte si sedm titulků a pořadí odvozuje znovu. U sedmi issues je přitom **rozvrh
+polovina zadání**.
+
+Jak takový milník vypadá:
+
+- **Titulek `M<číslo> — <krátký název>`** a číslo **pokračuje** v číslování existujících
+  milníků (`M9 — Revize okna`, `M10 — Vlastní PR`). Nezakládá se od nuly a nevynechává se —
+  jinak z čísla nejde poznat, co bylo dřív.
+- **Popis česky**: co milník je a proč, odkaz na sekci návrhu, když se to týká vzhledu
+  (`docs/navrh.html`), a hlavně sekce **`POŘADÍ PRÁCE`** — číslovaný seznam issues i s tím,
+  **co jde souběžně a co na čem stojí**, tedy přesně výstup tabulky výš. Ten formát má
+  **M9** a osvědčil se tam: šestnáct issues ve čtyřech vlnách a `docs/stav.md` u něj odkazuje
+  na popis milníku místo vlastního výčtu, „protože se podle něj rozhoduje, co se dá dělat
+  souběžně“. Popis milníku je na GitHubu prostý text, takže `POŘADÍ PRÁCE` je velkými
+  písmeny, ne markdownový nadpis.
+- **Zakládá i přesouvá se přes REST**, protože `gh issue edit` v tomhle repu padá na
+  deprecated Projects classic — je to tentýž důvod, který `CLAUDE.md` má u `gh pr edit`
+  a `gh issue view`:
+
+  ```bash
+  jq -n --arg t 'M11 — Krátký název' --rawfile d popis.txt '{title: $t, description: $d}' > milestone.json
+  gh api repos/{owner}/{repo}/milestones -X POST --input milestone.json --jq .number
+  gh api repos/{owner}/{repo}/issues/330 -X PATCH -f milestone=11
+  ```
+
+  `milestone=` bere **`.number` milníku, ne `.id`** — u M10 je to `12` proti `17334964`.
+  Změřeno: s `.id` vrátí API `422 Validation Failed` s `field: milestone, code: invalid`
+  a issue nechá být, takže se to pozná hned. Číslo vrátí ten `POST` výš (`--jq .number`);
+  přesunout zpátky do `Průběžné` jde stejným `PATCH`em s jeho číslem. A že řetězec v `-f`
+  u celočíselného pole projde, je změřené taky — `-F milestone=12` dělá totéž.
+- **`docs/stav.md` o novém milníku neví** a ten odstavec patří do **prvního PR toho
+  milníku**, ne do zvláštního úklidového PR — dokumentace jde se změnou v jednom commitu,
+  což je pravidlo z `CLAUDE.md`. Zvláštní PR by za tu jednu větu zaplatil branch, Copilota,
+  merge a release; a mezi ním a prvním PR by v repu stál milník, o kterém dokumentace mlčí.
+- **Verzování se tím nemění**: releasy pokračují v běžící řadě (`v1.1.x`) a číslo milníku
+  v nich roli nehraje. Nový milník tedy nezakládá novou řadu verzí.
+
+`Průběžné` má proti tomu zůstat tím, co o sobě tvrdí v popisu: **koš na věci mimo fáze, bez
+pořadí a termínu.** Když se v něm začne hromadit něco, co pořadí má, je to signál k milníku,
+ne k delšímu seznamu.
 
 ## 2. Přidělit slot
 
