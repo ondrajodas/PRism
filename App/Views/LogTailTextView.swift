@@ -157,7 +157,7 @@ struct LogTailTextView: NSViewRepresentable {
     /// celého dokumentu, jen o vrstvu vedle.
     ///
     /// **Žádost se zahodí teprve tehdy, když je konec doopravdy vidět.** Rozložení totiž nemusí být
-    /// jedno: když se vodorovný scroller objeví **až po** skoku, viewport se o jeho 13 bodů zmenší
+    /// jedno: když se vodorovný scroller objeví **až po** skoku, viewport se o jeho 17 bodů zmenší
     /// a okýnko zůstane o řádek nad koncem. Chyceno plným během testů pod zátěží (samostatně to
     /// vycházelo), takže je to zrovna ten druh chyby, který by se v aplikaci projevil jednou za čas
     /// a nedal by se zopakovat.
@@ -201,6 +201,13 @@ struct LogTailTextView: NSViewRepresentable {
     /// Krátký log tedy nedostane celý strop s prázdnem pod sebou a dlouhý se do stropu zastropuje
     /// a scrolluje uvnitř. Kolik ten strop je, rozhoduje `CheckDetailView.logMaxHeight` — je to
     /// rozhodnutí o okně, ne o textu.
+    ///
+    /// **Obsah je o `lineSpacing` velkorysejší, než co text potřebuje**, a je to schválně: posledního
+    /// řádku se prokládání netýká, takže vysázený dokument je `N × lineHeight − lineSpacing + 2 × inset`
+    /// vysoký, kdežto tady se počítá `N × lineHeight + 2 × inset`. Dva body slacku znamenají, že okýnko
+    /// je na obsah vždycky o chlup **větší**, nikdy menší — a to je ta strana, na které se chybovat má.
+    /// Změřeno u #347 (`LogTailScrollerReserveTests`); kdo to bude chtít zpřesnit, musí spolu s tím
+    /// posunout `CheckDetailView.logMaxHeight`, protože strop na tom stojí.
     nonisolated static func height(forLines lines: Int, fontSize: CGFloat, lineSpacing: CGFloat, limit: CGFloat) -> CGFloat {
         let manager = NSLayoutManager()
         let lineHeight = manager.defaultLineHeight(for: font(size: fontSize)) + lineSpacing
@@ -210,19 +217,53 @@ struct LogTailTextView: NSViewRepresentable {
         return min(limit, content + horizontalScrollerHeight)
     }
 
-    /// Kolik se nechává na vodorovný scroller: **13 bodů**, tedy
-    /// `NSScroller.scrollerWidth(for: .small, scrollerStyle: .legacy)` na tomhle systému.
+    /// Kolik se nechává na vodorovný scroller: **17 bodů**, tedy
+    /// `NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)` na tomhle systému.
     ///
-    /// Rezervuje se **legacy** styl, protože jen ten místo doopravdy zabírá; overlay scrollery
-    /// plavou nad obsahem. Na `NSScroller.preferredScrollerStyle` se schválně neptáme dvakrát:
-    /// je vázaný na hlavní vlákno (výška se počítá i mimo něj) a **mění se za běhu** podle toho,
-    /// jestli je připojená myš — okýnko, kterému se výška mění připojením myši, je horší než pár
-    /// bodů rezervy u krátkého logu.
+    /// **Na čem se to měřilo, protože právě tohle se tady rozešlo** (#347; do té doby tu stálo 13
+    /// bodů). Třináct je `scrollerWidth` pro velikost **`.small`** — tedy pro scroller, který okýnko
+    /// nikdy nekreslí: `makeScrollView()` nechává `NSScrollView`u výchozí `.regular`, a ten bere 17.
+    /// Konstanta odměřená na jiném ovládacím prvku, než jaký se kreslí, je zrovna ta chyba, kterou
+    /// popisuje #236 — a vypadala odměřeně, protože měření bylo skutečné, jen jinde.
     ///
-    /// Číslo je opsané, protože ta funkce je taky vázaná na hlavní vlákno. **Nedrží ho odhad, ale
-    /// test** (`LogTailHeightTests`), který ho porovnává s tím, co vrací systém — kdyby se hodnota
-    /// rozešla, spadne, místo aby se okýnko potichu rozešlo se scrollerem.
-    nonisolated static let horizontalScrollerHeight: CGFloat = 13
+    /// Změřeno na tom, na čem se kreslí, a **u obou stylů**: `LogTailScrollView` o výšce 441 má
+    /// s **legacy** stylem `contentView.bounds.height` 424, tedy zábor **17**; s **overlay** stylem
+    /// 441, tedy zábor **0** — overlay scroller plave nad obsahem, i když je 17 bodů vysoký.
+    /// Rezervuje se proto legacy: je to horší z těch dvou, takže při overlay zbyde 17 bodů prázdna,
+    /// kdežto naopak by se z obsahu ukusovalo.
+    ///
+    /// Čtyři body, o které to bylo vedle, nebyly kosmetika, a **projevily se na obou koncích jinak**
+    /// (změřeno u #347, obě čísla z kresby):
+    ///
+    /// - **Nezastropované okýnko** bylo o 2 body nižší než jeho vlastní dokument — z těch čtyř dva
+    ///   spolkl slack na prokládání z odstavce výš. Log, který se měl vejít celý, tím dostal svislý
+    ///   scroller a odscrolloval se o 2 body (`origin.y` 2 místo 0), takže se **horní řádek ořezal**.
+    ///   Na třířádkovém logu je to 63 bodů okýnka na dokument o 50, po opravě 67 na 50.
+    /// - **Zastropované okýnko** ukazovalo `(441 − 8 − 17) / 14` = **29,71 řádku** místo 30, tedy
+    ///   o řádek méně, než na kolik si strop řekl.
+    ///
+    /// Co se u stropu **nezměnilo**, ať to někdo nehledá jako regresi: u konce logu je i po opravě
+    /// u horní hrany vidět necelý řádek. To není z rezervy, ale z toho, že `2 × inset` leží **uvnitř**
+    /// dokumentu a skáče se na jeho úplný konec — mřížka řádků na hranu viewportu prostě nepadne.
+    /// Rezerva rozhoduje o **výšce**, ne o zarovnání mřížky.
+    ///
+    /// **Zůstává to opsané číslo, ne dotaz na API** (rozhodnuto u #347, zdůvodnění v specifikaci).
+    /// `NSScroller.scrollerWidth` je `@MainActor` — dědí to z `NSControl` —, kdežto výška se počítá
+    /// `nonisolated`; a hlavně `CheckDetailView.logMaxHeight` je ručně vybraná konstanta, která musí
+    /// být `14N + 2 × inset + rezerva`. S rezervou známou teprve za běhu by se u stropu nedalo
+    /// tvrdit, že padne na celý řádek, právě tam, kde se ten strop vybírá. Ty dvě konstanty jsou pár
+    /// a hýbe se s nimi společně.
+    ///
+    /// Na `NSScroller.preferredScrollerStyle` se schválně neptáme: **mění se za běhu** podle toho,
+    /// jestli je připojená myš (změřeno u #347 — dva běhy sondy za sebou se usadily jednou na
+    /// `legacy`, jednou na `overlay`), a okýnko, kterému se výška mění připojením myši, je horší než
+    /// 17 bodů prázdna u krátkého logu.
+    ///
+    /// **Nedrží to komentář, ale test** (`LogTailScrollerReserveTests`) — a ten se od #347 ptá
+    /// **kresby**, ne API s ručně vybranou velikostí: postaví `makeScrollView()`, položí do něj
+    /// dokument širší než okýnko a odečte, kolik z výšky ubylo. Kdyby se ptal jen
+    /// `scrollerWidth(for: .small, …)`, spletl by se znovu a stejně — a přesně to se stalo.
+    nonisolated static let horizontalScrollerHeight: CGFloat = 17
 }
 
 /// `NSScrollView`, který umí říct, že se právě rozložil.

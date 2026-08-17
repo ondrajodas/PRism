@@ -50,7 +50,7 @@ extension Policy {
     /// **`Ukázat celý log` tím o smysl nepřišel** a je to změřené, ne odhadnuté: z devíti změřených
     /// logů zůstávají nad mezí tři (16 013 / 16 270 / 25 533 řádků), takže se u nich pořád ukáže
     /// „starších N řádků se nevešlo“ a sheet má co dodat. Cena zvednutí, ať je zapsaná: v okýnku
-    /// o 441 bodech (30 řádků) je 6 000 řádků **200 obrazovek** scrollování, takže dál se nezvedá
+    /// o 445 bodech (30 řádků) je 6 000 řádků **200 obrazovek** scrollování, takže dál se nezvedá
     /// samotný ocas — od téhle mezi výš je to práce pro sheet a pro odkaz na GitHub.
     static let logTailLines = 6_000
 
