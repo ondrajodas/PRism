@@ -85,6 +85,33 @@ struct ReviewIntentStoreTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: outside.url.path(percentEncoded: false)).isEmpty)
     }
 
+    /// Odkaz **na samotném souboru** `contains` nezachytí (rozbaluje symlinky na obou stranách),
+    /// takže se musí odmítnout výslovně — tatáž kontrola, jakou u čtení mají `ReviewStore`
+    /// i `ReviewDraftStore` (#106). Nález Copilota na #352.
+    ///
+    /// Změřeno, že na zápisu dnes nestojí nic: `write(to:options: .atomic)` odkaz **nahradí**
+    /// souborem a cíl nechá být (bez `.atomic` by ho přepsal). Bezpečnost tedy visela na příznaku
+    /// u zápisu, ne na vyjmenované kontrole — a to je slabší záruka.
+    @Test("Zápis na místo, kde leží odkaz, neprojde")
+    func refusesToWriteThroughASymbolicLinkFile() throws {
+        let outside = try TemporaryDirectory()
+        let victim = outside.url.appending(path: "mimo-cache.md")
+        try Data("PŮVODNÍ".utf8).write(to: victim)
+        try FileManager.default.createDirectory(
+            at: layout.worktrees(of: pr.repo),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(
+            at: layout.intentFile(for: pr, at: headSha),
+            withDestinationURL: victim
+        )
+
+        #expect(throws: CheckoutError.self) {
+            try store.save("# zadání", for: pr, at: headSha)
+        }
+        #expect(try String(contentsOf: victim, encoding: .utf8) == "PŮVODNÍ")
+    }
+
     // MARK: - Existující soubor pro `Zkopírovat příkaz`
 
     @Test("Bez uloženého zadání se cesta nevrátí")
@@ -116,5 +143,25 @@ struct ReviewIntentStoreTests {
 
         let other = PRIdentifier(repo: pr.repo, number: 421)
         #expect(store.existingFile(for: other, at: headSha) == nil)
+    }
+
+    /// **Nejcennější tvrzení téhle sady.** Vrácená cesta jde do promptu a reviewer ji otevře
+    /// `Read`em, takže odkaz by session poslal čtením **mimo cache aplikace** — a to je tvrdá
+    /// podmínka č. 3. Nález Copilota na #352.
+    @Test("Odkaz místo zadání se jako zadání nevydá")
+    func neverServesASymbolicLink() throws {
+        let outside = try TemporaryDirectory()
+        let secret = outside.url.appending(path: "cizi-soubor.md")
+        try Data("cizí obsah".utf8).write(to: secret)
+        try FileManager.default.createDirectory(
+            at: layout.worktrees(of: pr.repo),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(
+            at: layout.intentFile(for: pr, at: headSha),
+            withDestinationURL: secret
+        )
+
+        #expect(store.existingFile(for: pr, at: headSha) == nil)
     }
 }

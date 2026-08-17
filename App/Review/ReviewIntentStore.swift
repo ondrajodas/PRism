@@ -36,6 +36,19 @@ struct ReviewIntentStore: Sendable {
         // (`CacheLayout.contains` rozbaluje symlinky v rodiči, protože zápis přes odkaz
         // v cestě by psal mimo cache). „Pracuje výhradně ve své cache“ je tvrdá podmínka.
         let checked = try CacheEviction.insideCache(file, of: layout)
+        // **A odkaz na samotném souboru se odmítne výslovně** — `contains` ho nezachytí, protože
+        // rozbaluje symlinky na obou stranách. Je to tatáž kontrola, jakou si u čtení dělají
+        // `ReviewStore` a `ReviewDraftStore` (#106).
+        //
+        // Změřeno, že na zápisu **dnes** nestojí nic: `write(to:options: .atomic)` odkaz
+        // **nahradí** souborem a cíl nechá být, kdežto tentýž zápis **bez** `.atomic` cíl
+        // přepíše. Bezpečnost tedy visela na jednom příznaku u zápisu, což je slabší záruka než
+        // vyjmenovaná kontrola — a u `existingFile` níž neplatilo ani to.
+        guard !layout.isSymbolicLink(checked) else {
+            throw CheckoutError.cacheUnavailable(
+                "Na cestě \(checked.path(percentEncoded: false)) leží symbolický odkaz."
+            )
+        }
         try FileManager.default.createDirectory(
             at: checked.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -52,9 +65,16 @@ struct ReviewIntentStore: Sendable {
     /// **teď**, takže se musí zeptat disku — soubor tam je právě tehdy, když by ho dostal
     /// i skutečný běh. Odhadovat existenci z toho, že review někdy proběhlo, by dalo příkaz,
     /// který ukazuje na smazaný soubor.
+    ///
+    /// **Symbolický odkaz se odmítne** (nález Copilota na #352). Tady na tom záleží nejvíc
+    /// z celého souboru: vrácená cesta jde do promptu a reviewer ji otevře `Read`em, takže odkaz
+    /// by session poslal čtením **mimo cache aplikace**. `contains` to nezachytí, protože rozbaluje
+    /// symlinky na obou stranách a cíl pak vyjde rovný cíli — proto `isSymbolicLink`, tedy tatáž
+    /// kontrola, kterou u čtení z cache mají `ReviewStore` i `ReviewDraftStore` (#106).
     func existingFile(for pr: PRIdentifier, at headSha: String) -> URL? {
         let file = layout.intentFile(for: pr, at: headSha)
         guard layout.contains(file),
+              !layout.isSymbolicLink(file),
               FileManager.default.fileExists(atPath: file.path(percentEncoded: false))
         else { return nil }
         return file

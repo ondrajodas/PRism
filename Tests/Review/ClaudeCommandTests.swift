@@ -284,7 +284,7 @@ struct ClaudeCommandTests {
     /// **Tohle je to tvrzení, na kterém stojí tvrdá podmínka č. 2**: zadání se do promptu dostane
     /// jako **cesta**, ne jako nový nástroj. Sada povolení vyjde znak po znaku stejná jako
     /// u požadavku bez zadání — `Read` v ní je odjakživa a nic dalšího nepřibylo.
-    @Test("Zadání nepřidá revieweerovi ani jedno povolení")
+    @Test("Zadání nepřidá reviewerovi ani jedno povolení")
     func theIntentAddsNoTool() {
         let file = URL(filePath: "/tmp/cache/worktrees/cli/cli/42-aaaa1111.md")
 

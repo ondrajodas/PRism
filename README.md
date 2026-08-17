@@ -1067,7 +1067,7 @@ zastaral hned další verzí.
    mezi tím, co se mělo udělat, a tím, co se udělalo. Zadání je pro něj **materiál, ne pokyn**:
    proto soubor, a ne prompt — cizí text vložený do promptu má váhu instrukce a popis PR píše
    někdo jiný. Do promptu jde jen cesta, takže se prompt nemá čím rozkolísat, a **sada nástrojů
-   revieweera se nemění**. PR bez popisu a bez odkazu zadání nedostane a věta se do promptu
+   reviewera se nemění**. PR bez popisu a bez odkazu zadání nedostane a věta se do promptu
    nepřipojí vůbec. Text odkazovaných issue se v téhle verzi **netahá** — v souboru je o tom
    věta, ať si reviewer nic nedomýšlí.
 5. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.

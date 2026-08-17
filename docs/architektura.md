@@ -1619,6 +1619,21 @@ Věci, které se u toho nemají rozbít:
   kontrolovaná cesta — používá ji razítko použití repa i `ReviewIntentStore` (#120). Symlink
   v rodičovské komponentě umí zápis vyvést mimo cache, a „pracuje výhradně ve své cache“ je tvrdá
   podmínka; vlastní kopie té kontroly v každém storu by se dřív nebo později rozešla.
+
+  **`contains` ale nestačí a `isSymbolicLink` musí přijít vedle něj** (nález Copilota na #352).
+  `contains` rozbaluje symlinky na **obou** stranách, takže odkaz na samotném souboru přes něj
+  projde — cíl vyjde rovný cíli. U zadání to bolí ve dvou směrech a v jednom z nich to bolelo
+  doopravdy:
+  - **Čtení** (`existingFile`) vrací cestu, která jde do promptu a kterou reviewer otevře `Read`em,
+    takže odkaz by session poslal čtením **mimo cache aplikace**. To byla skutečná díra.
+  - **Zápis** (`save`) na tom nestál — **změřeno**: `write(to:options: .atomic)` odkaz **nahradí**
+    souborem a cíl nechá být, kdežto tentýž zápis **bez** `.atomic` cíl přepíše. Bezpečnost tedy
+    visela na jednom příznaku u zápisu, což je slabší záruka než vyjmenovaná kontrola, takže
+    `isSymbolicLink` je i tam.
+
+  Je to tatáž kontrola, jakou u čtení z cache mají `ReviewStore` i `ReviewDraftStore` (#106) —
+  a přesně ten druh nálezu, který `CLAUDE.md` popisuje jako „kontrola, která jinde v repu je,
+  a tady chybí“.
 - **Použitelnost stromu se ověřuje `rev-parse HEAD`, ne existencí složky.** Zabitý
   `worktree add` nechá rozkopírovanou složku se zámkem `initializing`, kterou `fileExists`
   od hotové nerozezná — reviewer by pak četl uříznutý strom. Porovnání s `headSha` navíc

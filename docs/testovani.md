@@ -1014,7 +1014,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   řádky a zbytek promptu uřízly třemi tečkami — tedy náhled, který zamlčí zrovna to, kvůli čemu se
   do něj kouká. Léčba je `fixedSize(horizontal: false, vertical: true)`.
 - **Zadání pro reviewera (#120)** — čtyři sady a **nejcennější tvrzení jsou o tom, co se
-  nestane**: že se věta o zadání nepřipojí, dokud soubor není, že se revieweerovi nepřidalo ani
+  nestane**: že se věta o zadání nepřipojí, dokud soubor není, že se reviewerovi nepřidalo ani
   jedno povolení, a že review **doběhne**, i když se zadání nepodaří připravit.
 
   `ReviewIntentTests` (`Policy`, vyčerpávajícím výčtem) — odkazy se testují **na skutečných
@@ -1041,6 +1041,17 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **celý** (kratší obsah by jinak nechal zbytek starého zadání), a že **zápis přes symlink ven
   z cache neprojde** (tvrdá podmínka č. 3 — a cizí složka po pokusu zůstane prázdná). K tomu
   `existingFile` pro `Zkopírovat příkaz`: nevydá zadání jiné hlavy ani jiného PR.
+
+  **Symlink se testuje ve dvou podobách, a ta druhá je cennější.** Odkaz na *složce* v cestě
+  (`worktrees/<owner>/<repo>`) chytá `contains`; odkaz na **samotném souboru** ne, protože `contains`
+  rozbaluje symlinky na obou stranách a cíl vyjde rovný cíli. Nejcennější tvrzení je proto to, že
+  `existingFile` odkaz **nevydá** — vrácená cesta jde do promptu a reviewer ji otevře `Read`em, takže
+  by ho poslala čtením mimo cache. Nález Copilota na #352; do té doby to hlídal jen `contains`.
+
+  U zápisu se to doměřilo, ať se nezakazuje naslepo: `write(to:options: .atomic)` odkaz **nahradí**
+  souborem a cíl nechá být, kdežto **bez** `.atomic` ho přepíše. Zápis tedy díra nebyl — ale visel na
+  příznaku, ne na vyjmenované kontrole, takže `isSymbolicLink` je i tam a test to tvrdí obsahem cíle
+  (`"PŮVODNÍ"` po pokusu o zápis).
 
   `ClaudeCommandTests` — že se argumenty se zadáním a bez něj liší **jen** textem za `-p`, že do
   promptu jde **cesta a ne obsah**, a že kontrola nálezů (#150) zadání nenese. Obě konstanty

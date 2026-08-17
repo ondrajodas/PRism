@@ -2155,7 +2155,7 @@ v pořádku“ musí být materiál k posouzení, ne instrukce; a **prompt se ne
 u #52 se změřilo, že tři běhy nad týmž commitem daly 1, 2 a 3 nálezy, takže rozptyl by schoval, čím
 se to zhoršilo. Do promptu jde **jen cesta**.
 
-**Sada nástrojů revieweera se nemění** (tvrdá podmínka č. 2). `Read` v ní je odjakživa a soubor leží
+**Sada nástrojů reviewera se nemění** (tvrdá podmínka č. 2). `Read` v ní je odjakživa a soubor leží
 v cache aplikace, kam session vidí — stojí v ní i pracovní strom. Test to tvrdí z obou stran:
 argumenty se zadáním a bez něj se liší **jen** textem za `-p` a obě konstanty povolení jsou v testu
 zapsané literálem, takže přidaný MCP nástroj spadne tam.
@@ -2195,7 +2195,16 @@ strop **32** položek a `short_summary` **60 znaků**. Obecný nález se tedy ne
 k **souboru bez řádku** — cesta to unese bez práce (`Policy.draftTarget` z toho udělá tělo review
 s odkazem na soubor) a texty v UI se prošly: žádný neslibuje nález bez souboru.
 
-Testů je **2759** a jsou zelené. Odkazy se testují na **skutečných linkbacích** ze dvou nových fixtures — popis
+**Copilot našel jednu skutečnou díru** a je to přesně ten vzor z `CLAUDE.md`, tedy „kontrola, která
+jinde v repu je, a tady chybí“: `existingFile` vracel cestu i tehdy, když na ní ležel **symbolický
+odkaz** — a ta cesta jde do promptu, takže by reviewera poslala `Read`em **mimo cache aplikace**.
+`contains` to nezachytí, protože rozbaluje symlinky na obou stranách; hlídá to `isSymbolicLink`,
+tatáž kontrola, jakou u čtení z cache mají `ReviewStore` i `ReviewDraftStore` (#106). U **zápisu** se
+to doměřilo, ať se nezakazuje naslepo: `write(to:options: .atomic)` odkaz **nahradí** souborem a cíl
+nechá být, kdežto **bez** `.atomic` ho přepíše — zápis tedy díra nebyl, ale visel na příznaku
+místo na vyjmenované kontrole, takže `isSymbolicLink` je i tam.
+
+Testů je **2761** a jsou zelené. Odkazy se testují na **skutečných linkbacích** ze dvou nových fixtures — popis
 `metalbear-co/mirrord#4702` (markdownový odkaz se slugem) a linkback od `linear[bot]` na
 `zcash/zcash-swift-wallet-sdk#1893` (HTML, sedm adres **bez** slugu). Regrese ověřena vložením:
 zapomenuté `request.intentFile`, `try?` nad selhaným zápisem a odfiltrované `.md` v `allWorktrees()`

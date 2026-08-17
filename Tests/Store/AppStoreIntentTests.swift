@@ -7,7 +7,7 @@ import Testing
 ///
 /// Nejcennější tvrzení jsou tři a všechna jsou o tom, co se **nestane**: review doběhne i tehdy,
 /// když se zadání nepodaří připravit; prompt o souboru mlčí, dokud soubor není; a sada nástrojů
-/// revieweera se tím nemění (tvrdá podmínka č. 2).
+/// reviewera se tím nemění (tvrdá podmínka č. 2).
 @Suite("AppStore — zadání pro reviewera (#120)")
 @MainActor
 struct AppStoreIntentTests {
@@ -188,7 +188,7 @@ struct AppStoreIntentTests {
 
     /// Sada nástrojů se zadáním **nemění** — zadání je soubor ke čtení, ne nový nástroj. Kdyby si
     /// někdo pro dotažení zadání přidal MCP nástroj (což je #345), spadne to tady.
-    @Test("Se zadáním se revieweerovi nepřidá ani jedno povolení")
+    @Test("Se zadáním se reviewerovi nepřidá ani jedno povolení")
     func theIntentAddsNoPermission() async throws {
         let reviewer = FakeReviewRunner()
         let store = store(body: "Popis.", reviewer: reviewer)
