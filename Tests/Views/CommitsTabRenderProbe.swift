@@ -48,6 +48,11 @@ struct CommitsTabRenderProbe {
         /// koukám“ — cesta zpět, titulek, sha, autor, čas i počty v ní zůstávají a zmizí jen
         /// odstavce pod titulkem. Kolik místa se tím získá, je vidět vedle snímku `diff-commitu`.
         case commitDiffCollapsed = "diff-commitu-sbalena-hlavicka"
+        /// Sbalená hlavička nad commitem, jehož zpráva má **`CRLF`** (#339). Je to jediný způsob, jak
+        /// si tenhle stav prohlédnout: normálním používáním by k němu musel v tabu `Commity` ležet PR
+        /// s `CRLF` ve zprávě commitu. Na snímku se posuzuje jediná věc — že v popisku přepínače stojí
+        /// skutečný počet řádků (`3 řádky`), ne `1 řádek`, který tam byl do #339.
+        case commitDiffCRLF = "diff-commitu-sbalena-hlavicka-crlf"
         /// **Prázdný diff** — ten stav, který se z prázdné plochy nedá odlišit od poruchy, takže
         /// je na snímku vidět věta místo diffu. Sloučení, protože má vlastní znění.
         case emptyMerge = "diff-commitu-prazdne-slouceni"
@@ -139,15 +144,15 @@ struct CommitsTabRenderProbe {
         case .single:
             store.commits[pr] = [Self.commits[0]]
             store.commitFailures[pr] = nil
-        case .commitDiff, .commitDiffCollapsed, .emptyMerge, .commitLoading, .commitFailed:
-            store.commits[pr] = Self.commits
+        case .commitDiff, .commitDiffCollapsed, .commitDiffCRLF, .emptyMerge, .commitLoading, .commitFailed:
+            store.commits[pr] = scenario == .commitDiffCRLF ? try Self.crlfCommits() : Self.commits
             store.commitFailures[pr] = nil
             // Stav diffu se **staví přímo**, ne přes `openCommit`: ten spouští `Task`, na který by
             // render čekal, a rozdělaný stav (`nenacteno`) by se tudy nedal vyrobit vůbec.
             let sha = Self.openSha(for: scenario)
             store.openCommits[pr] = sha
             store.commitDiffs[pr] = CommitDiff(sha: sha, content: content(for: scenario))
-            store.isCommitMessageExpanded = scenario != .commitDiffCollapsed
+            store.isCommitMessageExpanded = ![.commitDiffCollapsed, .commitDiffCRLF].contains(scenario)
         }
         return (store, directory)
     }
@@ -319,6 +324,29 @@ struct CommitsTabRenderProbe {
                "Merge branch 'trunk' into fix/13804-gh-issue-create-errors-after-successful",
                days: -8, merge: true, name: "Kumar Prateek"),
     ]
+
+    /// Tentýž seznam, ale rozkliknutý commit má zprávu s **míchanými zakončeními** (#339).
+    ///
+    /// Zpráva se bere **ze skutečné odpovědi** `gh/pr-commits-crlf.json` (`git-for-windows/git`,
+    /// commit `415ab35` — titulek `LF`, tělo `CRLF`), ne z literálu v tomhle souboru: ručně napsaná
+    /// zpráva by nesla `LF` toho, kdo ji napsal, a sonda by kreslila stav, který `gh` nevrací.
+    /// Ostatní commity zůstávají, aby se snímek dal položit vedle `diff-commitu-sbalena-hlavicka`.
+    private static func crlfCommits() throws -> [PullRequestCommit] {
+        let message = try CommitFixture.crlfCommit().message
+        let openSha = openSha(for: .commitDiffCRLF)
+        return commits.map { original in
+            guard original.sha == openSha else { return original }
+            return PullRequestCommit(
+                sha: original.sha,
+                message: message,
+                authorName: original.authorName,
+                authorLogin: original.authorLogin,
+                avatarURL: nil,
+                committedAt: original.committedAt,
+                isMerge: original.isMerge
+            )
+        }
+    }
 
     private static func commit(
         _ sha: String,

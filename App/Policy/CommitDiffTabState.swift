@@ -93,9 +93,16 @@ extension Policy {
     /// **Prázdné u jednořádkové zprávy**, a pak hlavička nekreslí ani blok s linkou, ani přepínač
     /// pod titulkem: první řádka **je** ten titulek, takže by se sbalovalo prázdno. Tělo je zároveň
     /// jediná část hlavičky, která roste bez omezení — sha, autor a počty jsou pořád tři řádky.
+    ///
+    /// **Dělí se na `isLineTerminator`, ne na `isNewline`** (#339) — tedy tam, kde končí řádek
+    /// `gitu`, a na tomtéž znaku, na kterém řádky počítá `commitMessageToggle`. Titulek
+    /// (`PullRequestCommit.subject`) a tělo jsou dvě půlky jednoho rozdělení, takže musí mít jeden
+    /// pojem „konec řádky“: s `isNewline` by `U+2028` uvnitř titulku titulek usekl a jeho zbytek by
+    /// se v hlavičce objevil ještě jako první řádka těla — tentýž text dvakrát, a přitom `git`
+    /// (`%s`/`%b`) tam žádnou hranici nevidí.
     static func commitMessageBody(of commit: PullRequestCommit) -> String {
         commit.message
-            .drop(while: { !$0.isNewline })
+            .drop(while: { !$0.isLineTerminator })
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -108,10 +115,15 @@ extension Policy {
     /// Počítají se **řádky zprávy včetně prázdných** mezi odstavci: tělo je useknuté z obou stran
     /// (`commitMessageBody`), takže prázdný řádek uvnitř je odstavcová mezera, a ta v hlavičce místo
     /// zabírá stejně jako text. Zalomení sazbou se do počtu nepromítá — číslo mluví o zprávě, ne
-    /// o tom, jak široké je zrovna okno.
+    /// o tom, jak široké je zrovna okno. Proto `TextLines.all` (drží prázdné) a ne `content`.
+    ///
+    /// **Dělí `TextLines`, ne `split(separator: "\n")`** (#339). `"\r\n"` je ve Swiftu jeden
+    /// `Character`, takže `split` na `CRLF` nerozdělil vůbec a popisek tvrdil `1 řádek` u zprávy
+    /// jakékoli délky — tedy přesný opak toho, na co má odpovědět. Zprávy commitů chodí z `gh`
+    /// z cizích repozitářů, takže zakončení řádků si nevybíráme.
     static func commitMessageToggle(_ body: String, expanded: Bool) -> String {
         guard !expanded else { return "Tělo zprávy" }
-        let lines = body.split(separator: "\n", omittingEmptySubsequences: false).count
+        let lines = TextLines.all(body).count
         return "Tělo zprávy · \(Plural.czech(lines, one: "řádek", few: "řádky", many: "řádků"))"
     }
 

@@ -8,3 +8,12 @@
 # i tam, kde na zakončení nezáleží — a tím by přestalo být vidět, které fixtures na něm stojí.
 Tests/Fixtures/gh/job-log-head.txt -text
 Tests/Fixtures/gh/pr-diff-crlf.diff -text
+
+# `Tests/Fixtures/gh/pr-commits-crlf.json` tady schválně **není**, i když na `CRLF` taky stojí
+# (#339). Je to odpověď JSON API, takže `CR` v ní není surový bajt, ale escapovaná dvojice `\` + `r`
+# — změřeno, surových `CR` je v souboru **nula**, a `core.autocrlf` tedy nemá co normalizovat.
+# Řádek `-text` by byl kontrola, která nic nedělá, a v tomhle výčtu by tvrdil, že zakončení té
+# fixture drží on. Že přežilo, si hlídají sady samy — `GhCommitTests` na dekódované zprávě
+# (`message.contains("\r\n")`) a `CommitDiffTabStateTests` na těle, ze kterého se počítají řádky
+# (`body.contains("\r\n")`). To je pojistka, která platí bez ohledu na nastavení gitu. A platí to na
+# každou fixture v JSONu: chránit se musí surové bajty, ne escape.

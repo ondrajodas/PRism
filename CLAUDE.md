@@ -581,6 +581,11 @@ Zvlášť stojí za přečtení, než sáhneš na:
   širší `isNewline` (grep ji nechytá, dělí přes `whereSeparator`). Zdůvodnění obojího je
   u `Character.isLineTerminator` a v [`docs/architektura.md`](docs/architektura.md).
 
+  A **kdo text dělí na dvě části, dělí obě na tomtéž znaku** (#339) — tohle grep nechytá vůbec.
+  Titulek a tělo zprávy commitu jsou dvě půlky jednoho rozdělení, takže obě jdou po
+  `isLineTerminator`; s `isNewline` by `U+2028` uvnitř titulku titulek usekl a jeho zbytek by se
+  v hlavičce objevil ještě jako první řádka těla.
+
   A **fixture takového formátu musí být skutečný výstup** — ruční literál nese `LF` toho, kdo ho
   napsal, takže test zezelená i nad rozbitým rozborem; když na `CRLF` stojí, patří do
   `.gitattributes` jako `-text`, jinak ho `core.autocrlf` zahodí při commitu.

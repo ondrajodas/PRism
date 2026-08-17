@@ -1986,5 +1986,47 @@ v jiném pásmu, takže se obrázky nedaly položit vedle sebe.
 Testů je **2669**; regrese ověřena vložením dvou (smazaná podoba `icons`, zahozený popisek
 u aktivní) — první položí čtyři testy, druhá to tvrzení, které by výška pruhu nechytla.
 
+### #339 — počet řádků těla zprávy commitu neuměl CRLF
+
+Popisek přepínače v hlavičce rozkliknutého commitu (`› Tělo zprávy · 6 řádků`) počítal řádky
+`body.split(separator: "\n", omittingEmptySubsequences: false).count`, tedy vzorem, který
+`CLAUDE.md` zakazuje od #292 a který #295 svedl na jedno místo. `"\r\n"` je ve Swiftu **jeden
+`Character`**, takže se na `CRLF` nerozdělilo vůbec a v hlavičce stálo **`Tělo zprávy · 1 řádek`**
+u zprávy jakékoli délky — přesný opak toho, na co ten popisek odpovídá („vyplatí se to rozbalit?“).
+Zprávy commitů chodí z `gh` z cizích repozitářů, takže zakončení řádků si nevybíráme; nebyla to tedy
+teorie. **Našel to grep z `CLAUDE.md`** při revizi #338, kde ten grep musí vyjít prázdný — a
+nevycházel. Po opravě (`TextLines.all(body).count`) vychází.
+
+**Sjednotil se u toho pojem „konec řádky“.** Titulek (`PullRequestCommit.subject`) a tělo
+(`Policy.commitMessageBody`) jsou dvě půlky **jednoho** rozdělení, a obojí dělilo `isNewline` — na
+`CRLF` to funguje, takže to nebyla ta chyba, ale po opravě počtu by se to s ním rozešlo. `isNewline`
+je pravda i pro `VT`, `FF`, `NEL`, `U+2028` a `U+2029`, což jsou pro `git` znaky **obsahu**, takže
+jedno `U+2028` v titulku by titulek usekalo a jeho zbytek by se v hlavičce objevil **ještě jako
+první řádka těla** — tentýž text dvakrát. Obojí jde teď po `isLineTerminator`, stejně jako počet.
+Sazbu to nerozhodí, oba pohledy titulek zkracují (`lineLimit` 1 v seznamu, 2 v hlavičce). Zamítnuto
+přepsat tělo přes `TextLines` a zbytek spojit: spojení by `CRLF` uvnitř těla přepsalo na `LF`, tedy
+změnilo text, který se kreslí.
+
+**Fixture je skutečná odpověď, ne literál** — `gh api …/pulls/6293/commits` na veřejném
+`git-for-windows/git`, commit `415ab35` s **míchanými** zakončeními: titulek `LF`, tělo `CRLF`,
+tělo o třech řádcích. Jedna stránka (`per_page=1`, 3,6 kB), protože celá jich má 391 kB.
+**`-text` v `.gitattributes` schválně nedostala**, ačkoli s ním zadání počítalo: `CR` je v JSONu
+escapovaný jako dvojice `\` + `r`, takže surových `CR` bajtů je v souboru nula (změřeno — staged blob
+má tytéž 3 664 B jako soubor na disku, přitom `core.autocrlf=input`) a normalizovat není co. Řádek by
+byl kontrola, která nic nedělá; co zakončení doopravdy drží, je tvrzení v testu, a to platí bez ohledu
+na nastavení gitu. Důvod je zapsaný v `.gitattributes` jako komentář, ať to příště nikdo „neopraví“.
+
+**Vidět to je**, ale ke stavu se **normálním používáním nedá dojít** — musel by v tabu `Commity`
+ležet PR s `CRLF` ve zprávě commitu. Je na něj proto šestý scénář sondy
+(`CommitsTabRenderProbe`, `diff-commitu-sbalena-hlavicka-crlf`), který zprávu bere z té fixture;
+v popisku na něm stojí `Tělo zprávy · 3 řádky`. Ověřeno u toho i to, co sonda nekreslí: rozbalené
+`CRLF` tělo se sází jako tři řádky bez zbylých glyfů (jednorázově, přepnutým příznakem).
+
+Testů je **2716** (o 6 víc), plus dva argumenty k existujícímu parametrizovanému. **Regrese ověřena
+vložením regrese, dvakrát zvlášť**: vrácený `split(separator: "\n")` položí 3 testy a 5 tvrzení —
+parametrizovaný spadne na 3 případech ze 4, protože `LF` projde, a to je přesně ten důvod, proč se
+chyba nechytila dřív —, a `isNewline` zpátky v obou půlkách rozdělení položí test o `U+2028` třemi
+tvrzeními naráz (titulek `feat: cache`, `secrets` přelité do těla, počet `3 řádky` místo `1 řádek`).
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
