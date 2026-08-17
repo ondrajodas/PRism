@@ -19,6 +19,16 @@ struct GhAuthor: Decodable {
     let login: String
 }
 
+/// Výstup `gh api user` — přihlášený účet (#330).
+///
+/// **Vlastní typ, i když má tentýž jeden field jako `GhAuthor`.** Je to jiná odpověď na jinou
+/// otázku: `GhAuthor` je autor uvnitř `gh --json` výstupu, tohle je celé tělo REST endpointu
+/// `/user`. Sdílený typ by znamenal, že se doplněné pole u jednoho projeví u druhého — a hlavně
+/// že z podpisu volání není poznat, čí login se dekóduje.
+struct GhUser: Decodable {
+    let login: String
+}
+
 /// Jedna položka `gh search prs --json …`.
 struct GhSearchItem: Decodable {
     struct Repository: Decodable {

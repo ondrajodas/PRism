@@ -16,6 +16,19 @@ enum ReviewMode: String, Codable, Hashable, Sendable {
 /// nefunguje.
 struct GlobalConfig: Codable, Equatable, Sendable {
     var sources: [Source]
+    /// Další loginy, které se počítají za **moje** (#330). Viewer z `gh api user` se přidává sám,
+    /// tady se vypisuje jen to, co se od něj liší — typicky agent s vlastním účtem
+    /// (`github-actions[bot]`, Copilot), který pushuje pod sebou.
+    ///
+    /// **Prázdné pole je běžný stav, ne nedodělek**: agenti v tomhle repu pushují přes moje `gh`,
+    /// takže mají autora `ondrajodas` a viewer sám stačí (ověřeno na živých datech). Pole je tu
+    /// proto, že rozřazení má odpovídat na „čí je tah“, a den, kdy se to rozejde, se pozná jedině
+    /// tím, že PR agenta spadne do cizí fronty.
+    ///
+    /// **Globálně, ne per repo**, jako prompt nebo vzhled: kdo jsem já, z repozitáře neplyne.
+    /// **V okně nastavení pole není** — je to jednorázová věc pro toho, kdo si pouští agenta pod
+    /// vlastním účtem, a nová sekce nastavení by znamenala změnu vzhledu, tedy mockup a schválení.
+    var ownLogins: [String]
     /// Sada, která platí, dokud ji nepřebije jazyk nebo repo. Je to ta „hvězdička“
     /// z rozpisu v #24 — druhý zápis téhož by byla past pro toho, kdo soubor čte.
     ///
@@ -91,6 +104,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
 
     init(
         sources: [Source],
+        ownLogins: [String] = [],
         skills: [String],
         skillsByLanguage: [ProjectLanguage: [String]] = [:],
         blockingCategories: [String],
@@ -109,6 +123,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         notifications: NotificationSettings = NotificationSettings()
     ) {
         self.sources = sources
+        self.ownLogins = ownLogins
         self.skills = skills
         self.skillsByLanguage = skillsByLanguage
         self.blockingCategories = blockingCategories
@@ -131,6 +146,11 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let standard = Configuration.standard.global
         sources = try container.decodeIfPresent([Source].self, forKey: .sources) ?? standard.sources
+        // Chybějící klíč = prázdné pole, tedy „jsem to jen já“. **Hodnota jiného typu položí
+        // čtení** (`try`, ne `try?`), stejně jako u `sources` a `skills`: tiše podstrčené prázdno
+        // by z PR mého agenta udělalo cizí PR, tedy řádek ve frontě k review, o které nikdo
+        // nepožádal — a to je zrovna to rozřazení, kvůli kterému pole existuje.
+        ownLogins = try container.decodeIfPresent([String].self, forKey: .ownLogins) ?? standard.ownLogins
         skills = try container.decodeIfPresent([String].self, forKey: .skills) ?? standard.skills
         // Rozbitá mapa se hlásí ze stejného důvodu jako rozbité `skills`: tiše podstrčený
         // výchozí (prázdný) obsah by na jazykových repech pustil jiné reviewery, než jaké
@@ -300,9 +320,16 @@ struct Configuration: Codable, Equatable, Sendable {
 
     /// Hodnoty, se kterými aplikace běžela, než konfigurace existovala. Nesmí se rozejít —
     /// jinak by se po zavedení konfigurace začala chovat jinak.
+    ///
+    /// **Výjimka je `sources`** (#330): od té doby je v nich vedle `reviewRequested` i `mine`,
+    /// takže se aplikace se **prázdnou cache** chová jinak než dřív — v seznamu jsou i vlastní PR.
+    /// Je to vědomé a je to podmínka toho, aby sekce `Moje PR` (#331) měla odkud brát data: kdo si
+    /// ten řádek nedopíše ručně, měl by ji navždycky prázdnou. **Existující `config.json` to
+    /// nespraví** a nemigruje se — `decodeIfPresent` vezme uložené `sources` a nový zdroj se
+    /// nedoplní; že chybí, pozná `Policy.tracksOwnPullRequests` a řekne to prázdný stav sekce.
     static let standard = Configuration(
         global: GlobalConfig(
-            sources: [.reviewRequested],
+            sources: [.reviewRequested, .mine],
             skills: ["code-review:code-review"],
             blockingCategories: Policy.defaultBlockingCategories.sorted(),
             // Doslova ten text, co byl do #281 v kódu — po zavedení pole se aplikace nesmí

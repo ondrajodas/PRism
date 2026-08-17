@@ -639,6 +639,14 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
    je z ní vidět, jestli nový vizuální jazyk sedí, dřív než se do něj investuje přepis
    `ContentView`. Kdyby nesedl, je #172 nejlevnější místo, kde návrh zahodit.
 
+10. **Vlastní PR** (M10, milník #12) — vlastní pull requesty v okně. Aplikace do #330 nevěděla,
+    **kdo se dívá**, takže vlastní PR byly od cizích k nerozeznání — a půlka okna (fronta,
+    dashboard, automat, notifikace, paleta) předpokládá, že „PR = něco, na co se čeká“. Milník to
+    rozřadí podle autora a dá vlastním PR jinou práci: místo verdiktu, který GitHub na vlastním PR
+    odmítá, se z nálezů a konverzace skládá zadání pro agenta. Sedm issues (#330–#336), nakreslené
+    v sekcích 21 a 22 návrhu; **pořadí je v popisu milníku**, protože se podle něj rozhoduje, co jde
+    souběžně. Hotové: rozřazení podle autora #330.
+
 Vedle fází stojí milník **Průběžné**: koš na to, co do žádné z nich nepatří (ikona,
 podpis, stavový řádek). Nemá pořadí ani termín a verze se z něj neodvozuje — viz
 Pracovní postup.
@@ -2486,6 +2494,46 @@ v [`testovani.md`](testovani.md).
 
 Testů je **2812** a jsou zelené. **Vidět je totéž co dřív** — pilulka na komentář svítí u řádku pod
 myší a mění stranu podle poloviny; co se změnilo, je že okno u toho nespálí procesor.
+
+**Aplikace ví, kdo se dívá (#330)** — `GitHubGateway.fetchViewer()` přes `gh api user`, login se
+dotáhne **jednou při startu** a `Policy.ownership(of:mine:)` z něj rozřadí seznam na `.mine`
+a `.theirs`. Rozhoduje **autor PR, ne zdroj**, ze kterého přišel: jeden PR umí splňovat víc dotazů
+naráz, takže rozřazení podle zdroje by záviselo na tom, jak si člověk dotazy poskládal. Sama
+`PullRequestList.merged` se nemění — rozřazení se počítá nad hotovým seznamem.
+
+**Prázdný viewer znamená „nevím“, ne „to jsem já“**, a je to nejcennější věta celého issue: dokud
+login nedorazí (nebo se ho nepodaří zjistit), je všechno `.theirs`. Obrácené výchozí chování by při
+startu na okamžik přehodilo celý seznam do „moje“ a fronta cizích PR by zmizela. Vložená regrese
+(`mine.isEmpty → .mine`) shodí **11 testů**, mezi nimi tři z #114 — porovnání je totiž doopravdy na
+jednom místě: `Policy.isOwn(author:viewer:)` chodí přes tutéž funkci.
+
+**`ownership` bere množinu loginů, ne jeden řetězec** (viewer + nový `ownLogins` v konfiguraci).
+Agent s vlastním účtem (`github-actions[bot]`, Copilot) by do `.mine` nespadl; dneska to nevadí —
+agenti v tomhle repu pushují přes moje `gh` a mají autora `ondrajodas` (ověřeno na živých datech) —
+ale dolepovat druhý login potom by znamenalo projít všechna místa, která se ptají „je to moje“. Pole
+je **jen v souboru, ne v okně nastavení**: nová sekce nastavení je změna vzhledu, tedy mockup
+a schválení, a je to jednorázová věc pro toho, kdo si pouští agenta pod vlastním účtem.
+
+**Do výchozích zdrojů přibylo `author:@me is:open`** (`Source.mine`) a je to **vědomá výjimka**
+z pravidla, že se výchozí hodnoty nesmí rozejít s tím, jak aplikace běžela dřív: bez toho zdroje by
+sekce `Moje PR` (#331) neměla odkud brát data. **Uložená konfigurace se nemigruje** — `decodeIfPresent`
+vezme, co je v souboru —, takže na mém stroji ten zdroj nepřibude a sekce by zůstala prázdná; že
+chybí, pozná `Policy.tracksOwnPullRequests` (poznává token `author:`, ne jméno zdroje) a napíše to
+prázdný stav sekce. Dopsat uživateli do ručně editovaného souboru dotaz, o který neřekl, by byl
+zásah do jeho věci — a dotaz navíc při každém tiku.
+
+**Rozhodnuto jinak, než bylo v zadání**, dvakrát a v obou případech jen v detailu: `fetchViewer()` je
+**šestnáctá** čtecí metoda protokolu, ne dvanáctá (dokumentace u toho měla o jeden vedle už dřív —
+text tvrdil čtrnáct nad patnáctipoložkovým výčtem), a login se **dekóduje jako JSON**, ne přes
+`--jq .login`: `--jq` na chybějící pole vypíše prázdný řádek s nulovým návratovým kódem, tedy
+prázdný login — a to je zrovna ta hodnota, která v aplikaci znamená „nevím“. `AppStore.isOwnPullRequest(_:)`
+zůstává na `Conversation.viewer` schválně: přepnout ho na login ze storu by změnilo, kdy se v panelu
+předvyplňuje verdikt, a to je viditelná změna a věc panelu vlastního PR (#333).
+
+Testů je **2843** a jsou zelené (+31). **V okně není vidět nic** — je to součástka, kterou zatím
+nikdo nekreslí; jediné, co je vidět, je nový výchozí zdroj, a ten se projeví **jen na prázdné
+cache**: v seznamu se pak vedle cizích PR objeví i vlastní (změřeno `gh search prs`: 13 cizích proti
+17 vlastním). Fronta, dashboard, automat a notifikace se od cizích PR odříznou v #332.
 
 ### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
 

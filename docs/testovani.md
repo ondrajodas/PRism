@@ -53,6 +53,39 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   klasifikace chyb tabulkou nad `ProcessResult`, mapování stavu vyčerpávajícím výčtem.
   Testuje se i **tvar argumentů** předaných `gh` — rozdělení dotazu na tokeny a seznam
   `--json` polí je kontrakt s `gh`, ne detail.
+- **Rozřazení PR podle autora (#330)** — tři vrstvy a v každé je nejcennější to, co tvrdí, že se
+  něco **NEstalo**:
+
+  `Policy` výčtem (`PullRequestOwnershipTests`): prázdný i nenačtený (`nil`) viewer znamená, že je
+  **všechno cizí** — tohle je ta věta, na které issue stojí, a rozbije se potichu, protože obrácené
+  výchozí chování nic neshodí, jen na okamžik po spuštění zmizí fronta cizích PR a vypadá to jako
+  „ještě se to nenačetlo“. Dál: bílé znaky loginem nejsou, velikost písmen nerozhoduje, loginy
+  z konfigurace se k viewerovi **přidávají** (na tom stojí PR agenta s vlastním účtem), a dva PR
+  z **téhož** seznamu vyjdou různě — z toho je vidět, že rozhoduje autor, ne zdroj.
+
+  `AppStore` proti fake gateway (`AppStoreOwnershipTests`): dokud `keepFresh()` neproběhl, je
+  `viewer` prázdný a nic není moje; **selhání dotazu z cizích PR moje nedělá**; login se tahá
+  **jednou za spuštění** (tři tiky, jeden dotaz — je to údaj o účtu, ne o PR). Fake má `viewer`
+  ve výchozím stavu `nil`, tedy „gateway ho nezná“, takže ostatní sady zůstávají v tom stavu, ve
+  kterém aplikace startuje.
+
+  `GhGateway` proti `FakeProcessRunner`: argumenty (`api user`), skutečná odpověď GitHubu ve
+  fixture `gh/user.json` (z **veřejného** `gh api users/octocat` — `/user` má tentýž tvar plus
+  privátní pole, která se nečtou, a osobní údaje do repa nepatří), a dvě podoby toho, že se prázdný
+  login **nevrátí**: odpověď bez `login` a odpověď s prázdným řetězcem obojí skončí chybou. Přesně
+  to je důvod, proč se nepoužívá `--jq .login` — ten by na chybějící pole vypsal prázdný řádek
+  s nulovým kódem, tedy „nevím, kdo jsem“ vydávané za odpověď.
+
+  **Ověřeno vložením regrese, dvakrát.** `mine.isEmpty → .mine` (tedy „nevím“ = „to jsem já“)
+  shodí **11 testů / 18 tvrzení** — mezi nimi i tři z #114 (`prefillableSuggestion`), což je
+  zároveň doklad, že porovnání je doopravdy na jednom místě. Vypnutí normalizace na malá písmena
+  plus vyhození `.mine` z výchozích zdrojů shodí dalších 6 testů, každý na svou příčinu.
+
+  **Sada, která na tom nečekaně stála:** `AppStoreAutomaticTests` si musela zdroj pinovat na jeden
+  (`[.reviewRequested]`), protože `FakeGitHubGateway` spotřebovává předepsané odpovědi **po
+  dotazech, ne po tikech** — s druhým výchozím zdrojem by tik, který má vidět `updatedAt: 100`,
+  dostal rovnou `200`. Ostatní sady store si zdroje pinují už dneska; tahle jediná brala
+  `Configuration.standard`.
 - **Konverzace** — proti fixtures, které jsou surové odpovědi z veřejných PR `cli/cli`
   sebrané **tím dotazem, který posílá aplikace** (`ConversationQuery.document`). Kdyby se
   sbíraly jinak, testovaly by tvar, který v provozu nikdy nepřijde; ověřené je to i tak, že
