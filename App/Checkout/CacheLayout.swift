@@ -155,6 +155,26 @@ struct CacheLayout: Sendable, Equatable {
         worktrees(of: pr.repo).appending(path: "\(pr.number)-\(headSha)")
     }
 
+    /// Zadání jednoho review: `worktrees/<owner>/<repo>/<pr>-<sha>.md` (#120).
+    ///
+    /// **Vedle stromu, ne v něm**, a je to celý důvod, proč to leží tady a ne v `worktree(for:at:)`:
+    /// soubor uvnitř pracovní kopie by se objevil v `git status` i v `git diff`, takže by ho
+    /// reviewer viděl jako součást změny, kterou má posoudit. Je to tatáž úvaha jako
+    /// u `lastUsedMarker`, který ze stejného důvodu leží vedle klonu.
+    ///
+    /// Klíčem je `(PR, headSha)`, stejně jako u stromu: zadání se váže k témuž commitu, sdílí ho
+    /// všechny skilly jednoho review a po novém commitu zestárne spolu se stromem i s nálezy.
+    ///
+    /// **Úklid jde tou cestou, která už existuje.** `CacheEviction.evict` maže celé
+    /// `worktrees(of:)`, takže soubor jde s klonem, a `discardUnwantedWorktrees` parsuje číslo PR
+    /// z názvu (`42-<sha>.md` → 42), takže odejde s tím, jak PR vypadne ze sledovaného seznamu.
+    /// Vlastní mazací cesta by byla další místo, na které se dá zapomenout.
+    func intentFile(for pr: PRIdentifier, at headSha: String) -> URL {
+        // Přípona `.md` je zároveň to, co soubor odlišuje od pracovní kopie téhož PR — jméno
+        // stromu je `<pr>-<sha>` bez ní, takže se nemají čím přebít.
+        worktrees(of: pr.repo).appending(path: "\(pr.number)-\(headSha).md")
+    }
+
     /// Stromy jsou zanořené pod repo, ne slepené do jednoho jména.
     ///
     /// Ploché `owner-repo-pr-sha` se nedá spolehlivě filtrovat podle prefixu: `keboola-kbc-`

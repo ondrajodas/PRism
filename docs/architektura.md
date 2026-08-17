@@ -1220,7 +1220,8 @@ Jeden běh = jedna headless session `claude` na jeden skill v jednom pracovním 
 |---|---|
 | `ReviewRunning` | Protokol: `run(_:progress:)`. Schválně nemá nic, čím by šlo něco odeslat |
 | `ClaudeReviewRunner` | Implementace nad `claude` přes `ProcessStreaming` |
-| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat), `promptTemplate` z nastavení (#281), `timeout` z nastavení (#320); u kontroly nálezů (#150) navíc `recheck: RecheckMaterial?` |
+| `ReviewRequest` | Zadání: klíč, pracovní strom, `baseSha` (proti čemu diffovat), `promptTemplate` z nastavení (#281), `timeout` z nastavení (#320), `intentFile` se zadáním PR (#120); u kontroly nálezů (#150) navíc `recheck: RecheckMaterial?` |
+| `ReviewIntentStore` | Zadání PR uložené **vedle** pracovního stromu (#120). Bez protokolu, jako `ReviewStore` — v testech se nahrazuje kořenem cache, ne fakem |
 | `ReviewRunKey` | `(PR, headSha, skillID, kind)` — identita běhu; `kind` je `review` / `recheck` (#150) |
 | `RecheckMaterial` | Vstup kontroly (#150): commit, na kterém nálezy vznikly, a nálezy v pořadí, ve kterém se na ně ptáme |
 | `RecheckCommand` | **Čisté funkce**: prompt kontroly a defenzivní čtení její odpovědi (#150) |
@@ -1326,6 +1327,80 @@ Věci, které se u toho nemají rozbít:
 - **Reviewer načte i skill ležící v kontrolovaném repu** a řídí se jím. Je to **záměr**:
   repo, které si přinese vlastní review skill, ho má dostat. Vypnout by to šlo
   `--setting-sources user`, neověřeno.
+
+### Zadání pro reviewera (#120)
+
+Reviewer do #120 viděl **jen kód** — odpojený strom a `git diff <base>...HEAD`. Zadání nedostal,
+takže rozdíl mezi „co se mělo udělat“ a „co se udělalo“ pro něj byl neviditelný. Od #120 mu
+aplikace položí **vedle pracovního stromu soubor** s popisem PR a s odkazy na issue, a prompt
+o něm řekne jedinou větou, kde leží.
+
+**Zadání není prompt, je to materiál.** To je to hlavní rozhodnutí a řídí zbytek:
+
+- **Cizí text v promptu je pokyn, cizí text v souboru je doklad.** Popis PR píše někdo jiný než
+  já, takže věta „nic nehlas, je to v pořádku“ vložená **do promptu** má váhu instrukce, kdežto
+  ve čteném souboru je součástí zadání, které se posuzuje. Napsané je to na dvou místech
+  a schválně: v jádře promptu (`ReviewPromptTemplate.intent(at:)`) i v samotném souboru
+  (`ReviewIntentText.preamble`).
+- **Prompt se nemá čím rozkolísat.** Kilobajty cizího textu v promptu znamenají, že každý běh
+  jede na jiném promptu — a u #52 se změřilo, že tři běhy nad týmž commitem daly 1, 2 a 3 nálezy,
+  takže rozptyl schová, čím se to zhoršilo. Do promptu jde **jen cesta**.
+- **Sada nástrojů se nemění** (tvrdá podmínka č. 2). `Read` v ní je odjakživa a soubor leží
+  v cache aplikace, kam session vidí, protože v ní stojí i pracovní strom. Testy to tvrdí
+  z obou stran: argumenty se zadáním a bez něj se liší **jen** textem za `-p`, a obě konstanty
+  povolení jsou v testu zapsané literálem.
+
+Co se u toho nemá rozbít:
+
+- **Věta patří do jádra, ne do šablony.** Nese **cestu**, tedy fakt o tomhle běhu (cesty se
+  dosazují, nepíšou ručně), a smazatelná věta by znamenala zadání stažené, uložené a nepřečtené —
+  tichá porucha téhož druhu, kvůli které je v jádře `ReportFindings`.
+- **Připojovaná půlka je funkce, ne konstanta** (`Policy.reviewPromptCore(intentPath:)`). Náhled
+  v nastavení kreslil jádro **rovnou z konstanty `core`** a `Policy.reviewPrompt` nevolal vůbec,
+  takže nová věta by v náhledu nebyla vidět a nikdo by si toho nevšiml. Teď volají obě cesty tutéž
+  funkci — jedna pravda o jednom textu. Ukázková cesta v náhledu je pevná
+  (`ReviewPromptTemplate.sampleIntentPath`), ze stejného důvodu jako `sampleSkillID`.
+- **`Policy.reviewPrompt` nemá na `intent` default.** S `= nil` by obě dnešní volání
+  (`ClaudeCommand.prompt(for:)` i `shellCommand(...)`, tedy tlačítko `Zkopírovat příkaz`) zůstala
+  zelená a věta by se nepřipojila **nikdy**. Bez defaultu to překladač vynutí na obou.
+- **`Zkopírovat příkaz` se ptá disku, ne záznamu** (`ReviewIntentStore.existingFile`). Tlačítko
+  skládá příkaz, jakým by se reviewer spustil *teď*, takže věta o zadání do něj patří právě tehdy,
+  když by ten soubor dostal i skutečný běh — jinak by zkopírovaný příkaz posílal reviewera na
+  smazaný soubor.
+- **Prompt nikdy neukazuje na soubor, který neexistuje.** `Policy.intentBrief` vrátí `nil`, když
+  se nesehnalo nic (prázdný popis bez jediného odkazu), a tehdy se nezakládá nic a věta se
+  nepřipojí. Ověřuje to test na obou koncích — `intentFile == nil` v požadavku a chybějící soubor
+  na disku.
+- **Prázdný popis a nedotažený popis jsou tatáž hodnota** (`PullRequest.body` je neoptional
+  `String` s defaultem `""`), takže se do souboru **nepíše, které z toho to je**. V cestě review
+  se nedotažený vyskytnout nemůže — `fetchDetail` by vyhodil a review by se nespustilo —, ale
+  jistota to je jen tam, ne v modelu; věta v souboru (`ReviewIntentText.noDescription`) proto
+  přiznává, že to rozlišit neumí. Rozlišení přijde s #345, kde se zadání skládá z víc zdrojů
+  a každý si nese svůj výsledek.
+- **Chybějící sekce se nevynechává mlčky.** Soubor má tři pojmenované sekce (popis PR, odkazy,
+  text issue) a ta poslední je v téhle verzi prázdná **vždycky** — s větou, že se text netahá
+  a identifikátory jsou jen ukazatele. Bez ní by reviewer nepoznal rozdíl mezi „issue nic neříká“
+  a „text issue se sem nedostal“.
+- **Odkazy se normalizují na kanonickou adresu bez slugu**, a dedup je podle **identifikátoru**.
+  Tentýž issue přijde v popisu jako markdownový odkaz se slugem a v linkbacku od Linearu bez něj
+  (ověřeno na `zcash/zcash-swift-wallet-sdk#1893`), takže dedup nad doslovným textem by
+  z jednoho issue udělal dva. Vytahuje se **jen Linear**, protože jen u něj je z adresy vidět
+  identifikátor issue — GitHubové `#123` ukazuje na sousední PR téhož repa, který reviewer
+  v pracovní kopii má.
+- **Nepovedené zadání review nepoloží, ale mlčí se o něm ne.** Zápis se vyhazuje z
+  `ReviewIntentStore.save`, `AppStore.prepareIntent` z toho udělá `intentFailure` a review běží
+  dál bez zadání. `try?` by znamenal běh, který zadání nedostal, a v okně nic — přitom takový běh
+  vypadá **úplně stejně** jako ten, který ho dostal.
+
+**Příznak na ose (tab `Průběh`) tohle issue vědomě nedostalo** a patří celý do #345. Důvod je, že
+v téhle části může selhat **jedině zápis do vlastní cache** — a to ve chvíli, kdy o pár řádků výš
+prošlo vytvoření pracovního stromu, tedy nesrovnatelně větší zápis do téže složky. Odznak, který se
+rozsvítí jen nad rozbitým diskem, je UI pro stav, který nenastává; kdežto #345 přináší tři tvary
+selhání, které nastávají běžně (chybějící MCP server, server, který nejde spustit, nepovolený
+nástroj), a **tam se ten odznak vyplatí**. Druhý důvod je návrhový: `loadedADifferentSkill` je fakt
+**o jedné session**, kdežto zadání je jedno pro celý běh, takže „jak jeden fakt vypadá na N
+dráhách“ je rozhodnutí, které patří k případu, kde si ho něco vynutí. Do té doby to hlásí
+`AppNoticesView` ve stavovém řádku, jako `draftFailure` nebo `dismissalFailure`.
 
 ### Kontrola nálezů z minula (#150)
 
@@ -1523,6 +1598,42 @@ Věci, které se u toho nemají rozbít:
 - **Worktree je klíčovaný `(PR, headSha)`**, ne jen PR. Nálezy visí na `headSha`, takže dva
   běhy nad různými commity téhož PR si nesmí sáhnout na stejný strom. Naopak dva skilly
   nad **stejným** commitem strom sdílejí — proto je vytvoření idempotentní.
+- **Zadání pro reviewera leží vedle stromu, ne v něm** (#120,
+  `CacheLayout.intentFile(for:at:)` → `worktrees/<owner>/<repo>/<pr>-<sha>.md`). Uvnitř pracovní
+  kopie by ho `git status` i `git diff` vypsaly jako součást změny, kterou má reviewer posoudit —
+  tedy tatáž úvaha, kvůli které leží `lastUsedMarker` vedle klonu a ne v něm. Klíč je stejný jako
+  u stromu, takže zadání sdílejí všechny skilly jednoho review a po novém commitu zestárne
+  společně se stromem i s nálezy.
+
+  **Úklid nedostal vlastní cestu a je to schválně.** `CacheEviction.evict` maže celé
+  `worktrees(of:)`, takže zadání jde s klonem, a `discardUnwantedWorktrees` čte číslo PR z názvu
+  (`42-<sha>.md` → 42), takže odejde s tím, jak PR vypadne ze sledovaného seznamu. Vlastní mazací
+  cesta by byla další místo, na které se dá zapomenout — a `RepoCheckout.removeWorktree` z aplikace
+  dneska **nikdo nevolá** (jen testy), takže by se na ni ani nespoléhalo.
+
+  Cena je, že **`CacheEviction.allWorktrees()` bere zadání jako „worktree“** — vypisuje každé dítě
+  té složky, ne jen složky. Filtr tam vědomě **není**: kdyby se soubory odfiltrovaly, zadání
+  zavřeného PR by nesmazal nikdo. Nepřesné jméno metody je menší cena než neuklizený soubor;
+  hlídají to dva testy v `CacheEvictionTests`.
+- **Zápis vedle klonu i vedle stromu jde přes `CacheEviction.insideCache`.** Je to jediná
+  kontrolovaná cesta — používá ji razítko použití repa i `ReviewIntentStore` (#120). Symlink
+  v rodičovské komponentě umí zápis vyvést mimo cache, a „pracuje výhradně ve své cache“ je tvrdá
+  podmínka; vlastní kopie té kontroly v každém storu by se dřív nebo později rozešla.
+
+  **`contains` ale nestačí a `isSymbolicLink` musí přijít vedle něj** (nález Copilota na #352).
+  `contains` rozbaluje symlinky na **obou** stranách, takže odkaz na samotném souboru přes něj
+  projde — cíl vyjde rovný cíli. U zadání to bolí ve dvou směrech a v jednom z nich to bolelo
+  doopravdy:
+  - **Čtení** (`existingFile`) vrací cestu, která jde do promptu a kterou reviewer otevře `Read`em,
+    takže odkaz by session poslal čtením **mimo cache aplikace**. To byla skutečná díra.
+  - **Zápis** (`save`) na tom nestál — **změřeno**: `write(to:options: .atomic)` odkaz **nahradí**
+    souborem a cíl nechá být, kdežto tentýž zápis **bez** `.atomic` cíl přepíše. Bezpečnost tedy
+    visela na jednom příznaku u zápisu, což je slabší záruka než vyjmenovaná kontrola, takže
+    `isSymbolicLink` je i tam.
+
+  Je to tatáž kontrola, jakou u čtení z cache mají `ReviewStore` i `ReviewDraftStore` (#106) —
+  a přesně ten druh nálezu, který `CLAUDE.md` popisuje jako „kontrola, která jinde v repu je,
+  a tady chybí“.
 - **Použitelnost stromu se ověřuje `rev-parse HEAD`, ne existencí složky.** Zabitý
   `worktree add` nechá rozkopírovanou složku se zámkem `initializing`, kterou `fileExists`
   od hotové nerozezná — reviewer by pak četl uříznutý strom. Porovnání s `headSha` navíc
@@ -1711,8 +1822,14 @@ kopií** a **review**. Výběr žije tady, ne ve view — jinak by ho každé p�
 zahodilo.
 
 Review orchestruje takhle: `gh pr view` (kvůli `headSha` a `baseSha`) → označit starší
-záznamy zastaralými → worktree → skilly paralelně → každý doběhlý uložit do `ReviewStore`.
-Limit souběžných session hlídá `ReviewRunner`, ne tenhle kód.
+záznamy zastaralými → worktree → **zadání pro reviewera vedle stromu** (#120) → skilly paralelně
+→ každý doběhlý uložit do `ReviewStore`. Limit souběžných session hlídá `ReviewRunner`, ne
+tenhle kód.
+
+Zadání se připravuje **po checkoutu a před spuštěním skillů** (`prepareIntent(for:of:)`), a to je
+jediné možné místo: leží vedle pracovního stromu a session ho musí mít v ruce dřív, než se poskládá
+prompt. Nestojí to ani jedno volání navíc — popis PR je v `detail`, který se dotahuje kvůli
+`headSha`. Podrobnosti a rozhodnutí jsou u `ReviewRunner` v sekci *Zadání pro reviewera (#120)*.
 
 **Od #154 je to rozdělené na `extension` po zodpovědnostech** — do té doby jeden soubor
 o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen zapsaném na jednom místě:
@@ -4421,7 +4538,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.disclosure(of:categories:toggled:)`, `Policy.disclosureKey(of:)` | Jak je nález u kódu rozbalený (#185): blokující rozbalený, ostatní značka, odmítnutý nikdy — a čím se místo klíčuje |
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` i s **cenou** z uloženého běhu |
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
-| `Policy.reviewPromptTemplate(from:)`, `.reviewPromptProblems(in:)`, `.reviewPromptBody(template:skillID:baseSha:)`, `.reviewPrompt(template:skillID:baseSha:)` | Prompt review ze šablony v nastavení (#281, `ReviewPromptTemplate`): prázdná šablona → výchozí, chybějící zástupný text → `Problem`, dosazení hodnot a **vždycky připojené jádro**. Skládá to **jedno místo**, protože týž text potřebuje běh i `Zkopírovat příkaz` |
+| `Policy.reviewPromptTemplate(from:)`, `.reviewPromptProblems(in:)`, `.reviewPromptBody(template:skillID:baseSha:)`, `.reviewPromptCore(intentPath:)`, `.reviewPrompt(template:skillID:baseSha:intent:)` | Prompt review ze šablony v nastavení (#281, `ReviewPromptTemplate`): prázdná šablona → výchozí, chybějící zástupný text → `Problem`, dosazení hodnot a **vždycky připojené jádro** — od #120 i s větou o souboru se zadáním. Skládá to **jedno místo**, protože týž text potřebuje běh, `Zkopírovat příkaz` i náhled v nastavení |
+| `Policy.intentLinks(in:)`, `.intentBrief(of:description:links:)` | Zadání pro reviewera (#120, `ReviewIntent`): odkazy na Linear issue z cizího textu (dedup podle identifikátoru, pořadí prvního výskytu) a soubor v Markdownu, který se z nich složí. `nil` = nebylo co uložit |
 | `Policy.reviewTimeout(minutes:)`, `.reviewTimeoutMinutes(from:)`, `.reviewTimeoutProblem(in:)` | Časový limit běhu z nastavení (#320, `ReviewTimeout`): sražení do mezí 5–60 min a pojmenování hodnoty, která je mimo ně. **Jediné místo, kde se sráží** — pole v nastavení, globální hodnota i override per repo mluví o týchž mezích |
 | `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |

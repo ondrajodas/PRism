@@ -114,7 +114,11 @@ struct ReviewPromptEditor: View {
             Label("Připojí se vždycky, přepsat to nejde", systemImage: "lock")
                 .font(.system(size: 11))
                 .foregroundStyle(Palette.ink2)
-            Text(verbatim: ReviewPromptTemplate.core)
+            // **Přes `Policy`, ne z konstanty `core`** (#120): od chvíle, kdy se k jádru něco
+            // připojuje, by čtení konstanty znamenalo druhou pravdu o jednom textu — náhled by
+            // ukazoval jádro bez věty o zadání a nikdo by si toho nevšiml. Ukázková cesta je
+            // pevná, jako `sampleSkillID` a `sampleBaseSha`.
+            Text(verbatim: Policy.reviewPromptCore(intentPath: ReviewPromptTemplate.sampleIntentPath))
                 .textSelection(.enabled)
                 .font(.system(size: 11, design: .monospaced))
                 .lineSpacing(5)
@@ -128,6 +132,11 @@ struct ReviewPromptEditor: View {
                     RoundedRectangle(cornerRadius: 6)
                         .strokeBorder(Palette.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 }
+            // Bez téhle věty by odznak se zámkem výš tvrdil, že se **celý** blok připojí vždycky
+            // — a to o poslední větě neplatí: PR bez popisu a bez odkazu žádné zadání nemá, takže
+            // se nepřipojí nic. Cesta v náhledu je navíc ukázková, ne cesta konkrétního běhu.
+            hint("Poslední věta je o zadání PR — připojí se jen u PR, ke kterému se zadání "
+                + "sehnalo, a cesta v ní je ukázková.")
         }
     }
 

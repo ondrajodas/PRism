@@ -171,6 +171,49 @@ extension CacheEvictionTests {
         #expect(FileManager.default.fileExists(atPath: open.path(percentEncoded: false)))
     }
 
+    /// Zadání pro reviewera (#120) leží **vedle** stromu, takže ho `allWorktrees()` vezme jako
+    /// jeho dítě — a právě proto ho úklid najde bez vlastní mazací cesty. Bez tohohle testu by
+    /// zadání zavřeného PR přežilo v repu, které v cache zůstává kvůli jinému PR, a nesmazal by
+    /// ho nikdo.
+    @Test("Zadání zavřeného PR odejde se stromem, zadání otevřeného zůstane")
+    func discardsIntentOfAClosedPullRequest() async throws {
+        try makeClone(vault)
+        let closed = PRIdentifier(repo: vault, number: 7)
+        let open = PRIdentifier(repo: vault, number: 8)
+        let closedIntent = layout.intentFile(for: closed, at: String(repeating: "a", count: 40))
+        let openIntent = layout.intentFile(for: open, at: String(repeating: "b", count: 40))
+        try FileManager.default.createDirectory(
+            at: layout.worktrees(of: vault),
+            withIntermediateDirectories: true
+        )
+        for file in [closedIntent, openIntent] {
+            try Data("# zadání".utf8).write(to: file)
+        }
+
+        try await eviction(budget: .max).run(openPullRequests: [open], busy: { Set() })
+
+        #expect(!FileManager.default.fileExists(atPath: closedIntent.path(percentEncoded: false)))
+        #expect(FileManager.default.fileExists(atPath: openIntent.path(percentEncoded: false)))
+    }
+
+    /// A se smazaným repem jde zadání taky — `evict` maže celé `worktrees(of:)`, takže se na něj
+    /// nemusí myslet zvlášť.
+    @Test("Se smazaným repem jde i zadání pro reviewera")
+    func evictingARepositoryDropsItsIntentFiles() async throws {
+        try makeClone(vault, usedAt: .distantPast)
+        let intent = layout.intentFile(for: PRIdentifier(repo: vault, number: 1), at: "aaaa1111")
+        try FileManager.default.createDirectory(
+            at: layout.worktrees(of: vault),
+            withIntermediateDirectories: true
+        )
+        try Data("# zadání".utf8).write(to: intent)
+
+        try await eviction(budget: .max).run(openPullRequests: [], busy: { Set() })
+
+        #expect(!exists(vault))
+        #expect(!FileManager.default.fileExists(atPath: intent.path(percentEncoded: false)))
+    }
+
     @Test("Úklid repa nesáhne na jiné, jehož jméno začíná stejně")
     func evictingARepositoryLeavesSimilarlyNamedOnesAlone() async throws {
         // `keboola-kbc-` je prefix i pro `keboola-kbc-stacks-…`; ploché názvy stromů by
