@@ -52,9 +52,9 @@ struct IdleWindowSpinProbe {
             let window = show(store: store, ring: scenario.ring, detail: scenario.detail)
             defer { window.orderOut(nil) }
             // Usadit: po prvním zobrazení se hierarchie skládá a to do měření nepatří.
-            _ = spin(seconds: 1.5)
+            _ = spinMainRunLoop(seconds: 1.5)
 
-            let cpu = spin(seconds: 3)
+            let cpu = spinMainRunLoop(seconds: 3)
             print(String(format: "MĚŘENÍ %@: %.0f %% CPU hlavního vlákna v nečinném okně",
                          scenario.name, cpu / 3 * 100))
         }
@@ -86,7 +86,7 @@ struct IdleWindowSpinProbe {
         window.level = .floating
         window.orderFrontRegardless()
         defer { window.orderOut(nil) }
-        _ = spin(seconds: 1.0)
+        _ = spinMainRunLoop(seconds: 1.0)
 
         let ring = try #require(Self.ring(in: controller.view))
         let url = directory.appending(path: "prsten.png")
@@ -99,7 +99,7 @@ struct IdleWindowSpinProbe {
         for step in 1...3 {
             let turn = ring.currentTurn.map { String(format: "%.3f rad", $0) } ?? "bez prezentace"
             print("SONDA otočení \(step): \(turn)")
-            _ = spin(seconds: 0.2)
+            _ = spinMainRunLoop(seconds: 0.2)
         }
     }
 
@@ -134,17 +134,6 @@ struct IdleWindowSpinProbe {
             if let ring = ring(in: child) { return ring }
         }
         return nil
-    }
-
-    /// Nechá smyčku běžet a vrátí, kolik CPU si při tom vzalo hlavní vlákno.
-    private func spin(seconds: TimeInterval) -> TimeInterval {
-        let start = cpuSeconds()
-        RunLoop.current.run(until: Date().addingTimeInterval(seconds))
-        return cpuSeconds() - start
-    }
-
-    private func cpuSeconds() -> TimeInterval {
-        TimeInterval(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)) / 1_000_000_000
     }
 
     /// Okno s detailem PR **na obrazovce**, přes `NSHostingController` — tedy tou cestou, kterou

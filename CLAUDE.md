@@ -603,6 +603,13 @@ Zvlášť stojí za přečtení, než sáhneš na:
       while read f; do grep -v '^ *//' "$f" | grep -q 'Policy.hoverChange' || echo "$f"; done
   ```
 
+  **Do téhle třídy patří `onContinuousHover`, ne `onGeometryChange`** (#361, změřeno sondou
+  `LayoutCallbackProbe`): akce `onGeometryChange` se při nezměněné hodnotě **nespustí** (80 zašpinění
+  grafu → 80× výpočet hodnoty, **0× zápis**), takže těch šest míst v aplikaci grep hlídat nemusí.
+  U **`.onHover` to ověřené není** — aplikace na pozadí hover callbacky nedostává, takže na to sonda
+  nedosáhne; jediné bezpodmínečné místo (`PullRequestTabBar`, píše i tutéž hodnotu) a co k tomu
+  zbývá doměřit je v [`docs/testovani.md`](docs/testovani.md).
+
   **Harness na to nestačí a je to změřené, ne odhad**: syntetická `.mouseMoved` do okna
   (`sendEvent` i `NSApp.postEvent`) `onContinuousHover` **nevyvolá vůbec** — nula zásahů —, takže
   smyčku v testu zavřít nejde bez sebrání skutečné myši. Testuje se proto ta čistá funkce a hodnota,

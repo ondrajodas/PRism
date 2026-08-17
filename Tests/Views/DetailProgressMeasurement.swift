@@ -179,7 +179,7 @@ struct DetailProgressMeasurement {
         gap: TimeInterval = 0.25,
         work: (Int) -> Void
     ) -> TimeInterval {
-        let start = cpuSeconds()
+        let start = mainThreadCPUSeconds()
         for step in 0..<spins {
             work(step)
             // Kolo smyčky doručí SwiftUI přeplánování, `layoutSubtreeIfNeeded` vynutí rozvržení —
@@ -188,17 +188,13 @@ struct DetailProgressMeasurement {
             hosting.layoutSubtreeIfNeeded()
             hosting.displayIfNeeded()
         }
-        return cpuSeconds() - start
+        return mainThreadCPUSeconds() - start
     }
 
     private func measure(_ rounds: Int, _ work: () -> Void) -> TimeInterval {
-        let start = cpuSeconds()
+        let start = mainThreadCPUSeconds()
         for _ in 0..<rounds { work() }
-        return (cpuSeconds() - start) / Double(rounds)
-    }
-
-    private func cpuSeconds() -> TimeInterval {
-        TimeInterval(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)) / 1_000_000_000
+        return (mainThreadCPUSeconds() - start) / Double(rounds)
     }
 
     /// Nechá hierarchii usadit — po přepnutí tabu se skládá obsah a to do měřeného úseku nepatří.
