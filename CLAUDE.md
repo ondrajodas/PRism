@@ -482,7 +482,7 @@ viz tvrdá podmínka č. 1.
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), čí je PR podle autora (#330), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |
@@ -608,6 +608,13 @@ Zvlášť stojí za přečtení, než sáhneš na:
   grep -rn 'onContinuousHover' App | grep -vE ':[0-9]+: *//' | cut -d: -f1 | sort -u |
       while read f; do grep -v '^ *//' "$f" | grep -q 'Policy.hoverChange' || echo "$f"; done
   ```
+
+  **Do téhle třídy patří `onContinuousHover`, ne `onGeometryChange`** (#361, změřeno sondou
+  `LayoutCallbackProbe`): akce `onGeometryChange` se při nezměněné hodnotě **nespustí** (80 zašpinění
+  grafu → 80× výpočet hodnoty, **0× zápis**), takže těch šest míst v aplikaci grep hlídat nemusí.
+  U **`.onHover` to ověřené není** — aplikace na pozadí hover callbacky nedostává, takže na to sonda
+  nedosáhne; jediné bezpodmínečné místo (`PullRequestTabBar`, píše i tutéž hodnotu) a co k tomu
+  zbývá doměřit je v [`docs/testovani.md`](docs/testovani.md).
 
   **Harness na to nestačí a je to změřené, ne odhad**: syntetická `.mouseMoved` do okna
   (`sendEvent` i `NSApp.postEvent`) `onContinuousHover` **nevyvolá vůbec** — nula zásahů —, takže

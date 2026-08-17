@@ -8,6 +8,8 @@ import Foundation
 struct Dashboard: Hashable, Sendable {
     let queue: QueueCard
     let blocking: BlockingCard
+    /// Moje vlastní PR (#331) — druhá fronta, ne podmnožina té první.
+    let mine: MineCard
     let drafts: DraftsCard
     /// Podíl reviewerů na nálezech za posledních pár dní.
     let reviewers: [ReviewerShareOfFindings]
@@ -27,6 +29,23 @@ struct Dashboard: Hashable, Sendable {
     struct BlockingCard: Hashable, Sendable {
         let pullRequests: Int
         let detail: String?
+    }
+
+    /// Kolik mám otevřených vlastních PR a na kolika z nich leží můj tah (#331).
+    ///
+    /// **Dvě čísla, ne jedno**, a je to celý důvod, proč karta vznikla: velké číslo je „kolik
+    /// toho mám venku“, kdežto věta pod ním „kolik z toho čeká na mě“. Šest otevřených PR, ze
+    /// kterých pět čeká na CI, není šest věcí k práci.
+    ///
+    /// `isTracked == false` znamená, že mezi zdroji chybí `author:@me` — pak je nula údaj
+    /// o **nastavení**, ne o mojí práci, a věta pod číslem to musí říct. Bez toho příznaku by
+    /// nenastavená aplikace vypadala jako uklizený stůl.
+    struct MineCard: Hashable, Sendable {
+        let pullRequests: Int
+        /// Kolik z nich má nezpracovaný nález nebo nevyřešené cizí vlákno. Spodní hranice —
+        /// viz `Policy.ownPullRequestsAwaitingMove`.
+        let awaitingMove: Int
+        let isTracked: Bool
     }
 
     /// Kolik PR má rozdělané review a jak dlouho leží to nejstarší.
@@ -55,14 +74,26 @@ extension Policy {
     ///
     /// Bere **plný** seznam, ne zúžený filtrem (#117): dashboard je tvrzení o tom, co ve frontě
     /// **je**, ne o tom, co je zrovna vidět — tatáž úvaha jako u souhrnu ve stavovém řádku.
+    ///
+    /// **Karta `Moje PR` se počítá tady, ne vedle** (#331). Dashboard je jeden snímek, který si
+    /// view bere **jednou za překreslení**, takže druhý getter na jednu jeho kartu by znamenal
+    /// druhý průchod seznamem a druhou pravdu o jedné obrazovce.
+    ///
+    /// **Karta `Čeká na mě` počítá pořád celý seznam**, tedy i moje PR — odříznout je patří k #332,
+    /// které mění i frontu, automat a notifikace. Do té doby se moje PR na dashboardu objeví
+    /// v obou blocích.
     static func dashboard(
         pullRequests: [PullRequestSummary],
         records: [PRIdentifier: ReviewRecord],
         drafts: [PRIdentifier: ReviewDraft],
         categories: Set<String> = defaultBlockingCategories,
-        since: Date? = nil
+        since: Date? = nil,
+        mine: Set<String> = [],
+        conversation: (PRIdentifier) -> Conversation? = { _ in nil },
+        tracksOwnSource: Bool = false
     ) -> Dashboard {
         let blocking = pullRequests.filter { blockingCount(in: records[$0.id], categories: categories) > 0 }
+        let own = self.pullRequests(pullRequests, ownedBy: .mine, mine: mine)
 
         return Dashboard(
             queue: Dashboard.QueueCard(
@@ -72,6 +103,15 @@ extension Policy {
             blocking: Dashboard.BlockingCard(
                 pullRequests: blocking.count,
                 detail: blockingDetail(of: blocking, records: records, categories: categories)
+            ),
+            mine: Dashboard.MineCard(
+                pullRequests: own.count,
+                awaitingMove: ownPullRequestsAwaitingMove(
+                    own,
+                    records: records,
+                    conversation: conversation
+                ),
+                isTracked: tracksOwnSource
             ),
             drafts: draftsCard(of: pullRequests, drafts: drafts),
             reviewers: reviewerShares(in: records, since: since)

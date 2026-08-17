@@ -645,7 +645,8 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
     rozřadí podle autora a dá vlastním PR jinou práci: místo verdiktu, který GitHub na vlastním PR
     odmítá, se z nálezů a konverzace skládá zadání pro agenta. Sedm issues (#330–#336), nakreslené
     v sekcích 21 a 22 návrhu; **pořadí je v popisu milníku**, protože se podle něj rozhoduje, co jde
-    souběžně. Hotové: rozřazení podle autora #330, panel se zadáním pro agenta #333.
+    souběžně. Hotové: rozřazení podle autora #330, sekce `Moje PR` v railu a druhá fronta na
+    dashboardu #331, panel se zadáním pro agenta #333.
 
 Vedle fází stojí milník **Průběžné**: koš na to, co do žádné z nich nepatří (ikona,
 podpis, stavový řádek). Nemá pořadí ani termín a verze se z něj neodvozuje — viz
@@ -2535,7 +2536,52 @@ nikdo nekreslí; jediné, co je vidět, je nový výchozí zdroj, a ten se proje
 cache**: v seznamu se pak vedle cizích PR objeví i vlastní (změřeno `gh search prs`: 13 cizích proti
 17 vlastním). Fronta, dashboard, automat a notifikace se od cizích PR odříznou v #332.
 
-**Na vlastním PR panel sbírá zadání pro agenta, ne verdikt (#333)** — druhý mergnutý kus M10.
+**Moje PR jsou druhá fronta (#331)** — v railu přibyla sekce `Moje PR` mezi `Frontou`
+a `Rozdělanými` (`RailSection.mine`, šipka nad vaničkou) a na dashboardu **dva bloky pod sebou**
+(`Čeká na moje review` a `Moje PR`) plus **pátá karta**. Seznam je **tentýž
+`PullRequestListView`** nad druhou množinou (`PullRequestListScope`), takže filtr, řazení i otevření
+záložky platí beze změny; rozřazuje `Policy.pullRequests(_:ownedBy:mine:)`, tedy **další zúžení nad
+zúženým seznamem**, ne nový zdroj pravdy — kdyby na něm viselo cokoli z úklidu, přihlášení jiným
+účtem by smazalo cache.
+
+**Karta `Ve frontě` se přejmenovala na `Čeká na mě`** a přibyla `Moje PR`: velké číslo je počet
+otevřených, věta pod ním kolik z nich **čeká na tah**. Akcentový proužek se přestěhoval z karty
+`Rozdělaná review` sem, jak to má návrh — dva proužky vedle sebe by přestaly znamenat, která karta je
+ta o mně.
+
+**Odznak počítá práci, ne PR** (`Policy.ownPullRequestsAwaitingMove`): PR s nezpracovaným nálezem
+nebo s nevyřešeným cizím vláknem. Šest PR, ze kterých pět čeká na CI, není šest věcí k práci. Vlákna
+se počítají **jen z načtených konverzací** (tahají se při výběru řádku, ne při pollingu), takže je to
+**spodní hranice** — a neúplnost je schválně v tomhle směru: odznak, který napočítá víc práce, než jí
+je, se přestane čítat. Doplní to #335.
+
+**Prázdná sekce má tři různé věty** (`Policy.ownListEmptyReason`) a pořadí důvodů je celý obsah
+issue: polling → chybějící zdroj → nenačtený login → filtr → prázdno. Bez zdroje `author:@me is:open`
+se aplikace na vlastní PR vůbec neptá, takže „nic tu není“ by vypadalo jako uklizený stůl — sekce
+místo toho nabídne nastavení. Nenačtený login je třetí stav: podle autora je pak všechno cizí, což
+není „nic nemám“, ale „nevím, kdo jsem“ (dohodnuto už v #330).
+
+**Rozhodnuto jinak, než bylo v zadání**, čtyřikrát a v každém případě s důvodem. Řádek vlastního PR
+má `Prompt →` **vedle** odznaku stavu, ne místo něj: pilulku `6 k předání` z návrhu se dá napsat
+teprve tehdy, až předání existuje (#333) a nese razítko (#334), kdežto odznak říká to, co se ví — že
+reviewer běžel a s jakým výsledkem —, a to je zrovna materiál, který prompt ponese. Tlačítko bylo
+v #331 **zakázané a ztlumené**, protože plné akcentové tlačítko, po kterém se nic nestane, je lež
+o tom, co okno umí (napojilo ho #333, viz níž); ztlumení kreslí řádek, protože `MiniButtonStyle` se
+na `isEnabled` neptá (v celé aplikaci, ne jen tady — vlastní otázka na návrh). Blok `Moje PR` na
+dashboardu **nemá popisek** `jen s nálezy`, který návrh kreslí vpravo v hlavičce: nic se nefiltruje,
+takže by ten text tvrdil něco, co se nedělá. A **věta pod pozdravem se nezměnila**, ačkoli návrh má
+„Na dvou vlastních leží nálezy k předání.“ — dokud `Čeká na mě` počítá i vlastní PR, mluvila by ta
+druhá věta o týchž pull requestech dvakrát.
+
+**Známé omezení, které jde do #332:** `railQueueCount`, `Policy.dashboard`, automat i notifikace
+počítají pořád i vlastní PR, takže vlastní PR je na dashboardu vidět **v obou blocích** a v čísle
+karty `Čeká na mě`. Je na to test, aby se ta oprava nestala mimochodem.
+
+Testů je **2881** a jsou zelené (+38). K tomu sonda `OwnPullRequestsRenderProbe` (dashboard a čtyři
+podoby sekce), protože ke dvěma z těch stavů se klikáním nedostaneš a dashboard se ve skutečném okně
+s třiceti PR ve frontě celý nevyfotí.
+
+**Na vlastním PR panel sbírá zadání pro agenta, ne verdikt (#333)** — třetí mergnutý kus M10.
 Pravý panel měl na vlastním PR všechny tři věci k ničemu (tělo, verdikt, `Odeslat`), protože
 `APPROVE` i `REQUEST_CHANGES` tam GitHub vrací jako 422 (změřeno u #62). Segment `Moje review` proto
 na vlastním PR **zmizel celý** (ne zašedl) a na jeho místě je `Zadání`: sedm zaškrtávacích voleb
@@ -2569,6 +2615,41 @@ Levý seznam `Co je potřeba opravit` ze sekce 22 tenhle kus taky nekreslí: zad
 panel, čistou funkci a sheet, a počty i celý obsah jsou v nich.
 
 Testů je **2895** a jsou zelené (+52), z toho jeden je sonda, která se pouští ručně.
+
+### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
+
+Táž signatura jako #358 (`flushObservers → beginTransaction → flushTransactions`, nula na animaci
+i na timeru), ale pohonem už není náš zápis: v hover podstromu obou vzorků **není ani jeden rámec
+aplikace**. Issue proto žádalo měření, ne opravu — a **oprava z toho nevyšla**, protože se stav
+nepodařilo vyrobit. Zapsané je, co se vyloučilo a čím:
+
+- **Akce `onGeometryChange` do třídy chyb z #358 nepatří.** Změřeno novou sondou
+  (`Tests/Views/LayoutCallbackProbe.swift`): 80 zašpinění grafu → **80× výpočet hodnoty, 0× zápis**;
+  kontrolní scénář s měnící se geometrií dá 80× zápis, takže měřidlo počítá. Sedí to na vzorek, ve
+  kterém je vidět jen ten výpočet (`DiffPairBlockRowView.swift:50`), ne akce.
+- **Scéna sama kolo nezavírá.** `Tests/Views/IdleDiffSpinProbe.swift` hostuje plné okno na obrazovce
+  (1512×874, `ContentView`, tři záložky, nálezy, konverzace, split diff, odscrollováno o 8000 pt):
+  **3,26 % CPU v prvních pěti sekundách, pak 0,00 % po 35 s**. To první je usazení po posunu — proto
+  se měří po úsecích; jedno číslo za třicet sekund by tvrdilo, že okno hoří.
+- **Hover callbacky sonda nedosáhne**, a to je změřené, ne odhad: aplikace na pozadí je nedostává
+  (80 zašpinění grafu → `onHover` 0×, `onContinuousHover` 0×, kurzor přitom v okně ležel).
+- **Pod kurzorem přitom žádný náš zápis z hoveru nebyl.** 28 bodů od horní hrany okna je
+  `ContentView.header` s `ReviewTabsView` a tlačítky, a tam `onHover` **není** — jen `.help()`.
+  `PullRequestTabBar.swift:203` (jediné místo, které do hoveru píše bezpodmínečně, včetně **téže**
+  hodnoty) sedí **pod** hlavičkou, uvnitř detailu. Je to vada k opravě, ale #361 nevysvětluje.
+  Nejsilnější zbylá nitka je re-arm `NSHostingView.requestUpdate(after:)`, ke kterému se dostane
+  `signalPrefetch` a — ze zásobníku AppKitové výjimky při stavbě sondy — taky
+  `ViewGraph.invalidateTransform() → graphDidChange()`; transformaci si přitom v aplikaci vyžaduje
+  jedině čtení **pojmenovaného** souřadnicového prostoru v seznamu řádků. Ověřit to jde jen na živém
+  okně, takže se to neopravovalo: oprava neověřené domněnky se od opravy pozná jedině tím, že se změří.
+
+Vedle toho vyšly z sondy tři pasti, kvůli kterým měřila prázdno a tvrdila, že je čisto (velikost okna
+až za `contentViewController`em, předepsaný rozměr scény, PR do `ContentView` jen frontou) a dvě věci
+k mechanice sond (pumpa musí být `Timer`, ne `Task.sleep`; sonda píše do `UserDefaults` skutečné
+aplikace). Všechno v [`testovani.md`](testovani.md), sekce *Co je u #361 změřené a co z toho zbývá*.
+
+Testů je **2849** a jsou zelené. **Vidět není nic** — nezměnilo se ani jedno view, přidaly se dvě
+ruční sondy (obě za `PRISM_MEASURE`, takže se v běžném běhu přeskočí) a zápis měření.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

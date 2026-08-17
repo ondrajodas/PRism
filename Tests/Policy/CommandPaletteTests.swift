@@ -343,6 +343,23 @@ struct CommandPaletteTests {
         #expect(items.contains { $0.target == .action(.setDiffLayout(.split)) })
     }
 
+    /// Sekce se staví z `RailSection.allCases`, takže nová se do palety dostane sama (#331) —
+    /// dopsat se musí jedině **tvar jejího jména**. Bez toho by v ní stálo „Otevřít Moje PR“,
+    /// tedy nadpis nalepený do věty; a je to ta chyba, která by se udělala nejsnáz.
+    @Test("Paleta umí skočit na Moje PR, a ve čtvrtém pádě")
+    func offersTheOwnPullRequestsSection() {
+        let items = Policy.paletteActions(open: nil, section: .overview)
+
+        #expect(items.contains { $0.target == .action(.openSection(.mine)) })
+        #expect(items.map(\.title).contains("Otevřít moje pull requesty"))
+        // Každá sekce kromě té viditelné má řádek — počet drží i test o vzhledu v `SidebarRailTests`.
+        let sections = items.compactMap { item -> RailSection? in
+            guard case .action(.openSection(let section)) = item.target else { return nil }
+            return section
+        }
+        #expect(Set(sections) == Set(RailSection.allCases).subtracting([.overview]))
+    }
+
     @Test("Viditelná sekce railu se v domácí záložce nenabízí, nad PR ano")
     func visibleSectionIsOfferedOnlyWhenItWouldChangeSomething() {
         let home = Policy.paletteActions(open: nil, section: .queue).map(\.title)

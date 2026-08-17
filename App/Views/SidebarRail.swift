@@ -21,6 +21,10 @@ struct SidebarRail: View {
     /// Kolik PR čeká ve frontě. `nil` = ještě se nenačetlo; nula se **nekreslí**, protože
     /// odznak s nulou tvrdí, že je co dělat.
     var queueCount: Int?
+    /// Kolik vlastních PR **čeká na tah** (#331) — ne kolik jich je otevřených. Šest PR, ze
+    /// kterých pět čeká na CI, není šest věcí k práci; čísla se v tom rail a karta na dashboardu
+    /// rozcházejí schválně.
+    var mineCount: Int?
     /// Kolik PR má rozdělané review.
     var draftCount: Int?
     /// Vybraný vzhled okna (#278). Čte se z konfigurace, takže rail **nedrží vlastní kopii** —
@@ -125,6 +129,7 @@ struct SidebarRail: View {
         // co je za ní vidět.
         case .overview: nil
         case .queue: queueCount
+        case .mine: mineCount
         case .drafts: draftCount
         }
     }
