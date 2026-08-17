@@ -15,6 +15,9 @@ import Testing
 ///   bude číst jako porucha.
 @Suite("Commity z GitHub API")
 struct GhCommitTests {
+    /// Pro **inline JSON** — tvary, které se ze skutečných dat veřejných rep nesehnaly (`author: null`,
+    /// chybějící pole). Fixtures se čtou `CommitFixture`, aby se ta odpověď dekódovala na jednom místě
+    /// (#339); tady je vstupem řetězec napsaný v testu, ne soubor.
     private func decode(_ json: String) throws -> [PullRequestCommit] {
         try GhOutput.decoder.decode([GhCommit].self, from: Data(json.utf8))
             .compactMap(\.pullRequestCommit)
@@ -25,7 +28,7 @@ struct GhCommitTests {
     /// PR do fixture nepatří.
     @Test("Skutečná odpověď se přeloží na řádky seznamu")
     func decodesTheRealResponse() throws {
-        let commits = try decode(Fixture.text("gh/pr-commits.json"))
+        let commits = try CommitFixture.commits("gh/pr-commits.json")
 
         #expect(commits.count == 7)
 
@@ -55,7 +58,7 @@ struct GhCommitTests {
     /// rozházelo postup, kvůli kterému se ten seznam čte.
     @Test("Pořadí se nemění")
     func keepsTheOrder() throws {
-        let commits = try decode(Fixture.text("gh/pr-commits.json"))
+        let commits = try CommitFixture.commits("gh/pr-commits.json")
         let dates = commits.compactMap(\.committedAt)
         #expect(dates.count == commits.count)
         #expect(commits.first?.subject.hasPrefix("Warn instead") == true)
@@ -111,6 +114,33 @@ struct GhCommitTests {
         let emptyName = try #require(commits.last)
         #expect(emptyName.authorName == "?")
         #expect(emptyName.authorLogin == "x")
+    }
+
+    /// **Zakončení řádků ve zprávě si vybírá cizí repo, ne my** (#295, #339). Fixture je skutečná
+    /// odpověď `gh api repos/git-for-windows/git/pulls/6293/commits?per_page=1&page=90` — jedna
+    /// stránka schválně, celá jich má 391 kB a do fixtures nepatří. Commit `415ab35` v ní má
+    /// **míchaná** zakončení: titulek `LF`, tělo `CRLF`, takže se na něm dá ověřit obojí naráz.
+    ///
+    /// Zpráva se drží **tak, jak přišla** — `CRLF` se při dekódování nenormalizuje. Hlavička z ní
+    /// kreslí odstavce a `Policy.commitMessageToggle` počítá řádky, takže pravda o zprávě má být
+    /// jedna; kdo řádky potřebuje, dělí `TextLines`.
+    ///
+    /// **Tahle fixture v `.gitattributes` schválně není** — na rozdíl od `gh/pr-diff-crlf.diff`
+    /// nemá jediný surový `CR` bajt (změřeno), protože `CR` v JSONu je escapovaný jako dvojice
+    /// `\` + `r`. `core.autocrlf=input` tedy nemá co normalizovat. Že zakončení přežilo, si přesto
+    /// hlídá tvrzení níž: bez něj by test zezelenal nad normalizovaným souborem.
+    @Test("Zpráva s CRLF si zakončení nechá a titulek z něj nenese CR")
+    func keepsCRLFInTheMessage() throws {
+        let commits = try CommitFixture.commits("gh/pr-commits-crlf.json")
+        let commit = try #require(commits.first)
+
+        #expect(commit.sha == "415ab352039a8e2b3dd8ccc2ca250c775d9dd895")
+        #expect(commit.message.contains("\r\n"), "fixture přišla o CRLF — viz komentář výš")
+        #expect(commit.subject == "Fix global repository field not being cleared (#4083)")
+        #expect(
+            !commit.subject.unicodeScalars.contains("\r"),
+            "titulek končí na zakončení řádku, takže se na něj CR nesmí přilepit"
+        )
     }
 
     /// `avatar_url` je `snake_case`, na rozdíl od `gh … --json`, které dává `camelCase`.

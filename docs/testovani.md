@@ -258,6 +258,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `-text`, jinak by ji `core.autocrlf=input` při commitu normalizoval a test by zezelenal nad
   vrácenou chybou — tatáž pojistka jako u `gh/job-log-head.txt`.
 
+  **`-text` se ale řídí surovými bajty, ne obsahem** (#339): u fixture v **JSONu**
+  (`gh/pr-commits-crlf.json`) je `CR` escapovaný jako dvojice `\` + `r`, takže surové `CR` v souboru
+  nejsou a normalizovat není co — ta proto v `.gitattributes` **není** a je u ní napsané proč.
+  Kontrola v testu zůstává v obou případech, protože platí bez ohledu na nastavení gitu.
+
   Nejcennější tvrzení té sady je **„tentýž diff se `CRLF` a s `LF` dá stejný model“**: je to
   zároveň odpověď na „nezměnilo se něco na `LF` vstupech?“, protože z rovnosti modelů plyne i to,
   že texty řádků — a s nimi klíče do `SyntaxRunCache` (#153, #224) a vstup do word-level
@@ -1789,6 +1794,38 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     že tělo je všechno pod první řádkou (titulek nad ním je ta první), že jednořádková zpráva tělo
     **nemá** — a tedy že se nekreslí ani přepínač —, a že počet řádků je **jen ve sbaleném**
     popisku, i s prázdnými řádky mezi odstavci a se skloňováním.
+
+    A od #339 **zakončení řádků**, pět případů, protože zprávy commitů chodí z `gh` z cizích
+    repozitářů. Jádro je počet řádků nad **skutečnou** odpovědí (`gh/pr-commits-crlf.json` —
+    `git-for-windows/git#6293`, commit `415ab35` s míchanými zakončeními: titulek `LF`, tělo `CRLF`):
+    popisek musí říct `3 řádky`, do #339 říkal `1 řádek`, protože `"\r\n"` je jeden `Character`.
+    Vedle toho **`CRLF` dá tentýž popisek jako `LF`** (odpověď na „nezměnilo se něco na `LF`
+    vstupech?“), počet **nezávisí na zakončení** (`LF` / `CRLF` / samotné `CR` / míchané v jedné
+    zprávě dají všechny `3 řádky`) a dvě tvrzení o `U+2028`: uvnitř **titulku** ho neusekne ani
+    nepřelije do těla, v **těle** se za řádek nepočítá. Ta dvě jsou to hlavní, co se dá pokazit
+    potichu — titulek a tělo jsou půlky jednoho rozdělení, takže rozpojený pojem „konec řádky“ by
+    tentýž text ukázal v hlavičce dvakrát. Dekódovací strana je v `GhCommitTests`: že zpráva `CRLF`
+    **nenormalizuje** a že se `CR` nepřilepí na konec titulku.
+
+    **Fixture dekóduje jedno místo** — `Tests/Support/CommitFixture.swift`. Čtou ji tři na sobě
+    nezávislá místa (dekódování, počet řádků, sonda) a tři kopie téhož `decode` by se rozešly zrovna
+    v tom, na čem #339 stojí: stačilo by, aby si jedna z nich zakončení „pro pořádek“ znormalizovala,
+    a sada by pak zeleně tvrdila něco o `CRLF`, které v datech není. `GhCommitTests.decode(_:)`
+    zůstává, ale už jen na **inline JSON** (tvary, co se z veřejných rep nesehnaly).
+
+    **Regrese ověřená vložením regrese, dvakrát zvlášť.** Vrácený `split(separator: "\n")` v počtu
+    položí **3 testy a 5 tvrzení** (parametrizovaný spadne na 3 případech ze 4 — `LF` projde, což je
+    přesně ten důvod, proč se to nechytilo dřív); `isNewline` zpátky v obou půlkách rozdělení položí
+    test o `U+2028` **třemi** tvrzeními naráz: titulek `feat: cache` místo `feat: cache\u{2028}secrets`,
+    `secrets` přelité do těla a počet `3 řádky` místo `1 řádek`.
+
+    **Fixture v `.gitattributes` schválně není** a je to odchylka od zadání #339, které s `-text`
+    počítalo: `CR` je v JSONu **escapovaný** (`\` + `r`), takže surových `CR` bajtů je v souboru nula
+    (změřeno; `git cat-file -s` na staženém blobu vrací tytéž 3 664 B jako soubor na disku, přitom
+    `core.autocrlf=input`). Řádek `-text` by byl kontrola, která nic nedělá, a ve výčtu by tvrdil, že
+    zakončení té fixture drží on. Že přežilo, si hlídají obě sady samy (`#expect(…contains("\r\n"))`),
+    a to platí bez ohledu na nastavení gitu. Zdůvodnění je i v `.gitattributes` jako komentář, aby to
+    příště nikdo „neopravil“.
   - **Načítání ve store** (`AppStoreCommitDiffTests`) — sedm pastí. Že se **stažený diff drží**
     (druhé otevření téhož commitu se neptá znovu, jinak by z jednoho kliknutí byl polling), že se
     po selhání **ptá znovu** (jinak by `Zkusit znovu` nic neudělalo), že doběhlé volání **nepřepíše
@@ -1883,7 +1920,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   v 647–1047 s aktivními `Commity`), takže se obrázky nedaly položit vedle sebe — a obě sondy měly
   u sebe text o tom, jak se pruh zalomí, což od #318 neplatí. Pruh není součást žádného z těch
   tabů; stojí nad všemi sedmi.
-- **Sonda tabu `Commity` (#316, rozšířeno #317)** — `CommitsTabRenderProbe`, gated `PRISM_MEASURE`.
+- **Sonda tabu `Commity` (#316, rozšířeno #317 a #339)** — `CommitsTabRenderProbe`, gated
+  `PRISM_MEASURE`.
   Nic netvrdí; vyrendruje **detail PR v tabu `Commity` ve všech podobách stavu** (nenačteno, seznam,
   porucha, zastaralý seznam, **PR s jedním commitem**, a od #317 **rozkliknutý commit** v pěti
   stavech — diff, **týž diff se sbalenou hlavičkou**, prázdný diff sloučení, nenačteno, porucha) ve
@@ -1902,6 +1940,17 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `Task`, na který by render čekal, a rozdělaný stav (`nenacteno`) by se tudy nedal vyrobit vůbec.
   Rozkliknutý commit je ten **s tělem zprávy**, protože na jeho hlavičce je co posuzovat — u
   prázdného diffu naopak **sloučení**, protože právě u něj má věta jiné znění.
+
+  **Šestý scénář rozkliknutého commitu přidalo #339: sbalená hlavička nad zprávou s `CRLF`**
+  (`diff-commitu-sbalena-hlavicka-crlf`). Je tam proto, že ke stavu se **normálním používáním nedá
+  dojít** — musel by v tabu ležet PR s `CRLF` ve zprávě commitu —, takže sonda je jediná cesta, jak
+  se na ten popisek podívat. Zpráva se bere **z fixture** `gh/pr-commits-crlf.json`, ne z literálu
+  v sondě: ručně napsaná by nesla `LF` toho, kdo ji napsal, a sonda by kreslila stav, který `gh`
+  nevrací. Ostatní commity zůstávají, aby se snímek dal položit vedle
+  `diff-commitu-sbalena-hlavicka`. Změřeno: v popisku stojí `Tělo zprávy · 3 řádky`, do #339 tam bylo
+  `1 řádek`. **Rozbalená podoba se nerendruje** — počet je jen ve sbaleném popisku, takže by na ní
+  nebylo co posoudit; že se `CRLF` tělo sází jako tři řádky bez zbylých glyfů, je ověřené jednorázově
+  při #339 (přepnutý příznak, snímek, vráceno).
 
   Pořadí ve scéně je podmínka, tatáž jako u `ChecksTabRenderProbe`: `loadDetail` si commity
   dotahuje sám, takže se **nastavují až po něm**, jinak by je přepsal. Tmavý režim se nastavuje

@@ -174,7 +174,10 @@ struct CommitDiffTabStateTests {
 
     /// Většina commitů má jednořádkovou zprávu. Prázdné tělo je signál pro hlavičku, že nemá
     /// kreslit **ani přepínač** — sbalovat prázdno nemá co říct.
-    @Test("Jednořádková zpráva nemá tělo", arguments: ["feat: něco", "feat: něco\n", "feat: něco\n\n  \n"])
+    @Test(
+        "Jednořádková zpráva nemá tělo",
+        arguments: ["feat: něco", "feat: něco\n", "feat: něco\n\n  \n", "feat: něco\r\n", "feat: něco\r"]
+    )
     func hasNoBodyForASingleLineMessage(message: String) {
         #expect(Policy.commitMessageBody(of: commit("aaa", message: message)).isEmpty)
     }
@@ -202,5 +205,77 @@ struct CommitDiffTabStateTests {
     func inflectsTheLineCount(count: Int, expected: String) {
         let body = (1...count).map { "řádka \($0)" }.joined(separator: "\n")
         #expect(Policy.commitMessageToggle(body, expanded: false) == "Tělo zprávy · \(expected)")
+    }
+
+    // MARK: - Zakončení řádků ve zprávě (#339)
+
+    /// **Tohle je ta chyba z #339.** Do opravy se řádky počítaly `split(separator: "\n")`, a `"\r\n"`
+    /// je ve Swiftu **jeden `Character`** — takže se na `CRLF` nerozdělilo vůbec a v hlavičce stálo
+    /// `Tělo zprávy · 1 řádek` bez ohledu na délku zprávy. Popisek tvrdil přesný opak toho, kvůli
+    /// čemu tam je: má odpovědět, jestli se vyplatí text rozbalit.
+    ///
+    /// Fixture je **skutečná odpověď** `gh api …/pulls/6293/commits` na veřejném
+    /// `git-for-windows/git`, kde commit `415ab35` má míchaná zakončení (titulek `LF`, tělo `CRLF`);
+    /// ručně psaný literál by nesl `LF` toho, kdo ho napsal, a test by zezelenal nad rozbitým
+    /// počítáním. Proč nestojí v `.gitattributes`, je u `GhCommitTests.keepsCRLFInTheMessage()`.
+    @Test("Tělo s CRLF má skutečný počet řádků, ne jeden")
+    func countsLinesInACRLFBody() throws {
+        let body = Policy.commitMessageBody(of: try CommitFixture.crlfCommit())
+
+        #expect(body.contains("\r\n"), "fixture přišla o CRLF — viz GhCommitTests")
+        #expect(Policy.commitMessageToggle(body, expanded: false) == "Tělo zprávy · 3 řádky")
+    }
+
+    /// **Odpověď na „nezměnilo se něco na `LF` vstupech?“** Tatáž zpráva s `LF` musí dát tentýž
+    /// popisek — jinak by oprava `CRLF` byla směna, ne oprava.
+    @Test("Tělo s CRLF dá stejný popisek jako totéž tělo s LF")
+    func countsCRLFSameAsLF() throws {
+        let commit = try CommitFixture.crlfCommit()
+        let body = Policy.commitMessageBody(of: commit)
+        let lf = body.replacingOccurrences(of: "\r\n", with: "\n")
+
+        #expect(lf != body, "předpoklad testu: tělo z fixture má CRLF")
+        #expect(
+            Policy.commitMessageToggle(body, expanded: false)
+                == Policy.commitMessageToggle(lf, expanded: false)
+        )
+    }
+
+    /// Zakončení si vybírá cizí repo, ne my — `LF`, `CRLF`, samotné `CR` i míchaná zakončení
+    /// v jedné zprávě musí dát **stejný** počet.
+    @Test(
+        "Počet řádků nezávisí na tom, jaké zakončení cizí repo používá",
+        arguments: [
+            "první\ndruhá\ntřetí",
+            "první\r\ndruhá\r\ntřetí",
+            "první\rdruhá\rtřetí",
+            "první\r\ndruhá\ntřetí",
+        ]
+    )
+    func countsLinesRegardlessOfTheTerminator(body: String) {
+        #expect(Policy.commitMessageToggle(body, expanded: false) == "Tělo zprávy · 3 řádky")
+    }
+
+    /// Titulek a tělo jsou **dvě půlky jednoho rozdělení**, takže musí mít tentýž pojem „konec
+    /// řádky“ (#339). `U+2028` je pro `git` **obsah**, ne konec řádku — kdyby se na něm dělilo
+    /// (`isNewline`), usekl by titulek a jeho zbytek by se v hlavičce objevil ještě jako první řádka
+    /// těla, tedy tentýž text dvakrát. `lineLimit` v obou pohledech (1 v seznamu, 2 v hlavičce)
+    /// znamená, že delší titulek sazbu nerozhodí.
+    @Test("Unicode oddělovač titulek neusekne ani ho nepřelije do těla")
+    func keepsUnicodeSeparatorsInsideTheSubject() {
+        let separated = commit("aaa", message: "feat: cache\u{2028}secrets\n\nKaždý požadavek sáhne do Vaultu.")
+
+        #expect(separated.subject == "feat: cache\u{2028}secrets")
+        let body = Policy.commitMessageBody(of: separated)
+        #expect(body == "Každý požadavek sáhne do Vaultu.")
+        #expect(Policy.commitMessageToggle(body, expanded: false) == "Tělo zprávy · 1 řádek")
+    }
+
+    /// Druhá strana téhož rozhodnutí: `U+2028` v **těle** se nesmí spočítat jako řádek, protože
+    /// řádek v hlavičce zabírá místo teprve tehdy, když ho `git` za řádek považuje.
+    @Test("Unicode oddělovač v těle se za řádek nepočítá")
+    func doesNotCountUnicodeSeparatorsAsLines() {
+        #expect(Policy.commitMessageToggle("pořád\u{2028}jedna\u{2029}řádka", expanded: false)
+            == "Tělo zprávy · 1 řádek")
     }
 }
