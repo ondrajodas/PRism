@@ -215,11 +215,23 @@ struct CheckDetailView: View {
     nonisolated static let logFontSize: CGFloat = 10.5
     nonisolated static let logLineSpacing: CGFloat = 2
 
-    /// Strop na výšku okýnka: **441 bodů, tedy přesně 30 řádků** (`30 × 14 + 2 × 4 + 13`).
+    /// Strop na výšku okýnka: **445 bodů, tedy přesně 30 řádků** (`30 × 14 + 2 × 4 + 17`).
     ///
     /// **Zvednuto z 320 bodů (21 řádků) u #303**, na výslovné přání po proklikání — a kolik přesně,
     /// rozhodlo měření (`CheckLogRoomProbe`), ne odhad. Číslo padne na **celý řádek**, ne na půlku:
-    /// hodnoty jsou `14N + 21`, takže se okýnko nezavírá uprostřed písmen.
+    /// hodnoty jsou `14N + 25`, takže se okýnko nezavírá uprostřed písmen.
+    ///
+    /// **Ze 441 na 445 u #347**, a je to oprava rezervy, ne nové rozhodnutí o výšce: rezerva na
+    /// vodorovný scroller byla odměřená na `.small` scrolleru (13 bodů) místo na tom `.regular`, který
+    /// se kreslí (17), takže na text zbývalo `(441 − 8 − 17) / 14` = **29,71 řádku** — strop sliboval
+    /// 30 řádků a ukázal 29. Rozhodnutí „30 řádků“ z #303 zůstává v platnosti, mění se jen číslo, na
+    /// kterém ho dostaneme. Ta rezerva a tenhle strop jsou **pár** (viz
+    /// `LogTailTextView.horizontalScrollerHeight`) — jeden se bez druhého posunout nedá.
+    ///
+    /// Cena je **změřená znovu**, ne odhadnutá (`CheckLogRoomProbe`, řádek seznamu 28 bodů): každé
+    /// „zbylo“ v tabulce níž se zmenší o 4 body. Na okně, na kterém se aplikace používá, je to
+    /// 172 → 168 bodů, tedy **pořád 6 řádků seznamu** — rozhodující řádek tabulky tím nehne. Zaplatí
+    /// to okno 810, kde ze 30 bodů zbyde 26, tedy z jednoho řádku žádný.
     ///
     /// **Co se měřilo: kolik zbude na seznam checků.** Původní 320 má zapsaný důvod — 300 řádků
     /// nasázených naplno odtlačilo zbytek seznamu mimo obrazovku, tedy zrovna to, kvůli čemu se
@@ -242,7 +254,7 @@ struct CheckDetailView: View {
     /// nezbude nic — z okýnka by byl celý tab. A **zamítnuto 357 bodů (24 řádků)**, tedy největší
     /// hodnota, u které se okýnko celé vejde i do výchozího okna: +3 řádky nejsou změna, o kterou
     /// se prosilo.
-    nonisolated static let logMaxHeight: CGFloat = 441
+    nonisolated static let logMaxHeight: CGFloat = 445
 
     /// Konec logu (`.logtail`): mono, bez zalamování, s vodorovným scrollem.
     ///

@@ -2228,18 +2228,64 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 - **Výška okýnka konce logu (#292, strop zvednutý u #303)** — `LogTailHeightTests`, výčtem. Počítá se
   z metriky **toho** fontu, kterým se kreslí (#236), takže se dá tvrdit přesná hodnota proti
   `NSLayoutManager`u. Co se dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým by zbylo
-  441 bodů prázdna) a **nezastropovat dlouhý** (šest tisíc řádků naplno odtlačí seznam checků mimo
+  445 bodů prázdna) a **nezastropovat dlouhý** (šest tisíc řádků naplno odtlačí seznam checků mimo
   obrazovku, tedy zrovna to, kvůli čemu se detail stěhoval z `Přehledu`). Regrese ověřená vložením
   regrese: vyndaný `min(limit, …)` položí sedm tvrzení.
 
   **Strop se v sadě bere z aplikace, ne opisuje** (#303) — jinak by se s ním test rozešel potichu.
-  Tvrdí se u něj to jediné, co tvrdit jde: že padne na **celý počet řádků** (`14N + 21`) a že jich je
-  30. Půlka řádku na spodní hraně by byla zrovna na tom řádku, kvůli kterému se log otevírá — okýnko
-  se otevírá na konci.
+  Tvrdí se u něj to jediné, co tvrdit jde: že padne na **celý počet řádků** (`14N + 25`) a že jich je
+  30. Strop, který slibuje 30 řádků a ukáže 29, je horší než o 4 body vyšší okýnko.
 
-  Je u toho **kontrola měřidla**: rezerva na vodorovný scroller je v kódu opsané číslo, protože
-  `NSScroller.scrollerWidth` je vázaná na hlavní vlákno — test ji porovnává se systémem, aby se
-  okýnko nemohlo potichu rozejít se scrollerem.
+  **Tvrzení o rezervě na scroller je odsud pryč** (#347) — je to sada níž. Tady zůstává jen aritmetika
+  **nad** tou konstantou, a je to hranice, která má důvod: aritmetika neumí poznat, že je konstanta
+  sama špatná. Doloženo vloženou regresí — s rezervou 13 a stropem 441 projde celá tahle sada zeleně.
+
+- **Rezerva na vodorovný scroller u konce logu (#347)** — `LogTailScrollerReserveTests`, `@MainActor`.
+  **Nedopočítává, měří na kresbě**, a to je celý důvod, proč je to sada zvlášť.
+
+  Co se stalo: do #347 držel rezervu jeden test, který ji porovnával s
+  `NSScroller.scrollerWidth(for: .small, scrollerStyle: .legacy)`. Byl zelený — a hlídal přitom
+  **jinou velikost scrolleru, než jakou okýnko kreslí**. `LogTailTextView.makeScrollView()` nechává
+  `NSScrollView`u výchozí `.regular`, a ten bere **17 bodů**, ne 13. Test tedy zopakoval tu samou
+  úvahu jako kód a byl zelený nad rozbitou hodnotou; je to čítankový příklad toho, proč se u #236
+  měří na tom, na čem se kreslí. **Vacuous test, který vypadá jako pojistka** — tatáž třída omylu jako
+  `-text` v `.gitattributes`, které se ověří až na blobu (#353).
+
+  Proto se tady nic neodvozuje: postaví se `makeScrollView()`, dostane dokument s řádkem o 2 258
+  znacích (bez něj se scroller kvůli `autohidesScrollers` neobjeví a nebylo by co měřit)
+  a **odečte se, kolik z výšky ubylo**. Pět tvrzení:
+
+  | Co | Změřeno |
+  |---|---|
+  | Zábor **legacy** scrolleru je to, co se rezervuje | okýnko 445 → `clip.h` 428, tedy **17** |
+  | **Overlay** z výšky nebere nic, a proto se rezervuje legacy | okýnko 445 → `clip.h` 445, tedy **0** |
+  | Rezerva odpovídá API pro tu velikost, která se **kreslí** (vyčtenou ze scrolleru, ne napsanou) | `.regular` → 17 |
+  | Nezastropované okýnko unese celý svůj dokument, a nemusí kvůli tomu scrollovat | 5 řádků: 95 bodů okýnka, 78 na text, dokument 78, `origin.y` 0 |
+  | Zastropované okýnko nechá na text celý počet řádků | 445 → 428 − 8 = 420 = **30 × 14** |
+
+  **Styl se vynucuje na instanci** (`scroll.scrollerStyle`), ne přes `preferredScrollerStyle`: ten je
+  systémový stav, který se mění připojením myši, takže by z něj byl test na náladu stroje místo na oba
+  případy. Změřeno, že instanční nastavení zabere i tehdy, když je systémový styl druhý. Styl se
+  přesto nechává **usadit napřed** (`TestWait.awaitSettledScrollerStyle()`, #343) — jinak se okýnko
+  může přerovnat uprostřed měření.
+
+  **Regrese ověřená vložením regrese**, a rozhodovalo u toho, že padne **na těch bodech, ne na
+  timeoutu**: s vrácenou rezervou 13 a stropem 441 padnou 4 testy a 13 tvrzení za 3,3 s —
+  `abs(legacy − rezerva) → 4.0`, `13.0 == 17.0`, `visible → 74.0 >= 75.5`, `origin.y → 2.0 == 0.0`
+  a `abs(lines − lines.rounded()) → 0.2857` (tedy 4 body ze 14). `LogTailHeightTests` u toho projde
+  celá, což je zrovna ta hranice mezi oběma sadami.
+
+  **Ta chyba není vidět v renderu celého tabu** (`CheckLogRoomProbe`), a stojí to za zapsání: scrollery
+  se v testovacím procesu usadí obvykle na `overlay`, a tam je rezerva čisté odsazení, takže se nikdy
+  nic neuřízne. V renderu tabu je proto vidět jen to, že okýnko je o 4 body vyšší. Kdo se chce na ty
+  body podívat, má v téhle sadě dump okýnka pod `PRISM_RENDER_DIR` (`logtail-<N>-radku-<styl>.png`) —
+  ten kreslí vynucený `legacy`, takže je na něm vidět i ořezaný horní řádek:
+
+  ```bash
+  PRISM_RENDER_DIR=/tmp/render xcodebuild … test -only-testing:PRismTests/LogTailScrollerReserveTests
+  ```
+
+  Před opravou: `výška 63, na text zbylo 46, origin.y 2` u třířádkového logu. Po ní: `67 / 50 / 0`.
 
 - **Otevření konce logu (#303)** — `LogTailOpeningTests`. Tvrdí dvě věci, které se dají pokazit
   potichu: okýnko se otevře **na konci logu** a **vodorovně na nule**. Testuje se to přes
@@ -2256,7 +2302,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **projde**, a je to tak správně — hlídá jinou chybu (`x` u konce nejdelšího řádku).
 
   **Styl scrollerů se musí nechat usadit dřív, než se okýnko postaví** (#343,
-  `awaitSettledScrollerStyle()`) — bez toho je z téhle sady **flake**, a je to změřené:
+  `TestWait.awaitSettledScrollerStyle()` — od #347 ve `Tests/Support/TestWaiting.swift`, protože
+  ji potřebuje i sada nad rezervou na scroller a čekání má jedno místo) — bez toho je z téhle sady
+  **flake**, a je to změřené:
   `NSScroller.preferredScrollerStyle` je po startu procesu chvíli `overlay` (`1`) a teprve za pár kol
   smyčky se doresolvuje na `legacy` (`0`), který **místo doopravdy zabírá**. Když ta změna přijde až
   *po* dosazení cíle skoku, viewport se zmenší (`clip.h` **441 → 424**, tedy 17 bodů) a `origin.y` už
@@ -2300,6 +2348,19 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   okýnka je ve výšce pevné, takže z jednoho renderu vyjde konstanta a zbytek je odčítání. A **log musí
   dorazit až po prvním rozložení**, jako v aplikaci — když se text podá hned při stavbě hierarchie,
   okýnko zůstane na začátku ocasu, a to je vlastnost sondy, ne aplikace.
+
+  **Kandidáti jsou `14N + 25`** (#347, do té doby `14N + 21`) — řádek 14, `2 × inset` 8 a rezerva na
+  scroller 17. Je to tentýž výčet řádků, jen posazený na správnou rezervu; každá hodnota vyrostla
+  o 4 body. Přeměřeno u toho, co ta změna stojí seznam checků: **řádek seznamu je 28 bodů**, takže na
+  skutečném okně 172 → 168 bodů = pořád 6 řádků, kdežto v okně 810 ze 30 zbyde 26, tedy z jednoho
+  řádku žádný.
+
+  **Od #347 je u ní render krátkého logu ve dvou podobách** — bez dlouhého řádku a s ním (2 258 znaků).
+  Má to důvod: rezerva se z výšky ukusuje jedině tehdy, když vodorovný scroller doopravdy je, a
+  `autohidesScrollers` ho u samých krátkých řádků neukáže. Bez té druhé podoby by z renderu vypadlo
+  zrovna to, kde rezerva rozhoduje. **Ani jedna z nich ale ty ořezané body neukáže**, protože scrollery
+  se v testovacím procesu usadí obvykle na `overlay` — na to je dump ve
+  `LogTailScrollerReserveTests`, který si `legacy` vynutí.
 
   **Jak konec logu doopravdy vypadá, `ImageRenderer` neukáže** — obsah `NSScrollView`u nerasterizuje
   (prázdná plocha v renderu je omezení sondy, ne aplikace, a ověřilo se to i na třířádkovém logu).
@@ -2475,6 +2536,7 @@ Sem patří všechno, co v testu znamená „počkej, až se něco stane“. Je 
 | `waitUntil("jev") { podmínka }` | čeká se na jev, který nastat **má** | `TestWait.deadline` = 2 min |
 | `settle()` | není na co čekat — tvrdí se, že se **nic nestalo**, nebo se čeká na zápis bez handle | bez stropu, 100 ms |
 | `TestWait.pause()` | smyčka, která práci **drží** rozběhnutou, dokud ji test nepustí | bez stropu (držení stropovat nejde) |
+| `TestWait.awaitSettledScrollerStyle()` | usadit **prostředí** před stavbou AppKitové hierarchie (#343, sem svedeno #347) | `TestWait.deadline` |
 
 **Čeká se odmlkami, ne `Task.yield()`.** Yield práci nepustí na procesor — přeřadí ji na konec
 fronty téhož aktoru —, takže hot spin na `MainActoru` vyhladoví hlavní smyčku a s ní časovače.
@@ -2545,8 +2607,14 @@ hierarchii, musí počítat s tím, že **proces po startu ještě není usazen�
 se doresolvuje z `overlay` na `legacy` až za pár kol smyčky, a legacy scroller mění výšku viewportu.
 Test, který si hierarchii postaví dřív, měří jiné rozměry než test, který běží o dvě sekundy později —
 a vyjde z toho flake, který se **pozná od zátěže tím, že padá pokaždé na týchž číslech**. Léčba je
-nechat tu vlastnost usadit **před** stavbou hierarchie (`awaitSettledScrollerStyle()`), ne stropovat
-čekání na výsledek; podrobnosti u sady výš.
+nechat tu vlastnost usadit **před** stavbou hierarchie (`TestWait.awaitSettledScrollerStyle()`), ne
+stropovat čekání na výsledek; podrobnosti u sady výš.
+
+**Od #347 je i tahle smyčka v `TestWait`**, ne privátní metodou v jedné suitě — potřebuje ji druhá
+sada (`LogTailScrollerReserveTests`) a druhá kopie by byla druhý strop, který se s tímhle rozejde.
+Cena je `import AppKit` v souboru o čekání, a je to vědomá daň za to pravidlo: jedno místo je
+přednější než čistota importů. Je to zároveň jediné čekání, které nečeká na **vlastní jev**, ale na
+usazené **prostředí** — proto je v `TestWait` jmenované zvlášť, ne schované do `waitUntil`.
 
 **Ověřeno vložením regrese, čtyřmi:** vyndaný `requestKill()` v `SubprocessRunneru` (spadne
 `RealEnvironmentTests` — „proces po zrušení pořád běží“), vyndaný `requestKill()` v

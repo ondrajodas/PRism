@@ -48,10 +48,15 @@ struct CheckLogRoomProbe {
     /// Šířka okna z `defaultSize` mínus rail (52 + linka), tedy to, co dostane obsah.
     private let contentWidth: CGFloat = 1100 - 53
 
-    /// Kandidáti na strop, na které se odčítáním přepočítává zbylé místo. Hodnoty jsou `14N + 21`
-    /// (řádek 14 bodů, `2 × inset` 8 a rezerva na vodorovný scroller 13), takže na každém z nich
+    /// Kandidáti na strop, na které se odčítáním přepočítává zbylé místo. Hodnoty jsou `14N + 25`
+    /// (řádek 14 bodů, `2 × inset` 8 a rezerva na vodorovný scroller 17), takže na každém z nich
     /// končí okýnko **celým řádkem**, ne půlkou.
-    private let candidates: [CGFloat] = [320, 385, 413, 441, 469, 525]
+    ///
+    /// **Přepočítáno u #347** z `14N + 21`, kde ta rezerva byla 13 — odměřená na `.small` scrolleru
+    /// místo na `.regular`, který se kreslí. Je to tentýž výčet řádků (21, 26, 28, 30, 32, 36), jen
+    /// posazený na správnou rezervu; každá hodnota tedy vyrostla o 4 body. První je stav před #303,
+    /// čtvrtá je dnešní strop.
+    private let candidates: [CGFloat] = [319, 389, 417, 445, 473, 529]
 
     private let pr = PRIdentifier(repo: RepoID(owner: "keboola", name: "job-queue-daemon"), number: 858)
 
@@ -88,6 +93,21 @@ struct CheckLogRoomProbe {
         let url = directory.appending(path: "kontroly-log-kratky.png")
         let short = try render(store: store, height: 700 - Self.windowHeaderHeight - statusBarHeight, to: url, log: "PHPUnit 11.5.0\nOK (3 tests, 5 assertions)\n##[error]Process completed with exit code 1.")
         print("MĚŘENÍ krátký log (3 řádky): okýnko \(fmt(short.log)) bodů, pod ním zbylo \(fmt(short.below)) bodů — \(url.lastPathComponent)")
+
+        // **A ten samý krátký log s řádkem, který se nevejde na šířku** (#347). Rezerva na vodorovný
+        // scroller se z výšky ukusuje jedině tehdy, když ten scroller doopravdy je — u předchozího
+        // renderu se `autohidesScrollers` postará o to, že není, takže z něj rezervu nevidět. Tohle je
+        // ten stav, ve kterém rozhoduje: s rezervou odměřenou na `.small` (13 bodů) bylo okýnko o 2 body
+        // nižší než jeho vlastní dokument, takže log, který se měl vejít celý, dostal svislý scroller.
+        let wide = directory.appending(path: "kontroly-log-kratky-dlouhy-radek.png")
+        let long = String(repeating: "x", count: 2_258)
+        let wideRoom = try render(
+            store: store,
+            height: 700 - Self.windowHeaderHeight - statusBarHeight,
+            to: wide,
+            log: "PHPUnit 11.5.0\n\(long)\n##[error]Process completed with exit code 1."
+        )
+        print("MĚŘENÍ krátký log s dlouhým řádkem: okýnko \(fmt(wideRoom.log)) bodů — \(wide.lastPathComponent)")
     }
 
     // MARK: - Měření
