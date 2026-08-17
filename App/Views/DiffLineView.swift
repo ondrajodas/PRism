@@ -79,7 +79,7 @@ struct DiffLineView: View {
             // Jeden řádek je z pohledu krabice blok o jednom řádku; řádek, na který se komentovat
             // nedá, se nehlásí a tím z krabice vypadne (#252).
             let rows = dragAnchor.map { [DiffRowFrames.Entry(id: dragID, rect: rect, anchor: $0)] } ?? []
-            rangeDrag.frames?.note(rows, covering: rect)
+            if let box = rangeDrag.box { box.frames.note(rows, covering: rect, of: box.subject) }
         }
         // **Tažení rozsahu visí na celém řádku, ne na sloupci s čísly** — a je to návrat k #110,
         // ke kterému mě dohnalo zkoušení #157. Přesun do sloupce vypadal správně (GitHub to tak
@@ -220,7 +220,7 @@ struct DiffLineView: View {
                 //
                 // Když pod myší řádek není, posílá se `nil` — **ne začátek**. Dosazený začátek
                 // rozsah srazil na jeden řádek pokaždé, když myš přejela prázdnou protistranu.
-                rangeDrag.move(anchor, rangeDrag.frames?.anchor(at: value.location, on: side))
+                rangeDrag.move(anchor, rangeDrag.box?.frames.anchor(at: value.location, on: side))
             }
             .onEnded { _ in rangeDrag.end() }
     }

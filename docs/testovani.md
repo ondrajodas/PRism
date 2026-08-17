@@ -1363,6 +1363,15 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   že blok **nevyklidí sám sebe** (vyzkoušeno regresí — se zápisem před úklidem z něj zbude poslední
   řádek) a že **nulová plocha nevyklidí nic** (blok, který se ještě nerozložil, jinak sebere záznamy
   na souřadnici nula, tedy první řádky diffu).
+
+  **#274 přidal tři testy na to, že v krabici je nejvýš jeden diff.** Nejcennější je ten první,
+  protože tvrdí, že se něco **nestalo** — po hlášení z jiného diffu v krabici cizí plochy
+  nezůstanou (vyzkoušeno vložením regrese: bez klíče podle diffu vyjde počet 2000 místo 1).
+  K němu patří dva, které hlídají opačnou chybu, tedy že se nezahazuje víc, než se má: hlášení
+  z **téhož** diffu ostatní plochy nechá být (jinak by tažení našlo nejvýš ten blok, ve kterém
+  začalo) a po přepnutí je v krabici **hned** to nové (zahazuje se z hlášení, ne zvenčí — kdyby
+  se vyprazdňovalo při přepnutí záložky, byla by zpátky chyba z #110, kde krabice zůstala
+  prázdná a rozsah se nedal roztáhnout).
 - **Filtr seznamu PR (#117)** — dvě vrstvy, a **ta druhá je z celého issue nejdůležitější**.
 
   `Policy` vyčerpávajícím výčtem: prázdný filtr propustí **všechno** (ne nic), dvě repa dají
@@ -2878,7 +2887,7 @@ Co harness měří:
 | podíl word-diffu na skládání bloku (#153) | odpovídá na „ztuhlo to kvůli #153?“ — `DiffPairBlockContainer.show` na 27 blocích samých dvojic **61,5 ms**, z toho `WordDiff` **14,0 ms**, tedy **23 %** v nejhorším případě; skládání bloku je přitom jen část ceny scrollování. Podíl vzrostl u #275 z 18 %, a `WordDiff` se přitom nezměnil — zlevnilo se to, s čím se poměřuje |
 | z čeho se skládá cena sazby bloku (#275) | rozpad `show` na fáze, aby se dalo poznat, co je co: `WordDiff` **14,0 ms**, složení atributovaného textu **4,5 ms** (do #275 **22,2 ms**), nasazení do `NSTextStorage` **3,8 ms**, nasazení + sazba **39,5 ms**. Fáze se měří **za sebou v pořadí, v jakém běží**, takže se dají odečítat. Měří i **čerstvý kontejner** (72,4 ms proti 61,5 ms), protože `LazyVStack` view nerecykluje — a to je, co platí projíždění. Celé `show` stálo do #275 **86,3 ms**; absolutní čísla se hýbou se zátěží stroje (na volnějším vyšla tatáž dvojice 79,2 → 60,0), takže se čte **poměr**, ne milisekundy |
 | cena overlay gutteru podle tvaru (#252) | dvě čísla na bloku o 60 řádcích: `po řádcích` (do #252) **3,05 ms**, `po bloku` (od #252) **0,12 ms**, tedy 26× — a pro srovnání, samotný text téhož bloku stojí 2,8 ms, takže overlay býval dražší než kód, který zdobí |
-| cena zápisu ploch pro tažení (#252) | `DiffRowFrames` s 4000 záznamy a blok o 120 plochách: **po řádcích 22,6 ms, naráz 1,40 ms** (16×). Je to ta kvadratická část — úklid je lineární v počtu záznamů, takže po řádcích se platí za každý |
+| cena zápisu ploch pro tažení (#252, #274) | `DiffRowFrames` s 4000 záznamy (jeden velký PR) a blok o 120 plochách: **po řádcích 24,1 ms, naráz 0,25 ms**. Je to ta kvadratická část — úklid je lineární v počtu záznamů, takže po řádcích se platí za každý. Od #274 se měří i **jak to roste s prohlédnutými záložkami**: 4000 záznamů **0,25 ms**, 8000 **0,49 ms**, 16000 **0,93 ms** (tedy 3,7× za čtyři záložky), a po přepnutí diffu **0,063 ms**, protože krabice cizí plochy zahodí. **Čísla se u #274 přeměřila**, do té doby tu stálo 22,6 → 1,40 ms: měřidlo počítalo i **naplnění** krabice, tedy 4000 ploch k tíži bloku o 120 — příprava se od té doby dělá mimo hodinky (`measure(_:preparing:_:)`) |
 | cena obarvení se cachí a bez ní (#224) | tři čísla na jednom souboru o 2400 řádcích: `scan` bez cache **44 ms**, totéž z plné cache **0,30 ms** (~145×), naplnění prázdné cache **44 ms** — uložení se v šumu ztratí |
 | co v cache zůstane ležet (#224) | 68 kB textu run na 2400 řádků (~29 B na řádek), tedy z čeho se strop `capacity` překládá na kilobajty |
 
@@ -2952,8 +2961,11 @@ Tři věci, bez kterých z toho vyjde nesmysl:
 - **Stav aplikace to mění násobně.** Tentýž build a tentýž scénář vyšel na 10,8 s v okně se
   **čtyřmi otevřenými záložkami PR** a na 3,6 s po čerstvém spuštění s jednou. Měření se proto
   pouští ze **stejného výchozího stavu** (spustit, otevřít jeden PR, rozbalit úsek) a čísla ze
-  dvou různých sezení se nesrovnávají. Že cena projíždění roste s počtem otevřených záložek, je
-  samostatné zjištění — #252 ho neřeší.
+  dvou různých sezení se nesrovnávají.
+
+  **Ten trojnásobek se ale #274 nepovedlo zreprodukovat** a je to tím prvním bodem výš, ne
+  záložkami — postup i čísla jsou v *Kolik stojí otevřená záložka* níž. Zůstává z toho **pravidlo
+  o výchozím stavu**, protože rozdíl mezi dvěma sezeními vyšel větší než rozdíl, který se hledal.
 
 **`window 1 of (first application process whose unix id is …)` sáhne do cizí instance.** System
 Events si proces přepíše podle **jména**, a to mají všechny sloty stejné, takže `window 1` vrátí
@@ -2998,6 +3010,68 @@ bez ohledu na `.shift`**, takže dvě tlačítka lišící se jen jím jsou jedn
 směry — po dočasném odebrání varianty se shiftem začalo `⌥↓` procházet nálezy a `⌥⇧↓` skákalo po
 tom samém. Je to platformní chování, takže na něj **test není** a drží ho jen ten zápis; kdyby se
 zkratky zase rozdělily na dvě tlačítka, projde build i testy a rozbije se to potichu.
+
+### Kolik stojí otevřená záložka (#274)
+
+**Posuvník se řídí přímo přes `AXUIElementSetAttributeValue`, ne přes `System Events`** — a je to
+ten hlavní rozdíl proti postupu u #252 výš. Režie řízení spadla z **9,3 s na 0,02 s** za 601 zápisů
+(tedy ~450×), protože do toho nemluví druhý proces, který si cestu k prvku dohledává podle jména
+a přitom se vyptává na atributy. Číslo z GUI tím **přestává být rozdíl dvou velkých čísel**: 2,4 s
+naměřených za projetí diffu je práce aplikace, ne odpověď na dotazy AX.
+
+Prvek se hledá **podle PID** (`AXUIElementCreateApplication`) a v okně, které se jmenuje `PRism` —
+vedle sebe běží víc slotů a **okno novinek si po vydání releasu stoupne dopředu**, takže „první
+okno“ vrátí ono. Svislý posuvník diffu je ten **nejvyšší** v okně; seznam i panel mají svoje.
+
+```swift
+let app = NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == "com.ondrajodas.prism.b" }!
+let root = AXUIElementCreateApplication(app.processIdentifier)
+// … najít okno s titulkem "PRism" a v něm nejvyšší AXScrollBar s AXVerticalOrientation …
+for step in 1...steps { set(Double(step) / Double(steps)) }    // sjet
+for step in 1...steps { set(1 - Double(step) / Double(steps)) }    // a vyjet
+```
+
+**CPU se čte z `ps -o time=` a čeká se, než se aplikace usadí — před měřením i po něm.** Bez toho
+prvního spadne do čísla dokreslení po aktivaci okna (0,27 s), bez toho druhého z něj vypadne chvost
+rozvržení, který běží po posledním zápisu do posuvníku. „Usadit se“ znamená, že se `time` přestane
+hýbat; `ps` má rozlišení na stovky sekundy, což u čísel v sekundách stačí.
+
+**Střídá se A/B/A/B, protože drift sezení je větší než hledaný rozdíl.** Tentýž scénář vyšel
+v jednom sezení na 2,15 s a o půl hodiny později na 4,39 s — dvě série za sebou by tedy měřily
+stárnutí sezení a zátěž stroje (souběžně buildí ostatní sloty), ne to, co se srovnává. Záložky se
+zavírají tlačítkem `Zavřít <repo>#<číslo>` a otevírají z fronty: **`AXPress` na záložku v pruhu
+nedělá nic**, protože je to `onTapGesture` s `.isButton`, ne `Button` — přepnout se dá jedině
+kliknutím na řádek ve frontě (už otevřený PR se tím jen vybere).
+
+Co z toho u #274 vyšlo na scénáři z #252 (`job-queue-daemon#858`, split, rozbalený úsek o 1 904
+řádcích, 300 kroků tam a zpět):
+
+| Stav | CPU (tři kola, střídaně) |
+|---|---|
+| jedna záložka | 2,77 s / 3,50 s / 3,28 s |
+| čtyři otevřené záložky | 4,39 s / 3,68 s / 3,37 s |
+| jedna záložka, po #274 | 2,79 s / 2,60 s / 2,39 s |
+| čtyři záložky, po #274 | 2,26 s / 2,33 s / 2,56 s |
+
+Tedy **rozdíl mezi jednou a čtyřmi záložkami se v okně neukázal** — leží pod rozptylem téhož
+měření (±25 %). Trojnásobek z #252 (3,6 s proti 10,8 s) se zreprodukovat nepovedlo ani na
+**buildu před #252** (`3a49f0a~1`, tamtéž: 4,92/4,57/4,96 s proti 4,30/4,30/4,45 s), takže to
+nebylo tak, že by #252 tu příčinu cestou spravil.
+
+Čím se vylučovalo (a co z toho vylezlo za čísla):
+
+| Podezření | Čím padlo |
+|---|---|
+| Per-PR slovníky (`DiffRowFrames`) drží cenu projíždění | `sample` běžícího procesu během projíždění: `DiffRowFrames.note` má **17 vzorků ze 4104** na hlavním vlákně, tedy **0,4 %**. Roste to sice s prohlédnutými záložkami (viz harness, 0,25 → 0,93 ms na blok), ale ze 0,4 % se trojnásobek celku nedá poskládat |
+| Neaktivní záložka se přepočítává na pozadí | Nečinné okno se čtyřmi záložkami stojí **0,00 s CPU za 15 s**. Detail neaktivní záložky se nekreslí — `ContentView` má v `switch`i jen aktivní tab, takže z něj nezůstane nic než data ve store |
+| Cache obarvení se s víc soubory zahazuje (`SyntaxRunCache`, strop 4000 řádků) | V sampleu není `SyntaxHighlighter` ani `SyntaxRunCache` **ani jednou**; kdyby se cache při projíždění vyprazdňovala, `scan` by v něm být musel |
+| Paměť: čtyři záložky tlačí stroj do komprese | RSS **36 → 74 MB** po otevření tří dalších záložek a při nečinnosti zpátky na 44 MB. Na tomhle stroji to není tlak, který by se projevil v CPU |
+| Cenu drží to, že aplikace odpovídá na dotazy AX (u #252 58 % vzorků) | Průchod stromem okna stojí se čtyřmi záložkami **0,11 s** proti **0,08 s** s jednou (20 průchodů), tedy 1,4× — a to je jediné, co s počtem záložek doopravdy roste. Vysvětlilo by to nejvýš pár desítek procent na měření, které si režii AX odečítá špatně, ne trojnásobek |
+
+**Vlastní práce aplikace při projíždění** (z téhož sampleu, 4104 vzorků hlavního vlákna) leží
+v rozvržení líného seznamu a v sazbě textu: `DiffTextView.draw` a spol. **~16 %**, zbytek
+`AttributeGraph` a `NSLayoutManager`. To je ten směr, kterým se dá projíždění zlevnit — a je to
+**samostatná věc**, ne tohle issue.
 
 ### `⌃Tab` a shift, který mění klávesu (#245)
 

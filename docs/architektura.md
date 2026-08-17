@@ -2021,7 +2021,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffFileHeaderView`, `FilePathText` | Hlavička souboru (`.fhead`): celá cesta se **složkou tlumeně a jménem tučně**, odznak změny, kapsle s počtem nálezů, `+X −Y` |
 | `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek, dvojice, rozbalovací řádek nebo poznámka |
 | `DiffPairView` | Dvojice vedle sebe: dvě buňky `DiffLineView` se `side`, pozadí za celou dvojici, prázdná protistrana |
-| `RangeDragActions`, `DiffRowFrames` | Tažení rozsahu komentáře (#110) — akce a rámečky řádků **mimo observable stav** |
+| `RangeDragActions`, `DiffRowFrames` | Tažení rozsahu komentáře (#110) — akce a rámečky řádků **mimo observable stav**; od #274 nese hlášení i klíč diffu, takže v krabici není víc než jeden |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou. Od #283 jsou akce **řada malých tlačítek vlevo pod textem** |
 | `MiniButtonStyle` | Malé tlačítko z návrhu (`.mini`, `.mini.pri`) — plné akcentové a obtažené. Rozměry v `Metrics`, aby se daly změřit testem; text plného je `Palette.surface` (`--panel`), ne bílá |
@@ -2895,9 +2895,29 @@ Sbalení celých souborů (`foldedFiles`) je **jiná věc než rozbalení kontex
 - **Hlásí se naráz za celý blok** (#252), ne po jednom rámečku. Úklid zastaralých záznamů je
   lineární v jejich počtu, takže po řádcích to bylo kvadratické — 120 ploch bloku dvojic proti
   tisícům záznamů velkého souboru je stovky tisíc porovnání na jeden blok, který vjede do okna
-  (změřeno **22,6 ms → 1,40 ms**). Pořadí je **napřed úklid, potom zápis**: obráceně by blok vyklidil
+  (změřeno **24,1 ms → 0,25 ms**; do #274 tu stálo 22,6 → 1,40 ms, protože měřidlo počítalo
+  i naplnění krabice). Pořadí je **napřed úklid, potom zápis**: obráceně by blok vyklidil
   sám sebe, protože leží celý ve své ploše. Prázdná plocha se ignoruje — blok, který se ještě
   nerozložil, hlásí nulový rámeček a vyklidil by cizí záznamy na souřadnici nula.
+- **V krabici je nejvýš jeden diff** (#274), a hlídá to klíč, který každé hlášení nese s sebou
+  (`RangeDragActions.FrameBox.subject` — `owner/repo#číslo`, u diffu commitu jeho sha; krabice a klíč
+  jsou **jedna hodnota**, aby se nedalo předat jedno bez druhého a zahazování tiše vypnout). Je to
+  potřeba proto,
+  že `@State` detailu **přetéká mezi pull requesty**: jeden `DiffView` obslouží všechny otevřené
+  záložky, takže se v krabici vrstvily plochy každého PR, na který se člověk podíval. Vyklizení
+  plochy je sundá jedině tam, kam nový blok dosáhl — u krátkého diffu po dlouhém tedy zbyde ležet
+  všechno pod ním. Zápis je lineární v počtu záznamů, takže každá prohlédnutá záložka ho zdražovala:
+  **0,25 ms** na blok s jedním PR v krabici, **0,49 ms** se dvěma, **0,93 ms** se čtyřmi.
+
+  **Zahazuje se z hlášení, ne zvenčí**, a na tom to celé stojí: vyprázdnit krabici při přepnutí
+  záložky by znamenalo, že bloky, které stojí a geometrii nemění, už nic nenahlásí — a tažení nemá
+  co najít (je to ta chyba z #110, popsaná o dva odstavce výš). Takhle je v krabici hned s prvním
+  hlášením nového diffu jeho vlastní plocha a nic cizího.
+
+  **V okně se to na projíždění nepozná** (změřeno, viz [`testovani.md`](testovani.md), *Kolik stojí
+  otevřená záložka*): zápis ploch je 0,4 % vzorků hlavního vlákna, takže rozdíl mezi jednou a čtyřmi
+  záložkami leží pod rozptylem měření. Co se tím spraví, je růst — a to, že se v krabici přestaly
+  vrstvit plochy diffu, který na obrazovce není.
 - **Táhne se přes celý řádek, ne jen přes sloupec s čísly.** GitHub má gesto v číslech, ale tady
   je nad diffem vypnuté vybírání textu, takže tažení přes kód nic nepřebíjí — a úzký sloupec se
   trefuje hůř. `minimumDistance` je nenulová, aby samotný klik zůstal kliknutím (jednořádkový

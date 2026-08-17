@@ -149,7 +149,7 @@ struct DiffPairBlockRowView: View {
     /// Zapíše plochy řádků do krabice pro tažení — **naráz za celý blok** (#252). Volá se odkud
     /// přijde nová informace: z rámečků řádků i z polohy bloku, protože obojí je potřeba.
     private func noteRows() {
-        guard let box = rangeDrag.frames else { return }
+        guard let box = rangeDrag.box else { return }
         let gutter = geometry
         let origin = placement.rect.origin
         var rows: [DiffRowFrames.Entry] = []
@@ -163,7 +163,7 @@ struct DiffPairBlockRowView: View {
                 ))
             }
         }
-        box.note(rows, covering: placement.rect)
+        box.frames.note(rows, covering: placement.rect, of: box.subject)
     }
 
     private func line(of frame: DiffBlockLineFrame, on side: DiffSide) -> DiffLine? {
@@ -195,7 +195,7 @@ struct DiffPairBlockRowView: View {
                       let anchor = anchor(of: frame, on: side)
                 else { return }
                 // Hledá se **jen ve svém sloupci**: tažení, které začalo vpravo, nemá skákat vlevo.
-                rangeDrag.move(anchor, rangeDrag.frames?.anchor(at: value.location, on: side))
+                rangeDrag.move(anchor, rangeDrag.box?.frames.anchor(at: value.location, on: side))
             }
             .onEnded { _ in rangeDrag.end() }
     }

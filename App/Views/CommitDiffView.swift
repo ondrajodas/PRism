@@ -114,6 +114,10 @@ struct CommitDiffView: View {
     func reading(_ diff: Diff) -> DiffView {
         DiffView(
             diff: diff,
+            // Commit, ne pull request: diff commitu je jiný obsah na týchž souřadnicích, takže
+            // krabice ploch pro tažení musí poznat, že se kreslí něco jiného (#274). Sha stačí —
+            // je jednoznačná napříč repozitáři a tab žádnou identitu PR **nemá schválně**.
+            subject: commit.sha,
             // Skáče se jedině v diffu PR (z nálezu, z palety, z anotace CI) a sem žádná z těch
             // cest nevede — kotvy míří na řádky dnešní hlavy, ne tohohle commitu.
             scrollTarget: .constant(nil),

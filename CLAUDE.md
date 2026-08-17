@@ -670,6 +670,12 @@ Zásady, které platí všude:
   padne, **napřed se podívej, co v ní doopravdy je** — u kresby uložený PNG, ne počet bytů; z toho
   se pozná, jestli je rozbitá aplikace, nebo sonda. Podrobnosti v
   [`docs/testovani.md`](docs/testovani.md).
+- **Měřidlo nesmí počítat přípravu, a číslo z okna se bere střídavě** (#274). Cena jednoho bloku
+  v harnessu měla uvnitř hodinek naplnění celé krabice ploch (4000 proti 120), takže roky stálo
+  v dokumentaci číslo o řád vedle — příprava patří mimo (`measure(_:preparing:_:)`). A v okně je
+  drift sezení větší než hledaný rozdíl (tentýž scénář 2,15 s a po půl hodině 4,39 s), takže se
+  série **střídají** (A/B/A/B), ne dvě za sebou. Podrobnosti a postup měření projíždění
+  v [`docs/testovani.md`](docs/testovani.md).
 - **Testy se nespouštějí rourou do `grepu`** — viz *Příkazy* níž, umí to zaseknout na neurčito.
 
 ## Příkazy
