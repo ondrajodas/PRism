@@ -37,8 +37,12 @@ struct GhGateway: GitHubGateway {
         let login = user.login.trimmingCharacters(in: .whitespacesAndNewlines)
         // Prázdný login se **nevrací**, ani když ho tak API pošle: „nevím“ se od loginu musí
         // poznat, a tady je poslední místo, kde se to dá rozlišit.
+        //
+        // Hláška mluví o **prázdné hodnotě**, ne o chybějícím poli: `login` je v `GhUser`
+        // neoptional, takže odpověď bez něj se sem nedostane — položí ji dekodér a hláška z něj
+        // nese `keyNotFound`. Sem tedy vede jedině `""` nebo samé mezery.
         guard !login.isEmpty else {
-            throw GitHubError.malformedOutput("Přihlášený účet: odpověď nemá login.")
+            throw GitHubError.malformedOutput("Přihlášený účet: login v odpovědi je prázdný.")
         }
         return login
     }

@@ -415,14 +415,20 @@ struct GhGatewayTests {
     }
 
     /// Tatáž věta z druhé strany: prázdný ani bílý login se nesmí vrátit jako platná odpověď.
-    @Test("Prázdný login se nevrátí")
-    func blankLoginThrows() async {
+    ///
+    /// Hláška se u toho **liší od chybějícího pole** (nález Copilota na #362): odpověď bez `login`
+    /// položí dekodér (`keyNotFound`), sem vede jedině prázdná hodnota — a z hlášky má být poznat,
+    /// která z těch dvou věcí se stala, jinak se to diagnostikuje naslepo.
+    @Test("Prázdný login se nevrátí a hláška mluví o prázdné hodnotě")
+    func blankLoginThrows() async throws {
         for output in ["{\"login\": \"\"}", "{\"login\": \"   \"}"] {
             let runner = FakeProcessRunner(exitCode: 0, standardOutput: output)
 
-            await #expect(throws: GitHubError.self) {
+            let thrown = await #expect(throws: GitHubError.self) {
                 try await gateway(runner).fetchViewer()
             }
+
+            #expect(try #require(thrown).userDescription.contains("login v odpovědi je prázdný"))
         }
     }
 
