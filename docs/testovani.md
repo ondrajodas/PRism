@@ -200,6 +200,34 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   incident se na přání nevyrobí, takže je do skutečného tvaru dopsaný — `major_outage`
   a `degraded_performance` na sledovaných komponentách a `partial_outage` v `Actions`, aby
   bylo na čem ověřit, že se cizí výpadek nepočítá.
+
+  **U fixture, která stojí na zakončení řádků, je doklad blob — ne řádek v `.gitattributes`**
+  (#353). Atributy se na položku, která už v indexu leží, **zpětně neuplatní**: u
+  `gh/pr-body-linear.md` se `-text` přidalo v tomtéž PR (#120), ale až *po* prvním `git add`,
+  takže tu položku už nechalo být. V repu tím ležela fixture bez jediného `CR`, přesto že si ji
+  `ReviewIntentTests` výslovně kontroluje (`body.contains("\r\n")`) — sada padala a `main` byl
+  červený, zatímco řádek v `.gitattributes` vypadal jako pojistka a nedělal nic. Pracovní kopie to
+  zamlčí: `core.autocrlf=input` normalizuje **při zápisu do indexu**, ne při checkoutu, takže
+  soubor na disku `CR` mít může a commit ne.
+
+  Kontrolují se proto **dva bloby** — index před commitem a `origin/<branch>` po pushi:
+
+  ```bash
+  git cat-file -p :Tests/Fixtures/gh/pr-body-linear.md | LC_ALL=C grep -c $'\r'
+  git cat-file -p origin/<branch>:Tests/Fixtures/gh/pr-body-linear.md | LC_ALL=C grep -c $'\r'
+  ```
+
+  **Ten druhý je podstatný**: bez něj se to může ztratit znovu tou samou cestou a pozná se to až
+  na červeném `main`. Levnější náhled na obojí dá `git ls-files --eol <cesta>` — vypíše `i/…`
+  (index), `w/…` (pracovní kopii) i `attr/…`, takže rozejití je vidět na jednom řádku; správný
+  stav téhle fixture je `i/mixed w/mixed attr/-text`, rozbitý byl `i/lf w/lf attr/-text`.
+
+  **Opravit to jde jedině novými bajty**, a co zabralo, je změřené: **znovu stáhnout tělo z API**
+  (`gh api repos/metalbear-co/mirrord/pulls/4702 --jq .body`, 13 `CRLF` ze 14 řádků) a pak už
+  stačí obyčejný `git add` — `-text` konverzi vypíná, takže se bajty uloží, jak jsou.
+  `git add --renormalize` dá týž blob (změřeno), ale **sám o sobě by nepomohl**, stejně jako
+  `git rm --cached`: normalizovaná pracovní kopie `CR` neobsahuje, takže re-add bez nových bajtů
+  uloží zase `LF`.
 - **`StreamParser`** — proti **všem** fixtures ze skutečných běhů, plus syntetické rozbité
   vstupy: nevalidní JSON, useknutý řádek, neznámý event, nález bez povinných polí, prázdný
   vstup. Fixtures ze skutečných běhů už v repu jsou
@@ -261,7 +289,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **`-text` se ale řídí surovými bajty, ne obsahem** (#339): u fixture v **JSONu**
   (`gh/pr-commits-crlf.json`) je `CR` escapovaný jako dvojice `\` + `r`, takže surové `CR` v souboru
   nejsou a normalizovat není co — ta proto v `.gitattributes` **není** a je u ní napsané proč.
-  Kontrola v testu zůstává v obou případech, protože platí bez ohledu na nastavení gitu.
+  Kontrola v testu zůstává v obou případech, protože platí bez ohledu na nastavení gitu. A že
+  `-text` doopravdy zabral, se pozná **jedině na blobu** — viz *Fixtures* výš (#353).
 
   Nejcennější tvrzení té sady je **„tentýž diff se `CRLF` a s `LF` dá stejný model“**: je to
   zároveň odpověď na „nezměnilo se něco na `LF` vstupech?“, protože z rovnosti modelů plyne i to,
