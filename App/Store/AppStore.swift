@@ -581,7 +581,9 @@ final class AppStore {
             reviewer: ClaudeReviewRunner(
                 claude: toolPaths.claude,
                 gh: toolPaths.gh,
-                runner: SubprocessStreamer(),
+                // Značky běžících session (#351) — jedině tady, protože jedině `claude -p` běží
+                // minuty a jako sirotek platí tokeny dál. Úklid při startu sahá na tentýž registr.
+                runner: SubprocessStreamer(sessions: .shared),
                 maxConcurrent: { box.value.global.maxConcurrentReviews },
                 model: { box.value.global.model }
             ),

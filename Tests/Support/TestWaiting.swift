@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -58,6 +59,56 @@ enum TestWait {
     /// jev platí i tady, je ta odmlka — spin na `yield()` bere procesor ostatním suitám.
     static func pause() async {
         try? await Task.sleep(for: step)
+    }
+
+    /// Počká, až se v procesu **usadí styl scrollerů**, a teprve pak se smí stavět AppKitová
+    /// hierarchie, na které se něco měří (#343; sem svedeno u #347).
+    ///
+    /// `NSScroller.preferredScrollerStyle` je po startu procesu chvíli `overlay` (`1`) a teprve za pár
+    /// kol smyčky se doresolvuje na `legacy` (`0`) — a **legacy scroller místo doopravdy zabírá**
+    /// (17 bodů, změřeno u #347), kdežto overlay plave nad obsahem. Kdo si hierarchii postaví dřív,
+    /// měří jiné rozměry než ten, kdo běží o dvě sekundy později: u #343 z toho byl flake, který se od
+    /// zátěže poznal tím, že **padal pokaždé na týchž číslech** (`clip.h` 441 → 424, `origin.y` už
+    /// nikdo nepřerovnal, okýnko zůstalo o řádku nad koncem).
+    ///
+    /// **Je to artefakt harnessu, ne vada aplikace** — tam je styl usazený dávno předtím, než se dá
+    /// otevřít detail checku. Proto se léčí tady, ne v `LogTailTextView`; zamítnuté varianty jsou
+    /// v [`docs/testovani.md`](../../docs/testovani.md).
+    ///
+    /// **`AppKit` je tady kvůli tomuhle jedinému** a je to vědomá daň za pravidlo „čekání má jedno
+    /// místo“ (#296): druhá kopie téhle smyčky v `Tests/Views/` by byla druhý strop, který se s tímhle
+    /// rozejde. Volají to `LogTailOpeningTests` i `LogTailScrollerReserveTests`.
+    ///
+    /// Čeká se **pumpováním smyčky**, protože styl se doresolvuje jejím během — `waitUntil` by tady
+    /// nepomohl. Strop je `TestWait.deadline` jako všude jinde a je to **jev se stropem**, ne pevný
+    /// okamžik (#269).
+    @MainActor
+    static func awaitSettledScrollerStyle(sourceLocation: SourceLocation = #_sourceLocation) {
+        // Pět **shodných kol za sebou**: jedno by „usazeno“ tvrdilo i o hodnotě, kterou smyčka ještě
+        // nezměnila. Počítá se od hodnoty přečtené předem, takže „pět kol“ je doopravdy pět kol.
+        let requiredRounds = 5
+        let step: TimeInterval = 0.05
+        let limit = ContinuousClock.now.advanced(by: deadline)
+        var previous = NSScroller.preferredScrollerStyle
+        var matchingRounds = 0
+        while ContinuousClock.now < limit, matchingRounds < requiredRounds {
+            RunLoop.current.run(until: Date().addingTimeInterval(step))
+            let style = NSScroller.preferredScrollerStyle
+            matchingRounds = style == previous ? matchingRounds + 1 : 0
+            previous = style
+        }
+        // **Nedočkání se hlásí, ne přechází.** Kdyby se styl přestal usazovat, vrátí se flake
+        // z #343 — a bez téhle věty by to vypadalo na tentýž nevysvětlitelný pád jako předtím,
+        // tedy „nic nevypsalo“ k nerozeznání od „funguje“.
+        if matchingRounds < requiredRounds {
+            Issue.record(
+                """
+                Nedočkalo se: styl scrollerů se neusadil (strop \(deadline), \
+                poslední hodnota \(previous.rawValue)). Tvrzení níž tím ztrácejí platnost.
+                """,
+                sourceLocation: sourceLocation
+            )
+        }
     }
 }
 

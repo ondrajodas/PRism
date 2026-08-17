@@ -80,6 +80,13 @@ struct CacheLayout: Sendable, Equatable {
     /// co aplikaci nepřežilo — viz `InterruptedRuns`.
     var interruptedFile: URL { root.appending(path: "interrupted.json") }
 
+    /// Podprocesy, které aplikace právě drží (#351). Po startu je v něm to, co aplikaci
+    /// **přežilo** — osiřelý `claude -p`, kterého má úklid zabít; viz `RunningSessions`.
+    ///
+    /// Vedle `interrupted.json`, ne v něm: tohle je klíčované operačním systémem
+    /// (`(pid, startedAt)`), kdežto přerušené běhy `ReviewRunKey`.
+    var sessionsFile: URL { root.appending(path: "sessions.json") }
+
     /// Výsledky review jednoho PR na jednom commitu: `reviews/<owner>/<repo>/<pr>-<sha>.json`.
     ///
     /// Zanořeno pod repo ze stejného důvodu jako stromy: ploché jméno se nedá filtrovat

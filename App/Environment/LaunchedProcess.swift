@@ -15,6 +15,13 @@ final class LaunchedProcess: @unchecked Sendable {
     private let output = Pipe()
     private let error = Pipe()
     private let lock = NSLock()
+    /// Kam si zapsat, že proces běží — aby ho po zabité aplikaci šlo dohledat a zabít (#351).
+    ///
+    /// **Nepovinné, a schválně.** Dostává ho jedině streamovací cesta, tedy `claude -p`: ta běží
+    /// minuty a platí se za ni tokeny, takže osiřelá stojí peníze. Bufferovaná cesta jsou `gh`
+    /// a `git`, které doběhnou samy za sekundy — a hlavně se pouštějí při **každém tiku pollingu**,
+    /// takže zápis do cache u nich znamená sáhnutí na disk za nic.
+    private let sessions: RunningSessions?
     private var timedOut = false
     private var running = false
     private var killRequested = false
@@ -25,8 +32,10 @@ final class LaunchedProcess: @unchecked Sendable {
         executable: URL,
         arguments: [String],
         environment: [String: String] = [:],
-        workingDirectory: URL? = nil
+        workingDirectory: URL? = nil,
+        sessions: RunningSessions? = nil
     ) {
+        self.sessions = sessions
         process.executableURL = executable
         process.arguments = arguments
         if !environment.isEmpty {
@@ -49,6 +58,11 @@ final class LaunchedProcess: @unchecked Sendable {
         } catch {
             throw ProcessError.launchFailed(error.localizedDescription)
         }
+
+        // Značka se zapisuje **hned**, ještě před vyřizováním odloženého zrušení: proces už běží,
+        // takže od téhle chvíle může aplikaci přežít. Kdyby se zápis odložil, vešlo by se do té
+        // mezery ukončení aplikace — a osiřelou session by pak nikdo nedohledal.
+        sessions?.remember(pid: process.processIdentifier)
 
         // Zabít se o proces mohl někdo říct dřív, než vznikl — zrušení dorazí kdykoli.
         // Bez tohohle by `SIGKILL` narazil na `isRunning == false`, neudělal nic a proces
@@ -101,6 +115,12 @@ final class LaunchedProcess: @unchecked Sendable {
     /// přepsalo a jeho `continuation` by se nikdy neresumnula — task by visel navždy
     /// a runtime by to jen tiše ohlásil jako uniklou continuation.
     private func processDidExit(_ status: Int32) {
+        // Značka jde pryč koncem procesu, ne až úklidem při dalším startu: zapsaný PID, pod kterým
+        // už nic neběží, by se dal recyklovat a další start by na něj koukal jako na sirotka.
+        // Identitu si `reapOrphans` ověřuje, takže by ho nezabil — ale značka, kterou nikdo
+        // nemaže, je mrtvá váha, která svádí spolehnout se na ni.
+        sessions?.forget(pid: process.processIdentifier)
+
         let waiters: [CheckedContinuation<Int32, Never>] = lock.withLock {
             terminationStatus = status
             defer { exitWaiters.removeAll() }

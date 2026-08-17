@@ -2293,6 +2293,11 @@ běžely na stroji čtyři dny.
 - **Nezachytí to všechno**, a je to tak zamýšlené: pád aplikace ani zabití zvenčí takhle
   odchytit nejde. Dotažení nálezů z transcriptu (#97) je pro ně ta drahá varianta — a od #264
   slouží **oběma** cestám, protože zavření aplikace je pro běh totéž jako pád.
+- **Session, která zabitou aplikaci přežila, se uklidí až při dalším startu** (#351). Nálezy dotahuje
+  transcript (#97), ale sám `claude -p` běží dál pod `launchd` a počítá tokeny — tomu se
+  z běžícího procesu, který zmizel, zabránit nedá (prevence na macOS neexistuje, změřeno).
+  `AppDelegate.applicationDidFinishLaunching` proto sirotky dohledá a zabije; jak, je v sekci
+  `Environment`.
 
 **Zavírání se přitom nesmí lišit od pádu v tom, co po sobě nechá** (#264). Zabité běhy se
 schválně chovají jako přerušené, ne jako zrušené:
@@ -2637,9 +2642,17 @@ neběželo žádné review, takže tam prstýnek na obrazovce **ani nebyl** — 
 O té druhé je zapsané, co se změřilo: cena je v tom, že `ScrollView` počítá **ideální velikost**,
 což donutí líný seznam projít `_LazyLayout_Subviews.apply` přes **celý** `ForEach` (proto v listech
 `FileDiff.id`, `DiffRow.id`, `ConversationNode.id` a `_StringGutsSlice._fastNFCCheck` — porovnávání
-řetězcových identifikátorů). Co se **neví**, je co graf pokaždé zašpiní; a reprodukovat se to na
-vyžádání nepodařilo (otevřený PR, přepnutí na `Změněné soubory`, projetí diffu, nečinnost →
-`%cpu` 0,0). Má na to přijít vlastní issue.
+řetězcových identifikátorů). Je to **#358** a **co graf špiní, se od té doby ví**: smyčku pohání
+hover. Ve vzorku ztuhlého okna je 92,8 % vzorků hlavního vlákna v jedné transakci a **žádný jiný
+callout tam není** (nula na timeru, nula na hlavní dispatch frontě), takže ji nekrmí nic zvenčí;
+uvnitř je 1630 z 1690 vzorků `Update.dispatchActions()` v `EventBindingManager
+.enqueueHoverUpdateIfNeeded()` → `NSHostingView.didRequestHoverUpdate()`, a z něj se přes
+`HoverResponder.updatePhase(_:)` volá `.onContinuousHover` v `DiffPairBlockRowView`. Ta akce píše
+`@State hovered` **bezpodmínečně** (a je to `(index: Int, side: DiffSide)?`, tedy tuple, který
+`Equatable` není), takže se tělo bloku zašpiní, přestaví se rozvržení líného seznamu, změní se
+geometrie responderů — a hover update se naplánuje znovu. Reprodukce si žádá **split diff a kurzor
+ležící v okně**; to poslední je důvod, proč se to na vyžádání nedařilo (nečinnost s myší mimo blok
+kódu smyčku nezavře). Oprava má vlastní PR, ne tenhle.
 
 **Co se tím taky neopravilo:** každá **událost průběhu review** (`ReviewProgress`) pořád zašpiní tělo
 `PullRequestDetailView` (čte `store.reviewProgress(for:)` a `runningReviewers(for:)` v hlavičce),
@@ -2647,7 +2660,7 @@ takže se přepočítá pruh záložek se všemi osmi odznaky a přestaví se ob
 `DetailProgressMeasurement`: **9–55 ms na událost** podle otevřeného tabu a podle toho, kolik je
 v okně vidět. Na tuhnutí to nestačí — skutečná session dělá **0,07 až 0,37** události za sekundu
 (změřeno na 145 transcriptech běhů PRismu, viz [`testovani.md`](testovani.md)), tedy nejvýš dvě
-procenta procesoru —, ale je to práce, která tam být nemusí. Je na to vlastní issue; oprava je
+procenta procesoru —, ale je to práce, která tam být nemusí. Vlastní issue na to zatím není; oprava je
 vytáhnout pruh běhu do vlastního view, aby událost špinila jeho, ne celý detail.
 
 ## Okno nastavení (`App/Views/Settings/`)
@@ -3426,9 +3439,12 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     to jedno vyšetřování, tak ať je zapsané, na co se u toho koukat. `NSScroller.preferredScrollerStyle`
     je **po startu procesu chvíli `overlay`** a teprve za pár kol smyčky se doresolvuje na `legacy` —
     a legacy scroller místo doopravdy zabírá. Když ta změna přijde *až po* dosazení cíle, viewport se
-    zmenší (změřeno `clip.h` **441 → 424**, tedy **17 bodů**, ne 13 jako rezerva ve `height`),
-    `origin.y` zůstane a okýnko je o řádku nad koncem (`maxY` 84 006 → 83 989 proti poslednímu řádku
-    na 84 002) — a **nikdo to nepřerovná**, protože další `layout()` přijít nemusí.
+    zmenší (změřeno `clip.h` **441 → 424**, tedy **17 bodů**), `origin.y` zůstane a okýnko je o řádku
+    nad koncem (`maxY` 84 006 → 83 989 proti poslednímu řádku na 84 002) — a **nikdo to nepřerovná**,
+    protože další `layout()` přijít nemusí.
+
+    Těch 17 bodů si u #343 nesedělo s rezervou ve `height` (13) a **zůstal z toho zapsaný rozpor**,
+    který #347 vyřešilo: měření bylo správné, rezerva ne — viz odrážka o rezervě níž.
 
     V aplikaci je to nedosažitelné: styl scrollerů je usazený dávno předtím, než se dá otevřít detail
     checku. **Je to tedy vlastnost harnessu**, a proto se to opravilo v testu (nechat styl usadit dřív,
@@ -3456,11 +3472,45 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     na hlavním vlákně při otevření, a prospělo by to jen hunkům kódu.
   - **Výška okýnka se počítá z metriky fontu, kterým se kreslí** (#236, `LogTailTextView.height`):
     krátký log si vezme jen tolik, kolik má řádků, dlouhý se zastropuje na `CheckDetailView.logMaxHeight`
-    a scrolluje uvnitř. Rezerva na vodorovný scroller je opsané číslo (13 bodů), protože
-    `NSScroller.scrollerWidth` je vázaná na hlavní vlákno — **drží ji test**, který ji porovnává se
-    systémem, ne odhad. Na `preferredScrollerStyle` se schválně neptáme: mění se připojením myši,
-    a okýnko, kterému se tím mění výška, je horší než pár bodů rezervy.
-  - **Strop výšky je 441 bodů, tedy přesně 30 řádků** (#303; do té doby 320 bodů = 21 řádků). Zvednuto
+    a scrolluje uvnitř.
+  - **Rezerva na vodorovný scroller je 17 bodů, a je odměřená na tom, na čem se kreslí** (#347; do té
+    doby 13). Je to opsané číslo, protože `NSScroller.scrollerWidth` je `@MainActor` (dědí to z
+    `NSControl`), kdežto výška se počítá `nonisolated`.
+
+    **Čím to bylo špatně, je to podstatné na téhle odrážce.** Třináct bodů je `scrollerWidth` pro
+    velikost **`.small`** — tedy pro scroller, který okýnko nikdy nekreslí: `makeScrollView()` nechává
+    `NSScrollView`u výchozí **`.regular`**, a ten bere 17. Konstanta tedy nebyla odhad, byla to
+    **skutečně odměřená hodnota jiného ovládacího prvku**, což je zrovna ta chyba z #236 — a hůř se
+    hledá než odhad, protože vypadá odměřeně. Vypadala odměřeně i tomu testu, který ji držel: ptal se
+    API na `.small`, tedy zopakoval tu samou úvahu, a byl proto zelený i nad rozbitou hodnotou.
+
+    Změřeno **u obou stylů**, protože jeden je půlka problému: okýnko o výšce 441 má s **legacy**
+    stylem `contentView.bounds.height` 424 (zábor **17**), s **overlay** 441 (zábor **0** — overlay
+    scroller plave nad obsahem, i když je 17 bodů vysoký). Rezervuje se **legacy jako horší případ**:
+    při overlay zbyde 17 bodů prázdna, kdežto naopak by se z obsahu ukusovalo.
+
+    Co ty 4 body dělaly, a **na každém konci jinak**: nezastropované okýnko bylo o **2 body** nižší než
+    jeho vlastní dokument (dva z těch čtyř spolkl slack na prokládání, viz níž), takže log, který se měl
+    vejít celý, dostal svislý scroller a odscrolloval se o 2 body — horní řádek se ořezal. Zastropované
+    okýnko ukazovalo **29,71 řádku** místo třiceti. Co se u stropu **nezměnilo**: u horní hrany je
+    necelý řádek vidět i po opravě, protože `2 × inset` leží uvnitř dokumentu a skáče se na jeho úplný
+    konec. Rezerva rozhoduje o výšce, ne o zarovnání mřížky řádků.
+
+    Na `preferredScrollerStyle` se schválně neptáme: **mění se za běhu** podle připojené myši (u #347
+    se dva běhy sondy za sebou usadily jednou na `legacy`, jednou na `overlay`), a okýnko, kterému se
+    výška mění připojením myši, je horší než 17 bodů prázdna u krátkého logu.
+
+    **Drží to test, ale jiný než dřív** — `LogTailScrollerReserveTests` se ptá **kresby**: postaví
+    `makeScrollView()`, vynutí styl na instanci, položí do něj dokument širší než okýnko a odečte,
+    kolik z výšky ubylo. Test, který se ptá API s ručně vybranou velikostí, se dá splést stejnou
+    úvahou dvakrát; tenhle ne.
+  - **Obsah se počítá o `lineSpacing` velkoryseji, než co text potřebuje**, a je to schválně:
+    posledního řádku se prokládání netýká, takže vysázený dokument je `N × lineHeight − lineSpacing
+    + 2 × inset` vysoký, kdežto `height` počítá `N × lineHeight + 2 × inset`. Dva body slacku znamenají,
+    že okýnko je na obsah vždycky o chlup **větší**, nikdy menší. Kdo to bude chtít zpřesnit, musí
+    s tím posunout i `logMaxHeight` — strop na tom stojí.
+  - **Strop výšky je 445 bodů, tedy přesně 30 řádků** (#303; do té doby 320 bodů = 21 řádků, a do #347
+    441 — viz konec téhle odrážky). Zvednuto
     na výslovné přání po proklikání, ale **kolik přesně, rozhodlo měření** (`CheckLogRoomProbe`): sonda
     vyrendruje tab `Kontroly` s rozbaleným spadlým checkem a z hierarchie vyčte, kolik bodů viewportu
     zbylo **pod** okýnkem. Nad okýnkem je vždycky 173 bodů (hlavička karty, řádek checku, anotace, akce
@@ -3481,9 +3531,17 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     celý tab) a **357 bodů** (24 řádků, největší hodnota, u které se okýnko celé vejde i do výchozího
     okna: +3 řádky nejsou změna, o kterou se prosilo).
 
-    Strop je vždycky **celý počet řádků** (`14N + 21`), protože okýnko se otevírá na konci logu —
-    půlka řádku na spodní hraně by byla zrovna na tom řádku, kvůli kterému se log otevírá. Drží to
-    test, ne komentář.
+    Strop je vždycky **celý počet řádků** (`14N + 25`), protože okýnko se otevírá na konci logu —
+    strop, který slibuje 30 řádků a ukáže 29, je horší než o 4 body nižší okno. Drží to test, ne
+    komentář.
+
+    **Ze 441 na 445 u #347**, a je to důsledek opravené rezervy, ne nové rozhodnutí o výšce: hodnoty
+    jsou `14N + 2 × inset + rezerva`, takže s rezervou 17 místo 13 se celý řádek trefí na 445, ne 441.
+    Rezerva a strop jsou **pár** — jeden se bez druhého posunout nedá, jinak strop spadne mezi řádky.
+    Rozhodnutí „30 řádků“ zůstává; **přeměřeno**, co to stojí seznam checků (`CheckLogRoomProbe`,
+    řádek seznamu 28 bodů): každé „zbylo“ v tabulce výš se zmenší o 4 body, na skutečném okně
+    172 → 168, tedy **pořád 6 řádků** — rozhodující řádek tabulky se nemění. Zaplatí to okno 810, kde
+    ze 30 bodů zbyde 26, tedy z jednoho řádku seznamu žádný.
   - **ANSI se strhává a timestampy se schovávají.** ANSI je v obou změřených logách (116 řádků
     v 8,78MB) a bez toho se v okně objeví `^[[36;1m` uprostřed věty. Timestamp má skoro každý řádek
     (25 528 z 25 534) a zabírá 28 znaků, tedy ukrajuje šířku zrovna tam, kde je potřeba přečíst konec
@@ -5508,6 +5566,8 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `UserNotifying` | Protokol: doručit notifikaci a dát proud kliknutí. `PullRequestNotification` je vstup, `NotificationDelivery` výsledek |
 | `PreferenceStoring` | Protokol nad trvalými předvolbami (stav aplikace, ne `config.json`); `UserDefaults` ho splňuje |
 | `SystemNotificationCenter` | `UNUserNotificationCenter` za tím protokolem — **statická jediná instance** a delegát, který kliknutí převádí na hodnotu v proudu |
+| `ProcessIdentity` | `(pid, startedAt)` — dvojice, kterou nejde splést s recyklovaným PID (#351) |
+| `ProcessInspecting` | Protokol: co jádro ví o procesu a `SIGKILL` **na identitu, ne na PID**. `SystemProcessInspector` nad `sysctl(KERN_PROC_PID)` |
 
 Nad notifikacemi (#88) platí:
 
@@ -5575,7 +5635,7 @@ nad stavem prostředí ve view, patří to do reportu.
 nezavolají, by musely dopsat všechny. `workingDirectory` je jen v `ProcessStreaming` —
 `claude` pracovní složku flagem předat neumí, kdežto `git` si vystačí s `-C`.
 
-Šest věcí o podprocesech, na které se naráží znovu:
+Sedm věcí o podprocesech, na které se naráží znovu:
 
 - **Blokující I/O nesmí na kooperativní pool.** `readToEnd()` neumí čekat kooperativně
   a pool má jen tolik vláken, kolik je jader — několik paralelních review by si je
@@ -5599,6 +5659,10 @@ nezavolají, by musely dopsat všechny. `workingDirectory` je jen v `ProcessStre
   takže mezi `cancel()` a odeslaným signálem je několik hopů mezi aktory. Do #264 se nečekalo
   vůbec (nezabíjelo se) a osamocený `claude` se přerodil na `launchd` — změřeno, dvě takové
   session běžely na stroji čtyři dny. Podrobnosti o té cestě jsou v sekci `AppStore`.
+- **Co ta záruka nekryje: aplikaci zabitou zvenčí** (#351). Body výš popisují **normální**
+  ukončení, tedy cestu, na které se má co spustit. Když aplikace ztuhne a někdo ji zabije
+  (`kill -TERM`, Force Quit), nespustí se nic — hlavní vlákno je zaseknuté nebo proces prostě
+  zmizí. Řeší to `RunningSessions` níž, tedy **úklid po**, ne prevence.
 - **Proud smí skončit teprve po EOF na obou rourách, ne po exitu procesu.** Skončit hned po
   exitu by uřízlo řádky, které ještě leží v rouře — u review přesně ty poslední, ve kterých
   bývají nálezy.
@@ -5607,6 +5671,97 @@ nezavolají, by musely dopsat všechny. `workingDirectory` je jen v `ProcessStre
   `onTermination`, ne konec procesu) a po `SIGKILL`u proud ukončí samo. Data, která po
   konci proudu ještě přijdou, se zahodí a čtení se odpojí — ukecaný potomek by jinak plnil
   buffer, ze kterého už nikdo nečte.
+
+### Osiřelá session po zabité aplikaci (#351)
+
+`RunningSessions` (v `App/Store/`) drží na disku seznam podprocesů, které aplikace právě spustila,
+a **při startu zabije ty, které jí nepřežily**. Je to jediná záruka pro případ, na který #264
+nedosáhne: aplikace zabitá zvenčí.
+
+**Co se změřilo.** Potomek spuštěný `Foundation.Process`em přežije rodiči `SIGTERM` **i**
+`SIGKILL` a jádro ho přerodí na `launchd`:
+
+```
+$ ps -o pid,ppid,pgid,etime,comm -p 66365 -p 66367
+  PID  PPID  PGID ELAPSED COMM
+66365     1 66362   00:14 ./a-parent
+66367 66365 66367   00:13 sleep
+$ kill -KILL 66365
+  PID  PPID  PGID ELAPSED COMM
+66367     1 66367   00:22 sleep      # rodič pryč, potomek pod launchd
+```
+
+**Prevence na macOS není** a rozhodlo to tři věci, každou změřenou:
+
+- **`PDEATHSIG` v Darwinu neexistuje.** V `sys/spawn.h` je jen `RESETIDS`, `SETPGROUP`,
+  `SETSIGDEF`, `SETSIGMASK`, `SETSCHED*`, `SETEXEC`, `START_SUSPENDED`, `SETSID`,
+  `CLOEXEC_DEFAULT` a `PCONTROL_*`. Nic o konci rodiče — tedy ani přes `posix_spawn` napřímo,
+  natož přes `Foundation.Process`.
+- **`PROC_SETPC_TERMINATE` je o něčem jiném.** `libproc.h` u `proc_setpcontrol` píše *„state on
+  resource starvation“* a funkce nebere PID: nastavuje chování **volajícího** při hladovění po
+  paměti. Se smrtí rodiče nesouvisí.
+- **Procesová skupina nepomůže.** `Foundation.Process` dává potomkovi **vlastní** skupinu
+  (změřeno výš: `PGID == PID` potomka, kdežto rodič má skupinu shellu), takže signál poslaný
+  skupině aplikace na `claude` nedosáhne — a hlavně by ho musel poslat ten, kdo aplikaci zabíjí.
+
+Zbývá tedy **úklid po**: session se zapisují do cache a osiřelé zabije další start. Cena je, že
+sirotek žije do dalšího spuštění — což jsou v praxi vteřiny, protože zaseknutá aplikace se zabíjí
+právě proto, aby se spustila znovu.
+
+Jak to drží pohromadě:
+
+- **Identita je `(pid, startedAt)`, nikdy jen PID.** Čísla se recyklují, takže PID zapsané před
+  hodinou může dneska patřit cizímu procesu — a na stroji běží `claude` i mimo aplikaci
+  (uživatelovy vlastní session, paralelní agenti ve slotech). Okamžik vzniku procesu čte
+  `sysctl(KERN_PROC_PID)` v mikrosekundách; PID se recykluje, dvojice ne.
+- **Hledání v `ps` podle jména nebo promptu je zakázané.** Zabít cizí `claude` je horší než nechat
+  běžet sirotka, takže se pozná jedině to, co si aplikace **sama zapsala**.
+- **`ProcessInspecting.kill` bere identitu, ne PID.** `SystemProcessInspector` si ji ověří **znovu,
+  těsně před signálem**: mezi rozhodnutím a `kill(2)` je čas a v něm se PID může přesunout. Kdyby
+  metoda brala PID, závisela by ta kontrola na tom, jestli si na ni volající vzpomněl.
+- **Nekladné PID se odmítne dřív, než se na cokoli zeptáme.** `sysctl` na `pid == 0`
+  **odpovídá** (jádro), takže bez té pojistky by z nuly vylezla platná identita — a `kill(0, …)`
+  míří na celou **procesovou skupinu volajícího**, tedy na aplikaci samotnou.
+- **Rozhoduje `size`, ne návratový kód `sysctl`.** Změřeno: pro neexistující PID vrátí `sysctl`
+  taky `0`, jen nezapíše nic (`size == 0`) a `errno` nenastaví. Bez té kontroly by nulová
+  `kinfo_proc` vypadala jako platná odpověď.
+- **Záznam nese i vlastníka**, tedy identitu instance aplikace, která běh spustila — a **sirotek je
+  jen ten, jehož vlastník už neběží.** Bez toho by úklid zabíjel session běžící aplikaci pod
+  rukama, a naráží na to `xcodebuild test`: testovací host je tentýž bundle, takže má stejné
+  `CFBundleName` a sahá do **téže cache** jako aplikace v `/Applications`. Kontrola vlastníka je
+  zároveň to, co dovoluje nechat v souboru značky cizí instance a nemazat je.
+- **Rozhodnutí je čistá funkce** `Policy.orphanVerdict(for:ownerNow:processNow:)` se třemi
+  výsledky — `keep` (živý vlastník), `kill` (vlastník pryč a identita se shoduje), `discard`
+  (proces doběhl nebo jeho PID dostal někdo jiný). `RunningSessions` dělá jen I/O.
+- **Značku dostává jedině streamovací cesta.** `claude -p` běží minuty a platí se za něj tokeny;
+  `gh` a `git` z bufferované cesty doběhnou samy za sekundy a pouštějí se při **každém tiku
+  pollingu**, takže zápis do cache by u nich byl sáhnutí na disk za nic. Mechanismus přitom sedí
+  v `LaunchedProcess` (jedno místo pro obě cesty) a předává se mu nepovinným parametrem.
+- **Zapisuje se hned po `run()`, maže se koncem procesu.** Zápis odložený za `run()` by nechal
+  mezeru, do které se vejde ukončení aplikace. Mazání v `terminationHandler`u drží soubor krátký;
+  značka, kterou nikdo nemaže, by se úklidem zahodila taky (identita se neshoduje), ale byla by to
+  mrtvá váha, která svádí spolehnout se na ni.
+- **Bez paměťové cache**, na rozdíl od `InterruptedRuns`: soubor umí psát i druhá instance téhož
+  bundlu (testovací host) a cache v paměti by jí značky přepsala. Čte se dvakrát za session, tedy
+  ne v tiku ani při každém uložení.
+- **Úklid, který nic nezahodil, na soubor vůbec nesáhne.** Je to běžný stav (aplikace se obvykle
+  zavírá normálně) a start by za něj platil zápisem i zakládáním složky. Hlavní důvod je ale
+  druhý: zápis naprázdno by uměl **přepsat značku, kterou mezi čtením a zápisem zapsala jiná
+  instance** — a její sirotek by pak neodešel nikdy. Je na to test se souborem přeformátovaným
+  na kompaktní JSON, protože porovnání obsahu by přepis týmž seznamem nechytlo.
+- **Nečitelný soubor i selhaný zápis se berou jako prázdno**, stejně jako u `InterruptedRuns`:
+  nejhorší následek je neuklizený sirotek, tedy stav před #351. Vyhozená chyba by proti tomu
+  položila start aplikace, a tohle je záchranná síť.
+- **Úklid běží v `AppDelegate.applicationDidFinishLaunching`**, synchronně a až za delegátem
+  notifikací (ten má na pořadí podmínku, tenhle úklid žádnou). V `AppStore` být nemůže: značky
+  nestojí na preflightu ani na konfiguraci, takže po pádu, kvůli kterému preflight neprojde, by
+  se úklid nespustil vůbec.
+
+**Co #351 nekryje** a je to vědomé: zabíjí se **zapsaný proces, ne jeho potomci.** `claude` si
+spouští vlastní pomocné procesy (`bg-pty-host`, `bg-spare`) a ty tam po `SIGKILL`u zůstat mohou —
+je to tatáž mezera, jakou má `SIGKILL` z #264, a platí o ní totéž: peníze počítá hlavní proces,
+takže jeho zabití zastaví cenu. Rozšířit signál na celou skupinu by znamenalo druhou semantiku
+zastavení běhu vedle té z #264.
 
 **`zsh -lc` nečte `.zshrc`** — neinteraktivní login shell čte `.zshenv`, `.zprofile`
 a `.zlogin`. Přidat `-i` se zkoušelo a zahodilo (viz komentář v `LoginShellPathReader`

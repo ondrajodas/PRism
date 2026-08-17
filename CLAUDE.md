@@ -476,7 +476,7 @@ viz tvrdá podmínka č. 1.
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |
@@ -518,6 +518,15 @@ Zvlášť stojí za přečtení, než sáhneš na:
   číst souběžně, **zrušení i ukončení aplikace musí proces zabít** (#264 — obě cesty, jedním
   `SIGKILL`em z `LaunchedProcess`; zavírání se na něj navíc musí **počkat**, jinak `claude`
   osiří na `launchd` a běží dál).
+
+  **Ta záruka kryje jen normální ukončení** (#351). Aplikaci zabitou zvenčí — typicky protože
+  ztuhla — nemá kde spustit úklid a `claude -p` přežije `SIGTERM` i `SIGKILL` rodiče (změřeno
+  `ps -o ppid`: přejde pod `launchd`). **Prevence na macOS není** — v `sys/spawn.h` nic jako
+  `PDEATHSIG` a `PROC_SETPC_TERMINATE` je o hladovění po paměti —, takže se běžící session
+  **zapisují do cache** (`sessions.json`) a osiřelé zabije **další start**. Rozpoznání jedině
+  přes zapsanou identitu `(pid, startedAt)` a **jen když vlastník už neběží**; nikdy hledáním
+  v `ps` podle jména nebo promptu, protože `claude` na stroji běží i mimo aplikaci a zabít
+  cizí je horší než nechat běžet sirotka.
 
 ## Konvence
 

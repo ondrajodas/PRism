@@ -6,8 +6,14 @@ struct SubprocessStreamer: ProcessStreaming {
     /// skončí sám. Zkracují ho jen testy; v provozu jsou dvě sekundy.
     private let gracePeriod: Duration
 
-    init(gracePeriod: Duration = .seconds(2)) {
+    /// Kam se zapisuje, že session běží (#351). Streamovaný podproces je `claude -p`, tedy ten,
+    /// který běží minuty a jako sirotek platí tokeny dál — bufferovaná cesta značku nedostává,
+    /// viz `LaunchedProcess.sessions`.
+    private let sessions: RunningSessions?
+
+    init(gracePeriod: Duration = .seconds(2), sessions: RunningSessions? = nil) {
         self.gracePeriod = gracePeriod
+        self.sessions = sessions
     }
 
     func stream(
@@ -22,7 +28,8 @@ struct SubprocessStreamer: ProcessStreaming {
                 executable: executable,
                 arguments: arguments,
                 environment: environment,
-                workingDirectory: workingDirectory
+                workingDirectory: workingDirectory,
+                sessions: sessions
             )
             let run = StreamedRun(
                 launched: launched,

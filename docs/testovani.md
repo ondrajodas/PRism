@@ -2244,18 +2244,64 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 - **Výška okýnka konce logu (#292, strop zvednutý u #303)** — `LogTailHeightTests`, výčtem. Počítá se
   z metriky **toho** fontu, kterým se kreslí (#236), takže se dá tvrdit přesná hodnota proti
   `NSLayoutManager`u. Co se dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým by zbylo
-  441 bodů prázdna) a **nezastropovat dlouhý** (šest tisíc řádků naplno odtlačí seznam checků mimo
+  445 bodů prázdna) a **nezastropovat dlouhý** (šest tisíc řádků naplno odtlačí seznam checků mimo
   obrazovku, tedy zrovna to, kvůli čemu se detail stěhoval z `Přehledu`). Regrese ověřená vložením
   regrese: vyndaný `min(limit, …)` položí sedm tvrzení.
 
   **Strop se v sadě bere z aplikace, ne opisuje** (#303) — jinak by se s ním test rozešel potichu.
-  Tvrdí se u něj to jediné, co tvrdit jde: že padne na **celý počet řádků** (`14N + 21`) a že jich je
-  30. Půlka řádku na spodní hraně by byla zrovna na tom řádku, kvůli kterému se log otevírá — okýnko
-  se otevírá na konci.
+  Tvrdí se u něj to jediné, co tvrdit jde: že padne na **celý počet řádků** (`14N + 25`) a že jich je
+  30. Strop, který slibuje 30 řádků a ukáže 29, je horší než o 4 body vyšší okýnko.
 
-  Je u toho **kontrola měřidla**: rezerva na vodorovný scroller je v kódu opsané číslo, protože
-  `NSScroller.scrollerWidth` je vázaná na hlavní vlákno — test ji porovnává se systémem, aby se
-  okýnko nemohlo potichu rozejít se scrollerem.
+  **Tvrzení o rezervě na scroller je odsud pryč** (#347) — je to sada níž. Tady zůstává jen aritmetika
+  **nad** tou konstantou, a je to hranice, která má důvod: aritmetika neumí poznat, že je konstanta
+  sama špatná. Doloženo vloženou regresí — s rezervou 13 a stropem 441 projde celá tahle sada zeleně.
+
+- **Rezerva na vodorovný scroller u konce logu (#347)** — `LogTailScrollerReserveTests`, `@MainActor`.
+  **Nedopočítává, měří na kresbě**, a to je celý důvod, proč je to sada zvlášť.
+
+  Co se stalo: do #347 držel rezervu jeden test, který ji porovnával s
+  `NSScroller.scrollerWidth(for: .small, scrollerStyle: .legacy)`. Byl zelený — a hlídal přitom
+  **jinou velikost scrolleru, než jakou okýnko kreslí**. `LogTailTextView.makeScrollView()` nechává
+  `NSScrollView`u výchozí `.regular`, a ten bere **17 bodů**, ne 13. Test tedy zopakoval tu samou
+  úvahu jako kód a byl zelený nad rozbitou hodnotou; je to čítankový příklad toho, proč se u #236
+  měří na tom, na čem se kreslí. **Vacuous test, který vypadá jako pojistka** — tatáž třída omylu jako
+  `-text` v `.gitattributes`, které se ověří až na blobu (#353).
+
+  Proto se tady nic neodvozuje: postaví se `makeScrollView()`, dostane dokument s řádkem o 2 258
+  znacích (bez něj se scroller kvůli `autohidesScrollers` neobjeví a nebylo by co měřit)
+  a **odečte se, kolik z výšky ubylo**. Pět tvrzení:
+
+  | Co | Změřeno |
+  |---|---|
+  | Zábor **legacy** scrolleru je to, co se rezervuje | okýnko 445 → `clip.h` 428, tedy **17** |
+  | **Overlay** z výšky nebere nic, a proto se rezervuje legacy | okýnko 445 → `clip.h` 445, tedy **0** |
+  | Rezerva odpovídá API pro tu velikost, která se **kreslí** (vyčtenou ze scrolleru, ne napsanou) | `.regular` → 17 |
+  | Nezastropované okýnko unese celý svůj dokument, a nemusí kvůli tomu scrollovat | 5 řádků: 95 bodů okýnka, 78 na text, dokument 78, `origin.y` 0 |
+  | Zastropované okýnko nechá na text celý počet řádků | 445 → 428 − 8 = 420 = **30 × 14** |
+
+  **Styl se vynucuje na instanci** (`scroll.scrollerStyle`), ne přes `preferredScrollerStyle`: ten je
+  systémový stav, který se mění připojením myši, takže by z něj byl test na náladu stroje místo na oba
+  případy. Změřeno, že instanční nastavení zabere i tehdy, když je systémový styl druhý. Styl se
+  přesto nechává **usadit napřed** (`TestWait.awaitSettledScrollerStyle()`, #343) — jinak se okýnko
+  může přerovnat uprostřed měření.
+
+  **Regrese ověřená vložením regrese**, a rozhodovalo u toho, že padne **na těch bodech, ne na
+  timeoutu**: s vrácenou rezervou 13 a stropem 441 padnou 4 testy a 13 tvrzení za 3,3 s —
+  `abs(legacy − rezerva) → 4.0`, `13.0 == 17.0`, `visible → 74.0 >= 75.5`, `origin.y → 2.0 == 0.0`
+  a `abs(lines − lines.rounded()) → 0.2857` (tedy 4 body ze 14). `LogTailHeightTests` u toho projde
+  celá, což je zrovna ta hranice mezi oběma sadami.
+
+  **Ta chyba není vidět v renderu celého tabu** (`CheckLogRoomProbe`), a stojí to za zapsání: scrollery
+  se v testovacím procesu usadí obvykle na `overlay`, a tam je rezerva čisté odsazení, takže se nikdy
+  nic neuřízne. V renderu tabu je proto vidět jen to, že okýnko je o 4 body vyšší. Kdo se chce na ty
+  body podívat, má v téhle sadě dump okýnka pod `PRISM_RENDER_DIR` (`logtail-<N>-radku-<styl>.png`) —
+  ten kreslí vynucený `legacy`, takže je na něm vidět i ořezaný horní řádek:
+
+  ```bash
+  PRISM_RENDER_DIR=/tmp/render xcodebuild … test -only-testing:PRismTests/LogTailScrollerReserveTests
+  ```
+
+  Před opravou: `výška 63, na text zbylo 46, origin.y 2` u třířádkového logu. Po ní: `67 / 50 / 0`.
 
 - **Otevření konce logu (#303)** — `LogTailOpeningTests`. Tvrdí dvě věci, které se dají pokazit
   potichu: okýnko se otevře **na konci logu** a **vodorovně na nule**. Testuje se to přes
@@ -2272,7 +2318,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **projde**, a je to tak správně — hlídá jinou chybu (`x` u konce nejdelšího řádku).
 
   **Styl scrollerů se musí nechat usadit dřív, než se okýnko postaví** (#343,
-  `awaitSettledScrollerStyle()`) — bez toho je z téhle sady **flake**, a je to změřené:
+  `TestWait.awaitSettledScrollerStyle()` — od #347 ve `Tests/Support/TestWaiting.swift`, protože
+  ji potřebuje i sada nad rezervou na scroller a čekání má jedno místo) — bez toho je z téhle sady
+  **flake**, a je to změřené:
   `NSScroller.preferredScrollerStyle` je po startu procesu chvíli `overlay` (`1`) a teprve za pár kol
   smyčky se doresolvuje na `legacy` (`0`), který **místo doopravdy zabírá**. Když ta změna přijde až
   *po* dosazení cíle skoku, viewport se zmenší (`clip.h` **441 → 424**, tedy 17 bodů) a `origin.y` už
@@ -2316,6 +2364,19 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   okýnka je ve výšce pevné, takže z jednoho renderu vyjde konstanta a zbytek je odčítání. A **log musí
   dorazit až po prvním rozložení**, jako v aplikaci — když se text podá hned při stavbě hierarchie,
   okýnko zůstane na začátku ocasu, a to je vlastnost sondy, ne aplikace.
+
+  **Kandidáti jsou `14N + 25`** (#347, do té doby `14N + 21`) — řádek 14, `2 × inset` 8 a rezerva na
+  scroller 17. Je to tentýž výčet řádků, jen posazený na správnou rezervu; každá hodnota vyrostla
+  o 4 body. Přeměřeno u toho, co ta změna stojí seznam checků: **řádek seznamu je 28 bodů**, takže na
+  skutečném okně 172 → 168 bodů = pořád 6 řádků, kdežto v okně 810 ze 30 zbyde 26, tedy z jednoho
+  řádku žádný.
+
+  **Od #347 je u ní render krátkého logu ve dvou podobách** — bez dlouhého řádku a s ním (2 258 znaků).
+  Má to důvod: rezerva se z výšky ukusuje jedině tehdy, když vodorovný scroller doopravdy je, a
+  `autohidesScrollers` ho u samých krátkých řádků neukáže. Bez té druhé podoby by z renderu vypadlo
+  zrovna to, kde rezerva rozhoduje. **Ani jedna z nich ale ty ořezané body neukáže**, protože scrollery
+  se v testovacím procesu usadí obvykle na `overlay` — na to je dump ve
+  `LogTailScrollerReserveTests`, který si `legacy` vynutí.
 
   **Jak konec logu doopravdy vypadá, `ImageRenderer` neukáže** — obsah `NSScrollView`u nerasterizuje
   (prázdná plocha v renderu je omezení sondy, ne aplikace, a ověřilo se to i na třířádkovém logu).
@@ -2480,6 +2541,48 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   který by nezabíjel vlastního hosta, takže se to ověřuje spuštěním: pustit review, ukončit
   aplikaci a podívat se, jestli po ní zbyl `claude` s `ppid 1`. Změřeno u #264 na slotu — session
   zmizela, značka v `interrupted.json` zůstala a po restartu vyšel řádek `přerušeno`.
+- **Úklid osiřelé session po zabité aplikaci** (#351) — tři suity, protože se to láme na třech
+  různých místech, a **cennější polovina všech tvrzení je negativní**: že se signál nikam
+  neposlal. Ta se rozbije potichu, protože zabít cizí `claude` je horší než nechat běžet sirotka
+  a na stroji jich běží víc (uživatelovy vlastní session, paralelní agenti ve slotech).
+  - **`OrphanedSessionsTests`** — čistá funkce `Policy.orphanVerdict` **vyčerpávajícím výčtem**:
+    vlastník a proces mohou být každý ve třech stavech (běží tentýž, běží pod tím PID někdo jiný,
+    neběží nikdo), tedy devět kombinací. Osm z nich nesmí vydat `kill`.
+  - **`RunningSessionsTests`** — registr proti **skutečné** dočasné složce (o to jde: značka má
+    cenu jedině tím, že přežije proces, který ji zapsal) a proti **fake tabulce procesů**, protože
+    recyklované PID se skutečnými procesy vyrobit nedá. Čte se **soubor**, ne getter na objektu.
+
+    **Fake eviduje pokusy zvlášť od úspěchů, a je to podmínka.** `SystemProcessInspector` si
+    identitu ověřuje ještě sám, takže fake, který by ji ověřoval a mlčel, by kryl rozhodnutí,
+    které cizí proces zabít **chtělo** — negativní test by prošel i nad `Policy`, která identitu
+    neporovnává. Změřeno vloženou regresí: přesně tak to proběhlo, dokud fake evidoval jen
+    úspěchy. Negativní testy proto tvrdí `killRequests.isEmpty`, ne `killedProcesses.isEmpty`.
+  - **`SystemProcessInspectorTests`** — proti **skutečné tabulce procesů**: že `sysctl` vrací
+    identitu jen na živý proces, že nekladné PID identitu nemá (`sysctl` na `pid == 0` odpovídá
+    a `kill(0, …)` by mířil na procesovou skupinu aplikace), že `SIGKILL` **neodejde** na živý
+    proces se změněným `startedAt`, a celý řetěz: sirotek zapsaný s mrtvým vlastníkem se doopravdy
+    zabije, session živého vlastníka doopravdy zůstane běžet. Zabíjí se jedině to, co si suita sama
+    spustila — PID se nikde nehádá ani nehledá v `ps`.
+
+  Zapojení hlídá **`SubprocessStreamerTests`**: streamovaný proces se do registru zapíše a koncem
+  z něj zmizí. Bez toho testu by registr zůstal zelený a v cache by nebylo nic — a úklid při startu
+  by nad prázdným souborem hlásil, že sirotci nejsou.
+
+  **Že úklid naprázdno na soubor nesáhne, se testuje přes formát, ne přes obsah.** Zápis by uložil
+  týž seznam, takže porovnání „stejný obsah“ by ho nechytlo — soubor se proto před úklidem
+  přeformátuje na **kompaktní** JSON a test tvrdí, že kompaktní zůstal. Druhý test na to samé
+  z jiné strany: nad prázdnou cache nesmí soubor vůbec vzniknout.
+
+  Ověřeno **vložením regrese**, ve čtyřech podobách: bez porovnání identity procesu (spadne test
+  o recyklovaném PID v `Policy` **i** ten o cizím procesu v registru — a proti skutečnému systému
+  ten o změněném `startedAt`), bez kontroly vlastníka (spadnou tři testy včetně toho, ve kterém
+  by se zabil skutečný běžící proces), bez zápisu značky v `LaunchedProcess` (spadne test
+  zapojení) a bez podmínky na zápis v `reapOrphans` (spadnou oba testy o nedotčeném souboru).
+
+  Co testy nepokryjí, je **prevence, protože žádná není** — změřeno na harnessu, který spouští
+  potomka přes `Foundation.Process` stejně jako `LaunchedProcess`: po `kill -TERM` i `kill -KILL`
+  na rodiče má potomek `ppid 1`. Podrobnosti i výpis `ps` jsou v
+  [`architektura.md`](architektura.md), sekce *Osiřelá session po zabité aplikaci*.
 
 ## Čekání na jev (#296)
 
@@ -2491,6 +2594,7 @@ Sem patří všechno, co v testu znamená „počkej, až se něco stane“. Je 
 | `waitUntil("jev") { podmínka }` | čeká se na jev, který nastat **má** | `TestWait.deadline` = 2 min |
 | `settle()` | není na co čekat — tvrdí se, že se **nic nestalo**, nebo se čeká na zápis bez handle | bez stropu, 100 ms |
 | `TestWait.pause()` | smyčka, která práci **drží** rozběhnutou, dokud ji test nepustí | bez stropu (držení stropovat nejde) |
+| `TestWait.awaitSettledScrollerStyle()` | usadit **prostředí** před stavbou AppKitové hierarchie (#343, sem svedeno #347) | `TestWait.deadline` |
 
 **Čeká se odmlkami, ne `Task.yield()`.** Yield práci nepustí na procesor — přeřadí ji na konec
 fronty téhož aktoru —, takže hot spin na `MainActoru` vyhladoví hlavní smyčku a s ní časovače.
@@ -2561,8 +2665,14 @@ hierarchii, musí počítat s tím, že **proces po startu ještě není usazen�
 se doresolvuje z `overlay` na `legacy` až za pár kol smyčky, a legacy scroller mění výšku viewportu.
 Test, který si hierarchii postaví dřív, měří jiné rozměry než test, který běží o dvě sekundy později —
 a vyjde z toho flake, který se **pozná od zátěže tím, že padá pokaždé na týchž číslech**. Léčba je
-nechat tu vlastnost usadit **před** stavbou hierarchie (`awaitSettledScrollerStyle()`), ne stropovat
-čekání na výsledek; podrobnosti u sady výš.
+nechat tu vlastnost usadit **před** stavbou hierarchie (`TestWait.awaitSettledScrollerStyle()`), ne
+stropovat čekání na výsledek; podrobnosti u sady výš.
+
+**Od #347 je i tahle smyčka v `TestWait`**, ne privátní metodou v jedné suitě — potřebuje ji druhá
+sada (`LogTailScrollerReserveTests`) a druhá kopie by byla druhý strop, který se s tímhle rozejde.
+Cena je `import AppKit` v souboru o čekání, a je to vědomá daň za to pravidlo: jedno místo je
+přednější než čistota importů. Je to zároveň jediné čekání, které nečeká na **vlastní jev**, ale na
+usazené **prostředí** — proto je v `TestWait` jmenované zvlášť, ne schované do `waitUntil`.
 
 **Ověřeno vložením regrese, čtyřmi:** vyndaný `requestKill()` v `SubprocessRunneru` (spadne
 `RealEnvironmentTests` — „proces po zrušení pořád běží“), vyndaný `requestKill()` v
@@ -3057,11 +3167,59 @@ takže to vypadalo na jednu příčinu viděnou třemi pohledy. Kořeny ale byly
 | Kořen 100 % vzorků hlavního vlákna | Co to je | Poznávací znak |
 |---|---|---|
 | `NSDisplayCycleFlush → NSHostingView.layout()` | takt překreslování obrazovky, tedy **animace** | v cestě je `+[NSAnimationContext runAnimationGroup:]` (1754 vzorků) a `render(interval:…)` |
-| `NSRunLoop.flushObservers → NSHostingView.beginTransaction → GraphHost.flushTransactions` | vyprazdňování **čekajících transakcí** v každém kole smyčky, tedy něco, co graf pořád špiní | `runAnimationGroup` ani display cycle v cestě **nejsou vůbec** (nula vzorků) |
+| `NSRunLoop.flushObservers → NSHostingView.beginTransaction → GraphHost.flushTransactions` | vyprazdňování **čekajících transakcí** v každém kole smyčky, tedy něco, co graf pořád špiní | `runAnimationGroup` ani display cycle v cestě **nejsou vůbec** (nula vzorků). Tohle je #358; kdo to špiní, se dohledá pod `Update.dispatchActions()` — viz níž |
 
 Rozlišit se to musí, protože z toho vyjdou dvě různé opravy — a **pozná se to jedině tehdy, když se
 kořen přečte u každého vzorku zvlášť.** Sečtená tabulka vrcholů by obě signatury slila do jedné,
 protože `AG::Graph::UpdateStack::update()` a `propagate_dirty` jsou v obou.
+
+#### Kdo tu smyčku špiní: čte se `Update.dispatchActions()`, ne listy (#358)
+
+U té druhé signatury je otázka „co graf pokaždé zašpiní“, a **v listech odpověď není** — tam je vidět
+jen průchod celým `ForEach`em (`FileDiff.id`, `DiffRow.id`, `_StringGutsSlice._fastNFCCheck`), tedy
+následek. Postup, kterým se to u #358 dohledalo, je ve třech krocích a každý z nich je negativní
+tvrzení nebo jmenovitá cesta:
+
+1. **Vylučte vnější pohon.** V hlavním vlákně grepněte `_dispatch_main_queue_callback_4CF`,
+   `__CFRUNLOOP_IS_CALLING_OUT_TO_A_TIMER_CALLBACK_FUNCTION__` a obsluhu událostí. Když jsou všechny
+   **nula** (a u #358 byly), smyčku nekrmí nic zvenčí a pohon musí být uvnitř transakce. Dokud tam
+   timer je, hledá se timer.
+2. **Přečtěte podstrom `static Update.dispatchActions()`** pod `GraphHost.runTransaction`. Tam SwiftUI
+   pouští akce, které si transakce naplánovala — a právě jimi se zavírá kolo. U #358 bylo 1630 z 1690
+   vzorků v `EventBindingManager.enqueueHoverUpdateIfNeeded()` → `NSHostingView.didRequestHoverUpdate()`
+   a přes `HoverResponder.updatePhase(_:)` se z něj volalo `.onContinuousHover` v našem view. Druhý
+   re-arm ležel vedle: `LazyLayoutViewCache.signalPrefetch()` → `NSHostingView.requestUpdate(after:)`.
+3. **Najděte v tom podstromu rámec aplikace a dohledejte, co zapisuje.** Naše closure je ve `sample`u
+   číslovaná v pořadí literálů v `body` (`closure #5 in DiffPairBlockRowView.body.getter`), takže se
+   podle pořadí dopočítá řádek. U #358 to byl bezpodmínečný zápis do `@State hovered` — a ten typ je
+   `(index: Int, side: DiffSide)?`, tedy **tuple, který `Equatable` není**, takže na něm nemůže zabrat
+   žádné porovnání ani výš.
+
+`sample` tiskne strom s odsazením z `+!:|`, takže se podstrom nedá grepnout — čte se buď `sed`em podle
+řádků, nebo krátkým skriptem, který odsazení převede na hloubku a vypíše **přímé potomky** daného uzlu.
+Bez toho se v podstromu s desítkami tisíc řádků neorientuje.
+
+Dvě věci, které se u toho **taky musí změřit**, protože obě vypadají jako příčina a nejsou:
+
+- **Naše `NSViewRepresentable`.** Grepněte `updateNSView`, `lineFrames`, `height(forWidth:)`,
+  `sizeToFit`, `layoutManager`. U #358 to bylo 2, 0, 0, 0, 0 — text se vůbec nepřeměřoval, takže
+  zpětná vazba `noteFrames` → `@State frames` (kterou drží strážce v `Coordinator`u) je vyloučená.
+- **Že to není animace.** `runAnimationGroup`, `NSDisplayCycleFlush` a `CABasicAnimation` musí být nula,
+  jinak se čte ta první signatura z tabulky výš.
+
+**Reprodukce si žádá kurzor ležící v okně nad blokem kódu.** Tohle je na tom nejdražší poznatek: #358
+se nedařilo vyrobit na vyžádání (`%cpu` 0,0 při „nečinnosti“) právě proto, že hover responder se
+nerozřeší, když myš nad diffem není — a „nečinnost“ znamená nechat myš tam, kde skončila. Kde je,
+se zjistí bez zásahu do aplikace:
+
+```bash
+# NSEvent.mouseLocation + CGWindowListCopyWindowInfo, tedy jen čtení — aplikace se nijak neovládá
+swift mouse.swift
+```
+
+Podmínkou je dál **split diff** (jen `DiffPairBlockRowView` má ten tuple stav); velký diff kolo
+zdraží, ale nezpůsobí. A **běžící review je zhoršovák, ne podmínka** — doloženo tím, že potomek
+`claude` skončil a okno zůstalo minutu dál na 98,2–100,5 % CPU s nulou potomků.
 
 **A že jsou to doopravdy dvě věci, se ověří vložením regrese**, ne úsudkem: vrátit opravenou příčinu
 zpátky a vzít `sample` **testovacího hosta** při běžící sondě (`sample <pid> 4`, PID se najde jako
@@ -3138,7 +3296,7 @@ Vyloučené příčiny #350, aby po nich příští session nesáhla znovu:
 | Podezření | Čím padlo |
 |---|---|
 | Každá událost průběhu přepočítá pruh záložek (`tabs` → `Policy.tally` → `visibleFindings`) | Cena je změřená (9–55 ms na událost), ale frekvence je 0,07–0,37 ev/s → nejvýš 2 % CPU. A cena je **v zašpinění těla, ne v té práci**: zápis do `reviewPhases`, který s osou nedělá nic, stojí stejně (kontrolní série v `DetailProgressMeasurement`). Odznaky samotné jsou 0,006–0,15 ms |
-| ~~Nekonečná smyčka rozvržení (zápis do stavu během `body`)~~ **nevyloučená, zůstává** | Vylučovalo se to úvahou, že okno **reagovalo** (jen lagovalo), takže smyčka to být nemůže — **a ta úvaha je špatná.** Smyčka přes runloop observer (`flushObservers → beginTransaction`) pustí mezi koly události, takže okno odpovídá a jen lagne; procesor nepustí to ani ono. Signatura vzorků 1 a 3 je právě tohle a **oprava prstýnku ji nevysvětluje** (ověřeno vložením regrese) |
+| ~~Nekonečná smyčka rozvržení (zápis do stavu během `body`)~~ **potvrzená, je z ní #358** | Vylučovalo se to úvahou, že okno **reagovalo** (jen lagovalo), takže smyčka to být nemůže — **a ta úvaha je špatná.** Smyčka přes runloop observer (`flushObservers → beginTransaction`) pustí mezi koly události, takže okno odpovídá a jen lagne; procesor nepustí to ani ono. Signatura vzorků 1 a 3 je právě tohle a **oprava prstýnku ji nevysvětluje** (ověřeno vložením regrese). Doměřeno na živém ztuhlém okně: pohonem je **hover** (`.onContinuousHover` píše `@State` bez porovnání), postup je v sekci níž |
 | Rozbor `stream-json` běží na hlavním vlákně | `ClaudeReviewRunner` je `struct` bez izolace a `SWIFT_VERSION = 6.0` (bez `NonisolatedNonsendingByDefault`), takže jeho `async` metody běží na globálním executoru; `readabilityHandler` čte rouru na vlastní frontě Foundationu. Ve `sample`u není ani jeden rámec parseru |
 | Osa běhu roste a její kopírování zdražuje každou událost | `reviewTimelines` má strop 300 uložených položek a kopie pole struktur je v šumu — a hlavně: kontrolní série výš ukazuje, že na tom, **co** se do storu zapíše, nezáleží |
 

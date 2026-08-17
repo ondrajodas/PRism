@@ -2016,7 +2016,8 @@ skutečného stavu, ne zátěže.
 **Příčina je v prostředí procesu, ne v `jumpToEnd`.** `NSScroller.preferredScrollerStyle` je po startu
 procesu chvíli `overlay` a teprve za pár kol smyčky se doresolvuje na `legacy` — a legacy scroller
 místo doopravdy zabírá. Když ta změna přijde *až po* dosazení cíle skoku, viewport se zmenší
-(`clip.h` **441 → 424**, tedy 17 bodů, ne 13 jako rezerva ve `height`), `origin.y` zůstane a okýnko je
+(`clip.h` **441 → 424**, tedy 17 bodů, ne 13 jako rezerva ve `height` — ten rozpor vyřešilo #347, viz
+níž: měření bylo správné, rezerva ne), `origin.y` zůstane a okýnko je
 o řádku nad koncem — a **nikdo to nepřerovná**, protože další `layout()` přijít nemusí. Diff #339
 na tom nic nezpůsobil, jen posunul, které suity běží v tom startovacím okně.
 
@@ -2028,7 +2029,8 @@ tři zelené běhy, na kterých ten návrh stál, byly shoda. Změřeno naopak, 
 `maxY = 84 006`) a **beze změny v aplikaci**. V aplikaci je totiž ten stav nedosažitelný: styl
 scrollerů je usazený dávno předtím, než se dá otevřít detail checku.
 
-Opraveno tedy **v testu** (`awaitSettledScrollerStyle()`), aplikace zůstala nedotčená. Zamítnuto i
+Opraveno tedy **v testu** (`TestWait.awaitSettledScrollerStyle()`; u #343 to byla ještě privátní
+metoda `LogTailOpeningTests`, do `TestWait` se to svedlo u #347), aplikace zůstala nedotčená. Zamítnuto i
 čekat na „konec je vidět“ místo na `origin.y > 0`: bez změny v aplikaci to dojede na 120s strop a celý
 běh má **184 issues**, protože pumpování smyčky vyhladoví `MainActor`.
 
@@ -2252,6 +2254,97 @@ naráz položí 5 tvrzení v 5 testech napříč třemi sadami.
 stojí věta o souboru se zadáním s ukázkovou cestou a pod blokem poznámka, že se připojí jen u PR,
 ke kterému se zadání sehnalo.
 
+### #347 — rezerva na scroller v konci logu byla odměřená na scrolleru, který se nekreslí
+
+`LogTailTextView.horizontalScrollerHeight` nechávala na vodorovný scroller **13 bodů**, ale u #343 se
+změřilo, že legacy scroller zabere **17**. Rozpor ležel zapsaný v `docs/architektura.md` bez vlastního
+issue; #347 ho zakládalo proto, aby se neztratil.
+
+**Nebyl to odhad, a to je na tom to podstatné.** Třináct bodů je
+`NSScroller.scrollerWidth(for: .small, scrollerStyle: .legacy)`, tedy **skutečně odměřená hodnota —
+jiného ovládacího prvku**. `makeScrollView()` nechává `NSScrollView`u výchozí **`.regular`**, a ten bere
+17. Je to čítankový příklad #236 (kdo si říká o velikost, musí ji měřit na tom, na čem kreslí) a hůř se
+hledá než odhad, protože konstanta vypadá odměřeně. Vypadala odměřeně i **testu**, který ji držel: ptal
+se API na `.small`, tedy zopakoval tu samou úvahu, a byl proto zelený nad rozbitou hodnotou.
+
+Změřeno **u obou stylů**, protože jeden je půlka problému: okýnko o výšce 441 má s **legacy** stylem
+`clip.h` 424 (zábor **17**), s **overlay** 441 (zábor **0** — overlay plave nad obsahem, i když je
+17 bodů vysoký). Rezervuje se legacy jako **horší případ**.
+
+Co ty 4 body dělaly, a **na každém konci jinak**. Nezastropované okýnko bylo o **2 body** nižší než
+jeho vlastní dokument (dva ze čtyř spolkl slack na prokládání posledního řádku, který `height` počítá
+navíc), takže log, který se měl vejít celý, dostal svislý scroller a odscrolloval se — horní řádek se
+ořezal (třířádkový log: `výška 63, na text 46, origin.y 2`, po opravě `67 / 50 / 0`). Zastropované
+okýnko ukazovalo **29,71 řádku** místo třiceti, tedy strop sliboval 30 a ukázal 29.
+
+**Rozhodnuto pro konstantu, ne pro dotaz na API**, a je to zapsané ve specifikaci i u konstanty:
+`NSScroller.scrollerWidth` je `@MainActor` (dědí z `NSControl`), kdežto výška se počítá `nonisolated`
+— a hlavně `CheckDetailView.logMaxHeight` je ručně vybraná konstanta, která musí být
+`14N + 2 × inset + rezerva`; s rezervou známou teprve za běhu by se u stropu nedalo tvrdit, že padne na
+celý řádek, právě tam, kde se vybírá. Ty dvě konstanty jsou **pár**, takže se strop posunul **441 → 445**
+(pořád 30 řádků, `14N + 25`). Rozhodnutí „30 řádků“ z #303 tím zůstává; **přeměřeno**, co to stojí
+seznam checků (`CheckLogRoomProbe`, řádek 28 bodů): na skutečném okně 172 → 168 bodů, tedy **pořád
+6 řádků**, zaplatí to okno 810, kde ze 30 bodů zbyde 26.
+
+Co se **nezměnilo**, ať to někdo nehledá jako regresi: u horní hrany zastropovaného okýnka je necelý
+řádek vidět i po opravě — `2 × inset` leží uvnitř dokumentu a skáče se na jeho úplný konec, takže
+mřížka řádků na hranu viewportu nepadne. Rezerva rozhoduje o **výšce**, ne o zarovnání mřížky. Zadání
+mluvilo o „uříznutém posledním řádku“; ořezaný je horní, a jen u nezastropovaného okýnka.
+
+Testů je **2768**: nová sada `LogTailScrollerReserveTests` přidala **5** (jeden z nich přes pásmo pěti
+výšek okýnka) a **jeden ubyl** — ten vacuous, který se ptal API na `.small`. Nová sada se ptá
+**kresby**, ne API: postaví `makeScrollView()`, vynutí styl na instanci a odečte, kolik z výšky ubylo.
+Regrese ověřena vložením regrese a rozhodovalo, že padá **na těch bodech, ne na timeoutu**: s vrácenou
+rezervou 13 a stropem 441 padnou **4 testy a 13 tvrzení** za 3,3 s (`abs(legacy − rezerva) → 4.0`,
+`13.0 == 17.0`, `visible → 74.0 >= 75.5`, `origin.y → 2.0 == 0.0`, `0.2857` řádku). `LogTailHeightTests`
+u toho projde celá — a je to ta hranice, proč je nová sada zvlášť.
+
+**Vidět je to jen jako 4 body výšky okýnka**, takže na proklikání nebylo co ukazovat; zkontrolováno
+offscreen renderem před a po (`CheckLogRoomProbe` i nový dump okýnka pod `PRISM_RENDER_DIR`). Zapsané
+u toho zůstává, že v renderu celého tabu ta chyba **vidět není**: scrollery se v testovacím procesu
+usadí obvykle na `overlay`, kde je rezerva čisté odsazení — proto ten dump vynucuje `legacy`.
+
+Vedle toho se `TestWait.awaitSettledScrollerStyle()` (#343) přestěhoval z privátní metody
+`LogTailOpeningTests` do **`TestWait`**, protože ho potřebuje i nová sada a čekání má v tomhle repu
+jedno místo (#296).
+
+### #351 — zabitá aplikace už nenechá běžet osiřelý `claude -p`
+
+Od #264 se session zabíjí při zrušení i při ukončení, ale ta záruka platí jen pro **normální**
+ukončení. Když aplikace ztuhne a zabije se
+zvenčí, úklid se nemá kde spustit: potomek spuštěný `Foundation.Process`em přežije rodiči `SIGTERM`
+**i** `SIGKILL` a přejde pod `launchd` (změřeno `ps -o ppid` na harnessu, který spouští potomka
+stejně jako `LaunchedProcess`). Platí se tedy za review, jehož výsledek nemá kam doručit.
+
+**Prevence se zamítla měřením, ne úvahou.** Darwin nemá nic jako `PDEATHSIG` (v `sys/spawn.h` takový
+flag není, tedy ani přes `posix_spawn` napřímo), `PROC_SETPC_TERMINATE` je podle `libproc.h` o
+hladovění po paměti a nastavuje se sám sobě, a procesová skupina nepomůže, protože
+`Foundation.Process` dává potomkovi **vlastní** (změřeno: `PGID == PID` potomka). Zbývá tedy úklid
+**po**: běžící session se zapisují do cache (`sessions.json`) a osiřelé zabije **další start**
+aplikace. Cena je, že sirotek žije do dalšího spuštění — v praxi vteřiny, protože zaseknutá aplikace
+se zabíjí právě proto, aby se spustila znovu.
+
+**Nejcennější tvrzení je negativní: nezabije se cizí session.** Identita je `(pid, startedAt)`
+z jádra, nikdy jen PID (čísla se recyklují) a nikdy hledání v `ps` podle jména nebo promptu — na
+stroji běží `claude` i mimo aplikaci. `ProcessInspecting.kill` proto bere **identitu**, ne PID,
+a ověří si ji ještě těsně před signálem. Záznam navíc nese **vlastníka**, tedy instanci aplikace,
+která běh spustila, a sirotek je jen ten, jehož vlastník už neběží: bez toho by běh testů zabil
+review běžící aplikace, protože testovací host má stejné `CFBundleName`, tedy tutéž cache.
+
+Testů je **2793** a jsou zelené (po sloučení s #347). Rozhodnutí sedí v `Policy.orphanVerdict` jako čistá funkce se třemi
+výsledky a testuje se vyčerpávajícím výčtem devíti kombinací; regrese ověřena vložením ve čtyřech
+podobách (bez porovnání identity, bez kontroly vlastníka, bez zápisu značky, bez podmínky na zápis
+při úklidu) a každá položí jiná tvrzení. **Na tomhle není co vidět** — v okně se nemění nic, je to
+procesní hygiena.
+
+**Změřeno na běžící aplikaci ve slotu, ne jen v testech.** Do cache slotu se položil stav, v jakém
+aplikace je uprostřed review (značka s vlastníkem = běžící PRism a procesem = dlouho běžící
+podproces), pak se aplikace zabila zvenčí a `ps -o ppid` řekl, co se stalo: po `kill -TERM` i po
+`kill -KILL` podproces **přežil**, a po restartu aplikace **zmizel**. Kontrolní skupina — sirotek
+se **živým** vlastníkem — zůstala běžet a její značka v souboru taky. Cizí `claude` na stroji
+(dva paralelní agenti, uživatelovy session) se u toho nedotkl žádný: nejstarší běží dál deset dní.
+A PID přitom během měření **přetekl** z 99902 na 201, což je doklad, že recyklace čísel není teorie.
+
 ### #350 — okno tuhlo při běžícím review, a byla to jedenáctibodová animace (jedna příčina ze dvou)
 
 Hlavní aplikace se třikrát za jedno dopoledne dostala do stavu, ve kterém hlavní vlákno viselo na
@@ -2290,7 +2383,7 @@ z rozdělané práce po předchozí session zbývalo dodělat.** Rozhoduje **ko�
 | Vzorek | Kořen 100 % vzorků hlavního vlákna | Co v něm je | Vysvětluje ho |
 |---|---|---|---|
 | 2 (computed properties detailu) | `NSDisplayCycleFlush → NSHostingView.layout()` (3591) + `NSAnimationContext.runAnimationGroup` (1754) | takt překreslování obrazovky | **prstýnek** — opraveno tady |
-| 1 (osa konverzace) a 3 (diff) | `NSRunLoop.flushObservers → NSHostingView.beginTransaction → GraphHost.flushTransactions` (3663/3663, resp. 3679/3679), **display cycle nula, `runAnimationGroup` nula** | rozvržení líného seznamu (`LazySubviewPlacements`, `ScrollViewLayoutComputer.Engine.sizeThatFits`) | **jiná příčina** — vlastní issue |
+| 1 (osa konverzace) a 3 (diff) | `NSRunLoop.flushObservers → NSHostingView.beginTransaction → GraphHost.flushTransactions` (3663/3663, resp. 3679/3679), **display cycle nula, `runAnimationGroup` nula** | rozvržení líného seznamu (`LazySubviewPlacements`, `ScrollViewLayoutComputer.Engine.sizeThatFits`) | **jiná příčina** — #358 |
 
 Že to nejsou dva pohledy na jedno, je **ověřené vložením regrese, ne úsudkem**: nad buildem
 s vrácenou SwiftUI animací vyšel `sample` testovacího hosta zase na `NSDisplayCycleFlush`
@@ -2300,12 +2393,30 @@ kreslí jedině při `isRunning`, což je `reviewTasks[pr] != nil`, a v tom vzor
 session.
 
 **Ta druhá příčina se nepřibalila** a je to schválně (pravidlo o jedné změně v jednom PR i o měření
-před/po). Co se o ní ví: cena je v tom, že `ScrollView` počítá **ideální velikost**, což donutí líný
-seznam projít `_LazyLayout_Subviews.apply` přes **celý** `ForEach`, a děje se to při každém průchodu
-smyčky. Co se **neví**, je co graf pokaždé zašpiní. Reprodukovat se to na vyžádání nepodařilo:
-otevřený PR se třemi a čtyřmi změněnými soubory, přepnutí na `Změněné soubory`, projetí diffu
-posuvníkem a nečinnost — `%cpu` zůstalo na **0,0** ve všech případech. Nezávisí to tedy na tom, že je
-diff otevřený, a scénář, ve kterém to nastává, se musí najít; oba vzorky uživatele jsou z něj.
+před/po) — je z ní **#358**. Co se o ní ví: cena je v tom, že `ScrollView` počítá **ideální
+velikost**, což donutí líný seznam projít `_LazyLayout_Subviews.apply` přes **celý** `ForEach`, a
+děje se to při každém průchodu smyčky.
+
+**Co graf špiní, se doměřilo na živém ztuhlém okně**, až když se to podařilo reprodukovat — je to
+**hover**. Ve vzorku (30 s po 1 ms, 23 653 vzorků hlavního vlákna) leží 92,8 % v jedné transakci a
+**žádný jiný callout tam není**: nula vzorků na timeru, nula na hlavní dispatch frontě, nula na
+obsluze událostí, takže smyčku nekrmí nic zvenčí. Uvnitř je 1630 z 1690 vzorků
+`Update.dispatchActions()` v `EventBindingManager.enqueueHoverUpdateIfNeeded()` →
+`NSHostingView.didRequestHoverUpdate()` a přes `HoverResponder.updatePhase(_:)` se z něj volá
+`.onContinuousHover` v `DiffPairBlockRowView`. Ta akce zapíše `@State hovered` **bez porovnání se
+stávající hodnotou** — a je to `(index: Int, side: DiffSide)?`, tedy tuple, který v Swiftu
+`Equatable` **není**, takže na něm nemůže zabrat ani žádné porovnání výš. Tím se kolo zavře: zápis →
+neplatné tělo bloku → neplatné `LazySubviewPlacements` → přeloží se všechny podviews → změní se
+geometrie responderů → další hover update. Druhý, slabší re-arm je
+`LazyLayoutViewCache.signalPrefetch()` → `NSHostingView.requestUpdate(after:)` (55 vzorků).
+
+**Proč se to nedařilo reprodukovat:** chyběl **kurzor ležící v okně nad blokem kódu** (ověřeno na
+živém stavu přes `NSEvent.mouseLocation` a `CGWindowListCopyWindowInfo`). Pokusy byly „otevřený PR se
+třemi a čtyřmi soubory, přepnutí na `Změněné soubory`, projetí diffu, nečinnost“ → `%cpu` **0,0** —
+a „nečinnost“ znamenala nechat myš tam, kde skončila. Bez hover responderu se smyčka nemá čím zavřít.
+Podmínkou je **split diff** (`DiffPairBlockRowView`, tedy tuple stav); velký diff kolo jen zdraží,
+neschová. A **běžící review je zhoršovák, ne podmínka**: doloženo tím, že potomek `claude` během
+sledování skončil a okno zůstalo minutu dál na **98,2–100,5 %** CPU bez potomků.
 
 Prstýnek je od #350 `SpinningRingView` — `NSView` se dvěma `CAShapeLayer`y a `CABasicAnimation` na
 `transform.rotation.z`. Kresba je změřená na pixelech (oblouk 0,35 kruhu = 0,30 ze `strokeEnd` plus
@@ -2317,8 +2428,9 @@ Z toho je nové pravidlo v `CLAUDE.md` i grep, který musí vyjít prázdný. Te
 totéž co dřív — kresba se ověřila na skutečném okně, tedy zvětšeným výřezem pruhu záložek z pěti
 snímků po 0,7 s, na kterých sytý oblouk objíždí kruh po směru hodin. **Nepřibalené a otevřené**
 zůstávají dvě věci, obě změřené: zašpinění těla detailu událostí průběhu (9–55 ms na událost při
-0,07–0,37 události za sekundu, tedy nejvýš 2 % CPU) a **druhá příčina tuhnutí** z tabulky výš.
-Každá si zaslouží vlastní issue.
+0,07–0,37 události za sekundu, tedy nejvýš 2 % CPU) a **druhá příčina tuhnutí** z tabulky výš,
+která je jako **#358** a s doměřenou příčinou (hover, viz výš). Na to zašpinění těla detailu
+událostí průběhu vlastní issue zatím není.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
