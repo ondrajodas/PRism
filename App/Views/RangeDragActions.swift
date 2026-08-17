@@ -4,11 +4,19 @@ import CoreGraphics
 ///
 /// Jeden parametr místo tří closures, které patří k sobě — stejný vzor jako `DraftActions`.
 struct RangeDragActions {
-    /// Rámečky řádků. `nil` = tady se netáhne (náhledy, testy skládání řádků).
-    var frames: DiffRowFrames?
-    /// Který diff se zrovna kreslí — pull request, nebo commit v tabu `Commity`. Krabice podle
-    /// toho pozná, že v ní leží plochy z **jiného** diffu, a zahodí je (#274, viz `DiffRowFrames`).
-    var subject: String = ""
+    /// Krabice rámečků a diff, do kterého se hlásí. `nil` = tady se netáhne (náhledy, testy
+    /// skládání řádků).
+    var box: FrameBox?
+
+    /// **Krabice a klíč diffu jsou jedna hodnota schválně** (#274). Krabice, která klíč nedostane,
+    /// tiše přestane zahazovat plochy z jiných záložek — tedy přesně ta regrese, kterou #274
+    /// opravuje, a potichu. Jedno bez druhého se proto nedá předat ani omylem; volitelné pole
+    /// s výchozím prázdným klíčem by se zapomenout dalo (nález Copilota na #349).
+    struct FrameBox {
+        let frames: DiffRowFrames
+        /// Co se kreslí — pull request (`owner/repo#číslo`), nebo commit v tabu `Commity`.
+        let subject: String
+    }
     /// Rozsah se hlásí průběžně: `from` je řádek, na kterém tažení začalo, `to` ten pod myší.
     /// Komentář z toho vznikne až na konci — během tažení se jen zvýrazňuje.
     ///

@@ -2100,7 +2100,8 @@ v [`docs/testovani.md`](testovani.md), *Kolik stojí otevřená záložka*.
 přetéká mezi pull requesty, takže jeden `DiffView` obsluhuje všechny záložky a v krabici ploch pro
 tažení se vrstvily plochy každého prohlédnutého PR — vyklizení plochy je sundá jedině tam, kam nový
 blok dosáhl. Zápis je lineární v jejich počtu: **0,25 ms** na blok s jedním PR, **0,49 ms** se dvěma,
-**0,93 ms** se čtyřmi. Od #274 nese každé hlášení klíč diffu (`RangeDragActions.subject`) a cizí
+**0,93 ms** se čtyřmi. Od #274 nese každé hlášení klíč diffu (`RangeDragActions.FrameBox`, kde krabice
+a klíč jsou jedna hodnota — po nálezu Copilota, aby se nedalo předat jedno bez druhého) a cizí
 plochy se zahodí — **z hlášení, ne zvenčí**, protože vyprázdnění při přepnutí záložky je chyba
 z #110 (bloky, které stojí, už nic nenahlásí a tažení nemá co najít).
 

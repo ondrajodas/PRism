@@ -272,8 +272,7 @@ struct DiffView: View {
                 draggedCells: draggedCells,
                 dragEnd: dragged?.end,
                 rangeDrag: RangeDragActions(
-                    frames: rowFrames,
-                    subject: subject,
+                    box: .init(frames: rowFrames, subject: subject),
                     move: { draft.dragRange(file.displayPath, $0, $1) },
                     end: draft.endRangeDrag
                 ),

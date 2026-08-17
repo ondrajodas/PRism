@@ -2899,7 +2899,9 @@ Sbalení celých souborů (`foldedFiles`) je **jiná věc než rozbalení kontex
   sám sebe, protože leží celý ve své ploše. Prázdná plocha se ignoruje — blok, který se ještě
   nerozložil, hlásí nulový rámeček a vyklidil by cizí záznamy na souřadnici nula.
 - **V krabici je nejvýš jeden diff** (#274), a hlídá to klíč, který každé hlášení nese s sebou
-  (`RangeDragActions.subject` — `owner/repo#číslo`, u diffu commitu jeho sha). Je to potřeba proto,
+  (`RangeDragActions.FrameBox.subject` — `owner/repo#číslo`, u diffu commitu jeho sha; krabice a klíč
+  jsou **jedna hodnota**, aby se nedalo předat jedno bez druhého a zahazování tiše vypnout). Je to
+  potřeba proto,
   že `@State` detailu **přetéká mezi pull requesty**: jeden `DiffView` obslouží všechny otevřené
   záložky, takže se v krabici vrstvily plochy každého PR, na který se člověk podíval. Vyklizení
   plochy je sundá jedině tam, kam nový blok dosáhl — u krátkého diffu po dlouhém tedy zbyde ležet

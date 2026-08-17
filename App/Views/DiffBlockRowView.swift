@@ -145,7 +145,7 @@ struct DiffBlockRowView: View {
 
     /// Zapíše plochy řádků do krabice pro tažení — **naráz za celý blok** (#252).
     private func noteRows() {
-        guard let box = rangeDrag.frames else { return }
+        guard let box = rangeDrag.box else { return }
         let gutter = geometry
         let origin = placement.rect.origin
         let rows = frames.compactMap { frame -> DiffRowFrames.Entry? in
@@ -156,7 +156,7 @@ struct DiffBlockRowView: View {
                 anchor: anchor
             )
         }
-        box.note(rows, covering: placement.rect, of: rangeDrag.subject)
+        box.frames.note(rows, covering: placement.rect, of: box.subject)
     }
 
     private func anchor(of frame: DiffBlockLineFrame) -> DraftAnchor? {
@@ -176,7 +176,7 @@ struct DiffBlockRowView: View {
             .onChanged { value in
                 let y = value.startLocation.y - placement.rect.minY
                 guard let frame = geometry.line(atY: y), let anchor = anchor(of: frame) else { return }
-                rangeDrag.move(anchor, rangeDrag.frames?.anchor(at: value.location, on: nil))
+                rangeDrag.move(anchor, rangeDrag.box?.frames.anchor(at: value.location, on: nil))
             }
             .onEnded { _ in rangeDrag.end() }
     }
