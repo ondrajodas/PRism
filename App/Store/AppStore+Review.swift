@@ -200,13 +200,19 @@ extension AppStore {
             // strhávalo před checkoutem.
             guard await canSpendSession(on: pr) else { return }
 
+            // Zadání se připravuje **po checkoutu a před `runSkills`** (#120): leží vedle
+            // pracovního stromu, takže složka pod ním má existovat, a session ho musí mít
+            // v ruce dřív, než se poskládá prompt. Nic to nestojí — popis PR je v `detail`.
+            let intentFile = prepareIntent(for: pr, of: detail)
+
             try await runSkills(
                 for: pr,
                 of: detail,
                 in: worktree,
                 using: reviewer,
                 saving: reviews,
-                only: subset
+                only: subset,
+                intent: intentFile
             )
             reviewPhases[pr] = nil
             await notifyAboutFinishedReview(of: pr)
@@ -229,6 +235,45 @@ extension AppStore {
         } catch {
             reviewPhases[pr] = .failed(detail: error.localizedDescription)
             await notifyAboutFinishedReview(of: pr)
+        }
+    }
+
+    /// Uloží zadání PR vedle pracovního stromu a vrátí cestu k němu (#120).
+    ///
+    /// `nil` znamená, že prompt o zadání mlčet **má** — a jsou k tomu tři různé důvody, které se
+    /// nesmí slít:
+    ///
+    /// - **Store není** (testy). Tehdy se nic nepřipravuje a review běží jako do #120.
+    /// - **Nebylo co uložit** — prázdný popis PR bez jediného odkazu. Není to porucha, takže se
+    ///   o tom nic nehlásí: soubor se samými větami o tom, co v něm není, by reviewera poslal
+    ///   čtením za nic.
+    /// - **Zápis selhal.** To porucha je, a proto se hlásí — review poběží dál, ale bez zadání,
+    ///   a to je v okně k nerozeznání od běhu, který zadání dostal.
+    ///
+    /// **Popis se bere z `detail`, tedy z čerstvého `gh pr view`** v téhle cestě — ne z uloženého
+    /// snímku. Prázdný `body` a nedotažený `body` jsou v modelu tatáž hodnota (`String` s defaultem
+    /// `""`), ale sem se nedotažený nedostane: `fetchDetail` o pár řádků výš by vyhodil a review by
+    /// se nespustilo. Tvrzení o prázdném popisu se do souboru přesto **nepíše** (viz
+    /// `ReviewIntentText.noDescription`) — prázdný popis znamená, že se soubor nezakládá vůbec.
+    private func prepareIntent(for pr: PRIdentifier, of detail: PullRequest) -> URL? {
+        guard let intents else { return nil }
+        let brief = Policy.intentBrief(
+            of: pr,
+            description: detail.body,
+            links: Policy.intentLinks(in: detail.body)
+        )
+        do {
+            let file = try intents.save(brief, for: pr, at: detail.headSha)
+            // Úspěch hlášku **maže**: minulé selhání zápisu už není pravda o tomhle běhu.
+            intentFailure = nil
+            return file
+        } catch {
+            // **Hláška jmenuje PR**, protože ve frontě dvaceti PR je „zadání se nepodařilo
+            // připravit“ bez subjektu nepoužitelné — a `intentFailure` je jeden řetězec pro celou
+            // aplikaci, takže si sám o sobě neřekne, o kterém běhu mluví.
+            intentFailure = "Zadání pro reviewera \(pr.repo)#\(pr.number) se nepodařilo připravit, "
+                + "review běží bez něj. " + error.localizedDescription
+            return nil
         }
     }
 
@@ -287,7 +332,8 @@ extension AppStore {
         in worktree: URL,
         using reviewer: any ReviewRunning,
         saving reviews: ReviewStore,
-        only subset: [String]? = nil
+        only subset: [String]? = nil,
+        intent intentFile: URL?
     ) async throws {
         // Sada se čte **až tady**, po odhadu jazyka repa — proto se podmnožina předává jako
         // parametr a ne jako snímek pořízený při spuštění.
@@ -307,7 +353,8 @@ extension AppStore {
             using: reviewer,
             saving: reviews,
             skills: skills,
-            reporting: reporter
+            reporting: reporter,
+            intent: intentFile
         )
         reporter.finish()
         await drained
@@ -437,7 +484,8 @@ extension AppStore {
         using reviewer: any ReviewRunning,
         saving reviews: ReviewStore,
         skills: [String],
-        reporting reporter: AsyncStream<ReviewEvent>.Continuation
+        reporting reporter: AsyncStream<ReviewEvent>.Continuation,
+        intent intentFile: URL?
     ) async -> (any Error)? {
         // Limit se bere **tady a jednou** (#320), ze stejného důvodu jako šablona o pár řádků níž:
         // všechny session tohohle běhu poběží s tímtéž limitem, i kdyby se mezitím uložilo
@@ -454,7 +502,10 @@ extension AppStore {
                     // dostanou tutéž, i kdyby se mezitím uložilo nastavení. Runner si ji
                     // nečte sám — viz `ReviewRequest.promptTemplate`.
                     promptTemplate: configuration.global.reviewPrompt,
-                    timeout: timeout
+                    timeout: timeout,
+                    // Jeden soubor pro celý běh (#120): zadání se váže na `(PR, headSha)`, takže
+                    // ho všechny skilly sdílejí — připravuje se jednou, ne na každou session.
+                    intentFile: intentFile
                 )
                 // Protokol slibuje, že selhání session se vrací jako výsledek a vyhodí se
                 // jen zrušení — ale spolehnout se na to znamená, že jakákoli jiná chyba

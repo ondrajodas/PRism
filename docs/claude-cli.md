@@ -1,6 +1,7 @@
 # `claude` CLI — co je ověřené
 
-**Ověřeno:** 2026-08-01 · **verze:** `2.1.220 (Claude Code)` · **stroj:** macOS 26
+**Ověřeno:** 2026-08-01 · **verze:** `2.1.220 (Claude Code)` · **stroj:** macOS 26 ·
+**schéma `ReportFindings` doměřeno** 2026-08-17 na `2.1.233`
 
 Spike k issue #12, doplněno a **opraveno** u #17. Specifikace měla flagy `claude` CLI psané
 z pracovní znalosti; tenhle dokument je nahrazuje tím, co skutečně dělá nainstalované CLI.
@@ -212,6 +213,41 @@ Jeden nález (ověřeno na skutečném běhu):
 `category` je volný kebab-case slug od reviewera, `verdict` je `CONFIRMED` nebo
 `PLAUSIBLE` — tedy přesně to, na čem staví `Policy`. **Čisté review volá `ReportFindings`
 s prázdným polem `findings`**, ne že by nástroj nezavolalo; obojí je ve fixtures.
+
+### Co je v schématu povinné a co má strop (doměřeno u #120 na `2.1.233`)
+
+Přečteno **ze schématu v binárce CLI**, ne z běhu — je to deklarace nástroje, takže se za ni
+neplatí a nezávisí na tom, jak se model zachová:
+
+| Pole | Povinné? | Strop |
+|---|---|---|
+| `file` | **ano** — `Repo-relative path of the file the finding is in` | — |
+| `line` | ne (`1-indexed line the finding anchors to`) | — |
+| `summary` | **ano** | — |
+| `failure_scenario` | **ano** | — |
+| `short_summary` | ne | **60 znaků** |
+| `category` | ne | 40 znaků |
+| `verdict` | ne | `CONFIRMED` \| `PLAUSIBLE` |
+| `outcome` | ne | `fixed` \| `skipped` \| `no_change_needed` — jen při re-reportu po opravě |
+| `findings` (celý seznam) | ano | **32 položek**, „most-severe first; empty if none survived“ |
+| `level` (vedle `findings`) | ne | `low` \| `medium` \| `high` \| `xhigh` \| `max` |
+
+**Co z toho plyne pro aplikaci** (#120, zadání pro reviewera):
+
+- **Obecný nález přijde zakotvený k souboru bez řádku, ne bez místa.** Nález, který se váže
+  k zadání a ne k řádku („chybí migrace, kterou zadání žádá“), tedy dorazí s `file` a bez
+  `line`. Cesta to unese bez práce: `ReportedFinding.file` i `line` jsou optional
+  a `Policy.draftTarget` z toho udělá `.body(path: <soubor>, line: nil)`, takže při převzetí
+  skončí **v těle review s odkazem na soubor**.
+- **Texty v UI nic neslibují.** Prošlo se to: `FindingRow.location` dá `—` a `locationHelp`
+  větu „Nález nepatří ke konkrétnímu místu v kódu“ jen u nálezu, který soubor doopravdy nemá,
+  a `FindingNavigationView` o nálezech bez místa mluví jedině tehdy, když `withoutPlace > 0`.
+  Žádný text netvrdí, že nález bez souboru přijít **může** — a protože schéma `file` vyžaduje,
+  je ten stav dosažitelný jen z uložených dat, ne z nového běhu.
+- **`droppedFindings` je pořád potřeba.** Co CLI udělá, když model strop 32 překročí, **změřené
+  není** — schéma je `strict`, takže se čeká odmítnutí volání, ale ověřené to není a spoléhat se
+  na to nemá cenu: `findings` se stejně parsují z cizího JSONu a nález, ze kterého se nedá složit
+  `ReportedFinding`, musí být vidět jako počet, ne zmizet.
 
 ## Fixtures
 

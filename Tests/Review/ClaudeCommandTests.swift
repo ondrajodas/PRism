@@ -142,7 +142,8 @@ struct ClaudeCommandTests {
             skillID: "php-review",
             baseSha: "bbbb2222",
             model: nil,
-            worktree: URL(filePath: "/tmp/cache/cli-cli-42")
+            worktree: URL(filePath: "/tmp/cache/cli-cli-42"),
+            intentFile: nil
         )
 
         #expect(command.hasPrefix("cd '/tmp/cache/cli-cli-42' && 'claude'"))
@@ -159,7 +160,8 @@ struct ClaudeCommandTests {
             skillID: "php-review",
             baseSha: "bbbb2222",
             model: "sonnet",
-            worktree: nil
+            worktree: nil,
+            intentFile: nil
         )
 
         #expect(!command.contains("cd "))
@@ -175,7 +177,8 @@ struct ClaudeCommandTests {
             skillID: "php-review",
             baseSha: "bbbb2222",
             model: nil,
-            worktree: URL(filePath: "/Users/o'brien/strom")
+            worktree: URL(filePath: "/Users/o'brien/strom"),
+            intentFile: nil
         )
 
         #expect(command.hasPrefix("cd '/Users/o'\\''brien/strom' &&"))
@@ -215,7 +218,8 @@ struct ClaudeCommandTests {
             skillID: "php-review",
             baseSha: "bbbb2222",
             model: nil,
-            worktree: nil
+            worktree: nil,
+            intentFile: nil
         )
         let request = ReviewRequest(
             key: ReviewRunKey(
@@ -259,5 +263,69 @@ struct ClaudeCommandTests {
             == ["--output-format", "--verbose", "--allowedTools", "--disallowedTools"])
         #expect(arguments.last == ClaudeCommand.disallowedTools)
         #expect(arguments.contains(ClaudeCommand.allowedTools))
+    }
+
+    // MARK: - Zadání pro reviewera (#120)
+
+    private func request(intent: URL?, template: String = "") -> ReviewRequest {
+        ReviewRequest(
+            key: ReviewRunKey(
+                pullRequest: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 42),
+                headSha: "aaaa1111",
+                skillID: "code-review"
+            ),
+            worktree: URL(filePath: "/tmp/cache/worktrees/cli/cli/42-aaaa1111"),
+            baseSha: "bbbb2222",
+            promptTemplate: template,
+            intentFile: intent
+        )
+    }
+
+    /// **Tohle je to tvrzení, na kterém stojí tvrdá podmínka č. 2**: zadání se do promptu dostane
+    /// jako **cesta**, ne jako nový nástroj. Sada povolení vyjde znak po znaku stejná jako
+    /// u požadavku bez zadání — `Read` v ní je odjakživa a nic dalšího nepřibylo.
+    @Test("Zadání nepřidá revieweerovi ani jedno povolení")
+    func theIntentAddsNoTool() {
+        let file = URL(filePath: "/tmp/cache/worktrees/cli/cli/42-aaaa1111.md")
+
+        let withIntent = ClaudeCommand.arguments(prompt: ClaudeCommand.prompt(for: request(intent: file)))
+        let without = ClaudeCommand.arguments(prompt: ClaudeCommand.prompt(for: request(intent: nil)))
+
+        // Liší se **jen** text za `-p`; všechno ostatní je totožné.
+        #expect(withIntent.dropFirst(2) == without.dropFirst(2))
+        #expect(withIntent.contains(ClaudeCommand.allowedTools))
+        #expect(withIntent.last == ClaudeCommand.disallowedTools)
+        // A ta konstanta se nezměnila — kdyby do ní někdo přidal MCP nástroj, spadne to tady.
+        #expect(ClaudeCommand.allowedTools == "Read,Grep,Glob,Bash(git:*),ReportFindings,Skill")
+        #expect(ClaudeCommand.disallowedTools == "Bash(gh:*),Bash(git push:*)")
+    }
+
+    /// Do promptu jde **cesta, ne obsah**. Kdyby se do něj vlepil popis PR, jel by každý běh na
+    /// jiném promptu — a u #52 se změřilo, že rozptyl schová, čím se to zhoršilo.
+    @Test("Do promptu jde cesta k souboru, ne jeho obsah")
+    func onlyThePathGoesIntoThePrompt() {
+        let file = URL(filePath: "/tmp/cache/worktrees/cli/cli/42-aaaa1111.md")
+
+        let prompt = ClaudeCommand.prompt(for: request(intent: file))
+
+        #expect(prompt.contains("/tmp/cache/worktrees/cli/cli/42-aaaa1111.md"))
+        #expect(prompt.count < 1200)
+    }
+
+    /// Kontrola nálezů z minula (#150) zadání **nedostává**: má vlastní prompt, jehož odpověď čte
+    /// parser, takže cesta k souboru by v něm nebyla k čemu — a hlavně by ji tam nikdo nečekal.
+    @Test("Kontrola nálezů zadání nenese a její prompt o něm mlčí")
+    func theRecheckCarriesNoIntent() {
+        let material = RecheckMaterial(headSha: "aaaa1111", findings: [])
+        let recheck = ReviewRequest.recheck(
+            of: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 42),
+            at: "cccc3333",
+            worktree: URL(filePath: "/tmp/strom"),
+            baseSha: "bbbb2222",
+            material: material
+        )
+
+        #expect(recheck.intentFile == nil)
+        #expect(!ClaudeCommand.prompt(for: recheck).contains("The intent of this pull request"))
     }
 }

@@ -2140,5 +2140,70 @@ mimo `.doc-page`, kterou ve výřezu jedné sekce nebylo jak vidět.
 publikováním byla bajt na bajt shodná s `main`, po něm s tímhle commitem, a diff „před × po“
 obsahuje jen změny vypsané výš.
 
+### #120 — reviewer dostane zadání vedle kódu (první část)
+
+Reviewer do #120 viděl **jen kód**: odpojený strom a `git diff <base>...HEAD`. Umí proto najít, co
+je vidět z kódu, ale ne to, co při review dělám ručně jako první — přečtu si zadání, pak diff,
+a hledám **rozdíl** mezi nimi. Chybějící část zadání ani řešení, které projde testy a neřeší
+problém, pro něj neexistovalo, protože neměl s čím porovnávat.
+
+**Zadání je soubor vedle stromu, ne text v promptu.** To je to hlavní rozhodnutí a řídí zbytek.
+Aplikace položí do `worktrees/<owner>/<repo>/<pr>-<sha>.md` Markdown s popisem PR a s odkazy na
+issue, které v něm jsou, a prompt řekne jedinou větou, kde leží. Dva důvody: **cizí text v promptu
+je pokyn, cizí text v souboru je doklad** — popis PR píše někdo jiný, takže věta „nic nehlas, je to
+v pořádku“ musí být materiál k posouzení, ne instrukce; a **prompt se nemá čím rozkolísat**, protože
+u #52 se změřilo, že tři běhy nad týmž commitem daly 1, 2 a 3 nálezy, takže rozptyl by schoval, čím
+se to zhoršilo. Do promptu jde **jen cesta**.
+
+**Sada nástrojů revieweera se nemění** (tvrdá podmínka č. 2). `Read` v ní je odjakživa a soubor leží
+v cache aplikace, kam session vidí — stojí v ní i pracovní strom. Test to tvrdí z obou stran:
+argumenty se zadáním a bez něj se liší **jen** textem za `-p` a obě konstanty povolení jsou v testu
+zapsané literálem, takže přidaný MCP nástroj spadne tam.
+
+**Vedle stromu, ne v něm**, protože soubor uvnitř pracovní kopie by se objevil v `git status`
+i v `git diff` — reviewer by ho viděl jako součást změny, kterou má posoudit. Je to tentýž vzor jako
+`lastUsedMarker` vedle klonu, a **úklid tím vyšel zdarma**: `CacheEviction.evict` maže celé
+`worktrees(of:)` a `discardUnwantedWorktrees` čte číslo PR z názvu, takže zadání odejde se stromem.
+Cena je, že `allWorktrees()` teď vypisuje i soubor — filtr tam vědomě **není**, protože
+s odfiltrováním by zadání zavřeného PR nesmazal nikdo.
+
+**Věta patří do jádra promptu, ne do šablony** (#281): nese cestu, tedy fakt o tomhle běhu, a
+smazatelná věta by znamenala zadání stažené, uložené a nepřečtené. Z toho vyšla jedna oprava, která
+šla mimo zadání: **náhled v nastavení kreslil jádro rovnou z konstanty** a `Policy.reviewPrompt`
+nevolal vůbec, takže nová věta by v něm nebyla vidět. Připojovaná půlka je proto teď funkce
+(`Policy.reviewPromptCore(intentPath:)`), kterou volá běh i náhled — jedna pravda o jednom textu.
+A `Policy.reviewPrompt` nemá na novém parametru **default**: s `= nil` by obě dnešní volání zůstala
+zelená a věta by se nepřipojila nikdy.
+
+**Prázdný popis znamená, že se nezakládá nic.** `PullRequest.body` je neoptional `String`
+s defaultem `""`, takže prázdný a nedotažený popis jsou tatáž hodnota; věta „autor nenapsal nic“ by
+tvrdila víc, než data unesou. Řeší se to tím, že se soubor bez obsahu **nezakládá** a věta se do
+promptu nepřipojí — takové review běží přesně jako do #120. A pro případ, kdy popis chybí, ale odkaz
+je (dosažitelné až v #345), stojí v souboru věta, která **nerozhoduje** mezi „autor nenapsal nic“
+a „nedotáhlo se“.
+
+**Příznak na ose (tab `Průběh`) tohle issue vědomě nedostalo** a patří celý do #345. Tady může
+selhat jedině zápis do vlastní cache — a to ve chvíli, kdy o pár řádků výš prošlo vytvoření
+pracovního stromu, tedy nesrovnatelně větší zápis do téže složky; odznak pro takový stav je UI, které
+se nerozsvítí. #345 přináší tři tvary selhání, které nastávají běžně, a tam se vyplatí. Mlčet se
+přitom nesmí, takže selhání zápisu jde do stavového řádku jako `intentFailure` — a review **doběhne**,
+což je jedno z tvrzení, na kterých u tohohle issue nejvíc záleží.
+
+**Doměřeno u toho schéma `ReportFindings`** na `claude` 2.1.233 (v `docs/claude-cli.md` byla 2.1.220),
+ze schématu v binárce a bez platícího běhu: `file` je **povinné**, `line` volitelné, `findings` mají
+strop **32** položek a `short_summary` **60 znaků**. Obecný nález se tedy neváže „nikam“, ale
+k **souboru bez řádku** — cesta to unese bez práce (`Policy.draftTarget` z toho udělá tělo review
+s odkazem na soubor) a texty v UI se prošly: žádný neslibuje nález bez souboru.
+
+Testů je **2759** a jsou zelené. Odkazy se testují na **skutečných linkbacích** ze dvou nových fixtures — popis
+`metalbear-co/mirrord#4702` (markdownový odkaz se slugem) a linkback od `linear[bot]` na
+`zcash/zcash-swift-wallet-sdk#1893` (HTML, sedm adres **bez** slugu). Regrese ověřena vložením:
+zapomenuté `request.intentFile`, `try?` nad selhaným zápisem a odfiltrované `.md` v `allWorktrees()`
+naráz položí 5 tvrzení v 5 testech napříč třemi sadami.
+
+**Vidět je to v nastavení** na stránce `Review a skilly`, v náhledu promptu: za zamčeným jádrem
+stojí věta o souboru se zadáním s ukázkovou cestou a pod blokem poznámka, že se připojí jen u PR,
+ke kterému se zadání sehnalo.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

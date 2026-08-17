@@ -185,6 +185,13 @@ struct CacheEviction: Sendable {
         }
     }
 
+    /// Co leží ve složce stromů jednoho repa.
+    ///
+    /// **Bere každé dítě, ne jen složky** — takže od #120 do výpisu spadne i soubor se zadáním
+    /// (`<pr>-<sha>.md`), který leží vedle stromu. Filtr tady schválně **není**: soubor je
+    /// klíčovaný stejným PR jako strom, takže `discardUnwantedWorktrees` z jeho názvu přečte
+    /// tentýž číslo PR a odklidí obojí naráz. Odfiltrovat ho by znamenalo, že zadání zavřeného
+    /// PR nesmaže nikdo — a to je horší než nepřesné jméno téhle metody.
     private func allWorktrees() -> [(RepoID, URL)] {
         children(of: layout.worktrees).flatMap { owner -> [(RepoID, URL)] in
             let ownerRoot = layout.worktrees.appending(path: owner)
@@ -241,7 +248,12 @@ extension CacheEviction {
     }
 
     /// Vrátí cestu, jen když po rozbalení symlinků leží pod kořenem cache.
-    private static func insideCache(_ url: URL, of layout: CacheLayout) throws -> URL {
+    ///
+    /// **Jediná kontrolovaná cesta k zápisu vedle klonu i vedle stromu** — používá ji razítko
+    /// použití repa i zadání pro reviewera (#120). Vlastní kopie téhle kontroly v každém storu by
+    /// znamenala, že se jedna z nich dřív nebo později rozejde, a „pracuje výhradně ve své cache“
+    /// je tvrdá podmínka.
+    static func insideCache(_ url: URL, of layout: CacheLayout) throws -> URL {
         guard layout.contains(url) else {
             throw CheckoutError.cacheUnavailable(
                 "Cesta \(url.path(percentEncoded: false)) vede mimo cache aplikace."

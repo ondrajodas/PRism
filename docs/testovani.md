@@ -1013,6 +1013,51 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   kterému sonda vznikla. Chytila jednu reálnou chybu: náhled i jádro se ve `Form`u srazily na tři
   řádky a zbytek promptu uřízly třemi tečkami — tedy náhled, který zamlčí zrovna to, kvůli čemu se
   do něj kouká. Léčba je `fixedSize(horizontal: false, vertical: true)`.
+- **Zadání pro reviewera (#120)** — čtyři sady a **nejcennější tvrzení jsou o tom, co se
+  nestane**: že se věta o zadání nepřipojí, dokud soubor není, že se revieweerovi nepřidalo ani
+  jedno povolení, a že review **doběhne**, i když se zadání nepodaří připravit.
+
+  `ReviewIntentTests` (`Policy`, vyčerpávajícím výčtem) — odkazy se testují **na skutečných
+  linkbacích**, ne na vymyšlených řetězcích, a jsou k tomu dvě nové gh fixtures:
+  - `gh/pr-body-linear.md` — popis skutečného PR (`metalbear-co/mirrord#4702`): markdownový
+    odkaz **se slugem**, vedle něj odkazy na GitHub, Slack a PostHog. Vyjít má **jeden**.
+  - `gh/comment-linear-linkback.md` — skutečný linkback od `linear[bot]`
+    (`zcash/zcash-swift-wallet-sdk#1893`): HTML, sedm odkazů, adresy **bez slugu** a identifikátor
+    v adrese **i** v textu odkazu — takže naivní hledání by je vrátilo čtrnáctkrát. Je to zároveň
+    doklad, že Linear adresu bez slugu sám používá, tedy že normalizovat na ni je v pořádku.
+
+  Ty dva tvary jsou schválně oba: liší se přesně v tom, co je snadné pokazit, a ruční literál by
+  je zjednodušil na jeden. K tomu vyčerpávající výčet tvarů, ve kterých odkaz může v textu stát,
+  výčet toho, co se **nesmí** vytáhnout (cizí tracker, Linear mimo issue, chybějící číslo nebo
+  klíč, sousední doména `notlinear.app`), dedup přes tři různé zápisy téhož issue, a že `AJDA-892`
+  a `AJDA-8920` **nejsou totéž** (tatáž past jako u prefixu `42-` proti `421-`).
+
+  U složeného souboru: že se **nic nezakládá**, když se nic nesehnalo (tři podoby prázdna), že
+  všechny tři sekce zůstávají i prázdné, že soubor sám o sobě říká, že jeho obsah nic nepřebíjí,
+  a že věta o chybějícím popisu **nerozhoduje** mezi „autor nenapsal nic“ a „nedotáhlo se“.
+
+  `ReviewIntentStoreTests` — že soubor leží **vedle** stromu a ne uvnitř (kontroluje se cesta obou),
+  že se zakládá chybějící složka, že se nezakládá nic bez obsahu, že nový zápis starý přepíše
+  **celý** (kratší obsah by jinak nechal zbytek starého zadání), a že **zápis přes symlink ven
+  z cache neprojde** (tvrdá podmínka č. 3 — a cizí složka po pokusu zůstane prázdná). K tomu
+  `existingFile` pro `Zkopírovat příkaz`: nevydá zadání jiné hlavy ani jiného PR.
+
+  `ClaudeCommandTests` — že se argumenty se zadáním a bez něj liší **jen** textem za `-p`, že do
+  promptu jde **cesta a ne obsah**, a že kontrola nálezů (#150) zadání nenese. Obě konstanty
+  povolení jsou v testu zapsané **literálem**, takže přidaný MCP nástroj spadne tady.
+  `ReviewPromptTemplateTests` k tomu drží složený prompt se zadáním **znak po znaku proti
+  literálu** — a proti druhému literálu bez zadání; cesta se zadáním se **nepřidala do `compose`**,
+  protože tím by se hlídal nový prompt proti sobě samému.
+
+  `AppStoreIntentTests` — že popis dojede k session jako soubor, že odkaz z popisu se do souboru
+  zapíše, že **všechny skilly jednoho běhu dostanou tentýž soubor**, že PR bez popisu zadání
+  nedostane a **není to porucha** (hláška se neobjeví), a hlavně že **nepovedený zápis review
+  nepoloží**: session se spustí, záznam se uloží, `intentFile` je `nil` a v okně stojí hláška.
+  Selhání zápisu se vyrábí tím, že na místě souboru už leží **složka**.
+
+  Ověřeno **vloženou regresí** — `ClaudeCommand.prompt(for:)` zapomene `request.intentFile`,
+  selhání zápisu se spolkne `try?` a `allWorktrees()` odfiltruje `.md`: padne **5 tvrzení
+  v 5 testech** napříč `ClaudeCommandTests`, `AppStoreIntentTests` a `CacheEvictionTests`.
 - **Časový limit běhu (#320)** — tři sady a **nejcennější tvrzení je zase o tom, že se nic
   nezměnilo**: patnáct minut je hodnota, se kterou aplikace běžela do #320, a zavedení nastavení ji
   nesmí posunout.
@@ -2271,6 +2316,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 - **`CacheEviction`** — proti skutečné dočasné složce, ne proti fake filesystému: rozpočet
   je injektovatelný, takže stačí malé soubory. Pozor, počítá se **alokovaná** velikost, tedy
   po blocích — stobajtový soubor zabere 4 KB a testovací rozpočty musí být řádově výš.
+
+  Od #120 v ní leží i **zadání pro reviewera** (`<pr>-<sha>.md` vedle stromu) a jsou na to dva
+  testy: že zadání zavřeného PR odejde a zadání otevřeného zůstane, a že s evikovaným repem jde
+  taky. Nejsou nadbytečné vůči testům na stromy — soubor se od složky liší tím, že by ho
+  `allWorktrees()` mohl přeskočit, a bez těch dvou testů by ho odfiltrování nikdo nechytil.
 - **`CacheLayout` a sloty** (#228) — nejcennější test je ten, který tvrdí, že se něco
   **nestalo**: `CacheLayout(named: "PRism")` a `CacheLayout(named: "PRism-a")` se ptají
   `contains` na obě strany a ani jedna nesmí vidět do té druhé. Chytá to i past, do které by

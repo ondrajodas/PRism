@@ -1061,13 +1061,22 @@ zastaral hned další verzí.
    repo a výchozí je manuální, aby neznámé repo nespálilo panel session bez dozoru.
    **Automat utratí session, teprve když se změnil head commit**, takže komentář na PR ho
    nespustí, a hlídá ho denní limit.
-4. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
+4. **Zadání vedle kódu** (#120) — aplikace položí **vedle** pracovního stromu soubor
+   s popisem PR a s odkazy na issue, které v něm jsou, a prompt řekne jedinou větou, kde leží.
+   Reviewer si ho přečte `Read`em stejně jako změněné soubory, takže může hledat **rozdíl**
+   mezi tím, co se mělo udělat, a tím, co se udělalo. Zadání je pro něj **materiál, ne pokyn**:
+   proto soubor, a ne prompt — cizí text vložený do promptu má váhu instrukce a popis PR píše
+   někdo jiný. Do promptu jde jen cesta, takže se prompt nemá čím rozkolísat, a **sada nástrojů
+   revieweera se nemění**. PR bez popisu a bez odkazu zadání nedostane a věta se do promptu
+   nepřipojí vůbec. Text odkazovaných issue se v téhle verzi **netahá** — v souboru je o tom
+   věta, ať si reviewer nic nedomýšlí.
+5. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
    Strukturovaná data, ne parsování textu.
-5. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
+6. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
    řaditelná tabulka pro nálezy, které ke konkrétnímu řádku nepatří (chybějící testy,
    architektonické poznámky).
 
-6. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
+7. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
    a o doběhlém review. Klik na notifikaci ten pull request vybere a dá okno dopředu.
 
 **Co nedoběhlo, se neztratí.** Když se aplikace zavře, ptá se — a když se ukončení potvrdí,
@@ -1446,7 +1455,8 @@ App/                      zdrojáky aplikace — target PRism
                           od botů, škála nadpisů a mezer, zapamatované rozložení na bloky
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka, hledání v paletě
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR, brána z nastavení
-  Review/                 spuštění session claude a překlad stream-json na nálezy
+  Review/                 spuštění session claude a překlad stream-json na nálezy;
+                          zadání PR pro reviewera vedle pracovního stromu (#120)
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno (stav v AppStore.swift, metody v AppStore+*.swift);
                           ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku

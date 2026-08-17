@@ -121,6 +121,20 @@ final class AppStore {
     /// zápisu nespolkne. Na rozdíl od nálezů se nedá zopakovat žádným během.
     var draftFailure: String?
 
+    /// Proč se reviewerovi nepodařilo připravit zadání (#120).
+    ///
+    /// Review **doběhne** i bez zadání — zadání bez souboru je horší review, ne rozbité review,
+    /// tatáž úvaha jako u nepovedeného překladu nálezů. Mlčet o tom ale nejde: běh, který zadání
+    /// nedostal, vypadá v okně **úplně stejně** jako ten, který ho dostal, takže by se z okna
+    /// nedalo poznat, proč reviewer o zadání nemluví.
+    ///
+    /// **Jeden řetězec pro celou aplikaci, jako `draftFailure` a `dismissalFailure`** — je to
+    /// „poslední slovo“, ne historie: povedená příprava ho smaže, takže při dvou souběžných
+    /// review může hláška prvního zmizet za úspěchem druhého. Proto v ní **stojí, o který PR
+    /// jde**; kdyby se ukázalo, že to vadí, je řešením mapa klíčovaná PR a hláška u řádku,
+    /// ne trvalá hláška ve stavovém řádku.
+    var intentFailure: String?
+
     /// Proč se nepodařilo uložit odmítnutí nálezu (#113).
     ///
     /// Neuložené odmítnutí se po restartu vrátí a nikdo nebude vědět proč — takže se tady
@@ -311,6 +325,13 @@ final class AppStore {
 
     let draftStore: ReviewDraftStore?
 
+    /// Zadání PR pro reviewera (#120). `nil` = **zadání se nepřipravuje** a review poběží
+    /// s promptem bez věty o souboru, tedy tak, jak běželo do #120.
+    ///
+    /// Nepovinné ze stejného důvodu jako `reviews`: testy, které o zadání nestojí, ho nedostanou
+    /// a nesahají tím do skutečné cache.
+    let intents: ReviewIntentStore?
+
     let translator: (any FindingTranslating)?
 
     private let configStore: ConfigStore?
@@ -463,6 +484,7 @@ final class AppStore {
         reviewer: (any ReviewRunning)? = nil,
         reviews: ReviewStore? = nil,
         drafts: ReviewDraftStore? = nil,
+        intents: ReviewIntentStore? = nil,
         translator: (any FindingTranslating)? = nil,
         autoRuns: AutoRunLedger? = nil,
         spend: SpendLedger? = nil,
@@ -497,6 +519,7 @@ final class AppStore {
         self.reviewer = reviewer
         self.reviews = reviews
         draftStore = drafts
+        self.intents = intents
         self.translator = translator
         self.autoRuns = autoRuns
         self.spend = spend
@@ -564,6 +587,7 @@ final class AppStore {
             ),
             reviews: ReviewStore(),
             drafts: ReviewDraftStore(),
+            intents: ReviewIntentStore(),
             translator: ClaudeFindingTranslator(claude: toolPaths.claude, runner: runner),
             autoRuns: AutoRunLedger(),
             spend: SpendLedger(),

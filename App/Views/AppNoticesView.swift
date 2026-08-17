@@ -55,6 +55,12 @@ struct AppNoticesView: View {
                 if let failure = store.dismissalFailure {
                     notice(failure, icon: "exclamationmark.triangle")
                 }
+                // Reviewer, který nedostal zadání (#120), doběhne — a vypadá **úplně stejně**
+                // jako ten, který ho dostal. Bez tohohle by se z okna nedalo poznat, proč
+                // o zadání nemluví.
+                if let failure = store.intentFailure {
+                    notice(failure, icon: "exclamationmark.triangle")
+                }
                 // Neuložený vzhled okna (#278) taky ne: zápis selhal, takže se režim
                 // **nepřepnul** — a klik do railu, po kterém se nic nestane, vypadá jako rozbitá
                 // aplikace.
@@ -86,6 +92,7 @@ struct AppNoticesView: View {
             || store.unreadableDraftFiles > 0
             || store.draftFailure != nil
             || store.dismissalFailure != nil
+            || store.intentFailure != nil
             || store.appearanceFailure != nil
             || store.notificationFailure != nil
     }
