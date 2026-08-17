@@ -17,6 +17,10 @@ struct PullRequestRow: View {
     /// Odvozená čísla k výsledku — kolik blokuje a jak se nálezy rozdělily mezi reviewery.
     /// Prázdné u PR, na kterém nic neběželo.
     var row: QueueRow = .empty
+    /// Čí PR to je (#331). U vlastního má řádek vpravo `Prompt →`, protože sestavit z nálezů
+    /// a konverzace zadání pro agenta je jediné, co s ním okno umí udělat — verdikt na vlastní PR
+    /// GitHub odmítá.
+    var ownership: PullRequestOwnership = .theirs
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -49,7 +53,41 @@ struct PullRequestRow: View {
                 SpectrumBar(shares: row.spectrum)
             }
             ReviewStateBadge(state: reviewState, blocking: row.blocking)
+            if showsPromptAction {
+                promptButton
+            }
         }
+    }
+
+    /// Má řádek vpravo `Prompt →`? **Pojmenované, ne `if` uvnitř `body`** — je to jediné, čím se
+    /// vlastní řádek od cizího liší, a uvnitř `body` se to tvrdit nedá; tatáž úvaha jako
+    /// u `FindingBadgeAppearance`. Ven z aplikace se tím nic neotevírá, je to jeden modul.
+    var showsPromptAction: Bool { ownership == .mine }
+
+    /// `Prompt →` u vlastního PR (#331) — plné akcentové tlačítko z návrhu (`.mini.pri`).
+    ///
+    /// **Zakázané, dokud prompt není z čeho složit** (#333). Nakreslené je proto, že to je jediná
+    /// akce, kterou vlastní PR má, a řádek bez ní by se od cizího nelišil ničím; zakázané proto, že
+    /// tlačítko, po kterém se nic nestane, je lež o tom, co okno umí — tatáž zásada jako u popisek
+    /// zkratek. Nápověda říká, co bude, aby se z toho stavu nedalo usoudit, že je něco rozbité.
+    ///
+    /// **Odznak stavu review vedle něj zůstává**, ačkoli návrh na tom místě kreslí pilulku
+    /// `6 k předání`. Ta věta se dá napsat, teprve až předání existuje (#333) a nese razítko
+    /// (#334); do té doby by šlo o počet, který nikdo nepředal. Odznak zatím říká to, co se ví —
+    /// že reviewer běžel a s jakým výsledkem —, a to je zrovna materiál, který prompt ponese.
+    ///
+    /// **Ztlumení kreslí řádek, ne styl.** `MiniButtonStyle` se na `isEnabled` neptá, takže zakázané
+    /// malé tlačítko vypadá v celém okně jako klikatelné — a plné akcentové, po kterém se nic
+    /// nestane, je zrovna ta lež, kvůli které je tady `disabled`. Opravit to v samotném stylu by
+    /// přebarvilo i akce u nálezu a u vlákna, tedy věci mimo tohle issue; jak se ta oprava udělá, je
+    /// otázka na návrh (mockup zakázané tlačítko nekreslí).
+    private var promptButton: some View {
+        Button("Prompt →") {}
+            .buttonStyle(.miniPrimary)
+            .disabled(true)
+            .opacity(0.55)
+            .help("Zadání pro agenta se bude skládat z nálezů a konverzace — okno to zatím neumí")
+            .accessibilityLabel("Sestavit prompt pro agenta")
     }
 
     private var meta: some View {

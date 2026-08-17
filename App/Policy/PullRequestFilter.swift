@@ -56,11 +56,23 @@ struct PullRequestFilterOptions: Equatable, Sendable {
 ///
 /// Vlastní typ vedle `PollEmptyReason`, ne nový případ v něm: **polling o stavu okna neví a vědět
 /// nemá.** Skládá to `AppStore` nad tím, co polling řekl.
+///
+/// **Jeden typ pro obě sekce se seznamem** (#331). Tři případy navíc umí vzniknout jedině
+/// u `Moje PR` — a jsou tady, ne ve vlastním výčtu, protože je to pořád odpověď na tutéž otázku
+/// a `PullRequestListView` je jeden. Druhý výčet by znamenal druhý `switch` nad prázdnem, tedy
+/// druhé místo, kde se dá zapomenout stav.
 enum ListEmptyReason: Equatable, Sendable {
     /// Prázdno z pohledu pollingu — načítá se, nic nepřišlo, nebo se to nepovedlo.
     case poll(PollEmptyReason)
     /// Seznam prázdný **není**, jen ho celý schoval filtr.
     case filtered(hidden: Int)
+    /// `Moje PR`: mezi zdroji není ten, který vlastní PR přináší (#331). Není to „nic tu není“ —
+    /// aplikace se o vlastní PR vůbec neptá.
+    case ownSourceMissing
+    /// `Moje PR`: ještě se neví, kdo se dívá (#330), takže je podle autora všechno cizí.
+    case unknownViewer
+    /// `Moje PR`: zdroj i login jsou, jen nic otevřeného není — ten dobrý stav.
+    case noOwnPullRequests
 }
 
 extension Policy {

@@ -34,6 +34,7 @@ struct ContentView: View {
                 SidebarRail(
                     section: $store.railSection,
                     queueCount: store.railQueueCount,
+                    mineCount: store.railMineCount,
                     draftCount: store.pullRequestsWithDraft.count,
                     // Vzhled se čte z konfigurace a zapisuje do ní (#278) — rail je ovládání, ne
                     // druhé místo, kde by se stav držel.
@@ -238,7 +239,11 @@ struct ContentView: View {
     @ViewBuilder private var content: some View {
         switch store.activeTab {
         case .home:
-            HomeView(store: store)
+            // `openSettings` se předává jako uzávěr **z těla okna** (#331), stejně jako
+            // `openWindow` u novinek: prázdný stav sekce `Moje PR` nabízí dopsat chybějící zdroj,
+            // a scénickou akci z environmentu si má brát to view, o kterém je ověřené, že jí
+            // rozumí — ne každé, které ji potřebuje.
+            HomeView(store: store, openSettings: { openSettings() })
         case .pullRequest(let id):
             if let summary = store.summary(for: id) {
                 PullRequestDetailView(store: store, pullRequest: summary, submission: $submission)

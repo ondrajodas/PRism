@@ -53,14 +53,24 @@ to, co se jen konstatuje — odznak shody `2×`, `✓ v mém review`, počet roz
 `.tint()` z kořene okna se na `Color.accentColor` nevztahuje, takže tam, kde ho někdo použil, byl
 akcent okna jen zamýšlený.
 
-Obsahem domácí záložky je **dashboard** (#181), ne prázdné „Vyber pull request“. Odpovídá na tři
-otázky, na které se do té doby muselo hledat po okně: **kolik toho čeká**, **co z toho blokuje**
-a **co mám rozdělané** — plus co mě dneska stálo review, i s grafem za posledních sedm dní. Pod
-kartami je fronta seřazená **podle závažnosti**, ne podle času, vedle ní rozpad nálezů podle
+Obsahem domácí záložky je **dashboard** (#181), ne prázdné „Vyber pull request“. Odpovídá na čtyři
+otázky, na které se do té doby muselo hledat po okně: **kolik toho čeká**, **co z toho blokuje**,
+**co mám venku vlastního** (#331) a **co mám rozdělané** — plus co mě dneska stálo review, i s grafem
+za posledních sedm dní. Pod kartami jsou **dvě fronty pod sebou** (#331): `Čeká na moje review`
+seřazené **podle závažnosti**, ne podle času, a pod ní `Moje PR`; vedle nich rozpad nálezů podle
 revieweera za týden a blok `Co teď` s akcemi: pustit review na všechno, co neběželo (ptá se na
 potvrzení — je to jediné kliknutí v aplikaci, které utratí víc než jednu session), nebo se vrátit
 k nejstaršímu rozdělanému review. Nic se pro to nedotahuje; všechna ta čísla už v aplikaci byla,
 jen roztroušená.
+
+**Karta `Ve frontě` se od #331 jmenuje `Čeká na mě`** a přibyla vedle ní `Moje PR`. Staré jméno
+mluvilo o dvou různých druzích práce naráz: u cizího PR je moje úloha *přečíst a odpovědět*,
+u vlastního *opravit a pushnout*. Velké číslo na kartě `Moje PR` je **kolik jich mám otevřených**,
+věta pod ním **na kolika z nich leží tah** — šest PR, ze kterých pět čeká na CI, není šest věcí
+k práci. Když mezi zdroji chybí `author:@me is:open`, řekne to ta věta místo nuly: nula bez zdroje
+je údaj o nastavení, ne o mojí práci. Akcentový proužek nahoře se z karty `Rozdělaná review`
+přestěhoval sem, jak to má návrh — dva proužky vedle sebe by přestaly znamenat, která karta je ta
+o mně.
 
 V pravém horním koutu stojí, kdy se seznam naposledy načetl a **kolik zbývá do příštího dotazu** —
 `poslední tik 09:41 · za 43s znovu` (#237). Poslední tik je hodina, protože je to bod
@@ -100,6 +110,26 @@ review, běžící review běží dál, automat plánuje dál a okno nastavení 
 **Nepřežije restart** — je to jediné, co umí PR schovat úplně, a zmizelý PR vypadá jako vyřízený.
 Na trvalé schování jsou **zdroje** v nastavení (search dotaz umí i `-author:`), což je změna toho, co
 se stahuje.
+
+**Vlastní PR jsou druhá fronta, ne filtr v té první** (#331). V railu k tomu přibyla sekce
+`Moje PR` mezi `Frontou` a `Rozdělanými`: šipka nahoru vedle vaničky, protože dolů přichází, co mám
+zrevidovat, a nahoru jde, co posílám ven. Je to **tentýž seznam nad druhou množinou** — rozřazuje se
+podle **autora** (`Policy.ownership`, #330), ne podle zdroje, ze kterého PR přišel, protože jeden PR
+umí splňovat víc search dotazů naráz. Řádek vlastního PR má vpravo **`Prompt →`** místo verdiktu:
+verdikt na vlastní PR GitHub odmítá, takže jediné, co s ním okno umí udělat, je složit z nálezů
+a konverzace zadání pro agenta. Skládání samo je #333 — do té doby je tlačítko **ztlumené
+a zakázané**, aby neslibovalo akci, která se nestane.
+
+**Odznak u sekce počítá to, co čeká na tah**, ne otevřené PR: PR s nezpracovaným nálezem nebo
+s nevyřešeným cizím vláknem. Nula se nekreslí (prázdno je dobrá zpráva) a `nil` — tedy nenačteno —
+taky ne. Vlákna se přitom počítají **jen z konverzací, které se stáhly**, protože ty se tahají při
+výběru řádku, ne při každém tiku; číslo je tedy spodní hranice a doplní ho #335.
+
+Prázdná sekce má **tři různé věty**, ne jednu. Když mezi zdroji chybí `author:@me is:open`, řekne,
+že se vlastní PR nesledují, a nabídne nastavení — nenastavená aplikace nesmí vypadat jako uklizený
+stůl. Když se nepodařilo zjistit login (`gh api user`), řekne, že neví, kdo jsi, protože bez loginu
+je podle autora všechno cizí. A teprve když je zdroj i login, znamená prázdno „nic vlastního
+otevřeného“.
 
 U vybraného PR je tlačítko **Spustit review**. Za ním se stane tohle: dotáhne se head
 commit, připraví se odpojený pracovní strom a v něm se spustí headless session Claude Code

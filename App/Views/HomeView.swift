@@ -7,6 +7,9 @@ import SwiftUI
 /// jde záložkou domů, a otevřené review zůstává otevřené.
 struct HomeView: View {
     @Bindable var store: AppStore
+    /// Otevře okno nastavení. **Uzávěr z těla okna, ne `@Environment`** — viz `ContentView`.
+    /// Potřebuje ho prázdný stav sekce `Moje PR`, když mezi zdroji chybí `author:@me` (#331).
+    var openSettings: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,7 +50,10 @@ struct HomeView: View {
     @ViewBuilder private var content: some View {
         switch store.railSection {
         case .overview: DashboardView(store: store, open: store.openTab(_:))
-        case .queue: PullRequestListView(store: store)
+        case .queue: PullRequestListView(store: store, scope: .queue)
+        // Tentýž seznam nad druhou množinou (#331) — filtr, řazení i detail se použijí beze
+        // změny. Druhé view by znamenalo dvě podoby jednoho řádku.
+        case .mine: PullRequestListView(store: store, scope: .mine, openSettings: openSettings)
         case .drafts: draftList
         }
     }
@@ -69,7 +75,9 @@ struct HomeView: View {
                     pullRequest: pullRequest,
                     reviewState: store.reviewState(for: pullRequest.id),
                     hasDraft: true,
-                    row: store.queueRow(for: pullRequest.id)
+                    row: store.queueRow(for: pullRequest.id),
+                    // Vlastní PR vypadá jako vlastní PR i tady (#331) — jeden řádek, jedna podoba.
+                    ownership: store.ownership(of: pullRequest)
                 )
             }
         }

@@ -261,10 +261,15 @@ extension Policy {
 
     /// Sekce ve čtvrtém pádě. Nebere se z `RailSection.title` (ten je nadpis, tedy první pád) —
     /// „Otevřít Rozdělaná“ je věta, kterou by nikdo nenapsal.
+    ///
+    /// **Sekce se do palety berou z `allCases`**, takže nová se v ní objeví sama (#331) — dopsat
+    /// se musí jedině tvar jejího jména. Vlastní PR přitom v paletě **nejsou druhá skupina**:
+    /// řádky pull requestů zůstávají v jedné, a rozdělit je je samostatné issue (#336).
     private static func paletteTitle(of section: RailSection) -> String {
         switch section {
         case .overview: "přehled"
         case .queue: "frontu"
+        case .mine: "moje pull requesty"
         case .drafts: "rozdělaná review"
         }
     }

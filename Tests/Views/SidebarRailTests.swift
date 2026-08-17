@@ -22,7 +22,33 @@ struct SidebarRailTests {
     /// to ta chyba, která by se udělala nejsnáz, protože rail se kreslí z `allCases`.
     @Test("Vzhled není sekce railu")
     func theAppearanceIsNotARailSection() {
-        #expect(RailSection.allCases == [.overview, .queue, .drafts])
+        // Pořadí je pořadí položek v railu: `Moje PR` leží mezi frontou a rozdělanými (#331).
+        #expect(RailSection.allCases == [.overview, .queue, .mine, .drafts])
+    }
+
+    /// **Pátá položka se do 52 bodů vejde** (#331) — rail se kreslí z `allCases`, takže se do něj
+    /// další sekce dostane sama, a v pruhu o 52 bodech se to dá pokazit potichu: ikona širší než
+    /// rám (34 × 30, tedy 9–43) by se do svislice ostatních nevešla a rail by se rozjel.
+    ///
+    /// Měří se **bez odznaků**: ty visí jako `overlay` posunutý o 6 bodů doprava, takže z rámu
+    /// vyčnívají schválně. Pásy se u toho **nepočítají** — ikona s mezerou uprostřed (šipka nad
+    /// vaničkou u `Moje PR`) se do bitmapy zapíše jako dva pásy, takže by počet měřil kresbu
+    /// glyfu, ne počet položek. Kolik sekcí rail má, tvrdí test výš.
+    @Test("Sekce se vejdou do railu i s pátou položkou")
+    func fitsEverySectionIntoTheRail() throws {
+        let bands = try bands(mode: .system, queueCount: nil, mineCount: nil, draftCount: nil)
+        let separator = try #require(bands.first { $0.height == 1 })
+        let sections = bands.filter { $0.top < separator.top }
+
+        #expect(!sections.isEmpty)
+        for section in sections {
+            #expect(section.center == 26)
+            #expect(section.left >= 9)
+            #expect(section.right <= 43)
+        }
+        // A celý rail se do své plochy vejde — poslední pás končí nad spodní hranou (260 bodů
+        // s 10 body odsazení), takže se položky nepřekrývají a nic z nich nevypadlo.
+        #expect(try #require(bands.last).bottom < 250)
     }
 
     /// A totéž z druhé strany: v paletě ⌘K se vzhled **nesmí** objevit mezi sekcemi. Kdyby byl
@@ -109,8 +135,19 @@ struct SidebarRailTests {
     ///
     /// Kreslí se ve **světlém** režimu; na poloze režim nic nemění a dvě sady by jen zdvojily běh —
     /// jak to vypadá v tmavém, ukazuje `AppearanceRenderProbe`.
-    private func bands(mode: AppearanceMode) throws -> [Band] {
-        let scene = SidebarRail(section: .constant(.queue), queueCount: 5, draftCount: 2, appearance: mode)
+    private func bands(
+        mode: AppearanceMode,
+        queueCount: Int? = 5,
+        mineCount: Int? = 2,
+        draftCount: Int? = 2
+    ) throws -> [Band] {
+        let scene = SidebarRail(
+            section: .constant(.queue),
+            queueCount: queueCount,
+            mineCount: mineCount,
+            draftCount: draftCount,
+            appearance: mode
+        )
             .frame(height: 260)
             .environment(\.colorScheme, .light)
             .tint(Palette.accent)
