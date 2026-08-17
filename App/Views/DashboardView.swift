@@ -158,7 +158,7 @@ struct DashboardView: View {
                 isAlarm: dashboard.blocking.pullRequests > 0
             ) {
                 if let detail = dashboard.blocking.detail {
-                    Text(verbatim: detail).lineLimit(1)
+                    Text(verbatim: detail)
                 } else {
                     Text("nic nezastavuje merge")
                 }
@@ -187,7 +187,7 @@ struct DashboardView: View {
     /// (viz `Dashboard.MineCard.isTracked`).
     @ViewBuilder private func mineFoot(_ mine: Dashboard.MineCard) -> some View {
         if !mine.isTracked {
-            Text("zdroj vlastních PR chybí v nastavení").lineLimit(1)
+            Text("zdroj vlastních PR chybí v nastavení")
         } else if mine.awaitingMove == 0 {
             Text("nic nečeká na tvůj tah")
         } else {
@@ -196,7 +196,7 @@ struct DashboardView: View {
                 one: "má co předat agentovi",
                 few: "mají co předat agentovi",
                 many: "má co předat agentovi"
-            )).lineLimit(1)
+            ))
         }
     }
 
@@ -207,7 +207,6 @@ struct DashboardView: View {
             Text("nic nerozepsaného")
         } else if let oldest = drafts.oldest {
             Text("nejstarší leží \(oldest, format: .relative(presentation: .named))")
-                .lineLimit(1)
         } else {
             Text("čeká na dopsání")
         }
@@ -235,6 +234,11 @@ struct DashboardView: View {
             foot()
                 .font(.system(size: 12))
                 .foregroundStyle(Palette.ink2)
+                // **Jeden řádek, a je to tady, ne u každé věty** (nález Copilota na #331). Do #331
+                // si `lineLimit(1)` nasazovaly jen některé věty, takže se karta v úzkém okně
+                // zlomila právě v tom stavu, který ho zapomněl — a s ní i výška celé řady karet.
+                // Věta pod číslem je popisek, ne odstavec; co se nevejde, se zkrátí.
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
