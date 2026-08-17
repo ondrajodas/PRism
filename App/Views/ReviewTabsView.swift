@@ -148,9 +148,10 @@ private extension View {
 /// znamená **nový snímek při každém obtažení obrazovky**, přičemž každý snímek jde přes
 /// `NSHostingView.layout()`, které rozvrhne **celé okno** (a dvakrát: jednou pro kresbu, jednou pro
 /// `minSize` do constraints). Změřeno sondou `IdleWindowSpinProbe`: nečinné okno s detailem PR
-/// stálo s prstýnkem ve SwiftUI **99 % CPU** hlavního vlákna, bez něj **0 %**. V provozu z toho
-/// bylo okno, které se nedalo ovládat, a `bin/run.sh` na něm padal na `-1712`, protože Apple event
-/// na ukončení nedostal odpověď.
+/// stálo s prstýnkem ve SwiftUI **99 % CPU** hlavního vlákna, s otáčením v CoreAnimation **2–3 %**,
+/// tedy tolik, kolik stojí totéž okno bez prstýnku. V provozu z toho bylo okno, které se nedalo
+/// ovládat, a `bin/run.sh` na něm padal na `-1712`, protože Apple event na ukončení nedostal
+/// odpověď.
 ///
 /// CoreAnimation proti tomu točí vrstvou v render serveru: hlavní vlákno o tom neví a SwiftUI
 /// nedostane ani jeden snímek. Cena je, že se ta kresba musí napsat v AppKitu — proto ten
@@ -185,9 +186,13 @@ private struct SpinningRingLayer: NSViewRepresentable {
 
 /// Kruh s rotujícím obloukem, celý v `CAShapeLayer`.
 ///
-/// **Barvy se resolvují v `updateLayer()`**, ne jednou v initu: `CGColor` ve vrstvě se sám podle
-/// vzhledu nepřebarví, takže by prstýnek po přepnutí na světlý režim nebo po změně systémového
-/// akcentu zůstal v barvě z doby svého vzniku.
+/// **Barvy se resolvují znovu** (`resolveColours()`), ne jednou v initu: `CGColor` ve vrstvě se sám
+/// podle vzhledu nepřebarví, takže by prstýnek zůstal v barvě z doby svého vzniku.
+///
+/// **A vyžádat si to musí každá změna zvlášť** — vzhled přes `viewDidChangeEffectiveAppearance()`,
+/// akcent přes `NSColor.systemColorsDidChangeNotification`. Ve SwiftUI se `.tint` resolvovala sama,
+/// takže tady je to práce, která s přepisem do AppKitu přišla: bez toho druhého by prstýnek po změně
+/// akcentu v Nastavení systému držel starou barvu, dokud se nepřepne světlý/tmavý režim.
 final class SpinningRingView: NSView {
     private let track = CAShapeLayer()
     private let arc = CAShapeLayer()
@@ -219,6 +224,15 @@ final class SpinningRingView: NSView {
             shape.fillColor = nil
             shape.lineWidth = lineWidth
         }
+        // Selektorem, ne blokem: observer registrovaný takhle nepotřebuje odregistrovat v `deinit`
+        // (notifikační centrum od macOS 10.11 zaniklým observerům nedoručuje), takže tu nezůstává
+        // token, na který se dá zapomenout.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(systemColoursDidChange),
+            name: NSColor.systemColorsDidChangeNotification,
+            object: nil
+        )
     }
 
     @available(*, unavailable)
@@ -241,21 +255,48 @@ final class SpinningRingView: NSView {
     }
 
     func apply(lineWidth: CGFloat, isSpinning: Bool) {
-        self.lineWidth = lineWidth
-        track.lineWidth = lineWidth
-        arc.lineWidth = lineWidth
+        if lineWidth != self.lineWidth {
+            self.lineWidth = lineWidth
+            track.lineWidth = lineWidth
+            arc.lineWidth = lineWidth
+            // Cesta je o **půl tahu** zúžená dovnitř, takže se s šířkou tahu mění taky — a počítá se
+            // v `layout()`. Bez tohohle by silnější tah vyjel z rámu a čekalo by se, až rozvržení
+            // vyvolá něco jiného.
+            needsLayout = true
+        }
         guard isSpinning != self.isSpinning else { return }
         self.isSpinning = isSpinning
         updateSpin()
     }
 
-    /// Vzhled se změnil (světlý/tmavý režim, jiný akcent) — barvy se musí resolvovat znovu.
+    /// Akcent v Nastavení systému se změnil. Vzhled se přitom nemění, takže
+    /// `viewDidChangeEffectiveAppearance()` nepřijde a barvu si musí vyžádat tohle.
+    @objc private func systemColoursDidChange() {
+        resolveColours()
+    }
+
+    /// Jakou barvou je oblouk obtažený **právě teď**. Čte to test: „notifikace si vyžádala barvy“
+    /// se jinak nedá tvrdit — `updateLayer()` bez okna na obrazovce nikdo nezavolá a `needsDisplay`
+    /// se u view s `wantsUpdateLayer` přepošle vrstvě, takže na view čte dál `false` (vyzkoušeno,
+    /// test na něm padal nad správným kódem).
+    var arcStrokeColour: CGColor? { arc.strokeColor }
+
+    /// Vzhled se změnil (světlý/tmavý režim) — barvy se musí resolvovat znovu.
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
+        resolveColours()
     }
 
     override func updateLayer() {
+        resolveColours()
+    }
+
+    /// Barvy z aktuálního vzhledu do vrstev. Volá se ze **tří** míst, protože každé z nich je jiná
+    /// příležitost: první kresba (`updateLayer()`), přepnutí světlý/tmavý a změna akcentu.
+    ///
+    /// Nastavit `strokeColor` jde kdykoli, ne jen v kresbě — je to modelová vlastnost vrstvy, takže
+    /// si o překreslení řekne CoreAnimation sama.
+    private func resolveColours() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let accent = NSColor.controlAccentColor
             arc.strokeColor = accent.cgColor

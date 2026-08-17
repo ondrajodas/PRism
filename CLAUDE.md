@@ -563,12 +563,18 @@ Zvlášť stojí za přečtení, než sáhneš na:
 - **Animace, která nikdy nedoběhne, nesmí být ve SwiftUI** (#350). `repeatForever` si vyžádá průchod
   při **každém obtažení obrazovky** a ten jde přes `NSHostingView.layout()`, které rozvrhne **celé
   okno** — a dvakrát (kresba + `minSize` do constraints). Změřeno: nečinné okno s otevřeným PR stálo
-  kvůli jedenáctibodovému prstýnku **99 % CPU** hlavního vlákna, s otáčením v CoreAnimation **2 %**.
-  Cena přitom není v tom prvku, ale **v tom, co je vedle něj v okně** (prstýnek sám: 0 %), takže se
-  to neprojeví, dokud se nekouká na skutečnou obrazovku. Nekonečné otáčení patří na `CALayer`
+  kvůli jedenáctibodovému prstýnku **99 % CPU** hlavního vlákna, s otáčením v CoreAnimation **2–3 %**,
+  tedy tolik jako okno bez prstýnku. Cena přitom není v tom prvku, ale **v tom, co je vedle něj
+  v okně** (týž prstýnek v prázdném okně: 3 %), takže se to neprojeví, dokud se nekouká na
+  skutečnou obrazovku. Nekonečné otáčení patří na `CALayer`
   (`SpinningRingView`), krátká animace na gesto ve SwiftUI zůstat může. `ProgressView` je na macOS
   AppKitový, takže do téhle pasti nepadá. Grep, který **musí vyjít prázdný** (filtr zahazuje
   komentáře, které vysvětlují proč): `grep -rn 'repeatForever' App | grep -vE ':[0-9]+: *//'`.
+
+  **U víc vzorků ztuhlé aplikace se čte kořen u každého zvlášť, ne sečtená tabulka vrcholů** (#350).
+  Tři vzorky z jednoho dopoledne měly **dvě různé** signatury a vylučují se; sečtené by splynuly,
+  protože `propagate_dirty` je v obou. Jak se poznají a proč z toho zbyla jedna oprava a jedno
+  otevřené issue, je v [`docs/testovani.md`](docs/testovani.md).
 - **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236). Blok kódu si v `LazyVStack`u
   navrhuje výšku sám, takže když ji spočítá na jiné šířce, než na jaké se pak zalamuje, nakreslí víc
   řádků, než na kolik si řekl — a přeteče do řádku pod sebou (AppKitové view je nad SwiftUI obsahem,

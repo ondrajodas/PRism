@@ -49,6 +49,43 @@ struct SpinningRingTests {
         #expect(!ring.isSpinningInCoreAnimation)
     }
 
+    /// Změna systémového akcentu se musí propsat do barvy. Ve SwiftUI to bylo zdarma (`.tint` se
+    /// resolvovala sama), kdežto `CGColor` ve vrstvě zůstane ten, se kterým se nakreslila — takže by
+    /// prstýnek držel starou barvu, dokud se nepřepne světlý/tmavý režim.
+    ///
+    /// Zkouší se **poslanou notifikací**, ne přehozením akcentu v systému: nastavení uživatele není
+    /// testovací fixture. A tvrdí se to na **barvě oblouku**, ne na příznaku překreslení: příznaky
+    /// bez okna na obrazovce nedrží (vyzkoušeno u obou — `NSView.needsDisplay` i
+    /// `CALayer.needsDisplay()`), kdežto barva je ten výsledek, o který jde. Před notifikací je
+    /// `nil`, protože kresba ještě neproběhla — a právě proto je z toho vidět, že ji vyžádala ta
+    /// notifikace.
+    @Test("Změna systémového akcentu se propíše do barvy oblouku")
+    func resolvesColoursWhenTheAccentChanges() {
+        let ring = SpinningRingView(lineWidth: 2, isSpinning: true)
+        ring.frame = NSRect(x: 0, y: 0, width: 11, height: 11)
+        ring.layoutSubtreeIfNeeded()
+        #expect(ring.arcStrokeColour == nil)
+
+        NotificationCenter.default.post(name: NSColor.systemColorsDidChangeNotification, object: nil)
+
+        #expect(ring.arcStrokeColour == NSColor.controlAccentColor.cgColor)
+    }
+
+    /// Silnější tah znamená jinou cestu — kruh je o půl tahu zúžený dovnitř, aby se do rámu vešel
+    /// celý. Kdyby se po změně šířky nevyžádalo rozvržení, zůstala by cesta pro starou šířku
+    /// a tah by z prstýnku vyjel.
+    @Test("Jiná šířka tahu si vyžádá nové rozvržení")
+    func relayoutsWhenTheLineWidthChanges() {
+        let ring = SpinningRingView(lineWidth: 2, isSpinning: true)
+        ring.frame = NSRect(x: 0, y: 0, width: 40, height: 40)
+        ring.layoutSubtreeIfNeeded()
+        #expect(!ring.needsLayout)
+
+        ring.apply(lineWidth: 8, isSpinning: true)
+
+        #expect(ring.needsLayout)
+    }
+
     private static func descendant(of view: NSView) -> SpinningRingView? {
         if let ring = view as? SpinningRingView { return ring }
         for child in view.subviews {

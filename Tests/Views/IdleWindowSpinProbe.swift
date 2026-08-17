@@ -36,16 +36,20 @@ struct IdleWindowSpinProbe {
         // v témže hostingu jako detail**. V aplikaci sedí v pruhu záložek PR (#180), tedy nad
         // detailem a ve **stejné** hierarchii SwiftUI — a `repeatForever` z něj dělá animaci,
         // která se sama nezastaví. Sonda ho proto přidává k téže scéně, ne do vedlejšího okna.
-        let cases: [(name: String, running: Bool, chips: Bool, ring: Bool)] = [
-            ("review neběží", false, true, false),
-            ("review běží (kapsle reviewerů)", true, true, false),
-            ("review běží + prstýnek v pruhu záložek", true, true, true),
-            ("prstýnek bez detailu", false, false, true),
+        let cases: [(name: String, running: Bool, chips: Bool, ring: Bool, detail: Bool)] = [
+            ("review neběží", false, true, false, true),
+            ("review běží (kapsle reviewerů)", true, true, false, true),
+            ("review běží + prstýnek v pruhu záložek", true, true, true, true),
+            // Poslední případ nese celý závěr: **týž prstýnek v prázdném okně**. Vyjde-li malé číslo,
+            // cena není v prstýnku, ale v tom, co je vedle něj. Co se v okně hostuje, proto stojí
+            // v tabulce jako vlastní pole — odvozovat to z názvu scénáře by znamenalo, že překlep
+            // v próze potichu změní, co se měří.
+            ("prstýnek bez detailu", false, false, true, false),
         ]
         for scenario in cases {
             let (store, cache) = try await prepared(running: scenario.running, chips: scenario.chips)
             defer { _ = cache }
-            let window = show(store: store, ring: scenario.ring, detail: scenario.name != "prstýnek bez detailu")
+            let window = show(store: store, ring: scenario.ring, detail: scenario.detail)
             defer { window.orderOut(nil) }
             // Usadit: po prvním zobrazení se hierarchie skládá a to do měření nepatří.
             _ = spin(seconds: 1.5)

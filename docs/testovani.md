@@ -372,6 +372,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   napřímo, protože `accessibilityReduceMotion` je v `EnvironmentValues` jen ke čtení a v testu se
   nedá nastavit. Ověřeno **vložením regrese**: po návratu k `withAnimation(.repeatForever)` test
   spadl na tom, že v hierarchii žádné `SpinningRingView` není.
+
+  Druhé dva testy hlídají to, co ve SwiftUI bylo zdarma a s přepisem do AppKitu se musí obsloužit
+  ručně: **změna systémového akcentu** (posílá se notifikace, tvrdí se na barvě oblouku — příznaky
+  překreslení bez okna na obrazovce nedrží, takže by z nich byl test padající nad správným kódem)
+  a **jiná šířka tahu** (musí si vyžádat rozvržení, protože cesta je o půl tahu zúžená dovnitř).
+  Obojí ověřeno vložením regrese — bez pozorovatele, resp. bez `needsLayout`, padnou.
 - **Cyklení pruhem `⌃Tab` (#245)** — dvě sady. V `Policy` **vyčerpávající výčet** nad `openTabs`:
   oba směry z každé záložky pruhu, obě obtočení (za poslední je domácí, před domácí poslední),
   jediná záložka nevede nikam a aktivní záložka mimo pruh taky ne. K nim invariant „krok tam
@@ -3044,6 +3050,24 @@ vypadalo na drahou práci nad konkrétními daty. Celý soubor ale říkal něco
 **3709 vzorků** a **3599 z nich** (97 %) leželo pod `NSDisplayCycleFlush → NSHostingView.layout()`.
 Ty vrcholy byly jen nejhrubší kamínky uvnitř té jedné cesty.
 
+**A z kořene se pozná, jestli jsou vzorky o téže věci** — což je u víc vzorků ta první otázka, ne
+poslední. #350 měl tři a listy měl každý jiné (osa konverzace, computed properties detailu, diff),
+takže to vypadalo na jednu příčinu viděnou třemi pohledy. Kořeny ale byly dva, a vylučují se:
+
+| Kořen 100 % vzorků hlavního vlákna | Co to je | Poznávací znak |
+|---|---|---|
+| `NSDisplayCycleFlush → NSHostingView.layout()` | takt překreslování obrazovky, tedy **animace** | v cestě je `+[NSAnimationContext runAnimationGroup:]` (1754 vzorků) a `render(interval:…)` |
+| `NSRunLoop.flushObservers → NSHostingView.beginTransaction → GraphHost.flushTransactions` | vyprazdňování **čekajících transakcí** v každém kole smyčky, tedy něco, co graf pořád špiní | `runAnimationGroup` ani display cycle v cestě **nejsou vůbec** (nula vzorků) |
+
+Rozlišit se to musí, protože z toho vyjdou dvě různé opravy — a **pozná se to jedině tehdy, když se
+kořen přečte u každého vzorku zvlášť.** Sečtená tabulka vrcholů by obě signatury slila do jedné,
+protože `AG::Graph::UpdateStack::update()` a `propagate_dirty` jsou v obou.
+
+**A že jsou to doopravdy dvě věci, se ověří vložením regrese**, ne úsudkem: vrátit opravenou příčinu
+zpátky a vzít `sample` **testovacího hosta** při běžící sondě (`sample <pid> 4`, PID se najde jako
+`pgrep -f 'build.noindex/.*PRism.app/Contents/MacOS/PRism'`). U #350 z toho vyšla zase jen ta první
+signatura, takže druhá zůstala nevysvětlená — což je závěr, ne mezera.
+
 Čísla, ze kterých se to přečte, jsou v hlavičce grafu, ne v `Sort by top of stack`:
 
 ```bash
@@ -3114,7 +3138,7 @@ Vyloučené příčiny #350, aby po nich příští session nesáhla znovu:
 | Podezření | Čím padlo |
 |---|---|
 | Každá událost průběhu přepočítá pruh záložek (`tabs` → `Policy.tally` → `visibleFindings`) | Cena je změřená (9–55 ms na událost), ale frekvence je 0,07–0,37 ev/s → nejvýš 2 % CPU. A cena je **v zašpinění těla, ne v té práci**: zápis do `reviewPhases`, který s osou nedělá nic, stojí stejně (kontrolní série v `DetailProgressMeasurement`). Odznaky samotné jsou 0,006–0,15 ms |
-| Nekonečná smyčka rozvržení (zápis do stavu během `body`) | Vylučuje to chování v provozu: okno **reagovalo**, jen lagovalo, a CPU spadlo k nule v okamžiku, kdy dojela poslední session. Smyčka by držela procesor pořád a okno by nepustila vůbec |
+| ~~Nekonečná smyčka rozvržení (zápis do stavu během `body`)~~ **nevyloučená, zůstává** | Vylučovalo se to úvahou, že okno **reagovalo** (jen lagovalo), takže smyčka to být nemůže — **a ta úvaha je špatná.** Smyčka přes runloop observer (`flushObservers → beginTransaction`) pustí mezi koly události, takže okno odpovídá a jen lagne; procesor nepustí to ani ono. Signatura vzorků 1 a 3 je právě tohle a **oprava prstýnku ji nevysvětluje** (ověřeno vložením regrese) |
 | Rozbor `stream-json` běží na hlavním vlákně | `ClaudeReviewRunner` je `struct` bez izolace a `SWIFT_VERSION = 6.0` (bez `NonisolatedNonsendingByDefault`), takže jeho `async` metody běží na globálním executoru; `readabilityHandler` čte rouru na vlastní frontě Foundationu. Ve `sample`u není ani jeden rámec parseru |
 | Osa běhu roste a její kopírování zdražuje každou událost | `reviewTimelines` má strop 300 uložených položek a kopie pole struktur je v šumu — a hlavně: kontrolní série výš ukazuje, že na tom, **co** se do storu zapíše, nezáleží |
 
