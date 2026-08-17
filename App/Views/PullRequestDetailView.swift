@@ -1314,6 +1314,7 @@ struct PullRequestDetailView: View {
     private func diffView(of diff: Diff) -> some View {
         DiffView(
             diff: diff,
+            subject: pullRequest.id.description,
             scrollTarget: $scrollTarget,
             expansion: expansionActions,
             folding: foldingActions,

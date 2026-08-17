@@ -4,8 +4,19 @@ import CoreGraphics
 ///
 /// Jeden parametr místo tří closures, které patří k sobě — stejný vzor jako `DraftActions`.
 struct RangeDragActions {
-    /// Rámečky řádků. `nil` = tady se netáhne (náhledy, testy skládání řádků).
-    var frames: DiffRowFrames?
+    /// Krabice rámečků a diff, do kterého se hlásí. `nil` = tady se netáhne (náhledy, testy
+    /// skládání řádků).
+    var box: FrameBox?
+
+    /// **Krabice a klíč diffu jsou jedna hodnota schválně** (#274). Krabice, která klíč nedostane,
+    /// tiše přestane zahazovat plochy z jiných záložek — tedy přesně ta regrese, kterou #274
+    /// opravuje, a potichu. Jedno bez druhého se proto nedá předat ani omylem; volitelné pole
+    /// s výchozím prázdným klíčem by se zapomenout dalo (nález Copilota na #349).
+    struct FrameBox {
+        let frames: DiffRowFrames
+        /// Co se kreslí — pull request (`owner/repo#číslo`), nebo commit v tabu `Commity`.
+        let subject: String
+    }
     /// Rozsah se hlásí průběžně: `from` je řádek, na kterém tažení začalo, `to` ten pod myší.
     /// Komentář z toho vznikne až na konci — během tažení se jen zvýrazňuje.
     ///
@@ -29,9 +40,17 @@ struct RangeDragActions {
 /// takže se přeměřování nespouští a záznamy nezastarají.
 @MainActor final class DiffRowFrames {
     private var entries: [String: (rect: CGRect, anchor: DraftAnchor)] = [:]
+    /// Který diff krabice popisuje. `nil` = zatím žádný.
+    ///
+    /// Je tu proto, že `@State` detailu **přetéká mezi pull requesty**: jeden `DiffView` obslouží
+    /// všechny otevřené záložky, takže bez tohohle by se v krabici vrstvily plochy každého PR,
+    /// na který se člověk podíval — vyklizení plochy (`note`) zastaralé záznamy sundá jedině tam,
+    /// kam nový blok doopravdy dosáhl. Úklid je lineární v počtu záznamů, takže každá další
+    /// prohlédnutá záložka zdražovala zápis (#274).
+    private var subject: String?
 
     /// Jeden zapsaný rámeček. Řádek, který komentář neunese, se do zápisu **nedává** — a tím
-    /// z krabice vypadne (viz `note(_:covering:)`).
+    /// z krabice vypadne (viz `note(_:covering:of:)`).
     struct Entry {
         let id: String
         let rect: CGRect
@@ -64,14 +83,30 @@ struct RangeDragActions {
     /// ploše) a zbyl by z něj poslední řádek. Vynechání vlastních `id` z úklidu je proti tomu jen
     /// úspora práce na horké cestě: blok se hlásí znovu při každém posunu, takže nemá smysl
     /// stopadesát záznamů mazat a hned vracet.
-    func note(_ rows: [Entry], covering area: CGRect) {
+    ///
+    /// **Plochy z jiného diffu se zahodí naráz** (#274), a to ve chvíli, kdy přijde první hlášení
+    /// z toho nového — tedy z **hlášení**, ne zvenčí. Na tom to celé stojí: vyprázdnit krabici
+    /// zvenčí by znamenalo, že bloky, které stojí a geometrii nemění, už nic nenahlásí a tažení
+    /// nemá co najít (viz odstavec výš). Tímhle způsobem je v krabici vždycky nejvýš jeden diff,
+    /// takže zápis stojí totéž s jednou otevřenou záložkou jako se čtyřmi.
+    func note(_ rows: [Entry], covering area: CGRect, of subject: String) {
         guard !area.isEmpty else { return }
+        if subject != self.subject {
+            // `keepingCapacity`, protože přihrádky za chvíli zaplní tentýž počet ploch nového
+            // diffu — je to tatáž úvaha jako u `SyntaxRunCache.clear()`.
+            entries.removeAll(keepingCapacity: true)
+            self.subject = subject
+        }
         let live = Set(rows.map(\.id))
         for (key, entry) in entries where !live.contains(key) && entry.rect.intersects(area) {
             entries[key] = nil
         }
         for row in rows { entries[row.id] = (row.rect, row.anchor) }
     }
+
+    /// Kolik ploch v krabici leží. Čte to **jen test a měření** — tažení se ptá na kotvu, ne na
+    /// počet; je to tatáž výjimka jako `SyntaxRunCache.count`.
+    var count: Int { entries.count }
 
     /// Kotva řádku pod bodem. `nil` = mimo řádky, na které se dá komentovat.
     ///

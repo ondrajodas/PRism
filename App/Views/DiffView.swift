@@ -6,6 +6,13 @@ import SwiftUI
 /// naráz by okno na chvíli položilo.
 struct DiffView: View {
     let diff: Diff
+    /// Co se kreslí — pull request (`owner/repo#číslo`), nebo commit v tabu `Commity`.
+    ///
+    /// **Není to dekorace, je to klíč ke krabici ploch pro tažení** (#274). Jeden `DiffView`
+    /// obslouží všechny otevřené záložky, protože `@State` detailu přetéká mezi pull requesty —
+    /// takže bez identity toho, co se kreslí, by se v `DiffRowFrames` vrstvily plochy každého
+    /// prohlédnutého PR a zápis by s každou další záložkou zdražoval.
+    let subject: String
     /// Kam odscrollovat. Nastaví ho panel nálezů; po skoku se vrací na `nil`, aby šlo
     /// na totéž místo skočit i podruhé.
     @Binding var scrollTarget: String?
@@ -265,7 +272,7 @@ struct DiffView: View {
                 draggedCells: draggedCells,
                 dragEnd: dragged?.end,
                 rangeDrag: RangeDragActions(
-                    frames: rowFrames,
+                    box: .init(frames: rowFrames, subject: subject),
                     move: { draft.dragRange(file.displayPath, $0, $1) },
                     end: draft.endRangeDrag
                 ),

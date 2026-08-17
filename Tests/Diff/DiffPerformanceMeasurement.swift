@@ -32,6 +32,28 @@ struct DiffPerformanceMeasurement {
         print("MĚŘENÍ \(label): \((elapsed / iterations).milliseconds) na volání")
     }
 
+    /// Měřidlo pro případ, kdy se **příprava nesmí počítat** (#274): každé kolo potřebuje čerstvý
+    /// stav, ale hodinky se pouští teprve nad tím, co se měří.
+    ///
+    /// Existuje proto, že bez toho se dá naměřit cokoli. Do #274 tu byla jedna varianta a příprava
+    /// se dělala **uvnitř** měřeného bloku — u zápisu ploch to znamenalo, že se do „ceny jednoho
+    /// bloku“ počítalo naplnění celé krabice, tedy práce úplně jiného řádu (4000 ploch proti 120).
+    private func measure<Subject>(
+        _ label: String,
+        iterations: Int = 10,
+        preparing setup: () -> Subject,
+        _ body: (Subject) -> Void
+    ) {
+        let clock = ContinuousClock()
+        body(setup())    // zahřátí
+        var elapsed = Duration.zero
+        for _ in 0..<iterations {
+            let subject = setup()
+            elapsed += clock.measure { body(subject) }
+        }
+        print("MĚŘENÍ \(label): \((elapsed / iterations).milliseconds) na volání")
+    }
+
     // MARK: - Hlavní podezřelý: hloubka zanoření pružných stacků
 
     /// **Tohle je to měření, o které jde.** Zanořené stacky s pružnou šířkou a `Spacer`em —
@@ -655,8 +677,13 @@ struct DiffPerformanceMeasurement {
     ///
     /// Naměřeno na tomhle stroji (krabice s 4000 záznamy, blok o 120 plochách): **po řádcích
     /// 22,6 ms, naráz 1,40 ms** — 16×.
+    ///
+    /// Od #274 se měří i to, **jak ta cena roste s prohlédnutými záložkami**: do #274 se v krabici
+    /// vrstvily plochy každého PR, na který se člověk podíval, takže zápis byl lineární v jejich
+    /// součtu. Poslední řádek je stav po #274 — plochy z jiného diffu krabice zahodí, takže
+    /// v ní zůstane jedna sada a čtyři záložky stojí totéž co jedna.
     @MainActor
-    @Test("Cena zápisu ploch pro tažení (#252)")
+    @Test("Cena zápisu ploch pro tažení (#252, #274)")
     func rangeFrameNoteCost() {
         // Krabice jako u velkého souboru: 2000 dvojic × 2 strany.
         let filler = (0..<4000).map { index in
@@ -666,29 +693,67 @@ struct DiffPerformanceMeasurement {
                 anchor: DraftAnchor(line: index / 2 + 1, side: index.isMultiple(of: 2) ? .left : .right)
             )
         }
-        // Blok, který právě vjel do okna — leží pod tou náplní, aby se s ní nepřekrýval.
+        // Blok, který právě vjel do okna — leží **za** všemi náplněmi, aby se s nimi nepřekrýval:
+        // měří se cena zápisu do plné krabice, ne cena mazání cizích ploch.
+        let blockTop = 4 * 40_000.0
         let block = (0..<120).map { index in
             DiffRowFrames.Entry(
                 id: "block\(index)",
-                rect: CGRect(x: index.isMultiple(of: 2) ? 0 : 450, y: 40_000 + Double(index / 2) * 16, width: 84, height: 16),
+                rect: CGRect(x: index.isMultiple(of: 2) ? 0 : 450, y: blockTop + Double(index / 2) * 16, width: 84, height: 16),
                 anchor: DraftAnchor(line: 3000 + index / 2, side: index.isMultiple(of: 2) ? .left : .right)
             )
         }
-        let area = CGRect(x: 0, y: 40_000, width: 900, height: 960)
+        let area = CGRect(x: 0, y: blockTop, width: 900, height: 960)
 
-        func filled() -> DiffRowFrames {
+        func filled(_ tabs: Int) -> DiffRowFrames {
             let box = DiffRowFrames()
-            box.note(filler, covering: CGRect(x: 0, y: 0, width: 900, height: 32_000))
+            // Každá další prohlédnutá záložka je další sada ploch **v témže diffu krabice** —
+            // takhle vypadala krabice do #274, kdy klíč podle diffu neměla.
+            //
+            // Sady leží **každá ve svém pásu**, ne přes sebe: vyklizení plochy sundá jen to, kam
+            // nový blok dosáhl, takže z jednoho PR zůstane v krabici ležet právě ta část, kterou
+            // v tom druhém nikdo neprojel. Kdyby se v měření kladly na sebe, druhá sada by tu
+            // první smazala a krabice by nikdy nenarostla — což je přesně ten omyl, kvůli kterému
+            // vypadalo, že cena s počtem záložek neroste.
+            for tab in 0..<tabs {
+                let offset = Double(tab) * 40_000
+                let rows = filler.map {
+                    DiffRowFrames.Entry(
+                        id: "tab\(tab)-\($0.id)",
+                        rect: $0.rect.offsetBy(dx: 0, dy: offset),
+                        anchor: $0.anchor
+                    )
+                }
+                box.note(
+                    rows,
+                    covering: CGRect(x: 0, y: offset, width: 900, height: 32_000),
+                    of: "one"
+                )
+            }
             return box
         }
 
-        measure("zápis ploch po řádcích, \(block.count) ploch do krabice s \(filler.count) záznamy") {
-            let box = filled()
-            for row in block { box.note([row], covering: row.rect) }
+        measure(
+            "zápis ploch po řádcích, \(block.count) ploch do krabice s \(filler.count) záznamy",
+            preparing: { filled(1) }
+        ) { box in
+            for row in block { box.note([row], covering: row.rect, of: "one") }
         }
-        measure("zápis ploch naráz, \(block.count) ploch do krabice s \(filler.count) záznamy") {
-            let box = filled()
-            box.note(block, covering: area)
+        for tabs in [1, 2, 4] {
+            measure(
+                "zápis ploch naráz, \(block.count) ploch do krabice s \(filler.count * tabs) záznamy",
+                preparing: { filled(tabs) }
+            ) { box in
+                box.note(block, covering: area, of: "one")
+            }
+        }
+        // A totéž od #274: plochy z jiného diffu se zahodí, takže v krabici zůstane jedna sada
+        // bez ohledu na to, kolik záložek se prohlédlo.
+        measure(
+            "zápis ploch naráz, \(block.count) ploch po přepnutí ze 4 prohlédnutých záložek (#274)",
+            preparing: { filled(4) }
+        ) { box in
+            box.note(block, covering: area, of: "another")
         }
     }
 
