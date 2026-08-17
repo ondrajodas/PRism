@@ -2293,6 +2293,11 @@ běžely na stroji čtyři dny.
 - **Nezachytí to všechno**, a je to tak zamýšlené: pád aplikace ani zabití zvenčí takhle
   odchytit nejde. Dotažení nálezů z transcriptu (#97) je pro ně ta drahá varianta — a od #264
   slouží **oběma** cestám, protože zavření aplikace je pro běh totéž jako pád.
+- **Session, která zabitou aplikaci přežila, se uklidí až při dalším startu** (#351). Nálezy dotahuje
+  transcript (#97), ale sám `claude -p` běží dál pod `launchd` a počítá tokeny — tomu se
+  z běžícího procesu, který zmizel, zabránit nedá (prevence na macOS neexistuje, změřeno).
+  `AppDelegate.applicationDidFinishLaunching` proto sirotky dohledá a zabije; jak, je v sekci
+  `Environment`.
 
 **Zavírání se přitom nesmí lišit od pádu v tom, co po sobě nechá** (#264). Zabité běhy se
 schválně chovají jako přerušené, ne jako zrušené:
@@ -5467,6 +5472,8 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `UserNotifying` | Protokol: doručit notifikaci a dát proud kliknutí. `PullRequestNotification` je vstup, `NotificationDelivery` výsledek |
 | `PreferenceStoring` | Protokol nad trvalými předvolbami (stav aplikace, ne `config.json`); `UserDefaults` ho splňuje |
 | `SystemNotificationCenter` | `UNUserNotificationCenter` za tím protokolem — **statická jediná instance** a delegát, který kliknutí převádí na hodnotu v proudu |
+| `ProcessIdentity` | `(pid, startedAt)` — dvojice, kterou nejde splést s recyklovaným PID (#351) |
+| `ProcessInspecting` | Protokol: co jádro ví o procesu a `SIGKILL` **na identitu, ne na PID**. `SystemProcessInspector` nad `sysctl(KERN_PROC_PID)` |
 
 Nad notifikacemi (#88) platí:
 
@@ -5534,7 +5541,7 @@ nad stavem prostředí ve view, patří to do reportu.
 nezavolají, by musely dopsat všechny. `workingDirectory` je jen v `ProcessStreaming` —
 `claude` pracovní složku flagem předat neumí, kdežto `git` si vystačí s `-C`.
 
-Šest věcí o podprocesech, na které se naráží znovu:
+Sedm věcí o podprocesech, na které se naráží znovu:
 
 - **Blokující I/O nesmí na kooperativní pool.** `readToEnd()` neumí čekat kooperativně
   a pool má jen tolik vláken, kolik je jader — několik paralelních review by si je
@@ -5558,6 +5565,10 @@ nezavolají, by musely dopsat všechny. `workingDirectory` je jen v `ProcessStre
   takže mezi `cancel()` a odeslaným signálem je několik hopů mezi aktory. Do #264 se nečekalo
   vůbec (nezabíjelo se) a osamocený `claude` se přerodil na `launchd` — změřeno, dvě takové
   session běžely na stroji čtyři dny. Podrobnosti o té cestě jsou v sekci `AppStore`.
+- **Co ta záruka nekryje: aplikaci zabitou zvenčí** (#351). Body výš popisují **normální**
+  ukončení, tedy cestu, na které se má co spustit. Když aplikace ztuhne a někdo ji zabije
+  (`kill -TERM`, Force Quit), nespustí se nic — hlavní vlákno je zaseknuté nebo proces prostě
+  zmizí. Řeší to `RunningSessions` níž, tedy **úklid po**, ne prevence.
 - **Proud smí skončit teprve po EOF na obou rourách, ne po exitu procesu.** Skončit hned po
   exitu by uřízlo řádky, které ještě leží v rouře — u review přesně ty poslední, ve kterých
   bývají nálezy.
@@ -5566,6 +5577,97 @@ nezavolají, by musely dopsat všechny. `workingDirectory` je jen v `ProcessStre
   `onTermination`, ne konec procesu) a po `SIGKILL`u proud ukončí samo. Data, která po
   konci proudu ještě přijdou, se zahodí a čtení se odpojí — ukecaný potomek by jinak plnil
   buffer, ze kterého už nikdo nečte.
+
+### Osiřelá session po zabité aplikaci (#351)
+
+`RunningSessions` (v `App/Store/`) drží na disku seznam podprocesů, které aplikace právě spustila,
+a **při startu zabije ty, které jí nepřežily**. Je to jediná záruka pro případ, na který #264
+nedosáhne: aplikace zabitá zvenčí.
+
+**Co se změřilo.** Potomek spuštěný `Foundation.Process`em přežije rodiči `SIGTERM` **i**
+`SIGKILL` a jádro ho přerodí na `launchd`:
+
+```
+$ ps -o pid,ppid,pgid,etime,comm -p 66365 -p 66367
+  PID  PPID  PGID ELAPSED COMM
+66365     1 66362   00:14 ./a-parent
+66367 66365 66367   00:13 sleep
+$ kill -KILL 66365
+  PID  PPID  PGID ELAPSED COMM
+66367     1 66367   00:22 sleep      # rodič pryč, potomek pod launchd
+```
+
+**Prevence na macOS není** a rozhodlo to tři věci, každou změřenou:
+
+- **`PDEATHSIG` v Darwinu neexistuje.** V `sys/spawn.h` je jen `RESETIDS`, `SETPGROUP`,
+  `SETSIGDEF`, `SETSIGMASK`, `SETSCHED*`, `SETEXEC`, `START_SUSPENDED`, `SETSID`,
+  `CLOEXEC_DEFAULT` a `PCONTROL_*`. Nic o konci rodiče — tedy ani přes `posix_spawn` napřímo,
+  natož přes `Foundation.Process`.
+- **`PROC_SETPC_TERMINATE` je o něčem jiném.** `libproc.h` u `proc_setpcontrol` píše *„state on
+  resource starvation“* a funkce nebere PID: nastavuje chování **volajícího** při hladovění po
+  paměti. Se smrtí rodiče nesouvisí.
+- **Procesová skupina nepomůže.** `Foundation.Process` dává potomkovi **vlastní** skupinu
+  (změřeno výš: `PGID == PID` potomka, kdežto rodič má skupinu shellu), takže signál poslaný
+  skupině aplikace na `claude` nedosáhne — a hlavně by ho musel poslat ten, kdo aplikaci zabíjí.
+
+Zbývá tedy **úklid po**: session se zapisují do cache a osiřelé zabije další start. Cena je, že
+sirotek žije do dalšího spuštění — což jsou v praxi vteřiny, protože zaseknutá aplikace se zabíjí
+právě proto, aby se spustila znovu.
+
+Jak to drží pohromadě:
+
+- **Identita je `(pid, startedAt)`, nikdy jen PID.** Čísla se recyklují, takže PID zapsané před
+  hodinou může dneska patřit cizímu procesu — a na stroji běží `claude` i mimo aplikaci
+  (uživatelovy vlastní session, paralelní agenti ve slotech). Okamžik vzniku procesu čte
+  `sysctl(KERN_PROC_PID)` v mikrosekundách; PID se recykluje, dvojice ne.
+- **Hledání v `ps` podle jména nebo promptu je zakázané.** Zabít cizí `claude` je horší než nechat
+  běžet sirotka, takže se pozná jedině to, co si aplikace **sama zapsala**.
+- **`ProcessInspecting.kill` bere identitu, ne PID.** `SystemProcessInspector` si ji ověří **znovu,
+  těsně před signálem**: mezi rozhodnutím a `kill(2)` je čas a v něm se PID může přesunout. Kdyby
+  metoda brala PID, závisela by ta kontrola na tom, jestli si na ni volající vzpomněl.
+- **Nekladné PID se odmítne dřív, než se na cokoli zeptáme.** `sysctl` na `pid == 0`
+  **odpovídá** (jádro), takže bez té pojistky by z nuly vylezla platná identita — a `kill(0, …)`
+  míří na celou **procesovou skupinu volajícího**, tedy na aplikaci samotnou.
+- **Rozhoduje `size`, ne návratový kód `sysctl`.** Změřeno: pro neexistující PID vrátí `sysctl`
+  taky `0`, jen nezapíše nic (`size == 0`) a `errno` nenastaví. Bez té kontroly by nulová
+  `kinfo_proc` vypadala jako platná odpověď.
+- **Záznam nese i vlastníka**, tedy identitu instance aplikace, která běh spustila — a **sirotek je
+  jen ten, jehož vlastník už neběží.** Bez toho by úklid zabíjel session běžící aplikaci pod
+  rukama, a naráží na to `xcodebuild test`: testovací host je tentýž bundle, takže má stejné
+  `CFBundleName` a sahá do **téže cache** jako aplikace v `/Applications`. Kontrola vlastníka je
+  zároveň to, co dovoluje nechat v souboru značky cizí instance a nemazat je.
+- **Rozhodnutí je čistá funkce** `Policy.orphanVerdict(for:ownerNow:processNow:)` se třemi
+  výsledky — `keep` (živý vlastník), `kill` (vlastník pryč a identita se shoduje), `discard`
+  (proces doběhl nebo jeho PID dostal někdo jiný). `RunningSessions` dělá jen I/O.
+- **Značku dostává jedině streamovací cesta.** `claude -p` běží minuty a platí se za něj tokeny;
+  `gh` a `git` z bufferované cesty doběhnou samy za sekundy a pouštějí se při **každém tiku
+  pollingu**, takže zápis do cache by u nich byl sáhnutí na disk za nic. Mechanismus přitom sedí
+  v `LaunchedProcess` (jedno místo pro obě cesty) a předává se mu nepovinným parametrem.
+- **Zapisuje se hned po `run()`, maže se koncem procesu.** Zápis odložený za `run()` by nechal
+  mezeru, do které se vejde ukončení aplikace. Mazání v `terminationHandler`u drží soubor krátký;
+  značka, kterou nikdo nemaže, by se úklidem zahodila taky (identita se neshoduje), ale byla by to
+  mrtvá váha, která svádí spolehnout se na ni.
+- **Bez paměťové cache**, na rozdíl od `InterruptedRuns`: soubor umí psát i druhá instance téhož
+  bundlu (testovací host) a cache v paměti by jí značky přepsala. Čte se dvakrát za session, tedy
+  ne v tiku ani při každém uložení.
+- **Úklid, který nic nezahodil, na soubor vůbec nesáhne.** Je to běžný stav (aplikace se obvykle
+  zavírá normálně) a start by za něj platil zápisem i zakládáním složky. Hlavní důvod je ale
+  druhý: zápis naprázdno by uměl **přepsat značku, kterou mezi čtením a zápisem zapsala jiná
+  instance** — a její sirotek by pak neodešel nikdy. Je na to test se souborem přeformátovaným
+  na kompaktní JSON, protože porovnání obsahu by přepis týmž seznamem nechytlo.
+- **Nečitelný soubor i selhaný zápis se berou jako prázdno**, stejně jako u `InterruptedRuns`:
+  nejhorší následek je neuklizený sirotek, tedy stav před #351. Vyhozená chyba by proti tomu
+  položila start aplikace, a tohle je záchranná síť.
+- **Úklid běží v `AppDelegate.applicationDidFinishLaunching`**, synchronně a až za delegátem
+  notifikací (ten má na pořadí podmínku, tenhle úklid žádnou). V `AppStore` být nemůže: značky
+  nestojí na preflightu ani na konfiguraci, takže po pádu, kvůli kterému preflight neprojde, by
+  se úklid nespustil vůbec.
+
+**Co #351 nekryje** a je to vědomé: zabíjí se **zapsaný proces, ne jeho potomci.** `claude` si
+spouští vlastní pomocné procesy (`bg-pty-host`, `bg-spare`) a ty tam po `SIGKILL`u zůstat mohou —
+je to tatáž mezera, jakou má `SIGKILL` z #264, a platí o ní totéž: peníze počítá hlavní proces,
+takže jeho zabití zastaví cenu. Rozšířit signál na celou skupinu by znamenalo druhou semantiku
+zastavení běhu vedle té z #264.
 
 **`zsh -lc` nečte `.zshrc`** — neinteraktivní login shell čte `.zshenv`, `.zprofile`
 a `.zlogin`. Přidat `-i` se zkoušelo a zahodilo (viz komentář v `LoginShellPathReader`

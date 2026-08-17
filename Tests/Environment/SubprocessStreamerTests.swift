@@ -173,5 +173,52 @@ struct SubprocessStreamerTests {
         _ = try? await task.value
     }
 
+    /// Zapojení registru běžících session (#351).
+    ///
+    /// Sám registr se testuje v `RunningSessionsTests`; tady jde o to, že ho streamovaná cesta
+    /// **doopravdy volá** — jinak by po zabité aplikaci nebylo co dohledat a úklid při startu by
+    /// nad prázdným souborem hlásil, že sirotci nejsou. Zapojení je zrovna to, co se rozbije
+    /// potichu: registr zůstane zelený a v cache nic nebude.
+    ///
+    /// Značka se zapisuje uvnitř `launch()`, tedy **dřív, než se spuštěný shell dostane ke slovu** —
+    /// proto se na ni po přečtení PID kouká rovnou, bez čekání. Zapomenutí je proti tomu v
+    /// `terminationHandler`u, tedy asynchronní vůči zrušení, a čeká se na něj jako na jev.
+    @Test("Streamovaná session se zapíše do registru a koncem zmizí", .timeLimit(.minutes(3)))
+    func aStreamedSessionIsRegisteredAndForgotten() async throws {
+        let directory = try TemporaryDirectory()
+        let layout = CacheLayout(root: directory.url)
+        let registered = SubprocessStreamer(sessions: RunningSessions(layout: layout))
+        let pidFile = temporaryPIDFile("streamer-registry")
+        let path = pidFile.path(percentEncoded: false)
+        defer { try? FileManager.default.removeItem(at: pidFile) }
+
+        let task = Task {
+            for try await _ in registered.stream(
+                shell,
+                arguments: ["-c", "echo $$ > '\(path)'; sleep \(Self.longerThanTheTest)"],
+                environment: [:],
+                workingDirectory: nil,
+                timeout: .seconds(60)
+            ) {}
+        }
+
+        let pid = try await processID(writtenTo: pidFile)
+        #expect(Self.marks(in: layout).map(\.process.pid) == [pid])
+
+        task.cancel()
+        _ = try? await task.value
+
+        #expect(await waitUntil("značka doběhlé session zmizí z registru") {
+            Self.marks(in: layout).isEmpty
+        })
+    }
+
+    /// Co leží v registru na disku. Čte se soubor, ne getter na objektu: značka má cenu jedině
+    /// tím, že přežije proces, který ji zapsal.
+    private static func marks(in layout: CacheLayout) -> [RunningSession] {
+        guard let data = try? Data(contentsOf: layout.sessionsFile) else { return [] }
+        return (try? JSONDecoder().decode([RunningSession].self, from: data)) ?? []
+    }
+
     // Sonda na PID i její důvod jsou v `Tests/Support/ProcessProbing.swift` (#296).
 }

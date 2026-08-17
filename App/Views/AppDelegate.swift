@@ -1,8 +1,9 @@
 import AppKit
 
-/// Zachytí ukončení aplikace, dokud běží review.
+/// Zachytí ukončení aplikace, dokud běží review — a při startu uklidí, co po zabité aplikaci
+/// zbylo.
 ///
-/// Dělá u toho dvě věci a každá řeší jinou ztrátu:
+/// Dělá u toho tři věci a každá řeší jinou ztrátu:
 ///
 /// 1. **Zeptá se** (#94). Nálezy, které reviewer nahlásil, jsou v běžící session, ne na disku,
 ///    a zavřít okno uprostřed review je obvykle omyl. Dialog nepokrývá pád aplikace ani zabití
@@ -12,6 +13,11 @@ import AppKit
 ///    osiřelý proces se přerodil na `launchd` a běžel dál — platilo se za review, které už
 ///    nemá komu doručit nálezy, a držel pracovní strom v cache, který se proto nesmí uklidit.
 ///    Změřeno: dvě takové session běžely na stroji čtyři dny.
+/// 3. **Uklidí sirotky při startu** (#351). Body 1 a 2 platí pro **normální** ukončení; když se
+///    aplikace zabije zvenčí — typicky proto, že ztuhla a na Apple event nereaguje — nemá se úklid
+///    kde spustit a `claude -p` běží dál pod `launchd`. Změřeno `ps -o ppid` na potomkovi
+///    `Foundation.Process`u: přežije rodičovi `SIGTERM` i `SIGKILL`. Prevence na macOS není
+///    (viz `RunningSessions`), takže zbývá úklid při dalším startu.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kolik review právě běží. Doplní `PRismApp`, jakmile má store; do té doby nic neběží.
     @MainActor var runningReviews: () -> Int = { 0 }
@@ -40,8 +46,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// než projde preflight a složí se `AppStore`. Bez tohohle by delegát vznikl teprve s ním
     /// a kliknutí by se ztratilo; proud kliknutí si je proto podrží, dokud si je store
     /// nevyzvedne. **O oprávnění se tím nežádá** — na to se čeká až do první notifikace.
+    ///
+    /// **Úklid osiřelých session (#351) sedí taky tady**, ne v `AppStore`: značky nestojí na
+    /// preflightu ani na konfiguraci, a odložit je za složení storu by znamenalo, že sirotek přežije
+    /// i tehdy, když preflight neprojde — tedy zrovna po pádu, po kterém se aplikace spouští znovu.
+    /// Je to čtení jednoho malého souboru a několik `sysctl`ů, takže se tím start nezdrží;
+    /// **synchronně** schválně, aby se úklid nemohl potkat s prvním review. Až **za** delegátem
+    /// notifikací, protože ten má na pořadí podmínku a tenhle úklid žádnou — sirotek běží od zabití
+    /// aplikace, takže o pár milisekund nejde.
+    ///
+    /// Návratovou hodnotu nikdo nečte a je to záměr: procesní hygiena se v okně neprojevuje
+    /// a stav, který se drží a nikdo ho nezobrazí, je mrtvá váha.
     func applicationDidFinishLaunching(_ notification: Notification) {
         SystemNotificationCenter.prepare()
+        RunningSessions.shared.reapOrphans()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

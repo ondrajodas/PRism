@@ -2308,5 +2308,42 @@ Vedle toho se `TestWait.awaitSettledScrollerStyle()` (#343) přestěhoval z priv
 `LogTailOpeningTests` do **`TestWait`**, protože ho potřebuje i nová sada a čekání má v tomhle repu
 jedno místo (#296).
 
+### #351 — zabitá aplikace už nenechá běžet osiřelý `claude -p`
+
+Od #264 se session zabíjí při zrušení i při ukončení, ale ta záruka platí jen pro **normální**
+ukončení. Když aplikace ztuhne a zabije se
+zvenčí, úklid se nemá kde spustit: potomek spuštěný `Foundation.Process`em přežije rodiči `SIGTERM`
+**i** `SIGKILL` a přejde pod `launchd` (změřeno `ps -o ppid` na harnessu, který spouští potomka
+stejně jako `LaunchedProcess`). Platí se tedy za review, jehož výsledek nemá kam doručit.
+
+**Prevence se zamítla měřením, ne úvahou.** Darwin nemá nic jako `PDEATHSIG` (v `sys/spawn.h` takový
+flag není, tedy ani přes `posix_spawn` napřímo), `PROC_SETPC_TERMINATE` je podle `libproc.h` o
+hladovění po paměti a nastavuje se sám sobě, a procesová skupina nepomůže, protože
+`Foundation.Process` dává potomkovi **vlastní** (změřeno: `PGID == PID` potomka). Zbývá tedy úklid
+**po**: běžící session se zapisují do cache (`sessions.json`) a osiřelé zabije **další start**
+aplikace. Cena je, že sirotek žije do dalšího spuštění — v praxi vteřiny, protože zaseknutá aplikace
+se zabíjí právě proto, aby se spustila znovu.
+
+**Nejcennější tvrzení je negativní: nezabije se cizí session.** Identita je `(pid, startedAt)`
+z jádra, nikdy jen PID (čísla se recyklují) a nikdy hledání v `ps` podle jména nebo promptu — na
+stroji běží `claude` i mimo aplikaci. `ProcessInspecting.kill` proto bere **identitu**, ne PID,
+a ověří si ji ještě těsně před signálem. Záznam navíc nese **vlastníka**, tedy instanci aplikace,
+která běh spustila, a sirotek je jen ten, jehož vlastník už neběží: bez toho by běh testů zabil
+review běžící aplikace, protože testovací host má stejné `CFBundleName`, tedy tutéž cache.
+
+Testů je **2793** a jsou zelené (po sloučení s #347). Rozhodnutí sedí v `Policy.orphanVerdict` jako čistá funkce se třemi
+výsledky a testuje se vyčerpávajícím výčtem devíti kombinací; regrese ověřena vložením ve čtyřech
+podobách (bez porovnání identity, bez kontroly vlastníka, bez zápisu značky, bez podmínky na zápis
+při úklidu) a každá položí jiná tvrzení. **Na tomhle není co vidět** — v okně se nemění nic, je to
+procesní hygiena.
+
+**Změřeno na běžící aplikaci ve slotu, ne jen v testech.** Do cache slotu se položil stav, v jakém
+aplikace je uprostřed review (značka s vlastníkem = běžící PRism a procesem = dlouho běžící
+podproces), pak se aplikace zabila zvenčí a `ps -o ppid` řekl, co se stalo: po `kill -TERM` i po
+`kill -KILL` podproces **přežil**, a po restartu aplikace **zmizel**. Kontrolní skupina — sirotek
+se **živým** vlastníkem — zůstala běžet a její značka v souboru taky. Cizí `claude` na stroji
+(dva paralelní agenti, uživatelovy session) se u toho nedotkl žádný: nejstarší běží dál deset dní.
+A PID přitom během měření **přetekl** z 99902 na 201, což je doklad, že recyklace čísel není teorie.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
