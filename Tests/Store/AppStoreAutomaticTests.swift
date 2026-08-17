@@ -51,6 +51,11 @@ struct AppStoreAutomaticTests {
         limit: Int = 20
     ) -> AppStore {
         var configuration = Configuration.standard
+        // **Jeden zdroj, ne výchozí dva** (#330). Fake gateway spotřebovává předepsané odpovědi
+        // **po dotazech**, ne po tikech, takže se s druhým výchozím zdrojem (`author:@me`) posune
+        // celá sekvence: tik, který má vidět `updatedAt: 100`, by dostal rovnou `200`. Ostatní
+        // sady store si zdroj pinují ze stejného důvodu.
+        configuration.global.sources = [.reviewRequested]
         configuration.global.autoRunsPerDay = limit
         configuration.repositories = [repo: RepositoryConfig(mode: mode)]
         return AppStore(

@@ -92,6 +92,34 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
 
     func checkAuth() async -> GhAuthState { .loggedIn }
 
+    // MARK: - Kdo se dívá (#330)
+
+    /// Login, který vrátí `fetchViewer`. **Výchozí `nil` znamená „gateway ho nezná“** a volání
+    /// vyhodí — schválně, protože to je ten stav, ve kterém aplikace startuje: dokud login
+    /// nedorazí, je podle `Policy.ownership` všechno cizí. Test, který o rozřazení stojí, si login
+    /// nastaví; ostatním se tím nic nemění.
+    var viewer: String?
+
+    /// Čím `fetchViewer` spadne. `nil` = vrátí `viewer`, nebo `notFound`, když ani ten není.
+    ///
+    /// Vlastní přepínač vedle `viewer`, ne `Result`: „login jsem nezjistil“ a „`gh` selhal“ vedou
+    /// ke stejnému prázdnu, a právě proto se musí dát nastavit obojí — jinak nejde ověřit, že se
+    /// selhání **neprojeví jako `.mine`**.
+    var viewerFailure: (any Error)?
+
+    /// Kolikrát se někdo ptal. Na počtu stojí test, že se login tahá **jednou za spuštění**,
+    /// ne na každý tik pollingu.
+    var viewerRequests: Int { lock.withLock { viewersAsked } }
+
+    private var viewersAsked = 0
+
+    func fetchViewer() async throws -> String {
+        lock.withLock { viewersAsked += 1 }
+        if let viewerFailure { throw viewerFailure }
+        guard let viewer else { throw GitHubError.notFound("Fake gateway login nezná.") }
+        return viewer
+    }
+
     func searchPullRequests(query: String) async throws -> [PullRequestSummary] {
         let index: Int = lock.withLock {
             asked.append(query)

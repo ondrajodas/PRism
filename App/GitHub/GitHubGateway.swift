@@ -9,6 +9,27 @@ protocol GitHubGateway: Sendable {
     /// aplikace ukazuje, ne selhání volání.
     func checkAuth() async -> GhAuthState
 
+    /// Login přihlášeného účtu (#330) — **kdo se dívá**.
+    ///
+    /// Na tom stojí rozřazení seznamu podle autora (`Policy.ownership`): bez něj jsou vlastní PR
+    /// od cizích k nerozeznání. Volá se **jednou za spuštění**, ne na tik pollingu — není to údaj
+    /// o PR a `gh` se mezi dvěma tiky nepřehlásí.
+    ///
+    /// **Přes `gh api user`, ne rozborem `gh auth status`.** Login je i v `auth status`, který se
+    /// volá už dneska (`GhAuthCheck`), takže by to bylo zadarmo — je to ale výstup **pro člověka**,
+    /// ne kontrakt. Až se ta věta v nějaké verzi `gh` přeformuluje, přestane fungovat **rozřazení
+    /// seznamu**, ne kontrola přihlášení, a pozná se to podle toho, že vlastní PR zmizí z vlastní
+    /// sekce. Změřeno na tomhle stroji: `gh api user` 0,55 s proti 0,42 s u `auth status`, a platí
+    /// se to jednou za spuštění. `GhAuthState` se kvůli tomu **nerozšiřuje** — odpovídá na „jsem
+    /// přihlášený“ a druhá hodnota v něm by znamenala, že se týž údaj bere ze dvou míst.
+    ///
+    /// **Prázdný login není platná odpověď**, proto se vyhazuje: „nevím, kdo jsem“ znamená podle
+    /// `Policy.ownership` všechno cizí, a to se od skutečného loginu musí poznat.
+    ///
+    /// Šestnáctá **čtecí** metoda protokolu; tvrdá podmínka č. 1 platí dál — gateway pořád nemá
+    /// nic, čím by šlo něco odeslat.
+    func fetchViewer() async throws -> String
+
     /// Vyhledá PR podle search dotazu (jeden zdroj = jeden dotaz).
     func searchPullRequests(query: String) async throws -> [PullRequestSummary]
 

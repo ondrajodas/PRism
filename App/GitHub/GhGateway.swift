@@ -28,6 +28,21 @@ struct GhGateway: GitHubGateway {
         await GhAuthCheck(runner: runner, timeout: timeout).check(gh: gh)
     }
 
+    func fetchViewer() async throws -> String {
+        // **Dekóduje se JSON, nepoužívá se `--jq .login`** (#330). `--jq` na pole, které
+        // v odpovědi není, vypíše **prázdný řádek s nulovým návratovým kódem** — tedy prázdný
+        // login, což je zrovna ta hodnota, která v aplikaci znamená „nevím, kdo jsem“. Takhle
+        // to skončí `malformedOutput` a je z hlášky vidět, co se zkoušelo.
+        let user = try await run(["api", "user"], phase: "Přihlášený účet", decodedAs: GhUser.self)
+        let login = user.login.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Prázdný login se **nevrací**, ani když ho tak API pošle: „nevím“ se od loginu musí
+        // poznat, a tady je poslední místo, kde se to dá rozlišit.
+        guard !login.isEmpty else {
+            throw GitHubError.malformedOutput("Přihlášený účet: odpověď nemá login.")
+        }
+        return login
+    }
+
     func searchPullRequests(query: String) async throws -> [PullRequestSummary] {
         let arguments = ["search", "prs"] + GhSearchQuery.arguments(from: query) + [
             "--limit", String(searchLimit),

@@ -387,4 +387,55 @@ struct GhGatewayTests {
         #expect(state == .loggedIn)
         #expect(runner.invocations == [.init(executable: gh, arguments: ["auth", "status"])])
     }
+
+    // MARK: - Přihlášený účet (#330)
+
+    /// Fixture je **skutečná odpověď** GitHubu, jen z veřejného `gh api users/octocat`: `/user` má
+    /// tentýž tvar plus privátní pole, která se nečtou, a osobní údaje do repa nepatří.
+    @Test("Login se přečte ze skutečné odpovědi gh api user")
+    func decodesRealUserOutput() async throws {
+        let runner = try FakeProcessRunner(exitCode: 0, standardOutput: Fixture.text("gh/user.json"))
+
+        let viewer = try await gateway(runner).fetchViewer()
+
+        #expect(viewer == "octocat")
+        #expect(runner.invocations == [.init(executable: gh, arguments: ["api", "user"])])
+    }
+
+    /// **Bez `--jq .login`, a je to podstatné**: `--jq` na chybějící pole vypíše prázdný řádek
+    /// s nulovým návratovým kódem, tedy prázdný login — a to je zrovna ta hodnota, která v aplikaci
+    /// znamená „nevím, kdo jsem“. Inline JSON, protože takovou odpověď `gh` dneska nevrací.
+    @Test("Odpověď bez loginu je chyba, ne prázdný login")
+    func missingLoginThrows() async {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: "{\"id\": 583231}")
+
+        await #expect(throws: GitHubError.self) {
+            try await gateway(runner).fetchViewer()
+        }
+    }
+
+    /// Tatáž věta z druhé strany: prázdný ani bílý login se nesmí vrátit jako platná odpověď.
+    @Test("Prázdný login se nevrátí")
+    func blankLoginThrows() async {
+        for output in ["{\"login\": \"\"}", "{\"login\": \"   \"}"] {
+            let runner = FakeProcessRunner(exitCode: 0, standardOutput: output)
+
+            await #expect(throws: GitHubError.self) {
+                try await gateway(runner).fetchViewer()
+            }
+        }
+    }
+
+    /// Nepřihlášený `gh` končí kódem `4`; volající z toho musí dostat chybu, ne prázdný login.
+    @Test("Nepřihlášený gh skončí chybou přihlášení")
+    func notLoggedInThrows() async {
+        let runner = FakeProcessRunner(
+            exitCode: 4,
+            standardError: "You are not logged into any GitHub hosts. To log in, run: gh auth login"
+        )
+
+        await #expect(throws: GitHubError.notAuthenticated) {
+            try await gateway(runner).fetchViewer()
+        }
+    }
 }

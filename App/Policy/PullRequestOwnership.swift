@@ -1,0 +1,99 @@
+import Foundation
+
+/// Čí je pull request (#330).
+///
+/// **Vlastní typ, ne `Bool`.** U cizího PR je moje práce přečíst a odpovědět, u vlastního opravit
+/// a pushnout — jsou to dvě různé práce, ne jedna s příznakem, a okno je od #331 kreslí vedle sebe.
+/// Z `isMine == false` by navíc nebylo poznat, že „nevím, kdo se dívá“ spadá schválně do `theirs`.
+enum PullRequestOwnership: Hashable, Sendable {
+    /// Autor je někdo z mých loginů.
+    case mine
+    /// Autor je někdo jiný — **a taky to, když se ještě neví, kdo se dívá.**
+    case theirs
+}
+
+extension Policy {
+    /// Loginy, které se počítají za **moje** (#330) — viewer z `gh` plus to, co je v konfiguraci.
+    ///
+    /// **Množina, ne jeden řetězec**, a je to schválně dražší rozhodnutí, než dnešní data
+    /// potřebují: agent s vlastním účtem (`github-actions[bot]`, Copilot) pushuje pod sebou, takže
+    /// by do `.mine` nespadl. Dneska to nevadí — agenti v tomhle repu pushují přes moje `gh`
+    /// a ověřeně mají autora `ondrajodas` — ale dolepovat druhý login potom by znamenalo projít
+    /// všechna místa, která se ptají „je to moje“.
+    ///
+    /// **Prázdný viewer se nepřidává**, takže z něj vyjde prázdná množina a všechno je pak
+    /// `.theirs`. Prázdné a bílé položky z konfigurace padají ze stejného důvodu jako u skillů:
+    /// soubor se edituje ručně.
+    ///
+    /// Loginy se **normalizují na malá písmena**, protože GitHub je na velikost necitlivý a `gh`
+    /// vrací kanonický tvar (`OndraJodas`), kdežto do konfigurace si je člověk píše, jak zrovna
+    /// vidí v prohlížeči. Bez toho by se ručně zapsaný agent tiše nepoznal.
+    static func ownLogins(viewer: String?, configured: [String] = []) -> Set<String> {
+        var logins = Set(configured.compactMap { normalizedLogin($0) })
+        if let viewer = normalizedLogin(viewer) { logins.insert(viewer) }
+        return logins
+    }
+
+    /// Čí je pull request — podle **autora**, ne podle zdroje, ze kterého přišel (#330).
+    ///
+    /// Zdroj je search dotaz a jeden PR jich umí splňovat víc (`repo:foo/bar is:open` se překryje
+    /// s obojím), takže rozřazení odvozené od zdroje by záviselo na tom, jak si člověk dotazy
+    /// poskládal.
+    static func ownership(of summary: PullRequestSummary, mine: Set<String>) -> PullRequestOwnership {
+        ownership(ofAuthor: summary.author, mine: mine)
+    }
+
+    /// Tatáž otázka nad samotným autorem — pro místa, která `PullRequestSummary` nemají.
+    ///
+    /// Bere **optional**, protože „autora ještě neznám“ (detail nedorazil) je stav, o kterém se
+    /// tady rozhoduje, a padá do `.theirs` stejně jako neznámý viewer. Je to **jediné místo, kde se
+    /// s viewerem porovnává autor pull requestu** — `Policy.isOwn(author:viewer:)` z #114 chodí přes
+    /// ni, aby na tu otázku nebyly dvě odpovědi.
+    ///
+    /// `Conversation.isMine(_:)` porovnává **taky loginy, ale jinou otázku**: čí je komentář nebo
+    /// review uvnitř načtené konverzace. Zůstává v modelu schválně — viewer tam neoptional je
+    /// (konverzace ho vždycky nese) a přesměrovat ho sem by z modelu udělalo závislost na `Policy`
+    /// za jedno `==`, které nemá co rozhodovat.
+    static func ownership(ofAuthor author: String?, mine: Set<String>) -> PullRequestOwnership {
+        guard let author = normalizedLogin(author), mine.contains(author) else { return .theirs }
+        return .mine
+    }
+
+    /// Je mezi zdroji ten, který **přináší vlastní PR** (#330)?
+    ///
+    /// Rozřazení podle autora je k ničemu, dokud `author:@me is:open` není mezi zdroji: sekce
+    /// `Moje PR` by u každého, kdo si ten řádek nedopsal ručně, zůstala navždycky prázdná — a to
+    /// vypadá jako „nic nemám rozdělané“, ne jako „nemám kde se to dozvědět“. Konfigurace se kvůli
+    /// tomu **nemigruje** (dopsat uživateli zdroj, o který si neřekl, je zásah do souboru, který se
+    /// edituje ručně, a zdroj navíc je dotaz navíc při každém tiku), takže to musí poznat prázdný
+    /// stav sekce. Větu k tomu kreslí #331, rozhodnutí je tady.
+    ///
+    /// Poznává se **token `author:` v dotazu**, ne jméno zdroje: jméno je popisek pro člověka
+    /// a přejmenovaný řádek by rozpoznání vypnul. Bere se `author:@me` a `author:<některý z mých
+    /// loginů>`; `-author:@me` (negace) ani `involves:@me` **ne** — obojí je jiný dotaz. Kdo si
+    /// login vypíše ručně, dostane rozpoznání teprve tehdy, až je znám viewer; do té doby je
+    /// množina prázdná a `author:@me` je jediná forma, která se pozná.
+    static func tracksOwnPullRequests(in sources: [Source], mine: Set<String>) -> Bool {
+        sources.contains { source in
+            source.query.split(whereSeparator: \.isWhitespace).contains { token in
+                guard let login = ownAuthorToken(token) else { return false }
+                return login == "@me" || mine.contains(login)
+            }
+        }
+    }
+
+    /// Hodnota za `author:` v jednom tokenu dotazu, v malých písmenech. `nil` = není to `author:`.
+    private static func ownAuthorToken(_ token: Substring) -> String? {
+        let lowercased = token.lowercased()
+        guard lowercased.hasPrefix("author:") else { return nil }
+        let value = lowercased.dropFirst("author:".count)
+        return value.isEmpty ? nil : String(value)
+    }
+
+    /// Login v porovnatelném tvaru. `nil` = nic, co by se dalo s někým porovnat.
+    private static func normalizedLogin(_ login: String?) -> String? {
+        guard let trimmed = login?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed.lowercased()
+    }
+}
