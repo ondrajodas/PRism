@@ -790,13 +790,21 @@ final class AppStore {
     }
 
     /// Podklad pro dashboard (#181). Počítá se **z paměti store**, žádné nové čtení z disku.
+    ///
+    /// Od #331 nese i kartu `Moje PR`, takže dovnitř jdou i moje loginy, cesta k načtené konverzaci
+    /// a to, jestli se vlastní PR vůbec sledují — všechno z paměti, jako zbytek.
     var dashboard: Dashboard {
         Policy.dashboard(
             pullRequests: pullRequests,
             records: reviewRecords,
             drafts: drafts,
             categories: Set(configuration.global.blockingCategories),
-            since: Calendar.current.date(byAdding: .day, value: -7, to: time.now)
+            since: Calendar.current.date(byAdding: .day, value: -7, to: time.now),
+            mine: ownLogins,
+            // Uzávěr, ne mapa všech načtených konverzací: dashboard se ptá jen na vlastní PR
+            // a skládat pro něj kopii celé diskuze při každém překreslení je práce navíc.
+            conversation: conversation(for:),
+            tracksOwnSource: tracksOwnPullRequests
         )
     }
 

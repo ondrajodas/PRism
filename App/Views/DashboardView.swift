@@ -140,9 +140,11 @@ struct DashboardView: View {
 
     // MARK: - Karty
 
+    /// Pět karet (#331). **`Ve frontě` se jmenuje `Čeká na mě`**, protože s vlastními PR by staré
+    /// jméno mluvilo o dvou různých druzích práce naráz — a popisek pod číslem má říkat, čí je tah.
     private func cards(_ dashboard: Dashboard) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            card(caption: "Ve frontě", value: "\(dashboard.queue.pullRequests)") {
+            card(caption: "Čeká na mě", value: "\(dashboard.queue.pullRequests)") {
                 Text(verbatim: "napříč " + Plural.czech(
                     dashboard.queue.repositories,
                     one: "repozitářem",
@@ -162,13 +164,39 @@ struct DashboardView: View {
                 }
             }
             card(
+                caption: "Moje PR",
+                value: "\(dashboard.mine.pullRequests)",
+                hasAccentRail: dashboard.mine.pullRequests > 0
+            ) {
+                mineFoot(dashboard.mine)
+            }
+            card(
                 caption: "Rozdělaná review",
-                value: "\(dashboard.drafts.pullRequests)",
-                hasAccentRail: dashboard.drafts.pullRequests > 0
+                value: "\(dashboard.drafts.pullRequests)"
             ) {
                 draftsFoot(dashboard.drafts)
             }
             spendCard
+        }
+    }
+
+    /// Věta pod počtem vlastních PR. **Tři různé stavy, tři různá tvrzení** — jako u rozdělaných.
+    ///
+    /// Nesledovaný zdroj se **nesmí** slít s „nic k předání“: nula bez zdroje je údaj o nastavení,
+    /// ne o mojí práci, a uklizený stůl nad nenastavenou aplikací je ta nejhorší možná odpověď
+    /// (viz `Dashboard.MineCard.isTracked`).
+    @ViewBuilder private func mineFoot(_ mine: Dashboard.MineCard) -> some View {
+        if !mine.isTracked {
+            Text("zdroj vlastních PR chybí v nastavení").lineLimit(1)
+        } else if mine.awaitingMove == 0 {
+            Text("nic nečeká na tvůj tah")
+        } else {
+            Text(verbatim: Plural.czech(
+                mine.awaitingMove,
+                one: "má co předat agentovi",
+                few: "mají co předat agentovi",
+                many: "má co předat agentovi"
+            )).lineLimit(1)
         }
     }
 
@@ -218,8 +246,10 @@ struct DashboardView: View {
                 // varování, ne jako druhá čára navíc.
                 .strokeBorder(isAlarm ? Color.red.mix(with: Palette.line, by: 0.6) : Palette.line, lineWidth: 1)
         }
-        // Proužek nahoře jen u rozdělaných review — je to jediná karta, která mluví o **mojí**
-        // práci, ne o tom, co přišlo zvenčí.
+        // Proužek nahoře jen u karty `Moje PR` (#331). Do té doby ho měla `Rozdělaná review` jako
+        // „jediná karta, která mluví o mojí práci“ — od #331 to není pravda a návrh (sekce 21) ho
+        // překreslil právě takhle: dva akcentové proužky vedle sebe by přestaly znamenat, která
+        // karta je ta o mně.
         .overlay(alignment: .top) {
             if hasAccentRail {
                 LinearGradient(
@@ -248,7 +278,13 @@ struct DashboardView: View {
         // Poměr z návrhu (`1.45fr 1fr`), ne pevná šířka: pravý sloupec drží legendu a akce,
         // a ty se v proužku číst nedají.
         ProportionalColumns(ratios: [1.45, 1], spacing: 16) {
-            block("Fronta", more: "podle závažnosti") { queueRows }
+            // **Dva bloky pod sebou, ne jeden** (#331): u cizího PR je moje práce přečíst
+            // a odpovědět, u vlastního opravit a pushnout. Mezera 16 je z návrhu (`gap: 16px`),
+            // tedy jiná než 12 uvnitř pravého sloupce.
+            VStack(spacing: 16) {
+                block("Čeká na moje review", more: "podle závažnosti") { queueRows }
+                block("Moje PR") { ownRows }
+            }
             VStack(spacing: 12) {
                 block("Nálezy podle reviewera", more: "7 dní") { reviewerLegend(dashboard.reviewers) }
                 block("Co teď") { actions(dashboard.drafts.pullRequest) }
@@ -290,10 +326,23 @@ struct DashboardView: View {
     /// Fronta v dashboardu je **týž řádek jako v seznamu** (#172), ne druhá varianta: dvě
     /// podoby téhož by se rozešly a člověk by se v jedné z nich hledal. Pořadí je ale jiné —
     /// podle závažnosti, ne podle času (`Policy.byUrgency`).
+    ///
+    /// **Počítá pořád celý seznam, tedy i moje PR** — odříznout je patří k #332, které mění
+    /// i frontu, automat a notifikace. Do té doby je vlastní PR na dashboardu vidět dvakrát.
     @ViewBuilder private var queueRows: some View {
-        let entries = store.dashboardQueue
+        rows(store.dashboardQueue, emptyExplanation: RailSection.queue.emptyExplanation)
+    }
+
+    /// Moje PR v dashboardu (#331) — **tytéž řádky, jen druhá množina**, seřazené stejnou
+    /// funkcí. Prázdný stav mluví o vlastní práci, ne o frontě; že chybí zdroj nebo login, řekne
+    /// sekce v railu (`Policy.ownListEmptyReason`) — na kartě to nese věta pod číslem.
+    @ViewBuilder private var ownRows: some View {
+        rows(store.dashboardOwnPullRequests, emptyExplanation: RailSection.mine.emptyExplanation)
+    }
+
+    @ViewBuilder private func rows(_ entries: [QueueEntry], emptyExplanation: String) -> some View {
         if entries.isEmpty {
-            Text(verbatim: RailSection.queue.emptyExplanation)
+            Text(verbatim: emptyExplanation)
                 .font(.system(size: 12.5))
                 .foregroundStyle(Palette.ink2)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -306,7 +355,10 @@ struct DashboardView: View {
                             pullRequest: entry.pullRequest,
                             reviewState: entry.state,
                             hasDraft: entry.hasDraft,
-                            row: entry.row
+                            row: entry.row,
+                            // Čte se **tady**, ne v řádku: řádek store nemá. Vlastní PR má vpravo
+                            // `Prompt →` (#331), ať je v kterémkoli z obou bloků.
+                            ownership: store.ownership(of: entry.pullRequest)
                         )
                         // Vlevo nic: proužek stavu má sedět na hraně bloku, jak ho kreslí návrh.
                         .padding(.trailing, 13)

@@ -645,7 +645,8 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
     rozřadí podle autora a dá vlastním PR jinou práci: místo verdiktu, který GitHub na vlastním PR
     odmítá, se z nálezů a konverzace skládá zadání pro agenta. Sedm issues (#330–#336), nakreslené
     v sekcích 21 a 22 návrhu; **pořadí je v popisu milníku**, protože se podle něj rozhoduje, co jde
-    souběžně. Hotové: rozřazení podle autora #330.
+    souběžně. Hotové: rozřazení podle autora #330, sekce `Moje PR` v railu a druhá fronta na
+    dashboardu #331.
 
 Vedle fází stojí milník **Průběžné**: koš na to, co do žádné z nich nepatří (ikona,
 podpis, stavový řádek). Nemá pořadí ani termín a verze se z něj neodvozuje — viz
@@ -2534,6 +2535,50 @@ Testů je **2843** a jsou zelené (+31). **V okně není vidět nic** — je to 
 nikdo nekreslí; jediné, co je vidět, je nový výchozí zdroj, a ten se projeví **jen na prázdné
 cache**: v seznamu se pak vedle cizích PR objeví i vlastní (změřeno `gh search prs`: 13 cizích proti
 17 vlastním). Fronta, dashboard, automat a notifikace se od cizích PR odříznou v #332.
+
+**Moje PR jsou druhá fronta (#331)** — v railu přibyla sekce `Moje PR` mezi `Frontou`
+a `Rozdělanými` (`RailSection.mine`, šipka nad vaničkou) a na dashboardu **dva bloky pod sebou**
+(`Čeká na moje review` a `Moje PR`) plus **pátá karta**. Seznam je **tentýž
+`PullRequestListView`** nad druhou množinou (`PullRequestListScope`), takže filtr, řazení i otevření
+záložky platí beze změny; rozřazuje `Policy.pullRequests(_:ownedBy:mine:)`, tedy **další zúžení nad
+zúženým seznamem**, ne nový zdroj pravdy — kdyby na něm viselo cokoli z úklidu, přihlášení jiným
+účtem by smazalo cache.
+
+**Karta `Ve frontě` se přejmenovala na `Čeká na mě`** a přibyla `Moje PR`: velké číslo je počet
+otevřených, věta pod ním kolik z nich **čeká na tah**. Akcentový proužek se přestěhoval z karty
+`Rozdělaná review` sem, jak to má návrh — dva proužky vedle sebe by přestaly znamenat, která karta je
+ta o mně.
+
+**Odznak počítá práci, ne PR** (`Policy.ownPullRequestsAwaitingMove`): PR s nezpracovaným nálezem
+nebo s nevyřešeným cizím vláknem. Šest PR, ze kterých pět čeká na CI, není šest věcí k práci. Vlákna
+se počítají **jen z načtených konverzací** (tahají se při výběru řádku, ne při pollingu), takže je to
+**spodní hranice** — a neúplnost je schválně v tomhle směru: odznak, který napočítá víc práce, než jí
+je, se přestane čítat. Doplní to #335.
+
+**Prázdná sekce má tři různé věty** (`Policy.ownListEmptyReason`) a pořadí důvodů je celý obsah
+issue: polling → chybějící zdroj → nenačtený login → filtr → prázdno. Bez zdroje `author:@me is:open`
+se aplikace na vlastní PR vůbec neptá, takže „nic tu není“ by vypadalo jako uklizený stůl — sekce
+místo toho nabídne nastavení. Nenačtený login je třetí stav: podle autora je pak všechno cizí, což
+není „nic nemám“, ale „nevím, kdo jsem“ (dohodnuto už v #330).
+
+**Rozhodnuto jinak, než bylo v zadání**, čtyřikrát a v každém případě s důvodem. Řádek vlastního PR
+má `Prompt →` **vedle** odznaku stavu, ne místo něj: pilulku `6 k předání` z návrhu se dá napsat
+teprve tehdy, až předání existuje (#333) a nese razítko (#334), kdežto odznak říká to, co se ví — že
+reviewer běžel a s jakým výsledkem —, a to je zrovna materiál, který prompt ponese. Tlačítko je
+**zakázané a ztlumené**, protože plné akcentové tlačítko, po kterém se nic nestane, je lež o tom, co
+okno umí; ztlumení kreslí řádek, protože `MiniButtonStyle` se na `isEnabled` neptá (v celé aplikaci,
+ne jen tady — vlastní otázka na návrh). Blok `Moje PR` na dashboardu **nemá popisek** `jen s nálezy`,
+který návrh kreslí vpravo v hlavičce: nic se nefiltruje, takže by ten text tvrdil něco, co se nedělá.
+A **věta pod pozdravem se nezměnila**, ačkoli návrh má „Na dvou vlastních leží nálezy k předání.“ —
+dokud `Čeká na mě` počítá i vlastní PR, mluvila by ta druhá věta o týchž pull requestech dvakrát.
+
+**Známé omezení, které jde do #332:** `railQueueCount`, `Policy.dashboard`, automat i notifikace
+počítají pořád i vlastní PR, takže vlastní PR je na dashboardu vidět **v obou blocích** a v čísle
+karty `Čeká na mě`. Je na to test, aby se ta oprava nestala mimochodem.
+
+Testů je **2881** a jsou zelené (+38). K tomu sonda `OwnPullRequestsRenderProbe` (dashboard a čtyři
+podoby sekce), protože ke dvěma z těch stavů se klikáním nedostaneš a dashboard se ve skutečném okně
+s třiceti PR ve frontě celý nevyfotí.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

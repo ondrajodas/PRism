@@ -1,12 +1,31 @@
 import SwiftUI
 
+/// Nad kterou množinou seznam stojí (#331).
+///
+/// **Vyjmenované, ne `PullRequestOwnership`.** Fronta dneska není „cizí PR“ — je to všechno, co
+/// přišlo, tedy včetně mých; odříznout je patří k #332. Kdyby se sem posílalo `.theirs`, tvrdil by
+/// typ něco, co seznam nedělá.
+enum PullRequestListScope {
+    /// Fronta — celý seznam po filtru.
+    case queue
+    /// Moje PR — tentýž seznam zúžený podle autora.
+    case mine
+}
+
 /// Fronta pull requestů — obsah domácí záložky (#180).
 ///
 /// Do #180 to byl **trvalý levý sloupec** vedle diffu. Přestěhoval se, protože se v něm při čtení
 /// kódu nehrabe a diff tím přišel o šířku, kterou má mít; akce nad ním (obnovit, filtr, novinky)
 /// jsou v liště `HomeView` nad obsahem, ne v toolbaru okna.
+///
+/// Od #331 kreslí **dvě sekce railu**: frontu a moje PR. Rozdíl je jen v tom, který seznam se
+/// vezme a co se řekne nad prázdnem — řádek, filtr, řazení ani otevření záložky se neliší, protože
+/// je to pořád seznam pull requestů.
 struct PullRequestListView: View {
     @Bindable var store: AppStore
+    var scope: PullRequestListScope = .queue
+    /// Otevře nastavení — jedině pro prázdný stav `Moje PR` bez zdroje (#331).
+    var openSettings: () -> Void = {}
 
     var body: some View {
         content
@@ -17,8 +36,17 @@ struct PullRequestListView: View {
             }
     }
 
+    /// Proč je seznam prázdný. **Dvě různé funkce, jeden typ** (#331): u vlastních PR se rozhoduje
+    /// i mezi chybějícím zdrojem a nenačteným loginem, kdežto fronta ta prázdna mít nemůže.
+    private var emptyReason: ListEmptyReason? {
+        switch scope {
+        case .queue: store.listEmptyReason
+        case .mine: store.ownListEmptyReason
+        }
+    }
+
     @ViewBuilder private var content: some View {
-        switch store.listEmptyReason {
+        switch emptyReason {
         case nil:
             list
         // **Vlastní vysvětlení, ne `Žádné PR k review`.** Zelené „všechno vyřízeno“ nad zapnutým
@@ -32,7 +60,7 @@ struct PullRequestListView: View {
                 nature: .waiting,
                 symbol: "line.3.horizontal.decrease",
                 title: "Filtr schoval všechno",
-                message: "\(Plural.czech(hidden, one: "pull request čeká", few: "pull requesty čekají", many: "pull requestů čeká")) na review, ale filtr je schovává.",
+                message: filteredMessage(hidden),
                 primary: .init(title: "Vymazat filtr") { store.clearFilter() }
             )
         case .poll(.loading):
@@ -64,6 +92,46 @@ struct PullRequestListView: View {
                 title: "GitHub omezuje dotazy",
                 message: "Zkusím to znovu v \(retryAt.formatted(date: .omitted, time: .shortened)). Seznam zůstává takový, jaký dorazil naposled."
             )
+        // **Nenastavená aplikace není uklizený stůl** (#331). Bez zdroje `author:@me is:open` se
+        // aplikace na vlastní PR vůbec neptá, takže „nic tu není“ by byla nepravda o mojí práci.
+        // Konfigurace se kvůli tomu nemigruje (#330), a tohle je to místo, které to má říct.
+        case .ownSourceMissing:
+            EmptyStateView(
+                nature: .waiting,
+                symbol: "text.badge.plus",
+                title: "Vlastní PR se nesledují",
+                // Dotaz je v textu vypsaný celý a **bez zpětných apostrofů**: `EmptyStateView`
+                // sází `Text(verbatim:)`, takže by se nakreslily jako znaky.
+                message: "Mezi zdroji chybí dotaz na moje pull requesty: author:@me is:open. Dopiš si ho v nastavení a objeví se tady.",
+                primary: .init(title: "Otevřít nastavení", run: openSettings)
+            )
+        // Login se nedotáhl (`gh api user`), takže je podle autora všechno cizí (#330). Prázdno
+        // proto neznamená „nic nemám“, ale „nevím, kdo jsem“ — a to se nesmí slít.
+        case .unknownViewer:
+            EmptyStateView(
+                nature: .waiting,
+                symbol: "person.crop.circle.badge.questionmark",
+                title: "Nevím, kdo jsi",
+                message: "Login přihlášeného účtu se nepodařilo zjistit, takže se nedá poznat, které PR jsou tvoje. Zkontroluj přihlášení v gh a spusť aplikaci znovu."
+            )
+        case .noOwnPullRequests:
+            EmptyStateView(
+                nature: .calm,
+                symbol: "checkmark",
+                title: "Nic vlastního otevřeného",
+                message: RailSection.mine.emptyExplanation
+            )
+        }
+    }
+
+    /// Věta u schovaného seznamu. **Na sekci jiná**: „čeká na review“ o vlastních PR nemluví —
+    /// u nich je moje práce opravit a pushnout, ne odpovědět.
+    private func filteredMessage(_ hidden: Int) -> String {
+        switch scope {
+        case .queue:
+            "\(Plural.czech(hidden, one: "pull request čeká", few: "pull requesty čekají", many: "pull requestů čeká")) na review, ale filtr je schovává."
+        case .mine:
+            "Filtr schovává \(Plural.czech(hidden, one: "tvůj otevřený pull request", few: "tvoje otevřené pull requesty", many: "tvých otevřených pull requestů"))."
         }
     }
 
@@ -80,13 +148,15 @@ struct PullRequestListView: View {
         // naskočil až po překreslení z jiného důvodu.
         // **`visiblePullRequests`, ne `pullRequests`** (#117): filtr je pohled, takže se ho smí
         // dotknout jedině seznam a detail vybraného řádku. Cokoli dalšího nad zúženým seznamem by
-        // ze zapnutí filtru udělalo mazání cache — viz `AppStore.pullRequests`.
-        let rows = store.visiblePullRequests.map {
+        // ze zapnutí filtru udělalo mazání cache — viz `AppStore.pullRequests`. Rozřazení podle
+        // autora (#331) je **další zúžení nad tímtéž**, ne nový zdroj pravdy.
+        let rows = summaries.map {
             ListRow(
                 pullRequest: $0,
                 state: store.reviewState(for: $0.id),
                 hasDraft: store.hasDraft($0.id),
-                summary: store.queueRow(for: $0.id)
+                summary: store.queueRow(for: $0.id),
+                ownership: store.ownership(of: $0)
             )
         }
 
@@ -97,8 +167,16 @@ struct PullRequestListView: View {
                 pullRequest: row.pullRequest,
                 reviewState: row.state,
                 hasDraft: row.hasDraft,
-                row: row.summary
+                row: row.summary,
+                ownership: row.ownership
             )
+        }
+    }
+
+    private var summaries: [PullRequestSummary] {
+        switch scope {
+        case .queue: store.visiblePullRequests
+        case .mine: store.visibleOwnPullRequests
         }
     }
 
@@ -114,13 +192,16 @@ struct PullRequestListView: View {
         )
     }
 
-    /// Co seznam o jednom řádku ví. Pojmenovaný typ, ne čtveřice: od #172 se skládá ze čtyř
+    /// Co seznam o jednom řádku ví. Pojmenovaný typ, ne čtveřice: od #172 se skládá z pěti
     /// věcí a `\.0.id` v `List`u by přestalo jít přečíst.
     private struct ListRow: Identifiable {
         let pullRequest: PullRequestSummary
         let state: ReviewState
         let hasDraft: Bool
         let summary: QueueRow
+        /// Čí PR to je (#331) — u vlastního má řádek vpravo `Prompt →` místo verdiktu. Čte se
+        /// **tady**, ne v řádku: řádek nemá store a `List` ho staví líně.
+        let ownership: PullRequestOwnership
 
         var id: PRIdentifier { pullRequest.id }
     }

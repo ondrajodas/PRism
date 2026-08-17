@@ -86,6 +86,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   dotazech, ne po tikech** — s druhým výchozím zdrojem by tik, který má vidět `updatedAt: 100`,
   dostal rovnou `200`. Ostatní sady store si zdroje pinují už dneska; tahle jediná brala
   `Configuration.standard`.
+- **Sekce `Moje PR` (#331)** — tři vrstvy nad rozřazením z #330, a to nejcennější je zase to, co
+  tvrdí, že se něco **NEstalo**:
+
+  `Policy` výčtem (`OwnPullRequestsTests`): **pořadí důvodů prázdna** je celý obsah issue, takže se
+  testuje po dvojicích, ne jen jednotlivě — chybějící zdroj vyhrává nad nenačteným loginem i nad
+  filtrem, login nad filtrem, a polling nad všemi. K tomu dvě věty, které se rozbijí potichu:
+  `poll(.noPullRequests)` odsud **nesmí vypadnout** (jinak by nad vlastní sekcí stálo „Žádné PR
+  k review“, což o vlastních PR nemluví) a prázdná sekce **s vlastními PR v seznamu** žádný důvod
+  nedá (kdo si dopsal jiný dotaz, má sekci plnou). Odznak se testuje na tom, co se **nepočítá**:
+  odmítnutý nález, vyřešené vlákno, vlákno jen s mými komentáři a **PR, jehož konverzace není
+  načtená** — poslední z nich je vědomá spodní hranice, ne chyba.
+
+  `AppStore` proti fake gateway (`AppStoreOwnershipTests`): rozřazení **nezmenší plný ani zúžený
+  seznam** (fronta po #331 pořád ukazuje všechno, viz #332), filtr se s rozřazením **skládá**
+  a schované vlastní PR se počítají zvlášť od schovaných cizích, odznak je `nil` do prvního tiku,
+  a blok na dashboardu se filtrem **neschová** (dashboard tvrdí o tom, co venku mám).
+
+  `PullRequestRow` (`PullRequestRowPromptTests`): `Prompt →` se u cizího PR **nekreslí** a výchozí
+  hodnota je `theirs`, takže řádek bez informace o autorovi tlačítko nemá. Že se doopravdy nakreslí,
+  se pozná na **výšce řádku** rozvržené mimo obrazovku (`fittingSize`) — samotné `if` může projít,
+  aniž by se prvek do řádku vešel.
+
+  **Ověřeno vložením regrese, třemi.** Vyhození větve o chybějícím zdroji shodí 4 tvrzení ve třech
+  testech, `activeFindings → findings` (tedy „odmítnutý nález pořád čeká na tah“) jeden a
+  `showsPromptAction → true` tři včetně toho na výšku řádku.
+
+  Vedle toho je `Tests/Views/OwnPullRequestsRenderProbe.swift` — **sonda, ne test**: dashboard se
+  dvěma frontami a čtyři podoby sekce, protože „nevypadá prázdno jako hotová práce?“ je otázka na
+  obrázek. Ke dvěma z těch stavů se v aplikaci klikáním nedostaneš (musel by spadnout `gh api user`,
+  resp. chybět zdroj v konfiguraci) a dashboard se **screenshotem běžícího okna nevyfotí celý**:
+  je to jeden `ScrollView`, takže s třiceti PR ve frontě spadne blok `Moje PR` pod dolní hranu.
 - **Konverzace** — proti fixtures, které jsou surové odpovědi z veřejných PR `cli/cli`
   sebrané **tím dotazem, který posílá aplikace** (`ConversationQuery.document`). Kdyby se
   sbíraly jinak, testovaly by tvar, který v provozu nikdy nepřijde; ověřené je to i tak, že
