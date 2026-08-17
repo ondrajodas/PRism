@@ -283,6 +283,17 @@ final class AppStore {
     /// úplně jiná aplikace — pak by se rozostřovalo bez důvodu.
     var isSettingsFrontmost = false
 
+    /// Login přihlášeného účtu (#330) — kdo se dívá. **Prázdný znamená „nevím“, ne „to jsem já“.**
+    ///
+    /// Dotahuje se **jednou při startu** (`gh api user`), ne na tik pollingu: není to údaj o PR
+    /// a `gh` se mezi dvěma tiky nepřehlásí. Dokud nedorazí, je podle `Policy.ownership` všechno
+    /// cizí — opačné výchozí chování by při startu na okamžik přehodilo celý seznam do „moje“
+    /// a fronta by na ten okamžik zmizela.
+    ///
+    /// **Ne z `Conversation.viewer`**, který týž login taky nese: ten je až z načtené konverzace
+    /// vybraného PR, takže v seznamu není. Dvě cesty k témuž údaji by se navíc umělo rozejít.
+    private(set) var viewer = ""
+
     /// Nastavení, se kterým aplikace běží.
     private(set) var configuration: Configuration
 
@@ -986,6 +997,11 @@ final class AppStore {
         await loadDailySpend()
         // Všechno běží, dokud žije okno; zrušení tasku ukončí skupinu i se všemi smyčkami.
         await withTaskGroup(of: Void.self) { group in
+            // Login se dotahuje **souběžně s pollingem, ne před ním** (#330): `gh api user` stojí
+            // půl sekundy a seznam PR na něj nemá proč čekat. Dokud nedorazí, je `viewer` prázdný,
+            // což znamená „nevím“ — tedy všechno cizí, ne všechno moje. Je to jednorázový task,
+            // takže skupinu nedrží.
+            group.addTask { await self.loadViewer() }
             group.addTask { await self.polling.run() }
             if let health {
                 group.addTask { await health.run() }
@@ -1083,6 +1099,32 @@ final class AppStore {
             worktree: worktree
         )
         await interrupted.remember(run)
+    }
+
+    /// Zjistí, kdo se dívá (#330). **Jednou za spuštění**, ne na tik pollingu.
+    ///
+    /// Je tady, a ne v `AppStore+Ownership.swift`, ze dvou důvodů: patří k ostatním věcem, které
+    /// se načítají při startu, a `viewer` je `private(set)` — zapisovat ho smí jedině tenhle
+    /// loader, ne kterýkoli extension nebo view.
+    ///
+    /// **Selhání se nedrží jako vlastní stav — a není to spolknutá chyba.** `gh api user` sahá na
+    /// týž `gh` a týž token jako polling, takže co položí tohle, položí i seznam PR, a *to* v okně
+    /// vidět je: červený puntík GitHubu ve stavovém řádku i s větou, co se nepovedlo. Druhý, tišší
+    /// opis téhož signálu by k němu nepřidal nic a musel by se někde kreslit — tedy nová věc na
+    /// obrazovce, na kterou tohle issue nemá mockup. Co po selhání zbude, je `viewer` prázdný, tedy
+    /// „nevím“: podle `Policy.ownership` je pak všechno cizí, což je ta bezpečná strana. Že login
+    /// chybí, se v okně projeví prázdnou sekcí `Moje PR`, a vysvětlit to je věc jejího prázdného
+    /// stavu (#331).
+    ///
+    /// **Neopakuje se.** Kdo se přihlásí až po spuštění aplikace, se o svých PR dozví po restartu;
+    /// dotaz na každý tik by byl podproces navíc každou minutu za údaj, který se nemění.
+    func loadViewer() async {
+        do {
+            viewer = try await gateway.fetchViewer()
+        } catch {
+            // Prázdný `viewer` zůstává prázdný — viz doc výš. Mlčí se o tom vědomě, protože totéž
+            // selhání hlásí puntík GitHubu ve stavovém řádku.
+        }
     }
 
     /// Nálezy z minula. Bez toho by se po startu tvářil každý PR, že se nikdy nereviewoval.

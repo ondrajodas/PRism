@@ -21,7 +21,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PRIdentifier` | `owner/repo#číslo` — klíč všeho, co se váže k PR: dedup zdrojů, review stav, uložené nálezy |
 | `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav, **popis** (`body`) |
 | `PullRequestSummary` | Totéž **bez SHA** — co dá vyhledávání. Viz `App/GitHub/` níž |
-| `Source` | Zdroj PR: jméno pro UI + search dotaz. Default `Source.reviewRequested` |
+| `Source` | Zdroj PR: jméno pro UI + search dotaz. Výchozí dvojice je `Source.reviewRequested` a `Source.mine` (#330) |
 | `ReportedFinding` | Nález přesně jak ho poslal reviewer; `FindingVerdict` je `CONFIRMED`/`PLAUSIBLE` |
 | `Finding` | `ReportedFinding` + **kdo** ho našel (skill) a **proti čemu** (`headSha`) |
 | `FindingKey` | Identita nálezu napříč běhy. Skládá ji **jen** `Policy.key(of:)` |
@@ -890,7 +890,7 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `skills`, `skillsByLanguage`, `reviewPrompt`, `reviewTimeoutMinutes`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
+| `GlobalConfig` | `sources`, `ownLogins`, `skills`, `skillsByLanguage`, `reviewPrompt`, `reviewTimeoutMinutes`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
 | `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie, `reviewTimeoutMinutes` — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
@@ -906,6 +906,24 @@ Věci, které se u toho nemají rozbít:
   podstrčený výchozí seznam by ukazoval cizí PR nebo pustil jiné reviewery.
 - **Rozbitý soubor se nepřepisuje** a chyba je vidět nad seznamem. Aplikace běží na
   defaultech, ale mlčet o tom nesmí.
+- **Výchozí zdroje jsou od #330 dva** — `reviewRequested` a `mine` (`author:@me is:open`) — a je to
+  **jediná výjimka z pravidla „výchozí hodnoty se nesmí rozejít s tím, jak aplikace běžela dřív“**.
+  Bez toho zdroje by sekce `Moje PR` (#331) neměla odkud brát data a každému, kdo si ten řádek
+  nedopíše ručně, by zůstala navždycky prázdná. Projeví se to **jedině na prázdné cache**: uložené
+  `sources` se **nemigrují** (`decodeIfPresent` vezme, co je v souboru), protože dopsat uživateli do
+  ručně editovaného souboru dotaz, o který neřekl, je zásah do jeho věci — a zdroj navíc je dotaz
+  navíc při každém tiku. Že zdroj chybí, pozná `Policy.tracksOwnPullRequests` a řekne to prázdný
+  stav sekce, ne migrace.
+- **`ownLogins` je seznam dalších „mých“ loginů** (#330) — typicky agent s vlastním účtem
+  (`github-actions[bot]`, Copilot), který pushuje pod sebou. Viewer z `gh api user` se přidává sám,
+  takže **prázdné pole je běžný stav**, ne nedodělek: agenti v tomhle repu pushují přes moje `gh`
+  a mají autora `ondrajodas` (ověřeno na živých datech). Čte se **přísně jako `sources` a `skills`**
+  — hodnota jiného typu položí čtení —, protože tiše podstrčené prázdno by z PR agenta udělalo cizí
+  PR, tedy řádek ve frontě k review, o kterou nikdo nepožádal. **Globálně, ne per repo** (kdo jsem
+  já, z repozitáře neplyne) a **v okně nastavení pole není**: je to jednorázová věc pro toho, kdo si
+  pouští agenta pod vlastním účtem, a nová sekce nastavení by znamenala změnu vzhledu, tedy mockup
+  a schválení. Round-trip na disk to proto drží testem — soubor je jediná cesta, kterou se hodnota
+  do aplikace dostane.
 - **Hodnoty se čtou při použití**, ne při startu: limit souběhu při každém pokusu o slot,
   rozpočet při každém úklidu, skilly při spuštění review. Proto stačí načíst a nemusí se
   restartovat.
@@ -1849,6 +1867,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Automatic.swift` | Automatický režim a denní rozpočet (#25) | 89 |
 | `AppStore+Findings.swift` | Zahození záznamu (#81) a odmítnutí nálezu (#113) | 70 |
 | `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
+| `AppStore+Ownership.swift` | Čí jsou PR v seznamu (#330) — `ownLogins`, `ownership(of:)`, `tracksOwnPullRequests`. **Dotažení loginu je v `AppStore.swift`**, u ostatních věcí, které se načítají při startu, a taky proto, že `viewer` je `private(set)` | 42 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
 | `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
 | `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
@@ -1887,6 +1906,25 @@ Věci, které se u toho nemají rozbít:
   je proto pojistka proti zapomenutému filtru, protože zmizelý PR vypadá jako vyřízený. Na trvalé
   schování je `sources` v konfiguraci (dotaz umí i `-author:`): to je změna toho, **co se stahuje**,
   a patří do nastavení, ne do lišty.
+- **`viewer` je prázdný, dokud login nedorazí — a prázdný znamená „nevím“, ne „to jsem já“** (#330).
+  Dotahuje se **jednou při startu** (`loadViewer()`, `gh api user`) a **souběžně s pollingem**, ne
+  před ním: seznam PR nemá proč čekat půl sekundy na údaj, který se nemění. Dokud tam není,
+  `Policy.ownership` vrací u všeho `.theirs`; opačné výchozí chování by na okamžik po spuštění
+  přehodilo celý seznam do „moje“ a fronta cizích PR by zmizela. Je na to test v `Policy` i ve
+  storu a **vložená regrese** (`mine.isEmpty → .mine`) shodí jedenáct testů, mezi nimi i ty
+  z #114 — což je zároveň doklad, že porovnání je doopravdy na jednom místě.
+
+  **Ne z `Conversation.viewer`**, který týž login taky nese: ten je až z načtené konverzace
+  vybraného PR, takže v seznamu k dispozici není. `AppStore.isOwnPullRequest(_:)` (#114) na něm
+  zůstává schválně — přepnout ho na `viewer` ze storu by změnilo, kdy se v panelu předvyplňuje
+  verdikt, a to je viditelná změna a věc panelu vlastního PR (#333), ne téhle součástky. Sdílené je
+  proto jen **porovnání** (`Policy.ownership(ofAuthor:mine:)`), ne zdroj loginu.
+
+  **Selhání dotazu se nedrží jako vlastní stav a mlčí se o něm vědomě**: `gh api user` sahá na týž
+  `gh` a token jako polling, takže co položí jedno, položí i druhé — a to už v okně vidět je
+  (červený puntík GitHubu i s větou). Druhý, tišší opis téhož signálu by musel někde být nakreslený,
+  tedy nová věc na obrazovce. Co zbude, je „nevím“, tedy všechno cizí; vysvětlit prázdnou sekci
+  `Moje PR` je věc jejího prázdného stavu (#331).
 - **Zapsat filtr jde jedině `setFilter(_:)`**, protože se s ním musí srovnat výběr: vybraný PR mimo
   filtr výběr **ztrácí** (detail PR, který v seznamu není, se nedá zavřít ani znovu vybrat).
   Nic se tím neztrácí — draft leží na disku a běžící review běží dál. Ruší se to **jen tam**, ne
@@ -4626,7 +4664,9 @@ Věci, které se u toho nemají rozbít:
 | `ReviewRecord.activeFindings`, `.dismissal(of:)`, `.setDismissal(_:of:)` | Odmítnuté nálezy (#113) — čtení i zápis na jednom místě |
 | `Policy.suggestedVerdict(for:)` | Návrh verdiktu nad `ReviewRecord`. `nil` = není z čeho soudit |
 | `Policy.effectiveVerdict(of:suggestion:)` | Který verdikt **platí** a odkud je — moje volba, jinak návrh (#114) |
-| `Policy.prefillableSuggestion(_:author:viewer:)`, `Policy.isOwn(author:viewer:)` | Smí se návrhem předvyplnit? Na vlastním PR ne |
+| `Policy.prefillableSuggestion(_:author:viewer:)`, `Policy.isOwn(author:viewer:)` | Smí se návrhem předvyplnit? Na vlastním PR ne. Samo porovnání dělá od #330 `ownership(ofAuthor:mine:)` — na „je to moje?“ nesmí být dvě odpovědi |
+| `Policy.ownLogins(viewer:configured:)`, `Policy.ownership(of:mine:)`, `Policy.ownership(ofAuthor:mine:)` | Čí je PR (#330) → `PullRequestOwnership`. **Množina loginů**, ne jeden řetězec (viewer + volitelný seznam z konfigurace), porovnání bez ohledu na velikost písmen, **prázdná množina znamená všechno cizí** |
+| `Policy.tracksOwnPullRequests(in:mine:)` | Je mezi zdroji ten, který vlastní PR přináší (#330)? Pozná `author:@me` i vypsaný login; `-author:` ani `involves:` ne |
 | `Policy.groups(of:)` | Shoda reviewerů na `file:line` → `FindingGroup` s odznakem `2×` |
 | `Policy.disclosure(of:categories:toggled:)`, `Policy.disclosureKey(of:)` | Jak je nález u kódu rozbalený (#185): blokující rozbalený, ostatní značka, odmítnutý nikdy — a čím se místo klíčuje |
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` i s **cenou** z uloženého běhu |
@@ -4718,6 +4758,21 @@ Věci, které se u toho nemají rozbít:
   takže jeden z nich může nést stav, který mezitím zastaral.
 - **Řadí se od naposledy změněného, při shodě podle identifikátoru.** Druhé kritérium není
   kosmetika: bez něj by pořadí mezi pollingy poskakovalo, protože slovník nemá pořadí.
+- **Rozřazení podle autora se do slučování nemíchá** (#330). `PullRequestOwnership` (`.mine` /
+  `.theirs`) se počítá **nad hotovým seznamem** (`Policy.ownership(of:mine:)`), protože slučování
+  je o deduplikaci, ne o tom, čí co je — a jeden PR umí přijít z víc zdrojů naráz. Typ leží
+  v `App/Policy/`, jako `QueueRow`: je to odpověď čisté funkce, ne data, na kterých staví moduly.
+  Tři věci, na kterých to stojí:
+  - **Prázdná množina „mých“ loginů znamená, že je všechno `.theirs`.** Dokud login nedorazí, je
+    to „nevím, kdo jsem“ — a to nesmí znamenat „to je moje“, jinak by se při startu celý seznam
+    na okamžik přehodil do vlastní sekce a fronta cizích PR by zmizela.
+  - **Je to množina, ne jeden login** (viewer + `ownLogins` z konfigurace). Agent s vlastním
+    účtem pushuje pod sebou, takže by do `.mine` nespadl; dolepovat to potom znamená projít
+    všechna místa, která se ptají „je to moje“. Porovnává se bez ohledu na velikost písmen,
+    protože `gh` vrací kanonický tvar a do konfigurace se login píše ručně.
+  - **Porovnání je na jednom místě** (`ownership(ofAuthor:mine:)`) a chodí přes ně i
+    `Policy.isOwn(author:viewer:)` z #114. `Conversation.isMine(_:)` odpovídá na jinou otázku
+    (čí je komentář v načtené konverzaci) a v modelu zůstává.
 
 Nad odhadem jazyka platí:
 
@@ -5215,12 +5270,13 @@ Nad odesílatelností draftu (#68) platí:
 
 ## `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má čtrnáct metod
-a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu.
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má šestnáct metod
+a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu. (Do #330 tu stálo
+„čtrnáct“, ačkoli výčet v tabulce měl patnáct položek; teď je s ním číslo srovnané.)
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)` |
+| `GitHubGateway` | Protokol: `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
@@ -5228,6 +5284,7 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 | `ConversationQuery` | GraphQL dotaz na konverzaci a jeho argumenty — čisté funkce |
 | `GhConversationResponse` | Tvar GraphQL odpovědi a mapování na `Conversation` |
 | `GhSearchItem`, `GhPullRequestDetail` | Tvar JSONu z `gh` a převod na doménové modely |
+| `GhUser` | Tvar odpovědi `gh api user` — jen `login` (#330). **Vlastní typ vedle `GhAuthor`**, i když má tentýž jeden field: je to jiná odpověď na jinou otázku a z podpisu volání má být poznat, čí login se dekóduje |
 | `GhRelease` | Tvar jedné položky `GET /repos/…/releases` a převod na `Release` |
 | `GhCommit` | Tvar jedné položky `GET /repos/…/pulls/{n}/commits` a převod na `PullRequestCommit` (#316). **Skoro všechno optional**: odpověď má přes šedesát polí a bereme šest, takže chybějící pole nesmí položit seznam kvůli něčemu, co se nekreslí |
 | `PullRequestState(ghState:isDraft:)` | Mapování stavu — `gh` ho popisuje dvěma poli |
@@ -5330,6 +5387,22 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   keyNotFound…` neříká, co se zkoušelo, takže z hlášky nejde poznat ani to, která obrazovka je
   poloprázdná; fáze (`Vyhledávání pull requestů`, `Anotace check-runu`, …) je jediné, co k tomu
   volající ví a chyba sama ne.
+- **Login se bere z `gh api user`, ne z `gh auth status`** (#330), a **dekóduje se JSON, ne
+  `--jq .login`**. Obojí je rozhodnutí proti levnější cestě:
+
+  `auth status` se volá už dneska (`GhAuthCheck`), takže by login byl zadarmo — je to ale výstup
+  **pro člověka** (`Logged in to github.com account ondrajodas`), ne kontrakt. Až se ta věta v nějaké
+  verzi `gh` přeformuluje, přestane fungovat **rozřazení seznamu**, ne kontrola přihlášení; poznalo
+  by se to tím, že vlastní PR zmizí z vlastní sekce. Změřeno na tomhle stroji: `gh api user` 0,55 s
+  proti 0,42 s u `auth status`, a platí se to **jednou za spuštění** (`AppStore.loadViewer()`), takže
+  cena nerozhoduje. `GhAuthState` se kvůli tomu **nerozšiřuje** — odpovídá na „jsem přihlášený“
+  a druhá hodnota v něm by znamenala, že se týž údaj bere ze dvou míst.
+
+  `--jq .login` by ušetřilo `GhUser`, jenže `--jq` na pole, které v odpovědi není, vypíše **prázdný
+  řádek s nulovým návratovým kódem** — tedy prázdný login, a to je zrovna ta hodnota, která
+  v aplikaci znamená „nevím, kdo jsem“ (`Policy.ownership` pak vrací všechno cizí). Takhle to skončí
+  `malformedOutput` s fází `Přihlášený účet`. Prázdný ani bílý login se **nevrací** ani tehdy, když
+  ho tak API pošle: je to poslední místo, kde se „nevím“ dá od loginu rozlišit.
 
 Detail navíc ověří, že `gh` vrátil PR s číslem, na které jsme se ptali. Identifikátor se
 bere z dotazu (`gh pr view` repo nevrací) a tichý rozchod by nálezy naklíčoval cizímu PR.

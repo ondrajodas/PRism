@@ -325,7 +325,14 @@ struct ConfigurationTests {
     func matchesTheConstantsItReplaces() {
         let standard = Configuration.standard.global
 
-        #expect(standard.sources == [.reviewRequested])
+        // **Výjimka z „nesmí se rozejít“** (#330): vedle vyžádaných review jsou ve výchozích
+        // zdrojích i vlastní PR. Je to vědomé — bez toho zdroje by sekce `Moje PR` neměla odkud
+        // brát data —, a projeví se to jedině na **prázdné cache**: uložené `sources` se
+        // nemigrují.
+        #expect(standard.sources == [.reviewRequested, .mine])
+        // Prázdné pole loginů (#330) znamená „jsem to jen já“: viewer z `gh api user` se přidává
+        // sám, tady se vypisuje jen agent s vlastním účtem, kterého dneska nemám.
+        #expect(standard.ownLogins.isEmpty)
         // **Změna proti #23:** dřív tu stálo `code-review`, jenže to není skill (je to
         // plugin command), takže se nemělo co načíst a model si domýšlel — viz #78.
         #expect(standard.skills == ["code-review:code-review"])
@@ -762,5 +769,61 @@ struct RepositoryConfigDecodingTests {
 
         #expect(configuration.repositories[cli]?.reviewTimeoutMinutes == 999)
         #expect(configuration.resolved(for: cli).reviewTimeout == .seconds(3600))
+    }
+
+    // MARK: - Moje loginy a zdroj vlastních PR (#330)
+
+    @Test("Loginy ze souboru se přečtou")
+    func readsOwnLogins() throws {
+        let configuration = try self.configuration(#"{"global": {"ownLogins": ["github-actions[bot]"]}}"#)
+
+        #expect(configuration.global.ownLogins == ["github-actions[bot]"])
+    }
+
+    /// Chybějící klíč znamená „jsem to jen já“ — konfigurace bez `ownLogins` je ta, kterou má
+    /// na disku každý, kdo aplikaci používal před #330.
+    @Test("Chybějící loginy znamenají prázdno")
+    func fallsBackOnMissingOwnLogins() throws {
+        let configuration = try self.configuration(#"{"global": {"mode": "automatic"}}"#)
+
+        #expect(configuration.global.ownLogins.isEmpty)
+    }
+
+    /// Přísně jako `sources` a `skills`, ne tolerantně jako vzhled: tiše podstrčené prázdno by
+    /// z PR mého agenta udělalo cizí PR, tedy řádek ve frontě k review, o kterou nikdo nepožádal.
+    @Test("Rozbité loginy položí čtení, nepodstrčí prázdno")
+    func rejectsBrokenOwnLogins() {
+        #expect(throws: (any Error).self) {
+            try self.configuration(#"{"global": {"ownLogins": "ondrajodas"}}"#)
+        }
+    }
+
+    /// Loginy přežijí cestu na disk a zpátky — pole není v okně nastavení, takže je to jediná
+    /// cesta, kterou se do aplikace dostane.
+    @Test("Loginy přežijí cestu na disk a zpátky")
+    func ownLoginsSurviveARoundTrip() throws {
+        var original = Configuration.standard
+        original.global.ownLogins = ["github-actions[bot]", "Copilot"]
+
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Configuration.self, from: encoded)
+
+        #expect(decoded.global.ownLogins == ["github-actions[bot]", "Copilot"])
+    }
+
+    /// **Tohle je ta past z #330** a je to test na to, že se něco NEstane: uložené `sources` se
+    /// nemigrují, takže nový výchozí zdroj se do existující konfigurace nedoplní. Kdyby se
+    /// doplňoval, dopsala by aplikace do ručně editovaného souboru dotaz, o který nikdo neřekl —
+    /// a přidala si volání navíc při každém tiku.
+    @Test("Uložené zdroje se novým výchozím zdrojem nedoplní")
+    func neverMigratesStoredSources() throws {
+        let configuration = try self.configuration(
+            #"{"global": {"sources": [{"name": "Vyžádaná review", "query": "review-requested:@me is:open"}]}}"#
+        )
+
+        #expect(configuration.global.sources == [.reviewRequested])
+        #expect(!configuration.global.sources.contains(.mine))
+        // Že zdroj chybí, se pozná z dotazů — a to je jediné, co s tím aplikace dělá.
+        #expect(!Policy.tracksOwnPullRequests(in: configuration.activeSources, mine: []))
     }
 }

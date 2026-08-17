@@ -730,7 +730,8 @@ nepovede, nic se nezablokuje: puntík se řídí voláními a nápověda po hove
 nepovedlo a kdy se to zjišťovalo.
 
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
-PR, sada skillů, **prompt review**, **časový limit běhu**, blokující kategorie, výchozí režim
+PR, **další „moje“ loginy** (`ownLogins`, #330 — jen v souboru, v okně nastavení pole není),
+sada skillů, **prompt review**, **časový limit běhu**, blokující kategorie, výchozí režim
 review, jazyk nálezů, povolení odesílání, notifikace, výchozí pohled na diff, vzhled okna, interval
 pollingu, kolik session smí běžet naráz, denní strop automatu, rozpočet cache a model. Repozitář si
 může přebít režim (`manual`/`automatic`), povolení odesílání, jazyk nálezů, skilly, kategorie
@@ -1047,7 +1048,15 @@ zastaral hned další verzí.
 ## Jak to funguje
 
 1. **Polling GitHubu** přes `gh` — hledají se PR, u kterých je po mně požadované review
-   (`review-requested:@me`). Repozitáře nejsou pevný seznam, může přijít cokoli.
+   (`review-requested:@me`), a od #330 i **moje vlastní** (`author:@me is:open`). Repozitáře
+   nejsou pevný seznam, může přijít cokoli. Čí PR to je, se pozná z **autora**, ne ze zdroje:
+   login se zjistí jednou při startu (`gh api user`) a dokud nedorazí, je všechno cizí —
+   „nevím, kdo jsem“ nesmí znamenat „to je moje“. Do konfigurace se dají dopsat další „moje“
+   loginy (`ownLogins`) pro agenta, který pushuje pod vlastním účtem.
+
+   **Vlastní zdroj přibyl jen do výchozí konfigurace, uložená se nemigruje** — kdo `config.json`
+   už má, nový zdroj v něm nenajde a musí si ho dopsat (aplikace mu do ručně editovaného souboru
+   dotaz nedopisuje). Že chybí, aplikace pozná a napíše to tam, kde by vlastní PR měly být.
 2. **Checkout na vyžádání** — repo se naklonuje do vlastní cache aplikace jako bare
    partial clone a přidá se detached `git worktree` na head commitu daného PR.
    **Vlastních** klonů na disku se aplikace nikdy nedotkne.

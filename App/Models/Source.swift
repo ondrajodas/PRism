@@ -22,4 +22,15 @@ struct Source: Hashable, Codable, Sendable {
         name: "Vyžádaná review",
         query: "review-requested:@me is:open"
     )
+
+    /// Vlastní pull requesty (#330) — druhá polovina toho, co je v okně vidět.
+    ///
+    /// `is:open` ze stejného důvodu jako u `reviewRequested`: bez něj `gh search prs` vrací
+    /// i zavřené a mergnuté.
+    ///
+    /// **`author:@me`, ne vypsaný login.** Dotaz vyhodnocuje GitHub podle tokenu, kterým se `gh`
+    /// přihlásil, takže zdroj funguje hned — nečeká na `fetchViewer()` a nerozbije se tomu, kdo
+    /// se přihlásí jiným účtem. Rozřazení hotového seznamu je proti tomu věc **autora**
+    /// (`Policy.ownership`), ne zdroje: jeden PR umí splňovat víc dotazů naráz.
+    static let mine = Source(name: "Moje PR", query: "author:@me is:open")
 }

@@ -712,9 +712,15 @@ extension Policy {
     /// Právě ten stav „konverzaci nemám“ je to, o čem se tady rozhoduje, a `isMine` ho vyjádřit
     /// neumí — má `viewer` neoptional. Řetězit to přes model by znamenalo, že se rozhodnutí dělá
     /// v `??` u volajícího, tedy mimo `Policy` a mimo testy.
+    ///
+    /// **Samo porovnání dělá `Policy.ownership(ofAuthor:mine:)`** (#330), protože „je to moje?“ se
+    /// od té doby ptá i seznam PR — a dvě odpovědi na tutéž otázku se rozejdou. Zbylo tedy jen to,
+    /// co je na tomhle volajícím vlastní: viewer z **konverzace** (ne z `gh api user`, ta patří
+    /// seznamu) a `Bool` místo `PullRequestOwnership`, protože předvyplnění je zákaz, ne rozřazení.
+    /// Vedlejší efekt sdílené cesty: porovnává se **bez ohledu na velikost písmen** a s odstřiženými
+    /// mezerami, takže `OndraJodas` z `gh` sedne na `ondrajodas` z konfigurace.
     static func isOwn(author: String?, viewer: String?) -> Bool {
-        guard let author, let viewer else { return false }
-        return author == viewer
+        ownership(ofAuthor: author, mine: ownLogins(viewer: viewer)) == .mine
     }
 
     /// Je draft psaný proti staršímu commitu, než je hlava PR?
