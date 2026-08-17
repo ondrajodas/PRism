@@ -47,6 +47,21 @@ sebou. **Novější sekce se do té starší nepřekresluje** — záznam dnešk
 se dá aplikace srovnat, takže bez něj by každé srovnání hlásilo rozdíl, který není chyba, dokud
 se to issue neudělá.
 
+**U sekce, která je záznamem dneška, platí to obráceně: ta se překreslit musí** (#299). Když se
+v aplikaci něco změní, mění se s tím i ta sekce — jinak v návrhu zbude obrazovka, kterou v okně
+nikdo nenajde, a čtenář nemá jak poznat, jestli chybu má aplikace, nebo návrh. Takové sekce
+poznáš podle toho, že **v nich vedle sebe žádná novější varianta nestojí** — u #299 to byla
+sekce **02** (dnešní `Přehled`; #215 z ní vzalo souhrn checků, #291 rozdělil hlavičku karty na
+dvě podoby), **03** (patička nálezu po #283), **19** (seznam commitů po #316) a **01** (rail po
+#278). Zapsat to jako „vědomě zastaralé“ nestačí: zápis ve specifikaci nikdo nečte s obrázkem
+v ruce, a u #299 se takových zápisů sešlo pět.
+
+**Totéž platí o tokenech**, jen tam to nikdo neuvidí očima: `--mint` ve světlé větvi se u #309
+v aplikaci ztmavil kvůli kontrastu (`#0E8F80` → `#0C7E71`) a v mockupu zůstala stará hodnota, tedy
+přesně to, čemu má pravidlo „tokeny jsou `Palette` jedna ku jedné“ zabránit. Barva se mění
+**v obou** světlých větvích (`:root` i `:root[data-theme="light"]`), jako se u #277 měnily obě
+tmavé.
+
 **A jedna sekce může mít víc obrazovek.** Sekce 20 jich má dvě — živý výpis kroků a surovou
 session —, protože **odpovídají na jinou otázku nad týmž místem** a druhá je východ z první.
 Rozdělit je na dvě sekce by ten vztah zahodilo; dokud spolu obrazovky takhle souvisejí, patří
@@ -61,6 +76,13 @@ mění **spolu s kódem** — pravidlo o dokumentaci ve stejném commitu na něj
 
 Adresa publikované kopie je zapsaná výš. Dohledat se dá i jinak: nástroj `Artifact` s
 `action: "list"` vypíše artifacty uživatele i s adresami.
+
+**Favicon publikované kopie je 🎨** a zapsaný je právě proto, aby se nehádal (#299). Publikování
+si ho vynucuje jako povinný parametr a nikde jinde uložený není — v repu, v `Artifact`u ani ve
+výpisu artifactů se přečíst nedá. U #277 se ho proto nepodařilo dohledat a agent zvolil 🎨 podle
+svého; ikonka v tabu je ale to, podle čeho si člověk stránku hledá, takže **zůstává tahle**
+a při každém publikování se předává znovu. Titulek `PRism — návrh vizuální revize` platí
+stejně: mění se obsah, ne identita stránky.
 
 ## Jak se z něj čte
 
@@ -102,9 +124,9 @@ který platí.
    (`.notes`), protože návrh bez důvodů se za měsíc nedá obhájit ani změnit. Nová sekce dostane
    **další volné číslo** (ne to, kam v UI patří) a zařadí se do stránky podle místa v aplikaci;
    mapa stránek je v kostře dokumentu, v komentáři nad rozcestníkem.
-2. Publikovat: `Artifact` s `file_path: "docs/navrh.html"` a
-   `url: "https://claude.ai/code/artifact/5206622c-…"`. Titulek a favicon zůstávají — mění se
-   obsah, ne identita stránky.
+2. Publikovat: `Artifact` s `file_path: "docs/navrh.html"`,
+   `url: "https://claude.ai/code/artifact/5206622c-…"` a `favicon: "🎨"`. Titulek a favicon
+   zůstávají — mění se obsah, ne identita stránky; hodnoty jsou výš, v *Kde návrh je*.
 3. **Commitnout ten soubor toutéž změnou.** Publikovaná kopie bez commitu znamená, že v repu
    je jiný návrh než na odkazu, který jsem dostal.
 
@@ -147,3 +169,18 @@ opravovat v něm.
 U #181 to našlo čtyři odchylky, které kontrolou kódu prošly — pevnou šířku sloupce místo poměru
 `1.45fr 1fr`, chybějící popisky v hlavičkách bloků, chybějící blok `Co teď` a odsazený proužek
 řádku. U #216 to našlo uzel osy o 16 bodech místo 24. Zpaměti se to nepozná.
+
+**A na jednu vadu vyříznutá sekce nestačí: celý dokument se musí vyrendrovat taky** (#299).
+Fragment, který zůstane **mimo `.doc-page`** — typicky zbytek po přeskládání stránek —, router
+nikdy neskryje, takže se kreslí **na každé stránce**. U #332 takhle v dokumentu zbyla osiřelá
+patička nálezu se čtyřmi tlačítky a visela pod rozcestníkem i pod každou obrazovkou; ve výřezu
+jedné sekce ji přitom nebylo jak vidět. Stačí jeden snímek titulní stránky s dost vysokým
+`--window-size` a `--virtual-time-budget=3000` (router zapíná až JavaScript):
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
+    --hide-scrollbars --window-size=1400,1400 --virtual-time-budget=3000 \
+    --screenshot=doc.png "file://$PWD/docs/navrh.html"
+```
+
+Grep to nechytá: `<footer>` s tlačítky je platné HTML a v souboru vypadá jako kus sekce.

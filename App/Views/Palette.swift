@@ -210,7 +210,7 @@ enum Palette {
     /// **Tmavá je z návrhu doslova** (`--mint: #2DD4BF`) a měřením vychází jako nejčitelnější
     /// token v celé rodině: 9,90 na ploše řádku proti 7,25 u `ok` a 5,64 u akcentu.
     ///
-    /// **Světlá je vědomá odchylka od návrhu** (`--mint: #0E8F80` → `#0C7E71`, ΔE 6,2). Hodnota
+    /// **Světlá se proti prvnímu návrhu ztmavila** (`--mint: #0E8F80` → `#0C7E71`, ΔE 6,2). Hodnota
     /// z návrhu měla na ploše řádku kontrast **3,99**, a byla tím **jediným** stavovým tokenem
     /// pod hranicí AA 4,5: `ok` má 5,08, `crit` 5,36, `find` 4,91, `stale` 4,87, akcent 6,14.
     /// Odznak stavu by tak byl to nejsvětlejší v řádku — zrovna ten, který má říct, že se s tím
@@ -218,9 +218,9 @@ enum Palette {
     /// hranici**: na všech čtyřech podkladech vychází do 0,05 stejně jako `find` vedle něj
     /// (4,95 / 4,70 / 4,29 / 4,06 proti 4,91 / 4,66 / 4,25 / 4,02).
     ///
-    /// Mockup se u toho **nepřekresluje potichu** — návrh schvaluje uživatel (#286), takže se
-    /// `--mint` ve světlé větvi nabízí k překreslení (#299), a do té doby drží odchylku tenhle
-    /// komentář a záznam rozhodnutí ve specifikaci.
+    /// **Odchylka už žádná není**: #299 tu hodnotu dopsalo i do mockupu (obě jeho světlé větve —
+    /// `:root` i `:root[data-theme="light"]`), takže paleta a návrh drží jednu pravdu. Do té doby
+    /// ji držel jen tenhle komentář a záznam rozhodnutí.
     ///
     /// **Ne systémová `.mint`**, kterou do #309 brala `ReviewStateAppearance` na odmítnuté review.
     /// Byly by to dvě tyrkysové pro jedno sdělení — a k tomu ta nejhorší možná dvojice: v tmavém

@@ -1798,9 +1798,10 @@ Věci, které se u toho nemají rozbít:
 
   **Ovládací prvek je tlačítko, které klikem cykluje** (`světlý → tmavý → podle systému → …`), ne
   nabídka: nabídka byla první verze a uživatel ji zamítl. Stav proto nese **ikona** — slunce, měsíc,
-  kolečko s „A“ pro automat (`AppearanceMode.railSymbol`) —, což je **vědomá odchylka od návrhu**,
-  který kreslí jedno půlkolečko bez ohledu na stav; do mockupu se to doplní při jeho překreslení
-  (#299). Tři ikony si u toho hlídají **srovnatelnou velikost** (naměřeno 16 × 16, 15 × 16, 16 × 16),
+  kolečko s „A“ pro automat (`AppearanceMode.railSymbol`) —, což byla do #299 **vědomá odchylka od
+  návrhu**, který kreslil jedno půlkolečko bez ohledu na stav; #299 to do mockupu dokreslilo
+  (automat, tedy výchozí režim).
+  Tři ikony si u toho hlídají **srovnatelnou velikost** (naměřeno 16 × 16, 15 × 16, 16 × 16),
   jinak by tlačítko při cyklení poskakovalo.
 
   Cyklící tlačítko říká **kde jsem, ne kam se dostanu**, takže to nese nápověda (`Vzhled: tmavý ·
@@ -3310,8 +3311,9 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     GitHubu, protože PR se čte jako postup“). Neobstálo to na hotové obrazovce: v okně se PR nečte
     od začátku, ale od toho, co přibylo naposled — tentýž pohyb, jaký dělá pruh
     „Od tvé poslední návštěvy“, a tentýž důvod, proč jsou fakta v `Přehledu` nahoře (#280). Postup
-    se z otočeného seznamu přečte pořád, jen odspodu. **Mockup se nepřekresluje** (řeší #299),
-    odchylka je zapsaná ve specifikaci.
+    se z otočeného seznamu přečte pořád, jen odspodu. **Mockup to od #299 kreslí stejně** — sekce 19
+    má seznam od nejnovějšího i pruh `7 commitů · od nejnovějšího`, a původní důvod v ní zůstal
+    zapsaný i s tím, proč neobstál.
   - **Pilulka `hlava` se bere z `headSha`, ne z pozice v seznamu** (`Policy.headCommit(in:head:)`),
     a po otočení je to o to snazší přehlédnout: hlava **bývá** nahoře, ale je to důsledek toho, jak
     seznam přišel, ne pravidlo. Rozejdou se ve dvou běžných situacích — po pushnutém commitu je
