@@ -2016,7 +2016,8 @@ skutečného stavu, ne zátěže.
 **Příčina je v prostředí procesu, ne v `jumpToEnd`.** `NSScroller.preferredScrollerStyle` je po startu
 procesu chvíli `overlay` a teprve za pár kol smyčky se doresolvuje na `legacy` — a legacy scroller
 místo doopravdy zabírá. Když ta změna přijde *až po* dosazení cíle skoku, viewport se zmenší
-(`clip.h` **441 → 424**, tedy 17 bodů, ne 13 jako rezerva ve `height`), `origin.y` zůstane a okýnko je
+(`clip.h` **441 → 424**, tedy 17 bodů, ne 13 jako rezerva ve `height` — ten rozpor vyřešilo #347, viz
+níž: měření bylo správné, rezerva ne), `origin.y` zůstane a okýnko je
 o řádku nad koncem — a **nikdo to nepřerovná**, protože další `layout()` přijít nemusí. Diff #339
 na tom nic nezpůsobil, jen posunul, které suity běží v tom startovacím okně.
 
@@ -2251,6 +2252,60 @@ naráz položí 5 tvrzení v 5 testech napříč třemi sadami.
 **Vidět je to v nastavení** na stránce `Review a skilly`, v náhledu promptu: za zamčeným jádrem
 stojí věta o souboru se zadáním s ukázkovou cestou a pod blokem poznámka, že se připojí jen u PR,
 ke kterému se zadání sehnalo.
+
+### #347 — rezerva na scroller v konci logu byla odměřená na scrolleru, který se nekreslí
+
+`LogTailTextView.horizontalScrollerHeight` nechávala na vodorovný scroller **13 bodů**, ale u #343 se
+změřilo, že legacy scroller zabere **17**. Rozpor ležel zapsaný v `docs/architektura.md` bez vlastního
+issue; #347 ho zakládalo proto, aby se neztratil.
+
+**Nebyl to odhad, a to je na tom to podstatné.** Třináct bodů je
+`NSScroller.scrollerWidth(for: .small, scrollerStyle: .legacy)`, tedy **skutečně odměřená hodnota —
+jiného ovládacího prvku**. `makeScrollView()` nechává `NSScrollView`u výchozí **`.regular`**, a ten bere
+17. Je to čítankový příklad #236 (kdo si říká o velikost, musí ji měřit na tom, na čem kreslí) a hůř se
+hledá než odhad, protože konstanta vypadá odměřeně. Vypadala odměřeně i **testu**, který ji držel: ptal
+se API na `.small`, tedy zopakoval tu samou úvahu, a byl proto zelený nad rozbitou hodnotou.
+
+Změřeno **u obou stylů**, protože jeden je půlka problému: okýnko o výšce 441 má s **legacy** stylem
+`clip.h` 424 (zábor **17**), s **overlay** 441 (zábor **0** — overlay plave nad obsahem, i když je
+17 bodů vysoký). Rezervuje se legacy jako **horší případ**.
+
+Co ty 4 body dělaly, a **na každém konci jinak**. Nezastropované okýnko bylo o **2 body** nižší než
+jeho vlastní dokument (dva ze čtyř spolkl slack na prokládání posledního řádku, který `height` počítá
+navíc), takže log, který se měl vejít celý, dostal svislý scroller a odscrolloval se — horní řádek se
+ořezal (třířádkový log: `výška 63, na text 46, origin.y 2`, po opravě `67 / 50 / 0`). Zastropované
+okýnko ukazovalo **29,71 řádku** místo třiceti, tedy strop sliboval 30 a ukázal 29.
+
+**Rozhodnuto pro konstantu, ne pro dotaz na API**, a je to zapsané ve specifikaci i u konstanty:
+`NSScroller.scrollerWidth` je `@MainActor` (dědí z `NSControl`), kdežto výška se počítá `nonisolated`
+— a hlavně `CheckDetailView.logMaxHeight` je ručně vybraná konstanta, která musí být
+`14N + 2 × inset + rezerva`; s rezervou známou teprve za běhu by se u stropu nedalo tvrdit, že padne na
+celý řádek, právě tam, kde se vybírá. Ty dvě konstanty jsou **pár**, takže se strop posunul **441 → 445**
+(pořád 30 řádků, `14N + 25`). Rozhodnutí „30 řádků“ z #303 tím zůstává; **přeměřeno**, co to stojí
+seznam checků (`CheckLogRoomProbe`, řádek 28 bodů): na skutečném okně 172 → 168 bodů, tedy **pořád
+6 řádků**, zaplatí to okno 810, kde ze 30 bodů zbyde 26.
+
+Co se **nezměnilo**, ať to někdo nehledá jako regresi: u horní hrany zastropovaného okýnka je necelý
+řádek vidět i po opravě — `2 × inset` leží uvnitř dokumentu a skáče se na jeho úplný konec, takže
+mřížka řádků na hranu viewportu nepadne. Rezerva rozhoduje o **výšce**, ne o zarovnání mřížky. Zadání
+mluvilo o „uříznutém posledním řádku“; ořezaný je horní, a jen u nezastropovaného okýnka.
+
+Testů je **2768**: nová sada `LogTailScrollerReserveTests` přidala **5** (jeden z nich přes pásmo pěti
+výšek okýnka) a **jeden ubyl** — ten vacuous, který se ptal API na `.small`. Nová sada se ptá
+**kresby**, ne API: postaví `makeScrollView()`, vynutí styl na instanci a odečte, kolik z výšky ubylo.
+Regrese ověřena vložením regrese a rozhodovalo, že padá **na těch bodech, ne na timeoutu**: s vrácenou
+rezervou 13 a stropem 441 padnou **4 testy a 13 tvrzení** za 3,3 s (`abs(legacy − rezerva) → 4.0`,
+`13.0 == 17.0`, `visible → 74.0 >= 75.5`, `origin.y → 2.0 == 0.0`, `0.2857` řádku). `LogTailHeightTests`
+u toho projde celá — a je to ta hranice, proč je nová sada zvlášť.
+
+**Vidět je to jen jako 4 body výšky okýnka**, takže na proklikání nebylo co ukazovat; zkontrolováno
+offscreen renderem před a po (`CheckLogRoomProbe` i nový dump okýnka pod `PRISM_RENDER_DIR`). Zapsané
+u toho zůstává, že v renderu celého tabu ta chyba **vidět není**: scrollery se v testovacím procesu
+usadí obvykle na `overlay`, kde je rezerva čisté odsazení — proto ten dump vynucuje `legacy`.
+
+Vedle toho se `awaitSettledScrollerStyle()` (#343) přestěhoval z privátní metody
+`LogTailOpeningTests` do **`TestWait`**, protože ho potřebuje i nová sada a čekání má v tomhle repu
+jedno místo (#296).
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

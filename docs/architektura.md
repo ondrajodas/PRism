@@ -3340,9 +3340,12 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     to jedno vyšetřování, tak ať je zapsané, na co se u toho koukat. `NSScroller.preferredScrollerStyle`
     je **po startu procesu chvíli `overlay`** a teprve za pár kol smyčky se doresolvuje na `legacy` —
     a legacy scroller místo doopravdy zabírá. Když ta změna přijde *až po* dosazení cíle, viewport se
-    zmenší (změřeno `clip.h` **441 → 424**, tedy **17 bodů**, ne 13 jako rezerva ve `height`),
-    `origin.y` zůstane a okýnko je o řádku nad koncem (`maxY` 84 006 → 83 989 proti poslednímu řádku
-    na 84 002) — a **nikdo to nepřerovná**, protože další `layout()` přijít nemusí.
+    zmenší (změřeno `clip.h` **441 → 424**, tedy **17 bodů**), `origin.y` zůstane a okýnko je o řádku
+    nad koncem (`maxY` 84 006 → 83 989 proti poslednímu řádku na 84 002) — a **nikdo to nepřerovná**,
+    protože další `layout()` přijít nemusí.
+
+    Těch 17 bodů si u #343 nesedělo s rezervou ve `height` (13) a **zůstal z toho zapsaný rozpor**,
+    který #347 vyřešilo: měření bylo správné, rezerva ne — viz odrážka o rezervě níž.
 
     V aplikaci je to nedosažitelné: styl scrollerů je usazený dávno předtím, než se dá otevřít detail
     checku. **Je to tedy vlastnost harnessu**, a proto se to opravilo v testu (nechat styl usadit dřív,
@@ -3370,11 +3373,45 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     na hlavním vlákně při otevření, a prospělo by to jen hunkům kódu.
   - **Výška okýnka se počítá z metriky fontu, kterým se kreslí** (#236, `LogTailTextView.height`):
     krátký log si vezme jen tolik, kolik má řádků, dlouhý se zastropuje na `CheckDetailView.logMaxHeight`
-    a scrolluje uvnitř. Rezerva na vodorovný scroller je opsané číslo (13 bodů), protože
-    `NSScroller.scrollerWidth` je vázaná na hlavní vlákno — **drží ji test**, který ji porovnává se
-    systémem, ne odhad. Na `preferredScrollerStyle` se schválně neptáme: mění se připojením myši,
-    a okýnko, kterému se tím mění výška, je horší než pár bodů rezervy.
-  - **Strop výšky je 441 bodů, tedy přesně 30 řádků** (#303; do té doby 320 bodů = 21 řádků). Zvednuto
+    a scrolluje uvnitř.
+  - **Rezerva na vodorovný scroller je 17 bodů, a je odměřená na tom, na čem se kreslí** (#347; do té
+    doby 13). Je to opsané číslo, protože `NSScroller.scrollerWidth` je `@MainActor` (dědí to z
+    `NSControl`), kdežto výška se počítá `nonisolated`.
+
+    **Čím to bylo špatně, je to podstatné na téhle odrážce.** Třináct bodů je `scrollerWidth` pro
+    velikost **`.small`** — tedy pro scroller, který okýnko nikdy nekreslí: `makeScrollView()` nechává
+    `NSScrollView`u výchozí **`.regular`**, a ten bere 17. Konstanta tedy nebyla odhad, byla to
+    **skutečně odměřená hodnota jiného ovládacího prvku**, což je zrovna ta chyba z #236 — a hůř se
+    hledá než odhad, protože vypadá odměřeně. Vypadala odměřeně i tomu testu, který ji držel: ptal se
+    API na `.small`, tedy zopakoval tu samou úvahu, a byl proto zelený i nad rozbitou hodnotou.
+
+    Změřeno **u obou stylů**, protože jeden je půlka problému: okýnko o výšce 441 má s **legacy**
+    stylem `contentView.bounds.height` 424 (zábor **17**), s **overlay** 441 (zábor **0** — overlay
+    scroller plave nad obsahem, i když je 17 bodů vysoký). Rezervuje se **legacy jako horší případ**:
+    při overlay zbyde 17 bodů prázdna, kdežto naopak by se z obsahu ukusovalo.
+
+    Co ty 4 body dělaly, a **na každém konci jinak**: nezastropované okýnko bylo o **2 body** nižší než
+    jeho vlastní dokument (dva z těch čtyř spolkl slack na prokládání, viz níž), takže log, který se měl
+    vejít celý, dostal svislý scroller a odscrolloval se o 2 body — horní řádek se ořezal. Zastropované
+    okýnko ukazovalo **29,71 řádku** místo třiceti. Co se u stropu **nezměnilo**: u horní hrany je
+    necelý řádek vidět i po opravě, protože `2 × inset` leží uvnitř dokumentu a skáče se na jeho úplný
+    konec. Rezerva rozhoduje o výšce, ne o zarovnání mřížky řádků.
+
+    Na `preferredScrollerStyle` se schválně neptáme: **mění se za běhu** podle připojené myši (u #347
+    se dva běhy sondy za sebou usadily jednou na `legacy`, jednou na `overlay`), a okýnko, kterému se
+    výška mění připojením myši, je horší než 17 bodů prázdna u krátkého logu.
+
+    **Drží to test, ale jiný než dřív** — `LogTailScrollerReserveTests` se ptá **kresby**: postaví
+    `makeScrollView()`, vynutí styl na instanci, položí do něj dokument širší než okýnko a odečte,
+    kolik z výšky ubylo. Test, který se ptá API s ručně vybranou velikostí, se dá splést stejnou
+    úvahou dvakrát; tenhle ne.
+  - **Obsah se počítá o `lineSpacing` velkoryseji, než co text potřebuje**, a je to schválně:
+    posledního řádku se prokládání netýká, takže vysázený dokument je `N × lineHeight − lineSpacing
+    + 2 × inset` vysoký, kdežto `height` počítá `N × lineHeight + 2 × inset`. Dva body slacku znamenají,
+    že okýnko je na obsah vždycky o chlup **větší**, nikdy menší. Kdo to bude chtít zpřesnit, musí
+    s tím posunout i `logMaxHeight` — strop na tom stojí.
+  - **Strop výšky je 445 bodů, tedy přesně 30 řádků** (#303; do té doby 320 bodů = 21 řádků, a do #347
+    441 — viz konec téhle odrážky). Zvednuto
     na výslovné přání po proklikání, ale **kolik přesně, rozhodlo měření** (`CheckLogRoomProbe`): sonda
     vyrendruje tab `Kontroly` s rozbaleným spadlým checkem a z hierarchie vyčte, kolik bodů viewportu
     zbylo **pod** okýnkem. Nad okýnkem je vždycky 173 bodů (hlavička karty, řádek checku, anotace, akce
@@ -3395,9 +3432,17 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     celý tab) a **357 bodů** (24 řádků, největší hodnota, u které se okýnko celé vejde i do výchozího
     okna: +3 řádky nejsou změna, o kterou se prosilo).
 
-    Strop je vždycky **celý počet řádků** (`14N + 21`), protože okýnko se otevírá na konci logu —
-    půlka řádku na spodní hraně by byla zrovna na tom řádku, kvůli kterému se log otevírá. Drží to
-    test, ne komentář.
+    Strop je vždycky **celý počet řádků** (`14N + 25`), protože okýnko se otevírá na konci logu —
+    strop, který slibuje 30 řádků a ukáže 29, je horší než o 4 body nižší okno. Drží to test, ne
+    komentář.
+
+    **Ze 441 na 445 u #347**, a je to důsledek opravené rezervy, ne nové rozhodnutí o výšce: hodnoty
+    jsou `14N + 2 × inset + rezerva`, takže s rezervou 17 místo 13 se celý řádek trefí na 445, ne 441.
+    Rezerva a strop jsou **pár** — jeden se bez druhého posunout nedá, jinak strop spadne mezi řádky.
+    Rozhodnutí „30 řádků“ zůstává; **přeměřeno**, co to stojí seznam checků (`CheckLogRoomProbe`,
+    řádek seznamu 28 bodů): každé „zbylo“ v tabulce výš se zmenší o 4 body, na skutečném okně
+    172 → 168, tedy **pořád 6 řádků** — rozhodující řádek tabulky se nemění. Zaplatí to okno 810, kde
+    ze 30 bodů zbyde 26, tedy z jednoho řádku seznamu žádný.
   - **ANSI se strhává a timestampy se schovávají.** ANSI je v obou změřených logách (116 řádků
     v 8,78MB) a bez toho se v okně objeví `^[[36;1m` uprostřed věty. Timestamp má skoro každý řádek
     (25 528 z 25 534) a zabírá 28 znaků, tedy ukrajuje šířku zrovna tam, kde je potřeba přečíst konec

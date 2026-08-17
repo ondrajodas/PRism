@@ -66,62 +66,14 @@ struct LogTailOpeningTests {
 
     // MARK: - Pomůcky
 
-    /// Počká, až se v procesu **usadí styl scrollerů**, a teprve pak se smí okýnko postavit (#343).
-    ///
-    /// **Bez tohohle je z celé sady flake** a je to změřené, ne odhad. `NSScroller.preferredScrollerStyle`
-    /// je po startu procesu chvíli `overlay` (`1`) a teprve za pár kol smyčky se doresolvuje na
-    /// `legacy` (`0`) — a legacy scroller **místo doopravdy zabírá**. Když ta změna přijde *až po*
-    /// dosazení cíle skoku, viewport se zmenší (`clip.h` 441 → 424) a `origin.y` **už nikdo
-    /// nepřerovná**, protože další `layout()` přijít nemusí: okýnko zůstane 17 bodů nad koncem
-    /// dokumentu, tedy o jednu řádku (`maxY` 84 006 → 83 989 proti poslednímu řádku na 84 002).
-    ///
-    /// **Je to artefakt harnessu, ne vada aplikace** — a právě tím se to liší od toho, jak zadání
-    /// #343 tu chybu popisovalo. V aplikaci je styl scrollerů usazený dávno předtím, než se vůbec
-    /// dá otevřít detail checku, takže se `jumpToEnd` nikdy nepočítá z výšky, která se mu pod rukama
-    /// změní. Změřeno: když se styl nechá usadit předem, je poloha správná **od nultého kola**
-    /// (`origin.y = 83 582`, `maxY = 84 006`) a **beze změny v aplikaci**.
-    ///
-    /// Proto se tady nesahá do `jumpToEnd`. Zamítnuto **dosadit cíl dvakrát** (to zadání #343 chtělo):
-    /// obě kola by běžela v témže průchodu, tedy pořád před doresolvováním stylu, takže by na měřeném
-    /// stavu nezměnila nic — a tři zelené běhy, na kterých ten návrh stál, byly shoda daná tím, které
-    /// suity zrovna běžely v tom startovacím okně. Zamítnuto i **čekat na „konec je vidět“**: bez
-    /// změny v aplikaci to dojede na 120s strop a celý běh má 184 issues (taky měřeno, #339).
-    ///
-    /// Čeká se pumpováním smyčky, protože styl se doresolvuje jejím během — strop je `TestWait.deadline`
-    /// jako všude jinde (#296) a je to **jev se stropem**, ne pevný okamžik (#269).
-    private func awaitSettledScrollerStyle(sourceLocation: SourceLocation = #_sourceLocation) {
-        // Pět **shodných kol za sebou**: jedno by „usazeno“ tvrdilo i o hodnotě, kterou smyčka ještě
-        // nezměnila. Počítá se od hodnoty přečtené předem, takže „pět kol“ je doopravdy pět kol.
-        let requiredRounds = 5
-        let step: TimeInterval = 0.05
-        let limit = ContinuousClock.now.advanced(by: TestWait.deadline)
-        var previous = NSScroller.preferredScrollerStyle
-        var matchingRounds = 0
-        while ContinuousClock.now < limit, matchingRounds < requiredRounds {
-            RunLoop.current.run(until: Date().addingTimeInterval(step))
-            let style = NSScroller.preferredScrollerStyle
-            matchingRounds = style == previous ? matchingRounds + 1 : 0
-            previous = style
-        }
-        // **Nedočkání se hlásí, ne přechází.** Kdyby se styl přestal usazovat, vrátí se flake
-        // z #343 — a bez téhle věty by to vypadalo na tentýž nevysvětlitelný pád jako předtím,
-        // tedy „nic nevypsalo“ k nerozeznání od „funguje“.
-        if matchingRounds < requiredRounds {
-            Issue.record(
-                """
-                Nedočkalo se: styl scrollerů se neusadil (strop \(TestWait.deadline), \
-                poslední hodnota \(previous.rawValue)). Tvrzení níž tím ztrácejí platnost.
-                """,
-                sourceLocation: sourceLocation
-            )
-        }
-    }
-
     /// Okýnko v hierarchii SwiftUI, v okně mimo obrazovku — jako v aplikaci.
     ///
-    /// **Styl scrollerů se usadí napřed** (#343), viz `awaitSettledScrollerStyle()`.
+    /// **Styl scrollerů se usadí napřed** (#343), viz `TestWait.awaitSettledScrollerStyle()` — od #347
+    /// je ta smyčka ve `Tests/Support/TestWaiting.swift`, protože ji potřebuje i sada nad rezervou na
+    /// scroller a čekání má v tomhle repu jedno místo (#296). Zamítnuté varianty (dosadit cíl dvakrát,
+    /// čekat na „konec je vidět“) jsou v [`docs/testovani.md`](../../docs/testovani.md).
     private func hosted() -> (NSWindow, NSHostingView<some View>) {
-        awaitSettledScrollerStyle()
+        TestWait.awaitSettledScrollerStyle()
         let scene = LogTailTextView(
             text: text,
             fontSize: CheckDetailView.logFontSize,

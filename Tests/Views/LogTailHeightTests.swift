@@ -9,9 +9,13 @@ import Testing
 /// měřit na tom, na čem kreslí. Bez zalamování je to přesné, takže se to dá tvrdit: jeden řádek
 /// textu je jeden řádek sazby.
 ///
-/// Co se dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým logem by zbylo 441 bodů
+/// Co se dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým logem by zbylo 445 bodů
 /// prázdna) a **nezastropovat dlouhý** (šest tisíc řádků naplno odtlačí seznam checků mimo
 /// obrazovku, což je zrovna to, kvůli čemu se detail stěhoval z `Přehledu`).
+///
+/// **Tvrzení o rezervě na vodorovný scroller je odsud pryč** (#347) — přestěhovalo se do
+/// `LogTailScrollerReserveTests`, protože se musí měřit na kresbě, ne dopočítávat z API s ručně
+/// vybranou velikostí scrolleru. Tady zůstává jen aritmetika **nad** tou konstantou.
 @Suite("Výška konce logu")
 struct LogTailHeightTests {
     private let fontSize = CheckDetailView.logFontSize
@@ -34,16 +38,6 @@ struct LogTailHeightTests {
         // Tři řádky se do stropu vejdou, takže se dá tvrdit přesná hodnota.
         let expected = 3 * lineHeight + 2 * LogTailTextView.inset.height
         #expect(abs(height(3) - expected - LogTailTextView.horizontalScrollerHeight) <= 1.0)
-    }
-
-    /// **Kontrola měřidla**: rezerva na vodorovný scroller je v kódu opsané číslo, protože
-    /// `NSScroller.scrollerWidth` je vázaná na hlavní vlákno. Tenhle test je to jediné, co ji drží
-    /// u systému — bez něj by se okýnko potichu rozešlo se scrollerem.
-    @MainActor
-    @Test("Rezerva na scroller odpovídá systému")
-    func scrollerReserveMatchesTheSystem() {
-        #expect(LogTailTextView.horizontalScrollerHeight
-            == NSScroller.scrollerWidth(for: .small, scrollerStyle: .legacy))
     }
 
     @Test("Krátký log si nebere víc, než potřebuje")
@@ -78,7 +72,7 @@ struct LogTailHeightTests {
         let lines = (usable / lineHeight).rounded(.down)
         #expect(
             abs(usable - lines * lineHeight) < 0.01,
-            "strop \(limit) končí uprostřed řádku — celé řádky jsou na 14N + 21"
+            "strop \(limit) končí uprostřed řádku — celé řádky jsou na 14N + 25"
         )
         #expect(lines == 30, "strop \(limit) má ukázat 30 řádků, ukazuje \(lines)")
     }
