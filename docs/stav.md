@@ -2410,6 +2410,20 @@ neplatné tělo bloku → neplatné `LazySubviewPlacements` → přeloží se v�
 geometrie responderů → další hover update. Druhý, slabší re-arm je
 `LazyLayoutViewCache.signalPrefetch()` → `NSHostingView.requestUpdate(after:)` (55 vzorků).
 
+**Ověřeno po opravě na běžící aplikaci, se zaparkovaným kurzorem nad blokem kódu ve split diffu**
+(aplikace vpředu, ruce pryč). Za 20 s nečinnosti se kumulativní CPU čas procesu **nezměnil vůbec**
+(`0:09.58 → 0:09.58`, tedy 0,00 s; kontrolní desetisekundový odečet taktéž 0,00 s), a ve `sample`u je
+**4394 ze 4394** vzorků hlavního vlákna v `mach_msg2_trap` — vlákno tedy spí ve frontě událostí a
+v celém vzorku není **ani jeden** výskyt `flushTransactions`, `LazySubviewPlacements`,
+`dispatchActions`, `enqueueHoverUpdateIfNeeded`, `didRequestHoverUpdate` ani `signalPrefetch`.
+
+Z toho plyne jedna věc, která byla do téhle chvíle **předpoklad, a je z ní měření**: slabší re-arm
+přes `signalPrefetch` se **nesrovnal „nízko a nenulově“, zmizel úplně**. Prefetch si o další kolo
+říkal právě proto, že se rozvržení pořád přepočítávalo — jak přestala být `LazySubviewPlacements`
+neplatná, přestal i on. Poctivá výhrada k tomu měření: **poloha kurzoru se programově neověřila**
+(systémový `python3` na stroji nemá `Quartz`), takže „myš ležela nad kódem“ je z lidského slova;
+aplikace vpředu a ta nulová čísla ověřená jsou.
+
 **Proč se to nedařilo reprodukovat:** chyběl **kurzor ležící v okně nad blokem kódu** (ověřeno na
 živém stavu přes `NSEvent.mouseLocation` a `CGWindowListCopyWindowInfo`). Pokusy byly „otevřený PR se
 třemi a čtyřmi soubory, přepnutí na `Změněné soubory`, projetí diffu, nečinnost“ → `%cpu` **0,0** —
