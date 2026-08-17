@@ -3348,6 +3348,88 @@ Vyloučené příčiny #350, aby po nich příští session nesáhla znovu:
 | Rozbor `stream-json` běží na hlavním vlákně | `ClaudeReviewRunner` je `struct` bez izolace a `SWIFT_VERSION = 6.0` (bez `NonisolatedNonsendingByDefault`), takže jeho `async` metody běží na globálním executoru; `readabilityHandler` čte rouru na vlastní frontě Foundationu. Ve `sample`u není ani jeden rámec parseru |
 | Osa běhu roste a její kopírování zdražuje každou událost | `reviewTimelines` má strop 300 uložených položek a kopie pole struktur je v šumu — a hlavně: kontrolní série výš ukazuje, že na tom, **co** se do storu zapíše, nezáleží |
 
+### Co je u #361 změřené a co z toho zbývá (#361)
+
+#361 je **tatáž signatura jako #358** (`flushObservers → beginTransaction → flushTransactions`, nula
+vzorků na animaci i na timeru), ale pohonem už není náš zápis: grep na `onContinuousHover` vychází
+čistě a v hover podstromu obou vzorků není **ani jeden rámec aplikace**. Zbývala tedy otázka **co
+rozvržení pořád špiní** — a ta se z těch dvou vzorků nedohledala. Co se k ní změřilo, ať to příští
+session nezkouší znovu od nuly:
+
+**Akce `onGeometryChange` se nespustí, když se hodnota nezměnila — a hodnota se přitom počítá
+pokaždé.** Sonda `Tests/Views/LayoutCallbackProbe.swift` špiní graf zvenčí (`Timer` po 50 ms) a
+počítá zvlášť **výpočet hodnoty** (closure za `for:`) a **akci** (zápis):
+
+| Scénář | Zašpinění grafu | Výpočet hodnoty | Akce (zápis) |
+|---|---|---|---|
+| stálá geometrie (špiní se krytí, ne rozměr) | 80× | **80×** | **0×** |
+| měnící se geometrie (rozměr o bod) | 80× | 80× | **80×** |
+
+Druhý řádek je **kontrola měřidla**, ne informace: bez něj by nula v prvním řádku mohla znamenat
+i rozbitou sondu. Z prvního řádku plyne, že těch šest míst s `onGeometryChange` v aplikaci **do
+třídy chyb z #358 nepatří** — zápis je gatovaný frameworkem. A sedí to na vzorek: v obou profilech
+je vidět **jen výpočet** hodnoty (`closure #3 in DiffPairBlockRowView.body.getter`,
+`DiffPairBlockRowView.swift:50`, 14 z 1992 a 24 z 3593 vzorků) a **akce v nich není vůbec**, takže
+`placement.rect` ani `noteRows()` v tom okně neběžely.
+
+**Hover callbacky se v sondě změřit nedají, protože aplikace na pozadí je nedostává.** Táž sonda má
+i hover část: okno se postaví **pod kurzor tam, kde právě je** (myš se nebere, viz #350), kurzor
+v okně leží (ověřeno `window.frame.contains`) — a přes 80 zašpinění grafu se `onHover` ozval **0×**
+a `onContinuousHover` taky **0×**. Vpředu je terminál, který test pustil, takže tracking areas nic
+nedoručují. Číslo „nula“ tedy o gatování hover callbacků **netvrdí nic** a sonda to sama vypisuje.
+Zůstává z toho: **`.onHover` je jediný z těch callbacků, u kterého se pořád jen předpokládá, že chodí
+při změně** — a `PullRequestTabBar.swift:203` do něj píše bezpodmínečně
+(`hovered = $0 ? tab : (hovered == tab ? nil : hovered)` zapíše i **tutéž** hodnotu, což podle #358
+stačí). U #361 přitom kurzor ležel 28 bodů od horní hrany okna, tedy v hlavičce. Neověřeno.
+
+**Scéna sama kolo nezavírá** (`Tests/Views/IdleDiffSpinProbe.swift`). Sonda hostuje okno
+**na obrazovce** ve stejném rozměru jako ta ztuhlá instance (1512×874) a čte CPU hlavního vlákna:
+
+| Co je v okně | CPU hlavního vlákna v nečinnosti |
+|---|---|
+| přehled (bez diffu) | 0,01 % |
+| diff pod sebou | 0,01 % |
+| diff vedle sebe | 0,00 % |
+| plné okno (`ContentView`, tři záložky, nálezy, konverzace, split) | 0,00 % |
+| totéž odscrollované o 8000 pt | **3,26 %** v prvních 5 s, pak **0,00 %** po 35 s |
+
+Ten poslední řádek je na tom podstatný: **z jednoho čísla za třicet sekund by vyšlo, že okno hoří.**
+Proto se měří po úsecích — 3,26 % je usazení po posunu, ne kolo. A kurzor u toho v okně ležel
+(sonda ho zabírá skoro celou), takže se to nedá odbýt tím, že myš byla jinde.
+
+Tři pasti, kvůli kterým sonda **měřila prázdno a tvrdila, že je čisto**:
+
+- **Velikost okna se nastavuje až za `contentViewController`em** (tatáž past jako u #350). Před ním
+  se `contentRect` zahodí a v okně zbyl **jeden** blok kódu.
+- **Rozměr se scéně musí předepsat** (`.frame(width:height:)`). Diff je uvnitř `GeometryReader`u
+  pružný, takže ideální výška detailu je hlavička plus pruh záložek — okno se usadilo na **1512×265**
+  a bloky kódu v něm nebyly. Sonda proto vypisuje **počet bloků kódu v okně**; bez toho čísla nula
+  netvrdí nic. A ten scvrkávající se rozměr **není nevinný**: dokud si velikost okna určoval obsah,
+  padal testovací host na `NSGenericException` z AppKitu („marked as needing another Update
+  Constraints in Window pass, but it has already had more … than there are views“) uvnitř
+  `NSHostingView.updateConstraints → updateWindowContentSizeExtremaIfNecessary → minSize`. Je to
+  **oscilace sondy, ne aplikace** — okno `WindowGroup`u si rozměr od obsahu nebere —, ale vypadá to
+  jako nález, takže se to tady zapisuje.
+- **Do `ContentView` se PR dostane jen frontou.** Bez `await store.refresh()` záložka detail vůbec
+  nekreslí (0 bloků), i když je diff ve storu načtený.
+
+A dvě věci k mechanice sond obecně:
+
+- **Pumpa, která špiní graf, musí být `Timer` na runloopu, ne `Task.sleep`.** Test drží hlavní actor
+  po celou dobu (`RunLoop.run(until:)` v synchronní metodě), takže úloha se Swift concurrency se ke
+  slovu nedostane — změřeno: s `Task.sleep` se graf zašpinil **nulakrát**.
+- **Sonda píše do `UserDefaults` skutečné aplikace.** Testovací host **je** bundle aplikace
+  (`com.ondrajodas.prism`), takže `@AppStorage` i `VisitLedger` z hostované scény míří do nastavení
+  toho PRismu, který se používá. U #361 to byly návštěvy `cli/cli#13084` a `diffTreeExpanded`; nic
+  z toho nevadí, ale vědět se to má.
+
+**Co zbývá:** dohledat, co graf špiní. Vylučovací práce hotová: animace, timer, vnější pohon, přeměření
+textu, náš `onContinuousHover`, akce `onGeometryChange` a scéna sama. Zůstávají dvě věci, které sonda
+nedosáhne — **`.onHover` v hlavičce okna** (viz výš) a **skutečné okno `WindowGroup`u vpředu se
+skutečným kurzorem**. Příští záchvat se proto vzorkuje **dřív, než se aplikace zavře**
+(`sample <pid> 5 -file …`) a k tomu se přečte, **kde ležel kurzor** (`swift mouse.swift`) — a když
+leží v hlavičce nad pruhem záložek, je to potvrzení té hypotézy.
+
 ### Jak změřit projíždění diffu, když se ho nedá dotknout (#252)
 
 Scénář z #252 (velký split, sjet a vyjet) se musel řídit **nastavením posuvníku přes

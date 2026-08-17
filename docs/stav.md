@@ -2487,5 +2487,35 @@ v [`testovani.md`](testovani.md).
 Testů je **2812** a jsou zelené. **Vidět je totéž co dřív** — pilulka na komentář svítí u řádku pod
 myší a mění stranu podle poloviny; co se změnilo, je že okno u toho nespálí procesor.
 
+### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
+
+Táž signatura jako #358 (`flushObservers → beginTransaction → flushTransactions`, nula na animaci
+i na timeru), ale pohonem už není náš zápis: v hover podstromu obou vzorků **není ani jeden rámec
+aplikace**. Issue proto žádalo měření, ne opravu — a **oprava z toho nevyšla**, protože se stav
+nepodařilo vyrobit. Zapsané je, co se vyloučilo a čím:
+
+- **Akce `onGeometryChange` do třídy chyb z #358 nepatří.** Změřeno novou sondou
+  (`Tests/Views/LayoutCallbackProbe.swift`): 80 zašpinění grafu → **80× výpočet hodnoty, 0× zápis**;
+  kontrolní scénář s měnící se geometrií dá 80× zápis, takže měřidlo počítá. Sedí to na vzorek, ve
+  kterém je vidět jen ten výpočet (`DiffPairBlockRowView.swift:50`), ne akce.
+- **Scéna sama kolo nezavírá.** `Tests/Views/IdleDiffSpinProbe.swift` hostuje plné okno na obrazovce
+  (1512×874, `ContentView`, tři záložky, nálezy, konverzace, split diff, odscrollováno o 8000 pt):
+  **3,26 % CPU v prvních pěti sekundách, pak 0,00 % po 35 s**. To první je usazení po posunu — proto
+  se měří po úsecích; jedno číslo za třicet sekund by tvrdilo, že okno hoří.
+- **Hover callbacky sonda nedosáhne**, a to je změřené, ne odhad: aplikace na pozadí je nedostává
+  (80 zašpinění grafu → `onHover` 0×, `onContinuousHover` 0×, kurzor přitom v okně ležel). Zůstává
+  z toho jediná neověřená hypotéza: **`.onHover` v pruhu záložek** (`PullRequestTabBar.swift:203`)
+  píše bezpodmínečně, včetně **téže** hodnoty, a kurzor u #361 ležel 28 bodů od horní hrany, tedy
+  v hlavičce. Neopravovalo se to, protože oprava neověřené domněnky se pozná od opravy jedině tím,
+  že se změří.
+
+Vedle toho vyšly z sondy tři pasti, kvůli kterým měřila prázdno a tvrdila, že je čisto (velikost okna
+až za `contentViewController`em, předepsaný rozměr scény, PR do `ContentView` jen frontou) a dvě věci
+k mechanice sond (pumpa musí být `Timer`, ne `Task.sleep`; sonda píše do `UserDefaults` skutečné
+aplikace). Všechno v [`testovani.md`](testovani.md), sekce *Co je u #361 změřené a co z toho zbývá*.
+
+Testů je **2818** a jsou zelené. **Vidět není nic** — nezměnilo se ani jedno view, přidaly se dvě
+ruční sondy a zápis měření.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
