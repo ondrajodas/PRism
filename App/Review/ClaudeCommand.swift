@@ -76,7 +76,9 @@ enum ClaudeCommand {
             return Policy.reviewPrompt(
                 template: request.promptTemplate,
                 skillID: request.key.skillID,
-                baseSha: request.baseSha
+                baseSha: request.baseSha,
+                // Zadání jde s požadavkem (#120), ne z konfigurace — tatáž úvaha jako u šablony.
+                intent: request.intentFile
             )
         }
         return RecheckCommand.prompt(for: material, baseSha: request.baseSha)
@@ -95,14 +97,25 @@ enum ClaudeCommand {
     /// **Šablona se sem předává** (#281) ze stejného důvodu jako model: tlačítko `ReviewRequest`
     /// k dispozici nemá, ale text se skládá **toutéž** funkcí (`Policy.reviewPrompt`), takže se
     /// zkopírovaný příkaz nemá čím rozejít s tím, co doopravdy běží.
+    ///
+    /// **A totéž platí o zadání** (#120): předává se **soubor, který na disku doopravdy je** —
+    /// příkaz, který ukazuje na smazané zadání, by reviewera poslal čtením za nic, a příkaz bez
+    /// věty o zadání by lhal opačným směrem. Existenci proto ověřuje volající
+    /// (`ReviewIntentStore.existingFile`), ne tahle funkce: `ClaudeCommand` je čistý.
     static func shellCommand(
         promptTemplate: String,
         skillID: String,
         baseSha: String,
         model: String?,
-        worktree: URL?
+        worktree: URL?,
+        intentFile: URL?
     ) -> String {
-        let prompt = Policy.reviewPrompt(template: promptTemplate, skillID: skillID, baseSha: baseSha)
+        let prompt = Policy.reviewPrompt(
+            template: promptTemplate,
+            skillID: skillID,
+            baseSha: baseSha,
+            intent: intentFile
+        )
         let arguments = ["claude"] + arguments(prompt: prompt, model: model)
         let command = arguments.map(quoted(_:)).joined(separator: " ")
         guard let worktree else { return command }

@@ -37,24 +37,38 @@ struct ReviewRequest: Sendable, Equatable {
     /// Je to **materiál v promptu**, ne nový nástroj: sada povolení zůstává tatáž (tvrdá
     /// podmínka č. 2).
     let recheck: RecheckMaterial?
+    /// Soubor se zadáním PR (#120), nebo `nil`, když se žádné nesehnalo nebo se nepodařilo uložit.
+    ///
+    /// Putuje **s požadavkem** jako šablona a limit, a ze stejného důvodu: runner si ho nemá kde
+    /// zjistit a všechny session jednoho běhu mají dostat tentýž. Do promptu z něj jde **jen
+    /// cesta** — obsah čte reviewer sám `Read`em, takže se prompt nemá čím rozkolísat.
+    ///
+    /// **Sada nástrojů se tím nemění** (tvrdá podmínka č. 2): `Read` v ní je odjakživa a soubor
+    /// leží v cache aplikace, kam session vidí, protože v ní stojí i pracovní strom.
+    let intentFile: URL?
 
     /// - Parameter promptTemplate: prázdná znamená **výchozí šablonu**, ne prompt bez zadání
     ///   (#281). Výchozí hodnota parametru je tu kvůli testům; produkční cesta jde přes
     ///   `AppStore`, který sem dává hodnotu z konfigurace.
     /// - Parameter timeout: výchozí hodnota je tu ze stejného důvodu — produkční cesta bere
     ///   limit z konfigurace repa.
+    /// - Parameter intentFile: soubor se zadáním (#120). Výchozí `nil` je tu **jen kvůli testům,
+    ///   které o zadání nestojí** — produkční cesta jde přes `AppStore`, který ho připraví.
+    ///   Prompt se z něj skládá `Policy.reviewPrompt`, a tam default schválně není.
     init(
         key: ReviewRunKey,
         worktree: URL,
         baseSha: String,
         promptTemplate: String = "",
-        timeout: Duration = ReviewTimeout.standard
+        timeout: Duration = ReviewTimeout.standard,
+        intentFile: URL? = nil
     ) {
         self.key = key
         self.worktree = worktree
         self.baseSha = baseSha
         self.promptTemplate = promptTemplate
         self.timeout = timeout
+        self.intentFile = intentFile
         recheck = nil
     }
 
@@ -70,6 +84,9 @@ struct ReviewRequest: Sendable, Equatable {
         self.baseSha = baseSha
         promptTemplate = ""
         self.timeout = timeout
+        // Kontrola nálezů zadání **nedostává** (#150): má vlastní, natvrdo psaný prompt, jehož
+        // odpověď čte parser — cesta k souboru by v něm nebyla k čemu.
+        intentFile = nil
         self.recheck = recheck
     }
 

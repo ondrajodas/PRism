@@ -1172,7 +1172,7 @@ struct PullRequestDetailView: View {
     /// tlačítko, které zkopíruje něco nefunkčního, je horší než žádné. Příkaz se skládá **až při
     /// kliknutí** — nese celý prompt, takže by se jinak stavěl při každém překreslení tabu.
     private func copyCommand(in timelines: [ReviewerTimeline]) -> ((String) -> Void)? {
-        guard let baseSha = loadedDetail?.baseSha else { return nil }
+        guard let detail = loadedDetail else { return nil }
         let model = store.configuration.global.model
         // Tatáž šablona, jakou dostane skutečný běh (#281), a poskládá se toutéž funkcí —
         // dvě místa s vlastním textem by se rozešla první úpravou věty.
@@ -1181,9 +1181,14 @@ struct PullRequestDetailView: View {
             Clipboard.copy(ClaudeCommand.shellCommand(
                 promptTemplate: promptTemplate,
                 skillID: skill,
-                baseSha: baseSha,
+                baseSha: detail.baseSha,
                 model: model,
-                worktree: timelines.first { $0.skill == skill }?.worktree
+                worktree: timelines.first { $0.skill == skill }?.worktree,
+                // Ptá se **disku**, ne záznamu (#120): tlačítko skládá příkaz, jakým by se
+                // reviewer spustil *teď*, takže věta o zadání do něj patří právě tehdy, když by
+                // ten soubor dostal i skutečný běh. Zeptat se je levné — příkaz se skládá až při
+                // kliknutí, ne při každém překreslení tabu.
+                intentFile: store.intents?.existingFile(for: detail.id, at: detail.headSha)
             ))
         }
     }

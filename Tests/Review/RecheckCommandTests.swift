@@ -91,7 +91,9 @@ struct RecheckCommandTests {
         #expect(ClaudeCommand.prompt(for: request) == Policy.reviewPrompt(
             template: ReviewPromptTemplate.standard,
             skillID: "code-review",
-            baseSha: "bbbb2222"
+            baseSha: "bbbb2222",
+            // Požadavek bez zadání (#120) — o souboru se v promptu nemluví.
+            intent: nil
         ))
     }
 
