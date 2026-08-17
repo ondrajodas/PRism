@@ -2503,11 +2503,16 @@ nepodařilo vyrobit. Zapsané je, co se vyloučilo a čím:
   **3,26 % CPU v prvních pěti sekundách, pak 0,00 % po 35 s**. To první je usazení po posunu — proto
   se měří po úsecích; jedno číslo za třicet sekund by tvrdilo, že okno hoří.
 - **Hover callbacky sonda nedosáhne**, a to je změřené, ne odhad: aplikace na pozadí je nedostává
-  (80 zašpinění grafu → `onHover` 0×, `onContinuousHover` 0×, kurzor přitom v okně ležel). Zůstává
-  z toho jediná neověřená hypotéza: **`.onHover` v pruhu záložek** (`PullRequestTabBar.swift:203`)
-  píše bezpodmínečně, včetně **téže** hodnoty, a kurzor u #361 ležel 28 bodů od horní hrany, tedy
-  v hlavičce. Neopravovalo se to, protože oprava neověřené domněnky se pozná od opravy jedině tím,
-  že se změří.
+  (80 zašpinění grafu → `onHover` 0×, `onContinuousHover` 0×, kurzor přitom v okně ležel).
+- **Pod kurzorem přitom žádný náš zápis z hoveru nebyl.** 28 bodů od horní hrany okna je
+  `ContentView.header` s `ReviewTabsView` a tlačítky, a tam `onHover` **není** — jen `.help()`.
+  `PullRequestTabBar.swift:203` (jediné místo, které do hoveru píše bezpodmínečně, včetně **téže**
+  hodnoty) sedí **pod** hlavičkou, uvnitř detailu. Je to vada k opravě, ale #361 nevysvětluje.
+  Nejsilnější zbylá nitka je re-arm `NSHostingView.requestUpdate(after:)`, ke kterému se dostane
+  `signalPrefetch` a — ze zásobníku AppKitové výjimky při stavbě sondy — taky
+  `ViewGraph.invalidateTransform() → graphDidChange()`; transformaci si přitom v aplikaci vyžaduje
+  jedině čtení **pojmenovaného** souřadnicového prostoru v seznamu řádků. Ověřit to jde jen na živém
+  okně, takže se to neopravovalo: oprava neověřené domněnky se od opravy pozná jedině tím, že se změří.
 
 Vedle toho vyšly z sondy tři pasti, kvůli kterým měřila prázdno a tvrdila, že je čisto (velikost okna
 až za `contentViewController`em, předepsaný rozměr scény, PR do `ContentView` jen frontou) a dvě věci

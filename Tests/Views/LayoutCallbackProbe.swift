@@ -76,6 +76,9 @@ struct LayoutCallbackProbe {
     /// nedoručují pohyb myši aplikaci na pozadí, takže v testovacím hostu (vpředu je terminál)
     /// vyjde nula i nad kurzorem ležícím v okně. Sonda to **říká**, aby se nula nečetla jako
     /// „callback nechodí“.
+    ///
+    /// Zůstává tady schválně: `.onHover` je jediný z těch callbacků, u kterého se gatování pořád
+    /// jen předpokládá, a až se sonda pustí z aplikace vpředu, odpoví na to jedním číslem.
     @Test("Kolikrát se ozve onHover a onContinuousHover na jedno přerovnání")
     func hoverCallbackFrequency() throws {
         let mouse = NSEvent.mouseLocation

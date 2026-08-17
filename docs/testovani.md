@@ -3380,7 +3380,13 @@ nedoručují. Číslo „nula“ tedy o gatování hover callbacků **netvrdí n
 Zůstává z toho: **`.onHover` je jediný z těch callbacků, u kterého se pořád jen předpokládá, že chodí
 při změně** — a `PullRequestTabBar.swift:203` do něj píše bezpodmínečně
 (`hovered = $0 ? tab : (hovered == tab ? nil : hovered)` zapíše i **tutéž** hodnotu, což podle #358
-stačí). U #361 přitom kurzor ležel 28 bodů od horní hrany okna, tedy v hlavičce. Neověřeno.
+stačí). Je to vada k opravě, **ale #361 nevysvětluje**: ten pruh sedí **pod** hlavičkou, uvnitř
+detailu, kdežto 28 bodů od horní hrany okna je `ContentView.header` (vysoká 40 pt) s `ReviewTabsView`
+a tlačítky — a tam **žádný `onHover` není**, jen `.help()`, které si drží AppKit. Pod kurzorem tedy
+u #361 **žádný náš zápis z hoveru nebyl**, a v hover podstromu obou vzorků není ani jeden rámec
+aplikace. Kolo se tedy zavírá uvnitř SwiftUI a jediné, co z aplikace v transakci běží, je **výpočet
+hodnoty geometrie v pojmenovaném prostoru** (`frame(in: .named(DiffView.contentSpace))`, tři místa
+v seznamu řádků).
 
 **Scéna sama kolo nezavírá** (`Tests/Views/IdleDiffSpinProbe.swift`). Sonda hostuje okno
 **na obrazovce** ve stejném rozměru jako ta ztuhlá instance (1512×874) a čte CPU hlavního vlákna:
@@ -3424,11 +3430,21 @@ A dvě věci k mechanice sond obecně:
   z toho nevadí, ale vědět se to má.
 
 **Co zbývá:** dohledat, co graf špiní. Vylučovací práce hotová: animace, timer, vnější pohon, přeměření
-textu, náš `onContinuousHover`, akce `onGeometryChange` a scéna sama. Zůstávají dvě věci, které sonda
-nedosáhne — **`.onHover` v hlavičce okna** (viz výš) a **skutečné okno `WindowGroup`u vpředu se
-skutečným kurzorem**. Příští záchvat se proto vzorkuje **dřív, než se aplikace zavře**
-(`sample <pid> 5 -file …`) a k tomu se přečte, **kde ležel kurzor** (`swift mouse.swift`) — a když
-leží v hlavičce nad pruhem záložek, je to potvrzení té hypotézy.
+textu, náš `onContinuousHover`, akce `onGeometryChange`, hover zápis pod kurzorem a scéna sama.
+
+Nejsilnější zbylá nitka je **re-arm `NSHostingView.requestUpdate(after:)`**, ke kterému se ve vzorcích
+dostane `LazyLayoutViewCache.signalPrefetch()` — a při stavbě sondy se ukázal i druhý volající, ze
+zásobníku té AppKitové výjimky: `ViewGraph.invalidateTransform()` → `graphDidChange()`. Ta druhá cesta
+je zajímavá tím, že si o další kolo říká, když se **transformace během aktualizace grafu změnila** —
+a jediné, co v aplikaci transformace vyžaduje, je čtení **pojmenovaného** souřadnicového prostoru
+(`frame(in: .named(DiffView.contentSpace))` ve třech místech seznamu řádků). V sondě se to nechytlo,
+takže je to hypotéza; ověřit ji jde jedině na živém okně — dočasně přepnout ta čtení na `.local`
+a nechat okno stát hodiny.
+
+Příští záchvat se proto vzorkuje **dřív, než se aplikace zavře** (`sample <pid> 5 -file …`), přečte se
+u toho **kde ležel kurzor** (`swift mouse.swift`) a v podstromu `Update.dispatchActions()` se hledá
+**jakýkoli rámec aplikace** — jeho přítomnost nebo nepřítomnost rozhoduje, jestli se hledá dál v našem
+kódu, nebo v tom, co si SwiftUI plánuje samo.
 
 ### Jak změřit projíždění diffu, když se ho nedá dotknout (#252)
 

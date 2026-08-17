@@ -607,8 +607,8 @@ Zvlášť stojí za přečtení, než sáhneš na:
   `LayoutCallbackProbe`): akce `onGeometryChange` se při nezměněné hodnotě **nespustí** (80 zašpinění
   grafu → 80× výpočet hodnoty, **0× zápis**), takže těch šest míst v aplikaci grep hlídat nemusí.
   U **`.onHover` to ověřené není** — aplikace na pozadí hover callbacky nedostává, takže na to sonda
-  nedosáhne; jediné bezpodmínečné místo (`PullRequestTabBar`) a co k tomu zbývá doměřit je
-  v [`docs/testovani.md`](docs/testovani.md).
+  nedosáhne; jediné bezpodmínečné místo (`PullRequestTabBar`, píše i tutéž hodnotu) a co k tomu
+  zbývá doměřit je v [`docs/testovani.md`](docs/testovani.md).
 
   **Harness na to nestačí a je to změřené, ne odhad**: syntetická `.mouseMoved` do okna
   (`sendEvent` i `NSApp.postEvent`) `onContinuousHover` **nevyvolá vůbec** — nula zásahů —, takže
