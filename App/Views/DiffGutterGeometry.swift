@@ -83,6 +83,30 @@ struct DiffGutterGeometry {
     func line(atY y: Double) -> DiffBlockLineFrame? {
         frames.first { y >= $0.rect.minY && y < $0.rect.maxY }
     }
+
+    /// Buňka pod myší ve split pohledu — řádek a strana **jednou operací** (#358).
+    ///
+    /// Skládalo se to u volajícího ze dvou kroků (`line(atY:)` a `side(atX:)`) do tuplu, a tuple se
+    /// nedal porovnat se stávající hodnotou, takže hover psal do `@State` každé kolo. Odpovědí je
+    /// pojmenovaná `Equatable` hodnota, a ta patří k té geometrii, která ji umí spočítat: díky tomu
+    /// se dá bez okna otestovat, že **tentýž bod nad tímtéž blokem dá tutéž hodnotu** — což je
+    /// přesně to, na čem `Policy.hoverChange(from:to:)` stojí.
+    func hoveredCell(at point: CGPoint) -> HoveredCell? {
+        line(atY: point.y).map { HoveredCell(index: $0.index, side: side(atX: point.x)) }
+    }
+}
+
+/// Řádek a strana bloku pod myší ve split pohledu.
+///
+/// **`Equatable` je u tohohle typu podmínka, ne pohodlí** (#358). Do #358 to byl tuple
+/// `(index: Int, side: DiffSide)?` a tuple v Swiftu `Equatable` není — takže `.onContinuousHover`
+/// neměl jak poznat, že se myš nehnula, a zapisoval do `@State` při **každém** hover updatu. Tím se
+/// zavíralo kolo, ve kterém okno spálilo 99 % CPU; podrobnosti u `Policy.hoverChange(from:to:)`.
+struct HoveredCell: Equatable {
+    /// Pořadí řádku v bloku (`DiffBlockLineFrame.index`).
+    let index: Int
+    /// Která polovina split pohledu — komentář je vázaný na stranu diffu.
+    let side: DiffSide
 }
 
 /// Poloha bloku v prostoru obsahu diffu, držená **mimo observable stav**.

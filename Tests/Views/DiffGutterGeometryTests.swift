@@ -155,4 +155,42 @@ struct DiffGutterGeometryTests {
         #expect(rect == CGRect(x: 412.5, y: 1034, width: 84, height: 16))
         #expect(rect.contains(CGPoint(x: 420, y: 1040)))
     }
+
+    // MARK: - Buňka pod myší (#358)
+
+    /// Buňka se skládá **jednou operací**, a to je celý důvod, proč `hoveredCell(at:)` existuje:
+    /// dva kroky u volajícího končily v tuplu, který se nedal porovnat.
+    @Test("Buňka pod myší nese řádek podle `y` a stranu podle `x`")
+    func hoveredCellCombinesLineAndSide() {
+        let geometry = geometry(frames(count: 3, height: 16, top: 2), width: 800)
+
+        #expect(geometry.hoveredCell(at: CGPoint(x: 10, y: 20)) == HoveredCell(index: 1, side: .left))
+        #expect(geometry.hoveredCell(at: CGPoint(x: 600, y: 20)) == HoveredCell(index: 1, side: .right))
+        // Nad sloupcem s čísly a nad pilulkou hover drží — rozhoduje jen `y` (#98, #157).
+        #expect(geometry.hoveredCell(at: CGPoint(x: 0, y: 36)) == HoveredCell(index: 2, side: .left))
+    }
+
+    /// Mimo řádky není nic — ani nad prázdným blokem, který se ještě nerozložil.
+    @Test("Mimo řádky buňka není")
+    func hoveredCellIsEmptyOutsideRows() {
+        #expect(geometry(frames(count: 3, height: 16, top: 2)).hoveredCell(at: CGPoint(x: 10, y: 999)) == nil)
+        #expect(geometry([]).hoveredCell(at: CGPoint(x: 10, y: 10)) == nil)
+    }
+
+    /// **Na tomhle stojí oprava #358.** `Policy.hoverChange(from:to:)` umí zápis potlačit jedině
+    /// tehdy, když tentýž bod nad tímtéž blokem vydá **rovnou** hodnotu. Kdyby si buňka nesla cokoli
+    /// nestálého (identitu, čas, referenci), porovnání by nikdy nesedlo, zápis by proběhl každé kolo
+    /// a smyčka by se vrátila — přitom by všechny ostatní testy zůstaly zelené.
+    @Test("Tentýž bod dá tutéž hodnotu, takže se zápis dá potlačit")
+    func hoveredCellIsStableForTheSamePoint() {
+        let geometry = geometry(frames(count: 4, height: 16, top: 2), width: 800)
+        let point = CGPoint(x: 600, y: 36)
+
+        let first = geometry.hoveredCell(at: point)
+        let second = geometry.hoveredCell(at: point)
+
+        #expect(first != nil)
+        #expect(first == second)
+        #expect(Policy.hoverChange(from: first, to: second) == .unchanged)
+    }
 }

@@ -476,7 +476,7 @@ viz tvrdá podmínka č. 1.
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |
@@ -584,6 +584,29 @@ Zvlášť stojí za přečtení, než sáhneš na:
   Tři vzorky z jednoho dopoledne měly **dvě různé** signatury a vylučují se; sečtené by splynuly,
   protože `propagate_dirty` je v obou. Jak se poznají a proč z toho zbyla jedna oprava a jedno
   otevřené issue, je v [`docs/testovani.md`](docs/testovani.md).
+- **Zpětná vazba z každého snímku nesmí zapisovat do `@State` bezpodmínečně** (#358). `onContinuousHover`
+  dostane polohu i tehdy, když se myš **nehnula** — SwiftUI si hover update plánuje sám po každém
+  přerovnání obsahu. Bezpodmínečný zápis proto zavírá kolo přes runloop observer: zápis → neplatné
+  tělo → přeloží se všechny podviews líného seznamu → změní se geometrie responderů → další hover
+  update. Změřeno na ztuhlém okně: **1630 z 1690** vzorků `Update.dispatchActions()` bylo
+  v `EventBindingManager.enqueueHoverUpdateIfNeeded()` a hlavní vlákno stálo 99 % CPU **bez jakéhokoli
+  vnějšího pohonu** (nula vzorků na timeru i na hlavní dispatch frontě).
+
+  Rozhodnutí drží **`Policy.hoverChange(from:to:)`** a je na jednom místě schválně. Dvě věci, které
+  z toho plynou a nejsou zjevné: hodnota stavu **musí být `Equatable`** (do #358 to byl tuple, a ten
+  v Swiftu `Equatable` není, takže se porovnat nedal vůbec), a předat ji **nejde přes `inout`** —
+  `@State` je počítaná vlastnost, takže `&hovered` projde setterem i beze změny, a špiní právě setter.
+  Grep, který **musí vyjít prázdný** (ověřený i obráceně, na kopii s vrácenou regresí):
+
+  ```bash
+  grep -rn 'onContinuousHover' App | grep -vE ':[0-9]+: *//' | cut -d: -f1 | sort -u |
+      while read f; do grep -v '^ *//' "$f" | grep -q 'Policy.hoverChange' || echo "$f"; done
+  ```
+
+  **Harness na to nestačí a je to změřené, ne odhad**: syntetická `.mouseMoved` do okna
+  (`sendEvent` i `NSApp.postEvent`) `onContinuousHover` **nevyvolá vůbec** — nula zásahů —, takže
+  smyčku v testu zavřít nejde bez sebrání skutečné myši. Testuje se proto ta čistá funkce a hodnota,
+  kterou dostane; podrobnosti v [`docs/testovani.md`](docs/testovani.md).
 - **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236). Blok kódu si v `LazyVStack`u
   navrhuje výšku sám, takže když ji spočítá na jiné šířce, než na jaké se pak zalamuje, nakreslí víc
   řádků, než na kolik si řekl — a přeteče do řádku pod sebou (AppKitové view je nad SwiftUI obsahem,

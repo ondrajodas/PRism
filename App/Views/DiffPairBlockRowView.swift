@@ -20,7 +20,10 @@ struct DiffPairBlockRowView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var frames: [DiffBlockLineFrame] = []
     /// Řádek a strana pod myší — pilulka svítí jen tam.
-    @State private var hovered: (index: Int, side: DiffSide)?
+    ///
+    /// **Je to `HoveredCell`, ne tuple** (#358): tuple se nedá porovnat se stávající hodnotou, takže
+    /// se do tohohle stavu zapisovalo při každém hover updatu a okno se zacyklilo.
+    @State private var hovered: HoveredCell?
     /// Poloha bloku v prostoru obsahu diffu. Drží se **mimo observable stav** (`@State` na třídě,
     /// jejíž pole nikdo nesleduje), ze stejného důvodu jako `DiffRowFrames`: líný seznam si obsah
     /// přeměřuje průběžně, takže se při scrollování mění — a přestavovat kvůli tomu blok by
@@ -50,14 +53,17 @@ struct DiffPairBlockRowView: View {
         }
         // Strana se pozná z `x`: která polovina, ta strana. Svisle rozhoduje jen `y`, aby hover
         // držel i nad sloupcem s čísly a nad pilulkou (jinak zmizí pod rukou, viz #157 a #98).
+        //
+        // **Zapisuje se jedině při změně** (#358). `onContinuousHover` dostane polohu i tehdy, když
+        // se myš nehnula, takže bezpodmínečný zápis do `@State` zavíral kolo přes runloop observer
+        // a okno spálilo 99 % CPU. Rozhodnutí drží `Policy.hoverChange(from:to:)` — tam je i důvod,
+        // proč se hodnota vrací a neposílá se `inout`.
         .onContinuousHover { phase in
-            switch phase {
-            case .active(let point):
-                hovered = geometry.line(atY: point.y)
-                    .map { (index: $0.index, side: geometry.side(atX: point.x)) }
-            case .ended:
-                hovered = nil
+            let next: HoveredCell? = switch phase {
+            case .active(let point): geometry.hoveredCell(at: point)
+            case .ended: nil
             }
+            if case .write(let cell) = Policy.hoverChange(from: hovered, to: next) { hovered = cell }
         }
         // Menu bezpodmínečně, ať se nemění struktura view a nezruší se výběr — viz `DiffBlockRowView`.
         .contextMenu {

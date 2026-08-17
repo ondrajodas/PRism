@@ -2652,7 +2652,11 @@ uvnitř je 1630 z 1690 vzorků `Update.dispatchActions()` v `EventBindingManager
 `Equatable` není), takže se tělo bloku zašpiní, přestaví se rozvržení líného seznamu, změní se
 geometrie responderů — a hover update se naplánuje znovu. Reprodukce si žádá **split diff a kurzor
 ležící v okně**; to poslední je důvod, proč se to na vyžádání nedařilo (nečinnost s myší mimo blok
-kódu smyčku nezavře). Oprava má vlastní PR, ne tenhle.
+kódu smyčku nezavře).
+
+**Opraveno v #358**: hover se do `@State` zapisuje jedině při změně, rozhodnutí drží
+`Policy.hoverChange(from:to:)` a stav split pohledu je `HoveredCell` (`Equatable`), ne tuple.
+Podrobnosti u toho typu a v sekci `Policy` níž.
 
 **Co se tím taky neopravilo:** každá **událost průběhu review** (`ReviewProgress`) pořád zašpiní tělo
 `PullRequestDetailView` (čte `store.reviewProgress(for:)` a `runningReviewers(for:)` v hlavičce),
@@ -4627,6 +4631,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.disclosure(of:categories:toggled:)`, `Policy.disclosureKey(of:)` | Jak je nález u kódu rozbalený (#185): blokující rozbalený, ostatní značka, odmítnutý nikdy — a čím se místo klíčuje |
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` i s **cenou** z uloženého běhu |
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
+| `Policy.hoverChange(from:to:)` | Jestli se hover má zapsat do `@State`, nebo se stav **nechá být** (#358). Generické nad `Equatable`, takže platí pro `HoveredCell?` (split) i `Int?` (pod sebou) — jedna podmínka, ne dvě kopie. Vrací hodnotu, **ne `inout`**: `@State` je počítaná vlastnost, takže `&hovered` by prošlo setterem i beze změny, a špiní právě setter |
 | `Policy.reviewPromptTemplate(from:)`, `.reviewPromptProblems(in:)`, `.reviewPromptBody(template:skillID:baseSha:)`, `.reviewPromptCore(intentPath:)`, `.reviewPrompt(template:skillID:baseSha:intent:)` | Prompt review ze šablony v nastavení (#281, `ReviewPromptTemplate`): prázdná šablona → výchozí, chybějící zástupný text → `Problem`, dosazení hodnot a **vždycky připojené jádro** — od #120 i s větou o souboru se zadáním. Skládá to **jedno místo**, protože týž text potřebuje běh, `Zkopírovat příkaz` i náhled v nastavení |
 | `Policy.intentLinks(in:)`, `.intentBrief(of:description:links:)` | Zadání pro reviewera (#120, `ReviewIntent`): odkazy na Linear issue z cizího textu (dedup podle identifikátoru, pořadí prvního výskytu) a soubor v Markdownu, který se z nich složí. `nil` = nebylo co uložit |
 | `Policy.reviewTimeout(minutes:)`, `.reviewTimeoutMinutes(from:)`, `.reviewTimeoutProblem(in:)` | Časový limit běhu z nastavení (#320, `ReviewTimeout`): sražení do mezí 5–60 min a pojmenování hodnoty, která je mimo ně. **Jediné místo, kde se sráží** — pole v nastavení, globální hodnota i override per repo mluví o týchž mezích |

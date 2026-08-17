@@ -2432,5 +2432,46 @@ zůstávají dvě věci, obě změřené: zašpinění těla detailu událostí 
 která je jako **#358** a s doměřenou příčinou (hover, viz výš). Na to zašpinění těla detailu
 událostí průběhu vlastní issue zatím není.
 
+### #358 — druhá příčina tuhnutí: hover si sám plánoval další kolo
+
+Zbylá příčina z #350. Zadání ji mělo popsanou z vzorků, ale **chybělo v něm to jediné, na čem
+oprava mohla stát: co ten graf pokaždé zašpiní.** Reprodukovat se to na vyžádání nedařilo (PR se
+třemi a čtyřmi soubory, přepnutí na `Změněné soubory`, projetí diffu, nečinnost → `%cpu` 0,0),
+takže se nejdřív musela najít reprodukce a teprve pak psát kód.
+
+**Reprodukce má tři složky a ta třetí je celé vysvětlení, proč to dřív nešlo:** split (side-by-side)
+diff, velký diff, a **kurzor ležící v okně nad blokem kódu**. „Nečinnost“ v neúspěšných pokusech
+znamenala nechat myš tam, kde skončila — a bez hover responderu se kolo nemá čím zavřít. Ověřeno na
+živém ztuhlém okně přes `NSEvent.mouseLocation` a `CGWindowListCopyWindowInfo`: ukazatel byl uvnitř
+rámce okna. Velikost diffu kolo jen **zdraží** (jedno kolo je průchod celým `ForEach`em), nezpůsobí.
+
+**Co graf špiní.** Ve vzorku (30 s po 1 ms, 23 653 vzorků hlavního vlákna) leží 92,8 % v jedné
+transakci a **žádný jiný callout tam není**: nula na timeru, nula na hlavní dispatch frontě, nula na
+obsluze událostí — smyčku tedy nekrmí nic zvenčí. Uvnitř je 1630 z 1690 vzorků
+`Update.dispatchActions()` v `EventBindingManager.enqueueHoverUpdateIfNeeded()` →
+`NSHostingView.didRequestHoverUpdate()` a přes `HoverResponder.updatePhase(_:)` se z něj volá
+`.onContinuousHover` v `DiffPairBlockRowView`. Ta akce zapsala `@State hovered` **bez porovnání se
+stávající hodnotou**, takže: zápis → neplatné tělo bloku → neplatné `LazySubviewPlacements` →
+přeloží se všechny podviews → změní se geometrie responderů → další hover update. Odtud i ty listy
+ze zadání (`FileDiff.id`, `DiffRow.id`) — nejsou příčina, jsou průchod.
+
+**Tuple byl polovina problému.** Stav byl `(index: Int, side: DiffSide)?` a tuple v Swiftu
+`Equatable` **není**, takže „zapiš jen při změně“ se tam nedalo napsat ani kdyby na to někdo přišel.
+Je z něj proto `HoveredCell`, a rozhodnutí drží `Policy.hoverChange(from:to:)` — generické nad
+`Equatable`, takže je jedno pro split (`HoveredCell?`) i pro pohled pod sebou (`Int?`). Předat se to
+**nedá `inout`**: `@State` je počítaná vlastnost, takže `&hovered` projde setterem i beze změny, a
+špiní právě setter.
+
+**Sonda se zahodila, a je to změřené rozhodnutí.** Syntetická `.mouseMoved` do okna (`sendEvent`
+i `NSApp.postEvent`) `onContinuousHover` **nevyvolá vůbec** — nula zásahů, SwiftUI hover řeší
+z tracking areas a skutečné polohy kurzoru. První podoba sondy proto tvrdila 0 % CPU i nad buildem
+s **vrácenou regresí**, tedy přesně ta vada, na kterou si `docs/testovani.md` stěžuje u kontrol
+nespuštěných ve výjimečném stavu. Testuje se místo toho čistá funkce a hodnota, kterou dostane;
+vložením regrese padá **6 tvrzení ve dvou sadách**. Celý zápis včetně tabulky pokusů je
+v [`testovani.md`](testovani.md).
+
+Testů je **2812** a jsou zelené. **Vidět je totéž co dřív** — pilulka na komentář svítí u řádku pod
+myší a mění stranu podle poloviny; co se změnilo, je že okno u toho nespálí procesor.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
