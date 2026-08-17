@@ -2029,7 +2029,8 @@ tři zelené běhy, na kterých ten návrh stál, byly shoda. Změřeno naopak, 
 `maxY = 84 006`) a **beze změny v aplikaci**. V aplikaci je totiž ten stav nedosažitelný: styl
 scrollerů je usazený dávno předtím, než se dá otevřít detail checku.
 
-Opraveno tedy **v testu** (`awaitSettledScrollerStyle()`), aplikace zůstala nedotčená. Zamítnuto i
+Opraveno tedy **v testu** (`TestWait.awaitSettledScrollerStyle()`; u #343 to byla ještě privátní
+metoda `LogTailOpeningTests`, do `TestWait` se to svedlo u #347), aplikace zůstala nedotčená. Zamítnuto i
 čekat na „konec je vidět“ místo na `origin.y > 0`: bez změny v aplikaci to dojede na 120s strop a celý
 běh má **184 issues**, protože pumpování smyčky vyhladoví `MainActor`.
 
@@ -2303,7 +2304,7 @@ offscreen renderem před a po (`CheckLogRoomProbe` i nový dump okýnka pod `PRI
 u toho zůstává, že v renderu celého tabu ta chyba **vidět není**: scrollery se v testovacím procesu
 usadí obvykle na `overlay`, kde je rezerva čisté odsazení — proto ten dump vynucuje `legacy`.
 
-Vedle toho se `awaitSettledScrollerStyle()` (#343) přestěhoval z privátní metody
+Vedle toho se `TestWait.awaitSettledScrollerStyle()` (#343) přestěhoval z privátní metody
 `LogTailOpeningTests` do **`TestWait`**, protože ho potřebuje i nová sada a čekání má v tomhle repu
 jedno místo (#296).
 

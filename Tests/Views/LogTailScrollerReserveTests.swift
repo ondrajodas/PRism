@@ -97,7 +97,8 @@ struct LogTailScrollerReserveTests {
             visible >= textView.frame.height - 0.5,
             """
             okýnko o \(asked) bodech ukáže \(visible) z dokumentu o \(textView.frame.height) \
-            — chybí \(textView.frame.height - visible) bodů, tedy se \(lines). řádek neveje
+            (\(lines) řádků) — chybí \(textView.frame.height - visible) bodů, takže se log, \
+            na který si okýnko řeklo, do něj celý nevejde
             """
         )
         // Vejde-li se dokument celý, není proč scrollovat — a svislý scroller u logu, který se vejde,

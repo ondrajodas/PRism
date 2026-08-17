@@ -18,7 +18,7 @@ import Testing
 ///
 /// **Styl scrollerů se musí nechat usadit dřív, než se okýnko postaví** (#343) — jinak je z téhle
 /// sady flake, a je to změřené: `main` 6× ze 6 zeleně, větev #339 jen 4× ze 7, pokaždé na týchž
-/// číslech. Rozbor je u `awaitSettledScrollerStyle()`.
+/// číslech. Rozbor je u `TestWait.awaitSettledScrollerStyle()`.
 @MainActor
 @Suite("Otevření konce logu")
 struct LogTailOpeningTests {
