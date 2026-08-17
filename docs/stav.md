@@ -2555,8 +2555,8 @@ tlačítka **nekreslí**. Co tam zbylo z dřívějška, se ale **nezahazuje** �
 `Zadání` i v bublinách diffu a jde smazat.
 
 **Tvrdá podmínka č. 1 se nemění a od téhle změny na ni je test** (`SingleWayOutTests`): čte zdrojáky
-a tvrdí pět souborů u `ReviewPublishing`, čtyři metody protokolu a že ani jeden ze sedmi souborů
-zadání nezná publisher, payload, API ani podproces. Prompt končí ve schránce nebo v souboru, který
+a tvrdí pět souborů u `ReviewPublishing`, čtyři metody protokolu a že ani jeden ze souborů zadání
+nezná publisher, payload, API ani podproces. Prompt končí ve schránce nebo v souboru, který
 vybere člověk v `NSSavePanel`u — a selhání zápisu se **ukáže**, protože po zavření sheetu se text
 nemá kde vzít znovu.
 

@@ -107,9 +107,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 
   **Tvrdá podmínka č. 1 má od #333 test, ne jen grep** (`SingleWayOutTests`). Čte zdrojáky v `App/`
   (komentáře zahazuje stejně jako grep v `CLAUDE.md`) a tvrdí čtyři věci: `ReviewPublishing` zná
-  **právě pět souborů**, protokol má **čtyři metody**, žádný ze sedmi souborů zadání nezná publisher,
-  payload, API ani `Process(`, a mimo úložiště zapisuje soubor **jen** `TextFileExport` přes
-  `NSSavePanel`. Je to test o struktuře kódu, protože „odkud se dá odeslat“ se za běhu zjistit nedá.
+  **právě pět souborů**, protokol má **čtyři metody**, **žádný** ze souborů zadání (jejich počet je
+  v tvrzení, ať novým souborem téhle vrstvy neprojde výjimka) nezná publisher, payload, API ani
+  `Process(`, a mimo úložiště zapisuje soubor **jen** `TextFileExport` přes `NSSavePanel`. Je to test
+  o struktuře kódu, protože „odkud se dá odeslat“ se za běhu zjistit nedá. **Počty jsou jen v testu**
+  — opsané v dokumentaci by se rozešly hned prvním přidaným souborem (chytil to Copilot na #333).
 
   **Ověřeno vložením regrese, dvakrát:** vyhození `.mine` z `canComposeDraft` shodí tři testy store
   (mezi nimi ten o velikosti písmen, takže je vidět, že brána chodí přes `Policy.ownership`)

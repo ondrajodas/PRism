@@ -17,7 +17,9 @@ import Testing
 /// `NSHostingView`, ne `ImageRenderer`: obsah `ScrollView`u se offscreen nerasterizuje, a panel je
 /// celý ve `ScrollView`u. Tatáž cesta jako u ostatních sond, viz `docs/testovani.md`.
 ///
-/// **Pouští se ručně**: `PRISM_MEASURE=1`, cesta ven přes `PRISM_RENDER_DIR`.
+/// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes `TEST_RUNNER_PRISM_RENDER_DIR`
+/// — `xcodebuild` posílá do testovacího procesu jen proměnné s tou předponou a **bez ní se sonda
+/// tiše přeskočí** (vypadá to jako zelený běh, ve kterém nic nevzniklo).
 @MainActor
 @Suite(
     "Sonda zadání pro agenta (#333)",
