@@ -2293,7 +2293,7 @@ běžely na stroji čtyři dny.
 - **Nezachytí to všechno**, a je to tak zamýšlené: pád aplikace ani zabití zvenčí takhle
   odchytit nejde. Dotažení nálezů z transcriptu (#97) je pro ně ta drahá varianta — a od #264
   slouží **oběma** cestám, protože zavření aplikace je pro běh totéž jako pád.
-- **Zabitá session po zabité aplikaci se uklidí až při dalším startu** (#351). Nálezy dotahuje
+- **Session, která zabitou aplikaci přežila, se uklidí až při dalším startu** (#351). Nálezy dotahuje
   transcript (#97), ale sám `claude -p` běží dál pod `launchd` a počítá tokeny — tomu se
   z běžícího procesu, který zmizel, zabránit nedá (prevence na macOS neexistuje, změřeno).
   `AppDelegate.applicationDidFinishLaunching` proto sirotky dohledá a zabije; jak, je v sekci
