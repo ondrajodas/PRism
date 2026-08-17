@@ -2130,9 +2130,15 @@ už u #277 — není v repu, v `Artifact`u ani ve výpisu artifactů —, přito
 jako povinný parametr. Ikonka v tabu je součást identity stránky zrovna jako titulek, a ten
 zapsaný byl.
 
-Testů je **2710** a jsou zelené; na tomhle issue se v aplikaci nemění nic, takže žádný nepřibyl.
-Shoda se ověřila **obrázkem vedle obrázku**: sekce 02 a 03 vyříznuté a vyrenderované headless
-Chromem proti renderu `OverviewRenderProbe` a `FindingActionColourProbe` z běžící hierarchie.
+Testů je **2716** a jsou zelené; na tomhle issue se v aplikaci nemění nic, takže žádný nepřibyl.
+Shoda se ověřila **obrázkem vedle obrázku**: sekce 02, 03 a 19 vyříznuté a vyrenderované headless
+Chromem proti renderu `OverviewRenderProbe`, `FindingActionColourProbe` a `CommitsTabRenderProbe`
+z běžící hierarchie. A **jedna vada se ukázala až na renderu celého dokumentu** — osiřelá patička
+mimo `.doc-page`, kterou ve výřezu jedné sekce nebylo jak vidět.
+
+Že se v publikované kopii nezměnilo nic dalšího, je ověřené **diffem stažené stránky**: před
+publikováním byla bajt na bajt shodná s `main`, po něm s tímhle commitem, a diff „před × po“
+obsahuje jen změny vypsané výš.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
