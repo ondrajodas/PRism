@@ -2161,6 +2161,41 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   („zůstalo na začátku ocasu“ a „poslední řádek není vidět“). Tvrzení o vodorovné nule s tou regresí
   **projde**, a je to tak správně — hlídá jinou chybu (`x` u konce nejdelšího řádku).
 
+  **Styl scrollerů se musí nechat usadit dřív, než se okýnko postaví** (#343,
+  `awaitSettledScrollerStyle()`) — bez toho je z téhle sady **flake**, a je to změřené:
+  `NSScroller.preferredScrollerStyle` je po startu procesu chvíli `overlay` (`1`) a teprve za pár kol
+  smyčky se doresolvuje na `legacy` (`0`), který **místo doopravdy zabírá**. Když ta změna přijde až
+  *po* dosazení cíle skoku, viewport se zmenší (`clip.h` **441 → 424**, tedy 17 bodů) a `origin.y` už
+  nikdo nepřerovná: okýnko zůstane **o jednu řádku** nad koncem (`maxY` 84 006 → 83 989 proti
+  poslednímu řádku na 84 002). Když se styl nechá usadit předem, je poloha správná **od nultého kola**
+  (`origin.y = 83 582`) — a **beze změny v aplikaci**.
+
+  Proč to takhle: rozhodovalo, kdo tu chybu má. **Je to artefakt harnessu, ne vada aplikace** — v
+  aplikaci je styl scrollerů usazený dávno předtím, než se dá otevřít detail checku, takže se
+  `jumpToEnd` nikdy nepočítá z výšky, která se mu pod rukama změní. Zadání #343 to popisovalo jako
+  vadu aplikace a chtělo **dosadit cíl dvakrát**; zamítnuto po měření: obě kola běží v témže průchodu,
+  tedy pořád před doresolvováním stylu, takže na měřeném stavu nemění nic — tři zelené běhy, na
+  kterých ten návrh stál, byly shoda daná tím, které suity zrovna běžely v tom startovacím okně.
+  Zamítnuto i **čekat na „konec je vidět“** místo na `origin.y > 0`: bez změny v aplikaci to dojede
+  na 120s strop a celý běh má **184 issues**, protože pumpování smyčky vyhladoví `MainActor`.
+
+  Jak se to poznalo, ať se to nemusí hledat znovu: pády byly **pokaždé na týchž číslech**, což je
+  známka skutečného stavu, ne zátěže — a zátěž se vylučovala měřením proti `main` (6× ze 6 zeleně
+  proti 4× ze 7 na větvi #339, kde ten diff jen posunul, které suity běží v tom okně). Příčinu pak dal
+  **výpis `clip.h`, `origin.y` a `preferredScrollerStyle` po kolech smyčky**; z pádu samotného se
+  vyčíst nedala.
+
+  Regrese po #343 ověřená znovu, a **deterministicky**: cíl spočítaný ze zastaralé výšky viewportu
+  (`- 17`) položí tvrzení o posledním řádku na téže signatuře jako původní flake (`83 989` proti
+  `84 001`), tedy sada dál chytá to, kvůli čemu #303 vznikl.
+
+  A **když se styl neusadí do stropu, sada to řekne** — `Issue.record` s poslední přečtenou hodnotou,
+  ne tiché pokračování (nález Copilota na #344). Bez toho by se návrat toho flaku projevil jako pád
+  tvrzení o posledním řádku, tedy přesně tou nevysvětlitelnou podobou, kterou #343 rozmotávalo.
+  **Vyzkoušeno spuštěním v tom výjimečném stavu** (strop stažený na 1 ms) — hlásí
+  `Nedočkalo se: styl scrollerů se neusadil (…, poslední hodnota 0)` a padne na místě volání, ne
+  o třicet řádků níž; jinak by „nic nevypsalo“ bylo k nerozeznání od „funguje“.
+
 - **Sonda místa pro konec logu (#303)** — `CheckLogRoomProbe`, gated `PRISM_MEASURE`. Nic netvrdí;
   odpovídá na otázku „kolik po vyšším okýnku zbude na seznam checků“, a to **měřením v hierarchii**,
   ne odhadem: v rendrovaném tabu najde `NSScrollView` viewportu i okýnko logu (pozná se podle
@@ -2405,6 +2440,14 @@ spustit a posbírat do 10 s.
 okýnka tím, že doopravdy pustí `RunLoop` — `waitUntil` by tam nepomohl, protože okýnko se rozloží
 jedině tak, že smyčka poběží. Strop si ale bere z `TestWait.deadline`: do #296 tam bylo 40 kol po
 50 ms („o dva řády víc, než co se čeká“), a dva řády nestačí, když je změřené zpoždění stonásobné.
+
+**A někdy se nečeká na vlastní jev, ale na to, aby se usadilo prostředí** (#343). Kdo staví AppKitovou
+hierarchii, musí počítat s tím, že **proces po startu ještě není usazený**: `NSScroller.preferredScrollerStyle`
+se doresolvuje z `overlay` na `legacy` až za pár kol smyčky, a legacy scroller mění výšku viewportu.
+Test, který si hierarchii postaví dřív, měří jiné rozměry než test, který běží o dvě sekundy později —
+a vyjde z toho flake, který se **pozná od zátěže tím, že padá pokaždé na týchž číslech**. Léčba je
+nechat tu vlastnost usadit **před** stavbou hierarchie (`awaitSettledScrollerStyle()`), ne stropovat
+čekání na výsledek; podrobnosti u sady výš.
 
 **Ověřeno vložením regrese, čtyřmi:** vyndaný `requestKill()` v `SubprocessRunneru` (spadne
 `RealEnvironmentTests` — „proces po zrušení pořád běží“), vyndaný `requestKill()` v

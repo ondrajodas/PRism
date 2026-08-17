@@ -1042,6 +1042,7 @@ zastaral hned další verzí.
 - [`docs/testovani.md`](docs/testovani.md) — co se u které oblasti testuje a proč zrovna to
 - [`docs/stav.md`](docs/stav.md) — co je hotové a co zbývá
 - [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md) — jak se vyřizuje seznam issues naráz
+  a jak vypadá milník na větší objem práce
 
 ## Jak to funguje
 
@@ -1492,7 +1493,7 @@ docs/testovani.md         co se u které oblasti testuje
 docs/navrh.html           vizuální návrh (mockup) — zdroj, artifact je publikovaná kopie
 docs/navrh.md             jak se s mockupem pracuje (čtení, aktualizace, schvalování)
 docs/stav.md              co je hotové a co zbývá
-docs/paralelni-vyvoj.md   jak se vyřizuje seznam issues naráz — sloty, subagenti, merge
+docs/paralelni-vyvoj.md   jak se vyřizuje seznam issues naráz — sloty, subagenti, milníky, merge
 docs/claude-cli.md        ověřené chování claude CLI (flagy, tvar eventů)
 docs/github-review-api.md ověřené chování zápisového review API GitHubu (spike k M6)
 docs/superpowers/specs/   návrh a specifikace
