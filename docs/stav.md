@@ -2345,5 +2345,92 @@ se **živým** vlastníkem — zůstala běžet a její značka v souboru taky. 
 (dva paralelní agenti, uživatelovy session) se u toho nedotkl žádný: nejstarší běží dál deset dní.
 A PID přitom během měření **přetekl** z 99902 na 201, což je doklad, že recyklace čísel není teorie.
 
+### #350 — okno tuhlo při běžícím review, a byla to jedenáctibodová animace (jedna příčina ze dvou)
+
+Hlavní aplikace se třikrát za jedno dopoledne dostala do stavu, ve kterém hlavní vlákno viselo na
+**83–100 % CPU**, okno reagovalo se zpožděním a `bin/run.sh` na něm padal na `-1712`, protože Apple
+event na ukončení nedostal odpověď. U prvních dvou spadlo CPU k nule v okamžiku, kdy dojela poslední
+`claude` session; **u třetího neběželo nic** (98,6 % a nula potomků), což je ta nesrovnalost, ze
+které nakonec vyšlo, že příčiny jsou dvě.
+
+**Hypotéza v zadání byla mimo, a to o dva řády.** Vypadalo to na události průběhu review: každá
+zašpiní tělo `PullRequestDetailView` (hlavička čte `reviewProgress(for:)`), takže se přepočítá pruh
+záložek se všemi odznaky a přestaví se obsah tabu. Cena je změřená — **9–55 ms na událost** podle
+toho, co je v okně vidět —, jenže **frekvence je 0,07 až 0,37 události za sekundu** (změřeno na
+145 transcriptech skutečných běhů PRismu v `~/.claude/projects/`), tedy nejvýš dvě procenta
+procesoru. Navíc se u toho ukázalo, že cena je v **zašpinění těla**, ne v té práci: zápis do
+`reviewPhases`, který s časovou osou nedělá nic, stojí přesně tolik.
+
+**Příčina byla ve `sample`u, jen se z něj musel číst podíl místo vrcholů zásobníku.** U druhého
+tuhnutí mělo hlavní vlákno 3709 vzorků a **3599 z nich** (97 %) leželo pod
+`NSDisplayCycleFlush → NSHostingView.layout()` — tedy v rozvržení, které se opakuje samo, **bez
+jediného rámce aplikace**. Vinen byl `SpinningRing`, jedenáctibodový prstýnek „review běží“ v pruhu
+záložek (#180), který se točil `withAnimation(.linear.repeatForever)`. Nekonečná animace ve SwiftUI
+si vyžádá průchod při každém obtažení obrazovky a ten jde přes `NSHostingView.layout()`, které
+rozvrhne **celé okno — a dvakrát**: jednou pro kresbu, jednou pro `minSize` do constraints
+(půl na půl, 1378 proti 1374 vzorkům).
+
+Sonda `IdleWindowSpinProbe` to reprodukovala v harnessu, u nečinného okna s otevřeným PR:
+**99 % CPU** s prstýnkem ve SwiftUI, **2–3 %** po převedení na CoreAnimation — tedy přesně tolik,
+kolik stojí totéž okno **bez prstýnku**, takže z ceny nezbylo nic. Klíčový je u toho čtvrtý případ:
+**prstýnek sám, bez detailu v okně, stojí 3 % místo 99** — cena tedy není v tom prvku, ale v tom, co
+je vedle něj v okně. Proto to nezáviselo ani na počtu běžících session, ani na tom, který tab byl
+otevřený.
+
+**Tři vzorky ze zadání ale mají dvě různé signatury, ne jednu, a tohle je právě to zjištění, které
+z rozdělané práce po předchozí session zbývalo dodělat.** Rozhoduje **kořen** cesty, ne listy:
+
+| Vzorek | Kořen 100 % vzorků hlavního vlákna | Co v něm je | Vysvětluje ho |
+|---|---|---|---|
+| 2 (computed properties detailu) | `NSDisplayCycleFlush → NSHostingView.layout()` (3591) + `NSAnimationContext.runAnimationGroup` (1754) | takt překreslování obrazovky | **prstýnek** — opraveno tady |
+| 1 (osa konverzace) a 3 (diff) | `NSRunLoop.flushObservers → NSHostingView.beginTransaction → GraphHost.flushTransactions` (3663/3663, resp. 3679/3679), **display cycle nula, `runAnimationGroup` nula** | rozvržení líného seznamu (`LazySubviewPlacements`, `ScrollViewLayoutComputer.Engine.sizeThatFits`) | **jiná příčina** — #358 |
+
+Že to nejsou dva pohledy na jedno, je **ověřené vložením regrese, ne úsudkem**: nad buildem
+s vrácenou SwiftUI animací vyšel `sample` testovacího hosta zase na `NSDisplayCycleFlush`
+(144 z 976) a `runAnimationGroup` (127), kdežto `flushObservers` v něm byl **nula**. Prstýnek tedy
+signaturu vzorků 1 a 3 **neumí vyrobit**. A u vzorku 3 nebyl vůbec na obrazovce — pruh záložek ho
+kreslí jedině při `isRunning`, což je `reviewTasks[pr] != nil`, a v tom vzorku neběžela žádná
+session.
+
+**Ta druhá příčina se nepřibalila** a je to schválně (pravidlo o jedné změně v jednom PR i o měření
+před/po) — je z ní **#358**. Co se o ní ví: cena je v tom, že `ScrollView` počítá **ideální
+velikost**, což donutí líný seznam projít `_LazyLayout_Subviews.apply` přes **celý** `ForEach`, a
+děje se to při každém průchodu smyčky.
+
+**Co graf špiní, se doměřilo na živém ztuhlém okně**, až když se to podařilo reprodukovat — je to
+**hover**. Ve vzorku (30 s po 1 ms, 23 653 vzorků hlavního vlákna) leží 92,8 % v jedné transakci a
+**žádný jiný callout tam není**: nula vzorků na timeru, nula na hlavní dispatch frontě, nula na
+obsluze událostí, takže smyčku nekrmí nic zvenčí. Uvnitř je 1630 z 1690 vzorků
+`Update.dispatchActions()` v `EventBindingManager.enqueueHoverUpdateIfNeeded()` →
+`NSHostingView.didRequestHoverUpdate()` a přes `HoverResponder.updatePhase(_:)` se z něj volá
+`.onContinuousHover` v `DiffPairBlockRowView`. Ta akce zapíše `@State hovered` **bez porovnání se
+stávající hodnotou** — a je to `(index: Int, side: DiffSide)?`, tedy tuple, který v Swiftu
+`Equatable` **není**, takže na něm nemůže zabrat ani žádné porovnání výš. Tím se kolo zavře: zápis →
+neplatné tělo bloku → neplatné `LazySubviewPlacements` → přeloží se všechny podviews → změní se
+geometrie responderů → další hover update. Druhý, slabší re-arm je
+`LazyLayoutViewCache.signalPrefetch()` → `NSHostingView.requestUpdate(after:)` (55 vzorků).
+
+**Proč se to nedařilo reprodukovat:** chyběl **kurzor ležící v okně nad blokem kódu** (ověřeno na
+živém stavu přes `NSEvent.mouseLocation` a `CGWindowListCopyWindowInfo`). Pokusy byly „otevřený PR se
+třemi a čtyřmi soubory, přepnutí na `Změněné soubory`, projetí diffu, nečinnost“ → `%cpu` **0,0** —
+a „nečinnost“ znamenala nechat myš tam, kde skončila. Bez hover responderu se smyčka nemá čím zavřít.
+Podmínkou je **split diff** (`DiffPairBlockRowView`, tedy tuple stav); velký diff kolo jen zdraží,
+neschová. A **běžící review je zhoršovák, ne podmínka**: doloženo tím, že potomek `claude` během
+sledování skončil a okno zůstalo minutu dál na **98,2–100,5 %** CPU bez potomků.
+
+Prstýnek je od #350 `SpinningRingView` — `NSView` se dvěma `CAShapeLayer`y a `CABasicAnimation` na
+`transform.rotation.z`. Kresba je změřená na pixelech (oblouk 0,35 kruhu = 0,30 ze `strokeEnd` plus
+kulaté zakončení tahu, tichý kruh 0,65) a otáčení na prezentační vrstvě (~1,4 rad za 0,2 s, tedy
+jedna otáčka za 0,9 s). `ProgressView` v kapslích reviewerů zůstává — na macOS ho animuje AppKit,
+takže do téhle pasti nepadá (3 %).
+
+Z toho je nové pravidlo v `CLAUDE.md` i grep, který musí vyjít prázdný. Testů je **2803**; vidět je
+totéž co dřív — kresba se ověřila na skutečném okně, tedy zvětšeným výřezem pruhu záložek z pěti
+snímků po 0,7 s, na kterých sytý oblouk objíždí kruh po směru hodin. **Nepřibalené a otevřené**
+zůstávají dvě věci, obě změřené: zašpinění těla detailu událostí průběhu (9–55 ms na událost při
+0,07–0,37 události za sekundu, tedy nejvýš 2 % CPU) a **druhá příčina tuhnutí** z tabulky výš,
+která je jako **#358** a s doměřenou příčinou (hover, viz výš). Na to zašpinění těla detailu
+událostí průběhu vlastní issue zatím není.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

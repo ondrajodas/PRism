@@ -362,6 +362,22 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   umělo zahodit rozepsanou práci jedním kliknutím na křížek. Past při jeho psaní: draft nevznikne
   bez známé hlavy PR, takže se musí napřed dotáhnout detail; první verze testu selhala už na
   přípravě a vypadalo to jako chyba v zavírání.
+- **Prstýnek běžícího review (#350)** — `SpinningRingTests`. Ptá se na jedinou věc, a je to
+  ta nejcennější podoba testu: **že se prstýnek točí v CoreAnimation, a ne ve SwiftUI.** Kontroluje
+  se to dvěma tvrzeními naráz — v hostované hierarchii **je** `SpinningRingView` (tedy AppKitová
+  vrstva, ne SwiftUI kresba) a na jeho oblouku **visí** animace pod známým klíčem. Kdyby se ptalo jen
+  na to druhé, prošla by i verze, která si vedle CoreAnimation nechá `repeatForever`. Měřit místo
+  toho CPU nejde: strojově závislé číslo by z toho udělalo test padající bez chyby v kódu — na to je
+  gated sonda `IdleWindowSpinProbe`. Vypnutý pohyb v systému se zkouší na `SpinningRingView`
+  napřímo, protože `accessibilityReduceMotion` je v `EnvironmentValues` jen ke čtení a v testu se
+  nedá nastavit. Ověřeno **vložením regrese**: po návratu k `withAnimation(.repeatForever)` test
+  spadl na tom, že v hierarchii žádné `SpinningRingView` není.
+
+  Druhé dva testy hlídají to, co ve SwiftUI bylo zdarma a s přepisem do AppKitu se musí obsloužit
+  ručně: **změna systémového akcentu** (posílá se notifikace, tvrdí se na barvě oblouku — příznaky
+  překreslení bez okna na obrazovce nedrží, takže by z nich byl test padající nad správným kódem)
+  a **jiná šířka tahu** (musí si vyžádat rozvržení, protože cesta je o půl tahu zúžená dovnitř).
+  Obojí ověřeno vložením regrese — bez pozorovatele, resp. bez `needsLayout`, padnou.
 - **Cyklení pruhem `⌃Tab` (#245)** — dvě sady. V `Policy` **vyčerpávající výčet** nad `openTabs`:
   oba směry z každé záložky pruhu, obě obtočení (za poslední je domácí, před domácí poslední),
   jediná záložka nevede nikam a aktivní záložka mimo pruh taky ne. K nim invariant „krok tam
@@ -3041,7 +3057,10 @@ falešná obrazovka.
 ## Jak změřit, že okno netuhne (#220)
 
 Měřicí harness je `Tests/Diff/DiffPerformanceMeasurement.swift` a **v běžném běhu se nepouští** —
-je za přepínačem:
+je za přepínačem. Za tímtéž přepínačem stojí i `Tests/Views/DetailProgressMeasurement.swift` (co
+stojí jedna událost průběhu review v otevřeném detailu, #350) a `Tests/Views/IdleWindowSpinProbe.swift`
+(kolik CPU sežere okno, ve kterém se **nic nemění**, #350) — obojí se pouští stejně, jen s jiným
+`-only-testing`:
 
 ```bash
 TEST_RUNNER_PRISM_MEASURE=1 xcodebuild -project PRism.xcodeproj -scheme PRism \
@@ -3132,6 +3151,154 @@ příští session znovu — u #153 to byly tyhle tři:
 | Word-diff se počítá při každém umístění prvku | Počítá se za stráží na podpis obsahu v `DiffTextView.show(…)`; naměřeno **18 %** ceny skládání bloku v nejhorším případě (samé dvojice), na skutečném diffu méně |
 | `WordDiff.Spans` se dostalo do hodnoty, kterou SwiftUI kopíruje | `DiffPairBlockView` nemá o pole víc než před #153; spany drží `DiffTextView`, což je `NSView`, ne struktura view |
 | Nekonečná smyčka rozvržení, kterou #153 rozjelo | Tuhnutí se reprodukovalo **projížděním** velkého diffu vedle sebe a po zastavení scrollu se ustálí; na mainu se chová stejně |
+
+### Ve `sample`u se čte podíl, ne jen vrcholy zásobníku (#350)
+
+**Nejčastější list nemusí být nic — rozhoduje, kolik vzorků má celé vlákno a kam ta většina míří.**
+U #350 stálo v zadání „`propagate_dirty` 280 vzorků, `UpdateStack::update()` 265“, a z toho to
+vypadalo na drahou práci nad konkrétními daty. Celý soubor ale říkal něco jiného: hlavní vlákno mělo
+**3709 vzorků** a **3599 z nich** (97 %) leželo pod `NSDisplayCycleFlush → NSHostingView.layout()`.
+Ty vrcholy byly jen nejhrubší kamínky uvnitř té jedné cesty.
+
+**A z kořene se pozná, jestli jsou vzorky o téže věci** — což je u víc vzorků ta první otázka, ne
+poslední. #350 měl tři a listy měl každý jiné (osa konverzace, computed properties detailu, diff),
+takže to vypadalo na jednu příčinu viděnou třemi pohledy. Kořeny ale byly dva, a vylučují se:
+
+| Kořen 100 % vzorků hlavního vlákna | Co to je | Poznávací znak |
+|---|---|---|
+| `NSDisplayCycleFlush → NSHostingView.layout()` | takt překreslování obrazovky, tedy **animace** | v cestě je `+[NSAnimationContext runAnimationGroup:]` (1754 vzorků) a `render(interval:…)` |
+| `NSRunLoop.flushObservers → NSHostingView.beginTransaction → GraphHost.flushTransactions` | vyprazdňování **čekajících transakcí** v každém kole smyčky, tedy něco, co graf pořád špiní | `runAnimationGroup` ani display cycle v cestě **nejsou vůbec** (nula vzorků). Tohle je #358; kdo to špiní, se dohledá pod `Update.dispatchActions()` — viz níž |
+
+Rozlišit se to musí, protože z toho vyjdou dvě různé opravy — a **pozná se to jedině tehdy, když se
+kořen přečte u každého vzorku zvlášť.** Sečtená tabulka vrcholů by obě signatury slila do jedné,
+protože `AG::Graph::UpdateStack::update()` a `propagate_dirty` jsou v obou.
+
+#### Kdo tu smyčku špiní: čte se `Update.dispatchActions()`, ne listy (#358)
+
+U té druhé signatury je otázka „co graf pokaždé zašpiní“, a **v listech odpověď není** — tam je vidět
+jen průchod celým `ForEach`em (`FileDiff.id`, `DiffRow.id`, `_StringGutsSlice._fastNFCCheck`), tedy
+následek. Postup, kterým se to u #358 dohledalo, je ve třech krocích a každý z nich je negativní
+tvrzení nebo jmenovitá cesta:
+
+1. **Vylučte vnější pohon.** V hlavním vlákně grepněte `_dispatch_main_queue_callback_4CF`,
+   `__CFRUNLOOP_IS_CALLING_OUT_TO_A_TIMER_CALLBACK_FUNCTION__` a obsluhu událostí. Když jsou všechny
+   **nula** (a u #358 byly), smyčku nekrmí nic zvenčí a pohon musí být uvnitř transakce. Dokud tam
+   timer je, hledá se timer.
+2. **Přečtěte podstrom `static Update.dispatchActions()`** pod `GraphHost.runTransaction`. Tam SwiftUI
+   pouští akce, které si transakce naplánovala — a právě jimi se zavírá kolo. U #358 bylo 1630 z 1690
+   vzorků v `EventBindingManager.enqueueHoverUpdateIfNeeded()` → `NSHostingView.didRequestHoverUpdate()`
+   a přes `HoverResponder.updatePhase(_:)` se z něj volalo `.onContinuousHover` v našem view. Druhý
+   re-arm ležel vedle: `LazyLayoutViewCache.signalPrefetch()` → `NSHostingView.requestUpdate(after:)`.
+3. **Najděte v tom podstromu rámec aplikace a dohledejte, co zapisuje.** Naše closure je ve `sample`u
+   číslovaná v pořadí literálů v `body` (`closure #5 in DiffPairBlockRowView.body.getter`), takže se
+   podle pořadí dopočítá řádek. U #358 to byl bezpodmínečný zápis do `@State hovered` — a ten typ je
+   `(index: Int, side: DiffSide)?`, tedy **tuple, který `Equatable` není**, takže na něm nemůže zabrat
+   žádné porovnání ani výš.
+
+`sample` tiskne strom s odsazením z `+!:|`, takže se podstrom nedá grepnout — čte se buď `sed`em podle
+řádků, nebo krátkým skriptem, který odsazení převede na hloubku a vypíše **přímé potomky** daného uzlu.
+Bez toho se v podstromu s desítkami tisíc řádků neorientuje.
+
+Dvě věci, které se u toho **taky musí změřit**, protože obě vypadají jako příčina a nejsou:
+
+- **Naše `NSViewRepresentable`.** Grepněte `updateNSView`, `lineFrames`, `height(forWidth:)`,
+  `sizeToFit`, `layoutManager`. U #358 to bylo 2, 0, 0, 0, 0 — text se vůbec nepřeměřoval, takže
+  zpětná vazba `noteFrames` → `@State frames` (kterou drží strážce v `Coordinator`u) je vyloučená.
+- **Že to není animace.** `runAnimationGroup`, `NSDisplayCycleFlush` a `CABasicAnimation` musí být nula,
+  jinak se čte ta první signatura z tabulky výš.
+
+**Reprodukce si žádá kurzor ležící v okně nad blokem kódu.** Tohle je na tom nejdražší poznatek: #358
+se nedařilo vyrobit na vyžádání (`%cpu` 0,0 při „nečinnosti“) právě proto, že hover responder se
+nerozřeší, když myš nad diffem není — a „nečinnost“ znamená nechat myš tam, kde skončila. Kde je,
+se zjistí bez zásahu do aplikace:
+
+```bash
+# NSEvent.mouseLocation + CGWindowListCopyWindowInfo, tedy jen čtení — aplikace se nijak neovládá
+swift mouse.swift
+```
+
+Podmínkou je dál **split diff** (jen `DiffPairBlockRowView` má ten tuple stav); velký diff kolo
+zdraží, ale nezpůsobí. A **běžící review je zhoršovák, ne podmínka** — doloženo tím, že potomek
+`claude` skončil a okno zůstalo minutu dál na 98,2–100,5 % CPU s nulou potomků.
+
+**A že jsou to doopravdy dvě věci, se ověří vložením regrese**, ne úsudkem: vrátit opravenou příčinu
+zpátky a vzít `sample` **testovacího hosta** při běžící sondě (`sample <pid> 4`, PID se najde jako
+`pgrep -f 'build.noindex/.*PRism.app/Contents/MacOS/PRism'`). U #350 z toho vyšla zase jen ta první
+signatura, takže druhá zůstala nevysvětlená — což je závěr, ne mezera.
+
+Čísla, ze kterých se to přečte, jsou v hlavičce grafu, ne v `Sort by top of stack`:
+
+```bash
+sample "$PID" 5 -file /tmp/hang.txt
+grep -n "com.apple.main-thread" /tmp/hang.txt        # kolik vzorků má hlavní vlákno celkem
+# a pak větve u kořene — kam z těch vzorků většina jde
+python3 - <<'PY'
+import re
+pat = re.compile(r'^([ +!:|]*)(\d+) (.*)$')
+for line in open('/tmp/hang.txt', errors='replace'):
+    m = pat.match(line.rstrip())
+    if m and len(m.group(1)) <= 60 and int(m.group(2)) >= 15:
+        print(f"{len(m.group(1)):4d} {int(m.group(2)):6d} {m.group(3)[:100]}")
+PY
+```
+
+Dvě věci, které z toho výpisu u #350 padly hned:
+
+- **Ani jeden rámec aplikace.** Kdyby cenu drželo přepočítávání nad daty (nálezy, konverzace), byl by
+  v té cestě vidět náš kód. Nebyl — celá cena je rozvržení, které se opakuje samo.
+- **`NSHostingView.layout()` se dělí skoro půl na půl** mezi `render(interval:…)` (1378 vzorků)
+  a `invalidateSizeConstraintsIfNecessary()` → `minSize()` → `ViewGraph.sizeThatFits(_:)`
+  (1374 vzorků). Půlka ceny každého snímku je tedy jen dopočet velikosti do constraints hostujícího
+  view — a to se dá zjistit jedině ze `sample`u, z API to vidět není.
+
+**Nečinné okno se měří na obrazovce, jinak se smyčka neprojeví** (`Tests/Views/IdleWindowSpinProbe.swift`).
+Okno mimo obrazovku ani zakryté okno **nedostává takt překreslování**, takže nekonečná animace v něm
+nespotřebuje nic a sonda by tvrdila, že je čisto. Sonda proto dává oknu `level = .floating`
+a `orderFrontRegardless()` — vidět být musí, fokus si brát nesmí (vedle běží terminál a cizí
+instance PRismu). CPU se čte `clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)` na hlavním vlákně, ne
+nástěnnými hodinami: smyčka většinu času spí, takže nástěnný čas by měřil délku spánku. Naměřená
+čísla jsou v [`architektura.md`](architektura.md), sekce *Nekonečné animace v okně*.
+
+**Nulové CPU není doklad, že se něco točí** — stejně dobře to je nehybný prstýnek. Sonda proto vedle
+CPU vydá i **otočení z prezentační vrstvy** (`arc.presentation()`) ve třech okamžicích; má se hýbat
+o ~1,4 rad za 0,2 s, což je ta jedna otáčka za 0,9 s. Model vrstvy o animaci nic neví, takže se to
+z něj vyčíst nedá.
+
+**Kolik kruhu zabírá oblouk, se počítá z alfy, ne z barvy.** Prstýnek se kreslí do průhledna, takže
+barevné složky jsou premultiplikované a tichý kruh i prázdno mají červenou blízko nuly — první podoba
+téhle sondy podle ní tvrdila „oblouk zabírá celý kruh“ i nad kresbou, která je v pořádku, a málem
+z toho byla oprava neexistující chyby. Podle alfy vyjde **0,35** (0,30 z `strokeEnd` plus kulaté
+zakončení tahu) a tichý kruh 0,65.
+
+**`screencapture` z testovacího hosta nefunguje** a **nic neřekne**: oprávnění k nahrávání obrazovky
+má terminál, ne testovací host, takže `screencapture -l<okno>` skončí nulovým kódem a bez souboru.
+Kresba se proto bere `cacheDisplay(in:to:)` z toho view, o které jde (`ring.bounds`, ne kontejner —
+jinak se fotí padding a měření radiusu ukazuje mimo prstýnek).
+
+**Frekvence událostí průběhu se dá změřit z transcriptů skutečných běhů**, ne odhadnout. `claude` si
+je vede v `~/.claude/projects/`, a běhy PRismu jsou poznat po cestě k pracovnímu stromu:
+
+```bash
+ls -d ~/.claude/projects/*PRism*worktrees*      # jedna složka na strom, v ní JSONL sessiony
+```
+
+Každý záznam nese `timestamp` a `message.content` s bloky `tool_use`; jedna událost `attemptedTool`
+odpovídá jednomu takovému bloku (`ClaudeReviewRunner.consume`). Naměřeno na **145 sessionech**:
+**0,07–0,37 události za sekundu** (medián 0,15), špička **2 za sekundu** a nejvýš **4 za pět
+sekund**. Z toho vyšlo, že hypotéza „události průběhu tuhnou okno“ je o dva řády mimo — při
+9–55 ms na událost (`DetailProgressMeasurement`) je to nejvýš dvě procenta procesoru.
+
+**Fixtures `stream-json` na tohle nestačí** a je dobré vědět proč: jsou to výstupy z malých spiků,
+takže v každé jsou **jedna až dvě** `tool_use`. Tvar události se z nich vzít dá, tempo ne.
+
+Vyloučené příčiny #350, aby po nich příští session nesáhla znovu:
+
+| Podezření | Čím padlo |
+|---|---|
+| Každá událost průběhu přepočítá pruh záložek (`tabs` → `Policy.tally` → `visibleFindings`) | Cena je změřená (9–55 ms na událost), ale frekvence je 0,07–0,37 ev/s → nejvýš 2 % CPU. A cena je **v zašpinění těla, ne v té práci**: zápis do `reviewPhases`, který s osou nedělá nic, stojí stejně (kontrolní série v `DetailProgressMeasurement`). Odznaky samotné jsou 0,006–0,15 ms |
+| ~~Nekonečná smyčka rozvržení (zápis do stavu během `body`)~~ **potvrzená, je z ní #358** | Vylučovalo se to úvahou, že okno **reagovalo** (jen lagovalo), takže smyčka to být nemůže — **a ta úvaha je špatná.** Smyčka přes runloop observer (`flushObservers → beginTransaction`) pustí mezi koly události, takže okno odpovídá a jen lagne; procesor nepustí to ani ono. Signatura vzorků 1 a 3 je právě tohle a **oprava prstýnku ji nevysvětluje** (ověřeno vložením regrese). Doměřeno na živém ztuhlém okně: pohonem je **hover** (`.onContinuousHover` píše `@State` bez porovnání), postup je v sekci níž |
+| Rozbor `stream-json` běží na hlavním vlákně | `ClaudeReviewRunner` je `struct` bez izolace a `SWIFT_VERSION = 6.0` (bez `NonisolatedNonsendingByDefault`), takže jeho `async` metody běží na globálním executoru; `readabilityHandler` čte rouru na vlastní frontě Foundationu. Ve `sample`u není ani jeden rámec parseru |
+| Osa běhu roste a její kopírování zdražuje každou událost | `reviewTimelines` má strop 300 uložených položek a kopie pole struktur je v šumu — a hlavně: kontrolní série výš ukazuje, že na tom, **co** se do storu zapíše, nezáleží |
 
 ### Jak změřit projíždění diffu, když se ho nedá dotknout (#252)
 

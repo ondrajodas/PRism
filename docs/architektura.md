@@ -2569,6 +2569,100 @@ Do #318 se pruh pod 939 body okna **zalamoval** — v nejužším povoleném okn
 90 bodů místo 30, se šesti záložkami 75. Nebyla to tedy cena sedmé záložky, ale stav rozbitý
 i bez ní, a proto se to opravovalo zvlášť.
 
+## Nekonečné animace v okně (#350)
+
+**Animace, která nikdy nedoběhne, nesmí být ve SwiftUI.** Je to tatáž třída chyby jako pružná šířka
+výš — jen cenu neplatí jeden layout, ale **každý snímek**.
+
+Proč: SwiftUI si na animovaný atribut vyžádá nový průchod při každém obtažení obrazovky, a ten
+průchod jde na macOS přes `NSHostingView.layout()`. To rozvrhne **celý obsah okna, a dvakrát** —
+jednou `render(interval:…)` pro kresbu a jednou `invalidateSizeConstraintsIfNecessary()` →
+`minSize()` → `ViewGraph.sizeThatFits(_:)` kvůli constraints hostujícího view. Jeden snímek proto
+stojí tolik, kolik stojí rozvržení celého okna, a při 120 Hz je z toho **plné hlavní vlákno** bez
+ohledu na to, jak malý je ten animovaný prvek.
+
+Změřeno u #350 na `SpinningRing` (prstýnek „review běží“ v pruhu záložek, #180). Sonda
+`IdleWindowSpinProbe` hostuje detail PR v okně **na obrazovce**, nechá smyčku běžet a čte CPU
+hlavního vlákna:
+
+| Stav nečinného okna | CPU hlavního vlákna |
+|---|---|
+| review neběží | 0 % |
+| review běží, jen kapsle reviewerů (`ProgressView`) | 2–3 % |
+| review běží + prstýnek **ve SwiftUI** (`repeatForever`) | **99 %** |
+| review běží + prstýnek **v CoreAnimation** | 2–3 % |
+| prstýnek sám, bez detailu v okně, **ve SwiftUI** | 3 % |
+
+(Rozsah je rozptyl mezi dvěma běhy sondy. Rozhoduje pořadí velikosti, ne jednotky procent — a to,
+že jsou druhý a čtvrtý řádek **stejné**.)
+
+Dva řádky nesou celý závěr. Po opravě stojí okno s prstýnkem **stejně jako okno bez něj** (2–3 %),
+takže z ceny nezbylo nic — a poslední řádek říká, proč: **cena není v prstýnku, je v tom, co je vedle
+něj v okně.** Prstýnek v prázdném okně stojí 3 % i s tou SwiftUI animací, protože rozvrhnout prázdné
+okno je zdarma; s otevřeným PR je to celý strom hlavičky, pruhu záložek, tabu a panelu, a totéž
+otáčení stojí 99 %. Proto se to v provozu projevilo jako „okno tuhne, když pustím review“ a proč to
+**nezáviselo na počtu běžících session** (jeden prstýnek stačí) ani na tom, který tab je otevřený.
+
+Léčba je `SpinningRingView` — `NSView` se dvěma `CAShapeLayer`y a `CABasicAnimation` na
+`transform.rotation.z`. Otáčení obslouží render server, hlavní vlákno o něm neví a SwiftUI nedostane
+ani jeden snímek. Tři věci, které u toho drží kresbu:
+
+- **`isRemovedOnCompletion = false`** — jinak se prstýnek po první otáčce vrátí do výchozí polohy
+  a stojí.
+- **Otáčení se přidává jen tehdy, když tam ještě není.** `layout()` běží vícekrát a druhé přidání by
+  animaci restartovalo, takže by prstýnek poskakoval.
+- **Barvy se resolvují znovu, ne jednou v initu** (`resolveColours()`): `CGColor` ve vrstvě se sám
+  podle vzhledu nepřebarví, takže by prstýnek zůstal v barvě z doby svého vzniku. Volá se ze **tří**
+  míst, protože každé je jiná příležitost — první kresba (`updateLayer()`), přepnutí světlý/tmavý
+  (`viewDidChangeEffectiveAppearance()`) a **změna systémového akcentu**
+  (`NSColor.systemColorsDidChangeNotification`). To třetí je práce, která přišla s přepisem do
+  AppKitu: ve SwiftUI se `.tint` resolvovala sama, kdežto tady by bez pozorovatele prstýnek po změně
+  akcentu v Nastavení systému držel starou barvu, dokud se nepřepne režim. Testuje se to na
+  **barvě oblouku** po poslané notifikaci, ne na příznaku překreslení — příznaky bez okna na
+  obrazovce nedrží (vyzkoušené obojí, `NSView.needsDisplay` i `CALayer.needsDisplay()`), takže by
+  z nich byl test, který padá nad správným kódem.
+- **Šířka tahu si musí vyžádat rozvržení.** Cesta je o půl tahu zúžená dovnitř, aby se kruh vešel do
+  rámu celý, takže se se šířkou mění — a počítá se v `layout()`. Bez `needsLayout = true`
+  v `apply(lineWidth:isSpinning:)` by silnější tah kreslil starou cestu.
+
+**`ProgressView` do téhle pasti nepadá** (2–3 % výš), protože je na macOS AppKitový — animuje ho
+`NSProgressIndicator`, tedy taky CoreAnimation. Zůstává proto v kapslích reviewerů i ve stavovém
+řádku beze změny.
+
+**Tohle není jediná příčina tuhnutí a nesmí se za ni vydávat.** Ze tří vzorků ztuhlé aplikace ji
+vysvětluje **jeden**; druhá signatura (vzorky nad osou konverzace a nad diffem) má **100 % vzorků
+hlavního vlákna** pod `NSRunLoop.flushObservers → NSHostingView.beginTransaction →
+GraphHost.flushTransactions`, tedy pod **vyprazdňováním čekajících transakcí v každém kole smyčky**,
+a `NSDisplayCycleFlush` ani `runAnimationGroup` v ní nejsou vůbec. Že jsou to dvě věci, je ověřené
+vložením regrese: build s vrácenou SwiftUI animací vyrobí zase jen tu **první** signaturu
+(`NSDisplayCycleFlush` 144 z 976 vzorků, `flushObservers` nula). A u toho vzorku nad diffem
+neběželo žádné review, takže tam prstýnek na obrazovce **ani nebyl** — pruh ho kreslí jedině při
+`isRunning`, což je `reviewTasks[pr] != nil`.
+
+O té druhé je zapsané, co se změřilo: cena je v tom, že `ScrollView` počítá **ideální velikost**,
+což donutí líný seznam projít `_LazyLayout_Subviews.apply` přes **celý** `ForEach` (proto v listech
+`FileDiff.id`, `DiffRow.id`, `ConversationNode.id` a `_StringGutsSlice._fastNFCCheck` — porovnávání
+řetězcových identifikátorů). Je to **#358** a **co graf špiní, se od té doby ví**: smyčku pohání
+hover. Ve vzorku ztuhlého okna je 92,8 % vzorků hlavního vlákna v jedné transakci a **žádný jiný
+callout tam není** (nula na timeru, nula na hlavní dispatch frontě), takže ji nekrmí nic zvenčí;
+uvnitř je 1630 z 1690 vzorků `Update.dispatchActions()` v `EventBindingManager
+.enqueueHoverUpdateIfNeeded()` → `NSHostingView.didRequestHoverUpdate()`, a z něj se přes
+`HoverResponder.updatePhase(_:)` volá `.onContinuousHover` v `DiffPairBlockRowView`. Ta akce píše
+`@State hovered` **bezpodmínečně** (a je to `(index: Int, side: DiffSide)?`, tedy tuple, který
+`Equatable` není), takže se tělo bloku zašpiní, přestaví se rozvržení líného seznamu, změní se
+geometrie responderů — a hover update se naplánuje znovu. Reprodukce si žádá **split diff a kurzor
+ležící v okně**; to poslední je důvod, proč se to na vyžádání nedařilo (nečinnost s myší mimo blok
+kódu smyčku nezavře). Oprava má vlastní PR, ne tenhle.
+
+**Co se tím taky neopravilo:** každá **událost průběhu review** (`ReviewProgress`) pořád zašpiní tělo
+`PullRequestDetailView` (čte `store.reviewProgress(for:)` a `runningReviewers(for:)` v hlavičce),
+takže se přepočítá pruh záložek se všemi osmi odznaky a přestaví se obsah tabu. Změřeno
+`DetailProgressMeasurement`: **9–55 ms na událost** podle otevřeného tabu a podle toho, kolik je
+v okně vidět. Na tuhnutí to nestačí — skutečná session dělá **0,07 až 0,37** události za sekundu
+(změřeno na 145 transcriptech běhů PRismu, viz [`testovani.md`](testovani.md)), tedy nejvýš dvě
+procenta procesoru —, ale je to práce, která tam být nemusí. Vlastní issue na to zatím není; oprava je
+vytáhnout pruh běhu do vlastního view, aby událost špinila jeho, ne celý detail.
+
 ## Okno nastavení (`App/Views/Settings/`)
 
 Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisuje do téhož
