@@ -194,7 +194,9 @@ struct AgentPromptPanel: View {
     private func leftover(_ draft: ReviewDraft) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             caption("Rozdělané review z dřívějška")
-            Text("Odeslat ho nejde — na vlastním PR GitHub review nepřijme. Zůstává tady, aby se dalo přečíst a smazat.")
+            // **Ne „GitHub review nepřijme“**: `COMMENT` by tam prošel (změřeno u #62), takže by
+            // ta věta tvrdila víc, než je změřené. Odsud se review nesbírá, a to je to, co platí.
+            Text("Odeslat ho odsud nejde — na vlastním PR se review nesbírá. Zůstává tady, aby se dalo přečíst a smazat.")
                 .font(.caption)
                 .foregroundStyle(Palette.ink2)
                 .fixedSize(horizontal: false, vertical: true)
