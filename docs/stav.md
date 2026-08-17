@@ -2005,6 +2005,82 @@ v jiném pásmu, takže se obrázky nedaly položit vedle sebe.
 Testů je **2669**; regrese ověřena vložením dvou (smazaná podoba `icons`, zahozený popisek
 u aktivní) — první položí čtyři testy, druhá to tvrzení, které by výška pruhu nechytla.
 
+### #343 — konec logu „o řádek vedle“ byl artefakt harnessu, ne vada aplikace
+
+`LogTailOpeningTests.opensAtTheEndOfTheLog` padal nahodile: `documentVisibleRect.maxY` **83 989**
+proti poslednímu řádku končícímu na **84 002**, tedy o jednu řádku nad koncem. Vyvolal to diff #339
+(`main` 6× ze 6 zeleně, ta větev 4× ze 7) a pády byly **pokaždé na týchž číslech** — což je známka
+skutečného stavu, ne zátěže.
+
+**Příčina je v prostředí procesu, ne v `jumpToEnd`.** `NSScroller.preferredScrollerStyle` je po startu
+procesu chvíli `overlay` a teprve za pár kol smyčky se doresolvuje na `legacy` — a legacy scroller
+místo doopravdy zabírá. Když ta změna přijde *až po* dosazení cíle skoku, viewport se zmenší
+(`clip.h` **441 → 424**, tedy 17 bodů, ne 13 jako rezerva ve `height`), `origin.y` zůstane a okýnko je
+o řádku nad koncem — a **nikdo to nepřerovná**, protože další `layout()` přijít nemusí. Diff #339
+na tom nic nezpůsobil, jen posunul, které suity běží v tom startovacím okně.
+
+**Zadání se tím obrátilo, a je to zapsané jako vědomá odchylka.** #343 to popisovalo jako vadu
+aplikace („ležící žádost nikdo nedovolá“) a chtělo **dosadit cíl dvakrát**. Zamítnuto po měření: obě
+kola běží v témže průchodu, tedy pořád před doresolvováním stylu, takže na měřeném stavu nemění nic —
+tři zelené běhy, na kterých ten návrh stál, byly shoda. Změřeno naopak, že když se styl nechá usadit
+**před** postavením okýnka, je poloha správná **od nultého kola** (`origin.y = 83 582`,
+`maxY = 84 006`) a **beze změny v aplikaci**. V aplikaci je totiž ten stav nedosažitelný: styl
+scrollerů je usazený dávno předtím, než se dá otevřít detail checku.
+
+Opraveno tedy **v testu** (`awaitSettledScrollerStyle()`), aplikace zůstala nedotčená. Zamítnuto i
+čekat na „konec je vidět“ místo na `origin.y > 0`: bez změny v aplikaci to dojede na 120s strop a celý
+běh má **184 issues**, protože pumpování smyčky vyhladoví `MainActor`.
+
+**Vidět není nic** — je to čistě testovací vrstva, aplikace se nezměnila ani o řádek. Testů zůstává
+**2710** (žádný nový; sada měla flake, ne mezeru). Regrese ověřena vložením regrese, a od #343
+**deterministicky**: cíl spočítaný ze zastaralé výšky viewportu (`- 17`) položí tvrzení o posledním
+řádku na téže signatuře jako původní flake (`83 989` proti `84 001`). Tři zelené plné běhy po opravě.
+
+Poučení, které z toho zbývá i mimo tuhle sadu: **pády pokaždé na týchž číslech nejsou zátěž**, a kdo
+staví AppKitovou hierarchii v testu, musí počítat s tím, že proces po startu ještě není usazený.
+
+### #339 — počet řádků těla zprávy commitu neuměl CRLF
+
+Popisek přepínače v hlavičce rozkliknutého commitu (`› Tělo zprávy · 6 řádků`) počítal řádky
+`body.split(separator: "\n", omittingEmptySubsequences: false).count`, tedy vzorem, který
+`CLAUDE.md` zakazuje od #292 a který #295 svedl na jedno místo. `"\r\n"` je ve Swiftu **jeden
+`Character`**, takže se na `CRLF` nerozdělilo vůbec a v hlavičce stálo **`Tělo zprávy · 1 řádek`**
+u zprávy jakékoli délky — přesný opak toho, na co ten popisek odpovídá („vyplatí se to rozbalit?“).
+Zprávy commitů chodí z `gh` z cizích repozitářů, takže zakončení řádků si nevybíráme; nebyla to tedy
+teorie. **Našel to grep z `CLAUDE.md`** při revizi #338, kde ten grep musí vyjít prázdný — a
+nevycházel. Po opravě (`TextLines.all(body).count`) vychází.
+
+**Sjednotil se u toho pojem „konec řádky“.** Titulek (`PullRequestCommit.subject`) a tělo
+(`Policy.commitMessageBody`) jsou dvě půlky **jednoho** rozdělení, a obojí dělilo `isNewline` — na
+`CRLF` to funguje, takže to nebyla ta chyba, ale po opravě počtu by se to s ním rozešlo. `isNewline`
+je pravda i pro `VT`, `FF`, `NEL`, `U+2028` a `U+2029`, což jsou pro `git` znaky **obsahu**, takže
+jedno `U+2028` v titulku by titulek usekalo a jeho zbytek by se v hlavičce objevil **ještě jako
+první řádka těla** — tentýž text dvakrát. Obojí jde teď po `isLineTerminator`, stejně jako počet.
+Sazbu to nerozhodí, oba pohledy titulek zkracují (`lineLimit` 1 v seznamu, 2 v hlavičce). Zamítnuto
+přepsat tělo přes `TextLines` a zbytek spojit: spojení by `CRLF` uvnitř těla přepsalo na `LF`, tedy
+změnilo text, který se kreslí.
+
+**Fixture je skutečná odpověď, ne literál** — `gh api …/pulls/6293/commits` na veřejném
+`git-for-windows/git`, commit `415ab35` s **míchanými** zakončeními: titulek `LF`, tělo `CRLF`,
+tělo o třech řádcích. Jedna stránka (`per_page=1`, 3,6 kB), protože celá jich má 391 kB.
+**`-text` v `.gitattributes` schválně nedostala**, ačkoli s ním zadání počítalo: `CR` je v JSONu
+escapovaný jako dvojice `\` + `r`, takže surových `CR` bajtů je v souboru nula (změřeno — staged blob
+má tytéž 3 664 B jako soubor na disku, přitom `core.autocrlf=input`) a normalizovat není co. Řádek by
+byl kontrola, která nic nedělá; co zakončení doopravdy drží, je tvrzení v testu, a to platí bez ohledu
+na nastavení gitu. Důvod je zapsaný v `.gitattributes` jako komentář, ať to příště nikdo „neopraví“.
+
+**Vidět to je**, ale ke stavu se **normálním používáním nedá dojít** — musel by v tabu `Commity`
+ležet PR s `CRLF` ve zprávě commitu. Je na něj proto šestý scénář sondy
+(`CommitsTabRenderProbe`, `diff-commitu-sbalena-hlavicka-crlf`), který zprávu bere z té fixture;
+v popisku na něm stojí `Tělo zprávy · 3 řádky`. Ověřeno u toho i to, co sonda nekreslí: rozbalené
+`CRLF` tělo se sází jako tři řádky bez zbylých glyfů (jednorázově, přepnutým příznakem).
+
+Testů je **2716** (o 6 víc), plus dva argumenty k existujícímu parametrizovanému. **Regrese ověřena
+vložením regrese, dvakrát zvlášť**: vrácený `split(separator: "\n")` položí 3 testy a 5 tvrzení —
+parametrizovaný spadne na 3 případech ze 4, protože `LF` projde, a to je přesně ten důvod, proč se
+chyba nechytila dřív —, a `isNewline` zpátky v obou půlkách rozdělení položí test o `U+2028` třemi
+tvrzeními naráz (titulek `feat: cache`, `secrets` přelité do těla, počet `3 řádky` místo `1 řádek`).
+
 ### #299 — mockup dohnal aplikaci, favicon je zapsaný
 
 Mockup se po dávce s aplikací rozešel na šesti místech a **v kódu se nemění nic než komentáře** —

@@ -41,8 +41,15 @@ struct PullRequestCommit: Hashable, Sendable, Identifiable {
     /// `(commit bez zprávy)`, je rozhodnutí **view** (`CommitListView`) — prázdné místo vedle
     /// avataru vypadá jako chyba kreslení, ale závorka je tam vidět jako zástupný text a model se
     /// tím nešpiní.
+    ///
+    /// **Končí na `isLineTerminator`, ne na `isNewline`** (#339): řádek zprávy končí tam, kde ho
+    /// končí `git` (`LF`, `CRLF`, `CR`), a `U+2028`, `VT` nebo `FF` jsou pro něj **obsah**. Je to
+    /// tentýž znak, na kterém začíná tělo (`Policy.commitMessageBody`) i na kterém se počítají jeho
+    /// řádky — jinak by jedno `U+2028` usekalo titulek a jeho zbytek by se objevil ještě jako první
+    /// řádka těla. Sazba se tím rozhodit nemá: oba pohledy titulek zkracují (`lineLimit` 1 v seznamu,
+    /// 2 v hlavičce).
     var subject: String {
-        String(message.prefix(while: { !$0.isNewline }))
+        String(message.prefix(while: { !$0.isLineTerminator }))
     }
 
     /// Zkrácený sha do pilulky vpravo — sedm znaků, jako `git` a GitHub.

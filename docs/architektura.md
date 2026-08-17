@@ -1444,6 +1444,7 @@ Kde to leželo, než to #295 svedlo na jedno místo:
 | `SelectableCodeView` | Kód v sheetu se obarvil jako jeden řádek a celý jeho objem šel do `SyntaxRunCache` jako **jeden klíč** (#224) |
 | `CopyPolicy` | Popisek `Kopírovat rozsah (1 řádek)` nad rozsahem o dvaceti |
 | `MarkdownParser`, `TranscriptStore` | Jiná past, tentýž druh: `components(separatedBy: .newlines)` dělí po **skalárech**, takže `CRLF` jsou pro ni dva oddělovače a mezi ně vloží prázdný řádek. V markdownu je prázdný řádek konec odstavce — takže se každý řádek cizího komentáře vysázel jako vlastní odstavec. Těla komentářů z GitHubu `CRLF` mají, je ve třech fixtures konverzací |
+| `Policy.commitMessageToggle` (#339) | Sedmé místo, které #295 minulo, protože vzniklo až s #317. Popisek přepínače hlásil `Tělo zprávy · 1 řádek` u zprávy jakékoli délky — tedy přesný opak toho, na co odpovídá („vyplatí se to rozbalit?“). Zprávy commitů chodí z `gh` z cizích repozitářů, takže zakončení řádků si nevybíráme |
 
 Tři funkce, ne jedna s přepínačem — liší se tím, **co je řádek** pro volajícího, a to má být vidět
 na místě volání: `all` (všechno včetně prázdného posledního), `content` (bez prázdného posledního za
@@ -1460,6 +1461,15 @@ Věci, které se u toho nemají rozbít:
 - **`String.singleLine` si `isNewline` schválně nechává.** Jsou to dvě různé otázky: „kde končí
   řádek v bajtech, které mi někdo poslal“ a „co mi zalomí popisek“. `U+2028` popisek zalomí, takže
   se srazit musí. Hlídá to test, ať to někdo omylem nesrovná.
+- **Kdo text dělí na dvě části, dělí obě na tomtéž znaku** (#339). Zpráva commitu se rozpadá na
+  titulek (`PullRequestCommit.subject`, `prefix(while:)`) a tělo (`Policy.commitMessageBody`,
+  `drop(while:)`) — jsou to dvě půlky **jednoho** rozdělení, takže obě jdou po `isLineTerminator`,
+  a po tomtéž znaku počítá řádky i popisek přepínače. S `isNewline` v půlkách a `TextLines` v počtu
+  by `U+2028` uvnitř titulku titulek usekl a jeho zbytek by se v hlavičce objevil **ještě jako první
+  řádka těla** — tentýž text dvakrát, a přitom `git` (`%s`/`%b`) tam žádnou hranici nevidí. Sazbu to
+  neohrozí: oba pohledy titulek zkracují (`lineLimit` 1 v `CommitListView`, 2 v `CommitHeaderView`).
+  Grep z `CLAUDE.md` tenhle rozpor **nechytá** (nechytá `whereSeparator` ani `isNewline`), takže se
+  na něj musí koukat u každého místa, které jeden text dělí na víc kusů.
 - **`CR` se do textu řádku nedostane** — je součást zakončení, ne obsahu. Kdyby zůstal, nesly by
   neviditelný znak klíče do `SyntaxRunCache` (#153, #224), word-level rozdíl i sazba, a v sazbě by
   z něj byl prázdný řádek pod každým řádkem kódu. Cena rozhodnutí: **kopie do schránky nese `LF`,
@@ -3185,8 +3195,23 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     `LogTailScrollView`, který hlásí rozložení, a `Coordinator` nese **nevyřízenou žádost o skok**.
 
     Žádost se přitom zahodí **teprve tehdy, když je konec doopravdy vidět**: když se vodorovný
-    scroller objeví až po skoku, viewport se o jeho 13 bodů zmenší a okýnko zůstane o řádek nad
-    koncem. Chyceno plným během testů pod zátěží (samostatně to vycházelo).
+    scroller objeví až po skoku, viewport se o jeho body zmenší a okýnko zůstane o řádek nad koncem.
+    Chyceno plným během testů, kdežto samostatně to vycházelo — což se do #343 čtlo jako zátěž;
+    **byla to ale pořadová věc, ne časová**, viz odstavec níž.
+
+    **Ta pojistka se ale v testech umí spustit z důvodu, který v aplikaci neexistuje** (#343), a stálo
+    to jedno vyšetřování, tak ať je zapsané, na co se u toho koukat. `NSScroller.preferredScrollerStyle`
+    je **po startu procesu chvíli `overlay`** a teprve za pár kol smyčky se doresolvuje na `legacy` —
+    a legacy scroller místo doopravdy zabírá. Když ta změna přijde *až po* dosazení cíle, viewport se
+    zmenší (změřeno `clip.h` **441 → 424**, tedy **17 bodů**, ne 13 jako rezerva ve `height`),
+    `origin.y` zůstane a okýnko je o řádku nad koncem (`maxY` 84 006 → 83 989 proti poslednímu řádku
+    na 84 002) — a **nikdo to nepřerovná**, protože další `layout()` přijít nemusí.
+
+    V aplikaci je to nedosažitelné: styl scrollerů je usazený dávno předtím, než se dá otevřít detail
+    checku. **Je to tedy vlastnost harnessu**, a proto se to opravilo v testu (nechat styl usadit dřív,
+    než se okýnko postaví), ne tady — podrobnosti i zamítnuté varianty v
+    [`testovani.md`](testovani.md). Kdo sem přijde s tím, že se okýnko otevírá o řádek vedle, ať
+    napřed změří `preferredScrollerStyle` v prvních kolech smyčky.
 
     Cena, ať je zapsaná: skok **vynutí sazbu až na konec dokumentu**, což je na šesti tisících řádcích
     **128 ms** (2 000 řádků 47 ms, 300 řádků 11 ms) — jednorázově, při rozbalení checku, po vteřinách
@@ -3374,6 +3399,12 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
       `isReviewPanelExpanded`, tedy ne mapa per PR a hlavně ne `@State`, který mezi pull requesty
       přetéká. **Výchozí stav je rozbaleno** a u jednořádkové zprávy se nekreslí ani přepínač
       (`Policy.commitMessageBody` vrátí prázdno).
+
+      **Řádky se počítají `TextLines`, ne `split(separator: "\n")`** (#339) — a titulek i tělo se
+      dělí na `isLineTerminator`. Do #339 tam bylo obojí jinak a popisek u zprávy s `CRLF` tvrdil
+      `1 řádek` bez ohledu na délku; podrobnosti u `TextLines` výš. Ke stavu se **normálním
+      používáním nedá dojít** (musel by v tabu ležet PR s `CRLF` ve zprávě), takže je na něj sonda —
+      `CommitsTabRenderProbe`, scénář `diff-commitu-sbalena-hlavicka-crlf`.
     - **Prázdný diff dostane větu, ne prázdnou plochu** (`CommitDiffTabState.nothing`), a jinou
       podle toho, jestli je to sloučení. Změřeno: prázdno vracejí hlavně **prázdné commity**
       (`--allow-empty`), ne sloučení — podrobnosti u gateway a ve specifikaci.

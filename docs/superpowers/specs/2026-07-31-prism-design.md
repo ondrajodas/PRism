@@ -630,8 +630,9 @@ tady, protože rozhodnutí padla dřív, než na ně vznikly issues — pravidlo
 v `CLAUDE.md` chce nakreslit a nechat schválit napřed.
 
 **Hotové celé**: seznam od #316, diff jednoho commitu od #317, smrsknutí pruhu na ikony v úzkém
-okně od #318. Co implementace upřesnila nebo změnila, je v pododdílech *Co se při implementaci
-rozhodlo jinak* (#316, #317, #318) níž — jeden na issue.
+okně od #318; počet řádků těla zprávy opravený na `CRLF` od #339. Co implementace upřesnila nebo
+změnila, je v pododdílech *Co se při implementaci rozhodlo jinak* (#316, #317, #318, #339) níž —
+jeden na issue.
 
 **Proč vzniká.** `Změněné soubory` odpovídají na „co je na PR jinak proti základu“ — jeden
 slitý diff, ze kterého je vidět výsledek, ne cesta. Otázka „proč tenhle řádek zmizel“ nebo
@@ -965,6 +966,37 @@ se u něj rozhodly nebo naměřily jinak, než jak stálo výš.
   dostane nápovědu — obojí **jen v úzkém stupni**, ať se jméno nečte a neukazuje dvakrát. Mockup
   má na neaktivních záložkách `title`, takže je to zapracování návrhu, ne přídavek; navíc k tomu
   jde odečítání, které mockup neřeší.
+
+#### Co se při implementaci rozhodlo jinak (#339, počet řádků těla zprávy)
+
+Popisek přepínače (`› Tělo zprávy · 6 řádků`) počítal řádky `split(separator: "\n")`, tedy vzorem,
+který `CLAUDE.md` zakazuje od #292/#295. Na `CRLF` nerozdělí vůbec — `"\r\n"` je ve Swiftu **jeden
+`Character`** —, takže u zprávy s `CRLF` stálo v hlavičce `1 řádek` bez ohledu na délku. Oprava je
+`TextLines.all(body).count`; k tomu se rozhodly dvě věci, které v zadání #339 takhle nestály.
+
+- **Titulek a tělo se sjednotily na `isLineTerminator`.** Zadání to nechávalo otevřené (`subject`
+  přes `prefix(while: !isNewline)` a `commitMessageBody` přes `drop(while:)` na `CRLF` fungují, takže
+  to **nebyla ta chyba**). Sjednoceno přesto, protože jsou to **dvě půlky jednoho rozdělení** a po
+  opravě by se rozešly s tím, na čem se počítá: `isNewline` je pravda i pro `VT`, `FF`, `NEL`,
+  `U+2028` a `U+2029`, což jsou pro `git` znaky **obsahu** (`git log %s` na nich titulek nekončí).
+  Jedno `U+2028` v titulku by titulek usekalo a jeho zbytek by se v hlavičce objevil **ještě jako
+  první řádka těla** — tentýž text dvakrát. Zamítnuto ponechat to jak bylo („není to ta chyba“):
+  rozpojený pojem „konec řádky“ uvnitř jednoho rozdělení je právě ta věc, která se rozbije potichu.
+  Sazbu to nerozhodí, oba pohledy titulek zkracují (`lineLimit` 1 v seznamu, 2 v hlavičce).
+
+  Zamítnuto i **přepsat tělo přes `TextLines`** (vzít `all(message)` a zbytek spojit): spojování by
+  `CRLF` uvnitř těla přepsalo na `LF`, tedy změnilo text, který se kreslí. Zprávu se drží tak, jak
+  přišla; dělí se jen predikátem.
+
+- **Fixture nedostala `-text` v `.gitattributes`, ačkoli to zadání předepisovalo.** Je to odpověď
+  JSON API (`gh/pr-commits-crlf.json`), takže `CR` v ní není surový bajt, ale escapovaná dvojice
+  `\` + `r` — surových `CR` je v souboru **nula** (změřeno; staged blob má tytéž 3 664 B jako soubor
+  na disku, přitom `core.autocrlf=input`). `-text` by byl řádek, který nic nedělá, a ve výčtu, který
+  má říkat *které fixtures na zakončení stojí*, by tvrdil, že to zakončení drží on. Co ho drží
+  doopravdy, je **tvrzení v testu** (`#expect(message.contains("\r\n"))`), a to platí bez ohledu na
+  nastavení gitu. Důvod je zapsaný v `.gitattributes` jako komentář, ať to příště nikdo
+  „neopraví“ — pravidlo z `CLAUDE.md` se tím nemění, jen se čte přesněji: chránit se musí **surové
+  bajty**, ne escape.
 
 #### Co se zamítlo
 
