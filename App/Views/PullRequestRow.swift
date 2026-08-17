@@ -21,6 +21,10 @@ struct PullRequestRow: View {
     /// a konverzace zadání pro agenta je jediné, co s ním okno umí udělat — verdikt na vlastní PR
     /// GitHub odmítá.
     var ownership: PullRequestOwnership = .theirs
+    /// Co udělá `Prompt →` (#333). `nil` = **tlačítko se nekreslí** — řádek bez storu (náhled,
+    /// test) akci nemá odkud vzít a nakreslit ji naprázdno je zrovna ta lež, kvůli které se
+    /// v #331 kreslila zakázaná.
+    var openPrompt: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -62,31 +66,30 @@ struct PullRequestRow: View {
     /// Má řádek vpravo `Prompt →`? **Pojmenované, ne `if` uvnitř `body`** — je to jediné, čím se
     /// vlastní řádek od cizího liší, a uvnitř `body` se to tvrdit nedá; tatáž úvaha jako
     /// u `FindingBadgeAppearance`. Ven z aplikace se tím nic neotevírá, je to jeden modul.
-    var showsPromptAction: Bool { ownership == .mine }
-
-    /// `Prompt →` u vlastního PR (#331) — plné akcentové tlačítko z návrhu (`.mini.pri`).
     ///
-    /// **Zakázané, dokud prompt není z čeho složit** (#333). Nakreslené je proto, že to je jediná
-    /// akce, kterou vlastní PR má, a řádek bez ní by se od cizího nelišil ničím; zakázané proto, že
-    /// tlačítko, po kterém se nic nestane, je lež o tom, co okno umí — tatáž zásada jako u popisek
-    /// zkratek. Nápověda říká, co bude, aby se z toho stavu nedalo usoudit, že je něco rozbité.
+    /// **Ptá se i na akci** (#333): vlastní řádek bez `openPrompt` tlačítko nedostane. Do #333 se
+    /// kreslilo zakázané, protože akci měl dodat až tenhle kus — a zakázané tlačítko, po kterém se
+    /// nic nestane, svádí na něj kliknout a hledat, co je rozbité.
+    var showsPromptAction: Bool { ownership == .mine && openPrompt != nil }
+
+    /// `Prompt →` u vlastního PR (#331, akce od #333) — plné akcentové tlačítko z návrhu
+    /// (`.mini.pri`).
+    ///
+    /// **Otevře PR a v něm panel se zadáním, text neskládá.** Sheet by z řádku šel otevřít taky, ale
+    /// dal by horší zadání: konverzace se tahá při zobrazení PR, takže z neotevřeného řádku by v textu
+    /// nebyla vlákna ani komentáře. Zdůvodnění je u `AppStore.openAgentPrompt(in:)`, a proto tu
+    /// **není `disabled`** — navigace udělá vždycky něco.
     ///
     /// **Odznak stavu review vedle něj zůstává**, ačkoli návrh na tom místě kreslí pilulku
-    /// `6 k předání`. Ta věta se dá napsat, teprve až předání existuje (#333) a nese razítko
-    /// (#334); do té doby by šlo o počet, který nikdo nepředal. Odznak zatím říká to, co se ví —
-    /// že reviewer běžel a s jakým výsledkem —, a to je zrovna materiál, který prompt ponese.
-    ///
-    /// **Ztlumení kreslí řádek, ne styl.** `MiniButtonStyle` se na `isEnabled` neptá, takže zakázané
-    /// malé tlačítko vypadá v celém okně jako klikatelné — a plné akcentové, po kterém se nic
-    /// nestane, je zrovna ta lež, kvůli které je tady `disabled`. Opravit to v samotném stylu by
-    /// přebarvilo i akce u nálezu a u vlákna, tedy věci mimo tohle issue; jak se ta oprava udělá, je
-    /// otázka na návrh (mockup zakázané tlačítko nekreslí).
+    /// `6 k předání`. Ta věta se dá napsat, teprve až předání nese razítko (#334); do té doby by šlo
+    /// o počet, který nikdo nepředal. Odznak zatím říká to, co se ví — že reviewer běžel a s jakým
+    /// výsledkem —, a to je zrovna materiál, který prompt ponese.
     private var promptButton: some View {
-        Button("Prompt →") {}
+        Button("Prompt →") { openPrompt?() }
             .buttonStyle(.miniPrimary)
-            .disabled(true)
-            .opacity(0.55)
-            .help("Zadání pro agenta se bude skládat z nálezů a konverzace — okno to zatím neumí")
+            // Nápověda říká, co se stane — tedy „otevře“, ne „složí“: text se sází teprve v panelu,
+            // a nápověda, která slíbí hotové zadání, je tatáž lež jako němé tlačítko.
+            .help("Otevřít PR a v něm panel se zadáním pro agenta")
             .accessibilityLabel("Sestavit prompt pro agenta")
     }
 

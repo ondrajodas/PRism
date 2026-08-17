@@ -67,19 +67,26 @@ struct AgentPromptRenderProbe {
 
         // Sheet zvlášť, ne přes `.sheet`: offscreen se modální okno nevykreslí, takže se rendruje
         // to, co je v něm — tedy tentýž `View`, jaký uvidí člověk.
+        //
+        // **V obou mezích šířky**, ne v jedné: sheet se otevře na `idealWidth` (1080 b), ale dá se
+        // stáhnout na `minWidth` (840 b) — a odznaky „co je v textu“ i zalomení markdownu jsou na
+        // šířce závislé, takže jedno číslo by o druhém stavu netvrdilo nic. Rozsah se posunul u #333
+        // po proklikání (720 → 1080), protože na 720 zalamoval skoro každý řádek fenced diffu.
         let prompt = store.agentPrompt(for: pr)
-        let sheet = directory.appending(path: "zadani-sheet.png")
-        // Pozadí i režim se sondě musí nasadit: sheet si plochu nemaluje (v aplikaci ji dává okno
-        // sheetu), takže by v borderless okně vyšel titulek světle na světlém.
-        try render(
-            AgentPromptSheet(prompt: prompt)
-                .frame(width: 720, height: 620)
-                .background(Palette.surface),
-            width: 720,
-            height: 620,
-            to: sheet
-        )
-        print("SONDA \(sheet.path) — sheet, \(prompt.included.total) položek, \(prompt.sizeText)")
+        for width in [1080.0, 840.0] as [CGFloat] {
+            let sheet = directory.appending(path: "zadani-sheet-\(Int(width)).png")
+            // Pozadí i režim se sondě musí nasadit: sheet si plochu nemaluje (v aplikaci ji dává okno
+            // sheetu), takže by v borderless okně vyšel titulek světle na světlém.
+            try render(
+                AgentPromptSheet(prompt: prompt)
+                    .frame(width: width, height: 620)
+                    .background(Palette.surface),
+                width: width,
+                height: 620,
+                to: sheet
+            )
+            print("SONDA \(sheet.path) — sheet \(Int(width)) b, \(prompt.included.total) položek, \(prompt.sizeText)")
+        }
         print("SONDA text:\n\(prompt.text)")
     }
 

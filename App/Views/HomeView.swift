@@ -77,7 +77,11 @@ struct HomeView: View {
                     hasDraft: true,
                     row: store.queueRow(for: pullRequest.id),
                     // Vlastní PR vypadá jako vlastní PR i tady (#331) — jeden řádek, jedna podoba.
-                    ownership: store.ownership(of: pullRequest)
+                    // Od #333 to platí i o akci: `Prompt →` bez akce se nekreslí, takže bez tohohle
+                    // řádku by se sekce od seznamu lišila zrovna tím, čím se lišit nemá. Vlastní PR
+                    // se sem dostane jedině s draftem z dřívějška — a ten se má dát dořešit.
+                    ownership: store.ownership(of: pullRequest),
+                    openPrompt: { store.openAgentPrompt(in: pullRequest.id) }
                 )
             }
         }

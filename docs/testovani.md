@@ -108,6 +108,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   se pozná na **výšce řádku** rozvržené mimo obrazovku (`fittingSize`) — samotné `if` může projít,
   aniž by se prvek do řádku vešel.
 
+  **Od #333 je tam třetí tvrzení: bez akce se tlačítko nekreslí.** Vlastní řádek bez `openPrompt` má
+  výšku cizího, tedy měřenou, ne odhadnutou — kdyby se kreslilo dál, byl by z něj potichu zase ten
+  zakázaný prvek z #331, jen vyrobený volajícím, který zapomněl uzávěr předat. Že tlačítko volá **tu**
+  akci, se tvrdí na uzávěru: `Button` se v testu stisknout nedá (klik do okna mimo obrazovku se
+  nedoručí), takže se ověřuje jediná věc mezi řádkem a storem.
+
   **Ověřeno vložením regrese, třemi.** Vyhození větve o chybějícím zdroji shodí 4 tvrzení ve třech
   testech, `activeFindings → findings` (tedy „odmítnutý nález pořád čeká na tah“) jeden a
   `showsPromptAction → true` tři včetně toho na výšku řádku.
@@ -136,6 +142,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   dopsal `author:@me`. Předfiltr pro zkratku `⌘⇧P` se ověřuje proti hotovému zadání, aby zkratka
   nebyla zakázaná nad neprázdným panelem.
 
+  **Akce `Prompt →` z řádku má dvě tvrzení** (`openAgentPrompt(in:)`): že otevře **záložku i panel**
+  — včetně přepnutí z tabu `Commity`, ve kterém panel není, protože rozložit něco, co není vidět, je
+  k nerozeznání od němé akce —, a že **nezakazuje sama sebe nad prázdným zadáním**. To druhé je to
+  cennější: je to navigace, takže `hasAgentPromptItems` v seznamu měří stav před otevřením PR a jako
+  brána by schoval cestu k panelu zrovna u PR, jehož materiál leží v diskuzi.
+
   **Tvrdá podmínka č. 1 má od #333 test, ne jen grep** (`SingleWayOutTests`). Čte zdrojáky v `App/`
   (komentáře zahazuje stejně jako grep v `CLAUDE.md`) a tvrdí čtyři věci: `ReviewPublishing` zná
   **právě pět souborů**, protokol má **čtyři metody**, **žádný** ze souborů zadání (jejich počet je
@@ -156,6 +168,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (v okně ji dává sheet), takže bez toho vyjde titulek světle na světlém a vypadá to jako chybějící
   prvek — na to se u #333 spálilo jedno kolo. Sonda tiskne i celý text zadání, takže se dá přečíst
   vedle mockupu.
+
+  **Sheet se od #333 rendruje taky v obou mezích** (840 a 1080 b), a je to k něčemu: na tom rozšíření
+  o polovinu je vidět, co se **zalomením** mění. Na 720 b spadl odznak `vynecháno: 1 vyřešené vlákno`
+  do druhé řady `FlowRow`u a úvodní odstavec zabral pět řádek; na 1080 se odznaky vejdou do jedné řady
+  a odstavec do tří; na 840 taky do jedné řady, jen odstavec do čtyř. Jedno číslo by o druhém stavu
+  netvrdilo nic — a **`minWidth` je to zajímavější z těch dvou**, protože do něj se sheet dá stáhnout.
 - **Konverzace** — proti fixtures, které jsou surové odpovědi z veřejných PR `cli/cli`
   sebrané **tím dotazem, který posílá aplikace** (`ConversationQuery.document`). Kdyby se
   sbíraly jinak, testovaly by tvar, který v provozu nikdy nepřijde; ověřené je to i tak, že

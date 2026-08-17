@@ -300,4 +300,42 @@ struct AppStoreAgentPromptTests {
         #expect(store.hasAgentPromptItems(for: pr))
         #expect(!store.agentPrompt(for: pr).isEmpty)
     }
+
+    // MARK: - `Prompt →` z řádku
+
+    /// Akce tlačítka z řádku seznamu (#331, napojená #333): **otevřít PR a v něm panel**.
+    ///
+    /// Otevření záložky je součást akce, ne krok před ní — bez něj se nenačte konverzace a zadání by
+    /// z řádku vyšlo bez vláken a komentářů, tedy bez většiny toho, co se předává.
+    @Test("Prompt z řádku otevře PR a v něm panel se zadáním")
+    func opensThePullRequestAndItsPanel() async {
+        let store = await prepared(author: "ondra", mine: ["ondra"])
+        store.isReviewPanelExpanded = false
+        store.setDetailTab(.commits, for: pr)
+
+        store.openAgentPrompt(in: pr)
+
+        #expect(store.activeTab == .pullRequest(pr))
+        #expect(store.openTabs.contains(pr))
+        #expect(store.reviewPanelTab == .agentPrompt)
+        #expect(store.isReviewPanelExpanded)
+        // Panel v tabu `Commity` není, takže se musí přepnout na ten, ve kterém je — jinak se
+        // rozloží něco, co není vidět.
+        #expect(store.detailTab(for: pr) == .standard)
+    }
+
+    /// **Nezakazuje se, když není co předat.** Je to navigace: `hasAgentPromptItems` hlídá sazbu
+    /// textu (zkratka, `Sestavit prompt →`), kdežto v seznamu by měřilo stav před otevřením PR
+    /// a schovalo by cestu k panelu zrovna u PR, jehož materiál leží v diskuzi.
+    @Test("Prompt z řádku vede do panelu i nad prázdným zadáním")
+    func opensThePanelEvenWithNothingToHandOver() async {
+        let store = await prepared(author: "ondra", mine: ["ondra"])
+
+        #expect(!store.hasAgentPromptItems(for: pr))
+
+        store.openAgentPrompt(in: pr)
+
+        #expect(store.activeTab == .pullRequest(pr))
+        #expect(store.reviewPanelTab == .agentPrompt)
+    }
 }

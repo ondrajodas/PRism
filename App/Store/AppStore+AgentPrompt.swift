@@ -70,4 +70,21 @@ extension AppStore {
         guard !detailTab(for: pr).showsReviewPanel else { return }
         setDetailTab(.standard, for: pr)
     }
+
+    /// `Prompt →` z řádku seznamu a z dashboardu (#331, napojeno #333) — **otevře PR a v něm
+    /// panel**, text neskládá.
+    ///
+    /// Skládat markdown už v seznamu by dalo **horší zadání, ne rychlejší**: `Conversation`
+    /// se nepersistuje a tahá se při zobrazení PR, takže z řádku, do kterého se ještě nekliklo, by
+    /// v textu nebyla vlákna, komentáře pod PR ani souhrny review — tedy většina toho, co se předává
+    /// — a zadání by to o sobě jen poctivě napsalo. Otevřít PR je proto **součástí** akce, ne krok
+    /// před ní: `openTab` konverzaci nastartuje a panel ukazuje počty nad tím, co už je v ruce.
+    ///
+    /// Tlačítko je z téhož důvodu **zakázané nikdy** — `hasAgentPromptItems(for:)` hlídá zkratku
+    /// `⌘⇧P` a `Sestavit prompt →` v panelu, tedy sazbu textu. V seznamu by měřilo „co víme, aniž
+    /// bychom PR otevřeli“, a schovalo by cestu k panelu zrovna u PR, jehož materiál je v diskuzi.
+    func openAgentPrompt(in pr: PRIdentifier) {
+        openTab(pr)
+        revealAgentPrompt(in: pr)
+    }
 }

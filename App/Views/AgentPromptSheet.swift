@@ -29,7 +29,12 @@ struct AgentPromptSheet: View {
             Divider()
             footer
         }
-        .frame(minWidth: 560, idealWidth: 720, minHeight: 420, idealHeight: 620)
+        // **Širší než ostatní sheety, a je to celý rozsah, ne jedna mez.** Obsah je markdown se
+        // zanořenými nadpisy a fenced diffy, tedy text, kterému na 720 bodech zalamoval skoro každý
+        // řádek — a zalomený diff se přestane číst jako diff. Rozsah je proto posunutý celý
+        // (560 → 840, 720 → 1080): kdyby se zvedl jen `idealWidth`, zmenšené okno by spadlo zpátky
+        // na šířku, kvůli které se to měnilo.
+        .frame(minWidth: 840, idealWidth: 1080, minHeight: 420, idealHeight: 620)
     }
 
     // MARK: - Hlavička

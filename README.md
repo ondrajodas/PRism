@@ -117,8 +117,12 @@ zrevidovat, a nahoru jde, co posílám ven. Je to **tentýž seznam nad druhou m
 podle **autora** (`Policy.ownership`, #330), ne podle zdroje, ze kterého PR přišel, protože jeden PR
 umí splňovat víc search dotazů naráz. Řádek vlastního PR má vpravo **`Prompt →`** místo verdiktu:
 verdikt na vlastní PR GitHub odmítá, takže jediné, co s ním okno umí udělat, je složit z nálezů
-a konverzace zadání pro agenta. Skládání samo je #333 — do té doby je tlačítko **ztlumené
-a zakázané**, aby neslibovalo akci, která se nestane.
+a konverzace zadání pro agenta.
+
+**`Prompt →` otevře PR a v něm panel `Zadání`** (#333), text neskládá. Je to schválně: konverzace se
+tahá při zobrazení PR, takže složit markdown rovnou ze seznamu by dalo zadání **bez vláken
+a komentářů pod PR** — tedy bez většiny toho, co se předává. Tlačítko proto taky není nikdy zakázané:
+navigace udělá vždycky něco, kdežto sazba textu má vlastní bránu v panelu.
 
 **Odznak u sekce počítá to, co čeká na tah**, ne otevřené PR: PR s nezpracovaným nálezem nebo
 s nevyřešeným cizím vláknem. Nula se nekreslí (prázdno je dobrá zpráva) a `nil` — tedy nenačteno —
@@ -611,7 +615,9 @@ nich panel sbírá, co je potřeba opravit, a skládá z toho **jedno zadání p
 reviewerů, vlákna u řádků, komentáře pod PR a souhrny review. Sedm zaškrtávacích voleb s počty říká,
 co v textu je; vyřešená vlákna a odmítnuté nálezy v něm nejsou, ale **je u nich vidět, kolik jich
 je**, a dají se přibrat. `Sestavit prompt →` (nebo `⌘⇧P`) otevře okno s celým markdownem, ze kterého
-se dá text zkopírovat nebo uložit do souboru — **nikam se neodesílá**, cesta ven zůstává jen jedna
+se dá text zkopírovat nebo uložit do souboru. To okno je **širší než ostatní sheety** (1080 bodů proti
+720 u ostatních): obsah je markdown s fenced diffy, a na užším se zalamoval skoro každý řádek —
+zalomený diff se přestane číst jako diff. Text se **nikam neodesílá**, cesta ven zůstává jen jedna
 (viz *Odeslání review*). Proto tu taky **není druhé potvrzení**: dvě kliknutí na dvou tlačítkách jsou
 brána proti tomu, aby něco odešlo na GitHub, a zkopírovaný text nikomu nic neudělá.
 

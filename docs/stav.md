@@ -2588,6 +2588,15 @@ na vlastním PR **zmizel celý** (ne zašedl) a na jeho místě je `Zadání`: s
 s počty, náhled textu a `Sestavit prompt →`, který otevře sheet s celým markdownem, `Zkopírovat`
 a `Uložit do souboru…`.
 
+**Tlačítko `Prompt →` z #331 dostalo akci** a tím zmizel poslední zakázaný prvek v okně: otevře PR
+a v něm panel `Zadání` (`AppStore.openAgentPrompt(in:)` = `openTab` + `revealAgentPrompt`). Otevřít PR
+je **součást** akce, ne krok před ní — konverzace se nepersistuje a tahá se při zobrazení, takže
+sestavit text rovnou ze seznamu by dalo zadání bez vláken, komentářů pod PR a souhrnů review, tedy
+bez tří druhů ze čtyř. Ze stejného důvodu **není zakázané**: `hasAgentPromptItems` hlídá sazbu textu
+(zkratka a `Sestavit prompt →`), a v seznamu by měřilo stav před otevřením PR — zakázalo by cestu
+k panelu zrovna u PR, jehož materiál je v diskuzi. Řádek **bez akce** (náhled, test) tlačítko nekreslí
+vůbec; je na to test na výšce řádku.
+
 Text skládá čistá funkce `Policy.agentPrompt(…)` ze **čtyř druhů** toho, co aplikace o PR ví —
 nálezy reviewerů, vlákna u řádků, komentáře pod PR a souhrny review. Seskupuje se **po souborech, ne
 po zdrojích** (agent otevírá soubor, ne revieweera), původ se nese v textu, a co soubor nemá, stojí
@@ -2614,7 +2623,14 @@ neodesílá` ani mint pilulka `moje PR` v hlavičce **nepřibyly** — je to chr
 Levý seznam `Co je potřeba opravit` ze sekce 22 tenhle kus taky nekreslí: zadání #333 vyjmenovává
 panel, čistou funkci a sheet, a počty i celý obsah jsou v nich.
 
-Testů je **2895** a jsou zelené (+52), z toho jeden je sonda, která se pouští ručně.
+**Sheet se po proklikání rozšířil o polovinu** (`minWidth` 560 → 840, `idealWidth` 720 → 1080)
+a posunul se **celý rozsah**, ne jedna mez: se zvednutým `idealWidth` by stažené okno spadlo zpátky
+na šířku, kvůli které se to měnilo. Doloženo renderem v obou mezích — na 720 b spadl odznak
+`vynecháno: 1 vyřešené vlákno` do druhé řady a úvodní odstavec zabral pět řádek, na 1080 se odznaky
+vejdou do jedné řady a odstavec do tří. Mockup (sekce 23) drží tutéž hodnotu.
+
+Testů přidala tahle změna **56** a po sloučení s #331 je jich **2943**; jsou zelené, z toho jeden je
+sonda, která se pouští ručně.
 
 ### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
 
