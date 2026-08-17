@@ -2331,7 +2331,7 @@ a ověří si ji ještě těsně před signálem. Záznam navíc nese **vlastní
 která běh spustila, a sirotek je jen ten, jehož vlastník už neběží: bez toho by běh testů zabil
 review běžící aplikace, protože testovací host má stejné `CFBundleName`, tedy tutéž cache.
 
-Testů je **2789** a jsou zelené. Rozhodnutí sedí v `Policy.orphanVerdict` jako čistá funkce se třemi
+Testů je **2793** a jsou zelené (po sloučení s #347). Rozhodnutí sedí v `Policy.orphanVerdict` jako čistá funkce se třemi
 výsledky a testuje se vyčerpávajícím výčtem devíti kombinací; regrese ověřena vložením ve čtyřech
 podobách (bez porovnání identity, bez kontroly vlastníka, bez zápisu značky, bez podmínky na zápis
 při úklidu) a každá položí jiná tvrzení. **Na tomhle není co vidět** — v okně se nemění nic, je to
