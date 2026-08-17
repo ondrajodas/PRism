@@ -2178,5 +2178,46 @@ i naplnění celé krabice, takže tam stálo 22,6 → 1,40 ms; s přípravou mi
 (`measure(_:preparing:_:)`) je to **24,1 → 0,25 ms**. Vidět není nic, testů je **2719** (o 3 víc)
 a regrese je ověřená vložením regrese: bez klíče vyjde v krabici 2000 cizích ploch místo jedné vlastní.
 
+### #350 — okno tuhlo při běžícím review, a byla to jedenáctibodová animace
+
+Hlavní aplikace se dvakrát za dopoledne dostala do stavu, ve kterém hlavní vlákno viselo na
+**83–100 % CPU**, okno reagovalo se zpožděním a `bin/run.sh` na něm padal na `-1712`, protože Apple
+event na ukončení nedostal odpověď. CPU spadlo k nule v okamžiku, kdy dojela poslední `claude`
+session.
+
+**Hypotéza v zadání byla mimo, a to o dva řády.** Vypadalo to na události průběhu review: každá
+zašpiní tělo `PullRequestDetailView` (hlavička čte `reviewProgress(for:)`), takže se přepočítá pruh
+záložek se všemi odznaky a přestaví se obsah tabu. Cena je změřená — **9–55 ms na událost** podle
+toho, co je v okně vidět —, jenže **frekvence je 0,07 až 0,37 události za sekundu** (změřeno na
+145 transcriptech skutečných běhů PRismu v `~/.claude/projects/`), tedy nejvýš dvě procenta
+procesoru. Navíc se u toho ukázalo, že cena je v **zašpinění těla**, ne v té práci: zápis do
+`reviewPhases`, který s časovou osou nedělá nic, stojí přesně tolik.
+
+**Skutečná příčina byla ve `sample`u, jen se z něj musel číst podíl místo vrcholů zásobníku.**
+Hlavní vlákno mělo 3709 vzorků a **3599 z nich** (97 %) leželo pod
+`NSDisplayCycleFlush → NSHostingView.layout()` — tedy v rozvržení, které se opakuje samo, **bez
+jediného rámce aplikace**. Vinen byl `SpinningRing`, jedenáctibodový prstýnek „review běží“ v pruhu
+záložek (#180), který se točil `withAnimation(.linear.repeatForever)`. Nekonečná animace ve SwiftUI
+si vyžádá průchod při každém obtažení obrazovky a ten jde přes `NSHostingView.layout()`, které
+rozvrhne **celé okno — a dvakrát**: jednou pro kresbu, jednou pro `minSize` do constraints
+(půl na půl, 1378 proti 1374 vzorkům).
+
+Sonda `IdleWindowSpinProbe` to reprodukovala v harnessu, u nečinného okna s otevřeným PR:
+**99 % CPU** s prstýnkem ve SwiftUI, **2 %** po převedení na CoreAnimation, **0 %** bez běžícího
+review. Klíčový řádek je ale ten poslední — **prstýnek sám, bez detailu v okně, stojí 0 %**: cena
+není v tom prvku, ale v tom, co je vedle něj. Proto to nezáviselo ani na počtu běžících session,
+ani na tom, který tab byl otevřený, a proto to obě `sample` signatury viděly jinak (v listech je
+vždycky to, co je zrovna na obrazovce).
+
+Prstýnek je od #350 `SpinningRingView` — `NSView` se dvěma `CAShapeLayer`y a `CABasicAnimation` na
+`transform.rotation.z`. Kresba je změřená na pixelech (oblouk 0,35 kruhu = 0,30 ze `strokeEnd` plus
+kulaté zakončení tahu, tichý kruh 0,65) a otáčení na prezentační vrstvě (~1,4 rad za 0,2 s, tedy
+jedna otáčka za 0,9 s). `ProgressView` v kapslích reviewerů zůstává — na macOS ho animuje AppKit,
+takže do téhle pasti nepadá (3 %).
+
+Z toho je nové pravidlo v `CLAUDE.md` i grep, který musí vyjít prázdný. Testů je **2727**; vidět je
+totéž co dřív, jen okno při běžícím review reaguje. **Nepřibaleno:** zašpinění těla detailu událostí
+průběhu — je změřené, ale je to jiná příčina a patří jí vlastní issue.
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

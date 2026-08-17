@@ -142,31 +142,164 @@ private extension View {
 /// Barva je **systémový akcent**, ne fialová z návrhu: fialová je v mockupu proto, že HTML žádný
 /// systémový akcent nemá, kdežto v okně by byla jediná barva, která se neřídí nastavením systému —
 /// a ikona rozdělaného review hned vedle ho používá taky.
+///
+/// **Točí se v CoreAnimation, ne ve SwiftUI, a je to podmínka, ne vkus** (#350). Do #350 to byl
+/// `withAnimation(.linear.repeatForever)` nad `@State` úhlem — a nekonečná animace ve SwiftUI
+/// znamená **nový snímek při každém obtažení obrazovky**, přičemž každý snímek jde přes
+/// `NSHostingView.layout()`, které rozvrhne **celé okno** (a dvakrát: jednou pro kresbu, jednou pro
+/// `minSize` do constraints). Změřeno sondou `IdleWindowSpinProbe`: nečinné okno s detailem PR
+/// stálo s prstýnkem ve SwiftUI **99 % CPU** hlavního vlákna, bez něj **0 %**. V provozu z toho
+/// bylo okno, které se nedalo ovládat, a `bin/run.sh` na něm padal na `-1712`, protože Apple event
+/// na ukončení nedostal odpověď.
+///
+/// CoreAnimation proti tomu točí vrstvou v render serveru: hlavní vlákno o tom neví a SwiftUI
+/// nedostane ani jeden snímek. Cena je, že se ta kresba musí napsat v AppKitu — proto ten
+/// `NSViewRepresentable` níž.
 struct SpinningRing: View {
     var size: CGFloat = 11
     var lineWidth: CGFloat = 2
 
-    @State private var angle = 0.0
     /// Vypnutý pohyb v systému. Prstýnek pak **stojí** — je nedokončený, takže je z něj pořád
     /// poznat, že se něco děje, jen se netočí.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Circle()
-            .trim(from: 0, to: 0.3)
-            .stroke(.tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-            .rotationEffect(.degrees(angle))
-            .background {
-                Circle().stroke(.tint.opacity(0.25), lineWidth: lineWidth)
-            }
+        SpinningRingLayer(lineWidth: lineWidth, isSpinning: !reduceMotion)
             .frame(width: size, height: size)
-            .onAppear {
-                // Točit se něčím, co si člověk v systému vypnul, je horší než nehybná značka —
-                // a `repeatForever` se sám nezastaví, takže se nesmí spustit vůbec.
-                guard !reduceMotion else { return }
-                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
-                    angle = 360
-                }
-            }
+    }
+}
+
+/// Prstýnek jako AppKitová vrstva — kresba i otáčení v CoreAnimation (#350).
+private struct SpinningRingLayer: NSViewRepresentable {
+    let lineWidth: CGFloat
+    let isSpinning: Bool
+
+    func makeNSView(context: Context) -> SpinningRingView {
+        SpinningRingView(lineWidth: lineWidth, isSpinning: isSpinning)
+    }
+
+    func updateNSView(_ view: SpinningRingView, context: Context) {
+        view.apply(lineWidth: lineWidth, isSpinning: isSpinning)
+    }
+}
+
+/// Kruh s rotujícím obloukem, celý v `CAShapeLayer`.
+///
+/// **Barvy se resolvují v `updateLayer()`**, ne jednou v initu: `CGColor` ve vrstvě se sám podle
+/// vzhledu nepřebarví, takže by prstýnek po přepnutí na světlý režim nebo po změně systémového
+/// akcentu zůstal v barvě z doby svého vzniku.
+final class SpinningRingView: NSView {
+    private let track = CAShapeLayer()
+    private let arc = CAShapeLayer()
+    private var lineWidth: CGFloat
+    private var isSpinning: Bool
+
+    /// Jak dlouho trvá jedna otáčka. Tatáž hodnota, jakou měla animace ve SwiftUI do #350 —
+    /// mění se způsob otáčení, ne jeho tempo.
+    static let turn: CFTimeInterval = 0.9
+    /// Kolik kruhu je obtažené. Zbytek je tiché krytí pod ním, ze kterého je poznat, že je
+    /// prstýnek nedokončený.
+    static let arcShare: CGFloat = 0.3
+    /// Krytí tichého kruhu pod obloukem — tolik, kolik měl ve SwiftUI (`.tint.opacity(0.25)`).
+    static let trackAlpha: CGFloat = 0.25
+    /// Pod jakým klíčem visí otáčení. Čte ho test — bez pojmenování by se „točí se v CoreAnimation“
+    /// nedalo tvrdit jinak než okem.
+    static let spinKey = "prism.spin"
+
+    init(lineWidth: CGFloat, isSpinning: Bool) {
+        self.lineWidth = lineWidth
+        self.isSpinning = isSpinning
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.addSublayer(track)
+        layer?.addSublayer(arc)
+        arc.strokeEnd = Self.arcShare
+        arc.lineCap = .round
+        for shape in [track, arc] {
+            shape.fillColor = nil
+            shape.lineWidth = lineWidth
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Prstýnek se ze storyboardu nenačítá.") }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    /// Točí se doopravdy, a v CoreAnimation? Čte to test.
+    ///
+    /// Bez pojmenovaného dotazu se invariant z #350 („nekonečná animace nesmí být ve SwiftUI“) nedá
+    /// tvrdit jinak než okem nebo měřením CPU — a měření je strojově závislé, takže by z něj byl
+    /// test padající bez chyby v kódu.
+    var isSpinningInCoreAnimation: Bool { arc.animation(forKey: Self.spinKey) != nil }
+
+    /// Jak je oblouk otočený **právě teď**, tedy hodnota z prezentační vrstvy. Čte ji sonda:
+    /// nulové CPU samo o sobě nedokazuje, že se prstýnek točí — stejně dobře může stát. `nil`
+    /// znamená, že vrstva zatím nemá prezentaci (okno není na obrazovce).
+    var currentTurn: Double? {
+        arc.presentation()?.value(forKeyPath: "transform.rotation.z") as? Double
+    }
+
+    func apply(lineWidth: CGFloat, isSpinning: Bool) {
+        self.lineWidth = lineWidth
+        track.lineWidth = lineWidth
+        arc.lineWidth = lineWidth
+        guard isSpinning != self.isSpinning else { return }
+        self.isSpinning = isSpinning
+        updateSpin()
+    }
+
+    /// Vzhled se změnil (světlý/tmavý režim, jiný akcent) — barvy se musí resolvovat znovu.
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let accent = NSColor.controlAccentColor
+            arc.strokeColor = accent.cgColor
+            track.strokeColor = accent.withAlphaComponent(Self.trackAlpha).cgColor
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        // Cesta se kreslí v souřadnicích **vrstvy**, ne view: kdyby se vzal `bounds` s nenulovým
+        // počátkem, byl by kruh odsazený o něj a z prstýnku by koukal jen kus.
+        let box = CGRect(origin: .zero, size: bounds.size)
+        for shape in [track, arc] {
+            shape.frame = bounds
+            // Otáčí se **kolem středu**, takže vrstvě patří střed jako záchytný bod — s výchozím
+            // levým dolním rohem by oblouk objížděl okolo prstýnku. Poloha se dorovnává až po něm,
+            // protože změna záchytného bodu vrstvou posune.
+            shape.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+            shape.position = CGPoint(x: bounds.midX, y: bounds.midY)
+            shape.path = CGPath(
+                ellipseIn: box.insetBy(dx: lineWidth / 2, dy: lineWidth / 2),
+                transform: nil
+            )
+        }
+        updateSpin()
+    }
+
+    /// Přidá nebo sundá otáčení. **Přidává se jen tehdy, když tam ještě není** — `layout()` běží
+    /// vícekrát a druhé přidání by animaci restartovalo, takže by prstýnek poskakoval.
+    private func updateSpin() {
+        guard isSpinning else {
+            arc.removeAnimation(forKey: Self.spinKey)
+            return
+        }
+        guard arc.animation(forKey: Self.spinKey) == nil else { return }
+        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+        spin.fromValue = 0
+        spin.toValue = -2 * Double.pi
+        spin.duration = Self.turn
+        spin.repeatCount = .infinity
+        spin.timingFunction = CAMediaTimingFunction(name: .linear)
+        // Animace **nesmí zmizet po dokončení**: bez toho by se prstýnek po první otáčce vrátil
+        // do výchozí polohy a stál.
+        spin.isRemovedOnCompletion = false
+        arc.add(spin, forKey: Self.spinKey)
     }
 }

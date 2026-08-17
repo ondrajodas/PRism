@@ -364,7 +364,10 @@ extension AppStore {
         }
     }
 
-    private func record(_ progress: ReviewProgress, of skill: String, for pr: PRIdentifier, in worktree: URL) {
+    /// `internal`, ne `private`, aby měření ceny jedné události průběhu (#350) sypalo do storu
+    /// **tou samou cestou**, jakou to dělá běh — vlastní zápis do `reviewTimelines` v harnessu by
+    /// byl druhá kopie pravidla a měřil by ji místo aplikace.
+    func record(_ progress: ReviewProgress, of skill: String, for pr: PRIdentifier, in worktree: URL) {
         var timelines = reviewTimelines[pr] ?? []
         if let index = timelines.firstIndex(where: { $0.skill == skill }) {
             timelines[index].record(progress, at: time.now)
