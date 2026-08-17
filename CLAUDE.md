@@ -19,7 +19,7 @@ Co kam patří:
 | [`docs/testovani.md`](docs/testovani.md) | Katalog toho, co se u které oblasti testuje a proč zrovna to | Nová oblast testů, nebo nový případ, který se dá pokazit potichu |
 | [`docs/navrh.md`](docs/navrh.md) | Kde je vizuální návrh a jak se s ním pracuje — čtení CSS, aktualizace, render vedle screenshotu | Změna postupu při práci s mockupem (samo pravidlo je v `CLAUDE.md`) |
 | [`docs/stav.md`](docs/stav.md) | Co je hotové a co zbývá | Dokončené issue |
-| [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md) | Jak se vyřizuje **seznam** issues: co jde souběžně, co dostane subagent, co si nechává orchestrátor, kdo merguje | Změna postupu při dávce, nebo toho, co si subagent ani orchestrátor nesmí dovolit |
+| [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md) | Jak se vyřizuje **seznam** issues: co jde souběžně, jak vypadá milník na větší objem práce, co dostane subagent, co si nechává orchestrátor, kdo merguje | Změna postupu při dávce, podoby milníku, nebo toho, co si subagent ani orchestrátor nesmí dovolit |
 | `docs/superpowers/specs/` | Proč jsou rozhodnutí taková, jaká jsou — včetně zamítnutých alternativ | Změna návrhového rozhodnutí; zapsat i **proč** se změnilo, staré nechat v záznamu rozhodnutí |
 
 Když se změna nikam z toho nevejde, je to signál, že jsem si neujasnil, co vlastně měním
@@ -254,6 +254,15 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   což o dvě verze později nebyla pravda — a v delších releasech **utopil samotnou změnu**,
   které patřila půlka místa. Release je značka na časové ose, takže hodnotu má právě to,
   co je v ní neměnné. Stávající releasy jsou podle toho pravidla přepsané zpětně.
+- **Větší objem práce dostane vlastní milník** (#340) — orientačně **tři a víc issues, které
+  patří k sobě**. Nenechává se nasypaný v `Průběžné` a nečeká se, až o milník někdo požádá:
+  u tří issues je **rozvrh polovina zadání** a milník je jediné místo, kde ta informace přežije
+  napříč sessions. `Průběžné` zůstává tím, co o sobě tvrdí v popisu — koš na věci mimo fáze,
+  bez pořadí a termínu. **Verzování se tím nemění**, viz bod níž.
+
+  Jak takový milník vypadá (titulek, sekce `POŘADÍ PRÁCE`, zakládání přes REST a kam patří
+  odstavec do `docs/stav.md`), je v
+  [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md) — **přečti si to, než milník založíš.**
 - **Verzování:** `v0.<milník>.<pořadí PR v milníku>` — např. třetí mergnutý PR
   v milníku 1 je `v0.1.3`. Verze `v1.0.0` = dokončený rozsah v1 podle specifikace.
 
@@ -261,6 +270,11 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   drobnosti, opravy). PR z něj **pokračuje v číslování běžící fáze**, protože verze je
   značka na časové ose, ne štítek původu. Vlastní řada by znamenala, že se čísla vracejí
   zpátky: `v0.0.x` po `v0.5.7` nikomu neřekne, kdy to vzniklo.
+
+  **Nový milník novou řadu verzí nezakládá.** Od `v1.0.0` běží jedna řada (`v1.1.x`)
+  a číslo milníku v ní roli nehraje — **M9 v ní vyšel celý** (#184 jako `v1.1.87`, #245 jako
+  `v1.1.89`). Je to tatáž úvaha jako u `Průběžné`: verze je značka na časové ose, ne štítek
+  původu.
 - Binárky se do release nepřikládají — buildujeme lokálně. Release slouží k záznamu
   změn, ne k distribuci.
 
