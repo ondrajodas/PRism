@@ -52,8 +52,12 @@ extension AppStore {
     ///
     /// Z tabu, kde panel je, se **nepřepíná nikam** — jinak by převzetí nálezu v diffu člověka
     /// vyhodilo z kódu, který zrovna čte.
+    ///
+    /// **Na vlastním PR z toho vyjde tab se zadáním** (#333): `Moje review` tam v panelu není,
+    /// takže by se přepínalo na segment, který se nekreslí — a panel by zůstal na `Nálezech`, tedy
+    /// jinde, než kam text spadl. Překlad dělá `Policy`, aby na tu otázku byla jedna odpověď.
     func revealDraft(in pr: PRIdentifier) {
-        reviewPanelTab = .draft
+        reviewPanelTab = Policy.reviewPanelTab(.draft, for: ownership(of: pr))
         isReviewPanelExpanded = true
         guard !detailTab(for: pr).showsReviewPanel else { return }
         setDetailTab(.standard, for: pr)

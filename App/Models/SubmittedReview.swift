@@ -43,3 +43,25 @@ struct SubmittedReview: Hashable, Codable, Sendable {
     /// svoje rozhodnutí pozbylo, takže tvrdit „někdo schválil“ by bylo nepravdivé.
     var isVerdict: Bool { state == .approved || state == .changesRequested }
 }
+
+extension SubmittedReview.State {
+    /// Jak se stav review píše v české větě — jako `PullRequestState.czechLabel`.
+    ///
+    /// Patří k modelu, ne k tomu, kdo ho zrovna sází: `rawValue` je **anglický** a jde do JSONu,
+    /// takže interpolovat ho do české věty znamená ukázat `CHANGES_REQUESTED` uprostřed češtiny.
+    /// Ptají se dva (osa konverzace a zadání pro agenta, #333) a dvě tabulky týchž slov by se
+    /// rozešly.
+    ///
+    /// **Odznak na ose z toho čte popisek, ne rozhodnutí, jestli ho kreslit** — `commented` odznak
+    /// nemá, protože „komentoval“ vedle jména autora neřekne nic. To je jiná otázka a bydlí tam,
+    /// kde se kreslí.
+    var czechLabel: String {
+        switch self {
+        case .approved: "schválil"
+        case .changesRequested: "vyžádal změny"
+        case .commented: "komentoval"
+        case .dismissed: "zamítnuté review"
+        case .pending: "rozdělané review"
+        }
+    }
+}

@@ -35,6 +35,14 @@ struct PullRequestDetailView: View {
     /// megabajty — a po přepnutí PR by nad novým ukazoval log z předchozího.
     @State private var logSheet: CodeText?
 
+    /// Zadání pro agenta v sheetu (#333). `@State` detailu ze stejného důvodu jako `logSheet`:
+    /// je to **snímek k přečtení**, nic se z něj neodesílá a nemá co přežít.
+    ///
+    /// **Nuluje se při přepnutí PR** (viz `.task(id:)` níž) — jinak by nad novým PR zůstal
+    /// otevřený sheet se zadáním z předchozího, tedy text, který se dá zkopírovat a nesouhlasí
+    /// s tím, co je za ním v okně. Tatáž past jako u logu checku.
+    @State private var promptSheet: AgentPrompt?
+
     /// Rozdělané odeslání review. Zakládá se tady, ale **drží ho `ContentView`** — detail
     /// zmizí, jakmile PR vypadne ze seznamu, a odeslané review `review-requested` ruší, takže
     /// se to na příštím tiku stane. Sheet by tím zmizel i s hláškou, kvůli které je otevřený.
@@ -60,6 +68,9 @@ struct PullRequestDetailView: View {
         // Celý log jobu (#214) — tentýž sheet, jakým se kopíruje hunk z diffu (#157): jeden
         // read-only `NSTextView`, tedy přesně na tohle.
         .sheet(item: $logSheet) { CodeTextSheet(content: $0) }
+        // Zadání pro agenta (#333). `item:`, ne `isPresented:`: sheet nemá co ukazovat bez textu,
+        // a ten se skládá ve chvíli kliknutí — co je vidět, to se zkopíruje.
+        .sheet(item: $promptSheet) { AgentPromptSheet(prompt: $0) }
         .hiddenShortcuts { shortcuts }
         .task(id: highlighted) {
             guard highlighted != nil else { return }
@@ -79,6 +90,9 @@ struct PullRequestDetailView: View {
         // Log jobu patří k jednomu checku jednoho PR (#214), takže při přepnutí PR **nesmí**
         // přetéct — ani obsahem, ani tou pamětí, kterou drží.
         .task(id: pullRequest.id) { logSheet = nil }
+        // Zadání patří k jednomu PR (#333) a je k rozkopírování, takže při přepnutí **nesmí**
+        // přetéct: zkopírovat prompt psaný o jiném PR se nedá vzít zpátky.
+        .task(id: pullRequest.id) { promptSheet = nil }
         // Klíčem je celé shrnutí, ne jen identifikátor: nový commit změní `updatedAt`,
         // a to je přesně chvíle, kdy se má diff načíst znovu i bez přepnutí PR.
         .task(id: pullRequest) { await store.loadDiff(for: pullRequest) }
@@ -393,6 +407,12 @@ struct PullRequestDetailView: View {
             draftVerdict: store.effectiveVerdict(for: pullRequest.id),
             isDraftStale: store.isDraftStale(for: pullRequest.id),
             isOwnPullRequest: store.isOwnPullRequest(pullRequest.id),
+            ownership: ownership,
+            // Skládá se jen na vlastním PR (#333): na cizím by to byl text, který nikdo neotevře,
+            // a přesto by se přeskládal při každém překreslení panelu.
+            agentPrompt: ownership == .mine ? store.agentPrompt(for: pullRequest.id) : nil,
+            agentPromptActions: agentPromptActions,
+            conversation: store.conversationState(for: pullRequest.id),
             draftUnavailable: draftUnavailable,
             draftActions: draftActions,
             jumpToComment: jumpToComment,
@@ -544,12 +564,33 @@ struct PullRequestDetailView: View {
     ///
     /// Bez `headSha` nemá draft proti čemu vzniknout, a mlčky zakázaná tlačítka vypadají jako
     /// rozbitá aplikace. Rozepsaného draftu se to netýká — ten svůj commit už zná.
+    ///
+    /// **Na vlastním PR se neptá** (#333): tab `Moje review` tam v panelu není, takže věta o tom,
+    /// proč se do něj nedá psát, by mluvila o obrazovce, která se nekreslí — a hlavně by tvrdila,
+    /// že se čeká na commit, kdežto skutečný důvod je, že review na vlastní PR neodejde.
     private var draftUnavailable: String? {
-        guard !store.canComposeDraft(for: pullRequest.id) else { return nil }
+        guard ownership != .mine, !store.canComposeDraft(for: pullRequest.id) else { return nil }
         if case .failed(let detail) = store.detailState(for: pullRequest.id) {
             return "Nevím, na kterém commitu PR stojí, takže se review nemá k čemu psát. \(detail)"
         }
         return "Zjišťuji, na kterém commitu PR stojí…"
+    }
+
+    /// Čí je tenhle PR (#330). Čte se z toho, který segment panelu se kreslí a jestli se smí
+    /// zakládat draft — proto to je jedno místo, ne dotaz u každého volajícího.
+    private var ownership: PullRequestOwnership {
+        store.ownership(of: pullRequest.id)
+    }
+
+    // MARK: - Zadání pro agenta
+
+    private var agentPromptActions: AgentPromptActions {
+        AgentPromptActions(
+            toggle: { store.toggleAgentPromptOption($0) },
+            isEnabled: { store.agentPromptOptions.includes($0) },
+            // Otevře sheet, **nic neodesílá** — do schránky a do souboru se sahá až tam.
+            compose: { promptSheet = store.agentPrompt(for: pullRequest.id) }
+        )
     }
 
     private var draftActions: DraftActions {
@@ -696,6 +737,28 @@ struct PullRequestDetailView: View {
         .disabled(!store.detailTab(for: pullRequest.id).showsReviewPanel)
         backFromCommitShortcut
         submitShortcut
+        agentPromptShortcut
+    }
+
+    /// `⌘⇧P` — sestavit zadání pro agenta (#333), jak to má návrh v hlavičce panelu.
+    ///
+    /// **Jen na vlastním PR a jen když je co předat.** Zkratka, po které se nestane nic, je
+    /// k nerozeznání od rozbité aplikace; zakázané tlačítko klávesu nebere, takže propadne dál.
+    /// Panel se u toho **rozloží sám** — sheet nad složeným panelem by po zavření nechal člověka
+    /// u proužku na hraně okna, tedy tam, kde volby nejsou.
+    /// **Text se tady neskládá** (pravidlo #224): zkratka se vyhodnocuje při každém překreslení,
+    /// takže se ptá jen na to, jestli je co předat — markdown vzniká teprve kliknutím.
+    private var agentPromptShortcut: some View {
+        Button("Sestavit zadání pro agenta") {
+            store.revealAgentPrompt(in: pullRequest.id)
+            promptSheet = store.agentPrompt(for: pullRequest.id)
+        }
+        .keyboardShortcut("p", modifiers: [.command, .shift])
+        .disabled(!canComposeAgentPrompt || promptSheet != nil || store.isPaletteOpen)
+    }
+
+    private var canComposeAgentPrompt: Bool {
+        ownership == .mine && store.hasAgentPromptItems(for: pullRequest.id)
     }
 
     /// `⎋` zavře diff commitu a vrátí seznam (#317) — druhá cesta zpět vedle tlačítka v hlavičce.

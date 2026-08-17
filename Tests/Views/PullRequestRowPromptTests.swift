@@ -4,16 +4,18 @@ import Testing
 
 @testable import PRism
 
-/// Řádek vlastního PR má vpravo `Prompt →` (#331).
+/// Řádek vlastního PR má vpravo `Prompt →` (#331, akce od #333).
 ///
-/// Dvě třídy tvrzení. **Že se to nekreslí u cizího PR:** tlačítko na cizím řádku by slibovalo akci
+/// Tři třídy tvrzení. **Že se to nekreslí u cizího PR:** tlačítko na cizím řádku by slibovalo akci
 /// nad prací, která není moje, a v `body` se to tvrdit nedá — proto je rozhodnutí pojmenované.
-/// A **že se doopravdy nakreslí:** `if` nad `ownership` může projít, aniž by se prvek do řádku
-/// vešel, takže se řádek rozvrhne mimo obrazovku a porovná se výška.
+/// **Že se to nekreslí bez akce** (#333): do té doby bylo tlačítko zakázané a nedělalo nic, což je
+/// zrovna ten stav, ve kterém člověk hledá, co je rozbité — takže se řádek bez `openPrompt` kreslí
+/// jako cizí. A **že se doopravdy nakreslí:** `if` nad `ownership` může projít, aniž by se prvek do
+/// řádku vešel, takže se řádek rozvrhne mimo obrazovku a porovná se výška.
 @Suite("Řádek vlastního PR (#331)")
 @MainActor
 struct PullRequestRowPromptTests {
-    private func row(_ ownership: PullRequestOwnership) -> PullRequestRow {
+    private func row(_ ownership: PullRequestOwnership, openPrompt: (() -> Void)? = {}) -> PullRequestRow {
         PullRequestRow(
             pullRequest: PullRequestSummary(
                 id: PRIdentifier("ondrajodas/PRism#324")!,
@@ -24,7 +26,8 @@ struct PullRequestRowPromptTests {
                 state: .open
             ),
             reviewState: .completed(findings: 6),
-            ownership: ownership
+            ownership: ownership,
+            openPrompt: openPrompt
         )
     }
 
@@ -35,6 +38,27 @@ struct PullRequestRowPromptTests {
         // A výchozí hodnota je `theirs`: řádek bez informace o autorovi tlačítko **nemá**, jinak by
         // se objevilo všude, kde se řádek kreslí bez storu.
         #expect(!PullRequestRow(pullRequest: row(.mine).pullRequest, reviewState: .notStarted).showsPromptAction)
+    }
+
+    /// Nejcennější tvrzení téhle sady: **bez akce se tlačítko nekreslí.** Kdyby se kreslilo, byl by
+    /// z něj zase zakázaný prvek z #331 — jen tentokrát potichu, protože by ho vyrobil volající,
+    /// který zapomněl uzávěr předat.
+    @Test("Bez akce se Prompt nekreslí, ani na vlastním PR")
+    func doesNotDrawThePromptWithoutAnAction() {
+        #expect(!row(.mine, openPrompt: nil).showsPromptAction)
+        #expect(height(of: row(.mine, openPrompt: nil)) == height(of: row(.theirs)))
+    }
+
+    /// Že tlačítko volá **tu akci, kterou dostalo**. Sám `Button` se v testu stisknout nedá (klik do
+    /// okna mimo obrazovku se nedoručí), takže se tvrdí uzávěr — jediná věc mezi řádkem a storem.
+    @Test("Prompt volá akci, kterou řádek dostal")
+    func callsTheActionItWasGiven() {
+        final class Box { var count = 0 }
+        let box = Box()
+
+        row(.mine, openPrompt: { box.count += 1 }).openPrompt?()
+
+        #expect(box.count == 1)
     }
 
     /// Tlačítko je z návrhu 25 bodů vysoké (`.mini.pri`), kdežto odznak stavu je jen text

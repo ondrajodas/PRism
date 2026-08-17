@@ -108,6 +108,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   se pozná na **výšce řádku** rozvržené mimo obrazovku (`fittingSize`) — samotné `if` může projít,
   aniž by se prvek do řádku vešel.
 
+  **Od #333 je tam třetí tvrzení: bez akce se tlačítko nekreslí.** Vlastní řádek bez `openPrompt` má
+  výšku cizího, tedy měřenou, ne odhadnutou — kdyby se kreslilo dál, byl by z něj potichu zase ten
+  zakázaný prvek z #331, jen vyrobený volajícím, který zapomněl uzávěr předat. Že tlačítko volá **tu**
+  akci, se tvrdí na uzávěru: `Button` se v testu stisknout nedá (klik do okna mimo obrazovku se
+  nedoručí), takže se ověřuje jediná věc mezi řádkem a storem.
+
   **Ověřeno vložením regrese, třemi.** Vyhození větve o chybějícím zdroji shodí 4 tvrzení ve třech
   testech, `activeFindings → findings` (tedy „odmítnutý nález pořád čeká na tah“) jeden a
   `showsPromptAction → true` tři včetně toho na výšku řádku.
@@ -117,6 +123,57 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   obrázek. Ke dvěma z těch stavů se v aplikaci klikáním nedostaneš (musel by spadnout `gh api user`,
   resp. chybět zdroj v konfiguraci) a dashboard se **screenshotem běžícího okna nevyfotí celý**:
   je to jeden `ScrollView`, takže s třiceti PR ve frontě spadne blok `Moje PR` pod dolní hranu.
+- **Zadání pro agenta na vlastním PR (#333)** — tři sady a v každé je to nejcennější negativní.
+
+  `Policy` výčtem (`AgentPromptTests`): že se **vyřešená vlákna a odmítnuté nálezy do textu
+  nedostanou, ale spočítají se** (bez počtu by se nedalo napsat „vynecháno“ a tiché zahození vypadá
+  jako „tohle je všechno“); že komentář pod PR a souhrn review skončí v sekci **bez souboru**, ne
+  přišpendlené k náhodnému; že zastaralé vlákno **řekne, že jeho číslo platí pro starší commit**;
+  že hlava PR je v hlavičce textu, a když ji neznáme, je tam **věta o tom**; že nenačtená konverzace
+  je přiznaná i v textu; že vypnutý hunk zmizí **u nálezu i u vlákna**; a že odmítnutý nález
+  neblokuje. K tomu pořadí sekcí a souborů (blokující první, pak abecedně, uvnitř podle řádku
+  s položkou bez řádku nahoře) a název souboru bez lomítka.
+
+  `AppStore` proti fake gateway a **skutečnému** `ReviewDraftStore` (`AppStoreAgentPromptTests`):
+  že se na vlastním PR **draft nedá založit, ani když je hlava známá** — to je celé issue —, že se
+  brána nezavře, dokud není znám login (bezpečná strana z #330), a že **draft z dřívějška zůstane
+  čitelný a smazatelný**. Draft se v tom testu zakládá jako cizí PR, tedy tou cestou, kterou
+  doopravdy vznikl, a až potom se z PR stane vlastní: přesně stav, do kterého se dostane, kdo si
+  dopsal `author:@me`. Předfiltr pro zkratku `⌘⇧P` se ověřuje proti hotovému zadání, aby zkratka
+  nebyla zakázaná nad neprázdným panelem.
+
+  **Akce `Prompt →` z řádku má dvě tvrzení** (`openAgentPrompt(in:)`): že otevře **záložku i panel**
+  — včetně přepnutí z tabu `Commity`, ve kterém panel není, protože rozložit něco, co není vidět, je
+  k nerozeznání od němé akce —, a že **nezakazuje sama sebe nad prázdným zadáním**. To druhé je to
+  cennější: je to navigace, takže `hasAgentPromptItems` v seznamu měří stav před otevřením PR a jako
+  brána by schoval cestu k panelu zrovna u PR, jehož materiál leží v diskuzi.
+
+  **Tvrdá podmínka č. 1 má od #333 test, ne jen grep** (`SingleWayOutTests`). Čte zdrojáky v `App/`
+  (komentáře zahazuje stejně jako grep v `CLAUDE.md`) a tvrdí čtyři věci: `ReviewPublishing` zná
+  **právě pět souborů**, protokol má **čtyři metody**, **žádný** ze souborů zadání (jejich počet je
+  v tvrzení, ať novým souborem téhle vrstvy neprojde výjimka) nezná publisher, payload, API ani
+  `Process(`, a mimo úložiště zapisuje soubor **jen** `TextFileExport` přes `NSSavePanel`. Je to test
+  o struktuře kódu, protože „odkud se dá odeslat“ se za běhu zjistit nedá. **Počty jsou jen v testu**
+  — opsané v dokumentaci by se rozešly hned prvním přidaným souborem (chytil to Copilot na #333).
+
+  **Ověřeno vložením regrese, dvakrát:** vyhození `.mine` z `canComposeDraft` shodí tři testy store
+  (mezi nimi ten o velikosti písmen, takže je vidět, že brána chodí přes `Policy.ownership`)
+  a jediné `(any ReviewPublishing)?` v `AppStore+AgentPrompt.swift` shodí obě poloviny
+  `SingleWayOutTests` — výčet pěti souborů i zákaz publisheru v zadání.
+
+  **Vzhled má sondu, ne tvrzení** (`AgentPromptRenderProbe`, `TEST_RUNNER_PRISM_MEASURE=1`): panel se
+  rendruje v **obou mezích šířky** (240 a 520 bodů), protože sedm popisků s počty se do užší vejít
+  musí — `lineLimit(1)` by rozdíl mezi `Vyřešená vlákna` a `Odmítnuté nálezy` schoval do „…“. Sheet
+  se rendruje zvlášť a **s pozadím a tmavým režimem nasazeným sondou**: sám si plochu nemaluje
+  (v okně ji dává sheet), takže bez toho vyjde titulek světle na světlém a vypadá to jako chybějící
+  prvek — na to se u #333 spálilo jedno kolo. Sonda tiskne i celý text zadání, takže se dá přečíst
+  vedle mockupu.
+
+  **Sheet se od #333 rendruje taky v obou mezích** (840 a 1080 b), a je to k něčemu: na tom rozšíření
+  o polovinu je vidět, co se **zalomením** mění. Na 720 b spadl odznak `vynecháno: 1 vyřešené vlákno`
+  do druhé řady `FlowRow`u a úvodní odstavec zabral pět řádek; na 1080 se odznaky vejdou do jedné řady
+  a odstavec do tří; na 840 taky do jedné řady, jen odstavec do čtyř. Jedno číslo by o druhém stavu
+  netvrdilo nic — a **`minWidth` je to zajímavější z těch dvou**, protože do něj se sheet dá stáhnout.
 - **Konverzace** — proti fixtures, které jsou surové odpovědi z veřejných PR `cli/cli`
   sebrané **tím dotazem, který posílá aplikace** (`ConversationQuery.document`). Kdyby se
   sbíraly jinak, testovaly by tvar, který v provozu nikdy nepřijde; ověřené je to i tak, že

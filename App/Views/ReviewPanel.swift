@@ -46,6 +46,17 @@ struct ReviewPanel: View {
     var isDraftStale = false
     /// Je to můj vlastní PR? Pak se návrh nepředvyplňuje a panel to vysvětlí.
     var isOwnPullRequest = false
+    /// Čí je PR (#330). **Rozhoduje, který druhý segment se kreslí**: na cizím `Moje review`,
+    /// na vlastním `Zadání`. Není to totéž jako `isOwnPullRequest`: ten se ptá konverzace na to,
+    /// co GitHub udělá s odeslaným review, kdežto tohle je rozřazení podle autora, které platí
+    /// od první obtažené obrazovky.
+    var ownership: PullRequestOwnership = .theirs
+    /// Zadání pro agenta (#333). `nil` u cizího PR — tam se panel na něj neptá.
+    var agentPrompt: AgentPrompt?
+    var agentPromptActions = AgentPromptActions()
+    /// Stav načtení konverzace — panel se zadáním z něj kreslí větu o tom, že cizí komentáře
+    /// nemá odkud vzít.
+    var conversation: ConversationState?
     /// Proč se do draftu nedá psát. `nil` = dá se.
     var draftUnavailable: String?
     var draftActions = DraftActions()
@@ -157,7 +168,9 @@ struct ReviewPanel: View {
                     )
                 }
                 draftMark
-                Text(verbatim: "nálezy · review")
+                // Na vlastním PR je vedle nálezů zadání, ne review (#333) — proužek má říkat,
+                // co za ním je.
+                Text(verbatim: ownership == .mine ? "nálezy · zadání" : "nálezy · review")
                     .font(.system(size: 10.5))
                     .tracking(0.6)
                     .foregroundStyle(Palette.ink3)
@@ -245,10 +258,24 @@ struct ReviewPanel: View {
     /// Segmenty z návrhu, ne `Picker(.segmented)`: systémový přepínač si bere výšku
     /// i šířku podle textu a v panelu 300 bodů se `Nálezy · 12 / Moje review ●` nevejde.
     /// Sazba je z `.seg` — poloměr 6, 11,5 bodu, aktivní na vyvýšené ploše.
+    ///
+    /// **Který druhý segment to je, rozhoduje `Policy.reviewPanelTabs`** (#333): na vlastním PR
+    /// `Zadání`, na cizím `Moje review`. Nikdy oba — verdikt na vlastním PR GitHub odmítne, takže
+    /// tam nemá co dělat ani jako zašedlý.
     private var segments: some View {
         HStack(spacing: 2) {
-            segment("Nálezy", count: findings.isEmpty ? nil : findings.count, tag: .findings)
-            segment(draftLabel, tag: .draft)
+            ForEach(Policy.reviewPanelTabs(for: ownership), id: \.self) { tag in
+                switch tag {
+                case .findings:
+                    segment("Nálezy", count: findings.isEmpty ? nil : findings.count, tag: .findings)
+                case .draft:
+                    segment(draftLabel, tag: .draft)
+                case .agentPrompt:
+                    // Nula se nekreslí — „Zadání 0“ tvrdí, že se počítalo a nic nevyšlo, kdežto
+                    // důvod (nenačtená konverzace, nespuštěné review) je uvnitř tabu.
+                    segment("Zadání", count: agentPromptCount, tag: .agentPrompt)
+                }
+            }
         }
         .padding(.horizontal, 11)
         .padding(.top, 9)
@@ -309,8 +336,10 @@ struct ReviewPanel: View {
 
     // MARK: - Obsah
 
+    /// Vybraný tab se **přeloží** podle toho, čí PR to je (#333) — volba je jedna pro celé okno,
+    /// takže po přepnutí z cizího PR na vlastní ukazuje na segment, který tady není.
     @ViewBuilder private var content: some View {
-        switch tab {
+        switch Policy.reviewPanelTab(tab, for: ownership) {
         case .findings: findingsTab
         case .draft:
             DraftPanel(
@@ -323,6 +352,23 @@ struct ReviewPanel: View {
                 actions: draftActions,
                 jump: jumpToComment
             )
+        case .agentPrompt:
+            // `nil` znamená „cizí PR“, a tam se tenhle segment nekreslí (`Policy.reviewPanelTabs`),
+            // takže sem to nedojde. Je to rozbalení optionalu, ne stav k zobrazení — kdyby se to
+            // rozešlo, je chyba v tom, kdo panel skládá, ne prázdno k vysvětlení.
+            if let agentPrompt {
+                AgentPromptPanel(
+                    prompt: agentPrompt,
+                    conversation: conversation,
+                    toggle: agentPromptActions.toggle,
+                    isEnabled: agentPromptActions.isEnabled,
+                    compose: agentPromptActions.compose,
+                    // Draft na vlastním PR se od #333 nezakládá, ale co tam zbylo z dřívějška,
+                    // musí zůstat vidět a smazatelné.
+                    leftoverDraft: draft,
+                    discardDraft: draftActions.discard
+                )
+            }
         }
     }
 
@@ -389,5 +435,12 @@ struct ReviewPanel: View {
     private var draftLabel: String {
         guard draft != nil else { return "Moje review" }
         return isDraftStale ? "Moje review ⚠︎" : "Moje review ●"
+    }
+
+    /// Počet položek u segmentu `Zadání`. `nil` u nuly i bez zadání — nula by tvrdila, že se
+    /// spočítalo a vyšlo prázdno, a to má vysvětlit obsah tabu.
+    private var agentPromptCount: Int? {
+        guard let total = agentPrompt?.included.total, total > 0 else { return nil }
+        return total
     }
 }

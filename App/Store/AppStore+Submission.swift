@@ -62,14 +62,13 @@ extension AppStore {
     ///
     /// Panel z toho skládá větu o tom, že tam GitHub bere jedině `Jen komentář`; bez ní by
     /// nepředvyplněný verdikt vypadal jako chybějící návrh.
+    ///
+    /// Ptá se na **konverzaci**, ne na `viewer` z `gh` (#330): tady jde o to, co GitHub udělá
+    /// s odeslaným review, a `Conversation.viewer` je tentýž login, jakým se v ní pozná „to jsem
+    /// napsal já“. Rozřazení seznamu i brána na zakládání draftu jdou naopak přes
+    /// `ownership(of:)` — ta odpověď musí být hotová dřív, než se stihne načíst konverzace.
     func isOwnPullRequest(_ pr: PRIdentifier) -> Bool {
         Policy.isOwn(author: author(of: pr), viewer: conversation(for: pr)?.viewer)
-    }
-
-    /// Autor PR z dotaženého detailu. `nil` = ještě nevíme.
-    private func author(of pr: PRIdentifier) -> String? {
-        guard case .loaded(let detail, _) = detailStates[pr] else { return nil }
-        return detail.author
     }
 
     /// Složí jedno odeslání — snímek toho, co je teď v draftu.

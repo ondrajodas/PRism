@@ -362,7 +362,11 @@ struct DashboardView: View {
                             row: entry.row,
                             // Čte se **tady**, ne v řádku: řádek store nemá. Vlastní PR má vpravo
                             // `Prompt →` (#331), ať je v kterémkoli z obou bloků.
-                            ownership: store.ownership(of: entry.pullRequest)
+                            ownership: store.ownership(of: entry.pullRequest),
+                            // Akce od #333, tatáž jako v seznamu. Celý řádek je tu `Button`, který
+                            // PR otevírá — takže i kdyby klik spadl na řádek pod tlačítkem, vede to
+                            // na týž PR, jen bez rozloženého panelu. Němá akce z toho nevznikne.
+                            openPrompt: { store.openAgentPrompt(in: entry.id) }
                         )
                         // Vlevo nic: proužek stavu má sedět na hraně bloku, jak ho kreslí návrh.
                         .padding(.trailing, 13)

@@ -117,8 +117,12 @@ zrevidovat, a nahoru jde, co posílám ven. Je to **tentýž seznam nad druhou m
 podle **autora** (`Policy.ownership`, #330), ne podle zdroje, ze kterého PR přišel, protože jeden PR
 umí splňovat víc search dotazů naráz. Řádek vlastního PR má vpravo **`Prompt →`** místo verdiktu:
 verdikt na vlastní PR GitHub odmítá, takže jediné, co s ním okno umí udělat, je složit z nálezů
-a konverzace zadání pro agenta. Skládání samo je #333 — do té doby je tlačítko **ztlumené
-a zakázané**, aby neslibovalo akci, která se nestane.
+a konverzace zadání pro agenta.
+
+**`Prompt →` otevře PR a v něm panel `Zadání`** (#333), text neskládá. Je to schválně: konverzace se
+tahá při zobrazení PR, takže složit markdown rovnou ze seznamu by dalo zadání **bez vláken
+a komentářů pod PR** — tedy bez většiny toho, co se předává. Tlačítko proto taky není nikdy zakázané:
+navigace udělá vždycky něco, kdežto sazba textu má vlastní bránu v panelu.
 
 **Odznak u sekce počítá to, co čeká na tah**, ne otevřené PR: PR s nezpracovaným nálezem nebo
 s nevyřešeným cizím vláknem. Nula se nekreslí (prázdno je dobrá zpráva) a `nil` — tedy nenačteno —
@@ -603,6 +607,29 @@ po tom v okně stopu je horší než zkratka, která nedělá nic.
 Segmenty jsou od #242 **dva**: `Průběh` se odstěhoval do vlastní záložky PR, protože se u kódu
 nečte a u spadlé session se do 300 bodů nevešel ani důvod, ani konec logu. Nálezy v panelu
 naopak zůstávají — tab `Nálezy` je druhý pohled na tu samou věc, ne přesun.
+
+**Na vlastním PR je vedle nálezů `Zadání`, ne `Moje review`** (#333). `APPROVE`
+i `REQUEST_CHANGES` na vlastní pull request GitHub odmítá (422, změřeno u #62), takže verdikt
+a `Odeslat` tam **zmizí celé** — zašedlé tlačítko svádí na něj kliknout a přečíst si chybu. Místo
+nich panel sbírá, co je potřeba opravit, a skládá z toho **jedno zadání pro agenta**: nálezy
+reviewerů, vlákna u řádků, komentáře pod PR a souhrny review. Sedm zaškrtávacích voleb s počty říká,
+co v textu je; vyřešená vlákna a odmítnuté nálezy v něm nejsou, ale **je u nich vidět, kolik jich
+je**, a dají se přibrat. `Sestavit prompt →` (nebo `⌘⇧P`) otevře okno s celým markdownem, ze kterého
+se dá text zkopírovat nebo uložit do souboru. To okno je **širší než ostatní sheety** (1080 bodů proti
+720 u ostatních): obsah je markdown s fenced diffy, a na užším se zalamoval skoro každý řádek —
+zalomený diff se přestane číst jako diff. Text se **nikam neodesílá**, cesta ven zůstává jen jedna
+(viz *Odeslání review*). Proto tu taky **není druhé potvrzení**: dvě kliknutí na dvou tlačítkách jsou
+brána proti tomu, aby něco odešlo na GitHub, a zkopírovaný text nikomu nic neudělá.
+
+Text je seskupený **po souborech, ne po zdrojích** (agent otevírá soubor, ne revieweera), u každé
+položky je napsané, odkud přišla — podle toho se pozná, komu se dá odpovědět —, a co soubor nemá
+(souhrn review, komentář v diskuzi), stojí ve vlastní sekci před nimi. V hlavičce textu je **hlava
+PR**, protože nálezy platí proti ní a zadání se předává dál. Když konverzace není načtená, je to
+napsané v panelu i v textu: prázdný počet vláken nesmí vypadat jako „nikdo nic nenapsal“.
+
+**Rozdělané review se na vlastním PR nezakládá** — tlačítka, kterými by vzniklo (převzetí nálezu,
+poznámka, komentář u řádku, tažení rozsahu), tam **nejsou**, protože odeslat ho není kudy. Co tam
+zbylo z dřívějška, ale nezmizí: je vidět v panelu `Zadání` i v bublinách u kódu a jde smazat.
 
 Do #182 byl panel **pod** diffem, kde si bral výšku — tedy to, čeho je u kódu nejmíň. Napravo bere
 šířku, které je v okně přes celou obrazovku dost: v pohledu pod sebou zbude i na 14" displeji 126
@@ -1502,7 +1529,8 @@ App/                      zdrojáky aplikace — target PRism
   Health/                 dostupnost služeb pro stavový řádek: status pages, signály, monitor
   Markdown/               vykreslení Markdownu z GitHubu: bloky (včetně citací a výstrah), inline HTML
                           od botů, škála nadpisů a mezer, zapamatované rozložení na bloky
-  Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka, hledání v paletě
+  Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka, hledání v paletě,
+                          složení zadání pro agenta na vlastním PR (#333)
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR, brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy;
                           zadání PR pro reviewera vedle pracovního stromu (#120)

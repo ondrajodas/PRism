@@ -168,7 +168,10 @@ struct PullRequestListView: View {
                 reviewState: row.state,
                 hasDraft: row.hasDraft,
                 row: row.summary,
-                ownership: row.ownership
+                ownership: row.ownership,
+                // `Prompt →` (#333) — otevře PR a v něm panel `Zadání`. Store se tady drží, takže
+                // uzávěr nese jen identitu řádku; skládání textu je věc panelu, ne seznamu.
+                openPrompt: { store.openAgentPrompt(in: row.id) }
             )
         }
     }

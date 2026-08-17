@@ -646,7 +646,7 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
     odmítá, se z nálezů a konverzace skládá zadání pro agenta. Sedm issues (#330–#336), nakreslené
     v sekcích 21 a 22 návrhu; **pořadí je v popisu milníku**, protože se podle něj rozhoduje, co jde
     souběžně. Hotové: rozřazení podle autora #330, sekce `Moje PR` v railu a druhá fronta na
-    dashboardu #331.
+    dashboardu #331, panel se zadáním pro agenta #333.
 
 Vedle fází stojí milník **Průběžné**: koš na to, co do žádné z nich nepatří (ikona,
 podpis, stavový řádek). Nemá pořadí ani termín a verze se z něj neodvozuje — viz
@@ -2564,13 +2564,14 @@ není „nic nemám“, ale „nevím, kdo jsem“ (dohodnuto už v #330).
 **Rozhodnuto jinak, než bylo v zadání**, čtyřikrát a v každém případě s důvodem. Řádek vlastního PR
 má `Prompt →` **vedle** odznaku stavu, ne místo něj: pilulku `6 k předání` z návrhu se dá napsat
 teprve tehdy, až předání existuje (#333) a nese razítko (#334), kdežto odznak říká to, co se ví — že
-reviewer běžel a s jakým výsledkem —, a to je zrovna materiál, který prompt ponese. Tlačítko je
-**zakázané a ztlumené**, protože plné akcentové tlačítko, po kterém se nic nestane, je lež o tom, co
-okno umí; ztlumení kreslí řádek, protože `MiniButtonStyle` se na `isEnabled` neptá (v celé aplikaci,
-ne jen tady — vlastní otázka na návrh). Blok `Moje PR` na dashboardu **nemá popisek** `jen s nálezy`,
-který návrh kreslí vpravo v hlavičce: nic se nefiltruje, takže by ten text tvrdil něco, co se nedělá.
-A **věta pod pozdravem se nezměnila**, ačkoli návrh má „Na dvou vlastních leží nálezy k předání.“ —
-dokud `Čeká na mě` počítá i vlastní PR, mluvila by ta druhá věta o týchž pull requestech dvakrát.
+reviewer běžel a s jakým výsledkem —, a to je zrovna materiál, který prompt ponese. Tlačítko bylo
+v #331 **zakázané a ztlumené**, protože plné akcentové tlačítko, po kterém se nic nestane, je lež
+o tom, co okno umí (napojilo ho #333, viz níž); ztlumení kreslí řádek, protože `MiniButtonStyle` se
+na `isEnabled` neptá (v celé aplikaci, ne jen tady — vlastní otázka na návrh). Blok `Moje PR` na
+dashboardu **nemá popisek** `jen s nálezy`, který návrh kreslí vpravo v hlavičce: nic se nefiltruje,
+takže by ten text tvrdil něco, co se nedělá. A **věta pod pozdravem se nezměnila**, ačkoli návrh má
+„Na dvou vlastních leží nálezy k předání.“ — dokud `Čeká na mě` počítá i vlastní PR, mluvila by ta
+druhá věta o týchž pull requestech dvakrát.
 
 **Známé omezení, které jde do #332:** `railQueueCount`, `Policy.dashboard`, automat i notifikace
 počítají pořád i vlastní PR, takže vlastní PR je na dashboardu vidět **v obou blocích** a v čísle
@@ -2579,6 +2580,57 @@ karty `Čeká na mě`. Je na to test, aby se ta oprava nestala mimochodem.
 Testů je **2881** a jsou zelené (+38). K tomu sonda `OwnPullRequestsRenderProbe` (dashboard a čtyři
 podoby sekce), protože ke dvěma z těch stavů se klikáním nedostaneš a dashboard se ve skutečném okně
 s třiceti PR ve frontě celý nevyfotí.
+
+**Na vlastním PR panel sbírá zadání pro agenta, ne verdikt (#333)** — třetí mergnutý kus M10.
+Pravý panel měl na vlastním PR všechny tři věci k ničemu (tělo, verdikt, `Odeslat`), protože
+`APPROVE` i `REQUEST_CHANGES` tam GitHub vrací jako 422 (změřeno u #62). Segment `Moje review` proto
+na vlastním PR **zmizel celý** (ne zašedl) a na jeho místě je `Zadání`: sedm zaškrtávacích voleb
+s počty, náhled textu a `Sestavit prompt →`, který otevře sheet s celým markdownem, `Zkopírovat`
+a `Uložit do souboru…`.
+
+**Tlačítko `Prompt →` z #331 dostalo akci** a tím zmizel poslední zakázaný prvek v okně: otevře PR
+a v něm panel `Zadání` (`AppStore.openAgentPrompt(in:)` = `openTab` + `revealAgentPrompt`). Otevřít PR
+je **součást** akce, ne krok před ní — konverzace se nepersistuje a tahá se při zobrazení, takže
+sestavit text rovnou ze seznamu by dalo zadání bez vláken, komentářů pod PR a souhrnů review, tedy
+bez tří druhů ze čtyř. Ze stejného důvodu **není zakázané**: `hasAgentPromptItems` hlídá sazbu textu
+(zkratka a `Sestavit prompt →`), a v seznamu by měřilo stav před otevřením PR — zakázalo by cestu
+k panelu zrovna u PR, jehož materiál je v diskuzi. Řádek **bez akce** (náhled, test) tlačítko nekreslí
+vůbec; je na to test na výšce řádku.
+
+Text skládá čistá funkce `Policy.agentPrompt(…)` ze **čtyř druhů** toho, co aplikace o PR ví —
+nálezy reviewerů, vlákna u řádků, komentáře pod PR a souhrny review. Seskupuje se **po souborech, ne
+po zdrojích** (agent otevírá soubor, ne revieweera), původ se nese v textu, a co soubor nemá, stojí
+v sekci `K celému PR (bez souboru)` **před** nimi. Vyřešená vlákna a odmítnuté nálezy v textu
+nejsou, ale **jsou spočítané** a dají se zapnout; hlava PR je v hlavičce textu (tvrdá podmínka č. 5)
+a nenačtená konverzace je přiznaná i v textu, protože zadání se předává dál.
+
+**Draft review na vlastním PR nesmí ani vzniknout** a je to půlka issue: zakládá se čtyřmi cestami
+přes diff, takže je zavírá jedna brána (`canComposeDraft(for:)`, dva volající ve view) tím, že se ta
+tlačítka **nekreslí**. Co tam zbylo z dřívějška, se ale **nezahazuje** — zůstává vidět v panelu
+`Zadání` i v bublinách diffu a jde smazat.
+
+**Tvrdá podmínka č. 1 se nemění a od téhle změny na ni je test** (`SingleWayOutTests`): čte zdrojáky
+a tvrdí pět souborů u `ReviewPublishing`, čtyři metody protokolu a že ani jeden ze souborů zadání
+nezná publisher, payload, API ani podproces. Prompt končí ve schránce nebo v souboru, který
+vybere člověk v `NSSavePanel`u — a selhání zápisu se **ukáže**, protože po zavření sheetu se text
+nemá kde vzít znovu.
+
+**Rozhodnuto jinak, než bylo v zadání**, ve třech detailech: popisky dvou voleb nejsou z mockupu
+doslova (`Nevyřešená vlákna u řádků` a `Souhrny review` bez „od kolegů“, protože do zadání jde i to,
+co jsem si na vlastním PR napsal sám); draft z dřívějška bydlí **v panelu se zadáním**, ne ve třetím
+segmentu (tři segmenty se do 240 bodů nevejdou); a řádek stavové lišty `Vlastní PR — review se odsud
+neodesílá` ani mint pilulka `moje PR` v hlavičce **nepřibyly** — je to chrom sdílený s #331 a #332.
+Levý seznam `Co je potřeba opravit` ze sekce 22 tenhle kus taky nekreslí: zadání #333 vyjmenovává
+panel, čistou funkci a sheet, a počty i celý obsah jsou v nich.
+
+**Sheet se po proklikání rozšířil o polovinu** (`minWidth` 560 → 840, `idealWidth` 720 → 1080)
+a posunul se **celý rozsah**, ne jedna mez: se zvednutým `idealWidth` by stažené okno spadlo zpátky
+na šířku, kvůli které se to měnilo. Doloženo renderem v obou mezích — na 720 b spadl odznak
+`vynecháno: 1 vyřešené vlákno` do druhé řady a úvodní odstavec zabral pět řádek, na 1080 se odznaky
+vejdou do jedné řady a odstavec do tří. Mockup (sekce 23) drží tutéž hodnotu.
+
+Testů přidala tahle změna **56** a po sloučení s #331 je jich **2943**; jsou zelené, z toho jeden je
+sonda, která se pouští ručně.
 
 ### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
 

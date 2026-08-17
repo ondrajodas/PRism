@@ -1867,7 +1867,8 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Automatic.swift` | Automatický režim a denní rozpočet (#25) | 89 |
 | `AppStore+Findings.swift` | Zahození záznamu (#81) a odmítnutí nálezu (#113) | 70 |
 | `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
-| `AppStore+Ownership.swift` | Čí jsou PR v seznamu (#330) — `ownLogins`, `ownership(of:)`, `tracksOwnPullRequests` — a od #331 celá sekce `Moje PR`: `visibleOwnPullRequests`, `hiddenOwnPullRequestCount`, `railMineCount`, `ownListEmptyReason`, `dashboardOwnPullRequests`. **Dotažení loginu je v `AppStore.swift`**, u ostatních věcí, které se načítají při startu, a taky proto, že `viewer` je `private(set)` | 125 |
+| `AppStore+Ownership.swift` | Čí jsou PR v seznamu (#330) — `ownLogins`, `ownership(of:)`, `tracksOwnPullRequests` —, od #331 celá sekce `Moje PR`: `visibleOwnPullRequests`, `hiddenOwnPullRequestCount`, `railMineCount`, `ownListEmptyReason`, `dashboardOwnPullRequests`, a od #333 i `ownership(of pr:)` s `author(of:)`. **Dotažení loginu je v `AppStore.swift`**, u ostatních věcí, které se načítají při startu, a taky proto, že `viewer` je `private(set)` | 132 |
+| `AppStore+AgentPrompt.swift` | Zadání pro agenta na vlastním PR (#333) — `agentPrompt(for:)`, předfiltr `hasAgentPromptItems(for:)` bez sazby textu, přepnutí volby, `revealAgentPrompt(in:)` a `openAgentPrompt(in:)` (akce `Prompt →` z řádku: otevřít PR **a** panel). **Nedrží cestu ven**: prompt končí ve schránce nebo v souboru | 90 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
 | `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
 | `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
@@ -2173,7 +2174,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ConversationComposerView`, `ConversationComposer` | Psaní komentáře pod PR (#216) a akce k němu |
 | `TimelineEventRow` | Událost převedená na řádek — symbol, věta **s tučnými jmény**, barva uzlu (`tint: Color?`), sha po jednom (#171, sazba #216). Mimo view a testovatelné, jako `FindingRow` |
 | `AvatarView`, `AvatarLoader` | Obrázek uživatele u události a jeho cache nad `HTTPGetting` (#171) |
-| `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review — a u **vlastního PR** `Prompt →` (#331, `showsPromptAction`). Tlačítko je zatím **zakázané a ztlumené**: skládání promptu je #333, a plné akcentové tlačítko, po kterém se nic nestane, je lež o tom, co okno umí |
+| `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review — a u **vlastního PR** `Prompt →` (#331, `showsPromptAction`). Od #333 nese tlačítko akci (`openPrompt`) a **není zakázané**: otevře PR a v něm panel `Zadání`. **Bez akce se nekreslí** — `showsPromptAction` se ptá i na uzávěr, takže řádek bez storu (náhled, test) tlačítko nemá; nakreslit ho naprázdno je zrovna ta lež, kvůli které se do #333 kreslilo ztlumené |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
 | `PullRequestDetailView` | Pravý panel: hlavička ve třech řádcích (titulek s číslem, souřadnice PR, pruh běhu), pod ní záložky, diff a nálezy. **Bez pravého sloupce** (#218) — zbylo v něm jediné akcentové místo, `Spustit review` |
 | `PullRequestHeaderView` | Souřadnice PR: kapsle stavu (plná, s puntíkem), autor, větev → base, repo, souhrn checků a odkaz na GitHub. `StaleHeadView` vedle něj mluví jen tehdy, když se hlava rozešla se sha nálezů |
@@ -2204,7 +2205,11 @@ na `.task` okna, takže zavření okna ji zruší.
 | `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení. `Komentář` bere od #309 `Palette.accent` (verdikt je volba, tedy akce); `.green`/`.red` zůstávají systémové vědomě — převod celé škály je jiná otázka a jinde v `App/` se zelená a červená berou ze systému na desítkách míst |
 | `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
 | `DiffLineView` | Řádek souboru: dvě čísla (v buňce dvojice jedno, podle `side`), znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
-| `ReviewPanel` | Panel **napravo od diffu** (#182, do #242 `FindingsPanel`): segmenty `Nálezy`/`Moje review`, karty nálezů, prokliky do diffu — a složení na proužek s počtem nálezů a značkou rozdělaného review. `Průběh` a zahození nálezů se u #242 odstěhovaly do záložek PR. **Kreslí se jen ve třech tabech** (#294, `PullRequestTab.showsReviewPanel`) — sám o tom nerozhoduje, podmínku má detail |
+| `ReviewPanel` | Panel **napravo od diffu** (#182, do #242 `FindingsPanel`): segmenty `Nálezy`/`Moje review` — a na vlastním PR `Nálezy`/`Zadání` (#333, rozhoduje `Policy.reviewPanelTabs`) —, karty nálezů, prokliky do diffu a složení na proužek s počtem nálezů a značkou rozdělaného review. `Průběh` a zahození nálezů se u #242 odstěhovaly do záložek PR. **Kreslí se jen ve třech tabech** (#294, `PullRequestTab.showsReviewPanel`) — sám o tom nerozhoduje, podmínku má detail |
+| `AgentPromptPanel` | Tab `Zadání` na vlastním PR (#333): sedm zaškrtávacích voleb s počty, náhled začátku textu, `Sestavit prompt →` na hraně panelu — a věta o tom, že konverzace **není** načtená (načítání se rozlišuje od selhání). Verdikt ani `Odeslat` tam **nejsou**, ne zašedlé. Draft z dřívějška se v něm kreslí jako blok s výpisem a `Zahodit review`, protože zmizet nesmí |
+| `AgentPromptSheet` | Sheet s celým textem (#333): hlavička s hlavou PR a velikostí, odznaky „co je v textu“ i „vynecháno“ (sází je `FlowRow`), text tak, jak se zkopíruje, a v patičce `Zkopírovat` / `Uložit do souboru…` s větou `nikam se to neodesílá`. **Bez druhého potvrzení** — brána proti odeslání se týká GitHubu, tady se neodesílá nic. **Nejširší sheet v okně** (840 / 1080 b proti 560 / 720 u ostatních), protože obsah je markdown s fenced diffy |
+| `FlowRow` | `Layout`, který řadu **zalomí** místo zkracování popisků (`flex-wrap: wrap` z návrhu, #333). Polohy se počítají, nevyjednávají (#220) |
+| `AgentPromptActions` | Co se dá se zadáním dělat (přepnout volbu, sestavit) — jeden parametr místo tří closures, jako `DraftActions`. **Nic, co by odesílalo** |
 | `DismissedRowStyle` | Buňka tabulky: ztlumení odmítnutého řádku a kontextové menu `Označit jako…` / `Vrátit` |
 | `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak, odmítnutí |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
@@ -3288,6 +3293,39 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   což je tatáž tichá ztráta rozepsané věty, jakou #242 řešil u složeného panelu — jen o stupeň
   horší, protože složený panel je aspoň vidět jako proužek. Z tabu, kde panel je, se
   **nepřepíná nikam**: převzetí nálezu v diffu nesmí vyhodit člověka z kódu, který čte.
+
+  Od #333 si `revealDraft(in:)` **tab přeloží** (`Policy.reviewPanelTab(.draft, for:)`): na vlastním
+  PR segment `Moje review` neexistuje, takže by se přepínalo na něco, co se nekreslí — a rozdělané
+  review z dřívějška bydlí v tabu `Zadání`, tedy tam, kam ten odkaz vede. Zkratka `⌘⇧P` má vlastní
+  cestu (`revealAgentPrompt(in:)`) se stejnými třemi kroky.
+- **Na vlastním PR panel nesbírá verdikt, ale zadání pro agenta** (#333). Rozhoduje o tom
+  `ownership(of pr:)`, tedy autor PR proti `ownLogins` — ne `isOwnPullRequest(_:)`, který se ptá
+  načtené konverzace, protože ta odpověď musí platit **od první obtažené obrazovky**. Tři věci,
+  na kterých to stojí:
+  - **`APPROVE` ani `REQUEST_CHANGES` na vlastní PR GitHub nepustí** (422, změřeno u #62), takže
+    verdikt a `Odeslat` **zmizí celé**, ne zašedlé: zakázané tlačítko svádí na něj kliknout
+    a přečíst si chybu od GitHubu.
+  - **Draft tam nesmí ani vzniknout.** Zakládá se čtyřmi cestami (`adoptFinding`, `appendDraftNote`,
+    `addDraftComment`, `dragCommentRange`) a všechny vedou přes diff, ne přes panel — zavírá je
+    jedna brána, `canComposeDraft(for:)`, se dvěma volajícími v `PullRequestDetailView`. Tlačítka
+    se tím **nekreslí**, ne že by nic nedělala. `pullRequestsWithDraft` (sekce `Rozdělaná`) tím
+    u vlastních PR zůstane prázdná sama, bez druhé podmínky jinde.
+  - **Existující draft se nezahazuje.** Bubliny v diffu ho kreslí z `draft.comments` (ne z brány),
+    takže se v nich dá pořád číst i mazat, a panel `Zadání` k němu nabízí `Zahodit review`. Tiše
+    zmizelá data jsou horší než data, která nejdou odeslat.
+
+  A dvě věci k **cestě do panelu**, protože vstupy jsou tři a chovají se různě:
+
+  - **`Prompt →` v řádku (#331) jen naviguje, neskládá text** — `openAgentPrompt(in:)` = `openTab`
+    + `revealAgentPrompt`. Otevřít PR je **součást** akce: `Conversation` se nepersistuje a tahá se
+    při zobrazení, takže sazba přímo ze seznamu by dala zadání bez vláken, komentářů pod PR
+    a souhrnů review — a jen by o té mezeře poctivě napsala. Tlačítko proto **není zakázané**;
+    `hasAgentPromptItems(for:)` hlídá zkratku `⌘⇧P` a `Sestavit prompt →`, tedy sazbu. V seznamu by
+    měřilo stav *před* otevřením PR a schovalo by cestu k panelu zrovna u PR, jehož materiál je
+    v diskuzi.
+  - **Sheet má jen jednoho presentera** (`PullRequestDetailView`), a to je druhý důvod navigace: dva
+    `.sheet(item:)` nad jedním `AgentPrompt`em by znamenaly dvě místa, ve kterých se to okno kreslí,
+    a hlavně dvě různá zadání složená z různě úplného stavu.
 - **Pohled vedle sebe složí postranní sloupce** (#188). Řádek se v něm dělí na dvě strany, takže
   na 14" nezbude ani 100 znaků ani se složenými sloupci; pod sebou se zase rozbalí. Tři pravidla:
   - **`task(id: layout)`, ne `onChange`.** Pohled se drží napříč pull requesty a výchozí je
@@ -3975,8 +4013,9 @@ Skládání rozdělaného review (#66) drží `AppStore` v `drafts` (per PR) a p
 - **Předvyplněný návrh doplní až snímek pro odeslání** (`submission(for:)`), ne mapa `drafts`.
   Uložená hodnota tak zůstane bez verdiktu i pro restart, a přesto odejde to, co je v potvrzení
   vidět. Vybraný verdikt to nikdy nepřepíše: volba přebíjí návrh.
-- **Na vlastním PR se návrh nenabídne** (`isOwnPullRequest`, autor z detailu proti
-  `Conversation.viewer`). GitHub tam bere jedině `COMMENT` (změřeno u #62), takže by předvyplněný
+- **Na vlastním PR se návrh nenabídne** (`isOwnPullRequest`, autor ze seznamu — a když tam není,
+  z detailu — proti `Conversation.viewer`; od #333 je autor pro obě otázky na jednom místě,
+  `AppStore+Ownership.author(of:)`). GitHub tam bere jedině `COMMENT` (změřeno u #62), takže by předvyplněný
   `APPROVE` vedl k `422`. Dokud konverzace nedorazí, **předvyplňuje se dál** — kdo se dívá, se
   jinde nedozvíme a schovaný návrh u každého PR by byl horší než jedna měřená chyba, která si
   o `Jen komentář` řekne sama.
@@ -4678,6 +4717,12 @@ Věci, které se u toho nemají rozbít:
 | `Policy.pullRequests(_:ownedBy:mine:)` | Seznam zúžený na jednu stranu (#331) — obsah sekce `Moje PR` a bloku na dashboardu. **Nesahá na pořadí**, jako `filtered(_:by:)` |
 | `Policy.ownListEmptyReason(poll:tracksOwnSource:knowsViewer:visible:hidden:)` | Proč je sekce `Moje PR` prázdná (#331) → `ListEmptyReason`. **Tři prázdna navíc** proti frontě: chybějící zdroj, nenačtený login, „nic vlastního otevřeného“. `poll(.noPullRequests)` odsud nevypadne nikdy |
 | `Policy.ownPullRequestsAwaitingMove(_:records:conversation:)`, `Policy.awaitsMyMove(_:conversation:)` | Kolik vlastních PR **čeká na tah** (#331) — obsah odznaku a věty na kartě. Nezpracovaný nález (`activeFindings`) nebo nevyřešené cizí vlákno; **spodní hranice**, protože konverzace jsou v paměti jen u PR, do kterých se kliklo. Konverzace se berou **uzávěrem, ne slovníkem**: odznak čte SwiftUI při každém překreslení okna, takže mapa všech načtených diskuzí by byla kopie za odpověď o vlastních PR |
+| `Policy.agentPromptItems(findings:dismissals:conversation:)` | Všechno, co se dá na vlastním PR předat agentovi (#333) → `[AgentPromptItem]`. **Nefiltruje podle voleb** — z téhož seznamu se počítají i čísla u vypnutých voleb. Vynechá jedině prázdnou obálku review (bez verdiktu i bez prózy), stejně jako `overview` |
+| `Policy.agentPrompt(for:findings:dismissals:conversation:diff:blocking:options:)` | Hotové zadání (#333) → `AgentPrompt`: text, inventář (co všechno je), co je v textu, kolik blokuje a jestli byla načtená konverzace |
+| `Policy.agentPromptSections(_:blocking:)` | Rozdělení po souborech (#333): **sekce bez souboru první**, pak soubory (blokující první, zbytek abecedně), uvnitř podle řádku |
+| `Policy.agentPromptText(for:sections:diff:withHunks:blocking:isConversationLoaded:)`, `.agentPromptHeading(of:inFileSection:blocking:)`, `.unifiedText(of:)` | Sazba markdownu (#333) — hlavička s hlavou PR, nadpisy s původem, diff hunk ve fenced bloku |
+| `Policy.agentPromptFileName(for:)` | Navržený název souboru (#333): `PRism-324-zadani-9c1de02.md` — repo, číslo PR a hlava, bez lomítka |
+| `Policy.reviewPanelTabs(for:)`, `Policy.reviewPanelTab(_:for:)` | Které segmenty panelu se kreslí a jak se přeloží vybraný tab, který na tomhle PR není (#333). **Nikdy `draft` a `agentPrompt` naráz** |
 | `Policy.groups(of:)` | Shoda reviewerů na `file:line` → `FindingGroup` s odznakem `2×` |
 | `Policy.disclosure(of:categories:toggled:)`, `Policy.disclosureKey(of:)` | Jak je nález u kódu rozbalený (#185): blokující rozbalený, ostatní značka, odmítnutý nikdy — a čím se místo klíčuje |
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` i s **cenou** z uloženého běhu |
@@ -4784,6 +4829,35 @@ Věci, které se u toho nemají rozbít:
   - **Porovnání je na jednom místě** (`ownership(ofAuthor:mine:)`) a chodí přes ně i
     `Policy.isOwn(author:viewer:)` z #114. `Conversation.isMine(_:)` odpovídá na jinou otázku
     (čí je komentář v načtené konverzaci) a v modelu zůstává.
+
+Nad zadáním pro agenta (#333) platí:
+
+- **`AgentPromptItem` je výčet se čtyřmi případy a nese původní modely** — nález (i s důvodem
+  odmítnutí), vlákno, komentář pod PR, souhrn review. Tatáž úvaha jako u `ConversationEntry`:
+  kdyby se položky při sběru zplošťovaly do jednoho tvaru, spadlo by rozhodnutí „co se z položky
+  ukáže“ do sběru. Do které volby položka patří (`choice`), kde se řeší (`file`, `line`) a kdy
+  vznikla (`date`) jsou **odvozené vlastnosti**, ne uložená pole.
+- **Sběr nefiltruje podle voleb.** `agentPromptItems` vrací i vyřešená vlákna a odmítnuté nálezy,
+  protože z téhož seznamu se počítají čísla u **vypnutých** voleb — bez nich by se nedalo napsat
+  „vynecháno: 1 vyřešené vlákno“ a tiché zahození vypadá jako „tohle je všechno“.
+- **Sekce bez souboru stojí první.** Souhrn review a komentář pod PR se k žádnému řádku nevážou,
+  a nález bez `file` je tentýž případ; přišpendlit je k náhodnému souboru by agentovi lhalo o tom,
+  kde se to řeší. Pořadí souborů je **blokující první, zbytek abecedně** — deterministické (dvě
+  po sobě sestavená zadání se dají porovnat) a zároveň něco tvrdící.
+- **Zastaralé vlákno se umístí podle `originalLine` a napíše se to.** `anchorLine` dá číslo, které
+  platilo pro starší commit, takže se u něj v nadpisu píše `(zastaralé — číslo platí pro starší
+  commit)`. Tvrdit dnešní řádek u kotvy, která platila pro starý head, je horší než nic.
+- **Hlava PR je v hlavičce textu, a když ji neznáme, řekne se to.** Nálezy jsou jí klíčované
+  (tvrdá podmínka č. 5) a zadání se předává dál. Nenačtená konverzace je z téhož důvodu **v textu**,
+  ne jen v okně: je to mezera v tom, co text tvrdí, kdežto vypnutá volba je moje rozhodnutí.
+- **Diff hunk má vlastní příznak vedle `diff`u.** U vlákna je hunk snímek z commitu, na kterém
+  vzniklo (`ReviewThread.diffHunk`), u nálezu se hledá v dnešním diffu — takže samotné `diff == nil`
+  nesmí hunky vypnout, jinak by u nenačteného diffu tiše zmizely i ty, které se mají kde vzít.
+  `Policy.unifiedText(of:)` sází hunk **se znaky změny**, na rozdíl od `Policy.code(of:)`: tady jde
+  o to, co se v tom místě změnilo, ne o kód do editoru.
+- **Nic z toho neumí nic odeslat.** Prompt končí ve schránce (`Clipboard`) nebo v souboru, který
+  vybere člověk (`TextFileExport`, `NSSavePanel`). Je na to test — `SingleWayOutTests` čte zdrojáky
+  a tvrdí, že soubory zadání nezná `ReviewPublishing`, `PublishRequest`, API ani podproces.
 
 Nad sekcí `Moje PR` (#331) platí čtyři věci:
 
