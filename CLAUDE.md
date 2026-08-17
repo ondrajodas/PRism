@@ -609,7 +609,11 @@ Zvlášť stojí za přečtení, než sáhneš na:
 
   A **fixture takového formátu musí být skutečný výstup** — ruční literál nese `LF` toho, kdo ho
   napsal, takže test zezelená i nad rozbitým rozborem; když na `CRLF` stojí, patří do
-  `.gitattributes` jako `-text`, jinak ho `core.autocrlf` zahodí při commitu.
+  `.gitattributes` jako `-text`, jinak ho `core.autocrlf` zahodí při commitu. **Doklad je ale
+  blob, ne řádek v `.gitattributes`** (#353): `-text` přidané *až po* zapsání souboru do indexu
+  se na tu položku zpětně neuplatní, takže vypadá jako pojistka a nedělá nic. Ověřuje se
+  `git cat-file -p <ref>:<cesta>` — před commitem nad `:<cesta>` a po pushi nad `origin/<branch>`;
+  postup je v [`docs/testovani.md`](docs/testovani.md).
 - **V shell skriptech se proměnná v české próze píše `${VAR}`.** Uvozovka „ hned za
   `$VAR` shodí bash 3.2 (ten je v `/bin/bash`) v UTF-8 locale na `unbound variable`: její
   byty se počítají do jména proměnné. Chytí to `set -u`, ale až za běhu — `bash -n` ne.
