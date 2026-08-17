@@ -163,7 +163,7 @@ struct DiffPairBlockRowView: View {
                 ))
             }
         }
-        box.note(rows, covering: placement.rect)
+        box.note(rows, covering: placement.rect, of: rangeDrag.subject)
     }
 
     private func line(of frame: DiffBlockLineFrame, on side: DiffSide) -> DiffLine? {

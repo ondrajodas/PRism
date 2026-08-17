@@ -156,7 +156,7 @@ struct DiffBlockRowView: View {
                 anchor: anchor
             )
         }
-        box.note(rows, covering: placement.rect)
+        box.note(rows, covering: placement.rect, of: rangeDrag.subject)
     }
 
     private func anchor(of frame: DiffBlockLineFrame) -> DraftAnchor? {

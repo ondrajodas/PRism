@@ -79,7 +79,7 @@ struct DiffLineView: View {
             // Jeden řádek je z pohledu krabice blok o jednom řádku; řádek, na který se komentovat
             // nedá, se nehlásí a tím z krabice vypadne (#252).
             let rows = dragAnchor.map { [DiffRowFrames.Entry(id: dragID, rect: rect, anchor: $0)] } ?? []
-            rangeDrag.frames?.note(rows, covering: rect)
+            rangeDrag.frames?.note(rows, covering: rect, of: rangeDrag.subject)
         }
         // **Tažení rozsahu visí na celém řádku, ne na sloupci s čísly** — a je to návrat k #110,
         // ke kterému mě dohnalo zkoušení #157. Přesun do sloupce vypadal správně (GitHub to tak

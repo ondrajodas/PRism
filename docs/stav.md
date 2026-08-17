@@ -1076,8 +1076,9 @@ přes čtyři stovky prvků k umístění. Polohy přitom hlásí textové view 
 spočítat**: zbyly dvě plochy na tažení, **jedna** pilulka a jeden `onGeometryChange` na celý blok,
 a aritmetika k tomu je čistý typ (`DiffGutterGeometry`), takže se dá otestovat bez okna.
 
-Změřeno: overlay bloku **3,05 ms → 0,12 ms** (26×) a zápis ploch do `DiffRowFrames` **22,6 ms →
-1,40 ms** (16×; hlásí se naráz za blok, protože úklid je lineární v počtu záznamů). V aplikaci na
+Změřeno: overlay bloku **3,05 ms → 0,12 ms** (26×) a zápis ploch do `DiffRowFrames` **24,1 ms →
+0,25 ms** (hlásí se naráz za blok, protože úklid je lineární v počtu záznamů; u #274 přeměřeno
+s přípravou mimo hodinky, do té doby tu stálo 22,6 → 1,40 ms). V aplikaci na
 scénáři z issue vlastní práce při projetí diffu **6,4 s → 4,2 s** CPU — zbytek je sazba textu bloku,
 na kterou #252 nesahá. Vyloučené příčiny z issue (#153 a cache obarvení) se **znovu neotvíraly**.
 
@@ -2077,6 +2078,42 @@ vložením regrese, dvakrát zvlášť**: vrácený `split(separator: "\n")` pol
 parametrizovaný spadne na 3 případech ze 4, protože `LF` projde, a to je přesně ten důvod, proč se
 chyba nechytila dřív —, a `isNewline` zpátky v obou půlkách rozdělení položí test o `U+2028` třemi
 tvrzeními naráz (titulek `feat: cache`, `secrets` přelité do těla, počet `3 řádky` místo `1 řádek`).
+
+### #274 — otevřená záložka zdražovala projíždění diffu
+
+Zadání vycházelo z vedlejšího zjištění u #252: tentýž scénář (`job-queue-daemon#858`, split,
+rozbalený úsek o 1 904 řádcích, 300 kroků) vyšel na **3,6 s** CPU po čerstvém spuštění s jednou
+záložkou a na **10,8 s** v okně se čtyřmi. **Ten trojnásobek se nepovedlo zreprodukovat** — ani na
+dnešním buildu (jedna záložka 2,77/3,50/3,28 s proti čtyřem 4,39/3,68/3,37 s, střídavě), ani na
+buildu **před** #252 (4,92/4,57/4,96 s proti 4,30/4,30/4,45 s). Rozdíl mezi jednou a čtyřmi
+záložkami leží pod rozptylem téhož měření, takže #252 tu příčinu cestou nespravil; nejpravděpodobněji
+šlo o **stav sezení a režii řízení**, kterou tehdejší postup odečítal špatně (9,3 s z 15,6 s).
+
+**Přišlo z toho lepší měřidlo, a to je hlavní výnos.** Posuvník se řídí přímo přes
+`AXUIElementSetAttributeValue` podle PID, ne přes `System Events`: režie spadla z **9,3 s na
+0,02 s** za 601 zápisů, takže naměřené sekundy jsou práce aplikace, ne odpovědi na dotazy AX.
+K tomu čekání na usazení před měřením i po něm a **střídavé A/B**, protože drift sezení (2,15 →
+4,39 s za půl hodiny) je větší než hledaný rozdíl. Postup i vylučovací tabulka jsou
+v [`docs/testovani.md`](testovani.md), *Kolik stojí otevřená záložka*.
+
+**Jedna věc s počtem prohlédnutých záložek doopravdy rostla:** `DiffRowFrames`. `@State` detailu
+přetéká mezi pull requesty, takže jeden `DiffView` obsluhuje všechny záložky a v krabici ploch pro
+tažení se vrstvily plochy každého prohlédnutého PR — vyklizení plochy je sundá jedině tam, kam nový
+blok dosáhl. Zápis je lineární v jejich počtu: **0,25 ms** na blok s jedním PR, **0,49 ms** se dvěma,
+**0,93 ms** se čtyřmi. Od #274 nese každé hlášení klíč diffu (`RangeDragActions.subject`) a cizí
+plochy se zahodí — **z hlášení, ne zvenčí**, protože vyprázdnění při přepnutí záložky je chyba
+z #110 (bloky, které stojí, už nic nenahlásí a tažení nemá co najít).
+
+**V okně se to nepozná** a je to tak napsané i v PR: zápis ploch je **0,4 %** vzorků hlavního vlákna
+(`sample` během projíždění), takže po opravě vyšlo měření stejně jako před ní (2,79/2,60/2,39 s proti
+2,26/2,33/2,56 s). Co se spravilo, je **růst** — a to, že krabice přestala držet plochy diffu, který
+na obrazovce není. Zbytek ceny projíždění je rozvržení líného seznamu a sazba textu
+(`DiffTextView.draw` ~16 % vzorků), což je samostatná věc.
+
+**Přeměřilo se u toho i číslo z #252**: měřidlo v harnessu počítalo do „ceny jednoho bloku“
+i naplnění celé krabice, takže tam stálo 22,6 → 1,40 ms; s přípravou mimo hodinky
+(`measure(_:preparing:_:)`) je to **24,1 → 0,25 ms**. Vidět není nic, testů je **2719** (o 3 víc)
+a regrese je ověřená vložením regrese: bez klíče vyjde v krabici 2000 cizích ploch místo jedné vlastní.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

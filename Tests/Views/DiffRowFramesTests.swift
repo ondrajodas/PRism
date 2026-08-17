@@ -11,10 +11,16 @@ import Testing
 /// vyprázdnění už nic nenahlásí a tažení nemá co najít.
 ///
 /// Od #252 se hlásí **po blocích, ne po řádcích**, takže se tady kontroluje i to, že blok
-/// vyklidí svou plochu a **nevyhodí přitom sám sebe**.
+/// vyklidí svou plochu a **nevyhodí přitom sám sebe**. Od #274 nese hlášení klíč diffu a přidaly
+/// se k tomu tři testy: cizí plochy se zahodí, vlastní ne, a nové jsou v krabici hned.
 @Suite("Rámečky řádků pro tažení")
 @MainActor
 struct DiffRowFramesTests {
+    /// Diff, ke kterému plochy v testech patří. Většina testů mluví o jednom, takže je to
+    /// konstanta; kde jde o dva, je vidět druhý (`otherPullRequest`).
+    private let pullRequest = "owner/repo#1"
+    private let otherPullRequest = "owner/repo#2"
+
     private func anchor(_ line: Int, _ side: DiffSide = .right) -> DraftAnchor {
         DraftAnchor(line: line, side: side)
     }
@@ -32,7 +38,8 @@ struct DiffRowFramesTests {
         let frames = DiffRowFrames()
         frames.note(
             [entry("a", rect(0), anchor(1)), entry("b", rect(15), anchor(2))],
-            covering: rect(0, height: 30)
+            covering: rect(0, height: 30),
+            of: pullRequest
         )
 
         #expect(frames.anchor(at: CGPoint(x: 500, y: 20), on: nil) == anchor(2))
@@ -41,7 +48,7 @@ struct DiffRowFramesTests {
     @Test("Bod mimo všechny rámečky nenajde nic")
     func findsNothingOutside() {
         let frames = DiffRowFrames()
-        frames.note([entry("a", rect(0), anchor(1))], covering: rect(0))
+        frames.note([entry("a", rect(0), anchor(1))], covering: rect(0), of: pullRequest)
 
         #expect(frames.anchor(at: CGPoint(x: 500, y: 900), on: nil) == nil)
     }
@@ -52,9 +59,9 @@ struct DiffRowFramesTests {
     @Test("Řádek bez kotvy se z krabice smaže")
     func removesALineWithoutAnAnchor() {
         let frames = DiffRowFrames()
-        frames.note([entry("a", rect(0), anchor(1))], covering: rect(0))
+        frames.note([entry("a", rect(0), anchor(1))], covering: rect(0), of: pullRequest)
 
-        frames.note([], covering: rect(0))
+        frames.note([], covering: rect(0), of: pullRequest)
 
         #expect(frames.anchor(at: CGPoint(x: 500, y: 5), on: nil) == nil)
     }
@@ -66,12 +73,17 @@ struct DiffRowFramesTests {
     func evictsAnOverlappingFrame() {
         let frames = DiffRowFrames()
         // Unified řádek přes celou šířku…
-        frames.note([entry("unified", rect(0, width: 1000), anchor(1))], covering: rect(0, width: 1000))
+        frames.note(
+            [entry("unified", rect(0, width: 1000), anchor(1))],
+            covering: rect(0, width: 1000),
+            of: pullRequest
+        )
 
         // …a po přepnutí pohledu buňka dvojice na půlce, na tomtéž místě.
         frames.note(
             [entry("split|LEFT", rect(0, x: 0, width: 500), anchor(9, .left))],
-            covering: rect(0, width: 1000)
+            covering: rect(0, width: 1000),
+            of: pullRequest
         )
 
         #expect(frames.anchor(at: CGPoint(x: 100, y: 5), on: nil) == anchor(9, .left))
@@ -87,7 +99,7 @@ struct DiffRowFramesTests {
         let frames = DiffRowFrames()
         let rows = (0..<5).map { entry("l\($0)", rect(Double($0) * 15), anchor($0 + 1)) }
 
-        frames.note(rows, covering: rect(0, height: 75))
+        frames.note(rows, covering: rect(0, height: 75), of: pullRequest)
 
         for index in 0..<5 {
             #expect(frames.anchor(at: CGPoint(x: 500, y: Double(index) * 15 + 5), on: nil) == anchor(index + 1))
@@ -99,11 +111,64 @@ struct DiffRowFramesTests {
     @Test("Nulová plocha nevyklidí nic")
     func ignoresAnEmptyArea() {
         let frames = DiffRowFrames()
-        frames.note([entry("a", rect(0), anchor(1))], covering: rect(0))
+        frames.note([entry("a", rect(0), anchor(1))], covering: rect(0), of: pullRequest)
 
-        frames.note([], covering: .zero)
+        frames.note([], covering: .zero, of: pullRequest)
 
         #expect(frames.anchor(at: CGPoint(x: 500, y: 5), on: nil) == anchor(1))
+    }
+
+    /// **Tohle je #274:** jeden `DiffView` obslouží všechny otevřené záložky, takže bez klíče
+    /// podle diffu se v krabici vrství plochy každého prohlédnutého PR — vyklizení plochy sundá
+    /// zastaralé záznamy jedině tam, kam nový blok dosáhl. Dlouhý diff v jedné záložce a krátký
+    /// v druhé je přesně ten případ: nový blok pokryje prvních pár set bodů a zbytek cizích ploch
+    /// zůstane ležet.
+    ///
+    /// Vyzkoušeno vložením regrese (odebráním klíče z `note`): počet vyjde 2000 místo 1.
+    @Test("Plochy z jiného diffu krabice zahodí")
+    func dropsFramesOfAnotherDiff() {
+        let frames = DiffRowFrames()
+        let long = (0..<2000).map { entry("long\($0)", rect(Double($0) * 15), anchor($0 + 1)) }
+        frames.note(long, covering: rect(0, height: 30_000), of: pullRequest)
+
+        frames.note(
+            [entry("short0", rect(0), anchor(1))],
+            covering: rect(0, height: 15),
+            of: otherPullRequest
+        )
+
+        #expect(frames.count == 1)
+        // A dole, kam ten krátký diff nedosáhl, po cizích plochách nezbylo nic.
+        #expect(frames.anchor(at: CGPoint(x: 500, y: 20_000), on: nil) == nil)
+    }
+
+    /// Zahodit se smí **jen** při hlášení z jiného diffu. Kdyby krabice zahazovala i při hlášení
+    /// z toho samého, přišla by po každém bloku o všechny ostatní — a tažení by našlo nejvýš ten
+    /// jeden blok, ve kterém začalo.
+    @Test("Hlášení z téhož diffu ostatní plochy nechá být")
+    func keepsFramesOfTheSameDiff() {
+        let frames = DiffRowFrames()
+        frames.note([entry("a", rect(0), anchor(1))], covering: rect(0), of: pullRequest)
+
+        frames.note([entry("b", rect(1000), anchor(50))], covering: rect(1000), of: pullRequest)
+
+        #expect(frames.count == 2)
+        #expect(frames.anchor(at: CGPoint(x: 500, y: 5), on: nil) == anchor(1))
+        #expect(frames.anchor(at: CGPoint(x: 500, y: 1005), on: nil) == anchor(50))
+    }
+
+    /// Zahazuje se **z hlášení**, ne zvenčí, takže se krabice nikdy neocitne prázdná pod živými
+    /// bloky: plochy nového diffu jsou v ní hned s tím prvním hlášením. Je to ta chyba z #110,
+    /// kterou by klíčování podle diffu umělo vrátit, kdyby se zahazovalo vyprázdněním při přepnutí
+    /// záložky.
+    @Test("Po přepnutí diffu je v krabici hned to nové")
+    func hasTheNewDiffRightAway() {
+        let frames = DiffRowFrames()
+        frames.note([entry("old", rect(0), anchor(1))], covering: rect(0), of: pullRequest)
+
+        frames.note([entry("new", rect(0), anchor(7))], covering: rect(0), of: otherPullRequest)
+
+        #expect(frames.anchor(at: CGPoint(x: 500, y: 5), on: nil) == anchor(7))
     }
 
     @Test("Rámečky, které se nepřekrývají, vedle sebe zůstanou")
@@ -114,7 +179,8 @@ struct DiffRowFramesTests {
                 entry("left", rect(0, x: 0, width: 500), anchor(1, .left)),
                 entry("right", rect(0, x: 501, width: 499), anchor(1))
             ],
-            covering: rect(0, width: 1000)
+            covering: rect(0, width: 1000),
+            of: pullRequest
         )
 
         #expect(frames.anchor(at: CGPoint(x: 100, y: 5), on: nil) == anchor(1, .left))
@@ -131,7 +197,8 @@ struct DiffRowFramesTests {
                 entry("left", rect(0, x: 0, width: 500), anchor(1, .left)),
                 entry("right", rect(0, x: 501, width: 499), anchor(1))
             ],
-            covering: rect(0, width: 1000)
+            covering: rect(0, width: 1000),
+            of: pullRequest
         )
 
         #expect(frames.anchor(at: CGPoint(x: 100, y: 5), on: .right) == nil)
