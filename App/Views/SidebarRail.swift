@@ -14,8 +14,8 @@ import SwiftUI
 /// případem `RailSection`. Kdyby byla, šlo by na vzhled „přepnout jako na obrazovku“, nabídla by
 /// se v ⌘K mezi sekcemi a v okně by zbyla prázdná plocha; je na to test.
 ///
-/// Klikem **cykluje** a ikona se s režimem mění (slunce / měsíc / kolečko s „A“) — vědomá odchylka
-/// od návrhu, který tam kreslí jednu ikonu; viz `AppearanceMode.railSymbol` a specifikace.
+/// Klikem **cykluje** a ikona se s režimem mění (slunce / měsíc / kolečko s „A“); od #299 to tak
+/// kreslí i návrh. Viz `AppearanceMode.railSymbol` a specifikace.
 struct SidebarRail: View {
     @Binding var section: RailSection
     /// Kolik PR čeká ve frontě. `nil` = ještě se nenačetlo; nula se **nekreslí**, protože

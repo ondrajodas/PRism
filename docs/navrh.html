@@ -25,7 +25,11 @@
   --ok:     #1A7F37;
   --find:   #B4560A;
   --crit:   #CF222E;
-  --mint:   #0E8F80;
+  /* Ztmaveno z #0E8F80 (#309, dokresleno #299): původní hodnota měla na ploše řádku kontrast
+     3,99, tedy pod AA 4,5, a byla jediným stavovým tokenem palety pod tou hranicí. Ztmavení je
+     na rodinu, ne na hranici — vychází na všech čtyřech podkladech stejně jako `--find` vedle
+     něj. Tmavá větev je původní, tam je #2DD4BF nejčitelnější z celé rodiny. */
+  --mint:   #0C7E71;
   --stale:  #9A6700;
 
   --add-bg:  #E3FBE8;
@@ -81,7 +85,7 @@
   --panel-3: #EEF1F7;  --line: #DDE2ED;  --line-soft: #E9ECF4;
   --ink: #131722;  --ink-2: #5A6379;  --ink-3: #8B93A7;
   --accent: #5B47E0;  --accent-2: #128FB0;  --accent-weak: rgba(91, 71, 224, 0.10);
-  --ok: #1A7F37;  --find: #B4560A;  --crit: #CF222E;  --mint: #0E8F80;  --stale: #9A6700;
+  --ok: #1A7F37;  --find: #B4560A;  --crit: #CF222E;  --mint: #0C7E71;  --stale: #9A6700;
   --add-bg: #E3FBE8;  --add-hi: #ABEFC0;  --del-bg: #FFEBE9;  --del-hi: #FFC9C6;
   --shadow-lg: 0 24px 60px -20px rgba(19, 23, 34, 0.28), 0 4px 14px -6px rgba(19, 23, 34, 0.14);
   --shadow-sm: 0 1px 2px rgba(19, 23, 34, 0.06), 0 4px 12px -8px rgba(19, 23, 34, 0.16);
@@ -860,6 +864,9 @@ footer.end {
 }
 .since .hd { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 620; }
 .since .hd .when { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); font-weight: 400; }
+/* `Označit za přečtené` — pruh zmizí, dokud nepřibude něco dalšího. Tlumené jako křížek
+   na záložce (`.tab .x`): je to úklid, ne akce, kvůli které se sem chodí. */
+.since .hd .x { color: var(--ink-3); font-size: 12px; font-weight: 400; }
 .since ul { margin: 0; padding-left: 17px; display: flex; flex-direction: column; gap: 3px; }
 .since li { font-size: 12px; color: var(--ink-2); }
 .since li b { color: var(--ink); font-weight: 580; }
@@ -2309,7 +2316,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="ri">✎</div>
             <div class="ri">◷</div>
             <div class="sep"></div>
-            <div class="ri">◐</div>
+            <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
             <div class="grow"></div>
             <div class="ri">⚙</div>
           </nav>
@@ -2516,8 +2523,13 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <span class="num">2</span>
         <span class="body">
           <b>Svislý rail místo toolbaru</b>
-          <span>Přehled, fronta, rozdělaná, historie, zdraví, nastavení. Odznak na frontě
-          říká počet, aniž by se na ni muselo přepnout.</span>
+          <span>Nad oddělovačem obrazovky — přehled, fronta, rozdělaná, historie —, dole
+          nastavení. Odznak na frontě říká počet, aniž by se na ni muselo přepnout.
+          <b>Pod oddělovačem stojí volba, ne obrazovka</b>: přepínač vzhledu okna, který klikem
+          cykluje <em>světlý → tmavý → podle systému</em> a stav nese <em>ikonou</em> — slunce,
+          měsíc, kolečko s „A“ pro automat (#278; nakresleno je to poslední). Tři ikony místo
+          jedné jsou vědomá odchylka od prvního návrhu: cyklující tlačítko jinak neřekne, co
+          zrovna platí. Kam klik povede, je v nápovědě.</span>
         </span>
       </div>
       <div class="note">
@@ -2582,7 +2594,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="ri">✎</div>
             <div class="ri">◷</div>
             <div class="sep"></div>
-            <div class="ri">◐</div>
+            <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
             <div class="grow"></div>
             <div class="ri">⚙</div>
           </nav>
@@ -2880,13 +2892,24 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <h2>Přehled odpovídá na „co se tu změnilo, než jsem přišel“</h2>
       <p class="muted">
         Dneska je Přehled popis PR a pod ním konverzace v jednom scrollu. Návrh to dělí:
-        <strong>Přehled je stav věcí</strong> — fakta, popis, checks a hlavně to, co se stalo
+        <strong>Přehled je stav věcí</strong> — fakta, popis a hlavně to, co se stalo
         od poslední návštěvy — a <strong>konverzace dostane vlastní tab</strong>, protože je to
         proud v čase, ne stav. Vlákna s kotvou zůstávají u kódu, jak jsou; jediný domov
         konverzace bez kotvy se tím neztrácí, jen se stěhuje o tab vedle. Řada faktů stojí
         <strong>nad popisem</strong>, protože popis je libovolně dlouhý, kdežto fakta jsou
         přehled — proč zrovna takhle a co se k tomu ještě navrhovalo, je v
         <a class="jump" href="#s18">sekci 18 (proč to tak je →)</a>.
+      </p>
+      <p class="muted">
+        <strong>Tahle sekce je záznam dneška</strong>, ne přání — proti ní se srovnává okno,
+        takže co v ní stojí, má být v aplikaci. Naposledy se v ní kvůli tomu měnily tři věci
+        (#299): <em>Kontroly na GitHubu</em> z ní odešly za <a class="jump" href="#s05">tabem
+        Kontroly (sekce 05 →)</a>, hlavička karty popisu dostala pilulku stavu a řada „od minule“
+        křížek <em>Označit za přečtené</em>. Hlavička je nakreslená v <strong>té širší ze dvou
+        podob</strong>: v úzkém tabu (320 bodů, tedy okno na minimu s vytaženým panelem)
+        <strong>vypadne celý relativní čas</strong> — ze čtyř údajů je nejméně potřebný a nese ho
+        i řádek ve frontě a pruh nad taby, kdežto ořezaný by z pilulky nechal <code>ote…</code>
+        a z časového údaje osamocené <code>r</code> (#291).
       </p>
     </div>
 
@@ -2923,7 +2946,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="ri">✎</div>
             <div class="ri">◷</div>
             <div class="sep"></div>
-            <div class="ri">◐</div>
+            <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
             <div class="grow"></div>
             <div class="ri">⚙</div>
           </nav>
@@ -2972,6 +2995,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
                     <span>⟲</span>
                     <span>Od tvé poslední návštěvy</span>
                     <span class="when">včera 18:42</span>
+                    <span class="x" title="Označit za přečtené">×</span>
                   </div>
                   <ul>
                     <li><b>3 nové commity</b> od odinuv — poslední <code>9c1de02</code></li>
@@ -3007,11 +3031,13 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
                 <!-- popis PR -->
                 <div class="desc">
+                  <!-- hlavička karty: čtyři údaje, z nichž čas v úzkém tabu vypadne celý (#291) -->
                   <header>
                     <span class="av">OD</span>
                     <span class="nm">odinuv</span>
-                    <span class="ago">otevřel před 2 dny</span>
-                    <span class="lnk">otevřít na GitHubu ↗</span>
+                    <span class="pill idle">otevřený</span>
+                    <span class="ago">před 2 dny</span>
+                    <span class="lnk">↗ Otevřít na GitHubu</span>
                   </header>
                   <div class="md">
                     <p>
@@ -3030,18 +3056,9 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
                   </div>
                 </div>
 
-                <!-- souhrn kontrol; seznam a detail jsou ve vlastním tabu (#215) -->
-                <div class="checks">
-                  <header>
-                    <span>Kontroly na GitHubu</span>
-                    <span class="sum">2 prošly · 1 běží · <b style="color: var(--crit); font-weight: 600;">1 selhala</b></span>
-                  </header>
-                  <div class="chk">
-                    <span class="i" style="color: var(--crit);">✕</span>
-                    <span class="nm">phpstan (level 8) — a co dál, je v tabu <b style="color: var(--ink);">Kontroly</b></span>
-                    <span class="t">otevřít ↗</span>
-                  </div>
-                </div>
+                <!-- Kontroly tady nejsou vůbec (#215) — mají vlastní tab, viz sekce 05.
+                     Do #299 tu ležel souhrn `Kontroly na GitHubu`, který #215 odebral; zůstal
+                     v návrhu a čtenář v něm viděl blok, který v okně není. -->
               </div>
 
               <!-- pravý panel: moje review -->
@@ -3123,9 +3140,11 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <div class="note">
         <span class="num">11</span>
         <span class="body">
-          <b>Checks z GitHubu</b>
-          <span>Dneska v okně nejsou. Padající phpstan přitom mění, co se s PR dá dělat —
-          a je to důvod, proč se dneska přepíná do prohlížeče.</span>
+          <b>Kontroly tady nejsou</b>
+          <span>Nejdřív to byl seznam (#209), pak chvíli souhrn — a od #215 ani ten:
+          na „co hlásí CI“ odpovídá celý <a class="jump" href="#s05">tab Kontroly (sekce 05 →)</a>
+          a „je to zelené“ nese chip v pruhu nad taby, který je vidět ve všech tabech.
+          Souhrn tu byl třetí místo o téže věci.</span>
         </span>
       </div>
       <div class="note">
@@ -3215,7 +3234,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="ri">✎</div>
             <div class="ri">◷</div>
             <div class="sep"></div>
-            <div class="ri">◐</div>
+            <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
             <div class="grow"></div>
             <div class="ri">⚙</div>
           </nav>
@@ -3379,11 +3398,14 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
                     <em>Selže takto: <code>getSecret('missing')</code> vrátí <code>''</code>,
                     šifrování proběhne s prázdným klíčem a chyba se projeví až u dat.</em>
                   </div>
+                  <!-- Popisky jsou z aplikace po #283: `Převzít` je ustálené slovo pro tenhle
+                       pohyb (a má druhou podobu `… do těla review`), a dvě odmítnutí se jmenují
+                       podle toho, co doopravdy znamenají. `Přeložit` se dělat nebude — překlad
+                       běží dávkově při uložení běhu, takže by tady nedělalo nic. -->
                   <footer>
-                    <span class="mini pri">Přidat do review</span>
-                    <span class="mini">Zamítnout</span>
+                    <span class="mini pri">Převzít do review</span>
                     <span class="mini">Neplatí</span>
-                    <span class="mini">Přeložit</span>
+                    <span class="mini">Nepatří sem</span>
                   </footer>
                 </div>
 
@@ -3531,7 +3553,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="ri">✎</div>
             <div class="ri">◷</div>
             <div class="sep"></div>
-            <div class="ri">◐</div>
+            <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
             <div class="grow"></div>
             <div class="ri">⚙</div>
           </nav>
@@ -3668,8 +3690,9 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
                     týká se nového kódu, ne toho, co bylo.</em>
                   </div>
                   <footer>
-                    <span class="mini pri">Přidat do review</span>
-                    <span class="mini">Zamítnout</span>
+                    <span class="mini pri">Převzít do review</span>
+                    <span class="mini">Neplatí</span>
+                    <span class="mini">Nepatří sem</span>
                   </footer>
                 </div>
               </div>
@@ -4113,7 +4136,12 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     <!-- ---------- 19.2 SEZNAM COMMITŮ ---------- -->
     <h3>Seznam commitů</h3>
     <p class="muted">
-      Řádek na commit, <b>od nejstaršího</b> — PR se takhle čte jako postup, ne jako hromada.
+      Řádek na commit, <b>od nejnovějšího</b>. Napřed tu stálo „od nejstaršího, jako na GitHubu,
+      protože PR se čte jako postup“ — neobstálo to na hotové obrazovce (#316): v okně se PR nečte
+      od začátku, ale od toho, co přibylo naposled, tedy tentýž pohyb jako u pruhu
+      <em>Od tvé poslední návštěvy</em> a tentýž důvod, proč jsou fakta v <em>Přehledu</em> nahoře.
+      Postup se z otočeného seznamu přečte pořád, jen odspodu. Pruh nad seznamem se s tím mění taky —
+      je to jediné místo, které o pořadí něco tvrdí.
       Co v řádku není: počet souborů a <code>+X −Y</code>. Seznam z GitHubu je nenese
       (<code>stats</code> ani <code>files</code> v odpovědi nejsou, ověřeno) a dotahovat je po
       commitu znamená sedm dalších volání u sedmi commitů. Objeví se proto až v hlavičce
@@ -4153,7 +4181,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="ri">✎</div>
             <div class="ri">◷</div>
             <div class="sep"></div>
-            <div class="ri">◐</div>
+            <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
             <div class="grow"></div>
             <div class="ri">⚙</div>
           </nav>
@@ -4196,64 +4224,22 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             </div>
 
             <div class="cbar">
-              <span><b style="font-weight: 620; color: var(--ink);">7 commitů</b> · od nejstaršího</span>
+              <span><b style="font-weight: 620; color: var(--ink);">7 commitů</b> · od nejnovějšího</span>
               <span class="sp"></span>
               <span class="tool">⌥ hlava <span style="font-family: var(--mono); color: var(--ink-3);">e8d4a60</span></span>
             </div>
 
+            <!-- Od nejnovějšího (#316) — otočené proti prvnímu návrhu, viz poznámky.
+                 Hlava je proto nahoře, ale pilulku `hlava` nese sha, ne pozice. -->
             <div class="clist">
               <div class="crow">
                 <span class="ava" style="background: var(--accent);">OU</span>
                 <span class="mid">
-                  <span class="msg">chore: bump php-vault-client to 4.2</span>
-                  <span class="sub"><b>Odin Uv</b>· před 3 dny</span>
+                  <span class="msg">refactor: move SecretNotFound into its own file</span>
+                  <span class="sub"><b>Odin Uv</b>· dnes 9:12<span class="pill mint">hlava</span></span>
                 </span>
                 <span class="right">
-                  <span class="sha">a1c9f04</span>
-                  <span class="go">›</span>
-                </span>
-              </div>
-              <div class="crow on">
-                <span class="ava" style="background: var(--accent);">OU</span>
-                <span class="mid">
-                  <span class="msg">feat: cache secrets for the lifetime of the request</span>
-                  <span class="sub"><b>Odin Uv</b>· před 3 dny</span>
-                </span>
-                <span class="right">
-                  <span class="sha">5e2b1aa</span>
-                  <span class="go">›</span>
-                </span>
-              </div>
-              <div class="crow merge">
-                <span class="ava" style="background: var(--ink-3);">OU</span>
-                <span class="mid">
-                  <span class="msg">Merge branch 'main' into chore/deps-2026</span>
-                  <span class="sub"><b>Odin Uv</b>· před 2 dny<span class="pill idle">sloučení</span></span>
-                </span>
-                <span class="right">
-                  <span class="sha">9f3d7c2</span>
-                  <span class="go">›</span>
-                </span>
-              </div>
-              <div class="crow">
-                <span class="ava" style="background: var(--accent-2);">PM</span>
-                <span class="mid">
-                  <span class="msg">test: cover the cache hit and miss paths</span>
-                  <span class="sub"><b>Petra Malá</b>· před 2 dny</span>
-                </span>
-                <span class="right">
-                  <span class="sha">c04b8e1</span>
-                  <span class="go">›</span>
-                </span>
-              </div>
-              <div class="crow">
-                <span class="ava" style="background: var(--accent);">OU</span>
-                <span class="mid">
-                  <span class="msg">fix: fall back to the client when the cache is cold</span>
-                  <span class="sub"><b>Odin Uv</b>· včera 16:40</span>
-                </span>
-                <span class="right">
-                  <span class="sha">77a0d15</span>
+                  <span class="sha">e8d4a60</span>
                   <span class="go">›</span>
                 </span>
               </div>
@@ -4271,11 +4257,55 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               <div class="crow">
                 <span class="ava" style="background: var(--accent);">OU</span>
                 <span class="mid">
-                  <span class="msg">refactor: move SecretNotFound into its own file</span>
-                  <span class="sub"><b>Odin Uv</b>· dnes 9:12<span class="pill mint">hlava</span></span>
+                  <span class="msg">fix: fall back to the client when the cache is cold</span>
+                  <span class="sub"><b>Odin Uv</b>· včera 16:40</span>
                 </span>
                 <span class="right">
-                  <span class="sha">e8d4a60</span>
+                  <span class="sha">77a0d15</span>
+                  <span class="go">›</span>
+                </span>
+              </div>
+              <div class="crow">
+                <span class="ava" style="background: var(--accent-2);">PM</span>
+                <span class="mid">
+                  <span class="msg">test: cover the cache hit and miss paths</span>
+                  <span class="sub"><b>Petra Malá</b>· před 2 dny</span>
+                </span>
+                <span class="right">
+                  <span class="sha">c04b8e1</span>
+                  <span class="go">›</span>
+                </span>
+              </div>
+              <div class="crow merge">
+                <span class="ava" style="background: var(--ink-3);">OU</span>
+                <span class="mid">
+                  <span class="msg">Merge branch 'main' into chore/deps-2026</span>
+                  <span class="sub"><b>Odin Uv</b>· před 2 dny<span class="pill idle">sloučení</span></span>
+                </span>
+                <span class="right">
+                  <span class="sha">9f3d7c2</span>
+                  <span class="go">›</span>
+                </span>
+              </div>
+              <div class="crow on">
+                <span class="ava" style="background: var(--accent);">OU</span>
+                <span class="mid">
+                  <span class="msg">feat: cache secrets for the lifetime of the request</span>
+                  <span class="sub"><b>Odin Uv</b>· před 3 dny</span>
+                </span>
+                <span class="right">
+                  <span class="sha">5e2b1aa</span>
+                  <span class="go">›</span>
+                </span>
+              </div>
+              <div class="crow">
+                <span class="ava" style="background: var(--accent);">OU</span>
+                <span class="mid">
+                  <span class="msg">chore: bump php-vault-client to 4.2</span>
+                  <span class="sub"><b>Odin Uv</b>· před 3 dny</span>
+                </span>
+                <span class="right">
+                  <span class="sha">a1c9f04</span>
                   <span class="go">›</span>
                 </span>
               </div>
@@ -4392,7 +4422,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="ri">✎</div>
             <div class="ri">◷</div>
             <div class="sep"></div>
-            <div class="ri">◐</div>
+            <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
             <div class="grow"></div>
             <div class="ri">⚙</div>
           </nav>
@@ -4773,7 +4803,7 @@ projeví hned v tom dalším.</div>
             <div class="ri">✎</div>
             <div class="ri">◷</div>
             <div class="sep"></div>
-            <div class="ri">◐</div>
+            <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
             <div class="grow"></div>
             <div class="ri">⚙</div>
           </nav>
@@ -6708,7 +6738,7 @@ Secret Client
             <div class="ri">✎</div>
             <div class="ri">◷</div>
             <div class="sep"></div>
-            <div class="ri">◐</div>
+            <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
             <div class="grow"></div>
             <div class="ri">⚙</div>
           </nav>
@@ -8777,13 +8807,6 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
           <a class="prev" href="#volby"><span class="dir">← předchozí</span><span class="t">Kde jsem si vybral</span></a>
         </div>
       </div>
-
-                  <footer>
-                    <span class="mini pri">Přidat do review</span>
-                    <span class="mini">Zamítnout</span>
-                    <span class="mini">Neplatí</span>
-                    <span class="mini">Přeložit</span>
-                  </footer>
 
     </div>
   </main>

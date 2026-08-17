@@ -42,9 +42,9 @@ enum AppearanceMode: String, CaseIterable, Codable, Hashable, Sendable {
     /// `a.circle` je „auto“ — kolečko s písmenem, tedy tvar, který se v té velikosti nepřečte jako
     /// slunce ani měsíc.
     ///
-    /// **Je to vědomá odchylka od návrhu**: mockup má v railu jedno půlkolečko bez ohledu na stav
-    /// (`◐`). Vyžádal si to uživatel, důvod je v záznamu rozhodnutí ve specifikaci a do mockupu se
-    /// to doplní při jeho překreslení (#299).
+    /// **Návrh to od #299 kreslí stejně** — v railu je kolečko s „A“, tedy výchozí automat, a
+    /// poznámka u sekce 01 popisuje cyklení. Do té doby to byla vědomá odchylka (mockup měl jedno
+    /// půlkolečko bez ohledu na stav); vyžádal si ji uživatel a důvod je v záznamu rozhodnutí.
     var railSymbol: String {
         switch self {
         case .light: "sun.max"
