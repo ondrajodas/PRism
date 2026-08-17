@@ -2464,6 +2464,48 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   který by nezabíjel vlastního hosta, takže se to ověřuje spuštěním: pustit review, ukončit
   aplikaci a podívat se, jestli po ní zbyl `claude` s `ppid 1`. Změřeno u #264 na slotu — session
   zmizela, značka v `interrupted.json` zůstala a po restartu vyšel řádek `přerušeno`.
+- **Úklid osiřelé session po zabité aplikaci** (#351) — tři suity, protože se to láme na třech
+  různých místech, a **cennější polovina všech tvrzení je negativní**: že se signál nikam
+  neposlal. Ta se rozbije potichu, protože zabít cizí `claude` je horší než nechat běžet sirotka
+  a na stroji jich běží víc (uživatelovy vlastní session, paralelní agenti ve slotech).
+  - **`OrphanedSessionsTests`** — čistá funkce `Policy.orphanVerdict` **vyčerpávajícím výčtem**:
+    vlastník a proces mohou být každý ve třech stavech (běží tentýž, běží pod tím PID někdo jiný,
+    neběží nikdo), tedy devět kombinací. Osm z nich nesmí vydat `kill`.
+  - **`RunningSessionsTests`** — registr proti **skutečné** dočasné složce (o to jde: značka má
+    cenu jedině tím, že přežije proces, který ji zapsal) a proti **fake tabulce procesů**, protože
+    recyklované PID se skutečnými procesy vyrobit nedá. Čte se **soubor**, ne getter na objektu.
+
+    **Fake eviduje pokusy zvlášť od úspěchů, a je to podmínka.** `SystemProcessInspector` si
+    identitu ověřuje ještě sám, takže fake, který by ji ověřoval a mlčel, by kryl rozhodnutí,
+    které cizí proces zabít **chtělo** — negativní test by prošel i nad `Policy`, která identitu
+    neporovnává. Změřeno vloženou regresí: přesně tak to proběhlo, dokud fake evidoval jen
+    úspěchy. Negativní testy proto tvrdí `killRequests.isEmpty`, ne `killedProcesses.isEmpty`.
+  - **`SystemProcessInspectorTests`** — proti **skutečné tabulce procesů**: že `sysctl` vrací
+    identitu jen na živý proces, že nekladné PID identitu nemá (`sysctl` na `pid == 0` odpovídá
+    a `kill(0, …)` by mířil na procesovou skupinu aplikace), že `SIGKILL` **neodejde** na živý
+    proces se změněným `startedAt`, a celý řetěz: sirotek zapsaný s mrtvým vlastníkem se doopravdy
+    zabije, session živého vlastníka doopravdy zůstane běžet. Zabíjí se jedině to, co si suita sama
+    spustila — PID se nikde nehádá ani nehledá v `ps`.
+
+  Zapojení hlídá **`SubprocessStreamerTests`**: streamovaný proces se do registru zapíše a koncem
+  z něj zmizí. Bez toho testu by registr zůstal zelený a v cache by nebylo nic — a úklid při startu
+  by nad prázdným souborem hlásil, že sirotci nejsou.
+
+  **Že úklid naprázdno na soubor nesáhne, se testuje přes formát, ne přes obsah.** Zápis by uložil
+  týž seznam, takže porovnání „stejný obsah“ by ho nechytlo — soubor se proto před úklidem
+  přeformátuje na **kompaktní** JSON a test tvrdí, že kompaktní zůstal. Druhý test na to samé
+  z jiné strany: nad prázdnou cache nesmí soubor vůbec vzniknout.
+
+  Ověřeno **vložením regrese**, ve čtyřech podobách: bez porovnání identity procesu (spadne test
+  o recyklovaném PID v `Policy` **i** ten o cizím procesu v registru — a proti skutečnému systému
+  ten o změněném `startedAt`), bez kontroly vlastníka (spadnou tři testy včetně toho, ve kterém
+  by se zabil skutečný běžící proces), bez zápisu značky v `LaunchedProcess` (spadne test
+  zapojení) a bez podmínky na zápis v `reapOrphans` (spadnou oba testy o nedotčeném souboru).
+
+  Co testy nepokryjí, je **prevence, protože žádná není** — změřeno na harnessu, který spouští
+  potomka přes `Foundation.Process` stejně jako `LaunchedProcess`: po `kill -TERM` i `kill -KILL`
+  na rodiče má potomek `ppid 1`. Podrobnosti i výpis `ps` jsou v
+  [`architektura.md`](architektura.md), sekce *Osiřelá session po zabité aplikaci*.
 
 ## Čekání na jev (#296)
 

@@ -1092,6 +1092,16 @@ Takový výsledek je v řádku `přerušeno`, ne `timeout` ani `čisté` — ned
 soudit, že je hotovo. Zrušení review člověkem je proti tomu jiná odpověď: tam se nedotahuje nic,
 protože o ty nálezy si nikdo neřekl.
 
+**A po aplikaci zabité zvenčí nezůstane běžet `claude`** (#351). Zabíjení při zavírání pokrývá
+jen normální ukončení — když aplikace ztuhne a někdo ji zabije, nemá se úklid kde spustit
+a session přejde pod `launchd` a počítá tokeny dál. Prevence na macOS neexistuje (změřeno:
+potomek přežije rodiči `SIGTERM` i `SIGKILL` a Darwin nemá čím to zakázat), takže si aplikace
+běžící session **zapisuje do své cache** a při dalším startu ty osiřelé zabije. Sirotek tedy žije
+do dalšího spuštění, což jsou v praxi vteřiny — zaseknutá aplikace se zabíjí právě proto, aby se
+spustila znovu. Cizí `claude` se u toho nemá jak splést s vlastním: pozná se jedině podle
+identity, kterou si aplikace sama zapsala (PID **a** okamžik vzniku procesu), nikdy hledáním
+mezi běžícími procesy podle jména.
+
 Nálezy jsou klíčované head commitem PR. Když přijdou nové commity, předchozí nálezy se
 označí jako zastaralé — nezobrazují se proti kódu, který už neexistuje.
 

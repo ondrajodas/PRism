@@ -182,6 +182,54 @@ final class InMemoryPreferences: PreferenceStoring, @unchecked Sendable {
     }
 }
 
+/// Tabulka procesů, ve které běží jen to, co si test vyjmenuje — a která si **pamatuje, komu se
+/// signál vůbec adresoval**.
+///
+/// Ten seznam je celý smysl fake: nejcennější tvrzení #351 je, že se **nezabije cizí** session,
+/// a to se dá ověřit jedině tím, že je seznam prázdný. Skutečnými procesy se navíc nenasimuluje
+/// stav, o který tam jde nejvíc — PID, které mezitím dostal někdo jiný.
+///
+/// **Pokusy se evidují zvlášť od úspěchů, a je to podmínka, ne pohodlí.** `SystemProcessInspector`
+/// si identitu ověřuje ještě sám (kvůli okně mezi rozhodnutím a signálem), takže kdyby ji fake
+/// ověřoval a mlčel, kryl by rozhodnutí, které cizí proces vůbec zabít **chtělo** — a test
+/// „cizí session se nezabije“ by prošel i nad `Policy`, která identitu neporovnává. Změřeno
+/// vloženou regresí: přesně tak to proběhlo, dokud fake evidoval jen úspěchy.
+final class FakeProcessInspector: ProcessInspecting, @unchecked Sendable {
+    private let lock = NSLock()
+    private var table: [pid_t: ProcessIdentity]
+    private var requests: [ProcessIdentity] = []
+    private var killed: [ProcessIdentity] = []
+
+    /// Kdo běží. Klíčem je PID, hodnotou identita — takže „PID recyklované cizím procesem“ se
+    /// zapíše jako tentýž PID s jiným `startedAt`.
+    init(running: [ProcessIdentity] = []) {
+        table = Dictionary(uniqueKeysWithValues: running.map { ($0.pid, $0) })
+    }
+
+    /// Komu se signál **adresoval**, ať už odešel, nebo ne. Tohle je to, co se v negativních
+    /// testech musí rovnat prázdnu.
+    var killRequests: [ProcessIdentity] { lock.withLock { requests } }
+
+    /// Komu signál doopravdy odešel.
+    var killedProcesses: [ProcessIdentity] { lock.withLock { killed } }
+
+    func identity(of pid: pid_t) -> ProcessIdentity? {
+        guard pid > 0 else { return nil }
+        return lock.withLock { table[pid] }
+    }
+
+    @discardableResult
+    func kill(_ identity: ProcessIdentity) -> Bool {
+        lock.withLock {
+            requests.append(identity)
+            guard table[identity.pid] == identity else { return false }
+            killed.append(identity)
+            table[identity.pid] = nil
+            return true
+        }
+    }
+}
+
 /// Cesty, na kterých nástroje leží podle `BinaryLocator.knownLocations`.
 enum KnownPath {
     static let gh = "/opt/homebrew/bin/gh"
