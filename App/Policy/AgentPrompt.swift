@@ -87,6 +87,13 @@ struct AgentPrompt: Identifiable, Hashable, Sendable {
     let inventory: AgentPromptInventory
     /// Co je v textu.
     let included: AgentPromptInventory
+    /// Identity položek, které v textu jsou (`AgentPromptItem.id`) — z nich se skládá razítko
+    /// předání (#334).
+    ///
+    /// **Ne celé položky:** sheet ukazuje text, ne recept na jeho složení (viz výš), a razítko
+    /// potřebuje jedině to, podle čeho se položka pozná. Počet by nestačil — zadání se dá
+    /// sestavit s vypnutou volbou, takže „poslal jsem šest“ nemluví o tom, **co** zbývá.
+    let handed: Set<String>
     /// Kolik z položek v textu blokuje (`Policy.isBlocking`).
     let blocking: Int
     /// Byla načtená konverzace? `false` = cizí komentáře se **nemají kde vzít**, a to musí být

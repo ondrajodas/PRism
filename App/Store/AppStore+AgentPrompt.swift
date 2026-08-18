@@ -15,7 +15,9 @@ extension AppStore {
     /// **Nálezy se berou z uloženého záznamu, ne po filtru reviewerů**: filtr je pohled (koho
     /// zrovna nečtu), kdežto zadání je to, co se má opravit. Ztlumený reviewer by z něj tiše
     /// vypadl a v panelu by u volby stálo o dva nálezy méně, než kolik jich na PR je.
-    func agentPrompt(for pr: PRIdentifier) -> AgentPrompt {
+    /// - Parameter only: zúžení na vyjmenované položky (#334) — `Sestavit i tak (jen nové vlákno)`
+    ///   po pushi. `nil` = celé zadání, jak ho skládá panel.
+    func agentPrompt(for pr: PRIdentifier, only: Set<String>? = nil) -> AgentPrompt {
         let record = reviewRecord(for: pr)
         return Policy.agentPrompt(
             for: agentPromptSubject(for: pr),
@@ -24,7 +26,8 @@ extension AppStore {
             conversation: conversation(for: pr),
             diff: loadedDiff(for: pr),
             blocking: resolved(for: pr.repo).blockingCategories,
-            options: agentPromptOptions
+            options: agentPromptOptions,
+            only: only
         )
     }
 

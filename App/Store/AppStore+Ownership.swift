@@ -126,12 +126,18 @@ extension AppStore {
     /// Ne počet otevřených PR: odznak na railu znamená „je co dělat“ (viz
     /// `Policy.ownPullRequestsAwaitingMove`). `nil`, dokud se seznam nenačetl — tatáž úvaha jako
     /// u fronty: nula nad nenačtenými daty vypadá jako hotovo.
+    ///
+    /// **Od #334 se ptá „zbývá tu něco, co jsem nepředal?“**, takže dovnitř jdou i razítka předání
+    /// a hlavy PR. Obojí uzávěrem: odznak se čte při každém překreslení okna, takže se sahá jen na
+    /// ta PR, kterých se to týká.
     var railMineCount: Int? {
         guard lastSuccess != nil else { return nil }
         return Policy.ownPullRequestsAwaitingMove(
             visibleOwnPullRequests,
             records: reviewRecords,
-            conversation: conversation(for:)
+            conversation: conversation(for:),
+            handoff: handoff(for:),
+            head: head(of:)
         )
     }
 

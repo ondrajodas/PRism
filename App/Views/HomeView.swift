@@ -74,6 +74,7 @@ struct HomeView: View {
             )
         } else {
             List(rows, id: \.id, selection: $store.selection) { pullRequest in
+                let ownership = store.ownership(of: pullRequest)
                 PullRequestRow(
                     pullRequest: pullRequest,
                     reviewState: store.reviewState(for: pullRequest.id),
@@ -83,8 +84,11 @@ struct HomeView: View {
                     // Od #333 to platí i o akci: `Prompt →` bez akce se nekreslí, takže bez tohohle
                     // řádku by se sekce od seznamu lišila zrovna tím, čím se lišit nemá. Vlastní PR
                     // se sem dostane jedině s draftem z dřívějška — a ten se má dát dořešit.
-                    ownership: store.ownership(of: pullRequest),
-                    openPrompt: { store.openAgentPrompt(in: pullRequest.id) }
+                    ownership: ownership,
+                    openPrompt: { store.openAgentPrompt(in: pullRequest.id) },
+                    // Jen u vlastních PR (#334) — u cizího řádku se pilulka nekreslí, takže by
+                    // skládání položek zadání byla práce za odpověď, kterou nikdo nepřečte.
+                    pending: ownership == .mine ? store.pendingHandoffCount(for: pullRequest.id) : 0
                 )
             }
         }

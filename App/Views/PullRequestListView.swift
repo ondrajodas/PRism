@@ -151,13 +151,18 @@ struct PullRequestListView: View {
         // jedině seznam a detail vybraného řádku. Cokoli dalšího nad zúženým seznamem by ze
         // zapnutí filtru udělalo mazání cache — viz `AppStore.pullRequests`. Rozřazení podle
         // autora (#331, #332) je **další zúžení nad tímtéž**, ne nový zdroj pravdy.
-        let rows = summaries.map {
-            ListRow(
-                pullRequest: $0,
-                state: store.reviewState(for: $0.id),
-                hasDraft: store.hasDraft($0.id),
-                summary: store.queueRow(for: $0.id),
-                ownership: store.ownership(of: $0)
+        let rows = summaries.map { summary -> ListRow in
+            let ownership = store.ownership(of: summary)
+            return ListRow(
+                pullRequest: summary,
+                state: store.reviewState(for: summary.id),
+                hasDraft: store.hasDraft(summary.id),
+                summary: store.queueRow(for: summary.id),
+                ownership: ownership,
+                // **Jen u vlastních PR** (#334): `pendingHandoffCount` skládá položky zadání (nálezy
+                // i celou konverzaci) a u cizího řádku se pilulka nekreslí, takže by to byla práce
+                // za odpověď, kterou nikdo nepřečte — a `List` řádky staví při každém překreslení.
+                pending: ownership == .mine ? store.pendingHandoffCount(for: summary.id) : 0
             )
         }
 
@@ -172,7 +177,8 @@ struct PullRequestListView: View {
                 ownership: row.ownership,
                 // `Prompt →` (#333) — otevře PR a v něm panel `Zadání`. Store se tady drží, takže
                 // uzávěr nese jen identitu řádku; skládání textu je věc panelu, ne seznamu.
-                openPrompt: { store.openAgentPrompt(in: row.id) }
+                openPrompt: { store.openAgentPrompt(in: row.id) },
+                pending: row.pending
             )
         }
     }
@@ -209,6 +215,9 @@ struct PullRequestListView: View {
         /// Čí PR to je (#331) — u vlastního má řádek vpravo `Prompt →` místo verdiktu. Čte se
         /// **tady**, ne v řádku: řádek nemá store a `List` ho staví líně.
         let ownership: PullRequestOwnership
+        /// Kolik zbývá předat agentovi (#334). Ze stejného důvodu tady: `Policy.handoff` potřebuje
+        /// razítko, nálezy a konverzaci, tedy store.
+        let pending: Int
 
         var id: PRIdentifier { pullRequest.id }
     }

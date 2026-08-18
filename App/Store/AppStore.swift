@@ -475,6 +475,15 @@ final class AppStore {
     /// Kdy jsem který PR naposled viděl (#173).
     let visits: VisitLedger
 
+    /// Které zadání jsem už předal agentovi (#334). Nepovinná závislost jako ostatní story —
+    /// testy, které o razítka nestojí, ji nedostanou a pak je všechno nepředané.
+    let handoffs: HandoffLedger?
+
+    /// Razítka předání, se kterými se pracuje (#334). Disk je **záloha**, ne jediná kopie:
+    /// odznak v railu i pilulka v řádku se na ně ptají při každém překreslení okna, takže se
+    /// čtou z paměti — z disku jednou při startu (`loadStoredHandoffs()`).
+    var handoffStamps: [PRIdentifier: Handoff] = [:]
+
     /// Značka, proti které se **v tomhle běhu** počítá „od tvé poslední návštěvy“.
     ///
     /// Drží se zvlášť od zapsané návštěvy schválně, a je to tentýž vzor jako u odznaků `nové`
@@ -517,9 +526,11 @@ final class AppStore {
         interrupted: InterruptedRuns? = nil,
         transcripts: (any TranscriptReading)? = nil,
         appearance: (any AppearanceApplying)? = nil,
-        visits: VisitLedger = VisitLedger(preferences: UserDefaults.standard)
+        visits: VisitLedger = VisitLedger(preferences: UserDefaults.standard),
+        handoffs: HandoffLedger? = nil
     ) {
         self.visits = visits
+        self.handoffs = handoffs
         self.appearance = appearance
         self.time = time
         self.gh = gh
@@ -621,7 +632,8 @@ final class AppStore {
             announced: AnnouncedPullRequests(),
             interrupted: InterruptedRuns(),
             transcripts: TranscriptStore(),
-            appearance: AppAppearance.application
+            appearance: AppAppearance.application,
+            handoffs: HandoffLedger()
         )
         self.configurationBox = box
     }
@@ -871,6 +883,10 @@ final class AppStore {
             // Uzávěr, ne mapa všech načtených konverzací: dashboard se ptá jen na vlastní PR
             // a skládat pro něj kopii celé diskuze při každém překreslení je práce navíc.
             conversation: conversation(for:),
+            // Razítka předání a hlavy PR (#334): karta `Moje PR` počítá totéž, co odznak v railu,
+            // takže musí dostat tytéž vstupy — jinak by nad jedním seznamem stála dvě čísla.
+            handoff: handoff(for:),
+            head: head(of:),
             tracksOwnSource: tracksOwnPullRequests
         )
     }
@@ -1076,6 +1092,10 @@ final class AppStore {
         await recoverInterruptedRuns()
         await loadStoredReviews()
         await loadStoredDrafts()
+        // Razítka předání (#334) se čtou **jednou**: odznak a pilulka se pak ptají paměti. Před
+        // pollingem, ať se PR nekreslí na okamžik jako nepředaný — to je zrovna to bliknutí,
+        // kvůli kterému odznak přestává něco znamenat.
+        await loadStoredHandoffs()
         await loadDailySpend()
         // Všechno běží, dokud žije okno; zrušení tasku ukončí skupinu i se všemi smyčkami.
         await withTaskGroup(of: Void.self) { group in

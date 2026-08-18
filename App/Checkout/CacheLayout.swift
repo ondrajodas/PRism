@@ -80,6 +80,13 @@ struct CacheLayout: Sendable, Equatable {
     /// co aplikaci nepřežilo — viz `InterruptedRuns`.
     var interruptedFile: URL { root.appending(path: "interrupted.json") }
 
+    /// Které zadání jsem už předal agentovi (#334) — razítko `(kdy, proti čemu, co)` na PR.
+    ///
+    /// Vedle nálezů, ne v jejich souborech: razítko patří **pull requestu**, kdežto `reviews/` se
+    /// klíčuje commitem — a předat se dá i zadání, ve kterém není jediný nález, takže by pro něj
+    /// musel vzniknout záznam bez běhu (viz `HandoffLedger` a `StoredRecheck`).
+    var handoffsFile: URL { root.appending(path: "handoffs.json") }
+
     /// Podprocesy, které aplikace právě drží (#351). Po startu je v něm to, co aplikaci
     /// **přežilo** — osiřelý `claude -p`, kterého má úklid zabít; viz `RunningSessions`.
     ///

@@ -132,6 +132,21 @@ enum AgentPromptChoice: String, Hashable, Sendable, CaseIterable, Codable {
     /// Je to druh položky, nebo podoba textu? Počet se ukazuje jen u těch prvních.
     var countsItems: Bool { self != .diffHunks }
 
+    /// Je to materiál, který **zbývá předat** (#334)?
+    ///
+    /// Vyřešené vlákno a odmítnutý nález ne: jedno je zavřená diskuze, druhé moje rozhodnutí
+    /// (#113), a ani jedno po mně nic nechce — proto se v panelu ukazují vypnuté. `diffHunks`
+    /// není druh položky, takže se nepočítá vůbec.
+    ///
+    /// Tohle je **materiál pro `Policy.handoff`**, tedy pro odznak v railu, pilulku `N k předání`
+    /// a panel naráz. Kdyby si ho každé z těch míst vybíralo samo, počítala by tři různá čísla.
+    var isPending: Bool {
+        switch self {
+        case .findings, .unresolvedThreads, .comments, .reviews: true
+        case .resolvedThreads, .dismissedFindings, .diffHunks: false
+        }
+    }
+
     /// Počet i s podstatným jménem v české podobě — `2 nálezy`, `1 vlákno u řádku`.
     ///
     /// Krátké tvary, ne `label`: odznak v hlavičce sheetu jich nese vedle sebe čtyři a

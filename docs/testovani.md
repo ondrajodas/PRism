@@ -207,6 +207,59 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   do druhé řady `FlowRow`u a úvodní odstavec zabral pět řádek; na 1080 se odznaky vejdou do jedné řady
   a odstavec do tří; na 840 taky do jedné řady, jen odstavec do čtyř. Jedno číslo by o druhém stavu
   netvrdilo nic — a **`minWidth` je to zajímavější z těch dvou**, protože do něj se sheet dá stáhnout.
+
+- **Předání zadání (#334)** — čtyři sady a všechny to nejcennější mají v negativním tvrzení.
+
+  `Policy` výčtem (`HandoffTests`): že po předání odznak **zhasne, i když nálezy dál existují**;
+  že ho rozsvítí **nová položka, ne opakovaný nález** (týž klíč = nic nového, nový klíč = práce);
+  že se počítá **cizí odpověď v už předaném vlákně**, ale **ne moje vlastní**; že po pushi vyjde
+  `.outdated` a `staleFindings` je nenulové (**zastaralý nález z počtu nezmizí**); že se počet
+  commitů netvrdí ani po force pushi, ani bez načteného seznamu; a že **neznámá dnešní hlava se bere
+  jako „neposunula se“**, protože jinak by odznak po předání nikdy nezhasl. Razítko si testy skládají
+  **produkční funkcí** (`agentPromptItems` + `AgentPromptItem.id`), ne ručně psanými identitami —
+  jinak by ověřovaly svoji kopii pravidla.
+
+  `AppStore` proti **skutečnému** `HandoffLedger`u (`AppStoreHandoffTests`): že razítko nese hlavu
+  i položky, že po předání je `pending == 0` a **nález nezmizel**, že razítko **přežije nový store**
+  (druhá instance nad tímtéž souborem), že po pushi vyjde `.outdated` a **review se nespustí samo**
+  (`reviewTasks` i `automaticReviews` prázdné — automat se vlastních PR netýká vůbec, #332), že se
+  počet commitů bere ze seznamu, a že zúžené zadání **nese jen novou diskuzi**, ne nálezy proti staré
+  hlavě. Konverzace se v tom testu dotahuje podruhé se **novějším `updatedAt`** — načtená se drží
+  právě podle něj.
+
+  `HandoffLedger` proti skutečné složce (`HandoffLedgerTests`): restart, přepsání předchozího
+  razítka, že se zápisem **neztratí razítka ostatních PR**, lhůta, rozbitý i chybějící soubor jako
+  **prázdno** (tedy „nepředáno“ — bezpečný směr) a že se identity ukládají **řazené**, ať se soubor
+  nemění bez důvodu.
+
+  Texty panelu bez kreslení (`HandoffTextTests`): že se `dnes 14:20` pozná od staršího data, že
+  chybějící hlava **je v textu napsaná**, a že se skloňuje česky (`1 commit` / `2 commity` /
+  `5 commitů`, `přibyla 1 položka` / `přibyly 2 položky`). A hlavně: že se **počet commitů
+  nevymýšlí**, když ho není z čeho spočítat — nula se čte stejně jako `nil`.
+
+  **Dvě opravy po Copilotovi (#373) mají vlastní tvrzení**: že `.outdated` **skončí**, jak se pustí
+  review proti dnešní hlavě (jinak by v tom režimu panel zůstal navždycky a volby by v něm nešly
+  zapnout), a že zúžené předání **nechá razítko u staré hlavy** a předané položky **přičte**, ne
+  přepíše. U toho druhého musí mít test hodiny **za** komentáři, které předává — razítko se
+  porovnává s časy komentářů, takže s výchozím `FakeTimeSource` (rok 1970) by předané vlákno vyšlo
+  jako „přišlo po předání“; v aplikaci to platí samo, protože čas je skutečný.
+
+  **Třetí opravu našel Copilot v sekci *Suppressed comments*** (druhé kolo na #373), takže je vidět,
+  proč se tělo review čte celé: věta o posunuté hlavě tvrdila „nálezy už platí pro dnešní kód“ i na PR,
+  které žádné nálezy nemá. Test na to je negativní — `Věta o novém commitu o nálezech nic netvrdí`.
+
+  **Vzhled má sondu** (`AgentPromptRenderProbe` má od #334 druhý test): panel se rendruje v **pěti
+  stavech** — nepředáno, předáno, předáno-ale-něco-zbývá, po pushi a po pushi s nepředaným vláknem.
+  Ke třem z nich se v aplikaci klikáním nedostaneš (musel by mezitím někdo pushnout do PR, který mám
+  na obrazovce), takže je to jediná cesta, jak si je prohlédnout vedle mockupu. **Hodiny sondy musí
+  být za daty konverzace**: výchozí `FakeTimeSource` je v roce 1970, takže by z každého vlákna udělal
+  „přišlo po předání“ a stav `předáno` by na obrázku nikdy nevyšel — je to vlastnost fixture, ne
+  logiky. Sonda tiskne i celý `HandoffReport`, takže je z výstupu vidět, který stav se kreslil.
+
+  **Ověřeno vložením regrese, dvakrát:** vypnutí porovnání hlav (tedy „po pushi se nic neděje“)
+  shodilo **čtyři** testy `Policy` a **tři** ve store — mezi nimi i ten o počtu commitů a o tom, že
+  se review nespustí samo —, a smazání kontroly cizí odpovědi ve vlákně shodilo právě ten jeden
+  test, který ji má chytat (a nic víc, což je taky informace: kontrola nepřebíjí ostatní pravidla).
 - **Konverzace** — proti fixtures, které jsou surové odpovědi z veřejných PR `cli/cli`
   sebrané **tím dotazem, který posílá aplikace** (`ConversationQuery.document`). Kdyby se
   sbíraly jinak, testovaly by tvar, který v provozu nikdy nepřijde; ověřené je to i tak, že

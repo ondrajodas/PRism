@@ -25,6 +25,10 @@ struct PullRequestRow: View {
     /// test) akci nemá odkud vzít a nakreslit ji naprázdno je zrovna ta lež, kvůli které se
     /// v #331 kreslila zakázaná.
     var openPrompt: (() -> Void)?
+    /// Kolik položek na vlastním PR zbývá předat agentovi (#334) — `Policy.handoff`, tedy tatáž
+    /// funkce, ze které čte odznak v railu i panel. Nula znamená „nic nezbývá“ a pilulka se
+    /// nekreslí; na cizím PR se nekreslí nikdy.
+    var pending = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -56,7 +60,20 @@ struct PullRequestRow: View {
             if !row.spectrum.isEmpty {
                 SpectrumBar(shares: row.spectrum)
             }
-            ReviewStateBadge(state: reviewState, blocking: row.blocking)
+            // **Na vlastním PR pilulka `N k předání` místo odznaku stavu** (#334, návrh sekce 21).
+            // Do #334 tady stál odznak review i na vlastním řádku — a byla to jediná věta, kterou
+            // se dalo napsat, dokud předání nemělo razítko. Teď se dá napsat ta, na kterou se
+            // u vlastního PR ptám: kolik věcí zbývá předat agentovi. Vedle sebe by nešly: obě
+            // čísla mluví o týchž nálezech, takže by se pod sebou pral „3 nálezy“ s „6 k předání“
+            // a nikdo by nevěděl, které je které.
+            //
+            // **Když nezbývá nic, zůstává odznak.** Prázdné místo po pilulce by z vlastního řádku
+            // udělalo řádek, ze kterého nejde poznat, jestli review vůbec běželo.
+            if let pending = pendingHandoff {
+                handoffPill(pending)
+            } else {
+                ReviewStateBadge(state: reviewState, blocking: row.blocking)
+            }
             if showsPromptAction {
                 promptButton
             }
@@ -71,6 +88,31 @@ struct PullRequestRow: View {
     /// kreslilo zakázané, protože akci měl dodat až tenhle kus — a zakázané tlačítko, po kterém se
     /// nic nestane, svádí na něj kliknout a hledat, co je rozbité.
     var showsPromptAction: Bool { ownership == .mine && openPrompt != nil }
+
+    /// Kolik zbývá předat, jestli se to má kreslit (#334). `nil` = cizí PR, nebo nezbývá nic.
+    ///
+    /// Pojmenované, ne `if` uvnitř `body`, ze stejného důvodu jako `showsPromptAction`.
+    var pendingHandoff: Int? {
+        guard ownership == .mine, pending > 0 else { return nil }
+        return pending
+    }
+
+    /// `6 k předání` — plná pilulka z návrhu (`.pill.find`).
+    ///
+    /// **Barva nálezu**, ne akcent ani mint: většinu toho počtu tvoří nálezy a `find` v tomhle okně
+    /// znamená „něco se našlo“. Akcent vedle by se pral s `Prompt →` o roli hlavní akce a mint
+    /// znamená stav, se kterým se nic nedělá — tady je to naopak práce, která leží.
+    private func handoffPill(_ pending: Int) -> some View {
+        Text(verbatim: "\(pending) k předání")
+            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+            .monospacedDigit()
+            .foregroundStyle(Palette.find)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(Palette.find.opacity(0.15), in: .capsule)
+            .help("Nálezy, vlákna a komentáře, které jsi ještě nepředal agentovi — sestavit zadání jde v panelu Zadání")
+            .accessibilityLabel("\(pending) k předání agentovi")
+    }
 
     /// `Prompt →` u vlastního PR (#331, akce od #333) — plné akcentové tlačítko z návrhu
     /// (`.mini.pri`).
