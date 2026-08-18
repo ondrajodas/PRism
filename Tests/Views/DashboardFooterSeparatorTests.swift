@@ -80,9 +80,28 @@ struct DashboardFooterSeparatorTests {
     /// koly smyčky a kolik jich bude potřeba, rozhoduje zátěž stroje. Strop je `TestWait.deadline`,
     /// tedy tentýž jako u každého jiného čekání v repu — a když se nedočká, měří se poslední snímek
     /// a tvrzení nad ním spadne i s výpisem.
+    /// **Okno drží tenhle scope**, ne návratová hodnota z pomocné funkce (nález Copilota): `NSWindow`
+    /// vrácený jinde by měl vlastníka jedině v AppKitu a `hosting.window` by z toho bylo implicitní —
+    /// kdyby se uvolnil, `cacheDisplay` by měřil view mimo okno a `orderOut` by tiše nedělal nic.
+    /// Ostatní sondy v repu (`ChecksTabRenderProbe`, `SidebarRailTests`) ho drží stejně.
     private func horizontalLines(of store: AppStore) throws -> [Line] {
-        let hosting = try mounted(store)
-        defer { hosting.window?.orderOut(nil) }
+        let scene = DashboardView(store: store, open: { _ in })
+            .frame(width: Self.width, height: Self.height)
+            .environment(\.colorScheme, .light)
+            .tint(Palette.accent)
+        let hosting = NSHostingView(rootView: scene)
+        hosting.frame = NSRect(x: 0, y: 0, width: Self.width, height: Self.height)
+        let window = NSWindow(
+            contentRect: hosting.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hosting
+        // Mimo obrazovku, ať test nikomu neskočí před oči — vedle sebe běží víc instancí aplikace.
+        window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
 
         let limit = ContinuousClock.now.advanced(by: TestWait.deadline)
         var lines = try lines(in: hosting)
@@ -159,30 +178,10 @@ struct DashboardFooterSeparatorTests {
         }
     }
 
-    /// Dashboard se sedmi PR ve frontě — pět řádků a patka `+2` — v okně mimo obrazovku.
+    /// Dashboard se sedmi PR ve frontě — pět řádků a patka `+2`.
     ///
-    /// `NSHostingView` a `cacheDisplay`, ne `ImageRenderer`: dashboard je `ScrollView` a ten se
-    /// offscreen nerasterizuje (změřeno u #237).
-    private func mounted(_ store: AppStore) throws -> NSHostingView<some View> {
-        let scene = DashboardView(store: store, open: { _ in })
-            .frame(width: Self.width, height: Self.height)
-            .environment(\.colorScheme, .light)
-            .tint(Palette.accent)
-        let hosting = NSHostingView(rootView: scene)
-        hosting.frame = NSRect(x: 0, y: 0, width: Self.width, height: Self.height)
-        let window = NSWindow(
-            contentRect: hosting.frame,
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentView = hosting
-        // Mimo obrazovku, ať test nikomu neskočí před oči — vedle sebe běží víc instancí aplikace.
-        window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
-        return hosting
-    }
-
+    /// Kreslí se přes `NSHostingView` a `cacheDisplay`, ne `ImageRenderer`: dashboard je `ScrollView`
+    /// a ten se offscreen nerasterizuje (změřeno u #237).
     private func store() async -> AppStore {
         let queue = (1...7).map { number in
             PullRequestSummary(
