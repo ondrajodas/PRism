@@ -2665,7 +2665,11 @@ Testů přidala tahle změna **devět** a je jich **2952**; jsou zelené, z toho
 `CommandPaletteRenderProbe`, která se pouští ručně (karta ve dvou podobách — zúžená na počty řádků
 z návrhu a nad celým katalogem). Sonda existuje proto, že paletu otevírá jedině ⌘K a psát do cizí
 instance se v paralelním běhu nemá. Rozdělení je ověřené **vloženou regresí**: se všemi PR v jedné
-skupině a starým nadpisem padne pět testů.
+skupině a starým nadpisem padne pět testů a osm tvrzení.
+
+Vedle toho z toho vyšla jedna oprava mimo zadání: `try! #require` v testu **položí celý běh**, takže
+sečtený řádek hlásí „0 tests passed“ a kdo čte jen poslední řádek, přečte si opak. V `Tests/` byly
+dva výskyty (jeden z #184, jeden nový) a padly oba — teď je test `throws` a `#require` se volá `try`.
 
 ### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
 

@@ -1071,9 +1071,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   PR se nadpis nekreslí**; prázdný nadpis vypadá jako rozbité hledání.
 
   **Ověřeno vloženou regresí** (katalog zařadí všechno do `.pullRequests` a nadpis se vrátí na „Pull
-  requesty“): padne **pět testů** — čtyři nad storem a jeden nad nadpisem. Stojí za zaznamenání, čím
-  ten běh skončí: `try! #require` nad prázdnou skupinou run **položí**, takže sečtený řádek na konci
-  hlásí „0 tests passed“; červené je z výpisu vidět, ale kdo čte jen poslední řádek, přečte si opak.
+  requesty“): padne **pět testů** — čtyři nad storem a jeden nad nadpisem, dohromady osm tvrzení.
+
+  Poprvé z toho vyšlo „0 tests passed“, a to je poučení, které z toho zůstává: **`try! #require`
+  položí celý běh**, takže sečtený řádek na konci hlásí, že neproběhlo nic, a kdo čte jen poslední
+  řádek, přečte si opak toho, co se stalo. Test proto musí být `throws` a `#require` se volá `try`
+  (upozornil na to Copilot na #368; v `Tests/` byly dva výskyty a padly oba).
 - **`AppStore` — command palette (#184)** — proti fake gateway. **Nejcennější test celé palety
   tvrdí, že se nic nestalo**: po sestavení katalogu, prohledání a vykonání každého druhu cíle musí
   mít gateway pořád tentýž počet volání (search, diff, detail, konverzace). Bez toho by stačilo,

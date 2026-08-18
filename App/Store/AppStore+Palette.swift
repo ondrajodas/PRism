@@ -176,9 +176,11 @@ extension AppStore {
     /// se bere **jednou pro celý seznam**, ne u každého řádku (`ownLogins` se počítá při každém
     /// čtení).
     ///
-    /// **Jeden průchod, ne dva seznamy za sebou.** Do skupin je rozdělí `Policy.paletteResults`
-    /// a pořadí uvnitř skupiny drží pořadí katalogu, takže dvě `filter` volání by jen zopakovala
-    /// tutéž práci a mohla se rozejít v tom, co je „moje“.
+    /// **Zařazení padá tady, seskupení až v `Policy.paletteResults`.** Katalog je jeden plochý
+    /// seznam, ve kterém si každý řádek nese svou `group`; hledání pak podle ní seskupuje a řeže na
+    /// strop. Proto stačí **jeden průchod** — skládat dva seznamy za sebou (`filter` na moje
+    /// a `filter` na cizí) by jen zopakovalo tutéž otázku dvakrát a ty dvě odpovědi by se mohly
+    /// rozejít v tom, co je „moje“.
     ///
     /// **Cíl zůstává `Target.pullRequest`** — skupina je zařazení, ne druhá cesta k témuž;
     /// po `↵` se v obou případech otevírá tatáž záložka.

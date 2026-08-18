@@ -109,13 +109,13 @@ struct AppStorePaletteTests {
     }
 
     @Test("Nález nese souřadnice PR a jméno souboru, cesta se dá hledat")
-    func findingSubtitleAndKeywords() async {
+    func findingSubtitleAndKeywords() async throws {
         let (store, _) = await loaded([summary(vault)])
         store.reviewRecords[vault] = record([
             makeReported(file: "src/Vault/SecretClient.php", line: 81, summary: "schází secret"),
         ])
 
-        let item = try! #require(items(of: store, group: .findings).first)
+        let item = try #require(items(of: store, group: .findings).first)
         #expect(item.title == "schází secret")
         #expect(item.subtitle == "vault#85 · SecretClient.php:81")
         // Celá cesta se do podtitulku nevejde, ale hledat se podle ní musí dát.
@@ -204,13 +204,13 @@ struct AppStorePaletteTests {
 
     /// Skupina je **zařazení**, ne druhá cesta k témuž: druhý případ v `Target` by se rozešel.
     @Test("Vlastní PR má týž cíl i podtitulek jako cizí")
-    func ownPullRequestKeepsTheSameTargetAndSubtitle() async {
+    func ownPullRequestKeepsTheSameTargetAndSubtitle() async throws {
         let (store, _) = await loaded(
             [summary(vault, title: "feat: šifrovaný secret", author: "ondrajodas")],
             viewer: "ondrajodas"
         )
 
-        let item = try! #require(items(of: store, group: .myPullRequests).first)
+        let item = try #require(items(of: store, group: .myPullRequests).first)
         #expect(item.target == .pullRequest(vault))
         // Podtitulek zůstává `repo#číslo · autor` — `6 k předání` z návrhu se dá napsat teprve
         // s razítkem předání (#334), tak jak to u řádku seznamu rozhodlo #331.
