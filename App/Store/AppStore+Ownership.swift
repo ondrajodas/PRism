@@ -59,6 +59,45 @@ extension AppStore {
         Policy.tracksOwnPullRequests(in: configuration.activeSources, mine: ownLogins)
     }
 
+    // MARK: - Fronta (#332)
+
+    /// **Fronta** — cizí PR z plného seznamu, tedy to, o co mě někdo požádal (#332).
+    ///
+    /// Do #332 byla fronta celý seznam a vlastní PR se do ní počítal: odznak v railu tvrdil, že je
+    /// víc práce, než je (13 cizích + 19 vlastních = 32), a na dashboardu byl vlastní PR vidět
+    /// v obou blocích. Čte to všechno, co o **frontě** něco tvrdí — karty `Čeká na mě` a `Blokuje`,
+    /// souhrn ve stavovém řádku, hromadné spuštění review a plánovač automatu.
+    ///
+    /// **Plný seznam, ne zúžený filtrem**, protože z toho čtou i tvrzení o frontě jako celku;
+    /// zúžená podoba je `visibleQueuePullRequests` a čte ji jedině seznam a jeho odznak.
+    ///
+    /// **Nikdy z tohohle getteru neuklízej.** Úklid a eviction berou `summaries` z tiku, tedy plný
+    /// seznam (viz `AppStore.pullRequests`) — klon vlastního PR zabírá místo stejně jako cizí.
+    var queuePullRequests: [PullRequestSummary] {
+        Policy.pullRequests(pullRequests, ownedBy: .theirs, mine: ownLogins)
+    }
+
+    /// Fronta **po filtru** — obsah sekce `Fronta` a její odznak v railu (#332).
+    ///
+    /// Zrcadlí `visibleOwnPullRequests`: nejdřív filtr, pak autor. Dvě sekce, dvě množiny, jedno
+    /// řazení — a `visiblePullRequests` zůstává plný pohled, ze kterého se obě berou.
+    var visibleQueuePullRequests: [PullRequestSummary] {
+        Policy.pullRequests(visiblePullRequests, ownedBy: .theirs, mine: ownLogins)
+    }
+
+    /// Kolik PR **ve frontě** schoval filtr (#332) — číslo u tlačítka filtru nad frontou.
+    ///
+    /// Vlastní číslo vedle `hiddenOwnPullRequestCount`, a ze stejného důvodu: celkový počet by
+    /// nad frontou mluvil i o vlastních řádcích, které v ní nikdy nebyly, takže by lišta hlásila
+    /// „filtr schoval 1“ nad seznamem, ve kterém filtr neschoval nic.
+    ///
+    /// Počítá se **bez druhého filtrování** — jen se spočítá, co filtrem neprojde. SwiftUI ho čte
+    /// při každém překreslení lišty (nález Copilota na #170).
+    var hiddenQueuePullRequestCount: Int {
+        guard filter.isActive else { return 0 }
+        return queuePullRequests.count { !filter.matches($0) }
+    }
+
     // MARK: - Sekce `Moje PR` (#331)
 
     /// Moje PR pro sekci `Moje PR` — **zúžené filtrem a pak podle autora**.
@@ -74,8 +113,8 @@ extension AppStore {
         Policy.pullRequests(visiblePullRequests, ownedBy: .mine, mine: ownLogins)
     }
 
-    /// Kolik mých PR schoval filtr. Vlastní číslo, ne `hiddenPullRequestCount`: v sekci
-    /// `Moje PR` by celkový počet mluvil i o cizích řádcích, které tam nikdy nebyly.
+    /// Kolik mých PR schoval filtr. Vlastní číslo, ne `hiddenQueuePullRequestCount`: v sekci
+    /// `Moje PR` by počet z fronty mluvil o cizích řádcích, které tam nikdy nebyly.
     var hiddenOwnPullRequestCount: Int {
         guard filter.isActive else { return 0 }
         let mine = ownLogins

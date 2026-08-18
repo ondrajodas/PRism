@@ -137,19 +137,32 @@ extension Policy {
             .sorted { shouldPrecede($0.value, $1.value) }
     }
 
-    /// Proč je seznam prázdný.
+    /// Proč je **fronta** prázdná.
     ///
     /// **Důvod od pollingu má přednost.** Nad selhaným tikem se hlásí chyba načtení, ne filtr:
     /// „schoval jsem ti to filtrem“ nad daty, která nedorazila, je nepravda — a je to tatáž lekce
     /// jako u `PollEmptyReason`, který kvůli tomu vůbec existuje.
+    ///
+    /// **Prázdná fronta nad neprázdným tikem je `noPullRequests`** (#332). Od #332 stojí fronta na
+    /// cizích PR, takže tik, ve kterém přišly jen moje, nechá `visible` na nule, kdežto
+    /// `PollState.emptyReason` mlčí — seznam z pollingu prázdný není. Bez tohohle případu by v okně
+    /// zbyl prázdný seznam **bez věty**, a to je zrovna ten stav, kvůli kterému `ListEmptyReason`
+    /// existuje. Že po mně nikdo nechce review, je přitom správná odpověď: vlastní PR review
+    /// request není.
+    ///
+    /// Pořadí a tvar jsou schválně stejné jako u `ownListEmptyReason` — dvě sekce, dvě funkce,
+    /// jeden typ; liší se jen tím, mezi kolika prázdny se rozhoduje.
     static func listEmptyReason(
         poll: PollEmptyReason?,
         visible: Int,
         hidden: Int
     ) -> ListEmptyReason? {
-        if let poll { return .poll(poll) }
-        guard visible == 0, hidden > 0 else { return nil }
-        return .filtered(hidden: hidden)
+        // `noPullRequests` se přeskočí a spadne až do návratu dole: z prázdného tiku i z tiku
+        // s vlastními PR má vyjít tatáž věta, takže je na jednom místě.
+        if let poll, poll != .noPullRequests { return .poll(poll) }
+        guard visible == 0 else { return nil }
+        if hidden > 0 { return .filtered(hidden: hidden) }
+        return .poll(.noPullRequests)
     }
 
     private static func shouldPrecede(_ left: RepoID, _ right: RepoID) -> Bool {

@@ -104,6 +104,10 @@ extension AppStore {
         let categories = resolved(for: pr.repo).blockingCategories
         guard let notification = Policy.reviewNotification(
             for: pr,
+            // Čí PR to je (#332). Rozhoduje `Policy.reviewNotification`, ne tenhle guard: o vlastním
+            // PR se touhle cestou nehlásí nic, protože všechny tři události jsou odpověď na review
+            // request. Bere se `ownership(of:)` nad identitou — shrnutí tu po ruce být nemusí.
+            ownership: ownership(of: pr),
             state: reviewState(for: pr),
             blocking: record.map { Policy.blockingCount(in: $0, categories: categories) } ?? 0,
             topFinding: record.flatMap { Policy.mostSevereFinding(in: $0, categories: categories) }
@@ -130,9 +134,21 @@ extension AppStore {
     /// selhalo), protože se i po jednotlivých posílalo — bez toho by při opakovaném selhání
     /// jedné notifikace chodily ty ostatní každou minutu (nález Copilota na #132). Se souhrnem
     /// ta situace nastat nemůže: buď odešel celý, nebo vůbec.
+    ///
+    /// **Hlásí se jedině cizí PR** (#332). „Nový PR k review“ o pull requestu, který jsem sám
+    /// otevřel, je hláška o vlastním pushi — a `Znovu požádáno o review` u něj neplatí vůbec.
+    ///
+    /// Zúžení je **na vstupu, ne až u doručení**, takže se vlastní PR nedostane ani do snímku
+    /// ohlášených: v něm mají být právě ta PR, proti kterým se příště hledají novinky. Vypadnou
+    /// z něj sami (`newcomers(in:)` odebírá, co v seznamu není), takže nic neroste.
+    ///
+    /// **Dokud se neví, kdo se dívá**, je podle `Policy.ownership` všechno cizí, takže vlastní PR,
+    /// které dorazí v prvním tiku po startu (než doběhne `gh api user`), se ohlásit **může**. Je to
+    /// vědomá volba: druhá strana by byla mlčet, dokud login nedorazí, a to znamená u selhaného
+    /// `gh api user` ztracené notifikace o cizích PR — tedy o té práci, kvůli které aplikace je.
     func announceNewPullRequests(in summaries: [PullRequestSummary]) async {
         guard notifications != nil, let announced else { return }
-        let listed = summaries.map(\.id)
+        let listed = Policy.pullRequests(summaries, ownedBy: .theirs, mine: ownLogins).map(\.id)
         let newcomers = await announced.newcomers(in: listed)
         guard !newcomers.isEmpty else { return }
 

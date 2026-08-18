@@ -331,6 +331,27 @@ struct ReviewNotificationTests {
 
         #expect(Policy.blockingCount(in: record) == 0)
     }
+
+    // MARK: - Vlastní PR (#332)
+
+    /// **Tvrzení, že se něco nestalo**: o vlastním PR se touhle cestou nehlásí **nic** — ani
+    /// nálezy, ani čisto, ani selhání. Všechny tři události jsou odpověď na review request, takže
+    /// by hlásily práci, o kterou nikdo nepožádal. Vlastní notifikace o vlastních PR je #335.
+    @Test("O vlastním PR se touhle cestou nehlásí nic", arguments: [
+        ReviewState.completed(findings: 3),
+        .clean,
+        .dismissed(findings: 2),
+        .failed(detail: "spadlo"),
+        .checkoutFailed(detail: "nešlo naklonovat"),
+        .timedOut(findings: 2),
+        .interrupted(findings: 1),
+    ])
+    func staysQuietOnOwnPullRequests(state: ReviewState) {
+        #expect(Policy.reviewNotification(for: pr, ownership: .mine, state: state, blocking: 1) == nil)
+        // A cizí PR v témže stavu hlásit **musí** — jinak by test výš platil i nad vypnutými
+        // notifikacemi.
+        #expect(Policy.reviewNotification(for: pr, ownership: .theirs, state: state, blocking: 1) != nil)
+    }
 }
 
 extension ReviewNotificationTests {

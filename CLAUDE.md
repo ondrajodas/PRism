@@ -482,7 +482,7 @@ viz tvrdá podmínka č. 1.
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |
@@ -516,10 +516,14 @@ Zvlášť stojí za přečtení, než sáhneš na:
 - **`AppStore` a okno** — co patří do store a co do view (`@State` v detailu PR přetéká mezi
   pull requesty), a proč se stav checkoutu klíčuje repem;
 - **`pullRequests` je plný seznam, `visiblePullRequests` je po filtru** (#117), a **rozdíl mezi
-  těmi dvěma gettery je jediné, co dělí filtr od mazání cache**. Zúžený čte jedině seznam a detail
-  vybraného řádku; plný čte okno nastavení, souhrn fronty, automat a úklid. Kdyby na zúženém
-  viselo cokoli z úklidu, zapnutí filtru by zahodilo diffy a konverzace, smazalo cache a zrušilo
-  běžící review;
+  těmi dvěma gettery je jediné, co dělí filtr od mazání cache**. Plný čte okno nastavení, nabídka
+  filtru, klik na notifikaci a úklid; kdyby na zúženém viselo cokoli z úklidu, zapnutí filtru by
+  zahodilo diffy a konverzace, smazalo cache a zrušilo běžící review.
+
+  **Nad tím jsou od #332 dvě další zúžení podle autora**: `queuePullRequests` (cizí, tedy fronta)
+  a vlastní PR z #331. Fronta, karty `Čeká na mě` a `Blokuje`, souhrn, automat, hromadné spuštění
+  a notifikace čtou **jen cizí**; úklid, eviction, nastavení, nabídka filtru a rozdělaná review
+  **obojí**. Tabulka „které místo chce kterou množinu“ je v [`docs/architektura.md`](docs/architektura.md);
 - **`Environment`** — podprocesy: blokující I/O nesmí na kooperativní pool, oba pipy se musí
   číst souběžně, **zrušení i ukončení aplikace musí proces zabít** (#264 — obě cesty, jedním
   `SIGKILL`em z `LaunchedProcess`; zavírání se na něj navíc musí **počkat**, jinak `claude`

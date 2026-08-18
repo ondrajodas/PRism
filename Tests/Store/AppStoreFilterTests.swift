@@ -77,7 +77,7 @@ struct AppStoreFilterTests {
         let (store, _) = await loaded([summary(1), summary(2, repo: "ondrajodas/PRism")])
 
         #expect(store.visiblePullRequests.count == 2)
-        #expect(store.hiddenPullRequestCount == 0)
+        #expect(store.hiddenQueuePullRequestCount == 0)
         #expect(!store.filter.isActive)
     }
 
@@ -92,7 +92,7 @@ struct AppStoreFilterTests {
         store.setFilter(filter(repos: ["cli/cli"]))
 
         #expect(store.visiblePullRequests.map(\.number) == [1])
-        #expect(store.hiddenPullRequestCount == 2)
+        #expect(store.hiddenQueuePullRequestCount == 2)
     }
 
     /// **Plný seznam zůstává plný.** Na něm visí okno nastavení, souhrn fronty a automat.

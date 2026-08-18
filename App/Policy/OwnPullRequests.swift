@@ -3,10 +3,15 @@ import Foundation
 extension Policy {
     /// Seznam zúžený na jednu stranu — moje PR, nebo cizí (#331).
     ///
-    /// **Další zúžení nad tím, co seznam už má**, ne nový zdroj pravdy: čte to jedině sekce
-    /// `Moje PR` a blok na dashboardu, tedy tatáž místa, která smí sahat na zúžený seznam
-    /// (viz `AppStore.pullRequests`). Kdyby na rozřazení viselo cokoli z úklidu, přihlášení
-    /// jiným účtem by zahodilo cache.
+    /// **Další zúžení nad tím, co seznam už má**, ne nový zdroj pravdy. Od #332 na něm stojí obě
+    /// fronty: `.mine` je sekce `Moje PR` a její blok, `.theirs` je fronta, karty `Čeká na mě`
+    /// a `Blokuje`, souhrn ve stavovém řádku, automat a notifikace.
+    ///
+    /// **Co na něm viset nesmí, je úklid** (`forget(whatIsNotIn:)`, `CacheEviction`,
+    /// `ReviewStore.cleanUp`) **a okno nastavení** (`knownRepositories`) — ty čtou plný seznam
+    /// (viz `AppStore.pullRequests`). Klon vlastního PR zabírá místo stejně jako cizí, takže
+    /// navázat úklid na zúženou množinu znamená cache, která tiše roste; a přihlášení jiným účtem
+    /// by z ní naráz udělalo „cizí“ všechno.
     ///
     /// **Nesahá na řazení** — jako `filtered(_:by:)`: pořadí je od naposledy změněného
     /// a rozhodnutí o něm patří jinam.

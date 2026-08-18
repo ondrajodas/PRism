@@ -79,9 +79,16 @@ extension Policy {
     /// view bere **jednou za překreslení**, takže druhý getter na jednu jeho kartu by znamenal
     /// druhý průchod seznamem a druhou pravdu o jedné obrazovce.
     ///
-    /// **Karta `Čeká na mě` počítá pořád celý seznam**, tedy i moje PR — odříznout je patří k #332,
-    /// které mění i frontu, automat a notifikace. Do té doby se moje PR na dashboardu objeví
-    /// v obou blocích.
+    /// **Karty `Čeká na mě` a `Blokuje` počítají jen cizí PR** (#332). „Čeká na mě“ je fronta, tedy
+    /// to, o co mě někdo požádal; vlastní PR je moje práce a je pro něj karta i blok vedle. Blokující
+    /// nález na vlastním PR mě navíc **neblokuje** — je to seznam toho, co mám opravit, ne toho, co
+    /// mi stojí v cestě k odeslání review. Do #332 počítaly obojí a vlastní PR byl na dashboardu
+    /// vidět v obou blocích i v čísle karty.
+    ///
+    /// **Karta `Rozdělaná review` počítá dál celý seznam**, a je to schválně: draft je ručně psaná
+    /// práce, takže rozdělané review nemá kde zmizet podle toho, čí je PR. Od #333 na vlastním PR
+    /// draft ani nevznikne, takže se ta dvě čísla dneska stejně nerozejdou — kdyby se karta navázala
+    /// na frontu, starší draft na vlastním PR by z ní tiše vypadl.
     static func dashboard(
         pullRequests: [PullRequestSummary],
         records: [PRIdentifier: ReviewRecord],
@@ -92,13 +99,16 @@ extension Policy {
         conversation: (PRIdentifier) -> Conversation? = { _ in nil },
         tracksOwnSource: Bool = false
     ) -> Dashboard {
-        let blocking = pullRequests.filter { blockingCount(in: records[$0.id], categories: categories) > 0 }
+        // Jedním průchodem na množinu: `queue` i `blocking` mluví o **frontě**, tedy o cizích PR
+        // (#332), kdežto `mine` o mých. Rozřazení se proto udělá tady jednou, ne u každé karty.
+        let queue = self.pullRequests(pullRequests, ownedBy: .theirs, mine: mine)
+        let blocking = queue.filter { blockingCount(in: records[$0.id], categories: categories) > 0 }
         let own = self.pullRequests(pullRequests, ownedBy: .mine, mine: mine)
 
         return Dashboard(
             queue: Dashboard.QueueCard(
-                pullRequests: pullRequests.count,
-                repositories: Set(pullRequests.map(\.repo)).count
+                pullRequests: queue.count,
+                repositories: Set(queue.map(\.repo)).count
             ),
             blocking: Dashboard.BlockingCard(
                 pullRequests: blocking.count,
@@ -118,12 +128,18 @@ extension Policy {
         )
     }
 
-    /// Rozdělaná review: **PR ve frontě s neprázdným draftem**, tedy přesně to, co počítá souhrn
-    /// ve stavovém řádku (#155).
+    /// Rozdělaná review: **PR ze seznamu s neprázdným draftem**.
     ///
     /// Do #181 se tu počítaly všechny drafty na disku, a karta pak tvrdila „3“ vedle stavového
     /// řádku s jedničkou. Rozdíl dělá dvojí: prázdný draft (vznikne otevřením panelu a smazáním
-    /// napsaného znaku) a draft na PR, který už ve frontě není.
+    /// napsaného znaku) a draft na PR, který už v seznamu není.
+    ///
+    /// **Bere celý seznam, tedy i vlastní PR** (#332), kdežto souhrn ve stavovém řádku od #332
+    /// počítá jen frontu. Rozejdou se tím jedině u draftu na vlastním PR z doby před #333 — a ten
+    /// tady zůstat **musí**: je to ručně psaná práce a karta je jediná cesta, jak se k němu
+    /// z dashboardu dostat (akce `Dopsat review` v bloku `Co teď`). Do souhrnu fronty naopak nepatří,
+    /// protože souhrn mluví o frontě: „2 rozdělaná“ z pěti PR, mezi kterými jedno není, by si
+    /// v jedné větě odporovalo.
     private static func draftsCard(
         of pullRequests: [PullRequestSummary],
         drafts: [PRIdentifier: ReviewDraft]

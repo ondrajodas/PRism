@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// Nad kterou množinou seznam stojí (#331).
+/// Kterou sekci railu seznam kreslí (#331).
 ///
-/// **Vyjmenované, ne `PullRequestOwnership`.** Fronta dneska není „cizí PR“ — je to všechno, co
-/// přišlo, tedy včetně mých; odříznout je patří k #332. Kdyby se sem posílalo `.theirs`, tvrdil by
-/// typ něco, co seznam nedělá.
+/// **Vyjmenované, ne `PullRequestOwnership`**, i když od #332 fronta na cizích PR opravdu stojí.
+/// Sekce je totiž víc než jedna množina: nese i to, mezi kolika prázdny se rozhoduje (`Moje PR`
+/// jich má pět) a jakou větou se mluví o schovaných řádcích. `PullRequestOwnership` by z těch tří
+/// věcí odpověděl na jednu a zbylé dvě by se rozhodovaly někde vedle.
 enum PullRequestListScope {
-    /// Fronta — celý seznam po filtru.
+    /// Fronta — cizí PR po filtru (#332).
     case queue
-    /// Moje PR — tentýž seznam zúžený podle autora.
+    /// Moje PR — tentýž seznam zúžený podle autora na druhou stranu.
     case mine
 }
 
@@ -146,10 +147,10 @@ struct PullRequestListView: View {
         // sledování závislostí rodiče, takže změna stavu by seznam nemusela překreslit.
         // Platí to i pro rozdělané review a pro odvozená čísla z #172 — bez toho by indikátor
         // naskočil až po překreslení z jiného důvodu.
-        // **`visiblePullRequests`, ne `pullRequests`** (#117): filtr je pohled, takže se ho smí
-        // dotknout jedině seznam a detail vybraného řádku. Cokoli dalšího nad zúženým seznamem by
-        // ze zapnutí filtru udělalo mazání cache — viz `AppStore.pullRequests`. Rozřazení podle
-        // autora (#331) je **další zúžení nad tímtéž**, ne nový zdroj pravdy.
+        // **Zúžený seznam, ne `pullRequests`** (#117): filtr je pohled, takže se ho smí dotknout
+        // jedině seznam a detail vybraného řádku. Cokoli dalšího nad zúženým seznamem by ze
+        // zapnutí filtru udělalo mazání cache — viz `AppStore.pullRequests`. Rozřazení podle
+        // autora (#331, #332) je **další zúžení nad tímtéž**, ne nový zdroj pravdy.
         let rows = summaries.map {
             ListRow(
                 pullRequest: $0,
@@ -176,9 +177,12 @@ struct PullRequestListView: View {
         }
     }
 
+    /// Obě sekce stojí na **zúžených** getterech (#332): filtr, pak autor. `visiblePullRequests`
+    /// (celý pohled) tady schválně nefiguruje — po #332 by ve frontě kreslil i vlastní PR, které
+    /// je hned pod ní ve své sekci.
     private var summaries: [PullRequestSummary] {
         switch scope {
-        case .queue: store.visiblePullRequests
+        case .queue: store.visibleQueuePullRequests
         case .mine: store.visibleOwnPullRequests
         }
     }
