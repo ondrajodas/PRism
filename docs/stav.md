@@ -2778,14 +2778,16 @@ pravá strana pruhu je tvrzení o **frontě**, ne o otevřeném PR, a číslo te
 **Tvrdá podmínka č. 1 se nemění**: razítko je lokální stav v cache, `grep ReviewPublishing App/`
 vypisuje tytéž soubory a `SingleWayOutTests` prošly **bez úprav**.
 
-**Copilot našel dvě reálné věci** a obě jsou opravené: `.outdated` **končí**, jak se pustí review
+**Copilot našel tři reálné věci** (třetí v druhém kole, v sekci *Suppressed comments*) a všechny jsou
+opravené — ta třetí je text: věta o posunuté hlavě tvrdila „nálezy už platí pro dnešní kód“ i na PR bez
+nálezů, takže z ní o nálezech zbylo mlčení. Zbylé dvě: `.outdated` **končí**, jak se pustí review
 proti dnešní hlavě (jinak by panel zůstal v režimu „pusť review znovu“ navždycky a volby by v něm
 nešly zapnout), a zúžené předání `Sestavit i tak` **nehýbe hlavou razítka** ani nepřepisuje předané
 položky — skládá se proti dnešní hlavě, ale nálezy v něm nejsou, takže by jinak panel přestal hlásit,
 že uložené nálezy platí pro starý commit.
 
-Testů přidala tahle změna **43** (`HandoffTests`, `AppStoreHandoffTests`, `HandoffLedgerTests`,
-`HandoffTextTests`) a je jich **3022**; jsou zelené. **Ověřeno vložením regrese, dvakrát** — vypnutí
+Testů přidala tahle změna **44** (`HandoffTests`, `AppStoreHandoffTests`, `HandoffLedgerTests`,
+`HandoffTextTests`) a je jich **3023**; jsou zelené. **Ověřeno vložením regrese, dvakrát** — vypnutí
 porovnání hlav shodilo sedm testů, smazání kontroly cizí odpovědi ve vlákně právě ten jeden, který ji
 má chytat. Panel má sondu v **pěti stavech** (`AgentPromptRenderProbe`), protože ke třem z nich se
 klikáním v aplikaci nedostaneš.

@@ -370,13 +370,18 @@ struct AgentPromptPanel: View {
             return "Předávalo se dřív, než dorazil detail PR, takže se nedá poznat, jestli zadání "
                 + "ještě platí. Sestav ho znovu — tentokrát se hlava zapíše."
         }
-        // Posunutá hlava má **vlastní věty**, i když stav není `.outdated`: nálezy už proti dnešní
-        // hlavě platí (review se pustilo znovu, nebo žádné nejsou), ale pod předaným zadáním se
-        // změnil kód — a to je jiná informace než „přibyla položka“.
+        // Posunutá hlava má **vlastní větu**, i když stav není `.outdated`: pod předaným zadáním se
+        // změnil kód, a to je jiná informace než „přibyla položka“.
+        //
+        // **O nálezech se u ní nic netvrdí** (nálezem Copilota na #373, sekce *Suppressed
+        // comments*): do tohohle stavu se PR dostane dvěma cestami — review doběhlo proti dnešní
+        // hlavě, **nebo** na PR nejsou nálezy vůbec —, takže „nálezy už platí pro dnešní kód“ by
+        // v té druhé mluvilo o nálezech, které neexistují. Že se review pouštět nemusí, je vidět
+        // z toho, co panel **nekreslí**: varování ani `Pustit review znovu`.
         guard !report.hasMovedHead else {
             let against = report.handoff?.shortHead.map { " proti \($0)" } ?? ""
-            return "Od předání\(against) se hlava PR posunula a nálezy už platí pro dnešní kód — "
-                + "sestav zadání znovu, ať agent dostane, co platí teď."
+            return "Od předání\(against) přišel nový commit — sestav zadání znovu, ať agent dostane, "
+                + "co platí pro dnešní kód."
         }
         let items = Plural.czech(report.pending, one: "položka", few: "položky", many: "položek")
         return "Od předání \(Plural.word(report.pending, one: "přibyla", few: "přibyly", many: "přibylo")) "

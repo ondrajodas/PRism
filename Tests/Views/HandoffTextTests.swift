@@ -16,7 +16,8 @@ struct HandoffTextTests {
         pending: Int = 0,
         commits: Int? = nil,
         head: String? = "9c1de02aaaa",
-        staleFindings: Int = 0
+        staleFindings: Int = 0,
+        hasMovedHead: Bool = false
     ) -> HandoffReport {
         HandoffReport(
             stage: stage,
@@ -24,7 +25,8 @@ struct HandoffTextTests {
             pending: pending,
             freshDiscussion: [],
             staleFindings: staleFindings,
-            commits: commits
+            commits: commits,
+            hasMovedHead: hasMovedHead
         )
     }
 
@@ -80,6 +82,20 @@ struct HandoffTextTests {
 
         #expect(text.contains("dřív, než dorazil detail PR"))
         #expect(!text.contains("přibyla"))
+    }
+
+    /// **Věta o posunuté hlavě o nálezech nic netvrdí** (nálezem Copilota na #373): do toho stavu
+    /// se PR dostane i tehdy, když na něm žádné nálezy nejsou, takže „nálezy už platí pro dnešní
+    /// kód“ by mluvilo o nálezech, které neexistují.
+    @Test("Věta o novém commitu o nálezech nic netvrdí")
+    func staysSilentAboutFindingsAfterAPush() {
+        let text = AgentPromptPanel.pendingNotice(
+            report(stage: .changed, pending: 3, hasMovedHead: true)
+        )
+
+        #expect(text.contains("Od předání proti 9c1de02 přišel nový commit"))
+        #expect(!text.lowercased().contains("nálezy"))
+        #expect(!text.contains("přibyl"))
     }
 
     // MARK: - Varování po pushi

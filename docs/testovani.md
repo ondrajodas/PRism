@@ -244,6 +244,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   porovnává s časy komentářů, takže s výchozím `FakeTimeSource` (rok 1970) by předané vlákno vyšlo
   jako „přišlo po předání“; v aplikaci to platí samo, protože čas je skutečný.
 
+  **Třetí opravu našel Copilot v sekci *Suppressed comments*** (druhé kolo na #373), takže je vidět,
+  proč se tělo review čte celé: věta o posunuté hlavě tvrdila „nálezy už platí pro dnešní kód“ i na PR,
+  které žádné nálezy nemá. Test na to je negativní — `Věta o novém commitu o nálezech nic netvrdí`.
+
   **Vzhled má sondu** (`AgentPromptRenderProbe` má od #334 druhý test): panel se rendruje v **pěti
   stavech** — nepředáno, předáno, předáno-ale-něco-zbývá, po pushi a po pushi s nepředaným vláknem.
   Ke třem z nich se v aplikaci klikáním nedostaneš (musel by mezitím někdo pushnout do PR, který mám
