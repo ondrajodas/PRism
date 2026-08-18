@@ -127,20 +127,22 @@ struct ConversationView: View {
     // MARK: - Osa
 
     @ViewBuilder private var timeline: some View {
-        let nodes = Policy.conversation(of: entries, filter: filter)
-        if nodes.isEmpty {
+        // **Řádky, ne uzly s indexem.** `ForEach` nad `Array(nodes.enumerated())` znamenal nové
+        // pole tuplů při každém průchodu tělem a identitu čtenou keypathem přes tuple, tedy
+        // kopii celého `ConversationNode` při každém dotazu líného seznamu na identitu (#361).
+        // Značka poslední návštěvy je proto rozhodnutí v `Policy`, ne `if` nad sousedním uzlem.
+        let rows = Policy.conversationRows(of: entries, filter: filter, since: lastVisit)
+        if rows.isEmpty {
             empty
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(nodes.enumerated()), id: \.element.id) { index, node in
-                        // Značka se kreslí **před** první novou položkou, ne za poslední starou:
-                        // říká „odsud dolů je nové“, což je směr, ve kterém se osa čte.
-                        if isFirstNew(node, at: index, in: nodes) {
+                    ForEach(rows) { row in
+                        if row.isFirstNew {
                             SinceMarker(at: lastVisit)
                         }
                         ConversationNodeView(
-                            node: node,
+                            node: row.node,
                             viewer: viewer,
                             threadActions: threadActions,
                             isStale: isStale,
@@ -154,17 +156,6 @@ struct ConversationView: View {
                 .narrowingWidth(by: 32)
             }
         }
-    }
-
-    /// Je tohle první uzel, který přibyl od poslední návštěvy? Bez `lastVisit` nikdy —
-    /// „nové“ se nedá tvrdit, když není proti čemu.
-    private func isFirstNew(_ node: ConversationNode, at index: Int, in nodes: [ConversationNode]) -> Bool {
-        guard let lastVisit, let date = node.date, date > lastVisit else { return false }
-        // První uzel značku dostat **smí**: když je nové všechno, patří značka úplně nahoru.
-        // Nález Copilota — původní `index > 0` ji v tom případě zahodil.
-        guard index > 0 else { return true }
-        // Jinak musí být předchozí uzel starý, jinak by se značka kreslila u každé nové položky.
-        return nodes[index - 1].date.map { $0 <= lastVisit } ?? false
     }
 
     @ViewBuilder private var empty: some View {

@@ -482,7 +482,7 @@ viz tvrdá podmínka č. 1.
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |
@@ -643,6 +643,24 @@ Zvlášť stojí za přečtení, než sáhneš na:
   (`sendEvent` i `NSApp.postEvent`) `onContinuousHover` **nevyvolá vůbec** — nula zásahů —, takže
   smyčku v testu zavřít nejde bez sebrání skutečné myši. Testuje se proto ta čistá funkce a hodnota,
   kterou dostane; podrobnosti v [`docs/testovani.md`](docs/testovani.md).
+- **V líném seznamu se neiteruje pole tuplů** (#361). `ForEach(Array(x.enumerated()), id: \.element.id)`
+  čte identitu keypathem **přes tuple**, takže se u enumu s asociovanými hodnotami při každém dotazu
+  na identitu rozbalí a **zkopíruje** payload — a líný seznam se ptá při každém přerovnání obsahu.
+  U osy konverzace to bylo ~5 % vzorků hlavního vlákna ve ztuhlém okně a 0,141 ms proti 0,036 ms na
+  přerovnání 300 řádků. Identita proto patří do **uloženého pole** (`ConversationRow`) a index, když
+  je potřeba, se dopočítá v `Policy`, ne `if`em ve view.
+
+  **Plošný grep prázdný vyjít nemůže** a je to schválně: `id: \.offset` payload nekopíruje a u prvků,
+  které se legitimně opakují (řádky textu, sha), je pořadí **jediná** správná identita — `\.self` by
+  je slilo. Hlídají se proto ta dvě místa, která se opravovala, a zbytek se posuzuje výčtem:
+
+  ```bash
+  grep -n 'ForEach(Array(' App/Views/ConversationView.swift App/Views/ThreadBubbleView.swift
+  grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'    # výčet k posouzení, ne prázdný
+  ```
+
+  **Kolo z #361 to nevysvětluje.** Vzor byl v ose po celou dobu měření, kterými se kolo hledalo, a osa
+  se přesto usadila (0,00 % po projetí kolečkem) — je to **zlevnění cesty, ne oprava ztuhnutí**.
 - **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236). Blok kódu si v `LazyVStack`u
   navrhuje výšku sám, takže když ji spočítá na jiné šířce, než na jaké se pak zalamuje, nakreslí víc
   řádků, než na kolik si řekl — a přeteče do řádku pod sebou (AppKitové view je nad SwiftUI obsahem,
