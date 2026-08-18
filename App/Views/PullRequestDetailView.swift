@@ -763,6 +763,13 @@ struct PullRequestDetailView: View {
     /// u proužku na hraně okna, tedy tam, kde volby nejsou.
     /// **Text se tady neskládá** (pravidlo #224): zkratka se vyhodnocuje při každém překreslení,
     /// takže se ptá jen na to, jestli je co předat — markdown vzniká teprve kliknutím.
+    ///
+    /// **Po pushi dává celé zadání, ne to zúžené** (#334), a je to schválně: panel v tom stavu
+    /// nabízí `Pustit review znovu` a `Sestavit i tak (jen nové vlákno)`, kdežto zkratka je poslední
+    /// cesta pro rozhodnutí „předám to i tak celé“ — a to rozhodnutí patří člověku (#113: nález
+    /// sundá jedině odmítnutí). Zakázat ji nad zastaralým zadáním by znamenalo, že se zastaralé
+    /// nálezy předat **nedají vůbec**, což tvrdá podmínka č. 5 nežádá: nemají se tvářit jako
+    /// platné, ne zmizet.
     private var agentPromptShortcut: some View {
         Button("Sestavit zadání pro agenta") {
             store.revealAgentPrompt(in: pullRequest.id)
