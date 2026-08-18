@@ -381,7 +381,9 @@ code {
    na ni přepne do plné fronty v railu. Bez stropu roste blok s frontou a druhý blok skončí
    pod hranou okna. */
 .block > .more-rows {
-  padding: 8px 13px; border-top: 1px solid var(--line-soft);
+  /* Bez `border-top`: oddělovač kreslí poslední `.qrow`, kterému se s patkou za sebou
+     přestane uplatňovat `:last-child`. Dvě čáry na sobě daly 2 px (změřeno). */
+  padding: 8px 13px;
   font-size: 11.5px; font-weight: 500; color: var(--accent);
   display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
 }
