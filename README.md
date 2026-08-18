@@ -86,7 +86,7 @@ typografie, kterou si aplikace platí vlastním formátováním odpočtu, proto�
 mezeru v české locale má a nejde z něj vyndat.
 
 Napravo v hlavičce stojí **`⌘K`** — command palette (#184), jedno pole nad nálezy, soubory
-otevřeného PR, pull requesty a akcemi. Popsaná je níž.
+otevřeného PR, cizími i vlastními pull requesty (#336) a akcemi. Popsaná je níž.
 
 Po startu si ověří, že má `gh`, `git` i `claude` a že je `gh` přihlášený — jinak řekne, co
 chybí a čím se to spraví. Pak se otevře seznam pull requestů napříč repozitáři, který se
@@ -1023,20 +1023,26 @@ a paleta je zároveň jediné místo, kde se nemusí pamatovat, kde co v okně b
 **⌘K** (druhé zmáčknutí zavře) nebo kapslí `⌘K` v hlavičce okna; ta tam je proto, že jinak by
 o paletě věděl jen ten, kdo si přečetl release notes.
 
-Výsledky jsou ve **čtyřech skupinách a jejich pořadí je pevné**: **Nálezy**, soubory otevřeného
-PR, pull requesty, akce. Nálezy jsou první schválně — je to jediná věc, kterou tahle aplikace má
-a prohlížeč ne, takže pořadí skupin je tvrzení o tom, k čemu je okno. Z každé skupiny je vidět
-**nejvýš šest** řádků; strop je na skupinu, protože jinak by dvacet nálezů vytlačilo všechno
-ostatní.
+Výsledky jsou v **pěti skupinách a jejich pořadí je pevné**: **Nálezy**, soubory otevřeného
+PR, `Pull requesty k review`, `Moje PR`, akce. Nálezy jsou první schválně — je to jediná věc, kterou
+tahle aplikace má a prohlížeč ne, takže pořadí skupin je tvrzení o tom, k čemu je okno. Z každé
+skupiny je vidět **nejvýš šest** řádků; strop je na skupinu, protože jinak by dvacet nálezů
+vytlačilo všechno ostatní.
+
+**Vlastní PR mají vlastní skupinu, ne odznak v cizí** (#336), a je to důsledek toho stropu: ve
+společné skupině by při dvaceti cizích PR to moje nemuselo vyjít vůbec. Rozřazuje se podle **autora**
+(tak jako sekce `Moje PR` v railu), skupina stojí za cizími PR, protože cizí jsou to, na co se čeká,
+a skupina, ve které nic nesedlo, se **nekreslí** — kdo vlastní PR nemá, neuvidí prázdný nadpis.
+Otevírají se stejně jako cizí, `↵` v obou případech otevře záložku.
 
 **Pole má fokus hned po ⌘K** a je **prázdné** — paleta je „začínám hledat“, ne „vracím se
 k rozdělané práci“, takže po zavření z ní nezůstane text z minula.
 
 **Prázdný dotaz není prázdné okno** — ukáže začátek každé skupiny, tedy nabídku toho, co je po
-ruce: nálezy od nejvážnějšího, soubory v pořadí diffu, PR od naposledy změněného, akce v pevném
-pořadí. Hledá se **bez ohledu na velikost písmen a diakritiku** (`nalez` najde `nález`) a víc slov
-znamená **a zároveň** — `vault secret` najde nález ve `vaultu`, i když ta slova v textu vedle sebe
-nestojí. Shoda v titulku váží víc než v podtitulku, začátek slova víc než vnitřek; nalezený úsek
+ruce: nálezy od nejvážnějšího, soubory v pořadí diffu, cizí i vlastní PR od naposledy změněného,
+akce v pevném pořadí. Hledá se **bez ohledu na velikost písmen a diakritiku** (`nalez` najde
+`nález`) a víc slov znamená **a zároveň** — `vault secret` najde nález ve `vaultu`, i když ta slova
+v textu vedle sebe nestojí. Shoda v titulku váží víc než v podtitulku, začátek slova víc než vnitřek; nalezený úsek
 je v řádku **zvýrazněný** — a to v tom textu, ve kterém se doopravdy potkal.
 
 Hledá se i **podle autora a podle repozitáře**: autor u pull requestů, repo u pull requestů

@@ -59,7 +59,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `CommitDiff` | Diff **jednoho commitu** (#317): `sha` a `content` (`loading` / `loaded(Diff)` / `failed`). Sha je **v hodnotě, ne v klíči** — mapa ve store je klíčovaná pull requestem, takže se v okně drží nejvýš jeden diff commitu na PR. Klíč `(PR, sha)` by u PR se stovkou commitů rostl o každý proklik a byly by to megabajty za obrazovky, které nikdo nemá vidět (tatáž úvaha jako u `expandedChecks`). Návratem do seznamu se **nezahazuje**: je to i paměť na to, kde v seznamu člověk byl |
 | `CommitDiffTabState`, `CommitDiffEmpty`, `CommitDiffFacts` | Co je vidět po rozkliknutí commitu (#317): `loading` / `diff(Diff)` / `nothing(CommitDiffEmpty)` / `failed`. **Čtvrtý stav je ten podstatný** — diff, který se stáhl a nic v něm není, není porucha ani načítání, takže mu patří věta, ne prázdná plocha; a je to **měřený** případ, ne teoretický (commity z `git commit --allow-empty` vracejí nula bajtů). `CommitDiffEmpty` nese titulek i větu, protože sloučení a prázdný commit mají každý jiné znění. `CommitDiffFacts` je počet souborů (už vyskloňovaný) a `+X −Y` **ze staženého diffu**, tedy bez volání navíc |
 | `ReviewPanelTab` | Co je vidět v panelu vpravo: `findings` / `draft` (#242). Jako `PullRequestTab` **není `Codable`** |
-| `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání — `Hit` nese **dva** rozsahy
+| `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**; od #336 pět případů, protože vlastní PR mají svou skupinu **za** cizími), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání — `Hit` nese **dva** rozsahy
 zvýraznění, jeden nad titulkem a jeden nad podtitulkem), `Jump` (žádost o odscrollování) a `Effect` (co zbývá na okno). **Není `Codable`** — je to obsah jednoho otevření palety. Jmenný prostor proto, že `Palette` v repu už znamená barvy okna |
 | `DiffLayout` | Jak se kreslí diff: `unified` (pod sebou) / `split` (vedle sebe). Nastavení **člověka, ne repa** — proto jen v `GlobalConfig` |
 | `NotificationEvent` | Co notifikaci vyvolalo: `newPullRequest` / `findings` / `clean` / `failure`. Nese si ji notifikace sama |
@@ -1960,8 +1960,9 @@ Věci, které se u toho nemají rozbít:
   sama, takže se na ni snadno zapomene **jméno ve čtvrtém pádě** (`Policy.paletteTitle(of:)`) — bez
   něj by v paletě stálo „Otevřít Moje PR“, tedy nadpis nalepený do věty. A `RailSection` je zároveň
   jediné místo, kde je vidět **pořadí položek v railu**; `mine` leží mezi `queue` a `drafts` schválně.
-  Vlastní PR přitom **nejsou druhá skupina v paletě** — řádky pull requestů zůstávají v jedné, viz
-  #336.
+  Vlastní PR jsou od #336 v paletě **druhá skupina** (`CommandPalette.Group.myPullRequests`), takže
+  je výčet sekcí railu a výčet skupin palety dvě různé věci — obě ale rozřazuje týž
+  `Policy.ownership`.
 
   **Rail nedrží vlastní stav** — čte `configuration.global.appearance` a zapisuje
   `AppStore.setAppearance(_:)`, takže v okně není druhá pravda o tom, jaký režim platí. Zápis jde do
@@ -2366,8 +2367,8 @@ schválně chovají jako přerušené, ne jako zrušené:
 ### Command palette ⌘K (#184)
 
 Jediná obrazovka aplikace, která nemá předobraz v ničem starším: jedno pole nad **nálezy,
-soubory otevřeného PR, pull requesty a akcemi**. Rozdělená je na tři kusy a hranice mezi nimi je
-to podstatné:
+soubory otevřeného PR, cizími PR, vlastními PR (#336) a akcemi**. Rozdělená je na tři kusy
+a hranice mezi nimi je to podstatné:
 
 | Kde | Co tam patří |
 |---|---|
@@ -2383,6 +2384,20 @@ Co se u ní nemá rozbít:
   takže se nedá přehodit ve view.
 - **Strop je na skupinu** (`Policy.paletteGroupLimit`, šest). Celkový strop by znamenal, že dvacet
   nálezů vytlačí soubory, PR i akce — tedy zrovna to, kvůli čemu je paleta jedno pole na všechno.
+- **Vlastní PR jsou vlastní skupina, ne odznak u řádku** (#336), a stojí to na tom stropu o řádek
+  výš: ve **společné** skupině by při dvaceti cizích PR to moje nemuselo vyjít vůbec, protože se
+  řadí podle váhy shody a šestý řádek je konec. Dvě skupiny mají každá svých šest a při prázdném
+  dotazu je vidět začátek obou. Odznak `moje` u řádku ten problém neřeší, jen ho schová.
+
+  Tři věci k tomu, které se dají pokazit potichu:
+
+  - **Rozřazuje `Policy.ownership`**, tedy tatáž funkce jako rail a dashboard (#330) — podle
+    **autora**, ne podle zdroje. Dokud není znám `viewer`, je všechno cizí, takže se paleta při
+    startu nepřehodí do druhé skupiny a zpátky.
+  - **Cíl zůstává `Target.pullRequest`.** Skupina je zařazení; druhý případ v `Target` by byl
+    druhá cesta k témuž a rozešel by se.
+  - **Nadpis první skupiny je `Pull requesty k review`**, ne `Pull requesty`: se dvěma skupinami
+    musí říct, čeho se týká, jinak vypadá `Moje PR` jako řádky, které do té první nepatří omylem.
 - **Prázdný dotaz vrací všechno, ne nic.** Paleta se otevírá jako nabídka toho, co je po ruce;
   pořadí je pořadí katalogu (nálezy od nejvážnějšího přes `Policy.sorted`, soubory v pořadí diffu,
   PR od naposledy změněného, akce v pevném pořadí).
@@ -2436,6 +2451,13 @@ Co se u ní nemá rozbít:
 - **Kreslená zkratka musí být skutečná.** V paletě jsou dvě (`⌘2`, `⌘,`). Návrh má u „pustit
   review“ `⌘⇧R`, ale ta v aplikaci pouští review na **všechno, co neběželo** (dashboard) —
   nakreslit ji tady by byla lež o tom, co okno umí.
+- **Řádek vlastního PR se od cizího neliší ničím kromě skupiny** (#336) — dvě vědomé odchylky od
+  sekce 09 návrhu, obě zapsané ve specifikaci: podtitulek je `PRism#324 · ondrajodas`, ne
+  `· 6 k předání` (ten počet se dá napsat teprve s razítkem předání, #334 — tak jak to u řádku
+  seznamu rozhodlo #331), a puntík zůstává v barvě **stavu PR** (`PullRequestStateAppearance`),
+  ne v mintu. Mint by v paletě znamenal „moje“ podruhé — jednou už to říká nadpis skupiny — a přebil
+  by jedinou věc, kterou ten puntík nese: u vlastního draftu (`author:@me is:open` je vrací) by
+  zmizel rozdíl mezi rozdělaným a otevřeným PR, protože slovo `draft` má jen řádek seznamu.
 - **Odsud nic neodchází** (tvrdá podmínka č. 1). Ve `CommandPalette.Action` není nic, co by sahalo
   na `ReviewPublishing`; jediná věc, kterou paleta pouští, je read-only reviewer.
 
@@ -4902,7 +4924,7 @@ Nad sekcí `Moje PR` (#331) platí čtyři věci:
 | `handleNotificationClicks` | obojí | klik musí vybrat i vlastní PR |
 | úklid: `forget(whatIsNotIn:)`, `CacheEviction`, `ReviewStore.cleanUp` | obojí | klon vlastního PR zabírá místo stejně jako cizí |
 | `knownRepositories` (nastavení), `filterOptions` | obojí | přenastavit chci i repo, ve kterém mám jen svoje PR |
-| paleta ⌘K | obojí | vlastní skupina místo řádků mezi cizími je #336 |
+| paleta ⌘K | obojí, rozřazené do **dvou skupin** (#336) | katalog čte plný seznam a `Policy.ownership` z něj skládá `Pull requesty k review` a `Moje PR`; ⌘K jen hledá, nic neuklízí |
 
 - **Automat vlastní PR nevydá nikdy, a přepínač se zamítl** (#332). Filtr je v
   `Policy.automaticallyReviewable` **první v řadě**, takže se PR dál nezvažuje, ať si repo řeklo
