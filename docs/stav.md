@@ -2729,7 +2729,8 @@ prázdny se rozhoduje a jak se mluví o schovaných řádcích.
 pořád nepřibyly** — #333 je odložilo na „#331 a #332“, ale je to chrom **detailu PR**, kdežto tenhle
 kus mění počty; zůstává to otevřené (patří k #334 nebo k #335).
 
-Testů je **2969** a jsou zelené (+26). **Ověřeno vložením regrese, jedenácti** ve dvou dávkách —
+Testů přidala tahle změna **26** a po sloučení s #336 je jich **2978**; jsou zelené. **Ověřeno
+vložením regrese, jedenácti** ve dvou dávkách —
 každá shodila právě ten test, který ji má chytat; výčet je v [`testovani.md`](testovani.md).
 
 ### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
