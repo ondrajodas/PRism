@@ -14,10 +14,14 @@ struct PullRequestHeaderView: View {
     /// mergnout“ je otázka, kterou má okno zodpovědět bez přepínání, a při čtení diffu se
     /// do `Přehledu` nechodí.
     var checks: [PullRequestCheck] = []
+    /// Čí PR to je (#330, kreslí se od #334). Na vlastním stojí za stavem pilulka `moje PR`, jak ji
+    /// má návrh (sekce 22) — a je to jediné místo v hlavičce, které tu informaci nese.
+    var ownership: PullRequestOwnership = .theirs
 
     var body: some View {
         HStack(spacing: 9) {
             state
+            mine
             if let detail, !detail.headRef.isEmpty, !detail.baseRef.isEmpty {
                 merge(detail)
             }
@@ -35,6 +39,26 @@ struct PullRequestHeaderView: View {
             Link("otevřít na GitHubu", destination: pullRequest.url)
         }
         .font(.callout)
+    }
+
+    /// `moje PR` (#334) — pilulka z návrhu (`.pill.mint`), jen na vlastním pull requestu.
+    ///
+    /// **Mint schválně**: je to konstatování stavu, se kterým se nic nedělá (viz `Palette.mint`) —
+    /// vlastní PR není porucha ani nález. Vedle plné kapsle stavu stojí jako tlumená, aby zůstalo
+    /// jedno plné pole v pruhu, jak to má návrh.
+    ///
+    /// Na cizím PR **nic**, ne pilulka „cizí PR“: hlavička by nesla údaj, který platí u devadesáti
+    /// procent řádků, tedy šum. Že je PR vlastní, je odchylka od běžného stavu, a ta se pojmenovává.
+    @ViewBuilder private var mine: some View {
+        if ownership == .mine {
+            Text("moje PR")
+                .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Palette.mint)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Palette.mint.opacity(0.15), in: .capsule)
+                .help("Tenhle PR jsi psal ty — review se odsud neodesílá, místo verdiktu se z nálezů skládá zadání pro agenta")
+        }
     }
 
     /// Tečka mezi souřadnicemi, jak ji má návrh (`.pr-meta`). Sama o sobě neříká nic, takže

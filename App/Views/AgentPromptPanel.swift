@@ -24,6 +24,17 @@ struct AgentPromptPanel: View {
     /// Rozdělané review, které na vlastním PR zbylo z dřívějška. `nil` = žádné není.
     var leftoverDraft: ReviewDraft?
     var discardDraft: () -> Void = {}
+    /// Co zbývá předat (#334) — razítko, novinky od předání, nebo že zadání po pushi zastaralo.
+    /// Rozhoduje `Policy.handoff`; panel z toho jen kreslí.
+    var report: HandoffReport = .never
+    /// Zadání jen z toho, co po předání přibylo v diskuzi (#334). **Otevře sheet, neodesílá nic.**
+    var composeFresh: () -> Void = {}
+    /// Pustit review znovu po pushi (#334). Samo se nepustí nikdy — automat se vlastních PR
+    /// netýká vůbec (#332), takže je z toho tlačítko.
+    var runReview: () -> Void = {}
+    /// Běží zrovna review? Pak je tlačítko zakázané **s důvodem** — druhé kolo na tentýž commit
+    /// jsou peníze za nic.
+    var isReviewing = false
 
     @State private var isConfirmingDiscard = false
 
@@ -32,9 +43,18 @@ struct AgentPromptPanel: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     title
+                    // **Věta o nenačtené konverzaci stojí nad razítkem**, ne pod ním: mluví o tom,
+                    // z čeho se počítá „co zbývá“, takže se musí čít dřív než tvrzení „nic nového
+                    // nepřišlo“. Bez ní by to tvrzení platilo jen o tom, co je zrovna v paměti.
                     conversationNote
-                    choices
-                    preview
+                    handoffSection
+                    // **Volby a náhled jen tam, kde je z čeho vybírat** (#334). Po předání není
+                    // (všechno je předané) a po pushi má panel vlastní podobu — dvě cesty dál,
+                    // ne sedm zaškrtávátek nad nálezy, které platí pro starý kód.
+                    if report.showsChoices {
+                        choices
+                        preview
+                    }
                     if let leftoverDraft { leftover(leftoverDraft) }
                 }
                 .padding(.horizontal, 13)
@@ -184,6 +204,196 @@ struct AgentPromptPanel: View {
             .foregroundStyle(Palette.ink3)
     }
 
+    // MARK: - Předáno není hotovo (#334)
+
+    /// Razítko předání, novinky od něj, nebo varování po pushi — podle toho, co řekla `Policy`.
+    ///
+    /// **Nepředáno nekreslí nic.** Věta „ještě jsi nic nepředal“ by v panelu, který o předávání
+    /// celý je, zabírala řádek a neřekla nic; kdo nic nepředal, vidí volby a tlačítko.
+    @ViewBuilder private var handoffSection: some View {
+        switch report.stage {
+        case .never:
+            EmptyView()
+        case .delivered:
+            if let handoff = report.handoff { delivered(handoff) }
+        case .changed, .unverified:
+            if let handoff = report.handoff { changed(handoff) }
+        case .outdated:
+            outdated
+        }
+    }
+
+    /// Předáno a od té doby nic — razítko a věta, že se nové věci objeví tady.
+    private func delivered(_ handoff: Handoff) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            caption("Předáno")
+            stampRow(handoff)
+            Text("Nic nového od té doby nepřišlo. Až agent pushne nebo někdo napíše komentář, objeví se to tady.")
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Předáno, ale něco zbývá — razítko a **kolik** toho je. Volby a tlačítko zůstávají pod tím,
+    /// protože zadání se dá sestavit znovu.
+    private func changed(_ handoff: Handoff) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            caption("Předáno")
+            stampRow(handoff)
+            Text(verbatim: Self.pendingNotice(report))
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Pilulka s počtem předaných položek a k ní čas a hlava, proti které se předávalo.
+    ///
+    /// **Mint, ne akcent** (`.pill.mint` z návrhu): je to konstatování stavu, se kterým se nic
+    /// nedělá — tatáž barva jako u odznaku shody a rozdělaného review v řádku.
+    private func stampRow(_ handoff: Handoff) -> some View {
+        // Zalomená řada, ne `HStack`: v panelu užším než 300 bodů se pilulka a čas vedle sebe
+        // nevejdou, a zkrácený čas by zahodil zrovna hlavu, kvůli které tam je.
+        FlowRow(spacing: 8, lineSpacing: 4) {
+            Text(verbatim: "✓ \(Plural.czech(handoff.count, one: "položka", few: "položky", many: "položek"))")
+                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Palette.mint)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Palette.mint.opacity(0.15), in: .capsule)
+            Text(verbatim: Self.stampLabel(of: handoff))
+                .font(.system(size: 11.5))
+                .foregroundStyle(Palette.ink3)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Po pushi: varování a k němu dva řádky o tom, co se stalo s materiálem.
+    ///
+    /// Řádky jsou **konstatování, ne zaškrtávátka** (odchylka od návrhu, který je kreslí jako
+    /// `.radio`): v tomhle stavu o složení zadání rozhodují dvě tlačítka pod tím — buď nové review,
+    /// nebo jen to, co přibylo v diskuzi. Zaškrtávátko by slibovalo volbu, kterou ani jedno z nich
+    /// nenabízí. **Nálezy tím nemizí**: zůstávají v diffu, v tabu `Nálezy` i v segmentu `Nálezy`
+    /// vedle, jen se do zadání nepředvybírají — sundat je smí jedině odmítnutí (#113).
+    private var outdated: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                Text(verbatim: Self.outdatedNotice(report))
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Palette.stale)
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(Palette.ink2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .background(Palette.stale.opacity(0.11), in: .rect(cornerRadius: 7))
+            .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.stale.opacity(0.4)) }
+            VStack(alignment: .leading, spacing: 4) {
+                staleRow(
+                    "Nové v diskuzi",
+                    count: report.freshDiscussion.count,
+                    tint: report.freshDiscussion.isEmpty ? Palette.ink2 : Palette.ink,
+                    countTint: Palette.ink3,
+                    // Zaškrtnuté jen tehdy, když je co zaškrtnout: `✓ Nové v diskuzi 0` slibuje
+                    // obsah, který v zúženém zadání nebude — a tlačítko pod tím je v tu chvíli
+                    // zakázané, takže by si ta dvě místa odporovala.
+                    on: !report.freshDiscussion.isEmpty,
+                    help: "Vlákna, komentáře pod PR a souhrny review, které po předání přibyly — jen z nich se skládá „Sestavit i tak“"
+                )
+                staleRow(
+                    "Nálezy proti staré hlavě",
+                    count: report.staleFindings,
+                    tint: Palette.ink2,
+                    countTint: Palette.stale,
+                    on: false,
+                    help: "Platí pro commit, který na PR není. Ze seznamu nemizí, do zadání se ale nepředvybírají — pusť review znovu"
+                )
+            }
+        }
+    }
+
+    /// Řádek se čtverečkem, jak ho má návrh u voleb — ale **bez akce**, viz `outdated`.
+    private func staleRow(
+        _ label: String,
+        count: Int,
+        tint: Color,
+        countTint: Color,
+        on: Bool,
+        help: String
+    ) -> some View {
+        HStack(spacing: 7) {
+            checkbox(on: on)
+            Text(verbatim: label)
+                .font(.system(size: 11.5))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text(verbatim: "\(count)")
+                .font(.system(size: 10.5, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(countTint)
+        }
+        .help(help)
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: - Texty (#334)
+
+    /// `dnes 14:20 · proti 9c1de02` — kdy se předávalo a proti čemu.
+    ///
+    /// **Absolutní čas, jak ho má návrh**, ne „před 20 minutami“: k razítku patří hlava, a ta se
+    /// z relativního času nedá spárovat s commitem v seznamu. Den se píše jen tehdy, když to nebylo
+    /// dneska — „dnes“ u týden starého předání by bylo nepravdivé a datum u dnešního šum.
+    ///
+    /// Hlava chybí jedině tehdy, když se předávalo dřív, než dorazil detail PR; pak to musí být
+    /// napsané, protože se z toho neví, jestli zadání ještě platí.
+    nonisolated static func stampLabel(of handoff: Handoff) -> String {
+        let when = Calendar.current.isDateInToday(handoff.at)
+            ? "dnes \(handoff.at.formatted(date: .omitted, time: .shortened))"
+            : handoff.at.formatted(date: .abbreviated, time: .shortened)
+        guard let head = handoff.shortHead else { return "\(when) · hlavu PR jsem tehdy neznal" }
+        return "\(when) · proti \(head)"
+    }
+
+    /// Věta pod razítkem, když něco zbývá — **kolik** a proč se to objevilo.
+    ///
+    /// U neznámé hlavy říká něco jiného: nezbylo nic nového, jen se nedá potvrdit, že předané
+    /// platí. Splynutí obou vět by tvrdilo, že přišla práce, která nepřišla.
+    nonisolated static func pendingNotice(_ report: HandoffReport) -> String {
+        guard report.stage != .unverified else {
+            return "Předávalo se dřív, než dorazil detail PR, takže se nedá poznat, jestli zadání "
+                + "ještě platí. Sestav ho znovu — tentokrát se hlava zapíše."
+        }
+        let items = Plural.czech(report.pending, one: "položka", few: "položky", many: "položek")
+        return "Od předání \(Plural.word(report.pending, one: "přibyla", few: "přibyly", many: "přibylo")) "
+            + "\(items) — sestav zadání znovu, ať v něm je."
+    }
+
+    /// Varování po pushi: proti čemu se předávalo, kolik commitů přišlo a co s tím.
+    ///
+    /// Počet commitů se píše **jen když se ví** (seznam commitů se načetl a předaná hlava v něm
+    /// je). Po force pushi ani nad nenačteným seznamem se dopočítat nedá, a číslo, které by z toho
+    /// vyšlo, by o pushnutých commitech nemluvilo.
+    nonisolated static func outdatedNotice(_ report: HandoffReport) -> String {
+        let against = report.handoff?.shortHead.map { "proti \($0)" } ?? "proti starší hlavě"
+        let arrived: String
+        switch report.commits {
+        case .some(let count) where count > 0:
+            arrived = "mezitím \(Plural.word(count, one: "přišel", few: "přišly", many: "přišlo")) "
+                + Plural.czech(count, one: "commit", few: "commity", many: "commitů")
+        default:
+            arrived = "mezitím se hlava PR posunula"
+        }
+        return "Předával jsi \(against), \(arrived). Nálezy platí pro starý kód — než sestavíš "
+            + "nové zadání, pusť review znovu."
+    }
+
     // MARK: - Rozdělané review z dřívějška
 
     /// Draft, který na vlastním PR zbyl z doby, kdy se tam zakládat dal.
@@ -238,31 +448,101 @@ struct AgentPromptPanel: View {
 
     // MARK: - Patička
 
-    /// Tlačítko dole na hraně panelu, jak ho má návrh (`.composer .send`).
-    ///
-    /// Zakázané je jedině tehdy, když **není co předat** — a s důvodem, ne mlčky: prázdný sheet
-    /// s hlavičkou a bez položek by vypadal jako rozbitá aplikace.
+    /// Patička na hraně panelu, jak ji má návrh (`.composer`). **Tři podoby podle stavu předání**
+    /// (#334): sestavit, sestavit znovu, nebo pustit review.
     private var composer: some View {
-        VStack(spacing: 0) {
-            Button(action: compose) {
-                Text("Sestavit prompt →")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
-                    .foregroundStyle(prompt.isEmpty ? Palette.ink3 : Palette.surface)
-                    .background(
-                        prompt.isEmpty ? Palette.raised : Palette.accent,
-                        in: .rect(cornerRadius: 7)
-                    )
-                    .contentShape(.rect)
+        // Mezera 9 bodů je z návrhu (`.composer { gap: 9px }`) — patička nese dvě akce pod sebou.
+        VStack(spacing: 9) {
+            switch report.stage {
+            case .outdated:
+                primaryButton(
+                    isReviewing ? "Review běží…" : "Pustit review znovu →",
+                    isEnabled: !isReviewing,
+                    help: isReviewing
+                        ? "Review na tomhle PR už běží — druhé kolo na tentýž commit jsou peníze za nic"
+                        : "Spustí review skilly proti dnešní hlavě. Samo se to nepustí nikdy — automat se vlastních PR netýká (#332).",
+                    action: runReview
+                )
+                // **Druhá cesta zůstává** (#334): nové vlákno od kolegy se dá předat i bez nového
+                // review a bývá to nejrychlejší kolo. Zakázat to by nutilo pouštět reviewery
+                // kvůli jedné větě.
+                //
+                // **Když není co předat, není tam tlačítko, ale věta.** `AccentLinkButtonStyle`
+                // kreslí akcent bez ohledu na `disabled`, takže zakázaný odkaz vypadá jako
+                // klikatelný — a kliknutí, po kterém se nic nestane, je k nerozeznání od rozbité
+                // aplikace. Věta navíc řekne **proč**, což zakázané tlačítko neumí.
+                if report.freshDiscussion.isEmpty {
+                    Text("Nové vlákno tu není, takže není co předat samostatně.")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Palette.ink3)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Button(action: composeFresh) {
+                        Text("Sestavit i tak (jen nové vlákno)")
+                            .font(.system(size: 11.5))
+                            .frame(maxWidth: .infinity)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.accentLink)
+                    .help("Sestaví zadání jen z toho, co po předání přibylo v diskuzi — bez nálezů, které platí pro starý kód")
+                }
+            case .delivered:
+                // Tlumené, ne plné akcentové: všechno je předané, takže tohle není akce, kterou
+                // by panel doporučoval — jen cesta, jak si text vyzvednout znovu. Prázdné zadání
+                // dostane věta místo zakázaného odkazu, ze stejného důvodu jako u `Sestavit i tak`.
+                if prompt.isEmpty {
+                    Text("Zapni volbu, ve které něco je, a zadání se dá sestavit znovu.")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Palette.ink3)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Button(action: compose) {
+                        Text("Sestavit znovu")
+                            .font(.system(size: 11.5))
+                            .frame(maxWidth: .infinity)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.accentLink)
+                    .help("Ukáže tentýž text znovu — zkopírovat nebo uložit se dá až tam. Nikam se to neodesílá.")
+                }
+            case .never, .changed, .unverified:
+                primaryButton(
+                    "Sestavit prompt →",
+                    isEnabled: !prompt.isEmpty,
+                    help: prompt.isEmpty
+                        ? "Není co předat — zapni volbu, ve které něco je, nebo pusť review"
+                        : "Ukáže celý text; zkopírovat nebo uložit se dá až tam. Nikam se to neodesílá.",
+                    action: compose
+                )
             }
-            .buttonStyle(.plain)
-            .disabled(prompt.isEmpty)
-            .help(prompt.isEmpty
-                ? "Není co předat — zapni volbu, ve které něco je, nebo pusť review"
-                : "Ukáže celý text; zkopírovat nebo uložit se dá až tam. Nikam se to neodesílá.")
         }
         .padding(11)
         .overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }
+    }
+
+    /// Plné tlačítko z návrhu (`.composer .send`). Zakázané je **s důvodem**, ne mlčky: tlačítko,
+    /// po kterém se nic nestane, je k nerozeznání od rozbité aplikace.
+    private func primaryButton(
+        _ label: String,
+        isEnabled: Bool,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(verbatim: label)
+                .font(.system(size: 12.5, weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .foregroundStyle(isEnabled ? Palette.surface : Palette.ink3)
+                .background(isEnabled ? Palette.accent : Palette.raised, in: .rect(cornerRadius: 7))
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .help(help)
     }
 }

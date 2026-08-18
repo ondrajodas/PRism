@@ -53,6 +53,11 @@ extension Policy {
     /// `diff` je tady jen kvůli hunkům u nálezů: vlákno svůj `diffHunk` nese samo (je to snímek
     /// z commitu, na kterém vzniklo), kdežto u nálezu se musí najít v dnešním diffu. Bez načteného
     /// diffu se hunk prostě nepřiloží — text tím neztrácí položku, jen pohodlí.
+    /// - Parameter only: zúžení na vyjmenované položky podle `AgentPromptItem.id` (#334).
+    ///   `nil` = neomezovat. Používá to jedině `Sestavit i tak (jen nové vlákno)` po pushi: nálezy
+    ///   v tu chvíli platí pro starý kód, takže se předává jen to, co po předání přibylo v diskuzi.
+    ///   **Do `inventory` se to nepromítá** — počty u voleb dál mluví o tom, co na PR je, jinak by
+    ///   zúžené zadání vypadalo jako celé.
     static func agentPrompt(
         for subject: AgentPromptSubject,
         findings: [Finding],
@@ -60,10 +65,11 @@ extension Policy {
         conversation: Conversation?,
         diff: Diff? = nil,
         blocking: Set<String> = defaultBlockingCategories,
-        options: AgentPromptOptions
+        options: AgentPromptOptions,
+        only: Set<String>? = nil
     ) -> AgentPrompt {
         let all = agentPromptItems(findings: findings, dismissals: dismissals, conversation: conversation)
-        let included = all.filter { options.includes($0.choice) }
+        let included = all.filter { options.includes($0.choice) && (only?.contains($0.id) ?? true) }
         let sections = agentPromptSections(included, blocking: blocking)
         return AgentPrompt(
             subject: subject,
@@ -77,6 +83,7 @@ extension Policy {
             ),
             inventory: AgentPromptInventory(all),
             included: AgentPromptInventory(included),
+            handed: Set(included.map(\.id)),
             blocking: included.count { isBlockingItem($0, categories: blocking) },
             isConversationLoaded: conversation != nil
         )

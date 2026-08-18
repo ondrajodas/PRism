@@ -231,13 +231,18 @@ struct OwnPullRequestsTests {
         #expect(Policy.ownPullRequestsAwaitingMove(list, records: [:], conversation: { conversations[$0] }) == 0)
     }
 
-    /// Vlákno, ve kterém jsem mluvil jen já, není cizí diskuze — je to moje poznámka.
-    @Test("Vlákno jen s mými komentáři na tah nečeká")
-    func ignoresMyOwnThreads() {
+    /// **Vlákno jen s mými komentáři se od #334 počítá** — a je to změna proti #331, ne chyba.
+    ///
+    /// Otázka odznaku se změnila z „je tu něco?“ na „zbývá tu něco, co jsem nepředal?“, takže
+    /// materiál je od té doby ten, co jde do zadání pro agenta — a nevyřešená poznámka „tady se
+    /// musím vrátit“ do něj patří (viz `Policy.agentPromptItems`). Do #331 se nepočítala proto, že
+    /// „cizí diskuze“ byla tehdejší definice práce.
+    @Test("Vlákno jen s mými komentáři se počítá jako nepředané")
+    func countsMyOwnUnresolvedThreads() {
         let list = [pullRequest(1, author: "ondrajodas")]
         let conversations = [list[0].id: conversation([thread(authors: ["ondrajodas", "ondrajodas"])])]
 
-        #expect(Policy.ownPullRequestsAwaitingMove(list, records: [:], conversation: { conversations[$0] }) == 0)
+        #expect(Policy.ownPullRequestsAwaitingMove(list, records: [:], conversation: { conversations[$0] }) == 1)
     }
 
     /// Kolega, který odpověděl do **mého** vlákna, po mně chce odpověď stejně jako ten, který ho

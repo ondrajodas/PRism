@@ -2727,11 +2727,62 @@ prázdny se rozhoduje a jak se mluví o schovaných řádcích.
 
 **Řádek stavové lišty `Vlastní PR — review se odsud neodesílá` ani mint pilulka `moje PR` v hlavičce
 pořád nepřibyly** — #333 je odložilo na „#331 a #332“, ale je to chrom **detailu PR**, kdežto tenhle
-kus mění počty; zůstává to otevřené (patří k #334 nebo k #335).
+kus mění počty; zůstalo to otevřené a **dopsalo se u #334**, které do téže obrazovky sahá razítkem.
 
 Testů přidala tahle změna **26** a po sloučení s #336 je jich **2978**; jsou zelené. **Ověřeno
 vložením regrese, jedenácti** ve dvou dávkách —
 každá shodila právě ten test, který ji má chytat; výčet je v [`testovani.md`](testovani.md).
+
+**Předáno není hotovo: razítko předání a zastaralé zadání po pushi (#334)** — šestý mergnutý kus M10
+a druhá polovina #333. Sestavit prompt byl do té doby jeden okamžik, po kterém se v okně nezměnilo
+nic: odznak sekce `Moje PR` svítil pořád stejně i deset minut po zkopírování a po pushi se nedalo
+poznat, že předané zadání mluví o kódu, který na PR není.
+
+**Razítko je `(kdy, proti jaké hlavě, co)` a drží ho pull request**, ne prompt (`Handoff`,
+`HandoffLedger`, `handoffs.json` v cache): prompt zaniká zavřením sheetu, kdežto „předáno v 14:20
+proti 9c1de02“ musí přežít restart. **U nálezů bydlet nemůže** — předat se dá i zadání, ve kterém
+není jediný nález, a takové PR nemá uložený záznam vůbec; založit ho kvůli razítku by znamenalo
+záznam bez běhu, který v `Policy.currentRecords` vyhraje nad nálezy z minula.
+
+**Rozhodnuto jinak, než bylo v zadání**, ve třech věcech. Razítko nese **identity předaných položek**,
+ne jen počet: s počtem by částečné předání (vypnutá volba) odepsalo nevyřešené vlákno jako předané,
+kdežto s identitami je `pending` přesné číslo a opakované review s **týmž** nálezem odznak nerozsvítí.
+Do materiálu se tím ale rozšířil i odznak z #331 — do #334 počítal „nezpracovaný nález nebo nevyřešené
+**cizí** vlákno“, od #334 to, co jde do zadání (tedy i moje vlastní nevyřešené vlákno, komentář pod PR
+a souhrn review); otázka se změnila, takže se změnil i materiál, a jeden z testů #331 se proto obrátil.
+A **neznámá dnešní hlava se bere jako „neposunula se“**: hlavu zná aplikace jedině z dotaženého
+detailu, takže by jinak odznak po předání nikdy nezhasl — tedy přesně to, co issue opravuje.
+
+**Panel má tři podoby**: razítko `✓ 6 položek · dnes 14:20 · proti 9c1de02` s větou, že nic nového
+nepřišlo (volby se schovají, zbyde `Sestavit znovu`); razítko s větou „od předání přibyla 1 položka“
+nad běžnými volbami; a po pushi varování s počtem commitů, dvěma řádky (`Nové v diskuzi`, `Nálezy
+proti staré hlavě` okrově) a dvěma cestami dál — `Pustit review znovu →` a `Sestavit i tak (jen nové
+vlákno)`, které předá jen to, co po předání přibylo v diskuzi. **Zastaralé nálezy nemizí** (#113),
+jen se do zadání nepředvybírají. **Review se po pushi nepustí samo** — automat se vlastních PR netýká
+vůbec (#332), takže je z toho tlačítko.
+
+**Odchylka od návrhu**: dva řádky v panelu po pushi jsou **konstatování, ne zaškrtávátka**, jak je
+kreslí mockup — v tom stavu o složení zadání rozhodují ta dvě tlačítka pod nimi, takže by zaškrtávátko
+slibovalo volbu, kterou ani jedno z nich nenabízí. A když po předání nepřišlo nic, není tam zakázaný
+odkaz `Sestavit i tak`, ale **věta proč**: `AccentLinkButtonStyle` kreslí akcent bez ohledu na
+`disabled`, takže zakázaný odkaz vypadá klikatelně.
+
+**Dopsal se i chrom detailu vlastního PR ze sekce 22**, na který se od #333 odkládalo: řádek stavové
+lišty `Vlastní PR — review se odsud neodesílá` (`OwnPullRequestStatusView`, tichá mint věta jen nad
+otevřeným vlastním PR) a **mint pilulka `moje PR`** v hlavičce. K tomu pilulka `N k předání` v řádku
+seznamu i na dashboardu — ta v #331 nešla napsat, protože předání nemělo razítko; kreslí se **místo**
+odznaku stavu review, protože obě čísla mluví o týchž nálezech a vedle sebe by se pralo „3 nálezy“
+s „6 k předání“. Ze sekce 22 zbývá nenapsaný jen počet ve stavové liště (`6 k předání · 1 vyřešeno`):
+pravá strana pruhu je tvrzení o **frontě**, ne o otevřeném PR, a číslo teď nese řádek i panel.
+
+**Tvrdá podmínka č. 1 se nemění**: razítko je lokální stav v cache, `grep ReviewPublishing App/`
+vypisuje tytéž soubory a `SingleWayOutTests` prošly **bez úprav**.
+
+Testů přidala tahle změna **40** (`HandoffTests`, `AppStoreHandoffTests`, `HandoffLedgerTests`,
+`HandoffTextTests`) a je jich **3018**; jsou zelené. **Ověřeno vložením regrese, dvakrát** — vypnutí
+porovnání hlav shodilo sedm testů, smazání kontroly cizí odpovědi ve vlákně právě ten jeden, který ji
+má chytat. Panel má sondu v **pěti stavech** (`AgentPromptRenderProbe`), protože ke třem z nich se
+klikáním v aplikaci nedostaneš.
 
 ### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
 

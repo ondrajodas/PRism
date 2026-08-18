@@ -90,6 +90,63 @@ struct AgentPromptRenderProbe {
         print("SONDA text:\n\(prompt.text)")
     }
 
+    /// Panel ve **všech třech stavech předání** (#334): nepředáno, předáno, po pushi.
+    ///
+    /// Proč sonda: ke stavu „zadání zastaralo po pushi“ se v aplikaci klikáním nedostaneš —
+    /// musel by mezitím někdo pushnout do PR, který mám na obrazovce. A „předáno“ vypadá jinak než
+    /// „předáno, ale něco zbývá“ jedinou větou, takže je to otázka na obrázek. Co se **dá** tvrdit
+    /// číslem, je v `HandoffTests` (co je nové) a v `HandoffTextTests` (věty a skloňování).
+    @Test("Vyrendrovat panel v každém stavu předání")
+    func rendersEveryHandoffStage() async throws {
+        let directory = Self.outputDirectory
+        let (store, cache) = try await prepared()
+        defer { _ = cache }
+
+        try renderPanel(store: store, named: "nepredano", in: directory)
+
+        // Předáno celé: razítko a věta, že se nové věci objeví tady.
+        store.noteHandoff(of: store.agentPrompt(for: pr))
+        try renderPanel(store: store, named: "predano", in: directory)
+
+        // Předáno jen zčásti — vlákna byla vypnutá, takže zbývají. Je to ta cesta, kterou se do
+        // stavu `.changed` dostane člověk: vypne volbu a sestaví zadání bez ní.
+        store.toggleAgentPromptOption(.unresolvedThreads)
+        store.noteHandoff(of: store.agentPrompt(for: pr))
+        store.toggleAgentPromptOption(.unresolvedThreads)
+        try renderPanel(store: store, named: "predano-zbyva", in: directory)
+
+        // Po pushi: agent opravil a poslal dva commity, takže zadání zastaralo.
+        store.noteHandoff(of: store.agentPrompt(for: pr))
+        store.commits[pr] = Self.commits
+        store.detailStates[pr] = .loaded(Self.pushedDetail, updatedAt: Self.summary.updatedAt)
+        try renderPanel(store: store, named: "po-pushi", in: directory)
+        print("SONDA report po pushi: \(store.handoffReport(for: pr))")
+
+        // Tentýž stav, ale s **nepředaným vláknem** — přesně to, co kreslí návrh (sekce 22.2):
+        // pod hlavním tlačítkem druhá cesta, která předá jen novou diskuzi. Razítko musí vzniknout
+        // **před** pushem, jinak by nesl novou hlavu a zadání by nezastaralo.
+        store.detailStates[pr] = .loaded(Self.detail, updatedAt: Self.summary.updatedAt)
+        store.toggleAgentPromptOption(.unresolvedThreads)
+        store.noteHandoff(of: store.agentPrompt(for: pr))
+        store.toggleAgentPromptOption(.unresolvedThreads)
+        store.detailStates[pr] = .loaded(Self.pushedDetail, updatedAt: Self.summary.updatedAt)
+        try renderPanel(store: store, named: "po-pushi-nove-vlakno", in: directory)
+    }
+
+    private func renderPanel(store: AppStore, named name: String, in directory: URL) throws {
+        let url = directory.appending(path: "zadani-\(name).png")
+        let scene = PullRequestDetailView(
+            store: store,
+            pullRequest: Self.summary,
+            submission: .constant(nil)
+        )
+        .frame(width: 1400, height: Self.height)
+        .background(Palette.background)
+        try render(scene, width: 1400, height: Self.height, to: url)
+        print("SONDA \(url.path) — \(name), stav \(store.handoffReport(for: pr).stage), "
+            + "zbývá \(store.pendingHandoffCount(for: pr))")
+    }
+
     // MARK: - Scéna
 
     /// Vlastní PR s nálezy i konverzací a s panelem přepnutým na zadání.
@@ -97,6 +154,11 @@ struct AgentPromptRenderProbe {
         let directory = try TemporaryDirectory()
         var configuration = Configuration.standard
         configuration.global.ownLogins = ["ondrajodas"]
+        // Hodiny **za** daty konverzace (#334): razítko předání se porovnává s časy komentářů,
+        // takže výchozí rok 1970 by z každého vlákna udělal „přišlo po předání“ a stav `předáno`
+        // by na obrázku nikdy nevyšel. Je to vlastnost fixture, ne logiky — v aplikaci jsou
+        // komentáře starší než předání.
+        let clock = FakeTimeSource(start: Date(timeIntervalSince1970: 1_754_100_000))
         let store = AppStore(
             gateway: FakeGitHubGateway(
                 always: .success([Self.summary]),
@@ -105,10 +167,10 @@ struct AgentPromptRenderProbe {
                 conversations: [.success(Self.conversation)]
             ),
             configuration: configuration,
-            time: FakeTimeSource(),
+            time: clock,
             checkout: FakeRepoCheckout(),
             reviewer: FakeReviewRunner(findings: Self.findings),
-            reviews: ReviewStore(layout: CacheLayout(root: directory.url), time: FakeTimeSource()),
+            reviews: ReviewStore(layout: CacheLayout(root: directory.url), time: clock),
             drafts: ReviewDraftStore(layout: CacheLayout(root: directory.url))
         )
         await store.loadDetail(for: Self.summary)
@@ -172,6 +234,36 @@ struct AgentPromptRenderProbe {
         state: .open,
         body: "## Popis\n\nTimeout revieweera se bere z nastavení."
     )
+
+    /// Tentýž PR po pushi — hlava se posunula o dva commity.
+    private static let pushedDetail = PullRequest(
+        id: summary.id,
+        title: summary.title,
+        author: summary.author,
+        headSha: "ff11223cccc",
+        baseSha: "bbbb2222",
+        headRef: "issue-320-timeout",
+        url: summary.url,
+        updatedAt: summary.updatedAt,
+        state: .open,
+        body: detail.body
+    )
+
+    /// Commity od nejstaršího, jak je vydává gateway — předaná hlava je uprostřed, takže se počet
+    /// pushnutých dá spočítat.
+    private static let commits: [PullRequestCommit] = [
+        "aaa0001", "9c1de02aaaa", "dddd0003", "ff11223cccc",
+    ].map {
+        PullRequestCommit(
+            sha: $0,
+            message: "chore: \($0)",
+            authorName: "Ondra Jodas",
+            authorLogin: "ondrajodas",
+            avatarURL: nil,
+            committedAt: Date(timeIntervalSince1970: 1_754_000_000),
+            isMerge: false
+        )
+    }
 
     private static let findings: [ReportedFinding] = [
         ReportedFinding(

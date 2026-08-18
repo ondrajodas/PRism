@@ -18,6 +18,10 @@ struct StatusBarView: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             AppNoticesView(store: store)
+            // Že je otevřený PR vlastní (#334). **Před stavem kopie**, jak to má návrh (sekce 22):
+            // je to věta o tom, co se s tímhle PR dá dělat, kdežto kopie je stav prostředí. Krajní
+            // místo zůstává poruchám — `AppNoticesView` je nalevo od obojího.
+            OwnPullRequestStatusView(store: store)
             // Stav pracovní kopie (#218). **Za hláškami**, i když ho návrh kreslí úplně vlevo:
             // hláška je porucha a ta má mít krajní místo, kdežto kopie je běžný stav. Bez
             // hlášky — tedy skoro vždycky — vyjde nalevo stejně.

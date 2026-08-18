@@ -665,6 +665,22 @@ napsané v panelu i v textu: prázdný počet vláken nesmí vypadat jako „nik
 poznámka, komentář u řádku, tažení rozsahu), tam **nejsou**, protože odeslat ho není kudy. Co tam
 zbylo z dřívějška, ale nezmizí: je vidět v panelu `Zadání` i v bublinách u kódu a jde smazat.
 
+**Předáno není hotovo** (#334). Zkopírováním nebo uložením textu se u pull requestu zapíše razítko —
+**kdy, proti jaké hlavě a co v tom zadání bylo** — a od té chvíle se okno ptá „zbývá tu ještě něco,
+co jsem nepředal?“ místo „je tu něco?“. Odznak sekce `Moje PR` proto po předání **zhasne, i když
+nálezy dál existují**, a pilulka `N k předání` v řádku zmizí; rozsvítí je zpátky nový nález, nový
+komentář, cizí odpověď v už předaném vlákně, nebo nový commit. Razítko je **lokální stav v cache**,
+ne značka na PR — na GitHub se tím neposílá nic.
+
+Když agent opraví a pushne, panel to řekne sám: *„Předával jsi proti `9c1de02`, mezitím přišly
+2 commity. Nálezy platí pro starý kód — než sestavíš nové zadání, pusť review znovu.“* Počet commitů
+se píše jen tehdy, když se dá spočítat (po force pushi se předaná hlava v seznamu nenajde, takže tam
+stojí jen „hlava PR se posunula“). **Zastaralé nálezy nemizí** — zůstávají v diffu i v tabu `Nálezy`,
+jen se do nového zadání nepředvybírají. Vedle hlavního `Pustit review znovu →` je proto druhá cesta,
+`Sestavit i tak (jen nové vlákno)`: nové vlákno od kolegy se dá předat i bez nového review a bývá to
+nejrychlejší kolo. **Review se po pushi nepustí samo** — automat se vlastních PR netýká vůbec, protože
+na nich se pushuje často a každý commit by spustil kolo, které nikdo nečte.
+
 Do #182 byl panel **pod** diffem, kde si bral výšku — tedy to, čeho je u kódu nejmíň. Napravo bere
 šířku, které je v okně přes celou obrazovku dost: v pohledu pod sebou zbude i na 14" displeji 126
 znaků na stranu, takže slib „PHP na 120 znaků se vejde“ platí dál. **Složit ho jde na ⌘2** nebo
@@ -1570,13 +1586,14 @@ App/                      zdrojáky aplikace — target PRism
   Markdown/               vykreslení Markdownu z GitHubu: bloky (včetně citací a výstrah), inline HTML
                           od botů, škála nadpisů a mezer, zapamatované rozložení na bloky
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka, hledání v paletě,
-                          složení zadání pro agenta na vlastním PR (#333)
+                          složení zadání pro agenta na vlastním PR (#333) a co z něj zbývá předat (#334)
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR, brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy;
                           zadání PR pro reviewera vedle pracovního stromu (#120)
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno (stav v AppStore.swift, metody v AppStore+*.swift);
-                          ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku
+                          ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku;
+                          HandoffLedger — razítka předání zadání agentovi (#334)
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky

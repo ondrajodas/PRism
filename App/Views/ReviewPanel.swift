@@ -54,6 +54,9 @@ struct ReviewPanel: View {
     /// Zadání pro agenta (#333). `nil` u cizího PR — tam se panel na něj neptá.
     var agentPrompt: AgentPrompt?
     var agentPromptActions = AgentPromptActions()
+    /// Co zbývá předat (#334). Panel z toho kreslí razítko, novinky nebo varování po pushi;
+    /// rozhoduje `Policy.handoff`, tedy tatáž funkce jako u odznaku v railu.
+    var handoff: HandoffReport = .never
     /// Stav načtení konverzace — panel se zadáním z něj kreslí větu o tom, že cizí komentáře
     /// nemá odkud vzít.
     var conversation: ConversationState?
@@ -366,7 +369,11 @@ struct ReviewPanel: View {
                     // Draft na vlastním PR se od #333 nezakládá, ale co tam zbylo z dřívějška,
                     // musí zůstat vidět a smazatelné.
                     leftoverDraft: draft,
-                    discardDraft: draftActions.discard
+                    discardDraft: draftActions.discard,
+                    report: handoff,
+                    composeFresh: agentPromptActions.composeFresh,
+                    runReview: agentPromptActions.runReview,
+                    isReviewing: isRunning
                 )
             }
         }

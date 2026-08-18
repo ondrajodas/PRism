@@ -389,6 +389,7 @@ struct DashboardView: View {
         } else {
             VStack(spacing: 0) {
                 ForEach(entries) { entry in
+                    let ownership = store.ownership(of: entry.pullRequest)
                     Button { open(entry.id) } label: {
                         PullRequestRow(
                             pullRequest: entry.pullRequest,
@@ -397,11 +398,17 @@ struct DashboardView: View {
                             row: entry.row,
                             // Čte se **tady**, ne v řádku: řádek store nemá. Vlastní PR má vpravo
                             // `Prompt →` (#331), ať je v kterémkoli z obou bloků.
-                            ownership: store.ownership(of: entry.pullRequest),
+                            ownership: ownership,
                             // Akce od #333, tatáž jako v seznamu. Celý řádek je tu `Button`, který
                             // PR otevírá — takže i kdyby klik spadl na řádek pod tlačítkem, vede to
                             // na týž PR, jen bez rozloženého panelu. Němá akce z toho nevznikne.
-                            openPrompt: { store.openAgentPrompt(in: entry.id) }
+                            openPrompt: { store.openAgentPrompt(in: entry.id) },
+                            // Kolik zbývá předat (#334) — tatáž otázka jako u odznaku v railu,
+                            // takže i tatáž funkce; jinak by blok tvrdil jiné číslo než rail vedle.
+                            // **Jen u vlastních PR**: skládá položky zadání a u cizího řádku se
+                            // pilulka nekreslí, takže by to byla práce za odpověď, kterou nikdo
+                            // nepřečte — a oba bloky se kreslí týmž `rows(_:emptyExplanation:)`.
+                            pending: ownership == .mine ? store.pendingHandoffCount(for: entry.id) : 0
                         )
                         // Vlevo nic: proužek stavu má sedět na hraně bloku, jak ho kreslí návrh.
                         .padding(.trailing, 13)

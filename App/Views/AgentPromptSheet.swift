@@ -8,6 +8,12 @@ import SwiftUI
 /// nikomu nic neudělá (tatáž úvaha jako u odpovědi do vlákna, #73).
 struct AgentPromptSheet: View {
     let prompt: AgentPrompt
+    /// Že si člověk text **vzal** (#334) — zkopíroval, nebo uložil do souboru. Zapisuje razítko
+    /// předání, nic víc; kam text jde, se tím nemění.
+    ///
+    /// **Ne při otevření sheetu.** Otevřený náhled je náhled: kdyby razítko vznikalo jím, odznak
+    /// v railu by zhasl nad zadáním, které nikdo nikam nedal.
+    var handoff: (AgentPrompt) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
 
     /// Že se zkopírovalo, musí být vidět — kliknutí, po kterém se nestane nic viditelného,
@@ -194,6 +200,7 @@ struct AgentPromptSheet: View {
             Button(didCopy ? "Zkopírováno" : "Zkopírovat", systemImage: didCopy ? "checkmark" : "doc.on.doc") {
                 Clipboard.copy(prompt.text)
                 didCopy = true
+                handoff(prompt)
             }
             .buttonStyle(.miniPrimary)
         }
@@ -233,6 +240,9 @@ struct AgentPromptSheet: View {
                 suggestedName: Policy.agentPromptFileName(for: prompt.subject)
             ) else { return }
             saved = .written(url)
+            // Razítko až po **úspěšném** uložení: zrušený dialog (`nil`) ani plný disk předání
+            // nejsou, a razítko nad nezapsaným souborem by zhaslo odznak nad prací, která leží.
+            handoff(prompt)
         } catch {
             saved = .failed(error.localizedDescription)
         }

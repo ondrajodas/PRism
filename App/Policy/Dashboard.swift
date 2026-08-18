@@ -42,7 +42,7 @@ struct Dashboard: Hashable, Sendable {
     /// nenastavená aplikace vypadala jako uklizený stůl.
     struct MineCard: Hashable, Sendable {
         let pullRequests: Int
-        /// Kolik z nich má nezpracovaný nález nebo nevyřešené cizí vlákno. Spodní hranice —
+        /// Kolik z nich má něco, co jsem ještě nepředal agentovi (#334). Spodní hranice —
         /// viz `Policy.ownPullRequestsAwaitingMove`.
         let awaitingMove: Int
         let isTracked: Bool
@@ -97,6 +97,8 @@ extension Policy {
         since: Date? = nil,
         mine: Set<String> = [],
         conversation: (PRIdentifier) -> Conversation? = { _ in nil },
+        handoff: (PRIdentifier) -> Handoff? = { _ in nil },
+        head: (PRIdentifier) -> String? = { _ in nil },
         tracksOwnSource: Bool = false
     ) -> Dashboard {
         // Jedním průchodem na množinu: `queue` i `blocking` mluví o **frontě**, tedy o cizích PR
@@ -119,7 +121,9 @@ extension Policy {
                 awaitingMove: ownPullRequestsAwaitingMove(
                     own,
                     records: records,
-                    conversation: conversation
+                    conversation: conversation,
+                    handoff: handoff,
+                    head: head
                 ),
                 isTracked: tracksOwnSource
             ),

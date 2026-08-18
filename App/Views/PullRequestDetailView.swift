@@ -70,7 +70,11 @@ struct PullRequestDetailView: View {
         .sheet(item: $logSheet) { CodeTextSheet(content: $0) }
         // Zadání pro agenta (#333). `item:`, ne `isPresented:`: sheet nemá co ukazovat bez textu,
         // a ten se skládá ve chvíli kliknutí — co je vidět, to se zkopíruje.
-        .sheet(item: $promptSheet) { AgentPromptSheet(prompt: $0) }
+        // Razítko předání (#334) se zapisuje **až když si text někdo vezme** — zkopírováním nebo
+        // uložením do souboru, ne otevřením sheetu. Zapisuje ho store, sheet o tom jen řekne.
+        .sheet(item: $promptSheet) { prompt in
+            AgentPromptSheet(prompt: prompt, handoff: { store.noteHandoff(of: $0) })
+        }
         .hiddenShortcuts { shortcuts }
         .task(id: highlighted) {
             guard highlighted != nil else { return }
@@ -178,7 +182,10 @@ struct PullRequestDetailView: View {
                 PullRequestHeaderView(
                     pullRequest: pullRequest,
                     detail: loadedDetail,
-                    checks: store.checks[pullRequest.id] ?? []
+                    checks: store.checks[pullRequest.id] ?? [],
+                    // Pilulka `moje PR` (#334) — čte se ze stejného místa jako to, který segment
+                    // kreslí panel, takže se hlavička a panel nemají čím rozejít.
+                    ownership: ownership
                 )
                 draftChip
                 Spacer(minLength: 8)
@@ -412,6 +419,8 @@ struct PullRequestDetailView: View {
             // a přesto by se přeskládal při každém překreslení panelu.
             agentPrompt: ownership == .mine ? store.agentPrompt(for: pullRequest.id) : nil,
             agentPromptActions: agentPromptActions,
+            // Razítko předání (#334) — jen na vlastním PR, ze stejného důvodu jako zadání samo.
+            handoff: ownership == .mine ? store.handoffReport(for: pullRequest.id) : .never,
             conversation: store.conversationState(for: pullRequest.id),
             draftUnavailable: draftUnavailable,
             draftActions: draftActions,
@@ -589,7 +598,13 @@ struct PullRequestDetailView: View {
             toggle: { store.toggleAgentPromptOption($0) },
             isEnabled: { store.agentPromptOptions.includes($0) },
             // Otevře sheet, **nic neodesílá** — do schránky a do souboru se sahá až tam.
-            compose: { promptSheet = store.agentPrompt(for: pullRequest.id) }
+            compose: { promptSheet = store.agentPrompt(for: pullRequest.id) },
+            // Zúžené zadání po pushi (#334). `nil` znamená „není co předat“, a to tlačítko hlídá
+            // samo (`disabled`) — sheet bez položek by vypadal jako rozbitá aplikace.
+            composeFresh: { promptSheet = store.freshAgentPrompt(for: pullRequest.id) },
+            // Review se po pushi **nepustí samo** (#332, #334), takže tohle je jediná cesta —
+            // tatáž, jakou má tlačítko v hlavičce.
+            runReview: { store.startReview(for: pullRequest.id) }
         )
     }
 

@@ -58,50 +58,45 @@ extension Policy {
         return .noOwnPullRequests
     }
 
-    /// Kolik vlastních PR **čeká na můj tah** (#331) — obsah odznaku u sekce `Moje PR`.
+    /// Kolik vlastních PR **čeká na můj tah** (#331, otázka změněná #334) — obsah odznaku
+    /// u sekce `Moje PR`.
     ///
     /// **Ne počet otevřených PR.** Šest PR, ze kterých pět čeká na CI, není šest věcí k práci,
-    /// a odznak na railu znamená „je co dělat“. Počítá se tedy PR, na kterém leží **nezpracovaný
-    /// nález** nebo **nevyřešené cizí vlákno**.
+    /// a odznak na railu znamená „je co dělat“.
     ///
-    /// **Je to spodní hranice, ne přesný počet, a je to vidět z parametru.** Nálezy jsou
-    /// v paměti vždycky (záznamy se čtou při startu), kdežto konverzace jsou jen u PR, které se
-    /// **načetly** — a ty se tahají při výběru řádku, ne při pollingu (jinak by byl jeden tik
-    /// N podprocesů). PR, do kterého se ještě nekliklo, tedy vláknem nepřispěje. Neúplnost je
-    /// schválně **v tomhle směru**: odznak, který napočítá víc práce, než jí je, se přestane čítat,
-    /// kdežto tenhle o práci nelže — jen o části z ní ještě neví. Cizí aktivitu na vlastních PR
-    /// dotáhne #335.
+    /// **Od #334 se ptá „zbývá tu ještě něco, co jsem nepředal?“, ne „je tu něco?“** Rozhoduje
+    /// `Policy.handoff(_:record:conversation:head:commits:)`, tedy tatáž funkce, ze které čte
+    /// pilulka `N k předání` v řádku i panel `Zadání` — jinak by odznak svítil nad řádkem, který
+    /// tvrdí, že je hotovo. Do #334 to bylo „nezpracovaný nález nebo nevyřešené cizí vlákno“,
+    /// takže odznak svítil pořád stejně i deset minut po zkopírování promptu.
     ///
-    /// Konverzace se berou **uzávěrem, ne slovníkem**, a je to kvůli tomu, odkud se to volá: odznak
-    /// v railu čte SwiftUI při **každém překreslení okna**, takže složit pro něj mapu všech
-    /// načtených konverzací by bylo kopírování celé diskuze za odpověď, která se ptá jen na vlastní
-    /// PR. Uzávěr sáhne na ty, kterých se to týká.
+    /// **Je to spodní hranice, ne přesný počet, a je to vidět z parametrů.** Nálezy jsou v paměti
+    /// vždycky (záznamy se čtou při startu), kdežto konverzace a hlava PR jsou jen u PR, které se
+    /// **načetly** — a ty se tahají při výběru řádku, ne pollingem (jinak by byl jeden tik N
+    /// podprocesů). PR, do kterého se ještě nekliklo, tedy vláknem nepřispěje a o pushnutém commitu
+    /// se odsud neví. Neúplnost je schválně **v tomhle směru**: odznak, který napočítá víc práce,
+    /// než jí je, se přestane čítat, kdežto tenhle o práci nelže — jen o části z ní ještě neví.
+    /// Cizí aktivitu na vlastních PR dotáhne #335.
+    ///
+    /// Konverzace, razítka i hlavy se berou **uzávěry, ne slovníky**, a je to kvůli tomu, odkud se
+    /// to volá: odznak v railu čte SwiftUI při **každém překreslení okna**, takže složit pro něj
+    /// mapu všech načtených konverzací by bylo kopírování celé diskuze za odpověď, která se ptá jen
+    /// na vlastní PR. Uzávěr sáhne na ty, kterých se to týká.
     static func ownPullRequestsAwaitingMove(
         _ pullRequests: [PullRequestSummary],
         records: [PRIdentifier: ReviewRecord],
-        conversation: (PRIdentifier) -> Conversation? = { _ in nil }
+        conversation: (PRIdentifier) -> Conversation? = { _ in nil },
+        handoff: (PRIdentifier) -> Handoff? = { _ in nil },
+        head: (PRIdentifier) -> String? = { _ in nil }
     ) -> Int {
-        pullRequests.count {
-            awaitsMyMove(records[$0.id], conversation: conversation($0.id))
-        }
-    }
-
-    /// Čeká na tomhle vlastním PR můj tah?
-    ///
-    /// **Nezpracovaný nález** je nález, který platí — tedy `activeFindings`, bez odmítnutých
-    /// (#113). Razítko předání zatím neexistuje, takže „nezpracovaný“ dneska znamená „nikdo ho
-    /// neodmítl“; jak přijde předání agentovi (#333) a jeho razítko (#334), zúží se to tady,
-    /// na jednom místě.
-    ///
-    /// **Cizí vlákno** je vlákno, ve kterém je aspoň jeden komentář někoho jiného, a **není
-    /// vyřešené**. Ne „vlákno, které někdo jiný založil“: vlákno, do kterého kolega odpověděl,
-    /// po mně chce odpověď stejně jako to, které začal. **Zastaralá vlákna se počítají** —
-    /// zmizelá kotva je věc dnešního diffu, ne diskuze, a nevyřešená diskuze zůstává nevyřešená.
-    static func awaitsMyMove(_ record: ReviewRecord?, conversation: Conversation?) -> Bool {
-        if let record, !record.activeFindings.isEmpty { return true }
-        guard let conversation else { return false }
-        return conversation.threads.items.contains { thread in
-            !thread.isResolved && thread.comments.items.contains { !conversation.isMine($0) }
+        pullRequests.count { summary in
+            Policy.handoff(
+                handoff(summary.id),
+                record: records[summary.id],
+                conversation: conversation(summary.id),
+                head: head(summary.id)
+            )
+            .awaitsMove
         }
     }
 }
