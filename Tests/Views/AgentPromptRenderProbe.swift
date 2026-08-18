@@ -72,22 +72,64 @@ struct AgentPromptRenderProbe {
         // stáhnout na `minWidth` (840 b) — a odznaky „co je v textu“ i zalomení markdownu jsou na
         // šířce závislé, takže jedno číslo by o druhém stavu netvrdilo nic. Rozsah se posunul u #333
         // po proklikání (720 → 1080), protože na 720 zalamoval skoro každý řádek fenced diffu.
-        let prompt = store.agentPrompt(for: pr)
+        let selection = store.agentPromptSelection(for: pr)
         for width in [1080.0, 840.0] as [CGFloat] {
             let sheet = directory.appending(path: "zadani-sheet-\(Int(width)).png")
             // Pozadí i režim se sondě musí nasadit: sheet si plochu nemaluje (v aplikaci ji dává okno
             // sheetu), takže by v borderless okně vyšel titulek světle na světlém.
             try render(
-                AgentPromptSheet(prompt: prompt)
-                    .frame(width: width, height: 620)
+                AgentPromptSheet(selection: selection, rebuild: { store.agentPromptSelection(for: pr, toggled: $0) })
+                    .frame(width: width, height: 1100)
                     .background(Palette.surface),
                 width: width,
-                height: 620,
+                height: 1100,
                 to: sheet
             )
-            print("SONDA \(sheet.path) — sheet \(Int(width)) b, \(prompt.included.total) položek, \(prompt.sizeText)")
+            print("SONDA \(sheet.path) — sheet \(Int(width)) b, vybráno \(selection.selected) "
+                + "z \(selection.available), \(selection.prompt.sizeText)")
         }
-        print("SONDA text:\n\(prompt.text)")
+        print("SONDA text:\n\(selection.prompt.text)")
+    }
+
+    /// Seznam položek (#377) — **v obou mezích šířky a s rozbalenou položkou**.
+    ///
+    /// Proč zvlášť a ne přes sheet: co je rozbalené, drží `@State` sheetu, takže offscreen se
+    /// v něm rozbalit nedá. A rozbalený řádek je zrovna to, co je potřeba vidět — hlavička
+    /// `druh · autor · čas · velikost` a **dlouhý text, který se roluje** (strop 168 bodů z návrhu,
+    /// sekce 23). Rozbalí se nejdelší položka, tedy ta, u které se strop pozná.
+    ///
+    /// Šířka je vnitřek sheetu (840 a 1080 minus `padding(16)` po obou stranách), protože seznam
+    /// tam doopravdy leží — jiná šířka je jiný design.
+    @Test("Vyrendrovat seznam položek s rozbalenou položkou")
+    func rendersThePickListWithAnExpandedItem() async throws {
+        let directory = Self.outputDirectory
+        let (store, cache) = try await prepared()
+        defer { _ = cache }
+
+        let selection = store.agentPromptSelection(for: pr)
+        let picks = selection.groups.flatMap(\.picks)
+        let longest = try #require(picks.max { $0.text.utf8.count < $1.text.utf8.count })
+
+        for width in [1080.0, 840.0] as [CGFloat] {
+            let url = directory.appending(path: "zadani-seznam-\(Int(width)).png")
+            try render(
+                AgentPromptPickList(groups: selection.groups, expanded: [longest.id])
+                    .padding(16)
+                    .frame(width: width, alignment: .topLeading)
+                    .background(Palette.surface),
+                width: width,
+                height: 720,
+                to: url
+            )
+            print("SONDA \(url.path) — seznam \(Int(width)) b, \(picks.count) položek, "
+                + "rozbalená \(longest.id) (\(longest.text.utf8.count) B)")
+        }
+        for group in selection.groups {
+            print("SONDA grupa \(group.kind.title): \(group.countLabel)")
+        }
+        for pick in picks where !pick.isIncluded {
+            print("SONDA vypnuto \(pick.id): \(pick.exclusion?.label ?? "rukou") — \(pick.title)")
+        }
     }
 
     /// Panel ve **všech třech stavech předání** (#334): nepředáno, předáno, po pushi.
@@ -111,9 +153,9 @@ struct AgentPromptRenderProbe {
         // Předáno a **pak přišlo nové vlákno** — stav, ve kterém razítko zůstává a volby se kreslí.
         // Vlákno se dosazuje do stavu store, protože fake gateway drží konverzaci na `updatedAt`
         // shrnutí a sonda pracuje s jedním PR; jinak by se muselo předstírat druhé tiknutí.
-        store.conversationStates[pr] = .loaded(Self.conversationWithNewThread, updatedAt: Self.summary.updatedAt)
+        store.conversationStates[pr] = .loaded(try Self.conversationWithNewThread(), updatedAt: Self.summary.updatedAt)
         try renderPanel(store: store, named: "predano-zbyva", in: directory)
-        store.conversationStates[pr] = .loaded(Self.conversation, updatedAt: Self.summary.updatedAt)
+        store.conversationStates[pr] = .loaded(try Self.conversation(), updatedAt: Self.summary.updatedAt)
 
         // Po pushi: agent opravil a poslal dva commity, takže zadání zastaralo.
         store.noteHandoff(of: store.agentPrompt(for: pr))
@@ -171,7 +213,7 @@ struct AgentPromptRenderProbe {
                 always: .success([Self.summary]),
                 detail: .success(Self.detail),
                 diffs: [.success(Self.diffText)],
-                conversations: [.success(Self.conversation)]
+                conversations: [.success(try Self.conversation())]
             ),
             configuration: configuration,
             time: clock,
@@ -244,12 +286,13 @@ struct AgentPromptRenderProbe {
 
     /// Tatáž konverzace a v ní **jedno nové vlákno od kolegy** — z toho se kreslí stav „předáno,
     /// ale něco zbývá“.
-    private static var conversationWithNewThread: Conversation {
-        Conversation(
-            viewer: conversation.viewer,
-            reviews: conversation.reviews,
+    private static func conversationWithNewThread() throws -> Conversation {
+        let base = try conversation()
+        return Conversation(
+            viewer: base.viewer,
+            reviews: base.reviews,
             threads: ConversationPage(
-                items: conversation.threads.items + [
+                items: base.threads.items + [
                     ReviewThread(
                         id: "t9",
                         path: "App/Config/ReviewTimeout.swift",
@@ -273,10 +316,10 @@ struct AgentPromptRenderProbe {
                         )
                     ),
                 ],
-                total: conversation.threads.total + 1,
+                total: base.threads.total + 1,
                 hasNextPage: false
             ),
-            comments: conversation.comments
+            comments: base.comments
         )
     }
 
@@ -331,7 +374,15 @@ struct AgentPromptRenderProbe {
         ),
     ]
 
-    private static let conversation = Conversation(
+    /// Konverzace pro sondu — a od #377 v ní **každý důvod předvybrání**, který se dá nakreslit:
+    /// souhrn, který shrnuje diff, souhrn bez obsahu, vlastní komentář a vyřešené vlákno.
+    ///
+    /// Souhrn od Copilota je **skutečný výstup** (`gh/review-copilot-overview.md`, review na
+    /// `ondrajodas/PRism#378`), takže na obrázku je vidět i to, jak se sází text s `CRLF`. Vlastní
+    /// komentář je z téhož důvodu popis skutečného PR (`gh/pr-body-linear.md`) — je to nejdelší
+    /// položka, tedy zrovna ta, u které se pozná strop rolování v rozkliku.
+    private static func conversation() throws -> Conversation {
+        Conversation(
         viewer: "ondrajodas",
         reviews: ConversationPage(
             items: [
@@ -342,8 +393,22 @@ struct AgentPromptRenderProbe {
                     body: "Celkově dobrý, ale než to mergneme: ta mez by měla být pojmenovaná na jednom místě, ne dvakrát.",
                     submittedAt: Date(timeIntervalSince1970: 1_753_000_000)
                 ),
+                SubmittedReview(
+                    id: "r2",
+                    author: "copilot-pull-request-reviewer[bot]",
+                    state: .commented,
+                    body: try Fixture.text("gh/review-copilot-overview.md"),
+                    submittedAt: Date(timeIntervalSince1970: 1_753_010_000)
+                ),
+                SubmittedReview(
+                    id: "r3",
+                    author: "coderabbitai[bot]",
+                    state: .commented,
+                    body: "## Review\n\n### Walkthrough\n",
+                    submittedAt: Date(timeIntervalSince1970: 1_753_020_000)
+                ),
             ],
-            total: 1,
+            total: 3,
             hasNextPage: false
         ),
         threads: ConversationPage(
@@ -414,11 +479,19 @@ struct AgentPromptRenderProbe {
                     createdAt: Date(timeIntervalSince1970: 1_753_400_000),
                     url: URL(string: "https://github.com/ondrajodas/PRism/pull/324#issuecomment-1")!
                 ),
+                ThreadComment(
+                    id: "c2",
+                    author: "ondrajodas",
+                    body: try Fixture.text("gh/pr-body-linear.md"),
+                    createdAt: Date(timeIntervalSince1970: 1_753_500_000),
+                    url: URL(string: "https://github.com/ondrajodas/PRism/pull/324#issuecomment-2")!
+                ),
             ],
-            total: 1,
+            total: 2,
             hasNextPage: false
         )
-    )
+        )
+    }
 
     private static let diffText = """
         diff --git a/App/Config/Configuration.swift b/App/Config/Configuration.swift

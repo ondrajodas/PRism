@@ -679,6 +679,22 @@ zalomený diff se přestane číst jako diff. Text se **nikam neodesílá**, ces
 (viz *Odeslání review*). Proto tu taky **není druhé potvrzení**: dvě kliknutí na dvou tlačítkách jsou
 brána proti tomu, aby něco odešlo na GitHub, a zkopírovaný text nikomu nic neudělá.
 
+**V tom okně se vybírá po položkách, ne po druzích** (#377). Zaškrtávátko má **každý** nález, vlákno,
+komentář i souhrn review; seskupené je to po druzích a v hlavičce grupy stojí `2 z 3`, tedy kolik z ní
+je vybrané. U položky je vidět **autor** a `soubor:řádek` — podle toho se pozná, co je signál —
+a rozklik ukáže **celý text** i s hlavičkou `druh · autor · čas · velikost`; dlouhý se roluje, nekrátí.
+Volby po druzích zůstávají v panelu jako **hrubý filtr** a přibyl u nich počet vybraných.
+
+**Vypnuté předvybírá aplikace a píše proč**: `napsal jsi to ty` (vlastní komentář — typicky release
+notes, které jsou nejdelší blok v promptu a agentovi neříkají nic), `bez obsahu` (souhrn, ve kterém
+kromě nadpisu nic není) a `shrnuje diff` (Copilotův `Pull request overview`, tedy převyprávěný diff,
+který agent má sám). Vedle nich zůstávají `odmítl jsi ho` a `vyřešeno`. **Vypnuté položky zůstávají
+vidět a jdou zapnout** — a co se nakonec vynechalo, je nad textem vypsané odznakem s důvodem
+(`1 vlastní vynechán`), protože tiché zahození vypadá jako „tohle je všechno“. Náhled je **funkcí
+výběru** a je to pod ním napsané: `Přepočítáno podle výběru — 6 položek, 2,8 kB. Odškrtnuté v textu
+nejsou.` Výběr **nepřežije zavření okna**: sheet se otevírá k jednomu předání a předvybrání se počítá
+z dat, takže ukládat ho by znamenalo další stav u PR, který zastará pushem.
+
 Text je seskupený **po souborech, ne po zdrojích** (agent otevírá soubor, ne revieweera), u každé
 položky je napsané, odkud přišla — podle toho se pozná, komu se dá odpovědět —, a co soubor nemá
 (souhrn review, komentář v diskuzi), stojí ve vlastní sekci před nimi. V hlavičce textu je **hlava

@@ -265,7 +265,7 @@ struct AppStoreHandoffTests {
         // (načtená se drží právě podle něj, viz `hasCurrentConversation`).
         await store.loadConversation(for: pushedSummary)
 
-        let fresh = store.freshAgentPrompt(for: pr)
+        let fresh = store.freshAgentPromptSelection(for: pr)?.prompt
         #expect(fresh != nil)
         #expect(fresh?.included.total == 1)
         #expect(fresh?.text.contains("text c2") == true)
@@ -299,8 +299,8 @@ struct AppStoreHandoffTests {
         #expect(store.handoffReport(for: pr).stage == .outdated)
 
         // `Sestavit i tak (jen nové vlákno)` — zúžené zadání bez nálezů.
-        let fresh = try #require(store.freshAgentPrompt(for: pr))
-        store.noteHandoff(of: fresh)
+        let fresh = try #require(store.freshAgentPromptSelection(for: pr))
+        store.noteHandoff(of: fresh.prompt)
 
         let stamp = try #require(store.handoff(for: pr))
         #expect(stamp.headSha == "9c1de02aaaa")
@@ -312,7 +312,7 @@ struct AppStoreHandoffTests {
         #expect(report.staleFindings == 1)
         // Vlákno je předané, takže druhá cesta už nemá co nabídnout.
         #expect(report.freshDiscussion.isEmpty)
-        #expect(store.freshAgentPrompt(for: pr) == nil)
+        #expect(store.freshAgentPromptSelection(for: pr) == nil)
     }
 
     /// Když po předání nepřišlo nic, zúžené zadání **nevznikne** — prázdný sheet s hlavičkou
@@ -322,6 +322,6 @@ struct AppStoreHandoffTests {
         let (store, _, _) = try await prepared()
         store.noteHandoff(of: store.agentPrompt(for: pr))
 
-        #expect(store.freshAgentPrompt(for: pr) == nil)
+        #expect(store.freshAgentPromptSelection(for: pr) == nil)
     }
 }

@@ -9,6 +9,7 @@
 Tests/Fixtures/gh/job-log-head.txt -text
 Tests/Fixtures/gh/pr-diff-crlf.diff -text
 Tests/Fixtures/gh/pr-body-linear.md -text
+Tests/Fixtures/gh/review-copilot-overview.md -text
 
 # `Tests/Fixtures/gh/pr-commits-crlf.json` tady schválně **není**, i když na `CRLF` taky stojí
 # (#339). Je to odpověď JSON API, takže `CR` v ní není surový bajt, ale escapovaná dvojice `\` + `r`
@@ -18,6 +19,13 @@ Tests/Fixtures/gh/pr-body-linear.md -text
 # (`message.contains("\r\n")`) a `CommitDiffTabStateTests` na těle, ze kterého se počítají řádky
 # (`body.contains("\r\n")`). To je pojistka, která platí bez ohledu na nastavení gitu. A platí to na
 # každou fixture v JSONu: chránit se musí surové bajty, ne escape.
+
+# `Tests/Fixtures/gh/review-copilot-overview.md` je skutečné review Copilota (#377,
+# `ondrajodas/PRism#378`) a `CRLF` má na **9 řádcích** — tak GitHub těla review vrací. Stojí na něm
+# heuristika `Policy.summarizesDiff`, která hledá nadpis `Pull request overview` po řádcích: nad
+# normalizovaným souborem by test zezelenal i s `split(separator: "\n")`, tedy s tou chybou, kvůli
+# které #292 vypnulo celý konec logu. Hlídá si to i sada sama (`AgentPromptSelectionTests` se ptá
+# `contains("\r\n")`), aby to platilo bez ohledu na nastavení gitu.
 
 # `Tests/Fixtures/gh/pr-body-linear.md` je popis skutečného PR z `gh api … --jq .body` (#120) a
 # `CRLF` má na **13 řádcích ze 14** — tak GitHub těla PR vrací. Normalizovaný by přestal dokládat,

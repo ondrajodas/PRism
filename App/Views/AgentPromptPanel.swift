@@ -138,8 +138,8 @@ struct AgentPromptPanel: View {
                     .foregroundStyle(on ? Palette.ink : Palette.ink2)
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                if let count = prompt.inventory.count(of: choice) {
-                    Text(verbatim: "\(count)")
+                if let total = prompt.inventory.count(of: choice) {
+                    Text(verbatim: Self.choiceCount(selected: prompt.included.count(of: choice) ?? 0, of: total))
                         .font(.system(size: 10.5, design: .monospaced))
                         .monospacedDigit()
                         .foregroundStyle(Palette.ink3)
@@ -148,8 +148,27 @@ struct AgentPromptPanel: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .help(choice.explanation)
+        .help(Self.choiceHelp(choice, selected: prompt.included.count(of: choice), of: prompt.inventory.count(of: choice)))
         .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    /// Počet u volby: `3`, když do textu jde všechno, `1 z 3`, když ne (#377).
+    ///
+    /// Do #377 tu stál jen počet dostupných položek. Přestalo to být pravdivé ve chvíli, kdy se
+    /// vybírá **po položkách**: u volby, ze které jsou v textu dvě položky ze tří, by `3` tvrdilo
+    /// o textu něco, co v něm není. Plný počet zůstává tam, kde jde všechno — `3 z 3` je šum.
+    nonisolated static func choiceCount(selected: Int, of total: Int) -> String {
+        selected == total ? "\(total)" : "\(selected) z \(total)"
+    }
+
+    /// Nápověda u volby — a když je část položek vypnutá, i to, kde se to dá přepnout.
+    ///
+    /// Bez té druhé věty vypadá `1 z 3` jako chyba: v panelu není nic, čím by se s tím dalo hýbat,
+    /// protože jednotlivé položky bydlí v sheetu.
+    nonisolated static func choiceHelp(_ choice: AgentPromptChoice, selected: Int?, of total: Int?) -> String {
+        guard let selected, let total, selected < total else { return choice.explanation }
+        return choice.explanation
+            + " — část položek je vypnutá; vidět a přepnout je jdou v okně se zadáním."
     }
 
     /// Čtvereček z návrhu: 12 bodů, poloměr 3. Zapnutý má akcentové obtažení **4 body dovnitř**

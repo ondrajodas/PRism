@@ -2929,3 +2929,40 @@ Vypadly z toho dvě věci k sondám: `-only-testing` na jeden test ze `swift-tes
 **závorky** (bez nich `Test run with 0 tests`, a to zeleně), a `DetailTabRenderProbe` od #294
 rendrovala záložku `Konverzace` jako `Načítám konverzaci…`, takže každé srovnání vzhledu osy
 porovnávalo dva spinnery. Obojí je opravené a zapsané v [`testovani.md`](testovani.md).
+
+### #377 — zadání pro agenta se vybírá po položkách, ne po druzích
+
+Sedm zaškrtávátek po druzích (#333) na skutečném zadání nestačilo, a bylo to změřené na promptu pro
+`keboola/platform-libraries#561`: vypnutím druhu `souhrny review` odešel i verdikt bota se třemi
+concerny, ponecháním se agent v textu nevyznal (Copilotův přehled diffu, linkback na Linear a moje
+4,1 kB release notes). Od #377 má zaškrtávátko **každá položka**, bydlí to v **sheetu** (panel má
+240–520 bodů, sheet 840–1080) a v panelu zůstávají volby po druzích jako hrubý filtr s počtem
+**vybraných z celku** (`1 z 3`).
+
+**Předvybírá aplikace a u každé položky je napsaný důvod**: `napsal jsi to ty` (`Conversation.isMine`),
+`bez obsahu` (po odstranění nadpisů nezůstane nic — syntaktický test, ne heuristika) a `shrnuje diff`.
+Vedle nich zůstávají `odmítl jsi ho` a `vyřešeno` z #333. **`shrnuje diff` je jediná heuristika**, leží
+ve vlastním souboru (`AgentPromptDiffSummary.swift`) a pozná se na **nadpisu** `Pull request overview`.
+Tabulka změněných souborů se jako druhá podmínka **zamítla**: starší formát Copilotova přehledu ji nemá
+(změřeno na `cli/cli#11451`), takže by heuristika nedělala nic právě v tom případě, na který je.
+
+Dvě věci se rozhodly jinak, než bylo v zadání:
+
+- **Schválení s prázdným tělem se přestalo předvybírat do textu** (změna proti #333). Pro agenta je to
+  nulová informace; ze seznamu nemizí a jedním kliknutím se vrátí. U #333 „vynechat“ znamenalo ztratit
+  celý druh, teď jednu položku — proto se to obrátilo.
+- **Co aplikace předvybere jako vypnuté, není materiál k předání** (`Policy.handoff`). Zadání #377
+  říká, že po předání části položek má `pending` zůstat vyšší, a to platí pro **ruční** odškrtnutí.
+  Kdyby to platilo i pro předvybrání, odznak `Moje PR` by nad mým PR nezhasl **nikdy**: release notes
+  v komentáři pod PR tam píšu na každém, takže by mezi nepředanými navždycky zůstala položka, kterou
+  zadání ani nenabízí — tedy zrovna ten „odznak, který se přestane čítat“, kvůli kterému #334 vzniklo.
+
+Výběr ani rozbalení **nepřežijí zavření sheetu** (`@State` sheetu): sheet se otevírá k jednomu předání,
+předvybrání se počítá z dat a uložený výběr by byl další stav u PR vedle razítka v `handoffs.json`,
+který zastará pushem a nikdo o něm neví.
+
+Testů přidala tahle změna **32** a je jich **3130**; jsou zelené. **Ověřeno vložením regrese,
+čtyřikrát** — ignorovaný výběr, vyhozené vypnuté položky ze seznamu, heuristika vracející `true` na
+cokoli a vyhozený filtr předvybraných z `Policy.handoff`; každá shodila právě ty testy, které to mají
+chytat. Seznam se od sheetu rendruje **zvlášť** (co je rozbalené, drží `@State`, takže se offscreen
+v sheetu rozbalit nedá) a v obou mezích šířky.

@@ -48,17 +48,25 @@ extension Policy {
         return fromFindings + threads + comments + reviews
     }
 
-    /// Zadání pro agenta — text a počty k němu.
+    /// Zadání pro agenta **i seznam položek, ze kterého vzniklo** (#377).
+    ///
+    /// Jedna funkce na obojí schválně: panel potřebuje jen text a počty, sheet i seznam — ale ptát
+    /// se dvakrát znamená dvě odpovědi nad týmiž daty, tedy počet v hlavičce, který se rozejde
+    /// s tím, co se zkopíruje. Do #377 tady stálo `agentPrompt(for:…)`; volající, kterému stačí
+    /// text, si bere `.prompt` (`AppStore.agentPrompt(for:only:)`).
     ///
     /// `diff` je tady jen kvůli hunkům u nálezů: vlákno svůj `diffHunk` nese samo (je to snímek
     /// z commitu, na kterém vzniklo), kdežto u nálezu se musí najít v dnešním diffu. Bez načteného
     /// diffu se hunk prostě nepřiloží — text tím neztrácí položku, jen pohodlí.
+    /// - Parameter toggled: co jsem v seznamu překlikal proti předvybranému (#377) — **odchylka,
+    ///   ne seznam vybraných**, viz `agentPromptIncludes(_:options:conversation:toggled:)`.
     /// - Parameter only: zúžení na vyjmenované položky podle `AgentPromptItem.id` (#334).
     ///   `nil` = neomezovat. Používá to jedině `Sestavit i tak (jen nové vlákno)` po pushi: nálezy
     ///   v tu chvíli platí pro starý kód, takže se předává jen to, co po předání přibylo v diskuzi.
     ///   **Do `inventory` se to nepromítá** — počty u voleb dál mluví o tom, co na PR je, jinak by
-    ///   zúžené zadání vypadalo jako celé.
-    static func agentPrompt(
+    ///   zúžené zadání vypadalo jako celé. V **seznamu** se to promítá: zúžený sheet je o novém
+    ///   vlákně, takže nabízet v něm nálezy proti staré hlavě by bylo o něčem jiném, než co odejde.
+    static func agentPromptSelection(
         for subject: AgentPromptSubject,
         findings: [Finding],
         dismissals: [FindingKey: FindingDismissal] = [:],
@@ -66,12 +74,23 @@ extension Policy {
         diff: Diff? = nil,
         blocking: Set<String> = defaultBlockingCategories,
         options: AgentPromptOptions,
+        toggled: Set<String> = [],
         only: Set<String>? = nil
-    ) -> AgentPrompt {
+    ) -> AgentPromptSelection {
         let all = agentPromptItems(findings: findings, dismissals: dismissals, conversation: conversation)
-        let included = all.filter { options.includes($0.choice) && (only?.contains($0.id) ?? true) }
+        let material = all.filter { only?.contains($0.id) ?? true }
+        let groups = agentPromptGroups(
+            material,
+            options: options,
+            conversation: conversation,
+            toggled: toggled,
+            blocking: blocking
+        )
+        let included = material.filter {
+            agentPromptIncludes($0, options: options, conversation: conversation, toggled: toggled)
+        }
         let sections = agentPromptSections(included, blocking: blocking)
-        return AgentPrompt(
+        let prompt = AgentPrompt(
             subject: subject,
             text: agentPromptText(
                 for: subject,
@@ -87,6 +106,7 @@ extension Policy {
             blocking: included.count { isBlockingItem($0, categories: blocking) },
             isConversationLoaded: conversation != nil
         )
+        return AgentPromptSelection(prompt: prompt, groups: groups, only: only)
     }
 
     /// Položky rozdělené po souborech — **sekce bez souboru první**, pak soubory.

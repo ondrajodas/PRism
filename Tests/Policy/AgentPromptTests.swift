@@ -105,13 +105,35 @@ struct AgentPromptTests {
         options: AgentPromptOptions = .standard,
         subject: AgentPromptSubject? = nil
     ) -> AgentPrompt {
-        Policy.agentPrompt(
+        selection(
+            findings: findings,
+            dismissals: dismissals,
+            conversation: conversation,
+            diff: diff,
+            options: options,
+            subject: subject
+        )
+        .prompt
+    }
+
+    /// Zadání **i seznam položek** (#377) — tam, kde se tvrdí něco o obojím.
+    private func selection(
+        findings: [Finding] = [],
+        dismissals: [FindingKey: FindingDismissal] = [:],
+        conversation: Conversation? = nil,
+        diff: Diff? = nil,
+        options: AgentPromptOptions = .standard,
+        toggled: Set<String> = [],
+        subject: AgentPromptSubject? = nil
+    ) -> AgentPromptSelection {
+        Policy.agentPromptSelection(
             for: subject ?? self.subject,
             findings: findings,
             dismissals: dismissals,
             conversation: conversation,
             diff: diff,
-            options: options
+            options: options,
+            toggled: toggled
         )
     }
 
@@ -148,13 +170,34 @@ struct AgentPromptTests {
     }
 
     /// Schválení bez komentáře je plnohodnotný verdikt (čtvrtina vzorku u #63), takže se
-    /// nezahazuje — a v zadání je to informace, že někdo PR odsouhlasil.
-    @Test("Schválení s prázdným tělem zůstává")
-    func keepsAnEmptyApproval() {
-        let result = prompt(conversation: conversation(reviews: [review(state: .approved, body: "")]))
+    /// nezahazuje — zůstává v seznamu a dá se přibrat.
+    ///
+    /// **V textu od #377 není**: pro agenta je to nulová informace (nemá co opravit), takže se
+    /// předvybere jako vypnuté s důvodem `bez obsahu`. Změna proti #333, kde šlo do textu — tehdy
+    /// se vybíralo po druzích, takže „vynechat“ znamenalo ztratit i verdikt s prózou. Teď se
+    /// vynechá jedna položka, je vidět v seznamu a jedním kliknutím se vrátí.
+    @Test("Schválení s prázdným tělem zůstává v seznamu, ale ne v textu")
+    func keepsAnEmptyApprovalOutOfTheTextButInTheList() {
+        let result = selection(conversation: conversation(reviews: [review(state: .approved, body: "")]))
 
-        #expect(result.included.total == 1)
-        #expect(result.text.contains("souhrn review — odinuv, schválil"))
+        #expect(result.prompt.included.total == 0)
+        #expect(result.prompt.inventory.count(of: .reviews) == 1)
+        #expect(result.available == 1)
+        #expect(result.groups.first?.picks.first?.exclusion == .empty)
+        #expect(!result.prompt.text.contains("souhrn review — odinuv, schválil"))
+    }
+
+    /// A po zapnutí v seznamu v textu **je** — vypnutá položka nezmizela, jen se nepředvybrala.
+    @Test("Zapnuté prázdné schválení se do textu vrátí")
+    func bringsTheEmptyApprovalBack() {
+        let approval = review(state: .approved, body: "")
+        let result = selection(
+            conversation: conversation(reviews: [approval]),
+            toggled: [AgentPromptItem.review(approval).id]
+        )
+
+        #expect(result.prompt.included.total == 1)
+        #expect(result.prompt.text.contains("souhrn review — odinuv, schválil"))
     }
 
     // MARK: - Co se vynechává

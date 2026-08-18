@@ -46,6 +46,20 @@ enum AgentPromptItem: Hashable, Sendable, Identifiable {
         }
     }
 
+    /// Do které grupy seznamu položka patří (#377) — **čtyři druhy, ne sedm voleb.**
+    ///
+    /// Hrubší dělení než `choice` schválně: vyřešené vlákno a odmítnutý nález jsou pořád vlákno
+    /// a nález, jen v jiném stavu. V panelu mají vlastní zaškrtávátko (je to jiné rozhodnutí),
+    /// v seznamu leží mezi svými a jsou vypnuté s důvodem.
+    var kind: AgentPromptKind {
+        switch self {
+        case .finding: .findings
+        case .thread: .threads
+        case .comment: .comments
+        case .review: .reviews
+        }
+    }
+
     /// Do sekce kterého souboru položka patří. `nil` = sekce `K celému PR (bez souboru)`.
     ///
     /// Komentář pod PR a souhrn review soubor **nemají** a přišpendlit je k náhodnému by
@@ -69,6 +83,18 @@ enum AgentPromptItem: Hashable, Sendable, Identifiable {
         case .finding(let finding, _): finding.line
         case .thread(let thread): thread.anchorLine
         case .comment, .review: nil
+        }
+    }
+
+    /// Který reviewer to našel. `nil` u všeho, co napsal člověk nebo bot v diskuzi — ti mají
+    /// `author`, ne skill.
+    ///
+    /// Je to samostatná vlastnost, protože jméno revieweera se v úzkém místě **zkracuje** (#182)
+    /// a rozhoduje se to nad celou sadou naráz (`Policy.shortReviewerNames(of:)`).
+    var reviewer: String? {
+        switch self {
+        case .finding(let finding, _): finding.reviewer
+        case .thread, .comment, .review: nil
         }
     }
 
