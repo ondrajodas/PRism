@@ -90,11 +90,14 @@ extension Policy {
     ///
     /// **Vstup se nepřerovnává.** Pořadí rozhoduje `byUrgency` a strop je řez, ne řazení: horních
     /// pět je horních pět proto, že už je někdo seřadil.
+    ///
+    /// **Strop je konstanta, ne parametr.** Nastavitelný by byl knoflík, o který nikdo nepožádal —
+    /// a v testech by znamenal, že se ověřuje jiné číslo, než jaké okno kreslí.
     static func dashboardBlock(
         _ entries: [QueueEntry],
-        of ownership: PullRequestOwnership,
-        limit: Int = dashboardRowLimit
+        of ownership: PullRequestOwnership
     ) -> DashboardBlock {
+        let limit = dashboardRowLimit
         guard entries.count > limit else { return DashboardBlock(rows: entries, footer: nil) }
         return DashboardBlock(
             rows: Array(entries.prefix(limit)),
