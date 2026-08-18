@@ -18,8 +18,23 @@ extension AppStore {
     /// - Parameter only: zúžení na vyjmenované položky (#334) — `Sestavit i tak (jen nové vlákno)`
     ///   po pushi. `nil` = celé zadání, jak ho skládá panel.
     func agentPrompt(for pr: PRIdentifier, only: Set<String>? = nil) -> AgentPrompt {
+        agentPromptSelection(for: pr, only: only).prompt
+    }
+
+    /// Zadání **i seznam položek** (#377) — to, z čeho kreslí sheet.
+    ///
+    /// Panel si bere jen `prompt`, sheet obojí, a je to **jedno volání** schválně: počet v hlavičce
+    /// sheetu se musí rovnat počtu položek v textu, a to se dvěma cestami zaručit nedá.
+    /// - Parameter toggled: co člověk v seznamu překlikal proti předvybranému. Store to **nedrží**
+    ///   — výběr patří k jednomu otevřenému sheetu a zaniká s ním (viz `AgentPromptSheet`), takže
+    ///   uložený ve storu by přežil zavření a příště by se sestavilo zadání, o kterém nikdo neví.
+    func agentPromptSelection(
+        for pr: PRIdentifier,
+        only: Set<String>? = nil,
+        toggled: Set<String> = []
+    ) -> AgentPromptSelection {
         let record = reviewRecord(for: pr)
-        return Policy.agentPrompt(
+        return Policy.agentPromptSelection(
             for: agentPromptSubject(for: pr),
             findings: record?.findings ?? [],
             dismissals: record?.dismissals ?? [:],
@@ -27,6 +42,7 @@ extension AppStore {
             diff: loadedDiff(for: pr),
             blocking: resolved(for: pr.repo).blockingCategories,
             options: agentPromptOptions,
+            toggled: toggled,
             only: only
         )
     }
@@ -36,14 +52,21 @@ extension AppStore {
     /// Ptá se na to zkratka `⌘⇧P`, tedy něco, co se vyhodnocuje při každém překreslení detailu —
     /// a to je zrovna to místo, kde se nemá skládat pár kilobajtů markdownu (pravidlo #224).
     /// Panel text potřebuje (kreslí z něj náhled), zkratka jen ví, jestli má být zakázaná.
+    ///
+    /// Ptá se **tou samou funkcí**, která rozhoduje o textu (#377), tedy i s předvybráním: PR,
+    /// na kterém je jediný komentář a napsal jsem ho já, nemá co předat — a zkratka, po které by
+    /// se otevřel sheet s větou „aplikace nemá co předat“, je k nerozeznání od rozbité aplikace.
     func hasAgentPromptItems(for pr: PRIdentifier) -> Bool {
         let record = reviewRecord(for: pr)
+        let conversation = conversation(for: pr)
         return Policy.agentPromptItems(
             findings: record?.findings ?? [],
             dismissals: record?.dismissals ?? [:],
-            conversation: conversation(for: pr)
+            conversation: conversation
         )
-        .contains { agentPromptOptions.includes($0.choice) }
+        .contains {
+            Policy.agentPromptIncludes($0, options: agentPromptOptions, conversation: conversation)
+        }
     }
 
     /// Ke kterému PR zadání patří — větev a hlava z dotaženého detailu.

@@ -41,7 +41,11 @@ struct PullRequestDetailView: View {
     /// **Nuluje se při přepnutí PR** (viz `.task(id:)` níž) — jinak by nad novým PR zůstal
     /// otevřený sheet se zadáním z předchozího, tedy text, který se dá zkopírovat a nesouhlasí
     /// s tím, co je za ním v okně. Tatáž past jako u logu checku.
-    @State private var promptSheet: AgentPrompt?
+    ///
+    /// Od #377 je to **zadání i seznam položek**, ze kterého vzniklo (`AgentPromptSelection`):
+    /// sheet z něj kreslí zaškrtávátka a přeskládává text, takže by dva dotazy znamenaly dvě různá
+    /// čísla nad jedním textem.
+    @State private var promptSheet: AgentPromptSelection?
 
     /// Rozdělané odeslání review. Zakládá se tady, ale **drží ho `ContentView`** — detail
     /// zmizí, jakmile PR vypadne ze seznamu, a odeslané review `review-requested` ruší, takže
@@ -72,8 +76,17 @@ struct PullRequestDetailView: View {
         // a ten se skládá ve chvíli kliknutí — co je vidět, to se zkopíruje.
         // Razítko předání (#334) se zapisuje **až když si text někdo vezme** — zkopírováním nebo
         // uložením do souboru, ne otevřením sheetu. Zapisuje ho store, sheet o tom jen řekne.
-        .sheet(item: $promptSheet) { prompt in
-            AgentPromptSheet(prompt: prompt, handoff: { store.noteHandoff(of: $0) })
+        .sheet(item: $promptSheet) { selection in
+            AgentPromptSheet(
+                selection: selection,
+                // Přeskládání jde **tou samou cestou**, jakou se sheet otevřel — i se zúžením
+                // (#334), jinak by se zadání „jen nové vlákno“ po prvním odškrtnutí rozrostlo
+                // na celé.
+                rebuild: {
+                    store.agentPromptSelection(for: pullRequest.id, only: selection.only, toggled: $0)
+                },
+                handoff: { store.noteHandoff(of: $0) }
+            )
         }
         .hiddenShortcuts { shortcuts }
         .task(id: highlighted) {
@@ -598,10 +611,10 @@ struct PullRequestDetailView: View {
             toggle: { store.toggleAgentPromptOption($0) },
             isEnabled: { store.agentPromptOptions.includes($0) },
             // Otevře sheet, **nic neodesílá** — do schránky a do souboru se sahá až tam.
-            compose: { promptSheet = store.agentPrompt(for: pullRequest.id) },
+            compose: { promptSheet = store.agentPromptSelection(for: pullRequest.id) },
             // Zúžené zadání po pushi (#334). `nil` znamená „není co předat“, a to tlačítko hlídá
             // samo (`disabled`) — sheet bez položek by vypadal jako rozbitá aplikace.
-            composeFresh: { promptSheet = store.freshAgentPrompt(for: pullRequest.id) },
+            composeFresh: { promptSheet = store.freshAgentPromptSelection(for: pullRequest.id) },
             // Review se po pushi **nepustí samo** (#332, #334), takže tohle je jediná cesta —
             // tatáž, jakou má tlačítko v hlavičce.
             runReview: { store.startReview(for: pullRequest.id) }
@@ -773,7 +786,7 @@ struct PullRequestDetailView: View {
     private var agentPromptShortcut: some View {
         Button("Sestavit zadání pro agenta") {
             store.revealAgentPrompt(in: pullRequest.id)
-            promptSheet = store.agentPrompt(for: pullRequest.id)
+            promptSheet = store.agentPromptSelection(for: pullRequest.id)
         }
         .keyboardShortcut("p", modifiers: [.command, .shift])
         .disabled(!canComposeAgentPrompt || promptSheet != nil || store.isPaletteOpen)

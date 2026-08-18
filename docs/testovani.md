@@ -208,6 +208,49 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a odstavec do tří; na 840 taky do jedné řady, jen odstavec do čtyř. Jedno číslo by o druhém stavu
   netvrdilo nic — a **`minWidth` je to zajímavější z těch dvou**, protože do něj se sheet dá stáhnout.
 
+- **Výběr položek do zadání (#377)** — jedna sada `Policy` (`AgentPromptSelectionTests`) a tři
+  tvrzení, na kterých celé issue stojí. Všechna říkají, že se něco **nestalo**:
+
+  **Odškrtnutá položka není v textu** (to je smysl issue) — **a přesto zůstává v seznamu**.
+  Tiše zmizelá položka vypadá jako „tohle je všechno“, takže se ověřuje obojí: text ji nemá,
+  `groups` ano, s `isIncluded == false` a **bez důvodu** (ruční odškrtnutí důvod nemá, znám ho).
+
+  **Počet vybraných se rovná počtu položek v textu** — a počítá se z **nadpisů `###` v textu**, ne
+  z čísla, které o sobě zadání tvrdí. Tvrdí se to přes tři stavy výběru (nic, jedna, obojí), protože
+  na jednom by rozchod nemusel být vidět. K tomu součet přes grupy, aby se `2 z 3` v hlavičce grupy
+  nerozešlo s hlavičkou sheetu.
+
+  **Heuristika `shrnuje diff` nevypne souhrn, který diff nepřevypráví** — fixture je skutečné
+  `CHANGES_REQUESTED` review z `cli/cli#13084` (próza s odrážkami). Ze druhé strany ji drží fixture
+  `gh/review-copilot-overview.md` (skutečné review na `ondrajodas/PRism#378`, `CRLF` na 9 řádcích —
+  test se ptá `contains("\r\n")`, aby normalizovaný soubor nezezelenal s rozbitým dělením řádků) a dvě
+  hranice: **zmínka v próze nadpis není** a **starší přehled bez tabulky souborů heuristice sedí**
+  (změřeno na `cli/cli#11451`, proto tabulka není druhá podmínka).
+
+  Dál výčtem: že se **vlastní pozná podle `viewer`u, ne podle autora PR** (agentský PR má autora
+  `ondrajodas`, změřeno u #330 — a tentýž materiál očima kolegy má „vlastní“ na druhém komentáři);
+  že se **vlastní vlákno u řádku nepředvybírá** (na vlastním PR je to práce, #333); `bez obsahu`
+  výčtem čtyř těl (prázdné, jen nadpis, jen nadpisy, HTML komentář a nadpis); že se heuristika
+  **nepouští na vlákna**; a že rozbalení dá `.none` u položky bez textu, takže se u ní nekreslí šipka.
+
+  **Po předání části položek odznak `Moje PR` nezhasne** (`HandoffTests`) — razítko nese identity,
+  takže odškrtnuté vlákno zůstane nepředané. Vedle toho stojí tvrzení opačným směrem: **co aplikace
+  předvybrala jako vypnuté, materiál k předání není**, jinak by odznak nad vlastním PR nezhasl nikdy
+  (release notes v komentáři pod PR jsou tam na každém mém PR).
+
+  **Ověřeno vložením regrese, čtyřikrát:** ignorování `toggled` v `agentPromptIncludes` shodí čtyři
+  testy (mezi nimi `handed`, tedy razítko); vyhození vypnutých položek ze `agentPromptGroups` shodí
+  „zůstává v seznamu“, `available` i důvody; heuristika, která vrací `true` na cokoli, shodí ten test
+  s fixture, co jí nesedí; a vyhození filtru předvybraných z `Policy.handoff` shodí „materiál
+  k předání“ (`pending` 1 → 3, `.delivered` → `.changed`).
+
+  **Vzhled má sondu** (`AgentPromptRenderProbe`): seznam se rendruje **zvlášť od sheetu** a v obou
+  mezích šířky (840 a 1080 b), protože co je rozbalené, drží `@State` sheetu — offscreen se v něm
+  rozbalit nedá. Rozbaluje se **nejdelší** položka, tedy ta, u které se pozná strop rolování
+  (168 b z návrhu). Konverzace sondy nese od #377 **každý důvod předvybrání** (souhrn, který shrnuje
+  diff, souhrn bez obsahu, vlastní komentář, vyřešené vlákno), takže je na obrázku vidět celý sloupec
+  důvodů naráz.
+
 - **Předání zadání (#334)** — čtyři sady a všechny to nejcennější mají v negativním tvrzení.
 
   `Policy` výčtem (`HandoffTests`): že po předání odznak **zhasne, i když nálezy dál existují**;

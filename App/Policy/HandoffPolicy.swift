@@ -158,6 +158,20 @@ extension Policy {
             conversation: conversation
         )
         .filter(\.choice.isPending)
+        // **Co aplikace předvybrala jako vypnuté, není materiál k předání** (#377). Bez tohohle
+        // filtru by odznak `Moje PR` nad vlastním PR **nikdy nezhasl**: release notes v komentáři
+        // pod PR píšu na každém svém PR sám, takže by mezi nepředanými položkami zůstala navždycky
+        // jedna, kterou aplikace do zadání ani nenabízí. To je zrovna ten „odznak, který se přestane
+        // čítat“, kvůli kterému #334 vzniklo.
+        //
+        // Filtrují jen důvody **z dat** (`isPreselected`), ne volby panelu: vyřešená vlákna
+        // a odmítnuté nálezy z materiálu vyndal už `isPending` o řádek výš, a co jsem v seznamu
+        // odškrtnul rukou, tady vidět není vůbec — takže **předání části položek odznak nezhasne**,
+        // což tvrdí test.
+        .filter {
+            agentPromptExclusion(of: $0, options: .standard, conversation: conversation)?
+                .isPreselected != true
+        }
         let activity = foreignActivity(in: conversation, since: activitySince)
 
         guard let stamp else {

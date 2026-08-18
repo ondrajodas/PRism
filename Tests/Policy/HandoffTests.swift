@@ -422,4 +422,54 @@ struct HandoffTests {
             head: "9c1de02"
         ).showsChoices)
     }
+
+    // MARK: - Výběr po položkách (#377)
+
+    /// **Předání části položek odznak nezhasne.** Razítko nese identity, takže odškrtnuté vlákno
+    /// zůstane nepředané — a to je správně: leží na něm práce, kterou nikdo nikam nedal.
+    @Test("Po předání části položek odznak nezhasne")
+    func keepsTheBadgeLitAfterHandingOverPartOfTheItems() {
+        let kept = thread(id: "t1", comments: [comment(id: "c1")])
+        let skipped = thread(id: "t2", comments: [comment(id: "c2")])
+        let conversation = conversation(threads: [kept, skipped])
+        // Razítko jen na to jedno vlákno — tak, jak ho zapíše sheet s odškrtnutou druhou položkou.
+        let stamp = Handoff(at: handedAt, headSha: "9c1de02", handed: [AgentPromptItem.thread(kept).id])
+
+        let report = Policy.handoff(stamp, record: nil, conversation: conversation, head: "9c1de02")
+
+        #expect(report.stage == .changed)
+        #expect(report.pending == 1)
+        #expect(report.awaitsMove)
+        #expect(report.freshDiscussion == [AgentPromptItem.thread(skipped).id])
+    }
+
+    /// **A co aplikace do zadání ani nenabídla, odznak nedrží.** Vlastní komentář pod PR (release
+    /// notes) píšu na každém svém PR, takže bez tohohle by odznak `Moje PR` nezhasl **nikdy** —
+    /// tedy zrovna to, co #334 opravovalo.
+    ///
+    /// Rozhoduje `AgentPromptExclusion.isPreselected`, ne výběr člověka: ruční odškrtnutí odznak
+    /// nechá svítit (test o řádek výš), předvybrání z dat ne.
+    @Test("Předvybrané položky do materiálu k předání nepatří")
+    func ignoresPreselectedItemsInTheMaterial() {
+        let mine = comment(id: "cm", author: "ondrajodas")
+        let empty = SubmittedReview(
+            id: "r9",
+            author: "copilot",
+            state: .approved,
+            body: "## Pull request overview\n",
+            submittedAt: handedAt.addingTimeInterval(-200)
+        )
+        let work = thread(id: "t1", comments: [comment(id: "c1")])
+        let conversation = conversation(threads: [work], comments: [mine], reviews: [empty])
+
+        let before = Policy.handoff(nil, record: nil, conversation: conversation, head: "9c1de02")
+        #expect(before.pending == 1)
+
+        let stamp = Handoff(at: handedAt, headSha: "9c1de02", handed: [AgentPromptItem.thread(work).id])
+        let after = Policy.handoff(stamp, record: nil, conversation: conversation, head: "9c1de02")
+
+        #expect(after.stage == .delivered)
+        #expect(after.pending == 0)
+        #expect(!after.awaitsMove)
+    }
 }

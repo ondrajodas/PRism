@@ -105,10 +105,13 @@ struct SingleWayOutTests {
     func keepsTheAgentPromptOffline() throws {
         let files = try swiftFiles().filter { $0.path.contains("AgentPrompt") }
 
-        // Osm souborů: čtyři v `Policy`, jeden ve `Store`, tři ve `Views` — a `ReviewPanel`,
+        // Dvanáct souborů: sedm v `Policy`, jeden ve `Store`, čtyři ve `Views` — a `ReviewPanel`,
         // který je kreslí, tady schválně není (počítá se jen to, co má „AgentPrompt“ ve jméně).
-        // Počet je v tvrzení schválně: nový soubor téhle vrstvy má projít týmiž zákazy.
-        #expect(files.count == 8)
+        // Počet je v tvrzení schválně: nový soubor téhle vrstvy má projít týmiž zákazy. Od #377
+        // k nim patří i výběr po položkách (`AgentPromptExclusion`, `AgentPromptPick`,
+        // `AgentPromptDiffSummary`, `AgentPromptPickList`) — výběr rozhoduje o **obsahu** textu,
+        // takže je to zrovna vrstva, u které se nesmí objevit cesta ven.
+        #expect(files.count == 12)
         for file in files {
             #expect(!file.code.contains("ReviewPublishing"), "\(file.path) volá publisher")
             #expect(!file.code.contains("PublishRequest"), "\(file.path) skládá payload")

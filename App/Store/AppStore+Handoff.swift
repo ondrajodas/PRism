@@ -86,9 +86,9 @@ extension AppStore {
     ///
     /// `nil`, když po předání nepřišlo nic: prázdný sheet s hlavičkou a bez položek vypadá jako
     /// rozbitá aplikace, takže tlačítko je v tu chvíli zakázané s důvodem.
-    func freshAgentPrompt(for pr: PRIdentifier) -> AgentPrompt? {
+    func freshAgentPromptSelection(for pr: PRIdentifier) -> AgentPromptSelection? {
         let fresh = handoffReport(for: pr).freshDiscussion
         guard !fresh.isEmpty else { return nil }
-        return agentPrompt(for: pr, only: fresh)
+        return agentPromptSelection(for: pr, only: fresh)
     }
 }

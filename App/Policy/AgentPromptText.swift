@@ -131,11 +131,21 @@ extension Policy {
         }
     }
 
+    /// Text položky tak, jak se do zadání vysází — a **totéž**, co se ukáže v rozkliku (#377).
+    ///
+    /// Jedna funkce na obojí schválně: rozklik je tu proto, aby se dalo posoudit, co se předává,
+    /// takže druhá cesta k témuž textu by dřív nebo později ukázala něco jiného, než co odejde.
+    /// Prázdný výsledek znamená „položka nic nenese“ (schválení s prázdným tělem) a rozhoduje
+    /// podle něj `Policy.pickDisclosure(of:toggled:)`, jestli se u řádku vůbec kreslí šipka.
+    static func agentPromptItemText(of item: AgentPromptItem) -> String {
+        agentPromptBody(of: item).joined(separator: "\n\n")
+    }
+
     /// Text položky — a u vlákna i odpovědi v něm.
     ///
     /// Odpovědi se **nezahazují**: „o tomhle už se mluvilo“ mění zadání, protože bez nich agent
     /// napíše totéž znovu. Nesou proto autora, ať je z nich poznat, komu se odpovídá.
-    private static func agentPromptBody(of item: AgentPromptItem) -> [String] {
+    static func agentPromptBody(of item: AgentPromptItem) -> [String] {
         switch item {
         case .finding(let finding, _):
             var blocks = [finding.summary]

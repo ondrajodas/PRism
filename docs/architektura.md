@@ -1871,8 +1871,8 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Findings.swift` | Zahození záznamu (#81) a odmítnutí nálezu (#113) | 70 |
 | `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
 | `AppStore+Ownership.swift` | Čí jsou PR v seznamu (#330) — `ownLogins`, `ownership(of:)`, `tracksOwnPullRequests` —, od #331 celá sekce `Moje PR`: `visibleOwnPullRequests`, `hiddenOwnPullRequestCount`, `railMineCount`, `ownListEmptyReason`, `dashboardOwnPullRequests`, a od #333 i `ownership(of pr:)` s `author(of:)`. Od #332 tu leží i druhá strana rozřazení — `queuePullRequests`, `visibleQueuePullRequests`, `hiddenQueuePullRequestCount`. **Dotažení loginu je v `AppStore.swift`**, u ostatních věcí, které se načítají při startu, a taky proto, že `viewer` je `private(set)` | 132 |
-| `AppStore+AgentPrompt.swift` | Zadání pro agenta na vlastním PR (#333) — `agentPrompt(for:only:)`, předfiltr `hasAgentPromptItems(for:)` bez sazby textu, přepnutí volby, `revealAgentPrompt(in:)` a `openAgentPrompt(in:)` (akce `Prompt →` z řádku: otevřít PR **a** panel). **Nedrží cestu ven**: prompt končí ve schránce nebo v souboru | 92 |
-| `AppStore+Handoff.swift` | Razítko předání (#334) — `loadStoredHandoffs()` při startu, `handoff(for:)`, `handoffReport(for:)` (od #335 si volající bere **celý report**, ne jedno číslo — pilulka i text novinek se ptají téže funkce), `noteHandoff(of:)` (zapisuje **zkopírování a uložení**, ne otevření sheetu) a `freshAgentPrompt(for:)` pro `Sestavit i tak`. Do paměti hned, na disk asynchronně | 78 |
+| `AppStore+AgentPrompt.swift` | Zadání pro agenta na vlastním PR (#333) — `agentPrompt(for:only:)`, od #377 `agentPromptSelection(for:only:toggled:)` (zadání **i seznam položek** pro sheet; výběr si store **nedrží**, bere ho parametrem), předfiltr `hasAgentPromptItems(for:)` bez sazby textu (ptá se tou samou funkcí jako text, tedy i s předvybráním), přepnutí volby, `revealAgentPrompt(in:)` a `openAgentPrompt(in:)` (akce `Prompt →` z řádku: otevřít PR **a** panel). **Nedrží cestu ven**: prompt končí ve schránce nebo v souboru | 116 |
+| `AppStore+Handoff.swift` | Razítko předání (#334) — `loadStoredHandoffs()` při startu, `handoff(for:)`, `handoffReport(for:)` (od #335 si volající bere **celý report**, ne jedno číslo — pilulka i text novinek se ptají téže funkce), `noteHandoff(of:)` (zapisuje **zkopírování a uložení**, ne otevření sheetu) a `freshAgentPromptSelection(for:)` pro `Sestavit i tak` (od #377 vrací i seznam, protože sheet z něj kreslí zaškrtávátka). Do paměti hned, na disk asynchronně | 78 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
 | `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
 | `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
@@ -2226,9 +2226,10 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
 | `DiffLineView` | Řádek souboru: dvě čísla (v buňce dvojice jedno, podle `side`), znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
 | `ReviewPanel` | Panel **napravo od diffu** (#182, do #242 `FindingsPanel`): segmenty `Nálezy`/`Moje review` — a na vlastním PR `Nálezy`/`Zadání` (#333, rozhoduje `Policy.reviewPanelTabs`) —, karty nálezů, prokliky do diffu a složení na proužek s počtem nálezů a značkou rozdělaného review. `Průběh` a zahození nálezů se u #242 odstěhovaly do záložek PR. **Kreslí se jen ve třech tabech** (#294, `PullRequestTab.showsReviewPanel`) — sám o tom nerozhoduje, podmínku má detail |
-| `AgentPromptPanel` | Tab `Zadání` na vlastním PR (#333): sedm zaškrtávacích voleb s počty, náhled začátku textu, `Sestavit prompt →` na hraně panelu — a věta o tom, že konverzace **není** načtená (načítání se rozlišuje od selhání). Verdikt ani `Odeslat` tam **nejsou**, ne zašedlé. Draft z dřívějška se v něm kreslí jako blok s výpisem a `Zahodit review`, protože zmizet nesmí. Od #334 má **tři podoby podle stavu předání**: razítko `✓ N položek · dnes 14:20 · proti 9c1de02` (volby se schovají, zbyde `Sestavit znovu`), razítko s větou „od předání přibyla 1 položka“ nad běžnými volbami, a po pushi varování se dvěma řádky (`Nové v diskuzi`, `Nálezy proti staré hlavě`) a dvěma cestami dál. Texty jsou `nonisolated static`, takže se testují bez kreslení |
+| `AgentPromptPanel` | Tab `Zadání` na vlastním PR (#333): sedm zaškrtávacích voleb s počty (od #377 **vybraných z celku**, `1 z 3` — plný počet by nad textem se dvěma položkami lhal; nápověda u nich pošle do sheetu, kde se položky přepínají), náhled začátku textu, `Sestavit prompt →` na hraně panelu — a věta o tom, že konverzace **není** načtená (načítání se rozlišuje od selhání). Verdikt ani `Odeslat` tam **nejsou**, ne zašedlé. Draft z dřívějška se v něm kreslí jako blok s výpisem a `Zahodit review`, protože zmizet nesmí. Od #334 má **tři podoby podle stavu předání**: razítko `✓ N položek · dnes 14:20 · proti 9c1de02` (volby se schovají, zbyde `Sestavit znovu`), razítko s větou „od předání přibyla 1 položka“ nad běžnými volbami, a po pushi varování se dvěma řádky (`Nové v diskuzi`, `Nálezy proti staré hlavě`) a dvěma cestami dál. Texty jsou `nonisolated static`, takže se testují bez kreslení |
 | `OwnPullRequestStatusView` | `Vlastní PR — review se odsud neodesílá` ve stavovém řádku (#334, návrh sekce 22). Tichá mint věta bez kapsle, jen nad otevřeným **vlastním** PR — odpovídá na otázku „proč tady nejsou tlačítka, na která jsem zvyklý“ |
-| `AgentPromptSheet` | Sheet s celým textem (#333): hlavička s hlavou PR a velikostí, odznaky „co je v textu“ i „vynecháno“ (sází je `FlowRow`), text tak, jak se zkopíruje, a v patičce `Zkopírovat` / `Uložit do souboru…` s větou `nikam se to neodesílá`. **Bez druhého potvrzení** — brána proti odeslání se týká GitHubu, tady se neodesílá nic. **Nejširší sheet v okně** (840 / 1080 b proti 560 / 720 u ostatních), protože obsah je markdown s fenced diffy |
+| `AgentPromptSheet` | Sheet s celým textem (#333): hlavička s hlavou PR a velikostí, odznaky „co je v textu“ i „vynecháno“ (sází je `FlowRow`), text tak, jak se zkopíruje, a v patičce `Zkopírovat` / `Uložit do souboru…` s větou `nikam se to neodesílá`. **Bez druhého potvrzení** — brána proti odeslání se týká GitHubu, tady se neodesílá nic. **Nejširší sheet v okně** (840 / 1080 b proti 560 / 720 u ostatních), protože obsah je markdown s fenced diffy. Od #377 v něm bydlí i **výběr položek** (`Co zahrnout`): hlavička říká `vybráno 6 z 11`, odznaky „vynecháno“ nesou **důvod** (`1 vlastní vynechán`), pod nadpisem `Text` stojí věta, že je náhled funkcí výběru, a `Zkopírovat` je nad prázdným výběrem zakázané **s důvodem**. Výběr ani rozbalení nepřežijí zavření — `@State` sheetu, viz *Výběr položek do zadání* |
+| `AgentPromptPickList` | Seznam položek se zaškrtávátkem u každé (#377): grupy po druzích s počtem `2 z 3`, u položky autor a `soubor:řádek`, u vypnuté **důvod**, a rozklik s hlavičkou `druh · autor · čas · velikost`. Dlouhý text se **roluje** (strop 168 b z návrhu, výška se měří `onGeometryChange` — `ScrollView` je ve svém směru hltavý, takže bez měření by jednořádkový komentář zabral tolik jako čtyřkilobajtové release notes). Zaškrtávátko je **vlastní tlačítko**, řádek rozbaluje; jedno kliknutí nesmí znamenat obojí |
 | `FlowRow` | `Layout`, který řadu **zalomí** místo zkracování popisků (`flex-wrap: wrap` z návrhu, #333). Polohy se počítají, nevyjednávají (#220) |
 | `AgentPromptActions` | Co se dá se zadáním dělat (přepnout volbu, sestavit) — jeden parametr místo tří closures, jako `DraftActions`. **Nic, co by odesílalo** |
 | `DismissedRowStyle` | Buňka tabulky: ztlumení odmítnutého řádku a kontextové menu `Označit jako…` / `Vrátit` |
@@ -4820,7 +4821,10 @@ Věci, které se u toho nemají rozbít:
 | `Policy.activitySweep(of:mine:loadedAt:now:lastSweep:interval:limit:)`, `Policy.activitySweepInterval`, `Policy.activitySweepLimit` | Na které vlastní PR se v tomhle tiku zeptáme na konverzaci (#335) — **cena celého issue**: předfiltr podle `updatedAt` (klidný den = nula dotazů), vlastní pětiminutový interval a strop tři PR na průchod. `mine` **bez výchozí hodnoty**, jako u automatu |
 | `Policy.activityNotification(for:activity:)`, `Policy.activityHeadline(_:)` | Text hlášky „ozval se někdo na mém PR“ (#335): titulek s počtem a druhem, pod ním **ta nejnovější věta** a na třetím řádku PR. Titulek skládá **totéž místo** jako text v řádku seznamu (`od minule`), aby se ty dvě věty nerozešly |
 | `Policy.agentPromptItems(findings:dismissals:conversation:)` | Všechno, co se dá na vlastním PR předat agentovi (#333) → `[AgentPromptItem]`. **Nefiltruje podle voleb** — z téhož seznamu se počítají i čísla u vypnutých voleb. Vynechá jedině prázdnou obálku review (bez verdiktu i bez prózy), stejně jako `overview` |
-| `Policy.agentPrompt(for:findings:dismissals:conversation:diff:blocking:options:only:)` | Hotové zadání (#333) → `AgentPrompt`: text, inventář (co všechno je), co je v textu, identity předaných položek (#334), kolik blokuje a jestli byla načtená konverzace. `only:` zúží text na vyjmenované položky — `Sestavit i tak (jen nové vlákno)` po pushi |
+| `Policy.agentPromptSelection(for:findings:dismissals:conversation:diff:blocking:options:toggled:only:)` | Hotové zadání **i seznam položek, ze kterého vzniklo** (#333, #377) → `AgentPromptSelection`: text, inventář (co všechno je), co je v textu, identity předaných položek (#334), kolik blokuje, jestli byla načtená konverzace — a grupy se zaškrtávátky. `only:` zúží text na vyjmenované položky (`Sestavit i tak (jen nové vlákno)` po pushi). **Jedno volání na obojí schválně**: počet vybraných v hlavičce sheetu se musí rovnat počtu položek v textu. Do #377 se to jmenovalo `agentPrompt(for:…)`; komu stačí text, bere `.prompt` |
+| `Policy.agentPromptIncludes(_:options:conversation:toggled:)`, `Policy.agentPromptExclusion(of:options:conversation:)` | Je položka v textu, a když ne, **proč** (#377) → `AgentPromptExclusion`. Jediné místo, kde se to rozhoduje; `toggled` je **odchylka** od předvybraného, ne seznam vybraných (jako u #185) |
+| `Policy.summarizesDiff(_:)`, `Policy.hasNoContent(_:)` | Převypráví souhrn jen diff (**jediná heuristika**, vlastní soubor, pozná se na nadpisu `Pull request overview`), a zbylo by z něj po odstranění nadpisů něco? (#377) |
+| `Policy.agentPromptGroups(_:options:conversation:toggled:blocking:)`, `Policy.pickDisclosure(of:toggled:)` | Položky po druzích do seznamu v sheetu (#377) — čtyři grupy s počtem `2 z 3` —, a jak je položka rozbalená (`.none` = nenese text, takže bez šipky) |
 | `Policy.agentPromptSections(_:blocking:)` | Rozdělení po souborech (#333): **sekce bez souboru první**, pak soubory (blokující první, zbytek abecedně), uvnitř podle řádku |
 | `Policy.agentPromptText(for:sections:diff:withHunks:blocking:isConversationLoaded:)`, `.agentPromptHeading(of:inFileSection:blocking:)`, `.unifiedText(of:)` | Sazba markdownu (#333) — hlavička s hlavou PR, nadpisy s původem, diff hunk ve fenced bloku |
 | `Policy.agentPromptFileName(for:)` | Navržený název souboru (#333): `PRism-324-zadani-9c1de02.md` — repo, číslo PR a hlava, bez lomítka |
@@ -4967,7 +4971,59 @@ Nad zadáním pro agenta (#333) platí:
   šest“ neodpovídá na otázku, **co** zbývá.
 - **`only:` zužuje zadání na vyjmenované položky** (#334) a používá to jedině `Sestavit i tak (jen
   nové vlákno)` po pushi. Do `inventory` se to **nepromítá**: počty u voleb dál mluví o tom, co na
-  PR je, jinak by zúžené zadání vypadalo jako celé.
+  PR je, jinak by zúžené zadání vypadalo jako celé. Do **seznamu položek** (#377) se promítá — zúžený
+  sheet je o nové diskuzi, takže zaškrtávátko u nálezu, který zadání nepřijme, by lhalo; kolik položek
+  tím zbylo mimo, je nad textem napsané větou.
+
+### Výběr položek do zadání (#377)
+
+Do #377 se vybíralo **po druzích** (sedm voleb v panelu) a na skutečném zadání to nestačilo: vypnutím
+druhu `souhrny review` odešel i verdikt bota, ponecháním se agent v textu nevyznal. Od #377 má
+zaškrtávátko **každá položka** a bydlí to v **sheetu**, ne v panelu (240–520 bodů proti 840–1080);
+v panelu zůstávají volby po druzích jako hrubý filtr a přibyl u nich počet vybraných.
+
+- **Jedna funkce rozhoduje, co je v textu** — `Policy.agentPromptIncludes(_:options:conversation:toggled:)`.
+  Ptá se jí sazba textu i seznam v sheetu, protože **počet v hlavičce se musí rovnat počtu položek
+  v textu**; dvě cesty by znamenaly obrazovku, která lže o tom, co se zkopíruje. Proto je i výsledek
+  jedna hodnota: `Policy.agentPromptSelection(…)` → `AgentPromptSelection` (zadání **a** seznam),
+  a `Policy.agentPrompt(…)` je jen její `prompt`.
+- **Drží se odchylka, ne seznam vybraných** — `toggled: Set<String>`, `!=` jako xor, tatáž úvaha jako
+  u `Policy.disclosure` u bublin (#185). Výchozí stav je funkce dat a voleb, takže seznam vybraných by
+  se musel plnit při každém přeskládání zadání a nový běh review by zahodil, co si člověk naklikal.
+- **Vypnuté se předvybírá a u každé položky je napsaný důvod** (`AgentPromptExclusion`). Šest případů
+  v pořadí rozhodování: `odmítl jsi ho` a `vyřešeno` (volby z #333), `druh vypnutý` (hrubý filtr, tedy
+  **moje** rozhodnutí — přebíjí to, co se pozná z dat), a pak tři z dat: `napsal jsi to ty`
+  (`Conversation.isMine`), `bez obsahu` a `shrnuje diff`. Vlákna a nálezy se z dat nepředvybírají
+  nikdy: vlákno na vlastním PR je práce (#333) a nález sundá jedině odmítnutí (#113).
+- **`shrnuje diff` je jediná heuristika a stojí ve vlastním souboru**
+  (`App/Policy/AgentPromptDiffSummary.swift`), aby šla vyhodit bez dotyku na zbytek — smazat soubor
+  a jedno volání znamená, že se souhrny přestanou předvybírat, a nic dalšího se nerozbije. Pozná se
+  na **nadpisu** `Pull request overview`, ne na zmínce v próze. **Tabulka souborů se jako druhá
+  podmínka zamítla**: starší formát Copilotova přehledu ji nemá (změřeno na `cli/cli#11451`), takže by
+  heuristika nedělala nic právě v tom případě, na který je.
+- **`bez obsahu` je syntaktický test, ne druhá heuristika** (`Policy.hasNoContent`): po odstranění
+  nadpisů a HTML komentářů nezůstane nic. Padá do něj i **schválení s prázdným tělem** — změna proti
+  #333, kde šlo do textu. Pro agenta je to nulová informace, ze seznamu nemizí a jedním kliknutím se
+  vrátí; tehdy „vynechat“ znamenalo ztratit celý druh, teď jednu položku.
+- **Seznam se dělí na čtyři grupy po druzích** (`AgentPromptKind`), ne na sedm podle voleb: vyřešené
+  vlákno je pořád vlákno, jen v jiném stavu, a leží mezi svými s důvodem. V hlavičce grupy je
+  `2 z 3`, tedy **vybrané z celku**.
+- **Rozbalení rozhoduje `Policy.pickDisclosure(of:toggled:)`**, ne `@State` view: `.none` znamená, že
+  položka nic nenese (schválení s prázdným tělem) a šipka se u ní **nekreslí** — kliknutí, po kterém se
+  nic nestane, je k nerozeznání od rozbité aplikace. Text v rozkliku je **tentýž**, jaký jde do zadání
+  (`Policy.agentPromptItemText(of:)`), a dlouhý se **roluje, nekrátí**.
+- **Výběr ani rozbalení nepřežijí zavření sheetu**, a je to rozhodnutí: sheet se otevírá k jednomu
+  předání, předvybrání je levné (počítá se z dat) a uložený výběr by byl další stav u pull requestu
+  vedle razítka v `handoffs.json`, který zastará pushem a nikdo o něm neví. Drží to proto `@State`
+  sheetu; store si výběr **nedrží** a bere ho parametrem (`agentPromptSelection(for:only:toggled:)`).
+- **Autor je jediná opsaná hodnota v `AgentPromptPick`** — u nálezu je to **zkrácené** jméno
+  revieweera (#182), a zkrátit se smí jen to, co po zkrácení zůstane v celé sadě jednoznačné, takže to
+  jedna položka o sobě nerozhodne.
+- **Předvybrané položky nejsou materiál k předání** (`Policy.handoff`, filtr na
+  `AgentPromptExclusion.isPreselected`). Bez toho by odznak `Moje PR` nad vlastním PR **nikdy
+  nezhasl**: release notes v komentáři pod PR jsou na každém mém PR, takže by mezi nepředanými
+  navždycky zůstala položka, kterou zadání ani nenabízí. Ruční odškrtnutí odznak naopak svítit
+  **nechá** — leží na něm práce, kterou nikdo nikam nedal (zadání #377).
 
 ### Předání zadání (#334)
 
