@@ -3821,8 +3821,76 @@ A dvě věci k mechanice sond obecně:
   toho PRismu, který se používá. U #361 to byly návštěvy `cli/cli#13084` a `diffTreeExpanded`; nic
   z toho nevadí, ale vědět se to má.
 
+### Projíždění kolečkem, a co z něj u #361 vyšlo (#361)
+
+**`scroll(to:)` kolo z #361 nerozjede, a je to změřené** (1,28 s proti 1,30 s u #375, tedy nic).
+Pro `NSScrollView` je programový posun obyčejná změna počátku: neproběhne **živé scrollování**,
+nepošlou se `willStartLiveScroll`/`didLiveScroll`/`didEndLiveScroll`, nezapne se setrvačnost —
+a zrovna na tom visí `LazyLayoutViewCache`, který si při scrollování říká o předběžné načtení
+(`signalPrefetch` je jediný re-arm v obou vzorcích z 2026-08-18).
+
+Gesto se proto skládá jako skutečné události a **je na to jedno místo**:
+[`Tests/Support/WheelGesture.swift`](../Tests/Support/WheelGesture.swift). Tři věci, bez kterých
+z toho nic není:
+
+- **Událost se scroll view předává přímo** (`scrollWheel(with:)`). `CGEvent.post` ani `postToPid`
+  se do procesu nedoručí (změřeno u #252, selže **potichu**) a skutečnou myš si sonda brát nesmí.
+- **Musí to vypadat jako trackpad**, ne jako kolečko myši: `scrollWheelEventIsContinuous`, fáze
+  (`began`/`changed`/`ended`) a po nich **setrvačnost** (`momentumPhase`). Bez fáze `NSScrollView`
+  živé scrollování nezačne.
+- **Kolo runloopu po každé události.** Bez něj se rozvržení odloží a naměří se jedno přerovnání
+  místo všech (tatáž past jako hustota kroků u #252).
+
+Rozhodující číslo z toho **není cena gesta, ale úseky po něm**: cena projíždění se dá utratit,
+kolo ne — ztuhlá instance hořela šest hodin po tom, co od ní člověk odešel. Naměřeno na okně
+1512×874:
+
+| Scénář | Před gestem | Gesto (60 × 40 pt) | Po gestu, tři úseky po 3 s |
+|---|---|---|---|
+| konverzace (fixture, 44 položek, obsah 9 340) | 0,01 % | 0,35 s | 0,17 / 0,01 / 0,00 % |
+| dlouhá osa (300 komentářů, obsah 49 550) | 0,00 % | 0,14 s | 0,23 / 0,00 / 0,00 % |
+| diff (23 710) | 0,01 % | 0,27 s | 0,25 / 0,01 / 0,00 % |
+
+**Kolo se tedy nechytlo ani kolečkem.** Vylučuje to spolu s tabulkami výš i hypotézu, se kterou se
+do toho šlo — že ho zavírá `ForEach(Array(nodes.enumerated()), id: \.element.id)`: ten vzor byl
+v `ConversationView` po celou dobu těch měření a osa se přesto usadila. Zbylé dvě věci, které se
+u toho srovnaly, aby to nula netvrdila zbytečně:
+
+- **Okno se staví jako `WindowGroup`**, ne přes `NSHostingController` s předepsaným rozměrem.
+  Aplikace má `.windowResizability(.contentMinSize)`, takže si AppKit při každém průchodu
+  `updateConstraints` říká o `minSize` a hostující vrstva na to spustí `_sizeThatFits` — **druhou
+  aktualizaci grafu na jiné nabídce rozměru**. Předepsaný `frame` tu mašinerii zmrazí. Rozměr
+  proto předepisuje **okno** (`NSHostingView` + `sizingOptions = [.minSize]`), ne obsah; obsah si
+  ho určovat nesmí, jinak se okno scvrkne na hlavičku (past ze `show(store:full:)`).
+- **Dlouhá osa s různě vysokými uzly.** Fixture z `cli/cli` má 44 položek; syntetická osa jich má
+  300 a pět různých tvarů textu (věta, odstavce, blok kódu, odrážky), protože líný seznam odhaduje
+  zbytek obsahu z už umístěných řádků — stejně vysoké řádky by mu odhadem nepohnuly. Razítko
+  `updatedAt` u ní **musí být to z fixture PR**, jinak si detail konverzaci při zobrazení natáhne
+  znovu a sonda měří prázdno.
+
+**A nula z té sondy je od #361 ověřená z druhé strany** (`loopControl` + `FeedbackLoopList`):
+kontrolní scéna, ve které řádek zapisuje do stavu výšku, kterou tím sám změní, dá **32,05 % CPU**
+v prvním úseku a **0,00 %** v dalších, jak jí dojde rozpočet kol. Měřidlo tedy kolo rozvržení
+**vidí**. Dvě věci k té kontrole, obojí zaplacené:
+
+- **Zpětná vazba musí být ohraničená rozpočtem.** První verze rozpočet neměla a okno sondy se
+  nedalo zavřít ani ukončit — musela ho zabít ruka u stroje, na kterém se zrovna pracovalo.
+  Ověřené tím tedy **není** kolo, které nikdy nedoběhne, jen kolo jako jev.
+- **Kontrolní scéna nesmí mít `sizingOptions = [.minSize]`.** Oscilace se celá vejde do dotazu na
+  minimum okna a AppKit ji zabije výjimkou (`needing another Update Constraints in Window pass …
+  more than there are views`) dřív, než se dá cokoli změřit. Kolo hledané v aplikaci se naproti
+  tomu roztáhne přes kola runloopu a proces jen hoří.
+
+**Cena identity řádků osy se měří zvlášť** (`ConversationIdentityMeasurement`), protože v okně ji
+drift sezení přebije: 300 řádků, přečtení identity jednou za přerovnání obsahu vyšlo **0,141 ms**
+přes tuple a keypath a **0,036 ms** z uloženého pole; složení řádků v průchodu tělem je naopak
+o 0,086 ms dražší (0,179 → 0,265 ms). Obě strany měřidla přitom **musí obsahovat**
+`Policy.conversation` — bez ní by z toho vyšlo, že řádky jsou pětkrát dražší, což je artefakt
+měřidla, ne cena změny.
+
 **Co zbývá:** dohledat, co graf špiní. Vylučovací práce hotová: animace, timer, vnější pohon, přeměření
-textu, náš `onContinuousHover`, akce `onGeometryChange`, hover zápis pod kurzorem a scéna sama.
+textu, náš `onContinuousHover`, akce `onGeometryChange`, hover zápis pod kurzorem, scéna sama,
+projíždění kolečkem se setrvačností a `ForEach` nad polem tuplů.
 
 Nejsilnější zbylá nitka je **re-arm `NSHostingView.requestUpdate(after:)`**, ke kterému se ve vzorcích
 dostane `LazyLayoutViewCache.signalPrefetch()` — a při stavbě sondy se ukázal i druhý volající, ze

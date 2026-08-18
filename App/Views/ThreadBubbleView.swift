@@ -43,7 +43,10 @@ struct ThreadBubbleView: View {
                     separator
                     ThreadSnippetView(snippet: snippet, path: thread.path)
                 }
-                ForEach(Array(thread.comments.items.enumerated()), id: \.element.id) { _, comment in
+                // Bez `enumerated()`: index se tady nepoužíval a identita čtená keypathem přes
+                // tuple znamená kopii `ThreadComment`u při **každém** dotazu líného seznamu na
+                // identitu — a vlákno se kreslí uvnitř osy konverzace, tedy v líném seznamu (#361).
+                ForEach(thread.comments.items, id: \.id) { comment in
                     separator
                     entry(comment)
                 }

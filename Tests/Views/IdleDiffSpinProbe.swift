@@ -124,6 +124,105 @@ struct IdleDiffSpinProbe {
         }
     }
 
+    /// **Projíždění kolečkem** — a rozhodující číslo jsou ty úseky **po** gestu (#361).
+    ///
+    /// Cena projíždění se dá utratit, kolo ne: ztuhlá instance hořela šest hodin po tom, co od
+    /// ní člověk odešel. `scroll(to:)` v `scrollingConversation` níž kolo nerozjede vůbec (proč,
+    /// je u `WheelGesture`), takže tohle je ta cesta, kterou se hledá pohon.
+    @Test("Projíždění konverzace kolečkem")
+    func wheelConversation() async throws {
+        try await measureWheel("konverzace", tab: .conversation)
+    }
+
+    /// Totéž nad **dlouhou osou s různě vysokými uzly** — tedy nad tím, co v okně doopravdy je.
+    /// Fixture z `cli/cli` má 44 položek a 5 500 bodů obsahu, kdežto PR z tohohle repa jich má
+    /// stovky a výšky uzlů se liší násobně (krátká věta proti bloku kódu). Na odhadu zbytku
+    /// obsahu z už umístěných řádků visí právě to, kolik toho líný seznam přerovnává.
+    @Test("Projíždění dlouhé osy kolečkem")
+    func wheelLongConversation() async throws {
+        try await measureWheel("dlouhá osa", tab: .conversation, comments: 300)
+    }
+
+    /// Kontrola: tentýž seznam, jiný obsah řádku. Bez tohohle řádku by z čísla u konverzace
+    /// nešlo poznat, jestli je to o ose, nebo o líném seznamu.
+    @Test("Projíždění diffu kolečkem")
+    func wheelDiff() async throws {
+        try await measureWheel("diff", tab: .filesChanged)
+    }
+
+    /// **Kontrola měřidla** (#361): scéna, která se chvíli neusazuje. Bez ní číslo „0,00 % po
+    /// gestu“ netvrdí nic — může to být stejně dobře čisté okno jako sonda, která smyčku nevidí.
+    ///
+    /// Čte se **první úsek proti poslednímu**: dokud se zpětná vazba krmí, hoří, a jak jí dojde
+    /// rozpočet kol, spadne na nulu. Rozpočet je pojistka proti zaseknutému oknu (proč, je
+    /// u `FeedbackLoopList`) a plyne z něj, že **nekonečné** kolo tím ověřené není. Měří se
+    /// proto **od prvního snímku**, bez usazení — usazení by celý rozpočet spolklo a sonda by
+    /// hlásila nulu nad scénou, která zrovna hořela.
+    @Test("Kontrola měřidla: scéna, která se chvíli neusazuje")
+    func loopControl() async throws {
+        // Bez `.minSize`: oscilace se vejde celá do dotazu na minimum okna a AppKit ji zabije
+        // výjimkou dřív, než se dá cokoli změřit (viz `show(scene:minSizeFromContent:)`).
+        let window = show(scene: FeedbackLoopList(), minSizeFromContent: false)
+        defer { window.orderOut(nil) }
+        for slice in 1...4 {
+            let cpu = spinMainRunLoop(seconds: 2)
+            print(String(format: "MĚŘENÍ kontrola měřidla, úsek %d: %.2f %% CPU hlavního vlákna", slice, cpu / 2 * 100))
+        }
+    }
+
+    /// Jeden scénář kolečkem: usadit, změřit nečinnost, projet gestem a **nechat okno stát**.
+    ///
+    /// Měří se tři věci, protože jedna bez druhých nic neznamená: nečinnost před gestem (okno
+    /// nehořelo už předtím), cena gesta (gesto se doopravdy odehrálo) a nečinnost po něm
+    /// (zůstalo po gestu kolo). Usazení po posunu odezní za jeden úsek, kolo ne — proto úseky.
+    private func measureWheel(_ name: String, tab: PullRequestTab, comments: Int = 0) async throws {
+        let (store, cache) = try await prepared(big: tab == .filesChanged, full: true)
+        defer { _ = cache }
+        if comments > 0 {
+            // **Razítko musí být to z fixture PR**: detail si při zobrazení konverzaci natáhne
+            // znovu, když `updatedAt` nesedí (`hasCurrentConversation`), a syntetická osa by se
+            // zahodila — sonda by pak měřila prázdno a tvrdila, že je čisto.
+            store.conversationStates[pr] = .loaded(
+                Self.synthetic(comments: comments),
+                updatedAt: Self.summary.updatedAt
+            )
+        }
+        store.setDetailTab(tab, for: pr)
+        store.setDiffLayout(.unified)
+        let window = show(scene: ContentView(store: store))
+        defer { window.orderOut(nil) }
+        _ = spinMainRunLoop(seconds: 2)
+        let root = try #require(window.contentView)
+        let scroller = try #require(Self.tallestScroller(in: root))
+        print(String(
+            format: "SONDA %@: okno %.0f×%.0f, minimum obsahu %.0f×%.0f, %d prvků,"
+                + " %d položek osy, obsah scrolleru %.0f",
+            name,
+            window.frame.width,
+            window.frame.height,
+            window.contentMinSize.width,
+            window.contentMinSize.height,
+            Self.descendants(of: root),
+            store.overview(for: pr).count,
+            scroller.documentView?.frame.height ?? 0
+        ))
+        let idle = spinMainRunLoop(seconds: 3)
+        print(String(format: "MĚŘENÍ %@ před gestem: %.2f %% CPU hlavního vlákna", name, idle / 3 * 100))
+        let started = mainThreadCPUSeconds()
+        let landed = WheelGesture.scroll(over: scroller, in: window, steps: 60, step: 40)
+        let during = mainThreadCPUSeconds() - started
+        print(String(
+            format: "MĚŘENÍ %@ kolečkem: %.2f s CPU hlavního vlákna, 60 kroků po 40 pt (dojelo na %.0f)",
+            name,
+            during,
+            landed
+        ))
+        for slice in 1...3 {
+            let cpu = spinMainRunLoop(seconds: 3)
+            print(String(format: "MĚŘENÍ %@ po gestu, úsek %d: %.2f %% CPU hlavního vlákna", name, slice, cpu / 3 * 100))
+        }
+    }
+
     /// Cena **projíždění**, ne nečinnosti — a je to ten scénář, na kterém aplikace ztuhla
     /// (`hang361`, „projížděl jsem konverzací“). Nečinná konverzace je čistá (tabulka
     /// v `docs/testovani.md`), takže se ta cena musí hledat v pohybu.
@@ -295,6 +394,78 @@ struct IdleDiffSpinProbe {
     private static func blocks(in view: NSView) -> Int {
         view.subviews.reduce(view is DiffPairBlockContainer || view is DiffTextView ? 1 : 0) {
             $0 + blocks(in: $1)
+        }
+    }
+
+    /// Okno postavené **jako `WindowGroup`**, ne přes `NSHostingController` s předepsaným
+    /// rozměrem — a je to rozdíl, který se u #361 musel srovnat.
+    ///
+    /// Aplikace má na scéně `.windowResizability(.contentMinSize)`, takže si AppKit při **každém**
+    /// průchodu `updateConstraints` říká hostující vrstvě o `minSize` a ta na to spustí
+    /// `_sizeThatFits`, tedy **druhou aktualizaci grafu na jiné nabídce rozměru**. Předepsaný
+    /// `frame(width:height:)` v `show(store:full:)` tuhle mašinerii zmrazí (minimum je konstanta),
+    /// takže scéna, která by v okně hořela, může v sondě mlčet. Rozměr okna přitom předepisuje
+    /// **okno**, ne obsah — tím se obchází ta past, kvůli které se `frame` do sondy dostal: obsah
+    /// si rozměr určovat nesmí, jinak se okno scvrkne na hlavičku.
+    private func show<Scene: View>(scene: Scene, minSizeFromContent: Bool = true) -> NSWindow {
+        let host = NSHostingView(rootView: scene.background(Palette.background))
+        // Kontrolní scéna to mít nesmí: její oscilace se do dotazu na minimum vejde celá
+        // a AppKit ji zabije výjimkou („needing another Update Constraints … more than there
+        // are views“) dřív, než se dá cokoli změřit. Kolo, které se hledá v aplikaci, se
+        // naproti tomu roztáhne přes kola runloopu a proces jen hoří.
+        host.sizingOptions = minSizeFromContent ? [.minSize] : []
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1512, height: 874),
+            styleMask: [.titled, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = host
+        window.setContentSize(NSSize(width: 1512, height: 874))
+        window.setFrameOrigin(NSPoint(x: 0, y: 20))
+        // Nad ostatními okny, ale bez aktivace — fokus si sonda brát nesmí (#350).
+        window.level = .floating
+        window.orderFrontRegardless()
+        return window
+    }
+
+    /// Syntetická osa: komentáře s **různě vysokým** obsahem. Rozhoduje ta různost, ne počet —
+    /// líný seznam odhaduje zbytek obsahu z toho, co už umístil, takže stejně vysoké řádky by
+    /// mu odhadem nikdy nepohnuly.
+    private static func synthetic(comments: Int) -> Conversation {
+        let items = (0..<comments).map { index in
+            ThreadComment(
+                id: "c\(index)",
+                author: index % 3 == 0 ? "octocat" : "hubot",
+                body: syntheticBody(index),
+                createdAt: Date(timeIntervalSince1970: 1_753_000_000 + Double(index) * 3600),
+                url: URL(string: "https://github.com/cli/cli/pull/13084#issuecomment-\(index)")!
+            )
+        }
+        return Conversation(
+            viewer: "octocat",
+            reviews: ConversationPage(items: [], total: 0, hasNextPage: false),
+            threads: ConversationPage(items: [], total: 0, hasNextPage: false),
+            comments: ConversationPage(items: items, total: items.count, hasNextPage: false),
+            events: ConversationPage(items: [], total: 0, hasNextPage: false)
+        )
+    }
+
+    /// Pět tvarů textu, aby se výšky uzlů lišily násobně — věta, odstavce, blok kódu, odrážky.
+    private static func syntheticBody(_ index: Int) -> String {
+        switch index % 5 {
+        case 0:
+            "Krátká věta."
+        case 1:
+            (0..<6)
+                .map { "Odstavec \($0) s **tučným** a `inline kódem`, dost dlouhý na to, aby se zalomil." }
+                .joined(separator: "\n\n")
+        case 2:
+            "```swift\n" + (0..<14).map { "    let value\($0) = compute(\($0))" }.joined(separator: "\n") + "\n```"
+        case 3:
+            "- první\n- druhá odrážka, o které je potřeba napsat víc než jedno slovo\n- třetí\n- čtvrtá"
+        default:
+            "Dva odstavce.\n\nDruhý nese odkaz na [issue](https://github.com/cli/cli/pull/13084)."
         }
     }
 
