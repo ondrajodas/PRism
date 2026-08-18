@@ -170,11 +170,26 @@ extension AppStore {
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
+    /// Pull requesty — **rozřazené podle autora do dvou skupin** (#336).
+    ///
+    /// Rozhoduje `Policy.ownership`, tedy tatáž funkce jako v railu a na dashboardu; množina loginů
+    /// se bere **jednou pro celý seznam**, ne u každého řádku (`ownLogins` se počítá při každém
+    /// čtení).
+    ///
+    /// **Zařazení padá tady, seskupení až v `Policy.paletteResults`.** Katalog je jeden plochý
+    /// seznam, ve kterém si každý řádek nese svou `group`; hledání pak podle ní seskupuje a řeže na
+    /// strop. Proto stačí **jeden průchod** — skládat dva seznamy za sebou (`filter` na moje
+    /// a `filter` na cizí) by jen zopakovalo tutéž otázku dvakrát a ty dvě odpovědi by se mohly
+    /// rozejít v tom, co je „moje“.
+    ///
+    /// **Cíl zůstává `Target.pullRequest`** — skupina je zařazení, ne druhá cesta k témuž;
+    /// po `↵` se v obou případech otevírá tatáž záložka.
     private func palettePullRequests() -> [CommandPalette.Item] {
-        pullRequests.map { summary in
+        let mine = ownLogins
+        return pullRequests.map { summary in
             CommandPalette.Item(
                 id: "pr:\(summary.id)",
-                group: .pullRequests,
+                group: Policy.ownership(of: summary, mine: mine) == .mine ? .myPullRequests : .pullRequests,
                 title: summary.title,
                 subtitle: paletteSubtitle(of: summary),
                 mark: .pullRequest(summary.state),
@@ -191,6 +206,12 @@ extension AppStore {
     /// Autor je v podtitulku, ne v klíčových slovech (do #184 byl tam): hledat podle jména se musí
     /// dát, ale klíčové slovo se nikde nekreslí, takže by u dotazu na jméno nebylo z řádku poznat,
     /// proč vyšel. Bere se z `PullRequestSummary`, tedy z posledního tiku — žádný nový dotaz.
+    ///
+    /// **Ve skupině `Moje PR` zůstává týž tvar** (#336), i když návrh tam kreslí `PRism#324 ·
+    /// 6 k předání`: ten počet se dá napsat, teprve až předání nese razítko (#334) — do té doby by
+    /// šlo o číslo, které nikdo nepředal. Je to tatáž úvaha, kterou u řádku seznamu zapsalo #331.
+    /// Autor v tom podtitulku navíc není zbytečný: „moje“ je od #330 **množina** loginů, takže se
+    /// z něj pozná PR, který pod svým účtem otevřel agent.
     private func paletteSubtitle(of summary: PullRequestSummary) -> String {
         "\(Policy.paletteLabel(of: summary.id)) · \(summary.author)"
     }

@@ -33,8 +33,14 @@ struct CommandPaletteView: View {
     /// Šířka karty z návrhu (`width: min(560px, 100%)`). Nejmenší okno má 700, takže se vejde
     /// vždycky — a protože je **známá**, předá se dolů a řádky si ji nemusí vyjednávat (#220).
     static let width = 560.0
-    /// Strop seznamu. Nad ním se scrolluje; čtyři skupiny po šesti řádcích se do okna nevejdou
-    /// a paleta nemá zaclonit celé okno.
+    /// Strop seznamu. Nad ním se scrolluje; **pět** skupin po šesti řádcích (#336) se do okna
+    /// nevejde a paleta nemá zaclonit celé okno.
+    ///
+    /// **S druhou skupinou PR se hodnota nezvedla** a je to úvaha o stropu skupiny, ne o kartě:
+    /// vejít se všechno nemohlo ani ve čtyřech skupinách (šest nálezů a šest souborů samo o sobě
+    /// přeteče), takže by zvednutí jen posunulo, od kolika řádků se scrolluje — za cenu karty,
+    /// která v nejmenším okně zacloní obsah. Nad napsaným dotazem je situace jiná a je to ta
+    /// častá: dvě skupiny PR mají po pár řádcích a vejdou se i s nadpisy.
     private static let maxListHeight = 400.0
 
     var body: some View {

@@ -9,6 +9,9 @@ import Testing
 /// věc, kterou aplikace má a prohlížeč ne), **strop je na skupinu** (jinak by nálezy vytlačily
 /// všechno ostatní) a **pořadí uvnitř skupiny se nemíchá** (Swiftové `sorted` není stabilní, takže
 /// bez druhého kritéria by řádky mezi stisky klávesy poskakovaly).
+///
+/// Od #336 k tomu čtvrté: **vlastní PR jsou vlastní skupina**, takže mají **svých šest** — na tom
+/// stojí to, proč se rozdělovaly.
 @Suite("Policy — command palette")
 struct CommandPaletteTests {
     private func item(
@@ -38,6 +41,7 @@ struct CommandPaletteTests {
         let sections = Policy.paletteResults(
             of: [
                 item("akce", group: .actions),
+                item("moje PR", group: .myPullRequests),
                 item("pull request", group: .pullRequests),
                 item("soubor", group: .files),
                 item("nález", group: .findings),
@@ -45,8 +49,41 @@ struct CommandPaletteTests {
             query: ""
         )
 
-        #expect(sections.map(\.group) == [.findings, .files, .pullRequests, .actions])
+        // Vlastní PR jsou **za** cizími (#336): cizí PR jsou to, na co se čeká.
+        #expect(sections.map(\.group) == [.findings, .files, .pullRequests, .myPullRequests, .actions])
         #expect(sections.allSatisfy { $0.hits.count == 1 })
+    }
+
+    /// Nadpisy jsou tvrzení, ne kosmetika: se dvěma skupinami PR musí první říct, čeho se týká.
+    @Test("Nadpisy skupin: cizí PR jsou „k review“, vlastní „Moje PR“")
+    func groupTitlesSayWhichPullRequestsTheyMean() {
+        #expect(CommandPalette.Group.pullRequests.title == "Pull requesty k review")
+        #expect(CommandPalette.Group.myPullRequests.title == "Moje PR")
+    }
+
+    /// **Tohle je ten test, kvůli kterému se skupiny dělily** (#336): ve společné skupině by
+    /// dvacet cizích PR vlastní PR vytlačilo, protože šestý řádek je strop.
+    @Test("Dvacet cizích PR nevytlačí ani jedno moje")
+    func foreignPullRequestsCannotPushOutMyOwn() {
+        let theirs = (1...20).map { item("token \($0)", group: .pullRequests, id: "t\($0)") }
+        let mine = item("token v mém PR", group: .myPullRequests, id: "mine")
+
+        let sections = Policy.paletteResults(of: theirs + [mine], query: "token", limit: 6)
+
+        #expect(sections.map(\.group) == [.pullRequests, .myPullRequests])
+        #expect(sections.first?.hits.count == 6)
+        #expect(sections.last?.hits.map(\.id) == ["mine"])
+    }
+
+    /// Kdo vlastní PR nemá, nesmí vidět prázdný nadpis — vypadá to jako rozbité hledání.
+    @Test("Bez vlastních PR se nadpis „Moje PR“ nekreslí")
+    func theOwnGroupDisappearsWithoutOwnPullRequests() {
+        let sections = Policy.paletteResults(
+            of: [item("fix: token", group: .pullRequests, id: "theirs")],
+            query: ""
+        )
+
+        #expect(sections.map(\.group) == [.pullRequests])
     }
 
     @Test("Skupina bez shody vypadne celá")

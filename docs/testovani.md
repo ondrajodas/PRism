@@ -1063,6 +1063,20 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   Test na **pořadí při shodných váhách** je zapsané pravidlo, ne důkaz: vložená regrese (zahozený
   druhý klíč řazení) ho neshodí, protože dnešní `sorted` v Swiftu stabilní je, i když to nemá
   v kontraktu.
+
+  **Dvě skupiny pull requestů (#336)** mají tři tvrzení, a to nejcennější je to, kvůli kterému se
+  dělily: **dvacet cizích PR nevytlačí ani jedno moje** (ve společné skupině by vytlačilo, protože
+  šestý řádek je strop). K tomu pořadí skupin s vlastními **za** cizími, nadpisy (`Pull requesty
+  k review` a `Moje PR` — se dvěma skupinami musí první říct, čeho se týká) a to, že **bez vlastních
+  PR se nadpis nekreslí**; prázdný nadpis vypadá jako rozbité hledání.
+
+  **Ověřeno vloženou regresí** (katalog zařadí všechno do `.pullRequests` a nadpis se vrátí na „Pull
+  requesty“): padne **pět testů** — čtyři nad storem a jeden nad nadpisem, dohromady osm tvrzení.
+
+  Poprvé z toho vyšlo „0 tests passed“, a to je poučení, které z toho zůstává: **`try! #require`
+  položí celý běh**, takže sečtený řádek na konci hlásí, že neproběhlo nic, a kdo čte jen poslední
+  řádek, přečte si opak toho, co se stalo. Test proto musí být `throws` a `#require` se volá `try`
+  (upozornil na to Copilot na #368; v `Tests/` byly dva výskyty a padly oba).
 - **`AppStore` — command palette (#184)** — proti fake gateway. **Nejcennější test celé palety
   tvrdí, že se nic nestalo**: po sestavení katalogu, prohledání a vykonání každého druhu cíle musí
   mít gateway pořád tentýž počet volání (search, diff, detail, konverzace). Bez toho by stačilo,
@@ -1079,6 +1093,20 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   dá vyžádat **dvakrát**, nález bez místa v kódu otevře tab `Nálezy` a **o skok nežádá**,
   nevyzvednutá žádost se uklidí s PR mimo seznam a `openSettings` se vrací **volajícímu**, aniž by
   se ve storu cokoli změnilo.
+
+  **Rozřazení do dvou skupin (#336)** je nad storem, protože katalog ho dělá: vlastní PR do skupiny
+  `Moje PR`, cizí do té první, PR agenta z `ownLogins` taky do mých, a **dokud login nedorazí, je
+  všechno cizí** — to je ten test, který tvrdí, že se něco nestalo, jinak by paleta na okamžik po
+  spuštění přehodila celý seznam a zpátky. K tomu, že vlastní řádek nese **týž cíl** (`.pullRequest`,
+  po `↵` otevře záložku) i **týž podtitulek** jako cizí, a že dotaz najde obojí naráz.
+- **Sonda palety se dvěma skupinami (#336)** — `CommandPaletteRenderProbe`, gated `PRISM_MEASURE`,
+  cesta ven `PRISM_RENDER_DIR`. Vyrendruje kartu nad katalogem ze **storu** (diff z fixture, takže
+  cesty souborů mají skutečný tvar) ve dvou podobách: zúžené na počty řádků ze sekce 09 návrhu
+  (na srovnání vedle sebe) a nad celým katalogem, kde je vidět, že se pět skupin scrolluje.
+  **Dotaz se do renderu dosadit nedá** — `query` je `@State` uvnitř `CommandPaletteView`, protože má
+  zaniknout se zavřením palety —, takže sonda kreslí stav prázdného dotazu; zvýraznění shody v ní
+  proto není. Paletu v běžící aplikaci navíc otevírá jedině ⌘K, a psát do cizí instance se
+  v paralelním běhu nemá.
 - **Měření hledání (#184)** — `CommandPaletteMeasurement`, gated `PRISM_MEASURE` jako měření
   layoutu. Nic netvrdí; existuje proto, že se katalog skládá **při každém stisku klávesy** a to
   rozhodnutí má být podložené číslem: 200 řádků 1,5 ms, 2000 řádků 17,6 ms.

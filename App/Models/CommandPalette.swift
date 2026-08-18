@@ -21,18 +21,27 @@ extension CommandPalette {
     /// **Pořadí případů je pořadí skupin v okně** a je to tvrzení o tom, k čemu tohle okno je:
     /// nálezy první, protože jsou jediná věc, kterou tahle aplikace má a prohlížeč ne. Kdo
     /// pořadí přehodí, mění návrh, ne kreslení.
+    ///
+    /// **Vlastní PR mají vlastní skupinu, ne odznak v cizí** (#336), a je to kvůli stropu:
+    /// `Policy.paletteGroupLimit` platí **na skupinu**, takže ve společné skupině by při dvaceti
+    /// cizích PR to moje nemuselo vyjít vůbec. Odznak u řádku ten problém neřeší, jen ho schová.
+    /// Stojí **za** cizími: cizí PR jsou to, na co se čeká.
     enum Group: Hashable, Sendable, CaseIterable {
         case findings
         case files
         case pullRequests
+        case myPullRequests
         case actions
 
-        /// Nadpis skupiny, jak ho má návrh (#184).
+        /// Nadpis skupiny, jak ho má návrh (#184, sekce 09 od #336).
         var title: String {
             switch self {
             case .findings: "Nálezy"
             case .files: "Soubory v otevřeném PR"
-            case .pullRequests: "Pull requesty"
+            // **Ne jen „Pull requesty“** (#336): se dvěma skupinami musí první říct, čeho se
+            // týká, jinak vypadá `Moje PR` jako řádky, které do té první nepatří omylem.
+            case .pullRequests: "Pull requesty k review"
+            case .myPullRequests: "Moje PR"
             case .actions: "Akce"
             }
         }
