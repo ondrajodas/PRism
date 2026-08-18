@@ -17,6 +17,13 @@ enum NotificationEvent: String, Codable, CaseIterable, Hashable, Sendable {
     /// a timeout, který **nic nenahlásil**. Timeout s nálezy patří k `findings`, protože
     /// nálezy jsou tam k přečtení; rozhoduje `Policy.reviewNotification`.
     case failure
+    /// Na **vlastním** PR se ozval někdo jiný (#335) — komentář pod PR, odpověď ve vlákně,
+    /// odeslané review včetně Copilotova.
+    ///
+    /// **Vlastní případ, ne pátý odstín výsledku review.** Zbylé čtyři jsou o naší aplikaci
+    /// a o cizích PR (`Policy.reviewNotification` vlastní PR nevydá); tenhle je opačný směr —
+    /// na mém PR se něco stalo bez mého přičinění. Rozhoduje `Policy.activityNotification`.
+    case activity
 
     /// Co se navzájem nahrazuje, když jedna hláška ještě visí (#87).
     ///
@@ -26,11 +33,14 @@ enum NotificationEvent: String, Codable, CaseIterable, Hashable, Sendable {
     /// už neplatí. Chytil to test, který původně tvrdil opak.
     ///
     /// Nový PR je vlastní skupina: že PR přišel a jak dopadlo jeho review, jsou dvě různé
-    /// informace a jedna nemá tu druhou přebít.
+    /// informace a jedna nemá tu druhou přebít. **Cizí aktivita taky** (#335): že mi kolega
+    /// odpověděl, nemá přebít výsledek review na tomtéž PR — jsou to dvě různé věci a obě
+    /// mají zůstat na obrazovce.
     var replacementGroup: String {
         switch self {
         case .newPullRequest: "new"
         case .findings, .clean, .failure: "review"
+        case .activity: "activity"
         }
     }
 }
@@ -56,19 +66,24 @@ struct NotificationSettings: Codable, Equatable, Sendable {
     var findings: Bool
     var clean: Bool
     var failure: Bool
+    /// Cizí aktivita na vlastním PR (#335). **Výchozí zapnuto** jako u zbytku: je to zpráva
+    /// „někdo po tobě něco chce“, tedy ten druh vyrušení, kvůli kterému notifikace jsou.
+    var activity: Bool
 
     init(
         isEnabled: Bool = true,
         newPullRequest: Bool = true,
         findings: Bool = true,
         clean: Bool = true,
-        failure: Bool = true
+        failure: Bool = true,
+        activity: Bool = true
     ) {
         self.isEnabled = isEnabled
         self.newPullRequest = newPullRequest
         self.findings = findings
         self.clean = clean
         self.failure = failure
+        self.activity = activity
     }
 
     /// Smí se tahle událost ohlásit?
@@ -82,6 +97,7 @@ struct NotificationSettings: Codable, Equatable, Sendable {
         case .findings: return findings
         case .clean: return clean
         case .failure: return failure
+        case .activity: return activity
         }
     }
 
@@ -100,5 +116,6 @@ struct NotificationSettings: Codable, Equatable, Sendable {
         findings = (try? container.decode(Bool.self, forKey: .findings)) ?? standard.findings
         clean = (try? container.decode(Bool.self, forKey: .clean)) ?? standard.clean
         failure = (try? container.decode(Bool.self, forKey: .failure)) ?? standard.failure
+        activity = (try? container.decode(Bool.self, forKey: .activity)) ?? standard.activity
     }
 }

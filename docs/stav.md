@@ -2553,7 +2553,7 @@ ta o mně.
 nebo s nevyřešeným cizím vláknem. Šest PR, ze kterých pět čeká na CI, není šest věcí k práci. Vlákna
 se počítají **jen z načtených konverzací** (tahají se při výběru řádku, ne při pollingu), takže je to
 **spodní hranice** — a neúplnost je schválně v tomhle směru: odznak, který napočítá víc práce, než jí
-je, se přestane čítat. Doplní to #335.
+je, se přestane čítat. **Doplnilo to #335**: konverzace vlastních PR dorazí sama (rozhlídka na pozadí), takže se hranice posunula — zbývá jen tam, kam jeden průchod nedosáhl.
 
 **Prázdná sekce má tři různé věty** (`Policy.ownListEmptyReason`) a pořadí důvodů je celý obsah
 issue: polling → chybějící zdroj → nenačtený login → filtr → prázdno. Bez zdroje `author:@me is:open`
@@ -2705,7 +2705,7 @@ dál**, i tlačítkem na řádku.
 o novém PR. Zúžení u nových PR je **na vstupu**, aby se vlastní PR nedostal ani do snímku ohlášených.
 **Dokud login nedorazí** (`gh api user` běží souběžně s prvním tikem), je všechno cizí, takže vlastní
 PR z prvního tiku se ohlásit může — druhá strana by byla mlčet, dokud login nedorazí, a při selhaném
-dotazu by to znamenalo ztracené notifikace o **cizích** PR. Vlastní text pro vlastní PR je #335.
+dotazu by to znamenalo ztracené notifikace o **cizích** PR. Vlastní text pro vlastní PR **dopsalo #335** (pátá událost `activity`).
 
 **Prázdná fronta dostala vlastní důvod.** Tik, ve kterém přišla jen vlastní PR, nechá frontu prázdnou,
 kdežto `PollState.emptyReason` mlčí (seznam prázdný není), takže by v okně zbyl prázdný seznam **bez
@@ -2865,6 +2865,51 @@ výška celé řady karet (ověřeno renderem na 640, 760 a 900 bodech).
 
 Testů přidala tahle změna **25** a je jich **3003**; jsou zelené. **Ověřeno vložením regrese** u čáry
 nad patkou (`overlay` navíc nad ní → jedna čára 4 px místo 2 px, test spadl).
+
+### #335 — cizí aktivita na vlastních PR: komentář kolegy se dozví okno, ne prohlížeč
+
+Poslední kus M10. Po #330–#334 byla sekce `Moje PR` **pasivní**: bylo v ní vidět, co jsem si sám
+vyžádal, ale o tom, že přibyla práce, se aplikace nedozvěděla — přitom u vlastního PR je ta
+nejdůležitější událost zrovna cizí (kolega odpověděl, Copilot dopsal review). Součástky přitom byly
+hotové od #173 (`VisitChanges`, `VisitLedger`, `SinceLastVisitLine`); chybělo jediné — **někdo se na
+to musí zeptat dřív, než PR otevřu**.
+
+**Cena byla to podstatné rozhodnutí a je zapsaná** (specifikace, záznam #335). Tik pollingu je jeden
+search dotaz a plná konverzace vlastních PR by z něj udělala `1 + N`. Drží to tři pojistky naráz:
+**`updatedAt` ze searche jako předfiltr** (tahá se jedině to, kde se doopravdy něco stalo — klidný den
+je **nula dotazů**), **vlastní pětiminutový interval** nezávislý na intervalu seznamu a **strop tři PR
+na jednu rozhlídku**. Nejvyšší cena je tím shora omezená: **tři dotazy za pět minut**, tedy 0,6 na
+minutový tik. Rate limit se nedědí druhou cestou, ale tou stejnou — rozhlídka běží uvnitř
+`afterSuccessfulTick`, takže při backoffu se netiká a tedy se ani nekouká. Zamítnuto: samotné
+`updatedAt` bez konverzace (neřekne co ani kolik), podmnožina podle stavu PR (vynechání draftů by
+zamlčelo komentář zrovna tam, kde na něm záleží) a CI (`fetchChecks` je druhý dotaz a jiná událost).
+
+**Druhé razítko je podmínka, ne pohodlí.** `VisitLedger` drží poslední **návštěvu**, kdežto tady je
+potřeba poslední **oznámení** — oznámením PR nenavštívím, takže by „2 nové komentáře“ chodily každou
+rozhlídku, dokud PR neotevřu. Přibyl proto `ActivityNoticeLedger` (v předvolbách vedle návštěv, jedno
+datum na PR) a novinka je to, co je novější než **obojí**. Do razítka jde **datum té nejnovější
+ohlášené položky**, ne „teď“: s časem doručení by propadl komentář, který přišel mezi dotazem a zápisem.
+Dotažení konverzace na pozadí přitom **návštěva není** — značka „od minule“ se zakládá, návštěva se
+nezapisuje; jinak by se posunula na teď a řádek by o komentáři kolegy mlčel.
+
+**Cizí aktivita je další druh novosti, takže bydlí v `Policy.handoff`** (`HandoffReport.activity`), ne
+vedle ní. Vlastní odpověď pro řádek seznamu by se rozešla s odznakem v railu i s panelem — a přesně
+proti tomu #334 vzniklo. Commity v aktivitě **nejsou**: na vlastním PR je push obvykle můj a datum
+commitu není datum pushnutí, takže by banner chodil o vlastní práci (pruh „od minule“ v detailu je
+ukazuje dál).
+
+**Vidět je to na dvou místech.** V řádku seznamu i v bloku dashboardu `2 nové komentáře od minule`
+v `accent-2` — **místo autora a času**, jak to kreslí sekce 21; je to pořadí důležitosti, ne úspora
+místa (autorem vlastního PR jsem já nebo můj agent) a obojí zůstává v hlavičce detailu. A pátá
+notifikace s vlastním přepínačem `Ozval se někdo na mém PR` a **vlastní `replacementGroup`**: že mi
+kolega odpověděl, nemá přebít výsledek review na tomtéž PR. Mockup je dokreslený (sekce 12 má pátý
+banner a poznámku 31b).
+
+Testů přidala tahle změna **44** a je jich **3096**; jsou zelené. **Ověřeno vložením regrese**:
+značka jen z návštěvy (tedy zahozené druhé razítko) shodí právě ten test, který to má chytat —
+`O témže komentáři se nehlásí dvakrát`, `(center.delivered.count → 2) == 1`. Jeden test #331 se
+**obrátil**: odznak v railu teď vlákno počítá i bez kliknutí do PR, protože konverzaci dotáhne
+rozhlídka — spodní hranice se posunula, nezmizela.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**

@@ -196,6 +196,12 @@ struct AppStoreOwnershipTests {
     /// Druhá polovina odznaku: **nevyřešené cizí vlákno** z načtené konverzace. Testuje to
     /// zapojení, ne pravidlo (to má `OwnPullRequestsTests`) — podstrčit sem cestu k jiné konverzaci
     /// by z odznaku udělalo číslo o cizí diskuzi.
+    ///
+    /// **Obrácené #335** (do té doby tenhle test tvrdil, že odznak před kliknutím do PR vlákno
+    /// nepočítá, protože konverzace v paměti není). Rozhlídka po cizí aktivitě si o konverzaci
+    /// vlastních PR řekne **sama při tiku**, takže se odznak dozví o vlákně bez kliknutí — a to je
+    /// zrovna ta spodní hranice, kterou #331 zapsalo jako vědomou a #335 posunulo. Zbývá jen tam,
+    /// kam rozhlídka za jeden průchod nedosáhne (`Policy.activitySweepLimit`).
     @Test("Odznak počítá i nevyřešené cizí vlákno z načtené konverzace")
     func countsForeignThreadsFromLoadedConversations() async {
         let mine = summary(author: "ondrajodas", "cli/cli#1")
@@ -242,12 +248,15 @@ struct AppStoreOwnershipTests {
         )
         await store.keepFresh()
 
-        // Než se do PR klikne, konverzace v paměti není — odznak o vlákně neví, a je to vědomá
-        // spodní hranice, ne chyba.
-        #expect(store.railMineCount == 0)
+        // Konverzaci dotáhla **rozhlídka po cizí aktivitě** (#335) uvnitř prvního tiku, takže
+        // odznak o vlákně ví bez kliknutí do PR.
+        #expect(gateway.conversationRequests == [mine.id])
+        #expect(store.railMineCount == 1)
 
+        // A druhé načtení nic nemění — konverzace v paměti platí, dokud se nepohne `updatedAt`.
         await store.loadConversation(for: mine)
 
+        #expect(gateway.conversationRequests == [mine.id])
         #expect(store.railMineCount == 1)
     }
 

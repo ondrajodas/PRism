@@ -29,6 +29,10 @@ struct PullRequestRow: View {
     /// funkce, ze které čte odznak v railu i panel. Nula znamená „nic nezbývá“ a pilulka se
     /// nekreslí; na cizím PR se nekreslí nikdy.
     var pending = 0
+    /// Co na vlastním PR od minule udělal někdo jiný (#335) — `2 nové komentáře od minule`
+    /// v meta řádku. Prázdná znamená „nic nepřibylo“ (nebo se ještě nikdo nedíval) a řádek pak
+    /// vypadá jako dřív; bere se z **téhož** `HandoffReport` jako `pending`.
+    var activity: ForeignActivity = .none
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -97,6 +101,22 @@ struct PullRequestRow: View {
         return pending
     }
 
+    /// `2 nové komentáře od minule` (#335). `nil` = cizí PR, nebo od minule nic — pak v meta řádku
+    /// zůstane autor a čas.
+    ///
+    /// Pojmenované, ne `if` uvnitř `body`, ze stejného důvodu jako `showsPromptAction`: je to
+    /// rozhodnutí o tom, co řádek tvrdí, a v `body` se nedá testovat. **Jen u vlastního PR** —
+    /// u cizího je novinkou stav review, který má řádek vpravo, a cizí diskuzi aplikace na pozadí
+    /// nehlídá (`Policy.activitySweep`), takže by tam text byl vždycky prázdný.
+    ///
+    /// Počet a slovo skládá `Policy.activityHeadline`, tedy totéž místo jako titulek notifikace;
+    /// `od minule` je tady, protože v banneru by nemělo smysl (ten mluví o tom, o čem se ještě
+    /// nehlásilo, ne o mojí poslední návštěvě).
+    var activityLine: String? {
+        guard ownership == .mine, let headline = Policy.activityHeadline(activity) else { return nil }
+        return "\(headline) od minule"
+    }
+
     /// `6 k předání` — plná pilulka z návrhu (`.pill.find`).
     ///
     /// **Barva nálezu**, ne akcent ani mint: většinu toho počtu tvoří nálezy a `find` v tomhle okně
@@ -152,9 +172,22 @@ struct PullRequestRow: View {
                 Text("draft")
             }
             Text(verbatim: "·")
-            Text(verbatim: pullRequest.author)
-            Text(verbatim: "·")
-            Text(pullRequest.updatedAt, format: .relative(presentation: .named))
+            // **Novinky nese text, ne tečka** (návrh, poznámka 66b), a **místo autora a času**, jak
+            // to kreslí sekce 21. Není to úspora místa, je to pořadí důležitosti: „2 nové komentáře
+            // od minule“ je důvod na ten řádek kliknout, kdežto autorem vlastního PR jsem já (nebo
+            // můj agent) a „před 3 hodinami“ o čekající práci neříká nic. Obojí zůstává v hlavičce
+            // detailu, takže se nic neschovává — a na cizím řádku se nemění vůbec nic.
+            if let activityLine {
+                Text(verbatim: activityLine)
+                    // `accent-2` z návrhu — jediná barva v tomhle řádku, protože je to jediná věc,
+                    // která se v něm má přečíst dřív než ostatní.
+                    .foregroundStyle(Palette.accent2)
+                    .lineLimit(1)
+            } else {
+                Text(verbatim: pullRequest.author)
+                Text(verbatim: "·")
+                Text(pullRequest.updatedAt, format: .relative(presentation: .named))
+            }
             Spacer(minLength: 8)
             if hasDraft {
                 // **Mint, ne akcent** (#309), a to ze dvou důvodů naráz. Je to **totéž sdělení**

@@ -489,6 +489,13 @@ struct DashboardView: View {
             VStack(spacing: 0) {
                 ForEach(entries) { entry in
                     let ownership = store.ownership(of: entry.pullRequest)
+                    // Kolik zbývá předat (#334) a co od minule přibylo (#335) — **jeden report**,
+                    // tatáž otázka jako u odznaku v railu, takže i tatáž funkce; jinak by blok tvrdil
+                    // jiné číslo než rail vedle. **Jen u vlastních PR**: skládá položky zadání a
+                    // u cizího řádku se nekreslí ani pilulka, ani novinky, takže by to byla práce za
+                    // odpověď, kterou nikdo nepřečte — a oba bloky kreslí týž
+                    // `rows(_:emptyExplanation:)`.
+                    let handoff = ownership == .mine ? store.handoffReport(for: entry.id) : .never
                     Button { open(entry.id) } label: {
                         PullRequestRow(
                             pullRequest: entry.pullRequest,
@@ -502,12 +509,8 @@ struct DashboardView: View {
                             // PR otevírá — takže i kdyby klik spadl na řádek pod tlačítkem, vede to
                             // na týž PR, jen bez rozloženého panelu. Němá akce z toho nevznikne.
                             openPrompt: { store.openAgentPrompt(in: entry.id) },
-                            // Kolik zbývá předat (#334) — tatáž otázka jako u odznaku v railu,
-                            // takže i tatáž funkce; jinak by blok tvrdil jiné číslo než rail vedle.
-                            // **Jen u vlastních PR**: skládá položky zadání a u cizího řádku se
-                            // pilulka nekreslí, takže by to byla práce za odpověď, kterou nikdo
-                            // nepřečte — a oba bloky se kreslí týmž `rows(_:emptyExplanation:)`.
-                            pending: ownership == .mine ? store.pendingHandoffCount(for: entry.id) : 0
+                            pending: handoff.pending,
+                            activity: handoff.activity
                         )
                         // Vlevo nic: proužek stavu má sedět na hraně bloku, jak ho kreslí návrh.
                         .padding(.trailing, 13)

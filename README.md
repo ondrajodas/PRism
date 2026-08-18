@@ -180,10 +180,18 @@ jsou dohromady dvojnásobek — a po #332 ho čerpají jedině cizí PR. **Ručn
 jde dál**, i tlačítkem na řádku: pravidlo se týká automatu a hromadné akce, ne toho, když si
 o review řeknu.
 
-**Notifikace jsou cesta pro review requesty**, takže o vlastním PR nedají vědět: „Nový PR k review“
-o pull requestu, který jsem sám otevřel, je hláška o vlastním pushi, a výsledek review, které jsem
-si sám spustil, je v okně vidět na řádku i v panelu. Cizí aktivita na vlastních PR — komentář
-kolegy, spadlé CI — dostane vlastní text v #335.
+**Notifikace o review jsou cesta pro review requesty**, takže o vlastním PR nedají vědět: „Nový PR
+k review“ o pull requestu, který jsem sám otevřel, je hláška o vlastním pushi, a výsledek review,
+které jsem si sám spustil, je v okně vidět na řádku i v panelu.
+
+**O vlastních PR se hlásí jedna věc, a je to ta opačná** (#335): že se na nich ozval **někdo jiný** —
+kolega odpověděl do vlákna, Copilot dopsal review. Aplikace se proto na diskuzi vlastních PR ptá sama
+na pozadí, a je to **záměrně skoupé**: konverzace se tahá jedině u PR, kde se `updatedAt` ze seznamu
+posunul (tedy kde se doopravdy něco stalo), nejvýš **u tří PR za pět minut** a jedině po úspěšném tiku
+pollingu — takže se to vejde do jeho backoffu a při rate limitu se nekouká vůbec. Na klidný den to
+znamená **nula dotazů navíc**. Co v diskuzi přibylo, nese i řádek seznamu: `2 nové komentáře od minule`
+místo autora a času. **Spadlé CI se nehlídá** — je to druhý dotaz na PR a jiná událost, takže na to
+patří vlastní text i vlastní přepínač.
 
 U vybraného PR je tlačítko **Spustit review**. Za ním se stane tohle: dotáhne se head
 commit, připraví se odpojený pracovní strom a v něm se spustí headless session Claude Code
@@ -1275,6 +1283,7 @@ Co přijde a co v tom bude:
 | Review našlo nálezy, ale nic nezastavuje merge | `3 nálezy · nic neblokuje` |
 | Review je čisté | `Čisté review` a `Reviewer nenašel žádný nález.` |
 | Review se nepovedlo | `Review se nepovedlo` a pod tím důvod, se kterým se dá něco dělat — spadlá session, timeout bez nálezů, selhaná pracovní kopie |
+| Na **mém** PR se ozval někdo jiný | `2 nové komentáře a 1 review`, pod tím ta nejnovější věta (`odinuv: opravdu to potřebuje ten mutex?`) a na třetím řádku `owner/repo#123` |
 
 **Titulek odpovídá na „mám k tomu jít hned?“** (#200) — proto v něm je počet nálezů a kolik
 z nich blokuje, ne jméno pull requestu. To je až na třetím řádku; v banneru je vidět taky
@@ -1287,9 +1296,15 @@ hlášky za jednu věc jsou tři vyrušení. Nový výsledek review přepíše t
 `3 nálezy` nezůstala viset stará hláška `Čisté review`. Notifikace o témž PR systém řadí
 k sobě.
 
-**Co se hlásí, se nastavuje** — stránka `Notifikace` v okně nastavení: hlavní vypínač a čtyři
-události (nový PR, review s nálezy, čisté review, selhání). Ve výchozím stavu je zapnuté všechno.
-S vypnutým hlavním přepínačem se aplikace **nezeptá ani na systémové oprávnění**.
+**Co se hlásí, se nastavuje** — stránka `Notifikace` v okně nastavení: hlavní vypínač a pět
+událostí (nový PR, review s nálezy, čisté review, selhání a „ozval se někdo na mém PR“). Ve výchozím
+stavu je zapnuté všechno. S vypnutým hlavním přepínačem se aplikace **nezeptá ani na systémové
+oprávnění**.
+
+**Cizí aktivita na mém PR nepřebíjí výsledek review** (#335), a naopak: nový výsledek review přepíše
+jen ten předchozí, kdežto „kolega odpověděl“ zůstane na obrazovce vedle — jsou to dvě různé věci.
+Hláška o témže komentáři přitom **nepřijde dvakrát**: vedle poslední návštěvy PR si aplikace pamatuje,
+o čem už dala vědět, protože oznámením se PR nenavštíví.
 
 **Re-review se pozná od novinky.** U pull requestu, který jsem už někdy reviewoval, není
 „nový PR“ pravda — a je to jiné očekávání: u nového jde o první přečtení, u re-review o to,
@@ -1602,14 +1617,16 @@ App/                      zdrojáky aplikace — target PRism
   Markdown/               vykreslení Markdownu z GitHubu: bloky (včetně citací a výstrah), inline HTML
                           od botů, škála nadpisů a mezer, zapamatované rozložení na bloky
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka, hledání v paletě,
-                          složení zadání pro agenta na vlastním PR (#333) a co z něj zbývá předat (#334)
+                          složení zadání pro agenta na vlastním PR (#333), co z něj zbývá předat (#334)
+                          a co na něm od minule udělal někdo jiný, i za jakou cenu se na to ptát (#335)
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR, brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy;
                           zadání PR pro reviewera vedle pracovního stromu (#120)
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno (stav v AppStore.swift, metody v AppStore+*.swift);
                           ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku;
-                          HandoffLedger — razítka předání zadání agentovi (#334)
+                          HandoffLedger — razítka předání zadání agentovi (#334);
+                          ActivityNoticeLedger — o čem už se u vlastního PR hlásilo (#335)
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
   Support/                sdílené drobnosti bez příslušnosti k modulu
   Views/                  SwiftUI obrazovky

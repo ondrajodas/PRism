@@ -151,7 +151,7 @@ struct AgentPromptRenderProbe {
         .background(Palette.background)
         try render(scene, width: 1400, height: Self.height, to: url)
         print("SONDA \(url.path) — \(name), stav \(store.handoffReport(for: pr).stage), "
-            + "zbývá \(store.pendingHandoffCount(for: pr))")
+            + "zbývá \(store.handoffReport(for: pr).pending)")
     }
 
     // MARK: - Scéna

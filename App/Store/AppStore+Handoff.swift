@@ -25,20 +25,26 @@ extension AppStore {
     /// Commity jdou dovnitř jen kvůli počtu v panelu (`mezitím přišly 2 commity`) a tahají se
     /// s detailem PR (#316), tedy přesně tam, kde se ta věta kreslí. V seznamu žádné nejsou, takže
     /// odtud vyjde `nil` — a to je jiná věta, ne chybějící stav.
+    ///
+    /// **Volající si bere celý report, ne jedno číslo** (#335). Do #335 tu vedle stál
+    /// `pendingHandoffCount(for:)`, ale od chvíle, kdy řádek čte i cizí aktivitu, by to byla tatáž
+    /// práce dvakrát: report se skládá při každém čtení a `List` staví řádky při každém překreslení.
+    ///
+    /// Cizí aktivita (#335) se počítá proti **značce v paměti** (`visitSnapshots`), ne proti
+    /// ledgeru: tenhle getter čte SwiftUI při každém překreslení řádku, kdežto `VisitLedger` dekóduje
+    /// celý slovník návštěv z předvoleb. Značku zakládá `seedVisitBaseline(for:)` — při zobrazení PR
+    /// i při rozhlídce na pozadí —, takže PR, o kterém aplikace ještě neslyšela, vyjde jako „nevím“
+    /// a řádek o novinkách mlčí. To je bezpečná strana: „od minule“ nad prázdnou značkou by
+    /// znamenalo „od začátku věků“.
     func handoffReport(for pr: PRIdentifier) -> HandoffReport {
         Policy.handoff(
             handoffStamps[pr],
             record: reviewRecord(for: pr),
             conversation: conversation(for: pr),
             head: head(of: pr),
-            commits: commits[pr]
+            commits: commits[pr],
+            activitySince: visitSnapshots[pr]
         )
-    }
-
-    /// Kolik položek na vlastním PR zbývá předat — pilulka `N k předání` v řádku seznamu
-    /// i na dashboardu. Nula znamená „nic nezbývá“, takže se pilulka nekreslí.
-    func pendingHandoffCount(for pr: PRIdentifier) -> Int {
-        handoffReport(for: pr).pending
     }
 
     /// Zapíše předání (#334) — **zkopírováním nebo uložením do souboru**, ne otevřením sheetu.

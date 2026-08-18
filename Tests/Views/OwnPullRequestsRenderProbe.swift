@@ -42,6 +42,17 @@ struct OwnPullRequestsRenderProbe {
         case unknownViewer = "bez-loginu"
         /// Zdroj i login jsou, jen nic otevřeného není.
         case empty = "prazdno"
+        /// Cizí aktivita od minule (#335) — řádek s `2 nové komentáře od minule`.
+        ///
+        /// **Ke tomuhle stavu se v aplikaci klikáním nedostaneš**: musel by mezitím někdo napsat
+        /// komentář na PR, který mám v seznamu, a značka „od minule“ musí být starší než ten
+        /// komentář. Tohle je jediná cesta, jak si ho prohlédnout vedle mockupu (sekce 21).
+        case activity = "cizi-aktivita"
+        /// Totéž v bloku `Moje PR` na dashboardu, kde to návrh kreslí.
+        case activityDashboard = "cizi-aktivita-dashboard"
+
+        /// Kreslí se dashboard, nebo seznam? Rozhoduje o výšce i o vybrané sekci railu.
+        var isDashboard: Bool { self == .dashboard || self == .activityDashboard }
     }
 
     @Test("Vyrendrovat sekci Moje PR ve všech stavech")
@@ -50,7 +61,7 @@ struct OwnPullRequestsRenderProbe {
         for scenario in Scenario.allCases {
             let store = await prepared(scenario)
             let url = directory.appending(path: "moje-pr-\(scenario.rawValue).png")
-            let height = scenario == .dashboard ? Self.dashboardHeight : Self.height
+            let height = scenario.isDashboard ? Self.dashboardHeight : Self.height
             try render(
                 HStack(spacing: 0) {
                     SidebarRail(
@@ -75,7 +86,7 @@ struct OwnPullRequestsRenderProbe {
 
     private func prepared(_ scenario: Scenario) async -> AppStore {
         let list: [PullRequestSummary] = switch scenario {
-        case .dashboard, .list: Self.own + [Self.theirs]
+        case .dashboard, .list, .activity, .activityDashboard: Self.own + [Self.theirs]
         // Bez zdroje vlastní PR nedorazí — proto v seznamu žádné nejsou. Kdyby tam byly (třeba
         // z jinak napsaného dotazu), sekce žádný prázdný stav nemá a je to tak správně.
         case .sourceMissing, .empty: [Self.theirs]
@@ -92,12 +103,46 @@ struct OwnPullRequestsRenderProbe {
             time: FakeTimeSource(stopAfter: 1)
         )
         await store.keepFresh()
-        store.railSection = scenario == .dashboard ? .overview : .mine
+        store.railSection = scenario.isDashboard ? .overview : .mine
         // Nálezy na prvním vlastním PR, ať je v řádku vidět odznak i odznak na railu.
         store.reviewRecords[Self.own[0].id] = makeRecord(
             runs: [makeStoredRun(findings: [makeReported(), makeReported(category: "style")])]
         )
+        if scenario == .activity || scenario == .activityDashboard { seedActivity(in: store) }
         return store
+    }
+
+    /// Cizí komentáře na **druhém** vlastním PR a značka „od minule“ před nimi (#335).
+    ///
+    /// Píše se to do storu **až po tiku**: rozhlídka po cizí aktivitě si o konverzaci řekne sama,
+    /// jenže fake gateway ji nezná, takže by zbyl stav `failed`. Značka se nastavuje ručně ze
+    /// stejného důvodu, z jakého se k tomuhle stavu nedá dojít klikáním — musí být **starší** než
+    /// komentáře, jinak z definice nic nového není.
+    private func seedActivity(in store: AppStore) {
+        let pullRequest = Self.own[1]
+        let mine = pullRequest.id
+        store.visitSnapshots[mine] = Date(timeIntervalSinceNow: -86_400)
+        store.conversationStates[mine] = .loaded(
+            Conversation(
+                viewer: "ondrajodas",
+                reviews: ConversationPage(items: [], total: 0, hasNextPage: false),
+                threads: ConversationPage(items: [], total: 0, hasNextPage: false),
+                comments: ConversationPage(
+                    items: (1...2).map { index in
+                        ThreadComment(
+                            id: "c\(index)",
+                            author: "odinuv",
+                            body: "opravdu to potřebuje ten mutex?",
+                            createdAt: Date(timeIntervalSinceNow: -1_800),
+                            url: URL(string: "https://github.com/\(mine.repo)/pull/\(mine.number)#c\(index)")!
+                        )
+                    },
+                    total: 2,
+                    hasNextPage: false
+                )
+            ),
+            updatedAt: pullRequest.updatedAt
+        )
     }
 
     private func render(_ scene: some View, width: CGFloat, height: CGFloat, to url: URL) throws {

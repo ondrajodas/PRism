@@ -24,8 +24,8 @@ struct NotificationSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            // Jednotlivé události se **schovají**, když je hlavní vypínač vypnutý: čtyři
-            // zakázané přepínače pod vypnutým vypínačem jsou čtyři řádky, které nic neříkají.
+            // Jednotlivé události se **schovají**, když je hlavní vypínač vypnutý: pět
+            // zakázaných přepínačů pod vypnutým vypínačem je pět řádků, které nic neříkají.
             // U tlačítek v okně review je to obráceně (zakázané zůstávají a řeknou důvod), ale
             // tam ten důvod není o řádek výš — tady je.
             if settings.draft.global.notifications.isEnabled {
@@ -34,13 +34,17 @@ struct NotificationSettingsView: View {
                     Toggle("Review s nálezy", isOn: $settings.draft.global.notifications.findings)
                     Toggle("Čisté review", isOn: $settings.draft.global.notifications.clean)
                     Toggle("Review se nepovedlo", isOn: $settings.draft.global.notifications.failure)
+                    // Pátá událost (#335), a **jediná o vlastních PR** — proto stojí pod třemi
+                    // o review, ne mezi nimi: ty čtyři jsou odpověď na review request, tahle je
+                    // opačný směr.
+                    Toggle("Ozval se někdo na mém PR", isOn: $settings.draft.global.notifications.activity)
                 } header: {
                     Text("Co hlásit")
                 } footer: {
                     // Text říká, **co v které notifikaci uvidím**, ne jen že existuje: podle
                     // toho se rozhoduje, co vypnout. `Čisté review` má vysvětlení navíc, protože
                     // je to nejčastější hláška u automatického režimu a nejmenší informace.
-                    Text("`Review s nálezy` nese počet a to, kolik z nich blokuje — a taky běh, který se nevešel do limitu, ale nálezy stihl. `Čisté review` je zpráva, že nezbylo nic k řešení; u ručně spuštěného běhu je to ta odpověď, na kterou se čeká, u automatu s dvaceti běhy denně nejčastější a nejmenší informace. `Review se nepovedlo` pokrývá spadlou session, selhanou pracovní kopii a běh, který nedoběhl a nic nenahlásil. Platí globálně, ne per repo.")
+                    Text("`Review s nálezy` nese počet a to, kolik z nich blokuje — a taky běh, který se nevešel do limitu, ale nálezy stihl. `Čisté review` je zpráva, že nezbylo nic k řešení; u ručně spuštěného běhu je to ta odpověď, na kterou se čeká, u automatu s dvaceti běhy denně nejčastější a nejmenší informace. `Review se nepovedlo` pokrývá spadlou session, selhanou pracovní kopii a běh, který nedoběhl a nic nenahlásil. `Ozval se někdo na mém PR` je jediná hláška o vlastních PR: komentář kolegy, odpověď ve vlákně nebo odeslané review včetně Copilotova — o svém vlastním komentáři se nedozvíš. Diskuze vlastních PR se přitom hlídá jen tam, kde se od minule něco změnilo, a nejvýš po pěti minutách. Platí globálně, ne per repo.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

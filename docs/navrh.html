@@ -8011,18 +8011,25 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
         <div class="doc-head">
           <div class="doc-where"><span>Dialogy a okna</span><b>Notifikace</b></div>
           <h2>Notifikace</h2>
-          <p class="doc-lede">Čtyři události, čtyři různé věty — a žádná, která by se dala splést s jinou.</p>
+          <p class="doc-lede">Pět událostí, pět různých vět — a žádná, která by se dala splést s jinou.</p>
         </div>
 
   <section class="section" id="s12">
     <div class="section-head">
       <div class="eyebrow">12 — Notifikace</div>
-      <h2>Čtyři události, čtyři různé věty</h2>
+      <h2>Pět událostí, pět různých vět</h2>
       <p class="muted">
         Notifikace je jediné místo, kde appka mluví, když se do ní nikdo nedívá — takže musí
         v jedné větě nést, co se stalo a jestli je potřeba něco udělat.
         <strong>Čisté review a selhané review se nesmí slít</strong>, a to platí i tady:
         v banneru se to musí poznat z první řádky, ne z ikony.
+      </p>
+      <p class="muted">
+        Čtyři z nich jsou o <strong>cizích</strong> PR a o našem revieweru. Pátá je opačný směr:
+        na <strong>mém</strong> PR se ozval někdo jiný — kolega odpověděl do vlákna, Copilot dopsal
+        review. Má vlastní přepínač a <strong>nepřebíjí</strong> výsledek review na tomtéž PR:
+        že mi někdo odpověděl a jak dopadl reviewer jsou dvě různé věci a obě mají zůstat na
+        obrazovce.
       </p>
     </div>
 
@@ -8062,6 +8069,15 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
           <span class="t3">keboola/connection#21663 · php-review</span>
         </span>
       </div>
+
+      <div class="notif">
+        <span class="icon"><i></i></span>
+        <span class="col">
+          <span class="t1"><b>2 nové komentáře a 1 review</b><span class="ago">před 15 min</span></span>
+          <span class="t2">odinuv: opravdu to potřebuje ten mutex?</span>
+          <span class="t3">keboola/app-project-restore#91</span>
+        </span>
+      </div>
     </div>
 
     <div class="notes">
@@ -8087,6 +8103,16 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
           <b>Klik vybere ten pull request</b>
           <span>Beze změny. V návrhu navíc otevře záložku, takže se rozdělaná práce
           nezavře.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">31b</span>
+        <span class="body">
+          <b>Na mém PR nese titulek počet, ne jméno</b>
+          <span>„2 nové komentáře a 1 review“ je to, podle čeho se rozhoduju, jestli jít
+          k počítači; pod tím <b>ta nejnovější věta</b> (kdo a co) a na třetím řádku PR — tedy
+          totéž rozvržení jako u nálezů. O svém vlastním komentáři se nedozvím a spadlé CI je
+          jiná událost, ne odstín téhle.</span>
         </span>
       </div>
     </div>

@@ -75,6 +75,9 @@ struct HomeView: View {
         } else {
             List(rows, id: \.id, selection: $store.selection) { pullRequest in
                 let ownership = store.ownership(of: pullRequest)
+                // Jeden report na řádek (#334, #335): pilulka i text novinek se ptají téže funkce,
+                // takže dvě volání by byla tatáž práce dvakrát. U cizího řádku se nekreslí ani jedno.
+                let handoff = ownership == .mine ? store.handoffReport(for: pullRequest.id) : .never
                 PullRequestRow(
                     pullRequest: pullRequest,
                     reviewState: store.reviewState(for: pullRequest.id),
@@ -86,9 +89,8 @@ struct HomeView: View {
                     // se sem dostane jedině s draftem z dřívějška — a ten se má dát dořešit.
                     ownership: ownership,
                     openPrompt: { store.openAgentPrompt(in: pullRequest.id) },
-                    // Jen u vlastních PR (#334) — u cizího řádku se pilulka nekreslí, takže by
-                    // skládání položek zadání byla práce za odpověď, kterou nikdo nepřečte.
-                    pending: ownership == .mine ? store.pendingHandoffCount(for: pullRequest.id) : 0
+                    pending: handoff.pending,
+                    activity: handoff.activity
                 )
             }
         }
