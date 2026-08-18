@@ -16,6 +16,14 @@ struct DashboardView: View {
     /// utratí víc než jednu session, takže se u ní zastavíme.
     @State private var isConfirmingBulkRun = false
 
+    /// Karta pod kurzorem (#371) — rozsvěcuje jí rámeček a šipku v akcentu.
+    ///
+    /// **`nil` je „nikde“, ne „`Dneska stálo`“**: karta bez cíle hover vůbec nehlásí, takže se do
+    /// tohohle stavu nedostane a nemá čím zesvětlit rámeček.
+    @State private var hoveredCard: DashboardCard?
+    /// Patka bloku pod kurzorem (#371), klíčovaná sekcí, do které vede — dvě patky, dvě sekce.
+    @State private var hoveredFooter: RailSection?
+
     var body: some View {
         // **Jednou za překreslení.** `Policy.dashboard` projde všechny záznamy i jejich běhy,
         // takže getter volaný z každé karty zvlášť by tu práci udělal osmkrát za sebou.
@@ -177,9 +185,12 @@ struct DashboardView: View {
 
     /// Pět karet (#331). **`Ve frontě` se jmenuje `Čeká na mě`**, protože s vlastními PR by staré
     /// jméno mluvilo o dvou různých druzích práce naráz — a popisek pod číslem má říkat, čí je tah.
+    ///
+    /// **Čtyři z pěti vedou do své sekce** (#371); `Dneska stálo` nikam, protože nemá kam. Kam která
+    /// vede, rozhoduje `Policy.destination(of:)` — proto se karta identifikuje výčtem, ne popiskem.
     private func cards(_ dashboard: Dashboard) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            card(caption: "Čeká na mě", value: "\(dashboard.queue.pullRequests)") {
+            card(.queue, caption: "Čeká na mě", value: "\(dashboard.queue.pullRequests)") {
                 Text(verbatim: "napříč " + Plural.czech(
                     dashboard.queue.repositories,
                     one: "repozitářem",
@@ -188,6 +199,7 @@ struct DashboardView: View {
                 ))
             }
             card(
+                .blocking,
                 caption: "Blokuje",
                 value: "\(dashboard.blocking.pullRequests)",
                 isAlarm: dashboard.blocking.pullRequests > 0
@@ -199,6 +211,7 @@ struct DashboardView: View {
                 }
             }
             card(
+                .mine,
                 caption: "Moje PR",
                 value: "\(dashboard.mine.pullRequests)",
                 hasAccentRail: dashboard.mine.pullRequests > 0
@@ -206,6 +219,7 @@ struct DashboardView: View {
                 mineFoot(dashboard.mine)
             }
             card(
+                .drafts,
                 caption: "Rozdělaná review",
                 value: "\(dashboard.drafts.pullRequests)"
             ) {
@@ -249,11 +263,52 @@ struct DashboardView: View {
 
     /// Karta. `foot` je věta pod číslem — vždycky nějaká, protože prázdné místo pod velkým
     /// číslem vypadá jako chybějící údaj.
-    private func card(
+    ///
+    /// **Klikatelná je jen ta, která má kam vést** (#371). Karta bez cíle nedostane ani tlačítko,
+    /// ani šipku, ani ukazováček, ani hover — karta, po které se nic nestane, je lež o tom, co okno
+    /// umí, a `cursor: pointer` je z toho ta nejtišší část.
+    @ViewBuilder private func card(
+        _ card: DashboardCard,
         caption: String,
         value: String,
         isAlarm: Bool = false,
         hasAccentRail: Bool = false,
+        @ViewBuilder foot: () -> some View
+    ) -> some View {
+        let destination = Policy.destination(of: card)
+        let face = face(
+            card,
+            caption: caption,
+            value: value,
+            isAlarm: isAlarm,
+            hasAccentRail: hasAccentRail,
+            isClickable: destination != nil,
+            foot: foot
+        )
+        if let destination {
+            Button { store.show(destination) } label: { face }
+                .buttonStyle(.plain)
+                // `pointerStyle`, ne `NSCursor.push()`/`pop()` — když view zmizí uprostřed hoveru,
+                // druhá půlka páru se nikdy nezavolá; tatáž úvaha jako v `AccentLinkButtonStyle`.
+                .pointerStyle(.link)
+                // Zápis jen na změnu, jako v `PullRequestTabBar`: odchod z karty nesmí přepsat
+                // hover, který si mezitím vzala sousední.
+                .onHover { hoveredCard = $0 ? card : (hoveredCard == card ? nil : hoveredCard) }
+                .help(destination.help)
+        } else {
+            face
+        }
+    }
+
+    /// Kresba karty. Vyčleněná z `card(_:…)`, aby se dala položit do tlačítka i vedle něj beze
+    /// změny — jinak by klikatelná a neklikatelná karta byly dvě podoby jedné věci.
+    private func face(
+        _ card: DashboardCard,
+        caption: String,
+        value: String,
+        isAlarm: Bool,
+        hasAccentRail: Bool,
+        isClickable: Bool,
         @ViewBuilder foot: () -> some View
     ) -> some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -261,6 +316,12 @@ struct DashboardView: View {
                 .font(.system(size: 10, design: .monospaced))
                 .tracking(1)
                 .foregroundStyle(Palette.ink3)
+                // **Šipka si drží místo, nekreslí se přes popisek** (#371). V návrhu je šipka
+                // absolutně umístěná, takže by se v užším okně `ROZDĚLANÁ REVIEW` zalomilo pod ni —
+                // a s tím by narostla výška celé řady karet. Jeden řádek je tatáž úvaha jako u věty
+                // pod číslem (#331): popisek je popisek, co se nevejde, se zkrátí.
+                .lineLimit(1)
+                .padding(.trailing, isClickable ? Self.arrowRoom : 0)
             Text(verbatim: value)
                 .font(.system(size: 30, weight: .semibold))
                 .tracking(-0.9)
@@ -283,7 +344,19 @@ struct DashboardView: View {
             RoundedRectangle(cornerRadius: 12)
                 // Návrh míchá červenou do barvy linky, ne přes pozadí: obrys má být vidět jako
                 // varování, ne jako druhá čára navíc.
-                .strokeBorder(isAlarm ? Color.red.mix(with: Palette.line, by: 0.6) : Palette.line, lineWidth: 1)
+                .strokeBorder(border(card, isAlarm: isAlarm, isClickable: isClickable), lineWidth: 1)
+        }
+        // Šipka vpravo nahoře (`.card.go .goto`) — jediný trvalý signál, že karta někam vede;
+        // rámeček v akcentu je až na hover. Kreslí se **jen u karty s cílem**, ne u všech.
+        .overlay(alignment: .topTrailing) {
+            if isClickable {
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 12))
+                    .foregroundStyle(hoveredCard == card ? Palette.accent : Palette.ink3)
+                    // `top: 12`, `right: 13` z návrhu (`.card.go .goto`).
+                    .padding(.top, 12)
+                    .padding(.trailing, 13)
+            }
         }
         // Proužek nahoře jen u karty `Moje PR` (#331). Do té doby ho měla `Rozdělaná review` jako
         // „jediná karta, která mluví o mojí práci“ — od #331 to není pravda a návrh (sekce 21) ho
@@ -302,11 +375,27 @@ struct DashboardView: View {
         .clipShape(.rect(cornerRadius: 12))
     }
 
+    /// Barva obrysu karty. **Hover přebíjí alarm**, jak to má návrh (`.card.go:hover` má vyšší
+    /// specificitu než `.card.alarm`): pod kurzorem je červená karta pořád ta, na kterou se dá
+    /// kliknout, a dvě barvy naráz obrys nakreslit neumí.
+    ///
+    /// Na `isClickable` se ptá **i tady**, ne jen u šipky: karta bez cíle hover nehlásí, takže by se
+    /// do toho stavu neměla jak dostat — ale spoléhat se na to znamená, že by ji rozsvítil první, kdo
+    /// ten zápis přidá jinde. Pravidlo „`Dneska stálo` nemá hover stav“ patří k obrysu, ne k zapisovateli.
+    private func border(_ card: DashboardCard, isAlarm: Bool, isClickable: Bool) -> Color {
+        if isClickable, hoveredCard == card { return Palette.accent }
+        return isAlarm ? Color.red.mix(with: Palette.line, by: 0.6) : Palette.line
+    }
+
+    /// Kolik místa si šipka bere z popisku karty: `12` bodů glyfu a `13` odsazení z návrhu, tedy
+    /// dost na to, aby se popisek zkrátil dřív, než se pod ni dostane.
+    private static let arrowRoom = 25.0
+
     /// Útrata za dnešek. **Nenačtená není nulová** — `0,00 $` by tvrdilo, že se dneska nic
     /// neutratilo, což je nad nepřečteným souborem to samé jako u nenačtené fronty. Značku `≥`
     /// u neúplného součtu skládá `RunUsageText`, tedy totéž místo jako ve stavovém řádku.
     private var spendCard: some View {
-        card(caption: "Dneska stálo", value: store.dailySpend.map(RunUsageText.spent) ?? "—") {
+        card(.spend, caption: "Dneska stálo", value: store.dailySpend.map(RunUsageText.spent) ?? "—") {
             SpendSparkline(days: store.spendHistory)
         }
     }
@@ -368,25 +457,35 @@ struct DashboardView: View {
     ///
     /// **Jen cizí PR** (#332), tedy tatáž množina jako karta `Čeká na mě`. Do #332 tu byl celý
     /// seznam a vlastní PR byl na dashboardu vidět dvakrát.
+    ///
+    /// **Nejvýš pět řádků** (#371) — strop i patku skládá `Policy.dashboardBlock`, tady se jen
+    /// kreslí. Karta `Čeká na mě` nad blokem počítá dál celou frontu: strop je o kresbě.
     @ViewBuilder private var queueRows: some View {
-        rows(store.dashboardQueue, emptyExplanation: RailSection.queue.emptyExplanation)
+        rows(
+            Policy.dashboardBlock(store.dashboardQueue, of: .theirs),
+            emptyExplanation: RailSection.queue.emptyExplanation
+        )
     }
 
     /// Moje PR v dashboardu (#331) — **tytéž řádky, jen druhá množina**, seřazené stejnou
     /// funkcí. Prázdný stav mluví o vlastní práci, ne o frontě; že chybí zdroj nebo login, řekne
     /// sekce v railu (`Policy.ownListEmptyReason`) — na kartě to nese věta pod číslem.
     @ViewBuilder private var ownRows: some View {
-        rows(store.dashboardOwnPullRequests, emptyExplanation: RailSection.mine.emptyExplanation)
+        rows(
+            Policy.dashboardBlock(store.dashboardOwnPullRequests, of: .mine),
+            emptyExplanation: RailSection.mine.emptyExplanation
+        )
     }
 
-    @ViewBuilder private func rows(_ entries: [QueueEntry], emptyExplanation: String) -> some View {
-        if entries.isEmpty {
+    @ViewBuilder private func rows(_ block: DashboardBlock, emptyExplanation: String) -> some View {
+        if block.rows.isEmpty {
             Text(verbatim: emptyExplanation)
                 .font(.system(size: 12.5))
                 .foregroundStyle(Palette.ink2)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(13)
         } else {
+            let entries = block.rows
             VStack(spacing: 0) {
                 ForEach(entries) { entry in
                     let ownership = store.ownership(of: entry.pullRequest)
@@ -416,12 +515,56 @@ struct DashboardView: View {
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
-                    if entry.id != entries.last?.id {
-                        Rectangle().fill(Palette.lineSoft).frame(height: 1)
-                    }
+                    if entry.id != entries.last?.id { separator }
+                }
+                if let footer = block.footer {
+                    // **Čára je tady, a jedna** (#371): patka svou vlastní horní linku nemá, protože
+                    // by se sečetla s tou pod posledním řádkem. V mockupu z toho bylo 1 px + 1 px
+                    // = 2 px (změřeno sondou nad `getComputedStyle`), tady by to bylo totéž.
+                    separator
+                    footerRow(footer)
                 }
             }
         }
+    }
+
+    private var separator: some View {
+        Rectangle().fill(Palette.lineSoft).frame(height: 1)
+    }
+
+    /// Patka bloku (`.block > .more-rows`) — `Zobrazit všech 13 ve frontě +8 →`.
+    ///
+    /// **Není to řádek fronty**, jen cesta do ní: nekreslí se jako `PullRequestRow`, nepočítá se do
+    /// řádků bloku a vede tam, kam karta nad blokem. Text i počet skládá `Policy`, tady se kreslí.
+    private func footerRow(_ footer: DashboardBlock.Footer) -> some View {
+        Button { store.show(.section(footer.section)) } label: {
+            HStack(spacing: 6) {
+                Text(verbatim: footer.title)
+                    .font(.system(size: 11.5, weight: .medium))
+                Text(verbatim: footer.rest)
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(Palette.ink3)
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 10))
+            }
+            .foregroundStyle(Palette.accent)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 8)
+            // Návrh na hover sahá po `var(--hover)`, který v jeho `:root` definovaný **není**, takže
+            // se z něj nedá vzít hodnota — bere se tedy tichý podklad palety, kterým okno zvýrazňuje
+            // jinde (`Palette.raised`).
+            .background(hoveredFooter == footer.section ? Palette.raised : Color.clear)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .onHover {
+            hoveredFooter = $0 ? footer.section : (hoveredFooter == footer.section ? nil : hoveredFooter)
+        }
+        // Nápověda jde přes `DashboardDestination`, ne vlastní větou: patka vede tam, kam karta nad
+        // blokem, takže má i říkat totéž.
+        .help(DashboardDestination.section(footer.section).help)
     }
 
     @ViewBuilder private func reviewerLegend(_ reviewers: [ReviewerShareOfFindings]) -> some View {

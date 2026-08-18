@@ -95,7 +95,7 @@ extension AppStore {
     /// při každém překreslení lišty (nález Copilota na #170).
     var hiddenQueuePullRequestCount: Int {
         guard filter.isActive else { return 0 }
-        return queuePullRequests.count { !filter.matches($0) }
+        return queuePullRequests.count { !passesFilter($0) }
     }
 
     // MARK: - Sekce `Moje PR` (#331)
@@ -118,7 +118,7 @@ extension AppStore {
     var hiddenOwnPullRequestCount: Int {
         guard filter.isActive else { return 0 }
         let mine = ownLogins
-        return Policy.pullRequests(pullRequests, ownedBy: .mine, mine: mine).count { !filter.matches($0) }
+        return Policy.pullRequests(pullRequests, ownedBy: .mine, mine: mine).count { !passesFilter($0) }
     }
 
     /// Odznak u sekce `Moje PR` v railu (#331) — kolik vlastních PR **čeká na tah**.
@@ -148,7 +148,7 @@ extension AppStore {
         // překreslení seznamu.
         let mine = ownLogins
         let own = Policy.pullRequests(pullRequests, ownedBy: .mine, mine: mine)
-        let hidden = filter.isActive ? own.count { !filter.matches($0) } : 0
+        let hidden = filter.isActive ? own.count { !passesFilter($0) } : 0
         return Policy.ownListEmptyReason(
             poll: emptyReason,
             tracksOwnSource: tracksOwnPullRequests,

@@ -17,16 +17,29 @@ struct PullRequestFilter: Equatable, Sendable {
     var repositories: Set<RepoID> = []
     /// Autoři, jejichž PR se mají ukázat. Login z `PullRequestSummary.author`.
     var authors: Set<String> = []
+    /// Jen PR s blokujícím nálezem (#371) — třetí osa, kterou zapíná karta `Blokuje` na dashboardu.
+    ///
+    /// **Nestojí na `PullRequestSummary`, na rozdíl od obou os nad ní.** Jestli něco blokuje, ví
+    /// jedině uložený záznam, takže se odpověď musí dopočítat vedle a přijít zvenčí — proto ji
+    /// `matches(_:isBlocking:)` bere jako uzávěr a **nemá pro ni výchozí hodnotu**: s `false` na
+    /// výchozí by zapnutá osa u volajícího, který ji zapomněl předat, tiše schovala celý seznam.
+    var onlyBlocking = false
 
-    var isActive: Bool { !repositories.isEmpty || !authors.isEmpty }
+    var isActive: Bool { !repositories.isEmpty || !authors.isEmpty || onlyBlocking }
 
     /// Projde tenhle PR filtrem?
     ///
     /// **Uvnitř osy sjednocení, mezi osami průsečík.** Dvě repa znamenají „obojí“, repo + autor
-    /// znamená „jeho PR v tomhle repu“ — tak se filtr chová všude jinde.
-    func matches(_ pullRequest: PullRequestSummary) -> Bool {
-        (repositories.isEmpty || repositories.contains(pullRequest.repo))
-            && (authors.isEmpty || authors.contains(pullRequest.author))
+    /// znamená „jeho PR v tomhle repu“ — tak se filtr chová všude jinde. Osa „jen blokující“ se do
+    /// toho řadí stejně: je to další zúžení, ne druhý filtr.
+    ///
+    /// `isBlocking` je **uzávěr, ne hodnota**, aby se na nález ptalo jedině tehdy, když na tom osa
+    /// stojí. Bez toho by zapnutý filtr repa procházel u každého PR jeho nálezy pro nic — a tuhle
+    /// funkci volá SwiftUI při každém překreslení seznamu.
+    func matches(_ pullRequest: PullRequestSummary, isBlocking: () -> Bool) -> Bool {
+        guard repositories.isEmpty || repositories.contains(pullRequest.repo) else { return false }
+        guard authors.isEmpty || authors.contains(pullRequest.author) else { return false }
+        return !onlyBlocking || isBlocking()
     }
 }
 
@@ -79,12 +92,19 @@ extension Policy {
     /// Seznam zúžený filtrem. Čistá funkce — pořadí se nemění, jen se vybírá.
     ///
     /// **Nesahá na řazení.** Pořadí je od naposledy změněného a je to rozhodnutí z #5.
+    ///
+    /// `isBlocking` odpovídá na osu „jen blokující“ (#371) a **výchozí hodnotu nemá** schválně: mlčky
+    /// dosazené `false` by nad zapnutou osou vrátilo prázdný seznam, tedy nerozeznatelně od „nic
+    /// tu není“. Nad vypnutým filtrem se na ni nikdo neptá — první `guard` se vrací dřív.
     static func filtered(
         _ pullRequests: [PullRequestSummary],
-        by filter: PullRequestFilter
+        by filter: PullRequestFilter,
+        isBlocking: (PRIdentifier) -> Bool
     ) -> [PullRequestSummary] {
         guard filter.isActive else { return pullRequests }
-        return pullRequests.filter(filter.matches)
+        return pullRequests.filter { pullRequest in
+            filter.matches(pullRequest) { isBlocking(pullRequest.id) }
+        }
     }
 
     /// Co nabídnout ve filtru, včetně počtu PR u každé položky (#199).

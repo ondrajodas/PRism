@@ -270,10 +270,10 @@ extension AppStore {
         case .setReviewPanel(let expanded):
             isReviewPanelExpanded = expanded
         case .openSection(let section):
-            railSection = section
-            // Sekce railu je obsah **domácí** záložky, takže bez přepnutí záložky by se nad
-            // otevřeným PR nestalo nic viditelného.
-            activeTab = .home
+            // Přes `show(_:)`, ne dvěma přiřazeními tady: od #371 sem chodí i karty dashboardu
+            // a přepnutí na domácí záložku (bez něj by se nad otevřeným PR nestalo nic
+            // viditelného) má být na jednom místě.
+            show(section)
         case .refresh:
             Task { await refresh() }
         case .openSettings:

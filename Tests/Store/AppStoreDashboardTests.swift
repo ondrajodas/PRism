@@ -94,6 +94,109 @@ struct AppStoreDashboardTests {
 
         #expect(store.runningReviews == 0)
     }
+
+    // MARK: - Kam vede karta (#371)
+
+    @Test("Karta přepne na svou sekci i z otevřeného PR")
+    func switchesToTheSectionFromAnOpenPullRequest() async {
+        let pullRequest = summary("cli/cli#1")
+        let store = await store([pullRequest])
+        store.openTab(pullRequest.id)
+
+        store.show(.section(.mine))
+
+        #expect(store.railSection == .mine)
+        // Bez přepnutí na domácí záložku by se nad otevřeným PR nestalo nic viditelného.
+        #expect(store.activeTab == .home)
+    }
+
+    /// **Strop v bloku nesmí zúžit to, co se počítá.** Karta `Čeká na mě` hlásí třináct, i když
+    /// blok kreslí pět — kdyby se strop protáhl do počítání, dashboard by začal lhát a poznalo by
+    /// se to až za týden.
+    @Test("Strop bloku nezmění čísla na kartách")
+    func doesNotLetTheRowLimitShrinkTheCounts() async {
+        let list = (1...13).map { summary("cli/cli#\($0)") }
+        let store = await store(list)
+
+        let block = Policy.dashboardBlock(store.dashboardQueue, of: .theirs)
+
+        #expect(block.rows.count == 5)
+        #expect(block.footer?.rest == "+8")
+        #expect(store.dashboard.queue.pullRequests == 13)
+        #expect(store.dashboardQueue.count == 13)
+        #expect(store.railQueueCount == 13)
+    }
+
+    /// Karta `Blokuje` zapíná osu filtru a **ostatní volby nechává, jak byly** — zapíná jednu osu,
+    /// ne nový filtr.
+    @Test("Karta Blokuje zapne jen svou osu")
+    func turnsOnOnlyTheBlockingAxis() async {
+        let blocking = summary("cli/cli#1")
+        let clean = summary("cli/cli#2")
+        let store = await store([blocking, clean])
+        store.reviewRecords[blocking.id] = makeRecord(
+            runs: [makeStoredRun(findings: [makeReported(category: "correctness", verdict: .confirmed)])]
+        )
+        store.setFilter(PullRequestFilter(repositories: [RepoID("cli/cli")!], authors: ["autor"]))
+
+        store.show(.blockingQueue)
+
+        #expect(store.railSection == .queue)
+        #expect(store.filter.onlyBlocking)
+        #expect(store.filter.repositories == [RepoID("cli/cli")!])
+        #expect(store.filter.authors == ["autor"])
+        #expect(store.visibleQueuePullRequests.map(\.id) == [blocking.id])
+        #expect(store.hiddenQueuePullRequestCount == 1)
+    }
+
+    /// **Dvakrát kliknout na `Blokuje` nesmí nic přidat.** Osa je příznak, ne položka v seznamu —
+    /// a filtr se z ní vypíná odškrtnutím v nabídce, ne dalším klikem na kartu.
+    @Test("Karta Blokuje nezapne filtr dvakrát")
+    func turnsOnTheBlockingAxisIdempotently() async {
+        let store = await store([summary("cli/cli#1")])
+
+        store.show(.blockingQueue)
+        let afterFirst = store.filter
+        store.show(.blockingQueue)
+
+        #expect(store.filter == afterFirst)
+        #expect(store.filter.onlyBlocking)
+    }
+
+    /// Zapnutá osa **nemění dashboard** — ten je tvrzení o tom, co ve frontě je, ne o tom, co je
+    /// zrovna po filtru vidět (tatáž úvaha jako u filtru rep výš).
+    @Test("Filtr jen blokující dashboard nezúží")
+    func keepsTheDashboardWholeUnderTheBlockingFilter() async {
+        let store = await store([summary("cli/cli#1"), summary("cli/cli#2")])
+
+        store.show(.blockingQueue)
+
+        #expect(store.visibleQueuePullRequests.isEmpty)
+        #expect(store.dashboardQueue.count == 2)
+        #expect(store.dashboard.queue.pullRequests == 2)
+    }
+
+    /// Filtr zapnutý kartou musí vidět **právě ta PR, která karta napočítala**. Kdyby se sada
+    /// blokujících kategorií rozešla (per repo proti globální), šlo by kliknout na `Blokuje 1`
+    /// a dostat prázdný seznam.
+    @Test("Co karta napočítá, to filtr ukáže")
+    func showsExactlyWhatTheCardCounted() async {
+        let blocking = summary("cli/cli#1")
+        let cosmetic = summary("cli/cli#2")
+        let store = await store([blocking, cosmetic])
+        store.reviewRecords[blocking.id] = makeRecord(
+            runs: [makeStoredRun(findings: [makeReported(category: "security", verdict: .confirmed)])]
+        )
+        store.reviewRecords[cosmetic.id] = makeRecord(
+            runs: [makeStoredRun(findings: [makeReported(category: "style", verdict: .confirmed)])]
+        )
+
+        store.show(.blockingQueue)
+
+        #expect(store.dashboard.blocking.pullRequests == 1)
+        #expect(store.visibleQueuePullRequests.count == store.dashboard.blocking.pullRequests)
+        #expect(store.visibleQueuePullRequests.map(\.id) == [blocking.id])
+    }
 }
 
 /// Osa běhu po restartu (#203).

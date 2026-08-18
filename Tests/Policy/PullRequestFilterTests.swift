@@ -17,11 +17,27 @@ struct PullRequestFilterTests {
         )
     }
 
-    private func filter(repos: [String] = [], authors: [String] = []) -> PullRequestFilter {
+    private func filter(
+        repos: [String] = [],
+        authors: [String] = [],
+        onlyBlocking: Bool = false
+    ) -> PullRequestFilter {
         PullRequestFilter(
             repositories: Set(repos.compactMap { RepoID($0) }),
-            authors: Set(authors)
+            authors: Set(authors),
+            onlyBlocking: onlyBlocking
         )
+    }
+
+    /// `Policy.filtered` s odpovědí na osu „jen blokující“ (#371). Odpověď se skládá z **čísel PR**,
+    /// protože v testu je to to jediné, čím se od sebe liší — a `isBlocking` se **nepředává
+    /// implicitně**: kdyby měla ta funkce výchozí `false`, zapnutá osa by tiše schovala celý seznam.
+    private func filtered(
+        _ list: [PullRequestSummary],
+        by filter: PullRequestFilter,
+        blocking: Set<Int> = []
+    ) -> [PullRequestSummary] {
+        Policy.filtered(list, by: filter, isBlocking: { blocking.contains($0.number) })
     }
 
     // MARK: - Filtrování
@@ -32,7 +48,7 @@ struct PullRequestFilterTests {
     func passesEverythingWhenEmpty() {
         let list = [pullRequest(1), pullRequest(2, repo: "ondrajodas/PRism")]
 
-        #expect(Policy.filtered(list, by: PullRequestFilter()).count == 2)
+        #expect(filtered(list, by: PullRequestFilter()).count == 2)
         #expect(!PullRequestFilter().isActive)
     }
 
@@ -45,7 +61,7 @@ struct PullRequestFilterTests {
             pullRequest(3, repo: "keboola/job-queue"),
         ]
 
-        let result = Policy.filtered(list, by: filter(repos: ["cli/cli", "ondrajodas/PRism"]))
+        let result = filtered(list, by: filter(repos: ["cli/cli", "ondrajodas/PRism"]))
 
         #expect(result.map(\.number) == [1, 2])
     }
@@ -58,7 +74,7 @@ struct PullRequestFilterTests {
             pullRequest(3, author: "třetí"),
         ]
 
-        let result = Policy.filtered(list, by: filter(authors: ["první", "třetí"]))
+        let result = filtered(list, by: filter(authors: ["první", "třetí"]))
 
         #expect(result.map(\.number) == [1, 3])
     }
@@ -72,7 +88,7 @@ struct PullRequestFilterTests {
             pullRequest(3, repo: "ondrajodas/PRism", author: "první"),
         ]
 
-        let result = Policy.filtered(list, by: filter(repos: ["cli/cli"], authors: ["první"]))
+        let result = filtered(list, by: filter(repos: ["cli/cli"], authors: ["první"]))
 
         #expect(result.map(\.number) == [1])
     }
@@ -83,8 +99,8 @@ struct PullRequestFilterTests {
     func yieldsNothingForAnUnknownValue() {
         let list = [pullRequest(1)]
 
-        #expect(Policy.filtered(list, by: filter(repos: ["kdesi/jinde"])).isEmpty)
-        #expect(Policy.filtered(list, by: filter(authors: ["nikdo"])).isEmpty)
+        #expect(filtered(list, by: filter(repos: ["kdesi/jinde"])).isEmpty)
+        #expect(filtered(list, by: filter(authors: ["nikdo"])).isEmpty)
     }
 
     /// Filtr **nesahá na řazení** — pořadí je od naposledy změněného (#5).
@@ -92,9 +108,76 @@ struct PullRequestFilterTests {
     func keepsTheOrder() {
         let list = [pullRequest(3), pullRequest(1), pullRequest(2)]
 
-        let result = Policy.filtered(list, by: filter(repos: ["cli/cli"]))
+        let result = filtered(list, by: filter(repos: ["cli/cli"]))
 
         #expect(result.map(\.number) == [3, 1, 2])
+    }
+
+    // MARK: - Osa „jen blokující“ (#371)
+
+    @Test("Jen blokující nechá jen PR s blokujícím nálezem")
+    func keepsOnlyBlockingPullRequests() {
+        let list = [pullRequest(1), pullRequest(2), pullRequest(3)]
+
+        let result = filtered(list, by: filter(onlyBlocking: true), blocking: [2])
+
+        #expect(result.map(\.number) == [2])
+    }
+
+    /// Mezi osami **průsečík**, takže i tahle: `Blokuje` zapíná jednu osu a repo, které si člověk
+    /// odškrtal, zůstává v platnosti.
+    @Test("Jen blokující se s repem průsečíkuje")
+    func intersectsBlockingWithARepository() {
+        let list = [
+            pullRequest(1, repo: "cli/cli"),
+            pullRequest(2, repo: "ondrajodas/PRism"),
+        ]
+
+        let result = filtered(
+            list,
+            by: filter(repos: ["cli/cli"], onlyBlocking: true),
+            blocking: [1, 2]
+        )
+
+        #expect(result.map(\.number) == [1])
+    }
+
+    /// **Vypnutá osa se na nález neptá vůbec.** Jinak by zapnutý filtr repa procházel nálezy
+    /// u každého PR pro nic — a tuhle funkci čte SwiftUI při každém překreslení seznamu.
+    @Test("Vypnutá osa se na blokující nález neptá")
+    func doesNotAskAboutBlockingWhenTheAxisIsOff() {
+        let list = [pullRequest(1), pullRequest(2, repo: "ondrajodas/PRism")]
+        var asked: [Int] = []
+
+        let result = Policy.filtered(list, by: filter(repos: ["cli/cli"])) { pr in
+            asked.append(pr.number)
+            return true
+        }
+
+        #expect(result.map(\.number) == [1])
+        #expect(asked.isEmpty)
+    }
+
+    /// A nad **vypnutým filtrem** se neptá ani na nic jiného: vrací se to, co přišlo.
+    @Test("Prázdný filtr se neptá na nic")
+    func asksNothingWithoutAFilter() {
+        var asked = false
+
+        let result = Policy.filtered([pullRequest(1)], by: PullRequestFilter()) { _ in
+            asked = true
+            return false
+        }
+
+        #expect(result.count == 1)
+        #expect(!asked)
+    }
+
+    /// Osa se počítá do `isActive` — bez toho by ikona filtru nad zapnutou osou vypadala jako
+    /// vypnutý filtr a `Vymazat filtr` by bylo zakázané.
+    @Test("Jen blokující dělá filtr aktivním")
+    func countsAsAnActiveFilter() {
+        #expect(filter(onlyBlocking: true).isActive)
+        #expect(!PullRequestFilter().isActive)
     }
 
     // MARK: - Nabídka hodnot
