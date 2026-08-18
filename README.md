@@ -1006,9 +1006,9 @@ k rozdělané práci“, takže po zavření z ní nezůstane text z minula.
 
 **Prázdný dotaz není prázdné okno** — ukáže začátek každé skupiny, tedy nabídku toho, co je po
 ruce: nálezy od nejvážnějšího, soubory v pořadí diffu, cizí i vlastní PR od naposledy změněného,
-akce v pevném pořadí. Hledá se **bez ohledu na velikost písmen a diakritiku** (`nalez` najde `nález`) a víc slov
-znamená **a zároveň** — `vault secret` najde nález ve `vaultu`, i když ta slova v textu vedle sebe
-nestojí. Shoda v titulku váží víc než v podtitulku, začátek slova víc než vnitřek; nalezený úsek
+akce v pevném pořadí. Hledá se **bez ohledu na velikost písmen a diakritiku** (`nalez` najde
+`nález`) a víc slov znamená **a zároveň** — `vault secret` najde nález ve `vaultu`, i když ta slova
+v textu vedle sebe nestojí. Shoda v titulku váží víc než v podtitulku, začátek slova víc než vnitřek; nalezený úsek
 je v řádku **zvýrazněný** — a to v tom textu, ve kterém se doopravdy potkal.
 
 Hledá se i **podle autora a podle repozitáře**: autor u pull requestů, repo u pull requestů

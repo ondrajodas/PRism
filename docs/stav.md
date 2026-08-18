@@ -2656,15 +2656,16 @@ zůstává `PRism#324 · ondrajodas` místo `· 6 k předání`: je to tatáž �
 zapsalo #331 — předání nemá razítko (#334), takže by to byl počet, který nikdo nepředal. A puntík
 zůstává v barvě **stavu PR**, ne v mintu: mint by říkal „moje“ podruhé (jednou to říká nadpis
 skupiny) a přebil by jedinou věc, kterou ten puntík v paletě nese — `author:@me is:open` vrací
-i drafty a slovo `draft` má jen řádek seznamu. Doloženo renderem světlého tématu, kde jsou `--mint`
-(`#0C7E71`) a `--ok` (`#1A7F37`) skoro k nerozeznání.
+i drafty a slovo `draft` má jen řádek seznamu. **Měření mluví pro stav, ne proti**: `--ok` a `--mint`
+se od sebe liší dost (ΔE76 34 ve světlém, 46 v tmavém režimu), takže by mint tu barvu doopravdy
+přebil. Odhad z pohledu na malý puntík ve snímku říkal opak — proto se to počítalo, a je to zapsané
+i jako poučení: barvu se nemá posuzovat na patnáctibodové ikoně.
 
 Testů přidala tahle změna **devět** a je jich **2952**; jsou zelené, z toho jedno je sonda
 `CommandPaletteRenderProbe`, která se pouští ručně (karta ve dvou podobách — zúžená na počty řádků
 z návrhu a nad celým katalogem). Sonda existuje proto, že paletu otevírá jedině ⌘K a psát do cizí
-instance se v paralelním běhu nemá.
-Rozdělení je ověřené **vloženou regresí**: se všemi PR v jedné skupině a starým nadpisem padne pět
-testů.
+instance se v paralelním běhu nemá. Rozdělení je ověřené **vloženou regresí**: se všemi PR v jedné
+skupině a starým nadpisem padne pět testů.
 
 ### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
 
