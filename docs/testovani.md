@@ -3811,8 +3811,16 @@ testovacího procesu nepředá), **celá suita se bere bez závorek**
 `grepu` se umí zaseknout. Log navíc obsahuje binární smetí z AppKitu, takže `grep` bez `-a`
 odpoví `binary file matches` a nevypíše nic.
 
-A dvě věci k mechanice sond obecně:
+A tři věci k mechanice sond obecně:
 
+- **Měřicí smyčka, která drží okno na obrazovce, musí mít strop od začátku** (#361) — ne dopsaný
+  potom, co někomu sebere obrazovku. Sonda hostuje okno **na obrazovce** a nad hlavním vláknem drží
+  runloop, takže scéna, která si sama říká o další kolo, aplikaci **zabije zvenčí nedosažitelně**:
+  okno se nedá zavřít ani ukončit a zbývá ruční `kill` na stroji, na kterém se zrovna pracuje.
+  Stalo se to u kontrolní scény `FeedbackLoopList` a je to o to nepříjemnější, že takovou smyčku
+  sonda staví **schválně** — je to nástroj, ne nehoda. Pravidlo je proto tvrdé: každá zpětná vazba
+  v měřicí scéně dostane **rozpočet kol** (nebo strop v čase) hned, jak se píše, a v komentáři u ní
+  stojí, co tím zůstává neověřené — u rozpočtu je to kolo, které nikdy nedoběhne.
 - **Pumpa, která špiní graf, musí být `Timer` na runloopu, ne `Task.sleep`.** Test drží hlavní actor
   po celou dobu (`RunLoop.run(until:)` v synchronní metodě), takže úloha se Swift concurrency se ke
   slovu nedostane — změřeno: s `Task.sleep` se graf zašpinil **nulakrát**.
@@ -3900,6 +3908,20 @@ a jediné, co v aplikaci transformace vyžaduje, je čtení **pojmenovaného** s
 (`frame(in: .named(DiffView.contentSpace))` ve třech místech seznamu řádků). V sondě se to nechytlo,
 takže je to hypotéza; ověřit ji jde jedině na živém okně — dočasně přepnout ta čtení na `.local`
 a nechat okno stát hodiny.
+
+**Čtyři vzorky ze tří záchvatů, a co z nich vypadlo natrvalo.** Třetí záchvat (2026-08-18
+odpoledne) přišel při **projíždění konverzace** na buildu `ecf48a0`, tedy s opravou #375:
+
+| | 2026-08-17 | 2026-08-18 dopoledne | 2026-08-18 odpoledne |
+|---|---|---|---|
+| transakční kolo z vzorků hlavního vlákna | 1818/1992, 3279/3593 | 1957/1968, 3912/3924 | **3944/3965 (99 %)** |
+| `enqueueHoverUpdateIfNeeded` | 153 / 271 | **0** | **0** |
+| poloha kurzoru | nad blokem kódu | **mimo okno** | **uvnitř okna** (751, 709 zhora, nad osou) |
+| jediný re-arm v `dispatchActions` | hover + `signalPrefetch` | `signalPrefetch` | **`signalPrefetch`** (všech 15 vzorků podstromu) |
+
+Dvě věci jsou tím **uzavřené**: **hover je vyloučený nadvakrát** (dopoledne kurzor mimo okno,
+odpoledne uvnitř — a v obou nula, takže varianta z hlavičky #361 je jiná příčina se stejným kořenem)
+a **oprava #375 na tom nezměnila nic**, protože odpolední vzorky jsou z buildu, který ji má.
 
 **Číslo k té nitce z 2026-08-18**: v podstromu transakce drží `SecondaryLayerGeometryQuery.value` →
 `ViewDimensions.subscript` → `LayoutEngineBox.explicitAlignment` **517 z 3 924** vzorků hlavního

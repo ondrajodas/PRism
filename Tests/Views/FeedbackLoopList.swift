@@ -11,7 +11,9 @@ import SwiftUI
 ///
 /// **Zpětná vazba je záměrně ohraničená rozpočtem kol** a je to poučení z první verze: bez
 /// rozpočtu se okno sondy nedalo zavřít ani ukončit a musela ho zabít ruka u stroje, na kterém
-/// se zrovna pracovalo. Ohraničená smyčka doběhne sama do sekundy — a měřidlu to stačí, protože
+/// se zrovna pracovalo. Od #361 je to **pravidlo pro všechny sondy** (`docs/testovani.md`, sekce
+/// o mechanice sond): měřicí smyčka, která drží okno na obrazovce, dostane strop hned, jak se
+/// píše — ne po tom, co někomu sebere obrazovku. Ohraničená smyčka doběhne sama do sekundy — a měřidlu to stačí, protože
 /// se čte **první úsek proti pozdějšímu**: dokud se krmí, hoří, a jak přestane, spadne na nulu.
 /// Co tím tedy **není** ověřené: že sonda uvidí kolo, které nikdy nedoběhne.
 ///
