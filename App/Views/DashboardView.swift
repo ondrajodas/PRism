@@ -71,11 +71,26 @@ struct DashboardView: View {
 
     /// Věta pod pozdravem. Skládá se z **toho, co je**, ne z šablony: nad prázdnou frontou by
     /// „0 pull requestů čeká, 0 blokuje“ znělo jako porucha, kdežto je to nejlepší možný stav.
+    ///
+    /// **Dvě věty od #332** — fronta a vlastní PR —, jak je kreslí návrh (sekce 21). Do #332 tu
+    /// druhá chybět musela: dokud karta `Čeká na mě` počítala i vlastní PR, mluvily by obě věty
+    /// o týchž pull requestech a rozpor mezi dvěma čísly v jedné hlavičce je horší než chybějící
+    /// věta. Teď jsou to dvě různé množiny, takže se nemají o co přetahovat.
+    ///
+    /// **Nenačtená fronta druhou větu nedostane.** „Načítám frontu…“ je stav, ve kterém se o mojí
+    /// práci nedá tvrdit nic — a nula nad nenačtenými daty je ta nebezpečná strana.
     private func summarySentence(_ dashboard: Dashboard) -> String {
+        guard store.lastSuccess != nil else { return "Načítám frontu…" }
+        return [queueSentence(dashboard), ownSentence(dashboard.mine)]
+            .compactMap { $0 }
+            .joined(separator: " ")
+    }
+
+    /// První věta — o frontě. Prázdná fronta je nejlepší možný stav, takže se o ní mluví takhle
+    /// a ne nulou.
+    private func queueSentence(_ dashboard: Dashboard) -> String {
         guard dashboard.queue.pullRequests > 0 else {
-            return store.lastSuccess == nil
-                ? "Načítám frontu…"
-                : "Fronta je prázdná — nikdo po tobě zrovna nechce review."
+            return "Fronta je prázdná — nikdo po tobě zrovna nechce review."
         }
         // `Plural.czech` číslo píše samo, takže se před něj nesmí vypsat podruhé.
         var sentence = Plural.czech(
@@ -93,6 +108,26 @@ struct DashboardView: View {
             )
         }
         return sentence + "."
+    }
+
+    /// Druhá věta — o vlastních PR. `nil`, když na tah nečeká žádné: „na nula vlastních čeká tvůj
+    /// tah“ je hlášení o ničem a pozdrav má být krátký.
+    ///
+    /// Mluví o **tahu**, ne o počtu otevřených PR, takže sedí s větou pod číslem na kartě
+    /// `Moje PR` — a nemluví o „nálezech“, jak to má návrh: `awaitingMove` počítá i nevyřešená
+    /// cizí vlákna, takže by to tvrdilo víc, než data unesou.
+    ///
+    /// Číslo se píše **číslicí**, i když návrh má „Na dvou vlastních“: zbytek okna čísla nevypisuje
+    /// slovy (`napříč 4 repozitáři`, `2 mají co předat agentovi`) a dvě různá pravidla v jedné
+    /// hlavičce by byla vidět.
+    private func ownSentence(_ mine: Dashboard.MineCard) -> String? {
+        guard mine.awaitingMove > 0 else { return nil }
+        return "Na " + Plural.czech(
+            mine.awaitingMove,
+            one: "vlastním",
+            few: "vlastních",
+            many: "vlastních"
+        ) + " je co předat agentovi."
     }
 
     /// Kdy se to naposledy načetlo a kolik zbývá do příštího tiku — `poslední tik 09:41 ·
@@ -331,8 +366,8 @@ struct DashboardView: View {
     /// podoby téhož by se rozešly a člověk by se v jedné z nich hledal. Pořadí je ale jiné —
     /// podle závažnosti, ne podle času (`Policy.byUrgency`).
     ///
-    /// **Počítá pořád celý seznam, tedy i moje PR** — odříznout je patří k #332, které mění
-    /// i frontu, automat a notifikace. Do té doby je vlastní PR na dashboardu vidět dvakrát.
+    /// **Jen cizí PR** (#332), tedy tatáž množina jako karta `Čeká na mě`. Do #332 tu byl celý
+    /// seznam a vlastní PR byl na dashboardu vidět dvakrát.
     @ViewBuilder private var queueRows: some View {
         rows(store.dashboardQueue, emptyExplanation: RailSection.queue.emptyExplanation)
     }

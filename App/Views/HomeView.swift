@@ -38,7 +38,10 @@ struct HomeView: View {
                 PullRequestFilterButton(
                     options: store.filterOptions,
                     filter: store.filter,
-                    hidden: store.hiddenPullRequestCount,
+                    // Počet z **fronty** (#332): kdyby to bylo číslo z celého seznamu, lišta by
+                    // nad frontou hlásila „filtr schoval 1“ i tehdy, když schoval jedno vlastní
+                    // PR — tedy řádek, který ve frontě nikdy nebyl.
+                    hidden: store.hiddenQueuePullRequestCount,
                     apply: store.setFilter
                 )
             }

@@ -99,7 +99,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   načtená** — poslední z nich je vědomá spodní hranice, ne chyba.
 
   `AppStore` proti fake gateway (`AppStoreOwnershipTests`): rozřazení **nezmenší plný ani zúžený
-  seznam** (fronta po #331 pořád ukazuje všechno, viz #332), filtr se s rozřazením **skládá**
+  seznam** (na plném visí úklid a nastavení), filtr se s rozřazením **skládá**
   a schované vlastní PR se počítají zvlášť od schovaných cizích, odznak je `nil` do prvního tiku,
   a blok na dashboardu se filtrem **neschová** (dashboard tvrdí o tom, co venku mám).
 
@@ -123,6 +123,39 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   obrázek. Ke dvěma z těch stavů se v aplikaci klikáním nedostaneš (musel by spadnout `gh api user`,
   resp. chybět zdroj v konfiguraci) a dashboard se **screenshotem běžícího okna nevyfotí celý**:
   je to jeden `ScrollView`, takže s třiceti PR ve frontě spadne blok `Moje PR` pod dolní hranu.
+- **Fronta jsou cizí PR (#332)** — celá oblast je o tvrzeních, že se něco **nestalo**, protože
+  všechno tady se rozbije potichu: čísla by jen ukázala jinou hodnotu a úklid by tiše přestal
+  uklízet.
+
+  `Policy` výčtem (`OwnPullRequestsTests`, `AutomaticReviewTests`, `ReviewNotificationTests`,
+  `PullRequestFilterTests`): karta `Čeká na mě` počítá **jen cizí** PR a **repozitáře taky z fronty**
+  (jinak by u jediného cizího PR stálo „napříč 2 repozitáři“); karta `Blokuje` vlastní PR nepočítá
+  **ani v detailu pod číslem**; karta `Rozdělaná review` se naopak **nezmenšuje**. Automat nevydá
+  vlastní PR **ani při globálním `mode: automatic`, ani když si o automat řekne repo** — a k tomu
+  dvě věty, bez kterých by ta tvrzení platila i nad vypnutým automatem: cizí PR v témže seznamu
+  **projde dál** a bez známého loginu se **nevyřazuje nic**. Notifikace o doběhlém review se
+  u `.mine` nepošle **v žádném ze sedmi koncových stavů**, a u `.theirs` se v každém z nich pošle.
+  A `listEmptyReason` vydá `poll(.noPullRequests)` i tehdy, když je prázdná jen fronta.
+
+  `AppStore` proti fake gateway a **skutečnému** `ReviewStore` (`AppStoreQueueScopeTests`,
+  `AppStoreAutomaticTests`, `AppStoreReviewNotificationTests`, `AppStoreNewPullRequestTests`):
+  odznak fronty **se nezvedne**, když do seznamu přibude vlastní PR (a plný seznam zůstane plný);
+  souhrn ve stavovém řádku sčítá jen frontu a **nad samotnými vlastními PR se neukáže vůbec**;
+  hromadné spuštění nabídne jen cizí; a to nejdražší: **úklid nálezů vlastní PR za zmizelý
+  nepovažuje** — kontroluje se `closedAt` na záznamu po tiku, protože právě tím razítkem by se
+  cache začala mazat. K tomu druhá strana: nastavení vidí i repo, ve kterém mám jen svoje PR,
+  nabídka filtru zná vlastní autory a sekce `Rozdělaná` drží draft na vlastním PR.
+  V automatu se ověřuje i to, že **ruční spuštění na vlastním PR jde dál** (jinak by z něj nešlo
+  dostat nálezy pro zadání agentovi) a že se **nesáhne ani na rozpočet** (`automaticRunsToday`).
+
+  **Ověřeno vložením regrese, jedenácti.** Ve dvou dávkách: vyhozený filtr v
+  `automaticallyReviewable`, vrácený `listEmptyReason`, sundaná brána v `reviewNotification`,
+  `railQueueCount` zpátky na celý pohled, souhrn a nová PR zpátky na celý seznam, úklid navázaný na
+  frontu — a v druhé dávce `Policy.dashboard`, `dashboardQueue`, `hiddenQueuePullRequestCount`
+  a `pullRequestsNotReviewed`. Každá z nich shodila právě ten test, který ji má chytat; **u notifikace
+  o vlastním PR přitom potřebuje test tik pollingu**, protože čí je PR se bere ze seznamu — bez něj
+  vyjde `.theirs` a test by byl zeleně z jiného důvodu, než tvrdí.
+
 - **Zadání pro agenta na vlastním PR (#333)** — tři sady a v každé je to nejcennější negativní.
 
   `Policy` výčtem (`AgentPromptTests`): že se **vyřešená vlákna a odmítnuté nálezy do textu

@@ -1867,7 +1867,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Automatic.swift` | Automatický režim a denní rozpočet (#25) | 89 |
 | `AppStore+Findings.swift` | Zahození záznamu (#81) a odmítnutí nálezu (#113) | 70 |
 | `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
-| `AppStore+Ownership.swift` | Čí jsou PR v seznamu (#330) — `ownLogins`, `ownership(of:)`, `tracksOwnPullRequests` —, od #331 celá sekce `Moje PR`: `visibleOwnPullRequests`, `hiddenOwnPullRequestCount`, `railMineCount`, `ownListEmptyReason`, `dashboardOwnPullRequests`, a od #333 i `ownership(of pr:)` s `author(of:)`. **Dotažení loginu je v `AppStore.swift`**, u ostatních věcí, které se načítají při startu, a taky proto, že `viewer` je `private(set)` | 132 |
+| `AppStore+Ownership.swift` | Čí jsou PR v seznamu (#330) — `ownLogins`, `ownership(of:)`, `tracksOwnPullRequests` —, od #331 celá sekce `Moje PR`: `visibleOwnPullRequests`, `hiddenOwnPullRequestCount`, `railMineCount`, `ownListEmptyReason`, `dashboardOwnPullRequests`, a od #333 i `ownership(of pr:)` s `author(of:)`. Od #332 tu leží i druhá strana rozřazení — `queuePullRequests`, `visibleQueuePullRequests`, `hiddenQueuePullRequestCount`. **Dotažení loginu je v `AppStore.swift`**, u ostatních věcí, které se načítají při startu, a taky proto, že `viewer` je `private(set)` | 132 |
 | `AppStore+AgentPrompt.swift` | Zadání pro agenta na vlastním PR (#333) — `agentPrompt(for:)`, předfiltr `hasAgentPromptItems(for:)` bez sazby textu, přepnutí volby, `revealAgentPrompt(in:)` a `openAgentPrompt(in:)` (akce `Prompt →` z řádku: otevřít PR **a** panel). **Nedrží cestu ven**: prompt končí ve schránce nebo v souboru | 90 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
 | `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
@@ -2134,7 +2134,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, **`Moje PR` s odznakem** (#331), `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není. Šířka zůstává 52 bodů a pátá položka se do ní vejde; odznak u `Moje PR` počítá **práci, ne PR** |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181). Od #331 dostává `openSettings` jako **uzávěr z těla okna**, protože prázdná sekce `Moje PR` bez zdroje nabízí nastavení otevřít |
-| `DashboardView` | Startovní obrazovka (#181): pozdrav, **pět karet** (#331), **dvě fronty pod sebou** (`Čeká na moje review` a `Moje PR`), legenda reviewerů a `Co teď`. Akcentový proužek nese od #331 karta `Moje PR`, ne `Rozdělaná review` — dva proužky vedle sebe by přestaly znamenat, která karta je ta o mně |
+| `DashboardView` | Startovní obrazovka (#181): pozdrav, **pět karet** (#331), **dvě fronty pod sebou** (`Čeká na moje review` a `Moje PR`), legenda reviewerů a `Co teď`. Věta pod pozdravem je od #332 **dvojitá** (fronta + „na kolika vlastních je co předat agentovi“), jak ji kreslí návrh; nenačtená fronta druhou větu nedostane a číslo se píše **číslicí**, ne slovem jako v mockupu — zbytek okna to dělá stejně. Akcentový proužek nese od #331 karta `Moje PR`, ne `Rozdělaná review` — dva proužky vedle sebe by přestaly znamenat, která karta je ta o mně |
 | `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatné view |
 | `DashboardCountdown` | Samotný odpočet — `za 43s znovu`, **bez mezery mezi číslem a jednotkou** (#260). Formát je náš (systémový mezeru má a nejde vyndat), takt dává `TimelineView`, takže se přepočítává jen tenhle `Text`. Text i rozvrh jsou statické funkce, aby se daly otestovat |
 | `SpendSparkline` | Sloupcový graf útraty za posledních sedm dní; dnešek zvýrazněný, prázdný den zůstává v řadě (#181) |
@@ -2156,7 +2156,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffBlockSignature` | Podpis bloku, podle kterého se text **znovu nesází** (#157) — a v němž je schválně barevný režim (#278), protože barvy jsou v tom textu zapečené |
 | `DiffGutterGeometry`, `DiffBlockPlacement` | Aritmetika gutteru (#252) — kde leží plochy na tažení a pilulka, a poloha bloku v prostoru obsahu **mimo observable stav**. Čistý typ, aby se dal změřit i otestovat bez okna |
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
-| `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R). Od #331 kreslí **obě sekce se seznamem** (`PullRequestListScope`: `queue` / `mine`) — jeden řádek, jeden filtr, jedno řazení; liší se jen množina a věty nad prázdnem |
+| `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R). Od #331 kreslí **obě sekce se seznamem** (`PullRequestListScope`: `queue` / `mine`) — jeden řádek, jeden filtr, jedno řazení; liší se jen množina a věty nad prázdnem. Od #332 stojí **obě** na zúžených getterech (`visibleQueuePullRequests` / `visibleOwnPullRequests`); `PullRequestListScope` zůstává vyjmenovaný typ, ne `PullRequestOwnership`, protože nese i to, mezi kolika prázdny se rozhoduje a jak se mluví o schovaných řádcích |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199) |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Od #316 má **tři podoby** (`ViewThatFits`, `Layout`): s popisky a `+X −Y`, s popisky bez ní a od #318 **ikony s odznaky a popiskem jen u aktivní** — díky té třetí se pruh nezalomí ani v nejužším povoleném okně. Viz *Pruh záložek — tři podoby podle šířky* |
 | `StaleNoticeView` | Okrová věta „tohle je poslední známý stav“ nad seznamem, který se nepovedlo načíst **znovu** — jedno místo pro `Kontroly` (#215) i `Commity` (#316). Sedí **nad `ScrollView`em**, aby neodscrollovala pryč od obsahu, o kterém mluví |
@@ -4714,7 +4714,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.prefillableSuggestion(_:author:viewer:)`, `Policy.isOwn(author:viewer:)` | Smí se návrhem předvyplnit? Na vlastním PR ne. Samo porovnání dělá od #330 `ownership(ofAuthor:mine:)` — na „je to moje?“ nesmí být dvě odpovědi |
 | `Policy.ownLogins(viewer:configured:)`, `Policy.ownership(of:mine:)`, `Policy.ownership(ofAuthor:mine:)` | Čí je PR (#330) → `PullRequestOwnership`. **Množina loginů**, ne jeden řetězec (viewer + volitelný seznam z konfigurace), porovnání bez ohledu na velikost písmen, **prázdná množina znamená všechno cizí** |
 | `Policy.tracksOwnPullRequests(in:mine:)` | Je mezi zdroji ten, který vlastní PR přináší (#330)? Pozná `author:@me` i vypsaný login; `-author:` ani `involves:` ne |
-| `Policy.pullRequests(_:ownedBy:mine:)` | Seznam zúžený na jednu stranu (#331) — obsah sekce `Moje PR` a bloku na dashboardu. **Nesahá na pořadí**, jako `filtered(_:by:)` |
+| `Policy.pullRequests(_:ownedBy:mine:)` | Seznam zúžený na jednu stranu (#331) — sekce `Moje PR` a její blok, od #332 i **fronta** (`.theirs`) a všechno, co o ní něco tvrdí. **Nesahá na pořadí**, jako `filtered(_:by:)`; a **nesmí na něm viset úklid ani nastavení** |
 | `Policy.ownListEmptyReason(poll:tracksOwnSource:knowsViewer:visible:hidden:)` | Proč je sekce `Moje PR` prázdná (#331) → `ListEmptyReason`. **Tři prázdna navíc** proti frontě: chybějící zdroj, nenačtený login, „nic vlastního otevřeného“. `poll(.noPullRequests)` odsud nevypadne nikdy |
 | `Policy.ownPullRequestsAwaitingMove(_:records:conversation:)`, `Policy.awaitsMyMove(_:conversation:)` | Kolik vlastních PR **čeká na tah** (#331) — obsah odznaku a věty na kartě. Nezpracovaný nález (`activeFindings`) nebo nevyřešené cizí vlákno; **spodní hranice**, protože konverzace jsou v paměti jen u PR, do kterých se kliklo. Konverzace se berou **uzávěrem, ne slovníkem**: odznak čte SwiftUI při každém překreslení okna, takže mapa všech načtených diskuzí by byla kopie za odpověď o vlastních PR |
 | `Policy.agentPromptItems(findings:dismissals:conversation:)` | Všechno, co se dá na vlastním PR předat agentovi (#333) → `[AgentPromptItem]`. **Nefiltruje podle voleb** — z téhož seznamu se počítají i čísla u vypnutých voleb. Vynechá jedině prázdnou obálku review (bez verdiktu i bez prózy), stejně jako `overview` |
@@ -4731,15 +4731,15 @@ Věci, které se u toho nemají rozbít:
 | `Policy.reviewPromptTemplate(from:)`, `.reviewPromptProblems(in:)`, `.reviewPromptBody(template:skillID:baseSha:)`, `.reviewPromptCore(intentPath:)`, `.reviewPrompt(template:skillID:baseSha:intent:)` | Prompt review ze šablony v nastavení (#281, `ReviewPromptTemplate`): prázdná šablona → výchozí, chybějící zástupný text → `Problem`, dosazení hodnot a **vždycky připojené jádro** — od #120 i s větou o souboru se zadáním. Skládá to **jedno místo**, protože týž text potřebuje běh, `Zkopírovat příkaz` i náhled v nastavení |
 | `Policy.intentLinks(in:)`, `.intentBrief(of:description:links:)` | Zadání pro reviewera (#120, `ReviewIntent`): odkazy na Linear issue z cizího textu (dedup podle identifikátoru, pořadí prvního výskytu) a soubor v Markdownu, který se z nich složí. `nil` = nebylo co uložit |
 | `Policy.reviewTimeout(minutes:)`, `.reviewTimeoutMinutes(from:)`, `.reviewTimeoutProblem(in:)` | Časový limit běhu z nastavení (#320, `ReviewTimeout`): sražení do mezí 5–60 min a pojmenování hodnoty, která je mimo ně. **Jediné místo, kde se sráží** — pole v nastavení, globální hodnota i override per repo mluví o týchž mezích |
-| `Policy.automaticallyReviewable(...)` | Které PR má automat spustit — bez rozpočtu, ten je stavový |
+| `Policy.automaticallyReviewable(in:configuration:mine:considered:running:)` | Které PR má automat spustit — bez rozpočtu, ten je stavový. **Vlastní PR nevydá nikdy** (#332), a `mine` proto nemá výchozí hodnotu: zapomenutý parametr by to pravidlo tiše vypnul |
 | `Policy.sorted(_:)`, `Policy.sections(_:)` | Pořadí nálezů pro UI a jejich rozdělení po kategoriích |
 | `Policy.matches(_:_:)` | Patří vlákno (nebo můj rozdělaný komentář) k tomuhle řádku diffu — **jedno místo** pro výběr i umístění |
 | `Policy.inserting(_:intoThread:of:)`, `Policy.applying(_:to:)` | Zápis odeslané odpovědi a vyřešení do načtené konverzace; `nil` = vlákno tam není |
 | `Policy.linesWithSeveralComments(in:)` | Na kolika řádcích draftu je víc komentářů — z každého budou samostatná vlákna, ne odpověď |
 | `Policy.overview(of:renderedIn:)` | Co patří do tabu `Přehled`: review, komentáře pod PR, vlákna bez kotvy a **události časové osy** (#171), chronologicky (`ConversationEntry`) |
 | `Policy.displayableEvents(_:)` | Které události se kreslí — zavření po mergi zahodí, zbytek nechá (#171) |
-| `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem — **s počtem PR u každé položky** (#199), počítaným z plného seznamu, takže zapnutý filtr čísly nehne — a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem** |
-| `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých |
+| `Policy.filtered(_:by:)`, `Policy.filterOptions(in:filter:)`, `Policy.listEmptyReason(poll:visible:hidden:)` | Filtr seznamu PR (#117): zúžení, nabídka hodnot sjednocená s aktivním filtrem — **s počtem PR u každé položky** (#199), počítaným z plného seznamu, takže zapnutý filtr čísly nehne — a důvod prázdna, ve kterém **chyba načtení vyhrává nad filtrem**. Od #332 z něj vyjde `poll(.noPullRequests)` i tehdy, když je prázdná jen **fronta** (tik přinesl jen vlastní PR) — jinak by v okně zbyl prázdný seznam bez věty |
+| `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých. Volající mu od #332 posílá **frontu** (`queuePullRequests`), ne celý seznam |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
 | `Policy.mostSevereFinding(in:categories:)` | Nález, kterým se začíná (#200) — první ze `sorted`, tedy ten nahoře v panelu. Vlastní škála závažnosti z toho nevzniká |
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
@@ -4795,7 +4795,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.sendBlock(for:head:)` | **Proč** se draft nedá odeslat (`DraftSendBlock`); `nil` = dá se |
 | `Policy.canOpenSubmission(block:canTransfer:)`, `Policy.needsTransfer(block:canTransfer:)` | Dá se otevřít **potvrzení** odeslání (#151) a začne kontrolou kotev? Ptá se tlačítko v panelu i zkratka `⌘⏎` — dvě kopie by znamenaly, že zkratka otevře okno nad zakázaným tlačítkem |
 | `Policy.health(of:from:)` | Puntík služby ve stavovém řádku ze tří signálů — viz `App/Health/` |
-| `Policy.reviewNotification(for:state:blocking:topFinding:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět. Titulek nese počty (#200), tělo nález a pod ním PR |
+| `Policy.reviewNotification(for:ownership:state:blocking:topFinding:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět. Titulek nese počty (#200), tělo nález a pod ním PR. **O vlastním PR nehlásí nic** (#332) — všechny tři události jsou odpověď na review request; výchozí `.theirs` je tatáž bezpečná strana jako u `ownership(ofAuthor:mine:)` |
 | `Policy.newPullRequestNotification(for:title:isReReview:)` | Notifikace o novém PR ve frontě (#85); re-review se pozná textem (#137) |
 | `Policy.newPullRequestsNotification(for:titles:reviewed:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
 | `Policy.paletteResults(of:query:limit:)`, `Policy.paletteTokens(in:)` | Hledání v paletě ⌘K (#184): co na dotaz sedne, jak se to váží, kolik z každé skupiny je vidět. Prázdný dotaz vrací **všechno** v pořadí katalogu; pořadí skupin drží `CommandPalette.Group`. Váhy: titulek (začátek > hranice slova > vnitřek) **před** podtitulkem (repo, autor) a ten před klíčovým slovem; vrací i **dva rozsahy zvýraznění**, aby bylo z řádku vidět, proč vyšel |
@@ -4878,11 +4878,53 @@ Nad sekcí `Moje PR` (#331) platí čtyři věci:
   počítají **jen z načtených konverzací** — tahají se při výběru řádku, ne při pollingu — takže je
   to spodní hranice; neúplnost je schválně v tomhle směru, protože odznak, který napočítá víc práce,
   než jí je, se přestane čítat. Cizí aktivitu na vlastních PR dotáhne #335.
-- **Fronta a dashboard po #331 pořád počítají i moje PR.** `railQueueCount`, `Policy.dashboard`,
-  automat i notifikace jsou nezměněné, takže vlastní PR je na dashboardu vidět **v obou blocích**
-  a v čísle karty `Čeká na mě`. Odříznout je je #332, které mění tytéž počty — proto se nedělalo
-  spolu s tímhle. Je na to test (`Karta Čeká na mě po tomhle issue počítá pořád i moje PR`), aby se
-  ta oprava nestala mimochodem a nikdo nevěděl kdy.
+- **Fronta jsou od #332 cizí PR** (`AppStore.queuePullRequests`, `visibleQueuePullRequests`), takže
+  je vlastní PR na dashboardu v jednom bloku, ne ve dvou. Do #332 se počítal do obou a v provozu
+  z toho bylo `Čeká na mě = 32` (13 cizích, 19 vlastních). Které místo chce kterou množinu, je
+  v tabulce níž — a **je to rozhodnutí na místo, ne plošné zúžení**.
+
+### Které místo chce kterou množinu (#332)
+
+| Místo | Množina | Proč |
+|---|---|---|
+| `pullRequests` (plný seznam z tiku) | obojí | z něj se uklízí a čte nastavení; rozřazení je zúžení **nad** ním |
+| `visiblePullRequests` (po filtru) | obojí | základ pro obě sekce, klik na notifikaci podle něj pozná, že PR schoval filtr |
+| sekce `Fronta` a `railQueueCount` | `.theirs` | odznak znamená „tolik lidí čeká na moje review“ |
+| `hiddenQueuePullRequestCount` (lišta nad frontou) | `.theirs` | společné číslo by hlásilo schovaný řádek, který ve frontě nikdy nebyl |
+| `listEmptyReason` | `.theirs` | tik jen s vlastními PR nechá frontu prázdnou, kdežto polling mlčí → `poll(.noPullRequests)` |
+| karty `Čeká na mě` a `Blokuje`, blok `Čeká na moje review` | `.theirs` | blokující nález na vlastním PR mě neblokuje, je to moje práce |
+| karta a blok `Moje PR` | `.mine` | druhá fronta (#331) |
+| karta `Rozdělaná review`, sekce `Rozdělaná` | obojí | draft je ručně psaná práce; od #333 na vlastním PR nevznikne, ten starší se nesmí ztratit |
+| `queueSummary` (stavový řádek) | `.theirs` | jedna věta o frontě — „2 rozdělaná“ z pěti, mezi kterými jedno není, si odporuje |
+| `pullRequestsNotReviewed` (hromadné spuštění) | `.theirs` | akce nad frontou; „fronta je vyřízená“ vedle ní mluví o téže množině |
+| `Policy.automaticallyReviewable` | `.theirs` | **pravidlo, ne nastavení** — viz níž |
+| `Policy.reviewNotification`, `announceNewPullRequests` | `.theirs` | notifikace je odpověď na review request |
+| `handleNotificationClicks` | obojí | klik musí vybrat i vlastní PR |
+| úklid: `forget(whatIsNotIn:)`, `CacheEviction`, `ReviewStore.cleanUp` | obojí | klon vlastního PR zabírá místo stejně jako cizí |
+| `knownRepositories` (nastavení), `filterOptions` | obojí | přenastavit chci i repo, ve kterém mám jen svoje PR |
+| paleta ⌘K | obojí | vlastní skupina místo řádků mezi cizími je #336 |
+
+- **Automat vlastní PR nevydá nikdy, a přepínač se zamítl** (#332). Filtr je v
+  `Policy.automaticallyReviewable` **první v řadě**, takže se PR dál nezvažuje, ať si repo řeklo
+  cokoli. Tři důvody: automat existuje kvůli **čekání** (u vlastního PR není na co čekat), vlastní
+  PR se **mění pod rukama** (každý push je nová hlava, tedy nálezy proti kódu, který za deset minut
+  nebude) a přepínač by přinesl jedině **způsob, jak to pravidlo porušit omylem**. `mine` proto
+  u téhle funkce **nemá výchozí hodnotu**, na rozdíl od `Policy.dashboard`: prázdná množina znamená
+  „nikdo nejsem“, takže by zapomenutý parametr pravidlo tiše vypnul — a tady se za průchod platí
+  session. `autoRunsPerDay` zůstává **jeden společný** limit; dvě poloviny jsou dohromady
+  dvojnásobek. **Ruční spuštění** (`startReview`) pravidlem dotčené není.
+- **Notifikace o vlastním PR nechodí ani o nálezu, ani o novém PR** (#332). Všechny tři události
+  doběhlého review (`findings`, `clean`, `failure`) jsou odpověď na review request a „Nový PR
+  k review“ o vlastním pull requestu je hláška o vlastním pushi. Zúžení u nových PR je **na
+  vstupu**, takže se vlastní PR nedostane ani do snímku ohlášených (`AnnouncedPullRequests`) —
+  vypadnou z něj samy, takže nic neroste. **Dokud login nedorazí** (`gh api user` běží souběžně
+  s prvním tikem), je podle `Policy.ownership` všechno cizí, takže vlastní PR z prvního tiku se
+  ohlásit může; druhá strana by byla mlčet, dokud login nedorazí, a při selhaném dotazu by to
+  znamenalo ztracené notifikace o **cizích** PR. Vlastní text pro vlastní PR je #335.
+- **Čí je PR se u notifikace bere ze seznamu** (`AppStore.author(of:)` → `pullRequests`, teprve pak
+  dotažený detail). Review se pouští z řádku nebo ze záložky, takže tam autor je; review path si
+  detail dotahuje sám a do `detailStates` ho nepíše, což je vidět v testu — bez tiku by z vlastního
+  PR vyšlo `.theirs`.
 
 Nad odhadem jazyka platí:
 

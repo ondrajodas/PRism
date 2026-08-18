@@ -219,6 +219,49 @@ struct AppStoreReviewNotificationTests {
         reviewer.releaseAll()
     }
 
+    /// **Tvrzení, že se něco nestalo** (#332): review na vlastním PR doběhne a nálezy jsou
+    /// v okně, ale notifikace o nich **nepřijde** — cesta pro review requesty je pro cizí PR.
+    /// Hlásit vlastní práci jako review request znamená hlásit něco, o co nikdo nepožádal;
+    /// vlastní notifikace o vlastních PR (komentář kolegy, spadlé CI) je #335.
+    @Test("Nález na vlastním PR se cestou pro review requesty nehlásí")
+    func staysQuietOnOwnPullRequests() async throws {
+        let center = FakeNotificationCenter()
+        // Autor je `autor` a je mezi mými loginy, takže je to po tiku vlastní PR. Čí je PR se
+        // bere **ze seznamu** (`AppStore.author(of:)`), proto ten tik: bez něj by store autora
+        // neznal a padlo by to do `.theirs`.
+        var configuration = Configuration.standard
+        configuration.global.sources = [.reviewRequested]
+        configuration.global.ownLogins = ["autor"]
+        let store = store(
+            gateway: FakeGitHubGateway(
+                always: .success([
+                    PullRequestSummary(
+                        id: pr,
+                        title: "titulek",
+                        author: "autor",
+                        url: URL(string: "https://github.com/cli/cli/pull/42")!,
+                        updatedAt: Date(timeIntervalSince1970: 100),
+                        state: .open
+                    ),
+                ]),
+                detail: .success(detail)
+            ),
+            center: center,
+            reviewer: FakeReviewRunner(findings: [finding()]),
+            configuration: configuration
+        )
+        await store.refresh()
+        #expect(store.ownership(of: pr) == .mine)
+
+        store.startReview(for: pr)
+        try await waitUntilIdle(store)
+
+        #expect(center.delivered.isEmpty)
+        // Review přitom **doběhlo** a nálezy jsou k dispozici — jinak by test platil i tehdy,
+        // kdyby se na vlastním PR nespustilo nic.
+        #expect(store.reviewState(for: pr) == .completed(findings: 1))
+    }
+
     @Test("Bez notifikačního centra review proběhne stejně")
     func worksWithoutACenter() async throws {
         // Notifikace jsou nepovinná závislost — chybějící centrum nesmí review položit.

@@ -685,31 +685,26 @@ final class AppStore {
         await reviewer?.configurationChanged()
     }
 
-    /// **Plný** seznam z pollingu, nefiltrovaný — a musí to tak zůstat.
+    /// **Plný** seznam z pollingu, nefiltrovaný a nerozřazený podle autora — a musí to tak zůstat.
     ///
-    /// Čte ho pět míst, kterých se filtr **nesmí týkat**: `knownRepositories` (okno nastavení),
-    /// `queueSummary` (souhrn je o obsahu fronty, ne o pohledu — #155), `handleNotificationClicks`,
-    /// `startAutomaticReviews` po zahození nálezů (#81) a úklid, který bere `summaries` z tiku.
+    /// Čte ho to, čeho se **nesmí týkat filtr ani rozřazení podle autora** (#332):
+    /// `knownRepositories` (okno nastavení), `filterOptions` (nabídka filtru), `summary(for:)`,
+    /// `handleNotificationClicks`, `startAutomaticReviews` po zahození nálezů (#81) — plánovač si
+    /// vlastní PR odřízne sám v `Policy.automaticallyReviewable` — a úklid, který bere `summaries`
+    /// z tiku.
     ///
     /// Kdyby na zúženém seznamu viselo cokoli z úklidu (`forget(whatIsNotIn:)`, `CacheEviction`,
     /// `ReviewStore.cleanUp`, rušení automatických review), **zapnutí filtru by zahodilo diffy
-    /// a konverzace, smazalo cache a zrušilo běžící review**. Rozdíl mezi tímhle getterem
+    /// a konverzace, smazalo cache a zrušilo běžící review**; a na rozřazení podle autora by to
+    /// samé udělalo přihlášení jiným účtem, jen navíc potichu. Rozdíl mezi tímhle getterem
     /// a `visiblePullRequests` je jediné, co dělí filtr od mazání cache — a je na to test.
     var pullRequests: [PullRequestSummary] { polling.state.pullRequests }
 
-    /// Seznam **po filtru** (#117). Čte ho jedině seznam PR a detail vybraného řádku.
+    /// Seznam **po filtru** (#117), ještě bez rozřazení podle autora. Čtou ho ty dva zúžené
+    /// gettery (`visibleQueuePullRequests`, `visibleOwnPullRequests`), detail vybraného řádku
+    /// a klik na notifikaci, který podle něj pozná, že PR schoval filtr.
     var visiblePullRequests: [PullRequestSummary] {
         Policy.filtered(pullRequests, by: filter)
-    }
-
-    /// Kolik PR filtr schoval. Musí být vidět v liště: skrytý filtr je způsob, jak přijít o review.
-    ///
-    /// Počítá se **bez druhého filtrování** — jen se spočítá, co filtrem neprojde. `visiblePullRequests`
-    /// tady bylo dřív a znamenalo to, že se seznam filtruje dvakrát; SwiftUI ho přitom čte při každém
-    /// překreslení lišty (nález Copilota na #170).
-    var hiddenPullRequestCount: Int {
-        guard filter.isActive else { return 0 }
-        return pullRequests.count { !filter.matches($0) }
     }
 
     /// Co nabídnout ve filtru — z **plného** seznamu, sjednocené s aktivním filtrem.
@@ -796,8 +791,12 @@ final class AppStore {
 
     /// Odznak u fronty v railu. `nil`, dokud se seznam nenačetl — nula nad nenačtenými daty
     /// vypadá jako „hotovo“, a to je zrovna ten nebezpečný směr (tatáž úvaha jako u souhrnu).
+    ///
+    /// **Jen cizí PR** (#332): odznak znamená „tolik lidí čeká na moje review“, takže vlastní PR
+    /// v něm tvrdil víc práce, než je. Vlastní má svůj odznak (`railMineCount`) a ten navíc počítá
+    /// tahy, ne pull requesty.
     var railQueueCount: Int? {
-        lastSuccess == nil ? nil : visiblePullRequests.count
+        lastSuccess == nil ? nil : visibleQueuePullRequests.count
     }
 
     /// Podklad pro dashboard (#181). Počítá se **z paměti store**, žádné nové čtení z disku.
@@ -819,13 +818,14 @@ final class AppStore {
         )
     }
 
-    /// Fronta na dashboardu (#181) — **plný** seznam seřazený podle závažnosti.
+    /// Fronta na dashboardu (#181) — **cizí PR** seřazené podle závažnosti (#332).
     ///
-    /// Ne zúžený filtrem, ze stejného důvodu jako `dashboard` výš: dashboard je tvrzení o tom,
-    /// co ve frontě je, ne o tom, co je zrovna vidět.
+    /// Ne zúžené filtrem, ze stejného důvodu jako `dashboard` výš: dashboard je tvrzení o tom,
+    /// co ve frontě je, ne o tom, co je zrovna vidět. Vlastní PR má vedle vlastní blok
+    /// (`dashboardOwnPullRequests`) — do #332 byl v obou.
     var dashboardQueue: [QueueEntry] {
         Policy.byUrgency(
-            pullRequests.map {
+            queuePullRequests.map {
                 QueueEntry(
                     pullRequest: $0,
                     state: reviewState(for: $0.id),
@@ -946,17 +946,23 @@ final class AppStore {
 
     var emptyReason: PollEmptyReason? { polling.state.emptyReason }
 
-    /// Proč je **viditelný** seznam prázdný — včetně toho, že ho schoval filtr (#117).
+    /// Proč je **fronta** prázdná — včetně toho, že ji schoval filtr (#117).
     ///
     /// Skládá to store, ne polling: ten o stavu okna neví a vědět nemá. Pořadí důvodů rozhoduje
     /// `Policy.listEmptyReason` a nad selhaným tikem vyhrává chyba načtení, ne filtr.
+    ///
+    /// **Počítá se z fronty, ne z celého seznamu** (#332). Tik, ve kterém přišla jen moje PR,
+    /// nechá frontu prázdnou, kdežto `emptyReason` mlčí — a bez tohohle by v okně zbyl prázdný
+    /// seznam bez věty. Vysvětlení pak vyjde `poll(.noPullRequests)`, tedy „až po tobě někdo
+    /// bude chtít review, objeví se tady“.
     var listEmptyReason: ListEmptyReason? {
-        // Jedním průchodem: `visiblePullRequests` i `hiddenPullRequestCount` by seznam filtrovaly
-        // každý zvlášť, a tenhle getter čte SwiftUI při každém překreslení seznamu.
-        let hidden = hiddenPullRequestCount
+        // Jedním průchodem, jako u `ownListEmptyReason`: rozřazení podle autora i filtr by jinak
+        // seznam prošly každý zvlášť, a tenhle getter čte SwiftUI při každém překreslení seznamu.
+        let queue = queuePullRequests
+        let hidden = filter.isActive ? queue.count { !filter.matches($0) } : 0
         return Policy.listEmptyReason(
             poll: emptyReason,
-            visible: pullRequests.count - hidden,
+            visible: queue.count - hidden,
             hidden: hidden
         )
     }
@@ -1272,10 +1278,14 @@ final class AppStore {
     /// Blokující kategorie se berou **globální**, ne per repo: souhrn je jedno číslo přes celou
     /// frontu, takže se nemá čím rozhodnout, které repo má přednost. Řádek seznamu si dál bere ty
     /// svoje (`reviewState(for:)`).
+    ///
+    /// **Sčítá jen frontu, tedy cizí PR** (#332). Souhrn stojí vedle zvonku a účtu a odpovídá na
+    /// „kolik toho na mě čeká“; vlastní PR je druhá fronta a mluví o ní rail a dashboard. Kdyby se
+    /// počítala obojí, byla by v jedné větě dvě různá tvrzení o jednom čísle.
     var queueSummary: QueueSummary? {
         guard polling.state.lastSuccess != nil else { return nil }
         let summary = Policy.summary(
-            of: pullRequests,
+            of: queuePullRequests,
             records: reviewRecords,
             drafts: drafts,
             categories: Set(configuration.global.blockingCategories)

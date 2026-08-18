@@ -322,10 +322,11 @@ struct OwnPullRequestsTests {
         #expect(!card.isTracked)
     }
 
-    /// **Fronta zůstává celá, i s mými PR** — odříznout je patří k #332. Bez tohohle tvrzení by
-    /// se dvojí započtení opravilo „mimochodem“ a nikdo by nevěděl, kdy se to stalo.
-    @Test("Karta Čeká na mě po tomhle issue počítá pořád i moje PR")
-    func stillCountsOwnPullRequestsInTheQueueCard() {
+    /// **Vlastní PR je na dashboardu v jednom bloku, ne ve dvou** (#332). Do #332 se počítal do
+    /// obou a karta `Čeká na mě` tvrdila víc práce, než je (nahlášeno z provozu: 32 = 13 cizích
+    /// + 19 vlastních).
+    @Test("Karta Čeká na mě počítá jen cizí PR")
+    func countsOnlyTheirPullRequestsInTheQueueCard() {
         let list = [pullRequest(1, author: "ondrajodas"), pullRequest(2, author: "kolega")]
 
         let dashboard = Policy.dashboard(
@@ -336,7 +337,69 @@ struct OwnPullRequestsTests {
             tracksOwnSource: true
         )
 
-        #expect(dashboard.queue.pullRequests == 2)
+        #expect(dashboard.queue.pullRequests == 1)
         #expect(dashboard.mine.pullRequests == 1)
+    }
+
+    /// Popisek pod číslem počítá **repozitáře z fronty**, ne ze seznamu — jinak by u jediného
+    /// cizího PR stálo „napříč 2 repozitáři“.
+    @Test("Repozitáře v kartě Čeká na mě jsou jen z fronty")
+    func countsOnlyTheirRepositoriesInTheQueueCard() {
+        let dashboard = Policy.dashboard(
+            pullRequests: [
+                pullRequest(1, author: "ondrajodas", repo: "ondrajodas/PRism"),
+                pullRequest(2, author: "kolega", repo: "cli/cli"),
+            ],
+            records: [:],
+            drafts: [:],
+            mine: ["ondrajodas"],
+            tracksOwnSource: true
+        )
+
+        #expect(dashboard.queue.repositories == 1)
+    }
+
+    /// Blokující nález na vlastním PR **mě neblokuje** (#332) — je to seznam toho, co mám opravit,
+    /// ne toho, co mi stojí v cestě k odeslání review. Karta `Blokuje` je navíc červená, takže by
+    /// z vlastní práce dělala poplach.
+    @Test("Karta Blokuje nepočítá vlastní PR")
+    func countsOnlyTheirPullRequestsInTheBlockingCard() {
+        let own = pullRequest(1, author: "ondrajodas")
+        let theirs = pullRequest(2, author: "kolega")
+
+        let dashboard = Policy.dashboard(
+            pullRequests: [own, theirs],
+            records: [
+                own.id: record(findings: [makeReported(category: "correctness")]),
+                theirs.id: record(findings: [makeReported(category: "style")]),
+            ],
+            drafts: [:],
+            categories: ["correctness"],
+            mine: ["ondrajodas"],
+            tracksOwnSource: true
+        )
+
+        #expect(dashboard.blocking.pullRequests == 0)
+        // A ani v detailu pod číslem nesmí zbýt kategorie z vlastního PR.
+        #expect(dashboard.blocking.detail == nil)
+    }
+
+    /// **Karta `Rozdělaná review` se naopak nezmenšuje** (#332). Draft je ručně psaná práce a od
+    /// #333 na vlastním PR nevznikne — ten z doby předtím se ale nesmí ztratit, protože karta je
+    /// jediná cesta, jak se k němu z dashboardu dostat.
+    @Test("Karta Rozdělaná review počítá i draft na vlastním PR")
+    func countsDraftsOnOwnPullRequestsToo() {
+        let own = pullRequest(1, author: "ondrajodas")
+
+        let dashboard = Policy.dashboard(
+            pullRequests: [own],
+            records: [:],
+            drafts: [own.id: ReviewDraft(pullRequest: own.id, headSha: "aaaa1111", body: "rozepsané")],
+            mine: ["ondrajodas"],
+            tracksOwnSource: true
+        )
+
+        #expect(dashboard.drafts.pullRequests == 1)
+        #expect(dashboard.drafts.pullRequest == own.id)
     }
 }

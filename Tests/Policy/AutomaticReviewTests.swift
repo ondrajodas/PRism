@@ -11,13 +11,14 @@ struct AutomaticReviewTests {
     private func summary(
         _ identifier: String,
         updatedAt: TimeInterval = 100,
-        state: PullRequestState = .open
+        state: PullRequestState = .open,
+        author: String = "autor"
     ) -> PullRequestSummary {
         let id = PRIdentifier(identifier)!
         return PullRequestSummary(
             id: id,
             title: "titulek",
-            author: "autor",
+            author: author,
             url: URL(string: "https://github.com/\(id.repo)/pull/\(id.number)")!,
             updatedAt: Date(timeIntervalSince1970: updatedAt),
             state: state
@@ -33,12 +34,14 @@ struct AutomaticReviewTests {
     private func pick(
         _ summaries: [PullRequestSummary],
         automatic: Bool = true,
+        mine: Set<String> = [],
         considered: [PRIdentifier: Date] = [:],
         running: Set<PRIdentifier> = []
     ) -> [PRIdentifier] {
         Policy.automaticallyReviewable(
             in: summaries,
             configuration: configuration(automatic: automatic),
+            mine: mine,
             considered: considered,
             running: running
         )
@@ -85,5 +88,55 @@ struct AutomaticReviewTests {
     @Test("Prázdný seznam nevybere nic")
     func picksNothingFromAnEmptyList() {
         #expect(pick([]).isEmpty)
+    }
+
+    // MARK: - Vlastní PR (#332)
+
+    /// **Nejcennější test téhle sady.** Automat na vlastním PR znamená útratu bez upozornění —
+    /// a protože se vlastní PR mění pod rukama, je to útrata za nálezy proti kódu, který za deset
+    /// minut nebude. Repo je přitom v automatickém režimu, takže by to bez pravidla prošlo.
+    @Test("Vlastní PR se nevybere ani při globálním automatickém režimu")
+    func neverPicksOwnPullRequests() {
+        var configuration = Configuration.standard
+        // Globální default, ne override per repo: tohle je ta cesta, kterou by vlastní PR prošlo
+        // i v repu, o kterém se nikdy nic nenastavovalo.
+        configuration.global.mode = .automatic
+
+        let picked = Policy.automaticallyReviewable(
+            in: [summary("cli/cli#1", author: "OndraJodas")],
+            configuration: configuration,
+            mine: ["ondrajodas"],
+            considered: [:],
+            running: []
+        )
+
+        #expect(picked.isEmpty)
+    }
+
+    /// Druhá cesta k témuž: repo si o automat řekne samo. Pravidlo je **pravidlo, ne výchozí
+    /// hodnota**, takže se nedá přebít ani per repo — přepínač do nastavení se zamítl (viz
+    /// `Policy.automaticallyReviewable`).
+    @Test("Vlastní PR se nevybere ani když si o automat řekne repo")
+    func neverPicksOwnPullRequestsForAnAutomaticRepository() {
+        #expect(pick([summary("cli/cli#1", author: "ondrajodas")], mine: ["ondrajodas"]).isEmpty)
+    }
+
+    /// Cizí PR v témže seznamu projít **musí** — jinak by test výš platil i tehdy, kdyby se
+    /// automat vypnul celý.
+    @Test("Cizí PR ve stejném seznamu projde dál")
+    func stillPicksTheirPullRequests() {
+        let picked = pick(
+            [summary("cli/cli#1", author: "ondrajodas"), summary("cli/cli#2", author: "kolega")],
+            mine: ["ondrajodas"]
+        )
+
+        #expect(picked == [PRIdentifier("cli/cli#2")])
+    }
+
+    /// Bez loginu je podle `Policy.ownership` všechno cizí, takže se automat chová jako do #332.
+    /// Je to ta bezpečná strana jen na jednu stranu — a proto `mine` nemá výchozí hodnotu.
+    @Test("Bez znalosti loginu se nevyřazuje nic")
+    func picksEverythingWithoutAViewer() {
+        #expect(pick([summary("cli/cli#1", author: "ondrajodas")], mine: []).count == 1)
     }
 }

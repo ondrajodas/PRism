@@ -30,10 +30,16 @@ extension AppStore {
 
     /// PR ve frontě, na kterých se ještě nic nespustilo (#181).
     ///
-    /// Bere **plný** seznam, ne zúžený filtrem: „co neběželo“ je tvrzení o frontě, ne o tom,
-    /// co je zrovna vidět — tatáž úvaha jako u dashboardu.
+    /// Bere seznam **nezúžený filtrem**: „co neběželo“ je tvrzení o frontě, ne o tom, co je zrovna
+    /// vidět — tatáž úvaha jako u dashboardu.
+    ///
+    /// **Jen cizí PR** (#332). Je to obsah akce `Pustit review na vše, co neběželo` v bloku
+    /// `Co teď`, tedy hromadné spuštění nad **frontou** — a věta „Nic nečeká, fronta je vyřízená“
+    /// vedle něj mluví o téže množině jako karta `Čeká na mě`. Ruční spuštění na jednom vlastním PR
+    /// (tlačítko na řádku i v detailu) tím dotčené není: pravidlo se týká automatu a hromadné akce,
+    /// ne toho, když si o review řeknu u konkrétního PR.
     var pullRequestsNotReviewed: [PRIdentifier] {
-        pullRequests.map(\.id).filter { reviewState(for: $0) == .notStarted && reviewTasks[$0] == nil }
+        queuePullRequests.map(\.id).filter { reviewState(for: $0) == .notStarted && reviewTasks[$0] == nil }
     }
 
     /// Pustí review na všem, na čem ještě neběželo (#181).

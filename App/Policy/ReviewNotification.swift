@@ -21,12 +21,26 @@ extension Policy {
     /// řádek se ořízne. Nahoře je proto to, podle čeho se člověk rozhoduje, jestli jde
     /// k počítači hned (kolik nálezů a kolik z nich blokuje), pod tím **ten nejzávažnější
     /// z nich** a teprve na třetím řádku identifikace PR.
+    ///
+    /// **O vlastním PR se touhle cestou nehlásí nic** (#332). Všechny tři události (`findings`,
+    /// `clean`, `failure`) jsou odpověď na review request — přepínají se v nastavení pod
+    /// hlavičkou o review a jejich text mluví o tom, jestli jít k počítači kvůli **cizímu** PR.
+    /// Na vlastním PR automat neběží (`automaticallyReviewable`), takže tady zbývá jedině review,
+    /// které jsem si sám spustil a jehož výsledek je v okně vidět na řádku i v panelu. Vlastní
+    /// notifikace o vlastních PR — komentář kolegy, spadlé CI — je #335 a bude mít **vlastní
+    /// text**; oživit kvůli ní tuhle cestu by znamenalo hlásit vlastní práci jako review request.
+    ///
+    /// Výchozí `.theirs` je tatáž bezpečná strana jako u `Policy.ownership(ofAuthor:mine:)`:
+    /// dokud se neví, čí PR to je, hlásí se to jako fronta. Na rozdíl od automatu tady stojí
+    /// zapomenutý parametr **jeden banner**, ne utracenou session.
     static func reviewNotification(
         for pr: PRIdentifier,
+        ownership: PullRequestOwnership = .theirs,
         state: ReviewState,
         blocking: Int = 0,
         topFinding: Finding? = nil
     ) -> PullRequestNotification? {
+        guard ownership == .theirs else { return nil }
         guard let title = notificationTitle(state: state, blocking: blocking),
               let event = notificationEvent(for: state)
         else { return nil }

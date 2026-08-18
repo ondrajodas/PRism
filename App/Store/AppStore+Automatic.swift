@@ -4,6 +4,10 @@ import Foundation
 ///
 /// Rozpočet se **utrácí až při zabrání běhu** (`claimAutomaticRun`), ne při naplánování:
 /// jinak by se počítaly i běhy, které se nikdy nespustily.
+///
+/// **Vlastní PR automat nepustí nikdy** (#332) — je to pravidlo, ne nastavení, a rozhoduje o něm
+/// `Policy.automaticallyReviewable`. `autoRunsPerDay` zůstává **jeden společný limit**: dvě
+/// poloviny by dohromady byly dvojnásobek, a po #332 ho čerpají jedině cizí PR.
 extension AppStore {
     /// Nespustí automat nic? Počítá se **teď**, z aktuálního limitu.
     ///
@@ -25,12 +29,18 @@ extension AppStore {
         // zavíráním zastavuje. Ruční cesta má tutéž bránu v `startReview`.
         guard let autoRuns, !isTerminating else { return }
         let limit = configuration.global.autoRunsPerDay
-        let anyAutomatic = summaries.contains { resolved(for: $0.repo).mode == .automatic }
+        let mine = ownLogins
+        // **Vlastní PR se nepočítají ani do „je tu něco automatického“** (#332). Repo, ve kterém
+        // mám jen svoje PR, automat nespustí, takže by načtený stav rozpočtu svítil u fronty,
+        // ze které se nikdy nic nepustí. Rozřazení dělá tatáž funkce jako v plánovači.
+        let queue = Policy.pullRequests(summaries, ownedBy: .theirs, mine: mine)
+        let anyAutomatic = queue.contains { resolved(for: $0.repo).mode == .automatic }
         automaticRunsToday = anyAutomatic ? await autoRuns.used() : nil
 
         let candidates = Policy.automaticallyReviewable(
             in: summaries,
             configuration: configuration,
+            mine: mine,
             considered: consideredForAutomation,
             running: Set(reviewTasks.keys)
         )

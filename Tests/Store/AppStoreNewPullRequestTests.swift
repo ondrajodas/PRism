@@ -183,6 +183,32 @@ struct AppStoreNewPullRequestTests {
         #expect(center.delivered.count == 1)
     }
 
+    /// **Tvrzení, že se něco nestalo** (#332): vlastní PR není review request, takže „Nový PR
+    /// k review“ o pull requestu, který jsem sám otevřel, je hláška o vlastním pushi.
+    @Test("Vlastní PR se jako nový k review nehlásí")
+    func staysQuietAboutOwnPullRequests() async {
+        let center = FakeNotificationCenter()
+        var configuration = self.configuration
+        configuration.global.ownLogins = ["autor"]
+        let store = AppStore(
+            gateway: FakeGitHubGateway([
+                .success([summary("cli/cli#1")]),
+                .success([summary("cli/cli#1"), summary("cli/cli#2")]),
+            ]),
+            configuration: configuration,
+            time: FakeTimeSource(),
+            notifications: center,
+            announced: AnnouncedPullRequests(layout: layout)
+        )
+
+        await store.refresh()
+        await store.refresh()
+
+        // Oba PR jsou moje (autor `autor`), takže se druhý tik neohlásí — a je to jediný rozdíl
+        // proti testu `Druhý tik ohlásí, co přibylo`, který totéž se cizím autorem ohlásí.
+        #expect(center.delivered.isEmpty)
+    }
+
     @Test("Bez notifikačního centra se snímek nezakládá")
     func doesNothingWithoutACenter() async {
         // Kdyby se snímek plnil i bez centra, po zapnutí notifikací by se první nová PR

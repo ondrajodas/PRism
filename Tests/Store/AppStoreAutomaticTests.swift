@@ -19,12 +19,16 @@ struct AppStoreAutomaticTests {
         layout = CacheLayout(root: directory.url)
     }
 
-    private func summary(_ number: Int = 42, updatedAt: TimeInterval = 100) -> PullRequestSummary {
+    private func summary(
+        _ number: Int = 42,
+        updatedAt: TimeInterval = 100,
+        author: String = "autor"
+    ) -> PullRequestSummary {
         let id = PRIdentifier(repo: repo, number: number)
         return PullRequestSummary(
             id: id,
             title: "titulek",
-            author: "autor",
+            author: author,
             url: URL(string: "https://github.com/cli/cli/pull/\(number)")!,
             updatedAt: Date(timeIntervalSince1970: updatedAt),
             state: .open
@@ -271,5 +275,91 @@ struct AppStoreAutomaticTests {
         await settle(store)
 
         #expect(!store.isAutomaticStopped)
+    }
+
+    // MARK: - Vlastní PR (#332)
+
+    /// Store s vlastním PR v seznamu. Login se bere z konfigurace, ne z `gh` — je to tatáž množina
+    /// (`Policy.ownLogins`) a `refresh()` login netahá.
+    private func storeWithOwnPullRequest(
+        reviewer: FakeReviewRunner,
+        mode: ReviewMode = .automatic
+    ) -> AppStore {
+        var configuration = Configuration.standard
+        configuration.global.sources = [.reviewRequested]
+        configuration.global.ownLogins = ["ondrajodas"]
+        configuration.repositories = [repo: RepositoryConfig(mode: mode)]
+        return AppStore(
+            gateway: FakeGitHubGateway(
+                always: .success([summary(author: "ondrajodas")]),
+                detail: .success(detail())
+            ),
+            configuration: configuration,
+            time: FakeTimeSource(),
+            checkout: FakeRepoCheckout(),
+            reviewer: reviewer,
+            reviews: ReviewStore(layout: layout, time: FakeTimeSource()),
+            autoRuns: AutoRunLedger(layout: layout, time: FakeTimeSource())
+        )
+    }
+
+    /// **Útrata bez upozornění je ta nejdražší chyba tohohle pravidla** (#332): vlastní PR se mění
+    /// pod rukama, takže by každý push stál session za nálezy proti kódu, který za deset minut
+    /// nebude. Repo je v automatickém režimu, takže bez pravidla by to prošlo — a rozpočet se
+    /// nesmí strhnout ani omylem.
+    @Test("Vlastní PR automat nespustí ani v automatickém repu")
+    func neverReviewsOwnPullRequestsAutomatically() async throws {
+        let reviewer = FakeReviewRunner()
+        let store = storeWithOwnPullRequest(reviewer: reviewer)
+
+        await store.refresh()
+        await settle(store)
+
+        #expect(reviewer.requests.isEmpty)
+        #expect(store.automaticRunsToday == nil)
+    }
+
+    /// Druhá cesta: repo o automat nežádá, ale řekl si o něj **globální default**. Bez pravidla by
+    /// tudy vlastní PR prošlo i v repu, o kterém se nikdy nic nenastavovalo.
+    @Test("Vlastní PR automat nespustí ani z globálního defaultu")
+    func neverReviewsOwnPullRequestsFromTheGlobalDefault() async throws {
+        let reviewer = FakeReviewRunner()
+        var configuration = Configuration.standard
+        configuration.global.sources = [.reviewRequested]
+        configuration.global.ownLogins = ["ondrajodas"]
+        configuration.global.mode = .automatic
+        let store = AppStore(
+            gateway: FakeGitHubGateway(
+                always: .success([summary(author: "ondrajodas")]),
+                detail: .success(detail())
+            ),
+            configuration: configuration,
+            time: FakeTimeSource(),
+            checkout: FakeRepoCheckout(),
+            reviewer: reviewer,
+            reviews: ReviewStore(layout: layout, time: FakeTimeSource()),
+            autoRuns: AutoRunLedger(layout: layout, time: FakeTimeSource())
+        )
+
+        await store.refresh()
+        await settle(store)
+
+        #expect(reviewer.requests.isEmpty)
+    }
+
+    /// **Pravidlo se týká automatu, ne tlačítka.** Ruční spuštění na vlastním PR musí jít dál —
+    /// jinak by z něj nešlo dostat nálezy, ze kterých se skládá zadání pro agenta (#333).
+    @Test("Ruční spuštění review na vlastním PR jde dál")
+    func stillRunsManualReviewsOnOwnPullRequests() async throws {
+        let reviewer = FakeReviewRunner()
+        let store = storeWithOwnPullRequest(reviewer: reviewer, mode: .manual)
+        await store.refresh()
+        await settle(store)
+        #expect(reviewer.requests.isEmpty)
+
+        store.startReview(for: PRIdentifier(repo: repo, number: 42))
+        await settle(store)
+
+        #expect(reviewer.requests.map(\.key.pullRequest) == [pr])
     }
 }

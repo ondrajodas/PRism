@@ -63,6 +63,9 @@ potvrzení — je to jediné kliknutí v aplikaci, které utratí víc než jedn
 k nejstaršímu rozdělanému review. Nic se pro to nedotahuje; všechna ta čísla už v aplikaci byla,
 jen roztroušená.
 
+**Karta `Čeká na mě` a blok `Čeká na moje review` počítají od #332 jen cizí PR**, karta a blok
+`Moje PR` jen vlastní; `Rozdělaná review` počítá dál obojí. Podrobně je to níž, u sekce `Moje PR`.
+
 **Karta `Ve frontě` se od #331 jmenuje `Čeká na mě`** a přibyla vedle ní `Moje PR`. Staré jméno
 mluvilo o dvou různých druzích práce naráz: u cizího PR je moje úloha *přečíst a odpovědět*,
 u vlastního *opravit a pushnout*. Velké číslo na kartě `Moje PR` je **kolik jich mám otevřených**,
@@ -134,6 +137,37 @@ Prázdná sekce má **tři různé věty**, ne jednu. Když mezi zdroji chybí `
 stůl. Když se nepodařilo zjistit login (`gh api user`), řekne, že neví, kdo jsi, protože bez loginu
 je podle autora všechno cizí. A teprve když je zdroj i login, znamená prázdno „nic vlastního
 otevřeného“.
+
+**Fronta jsou od #332 cizí PR, ne všechno, co přišlo.** Do té doby se vlastní PR počítal na obě
+strany naráz: karta `Čeká na mě` tvrdila 32 (13 cizích a 19 vlastních) a tentýž řádek byl
+na dashboardu vidět v obou blocích. Rozřazení podle autora je tedy vidět všude, kde se o **frontě**
+něco tvrdí — v seznamu sekce `Fronta` a jejím odznaku, na kartách `Čeká na mě` a `Blokuje`, v bloku
+`Čeká na moje review`, v souhrnu ve stavovém řádku, v hromadné akci `Pustit review na vše, co
+neběželo` a v notifikacích. Blokující nález na vlastním PR se do karty `Blokuje` **nepočítá**: je to
+seznam toho, co mám opravit, ne toho, co mi stojí v cestě. Věta pod pozdravem je proto od #332
+**dvojitá** — „Pět pull requestů čeká na review, jeden z nich blokuje. Na 2 vlastních je co předat
+agentovi.“ —, jak ji kreslí návrh; dřív by mluvila o týchž pull requestech dvakrát.
+
+**Co se naopak řídí celým seznamem**: úklid cache, eviction a úklid nálezů (klon vlastního PR
+zabírá místo stejně jako cizí, takže navázat je na frontu znamená cache, která tiše roste), okno
+nastavení se seznamem repozitářů, nabídka filtru, sekce `Rozdělaná` a karta `Rozdělaná review`
+(draft je ručně psaná práce a od #333 na vlastním PR nevznikne — ten z doby předtím se nesmí
+ztratit) a klik na notifikaci.
+
+**Automat vlastní PR nepustí nikdy, a není to volba** (#332) — ani při globálním
+`mode: automatic`, ani když si o automat řekne repo svým nastavením. Přepínač se zvažoval
+a **zamítl**: automat existuje kvůli čekání (u vlastního PR není na co čekat, review si na něm
+pouštím, když vím, že jsem dopsal), vlastní PR se mění pod rukama (každý push je nová hlava, tedy
+nálezy proti kódu, který za deset minut nebude) a jediné, co by přepínač přinesl, je způsob, jak si
+to zapnout omylem. Denní strop `autoRunsPerDay` zůstává **jeden společný** — dvě poloviny limitu
+jsou dohromady dvojnásobek — a po #332 ho čerpají jedině cizí PR. **Ruční spuštění na vlastním PR
+jde dál**, i tlačítkem na řádku: pravidlo se týká automatu a hromadné akce, ne toho, když si
+o review řeknu.
+
+**Notifikace jsou cesta pro review requesty**, takže o vlastním PR nedají vědět: „Nový PR k review“
+o pull requestu, který jsem sám otevřel, je hláška o vlastním pushi, a výsledek review, které jsem
+si sám spustil, je v okně vidět na řádku i v panelu. Cizí aktivita na vlastních PR — komentář
+kolegy, spadlé CI — dostane vlastní text v #335.
 
 U vybraného PR je tlačítko **Spustit review**. Za ním se stane tohle: dotáhne se head
 commit, připraví se odpojený pracovní strom a v něm se spustí headless session Claude Code

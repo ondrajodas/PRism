@@ -2534,7 +2534,7 @@ předvyplňuje verdikt, a to je viditelná změna a věc panelu vlastního PR (#
 Testů je **2843** a jsou zelené (+31). **V okně není vidět nic** — je to součástka, kterou zatím
 nikdo nekreslí; jediné, co je vidět, je nový výchozí zdroj, a ten se projeví **jen na prázdné
 cache**: v seznamu se pak vedle cizích PR objeví i vlastní (změřeno `gh search prs`: 13 cizích proti
-17 vlastním). Fronta, dashboard, automat a notifikace se od cizích PR odříznou v #332.
+17 vlastním). Fronta, dashboard, automat a notifikace se od vlastních PR odřízly v #332 (viz níž).
 
 **Moje PR jsou druhá fronta (#331)** — v railu přibyla sekce `Moje PR` mezi `Frontou`
 a `Rozdělanými` (`RailSection.mine`, šipka nad vaničkou) a na dashboardu **dva bloky pod sebou**
@@ -2571,11 +2571,12 @@ na `isEnabled` neptá (v celé aplikaci, ne jen tady — vlastní otázka na ná
 dashboardu **nemá popisek** `jen s nálezy`, který návrh kreslí vpravo v hlavičce: nic se nefiltruje,
 takže by ten text tvrdil něco, co se nedělá. A **věta pod pozdravem se nezměnila**, ačkoli návrh má
 „Na dvou vlastních leží nálezy k předání.“ — dokud `Čeká na mě` počítá i vlastní PR, mluvila by ta
-druhá věta o týchž pull requestech dvakrát.
+druhá věta o týchž pull requestech dvakrát. (Dopsalo ji #332, jak se ta karta zúžila.)
 
-**Známé omezení, které jde do #332:** `railQueueCount`, `Policy.dashboard`, automat i notifikace
-počítají pořád i vlastní PR, takže vlastní PR je na dashboardu vidět **v obou blocích** a v čísle
-karty `Čeká na mě`. Je na to test, aby se ta oprava nestala mimochodem.
+**Známé omezení, které tenhle kus vydal a #332 odstranilo:** `railQueueCount`, `Policy.dashboard`,
+automat i notifikace počítaly pořád i vlastní PR, takže vlastní PR byl na dashboardu vidět **v obou
+blocích** a v čísle karty `Čeká na mě` (nahlášeno z provozu jako 32 = 13 cizích + 19 vlastních). Byl
+na to test, aby se ta oprava nestala mimochodem — v #332 se z něj stalo tvrzení obrácené.
 
 Testů je **2881** a jsou zelené (+38). K tomu sonda `OwnPullRequestsRenderProbe` (dashboard a čtyři
 podoby sekce), protože ke dvěma z těch stavů se klikáním nedostaneš a dashboard se ve skutečném okně
@@ -2631,6 +2632,67 @@ vejdou do jedné řady a odstavec do tří. Mockup (sekce 23) drží tutéž hod
 
 Testů přidala tahle změna **56** a po sloučení s #331 je jich **2943**; jsou zelené, z toho jeden je
 sonda, která se pouští ručně.
+
+**Fronta, dashboard, automat a notifikace se týkají cizích PR (#332)** — čtvrtý mergnutý kus M10
+a dokončení #331, ne úklid po něm. Do #332 čtla všechna ta místa plný seznam a předpokládala, že „PR
+= něco, na co se čeká“, takže vlastní PR byl na dashboardu vidět **v obou blocích** a započítaný
+v kartě `Čeká na mě` — v provozu z toho bylo `32 = 13 cizích + 19 vlastních`. Nic z toho nespadlo,
+všechno jen tiše ukázalo špatné číslo.
+
+**Zúžilo se to po místech, ne plošně**, a rozhodnutí „které místo chce kterou množinu“ je celý obsah
+issue; tabulka je v [`architektura.md`](architektura.md). Jen cizí PR (`AppStore.queuePullRequests`,
+`visibleQueuePullRequests`) čte sekce `Fronta` a její odznak, číslo schovaných řádků v liště nad ní,
+prázdný stav fronty, karty `Čeká na mě` a `Blokuje`, blok `Čeká na moje review`, souhrn ve stavovém
+řádku, hromadná akce `Pustit review na vše, co neběželo`, automat a notifikace. **Obojí** čte dál
+úklid nálezů, `CacheEviction`, `forget(whatIsNotIn:)`, okno nastavení, nabídka filtru, sekce
+`Rozdělaná` s kartou `Rozdělaná review` a klik na notifikaci — kdyby se úklid navázal na frontu,
+přestaly by se uklízet klony vlastních PR a cache by tiše rostla.
+
+**Blokující nález na vlastním PR se do karty `Blokuje` nepočítá**: je to seznam toho, co mám opravit,
+ne toho, co mi stojí v cestě k odeslání review — a karta je červená, takže by z vlastní práce dělala
+poplach.
+
+**Automat vlastní PR nevydá nikdy a přepínač se zamítl.** Filtr je v
+`Policy.automaticallyReviewable` **první v řadě**, takže neprojde ani globální `mode: automatic`, ani
+`RepositoryConfig` jednoho repa. Důvody jsou tři: automat existuje kvůli **čekání** (u vlastního PR
+není na co čekat — review si na něm pouštím, když vím, že jsem dopsal), vlastní PR se **mění pod
+rukama** (každý push je nová hlava, tedy nálezy proti kódu, který za deset minut nebude) a přepínač by
+přinesl jedině **způsob, jak si to zapnout omylem**. `mine` proto u téhle funkce **nemá výchozí
+hodnotu**, na rozdíl od `Policy.dashboard`: prázdná množina znamená „nikdo nejsem“, takže by zapomenutý
+parametr pravidlo tiše vypnul — a tady se za průchod platí session. `autoRunsPerDay` zůstává **jeden
+společný** limit a po tomhle kusu ho čerpají jedině cizí PR. **Ruční spuštění na vlastním PR jde
+dál**, i tlačítkem na řádku.
+
+**Notifikace jsou cesta pro review requesty**, takže o vlastním PR nedají vědět ani o nálezu, ani
+o novém PR. Zúžení u nových PR je **na vstupu**, aby se vlastní PR nedostal ani do snímku ohlášených.
+**Dokud login nedorazí** (`gh api user` běží souběžně s prvním tikem), je všechno cizí, takže vlastní
+PR z prvního tiku se ohlásit může — druhá strana by byla mlčet, dokud login nedorazí, a při selhaném
+dotazu by to znamenalo ztracené notifikace o **cizích** PR. Vlastní text pro vlastní PR je #335.
+
+**Prázdná fronta dostala vlastní důvod.** Tik, ve kterém přišla jen vlastní PR, nechá frontu prázdnou,
+kdežto `PollState.emptyReason` mlčí (seznam prázdný není), takže by v okně zbyl prázdný seznam **bez
+věty**. `Policy.listEmptyReason` proto vydá `poll(.noPullRequests)` — „až po tobě někdo bude chtít
+review, objeví se tady“, což je nad vlastními PR ta správná odpověď.
+
+**Rozhodnuto jinak, než bylo v zadání**, ve čtyřech detailech. Zadání jmenovalo pět míst; přibyla
+k nim **tři další, která čtou totéž** — číslo schovaných řádků v liště nad frontou
+(`hiddenQueuePullRequestCount`, jinak by hlásila schovaný vlastní řádek nad nezměněnou frontou),
+prázdný stav fronty a hromadná akce `Pustit review na vše, co neběželo` (věta „fronta je vyřízená“
+vedle ní mluví o téže množině jako karta). Karta `Rozdělaná review` se naopak **nezúžila**, i když
+u ní stálo, že počítá totéž co souhrn ve stavovém řádku: draft je ručně psaná práce, od #333 na
+vlastním PR nevznikne a ten z doby předtím je odkud dopsat jedině z ní. Věta pod pozdravem se
+**dopsala** (zbytek po #331, který se na ni odkládal), ale ne doslova podle mockupu: číslo je
+**číslicí** jako všude jinde v okně a mluví o „co předat agentovi“, ne o „nálezech“ — `awaitingMove`
+počítá i nevyřešená cizí vlákna. A `PullRequestListScope` zůstal **vyjmenovaný typ**, ne
+`PullRequestOwnership`, i když fronta teď na cizích PR opravdu stojí: sekce nese i to, mezi kolika
+prázdny se rozhoduje a jak se mluví o schovaných řádcích.
+
+**Řádek stavové lišty `Vlastní PR — review se odsud neodesílá` ani mint pilulka `moje PR` v hlavičce
+pořád nepřibyly** — #333 je odložilo na „#331 a #332“, ale je to chrom **detailu PR**, kdežto tenhle
+kus mění počty; zůstává to otevřené (patří k #334 nebo k #335).
+
+Testů je **2969** a jsou zelené (+26). **Ověřeno vložením regrese, jedenácti** ve dvou dávkách —
+každá shodila právě ten test, který ji má chytat; výčet je v [`testovani.md`](testovani.md).
 
 ### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
 

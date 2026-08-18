@@ -232,4 +232,19 @@ struct PullRequestFilterTests {
     func keepsTheEmptyReasonWithoutAFilter() {
         #expect(Policy.listEmptyReason(poll: .noPullRequests, visible: 0, hidden: 0) == .poll(.noPullRequests))
     }
+
+    /// **Prázdná fronta nad neprázdným tikem** (#332): tik přinesl jen vlastní PR, takže polling
+    /// o prázdnu nic neříká, ale ve frontě není nic. Bez tohohle případu by v okně zbyl prázdný
+    /// seznam **bez věty** — a to je zrovna ten stav, kvůli kterému `ListEmptyReason` existuje.
+    @Test("Fronta prázdná po rozřazení autorem dá noPullRequests")
+    func reportsAnEmptyQueueOverANonEmptyTick() {
+        #expect(Policy.listEmptyReason(poll: nil, visible: 0, hidden: 0) == .poll(.noPullRequests))
+    }
+
+    /// Filtr má nad prázdnou frontou přednost — z tohohle stavu vede cesta zpátky jedním
+    /// kliknutím, kdežto „nikdo po tobě nechce review“ by ji zavřelo.
+    @Test("Nad prázdnou frontou vyhrává filtr, ne noPullRequests")
+    func prefersTheFilterOverAnEmptyQueue() {
+        #expect(Policy.listEmptyReason(poll: nil, visible: 0, hidden: 2) == .filtered(hidden: 2))
+    }
 }

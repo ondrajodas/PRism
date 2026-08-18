@@ -146,7 +146,7 @@ struct AppStoreOwnershipTests {
         return store
     }
 
-    @Test("Sekce ukazuje moje PR, fronta zůstává celá")
+    @Test("Sekce ukazuje moje PR, fronta cizí")
     func narrowsTheListByAuthor() async {
         let store = await loaded([
             summary(author: "ondrajodas", "cli/cli#1"),
@@ -154,8 +154,10 @@ struct AppStoreOwnershipTests {
         ])
 
         #expect(store.visibleOwnPullRequests.map(\.number) == [1])
+        // Fronta je od #332 druhá strana téhož rozřazení.
+        #expect(store.visibleQueuePullRequests.map(\.number) == [2])
         // **Tvrzení, že se něco nestalo**: rozřazení je pohled, takže plný ani zúžený seznam
-        // nezmenší. Fronta po #331 pořád ukazuje všechno — odříznout ji patří k #332.
+        // nezmenší — na plném visí úklid cache a okno nastavení.
         #expect(store.pullRequests.count == 2)
         #expect(store.visiblePullRequests.count == 2)
     }
@@ -174,9 +176,9 @@ struct AppStoreOwnershipTests {
 
         #expect(store.visibleOwnPullRequests.map(\.number) == [1])
         #expect(store.hiddenOwnPullRequestCount == 1)
-        // Celkem schoval jedno moje a nic cizího; kdyby sekce brala celkové číslo, mluvila by
-        // i o cizích řádcích, které v ní nikdy nebyly.
-        #expect(store.hiddenPullRequestCount == 1)
+        // Schoval jedno **moje** a nic cizího, takže nad frontou nemá lišta co hlásit (#332):
+        // společné číslo by tam mluvilo o řádku, který ve frontě nikdy nebyl.
+        #expect(store.hiddenQueuePullRequestCount == 0)
     }
 
     @Test("Odznak počítá vlastní PR, na kterých leží tah")
