@@ -26,7 +26,12 @@ enum WheelGesture {
         steps: Int,
         step: Double
     ) -> Double {
-        let point = NSPoint(x: scroller.frame.midX, y: scroller.frame.midY)
+        // **Bod se bere z `bounds` a převádí do okna**, ne z `frame`: `frame` je v souřadnicích
+        // nadřazeného view, takže by se událost hlásila jinam, než kam ve okně míří — a poloha
+        // není dekorace, jde do `mouseEventWindowUnderMousePointer` i do `location`.
+        // (Nález Copilota na #379.)
+        let middle = NSPoint(x: scroller.bounds.midX, y: scroller.bounds.midY)
+        let point = scroller.convert(middle, to: nil)
         send(phase: .began, momentum: .none, delta: 0, to: scroller, in: window, at: point)
         for _ in 0..<steps {
             send(phase: .changed, momentum: .none, delta: -step, to: scroller, in: window, at: point)
