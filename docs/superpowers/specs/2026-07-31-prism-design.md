@@ -2433,3 +2433,27 @@ aplikací, která má pět.
 | Titulek notifikace i text v řádku skládá **jedna funkce** (`Policy.activityHeadline`) | Nechat prózu u view, jako to dělá `SinceLastVisitLines` | „2 nové komentáře“ je tatáž věta na dvou místech a dvě implementace skloňování se v tomhle repu už jednou rozešly (nález Copilota na #131: `3 blokujících`). Řádek si připisuje jen `od minule`, protože v banneru by to nemělo smysl — ten mluví o tom, o čem se ještě nehlásilo, ne o mojí poslední návštěvě |
 | `Policy.foreignActivity` **staví na `changes(in:since:)`** | Vlastní průchod konverzací, je to pár řádků | „Co přišlo po téhle chvíli“ je jedna otázka a druhá odpověď na ni by se s první rozešla — včetně pravidla, že **moje vlastní komentáře nejsou novinka**, které by se pak psalo dvakrát. Zbývá jediné rozhodnutí navíc: co z toho je cizí aktivita (komentáře a review bez mých vlastních) |
 | **Vypnutý přepínač zastaví hlášku, ne rozhlídku** | Netahat konverzaci, když jsou notifikace vypnuté — ušetřilo by to dotazy | Text `2 nové komentáře od minule` v řádku stojí na téže konverzaci a **nevypíná se**: kdo si vypne notifikace, chce mít okno pořád pravdivé. Vypnutá hláška u toho razítko **posune** (jako odmítnuté oprávnění u #85), protože opakovat každou rozhlídku něco, co je zakázané, nemá cenu — a po zapnutí přepínače je ta aktivita v okně vidět na řádku |
+
+### Záznam rozhodnutí — pružná výška v uzlu osy a rozsah sondy nečinného okna (#375)
+
+`#375` vzniklo z podezření, které **padlo**, a to je na něm to hlavní. Ztuhnutí z 2026-08-18 (dva
+`sample`y, 99 % vzorků hlavního vlákna v `flushObservers → beginTransaction → flushTransactions`,
+hover **0**, jediný re-arm `LazyLayoutViewCache.signalPrefetch() → NSHostingView.requestUpdate(after:)`)
+přišlo při projíždění konverzace, a v `ConversationNodeView` stála **pružná výška v řádku líného
+seznamu** — vzor, který `CLAUDE.md` od #220 zakazuje. Nabízelo se, že je to příčina. **Není** a nesmí
+se tak vydávat: nečinná konverzace je 0,00–0,01 % na všech záložkách a projíždění stojí 1,30 s s tím
+vzorem a 1,28 s bez něj. **Kontrola měřidla** to uzavírá — šest pružných úrovní navíc vyšlo na
+**1,08 s**, tedy levněji než jedna, takže měřidlo tuhle třídu v tom scénáři nevidí.
+
+Proto **#361 zůstává otevřené** a tahle práce se vydává jako hygiena plus pokrytí. Kdyby se zavřelo,
+zbyl by v repu záznam, že se ztuhnutí opravilo změnou, o které je změřené, že s ním nesouvisí — a
+příští session by u dalšího záchvatu hledala regresi místo příčiny.
+
+| Rozhodnutí | Alternativa | Proč |
+|---|---|---|
+| **Vzor se vyřídí, i když příčinou není** | Nechat `frame(maxHeight: .infinity)` být, když je změřeno, že nic nestojí | Je to **poslední** výskyt v řádku líného seznamu (sweep nad celým `App/`: 26 výskytů, 25 z nich ohraničených) a u buňky dvojice (#98) tentýž vzor aplikaci **položil** — jen v hit testu při pohybu myši, což tenhle scénář nevytěžuje. „Neměřím to, tedy to nestojí nic“ je zrovna ta úvaha, kterou #98 vyvrátilo. Cena opravy je nulová: geometrie je prokazatelně táž |
+| Linka jako **pozadí uzlu**, ne pružný sourozenec puntíku | `overlay`, `alignmentGuide`, nebo dopočítat výšku z obsahu | `background` se rozvrhuje **až nad hotovou velikostí** rodiče, takže si o výšku nevyjednává — a je to tatáž ohraničenost, jakou v repu už má pilulka v `DiffLineView` (tam `overlay`). `overlay` by kreslilo linku **nad** obsah, takže by prosvítala přes karty; `alignmentGuide` řeší polohu, ne výšku. Dopočet z obsahu by byl druhé místo, které se s výškou uzlu může rozejít |
+| Puntík dostane **pevných 34 bodů** (`minimumHeight`) | Nechat mu 24 a nižší uzly zkrátit | 34 je přesně to, co dřív vycházelo jako **ideální** rozměr `frame(maxHeight: .infinity)` nad `Rectangle`em (24 puntík + 10 ideál shapu), takže se výška nejkratších uzlů nezmění. Bez toho by se uzly s jednořádkovou událostí zkrátily o 3 body a linka pod puntíkem by z 10 bodů spadla na 7 — vizuální změna, kterou nikdo nechtěl. `HStack` si bere maximum, takže u vyššího obsahu to nehraje roli |
+| Sonda dostane **všechny záložky a projíždění**, ne jen konverzaci | Přidat scénář konverzace a skončit, issue je o ní | „Hoří jen konverzace“ je tvrzení **o všech** záložkách, takže bez `overview`, `commits` a `checks` se nedá vyslovit. A nečinnost o scénáři „projížděl jsem osou“ netvrdí nic — proto `scrollingConversation`/`scrollingDiff` po malých krocích (hustota kroků rozhoduje, viz #252) |
+| **Sonda vzhledu se opravuje ve stejném commitu** | Nechat `DetailTabRenderProbe` být, konverzaci lze zkontrolovat ručně | Sonda od #294 rendrovala záložku `Konverzace` jako `Načítám konverzaci…`, takže srovnání „před/po“ porovnávalo **dva spinnery** a vyšlo identické, ať se s osou stalo cokoli. Bez opravy by kontrola vzhledu u tohohle issue byla planá — a je to tatáž past jako počet bloků kódu u sondy nečinného okna: snímek, na kterém to, co se posuzuje, není, netvrdí nic |
+| Plošný grep na `maxHeight: .infinity` **prázdný vyjít nemá** | Zakázat ho všude a přepsat všech 25 výskytů na předanou výšku | Ohraničené formy jsou v pořádku a je jich většina: plocha tabu, panelu, sheetu a prázdného stavu má okno vyplnit, `background`/`overlay` uvnitř řádku se rozvrhuje nad hotovou velikostí. Must-be-empty grep by proto musel lhát, nebo by si vynutil 25 zbytečných změn. Kontroluje se ten jeden soubor, který se opravoval; sweep se dělá **výčtem** a u každého výskytu se řekne, do které řádky tabulky v `architektura.md` patří |

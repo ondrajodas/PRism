@@ -569,6 +569,25 @@ Zvlášť stojí za přečtení, než sáhneš na:
   `frame(maxWidth: .infinity)` na každé úrovni zanoření stojí **~5,5× na úroveň** — okno na PR
   s 2000 řádky tuhlo 20 minut na 100 % CPU. Šířka se předává (`availableWidth`, `narrowingWidth`,
   `filling` v `App/Views/AvailableWidth.swift`); pružná výška v líném seznamu je tatáž chyba.
+
+  **Pružná výška ale není *tentýž* multiplikátor jako šířka** (#375) — změřeno, ne odvozeno. V řádku
+  `LazyVStack`u se výška navrhuje jako `nil`, takže `frame(maxHeight: .infinity)` vrátí ideální
+  rozměr dítěte: jeden průchod, žádné pásmo. Šest pružných úrovní navíc v uzlu osy konverzace vyšlo
+  na projíždění **levněji** (1,08 s) než jedna (1,28 s), takže **měřidlo tuhle třídu v tom scénáři
+  nevidí** — a „bez rozdílu“ proto není doklad, že je vzor neškodný. Neškodný není: u buňky dvojice
+  (#98) položil aplikaci, jen v **hit testu při pohybu myši**. Plyne z toho, že se cena pružné výšky
+  **neodhaduje z tabulky pro šířku** a hledá se `sample`m nad tou cestou, která se doopravdy jde.
+
+  Zakázaná je proto pružná výška **v řádku líného seznamu**, ne plošně; ohraničené formy
+  (`background`/`overlay` uvnitř řádku, plocha tabu, panelu, prázdného stavu) jsou vyjmenované
+  v [`docs/architektura.md`](docs/architektura.md). Plošný grep prázdný vyjít **nemůže** — 25
+  ohraničených výskytů je v pořádku —, takže se kontroluje ten jeden soubor, který se opravoval,
+  a sweep se dělá výčtem:
+
+  ```bash
+  grep -rn 'maxHeight: .infinity' App/Views/ConversationNodeView.swift | grep -vE ':[0-9]+: *//'
+  grep -rn 'maxHeight: .infinity' App | grep -vE ':[0-9]+: *//'    # výčet k posouzení, ne prázdný
+  ```
   Tuhnoucí okno se diagnostikuje `sample`m běžícího procesu, ne odhadem — viz
   [`docs/testovani.md`](docs/testovani.md).
 

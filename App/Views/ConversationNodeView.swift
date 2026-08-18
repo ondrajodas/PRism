@@ -16,7 +16,7 @@ struct ConversationNodeView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            axis
+            dot
             content
                 // Šířka se bere z environmentu, když ji někdo ustavil (#220) — jinak pružně jako
                 // dřív. Osa je 24 bodů a mezera 8, takže obsah dostane o 32 méně.
@@ -24,35 +24,53 @@ struct ConversationNodeView: View {
                 .narrowingWidth(by: 32)
                 // **Mezera patří obsahu, ne celému uzlu.** Kdyby odsazovala `HStack`, končila
                 // by linka o jedenáct bodů dřív než uzel a osa by mezi položkami měla díry —
-                // takhle se `axis` roztáhne přes celou výšku včetně mezery a linka je spojitá.
+                // takhle se linka kreslí přes celou výšku včetně mezery a je spojitá.
                 .padding(.bottom, 11)
         }
+        // **Linka je pozadí, ne pružná výška v řádku líného seznamu** (#375). Pozadí se
+        // rozvrhuje až nad **hotovou** velikostí uzlu, takže si o výšku nevyjednává — je to
+        // tatáž ohraničenost jako u pilulky v `DiffLineView`, která žije v `overlay`.
+        .background(alignment: .topLeading) { line }
     }
 
-    /// Čára s puntíkem. Druh nese **symbol uvnitř** a barva obrysu — kolečko je pro všechny
+    /// Puntík na ose. Druh nese **symbol uvnitř** a barva obrysu — kolečko je pro všechny
     /// uzly stejné, aby osa držela svislou linku a nepřeskakovala v šířce.
-    private var axis: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                // **24 bodů a plná barva obrysu**, jak to má návrh (`.tl-dot`). Neutrální uzel
-                // je obrys `--line` a symbol `--ink-2`; barvu má jen ten, u kterého něco
-                // znamená. Ztlumený obrys (`opacity(0.5)`) dělal ze zeleného schválení
-                // nevýrazný šedozelený kroužek, ze kterého verdikt nešel přečíst.
-                Circle()
-                    .fill(Palette.chrome)
-                    .overlay(Circle().strokeBorder(marker.tint ?? Palette.line, lineWidth: 1))
-                    .frame(width: 24, height: 24)
-                Image(systemName: marker.symbol)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(marker.tint ?? Palette.ink2)
-            }
-            Rectangle()
-                .fill(Palette.line)
-                .frame(width: 2)
-                .frame(maxHeight: .infinity)
+    ///
+    /// **Výška je pevná, ne pružná** (#375): 24 bodů puntíku a 10 na kousek linky pod ním, tedy
+    /// přesně to, co dřív vycházelo jako *ideální* rozměr `frame(maxHeight: .infinity)` nad
+    /// `Rectangle`em. Výšku uzlu tak určuje obsah a osa jen řekne, pod co nesmí spadnout;
+    /// `HStack` si bere maximum, takže se u vyššího obsahu nic nemění.
+    private var dot: some View {
+        ZStack {
+            // **24 bodů a plná barva obrysu**, jak to má návrh (`.tl-dot`). Neutrální uzel
+            // je obrys `--line` a symbol `--ink-2`; barvu má jen ten, u kterého něco
+            // znamená. Ztlumený obrys (`opacity(0.5)`) dělal ze zeleného schválení
+            // nevýrazný šedozelený kroužek, ze kterého verdikt nešel přečíst.
+            Circle()
+                .fill(Palette.chrome)
+                .overlay(Circle().strokeBorder(marker.tint ?? Palette.line, lineWidth: 1))
+                .frame(width: 24, height: 24)
+            Image(systemName: marker.symbol)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(marker.tint ?? Palette.ink2)
         }
-        .frame(width: 24)
+        .frame(width: 24, height: Self.minimumHeight, alignment: .top)
     }
+
+    /// Svislá spojnice osy. **Žádné `.infinity`**: `Rectangle` je `Shape`, takže si vezme
+    /// výšku, která se mu navrhne — a v pozadí se navrhuje výška hotového uzlu. Odsazení
+    /// shora je průměr puntíku, takže linka začíná přesně pod ním; `frame(width: 24)` je
+    /// sloupec osy, ve kterém se dva body vystředí na tomtéž místě jako dřív.
+    private var line: some View {
+        Rectangle()
+            .fill(Palette.line)
+            .frame(width: 2)
+            .padding(.top, 24)
+            .frame(width: 24)
+    }
+
+    /// Pod co nesmí uzel spadnout: puntík a kousek linky za ním.
+    private static let minimumHeight: CGFloat = 34
 
     @ViewBuilder private var content: some View {
         switch node {
