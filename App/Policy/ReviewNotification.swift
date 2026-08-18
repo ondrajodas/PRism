@@ -214,10 +214,10 @@ extension Policy {
         guard let finding else { return nil }
         let text = summaryLine(of: finding)
         guard let category = finding.category.map(normalized(category:)), !category.isEmpty else {
-            return text.isEmpty ? nil : shortened(text)
+            return text.isEmpty ? nil : shortenedForBanner(text)
         }
         // Prázdný souhrn nechá samotnou kategorii: visící dvojtečka vypadá jako uříznutý text.
-        return text.isEmpty ? category : shortened("\(category): \(text)")
+        return text.isEmpty ? category : shortenedForBanner("\(category): \(text)")
     }
 
     /// Souhrn nálezu na jeden řádek. Prázdný `shortSummary` se bere jako nedodaný — jinak by
@@ -242,7 +242,11 @@ extension Policy {
     ///
     /// Vlastní tři tečky, i když macOS umí ořezat sám: systémový ořez sebere **celý zbytek
     /// notifikace**, tedy i řádek, na kterém je PR. Tohle je řez, po kterém zbytek přežije.
-    private static func shortened(_ text: String) -> String {
+    ///
+    /// **Není `private`, protože ho bere i notifikace o cizí aktivitě** (#335): banner má pořád
+    /// čtyři řádky a na tom čtvrtém musí zbýt PR, takže druhý řez s vlastní mezí by znamenal, že
+    /// u jedné z hlášek identifikace zmizí.
+    static func shortenedForBanner(_ text: String) -> String {
         guard text.count > notificationFindingLimit else { return text }
         let cut = text.prefix(notificationFindingLimit)
         // Poslední slovo se zahazuje jedině tehdy, když ho řez **rozpůlil**. Když `cut` končí

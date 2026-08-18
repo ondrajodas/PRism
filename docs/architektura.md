@@ -63,8 +63,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `CommandPalette` | Jmenný prostor palety ⌘K (#184): `Item` (řádek), `Group` (skupina — **pořadí případů je pořadí v okně**; od #336 pět případů, protože vlastní PR mají svou skupinu **za** cizími), `Target` a `Action` (co se stane po `↵`), `Mark` (co ten řádek je), `Hit` a `Section` (výsledek hledání — `Hit` nese **dva** rozsahy
 zvýraznění, jeden nad titulkem a jeden nad podtitulkem), `Jump` (žádost o odscrollování) a `Effect` (co zbývá na okno). **Není `Codable`** — je to obsah jednoho otevření palety. Jmenný prostor proto, že `Palette` v repu už znamená barvy okna |
 | `DiffLayout` | Jak se kreslí diff: `unified` (pod sebou) / `split` (vedle sebe). Nastavení **člověka, ne repa** — proto jen v `GlobalConfig` |
-| `NotificationEvent` | Co notifikaci vyvolalo: `newPullRequest` / `findings` / `clean` / `failure`. Nese si ji notifikace sama |
-| `NotificationSettings` | Co se má hlásit (#86) — hlavní vypínač a čtyři události. Jako `DiffLayout` jen globálně |
+| `NotificationEvent` | Co notifikaci vyvolalo: `newPullRequest` / `findings` / `clean` / `failure` / `activity` (#335 — na **mém** PR se ozval někdo jiný). Nese si ji notifikace sama |
+| `NotificationSettings` | Co se má hlásit (#86) — hlavní vypínač a pět událostí. Jako `DiffLayout` jen globálně |
 | `Release` | Jedno vydání aplikace na GitHubu (#127): tag, název, datum, release notes, odkaz. Jako `ReviewVerdict` **není `Codable`** — na disk nejde |
 | `DeliveredNotification` | Poslední **doručená** notifikace (#138) — čas a titulek. Taky **není `Codable`**, drží se v paměti |
 | `InterruptedRun` | Značka rozdělaného běhu (#97): klíč běhu, `sessionID` a pracovní strom — z těch dvou se najde transcript |
@@ -1862,6 +1862,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Draft.swift` | Rozdělané review (#65, #66) a tažení rozsahu (#110) | 190 |
 | `AppStore+Submission.swift` | Odeslání review na GitHub (#67, #68) | 172 |
 | `AppStore+Notifications.swift` | Co se ohlásí, když se do okna nikdo nedívá (#82, #85, #87) | 166 |
+| `AppStore+Activity.swift` | Cizí aktivita na vlastních PR (#335) — rozhlídka na pozadí (`refreshOwnActivity(in:)` z úspěšného tiku), `notifyAboutForeignActivity(on:)` a `conversationUpdatedAt(for:)` jako předfiltr. Text v řádku si bere `handoffReport(for:).activity`, tedy **žádný druhý getter**. **Nic neodesílá**, je to `fetchConversation` | 91 |
 | `AppStore+DiffExpansion.swift` | Rozbalování kontextu mimo hunky (#47), od #317 i v diffu commitu | 139 |
 | `AppStore+DraftTransfer.swift` | Přenesení draftu na nový commit (#69) | 103 |
 | `AppStore+Diff.swift` | Načtení diffu, pohled a sbalování souborů | 95 |
@@ -1871,7 +1872,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
 | `AppStore+Ownership.swift` | Čí jsou PR v seznamu (#330) — `ownLogins`, `ownership(of:)`, `tracksOwnPullRequests` —, od #331 celá sekce `Moje PR`: `visibleOwnPullRequests`, `hiddenOwnPullRequestCount`, `railMineCount`, `ownListEmptyReason`, `dashboardOwnPullRequests`, a od #333 i `ownership(of pr:)` s `author(of:)`. Od #332 tu leží i druhá strana rozřazení — `queuePullRequests`, `visibleQueuePullRequests`, `hiddenQueuePullRequestCount`. **Dotažení loginu je v `AppStore.swift`**, u ostatních věcí, které se načítají při startu, a taky proto, že `viewer` je `private(set)` | 132 |
 | `AppStore+AgentPrompt.swift` | Zadání pro agenta na vlastním PR (#333) — `agentPrompt(for:only:)`, předfiltr `hasAgentPromptItems(for:)` bez sazby textu, přepnutí volby, `revealAgentPrompt(in:)` a `openAgentPrompt(in:)` (akce `Prompt →` z řádku: otevřít PR **a** panel). **Nedrží cestu ven**: prompt končí ve schránce nebo v souboru | 92 |
-| `AppStore+Handoff.swift` | Razítko předání (#334) — `loadStoredHandoffs()` při startu, `handoff(for:)`, `handoffReport(for:)`, `pendingHandoffCount(for:)`, `noteHandoff(of:)` (zapisuje **zkopírování a uložení**, ne otevření sheetu) a `freshAgentPrompt(for:)` pro `Sestavit i tak`. Do paměti hned, na disk asynchronně | 78 |
+| `AppStore+Handoff.swift` | Razítko předání (#334) — `loadStoredHandoffs()` při startu, `handoff(for:)`, `handoffReport(for:)` (od #335 si volající bere **celý report**, ne jedno číslo — pilulka i text novinek se ptají téže funkce), `noteHandoff(of:)` (zapisuje **zkopírování a uložení**, ne otevření sheetu) a `freshAgentPrompt(for:)` pro `Sestavit i tak`. Do paměti hned, na disk asynchronně | 78 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
 | `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
 | `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
@@ -4758,7 +4759,10 @@ Věci, které se u toho nemají rozbít:
 | `Policy.pullRequests(_:ownedBy:mine:)` | Seznam zúžený na jednu stranu (#331) — sekce `Moje PR` a její blok, od #332 i **fronta** (`.theirs`) a všechno, co o ní něco tvrdí. **Nesahá na pořadí**, jako `filtered(_:by:)`; a **nesmí na něm viset úklid ani nastavení** |
 | `Policy.ownListEmptyReason(poll:tracksOwnSource:knowsViewer:visible:hidden:)` | Proč je sekce `Moje PR` prázdná (#331) → `ListEmptyReason`. **Tři prázdna navíc** proti frontě: chybějící zdroj, nenačtený login, „nic vlastního otevřeného“. `poll(.noPullRequests)` odsud nevypadne nikdy |
 | `Policy.ownPullRequestsAwaitingMove(_:records:conversation:handoff:head:)` | Kolik vlastních PR **čeká na tah** (#331) — obsah odznaku a věty na kartě. Od #334 se ptá „zbývá tu něco, co jsem nepředal?“ a rozhoduje `Policy.handoff`; **spodní hranice**, protože konverzace i hlavy jsou v paměti jen u PR, do kterých se kliklo. Konverzace, razítka a hlavy se berou **uzávěry, ne slovníky**: odznak čte SwiftUI při každém překreslení okna, takže mapa všech načtených diskuzí by byla kopie za odpověď o vlastních PR |
-| `Policy.handoff(_:record:conversation:head:commits:)` | Co zbývá předat (#334) → `HandoffReport` (stav, `pending`, identity nové diskuze, zastaralé nálezy, počet commitů). **Jediné místo, kde se rozhoduje, co je nové** — čtou z něj odznak v railu, pilulka `N k předání` v řádku i panel |
+| `Policy.handoff(_:record:conversation:head:commits:activitySince:)` | Co zbývá předat (#334) → `HandoffReport` (stav, `pending`, identity nové diskuze, zastaralé nálezy, počet commitů) a od #335 i **cizí aktivita** od minule. **Jediné místo, kde se rozhoduje, co je nové** — čtou z něj odznak v railu, pilulka `N k předání` v řádku i panel |
+| `Policy.foreignActivity(in:since:)`, `Policy.activityBaseline(lastVisit:lastNotice:)` | Co na vlastním PR udělal někdo jiný (#335) → `ForeignActivity` (cizí komentáře a review, **bez mých vlastních**) a proti čemu se to počítá — **pozdější** z návštěvy a oznámení. Staví na `changes(in:since:)`, tedy na téže funkci jako pruh „od minule“; commity v tom nejsou (na vlastním PR je push obvykle můj) |
+| `Policy.activitySweep(of:mine:loadedAt:now:lastSweep:interval:limit:)`, `Policy.activitySweepInterval`, `Policy.activitySweepLimit` | Na které vlastní PR se v tomhle tiku zeptáme na konverzaci (#335) — **cena celého issue**: předfiltr podle `updatedAt` (klidný den = nula dotazů), vlastní pětiminutový interval a strop tři PR na průchod. `mine` **bez výchozí hodnoty**, jako u automatu |
+| `Policy.activityNotification(for:activity:)`, `Policy.activityHeadline(_:)` | Text hlášky „ozval se někdo na mém PR“ (#335): titulek s počtem a druhem, pod ním **ta nejnovější věta** a na třetím řádku PR. Titulek skládá **totéž místo** jako text v řádku seznamu (`od minule`), aby se ty dvě věty nerozešly |
 | `Policy.agentPromptItems(findings:dismissals:conversation:)` | Všechno, co se dá na vlastním PR předat agentovi (#333) → `[AgentPromptItem]`. **Nefiltruje podle voleb** — z téhož seznamu se počítají i čísla u vypnutých voleb. Vynechá jedině prázdnou obálku review (bez verdiktu i bez prózy), stejně jako `overview` |
 | `Policy.agentPrompt(for:findings:dismissals:conversation:diff:blocking:options:only:)` | Hotové zadání (#333) → `AgentPrompt`: text, inventář (co všechno je), co je v textu, identity předaných položek (#334), kolik blokuje a jestli byla načtená konverzace. `only:` zúží text na vyjmenované položky — `Sestavit i tak (jen nové vlákno)` po pushi |
 | `Policy.agentPromptSections(_:blocking:)` | Rozdělení po souborech (#333): **sekce bez souboru první**, pak soubory (blokující první, zbytek abecedně), uvnitř podle řádku |
@@ -4912,10 +4916,12 @@ Nad zadáním pro agenta (#333) platí:
 ### Předání zadání (#334)
 
 Otázka je **„zbývá tu ještě něco, co jsem nepředal?“** a odpovídá na ni jedna čistá funkce
-(`Policy.handoff(_:record:conversation:head:commits:)` → `HandoffReport`). Čtou z ní tři místa:
-odznak sekce `Moje PR` v railu, pilulka `N k předání` v řádku seznamu i na dashboardu a panel
-`Zadání`. Kdyby si na „co je nové“ odpovídalo každé z nich samo, rozešlo by se to — odznak by svítil
-nad řádkem, který tvrdí, že je hotovo.
+(`Policy.handoff(_:record:conversation:head:commits:activitySince:)` → `HandoffReport`). Čtou z ní
+tři místa: odznak sekce `Moje PR` v railu, pilulka `N k předání` v řádku seznamu i na dashboardu
+a panel `Zadání`. Kdyby si na „co je nové“ odpovídalo každé z nich samo, rozešlo by se to — odznak by
+svítil nad řádkem, který tvrdí, že je hotovo. **Od #335 nese tentýž report i cizí aktivitu**
+(`HandoffReport.activity`), protože je to druhý druh téže otázky — viz *Cizí aktivita na vlastních
+PR* níž.
 
 - **Razítko drží pull request, ne prompt** (`Handoff`, `HandoffLedger`). `AgentPrompt` zaniká
   zavřením sheetu, kdežto „předáno v 14:20 proti 9c1de02“ musí přežít restart. Je to tatáž
@@ -4984,13 +4990,87 @@ Nad sekcí `Moje PR` (#331) platí čtyři věci:
   `ownPullRequestsAwaitingMove` volá `Policy.handoff` a počítá PR, kterým z něj vyjde `awaitsMove`.
   Do #334 to byl „nezpracovaný nález nebo nevyřešené **cizí** vlákno“; otázka se změnila, takže se
   změnil i materiál — je to to, co jde do zadání pro agenta (viz *Předání zadání* níž). Vlákna
-  a hlava PR se počítají **jen z načtených konverzací a detailů** — tahají se při výběru řádku, ne
-  při pollingu — takže je to spodní hranice; neúplnost je schválně v tomhle směru, protože odznak,
-  který napočítá víc práce, než jí je, se přestane čítat. Cizí aktivitu na vlastních PR dotáhne #335.
+  a hlava PR se počítají **jen z načtených konverzací a detailů**, takže je to spodní hranice;
+  neúplnost je schválně v tomhle směru, protože odznak, který napočítá víc práce, než jí je, se
+  přestane čítat. **Od #335 už konverzace vlastních PR dorazí sama** (rozhlídka na pozadí, nejvýš tři
+  PR za pět minut), takže se ta hranice posunula: zbývá jen tam, kam jeden průchod nedosáhl. Hlava PR
+  se pořád tahá jedině s detailem, tedy při výběru řádku.
 - **Fronta jsou od #332 cizí PR** (`AppStore.queuePullRequests`, `visibleQueuePullRequests`), takže
   je vlastní PR na dashboardu v jednom bloku, ne ve dvou. Do #332 se počítal do obou a v provozu
   z toho bylo `Čeká na mě = 32` (13 cizích, 19 vlastních). Které místo chce kterou množinu, je
   v tabulce níž — a **je to rozhodnutí na místo, ne plošné zúžení**.
+
+### Cizí aktivita na vlastních PR (#335)
+
+Do #335 se konverzace tahala **jedině při zobrazení PR**, takže „od minule“ vznikalo teprve ve chvíli,
+kdy se koukám — tedy přesně tehdy, kdy už notifikaci nepotřebuju. Chybělo jediné: **někdo se na to
+musí zeptat dřív.** Sbírat je z čeho — `VisitChanges` (#173) události i komentáře sbírá,
+`SinceLastVisitLine` je umí vykreslit a `Conversation.isMine` rozlišuje, co je moje.
+
+**Cena je to podstatné rozhodnutí** a drží ji `Policy.activitySweep` třemi věcmi naráz:
+
+1. **`updatedAt` ze searche je předfiltr a je zadarmo.** Tahá se jedině konverzace PR, jehož
+   `updatedAt` se posunul za ten, se kterým konverzace leží v paměti — tedy jedině tam, kde se
+   doopravdy něco stalo. **Na klidný den nula dotazů.** Samotné `updatedAt` na odznak nestačí: řekne,
+   že se něco stalo, ne co a kolik — a hýbe se i po vlastním pushi.
+2. **Vlastní interval, pětiminutový** (`Policy.activitySweepInterval`), nezávislý na
+   `pollIntervalSeconds`. Seznam se obnovuje po minutách, protože z něj plyne nová práce; u diskuze
+   na vlastním PR pět minut zpoždění nikomu nic nezkazí.
+3. **Strop tři PR na jednu rozhlídku** (`Policy.activitySweepLimit`), takže i v bouři je cena shora
+   omezená — **tři dotazy za pět minut**, tedy 0,6 na minutový tik proti `1 + N` každou minutu.
+   Pořadí se bere ze vstupu (řazený od naposledy změněného), takže strop nechá čekat to nejstarší.
+
+Rozhlídka běží **uvnitř `afterSuccessfulTick`**, a to je celý mechanismus, jak dědí backoff: při rate
+limitu `PollingService` čeká a netiká, takže se ani nekouká. Vlastní časovač by tu ochranu obešel.
+Razítko rozhlídky (`AppStore.lastActivitySweep`) se posouvá **jen když se doopravdy ptáme** — jinak by
+se pět minut čekalo zrovna na komentář, který přišel vteřinu po tiku.
+
+**Druhé razítko je podmínka, ne pohodlí.** `VisitLedger` drží poslední **návštěvu**,
+`ActivityNoticeLedger` (#335) poslední **oznámení** — a oznámením PR nenavštívím, takže bez toho
+druhého by „2 nové komentáře“ chodily každou rozhlídku, dokud PR neotevřu. Novinka je to, co je
+novější než **obojí** (`Policy.activityBaseline`). Detaily, které nejsou zjevné:
+
+- **Do razítka jde datum té nejnovější ohlášené položky, ne „teď“.** S časem doručení by propadl
+  komentář, který přišel mezi dotazem na konverzaci a zápisem razítka.
+- **Razítko se nikdy neposouvá dozadu**: rozhlídka se ptá i na PR, o kterých se hlásilo dřív, a starší
+  položka z ohlášené věci nesmí udělat neohlášenou.
+- **Zapisuje se až po doručení** (`isWorthRetrying`), jako snímek u nových PR (#85). Přechodná chyba
+  razítko nechá být, kdežto odmítnuté oprávnění nebo **vypnutý přepínač** ho posunou: opakovat každou
+  rozhlídku něco, co je zakázané, nemá cenu a v okně je ta aktivita vidět na řádku.
+- **V předvolbách, ne v cache**, ze stejného důvodu jako návštěvy: je to jedno datum na PR, ne materiál
+  review. Vlastní typ vedle `VisitLedger.Visit` proto, že zápis návštěvy se děje při **každém**
+  zobrazení detailu, kdežto zápis oznámení jen po doručené hlášce — jeden slovník se dvěma významy
+  znamená, že se ta dvě data dají posunout omylem naráz.
+- **Značka „od minule“ se zakládá i při rozhlídce** (`AppStore.seedVisitBaseline(for:)`), ale
+  **návštěva se nezapisuje**: dotažení konverzace na pozadí návštěva není. Kdyby se zapsala, značka by
+  se posunula na teď a řádek by o komentáři kolegy mlčel. PR, o kterém aplikace ještě neslyšela, tím
+  dostane značku „teď“, takže se o měsíc starých komentářích nehlásí — tatáž ochrana proti lavině jako
+  první tik u `AnnouncedPullRequests`.
+
+**Co je cizí aktivita** (`Policy.foreignActivity`): komentáře pod PR i ve vláknech a odeslaná review,
+vždy **bez mých vlastních** (`Conversation.isMine`; na vlastní PR sice verdikt poslat nejde, ale
+komentované review ano). Staví to na `Policy.changes(in:since:)`, tedy na téže funkci jako pruh „od
+minule“ — druhá odpověď na „co přišlo po téhle chvíli“ by se s první rozešla.
+
+- **Commity a události osy v tom nejsou**, a je to schválně: na vlastním PR je push obvykle můj
+  a `TimelineEvent.at` je u commitu **datum commitu, ne pushnutí** (`pushedDate` GitHub neplní,
+  změřeno u #171), takže by banner „někdo pushnul“ chodil o vlastní práci. Pruh v detailu PR commity
+  ukazuje dál.
+- **CI se nehlídá vůbec** (#335 to výslovně odkládá). `fetchChecks` je **druhý dotaz na PR**, tedy
+  dvojnásobek ceny, a spadlé CI je jiná událost než komentář — patří k tomu vlastní text i vlastní
+  přepínač, ne pátý odstín tohohle.
+- **`NotificationEvent.activity` má vlastní `replacementGroup`.** Že mi kolega odpověděl, nemá přebít
+  výsledek review na tomtéž PR (a naopak) — jsou to dvě různé věci a obě mají zůstat na obrazovce.
+  Text skládá `Policy.activityNotification`: titulek `2 nové komentáře a 1 review`, pod ním **ta
+  nejnovější věta** (rozhoduje datum, ne druh) a na třetím řádku PR, tedy rozvržení z #200. Krátí se
+  tímtéž řezem jako nález (`Policy.shortenedForBanner`), protože v banneru musí na čtvrtém řádku zbýt
+  identifikace.
+- **Řádek seznamu nese `2 nové komentáře od minule` místo autora a času** (návrh, sekce 21 a poznámka
+  66b). Počet a slovo skládá `Policy.activityHeadline`, tedy tatáž funkce jako titulek notifikace —
+  dvě implementace téže věty by se rozešly. Text **nahrazuje** autora a čas: je to pořadí důležitosti,
+  ne úspora místa (autorem vlastního PR jsem já nebo můj agent), a obojí zůstává v hlavičce detailu.
+- **Volající si bere jeden report na řádek.** `pending` i `activity` jsou z téhož `HandoffReport`,
+  takže dvě volání by byla tatáž práce dvakrát — a `List` staví řádky při každém překreslení.
 
 ### Které místo chce kterou množinu (#332)
 
@@ -5288,6 +5368,12 @@ Nad nálezy platí navíc:
     (`TimelineEvent.at`), kdežto řádek v banneru tvrdí „přišlo to teď“.
   - **Moje vlastní komentáře nejsou novinka.** Banner odpovídá na to, co se stalo, když jsem se
     nedíval.
+
+  **Od #335 zakládá značku i rozhlídka po cizí aktivitě** (`seedVisitBaseline(for:)`), ale
+  **návštěvu nezapisuje**: dotažení konverzace na pozadí návštěva není — kdyby se zapsala, značka by
+  se posunula na teď a řádek by o komentáři kolegy mlčel. Vedle toho stojí **druhé razítko**
+  (`ActivityNoticeLedger`) na otázku „o čem už se hlásilo“; proč jsou to dva typy a ne dvě pole
+  v jednom, je v *Cizí aktivita na vlastních PR* (#335) výš.
 
   Snapshot se posouvá **při odchodu na jiný PR**, ne při každém otevření a ne až s koncem
   aplikace. Odejít a vrátit se je nová návštěva — během té první byl banner na obrazovce, takže
@@ -5967,6 +6053,9 @@ Nad notifikacemi (#88) platí:
   tedy tvrzení, které už neplatí. Chytil to test, který původně tvrdil opak. Hláška o novém PR
   má vlastní skupinu: že PR přišel a jak dopadlo jeho review, jsou dvě různé informace.
   **Změna proti #88**, kde byl identifikátor náhodné `UUID`.
+- **Cizí aktivita na vlastním PR je vlastní skupina** (#335). Že mi kolega odpověděl a jak dopadl
+  reviewer jsou dvě různé věci, takže jedna nemá druhou přebít — a v `NotificationSettings` má
+  vlastní přepínač, protože kdo si vypne hlášky o review, o komentáři vědět chce.
 - **Vlákno je podle PR** (`threadIdentifier`), ne podle repa: notifikace o témž pull requestu
   patří k sobě, kdežto seskupení po repu by u monorepa slilo věci, které spolu nesouvisí.
 - **Souhrn místo N hlášek** (#87): víc nových PR z jednoho tiku dá **jednu** notifikaci

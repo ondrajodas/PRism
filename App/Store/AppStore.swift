@@ -475,6 +475,17 @@ final class AppStore {
     /// Kdy jsem který PR naposled viděl (#173).
     let visits: VisitLedger
 
+    /// O čem už se u kterého PR hlásilo (#335). **Druhé razítko vedle návštěv**, protože
+    /// oznámením PR nenavštívím — bez něj by hláška o cizím komentáři chodila při každé rozhlídce.
+    let activityNotices: ActivityNoticeLedger
+
+    /// Kdy se aplikace naposled ptala na diskuzi vlastních PR (#335). `nil` = ještě nikdy.
+    ///
+    /// V paměti, ne na disku: po restartu se rozhlídka udělá hned, což je jeden až tři dotazy
+    /// navíc při startu — a proti tomu stojí, že se po spuštění o cizí aktivitě dozvím rovnou.
+    /// Posouvá se **jen když se doopravdy ptáme**, viz `Policy.activitySweep`.
+    var lastActivitySweep: Date?
+
     /// Které zadání jsem už předal agentovi (#334). Nepovinná závislost jako ostatní story —
     /// testy, které o razítka nestojí, ji nedostanou a pak je všechno nepředané.
     let handoffs: HandoffLedger?
@@ -527,9 +538,11 @@ final class AppStore {
         transcripts: (any TranscriptReading)? = nil,
         appearance: (any AppearanceApplying)? = nil,
         visits: VisitLedger = VisitLedger(preferences: UserDefaults.standard),
+        activityNotices: ActivityNoticeLedger = ActivityNoticeLedger(preferences: UserDefaults.standard),
         handoffs: HandoffLedger? = nil
     ) {
         self.visits = visits
+        self.activityNotices = activityNotices
         self.handoffs = handoffs
         self.appearance = appearance
         self.time = time
@@ -576,6 +589,11 @@ final class AppStore {
             // ostatní tady: po výpadku sítě je seznam prázdný, takže by se snímek vyprázdnil
             // a při zotavení by přišlo úplně všechno.
             await self?.announceNewPullRequests(in: summaries)
+            // Cizí aktivita na **vlastních** PR (#335) — komentář kolegy, Copilotovo review.
+            // Uvnitř úspěšného tiku schválně: rozhlídka se tím vejde do backoffu pollingu (při rate
+            // limitu se netiká, takže se ani nekouká) a nepotřebuje druhý časovač. Kolik dotazů
+            // z toho je, rozhoduje `Policy.activitySweep` — na klidný den nula.
+            await self?.refreshOwnActivity(in: summaries)
             // Útrata se počítá od půlnoci (#148), takže aplikace, která běží přes noc, by
             // ráno ukazovala včerejší součet. Tik je nejlevnější místo, kde se to dá srovnat
             // — účetní kniha si den pamatuje, takže se na disk sahá jednou za den, ne jednou

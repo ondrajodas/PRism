@@ -260,6 +260,57 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   shodilo **čtyři** testy `Policy` a **tři** ve store — mezi nimi i ten o počtu commitů a o tom, že
   se review nespustí samo —, a smazání kontroly cizí odpovědi ve vlákně shodilo právě ten jeden
   test, který ji má chytat (a nic víc, což je taky informace: kontrola nepřebíjí ostatní pravidla).
+- **Cizí aktivita na vlastních PR (#335)** — pět sad a **skoro celá oblast jsou negativní
+  tvrzení**, protože se to rozbije potichu: notifikace, která přijde dvakrát, i dotaz, který se
+  posílá zbytečně, vypadají na první pohled jako fungující aplikace.
+
+  `Policy` výčtem (`ForeignActivityTests`): že **bez značky se nepočítá nic** (PR viděný poprvé —
+  jinak by při prvním spuštění přišla lavina o měsíc starých komentářích), že se **můj vlastní
+  komentář ani moje vlastní review nepočítá**, že rozdělané review (`submittedAt == nil`) není
+  aktivita, že se komentáře pod PR i ve vláknech sčítají, a že **commity v tom nejsou** — u toho
+  posledního test vedle sebe tvrdí obojí: `foreignActivity` commit nevidí, `changes` (pruh „od
+  minule“) ano. Značka je **pozdější** z návštěvy a oznámení, vyčerpávající tabulkou pěti kombinací.
+
+  **Cena** (`ActivitySweepTests`): že se **cizí PR neptá vůbec**, že se **beze změny `updatedAt`
+  neptá nikdo**, že se druhá rozhlídka do intervalu nevejde, že strop uřízne to **nejstarší** (ne
+  náhodné) a že **prázdná množina loginů znamená ticho**. Plus jedno tvrzení, které je záznamem
+  rozhodnutí: interval 300 s a strop 3, tedy 0,6 dotazu na minutový tik proti `1 + N` každou minutu.
+
+  **Text hlášky** (`ActivityNotificationTests`): skloňování obou druhů (`1 nový komentář` /
+  `2 nové komentáře` / `5 nových komentářů`, `1 nové review` / `2 nová review`) a jejich složení do
+  jedné věty; že do detailu jde **ta novější položka**, ne komentář vždycky; že se `CRLF` z komentáře
+  slije na jeden řádek (#292) a dlouhý text zkrátí tak, aby v banneru **zbylo PR**; a že událost má
+  **vlastní `replacementGroup`**, takže nepřebije výsledek review na tomtéž PR.
+
+  `AppStore` proti skutečnému `ActivityNoticeLedger`u (`AppStoreActivityTests`): **že o témže
+  komentáři nedorazí hláška dvakrát**, ani když se rozhlídka na PR podívá znovu (protože se
+  `updatedAt` mezitím pohnul něčím jiným) — to je to nejcennější tvrzení celého issue; že **novější**
+  komentář se ohlásí znovu; že se o vlastním komentáři nehlásí; že se u cizího PR konverzace netahá
+  vůbec; že dva tiky v intervalu dají **jednu** rozhlídku; že **rate limit rozhlídku nepustí**
+  (běží uvnitř úspěšného tiku); že se po selhaném doručení zkusí znovu; že vypnutý přepínač hlášku
+  nepustí, ale **konverzaci načte** (text v řádku na ní stojí); a že **rozhlídka nezapíše návštěvu** —
+  značka v paměti vzniknout musí, zápis do ledgeru ne.
+
+  `ActivityNoticeLedger` proti předvolbám v paměti: restart, oddělenost PR, lhůta, rozbitá hodnota
+  jako prázdno a že se razítko **neposouvá dozadu**.
+
+  Řádek seznamu (`PullRequestRowActivityTests`): že text nese počet a druh, že u cizího PR **nikdy**
+  není (ani když aktivitu omylem dostane) a že řádek s novinkami **nevyroste** — text nahrazuje
+  autora a čas, takže by zalomení udělalo z dvouřádkové buňky trojřádkovou.
+
+  **Vzhled má sondu** (`OwnPullRequestsRenderProbe` má od #335 dva scénáře navíc — `cizi-aktivita`
+  v seznamu a `cizi-aktivita-dashboard` v bloku). Ke tomu stavu se v aplikaci **klikáním nedostaneš**:
+  musel by mezitím někdo napsat komentář na PR, který mám v seznamu, a značka „od minule“ musí být
+  starší než ten komentář. Konverzace i značka se proto do storu píšou **až po tiku** — rozhlídka si
+  o konverzaci řekne sama, ale fake gateway ji nezná, takže by zbyl stav `failed`.
+
+  **Obrácený test #331** (`AppStoreOwnershipTests`): odznak v railu teď vlákno počítá **bez kliknutí
+  do PR**, protože konverzaci dotáhne rozhlídka v prvním tiku. Do #335 tvrdil opak a je u něj
+  napsané, proč se změnil — spodní hranice z #331 se posunula, nezmizela.
+
+  **Ověřeno vložením regrese:** vypnutí druhého razítka (značka jen z návštěvy) shodí právě ten
+  jeden test, který ho má chytat — `O témže komentáři se nehlásí dvakrát`, s hláškou
+  `(center.delivered.count → 2) == 1`.
 - **Konverzace** — proti fixtures, které jsou surové odpovědi z veřejných PR `cli/cli`
   sebrané **tím dotazem, který posílá aplikace** (`ConversationQuery.document`). Kdyby se
   sbíraly jinak, testovaly by tvar, který v provozu nikdy nepřijde; ověřené je to i tak, že

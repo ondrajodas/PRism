@@ -159,11 +159,11 @@ struct AppStoreHandoffTests {
     func clearsThePendingCountAfterTheHandoff() async throws {
         let (store, _, _) = try await prepared()
 
-        #expect(store.pendingHandoffCount(for: pr) == 1)
+        #expect(store.handoffReport(for: pr).pending == 1)
 
         store.noteHandoff(of: store.agentPrompt(for: pr))
 
-        #expect(store.pendingHandoffCount(for: pr) == 0)
+        #expect(store.handoffReport(for: pr).pending == 0)
         #expect(store.handoffReport(for: pr).stage == .delivered)
         // Nález nezmizel — jen je předaný.
         #expect(store.reviewRecord(for: pr)?.activeFindings.count == 1)
@@ -184,7 +184,7 @@ struct AppStoreHandoffTests {
         await restarted.loadStoredHandoffs()
 
         #expect(restarted.handoff(for: pr)?.headSha == "9c1de02aaaa")
-        #expect(restarted.pendingHandoffCount(for: pr) == 0)
+        #expect(restarted.handoffReport(for: pr).pending == 0)
     }
 
     // MARK: - Po pushi
@@ -194,7 +194,7 @@ struct AppStoreHandoffTests {
     func goesOutdatedAfterAPush() async throws {
         let (store, gateway, _) = try await prepared(commits: [])
         store.noteHandoff(of: store.agentPrompt(for: pr))
-        #expect(store.pendingHandoffCount(for: pr) == 0)
+        #expect(store.handoffReport(for: pr).pending == 0)
 
         // Agent opravil a pushnul: PR má novou hlavu a `updatedAt`, takže se detail dotáhne znovu.
         gateway.detailFromNowOn = .success(detail(headSha: "ff11223bbbb"))
@@ -259,7 +259,7 @@ struct AppStoreHandoffTests {
         ])
         let (store, _, _) = try await prepared(conversations: [.success(before), .success(after)])
         store.noteHandoff(of: store.agentPrompt(for: pr))
-        #expect(store.pendingHandoffCount(for: pr) == 0)
+        #expect(store.handoffReport(for: pr).pending == 0)
 
         // Kolega napsal nové vlákno — konverzace se dotáhne znovu, protože se změnilo `updatedAt`
         // (načtená se drží právě podle něj, viz `hasCurrentConversation`).

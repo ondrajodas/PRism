@@ -5,8 +5,12 @@ import Foundation
 /// Je to jedna odpověď pro tři místa — odznak sekce `Moje PR` v railu, pilulka `N k předání`
 /// v řádku seznamu a panel `Zadání`. Kdyby si na „co je nové“ odpovídalo každé z nich samo,
 /// rozešlo by se to: odznak by svítil nad řádkem, který tvrdí, že je hotovo. Proto je rozhodnutí
-/// **jedna čistá funkce** (`Policy.handoff(_:record:conversation:head:commits:)`) a tenhle typ je
-/// celý její výsledek.
+/// **jedna čistá funkce** (`Policy.handoff(_:record:conversation:head:commits:activitySince:)`)
+/// a tenhle typ je celý její výsledek.
+///
+/// **Od #335 nese i cizí aktivitu** (`activity`), tedy druhý druh novosti: co na PR udělal někdo
+/// jiný. Je to tatáž otázka („co je na tomhle PR nového?“) z druhé strany, takže odpovídá tatáž
+/// funkce — vlastní cesta pro řádek seznamu by se s odznakem rozešla.
 struct HandoffReport: Equatable, Sendable {
     /// V jakém stavu je předání. Pořadí případů je pořadí rozhodování ve `Policy.handoff`.
     enum Stage: Equatable, Sendable {
@@ -53,6 +57,16 @@ struct HandoffReport: Equatable, Sendable {
     /// se review pustí znovu, je `.changed`, ale věta v panelu má pořád říct, že pod předaným
     /// zadáním přišel commit.
     let hasMovedHead: Bool
+    /// Co na PR od minule udělal někdo jiný (#335) — `2 nové komentáře od minule` v meta řádku.
+    ///
+    /// **Je to tady, ne vedle**, protože je to druhý druh téže otázky („co je na tomhle PR
+    /// nového?“). Kdyby si na cizí aktivitu odpovídal řádek seznamu sám, rozešel by se s odznakem
+    /// v railu i s panelem — a přesně proti tomu tahle funkce vznikla (#334).
+    ///
+    /// Prázdná, dokud se nenačte konverzace, a taky u PR, který jsem nikdy neviděl: „od minule“ se
+    /// nemá o co opřít. Do `pending` se **nepřičítá** — nový cizí komentář je nepředaná položka, což
+    /// `pending` počítá už z materiálu zadání; druhé přičtení by bylo totéž číslo dvakrát.
+    let activity: ForeignActivity
 
     init(
         stage: Stage,
@@ -61,7 +75,8 @@ struct HandoffReport: Equatable, Sendable {
         freshDiscussion: Set<String>,
         staleFindings: Int,
         commits: Int?,
-        hasMovedHead: Bool = false
+        hasMovedHead: Bool = false,
+        activity: ForeignActivity = .none
     ) {
         self.stage = stage
         self.handoff = handoff
@@ -70,6 +85,7 @@ struct HandoffReport: Equatable, Sendable {
         self.staleFindings = staleFindings
         self.commits = commits
         self.hasMovedHead = hasMovedHead
+        self.activity = activity
     }
 
     /// Nic se nepředávalo a nic se neví. Výchozí hodnota pro místa, která razítko nemají po ruce.
@@ -126,12 +142,15 @@ extension Policy {
     ///     ještě neví, nelže; odznak, který ji hlásí pořád, se přestane čítat.
     ///   - commits: commity PR **od nejstaršího**, jak je vydává gateway. Slouží jen k počtu
     ///     v panelu; bez nich se počet nenapíše, což je jiná věta, ne chybějící stav.
+    ///   - activitySince: proti čemu se počítá cizí aktivita (#335) — `Policy.activityBaseline`.
+    ///     `nil` (PR jsem nikdy neviděl) dá prázdno, ne celou historii diskuze.
     static func handoff(
         _ stamp: Handoff?,
         record: ReviewRecord?,
         conversation: Conversation?,
         head: String?,
-        commits: [PullRequestCommit]? = nil
+        commits: [PullRequestCommit]? = nil,
+        activitySince: Date? = nil
     ) -> HandoffReport {
         let material = agentPromptItems(
             findings: record?.findings ?? [],
@@ -139,6 +158,7 @@ extension Policy {
             conversation: conversation
         )
         .filter(\.choice.isPending)
+        let activity = foreignActivity(in: conversation, since: activitySince)
 
         guard let stamp else {
             return HandoffReport(
@@ -147,7 +167,8 @@ extension Policy {
                 pending: material.count,
                 freshDiscussion: discussionIDs(of: material),
                 staleFindings: 0,
-                commits: nil
+                commits: nil,
+                activity: activity
             )
         }
 
@@ -162,7 +183,8 @@ extension Policy {
                 pending: material.count,
                 freshDiscussion: discussion,
                 staleFindings: 0,
-                commits: nil
+                commits: nil,
+                activity: activity
             )
         }
 
@@ -182,7 +204,8 @@ extension Policy {
                 freshDiscussion: discussion,
                 staleFindings: staleFindings,
                 commits: commitCount(since: againstHeadSha, in: commits),
-                hasMovedHead: true
+                hasMovedHead: true,
+                activity: activity
             )
         }
 
@@ -192,7 +215,8 @@ extension Policy {
             pending: unhanded.count,
             freshDiscussion: discussion,
             staleFindings: 0,
-            commits: nil
+            commits: nil,
+            activity: activity
         )
     }
 

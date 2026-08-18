@@ -16,17 +16,28 @@ extension AppStore {
     func noteVisit(to pullRequest: PRIdentifier) {
         closeVisit(leaving: pullRequest)
         openedPullRequest = pullRequest
-
-        if visitSnapshots[pullRequest] == nil {
-            let previous = visits.lastVisit(to: pullRequest)
-            // `Date.distantPast` u PR, který jsem nikdy neviděl, **nepoužíváme** — `nil` z
-            // ledgeru propadne do snapshotu jako „nevím“ a změny pak vyjdou prázdné.
-            // Ukázat při prvním otevření celou historii PR by nebylo „co je nového“.
-            visitSnapshots[pullRequest] = previous?.at ?? time.now
-            // Klíč se zakládá, jen když hlavu **známe** — viz `seenHeads`.
-            if let head = previous?.head { seenHeads[pullRequest] = head }
-        }
+        seedVisitBaseline(for: pullRequest)
         visits.record(pullRequest, at: time.now)
+    }
+
+    /// Založí značku „od minule“, aniž by zapsala návštěvu (#335).
+    ///
+    /// Dvě volání: `noteVisit` (a tam je zápis návštěvy hned za tím) a **rozhlídka po cizí
+    /// aktivitě**, která si o konverzaci vlastních PR řekne sama na pozadí. Dotažení konverzace
+    /// návštěva **není** — kdyby se zapsala, značka by se posunula na „teď“ a řádek by o komentáři
+    /// kolegy mlčel, protože by vyšel jako starší než ta návštěva.
+    ///
+    /// Nastavuje se jen **poprvé** za sezení u toho PR; je to tentýž vzor jako odznaky `nové`
+    /// u novinek (#127) a drží ho podmínka `visitSnapshots[pullRequest] == nil`.
+    func seedVisitBaseline(for pullRequest: PRIdentifier) {
+        guard visitSnapshots[pullRequest] == nil else { return }
+        let previous = visits.lastVisit(to: pullRequest)
+        // `Date.distantPast` u PR, který jsem nikdy neviděl, **nepoužíváme** — `nil` z
+        // ledgeru propadne do snapshotu jako „nevím“ a změny pak vyjdou prázdné.
+        // Ukázat při prvním otevření celou historii PR by nebylo „co je nového“.
+        visitSnapshots[pullRequest] = previous?.at ?? time.now
+        // Klíč se zakládá, jen když hlavu **známe** — viz `seenHeads`.
+        if let head = previous?.head { seenHeads[pullRequest] = head }
     }
 
     /// Doplní hlavu, kterou jsem u PR viděl (#173).

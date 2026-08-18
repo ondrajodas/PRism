@@ -153,16 +153,19 @@ struct PullRequestListView: View {
         // autora (#331, #332) je **další zúžení nad tímtéž**, ne nový zdroj pravdy.
         let rows = summaries.map { summary -> ListRow in
             let ownership = store.ownership(of: summary)
+            // **Jen u vlastních PR** (#334, #335) a **jeden report na řádek**: skládá položky zadání
+            // (nálezy i celou konverzaci), takže dvě volání kvůli pilulce a textu novinek by byla
+            // tatáž práce dvakrát — a `List` řádky staví při každém překreslení. U cizího řádku se
+            // nekreslí ani jedno, takže se nepočítá nic.
+            let handoff = ownership == .mine ? store.handoffReport(for: summary.id) : .never
             return ListRow(
                 pullRequest: summary,
                 state: store.reviewState(for: summary.id),
                 hasDraft: store.hasDraft(summary.id),
                 summary: store.queueRow(for: summary.id),
                 ownership: ownership,
-                // **Jen u vlastních PR** (#334): `pendingHandoffCount` skládá položky zadání (nálezy
-                // i celou konverzaci) a u cizího řádku se pilulka nekreslí, takže by to byla práce
-                // za odpověď, kterou nikdo nepřečte — a `List` řádky staví při každém překreslení.
-                pending: ownership == .mine ? store.pendingHandoffCount(for: summary.id) : 0
+                pending: handoff.pending,
+                activity: handoff.activity
             )
         }
 
@@ -178,7 +181,8 @@ struct PullRequestListView: View {
                 // `Prompt →` (#333) — otevře PR a v něm panel `Zadání`. Store se tady drží, takže
                 // uzávěr nese jen identitu řádku; skládání textu je věc panelu, ne seznamu.
                 openPrompt: { store.openAgentPrompt(in: row.id) },
-                pending: row.pending
+                pending: row.pending,
+                activity: row.activity
             )
         }
     }
@@ -218,6 +222,8 @@ struct PullRequestListView: View {
         /// Kolik zbývá předat agentovi (#334). Ze stejného důvodu tady: `Policy.handoff` potřebuje
         /// razítko, nálezy a konverzaci, tedy store.
         let pending: Int
+        /// Co od minule udělal někdo jiný (#335) — z **téhož** reportu jako `pending`.
+        let activity: ForeignActivity
 
         var id: PRIdentifier { pullRequest.id }
     }
