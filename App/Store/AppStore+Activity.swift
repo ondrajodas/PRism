@@ -89,13 +89,4 @@ extension AppStore {
         activityNotices.record(pr, announced: announced, at: time.now)
     }
 
-    /// Cizí aktivita na vlastním PR od minule (#335) — text `2 nové komentáře od minule` v řádku.
-    ///
-    /// Bere se z **téhož** `HandoffReport` jako pilulka `N k předání`, takže se řádek nemá jak
-    /// rozejít s odznakem v railu ani s panelem. Volající, který chce obojí, si má vzít **jeden
-    /// report** (`handoffReport(for:)`), ne dvě odpovědi — skládá se při každém čtení a `List` staví
-    /// řádky při každém překreslení.
-    func foreignActivity(for pr: PRIdentifier) -> ForeignActivity {
-        handoffReport(for: pr).activity
-    }
 }

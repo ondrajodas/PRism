@@ -1862,7 +1862,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Draft.swift` | Rozdělané review (#65, #66) a tažení rozsahu (#110) | 190 |
 | `AppStore+Submission.swift` | Odeslání review na GitHub (#67, #68) | 172 |
 | `AppStore+Notifications.swift` | Co se ohlásí, když se do okna nikdo nedívá (#82, #85, #87) | 166 |
-| `AppStore+Activity.swift` | Cizí aktivita na vlastních PR (#335) — rozhlídka na pozadí (`refreshOwnActivity(in:)` z úspěšného tiku), `notifyAboutForeignActivity(on:)` a `foreignActivity(for:)` pro řádek seznamu. **Nic neodesílá**, je to `fetchConversation` | 96 |
+| `AppStore+Activity.swift` | Cizí aktivita na vlastních PR (#335) — rozhlídka na pozadí (`refreshOwnActivity(in:)` z úspěšného tiku), `notifyAboutForeignActivity(on:)` a `conversationUpdatedAt(for:)` jako předfiltr. Text v řádku si bere `handoffReport(for:).activity`, tedy **žádný druhý getter**. **Nic neodesílá**, je to `fetchConversation` | 91 |
 | `AppStore+DiffExpansion.swift` | Rozbalování kontextu mimo hunky (#47), od #317 i v diffu commitu | 139 |
 | `AppStore+DraftTransfer.swift` | Přenesení draftu na nový commit (#69) | 103 |
 | `AppStore+Diff.swift` | Načtení diffu, pohled a sbalování souborů | 95 |

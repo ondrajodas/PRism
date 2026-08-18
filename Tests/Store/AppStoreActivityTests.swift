@@ -250,13 +250,12 @@ struct AppStoreActivityTests {
         time.advance(by: Policy.activitySweepInterval)
         await store.refresh()
 
-        #expect(store.foreignActivity(for: pr).count == 2)
-        #expect(store.handoffReport(for: pr).activity == store.foreignActivity(for: pr))
+        #expect(store.handoffReport(for: pr).activity.count == 2)
         #expect(PullRequestRow(
             pullRequest: summary(updated: 400),
             reviewState: .notStarted,
             ownership: .mine,
-            activity: store.foreignActivity(for: pr)
+            activity: store.handoffReport(for: pr).activity
         ).activityLine == "2 nové komentáře od minule")
     }
 
@@ -290,7 +289,7 @@ struct AppStoreActivityTests {
 
         #expect(center.delivered.isEmpty)
         // Konverzace se přesto načetla: text v řádku na ní stojí a ten se nevypíná.
-        #expect(store.foreignActivity(for: pr).count == 1)
+        #expect(store.handoffReport(for: pr).activity.count == 1)
     }
 
     /// Přechodné selhání razítko **nehne**, takže se hláška neztratí — tatáž nesymetrie jako
