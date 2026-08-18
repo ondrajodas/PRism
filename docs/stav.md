@@ -646,7 +646,7 @@ z těch tří milníků, který **nemění tvrdé podmínky**.
     odmítá, se z nálezů a konverzace skládá zadání pro agenta. Sedm issues (#330–#336), nakreslené
     v sekcích 21 a 22 návrhu; **pořadí je v popisu milníku**, protože se podle něj rozhoduje, co jde
     souběžně. Hotové: rozřazení podle autora #330, sekce `Moje PR` v railu a druhá fronta na
-    dashboardu #331, panel se zadáním pro agenta #333.
+    dashboardu #331, panel se zadáním pro agenta #333, vlastní skupina v paletě ⌘K #336.
 
 Vedle fází stojí milník **Průběžné**: koš na to, co do žádné z nich nepatří (ikona,
 podpis, stavový řádek). Nemá pořadí ani termín a verze se z něj neodvozuje — viz
@@ -2631,6 +2631,40 @@ vejdou do jedné řady a odstavec do tří. Mockup (sekce 23) drží tutéž hod
 
 Testů přidala tahle změna **56** a po sloučení s #331 je jich **2943**; jsou zelené, z toho jeden je
 sonda, která se pouští ručně.
+
+**Paleta ⌘K má vlastní skupinu `Moje PR` (#336)** — čtvrtý mergnutý kus M10. Do té doby byla
+skupina jedna a vlastní PR v ní k nerozeznání od cizích, přestože se s nimi dělá něco jiného.
+Rozdělení stojí na **stropu**: `Policy.paletteGroupLimit` je šest a platí **na skupinu**, takže ve
+společné skupině by při dvaceti cizích PR to moje nemuselo vyjít vůbec — a odznak `moje` u řádku ten
+problém neřeší, jen ho schová, protože řádek, který se do šestice nevešel, není o čem odznak.
+
+Přibyl **jeden případ** (`CommandPalette.Group.myPullRequests`, za `pullRequests`, protože cizí PR
+jsou to, na co se čeká), první skupina se přejmenovala na `Pull requesty k review` a katalog
+v `AppStore+Palette` rozřazuje řádky podle `Policy.ownership` — tedy tou samou funkcí jako rail
+a dashboard (#330), podle **autora**, ne podle zdroje. Množina loginů se bere jednou pro celý
+seznam. Dokud nedorazí `viewer`, je všechno cizí, takže se paleta při startu nepřehodí do druhé
+skupiny a zpátky.
+
+**Cíl zůstal `Target.pullRequest`** a skupina je jen zařazení: druhý případ by byl druhá cesta
+k témuž a rozešel by se. Klávesová navigace se **nezměnila a nemusela**: kurzor v `CommandPaletteView`
+běží nad `sections.flatMap(\.hits)`, takže se nadpisy do indexů nepočítají a pátá skupina se do
+výsledků dostane sama z `allCases`. Strop výšky karty (400 b) zůstal — vejít se všechno nemohlo ani
+ve čtyřech skupinách, takže by zvednutí jen posunulo, od kolika řádků se scrolluje.
+
+**Rozhodnuto jinak, než má sekce 09 návrhu**, ve dvou detailech u řádku vlastního PR. Podtitulek
+zůstává `PRism#324 · ondrajodas` místo `· 6 k předání`: je to tatáž úvaha, kterou u řádku seznamu
+zapsalo #331 — předání nemá razítko (#334), takže by to byl počet, který nikdo nepředal. A puntík
+zůstává v barvě **stavu PR**, ne v mintu: mint by říkal „moje“ podruhé (jednou to říká nadpis
+skupiny) a přebil by jedinou věc, kterou ten puntík v paletě nese — `author:@me is:open` vrací
+i drafty a slovo `draft` má jen řádek seznamu. Doloženo renderem světlého tématu, kde jsou `--mint`
+(`#0C7E71`) a `--ok` (`#1A7F37`) skoro k nerozeznání.
+
+Testů přidala tahle změna **devět** a je jich **2952**; jsou zelené, z toho jedno je sonda
+`CommandPaletteRenderProbe`, která se pouští ručně (karta ve dvou podobách — zúžená na počty řádků
+z návrhu a nad celým katalogem). Sonda existuje proto, že paletu otevírá jedině ⌘K a psát do cizí
+instance se v paralelním běhu nemá.
+Rozdělení je ověřené **vloženou regresí**: se všemi PR v jedné skupině a starým nadpisem padne pět
+testů.
 
 ### #361 — kolo hoří dál, ale ne z ničeho, co jde v sondě vyrobit (otevřené)
 

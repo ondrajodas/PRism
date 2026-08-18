@@ -12,13 +12,18 @@ extension Policy {
     /// Strop je na **skupinu, ne na celek**: bez něj by dvacet nálezů vytlačilo z okna soubory,
     /// pull requesty i akce, tedy zrovna to, kvůli čemu je paleta jedno pole na všechno.
     /// Šest je tolik, kolik se vejde, aniž by se ostatní skupiny odscrollovaly pod okraj.
+    ///
+    /// **Na tomhle stropu stojí i rozdělení pull requestů na dvě skupiny** (#336): ve společné
+    /// skupině by při dvaceti cizích PR to moje nemuselo vyjít vůbec, protože šestý řádek je
+    /// strop a řadí se podle váhy shody. Vlastní skupina má svých šest.
     static let paletteGroupLimit = 6
 
     /// Výsledky pro dotaz, po skupinách.
     ///
     /// Prázdný dotaz **není prázdný výsledek**: paleta se otevírá jako nabídka toho, co je po
     /// ruce, takže se ukáže začátek každé skupiny v pořadí, ve kterém katalog přišel (nálezy od
-    /// nejvážnějšího, soubory v pořadí diffu, PR od naposledy změněného, akce v pevném pořadí).
+    /// nejvážnějšího, soubory v pořadí diffu, cizí i vlastní PR od naposledy změněného, akce
+    /// v pevném pořadí).
     ///
     /// Skupina, ve které nic nesedlo, **vypadne celá** — nadpis nad prázdnem by tvrdil, že se
     /// hledalo a nic není, i tam, kde se hledat nemělo kde.
@@ -263,8 +268,9 @@ extension Policy {
     /// „Otevřít Rozdělaná“ je věta, kterou by nikdo nenapsal.
     ///
     /// **Sekce se do palety berou z `allCases`**, takže nová se v ní objeví sama (#331) — dopsat
-    /// se musí jedině tvar jejího jména. Vlastní PR přitom v paletě **nejsou druhá skupina**:
-    /// řádky pull requestů zůstávají v jedné, a rozdělit je je samostatné issue (#336).
+    /// se musí jedině tvar jejího jména. Od #336 má paleta i **druhou skupinu** řádků
+    /// (`Moje PR`), ale s tímhle výčtem to nesouvisí: tady jsou akce „otevři sekci railu“,
+    /// kdežto skupiny nese `CommandPalette.Group`.
     private static func paletteTitle(of section: RailSection) -> String {
         switch section {
         case .overview: "přehled"

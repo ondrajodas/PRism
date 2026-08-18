@@ -20,11 +20,16 @@ struct AppStorePaletteTests {
         return configuration
     }
 
-    private func summary(_ id: PRIdentifier, title: String = "titulek", updatedAt: TimeInterval = 100) -> PullRequestSummary {
+    private func summary(
+        _ id: PRIdentifier,
+        title: String = "titulek",
+        author: String = "kdosi",
+        updatedAt: TimeInterval = 100
+    ) -> PullRequestSummary {
         PullRequestSummary(
             id: id,
             title: title,
-            author: "kdosi",
+            author: author,
             url: URL(string: "https://github.com/\(id.repo)/pull/\(id.number)")!,
             updatedAt: Date(timeIntervalSince1970: updatedAt),
             state: .open
@@ -32,14 +37,22 @@ struct AppStorePaletteTests {
     }
 
     /// Store po jednom tiku, ve kterém dorazila daná PR.
+    ///
+    /// `viewer` je `nil` schválně jako výchozí: většina testů palety se čí PR neptá a bez loginu je
+    /// podle `Policy.ownership` všechno cizí (#330), takže katalog má jednu skupinu pull requestů.
     private func loaded(
         _ list: [PullRequestSummary],
-        diffs: [Result<String, any Error>] = []
+        diffs: [Result<String, any Error>] = [],
+        viewer: String? = nil,
+        ownLogins: [String] = []
     ) async -> (AppStore, FakeGitHubGateway) {
         let gateway = FakeGitHubGateway(always: .success(list), diffs: diffs)
+        gateway.viewer = viewer
+        var config = configuration
+        config.global.ownLogins = ownLogins
         let store = AppStore(
             gateway: gateway,
-            configuration: configuration,
+            configuration: config,
             time: FakeTimeSource(stopAfter: 1)
         )
         await store.keepFresh()
@@ -145,6 +158,83 @@ struct AppStorePaletteTests {
         #expect(items.map(\.title) == ["fix: nezahazovat token", "feat: šifrovaný secret"])
         #expect(items.first?.subtitle == "connection#21663 · kdosi")
         #expect(items.first?.keywords == ["keboola/connection"])
+    }
+
+    // MARK: - Vlastní PR jako druhá skupina (#336)
+
+    @Test("Vlastní PR jsou vlastní skupina, cizí zůstávají v té první")
+    func ownPullRequestsGetTheirOwnGroup() async {
+        // Rozřazuje `Policy.ownership`, tedy tatáž funkce jako v railu a na dashboardu — podle
+        // autora, ne podle zdroje, ze kterého PR přišel.
+        let (store, _) = await loaded(
+            [
+                summary(connection, title: "fix: nezahazovat token", updatedAt: 200),
+                summary(vault, title: "feat: šifrovaný secret", author: "OndraJodas"),
+            ],
+            viewer: "ondrajodas"
+        )
+
+        #expect(items(of: store, group: .pullRequests).map(\.title) == ["fix: nezahazovat token"])
+        #expect(items(of: store, group: .myPullRequests).map(\.title) == ["feat: šifrovaný secret"])
+    }
+
+    /// **Tohle je ten test, který tvrdí, že se něco nestalo**: dokud login nedorazí, nesmí být nic
+    /// „moje“ — jinak by paleta na okamžik po spuštění přehodila celý seznam do druhé skupiny.
+    @Test("Než se login načte, jsou v paletě všechny PR cizí")
+    func everythingIsTheirsUntilTheViewerArrives() async {
+        let (store, _) = await loaded([summary(vault, author: "ondrajodas")])
+
+        #expect(items(of: store, group: .myPullRequests).isEmpty)
+        #expect(items(of: store, group: .pullRequests).count == 1)
+    }
+
+    /// Loginy z konfigurace se k viewerovi přidávají (#330) — na tom stojí PR agenta s vlastním
+    /// účtem, který pushuje pod sebou.
+    @Test("PR agenta z konfigurace patří do skupiny mých")
+    func configuredLoginsCountAsMine() async {
+        let (store, _) = await loaded(
+            [summary(vault, author: "github-actions[bot]")],
+            viewer: "ondrajodas",
+            ownLogins: ["github-actions[bot]"]
+        )
+
+        #expect(items(of: store, group: .myPullRequests).count == 1)
+        #expect(items(of: store, group: .pullRequests).isEmpty)
+    }
+
+    /// Skupina je **zařazení**, ne druhá cesta k témuž: druhý případ v `Target` by se rozešel.
+    @Test("Vlastní PR má týž cíl i podtitulek jako cizí")
+    func ownPullRequestKeepsTheSameTargetAndSubtitle() async {
+        let (store, _) = await loaded(
+            [summary(vault, title: "feat: šifrovaný secret", author: "ondrajodas")],
+            viewer: "ondrajodas"
+        )
+
+        let item = try! #require(items(of: store, group: .myPullRequests).first)
+        #expect(item.target == .pullRequest(vault))
+        // Podtitulek zůstává `repo#číslo · autor` — `6 k předání` z návrhu se dá napsat teprve
+        // s razítkem předání (#334), tak jak to u řádku seznamu rozhodlo #331.
+        #expect(item.subtitle == "vault#85 · ondrajodas")
+        #expect(item.url == URL(string: "https://github.com/keboola/vault/pull/85"))
+
+        #expect(store.reveal(item.target) == nil)
+        #expect(store.openTabs == [vault])
+    }
+
+    @Test("Vlastní PR se najde dotazem stejně jako cizí")
+    func searchingFindsOwnPullRequestsToo() async {
+        let (store, _) = await loaded(
+            [
+                summary(connection, title: "fix: nezahazovat token", updatedAt: 200),
+                summary(vault, title: "feat: token do nastavení", author: "ondrajodas"),
+            ],
+            viewer: "ondrajodas"
+        )
+
+        let sections = Policy.paletteResults(of: store.paletteItems, query: "token")
+
+        #expect(sections.map(\.group) == [.pullRequests, .myPullRequests])
+        #expect(sections.last?.hits.map(\.item.title) == ["feat: token do nastavení"])
     }
 
     @Test("Podle autora se najde pull request, podle repa i nález")
