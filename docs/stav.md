@@ -2913,3 +2913,19 @@ rozhlídka — spodní hranice se posunula, nezmizela.
 
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
+
+**#375 je hygiena a pokrytí, ne oprava ztuhnutí** — a stojí za to vědět, proč se tak vydává. Sonda
+nečinného okna k #361 pokrývala jen `Změněné soubory`, kdežto ztuhnutí z 2026-08-18 přišlo při
+projíždění **konverzace**; sweep u toho našel v `ConversationNodeView` poslední výskyt pružné výšky
+v řádku líného seznamu, tedy vzoru, který `CLAUDE.md` od #220 zakazuje. Podezření, že je to příčina,
+se **neprokázalo**: nečinná konverzace stojí 0,00–0,01 % na všech záložkách a projíždění 1,30 s
+s tím vzorem proti 1,28 s bez něj — a kontrola měřidla (šest pružných úrovní navíc → **1,08 s**,
+tedy levněji) ukázala, že měřidlo tuhle třídu v tom scénáři nevidí. Vzor se proto vyřídil jako
+latentní past, ne jako příčina, linka se překreslila jako **pozadí uzlu** a vzhled je prokazatelně
+týž (byte-identické renders sedmi tabů). **#361 zůstává otevřené**, protože dnešní vzorky mají hover
+na nule a jediný re-arm v `signalPrefetch` — je to jiná varianta než ta, kterou #361 popisuje.
+
+Vypadly z toho dvě věci k sondám: `-only-testing` na jeden test ze `swift-testing` potřebuje
+**závorky** (bez nich `Test run with 0 tests`, a to zeleně), a `DetailTabRenderProbe` od #294
+rendrovala záložku `Konverzace` jako `Načítám konverzaci…`, takže každé srovnání vzhledu osy
+porovnávalo dva spinnery. Obojí je opravené a zapsané v [`testovani.md`](testovani.md).

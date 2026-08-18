@@ -3756,6 +3756,61 @@ Tři pasti, kvůli kterým sonda **měřila prázdno a tvrdila, že je čisto**:
 - **Do `ContentView` se PR dostane jen frontou.** Bez `await store.refresh()` záložka detail vůbec
   nekreslí (0 bloků), i když je diff ve storu načtený.
 
+**Od #375 pokrývá sonda všechny záložky, ne jen diff**, protože „hoří jen konverzace“ je tvrzení
+o všech, ne o jedné. Nečinné okno **nehoří na žádné** (plné okno, 1512×874):
+
+| Záložka v nečinném okně | CPU hlavního vlákna |
+|---|---|
+| Přehled | 0,03 % |
+| Konverzace | 0,00 % |
+| Konverzace odscrollovaná o 1000 / 3000 | 0,01 / 0,00 % |
+| Commity | 0,01 % |
+| Kontroly | 0,01 % |
+
+**Nečinnost o projíždění netvrdí nic** (#375), a scénář ze ztuhlé aplikace 2026-08-18 byl „projížděl
+jsem konverzací“. Sonda proto má i `scrollingConversation` a `scrollingDiff`: scrolluje **po malých
+krocích** (150 × 40 pt, kolo runloopu po každém), protože skok o půl obrazovky přerovná líný seznam
+jednou a rozdíl se v něm utopí — tatáž past jako hustota kroků u #252. Naměřeno **1,27–1,30 s** CPU
+u konverzace a **0,96–1,16 s** u diffu, a **na pružné výšce v uzlu osy to nezávisí** (1,30 s s ní,
+1,28 s bez ní).
+
+**A tady je to podstatné: měřidlo tuhle třídu nevidí, a pozná se to jedině vloženou regresí.**
+Se **šesti** pružnými úrovněmi navíc v uzlu osy vyšlo projíždění na **1,08 s**, tedy **levněji** než
+s jednou. Kdyby se kontrola nepustila, vyšlo by z dvojice 1,30 → 1,28 s, že oprava „nic nezhoršila“,
+a mlčky by se z toho stalo „vzor je neškodný“. Platí tedy obojí:
+
+- **pružná výška v řádku líného seznamu není ten multiplikátor, který má šířka** — v řádku se výška
+  navrhuje jako `nil`, takže `frame(maxHeight: .infinity)` vrátí ideální rozměr dítěte, jeden
+  průchod (rozvedeno v [`architektura.md`](architektura.md), sekce o šířce);
+- **„bez rozdílu“ u tohohle měřidla neznamená „neškodné“** — u buňky dvojice (#98) tentýž vzor
+  aplikaci položil, jen v hit testu při pohybu myši, což tenhle scénář nevytěžuje.
+
+**Vzhled osy se kontroluje `DetailTabRenderProbe`, a ta do #375 rendrovala spinner.** Sonda neměla
+načtenou konverzaci, takže záložka `Konverzace` byla na snímku `Načítám konverzaci…` — srovnání
+„před/po“ tedy porovnávalo **dva spinnery** a vycházelo identické, ať se s osou stalo cokoli. Je to
+tatáž past jako počet bloků kódu u sondy výš: **snímek, na kterém to, co se posuzuje, není, netvrdí
+nic.** Po doplnění fixture je na ose 44 položek a byte-identické rendery v obou verzích už něco
+znamenají. Pozor u toho na jednu drobnost: `conversation(id:)` si ověřuje, že GraphQL odpověděl na
+totéž PR, na které se ptal, takže se fixture dekóduje na **číslo z fixture** (13084), ne na `pr`
+sondy (14013).
+
+**`-only-testing` na jeden test ze `swift-testing` potřebuje závorky** — a je to past, která spálí
+čas každému, kdo sondu pouští poprvé. Bez nich filtr nesedne na nic a běh skončí
+`Test run with 0 tests … passed`, tedy **zeleně**: vypadá to, že se suita přeskočila kvůli
+`.enabled(if:)`, ne že je špatný filtr. (Totéž stojí u měřicího harnessu výš; u #361 na tom uvázlo
+jedno kolo.)
+
+```bash
+TEST_RUNNER_PRISM_MEASURE=1 xcodebuild -project PRism.xcodeproj -scheme PRism     -derivedDataPath build.noindex test     -only-testing:'PRismTests/IdleDiffSpinProbe/idleConversation()' > /tmp/probe.log 2>&1
+grep -aE "^MĚŘENÍ|^SONDA" /tmp/probe.log
+```
+
+Tři věci k tomu příkazu: prefix **`TEST_RUNNER_`** je podmínka (`xcodebuild` ostatní proměnné do
+testovacího procesu nepředá), **celá suita se bere bez závorek**
+(`-only-testing:PRismTests/IdleDiffSpinProbe`), a výstup se **grepuje ze souboru** — roura do
+`grepu` se umí zaseknout. Log navíc obsahuje binární smetí z AppKitu, takže `grep` bez `-a`
+odpoví `binary file matches` a nevypíše nic.
+
 A dvě věci k mechanice sond obecně:
 
 - **Pumpa, která špiní graf, musí být `Timer` na runloopu, ne `Task.sleep`.** Test drží hlavní actor

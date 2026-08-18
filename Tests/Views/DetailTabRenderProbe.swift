@@ -122,7 +122,8 @@ struct DetailTabRenderProbe {
         let gateway = FakeGitHubGateway(
             always: .success([Self.summary]),
             detail: .success(Self.detail),
-            diffs: [.success(Self.diffText)]
+            diffs: [.success(Self.diffText)],
+            conversations: [.success(try Self.conversation())]
         )
         gateway.checks = Self.checks
         gateway.commits = Self.commits
@@ -134,6 +135,10 @@ struct DetailTabRenderProbe {
         )
         await store.loadDetail(for: Self.summary)
         await store.loadDiff(for: Self.summary)
+        // **Konverzaci se musí načíst**, jinak se ta záložka rendruje jako „Načítám konverzaci…“
+        // a osa na snímku vůbec není — sonda pak srovnává dva spinnery a tvrdí, že se vzhled
+        // nezměnil. Nalezeno u #375, kdy na tom měla stát kontrola vzhledu osy.
+        await store.loadConversation(for: Self.summary)
         store.checks[pr] = Self.checks
         store.reviewRecords[pr] = Self.record
         store.setDraftBody("Zbytek vypadá dobře, jen ta jedna kontrola.", for: pr)
@@ -142,6 +147,16 @@ struct DetailTabRenderProbe {
         // Složka se vrací s storem: `TemporaryDirectory` maže v `deinit`, takže by se cache draftu
         // ztratila ještě před renderem.
         return (store, directory)
+    }
+
+    /// Konverzace ze skutečného výstupu `gh`, aby na ose stály vlákna, komentáře i události.
+    private static func conversation() throws -> Conversation {
+        let text = try Fixture.text("gh/conversation-threads.json")
+        let response = try GhOutput.decoder.decode(GhConversationResponse.self, from: Data(text.utf8))
+        // **Číslo je z fixture (13084), ne z `pr` téhle sondy (14013)** — `conversation(id:)` si
+        // ověřuje, že GraphQL odpověděl na to, na co se ptal, takže cizí číslo by to zahodilo.
+        // Osa se rendruje ze skutečné konverzace; na které PR se v ní odkazuje, je pro vzhled jedno.
+        return try response.conversation(id: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 13084))
     }
 
     private static func slug(of tab: PullRequestTab) -> String {

@@ -80,6 +80,120 @@ struct IdleDiffSpinProbe {
         }
     }
 
+    /// Nečinné okno s **otevřenou konverzací** — scénář ze ztuhlé aplikace 2026-08-18, kdy
+    /// v okně stál jediný PR a člověk projížděl osou. `sample` z ní měl **99 %** vzorků
+    /// hlavního vlákna v transakčním kole, hover nula a jediný re-arm v `signalPrefetch`;
+    /// naše rámce byly `ConversationNode.id`.
+    ///
+    /// **Nechytlo se to** (0,00–0,01 %), stejně jako u diffu: scéna sama kolo nezavírá ani tady.
+    /// Cena projíždění se proto měří zvlášť (`scrollingConversation`) — čísla a co z toho plyne
+    /// jsou v `docs/testovani.md`.
+    @Test("Nečinné okno s otevřenou konverzací")
+    func idleConversation() async throws {
+        try await measure("konverzace", tab: .conversation, layout: .unified, big: false, full: true)
+        for offset in [1000.0, 3000.0] {
+            try await measure(
+                "konverzace, odscrollováno o \(Int(offset))",
+                tab: .conversation,
+                layout: .unified,
+                big: false,
+                seconds: 6,
+                full: true,
+                scrollBy: offset
+            )
+        }
+    }
+
+    /// Ostatní záložky detailu nad **plným** oknem. Do #375 měřila sonda jen diff, takže o zbytku
+    /// okna netvrdila nic — a věta „nečinné okno nehoří“ je tvrzení **o všech** záložkách, ne
+    /// o jedné. Bez těchhle řádků by se u dalšího záchvatu nedalo vyloučit, že hoří zrovna ta,
+    /// na kterou se nikdo nepodíval.
+    @Test("Nečinné okno na ostatních záložkách")
+    func idleOtherTabs() async throws {
+        for tab in [PullRequestTab.overview, .commits, .checks] {
+            try await measure("\(Self.slug(of: tab)), plné okno", tab: tab, layout: .unified, big: false, full: true)
+        }
+    }
+
+    private static func slug(of tab: PullRequestTab) -> String {
+        switch tab {
+        case .overview: "přehled"
+        case .commits: "commity"
+        case .checks: "kontroly"
+        default: "\(tab)"
+        }
+    }
+
+    /// Cena **projíždění**, ne nečinnosti — a je to ten scénář, na kterém aplikace ztuhla
+    /// (`hang361`, „projížděl jsem konverzací“). Nečinná konverzace je čistá (tabulka
+    /// v `docs/testovani.md`), takže se ta cena musí hledat v pohybu.
+    ///
+    /// **Scrolluje se po malých krocích**, jako kolečkem: skok o půl obrazovky přerovná líný
+    /// seznam jednou a rozdíl mezi verzemi se v něm utopí — tatáž past jako hustota kroků u #252
+    /// (60 kroků 3,6 vs 3,4 s, 300 kroků 15,6 vs 13,5 s).
+    @Test("Cena projíždění konverzace")
+    func scrollingConversation() async throws {
+        try await measureScrolling("konverzace", tab: .conversation, steps: 150, step: 40)
+    }
+
+    /// Totéž nad diffem, jako kontrola: diff má stejný líný seznam, ale výšku řádku pevnou.
+    /// Bez tohohle řádku by z čísla u konverzace nešlo poznat, jestli je drahé projíždění, nebo
+    /// jen tenhle seznam.
+    @Test("Cena projíždění diffu")
+    func scrollingDiff() async throws {
+        try await measureScrolling("diff", tab: .filesChanged, steps: 150, step: 40)
+    }
+
+    /// Jeden scénář projíždění: usadit, pak scrollovat po krocích a vypsat, kolik to stálo.
+    ///
+    /// **Hodinky se zapínají až po usazení** (#274) — postavení hierarchie do měření nepatří.
+    private func measureScrolling(
+        _ name: String,
+        tab: PullRequestTab,
+        steps: Int,
+        step: Double
+    ) async throws {
+        let (store, cache) = try await prepared(big: tab == .filesChanged, full: true)
+        defer { _ = cache }
+        store.setDetailTab(tab, for: pr)
+        store.setDiffLayout(.unified)
+        let window = show(store: store, full: true)
+        defer { window.orderOut(nil) }
+        _ = spinMainRunLoop(seconds: 2)
+        let root = try #require(window.contentView)
+        let scroller = try #require(Self.tallestScroller(in: root))
+        let content = scroller.documentView?.frame.height ?? 0
+        let reach = max(content - scroller.contentSize.height, 0)
+        let cpuStart = mainThreadCPUSeconds()
+        for stride in 0..<steps {
+            // Trojúhelníkový průběh: sjíždí se dolů a **za koncem obsahu se otáčí zpátky**, aby
+            // se seznam přerovnával do obou stran. Při dnešních 150 × 40 pt se do obratu nedojde
+            // (6000 pt proti dosahu ~8800), takže je to pojistka pro delší série, ne popis běhu.
+            let raw = Double(stride) * step
+            let cycle = max(reach, 1)
+            let phase = raw.truncatingRemainder(dividingBy: cycle * 2)
+            scroller.contentView.scroll(to: NSPoint(x: 0, y: phase <= cycle ? phase : cycle * 2 - phase))
+            scroller.reflectScrolledClipView(scroller.contentView)
+            // Kolo runloopu po každém kroku: bez něj se rozvržení odloží a naměřila by se cena
+            // jednoho přerovnání místo všech.
+            _ = spinMainRunLoop(seconds: 0.02)
+        }
+        let cpu = mainThreadCPUSeconds() - cpuStart
+        print(String(
+            format: "MĚŘENÍ projíždění %@: %.2f s CPU hlavního vlákna, %d kroků po %.0f pt"
+                + " (obsah %.0f, dosah %.0f, %d prvků, okno %.0f×%.0f)",
+            name,
+            cpu,
+            steps,
+            step,
+            content,
+            reach,
+            Self.descendants(of: root),
+            window.frame.width,
+            window.frame.height
+        ))
+    }
+
     /// Dlouhý běh nad plným oknem, aby se dal vzít `sample` testovacího hosta a porovnat
     /// signatura s tou ze ztuhlé aplikace (postup v `docs/testovani.md`).
     @Test("Dlouhé nečinné okno k odvzorkování")
@@ -246,6 +360,12 @@ struct IdleDiffSpinProbe {
             return (store, directory)
         }
         await store.loadConversation(for: Self.summary)
+        // Commity a kontroly patří do storu **taky**, jinak by se na těch záložkách měřilo
+        // prázdno a nula by netvrdila nic — tatáž past jako u počtu bloků kódu.
+        gateway.commits = Self.commits
+        gateway.checks = Self.checks
+        await store.loadCommits(for: pr)
+        store.checks[pr] = Self.checks
         store.reviewRecords[pr] = Self.record
         // **Seznam se musí načíst tikem**, jinak `ContentView` detail vůbec nekreslí: záložka umí
         // jen PR, který je ve frontě. Bez tohohle sonda měřila okno bez jediného bloku kódu.
@@ -309,6 +429,55 @@ struct IdleDiffSpinProbe {
             )]
         )
     }
+
+    /// Tři commity a tři kontroly — dost na to, aby na obou záložkách stál seznam, ne prázdný stav.
+    private static let commits: [PullRequestCommit] = [
+        PullRequestCommit(
+            sha: "c82266c2dcc3285033605501837434af1faeddfe",
+            message: "Warn instead of failing when issue fields can't be set",
+            authorName: "imkp1",
+            authorLogin: "imkp1",
+            avatarURL: nil,
+            committedAt: Date(timeIntervalSince1970: 1_753_900_000),
+            isMerge: false
+        ),
+        PullRequestCommit(
+            sha: "96a469b6bd159d4cff137d5eab4d13ceee4c9807",
+            message: "Merge branch 'trunk' into fix/13804",
+            authorName: "Kumar Prateek",
+            authorLogin: "imkp1",
+            avatarURL: nil,
+            committedAt: Date(timeIntervalSince1970: 1_753_950_000),
+            isMerge: true
+        ),
+        PullRequestCommit(
+            sha: "aaaa1111",
+            message: "Resolve deferred issue fields before creating the issue",
+            authorName: "Jiří Novák",
+            authorLogin: nil,
+            avatarURL: nil,
+            committedAt: Date(timeIntervalSince1970: 1_753_990_000),
+            isMerge: false
+        ),
+    ]
+
+    private static let checks: [PullRequestCheck] = [
+        PullRequestCheck(
+            name: "phpstan (level 8) / analyse",
+            outcome: .failed,
+            link: URL(string: "https://github.com/cli/cli/actions/runs/1/job/2"),
+            startedAt: Date(timeIntervalSince1970: 0),
+            completedAt: Date(timeIntervalSince1970: 134)
+        ),
+        PullRequestCheck(
+            name: "phpunit / 8.4",
+            outcome: .passed,
+            link: nil,
+            startedAt: Date(timeIntervalSince1970: 0),
+            completedAt: Date(timeIntervalSince1970: 41)
+        ),
+        PullRequestCheck(name: "deploy", outcome: .skipped, link: nil, startedAt: nil, completedAt: nil),
+    ]
 
     private static let summary = PullRequestSummary(
         id: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 13084),

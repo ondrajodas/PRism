@@ -2189,7 +2189,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `IncrementalDiffBar` | Lišta nad rozsahovým diffem (#284) — rozsah dvěma sha a cesta zpátky na celý diff. Podobu vybírá **spočítaná** šířka, ne `ViewThatFits` |
 | `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde. Řez si bere z `MiniButtonStyle.labelFont`, aby se měření a kresba nemohly rozejít |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
-| `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka a obsah vpravo; slévá za sebou jdoucí commity |
+| `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka **jako pozadí** (#375, ne pružná výška v řádku) a obsah vpravo; slévá za sebou jdoucí commity |
 | `ConversationEntryView` | Položka osy: karta cizího review nebo komentáře, řádek události, vlákno bez kotvy |
 | `ConversationComposerView`, `ConversationComposer` | Psaní komentáře pod PR (#216) a akce k němu |
 | `TimelineEventRow` | Událost převedená na řádek — symbol, věta **s tučnými jmény**, barva uzlu (`tint: Color?`), sha po jednom (#171, sazba #216). Mimo view a testovatelné, jako `FindingRow` |
@@ -2544,6 +2544,45 @@ o tvar stromu, který mají společný přes detail PR.
 tam byl vinen `maxHeight: .infinity` v `LazyVStack`u, který výšku nenavrhuje, a našel se taky
 `sample`m. Pravidlo je proto jedno: **v zanořeném stromu se rozměr nenechává vyjednávat, když se
 dá spočítat.**
+
+**Pružná výška v líném seznamu ale není *tentýž* multiplikátor jako šířka** (#375) — a je to
+změřené, ne odvozené. Tabulka výš („5,5× na úroveň“) je o **šířce**: tu si každá úroveň vyjednává
+s dětmi, takže se pásma násobí. Výška se v řádku `LazyVStack`u navrhuje jako `nil`, takže
+`frame(maxHeight: .infinity)` nad ní vrátí **ideální** rozměr dítěte — jeden průchod, žádné pásmo.
+Kontrolní měření na ose konverzace (sonda `IdleDiffSpinProbe.scrollingConversation`, 150 kroků
+po 40 pt): jedna pružná úroveň **1,28 s** CPU, **šest** pružných úrovní **1,08 s**, tedy o nic
+dražší — a šířku má osa v tu chvíli konkrétní z `availableWidth`.
+
+Z toho **neplyne, že je pružná výška nevinná**: u buňky dvojice (#98) položila aplikaci na 99 %
+v `StackLayout.explicitAlignment` a `ViewResponder.hitTest`, tedy v **hit testu při pohybu myši**,
+ne v pásmu šířek. Plyne z toho jen tohle: **cena pružné výšky se nedá odhadnout z tabulky pro
+šířku** a hledá se `sample`m nad tou cestou, která se doopravdy jde. Proto se `maxHeight: .infinity`
+nezakazuje plošně — zakazuje se **v řádku líného seznamu**, a ohraničené formy jsou vyjmenované
+níž.
+
+**Ohraničené formy `maxHeight: .infinity`, které jsou v pořádku** (sweep u #375 nad celým `App/`,
+25 výskytů):
+
+| Forma | Proč je ohraničená |
+|---|---|
+| `background`/`overlay` uvnitř řádku | Rozvrhuje se **až nad hotovou velikostí** rodiče, takže si o ni nevyjednává. Takhle žije pilulka v `DiffLineView` a od #375 i linka osy v `ConversationNodeView` |
+| plocha tabu, panelu, sheetu, prázdného stavu | Není to řádek seznamu — je to jeden blok, který má vyplnit okno. `PullRequestDetailView`, `DraftPanel`, `EmptyStateView`, nastavení, novinky |
+| `SidebarRail`, `CommitDiffView` | Totéž: jeden prvek na okno, ne položka v `ForEach`i |
+
+**V řádku líného seznamu po #375 nezůstal ani jeden.** Kontrola je grep na ten jeden soubor, který
+se opravoval — **musí vyjít prázdný** (filtr zahazuje komentáře, které vysvětlují proč):
+
+```bash
+grep -rn 'maxHeight: .infinity' App/Views/ConversationNodeView.swift | grep -vE ':[0-9]+: *//'
+```
+
+Plošný grep prázdný vyjít **nemůže** a nemá se o to snažit — těch 25 ohraničených výskytů je
+v pořádku. Sweep se proto dělá tak, že se vypíšou všechny a u každého se řekne, do které řádky
+tabulky výš patří:
+
+```bash
+grep -rn 'maxHeight: .infinity' App | grep -vE ':[0-9]+: *//'
+```
 
 Jak to drží pohromadě:
 
