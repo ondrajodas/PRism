@@ -272,6 +272,49 @@ struct AppStoreHandoffTests {
         #expect(fresh?.text.contains("total() ignoruje množství") == false)
     }
 
+    /// **Zúžené předání nesmí posunout hlavu razítka ani zahodit dřív předané položky** (nález
+    /// Copilota na #373). Skládá se proti dnešní hlavě, ale nálezy v něm nejsou — takže kdyby
+    /// hlavu posunulo, panel by přestal hlásit, že uložené nálezy platí pro starý commit.
+    @Test("Předání jen nové diskuze nechá razítko u staré hlavy")
+    func keepsTheStampHeadWhenHandingOverDiscussionOnly() async throws {
+        let before = conversation(threads: [thread(id: "t1", comments: [comment(id: "c1", at: 500)])])
+        let after = conversation(threads: [
+            thread(id: "t1", comments: [comment(id: "c1", at: 500)]),
+            thread(id: "t2", comments: [comment(id: "c2", at: 2_000_000)]),
+        ])
+        // Hodiny **za** komentáři: razítko se porovnává s časy komentářů, takže předání musí být
+        // pozdější než to, co předává — jinak vyjde vlákno jako „přišlo po předání“. V aplikaci to
+        // platí samo (skutečný čas), tady to musí nastavit test.
+        let (store, gateway, _) = try await prepared(
+            conversations: [.success(before), .success(after)],
+            time: FakeTimeSource(start: Date(timeIntervalSince1970: 3_000_000))
+        )
+        store.noteHandoff(of: store.agentPrompt(for: pr))
+        let handedFirst = store.handoff(for: pr)?.count ?? 0
+
+        // Agent pushnul a kolega mezitím napsal nové vlákno.
+        gateway.detailFromNowOn = .success(detail(headSha: "ff11223bbbb"))
+        await store.loadDetail(for: pushedSummary)
+        await store.loadConversation(for: pushedSummary)
+        #expect(store.handoffReport(for: pr).stage == .outdated)
+
+        // `Sestavit i tak (jen nové vlákno)` — zúžené zadání bez nálezů.
+        let fresh = try #require(store.freshAgentPrompt(for: pr))
+        store.noteHandoff(of: fresh)
+
+        let stamp = try #require(store.handoff(for: pr))
+        #expect(stamp.headSha == "9c1de02aaaa")
+        // Předané položky se **přičetly**, ne přepsaly.
+        #expect(stamp.count == handedFirst + 1)
+        // A varování o zastaralých nálezech zůstává, protože nálezy pořád platí pro starý commit.
+        let report = store.handoffReport(for: pr)
+        #expect(report.stage == .outdated)
+        #expect(report.staleFindings == 1)
+        // Vlákno je předané, takže druhá cesta už nemá co nabídnout.
+        #expect(report.freshDiscussion.isEmpty)
+        #expect(store.freshAgentPrompt(for: pr) == nil)
+    }
+
     /// Když po předání nepřišlo nic, zúžené zadání **nevznikne** — prázdný sheet s hlavičkou
     /// a bez položek vypadá jako rozbitá aplikace, takže tlačítko zůstane zakázané.
     @Test("Bez novinek se zúžené zadání nesestaví")

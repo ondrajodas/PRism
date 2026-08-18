@@ -49,13 +49,24 @@ extension AppStore {
     /// Ukládá se **hlava i identity předaných položek** — proč, je u `Handoff`. Do paměti hned,
     /// na disk asynchronně: pravda za běhu je paměť (tentýž vzor jako u `AutoRunLedger`), protože
     /// odznak se překresluje dřív, než dopadne zápis.
+    ///
+    /// **Identity se sčítají s předchozím razítkem** a **hlava se posune jedině tehdy, když se
+    /// předávaly nálezy.** Obojí kvůli zúženému zadání po pushi (`Sestavit i tak (jen nové
+    /// vlákno)`): to se skládá proti dnešní hlavě, ale nálezy v něm nejsou — takže kdyby posunulo
+    /// hlavu, panel by přestal hlásit, že uložené nálezy platí pro starý commit, a kdyby razítko
+    /// přepsalo identity, byly by dřív předané nálezy najednou „nepředané“ a odznak by se rozsvítil
+    /// za práci, která odešla (nálezem Copilota na #373). Hlava proto říká, **proti jakému kódu
+    /// platí předané nálezy**; předání bez nálezů na tom nic nemění.
     func noteHandoff(of prompt: AgentPrompt) {
+        let pr = prompt.subject.pullRequest
+        let previous = handoffStamps[pr]
+        let carriesFindings = (prompt.included.count(of: .findings) ?? 0) > 0
+            || (prompt.included.count(of: .dismissedFindings) ?? 0) > 0
         let stamp = Handoff(
             at: time.now,
-            headSha: prompt.subject.headSha,
-            handed: prompt.handed
+            headSha: carriesFindings ? prompt.subject.headSha : previous?.headSha ?? prompt.subject.headSha,
+            handed: (previous?.handed ?? []).union(prompt.handed)
         )
-        let pr = prompt.subject.pullRequest
         handoffStamps[pr] = stamp
         guard let handoffs else { return }
         Task { await handoffs.record(stamp, for: pr) }

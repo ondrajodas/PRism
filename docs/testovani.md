@@ -237,6 +237,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `5 commitů`, `přibyla 1 položka` / `přibyly 2 položky`). A hlavně: že se **počet commitů
   nevymýšlí**, když ho není z čeho spočítat — nula se čte stejně jako `nil`.
 
+  **Dvě opravy po Copilotovi (#373) mají vlastní tvrzení**: že `.outdated` **skončí**, jak se pustí
+  review proti dnešní hlavě (jinak by v tom režimu panel zůstal navždycky a volby by v něm nešly
+  zapnout), a že zúžené předání **nechá razítko u staré hlavy** a předané položky **přičte**, ne
+  přepíše. U toho druhého musí mít test hodiny **za** komentáři, které předává — razítko se
+  porovnává s časy komentářů, takže s výchozím `FakeTimeSource` (rok 1970) by předané vlákno vyšlo
+  jako „přišlo po předání“; v aplikaci to platí samo, protože čas je skutečný.
+
   **Vzhled má sondu** (`AgentPromptRenderProbe` má od #334 druhý test): panel se rendruje v **pěti
   stavech** — nepředáno, předáno, předáno-ale-něco-zbývá, po pushi a po pushi s nepředaným vláknem.
   Ke třem z nich se v aplikaci klikáním nedostaneš (musel by mezitím někdo pushnout do PR, který mám

@@ -18,7 +18,12 @@ struct Handoff: Hashable, Codable, Sendable {
     /// Hlava PR v době předání. `nil` = detail se v tu chvíli ještě nenačetl, takže se platnost
     /// zadání nedá potvrdit ani vyvrátit — a text promptu to o sobě říká nahlas.
     let headSha: String?
-    /// Identity předaných položek (`AgentPromptItem.id`).
+    /// Identity předaných položek (`AgentPromptItem.id`) — **všech, co kdy odešly**, ne jen těch
+    /// z posledního textu.
+    ///
+    /// Sčítá je `AppStore.noteHandoff(of:)`, a je to kvůli zúženému zadání po pushi: to nese jen
+    /// novou diskuzi, takže by přepsané razítko udělalo z dřív předaných nálezů „nepředané“
+    /// a odznak by se rozsvítil za práci, která odešla.
     ///
     /// **Ne jen počet.** Počet by odpověděl na „kolik jsem poslal“, ale ne na „co zbývá“:
     /// zadání se dá sestavit s vypnutou volbou, takže nevyřešené vlákno může zůstat mimo text —
@@ -34,7 +39,8 @@ struct Handoff: Hashable, Codable, Sendable {
         self.handed = handed
     }
 
-    /// Kolik položek v předaném zadání bylo — do popisku `✓ 6 položek`.
+    /// Kolik položek je předaných — do popisku `✓ 6 položek`. Je to velikost `handed`, tedy součet
+    /// přes všechna předání, ne délka posledního textu.
     var count: Int { handed.count }
 
     /// Zkrácená hlava do textu — sedm znaků, jak ji píše `git`. Stejně jako

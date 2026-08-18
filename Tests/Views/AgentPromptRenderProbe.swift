@@ -108,12 +108,12 @@ struct AgentPromptRenderProbe {
         store.noteHandoff(of: store.agentPrompt(for: pr))
         try renderPanel(store: store, named: "predano", in: directory)
 
-        // Předáno jen zčásti — vlákna byla vypnutá, takže zbývají. Je to ta cesta, kterou se do
-        // stavu `.changed` dostane člověk: vypne volbu a sestaví zadání bez ní.
-        store.toggleAgentPromptOption(.unresolvedThreads)
-        store.noteHandoff(of: store.agentPrompt(for: pr))
-        store.toggleAgentPromptOption(.unresolvedThreads)
+        // Předáno a **pak přišlo nové vlákno** — stav, ve kterém razítko zůstává a volby se kreslí.
+        // Vlákno se dosazuje do stavu store, protože fake gateway drží konverzaci na `updatedAt`
+        // shrnutí a sonda pracuje s jedním PR; jinak by se muselo předstírat druhé tiknutí.
+        store.conversationStates[pr] = .loaded(Self.conversationWithNewThread, updatedAt: Self.summary.updatedAt)
         try renderPanel(store: store, named: "predano-zbyva", in: directory)
+        store.conversationStates[pr] = .loaded(Self.conversation, updatedAt: Self.summary.updatedAt)
 
         // Po pushi: agent opravil a poslal dva commity, takže zadání zastaralo.
         store.noteHandoff(of: store.agentPrompt(for: pr))
@@ -241,6 +241,44 @@ struct AgentPromptRenderProbe {
         state: .open,
         body: "## Popis\n\nTimeout revieweera se bere z nastavení."
     )
+
+    /// Tatáž konverzace a v ní **jedno nové vlákno od kolegy** — z toho se kreslí stav „předáno,
+    /// ale něco zbývá“.
+    private static var conversationWithNewThread: Conversation {
+        Conversation(
+            viewer: conversation.viewer,
+            reviews: conversation.reviews,
+            threads: ConversationPage(
+                items: conversation.threads.items + [
+                    ReviewThread(
+                        id: "t9",
+                        path: "App/Config/ReviewTimeout.swift",
+                        line: 12,
+                        originalLine: 12,
+                        side: .right,
+                        isResolved: false,
+                        isOutdated: false,
+                        comments: ConversationPage(
+                            items: [
+                                ThreadComment(
+                                    id: "t9c1",
+                                    author: "odinuv",
+                                    body: "Ta horní mez by chtěla test na hodnotu mimo rozsah.",
+                                    createdAt: Date(timeIntervalSince1970: 1_754_200_000),
+                                    url: URL(string: "https://github.com/ondrajodas/PRism/pull/324#discussion_r9")!
+                                ),
+                            ],
+                            total: 1,
+                            hasNextPage: false
+                        )
+                    ),
+                ],
+                total: conversation.threads.total + 1,
+                hasNextPage: false
+            ),
+            comments: conversation.comments
+        )
+    }
 
     /// Tentýž PR po pushi — hlava se posunula o dva commity.
     private static let pushedDetail = PullRequest(

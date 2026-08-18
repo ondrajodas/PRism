@@ -288,11 +288,12 @@ struct HandoffTests {
     /// společného.
     @Test("Po force pushi se počet commitů netvrdí")
     func staysSilentAboutCommitsAfterAForcePush() {
-        let stamp = handoff(of: nil, conversation: nil)
+        let record = makeRecord(runs: [makeStoredRun(findings: [makeReported()])])
+        let stamp = handoff(of: record, conversation: nil)
 
         let report = Policy.handoff(
             stamp,
-            record: nil,
+            record: record,
             conversation: nil,
             head: "ff11223",
             commits: commits(["xxx0001", "ff11223"])
@@ -305,12 +306,52 @@ struct HandoffTests {
     /// Bez načteného seznamu commitů se počet taky netvrdí — je to „nevím kolik“, ne nula.
     @Test("Bez commitů se počet netvrdí")
     func staysSilentAboutCommitsWithoutTheList() {
-        let stamp = handoff(of: nil, conversation: nil)
+        let record = makeRecord(runs: [makeStoredRun(findings: [makeReported()])])
+        let stamp = handoff(of: record, conversation: nil)
 
-        let report = Policy.handoff(stamp, record: nil, conversation: nil, head: "ff11223")
+        let report = Policy.handoff(stamp, record: record, conversation: nil, head: "ff11223")
 
         #expect(report.stage == .outdated)
         #expect(report.commits == nil)
+    }
+
+    /// **Jak se review pustí znovu, varování zmizí** — nálezy platí pro dnešní hlavu, takže
+    /// `Pustit review znovu` by byla rada, která už proběhla. Do #373 (nález Copilota) zůstal panel
+    /// v režimu varování navždycky a volby v něm nešly zapnout.
+    @Test("Po novém review přestane být zadání zastaralé")
+    func leavesTheOutdatedStageAfterANewReview() {
+        let handed = makeRecord(runs: [makeStoredRun(findings: [makeReported()])])
+        let stamp = handoff(of: handed, conversation: nil)
+        // Review doběhlo proti nové hlavě, takže záznam je pro `ff11223` a nese nový nález.
+        let current = makeRecord(
+            runs: [makeStoredRun(findings: [makeReported(summary: "nález po opravě")], headSha: "ff11223")],
+            headSha: "ff11223"
+        )
+
+        let report = Policy.handoff(stamp, record: current, conversation: nil, head: "ff11223")
+
+        #expect(report.stage == .changed)
+        #expect(report.staleFindings == 0)
+        // Volby se v tom stavu kreslí, jinak by se nedalo sestavit nové zadání.
+        #expect(report.showsChoices)
+        // Že se hlava posunula, panel pořád říká — jen jinou větou.
+        #expect(report.hasMovedHead)
+        #expect(report.awaitsMove)
+    }
+
+    /// PR bez nálezů po pushi taky **není** `.outdated`: „nálezy platí pro starý kód“ by bylo
+    /// tvrzení o nálezech, které neexistují. Odznak přesto svítí — commit je nový.
+    @Test("Po pushi bez nálezů se varování o nálezech nepíše")
+    func staysOutOfTheOutdatedStageWithoutFindings() {
+        let conversation = conversation(threads: [thread(comments: [comment()])])
+        let stamp = handoff(of: nil, conversation: conversation)
+
+        let report = Policy.handoff(stamp, record: nil, conversation: conversation, head: "ff11223")
+
+        #expect(report.stage == .changed)
+        #expect(report.staleFindings == 0)
+        #expect(report.hasMovedHead)
+        #expect(report.pending == 1)
     }
 
     /// Po pushi se do `Sestavit i tak` dostane **jen diskuze**, která přibyla — nálezy ne.
@@ -368,9 +409,12 @@ struct HandoffTests {
         let stamp = handoff(of: nil, conversation: nil)
         let record = makeRecord(runs: [makeStoredRun(findings: [makeReported()])])
 
+        let handedRecord = handoff(of: record, conversation: nil)
+
         #expect(Policy.handoff(nil, record: record, conversation: nil, head: "9c1de02").showsChoices)
         #expect(!Policy.handoff(stamp, record: nil, conversation: nil, head: "9c1de02").showsChoices)
-        #expect(!Policy.handoff(stamp, record: nil, conversation: nil, head: "ff11223").showsChoices)
+        // Po pushi se zastaralými nálezy volby nejsou — panel má vlastní podobu se dvěma cestami.
+        #expect(!Policy.handoff(handedRecord, record: record, conversation: nil, head: "ff11223").showsChoices)
         #expect(Policy.handoff(
             handoff(of: nil, conversation: nil, headSha: nil),
             record: record,

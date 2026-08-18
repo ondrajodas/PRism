@@ -46,6 +46,31 @@ struct HandoffReport: Equatable, Sendable {
     /// Kolik commitů přišlo od předané hlavy. `nil` = ze seznamu commitů se to nepozná
     /// (nenačetl se, nebo v něm předaná hlava není — typicky po force pushi).
     let commits: Int?
+    /// Posunula se hlava od předání?
+    ///
+    /// **Vlastní příznak vedle `stage`**, protože posunutá hlava a zastaralé nálezy jsou dvě různé
+    /// věci: po pushi je `stage` `.outdated` jen tehdy, dokud nálezy platí pro starší commit — jak
+    /// se review pustí znovu, je `.changed`, ale věta v panelu má pořád říct, že pod předaným
+    /// zadáním přišel commit.
+    let hasMovedHead: Bool
+
+    init(
+        stage: Stage,
+        handoff: Handoff?,
+        pending: Int,
+        freshDiscussion: Set<String>,
+        staleFindings: Int,
+        commits: Int?,
+        hasMovedHead: Bool = false
+    ) {
+        self.stage = stage
+        self.handoff = handoff
+        self.pending = pending
+        self.freshDiscussion = freshDiscussion
+        self.staleFindings = staleFindings
+        self.commits = commits
+        self.hasMovedHead = hasMovedHead
+    }
 
     /// Nic se nepředávalo a nic se neví. Výchozí hodnota pro místa, která razítko nemají po ruce.
     static let never = HandoffReport(
@@ -142,13 +167,22 @@ extension Policy {
         }
 
         if let head, head != againstHeadSha {
+            // **Zastaralé jsou nálezy, ne razítko**, a rozhoduje to `headSha` záznamu: jak se proti
+            // dnešní hlavě pustí review znovu, jsou nálezy platné a `Pustit review znovu` by byla
+            // rada, která už proběhla. Bez téhle podmínky by panel zůstal v režimu varování
+            // **navždycky** a volby by se v něm nedaly zapnout (nálezem Copilota na #373).
+            let staleFindings = record.map { $0.headSha == head ? 0 : $0.activeFindings.count } ?? 0
             return HandoffReport(
-                stage: .outdated,
+                stage: staleFindings > 0 ? .outdated : .changed,
                 handoff: stamp,
+                // Všechno, ne jen nepředané: pod předaným zadáním se změnil kód, takže se má
+                // předat znovu — a nový commit má rozsvítit odznak i tehdy, když se v diskuzi nic
+                // nestalo (zadání #334).
                 pending: material.count,
                 freshDiscussion: discussion,
-                staleFindings: record?.activeFindings.count ?? 0,
-                commits: commitCount(since: againstHeadSha, in: commits)
+                staleFindings: staleFindings,
+                commits: commitCount(since: againstHeadSha, in: commits),
+                hasMovedHead: true
             )
         }
 

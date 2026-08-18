@@ -4926,6 +4926,19 @@ nad řádkem, který tvrdí, že je hotovo.
 - **Po pushi je pending všechno, co je k předání**, a `staleFindings` se počítá zvlášť. Zastaralé
   nálezy **nemizí** (#113): zůstávají v diffu, v tabu `Nálezy` i v segmentu vedle, jen se do zadání
   nepředvybírají — a druhá cesta `Sestavit i tak` předá to, co po předání přibylo v diskuzi.
+- **`.outdated` platí jen dokud jsou nálezy proti starší hlavě** (nálezem Copilota na #373).
+  Rozhoduje `headSha` **záznamu**, ne razítka: jak se proti dnešní hlavě pustí review znovu, je
+  `Pustit review znovu` rada, která už proběhla — a panel by v tom režimu zůstal navždycky
+  a nedovolil zapnout volby. Že se hlava posunula, nese vedle `stage` vlastní příznak
+  (`hasMovedHead`), takže to věta v panelu řekne i tehdy, když nálezy platí. Ze stejného důvodu
+  není `.outdated` ani PR **bez nálezů**: „nálezy platí pro starý kód“ by bylo tvrzení o nálezech,
+  které neexistují.
+- **Předání bez nálezů nehýbe hlavou razítka a identity se sčítají** (`AppStore.noteHandoff(of:)`,
+  nálezem Copilota na #373). `Sestavit i tak (jen nové vlákno)` se skládá proti **dnešní** hlavě, ale
+  nálezy v něm nejsou — takže kdyby posunulo hlavu, panel by přestal hlásit, že uložené nálezy platí
+  pro starý commit, a kdyby razítko přepsalo identity, byly by dřív předané nálezy najednou
+  „nepředané“ a odznak by se rozsvítil za práci, která odešla. Hlava proto říká, **proti jakému kódu
+  platí předané nálezy**, a `Handoff.handed` je součet přes všechna předání.
 - **Počet commitů se tvrdí jen tehdy, když se ví.** Bere se ze seznamu commitů (tahá se s detailem,
   #316) a `nil` znamená „nevím kolik“ — po force pushi tam předaná hlava není a dopočítat rozdíl
   z délky seznamu by dalo číslo, které s pushnutými commity nemá nic společného.
