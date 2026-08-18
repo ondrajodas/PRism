@@ -66,6 +66,20 @@ jen roztroušená.
 **Karta `Čeká na mě` a blok `Čeká na moje review` počítají od #332 jen cizí PR**, karta a blok
 `Moje PR` jen vlastní; `Rozdělaná review` počítá dál obojí. Podrobně je to níž, u sekce `Moje PR`.
 
+**Blok kreslí od #371 nejvýš pět řádků** a pod nimi patku se zbytkem — `Zobrazit všech 13 ve frontě
++8 →`, kterou stačí kliknout, aby se okno přepnulo do plné fronty. Bez stropu roste blok s frontou
+a ten druhý skončí pod hranou okna: u třinácti cizích PR o půl obrazovky, před #332 (kdy se do fronty
+počítala i vlastní) o celou. **Karta nad blokem přitom počítá dál celou frontu** — `Čeká na mě`
+ukazuje 13, i když je pod ní pět řádků; strop je o kresbě, ne o množině. Blok pod stropem patku nemá,
+protože „zobrazit všechny“ nad seznamem, který je celý vidět, je akce, po které se nic nezmění.
+
+**Čtyři karty z pěti vedou do své sekce** (#371): `Čeká na mě` a `Blokuje` do `Fronty`, `Moje PR`
+a `Rozdělaná review` do svých. Pozná se to šipkou vpravo nahoře a rámečkem v akcentu na hover.
+`Blokuje` u toho zapne filtr **„jen blokující“** — bez něj by skákala na totéž místo jako `Čeká na
+mě` — a ostatní volby filtru nechá, jak si je člověk nastavil. **`Dneska stálo` klikatelná není**:
+nemá kam vést, a karta, po které se nic nestane, je lež o tom, co okno umí; nemá proto ani ukazováček
+kurzoru, ani hover stav.
+
 **Karta `Ve frontě` se od #331 jmenuje `Čeká na mě`** a přibyla vedle ní `Moje PR`. Staré jméno
 mluvilo o dvou různých druzích práce naráz: u cizího PR je moje úloha *přečíst a odpovědět*,
 u vlastního *opravit a pushnout*. Velké číslo na kartě `Moje PR` je **kolik jich mám otevřených**,
@@ -101,7 +115,9 @@ aktuální; při rate limitu pruh říká, kdy to zkusí znovu.
 
 **Seznam se dá zúžit filtrem** (#117) — ikona vpravo v liště nad frontou, a jen tam: nad
 rozdělanými review není co zúžit. Odškrtávají se v ní repozitáře a autoři (uvnitř osy „nebo“, mezi
-osami „a“: dvě repa znamenají obojí, repo + autor jeho PR v tom repu). U každé položky je **počet PR, kterých se týká** (#199), takže je před kliknutím vidět, co
+osami „a“: dvě repa znamenají obojí, repo + autor jeho PR v tom repu), a od #371 je nad nimi třetí
+osa **`Jen s blokujícím nálezem`** — tu zapíná i karta `Blokuje` na dashboardu, takže musí být vidět
+a vypnutelná tam, kde se filtr nastavuje. U každé položky je **počet PR, kterých se týká** (#199), takže je před kliknutím vidět, co
 se za ní schová; počítá se z **plného** seznamu, takže se odškrtáváním nemění — jinak by číslo
 říkalo něco o pohledu místo o tom, co zapnutí položky udělá. Že je filtr zapnutý a kolik schovává,
 je vidět na ikoně **bez otevírání nabídky**, protože skrytý filtr je způsob, jak přijít o review;

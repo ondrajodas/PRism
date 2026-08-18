@@ -2768,5 +2768,44 @@ aplikace). Všechno v [`testovani.md`](testovani.md), sekce *Co je u #361 změř
 Testů je **2849** a jsou zelené. **Vidět není nic** — nezměnilo se ani jedno view, přidaly se dvě
 ruční sondy (obě za `PRISM_MEASURE`, takže se v běžném běhu přeskočí) a zápis měření.
 
+### #371 — dashboard má strop pěti řádků a karty, které vedou do své sekce
+
+Blok na dashboardu vypisoval **všechny** řádky, takže s delší frontou přestal být dashboard přehled:
+blok `Moje PR` se schoval pod hranu okna a muselo se k němu rolovat (změřeno na živé aplikaci u #331
+při 32 PR — o celou obrazovku; po #332 při třinácti — o půl). Druhá půlka byla cesta zpátky: číslo
+`Čeká na mě 13` říkalo, že je co dělat, ale kliknout se na něj nedalo — do plné fronty se šlo jedině
+ikonou v railu.
+
+**Strop je pět řádků a patka pod nimi shrne zbytek** — `Zobrazit všech 13 ve frontě +8 →`. Skládá to
+`Policy.dashboardBlock` (`DashboardBlock`), ne view, takže se počet v patce nemůže rozejít s tím,
+kolik řádků se doopravdy nakreslilo. **Strop je o kresbě, ne o množině**: karta `Čeká na mě` ukazuje
+dál 13 a odznak v railu taky — kdyby sestoupil do počítání, dashboard by začal lhát a poznalo by se
+to až za týden. Blok pod stropem patku nemá (ani při přesně pěti řádcích) a **patka není řádek**:
+nepočítá se do `rows`, takže se nedostane do klávesové navigace ani do počtu, který blok hlásí.
+
+**Čtyři karty z pěti vedou do své sekce.** Cíl je `RailSection` (u `Blokuje` `DashboardDestination
+.blockingQueue`), takže karta nemá vědět, že rail existuje — složit z toho přepnutí je práce storu
+(`show(_:)`, jedna cesta i pro paletu ⌘K). `Blokuje` u toho zapíná **třetí osu filtru**
+(`PullRequestFilter.onlyBlocking`) a jde na to `setFilter`, tedy tatáž funkce jako u filtrovacího
+tlačítka (#117); ostatní volby zůstávají, jak si je člověk nastavil. **`Dneska stálo` klikatelná
+není** — nemá kam vést, takže nedostala ani šipku, ani ukazováček, ani hover.
+
+**Dvojitá dělící čára nevznikla, a je to změřené renderem.** S patkou za posledním řádkem přestane
+platit „poslední řádek čáru nemá“, takže by se jeho spodní linka sečetla s horní linkou patky (v mockupu
+z toho bylo 1 px + 1 px = 2 px). Patka proto vlastní horní linku **nemá** a tu jednu kreslí seznam
+řádků před ní; ověřuje to `DashboardFooterSeparatorTests` z bitmapy — všech jedenáct vodorovných čar
+v levém sloupci má 2 px a s vloženou regresí (`overlay` navíc nad patkou) vyjde jedna 4px a test spadne.
+
+**Rozhodnuto jinak, než bylo v zadání**, ve dvou věcech. Osa „jen blokující“ dostala **odškrtávátko
+v nabídce filtru** (`Jen s blokujícím nálezem`, kreslí ho návrh v patce nabídky jako zkratku) — zadání
+o něm nemluví, ale kartou se ta osa zapíná, takže bez něj by nabídka nad zapnutým filtrem ukazovala
+samá neodškrtnutá repa vedle ikony, která hlásí dvanáct schovaných PR, a jediná cesta zpátky by bylo
+`Vymazat filtr`. A popisek karty dostal **odsazení pro šipku** i `lineLimit(1)`: šipka je podle návrhu
+absolutně umístěná, takže by se `ROZDĚLANÁ REVIEW` v užším okně zalomilo pod ni a s ním by narostla
+výška celé řady karet (ověřeno renderem na 640, 760 a 900 bodech).
+
+Testů přidala tahle změna **25** a je jich **3003**; jsou zelené. **Ověřeno vložením regrese** u čáry
+nad patkou (`overlay` navíc nad ní → jedna čára 4 px místo 2 px, test spadl).
+
 Každá fáze je samostatně spustitelná a otestovatelná. **Tenhle seznam aktualizuj, jak
 fáze ubývají.**
