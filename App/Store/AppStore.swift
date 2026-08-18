@@ -704,7 +704,30 @@ final class AppStore {
     /// gettery (`visibleQueuePullRequests`, `visibleOwnPullRequests`), detail vybraného řádku
     /// a klik na notifikaci, který podle něj pozná, že PR schoval filtr.
     var visiblePullRequests: [PullRequestSummary] {
-        Policy.filtered(pullRequests, by: filter)
+        Policy.filtered(pullRequests, by: filter, isBlocking: hasBlockingFinding(_:))
+    }
+
+    /// Projde tenhle PR filtrem? **Jediné místo, kde se k filtru dopočítává blokující nález** (#371).
+    ///
+    /// Osa „jen blokující“ nestojí na shrnutí PR, ale na uloženém záznamu, takže si ji `matches`
+    /// nemá kde vzít sám. Počítání schovaných PR se proto ptá odsud, ne přes `filter.matches` — tři
+    /// místa, která si tu odpověď skládají po svém, by znamenala tři různá tvrzení o jednom filtru.
+    func passesFilter(_ summary: PullRequestSummary) -> Bool {
+        filter.matches(summary) { hasBlockingFinding(summary.id) }
+    }
+
+    /// Blokuje na tomhle PR aspoň jeden platný nález? (#371)
+    ///
+    /// **Globální sada kategorií, ne per repo** — tatáž, s jakou počítá kartu `Blokuje` getter
+    /// `dashboard` výš. Filtr, který ta karta zapíná, musí ukázat právě ta PR, která napočítala;
+    /// s per-repo sadou by šlo kliknout na `Blokuje 1` a dostat prázdný seznam. Řádek seznamu si dál
+    /// bere tu svoji (`queueRow(for:)`), protože mluví o jednom repu, ne o celé frontě.
+    func hasBlockingFinding(_ pr: PRIdentifier) -> Bool {
+        guard let record = reviewRecords[pr] else { return false }
+        return Policy.blockingCount(
+            in: record,
+            categories: Set(configuration.global.blockingCategories)
+        ) > 0
     }
 
     /// Co nabídnout ve filtru — z **plného** seznamu, sjednocené s aktivním filtrem.
@@ -733,6 +756,40 @@ final class AppStore {
     }
 
     func clearFilter() { setFilter(PullRequestFilter()) }
+
+    // MARK: - Navigace v domácí záložce
+
+    /// Přepne domácí záložku na sekci railu.
+    ///
+    /// **Včetně přepnutí na `home`**: sekce railu je obsah domácí záložky, takže nad otevřeným PR by
+    /// se jinak nestalo nic viditelného. Chodí sem paleta ⌘K (#184) i karty a patky bloků na
+    /// dashboardu (#371) — jedna cesta, ať se na to nezapomene jen v jedné z nich.
+    func show(_ section: RailSection) {
+        railSection = section
+        activeTab = .home
+    }
+
+    /// Klik na kartu nebo patku bloku na dashboardu (#371).
+    ///
+    /// Karta zná jen cíl (`DashboardDestination`), ne rail ani filtr — složit z toho přepnutí je
+    /// práce storu.
+    func show(_ destination: DashboardDestination) {
+        switch destination {
+        case .section(let section):
+            show(section)
+        case .blockingQueue:
+            // Filtr se nastavuje **tou samou cestou jako filtrovací tlačítko** (#117): `setFilter`
+            // srovnává s filtrem i výběr, takže druhá kopie by tuhle jednu věc zapomněla.
+            //
+            // **Ostatní osy zůstávají, jak si je člověk nastavil** — zapíná se jedna osa, ne nový
+            // filtr. Že se ta jedna přepíše, je vědomé: bez ní by karta `Blokuje` skákala na totéž
+            // místo jako `Čeká na mě`.
+            var updated = filter
+            updated.onlyBlocking = true
+            setFilter(updated)
+            show(.queue)
+        }
+    }
 
     // MARK: - Záložky (#180)
 
@@ -959,7 +1016,7 @@ final class AppStore {
         // Jedním průchodem, jako u `ownListEmptyReason`: rozřazení podle autora i filtr by jinak
         // seznam prošly každý zvlášť, a tenhle getter čte SwiftUI při každém překreslení seznamu.
         let queue = queuePullRequests
-        let hidden = filter.isActive ? queue.count { !filter.matches($0) } : 0
+        let hidden = filter.isActive ? queue.count { !passesFilter($0) } : 0
         return Policy.listEmptyReason(
             poll: emptyReason,
             visible: queue.count - hidden,

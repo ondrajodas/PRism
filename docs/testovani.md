@@ -1672,6 +1672,14 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a pořadí je podle jména i tehdy, když by počty seřadily jinak — jinak by nabídka přeskakovala
   s každým tikem.
 
+  **Osa „jen blokující“ (#371)** patří do téhož výčtu a nejcennější dvě tvrzení jsou o tom, na co se
+  **neptá**: nad vypnutou osou se na blokující nález neptá vůbec (jinak by zapnutý filtr repa
+  procházel nálezy u každého PR pro nic — a tuhle funkci čte SwiftUI při každém překreslení seznamu)
+  a nad prázdným filtrem se nevrací dřív, než se na cokoli zeptá. K tomu, že se osa s repem
+  **průsečíkuje** (karta `Blokuje` zapíná jednu osu, ostatní volby zůstávají) a že se počítá do
+  `isActive` — bez toho by ikona filtru nad zapnutou osou vypadala jako vypnutý filtr a `Vymazat
+  filtr` by bylo zakázané.
+
   **`AppStore` proti fakes na to, že filtr je pohled, ne mazání:** zapnutí filtru nezahodí diff
   schovaného PR (a po vypnutí se GitHubu neptá znovu), nezahodí draft, nezruší běžící review,
   nechá plný seznam plný, nechá `knownRepositories` (okno nastavení) i `queueSummary` beze změny.
@@ -1717,6 +1725,49 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   jinak by se dalo splést getter), **filtr seznamu ji nezúží** a hromadné spuštění bez revieweera
   **nespustí nic**. Sedmidenní historie útraty se ověřuje proti skutečné dočasné složce: přesun
   včerejška po půlnoci, prázdný den, který v řadě zůstává, a ořez na sedm dní.
+
+  **Strop pěti řádků a klikatelné karty (#371)** — `DashboardBlockTests` výčtem a `AppStoreDashboardTests`
+  proti fakes. Čtyři tvrzení nesou celé issue a všechna říkají, že se něco **ne**stalo:
+  - **Strop nezmění čísla na kartách.** Nad třinácti PR kreslí blok pět řádků a patka hlásí `+8`,
+    kdežto `dashboard.queue.pullRequests`, `dashboardQueue.count` i odznak v railu zůstávají na
+    třinácti. Kdyby strop sestoupil do počítání, dashboard by začal lhát a poznalo by se to až za
+    týden.
+  - **Patka se u bloku pod stropem nekreslí** — a **ani při přesně pěti řádcích**, což je ten případ,
+    na kterém se `>=` proti `>` pozná. Šestý řádek ji vyvolá s `+1`.
+  - **Karta `Dneska stálo` nevede nikam.** Vedle přímého tvrzení je test přes `allCases`: cíl nemá
+    **právě jedna** karta, takže nová karta se musí rozhodnout, a žádná nevede na `Přehled` (dashboard
+    je `Přehled` sám). Že to view dodržuje, je vidět v renderu — karta bez cíle nedostane tlačítko,
+    šipku ani hover.
+  - **Karta `Blokuje` nezapne filtr dvakrát a ostatní osy nechá být.** Klik nastaví `onlyBlocking`,
+    nechá odškrtnutá repa i autory a druhý klik už filtr nezmění. K tomu tvrzení, že **co karta
+    napočítá, to filtr ukáže** (`visibleQueuePullRequests.count == dashboard.blocking.pullRequests`) —
+    tam se pozná, kdyby se sada blokujících kategorií rozešla mezi kartou a filtrem.
+
+  A počet nakreslených řádků ověřuje `Policy.dashboardBlock` **přes pásmo** (1 až 20 PR): nakreslené
+  plus shrnuté musí dát celou frontu. Rozejít se to umí jen v pásmu, takže u jednoho počtu by test
+  prošel.
+
+  **Dělící čára nad patkou** má vlastní sadu z bitmapy (`DashboardFooterSeparatorTests`) — z kódu to
+  vidět není, dvě jednobodové čáry pod sebou vypadají v obou souborech správně. Měří se **všechny**
+  vodorovné čáry v levém sloupci naráz (v tomhle návrhu je každá jednobodová), takže tvrzení „všechny
+  stejně silné“ chytí dvojitou čáru bez ohledu na to, kolikátá zhora patka je; k němu jde počet čar,
+  bez kterého by prošla i nenakreslená patka. Dvě věci, které to stálo:
+  - **Barvy se neporovnávají s paletou**, a je to změřené: `Palette.lineSoft` (`#E9ECF4`) vyjde
+    v bitmapě jako `0.934 0.941 0.963` místo nominálních `0.914 0.925 0.957`, protože okno kreslí do
+    širšího barevného prostoru. Čára se proto pozná **tvarem** — tenký jednolitý pás, který se barvou
+    liší od pásů nad ním i pod ním. Ta podmínka na okolí je tam kvůli mezerám v textu: mezi titulkem
+    a souřadnicemi řádku je taky tenký jednolitý pás, jen v barvě plochy kolem.
+  - **Vyzkoušené vložením regrese**: s `overlay(alignment: .top)` navíc nad patkou vyjde jedna čára
+    4 px vedle deseti dvoupixelových a test spadne (`Set(thickness).count → 2`).
+
+  Do renderu se u toho **nesmí věřit `ImageRenderer`u** (dashboard je `ScrollView`, ten se offscreen
+  nerasterizuje) a na hotovou kresbu se **čeká se stropem**, ne pevnou odmlkou: kolik kol smyčky
+  hierarchie potřebuje, rozhoduje zátěž stroje.
+
+  **Šipka na kartě si drží místo odsazením** (`arrowRoom`), takže se popisek zkrátí, místo aby se
+  zalomil pod ni. Ověřeno renderem na šířkách 640, 760 a 900 bodů: v tom nejužším vyjde
+  `ČEKÁ N…  →` a výška řady karet zůstane stejná. Je to tatáž past jako u věty pod číslem (#331),
+  jen o jednu úroveň výš.
 
   Kdy se polling zeptá znovu (`PollState.nextPoll`) je u `PollingService`: hodnotu zapisuje
   smyčka, ruční obnovení ji **neposouvá**, a po rate limitu ctí backoff, ne nastavený interval.

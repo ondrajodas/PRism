@@ -39,7 +39,9 @@ struct PullRequestFilterButton: View {
     }
 
     private var help: String {
-        guard filter.isActive else { return "Zúžit seznam na vybraná repa a autory" }
+        // Od #371 tři osy, takže i nápověda mluví o třech: dvě vyjmenované vedle jedné, která
+        // v nabídce je, by vypadaly jako celý výčet.
+        guard filter.isActive else { return "Zúžit seznam na vybraná repa, autory a blokující nálezy" }
         return "Filtr je zapnutý a schovává \(Plural.czech(hidden, one: "pull request", few: "pull requesty", many: "pull requestů"))"
     }
 
@@ -48,6 +50,8 @@ struct PullRequestFilterButton: View {
     private var popover: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
+            Divider()
+            blockingAxis
             Divider()
             if options.isEmpty {
                 // **Věta musí sednout na oba stavy**, protože prázdná nabídka znamená obojí: seznam
@@ -88,6 +92,32 @@ struct PullRequestFilterButton: View {
                 .disabled(!filter.isActive)
                 .font(.callout)
         }
+        .padding(12)
+    }
+
+    /// Osa „jen blokující“ (#371) — `Jen s blokujícím nálezem`, jak ji kreslí návrh v patce nabídky.
+    ///
+    /// **Musí být vidět tady, ne jen na kartě `Blokuje`.** Kartou se osa zapíná, takže bez tohohle
+    /// řádku by nabídka nad zapnutým filtrem ukazovala samá neodškrtnutá repa a vedle ikonu, která
+    /// hlásí dvanáct schovaných PR — a jediná cesta zpátky by bylo `Vymazat filtr`, tedy zahodit
+    /// i to, co si člověk nastavil sám.
+    ///
+    /// **Odškrtávátko, ne zkratka**, jak ji má návrh: nese svůj stav, kdežto chip v patce by o něm
+    /// neřekl nic. A stojí **nad nabídkou os**, ne v patce, protože je to osa, ne akce.
+    ///
+    /// Kreslí se **i nad prázdnou nabídkou** — právě tam totiž může být zapnutá jako jediná.
+    private var blockingAxis: some View {
+        Toggle(isOn: Binding(
+            get: { filter.onlyBlocking },
+            set: { on in
+                var updated = filter
+                updated.onlyBlocking = on
+                apply(updated)
+            }
+        )) {
+            Text("Jen s blokujícím nálezem").font(.callout)
+        }
+        .toggleStyle(.checkbox)
         .padding(12)
     }
 
