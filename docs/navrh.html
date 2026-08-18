@@ -377,6 +377,25 @@ code {
   font-size: 12.5px; font-weight: 620;
 }
 .block > header .more { font-size: 11.5px; color: var(--accent); font-weight: 500; }
+/* Patka bloku: na dashboardu se z každé fronty kreslí **5 řádků**, zbytek shrne patka a klik
+   na ni přepne do plné fronty v railu. Bez stropu roste blok s frontou a druhý blok skončí
+   pod hranou okna. */
+.block > .more-rows {
+  padding: 8px 13px; border-top: 1px solid var(--line-soft);
+  font-size: 11.5px; font-weight: 500; color: var(--accent);
+  display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+}
+.block > .more-rows:hover { background: var(--hover); }
+.block > .more-rows .count { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
+
+/* Karta, která vede do sekce railu. Nekliká se `DNESKA STÁLO` — ta nemá kam vést. */
+.card.go { cursor: pointer; position: relative; }
+.card.go:hover { border-color: var(--accent); }
+.card.go .goto {
+  position: absolute; top: 12px; right: 13px;
+  font-size: 12px; color: var(--ink-3);
+}
+.card.go:hover .goto { color: var(--accent); }
 
 /* řádek fronty */
 .qrow {
@@ -2589,7 +2608,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <div class="body-grid">
           <nav class="rail">
             <div class="ri on">⌂</div>
-            <div class="ri">☰<span class="badge">5</span></div>
+            <div class="ri">☰<span class="badge">13</span></div>
             <div class="ri">↑<span class="badge">2</span></div>
             <div class="ri">✎</div>
             <div class="ri">◷</div>
@@ -2603,29 +2622,33 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="dash-head">
               <div>
                 <h4>Dobré ráno, Ondro.</h4>
-                <div class="sub">Pět pull requestů čeká na tvoje review. Na dvou vlastních leží nálezy k předání.</div>
+                <div class="sub">Třináct pull requestů čeká na tvoje review. Na dvou vlastních leží nálezy k předání.</div>
               </div>
               <div class="when">obnoveno 09:12</div>
             </div>
 
             <div class="cards" style="grid-template-columns: repeat(5, 1fr);">
-              <div class="card">
+              <div class="card go" title="přepne do sekce Fronta">
+                <span class="goto">→</span>
                 <div class="cap">Čeká na mě</div>
-                <div class="big">5</div>
-                <div class="foot">napříč 4 repozitáři</div>
+                <div class="big">13</div>
+                <div class="foot">napříč 11 repozitáři</div>
               </div>
-              <div class="card alarm">
+              <div class="card alarm go" title="přepne do sekce Fronta, filtr „jen blokující“">
+                <span class="goto">→</span>
                 <div class="cap">Blokuje</div>
                 <div class="big">1</div>
                 <div class="foot">correctness · keboola/vault</div>
               </div>
-              <div class="card">
+              <div class="card go" title="přepne do sekce Moje PR">
+                <span class="goto">→</span>
                 <div class="rail-top"></div>
                 <div class="cap">Moje PR</div>
-                <div class="big">6</div>
+                <div class="big">5</div>
                 <div class="foot">2 mají co předat agentovi</div>
               </div>
-              <div class="card">
+              <div class="card go" title="přepne do sekce Rozdělaná">
+                <span class="goto">→</span>
                 <div class="cap">Rozdělaná review</div>
                 <div class="big">2</div>
                 <div class="foot">nejstarší leží 2 dny</div>
@@ -2700,6 +2723,44 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
                       <span class="pill ok">čisté</span>
                     </div>
                   </div>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--find);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico open">⬤</span>
+                        <span class="title">refactor: rozdělit ImportExportBundle na dvě služby</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">keboola/connection #21701</span><span>·</span>
+                        <span>jkiss</span><span>·</span><span>před 2 hodinami</span>
+                      </div>
+                    </div>
+                    <div class="right">
+                      <span class="pill find">2 nálezy</span>
+                    </div>
+                  </div>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--ok);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico open">⬤</span>
+                        <span class="title">fix: dropnout osiřelé workspace po timeoutu</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">keboola/sandboxes-service #650</span><span>·</span>
+                        <span>tomasfejfar</span><span>·</span><span>před 3 hodinami</span>
+                      </div>
+                    </div>
+                    <div class="right">
+                      <span class="pill ok">čisté</span>
+                    </div>
+                  </div>
+
+                  <!-- Strop je 5 řádků na blok; zbytek shrne patka a klik na ni přepne do plné
+                       fronty v railu — stejně jako klik na kartu „Čeká na mě“ nad ní. -->
+                  <div class="more-rows">Zobrazit všech 13 ve frontě <span class="count">+8</span> →</div>
                 </div>
 
                 <!-- moje -->
@@ -2792,7 +2853,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           <span class="sitem"><span class="d" style="background: var(--ok);"></span>gh · claude · git</span>
           <span class="sitem plain">přihlášen jako ondrajodas</span>
           <span class="sp"></span>
-          <span class="sitem">5 cizích · 6 mých</span>
+          <span class="sitem">13 cizích · 5 mých</span>
         </div>
       </div>
     </div>
