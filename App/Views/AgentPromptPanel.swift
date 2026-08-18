@@ -168,7 +168,7 @@ struct AgentPromptPanel: View {
     nonisolated static func choiceHelp(_ choice: AgentPromptChoice, selected: Int?, of total: Int?) -> String {
         guard let selected, let total, selected < total else { return choice.explanation }
         return choice.explanation
-            + " — část položek je vypnutá; vidět a přepnout je jdou v okně se zadáním."
+            + " — část položek je vypnutá; vidět a přepnout se dají v okně se zadáním."
     }
 
     /// Čtvereček z návrhu: 12 bodů, poloměr 3. Zapnutý má akcentové obtažení **4 body dovnitř**

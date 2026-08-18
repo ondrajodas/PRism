@@ -542,7 +542,13 @@ struct AgentPromptSelectionTests {
         )
 
         #expect(AgentPromptPickList.checkboxHelp(pick).contains("napsal jsi to ty"))
-        #expect(AgentPromptPickList.checkboxHelp(byHand).contains("Odškrtnul jsi to"))
+        #expect(AgentPromptPickList.checkboxHelp(byHand).contains("Odškrtnul jsi ji"))
         #expect(AgentPromptPickList.checkboxHelp(on).contains("V textu je"))
+        // Všechny tři mluví o **položce**, tedy v ženském rodě (nálezem Copilota na #380): `ho`
+        // se nevázalo na nic, co je v okně napsané — nález, vlákno, komentář a souhrn mají tři
+        // různé rody, takže se ta věta musí držet toho jednoho slova, které je společné.
+        for help in [pick, byHand, on].map(AgentPromptPickList.checkboxHelp) {
+            #expect(!help.contains(" ho "))
+        }
     }
 }

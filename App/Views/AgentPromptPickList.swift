@@ -171,10 +171,14 @@ struct AgentPromptPickList: View {
 
     /// Nápověda u zaškrtávátka — u vypnuté položky **s důvodem**, protože bez něj je předvybrání
     /// aplikace k nerozeznání od chyby.
+    ///
+    /// Všechny tři věty mluví o **položce**, tedy v ženském rodě: `ho` z první verze se nevázalo
+    /// na nic, co je v okně napsané (nález, vlákno, komentář a souhrn mají tři různé rody), a v UI
+    /// textu to čte jako chyba. Nálezem Copilota na #380.
     nonisolated static func checkboxHelp(_ pick: AgentPromptPick) -> String {
-        guard !pick.isIncluded else { return "V textu je — kliknutím ho z něj vyndáš" }
-        guard let exclusion = pick.exclusion else { return "Odškrtnul jsi to — kliknutím to vrátíš" }
-        return "Vypnuto (\(exclusion.label)) — kliknutím to přibereš"
+        guard !pick.isIncluded else { return "V textu je — kliknutím ji odškrtneš" }
+        guard let exclusion = pick.exclusion else { return "Odškrtnul jsi ji — kliknutím ji vrátíš" }
+        return "Vypnuto (\(exclusion.label)) — kliknutím ji přibereš"
     }
 }
 
