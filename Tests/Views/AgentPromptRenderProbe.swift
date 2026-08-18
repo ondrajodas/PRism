@@ -131,6 +131,13 @@ struct AgentPromptRenderProbe {
         store.toggleAgentPromptOption(.unresolvedThreads)
         store.detailStates[pr] = .loaded(Self.pushedDetail, updatedAt: Self.summary.updatedAt)
         try renderPanel(store: store, named: "po-pushi-nove-vlakno", in: directory)
+
+        // **A ještě v užší mezi panelu** (240 b, viz `ReviewPanel`): jiná šířka je jiný design —
+        // varování, razítko i dva řádky s počty se do ní musí vejít, jinak `lineLimit(1)` schová
+        // zrovna to, kvůli čemu tam jsou.
+        UserDefaults.standard.set(240.0, forKey: "findingsPanelWidth")
+        try renderPanel(store: store, named: "po-pushi-uzky", in: directory)
+        UserDefaults.standard.removeObject(forKey: "findingsPanelWidth")
     }
 
     private func renderPanel(store: AppStore, named name: String, in directory: URL) throws {
