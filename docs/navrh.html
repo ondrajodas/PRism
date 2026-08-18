@@ -970,6 +970,42 @@ footer.end {
 .logtail .bad { color: var(--crit); }
 .chkacts { display: flex; gap: 7px; padding: 8px 12px 10px 34px; border-bottom: 1px solid var(--line-soft); }
 
+/* Výběr jednotlivých položek do zadání pro agenta (sheet, sekce 23). Volby po druzích zůstávají
+   v panelu jako hrubý filtr; tady se zapíná a vypíná **položka**. Vypnuté zůstávají vidět —
+   tiše zmizelá položka je horší než položka, o které vím, že v textu není. */
+.picklist { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel-2); }
+.pickgroup {
+  display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+  background: var(--panel-3); border-bottom: 1px solid var(--line-soft);
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.pickgroup .n { margin-left: auto; }
+.pick { display: flex; align-items: flex-start; gap: 9px; padding: 7px 12px; border-bottom: 1px solid var(--line-soft); font-size: 12px; }
+.pick:last-child { border-bottom: 0; }
+.pick .box {
+  width: 14px; height: 14px; border-radius: 4px; flex: none; margin-top: 1px;
+  border: 1px solid var(--line); display: grid; place-items: center;
+  font-size: 9.5px; color: var(--panel); background: var(--panel-2);
+}
+.pick.on .box { background: var(--accent); border-color: var(--accent); }
+.pick .mid { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pick .t1 { color: var(--ink); }
+.pick .t2 { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
+.pick .who { font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); flex: none; }
+.pick .why { margin-left: auto; font-size: 10.5px; color: var(--ink-3); flex: none; padding-left: 10px; }
+.pick.off .t1 { color: var(--ink-3); }
+.pick .arrow { font-size: 10px; color: var(--ink-3); flex: none; padding-left: 8px; }
+.pick.open { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+/* Rozbalený text položky: **celý**, ať je vidět, co se potvrzuje. Dlouhý se roluje, nekrátí —
+   krácení by z rozkliku udělalo druhý náhled téhož problému. */
+.pickbody {
+  padding: 8px 12px 10px 35px; border-bottom: 1px solid var(--line-soft);
+  background: var(--panel); font-size: 11.5px; line-height: 1.5; color: var(--ink-2);
+  max-height: 168px; overflow-y: auto; white-space: pre-wrap;
+}
+.pickbody .meta { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); margin-bottom: 5px; }
+
 /* ============================================================
    TAB KONVERZACE
    ============================================================ */
@@ -7218,7 +7254,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
       <div class="sheet-head">
         <span class="t">Prompt pro implementačního agenta</span>
         <span class="slug">ondrajodas/PRism#324 · 9c1de02 · issue-320-timeout</span>
-        <span class="sub">6 položek z 8 · 2 nálezy, 2 vlákna u řádků, 1 souhrn review, 1 komentář pod PR · 2,8 kB</span>
+        <span class="sub">vybráno 6 z 11 · 2 nálezy, 2 vlákna u řádků, 1 souhrn review, 1 komentář pod PR · 2,8 kB</span>
       </div>
       <div class="sheet-body">
         <div class="pl-sec">
@@ -7231,11 +7267,147 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
             <span class="pill crit">1 blokuje</span>
             <span class="pill idle">1 vyřešené vynecháno</span>
             <span class="pill idle">1 odmítnutý vynechán</span>
+            <span class="pill idle">1 vlastní vynechán</span>
+            <span class="pill idle">2 souhrny bez obsahu vynechány</span>
+          </div>
+        </div>
+
+        <div class="pl-sec">
+          <span class="cap">Co zahrnout</span>
+          <div class="picklist">
+          <div class="pickgroup">Nálezy<span class="n">2 z 3</span></div>
+            <div class="pick on">
+              <span class="box">✓</span>
+              <div class="mid">
+                <span class="t1">Sražení do mezí se děje při čtení — BLOKUJE</span>
+                <span class="t2">Configuration.swift:41</span>
+              </div>
+              <span class="who">code-review</span>
+              <span class="arrow">⌄</span>
+            </div>
+            <div class="pick on">
+              <span class="box">✓</span>
+              <div class="mid">
+                <span class="t1">Horní mez 240 minut drží slot čtyři hodiny</span>
+                <span class="t2">ReviewTimeout.swift:12</span>
+              </div>
+              <span class="who">security-review</span>
+              <span class="arrow">⌄</span>
+            </div>
+            <div class="pick off">
+              <span class="box"></span>
+              <div class="mid">
+                <span class="t1">Sjednotit názvy testů podle konvence</span>
+                <span class="t2">ConfigurationTests.swift:88</span>
+              </div>
+              <span class="who">code-review</span>
+              <span class="why">odmítl jsi ho</span>
+              <span class="arrow">⌄</span>
+            </div>
+          <div class="pickgroup">Vlákna u řádků<span class="n">2 z 3</span></div>
+            <div class="pick on">
+              <span class="box">✓</span>
+              <div class="mid">
+                <span class="t1">The timeout is read from config on every run…</span>
+                <span class="t2">ClaudeReviewRunner.swift:88</span>
+              </div>
+              <span class="who">Copilot</span>
+              <span class="arrow">⌄</span>
+            </div>
+            <div class="pick on">
+              <span class="box">✓</span>
+              <div class="mid">
+                <span class="t1">Chybí test na hodnotu mimo meze</span>
+                <span class="t2">ConfigurationTests.swift:210</span>
+              </div>
+              <span class="who">odinuv</span>
+              <span class="arrow">⌄</span>
+            </div>
+            <div class="pick off">
+              <span class="box"></span>
+              <div class="mid">
+                <span class="t1">Překlep v komentáři</span>
+                <span class="t2">Configuration.swift:12</span>
+              </div>
+              <span class="who">odinuv</span>
+              <span class="why">vyřešeno</span>
+              <span class="arrow">⌄</span>
+            </div>
+          <div class="pickgroup">Souhrny review<span class="n">1 z 3</span></div>
+            <div class="pick on">
+              <span class="box">✓</span>
+              <div class="mid">
+                <span class="t1">Vyžádal změny — mez pojmenovat na jednom místě</span>
+              </div>
+              <span class="who">odinuv</span>
+              <span class="arrow">⌄</span>
+            </div>
+            <div class="pick off">
+              <span class="box"></span>
+              <div class="mid">
+                <span class="t1">Pull request overview — 3 soubory, 1 komentář</span>
+              </div>
+              <span class="who">copilot</span>
+              <span class="why">shrnuje diff</span>
+              <span class="arrow">⌄</span>
+            </div>
+            <div class="pick off">
+              <span class="box"></span>
+              <div class="mid">
+                <span class="t1">Pull request overview — generated no comments</span>
+              </div>
+              <span class="who">copilot</span>
+              <span class="why">bez obsahu</span>
+              <span class="arrow">⌄</span>
+            </div>
+          <div class="pickgroup">Komentáře pod PR<span class="n">1 z 2</span></div>
+            <div class="pick on">
+              <span class="box">✓</span>
+              <div class="mid">
+                <span class="t1">Potká se s #318 — zmínit v README</span>
+              </div>
+              <span class="who">ErikZigo</span>
+              <span class="arrow">⌄</span>
+            </div>
+            <div class="pick off open">
+              <span class="box"></span>
+              <div class="mid">
+                <span class="t1">Release Notes · Impact Analysis · Deployment Plan…</span>
+              </div>
+              <span class="who">ondrajodas</span>
+              <span class="why">napsal jsi to ty</span>
+              <span class="arrow">⌄</span>
+            </div>
+            <div class="pickbody"><span class="meta">komentář pod PR · ondrajodas · 18. 8. 09:41 · 4,1 kB</span># Release Notes
+Project storage tokens without a user behind them (`Role::NONE`) can now manage
+notification subscriptions in regular projects. Previously any write to
+`/project-subscriptions` from such a token failed with `400 Role "none" is not
+allowed to modify subscriptions`, even though reads were allowed.
+
+# Plans for Customer Communication
+No customer-facing announcement needed. The change only widens what already-issued
+tokens may do; nothing customers use today starts failing.
+
+# Impact Analysis
+- `keboola/permission-checker` — one-line change in `Check\Notification\CanModifySubscriptions`.
+- `keboola/notification-service` — the only consumer of this check…</div>
+          </div>
+          <!-- Předvybráno tím, co aplikace umí poznat sama: vlastní komentář
+               (`Conversation.isMine`), souhrn bez obsahu a souhrn, který jen shrnuje diff.
+               Vypnuté položky **zůstávají vidět** a jdou zapnout — tatáž úvaha jako u vyřešených
+               vláken a odmítnutých nálezů, které tady leží ze stejného důvodu. -->
+          <div style="font-size: 11px; color: var(--ink-3); padding-top: 7px;">
+            Vypnuté jsem předvybral: vlastní komentář a dva souhrny bez vlastního obsahu. Jdou zapnout.
           </div>
         </div>
 
         <div class="pl-sec">
           <span class="cap">Text</span>
+          <!-- Náhled je **funkcí výběru výš**: co je odškrtnuté, v textu není. Proto se pod
+               nadpisem píše počet — bez něj se ta souvislost z obrazovky nepozná. -->
+          <div style="font-size: 11px; color: var(--ink-3); margin: -3px 0 5px;">
+            Přepočítáno podle výběru — 6 položek, 2,8 kB. Odškrtnuté v textu nejsou.
+          </div>
           <div class="pl-mono">Pracuješ na PR <b>ondrajodas/PRism#324</b> ve větvi <b>issue-320-timeout</b>
 (hlava 9c1de02). Zbývá vyřešit 6 věcí z review. U každé je napsané,
 odkud přišla — <b>nález</b> je z automatického revieweru, <b>vlákno</b>
