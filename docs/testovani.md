@@ -3901,6 +3901,12 @@ a jediné, co v aplikaci transformace vyžaduje, je čtení **pojmenovaného** s
 takže je to hypotéza; ověřit ji jde jedině na živém okně — dočasně přepnout ta čtení na `.local`
 a nechat okno stát hodiny.
 
+**Číslo k té nitce z 2026-08-18**: v podstromu transakce drží `SecondaryLayerGeometryQuery.value` →
+`ViewDimensions.subscript` → `LayoutEngineBox.explicitAlignment` **517 z 3 924** vzorků hlavního
+vlákna, tedy 13 %. Explicitní zarovnání si v aplikaci vyžaduje `HStack(alignment: .firstTextBaseline)`
+(devět míst, z toho odrážky markdownu), pojmenovaný prostor ta tři čtení v seznamu řádků. Je to
+**cena uvnitř kola, ne doklad pohonu** — sama by se v nečinném okně nezaplatila.
+
 Příští záchvat se proto vzorkuje **dřív, než se aplikace zavře** (`sample <pid> 5 -file …`), přečte se
 u toho **kde ležel kurzor** (`swift mouse.swift`) a v podstromu `Update.dispatchActions()` se hledá
 **jakýkoli rámec aplikace** — jeho přítomnost nebo nepřítomnost rozhoduje, jestli se hledá dál v našem
