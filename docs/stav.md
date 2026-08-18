@@ -2929,3 +2929,23 @@ Vypadly z toho dvě věci k sondám: `-only-testing` na jeden test ze `swift-tes
 **závorky** (bez nich `Test run with 0 tests`, a to zeleně), a `DetailTabRenderProbe` od #294
 rendrovala záložku `Konverzace` jako `Načítám konverzaci…`, takže každé srovnání vzhledu osy
 porovnávalo dva spinnery. Obojí je opravené a zapsané v [`testovani.md`](testovani.md).
+
+**Kolo z #361 se nepovedlo zreprodukovat ani projížděním kolečkem, takže #361 zůstává otevřené.**
+Sonda umí od téhle dávky skládat **skutečné `scrollWheel` události** s fázemi a setrvačností
+([`WheelGesture`](../Tests/Support/WheelGesture.swift)) — což `scroll(to:)` neumí, protože pro
+`NSScrollView` je programový posun jen změna počátku a živé scrollování z něj nezačne. K tomu se
+srovnaly dvě věci, které mohly sondu držet slepou: okno se staví **jako `WindowGroup`** (minimum
+z obsahu, takže běží `minSize` → `_sizeThatFits`, tedy druhá aktualizace grafu na jiné nabídce
+rozměru) a osa má **300 komentářů pěti různých výšek**. Po gestu se okno usadí na **0,00 %** ve všech
+scénářích. A nula je od téhle dávky ověřená z druhé strany: kontrolní scéna se zpětnou vazbou
+z rozvržení do stavu dá **32 %** v prvním úseku a nulu, jak jí dojde rozpočet kol — měřidlo tedy kolo
+**vidí**. Rozpočet je tam po zkušenosti, kterou stojí za to nezapomenout: bez něj se okno sondy
+nedalo zavřít a musela ho zabít ruka u stroje.
+
+Padla tím i hypotéza, se kterou se do toho šlo — že kolo zavírá `ForEach(Array(nodes.enumerated()),
+id: \.element.id)` v ose. Vzor tam byl po celou dobu těch měření a osa se usadila. **Vyřídil se jako
+zlevnění cesty, ne jako oprava**: identita se čte z uloženého pole (`ConversationRow`, `Policy`), což
+je 0,141 → 0,036 ms na přerovnání 300 řádků, a značka poslední návštěvy se přestěhovala z view do
+`Policy`, kde na ni **poprvé** je test (osm případů, ověřené vloženou regresí). Vzhled je prokazatelně
+týž — 23 byte-identických renderů. Zbylých devět výskytů toho vzoru v `App/` zůstává vědomě:
+`id: \.offset` payload nekopíruje a u řádků textu nebo sha je pořadí jediná správná identita.

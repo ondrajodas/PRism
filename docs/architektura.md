@@ -4009,6 +4009,23 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Položku kreslí sdílené view** (`ConversationEntryView`), takže se totéž vlákno nevykresluje
     dvakrát jinak. Vlákna **s kotvou** zůstávají bublinami u kódu; jediný domov konverzace se
     nedělí, jen stěhoval.
+  - **Osu kreslí `ConversationRow`, ne uzel s indexem** (#361). Řádek nese **uloženou identitu**
+    a příznak značky poslední návštěvy; skládá ho `Policy.conversationRows(of:filter:since:)`.
+    Dva důvody, oba měřitelné:
+    - `ForEach(Array(nodes.enumerated()), id: \.element.id)` čte identitu keypathem **přes tuple**,
+      takže se při každém dotazu líného seznamu na identitu rozbalí a **zkopíruje** payload enumu
+      (`ConversationEntry` nese pole komentářů). Ve vzorku ze ztuhlého okna je to ~5 % vzorků
+      hlavního vlákna; v harnessu 0,141 ms proti 0,036 ms na přerovnání 300 řádků. Zaplatí se to
+      jedním průchodem při složení řádků (0,179 → 0,265 ms na průchod tělem), takže se to vyplatí
+      od druhého přerovnání na jeden průchod tělem — a přerovnání je řádově víc.
+    - **Značka „odsud dolů je nové“ je rozhodnutí, ne kresba.** Do #361 ji počítalo view z indexu
+      a sousedního uzlu a **neměla ani jeden test**. Zůstává u toho i to, co se snadno přehlédne:
+      první uzel značku dostat smí (jinak by při „nové je všechno“ chyběla) a **prokládané datum
+      dostane druhou značku** — dvě staré položky mezi novými jsou dvě různá místa, odkud dolů je
+      něco nového.
+
+    **Kolo z #361 to nevysvětluje** a nemá se to tak číst: pohon se nenašel, viz
+    [`testovani.md`](testovani.md).
 
   Odznak s počtem se přesunul k `Konverzaci`: říká, kolik je toho **k přečtení**, a čte se
   odteď tam. Události se do něj dál nepočítají (#171).
