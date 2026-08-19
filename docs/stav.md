@@ -3031,7 +3031,7 @@ sonda `FindingDuplicateProbe`, která kreslí bublinu před opravou a po ní na 
 Zákres stropu dashboardu (#371, `v1.1.136`) měl u patky `background: var(--hover)`, ale token toho
 jména paleta nemá, takže hover v návrhu **nekreslil nic**. Nedefinovaná custom property totiž není
 chyba: deklarace se stane neplatnou při výpočtu hodnoty a vlastnost spadne na `unset`. V souboru to
-proto vypadá hotově a na obrazovce po tom není stopa — všimnul si toho až subagent u #371, při
+proto vypadá hotově a na obrazovce po tom není stopa — všiml si toho až subagent u #371, při
 implementaci, a hodnotu si v okně vybral sám.
 
 **Srovnáno na `--panel-3`**, což je v `:root` protějšek `Palette.raised`, tedy přesně to, co okno
