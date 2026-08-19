@@ -553,9 +553,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 
   | Vložená regrese | Co spadne |
   |---|---|
-  | identita z #17 (`file, line, summary`) | 4 tvrzení; v nálezu zůstane `условиевторой` |
-  | slití podle `(file, line, category)` uvnitř sady | 2 tvrzení — a **reálná fixture to nechytí**, protože ta dvojice na `Cart.swift:17` má různou `category`; chytá to až inline test |
-  | poslední sada vyhrává celá | 7 tvrzení, s prázdnou sadou 9 |
+  | identita z #17 (`file, line, summary`) | **5 testů, 7 tvrzení**; v nálezu zůstane `условиевторой` |
+  | slití podle `(file, line, category)` uvnitř sady | **2 testy** — a **reálná fixture to nechytí**, protože ta dvojice na `Cart.swift:17` má různou `category`; chytá to až inline test |
+  | poslední sada vyhrává celá | **7 testů**, a když vyhrává i prázdná sada, **9** |
 - **Sonda `FindingDuplicateProbe` (#381)** — bublina **před opravou a po ní na jednom plátně**, nad
   tou samou fixturou. Stav „před“ se skládá tím, že se každé volání sečte zvlášť (přesně to dělal
   parser do #381), takže obě bubliny stojí na týchž datech. Je to sonda, ne test: „je v bublině

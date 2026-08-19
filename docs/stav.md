@@ -3020,7 +3020,7 @@ není, a špatně spárované odmítnutí schová nález, kdežto špatné slit�
 
 Testů přidala tahle změna **17** — šestnáct tvrzení a jedna sonda, která se pouští ručně — a je jich
 **3160**; jsou zelené. **Ověřeno vložením regrese, třikrát**
-(identita z #17 → 4 tvrzení a v nálezu zůstane `условиевторой`; slití podle kategorie → 2; poslední
-sada vyhrává celá → 7, s prázdnou sadou 9). Na obrazovce je to vidět, ale ten stav se v aplikaci ve
+(identita z #17 → 5 testů a v nálezu zůstane `условиевторой`; slití podle kategorie → 2 testy; poslední
+sada vyhrává celá → 7 testů, s prázdnou sadou 9). Na obrazovce je to vidět, ale ten stav se v aplikaci ve
 slotu vyrobit nedá — záznam s duplikátem leží v cache hlavní instance —, takže je na to offscreen
 sonda `FindingDuplicateProbe`, která kreslí bublinu před opravou a po ní na jedno plátno.
