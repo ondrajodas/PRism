@@ -2986,3 +2986,41 @@ Testů přidala tahle změna **32** a je jich **3130**; jsou zelené. **Ověřen
 cokoli a vyhozený filtr předvybraných z `Policy.handoff`; každá shodila právě ty testy, které to mají
 chytat. Seznam se od sheetu rendruje **zvlášť** (co je rozbalené, drží `@State`, takže se offscreen
 v sheetu rozbalit nedá) a v obou mezích šířky.
+
+### #381 — týž nález nahlášený dvakrát je v bublině jednou
+
+Reviewer zavolal `ReportFindings` **dvakrát**, protože si první text opravil (do češtiny mu prosákla
+ruština: `второй`, `условие`), a v bublině pak ležel týž nález dvakrát — oba `blokuje`, `correctness`,
+`CONFIRMED`, na `PhaseTransitionHandler.php:346` —, i když jeho vlastní log hlásil `1 finding`.
+Deduplikace z #17 stála na `(file, line, summary)`, a korekce `summary` mění: stačilo `fáze` → `fázi`.
+
+**Slévá se po sadách a rozhoduje místo, ne text.** Každé volání `ReportFindings` je celá sada
+a pozdější sada na daném `(file, line)` přepíše tolik nálezů, kolik sama nese; drží to jedna čistá
+funkce `Policy.mergedFindings(_:reporting:)` a parser jen složí sadu a předá ji. Uvnitř sady se
+**neslévá nic** (co reviewer vypsal vedle sebe, jsou dva problémy — `review-with-findings` má dva
+nálezy na `Cart.swift:17`) a nález, o kterém pozdější sada mlčí, **zůstane**, včetně přebytku na
+tomtéž místě. Prázdná ani nečitelná sada proto nálezy nesmaže.
+
+Dvě věci se rozhodly jinak, než doporučovalo zadání:
+
+- **„Poslední volání vyhrává celé“ se zamítlo.** Změřeno na fixtures z reálných session:
+  `ReportFindings` je ve **všech pěti** volané nejvýš jednou, takže premisu „závěrečné volání nese
+  úplný seznam“ **z dat v repu ověřit nejde** — a když neplatí, ztratí se nález, což je v okně
+  k nerozeznání od „reviewer nic nenašel“.
+- **Slití podle `(file, line, category)` uvnitř sady se zamítlo** ze stejného důvodu, kvůli kterému
+  `summary` do identity dal #17: dvě různé věci na jednom řádku by splynuly potichu.
+
+**Uložené záznamy se nečistí ani při čtení.** V záznamu už struktura volání není, takže úklid by
+hádal podle místa a slil by i legitimní dvojici na jednom řádku; k tomu jsou odmítnutí klíčovaná
+`(reviewer, file, line, summary)`, takže vybrat jednu ze dvou verzí textu osiří označení té druhé.
+Duplikát v jednom záznamu jednoho PR proto zůstává, dá se odmítnout (#113) a nové review ho odklidí.
+
+Klíč odmítnutí zůstává na `summary` schválně — páruje **napříč běhy**, kde z pořadí volání nic vidět
+není, a špatně spárované odmítnutí schová nález, kdežto špatné slití jen ukáže duplikát.
+
+Testů přidala tahle změna **17** — šestnáct tvrzení a jedna sonda, která se pouští ručně — a je jich
+**3160**; jsou zelené. **Ověřeno vložením regrese, třikrát**
+(identita z #17 → 5 testů a v nálezu zůstane `условиевторой`; slití podle kategorie → 2 testy; poslední
+sada vyhrává celá → 7 testů, s prázdnou sadou 9). Na obrazovce je to vidět, ale ten stav se v aplikaci ve
+slotu vyrobit nedá — záznam s duplikátem leží v cache hlavní instance —, takže je na to offscreen
+sonda `FindingDuplicateProbe`, která kreslí bublinu před opravou a po ní na jedno plátno.
