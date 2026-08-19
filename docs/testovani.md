@@ -546,6 +546,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   u fixtures s `CRLF`, jen tady nejde o zakončení řádků, takže do `.gitattributes` nepatří
   (v souboru je **nula** `CR`, ověřeno na bajtech i na blobu).
 
+  Fixtury `stream-json` se ve **všech čtyřech** čtečkách dělí `TextLines.content(_:)`, ne
+  `split(separator: "\n")` — pravidlo z #292/#295 platí i v testech (`StreamParserTests`,
+  `RunUsageTests`, `ClaudeReviewRunnerTests`, `FindingDuplicateProbe`). Nad fixturou s `CRLF` by
+  `split` nerozdělil vůbec, takže by z celého streamu zbyl jeden „řádek“ a sada by zezelenala nad
+  prázdným výsledkem.
+
   Nejcennější jsou tři tvrzení o tom, co se **nestalo**: dva různé problémy na jednom řádku
   z **jednoho** volání se neslijí, nález, o kterém pozdější volání mlčí, nezmizí (a `droppedFindings`
   se nehýbe), a prázdné ani nečitelné pozdější volání nálezy nesmaže. **Ověřeno vloženou regresí ve

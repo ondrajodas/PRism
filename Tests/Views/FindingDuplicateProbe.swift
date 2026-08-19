@@ -92,8 +92,11 @@ struct FindingDuplicateProbe {
 
     private static let headSha = "8292182754b50d1867049b1617d37bdee55324aa"
 
+    /// **`TextLines`, ne `split(separator: "\n")`** — pravidlo repa (#292, #295) platí i v testech:
+    /// `"\r\n"` je ve Swiftu jeden `Character`, takže by `split` na fixtuře s `CRLF` nerozdělil
+    /// vůbec a sonda by kreslila prázdnou bublinu.
     private func fixtureLines() throws -> [String] {
-        try Fixture.text("stream-json/report-findings-corrected.jsonl").split(separator: "\n").map(String.init)
+        TextLines.content(try Fixture.text("stream-json/report-findings-corrected.jsonl")).map(String.init)
     }
 
     /// Co v okně leželo do #381: každé volání zvlášť a výsledky za sebou.

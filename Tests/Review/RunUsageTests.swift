@@ -12,8 +12,9 @@ import Testing
 struct RunUsageTests {
     private let parser = StreamParser()
 
+    /// **`TextLines`, ne `split(separator: "\n")`** — pravidlo repa (#292, #295) platí i v testech.
     private func summary(of fixture: String) throws -> StreamSummary {
-        parser.summarize(try Fixture.text("stream-json/\(fixture).jsonl").split(separator: "\n").map(String.init))
+        parser.summarize(TextLines.content(try Fixture.text("stream-json/\(fixture).jsonl")).map(String.init))
     }
 
     @Test("Cena, trvání a počet kol se přečtou z result eventu")

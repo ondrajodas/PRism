@@ -24,10 +24,9 @@ struct ClaudeReviewRunnerTests {
         )
     }
 
+    /// **`TextLines`, ne `split(separator: "\n")`** — pravidlo repa (#292, #295) platí i v testech.
     private func lines(of fixture: String) throws -> [String] {
-        try Fixture.text("stream-json/\(fixture).jsonl")
-            .split(separator: "\n")
-            .map(String.init)
+        TextLines.content(try Fixture.text("stream-json/\(fixture).jsonl")).map(String.init)
     }
 
     private func runner(
