@@ -205,6 +205,9 @@ struct ReviewIntentTests {
 
         #expect(brief.contains("## \(ReviewIntentText.linksHeading)"))
         #expect(brief.contains(ReviewIntentText.noLinks))
+        // A sekce s textem issue **netvrdí nic o identifikátoru** (#345) — žádný tu není.
+        #expect(brief.contains(ReviewIntentText.noIssues))
+        #expect(!brief.contains("do not assume what this issue says"))
     }
 
     /// A sekce s textem issue zůstane **vždycky**. Vynechat ji by znamenalo, že reviewer nemá jak

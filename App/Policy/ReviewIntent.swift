@@ -179,6 +179,13 @@ enum ReviewIntentText {
     /// Sekce s textem issue — nadpis jednoho dotaženého issue.
     static func issueSubheading(_ id: String) -> String { "### \(id)" }
 
+    /// Co stojí v sekci s textem issue, když **žádný odkaz není**.
+    ///
+    /// Vlastní věta, ne `notFetched(_:)`: ta mluví o identifikátoru („treat the identifier as
+    /// a pointer only“), a **tady žádný není** — byl by to text, který tvrdí víc, než data unesou.
+    /// Jestli je seznam odkazů celý, řeší sekce nad tím (`commentsUnavailable`).
+    static let noIssues = "No linked issues, so there is no issue text to read."
+
     /// Text issue chybí a **důvod se nezaznamenal**.
     ///
     /// Dva reálné případy, oba bez poruchy: sestavení, které dotahování nemá vůbec (chování do
@@ -209,9 +216,10 @@ enum ReviewIntentText {
             "that session returned no usable text for this issue."
         case .sessionFailed(let detail):
             "that session did not run: \(detail)"
-        // Odsud nedosažitelné — `IntentMaterial.textGap` mluví o textu, kdežto tenhle případ
-        // o odkazech (`commentsUnavailable`). Věta je přesto pravdivá pro každý gap, aby
-        // vyčerpávající výčet nemusel lhát ani na cestě, po které se nejde.
+        // **Odsud nedosažitelné**, a je to tvrzení o typech, ne naděje: `IntentMaterial.textGap`
+        // mluví o textu, kdežto tenhle případ o **odkazech** — a ten se do souboru zapisuje větou
+        // `commentsUnavailable` u seznamu odkazů, ne tady. Věta je přesto pravdivá pro každý gap,
+        // aby vyčerpávající výčet nemusel lhát ani na cestě, po které se nejde.
         case .commentsUnavailable:
             "PRism did not get this issue's text."
         }
@@ -267,11 +275,7 @@ extension Policy {
     /// Bez odkazů se vypíše **jedna věta**, ne prázdná sekce: prázdno se nedá odlišit od chybějící
     /// sekce a sekce má zůstat i tehdy, když v ní nic není.
     private static func issueSections(of material: IntentMaterial) -> [String] {
-        guard !material.links.isEmpty else {
-            return [material.commentsUnavailable
-                ? ReviewIntentText.notFetched(.commentsUnavailable)
-                : ReviewIntentText.noLinks]
-        }
+        guard !material.links.isEmpty else { return [ReviewIntentText.noIssues] }
         // Slovníkem, ne `first(where:)` v cyklu — a hlavně: **páruje se podle `id`**, ne podle
         // pořadí. Model, který jedno issue vynechá, by u pozičního párování posunul texty
         // o jedno a přiřadil je cizím issues.
