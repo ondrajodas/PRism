@@ -30,6 +30,7 @@ struct ConversationView: View {
     @State private var filter: ConversationFilter = .all
 
     var body: some View {
+        let _ = RenderDiagnostics.pass(Self.self)
         VStack(spacing: 0) {
             toolbar
             Rectangle().fill(Palette.lineSoft).frame(height: 1)

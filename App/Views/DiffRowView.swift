@@ -44,6 +44,7 @@ struct DiffRowView: View {
     var copy = DiffCopyActions()
 
     var body: some View {
+        let _ = RenderDiagnostics.pass(Self.self)
         switch row {
         case .hunk(_, let hunk):
             hunkHeader(hunk)

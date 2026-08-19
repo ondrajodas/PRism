@@ -1,14 +1,16 @@
 import Foundation
 
-/// Kolik CPU si vzalo **hlavní vlákno** — jedno místo pro všechny sondy, které měří tuhnoucí okno
-/// (#350, #358, #361).
+@testable import PRism
+
+/// Kolik CPU si vzalo **hlavní vlákno**.
 ///
-/// **Čte se CPU vlákna, ne nástěnné hodiny**: smyčka většinu času spí, takže nástěnný čas by měřil
-/// délku spánku, ne práci. Do #361 měla tuhle dvojici každá sonda vlastní (`IdleWindowSpinProbe`,
-/// `DetailProgressMeasurement`) a třetí kopie byla ta chvíle, kdy se to mělo svést na jedno místo.
+/// Od #361 je to jen jméno pro `threadCPUSeconds()` z aplikace: tu funkci potřebuje i sama
+/// diagnostika kreslení (`RenderDiagnostics`), takže žije v `App/Support/ThreadCPU.swift` — dvě
+/// kopie by byla dvě různá čísla o jedné věci. Jméno tady zůstává proto, že v sondě je podstatné
+/// **které** vlákno se měří, a měří se to, na kterém drží runloop.
 @MainActor
 func mainThreadCPUSeconds() -> TimeInterval {
-    TimeInterval(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)) / 1_000_000_000
+    threadCPUSeconds()
 }
 
 /// Nechá běžet hlavní smyčku a vrátí, kolik CPU si při tom vzalo hlavní vlákno.

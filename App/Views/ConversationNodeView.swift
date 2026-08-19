@@ -15,6 +15,7 @@ struct ConversationNodeView: View {
     var rerun: (() -> Void)?
 
     var body: some View {
+        let _ = RenderDiagnostics.pass(Self.self)
         HStack(alignment: .top, spacing: 8) {
             dot
             content
