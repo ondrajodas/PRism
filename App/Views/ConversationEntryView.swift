@@ -12,6 +12,7 @@ struct ConversationEntryView: View {
     var threadActions = ThreadActions()
 
     var body: some View {
+        let _ = RenderDiagnostics.pass(Self.self)
         switch entry {
         case .review(let review): reviewCard(review)
         case .comment(let comment): commentCard(comment)

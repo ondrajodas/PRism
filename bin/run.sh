@@ -1,9 +1,28 @@
 #!/usr/bin/env bash
 # Buildne aplikaci v Debug konfiguraci, nainstaluje ji do /Applications a spustí odtud.
 # Jeden příkaz = jedna běžící appka.
+#
+#     ./bin/run.sh              # normální provoz
+#     ./bin/run.sh --diagnose   # totéž, ale se zapnutou diagnostikou kreslení (#361)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+
+# Diagnostika kreslení (#361). Zapíná se **jen odtud a jen na tenhle běh**: příznak umře
+# s procesem, takže se další spuštění vrátí do normálního provozu samo. Podrobně, včetně toho,
+# proč to není přepínač v nastavení, je u `RenderDiagnostics`.
+DIAGNOSE=""
+for arg in "$@"; do
+    case "${arg}" in
+    --diagnose)
+        DIAGNOSE="1"
+        ;;
+    *)
+        echo "Neznámý přepínač „${arg}“ — znám jen --diagnose."
+        exit 1
+        ;;
+    esac
+done
 
 # Slot určuje, **čí** aplikace se buildí (#228). Bez něj je to ta, se kterou se pracuje;
 # se slotem je to samostatná instance s vlastním bundle ID, vlastním jménem v /Applications
@@ -172,4 +191,35 @@ else
     echo "Pozor: lsregister na čekané cestě není, kopie v ${APP} zůstane ve Spotlightu."
 fi
 
-open "${INSTALLED}"
+if [ -n "${DIAGNOSE}" ]; then
+    # Strop záznamu platí na **soubor**, ne na sezení, takže nad už plným souborem se aplikace
+    # rozhodne diagnostiku nezapnout (viz `DiagnosticsLog`). Řekne to na stderr, kam se ale při
+    # spuštění přes `open` nikdo nedívá — proto se to pozná **tady**, dřív než se něco spustí.
+    # Banner, který slibuje záznam, a prázdný soubor jsou přesně to splynutí, kterému se vyhýbáme.
+    DIAGNOSTICS_LOG="${HOME}/Library/Application Support/${NAME}/diagnostics.log"
+    DIAGNOSTICS_LIMIT=8388608
+    if [ -f "${DIAGNOSTICS_LOG}" ]; then
+        DIAGNOSTICS_SIZE="$(stat -f%z "${DIAGNOSTICS_LOG}")"
+        if [ "${DIAGNOSTICS_SIZE}" -ge "${DIAGNOSTICS_LIMIT}" ]; then
+            echo "Záznam diagnostiky je plný (${DIAGNOSTICS_SIZE} B ze ${DIAGNOSTICS_LIMIT})."
+            echo "       Aplikace by ho nedoplnila, takže jsem nic nespustil:"
+            echo "       ${DIAGNOSTICS_LOG}"
+            echo "       Ulož si ho a smaž, pak spusť znovu."
+            exit 1
+        fi
+        echo "Záznam diagnostiky už existuje (${DIAGNOSTICS_SIZE} B), bude se do něj přípisovat."
+    fi
+    echo ""
+    echo "=========================================================================="
+    echo " DIAGNOSTIKA KRESLENÍ JE ZAPNUTÁ (#361)"
+    echo " Záznam: ${DIAGNOSTICS_LOG}"
+    echo " Vypne se sama tím, že příště spustíš ./bin/run.sh bez --diagnose."
+    echo "=========================================================================="
+    echo ""
+    # Proměnná se předává **výslovně přes `--env`**, ne spoléháním na to, že `open` zdědí prostředí
+    # shellu: zdědění je v manuálu popsané, ale závisí na tom, jak LaunchServices proces spustí, a
+    # tichý rozdíl mezi „zapnuto“ a „nezapnuto“ je u diagnostiky to nejhorší, co se může stát.
+    open --env PRISM_DIAGNOSE=1 "${INSTALLED}"
+else
+    open "${INSTALLED}"
+fi

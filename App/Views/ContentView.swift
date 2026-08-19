@@ -25,6 +25,9 @@ struct ContentView: View {
     @State private var submission: ReviewSubmission?
 
     var body: some View {
+        // Průchod tělem se počítá, jen když je zapnutá diagnostika (#361) — jinak je to načtení
+        // jednoho statického `Optional`u. Viz `RenderDiagnostics`.
+        let _ = RenderDiagnostics.pass(Self.self)
         VStack(spacing: 0) {
             header
             // Rail místo `NavigationSplitView` (#180). Seznam PR je obsah domácí záložky, ne

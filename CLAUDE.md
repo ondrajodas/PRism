@@ -482,7 +482,7 @@ viz tvrdá podmínka č. 1.
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), řádek záznamu diagnostiky kreslení (#361) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |
@@ -816,6 +816,15 @@ příští spuštění skriptu: je to **tatáž cesta**, kterou odregistrovává
                 # radši nespustí nic, ať se nekouká na starý build
                 # a po instalaci odregistruje kopii v build.noindex/ (#139)
                 # slot z .prism-slot mění bundle ID, jméno i cache (#228)
+```
+
+```bash
+./bin/run.sh --diagnose    # totéž se zapnutou diagnostikou kreslení (#361)
+                           # počitadla průchodů `body`, kol runloopu a CPU
+                           # do <cache>/diagnostics.log, řádek za sekundu
+                           # vypnutá nestojí nic a **vypne se sama** dalším
+                           # spuštěním bez toho přepínače — podrobnosti
+                           # v docs/architektura.md, Diagnostika kreslení
 ```
 
 ```bash

@@ -1530,6 +1530,8 @@ Sdílené drobnosti, které nepatří žádnému modulu:
 | `Collection[safely:]` | Prvek na indexu, nebo `nil` mimo rozsah |
 | `Clipboard` | Zápis do schránky |
 | `TextLines` + `Character.isLineTerminator` | Dělení textu na řádky — **jedno místo pro celou aplikaci** (#295) |
+| `threadCPUSeconds()` | Kolik CPU si vzalo vlákno, které se ptá — jedno místo pro aplikaci i pro sondy (#361) |
+| `RenderDiagnostics` + `DiagnosticsLog` | Počitadla průchodů `body`, kol runloopu a CPU do řádkového souboru; **vypnuté, dokud není `PRISM_DIAGNOSE=1`** (#361) |
 
 Společné je jim to, proč tady jsou: **kopie jednoho pravidla se rozejdou.** `WorkCoordinator`
 používá `RepoCheckout` (klony, stromy) i `ReviewRunner` (běhy) a dvě kopie by znamenaly dvakrát
@@ -1595,6 +1597,83 @@ Věci, které se u toho nemají rozbít:
 - **`Policy.logLines(of:)` zůstává jako jméno pro volající**, ne jako druhé pravidlo — dělí
   `TextLines.all`. Smazat by šlo, ale znamenalo by to sáhnout do `logTail`
   a `strippingTimestamps`.
+
+### Diagnostika kreslení (#361)
+
+Kolo z #361 se v testu za tři pokusy nepodařilo vyrobit, kdežto na skutečném okně se stalo třikrát.
+`sample` z ztuhlé instance přitom ukáže, **kde** hlavní vlákno je, ale ne **kolikrát** se co
+přeložilo — a to je zrovna ta chybějící polovina: v `Update.dispatchActions()` je vidět jen re-arm,
+ne invalidace. `RenderDiagnostics` je ta druhá polovina: **počitadlo průchodů `body` po typech**,
+počet kol runloopu a CPU hlavního vlákna, jeden řádek za sekundu do
+`~/Library/Application Support/PRism/diagnostics.log`.
+
+**Zapíná se `PRISM_DIAGNOSE=1`, nejjednodušeji `./bin/run.sh --diagnose`.** Tři důvody, proč
+proměnná prostředí a ne přepínač v nastavení:
+
+1. **Přepínač v nastavení je něco nového na obrazovce**, takže by se musel nakreslit do mockupu
+   a schválit dřív, než na to vznikne issue (`CLAUDE.md`, jediná schvalovací brána). Diagnostika
+   jednoho konkrétního hledání do produktu nepatří — až se #361 zavře, má zmizet.
+2. **Nedá se přepnout uprostřed sezení**, takže jeden soubor = jeden režim. Přepínač otočený
+   v půlce by dal záznam, ze kterého není poznat, co v něm chybí.
+3. **Zapomenout se nedá.** Příznak umře s procesem a `bin/run.sh` restartuje aplikaci po každém
+   mergi, tedy několikrát denně — diagnostika se tím vypne sama. Ukazatel v okně by tuhle
+   vlastnost neměl a stál by změnu vzhledu.
+
+Že je zapnutá, je vidět na třech místech: banner z `bin/run.sh`, řádek na stderr při startu
+a **hlavička sezení** v souboru (jméno bundlu kvůli slotům, PID kvůli `sample`u).
+
+Čtyři věci, které to **nesmí** dělat, protože měřidlo nesmí měnit to, co měří:
+
+- **Počitadlo není v observable stavu** (#252) — obyčejná třída se zámkem, ne `@Observable`. Zápis
+  do stavu při každém průchodu tělem je právě ta chyba, kterou tohle hledá.
+- **Nic si neplánuje kolo** (#350). Žádný `Timer`, žádná animace, žádný `requestUpdate`. Řádek
+  vypisuje **observer runloopu** na `beforeWaiting`, tedy jedině tehdy, když runloop něco dělal
+  a chystá se spát — diagnostika si nevyžádá ani jedno probuzení navíc. Ticho v souboru proto
+  znamená, že se runloop **vůbec neprobudil**; aplikace se ale sama probouzí kvůli pollingu, takže
+  v běžném provozu chodí levné řádky. Změřeno na běžící `PRism-a`: nečinné okno bez otevřeného PR
+  dá **1–4 kola a 5–14 ms CPU** za sekundu, tedy ~70 B na řádek a strop řádově za den. Pořadí
+  observeru je vysoké schválně — SwiftUI si transakce flushuje taky v `beforeWaiting` observeru
+  (`NSRunLoop.flushObservers`), takže se stav čte **po** nich.
+- **`pass(_:)` nečte hodiny ani nesahá na disk.** Je to inkrement pod zámkem a nic jiného; jméno
+  typu se skládá reflexí **jen u prvního průchodu** (`@autoclosure`). Cena vypnuté diagnostiky je
+  načtení jednoho statického `Optional`u (`RenderDiagnostics.current`).
+- **Nula se nezapisuje.** Mezera v záznamu znamená „aplikace nic nedělala“, a to je informace;
+  řádek každou sekundu by hořící okno utopil v tichých řádcích.
+
+**Strop je vyjmenovaný, platí na soubor a jeho dosažení se zapisuje** (8 MB,
+`DiagnosticsLog.byteLimit`). Cache bez vyjmenované meze je únik místa s odkladem (#224) — a soubor,
+který prostě přestane růst, se nedá odlišit od aplikace, která přestala hořet, takže se poslední
+řádek napíše. Chyba zápisu jde na stderr a sezení **zavře**; `try?` by udělal soubor, který mlčí ze
+dvou různých důvodů.
+
+**Že strop platí na soubor, a ne na sezení, je nález Copilota na #386** a je to podmínka, ne detail:
+soubor se přípisuje napříč sezeními, takže s počitadlem od nuly by každý start přidal dalších 8 MB
+a mez by nedělala nic. `written` se proto **seedne velikostí souboru** (`offset()` po `seekToEnd()`
+na tomtéž deskriptoru, do kterého se zapisuje). Sezení nad **už plným** souborem pak nezapíše nic
+a `append` vrátí `false` hned u hlavičky — limitní řádek v souboru už je od toho sezení, které na
+strop narazilo. Je na to test ověřený **vloženou regresí**: s počitadlem od nuly spadne na tom, že
+druhé sezení hlavičku zapsalo.
+
+**Z toho plyne druhá polovina, taky nález z #386: `start()` se láme na hlavičce.** Když se nezapsala,
+`current` zůstane `nil`, vrátí se `false` a důvod jde na stderr — jinak by „diagnostika je zapnutá“
+a „nic se nezapisuje“ splynuly, což je zrovna to, co banner v `bin/run.sh` slibuje, že nenastane.
+Skript to navíc kontroluje **dřív, než aplikaci spustí** (`stat -f%z` nad logem), protože na stderr
+se při spuštění přes `open` nikdo nedívá.
+
+**Omezení, které je potřeba znát:** kdyby se hlavní vlákno zaseklo tak, že se runloop nikdy
+nevrátí do observeru, nezapíše se nic. Vzorky z #361 to vylučují (v pěti sekundách jsou tisíce
+vzorků `flushObservers`, tedy tisíce kol), ale prázdný soubor u hořícího okna **není chyba
+diagnostiky, je to nález**.
+
+Skládání řádku je čistá funkce v `Policy` (`diagnosticLine`, `diagnosticHeaderLine`,
+`diagnosticLimitLine`) — soubor se posílá dál a je jediné, co z hořícího okna zbyde, takže na něm
+musí být pořád totéž a ve stejném pořadí. Řadí se **podle počtu**, ne podle jména: hledá se ten
+typ, který se překresluje nejvíc. Pásmo času se předává, aby se dal stamp napsat v testu
+literálem.
+
+Instrumentované jsou zatím `ContentView`, `PullRequestDetailView`, `ConversationView`,
+`ConversationNodeView`, `ConversationEntryView`, `MarkdownText`, `DiffView` a `DiffRowView` —
+řádkem `let _ = RenderDiagnostics.pass(Self.self)` na začátku `body`.
 
 ## `RepoCheckout` (`App/Checkout/`)
 

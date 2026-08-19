@@ -53,6 +53,7 @@ struct PullRequestDetailView: View {
     @Binding var submission: ReviewSubmission?
 
     var body: some View {
+        let _ = RenderDiagnostics.pass(Self.self)
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 controls
