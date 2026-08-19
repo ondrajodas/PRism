@@ -308,12 +308,13 @@ extension AppStore {
             // aplikaci, takže si sám o sobě neřekne, o kterém běhu mluví.
             intentFailure = "Zadání pro reviewera \(pr.repo)#\(pr.number) se nepodařilo připravit, "
                 + "review běží bez něj. " + error.localizedDescription
-            // Příznak jde na osu **jen ten, který doopravdy platí** — nedosazuje se za nepovedený
-            // zápis. Selhat tady může jedině vlastní cache a to je **jiná porucha**, kterou hlásí
-            // stavový řádek (`intentFailure`, tak to zavedlo #120); vyrobit z ní `.noAnswer` by
-            // znamenalo v nápovědě věta o tom, že „session doběhla a text nevypadl“ nad během, kde
-            // se text dotáhl a jen se neuložil.
-            return (nil, gap)
+            // **Na osu nejde nic** (nález Copilota na #388). Když zápis selže, reviewer nedostal
+            // soubor **vůbec** — a věty u příznaku mluví o tom, co v zadání chybí („dostal jen
+            // odkazy“), takže by nad během bez zadání tvrdily víc, než data unesou. Selhat tady může
+            // jedině vlastní cache a to je **jiná porucha**, kterou hlásí stavový řádek
+            // (`intentFailure`, tak to zavedlo #120 — a tam to zůstává schválně, protože odznak nad
+            // rozbitým diskem je UI pro stav, který nenastává).
+            return (nil, nil)
         }
     }
 

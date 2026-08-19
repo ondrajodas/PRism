@@ -415,6 +415,34 @@ struct AppStoreIntentTests {
         #expect(!saved.contains(ReviewIntentText.notRead))
     }
 
+    /// **Nepovedený zápis na osu nic nepošle** (nález Copilota na #388), i když by gap jinak byl:
+    /// reviewer nedostal soubor **vůbec**, takže věta „dostal jen odkazy“ by tvrdila víc, než data
+    /// unesou. Je to jiná porucha a hlásí ji stavový řádek.
+    @Test("Selhaný zápis zadání příznak na osu nepošle")
+    func aFailedWriteReportsNoGapOnTheLane() async throws {
+        let reviewer = FakeReviewRunner()
+        let store = store(
+            body: Self.linkbackBody,
+            reviewer: reviewer,
+            tool: nil,
+            intentText: FakeIntentTextFetcher(IntentTextResult())
+        )
+        // Na místě souboru leží složka, takže `write` nemá kam zapsat.
+        try FileManager.default.createDirectory(
+            at: layout.intentFile(for: pr, at: headSha),
+            withIntermediateDirectories: true
+        )
+
+        await run(store)
+
+        // Bez zápisu by gap byl `.toolNotConfigured` — jméno nástroje v konfiguraci není.
+        #expect(reviewer.requests.first?.intentFile == nil)
+        #expect(lanes(of: store).allSatisfy { $0.intentGap == nil })
+        // Mlčí se o tom **ne**: v okně stojí hláška a review doběhlo.
+        #expect(store.intentFailure != nil)
+        #expect(store.reviewRecords[pr] != nil)
+    }
+
     /// Konverzace se v cestě review tahá **vždycky znovu**, ne z uložené: ta je klíčovaná
     /// `updatedAt` z posledního seznamu, takže komentář s odkazem mohl přijít mezitím.
     @Test("Komentáře se v cestě review načtou jedním dotazem")

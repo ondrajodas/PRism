@@ -2327,7 +2327,15 @@ prvním řádku a rozbor nad tím streamem vydal text bez gapu. Tři tvary selh�
 **úspěšné dotažení fixture nemá schválně** — odpověď nese celý text firemního issue a ten do
 fixtures nepatří, takže inline v testu zbývá jen náš vlastní formát.
 
-Testů je **3210** a jsou zelené. Regrese ověřena vložením dvakrát: vypnutá kontrola serveru položí
+**Copilot našel dvě věci a obě jsou ten vzor „text v UI tvrdí víc, než data unesou“.** První:
+nepovedený zápis souboru posílal na osu příznak, který jinak platil — a věty u něj mluví o tom, co
+v zadání **chybí** („reviewer dostal jen odkazy“), takže nad během, který soubor nedostal vůbec, by
+lhaly; teď na osu nejde nic a zápis hlásí stavový řádek, jak to zavedlo #120. Druhá: nápověda
+u nepřipojeného serveru vypisovala **stav** a vedle toho tvrdila, že se nepřihlášený server od
+chybějícího nedá odlišit — což si u vypsaného stavu protiřečí, protože ten stav je zrovna to, čím se
+liší. Ta úvaha („následek je pro uživatele stejný“) patří k modelu, ne do nápovědy.
+
+Testů je **3227** a jsou zelené. Regrese ověřena vložením dvakrát: vypnutá kontrola serveru položí
 **4 testy** nad skutečnými streamy, kdežto `?? ""` místo `guard let` u chybějícího klíče `result`
 **nepoloží nic** — prázdný text nevydá ani jednu značku, takže skončí stejným `.noAnswer`. To je
 zapsané i v kódu, ať se ten `guard` nepovažuje za mechanismus, na kterém dnes něco stojí.

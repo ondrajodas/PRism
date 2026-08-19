@@ -1538,7 +1538,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   případ, kvůli kterému #120 vzniklo), že se **bez jména nástroje v konfiguraci nic nepustí**
   a je to vidět na ose, že **bez odkazů se neptá nikdo a nic se nehlásí**, že příznak nese **každá**
   dráha běhu (dvě sady skillů) a že doběhlou dráhu **nezhorší**, a že selhaný dotaz na komentáře
-  review nepoloží.
+  review nepoloží. Od nálezu Copilota na #388 k tomu i to, že **nepovedený zápis na osu nic
+  nepošle**, i když by gap jinak byl — reviewer nedostal soubor vůbec, takže věta „dostal jen
+  odkazy“ by tvrdila víc, než data unesou; hlásí to stavový řádek.
 
   `ReviewerLaneTests` a `StoredTimelineTests` — že příznak **osu neposouvá** (dráha jen s ním
   zůstane `queued` s jedinou fází), že **u syntetických drah je `nil`**, že **přežije restart**

@@ -171,10 +171,17 @@ struct ReviewerLaneTextTests {
 
     /// Stav serveru se do věty **propíše**, protože je to jediné, co o příčině víme. Bez něj by se
     /// `failed` a `needs-auth` nedaly rozeznat.
-    @Test("Stav serveru je ve větě vidět")
+    ///
+    /// A věta u toho **netvrdí, že se ty dva případy odlišit nedají** (nález Copilota na #388):
+    /// u vypsaného stavu by si protiřečila, protože ten stav je zrovna to, čím se liší. Že je
+    /// následek pro uživatele stejný, drží model (`IntentGap`), ne nápověda.
+    @Test("Stav serveru je ve větě vidět a věta si neprotiřečí")
     func showsTheServerStatus() {
         #expect(ReviewerLaneText.intentGap(.serverUnavailable(status: "needs-auth")).contains("needs-auth"))
         #expect(ReviewerLaneText.intentGap(.serverUnavailable(status: nil)).contains("vůbec nebyl"))
+        for status in [nil, "needs-auth", "failed"] {
+            #expect(!ReviewerLaneText.intentGap(.serverUnavailable(status: status)).contains("nedá odlišit"))
+        }
     }
 
     /// Odznak je krátký schválně: v hlavičce dráhy stojí vedle jména skillu, stavu a ceny, takže

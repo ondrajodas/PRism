@@ -1513,6 +1513,10 @@ Co se u toho nemá rozbít:
 - **Na osu jde jeden příznak, i když nastanou dva důvody.** Rozhoduje o tom `Policy`, ne view:
   přednost má **text**, protože je to ten obsah, kvůli kterému se zadání tahá. V souboru je
   zapsané obojí — tam se místem šetřit nemusí.
+- **A když se soubor nepodařilo uložit, nejde na osu nic** (nález Copilota na #388). Věty
+  u příznaku mluví o tom, co v zadání **chybí** („reviewer dostal jen odkazy“), takže nad během,
+  který nedostal soubor vůbec, by tvrdily víc, než data unesou. Nepovedený zápis do vlastní cache
+  je jiná porucha a zůstává tam, kam ho dalo #120 — ve stavovém řádku (`intentFailure`).
 - **Příznak jde do osy jako první událost každé dráhy, ne po konci běhu.** Odpověď je v tu chvíli
   hotová (zadání se připravilo před `runSkills`), takže s ní není na co čekat — a událost, která by
   přišla po doběhnutí, může dorazit do osy, kterou už nikdo nečte. Za **každého** revieweera zvlášť,

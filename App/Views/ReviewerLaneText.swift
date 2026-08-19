@@ -105,10 +105,14 @@ enum ReviewerLaneText {
         case .toolNotConfigured:
             return "Text issue se netahal — v konfiguraci není jméno nástroje (`issueTextTool`), "
                 + "takže reviewer dostal jen odkazy. Nic se nepokazilo, jen se to nezkoušelo."
+        // **Věta o tom, že se nepřihlášený server nedá odlišit od chybějícího, tady schválně
+        // není** (nález Copilota na #388): platila by jedině u `status == nil`, kdežto u vypsaného
+        // stavu si protiřečí — ten stav je zrovna to, čím se ty dva případy **liší**. Že je pro
+        // uživatele následek stejný, je úvaha o modelu (`IntentGap`), ne text do nápovědy.
         case .serverUnavailable(let status):
             let detail = status.map { "hlásil stav `\($0)`" } ?? "v session vůbec nebyl"
-            return "Text issue se nedotáhl — server trackeru \(detail). Reviewer dostal jen odkazy; "
-                + "nepřihlášený server se od chybějícího nedá odlišit."
+            return "Text issue se nedotáhl — server trackeru \(detail), takže reviewer dostal "
+                + "jen odkazy."
         case .toolDenied:
             return "Text issue se nedotáhl — nástroj se v session odmítl (`permission_denials`). "
                 + "Reviewer dostal jen odkazy."
