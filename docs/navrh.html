@@ -387,7 +387,13 @@ code {
   font-size: 11.5px; font-weight: 500; color: var(--accent);
   display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
 }
-.block > .more-rows:hover { background: var(--hover); }
+/* Hover je `--panel-3` (= `Palette.raised`), ne vlastní `--hover` token: paleta žádný hover
+   odstín nemá a tokeny v `:root` jsou s ní jedna ku jedné, takže nový token by byl token bez
+   protějšku. `--panel-3` je o stupeň tišší podklad nad `--panel-2` bloku — tentýž pár, kterým
+   se zvýrazňuje jinde v okně. Do #384 tu stál `--hover`, který definovaný nebyl, takže patka na
+   hover nedělala v návrhu vůbec nic. Jméno tokenu je tady schválně bez `var(…)`: kontrola
+   nedefinovaných tokenů (`docs/navrh.md`, *Jak se z něj čte*) je grep a musí vyjít prázdná. */
+.block > .more-rows:hover { background: var(--panel-3); }
 .block > .more-rows .count { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
 
 /* Karta, která vede do sekce railu. Nekliká se `DNESKA STÁLO` — ta nemá kam vést. */
