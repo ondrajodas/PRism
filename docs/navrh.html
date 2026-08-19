@@ -396,6 +396,80 @@ code {
 .block > .more-rows:hover { background: var(--panel-3); }
 .block > .more-rows .count { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
 
+/* --- labely a vyžádaní reviewery v hlavičce PR (#NNN) ---------------------------------
+   Vlastní řádek **pod** pruhem souřadnic, ne dovnitř něj — důvod i změřená čísla jsou
+   v poznámkách sekce 24. Řádek se u PR bez labelů a bez vyžádaných reviewerů nekreslí vůbec. */
+.pr-tags {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 7px 9px;
+  font-size: 12.5px; color: var(--ink-2);
+}
+
+/* Chip labelu drží metriku `.pill` (kapsle, 10.5px, 2/7), ale sází se v UI fontu: `.pill` je
+   mono, protože nese počty a stavy, kdežto label je slovo. Kapsle proti hranatému `.branch`
+   drží úmluvu „kapsle je údaj o PR, hranaté je identifikátor“.
+
+   **Barva labelu je puntík, ne výplň**, a je to rozhodnutí, ne úspora. Barvy labelů jsou
+   z repozitáře (`label.color`), tedy libovolné: plný chip by u každé z nich musel počítat
+   kontrast textu jako GitHub, a v pruhu nad diffem by přebíjel jediné plné pole, které tam
+   patří — kapsli stavu. První zákres to měl obráceně, plným chipem z `--crit` 16 %, a v renderu
+   vyšel `dependencies` k nerozeznání od `.pill.crit`, tedy jako porucha. Podklad je proto
+   neutrální trojice `--panel-3`/`--ink-2`/`--line`, tatáž jako u `.pill.idle`, a barva zbyla na
+   osmibodovém puntíku, který kontrast řešit nemusí. Hexy v kresbě jsou skutečné výchozí barvy
+   GitHubu (`dependencies` #0366D6, `enhancement` #A2EEEF, `bug` #D73A4A) — jsou to **data, ne
+   tokeny palety**; v aplikaci se berou z odpovědi, ne z `Palette`. */
+.lbl {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+  white-space: nowrap; border: 1px solid var(--line);
+  background: var(--panel-3); color: var(--ink-2);
+}
+/* Puntík je **obtažený `--line`**, ne jen kolečko. Bez obtažení se v renderu bledé barvy
+   labelů (`enhancement` #A2EEEF) na světlém `--panel-3` ztratily úplně, a v tmavém motivu se
+   to samé děje těm tmavým — každý motiv má tu vadu z jiné strany. `--line` je proti oběma
+   podkladům viditelná z definice, takže jedno obtažení stačí na obojí. */
+.lbl i {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* Přebytek se **počítá, neořezává**: z ořezaného jména labelu se nepozná který to je, kdežto
+   `+2` řekne, že jich je víc, a kde se na ně podívat. */
+.lbl.more { font-family: var(--mono); color: var(--ink-3); }
+
+/* Akce jsou přerušované: plný okraj je to, co na PR **je**, přerušovaný to, co se dá přidat.
+   Na cizím PR nejsou **vůbec**, ne zašedlé — zašedlé tlačítko tvrdí „tady se to dělá, jen teď
+   ne“, a u cizího PR se to nedělá nikdy. */
+.lbl.add, .rvw .add {
+  color: var(--ink-3); border-color: var(--line); border-style: dashed;
+  background: transparent; cursor: pointer; font-weight: 500;
+}
+.lbl.add:hover, .rvw .add:hover { color: var(--accent); border-color: var(--accent); }
+.rvw .add {
+  display: inline-flex; align-items: center;
+  font-size: 10.5px; font-weight: 500; padding: 2px 7px; border-radius: 20px;
+  border: 1px solid var(--line);
+}
+
+/* Reviewer je iniciálka a slovo o tom, jak odpověděl. Třída je `rv-av`, ne `.av`: `.av` výš je
+   dvacetibodové kolečko s gradientem akcentu, které používá konverzace, a přebít ho uvnitř
+   `.rvw` by znamenalo dvě různé podoby jedné třídy. */
+.rvw { display: inline-flex; align-items: center; gap: 7px; }
+.rvw .who { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-2); }
+.rv-av {
+  /* `border-box` schválně: dokument jinde `box-sizing` nepřepisuje, takže by kolečko
+     s okrajem vyšlo 18 bodů, kdežto v CSS by stálo 16 — a rozměry z tohohle souboru se berou
+     jako body 1 : 1. Šestnáct je velikost `.av.sm`, se kterou to má v okně souhlasit. */
+  box-sizing: border-box;
+  width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--mono); font-size: 8px; font-weight: 700; flex: none;
+  background: var(--panel-3); color: var(--ink-2); border: 1px solid var(--line);
+}
+/* Tři stavy odpovědi, protože ta prostřední je jediná, která něco blokuje. Přerušovaný okraj
+   u `čeká` je tatáž úmluva jako u `+`: přerušované se ještě nestalo. */
+.rv-av.done    { background: color-mix(in srgb, var(--ok) 15%, transparent);   color: var(--ok);   border-color: transparent; }
+.rv-av.blocked { background: color-mix(in srgb, var(--crit) 15%, transparent); color: var(--crit); border-color: transparent; }
+.rv-av.wait    { border-style: dashed; }
+
 /* Karta, která vede do sekce railu. Nekliká se `DNESKA STÁLO` — ta nemá kam vést. */
 .card.go { cursor: pointer; position: relative; }
 .card.go:hover { border-color: var(--accent); }
@@ -3258,6 +3332,216 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           <b>Panel drží kontext</b>
           <span>Stejný pruh vpravo, jen jiný segment: rozdělané review je vidět i v Přehledu,
           takže se přepnutím tabu neztratí.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s24">
+    <div class="section-head">
+      <div class="eyebrow">24 — Záložka s review · labely a reviewery</div>
+      <h2>Labely a reviewery: na vlastním PR se mění, na cizím se čtou</h2>
+      <p class="muted">
+        Dneska o tom okno <b>neví to podstatné</b>. Labely nezná vůbec — v modelech po nich není
+        ani pole. Vyžádané reviewery zná jen jako <b>události v konverzaci</b>
+        (<code>reviewRequested</code>, <code>reviewRequestRemoved</code>), tedy „stalo se to“, ne
+        „kdo na tom stojí teď a jak odpověděl“; a odpověď se z proudu událostí musí složit, aby se
+        na ni dalo koukat. Kvůli obojímu se chodí do prohlížeče.
+      </p>
+      <p class="muted">
+        Přidává se obojí, ale <b>ne symetricky</b>: u vlastního PR se dá měnit, u cizího se jen
+        vidí. Cizí PR je fronta někoho jiného — přeštítkovat ho odsud není moje věc a odebrat
+        vyžádaného reviewera už vůbec.
+      </p>
+      <p class="muted">
+        <b>Je to vlastní řádek, ne další položky v pruhu souřadnic</b> — i když tam vizuálně
+        patří. Ten pruh je v aplikaci <code>HStack</code>, který <b>nezalamuje</b>, takže na něm
+        nic nepřeteče na druhou řádku; ořeže se. A změřeno ve výřezu návrhu, s obsahem, který ten
+        řádek doopravdy nese: pruh cizího PR potřebuje dneska <b>651 bodů</b> a s labely
+        a reviewery uvnitř <b>1043</b>, u vlastního <b>581</b> a <b>905</b>. Pod pruhem přitom na
+        výchozím okně (1100 b) zbývá jen ~1000 bodů, protože rail a odsazení hlavičky si berou 98.
+        U cizího PR by se tedy pruh ořezal <b>hned na výchozím okně</b>, u vlastního v každém
+        užším než ~1000 bodů — a ořezalo by se to, co je vpravo: <code>otevřít na GitHubu</code>.
+        Druhý důvod je povahový: celý pruh souřadnic je ke čtení, kdežto <code>+ label</code>
+        a <code>+ reviewer</code> jsou akce, takže by se v něm poprvé někam klikalo. U PR bez
+        labelů a bez vyžádaných reviewerů se řádek <b>nekreslí vůbec</b>, takže cizí PR neplatí
+        místem za nic, co na něm nejde.
+      </p>
+      <p class="muted">
+        Kreslí se to <b>vedle sekce 02, ne do ní</b>. Sekce 02 je záznam dneška, proti kterému se
+        okno srovnává, takže nakreslit do ní něco neimplementovaného znamená, že každé další
+        srovnání ohlásí rozdíl, který není chyba (pravidlo je v <code>docs/navrh.md</code>).
+        Řádek přitom patří do <b>hlavičky PR</b>, ne do tabu <em>Přehled</em> — je vidět ve všech
+        tabech, protože „kdo to má taky na stole“ je otázka, která se nemění tím, že se člověk
+        kouká na diff.
+      </p>
+    </div>
+
+    <h3>Cizí PR — jen čtení</h3>
+    <div class="win sm" style="max-width: 940px;">
+      <div class="pr-head">
+        <div class="pr-title">
+          <h4>chore: modernize dependencies</h4>
+          <span class="num">#85</span>
+        </div>
+        <div class="pr-meta">
+          <span class="state-chip">⬤ Otevřený</span>
+          <span><strong>odinuv</strong> chce sloučit</span>
+          <span class="branch">chore/deps-2026</span>
+          <span>→</span>
+          <span class="branch">main</span>
+          <span>·</span>
+          <span>keboola/vault</span>
+          <span>·</span>
+          <span style="color: var(--accent);">otevřít na GitHubu ↗</span>
+        </div>
+        <!-- Žádné `+`. Ne zašedlé — na cizím PR se to nedělá nikdy, a zašedlé tlačítko tvrdí,
+             že by se dalo. -->
+        <div class="pr-tags">
+          <span class="lbl"><i style="background: #0366D6;"></i>dependencies</span>
+          <span class="lbl"><i style="background: #D73A4A;"></i>bug</span>
+          <span>·</span>
+          <span class="rvw">
+            <span class="who"><span class="rv-av done">OJ</span>schválil</span>
+            <span class="who"><span class="rv-av blocked">TK</span>chce změny</span>
+            <span class="who"><span class="rv-av wait">MZ</span>čeká</span>
+          </span>
+        </div>
+      </div>
+      <div class="subtabs">
+        <div class="stab on">Přehled <span class="cnt">4</span></div>
+        <div class="stab">Změněné soubory <span class="cnt">7</span></div>
+        <div class="stab">Konverzace <span class="cnt">2</span></div>
+        <div class="stab">Kontroly <span class="cnt crit">1</span></div>
+      </div>
+    </div>
+
+    <h3>Vlastní PR — dá se měnit</h3>
+    <div class="win sm" style="max-width: 940px;">
+      <div class="pr-head">
+        <div class="pr-title">
+          <h4>feat: put the reviewer run timeout into settings</h4>
+          <span class="num">#324</span>
+        </div>
+        <div class="pr-meta">
+          <span class="state-chip">⬤ otevřený</span>
+          <span class="pill mint">moje PR</span>
+          <span class="slug" style="font-family: var(--mono); font-size: 11.5px;">ondrajodas/PRism</span>
+          <span>·</span>
+          <span class="branch">issue-320-timeout</span>
+          <span>·</span>
+          <span>psal agent · 4 commity</span>
+        </div>
+        <!-- `+ label` otevírá výběr **z labelů, které repo zná** — volný text ne, aby nešlo
+             omylem vyrobit nový label. `+ reviewer` je jedno pojmenované kliknutí
+             (`Vyžádat review od …`), protože reviewer request pošle člověku upozornění
+             a odebráním se nevezme zpět. -->
+        <div class="pr-tags">
+          <span class="lbl"><i style="background: #A2EEEF;"></i>enhancement</span>
+          <span class="lbl add">+ label</span>
+          <span>·</span>
+          <span class="rvw">
+            <span class="who"><span class="rv-av wait">ER</span>čeká</span>
+            <span class="add">+ reviewer</span>
+          </span>
+        </div>
+      </div>
+      <div class="subtabs">
+        <div class="stab on">Přehled <span class="cnt">4</span></div>
+        <div class="stab">Změněné soubory <span class="cnt">9</span></div>
+        <div class="stab">Konverzace <span class="cnt">3</span></div>
+      </div>
+    </div>
+
+    <h3>Úzké okno — co ustoupí</h3>
+    <p class="muted">
+      Řádek má celou šířku sám pro sebe, takže na výchozím okně se vejde i s pěti labely. Když se
+      nevejde, ustupují <b>dvě věci v tomhle pořadí</b>: nejdřív slova u reviewerů (zůstanou
+      iniciálky, tak jak u přeplněného pruhu checků ustupují popisky odznakům), pak přebývající
+      labely do počtu <code>+2</code>. Co neustoupí nikdy, jsou <code>+ label</code>
+      a <code>+ reviewer</code> — jsou to jediné akce na řádku a bez nich je řádek k ničemu.
+    </p>
+    <div class="win sm" style="max-width: 470px;">
+      <!-- Spodní odsazení inline: `.pr-head` ho nemá, protože v okně navazuje `.subtabs` —
+           a ty se do 470 bodů nevejdou, takže tady nejsou. -->
+      <div class="pr-head" style="padding-bottom: 16px;">
+        <div class="pr-title">
+          <h4>feat: put the reviewer run timeout into settings</h4>
+          <span class="num">#324</span>
+        </div>
+        <div class="pr-meta">
+          <span class="state-chip">⬤ otevřený</span>
+          <span class="pill mint">moje PR</span>
+          <span class="branch">issue-320-timeout</span>
+        </div>
+        <div class="pr-tags">
+          <span class="lbl"><i style="background: #A2EEEF;"></i>enhancement</span>
+          <span class="lbl more">+2</span>
+          <span class="lbl add">+ label</span>
+          <span>·</span>
+          <span class="rvw">
+            <span class="who"><span class="rv-av done">OJ</span></span>
+            <span class="who"><span class="rv-av wait">ER</span></span>
+            <span class="add">+ reviewer</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">87</span>
+        <span class="body">
+          <b>Barva labelu je puntík</b>
+          <span>Barvy labelů jsou z repozitáře, tedy libovolné — plný chip by u každé musel
+          počítat kontrast textu a v pruhu nad diffem by přebíjel kapsli stavu. První zákres to
+          měl plným chipem z <code>--crit</code> a v renderu vyšel <code>dependencies</code>
+          k nerozeznání od <code>.pill.crit</code>, tedy jako porucha.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">88</span>
+        <span class="body">
+          <b>Volba z labelů repozitáře, ne volný text</b>
+          <span>Label je vratný jedním klikem a nikoho neupozorní, takže potvrzovací sheet
+          nedostane. Volný text tam ale <b>nepatří</b>: z něj se dá omylem vyrobit nový label,
+          a ten už z repozitáře nezmizí sám.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">89</span>
+        <span class="body">
+          <b>Reviewer jedním pojmenovaným kliknutím</b>
+          <span><code>Vyžádat review od …</code>, a jen z lidí, kteří na repo smí. Reviewer
+          request <b>pošle člověku upozornění a to se odebráním nedá vzít zpět</b> — proto je
+          u něj jméno na tlačítku, ne jen <code>+</code> vedle avatara.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">90</span>
+        <span class="body">
+          <b>Tři stavy odpovědi, ne dva</b>
+          <span><em>schválil</em>, <em>chce změny</em>, <em>čeká</em>. Prostřední je jediná, která
+          něco blokuje, takže sloučit ji s <em>čeká</em> by zahodilo zrovna tu informaci, kvůli
+          které se na řádek kouká.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">91</span>
+        <span class="body">
+          <b>Odesílá se to jedinou cestou</b>
+          <span>Změna labelů i vyžádání reviewera jde přes <code>ReviewPublishing</code> a bránu
+          v nastavení, jako review a komentáře. Je to <b>tatáž brána</b>
+          (<code>allowsPublishing</code>, globálně i per repo) — druhý přepínač by byl druhé
+          místo, kde se dá „nic samo neodejde“ porušit.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">92</span>
+        <span class="body">
+          <b>Prázdný řádek se nekreslí</b>
+          <span>Cizí PR bez labelů a bez vyžádaných reviewerů nemá co ukázat, takže řádek
+          nevznikne — jinak by devadesát procent hlaviček platilo 24 bodů výšky za prázdno.</span>
         </span>
       </div>
     </div>

@@ -11,7 +11,7 @@ odkaz, žije jako artifact `PRism — návrh vizuální revize`:
 <https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Obojí musí odejít
 **v jednom commitu a jednom publikování** — rozejít se smí leda na dobu jedné úpravy.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi 23 sekcí. Většina kreslí jednu
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi 24 sekcí. Většina kreslí jednu
 obrazovku nebo jeden stav v rámu okna (`.win`) a vedle sebe má poznámky (`.notes`), proč je to
 tak; zbytek rozhodnutí vysvětluje — *Dvanáct stavů, které se nesmí slít*, *Kde jsem si vybral,
 a co to stálo*, *Co by se muselo přepsat*.
@@ -43,18 +43,23 @@ ve [specifikaci](superpowers/specs/2026-07-31-prism-design.md).
 
 Totéž platí o **dashboardu**: 01 kreslí ten dnešní (`DashboardView` má opravdu kartu `Ve frontě`
 a jeden blok fronty), 21 ten se dvěma frontami podle #331. Obě jsou na stránce *Přehled* pod
-sebou. **Novější sekce se do té starší nepřekresluje** — záznam dneška je to jediné, proti čemu
-se dá aplikace srovnat, takže bez něj by každé srovnání hlásilo rozdíl, který není chyba, dokud
-se to issue neudělá.
+sebou. Stejný pár je **02 a 24** (#NNN): 02 je dnešní hlavička PR, 24 kreslí tutéž hlavičku
+s řádkem labelů a vyžádaných reviewerů. **Novější sekce se do té starší nepřekresluje** — záznam
+dneška je to jediné, proti čemu se dá aplikace srovnat, takže bez něj by každé srovnání hlásilo
+rozdíl, který není chyba, dokud se to issue neudělá. Platí to i tehdy, když nová sekce mění
+**jen kus** obrazovky: 24 nekreslí celé okno, ale výřez hlavičky (`.win.sm`), a i tak stojí
+vedle 02, ne v ní.
 
 **U sekce, která je záznamem dneška, platí to obráceně: ta se překreslit musí** (#299). Když se
 v aplikaci něco změní, mění se s tím i ta sekce — jinak v návrhu zbude obrazovka, kterou v okně
 nikdo nenajde, a čtenář nemá jak poznat, jestli chybu má aplikace, nebo návrh. Takové sekce
-poznáš podle toho, že **v nich vedle sebe žádná novější varianta nestojí** — u #299 to byla
-sekce **02** (dnešní `Přehled`; #215 z ní vzalo souhrn checků, #291 rozdělil hlavičku karty na
-dvě podoby), **03** (patička nálezu po #283), **19** (seznam commitů po #316) a **01** (rail po
-#278). Zapsat to jako „vědomě zastaralé“ nestačí: zápis ve specifikaci nikdo nečte s obrázkem
-v ruce, a u #299 se takových zápisů sešlo pět.
+poznáš podle toho, že **kreslí to, co okno umí dneska** — u #299 to byla sekce **02** (dnešní `Přehled`;
+#215 z ní vzalo souhrn checků, #291 rozdělil hlavičku karty na dvě podoby), **03** (patička
+nálezu po #283), **19** (seznam commitů po #316) a **01** (rail po #278). Poznávací znak to
+**není** „vedle ní nestojí novější varianta“: 01 má vedle sebe 21 a 02 má od #NNN vedle sebe 24,
+a záznamem dneška jsou obě dál — mít vedle sebe kresbu budoucího stavu neznamená, že se ta
+dnešní přestane udržovat. Zapsat to jako „vědomě zastaralé“ nestačí: zápis ve specifikaci nikdo
+nečte s obrázkem v ruce, a u #299 se takových zápisů sešlo pět.
 
 **Totéž platí o tokenech**, jen tam to nikdo neuvidí očima: `--mint` ve světlé větvi se u #309
 v aplikaci ztmavil kvůli kontrastu (`#0E8F80` → `#0C7E71`) a v mockupu zůstala stará hodnota, tedy
