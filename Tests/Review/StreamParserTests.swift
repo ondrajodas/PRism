@@ -26,6 +26,52 @@ struct StreamParserTests {
         #expect(first.verdict == .confirmed)
         #expect(first.summary.isEmpty == false)
         #expect(first.failureScenario?.isEmpty == false)
+        // Dva ze čtyř nálezů leží na **tomtéž řádku** (`Cart.swift:17`) a přišly v jednom
+        // volání. Je to doklad, že reviewer dva různé problémy na jeden řádek doopravdy
+        // dává — proto se položky uvnitř jedné sady neslévají (#381).
+        #expect(result.findings.filter { $0.file == "Cart.swift" && $0.line == 17 }.count == 2)
+    }
+
+    @Test("Opravené hlášení téhož nálezu je v okně jednou")
+    func aCorrectedReportOfTheSameFindingIsOne() throws {
+        // Fixture je poskládaná z uloženého záznamu z provozu (#381): reviewer zavolal
+        // `ReportFindings` dvakrát, protože si první text opravil — do češtiny mu prosákla
+        // ruština. V okně z toho byl týž nález dvakrát, oba `CONFIRMED` a oba na jednom
+        // řádku, i když jeho vlastní log hlásil jeden.
+        let result = try summary(of: "report-findings-corrected")
+
+        #expect(result.findings.count == 1)
+        let finding = try #require(result.findings.first)
+        #expect(finding.file == "src/Flow/Conditional/PhaseTransitionHandler.php")
+        #expect(finding.line == 346)
+        #expect(finding.verdict == .confirmed)
+        #expect(finding.category == "correctness")
+        // Vyhrát má **pozdější** hlášení, tedy to opravené. Cyrilice je zrovna to, po čem
+        // se první hlášení pozná: kdyby zůstalo, zbyla by v nálezu ruská slova.
+        #expect(finding.shortSummary == "Chybná fáze zápisu: porušení atomicity")
+        #expect(cyrillic(in: finding).isEmpty)
+        // Přebitý nález **není** zahozený nález: `droppedFindings` je počítadlo nepřečteného
+        // a rozsvítilo by v okně „nejisté“.
+        #expect(result.droppedFindings == 0)
+        #expect(result.outcome?.isError == false)
+    }
+
+    @Test("Fixture s korekcí nese cyrilici z prvního hlášení")
+    func theCorrectionFixtureCarriesTheCyrillicFromTheFirstReport() throws {
+        // Hlídá si to sada sama, ať test výš neplatí jen proto, že se z fixture cestou do
+        // repa ztratily bajty, na kterých stojí. Tatáž pojistka jako u fixtures s `CRLF`.
+        let text = try Fixture.text("stream-json/report-findings-corrected.jsonl")
+
+        #expect(text.contains("второй"))
+        #expect(text.contains("условие"))
+    }
+
+    /// Cyrilice v textech nálezu — čím se první (neopravené) hlášení pozná.
+    private func cyrillic(in finding: ReportedFinding) -> String {
+        let texts = [finding.summary, finding.shortSummary, finding.failureScenario]
+        return String(texts.compactMap { $0 }.joined().unicodeScalars.filter {
+            (0x0400...0x04FF).contains($0.value)
+        }.map(Character.init))
     }
 
     @Test("Čistý běh nástroj zavolá, jen s prázdným seznamem")
@@ -210,7 +256,8 @@ struct StreamParserTests {
     func aRewordedShortSummaryIsStillTheSameFinding() {
         // Ověřeno na skutečném běhu (#17): reviewer nahlásil tentýž problém průběžně
         // a znovu v závěrečném seznamu, jen si mezitím upravil `short_summary`.
-        // Porovnání celé hodnoty ho propustilo a v UI byl dvakrát.
+        // Porovnání celé hodnoty ho propustilo a v UI byl dvakrát. Od #381 to nedrží
+        // shodné `summary`, ale shodné **místo** — u #381 se totiž přeformulovalo i ono.
         func call(shortSummary: String) -> String {
             """
             {"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1",\
@@ -251,21 +298,70 @@ struct StreamParserTests {
 
     @Test("Dva různé problémy na jednom řádku zůstanou dva")
     func twoDifferentProblemsOnOneLineStayTwo() {
-        // Deduplikace se drží povinného `summary`, takže různé nálezy neslije.
-        func call(summary: String) -> String {
+        // Uvnitř **jedné sady** se neslévá nic: reviewer je vyjmenoval vedle sebe, takže
+        // jsou to dva problémy. Doložené reálným během (`review-with-findings`,
+        // `Cart.swift:17`), takže slití podle `(file, line, category)` do parseru nepatří.
+        let call = """
+            {"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1",\
+            "name":"ReportFindings","input":{"findings":[\
+            {"file":"A.php","line":96,"category":"correctness","summary":"chybí kontrola prázdnosti"},\
+            {"file":"A.php","line":96,"category":"correctness","summary":"celočíselné dělení useká zbytek"}\
+            ]}}]}}
+            """
+
+        #expect(parser.summarize([call]).findings.count == 2)
+    }
+
+    @Test("Nález, o kterém pozdější volání mlčí, se nezahodí")
+    func aFindingMissingFromTheLastReportIsNotDropped() {
+        // Ztracený nález vypadá v okně jako „reviewer nic nenašel“, což je nejhorší možné
+        // selhání téhle aplikace. Poslední sada proto přepisuje jen to, co sama nese —
+        // zbytek zůstane a `droppedFindings` (počítadlo **nepřečteného**) se nehýbe.
+        func call(file: String, line: Int) -> String {
             """
             {"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1",\
-            "name":"ReportFindings","input":{"findings":[{"file":"A.php","line":96,\
-            "summary":"\(summary)"}]}}]}}
+            "name":"ReportFindings","input":{"findings":[{"file":"\(file)","line":\(line),\
+            "summary":"ztráta dat"}]}}]}}
             """
         }
 
-        let result = parser.summarize([
-            call(summary: "chybí kontrola prázdnosti"),
-            call(summary: "celočíselné dělení useká zbytek"),
-        ])
+        let result = parser.summarize([call(file: "A.php", line: 10), call(file: "B.php", line: 20)])
 
         #expect(result.findings.count == 2)
+        #expect(result.droppedFindings == 0)
+    }
+
+    @Test("Závěrečné volání s prázdným seznamem nálezy nesmaže")
+    func anEmptyFinalReportDoesNotWipeFindings() {
+        // Kdyby smazalo, běh s nahlášenou ztrátou dat by v okně vyšel jako čisté review.
+        let withFinding = """
+            {"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1",\
+            "name":"ReportFindings","input":{"findings":[{"file":"A.php","line":10,\
+            "summary":"ztráta dat"}]}}]}}
+            """
+        let empty = #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"ReportFindings","input":{"findings":[]}}]}}"#
+
+        let result = parser.summarize([withFinding, empty])
+
+        #expect(result.findings.count == 1)
+        #expect(result.droppedFindings == 0)
+    }
+
+    @Test("Nečitelné druhé volání nálezy nesmaže, jen se spočítá")
+    func anUnreadableSecondReportDoesNotWipeFindings() {
+        // Nečitelný vstup **není sada** — je to selhání čtení. Kdyby přepisoval, jedna
+        // rozbitá řádka by zahodila nálezy, které už dorazily.
+        let withFinding = """
+            {"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1",\
+            "name":"ReportFindings","input":{"findings":[{"file":"A.php","line":10,\
+            "summary":"ztráta dat"}]}}]}}
+            """
+        let broken = #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"ReportFindings","input":"tohle není objekt"}]}}"#
+
+        let result = parser.summarize([withFinding, broken])
+
+        #expect(result.findings.count == 1)
+        #expect(result.droppedFindings == 1)
     }
 
     @Test("Číslo řádku snese text, ale ne boolean")

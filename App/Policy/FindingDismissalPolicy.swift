@@ -7,11 +7,17 @@ extension Policy {
     /// odmítnutí přestalo párovat a tiše zmizelo — a to je horší než nespárovat vůbec,
     /// protože zmizelý bit vypadá jako nekliknutý.
     ///
-    /// Je to táž identita, na které stojí dedup ve `StreamParseru`: **místo a `summary`**, ne
-    /// celá hodnota. Reviewer, který hlásí průběžně a na konci pošle kompletní seznam, si
+    /// Celá hodnota to není: reviewer, který hlásí průběžně a na konci pošle kompletní seznam, si
     /// umí `short_summary` přeformulovat (ověřeno na skutečném běhu u #17), takže cokoli
     /// bohatšího by tentýž nález rozdvojilo. K tomu **reviewer**, protože dva reviewery na
     /// jednom řádku jsou běžné a odmítnutí jednoho z nich nesmí odmítnout druhého.
+    ///
+    /// **Od #381 to už není táž identita, na které stojí dedup ve `StreamParseru`** (do #381 byla,
+    /// a stálo to tady). Slévání sad nálezů (`Policy.mergedFindings`) se drží **místa**, protože
+    /// v jednom běhu je z pořadí volání vidět, co je korekce; tady se páruje **napříč běhy**, kde
+    /// tahle informace není — a `summary` proto v klíči zůstává schválně. Ceny omylů jsou totiž
+    /// obrácené: špatné slití znamená duplikát v okně, špatně spárované odmítnutí znamená nález,
+    /// který jsem nikdy neviděl a je **schovaný**.
     ///
     /// Bere se **`reported.summary`, ne `summary`**, tedy věta revieweera, ne její překlad.
     /// Překlad je zobrazení: ukládá se druhým zápisem po běhu a při dalším běhu ho model

@@ -147,6 +147,12 @@ Nad odmítnutím nálezu (#113) platí:
   zmizelo**. Bere se `reported.summary`, ne `summary`: překlad se ukládá druhým zápisem a při
   dalším běhu ho model napíše jinak. Že se `short_summary` přeformuluje, je změřené u #17 —
   proto ne celá hodnota.
+
+  **Od #381 to už není táž identita, jakou se slévají nálezy uvnitř běhu** (do #381 byla).
+  `Policy.mergedFindings` se drží **místa**, protože v jednom běhu je z pořadí volání
+  `ReportFindings` vidět, co je korekce; klíč odmítnutí páruje **napříč běhy**, kde ta informace
+  není, takže by místo samo odmítlo i nález, který jsem nikdy neviděl. Ceny omylů jsou obrácené:
+  špatné slití = duplikát v okně (vidět), špatně spárované odmítnutí = schovaný nález (nevidět).
 - **Nepřenáší se na nový commit.** Vychází to samo z toho, že mapa leží v souboru daného
   `headSha` (tvrdá podmínka č. 5): nález falešný nad starým kódem nemusí být falešný nad novým.
   Opačné rozhodnutí než u draftu (#69), a schválně — draft je próza, tohle je jeden bit.
@@ -1203,17 +1209,26 @@ Klíčový spoj: ze `stream-json` výstupu `claude` udělá to, co aplikaci zaj�
 | `StreamSummary` | Session id, nálezy, **pokusy** o nástroje a odmítnuté nástroje, konec běhu, **cena běhu**, počty nepřečteného |
 | `ReviewOutcome` | Konec běhu podle `result` eventu |
 
-Čtyři věci, které se u toho nemají rozbít:
+Co se u toho nemá rozbít:
 
 - **Stream se čte defenzivně (`JSONSerialization`), ne přes `Codable`.** Je to opačně než
   u `gh` — tam si `--json` polem říkáme, co má přijít, takže DTO dává smysl. Tady přichází
   cizí formát, který se vyvíjí, a většina eventů nás nezajímá; typované dekódování by
   padalo na věcech, které jsou aplikaci lhostejné.
-- **Nález se deduplikuje podle místa a `summary`, ne podle celé hodnoty.** Reviewer, který
-  hlásí průběžně a na konci pošle kompletní seznam, dodá tentýž nález dvakrát — a ověřeno na
-  skutečném běhu (#17), že si při tom umí přeformulovat `short_summary`. Porovnání celé
-  hodnoty ho proto propustilo. Dva různé problémy na jednom řádku se neslijí, protože se liší
-  v `summary`, které je jediné povinné pole.
+- **Nálezy se slévají po sadách, ne po položkách** (#381). Každé volání `ReportFindings` je celá
+  sada a rozhoduje **struktura volání, ne text**: pozdější sada na daném místě (`file` + `line`)
+  přepíše, co tam bylo, a slévání drží jedna čistá funkce `Policy.mergedFindings(_:reporting:)` —
+  parser jen složí sadu a předá ji. Do #381 se porovnávalo místo **a celé `summary`**, což mělo
+  zabránit slití dvou různých problémů na jednom řádku; jenže reviewer, který si nález opraví,
+  přepíše i `summary` (u #381 stačilo `fáze` → `fázi`), takže korekce prošla jako nový nález
+  a v bublině ležel týž nález dvakrát. Podrobnosti i zamítnuté cesty jsou v `Policy` níž a v
+  záznamu rozhodnutí ve specifikaci.
+
+  Uvnitř jedné sady se **neslévá nic** (dva nálezy vedle sebe = dva problémy, viz
+  `Cart.swift:17` v `review-with-findings`) a nález z dřívější sady, o kterém pozdější sada mlčí,
+  **zůstane** — včetně přebytku na tomtéž místě. Ztracený nález se totiž v okně nedá odlišit od
+  „reviewer nic nenašel“. Vychází z toho i to, že **prázdná ani nečitelná** pozdější sada nálezy
+  nesmaže; nečitelná navíc není sada, ale `droppedFindings`.
 - **Rozbitý řádek se spočítá, ne vyhodí.** Proces se dá zabít uprostřed řádku a jedna
   useknutá řádka nesmí zahodit nálezy, které už dorazily.
 - **`calledReportFindings` je oddělené od prázdného seznamu.** „Nic jsem nenašel“
@@ -4807,6 +4822,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.reviewState(for:)` | Překlad stavu pracovní kopie na stav v řádku PR |
 | `Policy.isBlocking(_:categories:)` | Jediný odvozený boolean nad nálezem |
 | `Policy.key(of:)` | Identita nálezu napříč běhy — **jediné místo**, kde se klíč skládá |
+| `Policy.mergedFindings(_:reporting:)` | Slití **sady** nálezů z jednoho volání `ReportFindings` do toho, co dorazilo dřív (#381): pozdější sada přepíše dřívější **podle místa**, uvnitř sady se neslévá nic a nic se nezahodí potichu. Není to identita z `Policy.key(of:)` a nemá být — tam se páruje napříč běhy |
 | `ReviewRecord.activeFindings`, `.dismissal(of:)`, `.setDismissal(_:of:)` | Odmítnuté nálezy (#113) — čtení i zápis na jednom místě |
 | `Policy.suggestedVerdict(for:)` | Návrh verdiktu nad `ReviewRecord`. `nil` = není z čeho soudit |
 | `Policy.effectiveVerdict(of:suggestion:)` | Který verdikt **platí** a odkud je — moje volba, jinak návrh (#114) |

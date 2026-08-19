@@ -534,6 +534,33 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   vstup. Fixtures ze skutečných běhů už v repu jsou
   (`Tests/Fixtures/stream-json/`, viz [`docs/claude-cli.md`](claude-cli.md)): běh
   s nálezy, čistý běh, zabitý běh a odmítnutý zápis. Parser se testuje proti nim.
+- **Slévání nálezů z opakovaného `ReportFindings` (#381)** — dvě sady vedle sebe:
+  `FindingMergeTests` na čistou funkci (`Policy.mergedFindings`) vyčerpávajícím výčtem
+  a `StreamParserTests` na tu samou věc přes parser, ať se neověřuje jen pravidlo bez cesty k němu.
+  Vstupem je fixture `report-findings-corrected.jsonl` — poskládaná z **uloženého záznamu
+  z provozu** (dva nálezy jednoho běhu, texty doslova včetně cyrilice `веийлорсту`, kterou
+  reviewerovi prosákla do češtiny). Provenience je v první řádce fixture jako
+  `_prism_fixture_note`, protože v JSONL komentář být nemůže; parser ho přeskočí jako každý
+  neznámý event a **jeden test se ptá, jestli cyrilice v souboru pořád je** — kdyby se cestou do
+  repa ztratila, tvrzení „vyhrálo pozdější hlášení“ by procházelo naprázdno. Tatáž pojistka jako
+  u fixtures s `CRLF`, jen tady nejde o zakončení řádků, takže do `.gitattributes` nepatří
+  (v souboru je **nula** `CR`, ověřeno na bajtech i na blobu).
+
+  Nejcennější jsou tři tvrzení o tom, co se **nestalo**: dva různé problémy na jednom řádku
+  z **jednoho** volání se neslijí, nález, o kterém pozdější volání mlčí, nezmizí (a `droppedFindings`
+  se nehýbe), a prázdné ani nečitelné pozdější volání nálezy nesmaže. **Ověřeno vloženou regresí ve
+  třech variantách** (čísla jsou z běhu, ne odhad):
+
+  | Vložená regrese | Co spadne |
+  |---|---|
+  | identita z #17 (`file, line, summary`) | 4 tvrzení; v nálezu zůstane `условиевторой` |
+  | slití podle `(file, line, category)` uvnitř sady | 2 tvrzení — a **reálná fixture to nechytí**, protože ta dvojice na `Cart.swift:17` má různou `category`; chytá to až inline test |
+  | poslední sada vyhrává celá | 7 tvrzení, s prázdnou sadou 9 |
+- **Sonda `FindingDuplicateProbe` (#381)** — bublina **před opravou a po ní na jednom plátně**, nad
+  tou samou fixturou. Stav „před“ se skládá tím, že se každé volání sečte zvlášť (přesně to dělal
+  parser do #381), takže obě bubliny stojí na týchž datech. Je to sonda, ne test: „je v bublině
+  nález jednou?“ je otázka na obrázek a v aplikaci ve slotu se ten stav vyrobit nedá — záznam
+  s duplikátem leží v cache hlavní instance a do té se nesahá.
 - **Kontrola nálezů z minula (#150)** — čtyři oblasti, každá na jinou tichou poruchu:
   - **`RecheckCommand`** — prompt a **čtení odpovědi**. Odpověď je volný text od modelu, takže
     se testuje každý způsob, jak může přijít jinak, než se o ni prompt řekl: `id` číslem
