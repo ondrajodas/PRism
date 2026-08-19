@@ -3024,3 +3024,38 @@ Testů přidala tahle změna **17** — šestnáct tvrzení a jedna sonda, kter�
 sada vyhrává celá → 7 testů, s prázdnou sadou 9). Na obrazovce je to vidět, ale ten stav se v aplikaci ve
 slotu vyrobit nedá — záznam s duplikátem leží v cache hlavní instance —, takže je na to offscreen
 sonda `FindingDuplicateProbe`, která kreslí bublinu před opravou a po ní na jedno plátno.
+
+### #384 — hover patky bloku sahal v návrhu po tokenu, který neexistuje
+
+**V kódu se nemění nic než jeden komentář** — je to `docs/navrh.html`, dokumentace a publikování.
+Zákres stropu dashboardu (#371, `v1.1.136`) měl u patky `background: var(--hover)`, ale token toho
+jména paleta nemá, takže hover v návrhu **nekreslil nic**. Nedefinovaná custom property totiž není
+chyba: deklarace se stane neplatnou při výpočtu hodnoty a vlastnost spadne na `unset`. V souboru to
+proto vypadá hotově a na obrazovce po tom není stopa — všimnul si toho až subagent u #371, při
+implementaci, a hodnotu si v okně vybral sám.
+
+**Srovnáno na `--panel-3`**, což je v `:root` protějšek `Palette.raised`, tedy přesně to, co okno
+kreslí; nový token by byl token bez protějšku v paletě, a podle takového se nedá nic naprogramovat.
+Odstín zůstává o stupeň tišší nad `--panel-2` bloku — tentýž pár, kterým se zvýrazňuje jinde.
+
+**Byl to jediný nedefinovaný token v celém souboru** — před opravou 29 použitých proti 28
+definovaným, po ní 28 proti 28 a žádný definovaný token není bez použití. Ověřeno **grepem, který
+teď kontroluje třídu, ne ten
+jeden výskyt** (v [`navrh.md`](navrh.md), *Jak se z něj čte*), a chytání regrese je z běhu nad
+`HEAD` před opravou, ne z odhadu. Zkontrolovaly se u toho i **přebíjecí bloky** motivů: kdyby
+token v jednom z nich chyběl, obarvil by se v tom tématu potichu ze světlého `:root` — neliší se
+v nich nic než čtyři tokeny bez motivu (`--ui`, `--mono`, `--radius`, `--radius-sm`).
+
+Jméno tokenu je v komentáři v návrhu **schválně bez `var(…)`**, aby ta kontrola zůstala prázdná;
+kontrola, která hlásí sama sebe, je mrtvá kontrola.
+
+**Ověřeno renderem, ne čtením CSS.** Headless snímek nemá myš, takže se ve výřezu přepsal
+`:hover` na třídu (deklarace zůstala ta z návrhu) a barva se odečetla přes `getComputedStyle`:
+`rgba(0, 0, 0, 0)` před opravou proti `rgb(28, 33, 44)` = `#1C212C` po ní v tmavém motivu
+a `rgb(238, 241, 247)` = `#EEF1F7` ve světlém. Na snímcích je patka po opravě odlišená od těla
+bloku, před ní splývá. Postup je zapsaný v [`navrh.md`](navrh.md).
+
+**Publikovaná kopie dohnala repo o tři verze** (`v1.1.136` strop dashboardu, `v1.1.140` výběr
+položek, plus tahle oprava) — na **tutéž adresu**, protože dva návrhy jsou horší než žádný.
+Pravidlo „jedna úprava, jeden commit, jedno publikování“ se tím neruší, jen se splácí dluh po
+dvou dávkách, kde se to nestalo.

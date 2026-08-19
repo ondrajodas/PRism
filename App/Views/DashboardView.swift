@@ -554,9 +554,9 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 13)
             .padding(.vertical, 8)
-            // Návrh na hover sahá po `var(--hover)`, který v jeho `:root` definovaný **není**, takže
-            // se z něj nedá vzít hodnota — bere se tedy tichý podklad palety, kterým okno zvýrazňuje
-            // jinde (`Palette.raised`).
+            // Hover je `Palette.raised` = `--panel-3` v návrhu. Do #384 tam stálo nedefinované
+            // `var(--hover)`, takže hodnota se z návrhu vzít nedala a vybral ji tenhle řádek;
+            // od #384 je návrh srovnaný na `--panel-3` a shoda je jedna ku jedné.
             .background(hoveredFooter == footer.section ? Palette.raised : Color.clear)
             .contentShape(.rect)
         }

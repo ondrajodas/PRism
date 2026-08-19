@@ -110,6 +110,33 @@ rozešly.
 mění barva, mění se **obojí** — jinak se paleta a návrh rozejdou a další srovnání bude tvrdit,
 že chybu má aplikace.
 
+**Token, který `:root` nedefinuje, v návrhu potichu nedělá nic** (#384). Nedefinovaná custom
+property není v CSS chyba — deklarace se stane neplatnou při výpočtu hodnoty a vlastnost spadne
+na `unset`, takže v souboru vypadá zákres hotově a na obrazovce po něm není ani stopa. U hover
+patky bloku (`.block > .more-rows`) stálo `var(--hover)`, token toho jména paleta nemá, a hover
+tedy nekreslil **nic**: `getComputedStyle` hlásil `background-color: rgba(0, 0, 0, 0)` v obou
+tématech. Vyšlo to najevo až u #371, při implementaci, tedy o tři verze návrhu později.
+
+Nový token se proto **nevymýšlí** — paleta je zdroj a tokeny jsou s ní jedna ku jedné, takže
+token bez protějšku v `Palette` je token, podle kterého se nedá nic naprogramovat. Sáhne se po
+tom, který ten odstín už drží (tady `--panel-3` = `Palette.raised`); doopravdy nová barva
+znamená napřed pole v `Palette`. Grep, který **musí vyjít prázdný** — vypíše každé použití
+`var(--…)`, které `:root` nedefinuje:
+
+```bash
+grep -o 'var(--[a-zA-Z0-9-]*' docs/navrh.html | sed 's/var(//' | sort -u > /tmp/used.txt
+grep -oE '(^|[{; ])--[a-zA-Z0-9-]+[[:space:]]*:' docs/navrh.html |
+    grep -o '\-\-[a-zA-Z0-9-]*' | sort -u > /tmp/defined.txt
+comm -23 /tmp/used.txt /tmp/defined.txt
+```
+
+Obráceně je to jen uklízení, ne vada (`comm -13` vypíše tokeny, na které se nikdo neodkazuje).
+Za pozornost stojí i **čtvrtý blok**: barvy a stíny jsou v `:root`, v `@media
+(prefers-color-scheme: dark)` a v obou `:root[data-theme=…]`, takže token, který v jednom
+z nich chybí, se v tom tématu tiše obarví z toho světlého `:root` — ověřeno u #384, že se v těch
+třech přebíjecích blocích neliší nic než čtyři tokeny bez motivu (`--ui`, `--mono`, `--radius`,
+`--radius-sm`).
+
 Rozměry z CSS se berou jako body 1 : 1 (`font-size: 11.5px` → `.font(.system(size: 11.5))`,
 `border-radius: 6px` → `cornerRadius: 6`). Není to samozřejmost, je to zvyklost tohohle repa —
 dodržuje ji dnešní kód a odchylka od ní musí být zapsaná jako rozhodnutí.
@@ -159,6 +186,18 @@ obrazovka není.
 Stejně jako dřív: **obrázek vedle obrázku**, ne čtení kódu. Sekce se vyřízne z `docs/navrh.html`
 do samostatného souboru (i s `<style>`) a vyrenderuje headless Chromem; postup i s příkazem je
 v [`docs/testovani.md`](testovani.md), sekce o kontrole vzhledu.
+
+**Stav na `:hover` se fotí přepsaným selektorem, ne přepsanou deklarací** (#384). Headless snímek
+nemá myš, takže se ve **výřezu** (ne ve zdroji) přepíše `:hover` na třídu a ta se přidá jednomu
+prvku — `.block > .more-rows:hover` → `.block > .more-rows.hoverprobe`. Deklarace tím zůstává ta
+z návrhu, takže se testuje pravidlo ze souboru; přepsat rovnou barvu znamená vyfotit vlastní
+domněnku. Přepis patří do skriptu, který výřez skládá, a s `assert` na počet zásahů — když se
+selektor v návrhu přejmenuje, má sonda spadnout, ne vyfotit nedotčený stav.
+
+Barvu je u toho lepší **odečíst, ne odhadnout z obrázku**: `--dump-dom` po `getComputedStyle`
+vrátí přesné `rgb()`, a **`rgba(0, 0, 0, 0)` je právě ta odpověď, kterou dává neplatná
+deklarace** — tedy i mrtvý token. U #384 to rozhodlo: `rgba(0, 0, 0, 0)` před opravou proti
+`rgb(28, 33, 44)` = `#1C212C` = `--panel-3` po ní, v obou tématech.
 
 **Vyříznout se musí, i když je dokument stránkovaný** — a ne kvůli délce stránky, ale kvůli
 `--screenshot`: ten bere viewport **od horní hrany dokumentu**, takže po odrolování na sekci
