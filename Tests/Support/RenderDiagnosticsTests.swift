@@ -92,6 +92,29 @@ struct RenderDiagnosticsTests {
         #expect(text == "první sezení\ndruhé sezení\n")
     }
 
+    /// **Strop platí na soubor, ne na sezení** (nález Copilota na #386). Kdyby se počítal od nuly
+    /// při každém startu, přípisovalo by každé sezení dalších 8 MB a mez by nedělala nic — což je
+    /// zrovna to, co „vyjmenovaná mez“ nemá být.
+    @Test("Nové sezení nad plným souborem nezapíše nic")
+    func limitHoldsAcrossSessions() throws {
+        let directory = try TemporaryDirectory()
+        let file = directory.url.appending(path: "diagnostics.log")
+        let first = DiagnosticsLog(url: file, limit: 20, zone: .gmt)
+        #expect(first.append("první řádek, který strop naplní až nad hlavu"))
+        #expect(!first.append("druhý"))
+        let full = try String(contentsOf: file, encoding: .utf8)
+
+        // Druhé sezení: hlavička se **nezapíše** a `false` je to, z čeho `RenderDiagnostics.start()`
+        // pozná, že se diagnostika nemá zapínat.
+        let second = DiagnosticsLog(url: file, limit: 20, zone: .gmt)
+        #expect(!second.append("hlavička druhého sezení"))
+        #expect(!second.append("a další řádek"))
+        // Soubor je **beze změny** — ani o limitní řádek: ten už v něm je od sezení, které na strop
+        // narazilo, a druhý stejný by byl bajty nad strop a věta dvakrát.
+        #expect(try String(contentsOf: file, encoding: .utf8) == full)
+        #expect(full.components(separatedBy: "strop 20 B vyčerpán").count - 1 == 1)
+    }
+
     // MARK: - Pomůcky
 
     private var start: Date { Date(timeIntervalSince1970: 0) }

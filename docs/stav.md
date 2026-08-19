@@ -3084,6 +3084,8 @@ po čtyřiceti bodech je na ablaci málo, jsou v [`testovani.md`](testovani.md).
 nedá vyrobit v testu, je jediným zdrojem pravdy skutečné okno — a `sample` z něj řekne, **kde** hlavní
 vlákno je, ne **kolikrát** se co přeložilo. Aplikace proto umí zapsat řádek za sekundu do
 `<cache>/diagnostics.log`: počet kol runloopu, CPU hlavního vlákna a průchody `body` po typech views.
+Strop 8 MB platí na **soubor**, ne na sezení, a když se do něj nedá zapsat, diagnostika se
+**nezapne a řekne to** (obojí nález Copilota na #386; ověřeno vloženou regresí).
 Vypnutá stojí načtení jednoho statického `Optional`u, počitadlo **není v observable stavu** (#252)
 a nic si **neplánuje kolo** (#350) — řádky vypisuje observer runloopu, takže si diagnostika nevyžádá
 ani jedno probuzení navíc. Přepínač v nastavení se **zamítl**: byla by to změna vzhledu se schvalovací

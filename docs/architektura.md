@@ -1640,10 +1640,25 @@ a **hlavička sezení** v souboru (jméno bundlu kvůli slotům, PID kvůli `sam
 - **Nula se nezapisuje.** Mezera v záznamu znamená „aplikace nic nedělala“, a to je informace;
   řádek každou sekundu by hořící okno utopil v tichých řádcích.
 
-**Strop je vyjmenovaný a jeho dosažení se zapisuje** (8 MB, `DiagnosticsLog.byteLimit`). Cache bez
-vyjmenované meze je únik místa s odkladem (#224) — a soubor, který prostě přestane růst, se nedá
-odlišit od aplikace, která přestala hořet, takže se poslední řádek napíše. Chyba zápisu jde na
-stderr a sezení **zavře**; `try?` by udělal soubor, který mlčí ze dvou různých důvodů.
+**Strop je vyjmenovaný, platí na soubor a jeho dosažení se zapisuje** (8 MB,
+`DiagnosticsLog.byteLimit`). Cache bez vyjmenované meze je únik místa s odkladem (#224) — a soubor,
+který prostě přestane růst, se nedá odlišit od aplikace, která přestala hořet, takže se poslední
+řádek napíše. Chyba zápisu jde na stderr a sezení **zavře**; `try?` by udělal soubor, který mlčí ze
+dvou různých důvodů.
+
+**Že strop platí na soubor, a ne na sezení, je nález Copilota na #386** a je to podmínka, ne detail:
+soubor se přípisuje napříč sezeními, takže s počitadlem od nuly by každý start přidal dalších 8 MB
+a mez by nedělala nic. `written` se proto **seedne velikostí souboru** (`offset()` po `seekToEnd()`
+na tomtéž deskriptoru, do kterého se zapisuje). Sezení nad **už plným** souborem pak nezapíše nic
+a `append` vrátí `false` hned u hlavičky — limitní řádek v souboru už je od toho sezení, které na
+strop narazilo. Je na to test ověřený **vloženou regresí**: s počitadlem od nuly spadne na tom, že
+druhé sezení hlavičku zapsalo.
+
+**Z toho plyne druhá polovina, taky nález z #386: `start()` se láme na hlavičce.** Když se nezapsala,
+`current` zůstane `nil`, vrátí se `false` a důvod jde na stderr — jinak by „diagnostika je zapnutá“
+a „nic se nezapisuje“ splynuly, což je zrovna to, co banner v `bin/run.sh` slibuje, že nenastane.
+Skript to navíc kontroluje **dřív, než aplikaci spustí** (`stat -f%z` nad logem), protože na stderr
+se při spuštění přes `open` nikdo nedívá.
 
 **Omezení, které je potřeba znát:** kdyby se hlavní vlákno zaseklo tak, že se runloop nikdy
 nevrátí do observeru, nezapíše se nic. Vzorky z #361 to vylučují (v pěti sekundách jsou tisíce

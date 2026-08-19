@@ -23,7 +23,10 @@ import Foundation
 ///    nevzpomene. Ukazatel v okně by tuhle vlastnost neměl a stál by změnu vzhledu.
 ///
 /// Že je zapnutá, je vidět na třech místech: `bin/run.sh` to vypíše při spuštění, aplikace na
-/// stderr, a soubor začíná hlavičkou sezení (`Policy.diagnosticHeaderLine`).
+/// stderr, a soubor začíná hlavičkou sezení (`Policy.diagnosticHeaderLine`). **A když se zapnout
+/// nepovede** — typicky proto, že soubor už narazil na strop —, `start()` vrátí `false`, `current`
+/// zůstane `nil` a důvod jde na stderr; `bin/run.sh --diagnose` to navíc pozná **dřív, než spustí
+/// aplikaci**, a řekne, co s tím. „Zapnutá“ a „nic nezapisuje“ tedy nesplynou.
 ///
 /// ## Čím to nesmí být
 ///
@@ -91,14 +94,25 @@ final class RenderDiagnostics: @unchecked Sendable {
             now: Date(),
             cpu: threadCPUSeconds()
         )
-        diagnostics.log.append(
+        // **Na hlavičce se to láme** (nález Copilota na #386). Když se nezapsala, nezapíše se ani nic
+        // dalšího — typicky proto, že soubor už narazil na strop v minulém sezení. Zapnout se
+        // v takovém případě nesmí: „diagnostika je zapnutá“ a „nic se nezapisuje“ jsou dva různé
+        // stavy a mlčky splynout nemají, protože právě to `bin/run.sh` a dokumentace slibují.
+        guard diagnostics.log.append(
             Policy.diagnosticHeaderLine(
                 at: Date(),
                 in: .current,
                 bundle: layout.root.lastPathComponent,
                 pid: ProcessInfo.processInfo.processIdentifier
             )
-        )
+        ) else {
+            FileHandle.standardError.write(Data("""
+                PRism: diagnostika kreslení (#361) se NEZAPNULA — do \
+                \(layout.diagnosticsFile.path) nejde zapsat (nejspíš vyčerpaný strop \
+                \(DiagnosticsLog.byteLimit) B). Smaž ten soubor a spusť aplikaci znovu.\n
+                """.utf8))
+            return false
+        }
         diagnostics.observeRunLoop()
         current = diagnostics
         FileHandle.standardError.write(

@@ -1069,7 +1069,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   průchodu** (v hořícím okně jsou to tisíce volání za sekundu, takže by měřidlo přispívalo do toho,
   co měří — ověřeno počitadlem v `@autoclosure`), že se řádek zapíše až po sekundě a počitadla se
   tím vynulují, že se **vyčerpaný strop napíše do souboru** a další řádky se zahodí, a že druhé
-  sezení **přípisuje**. Co se z testů poznat nedá, je chování observeru runloopu v aplikaci — ten
+  sezení **přípisuje**.
+
+  Sedmý případ přibyl z Copilot review na #386 a je z nejcennější třídy: **nové sezení nad plným
+  souborem nezapíše nic** — ani hlavičku, ani druhý limitní řádek —, protože strop platí na
+  **soubor**, ne na sezení. Ověřeno **vloženou regresí**: s počitadlem od nuly (`written` bez seedu
+  z velikosti souboru) spadnou dvě expectations ze tří, na tom, že druhé sezení hlavičku zapsalo
+  a soubor se změnil. Co se z testů poznat nedá, je chování observeru runloopu v aplikaci — ten
   se pouští jedině s `PRISM_DIAGNOSE=1` a v testovacím hostu by psal do **skutečné** cache, protože
   host má `CFBundleName` hlavní instance.
 - **`AppStore` — pohled na diff** — že se bez odchylky bere hodnota z nastavení, že ji přepnutí
