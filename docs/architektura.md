@@ -3340,8 +3340,27 @@ Průběh review drží `AppStore` taky (`reviewTimelines`, per PR):
   nechal rozhodovat plánovač.
 - **Konec běhu jde stejným proudem.** Zápis mimo něj dorazil dřív než to, co mu
   předcházelo, a někdy se ztratil úplně; je na to test.
-- **Osa se drží i po doběhnutí** — právě tehdy se k ní člověk vrací. Nový běh ji vynuluje
-  a PR, které zmizí ze seznamu, ji ztratí (běžící review si ji podrží).
+- **A uložení běhu taky** (#308). `.finished` proto nese celý `ReviewRun` a `drain` ho hned za
+  zápisem konce osy uloží (`store(_:for:saving:)`). Do #308 se ukládalo mimo proud, takže si
+  čtení osy a její zápis závodily o `MainActor` a **do souboru šla osa, kterou zbyl závod**:
+  celá, zkrácená na `[ve frontě]`, nebo vůbec žádná — a `dropped` u toho zůstalo nulové, tedy
+  o zkrácení mlčelo. Změřeno na `AppStoreProgressTests`: nad volným strojem vycházelo `[ve
+  frontě]`, se souběžnou suitou nic. Zamítnutá varianta bylo uložit všechny běhy až po
+  `await drained` — to ruší pravidlo „ukládá se po každém doběhlém skillu“ (#97), takže by
+  zavření aplikace uprostřed sady zahodilo i to, co doběhlo.
+- **Osa se drží i po doběhnutí** — právě tehdy se k ní člověk vrací. Nový běh ji vynuluje;
+  běžící review si ji přes tik podrží.
+- **Tik pustí živou kopii osy, ne osu** (#308). PR mimo seznam vypadne z `reviewTimelines`, ale
+  `timelines(for:)` pak odpovídá z uloženého záznamu — a ten se schválně neuklízí (#137 z něj
+  pozná re-review od novinky), takže je to tatáž odpověď jako po restartu (#203). Zahodit osu
+  doopravdy by znamenalo zahodit i záznam, tedy rozbít #137. Do #308 tady stálo, že se osa
+  „ztratí“, a test to tvrdil taky — jenže netvrdil, což byl jediný důvod, proč padal.
+- **Pozdní událost zahozeného běhu nastat nemůže, a je to strukturou, ne kontrolou** (#308):
+  proud se dojíždí uvnitř `review()` (`reporter.finish()` + `await drained`), takže po konci
+  běhu už žádná událost nepřijde, a dokud běh žije, `forget(whatIsNotIn:)` jeho osu z úklidu
+  vyjímá (`reviewTasks[$0.key] != nil`). `record(_:of:for:in:)` proto **žádnou bránu nemá** a mít
+  ji nemá: je to obyčejný zapisovatel, který používá i měření ceny události (#350) — brána „jen
+  když PR běží“ by harnessu neuložila nic a měřila by prázdno.
 
 Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
 
@@ -4278,18 +4297,26 @@ seznam, dvojklik pošle jeden komentář a selhání drží stav i text. Dvě v�
     „osa se neuložila“, ne „nic se nedělo“ — takový běh se v tabu `Průběh` kreslí jako **`bez
     průběhu`** (#242), ne jako nespuštěný: nespuštěno by o doběhlém běhu lhalo a vynechat ho úplně
     znamená, že tab vypíše zrovna ty reviewery, které neběžely.
-  - **Uložená osa svůj konec neobsahuje, takže se doplňuje z běhu** (`ReviewerTimeline.completeTail(from:)`,
-    #242). Snímek pro zápis se v `runSkills` bere dřív, než proud událostí dojede, takže v souboru
-    chybí `hlásí nálezy` i `doběhlo` — **změřeno na skutečné cache: 7 ze 7 os po skutečném běhu**
-    (osy vyrobené v testech konec mají, proto to testy nechytily). Bez doplnění tvrdil tab `Průběh`
-    po restartu `nedoběhlo — běh někdo zrušil` nad doběhlým review a `nálezy vůbec nenahlásilo` nad
-    tím, které nahlásilo prázdný seznam; chip vedle toho ukazoval `čisto`. Doplňuje se **jen to, co
-    běh sám ví** (jeho výsledek a jeho počet nálezů včetně nepřečtených), jen když to v ose není,
-    a **nikdy do prázdné osy** — jinak by z chybějícího průběhu vznikl vymyšlený. Běh, který
-    `ReportFindings` nezavolal, doplněnou fázi hlášení nedostane: to je vlastní stav a slít se nesmí.
-    Opravuje se to na **čtení**, ne v zápisu, protože stejně tak vypadají všechny už uložené
-    soubory; zápis by se musel synchronizovat s proudem, a to je continuation navíc v cestě, která
-    se ruší.
+  - **Osa se ukládá celá, protože se ukládá z proudu** (#308). Do #308 se snímek pro zápis bral
+    mimo proud událostí, takže v souboru chybělo `hlásí nálezy` i `doběhlo` — **změřeno na
+    skutečné cache: 7 ze 7 os po skutečném běhu** — a rozjezd osy podle toho, jak závod dopadl
+    (osy vyrobené v testech konec měly, proto to testy nechytily). Zápis se proto přesunul na
+    konec proudu, kde je osa hotová; podrobnosti a zamítnuté varianty jsou v sekci o průběhu
+    review výš.
+  - **Konec se ale doplňuje dál** (`ReviewerTimeline.completeTail(from:)`, #242), protože soubory
+    uložené **před #308** ho pořád nemají — a bez doplnění tvrdil tab `Průběh` `nedoběhlo — běh
+    někdo zrušil` nad doběhlým review a `nálezy vůbec nenahlásilo` nad tím, které nahlásilo
+    prázdný seznam; chip vedle toho ukazoval `čisto`. Doplňuje se **jen to, co běh sám ví** (jeho
+    výsledek a jeho počet nálezů včetně nepřečtených), jen když to v ose není, a **nikdy do
+    prázdné osy** — jinak by z chybějícího průběhu vznikl vymyšlený. Běh, který `ReportFindings`
+    nezavolal, doplněnou fázi hlášení nedostane: to je vlastní stav a slít se nesmí. Že to nad
+    novými soubory nemá co dělat, není důvod to zahodit — staré na disku leží dál.
+
+    **Změna proti #242**, které si tenhle konec doplnilo na čtení s odůvodněním, že „zápis by se
+    musel synchronizovat s proudem, a to je continuation navíc v cestě, která se ruší“. Ta cena
+    se ukázala jako zbytečná: uložení se **přesunulo do proudu**, takže žádná continuation ani
+    synchronizace nevznikla. Doplňování na čtení tím neztratilo předmět (staré soubory), ale
+    přestalo být jediným řešením.
   - **Živá osa přebíjí uloženou.** Běžící review si ji drží v paměti, kdežto uložená patří
     předchozímu běhu; ověřeno vloženou regresí (spadne sedm testů).
   - **Ořezává se začátek, ne konec**, a strop je 300 událostí: kdo se do osy dívá po restartu,
