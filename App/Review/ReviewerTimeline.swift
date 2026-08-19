@@ -40,6 +40,9 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
             case started
             case tool(ToolAttempt)
             case findings(count: Int)
+            /// Zadání pro reviewera nebylo celé (#345). **Není to fáze běhu** — je to fakt
+            /// o materiálu, se kterým běh začal, takže osu nikam neposouvá.
+            case intentGap(IntentGap)
             case finished(ReviewRunOutcome)
         }
     }
@@ -79,7 +82,11 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     /// - **prázdná osa se nedoplňuje**, takže běh, jehož osa se vůbec neuložila, zůstane bez osy
     ///   (v tabu z něj je `bez průběhu`, ne vymyšlený průběh o dvou událostech).
     private mutating func completeTail(from run: StoredReviewRun) {
-        guard !entries.isEmpty, !isFinished else { return }
+        // **Příznak zadání se za průběh nepočítá** (#345): je to fakt o materiálu, se kterým běh
+        // začal, ne o tom, co běh dělal. Osa, ve které je jen on, je pořád osa bez průběhu — a
+        // doplnit jí konec by z ní udělala dráhu, která tvrdí `doběhlo` nad prázdnými fázemi.
+        let progress = entries.contains { if case .intentGap = $0.kind { false } else { true } }
+        guard progress, !isFinished else { return }
         let hasFindings = entries.contains { if case .findings = $0.kind { true } else { false } }
         if !hasFindings, run.calledReportFindings {
             // Nahlášený počet, ne jen ten uložený: nález, který se nepodařilo přečíst, reviewer
@@ -125,6 +132,21 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         return loadedSkill != skill
     }
 
+    /// Proč zadání pro reviewera nebylo celé (#345). `nil` = bylo, nebo se na to neptalo.
+    ///
+    /// Počítá se **z osy**, stejně jako `loadedSkill`, a je to ten důvod, proč to není pole:
+    /// s událostí to **přežije restart** (ukládá se ve `StoredTimeline`), takže tab `Průběh`
+    /// tvrdí o starším běhu totéž, co tvrdil, když běžel.
+    ///
+    /// Bere se **první** událost. Za jeden běh přijde jedna; kdyby jich přišlo víc, je pravda ta,
+    /// s jakou běh začal — ne ta, kterou by přepsalo pozdější hlášení.
+    var intentGap: IntentGap? {
+        entries.lazy.compactMap { entry -> IntentGap? in
+            guard case .intentGap(let gap) = entry.kind else { return nil }
+            return gap
+        }.first
+    }
+
     /// Nejnovější událost napříč reviewery — podle ní se osa posouvá na konec.
     ///
     /// Napříč, ne z poslední osy v poli: reviewery běží paralelně, takže nová událost
@@ -147,6 +169,8 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
             append(.tool(tool), at: time)
         case .findings(let count):
             append(.findings(count: count), at: time)
+        case .intentGap(let gap):
+            append(.intentGap(gap), at: time)
         }
     }
 

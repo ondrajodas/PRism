@@ -878,6 +878,7 @@ nepovedlo a kdy se to zjišťovalo.
 
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
 PR, **další „moje“ loginy** (`ownLogins`, #330 — jen v souboru, v okně nastavení pole není),
+**jméno MCP nástroje, kterým se čte text issue** (`issueTextTool`, #345 — taky jen v souboru),
 sada skillů, **prompt review**, **časový limit běhu**, blokující kategorie, výchozí režim
 review, jazyk nálezů, povolení odesílání, notifikace, výchozí pohled na diff, vzhled okna, interval
 pollingu, kolik session smí běžet naráz, denní strop automatu, rozpočet cache a model. Repozitář si
@@ -1230,8 +1231,20 @@ zastaral hned další verzí.
    proto soubor, a ne prompt — cizí text vložený do promptu má váhu instrukce a popis PR píše
    někdo jiný. Do promptu jde jen cesta, takže se prompt nemá čím rozkolísat, a **sada nástrojů
    reviewera se nemění**. PR bez popisu a bez odkazu zadání nedostane a věta se do promptu
-   nepřipojí vůbec. Text odkazovaných issue se v téhle verzi **netahá** — v souboru je o tom
-   věta, ať si reviewer nic nedomýšlí.
+   nepřipojí vůbec.
+
+   **Od #345 se k odkazům dotáhne i text issue** — a odkazy se hledají i v **komentářích pod PR**,
+   protože linkback z trackeru chodí zrovna komentářem. Text tahá **vlastní krátká `claude -p`
+   session**, aby aplikace nemusela držet druhý token; má vyjmenovaná povolení (`ToolSearch` a jeden
+   čtecí MCP nástroj, jehož jméno je v `config.json`) a sada nástrojů revieweera se tím **nemění**.
+   Stojí to ~$0,2–0,3 a ~20 s na review a **tahá se vždycky, i v automatu**: zadání vedle diffu je
+   důvod, proč ta funkce existuje.
+
+   **Nedotažené zadání review nepoloží, ale nezmizí.** V souboru zůstane u každého issue věta,
+   která říká **proč** ho tam není — jinak by „issue nic neříká“ vypadalo stejně jako „text se
+   nestáhl“ —, a v tabu `Průběh` je u dráhy odznak `zadání není celé` s důvodem v nápovědě.
+   Rozhoduje se přitom podle stavu MCP serveru v `init` eventu session, **ne podle toho, co model
+   napsal**: dva ze tří tvarů selhání skončí nulovým kódem a hlásí se jako úspěch.
 5. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
    Strukturovaná data, ne parsování textu.
 6. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
@@ -1638,6 +1651,7 @@ App/                      zdrojáky aplikace — target PRism
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR, brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy;
                           zadání PR pro reviewera vedle pracovního stromu (#120)
+                          a dotažení textu issue vlastní krátkou session (#345)
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno (stav v AppStore.swift, metody v AppStore+*.swift);
                           ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku;

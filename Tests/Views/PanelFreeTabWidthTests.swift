@@ -325,9 +325,14 @@ struct PanelFreeTabWidthTests {
 
     /// Dráhy: jedna doběhlá, jedna spadlá (kvůli bloku s koncem logu) a jedna nespuštěná. Skládají
     /// se **tou cestou, kterou vznikají doopravdy** (`Policy.lanes` nad osami), ne vlastním initem.
+    ///
+    /// Doběhlá nese od #345 i **příznak zadání**, protože její hlavička je z celého tabu ta
+    /// nejplnější (jméno skillu, stav, odznak, `Zkopírovat resume`) — a odznak, který se vejde tam,
+    /// se vejde všude. Ostatní dráhy ho schválně nemají, ať se měří i hlavička bez něj.
     private static var lanes: [ReviewerLane] {
         var finished = ReviewerTimeline(skill: "code-review", worktree: nil)
         let clock = Date(timeIntervalSince1970: 1_000_000)
+        finished.record(.intentGap(.serverUnavailable(status: "needs-auth")), at: clock)
         finished.record(.queued, at: clock)
         finished.record(.started(sessionID: "6f1c2b7a-2c1e-4c3a-9a55-9f2b1a0c7d10"), at: clock)
         finished.record(.attemptedTool(ToolAttempt(name: "Read", detail: "libs/service-client/src/ServiceClient.php")), at: clock)

@@ -62,6 +62,17 @@ struct ReviewerLaneView: View {
                     .lineLimit(1)
                     .help("Tenhle skill není v nastavené sadě pro tohle repo — dráha je ze zaznamenaného běhu, ne z dnešního nastavení.")
             }
+            // Zadání, které nedorazilo celé (#345). Musí to být poznat **na dráze**, ne až
+            // v souboru: review bez textu issue vypadá v okně stejně jako to s ním, a nález,
+            // který se váže k zadání, se tak nemá čím nestat. Popisek je krátký schválně —
+            // který díl chyběl, řekne nápověda; hlavička nese už jméno, stav a cenu.
+            if let gap = lane.intentGap {
+                Label(ReviewerLaneText.intentGapLabel, systemImage: "doc.badge.ellipsis")
+                    .font(.caption)
+                    .foregroundStyle(Palette.stale)
+                    .lineLimit(1)
+                    .help(ReviewerLaneText.intentGap(gap))
+            }
             // Hlavička tvrdí, který skill běžel. Když si session načetla jiný, musí to říct —
             // jinak je to text, co tvrdí víc, než data unesou.
             if let loaded = lane.loadedSkill {
@@ -326,6 +337,10 @@ struct TimelineEntryRow: View {
         case .started: "session naběhla"
         case .tool(let tool): tool.name
         case .findings(let count): Plural.czech(count, one: "nález", few: "nálezy", many: "nálezů")
+        // Ve výpisu událostí stojí i **důvod** (#345), na rozdíl od odznaku v hlavičce: tady je
+        // na řádek jedna věc, takže se místem šetřit nemusí.
+        case .intentGap(let gap):
+            "\(ReviewerLaneText.intentGapLabel) — \(ReviewerLaneText.intentGapReason(gap))"
         case .finished(let outcome): finishedTitle(outcome)
         }
     }
@@ -345,6 +360,7 @@ struct TimelineEntryRow: View {
         case .started: "play.circle"
         case .tool(let tool): Self.toolSymbol(tool.name)
         case .findings: "text.magnifyingglass"
+        case .intentGap: "doc.badge.ellipsis"
         case .finished(let outcome): outcome == .finished ? "checkmark.circle" : "exclamationmark.triangle"
         }
     }
@@ -371,6 +387,8 @@ struct TimelineEntryRow: View {
         switch entry.kind {
         case .finished(let outcome): outcome == .finished ? Palette.ok : Palette.stale
         case .findings: Palette.accent
+        // `stale`, ne `crit`: zadání, které nedorazilo celé, review nepoložilo — jen ho zúžilo.
+        case .intentGap: Palette.stale
         default: .secondary
         }
     }

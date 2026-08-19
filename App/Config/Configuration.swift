@@ -99,6 +99,24 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     var cacheBudgetMegabytes: Int
     /// `nil` = model, který si `claude` zvolí sám.
     var model: String?
+    /// Jméno MCP nástroje, kterým se čte **text issue** do zadání pro reviewera (#345) — na tomhle
+    /// stroji `mcp__claude_ai_Linear__get_issue`.
+    ///
+    /// **`nil` (i prázdno) znamená „netahat“**, ne prázdný pokus: session, která nemá co zavolat,
+    /// stojí boot (~$0,2) a nevrátí nic. Vyhodnocuje to `Policy.issueTextTool(from:)`.
+    ///
+    /// **Do konfigurace to patří proto, že je to fakt o prostředí, ne volba chování.** Jméno
+    /// závisí na tom, jak si uživatel pojmenoval MCP server, takže konstanta v kódu by byla
+    /// tvrzení o cizím stroji. Přepínač „tahat / netahat“ tady naopak **není** — o ceně se
+    /// rozhodlo jednou (tahá se vždycky, i v automatu) a knoflík, který si nikdo nenastaví, je
+    /// jen řádek v okně.
+    ///
+    /// **V okně nastavení pole není**, jako `ownLogins`: je to jednorázová věc pro toho, kdo má
+    /// tracker za MCP serverem, a nová sekce nastavení znamená změnu vzhledu, tedy mockup
+    /// a schválení.
+    ///
+    /// **Globálně, ne per repo**: který nástroj čte issues, z repozitáře neplyne.
+    var issueTextTool: String?
     /// Co se má hlásit notifikací (#86). Jen globálně — viz `NotificationSettings`.
     var notifications: NotificationSettings
 
@@ -120,6 +138,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         autoRunsPerDay: Int = 20,
         cacheBudgetMegabytes: Int,
         model: String?,
+        issueTextTool: String? = nil,
         notifications: NotificationSettings = NotificationSettings()
     ) {
         self.sources = sources
@@ -139,6 +158,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.autoRunsPerDay = autoRunsPerDay
         self.cacheBudgetMegabytes = cacheBudgetMegabytes
         self.model = model
+        self.issueTextTool = issueTextTool
         self.notifications = notifications
     }
 
@@ -214,6 +234,11 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         cacheBudgetMegabytes = try container.decodeIfPresent(Int.self, forKey: .cacheBudgetMegabytes)
             ?? standard.cacheBudgetMegabytes
         model = try container.decodeIfPresent(String.self, forKey: .model)
+        // Jako `model`, a se stejným odůvodněním: chybějící klíč je „netahat“, kdežto hodnota
+        // **jiného typu položí čtení** (`try`, ne `try?`). Tiše zahozený překlep by znamenal, že
+        // se text issue nikdy nedotáhne a v okně bude stát „nástroj není nastavený“ nad souborem,
+        // ve kterém nastavený je.
+        issueTextTool = try container.decodeIfPresent(String.self, forKey: .issueTextTool)
         // Chybějící klíč = výchozí (všechno zapnuté). Rozbitý obsah řeší `NotificationSettings`
         // sám, po jednotlivých přepínačích — celá sekce se kvůli jednomu překlepu zahazovat
         // nemá, jinak by se s ním vypnulo i to, co je napsané správně.

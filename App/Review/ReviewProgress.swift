@@ -13,6 +13,15 @@ enum ReviewProgress: Sendable, Equatable {
     case attemptedTool(ToolAttempt)
     /// Kolik nálezů zatím dorazilo.
     case findings(count: Int)
+    /// Zadání pro reviewera **není celé** (#345) — a proč.
+    ///
+    /// Hlásí se **na začátku běhu, ne po jeho konci**, a je to podmínka: zadání se připravuje před
+    /// spuštěním session, takže v tu chvíli je odpověď hotová a nemá cenu s ní čekat. Pozdní
+    /// událost by navíc mohla dorazit do osy, kterou už nikdo nečte.
+    ///
+    /// Hlásí se **za každého revieweera**, i když je to fakt o celém review: příznak žije na dráze
+    /// (`ReviewerLane`), takže dráha bez události by o sobě tvrdila, že zadání dostala celé.
+    case intentGap(IntentGap)
 }
 
 /// Kam běh hlásí průběh.

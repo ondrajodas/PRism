@@ -1,7 +1,8 @@
 # `claude` CLI — co je ověřené
 
 **Ověřeno:** 2026-08-01 · **verze:** `2.1.220 (Claude Code)` · **stroj:** macOS 26 ·
-**schéma `ReportFindings` doměřeno** 2026-08-17 na `2.1.233`
+**schéma `ReportFindings` doměřeno** 2026-08-17 na `2.1.233` ·
+**dotažení textu issue změřeno** 2026-08-17 na `2.1.233` a ověřeno spuštěním 2026-08-19 na `2.1.236`
 
 Spike k issue #12, doplněno a **opraveno** u #17. Specifikace měla flagy `claude` CLI psané
 z pracovní znalosti; tenhle dokument je nahrazuje tím, co skutečně dělá nainstalované CLI.
@@ -249,6 +250,59 @@ neplatí a nezávisí na tom, jak se model zachová:
   na to nemá cenu: `findings` se stejně parsují z cizího JSONu a nález, ze kterého se nedá složit
   `ReportedFinding`, musí být vidět jako počet, ne zmizet.
 
+## Dotažení textu issue (#345)
+
+Zadání pro reviewera si text Linear issue tahá **vlastní krátkou session**. Vypadá takhle
+(`IntentTextCommand.arguments`):
+
+```bash
+claude -p "<prompt s identifikátory a se jménem nástroje>" \
+    --output-format stream-json \
+    --verbose \
+    --allowedTools "ToolSearch,mcp__claude_ai_Linear__get_issue" \
+    --disallowedTools "Bash(gh:*),Bash(git push:*)" \
+    --max-turns 6 \
+    < /dev/null
+```
+
+Čtyři věci, které se **musely změřit** a nedaly se odvodit z toho, jak funguje překlad nálezů:
+
+- **Linear MCP v headless session je.** `claude -p` vidí všech 38 claude.ai konektorů
+  a `claude.ai Linear` hlásí v `init` eventu `status: "connected"`. Čtecí nástroj se jmenuje
+  **`mcp__claude_ai_Linear__get_issue`** — ale je to jméno **serveru u tohohle uživatele**, ne
+  kontrakt, takže patří do konfigurace (`GlobalConfig.issueTextTool`), ne do konstanty.
+- **Bez `ToolSearch` to nefunguje.** Na stroji je v session **165 nástrojů**, takže CLI odkládá
+  schémata: model musí napřed zavolat `ToolSearch` (`select:mcp__claude_ai_Linear__get_issue`)
+  a **teprve pak** MCP nástroj. Doloženo ve všech bězích. Proto `--allowedTools ""` z překladu
+  nefunguje a proto `--max-turns` nesmí být 1–2 (dotažení je ≥ 3 turny / 2 tool cally).
+- **Cena.** Jedno dotažení: **$0,18 (sonnet) až $0,31 (opus-5), ~20 s**. Rozhoduje **boot session**
+  (85–121 tis. cache-read + ~21 tis. cache-create: systémový prompt, 165 jmen nástrojů,
+  `SessionStart` hook), ne text issue — takže víc issues v jednom PR je skoro zdarma, ale **každé
+  review platí boot znovu**. Ověřovací běh u #345 (jedno issue, 2 410 znaků odpovědi): `num_turns: 3`,
+  `$0,3099`, 21,4 s.
+- **Tři tvary selhání, a dva vypadají jako úspěch:**
+
+  | Případ | Exit | `result` event | Signál |
+  |---|---|---|---|
+  | server chybí / není přihlášený | **0** | `success`, `is_error: false`, `permission_denials: []` | jen **próza** modelu + `init.mcp_servers = []` |
+  | server v konfiguraci, ale nejde spustit | **1** | `error_max_turns`, **klíč `result` v eventu vůbec není** | `init.mcp_servers[].status = "failed"`, na stderr nic |
+  | nástroj není povolený | 0 | `success` | `permission_denials: ["…list_issues"]`, `tool_result` s `is_error` |
+
+  **Nepřihlášený server je k nerozeznání od chybějícího** — servery se `status: "needs-auth"`
+  nemají v `tools` ani jednu položku. Jediný **strojově čitelný** signál je tedy
+  `init.mcp_servers[].status` (`connected` / `needs-auth` / `failed` / `pending`), a ten se dá
+  přečíst **jedině streamem**; `TranslationCommand` proti tomu jede bufferovaně. Rozhodnout
+  „dotáhlo se / nedotáhlo“ **podle prózy modelu je hádání**.
+
+**Seznam nástrojů v `init` eventu není obraz oprávnění** — potvrzeno i tady: jsou v něm i všechny
+**zápisové** Linear nástroje, přesto bylo povolené jen `get_issue` a nepovolený čtecí `list_issues`
+skončil v `permission_denials`.
+
+**Neověřená mezera z průzkumu:** skutečný pokus o **zápisový** Linear nástroj se nedělal (mantinel
+„v Linearu nic neměnit“), takže důkaz je nepřímý — přes odmítnutý čtecí `list_issues`. Zlevnění
+bootu (`--strict-mcp-config` jen pro Linear) se neměřilo, protože by to znamenalo šťourat do
+uloženého OAuth tokenu.
+
 ## Fixtures
 
 | Soubor | Co dokazuje |
@@ -257,6 +311,15 @@ neplatí a nezávisí na tom, jak se model zachová:
 | `review-clean.jsonl` | Běh bez nálezů: `ReportFindings` s prázdným seznamem |
 | `review-killed.jsonl` | Běh zabitý uprostřed — **chybí `result` event** |
 | `review-denied-write.jsonl` | Odmítnutý `Write`: `is_error` v `tool_result` i `permission_denials` v `result` |
+| `intent-server-missing.jsonl` | #345: MCP server v session **není** — `mcp_servers: []`, přitom `exit 0` a `success` |
+| `intent-server-failed.jsonl` | #345: `mcp_servers[].status = "failed"`, `error_max_turns` a **`result` event bez klíče `result`** |
+| `intent-tool-denied.jsonl` | #345: nepovolený čtecí nástroj — `success` a `permission_denials` s jednou položkou |
+
+**Úspěšné dotažení textu issue fixture nemá, a je to schválně:** odpověď nese celý text skutečného
+issue z firemního trackeru a firemní obsah do fixtures nepatří. Tvar eventů kolem něj je pokrytý
+těmi třemi selháními (tentýž `init`, tentýž `result`), takže inline v testu zbývá jen to, co je
+**náš vlastní formát** — značky v odpovědi. Rozbor nad skutečnou úspěšnou odpovědí se ověřil
+spuštěním (dočasný test nad souborem ve scratchpadu, 2 359 znaků textu, `gap == nil`).
 
 Issue #12 žádalo „kompletní surové streamy“ — redakce hook eventů je vědomá odchylka a týká
 se jen obsahu, který do repa nepatří. Všechno, co parser potřebuje, je v nich tak, jak to
