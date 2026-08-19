@@ -89,6 +89,7 @@ struct DiffView: View {
     static let contentSpace = "prism-diff-content"
 
     var body: some View {
+        let _ = RenderDiagnostics.pass(Self.self)
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 0) {
                 toolbar

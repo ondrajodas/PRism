@@ -60,6 +60,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         SystemNotificationCenter.prepare()
         RunningSessions.shared.reapOrphans()
+        // Diagnostika kreslení (#361). Vypnutá nedělá nic — `start()` se hned vrátí, protože
+        // proměnná v prostředí není. Až **za** úklidem sirotků: kdyby se zapisování rozbilo,
+        // nemá to zdržet to, na čem něco stojí.
+        RenderDiagnostics.start()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

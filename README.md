@@ -1476,6 +1476,25 @@ Skript odmítne přepsat bundle, který se hlásí cizím identifikátorem, a kd
 nepovede, radši nespustí nic — spuštěná stará verze z `/Applications` je přesně ta past
 „koukám na starý build“.
 
+### Diagnostika kreslení (#361)
+
+Když okno začne spálit jádro na nečinnosti, `sample` ukáže, **kde** hlavní vlákno je, ale ne
+**kolikrát** se co přeložilo. Na to je diagnostika, která se zapíná jedním přepínačem:
+
+```bash
+./bin/run.sh --diagnose
+```
+
+Aplikace pak zapisuje do `~/Library/Application Support/PRism/diagnostics.log` — jeden řádek za
+sekundu s časem, počtem kol runloopu, CPU hlavního vlákna a počtem průchodů `body` po typech
+views. Soubor se dá poslat v příloze; ticho v něm znamená, že aplikace nic nedělala.
+
+**Vypnutá nestojí nic** (jedna podmínka na začátku `body`) a **vypne se sama**: příznak umře
+s procesem, takže další `./bin/run.sh` bez `--diagnose` je zpátky v normálním provozu. Že je
+zapnutá, je vidět z banneru skriptu i z hlavičky sezení v souboru. Proč to není přepínač
+v nastavení a co si diagnostika nesmí dovolit, je v
+[`docs/architektura.md`](docs/architektura.md), sekce *Diagnostika kreslení*.
+
 ### Paralelní vývoj — sloty
 
 Vývoj se zdržuje čekáním, takže se dá pracovat ve víc oknech naráz. Překáží tomu jediná věc:
@@ -1644,7 +1663,8 @@ App/                      zdrojáky aplikace — target PRism
                           HandoffLedger — razítka předání zadání agentovi (#334);
                           ActivityNoticeLedger — o čem už se u vlastního PR hlásilo (#335)
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
-  Support/                sdílené drobnosti bez příslušnosti k modulu
+  Support/                sdílené drobnosti bez příslušnosti k modulu;
+                          diagnostika kreslení za přepínačem PRISM_DIAGNOSE (#361)
   Views/                  SwiftUI obrazovky
     ReleaseNotes/         okno s novinkami — historie vydání a release notes vybrané verze
     Settings/             okno nastavení (⌘,) — sedm stránek v boční navigaci (#177)
@@ -1671,7 +1691,7 @@ Tests/                    unit testy — target PRismTests
   Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů
   Fixtures/statuspage/    skutečné components.json ze status pages (a jeden s dopsaným incidentem)
   Fixtures/transcript/    skutečné transcripty claude — dotažení nálezů z přerušeného běhu
-bin/run.sh                build + spuštění jedním příkazem
+bin/run.sh                build + spuštění jedním příkazem (--diagnose zapne diagnostiku kreslení)
 bin/worktree.sh           pracovní strom se slotem — paralelní vývoj vedle běžící aplikace
 bin/slot-config.sh        očištěná konfigurace do cache slotu (jediné místo, kde ta očista je)
 bin/copilot-review.sh     vyžádání Copilot review na PR
