@@ -94,6 +94,14 @@ struct CacheLayout: Sendable, Equatable {
     /// (`(pid, startedAt)`), kdežto přerušené běhy `ReviewRunKey`.
     var sessionsFile: URL { root.appending(path: "sessions.json") }
 
+    /// Záznam diagnostiky kreslení (#361) — řádkový soubor, který se dá poslat, když okno začne
+    /// hořet. Zakládá se **jedině se zapnutou diagnostikou**, viz `RenderDiagnostics`.
+    ///
+    /// V kořeni cache, ne pod `reviews/`: netýká se žádného PR ani commitu, je to záznam o té
+    /// **instanci aplikace**, která běžela. A `.log`, ne `.json`: čte ho člověk a posílá se
+    /// v příloze, takže na řádku musí být všechno, ne zanořený objekt.
+    var diagnosticsFile: URL { root.appending(path: "diagnostics.log") }
+
     /// Výsledky review jednoho PR na jednom commitu: `reviews/<owner>/<repo>/<pr>-<sha>.json`.
     ///
     /// Zanořeno pod repo ze stejného důvodu jako stromy: ploché jméno se nedá filtrovat

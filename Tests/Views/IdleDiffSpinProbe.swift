@@ -124,6 +124,47 @@ struct IdleDiffSpinProbe {
         }
     }
 
+    /// **Zůstává `DiffView` v hierarchii, když je vybraná Konverzace?** (#361)
+    ///
+    /// Ptá se to proto, že kdyby zůstával, běžely by dál jeho `onGeometryChange` nad **pojmenovaným**
+    /// souřadnicovým prostorem (`DiffView.contentSpace`) a `DragGesture` v něm — a to byla nejsilnější
+    /// hypotéza o pohonu kola. Odpověď se **nedá odbýt dojmem z kódu** (`switch tab` v `content`
+    /// vypadá jako výběr jedné větve, ale to o životnosti nic netvrdí), takže se měří ze dvou stran:
+    ///
+    /// - **AppKitové view** z diffu (`DiffTextView`, `DiffPairBlockContainer`) v okně, tedy jestli
+    ///   se representable vůbec vyrobil;
+    /// - **průchody tělem** `DiffView` a `DiffRowView` v úseku, kdy se konverzací projíždí — kdyby
+    ///   podstrom diffu žil, přerovnávání by ho zašpinilo s sebou.
+    ///
+    /// Scéna je **konverzace nad PR, které má načtený diff**, protože to je stav, v jakém uživatel
+    /// doopravdy je: prohlíží si diff a pak přepne na osu.
+    @Test("Zůstává DiffView v hierarchii pod Konverzací")
+    func diffLivenessUnderConversation() async throws {
+        let (store, cache) = try await prepared(big: true, full: true)
+        defer { _ = cache }
+        store.setDiffLayout(.split)
+        store.setDetailTab(.filesChanged, for: pr)
+        let window = show(scene: ContentView(store: store))
+        defer { window.orderOut(nil) }
+        _ = spinMainRunLoop(seconds: 2)
+        let root = try #require(window.contentView)
+        print("SONDA diff vybraný: \(Self.blocks(in: root)) bloků kódu, \(Self.descendants(of: root)) prvků")
+
+        // Přepnutí na osu — a diff **zůstává načtený ve storu**, takže kdyby si ho SwiftUI držel
+        // živý, měl by z čeho.
+        store.setDetailTab(.conversation, for: pr)
+        _ = spinMainRunLoop(seconds: 2)
+        print("SONDA konverzace vybraná: \(Self.blocks(in: root)) bloků kódu, \(Self.descendants(of: root)) prvků")
+        #expect(store.diffState(for: pr) != nil)
+
+        let diagnostics = RenderDiagnostics(log: DiagnosticsLog(url: cache.url.appending(path: "d.log")))
+        RenderDiagnostics.current = diagnostics
+        defer { RenderDiagnostics.current = nil }
+        let scroller = try #require(Self.tallestScroller(in: root))
+        _ = WheelGesture.scroll(over: scroller, in: window, steps: 30, step: 40)
+        print("MĚŘENÍ průchody tělem při projíždění osy nad načteným diffem: \(Self.passes(diagnostics))")
+    }
+
     /// **Projíždění kolečkem** — a rozhodující číslo jsou ty úseky **po** gestu (#361).
     ///
     /// Cena projíždění se dá utratit, kolo ne: ztuhlá instance hořela šest hodin po tom, co od
@@ -132,6 +173,32 @@ struct IdleDiffSpinProbe {
     @Test("Projíždění konverzace kolečkem")
     func wheelConversation() async throws {
         try await measureWheel("konverzace", tab: .conversation)
+    }
+
+    /// Dlouhá osa nad PR, které má **načtený diff** — tedy scénář ze ztuhlé aplikace. Bez tohohle
+    /// řádku by se z `wheelLongConversation` nedalo poznat, jestli na tom, že si člověk předtím
+    /// prohlížel diff, něco závisí.
+    @Test("Projíždění dlouhé osy nad načteným diffem")
+    func wheelLongConversationOverDiff() async throws {
+        try await measureWheel("dlouhá osa nad diffem", tab: .conversation, comments: 300, big: true)
+    }
+
+    /// **Scénář na ablaci** (#361): projet osu celou, ne dva a půl tisíce bodů z čtyřiceti tisíc.
+    ///
+    /// Existuje proto, že šedesát kroků po čtyřiceti bodech je na porovnávání variant **málo**:
+    /// zmateralizuje se 17 řádků a celé gesto stojí 0,14 s, takže se v tom rozdíl mezi „s baseline
+    /// zarovnáním“ a „bez něj“ utopí. Změřeno — čtyři varianty (včetně té úplně bez markdownu) vyšly
+    /// 0,14 / 0,14 / 0,14 / 0,12 s, tedy na hranici šumu. Tady se projede **celý** obsah, takže se
+    /// každý uzel osy jednou umístí a rozdíl má z čeho vyjít.
+    @Test("Projíždění celé osy kolečkem (na ablaci)")
+    func wheelWholeConversation() async throws {
+        try await measureWheel(
+            "celá osa",
+            tab: .conversation,
+            comments: 300,
+            steps: 300,
+            step: 140
+        )
     }
 
     /// Totéž nad **dlouhou osou s různě vysokými uzly** — tedy nad tím, co v okně doopravdy je.
@@ -175,8 +242,15 @@ struct IdleDiffSpinProbe {
     /// Měří se tři věci, protože jedna bez druhých nic neznamená: nečinnost před gestem (okno
     /// nehořelo už předtím), cena gesta (gesto se doopravdy odehrálo) a nečinnost po něm
     /// (zůstalo po gestu kolo). Usazení po posunu odezní za jeden úsek, kolo ne — proto úseky.
-    private func measureWheel(_ name: String, tab: PullRequestTab, comments: Int = 0) async throws {
-        let (store, cache) = try await prepared(big: tab == .filesChanged, full: true)
+    private func measureWheel(
+        _ name: String,
+        tab: PullRequestTab,
+        comments: Int = 0,
+        big: Bool? = nil,
+        steps: Int = 60,
+        step: Double = 40
+    ) async throws {
+        let (store, cache) = try await prepared(big: big ?? (tab == .filesChanged), full: true)
         defer { _ = cache }
         if comments > 0 {
             // **Razítko musí být to z fixture PR**: detail si při zobrazení konverzaci natáhne
@@ -186,6 +260,10 @@ struct IdleDiffSpinProbe {
                 Self.synthetic(comments: comments),
                 updatedAt: Self.summary.updatedAt
             )
+            // **Složení fixture se vypisuje**, protože na něm celý ablační scénář stojí: bez
+            // odrážek a bez víc odstavců by `MarkdownText` baseline `HStack` (`item(marker:…)`)
+            // vůbec nevyrobil a měřilo by se něco jiného, než co se hledá (#361).
+            print("SONDA \(name): osa má \(comments) komentářů, \(Self.shapes(of: comments))")
         }
         store.setDetailTab(tab, for: pr)
         store.setDiffLayout(.unified)
@@ -206,21 +284,53 @@ struct IdleDiffSpinProbe {
             store.overview(for: pr).count,
             scroller.documentView?.frame.height ?? 0
         ))
+        print("SONDA \(name): bloků kódu v okně \(Self.blocks(in: root))")
         let idle = spinMainRunLoop(seconds: 3)
         print(String(format: "MĚŘENÍ %@ před gestem: %.2f %% CPU hlavního vlákna", name, idle / 3 * 100))
+        // **Průchody tělem se počítají jen v tomhle úseku** a do vlastní instance diagnostiky, ne
+        // do té z aplikace (#361): globální `shared` píše do skutečné cache a testovací host má
+        // `CFBundleName` hlavní instance, takže by sonda zapisovala do souboru toho PRismu, který
+        // se používá.
+        let diagnostics = RenderDiagnostics(log: DiagnosticsLog(url: cache.url.appending(path: "d.log")))
+        RenderDiagnostics.current = diagnostics
+        defer { RenderDiagnostics.current = nil }
         let started = mainThreadCPUSeconds()
-        let landed = WheelGesture.scroll(over: scroller, in: window, steps: 60, step: 40)
+        let landed = WheelGesture.scroll(over: scroller, in: window, steps: steps, step: step)
         let during = mainThreadCPUSeconds() - started
         print(String(
-            format: "MĚŘENÍ %@ kolečkem: %.2f s CPU hlavního vlákna, 60 kroků po 40 pt (dojelo na %.0f)",
+            format: "MĚŘENÍ %@ kolečkem: %.2f s CPU hlavního vlákna, %d kroků po %.0f pt (dojelo na %.0f)",
             name,
             during,
+            steps,
+            step,
             landed
         ))
+        print("MĚŘENÍ \(name) průchody tělem při gestu: \(Self.passes(diagnostics))")
         for slice in 1...3 {
             let cpu = spinMainRunLoop(seconds: 3)
             print(String(format: "MĚŘENÍ %@ po gestu, úsek %d: %.2f %% CPU hlavního vlákna", name, slice, cpu / 3 * 100))
+            print("MĚŘENÍ \(name) průchody tělem po gestu, úsek \(slice): \(Self.passes(diagnostics))")
         }
+    }
+
+    /// Kolik čeho v syntetické ose je. Pět tvarů po `index % 5`, viz `syntheticBody(_:)`.
+    private static func shapes(of comments: Int) -> String {
+        let names = ["věta", "6 odstavců", "blok kódu", "4 odrážky", "2 odstavce s odkazem"]
+        return names.enumerated()
+            .map { index, label in "\(label): \((0..<comments).count { $0 % 5 == index })" }
+            .joined(separator: ", ")
+    }
+
+    /// Průchody tělem od nejčastějšího, jako je píše diagnostika do souboru — a **nuluje** je,
+    /// aby další úsek popisoval jen sebe.
+    private static func passes(_ diagnostics: RenderDiagnostics) -> String {
+        let counts = diagnostics.snapshot()
+        diagnostics.reset()
+        guard !counts.isEmpty else { return "žádné" }
+        return counts
+            .sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
     }
 
     /// Cena **projíždění**, ne nečinnosti — a je to ten scénář, na kterém aplikace ztuhla

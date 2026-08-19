@@ -3060,6 +3060,39 @@ položek, plus tahle oprava) — na **tutéž adresu**, protože dva návrhy jso
 Pravidlo „jedna úprava, jeden commit, jedno publikování“ se tím neruší, jen se splácí dluh po
 dvou dávkách, kde se to nestalo.
 
+### #361 — třetí kolo: `explicitAlignment` a `DiffView` vyloučené, přibyla diagnostika do živého okna (otevřené)
+
+**Kolo z #361 se nepodařilo vyrobit ani potřetí, takže issue zůstává otevřené.** Zbyly z toho dvě
+uzavřené otázky a jeden nástroj.
+
+**`DiffView` pod záložkou `Konverzace` v hierarchii nezůstává** — a tím padá nejsilnější zbylá
+hypotéza (že by v ose běžely dál `onGeometryChange` nad pojmenovaným prostorem `DiffView.contentSpace`
+a `DragGesture` v něm). Změřeno ze dvou stran nad PR, které **má načtený diff**: 9 bloků kódu v okně
+s vybraným diffem proti **0** s vybranou konverzací, a v úseku projíždění osy **0 průchodů tělem**
+`DiffView` i `DiffRowView`. Sedí to na vzorky ztuhlé aplikace, ve kterých se `DiffView` ani
+`contentSpace` neobjeví **ani jednou**.
+
+**Ablace na `explicitAlignment` číslo nesundala.** Baseline zarovnání v odrážkách markdownu vyšlo
+1,37 s proti 1,44 s (v šumu) a `.background(alignment: .topLeading)` v uzlu osy — tedy právě ten
+`SecondaryLayerGeometryQuery`, který v profilu drží 449 z 3 585 vzorků — 1,42 s. Markdown celý ubere
+18 %, ale odebere se tím veškerý obsah uzlu, takže to není srovnání téhož. **Žádná varianta po gestu
+nehoří** (0,00 %), takže je `explicitAlignment` cena uvnitř cizího kola, ne to kolo. `SinceLastVisitView`
+se neměřilo, protože **v ose vůbec není** (sedí v `Přehledu`). Čísla, včetně toho, že šedesát kroků
+po čtyřiceti bodech je na ablaci málo, jsou v [`testovani.md`](testovani.md).
+
+**Nástroj: diagnostika kreslení za `PRISM_DIAGNOSE=1`** (`./bin/run.sh --diagnose`). Dokud se kolo
+nedá vyrobit v testu, je jediným zdrojem pravdy skutečné okno — a `sample` z něj řekne, **kde** hlavní
+vlákno je, ne **kolikrát** se co přeložilo. Aplikace proto umí zapsat řádek za sekundu do
+`<cache>/diagnostics.log`: počet kol runloopu, CPU hlavního vlákna a průchody `body` po typech views.
+Strop 8 MB platí na **soubor**, ne na sezení, a když se do něj nedá zapsat, diagnostika se
+**nezapne a řekne to** (obojí nález Copilota na #386; ověřeno vloženou regresí).
+Vypnutá stojí načtení jednoho statického `Optional`u, počitadlo **není v observable stavu** (#252)
+a nic si **neplánuje kolo** (#350) — řádky vypisuje observer runloopu, takže si diagnostika nevyžádá
+ani jedno probuzení navíc. Přepínač v nastavení se **zamítl**: byla by to změna vzhledu se schvalovací
+bránou, a hlavně by se dal zapomenout — proměnná prostředí umře s procesem, takže se diagnostika
+vypne dalším `./bin/run.sh` sama. Ověřeno na běžící `PRism-a`; podrobnosti a co si měřidlo nesmí
+dovolit jsou v [`architektura.md`](architektura.md), sekce *Diagnostika kreslení*.
+
 ### M11 — Průběh běhu (milník #13)
 
 Čtyři issues, které sahají do téhož — `ReviewProgress`, `ReviewerTimeline` a stav průběhu

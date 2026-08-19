@@ -23,6 +23,7 @@ struct MarkdownText: View {
     var size: Double = 12.5
 
     var body: some View {
+        let _ = RenderDiagnostics.pass(Self.self)
         MarkdownBlocksView(blocks: MarkdownRenderCache.shared.blocks(of: text), size: size)
     }
 }

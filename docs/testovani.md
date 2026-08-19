@@ -1077,6 +1077,28 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   i s tím, co je pod tím. Odtud sto znaků v `Policy.notificationFindingLimit`. Zadání #200
   přitom počítalo s dvouřádkovým bannerem — je to zrovna ten případ, kdy odhad délky vyjde
   jinak než měření.
+- **Diagnostika kreslení (#361)** — dvě vrstvy, a **cennější jsou ty negativní případy**.
+  Skládání řádku je čistá funkce (`Policy.diagnosticLine`), takže se testuje literálem: že
+  **nečinnost nezapíše nic** (bez kola a bez průchodů `nil`), že kolo bez jediného průchodu tělem
+  řádek **dostane** (runloop se probouzí a nic se nekreslí — to je informace), řazení podle počtu
+  a při shodě podle jména (bez toho by se dva soubory nedaly srovnat) a hlavička s jménem bundlu
+  a PIDem. Pásmo času se do funkce **předává**, aby šel stamp napsat literálem, ne aby test
+  závisel na tom, jak je stroj nastavený.
+
+  Nad tím sběr sám: že **vypnutá diagnostika nezakládá ani prázdný soubor** (jinak by se z cache
+  nedalo poznat, jestli sezení běželo se zapnutou), že se jméno typu skládá reflexí **jen u prvního
+  průchodu** (v hořícím okně jsou to tisíce volání za sekundu, takže by měřidlo přispívalo do toho,
+  co měří — ověřeno počitadlem v `@autoclosure`), že se řádek zapíše až po sekundě a počitadla se
+  tím vynulují, že se **vyčerpaný strop napíše do souboru** a další řádky se zahodí, a že druhé
+  sezení **přípisuje**.
+
+  Sedmý případ přibyl z Copilot review na #386 a je z nejcennější třídy: **nové sezení nad plným
+  souborem nezapíše nic** — ani hlavičku, ani druhý limitní řádek —, protože strop platí na
+  **soubor**, ne na sezení. Ověřeno **vloženou regresí**: s počitadlem od nuly (`written` bez seedu
+  z velikosti souboru) spadnou dvě expectations ze tří, na tom, že druhé sezení hlavičku zapsalo
+  a soubor se změnil. Co se z testů poznat nedá, je chování observeru runloopu v aplikaci — ten
+  se pouští jedině s `PRISM_DIAGNOSE=1` a v testovacím hostu by psal do **skutečné** cache, protože
+  host má `CFBundleName` hlavní instance.
 - **`AppStore` — pohled na diff** — že se bez odchylky bere hodnota z nastavení, že ji přepnutí
   v liště přebije, že se změna nastavení projeví **bez restartu** a že odchylka **shodná**
   s nastavením přežije jeho změnu. Poslední dva potřebují skutečný `ConfigStore` nad dočasnou
@@ -4049,6 +4071,74 @@ Příští záchvat se proto vzorkuje **dřív, než se aplikace zavře** (`samp
 u toho **kde ležel kurzor** (`swift mouse.swift`) a v podstromu `Update.dispatchActions()` se hledá
 **jakýkoli rámec aplikace** — jeho přítomnost nebo nepřítomnost rozhoduje, jestli se hledá dál v našem
 kódu, nebo v tom, co si SwiftUI plánuje samo.
+
+### Ablace na `explicitAlignment` a životnost `DiffView` (#361)
+
+Třetí kolo hledání u #361. Vyšlo **negativně** a je to zapsané proto, aby se to nezkoušelo znovu
+od nuly.
+
+**`DiffView` pod záložkou `Konverzace` v hierarchii nezůstává.** Byla to nejsilnější zbylá
+hypotéza — kdyby zůstával, běžely by dál jeho `onGeometryChange` nad **pojmenovaným** prostorem
+(`DiffView.contentSpace`, tři místa v seznamu řádků) a `DragGesture(coordinateSpace: .named(…))`,
+což by vysvětlovalo, proč se kolo nad **čistou** konverzací nedaří vyrobit. Změřeno sondou
+`diffLivenessUnderConversation` ze dvou stran, nad PR, které **má načtený diff** (tedy ve stavu, ve
+kterém uživatel doopravdy je — prohlíží diff a pak přepne na osu):
+
+| Vybraná záložka | AppKitová view z diffu v okně | Průchody `body` při projíždění osy |
+|---|---|---|
+| Změněné soubory | **9** bloků kódu, 185 prvků | — |
+| Konverzace (diff pořád ve storu) | **0** bloků kódu, 162 prvků | `ConversationEntryView` 10, `ConversationNodeView` 10, `MarkdownText` 5, **`DiffView` 0, `DiffRowView` 0** |
+
+Ta nula v pravém sloupci je to rozhodující: v úseku, kdy se osou projíždí a líný seznam přerovnává,
+se tělo `DiffView` ani `DiffRowView` **nepřeloží ani jednou**. `switch tab` v `PullRequestDetailView.content`
+tedy podstrom diffu doopravdy zahazuje a **pojmenovaný souřadnicový prostor je z podezřelých venku**.
+Sedí to i na vzorky ze ztuhlé aplikace: řetězec `DiffView` ani `contentSpace` v nich není **ani
+jednou** (`grep -c` nad všemi čtyřmi: 0/0/0/0).
+
+**Ablace `explicitAlignment` číslo nesundala.** Postup je odebírání, ne přidávání: vzít osu se 300
+komentáři, projet ji kolečkem a odebírat po jednom. Měří se **CPU hlavního vlákna za gesto** a série
+se **střídají** (#274), protože drift sezení je větší než hledaný rozdíl:
+
+| Varianta | kolo 2 | kolo 3 | po gestu |
+|---|---|---|---|
+| beze změny | 1,46 s | 1,44 s | 0,00 % |
+| odrážky markdownu `.top` místo `.firstTextBaseline` (`MarkdownText.swift:133`) | 2,20 s¹ | **1,37 s** | 0,00 % |
+| uzel osy bez `.background(alignment: .topLeading) { line }` | 1,92 s¹ | **1,42 s** | 0,00 % |
+| markdown úplně (holý `Text` místo bloků) | 1,22 s | **1,18 s** | 0,00 % |
+
+¹ Kolo 2 bylo u dvou variant zašpiněné cizí zátěží — sonda to sama hlásí řádkem „před gestem“, který
+u té první vyšel **5,58 %** místo 0,01 %. Bez toho řádku by z čísel vyšlo, že baseline zarovnání
+projíždění **prodražuje**, a hledalo by se dál v úplně opačném směru.
+
+Co z toho plyne:
+
+- **Baseline zarovnání v odrážkách markdownu to není** (1,37 proti 1,44 s, tedy v šumu), a **není to
+  ani pozadí uzlu osy** (1,42 s) — přitom právě to pozadí je ten `SecondaryLayerGeometryQuery`
+  z profilu: `background(alignment:)` si vyžádá `ViewDimensions[.top]` a `[.leading]` na primární
+  vrstvě, což je `_HStackLayout`, a ten na to **umístí všechny své děti** (v profilu
+  `StackLayout.UnmanagedImplementation.placeChildren` → `sizeChildrenGenerally…` → vnořené
+  `_PaddingLayout`/`_FrameLayout`, 449 z 3 585 vzorků).
+- **Markdown celý ubere 18 %**, ale to není nález: odebere se tím **veškerý obsah** každého uzlu
+  a zmateralizuje se jiný počet řádků (256 proti 280), takže to není srovnání téhož.
+- **Žádná varianta po gestu nehoří** (0,00 % ve všech třech úsecích). `explicitAlignment` je tedy
+  **cena uvnitř cizího kola, ne to kolo** — potvrzuje to, co se o něm psalo u předchozího kola.
+
+**`SinceLastVisitView` v ose vůbec není** — ta varianta se proto neměřila. Sedí v `OverviewView`
+(záložka `Přehled`); značka „od minule“ **v ose** je `SinceMarker` uvnitř `ConversationView` a ta
+baseline zarovnání nemá (`HStack(spacing: 8)`). Kdo tu variantu bude chtít zkusit znovu, ať napřed
+`grep`ne, kde ten typ doopravdy žije.
+
+**Šedesát kroků po čtyřiceti bodech je na ablaci málo, a je to změřené.** V prvním kole (60 × 40 pt,
+2 400 z 43 000 bodů obsahu) vyšly všechny čtyři varianty **0,14 / 0,14 / 0,14 / 0,12 s** — tedy
+nerozlišitelně, protože se zmaterializuje 17 řádků a rozdíl se v tom utopí. Scénář na ablaci proto
+projíždí **celý** obsah (`wheelWholeConversation`, 300 × 140 pt, 280 řádků), takže se každý uzel
+jednou umístí a rozdíl má z čeho vyjít.
+
+**Nový výpis sondy: průchody `body` po typech.** `measureWheel` od #361 zapíná vlastní instanci
+`RenderDiagnostics` (ne tu z aplikace — globální `shared` píše do **skutečné** cache, protože
+testovací host má `CFBundleName` hlavní instance) a po každém úseku vypíše počitadla. Je to jediné
+číslo, ze kterého se pozná rozdíl mezi „scéna se usadila“ a „scéna se překresluje, jen levně“ —
+`0,00 % CPU` samo o sobě obojí neodliší.
 
 ### Jak změřit projíždění diffu, když se ho nedá dotknout (#252)
 
