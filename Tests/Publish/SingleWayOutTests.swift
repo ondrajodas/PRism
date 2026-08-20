@@ -5,10 +5,16 @@ import Testing
 
 /// Jediná cesta ven (tvrdá podmínka č. 1) jako **test, ne grep v hlavě** (#333).
 ///
-/// `CLAUDE.md` říká, že `grep ReviewPublishing App/` má vypsat pět souborů a tři volající. Dokud
+/// `CLAUDE.md` říká, že `grep ReviewPublishing App/` má vypsat šest souborů a čtyři volající. Dokud
 /// to byl jen grep, platilo to jen tehdy, když si na něj někdo vzpomněl — a zrovna u téhle
 /// podmínky se porušení nepozná jinak než tím, že něco odešlo. Nejcennější test je ten, který
 /// tvrdí, že se něco **nestalo**.
+///
+/// **Čísla v tvrzeních se u #392 zvedla, tvrzení samotná ne** (do té doby pět souborů a čtyři
+/// metody). Pravidlo se rozšířilo vědomě — labely a vyžádání reviewera na **vlastním** PR, důvod je
+/// u `ReviewPublishing` —, takže se přepsal ten výčet, ne jeho podoba: pořád je to **jmenovitý**
+/// seznam souborů a **jmenovitý** seznam metod, ne rozsah ani „aspoň tolik“. Rozvolnit tvrzení na
+/// nerovnost by z testu udělalo dekoraci: přibyla by sedmá cesta ven a nikdo by se o ní nedozvěděl.
 ///
 /// Čte se **zdroják, ne chování**: „odkud se dá odeslat“ je vlastnost struktury kódu, na kterou se
 /// za běhu zeptat nedá. Cesta ke zdrojákům se odvozuje z `#filePath`, jako u `Fixture`.
@@ -61,9 +67,12 @@ struct SingleWayOutTests {
         case unreadable(String)
     }
 
-    /// **Pět souborů, ani o jeden víc.** Protokol, jeho implementace a tři volající — víc míst
+    /// **Šest souborů, ani o jeden víc.** Protokol, jeho implementace a čtyři volající — víc míst
     /// znamená víc toho, co aplikace umí odeslat, a to má být vidět na jednom místě.
-    @Test("ReviewPublishing zná pět souborů")
+    ///
+    /// Všechny leží v `Publish/`, a to je druhá polovina tvrzení: nový volající **mimo** tuhle
+    /// složku by znamenal, že cesta ven vede odjinud než z jednoho místa.
+    @Test("ReviewPublishing zná šest souborů")
     func namesEveryWayOut() throws {
         let using = try swiftFiles()
             .filter { $0.code.contains("ReviewPublishing") }
@@ -73,16 +82,19 @@ struct SingleWayOutTests {
         #expect(using == [
             "Publish/CommentSubmission.swift",
             "Publish/GhReviewPublisher.swift",
+            "Publish/MetadataSubmission.swift",
             "Publish/ReviewPublishing.swift",
             "Publish/ReviewSubmission.swift",
             "Publish/ThreadSubmission.swift",
         ])
+        #expect(using.allSatisfy { $0.hasPrefix("Publish/") })
     }
 
-    /// Protokol má **čtyři vyjmenované metody**. Approve mimo review, label ani zavření PR mezi
-    /// ně nepatří — a kdyby přibyla pátá, má o tom být řeč v review, ne až na GitHubu.
-    @Test("Protokol má čtyři metody")
-    func hasFourMethods() throws {
+    /// Protokol má **šest vyjmenovaných metod** (do #392 čtyři). Approve mimo review, **merge**,
+    /// **zavření PR** ani **milník** mezi ně nepatří — a kdyby přibyla sedmá, má o tom být řeč
+    /// v review, ne až na GitHubu.
+    @Test("Protokol má šest metod")
+    func hasSixMethods() throws {
         guard let file = try swiftFiles().first(where: { $0.path == "Publish/ReviewPublishing.swift" }) else {
             Issue.record("soubor s protokolem se nenašel")
             return
@@ -91,9 +103,18 @@ struct SingleWayOutTests {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { $0.hasPrefix("func ") }
 
-        #expect(methods.count == 4)
-        for name in ["func submit", "func reply", "func setResolved", "func comment"] {
+        #expect(methods.count == 6)
+        for name in [
+            "func submit", "func reply", "func setResolved", "func comment",
+            "func setLabels", "func requestReviewers",
+        ] {
             #expect(methods.contains { $0.hasPrefix(name) })
+        }
+        // **Co v zákazu zůstalo.** Vyjmenované jmenovitě, ne jen počtem: sedmá metoda by počet
+        // shodila, ale přejmenovaná pátá ne — a `merge` nebo `close` v tomhle protokolu je
+        // porušení podmínky, ne rozšíření.
+        for forbidden in ["func merge", "func close", "func approve", "func setMilestone"] {
+            #expect(!methods.contains { $0.hasPrefix(forbidden) }, "\(forbidden) je cesta ven, kterou podmínka nepřipouští")
         }
     }
 

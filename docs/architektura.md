@@ -29,6 +29,11 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `RecheckStatus` | Co o nálezu řekla kontrola nových commitů (#150): verdikt (`resolved`/`still-applies`/`unclear`) a věta k němu. **Není nález** a nesmí se za něj vydávat — je to tvrzení *o* nálezu |
 | `Handoff` | Razítko předání zadání agentovi (#334): **kdy, proti jaké hlavě a identity předaných položek**. Bydlí u PR, ne u nálezů — předat se dá i zadání bez jediného nálezu |
 | `PullRequestState` | `open` / `draft` / `merged` / `closed` |
+| `PullRequestLabel` | Štítek na PR: jméno a **šestimístný hex bez `#`** (#392). Barva je **data z repozitáře, ne token palety** — může být libovolná, takže se nedá odvodit z `Palette` ani z kategorie |
+| `ReviewerAnswer` | Jak vyžádaný reviewer odpověděl: `approved` / `changesRequested` / `waiting` (#392). **Tři hodnoty, ne dvě** — prostřední je jediná, která něco blokuje |
+| `RequestedReviewer` | Kdo na PR stojí a jak odpověděl. Je to **stav, ne událost**: konverzace zná `reviewRequested`/`reviewRequestRemoved`, tedy „to se stalo“ |
+| `PullRequestMetadata` | Snímek labelů a reviewerů (#392). **Vlastní vedle `PullRequest`**, protože `fetchDetail` volá i pre-flight publisheru a `latestReviews` nese celá těla review |
+| `MetadataState` | `loading` / `loaded` / `failed` u toho snímku. Existuje kvůli jedné věci: **„labely tu nejsou“ se nesmí splést s „labely jsem nezjistil“** — podle prvního se sekce nekreslí, podle druhého se nesmí dát měnit sada, kterou aplikace nezná |
 | `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
 | `ReviewVerdict` | Návrh, co s PR udělat: `approve` / `requestChanges`. Jako jediný **není `Codable`** — neukládá se, odvozuje se z uložených nálezů |
 | `EffectiveVerdict` | Verdikt, který na draftu **platí**, a jeho původ (`suggested`/`chosen`). Taky **není `Codable`** — počítá se, viz níž |
@@ -2213,6 +2218,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Handoff.swift` | Razítko předání (#334) — `loadStoredHandoffs()` při startu, `handoff(for:)`, `handoffReport(for:)` (od #335 si volající bere **celý report**, ne jedno číslo — pilulka i text novinek se ptají téže funkce), `noteHandoff(of:)` (zapisuje **zkopírování a uložení**, ne otevření sheetu) a `freshAgentPromptSelection(for:)` pro `Sestavit i tak` (od #377 vrací i seznam, protože sheet z něj kreslí zaškrtávátka). Do paměti hned, na disk asynchronně | 78 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
 | `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
+| `AppStore+Metadata.swift` | Labely a vyžádaní reviewery (#392) — `loadMetadata(for:)` s detailem (cache podle `updatedAt`), nabídky `loadRepositoryLabels(for:)` a `loadAssignableUsers(for:)` **až na otevření** (volání `gh` navíc, které se má platit jen tehdy, kdy se nabídka otevře), a dvě akce (`toggleLabel(_:on:)`, `requestReview(from:on:)`), které si publisher **nedrží** — skládá se uvnitř `MetadataSubmission`. Po úspěchu se snímek přepíše z odpovědi GitHubu, ne dalším čtením | 191 |
 | `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
 
 Čtyři věci, na kterých to rozdělení stojí:
@@ -6113,15 +6119,90 @@ Nad odesílatelností draftu (#68) platí:
   Ověřeno na běžící aplikaci: nad draftem v nepovoleném repu `⌘⏎` neudělá nic; po povolení otevře
   potvrzení s celým payloadem a **na PR nepřibylo review** (`gh api …/reviews` má 7 před i po).
 
+### Labely a reviewery v panelu (#392)
+
+Čtyři čisté funkce a každá odpovídá na jednu otázku, kterou by jinak view rozhodovalo samo:
+
+- **`Policy.reviewers(requested:verdicts:)`** — kdo je v sekci a s jakou odpovědí. Tři pravidla:
+  **vyžádání přebíjí starší verdikt** (po pushnutí opravy je `CHANGES_REQUESTED` odpověď na kód,
+  který už tam není), **kdo jen komentoval a vyžádaný není, v sekci není** (`latestReviews` nese
+  i review bez verdiktu a přijdou i od review bota — nakreslit je jako `čeká` by tvrdilo, že se na
+  ně čeká) a **pořadí je podle odpovědi, ne podle toho, co přišlo první** (GitHub pořadí
+  `latestReviews` nezaručuje, takže by se seznam přeskládal při každém načtení). Rozhoduje
+  `SubmittedReview.isVerdict`, tedy tatáž funkce jako na ose konverzace.
+- **`Policy.reviewers(requested:keeping:)`** — totéž po vyžádání, kdy GitHub odpovědi ostatních
+  neposílá. Skládá se **tou samou funkcí**, jen se vstupem odjinud; druhé místo by se s prvním
+  rozešlo zrovna v tom pravidle o přebíjení.
+- **`Policy.labelChips(_:width:metrics:canAdd:)`** — zalomení do **nejvýš dvou řádků labelů**
+  a `+N` na zbytek. Dvě pasti, obě změřené na zákresu (#390):
+
+  1. **Ořez jménu musí nechat místo na `+N`.** Prostý „ořež na šířku řádku“ dá chip přes celý druhý
+     řádek, `+N` spadne na třetí a řádky labelů jsou tři — tedy zrovna to, co má strop zakázat.
+     Rezerva se počítá iterativně, protože šířka `+N` závisí na počtu, který se dozvíme až po
+     zabalení; roste monotónně, takže se to po pár krocích zastaví.
+  2. **Šířka chipu se počítá i s rámem a odsazením.** Mez uplatněná na obsah nechá chip přerůst;
+     v zákresu z toho byl chip 230 bodů v řádku širokém 214. Měří to `LabelChipStyle`, tedy typ,
+     který kreslí (pravidlo #236) — a hlídá to test, který srovnává **spočítanou šířku
+     s nakreslenou**. Ostatní tvrzení to nechytí, protože si berou tutéž míru.
+
+  `+ label` do stropu **nepočítá**: neustoupí nikdy, takže když na poslední řádek nevyjde, vezme si
+  vlastní.
+- **`Policy.metadataEditing(ownership:repo:scope:hasTool:)`** — tři stavy, ne boolean. Na cizím PR
+  `.absent` (akce se nekreslí **vůbec**, ne zašedle: „tady se to dělá, jen teď ne“ by byla
+  nepravda), bez povolené brány `.blocked` **s větou, na které skončí publisher** (to je stav, který
+  se mění, takže zašedlá akce s důvodem je správná podoba), jinak `.allowed`.
+- **`Policy.toggledLabels(_:on:known:)`** — nová sada po kliknutí, nebo `nil`. `nil` znamená
+  **neposílat nic** a je to ta kontrola, která drží uzavřenost množiny i tehdy, kdyby ji nabídka
+  ve view obešla. **Prázdná sada není `nil`**: sundání posledního štítku je platná akce. U reviewerů
+  drží totéž `AppStore.requestReview(from:on:)`, které pustí **jen login z nabídky**
+  (`reviewerCandidates`) — jediná kontrola ve view je kontrola, kterou příští obrazovka obejde.
+- **Prázdný login se do sekce nedostane.** Autora review může GitHub vynechat (smazaný účet)
+  a řádek bez jména se v panelu nedá odlišit od chyby kresby — a hlavně se nedá vyžádat.
+- **`Policy.pickerRank(of:query:)`, `filteredPicker(_:query:text:)` a `pickerSelection(from:step:count:)`**
+  — hledání v nabídkách `+ label` a `+ reviewer` (`App/Policy/PickerSearch.swift`).
+
+  **Pravidlo shody se dělí s paletou ⌘K** (#184): `searchRange` a `searchStartsWord` jsou tytéž
+  funkce (kvůli tomu se z `CommandPaletteSearch` zvedly na `internal`) a dělení dotazu na slova taky
+  (`paletteTokens`). Dvě jinak se chovající hledání v jednom okně je horší než sdílení — člověk si
+  zvykne, že `nalez` najde `nález`, a je jedno, do kterého pole to píše.
+
+  **Sdílí se pravidlo, ne `paletteResults`**, a je to rozhodnutí: paleta hledá nad
+  `CommandPalette.Item` (titulek, podtitulek, klíčová slova, skupina, **akce**) a má strop **šest
+  řádků na skupinu**. Nabídka reviewerů má třicet čtyři týmů a položku o jednom řetězci, takže
+  prohnat ji paletou by znamenalo vyrobit položky s vymyšlenou skupinou a akcí, na kterou se nedá
+  kliknout — víc kódu **a** dvě nová místa v paletě, která tam nemají co dělat.
+
+  Tři věci, které se u toho nemají rozbít:
+
+  - **Filtruje se podle toho, co je v řádku vidět** (`text:`). Kdyby filtr sedl na něco, co v řádku
+    není, vypadal by výsledek jako chyba.
+  - **Při shodné váze rozhoduje původní pořadí.** Swiftové `sorted` není stabilní, takže by dvě
+    položky se stejnou váhou přeskakovaly mezi stisky klávesy — tatáž past jako v paletě.
+  - **`searchStartsWord` je totální funkce.** Jako `private` funkce palety měla skrytou
+    precondition (volající se na `startIndex` ptal dřív), a jako sdílená by na něm padala na
+    `index(before:)`. Shoda na začátku textu **je** hranice slova, takže odpověď „ano“ je i věcně
+    správná; ověřeno vloženou regresí — bez té stráže test run **spadne fatálem**, ne červeným
+    tvrzením (nález Copilota).
+  - **Kurzor ořezává, necyklí.** V nabídce, která se pod rukama filtruje, je přeskok z konce na
+    začátek k nerozeznání od „šipka nic neudělala“; ořez se navíc uplatňuje i **bez pohybu**
+    (`step: 0`), protože index z předchozího dotazu může být za koncem.
+- **`Policy.findingsHeadNotice(tab:findingsHead:openCommit:hasFindings:)`** — proti kterému kódu
+  nálezy platí. Je to **tvrdá podmínka č. 5 přepsaná do věty**: v `Commitech` může vedle nálezů stát
+  jiný commit, než na kterém vznikly, takže nad seznamem je klidná věta a u rozkliknutého staršího
+  commitu **výstraha** a ztlumené karty. Hlava se bere z **uloženého záznamu**, ne z detailu PR —
+  hlava z detailu by mluvila o commitu, se kterým ty nálezy nemají nic společného. Text věty patří
+  k tomu výčtu (`czechSentence`), aby se testoval tam, kde se rozhoduje, a ne odečítáním pixelů.
+
 ## `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má šestnáct metod
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má dvacet metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu. (Do #330 tu stálo
-„čtrnáct“, ačkoli výčet v tabulce měl patnáct položek; teď je s ním číslo srovnané.)
+„čtrnáct“, ačkoli výčet v tabulce měl patnáct položek; teď je s ním číslo srovnané. Tři přidala
+#392: labely a reviewery PR a nabídky lidí a týmů k nim.)
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)` |
+| `GitHubGateway` | Protokol (dvacet metod): `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)`, `fetchMetadata(id:)`, `fetchRepositoryLabels(repo:)`, `fetchAssignableUsers(repo:)`, `fetchAssignableTeams(repo:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
@@ -6133,6 +6214,8 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 | `GhRelease` | Tvar jedné položky `GET /repos/…/releases` a převod na `Release` |
 | `GhCommit` | Tvar jedné položky `GET /repos/…/pulls/{n}/commits` a převod na `PullRequestCommit` (#316). **Skoro všechno optional**: odpověď má přes šedesát polí a bereme šest, takže chybějící pole nesmí položit seznam kvůli něčemu, co se nekreslí |
 | `PullRequestState(ghState:isDraft:)` | Mapování stavu — `gh` ho popisuje dvěma poli |
+| `GhPullRequestMetadata`, `GhLabel`, `GhReviewRequest`, `GhLatestReview`, `GhTeam` | Tvar `gh pr view --json labels,reviewRequests,latestReviews` a převod na `PullRequestMetadata` (#392). `GhReviewRequest` rozlišuje člověka od týmu **podle toho, které pole má** (`login` proti `slug`), ne podle `__typename` — z chybějícího pole se to pozná stejně a nemusí se pamatovat jméno GraphQL typu |
+| `AssignableUsersQuery`, `GhAssignableUsersResponse` | GraphQL dotaz na lidi, kteří na repo smí, a jeho odpověď (#392) |
 
 Čtyři věci, které se u toho nemají rozbít:
 
@@ -6299,6 +6382,83 @@ Konverzace (#63) jde **jedním GraphQL dotazem** přes `gh api graphql`:
   `Bot`, `Mannequin` **i** `Team`: bot vyžádá review stejně jako člověk a bez jeho fragmentu
   z něj přijde jen `__typename`.
 
+### Labely a vyžádaní reviewery (#392)
+
+Tři **čtecí** metody; tvrdá podmínka č. 1 platí dál — gateway pořád nemá nic, čím by šlo něco
+odeslat, a měnit label umí jedině `ReviewPublisher`.
+
+- **`fetchMetadata(id:)` je vlastní volání, ne pole navíc v `fetchDetail`.** Detail si tahá
+  i pre-flight publisheru před **každým** odesláním, a odpověď reviewera se skládá
+  z `latestReviews`, tedy z pole, které nese celá **těla** review (změřeno na `cli/cli`: 1,5 kB za
+  jedno review od bota). Platit tu velikost při každém odeslání za údaj, který odesílání nezajímá,
+  nemá důvod.
+- **Sekci reviewerů skládá `Policy`, ne DTO.** GitHub dává dvě různá pole — `reviewRequests`
+  („komu to leží na stole teď“) a `latestReviews` („kdo se vyjádřil“) — a jejich slití do tří
+  hodnot je rozhodnutí, ne tvar odpovědi. DTO jen převede tvar.
+- **Týmy jdou do vlastního pole, ne mezi lidi** (`PullRequestMetadata.teams`). Do #392 se zahazovaly
+  a byla to **tichá ztráta**: GitHub drží vyžádané reviewery ve **dvou** polích, takže u PR
+  s týmovou žádostí byla sekce prázdná, i když review někdo vyžádal — změřeno na
+  `keboola/platform-architecture-and-concepts#278` (`requested_reviewers: []`,
+  `requested_teams: ["ajda-swimlane"]`), a v jedné frontě to byly **čtyři PR ze čtrnácti**. Fronta
+  o ně nepřicházela (`review-requested:@me` týmové žádosti expanduje), chyběly jen ve výpisu.
+- **Slug týmu se sjednocuje na podobu bez organizace** (`Policy.requestedTeams`): `gh pr view` dává
+  `keboola/ajda-swimlane`, REST i `orgs/{org}/teams` `ajda-swimlane` — a tu druhou chce zápis. Dělí
+  se s `omittingEmptySubsequences: false`, protože s výchozím `true` by z `keboola/` vyšlo
+  `keboola`, tedy **jméno organizace vydávané za slug týmu** (chytil to test).
+- **`fetchAssignableTeams` jde přes `orgs/{org}/teams`, ne `repos/{o}/{r}/teams`** — repozitářová
+  varianta vrátila **404** i na repu, kam se dá číst i psát PR (chce admin práva). Organizační
+  seznam prošel: 34 týmů, 0,63 s. **404 u účtu bez organizace je odpověď, ne porucha** — osobní repo
+  týmy nemá, takže se vrací prázdno; ostatní chyby propadnou dál.
+- **`fetchAssignableUsers` jde přes GraphQL, ne `GET /repos/{o}/{r}/collaborators`.** Seznam
+  spolupracovníků chce **push právo**, takže by na repu, kam se dá jen číst, skončil 403 —
+  a `assignableUsers` je navíc přesně ta množina, ze které GitHub sám dovolí review vyžádat, takže
+  nabídka nemůže obsahovat volbu, kterou pak zápis odmítne.
+- **`fetchRepositoryLabels` je uzavřená množina, na které stojí celé rozhodnutí, že `+ label` není
+  volný text.** Z volného textu se dá omylem vyrobit nový label a ten už z repozitáře sám nezmizí.
+- **Prázdná odpověď je platný výsledek, ne porucha**: PR bez labelů i bez vyžádaných reviewerů je
+  běžný. „Nepodařilo se to zjistit“ drží volající zvlášť (`MetadataState`) — u téhle sekce se ty dva
+  stavy nesmí slít, protože podle prvního se sekce nekreslí a podle druhého se **nesmí dát měnit
+  sada, kterou aplikace nezná**.
+- **Sloveso je v nadpisu nabídky, položky nesou jen jména.** Do proklikání ho měla každá položka
+  (`Vyžádat review od …`), takže u čtrnácti řádků opakovala totéž a předpona ořezala to jediné, čím
+  se od sebe liší. Pojmenované kliknutí se neztrácí, jen se říká jednou — a **pro čtečku obrazovky
+  zůstává celá věta u položky** (`accessibilityLabel`), protože nadpis se k ní nepřečte.
+- **Klávesnice funguje, protože nabídka není `Menu`.** Popover je vlastní view, takže se v něm dá
+  mít pole i obsluha šipek: psaní filtruje, `↑↓` vybírají, `↵` potvrdí. `esc` se **neobsluhuje** —
+  popover ho umí sám a vlastní obsluha by ho jen vzala tomu, kdo to zvládne líp. Klávesy se berou
+  **na poli**, ne na kontejneru (fokus je v něm), a vracejí `.handled`, jinak si šipku vezme pole na
+  posun kurzoru v textu.
+- **Hledání se kreslí teprve nad seznamem, který má co filtrovat** — **nad šesti položkami, tedy
+  od sedmi**. Nad třemi jmény je to šum a nad prázdnem pole, ve kterém se nedá nic najít. Práh drží
+  `Policy.pickerShowsSearch(count:)`, **jeden pro obě nabídky**: do #392 měla každá vlastní
+  `searchFrom = 6`, takže se mohly rozejít potichu a bylo by z toho vidět jen to, že jedna nabídka
+  pole má a druhá ne. Zároveň je to jediné, co se o tom poli dá tvrdit **číslem** — jestli v něm je
+  fokus, je stav skutečného okna.
+- **Fokus je v poli hned po otevření, a dělá se `.task` s jedním `Task.yield()`.** Bez toho je
+  nabídka „otevři, klikni a piš“, tedy o krok delší než ta, kterou nahradila. Přiřazení ve **stejném
+  průchodu**, ve kterém pole vzniká, SwiftUI zahodí — změřeno u palety ⌘K (#184) accessibilitou na
+  běžící aplikaci: `onAppear`, `task` bez yieldu i `defaultFocus($isFocused, true)` daly
+  `AXFocused = false` **navždycky**, ne později. Rozhoduje **počet průchodů, ne čas**, takže tady
+  není žádná pauza ani nic, co by si plánovalo další kolo (#350): jeden yield, jeden zápis.
+
+  Do #392 tu stálo `onAppear` a nabídka se musela kliknout, i když komentář u ní tvrdil opak — z toho
+  plyne, že tohle je vlastnost, kterou **nedokládá kód, ale proklikání**. Samostatná sonda mimo
+  aplikaci `onAppear` nechá projít, takže na potvrzení nestačí; podrobnosti a tabulka variant jsou
+  v [`testovani.md`](testovani.md).
+- **Fokus nabídku nepřežije.** `@FocusState` sedí v `PickerSearchField`, tedy ve view, které
+  s popoverem zaniká — po zavření tak není co držet a psaní nemá kam mizet (změřeno sondou: znak po
+  zavření jde do okna a v poli se neobjeví). Pod sedmi položkami pole není vůbec, takže tam není co
+  fokusovat.
+- **Prázdný výsledek filtru je čtvrtý stav nabídky**, ne první: vedle něj existuje nenačteno,
+  prázdné repo a porucha, a každý má vlastní větu. Prázdná plocha by vypadala jako spadlé načítání.
+- **Dokud snímek nedorazil, je `+ label` zakázaný.** Sada se posílá celá, takže bez snímku nemá
+  z čeho vzniknout — a tlačítko, po kterém se nic nestane, je horší než zakázané. Vysvětlení u něj
+  mluví o načítání, ne o bráně; jsou to dva různé důvody.
+- **Totéž platí o nabídkách, a jsou to tři stavy, ne dva**: nenačteno, načteno prázdné („repo žádné
+  labely nezná“) a porucha. Drží to `repositoryLabels` proti `repositoryLabelFailures` (a totéž
+  u lidí), takže se nabídka po výpadku sítě netváří jako repo bez labelů. Seznam se u poruchy
+  **nezapíše**, takže se další otevření nabídky ptá znovu — to je zároveň to „zkusit znovu“.
+
 ## `ReviewPublisher` (`App/Publish/`)
 
 **Jediná cesta, kterou z aplikace něco odejde na GitHub.** Vznikl v #67 a nahradil tvrdou
@@ -6306,13 +6466,16 @@ podmínku „nikdy nic neposílat“ pravidlem, které je vidět z kódu — viz
 
 | Typ | Co dělá |
 |---|---|
-| `ReviewPublishing` | Protokol se **čtyřmi** metodami: `submit(_:)`, `reply(to:body:)`, `setResolved(_:of:)`, `comment(on:body:)` |
+| `ReviewPublishing` | Protokol se **šesti** metodami: `submit(_:)`, `reply(to:body:)`, `setResolved(_:of:)`, `comment(on:body:)`, `setLabels(_:on:)`, `requestReviewers(_:teams:on:)` |
 | `GhReviewPublisher` | Implementace nad `gh`; pre-flight přes `GitHubGateway` |
 | `PublishScope` | Brána: smí se z tohohle repa odeslat? Skládá se z `Configuration`, výchozí stav **vypnuto** |
 | `PublishError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `PublishRequest` | Payload a argumenty review + `isSendable` (sdílená kontrola prázdného těla) — čisté funkce |
 | `ThreadRequest` | GraphQL mutace pro vlákna a jejich argumenty — čisté funkce |
 | `CommentRequest` | REST argumenty komentáře pod PR (#216) — čisté funkce |
+| `MetadataRequest` | REST argumenty labelů a vyžádání reviewera (#392) + payload sady labelů — čisté funkce |
+| `MetadataSubmission`, `MetadataActionState` | Čtvrtý volající publisheru a stav toho, co se právě odesílá (#392) |
+| `GhRequestedReviewersResponse` | Tvar odpovědi `POST /pulls/{n}/requested_reviewers` — čte se z ní **jen** `requested_reviewers` |
 | `ThreadTarget`, `ThreadResolution` | Adresa vlákna (PR + `id`) a to, jak dopadlo přepnutí vyřešení |
 | `ThreadActionState`, `ThreadKey` | Co se s vláknem právě děje a klíč, pod kterým to drží `AppStore` |
 | `CommentActionState` | Co se právě děje s komentářem pod PR (#216) |
@@ -6464,6 +6627,50 @@ Nad `CommentSubmission` (#216) platí:
 - **`replyToID` zůstává `nil`.** Komentář pod PR není ve vlákně a `Conversation` ho drží ve
   vlastní stránce — s vyplněným `replyTo` by se v ose kreslil odsazený jako odpověď na něco,
   co neexistuje.
+
+### Labely a vyžádání reviewera (#392) — pátá a šestá metoda
+
+Vědomé rozšíření tvrdé podmínky č. 1, ne její obejití. **Proč**: u vlastního PR je štítek
+a reviewer součástí toho, jak si člověk řídí svoji frontu, a je to poslední věc, kvůli které se od
+hotového review přepíná do prohlížeče. Tentýž precedens jako #73 (odpověď do vlákna) a #216
+(komentář pod PR). **Co v zákazu zůstává**: approve mimo review, merge, zavření PR a milník —
+a `SingleWayOutTests` je hlídá jmenovitě, takže se sedmá metoda nedá přidat potichu.
+
+Co na tom stojí:
+
+- **Brána je tatáž** (`PublishScope`, `allowsPublishing` globálně i per repo). Druhý přepínač by
+  byl druhé místo, kde se dá „samo nic neodejde“ porušit — a to je celý smysl toho, že je jedna.
+- **Sada labelů se posílá celá, jedním `PUT /issues/{n}/labels`.** Endpoint sadu **nahrazuje**, ne
+  doplňuje, takže dvě volání (přidat, sundat) by mezi sebou nechala stav s půlkou sady. Rozdíl
+  skládá `Policy.toggledLabels`, ne publisher: dvě skládání téhož se rozejdou.
+- **Payload jde souborem, ne přes `-f 'labels[]=…'`** — kvůli jediné hodnotě, která se jinak
+  poslat nedá: **prázdné sadě**. Sundání posledního štítku je `{"labels": []}`, kdežto `gh api`
+  bez jediného `-f` neposílá tělo vůbec. Jedna cesta pro obojí je lepší než dvě, z nichž se jedna
+  použije jen při sundávání posledního štítku — tedy zrovna ta, kterou nikdo nezkouší.
+- **`writePayload` bere hotová data, ne payload review.** Souborem se od #392 posílají dvě různé
+  věci; dvě skoro shodné funkce na „napiš JSON s právy `0600` a ukliď ho“ by se rozešly zrovna
+  v těch právech. Kódování zůstává **u volajícího a před tím voláním** — když selže, není co
+  uklízet.
+- **Endpoint labelů je `issues`, ne `pulls`**, ze stejného důvodu jako u komentáře: pull request je
+  issue s diffem a pro labely v `/pulls/` není nic. Reviewer naopak `/pulls/` má, protože review na
+  issue neexistuje.
+- **Loginy jdou přes `-f`, ne `-F`.** `--field` hodnotu typuje, takže login z číslic by v payloadu
+  skončil jako `123` místo `"123"`.
+- **Vyžádat nikoho není akce** (`PublishError.noReviewer`): GitHub prázdné pole `reviewers` přijme
+  a neudělá nic, takže by okno hlásilo vyžádané review, které nevzniklo. Tatáž past jako u prázdného
+  komentáře, ale vlastní případ — věta „napiš text“ by u vyžádání nedávala smysl.
+- **`headSha` se neověřuje**, stav PR ano. Štítek se váže na PR, ne na commit; kontrola hlavy by
+  zakázala zrovna to, kvůli čemu se štítkuje.
+- **Odebrat vyžádané review odsud nejde**, a to je rozhodnutí: request pošle člověku upozornění,
+  které se odebráním **nedá vzít zpět**, takže odebrání není opravný krok, jen zametení. Proto na
+  něj nevede `+`, ale pojmenované tlačítko se jménem toho člověka — a **u týmu je v něm slovo
+  `týmu`**, protože upozornění odejde všem jeho členům.
+- **Lidé a týmy jdou jedním voláním** (`reviewers` + `team_reviewers` v jednom payloadu). Druhá
+  metoda by prodloužila výčet cest ven za nic a dvě žádosti by nechaly mezistav s půlkou vyžádaných.
+  Vyžádat **nikoho** není akce ani tady: prázdné musí být obojí, jinak se volá.
+- **Odpověď na vyžádání nenese odpovědi ostatních**, jen `requested_reviewers`. Slévá to
+  `Policy.reviewers(requested:keeping:)`, tedy tatáž funkce jako při čtení — bez ní by z panelu po
+  jednom kliknutí zmizelo schválení, které tam bylo, nebo by se muselo volat `fetchMetadata` znovu.
 
 ## Vrstva `Environment` (`App/Environment/`)
 

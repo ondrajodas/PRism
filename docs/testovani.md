@@ -458,6 +458,87 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a do #216 se to neprojevilo nikde jinde než na obrazovce. Hlídají to dva testy: jeden nad
   `Policy.inserting`/`applying` (obě cesty), druhý nad storem. **Ověřeno vložením regrese** —
   po vrácení původního kódu test spadne na `events.items == []`.
+- **Labely a vyžádaní reviewery (#392)** — pátá a šestá cesta ven, takže se u nich hlídá **totéž
+  co u vláken a komentářů**, a k tomu tři věci, které se dají pokazit tiše. Rozdělené je to na pět
+  suit schválně: každá odpovídá na jinou otázku, takže se z červeného testu pozná, **co** se rozbilo.
+  - **`MetadataPublishingTests`** — publisher proti `FakeProcessRunner`. Nejdůležitější tvrzení
+    netvrdí, co se odeslalo: bez povolení (globálně i s povoleným **jiným** repem), bez jediného
+    loginu a na mergnutý či zavřený PR **`runner.invocations.isEmpty`**. Vedle toho, co je jinak než
+    u review: **nová hlava labely neblokuje**. A k tomu tvar payloadu na hotových bajtech
+    (`{"labels":["bug","go"]}` a `{"labels":[]}` — prázdná sada je **platná akce**, ne `nil`), `-f`
+    proti `-F` u loginu a **úklid dočasného souboru** po úspěchu i po pádu. Cesta se u toho bere
+    **z argumentů, které publisher poslal**, ne výpisem `/tmp`: výpis by v paralelním běhu chytal
+    cizí soubory a tvrdil úklid, který se nestal.
+  - **`AppStoreMetadataTests`** — podstrčený `gh` skript s počítadlem spuštění, stejně jako
+    u vláken. Nula volání: **na cizím PR**, **bez povolené brány**, u labelu, který **repo nezná**,
+    bez načtené nabídky, nad nenačteným snímkem, u reviewera **mimo nabídku** a bez `gh`. K tomu
+    tři stavy nabídky (nenačteno / prázdné repo / porucha), protože nabídka, která po výpadku sítě
+    vypadá jako repo bez labelů, posílá člověka hledat labely, které tam jsou. Vedle toho cache (druhý příchod na PR se
+    neptá), že se **nabídky s detailem netahají** (volání navíc, které se má platit až na otevření),
+    a že se po úspěchu snímek přepíše **bez dalšího dotazu**. A ten nejcennější zápis: **vyžádání
+    reviewera nesmaže schválení, které v panelu bylo** — GitHub ho v odpovědi neposílá.
+  - **Týmy jsou vlastní sada tvrzení**, protože to byla **tichá ztráta**: do opravy se `requested_teams`
+    zahazovaly a sekce byla u PR s týmovou žádostí prázdná (čtyři PR ze čtrnácti v jedné frontě).
+    Testuje se, že tým jde do vlastního pole a **ne mezi lidi**, že PR s žádostí jen pro tým není
+    prázdný, že se slug zbavuje předpony organizace (a že z `keboola/` **nevyjde `keboola`** — to je
+    ta past, kterou chytil test na prázdný slug), že tým odejde **týmž voláním** v `team_reviewers`,
+    že chybějící `requested_teams` v odpovědi nepoloží akci, která prošla, a že vyžádaný tým se
+    v nabídce neopakuje.
+  - **`PanelMetadataEditingTests`** a **`PanelReviewersTests`** — čisté funkce vyčerpávajícím
+    výčtem. Že se z výběru nedá vyrobit label, který repo nezná; že sundání **posledního** labelu je
+    prázdná sada, ne „nic neposílat“; že se přidáním jednoho labelu **nesmaže ten, který repo
+    přestalo znát** (sada se posílá celá); a u reviewerů všech pět hodnot `SubmittedReview.State`
+    plus `nil` — komentář bez verdiktu se do sekce **nedostane**, jinak by v ní u každého PR svítil
+    review bot jako `čeká`.
+  - **`LabelChipsTests`** (pravidlo) a **`PanelMetadataWidthTests`** (rozměr) — rozdělené schválně:
+    první počítá nad **umělými, rovnými** šířkami, takže se výsledek dá spočítat v hlavě, druhý měří
+    **skutečným písmem přes pásmo 240–520**. Kdyby to byl jeden test, nešlo by po spadnutí poznat,
+    jestli se rozbilo rozhodování, nebo sazba. Hlídané pasti: dvouřádkový strop, `+N` právě tehdy,
+    když se něco nevešlo, **ořez, který nechá místo na `+N`** (jinak jsou řádky tři), `+ label`,
+    který neustoupí nikdy, a **`chce změny`, které se neořezává** — u reviewerů ustupuje jméno.
+    Jedno tvrzení stojí zvlášť: **spočítaná šířka chipu se srovnává s nakreslenou**
+    (`ImageRenderer` nad `LabelChipView`). Je to jediné, co chytá `box-sizing` — ostatní si berou
+    tutéž míru, takže by prošla i tehdy, kdyby se z ní vypustil rám a odsazení. **Ověřeno vložením
+    regrese**: s `frameWidth == 0` je rozdíl 14 bodů a test spadne, kdežto zbytek suity projde.
+  - **`PickerSearchTests`** — hledání v nabídkách. Kromě váhy shody (začátek, hranice slova,
+    vnitřek), diakritiky a „všechna slova musí sednout“ tam stojí tři tvrzení, která se dají pokazit
+    potichu: že se **pravidlo dělí s paletou ⌘K** (tytéž primitivy i dělení dotazu na slova — kdyby
+    se rozešlo, chová se jedno okno na dvě strany), že **shodné váhy nepřeskakují mezi průchody**
+    (Swiftové `sorted` není stabilní, takže se pořadí drží druhým kritériem), a že **filtr nikdy
+    nevrátí něco, co v nabídce nebylo** — tedy že se ani hledáním nedá vyrobit label, který repo
+    nezná. K tomu kurzor: **ořezává, necyklí**, a ořezává i bez pohybu, protože index z předchozího
+    dotazu může být za koncem.
+  - **`PanelHeadNoticeTests`** — že panel u staršího commitu **nekreslí nálezy jako platné**. Věta se
+    testuje jako text z `Policy` (jmenuje obě sha a u neshody říká, že o kódu na obrazovce nemluví),
+    a k tomu se **tři stavy notice musí nakreslit různě**. Porovnávají se **surové bajty bitmapy, ne
+    `tiffRepresentation`**: TIFF ze dvou renderů se liší i u shodného obrázku (obálka nese metadata),
+    takže na něm test procházel i s panelem, který notici ignoruje. **Ověřeno vložením regrese** —
+    se zadrátovaným `.none` v panelu na bajtech spadne, na TIFFu prošel.
+- **Místo na diff commitu vedle panelu (#392)** — `CommitPanelRoomTests` je **měření zapsané jako
+  test**, ne mez v aplikaci. Počítá produkční funkcí (`Policy.charactersPerSide`) a skutečnými
+  rozměry (šířka znaku mono písma, `DiffLineView.contentInset(for:)`), takže čísla nezastarají
+  s doladěním sazby. Naměřeno na výchozím okně (1100, plocha tabu 1047):
+
+  | Co je rozložené | Zbývá na diff | Vedle sebe | Pod sebou |
+  |---|---|---|---|
+  | strom (210) + panel (306) | 531 b | **22 znaků** | 49 znaků |
+  | strom + proužek (38) | 799 b | 39 znaků | — |
+  | jen proužek | 1009 b | 52 znaků | — |
+
+  **Počty znaků jsou v dokumentaci, ne v tvrzeních** — a je to poučení z prvního běhu: `split`
+  zapsaný jako `>= 20 && <= 24` v **plném paralelním běhu** jednou spadl, protože se v procesu, kde
+  zároveň vzniká několik `NSHostingView`ů, vyřešila šířka znaku jinak. Číslo, které se v harnessu
+  pod zátěží mění, nesmí být tvrzením: mění se **měřidlo, ne aplikace**. Testy proto tvrdí
+  **nerovnosti a poměry** (split pod slibem, unified nad dvojnásobkem splitu, proužek nad panelem)
+  a šířku znaku pinuje **jeden** test — když se písmo v systému změní, spadne on a řekne proč, místo
+  aby se rozsypaly počty v půlce suity.
+
+  Slib z `CLAUDE.md` je **120 znaků na stranu** a ten by se stromem i panelem chtěl okno
+  **~2665 bodů**. Z toho plyne rozhodnutí: **nevynucuje se nic** — strom se složí ⌘1, panel ⌘2 —,
+  protože složený proužek přidá ve splitu skoro dvojnásobek znaků, takže u commitu je čím zaplatit.
+  Nejužší stav, do kterého se aplikace dostane (okno 700, panel na podlaze 246), dá na diff **402
+  bodů**; v tom pásmu se proto měří i přetečení seznamu commitů a hlavičky (`PanelFreeTabWidthTests`
+  má pro `Commity` **vlastní, širší pásmo** od 402).
 - **Dostupnost služeb (#31)** — tři vrstvy, každá jinak. `Policy.health` vyčerpávajícím
   výčtem stavů (nic se nemockuje), včetně toho, co se dá pokazit tiše: že **incident mimo
   sledované komponenty puntík nerozsvítí** (skutečná fixture s výpadkem v `Actions`), že
@@ -3539,6 +3620,43 @@ Tři věci, které z toho u #184 vyšly a bez měření by se neodhadly:
   vypsat stav (paleta otevřená?, obsah pole, fokus, vybraný řádek). `AXSelected` se ale musí hledat
   **jen v tom podstromu, o který jde** — v okně ho nese i záložka detailu PR, takže bez zúžení
   vypadá vybraný řádek jako `Průběh`.
+
+**A totéž znovu u nabídek panelu (#392), včetně toho, co se změřit nedá.** Hledací pole nabídky
+labelů i reviewerů má mít fokus hned po otevření. Změřeno **samostatnou sondou** — jeden
+`swiftc`em přeložený soubor s oknem, tlačítkem a popoverem, který si popover otevře sám (stavem
+i **skutečným klikem** poslaným do okna), po dotažení nabídky do něj pošle znaky a šipky a vypíše
+`firstResponder` s obsahem pole. Čtyři varianty, série A/B/A/B (drift sezení je větší než hledaný
+rozdíl, #274):
+
+| varianta | `firstResponder` popoveru | co se napsalo |
+|---|---|---|
+| bez fokusu | `_NSPopoverWindow` | nic |
+| `defaultFocus($isFocused, true)` | `_NSPopoverWindow` | nic |
+| `onAppear` | `_SystemTextFieldFieldEditor` | `xy` |
+| `task` + `Task.yield()` | `_SystemTextFieldFieldEditor` | `xy` |
+
+Tři věci, které z toho plynou:
+
+- **`defaultFocus` nefunguje ani v popoveru**, tedy stejně jako u palety (#184). Vypadá jako
+  určená cesta a není.
+- **Samostatná sonda `onAppear` nechá projít, aplikace ne.** V ní tedy rozdíl mezi `onAppear`
+  a yieldem **nevidět není** — a přesně proto se řídíme měřením z aplikace (#184: `onAppear`
+  i `task` bez yieldu daly `AXFocused = false` **navždycky**), ne touhle sondou. Použije se yield:
+  kde `onAppear` stačí, projde i yield (změřeno výš), kdežde nestačí, je yield ta jediná
+  změřená oprava. Sonda mimo aplikaci je tedy dobrá na *vyloučení* varianty, ne na její potvrzení.
+- **Fokus nabídku nepřežije**: po zavření popoveru jde znak do okna a v poli se neobjeví
+  (`queryPredPsanim == queryPoPsani`), protože `@FocusState` sedí v tom view, které s popoverem
+  zaniká.
+
+**V harnessu se to změřit nedá a je to změřené, ne odhad.** Sonda uvnitř testů (`NSHostingView`
+v okně, čekání na `firstResponder`, poslané znaky) skončila na tom, že **testovací host nedostane
+aktivaci**: `NSApp.isActive == false`, `window.isKeyWindow == false` i po
+`setActivationPolicy(.regular)`, `NSApp.activate(ignoringOtherApps: true)` a
+`NSRunningApplication.current.activate(options: .activateAllWindows)`, se stropem 5 s a v obou
+testech. Bez key okna nemá fokus kam sednout, takže by taková sonda měřila něco jiného, než tvrdí —
+proto v repu **není** a zůstala jen jako samostatný soubor mimo strom. Co v testech **je**, je ta
+část, která je číslo: `Policy.pickerShowsSearch(count:)` výčtem kolem hranice, protože jestli se
+pole vůbec kreslí, se z okna ptát nemusí. Poslední slovo má proklikání v aplikaci.
 
 Co se **nedá naklikat** (chybějící binárka, chyba sítě, prázdný stav nad plnou frontou), se dá
 vykreslit dočasným testem přes `ImageRenderer` do PNG ve scratchpadu. Před commitem se maže.

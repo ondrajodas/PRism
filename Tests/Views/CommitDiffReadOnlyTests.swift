@@ -7,10 +7,15 @@ import Testing
 /// **Že se v diffu commitu nedá nic napsat** (#317) — test, který tvrdí, že se něco *ne*stalo.
 ///
 /// Tab `Commity` je prohlížeč, ne review, a stojí to na dvou tvrdých podmínkách: komentář k řádku
-/// commitu by potřeboval jiný klíč draftu a **pátou metodu v `ReviewPublishing`** (č. 1), a nálezy
+/// commitu by potřeboval jiný klíč draftu a **další metodu v `ReviewPublishing`** (č. 1), a nálezy
 /// jsou klíčované `headSha` (č. 5), takže by u staršího commitu ukazovaly na jiný kód. Zrušit to
 /// jde jedním přidaným parametrem u `DiffView` — a na obrazovce by se to poznalo až tehdy, když by
 /// někdo bublinu uviděl.
+///
+/// **Od #392 je v tabu panel** a na tomhle se tím nemění nic: panel kreslí `PullRequestDetailView`
+/// **vedle** `CommitDiffView`, takže composer v něm píše tělo review proti hlavě PR, ne komentář
+/// k řádku commitu. Sám `CommitDiffView` zůstává bez `AppStore` a bez akcí — a právě to tenhle
+/// soubor hlídá.
 ///
 /// Testuje se ve **třech vrstvách**, protože žádná z nich sama by nestačila:
 ///
@@ -46,12 +51,24 @@ struct CommitDiffReadOnlyTests {
         #expect(reading.highlighted == nil)
     }
 
-    /// Panel se v tabu nekreslí, a **je to vlastnost tabu**, ne rozhodnutí view. Kdyby se
-    /// `showsReviewPanel` u `Commitů` obrátilo, stál by vedle diffu staršího commitu panel
-    /// s nálezy k jinému kódu.
-    @Test("Tab Commity panel s nálezy nemá")
-    func theCommitsTabHasNoPanel() {
-        #expect(PullRequestTab.commits.showsReviewPanel == false)
+    /// **Diff commitu panel nezná** — a je to jiné tvrzení než „v tabu panel není“.
+    ///
+    /// Do #392 se panel v `Commitech` nekreslil vůbec a tenhle test tvrdil právě to
+    /// (`showsReviewPanel == false`). Od #392 v tabu **je**, protože labely a reviewery platí pro
+    /// celý PR — takže se tvrzení posunulo tam, kde má smysl: panel kreslí `PullRequestDetailView`
+    /// vedle diffu, kdežto `CommitDiffView` na něj nemá **žádný kanál**. Kdyby ho dostal, dal by se
+    /// z diffu commitu rozložit a psát do něj komentář ke commitu, na který se v panelu díváme
+    /// jinou hlavou.
+    ///
+    /// Že nálezy u staršího commitu nevypadají jako platné, hlídá `Policy.findingsHeadNotice`
+    /// a jeho testy — tady se to poznat nedá, protože tenhle typ o nálezech nic neví.
+    @Test("Diff commitu nemá k panelu žádný kanál")
+    func theCommitDiffHasNoPanelChannel() throws {
+        let reading = try commitDiffView().reading(try Self.diff())
+
+        #expect(reading.panelExpanded == nil)
+        // Panel v tabu **je** (#392) — kreslí ho detail vedle diffu, ne diff sám.
+        #expect(PullRequestTab.commits.showsReviewPanel)
     }
 
     // MARK: - Co z toho vyjde v řádcích

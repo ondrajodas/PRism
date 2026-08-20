@@ -226,6 +226,55 @@ struct GhGateway: GitHubGateway {
         try await run(["api", "repos/\(repo)/actions/jobs/\(jobID)/logs"])
     }
 
+    func fetchMetadata(id: PRIdentifier) async throws -> PullRequestMetadata {
+        let arguments = [
+            "pr", "view", String(id.number),
+            "--repo", id.repo.description,
+            "--json", GhPullRequestMetadata.jsonFields,
+        ]
+
+        return try await run(
+            arguments,
+            phase: "Labely a reviewery pull requestu",
+            decodedAs: GhPullRequestMetadata.self
+        ).metadata()
+    }
+
+    func fetchRepositoryLabels(repo: RepoID) async throws -> [PullRequestLabel] {
+        // `per_page=100` je strop GitHubu a bere se **jedna stránka**: repo se stovkou labelů je
+        // řádově víc, než z čeho se v nabídce vybírá, a stránkování by bylo volání navíc za nic.
+        let items = try await run([
+            "api", "repos/\(repo)/labels?per_page=100",
+        ], phase: "Labely repozitáře", decodedAs: [GhLabel].self)
+
+        // **Neřadí se tady** — pořadí v nabídce je rozhodnutí, ne tvar odpovědi. GitHub vrací
+        // labely abecedně, což je zrovna to, co nabídka chce; kdyby to změnil, srovná to volající.
+        return items.map(\.label)
+    }
+
+    func fetchAssignableUsers(repo: RepoID) async throws -> [String] {
+        try await run(
+            AssignableUsersQuery.arguments(for: repo),
+            phase: "Lidé, kteří na repozitář smí",
+            decodedAs: GhAssignableUsersResponse.self
+        ).logins()
+    }
+
+    func fetchAssignableTeams(repo: RepoID) async throws -> [String] {
+        do {
+            let teams = try await run([
+                "api", "orgs/\(repo.owner)/teams?per_page=100",
+            ], phase: "Týmy organizace", decodedAs: [GhTeam].self)
+            // Slug se nechává, jak přišel — `orgs/…` dává bezpředponovou podobu, tedy tu, kterou
+            // chce zápis. Řadí a čistí až `Policy`.
+            return teams.map(\.slug)
+        } catch GitHubError.notFound {
+            // Účet bez organizace týmy nemá; 404 je tady **odpověď**, ne porucha. Ostatní chyby
+            // propadnou dál — nabídka pak řekne, že se seznam nepodařilo načíst.
+            return []
+        }
+    }
+
     func fetchCommits(id: PRIdentifier) async throws -> [PullRequestCommit] {
         // `per_page=100` je strop GitHubu a `--paginate` je tu kvůli PR, které ho přerostou:
         // bez něj by přišlo **prvních třicet** (výchozí stránka) a odznak by nad stovkou commitů

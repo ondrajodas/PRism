@@ -466,6 +466,56 @@ code {
 }
 .chip-add:hover { color: var(--accent); border-color: var(--accent); }
 
+/* --- nabídka za `+ label` a `+ reviewer` (#392) --------------------------------------
+   **Popover, ne systémové menu**: nabídka se dotahuje při otevření, u labelu se kreslí puntík
+   s barvou z repozitáře a od hledání je v ní pole i obsluha šipek — nic z toho `Menu` neunese.
+
+   **Sloveso je v nadpisu, ne v každé položce.** První podoba měla na každém řádku
+   `Vyžádat review od …`, takže čtrnáct řádků opakovalo totéž a předpona ořezala to jediné, čím se
+   od sebe liší: jméno. Nadpis a položka se čtou jako jedna věta. */
+.pkr {
+  width: min(300px, 100%);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--panel); box-shadow: var(--shadow-lg); overflow: hidden;
+}
+.pkr > .cap {
+  display: block; padding: 9px 11px 6px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+/* Hledací řádek se objeví teprve nad seznamem, který má co filtrovat — nad třemi jmény je to šum. */
+.pkr-q {
+  display: flex; align-items: center; gap: 6px; margin: 0 11px 7px;
+  padding: 6px 9px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--panel-3);
+  font-size: 12px; color: var(--ink);
+}
+.pkr-q .ico { color: var(--ink-3); font-size: 11px; }
+.pkr-q .sp { flex: 1; }
+/* Kurzor je v poli **hned po otevření** nabídky, aby se dalo psát bez kliknutí. V aplikaci to
+   znamená blikající caret; tady stojí, protože statická kresba blikat nemá čím. */
+.pkr-q .caret {
+  display: inline-block; width: 1px; height: 13px; margin-right: -3px;
+  background: var(--ink); vertical-align: middle;
+}
+/* Počet je vidět jedině při hledání: nad nefiltrovaným seznamem by opakoval to, co je v něm. */
+.pkr-q .n { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
+.pkr-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 16px; font-size: 12px; color: var(--ink);
+}
+.pkr-row.on { background: var(--accent-weak); }
+.pkr-row .kind { font-size: 10.5px; color: var(--ink-3); }
+.pkr-row .tick { width: 10px; color: var(--accent); font-size: 9px; }
+/* Prázdný výsledek **něco říká**: prázdná plocha by u nabídky vypadala jako spadlé načítání,
+   což je stav, který tu existuje taky. */
+.pkr-empty { padding: 2px 11px 11px; font-size: 11.5px; color: var(--ink-3); }
+.pkr-foot {
+  display: flex; gap: 12px; padding: 6px 11px;
+  border-top: 1px solid var(--line-soft); background: var(--panel-2);
+  font-size: 10.5px; color: var(--ink-3);
+}
+
 /* Reviewer je **řádek**, ne chip: panel je sloupec, takže se do něj vejde iniciálka, jméno
    a slovo o tom, jak odpověděl — a to slovo je jediný důvod, proč se na sekci kouká. Když se
    panel zúží, ustoupí **jméno** (ořeže se), odpověď zůstává celá. */
@@ -3103,8 +3153,11 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       </p>
       <p class="muted">
         <strong>Tahle sekce je záznam dneška</strong>, ne přání — proti ní se srovnává okno,
-        takže co v ní stojí, má být v aplikaci. Naposledy se v ní kvůli tomu měnily tři věci
-        (#299): <em>Kontroly na GitHubu</em> z ní odešly za <a class="jump" href="#s05">tabem
+        takže co v ní stojí, má být v aplikaci. Naposledy se v ní měnil <b>pravý panel</b> (#392):
+        pod jeho hlavičkou stojí <b>labely a vyžádaní reviewery</b>, tedy to, co platí pro celý
+        pull request — na cizím PR jen ke čtení, na vlastním s <code>+ label</code>
+        a <code>+ reviewer</code>. Rozhodnutí i s měřením je v <a class="jump" href="#s24">sekci 24
+        (proč to tak je →)</a>. Před tím se měnily tři věci (#299): <em>Kontroly na GitHubu</em> z ní odešly za <a class="jump" href="#s05">tabem
         Kontroly (sekce 05 →)</a>, hlavička karty popisu dostala pilulku stavu a řada „od minule“
         křížek <em>Označit za přečtené</em>. Hlavička je nakreslená v <strong>té širší ze dvou
         podob</strong>: v úzkém tabu (320 bodů, tedy okno na minimu s vytaženým panelem)
@@ -3270,6 +3323,28 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
                   <span class="kbd">⌘2</span>
                   <span class="fold">›</span>
                 </header>
+
+                <!-- Labely a vyžádaní reviewery (#392) — dvě sekce hned pod hlavičkou, nad tím,
+                     co panel ukazuje k vybranému segmentu. Cizí PR: jen čtení, tedy žádné
+                     `+ label` ani `+ reviewer`. Rozhodnutí i s měřením je v sekci 24. -->
+                <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 11px;
+                            border-bottom: 1px solid var(--line-soft);">
+                  <div class="pl-sec">
+                    <span class="cap">Labely</span>
+                    <div class="chipline">
+                      <span class="lchip"><i style="background: #0366D6;"></i><span>dependencies</span></span>
+                      <span class="lchip"><i style="background: #D73A4A;"></i><span>bug</span></span>
+                    </div>
+                  </div>
+                  <div class="pl-sec">
+                    <span class="cap">Reviewery</span>
+                    <div class="rv-list">
+                      <div class="rv-row"><span class="rv-av done">OJ</span><span class="who">Ondřej Jodas</span><span class="ans done">schválil</span></div>
+                      <div class="rv-row"><span class="rv-av blocked">TK</span><span class="who">Tomáš Kraus</span><span class="ans blocked">chce změny</span></div>
+                      <div class="rv-row"><span class="rv-av wait">MZ</span><span class="who">Marie Zíková</span><span class="ans">čeká</span></div>
+                    </div>
+                  </div>
+                </div>
 
                 <div style="padding: 4px 11px 0; display: flex; flex-direction: column; gap: 8px;">
                   <div class="tl-impact" style="margin-top: 4px;">
@@ -3606,6 +3681,121 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       </div>
     </div>
 
+    <h3>Nabídka za <code>+ label</code> a <code>+ reviewer</code></h3>
+    <p class="muted">
+      <b>Sloveso je v nadpisu, položky nesou jen jména.</b> První podoba je měla na každém řádku
+      (<code>Vyžádat review od …</code>) a bylo to špatně: čtrnáct řádků opakovalo totéž a předpona
+      ořezala to jediné, čím se od sebe liší. Pojmenované kliknutí se tím neztrácí — jen se říká
+      <b>jednou</b>, a nadpis s položkou se čte jako jedna věta.
+    </p>
+    <p class="muted">
+      <b>Hledání je součást nabídky, ne příslušenství.</b> Lidí a týmů, které na repo smí, je
+      v organizaci řádově třicet (změřeno: 34 týmů), takže seznam bez filtru není hotová funkce.
+      Filtruje se podle toho, co je v řádku <b>vidět</b> — jméno, login, slug —, a pravidlo shody je
+      <b>totéž jako v paletě ⌘K</b>: bez diakritiky, bez ohledu na velikost písmen, víc slov jako
+      „a zároveň“ a silnější shoda nahoru. Dvě jinak se chovající hledání v jednom okně by byla
+      horší volba než sdílení. Nad krátkým seznamem se pole <b>nekreslí</b>.
+    </p>
+    <p class="muted">
+      <b>Kurzor je v poli hned po otevření</b> — proto je v kresbě před placeholderem. Bez toho je
+      nabídka „otevři, <b>klikni</b> a piš“, tedy o krok delší než ta, kterou nahradila. Šipky
+      a <code>↵</code> přitom bere pole <b>samo</b>, takže se dá vybírat, aniž by se z pole odešlo:
+      <code>↑↓</code> ořezávají (necyklí), <code>↵</code> potvrdí vybraný řádek a <code>esc</code>
+      nabídku zavře.
+    </p>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Reviewery — nadpis nese sloveso</div>
+        <div class="frame flat" style="padding: 14px;">
+          <div class="pkr">
+            <span class="cap">Vyžádat review od</span>
+            <div class="pkr-q">
+              <span class="ico">⌕</span>
+              <span class="caret"></span>
+              <span style="color: var(--ink-3);">Hledat</span>
+              <span class="sp"></span>
+            </div>
+            <div class="pkr-row on"><span class="rv-av wait">AD</span><span>adamvoves</span></div>
+            <div class="pkr-row"><span class="rv-av wait">BT</span><span>BagToad</span></div>
+            <div class="pkr-row"><span class="rv-av wait">DN</span><span>dasa-novakova</span></div>
+            <div class="pkr-row"><span class="rv-av wait">OD</span><span>odinuv</span></div>
+            <div class="pkr-row">
+              <span class="rv-av wait" style="border-radius: 4px;">▣</span>
+              <span>ajda-swimlane</span><span class="kind">tým</span>
+            </div>
+            <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ vyžádá</span><span>esc zavře</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Po filtru a prázdný výsledek</div>
+        <div class="frame flat" style="padding: 14px; display: flex; flex-direction: column; gap: 12px;">
+          <div class="pkr">
+            <span class="cap">Vyžádat review od</span>
+            <div class="pkr-q">
+              <span class="ico">⌕</span>
+              <span>swim</span>
+              <span class="sp"></span>
+              <span class="n">1</span>
+            </div>
+            <div class="pkr-row on">
+              <span class="rv-av wait" style="border-radius: 4px;">▣</span>
+              <span>ajda-swimlane</span><span class="kind">tým</span>
+            </div>
+            <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ vyžádá</span><span>esc zavře</span></div>
+          </div>
+          <div class="pkr">
+            <span class="cap">Vyžádat review od</span>
+            <div class="pkr-q">
+              <span class="ico">⌕</span>
+              <span>xyz</span>
+              <span class="sp"></span>
+              <span class="n">0</span>
+            </div>
+            <div class="pkr-empty">Nikdo takový tu není.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="muted">
+      U labelů je to totéž, jen se sloveso v nadpisu jmenuje podle toho, co klik dělá: je to
+      <b>přepínač</b>, takže se stejným řádkem label přidá i sundá. Odškrtnutí říká, které na PR
+      leží; položka zůstává <b>chip s barvou</b>, protože puntík je to, čím se labely od sebe poznají.
+    </p>
+    <div class="pane new" style="max-width: 340px;">
+      <div class="tag"><i></i>Labely — klik je přepínač</div>
+      <div class="frame flat" style="padding: 14px;">
+        <div class="pkr">
+          <span class="cap">Přepnout label</span>
+          <div class="pkr-q">
+            <span class="ico">⌕</span>
+            <span class="caret"></span>
+            <span style="color: var(--ink-3);">Hledat</span>
+            <span class="sp"></span>
+          </div>
+          <div class="pkr-row on">
+            <span class="tick">✓</span>
+            <span class="lchip"><i style="background: #D73A4A;"></i><span>bug</span></span>
+          </div>
+          <div class="pkr-row">
+            <span class="tick"></span>
+            <span class="lchip"><i style="background: #0366D6;"></i><span>dependencies</span></span>
+          </div>
+          <div class="pkr-row">
+            <span class="tick"></span>
+            <span class="lchip"><i style="background: #A2EEEF;"></i><span>enhancement</span></span>
+          </div>
+          <div class="pkr-row">
+            <span class="tick"></span>
+            <span class="lchip"><i style="background: #D4C5F9;"></i><span>needs-design-review</span></span>
+          </div>
+          <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ přepne</span><span>esc zavře</span></div>
+        </div>
+      </div>
+    </div>
+
     <div class="notes">
       <div class="note">
         <span class="num">1</span>
@@ -3686,6 +3876,37 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       </div>
       <div class="note">
         <span class="num">9</span>
+        <span class="body">
+          <b>Sloveso jednou, v nadpisu</b>
+          <span>Položka <code>Vyžádat review od Ada…</code> ořezala to jediné, čím se řádky liší,
+          a čtrnáctkrát zopakovala totéž. Nadpis je jedna řádka a s položkou se čte jako věta —
+          pojmenované kliknutí zůstává, jen se neopisuje. Pro čtečku obrazovky zůstává celá věta
+          u položky, protože nadpis se k ní nepřečte.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">10</span>
+        <span class="body">
+          <b>Hledání sdílí pravidlo s ⌘K</b>
+          <span>Bez diakritiky, bez ohledu na velikost písmen, víc slov jako „a zároveň“, silnější
+          shoda nahoru — a filtruje se podle toho, co je v řádku <b>vidět</b>. Sdílí se pravidlo, ne
+          celá paleta: ta hledá nad položkami s titulkem, podtitulkem a akcí a má strop šest řádků na
+          skupinu, což je u nabídky třiceti týmů špatně. Klávesnice: psaní filtruje, <code>↑↓</code>
+          vybírají (<b>ořezávají, necyklí</b> — přeskok z konce na začátek je v filtrované nabídce
+          k nerozeznání od „šipka nic neudělala“), <code>↵</code> potvrdí, <code>esc</code> zavře.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">11</span>
+        <span class="body">
+          <b>Prázdný výsledek není prázdná plocha</b>
+          <span><code>Nikdo takový tu není.</code> — a je to <b>čtvrtý</b> stav nabídky, ne první:
+          vedle něj existuje nenačteno, prázdné repo a porucha, a každý má vlastní větu. Prázdná
+          plocha by vypadala jako spadlé načítání, což je zrovna jeden z těch stavů.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">12</span>
         <span class="body">
           <b>Ve třech tabech to vidět nebude</b>
           <span>Panel není v <em>Kontrolách</em>, <em>Nálezech</em> ani <em>Průběhu</em> (#294)
@@ -4472,9 +4693,17 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         „kdy se sem dostala ta migrace“ má ale odpověď v jednotlivých commitech, a ta se dneska
         hledá v prohlížeči. Sedmá záložka je proto <b>prohlížeč, ne review</b>: seznam commitů
         a diff toho jednoho, na který se kliklo. Rozkliknutý commit <b>přepne obsah tabu</b>,
-        jako to má GitHub — seznam zmizí a diff dostane celou plochu. Bubliny nálezů, rozdělaný
-        komentář ani panel vpravo v ní nejsou, a není to zjednodušení první verze; proč, je
-        v poznámkách.
+        jako to má GitHub — seznam zmizí a diff dostane celou plochu. Bubliny nálezů ani rozdělaný
+        komentář v ní nejsou, a není to zjednodušení první verze; proč, je v poznámkách.
+      </p>
+      <p class="muted">
+        <b>Panel vpravo v ní od #392 je</b> — přepsáno proti prvnímu zákresu, ve kterém se
+        nekreslil ani složený proužek. Rozhodly o tom labely a vyžádaní reviewery, kteří v panelu
+        bydlí od #392: <b>nejsou o commitu</b>, platí pro celý pull request, takže panel, který se
+        tady nekreslí, schová i to, co v něm platí vždycky. Nálezy u toho musí říct, <b>proti čemu
+        platí</b>: nad seznamem stačí věta, u rozkliknutého staršího commitu je to výstraha
+        a karty jsou ztlumené. Rozhodnutí i s měřením je v <a class="jump" href="#s25">sekci 25
+        (proč to tak je →)</a>.
       </p>
     </div>
 
@@ -4483,8 +4712,10 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     <p class="muted">
       Je to jediné, co ten tab doopravdy stojí. Pruh je <b>jeden řádek</b>, dokud se do šířky
       tabu vejde; pod tím se popisky <b>zalamují</b> (nezkracují se) a pruh povyroste na dva až
-      čtyři řádky. Šířka tabu je okno minus rail (53) — panel s nálezy se v <em>Commitech</em>
-      nekreslí, takže ten neubírá. Čísla níž jsou změřená na <code>PullRequestTabBar</code>,
+      čtyři řádky. Šířka tabu je okno minus rail (53) — <b>panel z ní neubírá ani od #392</b>, kdy
+      se v <em>Commitech</em> začal kreslit: pruh leží v <code>PullRequestDetailView</code>
+      <b>nad</b> obsahem tabu, takže čísla níž platí dál a ubírá se <b>obsahu</b>, ne jim.
+      Čísla jsou změřená na <code>PullRequestTabBar</code>,
       ne odhadnutá: replika pruhu v Swiftu, <code>fittingSize</code> přes pásmo šířek. Sedí
       s tím, co naměřilo #306 — šest záložek bez odznaků vyšlo na 750 b (#306 hlásí „vejde se
       od ~780“), se všemi na 867 b („od ~920“).
@@ -4761,6 +4992,10 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               </div>
             </div>
 
+            <!-- Panel od #392 (viz sekce 25): labely a reviewery platí pro celý PR, takže se
+                 v Commitech kreslí. Ubírá **obsahu**, ne pruhu záložek nad ním. -->
+            <div class="work two" style="min-height: 0;">
+            <div style="min-width: 0; display: flex; flex-direction: column;">
             <div class="cbar">
               <span><b style="font-weight: 620; color: var(--ink);">7 commitů</b> · od nejnovějšího</span>
               <span class="sp"></span>
@@ -4847,6 +5082,57 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
                   <span class="go">›</span>
                 </span>
               </div>
+            </div>
+            </div>
+
+            <!-- Nad seznamem není vybraný žádný commit, takže nálezy platí pro hlavu PR
+                 a stačí u nich věta. Výstraha a ztlumené karty jsou u rozkliknutého staršího
+                 commitu, viz sekce 25. -->
+            <aside class="side">
+              <header>
+                <span>Moje review</span>
+                <span class="sp"></span>
+                <span class="kbd">⌘2</span>
+                <span class="fold">›</span>
+              </header>
+
+              <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 11px;
+                          border-bottom: 1px solid var(--line-soft);">
+                <div class="pl-sec">
+                  <span class="cap">Labely</span>
+                  <div class="chipline">
+                    <span class="lchip"><i style="background: #0366D6;"></i><span>dependencies</span></span>
+                    <span class="lchip"><i style="background: #D73A4A;"></i><span>bug</span></span>
+                  </div>
+                </div>
+                <div class="pl-sec">
+                  <span class="cap">Reviewery</span>
+                  <div class="rv-list">
+                    <div class="rv-row"><span class="rv-av done">OJ</span><span class="who">Ondřej Jodas</span><span class="ans done">schválil</span></div>
+                    <div class="rv-row"><span class="rv-av wait">MZ</span><span class="who">Marie Zíková</span><span class="ans">čeká</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="seg">
+                <span class="seg-i on">Nálezy <span style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-2);">3</span></span>
+                <span class="seg-i">Moje review</span>
+              </div>
+
+              <div style="padding: 4px 11px 0;">
+                <div class="tl-impact">
+                  <span class="txt">Nálezy jsou proti hlavě <code>e8d4a60</code>.</span>
+                </div>
+              </div>
+
+              <div class="fcard crit">
+                <div class="top">
+                  <span class="pill crit">blokuje</span>
+                  <span class="cat">SecretClient.php:81</span>
+                </div>
+                <div class="sum">Prázdný secret projde fallbackem dál jako platný.</div>
+              </div>
+            </aside>
             </div>
 
             <div class="statusbar">
@@ -5199,11 +5485,13 @@ projeví hned v tom dalším.</div>
       <div class="note">
         <span class="num">6</span>
         <div class="body">
-          <b>Panel vpravo se nekreslí</b>
-          <span><em>Commity</em> jsou čtvrtý tab bez panelu (#294) a ze stejného důvodu jako
-            <em>Kontroly</em>: panel odpovídá na „co k tomu, co čtu, nahlásily reviewery“,
-            a nálezy jsou klíčované hlavou PR, ne commitem — u staršího commitu by ukazoval
-            nálezy k jinému kódu.</span>
+          <b>Panel vpravo se kreslí (#392)</b>
+          <span>Do #392 se nekreslil — <em>Commity</em> byly čtvrtý tab bez panelu (#294) a druhý
+            důvod byl tvrdší: nálezy jsou klíčované hlavou PR, ne commitem. Otočily to labely
+            a reviewery, kteří platí pro celý PR. Ten tvrdší důvod se přitom <b>neobešel</b>:
+            u rozkliknutého staršího commitu je nad nálezy <b>výstraha</b> a karty jsou ztlumené,
+            takže se nekreslí jako platné. Panel navíc přijde v tom stavu, ve kterém ho člověk
+            nechal jinde — <code>isReviewPanelExpanded</code> je jeden na okno, ne na tab.</span>
         </div>
       </div>
     </div>
@@ -5226,9 +5514,11 @@ projeví hned v tom dalším.</div>
           <b style="font-size: 13.5px;">Komentář k řádku commitu</b>
           <p class="muted" style="font-size: 12.5px;">Rozdělaný komentář se váže na
             <code>(soubor, řádek)</code> diffu PR. U commitu by se musel klíčovat i sha
-            a odeslat by šel jedině <b>pátou metodou v <code>ReviewPublishing</code></b> —
-            a ten výčet je krátký schválně. Takhle se tvrdé podmínky č. 1 tenhle tab
-            <b>nedotýká vůbec</b>: je celý čtecí.</p>
+            a odeslat by šel jedině <b>další metodou v <code>ReviewPublishing</code></b> —
+            a ten výčet je krátký schválně (od #392 je v něm šest metod, protože přibyly labely
+            a vyžádání reviewera; komentář ke commitu mezi ně pořád nepatří). Composer v panelu
+            proto píše <b>tělo review proti hlavě PR</b>, ne komentář ke commitu, a sám
+            <code>CommitDiffView</code> zůstává celý čtecí.</p>
         </div>
       </div>
       <div class="frame">

@@ -102,6 +102,63 @@ struct GhReviewPublisher: ReviewPublishing {
         return comment
     }
 
+    // MARK: - Labely a reviewery (#392)
+
+    /// Nastaví celou sadu labelů. Brána i pre-flight stejné jako u komentáře — štítek se neváže
+    /// na commit, takže se hlava neověřuje.
+    ///
+    /// **Prázdná sada je platná akce**, na rozdíl od prázdného komentáře: sundání posledního
+    /// štítku je právě `{"labels": []}`, takže tady žádná obdoba `blankComment` není a být nemá.
+    func setLabels(_ labels: [String], on pullRequest: PRIdentifier) async throws -> [PullRequestLabel] {
+        guard scope.allows(pullRequest.repo) else {
+            throw PublishError.publishingNotAllowed(pullRequest.repo)
+        }
+
+        try await preflight(pullRequest, expecting: nil)
+
+        let file = try writePayload(
+            try MetadataRequest.encoded(MetadataRequest.LabelsPayload(labels: labels)),
+            prefix: "prism-labels"
+        )
+        // Soubor jde pryč, ať se to povede nebo ne — `try?` je tady v pořádku ze stejného důvodu
+        // jako u review: nepovedený úklid nemá na výsledek vliv a nic se jím neztrácí.
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let output = try await call(MetadataRequest.labelArguments(for: pullRequest, payload: file))
+        return try decoded([GhLabel].self, from: output).map(\.label)
+    }
+
+    /// Vyžádá review od uvedených lidí. **Jen přidává** — odebrání není opravný krok (upozornění
+    /// se vzít zpět nedá), takže tudy nevede.
+    func requestReviewers(
+        _ logins: [String],
+        teams: [String],
+        on pullRequest: PRIdentifier
+    ) async throws -> RequestedReview {
+        guard scope.allows(pullRequest.repo) else {
+            throw PublishError.publishingNotAllowed(pullRequest.repo)
+        }
+        // Vyžádat nikoho **není akce** a nevolá se: GitHub prázdná pole přijme a nic neudělá, takže
+        // by okno hlásilo vyžádané review, které nevzniklo. Tatáž úvaha jako u prázdného komentáře,
+        // jen s vlastní hláškou — „napiš text“ by tady nedávalo smysl. Platí to i pro týmy: prázdné
+        // je obojí, nebo se volá.
+        guard !logins.isEmpty || !teams.isEmpty else { throw PublishError.noReviewer }
+
+        try await preflight(pullRequest, expecting: nil)
+
+        let output = try await call(
+            MetadataRequest.reviewerArguments(for: pullRequest, logins: logins, teams: teams)
+        )
+        let decoded = try decoded(GhRequestedReviewersResponse.self, from: output)
+        // Odpověď nese **jen** to, na koho se čeká; odpovědi ostatních v ní nejsou. Sloučení proto
+        // patří volajícímu, který zná stav okna (`Policy.reviewers(requested:keeping:)`) — tady se
+        // vrací to, co potvrdil GitHub, tedy samí čekající a všechny vyžádané týmy.
+        return RequestedReview(
+            reviewers: Policy.reviewers(requested: decoded.logins(), verdicts: []),
+            teams: decoded.teamSlugs()
+        )
+    }
+
     // MARK: - Pre-flight
 
     /// Ověří, že se posílá na to, co jsme viděli. **Při neshodě se nevolá zápis.**
@@ -142,7 +199,7 @@ struct GhReviewPublisher: ReviewPublishing {
         _ payload: PublishRequest.Payload,
         to pr: PRIdentifier
     ) async throws -> SubmittedReview {
-        let file = try writePayload(payload)
+        let file = try writePayload(try PublishRequest.encoded(payload), prefix: "prism-review")
         // Soubor jde pryč, ať se odeslání povede nebo ne — je v něm text review.
         //
         // `try?` je tady v pořádku, i když se jinak v tomhle repu nesmí: **nepovedený úklid
@@ -198,12 +255,16 @@ struct GhReviewPublisher: ReviewPublishing {
     ///
     /// Práva `0600`: je v něm text review, který ještě nikdo neviděl, a dočasná složka je
     /// společná pro celý systém.
-    private func writePayload(_ payload: PublishRequest.Payload) throws -> URL {
+    ///
+    /// **Bere hotová data, ne payload review** (#392): souborem se od té doby posílá i sada labelů,
+    /// a dvě skoro shodné funkce na „napiš JSON s právy 0600 a ukliď ho“ by se rozešly zrovna
+    /// v těch právech. `prefix` je jen jméno v dočasné složce, aby se dalo poznat, co v souboru
+    /// zůstalo, kdyby úklid selhal. Kódování zůstává **u volajícího a před tímhle voláním** —
+    /// když selže, není co uklízet.
+    private func writePayload(_ data: Data, prefix: String) throws -> URL {
         let file = URL(filePath: NSTemporaryDirectory())
-            .appending(path: "prism-review-\(UUID().uuidString).json")
+            .appending(path: "\(prefix)-\(UUID().uuidString).json")
         let path = file.path(percentEncoded: false)
-        // Kódování **před** vytvořením souboru: když selže, není co uklízet.
-        let data = try PublishRequest.encoded(payload)
 
         // Nejdřív prázdný soubor s právy, teprve pak obsah — text review tak na disku nikdy
         // neexistuje se širšími právy. Zápis proto **není** `.atomic`: ten píše do vedlejšího

@@ -251,6 +251,72 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return jobLog
     }
 
+    // MARK: - Labely a reviewery (#392)
+
+    /// Co vrátí `fetchMetadata`. Výchozí **prázdný snímek**, protože prázdno je platná odpověď:
+    /// PR bez labelů a bez vyžádaných reviewerů je běžný.
+    var metadata = PullRequestMetadata()
+
+    /// Čím `fetchMetadata` spadne. `nil` = vrátí `metadata`.
+    ///
+    /// Vlastní přepínač, ne `Result`, ze stejného důvodu jako u checků: „PR nemá labely“ a „nešlo
+    /// to zjistit“ jsou dva stavy, které se u téhle sekce nesmí slít — podle prvního se sekce
+    /// nekreslí, podle druhého se nesmí dát měnit sada, kterou aplikace nezná.
+    var metadataFailure: (any Error)?
+
+    /// Na co se kdo ptal, v pořadí. Na počtu stojí test, že se snímek **nedotahuje znovu při
+    /// každém příchodu na PR**.
+    var metadataRequests: [PRIdentifier] { lock.withLock { metadataAsked } }
+
+    private var metadataAsked: [PRIdentifier] = []
+
+    func fetchMetadata(id: PRIdentifier) async throws -> PullRequestMetadata {
+        lock.withLock { metadataAsked.append(id) }
+        if let metadataFailure { throw metadataFailure }
+        return metadata
+    }
+
+    /// Labely, které zná repo. Prázdno je platná odpověď — a hlavně: z prázdné nabídky nejde
+    /// vyrobit label.
+    var repositoryLabels: [PullRequestLabel] = []
+    var repositoryLabelsFailure: (any Error)?
+    /// Na co se kdo ptal. Na počtu stojí test, že se nabídka tahá **jednou**, ne při každém
+    /// otevření.
+    var repositoryLabelRequests: [RepoID] { lock.withLock { repositoryLabelsAsked } }
+
+    private var repositoryLabelsAsked: [RepoID] = []
+
+    func fetchRepositoryLabels(repo: RepoID) async throws -> [PullRequestLabel] {
+        lock.withLock { repositoryLabelsAsked.append(repo) }
+        if let repositoryLabelsFailure { throw repositoryLabelsFailure }
+        return repositoryLabels
+    }
+
+    var assignableUsers: [String] = []
+    var assignableUsersFailure: (any Error)?
+    var assignableUserRequests: [RepoID] { lock.withLock { assignableUsersAsked } }
+
+    private var assignableUsersAsked: [RepoID] = []
+
+    func fetchAssignableUsers(repo: RepoID) async throws -> [String] {
+        lock.withLock { assignableUsersAsked.append(repo) }
+        if let assignableUsersFailure { throw assignableUsersFailure }
+        return assignableUsers
+    }
+
+    /// Slugy týmů. Prázdno je platná odpověď — repo mimo organizaci týmy nemá.
+    var assignableTeams: [String] = []
+    var assignableTeamsFailure: (any Error)?
+    var assignableTeamRequests: [RepoID] { lock.withLock { assignableTeamsAsked } }
+
+    private var assignableTeamsAsked: [RepoID] = []
+
+    func fetchAssignableTeams(repo: RepoID) async throws -> [String] {
+        lock.withLock { assignableTeamsAsked.append(repo) }
+        if let assignableTeamsFailure { throw assignableTeamsFailure }
+        return assignableTeams
+    }
+
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {
         let answer: Result<PullRequest, any Error>? = lock.withLock {
             detailsAsked.append(id)

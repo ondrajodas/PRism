@@ -311,7 +311,9 @@ struct AppStoreAgentPromptTests {
     func opensThePullRequestAndItsPanel() async {
         let store = await prepared(author: "ondra", mine: ["ondra"])
         store.isReviewPanelExpanded = false
-        store.setDetailTab(.commits, for: pr)
+        // `Kontroly`, ne `Commity`: od #392 panel v `Commitech` **je**, takže by se nepřepínalo
+        // nic a test by tvrdil něco o tabu, ve kterém ta situace nenastane.
+        store.setDetailTab(.checks, for: pr)
 
         store.openAgentPrompt(in: pr)
 
@@ -319,7 +321,7 @@ struct AppStoreAgentPromptTests {
         #expect(store.openTabs.contains(pr))
         #expect(store.reviewPanelTab == .agentPrompt)
         #expect(store.isReviewPanelExpanded)
-        // Panel v tabu `Commity` není, takže se musí přepnout na ten, ve kterém je — jinak se
+        // Panel v tabu `Kontroly` není, takže se musí přepnout na ten, ve kterém je — jinak se
         // rozloží něco, co není vidět.
         #expect(store.detailTab(for: pr) == .standard)
     }

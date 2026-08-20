@@ -13,12 +13,17 @@ import SwiftUI
 ///
 /// - **Komentář k řádku commitu by potřeboval jiný klíč.** Rozdělaný komentář se váže na
 ///   `(soubor, řádek)` diffu PR; u commitu by se musel klíčovat i sha, jinak by se dva komentáře
-///   k témuž řádku ve dvou commitech přepsaly. A odeslat by ho šla jedině **pátá metoda
-///   v `ReviewPublishing`** — a ten výčet je podle tvrdé podmínky č. 1 krátký schválně. Tím, že je
-///   tab celý čtecí, se podmínky **nedotýká vůbec**.
+///   k témuž řádku ve dvou commitech přepsaly. A odeslat by ho šla jedině **další metoda
+///   v `ReviewPublishing`** — a ten výčet je podle tvrdé podmínky č. 1 krátký schválně (od #392
+///   je v něm šest metod, komentář ke commitu mezi ně pořád nepatří). Tím, že je tenhle typ celý
+///   čtecí, se podmínky **nedotýká vůbec**.
 /// - **Nálezy jsou klíčované `headSha`** (tvrdá podmínka č. 5), takže u staršího commitu by
-///   ukazovaly na jiný kód. To je i důvod, proč se v tabu nekreslí panel
-///   (`PullRequestTab.showsReviewPanel`).
+///   ukazovaly na jiný kód.
+///
+/// **Panel v tabu od #392 je**, a na tomhle typu se tím nemění nic: kreslí ho
+/// `PullRequestDetailView` **vedle** něj, takže composer v panelu píše tělo review proti hlavě PR,
+/// ne komentář ke commitu. Že u staršího commitu nálezy nevypadají jako platné, řeší věta a ztlumené
+/// karty v panelu (`Policy.findingsHeadNotice`), ne tenhle typ — ten o nálezech nic neví.
 ///
 /// Co **zůstává**: oba pohledy, word-level zvýraznění, sbalování souborů, rozbalování kontextu,
 /// kopírování a strom souborů vlevo (`⌘1`) — commit s třiceti soubory ho potřebuje. Všechno

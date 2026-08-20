@@ -647,15 +647,23 @@ komentář a do řádků se nedá klikat. Čte se, kopíruje a rozbaluje kontext
 - **Komentář k řádku commitu by potřeboval jiný klíč.** Rozdělaný komentář se váže na
   `(soubor, řádek)` diffu PR; u commitu by se musel klíčovat i sha, jinak by se dva
   komentáře k témuž řádku ve dvou commitech přepsaly.
-- **Odeslat by ho šla jedině pátá metoda v `ReviewPublishing`** — a tvrdá podmínka č. 1
-  říká, že ten výčet je krátký schválně. Tím, že je tab celý čtecí, se **tvrdé podmínky
-  č. 1 nedotýká vůbec**: `GitHubGateway` zůstává bez zápisových metod,
-  `grep ReviewPublishing App/` vrací tentýž seznam a protokol má dál čtyři metody.
+- **Odeslat by ho šla jedině další metoda v `ReviewPublishing`** — a tvrdá podmínka č. 1
+  říká, že ten výčet je krátký schválně. Tím, že je diff commitu celý čtecí, se **tvrdé podmínky
+  č. 1 nedotýká vůbec**: `GitHubGateway` zůstává bez zápisových metod a `CommitDiffView` nemá
+  `AppStore` ani jedinou akci. (Do #392 tu stálo „pátá metoda“ a „protokol má dál čtyři metody“;
+  od #392 jich má šest — labely a vyžádání reviewera —, ale komentář ke commitu mezi ně pořád
+  nepatří.)
 
-**Panel s nálezy se nekreslí** — čtvrtý takový tab po `Kontrolách`, `Nálezech` a `Průběhu`
-(#294). Důvod je tu ale vlastní: nálezy jsou klíčované `headSha` (tvrdá podmínka č. 5),
-takže u staršího commitu by panel ukazoval nálezy k **jinému kódu**. Není to jen
-duplikát jako u `Nálezů`, je to tvrzení, které by neplatilo.
+**Panel s nálezy se nekreslil** — čtvrtý takový tab po `Kontrolách`, `Nálezech` a `Průběhu`
+(#294). Důvod byl vlastní: nálezy jsou klíčované `headSha` (tvrdá podmínka č. 5), takže
+u staršího commitu by panel ukazoval nálezy k **jinému kódu**. Nebyl to jen duplikát jako
+u `Nálezů`, bylo to tvrzení, které by neplatilo.
+
+**Od #392 se panel kreslí** (viz záznam rozhodnutí na konci dokumentu) a otočily to labely
+s reviewery, které v panelu platí pro celý PR, ne pro commit. Ten důvod výš se ale **neobešel**:
+stala se z něj věta v UI — nad seznamem klidná, u rozkliknutého **staršího** commitu **výstraha**
+a ztlumené karty (`Policy.findingsHeadNotice`). Nálezy se tedy dál nekreslí proti kódu, který
+neexistuje; jen je u nich napsané, ke kterému kódu patří.
 
 **Rozkliknutý commit přepne obsah tabu**, jako to má GitHub — seznam zmizí, diff dostane
 celou plochu a nahoře je hlavička se sha, zprávou, autorem, počty a cestou zpět.
@@ -1003,7 +1011,7 @@ který `CLAUDE.md` zakazuje od #292/#295. Na `CRLF` nerozdělí vůbec — `"\r\
 | Zamítnuto | Proč |
 |---|---|
 | Rozbalení diffu pod řádkem seznamu | Seznam by zůstal nad diffem, scrollovaly by se dvě plochy nad sebou a hlavička commitu by se odrolovala pryč zrovna ve chvíli, kdy se čte kód |
-| Komentář k řádku commitu | Jiný klíč draftu a pátá metoda v `ReviewPublishing` — viz výš. Komentář patří do `Změněných souborů` a hlavička commitu na to jednou větou odkazuje |
+| Komentář k řádku commitu | Jiný klíč draftu a **další** metoda v `ReviewPublishing` — viz výš. Komentář patří do `Změněných souborů` a hlavička commitu na to jednou větou odkazuje. Platí to i po #392, které ten výčet rozšířilo o labely a reviewery |
 | `+X −Y` u každého commitu v seznamu | Seznam je nenese; dotažení je N+1. Čísla jsou o jedno kliknutí dál a tam zadarmo |
 | Zkrátit `Změněné soubory` na `Soubory` | Ušetří 55 bodů, tedy skoro polovinu ceny sedmé záložky — ale `Soubory` se plete se stromem souborů v liště diffu, což je zapsaný důvod, proč ten popisek takhle zní (`PullRequestTab.czechLabel`) |
 | `Commity` jako přepínač uvnitř `Změněných souborů` | Ušetřilo by sedmou záložku celou, ale `Změněné soubory` jsou obrazovka na review (strom, panel, bubliny, draft) a přepínač uvnitř by polovinu z toho zhasínal. Skrytý stav, ve kterém obrazovka umí míň, je horší než záložka, na které je vidět, kde jsem |
@@ -2554,3 +2562,65 @@ o tomtéž a rozešly by se, jak se to u dvou kopií stává.
 | **`permission_denials` zůstává jako záchrana** a při shodě prohrává | Zrušit ho (duplicita), nebo mu naopak dát přednost | Není to druhý zdroj pravdy, je to druhá cesta k témuž pro chvíli, kdy ta první nedoběhla — useknutý `user` event, rozbitý řádek, starší CLI bez `tool_result_meta`. Odpověď ze streamu vyhrává, protože přišla, když se to stalo, a nese trvání; přepsat smí záchrana jedině `failed`, protože „nemělo povolení“ je o té odpovědi silnější tvrzení než hláška, kterou nástroj vrátil |
 | **Hláška se ukládá sražená na řádek a do 200 znaků** | Držet celou odpověď, nebo nedržet nic | Odpovědí `Read`u je celý soubor a odpovědí `Bash`e celý výstup, takže bez stropu by jeden neúspěšný krok přilepil k záznamu na disku megabajt — a osa se čte při každém startu. Nedržet nic by ale znamenalo odznak bez důvodu, tedy pravý opak toho, co #326 chce |
 | **Nespárovaná odpověď se zahazuje** | Vyrobit z ní krok | Není k čemu ji přilepit (rozbitý řádek s `tool_use`) a samostatný krok by byl krok, o kterém se neví, co v něm běželo |
+
+### Záznam rozhodnutí — labely a reviewery v panelu, panel i v `Commitech` (#392)
+
+**#392 mění tvrdou podmínku č. 1**, a je to nejdůležitější věc na tom celém issue. Do té doby
+u výčtu metod `ReviewPublishing` stálo, že „approve mimo review, **label** ani zavření PR tam pořád
+nepatří“. Teď tam label patří — a je zapsané proč i co v zákazu zůstalo.
+
+**Proč se to změnilo:** u **vlastního** PR je štítek a vyžádaný reviewer součástí toho, jak si
+člověk řídí svoji frontu, a je to poslední věc, kvůli které se od hotového review přepíná do
+prohlížeče. Je to tatáž úvaha i tentýž precedens jako u #73 (odpověď do vlákna) a #216 (komentář pod
+PR): výčet se rozšířil, protože se ta věc dělá **při review**, a zapsal se důvod. **Co zůstává
+zakázané:** approve mimo review, **merge**, **zavření PR** a **milník** — a `SingleWayOutTests` je
+hlídá jmenovitě, takže se sedmá metoda nedá přidat potichu.
+
+| Rozhodnutí | Alternativa | Proč |
+|---|---|---|
+| **Pátá a šestá metoda `ReviewPublishing`** (`setLabels`, `requestReviewers`), obě si ověří **tutéž** bránu | Nechat výčet na čtyřech a labely řešit jinudy (`gh` z view, druhý „lehký“ zapisovač) | Druhá cesta ven je přesně to, co podmínka zakazuje — a nešla by zakázat v nastavení. Cena rozšíření je jeden řádek v grepu a jeden ve testu; cena druhého zapisovače je, že „odkud se dá odeslat“ přestane být otázka s jednou odpovědí |
+| **Jeden volající na obojí** (`MetadataSubmission`) | Dva soubory, jeden na labely a jeden na reviewery | Z pohledu podmínky je to tatáž věc: metadata **vlastního** PR, tatáž brána, žádný potvrzovací sheet, tytéž dvě sekce panelu. Dva soubory by ten výčet cest ven prodloužily za nic — a smysl toho výčtu je, že je krátký |
+| **Žádný druhý přepínač v nastavení** — platí `allowsPublishing` | Vlastní volba „smí měnit labely“ | Druhý přepínač je druhé místo, kde se dá „samo nic neodejde“ porušit, a hlavně: člověk, který povolil odeslání **review** do repa, povolil to větší. Štítek je proti approve maličkost |
+| **Měnit jen na vlastním PR; na cizím akce nejsou vůbec** | Zašedlé akce s vysvětlením i na cizím PR | Zašedlé tlačítko tvrdí „tady se to dělá, jen teď ne“. U cizího PR se to nedělá **nikdy**, takže by to byla nepravda. U vypnuté **brány** je to naopak pravda — proto tam zašedlá akce s důvodem zůstává, a je to jediný rozdíl mezi těmi dvěma stavy |
+| **Label bez potvrzovacího sheetu, ale jen z labelů, které repo zná** | Volný text (rychlejší, umí i nový label) | Label je vratný jedním klikem a nikoho neupozorní, takže sheet by z okna udělal klikačku. Volný text ale umí **vyrobit nový label**, a ten už z repozitáře sám nezmizí — to je nevratná změna repa udělaná překlepem. Nabídka je proto uzavřená a hlídá to i `Policy.toggledLabels`, ne jen view |
+| **Reviewer jedním pojmenovaným kliknutím** (`Vyžádat review od …`) | `+` vedle avatara, nebo potvrzovací sheet | Request **pošle člověku upozornění a odebráním se nedá vzít zpět**, takže potvrzení musí být vidět dřív, než se klikne — a to nejlevnější potvrzení je jméno na tlačítku. Sheet by nepřidal nic: payload je jedno jméno, které je na tlačítku celé |
+| **Odebrat vyžádané review odsud nejde** | Křížek u řádku reviewera | Odebrání není opravný krok (upozornění je odesláno), jen zametení — a to patří do prohlížeče, ne do okna, které má o review rozhodovat |
+| **Sada labelů se posílá celá, jedním `PUT`, a payload jde souborem** | Dvě volání (přidat, odebrat) nebo `-f 'labels[]=…'` | `PUT /issues/{n}/labels` sadu **nahrazuje**, takže dvě volání by mezi sebou nechala stav s půlkou sady — a to je právě ten částečně odeslaný stav, který podmínka zakazuje. Souborem kvůli **prázdné sadě**: sundání posledního štítku je `{"labels": []}`, kdežto `gh api` bez jediného `-f` neposílá tělo vůbec |
+| **`headSha` se neověřuje**, stav PR ano | Ověřit hlavu jako u review | Štítek se váže na PR, ne na commit; kontrola hlavy by zakázala zrovna to, kvůli čemu se štítkuje — přeštítkovat PR, který mezitím dostal push. Tatáž úvaha jako u #73 a #216 |
+| **Čtení je tři metody `GitHubGateway`** (metadata PR, labely repa, assignable uživatelé) | Nacpat labely do `fetchDetail` | `fetchDetail` volá i pre-flight publisheru před **každým** odesláním, a odpověď reviewera se skládá z `latestReviews`, tedy z pole s celými těly review (1,5 kB za jedno review od bota, změřeno na `cli/cli`). Platit tu velikost při každém odeslání za údaj, který odesílání nezajímá, nemá důvod |
+| **Nabídky se tahají až na otevření** | Dotáhnout je s detailem, ať je nabídka okamžitá | Jsou to dvě volání `gh` na výběr řádku, a nabídka se otevírá zřídka. Cena za rychlost by se platila u každého PR, i u těch, kde nikdo na `+ label` neklikne |
+| **`assignableUsers` přes GraphQL** | `GET /repos/{o}/{r}/collaborators` | Seznam spolupracovníků chce **push právo**, takže na repu, kam se dá jen číst, skončí 403. `assignableUsers` je navíc přesně ta množina, ze které GitHub sám dovolí review vyžádat, takže nabídka nemůže obsahovat volbu, kterou pak zápis odmítne |
+| **Odpověď reviewera má tři hodnoty** (`schválil`, `chce změny`, `čeká`) | Dvě (odpověděl / neodpověděl) | Prostřední je jediná, která něco **blokuje** — sloučit ji s `čeká` by zahodilo zrovna tu informaci, kvůli které se na sekci kouká |
+| **Kdo jen komentoval a vyžádaný není, v sekci není** | Ukázat všechny z `latestReviews` | `latestReviews` nese i review bez verdiktu a přijdou i od review bota. Nakreslit je jako `čeká` by tvrdilo, že se na ně čeká, což není pravda: neřekli ani ano, ani ne, a nikdo je nežádal |
+| **Vyžádání přebíjí starší verdikt** | Nechat vyhrát verdikt jako „poslední slovo“ | Po pushnutí opravy GitHub review znovu vyžádá; staré `CHANGES_REQUESTED` je pak odpověď na kód, který už tam není. Na otázku „na kom to stojí“ je správná odpověď `čeká` |
+| **Panel v `Commitech` a věta o hlavě** | Nechat `Commity` bez panelu (stav do #392) | Labely a reviewery **nejsou o commitu**, platí pro celý PR — panel, který se v `Commitech` nekreslí, tedy schová i to, co v něm platí vždycky. Ten druhý, tvrdší důvod (nálezy jsou klíčované `headSha`) se **neobešel**: stala se z něj věta v UI, u staršího commitu výstraha a ztlumené karty. Nálezy se tedy dál nekreslí proti kódu, který neexistuje |
+| **Hlava ve větě je z uloženého záznamu**, ne z detailu PR | Brát dnešní hlavu z `fetchDetail` | Nálezy vznikly na konkrétní hlavě a věta má říct **ke kterému kódu patří**; hlava z detailu by mluvila o commitu, se kterým nemají nic společného |
+| **Karty se ztlumí, neschovají** | U staršího commitu nálezy nekreslit | Schovat je znamená, že panel v `Commitech` nálezy nemá — tedy zrovna ta ztráta, kterou #392 řeší. A schovaný nález se nedá odlišit od neexistujícího (tatáž úvaha jako u odmítnutí, #113) |
+| **`showsReviewPanel` se nespojuje s `isReviewerOutput`** | Sjednotit na jednu vlastnost, když se rozcházejí jen u `Kontrol` | Dělič v pruhu záložek se kreslí z `isReviewerOutput`; splynutí by ho posunulo a `Kontroly` by skočily do pravé skupiny. Test `panelIsNotReviewerOutput` se proto **přepsal** (`Commity` z výčtu odešly), ne zrušil — tvrzení drží `Kontroly` samotné |
+| **Zalomení chipů počítá `Policy`, nevyjednává SwiftUI** | Nechat to na `FlowRow` a `max-width` | Dvouřádkový strop se z pružného rozvržení vyjádřit **nedá vůbec**, a k tomu jsou v tom dvě pasti změřené na zákresu (#390): ořez musí nechat místo na `+N` (jinak jsou řádky tři) a šířka chipu se počítá **i s rámem a odsazením** (jinak chip přeroste panel o 3 body). Měří se na tom typu, který kreslí (pravidlo #236), a hlídá to test srovnávající spočítanou šířku s nakreslenou |
+| **Chybu načtení drží vlastní stav** (`MetadataState.failed`) | Po chybě jen nekreslit sekci | „PR nemá labely“ a „labely jsem nezjistil“ jsou dvě různé odpovědi. Kdyby se slily, vypadal by výpadek sítě jako pull request bez štítků — a na vlastním PR by se dalo kliknutím **přepsat sadu, kterou aplikace nezná**, tedy smazat štítky, o kterých neví |
+| **Nabídka labelů je popover, ne `Menu`** | Systémové menu | Nabídka se musí dotáhnout **při otevření** a `Menu` na macOS spolehlivý okamžik nedává; a u labelu se kreslí **puntík s barvou z repozitáře**, což v systémovém menu není kam dát |
+
+Dvě rozhodnutí dorazila z proklikání, ještě před mergem:
+
+| Rozhodnutí | Alternativa | Proč |
+|---|---|---|
+| **Vyžádané týmy mají vlastní pole** (`PullRequestMetadata.teams`) | `RequestedReviewer` s příznakem „je to tým“ | GitHub je drží ve **dvou** polích a tým **nemá odpověď** — dá ji až ten, kdo za tým odpoví, a ten se objeví jako osoba. Sdílený typ by znamenal `answer` optional a každé view by na tu možnost muselo myslet; takhle to drží typ. Do #392 se týmy **zahazovaly** a byla to tichá ztráta: u čtyř PR ze čtrnácti byla sekce prázdná, i když review někdo vyžádal (změřeno na `keboola/platform-architecture-and-concepts#278`) |
+| **Tým se kreslí jako čtverec se skupinovou ikonou a slovem `tým` v pravém sloupci** | Kolečko s iniciálou jako u člověka; nebo prázdný pravý sloupec | Kolečko v tomhle okně znamená **osobu**, takže tým s iniciálou je osoba s divným jménem. A prázdný pravý sloupec vypadá jako chybějící data — `tým` je jediné pravdivé slovo, které tam patří, a nikdy netvrdí odpověď. Jiný tvar = jiný druh věci, přerušovaný okraj drží úmluvu „přerušované se ještě nestalo“ |
+| **Lidi i týmy vyžádá jedna metoda jedním voláním** | Sedmá metoda protokolu na týmy | GitHub je bere jedním payloadem (`reviewers` + `team_reviewers`), takže dvě žádosti by nechaly mezistav s půlkou vyžádaných — a to podmínka č. 1 zakazuje. Druhá metoda by ten výčet prodloužila za nic |
+| **Nabídka týmů přes `orgs/{org}/teams`** | `repos/{o}/{r}/teams`, tedy „týmy tohohle repa“ | Změřeno: repozitářová varianta vrátila **404** i na repu, kam se dá číst i psát PR — chce admin práva. Organizační seznam prošel (34 týmů, 0,63 s). **404 u účtu bez organizace je odpověď, ne porucha**: osobní repo týmy nemá |
+| **Slug se sjednocuje na podobu bez organizace** | Nechat, jak přijde | `gh pr view` dává `keboola/ajda-swimlane`, REST a `orgs/…` `ajda-swimlane` — a tu druhou chce zápis. Kdyby se obě podoby potkaly v panelu, vypadal by týž tým jako dva. Dělí se s `omittingEmptySubsequences: false`, protože jinak z `keboola/` vyjde `keboola`, tedy **jméno organizace vydávané za tým** (chytil to test) |
+| **Důvod zakázané akce je napsaný v panelu** | Nechat ho v tooltipu (`help`) | Zašedlé tlačítko bez důvodu je otázka, na kterou okno neodpovídá — při proklikání vypadala vypnutá brána jako rozbitá aplikace. Věta je tatáž, na které skončí publisher; **není to výstraha**, protože nastavení není porucha, takže je tiše šedá |
+| **Zakládání nových labelů do #392 nepatří** | Přidat volné pole „nový label“ k nabídce | Je to zápis do **repozitáře**, ne do PR (`POST /repos/{owner}/{repo}/labels`), tedy **sedmá** metoda protokolu, k tomu nové pole s barvou (nová věc na obrazovce → mockup a schválení) a hlavně: **nedá se vzít zpět jedním klikem**, protože smazání labelu ho odebere ze všech PR v repu. Uzavřená množina proto zůstává a na zakládání je samostatné issue |
+
+A dvě z druhého kola proklikání, obojí o nabídce:
+
+| Rozhodnutí | Alternativa | Proč |
+|---|---|---|
+| **Sloveso v nadpisu nabídky, položky nesou jen jména** | Nechat `Vyžádat review od …` na každém řádku (původní podoba „pojmenovaného kliknutí“) | U čtrnácti řádků předpona sežrala šířku a ořezala to jediné, čím se položky liší — `Vyžádat review od Ada…`, `… Das…`, `… Hal…`. Pojmenované kliknutí se neztrácí, jen se říká **jednou**: nadpis a položka se čtou jako věta. Pro čtečku obrazovky zůstává celá věta u položky, protože nadpis se k ní nepřečte |
+| **Hledání sdílí pravidlo s paletou ⌘K, ne její `paletteResults`** | (a) vlastní pravidlo shody; (b) prohnat nabídku paletou | (a) Dvě jinak se chovající hledání v jednom okně jsou horší než sdílení — člověk si zvykne, že `nalez` najde `nález`. (b) Paleta hledá nad položkami s titulkem, podtitulkem, klíčovými slovy, skupinou a **akcí** a má strop šest řádků na skupinu; nabídka má třicet čtyři týmů a položku o jednom řetězci. Prohnat ji paletou by znamenalo vymyšlenou skupinu a akci, na kterou se nedá kliknout, tedy víc kódu **a** dvě nová místa v paletě. Zvedly se proto na `internal` dvě primitivy (`searchRange`, `searchStartsWord`) a dělení dotazu na slova |
+| **Kurzor v nabídce ořezává, necyklí** | Cyklit z konce na začátek | V nabídce, která se pod rukama filtruje, je přeskok z konce na začátek k nerozeznání od „šipka nic neudělala“ — a u třiceti položek by se to stalo při každém přidržení klávesy |
+| **`esc` se neobsluhuje** | Vlastní obsluha `esc` | Popover ho umí sám; vlastní obsluha by ho jen vzala tomu, kdo to zvládne líp. Šipky a `↵` se naopak berou **na poli**, ne na kontejneru — fokus je v něm, takže kdekoli jinde by je nedostal |
+| **Hledání se kreslí nad šesti položkami** (tedy od sedmi) | Vždycky, nebo nikdy | Nad třemi jmény je pole šum a nad prázdnem je to pole, ve kterém se nedá nic najít. Šest je tolik, kolik se přečte rychleji, než se do pole klikne. **Práh drží `Policy.pickerShowsSearch(count:)`, jeden pro obě nabídky** — do proklikání měla každá vlastní `searchFrom = 6`, takže se mohly rozejít potichu a bylo by z toho vidět jen to, že jedna nabídka pole má a druhá ne; zároveň je to jediné, co se o tom poli dá tvrdit číslem, takže se to dá otestovat výčtem |
+| **Fokus v poli hned po otevření, přes `.task` s jedním `Task.yield()`** | (a) `onAppear`, jak to tam stálo do proklikání; (b) `defaultFocus($isFocused, true)`; (c) odklad časovačem | Bez fokusu je nabídka „otevři, **klikni** a piš“, tedy o krok delší než ta, kterou nahradila — a to byla připomínka z proklikání. (a) i (b) jsou **změřené jako nefunkční** v aplikaci u palety ⌘K (#184, accessibilitou): přiřazení ve stejném průchodu, ve kterém pole vzniká, SwiftUI zahodí a `AXFocused` zůstane `false` **navždycky**, ne později. (c) je zakázaná třída (#350, #358) a hlavně by nepomohla: rozhoduje **počet průchodů, ne čas**. Cena zápisu: samostatná sonda mimo aplikaci `onAppear` nechá projít, takže tuhle vlastnost **nedokládá kód ani harness, ale proklikání** — testovací host navíc nedostane aktivaci (`NSApp.isActive == false`), takže sonda v testech měřit nemůže. Tabulka variant je v [`testovani.md`](../../testovani.md) |
+| **Prázdný výsledek filtru má vlastní větu** | Prázdná plocha, nebo tatáž věta jako u prázdné nabídky | Je to **čtvrtý** stav vedle nenačteno / prázdné repo / porucha, a prázdná plocha by vypadala jako spadlé načítání — tedy jako jeden z těch tří |

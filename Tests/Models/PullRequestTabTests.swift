@@ -67,42 +67,48 @@ struct PullRequestTabTests {
     /// Vyčerpávající výčet, ne tři reprezentanti: je to sedm případů a jediné, co tuhle vlastnost
     /// drží, je právě ten výčet — přidaný osmý tab by jinak mlčky dostal panel podle toho, kam ho
     /// někdo napsal.
-    @Test("Panel je jen v Přehledu, Změněných souborech a Konverzaci")
+    ///
+    /// **`Commity` přibyly u #392** a pořadí ve výčtu je pořadí z `allCases`, tedy třetí.
+    @Test("Panel je v Přehledu, Změněných souborech, Commitech a Konverzaci")
     func panelTabs() {
         let withPanel = PullRequestTab.allCases.filter(\.showsReviewPanel)
 
-        #expect(withPanel == [.overview, .filesChanged, .conversation])
-        #expect(!PullRequestTab.commits.showsReviewPanel)
+        #expect(withPanel == [.overview, .filesChanged, .commits, .conversation])
+        #expect(PullRequestTab.commits.showsReviewPanel)
         #expect(!PullRequestTab.checks.showsReviewPanel)
         #expect(!PullRequestTab.findings.showsReviewPanel)
         #expect(!PullRequestTab.progress.showsReviewPanel)
     }
 
     /// **Tohle je ten test, který tvrdí, že se něco NEstalo**: že se `showsReviewPanel` neohnul na
-    /// `isReviewerOutput`. Ty dvě vlastnosti se rozcházejí ve dvou tabech — `Kontroly` (#294)
-    /// a `Commity` (#316) jsou fakt o PR, takže **nalevo od děliče**, a panel přesto mít nemají.
-    /// Kdyby se sloučily, dělič v pruhu záložek by se posunul a obě by skočily do pravé skupiny.
+    /// `isReviewerOutput`. Od #392 to drží **`Kontroly` samotné**: jsou fakt o PR, takže stojí **nalevo od
+    /// děliče** (`isReviewerOutput == false`), a panel přesto mít nemají — vedle detailu spadlého
+    /// checku se čte konec logu, který šířku potřebuje. Kdyby se ty dvě vlastnosti sloučily, dělič
+    /// v pruhu záložek by se posunul a `Kontroly` by skočily do pravé skupiny.
     ///
-    /// U `Commitů` je ten důvod navíc tvrdší než šířka: nálezy jsou klíčované `headSha` (tvrdá
-    /// podmínka č. 5), takže by panel u staršího commitu ukazoval nálezy k jinému kódu.
+    /// **Přepsáno u #392, ne doplněno.** Do té doby tu byly ve výčtu i `Commity` s odůvodněním,
+    /// že nálezy jsou klíčované `headSha`, takže by panel u staršího commitu ukazoval nálezy
+    /// k jinému kódu. Panel v `Commitech` od #392 **je** (rozhodly o tom labely a reviewery, které
+    /// platí pro celý PR), a ta podmínka se neobešla — stala se z ní věta v UI
+    /// (`Policy.findingsHeadNotice`). Z původního odůvodnění proto nesmí zbýt nic: `Commity`
+    /// jsou dneska tab **s** panelem.
     @Test("Panel se neřídí příznakem výstupu reviewerů")
     func panelIsNotReviewerOutput() {
-        for tab in [PullRequestTab.checks, .commits] {
-            #expect(tab.isReviewerOutput == false)
-            #expect(tab.showsReviewPanel == false)
-        }
+        #expect(PullRequestTab.checks.isReviewerOutput == false)
+        #expect(PullRequestTab.checks.showsReviewPanel == false)
 
         let sameEverywhere = PullRequestTab.allCases.allSatisfy { $0.showsReviewPanel == !$0.isReviewerOutput }
         #expect(!sameEverywhere, "vlastnosti splynuly — jedna z nich pak mluví o něčem jiném, než co dělá")
     }
 
-    /// Tři ze sedmi: kdyby panel zmizel odevšad nebo zůstal všude, obojí by prošlo výčtem výš jen
-    /// s jeho přepsáním — tohle je pojistka na to, že se výčet nepřepíše „aby test prošel“.
-    @Test("Panel je ve třech tabech, ne ve všech a ne v žádném")
+    /// Čtyři ze sedmi (do #392 tři): kdyby panel zmizel odevšad nebo zůstal všude, obojí by prošlo
+    /// výčtem výš jen s jeho přepsáním — tohle je pojistka na to, že se výčet nepřepíše „aby test
+    /// prošel“.
+    @Test("Panel je ve čtyřech tabech, ne ve všech a ne v žádném")
     func panelIsPartial() {
         let count = PullRequestTab.allCases.count(where: \.showsReviewPanel)
 
-        #expect(count == 3)
+        #expect(count == 4)
         #expect(count < PullRequestTab.allCases.count)
         #expect(count > 0)
     }

@@ -117,9 +117,18 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// v `Kontrolách` nese konec logu (#214). Složený proužek je úzký, ale ne zdarma: bere šířku,
     /// a v úzkém okně je to zrovna to místo, kde se obsah láme.
     ///
-    /// **`Commity` mají důvod navíc** (#316), a je silnější než šířka: nálezy jsou klíčované
-    /// `headSha` (tvrdá podmínka č. 5), takže by panel vedle staršího commitu ukazoval nálezy
-    /// k **jinému kódu**. Není to duplikát, je to tvrzení, které by neplatilo.
+    /// **`Commity` panel od #392 mají** (do té doby ne, viz níž). Rozhodly o tom labely a vyžádaní
+    /// reviewery, které v panelu bydlí od #392: **nejsou o commitu**, platí pro celý pull request —
+    /// takže panel, který se v `Commitech` nekreslí, schová i to, co v něm platí vždycky. Šířku to
+    /// stojí obsah, ne pruh záložek (ten leží nad plochou tabu), a vynucovat se nic nemusí: strom
+    /// souborů se složí ⌘1 a panel ⌘2.
+    ///
+    /// **Ten druhý, tvrdší důvod se tím neobešel.** Nálezy jsou klíčované `headSha` (tvrdá podmínka
+    /// č. 5), takže vedle rozkliknutého **staršího** commitu neplatí pro to, co je na obrazovce —
+    /// a z podmínky se proto stala **věta v UI**: nad seznamem klidná (`Nálezy jsou proti hlavě …`),
+    /// u staršího commitu **výstraha** a ztlumené karty. Rozhoduje o ní
+    /// `Policy.findingsHeadNotice(tab:findingsHead:openCommit:hasFindings:)`. Nálezy se tedy dál
+    /// nekreslí proti kódu, který neexistuje — jen je u nich napsané, ke kterému kódu patří.
     ///
     /// **Změna proti #242**, kde stálo, že panel je vidět ve všech tabech včetně `Nálezů` — s
     /// odůvodněním, že smyčka nález → `Převzít` → text v mém review je ta hlavní práce a musí se
@@ -130,7 +139,9 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// **Není to `isReviewerOutput`** a nesmí se na něj ohnout: `Kontroly` jsou fakt o PR
     /// (`isReviewerOutput == false`), a panel tam přesto být nemá. Jedna vlastnost pro dvě otázky
     /// by posunula dělič v pruhu záložek — kreslí se z týchž příznaků, takže by `Kontroly` skočily
-    /// do pravé skupiny a chyba by byla vidět jinde, než by vznikla.
+    /// do pravé skupiny a chyba by byla vidět jinde, než by vznikla. Od #392 to drží **`Kontroly`
+    /// samotné**: `Commity` se přesunuly mezi taby s panelem, takže se ty dvě vlastnosti rozcházejí
+    /// jen u nich — a dělič se tím neposunul, protože `isReviewerOutput` se nezměnil.
     ///
     /// Vlastnost tabu, ne funkce v `Policy`: není co vážit ani z čeho počítat — je to konstantní
     /// fakt o každém ze sedmi případů, tedy tentýž druh věci jako `czechLabel`
@@ -138,8 +149,8 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// chodit podívat.
     var showsReviewPanel: Bool {
         switch self {
-        case .overview, .filesChanged, .conversation: true
-        case .commits, .checks, .findings, .progress: false
+        case .overview, .filesChanged, .commits, .conversation: true
+        case .checks, .findings, .progress: false
         }
     }
 }

@@ -8,6 +8,11 @@ import Testing
 /// Šířka tabů, ze kterých #294 schovala panel (`Kontroly`, `Nálezy`, `Průběh`): **obsah se roztáhl
 /// a nic se nekreslí mimo tab.**
 ///
+/// **`Commity` do té trojice od #392 nepatří** — panel v nich je. Jejich testy tady zůstávají,
+/// protože měří tentýž druh chyby (obsah přes hranu tabu), ale mají **vlastní, širší pásmo**:
+/// s rozloženým panelem začíná jejich šířka o 246 bodů níž. Dvě pásma v jedné suitě jsou lepší než
+/// dvě suity nad týmiž fixturami, které by se rozešly při první úpravě commitu ve vzorku.
+///
 /// Skrytí panelu je jednoduché; **riskantní je šířka.** Tab dostane o panel víc místa (38 bodů po
 /// složeném proužku, 306 po rozloženém na výchozí šířce, až 526 po vytaženém), takže se v něm
 /// najednou sází to, co se do té doby sázelo v užším. Přesně na takové změně se rozbila #291 — jen
@@ -25,6 +30,11 @@ struct PanelFreeTabWidthTests {
     /// je to pásmo jiné než u `Přehledu`, kde se pořád začíná na 128.
     private let widths: [CGFloat] = [648, 720, 900, 1100, 1400, 1800]
 
+    /// Pásmo pro `Commity` (#392). Spodní kraj je **402 bodů** a je spočítaný: okno má podlahu 700,
+    /// rail bere 52 a rozložený panel na podlaze 240 s úchytem 246 — takže 700 − 52 − 246. Pod tím se
+    /// tab nedostane, protože užší panel `ReviewPanel` nepovolí.
+    private let commitWidths: [CGFloat] = [402, 460, 531, 648, 900, 1400]
+
     @Test("Kontroly nepřetečou v žádné šířce")
     func checksStayInside() throws {
         for width in widths {
@@ -34,12 +44,15 @@ struct PanelFreeTabWidthTests {
         }
     }
 
-    /// `Commity` (#316) jsou čtvrtý tab bez panelu a v šířce se perou o dvě věci naráz: **dlouhá
-    /// první řádka zprávy** (typicky `Merge branch 'main' into …`) a pilulka se sha u pravé hrany.
-    /// Zpráva se řeže, sha ne — takže kdyby se řez ztratil, přeteče to vpravo.
+    /// `Commity` se v šířce perou o dvě věci naráz: **dlouhá první řádka zprávy** (typicky
+    /// `Merge branch 'main' into …`) a pilulka se sha u pravé hrany. Zpráva se řeže, sha ne — takže
+    /// kdyby se řez ztratil, přeteče to vpravo.
+    ///
+    /// **Od #392 se měří v užším pásmu**: panel jim ubírá až 246 bodů, takže se seznam sází i na
+    /// 402 — a to je zrovna ta šířka, ve které se dlouhá zpráva láme jinak než v 648.
     @Test("Commity nepřetečou v žádné šířce")
     func commitsStayInside() throws {
-        for width in widths {
+        for width in commitWidths {
             let probe = OverflowProbe(width: width, name: "commity-\(Int(width))")
             let list = CommitListView(commits: Self.commits, head: Self.commits.last?.sha)
             let overflow = try probe.overflow(of: list.content)
@@ -57,7 +70,7 @@ struct PanelFreeTabWidthTests {
     /// se u něj nekreslí vůbec. Oba stavy měří test pod ním, na commitu, který tělo má.
     @Test("Hlavička commitu nepřeteče v žádné šířce")
     func theCommitHeaderStaysInside() throws {
-        for width in widths {
+        for width in commitWidths {
             let probe = OverflowProbe(width: width, name: "commit-hlavicka-\(Int(width))")
             let header = CommitHeaderView(
                 commit: Self.commits[1],
@@ -83,7 +96,7 @@ struct PanelFreeTabWidthTests {
     @Test("Hlavička s tělem zprávy nepřeteče ani sbalená, ani rozbalená", arguments: [true, false])
     func theCommitHeaderWithBodyStaysInside(expanded: Bool) throws {
         let state = expanded ? "rozbalena" : "sbalena"
-        for width in widths {
+        for width in commitWidths {
             let probe = OverflowProbe(width: width, name: "commit-telo-\(state)-\(Int(width))")
             let header = CommitHeaderView(
                 commit: Self.commitWithBody,
@@ -104,7 +117,7 @@ struct PanelFreeTabWidthTests {
     /// který uvidí člověk.
     @Test("Prázdný diff commitu nepřeteče ani s vysvětlením")
     func theEmptyCommitDiffStaysInside() throws {
-        for width in widths {
+        for width in commitWidths {
             let probe = OverflowProbe(width: width, name: "commit-prazdny-\(Int(width))")
             let view = CommitDiffView(
                 commit: Self.commits[1],
