@@ -32,7 +32,7 @@ enum PublishError: Error, Equatable {
     /// diskuze pod PR — a hláška, která pojmenuje něco jiného, než na co se člověk dívá,
     /// vypadá jako chyba v jiné části okna. Důvod je jinak tentýž a změřený stejně.
     case blankComment
-    /// Vyžádání review bez jediného člověka. Nic se nevolalo (#392).
+    /// Vyžádání review bez jediného člověka **i týmu**. Nic se nevolalo (#392).
     ///
     /// Vlastní případ, ne `blankComment`: ta věta radí napsat text, což u vyžádání nedává smysl.
     /// A není to opatrnost — GitHub prázdné pole `reviewers` přijme a neudělá nic, takže by okno
@@ -174,7 +174,9 @@ extension PublishError {
         case .blankComment:
             "Komentář je prázdný. Napiš text — prázdný komentář GitHub tiše zahodí."
         case .noReviewer:
-            "Nebyl vybraný nikdo, od koho review vyžádat. Vyber člověka ze seznamu."
+            // **Ne „vyber člověka“**: od #392 se dá vyžádat i tým, a hláška, která nabídku
+            // zužuje na lidi, mluví o něčem jiném, než co je na obrazovce (nález Copilota).
+            "Nebyl vybraný nikdo, od koho review vyžádat. Vyber ze seznamu člověka nebo tým."
         case .threadNotFound:
             "Vlákno na GitHubu není — někdo ho mezitím smazal, nebo je konverzace v okně stará. Načti ji znovu."
         case .lineOutsideDiff:
