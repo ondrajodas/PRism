@@ -20,6 +20,10 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
     /// Co běh nahlásí jako průběh. Prázdné u testů, které se na časovou osu neptají —
     /// samotné `.queued` hlásí runner vždycky.
     private let reported: [ReviewProgress]
+    /// Co běh nahlásí **až po tom, co ho test pustí** (#308). Bez toho se všechen průběh hlásí
+    /// dřív, než se běh dá pozdržet, takže se nedá vyzkoušet událost, která dorazí až po nějakém
+    /// mezitím proběhlém tiku pollingu — a to je zrovna ta situace, ve které se osa nesmí ztratit.
+    private let reportedAfterRelease: [ReviewProgress]
     /// Poslední sdělení session, tedy `result` event (#150). `nil` = nedorazil, což je stav
     /// zabitého běhu — kontrola nálezů z něj nevyčte nic, a to je správná odpověď.
     private let resultText: String?
@@ -35,6 +39,7 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         holdsUntilRelease: Bool = false,
         usage: RunUsage? = nil,
         progress reported: [ReviewProgress] = [],
+        progressAfterRelease reportedAfterRelease: [ReviewProgress] = [],
         resultText: String? = nil
     ) {
         self.outcome = outcome
@@ -44,6 +49,7 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         self.usage = usage
         holds = holdsUntilRelease
         self.reported = reported
+        self.reportedAfterRelease = reportedAfterRelease
         self.resultText = resultText
     }
 
@@ -69,6 +75,9 @@ final class FakeReviewRunner: ReviewRunning, @unchecked Sendable {
         // Držení, ne čekání na jev — proto bez stropu, ale s odmlkou.
         while holds, !isReleased, !Task.isCancelled { await TestWait.pause() }
         try Task.checkCancellation()
+        // Až za kontrolou zrušení: zrušený běh nemá co hlásit, hlásit průběh po `cancel` by
+        // z fake udělalo jediného aktéra, který to dělá.
+        for event in reportedAfterRelease { progress(event) }
         if let failure { throw failure }
 
         var summary = StreamSummary()

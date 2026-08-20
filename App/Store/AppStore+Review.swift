@@ -350,24 +350,35 @@ extension AppStore {
         // hlavní vlákno, a **pořadí událostí je to hlavní, co časová osa říká**. Proud ho
         // drží; hop do vlastního tasku na každou událost by o pořadí nechal rozhodovat
         // plánovač.
+        //
+        // **Uložení běhu jde tímtéž proudem** (#308), a to je celý smysl toho, že `.finished`
+        // nese celý `ReviewRun`: osa se ukládá až v okamžiku, kdy do ní dojely i události, které
+        // konci předcházely. Do #308 se uložení dělo mimo proud, takže si čtení osy a její zápis
+        // závodily o `MainActor` — a v souboru končila osa, kterou zbyl závod, ne osa běhu.
         let (events, reporter) = AsyncStream<ReviewEvent>.makeStream()
-        async let drained: Void = drain(events, for: pr, at: detail.headSha, in: worktree)
-        let failure = await runSkills(
+        async let drained: (any Error)? = drain(
+            events,
+            for: pr,
+            at: detail.headSha,
+            in: worktree,
+            saving: reviews
+        )
+        await runSkills(
             for: pr,
             of: detail,
             in: worktree,
             using: reviewer,
-            saving: reviews,
             skills: skills,
             reporting: reporter,
             intent: intentFile
         )
         reporter.finish()
-        await drained
+        let failure = await drained
 
-        // Značky se mažou **až po vyprázdnění proudu** (#97). Zápis značky jde přes něj, kdežto
-        // uložení výsledku ne — takže by se smazání umělo předběhnout a značka by zůstala ležet
-        // nad hotovým během. Chytil to test, ne úvaha.
+        // Značky se mažou **až po vyprázdnění proudu** (#97). Značka i uložení výsledku jdou
+        // přes něj (uložení od #308), takže se smazání nemá jak předběhnout — a i tak se maže
+        // teprve tady, po `await drained`, ať to platí i pro běh, který se uložit nepovedlo.
+        // Chytil to test, ne úvaha.
         //
         // Maže se **celá sada, ne jen uložené běhy**: sem se dojde jedině tehdy, když review
         // skončilo, takže značka po něm už nemá co znamenat. Pokrývá to i **zrušený** běh,
@@ -393,13 +404,18 @@ extension AppStore {
         if let failure { throw failure }
     }
 
-    /// Zapisuje průběh v pořadí, ve kterém dorazil.
+    /// Zapisuje průběh v pořadí, ve kterém dorazil — a doběhlé běhy ukládá.
+    ///
+    /// Vrací **první** chybu zápisu, `nil` když se všechno uložilo. Ostatní skilly se kvůli ní
+    /// nezastavují: co se uložit povedlo, se nemá zahazovat.
     private func drain(
         _ events: AsyncStream<ReviewEvent>,
         for pr: PRIdentifier,
         at headSha: String,
-        in worktree: URL
-    ) async {
+        in worktree: URL,
+        saving reviews: ReviewStore
+    ) async -> (any Error)? {
+        var saveFailure: (any Error)?
         for await event in events {
             switch event {
             case .progress(let skill, let progress):
@@ -411,9 +427,44 @@ extension AppStore {
                     await markInterrupted(sessionID, of: skill, for: pr, at: headSha, in: worktree)
                 }
                 record(progress, of: skill, for: pr, in: worktree)
-            case .finished(let skill, let outcome, let usage):
-                finish(outcome, usage: usage, of: skill, for: pr)
+            case .finished(let run):
+                finish(run.outcome, usage: run.summary.usage, of: run.key.skillID, for: pr)
+                do {
+                    try await store(run, for: pr, saving: reviews)
+                } catch {
+                    // Nezapsaný nález je ztracený nález. Spolknout to by znamenalo, že řádek
+                    // po doběhlém review ukazuje „neběželo“ — tedy přesně to, čemu se celý ten
+                    // rozlišený stav vyhýbá. Ostatní skilly doběhnou, ať se nezahodí i to, co
+                    // se uložit povedlo.
+                    saveFailure = saveFailure ?? error
+                }
             }
+        }
+        return saveFailure
+    }
+
+    /// Uloží doběhlý běh i s osou, kterou má v tuhle chvíli store.
+    ///
+    /// Volá se **z proudu událostí, těsně za zápisem konce osy do storu** (#308) — a to je jediné
+    /// místo, odkud se osa dá uložit celá. Snímek pořízený mimo proud (tak to bylo do #308) čte
+    /// `reviewTimelines` uprostřed toho, jak ho proud plní, takže do souboru šla osa zkrácená
+    /// o rozjezd i o konec — a `dropped` u toho zůstalo nulové, tedy o zkrácení mlčelo. Kolik
+    /// událostí zbylo, rozhodovalo pořadí na `MainActoru`: změřeno na `AppStoreProgressTests`,
+    /// kde nad volným strojem v souboru končilo `[ve frontě]` a při souběžné suitě osa vůbec žádná.
+    ///
+    /// Osa se ukládá **s během**, ne zvlášť: je to jeho průběh, takže patří do téhož souboru
+    /// a zestárne s ním (#203).
+    private func store(_ run: ReviewRun, for pr: PRIdentifier, saving reviews: ReviewStore) async throws {
+        // Ukládá se **před** překladem: ten je krátká síťová operace navíc a když se na ní
+        // aplikace zavře, nálezy už jsou na disku. V originále, ale jsou — což je přesně to,
+        // co pravidlo „co doběhlo, zůstane“ chce.
+        reviewRecords[pr] = try await reviews.save(
+            run,
+            timeline: reviewTimelines[pr]?.first { $0.skill == run.key.skillID }?.stored()
+        )
+        revealFindingsOutsideTheDiff(for: pr)
+        if let translated = await translated(run, for: pr.repo) {
+            reviewRecords[pr] = try await reviews.save(translated)
         }
     }
 
@@ -486,22 +537,23 @@ extension AppStore {
         }
     }
 
+    /// Pustí session a doběhlé běhy pošle do proudu. **Neukládá** — uložení sedí na konci proudu
+    /// (viz `drain`), aby osa v souboru byla celá.
     private func runSkills(
         for pr: PRIdentifier,
         of detail: PullRequest,
         in worktree: URL,
         using reviewer: any ReviewRunning,
-        saving reviews: ReviewStore,
         skills: [String],
         reporting reporter: AsyncStream<ReviewEvent>.Continuation,
         intent intentFile: URL?
-    ) async -> (any Error)? {
+    ) async {
         // Limit se bere **tady a jednou** (#320), ze stejného důvodu jako šablona o pár řádků níž:
         // všechny session tohohle běhu poběží s tímtéž limitem, i kdyby se mezitím uložilo
         // nastavení. Přes `resolved(for:)`, protože je to hodnota **repa** — velké repo si o víc
         // říct smí, zbytek fronty se tím měnit nemá.
         let timeout = resolved(for: pr.repo).reviewTimeout
-        return await withTaskGroup(of: ReviewRun?.self) { group in
+        await withTaskGroup(of: ReviewRun?.self) { group in
             for skill in skills {
                 let request = ReviewRequest(
                     key: ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill),
@@ -536,7 +588,6 @@ extension AppStore {
             }
 
             var finished = 0
-            var saveFailure: (any Error)?
             for await run in group {
                 finished += 1
                 reviewPhases[pr] = .running(finished: finished, total: skills.count)
@@ -545,33 +596,11 @@ extension AppStore {
                 // peníze stála, ať už se její výsledek uloží, nebo ne. Číslo, které zrušením
                 // zmizí, by o mém účtu lhalo.
                 await recordSpend(run.summary.usage)
+                // Zrušený běh se **neukládá** — a proto se do proudu ani nepošle. Osa si tím
+                // konec nedostane, což je pravda: zrušené review nedoběhlo.
                 guard !Task.isCancelled else { continue }
-                reporter.yield(.finished(skill: run.key.skillID, run.outcome, usage: run.summary.usage))
-                do {
-                    // Ukládá se **před** překladem: ten je krátká síťová operace navíc
-                    // a když se na ní aplikace zavře, nálezy už jsou na disku. V originále,
-                    // ale jsou — což je přesně to, co pravidlo „co doběhlo, zůstane“ chce.
-                    reviewRecords[pr] = try await reviews.save(
-                        run,
-                        // Osa se ukládá **s během**, ne zvlášť: je to jeho průběh, takže patří
-                        // do téhož souboru a zestárne s ním (#203).
-                        timeline: reviewTimelines[pr]?
-                            .first { $0.skill == run.key.skillID }?
-                            .stored()
-                    )
-                    revealFindingsOutsideTheDiff(for: pr)
-                    if let translated = await translated(run, for: pr.repo) {
-                        reviewRecords[pr] = try await reviews.save(translated)
-                    }
-                } catch {
-                    // Nezapsaný nález je ztracený nález. Spolknout to by znamenalo, že
-                    // řádek po doběhlém review ukazuje „neběželo“ — tedy přesně to, čemu se
-                    // celý ten rozlišený stav vyhýbá. Ostatní skilly doběhnou, ať se
-                    // nezahodí i to, co se uložit povedlo.
-                    saveFailure = saveFailure ?? error
-                }
+                reporter.yield(.finished(run))
             }
-            return saveFailure
         }
     }
 
