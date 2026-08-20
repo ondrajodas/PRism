@@ -155,11 +155,19 @@ nové jméno (`.lchip`), ne specificita.
 Kontroluje se to **u jmen, která zákres přidává**, ne plošným výpisem: plošný hlásí i jména,
 která se takhle míjejí odjakživa a jsou v pořádku (`.acts` proti `.frow .acts`, `.subtabs` proti
 `.stripcut .subtabs`), takže z něj zbyde seznam k odklikání. Grep níž **musí vyjít prázdný**
-a ověřený je z obou stran — nad zákresem s vrácenou regresí (`c=lbl`) hlásí:
+a ověřený je z obou stran — nad zákresem s vrácenou regresí hlásí.
+
+**Vzor nesmí být zakotvený na začátek řádku a na jednu třídu v rodiči.** První podoba téhle
+kontroly byla `^\.[a-z][a-z0-9-]* +\.$c`, a ta **mlčí u většiny skutečných tvarů**: rodič
+s víc třídami (`.card.go .goto`, `.card.alarm .big`, `.frow.crit .bar` — všechny tři v tomhle
+souboru opravdu jsou), potomkový kombinátor (`.runbar > .lchip`), dvě úrovně (`.a .b .lchip`)
+i odsazené pravidlo. Ověřeno vložením regrese ve všech čtyřech tvarech: zakotvená podoba
+nenašla **ani jeden**, ta níž všechny. Falešně pozitivní nález u pěti vybraných jmen nehrozí
+natolik, aby se za tuhle šířku platilo — a kdyby přišel, je to pobídka se podívat, ne šum.
 
 ```bash
 for c in lchip chip-add rv-list rv-row rv-av; do
-    grep -qE "^\.[a-z][a-z0-9-]* +\.$c([^a-z0-9-]|$)" docs/navrh.html &&
+    grep -qE "[a-z0-9)]([ ]*[>+~][ ]*|[ ]+)\.$c([^a-z0-9-]|$)" docs/navrh.html &&
         echo "POZOR: .$c je jinde vnořený"
 done
 ```
