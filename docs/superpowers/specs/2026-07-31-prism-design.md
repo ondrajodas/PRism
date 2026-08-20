@@ -647,15 +647,23 @@ komentář a do řádků se nedá klikat. Čte se, kopíruje a rozbaluje kontext
 - **Komentář k řádku commitu by potřeboval jiný klíč.** Rozdělaný komentář se váže na
   `(soubor, řádek)` diffu PR; u commitu by se musel klíčovat i sha, jinak by se dva
   komentáře k témuž řádku ve dvou commitech přepsaly.
-- **Odeslat by ho šla jedině pátá metoda v `ReviewPublishing`** — a tvrdá podmínka č. 1
-  říká, že ten výčet je krátký schválně. Tím, že je tab celý čtecí, se **tvrdé podmínky
-  č. 1 nedotýká vůbec**: `GitHubGateway` zůstává bez zápisových metod,
-  `grep ReviewPublishing App/` vrací tentýž seznam a protokol má dál čtyři metody.
+- **Odeslat by ho šla jedině další metoda v `ReviewPublishing`** — a tvrdá podmínka č. 1
+  říká, že ten výčet je krátký schválně. Tím, že je diff commitu celý čtecí, se **tvrdé podmínky
+  č. 1 nedotýká vůbec**: `GitHubGateway` zůstává bez zápisových metod a `CommitDiffView` nemá
+  `AppStore` ani jedinou akci. (Do #392 tu stálo „pátá metoda“ a „protokol má dál čtyři metody“;
+  od #392 jich má šest — labely a vyžádání reviewera —, ale komentář ke commitu mezi ně pořád
+  nepatří.)
 
-**Panel s nálezy se nekreslí** — čtvrtý takový tab po `Kontrolách`, `Nálezech` a `Průběhu`
-(#294). Důvod je tu ale vlastní: nálezy jsou klíčované `headSha` (tvrdá podmínka č. 5),
-takže u staršího commitu by panel ukazoval nálezy k **jinému kódu**. Není to jen
-duplikát jako u `Nálezů`, je to tvrzení, které by neplatilo.
+**Panel s nálezy se nekreslil** — čtvrtý takový tab po `Kontrolách`, `Nálezech` a `Průběhu`
+(#294). Důvod byl vlastní: nálezy jsou klíčované `headSha` (tvrdá podmínka č. 5), takže
+u staršího commitu by panel ukazoval nálezy k **jinému kódu**. Nebyl to jen duplikát jako
+u `Nálezů`, bylo to tvrzení, které by neplatilo.
+
+**Od #392 se panel kreslí** (viz záznam rozhodnutí na konci dokumentu) a otočily to labely
+s reviewery, které v panelu platí pro celý PR, ne pro commit. Ten důvod výš se ale **neobešel**:
+stala se z něj věta v UI — nad seznamem klidná, u rozkliknutého **staršího** commitu **výstraha**
+a ztlumené karty (`Policy.findingsHeadNotice`). Nálezy se tedy dál nekreslí proti kódu, který
+neexistuje; jen je u nich napsané, ke kterému kódu patří.
 
 **Rozkliknutý commit přepne obsah tabu**, jako to má GitHub — seznam zmizí, diff dostane
 celou plochu a nahoře je hlavička se sha, zprávou, autorem, počty a cestou zpět.
@@ -1003,7 +1011,7 @@ který `CLAUDE.md` zakazuje od #292/#295. Na `CRLF` nerozdělí vůbec — `"\r\
 | Zamítnuto | Proč |
 |---|---|
 | Rozbalení diffu pod řádkem seznamu | Seznam by zůstal nad diffem, scrollovaly by se dvě plochy nad sebou a hlavička commitu by se odrolovala pryč zrovna ve chvíli, kdy se čte kód |
-| Komentář k řádku commitu | Jiný klíč draftu a pátá metoda v `ReviewPublishing` — viz výš. Komentář patří do `Změněných souborů` a hlavička commitu na to jednou větou odkazuje |
+| Komentář k řádku commitu | Jiný klíč draftu a **další** metoda v `ReviewPublishing` — viz výš. Komentář patří do `Změněných souborů` a hlavička commitu na to jednou větou odkazuje. Platí to i po #392, které ten výčet rozšířilo o labely a reviewery |
 | `+X −Y` u každého commitu v seznamu | Seznam je nenese; dotažení je N+1. Čísla jsou o jedno kliknutí dál a tam zadarmo |
 | Zkrátit `Změněné soubory` na `Soubory` | Ušetří 55 bodů, tedy skoro polovinu ceny sedmé záložky — ale `Soubory` se plete se stromem souborů v liště diffu, což je zapsaný důvod, proč ten popisek takhle zní (`PullRequestTab.czechLabel`) |
 | `Commity` jako přepínač uvnitř `Změněných souborů` | Ušetřilo by sedmou záložku celou, ale `Změněné soubory` jsou obrazovka na review (strom, panel, bubliny, draft) a přepínač uvnitř by polovinu z toho zhasínal. Skrytý stav, ve kterém obrazovka umí míň, je horší než záložka, na které je vidět, kde jsem |
