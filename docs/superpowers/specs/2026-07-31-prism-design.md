@@ -2522,3 +2522,35 @@ stream se neukládá).
 | Klíč odmítnutí (`Policy.key(of:)`) **zůstává na `summary`** | Sjednotit obě identity na místo, ať je pravidlo jedno | Není to totéž párování a ceny omylů jsou obrácené. Uvnitř běhu je z pořadí volání vidět, co je korekce; **napříč běhy** ta informace není, takže by odmítnutí jednoho nálezu na řádku schovalo i nález, který jsem nikdy neviděl — a schovaný nález je nevidět, kdežto duplikát vidět je. Zůstávají proto dvě identity a u obou je napsané, proč se liší |
 | **Uložené záznamy se nečistí ani při čtení** | Slít duplikáty při dekódování `ReviewRecord`, nebo je uklidit jednorázovou migrací | V uloženém záznamu už **struktura volání není** — nálezy jsou slité do jednoho pole —, takže úklid při čtení by mohl hádat jedině podle místa, a tím by slil i legitimní dvojici na jednom řádku (`Cart.swift:17`). K tomu je záznam **záznam běhu**: přepisovat ho při čtení znamená, že v souboru je něco jiného než v okně, a při dalším zápisu by se domněnka uložila. A odmítnutí jsou klíčovaná `(reviewer, file, line, summary)`, takže vybrat jednu ze dvou verzí textu **osiří** označení té druhé. Duplikát proto zůstává v jednom záznamu jednoho PR, dá se odmítnout a nové review ho odklidí samo |
 | Fixture je **poskládaná** ze uloženého záznamu, ne stažená | Nechat případ jen v inline JSONu v testu | Syrový `stream-json` se neukládá, takže úplně skutečný soubor k dispozici není — ale texty nálezů, session id i `headSha` jsou z provozu doslova, včetně cyrilice, na které se pozná první hlášení. Obálka (`init`, dvě `assistant` volání, `result`) je poskládaná podle tvaru `review-with-findings.jsonl` a **je to napsané v první řádce fixture** (`_prism_fixture_note`, který parser přeskočí jako každý neznámý event). Že cyrilice v souboru přežila, si hlídá i sada sama, jako u fixtures s `CRLF` |
+
+### Záznam rozhodnutí — krok v ose je pokus, dokud nedorazí `tool_result` (#326)
+
+`#326` mění to, co u `StreamSummary.deniedTools` rozhodlo #17: že se odmítnutí bere ze
+`permission_denials` v `result` eventu a že druhý zdroj (`tool_result` s `is_error`) čtený nebude,
+protože „rozeznat odmítnutí od běžné chyby nástroje se dá jen podle anglického textu hlášky“.
+
+**Ta premisa neplatí a je to změřené na fixtures v repu.** `claude` posílá u volání, které se
+nespustilo, vedle bloku `tool_result` ještě `tool_result_meta` s klíčem `non_execution_kind` —
+`user-rejected` v obou fixtures s odmítnutím (`review-denied-write.jsonl`,
+`intent-tool-denied.jsonl`). Odmítnutí se tedy pozná **strukturou**, ne překladem hlášky. Cena té
+staré premisy byla, že odmítnutý nástroj vypadal v ose jako provedený až do konce běhu, tedy
+o minuty; u revieweera, kde je odmítnutí **normální stav** (tvrdá podmínka č. 2 zakazuje
+`Bash(gh:*)`), to bylo tvrzení o kódu, které data neunesla.
+
+Druhá věc, kterou #326 mění: `deniedTools` **nikdo nečetl**, takže se zrušilo. Bylo to pole plněné
+parserem a v UI se neobjevovalo, protože se dalo ukázat jen u kroku — a krok o svém odmítnutí
+nevěděl. Odmítnutí nese krok, tedy to místo, kde se kreslí; druhý seznam by byl druhá pravda
+o tomtéž a rozešly by se, jak se to u dvou kopií stává.
+
+| Rozhodnutí | Alternativa | Proč |
+|---|---|---|
+| **Páruje se `tool_use.id` ↔ `tool_result.tool_use_id`** a nese ho `ToolAttempt.id` | Párovat podle pořadí (n-tý pokus ↔ n-tá odpověď), nebo podle jména nástroje | Pořadí neplatí: `assistant` event umí nést víc `tool_use` bloků naráz a odpovědi chodí každá ve svém `user` eventu. Jméno neplatí taky — `Bash` je v jednom běhu i padesátkrát a odmítnutý z nich je jeden. `id` je v obou směrech ve všech osmi fixtures a v každé je pokusů a odpovědí stejně |
+| **Tři stavy: prošel / vrátil chybu / odmítnut** | Brát každé `is_error` za odmítnutí (mockup kreslí jen `ODMÍTNUTO` a trvání) | `grep` bez shody vrací `is_error` při každém běhu a `Read` neexistujícího souboru taky. Odznak `ODMÍTNUTO` u nich by znamenal „něco se nepovedlo“ místo „read-only režim zabral“ — a tím by se z tvrdé podmínky č. 2 stal poplach, tedy důvod ji vypínat. Chyba nástroje se proto kreslí jako prošlý krok (trvání) a hláška je v nápovědě řádku; červený odznak má jedině odmítnutí |
+| **Jakýkoli `non_execution_kind` je odmítnutí**, nejen `user-rejected` | Čtvrtý stav pro neznámou hodnotu | Znamená „nástroj neběžel“, což je přesně to, co odznak tvrdí. Vymýšlet stav pro hodnotu, kterou nikdo neviděl, by byl dohad — a `user-rejected` je jediná, která je v datech |
+| **`nil` outcome znamená „běží“, ne „prošel“** | Držet `Bool` „hotovo“ | Zabitá session poslední odpověď nedostane vůbec, takže `Bool` by musel lhát v jednu nebo druhou stranu. Prázdná hodnota je tady odpověď „nevíme“ — tatáž úmluva jako u `usage` (cena `nil`, ne nula) a `calledReportFindings` |
+| **Krok bez `id` se nekreslí jako běžící** (`Policy.toolStepMark`) | Kreslit `běží…` u všeho, co nemá odpověď | Osy uložené před #326 `id` nemají, takže se jim odpověď neměla s čím spárovat. `běží…` u každého kroku doběhlého review z minulého týdne je text, který tvrdí víc, než data unesou — a je to ta úplně stejná past jako `čisto` nad nepřečtenými nálezy |
+| **Odpověď osu neprodlužuje**, mění krok, který v ní je | Nová událost `.toolResult` v ose | Jeden `tool_use` je jeden krok, ať se o něm dozvíme cokoli dalšího. Druhý řádek by osu zdvojil a poslal `newestEntry` (podle kterého se osa posouvá na konec) na událost, která žádný nový krok není |
+| **Trvání měří osa, ne parser** | Brát `timestamp` z eventů streamu | Parser hodiny nemá a je to čistý překlad textu na data. Časy ve streamu jsou druhý zdroj, který by se rozešel s časy, podle kterých se osa kreslí — a osa je jediné místo, kde se trvání ukazuje. Odmítnutí trvání nedostane vůbec: nástroj neběžel |
+| **`permission_denials` zůstává jako záchrana** a při shodě prohrává | Zrušit ho (duplicita), nebo mu naopak dát přednost | Není to druhý zdroj pravdy, je to druhá cesta k témuž pro chvíli, kdy ta první nedoběhla — useknutý `user` event, rozbitý řádek, starší CLI bez `tool_result_meta`. Odpověď ze streamu vyhrává, protože přišla, když se to stalo, a nese trvání; přepsat smí záchrana jedině `failed`, protože „nemělo povolení“ je o té odpovědi silnější tvrzení než hláška, kterou nástroj vrátil |
+| **Hláška se ukládá sražená na řádek a do 200 znaků** | Držet celou odpověď, nebo nedržet nic | Odpovědí `Read`u je celý soubor a odpovědí `Bash`e celý výstup, takže bez stropu by jeden neúspěšný krok přilepil k záznamu na disku megabajt — a osa se čte při každém startu. Nedržet nic by ale znamenalo odznak bez důvodu, tedy pravý opak toho, co #326 chce |
+| **Nespárovaná odpověď se zahazuje** | Vyrobit z ní krok | Není k čemu ji přilepit (rozbitý řádek s `tool_use`) a samostatný krok by byl krok, o kterém se neví, co v něm běželo |

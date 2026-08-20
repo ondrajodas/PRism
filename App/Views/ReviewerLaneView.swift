@@ -328,6 +328,44 @@ struct TimelineEntryRow: View {
                     .truncationMode(tool.keepsTail ? .head : .tail)
             }
             Spacer(minLength: 0)
+            if case .tool(let tool) = entry.kind { mark(of: tool) }
+        }
+    }
+
+    /// Jak krok dopadl — na konci řádku, jak to kreslí návrh (#326).
+    ///
+    /// **Odmítnutí je štítek, ne červený řádek.** Read-only reviewer je tvrdá podmínka, takže
+    /// `Bash(gh:*)` odmítnout **má** a session přesto skončí úspěchem; kdyby řádek vypadal jako
+    /// chyba, začal by se ten režim vypínat.
+    @ViewBuilder
+    private func mark(of tool: ToolAttempt) -> some View {
+        let mark = Policy.toolStepMark(of: tool)
+        if let text = ReviewerLaneText.step(mark) {
+            let label = markLabel(text, mark)
+            // Nápověda jen tam, kde je co říct — prázdná by nad krokem otevřela prázdný obláček.
+            if let help = ReviewerLaneText.stepHelp(of: tool) { label.help(help) } else { label }
+        }
+    }
+
+    private func markLabel(_ text: String, _ mark: ToolStepMark) -> some View {
+        Text(verbatim: text)
+            .font(.system(size: 10, design: .monospaced))
+            .monospacedDigit()
+            .fontWeight(mark == .denied ? .bold : .regular)
+            .foregroundStyle(Self.markColor(mark))
+            .padding(.horizontal, mark == .denied ? 5 : 0)
+            .background {
+                if mark == .denied { Capsule().fill(Palette.crit.opacity(0.14)) }
+            }
+    }
+
+    /// `find`, ne akcent, u běžícího kroku: je to tatáž role jako u puntíku revieweera, který
+    /// zrovna něco dělá. Trvání je popiskové (`ink3` v návrhu), odmítnutí `crit`.
+    private static func markColor(_ mark: ToolStepMark) -> Color {
+        switch mark {
+        case .pending: Palette.find
+        case .denied: Palette.crit
+        case .duration, .none: Palette.ink3
         }
     }
 

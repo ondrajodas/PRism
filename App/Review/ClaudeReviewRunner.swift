@@ -102,6 +102,7 @@ struct ClaudeReviewRunner: ReviewRunning {
     ) {
         let hadSession = summary.sessionID != nil
         let tools = summary.attemptedTools.count
+        let resolved = summary.resolvedTools.count
         let findings = summary.findings.count
 
         parser.consume(line, into: &summary)
@@ -111,6 +112,12 @@ struct ClaudeReviewRunner: ReviewRunning {
         }
         for tool in summary.attemptedTools[tools...] {
             progress(.attemptedTool(tool))
+        }
+        // Odpovědi na pokusy (#326) hned za pokusy z téhož řádku: jeden `user` event zavírá
+        // krok, o kterém se ohlásilo dřív, takže osa dostane obojí v tom pořadí, v jakém to
+        // přišlo ze streamu.
+        for resolution in summary.resolvedTools[resolved...] {
+            progress(.resolvedTool(resolution))
         }
         if summary.findings.count != findings {
             progress(.findings(count: summary.findings.count))

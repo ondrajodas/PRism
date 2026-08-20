@@ -3272,3 +3272,44 @@ přes `waitUntil` (#296) —, takže z #360 zbývá jen ten závod, který oprav
 
 **Na obrazovce není co vidět.** Osa se v tabu `Průběh` kreslí ze stejného modelu jako dřív; mění se
 jen to, co se z ní uloží na disk a v jakém okamžiku.
+
+### #326 — krok v ose je pokus, dokud nedorazí `tool_result`
+
+**Odmítnutý nástroj se v ose dozvíme hned, ne až s koncem běhu.** `StreamParser` čte od teď
+i `user` eventy, tedy odpovědi na to, o co si model řekl (`tool_result` v `message.content[]`),
+a páruje je s pokusem přes `tool_use.id`. Krok proto nese stav: **běží** (odpověď nedorazila),
+**prošel** (a jak dlouho se na odpověď čekalo), **vrátil chybu**, nebo **byl odmítnut**.
+
+Do téhle změny se odmítnutí poznalo jedině z `permission_denials` v závěrečném `result` eventu, tedy
+o minuty později — a u revieweera, kde je odmítnutí **normální stav** (tvrdá podmínka č. 2 zakazuje
+`Bash(gh:*)`), okno do té doby tvrdilo, že nástroj proběhl.
+
+**Klíčové zjištění: odmítnutí se pozná strukturou, ne textem hlášky.** U #17 se rozhodlo, že se
+`tool_result` čítat nebude, protože „rozeznat odmítnutí od běžné chyby nástroje se dá jen podle
+anglického textu“. Neplatí to — `claude` posílá u neprovedeného volání navíc
+`tool_result_meta[].non_execution_kind` (`user-rejected` v obou fixtures s odmítnutím). Rozlišení je
+podstatné v obou směrech: `grep` bez shody vrací `is_error` při každém běhu, takže odznak
+`ODMÍTNUTO` u něj by z read-only režimu udělal poplach. Chyba nástroje se proto kreslí jako prošlý
+krok a hláška je v nápovědě řádku; červený odznak má jedině odmítnutí.
+
+Co u toho ještě padlo: **`StreamSummary.deniedTools` je zrušené** — bylo to pole plněné z `result`
+eventu, které se v UI neobjevilo, protože se dalo ukázat jen u kroku, a krok o svém odmítnutí
+nevěděl. Odmítnutí teď nese krok, tedy to místo, kde se kreslí; druhý seznam by byl druhá pravda
+o tomtéž. `permission_denials` zůstává jako **záchrana** pro
+pokus, kterému odpověď nedorazila; při shodě prohrává s tou ze streamu, protože ta přišla, když se to
+stalo, a nese trvání.
+
+**Zpětná kompatibilita je testovaná, ne předpokládaná.** Nová pole (`ToolAttempt.id`, `outcome`) jsou
+v souboru volitelná a u nespárovaného pokusu se neukládají vůbec, takže osy uložené dřív se čtou dál —
+a **nekreslí se jako běžící**: `Policy.toolStepMark` u kroku bez `id` značku nevydá, protože se jeho
+odpověď neměla s čím spárovat. Test nad literálem starého tvaru je doplněný druhým, který hlídá, že se
+ten tvar nezměnil.
+
+**Na obrazovce se mění řádek kroku** v rozbaleném výpisu v tabu `Průběh`: vpravo trvání (`0,2 s`),
+`běží…` u pokusu bez odpovědi a odznak `ODMÍTNUTO` u odmítnutého — vysázené podle sekce 20 návrhu,
+včetně barev (`find` u běžícího, `crit` na 14 % u odznaku). Zkontrolované offscreen renderem
+(`ToolStepRenderProbe`) ve dvou šířkách; v úzkém místě se ořezává cesta, ne značka.
+
+**Rozbalený výpis, strop a sledování konce zůstávají na #325** — tohle je vrstva dat pod ním. Osa se
+o odpověď **neprodlužuje** (mění se krok, který v ní je), takže #325 dostane hotové to, co potřebuje
+kreslit: jeden řádek na `tool_use` a na něm jeho stav.

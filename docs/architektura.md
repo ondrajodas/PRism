@@ -1206,7 +1206,9 @@ Klíčový spoj: ze `stream-json` výstupu `claude` udělá to, co aplikaci zaj�
 | Typ | Co je |
 |---|---|
 | `StreamParser` | JSONL řádky → `StreamSummary`. **Nikdy nevyhodí výjimku** |
-| `StreamSummary` | Session id, nálezy, **pokusy** o nástroje a odmítnuté nástroje, konec běhu, **cena běhu**, počty nepřečteného |
+| `StreamSummary` | Session id, nálezy, **pokusy** o nástroje i odpovědi na ně (#326), konec běhu, **cena běhu**, počty nepřečteného |
+| `ToolAttempt` | Co si reviewer vyžádal, nad čím, pod jakým `tool_use.id` a jak to dopadlo (`Outcome`, #326) |
+| `ToolResolution` | Odpověď na jeden pokus, jak ji vydá parser: `(tool_use_id, outcome)` |
 | `ReviewOutcome` | Konec běhu podle `result` eventu |
 
 Co se u toho nemá rozbít:
@@ -1245,6 +1247,53 @@ Co se u toho nemá rozbít:
   zdarma. Čte se to stejně defenzivně jako číslo řádku: `true` je `NSNumber`, takže by bez
   kontroly vyšla cena 1 $, a **záporná hodnota se zahazuje**, protože by v denním součtu
   tvrdila, že mě běh vydělal.
+
+### Krok je pokus, dokud nedorazí `tool_result` (#326)
+
+Parser čte od #326 i **`user` eventy**: `message.content[]` v nich nese bloky `tool_result`, tedy
+odpovědi na to, o co si model řekl. Do té doby se zahazovaly, takže krok v ose byl hotová věc od
+chvíle, kdy ho model ohlásil — a odmítnutý nástroj vypadal jako provedený až do konce běhu.
+Zdůvodnění celé změny včetně zamítnutých cest je v záznamu rozhodnutí ve specifikaci.
+
+Co se u toho nemá rozbít:
+
+- **Páruje se `id`, nikdy pořadí ani jméno.** `tool_use.id` nese `ToolAttempt.id`,
+  `tool_result.tool_use_id` se hledá proti němu. Jeden `assistant` event umí nést víc `tool_use`
+  bloků naráz a odpovědi chodí každá ve svém eventu, takže pořadí neplatí; `Bash` je v běhu
+  i padesátkrát, takže jméno neplatí taky.
+- **`outcome == nil` znamená „běží“, ne „prošel“.** Zabitá session poslední odpověď nedostane, takže
+  poslední krok zůstane pokusem — ne hotový a ne selhaný. Je na to test nad **řezaným** skutečným
+  streamem (`review-killed.jsonl` po poslední `tool_use` řádku).
+- **Odmítnutí ≠ chyba nástroje.** Rozhoduje `tool_result_meta[].non_execution_kind`
+  (`user-rejected` v obou fixtures s odmítnutím), ne text hlášky. `is_error` samo o sobě je běžná
+  věc: `grep` bez shody, `Read` neexistujícího souboru. Kdyby z nich byl odznak `ODMÍTNUTO`, znamenal
+  by „něco se nepovedlo“ místo „read-only režim zabral“ — a tvrdá podmínka č. 2 by vypadala jako
+  porucha. Rozhodnutí drží `Policy.toolOutcome(isError:nonExecutionKind:text:)`.
+- **`permission_denials` z `result` zůstává jako záchrana**, ne jako druhá pravda: dopisuje odmítnutí
+  jen tam, kde odpověď nedorazila (useknutý event, rozbitý řádek) nebo vyšla jako `failed`. Krok
+  zavřený ze streamu se z něj podruhé nezavírá — jinak by osa dostala na jeden krok dvě události.
+  Páruje se **jen po `tool_use_id`**; bez něj se nepáruje nic.
+- **Kdo koho smí přepsat, rozhoduje `Policy.replacesToolOutcome` — jedna funkce pro tři místa**
+  (odpověď ze streamu, záchrana z `permission_denials`, zápis do osy). Nezavřený krok bere cokoli,
+  `failed` smí přepsat jedině `denied`, a `passed` ani `denied` se nepřepíšou nikdy. Tři kopie
+  téhož pravidla se rozešly hned v prvním kole: osa měla vlastní podmínku „jen nezavřený krok“,
+  takže záchrana `failed` → `denied` doputovala do souhrnu, ale do kroku, který se kreslí, ne —
+  nálezem Copilota na #394.
+- **`deniedTools` #326 zrušilo.** Bylo to pole jmen plněné z `permission_denials`, které v UI
+  **nikdo nečetl** (ukázat se dalo jen u kroku, a krok o svém odmítnutí nevěděl) a zabitý běh ho
+  neměl vůbec. Odmítnutí nese `ToolAttempt.outcome`, tedy tam, kde se kreslí; druhý seznam by byl
+  druhá pravda o tomtéž.
+- **Hláška z odpovědi se sráží na řádek a stříhá na `Policy.toolReasonLimit`** (200 znaků). Osa se
+  ukládá na disk a čte při každém startu; obsahem odpovědi `Read`u je celý soubor.
+- **Trvání kroku počítá osa, ne parser** (`ReviewerTimeline.resolve`) — z rozdílu časů událostí, se
+  kterými se osa kreslí. Parser hodiny nemá a `timestamp` ze streamu by byl druhý zdroj času.
+  Odmítnutý krok trvání **nedostane**: nástroj neběžel.
+- **Odpověď osu neprodlužuje.** `ReviewerTimeline` mění krok, který v ose už je, včetně jeho `id`
+  a času — takže se `newestEntry` (posun osy na konec) nehne na něco, co krok není.
+- **Krok bez `id` nemá značku žádnou** (`Policy.toolStepMark`). Tak vypadají osy uložené před #326:
+  `běží…` u každého kroku doběhlého review by tvrdilo víc, než data unesou. Nová pole jsou v souboru
+  volitelná, takže starší osy se čtou dál — je na to test nad literálem v tom tvaru, jaký zapisoval
+  encoder před #326, a k němu druhý, který hlídá, že se ten tvar pro nespárovaný pokus nezměnil.
 
 ## `ReviewRunner` (`App/Review/`)
 

@@ -167,6 +167,8 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
             append(.started, at: time)
         case .attemptedTool(let tool):
             append(.tool(tool), at: time)
+        case .resolvedTool(let resolution):
+            resolve(resolution, at: time)
         case .findings(let count):
             append(.findings(count: count), at: time)
         case .intentGap(let gap):
@@ -177,6 +179,33 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     mutating func finish(_ outcome: ReviewRunOutcome, usage: RunUsage? = nil, at time: Date) {
         self.usage = usage
         append(.finished(outcome), at: time)
+    }
+
+    /// Zavře krok, na který dorazila odpověď (#326).
+    ///
+    /// **Nepřidává událost, mění tu, která už v ose je.** Jeden `tool_use` je jeden krok, ať se
+    /// o něm dozvíme cokoli dalšího — druhý řádek „a takhle to dopadlo“ by osu zdvojil a poslal
+    /// `newestEntry` na událost, která žádný nový krok není.
+    ///
+    /// Páruje **poslední** krok s tím `id`; odpověď na krok, který v ose není, ji nechá být.
+    /// Jestli smí přepsat, co už krok má, rozhoduje `Policy.replacesToolOutcome` — **tatáž funkce,
+    /// jakou se řídí parser**. Dokud to byla vlastní podmínka „jen nezavřený krok“, záchrana
+    /// z `permission_denials` (`failed` → `denied`) se do souhrnu propsala a do kroku, který se
+    /// kreslí, ne; nálezem Copilota na #394.
+    ///
+    /// Trvání se počítá z časů osy, takže **záporné být nemůže** ani po posunu systémových hodin —
+    /// tatáž pojistka jako u `RunUsageText.elapsed`.
+    private mutating func resolve(_ resolution: ToolResolution, at time: Date) {
+        guard let index = entries.lastIndex(where: { entry in
+            guard case .tool(let tool) = entry.kind else { return false }
+            return tool.id == resolution.id
+                && Policy.replacesToolOutcome(tool.outcome, with: resolution.outcome)
+        }), case .tool(var tool) = entries[index].kind else { return }
+
+        let entry = entries[index]
+        let wait = Duration.seconds(max(time.timeIntervalSince(entry.at), 0))
+        tool.outcome = resolution.outcome.measured(after: wait)
+        entries[index] = Entry(id: entry.id, at: entry.at, kind: .tool(tool))
     }
 
     /// Identita se počítá **z poslední události, ne z počtu**. V živé ose je to totéž, ale osa

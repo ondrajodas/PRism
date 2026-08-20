@@ -93,6 +93,24 @@ Odmítnutí je ve streamu vidět dvakrát: jako `tool_result` s `is_error: true`
 eventu v poli `permission_denials` (`tool_name`, `tool_use_id`, `tool_input`). Běh přitom
 skončí `subtype: "success"` a `is_error: false` — **odmítnutý nástroj není chyba běhu**.
 
+**Od odmítnutí se chyba nástroje pozná strukturou, ne textem hlášky** (#326). `user` event
+s neprovedeným voláním nese vedle `message` ještě pole `tool_result_meta`:
+
+```json
+"tool_result_meta": [{"id": "toolu_01Ems…", "non_execution_kind": "user-rejected"}]
+```
+
+Je to jediná hodnota, která se v datech objevila — v `review-denied-write.jsonl`
+i `intent-tool-denied.jsonl`. Aplikace na tom stojí: `is_error: true` **bez** `tool_result_meta` je
+běžná chyba nástroje (`grep` bez shody vrací `is_error` při každém běhu), takže by z ní odznak
+`ODMÍTNUTO` udělal poplach nad úplně normálním krokem. Do #326 tu stálo opačné rozhodnutí — že se
+odmítnutí od chyby odlišit nedá —, viz `docs/architektura.md` a záznam rozhodnutí ve specifikaci.
+
+**Odpověď dostane každý pokus, i `ReportFindings`.** Ve všech osmi fixtures je pokusů a odpovědí
+stejně a `tool_use.id` sedí na `tool_result.tool_use_id`. Obsah odpovědi je řetězec, u některých
+nástrojů pole bloků (`ToolSearch` vrací `tool_reference`). Zabitá session poslední odpověď
+nedostane vůbec — to je ta situace, kvůli které je krok v ose pokus, dokud odpověď nedorazí.
+
 ## Jak se review vyvolává (ověřeno u #17, přepsáno u #78)
 
 Nálezy sbírá aplikace z `ReportFindings` tool callů, takže **na promptu záleží**.
@@ -174,7 +192,7 @@ Jeden JSON objekt na řádek. Typy v pořadí, v jakém chodí:
 | `system` / `hook_started`, `hook_response` | Hooky uživatelova prostředí. Pro aplikaci šum |
 | `system` / `init` | Start session — 22 klíčů, mimo jiné `session_id`, `cwd`, `model`, `tools`, `permissionMode`. **`tools` není spolehlivý obraz povolení** (viz níž) |
 | `assistant` | Zpráva modelu; `message.content[]` nese bloky `text` a `tool_use` |
-| `user` | Výsledky nástrojů; `message.content[]` nese bloky `tool_result` |
+| `user` | Výsledky nástrojů; `message.content[]` nese bloky `tool_result`, u neprovedeného volání je vedle nich `tool_result_meta` (#326). **Aplikace to čte** — do #326 ne |
 | `rate_limit_event` | Informace o limitech, chodí i uprostřed běhu |
 | `system` / `thinking_tokens` | Průběžné počty; ve fixtures je jich nejvíc ze všech |
 | `result` / `success` | Konec běhu: `duration_ms`, `num_turns`, `total_cost_usd`, `usage`, `permission_denials`, `result` |
@@ -310,10 +328,15 @@ uloženého OAuth tokenu.
 | `review-with-findings.jsonl` | Úspěšný běh se čtyřmi nálezy — tvar `ReportFindings` i `result` |
 | `review-clean.jsonl` | Běh bez nálezů: `ReportFindings` s prázdným seznamem |
 | `review-killed.jsonl` | Běh zabitý uprostřed — **chybí `result` event** |
-| `review-denied-write.jsonl` | Odmítnutý `Write`: `is_error` v `tool_result` i `permission_denials` v `result` |
+| `review-denied-write.jsonl` | Odmítnutý `Write`: `is_error` v `tool_result`, `non_execution_kind` v `tool_result_meta` (#326) i `permission_denials` v `result` |
 | `intent-server-missing.jsonl` | #345: MCP server v session **není** — `mcp_servers: []`, přitom `exit 0` a `success` |
 | `intent-server-failed.jsonl` | #345: `mcp_servers[].status = "failed"`, `error_max_turns` a **`result` event bez klíče `result`** |
 | `intent-tool-denied.jsonl` | #345: nepovolený čtecí nástroj — `success` a `permission_denials` s jednou položkou |
+
+**Neúspěšný příkaz fixture nemá** (#326): ve všech osmi zachycených streamech přišel
+`is_error: true` **vždycky** s `tool_result_meta`, tedy jako odmítnutí — `grep` bez shody ani `Read`
+neexistujícího souboru se do nich nedostal. Rozlišení „chyba nástroje ≠ odmítnutí“ se proto testuje
+inline JSONem v `StreamParserTests`; tvar bloku je tentýž, jen bez toho `meta`.
 
 **Úspěšné dotažení textu issue fixture nemá, a je to schválně:** odpověď nese celý text skutečného
 issue z firemního trackeru a firemní obsah do fixtures nepatří. Tvar eventů kolem něj je pokrytý

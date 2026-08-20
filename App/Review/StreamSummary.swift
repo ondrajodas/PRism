@@ -11,18 +11,24 @@ struct StreamSummary: Sendable, Equatable {
     /// To druhé znamená, že se nálezy nemají kde vzít — třeba proto, že `ReportFindings`
     /// chybělo v `--allowedTools` (viz `docs/claude-cli.md`).
     var calledReportFindings = false
-    /// Jména nástrojů v pořadí, jak si o ně reviewer řekl — pro tab Průběh.
+    /// Nástroje v pořadí, jak si o ně reviewer řekl — pro tab Průběh.
     ///
     /// **Pokusy, ne použití:** odmítnutý nástroj je tu taky. Tvrdit „použil“ by u `Write`
-    /// znamenalo hlásit, že reviewer zapisoval do repa, což je přesně to, co nesmí.
+    /// znamenalo hlásit, že reviewer zapisoval do repa, což je přesně to, co nesmí. Jak pokus
+    /// dopadl, nese od #326 `ToolAttempt.outcome` — a `nil` v něm znamená „ještě běží“.
     var attemptedTools: [ToolAttempt] = []
-    /// Nástroje, které session chtěla, ale nedostala. Není to chyba běhu.
+    /// Odpovědi na pokusy v pořadí, jak dorazily (#326).
     ///
-    /// Bere se z `result` eventu, takže **zabitý běh je nemá** — u něj se odmítnutí
-    /// nedozvíme. Druhý zdroj (`tool_result` s `is_error`) by šlo číst, ale rozeznat
-    /// odmítnutí od běžné chyby nástroje se dá jen podle anglického textu hlášky, a to
-    /// je křehčí než ta informace stojí.
-    var deniedTools: [String] = []
+    /// Přírůstek čte `ClaudeReviewRunner` a posílá ho do osy — tedy stejně, jako to dělá
+    /// s `attemptedTools`. Bez toho seznamu by musel po každém řádku porovnávat celé pole
+    /// pokusů, aby zjistil, kterému z nich se právě změnil stav.
+    var resolvedTools: [ToolResolution] = []
+    // **`deniedTools` tady od #326 není** a je to úklid, ne opomenutí. Bylo to pole jmen plněné
+    // z `permission_denials`, tedy ze závěrečného `result` eventu — takže zabitý běh odmítnutí
+    // neměl vůbec a **nikdo to pole nečetl**: ukázat se dalo jen u kroku, a krok o svém odmítnutí
+    // nevěděl. Od #326 ho nese `ToolAttempt.outcome`, tedy tam, kde se kreslí; druhý seznam by byl
+    // druhá pravda o tom samém. `permission_denials` zůstává jako **záchrana** — dopisuje odmítnutí
+    // pokusu, kterému odpověď nedorazila (viz `StreamParser.rescueDenials`).
     /// Konec běhu. `nil` znamená, že `result` event nedorazil — typicky zabitý běh, ale
     /// taky rozbitý poslední řádek nebo proces, který vůbec nenaběhl.
     var outcome: ReviewOutcome?
