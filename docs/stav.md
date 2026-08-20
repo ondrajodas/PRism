@@ -3169,3 +3169,70 @@ ani jedno probuzení navíc. Přepínač v nastavení se **zamítl**: byla by to
 bránou, a hlavně by se dal zapomenout — proměnná prostředí umře s procesem, takže se diagnostika
 vypne dalším `./bin/run.sh` sama. Ověřeno na běžící `PRism-a`; podrobnosti a co si měřidlo nesmí
 dovolit jsou v [`architektura.md`](architektura.md), sekce *Diagnostika kreslení*.
+
+### M11 — Průběh běhu (milník #13)
+
+Čtyři issues, které sahají do téhož — `ReviewProgress`, `ReviewerTimeline` a stav průběhu
+v `AppStore` —, takže souběžně nejdou a rozvrh je polovina zadání: **#308** (smí pozdní událost
+vzkřísit zahozenou osu) první a sama, protože dokud na to není odpověď, staví se #325 i #326 na
+sadě, která padá; pak **#326** (krok je pokus, dokud nedorazí `tool_result` — vrstva dat), pak
+**#325** (tab `Průběh`: živý výpis se stropem a sledováním konce) a nakonec **#327** (surová
+session v sheetu). Nakreslené je to v sekci 20 návrhu.
+
+### #308 — osu nevzkřísila pozdní událost, ale uložený záznam
+
+**Odpověď na otázku z issue je „ne“ v obou polovinách, a jedna z nich se nedala doprogramovat,
+protože nastat nemůže.** `AppStoreProgressTests` padalo na tom, že po tiku bez daného PR nebyla osa
+prázdná, a z hlášky to vypadalo na událost, která dorazila po konci běhu a osu postavila znovu
+(v ose chybělo `započalo` a razítka byla ze dvou různých hodin). Změřením se to ukázalo jinak:
+
+- **Pozdní událost nastat nemůže.** Proud událostí se dojíždí uvnitř `review()`
+  (`reporter.finish()` + `await drained`), takže po konci běhu už nic nepřijde — a dokud běh žije,
+  `forget(whatIsNotIn:)` jeho osu z úklidu vyjímá. Zůstává to tedy strukturou, ne kontrolou:
+  brána v `record(_:of:for:in:)` by byla mrtvý `if`, který by navíc měřidlu ceny události (#350)
+  neuložil nic, protože do storu sype tou samou cestou.
+- **„Vzkříšení“ byl fallback na disk.** `timelines(for:)` po úklidu odpovídá z uloženého záznamu
+  a ten se **schválně neuklízí** (#137 z něj pozná re-review od novinky). Tik tedy pustí živou
+  kopii osy, ne osu, a co okno ukáže potom, je tatáž odpověď jako po restartu (#203). Zahodit osu
+  doopravdy by znamenalo zahodit i záznam, tedy rozbít #137 kvůli jedné mapě v paměti.
+- **Padal ale skutečný závod, jen jinde.** Snímek osy pro **uložení** se bral mimo proud událostí,
+  takže si čtení `reviewTimelines` závodilo s jeho plněním o `MainActor`. Do souboru proto šla osa
+  celá, zkrácená na `[ve frontě]`, nebo vůbec žádná — a `dropped` u toho zůstalo nulové, tedy
+  o zkrácení mlčelo. To je zrovna to tiché zkrácení, které #203 zakazuje; chybějící `započalo`
+  bylo tímhle a druhé hodiny přidala `completeTail`, která konci osy dopočítala razítko
+  z `finishedAt`.
+
+**Oprava je jedna věta v návrhu: uložení jde tímtéž proudem jako konec běhu.** `ReviewEvent.finished`
+nese celý `ReviewRun` a ukládá ho `drain` hned za zápisem konce osy, takže je osa v tu chvíli
+hotová. Zamítnuté varianty: uložit všechny běhy až po `await drained` (ruší pravidlo „ukládá se po
+každém doběhlém skillu“ z #97, takže by zavření aplikace uprostřed sady zahodilo i to, co doběhlo)
+a synchronizovat zápis s proudem přes continuation (což #242 odmítlo jako cenu navíc v cestě, která
+se ruší — a je zbytečná, když ukládá sám proud). Vedlejší efekt: **uložená osa má konec**, takže
+doplňování z běhu (#242) platí od teď jen pro soubory uložené dřív; sada testů k němu zůstává,
+protože staré záznamy na disku leží dál.
+
+**Závod se dá vyrobit na zavolání, a to je na tom to hlavní.** Samotný test
+(`-only-testing:…/forgetsTheTimelineOfAPullRequestThatLeftTheList()`) padal **3× ze 3**, se
+souběžnou druhou suitou prošel **4× ze 4** — proto to nad plným během vypadalo náhodně a proto
+o tom osm běhů u #296 neřeklo nic. Po opravě je to deterministické: **10 běhů sady z 10 zelených**
+a plný běh 3162 testů taky.
+
+**Tvrzení testu se přepsala podle rozhodnutí, ne aby přestala padat.** Místo „po tiku není osa
+žádná“ stojí na tom, že se pustila živá kopie a že osa z disku má **tytéž události** — porovnání
+celé osy chytá zkrácený rozjezd i konec z jiných hodin. K tomu je nové tvrzení o tom, že se něco
+NEstalo: **běžícímu review tik osu nesebere a další události do ní pokračují**, tedy nevznikla
+druhá osa ani nová. Krok nad kódem u toho dorazí až po tiku (`FakeReviewRunner` na to dostal
+`progressAfterRelease:` — bez toho hlásí všechen průběh dřív, než se běh dá pozdržet), takže je to
+zrovna ta „pozdní událost“ z názvu issue; bez ochrany běžícího review v `forget` zbyde v ose
+`[tool(Read), finished]`, tedy osa začínající uprostřed běhu. Obojí je ověřené vloženou regresí
+a obojí padá **na tvrzení, ne na timeoutu**.
+
+**#360 s tím sdílí ten závod, ale ne diagnózu.** Tvrdilo, že tentýž test „vyčerpá strop čekání“
+(20,4 s z 22 s celého běhu). Nevyčerpal: Swift Testing pouští suity paralelně a hlásí u testu
+**uplynulý** čas, takže test, který se odbyde za 20 ms na začátku běhu, hlásí celou jeho délku.
+Změřeno: **793 z 3383** hlášených položek hlásilo 20+ s v běhu, který trval 24 s, a tentýž test
+hlášený jako 23,6 s se sám o sobě odbyde za 0,02 s. Čekání v něm žádný vlastní strop nemá — jde
+přes `waitUntil` (#296) —, takže z #360 zbývá jen ten závod, který opravuje #308.
+
+**Na obrazovce není co vidět.** Osa se v tabu `Průběh` kreslí ze stejného modelu jako dřív; mění se
+jen to, co se z ní uloží na disk a v jakém okamžiku.

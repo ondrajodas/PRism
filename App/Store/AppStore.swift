@@ -1478,8 +1478,12 @@ final class AppStore {
     /// osa dostala dřív než události, které mu předcházely, a někdy vůbec.
     enum ReviewEvent: Sendable {
         case progress(skill: String, ReviewProgress)
-        /// Konec běhu i s tím, co stál (#148) — `usage` je `nil` u běhu, který cenu nenahlásil.
-        case finished(skill: String, ReviewRunOutcome, usage: RunUsage?)
+        /// Doběhlý běh celý, ne jen jeho výsledek (#308). Skill, výsledek i cenu (#148) si osa
+        /// vezme z něj — a hlavně: **z proudu se běh i ukládá**, takže se osa zapisuje na disk
+        /// až po tom, co do ní dojedou události, které konci předcházely. Do #308 tady byla
+        /// jen trojice `(skill, outcome, usage)` a uložení běželo mimo proud, což znamenalo, že
+        /// se uloženou osou rozhodoval závod: hotová, `[ve frontě]`, nebo vůbec žádná.
+        case finished(ReviewRun)
     }
 
     /// Zahodí stav rep, o která už není zájem. Bez toho by mapa rostla donekonečna a PR,
