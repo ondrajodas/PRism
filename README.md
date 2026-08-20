@@ -688,7 +688,15 @@ panel, se ořeže — puntík u něj zůstane a `chce změny` se neořezává ni
 **Měnit se to dá jen na vlastním PR.** Tam jsou u sekcí `+ label` a `+ reviewer`; na cizím PR akce
 **nejsou vůbec** (ne zašedlé — u cizí fronty se to nedělá nikdy). Label se vybírá **jen z labelů,
 které repo zná**: je vratný jedním klikem, takže nedostal potvrzovací sheet, ale volný text tam
-nepatří, protože z něj se dá omylem vyrobit nový label a ten už z repozitáře sám nezmizí. Reviewer
+nepatří, protože z něj se dá omylem vyrobit nový label a ten už z repozitáře sám nezmizí.
+
+**V nabídce je sloveso v nadpisu a v položkách jen jména** (`Vyžádat review od` / `Přepnout label`).
+Kdyby ho nesla každá položka, čtrnáct řádků by opakovalo totéž a předpona by ořezala to jediné, čím
+se od sebe liší. Od šesti položek je nad seznamem **hledání**: psaní filtruje, `↑↓` vybírají, `↵`
+potvrdí, `esc` zavře — a filtruje se podle toho, co je v řádku vidět (jméno, login, slug, jméno
+labelu). Pravidlo shody je **totéž jako v paletě ⌘K**: bez diakritiky, bez ohledu na velikost
+písmen, víc slov jako „a zároveň“ a silnější shoda nahoru. Hledání **nezakládá** — co se v nabídce
+nenajde, nejde vybrat. Reviewer
 se vyžádá **jedním pojmenovaným kliknutím** (`Vyžádat review od …`) z lidí a **týmů**, které na repo
 smí — request pošle upozornění a odebráním se nedá vzít zpět, takže je na tlačítku napsané, co se
 stane a komu; u týmu je v něm slovo `týmu`, protože upozornění odejde všem jeho členům. Když je

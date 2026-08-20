@@ -466,6 +466,50 @@ code {
 }
 .chip-add:hover { color: var(--accent); border-color: var(--accent); }
 
+/* --- nabídka za `+ label` a `+ reviewer` (#392) --------------------------------------
+   **Popover, ne systémové menu**: nabídka se dotahuje při otevření, u labelu se kreslí puntík
+   s barvou z repozitáře a od hledání je v ní pole i obsluha šipek — nic z toho `Menu` neunese.
+
+   **Sloveso je v nadpisu, ne v každé položce.** První podoba měla na každém řádku
+   `Vyžádat review od …`, takže čtrnáct řádků opakovalo totéž a předpona ořezala to jediné, čím se
+   od sebe liší: jméno. Nadpis a položka se čtou jako jedna věta. */
+.pkr {
+  width: min(300px, 100%);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--panel); box-shadow: var(--shadow-lg); overflow: hidden;
+}
+.pkr > .cap {
+  display: block; padding: 9px 11px 6px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+/* Hledací řádek se objeví teprve nad seznamem, který má co filtrovat — nad třemi jmény je to šum. */
+.pkr-q {
+  display: flex; align-items: center; gap: 6px; margin: 0 11px 7px;
+  padding: 6px 9px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--panel-3);
+  font-size: 12px; color: var(--ink);
+}
+.pkr-q .ico { color: var(--ink-3); font-size: 11px; }
+.pkr-q .sp { flex: 1; }
+/* Počet je vidět jedině při hledání: nad nefiltrovaným seznamem by opakoval to, co je v něm. */
+.pkr-q .n { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
+.pkr-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 16px; font-size: 12px; color: var(--ink);
+}
+.pkr-row.on { background: var(--accent-weak); }
+.pkr-row .kind { font-size: 10.5px; color: var(--ink-3); }
+.pkr-row .tick { width: 10px; color: var(--accent); font-size: 9px; }
+/* Prázdný výsledek **něco říká**: prázdná plocha by u nabídky vypadala jako spadlé načítání,
+   což je stav, který tu existuje taky. */
+.pkr-empty { padding: 2px 11px 11px; font-size: 11.5px; color: var(--ink-3); }
+.pkr-foot {
+  display: flex; gap: 12px; padding: 6px 11px;
+  border-top: 1px solid var(--line-soft); background: var(--panel-2);
+  font-size: 10.5px; color: var(--ink-3);
+}
+
 /* Reviewer je **řádek**, ne chip: panel je sloupec, takže se do něj vejde iniciálka, jméno
    a slovo o tom, jak odpověděl — a to slovo je jediný důvod, proč se na sekci kouká. Když se
    panel zúží, ustoupí **jméno** (ořeže se), odpověď zůstává celá. */
@@ -3631,6 +3675,112 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       </div>
     </div>
 
+    <h3>Nabídka za <code>+ label</code> a <code>+ reviewer</code></h3>
+    <p class="muted">
+      <b>Sloveso je v nadpisu, položky nesou jen jména.</b> První podoba je měla na každém řádku
+      (<code>Vyžádat review od …</code>) a bylo to špatně: čtrnáct řádků opakovalo totéž a předpona
+      ořezala to jediné, čím se od sebe liší. Pojmenované kliknutí se tím neztrácí — jen se říká
+      <b>jednou</b>, a nadpis s položkou se čte jako jedna věta.
+    </p>
+    <p class="muted">
+      <b>Hledání je součást nabídky, ne příslušenství.</b> Lidí a týmů, které na repo smí, je
+      v organizaci řádově třicet (změřeno: 34 týmů), takže seznam bez filtru není hotová funkce.
+      Filtruje se podle toho, co je v řádku <b>vidět</b> — jméno, login, slug —, a pravidlo shody je
+      <b>totéž jako v paletě ⌘K</b>: bez diakritiky, bez ohledu na velikost písmen, víc slov jako
+      „a zároveň“ a silnější shoda nahoru. Dvě jinak se chovající hledání v jednom okně by byla
+      horší volba než sdílení. Nad krátkým seznamem se pole <b>nekreslí</b>.
+    </p>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Reviewery — nadpis nese sloveso</div>
+        <div class="frame flat" style="padding: 14px;">
+          <div class="pkr">
+            <span class="cap">Vyžádat review od</span>
+            <div class="pkr-q">
+              <span class="ico">⌕</span>
+              <span style="color: var(--ink-3);">Hledat</span>
+              <span class="sp"></span>
+            </div>
+            <div class="pkr-row on"><span class="rv-av wait">AD</span><span>adamvoves</span></div>
+            <div class="pkr-row"><span class="rv-av wait">BT</span><span>BagToad</span></div>
+            <div class="pkr-row"><span class="rv-av wait">DN</span><span>dasa-novakova</span></div>
+            <div class="pkr-row"><span class="rv-av wait">OD</span><span>odinuv</span></div>
+            <div class="pkr-row">
+              <span class="rv-av wait" style="border-radius: 4px;">▣</span>
+              <span>ajda-swimlane</span><span class="kind">tým</span>
+            </div>
+            <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ vyžádá</span><span>esc zavře</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Po filtru a prázdný výsledek</div>
+        <div class="frame flat" style="padding: 14px; display: flex; flex-direction: column; gap: 12px;">
+          <div class="pkr">
+            <span class="cap">Vyžádat review od</span>
+            <div class="pkr-q">
+              <span class="ico">⌕</span>
+              <span>swim</span>
+              <span class="sp"></span>
+              <span class="n">1</span>
+            </div>
+            <div class="pkr-row on">
+              <span class="rv-av wait" style="border-radius: 4px;">▣</span>
+              <span>ajda-swimlane</span><span class="kind">tým</span>
+            </div>
+            <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ vyžádá</span><span>esc zavře</span></div>
+          </div>
+          <div class="pkr">
+            <span class="cap">Vyžádat review od</span>
+            <div class="pkr-q">
+              <span class="ico">⌕</span>
+              <span>xyz</span>
+              <span class="sp"></span>
+              <span class="n">0</span>
+            </div>
+            <div class="pkr-empty">Nikdo takový tu není.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="muted">
+      U labelů je to totéž, jen se sloveso v nadpisu jmenuje podle toho, co klik dělá: je to
+      <b>přepínač</b>, takže se stejným řádkem label přidá i sundá. Odškrtnutí říká, které na PR
+      leží; položka zůstává <b>chip s barvou</b>, protože puntík je to, čím se labely od sebe poznají.
+    </p>
+    <div class="pane new" style="max-width: 340px;">
+      <div class="tag"><i></i>Labely — klik je přepínač</div>
+      <div class="frame flat" style="padding: 14px;">
+        <div class="pkr">
+          <span class="cap">Přepnout label</span>
+          <div class="pkr-q">
+            <span class="ico">⌕</span>
+            <span style="color: var(--ink-3);">Hledat</span>
+            <span class="sp"></span>
+          </div>
+          <div class="pkr-row on">
+            <span class="tick">✓</span>
+            <span class="lchip"><i style="background: #D73A4A;"></i><span>bug</span></span>
+          </div>
+          <div class="pkr-row">
+            <span class="tick"></span>
+            <span class="lchip"><i style="background: #0366D6;"></i><span>dependencies</span></span>
+          </div>
+          <div class="pkr-row">
+            <span class="tick"></span>
+            <span class="lchip"><i style="background: #A2EEEF;"></i><span>enhancement</span></span>
+          </div>
+          <div class="pkr-row">
+            <span class="tick"></span>
+            <span class="lchip"><i style="background: #D4C5F9;"></i><span>needs-design-review</span></span>
+          </div>
+          <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ přepne</span><span>esc zavře</span></div>
+        </div>
+      </div>
+    </div>
+
     <div class="notes">
       <div class="note">
         <span class="num">1</span>
@@ -3711,6 +3861,37 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       </div>
       <div class="note">
         <span class="num">9</span>
+        <span class="body">
+          <b>Sloveso jednou, v nadpisu</b>
+          <span>Položka <code>Vyžádat review od Ada…</code> ořezala to jediné, čím se řádky liší,
+          a čtrnáctkrát zopakovala totéž. Nadpis je jedna řádka a s položkou se čte jako věta —
+          pojmenované kliknutí zůstává, jen se neopisuje. Pro čtečku obrazovky zůstává celá věta
+          u položky, protože nadpis se k ní nepřečte.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">10</span>
+        <span class="body">
+          <b>Hledání sdílí pravidlo s ⌘K</b>
+          <span>Bez diakritiky, bez ohledu na velikost písmen, víc slov jako „a zároveň“, silnější
+          shoda nahoru — a filtruje se podle toho, co je v řádku <b>vidět</b>. Sdílí se pravidlo, ne
+          celá paleta: ta hledá nad položkami s titulkem, podtitulkem a akcí a má strop šest řádků na
+          skupinu, což je u nabídky třiceti týmů špatně. Klávesnice: psaní filtruje, <code>↑↓</code>
+          vybírají (<b>ořezávají, necyklí</b> — přeskok z konce na začátek je v filtrované nabídce
+          k nerozeznání od „šipka nic neudělala“), <code>↵</code> potvrdí, <code>esc</code> zavře.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">11</span>
+        <span class="body">
+          <b>Prázdný výsledek není prázdná plocha</b>
+          <span><code>Nikdo takový tu není.</code> — a je to <b>čtvrtý</b> stav nabídky, ne první:
+          vedle něj existuje nenačteno, prázdné repo a porucha, a každý má vlastní větu. Prázdná
+          plocha by vypadala jako spadlé načítání, což je zrovna jeden z těch stavů.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">12</span>
         <span class="body">
           <b>Ve třech tabech to vidět nebude</b>
           <span>Panel není v <em>Kontrolách</em>, <em>Nálezech</em> ani <em>Průběhu</em> (#294)

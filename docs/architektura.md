@@ -6037,6 +6037,29 @@ Nad odesílatelností draftu (#68) platí:
   (`reviewerCandidates`) — jediná kontrola ve view je kontrola, kterou příští obrazovka obejde.
 - **Prázdný login se do sekce nedostane.** Autora review může GitHub vynechat (smazaný účet)
   a řádek bez jména se v panelu nedá odlišit od chyby kresby — a hlavně se nedá vyžádat.
+- **`Policy.pickerRank(of:query:)`, `filteredPicker(_:query:text:)` a `pickerSelection(from:step:count:)`**
+  — hledání v nabídkách `+ label` a `+ reviewer` (`App/Policy/PickerSearch.swift`).
+
+  **Pravidlo shody se dělí s paletou ⌘K** (#184): `searchRange` a `searchStartsWord` jsou tytéž
+  funkce (kvůli tomu se z `CommandPaletteSearch` zvedly na `internal`) a dělení dotazu na slova taky
+  (`paletteTokens`). Dvě jinak se chovající hledání v jednom okně je horší než sdílení — člověk si
+  zvykne, že `nalez` najde `nález`, a je jedno, do kterého pole to píše.
+
+  **Sdílí se pravidlo, ne `paletteResults`**, a je to rozhodnutí: paleta hledá nad
+  `CommandPalette.Item` (titulek, podtitulek, klíčová slova, skupina, **akce**) a má strop **šest
+  řádků na skupinu**. Nabídka reviewerů má třicet čtyři týmů a položku o jednom řetězci, takže
+  prohnat ji paletou by znamenalo vyrobit položky s vymyšlenou skupinou a akcí, na kterou se nedá
+  kliknout — víc kódu **a** dvě nová místa v paletě, která tam nemají co dělat.
+
+  Tři věci, které se u toho nemají rozbít:
+
+  - **Filtruje se podle toho, co je v řádku vidět** (`text:`). Kdyby filtr sedl na něco, co v řádku
+    není, vypadal by výsledek jako chyba.
+  - **Při shodné váze rozhoduje původní pořadí.** Swiftové `sorted` není stabilní, takže by dvě
+    položky se stejnou váhou přeskakovaly mezi stisky klávesy — tatáž past jako v paletě.
+  - **Kurzor ořezává, necyklí.** V nabídce, která se pod rukama filtruje, je přeskok z konce na
+    začátek k nerozeznání od „šipka nic neudělala“; ořez se navíc uplatňuje i **bez pohybu**
+    (`step: 0`), protože index z předchozího dotazu může být za koncem.
 - **`Policy.findingsHeadNotice(tab:findingsHead:openCommit:hasFindings:)`** — proti kterému kódu
   nálezy platí. Je to **tvrdá podmínka č. 5 přepsaná do věty**: v `Commitech` může vedle nálezů stát
   jiný commit, než na kterém vznikly, takže nad seznamem je klidná věta a u rozkliknutého staršího
@@ -6270,6 +6293,19 @@ odeslat, a měnit label umí jedině `ReviewPublisher`.
   běžný. „Nepodařilo se to zjistit“ drží volající zvlášť (`MetadataState`) — u téhle sekce se ty dva
   stavy nesmí slít, protože podle prvního se sekce nekreslí a podle druhého se **nesmí dát měnit
   sada, kterou aplikace nezná**.
+- **Sloveso je v nadpisu nabídky, položky nesou jen jména.** Do proklikání ho měla každá položka
+  (`Vyžádat review od …`), takže u čtrnácti řádků opakovala totéž a předpona ořezala to jediné, čím
+  se od sebe liší. Pojmenované kliknutí se neztrácí, jen se říká jednou — a **pro čtečku obrazovky
+  zůstává celá věta u položky** (`accessibilityLabel`), protože nadpis se k ní nepřečte.
+- **Klávesnice funguje, protože nabídka není `Menu`.** Popover je vlastní view, takže se v něm dá
+  mít pole i obsluha šipek: psaní filtruje, `↑↓` vybírají, `↵` potvrdí. `esc` se **neobsluhuje** —
+  popover ho umí sám a vlastní obsluha by ho jen vzala tomu, kdo to zvládne líp. Klávesy se berou
+  **na poli**, ne na kontejneru (fokus je v něm), a vracejí `.handled`, jinak si šipku vezme pole na
+  posun kurzoru v textu.
+- **Hledání se kreslí teprve nad seznamem, který má co filtrovat** (od šesti položek). Nad třemi
+  jmény je to šum a nad prázdnem pole, ve kterém se nedá nic najít.
+- **Prázdný výsledek filtru je čtvrtý stav nabídky**, ne první: vedle něj existuje nenačteno,
+  prázdné repo a porucha, a každý má vlastní větu. Prázdná plocha by vypadala jako spadlé načítání.
 - **Dokud snímek nedorazil, je `+ label` zakázaný.** Sada se posílá celá, takže bez snímku nemá
   z čeho vzniknout — a tlačítko, po kterém se nic nestane, je horší než zakázané. Vysvětlení u něj
   mluví o načítání, ne o bráně; jsou to dva různé důvody.

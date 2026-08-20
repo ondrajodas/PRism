@@ -500,6 +500,14 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     (`ImageRenderer` nad `LabelChipView`). Je to jediné, co chytá `box-sizing` — ostatní si berou
     tutéž míru, takže by prošla i tehdy, kdyby se z ní vypustil rám a odsazení. **Ověřeno vložením
     regrese**: s `frameWidth == 0` je rozdíl 14 bodů a test spadne, kdežto zbytek suity projde.
+  - **`PickerSearchTests`** — hledání v nabídkách. Kromě váhy shody (začátek, hranice slova,
+    vnitřek), diakritiky a „všechna slova musí sednout“ tam stojí tři tvrzení, která se dají pokazit
+    potichu: že se **pravidlo dělí s paletou ⌘K** (tytéž primitivy i dělení dotazu na slova — kdyby
+    se rozešlo, chová se jedno okno na dvě strany), že **shodné váhy nepřeskakují mezi průchody**
+    (Swiftové `sorted` není stabilní, takže se pořadí drží druhým kritériem), a že **filtr nikdy
+    nevrátí něco, co v nabídce nebylo** — tedy že se ani hledáním nedá vyrobit label, který repo
+    nezná. K tomu kurzor: **ořezává, necyklí**, a ořezává i bez pohybu, protože index z předchozího
+    dotazu může být za koncem.
   - **`PanelHeadNoticeTests`** — že panel u staršího commitu **nekreslí nálezy jako platné**. Věta se
     testuje jako text z `Policy` (jmenuje obě sha a u neshody říká, že o kódu na obrazovce nemluví),
     a k tomu se **tři stavy notice musí nakreslit různě**. Porovnávají se **surové bajty bitmapy, ne

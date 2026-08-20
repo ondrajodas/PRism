@@ -2,13 +2,18 @@ import SwiftUI
 
 /// Nabídka lidí **a týmů**, od kterých jde vyžádat review (#392).
 ///
-/// **Jedno pojmenované kliknutí, ne `+` vedle avatara.** Reviewer request pošle člověku upozornění
-/// a odebráním se **nedá vzít zpět**, takže na tlačítku musí být napsané, co se stane a komu —
-/// potvrzení je v textu tlačítka, ne v druhém okně. Sheet by z toho udělal klikačku a nic by
-/// nepřidal: payload je jedno jméno, které je na tlačítku vidět celé.
+/// **Sloveso je v nadpisu, ne v každé položce** — přepsané po proklikání. Do té doby stálo na
+/// každém řádku `Vyžádat review od …`, takže čtrnáct řádků opakovalo totéž a předpona ořezala to
+/// jediné, čím se od sebe liší: jméno. Nadpis `Vyžádat review od` a pod ním samá jména se čte jako
+/// jedna věta a zůstane z ní to podstatné. Pojmenované kliknutí se tím **neztrácí** — jen se říká
+/// jednou.
 ///
-/// Množina je **uzavřená** (`assignableUsers`), takže z nabídky nejde vyžádat někdo, komu to GitHub
-/// odmítne.
+/// Request pošle upozornění a odebráním se **nedá vzít zpět**, takže je z nadpisu vidět, co klik
+/// udělá, dřív než se klikne. U týmu je to o to důležitější: upozornění odejde všem jeho členům,
+/// a proto u něj stojí `tým`.
+///
+/// Množina je **uzavřená** (`assignableUsers` a `orgs/{org}/teams`), takže z nabídky nejde vyžádat
+/// někdo, komu to GitHub odmítne.
 struct ReviewerPickerView: View {
     let candidates: [ReviewerCandidate]
     /// Dorazila už nabídka? `false` = ještě se načítá, takže se o repu nesmí nic tvrdit.
@@ -19,20 +24,32 @@ struct ReviewerPickerView: View {
     let request: @MainActor (ReviewerCandidate) -> Void
     let load: @MainActor () async -> Void
 
+    @State private var query = ""
+    /// Který řádek je vybraný klávesnicí. Ořezává se při každém překreslení podle počtu řádků —
+    /// filtr se mění pod rukama, takže index z předchozího dotazu může být za koncem.
+    @State private var selected = 0
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Kdo na repozitář smí")
-                .font(.system(size: 10, design: .monospaced))
-                .tracking(1)
-                .textCase(.uppercase)
-                .foregroundStyle(Palette.ink3)
-                .padding(.horizontal, 11)
-                .padding(.top, 9)
-                .padding(.bottom, 6)
-            if candidates.isEmpty {
-                // Tatáž úvaha jako u labelů: „všichni už jsou vyžádaní“ je odpověď, porucha je
-                // porucha, a slít se to nesmí.
-                Text(emptyReason)
+            PickerHeading(title: "Vyžádat review od")
+            // **Hledání jedině nad seznamem, který má co filtrovat.** Nad prázdnem by to bylo pole,
+            // ve kterém se nedá nic najít, a nad třemi jmény šum.
+            if candidates.count > Self.searchFrom {
+                PickerSearchField(
+                    query: $query,
+                    count: filtered.count,
+                    move: { step in
+                        selected = Policy.pickerSelection(
+                            from: selected,
+                            step: step,
+                            count: filtered.count
+                        ) ?? 0
+                    },
+                    confirm: confirmSelection
+                )
+            }
+            if filtered.isEmpty {
+                Text(verbatim: emptyReason)
                     .font(.caption)
                     .foregroundStyle(Palette.ink3)
                     .padding(.horizontal, 11)
@@ -42,7 +59,7 @@ struct ReviewerPickerView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 1) {
-                        ForEach(candidates, id: \.self) { candidate in
+                        ForEach(filtered, id: \.self) { candidate in
                             row(candidate)
                         }
                     }
@@ -50,33 +67,51 @@ struct ReviewerPickerView: View {
                     .padding(.bottom, 7)
                 }
                 .frame(maxWidth: 320)
-                .frame(height: min(Double(candidates.count) * 26 + 7, 320))
+                .frame(height: min(Double(filtered.count) * 26 + 7, 320))
             }
         }
         .task { await load() }
     }
 
-    /// Co je na tlačítku — **druh i jméno**.
-    private static func title(of candidate: ReviewerCandidate) -> String {
-        switch candidate {
-        case .person(let login): "Vyžádat review od \(login)"
-        case .team(let slug): "Vyžádat review od týmu \(slug)"
-        }
+    /// Od kolika položek má hledání smysl. Tři jména se přečtou rychleji, než se do pole klikne.
+    private static let searchFrom = 6
+
+    /// Nabídka po filtru — rozhoduje `Policy`, ne tohle view.
+    ///
+    /// **Filtruje se podle toho, co je v řádku vidět**: u člověka login, u týmu slug. Kdyby filtr
+    /// sedl na něco, co v řádku není, vypadal by výsledek jako chyba.
+    private var filtered: [ReviewerCandidate] {
+        Policy.filteredPicker(candidates, query: query) { $0.name }
     }
 
-    /// Tři různé věty, tři různé stavy — viz `LabelPickerView`.
+    /// Vybraný řádek, ořezaný na to, co po filtru zbylo.
+    private var selectedIndex: Int? {
+        Policy.pickerSelection(from: selected, step: 0, count: filtered.count)
+    }
+
+    private func confirmSelection() {
+        guard let selectedIndex else { return }
+        request(filtered[selectedIndex])
+    }
+
+    /// Tři různé věty, tři různé stavy — a od hledání čtvrtá: **filtr, který nic nenašel**, není
+    /// prázdná nabídka. Prázdná plocha by u nabídky vypadala jako spadlé načítání, což je stav,
+    /// který tu existuje taky.
     private var emptyReason: String {
-        if let failure {
+        if !query.isEmpty {
+            "Nikdo takový tu není."
+        } else if let failure {
             "Seznam lidí se nepodařilo načíst. \(failure) Zavři nabídku a otevři ji znovu."
         } else if isLoaded {
             "Vyžádat už není od koho — všichni ze seznamu na PR čekají."
         } else {
-            "Načítám lidi, kteří na repozitář smí…"
+            "Načítám lidi a týmy, které na repozitář smí…"
         }
     }
 
     private func row(_ candidate: ReviewerCandidate) -> some View {
-        Button {
+        let isSelected = selectedIndex.map { filtered[$0] == candidate } ?? false
+        return Button {
             request(candidate)
         } label: {
             HStack(spacing: 7) {
@@ -93,20 +128,59 @@ struct ReviewerPickerView: View {
                         .background(Palette.raised, in: .rect(cornerRadius: 4))
                         .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(Palette.line) }
                 }
-                // **Celá věta, ne jen login.** Z „Vyžádat review od odinuv“ je vidět, co klik udělá;
-                // samotné jméno v seznamu by se dalo přečíst i jako „tenhle už review dělá“. U týmu
-                // je v ní slovo `týmu`, protože upozornění odejde **všem jeho členům** — a to je
-                // rozdíl, který má být vidět dřív, než se klikne.
-                Text(Self.title(of: candidate))
+                Text(verbatim: candidate.name)
                     .font(.system(size: 12))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
+                    .truncationMode(.tail)
+                // **`tým` zůstává u položky**, i když sloveso z ní odešlo: druh není opakování,
+                // je to ta informace, kvůli které se u týmu rozmýšlí (upozornění odejde všem).
+                if case .team = candidate {
+                    Text("tým")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Palette.ink3)
+                }
                 Spacer(minLength: 4)
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 5).fill(Palette.accentWeak)
+                }
+            }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Self.accessibilityLabel(of: candidate))
+    }
+
+    /// Pro čtečku zůstává celá věta: nadpis se k položce nepřečte, takže by z „ajda-swimlane“
+    /// nebylo poznat, co se stane.
+    private static func accessibilityLabel(of candidate: ReviewerCandidate) -> String {
+        switch candidate {
+        case .person(let login): "vyžádat review od \(login)"
+        case .team(let slug): "vyžádat review od týmu \(slug)"
+        }
+    }
+}
+
+/// Nadpis nabídky — **místo, kde se sloveso říká jednou** (#392).
+///
+/// Do proklikání ho nesla každá položka (`Vyžádat review od …`), což u čtrnácti řádků opakovalo
+/// totéž a ořezalo jméno, kvůli kterému se do nabídky kouká. Nadpis je proti tomu jedna řádka
+/// a čte se s položkou jako věta.
+struct PickerHeading: View {
+    let title: String
+
+    var body: some View {
+        Text(verbatim: title)
+            .font(.system(size: 10, design: .monospaced))
+            .tracking(1)
+            .textCase(.uppercase)
+            .foregroundStyle(Palette.ink3)
+            .padding(.horizontal, 11)
+            .padding(.top, 9)
+            .padding(.bottom, 6)
     }
 }

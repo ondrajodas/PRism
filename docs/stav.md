@@ -3362,3 +3362,18 @@ v nastavení (⌘,).“) — tatáž, na které skončí publisher, a tiše šed
 nové pole s barvou (nová věc na obrazovce → mockup a schválení) a hlavně: **nedá se vzít zpět jedním
 klikem**, protože smazání labelu ho odebere ze všech PR v repu. Uzavřená množina
 z `fetchRepositoryLabels` tedy zůstává; na zakládání je samostatné issue.
+
+**Třetí a čtvrtá věc z proklikání: nabídka.** Položky nesly sloveso (`Vyžádat review od Ada…`),
+takže čtrnáct řádků opakovalo totéž a předpona ořezala to jediné, čím se od sebe liší. Sloveso se
+přesunulo do **nadpisu** (`Vyžádat review od`, u labelů `Přepnout label`, protože klik je přepínač)
+a v položkách zbyla jména — pro čtečku obrazovky celá věta u položky zůstává, protože nadpis se
+k ní nepřečte. A od šesti položek je nad seznamem **hledání**: pravidlo shody se **dělí s paletou
+⌘K** (tytéž primitivy, tedy bez diakritiky, bez ohledu na velikost písmen, víc slov jako „a
+zároveň“ a silnější shoda nahoru), filtruje se podle toho, co je v řádku vidět, a kurzor **ořezává,
+necyklí**. Klávesnice funguje proto, že nabídka nikdy nebyla `Menu`, ale popover s vlastními views;
+`esc` se schválně neobsluhuje, popover ho umí sám. Prázdný výsledek je **čtvrtý stav** nabídky
+(vedle nenačteno / prázdné repo / porucha) a má vlastní větu — prázdná plocha by vypadala jako
+spadlé načítání.
+
+Sekce 24 mockupu je o nabídku dokreslená (nadpis, hledací řádek, položky bez slovesa, filtr,
+prázdný výsledek, patka s klávesami) a publikovaná na tutéž adresu.

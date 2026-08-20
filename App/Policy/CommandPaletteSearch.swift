@@ -105,17 +105,17 @@ extension Policy {
         _ token: String,
         in item: CommandPalette.Item
     ) -> PaletteMatch? {
-        if let range = paletteRange(of: token, in: item.title) {
+        if let range = searchRange(of: token, in: item.title) {
             if range.lowerBound == item.title.startIndex { return PaletteMatch(rank: 0, title: range) }
-            return PaletteMatch(rank: paletteStartsWord(at: range, in: item.title) ? 1 : 2, title: range)
+            return PaletteMatch(rank: searchStartsWord(at: range, in: item.title) ? 1 : 2, title: range)
         }
         // Podtitulek má **jednu** váhu, ne tři jako titulek. Je to výčet dvou souřadnic
         // (`vault#85 · sykora-ji`), takže „začátek“ v něm znamená repo a „vnitřek“ autora — a mezi
         // těmi dvěma se nemá rozhodovat podle pozice v řetězci. Váhy oddělují **druh** shody.
-        if let subtitle = item.subtitle, let range = paletteRange(of: token, in: subtitle) {
+        if let subtitle = item.subtitle, let range = searchRange(of: token, in: subtitle) {
             return PaletteMatch(rank: 3, subtitle: range)
         }
-        if item.keywords.contains(where: { paletteRange(of: token, in: $0) != nil }) {
+        if item.keywords.contains(where: { searchRange(of: token, in: $0) != nil }) {
             return PaletteMatch(rank: 4)
         }
         return nil
@@ -133,19 +133,6 @@ extension Policy {
     /// Váha položky bez dotazu — jedna pro všechny, takže rozhoduje pořadí katalogu.
     private static let paletteCatalogRank = 0
 
-    /// Hledá se **bez ohledu na velikost písmen a na diakritiku**: aplikace je česká, takže
-    /// `nalez` musí najít `nález` — jinak by se paleta dala používat jen s přepnutou klávesnicí.
-    private static func paletteRange(of token: String, in text: String) -> Range<String.Index>? {
-        text.range(of: token, options: [.caseInsensitive, .diacriticInsensitive])
-    }
-
-    /// Začíná shoda na hranici slova? Předchozí znak nesmí být písmeno ani číslice — `/`, `.`,
-    /// `_` i mezera tedy hranice jsou, což u cest k souborům rozhoduje: `secret` má
-    /// v `src/Vault/SecretClient.php` vážit víc než v `MySecretThing.php`.
-    private static func paletteStartsWord(at range: Range<String.Index>, in text: String) -> Bool {
-        let previous = text[text.index(before: range.lowerBound)]
-        return !previous.isLetter && !previous.isNumber
-    }
 
     private struct RankedHit {
         let hit: CommandPalette.Hit

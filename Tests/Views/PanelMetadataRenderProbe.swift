@@ -44,6 +44,25 @@ struct PanelMetadataRenderProbe {
         }
     }
 
+    /// Nabídky (#392): plná, po filtru, s prázdným výsledkem a nenačtená.
+    @Test("Vyrendrovat nabídky labelů a reviewerů")
+    func rendersThePickers() throws {
+        let scenes: [(String, AnyView)] = [
+            ("nabidka-reviewery", AnyView(Self.reviewerPicker(loaded: true))),
+            ("nabidka-reviewery-nenactena", AnyView(Self.reviewerPicker(loaded: false))),
+            ("nabidka-labely", AnyView(Self.labelPicker)),
+        ]
+
+        for (name, scene) in scenes {
+            let url = Self.outputDirectory.appending(path: "\(name).png")
+            // Vyšší plátno než nabídka: strop seznamu je 320 bodů a k němu jde nadpis a hledací
+            // řádek — na nižším by se nadpis odřízl a sonda by ukazovala nabídku bez toho, co je
+            // na ní u #392 nové.
+            try Self.render(scene, width: 360, height: 440, to: url)
+            print("SONDA \(url.path)")
+        }
+    }
+
     /// Panel u seznamu commitů a u rozkliknutého staršího commitu — sekce 25.
     @Test("Vyrendrovat panel s nálezy proti hlavě a u staršího commitu")
     func rendersTheHeadNotice() throws {
@@ -139,6 +158,43 @@ struct PanelMetadataRenderProbe {
             tab: .constant(.findings)
         )
         .background(Palette.background)
+    }
+
+    /// Skutečné loginy z `orgs/keboola` a slugy týmů — nabídka o čtrnácti řádcích je zrovna ten
+    /// stav, kvůli kterému hledání přibylo.
+    @MainActor private static func reviewerPicker(loaded: Bool) -> some View {
+        let people = [
+            "adamvoves", "BagToad", "dasa-novakova", "ErikZigo", "halinapetrikova",
+            "jirkanovak", "odinuv", "petramala", "sergiou87", "tomaskraus",
+        ]
+        return ReviewerPickerView(
+            candidates: people.map { .person($0) } + ["ajda-swimlane", "platform"].map { .team($0) },
+            isLoaded: loaded,
+            request: { _ in },
+            load: {}
+        )
+        .frame(width: 340, alignment: .topLeading)
+        .background(Palette.chrome)
+    }
+
+    @MainActor private static var labelPicker: some View {
+        LabelPickerView(
+            known: [
+                PullRequestLabel(name: "bug", color: "D73A4A"),
+                PullRequestLabel(name: "dependencies", color: "0366D6"),
+                PullRequestLabel(name: "enhancement", color: "A2EEEF"),
+                PullRequestLabel(name: "go", color: "16E2E2"),
+                PullRequestLabel(name: "needs-design-review", color: "D4C5F9"),
+                PullRequestLabel(name: "ready-for-review", color: "39D965"),
+                PullRequestLabel(name: "unmet-requirements", color: "EE2329"),
+            ],
+            selected: [PullRequestLabel(name: "bug", color: "D73A4A")],
+            isLoaded: true,
+            toggle: { _ in },
+            load: {}
+        )
+        .frame(width: 340, alignment: .topLeading)
+        .background(Palette.chrome)
     }
 
     private static var outputDirectory: URL {
