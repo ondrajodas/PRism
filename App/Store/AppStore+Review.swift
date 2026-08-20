@@ -208,8 +208,13 @@ extension AppStore {
 
             // Zadání se připravuje **po checkoutu a před `runSkills`** (#120): leží vedle
             // pracovního stromu, takže složka pod ním má existovat, a session ho musí mít
-            // v ruce dřív, než se poskládá prompt. Nic to nestojí — popis PR je v `detail`.
-            let intentFile = prepareIntent(for: pr, of: detail)
+            // v ruce dřív, než se poskládá prompt.
+            //
+            // Od #345 to **něco stojí** — jeden dotaz na komentáře a jedna krátká `claude -p`
+            // session (~$0,2 a ~20 s). Je to schválně **tady**, tedy až za rozpočtem a za
+            // checkoutem: platit za text zadání u běhu, který se pak nerozjede, je ta samá chyba,
+            // kvůli které se rozpočet strhává až v `runSkills`.
+            let intent = try await prepareIntent(for: pr, of: detail)
 
             try await runSkills(
                 for: pr,
@@ -218,7 +223,8 @@ extension AppStore {
                 using: reviewer,
                 saving: reviews,
                 only: subset,
-                intent: intentFile
+                intent: intent.file,
+                gap: intent.gap
             )
             reviewPhases[pr] = nil
             await notifyAboutFinishedReview(of: pr)
@@ -261,26 +267,96 @@ extension AppStore {
     /// `""`), ale sem se nedotažený nedostane: `fetchDetail` o pár řádků výš by vyhodil a review by
     /// se nespustilo. Tvrzení o prázdném popisu se do souboru přesto **nepíše** (viz
     /// `ReviewIntentText.noDescription`) — prázdný popis znamená, že se soubor nezakládá vůbec.
-    private func prepareIntent(for pr: PRIdentifier, of detail: PullRequest) -> URL? {
-        guard let intents else { return nil }
-        let brief = Policy.intentBrief(
-            of: pr,
+    private func prepareIntent(
+        for pr: PRIdentifier,
+        of detail: PullRequest
+    ) async throws -> (file: URL?, gap: IntentGap?) {
+        guard let intents else { return (nil, nil) }
+
+        let comments = await intentComments(for: pr)
+        // **Zrušení se ptáme dřív, než se pustí session.** `intentComments` cancelaci spolkne
+        // (nevyhazuje), a `SubprocessRunner` proces **spustí a teprve pak** se dozví o zrušení —
+        // takže bez tohohle by zrušené review ještě zaplatilo boot session, o kterou si nikdo
+        // neřekl. Je to tatáž kontrola, jakou má cesta review po odhadu jazyka repa.
+        try Task.checkCancellation()
+        // Jedno vytažení nad **spojeným** textem, ne dvě: dedup i pořadí prvního výskytu drží
+        // `Policy.intentLinks`, takže tentýž issue z popisu a z linkbacku vyjde jednou. Popis je
+        // první, protože zadání píše autor PR — linkback je jen odkaz na něj.
+        let joined = ([detail.body] + comments.bodies).joined(separator: "\n\n")
+        let links = Policy.intentLinks(in: joined)
+        let text = try await fetchIntentText(of: links)
+        let material = IntentMaterial(
             description: detail.body,
-            links: Policy.intentLinks(in: detail.body)
+            links: links,
+            issues: text.issues,
+            textGap: text.gap,
+            commentsUnavailable: comments.unavailable
         )
+        // Na osu jde **jeden** příznak, i když nastanou oba důvody — rozhoduje o tom `Policy`,
+        // ne tenhle kód. V souboru je zapsané obojí.
+        let gap = Policy.intentGap(text: text.gap, commentsUnavailable: comments.unavailable)
+
         do {
+            let brief = Policy.intentBrief(of: pr, material: material)
             let file = try intents.save(brief, for: pr, at: detail.headSha)
             // Úspěch hlášku **maže**: minulé selhání zápisu už není pravda o tomhle běhu.
             intentFailure = nil
-            return file
+            return (file, gap)
         } catch {
             // **Hláška jmenuje PR**, protože ve frontě dvaceti PR je „zadání se nepodařilo
             // připravit“ bez subjektu nepoužitelné — a `intentFailure` je jeden řetězec pro celou
             // aplikaci, takže si sám o sobě neřekne, o kterém běhu mluví.
             intentFailure = "Zadání pro reviewera \(pr.repo)#\(pr.number) se nepodařilo připravit, "
                 + "review běží bez něj. " + error.localizedDescription
-            return nil
+            // **Na osu nejde nic** (nález Copilota na #388). Když zápis selže, reviewer nedostal
+            // soubor **vůbec** — a věty u příznaku mluví o tom, co v zadání chybí („dostal jen
+            // odkazy“), takže by nad během bez zadání tvrdily víc, než data unesou. Selhat tady může
+            // jedině vlastní cache a to je **jiná porucha**, kterou hlásí stavový řádek
+            // (`intentFailure`, tak to zavedlo #120 — a tam to zůstává schválně, protože odznak nad
+            // rozbitým diskem je UI pro stav, který nenastává).
+            return (nil, nil)
         }
+    }
+
+    /// Komentáře pod PR **do cesty review** (#345). Vrací jejich těla a jestli se to nepovedlo.
+    ///
+    /// Konverzace se jinak načítá až při výběru řádku (`AppStore+Conversation`), v cestě review
+    /// vůbec — tady se ale načíst musí: **linkback z trackeru chodí jako komentář**, tedy zrovna
+    /// ten častý případ, kvůli kterému #120 vzniklo. Je to 1 bod GraphQL a jeden podproces na
+    /// review (u automatu se to násobí počtem PR, ne tikem).
+    ///
+    /// **Uložená konverzace se nepoužívá**, i když by se tím podproces ušetřil: je klíčovaná
+    /// `updatedAt` z posledního seznamu, takže může být starší než hlava, na kterou se pouští
+    /// review — a komentář s odkazem mohl přijít mezitím. Jeden zdroj pravdy je tady levnější než
+    /// úvaha „která kopie je čerstvější“.
+    ///
+    /// **Selhání review nepoloží**, ale ani se nespolkne: `unavailable` jde do souboru i na osu.
+    /// Zadání bez odkazů je horší review, ne rozbité review — mlčení by z toho ale udělalo tvrzení,
+    /// že PR na žádném zadání nestojí.
+    private func intentComments(for pr: PRIdentifier) async -> (bodies: [String], unavailable: Bool) {
+        do {
+            let conversation = try await gateway.fetchConversation(id: pr)
+            return (conversation.comments.items.map(\.body), false)
+        } catch {
+            // **Včetně zrušení**: tady se z něj nedělá výjimka, protože zrušené review se stejně
+            // zastaví o pár řádků dál (`intentText`, `runSkills`) a rozdíl mezi „nevíme“
+            // a „zrušeno“ se do souboru, který nikdy nevznikne, nemá kde propsat.
+            return ([], true)
+        }
+    }
+
+    /// Text issues, nebo důvod, proč není (#345).
+    ///
+    /// Tři různé odpovědi a **žádná z nich není prázdná hodnota**: bez odkazů se neptá nikdo
+    /// (gap `nil` — nechybí nic, protože není na co se ptát), bez jména nástroje v konfiguraci se
+    /// **netahá** (`toolNotConfigured`), a jinak se pustí session. Chybějící jméno nesmí skončit
+    /// prázdným pokusem: boot session stojí peníze a nevrátil by nic.
+    private func fetchIntentText(of links: [IntentLink]) async throws -> IntentTextResult {
+        guard !links.isEmpty, let intentText else { return IntentTextResult() }
+        guard let tool = Policy.issueTextTool(from: configuration.global.issueTextTool) else {
+            return IntentTextResult(gap: .toolNotConfigured)
+        }
+        return try await intentText.fetchText(of: links, using: tool)
     }
 
     /// Odvodí sadu skillů z toho, co v repu leží.
@@ -339,7 +415,8 @@ extension AppStore {
         using reviewer: any ReviewRunning,
         saving reviews: ReviewStore,
         only subset: [String]? = nil,
-        intent intentFile: URL?
+        intent intentFile: URL?,
+        gap: IntentGap?
     ) async throws {
         // Sada se čte **až tady**, po odhadu jazyka repa — proto se podmnožina předává jako
         // parametr a ne jako snímek pořízený při spuštění.
@@ -350,24 +427,43 @@ extension AppStore {
         // hlavní vlákno, a **pořadí událostí je to hlavní, co časová osa říká**. Proud ho
         // drží; hop do vlastního tasku na každou událost by o pořadí nechal rozhodovat
         // plánovač.
+        //
+        // **Uložení běhu jde tímtéž proudem** (#308), a to je celý smysl toho, že `.finished`
+        // nese celý `ReviewRun`: osa se ukládá až v okamžiku, kdy do ní dojely i události, které
+        // konci předcházely. Do #308 se uložení dělo mimo proud, takže si čtení osy a její zápis
+        // závodily o `MainActor` — a v souboru končila osa, kterou zbyl závod, ne osa běhu.
         let (events, reporter) = AsyncStream<ReviewEvent>.makeStream()
-        async let drained: Void = drain(events, for: pr, at: detail.headSha, in: worktree)
-        let failure = await runSkills(
+        async let drained: (any Error)? = drain(
+            events,
+            for: pr,
+            at: detail.headSha,
+            in: worktree,
+            saving: reviews
+        )
+        // Příznak zadání jde do osy **jako první událost každé dráhy** (#345), ne po konci běhu.
+        // Odpověď je v tuhle chvíli hotová (zadání se připravilo před `runSkills`), takže s ní není
+        // na co čekat — a událost, která by přišla až po doběhnutí, může dorazit do osy, kterou už
+        // nikdo nečte. Za každého revieweera zvlášť, protože příznak žije na dráze: dráha bez
+        // události by o sobě tvrdila, že zadání dostala celé.
+        if let gap {
+            for skill in skills { reporter.yield(.progress(skill: skill, .intentGap(gap))) }
+        }
+        await runSkills(
             for: pr,
             of: detail,
             in: worktree,
             using: reviewer,
-            saving: reviews,
             skills: skills,
             reporting: reporter,
             intent: intentFile
         )
         reporter.finish()
-        await drained
+        let failure = await drained
 
-        // Značky se mažou **až po vyprázdnění proudu** (#97). Zápis značky jde přes něj, kdežto
-        // uložení výsledku ne — takže by se smazání umělo předběhnout a značka by zůstala ležet
-        // nad hotovým během. Chytil to test, ne úvaha.
+        // Značky se mažou **až po vyprázdnění proudu** (#97). Značka i uložení výsledku jdou
+        // přes něj (uložení od #308), takže se smazání nemá jak předběhnout — a i tak se maže
+        // teprve tady, po `await drained`, ať to platí i pro běh, který se uložit nepovedlo.
+        // Chytil to test, ne úvaha.
         //
         // Maže se **celá sada, ne jen uložené běhy**: sem se dojde jedině tehdy, když review
         // skončilo, takže značka po něm už nemá co znamenat. Pokrývá to i **zrušený** běh,
@@ -393,13 +489,18 @@ extension AppStore {
         if let failure { throw failure }
     }
 
-    /// Zapisuje průběh v pořadí, ve kterém dorazil.
+    /// Zapisuje průběh v pořadí, ve kterém dorazil — a doběhlé běhy ukládá.
+    ///
+    /// Vrací **první** chybu zápisu, `nil` když se všechno uložilo. Ostatní skilly se kvůli ní
+    /// nezastavují: co se uložit povedlo, se nemá zahazovat.
     private func drain(
         _ events: AsyncStream<ReviewEvent>,
         for pr: PRIdentifier,
         at headSha: String,
-        in worktree: URL
-    ) async {
+        in worktree: URL,
+        saving reviews: ReviewStore
+    ) async -> (any Error)? {
+        var saveFailure: (any Error)?
         for await event in events {
             switch event {
             case .progress(let skill, let progress):
@@ -411,9 +512,44 @@ extension AppStore {
                     await markInterrupted(sessionID, of: skill, for: pr, at: headSha, in: worktree)
                 }
                 record(progress, of: skill, for: pr, in: worktree)
-            case .finished(let skill, let outcome, let usage):
-                finish(outcome, usage: usage, of: skill, for: pr)
+            case .finished(let run):
+                finish(run.outcome, usage: run.summary.usage, of: run.key.skillID, for: pr)
+                do {
+                    try await store(run, for: pr, saving: reviews)
+                } catch {
+                    // Nezapsaný nález je ztracený nález. Spolknout to by znamenalo, že řádek
+                    // po doběhlém review ukazuje „neběželo“ — tedy přesně to, čemu se celý ten
+                    // rozlišený stav vyhýbá. Ostatní skilly doběhnou, ať se nezahodí i to, co
+                    // se uložit povedlo.
+                    saveFailure = saveFailure ?? error
+                }
             }
+        }
+        return saveFailure
+    }
+
+    /// Uloží doběhlý běh i s osou, kterou má v tuhle chvíli store.
+    ///
+    /// Volá se **z proudu událostí, těsně za zápisem konce osy do storu** (#308) — a to je jediné
+    /// místo, odkud se osa dá uložit celá. Snímek pořízený mimo proud (tak to bylo do #308) čte
+    /// `reviewTimelines` uprostřed toho, jak ho proud plní, takže do souboru šla osa zkrácená
+    /// o rozjezd i o konec — a `dropped` u toho zůstalo nulové, tedy o zkrácení mlčelo. Kolik
+    /// událostí zbylo, rozhodovalo pořadí na `MainActoru`: změřeno na `AppStoreProgressTests`,
+    /// kde nad volným strojem v souboru končilo `[ve frontě]` a při souběžné suitě osa vůbec žádná.
+    ///
+    /// Osa se ukládá **s během**, ne zvlášť: je to jeho průběh, takže patří do téhož souboru
+    /// a zestárne s ním (#203).
+    private func store(_ run: ReviewRun, for pr: PRIdentifier, saving reviews: ReviewStore) async throws {
+        // Ukládá se **před** překladem: ten je krátká síťová operace navíc a když se na ní
+        // aplikace zavře, nálezy už jsou na disku. V originále, ale jsou — což je přesně to,
+        // co pravidlo „co doběhlo, zůstane“ chce.
+        reviewRecords[pr] = try await reviews.save(
+            run,
+            timeline: reviewTimelines[pr]?.first { $0.skill == run.key.skillID }?.stored()
+        )
+        revealFindingsOutsideTheDiff(for: pr)
+        if let translated = await translated(run, for: pr.repo) {
+            reviewRecords[pr] = try await reviews.save(translated)
         }
     }
 
@@ -486,22 +622,23 @@ extension AppStore {
         }
     }
 
+    /// Pustí session a doběhlé běhy pošle do proudu. **Neukládá** — uložení sedí na konci proudu
+    /// (viz `drain`), aby osa v souboru byla celá.
     private func runSkills(
         for pr: PRIdentifier,
         of detail: PullRequest,
         in worktree: URL,
         using reviewer: any ReviewRunning,
-        saving reviews: ReviewStore,
         skills: [String],
         reporting reporter: AsyncStream<ReviewEvent>.Continuation,
         intent intentFile: URL?
-    ) async -> (any Error)? {
+    ) async {
         // Limit se bere **tady a jednou** (#320), ze stejného důvodu jako šablona o pár řádků níž:
         // všechny session tohohle běhu poběží s tímtéž limitem, i kdyby se mezitím uložilo
         // nastavení. Přes `resolved(for:)`, protože je to hodnota **repa** — velké repo si o víc
         // říct smí, zbytek fronty se tím měnit nemá.
         let timeout = resolved(for: pr.repo).reviewTimeout
-        return await withTaskGroup(of: ReviewRun?.self) { group in
+        await withTaskGroup(of: ReviewRun?.self) { group in
             for skill in skills {
                 let request = ReviewRequest(
                     key: ReviewRunKey(pullRequest: pr, headSha: detail.headSha, skillID: skill),
@@ -536,7 +673,6 @@ extension AppStore {
             }
 
             var finished = 0
-            var saveFailure: (any Error)?
             for await run in group {
                 finished += 1
                 reviewPhases[pr] = .running(finished: finished, total: skills.count)
@@ -545,33 +681,11 @@ extension AppStore {
                 // peníze stála, ať už se její výsledek uloží, nebo ne. Číslo, které zrušením
                 // zmizí, by o mém účtu lhalo.
                 await recordSpend(run.summary.usage)
+                // Zrušený běh se **neukládá** — a proto se do proudu ani nepošle. Osa si tím
+                // konec nedostane, což je pravda: zrušené review nedoběhlo.
                 guard !Task.isCancelled else { continue }
-                reporter.yield(.finished(skill: run.key.skillID, run.outcome, usage: run.summary.usage))
-                do {
-                    // Ukládá se **před** překladem: ten je krátká síťová operace navíc
-                    // a když se na ní aplikace zavře, nálezy už jsou na disku. V originále,
-                    // ale jsou — což je přesně to, co pravidlo „co doběhlo, zůstane“ chce.
-                    reviewRecords[pr] = try await reviews.save(
-                        run,
-                        // Osa se ukládá **s během**, ne zvlášť: je to jeho průběh, takže patří
-                        // do téhož souboru a zestárne s ním (#203).
-                        timeline: reviewTimelines[pr]?
-                            .first { $0.skill == run.key.skillID }?
-                            .stored()
-                    )
-                    revealFindingsOutsideTheDiff(for: pr)
-                    if let translated = await translated(run, for: pr.repo) {
-                        reviewRecords[pr] = try await reviews.save(translated)
-                    }
-                } catch {
-                    // Nezapsaný nález je ztracený nález. Spolknout to by znamenalo, že
-                    // řádek po doběhlém review ukazuje „neběželo“ — tedy přesně to, čemu se
-                    // celý ten rozlišený stav vyhýbá. Ostatní skilly doběhnou, ať se
-                    // nezahodí i to, co se uložit povedlo.
-                    saveFailure = saveFailure ?? error
-                }
+                reporter.yield(.finished(run))
             }
-            return saveFailure
         }
     }
 

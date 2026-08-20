@@ -760,9 +760,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   tytéž reviewery jako chipy** v pruhu běhu (dvě odpovědi na „koho se to na tomhle PR týká“ by se
   rozešly potichu), že **pořadí je stabilní** i pro `running`, které je `Set` bez pořadí, a že
   **zdvojený skill v sadě dá jednu dráhu** — dvě by `ForEach`i daly jednu identitu dvakrát.
-- **Doplněný konec uložené osy (#242)** — sada, která vznikla z **měření, ne z návrhu**: uložená osa
-  svůj konec neobsahuje (7 ze 7 os po skutečném běhu), takže tab po restartu tvrdil `nedoběhlo` nad
-  doběhlým review. Testuje se, že se konec doplní z běhu, pod kterým leží, a hlavně to, co se
+- **Doplněný konec uložené osy (#242)** — od #308 platí **jen pro soubory uložené dřív**, protože
+  nová osa se ukládá celá; sada zůstává, protože staré záznamy na disku leží dál. Vznikla
+  z **měření, ne z návrhu**: uložená osa
+  svůj konec neobsahovala (7 ze 7 os po skutečném běhu), takže tab po restartu tvrdil `nedoběhlo`
+  nad doběhlým review. Testuje se, že se konec doplní z běhu, pod kterým leží, a hlavně to, co se
   doplnit **nesmí**: prázdná osa (z chybějícího průběhu by vznikl vymyšlený), fáze hlášení u běhu,
   který `ReportFindings` nezavolal, a druhý konec u osy, která ho má. Plus že identita událostí
   zůstane rostoucí a jednoznačná — zkrácená osa si nechává původní čísla, takže by doplněný konec
@@ -858,9 +860,28 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `cd <strom> &&`, cesta uvnitř příkazu, a že se bez stromu nic nemění. Pozor na past
   v testu: skutečný nástroj dostane cestu **nekódovanou**, takže `URL.path()` v přípravě
   vstupu ověřuje něco, co nikdy nevznikne.
-- **`AppStore` — průběh** — pořadí událostí včetně konce běhu, že osa přežije doběhnutí,
-  že nový běh začíná načisto a že se s PR mimo seznam zahodí. Plus detekce záměny skillu:
+- **`AppStore` — průběh** — pořadí událostí včetně konce běhu, že osa přežije doběhnutí, že nový
+  běh začíná načisto a **že se na disk uloží tatáž osa, jakou má store** (#308; do té doby o obsahu
+  souboru rozhodoval závod, takže tam končilo `[ve frontě]` nebo nic). Plus detekce záměny skillu:
   načtený jiný, načtený správný a běh bez skillu (ten záměna není).
+
+  Nad úklidem po tiku (`keepFresh()` bez toho PR) stojí dvě tvrzení a **obojí je ověřené vloženou
+  regresí**, u které je vidět, že padá **na tvrzení, ne na timeoutu**:
+  - **pustí se živá kopie, ne osa** — `reviewTimelines[pr]` je pryč, ale `timelines(for:)` odpoví
+    z uloženého záznamu a jsou to **tytéž události**. To porovnání celé osy je to hlavní: chytá
+    zkrácený rozjezd i konec dopočítaný z jiných hodin, tedy přesně tvar pádu z #308. Do #308 tady
+    stálo, že po tiku není osa žádná;
+  - **běžícímu review tik osu nesebere a další události do ní pokračují** — tohle je to tvrzení,
+    že se něco NEstalo: nevznikla druhá osa ani nová. Krok nad kódem dorazí **až po tiku**
+    (`FakeReviewRunner(progressAfterRelease:)`, přidané u #308 — bez toho fake hlásí všechen
+    průběh dřív, než se běh dá pozdržet), takže je to zrovna ta „pozdní událost“ z #308. Bez
+    ochrany `reviewTasks[$0.key] != nil` v `forget` spadne na třech `#expect`ech a v ose zbyde
+    `[tool(Read), finished]`, tedy **osa začínající uprostřed běhu** — přesně to tiché zkrácení,
+    kvůli kterému se ta otázka řešila.
+
+  `sessionID` se v tom porovnání **vynechává**, a je to vlastnost fake: `FakeReviewRunner` hlásí
+  jednu hodnotu v události průběhu a jinou v souhrnu session, takže by se porovnávala fake, ne
+  aplikace. Ve skutečném běhu je to jedna hodnota z jedné session.
 - **`FindingRow`** — skládání textů (`—` u nálezu bez místa, samotný soubor bez řádku,
   `file:line` bez locale u velkých čísel), blokující příznak, výchozí pořadí z `Policy`
   a unikátní identita řádků. Plus **nápověda k místu**: celá cesta u nálezu s řádkem
@@ -1498,6 +1519,64 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   Ověřeno **vloženou regresí** — `ClaudeCommand.prompt(for:)` zapomene `request.intentFile`,
   selhání zápisu se spolkne `try?` a `allWorktrees()` odfiltruje `.md`: padne **5 tvrzení
   v 5 testech** napříč `ClaudeCommandTests`, `AppStoreIntentTests` a `CacheEvictionTests`.
+- **Text issue a komentáře pod PR (#345)** — pět sad, a to nejcennější je tady jedno tvrzení:
+  **„issue nic neříká“ a „text se nedotáhl“ nesmí vypadat stejně**. Dva ze tří tvarů selhání
+  vypadají jako úspěch (`exit 0`, `result` se `success`), takže test nad vymyšleným JSONem by se
+  dal napsat tak, aby prošel nad rozborem, který se v reálu mýlí.
+
+  **Tři tvary selhání se proto testují na skutečných streamech** z průzkumu — nové fixtures
+  `stream-json/intent-server-missing.jsonl`, `intent-server-failed.jsonl`
+  a `intent-tool-denied.jsonl`; redakce `hook_response` je tatáž jako u fixtures z #12 a jinak jsou
+  bajt po bajtu, jak je CLI vypsalo. Testy u nich netvrdí jen výsledek, ale i **že je to doopravdy
+  ten zrádný tvar**: že ve streamu stojí `"subtype":"success"`, že v `result` eventu **není klíč
+  `result`**, a že próza modelu („žádný Linear MCP server není připojen“) se **nikam neuložila**.
+
+  **Úspěšné dotažení fixture nemá a je to napsané v testu i v `docs/claude-cli.md`**: odpověď nese
+  celý text firemního issue a ten do fixtures nepatří. Tvar eventů kolem něj drží ty tři selhané
+  streamy, takže inline zbývá jen **náš vlastní formát** — značky. Rozbor nad skutečnou úspěšnou
+  odpovědí se ověřil **spuštěním**: jeden běh `claude -p` s argumenty, které skládá
+  `IntentTextCommand`, a dočasný test nad jeho streamem ve scratchpadu (`gap == nil`, 2 359 znaků
+  textu, `num_turns: 3`, $0,3099, 21,4 s). Ten test se po ověření smazal — ukazoval na scratchpad.
+
+  `IntentTextCommandTests` — vedle těch tří tvarů ještě: že povolení jsou **dva nástroje**
+  a neobsahují `Write`, `Edit`, `Bash`, `ReportFindings` ani `Skill`, že `--disallowedTools` je
+  tatáž konstanta (a **literál**, aby o její změně byla řeč), že `--max-turns` je 6, že se model
+  nevynucuje; a u čtení odpovědi, že se próza před první značkou zahodí, že se **neznámé id zahodí
+  i s textem** (jinak by se nalepil na cizí sekci), že značka se páruje bez ohledu na velikost
+  písmen, že prázdná značka není dotažené issue, a že odpověď s `CRLF` se rozdělí.
+
+  `ClaudeIntentTextFetcherTests` — že se **bez odkazů session nepustí** (boot je reálné peníze), že
+  nespuštěná binárka a timeout nesou důvod dál (`.sessionFailed`, ne prázdný výsledek), že
+  **nenulový exit kód rozbor streamu nepřeskočí**, a že argumenty jdou do procesu z `IntentTextCommand`.
+
+  `ReviewIntentTests` — že každý ze šesti důvodů má v souboru **vlastní větu** a že se ty věty
+  doopravdy liší (`Set(texts).count == texts.count`); že se text páruje **podle `id`, ne podle
+  pořadí** (test to čte podle poloh v souboru: věta o chybějícím textu patří prvnímu, text druhému);
+  že částečné dotažení se pozná **po issue**, ne za celek; a že selhané komentáře jsou v souboru
+  napsané, ale **samy soubor nezakládají**.
+
+  `AppStoreIntentTests` — že **odkaz z komentáře pod PR** se do zadání dostane (to je ten častý
+  případ, kvůli kterému #120 vzniklo), že se **bez jména nástroje v konfiguraci nic nepustí**
+  a je to vidět na ose, že **bez odkazů se neptá nikdo a nic se nehlásí**, že příznak nese **každá**
+  dráha běhu (dvě sady skillů) a že doběhlou dráhu **nezhorší**, a že selhaný dotaz na komentáře
+  review nepoloží. Od nálezu Copilota na #388 k tomu i to, že **nepovedený zápis na osu nic
+  nepošle**, i když by gap jinak byl — reviewer nedostal soubor vůbec, takže věta „dostal jen
+  odkazy“ by tvrdila víc, než data unesou; hlásí to stavový řádek.
+
+  `ReviewerLaneTests` a `StoredTimelineTests` — že příznak **osu neposouvá** (dráha jen s ním
+  zůstane `queued` s jedinou fází), že **u syntetických drah je `nil`**, že **přežije restart**
+  (round trip `StoredTimeline`) a že osa, ve které je jen on, se **nedoplní na doběhlý běh**.
+  `ReviewerLaneTextTests` k tomu drží českou prózu: šest různých vět, krátký odznak a stav serveru
+  ve větě vidět.
+
+  Ověřeno **vloženou regresí**, dvakrát:
+  - `parse` přeskočí kontrolu serveru a jde rovnou na odpověď → padnou **4 testy** nad skutečnými
+    streamy (`serverUnavailable` vyjde `noAnswer`, a u nepřihlášeného serveru se navíc **vezme text**,
+    který v odpovědi je);
+  - `result?["result"] as? String ?? ""` místo `guard let` → **nepadne nic**, a to je zapsané
+    i v kódu: prázdný text nevydá ani jednu značku, takže skončí stejným `.noAnswer`. Explicitní
+    `guard` tam zůstal jako čtení, které se dá bezpečně rozšířit, ne jako mechanismus, na kterém
+    dnes něco stojí.
 - **Časový limit běhu (#320)** — tři sady a **nejcennější tvrzení je zase o tom, že se nic
   nezměnilo**: patnáct minut je hodnota, se kterou aplikace běžela do #320, a zavedení nastavení ji
   nesmí posunout.
@@ -3117,22 +3196,41 @@ za 0,001 s).
 
 ### Co tím opravené není
 
-**`AppStoreProgressTests` je flaky i bez zátěže**, a je to **jiná třída** — pořadí, ne čas, takže na
-to strop nemá vliv a #296 to neopravuje. Měřeno samostatně (`-only-testing`), osm běhů: jeden pád,
-za **0,038 s**, na `forgetsTheTimelineOfAPullRequestThatLeftTheList`. Kolega u #295 to samé viděl na
-čistém `mainu` (tři různé kombinace pádů ve třech bězích, mimo jiné `Časová osa zůstane i po
-doběhnutí`), takže to není z převodu na `waitUntil`.
+**`AppStoreProgressTests` bylo flaky i bez zátěže**, a byla to **jiná třída** — pořadí, ne čas,
+takže na to strop neměl vliv a #296 to neopravovalo. Měřeno samostatně (`-only-testing`), osm běhů:
+jeden pád, za **0,038 s**, na `forgetsTheTimelineOfAPullRequestThatLeftTheList`. Kolega u #295 to
+samé viděl na čistém `mainu` (tři různé kombinace pádů ve třech bězích), takže to nebylo z převodu
+na `waitUntil`. **Vyřešeno u #308** — a řešení bylo v `AppStore`, ne ve stropu, viz níž.
 
-Z hlášky je vidět mechanismus: osa dropnutého PR obsahovala `[queued, findings(0), finished]` —
-tedy **bez** `.started`, který fake hlásí jako první, a s razítky ze dvou různých hodin (`queued`
-v roce 1970 z `FakeTimeSource`, zbytek ve skutečném čase). To není přežilá osa, ale **nová**: události
-průběhu dorazily až po konci běhu, `keepFresh()` mezitím osu zahodil (PR ze seznamu zmizel) a pozdní
-události ji **postavily znovu**. Test pak vidí neprázdnou osu tam, kde má být prázdno.
+Mechanismus z hlášky (osa dropnutého PR obsahovala `[queued, findings(0), finished]` — tedy **bez**
+`.started`, který fake hlásí jako první, a s razítky ze dvou různých hodin, `queued` v roce 1970
+z `FakeTimeSource` a zbytek ve skutečném čase) vypadal na **pozdní událost**, která zahozenou osu
+postavila znovu. Změřením se to ukázalo jinak a **stojí za to si to pamatovat**, protože ten omyl
+byl pochopitelný:
 
-Čekat na `!isReviewing(pr)` proti tomu nepomůže: `reviewTasks[pr] = nil` je v `defer`u `review()`,
-takže „už neběží“ nastane dřív, než dojdou poslední události průběhu. Opravit se to dá jedině
-rozhodnutím o tom, jestli **smí pozdní událost průběhu vzkřísit zahozenou osu** — a to je otázka na
-`AppStore`, ne na strop v testu. Patří to do vlastního issue.
+- **Nic nedorazí pozdě.** Proud událostí se dojíždí uvnitř `review()` (`reporter.finish()`
+  + `await drained`), takže po konci běhu už žádná událost nepřijde — a dokud běh žije, `forget`
+  jeho osu z úklidu vyjímá.
+- **„Vzkříšení“ byl fallback na disk.** `timelines(for:)` po úklidu odpoví z uloženého záznamu,
+  který se schválně neuklízí. Osa tedy nebyla nová, ale **uložená** — a chybějící `.started`
+  s druhými hodinami byl její obsah: uložila se zkrácená a `completeTail` jí dopočítala konec
+  z `finishedAt`, tedy ze skutečných hodin vedle fake razítek.
+- **Padal ten závod v ukládání.** Snímek osy pro zápis se bral mimo proud, takže si čtení
+  s plněním závodilo o `MainActor`. Deterministicky se to pozná **zátěží**: samotný test
+  (`-only-testing:…/forgetsTheTimelineOfAPullRequestThatLeftTheList()`) padl **3× ze 3** a se
+  souběžnou druhou suitou prošel 4× ze 4 — proto to nad plným během vypadalo náhodně.
+
+Poučení pro příště: **z hlášky se pozná obsah, ne cesta, kterou tam přišel.** Že v ose chybí
+`.started`, říká, že se osa někde zkrátila, ne kdo ji zapsal; kdo, se pozná až tím, že se vytiskne,
+co je v `reviewRecords` **před** úklidem a co po něm.
+
+**Reportované trvání testu není doba čekání** (#360). U #358 padl `Průběh PR, které zmizelo ze
+seznamu` a v hlášení stálo `20,4 s z 22 s` celého běhu, což vypadalo na vyčerpaný strop čekání
+(`TestWait.deadline`). Není: Swift Testing pouští suity paralelně a u testu hlásí **uplynulý čas**,
+takže test, který se odbaví za 20 ms na začátku a dokončí se na konci běhu, hlásí celou délku běhu.
+Změřeno na plném běhu: **793 z 3383** hlášených položek hlásilo 20+ s v běhu, který trval **24 s** —
+a tentýž test hlášený jako 23,6 s se sám o sobě odbyde za **0,02 s**. Strop se z toho tedy vyčíst
+nedá; když ho test doopravdy vyčerpá, je v logu věta `Nedočkalo se: …`.
 
 **Testovací host umře při startu** (`Early unexpected exit, operation never finished bootstrapping —
 test runner exited with code 0 while preparing to run tests`). Zaznamenáno u #298 při třech

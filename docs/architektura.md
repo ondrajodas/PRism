@@ -1412,7 +1412,7 @@ Co se u toho nemá rozbít:
   přiznává, že to rozlišit neumí. Rozlišení přijde s #345, kde se zadání skládá z víc zdrojů
   a každý si nese svůj výsledek.
 - **Chybějící sekce se nevynechává mlčky.** Soubor má tři pojmenované sekce (popis PR, odkazy,
-  text issue) a ta poslední je v téhle verzi prázdná **vždycky** — s větou, že se text netahá
+  text issue) a do #345 byla ta poslední prázdná **vždycky** — s větou, že se text netahá
   a identifikátory jsou jen ukazatele. Bez ní by reviewer nepoznal rozdíl mezi „issue nic neříká“
   a „text issue se sem nedostal“.
 - **Odkazy se normalizují na kanonickou adresu bez slugu**, a dedup je podle **identifikátoru**.
@@ -1426,15 +1426,106 @@ Co se u toho nemá rozbít:
   dál bez zadání. `try?` by znamenal běh, který zadání nedostal, a v okně nic — přitom takový běh
   vypadá **úplně stejně** jako ten, který ho dostal.
 
-**Příznak na ose (tab `Průběh`) tohle issue vědomě nedostalo** a patří celý do #345. Důvod je, že
+**Příznak na ose (tab `Průběh`) tohle issue vědomě nedostalo** a přinesl ho #345. Důvod byl, že
 v téhle části může selhat **jedině zápis do vlastní cache** — a to ve chvíli, kdy o pár řádků výš
 prošlo vytvoření pracovního stromu, tedy nesrovnatelně větší zápis do téže složky. Odznak, který se
 rozsvítí jen nad rozbitým diskem, je UI pro stav, který nenastává; kdežto #345 přináší tři tvary
 selhání, které nastávají běžně (chybějící MCP server, server, který nejde spustit, nepovolený
-nástroj), a **tam se ten odznak vyplatí**. Druhý důvod je návrhový: `loadedADifferentSkill` je fakt
+nástroj), a **tam se ten odznak vyplatí**. Druhý důvod byl návrhový: `loadedADifferentSkill` je fakt
 **o jedné session**, kdežto zadání je jedno pro celý běh, takže „jak jeden fakt vypadá na N
-dráhách“ je rozhodnutí, které patří k případu, kde si ho něco vynutí. Do té doby to hlásí
-`AppNoticesView` ve stavovém řádku, jako `draftFailure` nebo `dismissalFailure`.
+dráhách“ je rozhodnutí, které patřilo k případu, kde si ho něco vynutí. Zápis do cache hlásí
+`AppNoticesView` ve stavovém řádku dál (`intentFailure`), jako `draftFailure` nebo
+`dismissalFailure` — příznak na ose ho **nenahrazuje**, protože je to jiná porucha.
+
+### Text issue a komentáře pod PR (#345)
+
+Druhá polovina #120. Odkazy na zadání se od #345 hledají **i v komentářích pod PR** a jejich text se
+**dotáhne krátkou `claude -p` session**. Rozhodnutí o ceně (uživatel, 2026-08-17): **tahá se
+vždycky, i v automatickém režimu** — $0,18 (sonnet) až $0,31 (opus-5) a ~20 s na review. Zvažovalo
+se omezit to na ručně spuštěné review nebo u automatu vynutit `sonnet`; zamítnuto, protože zadání
+vedle diffu je důvod, proč funkce existuje, a automat je zrovna ten režim, u kterého se člověk dívá
+až na hotový výsledek.
+
+**Rozlišit „issue nic neříká“ od „nestáhlo se“ je jádro, ne detail** — a je to jediná věc, kvůli
+které je ta session postavená jinak než překlad nálezů. Průzkum naměřil **tři tvary selhání a dva
+z nich vypadají jako úspěch**; jediný strojově čitelný signál je `init.mcp_servers[].status`, který
+se dá přečíst **jedině ze streamu**. Tabulka tvarů, fixtures i ceny jsou
+v [`docs/claude-cli.md`](claude-cli.md), sekce *Dotažení textu issue*.
+
+Kudy to teče:
+
+| Vrstva | Co drží |
+|---|---|
+| `IntentTextFetching` + `IntentTextResult` | Protokol se **jednou** metodou, která bere odkazy a vrací texty. Z typu je vidět, že to umí jen přečíst text — není tam nic, čím by se dalo zapsat |
+| `ClaudeIntentTextFetcher` | Jedna session na review. Selhání procesu **nese důvod dál** (`.sessionFailed`), nespolkne se |
+| `IntentTextCommand` | Čisté funkce: argumenty, prompt, rozbor streamu. Rozhodování o gapu je celé tady |
+| `IntentGap` | Šest důvodů, proč zadání není celé. `Codable`, protože jde do osy |
+| `IntentMaterial` + `Policy.intentBrief` | Složení souboru. Nese `textGap` **a** `commentsUnavailable` zvlášť — nastat můžou oba |
+| `Policy.intentGap(text:commentsUnavailable:)` | Který příznak jde na osu, když nastanou oba |
+| `Policy.issueTextTool(from:)` | Jméno nástroje z konfigurace; prázdno = **netahat** |
+
+Co se u toho nemá rozbít:
+
+- **Sada nástrojů revieweera se nemění** (tvrdá podmínka č. 2). Text tahá **zvlášť běžící session**,
+  ne review, a ta má vlastní, taky vyjmenovanou sadu: `ToolSearch` a ten jeden čtecí MCP nástroj.
+  `--disallowedTools` je **tatáž konstanta** `ClaudeCommand.disallowedTools` — druhá sada zákazů by
+  byla druhé místo, kde se ta podmínka dá porušit. Je na to test, který v povoleních hledá `Write`,
+  `Edit`, `Bash`, `ReportFindings` i `Skill` a tvrdí, že tam nejsou.
+- **`--allowedTools ""` z překladu se opsat nedá.** Na stroji je v session **165 nástrojů**, takže
+  CLI odkládá schémata: model musí napřed zavolat `ToolSearch` a **teprve pak** MCP nástroj (ověřeno
+  ve všech bězích). Z toho plyne i `--max-turns`: **ne 1–2**, protože dotažení je ≥ 3 turny.
+- **Jméno nástroje je v konfiguraci, ne v konstantě** (`GlobalConfig.issueTextTool`).
+  `mcp__claude_ai_Linear__get_issue` je dnešní jméno serveru **u tohohle uživatele**, ne kontrakt —
+  konstanta v kódu by byla tvrzení o cizím prostředí. **Chybějící hodnota znamená „netahat“**, ne
+  prázdný pokus: session bez nástroje, který by zavolala, stojí boot (~$0,2) a nevrátí nic. Je to
+  vlastní stav (`.toolNotConfigured`) a **na ose je vidět**, protože reviewer dostal jen odkazy.
+- **Rozhodovat podle prózy modelu je hádání a nesmí se to tak psát.** Pořadí, ve kterém `parse`
+  hledá důvod, je pořadí **příčin**: server → odmítnutí → odpověď. Kdyby se napřed koukalo na text,
+  uložila by se do zadání věta modelu („nemám povolení k použití nástroje…“) jako by to bylo zadání.
+  Ověřeno vložením regrese — s vypnutou kontrolou serveru padnou čtyři testy nad skutečnými streamy.
+- **Exit kód se nečte.** Změřeno, že sám nerozhoduje: chybějící server skončí **nulou** a `success`,
+  server, který se nespustil, **jedničkou**. Rozbor streamu se proto pouští v obou případech.
+- **Nepřihlášený server je k nerozeznání od chybějícího** a je to jeden případ
+  (`.serverUnavailable(status:)` s `nil` pro „v seznamu nebyl“). Servery se `needs-auth` nemají
+  v `tools` ani jednu položku, takže se to odlišit nedá — a pro toho, kdo se dívá do okna, je to
+  tentýž stav „zadání se nedotáhlo“.
+- **Odpověď se čte podle značek, ne jako JSON.** Hodnota je cizí markdown libovolné délky
+  (4 439 znaků u jednoho issue z průzkumu, s uvozovkami i zpětnými apostrofy) a překódovat ho na
+  JSONový řetězec je krok, ve kterém model utne nebo zkazí escapování — selhání by pak zahodilo
+  **všechny** texty naráz. Řádková značka (`IntentTextCommand.marked(_:)`) se obsahem rozbít nedá
+  a skládá ji **jedna funkce** pro obě strany, takže se příklad v promptu a rozbor odpovědi nemají
+  čím rozejít. Dělí se `TextLines` — odpověď může přijít s `CRLF` a `split(separator: "\n")` by na
+  něm nerozdělil vůbec.
+- **Text se páruje podle `id`, ne podle pořadí.** Model, který jedno issue vynechá, by u pozičního
+  párování posunul texty o jedno a přiřadil je cizím issues — tichá záměna zadání. Neznámé id se
+  zahazuje **i s textem**, ne přilepí k předchozímu.
+- **Částečné dotažení není selhání celku.** Dvě issues a jeden text znamená, že session neselhala,
+  takže na osu nejde nic — a chybějící issue se pojmenuje **ve své podsekci** v souboru. Věta u něj
+  je přitom **bez příčiny** (`ReviewIntentText.notRead`), protože žádná zaznamenaná není; hádat mezi
+  „nezkoušelo se“ a „nepovedlo se“ je zrovna ta záměna, kterou tohle issue odstraňuje.
+- **Komentáře se v cestě review tahají vždycky znovu**, ne z uložené konverzace. Ta je klíčovaná
+  `updatedAt` z posledního seznamu, takže může být starší než hlava, na kterou se pouští review —
+  a komentář s linkbackem mohl přijít mezitím. Je to 1 bod GraphQL a jeden podproces na review.
+  **Selhání review nepoloží**, ale zapíše se do souboru (`ReviewIntentText.commentsUnavailable`)
+  i na osu: „no issue links found“ nad selhaným dotazem by tvrdilo, že PR na žádném zadání nestojí.
+- **Zadání se připravuje až za rozpočtem a za checkoutem.** Od #345 to něco stojí, takže platit za
+  text u běhu, který se pak nerozjede, je tatáž chyba, kvůli které se rozpočet strhává v `runSkills`.
+- **Na osu jde jeden příznak, i když nastanou dva důvody.** Rozhoduje o tom `Policy`, ne view:
+  přednost má **text**, protože je to ten obsah, kvůli kterému se zadání tahá. V souboru je
+  zapsané obojí — tam se místem šetřit nemusí.
+- **A když se soubor nepodařilo uložit, nejde na osu nic** (nález Copilota na #388). Věty
+  u příznaku mluví o tom, co v zadání **chybí** („reviewer dostal jen odkazy“), takže nad během,
+  který nedostal soubor vůbec, by tvrdily víc, než data unesou. Nepovedený zápis do vlastní cache
+  je jiná porucha a zůstává tam, kam ho dalo #120 — ve stavovém řádku (`intentFailure`).
+- **Příznak jde do osy jako první událost každé dráhy, ne po konci běhu.** Odpověď je v tu chvíli
+  hotová (zadání se připravilo před `runSkills`), takže s ní není na co čekat — a událost, která by
+  přišla po doběhnutí, může dorazit do osy, kterou už nikdo nečte. Za **každého** revieweera zvlášť,
+  protože příznak žije na dráze: dráha bez události by o sobě tvrdila, že zadání dostala celé.
+- **Příznak osu neposouvá.** `ReviewerLane.reachedStage` ho ignoruje a `completeTail` ho nepočítá za
+  průběh, takže osa, ve které je **jen** on, zůstane osou bez průběhu. Bez toho by dráha ve frontě
+  tvrdila, že už něco dělá, a dráha po nespuštěném běhu `doběhlo` nad prázdnými fázemi.
+- **U syntetických drah je `nil`.** Dráha bez osy (`notStarted`, `queued`, `missingProgress`)
+  o zadání nic neví, takže o něm nic netvrdí.
 
 ### Kontrola nálezů z minula (#150)
 
@@ -3419,8 +3510,27 @@ Průběh review drží `AppStore` taky (`reviewTimelines`, per PR):
   nechal rozhodovat plánovač.
 - **Konec běhu jde stejným proudem.** Zápis mimo něj dorazil dřív než to, co mu
   předcházelo, a někdy se ztratil úplně; je na to test.
-- **Osa se drží i po doběhnutí** — právě tehdy se k ní člověk vrací. Nový běh ji vynuluje
-  a PR, které zmizí ze seznamu, ji ztratí (běžící review si ji podrží).
+- **A uložení běhu taky** (#308). `.finished` proto nese celý `ReviewRun` a `drain` ho hned za
+  zápisem konce osy uloží (`store(_:for:saving:)`). Do #308 se ukládalo mimo proud, takže si
+  čtení osy a její zápis závodily o `MainActor` a **do souboru šla osa, kterou zbyl závod**:
+  celá, zkrácená na `[ve frontě]`, nebo vůbec žádná — a `dropped` u toho zůstalo nulové, tedy
+  o zkrácení mlčelo. Změřeno na `AppStoreProgressTests`: nad volným strojem vycházelo `[ve
+  frontě]`, se souběžnou suitou nic. Zamítnutá varianta bylo uložit všechny běhy až po
+  `await drained` — to ruší pravidlo „ukládá se po každém doběhlém skillu“ (#97), takže by
+  zavření aplikace uprostřed sady zahodilo i to, co doběhlo.
+- **Osa se drží i po doběhnutí** — právě tehdy se k ní člověk vrací. Nový běh ji vynuluje;
+  běžící review si ji přes tik podrží.
+- **Tik pustí živou kopii osy, ne osu** (#308). PR mimo seznam vypadne z `reviewTimelines`, ale
+  `timelines(for:)` pak odpovídá z uloženého záznamu — a ten se schválně neuklízí (#137 z něj
+  pozná re-review od novinky), takže je to tatáž odpověď jako po restartu (#203). Zahodit osu
+  doopravdy by znamenalo zahodit i záznam, tedy rozbít #137. Do #308 tady stálo, že se osa
+  „ztratí“, a test to tvrdil taky — jenže netvrdil, což byl jediný důvod, proč padal.
+- **Pozdní událost zahozeného běhu nastat nemůže, a je to strukturou, ne kontrolou** (#308):
+  proud se dojíždí uvnitř `review()` (`reporter.finish()` + `await drained`), takže po konci
+  běhu už žádná událost nepřijde, a dokud běh žije, `forget(whatIsNotIn:)` jeho osu z úklidu
+  vyjímá (`reviewTasks[$0.key] != nil`). `record(_:of:for:in:)` proto **žádnou bránu nemá** a mít
+  ji nemá: je to obyčejný zapisovatel, který používá i měření ceny události (#350) — brána „jen
+  když PR běží“ by harnessu neuložila nic a měřila by prázdno.
 
 Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
 
@@ -4357,18 +4467,26 @@ seznam, dvojklik pošle jeden komentář a selhání drží stav i text. Dvě v�
     „osa se neuložila“, ne „nic se nedělo“ — takový běh se v tabu `Průběh` kreslí jako **`bez
     průběhu`** (#242), ne jako nespuštěný: nespuštěno by o doběhlém běhu lhalo a vynechat ho úplně
     znamená, že tab vypíše zrovna ty reviewery, které neběžely.
-  - **Uložená osa svůj konec neobsahuje, takže se doplňuje z běhu** (`ReviewerTimeline.completeTail(from:)`,
-    #242). Snímek pro zápis se v `runSkills` bere dřív, než proud událostí dojede, takže v souboru
-    chybí `hlásí nálezy` i `doběhlo` — **změřeno na skutečné cache: 7 ze 7 os po skutečném běhu**
-    (osy vyrobené v testech konec mají, proto to testy nechytily). Bez doplnění tvrdil tab `Průběh`
-    po restartu `nedoběhlo — běh někdo zrušil` nad doběhlým review a `nálezy vůbec nenahlásilo` nad
-    tím, které nahlásilo prázdný seznam; chip vedle toho ukazoval `čisto`. Doplňuje se **jen to, co
-    běh sám ví** (jeho výsledek a jeho počet nálezů včetně nepřečtených), jen když to v ose není,
-    a **nikdy do prázdné osy** — jinak by z chybějícího průběhu vznikl vymyšlený. Běh, který
-    `ReportFindings` nezavolal, doplněnou fázi hlášení nedostane: to je vlastní stav a slít se nesmí.
-    Opravuje se to na **čtení**, ne v zápisu, protože stejně tak vypadají všechny už uložené
-    soubory; zápis by se musel synchronizovat s proudem, a to je continuation navíc v cestě, která
-    se ruší.
+  - **Osa se ukládá celá, protože se ukládá z proudu** (#308). Do #308 se snímek pro zápis bral
+    mimo proud událostí, takže v souboru chybělo `hlásí nálezy` i `doběhlo` — **změřeno na
+    skutečné cache: 7 ze 7 os po skutečném běhu** — a rozjezd osy podle toho, jak závod dopadl
+    (osy vyrobené v testech konec měly, proto to testy nechytily). Zápis se proto přesunul na
+    konec proudu, kde je osa hotová; podrobnosti a zamítnuté varianty jsou v sekci o průběhu
+    review výš.
+  - **Konec se ale doplňuje dál** (`ReviewerTimeline.completeTail(from:)`, #242), protože soubory
+    uložené **před #308** ho pořád nemají — a bez doplnění tvrdil tab `Průběh` `nedoběhlo — běh
+    někdo zrušil` nad doběhlým review a `nálezy vůbec nenahlásilo` nad tím, které nahlásilo
+    prázdný seznam; chip vedle toho ukazoval `čisto`. Doplňuje se **jen to, co běh sám ví** (jeho
+    výsledek a jeho počet nálezů včetně nepřečtených), jen když to v ose není, a **nikdy do
+    prázdné osy** — jinak by z chybějícího průběhu vznikl vymyšlený. Běh, který `ReportFindings`
+    nezavolal, doplněnou fázi hlášení nedostane: to je vlastní stav a slít se nesmí. Že to nad
+    novými soubory nemá co dělat, není důvod to zahodit — staré na disku leží dál.
+
+    **Změna proti #242**, které si tenhle konec doplnilo na čtení s odůvodněním, že „zápis by se
+    musel synchronizovat s proudem, a to je continuation navíc v cestě, která se ruší“. Ta cena
+    se ukázala jako zbytečná: uložení se **přesunulo do proudu**, takže žádná continuation ani
+    synchronizace nevznikla. Doplňování na čtení tím neztratilo předmět (staré soubory), ale
+    přestalo být jediným řešením.
   - **Živá osa přebíjí uloženou.** Běžící review si ji drží v paměti, kdežto uložená patří
     předchozímu běhu; ověřeno vloženou regresí (spadne sedm testů).
   - **Ořezává se začátek, ne konec**, a strop je 300 událostí: kdo se do osy dívá po restartu,

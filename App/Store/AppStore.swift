@@ -356,6 +356,13 @@ final class AppStore {
 
     let translator: (any FindingTranslating)?
 
+    /// Dotažení textu issue do zadání pro reviewera (#345). `nil` = **netahá se** a review poběží
+    /// se zadáním bez textu, tedy tak, jak běželo do #345.
+    ///
+    /// Nepovinné ze stejného důvodu jako `translator`: testy, které o zadání nestojí, ho nedostanou
+    /// a nespouští tím `claude`.
+    let intentText: (any IntentTextFetching)?
+
     private let configStore: ConfigStore?
 
     /// Doručování notifikací (#88). `nil` = odsud se neposílají (testy), takže se nic
@@ -528,6 +535,7 @@ final class AppStore {
         drafts: ReviewDraftStore? = nil,
         intents: ReviewIntentStore? = nil,
         translator: (any FindingTranslating)? = nil,
+        intentText: (any IntentTextFetching)? = nil,
         autoRuns: AutoRunLedger? = nil,
         spend: SpendLedger? = nil,
         gh: URL? = nil,
@@ -567,6 +575,7 @@ final class AppStore {
         draftStore = drafts
         self.intents = intents
         self.translator = translator
+        self.intentText = intentText
         self.autoRuns = autoRuns
         self.spend = spend
         polling.afterSuccessfulTick = { [weak self] summaries in
@@ -642,6 +651,7 @@ final class AppStore {
             drafts: ReviewDraftStore(),
             intents: ReviewIntentStore(),
             translator: ClaudeFindingTranslator(claude: toolPaths.claude, runner: runner),
+            intentText: ClaudeIntentTextFetcher(claude: toolPaths.claude, runner: runner),
             autoRuns: AutoRunLedger(),
             spend: SpendLedger(),
             gh: toolPaths.gh,
@@ -1468,8 +1478,12 @@ final class AppStore {
     /// osa dostala dřív než události, které mu předcházely, a někdy vůbec.
     enum ReviewEvent: Sendable {
         case progress(skill: String, ReviewProgress)
-        /// Konec běhu i s tím, co stál (#148) — `usage` je `nil` u běhu, který cenu nenahlásil.
-        case finished(skill: String, ReviewRunOutcome, usage: RunUsage?)
+        /// Doběhlý běh celý, ne jen jeho výsledek (#308). Skill, výsledek i cenu (#148) si osa
+        /// vezme z něj — a hlavně: **z proudu se běh i ukládá**, takže se osa zapisuje na disk
+        /// až po tom, co do ní dojedou události, které konci předcházely. Do #308 tady byla
+        /// jen trojice `(skill, outcome, usage)` a uložení běželo mimo proud, což znamenalo, že
+        /// se uloženou osou rozhodoval závod: hotová, `[ve frontě]`, nebo vůbec žádná.
+        case finished(ReviewRun)
     }
 
     /// Zahodí stav rep, o která už není zájem. Bez toho by mapa rostla donekonečna a PR,

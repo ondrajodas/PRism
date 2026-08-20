@@ -98,6 +98,10 @@ struct ReviewerLane: Identifiable, Equatable, Sendable {
     let droppedEntries: Int
     /// Skill, který si session doopravdy načetla, když je jiný než nastavený. `nil` = sedí.
     let loadedSkill: String?
+    /// Proč nebylo zadání pro reviewera celé (#345). `nil` = bylo, nebo se na to neptalo —
+    /// a **u syntetických drah taky `nil`**: dráha bez osy o zadání nic neví, takže o něm nic
+    /// netvrdí.
+    let intentGap: IntentGap?
     /// Celá osa. Dráha ji nese, aby view mělo **jeden** vstup — jinak by si lane a osu muselo
     /// párovat podle jména skillu a při přejmenování by se tiše rozešly.
     let entries: [ReviewerTimeline.Entry]
@@ -216,6 +220,7 @@ extension Policy {
             worktree: nil,
             droppedEntries: 0,
             loadedSkill: nil,
+            intentGap: nil,
             entries: [],
             // Dnes je to vždycky `true` — co v sadě není a nemá ani osu, ani běh, se do pořadí
             // drah nedostane. Předává se přesto: ta pravda drží jen pořadím větví ve `lanes`,
@@ -243,6 +248,7 @@ extension Policy {
             worktree: nil,
             droppedEntries: 0,
             loadedSkill: nil,
+            intentGap: nil,
             entries: [],
             isConfigured: isConfigured
         )
@@ -261,6 +267,7 @@ extension Policy {
             worktree: nil,
             droppedEntries: 0,
             loadedSkill: nil,
+            intentGap: nil,
             entries: [],
             isConfigured: isConfigured
         )
@@ -287,6 +294,7 @@ extension Policy {
             worktree: timeline.worktree,
             droppedEntries: timeline.droppedEntries,
             loadedSkill: timeline.loadedADifferentSkill ? timeline.loadedSkill : nil,
+            intentGap: timeline.intentGap,
             entries: timeline.entries,
             isConfigured: isConfigured
         )
@@ -302,6 +310,9 @@ extension Policy {
             case .started: reached = max(reached, 1)
             case .tool: reached = max(reached, 2)
             case .findings: reached = max(reached, 3)
+            // Příznak zadání (#345) osu **neposouvá**: přichází dřív, než se cokoli spustilo, a
+            // fáze mají popisovat běh. Kdyby posouval, dráha ve frontě by tvrdila, že už něco dělá.
+            case .intentGap: break
             case .finished: break
             }
         }

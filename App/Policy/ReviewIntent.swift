@@ -90,6 +90,45 @@ extension Policy {
     }
 }
 
+/// Text jednoho issue, jak ho dotáhla krátká `claude -p` session (#345).
+///
+/// **Vlastní typ, ne slovník `[String: String]`**: pořadí je pořadí odkazů v zadání a slovník
+/// žádné nemá, takže by se sekce v souboru mezi dvěma běhy nad tímtéž PR přeskupily — a text,
+/// který se přeskupí, je jiný prompt (viz `Policy.intentLinks`).
+struct IntentIssueText: Hashable, Sendable {
+    /// Identifikátor, na který se to ptalo — `AJDA-892`. Páruje se podle něj, ne podle pořadí:
+    /// model, který jedno issue vynechá, by u pozičního párování přiřadil text cizímu issue.
+    let id: String
+    /// Titulek a popis, jak je vrátil tracker. **Cizí text**, takže se do souboru jen položí; nic
+    /// se z něj nevykládá.
+    let text: String
+}
+
+/// Z čeho se skládá soubor se zadáním (#120, doplněno #345).
+///
+/// **Struktura, ne šest parametrů**: skládá se z víc zdrojů a **každý si nese svůj výsledek** —
+/// popis PR přijde vždycky, odkazy jen z toho textu, který se podařilo přečíst, a text issue jen
+/// tehdy, když se dotáhl. Rozdíl mezi „nic tam nebylo“ a „nedotáhlo se“ musí přežít až do souboru,
+/// takže se ty dva fakty nesou zvlášť, ne jako prázdná hodnota.
+struct IntentMaterial: Equatable, Sendable {
+    /// Popis PR. Prázdný znamená **prázdný nebo nedotažený** — model to nerozliší, viz
+    /// `ReviewIntentText.noDescription`.
+    var description: String
+    /// Odkazy vytažené z popisu **a z komentářů pod PR**, v pořadí prvního výskytu.
+    var links: [IntentLink] = []
+    /// Dotažené texty. Nemusí být ke každému odkazu — chybějící se v souboru pojmenuje.
+    var issues: [IntentIssueText] = []
+    /// Proč **text issue** chybí. `nil` = nechybí (dotáhl se, nebo nebylo co tahat).
+    ///
+    /// `.commentsUnavailable` sem nepatří: to je fakt o odkazech, ne o textu, a nese ho pole níž.
+    var textGap: IntentGap?
+    /// Nepodařilo se přečíst komentáře pod PR, takže odkazů může být méně.
+    ///
+    /// Vlastní pole vedle `textGap`, ne případ v něm: nastat můžou **oba** a soubor musí zapsat
+    /// obojí. Na osu jde jen jeden, o tom rozhoduje `Policy.intentGap(text:commentsUnavailable:)`.
+    var commentsUnavailable = false
+}
+
 /// Texty souboru se zadáním (#120).
 ///
 /// **Anglicky, na rozdíl od zbytku prózy v tomhle repu.** Soubor čte reviewer, tedy tentýž
@@ -127,14 +166,66 @@ enum ReviewIntentText {
 
     static let noLinks = "No issue links found in the text above."
 
-    /// Sekce s textem issue **zůstává i v téhle verzi**, jen prázdná.
+    /// Komentáře pod PR se nepodařilo přečíst (#345).
     ///
-    /// Vynechat ji by znamenalo, že reviewer nemá jak poznat rozdíl mezi „issue nic neříká“
-    /// a „text issue se sem nedostal“ — a to druhé je tady pravda vždycky. Naplní ji #345.
-    static let noIssueText = """
-        Not fetched. This version of PRism does not read the text of linked issues, so the \
-        identifiers above are pointers only — do not assume what those issues say.
+    /// Musí to být v souboru napsané, i když se odkaz v popisu našel: linkback od Linearu chodí
+    /// jako **komentář**, takže „no issue links found“ by nad selhaným dotazem tvrdilo víc, než
+    /// data unesou — a reviewer by usoudil, že PR na žádném zadání nestojí.
+    static let commentsUnavailable = """
+        PRism could not read the pull request comments, so this list may be incomplete — an issue \
+        linked from a comment (which is how tracker linkbacks arrive) would be missing from it.
         """
+
+    /// Sekce s textem issue — nadpis jednoho dotaženého issue.
+    static func issueSubheading(_ id: String) -> String { "### \(id)" }
+
+    /// Co stojí v sekci s textem issue, když **žádný odkaz není**.
+    ///
+    /// Vlastní věta, ne `notFetched(_:)`: ta mluví o identifikátoru („treat the identifier as
+    /// a pointer only“), a **tady žádný není** — byl by to text, který tvrdí víc, než data unesou.
+    /// Jestli je seznam odkazů celý, řeší sekce nad tím (`commentsUnavailable`).
+    static let noIssues = "No linked issues, so there is no issue text to read."
+
+    /// Text issue chybí a **důvod se nezaznamenal**.
+    ///
+    /// Dva reálné případy, oba bez poruchy: sestavení, které dotahování nemá vůbec (chování do
+    /// #345), a **částečné** dotažení, kde se jedno issue z několika nevrátilo, aniž by session
+    /// selhala. Věta proto o žádné příčině netvrdí nic — hádat mezi „nezkoušelo se“
+    /// a „nepovedlo se“ je zrovna ta záměna, kterou tenhle soubor má odstranit.
+    static let notRead = """
+        Not fetched. PRism does not have this issue's text — it did not record why. Treat the \
+        identifier as a pointer only: do not assume what this issue says.
+        """
+
+    /// Co se napíše místo textu issue, který se nedotáhl (#345).
+    ///
+    /// **Každý důvod má vlastní větu**, protože jinak se „issue nic neříká“ a „text se nedotáhl“
+    /// slijí do jednoho — a to je celý důvod, proč tohle issue vzniklo. Věta vždycky končí tím,
+    /// že se z odkazu nemá nic domýšlet: reviewer, který si obsah issue domyslí, nahlásí nález
+    /// proti zadání, které nikdo nenapsal.
+    static func notFetched(_ gap: IntentGap) -> String {
+        let reason = switch gap {
+        case .toolNotConfigured:
+            "PRism has no issue-reading tool configured, so it did not even try."
+        case .serverUnavailable(let status):
+            status.map { "the tracker's MCP server was not connected in that session (status: \($0))." }
+                ?? "the tracker's MCP server was not present in that session at all."
+        case .toolDenied:
+            "the tool call was denied in that session."
+        case .noAnswer:
+            "that session returned no usable text for this issue."
+        case .sessionFailed(let detail):
+            "that session did not run: \(detail)"
+        // **Odsud nedosažitelné**, a je to tvrzení o typech, ne naděje: `IntentMaterial.textGap`
+        // mluví o textu, kdežto tenhle případ o **odkazech** — a ten se do souboru zapisuje větou
+        // `commentsUnavailable` u seznamu odkazů, ne tady. Věta je přesto pravdivá pro každý gap,
+        // aby vyčerpávající výčet nemusel lhát ani na cestě, po které se nejde.
+        case .commentsUnavailable:
+            "PRism did not get this issue's text."
+        }
+        return "Not fetched — \(reason) Treat the identifier as a pointer only: "
+            + "do not assume what this issue says."
+    }
 }
 
 extension Policy {
@@ -147,14 +238,13 @@ extension Policy {
     /// Sekce jsou pojmenované a **žádná se nevynechává mlčky**: chybějící část dostane věty
     /// z `ReviewIntentText`, ze kterých je poznat, co se nedotáhlo. Tichá mezera by z „zadání
     /// nic neříká“ a „zadání se nesehnalo“ udělala jeden stav.
-    static func intentBrief(
-        of pullRequest: PRIdentifier,
-        description: String,
-        links: [IntentLink]
-    ) -> String? {
-        let description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+    static func intentBrief(of pullRequest: PRIdentifier, material: IntentMaterial) -> String? {
+        let description = material.description.trimmingCharacters(in: .whitespacesAndNewlines)
         // Nic nesehnáno = žádný soubor. Zbytek souboru by byly samé věty o tom, co v něm není.
-        guard !description.isEmpty || !links.isEmpty else { return nil }
+        //
+        // **Selhání komentářů samo soubor nezakládá**: bez popisu a bez odkazu by v něm nebylo nic
+        // než věta o tom, co se nepodařilo přečíst — a za tou reviewer nemá proč chodit.
+        guard !description.isEmpty || !material.links.isEmpty else { return nil }
 
         var sections = [
             "# \(ReviewIntentText.title) — \(pullRequest.repo)#\(pullRequest.number)",
@@ -164,13 +254,67 @@ extension Policy {
             "## \(ReviewIntentText.linksHeading)",
         ]
         sections.append(
-            links.isEmpty
+            material.links.isEmpty
                 ? ReviewIntentText.noLinks
-                : links.map { "- \($0.id) — \($0.url.absoluteString)" }.joined(separator: "\n")
+                : material.links.map { "- \($0.id) — \($0.url.absoluteString)" }.joined(separator: "\n")
         )
-        sections += ["## \(ReviewIntentText.issueHeading)", ReviewIntentText.noIssueText]
+        if material.commentsUnavailable { sections.append(ReviewIntentText.commentsUnavailable) }
+        sections.append("## \(ReviewIntentText.issueHeading)")
+        sections += issueSections(of: material)
         // Zakončovací nový řádek: je to soubor na disku, do kterého se dá kdykoli podívat
         // `cat`em, a text bez něj vypadá uříznutý.
         return sections.joined(separator: "\n\n") + "\n"
+    }
+
+    /// Sekce s texty issues — **podsekce na každý odkaz**, ne jeden slepenec (#345).
+    ///
+    /// Dělí se to po issue schválně: dotažení se může povést **částečně** (tři odkazy, dva texty),
+    /// a jediný způsob, jak to reviewer pozná, je že u toho třetího stojí věta o nedotažení. Jeden
+    /// souhrnný odstavec by z „dvě issues z tří“ udělal „tady je zadání“.
+    ///
+    /// Bez odkazů se vypíše **jedna věta**, ne prázdná sekce: prázdno se nedá odlišit od chybějící
+    /// sekce a sekce má zůstat i tehdy, když v ní nic není.
+    private static func issueSections(of material: IntentMaterial) -> [String] {
+        guard !material.links.isEmpty else { return [ReviewIntentText.noIssues] }
+        // Slovníkem, ne `first(where:)` v cyklu — a hlavně: **páruje se podle `id`**, ne podle
+        // pořadí. Model, který jedno issue vynechá, by u pozičního párování posunul texty
+        // o jedno a přiřadil je cizím issues.
+        let byID = Dictionary(material.issues.map { ($0.id, $0.text) }, uniquingKeysWith: { first, _ in first })
+        return material.links.flatMap { link -> [String] in
+            let text = byID[link.id]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return [
+                ReviewIntentText.issueSubheading(link.id),
+                // Prázdný text je pro reviewera totéž jako žádný. A když u toho **není důvod**,
+                // nevymýšlí se: `?? .noAnswer` by u sestavení bez dotahování tvrdilo, že session
+                // doběhla naprázdno, a u částečného dotažení, že selhala celá.
+                text.flatMap { $0.isEmpty ? nil : $0 }
+                    ?? material.textGap.map(ReviewIntentText.notFetched)
+                    ?? ReviewIntentText.notRead,
+            ]
+        }
+    }
+
+    /// Který gap se ukáže **na ose**, když jich nastane víc (#345).
+    ///
+    /// Jeden příznak, ne dva odznaky vedle sebe: v hlavičce dráhy je místo na jeden a odpověď na
+    /// „dostal reviewer zadání celé?“ je u obou stejná. Přednost má **text**, protože je to ten
+    /// obsah, kvůli kterému se zadání tahá; selhání komentářů je proti tomu tvrzení o tom, že
+    /// odkazů mohlo být víc. V **souboru** je zapsané obojí — tam se místem šetřit nemusí.
+    static func intentGap(text: IntentGap?, commentsUnavailable: Bool) -> IntentGap? {
+        text ?? (commentsUnavailable ? .commentsUnavailable : nil)
+    }
+
+    /// Jméno MCP nástroje, kterým se čte text issue. `nil` = **netahat**.
+    ///
+    /// Prázdná hodnota se bere jako chybějící ze stejného důvodu jako u šablony promptu: pole se
+    /// prázdné jen prochází (⌘A a píše se znovu). Pustit kvůli prázdnému řetězci session, která
+    /// nemá co zavolat, znamená zaplatit boot za nic — a „netahat“ je tady vlastní stav, ne chyba.
+    ///
+    /// **Jméno patří do konfigurace, ne do konstanty**: `mcp__claude_ai_Linear__get_issue` je to,
+    /// jak si server pojmenoval **tenhle** uživatel, ne kontrakt. Konstanta v kódu by byla tvrzení
+    /// o cizím prostředí.
+    static func issueTextTool(from configured: String?) -> String? {
+        let trimmed = configured?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
