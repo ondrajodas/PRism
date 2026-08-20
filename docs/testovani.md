@@ -525,6 +525,14 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   | strom + proužek (38) | 799 b | 39 znaků | — |
   | jen proužek | 1009 b | 52 znaků | — |
 
+  **Počty znaků jsou v dokumentaci, ne v tvrzeních** — a je to poučení z prvního běhu: `split`
+  zapsaný jako `>= 20 && <= 24` v **plném paralelním běhu** jednou spadl, protože se v procesu, kde
+  zároveň vzniká několik `NSHostingView`ů, vyřešila šířka znaku jinak. Číslo, které se v harnessu
+  pod zátěží mění, nesmí být tvrzením: mění se **měřidlo, ne aplikace**. Testy proto tvrdí
+  **nerovnosti a poměry** (split pod slibem, unified nad dvojnásobkem splitu, proužek nad panelem)
+  a šířku znaku pinuje **jeden** test — když se písmo v systému změní, spadne on a řekne proč, místo
+  aby se rozsypaly počty v půlce suity.
+
   Slib z `CLAUDE.md` je **120 znaků na stranu** a ten by se stromem i panelem chtěl okno
   **~2665 bodů**. Z toho plyne rozhodnutí: **nevynucuje se nic** — strom se složí ⌘1, panel ⌘2 —,
   protože složený proužek přidá ve splitu skoro dvojnásobek znaků, takže u commitu je čím zaplatit.
