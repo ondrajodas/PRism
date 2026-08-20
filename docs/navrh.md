@@ -43,7 +43,7 @@ ve [specifikaci](superpowers/specs/2026-07-31-prism-design.md).
 
 Totéž platí o **dashboardu**: 01 kreslí ten dnešní (`DashboardView` má opravdu kartu `Ve frontě`
 a jeden blok fronty), 21 ten se dvěma frontami podle #331. Obě jsou na stránce *Přehled* pod
-sebou. Stejné páry jsou **02 a 24** a **19 a 25** (#NNN): 02 a 19 kreslí dnešní obrazovky,
+sebou. Stejné páry jsou **02 a 24** a **19 a 25** (#390): 02 a 19 kreslí dnešní obrazovky,
 24 přidává labely a vyžádané reviewery do pravého panelu a 25 ten panel do tabu *Commity*.
 **Novější sekce se do té starší nepřekresluje** — záznam dneška je to jediné, proti čemu se dá
 aplikace srovnat, takže bez něj by každé srovnání hlásilo rozdíl, který není chyba, dokud se to
@@ -57,7 +57,7 @@ poznáš podle toho, že **kreslí to, co okno umí dneska** — u #299 to byla 
 (dnešní `Přehled`; #215 z ní vzalo souhrn checků, #291 rozdělil hlavičku karty na dvě podoby),
 **03** (patička nálezu po #283), **19** (seznam commitů po #316) a **01** (rail po #278).
 Poznávací znak to **není** „vedle ní nestojí novější varianta“: 01 má vedle sebe 21, 02 má
-od #NNN vedle sebe 24 a 19 má 25, a záznamem dneška jsou pořád dál — mít vedle sebe kresbu
+od #390 vedle sebe 24 a 19 má 25, a záznamem dneška jsou pořád dál — mít vedle sebe kresbu
 budoucího stavu neznamená, že se ta dnešní přestane udržovat. Zapsat to jako „vědomě
 zastaralé“ nestačí: zápis ve specifikaci nikdo nečte s obrázkem v ruce, a u #299 se
 takových zápisů sešlo pět.
@@ -143,7 +143,7 @@ z nich chybí, se v tom tématu tiše obarví z toho světlého `:root` — ově
 třech přebíjecích blocích neliší nic než čtyři tokeny bez motivu (`--ui`, `--mono`, `--radius`,
 `--radius-sm`).
 
-**Třída, kterou si někdo bere jako vnořenou, se naholo definovat nesmí** (#NNN). Je to opačná past
+**Třída, kterou si někdo bere jako vnořenou, se naholo definovat nesmí** (#390). Je to opačná past
 než mrtvý token a stejně tichá: pravidlo zabere, jenže **jinde, než na co se kouká**. `.lbl` je
 v dokumentu ve třech komponentách vnořený popisek (`.runbar .lbl`, `.findnav .lbl`, `.set-row .lbl`)
 a rozhoduje u něj jen barva a velikost písma; první zákres labelů PR ho přesto napsal naholo

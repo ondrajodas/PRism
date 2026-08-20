@@ -396,7 +396,7 @@ code {
 .block > .more-rows:hover { background: var(--panel-3); }
 .block > .more-rows .count { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
 
-/* --- labely a vyžádaní reviewery v pravém panelu (#NNN) -------------------------------
+/* --- labely a vyžádaní reviewery v pravém panelu (#390) -------------------------------
    Kreslí se jako **dvě sekce v pravém panelu** (`.pl-sec`, nad segmenty), ne jako řádek
    v hlavičce PR a ne jako třetí segment vedle `Nálezů` — obojí i se změřenými čísly je
    v poznámkách sekce 24. Sekce, která nemá co ukázat, se nekreslí vůbec.
@@ -3376,7 +3376,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         vyžádaného reviewera už vůbec.
       </p>
       <p class="muted">
-        <b>Bydlí to v pravém panelu, ne v hlavičce PR</b> (#NNN) — dvě sekce pod sebou, labely
+        <b>Bydlí to v pravém panelu, ne v hlavičce PR</b> (#390) — dvě sekce pod sebou, labely
         a reviewery, hned pod hlavičkou panelu. <b>Změna proti prvnímu zákresu</b>, ve kterém to
         byl vlastní řádek pod pruhem souřadnic. Měření z něj ale platí dál, jen otočeně: je to
         teď ten argument, proč v hlavičce nejsou. Pruh souřadnic je v aplikaci
@@ -5289,7 +5289,7 @@ projeví hned v tom dalším.</div>
         hlavu, nebo na commit z předevčíra — a od sekce 24 to bydlí v panelu. Panel, který se
         v <em>Commitech</em> nekreslí, tedy schová i to, co v něm platí vždycky.
         <code>PullRequestTab.showsReviewPanel</code> proto dostane u <code>.commits</code>
-        <code>true</code> (#NNN) a zůstane vypnutý u tří tabů, kde vedle panelu stojí obsah, který šířku
+        <code>true</code> (#390) a zůstane vypnutý u tří tabů, kde vedle panelu stojí obsah, který šířku
         potřebuje: <em>Kontroly</em>, <em>Nálezy</em>, <em>Průběh</em>.
       </p>
       <p class="muted">
