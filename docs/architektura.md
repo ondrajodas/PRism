@@ -1751,10 +1751,17 @@ tam, kde se má měřit; `start()` je `@MainActor`, takže v aplikaci to vyjde s
 který je taky ke prospěchu: **zápis na disk odešel z hlavního vlákna**.
 
 Zaseknuté kolo se z řádku pozná slovy: `0 kol runloopu`, celá sekunda CPU a
-`— HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU`. `qualityOfService` zapisovacího vlákna je
-`.utility` schválně — hlavní vlákno má přednost, protože se měří ono —, takže se úsek pod plnou
-zátěží roztáhne (měřeno 0,13–0,18 s při cadenci 0,1 s). Na řádku to nic nekazí: `elapsed` v něm je
-**skutečně** uplynulý čas, ne nastavená perioda.
+`— HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU`. **Věta netvrdí „záchvat“**, jen to změřené — jeden
+takový úsek může být i drahá práce na hlavním vlákně; záchvat se pozná z toho, že takových řádků
+jde za sebou desítky. `qualityOfService` zapisovacího vlákna je `.utility` schválně — hlavní vlákno
+má přednost, protože se měří ono —, takže se úsek pod plnou zátěží roztáhne (měřeno 0,13–0,18 s při
+cadenci 0,1 s). Na řádku to nic nekazí: `elapsed` v něm je **skutečně** uplynulý čas, ne nastavená
+perioda.
+
+**Ověřeno spuštěním, ne jen testem** (`PRism-a`, Debug, `./bin/run.sh --diagnose`): po hlavičce
+chodí řádek za sekundu se skutečnou cadencí **1,07 s**, nečinné okno bez otevřeného PR dá 2–15 kol
+a 0,000–0,018 s CPU. Bez toho by se nevědělo, že se `start()` po přestěhování na vlastní vlákno
+vůbec rozjede — `PRISM_DIAGNOSE` se v testech nezapíná, takže tu cestu žádný test nejde.
 
 **Strop je vyjmenovaný, platí na soubor a jeho dosažení se zapisuje** (8 MB,
 `DiagnosticsLog.byteLimit`). Cache bez vyjmenované meze je únik místa s odkladem (#224) — a soubor,
