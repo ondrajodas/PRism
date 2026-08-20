@@ -97,6 +97,9 @@ final class RenderDiagnostics: @unchecked Sendable {
     private var lastFlush: Date
     private var lastCPU: TimeInterval
     private var isStopped = false
+    /// Běží zapisovací vlákno? Drží to, aby druhé volání `startWriting()` nepustilo druhé — viz
+    /// komentář u té metody.
+    private var isWriting = false
     /// Vlastní reference na observer. Runloop si ho drží taky, ale životnost měřidla nemá
     /// záviset na tom, jak s ním zachází někdo jiný.
     private var observer: CFRunLoopObserver?
@@ -246,6 +249,15 @@ final class RenderDiagnostics: @unchecked Sendable {
     /// Reference na sebe je **slabá**, takže se vlákno ukončí i tehdy, když se instance zahodí bez
     /// `stop()` (typicky v sondě) — bez toho by testovací instance zapisovala do konce běhu.
     func startWriting() {
+        // **Druhé vlákno by se do záznamu vešlo**, jen by si dva zapisovatelé přebírali počitadla
+        // po sobě: každý flush je nuluje, takže by se úseky rozpadly na polovic a řádky by
+        // vypadaly, jako že se nic nedělo. Po `stop()` se už nerozjíždí vůbec.
+        let allowed = lock.withLock { () -> Bool in
+            guard !isWriting, !isStopped else { return false }
+            isWriting = true
+            return true
+        }
+        guard allowed else { return }
         let interval = interval
         let thread = Thread { [weak self] in
             while true {

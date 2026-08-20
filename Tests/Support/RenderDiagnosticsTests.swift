@@ -125,6 +125,28 @@ struct RenderDiagnosticsTests {
         #expect(try burnMainThread(watching: file).isEmpty)
     }
 
+    /// **Druhé zapisovací vlákno se nepustí.** Dva zapisovatelé si přebírají počitadla po sobě
+    /// (každý flush je nuluje), takže by se úseky rozpadly na polovic a řádky by tvrdily, že se nic
+    /// nedělo — přesně ta věta, kvůli které se záznam bere. Poznat je to na počtu řádků: se dvěma
+    /// vlákny jich za tu chvíli je dvojnásobek.
+    @MainActor
+    @Test("Druhé volání startWriting nepustí druhé vlákno")
+    func writerStartsOnlyOnce() throws {
+        let (diagnostics, file, directory) = try makeLive(interval: 0.1)
+        defer {
+            diagnostics.stop()
+            _ = directory
+        }
+        diagnostics.startWriting()
+        diagnostics.startWriting()
+        diagnostics.startWriting()
+        let duringFit = try burnMainThread(watching: file)
+        // Za `burn` sekundy při cadenci 0,1 s je řádků nejvýš deset. Tři vlákna by dala víc —
+        // a hlavně by se hořící sekunda rozpadla na úseky, ve kterých není vidět nic.
+        #expect(duringFit.count <= 10)
+        #expect(!duringFit.isEmpty)
+    }
+
     /// Nechá hlavní vlákno hořet `Self.burn` uvnitř observeru na `beforeWaiting` a vrátí to, co
     /// v souboru bylo **na konci toho hoření**, tedy ještě než se runloop vrátil.
     @MainActor

@@ -1116,6 +1116,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Strop je hned u toho, jak se to píše** (pravidlo z #379): hoří se `Self.burn` a ani
   o milisekundu víc.
 
+  Třetí případ z té trojice: **druhé volání `startWriting()` nepustí druhé vlákno.** Dva
+  zapisovatelé si přebírají počitadla po sobě (každý flush je nuluje), takže by se hořící sekunda
+  rozpadla na úseky, ve kterých není vidět nic — tedy zrovna ta věta, kvůli které se záznam bere.
+  Testuje se na počtu řádků ze záchvatu: při cadenci 0,1 s jich za sekundu smí být nejvýš deset.
+
   Sedmý případ přibyl z Copilot review na #386 a je z nejcennější třídy: **nové sezení nad plným
   souborem nezapíše nic** — ani hlavičku, ani druhý limitní řádek —, protože strop platí na
   **soubor**, ne na sezení. Ověřeno **vloženou regresí**: s počitadlem od nuly (`written` bez seedu
