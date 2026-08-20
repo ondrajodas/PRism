@@ -404,6 +404,29 @@ struct AppStoreMetadataTests {
         #expect(store.reviewerCandidates(for: pr).contains(.team("platform")))
     }
 
+    /// **Spadlé týmy nesmí nechat nabídku „načtenou“ napůl.** Kdyby se lidé zapsali hned, další
+    /// otevření by se už neptalo (stráž se dívá na lidi) a nabídka by hlásila poruchu **navždycky** —
+    /// tedy „zkusit znovu“, které nic nezkusí. Ověřeno i druhým pokusem, který po opravě projde.
+    @Test("Spadlé týmy nechají nabídku nenačtenou, takže se dá zkusit znovu")
+    func aFailedTeamListLeavesThePickerRetryable() async throws {
+        let (store, gateway) = await prepared(teams: ["ajda-swimlane"])
+        gateway.assignableTeamsFailure = GitHubError.network("spadlo to")
+
+        await store.loadAssignableUsers(for: pr.repo)
+
+        #expect(!store.hasLoadedAssignableUsers(in: pr.repo), "napůl načteno je horší než nenačteno")
+        #expect(store.reviewerPickerFailure(in: pr.repo) != nil)
+
+        // Druhý pokus se **doopravdy ptá** a po úspěchu je nabídka celá.
+        gateway.assignableTeamsFailure = nil
+        await store.loadAssignableUsers(for: pr.repo)
+
+        #expect(gateway.assignableUserRequests.count == 2)
+        #expect(store.hasLoadedAssignableUsers(in: pr.repo))
+        #expect(store.reviewerPickerFailure(in: pr.repo) == nil)
+        #expect(store.reviewerCandidates(for: pr).contains(.team("ajda-swimlane")))
+    }
+
     /// **Tým mimo nabídku se nevyžádá** — tatáž uzavřenost jako u lidí a labelů.
     @Test("Tým mimo nabídku se nevyžádá")
     func doesNotRequestATeamOutsideTheList() async throws {

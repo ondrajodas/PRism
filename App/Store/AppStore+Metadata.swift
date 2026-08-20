@@ -121,8 +121,14 @@ extension AppStore {
     func loadAssignableUsers(for repo: RepoID) async {
         guard assignableUsers[repo] == nil else { return }
         do {
-            assignableUsers[repo] = try await gateway.fetchAssignableUsers(repo: repo)
-            assignableTeams[repo] = try await gateway.fetchAssignableTeams(repo: repo)
+            let logins = try await gateway.fetchAssignableUsers(repo: repo)
+            let teams = try await gateway.fetchAssignableTeams(repo: repo)
+            // **Zapisuje se až po obojím.** Kdyby se lidé zapsali hned, zůstala by po spadlých
+            // týmech nabídka „načtená“ napůl — a další otevření by se už neptalo, protože stráž výš
+            // se dívá jedině na lidi. Nabídka by pak hlásila poruchu **navždycky**, tedy „zkusit
+            // znovu“, které nic nezkusí.
+            assignableUsers[repo] = logins
+            assignableTeams[repo] = teams
             assignableUserFailures[repo] = nil
         } catch is CancellationError {
             // Zavření nabídky není porucha.
