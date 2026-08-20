@@ -526,9 +526,9 @@ viz tvrdá podmínka č. 1.
 |---|---|---|
 | `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) —, **login přihlášeného účtu** (#330) a **labely s vyžádanými reviewery** (včetně **týmů**) i nabídky k nim (#392). **Pořád bez zápisu**: čtení je čtení, měnit label umí jedině `ReviewPublisher` | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení). Vedle nich dvě krátké session, které o review nic nevědí: překlad nálezů a **dotažení textu issue** do zadání (#345, vlastní povolení i rozbor streamu) | `claude` CLI |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje (#326 — krok v ose je pokus, dokud nedorazí `tool_result`). Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení). Vedle nich dvě krátké session, které o review nic nevědí: překlad nálezů a **dotažení textu issue** do zadání (#345, vlastní povolení i rozbor streamu) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), proč zadání není celé a jméno nástroje, kterým se text issue tahá (#345), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), kdo je v sekci reviewerů a s jakou odpovědí, jak se labely zalomí do dvou řádků a co se s nimi na kterém PR smí, proti kterému kódu nálezy platí, když vedle nich stojí commit, a co sedne na dotaz v nabídce panelu i odkdy v ní hledací pole vůbec je (#392, pravidlo shody sdílené s paletou ⌘K), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), řádek záznamu diagnostiky kreslení (#361) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), proč zadání není celé a jméno nástroje, kterým se text issue tahá (#345), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), kdo je v sekci reviewerů a s jakou odpovědí, jak se labely zalomí do dvou řádků a co se s nimi na kterém PR smí, proti kterému kódu nálezy platí, když vedle nich stojí commit, a co sedne na dotaz v nabídce panelu i odkdy v ní hledací pole vůbec je (#392, pravidlo shody sdílené s paletou ⌘K), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), jak dopadl pokus o nástroj a co se u kroku v ose kreslí (#326), řádek záznamu diagnostiky kreslení (#361) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR a od #392 nastavit labely a vyžádat review na **vlastním** PR; volající jsou `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission` a `MetadataSubmission` | `gh` CLI |
@@ -707,6 +707,42 @@ Zvlášť stojí za přečtení, než sáhneš na:
 
   **Kolo z #361 to nevysvětluje.** Vzor byl v ose po celou dobu měření, kterými se kolo hledalo, a osa
   se přesto usadila (0,00 % po projetí kolečkem) — je to **zlevnění cesty, ne oprava ztuhnutí**.
+- **`updateNSView` chodí i tehdy, když se hodnota nezměnila** (#393). Volá ho každý přepočet geometrie
+  toho view, ne změna dat — ve ztuhlém okně tisíckrát za sekundu a **bez jediného průchodu tělem**
+  (1 172 z 21 240 vzorků hlavního vlákna). Co je v něm lineární v délce obsahu (hash, kopie polí,
+  `sizeToFit()`, dotazy layout manageru), se proto musí schovat za **klíč uložený v `Coordinator`u**:
+  `DiffBlockDrawing` = obsah + styl + **šířka**.
+
+  Tři věci, které z toho plynou a nejsou zjevné: klíč nese **celý blok, ne jeho hash** (hodnota
+  representable leží v grafu, takže `Array.==` skončí na identitě úložiště — 0,013 ms proti 0,530 ms
+  za hash); **šířka patří do klíče kreslení, ale ne do klíče sazby**, protože přesázení ruší rozdělaný
+  výběr; a **`bounds` je v `updateNSView` o průchod pozadu** (první průchod vidí nulovou šířku, změřeno).
+
+  **Netýká se to všech representable, a je to změřené**: aktualizaci při každém přepočtu geometrie
+  dostane ten, který si **říká o vlastní velikost** (`sizeThatFits`) — nad tímtéž špiněním grafu
+  dostane blok dvojic 11 aktualizací a hunk v sheetu (`SelectableCodeView`, taky sází text
+  bezpodmínečně) **jednu**. Stráž se proto nedává plošně: kde ji nemá co vyvolat, nešla by ověřit
+  vloženou regresí. Grep je proto **výčet k posouzení, ne prázdný** — rozhoduje `sizeThatFits`
+  a `LogTailTextView` má vlastní stráž od #292:
+
+  ```bash
+  grep -rln 'func updateNSView' App
+  ```
+
+  **Zastavit kolo z #361 to neumí** — naše práce v něm byla 5,5 %. Je to zlevnění obsahu kola, ne
+  oprava ztuhnutí; podrobnosti a čísla v [`docs/architektura.md`](docs/architektura.md), ověření
+  v [`docs/testovani.md`](docs/testovani.md).
+- **V AppKitu není „bez barvy“ dědění, ale černá** (#393). `NSAttributedString` bez
+  `.foregroundColor` se kreslí **černě** — ve SwiftUI přitom `foregroundColor = nil` doopravdy dědí
+  z okolí, takže ta úvaha jednu cestu (`AttributedString`) popisuje správně a druhou ne. Stálo to
+  nečitelný kód v tmavém režimu: identifikátory a soubory bez rozpoznaného jazyka měly na přidaném
+  řádku kontrast **1,39** (po opravě 12,55). Barva textu se proto nasazuje **jako základní atribut
+  celého řetězce** a obarvení syntaxe ji přepisuje; hodnota je token `--ink` (`Palette.ink`), ne
+  `labelColor` — ten je poloprůhledný a přes barevné pozadí řádku se složí jinak než v návrhu.
+
+  A **kontrast paletového tokenu netvrdí nic o kresbě**: `DiffPaletteTests` ho měřily celou dobu
+  a procházely, protože měřily `Palette.ink`, kdežto do textu se nenasazoval. K měření barvy proto
+  patří i tvrzení, že se ta barva **do textu dostane** (`DiffBlockCompositionTests`).
 - **Fokus do textového pole se nastavuje `.task` s jedním `Task.yield()`** (#184, potřetí #392).
   Přiřazení ve **stejném průchodu**, ve kterém pole vzniká, SwiftUI zahodí: `onAppear`, `task` bez
   yieldu i `defaultFocus($x, true)` daly `AXFocused = false` **navždycky**, ne později (změřeno

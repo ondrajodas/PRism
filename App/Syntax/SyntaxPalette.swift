@@ -5,9 +5,16 @@ import SwiftUI
 /// Tmavá je **Darcula** z JetBrains, světlá její protějšek **IntelliJ Light** — dvě
 /// nesourodá témata by při přepnutí režimu vypadala jako dvě různé aplikace.
 ///
-/// Obyčejný text vlastní barvu nemá: dědí ji z okolí, takže soubor bez rozpoznaného
-/// jazyka a soubor s ním vypadají stejně všude, kde se nic nebarví.
-struct SyntaxPalette {
+/// **Obyčejný text v téhle paletě není** — a od #393 to neznamená „dědí barvu z okolí“, ale že si
+/// ji nasazuje ten, kdo text skládá (`SyntaxColors.plain`, token `--ink`). Do #393 tu stálo to
+/// dědění: platí ve SwiftUI, kde `foregroundColor = nil` doopravdy dědí, ale ne v atributovaném
+/// řetězci — tam je chybějící `.foregroundColor` **černá**, takže identifikátory v tmavém režimu
+/// splynuly s pozadím. Z původní úvahy zůstává jen to, co pořád platí: soubor bez rozpoznaného
+/// jazyka vypadá stejně jako s ním všude, kde se nic nebarví.
+///
+/// `Equatable` je tu kvůli testu, že paleta jde z barevného režimu v `DiffBlockStyle` (#393) —
+/// samotné barvy jsou konstanty, takže se tím nic nerozhoduje.
+struct SyntaxPalette: Equatable {
     let comment: Color
     let string: Color
     let number: Color

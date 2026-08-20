@@ -615,6 +615,42 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   vstup. Fixtures ze skutečných běhů už v repu jsou
   (`Tests/Fixtures/stream-json/`, viz [`docs/claude-cli.md`](claude-cli.md)): běh
   s nálezy, čistý běh, zabitý běh a odmítnutý zápis. Parser se testuje proti nim.
+- **Odpověď na pokus o nástroj (#326)** — čtyři vrstvy, protože se to dá pokazit v každé z nich:
+  `ToolStepOutcomeTests` na čisté funkce (`Policy.toolOutcome`, `Policy.toolStepMark`) výčtem,
+  `StreamParserTests` na rozbor streamu, `ToolResultPairingTests` na párování v ose
+  a `ClaudeReviewRunnerTests` na to, že odmítnutí odejde do průběhu **za běhu**, ne až s koncem.
+
+  Nejcennější jsou tři tvrzení o tom, co se **nestalo**:
+
+  - **Krok, jehož odpověď nedorazila, nezůstane hotový.** Vstupem je `review-killed.jsonl`
+    **řezaný na posledním `tool_use` řádku** — tak vypadá stream zabité session. K tomu druhá
+    podmínka v témže testu, že kroky **před** ním zavřené jsou: bez ní by test procházel i tehdy,
+    kdyby se `user` eventy nečetly vůbec (past z #296 — tvrzení, které platí i s vyndanou opravou).
+  - **Chyba nástroje se nestane odmítnutím.** `grep` bez shody vrací `is_error` při každém běhu,
+    takže by z odznaku `ODMÍTNUTO` byl poplach nad běžným krokem. Inline JSONem, a je u toho napsané
+    proč: ve všech osmi fixtures přišel `is_error` **vždycky** s `tool_result_meta`.
+  - **Osa uložená před #326 se nekreslí jako běžící.** Literál v testu je tvar, který zapisoval
+    encoder před změnou (`{"tool":{"_0":{"detail":…,"name":…}}}`, bez `id` a `outcome`) — vytištěný
+    dnešním encoderem, protože nová pole jsou volitelná, takže se u nespárovaného pokusu neukládají
+    vůbec. Že to tak zůstane, hlídá druhý test; bez něj by ten literál mohl tiše přestat být tvarem,
+    jaký na disku doopravdy leží.
+
+  **Ověřeno vloženou regresí, dvakrát** (čísla jsou z běhu):
+
+  | Vložená regrese | Co spadne |
+  |---|---|
+  | `user` eventy se nečtou (stav před #326) | 7 testů ve třech suitách — mezi nimi „krok, jehož odpověď nedorazila, zůstane pokusem“ a „odmítnutí dorazí do průběhu ještě před koncem běhu“ |
+  | osa páruje odpověď bez ohledu na `id` | 2 testy: odpověď na neznámý krok a krok bez `id` |
+
+  Dva zádrhely, na které se u toho naráží: **trvání se nesmí porovnávat na rovnost** (osa měří
+  rozdílem dvou `Date`, takže 0,7 s vyjde jako 0,7000000476837158 — testuje se pásmem)
+  a **`Duration.milliseconds` je v testovacím targetu `String`** (`Tests/DurationText.swift`
+  přebíjí to číslo z `RunUsage`), takže se do `#expect` píše srovnání `Duration` s `Duration`.
+
+  Jak řádek kroku vypadá, je otázka na obrázek: `ToolStepRenderProbe` (sonda, pouští se ručně
+  `TEST_RUNNER_PRISM_MEASURE=1`) vyrendruje všech pět podob vedle sebe — prošlý s trváním,
+  odmítnutý s odznakem, chybu nástroje, běžící pokus a krok z osy před #326 bez značky — ve dvou
+  šířkách, aby bylo vidět i to, že se v úzkém místě ořezává cesta, ne značka.
 - **Slévání nálezů z opakovaného `ReportFindings` (#381)** — dvě sady vedle sebe:
   `FindingMergeTests` na čistou funkci (`Policy.mergedFindings`) vyčerpávajícím výčtem
   a `StreamParserTests` na tu samou věc přes parser, ať se neověřuje jen pravidlo bez cesty k němu.
@@ -4442,6 +4478,132 @@ musela přestěhovat na vlastní vlákno) a že se v tom kole **nepřeloží ani
 je to čistě přepočítávání geometrie nad **nezměněnou** sadou podviews. Příští záchvat proto konečně
 dá i **záznam z průběhu**: řádky `0 kol runloopu … NEPUSTILO RUNLOOP KE SLOVU` s počty průchodů tělem, ze kterých se
 pozná, jestli se v tom kole něco překresluje, nebo se jen počítá rozvržení.
+
+### Pátý záchvat: práce uvnitř kola, a jak se ověří, že se přestala dělat (#393)
+
+Pátý záchvat (2026-08-20, build `31bccbc`) má **stejný kořen** jako čtyři předchozí — transakční
+kolo, **19 116 z 21 240** vzorků v `flushObservers → beginTransaction → flushTransactions` — ale
+poprvé je v něm vidět **náš kód**, a to ve dvou vzorcích (30 s / 21 240 vzorků a 20 s / 15 339):
+
+| Rámec | Vzorek 1 | Vzorek 2 |
+|---|---|---|
+| `updateNSView` → `DiffPairBlockView` | **1 172 (5,5 %)** | **849 (5,5 %)** |
+| z toho `DiffPairBlockContainer.show(…)` | 724 | 545 |
+| `LazySubviewPlacements.updateValue` | 6 759 | 4 933 |
+
+**Dvě věci se u pátého záchvatu čtou jinak, než jak byly zapsané v zadání #393.**
+
+1. **Hover re-arm je zpátky, a je to jediný re-arm, který v tomhle záchvatu něco váží.**
+   `Update.dispatchActions()` má 2 119 vzorků a z toho **2 065** je
+   `EventBindingManager.enqueueHoverUpdateIfNeeded()` (ve druhém vzorku 1 440 z 1 486);
+   `signalPrefetch` má 54 a 45. Je to tedy **první** varianta z #361 (kolo layout ↔ hover re-arm),
+   ne ta se `signalPrefetch`em. V zadání stálo, že je hover zanedbatelný — to číslo ale bylo
+   **počet řádků grepu**, ne počet vzorků, a `grep -c` na tomhle vyjde 2, protože všechny vzorky
+   sedí na jednom řádku výpisu. **Sample se čte po podílech, ne po řádcích** (pravidlo z #350).
+2. **Náš kód je v tom kole pořád jen 5,5 %.** Zbytek je přepočet geometrie líného seznamu, takže
+   oprava práce uvnitř kola je **zlevnění obsahu, ne zastavení kola** — z 5,5 % se 99 % neposkládá.
+   Platí u toho i to, že hover podstrom naši closure **neobsahuje**: z 2 065 vzorků je 10 rámců
+   aplikace (kopie hodnoty representable), zbytek hit-test responderů, tedy stejně jako u #361.
+
+#### Barva obyčejného textu: co bylo změřené a proč render přestal být identický
+
+Při pauze nad slotovou aplikací se v tmavém režimu ukázalo, že **identifikátory jsou skoro
+nečitelné** — a je to vada stará, ne z #393: obyčejný text neměl v atributovaném řetězci
+`.foregroundColor` vůbec, což TextKit kreslí **černě**. Klíčová slova, řetězce a čísla svoji barvu
+měly, takže to vypadalo jako vlastnost tématu.
+
+**Změřeno ze tří stran, ne odhadnuto:**
+
+1. **Atribut**: `DiffTextView.compose` vydal na `return Version20260729;` dva úseky —
+   `„return“ → sRGB 0.8/0.471/0.196` (oranžová Darculy) a `„ Version20260729;“ → BEZ BARVY`.
+2. **Nakreslený pixel** (blok v `darkAqua`, vzorek přes prostřední řádku textu, `--add-bg` pozadí):
+   před opravou nejtmavší pixel **0,000/0,000/0,000**, tedy černý glyf; po ní nejsvětlejší
+   **0,905/0,919/0,950**, což je přesně `--ink` (`#E7EAF2`).
+3. **WCAG kontrast** (spočítaný, obě větve palety, všechna pozadí, na kterých kód leží):
+
+   | pozadí řádku | světlý: černá → `ink` | tmavý: černá → `ink` |
+   |---|---|---|
+   | kontext (`surface`) | 21,00 → 17,90 | **1,14 → 15,31** |
+   | přidaný (`diffAdded`) | 19,23 → 16,39 | **1,39 → 12,55** |
+   | odebraný (`diffRemoved`) | 18,31 → 15,61 | **1,26 → 13,89** |
+   | word-level přidaný | 15,84 → 13,50 | **2,41 → 7,24** |
+   | word-level odebraný | 14,42 → 12,29 | **1,99 → 8,77** |
+
+**Co z toho platí pro testy.** `DiffPaletteTests` ten kontrast měřily celou dobu (`ink` nad oběma
+druhy řádku, práh 10) a **procházely** — jenže měřily **token z palety**, ne to, co se kreslí. Že
+se barva doopravdy nasadí, tvrdí od #393 `DiffBlockCompositionTests` („žádný znak nezůstane bez
+barvy“, „obyčejný text má barvu textu z palety“) a totéž pro sheet s hunkem
+(`SelectableCodeTextTests`). Vloženou regresí ověřeno: bez té barvy padnou **tři** tvrzení
+(nezabarvené úseky, prázdná sada barev u souboru bez jazyka, chybějící inkoust na identifikátoru).
+
+Tvrzení „bez jazyka se nic neobarví“ se tím **přepsalo** — bylo správné o obarvení a špatné
+o kresbě; text bez barvy vyjde černý, takže soubor, kterému `Language` nerozumí, byl v tmavém
+režimu celý černý na tmavém.
+
+**Render tím přestal být identický, a to schválně.** Sonda proto od #393 kreslí **oba motivy** a motiv
+si **předepisuje** (`window.appearance`, `hosting.appearance` a `performAsCurrentDrawingAppearance`
+kolem kresby) — bez toho kreslí v tom, co má zrovna stroj, a dva běhy pár hodin od sebe se liší
+motivem, ne kódem. Stalo se to u #393: snímek z 15:55 vyšel světlý a z 21:05 tmavý, takže první
+srovnání po bytech netvrdilo nic. S předepsaným motivem se z osmi snímků liší **šest**; identické
+zůstaly `pod-sebou-*-648`, protože v nejužší šířce se v pohledu pod sebou kód nevykreslí vůbec —
+což je zároveň kontrola, že se změnilo právě to písmo.
+
+#### Čím se ověřuje, že se ta práce přestala dělat
+
+**Počítadly v blocích, ne dojmem.** Blok drží tři čísla (`DiffTextView.updates`, `mounts`,
+`typesettings`; u dvojice `DiffPairBlockContainer.updates`, `mounts` a součet sazeb za sloupce)
+a čtou je `DiffBlockUpdateTests` i sonda projíždění. Bez `updates` by ta ostatní netvrdila nic:
+nula u nasazení znamená stejně dobře drženou stráž jako scénu, ve které se nic nedělo.
+
+**Sazba není to, co se opakovalo.** `DiffTextView.show(…)` se za podpisem obsahu vracela už před
+#393, takže „nesází se znovu“ platilo i tehdy. Co se opakovalo, bylo **nasazení** — a `typesettings`
+se proto v testech hlídá jako **nezměněná vlastnost**: po změně šířky se sázet **nesmí** (přesázení
+ruší rozdělaný výběr, #157), po změně jazyka a režimu **musí**.
+
+**`bounds` v `updateNSView` je o průchod pozadu** — změřeno u #393, ne odhadnuto: první průchod
+vidí šířku **nula** a ten druhý tu skutečnou (SwiftUI nastaví rámec view až po něm). Scéna se proto
+v testu nechá **dojet**, dokud nasazení nepřestanou přibývat; bez toho by baseline nesla stav se
+šířkou nula a druhé (správné) nasazení by vypadalo jako porušená stráž.
+
+**Regrese vložená z obou stran** (pravidlo „regrese se ověřuje vložením regrese“):
+
+| Vložená chyba | Co spadne |
+|---|---|
+| stráž vypnutá (`guard` zahozený v obou views) | `Nezměněná dvojice se znovu nenasazuje ani nesází` — 11 nasazení na 11 aktualizací proti jednomu, a totéž v pohledu pod sebou |
+| šířka vyhozená z klíče | `Po změně šířky se přepočítají rámečky, ale nesází se` — rámečky zůstanou na staré šířce bloku |
+
+**Render se porovnává po bytech.** `DetailTabRenderProbe.rendersBothDiffLayouts` vykreslí
+`Změněné soubory` v obou pohledech a na dvou šířkách; snímky z `main`u a z větve vyšly
+**bajt v bajt stejné** (334 721 / 179 118 / 283 840 / 206 205 B). Sonda je u toho nejdřív ověřená
+sama proti sobě — dva běhy nad týmž kódem dají tytéž byty —, jinak by shoda netvrdila nic.
+
+**Ostatní representable se prověřila taky, a měřením, ne čtením.** `SelectableCodeView` (hunk
+v sheetu) sází text bezpodmínečně, takže vypadá jako tentýž vzor — nad tímtéž špiněním grafu ale
+dostane **jednu** aktualizaci proti jedenácti u bloku dvojic, protože si neříká o vlastní velikost
+a jeho hodnota se nemění. Stráž tam proto **není**: zkoušeno, že s ní i bez ní test o výběru
+prochází, tedy že by ji nešlo ověřit vloženou regresí. `LogTailTextView` tentýž klíč
+(`shownText`/`shownColor` v koordinátoru) má od #292.
+
+**Cena stráže se měří v harnessu** (`DiffPerformanceMeasurement.blockUpdateGuardCost`, 27 bloků po
+60 řádcích, medián ze tří běhů): klíč nad **týmiž** poli **0,013 ms**, hash s podpisem (to, co tam
+bylo do #393) **0,530 ms**, porovnání po řádcích u čerstvých polí **0,284 ms**. Past u toho měření:
+**`Array(pole)` kopii nevyrobí** — jen podrží úložiště, takže se s ním měří zase identita
+(0,013 proti 0,012 ms, nerozlišitelně). Čerstvé pole udělá `map`.
+
+**A v kole, které jede** (`IdleDiffSpinProbe.wheelSplitDiff`, split diff, 60 kroků kolečkem po
+40 pt, série **A/B/A/B** kvůli driftu sezení podle #274):
+
+| | se stráží | bez stráže |
+|---|---|---|
+| práce bloků po usazení scény | 15 aktualizací → **3 nasazení** (3 bloky) | 15 aktualizací → **15 nasazení** |
+| CPU hlavního vlákna za gesto | 0,55 / 0,52 s | 0,50 / 0,55 s |
+| CPU po gestu, tři úseky po 3 s | 0,00–0,01 % | 0,00–0,01 % |
+
+**Na projíždění se to neprojeví, a je to tak správně**: blok, který vjede do okna, dostane jednu
+aktualizaci a nasadí se jednou — není co ušetřit. Šetří se tam, kde se geometrie přepočítává nad
+**týmž** blokem pořád dokola, tedy v tom kole z #361; v harnessu se takové kolo nerozjede (čtyři
+kola měření u #361), takže se to číslo bere ze **vzorku ztuhlé aplikace**: 5,5 % vzorků hlavního
+vlákna, které se po opravě zredukují na porovnání klíče.
 
 ### Jak změřit projíždění diffu, když se ho nedá dotknout (#252)
 

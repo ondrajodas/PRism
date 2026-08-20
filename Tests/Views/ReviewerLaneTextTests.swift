@@ -191,6 +191,53 @@ struct ReviewerLaneTextTests {
         #expect(ReviewerLaneText.intentGapLabel.count <= 20)
         #expect(!ReviewerLaneText.intentGapLabel.contains("server"))
     }
+
+    // MARK: - Krok v ose (#326)
+
+    /// `běží…`, ne trvání a ne nic: krok, na který nepřišel `tool_result`, se nesmí tvářit jako
+    /// hotový — a nesmí se ani slít s krokem, o kterém nevíme nic (osa uložená před #326).
+    @Test("Značka kroku má na každý stav vlastní text")
+    func stepMarks() {
+        #expect(ReviewerLaneText.step(.pending) == "běží…")
+        #expect(ReviewerLaneText.step(.duration(.milliseconds(200))) == "0,2 s")
+        #expect(ReviewerLaneText.step(.denied) == "ODMÍTNUTO")
+        #expect(ReviewerLaneText.step(ToolStepMark.none) == nil)
+    }
+
+    /// Nápověda říká, **co se stalo**, a k tomu cizí hlášku. Prošlý krok nápovědu nemá — prázdný
+    /// obláček nad každým řádkem osy je horší než žádný.
+    @Test("Nápověda kroku je jen tam, kde je co říct")
+    func stepHelp() throws {
+        let passed = ToolAttempt(
+            name: "Read",
+            detail: "a.php",
+            id: "t1",
+            outcome: ToolAttempt.Outcome(kind: .passed, after: .milliseconds(200))
+        )
+        #expect(ReviewerLaneText.stepHelp(of: passed) == nil)
+        #expect(ReviewerLaneText.stepHelp(of: ToolAttempt(name: "Read", detail: nil, id: "t1")) == nil)
+
+        let denied = ToolAttempt(
+            name: "Bash",
+            detail: "gh pr view",
+            id: "t2",
+            outcome: ToolAttempt.Outcome(kind: .denied, reason: "Claude requested permissions")
+        )
+        let help = try #require(ReviewerLaneText.stepHelp(of: denied))
+        #expect(help.hasPrefix("Odmítnuto"))
+        #expect(help.contains("Claude requested permissions"))
+        // Odmítnutí **není selhání běhu** a nápověda to nesmí tvrdit.
+        #expect(!help.contains("selhal"))
+
+        let failed = ToolAttempt(
+            name: "Bash",
+            detail: "grep x",
+            id: "t3",
+            outcome: ToolAttempt.Outcome(kind: .failed, after: .milliseconds(90), reason: "Exit code 1")
+        )
+        #expect(ReviewerLaneText.stepHelp(of: failed)?.contains("chybu") == true)
+        #expect(ReviewerLaneText.stepHelp(of: failed)?.contains("Odmítnuto") == false)
+    }
 }
 
 extension ReviewerLane.State {

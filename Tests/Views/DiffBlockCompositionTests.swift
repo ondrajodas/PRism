@@ -103,16 +103,62 @@ struct DiffBlockCompositionTests {
         #expect(dimmed == ["\\ No newline at end of file"])
     }
 
-    /// Soubor bez rozpoznaného jazyka: písmo ano, barvy ne. Kdyby se `nil` jazyk obarvoval podle
-    /// nějakého výchozího, vypadal by takový soubor jinak než ostatní.
-    @Test("Bez jazyka se nic neobarví")
-    func leavesAnUnknownLanguageAlone() {
+    /// **Žádný znak nesmí zůstat bez barvy** (#393) — a je to ten nejcennější případ v tomhle
+    /// souboru, protože chybějící `.foregroundColor` se v atributovaném řetězci nekreslí „jako
+    /// okolí“, ale **černě**. V tmavém režimu z toho byly identifikátory černé na tmavém pozadí
+    /// (kontrast 1,39), kdežto klíčová slova a řetězce svoji barvu měly — takže to vypadalo jako
+    /// vlastnost tématu, ne jako vada.
+    ///
+    /// Blok je namíchaný schválně: syntaxe, poznámka `git`u, prázdný řádek i znak mimo ASCII.
+    @Test("Žádný znak nezůstane bez barvy")
+    func coloursEveryCharacter() {
+        let lines = [
+            line("let total = Version20260729;"),
+            line("\\ No newline at end of file", kind: .meta),
+            line(""),
+            line("let 🐛 = \"chyba\""),
+        ]
+        let text = composed(lines).text
+        var uncoloured: [String] = []
+        text.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard value == nil else { return }
+            uncoloured.append((text.string as NSString).substring(with: range))
+        }
+        #expect(uncoloured.isEmpty)
+    }
+
+    /// Obyčejný text (identifikátory, interpunkce) má barvu **z návrhu** — token `--ink`, tedy
+    /// `Palette.ink`. Kontrast téhle barvy nad všemi druhy řádku hlídá `DiffPaletteTests`; tady se
+    /// tvrdí to, co tomu měření dosud chybělo: že se ta barva doopravdy nasadí do textu.
+    @Test("Obyčejný text má barvu textu z palety")
+    func paintsPlainTextWithTheInkColour() {
+        let text = composed([line("let total = Version20260729;")]).text
+        let ink = NSColor(Palette.ink)
+
+        var painted: [String] = []
+        text.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard value as? NSColor == ink else { return }
+            painted.append((text.string as NSString).substring(with: range))
+        }
+        // `let` je klíčové slovo, zbytek řádku je obyčejný text.
+        #expect(painted == [" total = Version20260729;"])
+    }
+
+    /// Soubor bez rozpoznaného jazyka: písmo ano, obarvení syntaxe ne — ale **barvu textu ano**.
+    ///
+    /// **Změna tvrzení proti #275** (do #393 tu stálo „bez jazyka se nic neobarví“ a měřilo se, že
+    /// `.foregroundColor` není nikde). Bylo správné o obarvení a špatné o kresbě: text bez té barvy
+    /// vyjde černý, takže soubor, kterému `Language` nerozumí, byl v tmavém režimu celý černý na
+    /// tmavém. Zůstává z něj to podstatné — obarvení syntaxe se nedosazuje —, jen se to tvrdí na
+    /// barvách runů, ne na jejich nepřítomnosti.
+    @Test("Bez jazyka se neobarvuje syntaxe, ale text barvu má")
+    func leavesAnUnknownLanguageUnhighlighted() {
         let lines = [line("let total = 1")]
         let text = DiffTextView.compose(lines, words: [:], language: nil, palette: .intelliJLight).text
-        var colored = 0
+        var colours: Set<NSColor> = []
         text.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: text.length)) { value, _, _ in
-            if value != nil { colored += 1 }
+            if let colour = value as? NSColor { colours.insert(colour) }
         }
-        #expect(colored == 0)
+        #expect(colours == [NSColor(Palette.ink)])
     }
 }

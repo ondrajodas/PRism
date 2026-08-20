@@ -145,4 +145,41 @@ enum ReviewerLaneText {
     static func usage(of lane: ReviewerLane) -> String? {
         lane.usage.flatMap(RunUsageText.summary(of:))
     }
+
+    // MARK: - Krok v ose (#326)
+
+    /// Odznak odmítnutého kroku. **Verzálky a mono jako v návrhu** — je to štítek, ne věta.
+    static let deniedStep = "ODMÍTNUTO"
+
+    /// Co stojí na konci řádku kroku. `nil` = nevíme (krok bez `id`, tedy osa uložená před #326).
+    ///
+    /// `běží…`, ne trvání: krok, na který ještě nepřišel `tool_result`, se nesmí tvářit jako
+    /// hotový — je to totéž pravidlo, jaké dělí `čisté` od `nálezy se nemají kde vzít`.
+    static func step(_ mark: ToolStepMark) -> String? {
+        switch mark {
+        case .none: nil
+        case .pending: "běží…"
+        case .duration(let value): RunUsageText.duration(value)
+        case .denied: deniedStep
+        }
+    }
+
+    /// Nápověda k řádku kroku — proč se odmítl, nebo co za chybu nástroj vrátil. `nil` u kroku,
+    /// který dopadl dobře nebo o sobě nic neříká.
+    ///
+    /// Hláška je anglická, protože ji píše `claude`, a je to schválně: přeložit cizí chybu
+    /// znamená hádat, co v ní bylo. České je to, co k ní aplikace dodává.
+    static func stepHelp(of tool: ToolAttempt) -> String? {
+        guard let outcome = tool.outcome, let label = stepFailure(outcome.kind) else { return nil }
+        return [label, outcome.reason].compactMap { $0 }.joined(separator: " ")
+    }
+
+    /// Jak se o kroku, který nedopadl dobře, mluví. `nil` u toho, který dopadl.
+    private static func stepFailure(_ kind: ToolAttempt.Outcome.Kind) -> String? {
+        switch kind {
+        case .passed: nil
+        case .denied: "Odmítnuto — nástroj se nespustil."
+        case .failed: "Nástroj vrátil chybu."
+        }
+    }
 }

@@ -56,8 +56,36 @@ final class DiffTextView: NSTextView {
     /// i o tom, na jaké šířce se měří výška.
     private var wrapsText = false
 
-    /// Podpis posledně složeného obsahu — z něj se pozná, že se text skládat nemusí.
-    private var signature: String?
+    /// Čím byl obarvený posledně složený text. Spolu s `lines` je to celý podpis obsahu, ze kterého
+    /// se pozná, že se skládat nemusí — do #393 to byl řetězec s **hashem** všech řádků, a ten se
+    /// počítal při každém průchodu `updateNSView` (viz `DiffBlockDrawing`).
+    private var style: DiffBlockStyle?
+
+    /// Kolikrát tomuhle bloku přišla aktualizace ze SwiftUI — počítá to `DiffCodeBlockView`
+    /// (pohled pod sebou); ve sloupci dvojice zůstává nula, protože tam aktualizace dostává
+    /// kontejner. **Vedle `typesettings` schválně**: samotná nula u sazby by mohla znamenat i to,
+    /// že aktualizace nepřišla vůbec (#393).
+    private(set) var updates = 0
+
+    /// Kolikrát se do view **nasadil blok** — tedy kolikrát průchod `updateNSView` prošel stráží
+    /// z `DiffBlockDrawing` a zaplatil práci lineární v délce bloku (rámečky řádků, u dvojice ještě
+    /// pole a množiny navíc). **Tohle je to číslo, o které u #393 šlo**: sazba se neopakovala ani
+    /// předtím (držel ji podpis obsahu), kdežto nasazení se dělo při každém přepočtu geometrie.
+    private(set) var mounts = 0
+
+    /// Kolikrát view **doopravdy** složilo text.
+    ///
+    /// **Počitadlo, ne dojem** (#393): že se nezměněný blok nesází znovu, se v okně jinak poznat
+    /// nedá — výsledek přesázení vypadá stejně jako to, co tam bylo, jen zahodí rozdělaný výběr
+    /// a stojí desítky milisekund. Čtou to `DiffBlockUpdateTests` (nezměněný blok) a sonda
+    /// projíždění (`IdleDiffSpinProbe`).
+    private(set) var typesettings = 0
+
+    /// Přišla aktualizace ze SwiftUI. Volá to `DiffCodeBlockView` **před** svou stráží, protože
+    /// právě o průchody, které za ni nedojdou, tady jde.
+    func noteUpdate() {
+        updates += 1
+    }
 
     /// **Vodorovný inset je nula a zůstane nula** (#236): odsazení na gutter dělá
     /// `textContainerOrigin`, protože `textContainerInset` platí na obě strany. Svisle symetrický
@@ -78,6 +106,12 @@ final class DiffTextView: NSTextView {
     /// překreslení — tedy i když myš přejede na jiný řádek a přesune se pilulka na komentář.
     /// Bez téhle podmínky se výběr rušil při každém hnutí myší (nahlášené při zkoušení #157).
     ///
+    /// **Porovnává se to na řádcích, ne na jejich hashi** (#393). Volající drží tentýž blok, jaký
+    /// posledně nasadil, takže `Array.==` vrátí na identitě úložiště hned — a hash celého bloku,
+    /// který tu byl do #393, přečetl znaky všech řádků pokaždé znovu. Šířka v tom klíči **není**
+    /// schválně: zalomení textu se s ní mění, ale sazba je pořád tatáž, a přesázení by sebralo výběr
+    /// při každém tažení za hranu okna (viz `DiffBlockDrawing`).
+    ///
     /// **Text vzniká jako jeden řetězec a barvy se do něj dopisují** (#275), ne jako řetězec
     /// slepený z run. Do #275 se za každý run vyrobil `NSAttributedString` a připojil — u velkého
     /// diffu 16 000 objektů na jedno projetí, tedy **22,2 ms z 86** na 27 blocích. Jeden řetězec
@@ -93,16 +127,21 @@ final class DiffTextView: NSTextView {
     ///   S `{ [:] }` by nový volající zvýraznění tiše vypnul a nikdo by to nepoznal.
     func show(
         _ block: DiffBlock,
-        language: Language?,
-        palette: SyntaxPalette,
-        signature: String,
+        style: DiffBlockStyle,
         words: () -> WordDiff.Spans
     ) {
-        guard self.signature != signature else { return }
-        self.signature = signature
+        mounts += 1
+        guard self.style != style || lines != block.lines else { return }
+        self.style = style
         lines = block.lines
+        typesettings += 1
 
-        let composed = Self.compose(block.lines, words: words(), language: language, palette: palette)
+        let composed = Self.compose(
+            block.lines,
+            words: words(),
+            language: style.language,
+            palette: style.palette
+        )
         lineRanges = composed.ranges
         textStorage?.setAttributedString(composed.text)
         needsDisplay = true
@@ -125,12 +164,15 @@ final class DiffTextView: NSTextView {
         palette: SyntaxPalette
     ) -> (text: NSAttributedString, ranges: [NSRange]) {
         let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        // Pět převodů na blok místo jednoho na run (#275) — viz `SyntaxColors`.
+        // Šest převodů na blok místo jednoho na run (#275, od #393 i barva textu) — viz `SyntaxColors`.
         let colors = SyntaxColors(palette)
         let ranges = lineRanges(of: lines)
+        // **Barva obyčejného textu se nasazuje na celý text** (#393), obarvení syntaxe ji pak přes
+        // svoje rozsahy přepíše. Bez ní kreslí TextKit chybějící `.foregroundColor` **černě** —
+        // v tmavém režimu tedy identifikátory černé na tmavém pozadí; podrobnosti u `SyntaxColors.plain`.
         let result = NSMutableAttributedString(
             string: lines.map(\.text).joined(separator: "\n"),
-            attributes: [.font: font]
+            attributes: [.font: font, .foregroundColor: colors.plain]
         )
         for (index, line) in lines.enumerated() {
             colorize(line, in: result, over: ranges[index], language: language, colors: colors)

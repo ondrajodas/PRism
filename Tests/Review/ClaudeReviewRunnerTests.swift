@@ -178,7 +178,42 @@ struct ClaudeReviewRunnerTests {
             guard case .attemptedTool(let tool) = event else { return false }
             return tool.name == "ReportFindings"
         })
-        #expect(events.last == .findings(count: 4))
+        #expect(events.contains(.findings(count: 4)))
+        // Posledním, co ze streamu přijde, je odpověď na `ReportFindings` (#326) — nálezy hlásí
+        // `tool_use`, ale `tool_result` na něj dorazí až po nich.
+        #expect(events.last == .resolvedTool(ToolResolution(
+            id: "toolu_01TBc3jnzreyV5dHj12YPsmM",
+            outcome: ToolAttempt.Outcome(kind: .passed)
+        )))
+    }
+
+    /// **Odmítnutí musí být v ose ve chvíli, kdy se stane** (#326), ne až ze `permission_denials`
+    /// na konci session — u revieweera, který má `Bash(gh:*)` zakázaný schválně, je to normální
+    /// stav a do #326 se o něm okno dozvědělo o minuty později.
+    @Test("Odmítnutí dorazí do průběhu ještě před koncem běhu")
+    func aDenialArrivesBeforeTheRunEnds() async throws {
+        let streamer = FakeProcessStreamer(lines: try lines(of: "review-denied-write"))
+        let collected = Collector()
+
+        _ = try await runner(streamer).run(request()) { collected.append($0) }
+
+        let events = collected.events
+        let denial = try #require(events.firstIndex { event in
+            guard case .resolvedTool(let resolution) = event else { return false }
+            // Hláška je to, čím se pozná, že odmítnutí přišlo **ze streamu** a ne ze záchrany
+            // v `permission_denials` na konci běhu — ta žádnou nemá. Bez téhle podmínky by test
+            // prošel i tehdy, kdyby se `user` eventy nečetly vůbec.
+            return resolution.outcome.kind == .denied
+                && resolution.outcome.reason?.contains("haven't granted") == true
+        })
+        let attempt = try #require(events.firstIndex { event in
+            guard case .attemptedTool(let tool) = event else { return false }
+            return tool.name == "Write"
+        })
+        #expect(attempt < denial)
+        // Odmítnutí je v běhu jedno, i když ho stream nese dvakrát (`tool_result`
+        // i `permission_denials`) — dvě události na jeden krok by v ose byly dva řádky.
+        #expect(events.count { if case .resolvedTool = $0 { true } else { false } } == 1)
     }
 
     // MARK: - Souběh a slučování

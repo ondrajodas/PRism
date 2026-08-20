@@ -11,6 +11,12 @@ enum ReviewProgress: Sendable, Equatable {
     case started(sessionID: String)
     /// Reviewer si řekl o nástroj. **Pokus, ne použití** — odmítnutý nástroj je tu taky.
     case attemptedTool(ToolAttempt)
+    /// Na pokus dorazila odpověď (#326): prošel, vrátil chybu, nebo byl odmítnut.
+    ///
+    /// **Není to nový krok, je to zavření toho, co v ose už je** — osa proto podle téhle události
+    /// neroste a neposouvá se. Chodí zvlášť, a ne jako nový `attemptedTool`, přesně proto: jeden
+    /// `tool_use` je v ose jeden řádek, ať se o něm dozvíme cokoli dalšího.
+    case resolvedTool(ToolResolution)
     /// Kolik nálezů zatím dorazilo.
     case findings(count: Int)
     /// Zadání pro reviewera **není celé** (#345) — a proč.
