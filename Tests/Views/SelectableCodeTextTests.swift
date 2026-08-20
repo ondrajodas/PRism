@@ -67,4 +67,41 @@ struct SelectableCodeTextTests {
 
         #expect(attributed.string == code)
     }
+
+    /// **Žádný znak bez barvy** (#393) — tatáž vada jako v bloku diffu, protože je to tentýž
+    /// mechanismus: chybějící `.foregroundColor` se v atributovaném řetězci kreslí **černě**, ne
+    /// „jako okolí“. V tmavém režimu byl proto hunk v sheetu černý na tmavém všude, kde nešlo
+    /// o klíčové slovo, řetězec nebo číslo — a **celý** u souboru, kterému `Language` nerozumí
+    /// (tedy i u logu, který touhle cestou chodí vždycky).
+    @Test("Text v sheetu má barvu i tam, kde se neobarvuje syntaxe")
+    func coloursEveryCharacter() {
+        for (label, path) in [("se známým jazykem", "x.swift"), ("bez jazyka", "job.log")] {
+            let attributed = SelectableCodeView.attributed(
+                "let total = Version20260729;\nlet b = 2",
+                path: path,
+                colorScheme: .dark
+            )
+            var uncoloured: [String] = []
+            let whole = NSRange(location: 0, length: attributed.length)
+            attributed.enumerateAttribute(.foregroundColor, in: whole) { value, range, _ in
+                guard value == nil else { return }
+                uncoloured.append((attributed.string as NSString).substring(with: range))
+            }
+            #expect(uncoloured.isEmpty, "\(label): bez barvy zůstalo \(uncoloured)")
+        }
+    }
+
+    /// A ta barva je **z návrhu** (`--ink`, tedy `Palette.ink`), stejně jako v bloku diffu — jeden
+    /// token pro obojí, aby se kód v sheetu a v diffu nerozešel.
+    @Test("Obyčejný text má barvu textu z palety")
+    func paintsPlainTextWithTheInkColour() {
+        let attributed = SelectableCodeView.attributed("řádek logu", path: "job.log", colorScheme: .dark)
+        let whole = NSRange(location: 0, length: attributed.length)
+
+        var colours: Set<NSColor> = []
+        attributed.enumerateAttribute(.foregroundColor, in: whole) { value, _, _ in
+            if let colour = value as? NSColor { colours.insert(colour) }
+        }
+        #expect(colours == [NSColor(Palette.ink)])
+    }
 }

@@ -23,29 +23,26 @@ struct DiffPairBlockView: NSViewRepresentable {
 
     final class Coordinator {
         var frames: [DiffBlockLineFrame] = []
+        /// Co je v kontejneru nakreslené. **Jediná paměť o tom, jestli má `updateNSView` co dělat**
+        /// (#393) — viz `DiffBlockDrawing`.
+        var drawing: DiffBlockDrawing<DiffPairBlock>?
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    /// Paměť koordinátoru se u nového view **zahazuje**. SwiftUI je vyrábí spolu, takže by k tomu
+    /// dojít nemělo — ale kdyby ano, prázdný kontejner s klíčem z předchozího by zůstal prázdný,
+    /// a to je zrovna ten druh vady, který se pozná až v okně.
     func makeNSView(context: Context) -> DiffPairBlockContainer {
-        DiffPairBlockContainer()
+        context.coordinator.drawing = nil
+        return DiffPairBlockContainer()
     }
 
     func updateNSView(_ container: DiffPairBlockContainer, context: Context) {
-        let palette = SyntaxPalette.forScheme(colorScheme)
-        let signature = DiffBlockSignature.of(
-            blockHash: block.hashValue,
-            language: language,
-            colorScheme: colorScheme
-        )
-
-        container.show(
-            block,
-            language: language,
-            palette: palette,
-            signature: signature,
-            gutter: DiffLineView.contentInset(for: .split)
-        )
+        container.noteUpdate()
+        // **Pruhy rozsahu se aplikují vždycky**, i když se blok nezměnil: mění se přejezdem myší
+        // a tažením, tedy bez bloku. Je to porovnání čtyř množin, které jsou obvykle prázdné —
+        // sazba za tím stojí o dva řády víc.
         container.apply(
             leftRange: leftRangeLines,
             rightRange: rightRangeLines,
@@ -53,10 +50,23 @@ struct DiffPairBlockView: NSViewRepresentable {
             rightDragged: rightDraggedLines
         )
 
+        // Stráž, kvůli které tohle celé existuje (#393): SwiftUI si `updateNSView` volá při každém
+        // přepočtu geometrie, takže všechno pod ní se ve ztuhlém okně platilo tisíckrát za sekundu
+        // za nic.
+        let drawing = DiffBlockDrawing(block: block, style: style, width: container.bounds.width)
+        guard drawing != context.coordinator.drawing else { return }
+        context.coordinator.drawing = drawing
+
+        container.show(block, style: style, gutter: DiffLineView.contentInset(for: .split))
+
         let frames = container.lineFrames()
         guard frames != context.coordinator.frames else { return }
         context.coordinator.frames = frames
         DispatchQueue.main.async { noteFrames(frames) }
+    }
+
+    private var style: DiffBlockStyle {
+        DiffBlockStyle(language: language, colorScheme: colorScheme)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: DiffPairBlockContainer, context: Context) -> CGSize? {
@@ -84,6 +94,25 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
     private var rowHeight: Double = 0
     private var rows = 0
 
+    /// Kolikrát tomuhle bloku přišla aktualizace ze SwiftUI. **Vedle `mounts` schválně** (#393):
+    /// samotná nula u nasazení by mohla znamenat i to, že aktualizace nepřišla vůbec, takže stráž
+    /// z `DiffBlockDrawing` je ověřená jedině oběma čísly naráz.
+    private(set) var updates = 0
+
+    /// Kolikrát se blok nasadil do sloupců, tedy kolikrát průchod prošel stráží. Viz
+    /// `DiffTextView.mounts`.
+    private(set) var mounts = 0
+
+    /// Kolikrát se v bloku doopravdy sázel text — **za oba sloupce**, takže jedno nasazení nového
+    /// obsahu přidá dvě. Podrobnosti u `DiffTextView.typesettings`.
+    var typesettings: Int { left.typesettings + right.typesettings }
+
+    /// Přišla aktualizace ze SwiftUI. Volá to `DiffPairBlockView` **před** svou stráží, protože
+    /// právě o průchody, které za ni nedojdou, tady jde.
+    func noteUpdate() {
+        updates += 1
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         separator.boxType = .separator
@@ -109,13 +138,15 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("jen z kódu") }
 
+    /// Nasadí blok do sloupců. **Volá se jen tehdy, když se něco změnilo** (`DiffBlockDrawing`),
+    /// takže si tady všechno pod tím může dovolit být lineární v délce bloku — do #393 to bylo
+    /// obráceně a platilo se to při každém přepočtu geometrie.
     func show(
         _ block: DiffPairBlock,
-        language: Language?,
-        palette: SyntaxPalette,
-        signature: String,
+        style: DiffBlockStyle,
         gutter: Double
     ) {
+        mounts += 1
         rows = block.count
         left.gutterWidth = gutter
         right.gutterWidth = gutter
@@ -123,8 +154,8 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
         left.numberColumns = 1
         right.numberColumns = 1
         // Word-level rozdíl (#153) se počítá **jednou pro obě strany** a až tehdy, když se text
-        // opravdu skládá: `show` níž se z něj vrátí hned, když se obsah nezměnil, a tahle metoda
-        // chodí i při pouhém přejezdu myší. Sloupec sám ho spočítat nemůže — protějšek je v tom
+        // opravdu skládá: `show` níž se z něj vrátí hned, když se obsah nezměnil — typicky když se
+        // sem přišlo jen kvůli jiné šířce. Sloupec sám ho spočítat nemůže — protějšek je v tom
         // druhém.
         var computed: (left: WordDiff.Spans, right: WordDiff.Spans)?
         func words() -> (left: WordDiff.Spans, right: WordDiff.Spans) {
@@ -142,18 +173,17 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
         // Nastavuje se před složením textu, protože se to složením nemění.
         left.missingLines = Self.missing(in: block.left)
         right.missingLines = Self.missing(in: block.right)
+        // Klíč sazby je **v každém sloupci jeho vlastní obsah** (#393), ne řetězec s prefixem
+        // `L`/`R`: každý sloupec porovná svoje řádky sám, takže se strany nemají jak splést a hash
+        // celého bloku k tomu není potřeba.
         left.show(
             DiffBlock(lines: block.left.map { $0 ?? .blank }),
-            language: language,
-            palette: palette,
-            signature: "L\(signature)",
+            style: style,
             words: { words().left }
         )
         right.show(
             DiffBlock(lines: block.right.map { $0 ?? .blank }),
-            language: language,
-            palette: palette,
-            signature: "R\(signature)",
+            style: style,
             words: { words().right }
         )
         rowHeight = left.singleLineHeight

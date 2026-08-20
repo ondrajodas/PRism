@@ -217,6 +217,22 @@ struct IdleDiffSpinProbe {
         try await measureWheel("diff", tab: .filesChanged)
     }
 
+    /// **Diff vedle sebe** — a je to ta scéna, ve které ztuhlo okno u #393: bloky dvojic, na kterých
+    /// se v `updateNSView` platil hash všech řádků, dvě pole `DiffLine` navíc, dvě množiny,
+    /// `sizeToFit()` na oba sloupce a rámečky řádků, a to při **každém** přepočtu geometrie.
+    ///
+    /// Číslo, které o té stráži rozhoduje, je `práce bloků` ve výpisu — a čte se **poměr**, ne
+    /// absolutní počty: nad usazenou scénou vyjde **15 aktualizací na 3 nasazení** (tři bloky, jedno
+    /// nasazení každý; bez stráže 15 na 15), sazeb jsou dvě na blok, jedna za sloupec. **Na samotném
+    /// gestu se stráž neprojeví** a je to tak správně: blok, který vjede do okna, dostane jednu
+    /// aktualizaci, takže tam není co ušetřit (změřeno 0,55 / 0,52 s se stráží proti 0,50 / 0,55 s
+    /// bez ní). Série se u toho **střídají** (A/B/A/B), protože drift sezení je větší než hledaný
+    /// rozdíl (#274).
+    @Test("Projíždění diffu vedle sebe kolečkem")
+    func wheelSplitDiff() async throws {
+        try await measureWheel("diff vedle sebe", tab: .filesChanged, layout: .split)
+    }
+
     /// **Kontrola měřidla** (#361): scéna, která se chvíli neusazuje. Bez ní číslo „0,00 % po
     /// gestu“ netvrdí nic — může to být stejně dobře čisté okno jako sonda, která smyčku nevidí.
     ///
@@ -450,7 +466,8 @@ struct IdleDiffSpinProbe {
         comments: Int = 0,
         big: Bool? = nil,
         steps: Int = 60,
-        step: Double = 40
+        step: Double = 40,
+        layout: DiffLayout = .unified
     ) async throws {
         let (store, cache) = try await prepared(big: big ?? (tab == .filesChanged), full: true)
         defer { _ = cache }
@@ -468,7 +485,7 @@ struct IdleDiffSpinProbe {
             print("SONDA \(name): osa má \(comments) komentářů, \(Self.shapes(of: comments))")
         }
         store.setDetailTab(tab, for: pr)
-        store.setDiffLayout(.unified)
+        store.setDiffLayout(layout)
         let window = show(scene: ContentView(store: store))
         defer { window.orderOut(nil) }
         _ = spinMainRunLoop(seconds: 2)
@@ -496,6 +513,7 @@ struct IdleDiffSpinProbe {
         let diagnostics = RenderDiagnostics(log: DiagnosticsLog(url: cache.url.appending(path: "d.log")))
         RenderDiagnostics.current = diagnostics
         defer { RenderDiagnostics.current = nil }
+        print("MĚŘENÍ \(name) práce bloků před gestem: \(Self.blockWork(in: root))")
         let started = mainThreadCPUSeconds()
         let landed = WheelGesture.scroll(over: scroller, in: window, steps: steps, step: step)
         let during = mainThreadCPUSeconds() - started
@@ -508,10 +526,59 @@ struct IdleDiffSpinProbe {
             landed
         ))
         print("MĚŘENÍ \(name) průchody tělem při gestu: \(Self.passes(diagnostics))")
+        print("MĚŘENÍ \(name) práce bloků po gestu: \(Self.blockWork(in: root))")
         for slice in 1...3 {
             let cpu = spinMainRunLoop(seconds: 3)
             print(String(format: "MĚŘENÍ %@ po gestu, úsek %d: %.2f %% CPU hlavního vlákna", name, slice, cpu / 3 * 100))
             print("MĚŘENÍ \(name) průchody tělem po gestu, úsek \(slice): \(Self.passes(diagnostics))")
+            print("MĚŘENÍ \(name) práce bloků po gestu, úsek \(slice): \(Self.blockWork(in: root))")
+        }
+    }
+
+    /// **Kolik práce ve viditelných blocích kódu doopravdy proběhlo** (#393): kolikrát jim SwiftUI
+    /// poslalo aktualizaci a kolikrát z toho vysázely text.
+    ///
+    /// Čte se to jako **absolutní počty za bloky, které v okně právě jsou**, ne jako rozdíl proti
+    /// minulému čtení: `LazyVStack` view nezachovává, takže blok, který vyjel z okna, si svá čísla
+    /// odnese a rozdíl by vyšel negativní (změřeno: `-11× updateNSView` po projetí). Rozhoduje
+    /// **poměr** — kolik aktualizací na jedno nasazení.
+    private static func blockWork(in view: NSView) -> BlockWork {
+        if let container = view as? DiffPairBlockContainer {
+            return BlockWork(
+                updates: container.updates,
+                mounts: container.mounts,
+                typesettings: container.typesettings,
+                blocks: 1
+            )
+        }
+        if let text = view as? DiffTextView {
+            return BlockWork(
+                updates: text.updates,
+                mounts: text.mounts,
+                typesettings: text.typesettings,
+                blocks: 1
+            )
+        }
+        return view.subviews.reduce(BlockWork()) { $0 + blockWork(in: $1) }
+    }
+
+    private struct BlockWork: CustomStringConvertible {
+        var updates = 0
+        var mounts = 0
+        var typesettings = 0
+        var blocks = 0
+
+        static func + (lhs: Self, rhs: Self) -> Self {
+            Self(
+                updates: lhs.updates + rhs.updates,
+                mounts: lhs.mounts + rhs.mounts,
+                typesettings: lhs.typesettings + rhs.typesettings,
+                blocks: lhs.blocks + rhs.blocks
+            )
+        }
+
+        var description: String {
+            "\(blocks) bloků v okně, \(updates)× updateNSView, \(mounts)× nasazení, \(typesettings)× sazba"
         }
     }
 
