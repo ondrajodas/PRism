@@ -21,10 +21,11 @@ struct PanelMetadataWidthTests {
     /// Šířky panelu z návrhu: podlaha, výchozí, mezi tím a strop.
     private let panelWidths: [Double] = [240, 260, 300, 360, 420, 520]
 
-    /// Odsazení bloku, jak ho má `PanelMetadataView` (`padding: 11px 13px`).
-    private let inset = 13.0
-
-    private func contentWidth(_ panel: Double) -> Double { panel - 2 * inset }
+    /// Šířka, která v bloku zbývá na chipy. **Z produkční funkce**, ne z vlastní aritmetiky:
+    /// odsazení je jedno a měření se s kresbou nesmí rozejít (pravidlo #236, nález Copilota).
+    private func contentWidth(_ panel: Double) -> Double {
+        PanelMetadataView.contentWidth(inPanelOf: panel)
+    }
 
     /// Skutečné labely z `cli/cli` (fixture `repo-labels.json`) plus dvě dlouhá jména — ta jsou to,
     /// co se do panelu nemá kam vejít.
@@ -221,11 +222,12 @@ struct PanelMetadataWidthTests {
     /// o načítání, ne o bráně. Kdyby zůstal aktivní, klik v nabídce by tiše neudělal nic.
     @Test("Bez načteného snímku je + label zakázaný")
     func theAddActionWaitsForTheSnapshot() throws {
-        let loading = PanelMetadataView(state: .loading, editing: .allowed, contentWidth: 274)
+        let width = contentWidth(300)
+        let loading = PanelMetadataView(state: .loading, editing: .allowed, contentWidth: width)
         let loaded = PanelMetadataView(
             state: .loaded(PullRequestMetadata(), updatedAt: Date(timeIntervalSince1970: 100)),
             editing: .allowed,
-            contentWidth: 274
+            contentWidth: width
         )
 
         // Dva různé obrázky: zakázaný chip se kreslí ztlumeně, povolený plně.
@@ -269,7 +271,7 @@ struct PanelMetadataWidthTests {
                 updatedAt: Date(timeIntervalSince1970: 100)
             ),
             editing: .allowed,
-            contentWidth: panelWidth - 26,
+            contentWidth: PanelMetadataView.contentWidth(inPanelOf: panelWidth),
             known: labels,
             candidates: ["odinuv"]
         )

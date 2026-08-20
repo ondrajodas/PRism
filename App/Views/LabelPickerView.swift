@@ -82,9 +82,14 @@ struct LabelPickerView: View {
             HStack(spacing: 7) {
                 // Odškrtnutí místo zaškrtávátka: klik je **přepínač**, takže se stejným tlačítkem
                 // label sundá. Bez značky by se nepoznalo, který na PR už je.
-                Image(systemName: isOn ? "checkmark" : "")
+                //
+                // **Neviditelná se dělá `opacity`, ne prázdným jménem symbolu.**
+                // `Image(systemName: "")` vykreslí placeholder chybějícího symbolu a loguje —
+                // a šířku sloupce drží `frame` tak jako tak (nález Copilota).
+                Image(systemName: "checkmark")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(Palette.accent)
+                    .opacity(isOn ? 1 : 0)
                     .frame(width: 10)
                 LabelChipView(label: label, maxWidth: nil)
                 Spacer(minLength: 4)

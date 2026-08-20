@@ -95,7 +95,7 @@ struct PanelMetadataRenderProbe {
                 updatedAt: Date(timeIntervalSince1970: 100)
             ),
             editing: editing,
-            contentWidth: width - 26,
+            contentWidth: PanelMetadataView.contentWidth(inPanelOf: width),
             known: longLabels,
             candidates: ["odinuv"]
         )
@@ -107,7 +107,7 @@ struct PanelMetadataRenderProbe {
         PanelMetadataView(
             state: .failed(GitHubError.network("dial tcp: lookup api.github.com").userDescription),
             editing: .allowed,
-            contentWidth: 274
+            contentWidth: PanelMetadataView.contentWidth(inPanelOf: 300)
         )
         .frame(width: 300, alignment: .topLeading)
         .background(Palette.chrome)
