@@ -3206,6 +3206,59 @@ jsou v [`testovani.md`](testovani.md), sekce *Čtvrtý záchvat*.
 `flushTransactions` a že se v tom kole **nepřeloží ani jedno tělo** aplikace — je to přepočítávání
 geometrie nad nezměněnou sadou podviews.
 
+### #393 — `updateNSView` sázel blok diffu při každém průchodu kola
+
+**Pátý záchvat ukázal poprvé náš kód** — a proto je z něj oprava, ne další negativní výsledek.
+Kořen je pořád ten z #361 (transakční kolo, 19 116 z 21 240 vzorků), ale práce uvnitř je naše:
+`updateNSView` u bloku dvojic drží **1 172 vzorků (5,5 %)** ve dvou nezávislých vzorcích, a to bez
+jediného průchodu tělem.
+
+**Co ten atribut špinilo, nebyla naše hodnota.** SwiftUI si `PlatformViewChild` přepočítá při každé
+změně geometrie bloku, takže `updateNSView` chodí i tehdy, když se blok, jazyk ani režim nezměnily —
+a všechno pod ním se platilo znovu: hash všech řádků a podpis do řetězce (275 vzorků), dvě pole
+`DiffLine` a dvě množiny navíc, `left.singleLineHeight` jako dotaz layout manageru, `layoutColumns()`
+se `sizeToFit()` na oba sloupce (279) a rámečky řádků i s jejich porovnáním (158).
+
+**Rozhoduje o tom jeden klíč, ne hash.** `DiffBlockDrawing` (blok + `DiffBlockStyle` + šířka) leží
+v `Coordinator`u a porovnává se celý blok: hodnota representable je v grafu, takže se porovnávají
+**tatáž** pole a `Array.==` se vrátí na identitě úložiště. Změřeno na 27 blocích po 60 řádcích: klíč
+**0,013 ms**, hash s podpisem **0,530 ms**, porovnání po řádcích u čerstvých polí **0,284 ms** —
+stráž tedy nemá jak stát víc, než co ušetří. `DiffBlockSignature` z #157 tím zmizel: obsah se
+porovnává na řádcích a v klíči sazby zbyly jazyk a barevný režim (`DiffBlockStyle`), ze kterého se
+bere i paleta — jako parametr vedle režimu by to byly dvě hodnoty o jedné věci.
+
+**Šířka je v jednom klíči a ve druhém ne, a je to celé rozhodnutí.** Rámečky řádků se z ní počítají
+a ve split pohledu z nich vychází hranice pravé poloviny, takže bez šířky by po zúžení okna svítila
+pilulka jinde, než kde se táhne rozsah. Do klíče **sazby** naopak nepatří: text se jen jinak zalomí,
+kdežto přesázení ruší rozdělaný výběr (#157). U toho se změřilo, že **`bounds` v `updateNSView` je
+o průchod pozadu** — první průchod vidí šířku nula a ten druhý tu skutečnou; platilo to i předtím,
+jen to nebylo z čeho poznat.
+
+**Kolo se tím nezastaví, a nevydává se to za opravu ztuhnutí.** Naše práce byla 5,5 % vzorků toho
+kola; zbytek je přepočet geometrie líného seznamu uvnitř jednoho `flushTransactions`. Na projíždění
+se oprava neprojeví vůbec (0,55 / 0,52 s se stráží proti 0,50 / 0,55 s bez ní, série A/B/A/B) — blok,
+který vjede do okna, dostane jednu aktualizaci a nasadí se jednou, takže tam **není co ušetřit**.
+Šetří se právě v tom kole, kde se geometrie počítá nad týmž blokem pořád dokola: nad usazenou scénou
+15 aktualizací → **3 nasazení** místo 15.
+
+**Ke čtení vzorku z toho plyne jedna oprava zadání:** v pátém záchvatu je `enqueueHoverUpdateIfNeeded`
+**2 065 z 2 119** vzorků `dispatchActions` (ve druhém vzorku 1 440 z 1 486), takže je to ta **první**
+varianta z #361 (hover re-arm), ne ta se `signalPrefetch`em. V zadání stálo, že je hover zanedbatelný —
+to číslo ale bylo počet **řádků grepu**, ne vzorků. Náš kód v tom podstromu není (10 vzorků z 2 065),
+takže je to pořád následek, ne příčina.
+
+**Ostatní representable v okně se prověřila a stráž nedostala** — měřením, ne čtením:
+`SelectableCodeView` sází text taky bezpodmínečně, ale nad tímtéž špiněním grafu dostane **jednu**
+aktualizaci proti jedenácti u bloku dvojic (nemá `sizeThatFits`, takže nevisí na rozvržení).
+Stráž, kterou nemá co vyvolat, by nešla ověřit vloženou regresí; `LogTailTextView` tentýž klíč má
+od #292.
+
+**Na obrazovce není co vidět, a je to doložené renderem.** `Změněné soubory` v obou pohledech a na
+dvou šířkách vyšly proti `main`u **bajt v bajt stejné**; sonda je nejdřív ověřená sama proti sobě.
+Blok drží tři počitadla (`updates`, `mounts`, `typesettings`), na kterých stojí sedm nových testů —
+a obě strany stráže jsou ověřené **vloženou regresí**: vypnutá stráž (11 nasazení na 11 aktualizací)
+i šířka vyhozená z klíče (rámečky zůstanou na staré šířce).
+
 ### M11 — Průběh běhu (milník #13)
 
 Čtyři issues, které sahají do téhož — `ReviewProgress`, `ReviewerTimeline` a stav průběhu

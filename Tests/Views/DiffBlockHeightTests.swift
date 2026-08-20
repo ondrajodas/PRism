@@ -29,9 +29,7 @@ struct DiffBlockHeightTests {
         view.gutterWidth = DiffLineView.contentInset(for: .unified)
         view.show(
             block(of: lines),
-            language: Language(path: "Cart.swift"),
-            palette: .intelliJLight,
-            signature: lines.joined(),
+            style: DiffBlockStyle(language: Language(path: "Cart.swift"), colorScheme: .light),
             words: { [:] }
         )
         return view
@@ -125,9 +123,7 @@ struct DiffPairBlockHeightTests {
         container.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
         container.show(
             DiffPairBlock(left: lines(rows), right: lines(rows)),
-            language: Language(path: "Cart.swift"),
-            palette: .intelliJLight,
-            signature: "rows\(rows)",
+            style: DiffBlockStyle(language: Language(path: "Cart.swift"), colorScheme: .light),
             gutter: DiffLineView.contentInset(for: .split)
         )
         return container
@@ -141,9 +137,7 @@ struct DiffPairBlockHeightTests {
         column.numberColumns = 1
         column.show(
             DiffBlock(lines: lines(rows)),
-            language: Language(path: "Cart.swift"),
-            palette: .intelliJLight,
-            signature: "rows\(rows)",
+            style: DiffBlockStyle(language: Language(path: "Cart.swift"), colorScheme: .light),
             words: { [:] }
         )
         return column

@@ -79,6 +79,33 @@ struct DetailTabRenderProbe {
         }
     }
 
+    /// Blok kódu v **obou pohledech** — pod sebou a vedle sebe (#393).
+    ///
+    /// Existuje proto, že stráž v `updateNSView` (`DiffBlockDrawing`) se dá zúžit špatně, a to je
+    /// tichá vada: blok, který se nepřesází, vypadá jako správně nakreslený blok — jen je v něm
+    /// obsah z minula. Render je jediné místo, kde se dá **vidět**, že se kresba nezměnila; číslo
+    /// z počitadel na to neodpoví.
+    ///
+    /// Porovnává se **po bytech** proti renderu z `main`u, takže se to sem hodí i pro každou další
+    /// změnu v sazbě bloku. Postup je v `docs/testovani.md`.
+    @Test("Vyrendrovat blok kódu v obou pohledech")
+    func rendersBothDiffLayouts() async throws {
+        let directory = URL(filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory())
+        let (store, cache) = try await prepared()
+        defer { _ = cache }
+
+        store.setDetailTab(.filesChanged, for: pr)
+        for layout in [DiffLayout.unified, .split] {
+            store.setDiffLayout(layout)
+            for width in [1400.0, 648.0] as [CGFloat] {
+                let name = layout == .split ? "vedle-sebe" : "pod-sebou"
+                let url = directory.appending(path: "detail-soubory-\(name)-\(Int(width)).png")
+                try capture(store: store, width: width, to: url)
+                print("SONDA \(url.path) — diff \(name)")
+            }
+        }
+    }
+
     /// Scéna do okna mimo obrazovku a odtud `cacheDisplay` do PNG — tatáž cesta jako u `Přehledu`
     /// (#291), bloku kódu (#236) a odpočtu (#269), viz `docs/testovani.md`.
     private func capture(store: AppStore, width: CGFloat, to url: URL) throws {

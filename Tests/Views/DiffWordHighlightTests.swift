@@ -10,12 +10,10 @@ import Testing
 @Suite("Zvýraznění v textu bloku")
 @MainActor
 struct DiffWordHighlightTests {
-    private func show(_ lines: [DiffLine], signature: String, in view: DiffTextView) {
+    private func show(_ lines: [DiffLine], in view: DiffTextView) {
         view.show(
             DiffBlock(lines: lines),
-            language: Language(path: "Cart.swift"),
-            palette: .intelliJLight,
-            signature: signature,
+            style: DiffBlockStyle(language: Language(path: "Cart.swift"), colorScheme: .light),
             words: { WordDiff.spans(in: lines) }
         )
     }
@@ -42,7 +40,7 @@ struct DiffWordHighlightTests {
     @Test("Svítí jen přepsaná část, na obou stranách")
     func highlightsTheRewrittenPart() {
         let view = DiffTextView.pairColumn()
-        show([removed("let total = price * amount"), added("let total = price * count")], signature: "a", in: view)
+        show([removed("let total = price * amount"), added("let total = price * count")], in: view)
         #expect(highlighted(in: view) == ["amount", "count"])
     }
 
@@ -51,7 +49,7 @@ struct DiffWordHighlightTests {
     func leavesTheTextAlone() {
         let view = DiffTextView.pairColumn()
         let lines = [removed("let total = price * amount"), added("let total = price * count")]
-        show(lines, signature: "a", in: view)
+        show(lines, in: view)
         #expect(view.textStorage?.string == lines.map(\.text).joined(separator: "\n"))
     }
 
@@ -66,10 +64,10 @@ struct DiffWordHighlightTests {
         let view = DiffTextView.pairColumn()
         let line = added("let total = price * count")
 
-        show([removed("let total = price * amount"), line], signature: "a", in: view)
+        show([removed("let total = price * amount"), line], in: view)
         #expect(highlighted(in: view) == ["amount", "count"])
 
-        show([removed("let subtotal = price * count"), line], signature: "b", in: view)
+        show([removed("let subtotal = price * count"), line], in: view)
         #expect(highlighted(in: view) == ["subtotal", "total"])
     }
 
@@ -78,7 +76,7 @@ struct DiffWordHighlightTests {
     @Test("Obarvení syntaxe zůstává i pod zvýrazněním")
     func keepsSyntaxColorsUnderTheHighlight() throws {
         let view = DiffTextView.pairColumn()
-        show([removed("let amount = 1"), added("let count = 1")], signature: "a", in: view)
+        show([removed("let amount = 1"), added("let count = 1")], in: view)
         let storage = try #require(view.textStorage)
 
         // `let` je klíčové slovo, takže má barvu písma z palety — a leží mimo zvýrazněný kus.
@@ -99,9 +97,7 @@ struct DiffWordHighlightTests {
         let context = DiffLine(kind: .context, oldNumber: 1, newNumber: 1, text: "let total = price * count")
         view.show(
             DiffBlock(lines: [context]),
-            language: Language(path: "Cart.swift"),
-            palette: .intelliJLight,
-            signature: "a",
+            style: DiffBlockStyle(language: Language(path: "Cart.swift"), colorScheme: .light),
             words: { [0: [context.text.startIndex..<context.text.endIndex]] }
         )
         #expect(highlighted(in: view).isEmpty)

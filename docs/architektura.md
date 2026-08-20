@@ -609,7 +609,9 @@ Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne p
 |---|---|
 | **Co se nakreslí po `super.draw`, není vidět** | Čísla a znaky se nekreslily vůbec, ačkoli se kód volal se správnými hodnotami. Doloženo plným obdélníkem, který taky nebyl. Všechno vlastní kreslení musí být **před** `super.draw` |
 | `NSAttributedString.draw(at:)` ve **flipped** view kreslí **nad** bod | Text mimo řádek a mimo view. Musí to být `draw(in:)` s rámečkem a zarovnáním z odstavce |
-| `setAttributedString` **ruší výběr** | `updateNSView` chodí i při přejezdu myší (mění se, u kterého řádku svítí pilulka), takže výběr zmizel při každém hnutí. Text se proto skládá jen při změně **podpisu** obsahu |
+| `setAttributedString` **ruší výběr** | `updateNSView` chodí i při přejezdu myší (mění se, u kterého řádku svítí pilulka), takže výběr zmizel při každém hnutí. Text se proto skládá jen při změně **řádků nebo stylu** (do #393 při změně podpisu s hashem) |
+| `updateNSView` chodí i **beze změny hodnoty** | Volá ho každý přepočet geometrie, ne změna bloku — ve ztuhlém okně z #393 tisíckrát za sekundu, bez jediného průchodu tělem. Práci pod tím proto hlídá klíč `DiffBlockDrawing` |
+| `bounds` v `updateNSView` je **o průchod pozadu** | SwiftUI nastaví rámec view až po něm, takže první průchod vidí šířku **nula** a ten druhý tu skutečnou (změřeno u #393). Platilo to i předtím — rámečky řádků se z nuly spočítaly stejně —, jen to nebylo z čeho poznat |
 | SwiftUI `@ViewBuilder`, který podle stavu vybírá mezi `self` a modifikátorem, **mění strukturu** | `copyMenu` s prázdnou nabídkou zahodil podstrom a postavil nový `NSTextView` — s ním zmizel výběr, jak myš odjela z bloku. Menu se proto připojuje bezpodmínečně |
 | `NSCursor.set()` ze SwiftUI ani `addCursorRect` si proti `NSTextView` **neporadí** | Ruka nad pilulkou blikla jen v rohu, kde se to potkalo, nebo vůbec. Jde to jen přes tracking area a `cursorUpdate` — a i tam se musí rozhodovat v `mouseMoved`, protože `cursorUpdate` chodí jen při vstupu do areay |
 | `contentShape` **před** `frame` tvaruje nulovou velikost | Gesto tažení nemělo kde začít. Vypadá to jako drobnost v pořadí modifikátorů a je z toho nefunkční gesto |
@@ -632,6 +634,53 @@ dvojici slévá `DiffRow.blockedPairs(_:)` do `pairBlock`u, takže případ `.pa
 nedojde. Drží se dál kvůli konstantám a proto, že je to jediný popis toho, jak dvojice vypadá bez
 bloku; když se v něm něco mění (jako barvy u #277), mění se to **spolu s blokem**, aby se ty dvě
 cesty nerozešly.
+
+### Stráž v `updateNSView` (#393)
+
+**`updateNSView` se volá při každém přepočtu geometrie bloku, ne při jeho změně.** Ve ztuhlém okně
+z #393 na něj padlo **1 172 z 21 240** vzorků hlavního vlákna — a v tom kole se nepřeložilo ani
+jedno tělo, takže se ta práce dělala pořád znovu nad **týmž** blokem:
+
+| co se v každém průchodu platilo | vzorků |
+|---|---|
+| `DiffPairBlockContainer.show(…)` (nasazení do sloupců) | 724 |
+| z toho `layoutColumns()` včetně `sizeToFit()` na oba sloupce | 279 |
+| z toho `left.singleLineHeight` (dotaz layout manageru) | 126 |
+| z toho `missing(in:)` ×2 (dvě množiny navíc) | 176 |
+| z toho `block.left/right.map { … }` (dvě pole `DiffLine` navíc) | 99 |
+| `block.hashValue` a podpis do řetězce | 275 |
+| `lineFrames()` a porovnání s minulými | 158 |
+
+Rozhoduje o tom **jeden klíč** (`DiffBlockDrawing`: blok + `DiffBlockStyle` + šířka) uložený
+v `Coordinator`u. Co u toho platí:
+
+- **Klíč nese celý blok, ne jeho hash.** Hodnota representable leží v grafu, takže se při dalším
+  průchodu porovnávají **tatáž** pole a `Array.==` se vrátí na identitě úložiště. Změřeno
+  (`DiffPerformanceMeasurement.blockUpdateGuardCost`, 27 bloků po 60 řádcích): klíč **0,013 ms**,
+  hash s podpisem **0,530 ms**; i porovnání po řádcích u čerstvých polí (**0,284 ms**) je levnější
+  než hash. Stráž tedy nemá jak stát víc, než co ušetří.
+- **Šířka v klíči být musí.** Rámečky řádků se z ní počítají a ve split pohledu z nich vychází
+  hranice pravé poloviny (`DiffGutterGeometry.split`), takže bez ní by po zúžení okna svítila
+  pilulka jinde, než kde se táhne rozsah.
+- **Do klíče sazby ale šířka nepatří** (`DiffBlockStyle`): text se zalamuje jinak, ale sází se
+  stejně, a přesázení **ruší rozdělaný výběr** (#157). Proto jsou to dva klíče, ne jeden.
+- **Paleta se bere z klíče**, ne od volajícího: dvě hodnoty o jednom barevném režimu by dovolily
+  nasadit paletu, která ke klíči nepatří, a sazba by se přeskočila s barvami z minula.
+- **Sazba se neopakovala ani před #393** — držel ji podpis obsahu. Co se opakovalo, bylo
+  **nasazení**; proto blok drží tři počitadla (`updates`, `mounts`, `typesettings`) a testy tvrdí
+  poměr mezi nimi, ne jen nulu (viz [`testovani.md`](testovani.md)).
+- **Kolo z #361 to nezastaví.** Naše práce byla 5,5 % vzorků toho kola; zbytek je přepočet
+  geometrie líného seznamu (`LazySubviewPlacements`, `UnaryChildGeometry`) uvnitř jednoho
+  `flushTransactions`. Je to **zlevnění obsahu kola, ne jeho oprava** — z 5,5 % se 99 % neposkládá.
+- **`needsLayout = true` v `show(…)` do toho kola nemluví**: AppKitové rozvržení potřebuje kolo
+  runloopu, a to se v záchvatu nekoná (ve vzorku má `DiffPairBlockContainer.layout()` **nulu**).
+- **Stráž nemají všechna representable, a je to změřené.** Aktualizaci při každém přepočtu geometrie
+  dostane ten, který si **říká o vlastní velikost** (`sizeThatFits`) — tedy oba bloky diffu. Nad
+  tímtéž špiněním grafu dostane blok dvojic **11** aktualizací a `SelectableCodeView` (hunk v sheetu,
+  taky sází text bezpodmínečně) **jednu**, protože se jeho hodnota nemění. Proto tam stráž není:
+  nešla by ověřit vloženou regresí, a stráž, kterou nemá co vyvolat, je stav, který nikdo nečte.
+  Drží to `DiffBlockUpdateTests.codeSheetIsNotUpdatedByGeometry`. `LogTailTextView` má vlastní stráž
+  od #292 (`shownText`/`shownColor` v koordinátoru) — je to tentýž vzor, jen o tři issues starší.
 
 ### Barvy diffu (#277)
 
@@ -2390,7 +2439,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffTextView` | `NSTextView`, který kreslí blok řádků: text, obarvení, pozadí, pruh rozsahu, čísla a znaky změny (#157). Drží **šířku kontejneru i měření výšky** (`height(forWidth:)`, `height(ofRows:)`), aby se šířka pro měření nemohla rozejít s tou pro kreslení (#236). Text skládá `compose(…)` — **čistá funkce nad řádky** (#275), aby šla změřit bez sazby |
 | `DiffCodeBlockView`, `DiffBlockRowView` | Blok v pohledu pod sebou a k němu pilulka na komentář a tažení rozsahu |
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
-| `DiffBlockSignature` | Podpis bloku, podle kterého se text **znovu nesází** (#157) — a v němž je schválně barevný režim (#278), protože barvy jsou v tom textu zapečené |
+| `DiffBlockStyle`, `DiffBlockDrawing` | Dva klíče bloku. `DiffBlockStyle` (jazyk + barevný režim, a z něj paleta) rozhoduje spolu s řádky o tom, jestli se text **znovu sází** (#157; režim v něm je schválně kvůli #278, barvy jsou v tom textu zapečené). `DiffBlockDrawing` (blok + styl + **šířka**) rozhoduje o tom, jestli má `updateNSView` vůbec co dělat (#393) — viz *Stráž v `updateNSView`* |
 | `DiffGutterGeometry`, `DiffBlockPlacement` | Aritmetika gutteru (#252) — kde leží plochy na tažení a pilulka, a poloha bloku v prostoru obsahu **mimo observable stav**. Čistý typ, aby se dal změřit i otestovat bez okna |
 | `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R). Od #331 kreslí **obě sekce se seznamem** (`PullRequestListScope`: `queue` / `mine`) — jeden řádek, jeden filtr, jedno řazení; liší se jen množina a věty nad prázdnem. Od #332 stojí **obě** na zúžených getterech (`visibleQueuePullRequests` / `visibleOwnPullRequests`); `PullRequestListScope` zůstává vyjmenovaný typ, ne `PullRequestOwnership`, protože nese i to, mezi kolika prázdny se rozhoduje a jak se mluví o schovaných řádcích |

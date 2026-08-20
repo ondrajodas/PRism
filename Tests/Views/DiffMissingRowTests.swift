@@ -32,9 +32,7 @@ struct DiffMissingRowTests {
         view.missingLines = missing
         view.show(
             DiffBlock(lines: lines),
-            language: Language(path: "Cart.swift"),
-            palette: .darcula,
-            signature: "missing-\(missing.sorted())",
+            style: DiffBlockStyle(language: Language(path: "Cart.swift"), colorScheme: .dark),
             words: { [:] }
         )
         view.appearance = NSAppearance(named: .darkAqua)

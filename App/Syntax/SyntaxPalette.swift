@@ -7,7 +7,10 @@ import SwiftUI
 ///
 /// Obyčejný text vlastní barvu nemá: dědí ji z okolí, takže soubor bez rozpoznaného
 /// jazyka a soubor s ním vypadají stejně všude, kde se nic nebarví.
-struct SyntaxPalette {
+///
+/// `Equatable` je tu kvůli testu, že paleta jde z barevného režimu v `DiffBlockStyle` (#393) —
+/// samotné barvy jsou konstanty, takže se tím nic nerozhoduje.
+struct SyntaxPalette: Equatable {
     let comment: Color
     let string: Color
     let number: Color

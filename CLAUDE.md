@@ -671,6 +671,31 @@ Zvlášť stojí za přečtení, než sáhneš na:
 
   **Kolo z #361 to nevysvětluje.** Vzor byl v ose po celou dobu měření, kterými se kolo hledalo, a osa
   se přesto usadila (0,00 % po projetí kolečkem) — je to **zlevnění cesty, ne oprava ztuhnutí**.
+- **`updateNSView` chodí i tehdy, když se hodnota nezměnila** (#393). Volá ho každý přepočet geometrie
+  toho view, ne změna dat — ve ztuhlém okně tisíckrát za sekundu a **bez jediného průchodu tělem**
+  (1 172 z 21 240 vzorků hlavního vlákna). Co je v něm lineární v délce obsahu (hash, kopie polí,
+  `sizeToFit()`, dotazy layout manageru), se proto musí schovat za **klíč uložený v `Coordinator`u**:
+  `DiffBlockDrawing` = obsah + styl + **šířka**.
+
+  Tři věci, které z toho plynou a nejsou zjevné: klíč nese **celý blok, ne jeho hash** (hodnota
+  representable leží v grafu, takže `Array.==` skončí na identitě úložiště — 0,013 ms proti 0,530 ms
+  za hash); **šířka patří do klíče kreslení, ale ne do klíče sazby**, protože přesázení ruší rozdělaný
+  výběr; a **`bounds` je v `updateNSView` o průchod pozadu** (první průchod vidí nulovou šířku, změřeno).
+
+  **Netýká se to všech representable, a je to změřené**: aktualizaci při každém přepočtu geometrie
+  dostane ten, který si **říká o vlastní velikost** (`sizeThatFits`) — nad tímtéž špiněním grafu
+  dostane blok dvojic 11 aktualizací a hunk v sheetu (`SelectableCodeView`, taky sází text
+  bezpodmínečně) **jednu**. Stráž se proto nedává plošně: kde ji nemá co vyvolat, nešla by ověřit
+  vloženou regresí. Grep je proto **výčet k posouzení, ne prázdný** — rozhoduje `sizeThatFits`
+  a `LogTailTextView` má vlastní stráž od #292:
+
+  ```bash
+  grep -rln 'func updateNSView' App
+  ```
+
+  **Zastavit kolo z #361 to neumí** — naše práce v něm byla 5,5 %. Je to zlevnění obsahu kola, ne
+  oprava ztuhnutí; podrobnosti a čísla v [`docs/architektura.md`](docs/architektura.md), ověření
+  v [`docs/testovani.md`](docs/testovani.md).
 - **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236). Blok kódu si v `LazyVStack`u
   navrhuje výšku sám, takže když ji spočítá na jiné šířce, než na jaké se pak zalamuje, nakreslí víc
   řádků, než na kolik si řekl — a přeteče do řádku pod sebou (AppKitové view je nad SwiftUI obsahem,

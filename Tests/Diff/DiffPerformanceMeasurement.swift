@@ -417,25 +417,22 @@ struct DiffPerformanceMeasurement {
     @MainActor
     @Test("Podíl word-level rozdílu na skládání bloku (#153)")
     func wordDiffShareOfBlockComposition() {
-        let language = Language(path: "Schema.swift")
-        let palette = SyntaxPalette.forScheme(.light)
+        let style = DiffBlockStyle(language: Language(path: "Schema.swift"), colorScheme: .light)
         let file = file(path: "src/Generated/Schema.swift", hunks: 1, linesPerHunk: 2400)
         let blocks = DiffRow.blockedPairs(DiffRow.rows(of: file, layout: .split)).compactMap { row -> DiffPairBlock? in
             if case .pairBlock(_, let block) = row { block } else { nil }
         }
         print("MĚŘENÍ bloků dvojic: \(blocks.count)")
 
-        // Podpis se musí lišit **pokaždé**, jinak se `show` vrátí za stráží a měří se stráž.
-        var round = 0
+        // **Bloky se musí lišit**, jinak se `show` vrátí za stráží a měří se stráž. Od #393 to
+        // drží samotný obsah: každý blok je jiný úsek souboru, takže i ten první v dalším kole je
+        // jiný než poslední z předchozího.
         let container = DiffPairBlockContainer()
         measure("DiffPairBlockContainer.show, \(blocks.count) bloků") {
-            round += 1
-            for (index, block) in blocks.enumerated() {
+            for block in blocks {
                 container.show(
                     block,
-                    language: language,
-                    palette: palette,
-                    signature: "\(round)|\(index)",
+                    style: style,
                     // Tatáž hodnota jako v `DiffPairBlockView` — s jinou by se měřila jiná sazba.
                     gutter: DiffLineView.contentInset(for: .split)
                 )
@@ -443,6 +440,75 @@ struct DiffPerformanceMeasurement {
         }
         measure("z toho WordDiff.spans(left:right:), \(blocks.count) bloků") {
             for block in blocks { _ = WordDiff.spans(left: block.left, right: block.right) }
+        }
+    }
+
+    // MARK: - Co stojí stráž v updateNSView (#393)
+
+    /// **Kolik stojí poznat, že se blok nezměnil** — a kolik stálo to, co tam bylo do #393.
+    ///
+    /// Tohle je měření, které rozhoduje, jestli stráž nestojí víc, než co má ušetřit. Porovnává tři
+    /// věci nad týmiž bloky:
+    ///
+    /// - **klíč kreslení** (`DiffBlockDrawing`), tedy co se platí dnes při každém průchodu
+    ///   `updateNSView` nad nezměněným blokem;
+    /// - **hash celého bloku** s podpisem složeným do řetězce, tedy to, co se platilo do #393;
+    /// - **prohlídku obou stran bloku po řádcích**, tedy horní hranici toho, co porovnání stojí,
+    ///   když se pole **nesejdou na identitě úložiště**.
+    ///
+    /// Naměřeno na tomhle stroji (27 bloků dvojic po 60 řádcích, tedy jeden průchod nad plným
+    /// oknem), medián ze tří běhů:
+    ///
+    /// | co | ms |
+    /// |---|---|
+    /// | klíč kreslení, tatáž pole (identita úložiště) | 0,013 |
+    /// | hash bloku + podpis do řetězce (do #393) | 0,530 |
+    /// | porovnání po řádcích (čerstvá pole) | 0,284 |
+    ///
+    /// Ta první hodnota je celá pointa: hodnota representable leží v grafu, takže se při dalším
+    /// průchodu porovnávají **tatáž** pole a `Array.==` se vrátí na identitě úložiště — **41×**
+    /// levněji než hash, který přečte znaky všech řádků pokaždé znovu. A i ta nejhorší varianta
+    /// (čerstvá pole, tedy blok po přeložení těla) je proti hashi **1,9×** levnější, takže stráž
+    /// nemá jak stát víc, než co ušetří.
+    ///
+    /// **Sazba je proti obojímu jiný řád** (`blockTypesettingBreakdown`: 61,5 ms na tytéž bloky),
+    /// takže rozhodující není ani jedno z těch čísel — rozhodující je, že se za stráží celá ta
+    /// sazba **nespustí**.
+    @MainActor
+    @Test("Co stojí stráž v updateNSView (#393)")
+    func blockUpdateGuardCost() {
+        let style = DiffBlockStyle(language: Language(path: "Schema.swift"), colorScheme: .light)
+        let file = file(path: "src/Generated/Schema.swift", hunks: 1, linesPerHunk: 2400)
+        let blocks = DiffRow.blockedPairs(DiffRow.rows(of: file, layout: .split)).compactMap { row -> DiffPairBlock? in
+            if case .pairBlock(_, let block) = row { block } else { nil }
+        }
+        print("MĚŘENÍ bloků dvojic: \(blocks.count) po \(blocks.first?.count ?? 0) řádcích")
+
+        let keys = blocks.map { DiffBlockDrawing(block: $0, style: style, width: 900) }
+        measure("klíč kreslení, tatáž pole, \(blocks.count) bloků") {
+            for (index, block) in blocks.enumerated() {
+                _ = DiffBlockDrawing(block: block, style: style, width: 900) == keys[index]
+            }
+        }
+
+        // Co tu bylo do #393: hash celého bloku a z něj podpis do řetězce.
+        measure("hash bloku a podpis, \(blocks.count) bloků") {
+            for block in blocks {
+                _ = "\(block.hashValue)|\(style.language?.name ?? "")|\(style.colorScheme)"
+            }
+        }
+
+        // Horní hranice: pole, která se na identitě úložiště nesejdou, se porovnají po řádcích.
+        // **`Array(pole)` na to nestačí** — úložiště nekopíruje, jen ho podrží, takže by se tady
+        // změřila zase identita (0,013 proti 0,012 ms, tedy nerozlišitelně). Kopii vyrobí `map`.
+        let copies = blocks.map {
+            DiffPairBlock(left: $0.left.map { $0 }, right: $0.right.map { $0 }, ids: $0.ids.map { $0 })
+        }
+        measure("porovnání po řádcích, čerstvá pole, \(blocks.count) bloků") {
+            for (index, block) in blocks.enumerated() {
+                _ = DiffBlockDrawing(block: block, style: style, width: 900)
+                    == DiffBlockDrawing(block: copies[index], style: style, width: 900)
+            }
         }
     }
 
@@ -488,7 +554,8 @@ struct DiffPerformanceMeasurement {
     @Test("Z čeho se skládá cena sazby bloku (#275)")
     func blockTypesettingBreakdown() {
         let language = Language(path: "Schema.swift")
-        let palette = SyntaxPalette.forScheme(.light)
+        let style = DiffBlockStyle(language: language, colorScheme: .light)
+        let palette = style.palette
         let file = file(path: "src/Generated/Schema.swift", hunks: 1, linesPerHunk: 2400)
         let blocks = DiffRow.blockedPairs(DiffRow.rows(of: file, layout: .split)).compactMap { row -> DiffPairBlock? in
             if case .pairBlock(_, let block) = row { block } else { nil }
@@ -496,24 +563,22 @@ struct DiffPerformanceMeasurement {
         let gutter = DiffLineView.contentInset(for: .split)
         print("MĚŘENÍ bloků dvojic: \(blocks.count) po \(blocks.first?.count ?? 0) řádcích")
 
-        // Podpis se musí lišit **pokaždé**, jinak se `show` vrátí za stráží a měří se stráž.
-        var round = 0
+        // **Bloky se musí lišit**, jinak se `show` vrátí za stráží a měří se stráž — viz
+        // `wordDiffShareOfBlockComposition`.
         let container = DiffPairBlockContainer()
         measure("celkem show do znovupoužitého kontejneru, \(blocks.count) bloků") {
-            round += 1
-            for (index, block) in blocks.enumerated() {
-                container.show(block, language: language, palette: palette, signature: "\(round)|\(index)", gutter: gutter)
+            for block in blocks {
+                container.show(block, style: style, gutter: gutter)
             }
         }
 
         // Co doopravdy platí projíždění: `LazyVStack` view nerecykluje, takže blok, který vjede do
         // okna, dostane **nový** kontejner. Rozdíl proti řádku výš je cena jeho postavení.
         measure("celkem s čerstvým kontejnerem, \(blocks.count) bloků") {
-            round += 1
-            for (index, block) in blocks.enumerated() {
+            for block in blocks {
                 let fresh = DiffPairBlockContainer()
                 fresh.frame = NSRect(x: 0, y: 0, width: 900, height: 962)
-                fresh.show(block, language: language, palette: palette, signature: "\(round)|\(index)", gutter: gutter)
+                fresh.show(block, style: style, gutter: gutter)
             }
         }
 
