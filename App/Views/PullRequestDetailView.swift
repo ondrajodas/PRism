@@ -439,6 +439,20 @@ struct PullRequestDetailView: View {
             draftUnavailable: draftUnavailable,
             draftActions: draftActions,
             jumpToComment: jumpToComment,
+            // Labely a reviewery (#392) — dvě sekce nad segmenty, které platí pro celý PR.
+            metadata: store.metadataState(for: pullRequest.id),
+            metadataEditing: store.metadataEditing(for: pullRequest.id),
+            knownLabels: store.knownLabels(in: pullRequest.repo),
+            reviewerCandidates: store.reviewerCandidates(for: pullRequest.id),
+            labelPickerFailure: store.labelPickerFailure(in: pullRequest.repo),
+            reviewerPickerFailure: store.reviewerPickerFailure(in: pullRequest.repo),
+            hasLoadedLabels: store.hasLoadedLabels(in: pullRequest.repo),
+            hasLoadedCandidates: store.hasLoadedAssignableUsers(in: pullRequest.repo),
+            metadataActionState: store.metadataActionState(for: pullRequest.id),
+            metadataActions: metadataActions,
+            // Proti kterému kódu nálezy platí (#392). Rozhoduje `Policy` — panel z toho jen sází
+            // větu, takže se okno neptá dvakrát jinak.
+            headNotice: headNotice,
             current: cursor.current,
             tab: panelTab
         )
@@ -447,6 +461,33 @@ struct PullRequestDetailView: View {
         // stáhnout. Bez priority dělí `HStack` místo mezi dva pružné prvky rovnoměrně
         // a v úzkém okně vyjde panel na půlku.
         .layoutPriority(1)
+    }
+
+    /// Akce nad labely a reviewery (#392). Skládá se tady, jako `findingActions` — panel dostane
+    /// hodnotu a `AppStore` nezná.
+    private var metadataActions: MetadataActions {
+        let summary = pullRequest
+        let id = summary.id
+        return MetadataActions(
+            toggle: { label in Task { await store.toggleLabel(label, on: summary) } },
+            request: { login in Task { await store.requestReview(from: login, on: summary) } },
+            loadLabels: { await store.loadRepositoryLabels(for: id.repo) },
+            loadCandidates: { await store.loadAssignableUsers(for: id.repo) },
+            clearFailure: { store.clearMetadataFailure(for: id) }
+        )
+    }
+
+    /// Věta o tom, proti které hlavě nálezy platí (#392).
+    ///
+    /// Hlava se bere z **uloženého záznamu**, ne z detailu PR: nálezy jsou klíčované `headSha`, na
+    /// kterém vznikly, takže hlava z detailu by mluvila o commitu, se kterým nemají nic společného.
+    private var headNotice: Policy.FindingsHeadNotice {
+        Policy.findingsHeadNotice(
+            tab: store.detailTab(for: pullRequest.id),
+            findingsHead: store.reviewRecord(for: pullRequest.id)?.headSha,
+            openCommit: store.openedCommit(in: pullRequest.id),
+            hasFindings: !visibleFindings.isEmpty
+        )
     }
 
     /// Pruh běhu: chipy reviewerů a vedle nich průběh běžícího review (#218). Ukazuje se,
@@ -1099,8 +1140,9 @@ struct PullRequestDetailView: View {
     ///
     /// **Tři stavy, a prázdný mezi nimi není**: pull request bez commitů neexistuje, takže by
     /// klidná hláška o prázdnu tvrdila něco, co platit nemůže — prázdná odpověď je proto porucha
-    /// (`Policy.commitsTab`). Panel s nálezy se v tomhle tabu nekreslí a je to zapsané
-    /// u `PullRequestTab.showsReviewPanel`.
+    /// (`Policy.commitsTab`). Panel s nálezy se v tomhle tabu od #392 **kreslí** a je to zapsané
+    /// u `PullRequestTab.showsReviewPanel` — i s tím, jak se u rozkliknutého staršího commitu pozná,
+    /// že nálezy o kódu na obrazovce nemluví.
     @ViewBuilder private var commits: some View {
         switch store.commitsTabState(for: pullRequest.id) {
         case .loading:

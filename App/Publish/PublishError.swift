@@ -32,6 +32,12 @@ enum PublishError: Error, Equatable {
     /// diskuze pod PR — a hláška, která pojmenuje něco jiného, než na co se člověk dívá,
     /// vypadá jako chyba v jiné části okna. Důvod je jinak tentýž a změřený stejně.
     case blankComment
+    /// Vyžádání review bez jediného člověka. Nic se nevolalo (#392).
+    ///
+    /// Vlastní případ, ne `blankComment`: ta věta radí napsat text, což u vyžádání nedává smysl.
+    /// A není to opatrnost — GitHub prázdné pole `reviewers` přijme a neudělá nic, takže by okno
+    /// hlásilo vyžádané review, které nevzniklo. Tatáž past jako u prázdného komentáře.
+    case noReviewer
     /// Vlákno, do kterého se odpovídá, na GitHubu není.
     ///
     /// Vlastní případ, ne `network`: hláška `Could not resolve to a node with the global id`
@@ -85,7 +91,7 @@ extension PublishError {
         switch self {
         // Nic se nevolalo (brány a pre-flight), nebo `gh` vůbec nenaběhl.
         case .publishingNotAllowed, .staleDraft, .nothingToSend, .blankReply, .blankComment,
-             .pullRequestNotOpen, .toolUnavailable:
+             .noReviewer, .pullRequestNotOpen, .toolUnavailable:
             false
         // GitHub požadavek **odmítl** — 422 u rozřazení komentářů, 401 u přihlášení, 403 u
         // limitu, spadlé spojení u sítě. Ve všech případech review nevzniklo.
@@ -167,6 +173,8 @@ extension PublishError {
             "Odpověď je prázdná. Napiš text — prázdný komentář GitHub tiše zahodí."
         case .blankComment:
             "Komentář je prázdný. Napiš text — prázdný komentář GitHub tiše zahodí."
+        case .noReviewer:
+            "Nebyl vybraný nikdo, od koho review vyžádat. Vyber člověka ze seznamu."
         case .threadNotFound:
             "Vlákno na GitHubu není — někdo ho mezitím smazal, nebo je konverzace v okně stará. Načti ji znovu."
         case .lineOutsideDiff:

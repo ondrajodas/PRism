@@ -16,6 +16,8 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
     private var replyOutcome: Result<ThreadComment, any Error>?
     private var resolutionOutcome: Result<ThreadResolution, any Error>?
     private var commentOutcome: Result<ThreadComment, any Error>?
+    private var labelsOutcome: Result<[PullRequestLabel], any Error>?
+    private var reviewersOutcome: Result<[RequestedReviewer], any Error>?
     /// Drží odeslání „rozběhnuté“, dokud se nepustí. Bez toho se nedá otestovat, co se stane
     /// **během** odesílání — a právě tam bydlí zákaz druhého odeslání. Stejný důvod, kvůli
     /// kterému `FakeReviewRunner` umí pozdržet běh.
@@ -34,6 +36,11 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
         case reply(ThreadTarget, body: String)
         case resolution(ThreadTarget, resolved: Bool)
         case comment(PRIdentifier, body: String)
+        /// Labely (#392). Ve **stejném výčtu** jako vlákna a komentáře, a ze stejného důvodu:
+        /// testy nad nimi tvrdí hlavně to, že se **nevolalo nic**, a to se pozná jedině z jednoho
+        /// seznamu všeho, co publisher dostal.
+        case labels(PRIdentifier, names: [String])
+        case reviewers(PRIdentifier, logins: [String])
     }
 
     convenience init(reply outcome: Result<ThreadComment, any Error>) {
@@ -49,6 +56,16 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
     convenience init(comment outcome: Result<ThreadComment, any Error>) {
         self.init([])
         lock.withLock { commentOutcome = outcome }
+    }
+
+    convenience init(labels outcome: Result<[PullRequestLabel], any Error>) {
+        self.init([])
+        lock.withLock { labelsOutcome = outcome }
+    }
+
+    convenience init(reviewers outcome: Result<[RequestedReviewer], any Error>) {
+        self.init([])
+        lock.withLock { reviewersOutcome = outcome }
     }
 
     var threadActions: [ThreadCall] { lock.withLock { threadCalls } }
@@ -104,6 +121,30 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
         if let gate = lock.withLock({ gate }) { await gate() }
         guard let outcome = lock.withLock({ commentOutcome }) else {
             throw PublishError.unknown("Fake publisher nemá co vrátit na komentář.")
+        }
+        return try outcome.get()
+    }
+
+    // MARK: - Labely a reviewery (#392)
+
+    func setLabels(_ labels: [String], on pullRequest: PRIdentifier) async throws -> [PullRequestLabel] {
+        lock.withLock { threadCalls.append(.labels(pullRequest, names: labels)) }
+        // Brána je **za** zápisem, jako u ostatních: test musí poznat, že odesílání běží.
+        if let gate = lock.withLock({ gate }) { await gate() }
+        guard let outcome = lock.withLock({ labelsOutcome }) else {
+            throw PublishError.unknown("Fake publisher nemá co vrátit na labely.")
+        }
+        return try outcome.get()
+    }
+
+    func requestReviewers(
+        _ logins: [String],
+        on pullRequest: PRIdentifier
+    ) async throws -> [RequestedReviewer] {
+        lock.withLock { threadCalls.append(.reviewers(pullRequest, logins: logins)) }
+        if let gate = lock.withLock({ gate }) { await gate() }
+        guard let outcome = lock.withLock({ reviewersOutcome }) else {
+            throw PublishError.unknown("Fake publisher nemá co vrátit na reviewery.")
         }
         return try outcome.get()
     }

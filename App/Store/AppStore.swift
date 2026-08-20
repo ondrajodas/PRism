@@ -967,6 +967,37 @@ final class AppStore {
     /// prázdno a porucha jsou tři různé odpovědi a nesmí se slít.
     var commitFailures: [PRIdentifier: String] = [:]
 
+    /// Labely a vyžádaní reviewery na PR (#392), klíčované PR. Chybějící klíč = ještě se
+    /// nenačetlo.
+    ///
+    /// **Stav, ne pole**, a ze stejného důvodu jako u `detailStates`: „nic tu není“, „ještě to
+    /// nedorazilo“ a „nepodařilo se to zjistit“ jsou tři různé odpovědi. U labelů na tom navíc visí
+    /// akce — sada se nastavuje **celá**, takže přeštítkovat PR, jehož štítky aplikace nezná,
+    /// znamená ty neznámé smazat.
+    var metadataStates: [PRIdentifier: MetadataState] = [:]
+
+    /// Labely, které zná **repozitář** (#392). Chybějící klíč = nabídka se ještě neotvírala.
+    ///
+    /// Klíčem je repo, ne PR: je to vlastnost repozitáře a mezi dvěma PR z téhož repa se nemění.
+    /// Na tom stojí uzavřenost nabídky — z volného textu by se dal vyrobit nový label.
+    var repositoryLabels: [RepoID: [PullRequestLabel]] = [:]
+
+    /// Proč se nabídka labelů nenačetla (#392). Chybějící klíč = poslední pokus prošel.
+    ///
+    /// **Vlastní mapa, ne prázdné pole v `repositoryLabels`**, ze stejného důvodu jako u checků:
+    /// „repo žádné labely nemá“ je běžný stav, kdežto tohle je porucha — a nabídka, která po chybě
+    /// sítě vypadá jako repo bez labelů, posílá člověka hledat labely, které tam jsou.
+    var repositoryLabelFailures: [RepoID: String] = [:]
+
+    /// Loginy lidí, kteří na repo smí (#392). Chybějící klíč = nabídka se ještě neotvírala.
+    var assignableUsers: [RepoID: [String]] = [:]
+
+    /// Proč se nabídka lidí nenačetla (#392). Chybějící klíč = poslední pokus prošel.
+    var assignableUserFailures: [RepoID: String] = [:]
+
+    /// Co se právě děje s labely nebo reviewery (#392). Chybějící klíč = nic.
+    var metadataActionStates: [PRIdentifier: MetadataActionState] = [:]
+
     /// Který commit je v tabu `Commity` rozkliknutý (#317). Chybějící klíč = v tabu je seznam.
     ///
     /// **Jen žádost okna**, ne tvrzení o PR: že ten commit na PR pořád je, rozhoduje
@@ -1572,6 +1603,23 @@ final class AppStore {
         // výš. Uklízí se **spolu**, jinak by po vypadlém PR zbyl osamocený důvod poruchy.
         commits = commits.filter { wantedPullRequests.contains($0.key) }
         commitFailures = commitFailures.filter { wantedPullRequests.contains($0.key) }
+
+        // Labely a reviewery (#392) — platí k jednomu PR a mapa drží celý identifikátor, takže by
+        // bez úklidu rostla donekonečna. Rozdělané načítání přežije ze stejného důvodu jako
+        // u detailu: doběhlé volání by si ho zapsalo zpátky. **Stav akce jde s tím**, jinak by po
+        // vrácení PR do seznamu svítila chyba odesílání, o které nikdo neví, odkud je.
+        metadataStates = metadataStates.filter {
+            wantedPullRequests.contains($0.key) || $0.value == .loading
+        }
+        metadataActionStates = metadataActionStates.filter { wantedPullRequests.contains($0.key) }
+        // Nabídky se klíčují **repem**, takže se uklízejí podle rep v seznamu — tatáž hranice jako
+        // u `checkoutStates`.
+        // Nabídky a jejich poruchy se uklízejí **spolu**: kdyby zůstal jen důvod, hlásila by
+        // nabídka poruchu u repa, které v seznamu není.
+        repositoryLabels = repositoryLabels.filter { wanted.contains($0.key) }
+        repositoryLabelFailures = repositoryLabelFailures.filter { wanted.contains($0.key) }
+        assignableUsers = assignableUsers.filter { wanted.contains($0.key) }
+        assignableUserFailures = assignableUserFailures.filter { wanted.contains($0.key) }
 
         // Rozkliknutý commit a jeho diff (#317). Diff jsou megabajty, takže jde stejnou cestou
         // jako diff PR — a rozdělané stahování přežije ze stejného důvodu: doběhlé volání by si

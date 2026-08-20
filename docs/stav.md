@@ -3272,3 +3272,70 @@ přes `waitUntil` (#296) —, takže z #360 zbývá jen ten závod, který oprav
 
 **Na obrazovce není co vidět.** Osa se v tabu `Průběh` kreslí ze stejného modelu jako dřív; mění se
 jen to, co se z ní uloží na disk a v jakém okamžiku.
+
+### #392 — labely a vyžádaní reviewery v panelu, panel i v `Commitech`
+
+Dvě části jednoho zákresu (`docs/navrh.html`, sekce 24 a 25) a patří k sobě: labely a reviewery
+bydlí v pravém panelu, a právě proto ten panel musí být i v *Commitech* — jinak se v jednom ze
+čtyř tabů schová i to, co platí o celém PR.
+
+**Aplikace o tom do #392 nevěděla to podstatné.** Labely neznala vůbec (v modelech po nich nebylo
+ani pole), vyžádané reviewery znala jen jako **události v konverzaci** (`reviewRequested`,
+`reviewRequestRemoved`), tedy „to se stalo“ — ne „kdo na tom stojí teď a jak odpověděl“. Kvůli
+obojímu se chodilo do prohlížeče.
+
+**Tvrdá podmínka č. 1 se tím vědomě změnila.** `ReviewPublishing` má šest metod místo čtyř
+(`setLabels`, `requestReviewers`) a v `CLAUDE.md` je přepsané i to, co v zákazu **zůstává**:
+approve mimo review, merge, zavření PR a milník. Důvod je tentýž a tentýž precedens jako u #73
+(odpověď do vlákna) a #216 (komentář pod PR): u **vlastního** PR je štítek a reviewer součástí
+toho, jak si člověk řídí svoji frontu, a je to poslední věc, kvůli které se od hotového review
+přepíná do prohlížeče. Brána je **tatáž** (`allowsPublishing`, globálně i per repo) — druhý
+přepínač by byl druhé místo, kde se dá „samo nic neodejde“ porušit. `GitHubGateway` zůstal **bez
+zápisu**: čtení labelů PR i repa a reviewerů i assignable uživatelů jsou tři **čtecí** metody.
+
+Co se u toho rozhodlo:
+
+- **Měnit jen na vlastním PR, a na cizím akce nejsou vůbec** — ne zašedlé. Zašedlé tlačítko tvrdí
+  „tady se to dělá, jen teď ne“, a to je u cizího PR nepravda. U **vypnuté brány** je naopak pravda,
+  takže tam se akce kreslí zakázaná s důvodem.
+- **Label bez potvrzovacího sheetu, ale jen z labelů, které repo zná.** Je vratný jedním klikem
+  a nikoho neupozorní; volný text tam nepatří, protože z něj se dá omylem vyrobit nový label, a ten
+  už z repozitáře sám nezmizí.
+- **Reviewer jedním pojmenovaným kliknutím** (`Vyžádat review od …`). Request pošle člověku
+  upozornění, které se odebráním **nedá vzít zpět**, takže potvrzení je v textu tlačítka.
+  Odebrání odsud nejde — není to opravný krok, jen zametení.
+- **Sada labelů se posílá celá, jedním `PUT`,** a payload jde souborem: sundání posledního štítku je
+  `{"labels": []}`, kdežto `gh api` bez jediného `-f` neposílá tělo vůbec.
+- **`headSha` se u obojího neověřuje**, stav PR ano. Štítek se váže na PR, ne na commit.
+
+**Druhá polovina: panel v `Commitech`.** `PullRequestTab.showsReviewPanel` je u `.commits` `true`;
+dělič v pruhu záložek se **neposunul**, protože se kreslí z `isReviewerOutput` (#242) a ta se
+nemění. Přepsal se test `panelIsNotReviewerOutput`: `Commity` z jeho výčtu odešly a tvrzení
+„vlastnosti nesplynuly“ drží **`Kontroly` samotné**.
+
+**Ten tvrdší důvod, proč tam panel nebyl, se neobešel.** Nálezy jsou klíčované `headSha` (tvrdá
+podmínka č. 5), takže u rozkliknutého **staršího** commitu neplatí pro to, co je na obrazovce —
+a z podmínky se proto stala **věta v UI**: nad seznamem klidná (*Nálezy jsou proti hlavě e8d4a60.*),
+u staršího commitu **výstraha** (*… Tenhle commit je 5e2b1aa, takže o kódu na obrazovce nemluví.*)
+a **ztlumené karty**. Rozhoduje `Policy.findingsHeadNotice`, hlava se bere z **uloženého záznamu**,
+ne z detailu PR.
+
+**Změřeno, protože to zadání žádalo:** se stromem souborů (210 b) a rozloženým panelem (306 b) zbude
+na diff commitu **531 bodů**, tedy **22 znaků na stranu** ve pohledu *Vedle sebe* a 49 pod sebou.
+Slib 120 znaků na stranu by chtěl okno **~2665 bodů**. Nevynucuje se proto nic: složený proužek dá
+ve splitu 39 znaků a bez stromu 52, takže u commitu je čím zaplatit (⌘1, ⌘2). Nejužší stav (okno
+700, panel na podlaze) dá na diff **402 bodů** a v tom pásmu se od #392 měří i přetečení seznamu
+commitů.
+
+**Sekce 02 a 19 mockupu se přepsaly** — jsou to záznamy dneška, takže v panelu v *Přehledu* stojí
+obě sekce a v *Commitech* je panel; sekce 24 a 25 zůstávají jako záznam rozhodnutí.
+
+**Testů 3350** (z 3238), z toho pět nových suit k labelům a reviewerům, jedna k větě o hlavě a jedna
+měřicí. Tři tvrzení jsou ověřená **vloženou regresí**: rezerva na `+N` (bez ní vzniknou tři řádky),
+`box-sizing` u chipu (bez rámu je rozdíl 14 bodů) a to, že panel na notici reaguje (na
+`tiffRepresentation` ten test procházel i s ignorovanou notící, na bajtech bitmapy spadne).
+
+**Neověřené zbylo jedno:** stav „vlastní PR s labely a povoleným odesíláním“ se ve slotu vyrobit
+nedá — `bin/slot-config.sh` odesílání schválně vypíná a zdroj je `review-requested`. Odeslání labelu
+ani vyžádání reviewera proto **neproběhlo proti živému API**; kryjí to testy publisheru (nula
+volání `gh` bez brány, tvar payloadu na bajtech) a offscreen render panelu ve všech stavech.

@@ -3103,8 +3103,11 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       </p>
       <p class="muted">
         <strong>Tahle sekce je záznam dneška</strong>, ne přání — proti ní se srovnává okno,
-        takže co v ní stojí, má být v aplikaci. Naposledy se v ní kvůli tomu měnily tři věci
-        (#299): <em>Kontroly na GitHubu</em> z ní odešly za <a class="jump" href="#s05">tabem
+        takže co v ní stojí, má být v aplikaci. Naposledy se v ní měnil <b>pravý panel</b> (#392):
+        pod jeho hlavičkou stojí <b>labely a vyžádaní reviewery</b>, tedy to, co platí pro celý
+        pull request — na cizím PR jen ke čtení, na vlastním s <code>+ label</code>
+        a <code>+ reviewer</code>. Rozhodnutí i s měřením je v <a class="jump" href="#s24">sekci 24
+        (proč to tak je →)</a>. Před tím se měnily tři věci (#299): <em>Kontroly na GitHubu</em> z ní odešly za <a class="jump" href="#s05">tabem
         Kontroly (sekce 05 →)</a>, hlavička karty popisu dostala pilulku stavu a řada „od minule“
         křížek <em>Označit za přečtené</em>. Hlavička je nakreslená v <strong>té širší ze dvou
         podob</strong>: v úzkém tabu (320 bodů, tedy okno na minimu s vytaženým panelem)
@@ -3270,6 +3273,28 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
                   <span class="kbd">⌘2</span>
                   <span class="fold">›</span>
                 </header>
+
+                <!-- Labely a vyžádaní reviewery (#392) — dvě sekce hned pod hlavičkou, nad tím,
+                     co panel ukazuje k vybranému segmentu. Cizí PR: jen čtení, tedy žádné
+                     `+ label` ani `+ reviewer`. Rozhodnutí i s měřením je v sekci 24. -->
+                <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 11px;
+                            border-bottom: 1px solid var(--line-soft);">
+                  <div class="pl-sec">
+                    <span class="cap">Labely</span>
+                    <div class="chipline">
+                      <span class="lchip"><i style="background: #0366D6;"></i><span>dependencies</span></span>
+                      <span class="lchip"><i style="background: #D73A4A;"></i><span>bug</span></span>
+                    </div>
+                  </div>
+                  <div class="pl-sec">
+                    <span class="cap">Reviewery</span>
+                    <div class="rv-list">
+                      <div class="rv-row"><span class="rv-av done">OJ</span><span class="who">Ondřej Jodas</span><span class="ans done">schválil</span></div>
+                      <div class="rv-row"><span class="rv-av blocked">TK</span><span class="who">Tomáš Kraus</span><span class="ans blocked">chce změny</span></div>
+                      <div class="rv-row"><span class="rv-av wait">MZ</span><span class="who">Marie Zíková</span><span class="ans">čeká</span></div>
+                    </div>
+                  </div>
+                </div>
 
                 <div style="padding: 4px 11px 0; display: flex; flex-direction: column; gap: 8px;">
                   <div class="tl-impact" style="margin-top: 4px;">
@@ -4472,9 +4497,17 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         „kdy se sem dostala ta migrace“ má ale odpověď v jednotlivých commitech, a ta se dneska
         hledá v prohlížeči. Sedmá záložka je proto <b>prohlížeč, ne review</b>: seznam commitů
         a diff toho jednoho, na který se kliklo. Rozkliknutý commit <b>přepne obsah tabu</b>,
-        jako to má GitHub — seznam zmizí a diff dostane celou plochu. Bubliny nálezů, rozdělaný
-        komentář ani panel vpravo v ní nejsou, a není to zjednodušení první verze; proč, je
-        v poznámkách.
+        jako to má GitHub — seznam zmizí a diff dostane celou plochu. Bubliny nálezů ani rozdělaný
+        komentář v ní nejsou, a není to zjednodušení první verze; proč, je v poznámkách.
+      </p>
+      <p class="muted">
+        <b>Panel vpravo v ní od #392 je</b> — přepsáno proti prvnímu zákresu, ve kterém se
+        nekreslil ani složený proužek. Rozhodly o tom labely a vyžádaní reviewery, kteří v panelu
+        bydlí od #392: <b>nejsou o commitu</b>, platí pro celý pull request, takže panel, který se
+        tady nekreslí, schová i to, co v něm platí vždycky. Nálezy u toho musí říct, <b>proti čemu
+        platí</b>: nad seznamem stačí věta, u rozkliknutého staršího commitu je to výstraha
+        a karty jsou ztlumené. Rozhodnutí i s měřením je v <a class="jump" href="#s25">sekci 25
+        (proč to tak je →)</a>.
       </p>
     </div>
 
@@ -4483,8 +4516,10 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     <p class="muted">
       Je to jediné, co ten tab doopravdy stojí. Pruh je <b>jeden řádek</b>, dokud se do šířky
       tabu vejde; pod tím se popisky <b>zalamují</b> (nezkracují se) a pruh povyroste na dva až
-      čtyři řádky. Šířka tabu je okno minus rail (53) — panel s nálezy se v <em>Commitech</em>
-      nekreslí, takže ten neubírá. Čísla níž jsou změřená na <code>PullRequestTabBar</code>,
+      čtyři řádky. Šířka tabu je okno minus rail (53) — <b>panel z ní neubírá ani od #392</b>, kdy
+      se v <em>Commitech</em> začal kreslit: pruh leží v <code>PullRequestDetailView</code>
+      <b>nad</b> obsahem tabu, takže čísla níž platí dál a ubírá se <b>obsahu</b>, ne jim.
+      Čísla jsou změřená na <code>PullRequestTabBar</code>,
       ne odhadnutá: replika pruhu v Swiftu, <code>fittingSize</code> přes pásmo šířek. Sedí
       s tím, co naměřilo #306 — šest záložek bez odznaků vyšlo na 750 b (#306 hlásí „vejde se
       od ~780“), se všemi na 867 b („od ~920“).
@@ -4761,6 +4796,10 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               </div>
             </div>
 
+            <!-- Panel od #392 (viz sekce 25): labely a reviewery platí pro celý PR, takže se
+                 v Commitech kreslí. Ubírá **obsahu**, ne pruhu záložek nad ním. -->
+            <div class="work two" style="min-height: 0;">
+            <div style="min-width: 0; display: flex; flex-direction: column;">
             <div class="cbar">
               <span><b style="font-weight: 620; color: var(--ink);">7 commitů</b> · od nejnovějšího</span>
               <span class="sp"></span>
@@ -4847,6 +4886,57 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
                   <span class="go">›</span>
                 </span>
               </div>
+            </div>
+            </div>
+
+            <!-- Nad seznamem není vybraný žádný commit, takže nálezy platí pro hlavu PR
+                 a stačí u nich věta. Výstraha a ztlumené karty jsou u rozkliknutého staršího
+                 commitu, viz sekce 25. -->
+            <aside class="side">
+              <header>
+                <span>Moje review</span>
+                <span class="sp"></span>
+                <span class="kbd">⌘2</span>
+                <span class="fold">›</span>
+              </header>
+
+              <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 11px;
+                          border-bottom: 1px solid var(--line-soft);">
+                <div class="pl-sec">
+                  <span class="cap">Labely</span>
+                  <div class="chipline">
+                    <span class="lchip"><i style="background: #0366D6;"></i><span>dependencies</span></span>
+                    <span class="lchip"><i style="background: #D73A4A;"></i><span>bug</span></span>
+                  </div>
+                </div>
+                <div class="pl-sec">
+                  <span class="cap">Reviewery</span>
+                  <div class="rv-list">
+                    <div class="rv-row"><span class="rv-av done">OJ</span><span class="who">Ondřej Jodas</span><span class="ans done">schválil</span></div>
+                    <div class="rv-row"><span class="rv-av wait">MZ</span><span class="who">Marie Zíková</span><span class="ans">čeká</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="seg">
+                <span class="seg-i on">Nálezy <span style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-2);">3</span></span>
+                <span class="seg-i">Moje review</span>
+              </div>
+
+              <div style="padding: 4px 11px 0;">
+                <div class="tl-impact">
+                  <span class="txt">Nálezy jsou proti hlavě <code>e8d4a60</code>.</span>
+                </div>
+              </div>
+
+              <div class="fcard crit">
+                <div class="top">
+                  <span class="pill crit">blokuje</span>
+                  <span class="cat">SecretClient.php:81</span>
+                </div>
+                <div class="sum">Prázdný secret projde fallbackem dál jako platný.</div>
+              </div>
+            </aside>
             </div>
 
             <div class="statusbar">
@@ -5199,11 +5289,13 @@ projeví hned v tom dalším.</div>
       <div class="note">
         <span class="num">6</span>
         <div class="body">
-          <b>Panel vpravo se nekreslí</b>
-          <span><em>Commity</em> jsou čtvrtý tab bez panelu (#294) a ze stejného důvodu jako
-            <em>Kontroly</em>: panel odpovídá na „co k tomu, co čtu, nahlásily reviewery“,
-            a nálezy jsou klíčované hlavou PR, ne commitem — u staršího commitu by ukazoval
-            nálezy k jinému kódu.</span>
+          <b>Panel vpravo se kreslí (#392)</b>
+          <span>Do #392 se nekreslil — <em>Commity</em> byly čtvrtý tab bez panelu (#294) a druhý
+            důvod byl tvrdší: nálezy jsou klíčované hlavou PR, ne commitem. Otočily to labely
+            a reviewery, kteří platí pro celý PR. Ten tvrdší důvod se přitom <b>neobešel</b>:
+            u rozkliknutého staršího commitu je nad nálezy <b>výstraha</b> a karty jsou ztlumené,
+            takže se nekreslí jako platné. Panel navíc přijde v tom stavu, ve kterém ho člověk
+            nechal jinde — <code>isReviewPanelExpanded</code> je jeden na okno, ne na tab.</span>
         </div>
       </div>
     </div>
@@ -5226,9 +5318,11 @@ projeví hned v tom dalším.</div>
           <b style="font-size: 13.5px;">Komentář k řádku commitu</b>
           <p class="muted" style="font-size: 12.5px;">Rozdělaný komentář se váže na
             <code>(soubor, řádek)</code> diffu PR. U commitu by se musel klíčovat i sha
-            a odeslat by šel jedině <b>pátou metodou v <code>ReviewPublishing</code></b> —
-            a ten výčet je krátký schválně. Takhle se tvrdé podmínky č. 1 tenhle tab
-            <b>nedotýká vůbec</b>: je celý čtecí.</p>
+            a odeslat by šel jedině <b>další metodou v <code>ReviewPublishing</code></b> —
+            a ten výčet je krátký schválně (od #392 je v něm šest metod, protože přibyly labely
+            a vyžádání reviewera; komentář ke commitu mezi ně pořád nepatří). Composer v panelu
+            proto píše <b>tělo review proti hlavě PR</b>, ne komentář ke commitu, a sám
+            <code>CommitDiffView</code> zůstává celý čtecí.</p>
         </div>
       </div>
       <div class="frame">

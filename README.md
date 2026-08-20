@@ -12,9 +12,10 @@ pustí na něj několik nezávislých reviewerů a jejich nálezy schválně nes
 názoru.
 
 > **Na GitHub vede jediná cesta a otevírá ji jen člověk.** Aplikace umí odeslat review,
-> odpovědět do vlákna a napsat komentář pod PR, ale výhradně přes jeden modul a jen na výslovný
-> pokyn — review navíc proti commitu, který jsi opravdu viděl. Nic se neodesílá samo — ani
-> návrh verdiktu, ani reviewer.
+> odpovědět do vlákna, napsat komentář pod PR a na **vlastním** PR nastavit labely a vyžádat
+> review, ale výhradně přes jeden modul a jen na výslovný pokyn — review navíc proti commitu,
+> který jsi opravdu viděl. Co tudy **nejde**: approve mimo review, merge, zavření PR a milník.
+> Nic se neodesílá samo — ani návrh verdiktu, ani reviewer.
 >
 > **A jedině tam, kde se to povolilo.** Odesílání je ve výchozím stavu vypnuté — zapíná se
 > v nastavení, globálně nebo u jednoho repa. Dokud si o to někdo výslovně neřekne, neodejde
@@ -649,18 +650,43 @@ k architektuře; kvůli nim samotné bubliny nestačí. Klik kamkoli do karty od
 (a přepne na něj, když jsi v jiném tabu) tak, aby nad nálezem zůstalo pár řádků kontextu,
 a bublinu na chvíli zvýrazní.
 
-**Vidět je ve třech záložkách ze sedmi** (#294, #316): v `Přehledu`, ve `Změněných souborech` a
-v `Konverzaci` — tedy tam, kde se vedle něj čte **něco jiného** a otázka „co k tomu nahlásily
-reviewery“ má smysl. V `Commitech`, `Kontrolách`, `Nálezech` a `Průběhu` se schová **celý, i se
-složeným proužkem**: v `Kontrolách` ukrajuje šířku obsahu, který ji potřebuje (konec logu),
-v `Nálezech` a `Průběhu` je to duplikát — tytéž nálezy přes celou šířku a záznam týchž běhů — a
-v `Commitech` by u staršího commitu ukazoval nálezy k jinému kódu, protože platí proti `headSha`.
+**Vidět je ve čtyřech záložkách ze sedmi** (#294, #316, #392): v `Přehledu`, ve `Změněných
+souborech`, v `Commitech` a v `Konverzaci` — tedy tam, kde se vedle něj čte **něco jiného** a otázka
+„co k tomu nahlásily reviewery“ má smysl. V `Kontrolách`, `Nálezech` a `Průběhu` se schová **celý,
+i se složeným proužkem**: v `Kontrolách` ukrajuje šířku obsahu, který ji potřebuje (konec logu),
+v `Nálezech` a `Průběhu` je to duplikát — tytéž nálezy přes celou šířku a záznam týchž běhů.
 Proužek je úzký, ale ne zdarma, a v úzkém okně je to zrovna to místo, kde se obsah láme. Do #242
 tu stálo, že panel je vidět všude; **smyčka nález → `Převzít` → text v mém review se tím nezahodila,
 jen se přestěhovala** — z tabu bez panelu si `Převzít` přepne do tabu, ve kterém panel je, jinak by
 rozepsaná věta spadla někam, kde ji nikdo nehledá. Ze stejného důvodu je `⌘2` v těch třech tabech
 zakázaná a ⌘K v nich složení panelu nenabízí: přestavět tab, do kterého se člověk vrátí, a nenechat
 po tom v okně stopu je horší než zkratka, která nedělá nic.
+
+**V `Commitech` panel do #392 nebyl** a otočily to labely s reviewery: nejsou o commitu, platí pro
+celý pull request, takže panel, který se tam nekreslí, schová i to, co v něm platí vždycky. Druhý
+důvod — nálezy jsou klíčované `headSha`, takže u staršího commitu mluví o jiném kódu — se **neobešel**:
+nad seznamem commitů je u nálezů věta *Nálezy jsou proti hlavě e8d4a60.*, u rozkliknutého **staršího**
+commitu **výstraha** (*… Tenhle commit je 5e2b1aa, takže o kódu na obrazovce nemluví.*) a karty jsou
+ztlumené. Šířku to bere **obsahu**, ne pruhu záložek: se stromem souborů a rozloženým panelem zbude
+na diff commitu 531 bodů, tedy 22 znaků na stranu ve pohledu *Vedle sebe* a 49 pod sebou. Nevynucuje
+se nic — strom se složí `⌘1`, panel `⌘2`, a se složeným proužkem je to ve splitu 39 znaků.
+
+**Nad segmenty stojí labely a vyžádaní reviewery** (#392) — dvě sekce, které platí pro celý PR, ne
+pro vybraný segment. Labely jsou chipy s **puntíkem v barvě z repozitáře** (plná výplň by u každé
+barvy musela počítat kontrast textu a přebíjela by odznak závažnosti nálezu), u reviewera je
+iniciála, login a **odpověď ve třech hodnotách**: `schválil`, `chce změny`, `čeká`. Prostřední je
+jediná, která něco blokuje. Když se panel zúží, ustupují tři věci v tomhle pořadí: řádek chipů se
+zalomí, na **dvou řádcích** se zastaví a zbytek je `+2`, a teprve jméno, které je samo širší než
+panel, se ořeže — puntík u něj zůstane a `chce změny` se neořezává nikdy.
+
+**Měnit se to dá jen na vlastním PR.** Tam jsou u sekcí `+ label` a `+ reviewer`; na cizím PR akce
+**nejsou vůbec** (ne zašedlé — u cizí fronty se to nedělá nikdy). Label se vybírá **jen z labelů,
+které repo zná**: je vratný jedním klikem, takže nedostal potvrzovací sheet, ale volný text tam
+nepatří, protože z něj se dá omylem vyrobit nový label a ten už z repozitáře sám nezmizí. Reviewer
+se vyžádá **jedním pojmenovaným kliknutím** (`Vyžádat review od …`) z lidí, kteří na repo smí —
+request pošle člověku upozornění a odebráním se nedá vzít zpět, takže je na tlačítku napsané, co se
+stane a komu. Odesílá se to **tou samou jedinou cestou ven** a **tou samou branou** jako review
+a komentáře; s vypnutým odesíláním jsou akce zakázané s důvodem, což je jiný stav než cizí PR.
 
 Segmenty jsou od #242 **dva**: `Průběh` se odstěhoval do vlastní záložky PR, protože se u kódu
 nečte a u spadlé session se do 300 bodů nevešel ani důvod, ani konec logu. Nálezy v panelu
@@ -1662,7 +1688,8 @@ PRism.xcodeproj/          Xcode projekt (shared scheme je verzovaný)
 App/                      zdrojáky aplikace — target PRism
   Models/                 doménové modely: PR, identifikátory, stav review
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight, notifikace, předvolby
-  GitHub/                 čtení PR a konverzace přes gh CLI: gateway, typované chyby, tvar výstupu
+  GitHub/                 čtení PR a konverzace přes gh CLI: gateway, typované chyby, tvar výstupu;
+                          labely a vyžádaní reviewery i nabídky k nim (#392) — pořád bez zápisu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Config/                 config.json: globální default, override per repo, čtení a zápis
   Diff/                   parsování unified diffu na soubory, hunky a řádky, slití do dvojic pro pohled
@@ -1673,7 +1700,8 @@ App/                      zdrojáky aplikace — target PRism
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka, hledání v paletě,
                           složení zadání pro agenta na vlastním PR (#333), co z něj zbývá předat (#334)
                           a co na něm od minule udělal někdo jiný, i za jakou cenu se na to ptát (#335)
-  Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR, brána z nastavení
+  Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR,
+                          labely a vyžádání reviewera na vlastním PR (#392), brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy;
                           zadání PR pro reviewera vedle pracovního stromu (#120)
                           a dotažení textu issue vlastní krátkou session (#345)

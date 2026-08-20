@@ -97,6 +97,12 @@ extension AppStore {
             // ani seznam, ani porucha**; obojí je hotová odpověď a přepisovat ji při každém příchodu
             // na PR by z commitů udělalo polling.
             if commits[id] == nil, commitFailures[id] == nil { await loadCommits(for: id) }
+            // Labely a reviewery (#392) mají tentýž problém i tutéž odpověď: `loadMetadata` běží až
+            // po detailu, takže se dá zrušit přepnutím PR — a bez tohohle dotažení by v panelu po
+            // návratu na PR zůstalo prázdno místo štítků. Ptá se jedině tehdy, když **není ani
+            // snímek, ani porucha**; obojí je hotová odpověď a přepisovat ji při každém příchodu na
+            // PR by z labelů udělalo polling.
+            if metadataStates[id] == nil { await loadMetadata(for: pullRequest) }
             return
         }
         detailStates[id] = .loading
@@ -138,6 +144,14 @@ extension AppStore {
         // spouštění by jich na jeden výběr řádku zvedlo počet naráz běžících; přínos by byl
         // sekunda, cena dva procesy místo jednoho v nejužším místě aplikace.
         await loadCommits(for: id)
+
+        // Labely a reviewery (#392) taky, a taky **i po spadlém detailu**: panel je vidět ve čtyřech
+        // tabech ze sedmi a nemá důvod zůstat prázdný proto, že se nepovedla hlavička. Je to jedno
+        // volání `gh pr view` a platí se za dvě sekce, které v panelu platí vždycky.
+        //
+        // **Za commity, ne souběžně** — týž důvod jako u nich: obojí je `gh` podproces a paralelní
+        // spouštění by jich na jeden výběr řádku zvedlo počet naráz běžících.
+        await loadMetadata(for: pullRequest)
     }
 
     /// Dotáhne checky k PR. **Selhání se neschovává do prázdna** (#215).

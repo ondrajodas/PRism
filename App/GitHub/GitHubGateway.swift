@@ -156,6 +156,35 @@ protocol GitHubGateway: Sendable {
     /// Desátá **čtecí** metoda; tvrdá podmínka č. 1 platí dál — restart workflow tady není.
     func fetchJobLog(repo: RepoID, jobID: Int) async throws -> String
 
+    /// Labely a vyžádaní reviewery pull requestu (#392) — dvě sekce v pravém panelu.
+    ///
+    /// **Vlastní volání vedle `fetchDetail`, ne pole navíc v něm.** Detail si tahá i pre-flight
+    /// publisheru před **každým** odesláním, a odpověď reviewera se skládá z `latestReviews`, tedy
+    /// z pole, které nese celá těla review (změřeno na `cli/cli`: 1,5 kB za jedno review od bota).
+    /// Platit tu velikost při každém odeslání za údaj, který odesílání nezajímá, nemá důvod.
+    ///
+    /// Prázdný snímek je **platný výsledek**, ne porucha: PR bez labelů i bez vyžádaných reviewerů
+    /// je běžný. Že se to nepodařilo zjistit, si volající drží zvlášť (`MetadataState`) — „nic tu
+    /// není“ a „nevím“ se u téhle sekce nesmí slít, protože podle prvního se kreslí prázdno a podle
+    /// druhého se nesmí dát měnit sada, kterou aplikace nezná.
+    ///
+    /// **Sedmnáctá čtecí metoda** protokolu; tvrdá podmínka č. 1 platí dál — gateway pořád nemá
+    /// nic, čím by šlo něco odeslat. Změnit label umí `ReviewPublishing`, a jedině on.
+    func fetchMetadata(id: PRIdentifier) async throws -> PullRequestMetadata
+
+    /// Labely, které **zná repozitář** (#392) — uzavřená množina, ze které se vybírá.
+    ///
+    /// Na tom stojí rozhodnutí, že `+ label` není volný text: z volného textu se dá omylem vyrobit
+    /// nový label, a ten už z repozitáře sám nezmizí. Nabídka proto nesmí mít jiný zdroj než tenhle.
+    ///
+    /// **Osmnáctá čtecí metoda**; čtení je čtení, tvrdá podmínka č. 1 platí dál.
+    func fetchRepositoryLabels(repo: RepoID) async throws -> [PullRequestLabel]
+
+    /// Loginy lidí, kteří na repo smí (#392) — nabídka k `Vyžádat review od …`.
+    ///
+    /// **Devatenáctá čtecí metoda**; čtení je čtení. Vyžádání samo jde přes `ReviewPublishing`.
+    func fetchAssignableUsers(repo: RepoID) async throws -> [String]
+
     /// Commity pull requestu (#316) — seznam do tabu `Commity`.
     ///
     /// **Jedno volání na celý seznam**: sha, zpráva, jméno a datum autora i adresa jeho obrázku

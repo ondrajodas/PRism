@@ -5,21 +5,30 @@ import Foundation
 /// Do #67 to vynucoval typ: `GitHubGateway` schválně neměl metodu, kterou by šlo něco
 /// odeslat. Ta vlastnost **zůstává** — zápis dostal vlastní modul, takže polling, diff,
 /// checkout ani reviewer nemají čím něco poslat. `grep ReviewPublishing App/` vyjmenuje všechna
-/// místa, odkud to jde: **pět souborů a tři volající** — protokol, `GhReviewPublisher`,
-/// `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission`. Roste-li ten výčet, roste to,
-/// co aplikace umí odeslat, a to musí být vidět z jednoho grepu.
+/// místa, odkud to jde: **šest souborů a čtyři volající** — protokol, `GhReviewPublisher`,
+/// `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission` a `MetadataSubmission`. Roste-li
+/// ten výčet, roste to, co aplikace umí odeslat, a to musí být vidět z jednoho grepu.
 ///
-/// Metody jsou **vyjmenované a jsou čtyři** (do #73 jedna, do #216 tři). Každá odpovídá jedné
-/// věci, kterou člověk v okně udělá — odeslat review, odpovědět do vlákna, přepnout jeho
-/// vyřešení, napsat komentář pod PR — a nic dalšího tady být nesmí: approve mimo review, label
-/// ani zavření PR by byly cesty ven, o kterých okno nemluví. Roste-li tenhle výčet, roste to,
-/// co aplikace umí odeslat, a to má být vidět v jednom souboru.
+/// Metody jsou **vyjmenované a je jich šest** (do #73 jedna, do #216 tři, do #392 čtyři). Každá
+/// odpovídá jedné věci, kterou člověk v okně udělá — odeslat review, odpovědět do vlákna,
+/// přepnout jeho vyřešení, napsat komentář pod PR, přeštítkovat svůj PR, vyžádat na něm review.
+/// Co tady být **nesmí**: approve mimo review, **merge**, **zavření PR** a **milník**. Roste-li
+/// tenhle výčet, roste to, co aplikace umí odeslat, a to má být vidět v jednom souboru.
 ///
 /// **Komentář pod PR přibyl u #216** a je to vědomé rozšíření tvrdé podmínky č. 1, ne její
 /// obejití. Důvod je tentýž jako u odpovědi do vlákna: konverzace pod PR je v okně vidět celá,
 /// takže napsat do ní jednu větu je poslední věc, kvůli které se odsud přepíná do prohlížeče.
 /// Co se **nezměnilo**: výčet je pořád krátký a na jednom místě, každá metoda si sama ověří
 /// bránu, a `GitHubGateway` zápis dál nemá.
+///
+/// **Labely a vyžádání reviewera přibyly u #392** — pátá a šestá metoda, a je to vědomá změna
+/// pravidla: do té doby tady stálo, že „label ani zavření PR sem nepatří“. Změnilo se to proto, že
+/// štítek a reviewer jsou u **vlastního** PR součástí toho, jak si člověk řídí svoji frontu, a je
+/// to poslední věc, kvůli které se od hotového review přepíná do prohlížeče. Tentýž precedens
+/// i tatáž úvaha jako u #73 a #216: výčet se rozšířil, protože se ta věc dělá při review,
+/// a **zapsal se důvod**. Co se **nezměnilo**: brána je tatáž (`PublishScope`, `allowsPublishing`
+/// globálně i per repo — žádný druhý přepínač), výčet je krátký a na jednom místě, `GitHubGateway`
+/// zápis dál nemá a **v zákazu zůstává** approve mimo review, merge, zavření PR a milník.
 ///
 /// **Každá metoda si sama ověří bránu `PublishScope`** — proto všechny berou adresu, ze které
 /// se dá zjistit repo. Kdyby ji jedna z nich brát nemusela, existovala by cesta ven, která se
@@ -55,4 +64,29 @@ protocol ReviewPublishing: Sendable {
     /// **Není to review.** Neposílá verdikt, nedá se jím schválit ani vyžádat změny a v panelu
     /// `Moje review` se neobjeví; to jde jedině `submit(_:)`, a to s potvrzením.
     func comment(on pullRequest: PRIdentifier, body: String) async throws -> ThreadComment
+
+    /// Nastaví **celou** sadu labelů na PR (#392). Vrací ji, jak ji potvrdil GitHub, takže se dá
+    /// zapsat do okna bez dalšího čtení.
+    ///
+    /// **Celá sada, ne přidání jednoho.** `PUT /issues/{n}/labels` sadu nahrazuje, takže rozdíl
+    /// by se musel skládat podruhé tady — a dvě skládání téhož se rozejdou. Volající si sadu
+    /// nechá spočítat od `Policy.toggledLabels`, která zároveň hlídá, že v ní není label, který
+    /// repo nezná.
+    ///
+    /// Pre-flight je **stejně široký jako u komentáře**: scope a stav PR, ne `headSha`. Štítek se
+    /// neváže na commit — přeštítkovat PR, který mezitím dostal push, je zrovna ta situace, kvůli
+    /// které se štítkuje.
+    func setLabels(_ labels: [String], on pullRequest: PRIdentifier) async throws -> [PullRequestLabel]
+
+    /// Vyžádá review od uvedených lidí (#392). Vrací vyžádané reviewery, jak je potvrdil GitHub.
+    ///
+    /// **Jen přidává.** Odebrat vyžádané review odsud nejde, a je to schválně: request pošle
+    /// člověku upozornění, které se odebráním **nedá vzít zpět**, takže odebrání není opravný krok,
+    /// jen zametení. Proto je u něj v okně jméno na tlačítku, ne `+` vedle avatara.
+    ///
+    /// Pre-flight jako u labelů — scope a stav PR, ne `headSha`.
+    func requestReviewers(
+        _ logins: [String],
+        on pullRequest: PRIdentifier
+    ) async throws -> [RequestedReviewer]
 }

@@ -349,53 +349,76 @@ to si od 2026-08-01 řídíš sám, viz pracovní postup.
 Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav se a zeptej se.
 
 1. **Jediná cesta ven** (od #67; do té doby tu stálo „nikdy nic neposílat na GitHub“).
-   Aplikace **umí** odeslat review, od #73 se **ozvat do vlákna** a od #216 **napsat komentář
-   pod PR** — ale jedině přes `ReviewPublishing`, jedině na výslovný pokyn člověka a jedině tam,
-   kde se to **v nastavení povolilo**. Pravidlo se skládá z šesti věcí a každá z nich je
-   kontrolovatelná:
+   Aplikace **umí** odeslat review, od #73 se **ozvat do vlákna**, od #216 **napsat komentář
+   pod PR** a od #392 **přeštítkovat svůj PR a vyžádat na něm review** — ale jedině přes
+   `ReviewPublishing`, jedině na výslovný pokyn člověka a jedině tam, kde se to **v nastavení
+   povolilo**. Pravidlo se skládá z šesti věcí a každá z nich je kontrolovatelná:
 
    1. **`GitHubGateway` zůstává bez zápisových metod.** Polling, diff, checkout ani reviewer
       tedy nemají čím něco odeslat — read-only je pořád vidět z typu.
    2. **`grep ReviewPublishing App/` vyjmenuje všechna místa, odkud to jde.** Mají to být
-      **pět souborů a tři volající**: protokol, `GhReviewPublisher` (implementace),
-      `ReviewSubmission.send()` (review), `ThreadSubmission` (odpověď a vyřešení vlákna)
-      a `CommentSubmission` (komentář pod PR).
+      **šest souborů a čtyři volající**: protokol, `GhReviewPublisher` (implementace),
+      `ReviewSubmission.send()` (review), `ThreadSubmission` (odpověď a vyřešení vlákna),
+      `CommentSubmission` (komentář pod PR) a `MetadataSubmission` (labely a vyžádání reviewera).
+      Všechny leží v `App/Publish/` — volající **mimo** tu složku by znamenal, že cesta ven vede
+      odjinud než z jednoho místa.
 
       **Od #333 je na to test, ne jen tenhle grep** (`SingleWayOutTests`): čte zdrojáky v `App/`
-      a tvrdí právě těch pět souborů, čtyři metody protokolu a že soubory zadání pro agenta nezná
+      a tvrdí právě těch šest souborů, šest metod protokolu a že soubory zadání pro agenta nezná
       publisher, payload, API ani podproces. Komentáře se u toho zahazují stejně jako v grepu
       (`grep -vE ':[0-9]+: *//'`) — o publisheru se v dokumentaci mluví na dalších čtyřech
       místech a právě ta vysvětlení podmínku drží pochopitelnou.
 
-      Protokol má **čtyři vyjmenované metody** — `submit`, `reply`, `setResolved`, `comment`.
-      Do #73 měl jednu a stálo tu, že cokoli dalšího by byla druhá cesta ven; do #216 tři.
+      Protokol má **šest vyjmenovaných metod** — `submit`, `reply`, `setResolved`, `comment`,
+      `setLabels`, `requestReviewers`. Do #73 měl jednu a stálo tu, že cokoli dalšího by byla
+      druhá cesta ven; do #216 tři, do #392 čtyři.
       Rozšířilo se to pokaždé ze stejného důvodu: ozvat se kolegovi je půlka toho, kvůli čemu
       se u review přepíná do prohlížeče, a přes `GitHubGateway` to jít nesmí (bod 1). Co
       **zůstává**: výčet je krátký, vyjmenovaný na jednom místě a **každá metoda si sama ověří
       bránu z bodu 6** — proto všechny berou adresu, ze které se pozná repo. Roste-li ten výčet,
-      roste to, co aplikace umí odeslat, a to má být vidět v jednom souboru. Approve mimo
-      review, label ani zavření PR tam pořád nepatří.
+      roste to, co aplikace umí odeslat, a to má být vidět v jednom souboru.
+
+      **Labely a vyžádání reviewera přibyly u #392 a je to vědomá změna tohohle pravidla** — do
+      té doby tady stálo, že „approve mimo review, **label** ani zavření PR tam pořád nepatří“.
+      Změnilo se to proto, že u **vlastního** PR je štítek a reviewer součástí toho, jak si člověk
+      řídí svoji frontu, a je to poslední věc, kvůli které se od hotového review přepíná do
+      prohlížeče. Tentýž precedens i tatáž úvaha jako u #73 a #216: výčet se rozšířil, protože se
+      ta věc dělá při review, a **zapsal se důvod**. Co v zákazu **zůstává**: approve mimo review,
+      **merge**, **zavření PR** a **milník** — a `SingleWayOutTests` je jmenovitě hlídá, aby se
+      sedmá metoda nepřidala potichu.
+
+      **Měnit se smí jedině na vlastním PR** (`Policy.metadataEditing`). Na cizím se akce
+      **nekreslí vůbec**, ne zašedle: zašedlé tlačítko tvrdí „tady se to dělá, jen teď ne“,
+      a přeštítkovat frontu někoho jiného se odsud nedělá nikdy. Zašedlá s důvodem je naopak
+      správná podoba tam, kde je vypnutá **brána** — to je stav, který se mění.
    3. **Publisher není pole `AppStore`.** Vzniká uvnitř té cesty, která odesílá, a zaniká
       s ní — nemá ho kde uložit nikdo, kdo ho nemá mít. Drží to `ReviewSubmission` (skládá se
       až v `send()`, zaniká zavřením sheetu), `ThreadSubmission` (skládá se v `reply(_:)`
-      a `setResolved(_:)`) a `CommentSubmission` (skládá se v `send(_:)`). `AppStore` si kvůli
+      a `setResolved(_:)`), `CommentSubmission` (skládá se v `send(_:)`) a `MetadataSubmission`
+      (skládá se v `setLabels(_:)` a `requestReview(from:)`). `AppStore` si kvůli
       odesílání drží **jen cestu ke `gh`**, ne publisher ani továrnu na něj — proto ho ten grep
-      nevypíše. Platí to i pro vlákna a komentáře, kde `AppStore` odesílání spouští: drží
-      **stav** (`ThreadActionState`, `CommentActionState`), ne cestu ven.
+      nevypíše. Platí to i pro vlákna, komentáře a labely, kde `AppStore` odesílání spouští: drží
+      **stav** (`ThreadActionState`, `CommentActionState`, `MetadataActionState`), ne cestu ven.
    4. **Odeslání review si žádá hotový draft s `headSha`** a pre-flight ověří, že je to pořád
       hlava PR. Approve na kód, který jsi neviděl, tak nejde poslat ani závodem s pushnutým
       commitem. GitHub proti tomu **nechrání** — změřeno u #62, že review se zastaralým
       `commit_id` přijme.
 
-      **U odpovědi do vlákna a u komentáře pod PR se `headSha` neověřuje** (#73, #216) a je to
-      schválně: obojí se váže na diskuzi, ne na commit, takže kontrola hlavy by zakázala zrovna
-      tu situaci, kvůli které se píše („opraveno v abc123“). Ověřuje se **stav PR**, a to i tam
+      **U odpovědi do vlákna, u komentáře pod PR a u labelů s reviewery se `headSha` neověřuje**
+      (#73, #216, #392) a je to
+      schválně: všechno to se váže na PR nebo na diskuzi, ne na commit, takže kontrola hlavy by
+      zakázala zrovna tu situaci, kvůli které se to dělá („opraveno v abc123“, přeštítkovat PR,
+      který mezitím dostal push). Ověřuje se **stav PR**, a to i tam
       **striktněji než GitHub** — změřeno u #73, že odpověď na zavřeném PR projde. Aplikace
       ukazuje PR z `review-requested`, takže mergnutý PR ze seznamu vypadne a k jeho diskuzi se
       z okna nedostaneš; psát do uzavřené diskuze patří do prohlížeče.
    5. **Jedno atomické volání.** Buď odejde všechno, nebo nic; žádný částečně odeslaný stav
       po pádu uprostřed. Změřeno u #62. U vláken a komentářů je to triviálně splněné — odpověď,
-      vyřešení i komentář jsou jedno volání.
+      vyřešení i komentář jsou jedno volání. **U labelů to není triviální a drží to tvar
+      payloadu** (#392): `PUT /issues/{n}/labels` sadu **nahrazuje**, takže se posílá celá a jedním
+      voláním — přidání jednoho štítku dvěma requesty by mezi nimi nechalo stav, ve kterém PR má
+      půlku sady. Sadu skládá `Policy.toggledLabels`, ne publisher; dvě skládání téhož by se
+      rozešla.
    6. **Jen tam, kde se to povolilo** — `PublishScope`, složený z `Configuration`
       (`allowsPublishing` globálně i per repo). **Výchozí stav je vypnuto**, a právě to drží
       vlastnost „samo nic neodejde“: dokud si někdo výslovně neřekne o konkrétní repo nebo
@@ -413,10 +436,14 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    neodesílá. Od #114 se jím **předvyplňuje** verdikt v panelu, takže odejít umí — ale jedině
    tou samou cestou jako cokoli jiného: dvěma kliknutími člověka v potvrzení, ve kterém je celý
    payload vidět a je u něj napsané, že hodnota je z návrhu. Odesílá tedy pořád jen člověk. **Potvrzovací sheet je jen
-   u review** — odpověď do vlákna (#73) ani komentář pod PR (#216) se nepotvrzují, protože je to
-   jedna věta v diskuzi, dá se smazat a potvrzování každé by z okna udělalo klikačku. „Výslovný
-   pokyn člověka“ tedy u review znamená dvě kliknutí na dvou různých tlačítkech, u diskuze jedno
-   pojmenované. Composer komentáře přitom **nesmí splynout s tabem `Moje review`** — proto sedí
+   u review** — odpověď do vlákna (#73), komentář pod PR (#216) ani label (#392) se nepotvrzují,
+   protože je to jedna věta v diskuzi nebo štítek vratný jedním klikem, a potvrzování každé by
+   z okna udělalo klikačku. „Výslovný pokyn člověka“ tedy u review znamená dvě kliknutí na dvou
+   různých tlačítkech, u diskuze a labelu jedno pojmenované. **U vyžádání reviewera je to
+   potvrzení v textu tlačítka** (`Vyžádat review od …`), ne druhé okno: request pošle člověku
+   upozornění a **odebráním se nedá vzít zpět**, takže je na tlačítku napsané, co se stane a komu.
+   Nabídky jsou u obojího **uzavřené** — labely z repozitáře a lidé z `assignableUsers` —, protože
+   z volného textu se dá omylem vyrobit nový label, a ten už z repa sám nezmizí. Composer komentáře přitom **nesmí splynout s tabem `Moje review`** — proto sedí
    pod osou konverzace, ne v pravém panelu, kde ho kreslí návrh.
 2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit`, u `Bash` se uvádí
    jen `git` — a v `--disallowedTools` jsou `Bash(gh:*)` a `Bash(git push:*)`. `Skill` mezi
@@ -488,14 +515,14 @@ viz tvrdá podmínka č. 1.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
-| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) — a **login přihlášeného účtu** (#330) | `gh` CLI |
+| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) —, **login přihlášeného účtu** (#330) a **labely s vyžádanými reviewery** i nabídky k nim (#392). **Pořád bez zápisu**: čtení je čtení, měnit label umí jedině `ReviewPublisher` | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení). Vedle nich dvě krátké session, které o review nic nevědí: překlad nálezů a **dotažení textu issue** do zadání (#345, vlastní povolení i rozbor streamu) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), proč zadání není celé a jméno nástroje, kterým se text issue tahá (#345), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), řádek záznamu diagnostiky kreslení (#361) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), proč zadání není celé a jméno nástroje, kterým se text issue tahá (#345), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), kdo je v sekci reviewerů a s jakou odpovědí, jak se labely zalomí do dvou řádků a co se s nimi na kterém PR smí, proti kterému kódu nálezy platí, když vedle nich stojí commit (#392), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), řádek záznamu diagnostiky kreslení (#361) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
-| `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |
+| `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR a od #392 nastavit labely a vyžádat review na **vlastním** PR; volající jsou `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission` a `MetadataSubmission` | `gh` CLI |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle sedmičku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá
@@ -518,7 +545,7 @@ Zvlášť stojí za přečtení, než sáhneš na:
 - **`AppStore` je rozdělený na `extension` po zodpovědnostech** (#154), takže se hledá podle
   souboru, ne v jednom dvoutisícovém: `AppStore.swift` drží **stav, init a polling**,
   `+Diff`, `+IncrementalDiff`, `+DiffExpansion`, `+Detail`, `+Commits`, `+Conversation`, `+Draft`,
-  `+DraftTransfer`, `+Submission`, `+Review`, `+Recheck`, `+Findings`, `+Notifications`,
+  `+DraftTransfer`, `+Submission`, `+Review`, `+Recheck`, `+Findings`, `+Metadata`, `+Notifications`,
   `+Ownership`, `+AgentPrompt`, `+Handoff`, `+Activity` a `+Automatic` metody. **Dělí se
   metody, ne data** — uložený stav zůstává na jednom místě. Cena je, že `private` členy, na
   které extensiony sahají, musely být `internal`; nic se tím neotevírá ven z aplikace (jeden

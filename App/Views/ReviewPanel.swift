@@ -64,6 +64,24 @@ struct ReviewPanel: View {
     var draftUnavailable: String?
     var draftActions = DraftActions()
     var jumpToComment: (ReviewDraftComment) -> Void = { _ in }
+    /// Labely a vyžádaní reviewery (#392). `nil` = ještě se nenačetly; prázdný snímek je platná
+    /// odpověď a znamená, že se sekce nekreslí.
+    var metadata: MetadataState?
+    /// Smí se to měnit? Na cizím PR `.absent`, tedy **žádné akce** — ne zašedlé.
+    var metadataEditing: Policy.MetadataEditing = .absent
+    var knownLabels: [PullRequestLabel] = []
+    var reviewerCandidates: [String] = []
+    /// Proč je nabídka prázdná (`nil` = načetla se). „Repo žádné labely nezná“ a „nepodařilo se je
+    /// zjistit“ se v nabídce nesmí slít.
+    var labelPickerFailure: String?
+    var reviewerPickerFailure: String?
+    var hasLoadedLabels = false
+    var hasLoadedCandidates = false
+    var metadataActionState: MetadataActionState?
+    var metadataActions = MetadataActions()
+    /// Proti kterému kódu nálezy platí (#392). Kreslí se **jen v tabu `Commity`** — rozhoduje
+    /// `Policy.findingsHeadNotice`, ne panel.
+    var headNotice: Policy.FindingsHeadNotice = .none
 
     /// Šířku si drží uživatel taháním a přežívá restart — kolik místa chce dát nálezům,
     /// ví jen on. **Vlastní klíč** (#182), ne přejmenovaná výška: uložených 220 by jako šířka
@@ -97,6 +115,13 @@ struct ReviewPanel: View {
     /// zápornou hodnotou rozhodí celé okno.
     private var clampedWidth: Double { clamp(width) }
 
+    /// Šířka, která v bloku labelů zbývá na chipy — panel minus jeho odsazení. **Spočítaná, ne
+    /// vyjednaná**: dvouřádkový strop a `+N` se z pružného rozvržení vyjádřit nedají (pravidlo
+    /// #220). Odsazení si bere **z toho typu, který ho kreslí**, ne z vlastní konstanty.
+    private var metadataContentWidth: Double {
+        PanelMetadataView.contentWidth(inPanelOf: clampedWidth)
+    }
+
     private func clamp(_ value: Double) -> Double {
         min(max(Self.minimumWidth, value), Self.maximumWidth)
     }
@@ -107,6 +132,20 @@ struct ReviewPanel: View {
                 resizeHandle
                 VStack(spacing: 0) {
                     header
+                    // **Nad segmenty** (#392): platí to pro celý PR, ne pro vybraný segment.
+                    PanelMetadataView(
+                        state: metadata,
+                        editing: metadataEditing,
+                        contentWidth: metadataContentWidth,
+                        known: knownLabels,
+                        candidates: reviewerCandidates,
+                        labelPickerFailure: labelPickerFailure,
+                        reviewerPickerFailure: reviewerPickerFailure,
+                        hasLoadedLabels: hasLoadedLabels,
+                        hasLoadedCandidates: hasLoadedCandidates,
+                        actionState: metadataActionState,
+                        actions: metadataActions
+                    )
                     segments
                     content
                 }
@@ -385,7 +424,12 @@ struct ReviewPanel: View {
             // prázdno, by se dřív nebo později rozešly a jedna z nich by tvrdila „čisto“.
             FindingsEmptyView(reason: reason)
         } else {
-            cards
+            VStack(spacing: 0) {
+                // Věta **nad** kartami a mimo `ScrollView` (#392): tvrzení o tom, ke kterému kódu
+                // nálezy patří, nesmí odscrollovat pryč od nálezů, o kterých mluví.
+                FindingsHeadNoticeView(notice: headNotice)
+                cards
+            }
         }
     }
 
@@ -412,6 +456,10 @@ struct ReviewPanel: View {
                 }
             }
             .padding(10)
+            // **Ztlumené, ne schované** (#392): u staršího commitu nálezy o kódu na obrazovce
+            // nemluví, ale pořád platí — schovat je by znamenalo, že v `Commitech` panel nálezy
+            // nemá, a to je zrovna ta ztráta, kterou #392 řešila. Hodnota je z návrhu (0,52).
+            .opacity(headNotice.dimsFindings ? 0.52 : 1)
         }
     }
 

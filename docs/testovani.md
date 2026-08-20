@@ -458,6 +458,64 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a do #216 se to neprojevilo nikde jinde než na obrazovce. Hlídají to dva testy: jeden nad
   `Policy.inserting`/`applying` (obě cesty), druhý nad storem. **Ověřeno vložením regrese** —
   po vrácení původního kódu test spadne na `events.items == []`.
+- **Labely a vyžádaní reviewery (#392)** — pátá a šestá cesta ven, takže se u nich hlídá **totéž
+  co u vláken a komentářů**, a k tomu tři věci, které se dají pokazit tiše. Rozdělené je to na pět
+  suit schválně: každá odpovídá na jinou otázku, takže se z červeného testu pozná, **co** se rozbilo.
+  - **`MetadataPublishingTests`** — publisher proti `FakeProcessRunner`. Nejdůležitější tvrzení
+    netvrdí, co se odeslalo: bez povolení (globálně i s povoleným **jiným** repem), bez jediného
+    loginu a na mergnutý či zavřený PR **`runner.invocations.isEmpty`**. Vedle toho, co je jinak než
+    u review: **nová hlava labely neblokuje**. A k tomu tvar payloadu na hotových bajtech
+    (`{"labels":["bug","go"]}` a `{"labels":[]}` — prázdná sada je **platná akce**, ne `nil`), `-f`
+    proti `-F` u loginu a **úklid dočasného souboru** po úspěchu i po pádu. Cesta se u toho bere
+    **z argumentů, které publisher poslal**, ne výpisem `/tmp`: výpis by v paralelním běhu chytal
+    cizí soubory a tvrdil úklid, který se nestal.
+  - **`AppStoreMetadataTests`** — podstrčený `gh` skript s počítadlem spuštění, stejně jako
+    u vláken. Nula volání: **na cizím PR**, **bez povolené brány**, u labelu, který **repo nezná**,
+    bez načtené nabídky, nad nenačteným snímkem, u reviewera **mimo nabídku** a bez `gh`. K tomu
+    tři stavy nabídky (nenačteno / prázdné repo / porucha), protože nabídka, která po výpadku sítě
+    vypadá jako repo bez labelů, posílá člověka hledat labely, které tam jsou. Vedle toho cache (druhý příchod na PR se
+    neptá), že se **nabídky s detailem netahají** (volání navíc, které se má platit až na otevření),
+    a že se po úspěchu snímek přepíše **bez dalšího dotazu**. A ten nejcennější zápis: **vyžádání
+    reviewera nesmaže schválení, které v panelu bylo** — GitHub ho v odpovědi neposílá.
+  - **`PanelMetadataEditingTests`** a **`PanelReviewersTests`** — čisté funkce vyčerpávajícím
+    výčtem. Že se z výběru nedá vyrobit label, který repo nezná; že sundání **posledního** labelu je
+    prázdná sada, ne „nic neposílat“; že se přidáním jednoho labelu **nesmaže ten, který repo
+    přestalo znát** (sada se posílá celá); a u reviewerů všech pět hodnot `SubmittedReview.State`
+    plus `nil` — komentář bez verdiktu se do sekce **nedostane**, jinak by v ní u každého PR svítil
+    review bot jako `čeká`.
+  - **`LabelChipsTests`** (pravidlo) a **`PanelMetadataWidthTests`** (rozměr) — rozdělené schválně:
+    první počítá nad **umělými, rovnými** šířkami, takže se výsledek dá spočítat v hlavě, druhý měří
+    **skutečným písmem přes pásmo 240–520**. Kdyby to byl jeden test, nešlo by po spadnutí poznat,
+    jestli se rozbilo rozhodování, nebo sazba. Hlídané pasti: dvouřádkový strop, `+N` právě tehdy,
+    když se něco nevešlo, **ořez, který nechá místo na `+N`** (jinak jsou řádky tři), `+ label`,
+    který neustoupí nikdy, a **`chce změny`, které se neořezává** — u reviewerů ustupuje jméno.
+    Jedno tvrzení stojí zvlášť: **spočítaná šířka chipu se srovnává s nakreslenou**
+    (`ImageRenderer` nad `LabelChipView`). Je to jediné, co chytá `box-sizing` — ostatní si berou
+    tutéž míru, takže by prošla i tehdy, kdyby se z ní vypustil rám a odsazení. **Ověřeno vložením
+    regrese**: s `frameWidth == 0` je rozdíl 14 bodů a test spadne, kdežto zbytek suity projde.
+  - **`PanelHeadNoticeTests`** — že panel u staršího commitu **nekreslí nálezy jako platné**. Věta se
+    testuje jako text z `Policy` (jmenuje obě sha a u neshody říká, že o kódu na obrazovce nemluví),
+    a k tomu se **tři stavy notice musí nakreslit různě**. Porovnávají se **surové bajty bitmapy, ne
+    `tiffRepresentation`**: TIFF ze dvou renderů se liší i u shodného obrázku (obálka nese metadata),
+    takže na něm test procházel i s panelem, který notici ignoruje. **Ověřeno vložením regrese** —
+    se zadrátovaným `.none` v panelu na bajtech spadne, na TIFFu prošel.
+- **Místo na diff commitu vedle panelu (#392)** — `CommitPanelRoomTests` je **měření zapsané jako
+  test**, ne mez v aplikaci. Počítá produkční funkcí (`Policy.charactersPerSide`) a skutečnými
+  rozměry (šířka znaku mono písma, `DiffLineView.contentInset(for:)`), takže čísla nezastarají
+  s doladěním sazby. Naměřeno na výchozím okně (1100, plocha tabu 1047):
+
+  | Co je rozložené | Zbývá na diff | Vedle sebe | Pod sebou |
+  |---|---|---|---|
+  | strom (210) + panel (306) | 531 b | **22 znaků** | 49 znaků |
+  | strom + proužek (38) | 799 b | 39 znaků | — |
+  | jen proužek | 1009 b | 52 znaků | — |
+
+  Slib z `CLAUDE.md` je **120 znaků na stranu** a ten by se stromem i panelem chtěl okno
+  **~2665 bodů**. Z toho plyne rozhodnutí: **nevynucuje se nic** — strom se složí ⌘1, panel ⌘2 —,
+  protože složený proužek přidá ve splitu skoro dvojnásobek znaků, takže u commitu je čím zaplatit.
+  Nejužší stav, do kterého se aplikace dostane (okno 700, panel na podlaze 246), dá na diff **402
+  bodů**; v tom pásmu se proto měří i přetečení seznamu commitů a hlavičky (`PanelFreeTabWidthTests`
+  má pro `Commity` **vlastní, širší pásmo** od 402).
 - **Dostupnost služeb (#31)** — tři vrstvy, každá jinak. `Policy.health` vyčerpávajícím
   výčtem stavů (nic se nemockuje), včetně toho, co se dá pokazit tiše: že **incident mimo
   sledované komponenty puntík nerozsvítí** (skutečná fixture s výpadkem v `Actions`), že
