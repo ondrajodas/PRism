@@ -7,11 +7,19 @@ import SwiftUI
 /// labelu), takže se v nich dá mít pole i obsluha šipek. V systémovém `Menu` by se nedalo ani jedno
 /// — a předstírat chování, které tam není, je horší než ho nemít.
 ///
-/// Co obsluhuje: **psaní filtruje** (pole má fokus hned po otevření), **šipky vybírají**, `↵`
-/// **potvrdí** vybraný řádek. `esc` zavírá popover systémově, takže se na něj nesahá — vlastní
-/// obsluha by ho jen vzala tomu, kdo ji umí líp.
+/// Co obsluhuje: **psaní filtruje**, **šipky vybírají**, `↵` **potvrdí** vybraný řádek. `esc`
+/// zavírá popover systémově, takže se na něj nesahá — vlastní obsluha by ho jen vzala tomu, kdo ji
+/// umí líp.
 ///
-/// Rozhodování je v `Policy` (`pickerSelection`, `filteredPicker`); tady zůstává jen předání klávesy.
+/// **Fokus je v poli hned po otevření**, protože jinak je nabídka „otevři, **klikni** a piš“, tedy
+/// o krok delší, než musí být. Jak se to dělá, je popsané u `.task` níž.
+///
+/// **Fokus nabídku nepřežije**, a drží to `@FocusState` uvnitř tohohle view: zaniká s popoverem,
+/// takže po zavření není co držet a psaní nemá kam mizet. Změřeno sondou v popoveru — po zavření
+/// jdou znaky do okna a v poli se neobjeví.
+///
+/// Rozhodování je v `Policy` (`pickerSelection`, `filteredPicker`, `pickerShowsSearch`); tady
+/// zůstává jen předání klávesy.
 struct PickerSearchField: View {
     @Binding var query: String
     /// Kolik řádků je po filtru — z toho se počítá, kam smí šipka.
@@ -47,7 +55,24 @@ struct PickerSearchField: View {
                     confirm()
                     return .handled
                 }
-                .onAppear { isFocused = true }
+                // Fokus **až po jednom průchodu smyčky**, a ten `Task.yield()` je to jediné, co
+                // funguje: přiřazení ve stejném průchodu, ve kterém pole vzniká, SwiftUI zahodí.
+                // Změřeno na běžící aplikaci u palety ⌘K (#184) accessibilitou: `onAppear`, `task`
+                // bez yieldu i `defaultFocus($isFocused, true)` daly `AXFocused = false`
+                // **navždycky**, ne později. Rozhoduje **počet průchodů, ne čas** — proto tady
+                // není žádná pauza a hlavně nic, co by si plánovalo další kolo (#350): jeden
+                // yield, jeden zápis, konec.
+                //
+                // Do #392 tu stálo `onAppear` a nabídka se musela **kliknout**, i když docstring
+                // tvrdil opak — nález z proklikání.
+                //
+                // `Task.isCancelled` se tady **neptáme schválně**: zápis do `@FocusState` view,
+                // které zaniklo, je no-op (fokus s popoverem zaniká), kdežto vynechaný zápis by
+                // byl zpátky ten stav, kdy se do nabídky musí kliknout.
+                .task {
+                    await Task.yield()
+                    isFocused = true
+                }
             if !query.isEmpty {
                 Button {
                     query = ""

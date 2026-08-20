@@ -147,6 +147,42 @@ struct PickerSearchTests {
         #expect(Policy.pickerSelection(from: 0, step: 1, count: 0) == nil)
     }
 
+    // MARK: - Kdy se pole vůbec kreslí
+
+    /// **Vyčerpávající výčet kolem hranice.** Práh je jediné, co se o hledacím poli dá tvrdit
+    /// číslem — jestli v něm **je fokus**, je stav skutečného okna a v harnessu se změřit nedá
+    /// (testovací host nedostane aktivaci, takže nemá key okno; postup a naměřené varianty jsou
+    /// v `docs/testovani.md`). Tím spíš se má hlídat to, co číslo je.
+    @Test(
+        "Pole se kreslí nad šesti položkami, ne dřív",
+        arguments: [
+            (0, false), (1, false), (2, false), (3, false), (4, false), (5, false), (6, false),
+            (7, true), (8, true), (34, true),
+        ]
+    )
+    func drawsTheSearchFieldOnlyAboveSix(count: Int, shows: Bool) {
+        #expect(Policy.pickerShowsSearch(count: count) == shows)
+    }
+
+    /// **Jeden práh pro obě nabídky** (#392): do téhle změny měl `LabelPickerView`
+    /// i `ReviewerPickerView` vlastní `searchFrom = 6`, takže se mohly rozejít potichu — a bylo by
+    /// z toho vidět jen to, že jedna nabídka pole má a druhá ne. Tvrzení je na tu jednu hodnotu,
+    /// protože víc než jedno místo se z testu ověřit nedá.
+    @Test("Práh je jedna hodnota, ne konstanta v každé nabídce")
+    func theThresholdIsOneValue() {
+        #expect(Policy.searchFrom == 6)
+        #expect(!Policy.pickerShowsSearch(count: Policy.searchFrom))
+        #expect(Policy.pickerShowsSearch(count: Policy.searchFrom + 1))
+    }
+
+    /// Záporný počet nemá odkud přijít, ale funkce je totální a **nemá mít skrytou precondition** —
+    /// tatáž úvaha, kvůli které se u `searchStartsWord` opravoval `index(before:)`.
+    @Test("Nesmyslný počet nepadá")
+    func doesNotTrapOnNonsense() {
+        #expect(!Policy.pickerShowsSearch(count: -1))
+        #expect(Policy.pickerShowsSearch(count: .max))
+    }
+
     // MARK: - Nabídka reviewerů a labelů
 
     /// **Filtruje se podle toho, co je v řádku vidět** — u člověka login, u týmu slug. Kdyby filtr

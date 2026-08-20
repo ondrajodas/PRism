@@ -84,6 +84,23 @@ extension Policy {
             .map(\.item)
     }
 
+    /// Má nabídka o `count` položkách kreslit hledací pole?
+    ///
+    /// **Nad šesti položkami, tedy od sedmi.** Tři jména se přečtou rychleji, než se do pole klikne,
+    /// a nad prázdnou nabídkou by to bylo pole, ve kterém se nedá nic najít.
+    ///
+    /// Rozhodnutí je tady, ne ve views, a je to jedna hodnota pro **obě** nabídky (#392): do téhle
+    /// změny měla každá vlastní `searchFrom = 6`, takže se prahy mohly rozejít potichu — a jediné,
+    /// co by z toho bylo vidět, je jedna nabídka s polem a druhá bez. Zároveň je to jediný způsob,
+    /// jak se ta hranice dá otestovat výčtem: pole je stav skutečného okna, kdežto tohle je číslo.
+    static func pickerShowsSearch(count: Int) -> Bool {
+        count > searchFrom
+    }
+
+    /// Od kolika položek má hledání smysl. Kreslí se **nad** touhle hodnotou, viz
+    /// `pickerShowsSearch(count:)`.
+    static let searchFrom = 6
+
     /// Kam se posune vybraný řádek po šipce. `count == 0` znamená, že není co vybírat.
     ///
     /// **Ořezává, necyklí.** V nabídce, která se pod rukama filtruje, je přeskok z konce na začátek

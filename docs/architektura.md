@@ -6307,8 +6307,27 @@ odeslat, a měnit label umí jedině `ReviewPublisher`.
   popover ho umí sám a vlastní obsluha by ho jen vzala tomu, kdo to zvládne líp. Klávesy se berou
   **na poli**, ne na kontejneru (fokus je v něm), a vracejí `.handled`, jinak si šipku vezme pole na
   posun kurzoru v textu.
-- **Hledání se kreslí teprve nad seznamem, který má co filtrovat** (od šesti položek). Nad třemi
-  jmény je to šum a nad prázdnem pole, ve kterém se nedá nic najít.
+- **Hledání se kreslí teprve nad seznamem, který má co filtrovat** — **nad šesti položkami, tedy
+  od sedmi**. Nad třemi jmény je to šum a nad prázdnem pole, ve kterém se nedá nic najít. Práh drží
+  `Policy.pickerShowsSearch(count:)`, **jeden pro obě nabídky**: do #392 měla každá vlastní
+  `searchFrom = 6`, takže se mohly rozejít potichu a bylo by z toho vidět jen to, že jedna nabídka
+  pole má a druhá ne. Zároveň je to jediné, co se o tom poli dá tvrdit **číslem** — jestli v něm je
+  fokus, je stav skutečného okna.
+- **Fokus je v poli hned po otevření, a dělá se `.task` s jedním `Task.yield()`.** Bez toho je
+  nabídka „otevři, klikni a piš“, tedy o krok delší než ta, kterou nahradila. Přiřazení ve **stejném
+  průchodu**, ve kterém pole vzniká, SwiftUI zahodí — změřeno u palety ⌘K (#184) accessibilitou na
+  běžící aplikaci: `onAppear`, `task` bez yieldu i `defaultFocus($isFocused, true)` daly
+  `AXFocused = false` **navždycky**, ne později. Rozhoduje **počet průchodů, ne čas**, takže tady
+  není žádná pauza ani nic, co by si plánovalo další kolo (#350): jeden yield, jeden zápis.
+
+  Do #392 tu stálo `onAppear` a nabídka se musela kliknout, i když komentář u ní tvrdil opak — z toho
+  plyne, že tohle je vlastnost, kterou **nedokládá kód, ale proklikání**. Samostatná sonda mimo
+  aplikaci `onAppear` nechá projít, takže na potvrzení nestačí; podrobnosti a tabulka variant jsou
+  v [`testovani.md`](testovani.md).
+- **Fokus nabídku nepřežije.** `@FocusState` sedí v `PickerSearchField`, tedy ve view, které
+  s popoverem zaniká — po zavření tak není co držet a psaní nemá kam mizet (změřeno sondou: znak po
+  zavření jde do okna a v poli se neobjeví). Pod sedmi položkami pole není vůbec, takže tam není co
+  fokusovat.
 - **Prázdný výsledek filtru je čtvrtý stav nabídky**, ne první: vedle něj existuje nenačteno,
   prázdné repo a porucha, a každý má vlastní větu. Prázdná plocha by vypadala jako spadlé načítání.
 - **Dokud snímek nedorazil, je `+ label` zakázaný.** Sada se posílá celá, takže bez snímku nemá

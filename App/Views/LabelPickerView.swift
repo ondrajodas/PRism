@@ -33,7 +33,7 @@ struct LabelPickerView: View {
             // **Sloveso, ne kategorie.** `Labely repozitáře` bylo věcně správně, ale neříkalo, co
             // klik udělá — a klik je tady přepínač, takže se stejným řádkem label i sundá.
             PickerHeading(title: "Přepnout label")
-            if known.count > Self.searchFrom {
+            if Policy.pickerShowsSearch(count: known.count) {
                 PickerSearchField(
                     query: $query,
                     count: filtered.count,
@@ -73,9 +73,6 @@ struct LabelPickerView: View {
         }
         .task { await load() }
     }
-
-    /// Od kolika labelů má hledání smysl — u pěti se přečtou rychleji, než se do pole klikne.
-    private static let searchFrom = 6
 
     /// **Filtruje se podle jména, tedy podle toho, co je v řádku vidět.** Rozhoduje `Policy`.
     private var filtered: [PullRequestLabel] {

@@ -3585,6 +3585,43 @@ Tři věci, které z toho u #184 vyšly a bez měření by se neodhadly:
   **jen v tom podstromu, o který jde** — v okně ho nese i záložka detailu PR, takže bez zúžení
   vypadá vybraný řádek jako `Průběh`.
 
+**A totéž znovu u nabídek panelu (#392), včetně toho, co se změřit nedá.** Hledací pole nabídky
+labelů i reviewerů má mít fokus hned po otevření. Změřeno **samostatnou sondou** — jeden
+`swiftc`em přeložený soubor s oknem, tlačítkem a popoverem, který si popover otevře sám (stavem
+i **skutečným klikem** poslaným do okna), po dotažení nabídky do něj pošle znaky a šipky a vypíše
+`firstResponder` s obsahem pole. Čtyři varianty, série A/B/A/B (drift sezení je větší než hledaný
+rozdíl, #274):
+
+| varianta | `firstResponder` popoveru | co se napsalo |
+|---|---|---|
+| bez fokusu | `_NSPopoverWindow` | nic |
+| `defaultFocus($isFocused, true)` | `_NSPopoverWindow` | nic |
+| `onAppear` | `_SystemTextFieldFieldEditor` | `xy` |
+| `task` + `Task.yield()` | `_SystemTextFieldFieldEditor` | `xy` |
+
+Tři věci, které z toho plynou:
+
+- **`defaultFocus` nefunguje ani v popoveru**, tedy stejně jako u palety (#184). Vypadá jako
+  určená cesta a není.
+- **Samostatná sonda `onAppear` nechá projít, aplikace ne.** V ní tedy rozdíl mezi `onAppear`
+  a yieldem **nevidět není** — a přesně proto se řídíme měřením z aplikace (#184: `onAppear`
+  i `task` bez yieldu daly `AXFocused = false` **navždycky**), ne touhle sondou. Použije se yield:
+  kde `onAppear` stačí, projde i yield (změřeno výš), kdežde nestačí, je yield ta jediná
+  změřená oprava. Sonda mimo aplikaci je tedy dobrá na *vyloučení* varianty, ne na její potvrzení.
+- **Fokus nabídku nepřežije**: po zavření popoveru jde znak do okna a v poli se neobjeví
+  (`queryPredPsanim == queryPoPsani`), protože `@FocusState` sedí v tom view, které s popoverem
+  zaniká.
+
+**V harnessu se to změřit nedá a je to změřené, ne odhad.** Sonda uvnitř testů (`NSHostingView`
+v okně, čekání na `firstResponder`, poslané znaky) skončila na tom, že **testovací host nedostane
+aktivaci**: `NSApp.isActive == false`, `window.isKeyWindow == false` i po
+`setActivationPolicy(.regular)`, `NSApp.activate(ignoringOtherApps: true)` a
+`NSRunningApplication.current.activate(options: .activateAllWindows)`, se stropem 5 s a v obou
+testech. Bez key okna nemá fokus kam sednout, takže by taková sonda měřila něco jiného, než tvrdí —
+proto v repu **není** a zůstala jen jako samostatný soubor mimo strom. Co v testech **je**, je ta
+část, která je číslo: `Policy.pickerShowsSearch(count:)` výčtem kolem hranice, protože jestli se
+pole vůbec kreslí, se z okna ptát nemusí. Poslední slovo má proklikání v aplikaci.
+
 Co se **nedá naklikat** (chybějící binárka, chyba sítě, prázdný stav nad plnou frontou), se dá
 vykreslit dočasným testem přes `ImageRenderer` do PNG ve scratchpadu. Před commitem se maže.
 

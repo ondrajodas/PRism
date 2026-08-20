@@ -32,9 +32,10 @@ struct ReviewerPickerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PickerHeading(title: "Vyžádat review od")
-            // **Hledání jedině nad seznamem, který má co filtrovat.** Nad prázdnem by to bylo pole,
-            // ve kterém se nedá nic najít, a nad třemi jmény šum.
-            if candidates.count > Self.searchFrom {
+            // **Hledání jedině nad seznamem, který má co filtrovat** — práh drží `Policy`, jeden
+            // pro obě nabídky. Nad prázdnem by to bylo pole, ve kterém se nedá nic najít, a nad
+            // třemi jmény šum.
+            if Policy.pickerShowsSearch(count: candidates.count) {
                 PickerSearchField(
                     query: $query,
                     count: filtered.count,
@@ -72,9 +73,6 @@ struct ReviewerPickerView: View {
         }
         .task { await load() }
     }
-
-    /// Od kolika položek má hledání smysl. Tři jména se přečtou rychleji, než se do pole klikne.
-    private static let searchFrom = 6
 
     /// Nabídka po filtru — rozhoduje `Policy`, ne tohle view.
     ///

@@ -492,6 +492,12 @@ code {
 }
 .pkr-q .ico { color: var(--ink-3); font-size: 11px; }
 .pkr-q .sp { flex: 1; }
+/* Kurzor je v poli **hned po otevření** nabídky, aby se dalo psát bez kliknutí. V aplikaci to
+   znamená blikající caret; tady stojí, protože statická kresba blikat nemá čím. */
+.pkr-q .caret {
+  display: inline-block; width: 1px; height: 13px; margin-right: -3px;
+  background: var(--ink); vertical-align: middle;
+}
 /* Počet je vidět jedině při hledání: nad nefiltrovaným seznamem by opakoval to, co je v něm. */
 .pkr-q .n { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
 .pkr-row {
@@ -3690,6 +3696,13 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       „a zároveň“ a silnější shoda nahoru. Dvě jinak se chovající hledání v jednom okně by byla
       horší volba než sdílení. Nad krátkým seznamem se pole <b>nekreslí</b>.
     </p>
+    <p class="muted">
+      <b>Kurzor je v poli hned po otevření</b> — proto je v kresbě před placeholderem. Bez toho je
+      nabídka „otevři, <b>klikni</b> a piš“, tedy o krok delší než ta, kterou nahradila. Šipky
+      a <code>↵</code> přitom bere pole <b>samo</b>, takže se dá vybírat, aniž by se z pole odešlo:
+      <code>↑↓</code> ořezávají (necyklí), <code>↵</code> potvrdí vybraný řádek a <code>esc</code>
+      nabídku zavře.
+    </p>
     <div class="duo">
       <div class="pane new">
         <div class="tag"><i></i>Reviewery — nadpis nese sloveso</div>
@@ -3698,6 +3711,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <span class="cap">Vyžádat review od</span>
             <div class="pkr-q">
               <span class="ico">⌕</span>
+              <span class="caret"></span>
               <span style="color: var(--ink-3);">Hledat</span>
               <span class="sp"></span>
             </div>
@@ -3757,6 +3771,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           <span class="cap">Přepnout label</span>
           <div class="pkr-q">
             <span class="ico">⌕</span>
+            <span class="caret"></span>
             <span style="color: var(--ink-3);">Hledat</span>
             <span class="sp"></span>
           </div>

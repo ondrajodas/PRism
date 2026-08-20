@@ -3330,7 +3330,7 @@ commitů.
 **Sekce 02 a 19 mockupu se přepsaly** — jsou to záznamy dneška, takže v panelu v *Přehledu* stojí
 obě sekce a v *Commitech* je panel; sekce 24 a 25 zůstávají jako záznam rozhodnutí.
 
-**Testů 3350** (z 3238), z toho pět nových suit k labelům a reviewerům, jedna k větě o hlavě a jedna
+**Testů 3394** (z 3238), z toho pět nových suit k labelům a reviewerům, jedna k větě o hlavě a jedna
 měřicí. Tři tvrzení jsou ověřená **vloženou regresí**: rezerva na `+N` (bez ní vzniknou tři řádky),
 `box-sizing` u chipu (bez rámu je rozdíl 14 bodů) a to, že panel na notici reaguje (na
 `tiffRepresentation` ten test procházel i s ignorovanou notící, na bajtech bitmapy spadne).
@@ -3375,5 +3375,29 @@ necyklí**. Klávesnice funguje proto, že nabídka nikdy nebyla `Menu`, ale pop
 (vedle nenačteno / prázdné repo / porucha) a má vlastní větu — prázdná plocha by vypadala jako
 spadlé načítání.
 
-Sekce 24 mockupu je o nabídku dokreslená (nadpis, hledací řádek, položky bez slovesa, filtr,
-prázdný výsledek, patka s klávesami) a publikovaná na tutéž adresu.
+**Pátá věc z proklikání: kurzor patří do pole hned po otevření.** Bez toho je nabídka „otevři,
+**klikni** a piš“, tedy o krok delší než ta, kterou nahradila. Do téhle opravy tam stálo
+`onAppear` — a komentář u něj tvrdil, že fokus sedá, přitom nesedal; je z toho poučení, že
+tuhle vlastnost **nedokládá kód, ale proklikání**. Dělá to `.task` s jedním `Task.yield()`, což
+je tentýž mechanismus, který si na sobě změřila paleta ⌘K (#184): přiřazení ve stejném průchodu,
+ve kterém pole vzniká, SwiftUI zahodí a `AXFocused` zůstane `false` **navždycky** — u `onAppear`,
+u `task` bez yieldu i u `defaultFocus`. Rozhoduje **počet průchodů, ne čas**, takže tady není
+žádná pauza ani nic, co by si plánovalo další kolo (#350, #358). Šipky a `↵` fungují i s fokusem
+nastaveným při otevření (ověřeno sondou: `.handled` přebije pole hned, ne až po prvním stisku)
+a fokus **nabídku nepřežije**, protože `@FocusState` sedí ve view, které s popoverem zaniká.
+
+Z toho vypadly ještě dvě věci. Práh, odkdy se pole kreslí, se přesunul do
+**`Policy.pickerShowsSearch(count:)`** — do té doby měla každá nabídka vlastní `searchFrom = 6`,
+takže se mohly rozejít potichu; zároveň je to jediné, co se o tom poli dá tvrdit **číslem**, a tak
+je na to výčet kolem hranice (ověřeno vloženou regresí: `>=` místo `>` shodí dva testy). A **sonda
+fokusu v harnessu být nemůže**: testovací host nedostane aktivaci (`NSApp.isActive == false`,
+`isKeyWindow == false` i po `activate(ignoringOtherApps:)`, strop 5 s), takže bez key okna nemá
+fokus kam sednout a taková sonda by měřila něco jiného, než tvrdí. Měřilo se proto samostatným
+přeloženým souborem mimo strom; tabulka variant je v [`testovani.md`](testovani.md).
+
+**Neověřené zůstává i tady jedno:** že se v aplikaci doopravdy píše bez kliknutí. Samostatná sonda
+`onAppear` nechá projít, takže na potvrzení nestačí — poslední slovo má proklikání v okně, stejně
+jako u odeslání proti živému API.
+
+Sekce 24 mockupu je o nabídku dokreslená (nadpis, hledací řádek s **kurzorem**, položky bez
+slovesa, filtr, prázdný výsledek, patka s klávesami) a publikovaná na tutéž adresu.
