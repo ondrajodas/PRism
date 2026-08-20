@@ -263,7 +263,9 @@ struct DiffLineView: View {
         for run in SyntaxHighlighter.runs(of: line.text, in: language) {
             var piece = AttributedString(run.text)
             // `nil` u obyčejného textu schválně: řádek si tak nechá barvu, kterou mu dal
-            // okolní styl (třeba ztlumenou u poznámky).
+            // okolní styl (třeba ztlumenou u poznámky). **Platí to jedině ve SwiftUI** —
+            // v atributovaném řetězci je chybějící barva černá, takže blok kódu si ji nasazuje
+            // sám (`SyntaxColors.plain`, #393).
             piece.foregroundColor = palette.color(for: run.kind)
             result += piece
         }
