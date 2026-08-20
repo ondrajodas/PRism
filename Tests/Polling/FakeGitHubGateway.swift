@@ -304,6 +304,19 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return assignableUsers
     }
 
+    /// Slugy týmů. Prázdno je platná odpověď — repo mimo organizaci týmy nemá.
+    var assignableTeams: [String] = []
+    var assignableTeamsFailure: (any Error)?
+    var assignableTeamRequests: [RepoID] { lock.withLock { assignableTeamsAsked } }
+
+    private var assignableTeamsAsked: [RepoID] = []
+
+    func fetchAssignableTeams(repo: RepoID) async throws -> [String] {
+        lock.withLock { assignableTeamsAsked.append(repo) }
+        if let assignableTeamsFailure { throw assignableTeamsFailure }
+        return assignableTeams
+    }
+
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {
         let answer: Result<PullRequest, any Error>? = lock.withLock {
             detailsAsked.append(id)

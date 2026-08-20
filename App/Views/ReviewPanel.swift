@@ -70,7 +70,7 @@ struct ReviewPanel: View {
     /// Smí se to měnit? Na cizím PR `.absent`, tedy **žádné akce** — ne zašedlé.
     var metadataEditing: Policy.MetadataEditing = .absent
     var knownLabels: [PullRequestLabel] = []
-    var reviewerCandidates: [String] = []
+    var reviewerCandidates: [ReviewerCandidate] = []
     /// Proč je nabídka prázdná (`nil` = načetla se). „Repo žádné labely nezná“ a „nepodařilo se je
     /// zjistit“ se v nabídce nesmí slít.
     var labelPickerFailure: String?

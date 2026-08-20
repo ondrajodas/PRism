@@ -390,7 +390,13 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
       **Měnit se smí jedině na vlastním PR** (`Policy.metadataEditing`). Na cizím se akce
       **nekreslí vůbec**, ne zašedle: zašedlé tlačítko tvrdí „tady se to dělá, jen teď ne“,
       a přeštítkovat frontu někoho jiného se odsud nedělá nikdy. Zašedlá s důvodem je naopak
-      správná podoba tam, kde je vypnutá **brána** — to je stav, který se mění.
+      správná podoba tam, kde je vypnutá **brána** — to je stav, který se mění; **důvod je u ní
+      napsaný v panelu, ne jen v tooltipu**, jinak je zašedlé tlačítko otázka, na kterou okno
+      neodpovídá.
+
+      **`requestReviewers` bere lidi i týmy jedním voláním** (`reviewers` + `team_reviewers`), ne
+      dvěma metodami: GitHub je bere spolu, takže dvě žádosti by znamenaly mezistav s půlkou
+      vyžádaných — a druhá metoda by prodloužila ten výčet za nic.
    3. **Publisher není pole `AppStore`.** Vzniká uvnitř té cesty, která odesílá, a zaniká
       s ní — nemá ho kde uložit nikdo, kdo ho nemá mít. Drží to `ReviewSubmission` (skládá se
       až v `send()`, zaniká zavřením sheetu), `ThreadSubmission` (skládá se v `reply(_:)`
@@ -515,7 +521,7 @@ viz tvrdá podmínka č. 1.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
-| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) —, **login přihlášeného účtu** (#330) a **labely s vyžádanými reviewery** i nabídky k nim (#392). **Pořád bez zápisu**: čtení je čtení, měnit label umí jedině `ReviewPublisher` | `gh` CLI |
+| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) —, **login přihlášeného účtu** (#330) a **labely s vyžádanými reviewery** (včetně **týmů**) i nabídky k nim (#392). **Pořád bez zápisu**: čtení je čtení, měnit label umí jedině `ReviewPublisher` | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení). Vedle nich dvě krátké session, které o review nic nevědí: překlad nálezů a **dotažení textu issue** do zadání (#345, vlastní povolení i rozbor streamu) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |

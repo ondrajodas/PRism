@@ -132,24 +132,31 @@ struct GhReviewPublisher: ReviewPublishing {
     /// se vzít zpět nedá), takže tudy nevede.
     func requestReviewers(
         _ logins: [String],
+        teams: [String],
         on pullRequest: PRIdentifier
-    ) async throws -> [RequestedReviewer] {
+    ) async throws -> RequestedReview {
         guard scope.allows(pullRequest.repo) else {
             throw PublishError.publishingNotAllowed(pullRequest.repo)
         }
-        // Vyžádat nikoho **není akce** a nevolá se: GitHub prázdné pole přijme a nic neudělá, takže
+        // Vyžádat nikoho **není akce** a nevolá se: GitHub prázdná pole přijme a nic neudělá, takže
         // by okno hlásilo vyžádané review, které nevzniklo. Tatáž úvaha jako u prázdného komentáře,
-        // jen s vlastní hláškou — „napiš text“ by tady nedávalo smysl.
-        guard !logins.isEmpty else { throw PublishError.noReviewer }
+        // jen s vlastní hláškou — „napiš text“ by tady nedávalo smysl. Platí to i pro týmy: prázdné
+        // je obojí, nebo se volá.
+        guard !logins.isEmpty || !teams.isEmpty else { throw PublishError.noReviewer }
 
         try await preflight(pullRequest, expecting: nil)
 
-        let output = try await call(MetadataRequest.reviewerArguments(for: pullRequest, logins: logins))
+        let output = try await call(
+            MetadataRequest.reviewerArguments(for: pullRequest, logins: logins, teams: teams)
+        )
         let decoded = try decoded(GhRequestedReviewersResponse.self, from: output)
         // Odpověď nese **jen** to, na koho se čeká; odpovědi ostatních v ní nejsou. Sloučení proto
         // patří volajícímu, který zná stav okna (`Policy.reviewers(requested:keeping:)`) — tady se
-        // vrací to, co potvrdil GitHub, tedy samí čekající.
-        return Policy.reviewers(requested: decoded.logins(), verdicts: [])
+        // vrací to, co potvrdil GitHub, tedy samí čekající a všechny vyžádané týmy.
+        return RequestedReview(
+            reviewers: Policy.reviewers(requested: decoded.logins(), verdicts: []),
+            teams: decoded.teamSlugs()
+        )
     }
 
     // MARK: - Pre-flight

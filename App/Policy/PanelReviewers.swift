@@ -73,6 +73,25 @@ extension Policy {
             }
     }
 
+    /// Vyžádané týmy, srovnané do podoby, kterou chce zápis (#392).
+    ///
+    /// **Slug se zbavuje předpony organizace**, protože `gh pr view` ho dává jako
+    /// `keboola/ajda-swimlane`, kdežto REST i `orgs/{org}/teams` jako `ajda-swimlane` — a `team_reviewers`
+    /// chce tu druhou podobu (změřeno na `keboola/platform-architecture-and-concepts#278`). Kdyby se
+    /// obě podoby potkaly v panelu, vypadal by týž tým jako dva.
+    ///
+    /// Řadí se abecedně a duplikáty padají: pořadí z API nezaručuje nic a přeskládaný seznam se nedá
+    /// přečíst dvakrát stejně.
+    static func requestedTeams(_ slugs: [String]) -> [String] {
+        Set(slugs.compactMap { slug in
+            // `omittingEmptySubsequences: false` schválně: s výchozím `true` by z `keboola/`
+            // vyšlo `keboola`, tedy **jméno organizace vydávané za slug týmu**. Chytil to test
+            // na prázdný slug.
+            let bare = slug.split(separator: "/", omittingEmptySubsequences: false).last.map(String.init)
+            return (bare?.isEmpty ?? true) ? nil : bare
+        }).sorted()
+    }
+
     /// Sekce po vyžádání review (#392): GitHub potvrdil, na koho se čeká, a odpovědi ostatních
     /// zůstávají tak, jak je okno zná.
     ///

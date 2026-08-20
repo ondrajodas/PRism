@@ -58,10 +58,18 @@ struct MetadataSubmission {
         }
     }
 
-    /// Vyžádá review od uvedených lidí a vrátí to, na koho se podle GitHubu čeká.
-    @MainActor func requestReview(from logins: [String]) async throws -> [RequestedReviewer] {
+    /// Vyžádá review od jednoho člověka nebo týmu a vrátí to, na koho se podle GitHubu čeká.
+    ///
+    /// **Bere `ReviewerCandidate`, ne dvě pole**: nabídka je jedna a klikne se vždycky na jednu
+    /// položku, takže volání, které umí obojí naráz, by nabízelo stav, do kterého se okno nedostane.
+    @MainActor func requestReview(from candidate: ReviewerCandidate) async throws -> RequestedReview {
         do {
-            return try await publisher().requestReviewers(logins, on: pullRequest)
+            switch candidate {
+            case .person(let login):
+                return try await publisher().requestReviewers([login], teams: [], on: pullRequest)
+            case .team(let slug):
+                return try await publisher().requestReviewers([], teams: [slug], on: pullRequest)
+            }
         } catch is CancellationError {
             throw PublishError.interrupted
         }

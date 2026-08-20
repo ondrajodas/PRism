@@ -995,6 +995,12 @@ final class AppStore {
     /// Proč se nabídka lidí nenačetla (#392). Chybějící klíč = poslední pokus prošel.
     var assignableUserFailures: [RepoID: String] = [:]
 
+    /// Slugy týmů, které jde na repu vyžádat (#392). Chybějící klíč = nabídka se ještě neotvírala.
+    ///
+    /// **Prázdné pole je odpověď**: repo mimo organizaci týmy nemá. Porucha je vedle, v mapě
+    /// `assignableUserFailures` — nabídka je jedna, takže i její porucha je jedna věta.
+    var assignableTeams: [RepoID: [String]] = [:]
+
     /// Co se právě děje s labely nebo reviewery (#392). Chybějící klíč = nic.
     var metadataActionStates: [PRIdentifier: MetadataActionState] = [:]
 
@@ -1619,6 +1625,7 @@ final class AppStore {
         repositoryLabels = repositoryLabels.filter { wanted.contains($0.key) }
         repositoryLabelFailures = repositoryLabelFailures.filter { wanted.contains($0.key) }
         assignableUsers = assignableUsers.filter { wanted.contains($0.key) }
+        assignableTeams = assignableTeams.filter { wanted.contains($0.key) }
         assignableUserFailures = assignableUserFailures.filter { wanted.contains($0.key) }
 
         // Rozkliknutý commit a jeho diff (#317). Diff jsou megabajty, takže jde stejnou cestou

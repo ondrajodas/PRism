@@ -22,7 +22,7 @@ struct PanelMetadataView: View {
     /// chipů z ní počítá `Policy`.
     let contentWidth: Double
     var known: [PullRequestLabel] = []
-    var candidates: [String] = []
+    var candidates: [ReviewerCandidate] = []
     /// Proč je nabídka labelů prázdná (`nil` = načetla se). Kreslí to popover, ne panel.
     var labelPickerFailure: String?
     var reviewerPickerFailure: String?
@@ -59,6 +59,7 @@ struct PanelMetadataView: View {
                     if showsLabels { labels }
                     if showsReviewers { reviewers }
                 }
+                if let reason = editing.reason { blocked(reason) }
                 if let error = actionState?.failure { actionFailure(error) }
             }
             .padding(.horizontal, Self.insetHorizontal)
@@ -92,6 +93,11 @@ struct PanelMetadataView: View {
                 ForEach(metadata.reviewers, id: \.login) { reviewer in
                     reviewerRow(reviewer)
                 }
+                // **Týmy pod lidmi.** Odpověď je to, kvůli čemu se na sekci kouká, a tu nese jedině
+                // člověk; tým říká jen „leží to na skupině“.
+                ForEach(metadata.teams, id: \.self) { team in
+                    teamRow(team)
+                }
                 if editing.isVisible { reviewerAction }
             }
         }
@@ -118,6 +124,42 @@ struct PanelMetadataView: View {
         }
     }
 
+    /// Řádek vyžádaného **týmu** (#392).
+    ///
+    /// **Bez avatara a bez odpovědi**, a obojí je rozhodnutí: kolečko s iniciálou znamená v tomhle
+    /// okně osobu, a `schválil`/`chce změny`/`čeká` u týmu nemá význam — odpověď dá až ten, kdo za
+    /// tým odpoví, a ten se objeví jako **osoba** v řádku výš. Místo iniciály je proto skupinová
+    /// ikona ve **čtverci** (jiný tvar = jiný druh věci) a v pravém sloupci stojí `tým`: prázdný
+    /// sloupec by vypadal jako chybějící data, kdežto tohle je jediné pravdivé slovo, které tam
+    /// patří.
+    private func teamRow(_ slug: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 8))
+                .foregroundStyle(Palette.ink3)
+                .frame(width: 16, height: 16)
+                .background(Palette.raised, in: .rect(cornerRadius: 4))
+                .overlay {
+                    // Přerušovaně, jako u `čeká` a u `+`: přerušované se ještě nestalo.
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(Palette.line, style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                }
+            Text(verbatim: slug)
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.ink2)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(slug)
+            Spacer(minLength: 4)
+            Text("tým")
+                .font(.system(size: 11))
+                .foregroundStyle(Palette.ink3)
+                .fixedSize()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("vyžádaný tým \(slug)")
+    }
+
     @ViewBuilder private var reviewerAction: some View {
         if editing.isAllowed {
             Button {
@@ -132,9 +174,9 @@ struct PanelMetadataView: View {
                     candidates: candidates,
                     isLoaded: hasLoadedCandidates,
                     failure: reviewerPickerFailure,
-                    request: { login in
+                    request: { candidate in
                         isPickingReviewer = false
-                        actions.request(login)
+                        actions.request(candidate)
                     },
                     load: actions.loadCandidates
                 )
@@ -212,6 +254,23 @@ struct PanelMetadataView: View {
         .font(.caption)
     }
 
+    /// Proč jsou akce zakázané — **napsané, ne jen v tooltipu** (nález z proklikání).
+    ///
+    /// Zašedlé tlačítko bez důvodu je otázka, na kterou okno neodpovídá: člověk vidí, že to nejde,
+    /// a jde hledat do nastavení, co si vypnul. Věta je tatáž, na které skončí publisher, takže se
+    /// okno neptá dvakrát jinak. **Není to výstraha** — vypnutá brána je nastavení, ne porucha, tak
+    /// je i tiše šedá.
+    private func blocked(_ reason: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Image(systemName: "lock")
+                .foregroundStyle(Palette.ink3)
+            Text(verbatim: reason)
+                .foregroundStyle(Palette.ink3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.caption)
+    }
+
     /// Proč akce nedopadla. Drží se, dokud ji člověk nezavře — chyba, která zmizí sama, je chyba,
     /// kterou nikdo nepřečte.
     private func actionFailure(_ error: PublishError) -> some View {
@@ -247,7 +306,9 @@ struct PanelMetadataView: View {
 
     private var showsLabels: Bool { !metadata.labels.isEmpty || editing.isVisible }
 
-    private var showsReviewers: Bool { !metadata.reviewers.isEmpty || editing.isVisible }
+    private var showsReviewers: Bool {
+        !metadata.reviewers.isEmpty || !metadata.teams.isEmpty || editing.isVisible
+    }
 
     /// Je v bloku vůbec co nakreslit? `nil` stav (ještě se nenačetlo) nedá ani jednu sekci — a na
     /// cizím PR bez labelů a reviewerů taky ne.

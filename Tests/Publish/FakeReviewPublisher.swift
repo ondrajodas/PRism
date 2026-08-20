@@ -17,7 +17,7 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
     private var resolutionOutcome: Result<ThreadResolution, any Error>?
     private var commentOutcome: Result<ThreadComment, any Error>?
     private var labelsOutcome: Result<[PullRequestLabel], any Error>?
-    private var reviewersOutcome: Result<[RequestedReviewer], any Error>?
+    private var reviewersOutcome: Result<RequestedReview, any Error>?
     /// Drží odeslání „rozběhnuté“, dokud se nepustí. Bez toho se nedá otestovat, co se stane
     /// **během** odesílání — a právě tam bydlí zákaz druhého odeslání. Stejný důvod, kvůli
     /// kterému `FakeReviewRunner` umí pozdržet běh.
@@ -40,7 +40,7 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
         /// testy nad nimi tvrdí hlavně to, že se **nevolalo nic**, a to se pozná jedině z jednoho
         /// seznamu všeho, co publisher dostal.
         case labels(PRIdentifier, names: [String])
-        case reviewers(PRIdentifier, logins: [String])
+        case reviewers(PRIdentifier, logins: [String], teams: [String])
     }
 
     convenience init(reply outcome: Result<ThreadComment, any Error>) {
@@ -63,7 +63,7 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
         lock.withLock { labelsOutcome = outcome }
     }
 
-    convenience init(reviewers outcome: Result<[RequestedReviewer], any Error>) {
+    convenience init(reviewers outcome: Result<RequestedReview, any Error>) {
         self.init([])
         lock.withLock { reviewersOutcome = outcome }
     }
@@ -139,9 +139,10 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
 
     func requestReviewers(
         _ logins: [String],
+        teams: [String],
         on pullRequest: PRIdentifier
-    ) async throws -> [RequestedReviewer] {
-        lock.withLock { threadCalls.append(.reviewers(pullRequest, logins: logins)) }
+    ) async throws -> RequestedReview {
+        lock.withLock { threadCalls.append(.reviewers(pullRequest, logins: logins, teams: teams)) }
         if let gate = lock.withLock({ gate }) { await gate() }
         guard let outcome = lock.withLock({ reviewersOutcome }) else {
             throw PublishError.unknown("Fake publisher nemá co vrátit na reviewery.")

@@ -59,7 +59,16 @@ struct MetadataPublishingTests {
     /// nepřepisuje, protože to není čtení detailu.
     private let reviewersOutput = """
     {"number":4,"state":"open",
-     "requested_reviewers":[{"login":"odinuv","id":11},{"login":"sergiou87","id":12}]}
+     "requested_reviewers":[{"login":"odinuv","id":11},{"login":"sergiou87","id":12}],
+     "requested_teams":[]}
+    """
+
+    /// Odpověď u **týmové** žádosti — změřeno na `keboola/platform-architecture-and-concepts#278`,
+    /// kde REST vrátil `{"requested_reviewers": [], "requested_teams": [{"slug": "ajda-swimlane"}]}`.
+    /// Slug je tam **bez** předpony organizace, na rozdíl od `gh pr view`.
+    private let teamOutput = """
+    {"number":4,"state":"open","requested_reviewers":[],
+     "requested_teams":[{"name":"ajda-swimlane","slug":"ajda-swimlane"}]}
     """
 
     // MARK: - Nic se neodeslalo
@@ -83,7 +92,7 @@ struct MetadataPublishingTests {
         let publisher = publisher(runner, scope: .standard)
 
         await #expect(throws: PublishError.publishingNotAllowed(sandbox.repo)) {
-            try await publisher.requestReviewers(["odinuv"], on: sandbox)
+            try await publisher.requestReviewers(["odinuv"], teams: [], on: sandbox)
         }
         #expect(runner.invocations.isEmpty)
     }
@@ -111,7 +120,7 @@ struct MetadataPublishingTests {
         let publisher = publisher(runner)
 
         await #expect(throws: PublishError.noReviewer) {
-            try await publisher.requestReviewers([], on: sandbox)
+            try await publisher.requestReviewers([], teams: [], on: sandbox)
         }
         #expect(runner.invocations.isEmpty)
     }
@@ -135,7 +144,7 @@ struct MetadataPublishingTests {
         let publisher = publisher(runner, detail: .success(detail(state: .closed)))
 
         await #expect(throws: PublishError.pullRequestNotOpen(.closed)) {
-            try await publisher.requestReviewers(["odinuv"], on: sandbox)
+            try await publisher.requestReviewers(["odinuv"], teams: [], on: sandbox)
         }
         #expect(runner.invocations.isEmpty)
     }
@@ -218,7 +227,7 @@ struct MetadataPublishingTests {
         let runner = FakeProcessRunner(exitCode: 0, standardOutput: reviewersOutput)
         let publisher = publisher(runner)
 
-        _ = try await publisher.requestReviewers(["odinuv"], on: sandbox)
+        _ = try await publisher.requestReviewers(["odinuv"], teams: [], on: sandbox)
 
         #expect(runner.invocations.count == 1)
         let arguments = try #require(runner.invocations.first?.arguments)
@@ -236,12 +245,57 @@ struct MetadataPublishingTests {
         let runner = FakeProcessRunner(exitCode: 0, standardOutput: reviewersOutput)
         let publisher = publisher(runner)
 
-        let requested = try await publisher.requestReviewers(["odinuv"], on: sandbox)
+        let requested = try await publisher.requestReviewers(["odinuv"], teams: [], on: sandbox)
 
-        #expect(requested == [
+        #expect(requested.reviewers == [
             RequestedReviewer(login: "odinuv", answer: .waiting),
             RequestedReviewer(login: "sergiou87", answer: .waiting),
         ])
+    }
+
+    /// **Tým jde týmž voláním, jen druhým polem.** Kdyby to byla druhá žádost, existoval by mezistav
+    /// s půlkou vyžádaných — a to je zrovna to, co tvrdá podmínka č. 1 zakazuje.
+    @Test("Tým odejde jedním voláním v team_reviewers")
+    func sendsTeamsInTheSameCall() async throws {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: teamOutput)
+        let publisher = publisher(runner)
+
+        let requested = try await publisher.requestReviewers([], teams: ["ajda-swimlane"], on: sandbox)
+
+        #expect(runner.invocations.count == 1)
+        let arguments = try #require(runner.invocations.first?.arguments)
+        #expect(arguments.contains("team_reviewers[]=ajda-swimlane"))
+        #expect(!arguments.contains { $0.hasPrefix("reviewers[]=") })
+        #expect(requested.teams == ["ajda-swimlane"])
+        #expect(requested.reviewers.isEmpty)
+    }
+
+    /// **Vyžádat nikoho není akce ani u týmů** — prázdné musí být obojí, jinak se volá.
+    @Test("Bez lidí i bez týmů se nic nevolá")
+    func doesNotCallWithoutAnybody() async throws {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: teamOutput)
+        let publisher = publisher(runner)
+
+        await #expect(throws: PublishError.noReviewer) {
+            try await publisher.requestReviewers([], teams: [], on: sandbox)
+        }
+        #expect(runner.invocations.isEmpty)
+    }
+
+    /// Chybějící `requested_teams` **nepoloží odpověď na akci, která prošla** — GitHub ho u repa bez
+    /// týmů vynechá.
+    @Test("Odpověď bez requested_teams se přečte")
+    func survivesAMissingTeamsField() async throws {
+        let runner = FakeProcessRunner(
+            exitCode: 0,
+            standardOutput: #"{"number":4,"requested_reviewers":[{"login":"odinuv"}]}"#
+        )
+        let publisher = publisher(runner)
+
+        let requested = try await publisher.requestReviewers(["odinuv"], teams: [], on: sandbox)
+
+        #expect(requested.reviewers.map(\.login) == ["odinuv"])
+        #expect(requested.teams.isEmpty)
     }
 
     /// Odpověď, které nerozumíme, je `malformedResponse` — exit kód byl nula, takže volání prošlo

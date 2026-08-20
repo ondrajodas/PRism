@@ -78,7 +78,14 @@ protocol ReviewPublishing: Sendable {
     /// které se štítkuje.
     func setLabels(_ labels: [String], on pullRequest: PRIdentifier) async throws -> [PullRequestLabel]
 
-    /// Vyžádá review od uvedených lidí (#392). Vrací vyžádané reviewery, jak je potvrdil GitHub.
+    /// Vyžádá review od uvedených lidí a týmů (#392). Vrací to, na koho se podle GitHubu čeká.
+    ///
+    /// **Jedna metoda na lidi i na týmy, ne dvě.** GitHub je bere jedním voláním
+    /// (`reviewers` a `team_reviewers` v jednom payloadu), takže druhá metoda by výčet cest ven
+    /// prodloužila za nic — a tvrdá podmínka č. 1 stojí na tom, že je ten výčet krátký.
+    ///
+    /// Slugy týmů se posílají **bez předpony organizace** — tak, jak je chce API a jak je dává
+    /// `orgs/{org}/teams`.
     ///
     /// **Jen přidává.** Odebrat vyžádané review odsud nejde, a je to schválně: request pošle
     /// člověku upozornění, které se odebráním **nedá vzít zpět**, takže odebrání není opravný krok,
@@ -87,6 +94,7 @@ protocol ReviewPublishing: Sendable {
     /// Pre-flight jako u labelů — scope a stav PR, ne `headSha`.
     func requestReviewers(
         _ logins: [String],
+        teams: [String],
         on pullRequest: PRIdentifier
-    ) async throws -> [RequestedReviewer]
+    ) async throws -> RequestedReview
 }

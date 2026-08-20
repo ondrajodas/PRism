@@ -78,6 +78,9 @@ struct PanelMetadataRenderProbe {
         PullRequestLabel(name: "bug", color: "D73A4A"),
     ]
 
+    /// Vyžádané týmy — skutečný slug z `keboola/platform-architecture-and-concepts#278`.
+    private static let teams = ["ajda-swimlane"]
+
     private static let reviewers = [
         RequestedReviewer(login: "ondrajodas", answer: .approved),
         RequestedReviewer(login: "katerina-prochazkova-mala", answer: .changesRequested),
@@ -91,13 +94,13 @@ struct PanelMetadataRenderProbe {
     ) -> some View {
         PanelMetadataView(
             state: .loaded(
-                PullRequestMetadata(labels: labels, reviewers: reviewers),
+                PullRequestMetadata(labels: labels, reviewers: reviewers, teams: teams),
                 updatedAt: Date(timeIntervalSince1970: 100)
             ),
             editing: editing,
             contentWidth: PanelMetadataView.contentWidth(inPanelOf: width),
             known: longLabels,
-            candidates: ["odinuv"]
+            candidates: [.person("odinuv"), .team("ajda-swimlane")]
         )
         .frame(width: width, alignment: .topLeading)
         .background(Palette.chrome)

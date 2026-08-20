@@ -3339,3 +3339,26 @@ měřicí. Tři tvrzení jsou ověřená **vloženou regresí**: rezerva na `+N`
 nedá — `bin/slot-config.sh` odesílání schválně vypíná a zdroj je `review-requested`. Odeslání labelu
 ani vyžádání reviewera proto **neproběhlo proti živému API**; kryjí to testy publisheru (nula
 volání `gh` bez brány, tvar payloadu na bajtech) a offscreen render panelu ve všech stavech.
+
+**Dvě věci dorazily z proklikání, ještě před mergem.** První byla **tichá ztráta**: GitHub drží
+vyžádané reviewery ve **dvou** polích a čtlo se jen `requested_reviewers`, takže u PR s týmovou
+žádostí byla sekce prázdná, i když review někdo vyžádal — změřeno na
+`keboola/platform-architecture-and-concepts#278` (`requested_teams: ["ajda-swimlane"]`), a v jedné
+frontě to byly **čtyři PR ze čtrnácti**. Týmy proto mají vlastní pole (`PullRequestMetadata.teams`)
+a v panelu **čtvrtý druh řádku pod lidmi**: skupinová ikona ve čtverci místo kolečka s iniciálou
+(kolečko znamená osobu) a `tým` v pravém sloupci — odpověď u týmu nemá význam, dá ji až ten, kdo za
+tým odpoví, a ten se objeví jako osoba. `+ reviewer` umí vyžádat i tým, **týmž jedním voláním**
+(`reviewers` + `team_reviewers`); nabídka týmů jde přes `orgs/{org}/teams`, protože
+`repos/{o}/{r}/teams` vrátilo 404 i na repu, kam se dá psát (chce admin práva). Slug se u toho
+sjednocuje na podobu bez předpony organizace — `gh pr view` dává `keboola/ajda-swimlane`, REST
+`ajda-swimlane` a zápis chce to druhé.
+
+Druhá věc: **zakázané tlačítko musí říct proč.** Vypnutá brána ve slotu vypadala jako rozbitá
+aplikace, takže pod sekcemi stojí věta („Odesílání na GitHub není pro … povolené. Zapni ho
+v nastavení (⌘,).“) — tatáž, na které skončí publisher, a tiše šedá, protože nastavení není porucha.
+
+**Zakládání nových labelů do tohohle issue nepatří** a je to rozhodnuté: je to zápis do
+**repozitáře**, ne do PR (`POST /repos/{owner}/{repo}/labels`), tedy sedmá metoda protokolu, k tomu
+nové pole s barvou (nová věc na obrazovce → mockup a schválení) a hlavně: **nedá se vzít zpět jedním
+klikem**, protože smazání labelu ho odebere ze všech PR v repu. Uzavřená množina
+z `fetchRepositoryLabels` tedy zůstává; na zakládání je samostatné issue.

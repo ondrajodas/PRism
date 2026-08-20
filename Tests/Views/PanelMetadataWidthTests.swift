@@ -266,14 +266,16 @@ struct PanelMetadataWidthTests {
                         RequestedReviewer(login: "katerina-prochazkova-mala", answer: .changesRequested),
                         RequestedReviewer(login: "babakks", answer: .approved),
                         RequestedReviewer(login: "sergiou87", answer: .waiting),
-                    ]
+                    ],
+                    // Tým s dlouhým slugem: druhý druh řádku, který se má do panelu vejít.
+                    teams: ["ajda-swimlane-platform-architecture"]
                 ),
                 updatedAt: Date(timeIntervalSince1970: 100)
             ),
             editing: .allowed,
             contentWidth: PanelMetadataView.contentWidth(inPanelOf: panelWidth),
             known: labels,
-            candidates: ["odinuv"]
+            candidates: [.person("odinuv"), .team("ajda-swimlane")]
         )
     }
 }

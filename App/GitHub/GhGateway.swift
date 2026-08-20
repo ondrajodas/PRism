@@ -260,6 +260,21 @@ struct GhGateway: GitHubGateway {
         ).logins()
     }
 
+    func fetchAssignableTeams(repo: RepoID) async throws -> [String] {
+        do {
+            let teams = try await run([
+                "api", "orgs/\(repo.owner)/teams?per_page=100",
+            ], phase: "Týmy organizace", decodedAs: [GhTeam].self)
+            // Slug se nechává, jak přišel — `orgs/…` dává bezpředponovou podobu, tedy tu, kterou
+            // chce zápis. Řadí a čistí až `Policy`.
+            return teams.map(\.slug)
+        } catch GitHubError.notFound {
+            // Účet bez organizace týmy nemá; 404 je tady **odpověď**, ne porucha. Ostatní chyby
+            // propadnou dál — nabídka pak řekne, že se seznam nepodařilo načíst.
+            return []
+        }
+    }
+
     func fetchCommits(id: PRIdentifier) async throws -> [PullRequestCommit] {
         // `per_page=100` je strop GitHubu a `--paginate` je tu kvůli PR, které ho přerostou:
         // bez něj by přišlo **prvních třicet** (výchozí stránka) a odznak by nad stovkou commitů

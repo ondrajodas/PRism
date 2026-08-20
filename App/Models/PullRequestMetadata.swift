@@ -68,4 +68,35 @@ struct RequestedReviewer: Hashable, Codable, Sendable {
 struct PullRequestMetadata: Hashable, Codable, Sendable {
     var labels: [PullRequestLabel] = []
     var reviewers: [RequestedReviewer] = []
+    /// Vyžádané **týmy** — slugy bez jména organizace (#392).
+    ///
+    /// **Vlastní pole, ne `RequestedReviewer` s příznakem**, a je to tvar API i tvar pravdy: GitHub
+    /// drží vyžádané reviewery ve **dvou** polích (`requested_reviewers`, `requested_teams`)
+    /// a tým **nemá odpověď** — `schválil`/`chce změny`/`čeká` u něj nemá význam, dokud za něj někdo
+    /// neodpoví (a ten se pak objeví jako **osoba** v `latestReviews`). Kdyby tým sdílel typ
+    /// s člověkem, muselo by být `answer` optional a každé view by na tu možnost muselo myslet;
+    /// takhle to drží typ.
+    ///
+    /// **Změřeno na `keboola/platform-architecture-and-concepts#278`**, kde bylo
+    /// `{"requested_reviewers": [], "requested_teams": ["ajda-swimlane"]}` — bez tohohle pole byla
+    /// sekce `Reviewery` u čtyř PR ze čtrnácti prázdná, i když review někdo vyžádal.
+    var teams: [String] = []
+}
+
+/// Koho jde ještě vyžádat (#392) — člověk, nebo tým.
+///
+/// **Jeden typ pro obojí**, protože nabídka je jedna a odesílají se jedním voláním. Kdyby to byly
+/// dvě cesty, byly by to dvě kontroly uzavřenosti množiny a dva stavy odesílání.
+enum ReviewerCandidate: Hashable, Sendable {
+    case person(String)
+    /// Slug **bez jména organizace** — tak, jak ho chce zápis (`team_reviewers`).
+    case team(String)
+
+    /// Co se o něm napíše na tlačítko.
+    var name: String {
+        switch self {
+        case .person(let login): login
+        case .team(let slug): slug
+        }
+    }
 }

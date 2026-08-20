@@ -10,8 +10,8 @@ import Foundation
 struct MetadataActions: Sendable {
     /// Přepnout jeden label. Sadu skládá `Policy`, ne tenhle uzávěr.
     var toggle: @MainActor (PullRequestLabel) -> Void = { _ in }
-    /// Vyžádat review od jednoho člověka.
-    var request: @MainActor (String) -> Void = { _ in }
+    /// Vyžádat review od jednoho člověka **nebo týmu**.
+    var request: @MainActor (ReviewerCandidate) -> Void = { _ in }
     /// Dotáhnout nabídku labelů. Volá se **při otevření**, ne při kreslení panelu — nabídka se
     /// otevírá zřídka a volání navíc při každém výběru řádku by se platilo vždycky.
     var loadLabels: @MainActor () async -> Void = {}

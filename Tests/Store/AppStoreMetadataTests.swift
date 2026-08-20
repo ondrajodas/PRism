@@ -76,7 +76,13 @@ struct AppStoreMetadataTests {
     """
 
     private let reviewersOutput = """
-    {"number":4,"requested_reviewers":[{"login":"odinuv"}]}
+    {"number":4,"requested_reviewers":[{"login":"odinuv"}],"requested_teams":[]}
+    """
+
+    /// Odpověď u týmové žádosti — tvar změřený na `keboola/platform-architecture-and-concepts#278`.
+    private let teamOutput = """
+    {"number":4,"requested_reviewers":[],
+     "requested_teams":[{"name":"ajda-swimlane","slug":"ajda-swimlane"}]}
     """
 
     /// Skript, který se tváří jako `gh`. Stejný jako u komentářů (#216) — `delay` je kvůli testu
@@ -114,7 +120,8 @@ struct AppStoreMetadataTests {
         metadata: PullRequestMetadata? = nil,
         metadataFailure: (any Error)? = nil,
         known: [PullRequestLabel]? = nil,
-        assignable: [String] = ["odinuv", "sergiou87"]
+        assignable: [String] = ["odinuv", "sergiou87"],
+        teams: [String] = []
     ) async -> (AppStore, FakeGitHubGateway) {
         let gateway = FakeGitHubGateway(
             always: .success([summary()]),
@@ -124,6 +131,7 @@ struct AppStoreMetadataTests {
         gateway.metadataFailure = metadataFailure
         gateway.repositoryLabels = known ?? Self.known
         gateway.assignableUsers = assignable
+        gateway.assignableTeams = teams
         let store = AppStore(
             gateway: gateway,
             configuration: configuration(publishing: publishing, mine: mine),
@@ -250,7 +258,7 @@ struct AppStoreMetadataTests {
 
         await store.loadAssignableUsers(for: pr.repo)
 
-        #expect(store.reviewerCandidates(for: pr) == ["sergiou87"])
+        #expect(store.reviewerCandidates(for: pr) == [.person("sergiou87")])
     }
 
     // MARK: - Nic se neodeslalo
@@ -274,7 +282,7 @@ struct AppStoreMetadataTests {
         let (store, _) = await prepared(gh: try fakeGh(reviewersOutput), mine: false)
         await store.loadAssignableUsers(for: pr.repo)
 
-        await store.requestReview(from: "odinuv", on: summary())
+        await store.requestReview(from: .person("odinuv"), on: summary())
 
         #expect(try ghCalls() == 0)
         #expect(store.metadata(for: pr) == Self.metadata)
@@ -289,7 +297,7 @@ struct AppStoreMetadataTests {
 
         await store.loadAssignableUsers(for: pr.repo)
         await store.toggleLabel(Self.known[1], on: summary())
-        await store.requestReview(from: "odinuv", on: summary())
+        await store.requestReview(from: .person("odinuv"), on: summary())
 
         #expect(try ghCalls() == 0)
         #expect(store.metadata(for: pr) == Self.metadata)
@@ -355,7 +363,7 @@ struct AppStoreMetadataTests {
         let (store, _) = await prepared(gh: try fakeGh(reviewersOutput))
         await store.loadAssignableUsers(for: pr.repo)
 
-        await store.requestReview(from: "kdokoli", on: summary())
+        await store.requestReview(from: .person("kdokoli"), on: summary())
 
         #expect(try ghCalls() == 0)
     }
@@ -365,9 +373,61 @@ struct AppStoreMetadataTests {
     func doesNotRequestWithoutTheList() async throws {
         let (store, _) = await prepared(gh: try fakeGh(reviewersOutput))
 
-        await store.requestReview(from: "odinuv", on: summary())
+        await store.requestReview(from: .person("odinuv"), on: summary())
 
         #expect(try ghCalls() == 0)
+    }
+
+    /// **Tým je druhá polovina nabídky** (#392) — a je za lidmi, protože odpověď nese jedině člověk.
+    @Test("Nabídka nese lidi i týmy")
+    func candidatesCarryPeopleAndTeams() async throws {
+        let (store, gateway) = await prepared(teams: ["ajda-swimlane"])
+
+        await store.loadAssignableUsers(for: pr.repo)
+
+        #expect(store.reviewerCandidates(for: pr)
+            == [.person("odinuv"), .person("sergiou87"), .team("ajda-swimlane")])
+        #expect(gateway.assignableTeamRequests == [pr.repo])
+    }
+
+    /// **Vyžádaný tým se v nabídce neopakuje** — bylo by to tlačítko, po kterém se nic nestane.
+    @Test("Už vyžádaný tým v nabídce není")
+    func alreadyRequestedTeamsAreNotOffered() async throws {
+        let (store, _) = await prepared(
+            metadata: PullRequestMetadata(teams: ["ajda-swimlane"]),
+            teams: ["ajda-swimlane", "platform"]
+        )
+
+        await store.loadAssignableUsers(for: pr.repo)
+
+        #expect(!store.reviewerCandidates(for: pr).contains(.team("ajda-swimlane")))
+        #expect(store.reviewerCandidates(for: pr).contains(.team("platform")))
+    }
+
+    /// **Tým mimo nabídku se nevyžádá** — tatáž uzavřenost jako u lidí a labelů.
+    @Test("Tým mimo nabídku se nevyžádá")
+    func doesNotRequestATeamOutsideTheList() async throws {
+        let (store, _) = await prepared(gh: try fakeGh(teamOutput), teams: ["ajda-swimlane"])
+        await store.loadAssignableUsers(for: pr.repo)
+
+        await store.requestReview(from: .team("kdokoli"), on: summary())
+
+        #expect(try ghCalls() == 0)
+    }
+
+    /// Vyžádaný tým se zapíše do snímku **bez dalšího dotazu**, a odpovědi lidí u toho zůstanou.
+    @Test("Vyžádaný tým je v panelu bez dalšího dotazu")
+    func showsTheRequestedTeam() async throws {
+        let (store, gateway) = await prepared(gh: try fakeGh(teamOutput), teams: ["ajda-swimlane"])
+        await store.loadAssignableUsers(for: pr.repo)
+        let loaded = gateway.metadataRequests.count
+
+        await store.requestReview(from: .team("ajda-swimlane"), on: summary())
+
+        #expect(try ghCalls() == 1)
+        #expect(store.metadata(for: pr)?.teams == ["ajda-swimlane"])
+        #expect(store.metadata(for: pr)?.reviewers == Self.metadata.reviewers, "schválení zůstalo")
+        #expect(gateway.metadataRequests.count == loaded)
     }
 
     // MARK: - Co se stane po odeslání
@@ -394,7 +454,7 @@ struct AppStoreMetadataTests {
         // Nabídka se musí načíst — vyžádat jde **jen z ní**.
         await store.loadAssignableUsers(for: pr.repo)
 
-        await store.requestReview(from: "odinuv", on: summary())
+        await store.requestReview(from: .person("odinuv"), on: summary())
 
         #expect(store.metadata(for: pr)?.reviewers == [
             RequestedReviewer(login: "babakks", answer: .approved),

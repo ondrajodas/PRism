@@ -19,11 +19,13 @@ struct GhPullRequestMetadata: Decodable {
         PullRequestMetadata(
             labels: labels.map(\.label),
             reviewers: Policy.reviewers(
-                // Týmy se **zahazují**: vyžádat se z okna dají jen lidé (`assignableUsers`), takže
-                // tým v seznamu by byl řádek, se kterým se nedá nic udělat — a login by mu chyběl.
                 requested: reviewRequests.compactMap(\.login),
                 verdicts: latestReviews.map(\.verdict)
-            )
+            ),
+            // **Týmy vlastním polem, ne zahozené.** Do #392 se zahazovaly a sekce `Reviewery` byla
+            // u PR s týmovou žádostí prázdná, i když review někdo vyžádal (změřeno: čtyři PR ze
+            // čtrnácti v jedné frontě).
+            teams: Policy.requestedTeams(reviewRequests.compactMap(\.teamSlug))
         )
     }
 }
@@ -38,10 +40,22 @@ struct GhLabel: Decodable {
     var label: PullRequestLabel { PullRequestLabel(name: name, color: color ?? "") }
 }
 
-/// Jedno vyžádané review. **Uživatel má `login`, tým ne** — proto optional a proto se týmy
-/// zahazují (ověřeno na živém API: `{"__typename":"User","login":"BagToad"}`).
+/// Jedno vyžádané review — **buď člověk, nebo tým**, a poznají se podle toho, které pole mají.
+///
+/// Ověřeno na živém API: `{"__typename":"User","login":"BagToad"}` proti
+/// `{"__typename":"Team","name":"ajda-swimlane","slug":"keboola/ajda-swimlane"}`. Obojí je optional,
+/// takže se nerozhoduje z `__typename` — z chybějícího pole se to pozná stejně a nemusí se
+/// pamatovat, jak se ten typ v GraphQL jmenuje.
+///
+/// **`slug` je u `gh pr view` s předponou organizace, u REST bez ní** (změřeno na témž PR:
+/// `keboola/ajda-swimlane` proti `ajda-swimlane`). Sjednocuje to `Policy.requestedTeams` na bezpředponovou
+/// podobu, protože právě tu chce zápis (`team_reviewers`) i nabídka z `orgs/{org}/teams`.
 struct GhReviewRequest: Decodable {
     let login: String?
+    let slug: String?
+
+    /// Slug týmu, nebo `nil` u člověka.
+    var teamSlug: String? { login == nil ? slug : nil }
 }
 
 /// Poslední review jednoho člověka. Z celé odpovědi se čte **jen autor a stav** — tělo tady
@@ -56,6 +70,11 @@ struct GhLatestReview: Decodable {
             state: state.flatMap(SubmittedReview.State.init(rawValue:))
         )
     }
+}
+
+/// Tým tak, jak ho vrací `orgs/{org}/teams` a `requested_teams` — bere se z něj **jen slug**.
+struct GhTeam: Decodable {
+    let slug: String
 }
 
 /// Odpověď GraphQL dotazu na lidi, kteří na repo smí (#392).

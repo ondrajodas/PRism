@@ -185,6 +185,19 @@ protocol GitHubGateway: Sendable {
     /// **Devatenáctá čtecí metoda**; čtení je čtení. Vyžádání samo jde přes `ReviewPublishing`.
     func fetchAssignableUsers(repo: RepoID) async throws -> [String]
 
+    /// Slugy týmů, které jde na repu vyžádat (#392) — druhá polovina nabídky k `+ reviewer`.
+    ///
+    /// **Přes `orgs/{org}/teams`, ne `repos/{o}/{r}/teams`**, a je to změřené: repozitářová varianta
+    /// vrátila **404** i na repu, kam se dá normálně číst a psát PR (`keboola/platform-architecture-and-concepts`),
+    /// protože chce admin práva. Organizační seznam prošel (34 týmů, 0,63 s).
+    ///
+    /// **Prázdno u účtu bez organizace je odpověď, ne porucha.** Osobní repo týmy nemá a `orgs/…`
+    /// na něj vrací 404 — vyhodit kvůli tomu chybu by znamenalo, že nabídka reviewerů hlásí poruchu
+    /// u každého repa mimo organizaci.
+    ///
+    /// **Dvacátá čtecí metoda**; čtení je čtení, tvrdá podmínka č. 1 platí dál.
+    func fetchAssignableTeams(repo: RepoID) async throws -> [String]
+
     /// Commity pull requestu (#316) — seznam do tabu `Commity`.
     ///
     /// **Jedno volání na celý seznam**: sha, zpráva, jméno a datum autora i adresa jeho obrázku

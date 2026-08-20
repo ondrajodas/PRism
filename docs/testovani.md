@@ -477,6 +477,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     neptá), že se **nabídky s detailem netahají** (volání navíc, které se má platit až na otevření),
     a že se po úspěchu snímek přepíše **bez dalšího dotazu**. A ten nejcennější zápis: **vyžádání
     reviewera nesmaže schválení, které v panelu bylo** — GitHub ho v odpovědi neposílá.
+  - **Týmy jsou vlastní sada tvrzení**, protože to byla **tichá ztráta**: do opravy se `requested_teams`
+    zahazovaly a sekce byla u PR s týmovou žádostí prázdná (čtyři PR ze čtrnácti v jedné frontě).
+    Testuje se, že tým jde do vlastního pole a **ne mezi lidi**, že PR s žádostí jen pro tým není
+    prázdný, že se slug zbavuje předpony organizace (a že z `keboola/` **nevyjde `keboola`** — to je
+    ta past, kterou chytil test na prázdný slug), že tým odejde **týmž voláním** v `team_reviewers`,
+    že chybějící `requested_teams` v odpovědi nepoloží akci, která prošla, a že vyžádaný tým se
+    v nabídce neopakuje.
   - **`PanelMetadataEditingTests`** a **`PanelReviewersTests`** — čisté funkce vyčerpávajícím
     výčtem. Že se z výběru nedá vyrobit label, který repo nezná; že sundání **posledního** labelu je
     prázdná sada, ne „nic neposílat“; že se přidáním jednoho labelu **nesmaže ten, který repo

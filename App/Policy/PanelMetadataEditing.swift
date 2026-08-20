@@ -73,16 +73,24 @@ extension Policy {
         return names.filter { $0 != label.name }
     }
 
-    /// Koho jde ještě vyžádat: lidi, kteří na repo smí, minus ty, kteří už vyžádaní jsou.
+    /// Koho jde ještě vyžádat: lidi a týmy, které na repo smí, minus ty, kteří už vyžádaní jsou.
     ///
     /// Vyžádat znovu toho, kdo už vyžádaný je, GitHub sice snese, ale bylo by to tlačítko, po
     /// kterém se nic nestane. Kdo už **odpověděl**, v nabídce zůstává — vyžádat review po opravě
-    /// je zrovna to, kvůli čemu se na tu nabídku kliká.
+    /// je zrovna to, kvůli čemu se na tu nabídku kliká. **U týmu ta výjimka neplatí**: tým odpověď
+    /// nemá, takže vyžádaný tým znamená prostě „už na tom leží“.
+    ///
+    /// **Lidé první, pak týmy.** Odpověď je to, kvůli čemu se na sekci kouká, a tu nese jedině
+    /// člověk; tým říká jen „leží to na skupině“.
     static func reviewerCandidates(
         assignable: [String],
-        reviewers: [RequestedReviewer]
-    ) -> [String] {
+        teams: [String] = [],
+        reviewers: [RequestedReviewer],
+        requestedTeams: [String] = []
+    ) -> [ReviewerCandidate] {
         let waiting = Set(reviewers.filter { $0.answer == .waiting }.map(\.login))
-        return assignable.filter { !waiting.contains($0) }.sorted()
+        let already = Set(requestedTeams)
+        return assignable.filter { !waiting.contains($0) }.sorted().map { .person($0) }
+            + teams.filter { !already.contains($0) }.sorted().map { .team($0) }
     }
 }

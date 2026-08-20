@@ -675,7 +675,13 @@ se nic — strom se složí `⌘1`, panel `⌘2`, a se složeným proužkem je t
 pro vybraný segment. Labely jsou chipy s **puntíkem v barvě z repozitáře** (plná výplň by u každé
 barvy musela počítat kontrast textu a přebíjela by odznak závažnosti nálezu), u reviewera je
 iniciála, login a **odpověď ve třech hodnotách**: `schválil`, `chce změny`, `čeká`. Prostřední je
-jediná, která něco blokuje. Když se panel zúží, ustupují tři věci v tomhle pořadí: řádek chipů se
+jediná, která něco blokuje.
+
+**Vyžádaný tým je čtvrtý druh řádku, pod lidmi.** GitHub drží vyžádané reviewery ve dvou polích
+a tým **nemá odpověď** — dá ji až ten, kdo za tým odpoví, a ten se pak objeví jako osoba v řádku
+výš. Tým proto nemá kolečko s iniciálou (to znamená osobu), ale skupinovou ikonu ve **čtverci**,
+a v pravém sloupci stojí `tým`. Bez toho byla sekce u PR s týmovou žádostí prázdná, i když review
+někdo vyžádal — u čtyř PR ze čtrnácti. Když se panel zúží, ustupují tři věci v tomhle pořadí: řádek chipů se
 zalomí, na **dvou řádcích** se zastaví a zbytek je `+2`, a teprve jméno, které je samo širší než
 panel, se ořeže — puntík u něj zůstane a `chce změny` se neořezává nikdy.
 
@@ -683,9 +689,10 @@ panel, se ořeže — puntík u něj zůstane a `chce změny` se neořezává ni
 **nejsou vůbec** (ne zašedlé — u cizí fronty se to nedělá nikdy). Label se vybírá **jen z labelů,
 které repo zná**: je vratný jedním klikem, takže nedostal potvrzovací sheet, ale volný text tam
 nepatří, protože z něj se dá omylem vyrobit nový label a ten už z repozitáře sám nezmizí. Reviewer
-se vyžádá **jedním pojmenovaným kliknutím** (`Vyžádat review od …`) z lidí, kteří na repo smí —
-request pošle člověku upozornění a odebráním se nedá vzít zpět, takže je na tlačítku napsané, co se
-stane a komu. Odesílá se to **tou samou jedinou cestou ven** a **tou samou branou** jako review
+se vyžádá **jedním pojmenovaným kliknutím** (`Vyžádat review od …`) z lidí a **týmů**, které na repo
+smí — request pošle upozornění a odebráním se nedá vzít zpět, takže je na tlačítku napsané, co se
+stane a komu; u týmu je v něm slovo `týmu`, protože upozornění odejde všem jeho členům. Když je
+odesílání vypnuté, jsou akce zakázané a **důvod je napsaný pod sekcemi**, ne jen v tooltipu. Odesílá se to **tou samou jedinou cestou ven** a **tou samou branou** jako review
 a komentáře; s vypnutým odesíláním jsou akce zakázané s důvodem, což je jiný stav než cizí PR.
 
 Segmenty jsou od #242 **dva**: `Průběh` se odstěhoval do vlastní záložky PR, protože se u kódu

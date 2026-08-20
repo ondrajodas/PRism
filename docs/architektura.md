@@ -6046,14 +6046,14 @@ Nad odesílatelností draftu (#68) platí:
 
 ## `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má devatenáct metod
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má dvacet metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu. (Do #330 tu stálo
 „čtrnáct“, ačkoli výčet v tabulce měl patnáct položek; teď je s ním číslo srovnané. Tři přidala
-#392: labely a reviewery PR a dvě nabídky k nim.)
+#392: labely a reviewery PR a nabídky lidí a týmů k nim.)
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol: `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)`, `fetchMetadata(id:)`, `fetchRepositoryLabels(repo:)`, `fetchAssignableUsers(repo:)` |
+| `GitHubGateway` | Protokol (dvacet metod): `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)`, `fetchMetadata(id:)`, `fetchRepositoryLabels(repo:)`, `fetchAssignableUsers(repo:)`, `fetchAssignableTeams(repo:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
@@ -6065,7 +6065,7 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 | `GhRelease` | Tvar jedné položky `GET /repos/…/releases` a převod na `Release` |
 | `GhCommit` | Tvar jedné položky `GET /repos/…/pulls/{n}/commits` a převod na `PullRequestCommit` (#316). **Skoro všechno optional**: odpověď má přes šedesát polí a bereme šest, takže chybějící pole nesmí položit seznam kvůli něčemu, co se nekreslí |
 | `PullRequestState(ghState:isDraft:)` | Mapování stavu — `gh` ho popisuje dvěma poli |
-| `GhPullRequestMetadata`, `GhLabel`, `GhReviewRequest`, `GhLatestReview` | Tvar `gh pr view --json labels,reviewRequests,latestReviews` a převod na `PullRequestMetadata` (#392) |
+| `GhPullRequestMetadata`, `GhLabel`, `GhReviewRequest`, `GhLatestReview`, `GhTeam` | Tvar `gh pr view --json labels,reviewRequests,latestReviews` a převod na `PullRequestMetadata` (#392). `GhReviewRequest` rozlišuje člověka od týmu **podle toho, které pole má** (`login` proti `slug`), ne podle `__typename` — z chybějícího pole se to pozná stejně a nemusí se pamatovat jméno GraphQL typu |
 | `AssignableUsersQuery`, `GhAssignableUsersResponse` | GraphQL dotaz na lidi, kteří na repo smí, a jeho odpověď (#392) |
 
 Čtyři věci, které se u toho nemají rozbít:
@@ -6246,8 +6246,20 @@ odeslat, a měnit label umí jedině `ReviewPublisher`.
 - **Sekci reviewerů skládá `Policy`, ne DTO.** GitHub dává dvě různá pole — `reviewRequests`
   („komu to leží na stole teď“) a `latestReviews` („kdo se vyjádřil“) — a jejich slití do tří
   hodnot je rozhodnutí, ne tvar odpovědi. DTO jen převede tvar.
-- **Týmy se zahazují.** `reviewRequests` u týmu login nedává (`{"__typename":"Team", …}`) a vyžádat
-  se z okna dají jen lidé, takže tým v seznamu by byl řádek, se kterým se nedá nic udělat.
+- **Týmy jdou do vlastního pole, ne mezi lidi** (`PullRequestMetadata.teams`). Do #392 se zahazovaly
+  a byla to **tichá ztráta**: GitHub drží vyžádané reviewery ve **dvou** polích, takže u PR
+  s týmovou žádostí byla sekce prázdná, i když review někdo vyžádal — změřeno na
+  `keboola/platform-architecture-and-concepts#278` (`requested_reviewers: []`,
+  `requested_teams: ["ajda-swimlane"]`), a v jedné frontě to byly **čtyři PR ze čtrnácti**. Fronta
+  o ně nepřicházela (`review-requested:@me` týmové žádosti expanduje), chyběly jen ve výpisu.
+- **Slug týmu se sjednocuje na podobu bez organizace** (`Policy.requestedTeams`): `gh pr view` dává
+  `keboola/ajda-swimlane`, REST i `orgs/{org}/teams` `ajda-swimlane` — a tu druhou chce zápis. Dělí
+  se s `omittingEmptySubsequences: false`, protože s výchozím `true` by z `keboola/` vyšlo
+  `keboola`, tedy **jméno organizace vydávané za slug týmu** (chytil to test).
+- **`fetchAssignableTeams` jde přes `orgs/{org}/teams`, ne `repos/{o}/{r}/teams`** — repozitářová
+  varianta vrátila **404** i na repu, kam se dá číst i psát PR (chce admin práva). Organizační
+  seznam prošel: 34 týmů, 0,63 s. **404 u účtu bez organizace je odpověď, ne porucha** — osobní repo
+  týmy nemá, takže se vrací prázdno; ostatní chyby propadnou dál.
 - **`fetchAssignableUsers` jde přes GraphQL, ne `GET /repos/{o}/{r}/collaborators`.** Seznam
   spolupracovníků chce **push právo**, takže by na repu, kam se dá jen číst, skončil 403 —
   a `assignableUsers` je navíc přesně ta množina, ze které GitHub sám dovolí review vyžádat, takže
@@ -6273,7 +6285,7 @@ podmínku „nikdy nic neposílat“ pravidlem, které je vidět z kódu — viz
 
 | Typ | Co dělá |
 |---|---|
-| `ReviewPublishing` | Protokol se **šesti** metodami: `submit(_:)`, `reply(to:body:)`, `setResolved(_:of:)`, `comment(on:body:)`, `setLabels(_:on:)`, `requestReviewers(_:on:)` |
+| `ReviewPublishing` | Protokol se **šesti** metodami: `submit(_:)`, `reply(to:body:)`, `setResolved(_:of:)`, `comment(on:body:)`, `setLabels(_:on:)`, `requestReviewers(_:teams:on:)` |
 | `GhReviewPublisher` | Implementace nad `gh`; pre-flight přes `GitHubGateway` |
 | `PublishScope` | Brána: smí se z tohohle repa odeslat? Skládá se z `Configuration`, výchozí stav **vypnuto** |
 | `PublishError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
@@ -6470,7 +6482,11 @@ Co na tom stojí:
   zakázala zrovna to, kvůli čemu se štítkuje.
 - **Odebrat vyžádané review odsud nejde**, a to je rozhodnutí: request pošle člověku upozornění,
   které se odebráním **nedá vzít zpět**, takže odebrání není opravný krok, jen zametení. Proto na
-  něj nevede `+`, ale pojmenované tlačítko se jménem toho člověka.
+  něj nevede `+`, ale pojmenované tlačítko se jménem toho člověka — a **u týmu je v něm slovo
+  `týmu`**, protože upozornění odejde všem jeho členům.
+- **Lidé a týmy jdou jedním voláním** (`reviewers` + `team_reviewers` v jednom payloadu). Druhá
+  metoda by prodloužila výčet cest ven za nic a dvě žádosti by nechaly mezistav s půlkou vyžádaných.
+  Vyžádat **nikoho** není akce ani tady: prázdné musí být obojí, jinak se volá.
 - **Odpověď na vyžádání nenese odpovědi ostatních**, jen `requested_reviewers`. Slévá to
   `Policy.reviewers(requested:keeping:)`, tedy tatáž funkce jako při čtení — bez ní by z panelu po
   jednom kliknutí zmizelo schválení, které tam bylo, nebo by se muselo volat `fetchMetadata` znovu.

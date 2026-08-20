@@ -42,32 +42,60 @@ enum MetadataRequest {
     /// nikoho není akce), takže past s prázdným tělem tady není. `-f`, ne `-F`, ze stejného důvodu
     /// jako u komentáře: `--field` hodnotu **typuje** (číslo pošle jako číslo), takže login
     /// z číslic by v payloadu skončil jako `123` místo `"123"`.
-    static func reviewerArguments(for pr: PRIdentifier, logins: [String]) -> [String] {
+    static func reviewerArguments(
+        for pr: PRIdentifier,
+        logins: [String],
+        teams: [String]
+    ) -> [String] {
         [
             "api", "repos/\(pr.repo)/pulls/\(pr.number)/requested_reviewers",
             "-X", "POST",
-        ] + logins.flatMap { ["-f", "reviewers[]=\($0)"] }
+        ]
+            + logins.flatMap { ["-f", "reviewers[]=\($0)"] }
+            // Týmy jdou **týmž voláním**, jen druhým polem — GitHub je bere spolu, takže se to
+            // nedělí na dvě žádosti (a tedy ani na dva částečně odeslané stavy).
+            + teams.flatMap { ["-f", "team_reviewers[]=\($0)"] }
     }
 }
 
-/// Odpověď `POST /pulls/{n}/requested_reviewers` — pull request, ze kterého nás zajímá **jen**
-/// seznam vyžádaných.
+/// Odpověď `POST /pulls/{n}/requested_reviewers` — pull request, ze kterého nás zajímají **jen**
+/// dva seznamy vyžádaných.
 ///
 /// Odpověď nese celý PR (a tedy i jeho popis a hlavu), ale odpovědi reviewerů v ní nejsou —
-/// `requested_reviewers` je právě to, na koho se čeká. Zbytek se do modelu nepřepisuje, protože
-/// tohle není čtení detailu.
+/// `requested_reviewers` a `requested_teams` je právě to, na koho se čeká. Zbytek se do modelu
+/// nepřepisuje, protože tohle není čtení detailu.
+///
+/// **Obojí je optional**: GitHub `requested_teams` u repa bez týmů vynechá a chybějící pole nemá
+/// položit odpověď na akci, která prošla.
 struct GhRequestedReviewersResponse: Decodable {
     struct Reviewer: Decodable {
         let login: String
     }
 
-    let requestedReviewers: [Reviewer]
+    let requestedReviewers: [Reviewer]?
+    let requestedTeams: [GhTeam]?
 
     enum CodingKeys: String, CodingKey {
         case requestedReviewers = "requested_reviewers"
+        case requestedTeams = "requested_teams"
     }
 
     func logins() -> [String] {
-        requestedReviewers.map(\.login).filter { !$0.isEmpty }
+        (requestedReviewers ?? []).map(\.login).filter { !$0.isEmpty }
     }
+
+    /// Slugy týmů. **Bez předpony organizace už z API** (změřeno), ale sjednocuje se to stejnou
+    /// funkcí jako u čtení, aby se obě cesty nemohly rozejít.
+    func teamSlugs() -> [String] {
+        Policy.requestedTeams((requestedTeams ?? []).map(\.slug))
+    }
+}
+
+/// Na koho se po vyžádání čeká — lidé a týmy zvlášť, jako je má GitHub (#392).
+///
+/// **Vlastní typ, ne dvojice v návratu**: volající z toho skládá dvě různá pole snímku a tuple by
+/// u volání nesl jen pořadí, ne význam.
+struct RequestedReview: Hashable, Sendable {
+    let reviewers: [RequestedReviewer]
+    let teams: [String]
 }

@@ -80,18 +80,21 @@ struct GhMetadataTests {
         #expect(logins == ["ajbeattie", "audreee", "babakks", "BagToad", "bdehamer"])
     }
 
-    /// **Tým se zahazuje**, protože se z okna vyžádat nedá (nabídka je `assignableUsers`, tedy
-    /// lidé) a login nemá. Řádek, se kterým se nedá nic udělat, do sekce nepatří.
+    /// **Tým jde do vlastního pole, ne mezi lidi** (#392) — a je to ta oprava, na kterou se přišlo
+    /// při proklikání: do té doby se týmy zahazovaly a sekce `Reviewery` byla u PR s týmovou žádostí
+    /// prázdná, i když review někdo vyžádal (změřeno: **čtyři PR ze čtrnácti** v jedné frontě).
     ///
-    /// Inline JSON, ne fixture: vyžádání review od týmu se ve veřejných repozitářích nesehnalo
-    /// a tvar je z dokumentace `gh` (`__typename: Team`, `slug` místo `login`).
-    @Test("Vyžádané review od týmu se do seznamu nedostane")
-    func dropsTeamRequests() throws {
+    /// Fixture je **skutečný výstup** z `keboola/platform-architecture-and-concepts#278`, převzatý
+    /// inline i s tím, co je na něm podstatné: `gh pr view` dává slug **s předponou organizace**
+    /// (`keboola/ajda-swimlane`), kdežto REST bez ní. Repo je firemní, takže se jeho titulek do
+    /// fixtures nedává — bere se z něj jen ten jeden tvar.
+    @Test("Vyžádaný tým jde do vlastního pole, ne mezi lidi")
+    func readsTeamRequestsIntoTheirOwnField() throws {
         let json = """
         {
           "labels": [],
           "reviewRequests": [
-            {"__typename": "Team", "name": "Platform", "slug": "platform"},
+            {"__typename": "Team", "name": "ajda-swimlane", "slug": "keboola/ajda-swimlane"},
             {"__typename": "User", "login": "odinuv"}
           ],
           "latestReviews": []
@@ -102,6 +105,29 @@ struct GhMetadataTests {
             .metadata()
 
         #expect(metadata.reviewers == [RequestedReviewer(login: "odinuv", answer: .waiting)])
+        // Bez předpony organizace — tu podobu chce zápis (`team_reviewers`).
+        #expect(metadata.teams == ["ajda-swimlane"])
+    }
+
+    /// **Ten stav, který #392 potichu schovávala**: žádný člověk, jen tým. Do opravy z něj vyšla
+    /// prázdná sekce, tedy „nikdo review nevyžádal“ — a to byla nepravda.
+    @Test("PR s žádostí jen pro tým není prázdný")
+    func aTeamOnlyRequestIsNotEmpty() throws {
+        let json = """
+        {
+          "labels": [],
+          "reviewRequests": [
+            {"__typename": "Team", "name": "ajda-swimlane", "slug": "keboola/ajda-swimlane"}
+          ],
+          "latestReviews": []
+        }
+        """
+        let metadata = try GhOutput.decoder
+            .decode(GhPullRequestMetadata.self, from: Data(json.utf8))
+            .metadata()
+
+        #expect(metadata.reviewers.isEmpty)
+        #expect(metadata.teams == ["ajda-swimlane"])
     }
 
     /// Neznámý stav review **nepokládá celý snímek** — stejné pravidlo jako u `SubmittedReview`.

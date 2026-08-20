@@ -42,11 +42,14 @@ extension AppStore {
     /// Dorazil už seznam lidí? Tatáž úvaha.
     func hasLoadedAssignableUsers(in repo: RepoID) -> Bool { assignableUsers[repo] != nil }
 
-    /// Koho jde ještě vyžádat. Prázdno = seznam se ještě nenačetl, nebo jsou všichni vyžádaní.
-    func reviewerCandidates(for pr: PRIdentifier) -> [String] {
+    /// Koho jde ještě vyžádat — lidi i **týmy**. Prázdno = seznam se ještě nenačetl, nebo jsou
+    /// všichni vyžádaní.
+    func reviewerCandidates(for pr: PRIdentifier) -> [ReviewerCandidate] {
         Policy.reviewerCandidates(
             assignable: assignableUsers[pr.repo] ?? [],
-            reviewers: metadata(for: pr)?.reviewers ?? []
+            teams: assignableTeams[pr.repo] ?? [],
+            reviewers: metadata(for: pr)?.reviewers ?? [],
+            requestedTeams: metadata(for: pr)?.teams ?? []
         )
     }
 
@@ -109,11 +112,17 @@ extension AppStore {
         }
     }
 
-    /// Dotáhne lidi, kteří na repo smí. Tatáž úvaha jako u labelů repozitáře.
+    /// Dotáhne lidi **a týmy**, které na repo smí. Tatáž úvaha jako u labelů repozitáře.
+    ///
+    /// **Dvě volání, jedna nabídka a jedna porucha.** Když spadne kterékoli z nich, je nabídka
+    /// nepřesná — a nepřesná nabídka se nemá tvářit jako úplná; ta věta je proto jedna. Týmy se
+    /// tahají **za** lidmi, ne souběžně: obojí je `gh` podproces a paralelní spouštění by jich na
+    /// jedno otevření nabídky zvedlo počet naráz běžících.
     func loadAssignableUsers(for repo: RepoID) async {
         guard assignableUsers[repo] == nil else { return }
         do {
             assignableUsers[repo] = try await gateway.fetchAssignableUsers(repo: repo)
+            assignableTeams[repo] = try await gateway.fetchAssignableTeams(repo: repo)
             assignableUserFailures[repo] = nil
         } catch is CancellationError {
             // Zavření nabídky není porucha.
@@ -161,16 +170,16 @@ extension AppStore {
     /// **Jen z nabídky.** Kontrola je i tady, ne jen ve view: uzavřená množina je to jediné, co
     /// drží slib, že se nevyžádá review od někoho, komu to GitHub odmítne — a jediná kontrola ve
     /// view je kontrola, kterou příští obrazovka obejde. Tatáž úvaha jako u labelů.
-    func requestReview(from login: String, on pullRequest: PullRequestSummary) async {
+    func requestReview(from candidate: ReviewerCandidate, on pullRequest: PullRequestSummary) async {
         let id = pullRequest.id
         guard metadataEditing(for: id).isAllowed else { return }
-        guard reviewerCandidates(for: id).contains(login) else { return }
+        guard reviewerCandidates(for: id).contains(candidate) else { return }
         guard let submission = metadataSubmission(for: id) else { return }
         guard metadataActionStates[id]?.isBusy != true else { return }
         metadataActionStates[id] = .requestingReviewer
 
         do {
-            let requested = try await submission.requestReview(from: [login])
+            let requested = try await submission.requestReview(from: candidate)
             metadataActionStates[id] = nil
             apply(requested: requested, to: pullRequest)
         } catch let error as PublishError {
@@ -202,13 +211,16 @@ extension AppStore {
 
     /// Vloží potvrzené vyžádání do snímku. Odpovědi ostatních **zůstávají** — GitHub je
     /// v odpovědi neposílá, takže je slévá `Policy`, tou samou funkcí jako při čtení.
-    private func apply(requested: [RequestedReviewer], to pullRequest: PullRequestSummary) {
+    private func apply(requested: RequestedReview, to pullRequest: PullRequestSummary) {
         let id = pullRequest.id
         guard case .loaded(var metadata, let updatedAt) = metadataStates[id] else { return }
         metadata.reviewers = Policy.reviewers(
-            requested: requested.map(\.login),
+            requested: requested.reviewers.map(\.login),
             keeping: metadata.reviewers
         )
+        // Týmy se přepisují **celé z odpovědi**: nemají odpověď, kterou by bylo potřeba zachovat,
+        // takže `requested_teams` je úplný stav toho, na kterých týmech PR leží.
+        metadata.teams = requested.teams
         metadataStates[id] = .loaded(metadata, updatedAt: updatedAt)
     }
 

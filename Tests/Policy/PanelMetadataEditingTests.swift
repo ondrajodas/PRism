@@ -163,7 +163,7 @@ struct PanelMetadataEditingTests {
             reviewers: [RequestedReviewer(login: "bara", answer: .waiting)]
         )
 
-        #expect(candidates == ["adam", "cyril"])
+        #expect(candidates == [.person("adam"), .person("cyril")])
     }
 
     /// Kdo **odpověděl**, v nabídce zůstává — vyžádat review po opravě je zrovna to, kvůli čemu se
@@ -178,11 +178,62 @@ struct PanelMetadataEditingTests {
             reviewers: [RequestedReviewer(login: "bara", answer: answer)]
         )
 
-        #expect(candidates == ["adam", "bara"])
+        #expect(candidates == [.person("adam"), .person("bara")])
     }
 
     @Test("Prázdný seznam assignable dá prázdnou nabídku")
     func emptyAssignableGivesNothing() {
         #expect(Policy.reviewerCandidates(assignable: [], reviewers: []).isEmpty)
+    }
+
+    // MARK: - Týmy (#392)
+
+    /// **Týmy jsou druhá polovina nabídky, a jsou za lidmi.** Odpověď je to, kvůli čemu se na sekci
+    /// kouká, a tu nese jedině člověk; tým říká jen „leží to na skupině“.
+    @Test("Nabídka nese lidi i týmy, lidi první")
+    func candidatesCarryPeopleThenTeams() {
+        let candidates = Policy.reviewerCandidates(
+            assignable: ["cyril", "adam"],
+            teams: ["platform", "ajda-swimlane"],
+            reviewers: []
+        )
+
+        #expect(candidates == [
+            .person("adam"), .person("cyril"), .team("ajda-swimlane"), .team("platform"),
+        ])
+    }
+
+    /// **Už vyžádaný tým se nenabízí** — bylo by to tlačítko, po kterém se nic nestane. U člověka
+    /// se to řídí odpovědí `čeká`, u týmu prostě tím, že už je vyžádaný: tým odpověď nemá.
+    @Test("Vyžádaný tým v nabídce není, i když člověk s odpovědí ano")
+    func alreadyRequestedTeamsAreDropped() {
+        let candidates = Policy.reviewerCandidates(
+            assignable: ["adam"],
+            teams: ["platform", "ajda-swimlane"],
+            reviewers: [RequestedReviewer(login: "adam", answer: .approved)],
+            requestedTeams: ["ajda-swimlane"]
+        )
+
+        #expect(candidates == [.person("adam"), .team("platform")])
+    }
+
+    /// **Slug se zbavuje předpony organizace.** `gh pr view` dává `keboola/ajda-swimlane`, REST
+    /// a `orgs/{org}/teams` `ajda-swimlane` — a tu druhou podobu chce zápis. Kdyby se obě potkaly
+    /// v panelu, vypadal by týž tým jako dva.
+    @Test("Předpona organizace ve slugu padá a duplikáty se slijí")
+    func stripsTheOrganisationPrefix() {
+        #expect(Policy.requestedTeams(["keboola/ajda-swimlane", "ajda-swimlane"]) == ["ajda-swimlane"])
+    }
+
+    @Test("Prázdný slug se zahodí")
+    func dropsEmptySlugs() {
+        #expect(Policy.requestedTeams(["", "keboola/"]).isEmpty)
+    }
+
+    /// Pořadí je abecední, ne to, co přišlo z API — přeskládaný seznam se nedá přečíst dvakrát
+    /// stejně.
+    @Test("Týmy se řadí abecedně")
+    func sortsTeams() {
+        #expect(Policy.requestedTeams(["platform", "ai", "keboola/ajda"]) == ["ai", "ajda", "platform"])
     }
 }
