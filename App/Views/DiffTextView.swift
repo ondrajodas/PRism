@@ -164,12 +164,15 @@ final class DiffTextView: NSTextView {
         palette: SyntaxPalette
     ) -> (text: NSAttributedString, ranges: [NSRange]) {
         let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        // Pět převodů na blok místo jednoho na run (#275) — viz `SyntaxColors`.
+        // Šest převodů na blok místo jednoho na run (#275, od #393 i barva textu) — viz `SyntaxColors`.
         let colors = SyntaxColors(palette)
         let ranges = lineRanges(of: lines)
+        // **Barva obyčejného textu se nasazuje na celý text** (#393), obarvení syntaxe ji pak přes
+        // svoje rozsahy přepíše. Bez ní kreslí TextKit chybějící `.foregroundColor` **černě** —
+        // v tmavém režimu tedy identifikátory černé na tmavém pozadí; podrobnosti u `SyntaxColors.plain`.
         let result = NSMutableAttributedString(
             string: lines.map(\.text).joined(separator: "\n"),
-            attributes: [.font: font]
+            attributes: [.font: font, .foregroundColor: colors.plain]
         )
         for (index, line) in lines.enumerated() {
             colorize(line, in: result, over: ranges[index], language: language, colors: colors)

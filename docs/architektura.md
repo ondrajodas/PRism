@@ -611,6 +611,7 @@ Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne p
 | `NSAttributedString.draw(at:)` ve **flipped** view kreslí **nad** bod | Text mimo řádek a mimo view. Musí to být `draw(in:)` s rámečkem a zarovnáním z odstavce |
 | `setAttributedString` **ruší výběr** | `updateNSView` chodí i při přejezdu myší (mění se, u kterého řádku svítí pilulka), takže výběr zmizel při každém hnutí. Text se proto skládá jen při změně **řádků nebo stylu** (do #393 při změně podpisu s hashem) |
 | `updateNSView` chodí i **beze změny hodnoty** | Volá ho každý přepočet geometrie, ne změna bloku — ve ztuhlém okně z #393 tisíckrát za sekundu, bez jediného průchodu tělem. Práci pod tím proto hlídá klíč `DiffBlockDrawing` |
+| Chybějící `.foregroundColor` v atributovaném řetězci je **černá**, ne „dědí z okolí“ | Identifikátory a soubory bez rozpoznaného jazyka byly v tmavém režimu černé na tmavém pozadí — kontrast **1,39** na přidaném řádku (#393). Ve SwiftUI `foregroundColor = nil` doopravdy dědí (`DiffLineView` tak kreslí úryvek u vlákna), takže se ta úvaha do #157 přenesla z cesty, kde platila. Barva textu se proto nasazuje **na celý text** a obarvení syntaxe ji přepisuje |
 | `bounds` v `updateNSView` je **o průchod pozadu** | SwiftUI nastaví rámec view až po něm, takže první průchod vidí šířku **nula** a ten druhý tu skutečnou (změřeno u #393). Platilo to i předtím — rámečky řádků se z nuly spočítaly stejně —, jen to nebylo z čeho poznat |
 | SwiftUI `@ViewBuilder`, který podle stavu vybírá mezi `self` a modifikátorem, **mění strukturu** | `copyMenu` s prázdnou nabídkou zahodil podstrom a postavil nový `NSTextView` — s ním zmizel výběr, jak myš odjela z bloku. Menu se proto připojuje bezpodmínečně |
 | `NSCursor.set()` ze SwiftUI ani `addCursorRect` si proti `NSTextView` **neporadí** | Ruka nad pilulkou blikla jen v rohu, kde se to potkalo, nebo vůbec. Jde to jen přes tracking area a `cursorUpdate` — a i tam se musí rozhodovat v `mouseMoved`, protože `cursorUpdate` chodí jen při vstupu do areay |
@@ -713,6 +714,28 @@ vyčíslené dvojice světlá/tmavá, žádné krytí. Hodnoty jsou **z návrhu*
   méně hlasitá než dřív (ΔE 13,9 proti 29,5), zato se pod ní dá číst (řetězec 2,17 proti 1,27).
   Rozhodnutí z #153 tím drží v tom, na čem stálo: vrstva musí být na první pohled jiná plocha než
   zbytek řádku, a práh je ΔE 10.
+- **Obyčejný text má barvu z návrhu, a nasazuje se vždycky** (#393). Token je `--ink`
+  (`Palette.ink`), protože `td.code` v mockupu dědí barvu textu stránky; v `SyntaxColors` je to
+  `plain` a v textu bloku sedí jako **základní atribut celého řetězce**, který obarvení syntaxe
+  přepisuje přes svoje rozsahy. Nasadit se **musí**: chybějící `.foregroundColor` znamená
+  v atributovaném řetězci **černou**, ne dědění, takže do #393 byly identifikátory v tmavém režimu
+  černé na tmavém — a soubor bez rozpoznaného jazyka celý. Změřené kontrasty (WCAG, obě větve):
+
+  | pozadí řádku | světlý: černá → `ink` | tmavý: černá → `ink` |
+  |---|---|---|
+  | kontext (`surface`) | 21,00 → 17,90 | **1,14 → 15,31** |
+  | přidaný (`diffAdded`) | 19,23 → 16,39 | **1,39 → 12,55** |
+  | odebraný (`diffRemoved`) | 18,31 → 15,61 | **1,26 → 13,89** |
+  | word-level přidaný | 15,84 → 13,50 | **2,41 → 7,24** |
+  | word-level odebraný | 14,42 → 12,29 | **1,99 → 8,77** |
+
+  Ve světlém režimu je to nepatrné zhoršení (černá je kontrastnější než inkoust), ale všude nad AAA
+  a **shodné s návrhem**, který černou nemá nikde. **Ne `labelColor`**: ten je poloprůhledný
+  (bílá na 85 %), takže by se přes barevné pozadí řádku složil jinak než v mockupu.
+
+  Zůstává z toho jedna věc k zapamatování: `DiffPaletteTests` ten kontrast (`ink` nad oběma druhy
+  řádku, práh 10) měřily **odjakživa** a procházely — jenže měřily **token**, ne to, co se kreslí.
+  Že se ta barva doopravdy nasadí, tvrdí od #393 `DiffBlockCompositionTests`.
 - **Pruh rozsahu komentáře zůstává průhledný schválně** (`rangeTint`, `dragTint`): musí se s barvou
   druhu řádku **smíchat**, aby pod ním zůstalo vidět, co je přidané. Je to tedy jediné krytí, které
   v diffu zbylo, a je to jiný případ než plocha — hodnota se tu měnit *má*. Změřeno nad novým

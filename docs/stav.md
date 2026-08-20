@@ -3253,7 +3253,23 @@ aktualizaci proti jedenácti u bloku dvojic (nemá `sizeThatFits`, takže nevis�
 Stráž, kterou nemá co vyvolat, by nešla ověřit vloženou regresí; `LogTailTextView` tentýž klíč má
 od #292.
 
-**Na obrazovce není co vidět, a je to doložené renderem.** `Změněné soubory` v obou pohledech a na
+**Z pauzy vyšla ještě jedna oprava, a ta na obrazovce vidět je** (proto se render proti `main`u
+liší schválně): v tmavém režimu byly **identifikátory černé na tmavém pozadí**, protože obyčejný text
+neměl v atributovaném řetězci `.foregroundColor` vůbec — a chybějící barva se v TextKitu kreslí
+**černě**, ne „jako okolí“. Ta úvaha se do #157 přenesla ze SwiftUI cesty, kde `foregroundColor = nil`
+doopravdy dědí (`DiffLineView` tak kreslí úryvek u vlákna). Nasazuje se proto token `--ink`
+(`Palette.ink`) jako základní atribut celého textu, který obarvení syntaxe přepisuje — v bloku diffu
+i v sheetu s hunkem, kde byl **celý** log černý na tmavém. Kontrast na přidaném řádku **1,39 → 12,55**,
+nejhorší místo (word-level přidaný) **2,41 → 7,24**, ve světlém režimu nepatrné zhoršení proti černé
+(19,23 → 16,39) a všude nad AAA. Změřeno i nakresleným pixelem: `0,000/0,000/0,000` → `0,905/0,919/0,950`,
+tedy přesně `#E7EAF2`. `DiffPaletteTests` ten kontrast přitom měřily odjakživa a procházely — měřily
+**token**, ne kresbu; že se barva nasadí, tvrdí teď `DiffBlockCompositionTests`.
+
+**Na stráži z #393 se tím nic nemění, jen se ukázala z druhé strany:** barva je funkcí barevného
+režimu, který je v klíči, takže přepnutí motivu blok přesází — a to je zároveň ta kontrola, že se
+stráž nezúžila špatně.
+
+**Na zbytku obrazovky není co vidět, a je to doložené renderem.** `Změněné soubory` v obou pohledech a na
 dvou šířkách vyšly proti `main`u **bajt v bajt stejné**; sonda je nejdřív ověřená sama proti sobě.
 Blok drží tři počitadla (`updates`, `mounts`, `typesettings`), na kterých stojí sedm nových testů —
 a obě strany stráže jsou ověřené **vloženou regresí**: vypnutá stráž (11 nasazení na 11 aktualizací)

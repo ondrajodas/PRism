@@ -4351,6 +4351,49 @@ poprvé je v něm vidět **náš kód**, a to ve dvou vzorcích (30 s / 21 240 v
    Platí u toho i to, že hover podstrom naši closure **neobsahuje**: z 2 065 vzorků je 10 rámců
    aplikace (kopie hodnoty representable), zbytek hit-test responderů, tedy stejně jako u #361.
 
+#### Barva obyčejného textu: co bylo změřené a proč render přestal být identický
+
+Při pauze nad slotovou aplikací se v tmavém režimu ukázalo, že **identifikátory jsou skoro
+nečitelné** — a je to vada stará, ne z #393: obyčejný text neměl v atributovaném řetězci
+`.foregroundColor` vůbec, což TextKit kreslí **černě**. Klíčová slova, řetězce a čísla svoji barvu
+měly, takže to vypadalo jako vlastnost tématu.
+
+**Změřeno ze tří stran, ne odhadnuto:**
+
+1. **Atribut**: `DiffTextView.compose` vydal na `return Version20260729;` dva úseky —
+   `„return“ → sRGB 0.8/0.471/0.196` (oranžová Darculy) a `„ Version20260729;“ → BEZ BARVY`.
+2. **Nakreslený pixel** (blok v `darkAqua`, vzorek přes prostřední řádku textu, `--add-bg` pozadí):
+   před opravou nejtmavší pixel **0,000/0,000/0,000**, tedy černý glyf; po ní nejsvětlejší
+   **0,905/0,919/0,950**, což je přesně `--ink` (`#E7EAF2`).
+3. **WCAG kontrast** (spočítaný, obě větve palety, všechna pozadí, na kterých kód leží):
+
+   | pozadí řádku | světlý: černá → `ink` | tmavý: černá → `ink` |
+   |---|---|---|
+   | kontext (`surface`) | 21,00 → 17,90 | **1,14 → 15,31** |
+   | přidaný (`diffAdded`) | 19,23 → 16,39 | **1,39 → 12,55** |
+   | odebraný (`diffRemoved`) | 18,31 → 15,61 | **1,26 → 13,89** |
+   | word-level přidaný | 15,84 → 13,50 | **2,41 → 7,24** |
+   | word-level odebraný | 14,42 → 12,29 | **1,99 → 8,77** |
+
+**Co z toho platí pro testy.** `DiffPaletteTests` ten kontrast měřily celou dobu (`ink` nad oběma
+druhy řádku, práh 10) a **procházely** — jenže měřily **token z palety**, ne to, co se kreslí. Že
+se barva doopravdy nasadí, tvrdí od #393 `DiffBlockCompositionTests` („žádný znak nezůstane bez
+barvy“, „obyčejný text má barvu textu z palety“) a totéž pro sheet s hunkem
+(`SelectableCodeTextTests`). Vloženou regresí ověřeno: bez té barvy padnou **tři** tvrzení
+(nezabarvené úseky, prázdná sada barev u souboru bez jazyka, chybějící inkoust na identifikátoru).
+
+Tvrzení „bez jazyka se nic neobarví“ se tím **přepsalo** — bylo správné o obarvení a špatné
+o kresbě; text bez barvy vyjde černý, takže soubor, kterému `Language` nerozumí, byl v tmavém
+režimu celý černý na tmavém.
+
+**Render tím přestal být identický, a to schválně.** Sonda proto od #393 kreslí **oba motivy** a motiv
+si **předepisuje** (`window.appearance`, `hosting.appearance` a `performAsCurrentDrawingAppearance`
+kolem kresby) — bez toho kreslí v tom, co má zrovna stroj, a dva běhy pár hodin od sebe se liší
+motivem, ne kódem. Stalo se to u #393: snímek z 15:55 vyšel světlý a z 21:05 tmavý, takže první
+srovnání po bytech netvrdilo nic. S předepsaným motivem se z osmi snímků liší **šest**; identické
+zůstaly `pod-sebou-*-648`, protože v nejužší šířce se v pohledu pod sebou kód nevykreslí vůbec —
+což je zároveň kontrola, že se změnilo právě to písmo.
+
 #### Čím se ověřuje, že se ta práce přestala dělat
 
 **Počítadly v blocích, ne dojmem.** Blok drží tři čísla (`DiffTextView.updates`, `mounts`,

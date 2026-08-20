@@ -57,6 +57,10 @@ struct SelectableCodeView: NSViewRepresentable {
         let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let language = Language(path: path)
         let palette = SyntaxPalette.forScheme(colorScheme)
+        // **Barva textu se nasazuje vždycky** (#393): chybějící `.foregroundColor` v atributovaném
+        // řetězci znamená černou, ne „dědí z okolí“, takže hunk bez rozpoznaného jazyka i obyčejné
+        // identifikátory v něm byly v tmavém režimu černé na tmavém. Viz `SyntaxColors.plain`.
+        let base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor(Palette.ink)]
 
         // **Bez známého jazyka se text neskládá po řádcích** (#214). Dělení a slepování řádek po
         // řádce nic nepřidá, když se nemá co obarvovat — a u velkého textu je to celá cena: změřeno
@@ -64,7 +68,7 @@ struct SelectableCodeView: NSViewRepresentable {
         // 8,78 MB 155 ms proti 7,9 ms. Konec logu (#214) tudy chodí vždycky, protože `.log` žádný
         // jazyk nemá; sheetu s kódem to pomůže u souborů, které `Language` nezná.
         guard let language else {
-            return NSAttributedString(string: code, attributes: [.font: font])
+            return NSAttributedString(string: code, attributes: base)
         }
 
         let result = NSMutableAttributedString()
@@ -76,11 +80,11 @@ struct SelectableCodeView: NSViewRepresentable {
         // klíčovaný textem řádku (#224).
         for (index, line) in TextLines.all(code).enumerated() {
             if index > 0 {
-                result.append(NSAttributedString(string: "\n", attributes: [.font: font]))
+                result.append(NSAttributedString(string: "\n", attributes: base))
             }
             for run in SyntaxHighlighter.runs(of: String(line), in: language) {
-                var attributes: [NSAttributedString.Key: Any] = [.font: font]
-                // `nil` u obyčejného textu nechává barvu na systému, jako v diffu.
+                var attributes = base
+                // `nil` u obyčejného textu nechává základní barvu z `base`, jako v diffu.
                 if let color = palette.color(for: run.kind) {
                     attributes[.foregroundColor] = NSColor(color)
                 }

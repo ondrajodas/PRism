@@ -696,6 +696,17 @@ Zvlášť stojí za přečtení, než sáhneš na:
   **Zastavit kolo z #361 to neumí** — naše práce v něm byla 5,5 %. Je to zlevnění obsahu kola, ne
   oprava ztuhnutí; podrobnosti a čísla v [`docs/architektura.md`](docs/architektura.md), ověření
   v [`docs/testovani.md`](docs/testovani.md).
+- **V AppKitu není „bez barvy“ dědění, ale černá** (#393). `NSAttributedString` bez
+  `.foregroundColor` se kreslí **černě** — ve SwiftUI přitom `foregroundColor = nil` doopravdy dědí
+  z okolí, takže ta úvaha jednu cestu (`AttributedString`) popisuje správně a druhou ne. Stálo to
+  nečitelný kód v tmavém režimu: identifikátory a soubory bez rozpoznaného jazyka měly na přidaném
+  řádku kontrast **1,39** (po opravě 12,55). Barva textu se proto nasazuje **jako základní atribut
+  celého řetězce** a obarvení syntaxe ji přepisuje; hodnota je token `--ink` (`Palette.ink`), ne
+  `labelColor` — ten je poloprůhledný a přes barevné pozadí řádku se složí jinak než v návrhu.
+
+  A **kontrast paletového tokenu netvrdí nic o kresbě**: `DiffPaletteTests` ho měřily celou dobu
+  a procházely, protože měřily `Palette.ink`, kdežto do textu se nenasazoval. K měření barvy proto
+  patří i tvrzení, že se ta barva **do textu dostane** (`DiffBlockCompositionTests`).
 - **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236). Blok kódu si v `LazyVStack`u
   navrhuje výšku sám, takže když ji spočítá na jiné šířce, než na jaké se pak zalamuje, nakreslí víc
   řádků, než na kolik si řekl — a přeteče do řádku pod sebou (AppKitové view je nad SwiftUI obsahem,

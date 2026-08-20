@@ -79,16 +79,23 @@ struct DetailTabRenderProbe {
         }
     }
 
-    /// Blok kódu v **obou pohledech** — pod sebou a vedle sebe (#393).
+    /// Blok kódu v **obou pohledech a v obou motivech** (#393).
     ///
     /// Existuje proto, že stráž v `updateNSView` (`DiffBlockDrawing`) se dá zúžit špatně, a to je
     /// tichá vada: blok, který se nepřesází, vypadá jako správně nakreslený blok — jen je v něm
     /// obsah z minula. Render je jediné místo, kde se dá **vidět**, že se kresba nezměnila; číslo
     /// z počitadel na to neodpoví.
     ///
-    /// Porovnává se **po bytech** proti renderu z `main`u, takže se to sem hodí i pro každou další
-    /// změnu v sazbě bloku. Postup je v `docs/testovani.md`.
-    @Test("Vyrendrovat blok kódu v obou pohledech")
+    /// **Motiv se předepisuje, nebere se ze systému.** Bez toho sonda kreslí v tom, co má zrovna
+    /// stroj — a dva běhy pár hodin od sebe se pak liší motivem, ne změnou v kódu (stalo se
+    /// u #393: snímek z 15:55 vyšel světlý a z 21:05 tmavý, takže srovnání po bytech nic netvrdilo).
+    /// Barva textu bloku je navíc dynamická, takže se vyhodnotí až při kreslení; nastavuje se proto
+    /// **na okně, na hostující vrstvě i jako kreslicí motiv**, jak to má `AppearanceRenderProbe`.
+    ///
+    /// Porovnává se **po bytech** proti renderu z `main`u. Když se barvy v bloku mění schválně,
+    /// identita padne — a to se pak píše do popisu PR, ať to nevypadá jako nedopatření. Postup je
+    /// v `docs/testovani.md`.
+    @Test("Vyrendrovat blok kódu v obou pohledech a motivech")
     func rendersBothDiffLayouts() async throws {
         let directory = URL(filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory())
         let (store, cache) = try await prepared()
@@ -97,18 +104,27 @@ struct DetailTabRenderProbe {
         store.setDetailTab(.filesChanged, for: pr)
         for layout in [DiffLayout.unified, .split] {
             store.setDiffLayout(layout)
-            for width in [1400.0, 648.0] as [CGFloat] {
-                let name = layout == .split ? "vedle-sebe" : "pod-sebou"
-                let url = directory.appending(path: "detail-soubory-\(name)-\(Int(width)).png")
-                try capture(store: store, width: width, to: url)
-                print("SONDA \(url.path) — diff \(name)")
+            for (theme, appearance) in [("svetly", NSAppearance.Name.aqua), ("tmavy", .darkAqua)] {
+                for width in [1400.0, 648.0] as [CGFloat] {
+                    let name = layout == .split ? "vedle-sebe" : "pod-sebou"
+                    let url = directory.appending(path: "detail-soubory-\(name)-\(theme)-\(Int(width)).png")
+                    try capture(store: store, width: width, appearance: appearance, to: url)
+                    print("SONDA \(url.path) — diff \(name), \(theme) motiv")
+                }
             }
         }
     }
 
     /// Scéna do okna mimo obrazovku a odtud `cacheDisplay` do PNG — tatáž cesta jako u `Přehledu`
     /// (#291), bloku kódu (#236) a odpočtu (#269), viz `docs/testovani.md`.
-    private func capture(store: AppStore, width: CGFloat, to url: URL) throws {
+    /// - Parameter appearance: motiv, ve kterém se kreslí. `nil` = ten, který má zrovna proces —
+    ///   pro sondy, kterým o barvy nejde. Viz `rendersBothDiffLayouts()`.
+    private func capture(
+        store: AppStore,
+        width: CGFloat,
+        appearance name: NSAppearance.Name? = nil,
+        to url: URL
+    ) throws {
         let scene = PullRequestDetailView(
             store: store,
             pullRequest: Self.summary,
@@ -129,14 +145,32 @@ struct DetailTabRenderProbe {
         // Mimo obrazovku, ať sonda nikomu neskočí před oči — v paralelním běhu stojí vedle sebe víc
         // instancí a cizí okno je poslední, co má sonda rušit.
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
+        let appearance = try name.map { try #require(NSAppearance(named: $0)) }
+        window.appearance = appearance
+        hosting.appearance = appearance
         window.orderFront(nil)
         // Hierarchie se doskládá až po jednom kole smyčky; `.task` v detailu si navíc dotahuje diff
         // a konverzaci z fake gatewaye, takže se na to musí nechat čas.
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))
-        let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
-        hosting.cacheDisplay(in: hosting.bounds, to: rep)
-        try #require(rep.representation(using: .png, properties: [:])).write(to: url)
+        var thrown: Error?
+        // Kreslicí motiv **navíc** k tomu na okně: dynamické `NSColor` z palety se vyhodnocují až
+        // tady, takže by jinak vyšly podle stroje (poučení z `AppearanceRenderProbe`).
+        func draw() {
+            do {
+                let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+                hosting.cacheDisplay(in: hosting.bounds, to: rep)
+                try #require(rep.representation(using: .png, properties: [:])).write(to: url)
+            } catch {
+                thrown = error
+            }
+        }
+        if let appearance {
+            appearance.performAsCurrentDrawingAppearance(draw)
+        } else {
+            draw()
+        }
         window.orderOut(nil)
+        if let thrown { throw thrown }
     }
 
     /// Store s načteným detailem, diffem, checky, uloženými nálezy **a rozdělaným review** — tedy
