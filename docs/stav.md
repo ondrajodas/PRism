@@ -3170,6 +3170,42 @@ bránou, a hlavně by se dal zapomenout — proměnná prostředí umře s proce
 vypne dalším `./bin/run.sh` sama. Ověřeno na běžící `PRism-a`; podrobnosti a co si měřidlo nesmí
 dovolit jsou v [`architektura.md`](architektura.md), sekce *Diagnostika kreslení*.
 
+### #361 — čtvrté kolo: diagnostika se v záchvatu vypínala, teď píše z vlastního vlákna (otevřené)
+
+**Kolo z #361 se nepodařilo vyrobit ani počtvrté**, ale poprvé je z živého záchvatu **záznam
+o průběhu**, ne jen o tom, co bylo před ním.
+
+**Nástroj měl vadu, kvůli které v záchvatu mlčel.** Do #391 řádky vypisoval observer hlavního
+runloopu na `beforeWaiting` — a v tom kole se runloop do stavu čekání **vůbec nedostane**, protože
+SwiftUI si flushuje transakce z takového observeru a z toho se nevrátí. Ve čtvrtém záchvatu je
+poslední řádek `11:01:31`, ztuhnutí trvalo do `11:02:53` a mezi tím **nic**. Řádky proto zapisuje
+vlastní vlákno (`Thread` + `Thread.sleep`), observer zůstal **jen jako počitadlo kol** a CPU hlavního
+vlákna se čte přes jeho mach port (`threadCPUSeconds(of:)`), protože `CLOCK_THREAD_CPUTIME_ID` umí
+jen vlákno samo o sobě. Zaseknutý úsek je z řádku vidět slovy: `0 kol runloopu`, celá sekunda CPU
+a `— HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU`. Ověřeno **vyrobeným kolem** (blokující observer, 1 s): šest řádků z doby záchvatu,
+všechny o zaseknutí — a **vloženou regresí** z druhé strany: se zápisem z observeru nezůstane ze
+záchvatu nic. Nad skutečnou scénou (`FeedbackLoopList`, 31,72 % CPU) zapsala i půlsekundové úseky,
+ve kterých hlavní vlákno runloop nepustilo ke slovu.
+
+**Ze třicetisekundových vzorků vyšly tři odpovědi, žádná z nich ale není pohon.**
+`SecondaryLayerGeometryQuery` (16,5 % hoření) je `.background(alignment: .topLeading)` v uzlu osy —
+poznat je to z řetězce ve vzorku, který končí v `_HStackLayout`, takže aby SwiftUI našel vodicí čáru,
+**umístí všechny děti řádku znovu**, a to na každý dotaz. Zůstává to tam: ablace u #386 tu cenu na
+projíždění **neviděla** (1,42 proti 1,44 s) a odebrat to znamená odebrat linku osy.
+`FillingWidth` v ose **nevyjednává** (ve vzorku je `_FrameLayout`, ne `_FlexFrameLayout`, takže
+`availableWidth` z #220 dosáhne až do uzlu) a `ConversationRow` se kopíruje jen při čtení identity
+v `ForEach`i (0,46 %).
+
+**Nově vyloučené:** přesázení osy pod odscrollovaným seznamem (zkrácení u dna i v prostředku,
+prodloužení, týž počet s jinými výškami — všechno se usadí do 0,01 %, a `NSScrollView` si navíc
+počátek sám usekne) a **tažení za hranu okna** nad osou, tedy ta nitka z #363 přes `minSize` →
+`_sizeThatFits` → `invalidateTransform` (1,82 s CPU za tažení, po něm 0,00 %). Čísla a mechanika
+jsou v [`testovani.md`](testovani.md), sekce *Čtvrtý záchvat*.
+
+**Co zbývá:** proč `signalPrefetch` nekonverguje. Nově se ví, že se to celé odehrává uvnitř jednoho
+`flushTransactions` a že se v tom kole **nepřeloží ani jedno tělo** aplikace — je to přepočítávání
+geometrie nad nezměněnou sadou podviews.
+
 ### M11 — Průběh běhu (milník #13)
 
 Čtyři issues, které sahají do téhož — `ReviewProgress`, `ReviewerTimeline` a stav průběhu

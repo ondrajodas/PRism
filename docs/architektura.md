@@ -1717,19 +1717,51 @@ a **hlavička sezení** v souboru (jméno bundlu kvůli slotům, PID kvůli `sam
 
 - **Počitadlo není v observable stavu** (#252) — obyčejná třída se zámkem, ne `@Observable`. Zápis
   do stavu při každém průchodu tělem je právě ta chyba, kterou tohle hledá.
-- **Nic si neplánuje kolo** (#350). Žádný `Timer`, žádná animace, žádný `requestUpdate`. Řádek
-  vypisuje **observer runloopu** na `beforeWaiting`, tedy jedině tehdy, když runloop něco dělal
-  a chystá se spát — diagnostika si nevyžádá ani jedno probuzení navíc. Ticho v souboru proto
-  znamená, že se runloop **vůbec neprobudil**; aplikace se ale sama probouzí kvůli pollingu, takže
-  v běžném provozu chodí levné řádky. Změřeno na běžící `PRism-a`: nečinné okno bez otevřeného PR
-  dá **1–4 kola a 5–14 ms CPU** za sekundu, tedy ~70 B na řádek a strop řádově za den. Pořadí
-  observeru je vysoké schválně — SwiftUI si transakce flushuje taky v `beforeWaiting` observeru
-  (`NSRunLoop.flushObservers`), takže se stav čte **po** nich.
+- **Nic si neplánuje kolo na hlavním vlákně** (#350). Žádný `Timer` na hlavním runloopu, žádná
+  animace, žádný `requestUpdate`, žádný `DispatchQueue.main.async`. Observer runloopu na
+  `beforeWaiting` zůstává, ale **jen jako počitadlo kol** — inkrement pod zámkem, bez hodin a bez
+  disku. Pořadí je vysoké schválně: SwiftUI si transakce flushuje taky v `beforeWaiting` observeru
+  (`NSRunLoop.flushObservers`), takže se počítá kolo, které už transakce proběhlo. Změřeno na
+  běžící `PRism-a`: nečinné okno bez otevřeného PR dá **1–4 kola a 5–14 ms CPU** za sekundu, tedy
+  ~70 B na řádek a strop řádově za den.
 - **`pass(_:)` nečte hodiny ani nesahá na disk.** Je to inkrement pod zámkem a nic jiného; jméno
   typu se skládá reflexí **jen u prvního průchodu** (`@autoclosure`). Cena vypnuté diagnostiky je
   načtení jednoho statického `Optional`u (`RenderDiagnostics.current`).
 - **Nula se nezapisuje.** Mezera v záznamu znamená „aplikace nic nedělala“, a to je informace;
-  řádek každou sekundu by hořící okno utopil v tichých řádcích.
+  řádek každou sekundu by hořící okno utopil v tichých řádcích. **Do „nic“ ale nepatří hořící
+  CPU** (#391): rozhoduje `Policy.diagnosticBurnFloor` (5 % uplynulého času), protože zaseknuté
+  kolo nemá ani kola runloopu, ani průchody tělem — a právě takový úsek se má zapsat.
+
+**Zapisuje vlastní vlákno, ne observer hlavního runloopu** (#391) — a je to ta jediná změna, která
+z toho nástroje udělala nástroj na **živý** záchvat. Do té doby řádky vypisoval ten observer, tedy
+hlavní vlákno samo, a ve čtvrtém záchvatu (#361, 2026-08-20) se ukázalo, co to znamená: poslední
+řádek je `11:01:31`, ztuhnutí trvalo do `11:02:53` a mezi tím **nic**. Runloop se totiž do stavu
+čekání vůbec nedostane — SwiftUI si flushuje transakce z `beforeWaiting` observeru a z toho se
+v tom kole nevrátí, takže náš observer s vyšším pořadím nepřijde na řadu. Nástroj postavený na
+živý záchvat se tak v záchvatu vypnul.
+
+Řádek proto zapisuje `Thread` + `Thread.sleep` (`startWriting()`), ne `Timer` ani
+`DispatchSourceTimer`: časovač potřebuje runloop nebo frontu, kdežto tady stačí vlákno, které se
+probouzí samo a nikomu nic neplánuje. Reference na sebe je **slabá**, takže se vlákno ukončí i
+tehdy, když se instance zahodí bez `stop()` (typicky v sondě). Hlavního vlákna se to dotýká jedině
+**čtením jeho CPU**: `threadCPUSeconds(of:)` nad jeho mach portem, protože
+`CLOCK_THREAD_CPUTIME_ID` umí jen vlákno samo o sobě a zaseknuté hlavní vlákno se nemá kdy zeptat.
+Port se bere v `init` z volajícího vlákna (`currentThreadPort()`), takže se instance musí postavit
+tam, kde se má měřit; `start()` je `@MainActor`, takže v aplikaci to vyjde samo. Vedlejší efekt,
+který je taky ke prospěchu: **zápis na disk odešel z hlavního vlákna**.
+
+Zaseknuté kolo se z řádku pozná slovy: `0 kol runloopu`, celá sekunda CPU a
+`— HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU`. **Věta netvrdí „záchvat“**, jen to změřené — jeden
+takový úsek může být i drahá práce na hlavním vlákně; záchvat se pozná z toho, že takových řádků
+jde za sebou desítky. `qualityOfService` zapisovacího vlákna je `.utility` schválně — hlavní vlákno
+má přednost, protože se měří ono —, takže se úsek pod plnou zátěží roztáhne (měřeno 0,13–0,18 s při
+cadenci 0,1 s). Na řádku to nic nekazí: `elapsed` v něm je **skutečně** uplynulý čas, ne nastavená
+perioda.
+
+**Ověřeno spuštěním, ne jen testem** (`PRism-a`, Debug, `./bin/run.sh --diagnose`): po hlavičce
+chodí řádek za sekundu se skutečnou cadencí **1,07 s**, nečinné okno bez otevřeného PR dá 2–15 kol
+a 0,000–0,018 s CPU. Bez toho by se nevědělo, že se `start()` po přestěhování na vlastní vlákno
+vůbec rozjede — `PRISM_DIAGNOSE` se v testech nezapíná, takže tu cestu žádný test nejde.
 
 **Strop je vyjmenovaný, platí na soubor a jeho dosažení se zapisuje** (8 MB,
 `DiagnosticsLog.byteLimit`). Cache bez vyjmenované meze je únik místa s odkladem (#224) — a soubor,
@@ -1751,10 +1783,10 @@ a „nic se nezapisuje“ splynuly, což je zrovna to, co banner v `bin/run.sh` 
 Skript to navíc kontroluje **dřív, než aplikaci spustí** (`stat -f%z` nad logem), protože na stderr
 se při spuštění přes `open` nikdo nedívá.
 
-**Omezení, které je potřeba znát:** kdyby se hlavní vlákno zaseklo tak, že se runloop nikdy
-nevrátí do observeru, nezapíše se nic. Vzorky z #361 to vylučují (v pěti sekundách jsou tisíce
-vzorků `flushObservers`, tedy tisíce kol), ale prázdný soubor u hořícího okna **není chyba
-diagnostiky, je to nález**.
+**Omezení, které zbylo:** záznam končí s procesem, takže poslední rozepsaný úsek se nezapíše —
+soubor se plní po celých úsecích. A zaseknutou aplikaci nemá kdo zavřít jinak než rukou
+(`bin/run.sh` na Apple event nedostane odpověď, `-1712`), takže z posledního záchvatu chybí ta
+poslední sekunda.
 
 Skládání řádku je čistá funkce v `Policy` (`diagnosticLine`, `diagnosticHeaderLine`,
 `diagnosticLimitLine`) — soubor se posílá dál a je jediné, co z hořícího okna zbyde, takže na něm

@@ -1502,6 +1502,12 @@ Aplikace pak zapisuje do `~/Library/Application Support/PRism/diagnostics.log` �
 sekundu s časem, počtem kol runloopu, CPU hlavního vlákna a počtem průchodů `body` po typech
 views. Soubor se dá poslat v příloze; ticho v něm znamená, že aplikace nic nedělala.
 
+**Zaseknuté okno v něm je vidět, a to je celý smysl** (#391). Řádky zapisuje vlastní vlákno, ne
+observer hlavního runloopu, takže se píše dál i tehdy, když hlavní vlákno runloop vůbec nepustí ke
+slovu — takový úsek má `0 kol runloopu`, celou sekundu CPU a větu `HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU`. Do #391 to byla
+mez, o které se vědělo: ve čtvrtém záchvatu (#361) přestal záznam **v okamžiku ztuhnutí** a zbylo
+z něj jen to, co bylo předtím.
+
 **Vypnutá nestojí nic** (jedna podmínka na začátku `body`) a **vypne se sama**: příznak umře
 s procesem, takže další `./bin/run.sh` bez `--diagnose` je zpátky v normálním provozu. Že je
 zapnutá, je vidět z banneru skriptu i z hlavičky sezení v souboru. Proč to není přepínač

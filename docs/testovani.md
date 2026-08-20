@@ -1085,20 +1085,65 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a PIDem. Pásmo času se do funkce **předává**, aby šel stamp napsat literálem, ne aby test
   závisel na tom, jak je stroj nastavený.
 
+  Od #391 k tomu patří **zaseknuté kolo**: že se úsek s nulou kol a nulou průchodů zapíše, když
+  hoří CPU, a dostane větu `HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU`; že s kolama runloopu tu větu **nedostane** (hoření při
+  práci je jiný stav); že nečinnost se stopou CPU pořád mlčí; a že je ta hranice **podíl
+  z uplynulého času**, ne absolutní sekundy — jinak by u kratší cadence zapisovacího vlákna hlásila
+  zaseknutí nad prací, která hoří chvilku.
+
   Nad tím sběr sám: že **vypnutá diagnostika nezakládá ani prázdný soubor** (jinak by se z cache
   nedalo poznat, jestli sezení běželo se zapnutou), že se jméno typu skládá reflexí **jen u prvního
   průchodu** (v hořícím okně jsou to tisíce volání za sekundu, takže by měřidlo přispívalo do toho,
-  co měří — ověřeno počitadlem v `@autoclosure`), že se řádek zapíše až po sekundě a počitadla se
-  tím vynulují, že se **vyčerpaný strop napíše do souboru** a další řádky se zahodí, a že druhé
+  co měří — ověřeno počitadlem v `@autoclosure`), že řádek **uzavře úsek** a počitadla se tím
+  vynulují, že se **vyčerpaný strop napíše do souboru** a další řádky se zahodí, a že druhé
   sezení **přípisuje**.
+
+  **A od #391 to nejcennější: že se zapisuje i v kole, ze kterého se runloop nevrátí.** Kolo se
+  v testu **vyrábí** — observer na `beforeWaiting` s nižším pořadím (0) než to naše počitadlo
+  (2 000 000), který se `Self.burn` (1 s) nevrátí a přitom hoří (zaměstnané vlákno, ne `sleep`;
+  spící by CPU nespálilo a řádek by pak tvrdil, že se nic nedělo). Runloop je tedy uvnitř
+  callbacku, přesně jako v tom záchvatu. **Čte se snímek souboru z chvíle, kdy záchvat ještě
+  trval** — bere ho ten blokující observer, než se vrátí; po záchvatu by to nic nedokazovalo,
+  protože tehdy už runloop běží a řádek by mohl napsat kdokoli. Naměřeno: **šest řádků za tu
+  sekundu**, všechny `0 kol runloopu` a všechny s větou o zaseknutí.
+
+  **Vložená regrese je u toho druhý test, ne poznámka**: tentýž záchvat, ale řádky vypisuje
+  observer runloopu, jak to bylo do #391 — ze záchvatu nezůstane **nic** (`file` neexistuje). Bez
+  toho tvrzení by první test nedokazoval, že ty řádky přineslo zapisovací vlákno. **A ověřeno i
+  obráceně**, na kopii bez opravy: s vypnutým `startWriting()` padne první test na
+  `(duringFit.count → 0) >= 2`, tedy na tom, že ze záchvatu nezůstalo nic.
+
+  **Strop je hned u toho, jak se to píše** (pravidlo z #379): hoří se `Self.burn` a ani
+  o milisekundu víc.
+
+  Třetí případ z té trojice: **druhé volání `startWriting()` nepustí druhé vlákno.** Dva
+  zapisovatelé si přebírají počitadla po sobě (každý flush je nuluje), takže by se hořící sekunda
+  rozpadla na úseky, ve kterých není vidět nic — tedy zrovna ta věta, kvůli které se záznam bere.
+  Testuje se na počtu řádků ze záchvatu: při cadenci 0,1 s jich za sekundu smí být nejvýš deset.
 
   Sedmý případ přibyl z Copilot review na #386 a je z nejcennější třídy: **nové sezení nad plným
   souborem nezapíše nic** — ani hlavičku, ani druhý limitní řádek —, protože strop platí na
   **soubor**, ne na sezení. Ověřeno **vloženou regresí**: s počitadlem od nuly (`written` bez seedu
   z velikosti souboru) spadnou dvě expectations ze tří, na tom, že druhé sezení hlavičku zapsalo
-  a soubor se změnil. Co se z testů poznat nedá, je chování observeru runloopu v aplikaci — ten
-  se pouští jedině s `PRISM_DIAGNOSE=1` a v testovacím hostu by psal do **skutečné** cache, protože
-  host má `CFBundleName` hlavní instance.
+  a soubor se změnil. Co se z testů poznat nedá, je chování diagnostiky **zapnuté z prostředí** —
+  `start()` se pouští jedině s `PRISM_DIAGNOSE=1` a v testovacím hostu by psal do **skutečné**
+  cache, protože host má `CFBundleName` hlavní instance. Testy si proto instanci staví samy, se
+  souborem v dočasné složce.
+
+  **Nad skutečnou scénou je na to sonda** (`IdleDiffSpinProbe.diagnosticsUnderLoad`,
+  `PRISM_MEASURE`): kontrolní seznam se zpětnou vazbou z rozvržení do stavu (`FeedbackLoopList`)
+  a hned za ním projetí osy kolečkem, se zapnutou diagnostikou do dočasného souboru. Naměřeno:
+  **31,72 % CPU** v prvním úseku, 29 řádků v záznamu — a mezi nimi dva takové, které do #391
+  nemohly vzniknout:
+
+  ```
+  za 0.51 s: 0 kol runloopu, 0.492 s CPU — HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU
+  za 0.57 s: 6 kol runloopu, 0.153 s CPU
+  ```
+
+  Kontrolní scéna tedy vyrábí i **půlsekundové úseky, ve kterých hlavní vlákno runloop vůbec
+  nepustí ke slovu**, a diagnostika je zapsala. Sonda u toho vypisuje CPU vedle počtu řádků: bez
+  toho čísla by nebylo poznat, jestli se měřilo nad zátěží, nebo nad prázdnem.
 - **`AppStore` — pohled na diff** — že se bez odchylky bere hodnota z nastavení, že ji přepnutí
   v liště přebije, že se změna nastavení projeví **bez restartu** a že odchylka **shodná**
   s nastavením přežije jeho změnu. Poslední dva potřebují skutečný `ConfigStore` nad dočasnou
@@ -4094,7 +4139,8 @@ měřidla, ne cena změny.
 
 **Co zbývá:** dohledat, co graf špiní. Vylučovací práce hotová: animace, timer, vnější pohon, přeměření
 textu, náš `onContinuousHover`, akce `onGeometryChange`, hover zápis pod kurzorem, scéna sama,
-projíždění kolečkem se setrvačností a `ForEach` nad polem tuplů.
+projíždění kolečkem se setrvačností a `ForEach` nad polem tuplů. **Úplný seznam po čtvrtém kole**
+je níž, v sekci *Čtvrtý záchvat*.
 
 Nejsilnější zbylá nitka je **re-arm `NSHostingView.requestUpdate(after:)`**, ke kterému se ve vzorcích
 dostane `LazyLayoutViewCache.signalPrefetch()` — a při stavbě sondy se ukázal i druhý volající, ze
@@ -4197,6 +4243,87 @@ jednou umístí a rozdíl má z čeho vyjít.
 testovací host má `CFBundleName` hlavní instance) a po každém úseku vypíše počitadla. Je to jediné
 číslo, ze kterého se pozná rozdíl mezi „scéna se usadila“ a „scéna se překresluje, jen levně“ —
 `0,00 % CPU` samo o sobě obojí neodliší.
+
+### Čtvrtý záchvat: co říká třicetisekundový vzorek a dvě nové vyloučené věci (#361)
+
+Čtvrté kolo. Přineslo **jednu opravu nástroje** (diagnostika psala jen do chvíle ztuhnutí, viz
+`architektura.md`) a **dva negativní výsledky**; pohon se nenašel ani tentokrát.
+
+**Vzorky:** dva třicetisekundové (24 050 a 24 195 vzorků hlavního vlákna) z ztuhlého hlavního okna
+na buildu `3737c29`. Signatura je čtvrtá stejná: transakční kolo **23 967 z 24 050 (99,7 %)**,
+`enqueueHoverUpdateIfNeeded` **0** (a myš přitom **uvnitř** okna), animace/timer/dispatch main queue
+0, jediný re-arm `signalPrefetch`. Podíly z 20 476 vzorků `UpdateStack::update`:
+`LazySubviewPlacements.updateValue` 3 284 + 3 048, **`SecondaryLayerGeometryQuery.value.getter`
+3 974**, `UnaryChildGeometry.value.getter` 3 176, `DynamicBody.updateValue` 605,
+`ViewListTransition.updateValue` 558.
+
+**Čí je ten `SecondaryLayerGeometryQuery`: `.background(alignment: .topLeading) { line }` v uzlu
+osy** (`ConversationNodeView.swift:34`, přišlo s opravou #375). Ze vzorku se to pozná bez hádání —
+celý řetězec je v něm rozepsaný: `SecondaryLayerGeometryQuery.value` → `ViewDimensions.subscript`
+→ `LayoutEngineBox.explicitAlignment` → `ViewLayoutEngine.explicitAlignment` → **`conformance
+_HStackLayout`** → `StackLayout.UnmanagedImplementation.placeChildren` →
+`sizeChildrenGenerallyWithConcreteMajorProposal` → `_PaddingLayout`/`_FrameLayout` a dál dolů. Je to
+tedy **`HStack`**, ne `VStack`, takže z těch dvou míst s explicitním zarovnáním v ose sedí jen tohle;
+druhé (`.overlay(alignment: .leading)` na kartě v `ConversationEntryView.swift:220`) je na `VStack`u
+a ve vzorku není. **Mechanika:** aby SwiftUI zjistil, kde je u `HStack`u vodicí čára `.top`
+a `.leading`, musí **umístit všechny jeho děti** — tedy druhé plné rozvržení řádku **na každý
+dotaz**. V nečinném okně se zaplatí jednou a graf si to podrží; v tom kole se to počítá znovu
+a znovu, odtud **16,5 %** celého hoření (u vzorku z 2026-08-18 to bylo 13 %).
+
+**Zůstává to tam, a je to rozhodnutí, ne opomenutí.** Ablace u #386 tu variantu **změřila**
+(1,42 s proti 1,44 s beze změny, tabulka výš), takže na projíždění se ta cena neprojeví vůbec —
+a pravidlo z #275 říká, že zlevnění, které se nedá změřit na té cestě, kterou kód doopravdy jde, se
+nevydává za zlevnění. Odebrat to navíc znamená odebrat **linku osy**, tedy vzhled; jiná forma
+(pozadí bez explicitního zarovnání, `ZStack`) by se musela měřit v kole, které jede, a to zatím
+není. Zapsáno proto jako **cena uvnitř cizího kola**, s mechanikou výš, ať se nehledá znovu.
+
+**`FillingWidth` v ose šířku nevyjednává** — a taky to není odhad ze čtení kódu, je to ve vzorku
+vidět: v řetězci explicitního zarovnání stojí **`_FrameLayout`** (to je `frame(width:)`), ne
+`_FlexFrameLayout` (`frame(maxWidth:)`). Uzel osy tedy bere tu větev `FillingWidth`, ve které
+`availableWidth` z environmentu **je** — nastavuje ho `GeometryReader` na hranici tabu
+(`PullRequestDetailView.swift:401`) —, takže se šířka **předává, ne vyjednává** (#220 platí).
+`_FlexFrameLayout` ve vzorku je jen výš, na ploše tabu (`timeline.frame(maxWidth:.infinity,
+maxHeight:.infinity)`), což je jedna úroveň, ne řetěz. Ve kole se `FillingWidth` objevuje pouze jako
+**přečtení jeho `@Environment`** (`DynamicBody.updateValue` → `_DynamicPropertyBuffer.update`):
+`initializeWithCopy for FillingWidth` 14 + 9 vzorků, tedy 0,1 %.
+
+**`ConversationRow` se v kole kopíruje, ale nic se z něj nepočítá.** Kopie visí pod
+`ForEachState.item(at:offset:)` → `ForEach.IDGenerator.makeID` → `Array.subscript.read`, tedy pod
+**přečtením identity** — líný seznam se na ni ptá při každém přerovnání a `Array.subscript.read`
+z toho udělá kopii celé struktury včetně payloadu enumu. Je to **cena průchodu**, ne vstup rozvržení:
+75 + 35 vzorků, **0,46 %**. Zlevnit by to šlo boxem (`final class` uvnitř řádku), ale ta cena se tím
+jen přestěhuje — alokace na řádek při **každém** průchodu tělem `ConversationView` proti kopii při
+každém dotazu na identitu —, takže se to nedělá bez čísla z kola, které jede.
+
+**Nové vyloučené věci.** Obě mají scénář v `IdleDiffSpinProbe` a obě vyšly negativně:
+
+| Hypotéza | Čím se zkoušela | Cena samotné změny | Po ní, tři úseky po 3 s |
+|---|---|---|---|
+| obsah se **zkrátí** pod odscrollovaným seznamem (prefetch chce pásmo, které neexistuje) | osa 300 → 40 komentářů u dna (obsah 48 417 → 6 515) | 4,48 % v prvním úseku | 0,01 / 0,00 % |
+| totéž v prostředku osy | 300 → 40, dojeto na 8 400 | 4,27 % | 0,00 / 0,00 % |
+| obsah se **prodlouží** | 300 → 600 u dna | 5,30 % | 0,01 / 0,00 % |
+| **týž počet, jiné výšky** (rozejde se odhad zbytku obsahu) | 300 → 300 s posunutými tvary | 5,48 % | 0,01 / 0,00 % |
+| **tažení za hranu okna** nad osou (`minSize` → `_sizeThatFits` → `invalidateTransform` z #363) | 20 kroků po 24 pt, kolo runloopu po každém | 1,82 s CPU za tažení | 0,00 / 0,01 / 0,00 % |
+| totéž nad diffem (kontrola) | dtto | 2,10 s | 0,02 / 0,00 / 0,00 % |
+
+První hypotéza měla proti sobě mechaniku, která je vidět až z čísel sondy: **`NSScrollView` počátek
+sám usekne** (obsah 6 515, výřez 5 828), takže výřez za koncem obsahu nevydrží ani do dalšího kola
+a prefetch nemá co chtít. Druhá vyřizuje tu nitku z #363: cesta `updateConstraints → minSize →
+_sizeThatFits` se tažením za hranu doopravdy vytíží (1,82 s CPU), ale po tažení se okno usadí.
+
+**Vylučovací seznam po čtvrtém kole:** animace, timer, vnější pohon, přeměření textu,
+`onContinuousHover`, akce `onGeometryChange`, hover zápis pod kurzorem, scéna sama, projíždění
+kolečkem se setrvačností, okno s minimem z obsahu, dlouhá osa s různě vysokými uzly, `ForEach` nad
+polem tuplů, životnost `DiffView` pod osou, baseline zarovnání v markdownu, pozadí uzlu osy,
+**přesázení osy pod odscrollovaným seznamem** a **tažení za hranu okna**.
+
+**Co zbývá:** pořád totéž — proč `signalPrefetch` nekonverguje. Nově se k tomu ví, že se to celé
+odehrává **uvnitř jednoho `flushTransactions`** (proto se runloop nevrátí a proto se diagnostika
+musela přestěhovat na vlastní vlákno) a že se v tom kole **nepřeloží ani jedno tělo** aplikace
+(`MarkdownText` a `DiffRowView` mají ve vzorku nulu), takže se ani nemateralizují nové řádky —
+je to čistě přepočítávání geometrie nad **nezměněnou** sadou podviews. Příští záchvat proto konečně
+dá i **záznam z průběhu**: řádky `0 kol runloopu … NEPUSTILO RUNLOOP KE SLOVU` s počty průchodů tělem, ze kterých se
+pozná, jestli se v tom kole něco překresluje, nebo se jen počítá rozvržení.
 
 ### Jak změřit projíždění diffu, když se ho nedá dotknout (#252)
 
