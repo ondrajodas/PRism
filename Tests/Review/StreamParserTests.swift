@@ -12,6 +12,13 @@ struct StreamParserTests {
         parser.summarize(TextLines.content(try Fixture.text("stream-json/\(fixture).jsonl")).map(String.init))
     }
 
+    /// Jména odmítnutých nástrojů. **Počítá se z kroků**, protože jiný seznam už neexistuje:
+    /// `StreamSummary.deniedTools` #326 zrušilo (bylo to pole, které nikdo nečetl — viz komentář
+    /// u `StreamSummary`).
+    private func denied(in summary: StreamSummary) -> [String] {
+        summary.attemptedTools.filter { $0.outcome?.kind == .denied }.map(\.name)
+    }
+
     // MARK: - Proti skutečným streamům
 
     @Test("Ze streamu s nálezy vypadnou nálezy")
@@ -109,9 +116,144 @@ struct StreamParserTests {
         let result = try summary(of: "review-denied-write")
 
         #expect(result.outcome?.isError == false)
-        #expect(result.deniedTools == ["Write"])
+        #expect(denied(in: result) == ["Write"])
         // `Write` se **nepoužil**, jen se o něj řeklo — v tabu Průběh se to nesmí slít.
         #expect(result.attemptedTools.map(\.name).contains("Write"))
+    }
+
+    // MARK: - Odpovědi na pokusy (#326)
+
+    /// Odmítnutí je ve streamu vidět **hned**, v `tool_result` s `is_error` — ne až
+    /// v `permission_denials` na konci běhu. Fixture je skutečný odmítnutý `Write`.
+    @Test("Odmítnutý nástroj se zavře odpovědí ze streamu, ne až koncem běhu")
+    func closesADeniedAttemptFromTheStream() throws {
+        let result = try summary(of: "review-denied-write")
+
+        let write = try #require(result.attemptedTools.first { $0.name == "Write" })
+        #expect(write.id == "toolu_01EmsAXxPz2r3DWjZRp8Z92v")
+        #expect(write.outcome?.kind == .denied)
+        // Hláška je anglická, protože ji píše `claude` — a je to ta jediná věc, která k důvodu
+        // odmítnutí ve streamu je.
+        #expect(write.outcome?.reason?.contains("haven't granted") == true)
+        // Trvání odmítnutý krok nedostane: nástroj neběžel.
+        #expect(write.outcome?.after == nil)
+    }
+
+    /// `permission_denials` je **záchrana**, ne druhý zdroj pravdy: krok zavřený odpovědí ze
+    /// streamu se z něj nesmí zavírat podruhé, jinak by osa dostala dvě události na jeden krok.
+    @Test("Odmítnutí ze streamu a z konce běhu se nesčítají")
+    func doesNotResolveTheSameAttemptTwice() throws {
+        let result = try summary(of: "review-denied-write")
+
+        #expect(result.resolvedTools.count == 1)
+        #expect(result.resolvedTools.first?.id == "toolu_01EmsAXxPz2r3DWjZRp8Z92v")
+    }
+
+    /// Úspěšná odpověď pokus **zavře**. Bez toho by v ose visel `běží…` u kroku, který dávno
+    /// skončil — a `ReportFindings` odpověď dostává taky, takže je to vidět na každém běhu.
+    @Test("Úspěšná odpověď zavře pokus jako prošlý")
+    func closesASuccessfulAttempt() throws {
+        let result = try summary(of: "review-with-findings")
+
+        #expect(result.attemptedTools.count == 2)
+        #expect(result.attemptedTools.allSatisfy { $0.outcome?.kind == .passed })
+        // U úspěchu se text odpovědi nedrží: je v něm celý soubor, celý diff nebo celý výstup.
+        #expect(result.attemptedTools.allSatisfy { $0.outcome?.reason == nil })
+        #expect(denied(in: result).isEmpty)
+    }
+
+    /// **Nejcennější test téhle sady.** Session zabitá uprostřed kroku nechá poslední pokus
+    /// otevřený — ne „prošel“ a ne „selhal“. Stream je skutečný, jen řezaný na řádku
+    /// s posledním `tool_use`; přesně tak vypadá výstup zabité session.
+    @Test("Krok, jehož odpověď nedorazila, zůstane pokusem")
+    func leavesAnUnansweredAttemptOpen() throws {
+        let lines = TextLines.content(try Fixture.text("stream-json/review-killed.jsonl")).map(String.init)
+        let lastAttempt = try #require(lines.lastIndex { $0.contains(#""type":"tool_use""#) })
+
+        let result = parser.summarize(Array(lines.prefix(through: lastAttempt)))
+
+        let last = try #require(result.attemptedTools.last)
+        #expect(last.outcome == nil)
+        #expect(last.id?.isEmpty == false)
+        // A kroky před ním zavřené jsou — jinak by test procházel i tehdy, kdyby se odpovědi
+        // nečetly vůbec.
+        #expect(result.attemptedTools.dropLast().allSatisfy { $0.outcome != nil })
+        #expect(result.outcome == nil)
+    }
+
+    /// Chyba nástroje **není odmítnutí**. `grep` bez shody a `Read` neexistujícího souboru se
+    /// vrací s `is_error` pořád, takže odznak `ODMÍTNUTO` u nich by z read-only režimu udělal
+    /// poplach nad běžným krokem.
+    ///
+    /// Inline JSON schválně: ve všech osmi fixtures přišel `is_error: true` **vždycky**
+    /// s `tool_result_meta`, tedy jako odmítnutí — neúspěšný příkaz se do zachycených streamů
+    /// nedostal. Tvar bloku je tentýž, jen bez toho `meta`.
+    @Test("Chyba nástroje se od odmítnutí pozná")
+    func tellsAToolErrorFromADenial() {
+        let result = parser.summarize([
+            #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"grep -rn x ."}}]}}"#,
+            #"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"Exit code 1"}]}}"#,
+        ])
+
+        #expect(result.attemptedTools.first?.outcome?.kind == .failed)
+        #expect(result.attemptedTools.first?.outcome?.reason == "Exit code 1")
+        // A hlavně: v odmítnutých nástrojích takový krok být nesmí.
+        #expect(denied(in: result).isEmpty)
+    }
+
+    /// Odmítnutí, které ve streamu nese jen `permission_denials` — starší CLI bez
+    /// `tool_result_meta`, nebo odpověď v useknutém řádku. Záchrana přebije `failed`, protože
+    /// „nemělo povolení“ je o té odpovědi silnější tvrzení než hláška nástroje.
+    @Test("Odmítnutí z konce běhu přepíše chybu nástroje")
+    func theDenialListOverridesAToolError() {
+        let result = parser.summarize([
+            #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"gh pr view"}}]}}"#,
+            #"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"Claude requested permissions"}]}}"#,
+            #"{"type":"result","subtype":"success","is_error":false,"permission_denials":[{"tool_name":"Bash","tool_use_id":"t1"}]}"#,
+        ])
+
+        #expect(result.attemptedTools.first?.outcome?.kind == .denied)
+        #expect(denied(in: result) == ["Bash"])
+    }
+
+    /// Odmítnutí bez `tool_use_id` se **nepáruje podle jména**: `Bash` je v jednom běhu
+    /// i padesátkrát a odmítnutý z nich je jeden.
+    @Test("Odmítnutí bez tool_use_id se k pokusu nepřilepí")
+    func doesNotGuessTheDeniedAttemptByName() {
+        let result = parser.summarize([
+            #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"git log"}}]}}"#,
+            #"{"type":"result","subtype":"success","is_error":false,"permission_denials":[{"tool_name":"Bash"}]}"#,
+        ])
+
+        #expect(result.attemptedTools.first?.outcome == nil)
+        #expect(denied(in: result).isEmpty)
+        #expect(result.resolvedTools.isEmpty)
+    }
+
+    /// Odpověď na krok, který v soupisu není (rozbitý řádek s `tool_use`), nemá kde skončit —
+    /// vyrobit z ní vlastní krok by znamenalo krok, o kterém se neví, co v něm běželo.
+    @Test("Odpověď bez pokusu se zahodí")
+    func dropsAResultWithoutAnAttempt() {
+        let result = parser.summarize([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"nikdo","content":"ok"}]}}"#,
+        ])
+
+        #expect(result.attemptedTools.isEmpty)
+        #expect(result.resolvedTools.isEmpty)
+        #expect(result.malformedLines == 0)
+    }
+
+    /// Odpověď v podobě pole bloků — tak ji vrací `ToolSearch` (`tool_reference`). Není to chyba
+    /// ani odmítnutí, takže krok prošel a text se z ní nebere.
+    @Test("Odpověď složená z bloků pokus taky zavře")
+    func closesAnAttemptAnsweredWithBlocks() throws {
+        let result = try summary(of: "intent-tool-denied")
+
+        let search = try #require(result.attemptedTools.first { $0.name == "ToolSearch" })
+        #expect(search.outcome?.kind == .passed)
+        // A odmítnutý MCP nástroj z téže session je pořád odmítnutý.
+        #expect(denied(in: result).count == 1)
+        #expect(denied(in: result).first?.contains("list_issues") == true)
     }
 
     @Test("Nástroje, o které si reviewer řekl, se dají vyjmenovat")

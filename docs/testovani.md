@@ -534,6 +534,42 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   vstup. Fixtures ze skutečných běhů už v repu jsou
   (`Tests/Fixtures/stream-json/`, viz [`docs/claude-cli.md`](claude-cli.md)): běh
   s nálezy, čistý běh, zabitý běh a odmítnutý zápis. Parser se testuje proti nim.
+- **Odpověď na pokus o nástroj (#326)** — čtyři vrstvy, protože se to dá pokazit v každé z nich:
+  `ToolStepOutcomeTests` na čisté funkce (`Policy.toolOutcome`, `Policy.toolStepMark`) výčtem,
+  `StreamParserTests` na rozbor streamu, `ToolResultPairingTests` na párování v ose
+  a `ClaudeReviewRunnerTests` na to, že odmítnutí odejde do průběhu **za běhu**, ne až s koncem.
+
+  Nejcennější jsou tři tvrzení o tom, co se **nestalo**:
+
+  - **Krok, jehož odpověď nedorazila, nezůstane hotový.** Vstupem je `review-killed.jsonl`
+    **řezaný na posledním `tool_use` řádku** — tak vypadá stream zabité session. K tomu druhá
+    podmínka v témže testu, že kroky **před** ním zavřené jsou: bez ní by test procházel i tehdy,
+    kdyby se `user` eventy nečetly vůbec (past z #296 — tvrzení, které platí i s vyndanou opravou).
+  - **Chyba nástroje se nestane odmítnutím.** `grep` bez shody vrací `is_error` při každém běhu,
+    takže by z odznaku `ODMÍTNUTO` byl poplach nad běžným krokem. Inline JSONem, a je u toho napsané
+    proč: ve všech osmi fixtures přišel `is_error` **vždycky** s `tool_result_meta`.
+  - **Osa uložená před #326 se nekreslí jako běžící.** Literál v testu je tvar, který zapisoval
+    encoder před změnou (`{"tool":{"_0":{"detail":…,"name":…}}}`, bez `id` a `outcome`) — vytištěný
+    dnešním encoderem, protože nová pole jsou volitelná, takže se u nespárovaného pokusu neukládají
+    vůbec. Že to tak zůstane, hlídá druhý test; bez něj by ten literál mohl tiše přestat být tvarem,
+    jaký na disku doopravdy leží.
+
+  **Ověřeno vloženou regresí, dvakrát** (čísla jsou z běhu):
+
+  | Vložená regrese | Co spadne |
+  |---|---|
+  | `user` eventy se nečtou (stav před #326) | 7 testů ve třech suitách — mezi nimi „krok, jehož odpověď nedorazila, zůstane pokusem“ a „odmítnutí dorazí do průběhu ještě před koncem běhu“ |
+  | osa páruje odpověď bez ohledu na `id` | 2 testy: odpověď na neznámý krok a krok bez `id` |
+
+  Dva zádrhely, na které se u toho naráží: **trvání se nesmí porovnávat na rovnost** (osa měří
+  rozdílem dvou `Date`, takže 0,7 s vyjde jako 0,7000000476837158 — testuje se pásmem)
+  a **`Duration.milliseconds` je v testovacím targetu `String`** (`Tests/DurationText.swift`
+  přebíjí to číslo z `RunUsage`), takže se do `#expect` píše srovnání `Duration` s `Duration`.
+
+  Jak řádek kroku vypadá, je otázka na obrázek: `ToolStepRenderProbe` (sonda, pouští se ručně
+  `TEST_RUNNER_PRISM_MEASURE=1`) vyrendruje všech pět podob vedle sebe — prošlý s trvením,
+  odmítnutý s odznakem, chybu nástroje, běžící pokus a krok z osy před #326 bez značky — ve dvou
+  šířkách, aby bylo vidět i to, že se v úzkém místě ořezává cesta, ne značka.
 - **Slévání nálezů z opakovaného `ReportFindings` (#381)** — dvě sady vedle sebe:
   `FindingMergeTests` na čistou funkci (`Policy.mergedFindings`) vyčerpávajícím výčtem
   a `StreamParserTests` na tu samou věc přes parser, ať se neověřuje jen pravidlo bez cesty k němu.

@@ -167,6 +167,8 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
             append(.started, at: time)
         case .attemptedTool(let tool):
             append(.tool(tool), at: time)
+        case .resolvedTool(let resolution):
+            resolve(resolution, at: time)
         case .findings(let count):
             append(.findings(count: count), at: time)
         case .intentGap(let gap):
@@ -177,6 +179,29 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     mutating func finish(_ outcome: ReviewRunOutcome, usage: RunUsage? = nil, at time: Date) {
         self.usage = usage
         append(.finished(outcome), at: time)
+    }
+
+    /// Zavře krok, na který dorazila odpověď (#326).
+    ///
+    /// **Nepřidává událost, mění tu, která už v ose je.** Jeden `tool_use` je jeden krok, ať se
+    /// o něm dozvíme cokoli dalšího — druhý řádek „a takhle to dopadlo“ by osu zdvojil a poslal
+    /// `newestEntry` na událost, která žádný nový krok není.
+    ///
+    /// Páruje **poslední nezavřený** krok s tím `id`; nespárovaná odpověď osu nechá být (krok se
+    /// do ní nedostal, nebo je zavřený už z `tool_result` a tohle je záchrana z `permission_denials`).
+    ///
+    /// Trvání se počítá z časů osy, takže **záporné být nemůže** ani po posunu systémových hodin —
+    /// tatáž pojistka jako u `RunUsageText.elapsed`.
+    private mutating func resolve(_ resolution: ToolResolution, at time: Date) {
+        guard let index = entries.lastIndex(where: { entry in
+            guard case .tool(let tool) = entry.kind else { return false }
+            return tool.id == resolution.id && tool.outcome == nil
+        }), case .tool(var tool) = entries[index].kind else { return }
+
+        let entry = entries[index]
+        let wait = Duration.seconds(max(time.timeIntervalSince(entry.at), 0))
+        tool.outcome = resolution.outcome.measured(after: wait)
+        entries[index] = Entry(id: entry.id, at: entry.at, kind: .tool(tool))
     }
 
     /// Identita se počítá **z poslední události, ne z počtu**. V živé ose je to totéž, ale osa

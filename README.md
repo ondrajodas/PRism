@@ -847,6 +847,16 @@ se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí bě
 nevešlo, je u rozbalení vidět; ořezává se **začátek**, protože se do osy kouká kvůli tomu, čím
 to skončilo.
 
+**Krok v ose je pokus, dokud nedorazí odpověď** (#326). U hotového kroku stojí vpravo trvání
+(`0,2 s`), u toho, na který odpověď ještě nepřišla, `běží…` — a u odmítnutého odznak `ODMÍTNUTO`.
+Odmítnutí **není chyba běhu**: reviewer je read-only, takže `Bash(gh:*)` se odmítnout **má**
+a session přesto skončí úspěchem; proto je to štítek u kroku, ne červený řádek. Chyba nástroje
+(`grep` bez shody, čtení souboru, který není) se od odmítnutí liší — vypadá jako hotový krok a co
+nástroj vrátil, je v nápovědě řádku. Do #326 se odmítnutí poznalo až ze závěrečného souhrnu session,
+tedy o minuty později, a do té doby okno tvrdilo, že nástroj proběhl. Osy uložené dřív značku
+nemají, protože se jejich krokům nemá s čím párovat — a `běží…` u doběhlého review by tvrdilo víc,
+než ta data unesou.
+
 U doběhlého revieweera je v hlavičce **cena, trvání a počet kol** — `0,23 $ · 11,8 s · 3 kola`.
 Bere se to z toho, co nahlásila sama session, takže **zabitý běh je nemá**: nula by tvrdila, že
 byl zdarma. Součet za dnešek je ve stavovém řádku, viz níž.

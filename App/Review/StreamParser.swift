@@ -40,6 +40,8 @@ struct StreamParser: Sendable {
         switch object["type"] as? String {
         case "assistant":
             consumeAssistant(object, into: &summary)
+        case "user":
+            consumeUser(object, into: &summary)
         case "result":
             consumeResult(object, into: &summary)
         default:
@@ -54,12 +56,83 @@ struct StreamParser: Sendable {
 
         for block in content where block["type"] as? String == "tool_use" {
             guard let name = block["name"] as? String else { continue }
-            summary.attemptedTools.append(ToolAttempt(name: name, input: block["input"] as? [String: Any]))
+            summary.attemptedTools.append(ToolAttempt(
+                name: name,
+                input: block["input"] as? [String: Any],
+                id: block["id"] as? String
+            ))
 
             guard name == "ReportFindings" else { continue }
             summary.calledReportFindings = true
             consumeFindings(in: block, into: &summary)
         }
+    }
+
+    /// Odpovědi na pokusy o nástroje (#326).
+    ///
+    /// Chodí v `user` eventech jako bloky `tool_result` v `message.content[]` a párují se
+    /// s `tool_use` přes `tool_use_id` — ověřeno na všech osmi fixtures, kde je pokusů a odpovědí
+    /// vždycky stejně a `id` z `tool_use` sedí na `tool_use_id` z odpovědi.
+    ///
+    /// `tool_result_meta` leží **na eventu, ne v bloku**, takže se k odpovědi hledá taky podle
+    /// `id`. Do #326 se `user` eventy nečetly vůbec a krok v ose vypadal jako provedený od chvíle,
+    /// kdy si o něj model řekl.
+    private func consumeUser(_ object: [String: Any], into summary: inout StreamSummary) {
+        let content = (object["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
+        let kinds = nonExecutionKinds(in: object)
+
+        for block in content where block["type"] as? String == "tool_result" {
+            guard let id = block["tool_use_id"] as? String else { continue }
+            resolve(id, with: Policy.toolOutcome(
+                isError: block["is_error"] as? Bool ?? false,
+                nonExecutionKind: kinds[id],
+                text: resultText(of: block["content"])
+            ), into: &summary)
+        }
+    }
+
+    /// `non_execution_kind` po `tool_use_id` — podle čeho se odmítnutí pozná od chyby nástroje.
+    private func nonExecutionKinds(in object: [String: Any]) -> [String: String] {
+        let meta = object["tool_result_meta"] as? [[String: Any]] ?? []
+        return meta.reduce(into: [:]) { result, entry in
+            guard let id = entry["id"] as? String,
+                  let kind = entry["non_execution_kind"] as? String
+            else { return }
+            result[id] = kind
+        }
+    }
+
+    /// Text odpovědi nástroje. Bývá to řetězec, ale u některých nástrojů je to pole bloků
+    /// (`ToolSearch` vrací `tool_reference`), a z těch nás zajímají jen textové — hlášku
+    /// o odmítnutí nese `text`.
+    private func resultText(of value: Any?) -> String? {
+        if let text = value as? String { return text }
+        guard let blocks = value as? [[String: Any]] else { return nil }
+        let texts = blocks.compactMap { block in
+            block["type"] as? String == "text" ? block["text"] as? String : nil
+        }
+        return texts.isEmpty ? nil : texts.joined(separator: " ")
+    }
+
+    /// Zapíše odpověď k pokusu, ke kterému patří.
+    ///
+    /// Páruje se **poslední nezavřený pokus** s tím `id`: `tool_use_id` se v jednom běhu
+    /// neopakuje, ale kdyby se to stalo, patří odpověď k tomu, co běželo naposled.
+    ///
+    /// Odpověď na pokus, který v soupisu **není** — rozbitý řádek s `tool_use`, nebo pokus
+    /// zavřený už dřív —, se zahazuje. Není k čemu ji přilepit a vyrobit z ní vlastní krok by
+    /// znamenalo krok, o kterém se neví, co v něm běželo.
+    private func resolve(
+        _ id: String,
+        with outcome: ToolAttempt.Outcome,
+        into summary: inout StreamSummary
+    ) {
+        guard let index = summary.attemptedTools.lastIndex(where: {
+            $0.id == id && $0.outcome == nil
+        }) else { return }
+
+        summary.attemptedTools[index].outcome = outcome
+        summary.resolvedTools.append(ToolResolution(id: id, outcome: outcome))
     }
 
     private func consumeFindings(in block: [String: Any], into summary: inout StreamSummary) {
@@ -96,11 +169,31 @@ struct StreamParser: Sendable {
             subtype: object["subtype"] as? String ?? "",
             text: object["result"] as? String
         )
-        let denials = object["permission_denials"] as? [[String: Any]] ?? []
-        for name in denials.compactMap({ $0["tool_name"] as? String }) where !summary.deniedTools.contains(name) {
-            summary.deniedTools.append(name)
-        }
+        rescueDenials(object["permission_denials"] as? [[String: Any]] ?? [], into: &summary)
         summary.usage = usage(from: object)
+    }
+
+    /// Odmítnutí z `permission_denials` jako **záchrana** pro pokus, kterému odpověď nedorazila
+    /// nebo se nedala přečíst (#326).
+    ///
+    /// Není to duplicita té cesty z `tool_result`, je to druhý zdroj téhož pro případ, kdy ta
+    /// první nedoběhla — rozbitý řádek, useknutý `user` event, starší CLI bez `tool_result_meta`.
+    /// **Když dorazí obě, platí ta ze streamu**: přišla ve chvíli, kdy se to stalo, a nese
+    /// trvání. Přepsat se smí jedině `failed`, protože „nemělo povolení“ je o té odpovědi
+    /// silnější tvrzení než hláška, kterou nástroj vrátil.
+    ///
+    /// Páruje se **jen po `tool_use_id`**. Bez něj se nepáruje nic: `tool_name` k pokusu
+    /// jednoznačně nepatří — `Bash` je v jednom běhu i padesátkrát a odmítnutý z nich je jeden.
+    private func rescueDenials(_ denials: [[String: Any]], into summary: inout StreamSummary) {
+        for id in denials.compactMap({ $0["tool_use_id"] as? String }) {
+            guard let index = summary.attemptedTools.lastIndex(where: { $0.id == id }) else { continue }
+            let kind = summary.attemptedTools[index].outcome?.kind
+            guard kind == nil || kind == .failed else { continue }
+
+            let outcome = ToolAttempt.Outcome(kind: .denied)
+            summary.attemptedTools[index].outcome = outcome
+            summary.resolvedTools.append(ToolResolution(id: id, outcome: outcome))
+        }
     }
 
     /// Cena, trvání a počet kol z `result` eventu (#148).
