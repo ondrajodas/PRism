@@ -58,8 +58,9 @@ poznáš podle toho, že **kreslí to, co okno umí dneska** — u #299 to byla 
 **03** (patička nálezu po #283), **19** (seznam commitů po #316) a **01** (rail po #278).
 Poznávací znak to **není** „vedle ní nestojí novější varianta“: 01 má vedle sebe 21, 02 má
 od #NNN vedle sebe 24 a 19 má 25, a záznamem dneška jsou pořád dál — mít vedle sebe kresbu
-budoucího stavu neznamená, že se ta dnešní přestane udržovat. Zapsat to jako „vědomě zastaralé“ nestačí: zápis ve specifikaci nikdo
-nečte s obrázkem v ruce, a u #299 se takových zápisů sešlo pět.
+budoucího stavu neznamená, že se ta dnešní přestane udržovat. Zapsat to jako „vědomě
+zastaralé“ nestačí: zápis ve specifikaci nikdo nečte s obrázkem v ruce, a u #299 se
+takových zápisů sešlo pět.
 
 **Totéž platí o tokenech**, jen tam to nikdo neuvidí očima: `--mint` ve světlé větvi se u #309
 v aplikaci ztmavil kvůli kontrastu (`#0E8F80` → `#0C7E71`) a v mockupu zůstala stará hodnota, tedy

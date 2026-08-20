@@ -423,6 +423,13 @@ code {
    `bug` #D73A4A) — jsou to **data, ne tokeny palety**; v aplikaci se berou z odpovědi,
    ne z `Palette`. */
 .lchip {
+  /* `border-box` z téhož důvodu jako u `.rv-av`, jen tady na tom stojí víc než rozměr:
+     dokument `box-sizing` nikde nepřepisuje, takže `max-width: 100%` by omezila **obsah**
+     a chip by o padding a okraj přerostl. Změřeno na podlaze 240 b: chip
+     `needs-design-review-and-product-signoff` vyšel **230 b** v řádku širokém 214, tedy
+     16 b přes řádek a **3 b za pravým okrajem panelu** — text se přitom ořezal správně, jen
+     ořezaný na špatnou šířku. S `border-box` je chip 214 a nepřeteče. */
+  box-sizing: border-box;
   display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
   font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
   border: 1px solid var(--line); background: var(--panel-3); color: var(--ink-2);
@@ -3516,6 +3523,15 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       a <code>+ reviewer</code> — když na poslední řádek nevyjdou, vezmou si vlastní; akce se
       neschovává.
     </p>
+    <p class="muted">
+      Ty dva řádky jsou <b>řádky labelů</b>, a je v tom jedna past, kterou je vidět až na podlaze
+      240 b: <b>ořez jménu musí nechat místo na <code>+2</code></b>. Prostý „ořež na šířku panelu“
+      totiž dá chip přes celý druhý řádek, <code>+2</code> spadne na třetí a řádky labelů jsou
+      tři — tedy zrovna to, co má strop zakázat. Ve výřezu je proto ten dlouhý chip ořezaný na
+      <b>180 b</b> (214 řádku minus mezera 5 a <code>+2</code> o 29), aby <code>+2</code> zůstalo
+      vedle něj. Řádek s <code>+ label</code> se do stropu <b>nepočítá</b> — akce se neschovává,
+      takže výřez má tři řádky chipů, ale labely na dvou.
+    </p>
     <div class="duo">
       <div class="pane">
         <div class="tag"><i></i>Výchozí 300 b · dlouhá jména</div>
@@ -3565,7 +3581,13 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
                 <span class="cap">Labely</span>
                 <div class="chipline">
                   <span class="lchip"><i style="background: #A2EEEF;"></i><span>enhancement</span></span>
-                  <span class="lchip"><i style="background: #D4C5F9;"></i><span>needs-design-review-and-product-signoff</span></span>
+                  <!-- Ořez jménu **nechává místo na `+2`**, a to je ten rozdíl proti prostému
+                       `max-width: 100%`: s ním by chip zabral celý druhý řádek, `+2` by spadlo
+                       na třetí a řádky labelů by byly tři — tedy zrovna to, co má strop dvou
+                       řádků zakázat (třetí ukusuje místo nálezům). `34px` je gap 5 + šířka
+                       `+2` 29, ne konstanta k opsání: v aplikaci je to „ořež tak, aby se
+                       zbytkový odznak vešel“, ne 180 bodů. -->
+                  <span class="lchip" style="max-width: calc(100% - 34px);"><i style="background: #D4C5F9;"></i><span>needs-design-review-and-product-signoff</span></span>
                   <span class="lchip more">+2</span>
                   <span class="chip-add">+ label</span>
                 </div>
