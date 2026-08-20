@@ -378,4 +378,57 @@ struct ReviewerLaneTests {
         #expect(try #require(Policy.lanes(of: [same], skills: ["code-review"]).first).loadedSkill == nil)
         #expect(try #require(Policy.lanes(of: [other], skills: ["code-review"]).first).loadedSkill == "code-review:code-review")
     }
+
+    // MARK: - Příznak zadání (#345)
+
+    /// Příznak jde na dráhu, ale **fáze neposouvá**: přišel dřív, než se cokoli spustilo, a fáze
+    /// popisují běh. Kdyby posouval, dráha ve frontě by tvrdila, že už něco dělá.
+    @Test("Příznak zadání je na dráze a fáze neposouvá")
+    func carriesTheIntentGapWithoutMovingThePhases() throws {
+        let onlyGap = timeline { timeline in
+            timeline.record(.intentGap(.toolDenied), at: clock)
+        }
+
+        let lane = try #require(Policy.lanes(of: [onlyGap], skills: ["code-review"], running: ["code-review"]).first)
+
+        #expect(lane.intentGap == .toolDenied)
+        // Nic se nespustilo, takže dráha čeká na slot — stejně jako by čekala bez příznaku.
+        #expect(lane.state == .queued)
+        #expect(lane.phases.map(\.title) == ["čeká na slot"])
+    }
+
+    /// Doběhlý běh s příznakem má fáze **hotové**: zadání nebylo celé, ale běh proběhl celý.
+    @Test("Příznak zadání doběhlou dráhu nezhorší")
+    func doesNotDowngradeAFinishedLane() throws {
+        let timeline = timeline { timeline in
+            timeline.record(.intentGap(.noAnswer), at: clock)
+            timeline.record(.queued, at: clock)
+            timeline.record(.started(sessionID: "abc"), at: clock)
+            timeline.record(.attemptedTool(ToolAttempt(name: "Read", detail: "a.php")), at: clock)
+            timeline.record(.findings(count: 0), at: clock)
+            timeline.finish(.finished, at: clock)
+        }
+
+        let lane = try #require(Policy.lanes(of: [timeline], skills: ["code-review"]).first)
+
+        #expect(lane.intentGap == .noAnswer)
+        #expect(lane.state == .finished)
+        #expect(lane.phases.allSatisfy { $0.state == .done })
+        // Příznak se **nepočítá za krok nad kódem** — jinak by dráha tvrdila o jeden krok víc.
+        #expect(lane.phases.first { $0.title == "prochází kód" }?.detail == "1 krok")
+    }
+
+    /// **U syntetických drah je příznak `nil`**: dráha bez osy o zadání nic neví, takže o něm nic
+    /// netvrdí. Vymyšlené „zadání dostal celé“ by bylo tvrzení, které data neunesou.
+    @Test("Dráhy bez osy o zadání netvrdí nic")
+    func syntheticLanesCarryNoGap() {
+        let notStarted = Policy.lanes(of: [], skills: ["code-review"])
+        let queued = Policy.lanes(of: [], skills: ["code-review"], running: ["code-review"])
+        let missing = Policy.lanes(of: [], skills: ["code-review"], record: record([storedRun("code-review")]))
+
+        #expect(notStarted.map(\.state) == [.notStarted])
+        #expect(queued.map(\.state) == [.queued])
+        #expect(missing.map(\.state) == [.missingProgress])
+        #expect((notStarted + queued + missing).allSatisfy { $0.intentGap == nil })
+    }
 }

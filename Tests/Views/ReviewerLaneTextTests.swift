@@ -133,6 +133,64 @@ struct ReviewerLaneTextTests {
 
         #expect(ReviewerLaneText.last(of: lane) == "Session naběhla, první krok ještě nepřišel.")
     }
+
+    // MARK: - Příznak zadání (#345)
+
+    private static let gaps: [IntentGap] = [
+        .toolNotConfigured,
+        .serverUnavailable(status: nil),
+        .serverUnavailable(status: "failed"),
+        .toolDenied,
+        .noAnswer,
+        .sessionFailed(detail: "vypršel čas"),
+        .commentsUnavailable,
+    ]
+
+    /// **Každý důvod má vlastní větu**, jinak by se „nezkoušelo se“ a „nepovedlo se“ slily zpátky
+    /// do jednoho — a to je celý smysl toho příznaku.
+    @Test("Věty o nedotaženém zadání se od sebe liší")
+    func namesEveryReason() {
+        let sentences = Self.gaps.map(ReviewerLaneText.intentGap)
+        let short = Self.gaps.map(ReviewerLaneText.intentGapReason)
+
+        #expect(Set(sentences).count == Self.gaps.count)
+        #expect(Set(short).count == Self.gaps.count)
+        #expect(sentences.allSatisfy { !$0.isEmpty })
+    }
+
+    /// Věta **netvrdí, že je review špatné** — běželo, jen s menším zadáním. A nepředstírá, že
+    /// zadání dorazilo: u každého důvodu je napsané, co reviewer doopravdy dostal, nebo proč ne.
+    @Test("Věta o chybějícím nástroji nezní jako porucha")
+    func doesNotCallAMissingToolAFailure() {
+        let sentence = ReviewerLaneText.intentGap(.toolNotConfigured)
+
+        #expect(sentence.contains("netahal"))
+        #expect(sentence.contains("issueTextTool"))
+        #expect(sentence.contains("Nic se nepokazilo"))
+    }
+
+    /// Stav serveru se do věty **propíše**, protože je to jediné, co o příčině víme. Bez něj by se
+    /// `failed` a `needs-auth` nedaly rozeznat.
+    ///
+    /// A věta u toho **netvrdí, že se ty dva případy odlišit nedají** (nález Copilota na #388):
+    /// u vypsaného stavu by si protiřečila, protože ten stav je zrovna to, čím se liší. Že je
+    /// následek pro uživatele stejný, drží model (`IntentGap`), ne nápověda.
+    @Test("Stav serveru je ve větě vidět a věta si neprotiřečí")
+    func showsTheServerStatus() {
+        #expect(ReviewerLaneText.intentGap(.serverUnavailable(status: "needs-auth")).contains("needs-auth"))
+        #expect(ReviewerLaneText.intentGap(.serverUnavailable(status: nil)).contains("vůbec nebyl"))
+        for status in [nil, "needs-auth", "failed"] {
+            #expect(!ReviewerLaneText.intentGap(.serverUnavailable(status: status)).contains("nedá odlišit"))
+        }
+    }
+
+    /// Odznak je krátký schválně: v hlavičce dráhy stojí vedle jména skillu, stavu a ceny, takže
+    /// dlouhý popisek se v úzkém panelu ořeže do nesmyslu.
+    @Test("Odznak je krátký a nejmenuje příčinu")
+    func keepsTheBadgeShort() {
+        #expect(ReviewerLaneText.intentGapLabel.count <= 20)
+        #expect(!ReviewerLaneText.intentGapLabel.contains("server"))
+    }
 }
 
 extension ReviewerLane.State {

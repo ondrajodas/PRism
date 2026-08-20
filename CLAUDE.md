@@ -435,6 +435,16 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    téhle sady nepatří. Je na to test z obou stran: argumenty se zadáním a bez něj se liší **jen**
    textem za `-p` a obě konstanty jsou v testu zapsané literálem.
 
+   **Dotažení textu issue (#345) je vlastní session, ne rozšíření revieweera.** Sada revieweera
+   se **nemění** — text tahá zvlášť běžící `claude -p`, která má svou, taky vyjmenovanou sadu:
+   `ToolSearch` a **jeden čtecí MCP nástroj**, jehož jméno je v konfiguraci (`issueTextTool`), ne
+   v konstantě. `--disallowedTools` je u ní **tatáž konstanta** `ClaudeCommand.disallowedTools`,
+   takže druhá sada zákazů nevzniká, a v povoleních není `Write`, `Edit`, `Bash`, `ReportFindings`
+   ani `Skill` (je na to test). `ToolSearch` v ní být **musí**: na tomhle stroji je v session 165
+   nástrojů, takže CLI odkládá schémata a bez něj se MCP nástroj nedá zavolat — proto se sem
+   `--allowedTools ""` z překladu nálezů opsat nedá. Jméno nástroje se do **promptu revieweera**
+   nedostane a chybějící hodnota znamená **netahat**, ne prázdný pokus.
+
    **Editovatelný prompt review (#281) na tom nemění nic.** Otevřel se **prompt, ne povolení**:
    šablona z nastavení se dosadí do textu a skončí v **jednom argumentu za `-p`**, kdežto sada
    nástrojů se pořád skládá z těch dvou konstant v kódu — ze šablony se do nich nedá sáhnout a nic
@@ -480,9 +490,9 @@ viz tvrdá podmínka č. 1.
 |---|---|---|
 | `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) — a **login přihlášeného účtu** (#330) | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení) | `claude` CLI |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings`. Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení). Vedle nich dvě krátké session, které o review nic nevědí: překlad nálezů a **dotažení textu issue** do zadání (#345, vlastní povolení i rozbor streamu) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), řádek záznamu diagnostiky kreslení (#361) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), proč zadání není celé a jméno nástroje, kterým se text issue tahá (#345), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), řádek záznamu diagnostiky kreslení (#361) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení a napsat komentář pod PR; volající jsou `ReviewSubmission`, `ThreadSubmission` a `CommentSubmission` | `gh` CLI |

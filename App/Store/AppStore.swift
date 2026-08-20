@@ -356,6 +356,13 @@ final class AppStore {
 
     let translator: (any FindingTranslating)?
 
+    /// Dotažení textu issue do zadání pro reviewera (#345). `nil` = **netahá se** a review poběží
+    /// se zadáním bez textu, tedy tak, jak běželo do #345.
+    ///
+    /// Nepovinné ze stejného důvodu jako `translator`: testy, které o zadání nestojí, ho nedostanou
+    /// a nespouští tím `claude`.
+    let intentText: (any IntentTextFetching)?
+
     private let configStore: ConfigStore?
 
     /// Doručování notifikací (#88). `nil` = odsud se neposílají (testy), takže se nic
@@ -528,6 +535,7 @@ final class AppStore {
         drafts: ReviewDraftStore? = nil,
         intents: ReviewIntentStore? = nil,
         translator: (any FindingTranslating)? = nil,
+        intentText: (any IntentTextFetching)? = nil,
         autoRuns: AutoRunLedger? = nil,
         spend: SpendLedger? = nil,
         gh: URL? = nil,
@@ -567,6 +575,7 @@ final class AppStore {
         draftStore = drafts
         self.intents = intents
         self.translator = translator
+        self.intentText = intentText
         self.autoRuns = autoRuns
         self.spend = spend
         polling.afterSuccessfulTick = { [weak self] summaries in
@@ -642,6 +651,7 @@ final class AppStore {
             drafts: ReviewDraftStore(),
             intents: ReviewIntentStore(),
             translator: ClaudeFindingTranslator(claude: toolPaths.claude, runner: runner),
+            intentText: ClaudeIntentTextFetcher(claude: toolPaths.claude, runner: runner),
             autoRuns: AutoRunLedger(),
             spend: SpendLedger(),
             gh: toolPaths.gh,

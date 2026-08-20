@@ -88,6 +88,58 @@ enum ReviewerLaneText {
         return "Doběhlo · \(Plural.czech(count, one: "nález", few: "nálezy", many: "nálezů"))."
     }
 
+    /// Odznak v hlavičce dráhy, když zadání pro reviewera nebylo celé (#345).
+    ///
+    /// **Netvrdí, co v zadání chybělo** — na to je místo v nápovědě a v souboru se zadáním. Krátký
+    /// je schválně: hlavička nese už jméno skillu, stav, cenu a případné `mimo sadu` nebo
+    /// `běžel …`, a v úzkém panelu se dlouhý popisek ořeže do nesmyslu.
+    static let intentGapLabel = "zadání není celé"
+
+    /// Co přesně chybělo, větou. Jde do nápovědy odznaku.
+    ///
+    /// **Každý důvod má vlastní větu**, protože rozlišit „issue nic neříká“ od „text se nedotáhl“
+    /// je celý smysl toho příznaku — jedna souhrnná hláška by ty dva stavy slila zpátky do sebe.
+    /// A žádná z nich netvrdí, že review je proto špatné: běželo, jen s menším zadáním.
+    static func intentGap(_ gap: IntentGap) -> String {
+        switch gap {
+        case .toolNotConfigured:
+            return "Text issue se netahal — v konfiguraci není jméno nástroje (`issueTextTool`), "
+                + "takže reviewer dostal jen odkazy. Nic se nepokazilo, jen se to nezkoušelo."
+        // **Věta o tom, že se nepřihlášený server nedá odlišit od chybějícího, tady schválně
+        // není** (nález Copilota na #388): platila by jedině u `status == nil`, kdežto u vypsaného
+        // stavu si protiřečí — ten stav je zrovna to, čím se ty dva případy **liší**. Že je pro
+        // uživatele následek stejný, je úvaha o modelu (`IntentGap`), ne text do nápovědy.
+        case .serverUnavailable(let status):
+            let detail = status.map { "hlásil stav `\($0)`" } ?? "v session vůbec nebyl"
+            return "Text issue se nedotáhl — server trackeru \(detail), takže reviewer dostal "
+                + "jen odkazy."
+        case .toolDenied:
+            return "Text issue se nedotáhl — nástroj se v session odmítl (`permission_denials`). "
+                + "Reviewer dostal jen odkazy."
+        case .noAnswer:
+            return "Text issue se nedotáhl — session doběhla, ale text z odpovědi nevypadl. "
+                + "Reviewer dostal jen odkazy."
+        case .sessionFailed(let detail):
+            return "Text issue se nedotáhl — session se nepustila: \(detail). Reviewer dostal "
+                + "jen odkazy."
+        case .commentsUnavailable:
+            return "Komentáře pod PR se nepodařilo přečíst, takže odkazů na zadání mohlo být víc, "
+                + "než kolik jich reviewer dostal — linkback z trackeru chodí zrovna komentářem."
+        }
+    }
+
+    /// Totéž pár slovy — do výpisu událostí, kde je na řádek jeden.
+    static func intentGapReason(_ gap: IntentGap) -> String {
+        switch gap {
+        case .toolNotConfigured: "nástroj není nastavený"
+        case .serverUnavailable(let status): status.map { "server trackeru: \($0)" } ?? "server trackeru chybí"
+        case .toolDenied: "nástroj se odmítl"
+        case .noAnswer: "bez použitelné odpovědi"
+        case .sessionFailed(let detail): "session se nepustila: \(detail)"
+        case .commentsUnavailable: "komentáře pod PR se nenačetly"
+        }
+    }
+
     /// Co běh stál — vpravo v hlavičce. `nil`, dokud to nedorazí: cenu nese `result` event, takže
     /// běžící reviewer ji nemá a zabitý ji mít nebude. Nula by tvrdila, že běh byl zdarma.
     static func usage(of lane: ReviewerLane) -> String? {

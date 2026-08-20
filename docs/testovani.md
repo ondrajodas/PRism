@@ -1519,6 +1519,64 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   Ověřeno **vloženou regresí** — `ClaudeCommand.prompt(for:)` zapomene `request.intentFile`,
   selhání zápisu se spolkne `try?` a `allWorktrees()` odfiltruje `.md`: padne **5 tvrzení
   v 5 testech** napříč `ClaudeCommandTests`, `AppStoreIntentTests` a `CacheEvictionTests`.
+- **Text issue a komentáře pod PR (#345)** — pět sad, a to nejcennější je tady jedno tvrzení:
+  **„issue nic neříká“ a „text se nedotáhl“ nesmí vypadat stejně**. Dva ze tří tvarů selhání
+  vypadají jako úspěch (`exit 0`, `result` se `success`), takže test nad vymyšleným JSONem by se
+  dal napsat tak, aby prošel nad rozborem, který se v reálu mýlí.
+
+  **Tři tvary selhání se proto testují na skutečných streamech** z průzkumu — nové fixtures
+  `stream-json/intent-server-missing.jsonl`, `intent-server-failed.jsonl`
+  a `intent-tool-denied.jsonl`; redakce `hook_response` je tatáž jako u fixtures z #12 a jinak jsou
+  bajt po bajtu, jak je CLI vypsalo. Testy u nich netvrdí jen výsledek, ale i **že je to doopravdy
+  ten zrádný tvar**: že ve streamu stojí `"subtype":"success"`, že v `result` eventu **není klíč
+  `result`**, a že próza modelu („žádný Linear MCP server není připojen“) se **nikam neuložila**.
+
+  **Úspěšné dotažení fixture nemá a je to napsané v testu i v `docs/claude-cli.md`**: odpověď nese
+  celý text firemního issue a ten do fixtures nepatří. Tvar eventů kolem něj drží ty tři selhané
+  streamy, takže inline zbývá jen **náš vlastní formát** — značky. Rozbor nad skutečnou úspěšnou
+  odpovědí se ověřil **spuštěním**: jeden běh `claude -p` s argumenty, které skládá
+  `IntentTextCommand`, a dočasný test nad jeho streamem ve scratchpadu (`gap == nil`, 2 359 znaků
+  textu, `num_turns: 3`, $0,3099, 21,4 s). Ten test se po ověření smazal — ukazoval na scratchpad.
+
+  `IntentTextCommandTests` — vedle těch tří tvarů ještě: že povolení jsou **dva nástroje**
+  a neobsahují `Write`, `Edit`, `Bash`, `ReportFindings` ani `Skill`, že `--disallowedTools` je
+  tatáž konstanta (a **literál**, aby o její změně byla řeč), že `--max-turns` je 6, že se model
+  nevynucuje; a u čtení odpovědi, že se próza před první značkou zahodí, že se **neznámé id zahodí
+  i s textem** (jinak by se nalepil na cizí sekci), že značka se páruje bez ohledu na velikost
+  písmen, že prázdná značka není dotažené issue, a že odpověď s `CRLF` se rozdělí.
+
+  `ClaudeIntentTextFetcherTests` — že se **bez odkazů session nepustí** (boot je reálné peníze), že
+  nespuštěná binárka a timeout nesou důvod dál (`.sessionFailed`, ne prázdný výsledek), že
+  **nenulový exit kód rozbor streamu nepřeskočí**, a že argumenty jdou do procesu z `IntentTextCommand`.
+
+  `ReviewIntentTests` — že každý ze šesti důvodů má v souboru **vlastní větu** a že se ty věty
+  doopravdy liší (`Set(texts).count == texts.count`); že se text páruje **podle `id`, ne podle
+  pořadí** (test to čte podle poloh v souboru: věta o chybějícím textu patří prvnímu, text druhému);
+  že částečné dotažení se pozná **po issue**, ne za celek; a že selhané komentáře jsou v souboru
+  napsané, ale **samy soubor nezakládají**.
+
+  `AppStoreIntentTests` — že **odkaz z komentáře pod PR** se do zadání dostane (to je ten častý
+  případ, kvůli kterému #120 vzniklo), že se **bez jména nástroje v konfiguraci nic nepustí**
+  a je to vidět na ose, že **bez odkazů se neptá nikdo a nic se nehlásí**, že příznak nese **každá**
+  dráha běhu (dvě sady skillů) a že doběhlou dráhu **nezhorší**, a že selhaný dotaz na komentáře
+  review nepoloží. Od nálezu Copilota na #388 k tomu i to, že **nepovedený zápis na osu nic
+  nepošle**, i když by gap jinak byl — reviewer nedostal soubor vůbec, takže věta „dostal jen
+  odkazy“ by tvrdila víc, než data unesou; hlásí to stavový řádek.
+
+  `ReviewerLaneTests` a `StoredTimelineTests` — že příznak **osu neposouvá** (dráha jen s ním
+  zůstane `queued` s jedinou fází), že **u syntetických drah je `nil`**, že **přežije restart**
+  (round trip `StoredTimeline`) a že osa, ve které je jen on, se **nedoplní na doběhlý běh**.
+  `ReviewerLaneTextTests` k tomu drží českou prózu: šest různých vět, krátký odznak a stav serveru
+  ve větě vidět.
+
+  Ověřeno **vloženou regresí**, dvakrát:
+  - `parse` přeskočí kontrolu serveru a jde rovnou na odpověď → padnou **4 testy** nad skutečnými
+    streamy (`serverUnavailable` vyjde `noAnswer`, a u nepřihlášeného serveru se navíc **vezme text**,
+    který v odpovědi je);
+  - `result?["result"] as? String ?? ""` místo `guard let` → **nepadne nic**, a to je zapsané
+    i v kódu: prázdný text nevydá ani jednu značku, takže skončí stejným `.noAnswer`. Explicitní
+    `guard` tam zůstal jako čtení, které se dá bezpečně rozšířit, ne jako mechanismus, na kterém
+    dnes něco stojí.
 - **Časový limit běhu (#320)** — tři sady a **nejcennější tvrzení je zase o tom, že se nic
   nezměnilo**: patnáct minut je hodnota, se kterou aplikace běžela do #320, a zavedení nastavení ji
   nesmí posunout.

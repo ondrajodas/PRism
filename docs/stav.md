@@ -2263,6 +2263,83 @@ naráz položí 5 tvrzení v 5 testech napříč třemi sadami.
 stojí věta o souboru se zadáním s ukázkovou cestou a pod blokem poznámka, že se připojí jen u PR,
 ke kterému se zadání sehnalo.
 
+### #345 — text Linear issue a komentáře pod PR do zadání (druhá část #120)
+
+Druhá polovina #120. Odkazy se teď hledají **i v komentářích pod PR** — linkback z trackeru chodí
+zrovna komentářem a konverzace se do #345 v cestě review nenačítala vůbec — a jejich text se
+**dotáhne krátkou `claude -p` session**. Cena je rozhodnutá uživatelem (2026-08-17): **tahá se
+vždycky, i v automatu**, protože zadání vedle diffu je důvod, proč ta funkce existuje. Změřeno
+$0,18 (sonnet) až $0,31 (opus-5) a ~20 s na review.
+
+**Jádro issue je rozlišit „issue nic neříká“ od „nestáhlo se“**, a je to jádro proto, že průzkum
+naměřil **tři tvary selhání a dva z nich vypadají jako úspěch**: chybějící (nebo nepřihlášený)
+server skončí `exit 0` a `result` se `subtype: "success"`, jen s prózou modelu v odpovědi; server,
+který se nespustí, skončí jedničkou a `error_max_turns` — a v tom eventu **klíč `result` vůbec
+není**; nepovolený nástroj skončí zase úspěchem a je vidět jedině v `permission_denials`. Jediný
+strojově čitelný signál je `init.mcp_servers[].status`, a ten se dá přečíst **jedině ze streamu** —
+proto ta session jede `--output-format stream-json --verbose`, na rozdíl od bufferovaného překladu
+nálezů. **Rozhodovat podle prózy modelu je hádání**; kdo čte exit kód, uloží si do zadání větu
+„nemám povolení k použití nástroje…“, jako by to bylo zadání.
+
+**Vzor `TranslationCommand` se nedal opsat** a je to změřené: na stroji je v session **165
+nástrojů**, takže CLI odkládá schémata a model musí napřed zavolat `ToolSearch`. Povolení proto
+vyjmenovává **oba** nástroje (`ToolSearch` a ten čtecí MCP) a `--max-turns` nesmí být 1–2 —
+dotažení je ≥ 3 turny. `--allowedTools ""` by nefungovalo vůbec.
+
+**Sada nástrojů revieweera se nemění** (tvrdá podmínka č. 2). Text tahá **zvlášť běžící** session
+a `--disallowedTools` je u ní **tatáž konstanta** `ClaudeCommand.disallowedTools`, takže druhá sada
+zákazů nevzniká; test hledá v povoleních `Write`, `Edit`, `Bash`, `ReportFindings` i `Skill`
+a tvrdí, že tam nejsou.
+
+**Jméno nástroje je v konfiguraci, ne v konstantě** (`issueTextTool`, jen v `config.json` jako
+`ownLogins`). `mcp__claude_ai_Linear__get_issue` je jméno serveru **u tohohle uživatele**, ne
+kontrakt. **Chybějící hodnota znamená „netahat“**, ne prázdný pokus — session bez nástroje, který by
+zavolala, stojí boot a nevrátí nic —, a je to **vlastní stav**, který je na ose vidět: reviewer
+dostal jen odkazy.
+
+**Odpověď se čte podle řádkových značek, ne jako JSON**, a je to změna proti překladu nálezů:
+hodnota je cizí markdown libovolné délky (4 439 znaků u jednoho issue z průzkumu, s uvozovkami
+i zpětnými apostrofy) a překódovat ho na JSONový řetězec je krok, ve kterém model utne nebo zkazí
+escapování — selhání by pak zahodilo **všechny** texty naráz. Značku (`IntentTextCommand.marked(_:)`)
+skládá jedna funkce pro obě strany, takže se příklad v promptu a rozbor odpovědi nemají čím rozejít.
+Text se páruje **podle `id`**, ne podle pořadí: vynechané issue by u pozičního párování přiřadilo
+texty cizím issues.
+
+**Na ose je to vidět jako odznak** `zadání není celé` v hlavičce dráhy, s důvodem v nápovědě — vzor
+`loadedADifferentSkill` z #78: příznak se počítá v `ReviewerTimeline` z osy (takže **přežije
+restart**), přenáší polem `ReviewerLane` (u syntetických drah `nil`) a kreslí `ReviewerLaneView`;
+česká próza je v `ReviewerLaneText`, šest různých vět. Dvě věci, které z toho plynou: příznak jde do
+osy **jako první událost každé dráhy**, ne po konci běhu (odpověď je hotová dřív, než se cokoli
+spustí, a pozdní událost může dorazit do osy, kterou už nikdo nečte — souvisí s #308), a **osu
+neposouvá**, takže dráha ve frontě netvrdí, že už něco dělá.
+
+**V souboru se zadáním má každé issue vlastní podsekci** a u té, která se nedotáhla, stojí věta
+s důvodem. Částečné dotažení (dvě issues, jeden text) proto **není selhání celku**: na osu nejde
+nic a chybějící issue se pojmenuje u sebe — s větou **bez příčiny**, protože žádná zaznamenaná není
+a hádat mezi „nezkoušelo se“ a „nepovedlo se“ je zrovna ta záměna, kterou tohle issue odstraňuje.
+Selhaný dotaz na komentáře je zapsaný **u seznamu odkazů**: „no issue links found“ nad selhaným
+dotazem by tvrdilo, že PR na žádném zadání nestojí.
+
+**Ověřeno spuštěním**, ne jen z fixtures: jeden běh s argumenty, které skládá `IntentTextCommand`
+(`claude` 2.1.236), doběhl `success` ve **3 turnech** za 21,4 s za $0,3099, značka přišla na vlastním
+prvním řádku a rozbor nad tím streamem vydal text bez gapu. Tři tvary selhání jsou ve fixtures jako
+**skutečné streamy** (`intent-server-missing`, `intent-server-failed`, `intent-tool-denied`);
+**úspěšné dotažení fixture nemá schválně** — odpověď nese celý text firemního issue a ten do
+fixtures nepatří, takže inline v testu zbývá jen náš vlastní formát.
+
+**Copilot našel dvě věci a obě jsou ten vzor „text v UI tvrdí víc, než data unesou“.** První:
+nepovedený zápis souboru posílal na osu příznak, který jinak platil — a věty u něj mluví o tom, co
+v zadání **chybí** („reviewer dostal jen odkazy“), takže nad během, který soubor nedostal vůbec, by
+lhaly; teď na osu nejde nic a zápis hlásí stavový řádek, jak to zavedlo #120. Druhá: nápověda
+u nepřipojeného serveru vypisovala **stav** a vedle toho tvrdila, že se nepřihlášený server od
+chybějícího nedá odlišit — což si u vypsaného stavu protiřečí, protože ten stav je zrovna to, čím se
+liší. Ta úvaha („následek je pro uživatele stejný“) patří k modelu, ne do nápovědy.
+
+Testů je **3227** a jsou zelené. Regrese ověřena vložením dvakrát: vypnutá kontrola serveru položí
+**4 testy** nad skutečnými streamy, kdežto `?? ""` místo `guard let` u chybějícího klíče `result`
+**nepoloží nic** — prázdný text nevydá ani jednu značku, takže skončí stejným `.noAnswer`. To je
+zapsané i v kódu, ať se ten `guard` nepovažuje za mechanismus, na kterém dnes něco stojí.
+
 ### #347 — rezerva na scroller v konci logu byla odměřená na scrolleru, který se nekreslí
 
 `LogTailTextView.horizontalScrollerHeight` nechávala na vodorovný scroller **13 bodů**, ale u #343 se

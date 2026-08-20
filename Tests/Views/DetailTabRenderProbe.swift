@@ -264,6 +264,9 @@ struct DetailTabRenderProbe {
     private static var record: ReviewRecord {
         var timeline = ReviewerTimeline(skill: "code-review", worktree: nil)
         let clock = Date(timeIntervalSince1970: 1_000_000)
+        // Příznak zadání (#345) je tady schválně: v tabu `Průběh` z něj vyjde odznak v hlavičce
+        // dráhy a řádek ve výpisu událostí, a obojí je vidět jedině na obrázku.
+        timeline.record(.intentGap(.serverUnavailable(status: "needs-auth")), at: clock)
         timeline.record(.queued, at: clock)
         timeline.record(.started(sessionID: "6f1c2b7a"), at: clock)
         timeline.record(.findings(count: 2), at: clock)

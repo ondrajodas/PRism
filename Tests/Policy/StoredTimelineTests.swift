@@ -176,6 +176,37 @@ struct StoredTimelineTests {
         #expect(ReviewerTimeline(makeStoredRun(timeline: StoredTimeline())).entries.isEmpty)
     }
 
+    // MARK: - Příznak zadání (#345)
+
+    /// Příznak zadání **přežije restart**, a to je celý důvod, proč je to událost osy a ne pole:
+    /// tab `Průběh` má o starším běhu tvrdit totéž, co tvrdil, když běžel.
+    @Test("Příznak zadání přežije uložení i načtení")
+    func keepsTheIntentGapAcrossARestart() throws {
+        var source = timeline(entries: 1)
+        source.record(.intentGap(.serverUnavailable(status: "failed")), at: Date(timeIntervalSince1970: 1_000_001))
+
+        let data = try JSONEncoder().encode(source.stored())
+        let decoded = try JSONDecoder().decode(StoredTimeline.self, from: data)
+        let restored = ReviewerTimeline(makeStoredRun(timeline: decoded))
+
+        #expect(restored.intentGap == .serverUnavailable(status: "failed"))
+    }
+
+    /// **Osu neposouvá a konec jí nedoplňuje.** Osa, ve které je jen příznak, je pořád osa bez
+    /// průběhu — doplnit jí konec by z ní udělalo dráhu, která tvrdí `doběhlo` nad prázdnými
+    /// fázemi.
+    @Test("Osa jen s příznakem zadání se nedoplní na doběhlý běh")
+    func doesNotCompleteATimelineThatOnlyCarriesTheGap() {
+        var source = ReviewerTimeline(skill: "code-review")
+        source.record(.intentGap(.toolNotConfigured), at: Date(timeIntervalSince1970: 1_000_000))
+
+        let restored = ReviewerTimeline(makeStoredRun(timeline: source.stored()))
+
+        #expect(!restored.isFinished)
+        #expect(restored.entries.count == 1)
+        #expect(restored.intentGap == .toolNotConfigured)
+    }
+
     /// Osa, která svůj konec **má**, se nesmí doplnit podruhé — dvě `doběhlo` pod sebou.
     @Test("Osa s koncem se nedoplňuje")
     func doesNotDuplicateTheTail() {
