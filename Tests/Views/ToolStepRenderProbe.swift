@@ -16,7 +16,9 @@ import Testing
 /// rozbalením a jeho `@State` se zvenčí otevřít nedá. Rozbalený výpis kreslí #325 — pak má
 /// sonda kde vyrůst.
 ///
-/// **Pouští se ručně**: `PRISM_MEASURE=1`, cesta ven přes `PRISM_RENDER_DIR`.
+/// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes
+/// `TEST_RUNNER_PRISM_RENDER_DIR`. Prefix `TEST_RUNNER_` je podmínka, ne ozdoba — `xcodebuild`
+/// jinak proměnnou do testovacího procesu nepředá a suita se **tiše přeskočí**.
 @MainActor
 @Suite(
     "Sonda řádku kroku (#326)",

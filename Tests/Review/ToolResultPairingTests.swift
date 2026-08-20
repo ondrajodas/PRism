@@ -115,6 +115,33 @@ struct ToolResultPairingTests {
         #expect(try #require(tool(in: timeline)).outcome == nil)
     }
 
+    /// Záchrana z `permission_denials` musí dosáhnout **do kroku, který se kreslí**, ne jen do
+    /// souhrnu. Dokud měla osa vlastní podmínku „jen nezavřený krok“, přepis `failed` → `denied`
+    /// se do ní nedostal a odznak odmítnutí se nikdy neukázal (nálezem Copilota na #394).
+    @Test("Odmítnutí z konce běhu přepíše v ose chybu nástroje")
+    func theDenialListOverridesAToolErrorInTheTimeline() throws {
+        var timeline = timeline(attempt: "t1")
+        timeline.record(
+            .resolvedTool(ToolResolution(
+                id: "t1",
+                outcome: ToolAttempt.Outcome(kind: .failed, reason: "Claude requested permissions")
+            )),
+            at: start.addingTimeInterval(0.3)
+        )
+
+        timeline.record(
+            .resolvedTool(ToolResolution(id: "t1", outcome: ToolAttempt.Outcome(kind: .denied))),
+            at: start.addingTimeInterval(12)
+        )
+
+        let step = try #require(tool(in: timeline))
+        #expect(step.outcome?.kind == .denied)
+        // A trvání se u odmítnutí neuchová ani z té dřívější odpovědi: nástroj neběžel.
+        #expect(step.outcome?.after == nil)
+        // Osa se tím pořád neprodloužila — je to týž krok.
+        #expect(timeline.entries.count == 2)
+    }
+
     /// Druhá odpověď na tentýž krok ho nepřepíše: platí ta, která přišla, když se to stalo.
     @Test("Zavřený krok se podruhé nezavírá")
     func keepsTheFirstAnswer() throws {

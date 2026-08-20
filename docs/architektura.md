@@ -1273,6 +1273,12 @@ Co se u toho nemá rozbít:
   jen tam, kde odpověď nedorazila (useknutý event, rozbitý řádek) nebo vyšla jako `failed`. Krok
   zavřený ze streamu se z něj podruhé nezavírá — jinak by osa dostala na jeden krok dvě události.
   Páruje se **jen po `tool_use_id`**; bez něj se nepáruje nic.
+- **Kdo koho smí přepsat, rozhoduje `Policy.replacesToolOutcome` — jedna funkce pro tři místa**
+  (odpověď ze streamu, záchrana z `permission_denials`, zápis do osy). Nezavřený krok bere cokoli,
+  `failed` smí přepsat jedině `denied`, a `passed` ani `denied` se nepřepíšou nikdy. Tři kopie
+  téhož pravidla se rozešly hned v prvním kole: osa měla vlastní podmínku „jen nezavřený krok“,
+  takže záchrana `failed` → `denied` doputovala do souhrnu, ale do kroku, který se kreslí, ne —
+  nálezem Copilota na #394.
 - **`deniedTools` #326 zrušilo.** Bylo to pole jmen plněné z `permission_denials`, které v UI
   **nikdo nečetl** (ukázat se dalo jen u kroku, a krok o svém odmítnutí nevěděl) a zabitý běh ho
   neměl vůbec. Odmítnutí nese `ToolAttempt.outcome`, tedy tam, kde se kreslí; druhý seznam by byl

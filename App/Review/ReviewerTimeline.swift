@@ -187,15 +187,19 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     /// o něm dozvíme cokoli dalšího — druhý řádek „a takhle to dopadlo“ by osu zdvojil a poslal
     /// `newestEntry` na událost, která žádný nový krok není.
     ///
-    /// Páruje **poslední nezavřený** krok s tím `id`; nespárovaná odpověď osu nechá být (krok se
-    /// do ní nedostal, nebo je zavřený už z `tool_result` a tohle je záchrana z `permission_denials`).
+    /// Páruje **poslední** krok s tím `id`; odpověď na krok, který v ose není, ji nechá být.
+    /// Jestli smí přepsat, co už krok má, rozhoduje `Policy.replacesToolOutcome` — **tatáž funkce,
+    /// jakou se řídí parser**. Dokud to byla vlastní podmínka „jen nezavřený krok“, záchrana
+    /// z `permission_denials` (`failed` → `denied`) se do souhrnu propsala a do kroku, který se
+    /// kreslí, ne; nálezem Copilota na #394.
     ///
     /// Trvání se počítá z časů osy, takže **záporné být nemůže** ani po posunu systémových hodin —
     /// tatáž pojistka jako u `RunUsageText.elapsed`.
     private mutating func resolve(_ resolution: ToolResolution, at time: Date) {
         guard let index = entries.lastIndex(where: { entry in
             guard case .tool(let tool) = entry.kind else { return false }
-            return tool.id == resolution.id && tool.outcome == nil
+            return tool.id == resolution.id
+                && Policy.replacesToolOutcome(tool.outcome, with: resolution.outcome)
         }), case .tool(var tool) = entries[index].kind else { return }
 
         let entry = entries[index]

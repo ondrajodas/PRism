@@ -30,6 +30,25 @@ extension Policy {
         return ToolAttempt.Outcome(kind: .failed, reason: toolOutcomeReason(text))
     }
 
+    /// Smí nová odpověď přepsat tu, kterou krok už má? (#326)
+    ///
+    /// Je to **jedna funkce pro tři místa** — parser při odpovědi ze streamu, parser při záchraně
+    /// z `permission_denials` a osa při zápisu do kroku. Tři kopie téhož pravidla by se rozešly,
+    /// a už se to stalo: nálezem Copilota na #394 bylo, že osa přepsat nedovolila nic, takže
+    /// záchrana `failed` → `denied` doputovala do souhrnu, ale do kroku, který se kreslí, ne.
+    ///
+    /// Platí dvě věty:
+    /// - **Nezavřený krok bere cokoli.** To je běžná cesta ze streamu.
+    /// - **`failed` smí přepsat jedině `denied`.** „Nemělo povolení“ je o té odpovědi silnější
+    ///   tvrzení než hláška, kterou nástroj vrátil, a jedině tuhle náhradu záchrana potřebuje.
+    ///
+    /// Co se **nikdy** nepřepíše: `passed` (krok odpověděl, takže odmítnutý nebyl) a `denied`
+    /// (o tom už je rozhodnuto — a druhá odpověď by z něj sundala odznak).
+    static func replacesToolOutcome(_ current: ToolAttempt.Outcome?, with next: ToolAttempt.Outcome) -> Bool {
+        guard let current else { return true }
+        return current.kind == .failed && next.kind == .denied
+    }
+
     /// Strop na hlášku, která se z odpovědi nástroje uloží.
     ///
     /// Musí být: odpovědí `Read`u je celý soubor a odpovědí `Bash`e celý výstup příkazu, takže

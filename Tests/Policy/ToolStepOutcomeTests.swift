@@ -70,6 +70,34 @@ struct ToolStepOutcomeTests {
         #expect(!reason.contains("\n"))
     }
 
+    // MARK: - Kdo koho smí přepsat
+
+    /// Pravidlo pro tři místa (parser, záchrana z `permission_denials`, osa), takže výčtem —
+    /// dvě kopie by se rozešly, a už se to stalo: osa nepřepisovala nic, takže záchrana
+    /// `failed` → `denied` do kreslené osy nedoputovala (Copilot na #394).
+    @Test("Nezavřený krok bere cokoli, failed přepíše jedině odmítnutí")
+    func decidesWhoMayReplaceWhom() {
+        let passed = ToolAttempt.Outcome(kind: .passed, after: .milliseconds(120))
+        let failed = ToolAttempt.Outcome(kind: .failed, reason: "Exit code 1")
+        let denied = ToolAttempt.Outcome(kind: .denied)
+
+        for next in [passed, failed, denied] {
+            #expect(Policy.replacesToolOutcome(nil, with: next))
+        }
+        #expect(Policy.replacesToolOutcome(failed, with: denied))
+
+        // Co se **nikdy** nepřepíše: krok, který odpověděl (odmítnutý nebyl), a krok, u kterého je
+        // o odmítnutí rozhodnuto — druhá odpověď by z něj sundala odznak.
+        #expect(!Policy.replacesToolOutcome(passed, with: denied))
+        #expect(!Policy.replacesToolOutcome(passed, with: failed))
+        #expect(!Policy.replacesToolOutcome(denied, with: passed))
+        #expect(!Policy.replacesToolOutcome(denied, with: failed))
+        #expect(!Policy.replacesToolOutcome(denied, with: denied))
+        // Chyba nástroje se druhou chybou nepřepisuje: platí ta, která přišla, když se to stalo.
+        #expect(!Policy.replacesToolOutcome(failed, with: failed))
+        #expect(!Policy.replacesToolOutcome(failed, with: passed))
+    }
+
     // MARK: - Značka v ose
 
     @Test("Krok bez odpovědi běží")

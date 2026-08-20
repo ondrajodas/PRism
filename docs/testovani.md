@@ -567,7 +567,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   přebíjí to číslo z `RunUsage`), takže se do `#expect` píše srovnání `Duration` s `Duration`.
 
   Jak řádek kroku vypadá, je otázka na obrázek: `ToolStepRenderProbe` (sonda, pouští se ručně
-  `TEST_RUNNER_PRISM_MEASURE=1`) vyrendruje všech pět podob vedle sebe — prošlý s trvením,
+  `TEST_RUNNER_PRISM_MEASURE=1`) vyrendruje všech pět podob vedle sebe — prošlý s trváním,
   odmítnutý s odznakem, chybu nástroje, běžící pokus a krok z osy před #326 bez značky — ve dvou
   šířkách, aby bylo vidět i to, že se v úzkém místě ořezává cesta, ne značka.
 - **Slévání nálezů z opakovaného `ReportFindings` (#381)** — dvě sady vedle sebe:

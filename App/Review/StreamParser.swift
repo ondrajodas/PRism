@@ -116,20 +116,21 @@ struct StreamParser: Sendable {
 
     /// Zapíše odpověď k pokusu, ke kterému patří.
     ///
-    /// Páruje se **poslední nezavřený pokus** s tím `id`: `tool_use_id` se v jednom běhu
-    /// neopakuje, ale kdyby se to stalo, patří odpověď k tomu, co běželo naposled.
+    /// Páruje se **poslední pokus** s tím `id`: `tool_use_id` se v jednom běhu neopakuje, ale kdyby
+    /// se to stalo, patří odpověď k tomu, co běželo naposled. Jestli smí přepsat, co už krok má,
+    /// rozhoduje `Policy.replacesToolOutcome` — tatáž funkce, jakou se řídí osa.
     ///
-    /// Odpověď na pokus, který v soupisu **není** — rozbitý řádek s `tool_use`, nebo pokus
-    /// zavřený už dřív —, se zahazuje. Není k čemu ji přilepit a vyrobit z ní vlastní krok by
-    /// znamenalo krok, o kterém se neví, co v něm běželo.
+    /// Odpověď na pokus, který v soupisu **není** — rozbitý řádek s `tool_use` —, se zahazuje.
+    /// Není k čemu ji přilepit a vyrobit z ní vlastní krok by znamenalo krok, o kterém se neví,
+    /// co v něm běželo.
     private func resolve(
         _ id: String,
         with outcome: ToolAttempt.Outcome,
         into summary: inout StreamSummary
     ) {
-        guard let index = summary.attemptedTools.lastIndex(where: {
-            $0.id == id && $0.outcome == nil
-        }) else { return }
+        guard let index = summary.attemptedTools.lastIndex(where: { $0.id == id }),
+              Policy.replacesToolOutcome(summary.attemptedTools[index].outcome, with: outcome)
+        else { return }
 
         summary.attemptedTools[index].outcome = outcome
         summary.resolvedTools.append(ToolResolution(id: id, outcome: outcome))
@@ -186,13 +187,7 @@ struct StreamParser: Sendable {
     /// jednoznačně nepatří — `Bash` je v jednom běhu i padesátkrát a odmítnutý z nich je jeden.
     private func rescueDenials(_ denials: [[String: Any]], into summary: inout StreamSummary) {
         for id in denials.compactMap({ $0["tool_use_id"] as? String }) {
-            guard let index = summary.attemptedTools.lastIndex(where: { $0.id == id }) else { continue }
-            let kind = summary.attemptedTools[index].outcome?.kind
-            guard kind == nil || kind == .failed else { continue }
-
-            let outcome = ToolAttempt.Outcome(kind: .denied)
-            summary.attemptedTools[index].outcome = outcome
-            summary.resolvedTools.append(ToolResolution(id: id, outcome: outcome))
+            resolve(id, with: ToolAttempt.Outcome(kind: .denied), into: &summary)
         }
     }
 
