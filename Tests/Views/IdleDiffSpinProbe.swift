@@ -237,6 +237,208 @@ struct IdleDiffSpinProbe {
         }
     }
 
+    /// **Osa, která se zkrátí pod odscrollovaným seznamem** (#361, čtvrté kolo).
+    ///
+    /// Hypotéza k tomu, proč `signalPrefetch` nekonverguje: líný seznam si o předběžné načtení
+    /// říká podle **viditelného výřezu**, a ten po zkrácení obsahu leží za jeho koncem. Prefetch
+    /// pak chce řádky z pásma, které neexistuje, a po každém průchodu si řekne znovu. V aplikaci
+    /// se to stane samo — polling natáhne konverzaci znovu, takže obsah se přesází pod rukama
+    /// někoho, kdo je odscrollovaný dole; a záznam z diagnostiky říká, že záchvat začal **skokem**,
+    /// ne postupným nárůstem.
+    ///
+    /// Čtou se **úseky po** té změně: cena přesázení se dá utratit, kolo ne.
+    @Test("Osa se zkrátí pod odscrollovaným seznamem")
+    func shrinkingConversationUnderScroll() async throws {
+        try await measureResize("zkrácení u dna", from: 300, to: 40, scrollSteps: 300)
+        try await measureResize("zkrácení v prostředku", from: 300, to: 40, scrollSteps: 60)
+        try await measureResize("prodloužení u dna", from: 300, to: 600, scrollSteps: 300)
+        // Stejný počet, jiné výšky: odhad zbytku obsahu se rozejde, i když se konec nehne.
+        try await measureResize("jiné výšky u dna", from: 300, to: 300, scrollSteps: 300, shift: 2)
+    }
+
+    /// Jeden scénář přesázení: projet osu kolečkem, změřit nečinnost, vyměnit obsah a **nechat
+    /// okno stát**.
+    private func measureResize(
+        _ name: String,
+        from: Int,
+        to: Int,
+        scrollSteps: Int,
+        shift: Int = 0
+    ) async throws {
+        let (store, cache) = try await prepared(big: false, full: true)
+        defer { _ = cache }
+        store.conversationStates[pr] = .loaded(
+            Self.synthetic(comments: from),
+            updatedAt: Self.summary.updatedAt
+        )
+        store.setDetailTab(.conversation, for: pr)
+        let window = show(scene: ContentView(store: store))
+        defer { window.orderOut(nil) }
+        _ = spinMainRunLoop(seconds: 2)
+        let root = try #require(window.contentView)
+        let scroller = try #require(Self.tallestScroller(in: root))
+        let landed = WheelGesture.scroll(over: scroller, in: window, steps: scrollSteps, step: 140)
+        let idle = spinMainRunLoop(seconds: 3)
+        print(String(
+            format: "MĚŘENÍ %@: obsah %.0f, dojelo na %.0f, před výměnou %.2f %% CPU",
+            name,
+            scroller.documentView?.frame.height ?? 0,
+            landed,
+            idle / 3 * 100
+        ))
+
+        store.conversationStates[pr] = .loaded(
+            Self.synthetic(comments: to, shift: shift),
+            updatedAt: Self.summary.updatedAt
+        )
+        for slice in 1...3 {
+            let cpu = spinMainRunLoop(seconds: 3)
+            print(String(
+                format: "MĚŘENÍ %@ po výměně (%d → %d), úsek %d: %.2f %% CPU, obsah %.0f, výřez %.0f",
+                name,
+                from,
+                to,
+                slice,
+                cpu / 3 * 100,
+                scroller.documentView?.frame.height ?? 0,
+                scroller.documentVisibleRect.origin.y
+            ))
+        }
+    }
+
+    /// **Změna velikosti okna nad otevřenou osou** (#361, čtvrté kolo).
+    ///
+    /// Druhá nitka z #363: scéna má `.windowResizability(.contentMinSize)`, takže si AppKit při
+    /// každém průchodu `updateConstraints` říká o `minSize`, hostující vrstva na to pustí
+    /// `_sizeThatFits` — **druhou aktualizaci grafu na jiné nabídce rozměru** — a ze zásobníku jedné
+    /// AppKitové výjimky se tam ukázalo `invalidateTransform → graphDidChange →
+    /// requestUpdate(after:) → setNeedsUpdateConstraints`. Tahle cesta se dosud nezkoušela: sonda
+    /// měla velikost okna pevnou, takže se `minSize` nikdy nepřepočítávalo za pochodu.
+    ///
+    /// Rozhodují **úseky po** změně rozměru, jako všude u #361.
+    @Test("Osa při změně velikosti okna")
+    func resizingWindowOverConversation() async throws {
+        try await measureWindowResize("osa", tab: .conversation, comments: 300)
+        try await measureWindowResize("diff", tab: .filesChanged, comments: 0)
+    }
+
+    private func measureWindowResize(
+        _ name: String,
+        tab: PullRequestTab,
+        comments: Int
+    ) async throws {
+        let (store, cache) = try await prepared(big: tab == .filesChanged, full: true)
+        defer { _ = cache }
+        if comments > 0 {
+            store.conversationStates[pr] = .loaded(
+                Self.synthetic(comments: comments),
+                updatedAt: Self.summary.updatedAt
+            )
+        }
+        store.setDetailTab(tab, for: pr)
+        let window = show(scene: ContentView(store: store))
+        defer { window.orderOut(nil) }
+        _ = spinMainRunLoop(seconds: 2)
+        let root = try #require(window.contentView)
+        let scroller = try #require(Self.tallestScroller(in: root))
+        _ = WheelGesture.scroll(over: scroller, in: window, steps: 60, step: 140)
+        _ = spinMainRunLoop(seconds: 2)
+
+        // Dvacet kroků tam a zpátky po 24 bodech, s kolem runloopu po každém — jako když se
+        // táhne za hranu okna. **Strop je v tom výčtu**, žádná smyčka „dokud“.
+        let started = mainThreadCPUSeconds()
+        for step in 0..<20 {
+            let width = 1512 - Double(min(step, 19 - step) * 24)
+            window.setContentSize(NSSize(width: width, height: 874))
+            _ = spinMainRunLoop(seconds: 0.03)
+        }
+        print(String(
+            format: "MĚŘENÍ %@ tažení za hranu: %.2f s CPU, minimum obsahu %.0f×%.0f, okno %.0f×%.0f",
+            name,
+            mainThreadCPUSeconds() - started,
+            window.contentMinSize.width,
+            window.contentMinSize.height,
+            window.frame.width,
+            window.frame.height
+        ))
+        for slice in 1...3 {
+            let cpu = spinMainRunLoop(seconds: 3)
+            print(String(
+                format: "MĚŘENÍ %@ po tažení, úsek %d: %.2f %% CPU hlavního vlákna",
+                name,
+                slice,
+                cpu / 3 * 100
+            ))
+        }
+    }
+
+    /// **Píše diagnostika i nad scénou, která hlavní vlákno vytíží?** (#391)
+    ///
+    /// Unit test na to je (`RenderDiagnosticsTests.writesWhileMainThreadNeverReturns`), ale ten si
+    /// kolo vyrábí blokujícím observerem. Tady je to nad **skutečnou scénou**: kontrolní seznam se
+    /// zpětnou vazbou z rozvržení do stavu (`FeedbackLoopList`, 32 % CPU) a hned za ním projetí osy
+    /// kolečkem. Vypisuje se, co v souboru přibylo — a co u toho stálo hlavní vlákno, aby se dalo
+    /// poznat, jestli se měřilo nad zátěží, nebo nad prázdnem.
+    @Test("Diagnostika píše i pod zátěží")
+    func diagnosticsUnderLoad() async throws {
+        let directory = try TemporaryDirectory()
+        let file = directory.url.appending(path: "diagnostics.log")
+        let diagnostics = RenderDiagnostics(
+            log: DiagnosticsLog(url: file, zone: .current),
+            interval: 0.5
+        )
+        RenderDiagnostics.current = diagnostics
+        defer {
+            RenderDiagnostics.current = nil
+            diagnostics.stop()
+        }
+        diagnostics.observeRunLoop()
+        diagnostics.startWriting()
+
+        let loop = show(scene: FeedbackLoopList(), minSizeFromContent: false)
+        for slice in 1...2 {
+            let cpu = spinMainRunLoop(seconds: 2)
+            print(String(
+                format: "MĚŘENÍ kontrolní scéna, úsek %d: %.2f %% CPU, řádků v logu %d",
+                slice,
+                cpu / 2 * 100,
+                Self.lines(of: file).count
+            ))
+        }
+        loop.orderOut(nil)
+
+        let (store, cache) = try await prepared(big: false, full: true)
+        defer { _ = cache }
+        store.conversationStates[pr] = .loaded(Self.synthetic(comments: 300), updatedAt: Self.summary.updatedAt)
+        store.setDetailTab(.conversation, for: pr)
+        let window = show(scene: ContentView(store: store))
+        defer { window.orderOut(nil) }
+        _ = spinMainRunLoop(seconds: 2)
+        let root = try #require(window.contentView)
+        let scroller = try #require(Self.tallestScroller(in: root))
+        let before = Self.lines(of: file).count
+        let started = mainThreadCPUSeconds()
+        _ = WheelGesture.scroll(over: scroller, in: window, steps: 60, step: 40)
+        print(String(
+            format: "MĚŘENÍ gesto nad osou: %.2f s CPU, řádků v logu %d → %d",
+            mainThreadCPUSeconds() - started,
+            before,
+            Self.lines(of: file).count
+        ))
+        let lines = Self.lines(of: file)
+        print("SONDA celý záznam:\n" + lines.joined(separator: "\n"))
+        // Bez řádků netvrdí ta čísla výš nic: sonda by měřila zátěž a mlčení o ní.
+        #expect(lines.count >= 4)
+    }
+
+    /// Řádky záznamu. Chybějící soubor znamená **„ještě se nic nezapsalo“**, což je platný stav
+    /// (diagnostika ho zakládá až u prvního řádku) — a kdyby čtení selhalo jinak, spadne na tom
+    /// `#expect` na počtu řádků, takže se to nemá kde schovat.
+    private static func lines(of file: URL) -> [String] {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
+        return TextLines.content(text).map(String.init)
+    }
+
     /// Jeden scénář kolečkem: usadit, změřit nečinnost, projet gestem a **nechat okno stát**.
     ///
     /// Měří se tři věci, protože jedna bez druhých nic neznamená: nečinnost před gestem (okno
@@ -542,12 +744,14 @@ struct IdleDiffSpinProbe {
     /// Syntetická osa: komentáře s **různě vysokým** obsahem. Rozhoduje ta různost, ne počet —
     /// líný seznam odhaduje zbytek obsahu z toho, co už umístil, takže stejně vysoké řádky by
     /// mu odhadem nikdy nepohnuly.
-    private static func synthetic(comments: Int) -> Conversation {
+    /// `shift` posune tvary o pár míst, takže **tytéž komentáře vyjdou jinak vysoké**. Je to jediný
+    /// způsob, jak nechat počet i identitu na místě a rozejít jen odhad zbytku obsahu (#361).
+    private static func synthetic(comments: Int, shift: Int = 0) -> Conversation {
         let items = (0..<comments).map { index in
             ThreadComment(
                 id: "c\(index)",
                 author: index % 3 == 0 ? "octocat" : "hubot",
-                body: syntheticBody(index),
+                body: syntheticBody(index + shift),
                 createdAt: Date(timeIntervalSince1970: 1_753_000_000 + Double(index) * 3600),
                 url: URL(string: "https://github.com/cli/cli/pull/13084#issuecomment-\(index)")!
             )

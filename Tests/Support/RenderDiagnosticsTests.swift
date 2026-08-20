@@ -47,22 +47,112 @@ struct RenderDiagnosticsTests {
         #expect(diagnostics.snapshot() == ["DiffView": 5])
     }
 
-    /// Řádek se zapíše, až když uplynula sekunda — a počitadla se tím vynulují, aby další řádek
-    /// popisoval **další** sekundu, ne celý běh.
-    @Test("Řádek se zapíše po sekundě a počitadla se vynulují")
-    func flushesAfterASecond() throws {
+    /// Řádek uzavírá úsek: co se nasbíralo, se do něj zapíše a počitadla se vynulují, aby další
+    /// řádek popisoval **další** úsek, ne celý běh.
+    @Test("Řádek uzavře úsek a počitadla se vynulují")
+    func flushClosesTheSlice() throws {
         let (diagnostics, file, _) = try make()
         diagnostics.note(id: ObjectIdentifier(String.self), name: "ConversationNodeView")
-        diagnostics.cycle(at: start.addingTimeInterval(0.5), cpu: 0.1)
+        diagnostics.noteCycle()
+        diagnostics.noteCycle()
         #expect(!FileManager.default.fileExists(atPath: file.path))
         #expect(diagnostics.snapshot() == ["ConversationNodeView": 1])
 
-        diagnostics.cycle(at: start.addingTimeInterval(2), cpu: 0.4)
+        #expect(diagnostics.flush(at: start.addingTimeInterval(2), cpu: 0.4))
         #expect(diagnostics.snapshot().isEmpty)
         let lines = TextLines.content(try String(contentsOf: file, encoding: .utf8))
         #expect(lines == ["1970-01-01T00:00:02Z za 2.00 s: 2 kol runloopu, 0.400 s CPU,"
             + " body: ConversationNodeView=1"])
     }
+
+    /// **Zapisuje se i tehdy, když hlavní vlákno nepustí runloop ke slovu** (#391) — a tohle je
+    /// ten scénář, kvůli kterému se to přepisovalo: ve čtvrtém záchvatu (#361) diagnostika
+    /// přestala psát **v okamžiku ztuhnutí**, protože řádky vypisoval observer na `beforeWaiting`.
+    ///
+    /// Kolo se vyrábí tak, jak se v tom záchvatu chovalo SwiftUI: observer na `beforeWaiting`
+    /// s **nižším pořadím**, který se nevrátí. Runloop je tedy uvnitř callbacku, hoří a naše
+    /// počitadlo kol (`observeRunLoop`, pořadí 2 000 000) se na řadu vůbec nedostane.
+    ///
+    /// **Čte se snímek souboru z chvíle, kdy záchvat ještě trval** — bere ho ten blokující
+    /// observer, než se vrátí. Po záchvatu by to nic nedokazovalo: tehdy už runloop běží a řádek
+    /// by mohl napsat kdokoli.
+    ///
+    /// **Strop je hned u toho, jak se to píše** (pravidlo z #379): blokuje se `Self.burn` a ani
+    /// o milisekundu víc, protože měřicí smyčka bez stropu tady už jednou sebrala obrazovku.
+    @MainActor
+    @Test("Zapisuje i v kole, ze kterého se runloop nevrátí")
+    func writesWhileMainThreadNeverReturns() throws {
+        let (diagnostics, file, directory) = try makeLive(interval: 0.1)
+        // Složku drží test, jinak ji `deinit` smaže hned a soubor by se zakládal do prázdna.
+        defer {
+            diagnostics.stop()
+            _ = directory
+        }
+        diagnostics.observeRunLoop()
+        diagnostics.startWriting()
+        let duringFit = try burnMainThread(watching: file)
+
+        // Aspoň dva řádky **z doby záchvatu** a všechny s tou větou. Kdyby je psal observer
+        // hlavního runloopu, nebyl by tam ani jeden — což tvrdí test níž.
+        #expect(duringFit.count >= 2)
+        #expect(duringFit.allSatisfy { $0.contains("0 kol runloopu") })
+        #expect(duringFit.allSatisfy { $0.contains("HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU") })
+        print("SONDA řádky ze zaseknutého kola:\n" + duringFit.joined(separator: "\n"))
+    }
+
+    /// **Kontrola z druhé strany, tedy vložená regrese**: tentýž záchvat, ale řádky vypisuje
+    /// observer runloopu, jako do #391. Ze záchvatu nezůstane **nic** — a bez tohohle tvrzení by
+    /// test výš nedokazoval, že ty řádky přineslo zapisovací vlákno, a ne shoda okolností.
+    @MainActor
+    @Test("Zápis z observeru runloopu ze zaseknutého kola nezachytí nic")
+    func withoutWriterNothingIsRecorded() throws {
+        let (diagnostics, file, directory) = try makeLive(interval: 0.1)
+        defer {
+            diagnostics.stop()
+            _ = directory
+        }
+        let observer = CFRunLoopObserverCreateWithHandler(
+            kCFAllocatorDefault,
+            CFRunLoopActivity.beforeWaiting.rawValue,
+            true,
+            2_000_000
+        ) { _, _ in
+            diagnostics.flush(at: Date(), cpu: threadCPUSeconds())
+        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+        defer { CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes) }
+
+        #expect(try burnMainThread(watching: file).isEmpty)
+    }
+
+    /// Nechá hlavní vlákno hořet `Self.burn` uvnitř observeru na `beforeWaiting` a vrátí to, co
+    /// v souboru bylo **na konci toho hoření**, tedy ještě než se runloop vrátil.
+    @MainActor
+    private func burnMainThread(watching file: URL) throws -> [Substring] {
+        let snapshot = Snapshot()
+        // Pořadí **nižší** než 2 000 000 z `observeRunLoop()`, aby se počitadlo kol dostalo na
+        // řadu až po tomhle — a tohle se v tom kole nevrátí, takže vůbec.
+        let blocker = CFRunLoopObserverCreateWithHandler(
+            kCFAllocatorDefault,
+            CFRunLoopActivity.beforeWaiting.rawValue,
+            false,
+            0
+        ) { _, _ in
+            let until = Date().addingTimeInterval(Self.burn)
+            // Zaměstnané, ne spící vlákno: `sleep` by CPU nespálil a řádek by pak tvrdil, že se
+            // nic nedělo. Tohle je ta pravdivá reprodukce — hoření bez jediného kola runloopu.
+            while Date() < until { snapshot.spin() }
+            snapshot.text = try? String(contentsOf: file, encoding: .utf8)
+        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), blocker, .commonModes)
+        defer { CFRunLoopRemoveObserver(CFRunLoopGetMain(), blocker, .commonModes) }
+        _ = spinMainRunLoop(seconds: Self.burn + 0.3)
+        return TextLines.content(snapshot.text ?? "")
+    }
+
+    /// Jak dlouho se v testu hoří. Deset úseků zapisovacího vlákna po 0,1 s — dost na to, aby
+    /// „aspoň dva řádky“ nebylo na hraně, a málo na to, aby to někoho zdrželo.
+    private static let burn: TimeInterval = 1
 
     /// Strop se **napíše do souboru** a další řádky se zahodí. Soubor, který prostě přestane
     /// růst, se nedá odlišit od aplikace, která přestala hořet.
@@ -133,6 +223,35 @@ struct RenderDiagnosticsTests {
         return (diagnostics, file, directory)
     }
 
+    /// Diagnostika se **skutečnými hodinami a skutečným CPU hlavního vlákna** — pro testy, ve
+    /// kterých zapisuje zapisovací vlákno. S razítkem z roku 1970 a nulovým CPU by úsek vyšel na
+    /// půl století a hoření na 0 %, takže by se nezapsalo nic.
+    @MainActor
+    private func makeLive(interval: TimeInterval) throws -> (RenderDiagnostics, URL, TemporaryDirectory) {
+        let directory = try TemporaryDirectory()
+        let file = directory.url.appending(path: "diagnostics.log")
+        let diagnostics = RenderDiagnostics(
+            log: DiagnosticsLog(url: file, zone: .gmt),
+            zone: .gmt,
+            interval: interval
+        )
+        return (diagnostics, file, directory)
+    }
+}
+
+/// Snímek souboru z chvíle, kdy záchvat ještě trval, plus spalovač CPU.
+///
+/// Třída, protože blok observeru je escaping a musí do něj jít reference; `@unchecked Sendable`,
+/// protože se celý život odehraje na hlavním vlákně a zámek by tady jen zastíral, o čem test je.
+private final class Snapshot: @unchecked Sendable {
+    var text: String?
+    private var sink = 0
+
+    /// Kousek práce, který jde vidět v CPU. Zaměstnané, ne spící vlákno — spící by CPU nespálilo
+    /// a řádek by pak tvrdil, že se nic nedělo.
+    func spin() {
+        sink = sink &+ (0..<2000).reduce(0, &+)
+    }
 }
 
 /// Počitadlo toho, kolikrát se jméno typu skutečně složilo.

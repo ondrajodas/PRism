@@ -13,6 +13,18 @@ extension Policy {
     /// informace. Kdyby se psal řádek každou sekundu, hořící okno by se v tichých řádcích utopilo
     /// a soubor by rostl i nad nečinnou aplikací.
     ///
+    /// **Do „nic“ ale nepatří hořící CPU** (#391, změna proti #386). Zaseknuté kolo z #361 nemá ani
+    /// kola runloopu, ani průchody tělem — hlavní vlákno se z transakce nevrátí, takže obojí je
+    /// nula a přesně ten stav by se se starým pravidlem nezapsal. Rozhoduje proto ještě CPU:
+    /// nad `diagnosticBurnFloor` se řádek napíše, i když je zbytek nulový. Nečinná aplikace tím nic
+    /// navíc nepíše — spící hlavní vlákno CPU nespotřebuje.
+    ///
+    /// **Věta o runloopu tvrdí právě to, co je změřené, a nic víc.** Hoření s nulou kol znamená, že
+    /// hlavní vlákno za ten úsek runloop ani jednou nepustilo ke slovu — což je signatura #361, ale
+    /// **jeden takový řádek ještě není záchvat**: takhle vypadá i drahá práce na hlavním vlákně
+    /// (rozbor velkého diffu). Záchvat se pozná z toho, že takových řádků jde **za sebou desítky**,
+    /// a to je z časů v souboru vidět. Proto tam nestojí „zaseklo se“.
+    ///
     /// **Průchody těla se řadí podle počtu, ne podle jména.** Hledá se ten typ, který se překresluje
     /// nejvíc; abecedně by první bylo to, co je zrovna vidět. Při shodě rozhoduje jméno, ať je řádek
     /// stejný při každém běhu — bez toho by se dva soubory nedaly srovnat.
@@ -28,18 +40,32 @@ extension Policy {
         cpu: TimeInterval,
         passes: [String: Int]
     ) -> String? {
-        guard cycles > 0 || !passes.isEmpty else { return nil }
-        let head = String(
+        let burns = cpu >= elapsed * diagnosticBurnFloor
+        guard cycles > 0 || !passes.isEmpty || burns else { return nil }
+        var head = String(
             format: "%@ za %.2f s: %d kol runloopu, %.3f s CPU",
             stamp(of: moment, in: zone),
             elapsed,
             cycles,
             cpu
         )
+        // Hoří a runloop nedošel ani jednou do čekání — to je ta signatura z #361 a v souboru má
+        // být vidět slovy, ne jako nula, kterou musí někdo umět přečíst.
+        if burns, cycles == 0 { head += " — HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU" }
         guard !passes.isEmpty else { return head }
         let sorted = passes.sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
         return head + ", body: " + sorted.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
     }
+
+    /// Od kolika CPU se úsek považuje za práci, i když v něm není ani kolo runloopu, ani průchod
+    /// tělem — **podíl z uplynulého času**, ne absolutní sekundy, aby to nezáviselo na cadenci
+    /// zapisovacího vlákna.
+    ///
+    /// 5 % je nízko schválně: hledá se hoření na 99 %, kdežto nečinné okno stojí jednotky
+    /// milisekund za sekundu (změřeno u #386: 1–4 kola a 5–14 ms), takže mezi tím je dva řády
+    /// místa a hranice nemusí být přesná. Vyjmenovaná ale být musí, jinak by se soubor plnil i nad
+    /// aplikací, která spí.
+    static let diagnosticBurnFloor = 0.05
 
     /// Věta, kterou diagnostika **uzavře** soubor, až narazí na strop (#361).
     ///

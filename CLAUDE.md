@@ -798,6 +798,14 @@ Zásady, které platí všude:
   drift sezení větší než hledaný rozdíl (tentýž scénář 2,15 s a po půl hodině 4,39 s), takže se
   série **střídají** (A/B/A/B), ne dvě za sebou. Podrobnosti a postup měření projíždění
   v [`docs/testovani.md`](docs/testovani.md).
+- **Nástroj na živý záchvat nesmí měřit z runloopu hlavního vlákna** (#391). Diagnostika kreslení
+  vypisovala řádky z observeru na `beforeWaiting` — a v tuhnoucím okně se runloop do stavu čekání
+  **vůbec nedostane** (SwiftUI si z takového observeru flushuje transakce a z toho se nevrátí), takže
+  se nástroj vypnul právě v tom, na co byl. Měří se proto **z vlastního vlákna** (`Thread` +
+  `Thread.sleep`, žádný `Timer` na hlavním runloopu ani `DispatchQueue.main`) a CPU hlavního vlákna
+  se čte přes jeho mach port (`threadCPUSeconds(of:)`) — `CLOCK_THREAD_CPUTIME_ID` umí jen vlákno
+  samo o sobě. **Ověřuje se vyrobeným kolem**, ne úsudkem: blokující observer se stropem, a k němu
+  vložená regrese (se zápisem z observeru nezůstane ze záchvatu nic).
 - **Testy se nespouštějí rourou do `grepu`** — viz *Příkazy* níž, umí to zaseknout na neurčito.
 
 ## Příkazy

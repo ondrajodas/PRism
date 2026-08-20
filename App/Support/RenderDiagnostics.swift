@@ -28,23 +28,39 @@ import Foundation
 /// zůstane `nil` a důvod jde na stderr; `bin/run.sh --diagnose` to navíc pozná **dřív, než spustí
 /// aplikaci**, a řekne, co s tím. „Zapnutá“ a „nic nezapisuje“ tedy nesplynou.
 ///
+/// ## Zapisuje **vlastní vlákno**, ne observer hlavního runloopu
+///
+/// Do #391 řádky vypisoval observer na `beforeWaiting`, tedy hlavní vlákno samo. Ve čtvrtém
+/// záchvatu (#361, 2026-08-20) se ukázalo, že takový nástroj se **v záchvatu vypne**: poslední
+/// řádek je `11:01:31`, ztuhnutí trvalo do `11:02:53` a mezi tím není nic. Runloop se totiž do
+/// stavu čekání **vůbec nedostane** — SwiftUI si transakce flushuje z `beforeWaiting` observeru
+/// (`NSRunLoop.flushObservers`) a z toho se v tom kole nevrátí, takže náš observer s vyšším
+/// pořadím nepřijde na řadu. Zbyl by z něj jen záznam toho, co bylo **předtím**.
+///
+/// Řádek proto zapisuje **zapisovací vlákno** (`Thread` + `Thread.sleep`) a hlavního vlákna se
+/// dotýká jedině čtením: `threadCPUSeconds(of:)` nad jeho mach portem. Zaseknuté kolo se z toho
+/// pozná na první pohled — `0 kol runloopu` a přitom celá sekunda CPU (viz
+/// `Policy.diagnosticLine`).
+///
 /// ## Čím to nesmí být
 ///
 /// - **Počitadlo není v observable stavu** (#252): je to obyčejná třída se zámkem, ne `@Observable`.
 ///   Zápis do stavu při každém průchodu tělem je přesně ta chyba, kterou tohle hledá.
-/// - **Nic si neplánuje kolo** (#350). Žádný `Timer`, žádná animace, žádný `requestUpdate`. Řádek se
-///   vypisuje z **observeru runloopu**, tedy jedině tehdy, když už runloop běží — diagnostika si
-///   nevyžádá ani jedno probuzení navíc. Ticho v souboru proto znamená, že se runloop **vůbec
-///   neprobudil**; aplikace se ale sama probouzí kvůli pollingu, takže v běžném provozu chodí
-///   levné řádky (jednotky kol, jednotky milisekund CPU) a strop se vyčerpá řádově za den.
+/// - **Nic si neplánuje kolo na hlavním vlákně** (#350). Žádný `Timer` na hlavním runloopu, žádná
+///   animace, žádný `requestUpdate`, žádný `DispatchQueue.main.async` — zapisovací vlákno je mimo
+///   runloop okna a spí, takže si aplikace kvůli diagnostice neprobudí ani jedno kolo. Observer
+///   runloopu zůstává, ale **jen jako počitadlo**: inkrement pod zámkem, žádné hodiny a žádný
+///   disk.
 /// - **`pass(_:)` nečte hodiny ani nesahá na disk.** Je to inkrement pod zámkem a nic jiného —
 ///   jediná věc, která se v tom kole opakuje tisíckrát za sekundu. Cena vypnuté diagnostiky je
 ///   načtení jednoho statického `Optional`u.
+/// - **Nula se nezapisuje.** Řádek každou sekundu by nečinnou aplikací utopil to, co se hledá, a
+///   soubor by rostl nad oknem, kde se nic nedělo. Rozhodnutí, co je „nic“, drží
+///   `Policy.diagnosticLine` — a od #391 do něj patří i CPU, protože zaseknuté kolo je zrovna
+///   ten stav, kde nejsou ani kola runloopu, ani průchody tělem.
 ///
-/// Plyne z toho jedno **omezení, které je potřeba znát**: kdyby se hlavní vlákno zaseklo tak, že se
-/// runloop nikdy nevrátí do observeru, nezapíše se nic. Vzorky z #361 tuhle možnost vylučují (v pěti
-/// sekundách je `flushObservers` tisíce vzorků, tedy tisíce kol), ale prázdný soubor u hořícího okna
-/// **není chyba diagnostiky, je to nález**.
+/// Zbývá z toho jedno omezení: **záznam končí s procesem.** Zaseknutou aplikaci nemá kdo zavřít
+/// jinak než rukou, a poslední rozepsaná sekunda se nezapíše — soubor se plní po celých úsecích.
 final class RenderDiagnostics: @unchecked Sendable {
     /// Kdo právě sbírá. `nil` = diagnostika je vypnutá a `pass(_:)` nedělá nic.
     ///
@@ -68,21 +84,47 @@ final class RenderDiagnostics: @unchecked Sendable {
 
     private let log: DiagnosticsLog
     private let zone: TimeZone
+    /// Jak často se zapisuje řádek. Je to **cadence zapisovacího vlákna**, ne strop: co se za tu
+    /// dobu nasbíralo, to je v řádku, a `elapsed` v něm je skutečně uplynulý čas.
+    private let interval: TimeInterval
+    /// Vlákno, jehož CPU se měří. Port se bere na **něm** (viz `threadCPUSeconds(of:)`), takže se
+    /// instance musí postavit tam, kde se má měřit — v aplikaci na hlavním vlákně.
+    private let watched: mach_port_t
     private let lock = NSLock()
     private var passes: [ObjectIdentifier: Int] = [:]
     private var names: [ObjectIdentifier: String] = [:]
     private var cycles = 0
     private var lastFlush: Date
     private var lastCPU: TimeInterval
+    private var isStopped = false
     /// Vlastní reference na observer. Runloop si ho drží taky, ale životnost měřidla nemá
     /// záviset na tom, jak s ním zachází někdo jiný.
     private var observer: CFRunLoopObserver?
 
-    init(log: DiagnosticsLog, zone: TimeZone = .current, now: Date = Date(), cpu: TimeInterval = 0) {
+    /// `watching` je **port volajícího vlákna**, protože default se vyhodnocuje na místě volání:
+    /// `start()` je `@MainActor`, takže se hlídá hlavní vlákno. Test si může podstrčit svůj.
+    ///
+    /// `cpu` je výchozí hodnota té řady, ze které se počítají rozdíly. `nil` znamená „vezmi ji
+    /// z hlídaného vlákna“ — celá řada pak jde z jednoho zdroje. Testy si ji dosazují, aby se
+    /// rozdíl v řádku dal napsat literálem.
+    ///
+    /// To `?? 0` na konci **není spolknutá chyba**: port se bere z vlákna, které o sebe právě
+    /// požádalo, takže selhat může jedině neplatným portem — a ten selže i v zapisovacím vlákně,
+    /// které se pak vypne dřív, než něco napíše. Nula se tedy nemá kde projevit.
+    init(
+        log: DiagnosticsLog,
+        zone: TimeZone = .current,
+        interval: TimeInterval = 1,
+        now: Date = Date(),
+        watching thread: mach_port_t = currentThreadPort(),
+        cpu: TimeInterval? = nil
+    ) {
         self.log = log
         self.zone = zone
+        self.interval = interval
+        watched = thread
         lastFlush = now
-        lastCPU = cpu
+        lastCPU = cpu ?? threadCPUSeconds(of: thread) ?? 0
     }
 
     /// Zapne sbírání, pokud je `PRISM_DIAGNOSE=1`. Vrací, jestli se zapnulo.
@@ -91,8 +133,7 @@ final class RenderDiagnostics: @unchecked Sendable {
         let layout = CacheLayout.applicationSupport
         let diagnostics = RenderDiagnostics(
             log: DiagnosticsLog(url: layout.diagnosticsFile, zone: .current),
-            now: Date(),
-            cpu: threadCPUSeconds()
+            now: Date()
         )
         // **Na hlavičce se to láme** (nález Copilota na #386). Když se nezapsala, nezapíše se ani nic
         // dalšího — typicky proto, že soubor už narazil na strop v minulém sezení. Zapnout se
@@ -114,6 +155,7 @@ final class RenderDiagnostics: @unchecked Sendable {
             return false
         }
         diagnostics.observeRunLoop()
+        diagnostics.startWriting()
         current = diagnostics
         FileHandle.standardError.write(
             Data("PRism: diagnostika kreslení (#361) ZAPNUTÁ → \(layout.diagnosticsFile.path)\n".utf8)
@@ -152,17 +194,25 @@ final class RenderDiagnostics: @unchecked Sendable {
         }
     }
 
-    /// Proběhlo kolo runloopu. Když od posledního řádku uplynula sekunda, řádek se zapíše
-    /// a počitadla se vynulují.
-    func cycle(at moment: Date, cpu: TimeInterval) {
+    /// Proběhlo jedno kolo runloopu. **Jen inkrement pod zámkem** — žádné hodiny, žádný disk:
+    /// tohle běží desítky až stovky krát za sekundu a v hořícím okně je to zrovna ta věc, která
+    /// se dělat přestane.
+    func noteCycle() {
+        lock.withLock { cycles += 1 }
+    }
+
+    /// Uzavře úsek a zapíše za něj řádek. Vrací, jestli se ještě zapisuje — `false` znamená
+    /// vyčerpaný strop nebo chybu zápisu, tedy že zapisovací vlákno může skončit.
+    ///
+    /// Volá to **zapisovací vlákno** (a testy, které si čas i CPU dosazují literálem). Průchody
+    /// tělem, kola runloopu i CPU se nulují tady — bez toho by druhý řádek nesl i to, co se stalo
+    /// v prvním.
+    @discardableResult func flush(at moment: Date, cpu: TimeInterval) -> Bool {
         let line: String? = lock.withLock {
-            cycles += 1
-            let elapsed = moment.timeIntervalSince(lastFlush)
-            guard elapsed >= 1 else { return nil }
             let line = Policy.diagnosticLine(
                 at: moment,
                 in: zone,
-                over: elapsed,
+                over: moment.timeIntervalSince(lastFlush),
                 cycles: cycles,
                 cpu: cpu - lastCPU,
                 passes: namedPasses()
@@ -173,24 +223,61 @@ final class RenderDiagnostics: @unchecked Sendable {
             lastCPU = cpu
             return line
         }
-        guard let line else { return }
-        log.append(line)
+        // **Nemám co říct** není konec zapisování: nečinná aplikace se zas rozjede.
+        guard let line else { return true }
+        return log.append(line)
     }
 
-    /// Observer runloopu, ze kterého se řádky vypisují. **Žádné probuzení navíc**: `beforeWaiting`
-    /// se ozve jedině tehdy, když runloop něco dělal a chystá se spát.
+    /// Přestane zapisovat a odregistruje počitadlo kol. Pro sondy a testy — aplikace diagnostiku
+    /// drží po celou dobu procesu, takže tam to nikdo nevolá.
+    func stop() {
+        lock.withLock { isStopped = true }
+        if let observer {
+            CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes)
+            self.observer = nil
+        }
+    }
+
+    /// Zapisovací vlákno. **Tohle je celá oprava z #391**: kdo měří zaseknuté hlavní vlákno, nesmí
+    /// na něm běžet.
+    ///
+    /// `Thread` + `Thread.sleep`, ne `Timer` ani `DispatchSourceTimer`: časovač potřebuje runloop
+    /// nebo frontu, kdežto tady stačí vlákno, které se probouzí samo a nikomu nic neplánuje.
+    /// Reference na sebe je **slabá**, takže se vlákno ukončí i tehdy, když se instance zahodí bez
+    /// `stop()` (typicky v sondě) — bez toho by testovací instance zapisovala do konce běhu.
+    func startWriting() {
+        let interval = interval
+        let thread = Thread { [weak self] in
+            while true {
+                Thread.sleep(forTimeInterval: interval)
+                guard let self, !lock.withLock({ isStopped }) else { return }
+                // Bez čtení CPU by řádek tvrdil, že hlavní vlákno nic nedělalo — a to je zrovna
+                // ta věta, kvůli které se tenhle soubor bere. Radši úsek přeskočit.
+                guard let cpu = threadCPUSeconds(of: watched) else { return }
+                guard flush(at: Date(), cpu: cpu) else { return }
+            }
+        }
+        thread.name = "PRism.RenderDiagnostics"
+        // `utility`, ne `userInitiated`: hlavní vlákno má přednost, protože se měří ono.
+        thread.qualityOfService = .utility
+        thread.start()
+    }
+
+    /// Počitadlo kol runloopu. **Žádné probuzení navíc**: `beforeWaiting` se ozve jedině tehdy,
+    /// když runloop něco dělal a chystá se spát.
     ///
     /// Pořadí je vysoké schválně — SwiftUI si v `beforeWaiting` observeru flushuje transakce
-    /// (`NSRunLoop.flushObservers`), takže s vyšším pořadím se čte stav **po** nich a průchody těla
-    /// z toho kola se do řádku vejdou.
-    private func observeRunLoop() {
+    /// (`NSRunLoop.flushObservers`), takže s vyšším pořadím se počítá kolo, které už transakce
+    /// proběhlo. **A právě proto se z observeru nezapisuje**: když se SwiftUI z toho flushe
+    /// nevrátí, tenhle blok se nespustí a v souboru by nebylo nic (#361, čtvrtý záchvat).
+    func observeRunLoop() {
         let observer = CFRunLoopObserverCreateWithHandler(
             kCFAllocatorDefault,
             CFRunLoopActivity.beforeWaiting.rawValue,
             true,
             2_000_000
         ) { [weak self] _, _ in
-            self?.cycle(at: Date(), cpu: threadCPUSeconds())
+            self?.noteCycle()
         }
         CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
         self.observer = observer

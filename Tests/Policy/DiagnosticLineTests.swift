@@ -25,6 +25,67 @@ struct DiagnosticLineTests {
         ) == nil)
     }
 
+    /// **Úsek, ve kterém hlavní vlákno nepustilo runloop ke slovu, se zapsat musí** (#391), a to je
+    /// změna proti #386: hlavní vlákno se z transakce nevrátí, takže kol runloopu je nula a průchodů
+    /// tělem taky — a přesně tenhle řádek v souboru u čtvrtého záchvatu chyběl. Rozhoduje proto CPU.
+    ///
+    /// Věta v řádku přitom netvrdí „záchvat“, jen to změřené: **jeden** takový úsek může být i drahá
+    /// práce na hlavním vlákně. Záchvat se pozná z toho, že takových řádků jde za sebou desítky.
+    @Test("Hoření bez kola a bez průchodů se zapíše i s větou o runloopu")
+    func stuckLoopIsWritten() {
+        #expect(Policy.diagnosticLine(
+            at: moment,
+            in: .gmt,
+            over: 1,
+            cycles: 0,
+            cpu: 0.998,
+            passes: [:]
+        ) == "2025-08-19T10:40:00Z za 1.00 s: 0 kol runloopu, 0.998 s CPU"
+            + " — HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU")
+    }
+
+    /// **Ta věta patří jedině k nule kol.** Když se runloop vrací, hoří to při práci — a to je jiný
+    /// stav než kolo, ze kterého se hlavní vlákno nevrátilo.
+    @Test("S koly runloopu se věta nepřipisuje, i když to hoří")
+    func burningWithCyclesIsNotStuck() {
+        let line = Policy.diagnosticLine(
+            at: moment,
+            in: .gmt,
+            over: 1,
+            cycles: 42,
+            cpu: 0.9,
+            passes: [:]
+        )
+        #expect(line == "2025-08-19T10:40:00Z za 1.00 s: 42 kol runloopu, 0.900 s CPU")
+    }
+
+    /// A nečinnost se pořád nezapisuje: spící hlavní vlákno CPU nespotřebuje, takže ta hranice
+    /// nesmí být tak nízko, aby ji přebilo zaokrouhlení.
+    @Test("Nečinný úsek se nezapíše ani se stopou CPU")
+    func idleWithTraceOfCPUStaysSilent() {
+        #expect(Policy.diagnosticLine(
+            at: moment,
+            in: .gmt,
+            over: 1,
+            cycles: 0,
+            cpu: 0.014,
+            passes: [:]
+        ) == nil)
+    }
+
+    /// Hranice je **podíl z uplynulého času**, ne absolutní sekundy — jinak by u kratší cadence
+    /// zapisovacího vlákna vycházela jinak než u delší a dva soubory by se nedaly srovnat.
+    @Test("Hranice hoření je podíl z uplynulého času")
+    func burnFloorScalesWithElapsed() {
+        // 0,004 s za 0,1 s je 4 %, tedy pod hranicí; za 0,05 s je 8 %, tedy nad ní.
+        #expect(Policy.diagnosticLine(
+            at: moment, in: .gmt, over: 0.1, cycles: 0, cpu: 0.004, passes: [:]
+        ) == nil)
+        #expect(Policy.diagnosticLine(
+            at: moment, in: .gmt, over: 0.05, cycles: 0, cpu: 0.004, passes: [:]
+        )?.hasSuffix("HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU") == true)
+    }
+
     /// Kolo bez jediného průchodu tělem **je** informace: runloop se probouzí, ale nic se
     /// nepřekresluje. Takový řádek se proto píše, jen bez sekce `body:`.
     @Test("Kolo bez průchodů tělem se zapíše bez sekce body")
