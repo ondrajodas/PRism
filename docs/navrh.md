@@ -11,7 +11,7 @@ odkaz, žije jako artifact `PRism — návrh vizuální revize`:
 <https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Obojí musí odejít
 **v jednom commitu a jednom publikování** — rozejít se smí leda na dobu jedné úpravy.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi 23 sekcí. Většina kreslí jednu
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi 25 sekcí. Většina kreslí jednu
 obrazovku nebo jeden stav v rámu okna (`.win`) a vedle sebe má poznámky (`.notes`), proč je to
 tak; zbytek rozhodnutí vysvětluje — *Dvanáct stavů, které se nesmí slít*, *Kde jsem si vybral,
 a co to stálo*, *Co by se muselo přepsat*.
@@ -43,18 +43,24 @@ ve [specifikaci](superpowers/specs/2026-07-31-prism-design.md).
 
 Totéž platí o **dashboardu**: 01 kreslí ten dnešní (`DashboardView` má opravdu kartu `Ve frontě`
 a jeden blok fronty), 21 ten se dvěma frontami podle #331. Obě jsou na stránce *Přehled* pod
-sebou. **Novější sekce se do té starší nepřekresluje** — záznam dneška je to jediné, proti čemu
-se dá aplikace srovnat, takže bez něj by každé srovnání hlásilo rozdíl, který není chyba, dokud
-se to issue neudělá.
+sebou. Stejné páry jsou **02 a 24** a **19 a 25** (#390): 02 a 19 kreslí dnešní obrazovky,
+24 přidává labely a vyžádané reviewery do pravého panelu a 25 ten panel do tabu *Commity*.
+**Novější sekce se do té starší nepřekresluje** — záznam dneška je to jediné, proti čemu se dá
+aplikace srovnat, takže bez něj by každé srovnání hlásilo rozdíl, který není chyba, dokud se to
+issue neudělá. Platí to i tehdy, když nová sekce mění **jen kus** obrazovky: 24 nekreslí celé
+okno, ale výřezy panelu (`.frame.flat` s `aside.side`), a i tak stojí vedle 02, ne v ní.
 
 **U sekce, která je záznamem dneška, platí to obráceně: ta se překreslit musí** (#299). Když se
 v aplikaci něco změní, mění se s tím i ta sekce — jinak v návrhu zbude obrazovka, kterou v okně
 nikdo nenajde, a čtenář nemá jak poznat, jestli chybu má aplikace, nebo návrh. Takové sekce
-poznáš podle toho, že **v nich vedle sebe žádná novější varianta nestojí** — u #299 to byla
-sekce **02** (dnešní `Přehled`; #215 z ní vzalo souhrn checků, #291 rozdělil hlavičku karty na
-dvě podoby), **03** (patička nálezu po #283), **19** (seznam commitů po #316) a **01** (rail po
-#278). Zapsat to jako „vědomě zastaralé“ nestačí: zápis ve specifikaci nikdo nečte s obrázkem
-v ruce, a u #299 se takových zápisů sešlo pět.
+poznáš podle toho, že **kreslí to, co okno umí dneska** — u #299 to byla sekce **02**
+(dnešní `Přehled`; #215 z ní vzalo souhrn checků, #291 rozdělil hlavičku karty na dvě podoby),
+**03** (patička nálezu po #283), **19** (seznam commitů po #316) a **01** (rail po #278).
+Poznávací znak to **není** „vedle ní nestojí novější varianta“: 01 má vedle sebe 21, 02 má
+od #390 vedle sebe 24 a 19 má 25, a záznamem dneška jsou pořád dál — mít vedle sebe kresbu
+budoucího stavu neznamená, že se ta dnešní přestane udržovat. Zapsat to jako „vědomě
+zastaralé“ nestačí: zápis ve specifikaci nikdo nečte s obrázkem v ruce, a u #299 se
+takových zápisů sešlo pět.
 
 **Totéž platí o tokenech**, jen tam to nikdo neuvidí očima: `--mint` ve světlé větvi se u #309
 v aplikaci ztmavil kvůli kontrastu (`#0E8F80` → `#0C7E71`) a v mockupu zůstala stará hodnota, tedy
@@ -136,6 +142,35 @@ Za pozornost stojí i **čtvrtý blok**: barvy a stíny jsou v `:root`, v `@medi
 z nich chybí, se v tom tématu tiše obarví z toho světlého `:root` — ověřeno u #384, že se v těch
 třech přebíjecích blocích neliší nic než čtyři tokeny bez motivu (`--ui`, `--mono`, `--radius`,
 `--radius-sm`).
+
+**Třída, kterou si někdo bere jako vnořenou, se naholo definovat nesmí** (#390). Je to opačná past
+než mrtvý token a stejně tichá: pravidlo zabere, jenže **jinde, než na co se kouká**. `.lbl` je
+v dokumentu ve třech komponentách vnořený popisek (`.runbar .lbl`, `.findnav .lbl`, `.set-row .lbl`)
+a rozhoduje u něj jen barva a velikost písma; první zákres labelů PR ho přesto napsal naholo
+(`.lbl { border: 1px solid …; border-radius: 20px; background: var(--panel-3) }`) a **podstrčil ho
+všem třem**. Změřeno `getComputedStyle`em nad dokumentem: `border: 1px solid`, `border-radius: 20px`
+a vyvýšený podklad tam, kde návrh chce prostý text — na `main` u všech tří `0px none`. Spravilo to
+nové jméno (`.lchip`), ne specificita.
+
+Kontroluje se to **u jmen, která zákres přidává**, ne plošným výpisem: plošný hlásí i jména,
+která se takhle míjejí odjakživa a jsou v pořádku (`.acts` proti `.frow .acts`, `.subtabs` proti
+`.stripcut .subtabs`), takže z něj zbyde seznam k odklikání. Grep níž **musí vyjít prázdný**
+a ověřený je z obou stran — nad zákresem s vrácenou regresí hlásí.
+
+**Vzor nesmí být zakotvený na začátek řádku a na jednu třídu v rodiči.** První podoba téhle
+kontroly byla `^\.[a-z][a-z0-9-]* +\.$c`, a ta **mlčí u většiny skutečných tvarů**: rodič
+s víc třídami (`.card.go .goto`, `.card.alarm .big`, `.frow.crit .bar` — všechny tři v tomhle
+souboru opravdu jsou), potomkový kombinátor (`.runbar > .lchip`), dvě úrovně (`.a .b .lchip`)
+i odsazené pravidlo. Ověřeno vložením regrese ve všech čtyřech tvarech: zakotvená podoba
+nenašla **ani jeden**, ta níž všechny. Falešně pozitivní nález u pěti vybraných jmen nehrozí
+natolik, aby se za tuhle šířku platilo — a kdyby přišel, je to pobídka se podívat, ne šum.
+
+```bash
+for c in lchip chip-add rv-list rv-row rv-av; do
+    grep -qE "[a-z0-9)]([ ]*[>+~][ ]*|[ ]+)\.$c([^a-z0-9-]|$)" docs/navrh.html &&
+        echo "POZOR: .$c je jinde vnořený"
+done
+```
 
 Rozměry z CSS se berou jako body 1 : 1 (`font-size: 11.5px` → `.font(.system(size: 11.5))`,
 `border-radius: 6px` → `cornerRadius: 6`). Není to samozřejmost, je to zvyklost tohohle repa —

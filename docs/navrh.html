@@ -396,6 +396,102 @@ code {
 .block > .more-rows:hover { background: var(--panel-3); }
 .block > .more-rows .count { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
 
+/* --- labely a vyžádané reviewery v pravém panelu (#390) -------------------------------
+   Kreslí se jako **dvě sekce v pravém panelu** (`.pl-sec`, nad segmenty), ne jako řádek
+   v hlavičce PR a ne jako třetí segment vedle `Nálezů` — obojí i se změřenými čísly je
+   v poznámkách sekce 24. Sekce, která nemá co ukázat, se nekreslí vůbec.
+
+   Třída je `.lchip`, ne `.lbl`, a je to oprava uvnitř tohohle zákresu: `.lbl` si v dokumentu
+   **už tři komponenty berou jako vnořený popisek** (`.runbar .lbl`, `.findnav .lbl`,
+   `.set-row .lbl`) a rozhodují u něj jen o barvě a velikosti písma. Naholo napsané `.lbl`
+   jim proto podstrčilo všechno ostatní — změřeno `getComputedStyle`em nad dokumentem:
+   `border: 1px solid`, `border-radius: 20px` a vyvýšený podklad tam, kde návrh chce prostý
+   text (na `main` u všech tří `0px none`). **Jméno, které si někdo bere jako vnořenou třídu,
+   se naholo definovat nesmí**; grep je v `docs/navrh.md`. */
+
+/* Chip labelu drží metriku `.pill` (kapsle, 10.5px, 2/7), ale sází se v UI fontu: `.pill` je
+   mono, protože nese počty a stavy, kdežto label je slovo.
+
+   **Barva labelu je puntík, ne výplň**, a je to rozhodnutí, ne úspora. Barvy labelů jsou
+   z repozitáře (`label.color`), tedy libovolné: plný chip by u každé z nich musel počítat
+   kontrast textu jako GitHub, a v panelu, kde jediné plné pole patří odznaku závažnosti
+   nálezu, by přebíjel zrovna to. První zákres to měl obráceně, plným chipem z `--crit` 16 %,
+   a v renderu vyšel `dependencies` k nerozeznání od `.pill.crit`, tedy jako porucha. Podklad
+   je proto neutrální trojice `--panel-3`/`--ink-2`/`--line`, tatáž jako u `.pill.idle`,
+   a barva zbyla na osmibodovém puntíku, který kontrast řešit nemusí. Hexy v kresbě jsou
+   skutečné výchozí barvy GitHubu (`dependencies` #0366D6, `enhancement` #A2EEEF,
+   `bug` #D73A4A) — jsou to **data, ne tokeny palety**; v aplikaci se berou z odpovědi,
+   ne z `Palette`. */
+.lchip {
+  /* `border-box` z téhož důvodu jako u `.rv-av`, jen tady na tom stojí víc než rozměr:
+     dokument `box-sizing` nikde nepřepisuje, takže `max-width: 100%` by omezila **obsah**
+     a chip by o padding a okraj přerostl. Změřeno na podlaze 240 b: chip
+     `needs-design-review-and-product-signoff` vyšel **230 b** v řádku širokém 214, tedy
+     16 b přes řádek a **3 b za pravým okrajem panelu** — text se přitom ořezal správně, jen
+     ořezaný na špatnou šířku. S `border-box` je chip 214 a nepřeteče. */
+  box-sizing: border-box;
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+  font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+  border: 1px solid var(--line); background: var(--panel-3); color: var(--ink-2);
+}
+/* Jméno se ořezává **až když je samo širší než panel**, a jinak nikdy: řádek chipů zalamuje,
+   takže na 300 bodech je celé. Ořezává se text, ne chip — puntík s barvou zůstane, a podle
+   něj se label pozná i s ukusnutým jménem. */
+.lchip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Puntík je **obtažený `--line`**, ne jen kolečko. Bez obtažení se v renderu bledé barvy
+   labelů (`enhancement` #A2EEEF) na světlém `--panel-3` ztratily úplně, a v tmavém motivu se
+   to samé děje těm tmavým — každý motiv má tu vadu z jiné strany. `--line` je proti oběma
+   podkladům viditelná z definice, takže jedno obtažení stačí na obojí. */
+.lchip i {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+/* Přebytek se **počítá, neořezává**: řádek se zalomí nejvýš na dva řádky a co se nevejde, je
+   `+2`. Třetí řádek labelů už ukusuje místo nálezům, a z prostě ořezaného seznamu se nepozná,
+   že něco chybí. */
+.lchip.more { font-family: var(--mono); color: var(--ink-3); }
+
+/* `+ label` a `+ reviewer` je **jedna třída**, ne dvě varianty chipu: obojí je akce a obojí je
+   jen na vlastním PR. Přerušovaný okraj proti plnému drží úmluvu „plné je to, co na PR je,
+   přerušované to, co se dá přidat“. Na cizím PR nejsou **vůbec**, ne zašedlé — zašedlé
+   tlačítko tvrdí „tady se to dělá, jen teď ne“, a u cizího PR se to nedělá nikdy.
+
+   Vlastní třída, ne `.lchip.add`: přebíjet u chipu podklad, okraj i tučnost znamená, že se
+   `.lchip` čte na dvě strany a jedna z nich není chip. */
+.chip-add {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  font-size: 10.5px; font-weight: 500; padding: 2px 7px; border-radius: 20px;
+  border: 1px dashed var(--line); background: transparent; color: var(--ink-3);
+  cursor: pointer;
+}
+.chip-add:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Reviewer je **řádek**, ne chip: panel je sloupec, takže se do něj vejde iniciálka, jméno
+   a slovo o tom, jak odpověděl — a to slovo je jediný důvod, proč se na sekci kouká. Když se
+   panel zúží, ustoupí **jméno** (ořeže se), odpověď zůstává celá. */
+.rv-list { display: flex; flex-direction: column; gap: 6px; }
+.rv-row { display: flex; align-items: center; gap: 7px; font-size: 12px; min-width: 0; }
+.rv-row .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.rv-row .ans { margin-left: auto; flex: none; font-size: 11px; color: var(--ink-3); }
+.rv-row .ans.done { color: var(--ok); }
+.rv-row .ans.blocked { color: var(--crit); }
+/* Třída je `rv-av`, ne `.av`: `.av` výš je dvacetibodové kolečko s gradientem akcentu, které
+   používá konverzace, a přebít ho uvnitř řádku by znamenalo dvě různé podoby jedné třídy. */
+.rv-av {
+  /* `border-box` schválně: dokument jinde `box-sizing` nepřepisuje, takže by kolečko
+     s okrajem vyšlo 18 bodů, kdežto v CSS by stálo 16 — a rozměry z tohohle souboru se berou
+     jako body 1 : 1. Šestnáct je velikost `.av.sm`, se kterou to má v okně souhlasit. */
+  box-sizing: border-box;
+  width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--mono); font-size: 8px; font-weight: 700; flex: none;
+  background: var(--panel-3); color: var(--ink-2); border: 1px solid var(--line);
+}
+/* Tři stavy odpovědi, protože ta prostřední je jediná, která něco blokuje. Přerušovaný okraj
+   u `čeká` je tatáž úmluva jako u `+`: přerušované se ještě nestalo. */
+.rv-av.done    { background: color-mix(in srgb, var(--ok) 15%, transparent);   color: var(--ok);   border-color: transparent; }
+.rv-av.blocked { background: color-mix(in srgb, var(--crit) 15%, transparent); color: var(--crit); border-color: transparent; }
+.rv-av.wait    { border-style: dashed; }
+
 /* Karta, která vede do sekce railu. Nekliká se `DNESKA STÁLO` — ta nemá kam vést. */
 .card.go { cursor: pointer; position: relative; }
 .card.go:hover { border-color: var(--accent); }
@@ -3263,6 +3359,343 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     </div>
   </section>
 
+  <section class="section" id="s24">
+    <div class="section-head">
+      <div class="eyebrow">24 — Pravý panel · labely a reviewery</div>
+      <h2>Labely a reviewery patří do panelu, ne do hlavičky</h2>
+      <p class="muted">
+        Dneska o tom okno <b>neví to podstatné</b>. Labely nezná vůbec — v modelech po nich není
+        ani pole. Vyžádané reviewery zná jen jako <b>události v konverzaci</b>
+        (<code>reviewRequested</code>, <code>reviewRequestRemoved</code>), tedy „stalo se to“, ne
+        „kdo na tom stojí teď a jak odpověděl“; a odpověď se z proudu událostí musí složit, aby se
+        na ni dalo koukat. Kvůli obojímu se chodí do prohlížeče.
+      </p>
+      <p class="muted">
+        Přidává se obojí, ale <b>ne symetricky</b>: u vlastního PR se dá měnit, u cizího se jen
+        vidí. Cizí PR je fronta někoho jiného — přeštítkovat ho odsud není moje věc a odebrat
+        vyžádaného reviewera už vůbec.
+      </p>
+      <p class="muted">
+        <b>Bydlí to v pravém panelu, ne v hlavičce PR</b> (#390) — dvě sekce pod sebou, labely
+        a reviewery, hned pod hlavičkou panelu. <b>Změna proti prvnímu zákresu</b>, ve kterém to
+        byl vlastní řádek pod pruhem souřadnic. Měření z něj ale platí dál, jen otočeně: je to
+        teď ten argument, proč v hlavičce nejsou. Pruh souřadnic je v aplikaci
+        <code>HStack</code>, který <b>nezalamuje</b>, takže by se ořezal. Změřeno na chipech
+        z tohohle zákresu složených do nezalamujícího pruhu: cizí PR potřebuje <b>1056 bodů</b>
+        proti dnešním <b>651</b>, vlastní <b>897</b> proti <b>581</b>. Pod pruhem přitom na
+        výchozím okně (1100 b) zbývá jen ~1000 bodů, protože rail a odsazení hlavičky si berou 98.
+        U cizího PR by se tedy hlavička ořezala <b>hned na výchozím okně</b>, u vlastního
+        v každém užším než ~1000 bodů — a ořezalo by se to, co je vpravo:
+        <code>otevřít na GitHubu</code>.
+      </p>
+      <p class="muted">
+        <b>A ne třetí segment vedle <em>Nálezů</em> a <em>Mého review</em>.</b> Segment se
+        <b>přepíná</b>, kdežto labely a reviewery mají být vidět <b>spolu</b> s nálezy, ne místo
+        nich: „kdo to má taky na stole“ je otázka, kterou si člověk klade zrovna při čtení
+        nálezu, ne v samostatném pohledu. Proto sedí <b>nad segmenty</b> — pod nimi by se čtly
+        jako obsah toho aktivního.
+      </p>
+      <p class="muted">
+        Cena je, že panel je jen ve <b>čtyřech tabech ze sedmi</b>: v <em>Kontrolách</em>,
+        <em>Nálezech</em> a <em>Průběhu</em> se labely nevidí, protože tam panel nemá být (#294)
+        a labely nejsou důvod ho tam vracet — v těch třech tabech se vedle nich čte log, tabulka
+        přes celou šířku nebo dráha běhu. <em>Commity</em> panel dostávají, a je to druhá polovina
+        téhož zákresu: sekce 25.
+      </p>
+    </div>
+
+    <h3>Panel na cizím PR vedle vlastního</h3>
+    <p class="muted">
+      Výřez samotného panelu ve výchozí šířce <b>300 bodů</b> (<code>ReviewPanel.defaultWidth</code>).
+      Vlevo cizí PR, vpravo vlastní; liší se dvě věci a obě jsou v kresbě vidět — akce
+      <code>+ label</code> a <code>+ reviewer</code>, a druhý segment (<em>Moje review</em> proti
+      <em>Zadání</em>, viz sekce 22).
+    </p>
+    <div class="duo">
+      <div class="pane">
+        <div class="tag"><i></i>Cizí PR — jen čtení</div>
+        <div class="frame flat" style="max-width: 300px;">
+          <aside class="side" style="border-left: 0;">
+            <header>
+              <span>Moje review</span>
+              <span class="sp"></span>
+              <span class="kbd">⌘2</span>
+              <span class="fold">›</span>
+            </header>
+
+            <!-- Nad segmenty schválně: platí to pro celý PR, ne pro vybraný segment.
+                 Žádné `+` — na cizím PR se to nedělá nikdy, a zašedlé tlačítko by tvrdilo,
+                 že by se dalo. -->
+            <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 11px;
+                          border-bottom: 1px solid var(--line-soft);">
+              <div class="pl-sec">
+                <span class="cap">Labely</span>
+                <div class="chipline">
+                  <span class="lchip"><i style="background: #0366D6;"></i><span>dependencies</span></span>
+                  <span class="lchip"><i style="background: #D73A4A;"></i><span>bug</span></span>
+                </div>
+              </div>
+              <div class="pl-sec">
+                <span class="cap">Reviewery</span>
+                <div class="rv-list">
+                  <div class="rv-row"><span class="rv-av done">OJ</span><span class="who">Ondřej Jodas</span><span class="ans done">schválil</span></div>
+                  <div class="rv-row"><span class="rv-av blocked">TK</span><span class="who">Tomáš Kraus</span><span class="ans blocked">chce změny</span></div>
+                  <div class="rv-row"><span class="rv-av wait">MZ</span><span class="who">Marie Zíková</span><span class="ans">čeká</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="seg">
+              <span class="seg-i on">Nálezy <span style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-2);">3</span></span>
+              <span class="seg-i">Moje review</span>
+            </div>
+
+            <div class="fcard crit">
+              <div class="top">
+                <span class="pill crit">blokuje</span>
+                <span class="cat">SecretClient.php:81</span>
+              </div>
+              <div class="sum">Prázdný secret projde fallbackem dál jako platný.</div>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Vlastní PR — dá se měnit</div>
+        <div class="frame flat" style="max-width: 300px;">
+          <aside class="side" style="border-left: 0;">
+            <header>
+              <span>Zadání pro agenta</span>
+              <span class="sp"></span>
+              <span class="kbd">⌘2</span>
+              <span class="fold">›</span>
+            </header>
+
+            <!-- `+ label` otevírá výběr **z labelů, které repo zná** — volný text ne, aby z něj
+                 nešlo omylem vyrobit nový label. `+ reviewer` je jedno pojmenované kliknutí
+                 (`Vyžádat review od …`), protože reviewer request pošle člověku upozornění
+                 a odebráním se nevezme zpět. -->
+            <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 11px;
+                          border-bottom: 1px solid var(--line-soft);">
+              <div class="pl-sec">
+                <span class="cap">Labely</span>
+                <div class="chipline">
+                  <span class="lchip"><i style="background: #A2EEEF;"></i><span>enhancement</span></span>
+                  <span class="chip-add">+ label</span>
+                </div>
+              </div>
+              <div class="pl-sec">
+                <span class="cap">Reviewery</span>
+                <div class="rv-list">
+                  <div class="rv-row"><span class="rv-av wait">ER</span><span class="who">Eva Řezáčová</span><span class="ans">čeká</span></div>
+                </div>
+                <div class="chipline"><span class="chip-add">+ reviewer</span></div>
+              </div>
+            </div>
+
+            <div class="seg">
+              <span class="seg-i on">Nálezy <span style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-2);">2</span></span>
+              <span class="seg-i">Zadání <span style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);">6</span></span>
+            </div>
+
+            <div class="fcard info">
+              <div class="top">
+                <span class="pill idle">doporučení</span>
+                <span class="cat">Configuration.swift:41</span>
+              </div>
+              <div class="sum">Sražení do mezí se děje při čtení, takže z „napsal jsem 120“ zbyde „vždycky tam bylo 60“.</div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <h3>Úzký panel — co ustoupí</h3>
+    <p class="muted">
+      Panel se dá tahat mezi <b>240 a 520 body</b> a výchozí je 300
+      (<code>ReviewPanel.minimumWidth</code>, <code>maximumWidth</code>, <code>defaultWidth</code>).
+      Když se labely na šířku nevejdou, ustupují <b>tři věci v tomhle pořadí</b>: řádek chipů se
+      <b>zalomí</b> (v panelu je svisle místo, kdežto v hlavičce nebylo), na <b>dvou řádcích</b>
+      se zastaví a zbytek je <code>+2</code>, a teprve jméno, které je samo širší než panel, se
+      ořeže — puntík s barvou u něj zůstane. U reviewerů ustoupí <b>jméno</b>, ne odpověď: kvůli
+      odpovědi se na sekci kouká. Co neustoupí nikdy, jsou <code>+ label</code>
+      a <code>+ reviewer</code> — když na poslední řádek nevyjdou, vezmou si vlastní; akce se
+      neschovává.
+    </p>
+    <p class="muted">
+      Ty dva řádky jsou <b>řádky labelů</b>, a je v tom jedna past, kterou je vidět až na podlaze
+      240 b: <b>ořez jménu musí nechat místo na <code>+2</code></b>. Prostý „ořež na šířku panelu“
+      totiž dá chip přes celý druhý řádek, <code>+2</code> spadne na třetí a řádky labelů jsou
+      tři — tedy zrovna to, co má strop zakázat. Ve výřezu je proto ten dlouhý chip ořezaný na
+      <b>180 b</b> (214 řádku minus mezera 5 a <code>+2</code> o 29), aby <code>+2</code> zůstalo
+      vedle něj. Řádek s <code>+ label</code> se do stropu <b>nepočítá</b> — akce se neschovává,
+      takže výřez má tři řádky chipů, ale labely na dvou.
+    </p>
+    <div class="duo">
+      <div class="pane">
+        <div class="tag"><i></i>Výchozí 300 b · dlouhá jména</div>
+        <div class="frame flat" style="max-width: 300px;">
+          <aside class="side" style="border-left: 0;">
+            <header>
+              <span>Zadání pro agenta</span>
+              <span class="sp"></span>
+              <span class="kbd">⌘2</span>
+              <span class="fold">›</span>
+            </header>
+            <div style="padding: 11px 13px 12px; display: flex; flex-direction: column; gap: 11px;">
+              <div class="pl-sec">
+                <span class="cap">Labely</span>
+                <div class="chipline">
+                  <span class="lchip"><i style="background: #A2EEEF;"></i><span>enhancement</span></span>
+                  <span class="lchip"><i style="background: #D4C5F9;"></i><span>needs-design-review</span></span>
+                  <span class="lchip more">+2</span>
+                  <span class="chip-add">+ label</span>
+                </div>
+              </div>
+              <div class="pl-sec">
+                <span class="cap">Reviewery</span>
+                <div class="rv-list">
+                  <div class="rv-row"><span class="rv-av done">OJ</span><span class="who">Ondřej Jodas</span><span class="ans done">schválil</span></div>
+                  <div class="rv-row"><span class="rv-av wait">ER</span><span class="who">Eva Řezáčová</span><span class="ans">čeká</span></div>
+                </div>
+                <div class="chipline"><span class="chip-add">+ reviewer</span></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Podlaha 240 b · totéž</div>
+        <div class="frame flat" style="max-width: 240px;">
+          <aside class="side" style="border-left: 0;">
+            <header>
+              <span>Zadání pro agenta</span>
+              <span class="sp"></span>
+              <span class="kbd">⌘2</span>
+              <span class="fold">›</span>
+            </header>
+            <div style="padding: 11px 13px 12px; display: flex; flex-direction: column; gap: 11px;">
+              <div class="pl-sec">
+                <span class="cap">Labely</span>
+                <div class="chipline">
+                  <span class="lchip"><i style="background: #A2EEEF;"></i><span>enhancement</span></span>
+                  <!-- Ořez jménu **nechává místo na `+2`**, a to je ten rozdíl proti prostému
+                       `max-width: 100%`: s ním by chip zabral celý druhý řádek, `+2` by spadlo
+                       na třetí a řádky labelů by byly tři — tedy zrovna to, co má strop dvou
+                       řádků zakázat (třetí ukusuje místo nálezům). `34px` je gap 5 + šířka
+                       `+2` 29, ne konstanta k opsání: v aplikaci je to „ořež tak, aby se
+                       zbytkový odznak vešel“, ne 180 bodů. -->
+                  <span class="lchip" style="max-width: calc(100% - 34px);"><i style="background: #D4C5F9;"></i><span>needs-design-review-and-product-signoff</span></span>
+                  <span class="lchip more">+2</span>
+                  <span class="chip-add">+ label</span>
+                </div>
+              </div>
+              <div class="pl-sec">
+                <span class="cap">Reviewery</span>
+                <div class="rv-list">
+                  <div class="rv-row"><span class="rv-av blocked">KP</span><span class="who">Kateřina Procházková-Malá</span><span class="ans blocked">chce změny</span></div>
+                  <div class="rv-row"><span class="rv-av wait">ER</span><span class="who">Eva Řezáčová</span><span class="ans">čeká</span></div>
+                </div>
+                <div class="chipline"><span class="chip-add">+ reviewer</span></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">1</span>
+        <span class="body">
+          <b>Do panelu, ne do hlavičky</b>
+          <span>Hlavička by to unesla vizuálně, ne rozměrem: pruh souřadnic nezalamuje a s labely
+          i reviewery potřebuje <b>1056 b</b> (cizí) a <b>897 b</b> (vlastní) proti ~1000, které
+          na výchozím okně zbývají — dneska mu stačí 651 a 581. Ořezal by se pravý konec, tedy
+          <code>otevřít na GitHubu</code>. Panel je sloupec, takže mu zalomení nevadí.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">2</span>
+        <span class="body">
+          <b>Nad segmenty, ne jako třetí segment</b>
+          <span>Segment se přepíná — labely by tím zmizely zrovna ve chvíli, kdy se čtou nálezy.
+          Pod segmenty by se zase čtly jako obsah toho aktivního. Nad nimi je to, co platí pro
+          celý PR.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">3</span>
+        <span class="body">
+          <b>Barva labelu je puntík</b>
+          <span>Barvy labelů jsou z repozitáře, tedy libovolné — plný chip by u každé musel
+          počítat kontrast textu a v panelu by přebíjel odznak závažnosti nálezu. První zákres to
+          měl plným chipem z <code>--crit</code> a v renderu vyšel <code>dependencies</code>
+          k nerozeznání od <code>.pill.crit</code>, tedy jako porucha.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">4</span>
+        <span class="body">
+          <b>Volba z labelů repozitáře, ne volný text</b>
+          <span>Label je vratný jedním klikem a nikoho neupozorní, takže potvrzovací sheet
+          nedostane. Volný text tam ale <b>nepatří</b>: z něj se dá omylem vyrobit nový label,
+          a ten už z repozitáře nezmizí sám.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">5</span>
+        <span class="body">
+          <b>Reviewer jedním pojmenovaným kliknutím</b>
+          <span><code>Vyžádat review od …</code>, a jen z lidí, kteří na repo smí. Reviewer
+          request <b>pošle člověku upozornění a to se odebráním nedá vzít zpět</b> — proto je
+          u něj jméno na tlačítku, ne jen <code>+</code> vedle avatara.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">6</span>
+        <span class="body">
+          <b>Tři stavy odpovědi, ne dva</b>
+          <span><em>schválil</em>, <em>chce změny</em>, <em>čeká</em>. Prostřední je jediná, která
+          něco blokuje, takže sloučit ji s <em>čeká</em> by zahodilo zrovna tu informaci, kvůli
+          které se na sekci kouká.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">7</span>
+        <span class="body">
+          <b>Odesílá se to jedinou cestou</b>
+          <span>Změna labelů i vyžádání reviewera jde přes <code>ReviewPublishing</code> a bránu
+          v nastavení, jako review a komentáře — <b>pátá a šestá metoda</b> toho výčtu. Je to
+          <b>tatáž brána</b> (<code>allowsPublishing</code>, globálně i per repo); druhý přepínač
+          by byl druhé místo, kde se dá „nic samo neodejde“ porušit. Tvrdá podmínka č. 1 se tím
+          mění a v <code>CLAUDE.md</code> se to musí přepsat i s tím, co v zákazu zůstává:
+          approve mimo review, merge, zavření PR, milník.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">8</span>
+        <span class="body">
+          <b>Prázdná sekce se nekreslí</b>
+          <span>Cizí PR bez labelů nemá co ukázat, takže sekce nevznikne — jinak by panel
+          u každého takového PR platil nadpisem za prázdno. Na vlastním PR zůstane samotné
+          <code>+ label</code>: tam je to jediná cesta, jak první label přidat.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">9</span>
+        <span class="body">
+          <b>Ve třech tabech to vidět nebude</b>
+          <span>Panel není v <em>Kontrolách</em>, <em>Nálezech</em> ani <em>Průběhu</em> (#294)
+          a labely nejsou důvod ho tam vracet — vedle nich se čte konec logu, tabulka přes celou
+          šířku a dráha běhu. <em>Commity</em> panel dostávají, viz sekce 25.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
         <div class="doc-move">
           <a class="prev" href="#prehled"><span class="dir">← předchozí</span><span class="t">Přehled</span></a>
           <a class="next" href="#pr-soubory"><span class="dir">další →</span><span class="t">Změněné soubory</span></a>
@@ -4836,6 +5269,364 @@ projeví hned v tom dalším.</div>
             záložky se to netýká — tu zaplatí první stupeň. Je to vlastní issue, ať se nesveze
             změna chování pruhu na něčem jiném.</p>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s25">
+    <div class="section-head">
+      <div class="eyebrow">25 — Záložka s review · panel i v Commitech</div>
+      <h2>Panel patří i do Commitů — ale musí říct, proti čemu nálezy platí</h2>
+      <p class="muted">
+        Sekce 19 kreslí dnešek a v něm panel v <em>Commitech</em> není vůbec — ani složený
+        proužek (#294, #316). Důvody byly dva: <b>šířka</b>, protože proužek není zdarma, a
+        tvrdší z nich, že <b>nálezy jsou klíčované <code>headSha</code></b> (tvrdá podmínka č. 5),
+        takže vedle staršího commitu by ukazovaly na jiný kód.
+      </p>
+      <p class="muted">
+        Labely a reviewery to mění, protože <b>nejsou o commitu</b>. „Kdo to má taky na stole“
+        a „jakým štítkem je to označené“ platí pro celý pull request, ať se člověk kouká na
+        hlavu, nebo na commit z předevčíra — a od sekce 24 to bydlí v panelu. Panel, který se
+        v <em>Commitech</em> nekreslí, tedy schová i to, co v něm platí vždycky.
+        <code>PullRequestTab.showsReviewPanel</code> proto dostane u <code>.commits</code>
+        <code>true</code> (#390) a zůstane vypnutý u tří tabů, kde vedle panelu stojí obsah, který šířku
+        potřebuje: <em>Kontroly</em>, <em>Nálezy</em>, <em>Průběh</em>.
+      </p>
+      <p class="muted">
+        <b>Dělič v pruhu záložek se tím neposune</b> a rozpojovat se nic nemusí — jsou to už
+        dneska <b>dvě vlastnosti</b>. Dělič se kreslí z <code>isReviewerOutput</code> (#242,
+        <code>PullRequestTabBar.needsSeparator</code>), a ta se nemění; mění se jen
+        <code>showsReviewPanel</code>. Co se změní, je <b>test</b>: <code>panelIsNotReviewerOutput</code>
+        má dnes ve výčtu <code>.checks</code> i <code>.commits</code> a po téhle změně tam
+        <code>.commits</code> nepatří — na tvrzení „vlastnosti nesplynuly“ pak stojí
+        <em>Kontroly</em> samotné. To je pořád platný test (splynutí by u nich prasklo), ale
+        důvod u něj se musí přepsat, ať z něj nezbude věta o <em>Commitech</em>, která už není
+        pravda.
+      </p>
+      <p class="muted">
+        <b>Nálezy v panelu musí říct, proti které hlavě platí.</b> Nad seznamem commitů je to
+        věta, u rozkliknutého staršího commitu <b>výstraha</b> — protože tam neplatí pro to, co je
+        na obrazovce. Tvrdá podmínka č. 5 se tím neobchází, naopak se z ní stane věta v UI: nálezy
+        se nezobrazují proti kódu, který už neexistuje, jen se u nich napíše, ke kterému kódu
+        patří.
+      </p>
+      <p class="muted">
+        <b>Cenu platí plocha tabu, ne pruh záložek</b> — a je to změřené, ne odhadnuté. Pruh leží
+        v <code>PullRequestDetailView</code> <b>nad</b> obsahem tabu (<code>tabs</code> je ve
+        vnějším <code>VStack</code>u, panel až v <code>content</code>), takže mu panel neubírá nic
+        v žádném tabu; čísla z 19.1 tedy platí dál a sedmá záložka se s panelem nezalomí.
+        Ověřeno i v tomhle výřezu: pruh se všemi odznaky i s pilulkou <code>+X −Y</code> se
+        na 1047 bodech vejde na <b>jeden řádek</b> (38 b výšky) a panel je pod ním.
+      </p>
+      <p class="muted">
+        Ubírá to <b>obsahu</b>. Na výchozím okně zbývá po railu <b>1047 bodů</b>; složený proužek
+        z nich vezme <b>38</b> (<code>ReviewPanel.collapsedWidth</code>), rozložený panel
+        <b>240 až 520</b>. Seznam commitů to unese — řádek je zpráva, autor a sha, tedy text, který
+        se zúžením jen zkrátí. Citlivá obrazovka je <b>diff jednoho commitu</b>: se stromem souborů
+        (210 b, sekce 19) a rozloženým panelem zbude na diff ~537 bodů, což je pod tím, co snese
+        pohled <em>Vedle sebe</em>. Vynucovat aplikace nebude nic — jde složit strom
+        (<code>⌘1</code>) i panel (<code>⌘2</code>) —, ale <b>kolik ten pohled doopravdy snese</b>
+        se musí změřit, protože na tom stojí, jestli u commitu stačí složený proužek.
+      </p>
+    </div>
+
+    <h3>Seznam commitů s rozloženým panelem</h3>
+    <p class="muted">
+      Nad seznamem není vybraný žádný commit, takže nálezy platí pro hlavu PR a stačí u nich věta.
+      Labely a reviewery jsou tytéž jako ve třech tabech, kde panel je dneska — je to týž panel,
+      ne jeho zvláštní podoba pro <em>Commity</em>. Výřez je <b>okno minus rail</b>, tedy 1047 bodů
+      na výchozím okně 1100 — na šířce tady záleží, protože panel je to, co ji ubírá.
+    </p>
+    <div class="win sm" style="max-width: 1047px;">
+      <div class="subtabs">
+        <div class="stab">Přehled <span class="cnt">4</span></div>
+        <div class="stab">Změněné soubory <span class="cnt">7</span></div>
+        <div class="stab on">Commity <span class="cnt">7</span></div>
+        <div class="stab">Konverzace <span class="cnt">2</span></div>
+        <div class="stab">Kontroly <span class="cnt crit">1</span></div>
+        <span class="tsep"></span>
+        <div class="stab">Nálezy <span class="cnt crit">3</span></div>
+        <div class="stab">Průběh <span class="live"></span></div>
+        <div class="diffstat">
+          <span class="add">+248</span>
+          <span class="del">−96</span>
+          <span class="blocks">
+            <i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i><i></i>
+          </span>
+        </div>
+      </div>
+
+      <div class="work" style="grid-template-columns: 1fr 300px;">
+        <div style="min-width: 0; display: flex; flex-direction: column;">
+          <div class="cbar">
+            <span><b style="font-weight: 620; color: var(--ink);">7 commitů</b> · od nejnovějšího</span>
+            <span class="sp"></span>
+            <span class="tool">⌥ hlava <span style="font-family: var(--mono); color: var(--ink-3);">e8d4a60</span></span>
+          </div>
+          <div class="clist">
+            <div class="crow">
+              <span class="ava" style="background: var(--accent);">OU</span>
+              <span class="mid">
+                <span class="msg">refactor: move SecretNotFound into its own file</span>
+                <span class="sub"><b>Odin Uv</b>· dnes 9:12<span class="pill mint">hlava</span></span>
+              </span>
+              <span class="right">
+                <span class="sha">e8d4a60</span>
+                <span class="go">›</span>
+              </span>
+            </div>
+            <div class="crow">
+              <span class="ava" style="background: var(--accent);">OU</span>
+              <span class="mid">
+                <span class="msg">chore: drop the unused Encryptor::legacy() branch</span>
+                <span class="sub"><b>Odin Uv</b>· dnes 8:02</span>
+              </span>
+              <span class="right">
+                <span class="sha">2b6ff93</span>
+                <span class="go">›</span>
+              </span>
+            </div>
+            <div class="crow">
+              <span class="ava" style="background: var(--accent-2);">PM</span>
+              <span class="mid">
+                <span class="msg">test: cover the cache hit and miss paths</span>
+                <span class="sub"><b>Petra Malá</b>· před 2 dny</span>
+              </span>
+              <span class="right">
+                <span class="sha">c04b8e1</span>
+                <span class="go">›</span>
+              </span>
+            </div>
+            <div class="crow">
+              <span class="ava" style="background: var(--accent);">OU</span>
+              <span class="mid">
+                <span class="msg">feat: cache secrets for the lifetime of the request</span>
+                <span class="sub"><b>Odin Uv</b>· před 3 dny</span>
+              </span>
+              <span class="right">
+                <span class="sha">5e2b1aa</span>
+                <span class="go">›</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side">
+          <header>
+            <span>Moje review</span>
+            <span class="sp"></span>
+            <span class="kbd">⌘2</span>
+            <span class="fold">›</span>
+          </header>
+
+          <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 11px;
+                          border-bottom: 1px solid var(--line-soft);">
+            <div class="pl-sec">
+              <span class="cap">Labely</span>
+              <div class="chipline">
+                <span class="lchip"><i style="background: #0366D6;"></i><span>dependencies</span></span>
+                <span class="lchip"><i style="background: #D73A4A;"></i><span>bug</span></span>
+              </div>
+            </div>
+            <div class="pl-sec">
+              <span class="cap">Reviewery</span>
+              <div class="rv-list">
+                <div class="rv-row"><span class="rv-av done">OJ</span><span class="who">Ondřej Jodas</span><span class="ans done">schválil</span></div>
+                <div class="rv-row"><span class="rv-av wait">MZ</span><span class="who">Marie Zíková</span><span class="ans">čeká</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="seg">
+            <span class="seg-i on">Nálezy <span style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-2);">3</span></span>
+            <span class="seg-i">Moje review</span>
+          </div>
+
+          <div style="padding: 4px 11px 0;">
+            <div class="tl-impact">
+              <span class="txt">Nálezy jsou proti hlavě <code>e8d4a60</code>.</span>
+            </div>
+          </div>
+
+          <div class="fcard crit">
+            <div class="top">
+              <span class="pill crit">blokuje</span>
+              <span class="cat">SecretClient.php:81</span>
+            </div>
+            <div class="sum">Prázdný secret projde fallbackem dál jako platný.</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <h3>Složený proužek</h3>
+    <p class="muted">
+      Panel přijde <b>v tom stavu, ve kterém ho člověk nechal jinde</b> —
+      <code>AppStore.isReviewPanelExpanded</code> je jeden na okno, ne na tab, a to je správně:
+      „chci vidět nálezy vedle obsahu“ je předvolba pohledu, ne vlastnost záložky. Proužek nese
+      počet nálezů a značku rozdělaného review, tak jak ho nese ve třech tabech, kde je dneska.
+    </p>
+    <div class="win sm" style="max-width: 1047px;">
+      <div class="work" style="grid-template-columns: 1fr 38px;">
+        <div style="min-width: 0; display: flex; flex-direction: column;">
+          <div class="cbar">
+            <span><b style="font-weight: 620; color: var(--ink);">7 commitů</b> · od nejnovějšího</span>
+            <span class="sp"></span>
+            <span class="tool">⌥ hlava <span style="font-family: var(--mono); color: var(--ink-3);">e8d4a60</span></span>
+          </div>
+          <div class="clist">
+            <div class="crow">
+              <span class="ava" style="background: var(--accent);">OU</span>
+              <span class="mid">
+                <span class="msg">refactor: move SecretNotFound into its own file</span>
+                <span class="sub"><b>Odin Uv</b>· dnes 9:12<span class="pill mint">hlava</span></span>
+              </span>
+              <span class="right">
+                <span class="sha">e8d4a60</span>
+                <span class="go">›</span>
+              </span>
+            </div>
+            <div class="crow">
+              <span class="ava" style="background: var(--accent);">OU</span>
+              <span class="mid">
+                <span class="msg">chore: drop the unused Encryptor::legacy() branch</span>
+                <span class="sub"><b>Odin Uv</b>· dnes 8:02</span>
+              </span>
+              <span class="right">
+                <span class="sha">2b6ff93</span>
+                <span class="go">›</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Popisek proužku zůstává `nálezy · review` (na vlastním PR `nálezy · zadání`).
+             Labely v něm nejsou, a to schválně — proč, je v poznámkách. -->
+        <div class="stub right">
+          <span>◨</span>
+          <span class="n crit">3</span>
+          <span class="vtext">nálezy · review</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>U rozkliknutého staršího commitu</h3>
+    <p class="muted">
+      Tady je ta věta výstrahou, protože nálezy o kódu na obrazovce nemluví. Labely a reviewery se
+      nemění — na ty commit vliv nemá, a právě proto panel v tomhle tabu stojí za tu šířku.
+    </p>
+    <div class="pane" style="max-width: 320px;">
+      <div class="tag"><i></i>Panel vedle commitu 5e2b1aa · hlava je e8d4a60</div>
+      <div class="frame flat">
+        <aside class="side" style="border-left: 0;">
+          <header>
+            <span>Moje review</span>
+            <span class="sp"></span>
+            <span class="kbd">⌘2</span>
+            <span class="fold">›</span>
+          </header>
+
+          <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 11px;
+                          border-bottom: 1px solid var(--line-soft);">
+            <div class="pl-sec">
+              <span class="cap">Labely</span>
+              <div class="chipline">
+                <span class="lchip"><i style="background: #0366D6;"></i><span>dependencies</span></span>
+                <span class="lchip"><i style="background: #D73A4A;"></i><span>bug</span></span>
+              </div>
+            </div>
+            <div class="pl-sec">
+              <span class="cap">Reviewery</span>
+              <div class="rv-list">
+                <div class="rv-row"><span class="rv-av done">OJ</span><span class="who">Ondřej Jodas</span><span class="ans done">schválil</span></div>
+                <div class="rv-row"><span class="rv-av wait">MZ</span><span class="who">Marie Zíková</span><span class="ans">čeká</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="seg">
+            <span class="seg-i on">Nálezy <span style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-2);">3</span></span>
+            <span class="seg-i">Moje review</span>
+          </div>
+
+          <div style="padding: 4px 11px 8px;">
+            <div class="warnbox">
+              <span class="i">⚠</span>
+              <span>Nálezy jsou proti hlavě <b>e8d4a60</b>. Tenhle commit je <b>5e2b1aa</b>,
+                takže o kódu na obrazovce nemluví.</span>
+            </div>
+          </div>
+
+          <div class="fcard crit" style="opacity: 0.52;">
+            <div class="top">
+              <span class="pill crit">blokuje</span>
+              <span class="cat">SecretClient.php:81</span>
+            </div>
+            <div class="sum">Prázdný secret projde fallbackem dál jako platný.</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">1</span>
+        <span class="body">
+          <b>Dělič se neposune</b>
+          <span>Kreslí se z <code>isReviewerOutput</code> (#242), a ta se nemění — vlastnosti jsou
+          už dneska dvě, takže není co rozpojovat. Změní se jedna větev
+          <code>showsReviewPanel</code> a výčet v testu
+          <code>panelIsNotReviewerOutput</code>, kde <code>.commits</code> po téhle změně nemá co
+          dělat.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">2</span>
+        <span class="body">
+          <b>Nálezy říkají, proti čemu platí</b>
+          <span>Nad seznamem věta, u staršího commitu výstraha a karty ztlumené. Tvrdá podmínka
+          č. 5 tím zůstává v platnosti — nálezy se nekreslí proti kódu, který neexistuje, jen je
+          u nich napsané, ke kterému kódu patří.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">3</span>
+        <span class="body">
+          <b>Tab zůstává jen ke čtení</b>
+          <span>Panel vedle commitu <b>nepřidává komentář k řádku commitu</b> — ten by potřeboval
+          jiný klíč (<code>(soubor, řádek)</code> plus sha) a další metodu v
+          <code>ReviewPublishing</code>. Composer v panelu píše <b>tělo review proti hlavě PR</b>,
+          tedy totéž co ve třech tabech, kde panel už je; <code>CommitDiffView</code> zůstává bez
+          <code>AppStore</code> a bez akcí.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">4</span>
+        <span class="body">
+          <b>Proužek nedostane nový popisek ani značku</b>
+          <span>Značky v proužku říkají „něco tu leží nepřečtené nebo nedodělané“ — počet nálezů,
+          rozdělané review. Label ani vyžádaný reviewer není ani jedno, takže by třetí značka
+          slibovala práci, která tam není. Kdo chce labely, panel rozloží (⌘2).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">5</span>
+        <span class="body">
+          <b>Pruh záložek se nezalomí, ubere se obsahu</b>
+          <span>Pruh leží nad obsahem tabu, ne vedle panelu, takže pásma z 19.1 platí dál —
+          ověřeno ve výřezu (1047 b, jeden řádek i s <code>+X −Y</code>). Ubírá se <b>obsahu</b>:
+          seznam commitů to unese, u diffu jednoho commitu zbude se stromem a rozloženým panelem
+          ~537 b, a kolik snese <em>Vedle sebe</em>, se musí změřit.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">6</span>
+        <span class="body">
+          <b>Sekce 19 se nepřekresluje</b>
+          <span>19 je záznam dneška, proti kterému se okno srovnává — včetně poznámky, že panel
+          v <em>Commitech</em> není. Až se tohle udělá, přepíše se <b>ona</b>, a tahle sekce
+          zůstane jako záznam rozhodnutí.</span>
+        </span>
       </div>
     </div>
   </section>
