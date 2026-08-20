@@ -6258,6 +6258,9 @@ odeslat, a měnit label umí jedině `ReviewPublisher`.
   běžný. „Nepodařilo se to zjistit“ drží volající zvlášť (`MetadataState`) — u téhle sekce se ty dva
   stavy nesmí slít, protože podle prvního se sekce nekreslí a podle druhého se **nesmí dát měnit
   sada, kterou aplikace nezná**.
+- **Dokud snímek nedorazil, je `+ label` zakázaný.** Sada se posílá celá, takže bez snímku nemá
+  z čeho vzniknout — a tlačítko, po kterém se nic nestane, je horší než zakázané. Vysvětlení u něj
+  mluví o načítání, ne o bráně; jsou to dva různé důvody.
 - **Totéž platí o nabídkách, a jsou to tři stavy, ne dva**: nenačteno, načteno prázdné („repo žádné
   labely nezná“) a porucha. Drží to `repositoryLabels` proti `repositoryLabelFailures` (a totéž
   u lidí), takže se nabídka po výpadku sítě netváří jako repo bez labelů. Seznam se u poruchy

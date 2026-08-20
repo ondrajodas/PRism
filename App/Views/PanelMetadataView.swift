@@ -160,7 +160,7 @@ struct PanelMetadataView: View {
     }
 
     @ViewBuilder private var addLabelAction: some View {
-        if editing.isAllowed {
+        if editing.isAllowed, hasSnapshot {
             Button {
                 isPickingLabel = true
             } label: {
@@ -180,8 +180,10 @@ struct PanelMetadataView: View {
                 )
             }
         } else {
+            // **Dokud snímek nedorazil, je akce zakázaná.** Sada se posílá celá, takže bez ní by
+            // klik neudělal nic — a tlačítko, po kterém se nic nestane, je horší než zakázané.
             AddChipLabel(title: Self.addLabelTitle, isEnabled: false)
-                .help(editing.reason ?? "")
+                .help(editing.reason ?? (hasSnapshot ? "" : "Labely se ještě načítají."))
         }
     }
 
@@ -239,6 +241,9 @@ struct PanelMetadataView: View {
             canAdd: editing.isVisible
         )
     }
+
+    /// Dorazil snímek labelů? Bez něj se sada nemá odkud skládat.
+    private var hasSnapshot: Bool { state?.metadata != nil }
 
     private var showsLabels: Bool { !metadata.labels.isEmpty || editing.isVisible }
 

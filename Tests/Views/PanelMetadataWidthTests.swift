@@ -216,6 +216,33 @@ struct PanelMetadataWidthTests {
         }
     }
 
+    /// **Akce, po které se nic nestane, tam být nesmí.** Dokud snímek nedorazil, nemá `+ label`
+    /// z čeho složit sadu (posílá se celá), takže se kreslí **zakázaný** — a jeho vysvětlení mluví
+    /// o načítání, ne o bráně. Kdyby zůstal aktivní, klik v nabídce by tiše neudělal nic.
+    @Test("Bez načteného snímku je + label zakázaný")
+    func theAddActionWaitsForTheSnapshot() throws {
+        let loading = PanelMetadataView(state: .loading, editing: .allowed, contentWidth: 274)
+        let loaded = PanelMetadataView(
+            state: .loaded(PullRequestMetadata(), updatedAt: Date(timeIntervalSince1970: 100)),
+            editing: .allowed,
+            contentWidth: 274
+        )
+
+        // Dva různé obrázky: zakázaný chip se kreslí ztlumeně, povolený plně.
+        #expect(try Self.pixels(of: loading) != Self.pixels(of: loaded))
+    }
+
+    /// Surové bajty bitmapy, ne `tiffRepresentation` — ta se mezi dvěma rendery liší i u shodného
+    /// obrázku, takže by porovnání vycházelo různě vždycky (viz `PanelHeadNoticeTests`).
+    @MainActor private static func pixels(of view: some View) throws -> Data {
+        let renderer = ImageRenderer(content: view.frame(width: 300, height: 200))
+        renderer.scale = 1
+        let image = try #require(renderer.nsImage)
+        let bitmap = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        let bytes = try #require(bitmap.bitmapData)
+        return Data(bytes: bytes, count: bitmap.bytesPerRow * bitmap.pixelsHigh)
+    }
+
     /// Součet šířky jednoho prvku v řádku — tatáž tabulka, jakou používá `Policy` uvnitř.
     private static func width(of chip: Policy.LabelChip, metrics: Policy.LabelChipMetrics) -> Double {
         switch chip {
