@@ -101,7 +101,9 @@ struct ReviewerPickerView: View {
         if !query.isEmpty {
             "Nikdo takový tu není."
         } else if let failure {
-            "Seznam lidí se nepodařilo načíst. \(failure) Zavři nabídku a otevři ji znovu."
+            // **„Lidí a týmů“**, ne jen lidí: nabídka nese obojí a věta, která jmenuje jen půlku,
+            // si odporuje s nadpisem i s hláškou o načítání (nález Copilota).
+            "Seznam lidí a týmů se nepodařilo načíst. \(failure) Zavři nabídku a otevři ji znovu."
         } else if isLoaded {
             "Vyžádat už není od koho — všichni ze seznamu na PR čekají."
         } else {

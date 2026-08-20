@@ -67,6 +67,29 @@ struct PickerSearchTests {
         #expect(Policy.paletteTokens(in: "ajda  platform") == ["ajda", "platform"])
     }
 
+    /// **Shoda na začátku textu je hranice slova, ne pád** (nález Copilota). Do #392 to byla
+    /// `private` funkce palety s jediným volajícím, který se na `startIndex` ptal dřív; jako sdílená
+    /// by na něm padala na `index(before:)`. Test je proto na tu funkci **přímo** — přes `pickerRank`
+    /// se k té větvi nedostane, protože ten si `startIndex` ošetřuje sám.
+    @Test("Hranice slova na začátku textu nepadá")
+    func startsWordIsTotal() throws {
+        let text = "ajda-swimlane"
+        let range = try #require(Policy.searchRange(of: "ajda", in: text))
+
+        #expect(range.lowerBound == text.startIndex)
+        #expect(Policy.searchStartsWord(at: range, in: text))
+    }
+
+    /// A totéž nad **prázdným textem**: `startIndex` je v něm zároveň `endIndex`, takže by
+    /// `index(before:)` padl i na tom. Prázdný rozsah `range(of: "")` cesta není — Swift na prázdný
+    /// dotaz vrací `nil` (změřeno), takže se ta větev musí vyrobit takhle.
+    @Test("Hranice slova v prázdném textu nepadá")
+    func startsWordIsTotalOnEmptyText() {
+        let text = ""
+
+        #expect(Policy.searchStartsWord(at: text.startIndex..<text.endIndex, in: text))
+    }
+
     // MARK: - Pořadí
 
     /// Řadí se podle váhy; **při shodě podle původního pořadí**, protože Swiftové `sorted` není

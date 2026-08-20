@@ -26,7 +26,14 @@ extension Policy {
     /// `-`, `_` i mezera tedy hranice jsou. U cest k souborům to rozhoduje (`secret`
     /// v `src/Vault/SecretClient.php` váží víc než v `MySecretThing.php`) a u slugů týmů stejně:
     /// `swimlane` má v `ajda-swimlane` vážit víc než uprostřed slova.
+    ///
+    /// **Shoda na začátku textu je hranice slova, ne pád** (nález Copilota). Do #392 to byla
+    /// `private` funkce palety, kterou volal jediný volající — a ten se na `startIndex` ptal dřív.
+    /// Jako sdílená by na něm padala na `index(before:)`, tedy runtime trapem u prvního volajícího,
+    /// který si tu podmínku nepřečte. Skrytá precondition ve funkci, kterou používá víc míst, je
+    /// past; totální funkce past není a odpověď „začátek je hranice“ je navíc ta správná.
     static func searchStartsWord(at range: Range<String.Index>, in text: String) -> Bool {
+        guard range.lowerBound != text.startIndex else { return true }
         let previous = text[text.index(before: range.lowerBound)]
         return !previous.isLetter && !previous.isNumber
     }

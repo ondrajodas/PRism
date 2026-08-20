@@ -6057,6 +6057,11 @@ Nad odesílatelností draftu (#68) platí:
     není, vypadal by výsledek jako chyba.
   - **Při shodné váze rozhoduje původní pořadí.** Swiftové `sorted` není stabilní, takže by dvě
     položky se stejnou váhou přeskakovaly mezi stisky klávesy — tatáž past jako v paletě.
+  - **`searchStartsWord` je totální funkce.** Jako `private` funkce palety měla skrytou
+    precondition (volající se na `startIndex` ptal dřív), a jako sdílená by na něm padala na
+    `index(before:)`. Shoda na začátku textu **je** hranice slova, takže odpověď „ano“ je i věcně
+    správná; ověřeno vloženou regresí — bez té stráže test run **spadne fatálem**, ne červeným
+    tvrzením (nález Copilota).
   - **Kurzor ořezává, necyklí.** V nabídce, která se pod rukama filtruje, je přeskok z konce na
     začátek k nerozeznání od „šipka nic neudělala“; ořez se navíc uplatňuje i **bez pohybu**
     (`step: 0`), protože index z předchozího dotazu může být za koncem.
