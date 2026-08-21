@@ -1751,8 +1751,9 @@ App/                      zdrojáky aplikace — target PRism
   Markdown/               vykreslení Markdownu z GitHubu: bloky (včetně citací a výstrah), inline HTML
                           od botů, škála nadpisů a mezer, zapamatované rozložení na bloky
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka, hledání v paletě,
-                          složení zadání pro agenta na vlastním PR (#333), co z něj zbývá předat (#334)
-                          a co na něm od minule udělal někdo jiný, i za jakou cenu se na to ptát (#335)
+                          složení zadání pro agenta na vlastním PR (#333), co z něj zbývá předat (#334),
+                          co na něm od minule udělal někdo jiný, i za jakou cenu se na to ptát (#335),
+                          a jestli reviewer vůbec otevřel kód — tedy jestli se z běhu dá tvrdit čisto (#383)
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR,
                           labely a vyžádání reviewera na vlastním PR (#392), brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy;
