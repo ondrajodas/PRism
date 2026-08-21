@@ -197,7 +197,7 @@ extension Policy {
     ///   o nule velikosti není v Finderu co si prohlédnout).
     ///
     /// `Zkopírovat přepis` **a cestu** je jen tam, kde přepis je. Je to takhle nakreslené (`.acts2`
-    /// u tří stavů v sekci 20 návrhu) a drží to jednu věc: u chybového stavu je odpověď v **hláščce**,
+    /// u tří stavů v sekci 20 návrhu) a drží to jednu věc: u chybového stavu je odpověď v **hlášce**,
     /// ne v tom, co se dá odsud vzít pryč — kopírovat cestu k souboru, který není, je nabídka jít se
     /// podívat na nic.
     static func rawSessionActions(for state: RawTranscriptState) -> [RawSessionAction] {

@@ -1014,7 +1014,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     vadné UTF-8.
   - `RawSessionStateTests` — který stav co nabídne, a hlavně **co nenabídne**: chybějící přepis
     nabízí **jedině `Zavřít`**, `Zkopírovat přepis` ani cestu nenabízí žádný chybový stav (odpověď je
-    v hláščce, ne v tom, co se dá odsud vzít pryč) a `Zavřít` nabízí každý stav. Tři různá „přepis tu
+    v hlášce, ne v tom, co se dá odsud vzít pryč) a `Zavřít` nabízí každý stav. Tři různá „přepis tu
     není“ se nesmí slít **ani nabídkou akcí**, takže je na to test a ne úvaha.
   - `TranscriptTranscriberTests` — proti **skutečnému** transcriptu z veřejného
     `ondrajodas/prism-review-sandbox` (`transcript/review-session.jsonl`, 18 řádků vybraných z běhu

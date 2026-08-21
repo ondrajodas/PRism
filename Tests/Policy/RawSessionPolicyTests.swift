@@ -241,7 +241,7 @@ struct RawSessionStateTests {
         #expect(Policy.rawSessionActions(for: .empty(bytes: 12)).contains(.revealInFinder))
     }
 
-    /// U chybového stavu je odpověď v hláščce, ne v tom, co se dá odsud vzít pryč — a kopírovat cestu
+    /// U chybového stavu je odpověď v hlášce, ne v tom, co se dá odsud vzít pryč — a kopírovat cestu
     /// k souboru, který není, je nabídka jít se podívat na nic.
     @Test("Zkopírovat přepis ani cestu nenabízí žádný chybový stav")
     func copyingIsOnlyForAShownTranscript() {
