@@ -3719,7 +3719,7 @@ U domény platí totéž zpětné čtení: `defaults delete` vrací nad neexistu
 a po sobě nechá **prázdný plist** (42 B), na kterém `defaults read` už tvrdí, že doména neexistuje.
 Maže se proto obojí a ověřuje se čtením, ne kódem.
 
-**Skripty mají poprvé testy v harnessu** (`Tests/Scripts/`, 20 tvrzení): že se bez slotu neuklidí nic
+**Skripty mají poprvé testy v harnessu** (`Tests/Scripts/`, 20 testů): že se bez slotu neuklidí nic
 (ani se nevypíše hlavička), že se maže jedině cesta složená ze slotu (tvrzeno nad zdrojákem, jako
 `SingleWayOutTests`), že doména i prázdný plist zmizí, a že zaniklý záznam jde pryč, kdežto
 existující bundle zůstane. Obě chybové větve se **pouštějí** (`PRISM_LSREGISTER` na neexistující
