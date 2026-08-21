@@ -285,6 +285,35 @@ final class FakeTranscriptReader: TranscriptReading, @unchecked Sendable {
         if failing.contains(sessionID) { throw CocoaError(.fileReadCorruptFile) }
         return summaries[sessionID]
     }
+
+    // MARK: - Přepis surové session (#327)
+
+    /// Snímky po `sessionID`. Chybějící klíč = transcript **není**.
+    var snapshots: [String: RawTranscript] = [:]
+    /// Session, u kterých selže **čtení snímku** — transcript je, ale nedá se přečíst.
+    ///
+    /// Vlastní sada, ne `failing`: dotažení nálezů a přepis jsou dvě různá čtení téhož souboru
+    /// a test na jedno nemá zapínat chování druhého.
+    var snapshotFailing: Set<String> = []
+    /// Velikost souboru **teď** — z ní se v patičce počítá přírůstek. `nil` = nevíme.
+    var sizes: [String: Int] = [:]
+    private var snapshotRequests: [String] = []
+
+    /// Kolikrát se ptalo na snímek. Z toho se pozná, že `Načíst znovu` doopravdy čte znovu — a taky
+    /// že tik přírůstku okno **nečte** podruhé.
+    var snapshotCount: Int { lock.withLock { snapshotRequests.count } }
+
+    func snapshot(ofSession sessionID: String, in worktree: URL, at time: Date) async throws -> RawTranscript? {
+        lock.withLock { snapshotRequests.append(sessionID) }
+        if snapshotFailing.contains(sessionID) { throw TranscriptUnreadable.invalidEncoding }
+        guard var snapshot = snapshots[sessionID] else { return nil }
+        snapshot.takenAt = time
+        return snapshot
+    }
+
+    func size(ofSession sessionID: String, in worktree: URL) async -> Int? {
+        sizes[sessionID]
+    }
 }
 
 /// Zápis značky za běhu (#97).

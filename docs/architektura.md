@@ -1518,6 +1518,129 @@ Tři věci, které u souhrnu nejsou zjevné:
 napříč reviewery pro jeden společný auto-scroll; s výpisem **na revieweera** se každé okno drží svého
 konce, takže by to byl stav, který nikdo nečte — a #325 mělo v zadání ho buď použít, nebo smazat.
 
+### Surová session — přepis transcriptu (#327)
+
+Záchranná brzda pod výpisem kroků: sheet, ve kterém je **celý transcript session** přepsaný
+k přečtení. Výpis o patro výš odpovídá na „koukal se tam, kam měl“ (jen nástroje); tohle na „proč to
+dopadlo takhle“, a odpověď na ni je v tom, co výpis **schválně zahazuje** — próza, `thinking`,
+výstupy nástrojů a systémové události.
+
+**Nová datová cesta z toho nevznikla**: `TranscriptLocation` cestu k souboru odvodí z pracovního
+stromu a `session_id`, `TranscriptStore` ho umí otevřít (od #97 z něj po pádu čte `ReportFindings`).
+Přibyly dvě metody protokolu `TranscriptReading` — `snapshot(ofSession:in:at:)` a
+`size(ofSession:in:)` — a k nim přepis (`TranscriptTranscriber`).
+
+| Typ | Co drží |
+|---|---|
+| `RawTranscript`, `TranscriptEvent` (`App/Models/`) | Snímek okna: události, kolik bajtů se nevešlo, velikost souboru, čas snímku, počet nečitelných řádků |
+| `RawTranscriptState` | `loading` / `shown` / `missing` / `unreadable` / `empty(bytes:)` — **tři různá „přepis tu není“** |
+| `Policy` (`App/Policy/RawSession.swift`) | Okno, zarovnání na začátek řádku, ořez události a jeho přiznání, nabídka akcí, cíl dráhy, přírůstek |
+| `TranscriptTranscriber` (`App/Review/`) | JSONL → události. Používá `ToolAttempt` na detail volání a `Policy.toolOutcome` na odmítnutí |
+| `RawSessionScript` (`App/Views/`) | Řádky s **rolemi** → `NSAttributedString` i čistý text pro `Zkopírovat přepis` |
+| `TranscriptTextView` (`App/Views/`) | Jeden `NSTextView` se stráží v `Coordinator`u |
+| `AppStore+RawSession` | Otevření, `Načíst znovu`, zavření, přeměření velikosti |
+
+#### Proč je jednotkou bajt, ne řádek
+
+Změřeno na 922 transcriptech pod `~/.claude/projects`: medián 271 kB, nad 1 MB 123 souborů, nad
+10 MB čtrnáct, největší **53,3 MB při 2 348 řádcích**, nejdelší řádek **7,5 MB**, medián řádku
+1 604 B. Z toho plynou oba stropy:
+
+- **Okno je posledních 4 MB** (`Policy.rawSessionWindowBytes`). Ocas o 6 000 řádcích, kterým se
+  ořezává log jobu (`Policy.logTailLines`), by na 2 348 řádcích nezabral vůbec — „ocas“ by byl celých
+  53 MB. A protože je soubor **lokální**, čte se `seek`em od konce, takže **stav „moc velký“ nevzniká
+  vůbec**; u logu checku ho vynutila síť (`Range` přes `gh` se na redirect nepřenese, změřeno u #214).
+- **8 kB na jednu událost** (`Policy.rawSessionEventBytes`). Jeden `tool_result` umí mít 7,5 MB, takže
+  by bez druhého stropu sežral celé okno a z ocasu session by byl výpis jednoho souboru.
+
+**Počet událostí celého souboru se netvrdí**, a je to vědomá odchylka od mockupu (`2 913 událostí ze
+4 117`): zjistit ten druhý počet znamená přečíst celý soubor, tedy zaplatit tu cenu, kvůli které okno
+existuje. Hlavička proto říká, kolik událostí je **v okně** a jak velké okno je.
+
+#### Zkrácení se přiznává třikrát
+
+V hlavičce (`konec souboru, N událostí z posledních 4 MB`), **řezem na začátku textu** a u ořezané
+události **na místě řezu**. Tiše zkrácený přepis tvrdí, že session začala uprostřed — tatáž úmluva
+jako u `Policy.logTail`, `ConversationShortfall` a osy běhu.
+
+Ořez události se hlásí **v řádcích pod megabajt a v bajtech nad ním**: nad megabajtem počet řádků
+přestává být míra toho, kolik toho chybí (7,5MB `tool_result` je jeden řádek). Po řezu **uprostřed**
+řádku se hlásí vždycky bajty — zbytek začíná půlkou řádku, takže by se počítal jako celý.
+
+#### Čtyři věci, které nejsou zjevné
+
+- **Okno se zarovnává na začátek řádku, ale ne za každou cenu.** První řádek ocasu je obvykle zbytek
+  řádku, jehož začátek leží před oknem, takže se zahodí. **Když ale za prvním zakončením už nic není**
+  (řádek delší než celé okno — ten změřený případ 7,5 MB), nezahodí se nic: zbyde jedna **nečitelná
+  událost**, a ta aspoň ukáže, co v souboru stojí. Prázdný sheet nad souborem, ve kterém něco je, by
+  byl horší.
+- **`String(data:encoding:)`, ne `String(decoding:as:)`.** Ten druhý nikdy neselže — vadné bajty
+  nahradí `U+FFFD` —, takže by se ze stavu „soubor nemá platné UTF-8“ stal přepis s otazníky
+  a `Ukázat v Finderu` by v okně nebylo. Rozpůlený znak na začátku okna se přitom **nesmí** za vadné
+  UTF-8 vydávat, proto se z něj zahazují pokračovací bajty (`Policy.rawSessionPrefixDrop`).
+- **Nečitelný řádek se nezahazuje, stane se z něj událost.** Poslední řádek rostoucího souboru je
+  běžně rozepsaný; tiše spolknutý řádek vypadá jako řádek, který v transcriptu nebyl. Souhrnný počet
+  je vedle toho v hlavičce, protože „ze čtyř set jich je nečitelných dvě stě“ je tvrzení o tom, jak
+  moc se dá přepisu věřit.
+- **Snímek drží store a je jeden**, ne slovník: sheet je v okně nejvýš jeden a snímek má megabajty.
+  Zavření sheetu i přepnutí PR ho zahodí — jinak by to byla paměť, kterou nikdo nečte.
+
+#### Sazba: třetí AppKitové view, a proč
+
+`RawSessionScript` skládá **řádky s rolemi** a z nich obojí — `NSAttributedString` do
+`TranscriptTextView`u i čistý text pod `Zkopírovat přepis`. Jedna pravda schválně: dvě samostatná
+skládání téhož se rozešla hned první podobou, kde vysázená hlavička neměla mezery a v kopii je měla
+(`23:13:36Bashgh pr view 412`), a chytil to **render, ne test** — proto je `RawSessionScript.gap`
+jedna konstanta a testuje se, že `attributed(…).string == plain(…)`.
+
+Proti dvěma AppKitovým views, které v repu už byly, se to liší takhle:
+
+| | `LogTailTextView` | `SelectableCodeView` | `TranscriptTextView` |
+|---|---|---|---|
+| zalamuje | ne (dvě osy scrollu) | ano | **ano** |
+| otevírá se na | konci dokumentu | začátku | **začátku okna** (okno *je* konec) |
+| atributy | jedna barva na celý text | obarvení podle jazyka | **role hlavičky události** |
+| stráž v `updateNSView` | ano (#292) | ne | **ano** |
+
+**Zalamování je vědomá odchylka od návrhu**, který má u těla události `white-space: pre`. V jednom
+textovém kontejneru nejde mít zalamované odstavce vedle nezalamovaných (`lineBreakMode` v odstavci
+text neuzalomí, ale **usekne**), takže se vybírá mezi „próza uteče doprava“ a „dlouhý řádek výstupu
+zabere víc řádků sazby“. Próza je to, kvůli čemu se sem chodí, a strop 8 kB drží zalomený výstup
+v mezích.
+
+**Stráž tady být musí, a je to konkrétní pohon, ne pojistka** (#393): patička se každé dvě vteřiny
+ptá na velikost souboru, takže se `body` sheetu přepočítá i nad nezměněným přepisem — bez stráže by
+se při každém tiknutí sázely znovu megabajty. Klíčem je **celý snímek**, ne jeho hash (hodnota leží
+v grafu, takže `Array.==` skončí na identitě úložiště), plus barevný režim. **Šířka v klíči není**, na
+rozdíl od `DiffBlockDrawing`: přepis si o vlastní velikost neříká (`sizeThatFits` nemá) a zalamuje ho
+`widthTracksTextView`, takže se při změně šířky nesází znovu — a přesázení by zrušilo rozdělaný výběr.
+
+#### Cena, změřená (`RawSessionMeasurement`)
+
+Debug build, syntetický transcript podle skutečného rozdělení. **Otevření je konstantní ve velikosti
+souboru**, což je to hlavní tvrzení:
+
+| Soubor | Snímek (čtení + přepis) |
+|---|---|
+| 1 MB (celý) | 84 ms |
+| 8 MB (okno 4 MB) | 331 ms |
+| 53 MB (okno 4 MB) | **312 ms** |
+
+Rozpad té ceny je ale poučnější než čísla sama: **rozbor JSONu stojí 6,9 ms**, kdežto dělení textu na
+řádky **216 ms** — tedy ta jediná věc, která jde nad megabajty po `Character`ech (`TextLines`, kvůli
+`CRLF`, #295). Bez rozpadu se optimalizovalo naslepo: ořez těla po znacích vypadal jako ta drahá věc
+(osm tisíc alokací `String`u na událost) a jeho odstranění nezměnilo **nic** (627 → 627 ms). Ubralo se
+proto tam, kde cena doopravdy byla — dělit se přestalo celé tělo a celý zbytek, jen `limit` bajtů:
+**428 → 108 ms** za `transcribe`, a s tím 655 → 312 ms za celý snímek.
+
+Sazba přes celé okno stojí `lines` 1,6 ms, `attributed` 12,6 ms a `setAttributedString` 5,9 ms
+(1,54 milionu znaků), takže hlavní vlákno zdrží jednotky milisekund. Čtení běží mimo něj
+(`TranscriptStore` je `nonisolated`), sheet se otevírá hned se stavem `loading`.
+
+Co se **nepodařilo zlevnit**, ať to příště nikdo nezkouší znovu: dělení okna na řádky. Šlo by to jen
+druhou cestou dělení textu — a jedno místo, kde se rozhoduje, co je řádek, je pravidlo, které stojí
+za víc než dvě desetiny sekundy v Debug buildu.
+
 ## `ReviewRunner` (`App/Review/`)
 
 Jeden běh = jedna headless session `claude` na jeden skill v jednom pracovním stromě.

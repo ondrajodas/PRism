@@ -1002,6 +1002,71 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a ne přepsalo — poučení z #275) a **cenu jedné události v otevřeném výpisu** v hostovaném okně
   (40,29 / 41,48 → **9,25 / 8,91 ms**). Série se u toho **střídají** (#274), protože drift sezení
   je větší než hledaný rozdíl, a příprava je mimo hodinky.
+- **Surová session — přepis transcriptu (#327)** — pět suit, protože se to rozhoduje na pěti různých
+  vrstvách a slít je do jedné by znamenalo mockovat disk kvůli čisté funkci:
+
+  - `RawSessionWindowTests` a `RawSessionBodyTests` — **čisté funkce výčtem**: kde začíná okno
+    (soubor pod stropem, přesně na stropu, 53 MB, prázdný i nesmyslně velký), co se zahodí ze
+    začátku a **co se nezahodí** (okno bez jediného zakončení řádku, rozpůlený znak, nejvýš tři
+    pokračovací bajty) a jak se ořeže jedna událost. V tom druhém je i ten změřený patologický případ
+    **řádku delšího než celé okno**, `CRLF` počítaný **dvěma bajty** (jinak by ořez lezl nad strop)
+    a tvrzení, že se řezem uprostřed řádku **neroztrhne znak** — rozpůlený kódový bod je v kopii
+    vadné UTF-8.
+  - `RawSessionStateTests` — který stav co nabídne, a hlavně **co nenabídne**: chybějící přepis nemá
+    `Načíst znovu` ani `Ukázat v Finderu`, `Zkopírovat přepis` je jedině tam, kde přepis je, a
+    `Zavřít` nabízí každý stav. Tři různá „přepis tu není“ se nesmí slít **ani nabídkou akcí**, takže
+    je na to test a ne úvaha.
+  - `TranscriptTranscriberTests` — proti **skutečnému** transcriptu z veřejného
+    `ondrajodas/prism-review-sandbox` (`transcript/review-session.jsonl`, 18 řádků vybraných z běhu
+    bajt po bajtu). Ty typy řádků ve `stream-json` **nejsou** — `queue-operation`, `attachment`,
+    `last-prompt`, `toolUseResult` místo `tool_result_meta` —, takže vyrobená fixture by popisovala
+    formát, který CLI nepíše. Tvrdí se, že vyleze próza, `thinking` i výstupy nástrojů (tedy to, co
+    výpis kroků zahazuje), že **ani jeden** řádek se neztratí jako nečitelný, že odpověď nástroje
+    doplní **tělo kroku** místo druhé události a že base64 obrázku se nevypíše ani v poznámce.
+
+    **Odmítnutý nástroj se ze skutečných dat nesehnal a je u toho napsané proč**: v žádném
+    transcriptu pod `~/.claude/projects` není ani jeden `non_execution_kind` (CLI ho píše do streamu,
+    ne do souboru), takže se tvar bere z fixture `review-denied-write.jsonl` a testuje inline JSONem.
+    Vedle toho stojí tvrzení, že **`is_error` sám o sobě odmítnutí neznamená** — `grep` bez shody
+    nesmí dostat odznak `ODMÍTNUTO`, jinak by ten odznak znamenal „něco se nepovedlo“ místo
+    „read-only režim zabral“ (#326).
+  - `RawTranscriptSnapshotTests` — **skutečné soubory** v dočasné složce, protože právě o disk tu jde.
+    Tři chybové stavy vzniknou tady (chybí / vadné UTF-8 / prázdný), okno se ověřuje na souboru přes
+    strop (nula nečitelných řádků, tedy zarovnání zabralo) a zvlášť na tom **jednom řádku delším než
+    okno**: musí z něj zbyt jedna nečitelná událost, ne prázdno.
+  - `AppStoreRawSessionTests` — fake `TranscriptReading`. Nejcennější jsou tři tvrzení o tom, co se
+    **nestalo**: nečitelný přepis se neslije s chybějícím (`do`/`catch`, ne `try?` — ten by obě
+    odpovědi zplošťoval na `nil`), tik přírůstku **okno nečte znovu** a `Načíst znovu` po zavření
+    sheetu nečte nic. Plus že zavření snímek zahodí — jsou to megabajty.
+
+  K tomu dvě věci mimo tu pětici. `RawSessionScriptTests` tvrdí, že vysázený a zkopírovaný přepis
+  jsou **jedna pravda** (`attributed(…).string == plain(…)`) — chyba, kterou zelené testy neukázaly
+  a render ano: první podoba měla mezery mezi kusy hlavičky jen v kopii, takže se vysázená slepila do
+  `23:13:36Bashgh pr view 412`. A **že se barva do textu doopravdy dostane**, ne jen že je v paletě
+  (#393): u každého kusu je `.foregroundColor`, tělo má paletový `ink2` a odsazení je `headIndent`
+  odstavce. Stráž sazby se testuje **vlastní funkcí** (`TranscriptTextView.needsTypesetting`), protože
+  `NSViewRepresentableContext` se v testu nepostaví — tik přírůstku přesazení nevyvolá, nový snímek
+  a přepnutí režimu ano.
+
+  A `SingleWayOutTests` má nový výčet: **surová session umí jen číst.** Deset souborů, ani jeden
+  z nich nezná publisher, payload, API, podproces — a nezapisuje do souboru, protože transcript leží
+  mimo cache (tvrdá podmínka č. 3). Je to tatáž konstrukce jako u zadání pro agenta a ze stejného
+  důvodu: nová obrazovka nad daty běhu je zrovna to místo, kde by druhá cesta ven vznikla, aniž by
+  o ní kdo mluvil.
+- **Jak surová session vypadá (#327)** — `RawSessionRenderProbe`, ruční
+  (`TEST_RUNNER_PRISM_MEASURE=1` + `TEST_RUNNER_PRISM_RENDER_DIR`). Existuje proto, že **k tabu
+  `Průběh` v běžícím okně vede jedině klik** a aplikaci sonda ovládat nesmí; tohle je jediná cesta
+  podívat se na tu obrazovku bez skutečné session na disku. Rendruje přepis v obou režimech (a je
+  v něm od každého druhu události jedna, i obě další přiznání zkrácení) a **všech pět** podob bez
+  přepisu, aby se dalo porovnat, že se od sebe poznají. Přírůstek se u chybových stavů schválně
+  nepředává — v aplikaci o něm rozhoduje store, takže sonda, která by ho dodala, by kreslila
+  obrazovku, jaká nevznikne.
+- **Kolik surová session stojí (#327)** — `RawSessionMeasurement`, ruční. Měří **otevření**
+  (84 / 331 / **312 ms** na 1 / 8 / 53 MB, tedy konstantní ve velikosti souboru — to je to hlavní
+  tvrzení) a **sazbu** zvlášť, aby se nezaměnilo jedno za druhé (#274). Třetí test je **rozpad té
+  ceny**, a ten je poučnější než čísla: rozbor JSONu stojí 6,9 ms, dělení textu na řádky 216 ms.
+  Bez rozpadu se optimalizovalo naslepo — ořez těla po znacích vypadal jako ta drahá věc a jeho
+  odstranění nezměnilo **nic** (627 → 627 ms).
 - **Věty dráhy (#242)** — `ReviewerLaneText` rozlišuje **tři** doběhlé konce (nahlásilo nálezy /
   nahlásilo nulu / nenahlásilo nic) a test hlídá, že se u toho třetího **nikde neslíbí čisto**.
   Plus že slova stavů jsou různá (`spadlo` ≠ `nedoběhlo`, `nespuštěno` ≠ `ve frontě`, u fází

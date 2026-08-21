@@ -1156,12 +1156,12 @@ se nedá psát a cesta zpátky do session zůstává `Zkopírovat resume`.
 | Vstupní pole do běžící session | Znamenalo by, že okno umí session **řídit** — jiná schopnost s jiným rizikem, a ne ta, kterou #22 chtělo. Zásah patří do terminálu |
 | Vyšší strop pro živou osu než pro uloženou | Sliboval by, že se ke krokům dá vrátit; nižší by zahodil kroky, které v souboru zůstanou. Obojí je rozpor mezi tím, co je vidět za běhu, a tím, co zbude |
 
-### Surová session — přepis transcriptu (návrh, zatím jen v mockupu)
+### Surová session — přepis transcriptu (hotovo, #327)
 
 **Druhá obrazovka téže sekce**, ne varianta té první. Výpis kroků výš odpovídá na „koukal se tam,
 kam měl“; tohle je **záchranná brzda** pro chvíli, kdy to nestačí — review dopadlo divně, session
 spadla — a otázka zní „co model doopravdy dělal“. Nakreslené v mockupu, **sekce 20**, blok
-*Surová session*; v kódu není nic.
+*Surová session*; od #327 to je i v kódu.
 
 **Nová datová cesta z toho nevychází.** `TranscriptLocation` odvodí cestu k souboru z pracovního
 stromu a `session_id`, `TranscriptStore` ho umí otevřít — dneska z něj po pádu čte jen
@@ -1234,6 +1234,28 @@ Rozhodnutí:
 | Vypisovat base64 obrázků | 2,8 MB v jednom změřeném transcriptu, a k přečtení z toho není nic. Přizná se, že obrázek je a kolik váží |
 | Jedna společná hláška „transcript se nepodařilo načíst“ | Slila by tři různé situace s **různým dalším krokem** — je to tatáž chyba, jaké se vyhýbá rozdíl mezi `čisté` a `failed` |
 | Vestavěný terminál (podruhé) | Přepis je pořád jen **čtení**: nedá se do něj psát a cesta zpátky do session zůstává `Zkopírovat resume`. Surová session je *víc dat*, ne *jiná schopnost* |
+
+#### Co se u implementace rozhodlo jinak než v návrhu (#327)
+
+Tři odchylky od mockupu, všechny vědomé — a všechny proto, že návrh slíbil něco, co by se muselo
+platit cenou, kvůli které ta obrazovka vznikla:
+
+| V mockupu | V aplikaci | Proč |
+|---|---|---|
+| `2 913 událostí ze 4 117` v hlavičce | `konec souboru, 2 913 událostí z posledních 4 MB` | Ten druhý počet se dá zjistit **jedině přečtením celého souboru** — tedy zaplacením té ceny, kvůli které okno existuje (53 MB u největšího změřeného). A odhad by byl text, který tvrdí víc, než data unesou. Řekne se proto, kolik událostí je **v okně** |
+| `starších 1 204 událostí (5,1 MB) se nevešlo` | `starších 5,1 MB se do okna nevešlo` | Totéž o řádek níž: kolik událostí leží před oknem, se bez čtení celého souboru neví |
+| Tělo události `white-space: pre` (nezalomené, vodorovný scroll) | Zalomené | V jednom textovém kontejneru **nejde** mít zalamované odstavce vedle nezalamovaných: `lineBreakMode` v odstavci text neuzalomí, ale **usekne**, takže by z dlouhého výstupu zbyl jeden řádek bez cesty k ostatnímu. Volí se tedy mezi „próza uteče doprava“ a „dlouhý řádek zabere víc řádků sazby“ — a próza je to, kvůli čemu se sem chodí. Strop 8 kB drží zalomený výstup v mezích |
+
+A jedna věc, kterou návrh nepředvídal: **prázdno má dvě různé věty.** Mockup má u třetího stavu
+„Transcript je prázdný — session se zabila dřív, než stihla cokoli zapsat“, jenže do téhož stavu
+spadne i soubor, ve kterém **bajty jsou** a nedala se z nich přečíst ani jedna událost. Stav proto
+nese velikost (`empty(bytes:)`) a věta se z ní skládá, aby nelhala; `Ukázat v Finderu` se u něj
+nabízí jedině tehdy, když je v souboru co si prohlédnout.
+
+**Kde se pravidla nezměnila, ať to nikdo nehledá jako odchylku:** oba stropy (4 MB okno, 8 kB na
+událost), tři přiznání zkrácení, tři různá „přepis tu není“ s vlastní nabídkou akcí, štítek u
+odmítnutého nástroje místo červeného řádku, tlačítko v hlavičce i ve sbaleném řádku výpisu a jeho
+absence bez známého `session_id`.
 
 ## Platformová rozhodnutí
 

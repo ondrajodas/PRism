@@ -35,6 +35,13 @@ struct PullRequestDetailView: View {
     /// megabajty — a po přepnutí PR by nad novým ukazoval log z předchozího.
     @State private var logSheet: CodeText?
 
+    /// Přepis surové session v sheetu (#327). `@State` detailu drží jen **kterou** session ukazuje;
+    /// snímek samotný (megabajty) drží store, aby ho zavření sheetu zahodilo na jednom místě.
+    ///
+    /// Nuluje se při přepnutí PR ze stejného důvodu jako `logSheet`: transcript patří jedné session
+    /// jednoho PR, takže by nad novým ukazoval přepis z předchozího.
+    @State private var rawSession: RawSessionTarget?
+
     /// Zadání pro agenta v sheetu (#333). `@State` detailu ze stejného důvodu jako `logSheet`:
     /// je to **snímek k přečtení**, nic se z něj neodesílá a nemá co přežít.
     ///
@@ -73,6 +80,21 @@ struct PullRequestDetailView: View {
         // Celý log jobu (#214) — tentýž sheet, jakým se kopíruje hunk z diffu (#157): jeden
         // read-only `NSTextView`, tedy přesně na tohle.
         .sheet(item: $logSheet) { CodeTextSheet(content: $0) }
+        // Surová session (#327) — `item:` ze stejného důvodu jako u zadání: sheet nemá co ukazovat
+        // bez cíle, a stav se čte ze storu, takže se sem nekopíruje.
+        .sheet(item: $rawSession) { target in
+            RawSessionSheet(
+                target: target,
+                state: store.rawSessionState(of: target),
+                growth: store.rawSessionGrowth(),
+                path: store.rawSessionPath(of: target),
+                reload: { Task { await store.reloadRawSession() } },
+                refreshSize: { await store.refreshRawSessionSize() }
+            )
+            // Zavřením se snímek **zahodí**: je to to největší, co okno kvůli téhle obrazovce drží,
+            // a mimo otevřený sheet ho nikdo nečte.
+            .onDisappear { store.closeRawSession() }
+        }
         // Zadání pro agenta (#333). `item:`, ne `isPresented:`: sheet nemá co ukazovat bez textu,
         // a ten se skládá ve chvíli kliknutí — co je vidět, to se zkopíruje.
         // Razítko předání (#334) se zapisuje **až když si text někdo vezme** — zkopírováním nebo
@@ -108,6 +130,13 @@ struct PullRequestDetailView: View {
         // Log jobu patří k jednomu checku jednoho PR (#214), takže při přepnutí PR **nesmí**
         // přetéct — ani obsahem, ani tou pamětí, kterou drží.
         .task(id: pullRequest.id) { logSheet = nil }
+        // Přepis patří jedné session jednoho PR (#327) a drží megabajty, takže při přepnutí PR
+        // **nesmí** přetéct — ani obsahem, ani tou pamětí. Zahazuje se obojí: cíl ve view i snímek
+        // ve storu.
+        .task(id: pullRequest.id) {
+            rawSession = nil
+            store.closeRawSession()
+        }
         // Zadání patří k jednomu PR (#333) a je k rozkopírování, takže při přepnutí **nesmí**
         // přetéct: zkopírovat prompt psaný o jiném PR se nedá vzít zpátky.
         .task(id: pullRequest.id) { promptSheet = nil }
@@ -1302,7 +1331,12 @@ struct PullRequestDetailView: View {
             rerun: store.isReviewing(pullRequest.id)
                 ? nil
                 : { store.startReview(for: pullRequest.id, skills: [$0]) },
-            copyCommand: copyCommand(in: timelines)
+            copyCommand: copyCommand(in: timelines),
+            showRawSession: { target in
+                rawSession = target
+                Task { await store.openRawSession(target) }
+            },
+            slug: "\(pullRequest.repo)#\(pullRequest.number)"
         )
     }
 

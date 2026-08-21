@@ -142,6 +142,36 @@ struct SingleWayOutTests {
         }
     }
 
+    /// **Surová session (#327) je čtení, a nic než čtení.** Sheet ukazuje soubor, který si `claude`
+    /// vede na disku — takže ani jeden z jeho souborů nesmí publisher volat, skládat payload, sahat
+    /// na API ani spouštět podproces. Je to tatáž konstrukce jako u zadání pro agenta a ze stejného
+    /// důvodu: nová obrazovka nad daty běhu je zrovna to místo, kde by druhá cesta ven vznikla, aniž
+    /// by o ní kdo mluvil.
+    ///
+    /// **A nesmí do souboru ani zapisovat.** Transcript je cizí soubor mimo cache (leží pod
+    /// `~/.claude/projects`), takže by zápis do něj porušil i tvrdou podmínku č. 3 — `Ukázat
+    /// v Finderu` je to nejvíc, co se s ním odsud dělá.
+    @Test("Surová session umí jen číst")
+    func keepsTheRawSessionReadOnly() throws {
+        let files = try swiftFiles().filter {
+            $0.path.contains("RawSession") || $0.path.contains("RawTranscript")
+                || $0.path.contains("Transcript")
+        }
+
+        // Deset souborů: model, `Policy`, přepis a čtení v `Review`, cesta k souboru, store
+        // a čtyři ve `Views`. Počet je v tvrzení schválně — nový soubor téhle vrstvy má projít
+        // týmiž zákazy.
+        #expect(files.count == 10)
+        for file in files {
+            #expect(!file.code.contains("ReviewPublishing"), "\(file.path) volá publisher")
+            #expect(!file.code.contains("PublishRequest"), "\(file.path) skládá payload")
+            #expect(!file.code.contains("GhReviewPublisher"), "\(file.path) zná implementaci")
+            #expect(!file.code.contains("api.github.com"), "\(file.path) sahá na API")
+            #expect(!file.code.contains("Process("), "\(file.path) spouští podproces")
+            #expect(!file.code.contains(".write(to:"), "\(file.path) zapisuje do souboru")
+        }
+    }
+
     /// Uložení do souboru je **jediné místo mimo úložiště, které zapisuje** — a smí to jen proto,
     /// že cestu vybírá člověk v systémovém dialogu (`NSSavePanel`). Kdyby si cestu složil kód sám,
     /// byl by to zápis mimo cache (tvrdá podmínka č. 3).

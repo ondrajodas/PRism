@@ -3457,6 +3457,43 @@ události. Výpis kreslí jen kroky, a schválně — próza je řádově víc d
 kroky vytlačila z dohledu. Tlačítko `Ukázat surovou session`, které návrh kreslí v hlavičce výpisu,
 proto v #325 **není**.
 
+### #327 — surová session: přepis transcriptu v sheetu
+
+**Posledním issue milníku M11**, a je to ta záchranná brzda pod výpisem kroků: sheet s celým
+transcriptem session, tedy s tím, co výpis schválně zahazuje. Otevírá se z hlavičky výpisu **i z jeho
+sbaleného řádku** (doběhlá dráha je ta častější) a bez známého `session_id` nebo pracovního stromu se
+tlačítko **nekreslí** — stejné pravidlo jako u `Zkopírovat resume`.
+
+**Nová datová cesta z toho nevznikla.** `TranscriptLocation` cestu odvodí, `TranscriptStore` soubor
+umí otevřít od #97; přibyly dvě metody protokolu (`snapshot`, `size`) a přepis
+(`TranscriptTranscriber`). Podrobnosti v [`architektura.md`](architektura.md), sekce *Surová session*.
+
+**Oba stropy jsou z měření, ne z odhadu** (922 transcriptů pod `~/.claude/projects`): okno je
+posledních **4 MB** zarovnaných na začátek řádku a jedna událost má **8 kB**. Řádek je špatná
+jednotka — největší soubor má 53,3 MB a jen 2 348 řádků, takže ocas o 6 000 řádcích by na něm nezabral
+vůbec; a nejdelší řádek má 7,5 MB, takže jeden `tool_result` bez druhého stropu sežere celé okno.
+Protože je soubor **lokální**, čte se `seek`em od konce a **stav „moc velký“ nevzniká vůbec** — na
+rozdíl od logu checku, kde ho vynutila síť.
+
+**Tři odchylky od mockupu, všechny vědomé** (celé i s důvody ve specifikaci): počet událostí celého
+souboru se **netvrdí** (šel by zjistit jedině přečtením 53 MB, tedy tou cenou, kvůli které okno je),
+totéž u řezu na začátku textu, a tělo události se **zalamuje** — v jednom textovém kontejneru nejde
+mít zalomené odstavce vedle nezalomených, a próza je to, kvůli čemu se sem chodí. K tomu jedna věc,
+kterou návrh nepředvídal: prázdno má **dvě různé věty**, protože do téhož stavu spadne i soubor,
+ve kterém bajty jsou a nedala se z nich přečíst ani jedna událost.
+
+**Co se muselo změřit, protože odhad byl vedle.** Otevření nad 53MB transcriptem stálo napřed 627 ms
+a vypadalo to na ořez těla po znacích (osm tisíc alokací `String`u na událost) — jeho odstranění
+nezměnilo **nic**. Rozpad ceny ukázal, že rozbor JSONu stojí 6,9 ms a **dělení textu na řádky
+216 ms**, tedy ta jediná věc, která jde nad megabajty po `Character`ech (`TextLines`, kvůli `CRLF`).
+Ubralo se proto tam: dělí se jen `limit` bajtů, ne celé tělo a celý zbytek (**428 → 108 ms** za
+přepis, 655 → 312 ms za celé otevření). Zbylých 216 ms zlevnit **nešlo** a nemá se to zkoušet znovu —
+jediná cesta by byla druhé místo, kde se rozhoduje, co je řádek.
+
+**A jednu chybu našel render, ne test:** vysázená hlavička neměla mezery mezi časem, druhem
+a detailem (`23:13:36Bashgh pr view 412`), protože mezera byla jen ve skládání kopie. Od té doby je
+`RawSessionScript.gap` jedna konstanta a testuje se, že `attributed(…).string == plain(…)`.
+
 ### #392 — labely a vyžádaní reviewery v panelu, panel i v `Commitech`
 
 Dvě části jednoho zákresu (`docs/navrh.html`, sekce 24 a 25) a patří k sobě: labely a reviewery

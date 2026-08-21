@@ -24,6 +24,15 @@ struct StepFeedView: View {
     /// uvnitř dráhy se v líném seznamu zahodí odrolováním (#325).
     let state: StepFeedState
     let toggle: () -> Void
+    /// Otevře přepis celého transcriptu (#327).
+    ///
+    /// **Sedí to tady, ne v hlavičce dráhy**, a je to tentýž vztah jako u checku: `Ukázat celý log`
+    /// je v akcích nad logem, ne v řádku checku. V hlavičce dráhy už stojí `Zkopírovat resume`, což
+    /// je ta *druhá* cesta ven (do terminálu), a dvě cesty ven vedle sebe by se pletly.
+    ///
+    /// `nil` = neznáme `session_id` nebo pracovní strom, takže **tlačítko není** — stejné pravidlo
+    /// jako u `Zkopírovat resume`. Rozhoduje `Policy.rawSessionTarget(of:slug:)`.
+    var showRawSession: (() -> Void)?
 
     /// Drží se výpis u nejnovějšího kroku?
     ///
@@ -133,6 +142,11 @@ struct StepFeedView: View {
             // která nedělá nic — a zašedlá by tvrdila „tady se to dělá, jen teď ne“, kdežto tady
             // není co následovat vůbec (`Policy.stepFeedAtEnd` u krátkého obsahu vrací `true`).
             if state == .expanded, window.scrolls { tailToggle }
+            // **Sbalený řádek dostane tlačítko taky, a schválně**: doběhlá dráha je ta častější —
+            // „review dopadlo divně“ se pozná až po doběhnutí. Nechat brzdu jen v rozbaleném výpisu
+            // by znamenalo rozbalit tři sta kroků jen proto, aby se došlo k tlačítku. Sbalený řádek
+            // **je** hlavička výpisu, jen zavřená, takže je to pořád jedno místo.
+            if let showRawSession { rawSessionButton(showRawSession) }
         }
         .foregroundStyle(Palette.ink3)
         .padding(.horizontal, 12)
@@ -165,6 +179,25 @@ struct StepFeedView: View {
         .buttonStyle(.plain)
         .help(ReviewerLaneText.followTailHelp)
         .accessibilityAddTraits(followsTail ? [.isSelected] : [])
+    }
+
+    /// `Ukázat surovou session`. **Hranaté jako `.mini`, ne pilulka** (`.rawbtn` v návrhu): vedle
+    /// `Sledovat konec` musí být na první pohled poznat, co je akce a co stav — pilulka je v tomhle
+    /// okně stav, hranaté tlačítko akce.
+    private func rawSessionButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(verbatim: RawSessionText.button)
+                .font(.caption2)
+                .foregroundStyle(Palette.ink2)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Palette.surface, in: .rect(cornerRadius: 6))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.line, lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .help(RawSessionText.buttonHelp)
     }
 
     // MARK: - Okno s kroky
