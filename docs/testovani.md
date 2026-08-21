@@ -3502,7 +3502,7 @@ vlastnost struktury kódu, na kterou se za běhu zeptat nedá:
 |---|---|
 | `App/Store/` nezná `NSApp` a importuje **jen** `Foundation` a `Observation` | Store **nemá čím** na globál sáhnout: nevidí AppKit, takže se v něm `NSApp` nedá ani napsat. Rozhoduje o vzhledu (dostal konfiguraci), ale kreslení není jeho práce. **Výčet povolených, ne zákaz AppKitu** — nález z review na #400: zákaz `import AppKit` obchází `import Cocoa`, a stejně tak kterýkoli další modul, který AppKit tahá s sebou |
 | `AppAppearance.application` je v `App/` jmenováno **jednou**, vzhled se uplatňuje jedině `appearance?.applyAppearance(` a `?? AppAppearance` nikde není | Živý cíl se zapojuje jen při složení živého storu. Kdyby ho vzal za výchozí hodnotu init, kterým store staví testy, přebarvil by jeden test hostitele — a render sondy by měřily jiný režim, než o který si řekly |
-| Žádný soubor v `Tests/` nepíše `NSApp.appearance` ani `NSApplication.shared.appearance` | Aby se ta třída nevrátila. Sám guard soubor se z výčtu odečítá, protože hledané řetězce v něm stojí jako literály |
+| Žádný soubor v `Tests/` nepíše `NSApp.appearance` ani `NSApplication.shared.appearance` | Aby se ta třída nevrátila. Sám guard soubor se z výčtu odečítá, protože hledané řetězce v něm stojí jako literály. **Hlídá dvě zápisy toho jména, ne obchvat přes proměnnou** (`let app = NSApplication.shared`) — na to je pravidlo v `CLAUDE.md`; whitelist importů jako u `App/Store/` tady nejde, testy AppKit legitimně potřebují |
 
 **Ověřeno vložením regrese, a to ze tří stran.** (1) Kolizní suita, která 4000× přepne
 `NSApp.appearance` s odmlkou: nad původním kódem padne `Bez cíle se na NSApp nesáhne`
