@@ -3360,8 +3360,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   spadnou dva testy se čtyřmi issues. Bez toho by zelený běh nedokazoval nic, protože obě
   cesty vedou do `Application Support` a liší se jediným řetězcem.
 
-  Zbytek slotů leží v shellu (`bin/run.sh`, `bin/worktree.sh`, `bin/slot-config.sh`) a testy ho
-  nepokryjí, takže se ověřuje spuštěním: build se slotem musí vyrobit `com.ondrajodas.prism.a`
+  Zbytek slotů leží v shellu (`bin/run.sh`, `bin/worktree.sh`, `bin/slot-config.sh`) a **od #398
+  je jeho část v testech** — viz *Skripty v `bin/`* níž. Co testy nepokryjí, se
+  ověřuje spuštěním: build se slotem musí vyrobit `com.ondrajodas.prism.a`
   a `PRism-a`, instance běží **vedle** té hlavní a hlavní cache zůstane bez jediného čerstvého
   souboru. Že se `pgrep` patterny nepletou, se pozná jen s oběma běžícími naráz — pattern hlavní
   instance nesmí najít slot a naopak.
@@ -3379,6 +3380,52 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   nic; a **kontrola nad výsledkem se ověřuje vložením regrese** — když se z filtru vyndá
   `mode` u rep, musí skript skončit nenulově a nezapsat nic. Zapsaná očista, která spadne
   na půl cesty, je horší než žádná: vypadá jako hotová.
+- **Skripty v `bin/` — úklid slotu a databáze LaunchServices (#398, #399)** — dvě sady
+  v `Tests/Scripts/`, a je to **první místo, kde se shell v tomhle repu testuje harnessem**.
+  Důvod je v tom, o čem ty skripty rozhodují: co se smaže. Přečtený `case` nedokazuje nic — u #61
+  tady ležela kontrola podpisu, která nevypsala nic ani v tom stavu, na který se ptala.
+
+  `SlotCleanupTests` pouští `bin/slot-cleanup.sh` jako proces. Nejcennější tvrzení je **negativní
+  a je o hlavní instanci**: prázdný slot (tedy hlavní aplikace, cache a doména, se kterými se
+  pracuje) musí být odmítnutý **dřív, než se složí jakákoli cesta** — proto se tvrdí nejen
+  návratový kód, ale i to, že skript nevypsal ani hlavičku „Uklízím slot“, a k tomu se bere
+  **odražený obraz hlavní instance** (existence a velikost `/Applications/PRism.app`, její cache
+  a jejího plistu) před úklidem a po něm. Že se maže **jedině cesta složená ze slotu**, se tvrdí
+  nad zdrojákem skriptu (tatáž konstrukce jako `SingleWayOutTests`), protože za běhu se ta cesta
+  pustit nedá — pustit se musí přesně to, co se nikdy nemá stát.
+
+  Doména v `UserDefaults` (#399) se testuje **na vyrobeném slotu s UUID** v názvu: test si domenu
+  sám vypíše (`defaults write com.ondrajodas.prism.zztest-…`) a po úklidu ověří **zpětným čtením**,
+  že `defaults read` selže a že plist v `~/Library/Preferences/` neexistuje. Obojí je potřeba:
+  `defaults delete` po sobě nechá **prázdný plist** (42 B, změřeno), na kterém `defaults read` už
+  hlásí, že doména neexistuje — návratový kód by tedy tvrdil hotovo nad souborem, který tam leží.
+
+  `BundleLibraryTests` sourcují `bin/lib/bundles.sh` bashem a volají její funkce. Vyrábí si vlastní
+  bundly (`PRism-….app` v `TemporaryDirectory`) a registrují je do **skutečné** databáze
+  LaunchServices — jinak není co odregistrovávat. Tři bundly v jednom běhu zastupují tři skutečné
+  případy: zaniklé worktree (registrace přežije smazání bundlu), **existující bundle, který se nesmí
+  dotknout** (to je hlavní aplikace a soused v jiném slotu), a výsledek buildu, který na disku
+  zůstává a předává se jmenovitě. Cesty se přitom musí rozřešit `realpath(3)`, ne
+  `resolvingSymlinksInPath()` — ten jde záměrně druhou stranou a `/private` odřezává, takže
+  tvrzení o vypsané cestě neplatilo, i když úklid proběhl správně.
+
+  **Obě chybové větve se pouštějí, ne čtou**, a je na to `PRISM_LSREGISTER`: `/nekde/neni` je
+  chybějící binárka, `/usr/bin/false` neúspěšný výpis databáze. Vedlejší užitek je, že testy, které
+  o LaunchServices nejsou (cache, doména), si databázi nechají projít `/usr/bin/true`, takže stojí
+  desetiny sekundy místo pěti.
+
+  Ověřeno **vložením regrese** a u dvou věcí to bylo potřeba dvakrát:
+  - bez odmítnutí prázdného slotu spadnou tři tvrzení a skript vypíše „Uklízím slot „““;
+  - bez `rm` prázdného plistu spadnou tři tvrzení v testu domény;
+  - bez filtru na hlášky `PlistBuddy` **spadne test na hlášku, ne na rozhodnutí** — a přesně tím se
+    našlo, že `PlistBuddy` píše chyby jednou na stdout (`Will Create`, `Error Reading File`)
+    a jednou na stderr (`Does Not Exist`), takže filtrovat podle textu je slepá cesta a rozhoduje
+    návratový kód;
+  - u přeskakování existujících cest se regrese **nesmí pustit na skutečnou databázi** — bez toho
+    `if`u by úklid odregistroval hlavní `/Applications/PRism.app`. Ověřuje se proto proti
+    **záznamníku** místo `lsregister` (`PRISM_LSREGISTER` na skript, který si `-u` jen zapíše
+    a na `-dump` vypíše dvě cesty, jednu existující a jednu ne): s `if`em dostane `-u` jednu cestu,
+    bez něj obě.
 - **`RepoCheckout`** — dvě vrstvy, a **obě jsou potřeba**. Fake runner ověří, co se `gitu`
   posílá za argumenty (na tocích s víc příkazy `ScriptedProcessRunner`, který odpovídá
   jinak na každé volání); integrační test (`RealRepoCheckoutTests`) klonuje z `file://`
