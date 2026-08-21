@@ -138,7 +138,7 @@ struct ConversationView: View {
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(rows) { row in
+                    ForEach(rows, id: \.diagnosedID) { row in
                         if row.isFirstNew {
                             SinceMarker(at: lastVisit)
                         }

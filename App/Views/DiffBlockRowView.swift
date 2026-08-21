@@ -43,7 +43,10 @@ struct DiffBlockRowView: View {
         .overlay(alignment: .topLeading) { gutter }
         // Rámeček **celého bloku** v souřadnicích obsahu diffu — jeden na blok, ne jeden na řádek
         // (#252). Plochy řádků se z něj dopočítají aritmetikou (`DiffGutterGeometry`).
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DiffView.contentSpace)) } action: { rect in
+        .onGeometryChange(for: CGRect.self) {
+            RenderDiagnostics.inGraph(.blockGeometry)
+            return $0.frame(in: .named(DiffView.contentSpace))
+        } action: { rect in
             placement.rect = rect
             noteRows()
         }

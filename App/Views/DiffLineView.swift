@@ -74,7 +74,10 @@ struct DiffLineView: View {
         .onHover { isHovered = $0 }
         // Rámeček řádku pro tažení (#110) — v souřadnicích **obsahu**, takže se scrollováním
         // nemění a přeměřování se nespouští. Píše se do neobservable schránky, viz `DiffRowFrames`.
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DiffView.contentSpace)) } action: { rect in
+        .onGeometryChange(for: CGRect.self) {
+            RenderDiagnostics.inGraph(.lineGeometry)
+            return $0.frame(in: .named(DiffView.contentSpace))
+        } action: { rect in
             guard let dragID else { return }
             // Jeden řádek je z pohledu krabice blok o jednom řádku; řádek, na který se komentovat
             // nedá, se nehlásí a tím z krabice vypadne (#252).

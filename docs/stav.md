@@ -3511,3 +3511,31 @@ jako u odeslání proti živému API.
 
 Sekce 24 mockupu je o nabídku dokreslená (nadpis, hledací řádek s **kurzorem**, položky bez
 slovesa, filtr, prázdný výsledek, patka s klávesami) a publikovaná na tutéž adresu.
+
+### #361 — osmé kolo: instrumentace grafu (otevřené)
+
+**Kolo se nepodařilo vyrobit ani poosmé, takže #361 zůstává otevřené** a tohle není oprava
+tuhnutí. Zbyl z toho **nástroj**, který u předchozích sedmi kol chyběl: v hořícím kole se
+nepřeloží ani jedno tělo, takže dosavadní počitadlo průchodů `body` v tu nejdůležitější sekundu
+řeklo jen „0 kol runloopu, sekunda CPU“.
+
+Nově se z něj dá přečíst, **co se v tom kole přepočítává a kdo si o to řekl**. Do záznamu
+(`./bin/run.sh --diagnose`) jde za hlavní řádek úseku počet zásahů háků v líném seznamu
+(`graf: DiffRow.id=857 …`) a **evaluační zásobník AttributeGraphu** — jména atributů od toho, co
+se počítá teď, k tomu, kdo si o řadu řekl, a u vstupů příznak `changed`.
+
+Ověřeno spuštěním, ne z dokumentace: `AGGraphDescription(nil, ["format": "stack/text"])` stojí
+**0,0063 ms**, jde z `body`, z `Layout`u, z `of:` closure u `onGeometryChange` i z getteru
+identity, a z **cizího vlákna** vrátí `nil` — proto se vzorek odebírá z háku na hlavním vlákně
+a zapisovací vlákno z #391 zůstává jen zapisovatelem. `AGGraphSetTrace` ani
+`AGGraphSetInvalidationCallback` se nepoužívají: obojí si nastavuje sám SwiftUICore, takže by se
+přepisovalo to, co se měří. Vlastnictví návratové hodnoty se zjistilo **pádem** (`SIGSEGV`
+v `objc_release` uvnitř `AutoreleasePoolPage::releaseUntil`) — footprint procesu tvrdil opak;
+hodnota je autoreleased. Podrobnosti a čísla v [`architektura.md`](architektura.md), sekce
+*Diagnostika kreslení*, rozhodnutí i zamítnuté cesty ve specifikaci.
+
+**Nitka pro příští záchvat**: nad projížděním (tedy mimo záchvat) je kořenem dotazu
+`LazySubviewPrefetcher<LazyVStackLayout>` — ten `signalPrefetch`, který je ve vzorcích jediný
+re-arm —, vrcholem `LazySubviewPlacements` a jediný `changed` vstup je **transformace**
+(`CoordinateSpaceNameTransform` v diffu, `ScrollViewChildTransform` v ose). V záchvatu se z týchž
+řádků pozná, jestli se ta transformace mění i tehdy, když se nikam neroluje.

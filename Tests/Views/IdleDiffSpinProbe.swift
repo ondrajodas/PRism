@@ -694,6 +694,73 @@ struct IdleDiffSpinProbe {
         }
     }
 
+    /// **Co instrumentace grafu (#361) hlásí nad skutečným oknem aplikace.**
+    ///
+    /// Kolo z #361 se v harnessu za sedm kol nerozjelo, takže tohle **není** pokus ho vyrobit.
+    /// Odpovídá na jinou otázku, bez které by ta instrumentace byla tvrzení bez důkazu: **ozvou se
+    /// háky nad skutečným stromem aplikace a přijde z nich zásobník?** Vypisují se proto počty
+    /// (`GraphSite`) a řádky, které by v tu sekundu šly do záznamu — tedy přesně to, co uživatel
+    /// uvidí v `diagnostics.log`, až okno začne hořet.
+    ///
+    /// Diagnostika se tady podstrkuje **ručně** (`RenderDiagnostics.current`), protože
+    /// `PRISM_DIAGNOSE` se v testech nezapíná; `defer` ji uklidí, jinak by ji viděly další testy
+    /// v tomtéž procesu.
+    @Test("Co hlásí instrumentace grafu nad skutečným oknem")
+    func graphInstrumentationOverRealWindow() async throws {
+        for tab in [PullRequestTab.filesChanged, .conversation] {
+            try await measureGraphSites(tab == .filesChanged ? "diff" : "osa", tab: tab)
+        }
+    }
+
+    private func measureGraphSites(_ name: String, tab: PullRequestTab) async throws {
+        let (store, cache) = try await prepared(big: true, full: true)
+        defer { _ = cache }
+        if tab == .conversation {
+            store.conversationStates[pr] = .loaded(
+                Self.synthetic(comments: 300),
+                updatedAt: Self.summary.updatedAt
+            )
+        }
+        store.setDetailTab(tab, for: pr)
+        store.setDiffLayout(.split)
+        let window = show(store: store, full: true)
+        defer { window.orderOut(nil) }
+        _ = spinMainRunLoop(seconds: 2)
+
+        let directory = try TemporaryDirectory()
+        let diagnostics = RenderDiagnostics(
+            log: DiagnosticsLog(url: directory.url.appending(path: "diagnostics.log")),
+            interval: 1
+        )
+        RenderDiagnostics.current = diagnostics
+        #expect(GraphProbe.prepare())
+        defer {
+            RenderDiagnostics.current = nil
+            _ = directory
+        }
+
+        // Projet kolečkem: háky se ozvou při **přerovnání** obsahu, ne nad stojícím seznamem.
+        let root = try #require(window.contentView)
+        let scroller = try #require(Self.tallestScroller(in: root))
+        _ = WheelGesture.scroll(over: scroller, in: window, steps: 40, step: 120)
+        _ = spinMainRunLoop(seconds: 1)
+
+        let sites = diagnostics.graphSnapshot()
+        print("MĚŘENÍ instrumentace \(name): \(sites.sorted { $0.value > $1.value })")
+        // **Aspoň jedno místo se ozvat musí**, jinak by v hořícím kole nebylo z čeho brát vzorek.
+        #expect(!sites.isEmpty, "nad oknem se neozvalo ani jedno místo v grafu")
+        // **Dotazy se čtou z instance, neodvozují z pole úspěchů** (nález Copilota na #397):
+        // `graphStacks().count` je počet vzorků, které přišly, kdežto `samples` je počet dotazů —
+        // a rozdíl mezi nimi je zrovna to, co má řádek říct.
+        for line in Policy.graphDiagnosticLines(
+            sites: sites,
+            stacks: diagnostics.graphStacks(),
+            samples: diagnostics.graphSampleAttempts()
+        ) {
+            print("ZÁZNAM \(name):\(line)")
+        }
+    }
+
     /// Jeden scénář: postavit okno, nechat ho stát a vypsat, co v něm je a kolik to stálo.
     ///
     /// Vypisuje se i **velikost okna**: `NSHostingController` cpe velikost scény do okna, takže

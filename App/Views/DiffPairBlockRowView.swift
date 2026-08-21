@@ -47,7 +47,12 @@ struct DiffPairBlockRowView: View {
         //
         // Poloha se **nezapisuje do `@State`**: při scrollování se mění, protože líný seznam
         // přeměřuje obsah, takže by z toho byl layout bloku při každém posunu.
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DiffView.contentSpace)) } action: { rect in
+        .onGeometryChange(for: CGRect.self) {
+            // Hák diagnostiky (#361): tahle closure běží **uvnitř** hořícího kola, kdežto tělo
+            // se v něm nepřeloží ani jednou. Viz `GraphSite`.
+            RenderDiagnostics.inGraph(.pairBlockGeometry)
+            return $0.frame(in: .named(DiffView.contentSpace))
+        } action: { rect in
             placement.rect = rect
             noteRows()
         }

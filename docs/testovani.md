@@ -1261,6 +1261,65 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   Kontrolní scéna tedy vyrábí i **půlsekundové úseky, ve kterých hlavní vlákno runloop vůbec
   nepustí ke slovu**, a diagnostika je zapsala. Sonda u toho vypisuje CPU vedle počtu řádků: bez
   toho čísla by nebylo poznat, jestli se měřilo nad zátěží, nebo nad prázdnem.
+- **Evaluační zásobník AttributeGraphu (#361, osmé kolo)** — tři vrstvy, a to nejcennější je zase
+  negativní: **z cizího vlákna a mimo aktualizaci grafu se nesmí vrátit nic** (`GraphProbeTests`).
+
+  **Dvířka (`GraphProbe`) se testují spuštěním, protože jinak to nejde.** Je to privátní
+  `AGGraphDescription`, takže jediné, co drží tvrzení v jeho dokumentaci, je scéna
+  (`ScrollView` + `LazyVStack` v okně mimo obrazovku) a čtyři testy nad ní: že zásobník přijde
+  **z těla, z `of:` closure u `onGeometryChange` i z getteru identity**, že je v něm rámec líného
+  seznamu pojmenovaný (`Lazy…` — jinak by ten nástroj u #361 neměřil to, o čem issue je), že mimo
+  aktualizaci grafu vyjde `nil` a že z **cizího vlákna** taky. Až systém tu funkci přejmenuje,
+  spadne to tady — diagnostika, která tiše přestane odpovídat, je horší než žádná.
+
+  **Vlastnictví návratové hodnoty se zjistilo pádem, ne měřením.** Footprint tvrdil +1 (100 000
+  volání bez `release`: 13,8 → 122,3 MB), takže první verze brala `takeRetainedValue()` — a test
+  složil proces `SIGSEGV`em v `objc_release` uvnitř `AutoreleasePoolPage::releaseUntil`. Hodnota je
+  **autoreleased**; ten footprint rostl proto, že se v tom měření pool ani jednou nevyprázdnil.
+  Plyne z toho pravidlo pro příště: **u privátního API rozhoduje pád v testu, ne úvaha nad
+  RSS** — a to je zároveň důvod, proč tenhle test v repu zůstává.
+
+  **Rozbor výpisu je čistá funkce nad skutečnou fixture** (`Policy.graphStack`,
+  `GraphStackDigestTests`, `Tests/Fixtures/attributegraph/stack-text.txt` — skutečný výstup, ne
+  ruční literál). Testuje se vrchol, kořen a `changed` vstupy; že z **cizího textu nevznikne jméno
+  atributu** (`nil`, ne půlka řádku — formát je privátní a může se změnit); že prázdný úsek nedá
+  **žádný** řádek; a dvě meze, obě z měření: do souboru jdou jen **rámce a vstupy s `changed`**
+  (jeden řádek vstupu měl nad skutečným diffem 1,5 kB a blok jich měl desítky, takže by hořící okno
+  vyčerpalo strop 8 MB za pár minut) a dlouhé jméno typu se **zkrátí** na 200 znaků.
+
+  Z Copilot review na #397 k tomu přibyly dva případy, oba z třídy „mez musí být vyjmenovaná“:
+  **histogram ukáže šest položek a zbytek přizná** (`+N dalších` — osm vzorků s osmi různými kořeny
+  by jinak dalo jednu řádku s osmi jmény po 200 znacích) a **řádek bez šipky se do výpisu neopíše**
+  (do té doby stačilo, že začíná `#`, takže by se po změně formátu opisoval syrový text jako rámec).
+
+  **Nad sběrem to samé, co u počitadel průchodů**: že vypnutá diagnostika nesáhne ani na graf
+  (hák sedí na cestě identity, tedy tam, kde se v hořícím kole volá tisíckrát za sekundu), že
+  `diagnosedID` vrací **tutéž** identitu jako `id` (jinak by zapnutá diagnostika přerovnala líný
+  seznam a měřilo by se něco jiného), že **ticho nedostane přílohu** (řádky o grafu jen s hlavním
+  řádkem úseku, ale nasbírané se zahodí tak i tak) a že vzorků je za úsek **nejvýš osm** a v jedné
+  smyčce **jeden** (rozpočet a odstup, `interval: 0` v testu vypne odstup, aby test nezávisel na
+  hodinách).
+
+  **A že je každé vyjmenované místo doopravdy zapojené, tvrdí test nad zdrojáky**
+  (`GraphSiteWiringTests`, tatáž konstrukce jako `SingleWayOutTests` včetně zahazování komentářů):
+  vyjmenované místo, které nikdo nevolá, je v záznamu nula, která lže — nedá se odlišit od „tímhle
+  místem kolo neprochází“, což je zrovna ta věta, kterou se u #361 hledá příčina.
+
+  **Nad skutečným oknem aplikace je na to měření**
+  (`IdleDiffSpinProbe.graphInstrumentationOverRealWindow`, `PRISM_MEASURE`). Není to pokus kolo
+  vyrobit — to se v harnessu za osm kol nepovedlo ani jednou —, odpovídá to na jinou otázku: **ozvou
+  se háky nad skutečným stromem a přijde z nich zásobník?** Naměřeno při projíždění kolečkem: diff
+  `DiffRow.id=857 FileDiff.id=453 DiffPairBlockRow.geometry=172`, osa `ConversationRow.id=2113`,
+  vzorky 6/6 a 5/5. Kořen je v obou `LazySubviewPrefetcher<LazyVStackLayout>`, vrchol
+  `LazySubviewPlacements` a jediný `changed` vstup je **transformace**
+  (`CoordinateSpaceNameTransform` v diffu, `ScrollViewChildTransform` v ose). Nad projížděním je to
+  očekávané, takže **příčinu #361 to netvrdí** — cenné je to jako srovnávací tvar pro záchvat.
+
+  Co se z testů poznat nedá: jak to vypadá v **záznamu skutečné instance**. Ověřeno spuštěním
+  (`PRism-a`, `./bin/run.sh --diagnose`): za hlavičkou sezení je řádek
+  `evaluační zásobník AttributeGraphu k dispozici`, tedy `dlopen` privátního frameworku prochází
+  i v nainstalované podepsané aplikaci; nad nečinným oknem bez otevřeného PR se žádný řádek o grafu
+  nepíše, protože se háky nemají kde ozvat.
 - **`AppStore` — pohled na diff** — že se bez odchylky bere hodnota z nastavení, že ji přepnutí
   v liště přebije, že se změna nastavení projeví **bez restartu** a že odchylka **shodná**
   s nastavením přežije jeho změnu. Poslední dva potřebují skutečný `ConfigStore` nad dočasnou

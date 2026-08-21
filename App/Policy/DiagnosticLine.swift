@@ -97,6 +97,19 @@ extension Policy {
             + " \(bundle) pid \(pid) — vypne se restartem bez toho přepínače"
     }
 
+    /// Věta o tom, jestli se do grafu vůbec dá sáhnout — píše se **do souboru** hned za hlavičku
+    /// sezení (#361).
+    ///
+    /// Bez ní by „graf nic neřekl“ a „graf nejde otevřít“ splynulo v tichu, což je u privátního
+    /// API ta nejpravděpodobnější porucha: příští systém tu funkci přejmenuje a z záznamu prostě
+    /// zmizí řádky o zásobníku, aniž by kdokoli poznal proč.
+    static func diagnosticGraphLine(at moment: Date, in zone: TimeZone, available: Bool) -> String {
+        let state = available
+            ? "evaluační zásobník AttributeGraphu k dispozici"
+            : "evaluační zásobník AttributeGraphu NEJDE otevřít — řádky „zásobník“ v záznamu nebudou"
+        return "\(stamp(of: moment, in: zone)) \(state)"
+    }
+
     private static func stamp(of moment: Date, in zone: TimeZone) -> String {
         moment.formatted(Date.ISO8601FormatStyle(timeZone: zone))
     }
