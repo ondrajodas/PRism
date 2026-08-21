@@ -516,6 +516,45 @@ code {
   font-size: 10.5px; color: var(--ink-3);
 }
 
+/* --- založení nového labelu z nabídky (sekce 26) --------------------------------------
+   **Nabídka zůstává uzavřená a založení je vlastní akce mimo seznam**, ne odemčené pole.
+   Seznam dál nese jedině labely repozitáře, takže `↵` na vybraném řádku znamená pořád jen
+   „přepni ten label“; založení má vlastní klávesu (`⌘↵`) a vlastní plochu pod dělič. Kdyby
+   sedělo v seznamu jako další řádek, byl by z něj nejpravděpodobnější omyl: šipka dolů na
+   konci filtrovaného seznamu by mířila na „založ nový label“.
+
+   Přerušovaný okraj je tatáž úmluva jako u `.chip-add` a `.rv-av.wait` — přerušované je to,
+   co se ještě nestalo. */
+.nl-bar { border-top: 1px solid var(--line-soft); padding: 6px 5px; }
+.nl-add {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 7px; border-radius: 6px;
+  border: 1px dashed var(--line);
+  font-size: 12px; color: var(--ink-2); cursor: pointer;
+}
+/* Jméno se v akci sází **doslova a v uvozovkách**: je to jediné místo před potvrzením, kde je
+   vidět, co přesně se v repozitáři objeví. Proto se **zalomí, ne ořeže** — ořezané jméno je
+   ořezaná zrovna ta informace, kvůli které tu ten krok je. Změřeno na 39 znacích: akce vyjde na
+   dvě řádky a nic nepřeteče za okraj nabídky. */
+.nl-add b { font-weight: 600; color: var(--ink); }
+.nl-add .keys { margin-left: auto; flex: none; font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
+.nl-add:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Druhý krok je **druhá obrazovka téhož popoveru**, ne sheet. Přepnutí existujícího labelu
+   zůstává jedno kliknutí (#392, potvrzovací sheet nedostalo schválně), kdežto založení je
+   nevratné — a rozdíl mezi „vratné jedním klikem“ a „zůstane v repozitáři“ musí být vidět na
+   obrazovce, ne jen v hlavě. Sheet by z toho udělal modální okno kvůli jednomu slovu; druhá
+   obrazovka drží krok tam, kde člověk zrovna kouká. */
+/* `align-items: flex-start` je tady **podmínka, ne úprava**: `.lchip` je `inline-flex`, takže by
+   ho svislý flex bez tohohle natáhl přes celou šířku popoveru — a z náhledu chipu by byla pilulka
+   na celou řádku, tedy něco, co v panelu nikdy nevypadá takhle. Změřeno v renderu: 278 b proti
+   102 b, které chip potřebuje. Výstraha se naopak stahovat nemá, ta si šířku bere zpátky. */
+.nl-step { padding: 2px 11px 11px; display: flex; flex-direction: column; align-items: flex-start; gap: 9px; }
+.nl-step > .warnbox { align-self: stretch; }
+.nl-step .hex { font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
+.nl-step .why { font-size: 11.5px; color: var(--ink-3); }
+.pkr-foot .sp { flex: 1; }
+
 /* Reviewer je **řádek**, ne chip: panel je sloupec, takže se do něj vejde iniciálka, jméno
    a slovo o tom, jak odpověděl — a to slovo je jediný důvod, proč se na sekci kouká. Když se
    panel zúží, ustoupí **jméno** (ořeže se), odpověď zůstává celá. */
@@ -3475,7 +3514,8 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <em>Nálezech</em> a <em>Průběhu</em> se labely nevidí, protože tam panel nemá být (#294)
         a labely nejsou důvod ho tam vracet — v těch třech tabech se vedle nich čte log, tabulka
         přes celou šířku nebo dráha běhu. <em>Commity</em> panel dostávají, a je to druhá polovina
-        téhož zákresu: sekce 25.
+        téhož zákresu: sekce 25. Jak se z téhle nabídky založí label, který repo ještě nezná,
+        je v sekci 26.
       </p>
     </div>
 
@@ -3916,6 +3956,317 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       </div>
     </div>
   </section>
+  <section class="section" id="s26">
+    <div class="section-head">
+      <div class="eyebrow">26 — Pravý panel · nový label z nabídky</div>
+      <h2>Nový label se zakládá druhým krokem, ne odemčeným polem</h2>
+      <p class="muted">
+        Nabídka za <code>+ label</code> je od sekce 24 <b>uzavřená</b> — nese jedině labely, které
+        repozitář zná, a hledací pole v ní <b>filtruje, nezakládá</b>. Bylo to schválně: z volného
+        textu se dá omylem vyrobit label, a ten už z repozitáře sám nezmizí. Cena za to je, že
+        <b>štítek, který v repu ještě není, se musí založit v prohlížeči</b> — tedy zrovna to
+        přepnutí do prohlížeče, kvůli kterému #392 vzniklo.
+      </p>
+      <p class="muted">
+        Zakládání se proto přidává, ale <b>uzavřený zůstává seznam</b>, ne nabídka. Řádky dál nesou
+        jenom labely repozitáře, takže <code>↵</code> na vybraném řádku znamená pořád „přepni tenhle
+        label“. Založení je <b>vlastní akce pod dělič</b> s vlastní klávesou (<code>⌘↵</code>) a vede
+        na <b>druhou obrazovku téhož popoveru</b>, ve které je vidět jméno v uvozovkách, barva,
+        repozitář a věta o tom, co po tom kliknutí zůstane. <b>Omyl z volného textu tedy
+        nenahrazuje pozornost, ale krok</b>, který se musí potvrdit a který o sobě řekne, že je
+        nevratný.
+      </p>
+      <p class="muted">
+        <b>Nevratné to je doopravdy a je to napsané v aplikaci.</b> Smazat label odsud nejde a nikdy
+        nepůjde — <code>ReviewPublishing</code> má vyjmenované metody a <code>deleteLabel</code> mezi
+        nimi nebude. Založení samo je proto <b>sedmá</b> metoda toho výčtu a <b>první, která zapisuje
+        do repozitáře</b>, ne do pull requestu: tvrdá podmínka č. 1 se tím mění a v
+        <code>CLAUDE.md</code> se to musí přepsat i s tím, co v zákazu zůstává (approve mimo review,
+        merge, zavření PR, milník — a mazání labelu).
+      </p>
+      <p class="muted">
+        <b>Barvu vybírá aplikace, člověk ji nevolí.</b> Dvě pole a vzorník by z popoveru o 300
+        bodech udělaly dialog kvůli hodnotě, na kterou se člověk podívá jednou; barva se proto bere
+        z výchozí palety GitHubu podle jména (stejné jméno = stejná barva) a v potvrzení je vidět
+        i s hexem. Kdo ji chce jinou, mění ji tam, kde se label i maže — v prohlížeči. Posílá se
+        u toho <b>vždycky</b>: náhled má být pravda, a puntík v panelu musí být ten, který byl
+        v potvrzení.
+      </p>
+      <p class="muted">
+        <b>Do panelu se tím nepřidává nic.</b> Založený a přidaný label je obyčejný chip v sekci
+        <em>Labely</em>, takže kresba panelu ze sekce 24 platí dál — nové jsou jen dvě obrazovky
+        nabídky a jedna věta v panelu pro případ, že druhé volání nedopadne.
+      </p>
+      <p class="muted">
+        <b>Že se to do úzkého místa vejde, je změřené, ne odhadnuté.</b> Nabídka je <b>300 bodů</b>
+        (<code>.pkr</code>, tolik co popover v aplikaci) a v renderu z ní nepřetéká nic: potvrzovací
+        krok má nejdelší řádek <b>265 b</b> (barva s hexem) z 278, které mezi okraji zbývají, patka
+        s oběma tlačítky a poznámkou <b>237 b</b> — tedy 41 b rezervy, kterou drží pružná mezera
+        mezi <code>Zpět</code> a <code>Založit a přidat</code> — a náhled chipu <b>94 b</b>. Panel
+        s větou o nepovedeném přidání je 300 b a taky bez přetečení. Dlouhé jméno se v akci
+        <b>zalomí, neořeže</b> (změřeno na 39 znacích: dvě řádky, nic za okrajem), a to je záměr —
+        akce je jediné místo před potvrzením, kde je jméno vidět celé, takže ořezat ho tam by bylo
+        ořezání zrovna té informace, kterou má člověk zkontrolovat.
+      </p>
+    </div>
+
+    <h3>Kde se založení nabídne — a kde ne</h3>
+    <p class="muted">
+      Akce je <b>pod seznamem a pod děličem</b>, přerušovaně obtažená jako <code>+ label</code>
+      a <code>čeká</code> u reviewera: přerušované je to, co se ještě nestalo. Nabídne se, kdykoli je
+      v poli něco napsané a <b>žádný label toho jména v repozitáři není</b> — tedy i tehdy, když
+      seznam něco našel, protože jinak by se nedal založit <code>bug-ui</code> v repu, který zná
+      <code>bug-ui-legacy</code>. Zmizí naopak ve chvíli, kdy je jméno shodné s existujícím labelem;
+      shoda se posuzuje <b>týmž pravidlem jako hledání</b>, takže ani <code>Bug</code> nabídku
+      k založení nedostane a <code>bug</code> je vidět v seznamu.
+    </p>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Dotaz bez shody — akce se nabídne</div>
+        <div class="frame flat" style="padding: 14px;">
+          <div class="pkr">
+            <span class="cap">Přepnout label</span>
+            <div class="pkr-q">
+              <span class="ico">⌕</span>
+              <span>design-debt</span>
+              <span class="sp"></span>
+              <span class="n">0</span>
+            </div>
+            <div class="pkr-empty">Žádný takový label tu není.</div>
+            <!-- Pod děličem, ne v seznamu: řádek v seznamu by při držené šipce dolů skončil na
+                 nevratné věci. `⌘↵` je proto jediná klávesa, která sem vede — `↵` zůstává
+                 přepínačem vybraného labelu. -->
+            <div class="nl-bar">
+              <div class="nl-add">
+                <span>+</span>
+                <span>Založit <b>„design-debt“</b></span>
+                <span class="keys">⌘↵</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Seznam něco našel · a když jméno už existuje</div>
+        <div class="frame flat" style="padding: 14px; display: flex; flex-direction: column; gap: 12px;">
+          <div class="pkr">
+            <span class="cap">Přepnout label</span>
+            <div class="pkr-q">
+              <span class="ico">⌕</span>
+              <span>bug-ui</span>
+              <span class="sp"></span>
+              <span class="n">1</span>
+            </div>
+            <div class="pkr-row on">
+              <span class="tick"></span>
+              <span class="lchip"><i style="background: #D73A4A;"></i><span>bug-ui-legacy</span></span>
+            </div>
+            <div class="nl-bar">
+              <div class="nl-add">
+                <span>+</span>
+                <span>Založit <b>„bug-ui“</b></span>
+                <span class="keys">⌘↵</span>
+              </div>
+            </div>
+            <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ přepne</span><span>esc zavře</span></div>
+          </div>
+          <!-- Jméno se od existujícího labelu liší jen velikostí písmen, takže se akce nekreslí
+               vůbec — skoroduplikát je ten nejpravděpodobnější odpad, který by odsud v repozitáři
+               zbyl. Řádek `bug` je přitom v seznamu vidět, takže odpověď na „a kde je?“ je na
+               obrazovce. -->
+          <div class="pkr">
+            <span class="cap">Přepnout label</span>
+            <div class="pkr-q">
+              <span class="ico">⌕</span>
+              <span>Bug</span>
+              <span class="sp"></span>
+              <span class="n">1</span>
+            </div>
+            <div class="pkr-row on">
+              <span class="tick">✓</span>
+              <span class="lchip"><i style="background: #D73A4A;"></i><span>bug</span></span>
+            </div>
+            <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ přepne</span><span>esc zavře</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Druhý krok a stav, který mezi dvěma voláními vznikne</h3>
+    <p class="muted">
+      Potvrzení je <b>druhá obrazovka popoveru</b>, ne sheet: přepnutí existujícího labelu zůstává
+      jedno kliknutí (#392 mu potvrzovací okno nedalo schválně), protože je vratné jedním klikem
+      a nikoho neupozorní — potvrzuje se tedy to, co vratné <b>není</b>, a modální okno kvůli jednomu
+      slovu by z panelu udělalo klikačku. Na obrazovce jsou čtyři věci a každá odpovídá na jednu
+      otázku: <b>kam</b> to jde (repozitář v nadpisu), <b>co</b> se objeví (chip s puntíkem, jméno
+      doslova), <b>jaká</b> bude barva (hex) a <b>co po tom zůstane</b> (výstraha).
+    </p>
+    <p class="muted">
+      <b>Založit a přidat jsou dvě volání</b> — jedno do repozitáře, druhé na PR — a spojit se
+      nedají. Tvrdá podmínka č. 5 (jedno atomické volání) se tím pro tuhle jednu akci mění, takže
+      k ní patří i kresba toho, jak vypadá, když druhé volání spadne: label v repozitáři <b>je</b>,
+      na PR <b>není</b>, a v panelu je věta, která to říká. Proti napůl odeslanému review je rozdíl
+      v tom, že tady je oba konce vidět a dorovná se to jedním kliknutím v nabídce — na řádek, který
+      v ní od té chvíle je.
+    </p>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Druhý krok — co odejde do repozitáře</div>
+        <div class="frame flat" style="padding: 14px;">
+          <div class="pkr">
+            <span class="cap">Nový label v ondrajodas/PRism</span>
+            <div class="nl-step">
+              <span class="lchip"><i style="background: #FBCA04;"></i><span>design-debt</span></span>
+              <span class="why"><span class="hex">#FBCA04</span> · z výchozí palety GitHubu, podle jména</span>
+              <div class="warnbox">
+                <span class="i">⚠</span>
+                <span>Zůstane v repozitáři i po odebrání z PR. Smazat ho odsud nejde — jedině
+                na GitHubu.</span>
+              </div>
+            </div>
+            <div class="pkr-foot">
+              <span class="mini">Zpět</span>
+              <span class="sp"></span>
+              <span>dvě volání</span>
+              <span class="mini pri">Založit a přidat</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Založilo se, přidat se nepovedlo</div>
+        <div class="frame flat" style="max-width: 300px;">
+          <aside class="side" style="border-left: 0;">
+            <header>
+              <span>Zadání pro agenta</span>
+              <span class="sp"></span>
+              <span class="kbd">⌘2</span>
+              <span class="fold">›</span>
+            </header>
+            <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 11px;
+                          border-bottom: 1px solid var(--line-soft);">
+              <div class="pl-sec">
+                <span class="cap">Labely</span>
+                <div class="chipline">
+                  <span class="lchip"><i style="background: #A2EEEF;"></i><span>enhancement</span></span>
+                  <span class="chip-add">+ label</span>
+                </div>
+              </div>
+              <div class="pl-sec">
+                <span class="cap">Reviewery</span>
+                <div class="rv-list">
+                  <div class="rv-row"><span class="rv-av wait">ER</span><span class="who">Eva Řezáčová</span><span class="ans">čeká</span></div>
+                </div>
+                <div class="chipline"><span class="chip-add">+ reviewer</span></div>
+              </div>
+              <!-- Věta je tam, kde už chyby odesílání v panelu jsou (`MetadataActionState.failed`),
+                   ne v popoveru: popover se dá zavřít a chyba, kterou nikdo nepřečte, je chyba,
+                   která se neopraví. `design-debt` proto v sekci chipů **není** — na PR se
+                   nedostal, a panel má tvrdit jen to, co data unesou. -->
+              <div style="display: flex; align-items: flex-start; gap: 7px; font-size: 11.5px;
+                          line-height: 1.45; color: var(--ink-2);">
+                <span style="color: var(--crit);">⚠</span>
+                <span>Label <b style="font-weight: 600;">design-debt</b> se v repozitáři založil,
+                na PR se ho přidat nepovedlo. Je v nabídce — přidáš ho kliknutím.</span>
+                <span class="mini" style="flex: none;">Zavřít</span>
+              </div>
+            </div>
+
+            <div class="seg">
+              <span class="seg-i on">Nálezy <span style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-2);">2</span></span>
+              <span class="seg-i">Zadání <span style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);">6</span></span>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">1</span>
+        <span class="body">
+          <b>Uzavřený zůstává seznam, ne nabídka</b>
+          <span>Řádky nesou dál jenom labely repozitáře, takže <code>↵</code> je pořád „přepni“.
+          Založení má vlastní plochu pod děličem a vlastní klávesu <code>⌘↵</code> — jako další
+          řádek v seznamu by z něj byl nejpravděpodobnější omyl v celé obrazovce: šipka dolů na
+          konci filtrovaného seznamu.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">2</span>
+        <span class="body">
+          <b>Omyl nahrazuje krok, ne pozornost</b>
+          <span>Druhá obrazovka popoveru říká jméno doslova a v uvozovkách, repozitář v nadpisu
+          a barvu v náhledu. Přepnutí existujícího labelu zůstává <b>jedno</b> kliknutí (#392):
+          potvrzuje se to, co je nevratné, ne všechno.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">3</span>
+        <span class="body">
+          <b>Sedmá metoda, a první, která píše do repozitáře</b>
+          <span>Ostatních šest zapisuje na pull request. Založení labelu je změna repozitáře, tedy
+          věc, kterou aplikace <b>nedokáže vzít zpět</b> — <code>deleteLabel</code> se nepřidá.
+          Tvrdá podmínka č. 1 se tím mění a přepsat se musí i <code>SingleWayOutTests</code>, které
+          těch šest metod tvrdí jmenovitě.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">4</span>
+        <span class="body">
+          <b>Barvu vybírá aplikace</b>
+          <span>Z výchozí palety GitHubu, podle jména — stejné jméno dá stejnou barvu. Zamítnutý
+          vzorník: v 300bodovém popoveru je to třetí prvek, který si říká o šířku, kvůli hodnotě,
+          na kterou se člověk podívá jednou. A přebarvit label se chodí tam, kde se i maže. Hex se
+          posílá <b>vždycky</b>, aby náhled nelhal.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">5</span>
+        <span class="body">
+          <b>Dvě volání, a mezistav má vlastní větu</b>
+          <span>Založit (repozitář) a přidat (PR) nejde spojit do jednoho volání, takže tvrdá
+          podmínka č. 5 pro tuhle akci neplatí — a proto se kreslí, jak to vypadá, když druhé
+          volání spadne. Zamítnuto: samotné <code>Založit</code> bez přidání. Bylo by atomické, ale
+          v devíti z deseti případů by po něm musel následovat klik na řádek, tedy krok navíc za
+          čistotu, kterou vidí jen dokumentace. Že ten řádek v nabídce doopravdy <b>je</b>, drží
+          dotažení seznamu <b>při otevření</b> (#392) — věta v panelu tedy netvrdí víc, než co
+          příští otevření nabídky ukáže.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">6</span>
+        <span class="body">
+          <b>Akce zmizí, když label existuje</b>
+          <span>Shoda se posuzuje týmž pravidlem jako hledání (bez diakritiky, bez ohledu na
+          velikost písmen), takže <code>Bug</code> se nezaloží vedle <code>bug</code>. Skoroduplikát
+          je ten odpad, který by z tohohle v repozitáři zbyl nejčastěji.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">7</span>
+        <span class="body">
+          <b>Brána je tatáž</b>
+          <span><code>allowsPublishing</code>, globálně i per repo — žádný druhý přepínač. Na cizím
+          PR není <code>+ label</code> vůbec, takže tam není odkud zakládat; s vypnutou bránou je
+          akce zašedlá a <b>důvod je napsaný v panelu</b>, jako u #392.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">8</span>
+        <span class="body">
+          <b>Hledací pole u labelů bude vždycky</b>
+          <span>Jméno se bere z dotazu, takže bez pole není kam ho napsat —
+          <code>Policy.pickerShowsSearch</code> ho ale dneska nad krátkým seznamem schovává (do šesti
+          položek), a v repu se třemi labely by tak nešlo založit nic. U labelů proto pole zůstává
+          vždycky, u reviewerů se pravidlo nemění: tam se nic nezakládá.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
 
         <div class="doc-move">
           <a class="prev" href="#prehled"><span class="dir">← předchozí</span><span class="t">Přehled</span></a>
