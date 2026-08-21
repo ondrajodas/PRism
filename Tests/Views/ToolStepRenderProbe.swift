@@ -110,7 +110,10 @@ struct ToolStepRenderProbe {
             lane: lane,
             shortName: skill,
             feed: expanded ? .expanded : .collapsed,
-            toggleFeed: {}
+            toggleFeed: {},
+            // `Ukázat session` (#327). Sbalený řádek ho dostane taky — doběhlá dráha je ta
+            // častější, takže na obrázku má být vidět v obou podobách.
+            showRawSession: {}
         )
     }
 

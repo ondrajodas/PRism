@@ -13,6 +13,13 @@ struct ReviewProgressView: View {
     /// Zkopíruje do schránky příkaz, jakým by se ten reviewer spustil teď. `nil` = neví se, proti
     /// čemu se diffuje, takže by příkaz nebyl spustitelný a tlačítko se nekreslí.
     var copyCommand: ((String) -> Void)?
+    /// Otevře přepis surové session té dráhy (#327). `nil` = odsud se to neotevírá.
+    ///
+    /// Cíl skládá **`Policy`, ne view** (`Policy.rawSessionTarget(of:slug:)`): rozhodnutí „bez
+    /// `session_id` a bez pracovního stromu tlačítko není“ je pravidlo, ne `if` v kresbě.
+    var showRawSession: ((RawSessionTarget) -> Void)?
+    /// `owner/repo#412` do podtitulku sheetu.
+    var slug = ""
 
     /// Které dráhy mají rozbalený výpis kroků (#325).
     ///
@@ -68,12 +75,21 @@ struct ReviewProgressView: View {
                     rerun: rerun.map { rerun in { rerun(lane.skill) } },
                     copyCommand: copyCommand.map { copy in { copy(lane.skill) } },
                     feed: Policy.stepFeed(of: lane, expansion: expansion),
-                    toggleFeed: { expansion = Policy.toggledStepFeed(expansion, of: lane.skill) }
+                    toggleFeed: { expansion = Policy.toggledStepFeed(expansion, of: lane.skill) },
+                    showRawSession: rawSession(of: lane)
                 )
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
+    }
+
+    /// Akce, která dráze otevře přepis surové session. `nil` = není co otevřít.
+    private func rawSession(of lane: ReviewerLane) -> (() -> Void)? {
+        guard let showRawSession, let target = Policy.rawSessionTarget(of: lane, slug: slug) else {
+            return nil
+        }
+        return { showRawSession(target) }
     }
 
     /// **Ne `ContentUnavailableView`** (#182): ten se vystředí, nadpis vysází na velikost titulku

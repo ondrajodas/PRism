@@ -1002,6 +1002,132 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a ne přepsalo — poučení z #275) a **cenu jedné události v otevřeném výpisu** v hostovaném okně
   (40,29 / 41,48 → **9,25 / 8,91 ms**). Série se u toho **střídají** (#274), protože drift sezení
   je větší než hledaný rozdíl, a příprava je mimo hodinky.
+- **Surová session — přepis transcriptu (#327)** — pět suit, protože se to rozhoduje na pěti různých
+  vrstvách a slít je do jedné by znamenalo mockovat disk kvůli čisté funkci:
+
+  - `RawSessionWindowTests` a `RawSessionBodyTests` — **čisté funkce výčtem**: kde začíná okno
+    (soubor pod stropem, přesně na stropu, 53 MB, prázdný i nesmyslně velký), co se zahodí ze
+    začátku a **co se nezahodí** (okno bez jediného zakončení řádku, rozpůlený znak, nejvýš tři
+    pokračovací bajty) a jak se ořeže jedna událost. V tom druhém je i ten změřený patologický případ
+    **řádku delšího než celé okno**, `CRLF` počítaný **dvěma bajty** (jinak by ořez lezl nad strop)
+    a tvrzení, že se řezem uprostřed řádku **neroztrhne znak** — rozpůlený kódový bod je v kopii
+    vadné UTF-8.
+  - `RawSessionStateTests` — který stav co nabídne, a hlavně **co nenabídne**: chybějící přepis
+    nabízí **jedině `Zavřít`**, `Zkopírovat přepis` ani cestu nenabízí žádný chybový stav (odpověď je
+    v hlášce, ne v tom, co se dá odsud vzít pryč) a `Zavřít` nabízí každý stav. Tři různá „přepis tu
+    není“ se nesmí slít **ani nabídkou akcí**, takže je na to test a ne úvaha.
+  - `TranscriptTranscriberTests` — proti **skutečnému** transcriptu z veřejného
+    `ondrajodas/prism-review-sandbox` (`transcript/review-session.jsonl`, 18 řádků vybraných z běhu
+    bajt po bajtu). Ty typy řádků ve `stream-json` **nejsou** — `queue-operation`, `attachment`,
+    `last-prompt`, `toolUseResult` místo `tool_result_meta` —, takže vyrobená fixture by popisovala
+    formát, který CLI nepíše. Tvrdí se, že vyleze próza, `thinking` i výstupy nástrojů (tedy to, co
+    výpis kroků zahazuje), že **ani jeden** řádek se neztratí jako nečitelný, že odpověď nástroje
+    doplní **tělo kroku** místo druhé události a že base64 obrázku se nevypíše ani v poznámce.
+
+    **Odmítnutý nástroj má vlastní fixture, a je to ten nejcennější test celého issue**
+    (`transcript/denied-tool.jsonl`). Původně tu stálo, že se odmítnutí ze skutečných dat sehnat
+    nedá — „v žádném transcriptu není `non_execution_kind`“ —, jenže to se `grep`lo nad transcripty
+    **z review, ve kterých žádné odmítnutí nebylo**, tedy nad soubory, ve kterých nebylo co psát.
+    Copilot na #408 upozornil, že odznak `ODMÍTNUTO` pak nad skutečnými daty nevznikne nikdy; fixture
+    se proto **vyrobila** (`claude -p` s `--disallowedTools 'Bash(wc:*)'`) a ukázala, že transcript
+    nese `toolDenialKind` na **řádku**. Poučení, které přežije tenhle test: **nepřítomnost klíče
+    v souborech, které tu situaci nemají, není doklad o formátu.**
+
+    Vedle toho stojí dvě tvrzení, která ten odznak drží pochopitelný: tvar ze **streamu** se čte dál
+    (inline JSONem — v souborech na disku není), a **`is_error` sám o sobě odmítnutí neznamená** —
+    `grep` bez shody nesmí dostat odznak, jinak by znamenal „něco se nepovedlo“ místo „read-only režim
+    zabral“ (#326).
+  - `RawTranscriptSnapshotTests` — **skutečné soubory** v dočasné složce, protože právě o disk tu jde.
+    Tři chybové stavy vzniknou tady (chybí / vadné UTF-8 / prázdný), okno se ověřuje na souboru přes
+    strop (nula nečitelných řádků, tedy zarovnání zabralo) a zvlášť na tom **jednom řádku delším než
+    okno**: musí z něj zbyt jedna nečitelná událost, ne prázdno. A od #408 na **okně zarovnaném
+    přesně na hranici řádku** — ten stav se dá spočítat (řádky po 128 bajtech padnou na hranici 4 MB
+    vždycky) a bez sondy v podobě bajtu před oknem se v něm ztrácela první událost.
+  - `AppStoreRawSessionTests` — fake `TranscriptReading`. Nejcennější jsou tvrzení o tom, co se
+    **nestalo**: nečitelný přepis se neslije s chybějícím (`do`/`catch`, ne `try?` — ten by obě
+    odpovědi zplošťoval na `nil`), tik přírůstku **okno nečte znovu**, `Načíst znovu` po zavření
+    sheetu nečte nic, přepis cizí session se neukáže pod jiným titulkem a **pomalejší čtení
+    nepřepíše novější snímek téže session** (od #408, kde se ukázalo, že na to cíl sám nestačí — dvě
+    čtení téhož cíle rozliší jedině generace). Plus že zavření snímek zahodí — jsou to megabajty.
+
+  K tomu dvě věci mimo tu pětici. `RawSessionScriptTests` tvrdí, že vysázený a zkopírovaný přepis
+  jsou **jedna pravda** (`attributed(…).string == plain(…)`) — chyba, kterou zelené testy neukázaly
+  a render ano: první podoba měla mezery mezi kusy hlavičky jen v kopii, takže se vysázená slepila do
+  `23:13:36Bashgh pr view 412`. A **že se barva do textu doopravdy dostane**, ne jen že je v paletě
+  (#393): u každého kusu je `.foregroundColor`, tělo má paletový `ink2` a odsazení je `headIndent`
+  odstavce. Stráž sazby se testuje **vlastní funkcí** (`TranscriptTextView.needsTypesetting`), protože
+  `NSViewRepresentableContext` se v testu nepostaví — tik přírůstku přesazení nevyvolá, nový snímek
+  a přepnutí režimu ano.
+
+  A `SingleWayOutTests` má nový výčet: **surová session umí jen číst.** Deset souborů, ani jeden
+  z nich nezná publisher, payload, API, podproces — a nezapisuje do souboru, protože transcript leží
+  mimo cache (tvrdá podmínka č. 3). Je to tatáž konstrukce jako u zadání pro agenta a ze stejného
+  důvodu: nová obrazovka nad daty běhu je zrovna to místo, kde by druhá cesta ven vznikla, aniž by
+  o ní kdo mluvil.
+- **Velikost sheetu s přepisem (#327 follow-up)** — dvě suity, protože se to rozhoduje na dvou
+  vrstvách a jedna z nich není naše.
+
+  `RawSessionSheetSizeTests` je `Policy` výčtem: co se vezme bez uložené hodnoty, co s ní, co
+  s nesmyslem (nula, záporné, `NaN`, `∞`), ořez o podlahu a o okraje obrazovky (i na displeji, kam se
+  podlaha nevejde, a na širokém a nízkém, kde se ořezává jen výška) a **kdy se ukládá**: velikost, se
+  kterou se sheet otevřel, se neukládá, natažená ano, a stažení až **na podlahu** taky (podlaha sama
+  nesmysl není).
+
+  `RawSessionSheetSizingTests` měří **skutečné okno sheetu** v hostovaném okně — tady se totiž
+  rozhoduje SwiftUI a z dokumentace se to přečíst nedalo. Tvrdí tři věci a **všechny tři jsou ověřené
+  vloženou regresí**:
+
+  1. sheet má `.resizable` a `contentMinSize` z `Policy` — bez `presentationSizing(.fitted)` má
+     `styleMask` 65 a `contentMinSize` nulový;
+  2. otevře se v **ideální** šířce — bez `.fitted` je široký jako `minWidth`, tedy 720 místo 1 180
+     (a nerozhoduje o tom okno za ním, změřeno i nad oknem 2 000 bodů);
+  3. **otevření bez tažení neuloží nic** — to je ten test, který tvrdí, že se něco nestalo. Sheet se
+     rozvrhuje **dvakrát** a v prvním průchodu má podlahu, takže bez odmlky (`resizeSettle`) by se
+     uložilo 720 × 420 a od druhého otevření by se sheet otevíral nejmenší možný. S vrácenou regresí
+     padne přesně na tom.
+
+  Dvě věci, na které se u toho naráží. Tažení se napodobuje `setFrame`em na okně sheetu — přesně to
+  dělá AppKit při tahání okrajem, a **syntetické myší události se k tomu nedostanou** (tatáž
+  zkušenost jako u hoveru, #358). A `@AppStorage` dostane **vlastní suitu** přes
+  `defaultAppStorage(_:)` — nasazuje se **na obsah sheetu**, ne na hostitele, protože sheet je vlastní
+  prezentace; suitu přitom nesmí mazat ta instance, která ji obsluhuje (odebrala by si ji
+  z prohledávaného seznamu a hodnoty by nedržela).
+
+  **Vlastní suita je u `@AppStorage` v testu tvrdá podmínka, a stálo to jeden červený běh**:
+  testovací host má bundle ID **hlavní instance** — slotová přípona vzniká až v `bin/run.sh`, ne při
+  buildu —, takže zápis z testu jde do nastavení, které uživatel doopravdy používá. Poznalo se to
+  dvěma způsoby naráz: velikost uložená v jednom běhu shodila v tom příštím test „otevře se v ideální
+  šířce“ (v nastavení ležela ta menší), a `SlotCleanupTests` nahlásily, že se změnil **plist hlavní
+  instance** — to je přesně to tvrzení, na které jsou (#398). Je to obecnější než tenhle sheet: každý
+  test, který se dotkne `@AppStorage`, píše do domény hlavní instance, dokud si o vlastní suitu
+  neřekne.
+
+  **Čeká se na hodnotu, ne na „něco se zapsalo“** (#269): mezi průchody rozvržení může v nastavení
+  chvíli ležet jiné číslo, takže „> 0“ test uzavře dřív, než se tažení usadí — a padá pak na hodnotě,
+  která se o chvíli později srovná. Stálo to jedno kolo.
+- **Jak surová session vypadá (#327)** — `RawSessionRenderProbe`, ruční
+  (`TEST_RUNNER_PRISM_MEASURE=1` + `TEST_RUNNER_PRISM_RENDER_DIR`). Existuje proto, že **k tabu
+  `Průběh` v běžícím okně vede jedině klik** a aplikaci sonda ovládat nesmí; tohle je jediná cesta
+  podívat se na tu obrazovku bez skutečné session na disku. Rendruje přepis v obou režimech (a je
+  v něm od každého druhu události jedna, i obě další přiznání zkrácení) a **všech pět** podob bez
+  přepisu, aby se dalo porovnat, že se od sebe poznají. Přírůstek se u chybových stavů schválně
+  nepředává — v aplikaci o něm rozhoduje store, takže sonda, která by ho dodala, by kreslila
+  obrazovku, jaká nevznikne.
+- **Kolik surová session stojí (#327)** — `RawSessionMeasurement`, ruční. Měří **otevření**
+  (84 / 331 / **312 ms** na 1 / 8 / 53 MB, tedy konstantní ve velikosti souboru — to je to hlavní
+  tvrzení) a **sazbu** zvlášť, aby se nezaměnilo jedno za druhé (#274). Třetí test je **rozpad té
+  ceny**, a ten je poučnější než čísla: rozbor JSONu stojí 6,9 ms, dělení textu na řádky 216 ms.
+  Bez rozpadu se optimalizovalo naslepo — ořez těla po znacích vypadal jako ta drahá věc a jeho
+  odstranění nezměnilo **nic** (627 → 627 ms).
+
+  Od roztahovatelného sheetu měří ještě dvě věci. **Cenu jednoho tažení** (`resizeCost`) po té cestě,
+  kterou to doopravdy jde (#275) — změna šířky → rozvržení → `updateNSView` se stráží → přelámání
+  textu → kresba výřezu —, a vyjde **2,61 ms na krok** nad 1,55 milionu znaků; kdyby stráž šířku
+  v klíči měla, byl by v každém kroku `attributed` + `setAttributedString`, tedy 18,5 ms.
+  A **zalamování podle šířky** (`wrappingByWidth`), ze kterého je výchozí šířka sheetu: nad skutečným
+  transcriptem ubude ze 720 na 1 180 bodů 15 % řádků sazby, dál jednotky procent. Počítá se
+  aritmeticky ze šířky znaku mono písma, ne layout managerem — nad 1,5 milionu znaků by sazba přes
+  pásmo šířek byla desítky sekund a rozhodují dlouhé řádky výstupu, které jsou v mono.
 - **Věty dráhy (#242)** — `ReviewerLaneText` rozlišuje **tři** doběhlé konce (nahlásilo nálezy /
   nahlásilo nulu / nenahlásilo nic) a test hlídá, že se u toho třetího **nikde neslíbí čisto**.
   Plus že slova stavů jsou různá (`spadlo` ≠ `nedoběhlo`, `nespuštěno` ≠ `ve frontě`, u fází

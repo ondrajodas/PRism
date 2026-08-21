@@ -392,8 +392,22 @@ final class AppStore {
     /// Rozdělané běhy (#97). `nil` = odsud se nedotahuje (testy).
     let interrupted: InterruptedRuns?
 
-    /// Čtení transcriptů zabitých session (#97). `nil` = odsud se nečte (testy).
-    private let transcripts: (any TranscriptReading)?
+    /// Čtení transcriptů zabitých session (#97) a přepisu surové session (#327). `nil` = odsud se
+    /// nečte (testy).
+    ///
+    /// **`internal`, protože na něj sahá `AppStore+RawSession`** — je to tatáž cena, jakou zaplatilo
+    /// rozdělení storu na extensiony (#154), a nic se tím neotevírá ven z aplikace (jeden modul).
+    let transcripts: (any TranscriptReading)?
+
+    /// Otevřený přepis surové session (#327). `nil` = sheet není otevřený.
+    ///
+    /// Drží se **v storu, ne ve view**, protože je to načtená věc z disku a view I/O nedělá; a je
+    /// to **jeden** snímek, ne slovník — viz `RawSessionSnapshot`.
+    var rawSession: RawSessionSnapshot?
+
+    /// Počitadlo načtení přepisu. Viz `RawSessionSnapshot.generation` — bez něj by dvě čtení téhož
+    /// cíle nešlo od sebe poznat.
+    var rawSessionGeneration = 0
 
     /// Běžící review podle PR — drží se kvůli zrušení.
     var reviewTasks: [PRIdentifier: RunningReview] = [:]
