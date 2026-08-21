@@ -2784,3 +2784,23 @@ nálezů na ně od #383 ukazuje věta, protože z prázdné plochy se to uhodnou
 **Vedlejší zjištění, které se tímhle neřeší:** reviewer má `Read` bez omezení cesty, takže si čte
 i cizí transkripty (17 čtení mimo pracovní strom napříč záznamy). Tvrdá podmínka č. 2 řeší **zápis**,
 ne čtení; zúžit ho je samostatná otázka a nepatří k tomu, jak se výsledek kreslí.
+
+
+### Záznam rozhodnutí — odznak v railu a kapsle stavu podle návrhu (#366, #348)
+
+Dvě odchylky **aplikace** od toho, co v mockupu už nakreslené je, tedy bez schvalovací brány (jako
+#283). Odchylka u kapsle byla zapsaná od #299 jako nalezená; odznak v railu se našel u #366 a platil
+pro **oba** odznaky (`Fronta` i `Moje PR`), takže to nebyla regrese z #331.
+
+| Rozhodnutí | Zamítnuté alternativy | Proč |
+|---|---|---|
+| **Rozměr odznaku se změřil na vyrenderované sekci 02** — obsah 14 × 14, odsazení 3, obtah 2, tedy celkem **24 × 18** | Vzít `min-width: 14px; height: 14px` jako celý rozměr odznaku, jak to čte issue (a jak by to bylo v `border-box`) | Dokument `box-sizing` nikde nepřepisuje — je to napsané u `.lchip` v `docs/navrh.html` a `getComputedStyle` to potvrdil (`boxSizing: content-box`), takže odsazení a obtah se k obsahu **přičítají**. Odznak podle issue by byl o deset bodů menší než ten, co návrh doopravdy kreslí; „čte se doslova“ znamená čte se **i to, jak se to složí**. Poloměr má proto dvě hodnoty (7 zvenčí, 5 zvnitřku): CSS obtah vnitřní poloměr zmenšuje, kdežto `.capsule` by na 18 bodech dala 9 |
+| **Text odznaku je `--panel`, ne bílá** | Nechat `.white` z doby před #366 a změnit jen barvu podkladu | Změřeno: bílá na světlé červené (`#CF222E`) má **3,35**, tedy pod hranicí 4,5 pro malé písmo, kdežto `--panel` dá **5,36** ve světlém a **5,50** v tmavém režimu. Dosavadní kombinace (bílá na akcentu) měla v tmavém režimu **3,27**. Je to tatáž úvaha jako u plné kapsle stavu v hlavičce PR (#218) a u `MiniButtonStyle`: text na plné ploše je v barvě plochy okna |
+| **Výška odznaku je `minHeight`** | `frame(height: 14)`, protože CSS má `height`, ne `min-height` | Řádek mono 9 bold je 11 bodů, takže se čtrnáctka chová jako podlaha a obojí kreslí totéž — jenže nasazený rámec by číslo **uřízl**, kdyby se metrika písma změnila, a rozměr, ze kterého se počítá, se v tomhle repu neinstaluje rámcem (#325, #236) |
+| **Sazba kapsle `.pill` se svedla do `designPill(tint:background:)`** | Opravit jen `OverviewView`, kde se rozešla; nebo z kapsle udělat vlastní `View` s parametrem textu | Metrika stála na **sedmi místech** a šest z nich shodně do bodu — rozejít se může jedině to, co je zapsané víckrát, takže oprava jednoho výskytu by tu vlastnost nechala nedotčenou (pravidlo „oprav třídu, ne výskyt“). Vlastní `View` by si vzal i `lineLimit` a `help`, které jsou u každého volajícího jiné; modifikátor nese **jen** to, co je z návrhu. Šířku z něj bere i měření (`TextWidth.pill(_:)`), stejně jako `TextWidth.miniButton` bere řez z `MiniButtonStyle` |
+| **Zbylých pět nemono kapslí se odložilo do #404** | Přesázet je v témže PR, jak to zadání #348 u druhého výskytu žádá | Sweep našel **pět** dalších míst, ne jedno, a jsou to **tři jiné metriky na pěti obrazovkách** (`.caption` 6/2 u odznaku ve frontě, `.caption2` 5/1 u pilulek nálezů, 10,5 bez mono 6/1 u odznaků v konverzaci). Jedna z nich sedí v bublině, jejíž výšku si blok kódu měří sám (#236), takže změna řádku z 13 na 12 hýbe geometrií, kterou se u #236 opravovalo přetečení kódu do bubliny. Pět obrazovek se v jedné vizuální pauze neposoudí, a ta pauza je u vzhledové změny jediné místo, kde se pozná, že to sedí. `.state-chip` v hlavičce PR do té třídy **nepatří** — nemono je i v návrhu |
+| **Barva se v testu porovnává s nakreslenou, ne s tokenem** | Porovnávat pixel s `Palette.crit` a tolerancí to dorovnat | Změřeno: bitmapa z `bitmapImageRepForCachingDisplay` je v profilu displeje, takže `crit` v ní vyjde `0.799/0.292/0.272` proti `0.812/0.133/0.180` v sRGB — 0,18 daleko. Tolerance, která by to přijala, by přijala i akcent, tedy zrovna tu chybu, kterou má test chytat. Tokeny se proto kreslí **týmž harnessem** jako vzorník. Kontrast se naopak měří **na tokenech**: je to vlastnost dvojice barev z palety, kdežto profil displeje je vlastnost harnessu — a že se ty barvy do kresby dostanou, tvrdí ta dvě pixelová tvrzení (#393) |
+
+**Co se nezměnilo:** nula se u odznaku nekreslí a `nil` se od nuly liší (#331), rám položky railu
+zůstává 34 × 30 a hlavička karty popisu má dvě podoby podle šířky (#291). V nejužším tabu se kapsle
+ořezává na `ote…` — bylo to tak i před #348 (`otev…`), takže mono stojí jeden znak, ne tu vlastnost.

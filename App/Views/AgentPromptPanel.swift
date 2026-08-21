@@ -278,11 +278,7 @@ struct AgentPromptPanel: View {
         // nevejdou, a zkrácený čas by zahodil zrovna hlavu, kvůli které tam je.
         FlowRow(spacing: 8, lineSpacing: 4) {
             Text(verbatim: "✓ \(Plural.czech(handoff.count, one: "položka", few: "položky", many: "položek"))")
-                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                .foregroundStyle(Palette.mint)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2)
-                .background(Palette.mint.opacity(0.15), in: .capsule)
+                .designPill(tint: Palette.mint, background: Palette.mint.opacity(0.15))
             Text(verbatim: Self.stampLabel(of: handoff))
                 .font(.system(size: 11.5))
                 .foregroundStyle(Palette.ink3)

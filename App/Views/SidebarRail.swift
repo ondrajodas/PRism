@@ -110,16 +110,34 @@ struct SidebarRail: View {
     /// Odznak s počtem. **Nula se nekreslí** — prázdná fronta je dobrá zpráva, ne položka
     /// k vyřízení; a `nil` (nenačteno) se od nuly musí lišit, jinak by okno po startu tvrdilo
     /// „nic tu není“ nad daty, která ještě nedorazila.
+    ///
+    /// **Červený a uvnitř rámu ikony** (#366, návrh `.rail .ri .badge`). Do #366 to byl fialový
+    /// akcent posunutý o 6 bodů za rám — dvě chyby v jednom odznaku. Akcent v tomhle okně znamená
+    /// „tady jsi“ (`.ri.on` je z něj celý), takže odznak v téže barvě netvrdil nic; červená
+    /// (`--crit`) je „je co dělat“, a to je přesně to, co počet ve frontě je. A odznak, který
+    /// vyčnívá z rámu, si v 52 bodech railu bere místo, které v něm není.
+    ///
+    /// Rozměry jsou z CSS doslova: obsah **14 × 14**, odsazení 3 na stranu, obtah 2 barvou railu
+    /// (`--panel-2`), poloměr 7 zvenčí a 5 zvnitřku (CSS obtah poloměr zmenšuje). Vyjde z toho
+    /// 24 × 18 na jednu i dvě cifry — **změřeno na vyrenderované sekci 02**, ne odhadnuto z popisu:
+    /// `min-width` a `height` v návrhu jsou **obsah**, protože dokument `box-sizing` nikde
+    /// nepřepisuje, takže odsazení a obtah se k nim přičítají.
+    ///
+    /// Výška je `minHeight`, ne `frame(height:)` — u mono 9 bold je řádek 11 bodů, takže se ta
+    /// čtrnáctka chová jako podlaha a nasazený rámec by číslo uřízl, kdyby se písmo systému
+    /// změnilo (#325). Text je v barvě **plochy okna** (`--panel`), ne bíle: bílá by na světlé
+    /// červené měla kontrast 3,35, kdežto takhle je to 5,36 ve světlém a 5,50 v tmavém režimu.
     @ViewBuilder private func badge(_ count: Int?) -> some View {
         if let count, count > 0 {
             Text(verbatim: "\(count)")
-                .font(.system(size: 9, weight: .bold))
-                .monospacedDigit()
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(.tint, in: .capsule)
-                .foregroundStyle(.white)
-                .offset(x: 6, y: -2)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(Palette.surface)
+                .frame(minWidth: 14, minHeight: 14)
+                .padding(.horizontal, 3)
+                .background(Palette.crit, in: .rect(cornerRadius: 5))
+                .padding(2)
+                .background(Palette.chrome, in: .rect(cornerRadius: 7))
+                .offset(y: 1)
         }
     }
 

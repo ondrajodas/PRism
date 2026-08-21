@@ -93,15 +93,12 @@ struct DiffFileHeaderView: View {
         return (Plural.czech(blocking, one: "blokuje", few: "blokují", many: "blokuje"), true)
     }
 
-    /// Kapsle z návrhu: mono, 10,5 bodu, podklad je 15% barva popisku.
+    /// Kapsle z návrhu: mono, 10,5 bodu, podklad je 15% barva popisku. Sazba je v `designPill`
+    /// (#348); `monospacedDigit()` odsud **odešlo jako nadbytečné** — mono řez má cifry stejně
+    /// široké sám a nastavené písmo by ho přebilo.
     private func pill(_ text: String, color: Color) -> some View {
         Text(verbatim: text)
-            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-            .monospacedDigit()
-            .foregroundStyle(color)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.15), in: .capsule)
+            .designPill(tint: color, background: color.opacity(0.15))
             .lineLimit(1)
     }
 
