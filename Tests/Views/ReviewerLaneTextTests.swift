@@ -238,6 +238,46 @@ struct ReviewerLaneTextTests {
         #expect(ReviewerLaneText.stepHelp(of: failed)?.contains("chybu") == true)
         #expect(ReviewerLaneText.stepHelp(of: failed)?.contains("Odmítnuto") == false)
     }
+
+    // MARK: - Výpis kroků (#325)
+
+    /// Skloňování je tady vidět v okně u každého běhu, takže se testuje výčtem — `1 krok`,
+    /// `3 kroky`, `312 kroků`.
+    @Test("Počet kroků se skloňuje")
+    func inflectsTheStepCount() {
+        #expect(ReviewerLaneText.stepCount(1) == "1 krok session")
+        #expect(ReviewerLaneText.stepCount(3) == "3 kroky session")
+        #expect(ReviewerLaneText.stepCount(312) == "312 kroků session")
+        #expect(ReviewerLaneText.stepCount(0) == "0 kroků session")
+    }
+
+    /// **Nejcennější tvrzení téhle části**: nad neořezanou osou se o ořezu nemluví. Hlavička, která
+    /// tvrdí zkrácení tam, kde žádné není, je horší než žádná — tatáž úmluva jako u konce logu.
+    @Test("Zkrácení se přiznává jen tam, kde je")
+    func admitsShortfallOnlyWhenThereIsOne() {
+        #expect(ReviewerLaneText.stepShortfall(0) == nil)
+        #expect(ReviewerLaneText.stepCut(0) == nil)
+
+        #expect(ReviewerLaneText.stepShortfall(214) == "· 214 starších se nevešlo")
+        #expect(ReviewerLaneText.stepCut(214) == "214 starších kroků se nevešlo do stropu")
+        #expect(ReviewerLaneText.stepCut(1) == "1 starší krok se nevešel do stropu")
+        #expect(ReviewerLaneText.stepCut(3) == "3 starší kroky se nevešly do stropu")
+    }
+
+    @Test("Pilulka nových kroků se skloňuje")
+    func inflectsArrivals() {
+        #expect(ReviewerLaneText.stepArrivals(1) == "↓ 1 nový")
+        #expect(ReviewerLaneText.stepArrivals(12) == "↓ 12 nových")
+        #expect(ReviewerLaneText.stepArrivals(3) == "↓ 3 nové")
+    }
+
+    /// Nápověda přepínače musí říct, že se **neukládá** — jinak vypadá jako nastavení, které se
+    /// pamatuje, a #242 zrušilo `progressFollowsTail` zrovna proto, že se pamatovalo zbytečně.
+    @Test("Nápověda přepínače říká, že se nic neukládá")
+    func tailHelpSaysItIsNotStored() {
+        #expect(ReviewerLaneText.followTailHelp.contains("Neukládá se"))
+        #expect(ReviewerLaneText.followTail == "Sledovat konec")
+    }
 }
 
 extension ReviewerLane.State {

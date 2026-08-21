@@ -48,8 +48,8 @@ struct ToolResultPairingTests {
     }
 
     /// **Nepřidává řádek, mění ten, který v ose je.** Kdyby přidávala, měl by jeden `tool_use`
-    /// v ose dva kroky — a `newestEntry`, podle kterého se osa posouvá na konec, by ukazoval na
-    /// událost, která žádný nový krok není.
+    /// v ose dva kroky — a sledování konce ve výpisu (#325) by skákalo na událost, která žádný
+    /// nový krok není.
     @Test("Odpověď osu neprodlouží")
     func doesNotGrowTheTimeline() {
         var timeline = timeline(attempt: "t1")

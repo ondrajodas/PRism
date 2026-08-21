@@ -1017,12 +1017,13 @@ který `CLAUDE.md` zakazuje od #292/#295. Na `CRLF` nerozdělí vůbec — `"\r\
 | `Commity` jako přepínač uvnitř `Změněných souborů` | Ušetřilo by sedmou záložku celou, ale `Změněné soubory` jsou obrazovka na review (strom, panel, bubliny, draft) a přepínač uvnitř by polovinu z toho zhasínal. Skrytý stav, ve kterém obrazovka umí míň, je horší než záložka, na které je vidět, kde jsem |
 | Data z klonu v cache | `refs/prism/pr/<n>` existuje jen po checkoutu kvůli review a `forgetPullRequest` ho maže — ověřeno |
 
-### Tab Průběh — živý výpis kroků (návrh, zatím jen v mockupu)
+### Tab Průběh — živý výpis kroků (#325, hotové)
 
 Druhá vrstva dráhy z *Tab Průběh (#22)* výš: pod fázemi visí **okno s kroky session**, u běžícího
 reviewera rozbalené. Nakreslené je v mockupu, **sekce 20** (*Review — Průběh · živý výpis*, viz
-[`docs/navrh.md`](../../navrh.md)); v kódu zatím není nic. Znění #22 se **nepřepisuje** — platí dál
-a tahle sekce je jeho dodělání.
+[`docs/navrh.md`](../../navrh.md)); od #325 je to i v kódu (`StepFeedView`, `Policy` v
+`App/Policy/StepFeed.swift`). Znění #22 se **nepřepisuje** — platí dál a tahle sekce je jeho
+dodělání.
 
 **Není to nová funkce, je to nedodělaná.** Odrážky u #22 chtěly „sekce na reviewera, v ní události
 pod sebou: čas, nástroj a to, nad čím běžel“ a „**sledovat konec**, dá se vypnout“. Události se
@@ -1045,7 +1046,7 @@ Co proti dnešku přibývá:
   uvnitř `ReviewerLaneView`, a dráhy jsou v `LazyVStack`u: odrolovaná dráha se zahodí i se svým
   stavem, takže se výpis po návratu sám zavře. Množina rozbalených skillů se proto drží o patro
   výš, klíčovaná jménem skillu. Při doběhnutí se výpis **nezavírá sám**.
-- **Jeden strop, 300, pro živou i uloženou osu.** Uložená ho má (`ReviewerTimeline.storedEntryLimit`)
+- **Jeden strop, 300, pro živou i uloženou osu** (`ReviewerTimeline.entryLimit`; do #325 platil jen na ukládání, a proto se jmenoval `storedEntryLimit`). Uložená ho měla
   a zkrácení přiznává (`droppedEntries`, #203); **živá ho nemá vůbec** — `record` přidává bez
   omezení. Se stejným číslem platí, že co bylo vidět za běhu, je vidět i po restartu. Ořezává se
   **začátek** a `droppedEntries` roste průběžně, ne až při ukládání. Zkrácení se přiznává **dvakrát**:
@@ -1074,6 +1075,44 @@ a `Policy.lanes` u toho projde celou osu **pětkrát** (`reachedStage`, `laneSta
 znovu; okno má **líný** seznam, protože prvek s prázdným obsahem se pořád umisťuje (#252). A poloha
 scrollu **nesmí být v observable stavu** (#252) — sledování konce je `Bool` a posun je jedno
 `scrollTo`. Měří se to offscreen renderem výpisu o 300 řádcích, před a po, jako u #275.
+
+#### Co se při implementaci rozhodlo jinak (#325)
+
+Zadání i tenhle návrh mluvily o `scrollTo` jako o samozřejmosti („poloha scrollu nesmí být
+v observable stavu — sledování konce je `Bool` a posun je jedno `scrollTo`“). To platí, ale **kdy**
+se to `scrollTo` volá, se muselo změřit, a napoprvé bylo špatně dvakrát:
+
+- **`defaultScrollAnchor(.bottom, for: .sizeChanges)` na sledování konce nestačí.** Vypadá to jako
+  deklarativní řešení bez jediného řádku stavu, jenže po každé nové události nechalo výpis **o řádek
+  pozadu** (15 bodů od konce), tedy s nejnovějším krokem pod hranou okna. Zamítnuto měřením.
+- **Posun ve stejném průchodu, ve kterém obsah narostl, SwiftUI zahodí.** Výpis zůstal 20 bodů od
+  konce a nedojel tam ani po pěti kolech smyčky; s odkladem o jeden průchod (`Task`) dojede. Je to
+  tatáž past jako u fokusu do textového pole (#184) — rozhoduje počet průchodů, ne čas. A obráceně:
+  posun navěšený na **data** (`id` posledního kroku) doběhl naopak **moc brzo**, protože řádek ještě
+  nebyl rozvržený. Sleduje se proto geometrie, ne data.
+
+Z toho vyšlo rozhodnutí, které v návrhu nebylo vůbec: **„obsah narostl“ se musí odlišit od „člověk
+odscrolloval“**, a je to čistá funkce (`Policy.stepFeedReaction(grew:isAtEnd:isCatchingUp:)`).
+Narostlý obsah totiž shodí „jsem na konci“ na `false` o ten jeden řádek, který se ještě
+nedoscrolloval — kdyby se z toho vyvozovalo odscrollování, sledování konce by se vypnulo **samo
+první událostí**. Třetí vstup (`isCatchingUp`) je tam proto, že se výška obsahu při rozvržení mění
+i naplano (změřeno `1825 → 3505 → 1825` na jedné scéně), takže „nezměněná výška“ sama o sobě nestačí.
+
+Druhé rozhodnutí navíc je u **souhrnu osy**. Návrh chtěl „odvozené údaje počítat při zápisu,
+přírůstkově“ kvůli ceně; při implementaci se ukázalo, že je to **i otázka správnosti**: strop
+zahazuje začátek osy, takže průchod přeživšími událostmi by u dlouhého běhu tvrdil, že session
+nenaběhla a že nálezy nenahlásila — fáze dráhy by po třech stech krocích spadly zpátky na `nedošlo
+na ni`. Souhrn je proto u faktů o běhu **monotónní** a u toho, co je v ose vidět (počet kroků,
+poslední nástroj), ne.
+
+**`ReviewerTimeline.newestEntry(in:)` #325 smazalo** (zadání dalo na výběr použít, nebo smazat i
+s testy). S výpisem na revieweera se každé okno drží svého konce, takže hledání nejnovější události
+napříč reviewery by byl stav, který nikdo nečte.
+
+A jedna věc **zůstala nezměřená**, protože na ni harness nedosáhne: „odrolovaný výpis se sám nevrátí
+na konec“ se v testu odzkoušet nedá — `WheelGesture` nad tímhle scrollem neposune vůbec nic
+(offscreen okno bez aktivace) a `contentView.scroll(to:)` si SwiftUI přerovná zpátky. Tatáž mez
+jako u `onContinuousHover` v #358; testuje se rozhodnutí a zbytek ověří člověk.
 
 **Vestavěný terminál se tím neodkládá ani nepřibližuje — zůstává, kde byl.** V *Co přijde později*
 a s tímtéž odůvodněním z tabulky rozhodnutí: „`stream-json` vykreslený nativně je pro sledování
@@ -2223,7 +2262,7 @@ Dvě rozhodnutí, která z rozpisu M8 nejsou vidět a stála za rozdělení na p
 | Limit sedí na stránce **`Review a skilly`**, ne na `Běh` (#320) | Mezi ostatní čísla na stránce `Běh` (interval, souběh, rozpočet, denní limit) | `Běh` je hrst čísel o stroji a prostředí a **žádné z nich nemá override per repo**. Limit je proti tomu třetí věc o *spuštěném review*, kterou si repo smí přebít — vedle režimu a jazyka nálezů —, takže stojí v téže sekci jako ony. Vlastní sekci nedostal ze stejného důvodu: byla by to čtvrtá sekce na stránce kvůli jednomu číslu |
 | **Živý výpis kroků je druhá vrstva dráhy** (návrh, sekce 20 mockupu) | Nechat ho pod rozbalením, jak je od #242 — je to detail, ne hlavní obsah; nebo dát mu vlastní sloupec vedle drah | Rozbalení je dneska **zavřené a bez stropu**, takže „živý pohled na to, co reviewer právě dělá“ (#22) se za běhu nekouká nikdo. Vlastní sloupec by rozbil srovnání „kdo kde je“, což je jediný důvod, proč fáze stojí vedle sebe (#242), a ve 300 bodech by se cesty nevešly — tatáž past, kvůli které se `Průběh` z panelu stěhoval. Druhá vrstva drží obojí: dráha odpovídá na *kdo kde je*, výpis pod ní na *co dělá teď* |
 | Okno výpisu má **pevnou výšku a vlastní scroll** (návrh) | Nechat ho růst s událostmi, jak roste dnešní `VStack` pod rozbalením | Rostoucí blok posune všechno pod sebou při **každé** události, tedy přerovnání celého tabu několikrát za vteřinu. Pevná výška to zavře do jednoho scrollu; je to tatáž úvaha jako #220 a #252 — co se dá spočítat, se nevyjednává |
-| **Sledovat konec se vrací, ale jen do paměti** (návrh; mění #242) | Nechat to, jak #242 rozhodlo — přepínač i klíč `progressFollowsTail` zrušené | #242 mělo pravdu **v tom, co tehdy platilo**: s dráhami nebylo co následovat, protože fáze nescrollují. Se scrollujícím výpisem je, takže první důvod odpadá; druhý (uložená předvolba, kterou nikdo nečte, je mrtvá váha) trvá, a proto se **nic neukládá**. Výchozí stav zapnuto, vypíná se odrolováním nahoru (ne jen klikem — jinak přepínač zápasí s kolečkem myši), na konci se zase zapne. Po `ReviewerTimeline.newestEntry(in:)` tím zmizí i to, že v aplikaci nemá volajícího a drží ho naživu jen testy |
+| **Sledovat konec se vrací, ale jen do paměti** (návrh; mění #242) | Nechat to, jak #242 rozhodlo — přepínač i klíč `progressFollowsTail` zrušené | #242 mělo pravdu **v tom, co tehdy platilo**: s dráhami nebylo co následovat, protože fáze nescrollují. Se scrollujícím výpisem je, takže první důvod odpadá; druhý (uložená předvolba, kterou nikdo nečte, je mrtvá váha) trvá, a proto se **nic neukládá**. Výchozí stav zapnuto, vypíná se odrolováním nahoru (ne jen klikem — jinak přepínač zápasí s kolečkem myši), na konci se zase zapne. `ReviewerTimeline.newestEntry(in:)` u toho **#325 smazalo**: s výpisem na revieweera se každé okno drží svého konce, takže hledání nejnovější události napříč reviewery by zůstalo stavem, který nikdo nečte |
 | **Jeden strop 300 pro živou i uloženou osu** (návrh) | Nechat živou bez stropu, jak je — v paměti to nikomu nevadí; nebo dát živé vyšší strop, ať se za běhu vidí víc | Dneska se za běhu drží stovky událostí, které po restartu zmizí, a **nikde to není napsané**. Vyšší živý strop by sliboval, že se ke krokům dá vrátit; nižší by zahodil kroky, které v souboru zůstanou. Se stejným číslem platí „co bylo vidět za běhu, je vidět i po restartu“ — a zkrácení se přiznává v hlavičce i řezem na začátku výpisu, tedy tak, jak to dělá `Policy.logTail` (#214) a `ConversationShortfall` |
 | **Krok je pokus, dokud nedorazí `tool_result`** (návrh) | Nechat to, jak je: odmítnutí se dozvíme z `permission_denials` v `result` eventu na konci běhu | Řádek, který se tváří jako hotový krok, je „text, který tvrdí víc, než data unesou“ — a `ToolAttempt` to o sobě říká vlastním komentářem („pokus, ne použití“). Ve streamu je odmítnutí vidět **hned** (`tool_result` s `is_error`, párování přes `tool_use_id`; fixture `review-denied-write.jsonl`), takže cena je číst i `user` eventy, které `StreamParser` dnes zahazuje. Odmítnutí zůstává **štítkem, ne červeným řádkem**: read-only reviewer je tvrdá podmínka č. 2, takže `Bash(gh:*)` odmítnout **má** a session přesto skončí úspěchem |
 | **Próza modelu se nekreslí** (návrh) | Vypisovat i `text` bloky `assistant` eventu, ať je vidět, proč reviewer sáhl zrovna tam | Otázka, kvůli které se do `Průběhu` chodí, je „koukal se tam, kam měl“, a odpověď jsou nástroje, ne úvahy. Próza je řádově víc dat a v okně o pevné výšce by kroky vytlačila z dohledu, tedy zhoršila přesně to, kvůli čemu výpis vzniká. Ztráta je „o krok dál“, ne „nikde“ — celá session je v `claude --resume` |
@@ -2557,7 +2596,7 @@ o tomtéž a rozešly by se, jak se to u dvou kopií stává.
 | **Jakýkoli `non_execution_kind` je odmítnutí**, nejen `user-rejected` | Čtvrtý stav pro neznámou hodnotu | Znamená „nástroj neběžel“, což je přesně to, co odznak tvrdí. Vymýšlet stav pro hodnotu, kterou nikdo neviděl, by byl dohad — a `user-rejected` je jediná, která je v datech |
 | **`nil` outcome znamená „běží“, ne „prošel“** | Držet `Bool` „hotovo“ | Zabitá session poslední odpověď nedostane vůbec, takže `Bool` by musel lhát v jednu nebo druhou stranu. Prázdná hodnota je tady odpověď „nevíme“ — tatáž úmluva jako u `usage` (cena `nil`, ne nula) a `calledReportFindings` |
 | **Krok bez `id` se nekreslí jako běžící** (`Policy.toolStepMark`) | Kreslit `běží…` u všeho, co nemá odpověď | Osy uložené před #326 `id` nemají, takže se jim odpověď neměla s čím spárovat. `běží…` u každého kroku doběhlého review z minulého týdne je text, který tvrdí víc, než data unesou — a je to ta úplně stejná past jako `čisto` nad nepřečtenými nálezy |
-| **Odpověď osu neprodlužuje**, mění krok, který v ní je | Nová událost `.toolResult` v ose | Jeden `tool_use` je jeden krok, ať se o něm dozvíme cokoli dalšího. Druhý řádek by osu zdvojil a poslal `newestEntry` (podle kterého se osa posouvá na konec) na událost, která žádný nový krok není |
+| **Odpověď osu neprodlužuje**, mění krok, který v ní je | Nová událost `.toolResult` v ose | Jeden `tool_use` je jeden krok, ať se o něm dozvíme cokoli dalšího. Druhý řádek by osu zdvojil a poslal sledování konce (#325) na událost, která žádný nový krok není |
 | **Trvání měří osa, ne parser** | Brát `timestamp` z eventů streamu | Parser hodiny nemá a je to čistý překlad textu na data. Časy ve streamu jsou druhý zdroj, který by se rozešel s časy, podle kterých se osa kreslí — a osa je jediné místo, kde se trvání ukazuje. Odmítnutí trvání nedostane vůbec: nástroj neběžel |
 | **`permission_denials` zůstává jako záchrana** a při shodě prohrává | Zrušit ho (duplicita), nebo mu naopak dát přednost | Není to druhý zdroj pravdy, je to druhá cesta k témuž pro chvíli, kdy ta první nedoběhla — useknutý `user` event, rozbitý řádek, starší CLI bez `tool_result_meta`. Odpověď ze streamu vyhrává, protože přišla, když se to stalo, a nese trvání; přepsat smí záchrana jedině `failed`, protože „nemělo povolení“ je o té odpovědi silnější tvrzení než hláška, kterou nástroj vrátil |
 | **Hláška se ukládá sražená na řádek a do 200 znaků** | Držet celou odpověď, nebo nedržet nic | Odpovědí `Read`u je celý soubor a odpovědí `Bash`e celý výstup, takže bez stropu by jeden neúspěšný krok přilepil k záznamu na disku megabajt — a osa se čte při každém startu. Nedržet nic by ale znamenalo odznak bez důvodu, tedy pravý opak toho, co #326 chce |

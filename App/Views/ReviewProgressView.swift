@@ -14,19 +14,44 @@ struct ReviewProgressView: View {
     /// čemu se diffuje, takže by příkaz nebyl spustitelný a tlačítko se nekreslí.
     var copyCommand: ((String) -> Void)?
 
+    /// Které dráhy mají rozbalený výpis kroků (#325).
+    ///
+    /// **Patří to tabu, ne dráze**: dráhy jsou v `LazyVStack`u, takže `@State` uvnitř `ReviewerLaneView`
+    /// se odrolováním zahodí a výpis by se sám zavřel — u běžícího revieweera tedy zrovna tam, kam
+    /// se člověk díval. Klíčem je jméno skillu, jako u všeho ostatního v tabu, takže to **smí**
+    /// přetéct mezi pull requesty; je to tatáž úvaha jako u `mutedReviewers` v detailu PR.
+    ///
+    /// Přepnutím tabu se to zapomene, a to je v pořádku: běžící dráha se rozbalí sama a jediné, co
+    /// se tím ztratí, je ručně otevřený výpis doběhlé dráhy — jeden klik. Do storu to proto nepatří.
+    @State private var expansion = StepFeedExpansion()
+
     /// Zkrácená jména reviewerů. Počítá se z **celé** sady naráz, protože zkrátit se smí jen to,
     /// co zůstane jednoznačné vůči ostatním.
     private var shortNames: [String: String] {
         Policy.shortReviewerNames(of: lanes.map(\.skill))
     }
 
+    /// Kdo právě běží. **Jediné, na co se automatické rozbalení váže** — proto se z toho počítá
+    /// klíč pro `onChange`, ne z celých drah: ty se mění při každé události, kdežto tohle jen
+    /// tehdy, když někdo začne nebo skončí.
+    private var runningSkills: Set<String> {
+        Set(lanes.filter { $0.state == .running }.map(\.skill))
+    }
+
     var body: some View {
-        if lanes.isEmpty {
-            empty
-        } else {
-            ScrollView {
-                content
+        Group {
+            if lanes.isEmpty {
+                empty
+            } else {
+                ScrollView {
+                    content
+                }
             }
+        }
+        // `initial: true` kvůli prvnímu otevření tabu při běžícím review: bez něj by se výpis
+        // rozbalil teprve tehdy, až někdo doběhne nebo začne.
+        .onChange(of: runningSkills, initial: true) { _, _ in
+            expansion = Policy.stepFeedExpansion(expansion, lanes: lanes)
         }
     }
 
@@ -41,7 +66,9 @@ struct ReviewProgressView: View {
                     lane: lane,
                     shortName: shortNames[lane.skill] ?? lane.skill,
                     rerun: rerun.map { rerun in { rerun(lane.skill) } },
-                    copyCommand: copyCommand.map { copy in { copy(lane.skill) } }
+                    copyCommand: copyCommand.map { copy in { copy(lane.skill) } },
+                    feed: Policy.stepFeed(of: lane, expansion: expansion),
+                    toggleFeed: { expansion = Policy.toggledStepFeed(expansion, of: lane.skill) }
                 )
             }
         }

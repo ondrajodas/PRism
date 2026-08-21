@@ -20,12 +20,57 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     /// Kolik událostí se na začátek osy nevešlo (#203). **Musí být vidět** — tiše zkrácená osa
     /// tvrdí, že běh začal uprostřed, a je to tatáž past jako u `droppedFindings`.
     private(set) var droppedEntries = 0
+    /// Odvozené údaje, počítané **při zápisu** (#325). Čte je `Policy.lanes` — viz `Digest`.
+    private(set) var digest = Digest()
 
     var id: String { skill }
 
     /// Doběhl už tenhle běh? Pozná se podle toho, že v ose je jeho konec.
-    var isFinished: Bool {
-        entries.contains { if case .finished = $0.kind { true } else { false } }
+    var isFinished: Bool { digest.finish != nil }
+
+    /// Co se z osy dá odvodit, spočítané **při zápisu, přírůstkově** (#325).
+    ///
+    /// **Proč to není osm `lazy` průchodů polem, jako do #325.** `Policy.lanes` skládá dráhy při
+    /// každém překreslení tabu — a při běžícím review to je několikrát za vteřinu —, takže každý
+    /// odvozený údaj tam znamenal průchod až třemi stovkami událostí: kam se běh dostal, jeho
+    /// konec, poslední nástroj, počet kroků, počet nálezů, čekání na slot, načtený skill a příznak
+    /// zadání. Je to tatáž třída úlohy jako #224: co se počítá při každém překreslení, se pamatuje.
+    ///
+    /// **Není to druhá kopie osy, je to její souhrn** — a aby se od ní nerozešel (což je ta past,
+    /// kterou `CLAUDE.md` u dvou kopií téhož popisuje), drží ho jediné místo: mutující metody
+    /// `ReviewerTimeline`. Že souhlasí s průchodem polem, tvrdí `TimelineDigestTests`.
+    ///
+    /// **Dvě věci se ořezáním osy nesmí zapomenout.** Strop (#325) zahazuje **začátek**, takže by
+    /// průchod přeživšími událostmi u dlouhého běhu tvrdil, že session nenaběhla a že nálezy
+    /// nenahlásila — a fáze dráhy by po třech stech krocích spadly zpátky na `nedošlo na ni`.
+    /// Souhrn je proto u těchhle údajů **monotónní**: co se v ose jednou stalo, se z něj neubírá.
+    /// Naopak `toolSteps` a `lastTool` popisují, co je v ose **vidět**, takže ty se ořezáním
+    /// zmenšují — přesně jak to má návrh (`prochází kód · 300 kroků` u osy s 214 zahozenými).
+    struct Digest: Equatable, Sendable {
+        /// Kam se běh dostal: 0 nikam, 1 session, 2 kroky nad kódem, 3 nahlášené nálezy.
+        /// **Monotónní** — viz výš.
+        var reached = 0
+        /// Čekalo se na volný slot? Monotónní: fáze `čeká na slot` se kreslí jen tehdy, když ji
+        /// osa zaznamenala, a ořezáním ta událost zmizí jako první.
+        var hadQueued = false
+        /// Kolik pokusů o nástroj je v ose **vidět**. Ořezáním klesá.
+        var toolSteps = 0
+        /// Poslední pokus o nástroj — z něj se skládá věta „právě čte…“. Ořezáním zmizí jedině
+        /// tehdy, když byl v ose jediný.
+        var lastTool: ToolAttempt?
+        /// Kolik nálezů reviewer nahlásil. **`nil` = nenahlásil nic, ani prázdný seznam.**
+        var reportedFindings: Int?
+        /// Konec běhu i s jeho časem. `nil` = neskončil, nebo ho někdo zrušil.
+        var finish: Finish?
+        /// Který skill si session doopravdy načetla — **první** takový (`Skill` mezi nástroji).
+        var loadedSkill: String?
+        /// Proč nebylo zadání celé (#345) — **první** takový příznak.
+        var intentGap: IntentGap?
+
+        struct Finish: Equatable, Sendable {
+            let outcome: ReviewRunOutcome
+            let at: Date
+        }
     }
 
     struct Entry: Identifiable, Hashable, Codable, Sendable {
@@ -63,7 +108,67 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         usage = run.usage
         entries = run.timeline?.entries ?? []
         droppedEntries = run.timeline?.dropped ?? 0
+        // Souhrn se z uložené osy počítá **jedním** průchodem, a to jen tady: soubor přichází
+        // hotový, takže není nad čím přírůstkovat. Vyjde z něj totéž, co by vyšlo průchodem
+        // v `Policy.lanes` — a přesně to je ta shoda, kterou hlídá `TimelineDigestTests`.
+        digest = Self.digest(of: entries)
+        // Strop platí i na to, co přijde z disku. Soubor ho má mít (`stored(limit:)`), ale
+        // spolehnout se na cizí data znamená mít v okně tři tisíce řádků kvůli starému formátu.
+        trimToLimit()
         completeTail(from: run)
+    }
+
+    /// Souhrn z hotové osy, jedním průchodem. **Jediné místo, kde se počítá jinak než při zápisu**
+    /// — a proto se drží vedle `note(_:)`, ať je vidět, že obojí čte tytéž případy.
+    private static func digest(of entries: [Entry]) -> Digest {
+        var digest = Digest()
+        for entry in entries { note(entry, into: &digest) }
+        return digest
+    }
+
+    /// Co jedna událost přidá do souhrnu.
+    ///
+    /// **Osu neposouvá příznak zadání** (#345): je to fakt o materiálu, se kterým běh začal, ne
+    /// o tom, co běh dělal. Kdyby posouval, dráha ve frontě by tvrdila, že už něco dělá.
+    private static func note(_ entry: Entry, into digest: inout Digest) {
+        switch entry.kind {
+        case .queued:
+            digest.hadQueued = true
+        case .started:
+            digest.reached = max(digest.reached, 1)
+        case .tool(let tool):
+            digest.reached = max(digest.reached, 2)
+            digest.toolSteps += 1
+            digest.lastTool = tool
+            // Načtený skill je **první** takový: session si ho bere na začátku a pozdější
+            // `Skill` by přepsal to, čím doopravdy začala.
+            if tool.name == "Skill", digest.loadedSkill == nil, let detail = tool.detail {
+                digest.loadedSkill = detail
+            }
+        case .findings(let count):
+            digest.reached = max(digest.reached, 3)
+            digest.reportedFindings = count
+        case .intentGap(let gap):
+            if digest.intentGap == nil { digest.intentGap = gap }
+        case .finished(let outcome):
+            digest.finish = Digest.Finish(outcome: outcome, at: entry.at)
+        }
+    }
+
+    /// Ořeže začátek osy na strop a přizná to (#325).
+    ///
+    /// Ubírá se **jen to, co je v ose vidět** — `toolSteps` a s ním případně `lastTool` (ten jedině
+    /// tehdy, když byl krok v ose jediný; ořez zpředu jiný poslední krok sebrat nemůže). Zbytek
+    /// souhrnu je monotónní, viz `Digest`.
+    private mutating func trimToLimit() {
+        while entries.count > Self.entryLimit {
+            if case .tool = entries[0].kind {
+                digest.toolSteps -= 1
+                if digest.toolSteps == 0 { digest.lastTool = nil }
+            }
+            entries.removeFirst()
+            droppedEntries += 1
+        }
     }
 
     /// Doplní **konec** osy z běhu, pod kterým leží.
@@ -98,7 +203,11 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
 
     /// Co se z osy uloží. Ořezává se **začátek**, ne konec: kdo se do osy dívá po restartu,
     /// hledá, čím to skončilo.
-    func stored(limit: Int = Self.storedEntryLimit) -> StoredTimeline {
+    ///
+    /// **Od #325 tady obvykle není co ořezávat** — strop platí i na živou osu, takže se do souboru
+    /// vejde celá. Ořez zůstává, protože `limit` se dá zvenčí snížit (dělají to testy) a protože
+    /// „co se ukládá“ nemá záležet na tom, že si to jinde už někdo ořezal.
+    func stored(limit: Int = Self.entryLimit) -> StoredTimeline {
         let dropped = max(entries.count - limit, 0)
         return StoredTimeline(
             worktree: worktree,
@@ -107,17 +216,18 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         )
     }
 
-    /// Strop uložených událostí. Delší běh jich nadělá stovky (každé čtení souboru je jedna)
-    /// a záznam leží vedle nálezů, které se čtou při každém startu.
-    static let storedEntryLimit = 300
+    /// Strop událostí v ose — **jeden pro živou i uloženou** (#325).
+    ///
+    /// Delší běh jich nadělá stovky (každé čtení souboru je jedna) a záznam leží vedle nálezů,
+    /// které se čtou při každém startu. Do #325 platil jen na ukládání (`storedEntryLimit`), takže
+    /// se za běhu držely stovky událostí, které po restartu zmizely — a nikde to nebylo napsané.
+    /// **Vyšší strop pro živou osu by sliboval, že se ke krokům dá vrátit; nižší by zahodil kroky,
+    /// které v souboru zůstanou.** Se stejným číslem platí, že co bylo vidět za běhu, je vidět
+    /// i po restartu.
+    static let entryLimit = 300
 
     /// Který skill si session doopravdy načetla. `nil` = žádný.
-    var loadedSkill: String? {
-        entries.lazy.compactMap { entry -> String? in
-            guard case .tool(let tool) = entry.kind, tool.name == "Skill" else { return nil }
-            return tool.detail
-        }.first
-    }
+    var loadedSkill: String? { digest.loadedSkill }
 
     /// Načetl se **jiný** skill, než jaký byl nastavený?
     ///
@@ -140,23 +250,7 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     ///
     /// Bere se **první** událost. Za jeden běh přijde jedna; kdyby jich přišlo víc, je pravda ta,
     /// s jakou běh začal — ne ta, kterou by přepsalo pozdější hlášení.
-    var intentGap: IntentGap? {
-        entries.lazy.compactMap { entry -> IntentGap? in
-            guard case .intentGap(let gap) = entry.kind else { return nil }
-            return gap
-        }.first
-    }
-
-    /// Nejnovější událost napříč reviewery — podle ní se osa posouvá na konec.
-    ///
-    /// Napříč, ne z poslední osy v poli: reviewery běží paralelně, takže nová událost
-    /// klidně přibude do té dřívější a osa by se přestala posouvat.
-    static func newestEntry(in timelines: [ReviewerTimeline]) -> (skill: String, entry: Int)? {
-        timelines
-            .compactMap { timeline in timeline.entries.last.map { (timeline.skill, $0.id, $0.at) } }
-            .max { $0.2 < $1.2 }
-            .map { (skill: $0.0, entry: $0.1) }
-    }
+    var intentGap: IntentGap? { digest.intentGap }
 
     mutating func record(_ progress: ReviewProgress, at time: Date) {
         switch progress {
@@ -184,8 +278,8 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     /// Zavře krok, na který dorazila odpověď (#326).
     ///
     /// **Nepřidává událost, mění tu, která už v ose je.** Jeden `tool_use` je jeden krok, ať se
-    /// o něm dozvíme cokoli dalšího — druhý řádek „a takhle to dopadlo“ by osu zdvojil a poslal
-    /// `newestEntry` na událost, která žádný nový krok není.
+    /// o něm dozvíme cokoli dalšího — druhý řádek „a takhle to dopadlo“ by osu zdvojil a sledování
+    /// konce ve výpisu (#325) by skákalo na událost, která žádný nový krok není.
     ///
     /// Páruje **poslední** krok s tím `id`; odpověď na krok, který v ose není, ji nechá být.
     /// Jestli smí přepsat, co už krok má, rozhoduje `Policy.replacesToolOutcome` — **tatáž funkce,
@@ -206,13 +300,20 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         let wait = Duration.seconds(max(time.timeIntervalSince(entry.at), 0))
         tool.outcome = resolution.outcome.measured(after: wait)
         entries[index] = Entry(id: entry.id, at: entry.at, kind: .tool(tool))
+        // Souhrn nese **hodnotu** posledního kroku, ne odkaz na něj, takže se odpověď na ten
+        // poslední musí propsat i do něj. Pozná se podle `id` — je unikátní na `tool_use`, takže
+        // shoda znamená „tohle je ten krok, který je v souhrnu“.
+        if digest.lastTool?.id == resolution.id { digest.lastTool = tool }
     }
 
     /// Identita se počítá **z poslední události, ne z počtu**. V živé ose je to totéž, ale osa
     /// poskládaná z uloženého běhu je zkrácená (`droppedEntries`), takže si nechává původní čísla —
     /// a podle počtu by doplněný konec dostal číslo menší než jeho předchůdce.
     private mutating func append(_ kind: Entry.Kind, at time: Date) {
-        entries.append(Entry(id: (entries.last?.id ?? -1) + 1, at: time, kind: kind))
+        let entry = Entry(id: (entries.last?.id ?? -1) + 1, at: time, kind: kind)
+        entries.append(entry)
+        Self.note(entry, into: &digest)
+        trimToLimit()
     }
 }
 
