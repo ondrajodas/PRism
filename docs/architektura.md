@@ -1924,6 +1924,85 @@ Instrumentované jsou zatím `ContentView`, `PullRequestDetailView`, `Conversati
 `ConversationNodeView`, `ConversationEntryView`, `MarkdownText`, `DiffView` a `DiffRowView` —
 řádkem `let _ = RenderDiagnostics.pass(Self.self)` na začátku `body`.
 
+#### Co se v tom kole přepočítává a kdo si o to řekl (#361, osmé kolo)
+
+Počitadlo průchodů `body` má u #361 jednu vadu, a je zásadní: **v hořícím kole se nepřeloží ani
+jedno tělo** (doloženo ve čtvrtém i sedmém záchvatu — `MarkdownText` a `DiffRowView` mají ve vzorku
+nulu), takže v tu nejdůležitější sekundu neřekne nic než „0 kol runloopu, sekunda CPU“. Osmé kolo
+proto přidalo dvě věci: **počitadla míst, která v tom kole doopravdy běží** (`GraphSite`),
+a **evaluační zásobník AttributeGraphu** (`GraphProbe`).
+
+**`GraphProbe` je jedna čtecí funkce privátního frameworku.**
+`AGGraphDescription(nil, ["format": "stack/text", "max-frames": 16])` vrátí zásobník toho grafu,
+který se právě aktualizuje **na volajícím vlákně**: rámce od toho, co se počítá teď (`#0`),
+k tomu, kdo si o celou tu řadu řekl (poslední rámec), a u vstupů příznak `changed`. Ověřeno
+spuštěním na macOS 26, ne přečteno z dokumentace:
+
+| Co | Zjištěno |
+|---|---|
+| cena volání | **0,0063 ms** při `max-frames: 64` (500 volání v jednom průchodu tělem; s osmi rámci 0,0047 ms, takže rozhoduje volání, ne délka) |
+| odkud je zásobník vidět | `View.body`, `Layout.sizeThatFits` i `placeSubviews`, `of:` closure u `onGeometryChange`, getter identity čtený `ForEach`em |
+| odkud **ne** | `action:` u `onGeometryChange` (běží mimo aktualizaci — z druhé strany totéž zjištění jako „framework ji gatuje“ z #363) a **cizí vlákno** (vrátí `nil`, ne nesmysl) |
+| vlastnictví | hodnota je **autoreleased**, ne +1 — `takeRetainedValue()` složil test `SIGSEGV`em v `objc_release` uvnitř `AutoreleasePoolPage::releaseUntil`. Footprint tvrdil opak (100 000 volání bez `release`: 13,8 → 122,3 MB), protože se v tom měření pool ani jednou nevyprázdnil. Volání má proto **vlastní `autoreleasepool`** — bez něj by se vzorky držely do konce kola runloopu, což je u zaseknutého kola „nikdy“ |
+| co nejde | `AGGraphGetCounter` chce `AGGraphRef`, a ten se zevnitř `body` nedá vzít (`AGSubgraphGetCurrent()` je `nil`, `AGGraphGetAttributeGraph` nad `AGGraphGetCurrentAttribute()` skončil `SIGABRT`em). Pojmenované counters (`updates`, `changes`, `transactions`) dá `["format": "graph/dict", "all_graphs": true]`, ale ten prochází **všechny uzly a hrany** (jsou v jeho výstupu vypsané), takže to není nástroj na vzorek každou sekundu |
+
+Čím to **není**: `AGGraphSetTrace` ani `AGGraphSetInvalidationCallback` se nepoužívají, i když by
+dávaly přímo události invalidace — obojí si nastavuje sám SwiftUICore (vidět
+v `dyld_info -imports`), takže je přepsat znamená sáhnout do toho, co se měří. Privátní framework
+se navíc **otevírá jedině se zapnutou diagnostikou** (`GraphProbe.prepare()` z `start()`) a jak to
+dopadlo, se píše **do souboru** (`Policy.diagnosticGraphLine`) — „graf nic neřekl“ a „graf nejde
+otevřít“ nemají kde splynout.
+
+**Háky sedí tam, kde v kole doopravdy jsme** (`GraphSite`, `RenderDiagnostics.inGraph(_:)`): dotazy
+na identitu líných seznamů (`DiffRow.id`, `FileDiff.id`, `ConversationRow.id` — u osy konverzace je
+to **jediná** přítomnost aplikace v kole) a čtení geometrie v diffu (`of:` closury v
+`DiffPairBlockRowView`, `DiffBlockRowView`, `DiffLineView`, `DiffView`). Identita jde přes
+`diagnosedID` v extension u diagnostiky, ne přes úpravu `id` v modelu, a **vrací tutéž hodnotu** —
+jinak by líný seznam se zapnutou diagnostikou přerovnal obsah a měřilo by se něco jiného než bez
+ní. Že je každé vyjmenované místo doopravdy zapojené, tvrdí test nad zdrojáky
+(`GraphSiteWiringTests`): nezapojené místo by v záznamu chybělo, a to se nedá odlišit od „tímhle
+místem kolo neprochází“ — tedy od té věty, kterou se u #361 hledá příčina.
+
+**Vzorky mají dvě meze a obě jsou vyjmenované.** `RenderDiagnostics.stackBudget` = 8 na úsek
+a odstup `interval / stackBudget` mezi nimi. Rozpočet proto, že hořící kolo by jinak vyrobilo
+tisíce dotazů za sekundu; odstup proto, aby těch osm bylo **histogram** přes sekundu, a ne osmkrát
+tentýž bod. Hodiny se čtou až za rozpočtem (`DispatchTime`, ne `Date` — posun systémového času
+nesmí odstup poslat do minusu), takže po vyčerpání je z celého háku inkrement pod zámkem.
+
+Do záznamu jde za hlavní řádek úseku (`Policy.graphDiagnosticLines`) tohle:
+
+```
+2026-08-21T11:22:14+0200 za 1.01 s: 0 kol runloopu, 1.007 s CPU — HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU
+    graf: DiffRow.id=857 FileDiff.id=453 DiffPairBlockRow.geometry=172
+    zásobník: 6 dotazů, 6 vzorků, kořen LazySubviewPrefetcher<LazyVStackLayout>=3 …, vrchol LazySubviewPlacements<LazyVStackLayout>=3 …, změněné vstupy CoordinateSpaceNameTransform=5
+    #0: 2254672 LazySubviewPlacements<LazyVStackLayout> -> Array<_LazyLayout_PlacedSubview>
+    2254192 CoordinateSpaceNameTransform -> ViewTransform, changed
+    #1: 2255208 LazySubviewPrefetcher<LazyVStackLayout> -> ()
+```
+
+Tři rozhodnutí, která na tom výpisu stojí:
+
+- **Ticho nedostane přílohu.** Řádky o grafu se píšou jen tehdy, když je hlavní řádek úseku;
+  nasbírané se ale zahodí tak i tak, jinak by čísla nesl úsek, ve kterém se nic z toho nestalo.
+- **Dotazy i vzorky, ne jedno číslo.** Dotaz, ze kterého nic nepřišlo, znamená „tady se graf
+  neaktualizoval“ — a to je informace, ne nula k zamlčení.
+- **Do souboru jdou rámce a vstupy s `changed`, ne celý výpis.** AttributeGraph u rámce `#0`
+  vypíše i **všechny jeho vstupy** a jména typů jsou generická jména celého podstromu: jeden
+  takový řádek měl nad skutečným diffem v okně **1,5 kB** a blok jich měl desítky, takže by hořící
+  okno vyčerpalo strop 8 MB za pár minut — zrovna tehdy, když je záznam potřeba. Řádek se navíc
+  zkracuje na `Policy.graphLineLimit` (200 znaků); cena je, že dva různé dlouhé typy mohou v
+  souhrnu spadnout do jednoho řádku, a je to vědomé — informace je v hlavě jména.
+
+**Co z toho vyšlo nad skutečným oknem** (měření `IdleDiffSpinProbe.graphInstrumentationOverRealWindow`,
+projíždění kolečkem, tedy **ne** záchvat): v diffu `DiffRow.id=857 FileDiff.id=453
+DiffPairBlockRow.geometry=172` za sekundu, v ose `ConversationRow.id=2113`. Kořenem je v obou
+`LazySubviewPrefetcher<LazyVStackLayout>` (tedy ten `signalPrefetch`, který je ve vzorcích ze
+záchvatů jediný re-arm), vrcholem `LazySubviewPlacements` a **jediný `changed` vstup je
+transformace** — `CoordinateSpaceNameTransform` v diffu, `ScrollViewChildTransform` v ose. Nad
+projížděním je to očekávané (obsah se posouvá), takže **to samo o sobě příčinu #361 netvrdí**; cenné
+je to jako srovnávací tvar: v záchvatu se z týchž řádků pozná, jestli se transformace mění i tehdy,
+když se nikam neroluje.
+
 ## `RepoCheckout` (`App/Checkout/`)
 
 Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživatelovy klony.**

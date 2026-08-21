@@ -47,6 +47,94 @@ struct RenderDiagnosticsTests {
         #expect(diagnostics.snapshot() == ["DiffView": 5])
     }
 
+    /// **Vypnutá diagnostika nesmí sáhnout ani na graf** (#361). `inGraph(_:)` sedí na cestě
+    /// identity líného seznamu, tedy tam, kde se v hořícím kole volá tisíckrát za sekundu — a bez
+    /// zapnuté diagnostiky je z něj jeden load `Optional`u.
+    @Test("Vypnutá diagnostika nepočítá ani místa v grafu")
+    func disabledIgnoresGraphSites() {
+        #expect(RenderDiagnostics.current == nil)
+        RenderDiagnostics.inGraph(.diffRowIdentity)
+        #expect(RenderDiagnostics.current == nil)
+    }
+
+    /// Hák diagnostiky **nesmí změnit identitu řádku** (#361): kdyby `diagnosedID` vydalo jinou
+    /// hodnotu než `id`, líný seznam by při zapnuté diagnostice přerovnal obsah a měřilo by se
+    /// něco jiného než při vypnuté.
+    @Test("diagnosedID vrací tutéž identitu jako id")
+    func diagnosedIdentityMatches() {
+        let row = ConversationRow(id: "uzel-1", node: .commits([]), isFirstNew: false)
+        #expect(row.diagnosedID == row.id)
+        let diffRow = DiffRow.note("soubor.swift#0", "binárka")
+        #expect(diffRow.diagnosedID == diffRow.id)
+    }
+
+    /// Počty míst v grafu jdou do řádku **za** hlavní řádek úseku, a odsazené — v souboru se čtou
+    /// jako příloha k té sekundě, ne jako další sekunda.
+    @Test("Místa v grafu se počítají a jdou do řádku za úsekem")
+    func countsGraphSites() throws {
+        let (diagnostics, file, directory) = try make()
+        defer { _ = directory }
+        diagnostics.note(site: .diffRowIdentity)
+        diagnostics.note(site: .diffRowIdentity)
+        diagnostics.note(site: .pairBlockGeometry)
+        #expect(diagnostics.graphSnapshot() == ["DiffRow.id": 2, "DiffPairBlockRow.geometry": 1])
+        diagnostics.noteCycle()
+        #expect(diagnostics.flush(at: start.addingTimeInterval(1), cpu: 0.5))
+        #expect(diagnostics.graphSnapshot().isEmpty)
+        let lines = TextLines.content(try String(contentsOf: file, encoding: .utf8))
+        #expect(lines.count >= 2)
+        #expect(lines[1] == "    graf: DiffRow.id=2 DiffPairBlockRow.geometry=1")
+    }
+
+    /// **Ticho nedostane přílohu.** Úsek, ve kterém není ani kolo runloopu, ani průchod tělem, ani
+    /// hoření, se nezapisuje — a řádky o grafu proto taky ne, i když se v něm identita čte. Jinak
+    /// by se soubor plnil nad aplikací, která nic nedělá.
+    @Test("Bez hlavního řádku se řádky o grafu nezapíšou")
+    func silentSliceHasNoGraphLines() throws {
+        let (diagnostics, file, directory) = try make()
+        defer { _ = directory }
+        diagnostics.note(site: .conversationRowIdentity)
+        #expect(diagnostics.flush(at: start.addingTimeInterval(1), cpu: 0))
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        // Nasbírané se přitom **zahodí**, jinak by to nesl další úsek a čísla by se přičítala
+        // k sekundě, ve které se nic z toho nestalo.
+        #expect(diagnostics.graphSnapshot().isEmpty)
+    }
+
+    /// **Vzorků zásobníku se za úsek vezme nejvýš `stackBudget`** — bez toho stropu by hořící kolo
+    /// vyrobilo tisíce dotazů za sekundu a diagnostika by se stala tím, co měří.
+    ///
+    /// `interval: 0` je tady schválně: odstup mezi vzorky je `interval / stackBudget`, takže
+    /// s nulou se rozhoduje **jen** rozpočtem a test nezávisí na hodinách. Že odstup zabírá,
+    /// tvrdí test pod tímhle.
+    @Test("Za úsek se vezme nejvýš osm vzorků zásobníku")
+    func stackSamplesAreCapped() throws {
+        let (diagnostics, file, directory) = try make(interval: 0)
+        defer { _ = directory }
+        for _ in 0..<500 { diagnostics.note(site: .fileIdentity) }
+        diagnostics.noteCycle()
+        #expect(diagnostics.flush(at: start.addingTimeInterval(1), cpu: 0.5))
+        let lines = TextLines.content(try String(contentsOf: file, encoding: .utf8))
+        #expect(lines[1] == "    graf: FileDiff.id=500")
+        // Vzorky jsou nulové, protože v testu žádný graf neaktualizuje — a je to **v řádku
+        // vidět**: „8 dotazů, 0 vzorků“ je jiný stav než „nikdo se neptal“.
+        #expect(lines[2] == "    zásobník: \(RenderDiagnostics.stackBudget) dotazů, 0 vzorků")
+    }
+
+    /// **Odstup mezi vzorky drží**: s úsekem o sekundě je mezi vzorky 1/8 sekundy, takže se
+    /// v jedné smyčce vezme právě jeden. Bez toho by osm vzorků padlo do jedné milisekundy a
+    /// souhrn by nebyl histogram, ale osmkrát tentýž bod.
+    @Test("Vzorky se v jedné smyčce nevezmou všechny")
+    func stackSamplesAreSpaced() throws {
+        let (diagnostics, file, directory) = try make(interval: 1)
+        defer { _ = directory }
+        for _ in 0..<500 { diagnostics.note(site: .lineGeometry) }
+        diagnostics.noteCycle()
+        #expect(diagnostics.flush(at: start.addingTimeInterval(1), cpu: 0.5))
+        let lines = TextLines.content(try String(contentsOf: file, encoding: .utf8))
+        #expect(lines[2] == "    zásobník: 1 dotazů, 0 vzorků")
+    }
+
     /// Řádek uzavírá úsek: co se nasbíralo, se do něj zapíše a počitadla se vynulují, aby další
     /// řádek popisoval **další** úsek, ne celý běh.
     @Test("Řádek uzavře úsek a počitadla se vynulují")
@@ -231,12 +319,13 @@ struct RenderDiagnosticsTests {
 
     private var start: Date { Date(timeIntervalSince1970: 0) }
 
-    private func make() throws -> (RenderDiagnostics, URL, TemporaryDirectory) {
+    private func make(interval: TimeInterval = 1) throws -> (RenderDiagnostics, URL, TemporaryDirectory) {
         let directory = try TemporaryDirectory()
         let file = directory.url.appending(path: "diagnostics.log")
         let diagnostics = RenderDiagnostics(
             log: DiagnosticsLog(url: file, zone: .gmt),
             zone: .gmt,
+            interval: interval,
             now: start,
             cpu: 0
         )

@@ -190,7 +190,7 @@ struct DiffView: View {
     private var files: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                ForEach(diff.files) { file in
+                ForEach(diff.files, id: \.diagnosedID) { file in
                     Section {
                         // Sbalený soubor se nevykresluje vůbec — u padesátisouborového PR
                         // je to hlavní důvod, proč se sbaluje. Hlavička zůstává, takže
@@ -207,7 +207,10 @@ struct DiffView: View {
             .coordinateSpace(.named(Self.contentSpace))
         }
         // Jen měření, žádný vliv na rozvržení — proto `onGeometryChange` a ne `GeometryReader`.
-        .onGeometryChange(for: CGSize.self) { $0.size } action: {
+        .onGeometryChange(for: CGSize.self) {
+            RenderDiagnostics.inGraph(.viewportGeometry)
+            return $0.size
+        } action: {
             viewportHeight = $0.height
             contentWidth = $0.width
         }
@@ -254,7 +257,10 @@ struct DiffView: View {
         // a jen na jeho konci je vidět tlačítko, aby šlo s myší.
         let dragged = draft.draggedRange.flatMap { $0.path == file.displayPath ? $0.anchor : nil }
         let draggedCells = dragged.map { Policy.rangeCells(of: $0, in: file) } ?? []
-        return ForEach(layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows)) { row in
+        return ForEach(
+            layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows),
+            id: \.diagnosedID
+        ) { row in
             DiffRowView(
                 row: row,
                 language: language,

@@ -1,0 +1,16 @@
+  #0: 11872 StaticBody<ViewBodyAccessor<ProbeRow>, MainThreadFlags> -> ModifiedContent<HStack<TupleView<(Text, Spacer)>>, _FrameLayout>
+  -- inputs:
+    11800 ForEachChild<Range<Int>, Int, ProbeRow> -> ProbeRow, changed
+  --
+  #1: 13500 UnaryLayoutComputer<_FrameLayout> -> LayoutComputer
+  #2: 8080 LazyLayoutComputer<LazyVStackLayout> -> LayoutComputer
+  #3: 3096 UnaryChildGeometry<_FrameLayout> -> ViewGeometry
+  #4: 3172 LayoutPositionQuery -> CGPoint
+  #5: 4688 AnimatableFrameAttribute -> ViewFrame
+  #6: 4840 ScrollViewContentFrameSize -> ViewSize
+  #7: 5468 ScrollViewAdjustedSize -> ViewSize
+  #8: 6448 ScrollViewChildTransform -> ViewTransform
+  #9: 7600 LazySubviewPlacements<LazyVStackLayout> -> Array<_LazyLayout_PlacedSubview>
+  #10: 8032 LazyPreference<HostPreferencesKey> -> PreferenceValues
+  #11: 9096 HostPreferencesTransform<ContentScrollViewPreferenceKey> -> PreferenceValues
+

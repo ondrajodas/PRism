@@ -73,6 +73,15 @@ final class RenderDiagnostics: @unchecked Sendable {
     /// Přečteno **jednou při startu procesu**, viz dokumentace typu.
     static let isEnabled = ProcessInfo.processInfo.environment["PRISM_DIAGNOSE"] == "1"
 
+    /// Kolik vzorků evaluačního zásobníku se smí vzít za jeden úsek (#361).
+    ///
+    /// Osm je kompromis mezi dvěma věcmi, které jdou proti sobě: jeden vzorek za sekundu je
+    /// **náhodný bod** v kole, které za tu sekundu proběhne milionkrát, kdežto z osmi je už
+    /// histogram, ze kterého se pozná, jestli se kořen opakuje. A víc už se nevejde do souboru:
+    /// v záznamu je za úsek souhrn plus **jeden** zásobník vypsaný celý, takže osm vzorků stojí
+    /// dva řádky a šestnáct rámců.
+    static let stackBudget = 8
+
     /// Jeden průchod tělem `View`u. Volá se jako `let _ = RenderDiagnostics.pass(Self.self)` na
     /// začátku `body`.
     ///
@@ -80,6 +89,17 @@ final class RenderDiagnostics: @unchecked Sendable {
     /// reflexe a v tomhle kole by běžela tisíckrát za sekundu.
     static func pass<V>(_ type: V.Type) {
         current?.note(id: ObjectIdentifier(type), name: String(describing: type))
+    }
+
+    /// Proběhlo jedno místo, které běží **uvnitř aktualizace grafu** (#361) — dotaz na identitu
+    /// v líném seznamu nebo čtení geometrie. Viz `GraphSite`, kde je i důvod, proč zrovna tahle
+    /// místa.
+    ///
+    /// Na rozdíl od `pass(_:)` je tohle ta cesta, která v **hořícím** kole doopravdy běží: tělo se
+    /// v něm nepřeloží ani jedno, kdežto identita a geometrie se přepočítávají tisíckrát za
+    /// sekundu. Odsud se proto bere i vzorek evaluačního zásobníku.
+    static func inGraph(_ site: GraphSite) {
+        current?.note(site: site)
     }
 
     private let log: DiagnosticsLog
@@ -93,6 +113,15 @@ final class RenderDiagnostics: @unchecked Sendable {
     private let lock = NSLock()
     private var passes: [ObjectIdentifier: Int] = [:]
     private var names: [ObjectIdentifier: String] = [:]
+    /// Kolikrát se v tomhle úseku ozvalo které místo uvnitř aktualizace grafu (#361).
+    private var sites: [String: Int] = [:]
+    /// Odebrané evaluační zásobníky — **vejde se jich do úseku nejvýš `stackBudget`**.
+    private var stacks: [String] = []
+    /// Kolikrát se v úseku vzorek **vzal** (i když z něj nic nepřišlo, viz `sampleStack()`).
+    private var samples = 0
+    /// Kdy se bral naposled, v sekundách monotónních hodin. Přes hranici úseku se **nenuluje**:
+    /// je to odstup mezi vzorky, ne poloha v úseku.
+    private var lastSample: TimeInterval = 0
     private var cycles = 0
     private var lastFlush: Date
     private var lastCPU: TimeInterval
@@ -157,6 +186,18 @@ final class RenderDiagnostics: @unchecked Sendable {
                 """.utf8))
             return false
         }
+        // **Privátní framework se otevírá jedině tady**, tedy jen se zapnutou diagnostikou — a to,
+        // jak to dopadlo, se hned zapíše do souboru. Bez té věty by „graf nic neřekl“ a „graf nejde
+        // otevřít“ splynulo v tichu (viz `GraphProbe`).
+        //
+        // Návratová hodnota se **nekontroluje schválně**: na zápisu se to láme už u hlavičky
+        // o řádek výš, takže sem se dojde jedině tehdy, když soubor zapisovat jde. Kdyby strop
+        // padl zrovna mezi těmi dvěma řádky, pozná to zapisovací vlákno u prvního úseku a sezení
+        // skončí — druhá kontrola téhož by z toho udělala dvě místa, kde se rozhoduje o startu.
+        let hasGraph = GraphProbe.prepare()
+        diagnostics.log.append(
+            Policy.diagnosticGraphLine(at: Date(), in: .current, available: hasGraph)
+        )
         diagnostics.observeRunLoop()
         diagnostics.startWriting()
         current = diagnostics
@@ -174,17 +215,77 @@ final class RenderDiagnostics: @unchecked Sendable {
         }
     }
 
+    /// Ozvalo se místo uvnitř aktualizace grafu (#361): inkrement, a když je čas, **vzorek
+    /// evaluačního zásobníku**.
+    ///
+    /// Vzorek se bere `GraphProbe.stack()`em **mimo zámek**: je to volání do cizí knihovny (0,0063 ms
+    /// změřeno), takže pod zámkem by o ně zapisovací vlákno zbytečně čekalo. Držet ho nemusí —
+    /// zásobník je hodnota, ne stav, a `samples` už je započítaný, takže dva souběžné vzorky se
+    /// nemají kde poplést.
+    func note(site: GraphSite) {
+        let wanted = lock.withLock { armSample(site) }
+        guard wanted else { return }
+        guard let stack = GraphProbe.stack() else { return }
+        lock.withLock { stacks.append(stack) }
+    }
+
     /// Co se od posledního řádku nasbíralo. **Nic tím nenuluje** — je to čtení pro sondy, které
     /// počitadla vyhodnocují samy a řádek do souboru nepotřebují.
     func snapshot() -> [String: Int] {
         lock.withLock { namedPasses() }
     }
 
+    /// Totéž pro místa uvnitř aktualizace grafu.
+    func graphSnapshot() -> [String: Int] {
+        lock.withLock { sites }
+    }
+
+    /// Odebrané zásobníky — pro sondu, která si řádky skládá sama a do souboru nezapisuje.
+    func graphStacks() -> [String] {
+        lock.withLock { stacks }
+    }
+
     /// Zahodí, co se nasbíralo. Pro sondy, které měří po úsecích: bez toho by druhý úsek nesl
     /// i to, co se stalo v prvním, a „po gestu se nic nepřekresluje“ by se z čísel nedalo
     /// přečíst. Jména typů zůstávají — jsou to konstanty, ne data.
     func reset() {
-        lock.withLock { passes.removeAll(keepingCapacity: true) }
+        lock.withLock {
+            passes.removeAll(keepingCapacity: true)
+            resetGraph()
+        }
+    }
+
+    /// Má se **teď** odebrat vzorek zásobníku? Volá se **pod zámkem** a zároveň počítá to místo,
+    /// které se ozvalo.
+    ///
+    /// Dvě meze, obě vyjmenované: `stackBudget` na úsek (jinak by hořící kolo vyrobilo tisíce
+    /// vzorků za sekundu) a odstup `interval / stackBudget` mezi nimi, aby se rozprostřely po
+    /// úseku a byl z nich **histogram**, ne osm vzorků z jedné milisekundy. Hodiny se čtou až za
+    /// rozpočtem, takže po vyčerpání je z celého téhle metody inkrement pod zámkem.
+    private func armSample(_ site: GraphSite) -> Bool {
+        sites[site.rawValue, default: 0] += 1
+        guard samples < Self.stackBudget else { return false }
+        let now = monotonicSeconds()
+        guard now - lastSample >= interval / TimeInterval(Self.stackBudget) else { return false }
+        lastSample = now
+        samples += 1
+        return true
+    }
+
+    /// Monotónní hodiny pro odstup mezi vzorky — `DispatchTime`, ne `Date`.
+    ///
+    /// `Date` jde za systémovým časem, takže posun hodin (NTP, uspání stroje) by odstup poslal do
+    /// minusu nebo naopak zablokoval vzorky na hodiny. Tady se čte `mach_absolute_time` a je to
+    /// jednotky nanosekund na volání.
+    private func monotonicSeconds() -> TimeInterval {
+        TimeInterval(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+    }
+
+    /// Zahodí, co se nasbíralo o grafu. Volá se **pod zámkem**.
+    private func resetGraph() {
+        sites.removeAll(keepingCapacity: true)
+        stacks.removeAll(keepingCapacity: true)
+        samples = 0
     }
 
     /// Počitadla po jménech typů. **Sčítá, nedosazuje**: dva typy se stejným jménem (jeden
@@ -211,7 +312,7 @@ final class RenderDiagnostics: @unchecked Sendable {
     /// tělem, kola runloopu i CPU se nulují tady — bez toho by druhý řádek nesl i to, co se stalo
     /// v prvním.
     @discardableResult func flush(at moment: Date, cpu: TimeInterval) -> Bool {
-        let line: String? = lock.withLock {
+        let lines: [String] = lock.withLock {
             let line = Policy.diagnosticLine(
                 at: moment,
                 in: zone,
@@ -220,15 +321,24 @@ final class RenderDiagnostics: @unchecked Sendable {
                 cpu: cpu - lastCPU,
                 passes: namedPasses()
             )
+            // Řádky o grafu jdou **za** hlavní řádek a jen tehdy, když ten je: bez něj je úsek
+            // ticho, a ticho nemá mít přílohu. Nasbírané se ale zahodí tak i tak, jinak by je
+            // nesl další úsek.
+            let graph = line == nil
+                ? []
+                : Policy.graphDiagnosticLines(sites: sites, stacks: stacks, samples: samples)
             cycles = 0
             passes.removeAll(keepingCapacity: true)
+            resetGraph()
             lastFlush = moment
             lastCPU = cpu
-            return line
+            return line.map { [$0] + graph } ?? []
         }
         // **Nemám co říct** není konec zapisování: nečinná aplikace se zas rozjede.
-        guard let line else { return true }
-        return log.append(line)
+        for line in lines {
+            guard log.append(line) else { return false }
+        }
+        return true
     }
 
     /// Přestane zapisovat a odregistruje počitadlo kol. Pro sondy a testy — aplikace diagnostiku

@@ -1559,7 +1559,25 @@ slovu — takový úsek má `0 kol runloopu`, celou sekundu CPU a větu `HLAVNÍ
 mez, o které se vědělo: ve čtvrtém záchvatu (#361) přestal záznam **v okamžiku ztuhnutí** a zbylo
 z něj jen to, co bylo předtím.
 
-**Vypnutá nestojí nic** (jedna podmínka na začátku `body`) a **vypne se sama**: příznak umře
+**A od osmého kola u #361 řekne i to, co se v tom kole přepočítává.** Počitadlo průchodů `body`
+totiž v hořícím kole mlčí — nepřeloží se v něm ani jedno tělo. Za hlavním řádkem úseku proto stojí
+ještě dva až pár řádků odsazených: kolikrát se ozvala která část líného seznamu (`graf:
+DiffRow.id=857 …`) a **evaluační zásobník AttributeGraphu** — tedy jména atributů od toho, co se
+počítá teď, k tomu, kdo si o to řekl, a u vstupů příznak `changed`:
+
+```
+za 1.01 s: 0 kol runloopu, 1.007 s CPU — HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU
+    graf: DiffRow.id=857 FileDiff.id=453 DiffPairBlockRow.geometry=172
+    zásobník: 6 dotazů, 6 vzorků, kořen LazySubviewPrefetcher<…>=3, vrchol LazySubviewPlacements<…>=3, změněné vstupy CoordinateSpaceNameTransform=5
+    #0: 2254672 LazySubviewPlacements<LazyVStackLayout> -> Array<_LazyLayout_PlacedSubview>
+    2254192 CoordinateSpaceNameTransform -> ViewTransform, changed
+```
+
+Čte se to jednou funkcí privátního frameworku a **jedině se zapnutou diagnostikou**; když ji systém
+nemá, stojí to v souboru hned za hlavičkou, takže „graf nic neřekl“ a „graf nejde otevřít“ nesplyne.
+
+**Vypnutá nestojí nic** (jedna podmínka na začátku `body`, resp. u dotazu na identitu řádku)
+a **vypne se sama**: příznak umře
 s procesem, takže další `./bin/run.sh` bez `--diagnose` je zpátky v normálním provozu. Že je
 zapnutá, je vidět z banneru skriptu i z hlavičky sezení v souboru. Proč to není přepínač
 v nastavení a co si diagnostika nesmí dovolit, je v
