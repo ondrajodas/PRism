@@ -102,21 +102,20 @@ extension Policy {
     /// na konci, a v zbytku by se počítalo jako o řádek víc, než se doopravdy neukázalo.
     ///
     /// **Dělí se jen `limit` bajtů, ne celé tělo**, a je to změřené: `TextLines` dělí po
-    /// `Character`ech (kvůli `CRLF`, #295), což je nad megabajty drahé — a tělo, které se ořezává,
-    /// je z definice delší než strop. Zbytek se proto nedělí vůbec; kde se řeže, se pozná z toho, že
-    /// poslední řádek toho prefixu je useknutý.
+    /// `Character`ech (kvůli `CRLF`, #295), což je nad megabajty drahé — a tělo, které se ořezává, je
+    /// z definice delší než strop. Kde se řeže, se pozná z toho, že poslední řádek toho prefixu je
+    /// useknutý; zbytek se tady nedělí vůbec (a v `rawSessionCut(of:onLineBoundary:)` jen pod
+    /// megabajtem, kde je počet řádků k něčemu).
     private static func rawSessionHead(
         of text: String,
         limit: Int
     ) -> (text: String.Index, rest: String.Index, onLineBoundary: Bool) {
         let safe = text[..<characterBoundary(in: text, atByte: limit)]
-        let lines = TextLines.all(safe)
         // Poslední řádek prefixu končí na hranici stropu, takže se dál pokračuje v těle — celý není.
-        var end: (text: String.Index, rest: String.Index)?
-        for line in lines.dropLast() {
-            end = (line.endIndex, text.index(after: line.endIndex))
+        // Bere se ten před ním; `nil` znamená, že se nevešel ani jeden celý.
+        if let line = TextLines.all(safe).dropLast().last {
+            return (line.endIndex, text.index(after: line.endIndex), true)
         }
-        if let end { return (end.text, end.rest, true) }
 
         // Ani první řádek se nevejde: řeže se na hranici **znaku**, ať se neroztrhne kódový bod —
         // rozpůlený znak v `NSTextView`u nakreslí otazník v kosočtverci a ve zkopírovaném přepisu
