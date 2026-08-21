@@ -32,13 +32,14 @@ struct DesignPillTests {
     /// stav procesu, takže se v jednom testu nesmí čítat dvakrát: pod paralelním během se dvě
     /// čtení umí vyřešit jinak a spadne z toho tvrzení, které nad aplikací platí
     /// (`CommitPanelRoomTests`, `LogTailHeightTests`).
-    private let pillLine = NSLayoutManager().defaultLineHeight(for: DesignPill.measuringFont)
+    private let pillLine = NSLayoutManager().defaultLineHeight(for: DesignPill.font)
     private let previousLine = NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: 11))
 
     // MARK: - Že je to mono
 
-    /// Mono se pozná tím, že **různě široké glyfy mají stejnou šířku**. `TextWidth.pill(_:)` bere
-    /// řez z `DesignPill`, takže tohle tvrzení mluví o tom, čím se kapsle doopravdy kreslí.
+    /// Mono se pozná tím, že **různě široké glyfy mají stejnou šířku** (naměřeno: `iii` i `WWW`
+    /// 19,472). `TextWidth.pill(_:)` bere řez z `DesignPill.font` a od #406 se týmž řezem i kreslí
+    /// (`Font(_:)`), takže tohle tvrzení mluví o tom, čím se kapsle doopravdy sází.
     @Test("Kapsle se sází mono řezem")
     func typesetsThePillWithAMonospacedFace() {
         #expect(TextWidth.pill("iii") == TextWidth.pill("WWW"))
@@ -58,7 +59,7 @@ struct DesignPillTests {
     func drawsThePillWithTheDesignMetric() throws {
         for label in Self.stateLabels {
             let size = fittingSize(of: label)
-            let text = TextWidth.of(label, font: DesignPill.measuringFont)
+            let text = TextWidth.of(label, font: DesignPill.font)
 
             #expect(abs(size.width - (text + 2 * DesignPill.horizontalPadding)) <= 1, "„\(label)“: šířka \(size.width)")
             #expect(abs(size.height - (pillLine + 2 * DesignPill.verticalPadding)) <= 1, "„\(label)“: výška \(size.height)")
@@ -108,11 +109,24 @@ struct DesignPillTests {
     /// **Metrika je zapsaná jednou.** Do #348 stálo `size: 10.5, weight: .semibold, design:
     /// .monospaced` na sedmi místech — šest z nich shodně a sedmé (hlavička karty) jinak. Rozejít
     /// se může jedině to, co je zapsané víckrát, takže guard hlídá počet zápisů, ne jejich obsah.
+    ///
+    /// **Hlídají se obě podoby zápisu**, a je to nález Copilota na #406: první verze znala jen
+    /// SwiftUI `size: 10.5, weight: .semibold` a minula tu AppKitovou
+    /// (`monospacedSystemFont(ofSize: 10.5, weight: .semibold)`) — tedy zrovna tu, kterou
+    /// `SinceLastVisitView` do #348 doopravdy mělo. Guard, který nechytá jednu ze dvou forem, co se
+    /// v repu vyskytly, hlídá něco jiného, než co o sobě tvrdí.
+    ///
+    /// Čte se **`DesignPill.fontSize`**, ne zapsaná desetina: kdyby se velikost změnila, má guard
+    /// hlídat tu novou. Ověřeno vložením regrese v obou podobách.
     @Test("Sazbu kapsle nikdo nepíše mimo DesignPill")
     func keepsTheTypesettingInOnePlace() throws {
+        let spellings = [
+            "size: \(DesignPill.fontSize), weight: .semibold",
+            "ofSize: \(DesignPill.fontSize), weight: .semibold",
+        ]
         let offenders = try appSources()
             .filter { $0.path != "App/Views/DesignPill.swift" }
-            .filter { $0.code.contains("size: \(DesignPill.fontSize), weight: .semibold") }
+            .filter { source in spellings.contains { source.code.contains($0) } }
             .map(\.path)
 
         #expect(offenders.isEmpty, "vlastní sazba kapsle: \(offenders.joined(separator: ", "))")

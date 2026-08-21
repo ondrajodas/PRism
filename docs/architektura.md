@@ -2770,7 +2770,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `SinceLastVisitLine`, `SinceLastVisitLines` | Odrážka po typovaných částech a jejich skládání (#284). Mimo view a testovatelné, jako `TimelineEventRow` |
 | `IncrementalDiffBar` | Lišta nad rozsahovým diffem (#284) — rozsah dvěma sha a cesta zpátky na celý diff. Podobu vybírá **spočítaná** šířka, ne `ViewThatFits` |
 | `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde. Řez si bere z `MiniButtonStyle.labelFont`, u kapsle z `DesignPill` (#348), aby se měření a kresba nemohly rozejít |
-| `DesignPill` | Kapsle stavu z návrhu (`.pill`) — **jedno místo pro její sazbu** (#348): mono 10,5 / 600, odsazení 7 a 2, `.capsule`. Volá se `designPill(tint:background:)` a bere si ji sedm míst v okně; `lineLimit` v ní **není** (rozhoduje o něm volající). Viz *Kapsle stavu na jednom místě* |
+| `DesignPill` | Kapsle stavu z návrhu (`.pill`) — **jedno místo pro její sazbu** (#348): mono 10,5 / 600, odsazení 7 a 2, `.capsule`. Volá se `designPill(tint:background:)` a bere si ji sedm míst v okně; řez je `DesignPill.font` (AppKit) a **kreslí se i měří tímtéž** (`Font(_:)`, `TextWidth.pill(_:)`). `lineLimit` v ní **není** (rozhoduje o něm volající). Viz *Kapsle stavu na jednom místě* |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka **jako pozadí** (#375, ne pružná výška v řádku) a obsah vpravo; slévá za sebou jdoucí commity |
 | `ConversationEntryView` | Položka osy: karta cizího review nebo komentáře, řádek události, vlákno bez kotvy |
@@ -3014,6 +3014,12 @@ Tři věci, které z toho plynou:
 - **Šířku bere měření odtud taky** (`TextWidth.pill(_:)`), stejně jako `TextWidth.miniButton`
   bere řez z `MiniButtonStyle`. Vlastní `systemFont` v měření znamená počítat jinou šířku, než
   jaká se nakreslí.
+
+  A **kreslí se tím samým `NSFont`em, který se měří** (`Font(DesignPill.font)`) — nález Copilota
+  na #406. První podoba měla AppKit řez na měření a SwiftUI `.system(size:weight:design:)` na
+  kresbu; metrikou to bylo totéž (`.AppleSystemUIFontMonospaced-Semibold`, `otevřený` 51,926
+  v obou), ale dvě specifikace jednoho řezu jsou přesně ta třída chyby, kvůli které `TextWidth`
+  vznikl (#284).
 - **`lineLimit` do kapsle nepatří.** V hlavičce karty se zalomit nesmí (`otevře/ný` nejsou dva
   odznaky pod sebou), v podtitulku commitu to omezení nikdy nemělo — je to rozhodnutí volajícího
   o jeho místě v okně.

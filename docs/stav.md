@@ -3716,6 +3716,15 @@ v `ThreadBubbleView` a `ConversationEntryView` (10,5 bez mono, 6/1). Jsou to **t
 pěti obrazovkách** a jedna z nich sedí v bublině, jejíž výšku si blok kódu měří sám (#236), takže by
 se do jedné vizuální pauzy neposoudily.
 
+**Z review na #406 přišly dva reálné nálezy a oba jsou opravené.** Kapsle měla řez zapsaný dvakrát
+— AppKit `NSFont` na měření a SwiftUI `.system(size:weight:design:)` na kresbu. Metrikou to bylo
+totéž (`.AppleSystemUIFontMonospaced-Semibold`, `otevřený` 51,926 v obou), ale dvě specifikace
+jednoho řezu jsou přesně ta třída chyby, kvůli které `TextWidth` vznikl (#284), takže se kreslí
+`Font(DesignPill.font)`. A guard nad zdrojáky znal jen SwiftUI podobu zápisu, tedy minul
+`monospacedSystemFont(ofSize: 10.5, weight: .semibold)` — což je zrovna tvar, který
+`SinceLastVisitView` do #348 doopravdy mělo; hlídá teď obě a ověřeno je to vloženou regresí zvlášť
+pro každou.
+
 **Barva se v testu porovnává s nakreslenou, ne s tokenem**, a je to změřené: bitmapa
 z `bitmapImageRepForCachingDisplay` je v profilu displeje, takže `crit` v ní vyjde
 `0.799/0.292/0.272` proti `0.812/0.133/0.180` v sRGB — na absolutní porovnání by tolerance musela

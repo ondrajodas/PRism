@@ -2018,6 +2018,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   #348 stála na sedmi místech a šest kopií je přesně ten stav, ve kterém se sedmá rozejde potichu.
   Vyzkoušené vložením regrese: s vrácenou sazbou `11 bez mono` v `OverviewView` padne.
 
+  **Guard hlídá obě podoby zápisu řezu** (nález Copilota na #406): SwiftUI
+  `size: 10.5, weight: .semibold` a AppKitovou `ofSize: 10.5, weight: .semibold`. První verze znala
+  jen tu první — a minula tím zrovna tvar, který `SinceLastVisitView` do #348 doopravdy mělo, tedy
+  hlídala něco jiného, než co o sobě tvrdila. Velikost se u toho čte z `DesignPill.fontSize`, ne
+  jako zapsaná desetina. Ověřeno vložením regrese v **obou** podobách, každá zvlášť.
+
   Že se hlavička v úzkém tabu nerozsype, tady **není** — na to je `OverviewWidthTests` (pásmo
   128–1180 bodů). Obojí je potřeba: přetečení je jiná chyba než jiná sazba.
 

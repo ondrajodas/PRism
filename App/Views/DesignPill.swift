@@ -23,8 +23,14 @@ enum DesignPill {
     static let horizontalPadding: CGFloat = 7
     static let verticalPadding: CGFloat = 2
 
-    /// Řez pro měření šířky — tentýž, jaký nasazuje `designPill(tint:background:)`.
-    static var measuringFont: NSFont {
+    /// Řez kapsle — **jeden pro kresbu i pro měření** (nález Copilota na #406).
+    ///
+    /// První podoba měla `NSFont` jen na měření a kreslila přes `.system(size:weight:design:)`.
+    /// Metrikou to bylo totéž (`.AppleSystemUIFontMonospaced-Semibold`, `otevřený` 51,926 v obou),
+    /// jenže dvě specifikace téhož řezu jsou přesně ta třída chyby, kvůli které `TextWidth` vůbec
+    /// existuje (#284): rozejít se může jedině to, co je zapsané dvakrát. `Font(_:)` z AppKit řezu
+    /// tu možnost zavírá — kreslí se doslova tím, co se změřilo.
+    static var font: NSFont {
         .monospacedSystemFont(ofSize: fontSize, weight: .semibold)
     }
 }
@@ -39,7 +45,7 @@ extension View {
     /// dva odznaky pod sebou), kdežto ta v podtitulku commitu to omezení nikdy neměla. Je to
     /// rozhodnutí volajícího o jeho místě v okně, ne vlastnost kapsle.
     func designPill(tint: Color, background: Color) -> some View {
-        font(.system(size: DesignPill.fontSize, weight: .semibold, design: .monospaced))
+        font(Font(DesignPill.font))
             .foregroundStyle(tint)
             .padding(.horizontal, DesignPill.horizontalPadding)
             .padding(.vertical, DesignPill.verticalPadding)
