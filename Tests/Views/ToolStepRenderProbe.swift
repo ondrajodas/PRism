@@ -41,7 +41,12 @@ struct ToolStepRenderProbe {
         }
     }
 
-    /// Dráhy s výpisem: běžící s rozbaleným oknem, doběhlá sbalená a běžící nad ořezanou osou.
+    /// Dráhy s výpisem: **čerstvě spuštěná o třech krocích**, běžící s rozbaleným oknem, doběhlá
+    /// sbalená a běžící nad ořezanou osou.
+    ///
+    /// Ta první je tam od opravy výšky (#402): okno je **obsah do stropu**, takže krátký běh má
+    /// vysoké tři řádky a nemá přepínač `Sledovat konec` — a je to zrovna ten stav, ve kterém každé
+    /// review začíná. Na obrázku se dá srovnat s dlouhými pod ním, kde strop platí.
     @Test("Vyrendrovat dráhy s výpisem kroků")
     func rendersLanesWithTheFeed() throws {
         let directory = URL(
@@ -50,13 +55,14 @@ struct ToolStepRenderProbe {
 
         for width in [1000.0, 620.0] as [CGFloat] {
             let url = directory.appending(path: "vypis-\(Int(width)).png")
-            try render(feedScene(width: width), width: width, height: 720, to: url)
+            try render(feedScene(width: width), width: width, height: 820, to: url)
             print("SONDA \(url.path) — \(Int(width)) b")
         }
     }
 
     private func feedScene(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 11) {
+            lane(skill: "docs-review", running: true, steps: 3, expanded: true)
             lane(skill: "security-review", running: true, steps: 47, expanded: true)
             lane(skill: "php-review", running: false, steps: 312, expanded: false)
             lane(skill: "test-coverage", running: true, steps: 516, expanded: true)

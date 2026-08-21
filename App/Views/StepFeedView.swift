@@ -2,12 +2,17 @@ import SwiftUI
 
 /// Živý výpis kroků pod fázemi dráhy — druhá vrstva tabu `Průběh` (#325, sekce 20 návrhu).
 ///
-/// **Okno o pevné výšce, ne rostoucí blok.** Blok, který roste s každou událostí, posune všechno
-/// pod sebou — a to je přerovnání celého tabu několikrát za vteřinu. Výpis je proto vlastní scroll
-/// a přibývající řádek hýbe jen s ním; dráha nad ním se nehne vůbec.
+/// **Okno se stropem, ne rostoucí blok.** Blok, který roste s každou událostí, posune všechno pod
+/// sebou — a to je přerovnání celého tabu několikrát za vteřinu. Výpis je proto vlastní scroll
+/// se stropem a přibývající řádek hýbe jen s ním; dráha nad ním se nehne vůbec.
+///
+/// **Do stropu je to ale výška obsahu.** Pevná výška od začátku znamenala, že krátký běh nakreslil
+/// okno vysoké 138 bodů a dvě třetiny z něj byly prázdné, což je stav, ve kterém každé review
+/// začíná. Roste se proto jen po strop (`Policy.stepFeedWindow`) — cena za to je přerovnání pod
+/// prvními osmi událostmi běhu, ne pod každou.
 ///
 /// **Próza modelu se nekreslí.** Otázka, kvůli které se do `Průběhu` chodí, je „koukal se tam, kam
-/// měl“, a odpověď na ni jsou nástroje, ne úvahy. Próza je řádově víc dat a v okně o pevné výšce by
+/// měl“, a odpověď na ni jsou nástroje, ne úvahy. Próza je řádově víc dat a v okně se stropem by
 /// kroky vytlačila z dohledu, tedy zhoršila přesně to, kvůli čemu výpis vzniká. Kdo ji potřebuje,
 /// má `claude --resume` v hlavičce dráhy.
 ///
@@ -51,14 +56,42 @@ struct StepFeedView: View {
     /// okno stojí.
     static let rowsInset = 5.0
 
-    /// Výška okna. **Pevná, a to je celý smysl** — viz komentář u typu. Sedm řádků a osmý
-    /// useknutý hranou, tedy z výpisu je poznat, že se scrolluje (138 bodů jako v návrhu).
-    private static let windowHeight = 138.0
+    /// Výška řádku s řezem na začátku výpisu — `caption2` plus svislé odsazení.
+    ///
+    /// Měří se tady, protože `cutRow(_:)` se kreslí tady (#236), a je to **změřená sazba, ne
+    /// nasazený rámec** — ze stejného důvodu jako u `TimelineEntryRow.height`. Do výšky okna se
+    /// počítá jen tehdy, když se ten řádek doopravdy kreslí; obojí rozhoduje `cutText`, aby to
+    /// byla jedna pravda.
+    static let cutRowHeight = 21.0
+
+    /// Strop výšky okna: osm řádků a devátý useknutý hranou, tedy z výpisu je poznat, že se
+    /// scrolluje (138 bodů, `.stepfeed .rows { max-height }` v návrhu). Že strop **není** celý
+    /// počet řádků, hlídá test — kdyby na řádky vyšel přesně, vypadal by rolovatelný výpis jako
+    /// celý.
+    ///
+    /// **Rozměry pohromadě a `internal` schválně, kvůli testu**: `StepFeedWindowTests` počítají
+    /// tímtéž vstupem, jakým počítá okno — vlastní kopie čísel v testu by hlídala jinou výšku, než
+    /// na které okno stojí.
+    static let metrics = StepFeedMetrics(
+        row: TimelineEntryRow.height,
+        cut: cutRowHeight,
+        inset: rowsInset,
+        cap: 138
+    )
+
+    /// Řez na začátku výpisu, nebo `nil` u neořezané osy. **Jedna pravda pro kresbu i pro výšku** —
+    /// dvě podmínky o tomtéž řádku by se rozešly a okno by o něj přerostlo obsah.
+    private var cutText: String? { ReviewerLaneText.stepCut(lane.droppedEntries) }
+
+    /// Jak vysoké okno je a je-li v něm co rolovat. Rozhoduje `Policy`, tady se jen dodají rozměry.
+    private var window: StepFeedWindow {
+        Policy.stepFeedWindow(rows: lane.entries.count, cut: cutText != nil, metrics: Self.metrics)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            if state == .expanded { window }
+            if state == .expanded { feedWindow }
         }
         .overlay(alignment: .top) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
     }
@@ -77,7 +110,9 @@ struct StepFeedView: View {
                         .font(.caption)
                         .monospacedDigit()
                     // Zkrácená osa to musí říct (#203, #325) — jinak vypadá, že běh začal
-                    // uprostřed. V hlavičce proto, že ta je vidět i sbalená.
+                    // uprostřed. V hlavičce proto, že ta je vidět i sbalená. Bere se
+                    // z `droppedEntries`, ne z `cutText`: hlavička mluví o celém běhu, řez o tom,
+                    // co v okně chybí nad prvním řádkem.
                     if let shortfall = ReviewerLaneText.stepShortfall(lane.droppedEntries) {
                         Text(verbatim: shortfall)
                             .font(.caption)
@@ -94,7 +129,10 @@ struct StepFeedView: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            if state == .expanded { tailToggle }
+            // **Jen když je co rolovat.** Nad obsahem, který se vejde celý, by to byla nabídka,
+            // která nedělá nic — a zašedlá by tvrdila „tady se to dělá, jen teď ne“, kdežto tady
+            // není co následovat vůbec (`Policy.stepFeedAtEnd` u krátkého obsahu vrací `true`).
+            if state == .expanded, window.scrolls { tailToggle }
         }
         .foregroundStyle(Palette.ink3)
         .padding(.horizontal, 12)
@@ -131,7 +169,7 @@ struct StepFeedView: View {
 
     // MARK: - Okno s kroky
 
-    private var window: some View {
+    private var feedWindow: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 rows
@@ -171,7 +209,14 @@ struct StepFeedView: View {
                 stuckAt = nil
                 catchUp(in: proxy)
             }
-            .frame(height: Self.windowHeight)
+            // Když se rolovat přestalo (osa se zkrátila novým během téhož revieweera), je výpis na
+            // konci z definice — a sledování se proto vrací na zapnuté. Bez toho by tu zůstalo
+            // vypnuté z minula a **až** by obsah zase přerostl strop, výpis by konec nesledoval,
+            // aniž by na to bylo kde přijít: přepínač je do té doby schovaný.
+            .onChange(of: window.scrolls) { _, scrolls in
+                if !scrolls { followsTail = true }
+            }
+            .frame(height: window.height)
             .background(Palette.chrome)
             .clipShape(.rect(cornerRadius: 6))
             .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.lineSoft, lineWidth: 1) }
@@ -188,7 +233,7 @@ struct StepFeedView: View {
         // (#252), a při třech stech krocích je to tři sta umístění při každém přerovnání obsahu.
         LazyVStack(alignment: .leading, spacing: 0) {
             // Řez na místě, kde ta useknutá část byla — druhé přiznání zkrácení (#325).
-            if let cut = ReviewerLaneText.stepCut(lane.droppedEntries) { cutRow(cut) }
+            if let cut = cutText { cutRow(cut) }
             ForEach(lane.entries) { entry in
                 TimelineEntryRow(
                     entry: entry,
@@ -219,6 +264,7 @@ struct StepFeedView: View {
     @ViewBuilder
     private var arrivals: some View {
         if let count = Policy.stepFeedArrivals(
+            scrolls: window.scrolls,
             follows: followsTail,
             newest: lane.entries.last?.id,
             anchor: arrivalAnchor

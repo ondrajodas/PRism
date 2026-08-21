@@ -904,6 +904,36 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   neotevře** (bez množiny `opened` by ho automat otevřel příští událostí, tedy do vteřiny)
   a **narostlý obsah není odrolování** — narostlý obsah je o řádek „mimo konec“, takže by se
   sledování konce vypnulo samo první událostí.
+- **Výška okna výpisu (#325, oprava po proklikání)** — okno je **obsah do stropu**, takže se výška
+  počítá z rozměrů, které drží view (`StepFeedView.metrics`). Tím vzniká třída chyby z #236,
+  jen o výšku: **měřeno jinde, než se kreslí**. Dělí se to na dvě sady.
+
+  `StepFeedTests` berou tu čistou funkci (`Policy.stepFeedWindow`) výčtem, a to nad **kulatými
+  rozměry, které nejsou z návrhu** — funkce nesmí na konkrétních číslech záležet a z literálů se
+  dá přečíst aritmetika. Nejcennější tvrzení je, že **okno na hranici stropu nekmitá**: řady
+  výšek přes 40 počtů řádků je neklesající, strop nepřeroste, a co jednou na stropu stojí, tam
+  zůstane. Zvlášť se tvrdí, že obsah **přesně** na strop se ještě neroluje (proto `>`, ne `>=`)
+  a že se pilulka `↓ N nových` nekreslí, když není co rolovat.
+
+  `StepFeedWindowTests` proti tomu měří na **hostovaném okně**, aby ta čísla nebyla druhá pravda
+  o kresbě. Rozměry se ověřují **rozdíly**, ne přepsanou aritmetikou: přírůstek na jeden řádek,
+  přírůstek řezu na začátku ořezané osy a celý vzorec tím, že u nerolovaného výpisu je **okno
+  stejně vysoké jako obsah**. Dvě věci, které se u toho našly a jinak by prošly:
+
+  - **výšku řádku určovala ikona** — SF Symboly jednu výšku nemají, takže řádek se zadáním, které
+    nedorazilo celé, měřil 17 bodů proti 15 u ostatních (a neznámý nástroj 16). Test proto jde
+    přes **všechny druhy řádku a všechny symboly**, které výpis kreslí, a přes **pásmo šířek**
+    (#236);
+  - **nasazený rámec (`frame(height:)`) tvrzení vypnul** — měřidlo pak vrací to, co se nasadilo,
+    takže rozejití s typografií není jak poznat (text se místo toho potichu ořízne). Výšku proto
+    určuje sazba a konstanta o ní jen tvrdí, kolik měří.
+
+  Ověřeno vloženou regresí z obou stran: pevná výška okna položí tři testy, výška řádku o bod
+  vedle další dva.
+
+  **Že `fittingSize` nesmí být přímo v `#expect`** je u toho vlastní past (#367 potřetí): v makru
+  se čte dvakrát a `CGFloat` se u toho převádí, takže tvrzení padalo nad dvěma **na bit shodnými**
+  patnáctkami. Hodnota se bere jednou do proměnné a tvrzení se porovnávají mezi sebou.
 - **Že výpis doopravdy dojede na konec (#325)** — `StepFeedTailTests` hostuje `StepFeedView`
   v okně a čte polohu z `NSScrollView`, protože jinde není: do observable stavu se offset
   **nezapisuje** (#252). Ptá se u toho **tou samou funkcí, jakou se rozhoduje okno**

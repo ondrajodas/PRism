@@ -15,6 +15,23 @@ struct TimelineEntryRow: View {
     /// události poskočil o řádek a v koutku oka to bliká.
     var isNewest = false
 
+    /// Výška řádku. **Číslo, ne vyjednávání** (#220): okno výpisu se z ní **počítá**
+    /// (`Policy.stepFeedWindow`), aby rostlo jen do stropu a na hranici neposkakovalo — a spočítat
+    /// se dá jedině to, co je známé dřív, než se nakreslí.
+    ///
+    /// **Je to změřená sazba, ne nasazený rámec**, a to je schválně: `frame(height:)` by výpočet
+    /// a kresbu srovnal na sílu, takže by se rozejití **nedalo poznat** — testu by měřidlo vracelo
+    /// nasazené číslo a text by se místo toho potichu ořízl. Sazbu proto určuje řádek
+    /// (`caption` a `caption2` plus svislé odsazení) a tahle konstanta o ní tvrdí, kolik měří;
+    /// `StepFeedWindowTests` to tvrzení kontrolují na hostovaném řádku, přes **pásmo šířek** (#236)
+    /// a přes **všechny druhy řádku** — ověřeno vloženou regresí (hodnota o bod vedle a suita padá
+    /// na dvou místech).
+    ///
+    /// Na šířce výška nezávisí, protože oba texty jsou jednořádkové (`lineLimit(1)`) — kdyby se to
+    /// změnilo, přestala by být výška okna spočitatelná bez šířky a měření by muselo do toho typu,
+    /// který ji drží.
+    static let height = 15.0
+
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(entry.at, format: .dateTime.hour().minute().second())
@@ -23,7 +40,23 @@ struct TimelineEntryRow: View {
                 .foregroundStyle(.tertiary)
             Image(systemName: symbol)
                 .font(.caption)
+                // **Ikona je menší než text, a to je podmínka, ne estetika** (#325, připomínka
+                // z proklikání). SF Symboly jednu výšku nemají — v přirozené velikosti měří
+                // `doc.badge.ellipsis` 15 bodů, `wrench.and.screwdriver` 14 a `clock` 12
+                // (změřeno), takže o výšce **řádku** rozhodovala ikona: řádek se zadáním, které
+                // nedorazilo celé, byl o dva body vyšší než ostatní a neznámý nástroj o jeden.
+                // Okno výpisu se z výšky řádku počítá, takže by u takového běhu bylo kratší než
+                // jeho obsah. Se `small` je každý symbol nejvýš 12 bodů, tedy pod výškou řádku
+                // textu, a o výšce řádku rozhoduje text. Návrh to má stejně
+                // (`.step .ic { font-size: 10.5px }` proti 11.5px u textu).
+                //
+                // **Rámcem se to řešit nedá**: `frame(height:)` sice výšku ohraničí, ale
+                // v `firstTextBaseline` stojí jeho účtování na dolní hraně, takže řádek naopak
+                // vyrostl na 16 bodů (změřeno).
+                .imageScale(.small)
                 .foregroundStyle(color)
+                // Pevná šířka sloupce ikon, aby jména nástrojů stála v jedné svislici — výpis se
+                // čte po sloupci (`.step` v návrhu má na ikonu vlastní sloupec mřížky).
                 .frame(width: 14)
             Text(verbatim: title)
                 .font(.caption)

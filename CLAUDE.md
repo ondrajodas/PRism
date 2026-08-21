@@ -774,6 +774,14 @@ Zvlášť stojí za přečtení, než sáhneš na:
   kreslení**, ne do volajícího; dvě místa znamenají dvě pravdy o jedné šířce. Testuje se proti
   **layout manageru** a **přes pásmo šířek** — rozejde se to jen v pásmu, takže u jedné šířky test
   projde. Podrobnosti v [`docs/architektura.md`](docs/architektura.md).
+
+  **A rozměr, ze kterého se počítá, se měří — nenasazuje se rámcem** (#325). Výška okna živého
+  výpisu je `min(obsah, strop)`, takže stojí na výšce řádku; `frame(height:)` by ji ale srovnal
+  s kresbou **na sílu**, a rozejití by pak nebylo jak poznat — měřidlo v testu vrací nasazené číslo
+  a text se místo toho potichu ořízne (ověřeno vloženou regresí: s rámcem projde i výška o bod
+  vedle). U výšky řádku navíc nesmí rozhodovat **ikona**: SF Symboly jednu výšku nemají (změřeno
+  15 / 14 / 12 bodů), takže je srovná `imageScale(.small)` — rámcem to nejde, v
+  `firstTextBaseline` se účtuje od dolní hrany a řádek s ním naopak vyroste.
 - **Co se počítá při každém překreslení, se pamatuje — a cache si musí říct, co ji vyprazdňuje**
   (#224). Obarvení řádku se volalo z computed property, takže běželo i při přejezdu myší: 44 ms
   na soubor o 2400 řádcích, pokaždé znovu; z cache 0,30 ms. Hranice musí být v tom typu vidět

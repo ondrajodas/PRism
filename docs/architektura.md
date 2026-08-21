@@ -1374,7 +1374,7 @@ Co se u toho nemá rozbít:
 
 ### Živý výpis kroků v tabu Průběh (#325)
 
-Druhá vrstva dráhy: pod fázemi visí **okno o pevné výšce s vlastním scrollem**, u běžícího
+Druhá vrstva dráhy: pod fázemi visí **okno se stropem a s vlastním scrollem**, u běžícího
 revieweera rozbalené. Do #325 byly tytéž řádky pod **zavřeným** rozbalením bez stropu a bez
 scrollu, takže se za běhu na to, co reviewer dělá, nedalo koukat — a `Sledovat konec` z #22 zrušilo
 #242 s tím, že „s dráhami není co následovat“. Se scrollujícím výpisem je co následovat zase.
@@ -1382,9 +1382,35 @@ scrollu, takže se za běhu na to, co reviewer dělá, nedalo koukat — a `Sled
 Kreslí to `StepFeedView` (`App/Views/`), řádek `TimelineEntryRow` (vlastní soubor od #325),
 rozhoduje `Policy` v `App/Policy/StepFeed.swift`. Co se u toho nemá rozbít:
 
-- **Výška okna je pevná (138 bodů), a to je celý smysl.** Rostoucí blok posune všechno pod sebou,
-  a to je přerovnání celého tabu několikrát za vteřinu. Přibývající řádek proto hýbe jen oknem;
-  dráha nad ním se nehne vůbec.
+- **Výška okna je obsah do stropu (138 bodů), ne strop od začátku** (`Policy.stepFeedWindow`).
+  Strop je tam proto, že rostoucí blok posune všechno pod sebou, a to je přerovnání celého tabu
+  několikrát za vteřinu; nad stropem tedy hýbe přibývající řádek jen oknem a dráha nad ním se
+  nehne vůbec. **Pod stropem se ale roste** — pevná výška od začátku znamenala u běhu o třech
+  krocích okno se dvěma třetinami prázdna, a to je stav, ve kterém každé review začíná (opraveno
+  po proklikání #325). Cena je přerovnání pod **prvními osmi** událostmi běhu, ne pod každou
+  z tří stovek.
+
+  Tři věci, které u toho nejsou zjevné:
+
+  - **Výška se počítá z dat, ne z přeměřeného obsahu.** Výška obsahu hlášená scrollem se při
+    rozvržení mění i naplano (změřeno `1825 → 3505 → 1825` na jedné scéně), takže okno navěšené
+    na ni by u nezměněného obsahu poskakovalo o řádek tam a zpět. Počítá se proto z počtu řádků
+    a rozměry dodává view (`StepFeedView.metrics`), protože se kreslí tam (#236); hodnota je
+    monotónní v počtu řádků, tedy na hranici stropu se zastaví a už se nemění.
+  - **O výšce řádku nesmí rozhodovat ikona.** SF Symboly jednu výšku nemají —
+    `doc.badge.ellipsis` 15 bodů, `wrench.and.screwdriver` 14, `clock` 12 (změřeno) —, takže
+    řádek se zadáním, které nedorazilo celé, byl o dva body vyšší než ostatní a neznámý nástroj
+    o jeden. Řeší to `imageScale(.small)` (každý symbol nejvýš 12 bodů, tedy pod výškou řádku
+    textu), ne `frame(height:)`: rámec se v `firstTextBaseline` účtuje od dolní hrany, takže
+    s ním řádek naopak vyrostl na 16 bodů. Návrh má ikonu menší než text taky
+    (`.step .ic { font-size: 10.5px }` proti 11.5px).
+  - **`Sledovat konec` ani pilulka `↓ N nových` se nekreslí, dokud není co rolovat**
+    (`StepFeedWindow.scrolls`). Nad obsahem, který se vejde celý, obojí slibuje posun tam, kde
+    výpis už je — a `Policy.stepFeedAtEnd` u krátkého obsahu vrací `true`, takže by přepínač
+    nemohl ani nic přepnout. Zašedle to nejde: zašedlé tlačítko tvrdí „tady se to dělá, jen teď
+    ne“, kdežto tady není co následovat. A když se rolovat **přestane** (osa se zkrátila novým
+    během), vrací se sledování na zapnuté — jinak by zůstalo vypnuté z minula a po přerostení
+    stropu by výpis konec nesledoval, aniž by na to bylo kde přijít.
 - **Rozbalení drží tab, ne dráha** (`StepFeedExpansion` v `@State` `ReviewProgressView`). Dráhy jsou
   v `LazyVStack`u, takže `@State` uvnitř `ReviewerLaneView` se odrolováním zahodil a výpis se sám
   zavřel — u běžícího revieweera tedy zrovna tam, kam se člověk díval. Klíčem je jméno skillu, takže
@@ -1421,10 +1447,10 @@ rozhoduje `Policy` v `App/Policy/StepFeed.swift`. Co se u toho nemá rozbít:
 - **Pilulka `↓ N nových` se počítá z `id`, ne z počtu událostí.** Se stropem počet přestane růst,
   jakmile se osa začne ořezávat, takže by pilulka u dlouhého běhu tvrdila, že nepřibylo nic — a to
   je zrovna ten běh, u kterého se odrolovalo nahoru.
-- **Okno má líný seznam**, i když je vysoké 138 bodů: prvek, který se nekreslí, se pořád umisťuje
+- **Okno má líný seznam**, i když je vysoké nejvýš 138 bodů: prvek, který se nekreslí, se pořád umisťuje
   (#252), a při třech stech krocích je to tři sta umístění při každém přerovnání obsahu.
 - **Próza modelu se nekreslí.** Otázka, kvůli které se do `Průběhu` chodí, je „koukal se tam, kam
-  měl“, a odpověď na ni jsou nástroje, ne úvahy; v okně o pevné výšce by kroky vytlačila z dohledu.
+  měl“, a odpověď na ni jsou nástroje, ne úvahy; v okně se stropem by kroky vytlačila z dohledu.
   Zamítnuté cesty jsou v záznamu rozhodnutí ve specifikaci.
 - **Vestavěný terminál to není a nemá být**: řeší **zásah** do běžící session, výpis **sledování**.
   Do výpisu se nedá psát a cesta zpátky do session zůstává `Zkopírovat resume` v hlavičce dráhy.
@@ -2770,7 +2796,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DismissedRowStyle` | Buňka tabulky: ztlumení odmítnutého řádku a kontextové menu `Označit jako…` / `Vrátit` |
 | `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak, odmítnutí |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
-| `ReviewProgressView`, `ReviewerLaneView` | Tab `Průběh` (#242, nahradily `ReviewTimelineView`): **dráha na revieweera** s fázemi vedle sebe, věta o tom, co se právě děje, u spadlé session důvod, `stderr` a `Pustit znovu` / `Zkopírovat příkaz`; pod fázemi **živý výpis kroků** v okně o pevné výšce (#325, `StepFeedView` + `TimelineEntryRow`). Dráha po skillu **mimo nastavenou sadu** nese v hlavičce `mimo sadu`; prázdný stav mluví o **nastavení**, protože se do něj dá dojít jedině s prázdnou sadou skillů |
+| `ReviewProgressView`, `ReviewerLaneView` | Tab `Průběh` (#242, nahradily `ReviewTimelineView`): **dráha na revieweera** s fázemi vedle sebe, věta o tom, co se právě děje, u spadlé session důvod, `stderr` a `Pustit znovu` / `Zkopírovat příkaz`; pod fázemi **živý výpis kroků** v okně se stropem (#325, `StepFeedView` + `TimelineEntryRow`). Dráha po skillu **mimo nastavenou sadu** nese v hlavičce `mimo sadu`; prázdný stav mluví o **nastavení**, protože se do něj dá dojít jedině s prázdnou sadou skillů |
 | `ReviewerLaneText` | České věty dráhy — stav, co se právě děje, čím to skončilo. Rozlišuje **tři** doběhlé stavy: nahlásilo nálezy / nahlásilo nulu / nenahlásilo nic — a `nespuštěno` od `ve frontě` |
 | `FindingsTabView`, `FindingsEmptyView` | Tab `Nálezy` (#242): souhrn počtů, `Zahodit nálezy`, tabulka — a věta, **proč** je prázdno (`Policy.findingsEmptyReason`), společná s panelem |
 | `FindingsTableView`, `FindingTableRowView`, `FindingTableRow` | Tabulka nálezů přes celou šířku: řazení kliknutím na hlavičku, řádek na **místo** (shoda dvou reviewerů je odznak `2×`), rozbalení kreslí tutéž `FindingBubbleView` jako diff. Akce (`Převzít`, `Vrátit`) jsou **barevný text z palety** (`AccentLinkButtonStyle`, #298), ne plocha jako v bublině a ne systémová modrá; krytí odmítnutého řádku drží `dismissedOpacity` (`.frow.done` z návrhu), ze kterého měří i sonda kontrastu |

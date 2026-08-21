@@ -28,8 +28,33 @@ enum StepFeedState: Equatable, Sendable {
     case none
     /// Sbalený: jeden řádek s počtem kroků, ne okno.
     case collapsed
-    /// Rozbalený: okno o pevné výšce s vlastním scrollem.
+    /// Rozbalený: okno o výšce obsahu do stropu, s vlastním scrollem.
     case expanded
+}
+
+/// Rozměry, ze kterých se počítá výška okna výpisu (#325).
+///
+/// **Čísla dodává view, ne `Policy`.** Kreslí se ve `StepFeedView` a v `TimelineEntryRow`, takže se
+/// tam i měří (#236) — jinak by o jedné výšce rozhodovala dvě místa a rozešla by se. `Policy` z nich
+/// jen počítá, což je celý důvod, proč sem chodí jako parametr a ne jako konstanta.
+struct StepFeedMetrics: Equatable, Sendable {
+    /// Výška jednoho řádku výpisu (`TimelineEntryRow.height`).
+    let row: Double
+    /// Výška řádku s řezem („N starších kroků se nevešlo do stropu“).
+    let cut: Double
+    /// Vzduch nad prvním a pod posledním řádkem — počítá se na **obou** stranách.
+    let inset: Double
+    /// Strop výšky okna. Nad ním okno neroste a začne se rolovat.
+    let cap: Double
+}
+
+/// Jak vysoké je okno výpisu a je-li v něm co rolovat (#325).
+struct StepFeedWindow: Equatable, Sendable {
+    /// Výška okna: **obsah do stropu**, ne strop od začátku.
+    let height: Double
+    /// Přerostl obsah strop? Když ne, není kam rolovat — a `Sledovat konec` ani `↓ N nových` se
+    /// proto nekreslí.
+    let scrolls: Bool
 }
 
 /// Co má výpis udělat s tím, co mu řekla geometrie scrollu (#325).
@@ -102,6 +127,29 @@ extension Policy {
         return expansion.expanded.contains(lane.skill) ? .expanded : .collapsed
     }
 
+    /// Výška okna výpisu: **obsah do stropu, ne strop od začátku** (#325, připomínka z proklikání).
+    ///
+    /// Do téhle opravy byla výška pevná vždycky, takže běh o třech krocích nakreslil okno vysoké
+    /// 138 bodů a dvě třetiny z něj byly prázdné — a to při **každém** otevření tabu, protože
+    /// každé review začíná krátkou osou. Důvod, kvůli kterému strop je, se tím nevrací: okno roste
+    /// jedině **do** stropu, takže přerovnání obsahu pod sebou stojí nejvýš prvních osm událostí
+    /// běhu, ne každá z tří stovek.
+    ///
+    /// **Počítá se z dat, ne z přeměřeného obsahu**, a tady je to celé rozhodnutí. Výška obsahu
+    /// hlášená scrollem se při rozvržení mění **i naplano** (změřeno `1825 → 3505 → 1825` na jedné
+    /// scéně), takže okno navěšené na ni by u nezměněného obsahu poskakovalo o řádek tam a zpět.
+    /// Řádek výpisu má proto **pevnou výšku** (`TimelineEntryRow.height`) a obsah se dá spočítat:
+    /// hodnota je funkcí počtu řádků, tedy roste **monotónně** a na hranici stropu se zastaví.
+    ///
+    /// `scrolls` je druhá polovina téže odpovědi. Dokud se obsah vejde celý, nabídka `Sledovat
+    /// konec` ani pilulka `↓ N nových` nemají co dělat — obojí slibuje posun tam, kam se posunout
+    /// nedá, a je to ta „nabídka, která nic nedělá“, kterou `CLAUDE.md` zakazuje. Rozhoduje se to
+    /// tady, aby to nebyl `if` ve view.
+    static func stepFeedWindow(rows: Int, cut: Bool, metrics: StepFeedMetrics) -> StepFeedWindow {
+        let content = 2 * metrics.inset + (cut ? metrics.cut : 0) + Double(rows) * metrics.row
+        return StepFeedWindow(height: min(content, metrics.cap), scrolls: content > metrics.cap)
+    }
+
     /// Vůle, do které se scroll ještě počítá za „na konci“.
     ///
     /// Musí být: offset i výšky přicházejí jako `Double` po rozvržení, takže rovnost na bod
@@ -126,8 +174,12 @@ extension Policy {
     /// Počítá se z **`id` poslední události, ne z jejich počtu**: se stropem (`entryLimit`) počet
     /// přestane růst, jakmile se osa začne ořezávat, takže by pilulka u dlouhého běhu tvrdila, že
     /// nepřibylo nic. `id` roste dál (`droppedEntries` mu čísla nevrací).
-    static func stepFeedArrivals(follows: Bool, newest: Int?, anchor: Int?) -> Int? {
-        guard !follows, let newest, let anchor, newest > anchor else { return nil }
+    ///
+    /// **Bez rolovatelného obsahu se nekreslí vůbec** (`scrolls`): pilulka slibuje posun na konec,
+    /// jenže obsah, který se vejde celý, žádný neviditelný konec nemá. Je to tatáž úvaha jako
+    /// u přepínače `Sledovat konec` a proto tentýž příznak z `stepFeedWindow`.
+    static func stepFeedArrivals(scrolls: Bool, follows: Bool, newest: Int?, anchor: Int?) -> Int? {
+        guard scrolls, !follows, let newest, let anchor, newest > anchor else { return nil }
         return newest - anchor
     }
 }

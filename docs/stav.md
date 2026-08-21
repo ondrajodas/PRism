@@ -3388,11 +3388,31 @@ kreslit: jeden řádek na `tool_use` a na něm jeho stav.
 
 **Nebyla to nová funkce, ale nedodělaná.** Kroky se do osy zapisovaly a umělo se je vykreslit už
 od #22, jenže pod **zavřeným** rozbalením, bez stropu a bez vlastního scrollu — takže se za běhu
-na to, co reviewer dělá, nedalo koukat. Od #325 visí pod fázemi **okno o pevné výšce s vlastním
+na to, co reviewer dělá, nedalo koukat. Od #325 visí pod fázemi **okno se stropem a s vlastním
 scrollem**, u běžícího revieweera rozbalené; při doběhnutí se nezavírá samo.
 
-Pevná výška je podstatná: rostoucí blok by při **každé** události posunul všechno pod sebou, tedy
+Strop je podstatný: rostoucí blok by při **každé** události posunul všechno pod sebou, tedy
 přerovnal celý tab několikrát za vteřinu.
+
+**Do stropu je to ale výška obsahu, a to je oprava po proklikání.** První verze měla výšku pevnou
+vždycky, takže běh o třech krocích nakreslil okno vysoké 138 bodů se dvěma třetinami prázdna — a to
+je stav, ve kterém **každé** review začíná. Okno proto roste, dokud na strop nenarazí; přerovná se
+tím nejvýš pod prvními osmi událostmi běhu, ne pod každou z tří stovek. Tři věci, které z toho
+plynou:
+
+- **výška se počítá z dat, ne z přeměřeného obsahu** — výška obsahu hlášená scrollem se při
+  rozvržení mění i naplano (`1825 → 3505 → 1825` na jedné scéně), takže okno navěšené na ni by
+  u nezměněného obsahu poskakovalo o řádek tam a zpět. Rozhoduje čistá funkce
+  (`Policy.stepFeedWindow`) nad rozměry, které dodává view, protože se kreslí tam (#236);
+- **o výšce řádku nesmí rozhodovat ikona** — SF Symboly jednu výšku nemají, takže řádek se
+  zadáním, které nedorazilo celé, měřil 17 bodů proti 15 u ostatních a neznámý nástroj 16.
+  Spravilo to `imageScale(.small)`, ne `frame(height:)`: rámec se v `firstTextBaseline` účtuje od
+  dolní hrany, takže s ním řádek naopak vyrostl na 16. Návrh má ikonu menší než text taky;
+- **`Sledovat konec` ani pilulka `↓ N nových` se nekreslí, dokud není co rolovat** — obojí slibuje
+  posun tam, kde výpis už je.
+
+Návrh (sekce 20) se u toho **překreslil taky**: `height: 138px` je `max-height`, protože v CSS to
+pravidlo platilo i pro krátký výpis.
 
 **Rozbalení drží tab, ne dráha.** Do #325 to byl `@State` uvnitř `ReviewerLaneView` a dráhy jsou
 v `LazyVStack`u, takže odrolovaná dráha se zahodila i se svým stavem — výpis se sám zavřel zrovna
@@ -3433,7 +3453,7 @@ smazat. S výpisem **na revieweera** se každé okno drží svého konce, takže
 události napříč reviewery by byl stav, který nikdo nečte.
 
 **Co zůstalo #327:** surová session v sheetu, tedy próza modelu, výstupy nástrojů a systémové
-události. Výpis kreslí jen kroky, a schválně — próza je řádově víc dat a v okně o pevné výšce by
+události. Výpis kreslí jen kroky, a schválně — próza je řádově víc dat a v okně se stropem by
 kroky vytlačila z dohledu. Tlačítko `Ukázat surovou session`, které návrh kreslí v hlavičce výpisu,
 proto v #325 **není**.
 
