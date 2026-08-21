@@ -91,11 +91,27 @@ extension Policy {
         }
     }
 
+    /// Stav doběhlého běhu.
+    ///
+    /// Nálezy přebíjejí všechno — počet je to, kvůli čemu se chip čte. Zbytek rozhoduje
+    /// `Policy.inconclusiveReason(of:)`, tedy **tatáž funkce, jakou se řídí návrh verdiktu
+    /// a proužek u řádku** (#383): do té doby tady stály vlastní `if`y v jiném pořadí a čtení
+    /// kódu neznaly, takže chip tvrdil `čisté` nad během, který kód neotevřel.
     private static func finishedState(of run: StoredReviewRun) -> ReviewerChip.State {
         if !run.findings.isEmpty { return .findings(run.findings.count) }
-        if !run.calledReportFindings { return .inconclusive("reviewer nálezy nenahlásil") }
-        if run.droppedFindings > 0 { return .inconclusive(droppedText(run.droppedFindings)) }
-        return .clean
+        guard let reason = inconclusiveReason(of: run) else { return .clean }
+        return .inconclusive(chipText(reason, in: run))
+    }
+
+    /// Důvod chipu větou. Kratší a s malým písmenem — visí za pomlčkou v nápovědě, ne jako
+    /// samostatné sdělení; delší text má `Policy.inconclusiveDetail(_:)` pro tab a notifikaci.
+    private static func chipText(_ reason: InconclusiveReason, in run: StoredReviewRun) -> String {
+        switch reason {
+        // Počet zůstává: „nálezy se nepodařilo přečíst“ bez čísla neřekne, kolik toho chybí.
+        case .droppedFindings: droppedText(run.droppedFindings)
+        case .noReport: "reviewer nálezy nenahlásil"
+        case .unreadCode: "reviewer neotevřel ani jeden soubor z pracovní kopie"
+        }
     }
 
     private static func droppedText(_ count: Int) -> String {

@@ -31,12 +31,16 @@ extension Policy {
     /// 3. **nálezy** — to je to, kvůli čemu se review pouštělo,
     /// 4. **odmítnuté** — nálezy byly, ale všechny jsem posoudil jako falešné (#113),
     /// 5. **selhání** — spadlá session bez nálezů,
-    /// 6. **čisté** — jen když se z běhů dá vůbec soudit; jinak je to `failed` s vysvětlením.
+    /// 6. **čisté** — jen když se z běhů dá vůbec soudit; jinak `inconclusive` s důvodem.
     ///
     /// Ten poslední krok je celý smysl toho rozlišení: „nic jsem nenašel“ a „nemám co říct“
     /// vypadají v datech stejně a v UI znamenají opak. Přesně proto je čtvrtý krok vlastní
     /// stav a ne `clean`: „našel a já to zamítl“ je třetí tvrzení, které v datech vypadá
     /// stejně jako ta dvě.
+    ///
+    /// **Do #383 byl ten šestý krok `failed`**, tedy odznak `selhalo` nad session, která doběhla
+    /// `success`. Změnilo se to proto, že tam od #383 spadá i běh, který **nepřečetl kód** —
+    /// a „selhalo“ o něm lže stejně jako „čisté“: neselhalo nic, jen se nedá z čeho soudit.
     ///
     /// Odmítnuté stojí až za `completed` a `timedOut` schválně — tam se počítají **platné**
     /// nálezy, takže na řadu přijde jen tehdy, když nezbyl žádný. A před `failed` proto, že
@@ -68,7 +72,7 @@ extension Policy {
 
         return suggestedVerdict(for: record, categories: categories) == .approve
             ? .clean
-            : .failed(detail: inconclusiveDetail(for: record))
+            : .inconclusive(reason: inconclusiveReason(for: record))
     }
 
     /// Který záznam je pro PR ten platný.
@@ -97,9 +101,20 @@ extension Policy {
         return detail
     }
 
-    private static func inconclusiveDetail(for record: ReviewRecord) -> String {
-        record.runs.contains { $0.droppedFindings > 0 }
-            ? "Část nálezů se nepodařilo přečíst, takže „čisté“ to tvrdit nejde."
-            : "Reviewer nenahlásil nálezy — nemají se kde vzít."
+    /// Věta k důvodu, proč se čisto tvrdit nedá (#383).
+    ///
+    /// Bydlí v `Policy`, ne ve view, protože ji čtou **tři** místa — prázdný tab nálezů,
+    /// notifikace a nápověda — a tři kopie téže věty se rozejdou. Do #383 to byl text
+    /// u `failed`, takže se v okně kreslil mono a k vybrání jako stderr od `claude`; je to ale
+    /// **naše věta**, ne cizí výstup.
+    static func inconclusiveDetail(_ reason: InconclusiveReason) -> String {
+        switch reason {
+        case .droppedFindings:
+            "Část nálezů se nepodařilo přečíst, takže „čisté“ to tvrdit nejde."
+        case .noReport:
+            "Reviewer nenahlásil nálezy — nemají se kde vzít."
+        case .unreadCode:
+            "Reviewer neotevřel ani jeden soubor z pracovní kopie, takže „čisté“ to tvrdit nejde."
+        }
     }
 }

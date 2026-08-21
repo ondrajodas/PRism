@@ -45,15 +45,44 @@ extension Policy {
 
     /// Dá se z běhu vyvodit, že je čisto?
     ///
-    /// Tři podmínky, každá kvůli jinému způsobu, jak se dá „nic jsem nenašel“ splést
-    /// s „nemám co říct“:
-    ///
-    /// - **doběhl** — spadlá ani zabitá session o čistotě kódu nevypovídá,
-    /// - **zavolal `ReportFindings`** — bez toho se nálezy neměly kde vzít (typicky proto,
-    ///   že nástroj chyběl v `--allowedTools`),
-    /// - **nic nezahodil** — nález bez povinného pole znamená, že reviewer něco hlásil
-    ///   a aplikace to nepřečetla.
+    /// Dvě podmínky: **doběhl** (spadlá ani zabitá session o čistotě kódu nevypovídá) a **není
+    /// pro co ho zpochybnit** — a to druhé rozhoduje `inconclusiveReason(of:)`, aby to bylo na
+    /// jednom místě. Do #383 tady stály tři podmínky vypsané, jenže tutéž dvojici si skládal
+    /// i chip revieweera a díl proužku v řádku, tedy tři kopie jednoho pravidla.
     static func isConclusive(_ run: StoredReviewRun) -> Bool {
-        run.outcome == .finished && run.calledReportFindings && run.droppedFindings == 0
+        run.outcome == .finished && inconclusiveReason(of: run) == nil
+    }
+
+    /// Proč se z **tohohle** běhu čistota tvrdit nedá. `nil` = dá se (nebo o ní běh nemluví).
+    ///
+    /// **Jediné místo, kde se ta otázka rozhoduje** (#383) — čte ho `isConclusive`, chip
+    /// revieweera i díl proužku u řádku. Do #383 měl každý z těch tří vlastní `if` a lišily se:
+    /// chip se ptal nejdřív na hlášení, řádek na ztracené nálezy, a čtení kódu nekontroloval
+    /// nikdo.
+    ///
+    /// Pořadí uvnitř: **ztracený nález, chybějící hlášení, nepřečtený kód.** První dvě se
+    /// v jednom běhu vylučují (ztratit se dá jen to, co dorazilo hlášením), takže je to pořadí
+    /// spíš pro čitelnost než pro rozhodování.
+    ///
+    /// **Běh, který něco našel, se na čtení kódu neptá.** Nálezy mluví samy za sebe: buď se
+    /// reviewer do kódu podíval, nebo ne, ale o čistotě netvrdí nic — a odmítnout kvůli tomu
+    /// návrh verdiktu (`approve` nad neblokujícími nálezy) by byl poplach nad výsledkem, který
+    /// je v okně celý vidět.
+    static func inconclusiveReason(of run: StoredReviewRun) -> InconclusiveReason? {
+        if run.droppedFindings > 0 { return .droppedFindings }
+        if !run.calledReportFindings { return .noReport }
+        guard run.findings.isEmpty else { return nil }
+        return codeReading(of: run) == .unread ? .unreadCode : nil
+    }
+
+    /// Proč se z celého záznamu čistota tvrdit nedá — důvod, který se objeví v odznaku (#383).
+    ///
+    /// Volá se jedině tam, kde `suggestedVerdict` neřekl `approve`. V takovém záznamu **musí**
+    /// aspoň jeden doběhlý běh důvod mít, jinak by byl průkazný; kdyby ho přesto neměl žádný,
+    /// zbývá `noReport` — z těch tří tvrzení to nejslabší, takže nedomyšlený stav nevyrobí
+    /// obvinění, které data neunesou.
+    static func inconclusiveReason(for record: ReviewRecord) -> InconclusiveReason {
+        let reasons = Set(record.runs.compactMap(inconclusiveReason(of:)))
+        return InconclusiveReason.byPrecedence.first(where: reasons.contains) ?? .noReport
     }
 }

@@ -50,6 +50,15 @@ enum ReviewStateAppearance {
         // se našlo“, kdežto tady je hlavní zpráva, že běh neskončil — `timeout · 0` oranžově
         // by vypadalo jako výsledek, a přitom je to selhání.
         case .checkoutFailed, .failed, .timedOut, .interrupted: .red
+        // **Okrová, ne červená ani zelená** (#383). Neprůkazné review neselhalo — session
+        // doběhla —, takže červená by o něm lhala; a zelená by lhala opačným směrem. Je to
+        // tatáž třída jako `stale`: výsledek, který se nedá použít, jen z jiného důvodu.
+        // Sdílený odstín je schválně, protože sdílené je i to, co se s tím dělá (pustit znovu);
+        // rozeznat se to má **textem**, který u obou stojí vedle puntíku.
+        //
+        // Chip revieweera kreslí `inconclusive` v `Palette.stale` už od #218, takže tím řádek
+        // a chip nad ním konečně říkají barvou totéž — do #383 byl řádek červený a chip okrový.
+        case .inconclusive: .yellow
         case .stale: .yellow
         }
     }
@@ -84,10 +93,24 @@ enum ReviewStateAppearance {
         // je z řádku poznat, kolik jsem toho přeskočil.
         case .dismissed(let findings): "odmítnuto · \(findings)"
         case .failed: "selhalo"
+        // Odznak říká **co chybí**, ne že je něco nejisté (#383): „nejisté“ je hodnocení, kdežto
+        // tyhle tři jsou fakta a každé vede k něčemu jinému. Krátké schválně — vejít se musí do
+        // řádku seznamu vedle titulku PR; celá věta je v nápovědě chipu a v prázdném tabu nálezů.
+        case .inconclusive(let reason): inconclusiveLabel(reason)
         case .timedOut(let findings): partialLabel("timeout", findings, blocking: blocking)
         // Ne „timeout“: běh neskončil limitem, ale s aplikací — a dělá se s tím něco jiného.
         case .interrupted(let findings): partialLabel("přerušeno", findings, blocking: blocking)
         case .stale: "zastaralé"
+        }
+    }
+
+    /// Odznak neprůkazného review (#383). Tři různé texty, protože jsou to tři různá zjištění —
+    /// a slít je do jednoho by znamenalo přesně tu záměnu, kvůli které stav vznikl.
+    private static func inconclusiveLabel(_ reason: InconclusiveReason) -> String {
+        switch reason {
+        case .droppedFindings: "ztracené nálezy"
+        case .noReport: "bez hlášení"
+        case .unreadCode: "kód nepřečten"
         }
     }
 

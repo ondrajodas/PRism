@@ -200,13 +200,18 @@ struct ReviewNotificationTests {
 
     @Test("Nejistý výsledek se nesmí tvářit jako čistý")
     func doesNotPassOffAnInconclusiveRunAsClean() {
-        // `Policy.reviewState` posílá nereportující běh do `failed` s vysvětlením — kdyby
+        // `Policy.reviewState` posílá nereportující běh do `inconclusive` s vysvětlením — kdyby
         // notifikace řekla „nenašel žádný nález“, bylo by to schválené PR s neohlášenou
         // chybou. Tady se ověřuje, že se ta věta z Policy doopravdy propíše.
+        //
+        // **Titulek není „Review se nepovedlo“** (změna u #383): session doběhla `success`,
+        // takže hláška o poruše by nad ní lhala. Musí se ale pořád lišit od čistoty — a to je
+        // to jediné, na čem tady záleží.
         let record = makeRecord(runs: [makeStoredRun(calledReportFindings: false)])
         let state = Policy.reviewState(for: record)
 
-        #expect(title(state) == "Review se nepovedlo")
+        #expect(title(state) == "Z review se čisto tvrdit nedá")
+        #expect(title(state) != title(.clean))
         #expect(body(state)?.contains("nenahlásil") == true)
     }
 

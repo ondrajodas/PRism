@@ -203,7 +203,10 @@ struct DashboardTests {
 
         let result = dashboard([pr], records: [pr.id: record])
 
-        #expect(result.reviewers == [ReviewerShareOfFindings(reviewer: "docs", findings: 0)])
+        // Průkazný je — běh doběhl, nahlásil a osu nemá, takže se o čtení kódu netvrdí nic (#383).
+        #expect(result.reviewers == [
+            ReviewerShareOfFindings(reviewer: "docs", findings: 0, isConclusive: true),
+        ])
     }
 
     @Test("Odmítnutý nález se reviewerovi nepočítá")
@@ -214,7 +217,47 @@ struct DashboardTests {
 
         let result = dashboard([pr], records: [pr.id: record])
 
-        #expect(result.reviewers == [ReviewerShareOfFindings(reviewer: "php-review", findings: 0)])
+        #expect(result.reviewers == [
+            ReviewerShareOfFindings(reviewer: "php-review", findings: 0, isConclusive: true),
+        ])
+    }
+
+    /// Nula v legendě neznamená čisto (#383). Reviewer, který v okně **neotevřel jediný soubor**,
+    /// má nulu stejně jako ten čistý — a zelený puntík vedle ní je tvrzení o čistotě, které data
+    /// neunesou. Stačí přitom **jeden** průkazný běh: týden práce nemá zešednout kvůli jednomu
+    /// běhu, ze kterého se soudit nedá.
+    @Test("Nula bez průkazného běhu není v legendě čisto")
+    func doesNotCallAnUnreadReviewerClean() throws {
+        let pr = pullRequest(1)
+        let worktree = URL(fileURLWithPath: "/cache/wt/42")
+        func run(reading: Bool, skill: String) -> StoredReviewRun {
+            let detail = reading ? worktree.path() + "/src/App.php" : worktree.path() + ".md"
+            return makeStoredRun(
+                skill: skill,
+                timeline: StoredTimeline(
+                    worktree: worktree,
+                    entries: [
+                        ReviewerTimeline.Entry(
+                            id: 0,
+                            at: Date(timeIntervalSince1970: 1_000_000),
+                            kind: .tool(ToolAttempt(name: "Read", detail: detail))
+                        ),
+                    ]
+                )
+            )
+        }
+        let record = makeRecord(runs: [run(reading: false, skill: "security"), run(reading: true, skill: "docs")])
+
+        let result = dashboard([pr], records: [pr.id: record])
+        let shares = Dictionary(uniqueKeysWithValues: result.reviewers.map { ($0.reviewer, $0) })
+
+        #expect(shares["security"]?.isConclusive == false)
+        #expect(shares["docs"]?.isConclusive == true)
+        // Puntík v legendě je šedý jako díl proužku u řádku, ne zelený jako u čistoty.
+        let unread = try #require(shares["security"])
+        let reading = try #require(shares["docs"])
+        #expect(DashboardView.legendOutcome(of: unread) == .inconclusive)
+        #expect(DashboardView.legendOutcome(of: reading) == .clean)
     }
 
     /// Legenda mluví o posledních sedmi dnech, takže starší běh do ní nepatří — ani se svým

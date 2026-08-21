@@ -51,7 +51,10 @@ extension Policy {
         // Nedoběhlý běh je zpráva o běhu, ne výsledek — ale blokující nález platí i z půlky
         // session, takže si první patro zaslouží stejně jako u doběhlého.
         case .timedOut, .interrupted: blocking ? 0 : 2
-        case .checkoutFailed, .failed: 2
+        // Neprůkazné review patří do stejného patra jako selhání (#383) — nálezy se z něj
+        // nemají kde vzít, takže se s ním dělá totéž: pustit znovu. Vlastní patro by bylo
+        // rozhodnutí o pořadí bez opory; závažnost je stejná, jen text a odznak jsou jiné.
+        case .checkoutFailed, .failed, .inconclusive: 2
         case .stale: 3
         case .notStarted: 4
         // Běžící review po mně nechce nic, dokud nedoběhne.

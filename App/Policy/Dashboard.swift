@@ -65,6 +65,13 @@ struct Dashboard: Hashable, Sendable {
 struct ReviewerShareOfFindings: Hashable, Sendable, Identifiable {
     let reviewer: String
     let findings: Int
+    /// Byl v tom okně **aspoň jeden průkazný běh** (#383)? Bez toho se nula nesmí kreslit zeleně:
+    /// „nenašel nic“ a „nemám z čeho soudit“ jsou u legendy stejné číslo a opačné tvrzení.
+    ///
+    /// **Bez výchozí hodnoty schválně.** `true` by znamenalo, že zapomenutý argument vyrobí zelený
+    /// puntík — tedy zrovna to falešné čisto, kvůli kterému #383 vzniklo. Kdo tenhle typ skládá,
+    /// musí se rozhodnout.
+    let isConclusive: Bool
 
     var id: String { reviewer }
 }
@@ -196,21 +203,35 @@ extension Policy {
     /// Počítají se **platné** nálezy (bez odmítnutých) z běhů, které doběhly po `since`.
     /// Reviewer, který v okně běžel a nic nenašel, v seznamu **zůstává s nulou**: „nenašel nic“
     /// je výsledek, kdežto chybějící řádek by vypadal, že neběžel.
+    ///
+    /// **Nula sama o sobě není čisto** (#383), takže se k ní počítá i to, jestli byl v okně aspoň
+    /// jeden **průkazný** běh. Bez toho by legenda kreslila zelený puntík vedle revieweera, který
+    /// za celý týden neotevřel jediný soubor — a byl by to tentýž falešný klid, jaký #383 opravuje
+    /// v řádku seznamu, jen o jednu obrazovku dál. Stačí **jeden** průkazný běh: reviewer, který
+    /// týden pracoval a jednou selhal, nemá zešednout celý.
     private static func reviewerShares(
         in records: [PRIdentifier: ReviewRecord],
         since: Date?
     ) -> [ReviewerShareOfFindings] {
         var counts: [String: Int] = [:]
+        var conclusive: Set<String> = []
         for record in records.values {
             let active = Set(record.activeFindings.map(key(of:)))
             for run in record.runs where since.map({ run.finishedAt >= $0 }) ?? true {
                 // Přes klíč, ne přes rovnost nálezů: `activeFindings` je filtr nad týmiž
                 // instancemi, ale identita nálezu se v tomhle repu skládá jedině `Policy.key`.
                 counts[run.skillID, default: 0] += run.findings.count { active.contains(key(of: $0)) }
+                if isConclusive(run) { conclusive.insert(run.skillID) }
             }
         }
         return counts
-            .map { ReviewerShareOfFindings(reviewer: $0.key, findings: $0.value) }
+            .map {
+                ReviewerShareOfFindings(
+                    reviewer: $0.key,
+                    findings: $0.value,
+                    isConclusive: conclusive.contains($0.key)
+                )
+            }
             // Od nejvíc nálezů, při shodě podle jména. Rozepsané, ne přes prohozenou dvojici:
             // slovník pořadí nemá, takže druhé kritérium je to jediné, co drží legendu klidnou
             // mezi překreslením — a musí být z kódu vidět, ne z triku s obrácenými prvky.

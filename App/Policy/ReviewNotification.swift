@@ -83,6 +83,12 @@ extension Policy {
             .clean
         case .failed, .checkoutFailed:
             .failure
+        // Neprůkazné review je z pohledu vyrušení totéž jako selhání (#383): výsledek nemám
+        // a musím pustit znovu. Kdo si vypne `Review se nepovedlo`, nechce ani tuhle hlášku —
+        // je to tatáž úvaha jako u timeoutu bez nálezů, jen o krok dál. Vlastní přepínač
+        // v nastavení to nedostane: byl by pátý za rozdíl, který se pozná z textu banneru.
+        case .inconclusive:
+            .failure
         }
     }
 
@@ -118,6 +124,11 @@ extension Policy {
             "Review se nepovedlo"
         case .checkoutFailed:
             "Nepovedlo se připravit pracovní kopii"
+        // Titulek je věta o **výsledku**, ne o poruše (#383): banner se čte odshora a „Review
+        // se nepovedlo“ by nad doběhlou session lhalo stejně jako „Čisté review“. Který ze tří
+        // důvodů to byl, řekne detail hned pod ním.
+        case .inconclusive:
+            "Z review se čisto tvrdit nedá"
         }
     }
 
@@ -167,13 +178,15 @@ extension Policy {
             // neřeší skloňování slova, ale to, jak je věta postavená.
             "Odmítl jsi \(Plural.czech(count, one: "nález", few: "nálezy", many: "nálezů")) a nic jiného nezbylo."
         case .failed(let detail):
-            // Sem spadá i „nemám co říct“ — spadlá session i nereportující běh. Detail
-            // z `Policy` je věta, se kterou se dá něco dělat, takže se posílá celá.
-            //
             // **Na jeden řádek**, a není to kosmetika: `CheckoutError.userDescription` lepí
             // výstup `gitu` za prázdný řádek, takže by se PR z třetího řádku propadlo o půl
             // obrazovky níž. Chytil to test, ne úvaha.
             detail.singleLine
+        case .inconclusive(let reason):
+            // Do #383 sem spadalo i „nemám co říct“, protože to byl `failed` s naší větou.
+            // Věta zůstala tatáž (`Policy.inconclusiveDetail`), jen ji teď skládá důvod —
+            // takže banner a prázdný tab nálezů řeknou nad tímtéž během totéž.
+            inconclusiveDetail(reason).singleLine
         case .checkoutFailed(let detail):
             detail.singleLine
         }

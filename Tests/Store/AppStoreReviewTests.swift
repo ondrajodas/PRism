@@ -128,10 +128,12 @@ struct AppStoreReviewTests {
         store.startReview(for: pr)
         try await waitUntilIdle(store)
 
-        guard case .failed = store.reviewState(for: pr) else {
+        // Od #383 `inconclusive`, ne `failed`: běh doběhl, jen se z něj nedá soudit.
+        guard case .inconclusive(let reason) = store.reviewState(for: pr) else {
             Issue.record("Očekáván rozlišený stav, přišlo \(store.reviewState(for: pr))")
             return
         }
+        #expect(reason == .noReport)
     }
 
     // MARK: - Průběh a zrušení

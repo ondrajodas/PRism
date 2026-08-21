@@ -74,11 +74,11 @@ struct ReviewStateFromRecordTests {
 
         #expect(unreported != .clean)
         #expect(dropped != .clean)
-        guard case .failed(let detail) = dropped else {
-            Issue.record("Očekáváno rozlišené selhání, přišlo \(dropped)")
-            return
-        }
-        #expect(detail.contains("přečíst"))
+        // Od #383 to není `failed`: session doběhla, takže „selhalo“ by lhalo stejně jako
+        // „čisté“. Důvod se u toho musí zachovat rozlišený — proto se tvrdí případ, ne jen
+        // „něco jiného než clean“.
+        #expect(unreported == .inconclusive(reason: .noReport))
+        #expect(dropped == .inconclusive(reason: .droppedFindings))
     }
 
     @Test("Záznam bez běhů se tváří, že se nespouštělo")

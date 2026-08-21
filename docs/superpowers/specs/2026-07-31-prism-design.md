@@ -2684,3 +2684,37 @@ a porovnával je. Při práci na #331 spadl, ve třech čistých bězích po sob
 
 **Co se nezměnilo:** cíl vzhledu zůstává nepovinná závislost `AppearanceApplying` a `AppStore` ji
 uplatňuje v `apply(_:)` jako od #278. Změnilo se **jak se to tvrdí**, ne co platí.
+
+### Záznam rozhodnutí — reviewer, který nepřečetl kód (#383)
+
+`security-review` hlásil od 17. 8. **nulu nálezů ve 12 ze 14 běhů** a stál desetinu toho, co
+předtím; okno to kreslilo jako **čisté review**. Příčina je mimo aplikaci (skill přestal spouštět
+`Agent` a grepoval v transkriptu vlastní session) a aplikace ji neopraví — je to orchestrátor
+a prohlížeč, vlastní review logiku nemá. Vada, která je naše, je jediná: *„nic nenašel“* a
+*„nedělal práci“* se z obrazovky nedaly rozeznat.
+
+Rozhodovalo se nad **40 uloženými běhy** z cache hlavní instance, ne nad úvahou; čísla jsou
+u `Policy.codeReading(of:)` a v [`docs/architektura.md`](../../architektura.md).
+
+| Rozhodnutí | Zamítnuté alternativy | Proč |
+|---|---|---|
+| **Signál je „neotevřel ani jeden soubor z pracovní kopie“** — `Read`/`NotebookRead` s cestou uvnitř stromu | (a) řádový výkyv ceny, trvání nebo počtu kol proti historii téhož skillu; (b) nula nálezů sama o sobě | Cena **nediskriminuje** a je to změřené: běh za 0,12 $ otevřel tři soubory, běh za 0,44 $ osmnáct, kdežto jeden ze čtyř podezřelých stál 0,74 $ — jako brána by vyrobila falešné poplachy a žádnou pravdu navíc. (b) by křičelo u každého čistého PR. Čtení souboru je proti tomu **fakt ze záznamu**, nezávislý na ceně i na modelu, a na měřených datech pojmenovalo právě ty čtyři běhy — u `db-extractor-adapter#39` k tomu `code-review` na tomtéž commitu našel **dva nálezy**, tedy doložené falešné čisto |
+| **`CodeReading` má tři hodnoty**, `unknown` vedle `read` a `unread` | Dvě hodnoty a chybějící záznam brát jako „nepřečteno“ | Osa se ukládá od #203 (15 ze 40 měřených běhů ji nemá), ořezává se na 300 událostí a u části nástrojů v ní cesta není. Z chybějícího záznamu se nesmí stát obvinění — okno by se rozkřičelo nad každým starším review naráz a hláška by se přestala čítat. Ověřeno vloženou regresí: s `unread` místo `unknown` padne **12 tvrzení v 8 sadách** |
+| **`Bash` se za čtení nepočítá, ale ani nebrání tvrzení** | Brát `git diff` uvnitř stromu jako čtení kódu | Kdyby bránil, pravidlo by se nespustilo **nikdy**: všechny čtyři doložené případy `git diff` uvnitř stromu mají. Cena za to je, že tvrzení musí být úzké — a taky je: **neotevřel soubor**, ne „nedíval se do kódu“. Věta v UI je podle toho |
+| **`Grep`, `Agent` a `Task` posílají odpověď na `unknown`** | Brát je jako doklad čtení; nebo je ignorovat | `Grep` nese v ose **vzor, ne cestu** (`detailKeys` má `pattern` před `path`), takže grep v cizím transkriptu je od grepu ve stromě k nerozeznání — jako doklad by otevřel přesně tu díru, kterou #383 řeší. Ignorovat je znamená obvinit běh, o kterém se to tvrdit nedá. Na měřených datech to nic nemění: žádný ze čtyř podezřelých je nepoužil |
+| **Vlastní stav `ReviewState.inconclusive(reason:)`** | Nechat `failed`, jak to bylo do #383 | Session doběhla `success`, takže odznak `selhalo` o ní lže stejně jako `čisté` — a `CLAUDE.md` zakazuje slévat vyjmenované stavy. Nese **důvod**, ne text: podle důvodu se liší odznak, věta i notifikace a tři kopie téhož textu by se rozešly |
+| **Odznak je okrový, ne červený** | Červená jako u selhání; nebo šedá jako `notStarted` | Je to tatáž třída jako `stale` — výsledek, který se nedá použít, ne porucha —, a chip revieweera kreslí `inconclusive` v `Palette.stale` už od #218, takže se řádek a chip nad ním konečně shodnou i barvou. Rozeznat se to má **textem** (`kód nepřečten`, `bez hlášení`, `ztracené nálezy`) |
+| **Nová obrazovka ani nový prvek: přeznačil se existující odznak** | Nakreslit stavu vlastní odznak nebo pruh, tedy napřed mockup a schválení | Odznak stavu, chip revieweera, díl proužku a prázdný tab nálezů v mockupu **už jsou** a mají pro tenhle stav i variantu (`.pill.stale`). Přidalo se **jen** jméno stavu do textů a jeden řádek nápovědy v prázdném tabu, takže brána na vzhled se neotevírá — ta platí pro *nové* věci na obrazovce |
+| **Rozhodnutí bydlí v `Policy.inconclusiveReason(of:)`, jediné pro tři čtenáře** | Přidat podmínku do `isConclusive` a chip s proužkem nechat, jak byly | Do #383 si tu dvojici podmínek skládal každý ze tří sám a **lišili se pořadím**; na čtení kódu se neptal nikdo. Byla by z toho třetí kopie pravidla a čtvrtá příležitost, aby řádek, chip a proužek řekly o jednom běhu tři různé věci |
+| **Běh, který nálezy má, se na čtení kódu neptá** | Ptát se vždycky | Nálezy mluví samy za sebe a v okně jsou celé vidět. Odebrat kvůli nečtení `approve` nad neblokujícími nálezy by byl poplach nad výsledkem, který má člověk před sebou — a `suggestedVerdict` je vstup do panelu, ne odznak |
+
+**Co se nezměnilo:** `failed` zůstává session, která spadla, i se svým stderr; rozdíl mezi ním
+a `inconclusive` je `run.outcome`, ne to, jak prázdný je výsledek. Nálezy dál platí ze všech běhů
+včetně spadlých, a přidávat kvůli tomuhle stavu přepínač do notifikací se **nezvažovalo**: byl by
+pátý za rozdíl, který se pozná z textu banneru. Ruční spuštění znovu se nikam nepřidávalo, protože
+už tam je — `Spustit review` v hlavičce PR a pravé tlačítko na chipu revieweera; v prázdném tabu
+nálezů na ně od #383 ukazuje věta, protože z prázdné plochy se to uhodnout nedá.
+
+**Vedlejší zjištění, které se tímhle neřeší:** reviewer má `Read` bez omezení cesty, takže si čte
+i cizí transkripty (17 čtení mimo pracovní strom napříč záznamy). Tvrdá podmínka č. 2 řeší **zápis**,
+ne čtení; zúžit ho je samostatná otázka a nepatří k tomu, jak se výsledek kreslí.
