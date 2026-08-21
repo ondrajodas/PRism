@@ -1983,6 +1983,55 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   místě, takže větší rozdíl znamená tlačítko, které při cyklení poskakuje. Rámečky by na tyhle chyby
   neodpověděly — `fittingSize` railu je pevných 52 bodů a accessibility tree se v okně mimo obrazovku
   nenaplní. Vyzkoušené vložením regrese: se stylem `.borderlessButton` vyjde střed 25 a test spadne.
+- **Odznak v railu (#366)** — `RailBadgeTests`, tři třídy tvrzení nad **bitmapou**: kde odznak leží
+  (nesmí opustit rám ikony 9–43 ani vyčnívat nad jeho horní hranu), jakou má barvu (`crit`, **žádný
+  akcent**, a číslo v barvě plochy okna) a že se u nuly a u `nil` **nekreslí** — s protějškem, že
+  s počtem 1 se nakreslit musí, jinak by sada vycházela zeleně nad odznakem, který zmizel celý.
+  K tomu rozměr červené plochy (20 × 14, tolerance bod na stranu kvůli vyhlazeným krajům) a kontrast
+  **tokenů** v obou režimech (5,36 a 5,50 při hranici 4,5), včetně tvrzení, že bílá by v tmavém
+  režimu byla **horší** — to je záznam rozhodnutí, ne kontrola.
+
+  **Barva se porovnává s nakreslenou, ne s tokenem, a je to změřené**: bitmapa
+  z `bitmapImageRepForCachingDisplay` je v profilu displeje (`Barevný LCD`), takže `crit` v ní vyjde
+  `0.799/0.292/0.272` proti `0.812/0.133/0.180` v sRGB — tedy 0,18 daleko. Tolerance, která by tohle
+  přijala, by přijala i akcent, takže se tokeny vykreslí **týmž harnessem** jako vzorník čtyř ploch
+  a srovnává se kresba s kresbou. Vzorník se drží mezi testy (`drawnTokens`), aby renderů nebylo
+  dvakrát tolik: metrika písma je stav procesu a `CommitPanelRoomTests` na ní pod paralelní zátěží
+  padají (viz *Globální stav procesu se v testech neměří*).
+
+  **Vyzkoušené vložením regrese ze dvou stran.** Se starým odznakem (akcent + `offset(x: 6, y: -2)`)
+  padne 5 testů ze 6 — barevná tvrzení na tom, že v railu není ani jeden červený pixel. Se **samotným**
+  `offset(x: 6, y: -2)` a ponechanou červenou padne právě tvrzení o poloze (`46 > 43`), takže je
+  vidět, že poloha se měří nezávisle na barvě.
+- **Kapsle stavu z návrhu (#348)** — `DesignPillTests`. Že je to **mono**, se pozná na tom, že
+  `TextWidth.pill("iii") == TextWidth.pill("WWW")` — a měřidlo to umí rozlišit, protože v UI fontu
+  téže velikosti se ta dvě slova liší. Metrika se měří na `fittingSize` hostované kapsle proti sazbě
+  (text + 2 × 7 a řádek + 2 × 2), ne proti konstantám v testu. Dvě tvrzení jsou o **ceně mono**:
+  kapsle nesmí být vyšší než ta před #348 (řádek 12 proti 13, takže je o bod **nižší**) a nesmí
+  vyrůst o víc než 10 bodů na šířku (naměřeno 4 až 9,4 na čtyřech stavech PR) — kdyby se sazba
+  omylem zvedla na 12, spadne to dřív, než se začne hledat v přetečení hlavičky.
+
+  **Že tu kapsli kreslí hlavička karty popisu, se tvrdí nad zdrojáky**, ne za běhu: barvy chipu
+  (`raised` na `chrome`) jsou od sebe devět dvěstěpětapadesátin, takže se v bitmapě nedají rozlišit.
+  Tatáž konstrukce jako `GlobalAppearanceTests` a `SingleWayOutTests`, včetně zahazování řádkových
+  komentářů. Druhý guard téže třídy tvrdí, že sazbu **nikdo nepíše mimo `DesignPill.swift`** — do
+  #348 stála na sedmi místech a šest kopií je přesně ten stav, ve kterém se sedmá rozejde potichu.
+  Vyzkoušené vložením regrese: s vrácenou sazbou `11 bez mono` v `OverviewView` padne.
+
+  **Guard hlídá obě podoby zápisu řezu** (nález Copilota na #406): SwiftUI
+  `size: 10.5, weight: .semibold` a AppKitovou `ofSize: 10.5, weight: .semibold`. První verze znala
+  jen tu první — a minula tím zrovna tvar, který `SinceLastVisitView` do #348 doopravdy mělo, tedy
+  hlídala něco jiného, než co o sobě tvrdila. Velikost se u toho čte z `DesignPill.fontSize`, ne
+  jako zapsaná desetina. Ověřeno vložením regrese v **obou** podobách, každá zvlášť.
+
+  Že se hlavička v úzkém tabu nerozsype, tady **není** — na to je `OverviewWidthTests` (pásmo
+  128–1180 bodů). Obojí je potřeba: přetečení je jiná chyba než jiná sazba.
+
+  **Výška řádku se čte jednou za test** (`pillLine`, `previousLine`), ne při každém tvrzení — je to
+  tentýž důvod jako u `CommitPanelRoomTests` po #367: metrika písma je stav procesu a dvě čtení
+  v jednom testu se pod paralelní zátěží umí vyřešit jinak. Poznat se to dá jedině plným během:
+  v jedné dávce takhle spadly `CommitPanelRoomTests` a `LogTailHeightTests` (o 36 bodů, tedy o tři
+  řádky po 12), obojí zeleně v samostatném běhu.
 - **Cyklus a ikony režimů (#278)** — `AppAppearanceTests`: pořadí `světlý → tmavý → podle systému`
   a hlavně to, že je **uzavřené a projde všechny tři** (jinak by se do jednoho režimu klikáním nešlo
   dostat), tři **různé** ikony a to, že všechny tři symboly v systému existují — chybějící SF Symbol

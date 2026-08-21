@@ -2734,7 +2734,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `AppAppearance`, `AppearanceApplying` | Přepnutí vzhledu celé aplikace (#278) — `NSApp.appearance`, a za protokolem, aby si na hostitele testů nesáhly testy |
 | `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit`. Od #309 `mint` — **dvojice k akcentu**: akcent je to, co se nabízí udělat nebo co běží, mint to, co se jen konstatuje (`2×`, `✓ v mém review`, `odmítnuto`). Světlá větev je **vědomá odchylka od návrhu** (`#0E8F80` → `#0C7E71`), protože hodnota z mockupu byla jediný stavový token pod AA — čísla u `Palette.mint` a v `MintTokenTests` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
-| `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, **`Moje PR` s odznakem** (#331), `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není. Šířka zůstává 52 bodů a pátá položka se do ní vejde; odznak u `Moje PR` počítá **práci, ne PR** |
+| `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, **`Moje PR` s odznakem** (#331), `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není. Šířka zůstává 52 bodů a pátá položka se do ní vejde; odznak u `Moje PR` počítá **práci, ne PR**. Od #366 je odznak **červený (`--crit`) a uvnitř rámu ikony**, jak ho kreslí návrh — viz *Odznak v railu* |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181). Od #331 dostává `openSettings` jako **uzávěr z těla okna**, protože prázdná sekce `Moje PR` bez zdroje nabízí nastavení otevřít |
 | `DashboardView` | Startovní obrazovka (#181): pozdrav, **pět karet** (#331), **dvě fronty pod sebou** (`Čeká na moje review` a `Moje PR`), legenda reviewerů a `Co teď`. Věta pod pozdravem je od #332 **dvojitá** (fronta + „na kolika vlastních je co předat agentovi“), jak ji kreslí návrh; nenačtená fronta druhou větu nedostane a číslo se píše **číslicí**, ne slovem jako v mockupu — zbytek okna to dělá stejně. Akcentový proužek nese od #331 karta `Moje PR`, ne `Rozdělaná review` — dva proužky vedle sebe by přestaly znamenat, která karta je ta o mně. Od #371 kreslí blok **nejvýš pět řádků** a pod nimi patku se zbytkem (`Policy.dashboardBlock`), a **čtyři karty z pěti vedou do své sekce** — šipka vpravo nahoře, rámeček v akcentu na hover, ukazováček; `Dneska stálo` nedostane nic z toho, protože nemá kam vést. Popisek karty se šipce **uhýbá odsazením** (`arrowRoom`) a je na jeden řádek: v úzkém okně by se pod ni zalomil a s ním by narostla výška celé řady karet |
 | `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatné view |
@@ -2765,11 +2765,12 @@ na `.task` okna, takže zavření okna ji zruší.
 | `CommitListView` | Seznam commitů v tabu `Commity` (#316): pruh s počtem a hlavou, řádek na commit (obrázek autora, první řádka zprávy, jméno, relativní čas, sha) a pilulky `sloučení` a `hlava`. `content` je `internal` kvůli měření přesahu — `NSScrollView` by přesah ukrojil |
 | `CommitDiffView` | Diff jednoho commitu (#317) — hlavička a pod ní `DiffView`. **Nedostane `AppStore` ani identifikátor PR**, takže nemá čím vyrobit bublinu nálezu ani rozdělaný komentář; `reading(_:)` je `internal` kvůli testu, který tvrdí právě to, co `DiffView` **nedostane** |
 | `CommitHeaderView` | Hlavička rozkliknutého commitu (`.chead`, #317): cesta zpět s pozicí, zpráva i její tělo, kapsle se sha (kliknutím se kopíruje), odkaz na GitHub, autor, čas, počet souborů a `+X −Y`, a tichá věta „Jen ke čtení…“ s odkazem do `Změněných souborů`. Řádek meta se v úzkém okně zalomí přes `ViewThatFits` — `.chead .meta` má v CSS `flex-wrap`, který SwiftUI nemá |
-| `OverviewView` | Tab `Přehled`, odshora **co se změnilo od minule → fakta → popis PR** (#280; kontroly mají od #215 vlastní tab). Obsah je v `content` **mimo `ScrollView`** a `internal` schválně — přes `body` se šířka změřit nedá, viz #291 |
+| `OverviewView` | Tab `Přehled`, odshora **co se změnilo od minule → fakta → popis PR** (#280; kontroly mají od #215 vlastní tab). Obsah je v `content` **mimo `ScrollView`** a `internal` schválně — přes `body` se šířka změřit nedá, viz #291. Kapsle stavu v hlavičce karty je od #348 `designPill` (mono 10,5), ne vlastní sazba |
 | `SinceLastVisitView` | Pruh „co se změnilo od minule“ nahoře v `Přehledu` (#173, sazba #226 a #284) — odrážky po částech a pod nimi odznak `nálezy zastaraly` s tlačítky `Pustit review znovu` a `Ukázat, co přibylo` |
 | `SinceLastVisitLine`, `SinceLastVisitLines` | Odrážka po typovaných částech a jejich skládání (#284). Mimo view a testovatelné, jako `TimelineEventRow` |
 | `IncrementalDiffBar` | Lišta nad rozsahovým diffem (#284) — rozsah dvěma sha a cesta zpátky na celý diff. Podobu vybírá **spočítaná** šířka, ne `ViewThatFits` |
-| `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde. Řez si bere z `MiniButtonStyle.labelFont`, aby se měření a kresba nemohly rozejít |
+| `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde. Řez si bere z `MiniButtonStyle.labelFont`, u kapsle z `DesignPill` (#348), aby se měření a kresba nemohly rozejít |
+| `DesignPill` | Kapsle stavu z návrhu (`.pill`) — **jedno místo pro její sazbu** (#348): mono 10,5 / 600, odsazení 7 a 2, `.capsule`. Volá se `designPill(tint:background:)` a bere si ji sedm míst v okně; řez je `DesignPill.font` (AppKit) a **kreslí se i měří tímtéž** (`Font(_:)`, `TextWidth.pill(_:)`). `lineLimit` v ní **není** (rozhoduje o něm volající). Viz *Kapsle stavu na jednom místě* |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka **jako pozadí** (#375, ne pružná výška v řádku) a obsah vpravo; slévá za sebou jdoucí commity |
 | `ConversationEntryView` | Položka osy: karta cizího review nebo komentáře, řádek události, vlákno bez kotvy |
@@ -2966,6 +2967,77 @@ schválně chovají jako přerušené, ne jako zrušené:
   `startAutomaticReviews`.
 - **Nic se neukládá jako doběhlé.** To platí i u zrušení (`Task.isCancelled` před zápisem) —
   zabitý běh není doběhlý běh a `čisté` by nad ním lhalo.
+
+### Odznak v railu (#366)
+
+Odznak s počtem u sekce railu měl do #366 **dvě odchylky od návrhu naráz** a obě z kódu vypadaly
+jako záměr: barvu (`.tint`, tedy fialový akcent) a polohu (`offset(x: 6, y: -2)`, tedy 6 bodů za
+rámem ikony). Návrh (`.rail .ri .badge`) má červený odznak zarovnaný **s pravou hranou rámu**.
+
+- **`--crit`, ne akcent.** Akcent v tomhle okně znamená „tady jsi“ — `.ri.on` je z něj celý —,
+  takže odznak v téže barvě neříkal nic navíc; červená je „je co dělat“, což počet ve frontě je.
+- **Rozměr se změřil na vyrenderované sekci 02, ne odhadl z CSS.** `min-width: 14px; height: 14px`
+  je v návrhu **obsah**: dokument `box-sizing` nikde nepřepisuje (viz komentář u `.lchip`), takže
+  se odsazení 3 a obtah 2 přičítají a odznak vychází **24 × 18** na jednu i dvě cifry (na tři
+  26,7). V bitmapě je z toho červená plocha **20 × 14** — obtah je barvou railu (`--panel-2`),
+  takže se do ní neplete.
+- **Poloměr má dvě hodnoty.** CSS `border-radius: 7px` platí na vnější box a vnitřní se o šířku
+  obtahu zmenšuje, takže se kreslí `rect(cornerRadius: 5)` uvnitř `rect(cornerRadius: 7)`.
+  `.capsule` by na 18 bodech výšky dala 9, tedy jiný tvar než návrh.
+- **Výška je `minHeight`, ne `frame(height:)`.** Řádek mono 9 bold je 11 bodů, takže se čtrnáctka
+  chová jako podlaha; nasazený rámec by číslo uřízl, kdyby se písmo systému změnilo (#325).
+- **Text v barvě plochy okna** (`--panel`), ne bíle. Kontrast **5,36** ve světlém a **5,50**
+  v tmavém režimu; bílá na světlé červené dá 3,35 a dosavadní bílá na akcentu měla v tmavém režimu
+  **3,27**, tedy pod hranicí pro malé písmo.
+- **Nula se nekreslí a `nil` se od nuly liší** — to platí od #331 dál a `RailBadgeTests` to tvrdí
+  i s protějškem (s počtem 1 se odznak nakreslit **musí**), aby sada nevycházela zeleně nad
+  odznakem, který zmizel celý.
+
+Co se **nezměnilo**: rám ikony zůstává 34 × 30 (návrh má 32 × 30), protože to je metrika položky
+railu z #278, ne odznaku.
+
+### Kapsle stavu na jednom místě (#348)
+
+`.pill` je v návrhu kapsle pro **stavy a počty**: `nálezy zastaraly`, `sloučení`, `hlava`, `+248`,
+`otevřený`. Sází se mono, a to není ozdoba — je to odlišení od `.lchip`, tedy od labelu
+z repozitáře, který je slovo a sází se v UI fontu.
+
+Metrika (`mono 10,5 / 600`, odsazení 7 a 2, kapsle) žila v **sedmi kopiích**: `CommitListView`,
+`SinceLastVisitView`, `DiffFileHeaderView`, `AgentPromptSheet`, `AgentPromptPanel`,
+`PullRequestRow` — a `OverviewView`, kde se rozešla (`11` bez mono). Šest shodných kopií je přesně
+ten stav, ve kterém se sedmá může rozejít potichu, takže metrika dostala jméno
+(`designPill(tint:background:)`) a hlídá to test nad zdrojáky
+(`DesignPillTests.keepsTheTypesettingInOnePlace`).
+
+Tři věci, které z toho plynou:
+
+- **Šířku bere měření odtud taky** (`TextWidth.pill(_:)`), stejně jako `TextWidth.miniButton`
+  bere řez z `MiniButtonStyle`. Vlastní `systemFont` v měření znamená počítat jinou šířku, než
+  jaká se nakreslí.
+
+  A **kreslí se tím samým `NSFont`em, který se měří** (`Font(DesignPill.font)`) — nález Copilota
+  na #406. První podoba měla AppKit řez na měření a SwiftUI `.system(size:weight:design:)` na
+  kresbu; metrikou to bylo totéž (`.AppleSystemUIFontMonospaced-Semibold`, `otevřený` 51,926
+  v obou), ale dvě specifikace jednoho řezu jsou přesně ta třída chyby, kvůli které `TextWidth`
+  vznikl (#284).
+- **`lineLimit` do kapsle nepatří.** V hlavičce karty se zalomit nesmí (`otevře/ný` nejsou dva
+  odznaky pod sebou), v podtitulku commitu to omezení nikdy nemělo — je to rozhodnutí volajícího
+  o jeho místě v okně.
+- **`monospacedDigit()` odešlo z `DiffFileHeaderView`** jako nadbytečné: mono řez má cifry stejně
+  široké sám a nastavené písmo by ho stejně přebilo.
+
+Cena mono je **šířka**: 4 až 9,4 bodu na čtyřech stavech PR (`zavřený` +6,75, `otevřený` +8,37,
+`rozpracovaný` +9,41, `mergnutý` +4,02). Výška naopak **klesla o bod** (řádek 12 proti 13
+u systémových 11), takže hlavička karty nemůže povyrůst. V nejužším tabu (320 bodů) se kapsle
+ořezává na `ote…` — je to **stav z doby před #348** (tam bylo `otev…`), tedy důsledek #291, ne
+téhle změny; rozhoduje o něm `ViewThatFits`, který v té šířce zahazuje relativní čas.
+
+**Zbytek třídy je otevřený jako #404**: pět dalších kapslí (`ReviewStateBadge`, pilulky nálezů ve
+`FindingCardView`, `FindingTableRowView` a `FindingBubbleView`, odznaky v `ThreadBubbleView`
+a `ConversationEntryView`) má v návrhu `.pill` a v aplikaci nemono sazbu. Odložilo se to vědomě:
+jsou to **tři jiné metriky na pěti obrazovkách** a jedna z nich sedí v bublině, jejíž výšku si blok
+kódu měří sám (#236). `PullRequestHeaderView` do té třídy **nepatří** — `.state-chip` je nemono
+i v návrhu.
 
 ### Command palette ⌘K (#184)
 

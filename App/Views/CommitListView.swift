@@ -232,14 +232,11 @@ struct CommitListView: View {
         }
     }
 
-    /// Pilulka v podtitulku řádku (návrh: `.pill.idle`, `.pill.mint`).
+    /// Pilulka v podtitulku řádku (návrh: `.pill.idle`, `.pill.mint`). Sazba je v `designPill`
+    /// (#348) — hodnoty se nemění, jen přestaly být jednou ze sedmi kopií téže metriky.
     private func pill(_ text: String, tint: Color, background: Color) -> some View {
         Text(verbatim: text)
-            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(background, in: .capsule)
+            .designPill(tint: tint, background: background)
     }
 }
 

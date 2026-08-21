@@ -28,4 +28,10 @@ enum TextWidth {
         of(label, font: MiniButtonStyle.labelFont(of: emphasis))
             + 2 * MiniButtonStyle.Metrics.insetHorizontal
     }
+
+    /// Šířka kapsle stavu i s jejím odsazením — řez a odsazení jsou z `DesignPill` ze stejného
+    /// důvodu jako u malého tlačítka o řádek výš (#348).
+    static func pill(_ label: String) -> CGFloat {
+        of(label, font: DesignPill.font) + 2 * DesignPill.horizontalPadding
+    }
 }

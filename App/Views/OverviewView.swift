@@ -158,12 +158,12 @@ struct OverviewView: View {
             AvatarView(login: pullRequest.author, url: nil, size: 18)
             Text(verbatim: pullRequest.author)
                 .font(.system(size: 12, weight: .semibold))
+            // Kapsle stavu je `.pill idle` z návrhu, tedy **mono 10,5** (#348). Do #348 to bylo
+            // 11 bez mono, takže vybočovala z okna, ve kterém mono nese každý stav a počet;
+            // barva a poloha sedí od #299. Sazba je v `designPill`, ne tady — sedm kopií téže
+            // metriky bylo celý důvod, proč se ta jedna mohla rozejít.
             Text(verbatim: pullRequest.state.czechLabel)
-                .font(.system(size: 11))
-                .foregroundStyle(Palette.ink2)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Palette.raised, in: .capsule)
+                .designPill(tint: Palette.ink2, background: Palette.raised)
             if showsAge {
                 Text(pullRequest.updatedAt, format: .relative(presentation: .named))
                     .font(.system(size: 12))

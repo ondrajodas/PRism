@@ -248,11 +248,9 @@ struct SinceLastVisitView: View {
     static let showAddedLabel = "Ukázat, co přibylo"
     static let badgeLabel = "nálezy zastaraly"
     private static let horizontalPadding = 12.0
-    /// Odznak i s odsazením kapsle (`.pill { padding: 2px 7px }`).
-    private static let badgeWidth = TextWidth.of(
-        badgeLabel,
-        font: .monospacedSystemFont(ofSize: 10.5, weight: .semibold)
-    ) + 14
+    /// Odznak i s odsazením kapsle (`.pill { padding: 2px 7px }`) — řez a odsazení bere
+    /// z `DesignPill`, tedy z toho, čím se kapsle doopravdy kreslí (#348).
+    private static let badgeWidth = TextWidth.pill(badgeLabel)
 
     /// Pustit review znovu se nabízí, i když **žádné nálezy zatím nejsou** — po přepsané historii
     /// je to ta rozumná další věc. Odznak vedle se v tom případě nerozsvítí, protože by tvrdil
@@ -267,12 +265,8 @@ struct SinceLastVisitView: View {
     /// se doopravdy nakreslí, a kdyby si odznak skládal sám, měřil by jinou věc než okno.
     static var stalePill: some View {
         Text(verbatim: Self.badgeLabel)
-            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
             .lineLimit(1)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .foregroundStyle(Palette.stale)
-            .background(Palette.stale.opacity(0.16), in: .capsule)
+            .designPill(tint: Palette.stale, background: Palette.stale.opacity(0.16))
             .help("Nálezy i rozdělané review jsou proti commitu, který na větvi už není.")
     }
 

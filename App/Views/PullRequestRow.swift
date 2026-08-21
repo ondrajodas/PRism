@@ -124,12 +124,7 @@ struct PullRequestRow: View {
     /// znamená stav, se kterým se nic nedělá — tady je to naopak práce, která leží.
     private func handoffPill(_ pending: Int) -> some View {
         Text(verbatim: "\(pending) k předání")
-            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-            .monospacedDigit()
-            .foregroundStyle(Palette.find)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(Palette.find.opacity(0.15), in: .capsule)
+            .designPill(tint: Palette.find, background: Palette.find.opacity(0.15))
             .help("Nálezy, vlákna a komentáře, které jsi ještě nepředal agentovi — sestavit zadání jde v panelu Zadání")
             .accessibilityLabel("\(pending) k předání agentovi")
     }

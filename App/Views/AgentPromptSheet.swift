@@ -266,12 +266,8 @@ struct AgentPromptSheet: View {
 
     private func pill(_ text: String, tint: Color, background: Color) -> some View {
         Text(verbatim: text)
-            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-            .foregroundStyle(tint)
             .lineLimit(1)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(background, in: .capsule)
+            .designPill(tint: tint, background: background)
     }
 
     // MARK: - Texty

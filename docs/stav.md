@@ -3725,3 +3725,47 @@ Maže se proto obojí a ověřuje se čtením, ne kódem.
 existující bundle zůstane. Obě chybové větve se **pouštějí** (`PRISM_LSREGISTER` na neexistující
 cestu a na `/usr/bin/false`), regrese na přeskakování existujících cest se ověřuje proti záznamníku
 místo `lsregister` — bez toho `if`u by odregistrovala hlavní aplikaci. Testů 3582.
+
+
+**Odznak v railu a kapsle stavu podle návrhu (issues #366 a #348).** Dvě odchylky aplikace od toho,
+co v mockupu **už nakreslené je** — tedy bez schvalovací brány, jako #283.
+
+Odznak s počtem byl fialový akcent posunutý o 6 bodů **za** rám ikony, návrh (`.rail .ri .badge`) má
+červený uvnitř rámu. Akcent v tomhle okně znamená „tady jsi“ (`.ri.on` je z něj celý), takže odznak
+v téže barvě neříkal nic; `--crit` je „je co dělat“, což počet ve frontě přesně je. Rozměr se
+**změřil na vyrenderované sekci 02**, ne odhadl z CSS: `min-width: 14px; height: 14px` je v návrhu
+**obsah** (dokument `box-sizing` nikde nepřepisuje), takže s odsazením 3 a obtahem 2 vyjde odznak
+**24 × 18** a v bitmapě je z toho červená plocha 20 × 14. Text je v barvě plochy okna (`--panel`),
+ne bíle — kontrast **5,36** ve světlém a **5,50** v tmavém režimu proti 3,35, které by dala bílá na
+světlé červené, a proti **3,27**, na kterých byl dosavadní bílý text na akcentu v tmavém režimu.
+Co **zůstalo**: nula se nekreslí a `nil` se od nuly liší.
+
+Kapsle stavu v hlavičce karty popisu byla `11 bez mono`, návrh má `.pill idle`, tedy **mono 10,5**.
+Sazba se svedla do `designPill(tint:background:)`, protože ta metrika žila v **sedmi** kopiích a šest
+z nich bylo shodných do bodu — rozejít se může jedině to, co je zapsané víckrát. Šířku z ní teď bere
+i měření (`TextWidth.pill(_:)`), stejně jako `TextWidth.miniButton` bere řez z `MiniButtonStyle`.
+Mono stojí **4 až 9,4 bodu** na šířku (naměřeno na čtyřech stavech PR) a je o **bod nižší** (řádek 12
+proti 13), takže hlavička nemůže povyrůst; přetečení hlídá `OverviewWidthTests` v pásmu 128–1180.
+
+**Zbylá část třídy se vědomě odložila** (#404): pět dalších kapslí v okně má v návrhu `.pill`
+a v aplikaci nemono sazbu — `ReviewStateBadge` (`.caption`, 6/2), pilulky nálezů ve
+`FindingCardView`, `FindingTableRowView` a `FindingBubbleView` (`.caption2`, 5/1) a odznaky
+v `ThreadBubbleView` a `ConversationEntryView` (10,5 bez mono, 6/1). Jsou to **tři jiné metriky na
+pěti obrazovkách** a jedna z nich sedí v bublině, jejíž výšku si blok kódu měří sám (#236), takže by
+se do jedné vizuální pauzy neposoudily.
+
+**Z review na #406 přišly dva reálné nálezy a oba jsou opravené.** Kapsle měla řez zapsaný dvakrát
+— AppKit `NSFont` na měření a SwiftUI `.system(size:weight:design:)` na kresbu. Metrikou to bylo
+totéž (`.AppleSystemUIFontMonospaced-Semibold`, `otevřený` 51,926 v obou), ale dvě specifikace
+jednoho řezu jsou přesně ta třída chyby, kvůli které `TextWidth` vznikl (#284), takže se kreslí
+`Font(DesignPill.font)`. A guard nad zdrojáky znal jen SwiftUI podobu zápisu, tedy minul
+`monospacedSystemFont(ofSize: 10.5, weight: .semibold)` — což je zrovna tvar, který
+`SinceLastVisitView` do #348 doopravdy mělo; hlídá teď obě a ověřeno je to vloženou regresí zvlášť
+pro každou.
+
+**Barva se v testu porovnává s nakreslenou, ne s tokenem**, a je to změřené: bitmapa
+z `bitmapImageRepForCachingDisplay` je v profilu displeje, takže `crit` v ní vyjde
+`0.799/0.292/0.272` proti `0.812/0.133/0.180` v sRGB — na absolutní porovnání by tolerance musela
+být tak velká, že by prošel i akcent. Tokeny se proto kreslí **týmž harnessem** jako vzorník.
+Ověřeno vložením regrese ze dvou stran: se starým odznakem padne 5 testů ze 6, a se samotným
+`offset(x: 6, y: -2)` (červená ponechána) padne tvrzení o poloze na `46 > 43`. Testů 3594.

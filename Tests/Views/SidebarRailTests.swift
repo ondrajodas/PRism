@@ -30,8 +30,10 @@ struct SidebarRailTests {
     /// další sekce dostane sama, a v pruhu o 52 bodech se to dá pokazit potichu: ikona širší než
     /// rám (34 × 30, tedy 9–43) by se do svislice ostatních nevešla a rail by se rozjel.
     ///
-    /// Měří se **bez odznaků**: ty visí jako `overlay` posunutý o 6 bodů doprava, takže z rámu
-    /// vyčnívají schválně. Pásy se u toho **nepočítají** — ikona s mezerou uprostřed (šipka nad
+    /// Měří se **bez odznaků**, ale už ne proto, že by z rámu vyčnívaly: od #366 jsou uvnitř
+    /// (`RailBadgeTests` to tvrdí a měří k tomu i barvu). Bez nich se měří proto, že tady jde
+    /// o **ikony** — odznak je jen na dvou položkách ze čtyř, takže by rozhodoval o tom, která
+    /// vyjde širší. Pásy se u toho **nepočítají** — ikona s mezerou uprostřed (šipka nad
     /// vaničkou u `Moje PR`) se do bitmapy zapíše jako dva pásy, takže by počet měřil kresbu
     /// glyfu, ne počet položek. Kolik sekcí rail má, tvrdí test výš.
     @Test("Sekce se vejdou do railu i s pátou položkou")
