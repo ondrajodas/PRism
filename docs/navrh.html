@@ -7383,6 +7383,13 @@ projeví hned v tom dalším.</div>
       <code>Zkopírovat resume</code>, což je ta <em>druhá</em> cesta ven (do terminálu), a dvě
       cesty ven vedle sebe by se pletly.
     </p>
+    <p class="muted">
+      Popisek je <code>Ukázat session</code>, ne <code>Ukázat surovou session</code>: tlačítko sedí
+      v úzkém místě vedle pilulky <code>Sledovat konec</code> a slovo „surová“ v něm nese nejmíň —
+      odkud se to otevírá, už samo říká, o kterou session jde, a <em>co</em> v sheetu je, vysvětluje
+      nápověda i jeho hlavička. Pojem <b>surová session</b> zůstává v nadpisu sheetu; mění se popis
+      tlačítka, ne jméno obrazovky.
+    </p>
 
     <div class="duo">
       <div class="pane">
@@ -7395,7 +7402,7 @@ projeví hned v tom dalším.</div>
                 <span class="n">47 kroků session</span>
                 <span class="sp"></span>
                 <span class="tailtgl on"><i></i>Sledovat konec</span>
-                <span class="rawbtn">Ukázat surovou session</span>
+                <span class="rawbtn">Ukázat session</span>
               </header>
             </div>
           </div>
@@ -7409,7 +7416,7 @@ projeví hned v tom dalším.</div>
               <span class="chev">▸</span>
               <span>312 kroků session</span>
               <span class="sp"></span>
-              <span class="rawbtn">Ukázat surovou session</span>
+              <span class="rawbtn">Ukázat session</span>
             </div>
           </div>
         </div>
@@ -7430,8 +7437,15 @@ projeví hned v tom dalším.</div>
       Přepis, ne syrový JSON — a proč, je v rozhodnutích níž. Vysázená je jen <b>hlavička
       události</b> (čas, druh, čeho se týká); tělo je text tak, jak v transcriptu stojí.
     </p>
+    <p class="muted">
+      <b>Sheet se dá roztáhnout za okraj a velikost si pamatuje</b> mezi otevřeními — u přepisu
+      s dlouhými řádky je „jak široké to mám“ půlka užitku. Otevírá se na <b>1 180 × 760</b>
+      (ořezáno o okraje obrazovky), podlaha je <b>720 × 420</b>. Šířka je změřená, ne od oka: přepis
+      zalamuje, takže ze 720 na 1 180 bodů ubude <b>15 %</b> řádků sazby, dál už jen jednotky
+      procent za sheet přes celou plochu (tabulka je u <code>Policy.rawSessionSheetIdealWidth</code>).
+    </p>
 
-    <div class="win sm" style="max-width: 940px;">
+    <div class="win sm" style="max-width: 1180px;">
       <div class="sheet-head">
         <span class="t">Surová session — security-review</span>
         <span class="slug">keboola/connection-php-client#412 · 4b90c7e2-1d55-4f0a-9c3e-77b0a2e41d6f</span>

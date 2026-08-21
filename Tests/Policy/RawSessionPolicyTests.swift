@@ -396,3 +396,183 @@ struct RawSessionStateTests {
         )
     }
 }
+
+/// S jakou velikostí se sheet otevře a kdy se natažená velikost ukládá (#327 follow-up).
+///
+/// Že je sheet **doopravdy roztahovatelný** a že se ideální šířka uplatní, se tady netvrdí — o tom
+/// rozhoduje SwiftUI a měří to `RawSessionSheetSizingTests` nad skutečným oknem sheetu.
+@Suite("Policy — velikost sheetu s přepisem")
+struct RawSessionSheetSizeTests {
+    private let screen = CGSize(width: 1_512, height: 944)
+
+    // MARK: - S čím se otevře
+
+    /// Nula znamená **„nic uloženého“**, ne nulový sheet — `@AppStorage` bez zapsané hodnoty vrací
+    /// právě ji.
+    @Test("Bez uložené velikosti se bere ideální")
+    func withoutAStoredSizeTheIdealIsUsed() {
+        let size = Policy.rawSessionSheetSize(storedWidth: 0, storedHeight: 0, screen: screen)
+
+        #expect(size.width == Policy.rawSessionSheetIdealWidth)
+        #expect(size.height == Policy.rawSessionSheetIdealHeight)
+    }
+
+    @Test("Uložená velikost v mezích se vezme, jak je")
+    func aStoredSizeIsUsedAsIs() {
+        let size = Policy.rawSessionSheetSize(storedWidth: 1_340, storedHeight: 820, screen: screen)
+
+        #expect(size == CGSize(width: 1_340, height: 820))
+    }
+
+    /// Ořez **při použití**, ne při zápisu: v `UserDefaults` může být cokoli — ruční editace,
+    /// hodnota ze starší verze — a `frame(idealWidth:)` se zápornou hodnotou rozhodí celé okno.
+    @Test("Nesmyslná uložená hodnota spadne na ideální velikost")
+    func nonsenseFallsBackToTheIdeal() {
+        let ideal = CGSize(
+            width: Policy.rawSessionSheetIdealWidth,
+            height: Policy.rawSessionSheetIdealHeight
+        )
+        let nonsense: [(Double, Double)] = [
+            (0, 0), (-1_200, 800), (1_200, -800), (.nan, 800), (1_200, .nan), (.infinity, .infinity),
+        ]
+        for (width, height) in nonsense {
+            #expect(
+                Policy.rawSessionSheetSize(storedWidth: width, storedHeight: height, screen: screen) == ideal,
+                "\(width)×\(height) se nevrátilo na ideální velikost."
+            )
+        }
+    }
+
+    @Test("Pod podlahu se sheet neotevře, ani když je uložená menší")
+    func aStoredSizeNeverGoesBelowTheFloor() {
+        let size = Policy.rawSessionSheetSize(storedWidth: 300, storedHeight: 100, screen: screen)
+
+        #expect(size.width == Policy.rawSessionSheetMinWidth)
+        #expect(size.height == Policy.rawSessionSheetMinHeight)
+    }
+
+    /// **Natáhne se na jedné obrazovce, otevírá na druhé.** Bez tohohle ořezu by 3 000 bodů
+    /// z ultrawide monitoru byl na notebooku sheet přes celou plochu a přes hrany.
+    @Test("Uložená velikost se ořeže o okraje obrazovky")
+    func aStoredSizeIsClampedToTheScreen() {
+        let size = Policy.rawSessionSheetSize(storedWidth: 3_000, storedHeight: 2_000, screen: screen)
+
+        #expect(size.width == screen.width - Policy.rawSessionSheetScreenMargin)
+        #expect(size.height == screen.height - Policy.rawSessionSheetScreenMargin)
+    }
+
+    /// Na displeji, kam se podlaha nevejde, rozhoduje **podlaha**, ne okraj — jinak by z ořezu
+    /// vyšel sheet užší, než v jakém se dá přepis přečíst (a při hodně malé obrazovce i záporný).
+    @Test("Na malé obrazovce rozhoduje podlaha, ne okraj")
+    func onATinyScreenTheFloorWins() {
+        let size = Policy.rawSessionSheetSize(
+            storedWidth: 1_200,
+            storedHeight: 900,
+            screen: CGSize(width: 600, height: 400)
+        )
+
+        #expect(size.width == Policy.rawSessionSheetMinWidth)
+        #expect(size.height == Policy.rawSessionSheetMinHeight)
+    }
+
+    /// Ideální velikost se ořezává **taky** — na malém displeji se sheet nemá otevřít přes hrany.
+    /// Ořezává se každý rozměr zvlášť, protože displej bývá nízký a široký, ne o obojí menší.
+    @Test("Ideální velikost se na malou obrazovku ořeže")
+    func theIdealIsClampedToo() {
+        let size = Policy.rawSessionSheetSize(
+            storedWidth: 0,
+            storedHeight: 0,
+            screen: CGSize(width: 1_000, height: 800)
+        )
+
+        #expect(size.width == 1_000 - Policy.rawSessionSheetScreenMargin)
+        #expect(size.height == 800 - Policy.rawSessionSheetScreenMargin)
+
+        // Na širokém a nízkém displeji se ořeže jen výška.
+        let wide = Policy.rawSessionSheetSize(
+            storedWidth: 0,
+            storedHeight: 0,
+            screen: CGSize(width: 3_440, height: 800)
+        )
+        #expect(wide.width == Policy.rawSessionSheetIdealWidth)
+        #expect(wide.height == 800 - Policy.rawSessionSheetScreenMargin)
+    }
+
+    /// Bez známé obrazovky zbývá **pojistka proti nesmyslu v `UserDefaults`**, ne návrhové
+    /// rozhodnutí: skutečný strop je obrazovka.
+    @Test("Bez známé obrazovky drží uloženou velikost jen pojistka")
+    func withoutAScreenOnlyTheCapHolds() {
+        let size = Policy.rawSessionSheetSize(storedWidth: 99_000, storedHeight: 99_000, screen: nil)
+
+        #expect(size == Policy.rawSessionSheetCap)
+        #expect(
+            Policy.rawSessionSheetSize(storedWidth: 1_340, storedHeight: 820, screen: nil)
+                == CGSize(width: 1_340, height: 820)
+        )
+    }
+
+    // MARK: - Kdy se ukládá
+
+    /// Velikost, o kterou si aplikace řekla sama, **není volba uživatele** — kdyby se ukládala,
+    /// přepsala by nulu („nic uloženého“) na konkrétní číslo a výchozí velikost by přestala vycházet
+    /// z obrazovky.
+    @Test("Velikost, se kterou se sheet otevřel, se neukládá")
+    func theOpeningSizeIsNotStored() {
+        let opened = CGSize(width: 1_180, height: 760)
+
+        #expect(Policy.rawSessionSheetResize(opened: opened, measured: opened) == nil)
+        // Zaokrouhluje se na obou stranách, takže půl bodu z rozvržení není změna.
+        #expect(
+            Policy.rawSessionSheetResize(
+                opened: opened,
+                measured: CGSize(width: 1_180.4, height: 759.6)
+            ) == nil
+        )
+    }
+
+    @Test("Natažená velikost se uloží zaokrouhlená")
+    func aDraggedSizeIsStoredRounded() {
+        let size = Policy.rawSessionSheetResize(
+            opened: CGSize(width: 1_180, height: 760),
+            measured: CGSize(width: 1_442.6, height: 903.2)
+        )
+
+        #expect(size == CGSize(width: 1_443, height: 903))
+    }
+
+    /// Pod podlahu se sheet nedostane (je to `contentMinSize` okna), takže menší číslo je mezistav
+    /// rozvržení, ne velikost okna — a nesmyslné rozměry se neukládají vůbec.
+    @Test("Rozměr pod podlahou ani nesmysl se neuloží")
+    func nonsenseIsNeverStored() {
+        let opened = CGSize(width: 1_180, height: 760)
+        let refused: [CGSize] = [
+            CGSize(width: 700, height: 900),
+            CGSize(width: 900, height: 400),
+            CGSize(width: 0, height: 0),
+            CGSize(width: CGFloat.nan, height: 800),
+            CGSize(width: 1_000, height: CGFloat.infinity),
+        ]
+        for measured in refused {
+            #expect(
+                Policy.rawSessionSheetResize(opened: opened, measured: measured) == nil,
+                "\(measured) se uložilo, i když se uložit nemělo."
+            )
+        }
+    }
+
+    /// **Podlaha sama nesmysl není**: kdo si sheet stáhne až na ni, má ji mít zapamatovanou. Že se
+    /// při otevření neuloží ta podlaha z **prvního průchodu rozvržení**, drží odmlka ve view — je na
+    /// to `RawSessionSheetSizingTests.openingAloneStoresNothing`.
+    @Test("Stažení až na podlahu se uloží")
+    func draggingDownToTheFloorIsStored() {
+        let size = Policy.rawSessionSheetResize(
+            opened: CGSize(width: 1_180, height: 760),
+            measured: CGSize(
+                width: Policy.rawSessionSheetMinWidth,
+                height: Policy.rawSessionSheetMinHeight
+            )
+        )
+
+        #expect(size == CGSize(width: 720, height: 420))
+    }
+}

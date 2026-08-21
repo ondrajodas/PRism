@@ -28,12 +28,34 @@ struct RawSessionSheet: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var didCopy = false
 
+    /// Velikost, kterou si uživatel natáhl. **Přežívá restart**, protože u přepisu s dlouhými
+    /// řádky je „jak široké to mám“ půlka užitku — a nula znamená „nic uloženého“, viz
+    /// `Policy.rawSessionSheetSize`.
+    @AppStorage("rawSessionSheetWidth") private var storedWidth = 0.0
+    @AppStorage("rawSessionSheetHeight") private var storedHeight = 0.0
+
+    /// Naposledy naměřená plocha sheetu. Drží se kvůli dvěma věcem: předává se dolů jako
+    /// `availableWidth` (aby se uvnitř nevyjednávalo, #220) a je to vstup do ukládání.
+    @State private var measured: CGSize?
+
     /// Jak často se přeměřuje velikost souboru pro patičku.
     ///
     /// **Dvě vteřiny, a je to jeden dotaz na atributy souboru** — ne druhé čtení okna. Rychlejší
     /// takt by patičce nic nepřidal (přírůstek se čte, ne sleduje) a pomalejší by u běžící session
     /// tvrdil starší číslo, než jaké je pravda.
     private static let growthTick = Duration.seconds(2)
+
+    /// Za jak dlouho po posledním přeměření se velikost uloží.
+    ///
+    /// **Odmlka, ne zápis z každého kroku**: tažení okrajem přeměří plochu po každém pixelu, takže
+    /// bez ní by z jednoho tahu byly desítky zápisů do `UserDefaults`. `.task(id:)` se při dalším
+    /// kroku zruší, takže se zapisuje **jednou za tažení**.
+    ///
+    /// Drží ještě jednu věc, a ta je důležitější: **sheet se rozvrhuje dvakrát a v prvním průchodu
+    /// má podlahu** (změřeno sondou — 720×420 a hned po ní ideální velikost). Odmlka ten mezistav
+    /// zahodí, takže se neuloží. Není `private`, aby si o ni čekání v testu mohlo říct místo toho,
+    /// aby ten samý počet milisekund stál v repu dvakrát.
+    static let resizeSettle = Duration.milliseconds(400)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -43,9 +65,30 @@ struct RawSessionSheet: View {
             Divider()
             footer
         }
-        .frame(minWidth: 720, idealWidth: 940, minHeight: 420, idealHeight: 640)
-        // Ať uvnitř sheetu nikdo šířku nevyjednává (#220) — obsah ji má znát.
-        .availableWidth(940)
+        // **Roztahovatelný sheet, a je to změřené, ne odvozené z dokumentace**
+        // (`RawSessionSheetSizingTests` nad skutečným oknem sheetu): sheet dostane `.resizable` do
+        // `styleMask`u jedině s `presentationSizing(.fitted)` a pružným rámcem — bez toho je pevný.
+        // Se stejným měřením padla i domněnka, že sheet roztáhnout nejde, kterou má v komentáři
+        // `CodeTextSheet`.
+        //
+        // A druhá věc odtamtud: **bez `.fitted` se `idealWidth` zahodí a sheet je široký jako
+        // `minWidth`** — tady tedy 720 místo nakreslených 940, ať je okno za ním jak chce velké.
+        .frame(
+            minWidth: Policy.rawSessionSheetMinWidth,
+            idealWidth: opened.width,
+            maxWidth: .infinity,
+            minHeight: Policy.rawSessionSheetMinHeight,
+            idealHeight: opened.height,
+            maxHeight: .infinity
+        )
+        .presentationSizing(.fitted)
+        // Ať uvnitř sheetu nikdo šířku nevyjednává (#220) — obsah ji má znát. Naměřená, protože
+        // roztahovatelný sheet žádnou zadrátovanou nemá.
+        .availableWidth(measured?.width ?? opened.width)
+        // Akce `onGeometryChange` se při nezměněné hodnotě **nespustí** (změřeno u #361), takže to
+        // není bezpodmínečný zápis z každého snímku, kterému se vyhýbá #358.
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { measured = $0 }
+        .task(id: measured) { await rememberSize() }
         // Přírůstek se přeměřuje **v odloženém úkolu, ne v těle**: I/O v `body` by běželo při každém
         // překreslení, a to je zrovna ta třída chyb, kterou popisuje #224.
         .task(id: target) {
@@ -54,6 +97,36 @@ struct RawSessionSheet: View {
                 try? await Task.sleep(for: Self.growthTick)
             }
         }
+    }
+
+    /// S jakou velikostí se sheet otevře. `NSScreen.main` je ta s klávesovým oknem, tedy ta, na
+    /// které sheet vyjede — stejně jako u `CodeTextSheet`u.
+    private var opened: CGSize {
+        Policy.rawSessionSheetSize(
+            storedWidth: storedWidth,
+            storedHeight: storedHeight,
+            screen: NSScreen.main?.visibleFrame.size
+        )
+    }
+
+    /// Uloží velikost, kterou si uživatel natáhl — teprve když se tažení usadí.
+    ///
+    /// Rozhodnutí, jestli vůbec zapsat, drží `Policy.rawSessionSheetResize`: **první průchod
+    /// rozvržení hlásí podlahu**, takže bezpodmínečný zápis by sheet od druhého otevření otevíral
+    /// nejmenší možný.
+    private func rememberSize() async {
+        guard let measured else { return }
+        do {
+            try await Task.sleep(for: Self.resizeSettle)
+        } catch {
+            // Zrušení znamená další krok tažení, tedy „ještě se to hýbe“ — ne chybu.
+            return
+        }
+        guard let size = Policy.rawSessionSheetResize(opened: opened, measured: measured) else {
+            return
+        }
+        storedWidth = size.width
+        storedHeight = size.height
     }
 
     // MARK: - Hlavička

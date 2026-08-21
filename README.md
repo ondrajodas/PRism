@@ -908,7 +908,7 @@ tedy o minuty později, a do té doby okno tvrdilo, že nástroj proběhl. Osy u
 nemají, protože se jejich krokům nemá s čím párovat — a `běží…` u doběhlého review by tvrdilo víc,
 než ta data unesou.
 
-**Když výpis kroků nestačí, je pod ním záchranná brzda: `Ukázat surovou session`** (#327). Výpis
+**Když výpis kroků nestačí, je pod ním záchranná brzda: `Ukázat session`** (#327). Výpis
 kreslí jen nástroje — odpovídá na „koukal se tam, kam měl“. Na jinou otázku (*proč to dopadlo
 takhle*, *co dělal, než to spadlo*) odpovídá to, co výpis schválně zahazuje, a to je v sheetu
 s **přepisem celého transcriptu**: próza modelu, jeho uvažování, výstupy nástrojů a systémové
@@ -923,6 +923,13 @@ kde největší má 53,3 MB a nejdelší jeden řádek 7,5 MB. Protože je soubo
 a **stav „moc velký“ nevzniká vůbec** (u logu z Actions ho vynutila síť). Zkrácení se přiznává
 **třikrát**: v hlavičce, řezem na začátku textu a u ořezané události na místě řezu; base64 obrázku se
 nevypisuje nikdy, jen se přizná, že tam je a kolik váží.
+
+**Sheet se dá roztáhnout za okraj a velikost si pamatuje** mezi otevřeními — u přepisu s dlouhými
+řádky je „jak široké to mám“ půlka užitku. Otevírá se na 1 180 × 760 bodů (ořezáno o okraje
+obrazovky, takže se na menším displeji nevejde přes hrany), pod 720 × 420 ho tažení nepustí, a jedno
+tažení stojí 2,61 ms na krok i nad přepisem o 1,5 milionu znaků — text se při změně šířky jen přelámí,
+nesází se znovu. Šířka není od oka: přepis zalamuje, takže ze 720 na 1 180 bodů ubude nad skutečným
+transcriptem 15 % řádků sazby, dál už jen jednotky procent za sheet přes celou plochu.
 
 **Že přepis není, má tři různé podoby, a každá nabídne něco jiného.** *Není* je konečná odpověď
 (strom sebral úklid cache) — bez `Načíst znovu`, a je u toho napsané, že tím padá i `claude --resume`,

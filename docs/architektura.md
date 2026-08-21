@@ -1651,6 +1651,38 @@ v grafu, takže `Array.==` skončí na identitě úložiště), plus barevný re
 rozdíl od `DiffBlockDrawing`: přepis si o vlastní velikost neříká (`sizeThatFits` nemá) a zalamuje ho
 `widthTracksTextView`, takže se při změně šířky nesází znovu — a přesázení by zrušilo rozdělaný výběr.
 
+#### Sheet se dá roztáhnout a velikost si pamatuje
+
+Otevírá se na **1 180 × 760** (podlaha 720 × 420, obojí `Policy.rawSessionSheet*`), dá se **táhnout
+za okraj** a natažená velikost přežívá restart (`@AppStorage`, tatáž konvence jako u šířky panelu
+nálezů). Tři věci na tom stojí a všechny jsou **změřené na skutečném okně sheetu**
+(`RawSessionSheetSizingTests`, ověřené i vloženou regresí):
+
+- **Roztahovatelný sheet na macOS 26 jde** — potřebuje `presentationSizing(.fitted)` a pružný rámec
+  (`maxWidth`/`maxHeight` `.infinity`). Teprve pak dostane okno sheetu `.resizable` do `styleMask`u
+  a `minWidth`/`minHeight` se v něm objeví jako `contentMinSize`. Padla s tím i domněnka, kterou měl
+  v komentáři `CodeTextSheet` („sheet není roztažitelný myší“).
+- **Bez `.fitted` se `idealWidth` zahodí a sheet je široký jako `minWidth`.** Do téhle změny byl tedy
+  přepis 720 bodů široký, ne nakreslených 940 — a nerozhodovalo o tom okno za ním (změřeno i nad
+  oknem 2 000 bodů). Je to **třída, ne výskyt**: `CodeTextSheet` (log a hunk) má min 560 a ideál
+  spočítaný z obrazovky až 2 700, takže se v něm celé měření #292 neuplatní. Neopravuje se to tady,
+  protože je to jiná obrazovka a spadá pod schvalovací bránu na vzhled.
+- **Sheet se rozvrhuje dvakrát a v prvním průchodu má podlahu.** Zápis naměřené velikosti bez odmlky
+  by proto při každém otevření uložil 720 × 420 a od druhého otevření by se sheet otevíral nejmenší
+  možný. Zahazuje ten mezistav `RawSessionSheet.resizeSettle` (400 ms) — je na to test, který tvrdí,
+  že otevřením a zavřením se **neuloží nic**.
+
+Ukládá se **jen to, co se liší od velikosti, se kterou se sheet otevřel** (`Policy.rawSessionSheetResize`,
+tentýž tvar jako `Policy.hoverChange`): velikost, o kterou si aplikace řekla sama, není volba
+uživatele, takže by jejím uložením přestala výchozí velikost vycházet z obrazovky. Uložená hodnota se
+ořezává **při použití** o okraje obrazovky — natáhne se na ultrawide a otevírá na notebooku, a SwiftUI
+sám neclampuje nic (AppKit jen výšku ke hraně obrazovky: 1 040 požadovaných → 917 daných, změřeno).
+
+Výchozí šířka **není od oka**: přepis zalamuje, takže ze 720 na 1 180 bodů ubude nad skutečným
+transcriptem (2,8 MB, 432 189 znaků, 5 236 logických řádků) **15 % řádků sazby**, tedy 2,4 řádku na
+každý bod šířky; dál je to 0,8 (do 1 600) a 0,37 (do 2 400). Celá tabulka je u
+`Policy.rawSessionSheetIdealWidth`, měřidlo v `RawSessionMeasurement.wrappingByWidth`.
+
 #### Cena, změřená (`RawSessionMeasurement`)
 
 Debug build, syntetický transcript podle skutečného rozdělení. **Otevření je konstantní ve velikosti
@@ -1672,6 +1704,11 @@ proto tam, kde cena doopravdy byla — dělit se přestalo celé tělo a celý z
 Sazba přes celé okno stojí `lines` 1,6 ms, `attributed` 12,6 ms a `setAttributedString` 5,9 ms
 (1,54 milionu znaků), takže hlavní vlákno zdrží jednotky milisekund. Čtení běží mimo něj
 (`TranscriptStore` je `nonisolated`), sheet se otevírá hned se stavem `loading`.
+
+**Jedno tažení za okraj stojí 2,61 ms na krok** (12 bodů, 1,55 milionu znaků přepisu, včetně kresby
+viditelného výřezu; celé tažení o dvaceti krocích 52 ms). Drží to stráž se šířkou **mimo klíč**: kdyby
+se přesázelo, byl by v každém kroku ten `attributed` + `setAttributedString`, tedy 18,5 ms — a jednou
+za tažení se navíc zapisuje velikost do `UserDefaults`, ne pokaždé (odmlka výš).
 
 Co se **nepodařilo zlevnit**, ať to příště nikdo nezkouší znovu: dělení okna na řádky. Šlo by to jen
 druhou cestou dělení textu — a jedno místo, kde se rozhoduje, co je řádek, je pravidlo, které stojí
@@ -3303,12 +3340,13 @@ nezakazuje plošně — zakazuje se **v řádku líného seznamu**, a ohraničen
 níž.
 
 **Ohraničené formy `maxHeight: .infinity`, které jsou v pořádku** (sweep u #375 nad celým `App/`,
-25 výskytů):
+tehdy 25 výskytů; dneska 28 — čísla se s každou obrazovkou mění, rozhoduje ta tabulka, ne počet):
 
 | Forma | Proč je ohraničená |
 |---|---|
 | `background`/`overlay` uvnitř řádku | Rozvrhuje se **až nad hotovou velikostí** rodiče, takže si o ni nevyjednává. Takhle žije pilulka v `DiffLineView` a od #375 i linka osy v `ConversationNodeView` |
 | plocha tabu, panelu, sheetu, prázdného stavu | Není to řádek seznamu — je to jeden blok, který má vyplnit okno. `PullRequestDetailView`, `DraftPanel`, `EmptyStateView`, nastavení, novinky |
+| **rámec roztahovatelného sheetu** | `RawSessionSheet`: pružnost je tady **podmínka roztahovatelnosti** — bez ní SwiftUI sheet resizable neudělá (změřeno, #327). Je to jeden blok na okno, ne položka seznamu |
 | `SidebarRail`, `CommitDiffView` | Totéž: jeden prvek na okno, ne položka v `ForEach`i |
 
 **V řádku líného seznamu po #375 nezůstal ani jeden.** Kontrola je grep na ten jeden soubor, který
@@ -3318,7 +3356,7 @@ se opravoval — **musí vyjít prázdný** (filtr zahazuje komentáře, které 
 grep -rn 'maxHeight: .infinity' App/Views/ConversationNodeView.swift | grep -vE ':[0-9]+: *//'
 ```
 
-Plošný grep prázdný vyjít **nemůže** a nemá se o to snažit — těch 25 ohraničených výskytů je
+Plošný grep prázdný vyjít **nemůže** a nemá se o to snažit — ty ohraničené výskyty jsou
 v pořádku. Sweep se proto dělá tak, že se vypíšou všechny a u každého se řekne, do které řádky
 tabulky výš patří:
 

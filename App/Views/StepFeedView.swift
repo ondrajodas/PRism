@@ -181,7 +181,7 @@ struct StepFeedView: View {
         .accessibilityAddTraits(followsTail ? [.isSelected] : [])
     }
 
-    /// `Ukázat surovou session`. **Hranaté jako `.mini`, ne pilulka** (`.rawbtn` v návrhu): vedle
+    /// `Ukázat session`. **Hranaté jako `.mini`, ne pilulka** (`.rawbtn` v návrhu): vedle
     /// `Sledovat konec` musí být na první pohled poznat, co je akce a co stav — pilulka je v tomhle
     /// okně stav, hranaté tlačítko akce.
     private func rawSessionButton(_ action: @escaping () -> Void) -> some View {

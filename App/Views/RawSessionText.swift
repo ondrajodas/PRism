@@ -5,7 +5,12 @@ import Foundation
 /// Vlastní typ ze stejného důvodu jako `ReviewerLaneText`: věty, které tvrdí něco o datech, se dají
 /// vyčerpat testem jen tehdy, když nejsou schované v těle view.
 enum RawSessionText {
-    static let button = "Ukázat surovou session"
+    /// **`Ukázat session`, ne `Ukázat surovou session`.** Tlačítko sedí v hlavičce výpisu kroků
+    /// vedle pilulky `Sledovat konec`, tedy v úzkém místě, a slovo „surová“ v něm nese nejmíň:
+    /// odkud se to otevírá, už samo říká, že jde o tuhle session, a *co* v sheetu je, vysvětluje
+    /// nápověda i jeho hlavička. Pojem `Surová session` zůstává v nadpisu sheetu a v dokumentaci —
+    /// mění se popis tlačítka, ne jméno té obrazovky.
+    static let button = "Ukázat session"
     static let buttonHelp = "Přepis celého transcriptu téhle session — próza, uvažování, výstupy "
         + "nástrojů a systémové události, tedy to, co výpis kroků schválně zahazuje."
 

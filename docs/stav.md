@@ -3454,7 +3454,7 @@ události napříč reviewery by byl stav, který nikdo nečte.
 
 **Co zůstalo #327:** surová session v sheetu, tedy próza modelu, výstupy nástrojů a systémové
 události. Výpis kreslí jen kroky, a schválně — próza je řádově víc dat a v okně se stropem by
-kroky vytlačila z dohledu. Tlačítko `Ukázat surovou session`, které návrh kreslí v hlavičce výpisu,
+kroky vytlačila z dohledu. Tlačítko `Ukázat session`, které návrh kreslí v hlavičce výpisu,
 proto v #325 **není**.
 
 ### #327 — surová session: přepis transcriptu v sheetu
@@ -3505,6 +3505,25 @@ odmítnutí nebylo; doklad je až soubor, ve kterém odmítnutí je — a ten se
 Ze stejného kola je i **sonda v podobě bajtu před oknem** (okno zarovnané přesně na hranici řádku
 o svou první událost přijít nesmí), zarovnání na `CR` a `CRLF`, ne jen na `LF`, a **generace** u čtení
 přepisu — dvě kliknutí na `Načíst znovu` nad týmž cílem se od sebe cílem poznat nedají.
+
+**Z proklikání přišly dvě připomínky a obojí je zapracované** (i do mockupu, sekce 20). Sheet se
+**dá roztáhnout za okraj** a velikost si pamatuje mezi otevřeními; tlačítko se jmenuje **`Ukázat
+session`**, protože v úzkém místě vedle `Sledovat konec` nese slovo „surová“ nejmíň — pojem
+*surová session* zůstává v nadpisu sheetu i v dokumentaci.
+
+U toho se ukázala chyba, která tam ležela od začátku: **bez `presentationSizing(.fitted)` SwiftUI
+`idealWidth` u sheetu zahodí** a okno je široké jako `minWidth`, takže přepis byl 720 bodů široký
+místo nakreslených 940 — a právě proto vypadal moc úzký. Nová výchozí velikost je **1 180 × 760**
+a je změřená (ze 720 na 1 180 ubude 15 % řádků sazby, dál jednotky procent). Druhá past je, že se
+sheet **rozvrhuje dvakrát a v prvním průchodu má podlahu**: bez odmlky by se ukládala ta podlaha
+a sheet by se od druhého otevření otevíral nejmenší možný.
+
+**Zbylo z toho jedno otevřené zjištění**, ne oprava: tatáž chyba je v `CodeTextSheet`u (celý log
+a hunk kódu), kde `minWidth` je 560 a ideál spočítaný z obrazovky až 2 700 — tedy celé měření #292
+se neuplatní. Je to **jiná obrazovka**, takže to spadá pod schvalovací bránu na vzhled a patří do
+vlastního issue.
+
+**Tím se zavírá milník M11.**
 
 ### #392 — labely a vyžádaní reviewery v panelu, panel i v `Commitech`
 

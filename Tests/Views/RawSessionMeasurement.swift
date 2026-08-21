@@ -163,6 +163,100 @@ struct RawSessionMeasurement {
         print("  setAttributedString: \(sitting) ms")
     }
 
+    /// **Co stojí jedno tažení za okraj sheetu** (#327 follow-up) — tedy to, co roztahovatelný sheet
+    /// přidal na horkou cestu.
+    ///
+    /// Měří se ta cesta, kterou to doopravdy jde (#275): změna šířky → rozvržení SwiftUI →
+    /// `updateNSView` (kde je stráž) → přelámání textu v `NSTextView`u → kresba viditelného výřezu.
+    /// Kdyby se přesázelo, byly by v každém kroku tažení megabajty; stráž má šířku **mimo klíč**
+    /// (`TranscriptTextView`), takže se sazba nemá opakovat ani jednou.
+    @Test("Cena jednoho tažení za okraj")
+    func resizeCost() async throws {
+        let directory = try TemporaryDirectory()
+        let store = TranscriptStore(projects: directory.url)
+        let data = try realTranscript() ?? transcript(bytes: 53 * 1024 * 1024)
+        _ = try place(data, in: directory, as: "tazeni")
+        let snapshot = try #require(await store.snapshot(ofSession: "tazeni", in: worktree, at: .now))
+        let characters = RawSessionScript.plain(RawSessionScript.lines(of: snapshot)).count
+
+        let height = 760.0
+        var width = 1_180.0
+        let hosting = NSHostingView(rootView: view(snapshot, width: width, height: height))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hosting
+        window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        hosting.layoutSubtreeIfNeeded()
+
+        print("MĚŘENÍ tažení (\(characters) znaků přepisu, \(snapshot.events.count) událostí):")
+        var total = 0.0
+        let steps = 20
+        for _ in 0..<steps {
+            width += 12
+            let step = ms {
+                hosting.rootView = view(snapshot, width: width, height: height)
+                hosting.frame = NSRect(x: 0, y: 0, width: width, height: height)
+                hosting.layoutSubtreeIfNeeded()
+                if let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
+                    hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+                }
+            }
+            total += Double(step) ?? 0
+        }
+        print("  krok tažení (12 b):  \(String(format: "%.2f", total / Double(steps))) ms")
+        print("  celé tažení (\(steps) kroků): \(String(format: "%.2f", total)) ms")
+    }
+
+    private func view(_ transcript: RawTranscript, width: Double, height: Double) -> some View {
+        TranscriptTextView(transcript: transcript, colorScheme: .dark)
+            .frame(width: width, height: height)
+    }
+
+    /// Kolik řádků sazby zabere přepis při různé šířce sheetu — **číslo, ze kterého je výchozí
+    /// šířka** (`Policy.rawSessionSheetIdealWidth`, #327 follow-up).
+    ///
+    /// Existuje proto, že „širší sheet“ je přání, ale *o kolik* širší je rozhodnutí, a to se
+    /// v tomhle repu měří. Přepis **zalamuje** (vědomá odchylka od návrhu, viz `TranscriptTextView`),
+    /// takže úzký sheet neznamená, že se text nevejde — znamená, že jeden řádek výstupu je pár řádků
+    /// sazby a scrolluje se přes ně. Je to tatáž úvaha jako u šířky sheetu s logem (#292,
+    /// `Policy.codeSheetWidth`), jen nad jiným obsahem.
+    ///
+    /// Počítá se **aritmeticky z šířky znaku mono písma**, ne layout managerem: nad 1,5 milionem
+    /// znaků by sazba přes pásmo šířek byla desítky sekund, a odsazení těla (21 bodů) ani proporční
+    /// hlavičku to nerozhodne — rozhodují dlouhé řádky výstupu, a ty jsou v mono.
+    @Test("Zalamování podle šířky sheetu")
+    func wrappingByWidth() async throws {
+        let directory = try TemporaryDirectory()
+        let store = TranscriptStore(projects: directory.url)
+        let data = try realTranscript() ?? transcript(bytes: 8 * 1024 * 1024)
+        _ = try place(data, in: directory, as: "sirka")
+        let snapshot = try #require(await store.snapshot(ofSession: "sirka", in: worktree, at: .now))
+
+        let plain = RawSessionScript.plain(RawSessionScript.lines(of: snapshot))
+        let logical = TextLines.content(plain)
+        let font = NSFont.monospacedSystemFont(ofSize: RawSessionScript.fontSize, weight: .regular)
+        let character = ("x" as NSString).size(withAttributes: [.font: font]).width
+
+        print("MĚŘENÍ zalamování (\(plain.count) znaků, \(logical.count) logických řádků,")
+        print("  mono \(RawSessionScript.fontSize) b = \(String(format: "%.2f", character)) b na znak):")
+        for width in [720.0, 940.0, 1_180.0, 1_600.0, 2_400.0] {
+            // Co z šířky sheetu zbude na text: odsazení textového kontejneru (12 na stranu)
+            // a svislý scroller.
+            let usable = width - 24 - 15
+            let perLine = max(Int(usable / character), 1)
+            let typeset = logical.reduce(0) { $0 + max(($1.count + perLine - 1) / perLine, 1) }
+            let ratio = Double(typeset) / Double(max(logical.count, 1))
+            print("  \(Int(width)) b: \(perLine) znaků/řádek, \(typeset) řádků sazby"
+                + " (\(String(format: "%.2f", ratio))× proti logickým)")
+        }
+    }
+
     /// Skutečný transcript, když je po ruce.
     private func realTranscript() throws -> Data? {
         guard let path = ProcessInfo.processInfo.environment["PRISM_TRANSCRIPT_FILE"] else { return nil }

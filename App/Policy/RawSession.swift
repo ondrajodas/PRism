@@ -272,4 +272,112 @@ extension Policy {
         guard let now, now > snapshot else { return nil }
         return now - snapshot
     }
+
+    // MARK: - Velikost sheetu
+
+    /// Podlaha sheetu s přepisem. Pod tohle ho nepustí ani tažení — je to `contentMinSize` okna
+    /// sheetu, takže je ta mez vidět rukou, ne jen v kódu.
+    static let rawSessionSheetMinWidth: CGFloat = 720
+    static let rawSessionSheetMinHeight: CGFloat = 420
+
+    /// Výchozí velikost, se kterou se sheet otevře, dokud si uživatel nenatáhl vlastní.
+    ///
+    /// **Širší, než návrh kreslí** (`max-width: 940px` u `.win.sm` v sekci 20) a je to změřené,
+    /// ne odhadnuté: přepis **zalamuje** (vědomá odchylka od návrhu, viz `TranscriptTextView`), takže
+    /// úzký sheet neznamená, že se text nevejde — znamená, že jeden řádek výstupu je pár řádků sazby
+    /// a scrolluje se přes ně. Nad skutečným transcriptem (2,8 MB, 432 189 znaků přepisu, 5 236
+    /// logických řádků; mono 10,5 b = 6,49 b na znak) vychází sazba takhle
+    /// (`RawSessionMeasurement.wrappingByWidth`):
+    ///
+    /// | Šířka sheetu | Znaků na řádek | Řádků sazby | Proti logickým |
+    /// |---|---|---|---|
+    /// | 720 (**dřív** jediná, viz níž) | 104 | 7 341 | 1,40× |
+    /// | 940 (návrh) | 138 | 6 672 | 1,27× |
+    /// | **1 180 (nově)** | **175** | **6 220** | **1,19×** |
+    /// | 1 600 | 240 | 5 870 | 1,12× |
+    /// | 2 400 | 363 | 5 571 | 1,06× |
+    ///
+    /// Ze 720 na 1 180 ubude **15 %** řádků sazby, tedy 2,4 řádku na každý bod šířky; dál je to
+    /// 0,8 řádku na bod (do 1 600) a 0,37 (do 2 400). Zlom je proto tady, a proto se strop netáhne
+    /// ke `codeSheetWidthCap` (2 700), kterým se řídí sheet s logem — ten je na jeden dlouhý výpis,
+    /// tenhle na střídání prózy a výstupů. Zbytek si dotáhne tažení, které si to pamatuje.
+    static let rawSessionSheetIdealWidth: CGFloat = 1_180
+    static let rawSessionSheetIdealHeight: CGFloat = 760
+
+    /// Kolik zůstane kolem sheetu na obrazovce (dohromady, ne na stranu).
+    ///
+    /// Uložená velikost se o to ořezává, protože se **natáhne na jedné obrazovce a otevírá na
+    /// druhé**: 3 000 bodů z ultrawide monitoru by na notebooku byl sheet přes celou plochu
+    /// a přes hrany. AppKit sám clampuje jen **výšku** ke hraně obrazovky (změřeno: 1 040
+    /// požadovaných → 917 daných), šířku nechá přetéct.
+    static let rawSessionSheetScreenMargin: CGFloat = 120
+
+    /// Poslední mez, kdyby obrazovka nebyla známá — je to **pojistka proti nesmyslu v
+    /// `UserDefaults`** (soubor se dá editovat rukou), ne návrhové rozhodnutí. Skutečný strop je
+    /// obrazovka.
+    static let rawSessionSheetCap = CGSize(width: 6_000, height: 4_000)
+
+    /// S jakou velikostí se sheet otevře: **uloženou, když je použitelná, jinak výchozí**.
+    ///
+    /// Nula znamená „nic uloženého“, ne nulový sheet — `@AppStorage` bez zapsané hodnoty vrací
+    /// právě ji, a odlišit „neuloženo“ od „uloženo“ je potřeba k tomu, aby výchozí velikost mohla
+    /// dál vycházet z obrazovky.
+    ///
+    /// Ořez je **při použití, ne při zápisu** (tatáž úvaha jako u šířky panelu nálezů): v
+    /// `UserDefaults` může být cokoli — ruční editace, hodnota z jiného monitoru, jiný rozsah ze
+    /// starší verze — a `frame(idealWidth:)` se zápornou hodnotou rozhodí celé okno.
+    static func rawSessionSheetSize(storedWidth: Double, storedHeight: Double, screen: CGSize?) -> CGSize {
+        let bounds = rawSessionSheetBounds(screen: screen)
+        guard storedWidth.isFinite, storedHeight.isFinite, storedWidth > 0, storedHeight > 0 else {
+            return CGSize(
+                width: min(rawSessionSheetIdealWidth, bounds.width),
+                height: min(rawSessionSheetIdealHeight, bounds.height)
+            )
+        }
+        return CGSize(
+            width: min(max(storedWidth, rawSessionSheetMinWidth), bounds.width),
+            height: min(max(storedHeight, rawSessionSheetMinHeight), bounds.height)
+        )
+    }
+
+    /// Jak velký smí sheet být: obrazovka bez okrajů, nebo pojistka, když obrazovku neznáme.
+    /// Nikdy pod podlahu — na displeji, kam se `720` nevejde, rozhoduje podlaha, ne okraj.
+    private static func rawSessionSheetBounds(screen: CGSize?) -> CGSize {
+        guard let screen, screen.width.isFinite, screen.height.isFinite,
+              screen.width > 0, screen.height > 0
+        else { return rawSessionSheetCap }
+        return CGSize(
+            width: max(screen.width - rawSessionSheetScreenMargin, rawSessionSheetMinWidth),
+            height: max(screen.height - rawSessionSheetScreenMargin, rawSessionSheetMinHeight)
+        )
+    }
+
+    /// Má se uložená velikost přepsat naměřenou? `nil` = **nezapisovat**.
+    ///
+    /// Je to tentýž tvar jako `Policy.hoverChange(from:to:)` a ze stejného důvodu: rozhodnutí
+    /// „tohle je změna, kterou stojí za to zapsat“ patří na jedno místo, kde se dá vyčerpat výčtem.
+    ///
+    /// Porovnává se s tím, **s čím se sheet otevřel**, ne s uloženou hodnotou: velikost, o kterou si
+    /// aplikace řekla sama, není volba uživatele, takže se neukládá — jinak by se nula („nic
+    /// uloženého“) při prvním otevření přepsala na konkrétní číslo a výchozí velikost by přestala
+    /// vycházet z obrazovky.
+    ///
+    /// **Mezistav rozvržení tahle funkce ale nepozná, a nemá ho poznat**: sheet se rozvrhuje dvakrát
+    /// a v prvním průchodu hlásí **podlahu** (změřeno sondou: 500×300 a hned po ní 700×500 při
+    /// ideálu 700×500). Podlaha je přitom legitimní velikost — kdo si sheet stáhne až na ni, má ji
+    /// mít zapamatovanou —, takže ji nelze zamítnout tady. Zahazuje ji **odmlka ve view**
+    /// (`RawSessionSheet.resizeSettle`); je na to test, který tvrdí, že se otevřením a zavřením
+    /// neuloží nic.
+    ///
+    /// Pod podlahu se nezapisuje: sheet se pod ni nedostane (je to `contentMinSize` okna), takže
+    /// menší číslo je mezistav rozvržení, ne velikost okna.
+    static func rawSessionSheetResize(opened: CGSize, measured: CGSize) -> CGSize? {
+        guard measured.width.isFinite, measured.height.isFinite else { return nil }
+        let rounded = CGSize(width: measured.width.rounded(), height: measured.height.rounded())
+        guard rounded.width >= rawSessionSheetMinWidth, rounded.height >= rawSessionSheetMinHeight
+        else { return nil }
+        let asked = CGSize(width: opened.width.rounded(), height: opened.height.rounded())
+        guard rounded != asked else { return nil }
+        return rounded
+    }
 }

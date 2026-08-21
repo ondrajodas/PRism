@@ -1064,6 +1064,47 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   mimo cache (tvrdá podmínka č. 3). Je to tatáž konstrukce jako u zadání pro agenta a ze stejného
   důvodu: nová obrazovka nad daty běhu je zrovna to místo, kde by druhá cesta ven vznikla, aniž by
   o ní kdo mluvil.
+- **Velikost sheetu s přepisem (#327 follow-up)** — dvě suity, protože se to rozhoduje na dvou
+  vrstvách a jedna z nich není naše.
+
+  `RawSessionSheetSizeTests` je `Policy` výčtem: co se vezme bez uložené hodnoty, co s ní, co
+  s nesmyslem (nula, záporné, `NaN`, `∞`), ořez o podlahu a o okraje obrazovky (i na displeji, kam se
+  podlaha nevejde, a na širokém a nízkém, kde se ořezává jen výška) a **kdy se ukládá**: velikost, se
+  kterou se sheet otevřel, se neukládá, natažená ano, a stažení až **na podlahu** taky (podlaha sama
+  nesmysl není).
+
+  `RawSessionSheetSizingTests` měří **skutečné okno sheetu** v hostovaném okně — tady se totiž
+  rozhoduje SwiftUI a z dokumentace se to přečíst nedalo. Tvrdí tři věci a **všechny tři jsou ověřené
+  vloženou regresí**:
+
+  1. sheet má `.resizable` a `contentMinSize` z `Policy` — bez `presentationSizing(.fitted)` má
+     `styleMask` 65 a `contentMinSize` nulový;
+  2. otevře se v **ideální** šířce — bez `.fitted` je široký jako `minWidth`, tedy 720 místo 1 180
+     (a nerozhoduje o tom okno za ním, změřeno i nad oknem 2 000 bodů);
+  3. **otevření bez tažení neuloží nic** — to je ten test, který tvrdí, že se něco nestalo. Sheet se
+     rozvrhuje **dvakrát** a v prvním průchodu má podlahu, takže bez odmlky (`resizeSettle`) by se
+     uložilo 720 × 420 a od druhého otevření by se sheet otevíral nejmenší možný. S vrácenou regresí
+     padne přesně na tom.
+
+  Dvě věci, na které se u toho naráží. Tažení se napodobuje `setFrame`em na okně sheetu — přesně to
+  dělá AppKit při tahání okrajem, a **syntetické myší události se k tomu nedostanou** (tatáž
+  zkušenost jako u hoveru, #358). A `@AppStorage` dostane **vlastní suitu** přes
+  `defaultAppStorage(_:)` — nasazuje se **na obsah sheetu**, ne na hostitele, protože sheet je vlastní
+  prezentace; suitu přitom nesmí mazat ta instance, která ji obsluhuje (odebrala by si ji
+  z prohledávaného seznamu a hodnoty by nedržela).
+
+  **Vlastní suita je u `@AppStorage` v testu tvrdá podmínka, a stálo to jeden červený běh**:
+  testovací host má bundle ID **hlavní instance** — slotová přípona vzniká až v `bin/run.sh`, ne při
+  buildu —, takže zápis z testu jde do nastavení, které uživatel doopravdy používá. Poznalo se to
+  dvěma způsoby naráz: velikost uložená v jednom běhu shodila v tom příštím test „otevře se v ideální
+  šířce“ (v nastavení ležela ta menší), a `SlotCleanupTests` nahlásily, že se změnil **plist hlavní
+  instance** — to je přesně to tvrzení, na které jsou (#398). Je to obecnější než tenhle sheet: každý
+  test, který se dotkne `@AppStorage`, píše do domény hlavní instance, dokud si o vlastní suitu
+  neřekne.
+
+  **Čeká se na hodnotu, ne na „něco se zapsalo“** (#269): mezi průchody rozvržení může v nastavení
+  chvíli ležet jiné číslo, takže „> 0“ test uzavře dřív, než se tažení usadí — a padá pak na hodnotě,
+  která se o chvíli později srovná. Stálo to jedno kolo.
 - **Jak surová session vypadá (#327)** — `RawSessionRenderProbe`, ruční
   (`TEST_RUNNER_PRISM_MEASURE=1` + `TEST_RUNNER_PRISM_RENDER_DIR`). Existuje proto, že **k tabu
   `Průběh` v běžícím okně vede jedině klik** a aplikaci sonda ovládat nesmí; tohle je jediná cesta
@@ -1078,6 +1119,15 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   ceny**, a ten je poučnější než čísla: rozbor JSONu stojí 6,9 ms, dělení textu na řádky 216 ms.
   Bez rozpadu se optimalizovalo naslepo — ořez těla po znacích vypadal jako ta drahá věc a jeho
   odstranění nezměnilo **nic** (627 → 627 ms).
+
+  Od roztahovatelného sheetu měří ještě dvě věci. **Cenu jednoho tažení** (`resizeCost`) po té cestě,
+  kterou to doopravdy jde (#275) — změna šířky → rozvržení → `updateNSView` se stráží → přelámání
+  textu → kresba výřezu —, a vyjde **2,61 ms na krok** nad 1,55 milionu znaků; kdyby stráž šířku
+  v klíči měla, byl by v každém kroku `attributed` + `setAttributedString`, tedy 18,5 ms.
+  A **zalamování podle šířky** (`wrappingByWidth`), ze kterého je výchozí šířka sheetu: nad skutečným
+  transcriptem ubude ze 720 na 1 180 bodů 15 % řádků sazby, dál jednotky procent. Počítá se
+  aritmeticky ze šířky znaku mono písma, ne layout managerem — nad 1,5 milionu znaků by sazba přes
+  pásmo šířek byla desítky sekund a rozhodují dlouhé řádky výstupu, které jsou v mono.
 - **Věty dráhy (#242)** — `ReviewerLaneText` rozlišuje **tři** doběhlé konce (nahlásilo nálezy /
   nahlásilo nulu / nenahlásilo nic) a test hlídá, že se u toho třetího **nikde neslíbí čisto**.
   Plus že slova stavů jsou různá (`spadlo` ≠ `nedoběhlo`, `nespuštěno` ≠ `ve frontě`, u fází

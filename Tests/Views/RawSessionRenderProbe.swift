@@ -170,7 +170,10 @@ struct RawSessionRenderProbe {
     /// **Režim se vynucuje na svém okně, ne na `NSApp`** (#367): globální stav procesu je jedna
     /// hodnota na celý testovací host a píše ho i hostitel sám.
     private func render(_ scene: some View, scheme: ColorScheme, height: CGFloat, to url: URL) throws {
-        let width = 940.0
+        // **Šířka je ta, se kterou se sheet doopravdy otevře**, ne zadrátovaných 940 z návrhu:
+        // od roztahovatelného sheetu ji drží `Policy`, takže obrázek jinak kreslí užší obrazovku,
+        // než jakou uživatel uvidí.
+        let width = Policy.rawSessionSheetIdealWidth
         let hosting = NSHostingView(rootView: scene.frame(width: width, height: height))
         hosting.frame = NSRect(x: 0, y: 0, width: width, height: height)
         let window = NSWindow(
