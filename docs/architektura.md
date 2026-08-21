@@ -1387,11 +1387,136 @@ Co se u toho nemá rozbít:
   kterými se osa kreslí. Parser hodiny nemá a `timestamp` ze streamu by byl druhý zdroj času.
   Odmítnutý krok trvání **nedostane**: nástroj neběžel.
 - **Odpověď osu neprodlužuje.** `ReviewerTimeline` mění krok, který v ose už je, včetně jeho `id`
-  a času — takže se `newestEntry` (posun osy na konec) nehne na něco, co krok není.
+  a času — takže se sledování konce ve výpisu (#325) nehne na něco, co krok není.
 - **Krok bez `id` nemá značku žádnou** (`Policy.toolStepMark`). Tak vypadají osy uložené před #326:
   `běží…` u každého kroku doběhlého review by tvrdilo víc, než data unesou. Nová pole jsou v souboru
   volitelná, takže starší osy se čtou dál — je na to test nad literálem v tom tvaru, jaký zapisoval
   encoder před #326, a k němu druhý, který hlídá, že se ten tvar pro nespárovaný pokus nezměnil.
+
+### Živý výpis kroků v tabu Průběh (#325)
+
+Druhá vrstva dráhy: pod fázemi visí **okno se stropem a s vlastním scrollem**, u běžícího
+revieweera rozbalené. Do #325 byly tytéž řádky pod **zavřeným** rozbalením bez stropu a bez
+scrollu, takže se za běhu na to, co reviewer dělá, nedalo koukat — a `Sledovat konec` z #22 zrušilo
+#242 s tím, že „s dráhami není co následovat“. Se scrollujícím výpisem je co následovat zase.
+
+Kreslí to `StepFeedView` (`App/Views/`), řádek `TimelineEntryRow` (vlastní soubor od #325),
+rozhoduje `Policy` v `App/Policy/StepFeed.swift`. Co se u toho nemá rozbít:
+
+- **Výška okna je obsah do stropu (138 bodů), ne strop od začátku** (`Policy.stepFeedWindow`).
+  Strop je tam proto, že rostoucí blok posune všechno pod sebou, a to je přerovnání celého tabu
+  několikrát za vteřinu; nad stropem tedy hýbe přibývající řádek jen oknem a dráha nad ním se
+  nehne vůbec. **Pod stropem se ale roste** — pevná výška od začátku znamenala u běhu o třech
+  krocích okno se dvěma třetinami prázdna, a to je stav, ve kterém každé review začíná (opraveno
+  po proklikání #325). Cena je přerovnání pod **prvními osmi** událostmi běhu, ne pod každou
+  z tří stovek.
+
+  Tři věci, které u toho nejsou zjevné:
+
+  - **Výška se počítá z dat, ne z přeměřeného obsahu.** Výška obsahu hlášená scrollem se při
+    rozvržení mění i naplano (změřeno `1825 → 3505 → 1825` na jedné scéně), takže okno navěšené
+    na ni by u nezměněného obsahu poskakovalo o řádek tam a zpět. Počítá se proto z počtu řádků
+    a rozměry dodává view (`StepFeedView.metrics`), protože se kreslí tam (#236); hodnota je
+    monotónní v počtu řádků, tedy na hranici stropu se zastaví a už se nemění.
+  - **O výšce řádku nesmí rozhodovat ikona.** SF Symboly jednu výšku nemají —
+    `doc.badge.ellipsis` 15 bodů, `wrench.and.screwdriver` 14, `clock` 12 (změřeno) —, takže
+    řádek se zadáním, které nedorazilo celé, byl o dva body vyšší než ostatní a neznámý nástroj
+    o jeden. Řeší to `imageScale(.small)` (každý symbol nejvýš 12 bodů, tedy pod výškou řádku
+    textu), ne `frame(height:)`: rámec se v `firstTextBaseline` účtuje od dolní hrany, takže
+    s ním řádek naopak vyrostl na 16 bodů. Návrh má ikonu menší než text taky
+    (`.step .ic { font-size: 10.5px }` proti 11.5px).
+  - **`Sledovat konec` ani pilulka `↓ N nových` se nekreslí, dokud není co rolovat**
+    (`StepFeedWindow.scrolls`). Nad obsahem, který se vejde celý, obojí slibuje posun tam, kde
+    výpis už je — a `Policy.stepFeedAtEnd` u krátkého obsahu vrací `true`, takže by přepínač
+    nemohl ani nic přepnout. Zašedle to nejde: zašedlé tlačítko tvrdí „tady se to dělá, jen teď
+    ne“, kdežto tady není co následovat. A když se rolovat **přestane** (osa se zkrátila novým
+    během), vrací se sledování na zapnuté — jinak by zůstalo vypnuté z minula a po přerostení
+    stropu by výpis konec nesledoval, aniž by na to bylo kde přijít.
+- **Rozbalení drží tab, ne dráha** (`StepFeedExpansion` v `@State` `ReviewProgressView`). Dráhy jsou
+  v `LazyVStack`u, takže `@State` uvnitř `ReviewerLaneView` se odrolováním zahodil a výpis se sám
+  zavřel — u běžícího revieweera tedy zrovna tam, kam se člověk díval. Klíčem je jméno skillu, takže
+  to **smí** přetéct mezi pull requesty (tatáž úvaha jako u `mutedReviewers`); přepnutím tabu se to
+  zapomene a je to v pořádku, protože běžící dráha se rozbalí sama.
+- **Automat rozbaluje jen `running`, a jen jednou za běh.** `StepFeedExpansion` má dvě množiny:
+  `expanded` (co je rozbalené) a `opened` (u koho už automat proběhl, drží se **jen dokud běží**).
+  Bez té druhé by se zavřený výpis běžícího revieweera při každé události otevřel znovu; bez toho
+  ořezávání by nový běh téhož skillu (`Pustit znovu`) rozbalení nedostal. **Doběhnutí výpis
+  nezavírá** — to by sebralo obrazovku zrovna ve chvíli, kdy je na ni nejvíc důvodů koukat.
+- **Sledování konce je `Bool`, ne poloha scrollu** (#252). Offset se nikam nezapisuje; do stavu se
+  píše jedině tehdy, když se **změní odpověď** na otázku „je výpis na konci?“ —
+  `onScrollGeometryChange` akci při nezměněné hodnotě nespustí (#361), takže je to zápis na přechodu,
+  ne z každého snímku (#358). Neukládá se: je to gesto v jednom běhu, ne nastavení, a klíč
+  `progressFollowsTail` zrušený u #242 se **nevrací**.
+- **Rozhodnutí „obsah narostl“ proti „člověk odscrolloval“ je čistá funkce**
+  (`Policy.stepFeedReaction(grew:isAtEnd:isCatchingUp:)`) a je to jediné netriviální místo celého
+  sledování. Narostlý obsah shodí „jsem na konci“ na `false` o ten jeden řádek, který se ještě
+  nedoscrolloval (změřeno 20 bodů), takže kdyby se z toho vyvozovalo odscrollování, sledování by se
+  vypnulo samo první událostí. U narostlého obsahu se proto **jen dohání**; o vypnutí rozhoduje jedině
+  změna polohy nad nezměněnou výškou obsahu, a ještě mimo dohánění — výška obsahu se totiž při
+  rozvržení mění i naplano (změřeno `1825 → 3505 → 1825` na jedné scéně).
+- **Posun se dělá o průchod později (`Task`), a je to změřené.** Posun ve stejném průchodu, ve kterém
+  se obsah přerovnal, SwiftUI zahodí: výpis zůstal 20 bodů od konce a nedojel tam ani po pěti kolech
+  smyčky. Je to tatáž past jako u fokusu do textového pole (#184) — rozhoduje **počet průchodů, ne
+  čas**, takže se nečeká časovačem (a ten je navíc zakázaná třída, #350). Naopak posun navěšený na
+  **data** (`id` posledního kroku) doběhl moc brzo, protože řádek ještě nebyl rozvržený.
+- **Kolo „posun → přeměření → posun“ zastavují dvě věci:** posun výšku obsahu **nemění** (takže druhé
+  kolo skončí u čtení polohy, ne u dalšího posunu) a `scrollTo` se volá jedině se zapnutým
+  sledováním.
+- **`Sledovat konec` znamená „nejnovější krok je celý vidět“**, ne „scroll dojel na poslední bod
+  obsahu“: pod posledním řádkem je `StepFeedView.rowsInset` bodů vzduchu, takže se od dolní hrany
+  odečítá — bez toho by se konec nesledoval nikdy.
+- **Pilulka `↓ N nových` se počítá z `id`, ne z počtu událostí.** Se stropem počet přestane růst,
+  jakmile se osa začne ořezávat, takže by pilulka u dlouhého běhu tvrdila, že nepřibylo nic — a to
+  je zrovna ten běh, u kterého se odrolovalo nahoru.
+- **Okno má líný seznam**, i když je vysoké nejvýš 138 bodů: prvek, který se nekreslí, se pořád umisťuje
+  (#252), a při třech stech krocích je to tři sta umístění při každém přerovnání obsahu.
+- **Próza modelu se nekreslí.** Otázka, kvůli které se do `Průběhu` chodí, je „koukal se tam, kam
+  měl“, a odpověď na ni jsou nástroje, ne úvahy; v okně se stropem by kroky vytlačila z dohledu.
+  Zamítnuté cesty jsou v záznamu rozhodnutí ve specifikaci.
+- **Vestavěný terminál to není a nemá být**: řeší **zásah** do běžící session, výpis **sledování**.
+  Do výpisu se nedá psát a cesta zpátky do session zůstává `Zkopírovat resume` v hlavičce dráhy.
+
+Změřeno (offscreen render výpisu o 300 řádcích, série střídavě podle #274):
+
+| Co | Do #325 | Od #325 |
+|---|---|---|
+| složení dráhy z osy o 300 událostech | 0,328 ms | **0,004 ms** |
+| jedna událost v otevřeném výpisu | 40,29 / 41,48 ms | **9,25 / 8,91 ms** |
+
+### Souhrn osy a strop na živou osu (#325)
+
+Dvě změny ve `ReviewerTimeline`, obě kvůli tomu, že výpis roste za běhu:
+
+- **Strop 300 platí i na živou osu** (`ReviewerTimeline.entryLimit`, do #325
+  `storedEntryLimit`). Do té doby ho měla jen uložená, takže se za běhu držely stovky událostí,
+  které po restartu zmizely — a nikde to nebylo napsané. **Vyšší strop pro živou osu by sliboval,
+  že se ke krokům dá vrátit; nižší by zahodil kroky, které v souboru zůstanou.** Ořezává se
+  začátek, `droppedEntries` roste průběžně (ne až při ukládání) a zkrácení se přiznává **dvakrát**:
+  v hlavičce výpisu (vidět i sbalená) a řezem na jeho začátku, tedy na místě, kde ta useknutá část
+  byla — tatáž úmluva jako `Policy.logTail` a `ConversationShortfall`.
+- **Odvozené údaje se počítají při zápisu** (`ReviewerTimeline.Digest`). `Policy.lanes` skládá dráhy
+  při každém překreslení tabu a do #325 u toho prošel osu **osmkrát** (kam se běh dostal, konec,
+  poslední nástroj, počet kroků, počet nálezů, čekání na slot, načtený skill, příznak zadání). Je to
+  tatáž třída úlohy jako #224.
+
+Tři věci, které u souhrnu nejsou zjevné:
+
+- **Není to druhá kopie osy, je to její souhrn** — a aby se od ní nerozešel, drží ho jediné místo:
+  mutující metody `ReviewerTimeline`. Že souhlasí s průchodem polem, tvrdí `TimelineDigestTests`;
+  z uložené osy se počítá **jedním** průchodem při načtení a vyjde z něj totéž.
+- **Ořezáním se nesmí zapomenout, čím běh prošel.** Strop zahazuje začátek, takže by průchod
+  přeživšími událostmi u dlouhého běhu tvrdil, že session nenaběhla a že nálezy nenahlásila — fáze
+  dráhy by po třech stech krocích spadly zpátky na `nedošlo na ni`. Souhrn je proto u `reached`,
+  `hadQueued`, `reportedFindings`, `finish`, `loadedSkill` a `intentGap` **monotónní**. Naopak
+  `toolSteps` a `lastTool` popisují, co je v ose **vidět**, takže se ořezáním zmenšují (`prochází
+  kód · 300 kroků` u osy s 218 zahozenými).
+- **Odpověď na krok se do souhrnu musí propsat.** Odpověď osu neprodlužuje (#326), takže se souhrn
+  nemá čím aktualizovat sám; pozná se podle `id` (unikátní na `tool_use`). Bez toho by věta pod
+  dráhou držela krok bez odpovědi a výpis by tvrdil `běží…` nad krokem, který dávno odpověděl.
+
+**`ReviewerTimeline.newestEntry(in:)` #325 smazalo, i s testy.** Bylo to hledání nejnovější události
+napříč reviewery pro jeden společný auto-scroll; s výpisem **na revieweera** se každé okno drží svého
+konce, takže by to byl stav, který nikdo nečte — a #325 mělo v zadání ho buď použít, nebo smazat.
 
 ## `ReviewRunner` (`App/Review/`)
 
@@ -2692,7 +2817,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DismissedRowStyle` | Buňka tabulky: ztlumení odmítnutého řádku a kontextové menu `Označit jako…` / `Vrátit` |
 | `FindingRow` | Nález převedený na řádek tabulky — texty (včetně nápovědy k místu), identita, blokující příznak, odmítnutí |
 | `FindingHighlight` | Místo, na které se právě skočilo; bublina na něm chvíli svítí |
-| `ReviewProgressView`, `ReviewerLaneView` | Tab `Průběh` (#242, nahradily `ReviewTimelineView`): **dráha na revieweera** s fázemi vedle sebe, věta o tom, co se právě děje, u spadlé session důvod, `stderr` a `Pustit znovu` / `Zkopírovat příkaz`; podrobný výpis událostí pod rozbalením (`TimelineEntryRow`). Dráha po skillu **mimo nastavenou sadu** nese v hlavičce `mimo sadu`; prázdný stav mluví o **nastavení**, protože se do něj dá dojít jedině s prázdnou sadou skillů |
+| `ReviewProgressView`, `ReviewerLaneView` | Tab `Průběh` (#242, nahradily `ReviewTimelineView`): **dráha na revieweera** s fázemi vedle sebe, věta o tom, co se právě děje, u spadlé session důvod, `stderr` a `Pustit znovu` / `Zkopírovat příkaz`; pod fázemi **živý výpis kroků** v okně se stropem (#325, `StepFeedView` + `TimelineEntryRow`). Dráha po skillu **mimo nastavenou sadu** nese v hlavičce `mimo sadu`; prázdný stav mluví o **nastavení**, protože se do něj dá dojít jedině s prázdnou sadou skillů |
 | `ReviewerLaneText` | České věty dráhy — stav, co se právě děje, čím to skončilo. Rozlišuje **tři** doběhlé stavy: nahlásilo nálezy / nahlásilo nulu / nenahlásilo nic — a `nespuštěno` od `ve frontě` |
 | `FindingsTabView`, `FindingsEmptyView` | Tab `Nálezy` (#242): souhrn počtů, `Zahodit nálezy`, tabulka — a věta, **proč** je prázdno (`Policy.findingsEmptyReason`), společná s panelem |
 | `FindingsTableView`, `FindingTableRowView`, `FindingTableRow` | Tabulka nálezů přes celou šířku: řazení kliknutím na hlavičku, řádek na **místo** (shoda dvou reviewerů je odznak `2×`), rozbalení kreslí tutéž `FindingBubbleView` jako diff. Akce (`Převzít`, `Vrátit`) jsou **barevný text z palety** (`AccentLinkButtonStyle`, #298), ne plocha jako v bublině a ne systémová modrá; krytí odmítnutého řádku drží `dismissedOpacity` (`.frow.done` z návrhu), ze kterého měří i sonda kontrastu |
@@ -4763,7 +4888,9 @@ seznam, dvojklik pošle jeden komentář a selhání drží stav i text. Dvě v�
     předchozímu běhu; ověřeno vloženou regresí (spadne sedm testů).
   - **Ořezává se začátek, ne konec**, a strop je 300 událostí: kdo se do osy dívá po restartu,
     hledá, čím to skončilo. Kolik se ořízlo, se **sčítá mezi uloženími** a je to v hlavičce
-    vidět — tiché zkrácení je tatáž past jako `droppedFindings`.
+    vidět — tiché zkrácení je tatáž past jako `droppedFindings`. **Od #325 je to jeden strop pro
+    živou i uloženou osu** (`ReviewerTimeline.entryLimit`), takže co bylo vidět za běhu, je vidět
+    i po restartu; podrobnosti v sekci *Souhrn osy a strop na živou osu (#325)*.
   - **`skill`, `sessionID` a cena se neduplikují** — osa je bere z běhu, pod kterým leží.
     Dvě kopie téhož v jednom souboru se rozejdou.
 - **Uložená cena má čtenáře — chip revieweera.** Osa v tabu `Průběh` je jen v paměti, takže po

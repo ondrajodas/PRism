@@ -526,9 +526,9 @@ viz tvrdá podmínka č. 1.
 |---|---|---|
 | `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) —, **login přihlášeného účtu** (#330) a **labely s vyžádanými reviewery** (včetně **týmů**) i nabídky k nim (#392). **Pořád bez zápisu**: čtení je čtení, měnit label umí jedině `ReviewPublisher` | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje (#326 — krok v ose je pokus, dokud nedorazí `tool_result`). Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení). Vedle nich dvě krátké session, které o review nic nevědí: překlad nálezů a **dotažení textu issue** do zadání (#345, vlastní povolení i rozbor streamu) | `claude` CLI |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje (#326 — krok v ose je pokus, dokud nedorazí `tool_result`). Osa má **jeden strop pro živou i uloženou** podobu a odvozené údaje si počítá **při zápisu** (#325). Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení). Vedle nich dvě krátké session, které o review nic nevědí: překlad nálezů a **dotažení textu issue** do zadání (#345, vlastní povolení i rozbor streamu) | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
-| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), proč zadání není celé a jméno nástroje, kterým se text issue tahá (#345), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), kdo je v sekci reviewerů a s jakou odpovědí, jak se labely zalomí do dvou řádků a co se s nimi na kterém PR smí, proti kterému kódu nálezy platí, když vedle nich stojí commit, a co sedne na dotaz v nabídce panelu i odkdy v ní hledací pole vůbec je (#392, pravidlo shody sdílené s paletou ⌘K), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), jak dopadl pokus o nástroj a co se u kroku v ose kreslí (#326), jestli reviewer otevřel kód a co z toho plyne pro „čisto“ (#383), řádek záznamu diagnostiky kreslení i rozbor evaluačního zásobníku AttributeGraphu, ze kterého se skládá (#361) | — |
+| `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), odkazy na zadání a soubor se zadáním pro reviewera (#120), proč zadání není celé a jméno nástroje, kterým se text issue tahá (#345), co udělat s osiřelou session po zabité aplikaci (#351), jestli se hover má zapsat do stavu (#358), kdo je v sekci reviewerů a s jakou odpovědí, jak se labely zalomí do dvou řádků a co se s nimi na kterém PR smí, proti kterému kódu nálezy platí, když vedle nich stojí commit, a co sedne na dotaz v nabídce panelu i odkdy v ní hledací pole vůbec je (#392, pravidlo shody sdílené s paletou ⌘K), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), jak dopadl pokus o nástroj a co se u kroku v ose kreslí (#326), jestli reviewer otevřel kód a co z toho plyne pro „čisto“ (#383), které dráhy mají rozbalený živý výpis kroků, jak vysoké je jeho okno a jestli je v něm co rolovat, jestli je odrolovaný na konec a co dělat s tím, co říká geometrie scrollu (#325), řádek záznamu diagnostiky kreslení i rozbor evaluačního zásobníku AttributeGraphu, ze kterého se skládá (#361) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR a od #392 nastavit labely a vyžádat review na **vlastním** PR; volající jsou `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission` a `MetadataSubmission` | `gh` CLI |
@@ -756,6 +756,17 @@ Zvlášť stojí za přečtení, než sáhneš na:
   varianta vyloučit, ne potvrdit. U #392 kvůli tomu v repu ležel komentář, který fokus tvrdil,
   a nabídka se přitom musela kliknout — **do popisu PR proto patří, že tuhle věc ověří člověk.**
 
+- **Posun scrollu ve stejném průchodu, ve kterém obsah narostl, SwiftUI zahodí** (#325). Živý výpis
+  kroků zůstal po nové události **20 bodů od konce** a nedojel tam ani po pěti kolech smyčky;
+  s posunem odloženým o jeden průchod (`Task`) dojede. Je to tatáž past jako u fokusu (#184) —
+  rozhoduje **počet průchodů, ne čas**, takže se nečeká časovačem (zakázaná třída, #350). A platí
+  to i obráceně: posun navěšený na **data** (`id` posledního řádku) doběhl naopak moc brzo, protože
+  řádek ještě nebyl rozvržený, takže se sleduje **geometrie**.
+
+  Sledování konce se u toho nesmí opřít o „jsem na poslední bod obsahu“: narostlý obsah je o řádek
+  „mimo konec“, takže by se vypnulo samo první událostí. Rozhoduje proto čistá funkce
+  (`Policy.stepFeedReaction`), která **dělí „obsah narostl“ od „člověk odscrolloval“** — a kolo
+  „posun → přeměření → posun“ zastavuje to, že posun výšku obsahu nemění.
 - **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236). Blok kódu si v `LazyVStack`u
   navrhuje výšku sám, takže když ji spočítá na jiné šířce, než na jaké se pak zalamuje, nakreslí víc
   řádků, než na kolik si řekl — a přeteče do řádku pod sebou (AppKitové view je nad SwiftUI obsahem,
@@ -763,6 +774,14 @@ Zvlášť stojí za přečtení, než sáhneš na:
   kreslení**, ne do volajícího; dvě místa znamenají dvě pravdy o jedné šířce. Testuje se proti
   **layout manageru** a **přes pásmo šířek** — rozejde se to jen v pásmu, takže u jedné šířky test
   projde. Podrobnosti v [`docs/architektura.md`](docs/architektura.md).
+
+  **A rozměr, ze kterého se počítá, se měří — nenasazuje se rámcem** (#325). Výška okna živého
+  výpisu je `min(obsah, strop)`, takže stojí na výšce řádku; `frame(height:)` by ji ale srovnal
+  s kresbou **na sílu**, a rozejití by pak nebylo jak poznat — měřidlo v testu vrací nasazené číslo
+  a text se místo toho potichu ořízne (ověřeno vloženou regresí: s rámcem projde i výška o bod
+  vedle). U výšky řádku navíc nesmí rozhodovat **ikona**: SF Symboly jednu výšku nemají (změřeno
+  15 / 14 / 12 bodů), takže je srovná `imageScale(.small)` — rámcem to nejde, v
+  `firstTextBaseline` se účtuje od dolní hrany a řádek s ním naopak vyroste.
 - **Co se počítá při každém překreslení, se pamatuje — a cache si musí říct, co ji vyprazdňuje**
   (#224). Obarvení řádku se volalo z computed property, takže běželo i při přejezdu myší: 44 ms
   na soubor o 2400 řádcích, pokaždé znovu; z cache 0,30 ms. Hranice musí být v tom typu vidět

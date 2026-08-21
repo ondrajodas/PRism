@@ -273,22 +273,25 @@ extension Policy {
         )
     }
 
+    /// Dráha z osy. **Všechno odvozené se čte ze souhrnu osy** (`ReviewerTimeline.Digest`, #325),
+    /// ne průchodem polem: tahle funkce běží při každém překreslení tabu, takže osm průchodů třemi
+    /// stovkami událostí na dráhu je práce, která se dá udělat jednou při zápisu.
     private static func lane(
         of timeline: ReviewerTimeline,
         isRunning: Bool,
         isConfigured: Bool
     ) -> ReviewerLane {
-        let reached = reachedStage(in: timeline)
-        let state = laneState(of: timeline, isRunning: isRunning, reached: reached)
+        let digest = timeline.digest
+        let state = laneState(of: digest, isRunning: isRunning)
         return ReviewerLane(
             skill: timeline.skill,
             state: state,
             phases: state == .queued
                 ? [ReviewerLane.Phase(title: ReviewerLane.Title.waiting, detail: nil, state: .running)]
-                : phases(of: timeline, state: state, reached: reached),
-            lastTool: lastTool(in: timeline),
-            finishedAt: finishTime(in: timeline),
-            reportedFindings: reportedFindings(in: timeline),
+                : phases(of: digest, state: state),
+            lastTool: digest.lastTool,
+            finishedAt: digest.finish?.at,
+            reportedFindings: digest.reportedFindings,
             usage: timeline.usage,
             sessionID: timeline.sessionID,
             worktree: timeline.worktree,
@@ -300,51 +303,33 @@ extension Policy {
         )
     }
 
-    /// Kam se běh dostal. Fáze se z toho odvozují **jedním** číslem, aby nemohly být v rozporu —
-    /// „hlásí nálezy hotovo“ nad „session ještě nenaběhla“ je stav, který by se jinak dal napsat.
-    private static func reachedStage(in timeline: ReviewerTimeline) -> Int {
-        var reached = 0
-        for entry in timeline.entries {
-            switch entry.kind {
-            case .queued: break
-            case .started: reached = max(reached, 1)
-            case .tool: reached = max(reached, 2)
-            case .findings: reached = max(reached, 3)
-            // Příznak zadání (#345) osu **neposouvá**: přichází dřív, než se cokoli spustilo, a
-            // fáze mají popisovat běh. Kdyby posouval, dráha ve frontě by tvrdila, že už něco dělá.
-            case .intentGap: break
-            case .finished: break
-            }
-        }
-        return reached
-    }
-
+    /// Kam se běh dostal, drží **souhrn osy** — fáze se z toho odvozují jedním číslem, aby nemohly
+    /// být v rozporu; „hlásí nálezy hotovo“ nad „session ještě nenaběhla“ je stav, který by se
+    /// jinak dal napsat.
     private static func laneState(
-        of timeline: ReviewerTimeline,
-        isRunning: Bool,
-        reached: Int
+        of digest: ReviewerTimeline.Digest,
+        isRunning: Bool
     ) -> ReviewerLane.State {
-        for entry in timeline.entries.reversed() {
-            guard case .finished(let outcome) = entry.kind else { continue }
-            return switch outcome {
+        if let finish = digest.finish {
+            return switch finish.outcome {
             case .finished: .finished
             case .timedOut: .timedOut
             case .interrupted: .interrupted
             case .failed(let detail): .failed(detail: detail)
             }
         }
-        if isRunning { return reached == 0 ? .queued : .running }
+        if isRunning { return digest.reached == 0 ? .queued : .running }
         // Bez konce a bez běhu: buď se na slot nikdy nedostalo, nebo běh někdo zrušil.
-        return reached == 0 ? .queued : .stopped
+        return digest.reached == 0 ? .queued : .stopped
     }
 
     private static func phases(
-        of timeline: ReviewerTimeline,
-        state: ReviewerLane.State,
-        reached: Int
+        of digest: ReviewerTimeline.Digest,
+        state: ReviewerLane.State
     ) -> [ReviewerLane.Phase] {
-        let steps = timeline.entries.count { if case .tool = $0.kind { true } else { false } }
-        let findings = reportedFindings(in: timeline)
+        let reached = digest.reached
+        let steps = digest.toolSteps
+        let findings = digest.reportedFindings
         // Fáze, která nese konec běhu. U špatného konce je to **aspoň `session`**, i když se běh
         // nikam nedostal: session, která spadla při startu, jinak nemá kde selhat a dráha by
         // vypadala k nerozeznání od té, co ještě nezačala.
@@ -357,7 +342,7 @@ extension Policy {
         }
 
         var phases: [ReviewerLane.Phase] = []
-        if timeline.entries.contains(where: { if case .queued = $0.kind { true } else { false } }) {
+        if digest.hadQueued {
             phases.append(ReviewerLane.Phase(title: ReviewerLane.Title.waiting, detail: nil, state: .done))
         }
         phases.append(ReviewerLane.Phase(
@@ -401,26 +386,5 @@ extension Policy {
         // ze stejného důvodu.
         case .finished, .queued, .notStarted, .missingProgress: .done
         }
-    }
-
-    private static func lastTool(in timeline: ReviewerTimeline) -> ToolAttempt? {
-        timeline.entries.reversed().lazy.compactMap { entry -> ToolAttempt? in
-            guard case .tool(let tool) = entry.kind else { return nil }
-            return tool
-        }.first
-    }
-
-    private static func reportedFindings(in timeline: ReviewerTimeline) -> Int? {
-        timeline.entries.reversed().lazy.compactMap { entry -> Int? in
-            guard case .findings(let count) = entry.kind else { return nil }
-            return count
-        }.first
-    }
-
-    private static func finishTime(in timeline: ReviewerTimeline) -> Date? {
-        timeline.entries.reversed().lazy.compactMap { entry -> Date? in
-            guard case .finished = entry.kind else { return nil }
-            return entry.at
-        }.first
     }
 }

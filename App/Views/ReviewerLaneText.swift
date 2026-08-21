@@ -182,4 +182,52 @@ enum ReviewerLaneText {
         case .failed: "Nástroj vrátil chybu."
         }
     }
+
+    // MARK: - Výpis kroků (#325)
+
+    /// Kolik kroků výpis nese — v hlavičce i ve sbaleném řádku.
+    static func stepCount(_ count: Int) -> String {
+        Plural.czech(count, one: "krok session", few: "kroky session", many: "kroků session")
+    }
+
+    /// Zkrácení v hlavičce výpisu. `nil` u neořezané osy: hlavička, která tvrdí ořez tam, kde
+    /// žádný není, je horší než žádná — tatáž úmluva jako u `Policy.logTailNotice`.
+    ///
+    /// **Přiznává se dvakrát** (v hlavičce a řezem na začátku výpisu), a je to schválně: hlavička
+    /// je vidět i sbalená, kdežto řez stojí na místě, kde ta useknutá část byla.
+    static func stepShortfall(_ dropped: Int) -> String? {
+        guard dropped > 0 else { return nil }
+        return "· \(dropped) starších se nevešlo"
+    }
+
+    /// Řez na začátku výpisu.
+    ///
+    /// **Skloňuje se i sloveso**, ne jen podstatné jméno: `1 starší krok se nevešlo` je věta, která
+    /// v okně praští do očí hned, a jednička je tady běžný stav — ořez přibývá po jedné.
+    static func stepCut(_ dropped: Int) -> String? {
+        guard dropped > 0 else { return nil }
+        let steps = Plural.czech(
+            dropped,
+            one: "starší krok se nevešel",
+            few: "starší kroky se nevešly",
+            many: "starších kroků se nevešlo"
+        )
+        return "\(steps) do stropu"
+    }
+
+    /// Přepínač sledování konce. **Není to akce, ale stav**, takže sloveso v infinitivu a barva
+    /// běžícího kroku (`find`), ne akcentová.
+    static let followTail = "Sledovat konec"
+
+    static let followTailHelp = "Výpis se drží u nejnovějšího kroku. Vypne se odrolováním nahoru "
+        + "i klikem; na konci se zapne zpátky. Neukládá se — je to gesto v jednom běhu."
+
+    /// Pilulka u spodní hrany, když se konec nesleduje a mezitím něco přišlo.
+    static func stepArrivals(_ count: Int) -> String {
+        "↓ \(Plural.czech(count, one: "nový", few: "nové", many: "nových"))"
+    }
+
+    /// Co dělá klik na sbalený řádek. Slovo je v řádku schválně — samotná šipka neřekne, že se dá
+    /// kliknout, a je to jediné místo, odkud se výpis doběhlé dráhy otevře.
+    static let expandFeed = "rozbalit"
 }

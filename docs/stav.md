@@ -1891,7 +1891,8 @@ Tři věci se u kreslení našly v kódu a nesou se do zadání: **živá osa ne
 takže se za běhu drží stovky událostí, které po restartu zmizí, a nikde to není napsané),
 **odmítnutý nástroj vypadá jako provedený** až do konce běhu (ve streamu je vidět hned, jako
 `tool_result` s `is_error`, ale `StreamParser` `user` eventy nečte) a
-**`ReviewerTimeline.newestEntry(in:)` po zrušeném přepínači (#242) v aplikaci nemá volajícího** —
+**`ReviewerTimeline.newestEntry(in:)` po zrušeném přepínači (#242) v aplikaci nemá volajícího**
+(#325 ho nakonec smazalo, viz níž) —
 drží ho naživu jen tři testy. Zkracování cest se u toho opravuje v číslech: prefix pracovního
 stromu není sedmdesát znaků, ale **131**, u `Bash` třikrát (změřeno 461 → 57 znaků, 8×).
 
@@ -3382,6 +3383,79 @@ včetně barev (`find` u běžícího, `crit` na 14 % u odznaku). Zkontrolované
 **Rozbalený výpis, strop a sledování konce zůstávají na #325** — tohle je vrstva dat pod ním. Osa se
 o odpověď **neprodlužuje** (mění se krok, který v ní je), takže #325 dostane hotové to, co potřebuje
 kreslit: jeden řádek na `tool_use` a na něm jeho stav.
+
+### #325 — tab Průběh: živý výpis kroků se stropem a sledováním konce
+
+**Nebyla to nová funkce, ale nedodělaná.** Kroky se do osy zapisovaly a umělo se je vykreslit už
+od #22, jenže pod **zavřeným** rozbalením, bez stropu a bez vlastního scrollu — takže se za běhu
+na to, co reviewer dělá, nedalo koukat. Od #325 visí pod fázemi **okno se stropem a s vlastním
+scrollem**, u běžícího revieweera rozbalené; při doběhnutí se nezavírá samo.
+
+Strop je podstatný: rostoucí blok by při **každé** události posunul všechno pod sebou, tedy
+přerovnal celý tab několikrát za vteřinu.
+
+**Do stropu je to ale výška obsahu, a to je oprava po proklikání.** První verze měla výšku pevnou
+vždycky, takže běh o třech krocích nakreslil okno vysoké 138 bodů se dvěma třetinami prázdna — a to
+je stav, ve kterém **každé** review začíná. Okno proto roste, dokud na strop nenarazí; přerovná se
+tím nejvýš pod prvními osmi událostmi běhu, ne pod každou z tří stovek. Tři věci, které z toho
+plynou:
+
+- **výška se počítá z dat, ne z přeměřeného obsahu** — výška obsahu hlášená scrollem se při
+  rozvržení mění i naplano (`1825 → 3505 → 1825` na jedné scéně), takže okno navěšené na ni by
+  u nezměněného obsahu poskakovalo o řádek tam a zpět. Rozhoduje čistá funkce
+  (`Policy.stepFeedWindow`) nad rozměry, které dodává view, protože se kreslí tam (#236);
+- **o výšce řádku nesmí rozhodovat ikona** — SF Symboly jednu výšku nemají, takže řádek se
+  zadáním, které nedorazilo celé, měřil 17 bodů proti 15 u ostatních a neznámý nástroj 16.
+  Spravilo to `imageScale(.small)`, ne `frame(height:)`: rámec se v `firstTextBaseline` účtuje od
+  dolní hrany, takže s ním řádek naopak vyrostl na 16. Návrh má ikonu menší než text taky;
+- **`Sledovat konec` ani pilulka `↓ N nových` se nekreslí, dokud není co rolovat** — obojí slibuje
+  posun tam, kde výpis už je.
+
+Návrh (sekce 20) se u toho **překreslil taky**: `height: 138px` je `max-height`, protože v CSS to
+pravidlo platilo i pro krátký výpis.
+
+**Rozbalení drží tab, ne dráha.** Do #325 to byl `@State` uvnitř `ReviewerLaneView` a dráhy jsou
+v `LazyVStack`u, takže odrolovaná dráha se zahodila i se svým stavem — výpis se sám zavřel zrovna
+u běžícího revieweera. Automat rozbaluje jedině `running`, a **jednou za běh**: bez toho by
+zavřený výpis běžící dráhy otevřela příští událost, tedy do vteřiny.
+
+**Jeden strop, 300, pro živou i uloženou osu.** Do #325 ho měla jen uložená, takže se za běhu
+držely stovky událostí, které po restartu zmizely — a nikde to nebylo napsané. Vyšší strop pro
+živou osu by sliboval, že se ke krokům dá vrátit; nižší by zahodil kroky, které v souboru zůstanou.
+Ořezává se začátek a **zkrácení se přiznává dvakrát**: v hlavičce výpisu a řezem na jeho začátku.
+
+**Cena překreslování byla součást zadání a je změřená, ne odhadnutá** (offscreen render výpisu
+o 300 řádcích, série střídavě podle #274):
+
+| Co | Do #325 | Od #325 |
+|---|---|---|
+| složení dráhy z osy o 300 událostech | 0,328 ms | **0,004 ms** |
+| jedna událost v otevřeném výpisu | 40,29 / 41,48 ms | **9,25 / 8,91 ms** |
+
+To první je souhrn osy počítaný **při zápisu** (`ReviewerTimeline.Digest`) místo osmi průchodů
+polem při každém překreslení. Vyšlo z toho i to, co nebylo v zadání: souhrn musí být u faktů
+o běhu **monotónní**, jinak by ořez osy nechal fáze dráhy spadnout zpátky na `nedošlo na ni`.
+
+**Sledování konce se vrátilo — do paměti, ne do konfigurace.** #242 ho zrušilo i s klíčem
+`progressFollowsTail`, protože „s dráhami není co následovat“; se scrollujícím výpisem ten důvod
+odpadl, ten druhý (uložená předvolba, kterou nikdo nečte) platí dál. Vypíná se odrolováním nahoru
+i klikem, na konci se zapne zpátky, jinak je vidět pilulka `↓ N nových`.
+
+**Dvě věci se u toho musely změřit, protože první verze byla špatně.** Posun ve stejném průchodu,
+ve kterém obsah narostl, SwiftUI **zahodí** — výpis zůstal 20 bodů od konce a nedojel tam ani po
+pěti kolech smyčky (tatáž past jako u fokusu, #184); a `defaultScrollAnchor(.bottom, for:
+.sizeChanges)` na sledování konce **nestačí**, nechá výpis o řádek pozadu. Rozhodnutí „obsah
+narostl“ proti „člověk odscrolloval“ je proto čistá funkce v `Policy`: narostlý obsah je o řádek
+„mimo konec“, takže by se sledování vypnulo samo první událostí.
+
+**`ReviewerTimeline.newestEntry(in:)` je smazané, i s testy** — zadání dalo na výběr použít, nebo
+smazat. S výpisem **na revieweera** se každé okno drží svého konce, takže hledání nejnovější
+události napříč reviewery by byl stav, který nikdo nečte.
+
+**Co zůstalo #327:** surová session v sheetu, tedy próza modelu, výstupy nástrojů a systémové
+události. Výpis kreslí jen kroky, a schválně — próza je řádově víc dat a v okně se stropem by
+kroky vytlačila z dohledu. Tlačítko `Ukázat surovou session`, které návrh kreslí v hlavičce výpisu,
+proto v #325 **není**.
 
 ### #392 — labely a vyžádaní reviewery v panelu, panel i v `Commitech`
 

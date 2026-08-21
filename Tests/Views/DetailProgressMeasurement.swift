@@ -149,7 +149,7 @@ struct DetailProgressMeasurement {
             print("MĚŘENÍ \(fixture): \(lines.count) řádků streamu → \(tools) událostí `attemptedTool`"
                 + " + \(findings)× `findings`")
         }
-        print("MĚŘENÍ strop uložených událostí na běh: \(ReviewerTimeline.storedEntryLimit)")
+        print("MĚŘENÍ strop uložených událostí na běh: \(ReviewerTimeline.entryLimit)")
     }
 
     // MARK: - Mechanika

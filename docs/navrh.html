@@ -1834,8 +1834,9 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* ============================================================
    ŽIVÝ VÝPIS KROKŮ V DRÁZE (sekce 20)
    Druhá vrstva dráhy z sekce 07: pod fázemi visí okno s kroky session.
-   Má pevnou výšku schválně — rostoucí blok by při každé události posunul
-   všechno pod sebou, a to je přerovnání celého tabu několikrát za vteřinu.
+   Má strop schválně — rostoucí blok by při každé události posunul všechno pod
+   sebou, a to je přerovnání celého tabu několikrát za vteřinu. Do stropu je to
+   ale výška obsahu: krátký běh jinak nakreslí okno se dvěma třetinami prázdna.
    ============================================================ */
 .stepfeed { border-top: 1px solid var(--line-soft); }
 .stepfeed > header {
@@ -1871,9 +1872,11 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .stepfeed .rows {
   position: relative; margin: 0 12px 11px;
   border: 1px solid var(--line-soft); border-radius: 6px; background: var(--panel-2);
-  /* Pevná výška, ne rostoucí — v mockupu je tím vidět i to, že poslední řádek
-     je useknutý hranou okna, tedy že se scrolluje. */
-  height: 138px; overflow: hidden;
+  /* Obsah do stropu, ne strop od začátku: krátký běh nakreslí okno vysoké tři
+     řádky a roste, dokud nenarazí na 138 bodů — od té chvíle se roluje a je
+     vidět, že poslední řádek usekla hrana okna. Pevná výška odsud dvě třetiny
+     okna vyprázdnila u každého začínajícího review. */
+  max-height: 138px; overflow: hidden;
 }
 .stepfeed .rows .scroll { padding: 5px 0; }
 /* Se zapnutým sledováním konce stojí obsah **u dolní hrany** — nejnovější krok je
@@ -6887,7 +6890,8 @@ projeví hned v tom dalším.</div>
         <em>kdo kde je</em>, a to je správně; chybí ta druhá polovina, tedy <em>co zrovna dělá</em>.
         Dneska je schovaná pod rozbalením <code>312 kroků session</code>, které je zavřené, nemá
         strop, nescrolluje a konec osy nesleduje. Návrh z ní dělá <b>druhou vrstvu dráhy</b>:
-        okno s pevnou výškou pod fázemi, u běžícího reviewera rozbalené.
+        okno se stropem pod fázemi (do stropu vysoké jako obsah), u běžícího reviewera
+        rozbalené.
       </p>
       <p class="muted">
         <b>Vestavěný terminál to není a nemá být.</b> SwiftTerm + PTY zůstává tam, kde je —
@@ -7197,10 +7201,16 @@ projeví hned v tom dalším.</div>
       <div class="note">
         <span class="num">1</span>
         <span class="body">
-          <b>Okno má pevnou výšku, ne rostoucí</b>
+          <b>Okno má strop, ne pevnou výšku</b>
           <span>Blok, který roste s každou událostí, posune všechno pod sebou — a to je
-          přerovnání celého tabu několikrát za vteřinu. Výpis je proto vlastní scroll o pevné
-          výšce a přibývající řádek hýbe jen s ním. Dráha nad ním se nehne vůbec.</span>
+          přerovnání celého tabu několikrát za vteřinu. Výpis je proto vlastní scroll se
+          stropem 138 bodů a přibývající řádek hýbe jen s ním; dráha nad ním se nehne vůbec.
+          <b>Do stropu je to ale výška obsahu</b>: pevná výška od začátku znamenala okno se
+          dvěma třetinami prázdna u <em>každého</em> začínajícího review, což je stav, ve
+          kterém se na výpis kouká nejvíc. Roste se proto po strop — přerovná se pod prvními
+          osmi událostmi běhu, ne pod každou —, a dokud se obsah vejde celý, <b>není v hlavičce
+          ani <code>Sledovat konec</code></b>: nabídka posunout se na konec, kde už výpis je,
+          nedělá nic.</span>
         </span>
       </div>
       <div class="note">
@@ -7643,7 +7653,7 @@ Secret Client
         <div class="verdict">
           <em>Jen kroky.</em> Otázka, kvůli které se do <em>Průběhu</em> chodí, je „koukal se tam,
           kam měl“ — a odpověď na ni jsou nástroje, ne úvahy. Próza je řádově víc dat a zalomená
-          v okně o pevné výšce by kroky vytlačila z dohledu, tedy zhoršila přesně to, kvůli čemu
+          v okně se stropem by kroky vytlačila z dohledu, tedy zhoršila přesně to, kvůli čemu
           výpis vzniká. Ztráta je „o krok dál“, ne „nikde“: celá session je v
           <code>claude --resume</code>, a to je ten levný terminál, o kterém mluví specifikace.
         </div>
@@ -7838,7 +7848,7 @@ Secret Client
         </p>
         <div class="verdict">
           <em>Není, je to celý smysl té druhé obrazovky.</em> Výpis kroků odpovídá na „koukal se
-          tam, kam měl“ a próza by v okně o pevné výšce vytlačila kroky z dohledu. Přepis
+          tam, kam měl“ a próza by v okně se stropem vytlačila kroky z dohledu. Přepis
           odpovídá na „proč to dopadlo takhle“ — a tam je próza <b>ta odpověď</b>. Kdyby přepis
           dělal tytéž škrty, byl by to druhý pohled na totéž a nemělo by smysl ho mít. Objem to
           navíc není: v největším transcriptu je próza <b>61 kB z 53 MB</b> (0,11 %), objem dělají

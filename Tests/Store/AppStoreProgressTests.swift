@@ -3,39 +3,6 @@ import Testing
 
 @testable import PRism
 
-@Suite("ReviewerTimeline — nejnovější událost")
-struct NewestEntryTests {
-    private func timeline(_ skill: String, seconds: [TimeInterval]) -> ReviewerTimeline {
-        var timeline = ReviewerTimeline(skill: skill)
-        for second in seconds {
-            timeline.record(.queued, at: Date(timeIntervalSince1970: second))
-        }
-        return timeline
-    }
-
-    /// Auto-scroll na konec se řídí tou **nejnovější** událostí. Brát ji z poslední osy
-    /// v poli by u dvou souběžných reviewerů znamenalo, že se osa přestane posouvat,
-    /// jakmile píše ten dřívější.
-    @Test("Nejnovější událost se hledá napříč reviewery")
-    func findsTheNewestEntryAcrossReviewers() throws {
-        let timelines = [
-            timeline("code-review", seconds: [10, 40]),
-            timeline("security", seconds: [20]),
-        ]
-
-        let newest = try #require(ReviewerTimeline.newestEntry(in: timelines))
-
-        #expect(newest.skill == "code-review")
-        #expect(newest.entry == 1)
-    }
-
-    @Test("Bez událostí není co hledat")
-    func findsNothingWithoutEntries() {
-        #expect(ReviewerTimeline.newestEntry(in: [ReviewerTimeline(skill: "code-review")]) == nil)
-        #expect(ReviewerTimeline.newestEntry(in: []) == nil)
-    }
-}
-
 /// Časová osa toho, co reviewer dělal. Drží ji store, aby zůstala i po doběhnutí běhu —
 /// právě tehdy se k ní člověk vrací.
 @Suite("AppStore — průběh review")

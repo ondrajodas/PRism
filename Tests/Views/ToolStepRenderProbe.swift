@@ -12,9 +12,10 @@ import Testing
 /// `ToolStepOutcomeTests` a `ReviewerLaneTextTests`; tady se ty stavy dají **přečíst vedle sebe**
 /// a srovnat se sekcí 20 návrhu.
 ///
-/// Rendruje se `TimelineEntryRow`, ne celá dráha: výpis kroků je v `ReviewerLaneView` pod
-/// rozbalením a jeho `@State` se zvenčí otevřít nedá. Rozbalený výpis kreslí #325 — pak má
-/// sonda kde vyrůst.
+/// **Od #325 rendruje i celé dráhy s výpisem kroků** — rozbalený (běžící reviewer), sbalený za
+/// řádkem s počtem kroků (doběhlý) a rozbalený nad ořezanou osou, kde se zkrácení přiznává dvakrát.
+/// To je ta obrazovka, kterou se srovnává sekce 20 návrhu; do #325 se výpis zvenčí otevřít nedal,
+/// protože jeho rozbalení bylo `@State` uvnitř dráhy.
 ///
 /// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes
 /// `TEST_RUNNER_PRISM_RENDER_DIR`. Prefix `TEST_RUNNER_` je podmínka, ne ozdoba — `xcodebuild`
@@ -39,6 +40,89 @@ struct ToolStepRenderProbe {
             print("SONDA \(url.path) — \(Int(width)) b")
         }
     }
+
+    /// Dráhy s výpisem: **čerstvě spuštěná o třech krocích**, běžící s rozbaleným oknem, doběhlá
+    /// sbalená a běžící nad ořezanou osou.
+    ///
+    /// Ta první je tam od opravy výšky (#402): okno je **obsah do stropu**, takže krátký běh má
+    /// vysoké tři řádky a nemá přepínač `Sledovat konec` — a je to zrovna ten stav, ve kterém každé
+    /// review začíná. Na obrázku se dá srovnat s dlouhými pod ním, kde strop platí.
+    @Test("Vyrendrovat dráhy s výpisem kroků")
+    func rendersLanesWithTheFeed() throws {
+        let directory = URL(
+            filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory()
+        )
+
+        for width in [1000.0, 620.0] as [CGFloat] {
+            let url = directory.appending(path: "vypis-\(Int(width)).png")
+            try render(feedScene(width: width), width: width, height: 820, to: url)
+            print("SONDA \(url.path) — \(Int(width)) b")
+        }
+    }
+
+    private func feedScene(width: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            lane(skill: "docs-review", running: true, steps: 3, expanded: true)
+            lane(skill: "security-review", running: true, steps: 47, expanded: true)
+            lane(skill: "php-review", running: false, steps: 312, expanded: false)
+            lane(skill: "test-coverage", running: true, steps: 516, expanded: true)
+        }
+        .padding(16)
+        .frame(width: width, alignment: .leading)
+        .background(Palette.background)
+    }
+
+    /// Dráha z **živé** osy, tedy tou cestou, kterou vzniká za běhu — včetně stropu, takže
+    /// u dlouhého běhu je na obrázku vidět i přiznané zkrácení.
+    private func lane(skill: String, running: Bool, steps: Int, expanded: Bool) -> some View {
+        var timeline = ReviewerTimeline(skill: skill, worktree: worktree)
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        timeline.record(.queued, at: start)
+        timeline.record(.started(sessionID: "8c1f2ab3"), at: start + 1)
+        for index in 0..<steps {
+            let tool = Self.tools[index % Self.tools.count]
+            timeline.record(
+                .attemptedTool(ToolAttempt(name: tool.0, detail: tool.1(worktree), id: "t\(index)")),
+                at: start + 2 + Double(index)
+            )
+            // Poslední krok běžící dráhy zůstane bez odpovědi — to je ten `běží…`.
+            guard !running || index < steps - 1 else { continue }
+            timeline.record(
+                .resolvedTool(ToolResolution(
+                    id: "t\(index)",
+                    // Odmítá se `Bash`, jako v návrhu: `Bash(gh:*)` je to, co read-only reviewer
+                    // odmítnout **má**.
+                    outcome: .init(kind: tool.0 == "Bash" && index % 3 == 0 ? .denied : .passed)
+                )),
+                at: start + 2.2 + Double(index)
+            )
+        }
+        if !running {
+            timeline.record(.findings(count: 2), at: start + 2 + Double(steps))
+            timeline.finish(.finished, usage: nil, at: start + 3 + Double(steps))
+        }
+        let lane = Policy.lanes(
+            of: [timeline],
+            skills: [skill],
+            running: running ? [skill] : []
+        )[0]
+        return ReviewerLaneView(
+            lane: lane,
+            shortName: skill,
+            feed: expanded ? .expanded : .collapsed,
+            toggleFeed: {}
+        )
+    }
+
+    /// Nástroje ve tvaru, v jakém chodí ze streamu — s celým prefixem pracovního stromu, aby se na
+    /// obrázku vidělo, že se zkracuje.
+    private static let tools: [(String, (URL) -> String)] = [
+        ("Read", { $0.path(percentEncoded: false) + "/src/Client/SecretClient.php" }),
+        ("Grep", { _ in "-rn \"getSecret\\|setSecret\" src tests --include=*.php" }),
+        ("Bash", { "cd \"\($0.path(percentEncoded: false))\" && git log --oneline -20 -- src" }),
+        ("Read", { $0.path(percentEncoded: false) + "/tests/Client/SecretClientTest.php" }),
+        ("Glob", { _ in "src/**/*Secret*.php" }),
+    ]
 
     private func scene(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 2) {

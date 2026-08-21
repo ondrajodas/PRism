@@ -932,6 +932,76 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   podle počtu dostal číslo menší než jeho předchůdce. **Osy vyrobené v testech konec mají**, a proto
   to nechytil žádný z původních testů; nová sada proto skládá osu přes `stored()`, jak vzniká
   doopravdy. Ověřeno vložením regrese (9 padlých tvrzení).
+- **Živý výpis kroků (#325)** — rozhodnutí jsou čisté funkce, takže **výčtem**
+  (`StepFeedTests`): co se u dráhy kreslí (prázdná osa výpis nedostane vůbec — `0 kroků session`
+  by nabízel rozbalení prázdného okna), automatické rozbalení přes **všech devět** stavů dráhy
+  (rozbalí se jedině `running`) a osmiřádková tabulka reakce na geometrii scrollu. Tři nejcennější
+  tvrzení jsou ta, že se něco **NE**stalo: **doběhnutí výpis nezavře** (obrazovka by zmizela
+  zrovna ve chvíli, kdy je na ni nejvíc důvodů koukat), **zavřený výpis běžící dráhy se sám
+  neotevře** (bez množiny `opened` by ho automat otevřel příští událostí, tedy do vteřiny)
+  a **narostlý obsah není odrolování** — narostlý obsah je o řádek „mimo konec“, takže by se
+  sledování konce vypnulo samo první událostí.
+- **Výška okna výpisu (#325, oprava po proklikání)** — okno je **obsah do stropu**, takže se výška
+  počítá z rozměrů, které drží view (`StepFeedView.metrics`). Tím vzniká třída chyby z #236,
+  jen o výšku: **měřeno jinde, než se kreslí**. Dělí se to na dvě sady.
+
+  `StepFeedTests` berou tu čistou funkci (`Policy.stepFeedWindow`) výčtem, a to nad **kulatými
+  rozměry, které nejsou z návrhu** — funkce nesmí na konkrétních číslech záležet a z literálů se
+  dá přečíst aritmetika. Nejcennější tvrzení je, že **okno na hranici stropu nekmitá**: řady
+  výšek přes 40 počtů řádků je neklesající, strop nepřeroste, a co jednou na stropu stojí, tam
+  zůstane. Zvlášť se tvrdí, že obsah **přesně** na strop se ještě neroluje (proto `>`, ne `>=`)
+  a že se pilulka `↓ N nových` nekreslí, když není co rolovat.
+
+  `StepFeedWindowTests` proti tomu měří na **hostovaném okně**, aby ta čísla nebyla druhá pravda
+  o kresbě. Rozměry se ověřují **rozdíly**, ne přepsanou aritmetikou: přírůstek na jeden řádek,
+  přírůstek řezu na začátku ořezané osy a celý vzorec tím, že u nerolovaného výpisu je **okno
+  stejně vysoké jako obsah**. Dvě věci, které se u toho našly a jinak by prošly:
+
+  - **výšku řádku určovala ikona** — SF Symboly jednu výšku nemají, takže řádek se zadáním, které
+    nedorazilo celé, měřil 17 bodů proti 15 u ostatních (a neznámý nástroj 16). Test proto jde
+    přes **všechny druhy řádku a všechny symboly**, které výpis kreslí, a přes **pásmo šířek**
+    (#236);
+  - **nasazený rámec (`frame(height:)`) tvrzení vypnul** — měřidlo pak vrací to, co se nasadilo,
+    takže rozejití s typografií není jak poznat (text se místo toho potichu ořízne). Výšku proto
+    určuje sazba a konstanta o ní jen tvrdí, kolik měří.
+
+  Ověřeno vloženou regresí z obou stran: pevná výška okna položí tři testy, výška řádku o bod
+  vedle další dva.
+
+  **Že `fittingSize` nesmí být přímo v `#expect`** je u toho vlastní past (#367 potřetí): v makru
+  se čte dvakrát a `CGFloat` se u toho převádí, takže tvrzení padalo nad dvěma **na bit shodnými**
+  patnáctkami. Hodnota se bere jednou do proměnné a tvrzení se porovnávají mezi sebou.
+- **Že výpis doopravdy dojede na konec (#325)** — `StepFeedTailTests` hostuje `StepFeedView`
+  v okně a čte polohu z `NSScrollView`, protože jinde není: do observable stavu se offset
+  **nezapisuje** (#252). Ptá se u toho **tou samou funkcí, jakou se rozhoduje okno**
+  (`Policy.stepFeedAtEnd` nad `StepFeedView.rowsInset`) — vlastní vzorec v testu by hlídal jiné
+  číslo, než na kterém aplikace stojí. Test je tam proto, že to implementace **napoprvé neměla**:
+  posun ve stejném průchodu, ve kterém řádek přibyl, SwiftUI zahodí (výpis zůstal 20 bodů od konce
+  a nedojel ani po pěti kolech smyčky), takže se posouvá o průchod později. Čeká se **na jev se
+  stropem** (#269), ne na pevný okamžik — posun přijde o kolo smyčky po sazbě řádku.
+
+  **Druhou polovinu harness neuveze, a je to změřené, ne odhad**: „odrolovaný výpis se nesmí sám
+  vrátit na konec“ se odzkoušet nedá, protože `WheelGesture` nad tímhle scrollem **neposune vůbec
+  nic** (skončil na 1687, tedy tam, kde začal — offscreen okno bez aktivace) a
+  `contentView.scroll(to:)` si SwiftUI přerovná zpátky. Je to tatáž mez jako u `onContinuousHover`
+  v #358: testuje se proto **rozhodnutí** (`Policy.stepFeedReaction`, výčtem) a zbytek ověří člověk
+  v pauze — patří to do popisu PR.
+- **Strop živé osy a souhrn (#325)** — `TimelineLimitTests` a `TimelineDigestTests`. U stropu se
+  hlídá, že se ořezává **začátek** (kdo se dívá do běžícího výpisu, kouká na konec), že
+  `droppedEntries` roste průběžně a že se u uložení nesečte dvakrát, a hlavně to nejcennější:
+  **ořez nezapomene, čím běh prošel** — kdyby se fáze počítaly průchodem přeživších událostí, dráha
+  po třech stech krocích tvrdí, že session nenaběhla a že nálezy nenahlásila. Souhrn se u toho
+  porovnává s **průchodem polem** (ta druhá pravda, kterou by mohl potichu opustit) nad osou, ve
+  které je od každého druhu události jedna, a zvlášť se tvrdí, že načtená osa má stejný souhrn jako
+  živá — jinak by tab po restartu kreslil jinou dráhu než před ním. K tomu dvě věci o posledním
+  kroku: odpověď na něj se do souhrnu **propíše** (jinak by výpis tvrdil `běží…` nad krokem, který
+  dávno odpověděl) a odpověď na **starší** krok posledním nehýbe.
+- **Kolik výpis stojí (#325)** — `StepFeedMeasurement`, ruční (`TEST_RUNNER_PRISM_MEASURE=1`).
+  Měří obojí, co se u #325 změnilo: složení dráhy z osy o 300 událostech (0,328 → **0,004 ms**;
+  kontrolní strana je těch osm průchodů polem, přepsaných do měření, aby bylo poznat, že se ubralo
+  a ne přepsalo — poučení z #275) a **cenu jedné události v otevřeném výpisu** v hostovaném okně
+  (40,29 / 41,48 → **9,25 / 8,91 ms**). Série se u toho **střídají** (#274), protože drift sezení
+  je větší než hledaný rozdíl, a příprava je mimo hodinky.
 - **Věty dráhy (#242)** — `ReviewerLaneText` rozlišuje **tři** doběhlé konce (nahlásilo nálezy /
   nahlásilo nulu / nenahlásilo nic) a test hlídá, že se u toho třetího **nikde neslíbí čisto**.
   Plus že slova stavů jsou různá (`spadlo` ≠ `nedoběhlo`, `nespuštěno` ≠ `ve frontě`, u fází

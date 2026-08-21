@@ -4,8 +4,9 @@ import SwiftUI
 ///
 /// Fáze vedle sebe, protože otázka je **srovnávací**: kdo je hotový, kdo běží a kdo spadl. Karta
 /// se svislým seznamem událostí na to neodpovídala — muselo se scrollovat a pamatovat si, kde kdo
-/// byl. Podrobný výpis událostí tím ale nezmizel: schová se do rozbalení, protože „co reviewer
-/// doopravdy přečetl“ je jediná odpověď na otázku, jestli se koukal tam, kam měl.
+/// byl. Podrobný výpis událostí tím ale nezmizel: od #325 visí pod fázemi jako **druhá vrstva**
+/// (`StepFeedView`), protože „co reviewer doopravdy čte“ je jediná odpověď na otázku, jestli se
+/// koukal tam, kam měl.
 struct ReviewerLaneView: View {
     let lane: ReviewerLane
     /// Zkrácené jméno skillu. Počítá se z celé sady naráz (`Policy.shortReviewerNames`), takže
@@ -19,8 +20,11 @@ struct ReviewerLaneView: View {
     /// **Closure, ne hotový `String`**: příkaz nese celý prompt, takže by se skládal při každém
     /// překreslení tabu, i když se na tlačítko nikdy neklikne.
     var copyCommand: (() -> Void)?
-
-    @State private var showsEntries = false
+    /// Sbalený, nebo rozbalený výpis kroků (#325). **Drží to tab**, ne tohle view: dráhy jsou
+    /// v `LazyVStack`u, takže `@State` uvnitř se odrolováním zahodí — a výpis by se sám zavřel
+    /// zrovna u běžícího revieweera.
+    let feed: StepFeedState
+    let toggleFeed: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -35,7 +39,9 @@ struct ReviewerLaneView: View {
                     .padding(.bottom, 10)
             }
             if let failure = lane.failure { failureBlock(failure) }
-            if !lane.entries.isEmpty { entriesDisclosure }
+            if feed != .none {
+                StepFeedView(lane: lane, state: feed, toggle: toggleFeed)
+            }
         }
         .background(Palette.surface)
         .clipShape(.rect(cornerRadius: 7))
@@ -250,184 +256,5 @@ struct ReviewerLaneView: View {
         .overlay(alignment: .leading) { Rectangle().fill(Palette.crit).frame(width: 3) }
         .padding(.horizontal, 12)
         .padding(.bottom, 11)
-    }
-
-    // MARK: - Události
-
-    /// Podrobný výpis toho, co reviewer spouštěl — sbalený, protože dráha odpovídá na „kdo kde je“
-    /// a tohle na „co doopravdy přečetl“. Zůstává schválně: bez něj by z okna zmizela jediná
-    /// odpověď na to, jestli se reviewer koukal tam, kam měl.
-    private var entriesDisclosure: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                showsEntries.toggle()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.right")
-                        .rotationEffect(.degrees(showsEntries ? 90 : 0))
-                        .font(.caption2)
-                    Text(verbatim: entriesLabel)
-                        .font(.caption)
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(Palette.ink3)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            if showsEntries {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(lane.entries) { entry in
-                        TimelineEntryRow(entry: entry, worktree: lane.worktree)
-                    }
-                }
-                .padding(.top, 6)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 10)
-    }
-
-    private var entriesLabel: String {
-        let count = Plural.czech(
-            lane.entries.count,
-            one: "krok session",
-            few: "kroky session",
-            many: "kroků session"
-        )
-        // Zkrácená osa to musí říct (#203) — jinak vypadá, že běh začal uprostřed.
-        guard lane.droppedEntries > 0 else { return count }
-        return "\(count) · \(lane.droppedEntries) starších se nevešlo"
-    }
-}
-
-/// Jedna událost osy — čas, ikona, co to bylo a nad čím.
-///
-/// Přesunuto z `ReviewTimelineView` (#242), který se překreslil na dráhy: sazba zůstala, jen se
-/// z hlavního obsahu tabu stal detail pod rozbalením.
-struct TimelineEntryRow: View {
-    let entry: ReviewerTimeline.Entry
-    let worktree: URL?
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(entry.at, format: .dateTime.hour().minute().second())
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.tertiary)
-            Image(systemName: symbol)
-                .font(.caption)
-                .foregroundStyle(color)
-                .frame(width: 14)
-            Text(verbatim: title)
-                .font(.caption)
-            if case .tool(let tool) = entry.kind, let detail = tool.shortened(inside: worktree) {
-                // U cesty je zajímavý konec (jméno souboru), u příkazu začátek.
-                Text(verbatim: detail)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(tool.keepsTail ? .head : .tail)
-            }
-            Spacer(minLength: 0)
-            if case .tool(let tool) = entry.kind { mark(of: tool) }
-        }
-    }
-
-    /// Jak krok dopadl — na konci řádku, jak to kreslí návrh (#326).
-    ///
-    /// **Odmítnutí je štítek, ne červený řádek.** Read-only reviewer je tvrdá podmínka, takže
-    /// `Bash(gh:*)` odmítnout **má** a session přesto skončí úspěchem; kdyby řádek vypadal jako
-    /// chyba, začal by se ten režim vypínat.
-    @ViewBuilder
-    private func mark(of tool: ToolAttempt) -> some View {
-        let mark = Policy.toolStepMark(of: tool)
-        if let text = ReviewerLaneText.step(mark) {
-            let label = markLabel(text, mark)
-            // Nápověda jen tam, kde je co říct — prázdná by nad krokem otevřela prázdný obláček.
-            if let help = ReviewerLaneText.stepHelp(of: tool) { label.help(help) } else { label }
-        }
-    }
-
-    private func markLabel(_ text: String, _ mark: ToolStepMark) -> some View {
-        Text(verbatim: text)
-            .font(.system(size: 10, design: .monospaced))
-            .monospacedDigit()
-            .fontWeight(mark == .denied ? .bold : .regular)
-            .foregroundStyle(Self.markColor(mark))
-            .padding(.horizontal, mark == .denied ? 5 : 0)
-            .background {
-                if mark == .denied { Capsule().fill(Palette.crit.opacity(0.14)) }
-            }
-    }
-
-    /// `find`, ne akcent, u běžícího kroku: je to tatáž role jako u puntíku revieweera, který
-    /// zrovna něco dělá. Trvání je popiskové (`ink3` v návrhu), odmítnutí `crit`.
-    private static func markColor(_ mark: ToolStepMark) -> Color {
-        switch mark {
-        case .pending: Palette.find
-        case .denied: Palette.crit
-        case .duration, .none: Palette.ink3
-        }
-    }
-
-    private var title: String {
-        switch entry.kind {
-        case .queued: "čeká na volný slot"
-        case .started: "session naběhla"
-        case .tool(let tool): tool.name
-        case .findings(let count): Plural.czech(count, one: "nález", few: "nálezy", many: "nálezů")
-        // Ve výpisu událostí stojí i **důvod** (#345), na rozdíl od odznaku v hlavičce: tady je
-        // na řádek jedna věc, takže se místem šetřit nemusí.
-        case .intentGap(let gap):
-            "\(ReviewerLaneText.intentGapLabel) — \(ReviewerLaneText.intentGapReason(gap))"
-        case .finished(let outcome): finishedTitle(outcome)
-        }
-    }
-
-    private func finishedTitle(_ outcome: ReviewRunOutcome) -> String {
-        switch outcome {
-        case .finished: "doběhlo"
-        case .timedOut: "vypršel čas"
-        case .interrupted: "přerušeno aplikací"
-        case .failed(let detail): "selhalo: \(detail)"
-        }
-    }
-
-    private var symbol: String {
-        switch entry.kind {
-        case .queued: "clock"
-        case .started: "play.circle"
-        case .tool(let tool): Self.toolSymbol(tool.name)
-        case .findings: "text.magnifyingglass"
-        case .intentGap: "doc.badge.ellipsis"
-        case .finished(let outcome): outcome == .finished ? "checkmark.circle" : "exclamationmark.triangle"
-        }
-    }
-
-    private static func toolSymbol(_ name: String) -> String {
-        switch name {
-        case "Read": "doc.text"
-        case "Grep": "magnifyingglass"
-        case "Glob": "folder"
-        case "Bash": "terminal"
-        case "ReportFindings": "flag"
-        default: "wrench.and.screwdriver"
-        }
-    }
-
-    /// **Akcent, ne mint** (#309), i když „nahlásil nálezy“ je stav: mint dělí stav od akce
-    /// **tam, kde stojí vedle sebe**, a na ose žádná akce není — je to výpis toho, co se stalo.
-    /// Akcent tu má svou druhou roli, tu samou jako `stateTint` u běžícího reviewera o pár set
-    /// řádků výš: „tohle je ten krok, kvůli kterému se sem chodí“.
-    ///
-    /// Do #309 to byla `Color.accentColor`, tedy systémová modrá — barva, kterou okno jinak nemá
-    /// (`.tint(Palette.accent)` z kořene na `accentColor` nezabírá).
-    private var color: Color {
-        switch entry.kind {
-        case .finished(let outcome): outcome == .finished ? Palette.ok : Palette.stale
-        case .findings: Palette.accent
-        // `stale`, ne `crit`: zadání, které nedorazilo celé, review nepoložilo — jen ho zúžilo.
-        case .intentGap: Palette.stale
-        default: .secondary
-        }
     }
 }
