@@ -3964,13 +3964,13 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         Nabídka za <code>+ label</code> je od sekce 24 <b>uzavřená</b> — nese jedině labely, které
         repozitář zná, a hledací pole v ní <b>filtruje, nezakládá</b>. Bylo to schválně: z volného
         textu se dá omylem vyrobit label, a ten už z repozitáře sám nezmizí. Cena za to je, že
-        <b>štítek, který v repu ještě není, se musí založit v prohlížeči</b> — tedy zrovna to
-        přepnutí do prohlížeče, kvůli kterému #392 vzniklo.
+        <b>štítek, který v repu ještě není, se musí založit v prohlížeči</b> — tedy zrovna ten
+        odskok, kvůli kterému #392 vzniklo.
       </p>
       <p class="muted">
         Zakládání se proto přidává, ale <b>uzavřený zůstává seznam</b>, ne nabídka. Řádky dál nesou
         jenom labely repozitáře, takže <code>↵</code> na vybraném řádku znamená pořád „přepni tenhle
-        label“. Založení je <b>vlastní akce pod dělič</b> s vlastní klávesou (<code>⌘↵</code>) a vede
+        label“. Založení je <b>vlastní akce pod děličem</b> s vlastní klávesou (<code>⌘↵</code>) a vede
         na <b>druhou obrazovku téhož popoveru</b>, ve které je vidět jméno v uvozovkách, barva,
         repozitář a věta o tom, co po tom kliknutí zůstane. <b>Omyl z volného textu tedy
         nenahrazuje pozornost, ale krok</b>, který se musí potvrdit a který o sobě řekne, že je
@@ -4004,7 +4004,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         s oběma tlačítky a poznámkou <b>237 b</b> — tedy 41 b rezervy, kterou drží pružná mezera
         mezi <code>Zpět</code> a <code>Založit a přidat</code> — a náhled chipu <b>94 b</b>. Panel
         s větou o nepovedeném přidání je 300 b a taky bez přetečení. Dlouhé jméno se v akci
-        <b>zalomí, neořeže</b> (změřeno na 39 znacích: dvě řádky, nic za okrajem), a to je záměr —
+        <b>zalomí, neořeže</b> (změřeno na 39 znacích: dva řádky, nic za okrajem), a to je záměr —
         akce je jediné místo před potvrzením, kde je jméno vidět celé, takže ořezat ho tam by bylo
         ořezání zrovna té informace, kterou má člověk zkontrolovat.
       </p>
@@ -4228,7 +4228,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <span class="body">
           <b>Dvě volání, a mezistav má vlastní větu</b>
           <span>Založit (repozitář) a přidat (PR) nejde spojit do jednoho volání, takže tvrdá
-          podmínka č. 5 pro tuhle akci neplatí — a proto se kreslí, jak to vypadá, když druhé
+          podmínka č. 5 se pro tuhle akci mění — a proto se kreslí, jak to vypadá, když druhé
           volání spadne. Zamítnuto: samotné <code>Založit</code> bez přidání. Bylo by atomické, ale
           v devíti z deseti případů by po něm musel následovat klik na řádek, tedy krok navíc za
           čistotu, kterou vidí jen dokumentace. Že ten řádek v nabídce doopravdy <b>je</b>, drží
