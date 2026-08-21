@@ -1850,7 +1850,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   zapsat (hlídá se datum souboru — nabídka hlásí i výběr toho, co platí, a zápis beze změny by
   přepsal ručně editovaný soubor), a **selhaný zápis nesmí projít tiše** (`appearanceFailure` je
   vidět a vzhled se nepřepnul). Cíl je **fake**, ne `NSApp`: živý cíl je hostitel testů, takže
-  vynucený režim by přetekl do render sond, které si režim nastavují samy. Vedle toho
+  vynucený režim by přetekl do render sond, které si režim nastavují samy.
+
+  **Že store bez cíle na `NSApp` nesáhne, se od #367 netvrdí nad globálem, ale nad zdrojáky**
+  (`GlobalAppearanceTests`) — původní podoba porovnávala `NSApp.appearance` před a po a byla to
+  jediná nedeterministická věc v téhle oblasti; podrobnosti a naměřená čísla v sekci *Globální stav
+  procesu se v testech neměří*. V `AppStoreAppearanceTests` po ní zůstalo to, co je vlastnost storu:
+  volba se přečte i bez cíle a chybějící cíl **není chybový stav** (nic se nehlásí). Vedle toho
   `AppAppearanceTests` na mapování — `.light` → `aqua`, `.dark` → `darkAqua` a hlavně, že `nil`
   (tedy „nevynucuj nic“) vyjde **jedině** u `.system`; jinak by volba tiše nezabrala a byla by
   k nerozeznání od výchozího stavu.
@@ -3461,6 +3467,49 @@ test**, a druhý běh nad tímtéž commitem projde. Je to zátěž, ne rozbitý
 Odstranění spinů (#296 vyndalo 56 míst, která na `yield()` točila procesor) tomu podle všeho pomáhá,
 ale **změřené to není**; kdyby se to vrátilo, tohle je záznam, u kterého se dá začít.
 
+## Globální stav procesu se v testech neměří (#367)
+
+Do #367 měly `AppStoreAppearanceTests` tvrzení „store bez cíle na `NSApp` nesáhne“ postavené tak, že
+si vzaly `NSApp.appearance` **před** a **po** a porovnaly je. V paralelním běhu z toho byl **falešně
+červený `main`**: při práci na #331 to spadlo, ve třech čistých bězích po sobě bylo zeleno — tedy
+přesně ten druh pádu, po kterém se přestane věřit celé sadě.
+
+**Měřilo se na hodnotě, která nám nepatří, a to má dva pisatele.** Ten druhý je překvapivější a je
+**změřený**: v běhu, ve kterém žádná jiná suita na vzhled nesahá, je `NSApp.appearance` po startu
+`nil` a asi **300 ms** poté `NSAppearanceNameAqua` — sonda ho vypsala dvacetkrát po 100 ms a od
+čtvrtého vzorku už drží vynucený režim. Je to **hostitel testů**, tedy naše aplikace: živý `AppStore`
+uplatní volbu z konfigurace uživatele. Ta hodnota tedy záleží na tom, jak má člověk u stroje
+nastavený vzhled, a mění se **uprostřed** našeho běhu.
+
+Pravidlo, které z toho zbylo: **test netvrdí nic o globálním stavu procesu a nezapisuje do něj.**
+Kdo potřebuje vynucený režim, nastaví ho na **svém** okně nebo view (`AppearanceSwitchProbe`), nebo
+si obalí kreslení `performAsCurrentDrawingAppearance` (`DiffPaletteTests`, `SidebarRailTests`,
+`MintTokenTests`) — obojí platí jen tam, kde se zrovna měří, a **z kódu je vidět, jaký režim se
+měří**, ne jaký zdědil stroj (tatáž past jako u #393).
+
+Hlídá to **`GlobalAppearanceTests`** třemi tvrzeními nad zdrojáky — je to tatáž konstrukce jako
+`SingleWayOutTests` a `GraphSiteWiringTests`, protože „kdo smí sáhnout na globální vzhled“ je
+vlastnost struktury kódu, na kterou se za běhu zeptat nedá:
+
+| Tvrzení | Co drží |
+|---|---|
+| `App/Store/` nezná `NSApp` a neimportuje AppKit ani SwiftUI | Store **nemá čím** na globál sáhnout. Rozhoduje o vzhledu (dostal konfiguraci), ale kreslení není jeho práce |
+| `AppAppearance.application` je v `App/` jmenováno **jednou**, vzhled se uplatňuje jedině `appearance?.applyAppearance(` a `?? AppAppearance` nikde není | Živý cíl se zapojuje jen při složení živého storu. Kdyby ho vzal za výchozí hodnotu init, kterým store staví testy, přebarvil by jeden test hostitele — a render sondy by měřily jiný režim, než o který si řekly |
+| Žádný soubor v `Tests/` nepíše `NSApp.appearance` ani `NSApplication.shared.appearance` | Aby se ta třída nevrátila. Sám guard soubor se z výčtu odečítá, protože hledané řetězce v něm stojí jako literály |
+
+**Ověřeno vložením regrese, a to ze tří stran.** (1) Kolizní suita, která 4000× přepne
+`NSApp.appearance` s odmlkou: nad původním kódem padne `Bez cíle se na NSApp nesáhne`
+(`Expectation failed: (NSApp.appearance → …) === (untouched → …)`), po opravě projde celá sada
+(8 testů ve 2 suitách, 82 s souběžného přepínání). (2) Výchozí hodnota `appearance:
+AppAppearance.application` v init, kterým store staví testy: padne tvrzení o jednom jmenování
+(`2 == 1`) — a nic jiného, což je zrovna ten důvod, proč to tvrzení existuje. (3) `import AppKit`
+plus `NSApp.appearance = …` přímo v `AppStore.apply(_:)`: padne pět tvrzení ve všech třech testech.
+
+**Zamítnuté cesty.** `.serialized` na sadu — serializuje jen tu jednu suitu, kdežto zápis dělá
+hostitel, takže by to na příčinu nedosáhlo vůbec. Zámek nad globálem v testech — tentýž problém,
+hostitel žádný zámek nedrží, a k tomu je to sdílený stav navíc. Test smazat — je to tvrzení
+o tom, že se něco **nestalo**, tedy nejcennější druh testu v tomhle repu; přesunulo se, ne zahodilo.
+
 ## Jak si zkontrolovat, jak view vypadá
 
 **Screenshot běžící aplikace dostaneš** — od #181, kdy terminálu přibylo oprávnění Screen
@@ -3735,7 +3784,7 @@ Dva zádrhely, které to má:
   renderem se musí nastavit ručně, obojí zvlášť.
 
 - **Přepnutí režimu za běhu se dá změřit bez toho, aby se hýbalo systémem** (#278). Nad hierarchií
-  v `NSHostingView` stačí přiřadit `NSApp.appearance` a nechat proběhnout runloop:
+  v `NSHostingView` stačí přiřadit vzhled **jejímu oknu** a nechat proběhnout runloop:
   `@Environment(\.colorScheme)` **se pohne spolu s paletou** — změřeno `AppearanceSwitchProbe`, které
   hostuje skutečný blok diffu a bere bitmapu před a po. To je odpověď na jedinou otázku, kterou se
   z kódu přečíst nedá: `Palette` se ptá `appearance.bestMatch(from:)`, kdežto obarvení kódu jde přes
@@ -3743,8 +3792,12 @@ Dva zádrhely, které to má:
 
   Tři věci, bez kterých to nedává odpověď. **Vynuť si oba režimy** (nejdřív `.aqua`, pak
   `.darkAqua`), ne jen ten druhý — na tmavém stroji by „změnilo se to“ vyšlo pravdivě i tehdy, kdyby
-  se nepřepnulo nic. **Vrať `NSApp.appearance` zpátky** (`defer`), protože v testech je to hostitel
-  testů a vynucený režim by přetekl do ostatních sond. A **hostuj to, na čem záleží**: pozadí okna
+  se nepřepnulo nic. **Přepínej na svém okně, ne na `NSApp`** (#367): do té doby sonda sahala na
+  globální vzhled a vracela ho `defer`em, což je zápis do stavu, který si hostitel testů **sám
+  přepisuje** (změřeno, viz sekce *Globální stav procesu se v testech neměří*) a který mezitím platí
+  pro všechno, co zrovna kreslí. Okno je vlastní, takže vynucený režim nikoho jiného nezastihne
+  a odpověď se tím nemění — `NSApp.appearance` se k barvám dostane touž cestou, tedy skrz efektivní
+  vzhled okna. A **hostuj to, na čem záleží**: pozadí okna
   se přebarví i tak, kdežto obarvená syntaxe jde přes cache vysázeného textu, takže tu je vidět
   jedině na skutečném `DiffBlockRowView`.
 

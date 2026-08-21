@@ -3539,3 +3539,34 @@ hodnota je autoreleased. Podrobnosti a čísla v [`architektura.md`](architektur
 re-arm —, vrcholem `LazySubviewPlacements` a jediný `changed` vstup je **transformace**
 (`CoordinateSpaceNameTransform` v diffu, `ScrollViewChildTransform` v ose). V záchvatu se z týchž
 řádků pozná, jestli se ta transformace mění i tehdy, když se nikam neroluje.
+
+### #367 — test vzhledu měřil globální `NSApp.appearance`, takže v paralelním běhu padal
+
+**Na tomhle není co vidět** — je to celé testovací vrstva, aplikace se nemění ani o řádek.
+
+`AppStoreAppearanceTests/Bez cíle se na NSApp nesáhne` si bral `NSApp.appearance` před a po
+a porovnával je. Při práci na #331 spadl, ve třech čistých bězích byl zelený, tedy **falešně červený
+`main`** — a to je dražší než chybějící test: podle zelených testů se tady rozhoduje o mergi, takže
+test, který padá „někdy“, učí ignorovat červenou.
+
+**Druhý pisatel toho globálu je sám hostitel testů, a to je změřené**: v běhu, ve kterém na vzhled
+nesahá žádná jiná suita, je `NSApp.appearance` po startu `nil` a asi **300 ms** poté
+`NSAppearanceNameAqua`, protože živý `AppStore` uplatní volbu z konfigurace uživatele. Tím padly obě
+zřejmé léčby — `.serialized` na sadu ani zámek v testech na hostitele nedosáhnou.
+
+Tvrzení se proto přesunulo **nad zdrojáky** (`GlobalAppearanceTests`, tatáž konstrukce jako
+`SingleWayOutTests`): `App/Store/` neimportuje AppKit, takže store `NSApp` nemá ani jak napsat; živý
+cíl se v `App/` jmenuje **jednou** a uplatňuje se jedině `appearance?.applyAppearance(`; a **žádný
+soubor v `Tests/`** na globální vzhled nesahá. V `AppStoreAppearanceTests` zůstalo to, co je
+vlastnost storu — volba se přečte i bez cíle a chybějící cíl není chybový stav.
+
+**Sonda přepnutí vzhledu (#278) přepíná na svém okně**, ne na `NSApp`: `defer` vracel hodnotu až po
+měření, takže mezitím platila vynucená tma pro všechno, co v procesu kreslilo. Odpověď na otázku
+sondy se tím nemění, ověřeno spuštěním — světlý render vyjde světlý, tmavý tmavý a prostředí
+`colorScheme` se pohne spolu s paletou.
+
+**Ověřeno vložením regrese ze tří stran**: kolizní suita se 4000 přepnutími globálu (před opravou
+padne původní test, po ní projde celá sada — 8 testů ve 2 suitách při 82 s souběžného přepínání),
+výchozí hodnota `appearance: AppAppearance.application` v init pro testy (padne tvrzení o jednom
+jmenování, `2 == 1`) a `import AppKit` s přímým zápisem v `apply(_:)` (padne pět tvrzení ve všech
+třech testech). Guard nad `Tests/` se přiznal sám: kolizní suitu nahlásil, dokud se nesmazala.

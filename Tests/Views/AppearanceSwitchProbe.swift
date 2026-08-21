@@ -16,9 +16,13 @@ import Testing
 /// kterém režim je (`DiffBlockSignature`), takže by ji přepnutí muselo minout — a to je zrovna to,
 /// co se dá pokazit potichu.
 ///
-/// **Sahá na `NSApp.appearance`**, tedy na hostitele testů — proto sonda za přepínačem, ne test
-/// v běžné sadě: vynucený režim by přetekl do render sond, které si režim nastavují samy. Vrací se
-/// zpátky na „podle systému“ i po pádu (`defer`).
+/// **Přepíná se na vlastním okně, ne na `NSApp`** (#367). Do té doby to šlo přes `NSApp.appearance`
+/// a vracelo se `defer`em — jenže to je jedna hodnota na celý proces, takže ta vynucená tma
+/// přetékala do všeho, co v tu chvíli kreslilo, a hostitel testů si ji navíc **sám přepisuje** (živý
+/// store uplatní volbu z konfigurace asi 300 ms po startu, změřeno). Okno je vlastní, takže vynucený
+/// režim nikoho jiného nezastihne a **z kódu je vidět, jaký režim se měří** — ne jaký zdědil stroj.
+/// Odpověď se tím nemění: `NSApp.appearance` se k barvám dostane tou samou cestou, tedy skrz
+/// efektivní vzhled okna, na které se kreslí.
 ///
 /// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes `TEST_RUNNER_PRISM_RENDER_DIR`.
 @MainActor
@@ -46,11 +50,9 @@ struct AppearanceSwitchProbe {
         }
     }
 
-    @Test("Přepnutí NSApp.appearance pohne chromem i kódem")
+    @Test("Přepnutí vzhledu okna pohne chromem i kódem")
     func switchesBothPathsAtOnce() throws {
         let directory = URL(filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory())
-        let previous = NSApp.appearance
-        defer { NSApp.appearance = previous }
 
         let observed = Observed()
         let hosting = NSHostingView(rootView: scene(observed: observed))
@@ -59,11 +61,11 @@ struct AppearanceSwitchProbe {
 
         // Vynucený světlý, ať sonda nezávisí na tom, jak je nastavený systém — bez toho by na
         // tmavém stroji „změnilo se to“ znamenalo pravdu i tehdy, kdyby se nic nepřepnulo.
-        NSApp.appearance = try #require(AppearanceMode.light.nsAppearance)
+        window.appearance = try #require(AppearanceMode.light.nsAppearance)
         let light = try capture(hosting, to: directory.appending(path: "prepnuti-svetly.png"))
         #expect(observed.schemes.last == .light)
 
-        NSApp.appearance = try #require(AppearanceMode.dark.nsAppearance)
+        window.appearance = try #require(AppearanceMode.dark.nsAppearance)
         let dark = try capture(hosting, to: directory.appending(path: "prepnuti-tmavy.png"))
 
         // Prostředí SwiftUI se pohnulo — na tomhle visí `SyntaxPalette.forScheme(_:)`.

@@ -898,6 +898,21 @@ Zásady, které platí všude:
   proto, že se v tom měření pool ani jednou nevyprázdnil. Cizí API se proto **projede testem
   v hostu**, ne úvahou nad číslem; a co se z takového API čte v kole, které nedoběhne, patří do
   vlastního `autoreleasepool`u.
+- **Test netvrdí nic o globálním stavu procesu a nezapisuje do něj** (#367). `NSApp.appearance` je
+  jedna hodnota na celý testovací host a **píše ji i sám hostitel**: změřeno, že po startu je `nil`
+  a asi **300 ms** poté vynucený režim, protože živý `AppStore` uplatní volbu z konfigurace
+  uživatele. Tvrzení „nesáhlo se“ proto vycházelo podle toho, kdo běžel vedle, a `main` byl **falešně
+  červený** — což je horší než chybějící test, protože se přestane věřit celé sadě. `.serialized`
+  ani zámek v testech na to nedosáhnou (hostitel není v žádné suitě). Kdo potřebuje vynucený režim,
+  nastaví ho na **svém** okně (`AppearanceSwitchProbe`) nebo obalí kreslení
+  `performAsCurrentDrawingAppearance`; „kdo smí sáhnout na globál“ se tvrdí nad **zdrojáky**
+  (`GlobalAppearanceTests`, tatáž konstrukce jako `SingleWayOutTests`). Grep, který **musí vyjít
+  prázdný** — guard soubor se odečítá, hledané řetězce v něm stojí jako literály:
+
+  ```bash
+  grep -rn 'NSApp.appearance\|NSApplication.shared.appearance' Tests |
+      grep -vE ':[0-9]+: *//' | grep -v GlobalAppearanceTests
+  ```
 - **Testy se nespouštějí rourou do `grepu`** — viz *Příkazy* níž, umí to zaseknout na neurčito.
 
 ## Příkazy
