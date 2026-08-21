@@ -222,23 +222,14 @@ struct RawSessionStateTests {
 
     /// Konečná odpověď **bez** `Načíst znovu`: nabízet opakování u odpovědi, která se nezmění, je
     /// slib, který se nemá čím naplnit. A bez `Ukázat v Finderu`, protože soubor tam není.
-    @Test("Chybějící transcript nenabídne opakování ani Finder")
-    func missingOffersNoRetry() {
-        let actions = Policy.rawSessionActions(for: .missing)
-
-        #expect(!actions.contains(.reload))
-        #expect(!actions.contains(.revealInFinder))
-        #expect(!actions.contains(.copyTranscript))
-        #expect(actions.contains(.close))
+    @Test("Chybějící transcript nabídne jedině Zavřít")
+    func missingOffersNothingButClosing() {
+        #expect(Policy.rawSessionActions(for: .missing) == [.close])
     }
 
     @Test("Nečitelný transcript nabídne opakování i Finder — soubor tam pořád leží")
     func unreadableOffersBoth() {
-        let actions = Policy.rawSessionActions(for: .unreadable("nic"))
-
-        #expect(actions.contains(.reload))
-        #expect(actions.contains(.revealInFinder))
-        #expect(!actions.contains(.copyTranscript))
+        #expect(Policy.rawSessionActions(for: .unreadable("nic")) == [.close, .revealInFinder, .reload])
     }
 
     /// U běžící session je prázdno **dočasný** stav, takže `Načíst znovu` smysl má. `Ukázat
@@ -250,15 +241,20 @@ struct RawSessionStateTests {
         #expect(Policy.rawSessionActions(for: .empty(bytes: 12)).contains(.revealInFinder))
     }
 
-    @Test("Zkopírovat přepis je jedině tam, kde přepis je")
+    /// U chybového stavu je odpověď v hláščce, ne v tom, co se dá odsud vzít pryč — a kopírovat cestu
+    /// k souboru, který není, je nabídka jít se podívat na nic.
+    @Test("Zkopírovat přepis ani cestu nenabízí žádný chybový stav")
     func copyingIsOnlyForAShownTranscript() {
         let states: [RawTranscriptState] = [
             .loading, .missing, .unreadable("nic"), .empty(bytes: 0), .empty(bytes: 5),
         ]
         for state in states {
             #expect(!Policy.rawSessionActions(for: state).contains(.copyTranscript))
+            #expect(!Policy.rawSessionActions(for: state).contains(.copyPath))
         }
-        #expect(Policy.rawSessionActions(for: .shown(RawTranscript())).contains(.copyTranscript))
+        let shown = Policy.rawSessionActions(for: .shown(RawTranscript()))
+        #expect(shown.contains(.copyTranscript))
+        #expect(shown.contains(.copyPath))
     }
 
     /// Zavřít musí jít z každého stavu — sheet, ze kterého se nedá odejít, je horší než chybějící.

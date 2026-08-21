@@ -187,16 +187,19 @@ extension Policy {
     /// Tři různá „přepis tu není“ mají **různý další krok**, a právě to je důvod, proč se nesmí
     /// slít do jedné hlášky:
     ///
-    /// - **není** — konečná odpověď, tedy **bez** `Načíst znovu`: nabízet opakování u odpovědi,
-    ///   která se nezmění, je slib, který se nemá čím naplnit. Ani `Ukázat v Finderu`, protože
-    ///   soubor tam není;
+    /// - **není** — konečná odpověď, tedy **jen `Zavřít`**: nabízet opakování u odpovědi, která se
+    ///   nezmění, je slib, který se nemá čím naplnit, a `Ukázat v Finderu` ani cesta nemají kam
+    ///   ukázat;
     /// - **nedá se přečíst** — soubor leží dál, takže se nabízí obojí: zkusit znovu i podívat se
     ///   na něj mimo aplikaci;
     /// - **prázdný** — u běžící session je to **dočasný** stav, takže `Načíst znovu` smysl má;
     ///   `Ukázat v Finderu` jedině tehdy, když v souboru vůbec nějaké bajty jsou (u souboru
     ///   o nule velikosti není v Finderu co si prohlédnout).
     ///
-    /// `Zkopírovat přepis` je jen tam, kde přepis je — u chybového stavu by kopírovalo hlášku.
+    /// `Zkopírovat přepis` **a cestu** je jen tam, kde přepis je. Je to takhle nakreslené (`.acts2`
+    /// u tří stavů v sekci 20 návrhu) a drží to jednu věc: u chybového stavu je odpověď v **hláščce**,
+    /// ne v tom, co se dá odsud vzít pryč — kopírovat cestu k souboru, který není, je nabídka jít se
+    /// podívat na nic.
     static func rawSessionActions(for state: RawTranscriptState) -> [RawSessionAction] {
         switch state {
         case .loading:
@@ -204,13 +207,11 @@ extension Policy {
         case .shown:
             return [.close, .copyTranscript, .copyPath, .revealInFinder, .reload]
         case .missing:
-            return [.close, .copyPath]
+            return [.close]
         case .unreadable:
-            return [.close, .copyPath, .revealInFinder, .reload]
+            return [.close, .revealInFinder, .reload]
         case .empty(let bytes):
-            return bytes > 0
-                ? [.close, .copyPath, .revealInFinder, .reload]
-                : [.close, .copyPath, .reload]
+            return bytes > 0 ? [.close, .revealInFinder, .reload] : [.close, .reload]
         }
     }
 

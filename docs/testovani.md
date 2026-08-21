@@ -1012,10 +1012,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     **řádku delšího než celé okno**, `CRLF` počítaný **dvěma bajty** (jinak by ořez lezl nad strop)
     a tvrzení, že se řezem uprostřed řádku **neroztrhne znak** — rozpůlený kódový bod je v kopii
     vadné UTF-8.
-  - `RawSessionStateTests` — který stav co nabídne, a hlavně **co nenabídne**: chybějící přepis nemá
-    `Načíst znovu` ani `Ukázat v Finderu`, `Zkopírovat přepis` je jedině tam, kde přepis je, a
-    `Zavřít` nabízí každý stav. Tři různá „přepis tu není“ se nesmí slít **ani nabídkou akcí**, takže
-    je na to test a ne úvaha.
+  - `RawSessionStateTests` — který stav co nabídne, a hlavně **co nenabídne**: chybějící přepis
+    nabízí **jedině `Zavřít`**, `Zkopírovat přepis` ani cestu nenabízí žádný chybový stav (odpověď je
+    v hláščce, ne v tom, co se dá odsud vzít pryč) a `Zavřít` nabízí každý stav. Tři různá „přepis tu
+    není“ se nesmí slít **ani nabídkou akcí**, takže je na to test a ne úvaha.
   - `TranscriptTranscriberTests` — proti **skutečnému** transcriptu z veřejného
     `ondrajodas/prism-review-sandbox` (`transcript/review-session.jsonl`, 18 řádků vybraných z běhu
     bajt po bajtu). Ty typy řádků ve `stream-json` **nejsou** — `queue-operation`, `attachment`,
