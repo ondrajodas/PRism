@@ -10,6 +10,9 @@ enum FindingsEmptyReason: Hashable, Sendable {
     case hiddenByReviewerFilter
     /// Review doběhlo a nic nenašlo.
     case clean
+    /// Doběhlo, ale čisto z toho neplyne (#383). **Nejdůležitější případ v tomhle výčtu:**
+    /// prázdná tabulka je tu k nerozeznání od `clean` a rozdíl nese jedině tahle věta.
+    case inconclusive(InconclusiveReason)
     /// Session spadla — `detail` je proč. Není to čisto, i když je tabulka prázdná stejně.
     case failed(String)
     /// Pracovní kopii se nepodařilo připravit; reviewer se tedy ani nespustil.
@@ -39,6 +42,10 @@ extension Policy {
 
         return switch reviewState(for: record, categories: categories) {
         case .clean: .clean
+        // **Musí být vyjmenované, ne v `default`** (#383): pod ním by z neprůkazného review byla
+        // věta „Nálezy k tomuhle běhu nejsou“, tedy konstatování prázdna nad stavem, který má
+        // říct, že se čistota tvrdit nedá.
+        case .inconclusive(let reason): .inconclusive(reason)
         case .failed(let detail): .failed(detail)
         case .checkoutFailed(let detail): .checkoutFailed(detail)
         // Běžící review má vlastní věta přednost před `nothingRan`: „nespustilo se nic“ nad

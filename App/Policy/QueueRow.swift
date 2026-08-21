@@ -97,7 +97,11 @@ extension Policy {
         // odmítnuto“ by nad ním tvrdilo víc, než data unesou — posoudil jsem jen to, co dorazilo.
         // Tady se rozhoduje „čisto“ versus „nemám co říct“, stejná dvojice jako
         // u `ReviewerChip.finishedState`, a stejně jako tam se nesmí slít.
-        if !run.calledReportFindings || run.droppedFindings > 0 { return .inconclusive }
+        //
+        // **Rozhoduje o tom `Policy.inconclusiveReason(of:)`, ne vlastní `if`** (#383): do té
+        // doby tady stála dvojice podmínek, která neznala čtení kódu, takže proužek u řádku
+        // svítil zeleně nad během, který kód neotevřel — a chip nad ním okrově.
+        if inconclusiveReason(of: run) != nil { return .inconclusive }
 
         switch run.outcome {
         // Zabitý ani přerušený běh se nesmí tvářit jako doběhlý: o tom, co nestihl, nevíme nic.

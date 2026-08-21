@@ -3654,3 +3654,36 @@ což tu cestu zavírá celou — ověřeno vloženou regresí, `import Cocoa` v�
 `(both → 0) > (treeOnly → 35)`, tedy na víc místa a **méně** znaků, což z monotónní funkce vyjít
 nemůže — šířka znaku mono písma byla computed property, takže se stav procesu čítal při každém
 použití a mezi dvěma voláními v jednom testu se vyřešil jinak. Bere se **jednou za test**.
+
+
+**Reviewer, který nepřečetl kód, se už nekreslí jako čisté review (issue #383).** `security-review`
+hlásil od 17. 8. nulu nálezů ve 12 ze 14 běhů a stál desetinu toho, co předtím — okno z toho udělalo
+`čisté`. Příčina je mimo aplikaci (skill přestal spouštět `Agent` a grepoval v transkriptu vlastní
+session) a neopravuje se tady; aplikace je orchestrátor a prohlížeč. Naše vada byla jediná: *„nic
+nenašel“* a *„nedělal práci“* se z obrazovky nedaly rozeznat.
+
+Pozná se to z **uložené osy**, ne z ceny: `Policy.codeReading(of:)` se ptá, jestli v ose je `Read`
+s cestou **uvnitř** pracovní kopie. Rozhodovalo se nad **40 uloženými běhy** z cache a cena se do
+pravidla nedostala právě proto, že nediskriminuje — běh za 0,12 $ otevřel tři soubory, běh za 0,44 $
+osmnáct, kdežto jeden ze čtyř podezřelých stál 0,74 $. Pravidlo pojmenovalo právě ty čtyři a u jednoho
+z nich (`db-extractor-adapter#39`) našel `code-review` na tomtéž commitu **dva nálezy**, tedy doložené
+falešné čisto.
+
+**`CodeReading` má tři hodnoty, a ta třetí je pointa**: `unknown` (osa chybí, je zkrácená, nezná
+strom, nebo je v ní `Grep`/`Agent`, u kterých cesta v záznamu není) **není `unread`**. Z chybějícího
+záznamu se nesmí stát obvinění — osa se ukládá od #203, takže 15 ze 40 běhů ji nemá a okno by se
+rozkřičelo nad každým starším review naráz.
+
+V okně z toho je **třetí stav** vedle `čisté` a `selhalo` (`ReviewState.inconclusive(reason:)`):
+odznak říká, co chybí (`kód nepřečten`, `bez hlášení`, `ztracené nálezy`), je okrový jako
+`zastaralé` — session doběhla, takže červená by lhala —, a ta okrová jde **z palety** (`--stale`
+z návrhu), protože systémová žlutá měla na kapsli odznaku ve světlém režimu kontrast **1,41** proti
+4,00 u tokenu; přebarvilo se s ní i `zastaralé`, kde ta vada ležela od #172 (nález Copilota) a v prázdném tabu nálezů stojí věta i s tím,
+čím to pustit znovu. Nová věc na obrazovce to není: přeznačil se existující odznak, chip revieweera
+i díl proužku, takže brána na vzhled se neotevírala. Rozhodnutí o „čistu“ bydlí od #383 na **jednom
+místě** (`Policy.inconclusiveReason(of:)`) — do té doby si ho skládal každý ze tří čtenářů sám
+a lišili se pořadím, čtení kódu nekontroloval nikdo.
+
+**Ověřeno vloženou regresí v obou směrech**: bez podmínky na čtení kódu padne 8 tvrzení v 6 testech
+(falešné čisto), a když se z `unknown` udělá `unread`, padne 12 tvrzení v 8 sadách napříč repem
+(falešný poplach). Testů 3509.

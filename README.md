@@ -196,8 +196,8 @@ patří vlastní text i vlastní přepínač.
 
 U vybraného PR je tlačítko **Spustit review**. Za ním se stane tohle: dotáhne se head
 commit, připraví se odpojený pracovní strom a v něm se spustí headless session Claude Code
-omezená na čtení. Řádek mezitím ukazuje `ve frontě · clone` → `běží 0/1` → `čisté` nebo
-`N nálezů`; běh jde kdykoli zrušit. Nálezy se uloží na disk, takže přežijí restart, a v panelu
+omezená na čtení. Řádek mezitím ukazuje `ve frontě · clone` → `běží 0/1` → `čisté`, `N nálezů`,
+nebo `kód nepřečten`, když se z běhu čisto tvrdit nedá (#383, viz níž); běh jde kdykoli zrušit. Nálezy se uloží na disk, takže přežijí restart, a v panelu
 vedle diffu je seznam nálezů po kategoriích, s odznakem u těch blokujících. **Návrh verdiktu**
 (`approve` / `request changes` / *není z čeho soudit*) se z nich předvyplní v tabu `Moje review`
 a je u něj napsané, že je to návrh; do #218 stál navíc v hlavičce, kde byl druhou kopií téhož.
@@ -829,6 +829,16 @@ neexistujícího — a když je to moje rozhodnutí, musím mít jak zkontrolova
 proto tu není ani přepínač „schovat odmítnuté“. Když jsi nálezy odmítl všechny, řádek
 v seznamu ukáže `odmítnuto · N`, **ne `čisté`**: „reviewer nic nenašel“ je jiné tvrzení než
 „našel a já to zamítl“. Návrh verdiktu to napíše taky (`1 odmítnutý nález se nepočítá`).
+
+Ze stejného důvodu existuje **třetí stav vedle `čisté` a `selhalo`** (#383): review, které doběhlo,
+ale čisto z něj neplyne. Odznak v seznamu řekne, co chybí — `kód nepřečten` (reviewer neotevřel ani
+jeden soubor z pracovní kopie, pozná se to z jeho osy v tabu `Průběh`), `bez hlášení`
+(`ReportFindings` nezavolal) nebo `ztracené nálezy` (něco nahlásil a nepodařilo se to přečíst) — a je
+okrový jako `zastaralé`, protože je to výsledek, který se nedá použít, ne porucha. V prázdném tabu
+`Nálezy` k tomu stojí věta i s tím, čím review pustit znovu. Vzniklo to z měření: `security-review`
+hlásil v jednom týdnu nulu nálezů ve 12 ze 14 běhů, protože přestal chodit do kódu, a okno z toho
+dělalo `čisté`. **Chybějící záznam ale obvinění není** — u běhu, ke kterému se osa neuložila (soubory
+z doby před #203) nebo v ní jsou nástroje, u kterých není vidět, kam sáhly, zůstává stav, jaký byl.
 
 Označení platí **jen pro ten commit** — nálezy jsou klíčované head commitem, takže nález
 falešný nad starým kódem nemusí být falešný nad novým. Přežije to restart i **opakované
@@ -1741,8 +1751,9 @@ App/                      zdrojáky aplikace — target PRism
   Markdown/               vykreslení Markdownu z GitHubu: bloky (včetně citací a výstrah), inline HTML
                           od botů, škála nadpisů a mezer, zapamatované rozložení na bloky
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka, hledání v paletě,
-                          složení zadání pro agenta na vlastním PR (#333), co z něj zbývá předat (#334)
-                          a co na něm od minule udělal někdo jiný, i za jakou cenu se na to ptát (#335)
+                          složení zadání pro agenta na vlastním PR (#333), co z něj zbývá předat (#334),
+                          co na něm od minule udělal někdo jiný, i za jakou cenu se na to ptát (#335),
+                          a jestli reviewer vůbec otevřel kód — tedy jestli se z běhu dá tvrdit čisto (#383)
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR,
                           labely a vyžádání reviewera na vlastním PR (#392), brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy;

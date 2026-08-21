@@ -29,6 +29,13 @@ enum ReviewState: Hashable, Codable, Sendable {
     /// u `finished(findingCount:)`. Nese počet odmítnutých, protože bez něj by odznak tvrdil
     /// jen „vyřízeno“ a nebylo by z čeho poznat, kolik jsem toho vlastně přeskočil.
     case dismissed(findings: Int)
+    /// Doběhlo, ale **z výsledku se čisto tvrdit nedá** (#383) — `reason` říká proč.
+    ///
+    /// Třetí stav vedle `clean` a `failed`, a vznikl proto, že se do té doby slíval s oběma:
+    /// reviewer, který nepřečetl kód a nahlásil prázdný seznam, se kreslil jako `čisté`,
+    /// a reviewer, který `ReportFindings` nezavolal vůbec, jako `selhalo` — přitom jeho session
+    /// skončila `success`. Obojí je nepravda o téže věci: **nevíme**.
+    case inconclusive(reason: InconclusiveReason)
     /// Session skončila nenulovým kódem; `detail` je uchovaný stderr.
     case failed(detail: String)
     /// Session byla zabita timeoutem. Částečné nálezy se zachovávají.

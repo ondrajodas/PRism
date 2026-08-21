@@ -867,6 +867,43 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   to, co se **nesmí** stát: schované filtrem se nesmí slít s `clean` a spadlá session zůstane
   spadlá i tehdy, když jiný reviewer ještě běží (jednořádková záměna pořadí podmínek by z ní
   udělala „review běží“).
+- **Reviewer, který nepřečetl kód (#383)** — dvě sady a jsou postavené tak, aby padly na **obě**
+  strany téže chyby. Bez druhé poloviny by se stav přestal čítat stejně spolehlivě jako s falešným
+  čistem, jen by se to poznalo později.
+
+  - **`CodeReadingTests`** — `Policy.codeReading(of:)` výčtem. Osy jsou **opsané ze skutečných
+    uložených běhů** z cache (`security-review` z 18.–20. 8.), jen s cestami převedenými na veřejné
+    repo: záznamy firemních PR do repa nepatří, takže se z nich bere **tvar**, ne obsah. Ten tvar je
+    to zajímavé — jedenáct pokusů, z toho `Read` zadání (`<strom>.md`), `Read` v cizím transkriptu
+    a sedm `Bash` s `git diff` uvnitř stromu, a **ani jeden otevřený soubor z kódu**. Nejcennější
+    test je právě ten (`Běh, který si přečetl jen zadání a diff, kód neotevřel`) a hned za ním ten
+    na **oddělovač v předponě cesty**: zadání leží jako `<strom>.md`, tedy soubor **vedle** stromu
+    se stejnou předponou, takže bez `/` by ho `hasPrefix` spolkl jako soubor v kódu — a přečte si
+    ho i ten běh, který se do kódu vůbec nepodíval. Dál: odmítnutý ani chybou skončený `Read` se za
+    čtení nepočítá, `outcome == nil` **ano** (odpovědi na nástroje se čtou od #326, takže starší osy
+    by jinak vyšly nepřečtené naráz), a `Grep` s `Agent` posílají odpověď na `unknown`, protože
+    v ose nesou vzor, resp. nic.
+  - **`UnreadCodeStateTests`** — celá cesta od záznamu k obrazovce, a je rozdělená přesně na ty dva
+    směry. **Falešné čisto:** stav není `clean`, návrh verdiktu nevznikne, chip řekne co chybí, díl
+    proužku není zelený, prázdný tab má větu a odznaky tří důvodů se neslijí ani mezi sebou, ani
+    s `čisté`/`selhalo`/`zastaralé`. **Falešný poplach:** běh, který kód otevřel a nic nenašel, je
+    `clean`; **levný a krátký** běh nad malým diffem se neoznačí (rozhoduje jediný pokus v ose, ne
+    částka); starší záznam **bez osy** zůstává čistý; běh s nálezy se na čtení kódu vůbec neptá;
+    a **jeden průkazný běh stačí**, i když druhý reviewer kód neotevřel — pozná se to na jeho chipu,
+    ne na řádku. Plus přednosti důvodů a tvrzení, že je `byPrecedence` vyjmenovává **všechny**
+    (čtvrtý zapomenutý důvod by tiše spadl na nejslabší tvrzení).
+
+  K tomu jedno tvrzení v `DashboardTests`: **nula v legendě reviewerů není čisto**. Reviewer, který
+  v okně sedmi dnů neotevřel jediný soubor, má nulu stejně jako ten čistý, takže se u něj hlídá
+  `isConclusive` **i barva puntíku** (`DashboardView.legendOutcome`) — a v témže testu vedle něj
+  stojí reviewer, který kód přečetl, aby bylo vidět, že šedá není plošná.
+
+  **Ověřeno vloženou regresí v obou směrech**, ne jen zeleným během. Bez podmínky na čtení kódu
+  padne **8 tvrzení v 6 testech** (falešné čisto). Když se naopak z `unknown` udělá `unread`
+  — tedy „chybějící záznam je obvinění“ —, padne **12 tvrzení v 8 sadách** napříč celým repem
+  (`ReviewStateFromRecordTests`, `VerdictSuggestionTests`, `QueueRowTests`, `ReviewerChipTests`,
+  `FindingsEmptyReasonTests`, `AppStoreRecoveryTests` a obě nové), protože `makeStoredRun` osu
+  ve výchozím stavu nemá — a přesně to je ta situace, ve které se okno nesmí rozkřičet.
 - **Dráhy v tabu `Průběh` (#242)** — osy se skládají `record(_:at:)`/`finish(_:at:)`, tedy tou
   cestou, kterou vznikají doopravdy. Pokrývá: doběhlá session má hotové fáze, kterými prošla;
   **doběhlá bez nahlášených nálezů nemá fázi hlášení za hotovou** (reviewer, který
