@@ -519,7 +519,7 @@ code {
 /* --- založení nového labelu z nabídky (sekce 26) --------------------------------------
    **Nabídka zůstává uzavřená a založení je vlastní akce mimo seznam**, ne odemčené pole.
    Seznam dál nese jedině labely repozitáře, takže `↵` na vybraném řádku znamená pořád jen
-   „přepni ten label“; založení má vlastní klávesu (`⌘↵`) a vlastní plochu pod dělič. Kdyby
+   „přepni ten label“; založení má vlastní klávesu (`⌥↵`) a vlastní plochu pod dělič. Kdyby
    sedělo v seznamu jako další řádek, byl by z něj nejpravděpodobnější omyl: šipka dolů na
    konci filtrovaného seznamu by mířila na „založ nový label“.
 
@@ -551,7 +551,7 @@ code {
    102 b, které chip potřebuje. Výstraha se naopak stahovat nemá, ta si šířku bere zpátky. */
 .nl-step { padding: 2px 11px 11px; display: flex; flex-direction: column; align-items: flex-start; gap: 9px; }
 .nl-step > .warnbox { align-self: stretch; }
-.nl-step .hex { font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
+.nl-step .hex, .nl-step .slug { font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
 .nl-step .why { font-size: 11.5px; color: var(--ink-3); }
 .pkr-foot .sp { flex: 1; }
 
@@ -3970,7 +3970,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <p class="muted">
         Zakládání se proto přidává, ale <b>uzavřený zůstává seznam</b>, ne nabídka. Řádky dál nesou
         jenom labely repozitáře, takže <code>↵</code> na vybraném řádku znamená pořád „přepni tenhle
-        label“. Založení je <b>vlastní akce pod děličem</b> s vlastní klávesou (<code>⌘↵</code>) a vede
+        label“. Založení je <b>vlastní akce pod děličem</b> s vlastní klávesou (<code>⌥↵</code>) a vede
         na <b>druhou obrazovku téhož popoveru</b>, ve které je vidět jméno v uvozovkách, barva,
         repozitář a věta o tom, co po tom kliknutí zůstane. <b>Omyl z volného textu tedy
         nenahrazuje pozornost, ale krok</b>, který se musí potvrdit a který o sobě řekne, že je
@@ -4034,13 +4034,16 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             </div>
             <div class="pkr-empty">Žádný takový label tu není.</div>
             <!-- Pod děličem, ne v seznamu: řádek v seznamu by při držené šipce dolů skončil na
-                 nevratné věci. `⌘↵` je proto jediná klávesa, která sem vede — `↵` zůstává
-                 přepínačem vybraného labelu. -->
+                 nevratné věci. `⌥↵` je proto jediná klávesa, která sem vede — `↵` zůstává
+                 přepínačem vybraného labelu. **Ne `⌘↵`**: tu má v tomhle okně paleta ⌘K
+                 (`otevřít na GitHubu`) a detail PR (`otevřít potvrzení odeslání`), a #184 už
+                 jednou popsalo, že dvě tlačítka s jednou zkratkou znamenají „vyhraje to
+                 zaregistrované později“. `⌘N` zabírá `File > New Window` z `WindowGroup`. -->
             <div class="nl-bar">
               <div class="nl-add">
                 <span>+</span>
                 <span>Založit <b>„design-debt“</b></span>
-                <span class="keys">⌘↵</span>
+                <span class="keys">⌥↵</span>
               </div>
             </div>
           </div>
@@ -4066,7 +4069,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               <div class="nl-add">
                 <span>+</span>
                 <span>Založit <b>„bug-ui“</b></span>
-                <span class="keys">⌘↵</span>
+                <span class="keys">⌥↵</span>
               </div>
             </div>
             <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ přepne</span><span>esc zavře</span></div>
@@ -4099,7 +4102,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       jedno kliknutí (#392 mu potvrzovací okno nedalo schválně), protože je vratné jedním klikem
       a nikoho neupozorní — potvrzuje se tedy to, co vratné <b>není</b>, a modální okno kvůli jednomu
       slovu by z panelu udělalo klikačku. Na obrazovce jsou čtyři věci a každá odpovídá na jednu
-      otázku: <b>kam</b> to jde (repozitář v nadpisu), <b>co</b> se objeví (chip s puntíkem, jméno
+      otázku: <b>kam</b> to jde (slug repozitáře pod chipem), <b>co</b> se objeví (chip s puntíkem, jméno
       doslova), <b>jaká</b> bude barva (hex) a <b>co po tom zůstane</b> (výstraha).
     </p>
     <p class="muted">
@@ -4115,9 +4118,14 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <div class="tag"><i></i>Druhý krok — co odejde do repozitáře</div>
         <div class="frame flat" style="padding: 14px;">
           <div class="pkr">
-            <span class="cap">Nový label v ondrajodas/PRism</span>
+            <span class="cap">Nový label v repozitáři</span>
             <div class="nl-step">
               <span class="lchip"><i style="background: #FBCA04;"></i><span>design-debt</span></span>
+              <!-- Slug **pod chipem, ne v nadpisu**: `.cap` je `text-transform: uppercase`, takže
+                   `ondrajodas/PRism` by se vysázelo jako `ONDRAJODAS/PRISM` — a u jména repozitáře
+                   je psaní velkých písmen data, ne dekorace. Mono s pravým casingem je tatáž
+                   podoba, jakou má slug v potvrzení odeslání (`.sheet-head .slug`). -->
+              <span class="slug">ondrajodas/PRism</span>
               <span class="why"><span class="hex">#FBCA04</span> · z výchozí palety GitHubu, podle jména</span>
               <div class="warnbox">
                 <span class="i">⚠</span>
@@ -4189,7 +4197,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <span class="body">
           <b>Uzavřený zůstává seznam, ne nabídka</b>
           <span>Řádky nesou dál jenom labely repozitáře, takže <code>↵</code> je pořád „přepni“.
-          Založení má vlastní plochu pod děličem a vlastní klávesu <code>⌘↵</code> — jako další
+          Založení má vlastní plochu pod děličem a vlastní klávesu <code>⌥↵</code> — jako další
           řádek v seznamu by z něj byl nejpravděpodobnější omyl v celé obrazovce: šipka dolů na
           konci filtrovaného seznamu.</span>
         </span>
@@ -4198,7 +4206,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <span class="num">2</span>
         <span class="body">
           <b>Omyl nahrazuje krok, ne pozornost</b>
-          <span>Druhá obrazovka popoveru říká jméno doslova a v uvozovkách, repozitář v nadpisu
+          <span>Druhá obrazovka popoveru říká jméno doslova a v uvozovkách, repozitář pod ním
           a barvu v náhledu. Přepnutí existujícího labelu zůstává <b>jedno</b> kliknutí (#392):
           potvrzuje se to, co je nevratné, ne všechno.</span>
         </span>
@@ -4239,6 +4247,20 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <div class="note">
         <span class="num">6</span>
         <span class="body">
+          <b>Klávesa je <code>⌥↵</code>, ne <code>⌘↵</code></b>
+          <span><code>⌘↵</code> je v tomhle okně obsazená dvakrát — paleta ⌘K jím otevírá výsledek
+          na GitHubu a detail PR potvrzení odeslání —, a #184 už jednou popsalo, čím to končí:
+          vyhraje ta zkratka, která se zaregistrovala později. Nad nevratnou akcí to není riziko,
+          které by se vyplatilo brát; <code>⌘N</code> zase patří <code>File &gt; New Window</code>
+          z <code>WindowGroup</code>. <code>⌥↵</code> je volná a bere ji <b>pole</b>
+          (<code>onKeyPress</code>), tedy tou samou cestou jako šipky — s okenními zkratkami si
+          proto nekonkuruje. Potvrzení na druhé obrazovce naopak <b>výchozí akci nemá</b>: poslední
+          klik před něčím nevratným je klik, tak jako u potvrzení odeslání (#68).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">7</span>
+        <span class="body">
           <b>Akce zmizí, když label existuje</b>
           <span>Shoda se posuzuje týmž pravidlem jako hledání (bez diakritiky, bez ohledu na
           velikost písmen), takže <code>Bug</code> se nezaloží vedle <code>bug</code>. Skoroduplikát
@@ -4246,7 +4268,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         </span>
       </div>
       <div class="note">
-        <span class="num">7</span>
+        <span class="num">8</span>
         <span class="body">
           <b>Brána je tatáž</b>
           <span><code>allowsPublishing</code>, globálně i per repo — žádný druhý přepínač. Na cizím
@@ -4255,7 +4277,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         </span>
       </div>
       <div class="note">
-        <span class="num">8</span>
+        <span class="num">9</span>
         <span class="body">
           <b>Hledací pole u labelů bude vždycky</b>
           <span>Jméno se bere z dotazu, takže bez pole není kam ho napsat —
