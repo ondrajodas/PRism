@@ -8,6 +8,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Kontrola identity bundlu a odregistrování z LaunchServices žijí od #398 v knihovně, protože je
+# potřebuje i `bin/slot-cleanup.sh` — dvě kopie znamenají, že se příští oprava udělá jen v jedné.
+# shellcheck source=bin/lib/bundles.sh
+. bin/lib/bundles.sh
+
 # Diagnostika kreslení (#361). Zapíná se **jen odtud a jen na tenhle běh**: příznak umře
 # s procesem, takže se další spuštění vrátí do normálního provozu samo. Podrobně, včetně toho,
 # proč to není přepínač v nastavení, je u `RenderDiagnostics`.
@@ -152,11 +157,8 @@ fi
 # Když v /Applications leží něco jiného se stejným jménem, je to důvod se zastavit, ne to
 # přepsat.
 if [ -e "${INSTALLED}" ]; then
-    INSTALLED_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
-        "${INSTALLED}/Contents/Info.plist" 2> /dev/null || true)"
-    if [ "${INSTALLED_ID}" != "${BUNDLE_ID}" ]; then
-        echo "V ${INSTALLED} leží aplikace s jiným identifikátorem (${INSTALLED_ID:-neznámý})."
-        echo "       Nic jsem nepřepsal — ukliď to ručně."
+    if ! prism_bundle_is_ours "${INSTALLED}" "${BUNDLE_ID}"; then
+        echo "       Nic jsem nepřepsal — ukliď to ručně." >&2
         exit 1
     fi
     rm -rf "${INSTALLED}"
@@ -176,19 +178,27 @@ fi
 # Bez tohohle kroku by tam ale zůstala po každém buildu, protože Xcode registruje výsledný
 # bundle výslovně.
 #
-# Odregistrovává se **cesta složená z `$APP`**, nikdy nic hledaného: odregistrovat tu
+# Jmenovitě se odregistrovává **cesta složená z `$APP`**, nikdy nic hledaného: odregistrovat tu
 # nainstalovanou by znamenalo, že ji nenajde Spotlight ani Dock, tedy pravý opak toho, o co
 # jde. Ta v build.noindex/ se přitom nikdy nespouští přímo — spouští se `${INSTALLED}` o řádek
-# níž.
+# níž. (Zametení níž databázi prochází, ale `${INSTALLED}` z něj vyjde nedotčená z principu:
+# co na disku je, se nedotkne.)
+#
+# Od #398 to je **jedno volání se dvěma úkoly**: `${APP}` se odregistruje jmenovitě (existuje na
+# disku, takže by ji zametení samo nevzalo) a k tomu se z databáze uklidí záznamy o PRism bundlech,
+# které na disku **nejsou** — cesty do smazaných worktree, po slotových bundlech a po testovacích
+# hostech, které `xcodebuild test` spouští, a tím registruje. Na ty odregistrování jedné cesty
+# nedosáhne: skript, který měl odregistrovat, zanikl se svým stromem.
+#
+# Sedí to **tady** proto, že hlavní aplikace se restartuje po každém mergi, takže se databáze
+# zametá při každém sériovém i paralelním kole, aniž by se na to muselo myslet. Cizí aplikaci to
+# odregistrovat nemůže: bere jedině cesty, na kterých na disku nic není, plus tu jednu vyjmenovanou
+# — takže běžícího souseda ani hlavní instanci nevidí.
 #
 # Selhání se jen ohlásí. `lsregister` není dokumentované API a skript běží pod `set -e`;
 # kvůli záznamu v databázi se nemá nespustit aplikace.
-LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
-if [ -x "${LSREGISTER}" ]; then
-    "${LSREGISTER}" -u "${PWD}/${APP}" > /dev/null 2>&1 \
-        || echo "Pozor: kopii v ${APP} se nepodařilo odregistrovat, ve Spotlightu bude ${NAME} dvakrát."
-else
-    echo "Pozor: lsregister na čekané cestě není, kopie v ${APP} zůstane ve Spotlightu."
+if ! prism_sweep_registrations "${PWD}/${APP}"; then
+    echo "Pozor: databáze LaunchServices se neuklidila (viz výš), ve Spotlightu může být ${NAME} dvakrát." >&2
 fi
 
 if [ -n "${DIAGNOSE}" ]; then

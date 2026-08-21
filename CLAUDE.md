@@ -59,8 +59,10 @@ sem se píše jen to, co je potřeba znát dřív, než se něco napíše.
   aplikaci, se kterou zrovna pracuju, i s její cache.
 
   **Subagent dotáhne issue až do konce** (#247): PR, Copilot, merge, zavření issue, release
-  a **úklid své aplikace** — ukončit, odregistrovat z LaunchServices a smazat i s cache (#250),
-  jinak se mi v `/Applications` hromadí PRismy, ze kterých se nedá vybrat.
+  a **úklid své aplikace** — `./bin/slot-cleanup.sh` ve svém stromě (#398, dřív pět příkazů
+  ručně): ukončí ji a smaže bundle, cache, **doménu v `UserDefaults`** i záznam v LaunchServices.
+  Jinak se mi v `/Applications` hromadí PRismy, ze kterých se nedá vybrat, a příští slot
+  nastartuje s nastavením po předchůdci (#250, #399).
   Nečeká na frontu u orchestrátora — hotová práce, která leží, je to zdržení, kvůli kterému se
   paralelně pracuje. Orchestrátorovi zůstává rozvrh, sloty, tlumočení připomínek, úklid stromů
   a **restart hlavní aplikace** (sahá do hlavního stromu, což subagent nesmí).
@@ -990,6 +992,14 @@ příští spuštění skriptu: je to **tatáž cesta**, kterou odregistrovává
                         # subagent v dávce ji volá takhle: strom má od harnessu
 ```
 
+```bash
+./bin/slot-cleanup.sh    # ukliď po slotu (#398, #399); slot z .prism-slot, nebo argumentem
+                         # aplikace, bundle, cache, doména v UserDefaults i prázdný plist po ní,
+                         # a nakonec zaniklé záznamy v databázi LaunchServices
+                         # bez slotu odmítne — cílem by byla hlavní instance
+                         # cizí bundle v /Applications nesmaže; návratové kódy jsou v hlavičce
+```
+
 **Slot je jediné, co dělí paralelní okna od sebe** — bundle ID, jméno v `/Applications`
 i kořen cache (ten si aplikace bere z `CFBundleName`, ne z konstanty). Bez `.prism-slot` se
 nemění nic, takže hlavní strom zůstává tou aplikací, která se používá. Podrobnosti v README,
@@ -1068,6 +1078,14 @@ Pusť ho znovu, viz tatáž sekce.
   `build.noindex/` míří i testy, uklidí tím i po nich. Selhání se **hlásí, ale nepokládá
   skript**: kvůli záznamu v databázi se nemá nespustit aplikace. Obě chybové větve jsou
   vyzkoušené spuštěním, ne jen přečtené.
+
+  **Od #398 to je jedno volání, které navíc zametá záznamy o cestách, na kterých na disku nic
+  není** — zaniklé worktree, staré slotové bundly, testovací hosty (`prism_sweep_registrations`
+  v `bin/lib/bundles.sh`, sdílené s `bin/slot-cleanup.sh`). Cizí ani sousedovu aplikaci to vzít
+  nemůže: co na disku je, se nedotkne. Dvě věci na tom nejsou zjevné a jsou změřené — `lsregister -u`
+  vrací **nenulu i nad cestou, která v databázi vůbec není**, takže návratový kód o úspěchu nemluví
+  a rozhoduje zpětné čtení výpisu; a `PlistBuddy` píše chyby **jednou na stdout, jednou na stderr**,
+  takže identifikátor bundlu se bere jedině při nulovém návratovém kódu.
 
 ## Stav
 

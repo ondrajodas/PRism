@@ -368,19 +368,26 @@ git worktree remove <cesta> && git branch -d <větev>
 **Strom s rozdělanou prací se nemaže**, i když jeho agent skončil — dotáhne ho nový subagent
 puštěný do něj (viz *Co dělá orchestrátor — a co ne*). Odklízí se až po mergi jeho PR.
 
-**Svou aplikaci uklidí subagent sám** (#250), jakmile domergoval — ukončí ji, odregistruje
-z LaunchServices a smaže i s cache:
+**Svou aplikaci uklidí subagent sám** (#250), jakmile domergoval — a od #398 **jedním příkazem**,
+ve svém stromě:
 
 ```bash
-SLOT=a   # svůj, nikdy cizí
-LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
-
-osascript -e "tell application id \"com.ondrajodas.prism.${SLOT}\" to quit"
-"${LSREGISTER}" -u "/Applications/PRism-${SLOT}.app"
-rm -rf "/Applications/PRism-${SLOT}.app" ~/Library/"Application Support"/PRism-${SLOT}
+./bin/slot-cleanup.sh    # slot se přečte z .prism-slot; svůj, nikdy cizí
 ```
 
-Bez toho se instance hromadí: po jednom odpoledni jich byly v `/Applications` čtyři vedle hlavní
+Ukončí aplikaci slotu (Apple eventem, ne `killall`em), smaže bundle z `/Applications`, cache,
+**doménu v `UserDefaults`** i prázdný plist po ní a nakonec zamete databázi LaunchServices.
+Návratový kód: `0` uklizeno (nebo nebylo co uklízet), `1` nepoužitelný slot — **včetně prázdného**,
+tedy hlavní instance —, `2` aplikace slotu běží dál a nesmazalo se nic, `3` něco se nedotáhlo (co,
+je vypsané) a zbytek je uklizený. Když se v `/Applications` hlásí cizím identifikátorem, **nesmaže
+ho** a řekne to.
+
+**Proč skript, a ne pět příkazů v dokumentaci** (#399): postup, který se dá vynechat, se vynechá.
+Doména v `UserDefaults` v tom postupu **nebyla vůbec** a uklízela se jen proto, že to orchestrátor
+napsal subagentům do zadání — tedy informace v jeho kontextu, ne v repu. A databáze LaunchServices
+si nechala záznamy po zaniklých stromech, kterých bylo za jedno dopoledne **čtrnáct**.
+
+Bez úklidu se instance hromadí: po jednom odpoledni jich byly v `/Applications` čtyři vedle hlavní
 a v Launchpadu ani Spotlightu se z nich nedá vybrat, protože se jmenují skoro stejně. Je to tentýž
 problém, jaký #139 řešil u kopie v `build.noindex/` — jen ho tentokrát vyrábí paralelní běh.
 
@@ -389,13 +396,34 @@ zkoušel UI — v jednom slotu takhle zbyl vyrobený záznam nálezů pro sandbo
 agenta na tomtéž písmenu mátl. Cena je nulová: klony se dotáhnou znovu, jen když je někdo
 potřebuje.
 
-**Odregistrovat se musí před smazáním bundlu**, a jedině **vlastní** slot. Cizí instance se nesmí
-ukončit ani odregistrovat — může na ní běžet jiný agent nebo ji může mít otevřenou člověk.
+**A maže se i doména v `UserDefaults`** (`com.ondrajodas.prism.<slot>`, #399). Nastavení **přežije
+smazání bundlu i cache**, takže příští slot na tomtéž písmenu nastartuje s nastavením po předchůdci
+— tedy i s tím, co z něj `bin/slot-config.sh` schválně vyndal (odesílání, notifikace, automat).
+Past, kterou skript řeší a ruční postup přehlížel: `defaults delete` po sobě nechá **prázdný plist**
+(42 B), na kterém `defaults read` už hlásí, že doména neexistuje — soubor v
+`~/Library/Preferences/` ale leží dál. **Ověřuje se proto zpětným čtením, ne návratovým kódem**;
+`defaults delete` navíc nad doménou, která neexistuje, vrací **nenulu**, takže „nebylo co mazat“
+by ruční postup pod `set -e` položilo.
+
+**Uklízí se jedině vlastní slot.** Cizí instance se nesmí ukončit ani odregistrovat — může na ní
+běžet jiný agent nebo ji může mít otevřenou člověk. Zametení databáze je proti tomu bezpečné
+z principu: bere jedině cesty, na kterých na disku **nic není**, takže hlavní aplikaci ani
+souseda v jiném slotu nevidí.
+
+**Na pořadí „napřed odregistrovat, pak smazat“ nezáleží** — do #398 to tady stálo jako podmínka
+a měření ji vyvrátilo: registrace smazání bundlu přežije (zjištění z #139) a `lsregister -u` nad
+cestou, která už neexistuje, záznam odstraní. Naopak návratový kód `lsregister -u` **o úspěchu
+nemluví**: nad cestou, která v databázi vůbec není, vrací nenulu (`failed to scan … -10814`), i když
+je to kýžený stav.
 
 **Změna proti první verzi** (#250), kde stálo, že se aplikace i cache nechávají „až slot doopravdy
 skončí“, protože další subagent dostane totéž písmeno a je levnější mu nechat udělená povolení
 k notifikacím. Slot **skončil** ve chvíli, kdy agent domergoval — a nasbírané aplikace jsou horší
 než jeden dotaz na notifikace navíc.
+
+**Zaniklý strom po sobě záznam v databázi nechá i tak** (#398) — skript, který by odregistroval,
+zanikl s ním. Zametá to proto i `bin/run.sh` při každém spuštění, tedy při restartu hlavní aplikace
+po každém mergi. Orchestrátor tak po odklizení stromů nemusí dělat nic zvlášť.
 
 ## 6. Kde je strop
 

@@ -3687,3 +3687,41 @@ a lišili se pořadím, čtení kódu nekontroloval nikdo.
 **Ověřeno vloženou regresí v obou směrech**: bez podmínky na čtení kódu padne 8 tvrzení v 6 testech
 (falešné čisto), a když se z `unknown` udělá `unread`, padne 12 tvrzení v 8 sadách napříč repem
 (falešný poplach). Testů 3509.
+
+
+**Po slotu už nezůstává aplikace, doména ani záznam v databázi (issues #398, #399).** Paralelní běh
+nechával na stroji dvě věci, o kterých repo nevědělo: záznam v LaunchServices mířící do worktree,
+který už neexistuje (za jedno dopoledne **čtrnáct**, mazaných ručně), a **doménu v `UserDefaults`**
+slotové aplikace — ta přežije smazání bundlu i cache, takže příští slot na tomtéž písmenu nastartoval
+s nastavením po předchůdci, tedy i s tím, co z něj `bin/slot-config.sh` schválně vyndal (odesílání,
+notifikace, automat).
+
+Z pěti příkazů v dokumentaci je proto **`bin/slot-cleanup.sh`**: postup, který se dá vynechat, se
+vynechá — doména v tom postupu nebyla vůbec a uklízela se jen proto, že to orchestrátor napsal
+subagentům do zadání, tedy z jeho kontextu, ne z repa. Kontrola identity bundlu a odregistrování
+z databáze se vyčlenily do `bin/lib/bundles.sh` a volají se **z úklidu i z `bin/run.sh`**, takže
+databázi zametá i restart hlavní aplikace po každém mergi.
+
+**Vybírá se podle toho, co na disku chybí, nikdy podle jména** — hlavní `/Applications/PRism.app`
+i aplikace slotu, na které pracuje někdo jiný, jsou na disku, takže z úklidu vypadnou z principu,
+ne díky výjimce.
+
+Tři věci, které měření vyvrátilo, a všechny tři byly předtím v repu napsané jinak: `lsregister -u`
+vrací **nenulu i nad cestou, která v databázi vůbec není**, takže jeho návratový kód o úspěchu
+nemluví (rozhoduje druhý výpis) — první verze kvůli tomu hlásila poplach nad kopií, kterou `run.sh`
+odregistroval o minutu dřív. **Na pořadí „napřed odregistrovat, pak smazat“ nezáleží** (od #250 to
+byla podmínka): registrace smazání bundlu přežije a `-u` nad neexistující cestou funguje.
+A `PlistBuddy` píše chyby **jednou na stdout, jednou na stderr** podle druhu, takže filtrovat je
+podle textu je slepá cesta — identifikátor se bere jedině při nulovém návratovém kódu; ta vada
+ležela v `run.sh` od #88 a znamenala nesmyslnou hlášku o cizím bundlu.
+
+U domény platí totéž zpětné čtení: `defaults delete` vrací nad neexistující doménou **nenulu**
+a po sobě nechá **prázdný plist** (42 B), na kterém `defaults read` už tvrdí, že doména neexistuje.
+Maže se proto obojí a ověřuje se čtením, ne kódem.
+
+**Skripty mají poprvé testy v harnessu** (`Tests/Scripts/`, 20 tvrzení): že se bez slotu neuklidí nic
+(ani se nevypíše hlavička), že se maže jedině cesta složená ze slotu (tvrzeno nad zdrojákem, jako
+`SingleWayOutTests`), že doména i prázdný plist zmizí, a že zaniklý záznam jde pryč, kdežto
+existující bundle zůstane. Obě chybové větve se **pouštějí** (`PRISM_LSREGISTER` na neexistující
+cestu a na `/usr/bin/false`), regrese na přeskakování existujících cest se ověřuje proti záznamníku
+místo `lsregister` — bez toho `if`u by odregistrovala hlavní aplikaci. Testů 3582.

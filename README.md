@@ -1539,6 +1539,13 @@ konci buildu přidá výslovně a `xcodebuild test` navíc testovacího hosta **
 ho zaregistruje taky. `bin/run.sh` proto po instalaci tu jednu cestu odregistruje — a protože
 do `build.noindex/` míří i testy, uklidí tím i po nich. Proto ten přepínač patří i k nim.
 
+**A při každém spuštění zamete i záznamy o PRism bundlech, které na disku nejsou** — po zaniklých
+worktree, po slotových bundlech a po testovacích hostech (#398). Na ty odregistrování jedné cesty
+nedosáhne: skript, který měl odregistrovat, zanikl se svým stromem. Vybírá se **podle toho, co na
+disku chybí, ne podle jména**, takže hlavní aplikaci ani běžící instanci jiného slotu to vzít nemůže.
+Rozhoduje se z výpisu databáze a ověřuje **zpětným čtením** — `lsregister -u` totiž vrací nenulu i
+nad cestou, která v databázi vůbec není, takže jeho návratový kód o úspěchu nemluví.
+
 Hotový bundle pak **nainstaluje do `/Applications` a spustí odtud**, protože jinde
 nefungují notifikace: z `build.noindex/` i z `~/Applications` vrací systém
 `Notifications are not allowed for this application` a stav oprávnění zůstane `denied` —
@@ -1663,12 +1670,25 @@ Co se čistí a co ne, je vyjmenované v komentáři skriptu — **celý `Global
 klíčů, které se nechávají být, a důvodu u každého. Nový klíč, který má obě úrovně
 (`GlobalConfig` i `RepositoryConfig`), do toho výčtu patří, i kdyby se nakonec nečistil.
 
-Po mergnutí branche se strom i cache slotu uklidí:
+Po mergnutí branche se slot uklidí **jedním příkazem** (#398, #399) a strom se odklidí:
 
 ```bash
+./bin/slot-cleanup.sh      # slot z .prism-slot v tomhle stromě
+./bin/slot-cleanup.sh a    # slot výslovně
 git worktree remove ../PRism-a
-rm -rf ~/Library/Application\ Support/PRism-a
 ```
+
+Skript ukončí aplikaci slotu (Apple eventem, ne `killall`em — běžící review se tedy ohlásí), smaže
+bundle z `/Applications`, cache, **doménu v `UserDefaults`** i prázdný plist po ní, a nakonec zamete
+databázi LaunchServices. Bez slotu **odmítne**: cílem by byla hlavní instance, tedy ta aplikace,
+která se používá — a v `/Applications` nesmaže bundle, který se hlásí cizím identifikátorem (tatáž
+kontrola, jakou má `bin/run.sh` u instalace, a od #398 na jednom místě).
+
+Doména se maže proto, že **nastavení přežije smazání bundlu i cache**: příští slot na tomtéž písmenu
+by nastartoval s nastavením po předchůdci, tedy i s tím, co z něj `bin/slot-config.sh` schválně
+vyndal. `defaults delete` má u toho dvě pasti a obě jsou změřené — nad neexistující doménou vrací
+**nenulu** a po sobě nechá **prázdný plist** (42 B), na kterém `defaults read` už tvrdí, že doména
+neexistuje. Úklid proto maže obojí a ověřuje se **zpětným čtením, ne návratovým kódem**.
 
 ### Ikona
 
@@ -1789,6 +1809,7 @@ Tests/                    unit testy — target PRismTests
   Views/                  testy řádků tabulky, modelu okna nastavení a novinek
   Syntax/                 testy detekce jazyka a obarvení kódu
   Support/                testy sdílených drobností
+  Scripts/                testy skriptů v bin/ — úklid slotu a databáze LaunchServices
   Fixtures/gh/            skutečné výstupy gh z veřejných repozitářů (JSON i diffy)
   Fixtures/stream-json/   skutečné stream-json výstupy claude z reálných běhů
   Fixtures/statuspage/    skutečné components.json ze status pages (a jeden s dopsaným incidentem)
@@ -1796,6 +1817,8 @@ Tests/                    unit testy — target PRismTests
 bin/run.sh                build + spuštění jedním příkazem (--diagnose zapne diagnostiku kreslení)
 bin/worktree.sh           pracovní strom se slotem — paralelní vývoj vedle běžící aplikace
 bin/slot-config.sh        očištěná konfigurace do cache slotu (jediné místo, kde ta očista je)
+bin/slot-cleanup.sh       úklid po slotu — aplikace, cache, doména v UserDefaults, LaunchServices
+bin/lib/bundles.sh        sdílené funkce nad PRism bundly a databází LaunchServices (sourcuje se)
 bin/copilot-review.sh     vyžádání Copilot review na PR
 bin/setup-signing.sh      jednorázová příprava stálého podpisu (self-signed certifikát)
 bin/make-icon.swift       vykreslí ikonu do asset catalogu (bez závislosti, přes ImageRenderer)
