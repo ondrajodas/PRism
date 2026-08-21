@@ -15,6 +15,12 @@ struct ReviewStateTests {
             .running(finished: 1, total: 3),
             .clean,
             .completed(findings: 9),
+            // Chyběl ve výčtu od #113, i když se ukládá jako všechny ostatní — doplněno u #383,
+            // kde se tenhle seznam kontroloval kvůli novému případu.
+            .dismissed(findings: 4),
+            .inconclusive(reason: .unreadCode),
+            .inconclusive(reason: .noReport),
+            .inconclusive(reason: .droppedFindings),
             .failed(detail: "exit 1"),
             .timedOut(findings: 2),
             .interrupted(findings: 3),
@@ -43,5 +49,17 @@ struct ReviewStateTests {
     @Test("Selhání checkoutu se neplete se selháním session")
     func checkoutFailureIsDistinctFromSessionFailure() {
         #expect(ReviewState.checkoutFailed(detail: "boom") != .failed(detail: "boom"))
+    }
+
+    /// Třetí stav (#383) se nesmí rovnat ani jednomu z těch dvou, mezi které patří — a **tři různé
+    /// důvody jsou tři různé stavy**, jinak by odznak u dvou z nich tvrdil něco, co se nestalo.
+    @Test("Neprůkazné není ani čisté, ani selhané")
+    func inconclusiveIsNeitherCleanNorFailed() {
+        let unread = ReviewState.inconclusive(reason: .unreadCode)
+
+        #expect(unread != .clean)
+        #expect(unread != .failed(detail: ""))
+        #expect(unread != .inconclusive(reason: .noReport))
+        #expect(unread != .inconclusive(reason: .droppedFindings))
     }
 }
