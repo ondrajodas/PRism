@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import Testing
 
@@ -145,13 +144,18 @@ struct AppStoreAppearanceTests {
     /// Store bez cíle (tedy tak, jak ho staví testy) nesmí sahat na `NSApp` — jinak by jeden test
     /// přebarvil hostitele testů a render sondy by měřily jiný režim, než o který si řekly.
     ///
-    /// Tvrdí se to na **skutečném `NSApp`**: konfigurace se čte s vynuceným tmavým a vzhled
-    /// hostitele se u toho nesmí pohnout. Jen se čte, nic se nenastavuje.
-    @Test("Bez cíle se na NSApp nesáhne")
-    func leavesTheApplicationAloneWithoutATarget() async throws {
+    /// **Do #367 se to tvrdilo na skutečném `NSApp.appearance`** (hodnota před a po) a byl to
+    /// falešně červený `main`: je to jedna hodnota na celý proces a **píše ji sám hostitel testů**
+    /// asi 300 ms po startu, když živý store uplatní volbu z konfigurace uživatele (změřeno).
+    /// Tvrzení „nesáhlo se“ proto vyšlo nepravdivě podle toho, kdo běžel vedle.
+    ///
+    /// Tady zůstalo to, co je vlastnost **storu**: volba se přečte i bez cíle a chybějící cíl není
+    /// chybový stav — nic se nehlásí, protože není co uplatnit. Že na globální vzhled nemá store
+    /// **čím** sáhnout, tvrdí `GlobalAppearanceTests` nad zdrojáky.
+    @Test("Bez cíle se volba jen přečte")
+    func readsTheChoiceWithoutATarget() async throws {
         let workspace = try TemporaryDirectory()
         try await write(configuration(.dark), to: workspace)
-        let untouched = NSApp.appearance
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
             configStore: ConfigStore(layout: CacheLayout(root: workspace.url)),
@@ -162,6 +166,7 @@ struct AppStoreAppearanceTests {
 
         // Volba se přečte, jen ji nemá kdo uplatnit.
         #expect(store.configuration.global.appearance == .dark)
-        #expect(NSApp.appearance === untouched)
+        #expect(store.appearanceFailure == nil)
+        #expect(store.configurationFailure == nil)
     }
 }
