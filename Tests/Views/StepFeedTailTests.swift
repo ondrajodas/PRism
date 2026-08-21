@@ -59,7 +59,7 @@ struct StepFeedTailTests {
     private final class Scene {
         let model: Model
         let hosting: NSHostingView<StepFeedHarness>
-        let window: NSWindow
+        private let window: NSWindow
 
         init(model: Model) {
             self.model = model
