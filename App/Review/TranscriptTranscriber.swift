@@ -344,6 +344,13 @@ struct TranscriptTranscriber: Sendable {
     /// **Odečítá se výplň `=`** (nálezem Copilota na #408): bez toho by `AQ==` hlásilo 3 B místo
     /// jednoho. U megabajtového obrázku je to nepodstatné, u malého je to trojnásobek — a číslo
     /// v hlavičce má být velikost obrázku, ne délka jeho zápisu.
+    ///
+    /// **`source.data` je jediný tvar bloku, který se v transcriptu ověřit nepodařilo** — a je to po
+    /// #408 potřeba říct, protože právě z takové domněnky vyšlo špatné čtení odmítnutí. V žádném
+    /// transcriptu na tomhle stroji obrázek není (`grep '"type":"image"'` nenašel ani jeden), takže
+    /// se bere tvar ze `stream-json`. Mluví pro to, že u **všech** ostatních bloků `message.content`
+    /// (`text`, `thinking`, `tool_use`, `tool_result`) transcript se streamem souhlasí; jistota to
+    /// ale není, a kdyby se rozešel, projeví se to jako `obrázek · 0 B`, ne jako vypsané base64.
     private func imageBytes(of block: [String: Any]) -> Int {
         guard let data = (block["source"] as? [String: Any])?["data"] as? String else { return 0 }
         let padding = data.reversed().prefix(2).prefix { $0 == "=" }.count
