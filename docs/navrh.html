@@ -1279,6 +1279,15 @@ footer.end {
 }
 .tl-new i { flex: 1; height: 1px; background: color-mix(in srgb, var(--accent) 45%, transparent); }
 
+/* Cíl kliknutí v řádku dění (sekce 26) — kam ten řádek vede. Vlastní jméno schválně:
+   `.goto` v tomhle dokumentu patří kartě dashboardu (`.card.go .goto`), takže naholo
+   napsané by se podstrčilo jí. `.out` je ten jediný řádek, který vede z aplikace ven. */
+.fd-to {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; color: var(--accent); white-space: nowrap;
+}
+.fd-to.out { color: var(--ink-3); }
+
 /* ============================================================
    LIŠTA DIFFU A REŽIM VEDLE SEBE
    ============================================================ */
@@ -2321,6 +2330,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           <div class="doc-group">
             <div class="doc-cap">Okno aplikace</div>
             <a class="doc-link" href="#prehled" data-page="prehled"><span class="t">Přehled</span></a>
+            <a class="doc-link" href="#deni" data-page="deni"><span class="t">Dění</span></a>
           </div>
           <div class="doc-group">
             <div class="doc-cap">Pull request</div>
@@ -2394,6 +2404,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           <div class="cap">Okno aplikace</div>
           <div class="rows">
             <a href="#prehled"><span>Přehled</span></a>
+            <a href="#deni"><span>Dění</span></a>
           </div>
         </div>
         <div class="doc-card">
@@ -3119,6 +3130,413 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
         <div class="doc-move">
           <a class="prev" href="#uvod"><span class="dir">← předchozí</span><span class="t">Úvod</span></a>
+          <a class="next" href="#deni"><span class="dir">další →</span><span class="t">Dění</span></a>
+        </div>
+      </div>
+
+      <div class="doc-page" id="deni" data-title="Dění">
+        <div class="doc-head">
+          <div class="doc-where"><span>Okno aplikace</span><b>Dění</b></div>
+          <h2>Dění</h2>
+          <p class="doc-lede">Kde se v aplikaci sbírá to, co proletělo jako notifikace.</p>
+        </div>
+
+  <section class="section" id="s26">
+    <div class="section-head">
+      <div class="eyebrow">26 — Pátá sekce railu · Dění</div>
+      <h2>Notifikace proletí, dění zůstane</h2>
+      <p class="muted">
+        Notifikace jsou dneska jediné místo, kde se o události dozvím (sekce 12) — a je to místo,
+        které <strong>nemá historii</strong>. Banner zmizí, <strong>stejná identita přepíše to, co
+        ještě visí</strong> (#87), a v okně po tom zbude <strong>jediný údaj</strong>: čas
+        posledního doručení u zvonku ve stavovém řádku (#138). Když jsem byl dvě hodiny na
+        schůzce, aplikace ví, co se stalo, a nemá to kde ukázat.
+      </p>
+      <p class="muted">
+        <strong>Sekce railu, ne blok na dashboardu ani popover.</strong> Dashboard odpovídá na
+        „co hoří teď“ a kreslí <strong>nejvýš pět řádků na blok</strong> (#371), takže dění by
+        v něm byla ukázka, ne místo, kde se dá zůstat; popover se zavře prvním kliknutím a nedá
+        se v něm rolovat. Rail je naopak přesně to místo pro obsah, který <strong>není o jednom
+        PR</strong>. A <strong>návrh ten slot už kreslí</strong>: pátá ikona <code>◷</code> stojí
+        v railu od sekce 01 a v aplikaci ji nikdo neotevře, protože <code>RailSection</code> má
+        čtyři případy — položka, po jejímž otevření je prázdno, je horší než položka, která ještě
+        není. Dění je ten obsah, na který ta ikona čekala; <strong>kreslený rail se tím
+        nemění</strong>, jen dostane jméno a odznak.
+      </p>
+      <p class="muted">
+        <strong>Nejmenuje se to Novinky</strong>, i když se o tom tak mluvilo. <em>Novinky</em> je
+        v aplikaci <strong>okno s release notes</strong> (sekce 11), tedy „co je nového
+        v PRismu“; tohle je „co se stalo na pull requestech“. Dvě různé věci pod jedním jménem se
+        v ⌘K nedají rozeznat.
+      </p>
+    </div>
+
+    <div class="scroller">
+      <div class="win tall">
+        <div class="titlebar">
+          <div class="lights"><i></i><i></i><i></i></div>
+          <div class="tabstrip">
+            <div class="tab home active"><span class="label">Přehled</span></div>
+            <div class="tab"><span class="dot" style="background: var(--crit);"></span><span class="repo">vault#85</span></div>
+            <div class="tab-add">+</div>
+          </div>
+          <div class="toolbtns">
+            <span class="tbtn key">⌘K</span>
+            <span class="tbtn">⟳</span>
+          </div>
+        </div>
+
+        <div class="body-grid">
+          <nav class="rail">
+            <div class="ri">⌂</div>
+            <div class="ri">☰<span class="badge">13</span></div>
+            <div class="ri">↑<span class="badge">2</span></div>
+            <div class="ri">✎</div>
+            <!-- Odznak s počtem neviděných tady schválně není: na aktivní sekci se nekreslí
+                 (poznámka 95). Odznak v tomhle railu totiž ikonu **překryje** — změřeno na
+                 sekci 21, kde pod `13` a `2` není vidět `☰` ani `↑` —, takže na položce, ve
+                 které zrovna stojím, by zbyl červený puntík bez identity. -->
+            <div class="ri on" title="Dění — co se stalo na pull requestech">◷</div>
+            <div class="sep"></div>
+            <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
+            <div class="grow"></div>
+            <div class="ri">⚙</div>
+          </nav>
+
+          <div class="dash">
+            <div class="dash-head">
+              <div>
+                <h4>Dění</h4>
+                <div class="sub">Co se stalo na pull requestech, když jsem se nekoukal. Naposledy jsem tu byl v 08:12.</div>
+              </div>
+              <div class="when">obnoveno 09:12</div>
+            </div>
+
+            <div class="block">
+              <header>
+                <span>Dnes · 4 nové</span>
+                <!-- Počet patří do nadpisu, ne do `.more`: `.more` je akcentová, tedy
+                     „na tohle se dá kliknout“, a počítadlo nikam nevede. -->
+                <span class="more">co se hlásí ↗</span>
+              </header>
+
+              <div class="tl">
+                <div class="tl-item">
+                  <span class="tl-dot warn">⟲</span>
+                  <div class="tl-line">
+                    <b>Nálezy zastaraly</b> — přišly 3 commity, hlava je teď
+                    <span class="sha">9c1f0ab</span>
+                    <span>keboola/vault#85</span>
+                    <span class="ago">před 2 min</span>
+                    <span class="fd-to">→ Commity</span>
+                  </div>
+                </div>
+
+                <div class="tl-item">
+                  <span class="tl-dot acc">💬</span>
+                  <div class="tl-line">
+                    <!-- Jméno a dvojtečka v jednom prvku: `.tl-line` je flex s mezerou 7 px,
+                         takže `<b>odinuv</b>: …` by dvojtečku odsadilo od jména. -->
+                    <span><b>odinuv</b>: opravdu to potřebuje ten mutex?</span>
+                    <span>· a 1 review od Copilota</span>
+                    <span>keboola/app-project-restore#91</span>
+                    <span class="ago">před 15 min</span>
+                    <span class="fd-to">→ Konverzace</span>
+                  </div>
+                </div>
+
+                <div class="tl-item">
+                  <span class="tl-dot crit">!</span>
+                  <div class="tl-line">
+                    <b>3 nálezy · 1 blokuje</b> <span>· php-review, security-review</span>
+                    <span>keboola/vault#85</span>
+                    <span class="ago">před 20 min</span>
+                    <span class="fd-to">→ Nálezy</span>
+                  </div>
+                </div>
+
+                <div class="tl-item">
+                  <span class="tl-dot acc">↓</span>
+                  <div class="tl-line">
+                    <b>Nový PR k review</b> <span>· chore: modernize dependencies (Symfony 8-ready)</span>
+                    <span>keboola/vault#85 · odinuv</span>
+                    <span class="ago">před hodinou</span>
+                    <span class="fd-to">→ Přehled</span>
+                  </div>
+                </div>
+
+                <div class="tl-new">
+                  <span>Tady jsem skončil</span>
+                  <i></i>
+                  <span>dnes 08:12</span>
+                </div>
+
+                <div class="tl-item">
+                  <span class="tl-dot ok">✓</span>
+                  <div class="tl-line">
+                    <b>Čisté review</b> <span>· 3 skilly · 1,04 $</span>
+                    <span class="botchip">bez banneru</span>
+                    <span>keboola/job-queue-api#402</span>
+                    <span class="ago">v 07:58</span>
+                    <span class="fd-to">→ Průběh</span>
+                  </div>
+                </div>
+
+                <div class="tl-item">
+                  <span class="tl-dot">−</span>
+                  <div class="tl-line" style="color: var(--ink-3);">
+                    <b style="color: var(--ink-2);">Už není ve frontě</b>
+                    <span>· mergnuto, nebo zrušený request — z fronty se to nepozná</span>
+                    <span>keboola/connection#21663</span>
+                    <span class="ago">v 07:41</span>
+                    <span class="fd-to out">GitHub ↗</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="block">
+              <header>
+                <span>Včera · čtvrtek 20. srpna</span>
+              </header>
+
+              <div class="tl">
+                <div class="tl-item">
+                  <span class="tl-dot crit">✕</span>
+                  <div class="tl-line">
+                    <b>Review se nepovedlo</b> <span>· session skončila s kódem 1 — nálezy se nemají kde vzít</span>
+                    <span>keboola/connection#21663</span>
+                    <span class="ago">v 18:20</span>
+                    <span class="fd-to">→ Průběh</span>
+                  </div>
+                </div>
+
+                <div class="tl-item">
+                  <span class="tl-dot acc">↻</span>
+                  <div class="tl-line">
+                    <b>Znovu k review</b> <span>· od mého review přišlo 5 commitů</span>
+                    <span>keboola/job-queue-api#402 · odinuv</span>
+                    <span class="ago">v 17:05</span>
+                    <span class="fd-to">→ Přehled</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="statusbar">
+          <span class="sitem plain">Vše v pořádku</span>
+          <span class="sp"></span>
+          <span class="sitem">13 cizích · 5 mých</span>
+          <span class="sitem">≥ 3,12 $</span>
+          <span class="sitem">🔔 09:12</span>
+          <span class="sitem"><span class="d" style="background: var(--ok);"></span>GitHub</span>
+          <span class="sitem"><span class="d" style="background: var(--ok);"></span>Claude</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">87</span>
+        <span class="body">
+          <b>Značka poslední návštěvy, ne přečteno u položky</b>
+          <span>Jeden časový údaj na celou sekci a nad ním pruh <em>Tady jsem skončil</em> —
+          tedy <b>tentýž mechanismus, jaký už drží konverzaci</b> (<code>VisitLedger</code>,
+          <code>Policy.conversationRows</code>, #183 a #361), jen s vlastním klíčem. Příznak
+          u každé položky by byl druhá odpověď na tutéž otázku a zápis na každý řádek.
+          Značka se posouvá <b>až při odchodu ze sekce</b>, ne při vstupu: kdyby se přepsala
+          při otevření, přestalo by být nové zrovna to, na co se koukám — je to tatáž
+          nesymetrie jako <code>seedVisitBaseline(for:)</code> u cizí aktivity (#335).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">88</span>
+        <span class="body">
+          <b>Od nejnovějšího, takže pruh je pod novým</b>
+          <span>V konverzaci se čte odshora dolů a pruh stojí <b>nad</b> novinkami; tady je to
+          seznam, do kterého se chodí zpátky, takže nejnovější je nahoře — <b>totéž rozhodnutí
+          jako u seznamu commitů</b> (#316). Popisek se tím musí obrátit: <em>Nové od tvé
+          poslední návštěvy</em> by v obráceném pořadí ukazovalo na to, co už jsem viděl.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">89</span>
+        <span class="body">
+          <b>Šest druhů, a čtyři z nich už tečou</b>
+          <span>Sloupec, který se plní jedinou věcí, by byl seznam výsledků review pod jiným
+          jménem. Co je novinka a odkud se bere, je v tabulce níž — <b>nové síťové volání
+          v tom není žádné</b>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">90</span>
+        <span class="body">
+          <b>Zápis nezávisí na přepínačích</b>
+          <span>Přepínače v nastavení (#86) rozhodují o <b>vyrušení</b>, ne o záznamu — a když
+          notifikace nedorazila, řekne to řádek chipem <em>bez banneru</em>. Bez toho by
+          „nepřišlo mi to“ nemělo na obrazovce odpověď. Platí to i pro <b>odmítnuté
+          oprávnění</b>: dění je pak jediné místo, kde se ty události vůbec dají přečíst —
+          dneska po nich zbude jen věta ve stavovém řádku, že notifikace nefungují.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">91</span>
+        <span class="body">
+          <b>Každý řádek někam vede a je to na něm vidět</b>
+          <span>Vpravo stojí <b>cíl</b>, ne šipka bez obsahu: klik otevře záložku toho PR
+          a přepne na ten tab, kde je co vidět — nálezy do <em>Nálezů</em>, cizí komentář do
+          <em>Konverzace</em> (na pruh <em>od minule</em>), zastaralé nálezy do <em>Commitů</em>,
+          doběhlé i spadlé review do <em>Průběhu</em>. Jde to <b>jednou</b> cestou
+          (<code>openTab(_:)</code> + cílový tab), tou samou, jakou musí jít i klik na
+          notifikaci — ten dneska nastaví jen výběr a v okně se nestane nic (#409). Novinka,
+          která nikam nevede, je ta stejná chyba nakreslená.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">92</span>
+        <span class="body">
+          <b>Řádek, který vede jen ven, to musí přiznat</b>
+          <span>PR, který z fronty odešel, není v seznamu, takže se nedá otevřít — a zašedlá
+          šipka <em>→ Nálezy</em> by lhala. Ten jediný řádek proto vede <b>na GitHub</b>
+          a pozná se to i barvou. Text u něj netvrdí, <b>proč</b> PR odešel: mergnuto od
+          zrušeného review requestu se ze samotné fronty rozlišit nedá a dotahovat kvůli
+          jednomu řádku detail je volání za nic.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">93</span>
+        <span class="body">
+          <b>Přežívá restart, na rozdíl od zvonku</b>
+          <span><code>DeliveredNotification</code> se drží <b>v paměti</b> schválně (#138) —
+          odpovídá na „funguje mi to teď“ a k té otázce je čas z minulého spuštění zavádějící.
+          Dění je opačná otázka („co se stalo“), takže musí být <b>na disku</b>, jako
+          <code>AnnouncedPullRequests</code> nebo <code>VisitLedger</code>. Strop je
+          <b>200 položek</b>, ne dní: dění odpovídá na „co jsem prošvihl“, a to je omezené
+          pozorností, ne kalendářem — týdenní okno jako u <code>SpendLedger</code> by
+          usekávalo přesně tu dovolenou, kvůli které se sem chodí.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">94</span>
+        <span class="body">
+          <b>Bez filtru, dokud není co filtrovat</b>
+          <span>Sekce má den jako nadpis bloku a strop 200 položek, takže se dá projít.
+          Odškrtávátka po druzích by teď byla ovládání nad ničím; vydělají si je, teprve až
+          budou výsledky review přehlušovat zbytek. Jediný odkaz v hlavičce vede tam, kde se
+          <b>hlášení</b> vypíná (sekce 10) — to je to, co v téhle sekci chci nejčastěji
+          změnit.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">95</span>
+        <span class="body">
+          <b>Odznak je tentýž červený jako u fronty — a na aktivní sekci se nekreslí</b>
+          <span>Počet neviděných nese <b>stejný odznak</b> jako fronta a vlastní PR; třetí
+          barva by z railu udělala legendu, a počítadlo, které otravuje, se spravuje
+          <b>posunem značky</b>, ne bledší červenou. Na položce, ve které zrovna stojím, ale
+          odznak nemá co říct — a hlavně: <b>v tomhle railu odznak ikonu překryje</b>. Změřeno
+          na sekci 21, kde pod <code>13</code> a <code>2</code> není vidět <code>☰</code> ani
+          <code>↑</code>: dvojmístný i jednomístný odznak vyjde na 20 bodů a sedí na
+          <code>top: 1px; right: 0</code>. Na aktivní položce by tak zbyl červený puntík bez
+          identity, takže tady ho nekreslím a počet stojí v nadpisu bloku. <b>Ta překrytá ikona
+          je vada dnešního railu</b>, ne tohohle zákresu — patří k ní vlastní issue.</span>
+        </span>
+      </div>
+    </div>
+
+    <h3>Co je novinka a odkud by se vzala</h3>
+    <p class="muted">
+      Šest druhů. <strong>Čtyři z nich už aplikace zná</strong> — jsou to tytéž události, které
+      posílá jako notifikace (sekce 12), takže dění není nový zdroj pravdy, ale první místo, kde
+      se ty existující ukládají. Zbylé dva se dopočítají z toho, co už tikem proteče;
+      <strong>nové síťové volání nepřidává ani jeden</strong>.
+    </p>
+
+    <div class="frame flat" style="overflow-x: auto;">
+      <table class="impact">
+        <thead>
+          <tr><th>Druh</th><th>Zdroj</th><th>Odkud se bere</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>nový PR · znovu k review</td>
+            <td><span class="pill ok">je</span></td>
+            <td><code>AnnouncedPullRequests</code> a <code>newcomers(in:)</code> (#85, #137) —
+              snímek fronty se porovnává při každém úspěšném tiku.</td>
+          </tr>
+          <tr>
+            <td>review doběhlo</td>
+            <td><span class="pill ok">je</span></td>
+            <td>Tam, kde se review uzavírá (#82). Rozhoduje <code>reviewState(for:)</code>, tedy
+              tentýž stav, jaký ukazuje řádek seznamu — nálezy, čisto, selhání i nejistý
+              výsledek (#383).</td>
+          </tr>
+          <tr>
+            <td>cizí aktivita na mém PR</td>
+            <td><span class="pill ok">je</span></td>
+            <td><code>Policy.foreignActivity</code> z rozhlídky na pozadí (#335) — komentáře,
+              odpovědi ve vláknech a odeslaná review včetně Copilotova.</td>
+          </tr>
+          <tr>
+            <td>nálezy zastaraly</td>
+            <td><span class="pill stale">dopočítat</span></td>
+            <td>Hlava se posunula pod uloženými nálezy — tvrdá podmínka č. 5 to už hlídá
+              a <code>Policy</code> to kreslí jako žlutý proužek. <b>Dneska to ale uvidí jen
+              ten, kdo ten PR zrovna otevře</b>, a je to přitom ta událost, po které je práce
+              k zahození.</td>
+          </tr>
+          <tr>
+            <td>PR odešel z fronty</td>
+            <td><span class="pill stale">dopočítat</span></td>
+            <td>Doplněk k <code>newcomers(in:)</code> nad tímtéž snímkem — kdo v něm byl a už
+              není. <b>Proč</b> odešel se z fronty nepozná, takže to řádek netvrdí
+              (poznámka 92).</td>
+          </tr>
+          <tr>
+            <td>spadlé CI</td>
+            <td><span class="pill idle">ne</span></td>
+            <td>Zamítnuto. Checky se tahají <b>až při zobrazení PR</b> (<code>loadDetail</code>,
+              #306), ne tikem, takže by se za tím musel postavit vlastní polling — a to už není
+              zápis toho, co proteklo, ale nový zdroj. Vlastní issue, ne odstín tohohle.</td>
+          </tr>
+          <tr>
+            <td>poruchy aplikace</td>
+            <td><span class="pill idle">ne</span></td>
+            <td>Rozbitá konfigurace, nedostupný <code>gh</code>, pozastavený automat — to je
+              stav <b>teď</b> a odpovídá na něj stavový řádek (sekce 13). Dění je o pull
+              requestech; kdyby v něm byly i tyhle, byl by z něj log.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Když se nic nestalo — a když nic nechodí</h3>
+    <p class="muted">
+      Dvě prázdna, která se nesmí slít, ze stejného důvodu jako <em>čisté review</em>
+      a <em>review se nepovedlo</em>: první znamená „klid“, druhé „něco je rozbité“.
+    </p>
+
+    <div class="duo">
+      <div class="empty">
+        <span class="glyph" style="background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok);">✓</span>
+        <span class="t">Za poslední dny se nic nestalo</span>
+        <span class="d">Nový PR, výsledek review nebo cizí komentář se objeví tady. Poslední tik v 9:41.</span>
+      </div>
+
+      <div class="empty">
+        <span class="glyph" style="background: color-mix(in srgb, var(--stale) 16%, transparent); color: var(--stale);">🔔</span>
+        <span class="t">Notifikace jsou zakázané</span>
+        <span class="d">Bannery nechodí, ale <b>tenhle seznam se plní dál</b> — povolit je jde
+          jedině v Nastavení systému.</span>
+        <span class="a"><span class="mini pri">Otevřít nastavení systému</span></span>
+      </div>
+    </div>
+  </section>
+
+        <div class="doc-move">
+          <a class="prev" href="#prehled"><span class="dir">← předchozí</span><span class="t">Přehled</span></a>
           <a class="next" href="#pr-prehled"><span class="dir">další →</span><span class="t">Přehled</span></a>
         </div>
       </div>
@@ -3921,7 +4339,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   </section>
 
         <div class="doc-move">
-          <a class="prev" href="#prehled"><span class="dir">← předchozí</span><span class="t">Přehled</span></a>
+          <a class="prev" href="#deni"><span class="dir">← předchozí</span><span class="t">Dění</span></a>
           <a class="next" href="#pr-soubory"><span class="dir">další →</span><span class="t">Změněné soubory</span></a>
         </div>
       </div>
