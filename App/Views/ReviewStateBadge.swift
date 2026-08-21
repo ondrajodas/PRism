@@ -35,6 +35,9 @@ struct ReviewStateBadge: View {
         ReviewStateBadge(state: .dismissed(findings: 3))
         ReviewStateBadge(state: .timedOut(findings: 2), blocking: 1)
         ReviewStateBadge(state: .failed(detail: "boom"))
+        ReviewStateBadge(state: .inconclusive(reason: .unreadCode))
+        ReviewStateBadge(state: .inconclusive(reason: .noReport))
+        ReviewStateBadge(state: .inconclusive(reason: .droppedFindings))
         ReviewStateBadge(state: .stale)
     }
     .padding()

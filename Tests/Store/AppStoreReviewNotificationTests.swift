@@ -166,7 +166,9 @@ struct AppStoreReviewNotificationTests {
         store.startReview(for: pr)
         try await waitUntilIdle(store)
 
-        #expect(center.delivered.first?.title == "Review se nepovedlo")
+        // Od #383 má vlastní titulek — session doběhla, takže „Review se nepovedlo“ o ní
+        // nemluví pravdu. Rozhoduje ale to druhé tvrzení: od čistoty se to musí lišit.
+        #expect(center.delivered.first?.title == "Z review se čisto tvrdit nedá")
         #expect(center.delivered.first?.title != "Čisté review")
     }
 

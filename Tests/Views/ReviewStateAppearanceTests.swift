@@ -86,11 +86,33 @@ struct ReviewStateAppearanceTests {
         #expect(ReviewStateAppearance.color(of: .running(finished: 2, total: 3), blocking: 1) != .accentColor)
     }
 
-    @Test("Zastaralé zůstává žluté")
-    func staleStaysYellow() {
+    @Test("Zastaralé zůstává okrové")
+    func staleStaysOchre() {
         // Nálezy patří commitu, který v PR není — to přebíjí i blokující.
-        #expect(ReviewStateAppearance.color(of: .stale, blocking: 2) == .yellow)
         #expect(ReviewStateAppearance.label(of: .stale, blocking: 2) == "zastaralé")
+        // Od #383 **z palety**, ne systémová `.yellow`: návrh má `.pill.stale { color: var(--stale) }`
+        // a systémová `#FFCC00` měla na vlastní kapsli ve světlém režimu kontrast 1,41. Tatáž
+        // výměna jako u `dismissed` v #309 a ze stejného důvodu.
+        #expect(ReviewStateAppearance.color(of: .stale, blocking: 2) == Palette.stale)
+        #expect(ReviewStateAppearance.color(of: .stale, blocking: 2) != .yellow)
+    }
+
+    /// Řádek a chip revieweera mluví o tomtéž běhu, takže se **nesmí lišit ani odstínem** (#383).
+    /// Do #383 tady byla systémová žlutá a chip kreslil `Palette.stale` — a komentář u toho tvrdil,
+    /// že je to jedna barva. Nález Copilota na #403; tvrzení místo komentáře.
+    @Test("Neprůkazné má v řádku i v chipu jednu barvu")
+    func inconclusiveSharesOneColourWithTheChip() {
+        for reason in InconclusiveReason.allCases {
+            let row = ReviewStateAppearance.color(of: .inconclusive(reason: reason))
+            #expect(row == Palette.stale)
+            #expect(row == ReviewerChipsView.color(.inconclusive("cokoli")))
+            #expect(row != .yellow)
+            // A od `zastaralé` se to pozná **textem**, ne barvou — tu mají schválně stejnou.
+            #expect(
+                ReviewStateAppearance.label(of: .inconclusive(reason: reason))
+                    != ReviewStateAppearance.label(of: .stale)
+            )
+        }
     }
 
     @Test("Díl proužku má barvu podle výsledku")

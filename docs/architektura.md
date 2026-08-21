@@ -34,7 +34,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `RequestedReviewer` | Kdo na PR stojí a jak odpověděl. Je to **stav, ne událost**: konverzace zná `reviewRequested`/`reviewRequestRemoved`, tedy „to se stalo“ |
 | `PullRequestMetadata` | Snímek labelů a reviewerů (#392). **Vlastní vedle `PullRequest`**, protože `fetchDetail` volá i pre-flight publisheru a `latestReviews` nese celá těla review |
 | `MetadataState` | `loading` / `loaded` / `failed` u toho snímku. Existuje kvůli jedné věci: **„labely tu nejsou“ se nesmí splést s „labely jsem nezjistil“** — podle prvního se sekce nekreslí, podle druhého se nesmí dát měnit sada, kterou aplikace nezná |
-| `ReviewState` | Stav review v řádku seznamu — deset případů, viz níž |
+| `ReviewState` | Stav review v řádku seznamu — jedenáct případů, viz níž |
+| `InconclusiveReason` | Proč se z doběhlého review **čisto tvrdit nedá** (#383): `droppedFindings`, `noReport`, `unreadCode`. Nese i pořadí přednosti (`byPrecedence`) — v jednom záznamu se ty důvody umí sejít |
 | `ReviewVerdict` | Návrh, co s PR udělat: `approve` / `requestChanges`. Jako jediný **není `Codable`** — neukládá se, odvozuje se z uložených nálezů |
 | `EffectiveVerdict` | Verdikt, který na draftu **platí**, a jeho původ (`suggested`/`chosen`). Taky **není `Codable`** — počítá se, viz níž |
 | `ProjectLanguage` | Čím je repo psané — klíč mapy „jazyk → sada skillů“. **Není to `Syntax.Language`**, viz níž |
@@ -92,8 +93,28 @@ Tři věci, které se u nich nemají rozbít:
   nic nenašlo) je opak `failed` (session spadla), `checkoutFailed` se spraví opakováním
   clonu a `timedOut` si drží částečné nálezy. Případy: `notStarted`, `queued`, `cloning`,
   `checkoutFailed(detail:)`, `running(finished:total:)`, `clean`, `completed(findings:)`,
-  `dismissed(findings:)`, `failed(detail:)`, `timedOut(findings:)`, `interrupted(findings:)`,
-  `stale`.
+  `dismissed(findings:)`, `inconclusive(reason:)`, `failed(detail:)`, `timedOut(findings:)`,
+  `interrupted(findings:)`, `stale`.
+- **`inconclusive` je třetí stav vedle `clean` a `failed`** (#383) a vznikl proto, že se do té
+  doby slíval s **oběma**. Reviewer, který nepřečetl kód a nahlásil prázdný seznam, se kreslil
+  jako `čisté`; reviewer, který `ReportFindings` nezavolal vůbec, jako `selhalo` — přitom jeho
+  session skončila `success`. Obojí je nepravda o téže věci: **nevíme**. Odznak proto říká, co
+  chybí (`kód nepřečten`, `bez hlášení`, `ztracené nálezy`), je **okrový** jako `stale` (výsledek,
+  který se nedá použít, ne porucha) a v prázdném tabu nálezů stojí věta i s tím, čím to pustit
+  znovu.
+
+  **Okrová jde z palety, ne ze systému, a je to výjimka z pravidla v `ReviewStateAppearance`**
+  („akcent a mint z palety, zbytek škály ze systému“). Opírá se o dvě věci: návrh má
+  `.pill.stale { color: var(--stale) }`, takže systémová žlutá byla **odchylka od schváleného
+  mockupu**, a odznak je text na vlastní kapsli — systémová `#FFCC00` na ní má ve světlém režimu
+  kontrast **1,41** (na ploše 1,51), kdežto token **4,00** a 4,87; v tmavém je to výměna 9,28 →
+  6,38. Přebarvilo se s ním i `zastaralé`, kde ta tichá vada ležela od #172. Tatáž úvaha i tentýž
+  způsob rozhodnutí jako u `dismissed` v #309 — čitelnost, ne „mají to i tokeny“. Že řádek a chip
+  revieweera kreslí **jednu** barvu, drží od #383 tvrzení v `ReviewStateAppearanceTests`, ne
+  komentář (nález Copilota na #403).
+
+  Co se tím **nezměnilo**: `failed` zůstává session, která spadla, a nese svůj stderr. Rozdíl
+  mezi těmi dvěma je `run.outcome` — ne to, jak prázdný je výsledek.
 - **`interrupted` není `timedOut`** (#97). Oba znamenají „nedoběhlo, částečné nálezy zůstaly“,
   ale vedou jinam: timeout říká, že je review pomalé — a limit **jde zvednout v nastavení** na
   stránce `Review a skilly`, globálně i per repo (#320) —, přerušení že spadla aplikace (nedá se
@@ -5273,6 +5294,9 @@ Věci, které se u toho nemají rozbít:
 | `Policy.mergedFindings(_:reporting:)` | Slití **sady** nálezů z jednoho volání `ReportFindings` do toho, co dorazilo dřív (#381): pozdější sada přepíše dřívější **podle místa**, uvnitř sady se neslévá nic a nic se nezahodí potichu. Není to identita z `Policy.key(of:)` a nemá být — tam se páruje napříč běhy |
 | `ReviewRecord.activeFindings`, `.dismissal(of:)`, `.setDismissal(_:of:)` | Odmítnuté nálezy (#113) — čtení i zápis na jednom místě |
 | `Policy.suggestedVerdict(for:)` | Návrh verdiktu nad `ReviewRecord`. `nil` = není z čeho soudit |
+| `Policy.isConclusive(_:)`, `Policy.inconclusiveReason(of:)`, `Policy.inconclusiveReason(for:)` | Dá se z běhu (resp. z celého záznamu) tvrdit čisto, a když ne, tak proč (#383). **Jediné místo**, kde se ta otázka rozhoduje — čte ji návrh verdiktu, chip revieweera i díl proužku |
+| `Policy.codeReading(of:)` | Otevřel běh soubor z pracovní kopie? `read` / `unread` / **`unknown`** (#383). Rozhoduje uložená osa, ne cena; `unknown` je odpověď, ne slabší `unread` |
+| `Policy.inconclusiveDetail(_:)` | Věta k důvodu — čte ji prázdný tab nálezů, notifikace i nápověda, takže je na jednom místě |
 | `Policy.effectiveVerdict(of:suggestion:)` | Který verdikt **platí** a odkud je — moje volba, jinak návrh (#114) |
 | `Policy.prefillableSuggestion(_:author:viewer:)`, `Policy.isOwn(author:viewer:)` | Smí se návrhem předvyplnit? Na vlastním PR ne. Samo porovnání dělá od #330 `ownership(ofAuthor:mine:)` — na „je to moje?“ nesmí být dvě odpovědi |
 | `Policy.ownLogins(viewer:configured:)`, `Policy.ownership(of:mine:)`, `Policy.ownership(ofAuthor:mine:)` | Čí je PR (#330) → `PullRequestOwnership`. **Množina loginů**, ne jeden řetězec (viewer + volitelný seznam z konfigurace), porovnání bez ohledu na velikost písmen, **prázdná množina znamená všechno cizí** |
@@ -5313,7 +5337,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
 | `Policy.mostSevereFinding(in:categories:)` | Nález, kterým se začíná (#200) — první ze `sorted`, tedy ten nahoře v panelu. Vlastní škála závažnosti z toho nevzniká |
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
-| `Policy.dashboard(pullRequests:records:drafts:categories:since:mine:conversation:handoff:head:tracksOwnSource:)` | Podklad startovní obrazovky (#181): **pět** karet od #331 (`Dashboard.MineCard` nese počet, „čeká na tah“ a `isTracked`) a rozpad nálezů podle revieweera (`Dashboard`, `ReviewerShareOfFindings`). Karta `Moje PR` se počítá **tady, ne vedle** — dashboard je jeden snímek, který si view bere jednou za překreslení |
+| `Policy.dashboard(pullRequests:records:drafts:categories:since:mine:conversation:handoff:head:tracksOwnSource:)` | Podklad startovní obrazovky (#181): **pět** karet od #331 (`Dashboard.MineCard` nese počet, „čeká na tah“ a `isTracked`) a rozpad nálezů podle revieweera (`Dashboard`, `ReviewerShareOfFindings`). Karta `Moje PR` se počítá **tady, ne vedle** — dashboard je jeden snímek, který si view bere jednou za překreslení. `ReviewerShareOfFindings` nese od #383 i `isConclusive`: **nula v legendě není čisto**, takže puntík zezelená jedině tehdy, když měl reviewer v okně aspoň jeden průkazný běh — jinak je šedý jako díl proužku u řádku |
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí obou front na dashboardu (#181, #331) — podle závažnosti, ne podle času (`QueueEntry`). Vlastní PR se řadí **tou samou funkcí**: blokující nález je i u nich to, co si žádá pozornost první |
 | `Policy.dashboardBlock(_:of:)`, `Policy.destination(of:)`, `Policy.dashboardRowLimit` | Strop **pěti řádků** na blok dashboardu i text patky (`DashboardBlock`, #371) a kam vede která karta (`DashboardCard` → `DashboardDestination`). Strop je **řez, ne řazení** a **o kresbě, ne o množině** — karta nad blokem dál počítá celou frontu. Rozřazení bloku dělá `PullRequestOwnership`, tedy tentýž typ jako obě fronty; `destination(of: .spend)` je **`nil`**, protože útrata není seznam, na který by se dalo přepnout |
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
@@ -5728,8 +5752,10 @@ Nad nálezy platí navíc:
     vidět — s nulovou šířkou by z proužku zmizela právě ta informace, že vůbec běžel.
   - **Pět výsledků, které se nesmí slít**: `blocking`, `findings`, `clean`, `dismissed`
     a `inconclusive`. `dismissed` není `clean` ze stejného důvodu jako u `ReviewState` (#113),
-    a `inconclusive` (spadlo, vytimeoutovalo, nereportovalo, ztratilo nález) není `clean`
-    proto, že zelený díl by tvrdil klid tam, kde se nálezy nemají kde vzít.
+    a `inconclusive` (spadlo, vytimeoutovalo, nereportovalo, ztratilo nález, **neotevřelo kód**)
+    není `clean` proto, že zelený díl by tvrdil klid tam, kde se nálezy nemají kde vzít. Od #383
+    o tom rozhoduje `Policy.inconclusiveReason(of:)`, ne vlastní dvojice `if`ů — do té doby svítil
+    proužek zeleně nad během, u kterého chip vedle něj hlásil `nejisté`.
   - **Nejistota přebíjí odmítnutí.** Běh, kterému se ztratil nález, vyjde `inconclusive` i tehdy,
     když jsem všechno, co dorazilo, odmítl: ztracený nález jsem neviděl, takže „všechno
     odmítnuto“ by nad ním tvrdilo víc, než data unesou. Pořadí kontrol je proto **nálezy →
@@ -6067,16 +6093,56 @@ Nad nálezy platí navíc:
 - **`suggestedVerdict` vrací `nil`, když není z čeho soudit** — a je to vlastní odpověď, ne
   opatrné `approve`. Schválit PR proto, že reviewer spadl, je nejdražší chyba, kterou
   aplikace umí udělat. Z běhu se dá vyvodit „je čisto“, jen když **doběhl**, **zavolal
-  `ReportFindings`** a **nic nezahodil**; zastaralý záznam nedá verdikt vůbec. Zahozený
+  `ReportFindings`**, **nic nezahodil** a od #383 **otevřel aspoň jeden soubor z pracovní
+  kopie**; zastaralý záznam nedá verdikt vůbec. Zahozený
   nález přitom bere `approve` **celému záznamu**, ne jen svému běhu — čistý výsledek jiného
   skillu o tom ztraceném nálezu nic neříká.
+- **Ta čtveřice podmínek žije na jednom místě** (`Policy.inconclusiveReason(of:)`, #383) a je to
+  změna proti stavu do #383, kdy si ji každý ze tří čtenářů skládal sám — a lišili se: `isConclusive`
+  se ptal na hlášení a ztracené nálezy, chip revieweera na totéž v jiném pořadí, díl proužku u řádku
+  taky, a **na čtení kódu se neptal nikdo**. Přesně ten druh „kontrola, která jinde v repu je, a tady
+  chybí“.
+
+  Dvě věci uvnitř té funkce nejsou zjevné: **běh, který něco našel, se na čtení kódu neptá**
+  (nálezy mluví samy za sebe a odebrat kvůli tomu `approve` nad neblokujícími nálezy by byl
+  poplach nad výsledkem, který je v okně celý vidět), a **pořadí důvodů je od nejkonkrétnějšího**
+  (`droppedFindings` → `noReport` → `unreadCode`), protože „část nálezů se ztratila“ řekne, co
+  dělat, kdežto „nepřečetl kód“ je nad tímtéž během pravda taky, jen řekne méně.
+- **Čtení kódu se pozná z uložené osy, ne z ceny** (`Policy.codeReading(of:)`, #383). `CodeReading`
+  má **tři** hodnoty a ta třetí je celý smysl toho typu: `read` (v ose je `Read` s cestou **uvnitř**
+  stromu), `unread` (ani jeden, a přitom je u všech pokusů vidět, kam sáhly) a `unknown` — osa
+  chybí (soubory z doby před #203, 15 ze 40 měřených běhů), nezná strom, je zkrácená (`dropped > 0`,
+  ořezává se **začátek**, tedy ta část, ve které se čte nejvíc), nemá jediný pokus, nebo je v ní
+  nástroj, u kterého cesta v záznamu **není**. Z chybějícího záznamu se nesmí stát obvinění — okno
+  by se rozkřičelo nad každým starším review a hláška by se přestala čítat.
+
+  Co do „nedá se soudit“ patří a proč, je vidět na uložených datech: **`Grep` nese vzor, ne cestu**
+  (`ToolAttempt.detailKeys` má `pattern` před `path`), takže z `AJDA-3003` nejde poznat, jestli se
+  hledalo ve stromě nebo v cizím transkriptu; **`Agent` a `Task` nemají detail vůbec**. Naopak
+  **`Bash` mezi ně nepatří**, i když `cat` přes vestavěný seznam čtecích příkazů projde: kdyby
+  patřil, pravidlo by se nespustilo nikdy — všechny čtyři doložené případy mají `git diff` uvnitř
+  stromu. Tvrzení je proto úzké a přesně takové, jaké záznam unese: **neotevřel soubor**, ne
+  „nedíval se do kódu“. A **`Glob` taky ne** — hledá jména, obsah nečte.
+
+  Dvě čísla, na kterých to rozhodnutí stojí (změřeno na 40 uložených bězích z cache):
+  pravidlo pojmenovalo **čtyři** běhy, všechny `security-review` s nulou nálezů z „levné“ éry, a
+  u `db-extractor-adapter#39` našel `code-review` na tomtéž commitu **dva nálezy** — doložené
+  falešné čisto. **Cena se do rozhodnutí nebere** a je to změřené, ne opatrnost: běh za 0,12 $
+  otevřel tři soubory a běh za 0,44 $ osmnáct, kdežto jeden z těch čtyř podezřelých stál 0,74 $.
+  Jako brána by cena vyrobila falešné poplachy a žádnou pravdu navíc.
+
+  **Oddělovač v předponě cesty je podmínka, ne kosmetika:** zadání pro revieweera (#120) leží jako
+  `<strom>.md`, tedy soubor **vedle** pracovní kopie se stejnou předponou, a přečte si ho i ten běh,
+  který se do kódu vůbec nepodíval (má ho každý ze čtyř doložených).
 - **Nálezy se berou ze všech běhů, i ze spadlých a vytimeoutovaných.** Selhal *běh*, ne
   nález — ten dorazil jako celý `ReportFindings` call. Filtrovat je podle stavu běhu by
   znamenalo, že spadlý reviewer s nahlášenou ztrátou dat vedle jednoho čistého běhu vyjde
   jako `approve`. Blokovat tedy umí i běh, který sám o sobě `approve` nedá.
-- **Chip `nejisté` je vlastní stav.** Běh, který doběhl, ale nezavolal `ReportFindings`
-  nebo se mu ztratil nález, není ani čistý, ani spadlý — a ukázat u něj „čisté“ znamená
-  schválený PR s neohlášenou chybou.
+- **Chip `nejisté` je vlastní stav.** Běh, který doběhl, ale nezavolal `ReportFindings`,
+  ztratil se mu nález nebo **neotevřel žádný soubor z pracovní kopie** (#383), není ani čistý,
+  ani spadlý — a ukázat u něj „čisté“ znamená schválený PR s neohlášenou chybou. Text v nápovědě
+  se u chipu liší od věty v tabu nálezů schválně: visí za pomlčkou v hlavičce nápovědy, takže je
+  kratší a s malým písmenem; **rozhodnutí ale sdílí** (`inconclusiveReason(of:)`).
 - **Běžící reviewer přebíjí starší výsledek**, protože to, co je na obrazovce, se právě
   přepisuje.
 - **Ztracený nález se hlásí i u chipu, který nálezy má** (`warning`). Stav zůstane

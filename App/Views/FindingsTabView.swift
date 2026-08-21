@@ -247,7 +247,7 @@ struct FindingsEmptyView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(verbatim: title)
                 .font(.callout)
-                .foregroundStyle(isFailure ? Palette.crit : Palette.ink2)
+                .foregroundStyle(titleColor)
                 .fixedSize(horizontal: false, vertical: true)
             if let detail {
                 // Mono a k vybrání, jako u ostatních chybových stavů v okně: text od `claude` nebo
@@ -258,15 +258,27 @@ struct FindingsEmptyView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
+            if let hint {
+                // Věta o tom, co dělat dál — obyčejným textem, ne mono: je naše, ne od `claude`.
+                Text(verbatim: hint)
+                    .font(.callout)
+                    .foregroundStyle(Palette.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var isFailure: Bool {
+    /// Barva věty. **Tři odstíny, ne dva** (#383): porucha je červená, neprůkazné review okrové
+    /// (tentýž token jako odznak u řádku a chip revieweera, ať se to nečte jako tři různé věci)
+    /// a zbytek je obyčejný sekundární text. Kdyby neprůkazné zůstalo v sekundární, čtlo by se
+    /// stejně klidně jako `čisté` — a tón je u téhle věty půlka sdělení.
+    private var titleColor: Color {
         switch reason {
-        case .failed, .checkoutFailed: true
-        default: false
+        case .failed, .checkoutFailed: Palette.crit
+        case .inconclusive: Palette.stale
+        default: Palette.ink2
         }
     }
 
@@ -274,6 +286,7 @@ struct FindingsEmptyView: View {
         switch reason {
         case .hiddenByReviewerFilter: "Nálezy jsou schované filtrem reviewerů."
         case .clean: "Review doběhlo a nic nenašlo."
+        case .inconclusive(let reason): Policy.inconclusiveDetail(reason)
         case .failed: "Reviewer spadl, takže nálezy nejsou — a to není totéž jako čisto."
         case .checkoutFailed: "Pracovní kopii se nepodařilo připravit, takže reviewer neběžel."
         case .running: "Review běží. Co se právě děje, je v tabu Průběh."
@@ -288,5 +301,17 @@ struct FindingsEmptyView: View {
         case .failed(let detail), .checkoutFailed(let detail): detail
         default: nil
         }
+    }
+
+    /// Co s tím udělat (#383). Jen u neprůkazného review — u ostatních stavů by to byla rada
+    /// k ničemu (`clean` řešit netřeba, spadlá session má vlastní `Zkopírovat příkaz`).
+    ///
+    /// **Odkazuje na tlačítko, které v okně je**, nekreslí nové: `Spustit review` stojí
+    /// v hlavičce PR vždycky, když nic neběží, a jednotlivý reviewer se pouští pravým tlačítkem
+    /// na svém chipu. Prázdný tab je ale plocha, na které se z toho nedá uhodnout nic.
+    private var hint: String? {
+        guard case .inconclusive = reason else { return nil }
+        return "Pusť ho znovu tlačítkem „Spustit review“ v hlavičce PR, "
+            + "nebo pravým tlačítkem na chipu revieweera jen jeho."
     }
 }

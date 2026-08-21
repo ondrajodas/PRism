@@ -50,7 +50,26 @@ enum ReviewStateAppearance {
         // se našlo“, kdežto tady je hlavní zpráva, že běh neskončil — `timeout · 0` oranžově
         // by vypadalo jako výsledek, a přitom je to selhání.
         case .checkoutFailed, .failed, .timedOut, .interrupted: .red
-        case .stale: .yellow
+        // **Okrová, ne červená ani zelená** (#383). Neprůkazné review neselhalo — session
+        // doběhla —, takže červená by o něm lhala; a zelená by lhala opačným směrem. Je to
+        // tatáž třída jako `stale`: výsledek, který se nedá použít, jen z jiného důvodu.
+        // Sdílený odstín je schválně, protože sdílené je i to, co se s tím dělá (pustit znovu);
+        // rozeznat se to má **textem**, který u obou stojí vedle puntíku.
+        //
+        // **Z palety, ne systémová `.yellow`** — a je to výjimka z pravidla o pár řádků výš
+        // („zbytek škály ze systému“), která se opírá o dvě věci, ne o vkus. **Návrh** má
+        // `.pill.stale { color: var(--stale) }`, tedy `#9A6700`, takže systémová žlutá je odchylka
+        // od schváleného mockupu — srovnat to s ním bránu nepotřebuje (#283). A **měření**:
+        // odznak je text na vlastní kapsli (`color.opacity(0.15)`), a systémová `#FFCC00` na ní má
+        // ve světlém režimu kontrast **1,41** (na ploše 1,51), tedy nečitelno; token má **4,00**
+        // a 4,87. V tmavém režimu je to výměna 9,28 → 6,38, tedy pořád s rezervou. U `zastaralé`
+        // to byla tichá vada od #172 — u tří nových odznaků by byla horší, protože právě text
+        // je to jediné, čím se od sebe liší.
+        //
+        // Tatáž úvaha jako u `dismissed` (#309), včetně toho, čím se rozhodlo: čitelnost ve
+        // světlém režimu, ne to, že „mají to i tokeny“. Chip revieweera kreslí `inconclusive`
+        // v `Palette.stale` od #218, takže tím řádek a chip nad ním konečně říkají barvou totéž.
+        case .inconclusive, .stale: Palette.stale
         }
     }
 
@@ -84,10 +103,24 @@ enum ReviewStateAppearance {
         // je z řádku poznat, kolik jsem toho přeskočil.
         case .dismissed(let findings): "odmítnuto · \(findings)"
         case .failed: "selhalo"
+        // Odznak říká **co chybí**, ne že je něco nejisté (#383): „nejisté“ je hodnocení, kdežto
+        // tyhle tři jsou fakta a každé vede k něčemu jinému. Krátké schválně — vejít se musí do
+        // řádku seznamu vedle titulku PR; celá věta je v nápovědě chipu a v prázdném tabu nálezů.
+        case .inconclusive(let reason): inconclusiveLabel(reason)
         case .timedOut(let findings): partialLabel("timeout", findings, blocking: blocking)
         // Ne „timeout“: běh neskončil limitem, ale s aplikací — a dělá se s tím něco jiného.
         case .interrupted(let findings): partialLabel("přerušeno", findings, blocking: blocking)
         case .stale: "zastaralé"
+        }
+    }
+
+    /// Odznak neprůkazného review (#383). Tři různé texty, protože jsou to tři různá zjištění —
+    /// a slít je do jednoho by znamenalo přesně tu záměnu, kvůli které stav vznikl.
+    private static func inconclusiveLabel(_ reason: InconclusiveReason) -> String {
+        switch reason {
+        case .droppedFindings: "ztracené nálezy"
+        case .noReport: "bez hlášení"
+        case .unreadCode: "kód nepřečten"
         }
     }
 

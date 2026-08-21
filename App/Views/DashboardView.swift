@@ -585,7 +585,10 @@ struct DashboardView: View {
                 ForEach(reviewers) { share in
                     HStack(spacing: 9) {
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(ReviewStateAppearance.color(of: share.findings > 0 ? .findings : .clean))
+                            // Nula zeleně **jen když je z čeho soudit** (#383): reviewer, který
+                            // v okně neměl jediný průkazný běh, dostane šedou jako díl proužku
+                            // u řádku — zelený puntík vedle nuly je tvrzení o čistotě.
+                            .fill(ReviewStateAppearance.color(of: Self.legendOutcome(of: share)))
                             .frame(width: 8, height: 8)
                         Text(verbatim: names[share.reviewer] ?? share.reviewer)
                             .font(.system(size: 12))
@@ -601,6 +604,16 @@ struct DashboardView: View {
             .padding(.horizontal, 13)
             .padding(.vertical, 12)
         }
+    }
+
+    /// Barva puntíku v legendě reviewerů — **tatáž škála jako díl proužku u řádku** (#383), aby
+    /// dashboard a fronta netvrdily o jednom reviewerovi každý něco jiného.
+    ///
+    /// `nonisolated static`, ať se to dá otestovat bez kreslení: je to jediný `if` nad tím, co
+    /// legenda ukazuje, a přesně ten se u #383 pletl.
+    nonisolated static func legendOutcome(of share: ReviewerShareOfFindings) -> ReviewerShare.Outcome {
+        if share.findings > 0 { return .findings }
+        return share.isConclusive ? .clean : .inconclusive
     }
 
     // MARK: - Co teď
