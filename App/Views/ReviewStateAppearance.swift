@@ -56,10 +56,20 @@ enum ReviewStateAppearance {
         // Sdílený odstín je schválně, protože sdílené je i to, co se s tím dělá (pustit znovu);
         // rozeznat se to má **textem**, který u obou stojí vedle puntíku.
         //
-        // Chip revieweera kreslí `inconclusive` v `Palette.stale` už od #218, takže tím řádek
-        // a chip nad ním konečně říkají barvou totéž — do #383 byl řádek červený a chip okrový.
-        case .inconclusive: .yellow
-        case .stale: .yellow
+        // **Z palety, ne systémová `.yellow`** — a je to výjimka z pravidla o pár řádků výš
+        // („zbytek škály ze systému“), která se opírá o dvě věci, ne o vkus. **Návrh** má
+        // `.pill.stale { color: var(--stale) }`, tedy `#9A6700`, takže systémová žlutá je odchylka
+        // od schváleného mockupu — srovnat to s ním bránu nepotřebuje (#283). A **měření**:
+        // odznak je text na vlastní kapsli (`color.opacity(0.15)`), a systémová `#FFCC00` na ní má
+        // ve světlém režimu kontrast **1,41** (na ploše 1,51), tedy nečitelno; token má **4,00**
+        // a 4,87. V tmavém režimu je to výměna 9,28 → 6,38, tedy pořád s rezervou. U `zastaralé`
+        // to byla tichá vada od #172 — u tří nových odznaků by byla horší, protože právě text
+        // je to jediné, čím se od sebe liší.
+        //
+        // Tatáž úvaha jako u `dismissed` (#309), včetně toho, čím se rozhodlo: čitelnost ve
+        // světlém režimu, ne to, že „mají to i tokeny“. Chip revieweera kreslí `inconclusive`
+        // v `Palette.stale` od #218, takže tím řádek a chip nad ním konečně říkají barvou totéž.
+        case .inconclusive, .stale: Palette.stale
         }
     }
 

@@ -3602,7 +3602,9 @@ rozkřičelo nad každým starším review naráz.
 
 V okně z toho je **třetí stav** vedle `čisté` a `selhalo` (`ReviewState.inconclusive(reason:)`):
 odznak říká, co chybí (`kód nepřečten`, `bez hlášení`, `ztracené nálezy`), je okrový jako
-`zastaralé` — session doběhla, takže červená by lhala — a v prázdném tabu nálezů stojí věta i s tím,
+`zastaralé` — session doběhla, takže červená by lhala —, a ta okrová jde **z palety** (`--stale`
+z návrhu), protože systémová žlutá měla na kapsli odznaku ve světlém režimu kontrast **1,41** proti
+4,00 u tokenu; přebarvilo se s ní i `zastaralé`, kde ta vada ležela od #172 (nález Copilota) a v prázdném tabu nálezů stojí věta i s tím,
 čím to pustit znovu. Nová věc na obrazovce to není: přeznačil se existující odznak, chip revieweera
 i díl proužku, takže brána na vzhled se neotevírala. Rozhodnutí o „čistu“ bydlí od #383 na **jednom
 místě** (`Policy.inconclusiveReason(of:)`) — do té doby si ho skládal každý ze tří čtenářů sám

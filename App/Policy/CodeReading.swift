@@ -114,8 +114,8 @@ extension Policy {
     /// `Edit` a `Write` v tom výčtu nejsou schválně: reviewer je nemá povolené (tvrdá podmínka
     /// č. 2), takže by se z jejich přítomnosti nemělo stát čtení — a kdyby se tam objevily, je to
     /// vada jinde než tady.
-    static let fileReadingTools: Set<String> = ["Read", "NotebookRead"]
+    private static let fileReadingTools: Set<String> = ["Read", "NotebookRead"]
 
     /// Nástroje, u kterých ze záznamu nejde poznat, kam sáhly.
-    static let opaqueTools: Set<String> = ["Grep", "Agent", "Task"]
+    private static let opaqueTools: Set<String> = ["Grep", "Agent", "Task"]
 }

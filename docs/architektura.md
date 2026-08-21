@@ -103,6 +103,16 @@ Tři věci, které se u nich nemají rozbít:
   který se nedá použít, ne porucha) a v prázdném tabu nálezů stojí věta i s tím, čím to pustit
   znovu.
 
+  **Okrová jde z palety, ne ze systému, a je to výjimka z pravidla v `ReviewStateAppearance`**
+  („akcent a mint z palety, zbytek škály ze systému“). Opírá se o dvě věci: návrh má
+  `.pill.stale { color: var(--stale) }`, takže systémová žlutá byla **odchylka od schváleného
+  mockupu**, a odznak je text na vlastní kapsli — systémová `#FFCC00` na ní má ve světlém režimu
+  kontrast **1,41** (na ploše 1,51), kdežto token **4,00** a 4,87; v tmavém je to výměna 9,28 →
+  6,38. Přebarvilo se s ním i `zastaralé`, kde ta tichá vada ležela od #172. Tatáž úvaha i tentýž
+  způsob rozhodnutí jako u `dismissed` v #309 — čitelnost, ne „mají to i tokeny“. Že řádek a chip
+  revieweera kreslí **jednu** barvu, drží od #383 tvrzení v `ReviewStateAppearanceTests`, ne
+  komentář (nález Copilota na #403).
+
   Co se tím **nezměnilo**: `failed` zůstává session, která spadla, a nese svůj stderr. Rozdíl
   mezi těmi dvěma je `run.outcome` — ne to, jak prázdný je výsledek.
 - **`interrupted` není `timedOut`** (#97). Oba znamenají „nedoběhlo, částečné nálezy zůstaly“,
