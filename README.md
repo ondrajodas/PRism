@@ -913,7 +913,8 @@ kreslí jen nástroje — odpovídá na „koukal se tam, kam měl“. Na jinou 
 takhle*, *co dělal, než to spadlo*) odpovídá to, co výpis schválně zahazuje, a to je v sheetu
 s **přepisem celého transcriptu**: próza modelu, jeho uvažování, výstupy nástrojů a systémové
 události. Tlačítko je v hlavičce výpisu **i v jeho sbaleném řádku** — doběhlá dráha je ta častější —
-a bez známého `session_id` se nekreslí, stejně jako `Zkopírovat resume`.
+a bez známého `session_id` **nebo bez pracovního stromu** se nekreslí (z těch dvou se odvozuje cesta
+k souboru), stejně jako u `Zkopírovat resume`.
 
 Přepis je **snímek k okamžiku otevření**, ne živý pohled: v hlavičce je to napsané, patička hlásí,
 kolik od té chvíle přibylo, a vedle je `Načíst znovu`. Sledovat rostoucí soubor umí výpis o patro
@@ -931,9 +932,10 @@ tažení stojí 2,61 ms na krok i nad přepisem o 1,5 milionu znaků — text se
 nesází se znovu. Šířka není od oka: přepis zalamuje, takže ze 720 na 1 180 bodů ubude nad skutečným
 transcriptem 15 % řádků sazby, dál už jen jednotky procent za sheet přes celou plochu.
 
-**Že přepis není, má tři různé podoby, a každá nabídne něco jiného.** *Není* je konečná odpověď
-(strom sebral úklid cache) — bez `Načíst znovu`, a je u toho napsané, že tím padá i `claude --resume`,
-protože čte tentýž soubor. *Nedá se přečíst* nabídne opakování i `Ukázat v Finderu`, protože soubor
+**Že přepis není, má tři různé podoby, a každá nabídne něco jiného.** *Není* znamená, že soubor
+na disku **není** — a je to konečná odpověď: bez `Načíst znovu`, a je u toho napsané, že tím padá
+i `claude --resume`, protože čte tentýž soubor. Proč tam není (úklid cache, session ho ještě
+nezaložila) se **netvrdí** — z chybějícího souboru se to nepozná. *Nedá se přečíst* nabídne opakování i `Ukázat v Finderu`, protože soubor
 tam pořád leží. *Prázdný* nabídne opakování, protože u běžící session je to dočasný stav — prázdný
 sheet by vypadal jako „session nic nedělala“. Do sheetu se **nepíše**: čte se, vybírá a kopíruje,
 a cesta zpátky do session zůstává `Zkopírovat resume`.

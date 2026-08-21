@@ -22,7 +22,7 @@ struct RawSessionSnapshot: Equatable, Sendable {
 extension AppStore {
     /// Otevře přepis transcriptu pro tuhle session (#327).
     ///
-    /// **Sheet se otevírá hned a obsah dorazí za chvíli** (`.loading`): čte se ze disku, takže je to
+    /// **Sheet se otevírá hned a obsah dorazí za chvíli** (`.loading`): čte se z disku, takže je to
     /// zlomek vteřiny, ale ne nula — a sheet, který se otevře až po dočtení, vypadá po kliknutí jako
     /// tlačítko, které nic neudělalo.
     func openRawSession(_ target: RawSessionTarget) async {

@@ -90,7 +90,7 @@ struct RawTranscript: Equatable, Sendable {
 /// tatáž úvaha, jaká drží oddělené `čisté` a `session spadla`. Který stav nabízí co, rozhoduje
 /// `Policy.rawSessionActions(for:)`.
 enum RawTranscriptState: Equatable, Sendable {
-    /// Čte se ze disku. Sheet se otevírá hned, obsah dorazí za chvíli.
+    /// Čte se z disku. Sheet se otevírá hned, obsah dorazí za chvíli.
     case loading
     case shown(RawTranscript)
     /// Transcript **není** — konečná odpověď. Bez `Načíst znovu`, protože se nezmění.

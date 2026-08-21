@@ -11,9 +11,13 @@ import Testing
 /// a `ReportFindings`. Žádný z těch typů ve `stream-json` **není**, takže vyrobená fixture by
 /// popisovala formát, který CLI nepíše.
 ///
-/// Co se ze skutečných dat nesehnalo, je **odmítnutý nástroj**: ve všech transcriptech pod
-/// `~/.claude/projects` (včetně těch z aplikace) není ani jeden `non_execution_kind` — CLI ho do
-/// souboru nepíše, na rozdíl od streamu. Testuje se proto inline JSONem, a je u toho napsané proč.
+/// **Odmítnutý nástroj má vlastní skutečnou fixture** (`transcript/denied-tool.jsonl`), a musela se
+/// vyrobit spuštěním (`claude -p` s `--disallowedTools 'Bash(wc:*)'`) — v transcriptech z review
+/// odmítnutí není, protože v nich nebylo co odmítnout. Do #408 se z jejich `grep`u odvozovalo, že
+/// „CLI to do souboru nepíše“, a odznak `ODMÍTNUTO` by se proto nad skutečnými daty neobjevil nikdy.
+///
+/// Inline JSONem se testuje jen **tvar ze streamu** (`non_execution_kind`, `tool_result_meta`): ten
+/// v souborech na disku doopravdy není, ale rozhodovat se podle něj musí dál, kdyby ho CLI přidalo.
 @Suite("Přepis transcriptu")
 struct TranscriptTranscriberTests {
     private let worktree = URL(filePath: "/Users/ondra/cache/worktrees/o/r/6-abc")
@@ -131,6 +135,27 @@ struct TranscriptTranscriberTests {
         #expect(events.count == 1)
         #expect(events[0].kind == .result)
         #expect(events[0].body == "něco")
+    }
+
+    /// A **ořez se u ní přizná stejně jako u kroku** — třetí ze tří přiznání zkrácení platí i tam,
+    /// kde `tool_use` leží před oknem. Nálezem Copilota na #408 bylo, že se `body.cut` spočítaný
+    /// v `consumeToolResult` u téhle větve zahazuje; zahazuje se doopravdy, ale **nic se tím
+    /// neztratí**, protože `append` si nad tímtéž textem počítá strop znovu. Tvrdí to tenhle test,
+    /// aby to nebyla úvaha nad kódem: bez toho druhého výpočtu by dlouhý výstup vypadal jako celý.
+    @Test("Odpověď na krok mimo okno přizná ořez")
+    func aResultWithoutItsStepStillAdmitsTruncation() throws {
+        let long = String(repeating: "x", count: Policy.rawSessionEventBytes * 2)
+        let text = """
+        {"type":"user","timestamp":"2026-08-09T21:44:37.738Z","message":{"content":\
+        [{"type":"tool_result","tool_use_id":"pryc","content":"\(long)"}]}}
+        """
+
+        let events = transcribe(text).events
+
+        #expect(events.count == 1)
+        let body = try #require(events[0].body)
+        #expect(body.count == Policy.rawSessionEventBytes)
+        #expect(events[0].bodyCut != nil, "ořez se nepřiznal, takže výstup vypadá jako celý")
     }
 
     /// **Nejcennější test celého issue**, a je tu proto, že to původně nefungovalo: kód hledal

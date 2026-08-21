@@ -401,7 +401,7 @@ final class AppStore {
 
     /// Otevřený přepis surové session (#327). `nil` = sheet není otevřený.
     ///
-    /// Drží se **v storu, ne ve view**, protože je to načtená věc ze disku a view I/O nedělá; a je
+    /// Drží se **v storu, ne ve view**, protože je to načtená věc z disku a view I/O nedělá; a je
     /// to **jeden** snímek, ne slovník — viz `RawSessionSnapshot`.
     var rawSession: RawSessionSnapshot?
 

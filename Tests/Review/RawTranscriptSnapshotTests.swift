@@ -3,7 +3,7 @@ import Testing
 
 @testable import PRism
 
-/// Snímek transcriptu ze disku (#327) — proti **skutečným souborům** v dočasné složce, protože
+/// Snímek transcriptu z disku (#327) — proti **skutečným souborům** v dočasné složce, protože
 /// právě o disk tu jde: okno se čte `seek`em od konce a rozdíl mezi „není“, „nedá se přečíst“
 /// a „prázdný“ vzniká tady.
 @Suite("Snímek transcriptu")
@@ -51,7 +51,7 @@ struct RawTranscriptSnapshotTests {
 
     /// **Ne `String(decoding:as:)`.** Ten by vadné bajty nahradil `U+FFFD`, takže by se ze stavu,
     /// který má nabídnout `Ukázat v Finderu`, stal přepis s otazníky uprostřed.
-    @Test("Vadné UTF-8 je chyba s přečtitelným důvodem, ne přepis s otazníky")
+    @Test("Vadné UTF-8 je chyba s čitelným důvodem, ne přepis s otazníky")
     func invalidEncodingThrows() async throws {
         try write(Data([0xFF, 0xFE, 0x41, 0x0A]), as: "rozbita")
 

@@ -147,6 +147,12 @@ struct AppStoreRawSessionTests {
     /// **Cíl sám na rozlišení nestačí** (nálezem Copilota na #408): dvě čtení **téhož** cíle se od
     /// sebe poznají jedině generací, a to pomalejší z nich nesmí přepsat novější. Bez ní by dvě
     /// kliknutí na `Načíst znovu` skončila u snímku, o který nikdo nežádal.
+    ///
+    /// **Závod se musí doopravdy postavit, jinak test tvrdí něco jiného, než co říká** (druhým
+    /// nálezem Copilota na #408). Do té doby tu byla dvě čtení **za sebou** — a ta se generací
+    /// nerozliší, protože to starší je v době zápisu novějšího dávno dočtené: test procházel i bez
+    /// té brány, kterou měl hlídat. Teď starší čtení visí na závoře **se svým snímkem v ruce**,
+    /// novější ho přeskočí a pustí se dopředu, a teprve pak se to starší dočte.
     @Test("Pomalejší čtení nepřepíše novější snímek téže session")
     func aSlowerReadDoesNotOverwriteANewerOne() async throws {
         let reader = FakeTranscriptReader([:])
@@ -154,17 +160,30 @@ struct AppStoreRawSessionTests {
         let store = store(reader)
         await store.openRawSession(target)
 
-        // Dvě čtení téhož cíle: to druhé (novější) dorazí a to první se pak nesmí propsat.
+        // Starší z dvou čtení: pozastaví se u závory se dvěma událostmi.
+        let gate = AsyncGate()
+        reader.snapshotGate = gate
+        reader.snapshots = ["abc-123": transcript(events: 2, fileBytes: 200)]
+        let stale = Task { await store.reloadRawSession() }
+        await gate.waitUntilReached()
+        let staleGeneration = store.rawSession?.generation
+
+        // Novější čtení projde celé, dokud to starší visí na závoře.
+        reader.snapshotGate = nil
         reader.snapshots = ["abc-123": transcript(events: 9, fileBytes: 900)]
-        let stale = store.rawSession?.generation
         await store.reloadRawSession()
 
-        #expect(store.rawSession?.generation != stale)
+        // A teď se to starší dočte — a nesmí se propsat.
+        await gate.release()
+        await stale.value
+
+        #expect(store.rawSession?.generation != staleGeneration)
+        #expect(reader.snapshotCount == 3)
         guard case .shown(let shown) = try #require(store.rawSession?.state) else {
             Issue.record("čekal se přepis")
             return
         }
-        #expect(shown.events.count == 9)
+        #expect(shown.events.count == 9, "propsal se starší snímek (\(shown.events.count) událostí)")
     }
 
     // MARK: - Přírůstek
