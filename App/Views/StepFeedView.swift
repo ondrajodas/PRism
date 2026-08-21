@@ -84,16 +84,17 @@ struct StepFeedView: View {
                             .foregroundStyle(Palette.stale)
                     }
                     Spacer(minLength: 8)
+                    // Sbalený řádek je klikací **celý, včetně slova `rozbalit`** — mimo tlačítko
+                    // by ten text sliboval klik, který nic nedělá.
+                    if state == .collapsed {
+                        Text(verbatim: ReviewerLaneText.expandFeed)
+                            .font(.caption)
+                    }
                 }
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            if state == .expanded {
-                tailToggle
-            } else {
-                Text(verbatim: ReviewerLaneText.expandFeed)
-                    .font(.caption)
-            }
+            if state == .expanded { tailToggle }
         }
         .foregroundStyle(Palette.ink3)
         .padding(.horizontal, 12)
@@ -270,6 +271,12 @@ struct StepFeedView: View {
     ///
     /// A **musí to být z geometrie, ne z dat**: posun navěšený na `id` posledního kroku doběhl moc
     /// brzo (řádek ještě nebyl rozvržený) a výpis zůstal o řádek pozadu — taky změřeno.
+    ///
+    /// `Task` je tady **na hlavním aktoru**, i když to na něm není napsané: konformance k `View`
+    /// dělá z typu `@MainActor` (#219) a `Task.init` izolaci volajícího dědí. Není to úvaha, ale
+    /// vlastnost, kterou v jazykovém režimu Swift 6 vynucuje překladač — `Task.detached` na tomtéž
+    /// místě neprojde (`passing closure as a 'sending' parameter risks causing data races between
+    /// main actor-isolated code…`, vyzkoušeno). Nálezem Copilota na #402.
     private func catchUp(in proxy: ScrollViewProxy) {
         guard followsTail, let newest = lane.entries.last?.id, newest != stuckAt else { return }
         stuckAt = newest
