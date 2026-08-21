@@ -2653,3 +2653,17 @@ který je ve vzorcích ze záchvatů jediný re-arm —, vrcholem `LazySubviewPl
 `ScrollViewChildTransform` v ose). Nad projížděním je to očekávané, protože se obsah posouvá.
 Nitka pro příští záchvat je proto tahle: **mění se ta transformace i tehdy, když se nikam
 neroluje?** Odpověď je poprvé v záznamu, ne v `sample`u.
+
+Z Copilot review na #397 dorazila čtyři rozhodnutí, všechna přijatá:
+
+| Rozhodnutí | Alternativa | Proč |
+|---|---|---|
+| **Histogram má mez na počet položek**, ne jen na délku hodnoty | Nechat zkrácení na 200 znaků a spolehnout se, že různých vstupů bude málo | Nad projížděním byl `changed` vstup jediný, ale osm vzorků může nasypat desítky různých — a to je zpátky u kilobajtů za sekundu, tedy u vyčerpaného stropu právě při hoření. Šest položek a `+N dalších`; co se nevejde, se **přizná**, protože zamlčený zbytek by z histogramu udělal tvrzení, které neplatí |
+| **Do výpisu jde jen řádek, ze kterého rozbor vytáhne typ** | Nechat podmínku „začíná `#` nebo končí `, changed`“ | O výpisu je slíbeno, že u cizího formátu **zmlkne** — a formát je privátní. S původní podmínkou by se po jeho změně do záznamu opisoval syrový text vydávaný za rámec, tedy pravý opak |
+| **Vzorek přes hranici úseku se zahodí** (`generation`) | Připsat ho do nového úseku | Dotaz se počítá v tom úseku, ve kterém začal, takže v novém pro něj započítaný není — z řádku by vyšlo „0 dotazů, 1 vzorků“. Do už zapsaného řádku vzorek nemá kudy, takže zbývá jediná pravdivá možnost: zahodit ho. Vloženou regresí to ověřit **nejde** (chtělo by to prostrčit `GraphProbe` do instance a naplánovat `flush` doprostřed odebírání), takže je to rozhodnutí podložené konstrukcí, ne testem — a je to tady napsané proto |
+| **Řádek o dostupnosti grafu láme `start()` stejně jako hlavička** | Nechat návratovou hodnotu bez kontroly, protože hlavička už prošla | Strop platí na **bajty**: hlavička projít může a druhý řádek už narazit. Diagnostika by se zapnula, háky by nesly svou cenu a v souboru by nebylo nic — tedy přesně to splynutí „zapnutá“ a „nic nezapisuje“, které tenhle soubor hlídá na dvou dalších místech. Původní odůvodnění („dvě místa, kde se rozhoduje o startu“) neplatí: je to **jedno** rozhodnutí použité dvakrát |
+
+Jeden nález se **nepřijal**: že se `text.prefix(limit) + "…"` v Swiftu nesestaví (`Substring` + `String`).
+Sestaví — návratový typ funkce je `String`, takže se vybere přetížení `Sequence + Self -> Self`
+s `Self == String`. Doloženo buildem a testem, který na tom řádku tvrdí **přesnou délku**
+(`graphLineLimit + 5`, tedy odsazení, dvě stě znaků a výpustka).

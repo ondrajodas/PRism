@@ -117,8 +117,11 @@ final class RenderDiagnostics: @unchecked Sendable {
     private var sites: [String: Int] = [:]
     /// Odebrané evaluační zásobníky — **vejde se jich do úseku nejvýš `stackBudget`**.
     private var stacks: [String] = []
-    /// Kolikrát se v úseku vzorek **vzal** (i když z něj nic nepřišlo, viz `sampleStack()`).
+    /// Kolikrát se v úseku vzorek **vzal** (i když z něj nic nepřišlo, viz `note(site:)`).
     private var samples = 0
+    /// Který úsek to je. Zvyšuje se s každým vynulováním a slouží k jediné věci: poznat vzorek,
+    /// který se začal odebírat ještě v předchozím úseku (viz `note(site:)`).
+    private var generation = 0
     /// Kdy se bral naposled, v sekundách monotónních hodin. Přes hranici úseku se **nenuluje**:
     /// je to odstup mezi vzorky, ne poloha v úseku.
     private var lastSample: TimeInterval = 0
@@ -190,14 +193,22 @@ final class RenderDiagnostics: @unchecked Sendable {
         // jak to dopadlo, se hned zapíše do souboru. Bez té věty by „graf nic neřekl“ a „graf nejde
         // otevřít“ splynulo v tichu (viz `GraphProbe`).
         //
-        // Návratová hodnota se **nekontroluje schválně**: na zápisu se to láme už u hlavičky
-        // o řádek výš, takže sem se dojde jedině tehdy, když soubor zapisovat jde. Kdyby strop
-        // padl zrovna mezi těmi dvěma řádky, pozná to zapisovací vlákno u prvního úseku a sezení
-        // skončí — druhá kontrola téhož by z toho udělala dvě místa, kde se rozhoduje o startu.
+        // **Láme se na tom stejně jako na hlavičce** (nález Copilota na #397). Do #397 se tady
+        // návratová hodnota ignorovala s odůvodněním, že zápis už jednou prošel — jenže strop platí
+        // na **bajty**, takže hlavička projít může a tenhle řádek už narazit. Diagnostika by se pak
+        // zapnula, háky by nesly svou cenu a v souboru by nebylo nic; to je zrovna to splynutí
+        // „zapnutá“ a „nic nezapisuje“, kterému se tady vyhýbáme dvakrát.
         let hasGraph = GraphProbe.prepare()
-        diagnostics.log.append(
+        guard diagnostics.log.append(
             Policy.diagnosticGraphLine(at: Date(), in: .current, available: hasGraph)
-        )
+        ) else {
+            FileHandle.standardError.write(Data("""
+                PRism: diagnostika kreslení (#361) se NEZAPNULA — do \
+                \(layout.diagnosticsFile.path) se vešla hlavička, ale řádek o grafu už ne \
+                (strop \(DiagnosticsLog.byteLimit) B). Smaž ten soubor a spusť aplikaci znovu.\n
+                """.utf8))
+            return false
+        }
         diagnostics.observeRunLoop()
         diagnostics.startWriting()
         current = diagnostics
@@ -219,14 +230,21 @@ final class RenderDiagnostics: @unchecked Sendable {
     /// evaluačního zásobníku**.
     ///
     /// Vzorek se bere `GraphProbe.stack()`em **mimo zámek**: je to volání do cizí knihovny (0,0063 ms
-    /// změřeno), takže pod zámkem by o ně zapisovací vlákno zbytečně čekalo. Držet ho nemusí —
-    /// zásobník je hodnota, ne stav, a `samples` už je započítaný, takže dva souběžné vzorky se
-    /// nemají kde poplést.
+    /// změřeno), takže pod zámkem by o ně zapisovací vlákno zbytečně čekalo.
+    ///
+    /// **Vzorek, který přeteče přes hranici úseku, se zahodí** (nález Copilota na #397). Mezi
+    /// odebráním a zapsáním se zapisovací vlákno může dostat ke `flush()`u, a pak by zásobník
+    /// spadl do **nového** úseku, ve kterém pro něj není započítaný dotaz — z řádku by vyšlo
+    /// „0 dotazů, 1 vzorků“. Rozhoduje o tom `generation`: dotaz zůstává v tom úseku, ve kterém
+    /// začal, a do dalšího se vzorek nepřenáší, protože do už zapsaného řádku nemá kudy.
     func note(site: GraphSite) {
-        let wanted = lock.withLock { armSample(site) }
-        guard wanted else { return }
+        let armed: Int? = lock.withLock { armSample(site) ? generation : nil }
+        guard let armed else { return }
         guard let stack = GraphProbe.stack() else { return }
-        lock.withLock { stacks.append(stack) }
+        lock.withLock {
+            guard generation == armed else { return }
+            stacks.append(stack)
+        }
     }
 
     /// Co se od posledního řádku nasbíralo. **Nic tím nenuluje** — je to čtení pro sondy, které
@@ -243,6 +261,13 @@ final class RenderDiagnostics: @unchecked Sendable {
     /// Odebrané zásobníky — pro sondu, která si řádky skládá sama a do souboru nezapisuje.
     func graphStacks() -> [String] {
         lock.withLock { stacks }
+    }
+
+    /// Kolik **dotazů** na zásobník v úseku bylo. Není to `graphStacks().count`: dotaz, ze kterého
+    /// nic nepřišlo, se počítá taky a právě ten rozdíl je informace (nález Copilota na #397 — sonda
+    /// ho odvozovala z pole úspěchů, takže by tiskla „1 dotaz, 1 vzorek“ místo „8 dotazů, 1 vzorek“).
+    func graphSampleAttempts() -> Int {
+        lock.withLock { samples }
     }
 
     /// Zahodí, co se nasbíralo. Pro sondy, které měří po úsecích: bez toho by druhý úsek nesl
@@ -286,6 +311,7 @@ final class RenderDiagnostics: @unchecked Sendable {
         sites.removeAll(keepingCapacity: true)
         stacks.removeAll(keepingCapacity: true)
         samples = 0
+        generation += 1
     }
 
     /// Počitadla po jménech typů. **Sčítá, nedosazuje**: dva typy se stejným jménem (jeden

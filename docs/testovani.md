@@ -1287,6 +1287,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (jeden řádek vstupu měl nad skutečným diffem 1,5 kB a blok jich měl desítky, takže by hořící okno
   vyčerpalo strop 8 MB za pár minut) a dlouhé jméno typu se **zkrátí** na 200 znaků.
 
+  Z Copilot review na #397 k tomu přibyly dva případy, oba z třídy „mez musí být vyjmenovaná“:
+  **histogram ukáže šest položek a zbytek přizná** (`+N dalších` — osm vzorků s osmi různými kořeny
+  by jinak dalo jednu řádku s osmi jmény po 200 znacích) a **řádek bez šipky se do výpisu neopíše**
+  (do té doby stačilo, že začíná `#`, takže by se po změně formátu opisoval syrový text jako rámec).
+
   **Nad sběrem to samé, co u počitadel průchodů**: že vypnutá diagnostika nesáhne ani na graf
   (hák sedí na cestě identity, tedy tam, kde se v hořícím kole volá tisíckrát za sekundu), že
   `diagnosedID` vrací **tutéž** identitu jako `id` (jinak by zapnutá diagnostika přerovnala líný

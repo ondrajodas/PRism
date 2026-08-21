@@ -749,10 +749,13 @@ struct IdleDiffSpinProbe {
         print("MĚŘENÍ instrumentace \(name): \(sites.sorted { $0.value > $1.value })")
         // **Aspoň jedno místo se ozvat musí**, jinak by v hořícím kole nebylo z čeho brát vzorek.
         #expect(!sites.isEmpty, "nad oknem se neozvalo ani jedno místo v grafu")
+        // **Dotazy se čtou z instance, neodvozují z pole úspěchů** (nález Copilota na #397):
+        // `graphStacks().count` je počet vzorků, které přišly, kdežto `samples` je počet dotazů —
+        // a rozdíl mezi nimi je zrovna to, co má řádek říct.
         for line in Policy.graphDiagnosticLines(
             sites: sites,
             stacks: diagnostics.graphStacks(),
-            samples: diagnostics.graphStacks().count
+            samples: diagnostics.graphSampleAttempts()
         ) {
             print("ZÁZNAM \(name):\(line)")
         }

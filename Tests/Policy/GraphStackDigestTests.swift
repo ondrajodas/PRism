@@ -109,6 +109,34 @@ struct GraphStackDigestTests {
         #expect(try #require(lines.last).count == Policy.graphLineLimit + 5)
     }
 
+    /// **Histogram má mez na počet položek, ne jen na jejich délku** (nález Copilota na #397):
+    /// osm vzorků s osmi různými kořeny by jinak dalo jednu řádku s osmi jmény po 200 znacích.
+    /// Co se nevejde, se **přizná počtem**.
+    @Test("Histogram ukáže šest položek a zbytek přizná")
+    func histogramIsCapped() throws {
+        let stacks = (0..<8).map { "  #0: \($0) Kořen\($0) -> Value" }
+        let lines = Policy.graphDiagnosticLines(sites: [:], stacks: stacks, samples: 8)
+        let summary = try #require(lines.first)
+        #expect(summary.contains("kořen Kořen0=1"))
+        #expect(summary.contains("(+\(8 - Policy.graphHistogramLimit) dalších)"))
+        #expect(!summary.contains("Kořen7"))
+    }
+
+    /// **Výpis se propustí jen tehdy, když z řádku jde vytáhnout typ** (nález Copilota na #397).
+    /// Řádek, který sice začíná `#`, ale formát nemá, by se jinak do záznamu opsal jako rámec —
+    /// přitom o tomhle výpisu je slíbeno, že u cizího formátu zmlkne.
+    @Test("Řádek bez šipky se do výpisu neopíše")
+    func detailIgnoresForeignFrames() {
+        let lines = Policy.graphDiagnosticLines(
+            sites: [:],
+            stacks: ["  #0: tohle není rámec\n    ani tohle, changed\n"],
+            samples: 1
+        )
+        // Zbyde jen souhrn — a ten o kořenu ani vrcholu netvrdí nic, protože z toho textu je
+        // nevytáhl.
+        #expect(lines == ["    zásobník: 1 dotazů, 1 vzorků"])
+    }
+
     /// Dotaz, ze kterého nic nepřišlo, se **hlásí** — je to rozdíl mezi „graf nic nepočítal“
     /// a „nikdo se neptal“.
     @Test("Dotazy bez vzorku se v řádku přiznají")

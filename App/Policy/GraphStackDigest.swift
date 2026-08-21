@@ -100,10 +100,19 @@ extension Policy {
     }
 
     /// Rámce zásobníku a vstupy, které se změnily — každý odsazený a zkrácený.
+    ///
+    /// **Řádek se propustí jedině tehdy, když z něj rozbor umí vytáhnout typ** (nález Copilota
+    /// na #397). Do té doby stačilo, že začíná `#` nebo končí `, changed`, takže po změně formátu
+    /// (je privátní) by se do záznamu opisoval syrový text vydávaný za rámec — přitom o tomhle
+    /// výpisu je slíbeno, že u cizího formátu **zmlkne**. Teď je to tatáž podmínka jako u histogramu.
     private static func graphStackDetail(of stack: String) -> [String] {
         TextLines.nonEmpty(stack).compactMap { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard trimmed.hasPrefix("#") || trimmed.hasSuffix(", changed") else { return nil }
+            guard graphAttributeType(of: trimmed.hasPrefix("#")
+                ? trimmed.drop(while: { $0 != " " })[...]
+                : trimmed[...]) != nil
+            else { return nil }
             return "    " + shortened(trimmed)
         }
     }
@@ -121,6 +130,12 @@ extension Policy {
         return text.prefix(graphLineLimit) + "…"
     }
 
+    /// Kolik různých hodnot se do jednoho histogramu vejde. Vyjmenovaná mez, ne odhad (nález
+    /// Copilota na #397): zkrácení jedné hodnoty nebrání tomu, aby jich osm vzorků nasypalo desítky
+    /// — a to je při hoření zpátky u kilobajtů za sekundu. Šest je tolik, kolik se z histogramu dá
+    /// přečíst; co se nevejde, se **přizná** počtem, ne zamlčí.
+    static let graphHistogramLimit = 6
+
     /// `nejčastější=3 druhý=1` s popiskem, nebo prázdno, když není co ukázat.
     ///
     /// Řadí se **podle počtu**, protože se hledá to, co se opakuje; při shodě podle jména, ať jsou
@@ -129,7 +144,10 @@ extension Policy {
         guard !values.isEmpty else { return "" }
         let counts = values.reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
         let sorted = counts.sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
-        return ", \(label) " + sorted.map { "\(shortened($0.key))=\($0.value)" }.joined(separator: " ")
+        let shown = sorted.prefix(graphHistogramLimit)
+        var text = ", \(label) " + shown.map { "\(shortened($0.key))=\($0.value)" }.joined(separator: " ")
+        if sorted.count > shown.count { text += " (+\(sorted.count - shown.count) dalších)" }
+        return text
     }
 
     /// Typ atributu z řádku zásobníku: to, co stojí mezi číslem uzlu a `->`.

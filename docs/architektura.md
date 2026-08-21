@@ -1989,9 +1989,22 @@ Tři rozhodnutí, která na tom výpisu stojí:
 - **Do souboru jdou rámce a vstupy s `changed`, ne celý výpis.** AttributeGraph u rámce `#0`
   vypíše i **všechny jeho vstupy** a jména typů jsou generická jména celého podstromu: jeden
   takový řádek měl nad skutečným diffem v okně **1,5 kB** a blok jich měl desítky, takže by hořící
-  okno vyčerpalo strop 8 MB za pár minut — zrovna tehdy, když je záznam potřeba. Řádek se navíc
-  zkracuje na `Policy.graphLineLimit` (200 znaků); cena je, že dva různé dlouhé typy mohou v
-  souhrnu spadnout do jednoho řádku, a je to vědomé — informace je v hlavě jména.
+  okno vyčerpalo strop 8 MB za pár minut — zrovna tehdy, když je záznam potřeba. Meze jsou proto
+  tři a všechny vyjmenované: délka řádku (`Policy.graphLineLimit`, 200 znaků), **počet položek
+  v jednom histogramu** (`graphHistogramLimit`, 6 — a co se nevejde, se přizná jako `+N dalších`,
+  protože zkrácení jedné hodnoty nebrání tomu, aby jich osm vzorků nasypalo desítky) a to, že se
+  **propustí jen řádek, ze kterého jde vytáhnout typ** — jinak by se po změně privátního formátu
+  do záznamu opisoval syrový text vydávaný za rámec, přitom o tomhle výpisu je slíbeno, že
+  u cizího formátu zmlkne. Cena zkrácení je, že dva různé dlouhé typy mohou v souhrnu spadnout do
+  jednoho řádku; je to vědomé — informace je v hlavě jména.
+- **Vzorek, který přeteče přes hranici úseku, se zahodí.** Mezi odebráním (`armSample`) a zapsáním
+  se zapisovací vlákno může dostat ke `flush()`u; bez toho by zásobník spadl do **nového** úseku,
+  kde pro něj není započítaný dotaz, a v řádku by stálo „0 dotazů, 1 vzorků“. Rozhoduje o tom
+  `generation`: dotaz zůstává v tom úseku, ve kterém začal, a do dalšího se vzorek nepřenáší,
+  protože do už zapsaného řádku nemá kudy.
+- **Na řádku o dostupnosti grafu se `start()` láme stejně jako na hlavičce.** Strop platí na
+  bajty, takže hlavička projít může a tenhle řádek už narazit — a diagnostika, která se zapnula
+  a nic nezapisuje, je zrovna to splynutí, kterému se tady vyhýbáme dvakrát.
 
 **Co z toho vyšlo nad skutečným oknem** (měření `IdleDiffSpinProbe.graphInstrumentationOverRealWindow`,
 projíždění kolečkem, tedy **ne** záchvat): v diffu `DiffRow.id=857 FileDiff.id=453

@@ -58,9 +58,12 @@ struct GraphProbeTests {
         defer { scene.orderOut(nil) }
         let joined = ["tělo", "geometrie", "identita"].compactMap { seen.stack(of: $0) }
         #expect(!joined.isEmpty)
+        // **Jmenovitě `LazySubviewPlacements`**, ne obecné `Lazy` (nález Copilota na #397): kdyby
+        // z výpisu zmizel právě tenhle rámec a zůstal třeba `LazyPreference`, test by prošel a
+        // nehlídal by to, co o sobě tvrdí.
         #expect(
-            joined.contains { $0.contains("Lazy") },
-            "v žádném ze \(joined.count) zásobníků není rámec líného seznamu"
+            joined.contains { $0.contains("LazySubviewPlacements") },
+            "v žádném ze \(joined.count) zásobníků není umisťování líného seznamu"
         )
     }
 
