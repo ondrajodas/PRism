@@ -34,6 +34,8 @@ struct GlobalAppearanceTests {
         let path: String
         /// Jen kód — řádky, které začínají `//`, jsou pryč.
         let code: String
+        /// Řádky `import …`, tak jak v souboru stojí.
+        let imports: [String]
     }
 
     /// Zdrojáky pod složkou repa, s cestou relativní k ní.
@@ -45,13 +47,15 @@ struct GlobalAppearanceTests {
         var files: [Source] = []
         for case let url as URL in walker where url.pathExtension == "swift" {
             let text = try String(contentsOf: url, encoding: .utf8)
+            // `TextLines`, ne `split(separator: "\n")` — pravidlo repa platí i v testech.
+            let lines = TextLines.content(text)
+                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
             files.append(
                 Source(
                     path: url.path.replacingOccurrences(of: root.path + "/", with: ""),
-                    // `TextLines`, ne `split(separator: "\n")` — pravidlo repa platí i v testech.
-                    code: TextLines.content(text)
-                        .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
-                        .joined(separator: "\n")
+                    code: lines.joined(separator: "\n"),
+                    imports: lines.map { $0.trimmingCharacters(in: .whitespaces) }
+                        .filter { $0.hasPrefix("import ") }
                 )
             )
         }
@@ -63,15 +67,25 @@ struct GlobalAppearanceTests {
         case unreadable(String)
     }
 
-    /// Store **nemá čím** na globální vzhled sáhnout, a to je celý ten důkaz: `App/Store/`
-    /// neimportuje AppKit, takže se v něm `NSApp` nedá ani napsat. Rozhoduje o vzhledu (dostal
-    /// konfiguraci), ale kreslení není jeho práce — proto nepovinný cíl `AppearanceApplying`.
+    /// Store **nemá čím** na globální vzhled sáhnout, a to je celý ten důkaz: `App/Store/` nevidí
+    /// AppKit, takže se v něm `NSApp` nedá ani napsat. Rozhoduje o vzhledu (dostal konfiguraci),
+    /// ale kreslení není jeho práce — proto nepovinný cíl `AppearanceApplying`.
+    ///
+    /// **Importy se hlídají výčtem povolených, ne zákazem AppKitu** (nález z review na #400):
+    /// zákaz `import AppKit` obchází `import Cocoa`, a stejně tak by ho obešel kterýkoli další
+    /// modul, který AppKit tahá s sebou. Výčet dvou povolených jmen se obejít nedá a **spadne
+    /// i tehdy, když ten nový import s vzhledem nesouvisí** — což je v pořádku: `App/Store/` je
+    /// vrstva bez kreslení a nový modul v ní je věc do review.
     @Test("Store nemá čím sáhnout na NSApp")
     func keepsTheStoreAwayFromTheApplication() throws {
+        let allowed = ["import Foundation", "import Observation"]
+
         for file in try sources(under: "App/Store") {
+            // `NSApp` chytá i `NSApplication` a `NSAppearance` — je to prefix všech tří.
             #expect(!file.code.contains("NSApp"), "Store/\(file.path) sahá na aplikaci")
-            #expect(!file.code.contains("import AppKit"), "Store/\(file.path) importuje AppKit")
-            #expect(!file.code.contains("import SwiftUI"), "Store/\(file.path) importuje SwiftUI")
+            for line in file.imports {
+                #expect(allowed.contains(line), "Store/\(file.path) importuje „\(line)“, a to sem nepatří")
+            }
         }
     }
 

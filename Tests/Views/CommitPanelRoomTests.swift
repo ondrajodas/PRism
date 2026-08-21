@@ -25,10 +25,17 @@ struct CommitPanelRoomTests {
     private let panelDefault = 306.0
     private let panelFloor = 246.0
 
-    private var characterWidth: Double {
-        NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-            .maximumAdvancement.width
-    }
+    /// Šířka znaku mono písma, kterým se kód sází — **přečtená jednou za test** (#367).
+    ///
+    /// Do té doby to bylo computed property, takže se v jednom testu čítala dvakrát a mohla vyjít
+    /// dvakrát jinak: v plném paralelním běhu z toho bylo `both → 0` proti `treeOnly → 35`, tedy
+    /// **víc místa a méně znaků**, což z monotónní funkce vyjít nemůže. Metrika písma je stav
+    /// procesu (vzniká v něm zároveň několik `NSHostingView`ů), takže platí totéž, co u vzhledu
+    /// hostitele: hodnota se vezme **jednou** a tvrzení se pak porovnávají mezi sebou, ne každé
+    /// proti jinému měřidlu.
+    private let characterWidth = NSFont
+        .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        .maximumAdvancement.width
 
     private func charactersPerSide(_ width: Double, layout: DiffLayout) -> Int {
         Policy.charactersPerSide(

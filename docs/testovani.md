@@ -533,6 +533,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a šířku znaku pinuje **jeden** test — když se písmo v systému změní, spadne on a řekne proč, místo
   aby se rozsypaly počty v půlce suity.
 
+  **Nerovnost ale nestačí, když se měřidlo mění uprostřed tvrzení** (#367). V plném běhu spadlo
+  `Složení stromu i panelu dá nejvíc místa` na `(both → 0) > (treeOnly → 35)`, tedy na **víc místa
+  a méně znaků** — z monotónní funkce to vyjít nemůže, takže se šířka znaku vyřešila mezi těmi dvěma
+  voláními jinak. Byla to computed property, tedy čtení stavu procesu při každém použití; teď se
+  bere **jednou za test** (`private let`). Je to tatáž třída jako vzhled hostitele: hodnota z globálu
+  se přečte jednou a tvrzení se porovnávají mezi sebou.
+
   Slib z `CLAUDE.md` je **120 znaků na stranu** a ten by se stromem i panelem chtěl okno
   **~2665 bodů**. Z toho plyne rozhodnutí: **nevynucuje se nic** — strom se složí ⌘1, panel ⌘2 —,
   protože složený proužek přidá ve splitu skoro dvojnásobek znaků, takže u commitu je čím zaplatit.
@@ -3493,7 +3500,7 @@ vlastnost struktury kódu, na kterou se za běhu zeptat nedá:
 
 | Tvrzení | Co drží |
 |---|---|
-| `App/Store/` nezná `NSApp` a neimportuje AppKit ani SwiftUI | Store **nemá čím** na globál sáhnout. Rozhoduje o vzhledu (dostal konfiguraci), ale kreslení není jeho práce |
+| `App/Store/` nezná `NSApp` a importuje **jen** `Foundation` a `Observation` | Store **nemá čím** na globál sáhnout: nevidí AppKit, takže se v něm `NSApp` nedá ani napsat. Rozhoduje o vzhledu (dostal konfiguraci), ale kreslení není jeho práce. **Výčet povolených, ne zákaz AppKitu** — nález z review na #400: zákaz `import AppKit` obchází `import Cocoa`, a stejně tak kterýkoli další modul, který AppKit tahá s sebou |
 | `AppAppearance.application` je v `App/` jmenováno **jednou**, vzhled se uplatňuje jedině `appearance?.applyAppearance(` a `?? AppAppearance` nikde není | Živý cíl se zapojuje jen při složení živého storu. Kdyby ho vzal za výchozí hodnotu init, kterým store staví testy, přebarvil by jeden test hostitele — a render sondy by měřily jiný režim, než o který si řekly |
 | Žádný soubor v `Tests/` nepíše `NSApp.appearance` ani `NSApplication.shared.appearance` | Aby se ta třída nevrátila. Sám guard soubor se z výčtu odečítá, protože hledané řetězce v něm stojí jako literály |
 
@@ -3504,6 +3511,8 @@ vlastnost struktury kódu, na kterou se za běhu zeptat nedá:
 AppAppearance.application` v init, kterým store staví testy: padne tvrzení o jednom jmenování
 (`2 == 1`) — a nic jiného, což je zrovna ten důvod, proč to tvrzení existuje. (3) `import AppKit`
 plus `NSApp.appearance = …` přímo v `AppStore.apply(_:)`: padne pět tvrzení ve všech třech testech.
+A po nálezu z review ještě (4) `import Cocoa` v `App/Store/AppStore.swift`: padne výčet povolených importů,
+kdežto původní zákaz `import AppKit` by tuhle cestu propustil.
 
 **Zamítnuté cesty.** `.serialized` na sadu — serializuje jen tu jednu suitu, kdežto zápis dělá
 hostitel, takže by to na příčinu nedosáhlo vůbec. Zámek nad globálem v testech — tentýž problém,

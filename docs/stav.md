@@ -3555,7 +3555,8 @@ nesahá žádná jiná suita, je `NSApp.appearance` po startu `nil` a asi **300 
 zřejmé léčby — `.serialized` na sadu ani zámek v testech na hostitele nedosáhnou.
 
 Tvrzení se proto přesunulo **nad zdrojáky** (`GlobalAppearanceTests`, tatáž konstrukce jako
-`SingleWayOutTests`): `App/Store/` neimportuje AppKit, takže store `NSApp` nemá ani jak napsat; živý
+`SingleWayOutTests`): `App/Store/` importuje jen `Foundation` a `Observation`, takže store `NSApp` nemá ani
+jak napsat; živý
 cíl se v `App/` jmenuje **jednou** a uplatňuje se jedině `appearance?.applyAppearance(`; a **žádný
 soubor v `Tests/`** na globální vzhled nesahá. V `AppStoreAppearanceTests` zůstalo to, co je
 vlastnost storu — volba se přečte i bez cíle a chybějící cíl není chybový stav.
@@ -3570,3 +3571,12 @@ padne původní test, po ní projde celá sada — 8 testů ve 2 suitách při 8
 výchozí hodnota `appearance: AppAppearance.application` v init pro testy (padne tvrzení o jednom
 jmenování, `2 == 1`) a `import AppKit` s přímým zápisem v `apply(_:)` (padne pět tvrzení ve všech
 třech testech). Guard nad `Tests/` se přiznal sám: kolizní suitu nahlásil, dokud se nesmazala.
+
+**Z review na #400 přišel jeden reálný nález a je opravený**: zákaz `import AppKit` v `App/Store/` obchází
+`import Cocoa`. Místo dalšího zakázaného jména se hlídá **výčet povolených** (`Foundation`, `Observation`),
+což tu cestu zavírá celou — ověřeno vloženou regresí, `import Cocoa` výčet složí.
+
+**A ještě jeden člen téže třídy, nalezený plným během**: `CommitPanelRoomTests` spadly na
+`(both → 0) > (treeOnly → 35)`, tedy na víc místa a **méně** znaků, což z monotónní funkce vyjít
+nemůže — šířka znaku mono písma byla computed property, takže se stav procesu čítal při každém
+použití a mezi dvěma voláními v jednom testu se vyřešil jinak. Bere se **jednou za test**.
