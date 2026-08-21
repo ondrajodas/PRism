@@ -10,6 +10,13 @@ struct RawSessionSnapshot: Equatable, Sendable {
     var state: RawTranscriptState
     /// Velikost transcriptu při poslední kontrole. `nil` = ještě se neptalo, nebo se nedala zjistit.
     var currentBytes: Int?
+    /// Které načtení tenhle snímek patří.
+    ///
+    /// **Cíl sám nestačí** (nálezem Copilota na #408): dvě kliknutí na `Načíst znovu` nad **tímtéž**
+    /// cílem znamenají dvě čtení, a to pomalejší z nich by po `await`u přepsalo to novější — brána
+    /// „je to pořád tenhle cíl?“ by přitom byla pravda. Generace je proto číslo, které se zvýší
+    /// s každým čtením a po `await`u se porovná.
+    var generation: Int
 }
 
 extension AppStore {
@@ -19,8 +26,14 @@ extension AppStore {
     /// zlomek vteřiny, ale ne nula — a sheet, který se otevře až po dočtení, vypadá po kliknutí jako
     /// tlačítko, které nic neudělalo.
     func openRawSession(_ target: RawSessionTarget) async {
-        rawSession = RawSessionSnapshot(target: target, state: .loading, currentBytes: nil)
-        await loadRawSession(target)
+        rawSessionGeneration += 1
+        rawSession = RawSessionSnapshot(
+            target: target,
+            state: .loading,
+            currentBytes: nil,
+            generation: rawSessionGeneration
+        )
+        await loadRawSession(target, generation: rawSessionGeneration)
     }
 
     /// `Načíst znovu` — tentýž snímek znovu, protože soubor mezitím vyrostl.
@@ -29,7 +42,9 @@ extension AppStore {
     /// skočil na začátek, tedy zrovna to, kvůli čemu se přepis neaktualizuje sám.
     func reloadRawSession() async {
         guard let target = rawSession?.target else { return }
-        await loadRawSession(target)
+        rawSessionGeneration += 1
+        rawSession?.generation = rawSessionGeneration
+        await loadRawSession(target, generation: rawSessionGeneration)
     }
 
     /// Zahodí snímek. Volá se **při zavření sheetu i při přepnutí PR** — snímek patří jedné session
@@ -62,8 +77,12 @@ extension AppStore {
     func refreshRawSessionSize() async {
         guard let session = rawSession, let transcripts else { return }
         let size = await transcripts.size(ofSession: session.target.sessionID, in: session.target.worktree)
-        // Cíl se mezitím mohl změnit (jiná dráha, zavřený sheet) — pak číslo patří někomu jinému.
-        guard rawSession?.target == session.target, rawSession?.currentBytes != size else { return }
+        // Sheet se mezitím mohl zavřít, přepnout na jinou dráhu **nebo načíst znovu** — pak číslo
+        // patří jinému snímku a proti jeho velikosti by dalo nesmyslný přírůstek. Proto generace,
+        // ne jen cíl.
+        guard rawSession?.generation == session.generation,
+              rawSession?.currentBytes != size
+        else { return }
         rawSession?.currentBytes = size
     }
 
@@ -83,12 +102,13 @@ extension AppStore {
     /// funkcí vracející optional zplošťuje —, a rozdíl mezi nimi je tady celý smysl: transcript,
     /// který **není**, už nebude, kdežto ten, který se nedá **přečíst**, tam pořád leží. Je to tatáž
     /// past jako u dotahování nálezů z transcriptu (#97), kde ji chytil test.
-    private func loadRawSession(_ target: RawSessionTarget) async {
+    private func loadRawSession(_ target: RawSessionTarget, generation: Int) async {
         guard let transcripts else {
             rawSession = RawSessionSnapshot(
                 target: target,
                 state: .unreadable("Čtení transcriptů není v tomhle běhu zapnuté."),
-                currentBytes: nil
+                currentBytes: nil,
+                generation: generation
             )
             return
         }
@@ -105,9 +125,11 @@ extension AppStore {
             state = .unreadable(error.localizedDescription)
         }
 
-        // Mezitím se mohl sheet zavřít nebo otevřít jiná dráha — dočtený snímek by pak přepsal
-        // stav, o který nikdo nežádal. Je to tatáž brána jako u pozdní události v ose (#308).
-        guard rawSession?.target == target else { return }
+        // Mezitím se mohl sheet zavřít, otevřít jiná dráha **nebo se načíst znovu** — dočtený
+        // snímek by pak přepsal stav, o který nikdo nežádal, a u dvou čtení téhož cíle by to
+        // pomalejší přebilo novější. Je to tatáž brána jako u pozdní události v ose (#308), jen
+        // klíčovaná generací, protože cíl je u dvou čtení stejný.
+        guard rawSession?.generation == generation else { return }
         rawSession?.state = state
         rawSession?.currentBytes = nil
         await refreshRawSessionSize()

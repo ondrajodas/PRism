@@ -33,11 +33,18 @@ extension Policy {
     /// `offset` je začátek okna v bajtech, `length` jeho délka. U souboru pod stropem je to celý
     /// soubor a `offset` je nula — tedy stav bez ořezu, ve kterém se nic nepřiznává.
     ///
+    /// **U zkráceného souboru se čte o jeden bajt víc — ten před oknem.** Je to sonda na hranici
+    /// řádku a bez ní se ztrácela **první celá událost** okna (nálezem Copilota na #408): zarovnání
+    /// zahazuje zbytek řádku před oknem, jenže když `fileBytes − 4 MB` padne přesně na začátek
+    /// řádku, není co zahazovat — a „první zakončení v okně“ by sebralo celou první událost
+    /// a `omittedBytes` by tvrdil větší zkrácení, než nastalo. S tím jedním bajtem je odpověď
+    /// v datech: je-li to zakončení řádku, okno začíná na hranici.
+    ///
     /// Záporná nebo nesmyslná velikost (soubor zmizel pod rukama) vyjde na prázdné okno, ne na pád.
     static func rawSessionWindow(fileBytes: Int) -> (offset: Int, length: Int) {
         let total = max(fileBytes, 0)
         guard total > rawSessionWindowBytes else { return (0, total) }
-        return (total - rawSessionWindowBytes, rawSessionWindowBytes)
+        return (total - rawSessionWindowBytes - 1, rawSessionWindowBytes + 1)
     }
 
     /// Kolik bajtů se ze začátku okna zahodí, aby okno začínalo **na začátku řádku**.
@@ -55,13 +62,26 @@ extension Policy {
     /// končí zakončením na **posledním bajtu** okna, takže hledání prvního zakončení by zahodilo
     /// všechno až na nic.
     ///
+    /// **Hledá se `LF` i `CR`, ne jen `LF`** (nálezem Copilota na #408). Dělení řádků drží
+    /// `TextLines` a to zná `LF`, `CRLF` i samotné `CR` — takže s transcriptem zakončeným `CR` by
+    /// zarovnání nenašlo nic, okno by začalo uprostřed záznamu a jeho první událost by byla
+    /// nečitelná, přestože soubor je v pořádku. `CRLF` se přitom musí spotřebovat **celé**: jinak
+    /// by okno začínalo osamoceným `LF`, tedy prázdným řádkem.
+    ///
     /// Pokračovací bajty (`10xxxxxx`) se zahazují proto, že `offset` padne doprostřed znaku:
     /// bez toho by dekódování skončilo chybou a okno by hlásilo „soubor nemá platné UTF-8“
     /// o souboru, který ho má.
     static func rawSessionPrefixDrop(_ window: Data, isTail: Bool) -> Int {
         guard isTail else { return 0 }
-        if let end = window.firstIndex(of: 0x0A), window.index(after: end) < window.endIndex {
-            return window.distance(from: window.startIndex, to: end) + 1
+        if let end = window.firstIndex(where: { $0 == 0x0A || $0 == 0x0D }) {
+            var after = window.index(after: end)
+            // `CRLF` je jedno zakončení, ne dvě.
+            if window[end] == 0x0D, after < window.endIndex, window[after] == 0x0A {
+                after = window.index(after: after)
+            }
+            if after < window.endIndex {
+                return window.distance(from: window.startIndex, to: after)
+            }
         }
         var dropped = 0
         var index = window.startIndex
@@ -81,11 +101,20 @@ extension Policy {
     ///
     /// **Zbytek se hlásí v řádcích, nebo v bajtech, podle toho, co má smysl.** Pod megabajt řekne
     /// počet řádků, kolik toho chybí ke čtení; nad megabajt už počet řádků neznamená nic (7,5MB
-    /// `tool_result` je **jeden** řádek), takže se hlásí velikost. Totéž platí u řezu uprostřed
-    /// řádku: „+ 1 řádek“ by u megabajtu bylo zavádějící.
+    /// `tool_result` je **jeden** řádek), takže se hlásí velikost.
+    ///
+    /// **Jednořádkový zbytek se hlásí taky velikostí** (a je to úmysl, ne mez o jedno vedle):
+    /// „+ 1 řádek“ neřekne, jestli chybí čtyřicet znaků nebo devět kilobajtů, kdežto „+ 8,7 kB“
+    /// ano. Totéž u řezu uprostřed řádku, kde by se zbytek počítal jako celý řádek.
     static func rawSessionBody(_ text: String, limit: Int = rawSessionEventBytes) -> RawSessionBody {
-        let trimmed = trimmingTrailingNewlines(text)
-        guard !trimmed.isEmpty else { return RawSessionBody(text: nil, cut: nil) }
+        // **Prázdnost se posuzuje jinak, než co se sundá** (nálezem Copilota na #408). Sundávají se
+        // jen zakončení řádků — mezery na konci umí být součástí výstupu nástroje a tělo se má
+        // ukázat tak, jak v transcriptu stojí. Tělo, ve kterém není nic než bílé znaky, se přitom
+        // nekreslí vůbec: byl by z něj prázdný odsazený řádek pod hlavičkou.
+        let trimmed = trimmingTrailingLineTerminators(text)
+        guard trimmed.contains(where: { !$0.isWhitespace }) else {
+            return RawSessionBody(text: nil, cut: nil)
+        }
         guard trimmed.utf8.count > limit else { return RawSessionBody(text: trimmed, cut: nil) }
 
         let head = rawSessionHead(of: trimmed, limit: limit)
@@ -164,9 +193,12 @@ extension Policy {
 
     /// Zakončení řádků na konci textu — v transcriptu je nese skoro každý blok a v přepisu by
     /// z nich byly prázdné řádky mezi událostmi.
-    private static func trimmingTrailingNewlines(_ text: String) -> String {
+    ///
+    /// **Jen zakončení, nic jiného**, a `isLineTerminator` jako všude jinde v repu (#295): mezery
+    /// a tabulátory na konci řádku jsou obsah, který nám nikdo nedal právo měnit.
+    private static func trimmingTrailingLineTerminators(_ text: String) -> String {
         var result = Substring(text)
-        while let last = result.last, last.isLineTerminator || last == " " || last == "\t" {
+        while let last = result.last, last.isLineTerminator {
             result.removeLast()
         }
         return String(result)

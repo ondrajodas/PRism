@@ -133,10 +133,30 @@ struct TranscriptTranscriberTests {
         #expect(events[0].body == "něco")
     }
 
-    /// **Inline JSON schválně**: `non_execution_kind` v žádném transcriptu na disku není (CLI ho
-    /// píše do streamu, ne do souboru), takže se tvar bere z fixture streamu `review-denied-write`.
-    @Test("Odmítnutý nástroj dostane štítek, ne nic")
-    func aDeniedToolIsLabelled() {
+    /// **Nejcennější test celého issue**, a je tu proto, že to původně nefungovalo: kód hledal
+    /// `non_execution_kind` (tvar ze `stream-json`), kdežto transcript nese `toolDenialKind` na
+    /// **řádku** — takže odznak `ODMÍTNUTO` by se nad skutečnými daty neobjevil nikdy. Nálezem
+    /// Copilota na #408.
+    ///
+    /// Proti **skutečnému** transcriptu se skutečným odmítnutím (`transcript/denied-tool.jsonl` —
+    /// `claude -p` s `--disallowedTools 'Bash(wc:*)'`, dva řádky z něj bajt po bajtu). Vyrobit ho
+    /// bylo potřeba: v žádném transcriptu z review na tomhle stroji odmítnutí není, takže „CLI to
+    /// do souboru nepíše“ se dřív odvozovalo ze souborů, ve kterých nebylo co psát.
+    @Test("Odmítnutý nástroj ze skutečného transcriptu dostane štítek")
+    func aDeniedToolFromARealTranscriptIsLabelled() throws {
+        let events = transcribe(try Fixture.text("transcript/denied-tool.jsonl")).events
+
+        let step = try #require(events.first)
+        #expect(events.count == 1)
+        #expect(step.kind == .tool("Bash"))
+        #expect(step.isDenied)
+        #expect(step.body?.contains("has been denied") == true)
+    }
+
+    /// A tvar ze **streamu** se přitom nepřestal číst: kdyby ho CLI do souboru přidalo, rozhodne se
+    /// stejně. Inline JSONem, protože v souborech na disku ten tvar není.
+    @Test("Odmítnutí ve tvaru ze streamu se pozná taky")
+    func theStreamShapedDenialStillWorks() {
         let text = """
         {"type":"assistant","timestamp":"2026-08-09T21:44:37.683Z","message":{"content":\
         [{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"gh pr view 412"}}]}}
@@ -209,6 +229,41 @@ struct TranscriptTranscriberTests {
     /// Krok bez těla vypadá jako krok, jehož nástroj nic nevrátil — takže se neznámý tvar odpovědi
     /// musí **přiznat**, ne spolknout. Nový druh bloku v příští verzi CLI je pravděpodobnější než
     /// rozbitá odpověď, proto poznámka a ne chyba.
+    /// Totéž u tvaru, který není ani řetězec, ani pole bloků: krok bez těla **i bez poznámky**
+    /// vypadá jako krok, jehož nástroj nic nevrátil (nálezem Copilota na #408).
+    @Test("Odpověď v úplně neznámém tvaru se přizná taky")
+    func aCompletelyUnknownResultShapeIsAdmitted() {
+        let text = """
+        {"type":"assistant","timestamp":"2026-08-09T21:44:37.683Z","message":{"content":\
+        [{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]}}
+        {"type":"user","timestamp":"2026-08-09T21:44:37.738Z","message":{"content":\
+        [{"type":"tool_result","tool_use_id":"t1","content":{"neznamy":"tvar"}}]}}
+        """
+
+        let events = transcribe(text).events
+
+        #expect(events.count == 1)
+        #expect(events[0].body == nil)
+        #expect(events[0].bodyCut == "odpověď v neznámém tvaru")
+    }
+
+    /// Bez odečtení výplně by `AQ==` hlásilo 3 B místo jednoho — u malého obrázku trojnásobek
+    /// (nálezem Copilota na #408).
+    @Test("Velikost obrázku odečítá výplň base64")
+    func imageSizeAccountsForPadding() {
+        func kind(of payload: String) -> TranscriptEvent.Kind? {
+            let text = """
+            {"type":"user","timestamp":"2026-08-09T21:44:37.738Z","message":{"content":\
+            [{"type":"image","source":{"data":"\(payload)"}}]}}
+            """
+            return transcribe(text).events.first?.kind
+        }
+
+        #expect(kind(of: "AQ==") == .image(bytes: 1))
+        #expect(kind(of: "AQI=") == .image(bytes: 2))
+        #expect(kind(of: "AQID") == .image(bytes: 3))
+    }
+
     @Test("Odpověď v neznámých blocích se přizná, nezmizí")
     func anUnknownResultShapeIsAdmitted() throws {
         let text = """

@@ -3494,6 +3494,18 @@ jediná cesta by byla druhé místo, kde se rozhoduje, co je řádek.
 a detailem (`23:13:36Bashgh pr view 412`), protože mezera byla jen ve skládání kopie. Od té doby je
 `RawSessionScript.gap` jedna konstanta a testuje se, že `attributed(…).string == plain(…)`.
 
+**A jednu podstatnou našel Copilot** (#408): odznak `ODMÍTNUTO` by se nad skutečnými daty neobjevil
+nikdy. Kód hledal `non_execution_kind`, tedy tvar ze `stream-json` — transcript ale nese odmítnutí
+jako `toolDenialKind` na **řádku** a i s jinou hláškou. Vyšlo z toho poučení, které přežije tenhle
+issue: **nepřítomnost klíče v souborech, které tu situaci nemají, není doklad o formátu.** Původní
+tvrzení „CLI to do souboru nepíše“ se opíralo o `grep` nad transcripty z review, ve kterých žádné
+odmítnutí nebylo; doklad je až soubor, ve kterém odmítnutí je — a ten se musel vyrobit spuštěním
+(`transcript/denied-tool.jsonl`).
+
+Ze stejného kola je i **sonda v podobě bajtu před oknem** (okno zarovnané přesně na hranici řádku
+o svou první událost přijít nesmí), zarovnání na `CR` a `CRLF`, ne jen na `LF`, a **generace** u čtení
+přepisu — dvě kliknutí na `Načíst znovu` nad týmž cílem se od sebe cílem poznat nedají.
+
 ### #392 — labely a vyžádaní reviewery v panelu, panel i v `Commitech`
 
 Dvě části jednoho zákresu (`docs/navrh.html`, sekce 24 a 25) a patří k sobě: labely a reviewery

@@ -106,7 +106,12 @@ struct RawSessionSheet: View {
                 }
             }
         case .shown(let transcript):
+            // **Pružný rámec, jako u hunku v `CodeTextSheet`u** (nálezem Copilota na #408):
+            // `NSScrollView` vlastní ideální výšku nemá, takže by se ve `VStack`u mohl srazit
+            // a z přepisu by nezbyla rolovatelná plocha. Zakázaná třída to není — #375 zakazuje
+            // pružnou výšku **v řádku líného seznamu**, a tohle je plocha sheetu.
             TranscriptTextView(transcript: transcript, colorScheme: colorScheme)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Palette.chrome)
         case .missing, .unreadable, .empty:
             notice { failure }

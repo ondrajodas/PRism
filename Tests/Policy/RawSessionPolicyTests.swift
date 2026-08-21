@@ -29,13 +29,27 @@ struct RawSessionWindowTests {
 
     /// Největší změřený transcript. **Nesmí z toho být stav „moc velký“** — soubor je lokální, takže
     /// se dá čtení začít od konce.
-    @Test("Z 53MB souboru se čtou poslední 4 MB")
+    @Test("Z 53MB souboru se čtou poslední 4 MB a bajt před nimi")
     func aHugeFileIsReadFromTheEnd() {
         let total = 53_300_000
         let window = Policy.rawSessionWindow(fileBytes: total)
 
-        #expect(window.length == Policy.rawSessionWindowBytes)
-        #expect(window.offset == total - Policy.rawSessionWindowBytes)
+        // O bajt víc, a je to sonda na hranici řádku — viz `rawSessionWindow`.
+        #expect(window.length == Policy.rawSessionWindowBytes + 1)
+        #expect(window.offset == total - Policy.rawSessionWindowBytes - 1)
+        // Okno pořád končí na konci souboru; sonda je jediný bajt navíc, a to zpředu.
+        #expect(window.offset + window.length == total)
+    }
+
+    /// Soubor **o jeden bajt nad stropem**: sonda se ještě vejde, takže se `offset` nesmí dostat do
+    /// minusu ani okno přerůst soubor.
+    @Test("Soubor o bajt nad stropem se čte celý, i se sondou")
+    func oneByteOverTheLimit() {
+        let total = Policy.rawSessionWindowBytes + 1
+        let window = Policy.rawSessionWindow(fileBytes: total)
+
+        #expect(window.offset == 0)
+        #expect(window.length == total)
     }
 
     @Test("Prázdný a nesmyslně velký soubor dají prázdné okno, ne pád")
@@ -93,6 +107,26 @@ struct RawSessionWindowTests {
     func anEmptyWindow() {
         #expect(Policy.rawSessionPrefixDrop(Data(), isTail: true) == 0)
     }
+
+    /// Dělení řádků drží `TextLines` a to zná `LF`, `CRLF` i samotné `CR` (#295) — kdyby zarovnání
+    /// hledalo jen `LF`, začalo by okno transcriptu s `CR` uprostřed záznamu a jeho první událost by
+    /// byla nečitelná, přestože soubor je v pořádku. Nálezem Copilota na #408.
+    @Test("Zarovnání zná CRLF i samotné CR, ne jen LF")
+    func alignmentKnowsEveryLineEnding() {
+        // `CRLF` je **jedno** zakončení: kdyby se spotřebovalo jen `CR`, okno by začalo osamoceným
+        // `LF`, tedy prázdným řádkem.
+        #expect(Policy.rawSessionPrefixDrop(Data("ab\r\ncd".utf8), isTail: true) == 4)
+        #expect(Policy.rawSessionPrefixDrop(Data("ab\rcd".utf8), isTail: true) == 3)
+        #expect(Policy.rawSessionPrefixDrop(Data("ab\ncd".utf8), isTail: true) == 3)
+    }
+
+    /// Řádek delší než celé okno končí zakončením na **posledním** bajtu okna, takže by hledání
+    /// prvního zakončení zahodilo všechno až na nic — a to platí i pro `CRLF` na konci.
+    @Test("Zakončení na samém konci okna se nezahodí")
+    func aLineEndingAtTheVeryEndIsKept() {
+        #expect(Policy.rawSessionPrefixDrop(Data("abcd\n".utf8), isTail: true) == 0)
+        #expect(Policy.rawSessionPrefixDrop(Data("abcd\r\n".utf8), isTail: true) == 0)
+    }
 }
 
 /// Strop na jednu událost a přiznání jeho ořezu (#327).
@@ -117,6 +151,16 @@ struct RawSessionBodyTests {
     @Test("Zakončení řádků na konci se sundá")
     func trailingNewlinesGoAway() {
         #expect(Policy.rawSessionBody("text\n\n").text == "text")
+        #expect(Policy.rawSessionBody("text\r\n").text == "text")
+    }
+
+    /// **Mezery na konci řádku jsou obsah**, ne šum: tělo se má ukázat tak, jak v transcriptu stojí,
+    /// a u výstupu příkazu se na koncové mezery dá narazit. Sundávají se jen zakončení řádků.
+    /// Nálezem Copilota na #408.
+    @Test("Mezery na konci se nesundávají")
+    func trailingSpacesStay() {
+        #expect(Policy.rawSessionBody("text   \n").text == "text   ")
+        #expect(Policy.rawSessionBody("text\t").text == "text\t")
     }
 
     @Test("Řeže se na celém řádku a řekne se, kolik řádků zbylo")
@@ -299,6 +343,24 @@ struct RawSessionStateTests {
                 slug: "o/r#1"
             ) == nil
         )
+    }
+
+    /// **Odpověď na nález Copilota, který chtěl tlačítko i mimo výpis kroků** (#408). Tlačítko se
+    /// kreslí uvnitř `StepFeedView`, a ten se u dráhy bez osy nekreslí vůbec — jenže dráha bez osy
+    /// **nemá pracovní strom**: bere ho z uložené osy (`ReviewerTimeline(_ run:)`), takže bez ní je
+    /// `nil` a cíl se nemá z čeho složit. Tlačítko by tedy nebylo co otevřít, ne že by chybělo.
+    ///
+    /// Je to tvrzení o **invariantu**, ne o kresbě: kdyby se strom začal brát odjinud, tenhle test
+    /// spadne a řekne, že se ta úvaha rozešla se skutečností.
+    @Test("Dráha bez osy nemá čím cíl složit, i když session zná")
+    func aLaneWithoutATimelineHasNoWorktree() {
+        // Bez uložené osy, tedy tak, jak vypadají soubory z doby před #203.
+        let run = makeStoredRun(skill: "security-review", timeline: nil, sessionID: "abc")
+        let timeline = ReviewerTimeline(run)
+
+        #expect(timeline.sessionID == "abc")
+        #expect(timeline.entries.isEmpty)
+        #expect(timeline.worktree == nil)
     }
 
     @Test("S obojím se cíl složí")

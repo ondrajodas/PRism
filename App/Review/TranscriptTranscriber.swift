@@ -21,14 +21,13 @@ import Foundation
 /// |---|---|
 /// | `session_id` | `sessionId` |
 /// | `system` / `init` | není vůbec; místo něj `queue-operation` a `attachment` |
-/// | `tool_result_meta` na eventu | není; místo něj `toolUseResult` |
+/// | `tool_result_meta` s `non_execution_kind` | není; odmítnutí nese **`toolDenialKind` na řádku** |
 /// | čas nikde | `timestamp` na skoro každém řádku |
 ///
 /// Z toho plyne jedna věc, kterou je potřeba vědět dopředu: **odmítnutí nástroje se v transcriptu
-/// pozná jinak než ve streamu.** `non_execution_kind` v souboru není, takže se `Policy.toolOutcome`
-/// dostane `nil` a zbývá `is_error`. Aby z toho nebyl odznak `ODMÍTNUTO` nad `grep`em bez shody,
-/// rozhoduje se to **stejně jako ve streamu** — tedy podle struktury, ne podle textu hlášky —
-/// a `tool_result_meta` se čte, kdyby ho novější CLI do transcriptu přidalo.
+/// pozná jinak než ve streamu** — nese ho `toolDenialKind` na **řádku**, ne `non_execution_kind`
+/// v `tool_result_meta`. Rozhoduje se o tom pořád **podle struktury, ne podle textu hlášky** (#326)
+/// a pořád v `Policy.toolOutcome`; podrobnosti i s měřením u `nonExecutionKinds(in:)`.
 struct TranscriptTranscriber: Sendable {
     /// Pracovní strom, ve kterém session běžela. Podle něj se zkracují cesty ve detailu volání —
     /// bez toho začíná každý řádek stejnými sedmdesáti znaky cache.
@@ -203,10 +202,20 @@ struct TranscriptTranscriber: Sendable {
         }
 
         let kinds = nonExecutionKinds(in: object)
+        // Odmítnutí je na **řádku**, ne v bloku — a řádek nese odpověď na jedno volání, takže se
+        // uplatní na jeho `tool_result`.
+        let denial = object["toolDenialKind"] as? String
         for block in blocks(of: object) {
             switch block["type"] as? String {
             case "tool_result":
-                consumeToolResult(block, at: time, kinds: kinds, into: &result, pending: &pending)
+                consumeToolResult(
+                    block,
+                    at: time,
+                    kinds: kinds,
+                    denial: denial,
+                    into: &result,
+                    pending: &pending
+                )
             case "text":
                 let text = block["text"] as? String ?? ""
                 append(.input, at: time, subject: size(of: text), body: text, into: &result)
@@ -222,13 +231,14 @@ struct TranscriptTranscriber: Sendable {
         _ block: [String: Any],
         at time: Date?,
         kinds: [String: String],
+        denial: String?,
         into result: inout Transcription,
         pending: inout [String: Int]
     ) {
         let content = resultContent(of: block["content"])
         let outcome = Policy.toolOutcome(
             isError: block["is_error"] as? Bool ?? false,
-            nonExecutionKind: (block["tool_use_id"] as? String).flatMap { kinds[$0] },
+            nonExecutionKind: denial ?? (block["tool_use_id"] as? String).flatMap { kinds[$0] },
             text: content.text
         )
         let body = Policy.rawSessionBody(content.text ?? "")
@@ -257,13 +267,25 @@ struct TranscriptTranscriber: Sendable {
         pending[id] = nil
     }
 
-    /// `non_execution_kind` po `tool_use_id`.
+    /// Čím se v transcriptu pozná **odmítnutý** nástroj od nástroje, který vrátil chybu.
     ///
-    /// **V dnešním transcriptu to pole není** (ověřeno na souborech pod `~/.claude/projects`:
-    /// `user` řádky mají `toolUseResult`, ne `tool_result_meta`), takže se z něj obvykle vrátí
-    /// prázdno a o odmítnutí rozhodne `is_error`. Čte se přesto, a je to schválně: kdyby ho CLI
-    /// do transcriptu přidalo, rozhodne se **stejně jako ve streamu** — a `Policy.toolOutcome`
-    /// zůstává jedním místem, kde se to rozhoduje.
+    /// **V transcriptu je to `toolDenialKind` na řádku, ne `tool_result_meta` jako ve streamu** —
+    /// a bylo to potřeba změřit, ne odvodit. Nálezem Copilota na #408 bylo, že se odmítnutí
+    /// v přepisu nepozná vůbec: kód hledal `non_execution_kind` (tvar ze `stream-json`), takže by
+    /// `Policy.toolOutcome` dostala `nil`, z odmítnutého `Bash`e by byl obyčejný `failed` a odznak
+    /// `ODMÍTNUTO` by se nad skutečnými daty **neobjevil nikdy**.
+    ///
+    /// Ověřeno na skutečném transcriptu se skutečným odmítnutím (`transcript/denied-tool.jsonl`,
+    /// vyrobený spuštěním `claude -p` s `--disallowedTools 'Bash(wc:*)'`): `non_execution_kind`
+    /// se v něm vyskytuje **nulakrát**, `toolDenialKind` **jednou**, a to jako klíč **řádku**
+    /// (v bloku `tool_result` je `null`). Hláška je navíc jiná než ve streamu — *Permission to use
+    /// Bash with command … has been denied.* proti *Claude requested permissions … yet.* —, takže
+    /// text hlášky by byl ještě křehčí, než jak ho popisuje #326.
+    ///
+    /// **Rozhodnutí zůstává v `Policy.toolOutcome`**, tady se jen dodá to, z čeho se pozná: kdyby
+    /// se odmítnutí vyhodnocovalo zvlášť, byly by dvě různá pravidla pro odznak, který má znamenat
+    /// jednu věc. `tool_result_meta` se čte dál — je to tvar, který CLI píše do streamu, takže
+    /// kdyby ho přidalo i do souboru, rozhodne se stejně.
     private func nonExecutionKinds(in object: [String: Any]) -> [String: String] {
         let meta = object["tool_result_meta"] as? [[String: Any]] ?? []
         return meta.reduce(into: [:]) { result, entry in
@@ -281,7 +303,11 @@ struct TranscriptTranscriber: Sendable {
     /// kterých není k přečtení nic. Jen se přizná, že tam je a kolik váží.
     private func resultContent(of value: Any?) -> (text: String?, note: String?) {
         if let text = value as? String { return (text, nil) }
-        guard let blocks = value as? [[String: Any]] else { return (nil, nil) }
+        guard let blocks = value as? [[String: Any]] else {
+            // Ani řetězec, ani pole bloků — nový tvar v příští verzi CLI. Krok bez těla a bez
+            // poznámky by vypadal jako krok, jehož nástroj nic nevrátil (nálezem Copilota na #408).
+            return (nil, value == nil ? nil : "odpověď v neznámém tvaru")
+        }
 
         var texts: [String] = []
         var imageBytesTotal = 0
@@ -314,9 +340,14 @@ struct TranscriptTranscriber: Sendable {
 
     /// Kolik obrázek váží. Počítá se z **délky base64**, ne dekódováním: dekódovat 2,8 MB kvůli
     /// jednomu číslu v hlavičce je práce, kterou nikdo nechtěl. Base64 nese 3 bajty na 4 znaky.
+    ///
+    /// **Odečítá se výplň `=`** (nálezem Copilota na #408): bez toho by `AQ==` hlásilo 3 B místo
+    /// jednoho. U megabajtového obrázku je to nepodstatné, u malého je to trojnásobek — a číslo
+    /// v hlavičce má být velikost obrázku, ne délka jeho zápisu.
     private func imageBytes(of block: [String: Any]) -> Int {
-        let data = (block["source"] as? [String: Any])?["data"] as? String
-        return (data?.utf8.count ?? 0) / 4 * 3
+        guard let data = (block["source"] as? [String: Any])?["data"] as? String else { return 0 }
+        let padding = data.reversed().prefix(2).prefix { $0 == "=" }.count
+        return max(data.utf8.count / 4 * 3 - padding, 0)
     }
 
     // MARK: - Drobnosti

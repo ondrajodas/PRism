@@ -333,6 +333,34 @@ uloženého OAuth tokenu.
 | `intent-server-failed.jsonl` | #345: `mcp_servers[].status = "failed"`, `error_max_turns` a **`result` event bez klíče `result`** |
 | `intent-tool-denied.jsonl` | #345: nepovolený čtecí nástroj — `success` a `permission_denials` s jednou položkou |
 
+**Transcript session není `stream-json`** (#327, #408) a fixtures na něj leží v
+`Tests/Fixtures/transcript/`:
+
+| Soubor | Co dokazuje |
+|---|---|
+| `interrupted-session.jsonl` | #97: `ReportFindings` v transcriptu zabité session, a typy `queue-operation` / `last-prompt`, které ve streamu nejsou |
+| `review-session.jsonl` | #327: celé review — `attachment`, zadání session, `text`, `thinking`, tři nástroje s odpověďmi a `ReportFindings` |
+| `denied-tool.jsonl` | #408: **odmítnutý nástroj** — `toolDenialKind` na **řádku**, hláška `Permission to use … has been denied.` |
+
+Čtyři rozdíly proti streamu, každý ověřený na skutečném souboru:
+
+| Ve streamu | V transcriptu |
+|---|---|
+| `session_id` | `sessionId` |
+| `system` / `init` | není vůbec; místo něj `queue-operation` a `attachment` |
+| `tool_result_meta[].non_execution_kind` | **`toolDenialKind` na řádku** (v bloku `tool_result` je `null`) |
+| čas nikde | `timestamp` na skoro každém řádku |
+
+**Hláška o odmítnutí se mezi nimi liší**, a je to potřeba vědět: stream píše `Claude requested
+permissions to use Bash, but you haven't granted it yet.`, transcript `Permission to use Bash with
+command wc -l ukazka.swift has been denied.` Je to druhý důvod, proč se odmítnutí nepozná podle textu
+(první je v #326).
+
+**`denied-tool.jsonl` se musela vyrobit** (`claude -p` s `--allowedTools 'Bash'` a
+`--disallowedTools 'Bash(wc:*)'`, dva řádky ze vzniklého transcriptu). V transcriptech z review na
+tomhle stroji odmítnutí **není ani jedno** — a dokud se to nezkusilo, vypadala jejich prázdnota jako
+doklad o tom, že CLI ten klíč do souboru nepíše.
+
 **Neúspěšný příkaz fixture nemá** (#326): ve všech osmi zachycených streamech přišel
 `is_error: true` **vždycky** s `tool_result_meta`, tedy jako odmítnutí — `grep` bez shody ani `Read`
 neexistujícího souboru se do nich nedostal. Rozlišení „chyba nástroje ≠ odmítnutí“ se proto testuje

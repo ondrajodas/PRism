@@ -1024,20 +1024,31 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     výpis kroků zahazuje), že **ani jeden** řádek se neztratí jako nečitelný, že odpověď nástroje
     doplní **tělo kroku** místo druhé události a že base64 obrázku se nevypíše ani v poznámce.
 
-    **Odmítnutý nástroj se ze skutečných dat nesehnal a je u toho napsané proč**: v žádném
-    transcriptu pod `~/.claude/projects` není ani jeden `non_execution_kind` (CLI ho píše do streamu,
-    ne do souboru), takže se tvar bere z fixture `review-denied-write.jsonl` a testuje inline JSONem.
-    Vedle toho stojí tvrzení, že **`is_error` sám o sobě odmítnutí neznamená** — `grep` bez shody
-    nesmí dostat odznak `ODMÍTNUTO`, jinak by ten odznak znamenal „něco se nepovedlo“ místo
-    „read-only režim zabral“ (#326).
+    **Odmítnutý nástroj má vlastní fixture, a je to ten nejcennější test celého issue**
+    (`transcript/denied-tool.jsonl`). Původně tu stálo, že se odmítnutí ze skutečných dat sehnat
+    nedá — „v žádném transcriptu není `non_execution_kind`“ —, jenže to se `grep`lo nad transcripty
+    **z review, ve kterých žádné odmítnutí nebylo**, tedy nad soubory, ve kterých nebylo co psát.
+    Copilot na #408 upozornil, že odznak `ODMÍTNUTO` pak nad skutečnými daty nevznikne nikdy; fixture
+    se proto **vyrobila** (`claude -p` s `--disallowedTools 'Bash(wc:*)'`) a ukázala, že transcript
+    nese `toolDenialKind` na **řádku**. Poučení, které přežije tenhle test: **nepřítomnost klíče
+    v souborech, které tu situaci nemají, není doklad o formátu.**
+
+    Vedle toho stojí dvě tvrzení, která ten odznak drží pochopitelný: tvar ze **streamu** se čte dál
+    (inline JSONem — v souborech na disku není), a **`is_error` sám o sobě odmítnutí neznamená** —
+    `grep` bez shody nesmí dostat odznak, jinak by znamenal „něco se nepovedlo“ místo „read-only režim
+    zabral“ (#326).
   - `RawTranscriptSnapshotTests` — **skutečné soubory** v dočasné složce, protože právě o disk tu jde.
     Tři chybové stavy vzniknou tady (chybí / vadné UTF-8 / prázdný), okno se ověřuje na souboru přes
     strop (nula nečitelných řádků, tedy zarovnání zabralo) a zvlášť na tom **jednom řádku delším než
-    okno**: musí z něj zbyt jedna nečitelná událost, ne prázdno.
-  - `AppStoreRawSessionTests` — fake `TranscriptReading`. Nejcennější jsou tři tvrzení o tom, co se
+    okno**: musí z něj zbyt jedna nečitelná událost, ne prázdno. A od #408 na **okně zarovnaném
+    přesně na hranici řádku** — ten stav se dá spočítat (řádky po 128 bajtech padnou na hranici 4 MB
+    vždycky) a bez sondy v podobě bajtu před oknem se v něm ztrácela první událost.
+  - `AppStoreRawSessionTests` — fake `TranscriptReading`. Nejcennější jsou tvrzení o tom, co se
     **nestalo**: nečitelný přepis se neslije s chybějícím (`do`/`catch`, ne `try?` — ten by obě
-    odpovědi zplošťoval na `nil`), tik přírůstku **okno nečte znovu** a `Načíst znovu` po zavření
-    sheetu nečte nic. Plus že zavření snímek zahodí — jsou to megabajty.
+    odpovědi zplošťoval na `nil`), tik přírůstku **okno nečte znovu**, `Načíst znovu` po zavření
+    sheetu nečte nic, přepis cizí session se neukáže pod jiným titulkem a **pomalejší čtení
+    nepřepíše novější snímek téže session** (od #408, kde se ukázalo, že na to cíl sám nestačí — dvě
+    čtení téhož cíle rozliší jedině generace). Plus že zavření snímek zahodí — jsou to megabajty.
 
   K tomu dvě věci mimo tu pětici. `RawSessionScriptTests` tvrdí, že vysázený a zkopírovaný přepis
   jsou **jedna pravda** (`attributed(…).string == plain(…)`) — chyba, kterou zelené testy neukázaly

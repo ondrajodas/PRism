@@ -1567,13 +1567,49 @@ Ořez události se hlásí **v řádcích pod megabajt a v bajtech nad ním**: n
 přestává být míra toho, kolik toho chybí (7,5MB `tool_result` je jeden řádek). Po řezu **uprostřed**
 řádku se hlásí vždycky bajty — zbytek začíná půlkou řádku, takže by se počítal jako celý.
 
+#### Odmítnutí se v transcriptu pozná jinak než ve streamu
+
+**A bylo to potřeba změřit, ne odvodit.** První podoba hledala `non_execution_kind` (tvar ze
+`stream-json`), takže `Policy.toolOutcome` dostala `nil`, z odmítnutého `Bash`e byl obyčejný `failed`
+a odznak `ODMÍTNUTO` by se nad skutečnými daty **neobjevil nikdy** — nálezem Copilota na #408.
+
+Co v transcriptu doopravdy je (ověřeno na souboru se **skutečným** odmítnutím, vyrobeným spuštěním
+`claude -p` s `--disallowedTools 'Bash(wc:*)'`):
+
+| Klíč | Kde | Hodnota |
+|---|---|---|
+| `non_execution_kind` | nikde | 0 výskytů |
+| `toolDenialKind` | na **řádku** `user` (v bloku `tool_result` je `null`) | `user-rejected` |
+| hláška | v `content` bloku | `Permission to use Bash with command … has been denied.` |
+
+Ta hláška je navíc **jiná** než ve streamu (`Claude requested permissions … yet.`), což je druhý
+důvod, proč se odmítnutí nesmí poznávat podle textu — a přesně to říká #326.
+
+**Rozhodnutí zůstává v `Policy.toolOutcome`**: transcriber jen dodá, z čeho se pozná. Dvě různá
+pravidla pro jeden odznak by znamenala, že se pod ním v ose a v přepisu skrývá něco jiného.
+`tool_result_meta` se přitom čte dál — je to tvar, který CLI píše do streamu, takže kdyby ho přidalo
+i do souboru, rozhodne se stejně.
+
+**Jak se to poznalo, ať to příště nikoho nestojí kolo:** dřívější tvrzení „CLI to do souboru nepíše“
+se opíralo o `grep` nad transcripty z review, ve kterých ale **žádné odmítnutí nebylo** — tedy o
+soubory, ve kterých nebylo co psát. Doklad je až soubor, ve kterém odmítnutí je.
+
 #### Čtyři věci, které nejsou zjevné
 
 - **Okno se zarovnává na začátek řádku, ale ne za každou cenu.** První řádek ocasu je obvykle zbytek
   řádku, jehož začátek leží před oknem, takže se zahodí. **Když ale za prvním zakončením už nic není**
   (řádek delší než celé okno — ten změřený případ 7,5 MB), nezahodí se nic: zbyde jedna **nečitelná
   událost**, a ta aspoň ukáže, co v souboru stojí. Prázdný sheet nad souborem, ve kterém něco je, by
-  byl horší.
+  byl horší. Hledá se `LF` **i `CR`** a `CRLF` se spotřebuje celé — dělení řádků drží `TextLines`
+  a to zná všechna tři zakončení (#295); s jedním `LF` by transcript s `CR` začínal uprostřed záznamu.
+- **Čte se o jeden bajt víc — ten před oknem.** Je to sonda na hranici řádku: když `fileBytes − 4 MB`
+  padne přesně na začátek řádku, není co zahazovat, a „první zakončení v okně“ by sebralo celou
+  **první událost** a `omittedBytes` by tvrdil větší zkrácení, než nastalo (nálezem Copilota na #408).
+  S tím bajtem je odpověď v datech, ne v úvaze, a `omittedBytes` zůstává `offset + zahozeno`.
+- **Dvě čtení téhož cíle se od sebe poznají generací, ne cílem.** Dvě kliknutí na `Načíst znovu`
+  znamenají dvě čtení, a to pomalejší z nich by po `await`u přepsalo novější — brána „je to pořád
+  tenhle cíl?“ by přitom byla pravda (taky nálezem Copilota na #408). Generace je číslo, které se
+  zvýší s každým čtením a kontroluje se i u tiku velikosti.
 - **`String(data:encoding:)`, ne `String(decoding:as:)`.** Ten druhý nikdy neselže — vadné bajty
   nahradí `U+FFFD` —, takže by se ze stavu „soubor nemá platné UTF-8“ stal přepis s otazníky
   a `Ukázat v Finderu` by v okně nebylo. Rozpůlený znak na začátku okna se přitom **nesmí** za vadné

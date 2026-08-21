@@ -405,6 +405,10 @@ final class AppStore {
     /// to **jeden** snímek, ne slovník — viz `RawSessionSnapshot`.
     var rawSession: RawSessionSnapshot?
 
+    /// Počitadlo načtení přepisu. Viz `RawSessionSnapshot.generation` — bez něj by dvě čtení téhož
+    /// cíle nešlo od sebe poznat.
+    var rawSessionGeneration = 0
+
     /// Běžící review podle PR — drží se kvůli zrušení.
     var reviewTasks: [PRIdentifier: RunningReview] = [:]
 

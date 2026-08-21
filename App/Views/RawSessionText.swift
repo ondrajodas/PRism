@@ -114,9 +114,14 @@ enum RawSessionText {
         case .loading, .shown:
             return nil
         case .missing:
-            return "Transcript téhle session na disku není — a už nebude: pracovní strom, ke kterému "
-                + "patřil, mezitím sebral úklid cache. Padá s ním i `claude --resume`, protože čte "
-                + "tentýž soubor (na neznámou session odpoví `No conversation found with session ID`)."
+            // **Příčina se netvrdí** (nálezem Copilota na #408): `nil` znamená „soubor tam není“ —
+            // ať už ho sebral úklid cache, nebo se session nestihla ani založit. Poslat člověka
+            // hledat problém v úklidu je horší než neříct nic. Co se tvrdit **dá**, je následek:
+            // `claude --resume` čte tentýž soubor.
+            return "Transcript téhle session na disku není — soubor chybí, takže se přepis nemá "
+                + "odkud vzít a opakování by na tom nic nezměnilo. Platí to i pro `claude --resume`: "
+                + "čte tentýž soubor a na neznámou session odpoví `No conversation found with "
+                + "session ID`."
         case .unreadable(let reason):
             return "Transcript je na disku, ale nedal se přečíst. \(reason)"
         case .empty(let bytes):

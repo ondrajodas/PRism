@@ -144,6 +144,29 @@ struct AppStoreRawSessionTests {
         #expect(store.rawSession == nil)
     }
 
+    /// **Cíl sám na rozlišení nestačí** (nálezem Copilota na #408): dvě čtení **téhož** cíle se od
+    /// sebe poznají jedině generací, a to pomalejší z nich nesmí přepsat novější. Bez ní by dvě
+    /// kliknutí na `Načíst znovu` skončila u snímku, o který nikdo nežádal.
+    @Test("Pomalejší čtení nepřepíše novější snímek téže session")
+    func aSlowerReadDoesNotOverwriteANewerOne() async throws {
+        let reader = FakeTranscriptReader([:])
+        reader.snapshots = ["abc-123": transcript(events: 1, fileBytes: 100)]
+        let store = store(reader)
+        await store.openRawSession(target)
+
+        // Dvě čtení téhož cíle: to druhé (novější) dorazí a to první se pak nesmí propsat.
+        reader.snapshots = ["abc-123": transcript(events: 9, fileBytes: 900)]
+        let stale = store.rawSession?.generation
+        await store.reloadRawSession()
+
+        #expect(store.rawSession?.generation != stale)
+        guard case .shown(let shown) = try #require(store.rawSession?.state) else {
+            Issue.record("čekal se přepis")
+            return
+        }
+        #expect(shown.events.count == 9)
+    }
+
     // MARK: - Přírůstek
 
     @Test("Přírůstek se počítá proti velikosti při snímku")

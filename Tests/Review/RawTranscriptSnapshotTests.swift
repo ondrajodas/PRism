@@ -135,6 +135,35 @@ struct RawTranscriptSnapshotTests {
         #expect(Policy.rawSessionState(of: snapshot) != .empty(bytes: snapshot.fileBytes))
     }
 
+    /// **Okno, které začíná přesně na hranici řádku, o svou první událost nepřijde.** Zarovnání
+    /// zahazuje zbytek řádku před oknem — jenže když `fileBytes − 4 MB` padne přesně na začátek
+    /// řádku, není co zahazovat, a hledání „prvního zakončení v okně“ by sebralo celou první
+    /// událost a `omittedBytes` by tvrdil větší zkrácení, než nastalo. Nálezem Copilota na #408.
+    ///
+    /// Zařídit ten stav jde spočítat: řádky **o 128 bajtech** (127 znaků JSONu a zakončení) padnou
+    /// na hranici okna vždycky, protože 4 MB je 32 768 × 128.
+    @Test("Okno zarovnané na hranici řádku o první událost nepřijde")
+    func aWindowThatStartsOnALineBoundaryKeepsItsFirstEvent() async throws {
+        let lineLength = 128
+        let head = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\""
+        let tail = "\"}]}}"
+        let padding = lineLength - 1 - head.utf8.count - tail.utf8.count
+        var text = ""
+        // O tisíc řádků víc, než se do okna vejde — okno tedy začne na hranici řádku.
+        for index in 0..<(Policy.rawSessionWindowBytes / lineLength + 1_000) {
+            text += head + String(repeating: "\(index % 10)", count: padding) + tail + "\n"
+        }
+        try write(Data(text.utf8), as: "zarovnana")
+
+        let snapshot = try #require(await snapshot("zarovnana"))
+
+        #expect(snapshot.isTruncated)
+        #expect(snapshot.unreadableLines == 0)
+        // Okno je 4 MB řádků po 128 bajtech, celých — ani jedna událost se neztratila.
+        #expect(snapshot.events.count == Policy.rawSessionWindowBytes / lineLength)
+        #expect(snapshot.omittedBytes == 1_000 * lineLength)
+    }
+
     // MARK: - Velikost pro patičku
 
     @Test("Velikost se čte bez druhého čtení okna")
