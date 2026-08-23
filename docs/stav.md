@@ -3837,3 +3837,45 @@ z `bitmapImageRepForCachingDisplay` je v profilu displeje, takže `crit` v ní v
 být tak velká, že by prošel i akcent. Tokeny se proto kreslí **týmž harnessem** jako vzorník.
 Ověřeno vložením regrese ze dvou stran: se starým odznakem padne 5 testů ze 6, a se samotným
 `offset(x: 6, y: -2)` (červená ponechána) padne tvrzení o poloze na `46 > 43`. Testů 3594.
+
+### #409 — klik na notifikaci nic neotevřel
+
+**Na tomhle je co vidět, ale ne ve slotu**: `bin/slot-config.sh` čistí konfiguraci od notifikací,
+takže se ve slotové aplikaci skutečná notifikace nedá vyrobit. Doloženo proto testy, ověření
+v hlavní instanci zbývá na člověka (v nastavení povolit notifikace, nechat doběhnout review nebo
+počkat na nové PR ve frontě a na banner kliknout — má se otevřít záložka toho PR a okno se na ni
+přepnout).
+
+Obsluha kliknutí nastavovala **jedině `selection`**, tedy stav, který od záložek (#180) v domácí
+záložce nikdo nekreslí: `activeTab` zůstal na `.home`, žádná záložka nevznikla a výsledek byl
+„aplikace naskočila a nic“. Byla to **regrese od #180** — obsluha je z #82–#88, kdy výběr řádku
+otevření byl.
+
+**Otevírání PR má od téhle změny jeden vstupní bod**: `AppStore.openTab(_ pr: PRIdentifier, in tab:
+PullRequestTab? = nil)`. Jsou to totiž dva zápisy (`openTabs` a `activeTab`), takže „otevřít PR“ se
+dá provést napůl — a přesně to se stalo. Volitelný `tab` je tam proto, že skok na nález nebo na
+řádek dění nemá nad zavřenou záložkou kde přistát; do #409 to skládala paleta ⌘K vlastní privátní
+metodou (`show(_:in:)`), která tím zmizela. **Použije ho i #414** (sekce `Dění`), aby klik na řádek
+vedl do konkrétního tabu tou samou cestou jako klik na notifikaci. `tab: nil` uloženou volbu
+**nepřepisuje** — klik na notifikaci tab nejmenuje, protože proud kliknutí nese `PRIdentifier`, ne
+událost, takže by ho vybíral naslepo.
+
+**Vlastní PR se nerozlišují.** Notifikace se o nich hlásí jedině o cizí aktivitě (#335), ale klik na
+starší notifikaci může přijít na PR, který se mezitím do sekce `Moje PR` (#331) přesunul — a záložka
+je na sekci railu nezávislá, protože obsah si bere z plného seznamu. Zúžení podle autora by tady
+znamenalo zahozený klik za nic.
+
+**Rozhodování je v `Policy.notificationClick(on:listed:visible:status:)`**, ne `if`y v obsluze
+proudu, a zůstává v něm obojí, co obsluha řešila správně: PR mimo seznam se neotevírá naslepo
+(výjimka je `notStarted`, kvůli kterému má proud buffer) a filtr, který PR schoval (#117), se ruší.
+Cena za tu výjimku je, že do prvního tiku stojí v záložce hláška „Pull request zmizel ze seznamu“;
+druhá varianta — čekat s otevřením na tik — je klik, po kterém se nic nestane, tedy zrovna to, co se
+opravovalo.
+
+**Ta zajímavější polovina issue jsou testy.** Čtyři testy na klik tvrdily `store.selection == pr`,
+tedy přesně to jediné, co obsluha dělala: zelené byly právem a o tom, co uživatel vidí, neříkaly
+nic. Přepsaly se na `activeTab` a `openTabs` a přidaly se tři případy, které nebyly vůbec (uložený
+tab se nepřepisuje, filtr se ruší, vlastní PR se otevře). Ověřeno vložením regrese ze dvou stran:
+`selection = pr` místo `openTab(pr)` složí šest testů ze třinácti v suitě (staré čtyři by prošly)
+a `Policy`, která vrací `open` vždycky, složí test „klik na PR mimo seznam neotevře nic“ i čtyři
+případy v `NotificationClickTests`. Testů 3724.
