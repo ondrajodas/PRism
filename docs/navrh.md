@@ -11,7 +11,7 @@ odkaz, žije jako artifact `PRism — návrh vizuální revize`:
 <https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Obojí musí odejít
 **v jednom commitu a jednom publikování** — rozejít se smí leda na dobu jedné úpravy.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi 26 sekcí. Většina kreslí jednu
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi 27 sekcí. Většina kreslí jednu
 obrazovku nebo jeden stav v rámu okna (`.win`) a vedle sebe má poznámky (`.notes`), proč je to
 tak; zbytek rozhodnutí vysvětluje — *Dvanáct stavů, které se nesmí slít*, *Kde jsem si vybral,
 a co to stálo*, *Co by se muselo přepsat*.
@@ -195,6 +195,29 @@ který platí.
    zůstávají — mění se obsah, ne identita stránky; hodnoty jsou výš, v *Kde návrh je*.
 3. **Commitnout ten soubor toutéž změnou.** Publikovaná kopie bez commitu znamená, že v repu
    je jiný návrh než na odkazu, který jsem dostal.
+
+**Publikuje se celý dokument, takže dvě session nad týmž artifactem se přepisují** (#410).
+Publikování není merge: nahraje se celý obsah stránky a to předchozí z ní beze slova zmizí.
+Plynou z toho tři věci.
+
+**Kdo publikuje z branche, vtáhne do ní napřed `main`** — jinak odkaz zahodí všechno, co se
+mezitím mergnulo, a vypadá to, že se ta práce nestala.
+
+**Pozdější publikování smete to dřívější, i když ta dřívější změna pořád leží v PR.** U #410 to
+tak dopadlo: zákres sekce *Dění* se publikoval ve 20:25, o půl hodiny později publikoval jiný
+agent ze **své** branche (přejmenování v sekci 20, #327) a v rozcestníku pak bylo pod *Oknem
+aplikace* jen *Přehled*. Uživatel tedy neměl co odsouhlasit, a ta sekce přitom celou dobu ležela
+v repu — publikovaná kopie o ní jen nevěděla.
+
+**Po každém publikování z branche si odkaz otevři a zkontroluj, že tam ta sekce je.** A když leží
+víc zákresů naráz, publikuje se **naposled ten, který se má ukazovat**.
+
+**Číslo sekce se kontroluje proti `mainu` v den publikování**, ne proti stavu při zakládání
+branche (#410). „Další volné číslo“ z bodu 1 si dvě nezávisle vzniklé branche vezmou obě: #401
+i #410 vyšly z mainu, na kterém bylo 25 sekcí, takže si obě vzaly **26** — a po mergnutí obou by
+dokument měl kotvu `#s26` dvakrát. Přečísluje se ta, která se merguje později (u #410 na **27**),
+a s číslem se mění i eyebrow sekce a komentáře u jejího CSS. Že je kotva navěky (viz *Kde návrh
+je*) tomu neodporuje: nemergnutá sekce ještě žádnou kotvu, na kterou se odkazuje, nemá.
 
 Nové obrazovky se kreslí **stejnými třídami jako zbytek** (`.win`, `.card`, `.pill`, `.mini`, …).
 Vlastní styl pro jednu sekci znamená, že se návrh přestal skládat z jednoho systému, a to je
