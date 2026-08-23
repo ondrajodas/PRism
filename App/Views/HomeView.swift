@@ -52,7 +52,10 @@ struct HomeView: View {
 
     @ViewBuilder private var content: some View {
         switch store.railSection {
-        case .overview: DashboardView(store: store, open: store.openTab(_:))
+        // Uzávěr, ne odkaz `store.openTab(_:)`: od #409 bere `openTab` i tab, na kterém se má PR
+        // otevřít, a odkaz na metodu s výchozím parametrem se ve Swiftu složit nedá. Dashboard tab
+        // nejmenuje — karta vede na PR, ne do jeho záložky.
+        case .overview: DashboardView(store: store, open: { store.openTab($0) })
         case .queue: PullRequestListView(store: store, scope: .queue)
         // Tentýž seznam nad druhou množinou (#331) — filtr, řazení i detail se použijí beze
         // změny. Druhé view by znamenalo dvě podoby jednoho řádku.

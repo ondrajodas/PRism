@@ -1393,9 +1393,28 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   není text notifikace, ale dvě věci, které se dají pokazit tiše: že se **odmítnuté oprávnění
   dá poznat** (a úspěch tu hlášku smaže) a že se **kliknutí neztratí, když dorazí dřív**, než
   si ho má kdo vyzvednout — na tom stojí klik na notifikaci, která aplikaci teprve spustila.
-  K tomu klik na PR mimo seznam, který výběr nemění, a doručení bez centra, které si nic
-  nezapíše. Čeká se **ohraničeně** (200 × 1 ms), ne neomezeným `Task.yield()` spinem: ten by
-  běžel na `MainActoru` bez horní hranice, což položilo suitu u #68.
+  K tomu klik na PR mimo seznam, který neotevře nic, a doručení bez centra, které si nic
+  nezapíše. Čeká se přes `Tests/Support/TestWaiting.swift` (#296), ne neomezeným `Task.yield()`
+  spinem: ten by běžel na `MainActoru` bez horní hranice, což položilo suitu u #68.
+
+  **Tvrzení o kliku jsou od #409 o `activeTab` a `openTabs`, ne o `selection`** — a je to
+  zajímavější polovina toho issue než samotná oprava. Čtyři testy tady totiž tvrdily
+  `store.selection == pr`, tedy **přesně to jediné, co obsluha dělala**: byly zelené právem
+  a o tom, co uživatel vidí, neříkaly nic. Poučení není „testuj víc“, ale **testuj ten stav,
+  který se kreslí** — `selection` je od záložek (#180) v domácí záložce neviditelný, takže test
+  nad ním nedokáže rozlišit funkční okno od okna, ve kterém se po kliknutí nestane nic.
+
+  Ověřeno **vloženou regresí ve dvou podobách**: `selection = pr` místo `openTab(pr)` složilo
+  šest testů ze třinácti (staré čtyři by prošly), a `Policy.notificationClick`, která vrací
+  `open` vždycky, složila test „klik na PR mimo seznam neotevře nic“ i čtyři případy v `Policy`.
+  K tomu tři nové případy, které dřív nebyly vůbec: že klik **nepřepíše uložený tab** (proud nese
+  identitu, ne událost), že **filtr, který PR schoval, se zruší** (do #409 to byl kód bez testu)
+  a že klik na **vlastní PR** (#331) záložku otevře taky — notifikace o cizí aktivitě (#335) na
+  něj chodí a rozřazení podle autora se téhle cesty nesmí týkat.
+
+  Samotné rozhodování je vyčerpané výčtem v `NotificationClickTests` (`Tests/Policy/`): PR
+  v seznamu / mimo × vidět po filtru / schovaný × `notStarted` / načteno, včetně toho, že
+  **chybující polling z chybějícího PR otevření nedělá** (seznam už jednou dorazil).
 
   Skutečné doručení fakem ověřit nejde, takže se ověřilo **spuštěním** — notifikace dorazila,
   delegát dostal `willPresent` i `didReceive` (`UNNotificationDefaultActionIdentifier`) a klik

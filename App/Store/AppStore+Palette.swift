@@ -234,29 +234,22 @@ extension AppStore {
         case .pullRequest(let pr):
             openTab(pr)
         case .file(let pr, let path):
-            show(pr, in: .filesChanged)
+            openTab(pr, in: .filesChanged)
             paletteJump = CommandPalette.Jump(pullRequest: pr, file: path, line: nil, kind: .file)
         case .finding(let pr, let file, let line):
             guard let file else {
                 // Nález bez místa v kódu se nemá kam scrollovat. Tabulka v tabu `Nálezy` je
                 // jediné místo, kde je vidět celý — a skok naslepo do diffu je horší než skok
                 // tam, kde ten nález doopravdy je.
-                show(pr, in: .findings)
+                openTab(pr, in: .findings)
                 return nil
             }
-            show(pr, in: .filesChanged)
+            openTab(pr, in: .filesChanged)
             paletteJump = CommandPalette.Jump(pullRequest: pr, file: file, line: line, kind: .finding)
         case .action(let action):
             return perform(action)
         }
         return nil
-    }
-
-    /// Otevře PR jako záložku a přepne v něm tab. Obojí naráz, protože skok do diffu nad
-    /// zavřenou záložkou by neměl kde přistát.
-    private func show(_ pr: PRIdentifier, in tab: PullRequestTab) {
-        openTab(pr)
-        setDetailTab(tab, for: pr)
     }
 
     private func perform(_ action: CommandPalette.Action) -> CommandPalette.Effect? {

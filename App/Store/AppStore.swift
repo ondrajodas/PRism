@@ -849,11 +849,24 @@ final class AppStore {
 
     /// Otevře PR jako záložku a přepne se na ni. Otevřený PR se **neotevírá podruhé** — kliknutí
     /// na něj v seznamu ho jen vytáhne dopředu, jako v prohlížeči.
-    func openTab(_ pullRequest: PRIdentifier) {
+    ///
+    /// **Jediný vstupní bod pro „otevři tenhle PR“** (#409), a s `tab` i pro „otevři ho na tomhle
+    /// tabu“. Chodí sem kliknutí v seznamu, karty dashboardu, paleta ⌘K, klik na notifikaci
+    /// a od #414 řádek dění — protože nastavit `activeTab` a `openTabs` jsou dva zápisy, které se
+    /// dají provést každý zvlášť, a přesně to bylo #409: obsluha notifikací nastavila `selection`,
+    /// tedy stav, který v domácí záložce nikdo nekreslí, a klik na notifikaci **neudělal nic**.
+    ///
+    /// **`tab: nil` volbu tabu nepřepisuje.** Volba je odpověď na „kam se v tomhle PR koukám“
+    /// a drží se per PR (`detailTab(for:)`), takže otevření bez upřesnění má vrátit člověka tam,
+    /// kde skončil. Kdo tab **jmenuje**, ho přepíše — a jmenuje ho jedním voláním schválně: skok
+    /// na nález (paleta ⌘K) ani na řádek dění (#414) nemá nad zavřenou záložkou kde přistát, takže
+    /// dvě volání by znamenala dvě místa, kde se dá zapomenout jedno z nich.
+    func openTab(_ pullRequest: PRIdentifier, in tab: PullRequestTab? = nil) {
         if !openTabs.contains(pullRequest) { openTabs.append(pullRequest) }
         if let summary = summary(for: pullRequest) { openTabSnapshots[pullRequest] = summary }
         activeTab = .pullRequest(pullRequest)
         selection = pullRequest
+        if let tab { setDetailTab(tab, for: pullRequest) }
     }
 
     /// Zavře záložku. **Nic se tím nezahazuje** — draft, nálezy i běžící review zůstávají, protože

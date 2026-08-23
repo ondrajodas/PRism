@@ -1345,7 +1345,9 @@ zastaral hned další verzí.
    architektonické poznámky).
 
 7. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
-   a o doběhlém review. Klik na notifikaci ten pull request vybere a dá okno dopředu.
+   a o doběhlém review. Klik na notifikaci **otevře záložku** toho pull requestu (na tabu, kde jsi
+   v něm skončil) a dá okno dopředu. PR, který se mezitím ze seznamu odklidil, se neotevírá —
+   a filtr, který ho schoval, klik zruší.
 
 **Co nedoběhlo, se neztratí.** Když se aplikace zavře, ptá se — a když se ukončení potvrdí,
 **běžící session zabije** a čeká, dokud po nich nezůstane běžet nic. Bez toho `claude` aplikaci

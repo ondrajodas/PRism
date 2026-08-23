@@ -6,10 +6,18 @@ import Testing
 /// Základ notifikací (#88) ze strany store: co se doručí, co se o tom řekne v okně a co
 /// udělá kliknutí.
 ///
-/// Vrstva bez konzumenta — doručovat začne #82. To hlavní tady proto není text notifikace,
-/// ale dvě věci, které se dají pokazit tiše: že se **odmítnuté oprávnění dá poznat** (jinak
-/// je „nic mi nepřišlo“ k nerozeznání od „nic se nestalo“) a že se **kliknutí neztratí**,
-/// když dorazí dřív, než si ho má kdo vyzvednout.
+/// To hlavní tady proto není text notifikace, ale tři věci, které se dají pokazit tiše: že se
+/// **odmítnuté oprávnění dá poznat** (jinak je „nic mi nepřišlo“ k nerozeznání od „nic se
+/// nestalo“), že se **kliknutí neztratí**, když dorazí dřív, než si ho má kdo vyzvednout, a že
+/// klik **něco otevře**.
+///
+/// **Tvrzení o kliku jsou od #409 o `activeTab` a `openTabs`, ne o `selection`** — a je to ta
+/// zajímavější polovina toho issue. Do té doby tvrdily čtyři testy `store.selection == pr`, tedy
+/// přesně to jediné, co obsluha dělala: zelené byly právem a o tom, co uživatel vidí, neříkaly nic.
+/// Otevření záložky obstarává od #180 `openTab(_:in:)`, takže bez něj zůstal `activeTab` na `.home`
+/// a z kliknutí bylo „aplikace naskočila a nic“. Ověřeno vloženou regresí (vrátit `selection = pr`
+/// místo `openTab(pr)` → padne šest testů ze sedmi v sekci níž; ten sedmý tvrdí, že se **nic
+/// nestane**, takže projít má).
 @Suite("AppStore — notifikace")
 @MainActor
 struct AppStoreNotificationTests {
@@ -121,17 +129,43 @@ struct AppStoreNotificationTests {
         #expect(store.notificationFailure == nil)
     }
 
-    @Test("Klik na notifikaci vybere její PR")
-    func clickSelectsThePullRequest() async {
+    // MARK: - Klik otevře záložku (#409)
+
+    @Test("Klik na notifikaci otevře záložku jeho PR")
+    func clickOpensATab() async {
         let center = FakeNotificationCenter()
         let store = store(center, listing: [pr])
         await store.refresh()
         let watching = Task { await store.handleNotificationClicks() }
 
         center.click(pr)
-        await waitUntil("klik na notifikaci vybere PR") { store.selection == pr }
+        await waitUntil("klik na notifikaci otevře záložku") { store.activeTab == .pullRequest(pr) }
 
+        // **Tohle je to tvrzení, které u #409 chybělo.** Do té doby obsluha nastavovala jedině
+        // `selection`, tedy stav, který od záložek (#180) v domácí záložce nikdo nekreslí — takže
+        // testy byly zelené právem a o tom, co uživatel vidí, neříkaly nic.
+        #expect(store.activeTab == .pullRequest(pr))
+        #expect(store.openTabs == [pr])
+        // Výběr zůstává na téhle cestě taky: řádek v seznamu má být zvýrazněný, jako po kliknutí.
         #expect(store.selection == pr)
+        watching.cancel()
+    }
+
+    /// Volba tabu je odpověď na „kam se v tomhle PR koukám“ a drží se per PR, takže klik na
+    /// notifikaci ji **nepřepisuje** — proud kliknutí nese `PRIdentifier`, ne událost, takže by se
+    /// tab vybíral naslepo. Jmenovat tab umí ten, kdo ví, o čem klik je (paleta ⌘K, #414).
+    @Test("Klik nepřepíše tab, na kterém člověk skončil")
+    func clickKeepsTheRememberedTab() async {
+        let center = FakeNotificationCenter()
+        let store = store(center, listing: [pr])
+        await store.refresh()
+        store.setDetailTab(.conversation, for: pr)
+        let watching = Task { await store.handleNotificationClicks() }
+
+        center.click(pr)
+        await waitUntil("klik na notifikaci otevře záložku") { store.activeTab == .pullRequest(pr) }
+
+        #expect(store.detailTab(for: pr) == .conversation)
         watching.cancel()
     }
 
@@ -146,39 +180,91 @@ struct AppStoreNotificationTests {
 
         center.click(pr)
         let watching = Task { await store.handleNotificationClicks() }
-        await waitUntil("klik na notifikaci vybere PR") { store.selection == pr }
+        await waitUntil("klik na notifikaci otevře záložku") { store.activeTab == .pullRequest(pr) }
 
-        #expect(store.selection == pr)
+        #expect(store.openTabs == [pr])
         watching.cancel()
     }
 
-    @Test("Klik před prvním tikem PR vybere, i když seznam je ještě prázdný")
-    func selectsBeforeTheFirstTick() async {
+    @Test("Klik před prvním tikem PR otevře, i když seznam je ještě prázdný")
+    func opensBeforeTheFirstTick() async {
         // Tohle je ten scénář, kvůli kterému má proud buffer: aplikaci spustilo právě kliknutí
         // na notifikaci, takže polling ještě neproběhl. Prázdný seznam tady neznamená „PR je
-        // zavřený“, ale „ještě nevím“ — zahodit klik by celý ten scénář rozbilo.
+        // zavřený“, ale „ještě nevím“ — zahodit klik by celý ten scénář rozbilo. Záložka se
+        // dokreslí, jakmile první tik dorazí (do té doby v ní stojí, že PR ze seznamu zmizel).
         let center = FakeNotificationCenter()
         let store = store(center, listing: [pr])
         #expect(store.status == .notStarted)
         let watching = Task { await store.handleNotificationClicks() }
 
         center.click(pr)
-        await waitUntil("klik na notifikaci vybere PR") { store.selection == pr }
+        await waitUntil("klik na notifikaci otevře záložku") { store.activeTab == .pullRequest(pr) }
 
-        #expect(store.selection == pr)
+        #expect(store.openTabs == [pr])
         watching.cancel()
     }
 
-    @Test("Klik na PR mimo seznam výběr nemění")
-    func clickOnAPullRequestThatIsGoneKeepsTheSelection() async {
-        // Notifikace přežije tik, který PR odklidil (mergnul se, zavřel se). Vybrat řádek,
-        // který v seznamu není, nejde — a skočit místo toho jinam by bylo horší než nechat na
-        // obrazovce to, co tam bylo. Okno je vepředu tak jako tak (dává ho vrstva prostředí).
+    /// Klik na notifikaci je výslovná žádost tenhle PR vidět, takže filtr (#117) ustoupí — jinak by
+    /// PR byl otevřený v okně a v seznamu pod ním by nebyl. Rozhodnutí drží `Policy`, tady se hlídá,
+    /// že store filtr doopravdy zruší, a to **tou samou cestou** jako tlačítko filtru.
+    @Test("Klik na PR schovaný filtrem filtr zruší")
+    func clearsTheFilterThatHidesThePullRequest() async {
+        let center = FakeNotificationCenter()
+        let store = store(center, listing: [pr])
+        await store.refresh()
+        store.setFilter(PullRequestFilter(repositories: [RepoID("ondrajodas/PRism")!]))
+        #expect(store.visiblePullRequests.isEmpty)
+        let watching = Task { await store.handleNotificationClicks() }
+
+        center.click(pr)
+        await waitUntil("klik na notifikaci otevře záložku") { store.activeTab == .pullRequest(pr) }
+
+        #expect(store.filter.isActive == false)
+        #expect(store.visiblePullRequests.map(\.id) == [pr])
+        #expect(store.openTabs == [pr])
+        watching.cancel()
+    }
+
+    /// Notifikace se o vlastních PR hlásí jedině o **cizí aktivitě** na nich (#335), a klik na
+    /// starší notifikaci může přijít i na PR, který se mezitím do sekce `Moje PR` (#331) přesunul.
+    /// Záložka je na sekci railu nezávislá — detail si bere z **plného** seznamu —, takže se z toho
+    /// nesmí stát zahozený klik ani prázdná záložka.
+    @Test("Klik na vlastní PR otevře záložku taky")
+    func opensAnOwnPullRequest() async {
+        let center = FakeNotificationCenter()
+        // „Moje“ je od #330 množina loginů z konfigurace, takže se viewer nemusí dotahovat.
+        var mine = configuration
+        mine.global.ownLogins = ["autor"]
+        let store = AppStore(
+            gateway: FakeGitHubGateway(always: .success([summary(pr)])),
+            configuration: mine,
+            time: FakeTimeSource(),
+            notifications: center
+        )
+        await store.refresh()
+        #expect(store.visibleOwnPullRequests.map(\.id) == [pr])
+        let watching = Task { await store.handleNotificationClicks() }
+
+        center.click(pr)
+        await waitUntil("klik na notifikaci otevře záložku") { store.activeTab == .pullRequest(pr) }
+
+        #expect(store.openTabs == [pr])
+        // Záložka se má nakreslit, ne skončit prázdnem: shrnutí se hledá v plném seznamu.
+        #expect(store.summary(for: pr) != nil)
+        watching.cancel()
+    }
+
+    @Test("Klik na PR mimo seznam neotevře nic")
+    func clickOnAPullRequestThatIsGoneOpensNothing() async {
+        // Notifikace přežije tik, který PR odklidil (mergnul se, zavřel se). Otevřít záložku
+        // naslepo by znamenalo prázdnou plochu s hláškou, že PR zmizel — skočit místo toho jinam
+        // je horší než nechat na obrazovce to, co tam bylo. Okno je vepředu tak jako tak (dává ho
+        // vrstva prostředí).
         let listed = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 7)
         let center = FakeNotificationCenter()
         let store = store(center, listing: [listed])
         await store.refresh()
-        store.selection = listed
+        store.openTab(listed)
         let watching = Task { await store.handleNotificationClicks() }
 
         center.click(pr)
@@ -186,7 +272,8 @@ struct AppStoreNotificationTests {
         // kdyby se přece jen zpracovávaly.
         await settle()
 
-        #expect(store.selection == listed)
+        #expect(store.activeTab == .pullRequest(listed))
+        #expect(store.openTabs == [listed])
         watching.cancel()
     }
 }

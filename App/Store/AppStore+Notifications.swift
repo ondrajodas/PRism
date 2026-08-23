@@ -57,32 +57,45 @@ extension AppStore {
         }
     }
 
-    /// Klik na notifikaci vybere PR, kterého se týká.
+    /// Klik na notifikaci **otevře záložku** PR, kterého se týká (#409).
     ///
     /// Okno dopředu dává `SystemNotificationCenter` — aktivace aplikace je přístup ke stroji
     /// jako doručení samotné, takže store zůstává bez AppKitu.
     ///
-    /// **PR, který v seznamu není, výběr nemění.** Notifikace přežije tik, který ho odklidil
-    /// (mergnul se, zavřel se), a vybrat neexistující řádek nejde — skočit místo toho jinam by
-    /// bylo horší než nechat na obrazovce to, co tam bylo. Okno je vepředu tak jako tak, takže
-    /// kliknutí nezůstane bez odpovědi.
+    /// **Otevírá se `openTab(_:in:)`, ne `selection`** — a to je celé #409. Do té doby tady stálo
+    /// jedno přiřazení do `selection`, tedy do stavu, který od záložek (#180) v domácí záložce
+    /// nikdo nekreslí: `activeTab` zůstal na `.home`, žádná záložka nevznikla a z kliknutí bylo
+    /// „aplikace naskočila a nic“. Byla to regrese od #180 (obsluha je z #82–#88, kdy výběr řádku
+    /// otevření byl) a **testy ji nechytily**, protože tvrdily přesně to `selection`.
     ///
-    /// **Dokud se ale seznam nenačetl, vybere se i tak.** Je to zrovna ten případ, kvůli kterému
-    /// si proud kliknutí drží buffer: aplikaci spustilo právě tohle kliknutí, takže polling ještě
-    /// neproběhl a prázdný seznam neznamená „PR je zavřený“, ale „ještě nevím“. Zahodit klik tady
-    /// by celý ten scénář rozbilo — detail se dokreslí, jakmile první tik dorazí.
-    /// **Klik na PR, které schoval filtr (#117), filtr vymaže.** Kliknutí na notifikaci je výslovná
-    /// žádost tenhle PR vidět, takže by mlčení bylo nejhorší z možností — a druhá varianta (vybrat
-    /// ho a nechat filtr) je ještě horší: detail by se nekreslil, protože ho `ContentView` hledá ve
-    /// **viditelném** seznamu, a vypadalo by to, že klik nic neudělal. Že filtr zmizel, je vidět
-    /// v liště, takže se nic nestane potichu. Do zadání #117 to nepatřilo; rozhodnuto tady.
+    /// **Tab se nejmenuje.** Proud kliknutí nese `PRIdentifier`, ne událost, takže by se vybíral
+    /// naslepo — a volba tabu je per PR (`detailTab(for:)`), tedy odpověď na „kam se v tomhle PR
+    /// koukám“. Otevřít člověka tam, kde skončil, je nejmenší překvapení; jmenovat tab umí ten,
+    /// kdo ví, o čem klik je (paleta ⌘K, řádek dění z #414).
+    ///
+    /// **Na čí PR klik dopadne, se nerozlišuje.** Notifikace se o vlastních PR hlásí jedině
+    /// o cizí aktivitě (#335), ale klik na starší notifikaci může přijít i na PR, který se mezitím
+    /// do sekce `Moje PR` (#331) přesunul — a záložka je na sekci railu nezávislá, protože si detail
+    /// bere z **plného** seznamu (`summary(for:)`). Rozřazení podle autora by tady tedy znamenalo
+    /// zahozený klik za nic.
+    ///
+    /// Co udělat, rozhoduje `Policy.notificationClick(on:listed:visible:status:)` — včetně toho, že
+    /// PR mimo seznam se neotevírá naslepo a že filtr, který ho schoval (#117), se ruší.
     func handleNotificationClicks() async {
         guard let notifications else { return }
         for await pr in notifications.clicks() {
-            let listed = pullRequests.contains { $0.id == pr }
-            guard listed || status == .notStarted else { continue }
-            if listed, !visiblePullRequests.contains(where: { $0.id == pr }) { clearFilter() }
-            selection = pr
+            let click = Policy.notificationClick(
+                on: pr,
+                listed: pullRequests,
+                visible: visiblePullRequests,
+                status: status
+            )
+            guard case .open(let clearsFilter) = click else { continue }
+            // Filtr se ruší **dřív** než se otevírá záložka: `clearFilter()` jde přes `setFilter`,
+            // který výběr srovnává s filtrem — v opačném pořadí by srovnal i ten výběr, který
+            // právě nastavilo otevření.
+            if clearsFilter { clearFilter() }
+            openTab(pr)
         }
     }
 

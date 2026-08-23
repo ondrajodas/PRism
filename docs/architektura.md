@@ -2732,9 +2732,12 @@ Věci, které se u toho nemají rozbít:
   per repo. Kdyby to filtr vypínal, slil by se pohled s nastavením a stav „schoval jsem si to, tak
   se to nereviewuje“ by nebyl kde ukázat.
 - **Klik na notifikaci PR, které filtr schoval, filtr vymaže** — rozhodnuto u #117, v zadání to
-  nebylo. Kliknutí je výslovná žádost ten PR vidět, takže mlčení by bylo nejhorší; a vybrat ho
-  a filtr nechat je ještě horší, protože `ContentView` hledá detail ve **viditelném** seznamu, takže
-  by se nenakreslil a vypadalo by to, že klik nic neudělal. Že filtr zmizel, je vidět v liště.
+  nebylo. Kliknutí je výslovná žádost ten PR vidět, takže mlčení by bylo nejhorší. Původní druhý
+  důvod (že `ContentView` hledá detail ve **viditelném** seznamu, takže by se nenakreslil) od
+  záložek (#180) **neplatí** — obsah záložky se hledá v plném seznamu (`summary(for:)`), takže se
+  nakreslí i pod filtrem. Zůstává ten první a k němu důsledek: PR by byl otevřený v okně a v seznamu
+  pod ním by nebyl, tedy dvě různá tvrzení o tomtéž. Že filtr zmizel, je vidět v liště. Rozhoduje
+  o tom `Policy.notificationClick` (#409), ne obsluha proudu.
 - **Důvod prázdna skládá store, ne polling** (`listEmptyReason`): polling o stavu okna neví a vědět
   nemá. Pořadí rozhoduje `Policy.listEmptyReason` a **nad selhaným tikem vyhrává chyba načtení, ne
   filtr** — „schoval jsem ti to filtrem“ nad daty, která nedorazila, je nepravda.
@@ -5210,15 +5213,38 @@ u nich:
 - **Doručení bez nastaveného centra si nic nezapíše.** „Odsud se neposílá“ (testy) není
   porucha, o které by se mělo hlásit — jinak by každý test s notifikacemi měl v okně větu
   o tom, že něco nefunguje.
-- **Klik na PR mimo seznam výběr nemění.** Notifikace přežije tik, který PR odklidil, a vybrat
-  neexistující řádek nejde; skočit místo toho jinam by bylo horší než nechat na obrazovce to,
-  co tam bylo. Okno je vepředu tak jako tak, takže kliknutí nezůstane bez odpovědi.
-- **Dokud se seznam nenačetl (`status == .notStarted`), vybere se i tak.** Je to zrovna ten
+- **Klik otevře záložku, ne výběr řádku** (#409). Do #409 tady stálo jedno přiřazení do
+  `selection` — tedy do stavu, který od záložek (#180) v domácí záložce nikdo nekreslí —, takže
+  z kliknutí bylo „aplikace naskočila a nic“. Byla to **regrese od #180**: obsluha je z #82–#88,
+  kdy výběr řádku otevření byl. Otevírá proto `openTab(_:in:)`, tedy tatáž cesta jako klik
+  v seznamu; **tab se u ní nejmenuje**, protože proud kliknutí nese `PRIdentifier`, ne událost —
+  člověk se vrátí tam, kde v tom PR skončil.
+- **Klik na PR mimo seznam neotevře nic.** Notifikace přežije tik, který PR odklidil, a otevřít
+  záložku naslepo by znamenalo prázdnou plochu s hláškou, že PR zmizel; skočit místo toho jinam
+  by bylo horší než nechat na obrazovce to, co tam bylo. Okno je vepředu tak jako tak, takže
+  kliknutí nezůstane bez odpovědi.
+- **Dokud se seznam nenačetl (`status == .notStarted`), otevře se i tak.** Je to zrovna ten
   případ, kvůli kterému má proud kliknutí buffer: aplikaci spustilo právě to kliknutí, takže
   polling ještě neproběhl a **prázdný seznam neznamená „PR je zavřený“, ale „ještě nevím“**.
   Bez toho by se klik z notifikace, která aplikaci spustila, zahodil — tedy přesně ten scénář,
-  pro který je celý buffer. Chytila to vlastní revize diffu u #88; detail se dokreslí, jakmile
-  první tik dorazí.
+  pro který je celý buffer. Chytila to vlastní revize diffu u #88. Cena je, že do prvního tiku
+  stojí v záložce hláška „Pull request zmizel ze seznamu“ (shrnutí ještě není), a je to **vědomě
+  přijaté**: obsah se dokreslí, jakmile tik dorazí, a druhá varianta — čekat s otevřením na tik —
+  je klik, po kterém se nic nestane, tedy zrovna to, co #409 opravovalo. Selhaný **první** tik
+  z toho vyňatý není a je to schválně: rozhoduje `status`, ne `lastSuccess`, protože chybující
+  polling je pořád „seznam jsme viděli“ jedině tehdy, když jednou dorazil — a měnit tuhle hranici
+  by znamenalo měnit chování bez hlášení z provozu, které by o ní mluvilo.
+- **Čí PR to je, se nerozlišuje** (#409). Notifikace se o vlastních PR hlásí jedině o **cizí
+  aktivitě** na nich (#335), ale klik na starší notifikaci může přijít i na PR, který se mezitím
+  do sekce `Moje PR` (#331) přesunul. Záložka je na sekci railu nezávislá — obsah si bere
+  z **plného** seznamu (`summary(for:)`) —, takže zúžení podle autora by tady znamenalo zahozený klik
+  za nic. Zúžené gettery (`queuePullRequests`) se tedy téhle cesty netýkají, viz *Které místo chce
+  kterou množinu*.
+- **Rozhodnutí drží `Policy.notificationClick(on:listed:visible:status:)`**, ne `if`y v obsluze
+  proudu: jsou to tři vstupy (v seznamu / vidět po filtru / načteno) a dva z následků se ručně
+  vracejí jen těžko (zrušený filtr, otevřená záložka). Store z toho provede, co vyšlo —
+  a **filtr ruší dřív, než otevře**: `clearFilter()` jde přes `setFilter`, který výběr srovnává
+  s filtrem, takže v opačném pořadí by srovnal i ten výběr, který otevření právě nastavilo.
 - **Proud kliknutí se konzumuje ve `keepFresh()`**, tedy dokud žije okno — jako polling
   a monitor dostupnosti. Bez nastaveného centra se task ani nezakládá.
 
@@ -5789,6 +5815,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.reviewNotification(for:ownership:state:blocking:topFinding:)` | Notifikace o doběhlém review z `ReviewState`; `nil` = není o čem dát vědět. Titulek nese počty (#200), tělo nález a pod ním PR. **O vlastním PR nehlásí nic** (#332) — všechny tři události jsou odpověď na review request; výchozí `.theirs` je tatáž bezpečná strana jako u `ownership(ofAuthor:mine:)` |
 | `Policy.newPullRequestNotification(for:title:isReReview:)` | Notifikace o novém PR ve frontě (#85); re-review se pozná textem (#137) |
 | `Policy.newPullRequestsNotification(for:titles:reviewed:)` | **Souhrn** za všechna nová PR z jednoho tiku (#87); jedno PR dá plnou hlášku |
+| `Policy.notificationClick(on:listed:visible:status:)` | Co udělat s klikem na notifikaci (#409): `ignore`, nebo `open(clearsFilter:)`. PR mimo seznam se **neotevírá naslepo** — výjimka je nenačtený seznam (`notStarted`), kvůli kterému má proud kliknutí buffer. Filtr, který PR schoval (#117), se ruší; rozřazení podle autora (#331, #332) do rozhodnutí **nevchází** |
 | `Policy.paletteResults(of:query:limit:)`, `Policy.paletteTokens(in:)` | Hledání v paletě ⌘K (#184): co na dotaz sedne, jak se to váží, kolik z každé skupiny je vidět. Prázdný dotaz vrací **všechno** v pořadí katalogu; pořadí skupin drží `CommandPalette.Group`. Váhy: titulek (začátek > hranice slova > vnitřek) **před** podtitulkem (repo, autor) a ten před klíčovým slovem; vrací i **dva rozsahy zvýraznění**, aby bylo z řádku vidět, proč vyšel |
 | `Policy.paletteActions(open:isReviewing:hasRun:layout:isPanelExpanded:section:)`, `Policy.paletteLabel(of:)` | Které akce mají teď co dělat (#184) a jak se jmenují. Řádek, který by nic neudělal, se nenabízí |
 | `Policy.tabStrip(open:)`, `Policy.tab(_:after:open:)` | Cyklení pruhem záložek `⌃Tab` / `⌃⇧Tab` (#245): pruh je `[.home] + openTabs` a soused se bere **dokola**. `nil` = nikam se nehýbe — jediná záložka, nebo aktivní záložka, která v pruhu není |
@@ -6191,6 +6218,23 @@ Nad nálezy platí navíc:
   - **Rail má jen položky, které mají obsah.** Návrh jich kreslí šest; položka, po jejímž otevření
     je prázdno, je horší než položka, která ještě není. `Přehled` přijde s dashboardem (#181),
     `Historie` a `Zdraví` potřebují napřed obsah, který v aplikaci není.
+- **Otevřít PR umí jedna metoda** — `AppStore.openTab(_:in:)` (#409). Jsou to totiž **dva zápisy**
+  (`openTabs` a `activeTab`, k tomu `selection` a snímek shrnutí), takže „otevřít PR“ se dá provést
+  napůl — a přesně to bylo #409: obsluha kliknutí na notifikaci je z #82–#88, kdy otevření **byl**
+  výběr řádku, takže po záložkách (#180) nastavovala jediné `selection`, tedy stav, který v domácí
+  záložce nikdo nekreslí. `activeTab` zůstal na `.home` a z kliknutí bylo „aplikace naskočila
+  a nic“. Chodí sem klik v seznamu, karty dashboardu, paleta ⌘K, klik na notifikaci a od #414 řádek
+  dění. Tři věci k tomu:
+  - **Volitelný `tab` otevře PR na konkrétní záložce**, protože skok na nález nebo na řádek dění by
+    nad zavřenou záložkou neměl kde přistát. Do #409 to skládala paleta ⌘K vlastní privátní
+    metodou (`show(_:in:)` = `openTab` + `setDetailTab`); jedna metoda znamená, že druhý volající
+    nemá co opisovat.
+  - **`tab: nil` uloženou volbu nepřepisuje.** Volba je odpověď na „kam se v tomhle PR koukám“
+    a drží se per PR (`detailTab(for:)`), takže otevření bez upřesnění vrátí člověka tam, kde
+    skončil — a klik na notifikaci tab **nejmenuje**, protože proud kliknutí nese `PRIdentifier`,
+    ne událost; vybíral by ho naslepo.
+  - **Odkaz na metodu se složit nedá** (`store.openTab(_:)`), protože má výchozí parametr — volající
+    v `HomeView` proto předává uzávěr. Je to cena za jeden vstupní bod místo dvou přetížení.
 - **Pruhem se přepíná `⌃Tab` a `⌃⇧Tab`** (#245), dokola a **včetně domácí záložky**. Pět věcí, na
   kterých to stojí:
   - **Cyklí se celý pruh, ne jen PR.** Pruh domácí záložku kreslí, chodí se na ni nejčastěji (je
