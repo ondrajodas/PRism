@@ -1,5 +1,19 @@
 import Foundation
 
+/// Co se ve frontě od minule změnilo (#414) — kdo přišel a kdo odešel.
+///
+/// **Jeden typ pro obojí, ne dvě volání.** Odchod je doplněk k příchodu nad **tímtéž** snímkem
+/// a snímek se při dotazu přepisuje, takže dvě volání by znamenala, že se druhé ptá už proti
+/// přepsanému stavu a vrátí prázdno.
+struct QueueChanges: Sendable, Equatable {
+    /// PR, které ve snímku nebyly. V pořadí, ve kterém přišly ze vstupu.
+    let newcomers: [PRIdentifier]
+    /// PR, které ve snímku byly a ve frontě už nejsou. Řazené `PRIdentifier`em.
+    let departed: [PRIdentifier]
+
+    static let none = QueueChanges(newcomers: [], departed: [])
+}
+
 /// Které PR už aplikace ohlásila jako nové (#85).
 ///
 /// **Na disku, ne v paměti.** Bez toho by po každém spuštění vyšla všechna otevřená PR jako
@@ -32,6 +46,14 @@ actor AnnouncedPullRequests {
 
     /// Co je z předaného seznamu nové, a zapamatuje si ho.
     ///
+    /// Zúžení `changes(in:)` na tu půlku, kvůli které snímek vznikl. Volá se odsud i z testů —
+    /// dvě volání na jeden tik by ale znamenala dva zápisy, takže store se ptá `changes(in:)`.
+    func newcomers(in current: [PRIdentifier]) -> [PRIdentifier] {
+        changes(in: current).newcomers
+    }
+
+    /// Co se ve frontě od minule změnilo — **kdo přišel a kdo odešel** (#414).
+    ///
     /// **Při prvním spuštění vrací prázdno** a jen si seznam zapamatuje: dokud snímek nikdy
     /// neexistoval, není proti čemu porovnávat a „všechno je nové“ by byla ta lavina. Prázdný
     /// **zapsaný** snímek je něco jiného — to znamená, že fronta byla prázdná, takže se nové
@@ -39,15 +61,18 @@ actor AnnouncedPullRequests {
     ///
     /// Volá se **jen po úspěšném tiku**. Po výpadku sítě je seznam prázdný, takže by se snímek
     /// vyprázdnil a při zotavení by se ohlásilo úplně všechno — tatáž past jako
-    /// u `CacheEviction` a `ReviewStore.cleanUp`.
-    func newcomers(in current: [PRIdentifier]) -> [PRIdentifier] {
+    /// u `CacheEviction` a `ReviewStore.cleanUp`. U odchodů je to o důvod naléhavější: z jednoho
+    /// selhaného tiku by byla řádka „už není ve frontě“ za celou frontu.
+    ///
+    /// **Odchody jsou doplněk nad tímtéž snímkem, ne nový zdroj** — žádné volání navíc.
+    func changes(in current: [PRIdentifier]) -> QueueChanges {
         let previous = load()
         // První spuštění: zapamatovat **hned** a mlčet. Zapsat se to tady musí, protože
         // volající nemá co doručovat, takže by `remember(_:)` nikdy nepřišlo — a snímek by se
         // nezaložil ani při dalších ticích.
         guard known else {
             write(Set(current))
-            return []
+            return .none
         }
 
         // **PR, která ve frontě nejsou, ze snímku vypadnou — hned** (#135). Odeslané review
@@ -61,9 +86,15 @@ actor AnnouncedPullRequests {
         let stillListed = previous.intersection(current)
         if stillListed != previous { write(stillListed) }
 
-        // Pořadí se bere ze **vstupu**, ne z množiny — ta ho nemá, takže by notifikace mezi
-        // tiky poskakovaly. Vstup je řazený `Policy.sorted`, tedy od naposledy změněného.
-        return current.filter { !previous.contains($0) }
+        return QueueChanges(
+            // Pořadí se bere ze **vstupu**, ne z množiny — ta ho nemá, takže by notifikace mezi
+            // tiky poskakovaly. Vstup je řazený `Policy.sorted`, tedy od naposledy změněného.
+            newcomers: current.filter { !previous.contains($0) },
+            // Odchody pořadí ze vstupu vzít nemají odkud (ve vstupu nejsou), takže se řadí
+            // `PRIdentifier`em — čísla číselně. Bez toho by se řádky dění mezi dvěma běhy
+            // přehazovaly podle toho, jak se zahašovala množina.
+            departed: previous.subtracting(current).sorted()
+        )
     }
 
     /// Zapíše snímek — **až po tom, co se notifikace doručily**.

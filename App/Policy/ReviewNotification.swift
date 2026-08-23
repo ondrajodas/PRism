@@ -146,7 +146,11 @@ extension Policy {
     }
 
     /// Druhý řádek — co se stalo. `nil` = není co dodat.
-    private static func notificationDetail(state: ReviewState, topFinding: Finding?) -> String? {
+    ///
+    /// **Není `private`, protože ho bere i řádek v dění** (#414): tam je to druhá půlka téže věty
+    /// a druhá tabulka detailů by se s touhle rozešla — pak by banner a řádek nad tímtéž během
+    /// řekly každý něco jiného.
+    static func notificationDetail(state: ReviewState, topFinding: Finding?) -> String? {
         switch state {
         case .notStarted, .queued, .cloning, .running, .stale:
             nil

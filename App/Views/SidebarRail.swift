@@ -27,6 +27,11 @@ struct SidebarRail: View {
     var mineCount: Int?
     /// Kolik PR má rozdělané review.
     var draftCount: Int?
+    /// Kolik položek dění je **nepřečtených** (#414) — ne kolik jich v záznamu je. `nil` znamená
+    /// „nekreslit“ a padá do něj i to, že v `Dění` zrovna stojím: v tomhle railu odznak ikonu
+    /// překryje, takže by na aktivní položce zbyl červený puntík bez identity (návrh, poznámka 95).
+    /// Rozhoduje `Policy.activityBadge(unread:isActive:)`, ne tohle view.
+    var activityCount: Int?
     /// Vybraný vzhled okna (#278). Čte se z konfigurace, takže rail **nedrží vlastní kopii** —
     /// jinak by v okně byla druhá pravda o tom, jaký režim platí.
     var appearance: AppearanceMode = .system
@@ -149,6 +154,7 @@ struct SidebarRail: View {
         case .queue: queueCount
         case .mine: mineCount
         case .drafts: draftCount
+        case .activity: activityCount
         }
     }
 

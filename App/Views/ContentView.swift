@@ -35,10 +35,14 @@ struct ContentView: View {
             // šířku okna. Záložky jsou **v hlavičce okna**, viz `toolbar` níž.
             HStack(spacing: 0) {
                 SidebarRail(
-                    section: $store.railSection,
+                    // **Přes `show(_:)`, ne přímo do `railSection`** (#414). Odchod ze sekce `Dění`
+                    // posouvá značku poslední návštěvy, a to umí jedině store — binding rovnou do
+                    // pole by tu jednu cestu obešel a značka by se z railu nikdy neposunula.
+                    section: Binding(get: { store.railSection }, set: { store.show($0) }),
                     queueCount: store.railQueueCount,
                     mineCount: store.railMineCount,
                     draftCount: store.pullRequestsWithDraft.count,
+                    activityCount: store.railActivityCount,
                     // Vzhled se čte z konfigurace a zapisuje do ní (#278) — rail je ovládání, ne
                     // druhé místo, kde by se stav držel.
                     appearance: store.configuration.global.appearance,

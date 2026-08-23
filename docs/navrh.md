@@ -178,7 +178,7 @@ nenašla **ani jeden**, ta níž všechny. Falešně pozitivní nález u osmi vy
 natolik, aby se za tuhle šířku platilo — a kdyby přišel, je to pobídka se podívat, ne šum.
 
 ```bash
-for c in lchip chip-add rv-list rv-row rv-av nl-bar nl-add nl-step; do
+for c in lchip chip-add rv-list rv-row rv-av nl-bar nl-add nl-step fd-to; do
     grep -qE "[a-z0-9)]([ ]*[>+~][ ]*|[ ]+)\.$c([^a-z0-9-]|$)" docs/navrh.html &&
         echo "POZOR: .$c je jinde vnořený"
 done

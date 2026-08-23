@@ -13,9 +13,9 @@ struct HomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Dashboard si hlavičku kreslí sám, takže nad pozdravem nemá co stát prázdný pruh
-            // s linkou. Návrh v něm žádný nemá a v okně to byl řádek, který nic neříkal.
-            if store.railSection != .overview {
+            // Dashboard a dění si hlavičku kreslí samy, takže nad nadpisem nemá co stát prázdný
+            // pruh s linkou. Návrh v nich žádný nemá a v okně to byl řádek, který nic neříkal.
+            if !store.railSection.drawsOwnHeader {
                 toolbar
                 Divider()
             }
@@ -61,7 +61,32 @@ struct HomeView: View {
         // změny. Druhé view by znamenalo dvě podoby jednoho řádku.
         case .mine: PullRequestListView(store: store, scope: .mine, openSettings: openSettings)
         case .drafts: draftList
+        // Dění (#414) — vlastní obrazovka, ne seznam PR: řádek mluví o **události**, ne o pull
+        // requestu, a jeden PR jich v něm má klidně pět.
+        case .activity: activityFeed
         }
+    }
+
+    /// Sekce `Dění` (#414). Hlavičku si kreslí sama, jako dashboard — proto se nad ní nekreslí
+    /// lišta s nadpisem (viz `body`).
+    private var activityFeed: some View {
+        ActivityFeedView(
+            days: store.activityFeed,
+            empty: store.activityEmptyState,
+            subtitle: Policy.activityHeaderSentence(
+                lastVisit: store.activityVisitSnapshot,
+                hasEvents: !store.activityEvents.isEmpty,
+                now: store.time.now
+            ),
+            lastVisit: store.activityVisitSnapshot,
+            lastSuccess: store.lastSuccess,
+            // **Jedny hodiny na celou obrazovku**, a ze zdroje času storu: dělení po dnech,
+            // věta v hlavičce, pruh i časy u řádků musí mluvit o témže „teď“.
+            now: store.time.now,
+            open: { store.show($0) },
+            openSettings: openSettings,
+            openSystemSettings: { SystemSettings.openNotifications() }
+        )
     }
 
     /// Rozdělaná review. Prázdný stav mluví o **rozdělané práci**, ne o frontě — jsou to dvě

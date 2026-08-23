@@ -194,6 +194,52 @@ znamená **nula dotazů navíc**. Co v diskuzi přibylo, nese i řádek seznamu:
 místo autora a času. **Spadlé CI se nehlídá** — je to druhý dotaz na PR a jiná událost, takže na to
 patří vlastní text i vlastní přepínač.
 
+## Dění — co proletělo jako notifikace, zůstane
+
+Notifikace **nemá historii**: banner zmizí, stejná identita přepíše to, co ještě visí, a v okně po
+tom zbude jediný údaj — čas posledního doručení u zvonku. Když jsem byl dvě hodiny na schůzce,
+aplikace ví, co se stalo, a nemá to kde ukázat. Pátá sekce railu `Dění` (#414) je to místo: **záznam
+na disku**, do kterého se chodí zpátky.
+
+**Osm druhů novinky**, čtyři z nich jsou tytéž události, které chodí jako notifikace (nové PR, znovu
+k review, tři výsledky review, cizí aktivita na vlastním PR), a **dva se dopočítávají, aniž by přidaly
+jediné volání**: že **nálezy zastaraly** (hlava se posunula pod uloženými nálezy — dneska to uvidí
+jen ten, kdo PR zrovna otevře, a je to přitom ta událost, po které je práce k zahození) a že **PR
+odešel z fronty**. Za tyhle dva banner nechodí schválně: vyrušovat nemají, dohledat se mají.
+
+**Sekce unese věci, které banner unést nesmí — a plní se, i když je aplikace mlčící.** Zápis
+**nezávisí na přepínačích notifikací**: ty rozhodují o vyrušení, ne o záznamu. Řádek, u kterého
+banner nedorazil (vypnutý přepínač, odmítnuté oprávnění), to říká chipem **bez banneru**, takže
+„nepřišlo mi to“ má na obrazovce odpověď.
+
+**Strop je 200 položek, ne dní.** Dění odpovídá na „co jsem prošvihl“, a to je omezené pozorností,
+ne kalendářem — týdenní okno by usekávalo přesně tu dovolenou, kvůli které se sem chodí. Záznam se
+neuklízí ani s PR, které vypadne ze seznamu: zavřený pull request na tom, co se na něm stalo, nemění
+nic.
+
+**Přečtenost drží značka poslední návštěvy, ne příznak u položky** — jeden časový údaj na celou sekci
+a nad ním pruh `Tady jsem skončil`, tedy tentýž mechanismus, jaký drží konverzaci. Značka se posouvá
+**až při odchodu ze sekce**: kdyby ji přepsal vstup, přestalo by být nové zrovna to, na co koukám.
+Řadí se **od nejnovějšího** jako commity, takže pruh stojí pod novinkami. Odznak v railu počítá
+**nepřečtené** a na aktivní sekci se nekreslí (odznak by v tom railu překryl ikonu, takže by z něj
+zbyl červený puntík bez identity); počet je proto v nadpisu bloku — `Dnes · 4 nové`.
+
+**Každý řádek někam vede a je to v něm napsané** (`→ Nálezy`, `→ Konverzace`, `→ Commity`,
+`→ Přehled`, `→ Průběh`), ne šipka bez obsahu — a jde to tou samou cestou jako klik na notifikaci
+(#409). Jediný řádek, který do okna nevede (PR z fronty odešel, takže v seznamu není), vede **na
+GitHub** a pozná se to i barvou; **proč** odešel netvrdí, protože mergnuto od zrušeného requestu se
+ze samotné fronty rozlišit nedá.
+
+**Prázdná sekce má čtyři různé věty**, ne jednu: klid („za poslední dny se nic nestalo“),
+**ztracený záznam** (soubor byl a nepřečetl se — historie je pryč, nové události se zapisují dál),
+**zakázané oprávnění** (bannery nechodí, ale seznam se plní dál — a jde se do Nastavení systému)
+a **vypnutý přepínač** (jde se do nastavení aplikace). Klid a mlčící aplikace se nesmí slít ze
+stejného důvodu jako `čisté review` a `review se nepovedlo` — a nad ztracenou historií by klidné
+„nic se nestalo“ tvrdilo víc, než data unesou.
+
+**Filtry sekce nemá**, dokud není co filtrovat: den je nadpis bloku a strop 200 položek znamená, že
+se dá projít. Odškrtávátka po druzích by teď byla ovládání nad ničím.
+
 U vybraného PR je tlačítko **Spustit review**. Za ním se stane tohle: dotáhne se head
 commit, připraví se odpojený pracovní strom a v něm se spustí headless session Claude Code
 omezená na čtení. Řádek mezitím ukazuje `ve frontě · clone` → `běží 0/1` → `čisté`, `N nálezů`,
@@ -1808,7 +1854,8 @@ App/                      zdrojáky aplikace — target PRism
   Policy/                 čisté funkce: slučování zdrojů, řazení, stav řádku, odhad jazyka, hledání v paletě,
                           složení zadání pro agenta na vlastním PR (#333), co z něj zbývá předat (#334),
                           co na něm od minule udělal někdo jiný, i za jakou cenu se na to ptát (#335),
-                          a jestli reviewer vůbec otevřel kód — tedy jestli se z běhu dá tvrdit čisto (#383)
+                          a jestli reviewer vůbec otevřel kód — tedy jestli se z běhu dá tvrdit čisto (#383);
+                          o čem se v dění hlásí, co je nepřečtené a jak se dělí po dnech (#414)
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR,
                           labely a vyžádání reviewera na vlastním PR (#392), brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy;
@@ -1818,7 +1865,9 @@ App/                      zdrojáky aplikace — target PRism
   Store/                  AppStore — stav, který kreslí okno (stav v AppStore.swift, metody v AppStore+*.swift);
                           ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku;
                           HandoffLedger — razítka předání zadání agentovi (#334);
-                          ActivityNoticeLedger — o čem už se u vlastního PR hlásilo (#335)
+                          ActivityNoticeLedger — o čem už se u vlastního PR hlásilo (#335);
+                          ActivityLog a ActivityVisitLedger — záznam dění se stropem 200 položek
+                          a značka poslední návštěvy té sekce (#414)
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
   Support/                sdílené drobnosti bez příslušnosti k modulu;
                           diagnostika kreslení za přepínačem PRISM_DIAGNOSE (#361)

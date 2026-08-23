@@ -2640,6 +2640,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Submission.swift` | Odeslání review na GitHub (#67, #68) | 172 |
 | `AppStore+Notifications.swift` | Co se ohlásí, když se do okna nikdo nedívá (#82, #85, #87) | 166 |
 | `AppStore+Activity.swift` | Cizí aktivita na vlastních PR (#335) — rozhlídka na pozadí (`refreshOwnActivity(in:)` z úspěšného tiku), `notifyAboutForeignActivity(on:)` a `conversationUpdatedAt(for:)` jako předfiltr. Text v řádku si bere `handoffReport(for:).activity`, tedy **žádný druhý getter**. **Nic neodesílá**, je to `fetchConversation` | 91 |
+| `AppStore+Feed.swift` | Dění (#414) — načtení záznamu a značky při startu (`loadStoredActivity()`), zápis položek (`recordActivity(_:)`), co je na obrazovce (`activityFeed`, `railActivityCount`, `activityEmptyState`), posun značky při **odchodu** ze sekce (`syncActivityVisit()`), klik na řádek (`show(_ event:)` přes `openTab(_:in:)`) a dopočítaný řádek o zastaralých nálezech. Drží tu i `watchesPullRequestActivity` — brána na spotřebování snímku fronty a razítka oznámení | 152 |
 | `AppStore+DiffExpansion.swift` | Rozbalování kontextu mimo hunky (#47), od #317 i v diffu commitu | 139 |
 | `AppStore+DraftTransfer.swift` | Přenesení draftu na nový commit (#69) | 103 |
 | `AppStore+Diff.swift` | Načtení diffu, pohled a sbalování souborů | 95 |
@@ -5729,6 +5730,12 @@ Věci, které se u toho nemají rozbít:
 | `Policy.handoff(_:record:conversation:head:commits:activitySince:)` | Co zbývá předat (#334) → `HandoffReport` (stav, `pending`, identity nové diskuze, zastaralé nálezy, počet commitů) a od #335 i **cizí aktivita** od minule. **Jediné místo, kde se rozhoduje, co je nové** — čtou z něj odznak v railu, pilulka `N k předání` v řádku i panel |
 | `Policy.foreignActivity(in:since:)`, `Policy.activityBaseline(lastVisit:lastNotice:)` | Co na vlastním PR udělal někdo jiný (#335) → `ForeignActivity` (cizí komentáře a review, **bez mých vlastních**) a proti čemu se to počítá — **pozdější** z návštěvy a oznámení. Staví na `changes(in:since:)`, tedy na téže funkci jako pruh „od minule“; commity v tom nejsou (na vlastním PR je push obvykle můj) |
 | `Policy.activitySweep(of:mine:loadedAt:now:lastSweep:interval:limit:)`, `Policy.activitySweepInterval`, `Policy.activitySweepLimit` | Na které vlastní PR se v tomhle tiku zeptáme na konverzaci (#335) — **cena celého issue**: předfiltr podle `updatedAt` (klidný den = nula dotazů), vlastní pětiminutový interval a strop tři PR na průchod. `mine` **bez výchozí hodnoty**, jako u automatu |
+| `Policy.isReported(_:on:)`, `Policy.activityKind(of:isReReview:)` | Brána dění (#414): o čem se **hlásí vůbec** — tatáž pravidla jako u notifikací (#332), lámaná podle druhu. **Jediné místo**, kde ta otázka je; bez ní by z dění byl obchvat pravidla „o vlastním PR se nehlásí“ |
+| `Policy.newPullRequestActivity(…)`, `Policy.reviewActivity(…)`, `Policy.foreignActivityEvent(…)`, `Policy.staleFindingsActivity(…)`, `Policy.departureActivity(…)` | Řádek dění na druh (#414) → `ActivityEvent?`. Text si berou z **týchž** funkcí jako banner (`reviewNotification`, `notificationDetail`, `activityHeadline`), takže se nad tímtéž během nemají čím rozejít; identita je deterministická a u zastaralých nálezů klíčovaná **hlavou** |
+| `Policy.activityLog(_:adding:limit:)`, `Policy.activityLimit` | Vložení do záznamu (#414): od nejnovějšího, bez duplicit, se stropem **200 položek**. **Jedno místo pro disk i paměť** — dvě implementace by znamenaly jiný záznam na obrazovce než v souboru |
+| `Policy.activityFeed(_:since:now:calendar:)`, `Policy.unreadActivity(_:since:)`, `Policy.activityBadge(unread:isActive:)` | Řádky dění po dnech se značkou poslední návštěvy, počet nepřečtených a odznak sekce (#414). **Bez značky je nové všechno** (opačně než u konverzace); odznak na aktivní sekci mlčí, protože by v railu překryl ikonu |
+| `Policy.destination(of:)`, `Policy.tone(of:)`, `Policy.symbol(of:)`, `Policy.showsSilentChip(_:announced:)`, `Policy.gitHubURL(of:)` | Co se u řádku dění kreslí a kam vede (#414). Chip **bez banneru** jen u druhů, které banner umí; jediný druh vede z aplikace **ven**, a adresa se skládá z identity, protože shrnutí v paměti být nemusí |
+| `Policy.activityHeaderSentence(lastVisit:hasEvents:now:calendar:)`, `Policy.visitLabel(_:now:calendar:)`, `Policy.showsRelativeTime(of:now:)`, `Policy.commitsAfter(_:in:)`, `Policy.activityEmptyState(…)` | Věta v hlavičce dění, popisek návštěvy (jedno místo pro větu i pruh), kdy se čas píše relativně, počet commitů po hlavě nálezů a **tři prázdna, která se nesmí slít** (#414) |
 | `Policy.activityNotification(for:activity:)`, `Policy.activityHeadline(_:)` | Text hlášky „ozval se někdo na mém PR“ (#335): titulek s počtem a druhem, pod ním **ta nejnovější věta** a na třetím řádku PR. Titulek skládá **totéž místo** jako text v řádku seznamu (`od minule`), aby se ty dvě věty nerozešly |
 | `Policy.agentPromptItems(findings:dismissals:conversation:)` | Všechno, co se dá na vlastním PR předat agentovi (#333) → `[AgentPromptItem]`. **Nefiltruje podle voleb** — z téhož seznamu se počítají i čísla u vypnutých voleb. Vynechá jedině prázdnou obálku review (bez verdiktu i bez prózy), stejně jako `overview` |
 | `Policy.agentPromptSelection(for:findings:dismissals:conversation:diff:blocking:options:toggled:only:)` | Hotové zadání **i seznam položek, ze kterého vzniklo** (#333, #377) → `AgentPromptSelection`: text, inventář (co všechno je), co je v textu, identity předaných položek (#334), kolik blokuje, jestli byla načtená konverzace — a grupy se zaškrtávátky. `only:` zúží text na vyjmenované položky (`Sestavit i tak (jen nové vlákno)` po pushi). **Jedno volání na obojí schválně**: počet vybraných v hlavičce sheetu se musí rovnat počtu položek v textu. Do #377 se to jmenovalo `agentPrompt(for:…)`; komu stačí text, bere `.prompt` |
@@ -6094,6 +6101,138 @@ minule“ — druhá odpověď na „co přišlo po téhle chvíli“ by se s pr
   ne úspora místa (autorem vlastního PR jsem já nebo můj agent), a obojí zůstává v hlavičce detailu.
 - **Volající si bere jeden report na řádek.** `pending` i `activity` jsou z téhož `HandoffReport`,
   takže dvě volání by byla tatáž práce dvakrát — a `List` staví řádky při každém překreslení.
+
+### Dění — pátá sekce railu (#414)
+
+Notifikace proletí a nikde nezůstane: banner zmizí, **stejná identita přepíše to, co ještě visí**
+(#87), a v okně po tom zbude **jediný údaj** — čas posledního doručení u zvonku (#138). `Dění` je
+místo, kde ty události zůstanou. Zakreslené v **sekci 27 návrhu**.
+
+**Kdo co drží:**
+
+| Kus | Kde | Co drží |
+|---|---|---|
+| `ActivityEvent` | `App/Models/` | jedna položka: druh, PR, čas, headline, detail, `wasAnnounced`, sha, autor |
+| `Policy` (`ActivityFeed.swift`) | `App/Policy/` | **všechno rozhodování** — brána, skládání textu, vložení do záznamu, strop, co je nepřečtené, dny, prázdno |
+| `ActivityLog` | `App/Store/` | soubor `activity.json` v kořeni cache, aktor, strop **200 položek** |
+| `ActivityVisitLedger` | `App/Store/` | značka poslední návštěvy v předvolbách (`activity.lastVisit`) |
+| `AppStore+Feed` | `App/Store/` | kdy se zapisuje, co je v paměti, kdy se posouvá značka, klik na řádek |
+| `ActivityFeedView` | `App/Views/` | obrazovka: bloky po dnech, osa s puntíky, pruh návštěvy, tři prázdna |
+
+**Záznam je na disku a mez je vidět v typu.** `DeliveredNotification` je v paměti schválně (#138) —
+odpovídá na „funguje mi to teď“ a čas z minulého spuštění je k té otázce zavádějící; dění je otázka
+opačná, takže musí přežít restart. Strop je **na položky, ne na dny**: dění odpovídá na „co jsem
+prošvihl“, a to je omezené pozorností, ne kalendářem — týdenní okno jako u `SpendLedger` by
+usekávalo přesně tu dovolenou, kvůli které se sem chodí. Cache bez vyjmenované meze je únik paměti
+s odkladem (#224), proto je `Policy.activityLimit` konstanta a **jedno místo** (`Policy.activityLog`)
+řadí, odstraňuje duplicity i stropuje — disk i paměť se tím nemají čím rozejít. **Nic jiného ten
+soubor nemaže**, ani úklid po PR, které vypadlo ze seznamu: zavřený pull request na tom, co se na
+něm stalo, nemění nic.
+
+**Zápis nezávisí na přepínačích notifikací** (#86), a je to celý důvod, proč ta obrazovka unese
+věci, které banner ne. Přepínače rozhodují o **vyrušení**, ne o záznamu — takže se sekce plní
+i tehdy, když je aplikace jinak mlčící, a řádek, u kterého banner nedorazil, to říká chipem
+**bez banneru**. Guardy na notifikační centrum se proto z `notifyAboutFinishedReview`,
+`announceNewPullRequests` a `notifyAboutForeignActivity` **přesunuly dolů**; co v nich zůstalo, je
+`AppStore.watchesPullRequestActivity` (centrum **nebo** záznam): snímek fronty a razítko oznámení se
+nesmí spotřebovat, když je nikdo nekonzumuje, jinak by po zapnutí notifikací vypadala první nová PR
+jako už ohlášená.
+
+**Osm druhů, šest podle zadání.** Čtyři aplikace zná (nové PR a re-review, tři výsledky review,
+cizí aktivita) a **dva se dopočítávají bez jediného volání navíc**:
+
+- **`leftQueue`** je doplněk k `newcomers(in:)` nad **tímtéž** snímkem. `AnnouncedPullRequests`
+  proto od #414 vrací `QueueChanges` (příchody i odchody) jedním voláním: snímek se dotazem
+  přepisuje, takže druhé volání by se ptalo už proti přepsanému stavu a vrátilo prázdno.
+- **`staleFindings`** čte `staleFindings(for:)` — tedy to jedno místo, které porovnává sha (#284) —
+  a počet commitů z už načteného seznamu (`Policy.commitsAfter`). **Zapisuje se z `loadDetail`**, ne
+  z tiku, a je to vědomé omezení: `PullRequestSummary` ze searche `headSha` nenese (`gh search prs`
+  ho neumí), takže by za tikem musel stát `gh pr view` na každé PR — tedy N+1 past, kvůli které se
+  netahá ani detail. Rozchod se tak zapíše teprve ve chvíli, kdy se na PR podívám nebo nad ním něco
+  poběží; **přínos je, že od té chvíle zůstane** (dneska je to žlutý proužek, který zmizí
+  s obrazovkou). Tikem to umí až vlastní issue.
+
+**Zamítnuté s důvodem:** spadlé CI (checky se tahají až při zobrazení PR, `loadDetail` z #306, takže
+by za tím musel stát vlastní polling — nový zdroj, ne zápis toho, co proteklo) a poruchy aplikace
+(stav *teď*, na který odpovídá stavový řádek; v dění by z toho byl log).
+
+**Brána je jedna a je v `Policy`** — `Policy.isReported(_:on:)`. Dění čte tytéž události jako
+notifikace, takže bez ní by z něj byl obchvat pravidla #332: hláška, kterou banner vydat nesmí, by na
+obrazovce zůstala navěky. Láme se **podle druhu**, jako u notifikací: výsledky review, příchod,
+odchod a zastaralé nálezy jen o **cizím** PR, cizí aktivita jen o **vlastním**. Zastaralé nálezy
+patří k cizím proto, že na vlastním je push obvykle můj — tatáž úvaha, kvůli které `ForeignActivity`
+schválně nenese commity.
+
+**Text se ukládá složený a skládají ho tytéž funkce jako banner.** Vypadá to jako uložené UI, ale je
+to jediná poctivá volba: řádek mluví o tom, jak review dopadlo **tehdy**, a nálezy z té chvíle na
+disku být nemusí (zahodily se, uklidila je lhůta, přepsal je další běh) — přepočítaný řádek by
+tvrdil něco o dnešku pod datem z minulého týdne. Bere se `Policy.reviewNotification` (co je konec
+běhu a jak se jmenuje), `Policy.notificationDetail` a `Policy.activityHeadline`/`activityDetail`.
+Odchylky od zákresu, které z toho plynou, jsou vypsané v [`stav.md`](stav.md).
+
+**Identita položky je deterministická**, ne `UUID`: skládá ji `Policy` z druhu, PR a toho, co tu
+příhodu odlišuje v čase. U `staleFindings` je to **hlava** (téhož rozchodu si aplikace všimne při
+každém dotažení detailu a druhý řádek o jedné věci je šum), u zbytku okamžik. U nových PR se proto
+zapisuje **až za `isWorthRetrying`**, ve stejné chvíli jako snímek: dokud se snímek nepřepsal, vrátí
+příští tik tatáž PR — a s časem v identitě by z jednoho příchodu byly dva řádky.
+
+**Značka poslední návštěvy, ne příznak u položky.** Tentýž mechanismus, jaký drží konverzaci
+(`VisitLedger`, `Policy.conversationRows`, #183 a #361), jen s vlastním klíčem; příznak u položky by
+byl druhá odpověď na tutéž otázku a zápis na každý řádek. **Posouvá se při odchodu ze sekce, ne při
+vstupu** — kdyby ji přepsal vstup, přestalo by být nové zrovna to, na co koukám (tatáž nesymetrie
+jako `seedVisitBaseline(for:)` u #335). Drží to `AppStore.syncActivityVisit()`, který rozhoduje ze
+**změny viditelnosti** (`wasActivityVisible` → `isActivityVisible`), ne z toho, které tlačítko ji
+způsobilo: volá se ze všech čtyř míst, která umí sekci opustit (`show(_:)`, `openTab`, `closeTab`,
+`selectTab`), takže na pořadí ani na počtu volání nezáleží. Rail proto zapisuje **přes `show(_:)`**
+(binding v `ContentView` je `Binding(get:set:)`), ne rovnou do `railSection` — jinak by ta jedna
+cesta neexistovala. **Snapshot se drží zvlášť** od zapsané značky, jako `visitSnapshots` u PR: kdyby
+se číslo bralo z ledgeru, posunul by ho zápis při odchodu a při návratu by nebylo nové nic.
+
+**Bez značky je nové všechno**, a je to opačná volba než u konverzace (#173), kde `nil` znamená
+prázdno. Rozhoduje o tom, co ta data jsou: záznam dění vzniká teprve za běhu aplikace, takže „nikdy
+jsem tu nebyl“ znamená, že jsem opravdu nic z toho neviděl — kdežto u PR by to znamenalo vypsat
+celou jeho historii.
+
+**Odznak sekce počítá nepřečtené a na aktivní sekci se nekreslí** (`Policy.activityBadge`). To druhé
+je vada dnešního railu, ne rozhodnutí o dění: odznak v něm ikonu **překryje** (změřeno na
+dvoumístných počtech fronty), takže by na položce, ve které zrovna stojím, zbyl červený puntík bez
+identity. Počet je proto v **nadpisu bloku** (`Dnes · 4 nové`), a to za den, ne za celý záznam.
+
+**Každý řádek někam vede a je to v něm napsané** (`→ Nálezy`, `→ Konverzace`, `→ Commity`,
+`→ Přehled`, `→ Průběh`), ne šipka bez obsahu. Jde se **jediným vstupním bodem** `openTab(_:in:)`
+(#409) a tab se **jmenuje**, na rozdíl od kliku na notifikaci: řádek dění ví, o čem je, takže poslat
+člověka „tam, kde skončil“ by ho poslalo jinam, než na co klikl. Jediný řádek, který do okna nevede
+(`leftQueue` — PR v seznamu není), vede **na GitHub** a pozná se to i barvou; adresu skládá
+`Policy.gitHubURL(of:)` z identity, protože shrnutí s `url` v paměti být nemusí. Otevírá ji **view**
+(`@Environment(\.openURL)`), jako v paletě ⌘K — store se o prohlížeči nemá co dozvědět.
+
+**Čí PR to je, se u kliku nerozlišuje** — a nesmí se to plést s bránou o řádek výš: řádek o cizí
+aktivitě je o **vlastním** PR a záložka si obsah bere z plného seznamu (`summary(for:)`), takže
+zúžení podle autora by znamenalo zahozený klik za nic. Je to tatáž úvaha, jakou má u #409 klik na
+notifikaci.
+
+**Kreslení:** líný seznam je **po dnech**, ne po řádcích — blok je ohraničená karta, takže potřebuje
+jeden kontejner, a řádků v něm je nejvýš tolik, kolik je strop celého záznamu, takže je nejhorší
+případ ohraničený. V řádku **není pružná výška** (#220, #375), neiteruje se pole tuplů (#361 —
+identitu nese `ActivityFeedRow`) a nic si neplánuje kolo (#350, #358). Svislá čára osy je
+**na pozadí bloku**, ne prvek v každém řádku: prvek na řádek by znamenal jeden prvek navíc na
+položku (#252). Zalomení řádku dělá `FlowRow` (`.tl-line` má v návrhu `flex-wrap: wrap`), cíl vpravo
+stojí mimo něj, aby se nezalomil doprostřed textu.
+
+**Čtyři prázdna, která se nesmí slít** (`Policy.activityEmptyState`): klid, **ztracený záznam**,
+**zakázané oprávnění** (spraví se jedině v Nastavení systému — odskok drží
+`SystemSettings.openNotifications()`) a **vypnutý přepínač** (spraví se v nastavení aplikace).
+Zakázané má přednost před vypnutým: je to stav, ve kterém je aplikace úplně mlčící a člověk o tom
+nemusí vědět. Návrh kreslil jen klid a zakázané oprávnění; ostatní dvě jsou rozhodnutá při
+implementaci.
+
+**Ztracený záznam přebíjí všechna ostatní prázdna, a je to to nejdůležitější z nich.** Rozbitý
+soubor i prázdný záznam dají obojí prázdný seznam, takže by nad ztracenou historií stálo klidné
+*Za poslední dny se nic nestalo* — tedy text, který tvrdí víc, než data unesou. Nese to
+`ActivityLog.Stored.isUnreadable` a **chybějící soubor se od nečitelného odlišuje dřív než
+dekódováním** (`Data(contentsOf:)` vyhodí u obojího): první spuštění je normální stav, ne porucha.
+Kreslí to prázdný stav sekce, ne stavový řádek — je to odpověď na otázku, kterou si člověk klade
+zrovna nad tou obrazovkou.
 
 ### Které místo chce kterou množinu (#332)
 

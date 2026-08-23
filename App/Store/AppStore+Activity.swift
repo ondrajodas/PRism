@@ -74,7 +74,10 @@ extension AppStore {
     /// tuhle metodu volá i test a jedna zapomenutá podmínka by z toho udělala notifikace o cizí
     /// diskuzi, tedy hlášky o práci, o kterou mě nikdo nepožádal.
     func notifyAboutForeignActivity(on pr: PRIdentifier) async {
-        guard notifications != nil, ownership(of: pr) == .mine else { return }
+        let ownership = ownership(of: pr)
+        // Razítko oznámení se nespotřebuje, když ho nikdo nekonzumuje — tatáž úvaha jako u snímku
+        // fronty (#414). Do #414 tu stálo `notifications != nil`.
+        guard ownership == .mine, watchesPullRequestActivity else { return }
         let baseline = Policy.activityBaseline(
             lastVisit: visitSnapshots[pr],
             lastNotice: activityNotices.lastNotice(for: pr)
@@ -84,9 +87,22 @@ extension AppStore {
               let announced = activity.latest
         else { return }
 
-        let delivery = await notify(notification)
+        // **Guard na notifikační centrum se přesunul dolů** (#414): do dění se zapisuje i tehdy,
+        // když se odsud neposílá nebo když je hláška vypnutá — přepínače (#86) rozhodují
+        // o vyrušení, ne o záznamu.
+        var delivery: NotificationDelivery?
+        if notifications != nil { delivery = await notify(notification) }
         guard delivery?.isWorthRetrying != true else { return }
         activityNotices.record(pr, announced: announced, at: time.now)
+        // Za razítkem oznámení, ze stejného důvodu jako u nových PR: dokud se razítko neposunulo,
+        // vrátí příští rozhlídka tutéž aktivitu — a druhý řádek o jednom komentáři je šum.
+        await recordActivity(Policy.foreignActivityEvent(
+            for: pr,
+            ownership: ownership,
+            activity: activity,
+            at: time.now,
+            announced: delivery?.isDelivered == true
+        ))
     }
 
 }

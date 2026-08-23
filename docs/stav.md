@@ -3879,3 +3879,72 @@ tab se nepřepisuje, filtr se ruší, vlastní PR se otevře). Ověřeno vložen
 `selection = pr` místo `openTab(pr)` složí šest testů ze třinácti v suitě (staré čtyři by prošly)
 a `Policy`, která vrací `open` vždycky, složí test „klik na PR mimo seznam neotevře nic“ i čtyři
 případy v `NotificationClickTests`. Testů 3724.
+
+### #414 — Dění: pátá sekce railu, ve které notifikace zůstane
+
+Notifikace proletí a nikde nezůstane. Banner zmizí, stejná identita přepíše to, co ještě visí (#87),
+a v okně po tom zbude **jediný údaj**: čas posledního doručení u zvonku ve stavovém řádku (#138).
+`Dění` je místo, kde ty události zůstanou — pátá sekce railu, na kterou ikona `◷` v návrhu čekala od
+sekce 01. Zakreslené v **sekci 27**, odsouhlaseno 2026-08-23.
+
+Podrobnosti — kdo drží záznam, co ho vyprazdňuje a jak se rozhoduje o řádku — jsou
+v [`architektura.md`](architektura.md), sekce *Dění — pátá sekce railu (#414)*. Tady zbývá to, co se
+rozhodlo **jinak, než bylo v zadání nebo v zákresu**.
+
+**Osm druhů, ne šest.** Zadání mluví o šesti; v `ActivityEvent.Kind` jich je osm, protože se `nové PR`
+dělí na příchod a re-review (#137) a `review doběhlo` na nálezy, čisto a selhání. Liší se glyfem
+i cílem kliknutí, takže by se jako jeden druh s příznakem kreslily stejně — a to je zrovna to slití,
+kterému se v tomhle okně brání (`čisté review` proti `review se nepovedlo`).
+
+**Zastaralé nálezy se zapisují z `loadDetail`, ne z tiku**, a je to vědomé omezení, ne opomenutí.
+`PullRequestSummary` ze searche `headSha` nenese (`gh search prs` ho neumí), takže tikem by to šlo
+jedině přes `gh pr view` na každé PR — tedy N+1 past, kvůli které se netahá ani detail, a zadání
+nové síťové volání zakazuje. Rozchod se proto zapíše ve chvíli, kdy se na PR podívám nebo nad ním
+něco poběží; **od té chvíle ale zůstane**, kdežto dneska je to žlutý proužek, který zmizí
+s obrazovkou. Zbytek — všimnout si toho tikem — je na **vlastní issue**; je to nový zdroj, tedy tatáž
+kategorie jako zamítnuté spadlé CI.
+
+**Text řádku se ukládá složený.** Vypadá to jako uložené UI, ale řádek mluví o tom, jak review
+dopadlo **tehdy**, a nálezy z té chvíle na disku být nemusí (zahodily se, uklidila je lhůta, přepsal
+je další běh) — přepočítaný řádek by tvrdil něco o dnešku pod datem z minulého týdne. Skládají ho
+**tytéž funkce jako banner**, takže se nad jedním během nemají čím rozejít.
+
+Z toho plynou **čtyři odchylky od zákresu**, každá proto, že by data pro nakreslený text musela
+vzniknout druhou cestou:
+
+- **Nálezy** mají v detailu ten **nejzávažnější nález** (`correctness: …`), ne seznam skillů
+  (`php-review, security-review`). Je to tatáž věta jako v banneru a nese víc.
+- **Čisté review** detail nemá vůbec, kdežto zákres má `· 3 skilly · 1,04 $`. Detail odpovídá na „co
+  potřebuju vědět nad titulkem“ a u čista je to nic; kolik skillů běželo a co to stálo je záznam běhu
+  a je v tabu `Průběh`, kam ten řádek vede.
+- **Re-review** nese titulek PR, ne `od mého review přišlo 5 commitů`: ten počet by znamenal dopočítat
+  commity od cizího review, a to z fronty ani ze snímku neplyne.
+- **Cizí aktivita** má v detailu celý počet (`2 nové komentáře a 1 review`), ne jeho druhou půlku
+  (`a 1 review od Copilota`). Skládá ho `Policy.activityHeadline`, tedy tatáž funkce jako titulek
+  banneru — druhá věta o témž počtu by se s ní rozešla.
+
+**Svislá čára osy jde středem puntíků, ne 4 body vedle.** V CSS zákresu se ty dvě hodnoty
+rozcházejí: `.tl::before` je na `left: 30px` od hrany `.tl` (tedy střed 31), kdežto `.tl-dot`
+vychází na `18 + 5` s průměrem 24, tedy střed **35**. Spočítáno z CSS, ne odhadnuto z obrázku.
+V aplikaci mají obojí střed na 30, protože čára pod puntíkem je zjevně to, co zákres kreslit chtěl —
+osa vedle puntíků vypadá jako chyba kreslení.
+
+**Prázdna jsou čtyři, ne dva.** Zákres kreslí klid a zakázané oprávnění; přibyl **vypnutý přepínač**
+v nastavení aplikace (bez něj by vypadal jako odmítnuté oprávnění a posílal člověka do Nastavení
+systému, kde s tím nic neudělá) a **ztracený záznam**, který přebíjí všechny ostatní. Ten poslední je
+z nich nejdůležitější: rozbitý soubor i prázdný záznam dají obojí prázdný seznam, takže by nad
+ztracenou historií stálo klidné „za poslední dny se nic nestalo“ — přesně ten text, který tvrdí víc,
+než data unesou. Chybějící soubor se od nečitelného odlišuje **dřív než dekódováním**, protože první
+spuštění je normální stav, ne porucha.
+
+**Odznak se na aktivní sekci nekreslí** (poznámka 95 v zákresu), a je to obejití vady dnešního railu:
+odznak v něm ikonu **překryje**, takže by na položce, ve které zrovna stojím, zbyl červený puntík bez
+identity. Počet je proto v nadpisu bloku. Ta překrytá ikona zbývá jako vlastní issue.
+
+**Klik jde vstupním bodem z #409** (`openTab(_:in:)`) a **tab jmenuje** — řádek dění ví, o čem je.
+Jediný řádek, který do okna nevede (PR odešel z fronty, takže v seznamu není), vede na GitHub a pozná
+se to i barvou.
+
+**Na tomhle je co vidět**, a do plné sekce se klikáním nedostaneš: čerstvá cache dění nemá. Pro
+screenshot se zapíše `activity.json` do cache slotu a značka do jeho domény v `UserDefaults`; postup
+je v [`testovani.md`](testovani.md). Testů 3791 (67 nových).

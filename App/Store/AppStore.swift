@@ -532,6 +532,48 @@ final class AppStore {
     /// první otevření PR tvářilo jako posunutá hlava. Chytil to test, ne čtení kódu.
     var seenHeads: [PRIdentifier: String] = [:]
 
+    /// Záznam dění (#414). `nil` = odsud se nezaznamenává (testy, které o dění nestojí, tím
+    /// nesahají do skutečné cache).
+    let activityLog: ActivityLog?
+
+    /// Značka poslední návštěvy sekce `Dění` (#414) — posouvá se **při odchodu**, ne při vstupu.
+    let activityVisits: ActivityVisitLedger
+
+    /// Položky dění, se kterými se pracuje (#414). Disk je **záloha**, ne jediná kopie: sekce
+    /// i odznak v railu se na ně ptají při každém překreslení okna, takže se čtou z paměti —
+    /// z disku jednou při startu (`loadStoredActivity()`).
+    ///
+    /// Od nejnovějšího a se stropem, protože obojí rozhoduje `Policy.activityLog(_:adding:limit:)`
+    /// — tatáž funkce, jakou se zapisuje soubor.
+    var activityEvents: [ActivityEvent] = []
+
+    /// Nepodařilo se přečíst soubor se záznamem dění (#414)?
+    ///
+    /// Musí být vidět, a ze stejného důvodu jako u nálezů: **prázdný záznam a ztracená historie
+    /// dají obojí prázdný seznam**, takže klidné „za poslední dny se nic nestalo“ by nad rozbitým
+    /// souborem tvrdilo víc, než data unesou. Kreslí to prázdný stav sekce, ne stavový řádek —
+    /// je to odpověď na otázku, kterou si člověk klade zrovna nad tou obrazovkou.
+    ///
+    /// **`internal`, ne `private(set)`** — píše to `AppStore+Feed`; je to tatáž cena, jakou
+    /// zaplatilo rozdělení storu na extensiony (#154).
+    var isActivityLogUnreadable = false
+
+    /// Značka, proti které se **v tomhle běhu** počítá, co je v dění nové.
+    ///
+    /// Drží se zvlášť od zapsané značky, přesně jako `visitSnapshots` u pull requestů: kdyby se
+    /// číslo bralo z ledgeru, posunul by ho zápis při odchodu a při návratu do sekce by nebylo
+    /// nové nic. `nil` = ještě se nečetla, nebo tu nikdy nikdo nebyl — a to znamená, že je nové
+    /// **všechno** (viz `Policy.unreadActivity`).
+    var activityVisitSnapshot: Date?
+
+    /// Byla sekce `Dění` na obrazovce, když se naposledy něco přepínalo (#414)?
+    ///
+    /// Drží se kvůli tomu, aby se poznalo **odejití** — tatáž úvaha jako u `openedPullRequest`.
+    /// Značka se posouvá jedině při odchodu, takže se ta dvě volání (vstup a odchod) musí od sebe
+    /// odlišit, a jinak než porovnáním s předchozím stavem to nejde: rail zapisuje sekci
+    /// i záložka a obojí umí sekci opustit.
+    var wasActivityVisible = false
+
     /// PR, jehož detail je zrovna na obrazovce (#173). Drží se kvůli tomu, aby se poznalo
     /// **odejití** — přepnutí jinam a návrat je nová návštěva, takže se banner podruhé
     /// neukazuje. Uvnitř jednoho PR se tím nemění nic, takže odskok mezi taby o něj nepřipraví.
@@ -561,11 +603,15 @@ final class AppStore {
         appearance: (any AppearanceApplying)? = nil,
         visits: VisitLedger = VisitLedger(preferences: UserDefaults.standard),
         activityNotices: ActivityNoticeLedger = ActivityNoticeLedger(preferences: UserDefaults.standard),
-        handoffs: HandoffLedger? = nil
+        handoffs: HandoffLedger? = nil,
+        activityLog: ActivityLog? = nil,
+        activityVisits: ActivityVisitLedger = ActivityVisitLedger(preferences: UserDefaults.standard)
     ) {
         self.visits = visits
         self.activityNotices = activityNotices
         self.handoffs = handoffs
+        self.activityLog = activityLog
+        self.activityVisits = activityVisits
         self.appearance = appearance
         self.time = time
         self.gh = gh
@@ -675,7 +721,9 @@ final class AppStore {
             interrupted: InterruptedRuns(),
             transcripts: TranscriptStore(),
             appearance: AppAppearance.application,
-            handoffs: HandoffLedger()
+            handoffs: HandoffLedger(),
+            // Záznam dění (#414). Živý jedině tady — testy ho nedostanou, takže nesahají do cache.
+            activityLog: ActivityLog()
         )
         self.configurationBox = box
     }
@@ -821,6 +869,9 @@ final class AppStore {
     func show(_ section: RailSection) {
         railSection = section
         activeTab = .home
+        // Odchod ze sekce `Dění` posouvá značku poslední návštěvy (#414). Musí to být **za**
+        // přepnutím: rozhoduje se z toho, co je na obrazovce teď, ne z toho, co se chystá.
+        syncActivityVisit()
     }
 
     /// Klik na kartu nebo patku bloku na dashboardu (#371).
@@ -867,6 +918,9 @@ final class AppStore {
         activeTab = .pullRequest(pullRequest)
         selection = pullRequest
         if let tab { setDetailTab(tab, for: pullRequest) }
+        // Otevření záložky je odchod z domácí záložky, takže i ze sekce `Dění` — a odchod posouvá
+        // značku poslední návštěvy (#414).
+        syncActivityVisit()
     }
 
     /// Zavře záložku. **Nic se tím nezahazuje** — draft, nálezy i běžící review zůstávají, protože
@@ -883,6 +937,7 @@ final class AppStore {
         let neighbour = openTabs.indices.contains(index) ? openTabs[index] : openTabs.last
         activeTab = neighbour.map(WindowTab.pullRequest) ?? .home
         selection = neighbour
+        syncActivityVisit()
     }
 
     /// Přepne na sousední záložku v pruhu (#245) — `⌃Tab` dopředu, `⌃⇧Tab` zpátky.
@@ -897,6 +952,7 @@ final class AppStore {
     func selectTab(_ step: NavigationStep) {
         guard let next = Policy.tab(step, after: activeTab, open: openTabs) else { return }
         activeTab = next
+        syncActivityVisit()
     }
 
     /// Shrnutí otevřených záložek. PR, který ze seznamu vypadl, si záložku drží — proto se
@@ -1188,6 +1244,11 @@ final class AppStore {
         // pollingem, ať se PR nekreslí na okamžik jako nepředaný — to je zrovna to bliknutí,
         // kvůli kterému odznak přestává něco znamenat.
         await loadStoredHandoffs()
+        // Dění (#414) taky **jednou** a ze stejného důvodu: sekce i odznak v railu se pak ptají
+        // paměti. Značka poslední návštěvy se čte spolu s ním — kdyby se čekalo na první otevření
+        // sekce, byl by první snímek značky až po tom, co se na obrazovku podívám, a nové by
+        // nebylo nic.
+        await loadStoredActivity()
         await loadDailySpend()
         // Všechno běží, dokud žije okno; zrušení tasku ukončí skupinu i se všemi smyčkami.
         await withTaskGroup(of: Void.self) { group in

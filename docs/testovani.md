@@ -354,6 +354,67 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Ověřeno vložením regrese:** vypnutí druhého razítka (značka jen z návštěvy) shodí právě ten
   jeden test, který ho má chytat — `O témže komentáři se nehlásí dvakrát`, s hláškou
   `(center.delivered.count → 2) == 1`.
+- **Dění (#414)** — tři sady a **to nejcennější jsou tři negativní tvrzení**: že vypnuté notifikace
+  zápis nezastaví, že se značka návštěvy neposune vstupem do sekce a že se vlastní PR do dění
+  nedostane. Všechna tři se rozbijí potichu — na obrazovce po nich zůstane prázdno, nebo přečtený
+  záznam.
+
+  `Policy` výčtem (`ActivityFeedTests`, 42 testů). **Brána se testuje nad `allCases`**, ne nad
+  vybranými druhy: devátý druh by jinak propadl bez povšimnutí. Dvě tabulky — cizí PR (hlásí se
+  všechno kromě cizí aktivity) a vlastní (jedině cizí aktivita) —, a k nim čtyři konstruktory, které
+  nad vlastním PR vrací `nil`. Dál: že **každý druh někam vede** a jediný vede na GitHub, že se dva
+  druhy neslijí barvou ani glyfem (počet unikátních glyfů = počet druhů), a že chip **bez banneru**
+  dostanou **jen ty druhy, které banner umí** — u dopočítaných by tvrdil, že něco nedorazilo, přitom
+  za ně banner nechodí nikdy.
+
+  Text: že headline je **titulek banneru** (`3 nálezy · 1 blokuje`), že u čistého review detail
+  **není** (opakoval by titulek) a u selhání **je**, že se stavy mimo konec běhu nezapisují vůbec,
+  že u cizí aktivity je věta headline a počet detail (obráceně než v banneru) a že se u **jediné**
+  položky počet vynechá. U zastaralých nálezů skloňování commitů **i slovesa** (`přišel 1 commit` /
+  `přišly 3 commity` / `přišlo 5 commitů`) a to, že neznámý počet o commitech **nemluví** — tatáž
+  třída chyby jako u blokujících nálezů (#131).
+
+  Záznam: pořadí od nejnovějšího, strop **odřízne nejstarší** (ne nejnovější), výchozí strop je
+  200 zapsaných literálem, duplicita podle identity se slije a **zůstane ta první** (čas se nepřepíše
+  na „všiml jsem si znovu“), nulový strop nechá prázdno. Identita zastaralých nálezů je klíčovaná
+  **hlavou, ne časem** — dvě všimnutí téhož rozchodu dají jeden řádek.
+
+  Nepřečtené a bloky: **bez značky je nepřečtené všechno** (opačně než u konverzace — je u toho
+  napsané proč), pruh `Tady jsem skončil` se kreslí před **první už viděnou** položkou a bez novinek
+  se nekreslí vůbec, den se jmenuje `Dnes` / `Včera` / datem a počet v nadpisu je **za ten den**, ne
+  za celý záznam. Odznak sekce mlčí nad nulou **i na aktivní sekci**.
+
+  `AppStore` proti skutečnému `ActivityLog`u a `AnnouncedPullRequests` nad dočasnou složkou
+  (`AppStoreFeedTests`, 18 testů): že **vypnuté notifikace zápis nezastaví** (banner nedorazí, řádek
+  je a přiznává to), že doručený banner nechá řádek bez chipu, že záznam **přežije restart** (druhá
+  instance nad tímtéž souborem), že odchod z fronty dostane řádek a **žádný banner**, že **první tik
+  po startu dění neplní** (jinak lavina), že se vlastní PR nedostane dovnitř, a že se **bez
+  konzumenta nespotřebuje snímek fronty** — tohle poslední je starší tvrzení z #85, jen se v něm
+  `notifications != nil` změnilo na `watchesPullRequestActivity`.
+
+  Značka návštěvy: **vstup ji neposune** (ani v paměti, ani v předvolbách), odchod ano a zapíše se,
+  otevření záložky PR je taky odchod, klik na tutéž sekci s ní nehýbe a při startu se přečte ta
+  z minulého spuštění. Klik na řádek jde **jediným vstupním bodem** (#409) a **jmenuje tab**; řádek
+  o odchodu z fronty záložku **neotevře** (otevřel by ji nad PR, které v seznamu není).
+
+  `ActivityLog` proti skutečné složce (`ActivityLogTests`, 7 testů): restart, strop, srovnání pořadí
+  a stropu **při čtení** (soubor mohl vzniknout s jinou konstantou), prázdný zápis se souboru
+  **nedotkne** (tik bez novinek se děje pořád) a zápis vrací **celý** záznam, aby se strop nepočítal
+  podruhé v paměti. A hlavně **rozbitý soubor se pozná od prázdného**: obojí dá prázdný seznam, ale
+  klidné „nic se nestalo“ by nad ztracenou historií lhalo — tvrdí se to na obou stranách (chybějící
+  soubor **není** porucha, nečitelný je) a store ten příznak musí donést až do prázdného stavu
+  (`AppStoreFeedTests`), protože jinak by zůstal ležet ve storu a nikdo by ho nečetl.
+
+  **Ověřeno vložením regrese, dvakrát:** posun značky při vstupu (`guard visible || wasActivityVisible`)
+  shodil dva testy — `Vstup do sekce značku neposune` i `Klik na tutéž sekci značku nehýbe` —,
+  a vrácení notifikační brány do `announceNewPullRequests` shodilo právě ten jeden, který ji má
+  chytat, s hláškou `(store.activityEvents.map(\.kind) → []) == [.newPullRequest]`.
+
+  **Do plné sekce se klikáním nedostaneš** — čerstvá cache dění nemá a událost přijde až tikem —,
+  takže se pro screenshot zapíše `activity.json` do cache slotu a značka do jeho domény
+  v `UserDefaults` (`defaults write com.ondrajodas.prism.<slot> activity.lastVisit <ISO>`). Sekce je
+  ve `ScrollView`, takže offscreen render nestačí (viz *Jak si zkontrolovat, jak view vypadá*)
+  a fotí se **skutečné okno podle ID**.
 - **Konverzace** — proti fixtures, které jsou surové odpovědi z veřejných PR `cli/cli`
   sebrané **tím dotazem, který posílá aplikace** (`ConversationQuery.document`). Kdyby se
   sbíraly jinak, testovaly by tvar, který v provozu nikdy nepřijde; ověřené je to i tak, že
