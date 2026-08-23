@@ -25,6 +25,9 @@ struct ReviewerLaneView: View {
     /// zrovna u běžícího revieweera.
     let feed: StepFeedState
     let toggleFeed: () -> Void
+    /// Otevře přepis celého transcriptu (#327). `nil` = dráha nemá `session_id` nebo pracovní strom,
+    /// takže se tlačítko nekreslí — viz `StepFeedView.showRawSession`.
+    var showRawSession: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -40,7 +43,12 @@ struct ReviewerLaneView: View {
             }
             if let failure = lane.failure { failureBlock(failure) }
             if feed != .none {
-                StepFeedView(lane: lane, state: feed, toggle: toggleFeed)
+                StepFeedView(
+                    lane: lane,
+                    state: feed,
+                    toggle: toggleFeed,
+                    showRawSession: showRawSession
+                )
             }
         }
         .background(Palette.surface)

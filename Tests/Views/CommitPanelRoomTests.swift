@@ -25,17 +25,30 @@ struct CommitPanelRoomTests {
     private let panelDefault = 306.0
     private let panelFloor = 246.0
 
-    /// Šířka znaku mono písma, kterým se kód sází — **přečtená jednou za test** (#367).
+    /// Šířka znaku mono písma, kterým se kód sází — **jedna hodnota na celý proces** (#367,
+    /// dotaženo u #327).
     ///
-    /// Do té doby to bylo computed property, takže se v jednom testu čítala dvakrát a mohla vyjít
+    /// Původně to byla computed property, takže se v jednom testu čítala dvakrát a mohla vyjít
     /// dvakrát jinak: v plném paralelním běhu z toho bylo `both → 0` proti `treeOnly → 35`, tedy
-    /// **víc místa a méně znaků**, což z monotónní funkce vyjít nemůže. Metrika písma je stav
-    /// procesu (vzniká v něm zároveň několik `NSHostingView`ů), takže platí totéž, co u vzhledu
-    /// hostitele: hodnota se vezme **jednou** a tvrzení se pak porovnávají mezi sebou, ne každé
-    /// proti jinému měřidlu.
-    private let characterWidth = NSFont
-        .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        .maximumAdvancement.width
+    /// **víc místa a méně znaků**, což z monotónní funkce vyjít nemůže. #367 z ní udělalo `let`
+    /// instance, tedy jedno čtení **na test** — a to nestačilo: Swift Testing staví na každý test
+    /// vlastní instanci, takže se pod souběžným buildem několika slotů pořád trefil běh, ve kterém
+    /// `maximumAdvancement` vyšlo **nulové** a spadl jeden ze čtyř poměrů (`pod sebou: 0, vedle
+    /// sebe: 0`). Falešně červený `main` je horší než chybějící test, takže:
+    ///
+    /// - hodnota je **`static`**, tedy jedno čtení na proces — všechna tvrzení suity pak porovnávají
+    ///   čísla z jednoho měřidla;
+    /// - a když metrika nevyjde, **změří se text**, ne aby se dělilo nulou. Že se náhradou nezmění
+    ///   čísla v dokumentaci, hlídá `theMeasuredCharacterWidthHoldsTheNumbers` — je to jediné místo,
+    ///   které tu hodnotu tvrdí.
+    private static let measuredCharacterWidth: Double = {
+        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let advance = font.maximumAdvancement.width
+        guard advance <= 0 else { return advance }
+        return NSAttributedString(string: "0", attributes: [.font: font]).size().width
+    }()
+
+    private var characterWidth: Double { Self.measuredCharacterWidth }
 
     private func charactersPerSide(_ width: Double, layout: DiffLayout) -> Int {
         Policy.charactersPerSide(

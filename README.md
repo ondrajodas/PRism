@@ -908,6 +908,38 @@ tedy o minuty později, a do té doby okno tvrdilo, že nástroj proběhl. Osy u
 nemají, protože se jejich krokům nemá s čím párovat — a `běží…` u doběhlého review by tvrdilo víc,
 než ta data unesou.
 
+**Když výpis kroků nestačí, je pod ním záchranná brzda: `Ukázat session`** (#327). Výpis
+kreslí jen nástroje — odpovídá na „koukal se tam, kam měl“. Na jinou otázku (*proč to dopadlo
+takhle*, *co dělal, než to spadlo*) odpovídá to, co výpis schválně zahazuje, a to je v sheetu
+s **přepisem celého transcriptu**: próza modelu, jeho uvažování, výstupy nástrojů a systémové
+události. Tlačítko je v hlavičce výpisu **i v jeho sbaleném řádku** — doběhlá dráha je ta častější —
+a bez známého `session_id` **nebo bez pracovního stromu** se nekreslí (z těch dvou se odvozuje cesta
+k souboru), stejně jako u `Zkopírovat resume`.
+
+Přepis je **snímek k okamžiku otevření**, ne živý pohled: v hlavičce je to napsané, patička hlásí,
+kolik od té chvíle přibylo, a vedle je `Načíst znovu`. Sledovat rostoucí soubor umí výpis o patro
+výš; dvě věci nad touž session jsou dvě místa, kde se dá splést pořadí. Kreslí se z něj **okno
+posledních 4 MB** a jedna událost má strop **8 kB** — obojí je změřené na 922 transcriptech na disku,
+kde největší má 53,3 MB a nejdelší jeden řádek 7,5 MB. Protože je soubor lokální, čte se od konce
+a **stav „moc velký“ nevzniká vůbec** (u logu z Actions ho vynutila síť). Zkrácení se přiznává
+**třikrát**: v hlavičce, řezem na začátku textu a u ořezané události na místě řezu; base64 obrázku se
+nevypisuje nikdy, jen se přizná, že tam je a kolik váží.
+
+**Sheet se dá roztáhnout za okraj a velikost si pamatuje** mezi otevřeními — u přepisu s dlouhými
+řádky je „jak široké to mám“ půlka užitku. Otevírá se na 1 180 × 760 bodů (ořezáno o okraje
+obrazovky, takže se na menším displeji nevejde přes hrany), pod 720 × 420 ho tažení nepustí, a jedno
+tažení stojí 2,61 ms na krok i nad přepisem o 1,5 milionu znaků — text se při změně šířky jen přelámí,
+nesází se znovu. Šířka není od oka: přepis zalamuje, takže ze 720 na 1 180 bodů ubude nad skutečným
+transcriptem 15 % řádků sazby, dál už jen jednotky procent za sheet přes celou plochu.
+
+**Že přepis není, má tři různé podoby, a každá nabídne něco jiného.** *Není* znamená, že soubor
+na disku **není** — a je to konečná odpověď: bez `Načíst znovu`, a je u toho napsané, že tím padá
+i `claude --resume`, protože čte tentýž soubor. Proč tam není (úklid cache, session ho ještě
+nezaložila) se **netvrdí** — z chybějícího souboru se to nepozná. *Nedá se přečíst* nabídne opakování i `Ukázat v Finderu`, protože soubor
+tam pořád leží. *Prázdný* nabídne opakování, protože u běžící session je to dočasný stav — prázdný
+sheet by vypadal jako „session nic nedělala“. Do sheetu se **nepíše**: čte se, vybírá a kopíruje,
+a cesta zpátky do session zůstává `Zkopírovat resume`.
+
 U doběhlého revieweera je v hlavičce **cena, trvání a počet kol** — `0,23 $ · 11,8 s · 3 kola`.
 Bere se to z toho, co nahlásila sama session, takže **zabitý běh je nemá**: nula by tvrdila, že
 byl zdarma. Součet za dnešek je ve stavovém řádku, viz níž.

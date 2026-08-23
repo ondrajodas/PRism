@@ -45,6 +45,10 @@ Totéž platí o **dashboardu**: 01 kreslí ten dnešní (`DashboardView` má op
 a jeden blok fronty), 21 ten se dvěma frontami podle #331. Obě jsou na stránce *Přehled* pod
 sebou. Stejné páry jsou **02 a 24** a **19 a 25** (#390): 02 a 19 kreslí dnešní obrazovky,
 24 přidává labely a vyžádané reviewery do pravého panelu a 25 ten panel do tabu *Commity*.
+Od zakreslení nového labelu z nabídky stojí vedle **24** ještě **26**, a je to tentýž vztah, jen
+o krok dál: 24 se mergnutím #392 stala záznamem dneška (nabídka labelů v panelu v okně opravdu
+je), takže se do ní zakládání nekreslí — 26 kreslí **jen dvě obrazovky nabídky a jednu větu
+v panelu**, ne celý panel znovu.
 **Novější sekce se do té starší nepřekresluje** — záznam dneška je to jediné, proti čemu se dá
 aplikace srovnat, takže bez něj by každé srovnání hlásilo rozdíl, který není chyba, dokud se to
 issue neudělá. Platí to i tehdy, když nová sekce mění **jen kus** obrazovky: 24 nekreslí celé
@@ -162,11 +166,11 @@ kontroly byla `^\.[a-z][a-z0-9-]* +\.$c`, a ta **mlčí u většiny skutečných
 s víc třídami (`.card.go .goto`, `.card.alarm .big`, `.frow.crit .bar` — všechny tři v tomhle
 souboru opravdu jsou), potomkový kombinátor (`.runbar > .lchip`), dvě úrovně (`.a .b .lchip`)
 i odsazené pravidlo. Ověřeno vložením regrese ve všech čtyřech tvarech: zakotvená podoba
-nenašla **ani jeden**, ta níž všechny. Falešně pozitivní nález u pěti vybraných jmen nehrozí
+nenašla **ani jeden**, ta níž všechny. Falešně pozitivní nález u osmi vybraných jmen nehrozí
 natolik, aby se za tuhle šířku platilo — a kdyby přišel, je to pobídka se podívat, ne šum.
 
 ```bash
-for c in lchip chip-add rv-list rv-row rv-av; do
+for c in lchip chip-add rv-list rv-row rv-av nl-bar nl-add nl-step; do
     grep -qE "[a-z0-9)]([ ]*[>+~][ ]*|[ ]+)\.$c([^a-z0-9-]|$)" docs/navrh.html &&
         echo "POZOR: .$c je jinde vnořený"
 done
