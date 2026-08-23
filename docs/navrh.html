@@ -2131,6 +2131,49 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .which ul { margin: 0; padding-left: 17px; display: flex; flex-direction: column; gap: 4px; }
 .which li { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
 
+/* Sheet s hunkem a s celým logem (sekce 27). Mono text je tady na **13 px s řádkem
+   16 px**, ne na 10,5 jako `.rawtx`: v okně ho kreslí `SelectableCodeView` písmem
+   `NSFont.systemFontSize` (13 b) a řádek má změřených 16,0 b
+   (`NSLayoutManager.defaultLineHeight`). Celé téma té sekce je šířka, takže se v ní musí
+   zalamovat tam, kde se zalamuje v okně — menší písmo by kresbu udělalo nepravdivou.
+
+   Zalomení jsou v textu **napsaná ručně** na změřených pozicích (66 znaků při 560 b,
+   143 při 1 180), proto `white-space: pre`. Nechat lámat prohlížeč by
+   znamenalo věřit tomu, že jeho mono má stejný advance jako AppKit — nemá (7,8 proti
+   8,036 b), takže by se zákres o pár znaků na řádek rozešel s aplikací. */
+.cs-text {
+  font-family: var(--mono); font-size: 13px; line-height: 1.2308;
+  /* `--ink`, ne `--ink-2`: `SelectableCodeView` nasazuje `Palette.ink` jako **základní
+     atribut celého řetězce** (#393) a obarvení syntaxe ji přepisuje. Konec logu v tabu
+     Kontroly je proti tomu celý v `--ink-2`, protože to je jiné view. */
+  background: var(--panel-2); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 8px; white-space: pre; overflow: hidden;
+}
+.cs-text b { color: var(--ink); font-weight: 500; }
+/* Značka na místě zalomení. Do vybraného textu se nedostane (zalomení není znak) —
+   v zákresu je proto šedivá a mimo obsah řádku, ne jako znak v kódu. */
+.cs-text .ret { color: var(--stale); }
+
+/* Tentýž řádek při podlaze a při šířce sheetu. Dva bloky **pod sebou**, ne vedle sebe:
+   1 180 a 560 vedle sebe je 1 740 bodů, tedy za hranou stránky (1 192) — a hlavně by se
+   šířky nedaly srovnat okem, když každá začíná jinde. */
+.cs-band { display: flex; flex-direction: column; gap: 12px; }
+/* `border-box` schválně (dokument jinde `box-sizing` nepřepisuje): blok **je** ten sheet,
+   takže má být 560 a 1 180 bodů široký naměřeně, ne 560 plus odsazení a okraj. Jinak by
+   `getBoundingClientRect` vrátil 578 a kontrola šířky by hlásila číslo, které v návrhu
+   nikde nestojí. */
+/* `max-width: 100%` k tomu z téhož důvodu jako u `.stripcut`: na úzkém okně se má blok
+   **uříznout**, ne roztlačit stránku do stran. Šířka, o které mluví popisek, zůstává
+   v `style`, takže se z návrhu pořád přečte. */
+.cs-band .cs-text { box-sizing: border-box; max-width: 100%; }
+.cs-band > div { display: flex; flex-direction: column; gap: 5px; }
+.cs-band .cap {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.cs-band .cap b { color: var(--ink-2); font-weight: 600; letter-spacing: 0.06em; }
+
 /* ============================================================
    KOSTRA DOKUMENTU — rozcestník, stránky, hledání
    Návrh se od téhle verze nečte jako jeden dlouhý svitek, ale po
@@ -7223,6 +7266,429 @@ projeví hned v tom dalším.</div>
         </span>
       </div>
     </div>
+  </section>
+
+  <!-- ---------- 28 SHEET S HUNKEM A S CELÝM LOGEM ---------- -->
+  <section class="section" id="s28">
+    <div class="section-head">
+      <div class="eyebrow">28 — Sheet s kódem · z tabu Kontroly i z diffu</div>
+      <h2>Celý log a celý hunk: sheet, jehož celé téma je šířka</h2>
+      <p class="muted">
+        Jeden sheet a dvě cesty, kterými se do něj přijde: <code>Ukázat celý log</code> v akcích nad
+        koncem logu (sekce 05) a <em>hunk k vybrání</em> z diffu (sekce 03). Nakreslený tady
+        <b>nebyl</b> — a proto se v něm nedala opravit vada, která se dá spočítat. Bez
+        <code>presentationSizing(.fitted)</code> SwiftUI <b>zahodí <code>idealWidth</code></b>
+        a sheet je široký jako <code>minWidth</code>: u přepisu session to bylo 720 místo
+        nakreslených 940, ať je okno za ním jak chce velké (změřeno u #327 i nad oknem 2 000 b).
+        Tady z toho plyne <b>560 × 320</b>, tedy <b>66 znaků na řádek</b> — a v logu z Actions
+        z nich <b>29 sní timestamp</b>.
+      </p>
+      <p class="muted">
+        Obsah je přitom ten nejcitlivější na šířku, jaký v okně je: sheet <b>zalamuje</b>
+        (<code>SelectableCodeView</code> s <code>widthTracksTextView</code>), takže úzké okno
+        neznamená, že se text nevejde — znamená, že jeden řádek logu je pár řádků sazby
+        a scrolluje se přes ně. Čísla níž jsou měřená na <b>skutečném</b>
+        <code>NSTextView</code>u nastaveném jako v aplikaci a nad skutečnými daty: pět logů jobů
+        z <code>pytorch/pytorch</code>, <code>home-assistant/core</code>
+        a <code>nodejs/node</code> a <b>128 hunků</b> z pěti PR v <code>home-assistant/core</code>,
+        <code>microsoft/terminal</code> a <code>laravel/framework</code>.
+      </p>
+    </div>
+
+    <div class="frame flat" style="overflow-x: auto;">
+      <table class="impact">
+        <thead>
+          <tr><th>Co se změřilo</th><th>Kolik</th><th>Co z toho pro návrh plyne</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="new-file">šířka, kterou má dneska</td>
+            <td><span class="pill crit">560 b</span></td>
+            <td><b>Podlaha není teoretická.</b> Bez <code>.fitted</code> je to velikost, kterou
+              sheet doopravdy dostane — takže se podlaha volí tak, aby v ní obsah ještě obstál,
+              ne jako nejmenší číslo, které projde.</td>
+          </tr>
+          <tr>
+            <td>znaků na řádek při 560</td>
+            <td><span class="pill crit">66</span></td>
+            <td>Plocha textu je šířka bez odsazení (2×8 b) a bez <code>lineFragmentPadding</code>
+              (2×5 b), písmo mono 13 b = <b>8,036 b na znak</b>. V logu z Actions zbude na obsah
+              řádku <b>37 znaků</b>, protože <code>2026-08-23T21:09:45.2216604Z</code> a mezera
+              jsou 29 z nich.</td>
+          </tr>
+          <tr>
+            <td class="new-file">zalomených řádků logu</td>
+            <td><span class="pill crit">68 %</span></td>
+            <td>Při 560 b, na 2,7MB logu spadlého jobu (<code>pytorch/pytorch</code>, 4 290 řádků,
+              medián řádku 101 znaků). Při 1 360 b je to <b>13,5 %</b>. U klidnějších logů
+              44 → 2,2 % (pytest) a 41 → 7,2 % (pylint).</td>
+          </tr>
+          <tr>
+            <td class="new-file">hunků bez zalomení</td>
+            <td><span class="pill crit">16 %</span></td>
+            <td>Při 560 b. Ze 128 hunků: medián řádku <b>38 znaků</b>, p90 86, p99 149, nejdelší
+              181. Při 1 180 b je bez jediného zalomení <b>91 %</b> hunků, při 1 600 b všechny.</td>
+          </tr>
+          <tr>
+            <td>co stojí timestamp</td>
+            <td><span class="pill find">240 b</span></td>
+            <td>Tolik šířky sní těch 29 znaků: <b>1 360 bez timestampů zalamuje stejně jako
+              1 600 s nimi</b> — 8,2 % řádků v obou. Přesto v sheetu zůstávají, viz poznámka 5.</td>
+          </tr>
+          <tr>
+            <td>ANSI sekvence</td>
+            <td><span class="pill idle">4 % řádků</span></td>
+            <td>170 řádků ze 4 290, na takovém řádku <b>11 znaků</b> navíc. Na šířku to tedy vliv
+              nemá — <code>^[[36;1m</code> uprostřed věty ale ano, viz poznámka 5.</td>
+          </tr>
+          <tr>
+            <td>řádek sazby</td>
+            <td><span class="pill idle">16,0 b</span></td>
+            <td><code>NSLayoutManager.defaultLineHeight</code> pro mono 13 b, změřeno. Z toho je
+              výška: 520 b = 27 řádků = <b>88 % hunků bez rolování</b>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Kde je zlom, a proč se strop netáhne dál</h3>
+    <p class="muted">
+      Zalomený řádek nestojí jen scrollování — přeteče pod sebe, kde vypadá jako další záznam.
+      Rozhoduje proto <b>podíl zalomených řádků</b>, ne poměr sazby k logickým řádkům. A ten podíl
+      padá do <b>1 360 b</b> a pak zplaskne: u toho nejhoršího logu je každých sto bodů šířky do
+      1 360 za <b>5,8 až 7,3</b> procentního bodu, nad ním už jen za <b>2,2 a méně</b>. U hunků je
+      zlom dřív — jsou to řádky kódu, ne výpisu.
+    </p>
+
+    <div class="frame flat" style="overflow-x: auto;">
+      <table class="impact">
+        <thead>
+          <tr>
+            <th>Šířka</th><th>Znaků na řádek</th>
+            <th>Log: zalomených řádků</th><th>Hunky: bez zalomení</th><th>Co to je</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="new-file">560 b</td><td>66</td>
+            <td><span class="pill crit">67,7 %</span></td>
+            <td><span class="pill crit">16 %</span></td>
+            <td>Co sheet dostane dneska, protože se <code>idealWidth</code> zahodí.</td>
+          </tr>
+          <tr>
+            <td>820 b</td><td>98</td><td>50,3 %</td><td>57 %</td>
+            <td><b>Podlaha logu</b> — a šířka, na kterou se sheet otevíral do #292.</td>
+          </tr>
+          <tr>
+            <td>1 080 b</td><td>131</td><td>29,9 %</td><td>86 %</td>
+            <td>Sheet se zadáním pro agenta (sekce 23).</td>
+          </tr>
+          <tr>
+            <td class="new-file">1 180 b</td><td>143</td><td>26,2 %</td>
+            <td><span class="pill ok">91 %</span></td>
+            <td><b>Takhle se otevře hunk.</b> Devět z deseti bez jediného zalomení.</td>
+          </tr>
+          <tr>
+            <td class="new-file">1 360 b</td><td>166</td>
+            <td><span class="pill ok">13,5 %</span></td><td>96 %</td>
+            <td><b>Takhle se otevře log</b> na 1512b displeji — obrazovka bez 152 b.</td>
+          </tr>
+          <tr>
+            <td>1 600 b</td><td>195</td><td>8,2 %</td><td>100 %</td>
+            <td>Odsud dál je to za 2,2 pb a méně na sto bodů.</td>
+          </tr>
+          <tr>
+            <td>2 000 b</td><td>245</td><td>2,3 %</td><td>100 %</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>2 700 b</td><td>332</td><td>0,6 %</td><td>100 %</td>
+            <td>Strop pro širokou obrazovku, na 3440b displeji (#292).</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Hunk: 1 180 × 520, podlaha 560 × 320</h3>
+    <p class="muted">
+      Kritérium je <b>devět hunků z deseti bez jediného zalomení</b> — při 1 180 b (143 znaků) to
+      platí; o sto bodů výš je to o pět procentních bodů lepší a dál po dvou. Výška <b>520 b</b>
+      zůstává, jak je v kódu dneska, jen je teď změřená: 27 řádků, tedy <b>88 % hunků bez
+      rolování</b> — ze 420 na 520 je to +5 pb, nad 520 už jen +1 pb za sto bodů. Podlaha
+      <b>560 × 320</b> je velikost, ve které je <b>mediánový hunk celý</b>: 10 řádků do patnácti,
+      mediánový řádek 38 znaků do šestašedesáti.
+    </p>
+
+    <div class="win sm" style="max-width: 1180px;">
+      <div class="sheet-head">
+        <span class="t">Hunk — src/Vault/SecretClient.php</span>
+        <span class="slug">@@ -78,9 +78,21 @@ final class SecretClient · 9c1de02</span>
+        <span class="sub">nová verze, 21 řádků — bez znaků změny a bez čísel řádků, přesně tak, jak
+          se zkopíruje</span>
+      </div>
+      <div class="sheet-body">
+        <div class="cs-text">    <span class="k">public function</span> <span class="fn">getSecret</span>(<span class="k">string</span> $<span class="vr">key</span>): <span class="k">string</span>
+    {
+        $<span class="vr">row</span> = $<span class="vr">this</span>-&gt;<span class="fn">cache</span>-&gt;<span class="fn">get</span>($<span class="vr">key</span>) ?? $<span class="vr">this</span>-&gt;<span class="fn">client</span>-&gt;<span class="fn">fetch</span>($<span class="vr">key</span>);
+        <span class="k">if</span> ($<span class="vr">row</span> === <span class="k">null</span>) {
+            <span class="k">throw new</span> <span class="fn">SecretNotFoundException</span>(<span class="fn">sprintf</span>(<span class="st">'Secret %s is not in the vault at %s.'</span>, $<span class="vr">key</span>, $<span class="vr">this</span>-&gt;<span class="fn">path</span>($<span class="vr">key</span>)));
+        }
+        <span class="k">if</span> (($<span class="vr">row</span>[<span class="st">'value'</span>] ?? <span class="st">''</span>) === <span class="st">''</span>) {
+            $<span class="vr">this</span>-&gt;<span class="fn">logger</span>-&gt;<span class="fn">warning</span>(<span class="fn">sprintf</span>(<span class="st">'Secret %s came back empty from %s, falling back to the copy cached at %s.'</span>, $<span class="vr">key</span>, $<span class="vr">this</span>-&gt;<span class="fn">client</span>-&gt;<span class="fn">en</span><span class="ret">↩</span>
+<span class="fn">dpoint</span>(), $<span class="vr">row</span>[<span class="st">'fetched_at'</span>]));
+        }
+        <span class="k">return</span> $<span class="vr">row</span>[<span class="st">'value'</span>] ?? <span class="st">''</span>;
+    }
+
+    <span class="cm">/** @param array&lt;string, string&gt; $items */</span>
+    <span class="k">public function</span> <span class="fn">putAll</span>(<span class="k">array</span> $<span class="vr">items</span>, ?<span class="k">int</span> $<span class="vr">ttl</span> = <span class="k">null</span>): <span class="k">void</span>
+    {
+        <span class="k">foreach</span> ($<span class="vr">items</span> <span class="k">as</span> $<span class="vr">key</span> =&gt; $<span class="vr">value</span>) {
+            $<span class="vr">this</span>-&gt;<span class="fn">cache</span>-&gt;<span class="fn">set</span>($<span class="vr">key</span>, $<span class="vr">value</span>, $<span class="vr">ttl</span> ?? <span class="k">self</span>::DEFAULT_TTL);
+        }
+    }
+
+}</div>
+      </div>
+      <div class="sheet-foot">
+        <span class="mini">Zavřít</span>
+        <span class="sp"></span>
+        <span style="font-size: 11.5px; color: var(--ink-3);">1 řádek z 21 se nevešel na šířku</span>
+        <span class="mini pri">Zkopírovat vše</span>
+      </div>
+    </div>
+
+    <p class="muted" style="margin-top: -6px;">
+      Ten jeden zalomený řádek má 174 znaků — je tedy za p99 (149) a blízko nejdelšímu, jaký se
+      v těch 128 hunkech našel (181). V kresbě je schválně: i nejširší
+      rozumný sheet dlouhý řádek zalomí, a je poctivější to nakreslit než předstírat pásmo, ve
+      kterém se to nestává. Kolik takových řádků v hunku je, <b>říká patička</b> — bez toho vypadá
+      zalomený řádek jako dva. Dvaadvacet řádků sazby se přitom do výchozí výšky vejde celé
+      (z 27), takže mediánový hunk se neroluje vůbec.
+    </p>
+
+    <h3>Celý log: obrazovka bez okrajů, podlaha 820 × 420</h3>
+    <p class="muted">
+      U logu <b>žádná šířka nestačí</b>: p99 řádku je 333 znaků a jeden řádek toho měřeného logu
+      měl <b>732 087</b> znaků. Nehledá se proto správná šířka, ale bere se, co obrazovka pohodlně
+      dovolí — <b>obrazovka bez 152 bodů, nejvýš 2 700</b>, tedy na 1512b displeji 1 360 a na 3440b
+      strop. To pravidlo v kódu <b>už je</b> (#292) a je změřené na skutečném displeji; dosud se jen
+      neuplatnilo, protože ho SwiftUI zahazovalo. Výška <b>760 b</b>: <code>visibleFrame</code> téhle
+      obrazovky je 883 b, takže po okrajích je 760 zhruba všechno, co jde. Že je to tolik jako
+      u přepisu session, není souměrnost — rozhoduje tentýž displej.
+    </p>
+    <p class="muted">
+      Podlaha <b>820 × 420</b>. 820 je šířka, na kterou se sheet otevíral do #292, takže pod ni by
+      to byla regrese; v číslech je to <b>98 znaků, z nich 69 na obsah</b> řádku. Výška 420 je
+      stejná jako u přepisu session a tady je to důvod, ne shoda: obojí je dlouhý výpis, kterým se
+      roluje, takže obojí potřebuje aspoň těch <b>21 řádků</b> naráz.
+    </p>
+
+    <p class="muted">
+      Nakreslené je to při <b>1 180 b</b>, protože tolik se do stránky návrhu vejde (má 1 192).
+      Na 1512b displeji se sheet otevře <b>1 360 b</b> široký, tedy o <b>23 znaků na řádek</b>
+      víc — a z těch dvou zalomených řádků níž by se jeden nezalomil vůbec. Že se výchozí šířka
+      logu do téhle stránky nevejde, je samo o sobě odpověď na otázku, proč se sheet nekreslí
+      užší.
+    </p>
+
+    <div class="win sm" style="max-width: 1180px;">
+        <div class="sheet-head">
+          <span class="t">Celý log — phpstan (level 8)</span>
+          <span class="slug">job.log · 24 918 řádků · 2,7 MB · keboola/vault#412</span>
+          <span class="sub">Job selhal 21:09:46 po 2 m 14 s — <b>log je celý</b>, nic už k němu
+            nepřibude. Surový, jen bez ANSI: s timestampy a bez ořezu na 6 000 řádků.</span>
+        </div>
+        <div class="sheet-body">
+          <div class="cs-text">2026-08-23T21:07:31.4821904Z ##[group]Run vendor/bin/phpstan analyse --level=8 --error-format=table --memory-limit=1G
+2026-08-23T21:07:33.9120041Z Note: Using configuration file /home/runner/work/vault/vault/phpstan.neon.
+2026-08-23T21:09:44.1174220Z  12/14 [============================&gt;  ]  85%
+2026-08-23T21:09:45.2211903Z  ------ ------------------------------------------------------
+2026-08-23T21:09:45.2212904Z   Line   src/Cart.php
+2026-08-23T21:09:45.2216604Z   41     Parameter #1 $items of method Cart::addAll() expects array&lt;Item&gt;, array&lt;string&gt; given.
+2026-08-23T21:09:45.2219902Z   26     Call to an undefined method Cart::assertItems(). Did you mean Cart::assertItem() declared in src/Cart.php<span class="ret">↩</span>
+:118?
+2026-08-23T21:09:45.2224180Z   88     Unable to resolve the template type TValue in call to method Illuminate\Support\Collection::map(); consid<span class="ret">↩</span>
+er adding @template-covariant TValue to Basket::items().
+2026-08-23T21:09:45.9930712Z  [ERROR] Found 2 errors
+2026-08-23T21:09:45.9931551Z Error: Process completed with exit code 1.</div>
+        </div>
+        <div class="sheet-foot">
+          <span class="mini">Zavřít</span>
+          <span class="mini">Otevřít celý log na GitHubu ↗</span>
+          <span class="sp"></span>
+          <span class="mini pri">Zkopírovat vše</span>
+        </div>
+    </div>
+
+    <h3>Tentýž řádek při podlaze a při šířce, na kterou se otevře</h3>
+    <p class="muted">
+      Zalomení jsou v obou blocích na <b>změřených</b> pozicích, ne tam, kde se to hodí: 66 znaků
+      při 560 b, 143 při 1 180 b. Ten řádek phpstanu má 199 znaků, takže v podlaze jsou z jednoho
+      záznamu <b>čtyři</b> řádky sazby a poslední z nich je tečka; při 1 180 b jsou dva. Kdyby
+      byl blok o dalších 180 bodů širší (1 360 b, 166 znaků), byl by jeden a půl — do stránky
+      návrhu se ale nevejde, takže tady zůstává jen v číslech.
+    </p>
+
+    <div class="cs-band">
+      <div>
+        <span class="cap">Podlaha bez opravy — <b>560 b, 66 znaků, z toho 37 na obsah</b></span>
+        <div class="cs-text" style="width: 560px;">2026-08-23T21:09:45.2224180Z   88     Unable to resolve the templa<span class="ret">↩</span>
+te type TValue in call to method Illuminate\Support\Collection::ma<span class="ret">↩</span>
+p(); consider adding @template-covariant TValue to Basket::items()<span class="ret">↩</span>
+.</div>
+      </div>
+      <div>
+        <span class="cap">Jak je nakreslený sheet — <b>1 180 b, 143 znaků, z toho 114 na obsah</b></span>
+        <div class="cs-text" style="width: 1180px;">2026-08-23T21:09:45.2224180Z   88     Unable to resolve the template type TValue in call to method Illuminate\Support\Collection::map(); consid<span class="ret">↩</span>
+er adding @template-covariant TValue to Basket::items().</div>
+      </div>
+    </div>
+
+    <h3>Třetí řádka hlavičky má dvě podoby</h3>
+    <p class="muted">
+      Nakreslené okno výš je log <b>doběhlého</b> jobu — končí <code>exit code 1</code>, takže
+      k němu nic nepřibude a hlavička to tak i říká. U běžícího jobu je ta věta jiná, a je to
+      <b>jediné</b>, co se mezi těmi dvěma stavy mění: patička zůstává stejná, protože
+      <code>Otevřít celý log na GitHubu</code> je cesta k novějšímu textu v obou případech.
+    </p>
+    <p class="muted">
+      <b>Doběhlému jobu se log neříká snímek.</b> Slovo „snímek“ nese informaci jen tam, kde se
+      text pod rukama mění; u doběhlého jobu by varovalo před něčím, co se nemůže stát — a takové
+      věty se pak přehlíží i tam, kde platí.
+    </p>
+
+    <div class="duo">
+      <div class="pane">
+        <div class="tag"><i></i>Job běží</div>
+        <div class="win sm">
+          <div class="sheet-head">
+            <span class="t">Celý log — phpunit / 8.4</span>
+            <span class="slug">job.log · 6 402 řádků · 512 kB · keboola/vault#412</span>
+            <span class="sub">Snímek z 21:09:46 — <b>job pořád běží</b>, takže log od té chvíle
+              narostl.</span>
+          </div>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="tag"><i></i>Job doběhl</div>
+        <div class="win sm">
+          <div class="sheet-head">
+            <span class="t">Celý log — phpstan (level 8)</span>
+            <span class="slug">job.log · 24 918 řádků · 2,7 MB · keboola/vault#412</span>
+            <span class="sub">Job selhal 21:09:46 po 2 m 14 s — <b>log je celý</b>, nic už k němu
+              nepřibude.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">1</span>
+        <span class="body">
+          <b>Jeden sheet, dva profily velikosti</b>
+          <span>Všechno, co sheet <em>dělá</em>, je u hunku i u logu totéž: jeden vybíratelný text,
+          zalamování, <code>Zkopírovat vše</code>, <code>Zavřít</code> — dvě obrazovky by to jen
+          zdvojily. Jak <em>velký</em> se otevře, je ale vlastnost obsahu a měření ho dělí: hunk
+          1 180 × 520 s podlahou 560 × 320, log <em>obrazovka bez okrajů</em> na šířku × 760 na
+          výšku, s podlahou 820 × 420.
+          Rozhoduje o tom <b>jedna čistá funkce</b> a <code>CodeText</code> k tomu nese druh, ne
+          druhý typ view.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">2</span>
+        <span class="body">
+          <b>Natažená velikost se pamatuje — a musí mít dva klíče</b>
+          <span>S jedním by roztažení logu přes celý monitor otevíralo takhle i hunk o devíti
+          řádcích. Mechanismus je tentýž jako u přepisu session (#327) včetně toho, na co se u něj
+          přišlo: <b>sheet se rozvrhuje dvakrát a v prvním průchodu hlásí podlahu</b>, takže se
+          zápis odkládá o 400 ms — bez toho by se od druhého otevření otevíral nejmenší
+          možný.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">3</span>
+        <span class="body">
+          <b>Podlaha je to, co dostaneš, když se pokazí ideál</b>
+          <span>Dnešní vada je právě to — <code>minWidth</code> místo <code>idealWidth</code>.
+          Podlaha proto není nejmenší číslo, které projde, ale velikost, ve které obsah <em>ještě
+          obstojí</em>: u hunku celý mediánový hunk, u logu 69 znaků na obsah řádku po
+          timestampu.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">4</span>
+        <span class="body">
+          <b>Roztáhnout myší jde, a je to změřené</b>
+          <span><code>presentationSizing(.fitted)</code> s pružným rámcem dá sheetu
+          <code>.resizable</code> do <code>styleMask</code>u (73, změřeno u #327 nad skutečným
+          oknem sheetu). Komentář v <code>CodeTextSheet</code>u, který dnes tvrdí, že „sheet není
+          roztažitelný myší, takže ideální šířka je jediná, kterou dostane“, tím padá — a s ním
+          i důvod, proč byla šířka z obrazovky jediná možnost.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">5</span>
+        <span class="body">
+          <b>Timestampy zůstávají, ANSI se sundá</b>
+          <span>Sundá se, co se nedá nakreslit; nechá se, co se dá přečíst.
+          <code>^[[36;1m</code> uprostřed věty je rozbitý log (4 % řádků, 11 znaků na takovém
+          řádku), kdežto timestamp je jediné, čím se řádek přiváže k době běhu jobu. <b>Cena je
+          změřená</b>: těch 29 znaků stojí 240 bodů šířky. Konec logu v tabu Kontroly timestampy
+          naopak sundává (<code>Policy.logTail</code>) a je to v pořádku — tam má řádek 34 bodů
+          odsazení a pár set bodů šířky, kdežto sheet je ta obrazovka, kde se člověk ptá po
+          <em>úplném</em> textu. A <b>log je v kresbě jednou barvou schválně</b>: obarvit
+          v něm timestamp nebo řádek s <code>[ERROR]</code> znamená skládat text po řádcích,
+          a to na 8,78MB logu stojí <b>155 ms proti 7,9 ms</b> jednolitě (změřeno u #214).
+          U hunku se obarvuje, protože tam <code>Language</code> jazyk pozná a řádků jsou
+          desítky.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">6</span>
+        <span class="body">
+          <b>Snímek se přiznává, přírůstek se nepočítá</b>
+          <span>U přepisu session patička ukazuje, <em>kolik</em> od otevření přibylo — je to
+          lokální soubor, tedy jeden dotaz na jeho atributy po dvou sekundách. Log jobu je na síti
+          (<code>gh</code> stahoval 8,78 MB 5,75 až 27,44 s, změřeno u #292), takže přírůstek by
+          byl request na tik. Proto <b>věta v hlavičce a odkaz v patičce</b>, ne živé číslo:
+          hlavička říká, k čemu se text vztahuje, patička kudy se jde pro novější. Počet řádků a velikost se
+          přitom spočítají <b>při stažení</b>, ne v <code>body</code> — scan megabajtů na každé
+          překreslení je zrovna to, co zakazuje #224.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">7</span>
+        <span class="body">
+          <b>Akce dolů do patičky, jako u přepisu session</b>
+          <span>Dneska sedí <code>Kopírovat vše</code> a <code>Zavřít</code> v hlavičce vedle cesty
+          k souboru. Hlavička ale nese tři řádky a u logu z nich jedna je věta, takže by se
+          tlačítka posouvala podle toho, jak je dlouhá. A dvě obrazovky nad týmž druhem obsahu —
+          mono text, který se čte a kopíruje — mají mít ovládání na jednom místě; třetí podoba
+          hlavičky sheetu je přesně to, čemu má mockup bránit.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">8</span>
+        <span class="body">
+          <b>Proč zlom, a ne „co nejvíc“</b>
+          <span>Šířka se neplatí prázdnem, ale tím, co sheet zakryje — je to modální okno nad
+          diffem, ze kterého se právě čte. Proto se u hunku netáhne k 1 600, kde by bylo bez
+          zalomení <em>všech</em> 128 měřených hunků: mediánový řádek hunku má 38 znaků, tedy
+          305 bodů, takže by to byl sheet z devíti desetin prázdný — a to za pět procentních
+          bodů.</span>
+        </span>
+      </div>
+    </div>
+
+    <p class="muted">
+      <b>Co se tím v kódu posouvá:</b> <code>codeSheetWidthCap</code> (2 700) zůstává mezí pro
+      širokou obrazovku u <em>logu</em>, ale přestává být hodnotou, kterou se řídí i hunk — a
+      <code>previousCodeSheetWidth</code> (820) se z „dolní mez ideálu“ stává <b>podlahou</b> logu,
+      tedy tím, čím měla být.
+    </p>
   </section>
 
         <div class="doc-move">
