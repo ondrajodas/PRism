@@ -11,7 +11,7 @@ odkaz, žije jako artifact `PRism — návrh vizuální revize`:
 <https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Obojí musí odejít
 **v jednom commitu a jednom publikování** — rozejít se smí leda na dobu jedné úpravy.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi 27 sekcí. Většina kreslí jednu
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi 28 sekcí. Většina kreslí jednu
 obrazovku nebo jeden stav v rámu okna (`.win`) a vedle sebe má poznámky (`.notes`), proč je to
 tak; zbytek rozhodnutí vysvětluje — *Dvanáct stavů, které se nesmí slít*, *Kde jsem si vybral,
 a co to stálo*, *Co by se muselo přepsat*.
@@ -49,6 +49,14 @@ Od zakreslení nového labelu z nabídky stojí vedle **24** ještě **26**, a j
 o krok dál: 24 se mergnutím #392 stala záznamem dneška (nabídka labelů v panelu v okně opravdu
 je), takže se do ní zakládání nekreslí — 26 kreslí **jen dvě obrazovky nabídky a jednu větu
 v panelu**, ne celý panel znovu.
+
+**Sekce, do které se z obrazovky jen přijde, leží na stránce toho místa, odkud se otevírá.**
+Sekce 20 kreslí surovou session na stránce *Průběh*, protože se otevírá z výpisu kroků; **28**
+(sheet s celým logem a s hunkem) leží na stránce *Kontroly*, protože odtud vede
+`Ukázat celý log` — i když tentýž sheet otevírá i diff v *Změněných souborech*. Když do jedné
+obrazovky vedou dvě cesty, vybere se ta, kvůli které sekce vznikla, a druhá se v textu
+pojmenuje; dvě kopie téhož sheetu na dvou stránkách by se rozešly.
+
 **Novější sekce se do té starší nepřekresluje** — záznam dneška je to jediné, proti čemu se dá
 aplikace srovnat, takže bez něj by každé srovnání hlásilo rozdíl, který není chyba, dokud se to
 issue neudělá. Platí to i tehdy, když nová sekce mění **jen kus** obrazovky: 24 nekreslí celé
