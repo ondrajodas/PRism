@@ -2174,6 +2174,100 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 .cs-band .cap b { color: var(--ink-2); font-weight: 600; letter-spacing: 0.06em; }
 
+/* Trvale viditelné vodorovné pruhy v pohledu vedle sebe (sekce 29).
+
+   Kreslí se **vlastními třídami, ne `table.split`**: celé téma sekce je to, co se za
+   pravý okraj sloupce nevejde, a tabulka se dvěma buňkami po 50 % se dlouhým řádkem
+   roztlačí do strany — přetečení by pak nebylo vidět v půlce, ale za rámem okna.
+   Každá půlka je proto vlastní ořezaná plocha (`overflow: hidden`) s obsahem
+   `white-space: pre`, tedy tak, jak to má v okně `NSScrollView` s neomezeným
+   kontejnerem.
+
+   **Pruh je nakreslený ve své skutečné velikosti** — pás 17 b, drážka i knob 11 b,
+   odsazení 3 b —, i když kód okolo je jako všude v tomhle dokumentu na 11 px místo
+   aplikačních 13. Rozhoduje se tady o té výšce, takže zmenšit ji do měřítka kresby by
+   znamenalo nakreslit jiné rozhodnutí, než jaké se schvaluje. Čísla jsou z
+   `NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)` a z `rect(for: .knob)`
+   na tomhle systému.
+
+   Barvy: pruh v okně kreslí **AppKit sám** systémovými barvami (změřeno na sondě
+   v tmavém režimu — knob #B0B2B2, drážka #3E4244), takže se tady jen přibližuje tokeny
+   `--ink-3` a `--panel-3`. Nový token by k tomu byl na nic: paleta systémovou barvu
+   scrolleru nedrží a držet nemá. `--ink-3`, ne `--ink-2`: scroller je chrom, ne obsah —
+   v tomhle dokumentu je `--ink-3` právě ta role (čísla řádků, popisky), kdežto `--ink-2`
+   ve světlém motivu (#5A6379) vyjde tmavší než skutečný knob a pruh pak křičí. */
+.hsblock {
+  display: flex; align-items: stretch;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--panel); overflow: hidden;
+}
+/* V rámu souboru už jeden okraj je (`.frame.flat` + `.fhead`), takže by z dvou vznikla
+   dvoubodová linka pod hlavičkou. Blok mimo rám (tři bloky pod sebou) si svůj okraj drží. */
+.frame > .hsblock { border: 0; border-radius: 0; }
+.hsside { flex: 1 1 50%; min-width: 0; display: flex; flex-direction: column; }
+.hsside + .hsside { border-left: 1px solid var(--line); }
+/* Ořez je tady, ne na řádku: sloupec je v okně clip view a řádek si v něm roztahuje
+   vlastní rámec podle nejdelšího řádku (`DiffPairBlockContainer`). */
+.hsrows { overflow: hidden; padding: 3px 0; }
+/* `min-height` je tady **podmínka, ne kosmetika**: prázdná strana dvojice nemá žádný obsah,
+   takže by řádek vyšel nulově vysoký a půlky by se rozešly o jeden řádek — přesně to, čemu
+   má split zabránit. V okně to drží `DiffPairBlockContainer` prázdným řádkem (`DiffLine.blank`),
+   tady výškou; hodnota je `font-size × line-height`, tedy 17,6 b. */
+.hsrow {
+  display: flex; align-items: baseline; gap: 0; min-height: 17.6px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.6; white-space: pre;
+}
+.hsrow.add { background: var(--add-bg); }
+.hsrow.del { background: var(--del-bg); }
+/* Prázdná protistrana dvojice — tentýž šraf jako `table.split tr.empty-side` (#277). */
+.hsrow.gap {
+  background: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, var(--ink) 5%, transparent) 5px 10px);
+}
+.hsnum {
+  width: 30px; flex: none; text-align: right; padding-right: 7px;
+  font-size: 9.5px; color: var(--ink-3);
+}
+.hssign { width: 11px; flex: none; color: var(--ink-3); }
+.hsrow.add .hssign { color: var(--ok); }
+.hsrow.del .hssign { color: var(--crit); }
+.hscode { flex: none; }
+/* Odrolovaná strana. Posun je na řádcích, ne na ploše: čísla řádků kreslí v okně
+   **totéž view jako text** (`DiffTextView`, `x: 0` v jeho souřadnicích), takže odjedou
+   s ním — a to je stav, který se má nakreslit, ne schovat. Viz poznámka 45. */
+.hsrows.scrolled .hsrow { margin-left: -164px; }
+
+/* Pás se pruhem. `flex: none`, ať ho nezmáčkne obsah nad ním. */
+.hsbar {
+  height: 17px; flex: none; padding: 3px; box-sizing: border-box;
+  border-top: 1px solid var(--line-soft);
+}
+.hsgroove {
+  height: 11px; border-radius: 5.5px; background: var(--panel-3);
+  position: relative; overflow: hidden;
+}
+.hsknob {
+  position: absolute; top: 0; height: 11px; border-radius: 5.5px;
+  background: var(--ink-3);
+}
+/* Pás bez pruhu — blok, který nemá co skrývat, o výšku nepřijde. Kreslí se jako
+   prázdno, ne jako drážka: prázdná drážka je 17 b na sdělení „tady nic není“. */
+.hsbar.none { border-top: 0; height: 0; padding: 0; }
+/* Pás, ve kterém je prázdno kvůli protistraně: blok je jeden, takže obě půlky mají
+   tutéž výšku i tehdy, když pruh potřebuje jen jedna. */
+.hsbar.reserved .hsgroove { background: transparent; }
+
+.hsstack { display: flex; flex-direction: column; gap: 10px; }
+/* `wrap` a `row-gap` schválně: popisek pod blokem má dvě části (co se kreslí a čím to
+   škaredí) a na půlce stránky se nevejdou na řádek — bez zalomení by se z nich staly
+   dva úzké sloupce vedle sebe. */
+.hscap {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 8px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.hscap b { color: var(--ink-2); font-weight: 600; letter-spacing: 0.04em; }
+.hscap .warn { color: var(--stale); text-transform: none; letter-spacing: 0; font-size: 10.5px; }
+
 /* ============================================================
    KOSTRA DOKUMENTU — rozcestník, stránky, hledání
    Návrh se od téhle verze nečte jako jeden dlouhý svitek, ale po
@@ -5492,6 +5586,329 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           <b>Skok otevře nález u kódu</b>
           <span>Ne jen odscrolluje. Aktuální nález má rámeček a číslo <code>2 z 3</code>, takže
           po skoku není potřeba hledat, co se vlastně vybralo.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s29">
+    <div class="section-head">
+      <div class="eyebrow">29 — Změněné soubory · vedle sebe</div>
+      <h2>Dva pruhy, které nezmizí — jeden na každou stranu</h2>
+      <p class="muted">
+        Pohled <em>vedle sebe</em> se <b>nezalamuje</b> (#157) — kdyby ano, jedna strana by
+        narostla o vizuální řádek a druhá ne, a přestalo by platit, že vlevo a vpravo je tentýž
+        řádek souboru. Dlouhý řádek proto odjede za pravý okraj sloupce. Rolovat se tam přitom
+        dá odjakživa: <code>DiffPairBlockContainer</code> má na každou stranu vlastní
+        <code>NSScrollView</code> s vodorovným scrollerem. Jen o tom nikdo neví —
+        <code>scrollerStyle = .overlay</code> se kreslí až při rolování, takže v nečinném okně
+        <b>není vidět nic</b> a vypadá to, že za okrajem nic není. Odsud ta stížnost, a je
+        oprávněná: v úzkém okně na jednu stranu zbývá <b>22 znaků</b> a <b>64,5 %</b> řádků
+        v diffu je delších.
+      </p>
+      <p class="muted">
+        Návrh proto pruh zapíná natrvalo — <b>jeden na každou půlku</b>, protože každá strana má
+        svůj nejdelší řádek a svoje okýnko. Změřeno, že jinou cestou to nejde:
+        <code>autohidesScrollers = false</code> na overlay scrolleru <b>nemění nic</b> (sonda
+        nakreslila <b>0 pixelů</b> v obou nastaveních), takže zbývá <code>.legacy</code>. Ten
+        stojí <b>17 bodů výšky</b> na blok — <b>ne šířky</b>, takže z těch 22 znaků nezmizí ani
+        jeden. Pohled <em>pod sebou</em> zůstává zalamovací a pruh v něm není vůbec; vybráno
+        ze tří možností, protože zalomený řádek se dá přečíst celý bez rolování.
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="pane">
+        <div class="tag"><i></i>Dnes</div>
+        <div class="frame flat">
+          <div class="fhead">
+            <span>▾</span>
+            <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+            <span class="sp"></span>
+            <span style="font-family: var(--mono); font-size: 11px; color: var(--ink-3);">
+              @@ -78,9 +78,21 @@
+            </span>
+          </div>
+          <div class="hsblock">
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">78</span><span class="hssign"> </span><span class="hscode">    public function getSecret(string $key, ?int $ttl = null): string</span></div>
+                <div class="hsrow"><span class="hsnum">79</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow del"><span class="hsnum">80</span><span class="hssign">−</span><span class="hscode">        $row = $this-&gt;client-&gt;fetch($key, ['timeout' =&gt; $ttl ?? self::DEFAULT_TIMEOUT]);</span></div>
+                <div class="hsrow gap"><span class="hsnum"></span><span class="hssign"></span><span class="hscode"></span></div>
+                <div class="hsrow del"><span class="hsnum">81</span><span class="hssign">−</span><span class="hscode">        return $row['value'];</span></div>
+                <div class="hsrow"><span class="hsnum">82</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+              </div>
+              <div class="hsbar none"></div>
+            </div>
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">78</span><span class="hssign"> </span><span class="hscode">    public function getSecret(string $key, ?int $ttl = null): string</span></div>
+                <div class="hsrow"><span class="hsnum">79</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow add"><span class="hsnum">80</span><span class="hssign">+</span><span class="hscode">        $row = $this-&gt;cache-&gt;get($key, ['timeout' =&gt; $ttl ?? self::DEFAULT_TIMEOUT])</span></div>
+                <div class="hsrow add"><span class="hsnum">81</span><span class="hssign">+</span><span class="hscode">            ?? $this-&gt;client-&gt;fetch($key);</span></div>
+                <div class="hsrow add"><span class="hsnum">82</span><span class="hssign">+</span><span class="hscode">        return $row['value'] ?? '';</span></div>
+                <div class="hsrow"><span class="hsnum">83</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+              </div>
+              <div class="hsbar none"></div>
+            </div>
+          </div>
+        </div>
+        <div class="hscap">
+          <b>Pruh tam je</b> — a nekreslí se
+          <span class="warn">za okrajem pokračuje kód, ze kterého okno neukáže nic</span>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh</div>
+        <div class="frame flat">
+          <div class="fhead">
+            <span>▾</span>
+            <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+            <span class="sp"></span>
+            <span style="font-family: var(--mono); font-size: 11px; color: var(--ink-3);">
+              @@ -78,9 +78,21 @@
+            </span>
+          </div>
+          <div class="hsblock">
+            <div class="hsside">
+              <div class="hsrows scrolled">
+                <div class="hsrow"><span class="hsnum">78</span><span class="hssign"> </span><span class="hscode">    public function getSecret(string $key, ?int $ttl = null): string</span></div>
+                <div class="hsrow"><span class="hsnum">79</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow del"><span class="hsnum">80</span><span class="hssign">−</span><span class="hscode">        $row = $this-&gt;client-&gt;fetch($key, ['timeout' =&gt; $ttl ?? self::DEFAULT_TIMEOUT]);</span></div>
+                <div class="hsrow gap"><span class="hsnum"></span><span class="hssign"></span><span class="hscode"></span></div>
+                <div class="hsrow del"><span class="hsnum">81</span><span class="hssign">−</span><span class="hscode">        return $row['value'];</span></div>
+                <div class="hsrow"><span class="hsnum">82</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+              </div>
+              <div class="hsbar">
+                <div class="hsgroove"><span class="hsknob" style="left: 34%; width: 55%;"></span></div>
+              </div>
+            </div>
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">78</span><span class="hssign"> </span><span class="hscode">    public function getSecret(string $key, ?int $ttl = null): string</span></div>
+                <div class="hsrow"><span class="hsnum">79</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow add"><span class="hsnum">80</span><span class="hssign">+</span><span class="hscode">        $row = $this-&gt;cache-&gt;get($key, ['timeout' =&gt; $ttl ?? self::DEFAULT_TIMEOUT])</span></div>
+                <div class="hsrow add"><span class="hsnum">81</span><span class="hssign">+</span><span class="hscode">            ?? $this-&gt;client-&gt;fetch($key);</span></div>
+                <div class="hsrow add"><span class="hsnum">82</span><span class="hssign">+</span><span class="hscode">        return $row['value'] ?? '';</span></div>
+                <div class="hsrow"><span class="hsnum">83</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+              </div>
+              <div class="hsbar">
+                <div class="hsgroove"><span class="hsknob" style="left: 0; width: 58%;"></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="hscap">
+          <b>Dva pruhy, každý o svém</b> — vlevo odrolováno, vpravo na začátku
+          <span class="warn">čísla řádků odjela s textem — dnešní chování, viz poznámka 45</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-head" style="margin-top: 18px;">
+      <h3>Pruh jen tam, kde je co skrývat</h3>
+      <p class="muted">
+        <code>autohidesScrollers = true</code> zůstává zapnuté, takže pruh dostane <b>jen ten
+        blok, jehož nejdelší řádek se do sloupce nevejde</b> — a co ho nepotřebuje, o těch
+        17 bodů nepřijde. Změřeno na sondě: legacy scroller nad dokumentem, který se vejde, je
+        skrytý a <b>zábor výšky je nula</b>; bez autohide zůstane prázdná drážka, tedy 17 bodů
+        na sdělení „tady nic není“. Blok je jeden, takže když pruh potřebuje jen jedna půlka,
+        má druhá v tom pásu prázdno — obě strany mají pořád stejně vysoké řádky, a to je celé,
+        proč se vedle sebe kreslí.
+      </p>
+    </div>
+
+    <div class="hsstack">
+      <div class="hscap"><b>Blok 1</b> · dlouhé řádky na obou stranách</div>
+      <div class="hsblock">
+        <div class="hsside">
+          <div class="hsrows">
+            <div class="hsrow"><span class="hsnum">41</span><span class="hssign"> </span><span class="hscode">        $client = new SecretClient($this-&gt;transport, $this-&gt;logger, $options);</span></div>
+            <div class="hsrow del"><span class="hsnum">42</span><span class="hssign">−</span><span class="hscode">        $this-&gt;assertSame('vault', $client-&gt;describe()['backend'], 'jiný backend');</span></div>
+          </div>
+          <div class="hsbar"><div class="hsgroove"><span class="hsknob" style="left: 0; width: 62%;"></span></div></div>
+        </div>
+        <div class="hsside">
+          <div class="hsrows">
+            <div class="hsrow"><span class="hsnum">41</span><span class="hssign"> </span><span class="hscode">        $client = new SecretClient($this-&gt;transport, $this-&gt;logger, $options);</span></div>
+            <div class="hsrow add"><span class="hsnum">42</span><span class="hssign">+</span><span class="hscode">        $this-&gt;assertSame('vault', $client-&gt;describe()['backend'], 'jiný backend');</span></div>
+          </div>
+          <div class="hsbar"><div class="hsgroove"><span class="hsknob" style="left: 0; width: 62%;"></span></div></div>
+        </div>
+      </div>
+
+      <div class="hscap"><b>Blok 2</b> · krátké řádky — pruh se nekreslí a výšku si nebere</div>
+      <div class="hsblock">
+        <div class="hsside">
+          <div class="hsrows">
+            <div class="hsrow"><span class="hsnum">58</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+            <div class="hsrow del"><span class="hsnum">59</span><span class="hssign">−</span><span class="hscode">    private int $ttl = 30;</span></div>
+          </div>
+          <div class="hsbar none"></div>
+        </div>
+        <div class="hsside">
+          <div class="hsrows">
+            <div class="hsrow"><span class="hsnum">58</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+            <div class="hsrow add"><span class="hsnum">59</span><span class="hssign">+</span><span class="hscode">    private int $ttl = 60;</span></div>
+          </div>
+          <div class="hsbar none"></div>
+        </div>
+      </div>
+
+      <div class="hscap"><b>Blok 3</b> · dlouhý jen nový kód — pruh vlevo není, pás je pro obě půlky</div>
+      <div class="hsblock">
+        <div class="hsside">
+          <div class="hsrows">
+            <div class="hsrow"><span class="hsnum">64</span><span class="hssign"> </span><span class="hscode">    public function flush(): void</span></div>
+            <div class="hsrow gap"><span class="hsnum"></span><span class="hssign"></span><span class="hscode"></span></div>
+          </div>
+          <div class="hsbar reserved"><div class="hsgroove"></div></div>
+        </div>
+        <div class="hsside">
+          <div class="hsrows">
+            <div class="hsrow"><span class="hsnum">65</span><span class="hssign"> </span><span class="hscode">    public function flush(): void</span></div>
+            <div class="hsrow add"><span class="hsnum">66</span><span class="hssign">+</span><span class="hscode">        $this-&gt;cache-&gt;deleteMultiple(array_keys($this-&gt;pending), self::FLUSH_TIMEOUT);</span></div>
+          </div>
+          <div class="hsbar"><div class="hsgroove"><span class="hsknob" style="left: 0; width: 48%;"></span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame flat" style="overflow-x: auto; margin-top: 18px;">
+      <table class="impact">
+        <thead>
+          <tr><th>Co se změřilo</th><th>Kolik</th><th>Co z toho pro návrh plyne</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="new-file">overlay scroller natrvalo</td>
+            <td><span class="pill crit">nejde</span></td>
+            <td><b>Nakreslí 0 pixelů</b> i s <code>autohidesScrollers = false</code> — a API na to
+              neodpovídá vůbec (<code>isHidden = false</code>, <code>alphaValue = 1.0</code> v obou
+              nastaveních, ať se kreslí cokoli). Zbývá tedy <code>scrollerStyle = .legacy</code>,
+              a ten se kreslí bez rolování i s myší odloženou.</td>
+          </tr>
+          <tr>
+            <td>co bere legacy scroller</td>
+            <td><span class="pill find">17 b výšky</span></td>
+            <td>Pás <b>17 b</b>, v něm drážka i knob <b>11 b</b> a odsazení <b>3 b</b>
+              (<code>scrollerWidth(for: .regular, scrollerStyle: .legacy)</code>
+              a <code>rect(for: .knob)</code>). Je to <b>1,06 řádku kódu</b> — a je to
+              <b>výška, ne šířka</b>: vodorovný scroller sloupec nezúží.</td>
+          </tr>
+          <tr>
+            <td class="new-file">znaků na stranu — před a po</td>
+            <td><span class="pill idle">bez změny</span></td>
+            <td>Podlaha okna (700 b) se složenými panely <b>24</b>, výchozí okno (1 100 b)
+              s otevřeným stromem i panelem <b>22</b> a se složenými <b>49</b>, na celou šířku
+              displeje (1 512 b) <b>47</b> a <b>75</b>. Po zavedení pruhu <b>tatáž čísla</b> —
+              cena se platí na výšku.</td>
+          </tr>
+          <tr>
+            <td>bloků na soubor</td>
+            <td><span class="pill idle">medián 2</span></td>
+            <td>Na <b>352 souborech</b> ze 48 mergnutých PR v šesti veřejných repozitářích
+              (1 025 bloků; blok je nejvýš 60 řádků, <code>DiffBlock.maxLines</code>).
+              <b>Jeden blok má 49,7 %</b> souborů, p90 je <b>5</b>, p95 <b>9</b>, p99 <b>22</b>.
+              Dvacet pruhů pod sebou je tedy <b>1,7 %</b> souborů, ne norma.</td>
+          </tr>
+          <tr>
+            <td>bloků, kde se pruh objeví</td>
+            <td><span class="pill find">90,3 %</span></td>
+            <td>Při rozpočtu 47 znaků na stranu; při 75 je to <b>59,9 %</b>. Autohide tedy počet
+              pruhů <b>nesrazí</b> — schovává právě těch 9,7 %, kde by pruh tvrdil, že je co
+              vidět, a nebylo by.</td>
+          </tr>
+          <tr>
+            <td class="new-file">co za okrajem zůstává</td>
+            <td><span class="pill crit">34 znaků</span></td>
+            <td>Medián přetečení při 47 znacích (p90 <b>89</b>, nejvíc 1 575). Delších než
+              rozpočet je <b>33,2 %</b> řádků při 47 a <b>12,7 %</b> při 75; medián řádku
+              v diffu je <b>34</b> znaků, p90 <b>79</b>.</td>
+          </tr>
+          <tr>
+            <td>rozptyl nejdelšího řádku v souboru</td>
+            <td><span class="pill crit">44 znaků</span></td>
+            <td>Medián rozdílu mezi nejdelším řádkem jednoho a druhého bloku téhož souboru
+              (92 souborů se třemi a víc bloky, p90 <b>132</b>). <b>Tolik by se mýlil sdílený
+              posun</b>: blok, který nemá co ukázat, by se odrolovaným prázdnem odsunul.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">39</span>
+        <span class="body">
+          <b>Pruh je na blok, ne na soubor</b>
+          <span>Rolovací plocha v okně <b>je</b> blok, a je to tak i správně: každý blok má svůj
+          nejdelší řádek. Sdílený posun na celý soubor by se mýlil o <b>44 znaků</b> (medián),
+          protože by blok s krátkými řádky odsunul do prázdna — a stál by <b>dva pozorovatele
+          na blok</b> plus přerolování všech viditelných bloků při každé události, tedy přesně
+          to násobení prvků, které v diffu už dvakrát položilo okno (#252). Typický soubor má
+          přitom <b>dva</b> bloky.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">40</span>
+        <span class="body">
+          <b>Legacy, ne overlay — a ne podle systémového nastavení</b>
+          <span>Overlay scroller je přechodný z principu; změřeno, že se bez rolování nenakreslí
+          ani s vypnutým autohide. Styl se proto vynutí <b>na těch dvou okýnkách</b>, ne globálně
+          a ne podle <em>Zobrazovat posuvníky</em> v systému — trvalý pruh je zadání, ne
+          preference. Zbytek okna se nemění.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">41</span>
+        <span class="body">
+          <b>Prázdná drážka se nekreslí</b>
+          <span>Autohide zůstává zapnutý, takže blok bez přetečení nemá pruh ani jeho výšku.
+          Cena je, že <b>výška bloku začne záležet na šířce</b> — dnes na ní nezáleží, protože
+          se ve split nezalamuje. Rezervovat těch 17 bodů musí <b>totéž místo, které rozhoduje,
+          že pruh je</b> (#236): dvě místa znamenají dvě pravdy o jedné výšce a poslední řádek
+          bloku zmizí pod pruhem.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">42</span>
+        <span class="body">
+          <b>Platí se výškou, ne šířkou</b>
+          <span>Vodorovný scroller ubírá z výšky — <b>17 b na blok</b>, tedy u mediánového
+          souboru 34 b a u p90 (5 bloků) 85 b. Znaků na stranu je <b>po zavedení pruhu stejně</b>
+          jako dnes, takže úzké okno se nezhorší v tom, kvůli čemu se pruh přidává.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">43</span>
+        <span class="body">
+          <b>Pod sebou se nemění nic</b>
+          <span>Zalamuje se dál a pruh tam není. Vybráno ze tří možností: zalomený řádek se
+          přečte celý bez rolování, takže by pruh v unified byl 17 bodů na blok za nic.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">44</span>
+        <span class="body">
+          <b>Knob říká, kolik toho je</b>
+          <span>Šířka knobu je podíl vidět/celkem, takže se z pruhu dá odečíst, jestli za okrajem
+          leží slovo, nebo tři obrazovky. Proto se pruh nekreslí vlastní tenkou lištou: knob,
+          tažení, klik do drážky i čtečka obrazovky jsou v <code>NSScroller</code> hotové
+          a menší výška by je stála všechny.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">45</span>
+        <span class="body">
+          <b>Čísla řádků odjedou s textem</b>
+          <span>Kreslí je <b>totéž view jako kód</b> (<code>DiffTextView</code>, na <code>x: 0</code>
+          ve svých souřadnicích), takže odrolováním zmizí vlevo. Dneska to nikdo nevidí, protože
+          se nescrolluje; s pruhem to bude vidět hned. <b>Tahle změna to neřeší</b> — přišpendlit
+          gutter znamená vytáhnout ho z rolovací plochy, a to je jiný zákres. Nakreslené je to
+          tak, jak to vyjde, ne tak, jak by to bylo hezčí.</span>
         </span>
       </div>
     </div>
