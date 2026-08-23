@@ -67,7 +67,10 @@ extension Policy {
     /// Krátí se **tímtéž řezem jako nález** (`Policy.shortenedForBanner`): banner má čtyři řádky těla po
     /// zhruba 43 znacích (změřeno u #200) a na tom čtvrtém musí zbýt PR. Dvě různé délky by
     /// znamenaly, že u jedné z hlášek zmizí identifikace.
-    private static func activityDetail(_ activity: ForeignActivity) -> String? {
+    ///
+    /// **Není `private`, protože ho bere i řádek v dění** (#414) — tam je to naopak headline, protože
+    /// v seznamu se řádek pozná podle věty, kdežto banner se čte odshora a nahoru patří počet.
+    static func activityDetail(_ activity: ForeignActivity) -> String? {
         let newestComment = activity.comments.max { $0.createdAt < $1.createdAt }
         let newestReview = activity.reviews.max {
             ($0.submittedAt ?? .distantPast) < ($1.submittedAt ?? .distantPast)

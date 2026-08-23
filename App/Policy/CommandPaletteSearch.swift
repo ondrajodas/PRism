@@ -264,6 +264,10 @@ extension Policy {
         case .queue: "frontu"
         case .mine: "moje pull requesty"
         case .drafts: "rozdělaná review"
+        // Čtvrtý pád `Dění` je shodný s prvním (je to neutrum), takže se to nemá čím poznat —
+        // a přesně proto sekce nemá `Novinky` v názvu: to je v aplikaci okno s release notes
+        // a dvě různé věci pod jedním jménem se v paletě nedají rozeznat.
+        case .activity: "dění"
         }
     }
 

@@ -76,6 +76,14 @@ struct CacheLayout: Sendable, Equatable {
     /// důvodu: píše to aplikace, ne člověk.
     var spendFile: URL { root.appending(path: "spend.json") }
 
+    /// Záznam dění (#414) — co se na pull requestech stalo, se stropem 200 položek.
+    ///
+    /// **V kořeni cache, mimo dosah eviction**, jako nálezy a rozdělaná review: je to záznam
+    /// událostí, ne pracovní kopie, a jeho velikost drží strop v `ActivityLog`, ne rozpočet na
+    /// místo. Neuklízí se ani s PR, které vypadne ze seznamu — zavřený pull request na tom, co se
+    /// na něm stalo, nic nemění.
+    var activityFile: URL { root.appending(path: "activity.json") }
+
     /// Běhy, které začaly a o kterých se neví, jestli doběhly (#97). Po startu je v něm to,
     /// co aplikaci nepřežilo — viz `InterruptedRuns`.
     var interruptedFile: URL { root.appending(path: "interrupted.json") }

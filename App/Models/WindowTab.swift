@@ -20,14 +20,16 @@ enum WindowTab: Hashable, Sendable {
 /// Sekce railu — co je vidět v domácí záložce (#180).
 ///
 /// **Jen položky, které mají obsah.** Návrh jich kreslí sedm (přehled, fronta, moje PR,
-/// rozdělaná, historie, zdraví, nastavení); tady jsou čtyři, protože položka, po jejímž otevření
-/// je prázdno, je horší než položka, která ještě není. `Historie` a `Zdraví` potřebují napřed
-/// obsah, který v aplikaci zatím nikde není — `Přehled` přibyl s dashboardem (#181),
-/// `Moje PR` s rozřazením podle autora (#331).
+/// rozdělaná, historie, zdraví, nastavení); tady jich je pět, protože položka, po jejímž otevření
+/// je prázdno, je horší než položka, která ještě není. `Zdraví` potřebuje napřed obsah, který
+/// v aplikaci zatím nikde není — `Přehled` přibyl s dashboardem (#181), `Moje PR` s rozřazením
+/// podle autora (#331) a `Dění` se záznamem toho, co proletělo jako notifikace (#414).
 ///
 /// **Pořadí případů je pořadí položek v railu** a rail je kreslí z `allCases`, takže `mine` leží
 /// mezi `queue` a `drafts` schválně: dolů přichází, co mám zrevidovat, nahoru jde, co posílám ven
-/// — a rozdělaná práce je až to, co jsem si u toho nechal nedopsané.
+/// — a rozdělaná práce je až to, co jsem si u toho nechal nedopsané. `Dění` je pátá a poslední,
+/// jak to kreslí návrh (pátá ikona `◷` v railu od sekce 01): není o jednom PR ani o mojí frontě,
+/// je to záznam, do kterého se chodí zpátky.
 enum RailSection: String, CaseIterable, Identifiable, Sendable {
     /// Dashboard — co dneska hoří (#181).
     case overview
@@ -37,6 +39,12 @@ enum RailSection: String, CaseIterable, Identifiable, Sendable {
     case mine
     /// PR, na kterých leží rozdělané review.
     case drafts
+    /// Dění (#414) — co se na pull requestech stalo, když jsem se nekoukal.
+    ///
+    /// **Nejmenuje se to `Novinky`**, i když se o tom tak mluvilo: `Novinky` je v aplikaci okno
+    /// s release notes (`ReleaseNotesView`), tedy „co je nového v PRismu“. Tohle je „co se stalo
+    /// na pull requestech“ a dvě různé věci pod jedním jménem se v paletě ⌘K nedají rozeznat.
+    case activity
 
     var id: String { rawValue }
 
@@ -46,6 +54,7 @@ enum RailSection: String, CaseIterable, Identifiable, Sendable {
         case .queue: "Fronta"
         case .mine: "Moje PR"
         case .drafts: "Rozdělaná"
+        case .activity: "Dění"
         }
     }
 
@@ -59,6 +68,21 @@ enum RailSection: String, CaseIterable, Identifiable, Sendable {
         // tatáž volnost, s jakou se za `⌂` bere `square.grid.2x2`.
         case .mine: "tray.and.arrow.up"
         case .drafts: "square.and.pencil"
+        // Návrh kreslí hodinový ciferník (`◷`) a smysl je v tom, že sekce mluví o **čase**:
+        // je to jediná položka railu, která odpovídá na „co se stalo“, ne na „co je“.
+        case .activity: "clock"
+        }
+    }
+
+    /// Kreslí si sekce hlavičku sama?
+    ///
+    /// **Vlastnost sekce, ne `if` ve view** (#414). Do #414 se to ve `HomeView` psalo jako
+    /// `railSection != .overview` na dvou místech, takže druhá sekce s vlastní hlavičkou by
+    /// jedno z nich zapomněla — a nad nadpisem by zůstal prázdný pruh s linkou.
+    var drawsOwnHeader: Bool {
+        switch self {
+        case .overview, .activity: true
+        case .queue, .mine, .drafts: false
         }
     }
 
@@ -74,6 +98,7 @@ enum RailSection: String, CaseIterable, Identifiable, Sendable {
         case .queue: "Až po tobě někdo bude chtít review, objeví se tady."
         case .mine: "Až otevřeš vlastní pull request, objeví se tady."
         case .drafts: "Rozdělané review vzniká psaním do panelu u PR. Zatím žádné neleží."
+        case .activity: "Nový PR, výsledek review nebo cizí komentář se objeví tady."
         }
     }
 }

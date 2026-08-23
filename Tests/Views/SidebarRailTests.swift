@@ -22,8 +22,9 @@ struct SidebarRailTests {
     /// to ta chyba, která by se udělala nejsnáz, protože rail se kreslí z `allCases`.
     @Test("Vzhled není sekce railu")
     func theAppearanceIsNotARailSection() {
-        // Pořadí je pořadí položek v railu: `Moje PR` leží mezi frontou a rozdělanými (#331).
-        #expect(RailSection.allCases == [.overview, .queue, .mine, .drafts])
+        // Pořadí je pořadí položek v railu: `Moje PR` leží mezi frontou a rozdělanými (#331)
+        // a `Dění` je pátá a poslední (#414), jak to kreslí návrh.
+        #expect(RailSection.allCases == [.overview, .queue, .mine, .drafts, .activity])
     }
 
     /// **Pátá položka se do 52 bodů vejde** (#331) — rail se kreslí z `allCases`, takže se do něj

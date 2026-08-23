@@ -79,9 +79,21 @@ extension AppStore {
         return detail.headSha
     }
 
+    /// Dotáhne detail vybraného PR a zapíše, co se z něj o dění dozvíme (#414).
+    ///
+    /// Rozdělené na dvě metody proto, že zápis do dění musí proběhnout **za všemi** cestami, kterými
+    /// `refreshDetail` končí — i za tou, která detail vzala z cache. Kopie volání před každým
+    /// `return` je přesně to místo, na které se dá zapomenout.
+    func loadDetail(for pullRequest: PullRequestSummary) async {
+        await refreshDetail(for: pullRequest)
+        // Až tady, protože hlavu i commity zná teprve dotažený detail — a bez commitů by řádek
+        // nemohl říct, kolik jich přišlo.
+        await noteStaleFindingsActivity(for: pullRequest.id)
+    }
+
     /// Dotáhne detail vybraného PR. Načtený se drží, dokud se nezmění `updatedAt` — stejná
     /// cache jako u diffu.
-    func loadDetail(for pullRequest: PullRequestSummary) async {
+    private func refreshDetail(for pullRequest: PullRequestSummary) async {
         let id = pullRequest.id
         guard !hasCurrentDetail(for: pullRequest) else {
             // Detail je z cache, ale o checcích **nemusíme vědět nic** (#306): `loadChecks` běží až

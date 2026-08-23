@@ -110,4 +110,15 @@ enum NotificationDelivery: Sendable, Equatable {
         if case .failed = self { return true }
         return false
     }
+
+    /// Dorazil banner? (#414)
+    ///
+    /// Bydlí tady ze stejného důvodu jako `isWorthRetrying`: v dění se z toho kreslí chip
+    /// **bez banneru**, a druhá kopie toho `if`u by u nového případu výčtu odpověděla jinak.
+    /// `nil` u volajícího (odsud se neposílá, nebo je hláška vypnutá) je z pohledu řádku totéž
+    /// jako `notAuthorized` — banner nepřišel.
+    var isDelivered: Bool {
+        if case .delivered = self { return true }
+        return false
+    }
 }

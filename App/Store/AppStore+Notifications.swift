@@ -108,24 +108,41 @@ extension AppStore {
     ///
     /// Stavy, které nejsou konec běhu, a zastaralý záznam si `Policy` odfiltruje sama.
     func notifyAboutFinishedReview(of pr: PRIdentifier) async {
-        guard notifications != nil else { return }
         // Počet blokujících i nejzávažnější nález se berou z **téhož** záznamu jako stav, takže
         // se titulek („3 nálezy · 1 blokuje“) a řádek pod ním nemají jak rozejít. Bez záznamu
         // vyjde nula a `nil` — není to spolknuté selhání, ale odpověď: když review nedoběhlo
         // (selhal checkout, spadlo volání GitHubu), nemá co blokovat ani co ukázat.
         let record = reviewRecords[pr]
         let categories = resolved(for: pr.repo).blockingCategories
-        guard let notification = Policy.reviewNotification(
+        // Čí PR to je (#332). Rozhoduje `Policy.reviewNotification`, ne guard tady: o vlastním
+        // PR se touhle cestou nehlásí nic, protože všechny tři události jsou odpověď na review
+        // request. Bere se `ownership(of:)` nad identitou — shrnutí tu po ruce být nemusí.
+        let ownership = ownership(of: pr)
+        let state = reviewState(for: pr)
+        let blocking = record.map { Policy.blockingCount(in: $0, categories: categories) } ?? 0
+        let topFinding = record.flatMap { Policy.mostSevereFinding(in: $0, categories: categories) }
+        let notification = Policy.reviewNotification(
             for: pr,
-            // Čí PR to je (#332). Rozhoduje `Policy.reviewNotification`, ne tenhle guard: o vlastním
-            // PR se touhle cestou nehlásí nic, protože všechny tři události jsou odpověď na review
-            // request. Bere se `ownership(of:)` nad identitou — shrnutí tu po ruce být nemusí.
-            ownership: ownership(of: pr),
-            state: reviewState(for: pr),
-            blocking: record.map { Policy.blockingCount(in: $0, categories: categories) } ?? 0,
-            topFinding: record.flatMap { Policy.mostSevereFinding(in: $0, categories: categories) }
-        ) else { return }
-        await notify(notification)
+            ownership: ownership,
+            state: state,
+            blocking: blocking,
+            topFinding: topFinding
+        )
+        // **Guard na notifikační centrum se přesunul dolů** (#414). Do dění se totiž zapisuje
+        // i tehdy, když se odsud neposílá nebo když je hláška vypnutá — přepínače (#86) rozhodují
+        // o vyrušení, ne o záznamu. `notify(_:)` vrátí `nil` právě v těch dvou případech, a z toho
+        // je `wasAnnounced: false`, tedy chip `bez banneru` v řádku.
+        var delivery: NotificationDelivery?
+        if let notification { delivery = await notify(notification) }
+        await recordActivity(Policy.reviewActivity(
+            for: pr,
+            ownership: ownership,
+            state: state,
+            blocking: blocking,
+            topFinding: topFinding,
+            at: time.now,
+            announced: delivery?.isDelivered == true
+        ))
     }
 
     /// Dá vědět o PR, která se v seznamu objevila (#85).
@@ -160,26 +177,64 @@ extension AppStore {
     /// vědomá volba: druhá strana by byla mlčet, dokud login nedorazí, a to znamená u selhaného
     /// `gh api user` ztracené notifikace o cizích PR — tedy o té práci, kvůli které aplikace je.
     func announceNewPullRequests(in summaries: [PullRequestSummary]) async {
-        guard notifications != nil, let announced else { return }
+        // **Snímek se nespotřebuje, když ho nikdo nekonzumuje** (`watchesPullRequestActivity`).
+        // Do #414 tu stálo `notifications != nil`; od #414 je konzumentem i záznam dění, takže
+        // podmínka jmenuje obojí — ale zůstává: kdyby se snímek plnil bez konzumenta, vypadala by
+        // první nová PR jako už ohlášená.
+        guard let announced, watchesPullRequestActivity else { return }
         let listed = Policy.pullRequests(summaries, ownedBy: .theirs, mine: ownLogins).map(\.id)
-        let newcomers = await announced.newcomers(in: listed)
-        guard !newcomers.isEmpty else { return }
+        // **Jeden dotaz na obojí** (#414): odchody jsou doplněk nad tímtéž snímkem a snímek se
+        // dotazem přepisuje, takže druhé volání by se ptalo už proti přepsanému stavu.
+        let changes = await announced.changes(in: listed)
+        // Odchod z fronty banner nedostane — vyrušovat nemá, dohledat se má (návrh, poznámka 92).
+        // Zapisuje se **před** doručením souhrnu, protože na doručení nijak nevisí.
+        await recordActivity(changes.departed.map {
+            Policy.departureActivity(for: $0, ownership: ownership(of: $0), at: time.now)
+        })
+        guard !changes.newcomers.isEmpty else { return }
 
         // Jedna notifikace za celý tik (#87), ne jedna na PR: deset hlášek naráz je první
         // důvod, proč si člověk notifikace vypne. Čekací okno na to potřeba není — tik dodá
         // celý seznam naráz, takže se slévá právě to, co se stalo mezi dvěma tiky.
-        guard let notification = Policy.newPullRequestsNotification(
-            for: newcomers,
-            titles: titles(from: summaries),
-            reviewed: reviewedPullRequests
-        ) else { return }
+        let titles = titles(from: summaries)
+        let authors = authors(from: summaries)
+        let reviewed = reviewedPullRequests
+        let notification = Policy.newPullRequestsNotification(
+            for: changes.newcomers,
+            titles: titles,
+            reviewed: reviewed
+        )
+        var delivery: NotificationDelivery?
+        if let notification { delivery = await notify(notification) }
 
-        let delivery = await notify(notification)
         // Nedoručený souhrn nechá **všechna** nová PR mimo snímek, takže se příští tik zkusí
         // znovu jako jeden celek. Do #87 se zapisovalo po jednotlivých PR, protože se i po
         // jednotlivých posílalo; teď je doručení jedno, takže i výsledek je jeden.
         guard delivery?.isWorthRetrying != true else { return }
         await announced.remember(listed)
+
+        // **Do dění se zapisuje až za tím guardem** (#414), tedy ve stejné chvíli, kdy se zapisuje
+        // snímek. Není to kosmetika: dokud se snímek nepřepsal, vrátí příští tik tatáž nová PR —
+        // a protože identita řádku nese **okamžik** (PR se do fronty umí vrátit, a to je novinka),
+        // vznikl by druhý řádek o jednom příchodu. Přechodná chyba banneru tak dění odloží o jeden
+        // tik, místo aby ho zdvojila. Vypnutý přepínač ani odmítnuté oprávnění nic neodkládají:
+        // `isWorthRetrying` je jen u `failed`.
+        //
+        // **Řádek je na každé PR, ne jeden souhrn.** Banner se slévá proto, že deset hlášek naráz
+        // je vyrušení desetkrát; seznam, do kterého se chodí zpátky, tuhle daň neplatí a „5 nových
+        // PR k review“ by v něm bylo tvrzení, ze kterého se nedá kliknout na žádné z nich.
+        // `announced` je proto na všech řádcích stejné — je z jednoho doručeného souhrnu.
+        await recordActivity(changes.newcomers.map { pr in
+            Policy.newPullRequestActivity(
+                for: pr,
+                title: titles[pr],
+                author: authors[pr],
+                isReReview: reviewed.contains(pr),
+                ownership: ownership(of: pr),
+                at: time.now,
+                announced: delivery?.isDelivered == true
+            )
+        })
     }
 
     /// PR, u kterých už někdy review běželo (#137). Podle nich se pozná re-review od novinky.
@@ -197,5 +252,13 @@ extension AppStore {
     /// Titulky PR pro text notifikace, klíčované identifikátorem.
     private func titles(from summaries: [PullRequestSummary]) -> [PRIdentifier: String] {
         Dictionary(summaries.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// Autoři PR pro řádek dění (#414) — u příchodu do fronty je to „kdo na mě čeká“.
+    ///
+    /// Do banneru **nejdou**: ten má čtyři řádky a na tom čtvrtém musí zbýt PR (#200), takže by
+    /// autor vytlačil identifikaci. V řádku dění místo je.
+    private func authors(from summaries: [PullRequestSummary]) -> [PRIdentifier: String] {
+        Dictionary(summaries.map { ($0.id, $0.author) }, uniquingKeysWith: { first, _ in first })
     }
 }
