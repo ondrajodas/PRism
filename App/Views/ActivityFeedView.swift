@@ -17,6 +17,12 @@ struct ActivityFeedView: View {
     var lastVisit: Date?
     /// Kdy se seznam PR naposledy načetl. `nil` = ještě nikdy.
     var lastSuccess: Date?
+    /// **Jedny hodiny na celou obrazovku.** Proti nim se počítá všechno, co na „teď“ stojí — název
+    /// dne v nadpisu bloku, věta pod titulkem, popisek pruhu i čas u řádku. Kdyby si je každý kus
+    /// bral sám (`Date()`), dostala by se do jedné obrazovky dvě různá „teď“: nad hlavičkou `Dnes`
+    /// by v řádku stálo relativní stáří proti jinému okamžiku a nad `FakeTimeSource`m by se sonda
+    /// rozešla s tím, co jí store nastavil. Nález Copilota na #418.
+    var now = Date()
     /// Klik na řádek. **Jedna cesta** — otevřít záložku PR a v ní cílový tab (#409); `.gitHub`
     /// jediné vede z aplikace ven.
     var open: (ActivityEvent) -> Void = { _ in }
@@ -121,8 +127,8 @@ struct ActivityFeedView: View {
     private func timeline(_ day: ActivityFeedDay) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             ForEach(day.rows) { row in
-                if row.isFirstSeen { SeenMarker(at: lastVisit) }
-                ActivityRowView(event: row.event, open: open)
+                if row.isFirstSeen { SeenMarker(at: lastVisit, now: now) }
+                ActivityRowView(event: row.event, now: now, open: open)
             }
         }
         .padding(.horizontal, 18)
@@ -149,6 +155,8 @@ struct ActivityFeedView: View {
 /// na to, co už jsem viděl.
 private struct SeenMarker: View {
     let at: Date?
+    /// Hodiny obrazovky, ne `Date()` — viz `ActivityFeedView.now`.
+    let now: Date
 
     var body: some View {
         // Verzálky jsou z návrhu (`.tl-new { text-transform: uppercase }`), ne velká písmena
@@ -159,7 +167,7 @@ private struct SeenMarker: View {
             if let at {
                 // Tentýž popisek jako ve větě v hlavičce — dvě různá formátování jednoho okamžiku
                 // na jedné obrazovce vypadají jako dva různé okamžiky.
-                Text(verbatim: Policy.visitLabel(at, now: .now).uppercased())
+                Text(verbatim: Policy.visitLabel(at, now: now).uppercased())
             }
         }
         .font(.system(size: 10, design: .monospaced))
@@ -177,6 +185,8 @@ private struct SeenMarker: View {
 /// nedá kliknout.
 private struct ActivityRowView: View {
     let event: ActivityEvent
+    /// Hodiny obrazovky, ne `Date()` — viz `ActivityFeedView.now`.
+    let now: Date
     let open: (ActivityEvent) -> Void
     /// Odkaz ven otevírá **view**, ne store — jako v paletě ⌘K. Store se o prohlížeči nemá co
     /// dozvědět a jediný řádek, který ho potřebuje, je ten, který v okně nemá kam vést.
@@ -253,7 +263,7 @@ private struct ActivityRowView: View {
     }
 
     @ViewBuilder private var time: some View {
-        if Policy.showsRelativeTime(of: event.at, now: .now) {
+        if Policy.showsRelativeTime(of: event.at, now: now) {
             Text(event.at, format: .relative(presentation: .named))
                 .font(.system(size: 11.5))
                 .foregroundStyle(Palette.ink3)

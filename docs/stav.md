@@ -3923,6 +3923,12 @@ vzniknout druhou cestou:
   (`a 1 review od Copilota`). Skládá ho `Policy.activityHeadline`, tedy tatáž funkce jako titulek
   banneru — druhá věta o témž počtu by se s ní rozešla.
 
+**Svislá čára osy jde středem puntíků, ne 4 body vedle.** V CSS zákresu se ty dvě hodnoty
+rozcházejí: `.tl::before` je na `left: 30px` od hrany `.tl` (tedy střed 31), kdežto `.tl-dot`
+vychází na `18 + 5` s průměrem 24, tedy střed **35**. Spočítáno z CSS, ne odhadnuto z obrázku.
+V aplikaci mají obojí střed na 30, protože čára pod puntíkem je zjevně to, co zákres kreslit chtěl —
+osa vedle puntíků vypadá jako chyba kreslení.
+
 **Prázdna jsou čtyři, ne dva.** Zákres kreslí klid a zakázané oprávnění; přibyl **vypnutý přepínač**
 v nastavení aplikace (bez něj by vypadal jako odmítnuté oprávnění a posílal člověka do Nastavení
 systému, kde s tím nic neudělá) a **ztracený záznam**, který přebíjí všechny ostatní. Ten poslední je

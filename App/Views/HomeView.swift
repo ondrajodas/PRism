@@ -80,6 +80,9 @@ struct HomeView: View {
             ),
             lastVisit: store.activityVisitSnapshot,
             lastSuccess: store.lastSuccess,
+            // **Jedny hodiny na celou obrazovku**, a ze zdroje času storu: dělení po dnech,
+            // věta v hlavičce, pruh i časy u řádků musí mluvit o témže „teď“.
+            now: store.time.now,
             open: { store.show($0) },
             openSettings: openSettings,
             openSystemSettings: { SystemSettings.openNotifications() }
