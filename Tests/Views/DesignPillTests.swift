@@ -120,7 +120,11 @@ struct DesignPillTests {
     /// **zůstávají** (nesou prózu vedle odznaku), kdežto kapsli tam po #404 kreslí jedině
     /// `designPill`. Guard na zapsané odsazení by naopak spadl na první nesouvisející
     /// `padding(.horizontal, 5)`, tedy hlídal by něco jiného, než co o sobě tvrdí.
-    @Test("Zbylých pět míst bere kapsli z jednoho místa")
+    ///
+    /// **Počet v názvu testu není** (nález Copilota na #431): tabulka v #404 vyjmenovává „pět míst“,
+    /// ale kapsle karty a odznak kontroly jsou v jednom řádku, takže souborů je **šest**. Číslo
+    /// v názvu by pak mátlo při hledání, které view je vlastně pokryté — rozhoduje seznam níž.
+    @Test("Zbylé kapsle berou sazbu z jednoho místa")
     func drawsTheRemainingPillsFromTheSharedMetric() throws {
         let places = [
             "App/Views/ReviewStateBadge.swift",
