@@ -2943,6 +2943,26 @@ pro **oba** odznaky (`Fronta` i `Moje PR`), takže to nebyla regrese z #331.
 zůstává 34 × 30 a hlavička karty popisu má dvě podoby podle šířky (#291). V nejužším tabu se kapsle
 ořezává na `ote…` — bylo to tak i před #348 (`otev…`), takže mono stojí jeden znak, ne tu vlastnost.
 
+### Záznam rozhodnutí — zbytek nemono kapslí (#404)
+
+Dotažení toho, co #348 vědomě odložilo: pět dalších míst, která návrh kreslí jako `.pill`. Je to
+zase jen srovnání aplikace s tím, co v mockupu **už nakreslené je** (jako #283 a #348), takže bez
+schvalovací brány.
+
+| Rozhodnutí | Zamítnuté alternativy | Proč |
+|---|---|---|
+| **Mění se sazba, ne barvy** | Srovnat při té příležitosti i odstíny — čtyři kapsle berou systémovou `.green` / `.red`, kdežto návrh má `--ok` a `--crit` | Zadání #404 je sazba a škálu odznaku fronty drží `ReviewStateAppearance`, jehož vlastní zdůvodnění z #309 říká, že převod zbytku škály na tokeny je **jiná otázka, která se zodpovídá měřením**. To měření se u #404 udělalo a mezeru našlo: `vyřešeno` má ve světlém režimu kontrast **1,63**, `schválil` **1,70**, `vyžádal změny` 2,52, `3 nálezy · 1 blokuje` 2,70 (nakreslené barvy, ne tokeny). Patří to do vlastního issue, protože je to změna **odstínů na pěti obrazovkách** a posuzuje se okem vedle mockupu, ne diffem — a smíchané se sazbou by se z pauzy nedalo poznat, co je čí. Do té doby prahy v `PillTypesettingTests` drží, že se to nezhorší |
+| **Odznak `Bot` mono nedostal**, i když ho tabulka v #404 vyjmenovala | Přesázet ho s ostatními, protože stojí v téže hlavičce | Návrh ho kreslí jako `.tl-line .botchip` — `font-size: 10px; padding: 0 5px`, **žádná `font-family`** —, tedy schválně nemono, ze stejného důvodu jako `.state-chip` v hlavičce PR: je to vlastnost účtu vedle avataru, ne stav ani počet. Mono by ho postavilo na roveň `schválil`. Je na to vlastní tvrzení v testu, protože „sjednotit kapsle“ je zadání, při kterém se převede omylem |
+| **`FindingCardView.blockingWarning` zůstává `Label` s ikonou** | Převést `⚠ blokuje` na `.pill.crit`, jak ho návrh v sekci 03 kreslí | Kapsle to není — nemá plochu ani odsazení —, takže do zadání #404 nespadá; převod by znamenal **zahodit tu ikonu**, a to je změna obrazovky, ne sazby. Cena je vidět: v kartě stojí nemono varování vedle mono kapsle `vyřešeno`. Patří to do téhož issue jako barvy |
+| **Odznak fronty dostal `lineLimit(1)` i `fixedSize()`** | Nechat jen `lineLimit(1)`, které z návrhu odpovídá `white-space: nowrap` | Změřeno, ne odvozeno: `lineLimit(1)` zalomení opravdu zabrání, ale místo něj **zkracuje** — bez `fixedSize` se v řádku o 320 bodech dva nejdelší stavy srazily o **20 a 33 bodů**, tedy na `3 nález…`. V řádku fronty je odznak vedle titulku PR, který je taky pružný, takže se o místo dělí; s `fixedSize` ustupuje titulek, který `lineLimit(1)` má odjakživa. Kapsle v **tabulce** ho naopak nedostala: sedí ve sloupci se spočítanou šířkou, o které rozhoduje `Policy` |
+| **Odznak `já` dostal barvu textu `Palette.ink` a wash `Palette.accent.opacity(0.18)`** | Nechat dědění (`primary` a `.tint`), protože `designPill` nic z toho nevyžaduje | `designPill` bere `Color`, ne `ShapeStyle`, takže `.tint.opacity(0.18)` se do něj nedá předat — a to je dobře: dědění padalo mimo okno (náhled, harness) na **systémovou modrou**, což je zrovna ta záměna, kterou #309 řešila u odznaku `2×`. V okně je to tatáž barva, protože `.tint` se na kořeni nasazuje jako `Palette.accent`. `Palette.ink`, ne `.primary`: `labelColor` je poloprůhledná a přes akcentový wash by se složila jinak než v návrhu (#393). Vedlejší užitek je, že se to dá změřit — kontrast **12,27 / 8,40** |
+| **Wash zůstal akcentový, ne `.pill.run`** | Dát `já` akcentový text, ať je to celé jedna z variant `.pill` | `já` v mockupu nakreslené **není**, takže by to nebylo srovnání s návrhem, ale nové rozhodnutí o barvě — a to do #404 nepatří. Je to značka „tohle jsem psal já“, ne stav, takže si odstín od `.pill.run` nepůjčuje |
+
+**Co se nezměnilo:** krytí washů zůstává, jaké bylo (0,15 u nálezů, 0,18 v konverzaci), i když
+návrh má u `.pill` všude 15 % — je to barva, ne sazba. `.state-chip` v hlavičce PR pořád nemono.
+A výška kapsle proti okolí **vyrostla o bod** (15 → 16), na rozdíl od #348, kde o bod klesla: tam
+se srovnávalo se systémovými 11 s odsazením 2, tady s `.caption2` s odsazením 1.
+
 ### Záznam rozhodnutí — jeden vstupní bod na otevření PR (#409)
 
 Klik na notifikaci nic neotevřel: obsluha nastavovala jedině `selection`, kdežto otevření záložky

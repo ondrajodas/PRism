@@ -2283,6 +2283,64 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   v jednom testu se pod paralelní zátěží umí vyřešit jinak. Poznat se to dá jedině plným během:
   v jedné dávce takhle spadly `CommitPanelRoomTests` a `LogTailHeightTests` (o 36 bodů, tedy o tři
   řádky po 12), obojí zeleně v samostatném běhu.
+
+  **Od #404 je v téže sadě guard na zbylých pět míst** — že berou `designPill` **a** že v tom
+  souboru nezbyla druhá kapsle. Obojí je potřeba: samotné „bere“ by zůstalo pravdivé i tehdy, kdyby
+  vedle nové kapsle zůstala jedna se starým odsazením, a přesně takhle v `FindingCardView` ležel
+  odznak kontroly, který se u #348 přehlédl.
+
+  Hlídá se **`in: .capsule` mimo `designPill`**, ne zapsaná stará sazba, a to schválně: `.caption2`
+  i `10,5` v těch souborech zůstávají (nesou prózu vedle odznaku), kdežto kapsli tam po #404 kreslí
+  jedině `designPill`. Guard na `padding(.horizontal, 5)` by naopak spadl na první nesouvisející
+  odsazení, tedy hlídal by něco jiného, než co o sobě tvrdí. Povolená je **jedna** kapsle
+  v `ConversationEntryView` — `Bot` je `.botchip` z návrhu, tedy schválně nemono, a má na to vlastní
+  tvrzení, protože „sjednotit kapsle“ je zadání, při kterém se převede omylem. Ověřeno vložením
+  regrese (vrácená ruční sazba `vyřešeno` v `ThreadBubbleView`).
+- **Rozměry a kontrast kapslí po #404** — `PillTypesettingTests`. Dělí se od `DesignPillTests`
+  schválně: tam se tvrdí **kdo** kapsli bere, tady se měří, co se tou změnou pohnulo v okně.
+
+  **Šířka** se měří tam, kde je místo spočítané, ne odhadem: kapsle ve sloupci závažnosti tabulky
+  (`Policy.findingTableLayout(availableWidth: 648).severity`, tedy 92 bodů — `irelevantní` má 86)
+  a odznak fronty **v řádku, ne sám za sebe**. To druhé je podstatné: `fittingSize` na tu otázku
+  neodpoví, protože rámec nasazený zvenčí je tvrdý a hostující view pak hlásí tu šířku, kterou
+  dostalo. Měří se proto `onGeometryChange` uvnitř hostovaného okna nad řádkem, který má vedle
+  odznaku pružný titulek s `lineLimit(1)` — tedy tu trojici, ve které se o místo pere.
+
+  **Vložená regrese vyloučila i první podobu toho testu**, a je to ta poučnější polovina:
+  `lineLimit(1)` sám o sobě zalomení opravdu zabrání, takže test, který měřil jen **výšku**,
+  procházel i s odebraným `fixedSize()`. Zkrácení je jiná vada než zalomení a měří se šířkou — bez
+  `fixedSize` se dva nejdelší stavy srazily o **20 a 33 bodů**.
+
+  **Výška bubliny** se hlídá stropem, ne rovností: měří se dvě bubliny nad týmiž daty (kategorie
+  `correctness` a `style`, tedy s kapslí `blokuje` a bez ní) a kapsle smí bublinu zvednout nejvýš
+  o ten jeden bod, kterým se liší od prózy vedle sebe. Číslo se u toho nevymýšlí — kapsle je 16
+  bodů, `.caption2` 13.
+
+  **Kontrast se měří z bitmapy, ne z tokenů** (#393, #366): podklad je **nejčastější barva** ve
+  středním pásu nakreslené kapsle (tedy wash složený nad plátem přesně tak, jak se nakreslil),
+  odstín má vlastní kresbu v témž vzhledu. Odečítat podklad z polohy by znamenalo tvrdit, kde
+  v bitmapě co leží, a to se rozbije při první změně odsazení. Vedle kontrastu je druhé tvrzení,
+  že se **odstín dostane do textu**: nejsytější pixel v kapsli musí být blíž nakreslenému odstínu
+  než podkladu. Bez toho by kontrast mohl projít i u kapsle, které se `foregroundStyle` vynechalo —
+  a zrovna to je u odznaku `já` nová věc (do #404 barvu textu neměl).
+
+  **Nejsytější pixel je dolní odhad**, ne barva glyfu: při 10,5 semibold nepokryje stopa pera celý
+  pixel, takže se z něj kontrast počítat nedá (naměřeno 1,63 až 2,91 tam, kde nakreslené barvy dají
+  3,65 až 4,08). Proto se dvě otázky rozdělily — legibilitu měří **plné plochy**, přítomnost
+  odstínu v textu ten pixel.
+
+  Prahy jsou **per kapsle a naměřené**, ne kulaté: čtyři z nich berou systémovou škálu a ve světlém
+  režimu jsou pod třemi (`vyřešeno` 1,63, `schválil` 1,70, `vyžádal změny` 2,52,
+  `3 nálezy · 1 blokuje` 2,70). #404 to nemění, takže se to změřilo, zapsalo do tabulky u testu
+  a hlídá se, že se **nezhorší**; `já` má vlastní tvrzení s prahem 8,0 (naměřeno 12,27 / 8,40),
+  protože společný práh z tabulky by výměnu `ink` za `ink3` nechytil.
+
+  **Vzhled se vynucuje na vlastním okně** (#367), ne na `NSApp`.
+- **Sonda sazby kapslí (#404)** — `PillRenderProbe`: všech pět míst na **jednom plátně** v obou
+  režimech, aby se dalo vidět, že to je jedna rodina prvků. Na plátně je i dvojice, která se
+  sjednotit **nemá** (`Bot` a `.state-chip` v hlavičce PR) — bez ní by z obrázku nešlo poznat, jestli
+  je nemono chip vada, nebo záměr. Karta nálezu se kreslí v **300 bodech** (šířka panelu), ne v šířce
+  plátna: v širokém místě se o nic nepere. Pouští se ručně (`TEST_RUNNER_PRISM_MEASURE=1`).
 - **Cyklus a ikony režimů (#278)** — `AppAppearanceTests`: pořadí `světlý → tmavý → podle systému`
   a hlavně to, že je **uzavřené a projde všechny tři** (jinak by se do jednoho režimu klikáním nešlo
   dostat), tři **různé** ikony a to, že všechny tři symboly v systému existují — chybějící SF Symbol

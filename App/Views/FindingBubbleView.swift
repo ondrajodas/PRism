@@ -612,14 +612,14 @@ struct FindingBubbleView: View {
     /// Odznak. **Ořezává se poslední**: je to jedno slovo, které buď je čitelné, nebo nemá
     /// smysl — `mi…` místo `mimo diff` neřekne nic. V úzkém okně proto ustupují texty vedle něj
     /// (verdikt, reviewer, náhled), ne on.
+    ///
+    /// Kapsle z návrhu (`.pill`), tedy mono 10,5 — **sazba je v `designPill`**, ne tady (#404,
+    /// zbytek třídy z #348). Do #404 to byl `.caption2` s odsazením 5 a 1, takže kapsle byla
+    /// o bod nižší (15 proti 16) a o 1 až 24 bodů užší.
     private func pill(_ text: String, color: Color) -> some View {
         Text(verbatim: text)
-            .font(.caption2)
+            .designPill(tint: color, background: color.opacity(0.15))
             .lineLimit(1)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(color.opacity(0.15), in: .capsule)
-            .foregroundStyle(color)
             .layoutPriority(2)
     }
 

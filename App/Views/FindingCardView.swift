@@ -110,14 +110,15 @@ struct FindingCardView: View {
             .help("Blokující nález — kvůli němu se PR nemerguje")
     }
 
+    /// Kapsle z návrhu (`.pill`), tedy mono 10,5 — **sazba je v `designPill`**, ne tady (#404,
+    /// zbytek třídy z #348). Do #404 to byl `.caption2` s odsazením 5 a 1.
+    ///
+    /// **Krytí zůstává 0,15**, jak ho má návrh (`color-mix(in srgb, var(--crit) 15%, transparent)`);
+    /// #404 mění sazbu, ne barvu.
     private func pill(_ text: String, tint: Color) -> some View {
         Text(verbatim: text)
-            .font(.caption2)
+            .designPill(tint: tint, background: tint.opacity(0.15))
             .lineLimit(1)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(tint.opacity(0.15), in: .capsule)
-            .foregroundStyle(tint)
             .fixedSize()
             .layoutPriority(2)
     }
@@ -131,16 +132,14 @@ struct FindingCardView: View {
     /// jako v bublině u kódu**: odznak a za ním věta.
     ///
     /// Odmítnutý nález odznak nedostane — o něm už rozhodl člověk a druhý stav vedle sebe se plete.
+    ///
+    /// **Odznak kontroly bere `pill(_:tint:)`, ne vlastní sazbu** (#404). Do #404 tady stála
+    /// druhá kopie téhož odsazení a řezu — a byla to jedna z těch kopií, kvůli kterých se u #348
+    /// metrika svedla na jedno místo.
     @ViewBuilder private var recheck: some View {
         if row.dismissal == nil, let status = row.recheck {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(verbatim: status.verdict.label)
-                    .font(.caption2)
-                    .lineLimit(1)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(status.verdict.tint.opacity(0.15), in: .capsule)
-                    .foregroundStyle(status.verdict.tint)
+                pill(status.verdict.label, tint: status.verdict.tint)
                 if let note = status.note {
                     // Jeden řádek: karta je náhled, ne celý nález. Celá věta je v bublině u kódu
                     // a v nápovědě, takže se tady nic neztrácí.
