@@ -3986,4 +3986,8 @@ záznamu, věta o tom, že mu chybí konec, a počet uložených záznamů.
 **Na tomhle není co vidět** — je to soubor v cache, obrazovka se nemění. Ověřeno spuštěním dvakrát za
 sebou (`PRism-c`): 848 B předchozího sezení leží jako `diagnostics-do-2026-08-24T10-02-02.log`, nový
 soubor začíná hlavičkou a řádkem `předchozí záznam (848 B) uložen jako …`, a za 70 s má **11 řádků
-místo ~66**. Testů 3812 (21 nových), dvě z nich ověřená vloženou regresí.
+místo ~66**. Testů 3813 (22 nových), dvě z nich ověřená vloženou regresí. Z Copilot review přišel
+jeden reálný nález: komentář tvrdil, že symlink pojmenovaný jako záznam se smaže („neškodně, smaže se
+odkaz“) — sondou se změřilo, že `resourceValues` odkaz **nerozbaluje**, takže se do úklidu vůbec
+nedostane. Chování zůstalo (bezpečnější strana omylu), komentář se přepsal na změřené a přibyl na to
+test.
