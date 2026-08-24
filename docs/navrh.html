@@ -2268,6 +2268,42 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hscap b { color: var(--ink-2); font-weight: 600; letter-spacing: 0.04em; }
 .hscap .warn { color: var(--stale); text-transform: none; letter-spacing: 0; font-size: 10.5px; }
 
+/* ---- sekce 30: pruh, který jede s výřezem ----------------------------------
+   `.hsview` je **viditelná část diffu**, ne blok: pevná výška a ořez, takže se blok pod
+   dolní hranou uřízne — přesně to dělá okno. Výška je změřených **448 b** (`.work`
+   v sekci 03 při okně 723,8 b), tedy 1 : 1 a ne zkrácená kvůli délce zákresu: kdyby byla,
+   nešel by z obrázku poznat poměr bloku k výřezu, a o ten tady jde.
+
+   Rám dělá `.frame.flat`, a proto je `.hsview` **na tomtéž prvku** jako `.frame`, ne uvnitř
+   něj: `.frame > .hsblock { border: 0 }` je potomkové pravidlo, takže vložená vrstva mezi
+   ně by blok nechala nakreslit vlastní okraj a pod hlavičkou souboru by byla dvoubodová
+   linka. Ořez si `.frame` nese sám (`overflow: hidden`), přidává se jen `position`. */
+.hsview { position: relative; height: 448px; }
+
+/* Připíchnutý pruh. `bottom: 0` je celé pravidlo: pruh sedí na dolní hraně **viditelné
+   části** svého bloku, a dokud blok tu hranu přesahuje, je to hrana výřezu. V okně to je
+   `frame.origin.y` toho scrolleru, který v bloku už je — proto se tady taky nekreslí nic
+   nového, jen se posunuje `.hsbar`.
+
+   Podklad je **neprůhledný schválně**: pruh kód pod sebou zakrývá (poznámka 49) a
+   průhledný by tvrdil, že se nic neztrácí — přes barevná pozadí přidaných a odebraných
+   řádků by se navíc složil jinak než nad kódem bez změny. */
+.hspin {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: stretch; background: var(--panel);
+}
+.hspin > .hsbar { flex: 1 1 50%; min-width: 0; }
+/* Tatáž linka, která dělí půlky bloku, jde i přes pruh — z toho se pozná, že drážka vlevo
+   patří levé půlce a drážka vpravo pravé, bez popisku. */
+.hspin > .hsbar + .hsbar { border-left: 1px solid var(--line); }
+
+/* Hlavička hunku mezi dvěma bloky téhož souboru. Blok končí tam, kde do diffu něco vstoupí
+   (`DiffBlock`), a v zákresu je hlavička jediné, co dva bloky pod sebou odděluje. */
+.hshunk {
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+  background: var(--panel-3); padding: 2px 10px;
+}
+
 /* ============================================================
    KOSTRA DOKUMENTU — rozcestník, stránky, hledání
    Návrh se od téhle verze nečte jako jeden dlouhý svitek, ale po
@@ -5909,6 +5945,583 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           se nescrolluje; s pruhem to bude vidět hned. <b>Tahle změna to neřeší</b> — přišpendlit
           gutter znamená vytáhnout ho z rolovací plochy, a to je jiný zákres. Nakreslené je to
           tak, jak to vyjde, ne tak, jak by to bylo hezčí.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s30">
+    <div class="section-head">
+      <div class="eyebrow">30 — Změněné soubory · vedle sebe</div>
+      <h2>Pruh, který jede s výřezem</h2>
+      <p class="muted">
+        Sekce 29 dala každé půlce bloku trvalý vodorovný pruh (implementace leží v PR #425) —
+        ale <b>na dolní hranu bloku</b>.
+        U dlouhého bloku je ta hrana pod dolní hranou okna, takže se k pruhu musí sjet a pak
+        zpátky nahoru k tomu, co jsem si chtěl přečíst. Změřeno na <b>343 blocích</b> ze 48
+        mergnutých PR: přes viditelnou část diffu (<b>448 b</b>, změřeno na <code>.work</code>
+        v sekci 03) přeteče <b>9,6 %</b> bloků a jejich pás leží pod hranou okna o <b>229 b</b>
+        (medián), p90 <b>533 b</b>. Není to většina bloků — je to přesně ta situace, kvůli
+        které se stěžuje, protože u ní se pruh a kód <b>nedají mít na obrazovce naráz</b>.
+      </p>
+      <p class="muted">
+        Návrh proto pruh přišpendlí k dolní hraně <b>viditelné části svého bloku</b>. Celé
+        pravidlo je <code>y = min(vlastní pás, hrana výřezu − 17)</code> — jedna spojitá funkce
+        posunu, ne dva stavy mezi kterými se přeskakuje. Dokud blok hranu okna přesahuje, stojí
+        pruh <b>na ní</b>; jak se pás bloku do výřezu dostane, pruh v něm přistane a dál se
+        hýbe s kódem. <b>Pruh přitom nikdy neopustí svůj blok</b> — a tím padá otázka, komu
+        patří, když jsou na obrazovce dva.
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="pane">
+        <div class="tag"><i></i>Dnes (sekce 29)</div>
+        <div class="frame flat hsview">
+          <div class="fhead">
+            <span>▾</span>
+            <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+            <span class="sp"></span>
+            <span style="font-family: var(--mono); font-size: 11px; color: var(--ink-3);">
+              @@ -96,24 +96,28 @@
+            </span>
+          </div>
+          <div class="hsblock">
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">96</span><span class="hssign"> </span><span class="hscode">    public function flush(): void</span></div>
+                <div class="hsrow"><span class="hsnum">97</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">98</span><span class="hssign"> </span><span class="hscode">        if ($this-&gt;pending === []) {</span></div>
+                <div class="hsrow"><span class="hsnum">99</span><span class="hssign"> </span><span class="hscode">            return;</span></div>
+                <div class="hsrow"><span class="hsnum">100</span><span class="hssign"> </span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">101</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow del"><span class="hsnum">102</span><span class="hssign">−</span><span class="hscode">        foreach ($this-&gt;pending as $key =&gt; $value) {</span></div>
+                <div class="hsrow del"><span class="hsnum">103</span><span class="hssign">−</span><span class="hscode">            $this-&gt;client-&gt;put($key, $value, ['timeout' =&gt; self::FLUSH_TIMEOUT]);</span></div>
+                <div class="hsrow del"><span class="hsnum">104</span><span class="hssign">−</span><span class="hscode">        }</span></div>
+                <div class="hsrow gap"><span class="hsnum"></span><span class="hssign"></span><span class="hscode"></span></div>
+                <div class="hsrow gap"><span class="hsnum"></span><span class="hssign"></span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">105</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">106</span><span class="hssign"> </span><span class="hscode">        $this-&gt;pending = [];</span></div>
+                <div class="hsrow"><span class="hsnum">107</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">108</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">109</span><span class="hssign"> </span><span class="hscode">    public function warmUp(array $keys): void</span></div>
+                <div class="hsrow"><span class="hsnum">110</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow del"><span class="hsnum">111</span><span class="hssign">−</span><span class="hscode">        foreach ($keys as $key) {</span></div>
+                <div class="hsrow del"><span class="hsnum">112</span><span class="hssign">−</span><span class="hscode">            $this-&gt;cache-&gt;set($key, $this-&gt;client-&gt;fetch($key), self::DEFAULT_TIMEOUT);</span></div>
+                <div class="hsrow"><span class="hsnum">113</span><span class="hssign"> </span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">114</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">115</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">116</span><span class="hssign"> </span><span class="hscode">    private function backendOf(string $key): string</span></div>
+                <div class="hsrow"><span class="hsnum">117</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">118</span><span class="hssign"> </span><span class="hscode">        return $this-&gt;describe()['backend'] ?? self::DEFAULT_BACKEND;</span></div>
+                <div class="hsrow"><span class="hsnum">119</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">120</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">121</span><span class="hssign"> </span><span class="hscode">    public function describe(): array</span></div>
+              </div>
+              <div class="hsbar none"></div>
+            </div>
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">96</span><span class="hssign"> </span><span class="hscode">    public function flush(): void</span></div>
+                <div class="hsrow"><span class="hsnum">97</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">98</span><span class="hssign"> </span><span class="hscode">        if ($this-&gt;pending === []) {</span></div>
+                <div class="hsrow"><span class="hsnum">99</span><span class="hssign"> </span><span class="hscode">            return;</span></div>
+                <div class="hsrow"><span class="hsnum">100</span><span class="hssign"> </span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">101</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow add"><span class="hsnum">102</span><span class="hssign">+</span><span class="hscode">        $chunks = array_chunk($this-&gt;pending, self::FLUSH_BATCH, true);</span></div>
+                <div class="hsrow add"><span class="hsnum">103</span><span class="hssign">+</span><span class="hscode">        foreach ($chunks as $index =&gt; $chunk) {</span></div>
+                <div class="hsrow add"><span class="hsnum">104</span><span class="hssign">+</span><span class="hscode">            $this-&gt;client-&gt;putMultiple($chunk, ['timeout' =&gt; self::FLUSH_TIMEOUT]);</span></div>
+                <div class="hsrow add"><span class="hsnum">105</span><span class="hssign">+</span><span class="hscode">            $this-&gt;logger-&gt;debug('vault: flushed', ['index' =&gt; $index, 'size' =&gt; count($chunk)]);</span></div>
+                <div class="hsrow add"><span class="hsnum">106</span><span class="hssign">+</span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">107</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">108</span><span class="hssign"> </span><span class="hscode">        $this-&gt;pending = [];</span></div>
+                <div class="hsrow"><span class="hsnum">109</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">110</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">111</span><span class="hssign"> </span><span class="hscode">    public function warmUp(array $keys): void</span></div>
+                <div class="hsrow"><span class="hsnum">112</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow add"><span class="hsnum">113</span><span class="hssign">+</span><span class="hscode">        foreach (array_unique($keys) as $key) {</span></div>
+                <div class="hsrow add"><span class="hsnum">114</span><span class="hssign">+</span><span class="hscode">            $this-&gt;cache-&gt;set($key, $this-&gt;client-&gt;fetch($key), self::WARMUP_TIMEOUT, ['stale' =&gt; true]);</span></div>
+                <div class="hsrow"><span class="hsnum">115</span><span class="hssign"> </span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">116</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">117</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">118</span><span class="hssign"> </span><span class="hscode">    private function backendOf(string $key): string</span></div>
+                <div class="hsrow"><span class="hsnum">119</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">120</span><span class="hssign"> </span><span class="hscode">        return $this-&gt;describe()['backend'] ?? self::DEFAULT_BACKEND;</span></div>
+                <div class="hsrow"><span class="hsnum">121</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">122</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">123</span><span class="hssign"> </span><span class="hscode">    public function describe(): array</span></div>
+              </div>
+              <div class="hsbar none"></div>
+            </div>
+          </div>
+        </div>
+        <div class="hscap">
+          <b>Pruh je 229 b pod hranou</b> — v okně z něj není nic
+          <span class="warn">sjet dolů, chytit knob, vyjet nahoru — a mezitím se ztratí místo, kde jsem byl</span>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh</div>
+        <div class="frame flat hsview">
+          <div class="fhead">
+            <span>▾</span>
+            <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+            <span class="sp"></span>
+            <span style="font-family: var(--mono); font-size: 11px; color: var(--ink-3);">
+              @@ -96,24 +96,28 @@
+            </span>
+          </div>
+          <div class="hsblock">
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">96</span><span class="hssign"> </span><span class="hscode">    public function flush(): void</span></div>
+                <div class="hsrow"><span class="hsnum">97</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">98</span><span class="hssign"> </span><span class="hscode">        if ($this-&gt;pending === []) {</span></div>
+                <div class="hsrow"><span class="hsnum">99</span><span class="hssign"> </span><span class="hscode">            return;</span></div>
+                <div class="hsrow"><span class="hsnum">100</span><span class="hssign"> </span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">101</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow del"><span class="hsnum">102</span><span class="hssign">−</span><span class="hscode">        foreach ($this-&gt;pending as $key =&gt; $value) {</span></div>
+                <div class="hsrow del"><span class="hsnum">103</span><span class="hssign">−</span><span class="hscode">            $this-&gt;client-&gt;put($key, $value, ['timeout' =&gt; self::FLUSH_TIMEOUT]);</span></div>
+                <div class="hsrow del"><span class="hsnum">104</span><span class="hssign">−</span><span class="hscode">        }</span></div>
+                <div class="hsrow gap"><span class="hsnum"></span><span class="hssign"></span><span class="hscode"></span></div>
+                <div class="hsrow gap"><span class="hsnum"></span><span class="hssign"></span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">105</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">106</span><span class="hssign"> </span><span class="hscode">        $this-&gt;pending = [];</span></div>
+                <div class="hsrow"><span class="hsnum">107</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">108</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">109</span><span class="hssign"> </span><span class="hscode">    public function warmUp(array $keys): void</span></div>
+                <div class="hsrow"><span class="hsnum">110</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow del"><span class="hsnum">111</span><span class="hssign">−</span><span class="hscode">        foreach ($keys as $key) {</span></div>
+                <div class="hsrow del"><span class="hsnum">112</span><span class="hssign">−</span><span class="hscode">            $this-&gt;cache-&gt;set($key, $this-&gt;client-&gt;fetch($key), self::DEFAULT_TIMEOUT);</span></div>
+                <div class="hsrow"><span class="hsnum">113</span><span class="hssign"> </span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">114</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">115</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">116</span><span class="hssign"> </span><span class="hscode">    private function backendOf(string $key): string</span></div>
+                <div class="hsrow"><span class="hsnum">117</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">118</span><span class="hssign"> </span><span class="hscode">        return $this-&gt;describe()['backend'] ?? self::DEFAULT_BACKEND;</span></div>
+                <div class="hsrow"><span class="hsnum">119</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">120</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">121</span><span class="hssign"> </span><span class="hscode">    public function describe(): array</span></div>
+              </div>
+              <div class="hsbar none"></div>
+            </div>
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">96</span><span class="hssign"> </span><span class="hscode">    public function flush(): void</span></div>
+                <div class="hsrow"><span class="hsnum">97</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">98</span><span class="hssign"> </span><span class="hscode">        if ($this-&gt;pending === []) {</span></div>
+                <div class="hsrow"><span class="hsnum">99</span><span class="hssign"> </span><span class="hscode">            return;</span></div>
+                <div class="hsrow"><span class="hsnum">100</span><span class="hssign"> </span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">101</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow add"><span class="hsnum">102</span><span class="hssign">+</span><span class="hscode">        $chunks = array_chunk($this-&gt;pending, self::FLUSH_BATCH, true);</span></div>
+                <div class="hsrow add"><span class="hsnum">103</span><span class="hssign">+</span><span class="hscode">        foreach ($chunks as $index =&gt; $chunk) {</span></div>
+                <div class="hsrow add"><span class="hsnum">104</span><span class="hssign">+</span><span class="hscode">            $this-&gt;client-&gt;putMultiple($chunk, ['timeout' =&gt; self::FLUSH_TIMEOUT]);</span></div>
+                <div class="hsrow add"><span class="hsnum">105</span><span class="hssign">+</span><span class="hscode">            $this-&gt;logger-&gt;debug('vault: flushed', ['index' =&gt; $index, 'size' =&gt; count($chunk)]);</span></div>
+                <div class="hsrow add"><span class="hsnum">106</span><span class="hssign">+</span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">107</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">108</span><span class="hssign"> </span><span class="hscode">        $this-&gt;pending = [];</span></div>
+                <div class="hsrow"><span class="hsnum">109</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">110</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">111</span><span class="hssign"> </span><span class="hscode">    public function warmUp(array $keys): void</span></div>
+                <div class="hsrow"><span class="hsnum">112</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow add"><span class="hsnum">113</span><span class="hssign">+</span><span class="hscode">        foreach (array_unique($keys) as $key) {</span></div>
+                <div class="hsrow add"><span class="hsnum">114</span><span class="hssign">+</span><span class="hscode">            $this-&gt;cache-&gt;set($key, $this-&gt;client-&gt;fetch($key), self::WARMUP_TIMEOUT, ['stale' =&gt; true]);</span></div>
+                <div class="hsrow"><span class="hsnum">115</span><span class="hssign"> </span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">116</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">117</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">118</span><span class="hssign"> </span><span class="hscode">    private function backendOf(string $key): string</span></div>
+                <div class="hsrow"><span class="hsnum">119</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">120</span><span class="hssign"> </span><span class="hscode">        return $this-&gt;describe()['backend'] ?? self::DEFAULT_BACKEND;</span></div>
+                <div class="hsrow"><span class="hsnum">121</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">122</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">123</span><span class="hssign"> </span><span class="hscode">    public function describe(): array</span></div>
+              </div>
+              <div class="hsbar none"></div>
+            </div>
+          </div>
+          <div class="hspin">
+            <div class="hsbar"><div class="hsgroove"><span class="hsknob" style="left: 0; width: 34%;"></span></div></div>
+            <div class="hsbar"><div class="hsgroove"><span class="hsknob" style="left: 0; width: 27%;"></span></div></div>
+          </div>
+        </div>
+        <div class="hscap">
+          <b>Pruh sedí na hraně okna</b> — dvě drážky, každá o své půlce
+          <span class="warn">zakrývá spodních 17 b kódu, tedy 1,06 řádku — viz poznámka 49</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-head" style="margin-top: 18px;">
+      <h3>Komu patří, se nemusí rozhodovat</h3>
+      <p class="muted">
+        Protože pruh zůstává uvnitř svého bloku — mezi jeho svislými okraji a rozdělený tou
+        samou linkou, která dělí půlky —, na hraně okna může stát <b>nejvýš jeden</b>: ten, který
+        k hraně dosahuje. Blok, jehož pás už je vidět, má pruh <b>ve svém pásu</b>, tedy uprostřed
+        výřezu. Žádné „ten pod kurzorem“ a žádné „ten, co zabírá víc“: rozhoduje poloha, ne volba.
+        Dva stavy, které při rolování jedním souborem přijdou hned po tom, co je nakreslené výš.
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="pane">
+        <div class="tag"><i></i>Dva bloky naráz</div>
+        <div class="frame flat hsview">
+          <div class="fhead">
+            <span>▾</span>
+            <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+            <span class="sp"></span>
+            <span style="font-family: var(--mono); font-size: 11px; color: var(--ink-3);">
+              @@ -96,24 +96,28 @@
+            </span>
+          </div>
+          <div class="hsblock">
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">116</span><span class="hssign"> </span><span class="hscode">    private function backendOf(string $key): string</span></div>
+                <div class="hsrow"><span class="hsnum">117</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">118</span><span class="hssign"> </span><span class="hscode">        return $this-&gt;describe()['backend'] ?? self::DEFAULT_BACKEND;</span></div>
+                <div class="hsrow"><span class="hsnum">119</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">120</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">121</span><span class="hssign"> </span><span class="hscode">    public function describe(): array</span></div>
+              </div>
+              <div class="hsbar"><div class="hsgroove"><span class="hsknob" style="left: 0; width: 34%;"></span></div></div>
+            </div>
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">118</span><span class="hssign"> </span><span class="hscode">    private function backendOf(string $key): string</span></div>
+                <div class="hsrow"><span class="hsnum">119</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">120</span><span class="hssign"> </span><span class="hscode">        return $this-&gt;describe()['backend'] ?? self::DEFAULT_BACKEND;</span></div>
+                <div class="hsrow"><span class="hsnum">121</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">122</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">123</span><span class="hssign"> </span><span class="hscode">    public function describe(): array</span></div>
+              </div>
+              <div class="hsbar"><div class="hsgroove"><span class="hsknob" style="left: 0; width: 27%;"></span></div></div>
+            </div>
+          </div>
+<div class="hshunk">@@ -158,14 +160,16 @@ final class SecretClient</div>
+          <div class="hsblock">
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">160</span><span class="hssign"> </span><span class="hscode">    public function describeAll(array $keys): array</span></div>
+                <div class="hsrow"><span class="hsnum">161</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow del"><span class="hsnum">162</span><span class="hssign">−</span><span class="hscode">        $out = [];</span></div>
+                <div class="hsrow del"><span class="hsnum">163</span><span class="hssign">−</span><span class="hscode">        foreach ($keys as $key) {</span></div>
+                <div class="hsrow del"><span class="hsnum">164</span><span class="hssign">−</span><span class="hscode">            $out[$key] = $this-&gt;describe($key);</span></div>
+                <div class="hsrow"><span class="hsnum">165</span><span class="hssign"> </span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">166</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow del"><span class="hsnum">167</span><span class="hssign">−</span><span class="hscode">        return $out;</span></div>
+                <div class="hsrow"><span class="hsnum">168</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">169</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">170</span><span class="hssign"> </span><span class="hscode">    private function sortByBackend(array $keys): array</span></div>
+                <div class="hsrow"><span class="hsnum">171</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">172</span><span class="hssign"> </span><span class="hscode">        return array_reduce($keys, fn (array $carry, string $key) =&gt; $carry, []);</span></div>
+                <div class="hsrow"><span class="hsnum">173</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">174</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">175</span><span class="hssign"> </span><span class="hscode">    private function backendFor(string $key): string</span></div>
+                <div class="hsrow"><span class="hsnum">176</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">177</span><span class="hssign"> </span><span class="hscode">        return $this-&gt;describe($key)['backend'] ?? self::DEFAULT_BACKEND;</span></div>
+                <div class="hsrow"><span class="hsnum">178</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+              </div>
+              <div class="hsbar none"></div>
+            </div>
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">162</span><span class="hssign"> </span><span class="hscode">    public function describeAll(array $keys): array</span></div>
+                <div class="hsrow"><span class="hsnum">163</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow add"><span class="hsnum">164</span><span class="hssign">+</span><span class="hscode">        $out = new SecretDescriptionSet($this-&gt;backendOf(reset($keys)));</span></div>
+                <div class="hsrow add"><span class="hsnum">165</span><span class="hssign">+</span><span class="hscode">        foreach ($this-&gt;sortByBackend($keys) as $backend =&gt; $group) {</span></div>
+                <div class="hsrow add"><span class="hsnum">166</span><span class="hssign">+</span><span class="hscode">            $out-&gt;merge($backend, $this-&gt;client-&gt;describeMultiple($group, self::DESCRIBE_TIMEOUT));</span></div>
+                <div class="hsrow"><span class="hsnum">167</span><span class="hssign"> </span><span class="hscode">        }</span></div>
+                <div class="hsrow"><span class="hsnum">168</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow add"><span class="hsnum">169</span><span class="hssign">+</span><span class="hscode">        return $out-&gt;toArray(JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);</span></div>
+                <div class="hsrow"><span class="hsnum">170</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">171</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">172</span><span class="hssign"> </span><span class="hscode">    private function sortByBackend(array $keys): array</span></div>
+                <div class="hsrow"><span class="hsnum">173</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">174</span><span class="hssign"> </span><span class="hscode">        return array_reduce($keys, fn (array $carry, string $key) =&gt; $carry, []);</span></div>
+                <div class="hsrow"><span class="hsnum">175</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">176</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">177</span><span class="hssign"> </span><span class="hscode">    private function backendFor(string $key): string</span></div>
+                <div class="hsrow"><span class="hsnum">178</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">179</span><span class="hssign"> </span><span class="hscode">        return $this-&gt;describe($key)['backend'] ?? self::DEFAULT_BACKEND;</span></div>
+                <div class="hsrow"><span class="hsnum">180</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+              </div>
+              <div class="hsbar none"></div>
+            </div>
+          </div>
+          <div class="hspin">
+            <div class="hsbar"><div class="hsgroove"><span class="hsknob" style="left: 0; width: 41%;"></span></div></div>
+            <div class="hsbar"><div class="hsgroove"><span class="hsknob" style="left: 0; width: 29%;"></span></div></div>
+          </div>
+        </div>
+        <div class="hscap">
+          <b>Horní ve svém pásu, dolní na hraně</b>
+          <span class="warn">na hraně okna je vždycky nejvýš jeden — ten, který k ní dosahuje</span>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="tag"><i></i>Další blok pruh nemá</div>
+        <div class="frame flat hsview">
+          <div class="fhead">
+            <span>▾</span>
+            <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+            <span class="sp"></span>
+            <span style="font-family: var(--mono); font-size: 11px; color: var(--ink-3);">
+              @@ -96,24 +96,28 @@
+            </span>
+          </div>
+          <div class="hsblock">
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">116</span><span class="hssign"> </span><span class="hscode">    private function backendOf(string $key): string</span></div>
+                <div class="hsrow"><span class="hsnum">117</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">118</span><span class="hssign"> </span><span class="hscode">        return $this-&gt;describe()['backend'] ?? self::DEFAULT_BACKEND;</span></div>
+                <div class="hsrow"><span class="hsnum">119</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">120</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">121</span><span class="hssign"> </span><span class="hscode">    public function describe(): array</span></div>
+              </div>
+              <div class="hsbar"><div class="hsgroove"><span class="hsknob" style="left: 0; width: 34%;"></span></div></div>
+            </div>
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow"><span class="hsnum">118</span><span class="hssign"> </span><span class="hscode">    private function backendOf(string $key): string</span></div>
+                <div class="hsrow"><span class="hsnum">119</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">120</span><span class="hssign"> </span><span class="hscode">        return $this-&gt;describe()['backend'] ?? self::DEFAULT_BACKEND;</span></div>
+                <div class="hsrow"><span class="hsnum">121</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">122</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">123</span><span class="hssign"> </span><span class="hscode">    public function describe(): array</span></div>
+              </div>
+              <div class="hsbar"><div class="hsgroove"><span class="hsknob" style="left: 0; width: 27%;"></span></div></div>
+            </div>
+          </div>
+<div class="hshunk">@@ -178,13 +180,13 @@ final class SecretClient</div>
+          <div class="hsblock">
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow del"><span class="hsnum">180</span><span class="hssign">−</span><span class="hscode">    private $n = 3;</span></div>
+                <div class="hsrow"><span class="hsnum">181</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">182</span><span class="hssign"> </span><span class="hscode">    function up()</span></div>
+                <div class="hsrow"><span class="hsnum">183</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">184</span><span class="hssign"> </span><span class="hscode">        $this-&gt;n++;</span></div>
+                <div class="hsrow"><span class="hsnum">185</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">186</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">187</span><span class="hssign"> </span><span class="hscode">    function ok()</span></div>
+                <div class="hsrow"><span class="hsnum">188</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">189</span><span class="hssign"> </span><span class="hscode">        return true;</span></div>
+                <div class="hsrow"><span class="hsnum">190</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">191</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">192</span><span class="hssign"> </span><span class="hscode">    function id()</span></div>
+                <div class="hsrow"><span class="hsnum">193</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">194</span><span class="hssign"> </span><span class="hscode">        return $id;</span></div>
+                <div class="hsrow"><span class="hsnum">195</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">196</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">197</span><span class="hssign"> </span><span class="hscode">    function n()</span></div>
+                <div class="hsrow"><span class="hsnum">198</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">199</span><span class="hssign"> </span><span class="hscode">        return $n;</span></div>
+                <div class="hsrow"><span class="hsnum">200</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">201</span><span class="hssign"> </span><span class="hscode">}</span></div>
+              </div>
+              <div class="hsbar none"></div>
+            </div>
+            <div class="hsside">
+              <div class="hsrows">
+                <div class="hsrow add"><span class="hsnum">182</span><span class="hssign">+</span><span class="hscode">    private $n = 5;</span></div>
+                <div class="hsrow"><span class="hsnum">183</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">184</span><span class="hssign"> </span><span class="hscode">    function up()</span></div>
+                <div class="hsrow"><span class="hsnum">185</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">186</span><span class="hssign"> </span><span class="hscode">        $this-&gt;n++;</span></div>
+                <div class="hsrow"><span class="hsnum">187</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">188</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">189</span><span class="hssign"> </span><span class="hscode">    function ok()</span></div>
+                <div class="hsrow"><span class="hsnum">190</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">191</span><span class="hssign"> </span><span class="hscode">        return true;</span></div>
+                <div class="hsrow"><span class="hsnum">192</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">193</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">194</span><span class="hssign"> </span><span class="hscode">    function id()</span></div>
+                <div class="hsrow"><span class="hsnum">195</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">196</span><span class="hssign"> </span><span class="hscode">        return $id;</span></div>
+                <div class="hsrow"><span class="hsnum">197</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">198</span><span class="hssign"> </span><span class="hscode"></span></div>
+                <div class="hsrow"><span class="hsnum">199</span><span class="hssign"> </span><span class="hscode">    function n()</span></div>
+                <div class="hsrow"><span class="hsnum">200</span><span class="hssign"> </span><span class="hscode">    {</span></div>
+                <div class="hsrow"><span class="hsnum">201</span><span class="hssign"> </span><span class="hscode">        return $n;</span></div>
+                <div class="hsrow"><span class="hsnum">202</span><span class="hssign"> </span><span class="hscode">    }</span></div>
+                <div class="hsrow"><span class="hsnum">203</span><span class="hssign"> </span><span class="hscode">}</span></div>
+              </div>
+              <div class="hsbar none"></div>
+            </div>
+          </div>
+        </div>
+        <div class="hscap">
+          <b>Na hraně okna nic</b> — a nic se tam ani nezjevilo
+          <span class="warn">dolní blok se do půlky vejde, takže pruh nemá (autohide ze sekce 29)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame flat" style="overflow-x: auto; margin-top: 18px;">
+      <table class="impact">
+        <thead>
+          <tr><th>Co se změřilo</th><th>Kolik</th><th>Co z toho pro návrh plyne</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="new-file">bloků, které přes výřez přetečou</td>
+            <td><span class="pill find">9,6 %</span></td>
+            <td>33 ze <b>343 bloků</b> na 151 souborech ze 48 mergnutých PR v šesti veřejných
+              repozitářích (párování i strop 60 řádků podle <code>DiffRow.paired</code> a
+              <code>blockedPairs</code>). Výřez <b>448 b</b> — změřeno na <code>.work</code>
+              v sekci 03. Při 640 b je to 5,2 %, při 400 b 11,7 %; <b>menší okno tedy bolí víc</b>.</td>
+          </tr>
+          <tr>
+            <td>jak hluboko pás pod hranou leží</td>
+            <td><span class="pill crit">229 b</span></td>
+            <td>Medián u těch bloků, které se nevejdou; p90 i nejvíc <b>533 b</b>. To je ta cesta
+              tam a zpátky — u p90 bloku přes celý výřez a ještě kus.</td>
+          </tr>
+          <tr>
+            <td>řádky a výška bloku</td>
+            <td><span class="pill idle">medián 9</span></td>
+            <td>p90 <b>26</b>, p99 <b>60</b> (strop <code>DiffBlock.maxLines</code>). Výška
+              <b>165 b</b> medián, p90 <b>437 b</b>, strop <b>981 b</b> — řádek je <b>16 b</b>
+              (<code>defaultLineHeight</code> monospace 13 b, změřeno) a svislý inset 2 × 2 b.
+              <b>Devět z deseti bloků se tedy nemění vůbec</b>.</td>
+          </tr>
+          <tr>
+            <td class="new-file">prvků navíc na blok</td>
+            <td><span class="pill idle">nula</span></td>
+            <td>Připíchnutý pruh je <b>tentýž <code>NSScroller</code></b>, který tam sekce 29
+              dává — mění se mu <code>frame.origin.y</code>, ne počet. Změřeno: půlka bloku má
+              dnes <b>4 views</b> (plocha, clip view, dokument, scroller), blok tedy 9 se
+              separátorem. Proto to taky nemůže být vlastní tenká lišta: knob, tažení, klik do
+              drážky i čtečka obrazovky jsou v <code>NSScroller</code> hotové (poznámka 44).</td>
+          </tr>
+          <tr>
+            <td>pozorovatelů na viditelný blok</td>
+            <td><span class="pill find">jeden</span></td>
+            <td>Na <code>boundsDidChange</code> <b>vnějšího</b> clip view — jeden na blok, ne na
+              půlku. Obsluha je aritmetika a <b>dva zápisy <code>frame.origin.y</code></b>:
+              <b>nula</b> zápisů do observable stavu, <b>nula</b> přerolování, nula zneplatnění
+              SwiftUI grafu. Sdílený posun na celý soubor, který sekce 29 zamítla, stál dva
+              pozorovatele na blok <b>a</b> přerolování všech viditelných bloků.</td>
+          </tr>
+          <tr>
+            <td class="new-file">co pruh zakryje</td>
+            <td><span class="pill crit">17 b</span></td>
+            <td><b>1,06 řádku</b> u řádku 16 b — tatáž hodnota jako pás v sekci 29.
+              Prakticky ten řádek, který hrana okna stejně řeže, a v průměru půlku toho nad ním.
+              Alternativa — ubrat výřezu 17 b, dokud dlouhý
+              blok sahá na hranu — <b>zamítnuta</b>: inset, který přichází a odchází, hýbe
+              veškerým kódem pod kurzorem.</td>
+          </tr>
+          <tr>
+            <td>vodorovné rolování gestem</td>
+            <td><span class="pill stale">nedoměřeno</span></td>
+            <td>Plocha posun <b>přijme</b>: <code>horizontalScrollElasticity = .automatic</code>,
+              klasické kolečko o 3 řádky ji posune o <b>30 b</b> a <b>⇧</b> + svislé
+              kolečko taky (systém ho doručí jako <code>scrollingDeltaX</code>). <b>Skutečné
+              gesto se ověřit nedá</b> — viz poznámka 51.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">46</span>
+        <span class="body">
+          <b>Pruh neopouští svůj blok</b>
+          <span>Sedí mezi svislými okraji svého bloku a dělí ho tatáž linka, která dělí půlky, takže
+          z obrázku je vidět, který blok řídí, bez popisku a bez zvýraznění. To je celý důvod,
+          proč se nepřišpendlil k <b>výřezu</b> jako chrom okna: takový pruh by musel říct, komu
+          patří, a při každém přejezdu hranice mezi bloky by mu <b>tiše přeskočil význam</b>.
+          Rozhodnutí sekce 29 — <b>pruh je na blok a na půlku</b> — tím zůstává nedotčené.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">47</span>
+        <span class="body">
+          <b>Jedno pravidlo, ne dva stavy</b>
+          <span><code>y = min(vlastní pás, hrana výřezu − 17)</code> je <b>spojitá</b> funkce posunu,
+          takže se nikde neskočí: dokud blok hranu přesahuje, pruh na ní stojí a jeho poloha
+          v okně se nemění; od chvíle, kdy pás do výřezu vjede, jde nahoru <b>rychlostí kódu</b>.
+          Přechod není animace, kterou by bylo potřeba naprogramovat — vyjde z toho minima sám.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">48</span>
+        <span class="body">
+          <b>Pás zůstává rezervovaný</b>
+          <span>Výška bloku se posunem <b>nemění</b>, a to je podmínka, ne detail: měnit ji znamená
+          přerovnat líný seznam při každém snímku. Rezervace těch 17 b zůstává tam, kde ji sekce
+          29 nechala (u dolní hrany bloku, ve <code>height(forWidth:)</code>); připíchnutím se mění
+          jen to, <b>kde se scroller kreslí</b>, ne kolik místa si blok bere.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">49</span>
+        <span class="body">
+          <b>Zakrývá 17 bodů kódu, a je to pojmenované</b>
+          <span>Když pruh na hraně okna stojí, kreslí se <b>přes</b> kód — jinak by musel mít vlastní
+          místo, a to by znamenalo měnit výšku výřezu podle toho, co je v něm zrovna vidět.
+          Zakrytý je ten řádek, který hrana okna stejně řeže, plus asi polovina toho nad ním
+          (17 b proti řádku 16 b). Podklad je proto <b>neprůhledný</b>: průhledný pruh by tvrdil,
+          že se nic neztrácí, a přes barevná pozadí přidaných řádků by se navíc složil jinak.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">50</span>
+        <span class="body">
+          <b>Nula prvků navíc, jeden pozorovatel na blok</b>
+          <span>Připíchnutí je <b>jiná poloha téhož scrolleru</b>, takže se nic nepřidává — a to je
+          důvod, proč se to smí udělat: násobení prvků v diffu už dvakrát položilo okno (#252).
+          Pozorovatel je <b>jeden na blok</b> (na <code>boundsDidChange</code> vnějšího clip view)
+          a jeho obsluha je aritmetika plus dva zápisy <code>frame.origin.y</code>. Poloha
+          <b>nesmí</b> jít do observable stavu — to je tatáž past jako u polohy bloku (#252) a
+          u hoveru (#358): zpětná vazba z každého snímku, která zapisuje do stavu, zavře kolo.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">51</span>
+        <span class="body">
+          <b>Gestem to možná jde už dnes — a co z toho je změřené</b>
+          <span>Změřené na sondě: plocha bloku posun <b>přijímá</b>
+          (<code>horizontalScrollElasticity = .automatic</code>,
+          <code>usesPredominantAxisScrolling = true</code>, obojí výchozí a nikdo je nemění),
+          klasické kolečko o 3 řádky ji posune o <b>30 b</b> a <b>⇧</b> + svislé kolečko
+          taky. <b>Skutečné trackpadové gesto ověřit nejde</b>: událost s fází pošle
+          <code>scrollWheel(with:)</code> do <code>trackGestureScrollWithEvent:</code>, tedy do
+          smyčky, která čeká na <b>opravdové</b> události — sonda v ní stála 2,5 minuty
+          (přečteno <code>sample</code>m) — a syntetické <code>CGEvent</code> se do aplikace
+          nedostanou vůbec. <b>Zbývá to na mě, ať to zkusím.</b> I kdyby gesto fungovalo, pruh
+          svoje místo má: říká, <b>kde v řádku jsem a kolik ještě zbývá</b>, což ze samotného
+          posunu vidět není. A celé to stojí na tom, že je vůbec co posouvat — na <code>main</code>
+          dokument nikdy širší než okýnko nebyl, to spravuje až implementace sekce 29.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">52</span>
+        <span class="body">
+          <b>Kdy se nekreslí vůbec</b>
+          <span>Autohide ze sekce 29 platí beze změny: blok, který se vejde, nemá pruh ani jeho pás
+          (změřeno — scroller je <code>isHidden</code> a zábor výšky je <b>nula</b>). Že to
+          neznamená poskakující prvek, drží pravidlo z poznámky 46: pruh <b>nikdy nemění</b>
+          vlastníka, takže při přejezdu z bloku s pruhem na blok bez pruhu <b>nic nezmizí na
+          místě</b> — pruh odjede nahoru se svým blokem a další blok přijede zdola takový, jaký
+          je. Na hraně okna proto někdy nic není, a to je správná odpověď, ne chybějící prvek.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">53</span>
+        <span class="body">
+          <b>Jediná heuristika: tři řádky</b>
+          <span>Když je z bloku u hrany okna vidět <b>méně než tři řádky</b>, pruh se nepřišpendlí a
+          zůstane ve svém pásu (tedy mimo obrazovku). Bez toho by pruh zakryl polovinu toho
+          mála, co z bloku vidět je, a popisoval by kód, který není čím přečíst. Tři je odhad,
+          ne měření, a je to <b>jediné</b> číslo v téhle sekci, které měřením podložené není —
+          proto je vypsané tady.</span>
         </span>
       </div>
     </div>
