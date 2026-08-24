@@ -4083,3 +4083,57 @@ jedním, protože overlay se hlásí jako viditelný a nekreslí nic. Ze druhéh
 zpátky **244 tvrzení** (u šrafované půlky `10000084.0 <= 94.0`) a bez zahození zapamatované šířky
 při změně obsahu **7 tvrzení** na recyklaci kontejneru — krátký blok tam zdědí po dlouhém 1701,2
 místo 102,0.
+
+### #428 — vodorovný pruh jede s výřezem
+
+Pruh z #422 sedí na dolní hraně bloku, a ta je u dlouhého bloku pod dolní hranou okna: uživatelovými
+slovy *„když je ten soubor se změnou moc dlouhý a já chci zkontrolovat něco nahoře, tak musím dolů…
+posunout a nahoru“*. Změřeno, koho to potká — přes viditelnou část diffu (448 b) přeteče **9,6 %**
+bloků (33 ze 343 ze 48 mergnutých PR) a jejich pás leží pod hranou okna o **229 b** (medián, p90
+i nejvíc 533); v menším okně (400 b) je to 11,7 %. Zakresleno v **sekci 30** návrhu, vydáno tak, jak
+to zákres kreslí.
+
+**Celé pravidlo je jedna věta:** `y = min(vlastní pás, hrana výřezu − 17)`, tedy jedna spojitá funkce
+posunu, ne dva stavy. Dokud blok hranu výřezu přesahuje, stojí pruh **na ní** a jeho poloha v okně se
+rolováním nemění; jak se pás bloku do výřezu dostane, pruh v něm přistane a jde dál rychlostí kódu.
+Přechod není animace — vyjde z toho minima sám. Rozhodnutí je čistá funkce
+(`Policy.pinnedScrollerY`), takže se dá projet vyčerpávajícím výčtem i průjezdem po jednom bodu.
+
+**Otázka „komu pruh patří“ se rozpustila, nerozhodovala se.** Pruh nikdy neopustí svůj blok, takže na
+hraně výřezu může stát nejvýš jeden — ten, který k ní dosahuje —, a blok, jehož pás už je vidět, má
+pruh ve svém pásu. Rozhodnutí #422 (pruh na blok a na půlku) zůstalo nedotčené.
+
+**Prvků navíc nula, pozorovatelů jeden na blok.** Je to tentýž `NSScroller`, jen jinde nakreslený:
+mění se mu `frame.origin.y`. Pozorovatel sedí na `boundsDidChange` **vnějšího** clip view (půlky se
+při rolování nehýbou, hýbe se výřez) a jeho obsluha je aritmetika a dva zápisy rámců — nula zápisů do
+observable stavu, protože zpětná vazba z každého snímku, která píše do stavu, zavírá kolo (#252,
+#358). Změřeno: dvacet posunů po deseti bodech nepřidalo **ani jeden** průchod tělem, `updateNSView`,
+nasazení bloku ani sazbu.
+
+**Souřadnice se počítají v ploše sloupce**, a to je celý trik: `NSScrollView` **je flipped**
+(změřeno) a plocha je vysoká jako celý blok, takže její `bounds` je rámec bloku s nulou na horní
+hraně — přímo soustava, ve které se výsledek zapisuje scrolleru do rámce. Zapisuje ho **jedno
+místo** a znovu se uplatní v `tile()`: rozvržení plochy scroller vrací na dolní hranu (změřeno,
+z 183 na 283), takže zápis odjinud by po první změně šířky okna zmizel.
+
+**Výška bloku se posunem nemění** — rezervace 17 b zůstala tam, kde ji #422 nechalo. Alternativa
+„ubrat výřezu 17 b, dokud dlouhý blok sahá na hranu“ je zamítnutá v zákresu: inset, který přichází
+a odchází, hýbe veškerým kódem pod kurzorem. Připíchnutý pruh proto kód **zakrývá** (17 b = 1,06
+řádku, prakticky ten řádek, který hrana okna stejně řeže).
+
+**Jediná heuristika je pojmenovaná:** pod třemi viditelnými řádky bloku se pruh nepřišpendlí. Je to
+jediné číslo v téhle změně bez měřidla a je vypsané i v zákresu (poznámka 53); druhé se k němu
+nepřidávalo. Autohide zůstal beze změny, takže na hraně okna někdy nic nestojí — a je to správná
+odpověď, ne chybějící prvek, protože pruh nemění vlastníka.
+
+**Kresba pruhu se v harnessu ověřit nedá a je to změřené, ne odhad**: legacy scroller se do
+`cacheDisplay(in:to:)` nekreslí (nad červeným dokumentem vyjde pod pruhem tatáž barva jako vedle
+něj) a `CGWindowListCreateImage` na macOS 26 není. Testům proto zůstala čísla — poloha scrolleru
+v okně, výška bloku, počty průchodů —, a jak to při rolování vypadá, posoudil člověk na běžícím okně.
+Z toho jedna otevřená domněnka: **neprůhledný podklad** pruhu (poznámka 49) kreslí legacy drážka
+sama, a kdyby přes ni kód prosvítal, je to jeden řádek na `layer` toho scrolleru, ne nový prvek.
+
+Testů **3880** (12 nových: 8 nad čistou funkcí, 4 nad scénou s `ScrollView`em). Vloženými regresemi
+ověřené tři věci a každá padá jinde: bez `min(…)` padne 400 tvrzení v průjezdu, 28 v okenní scéně
+a *„blok celý vidět“* (pruh vyjede pod blok, `1073 <= 683`); bez rezervace pásu 114 tvrzení o výšce;
+bez uplatnění polohy v `tile()` 29 tvrzení o hraně výřezu.

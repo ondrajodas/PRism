@@ -36,6 +36,42 @@ final class DiffPairScrollView: NSScrollView {
         set { super.scrollerStyle = .legacy }
     }
 
+    /// Kde má v téhle ploše stát vodorovný pruh (#428) — `nil` je „tam, kam ho dá AppKit“, tedy na
+    /// dolní hraně bloku jako do #422 včetně.
+    ///
+    /// **Je to tentýž `NSScroller`, jen jinde nakreslený**: mění se mu `frame.origin.y` a nic víc.
+    /// Vlastní tenká lišta je zamítnutá — knob, tažení, klik do drážky i čtečka obrazovky jsou
+    /// v `NSScroller` hotové a druhá drážka pro jeden posun by lhala o tom, kolik jich je.
+    ///
+    /// **Není to observable stav** a být nesmí: hodnota se mění při každém posunu výřezu, takže by
+    /// z ní byl layout bloku při každém snímku (tatáž past jako u polohy bloku v #252 a u hoveru
+    /// v #358). Je to obyčejná vlastnost `NSView`u, kterou nikdo nesleduje.
+    var pinnedScrollerY: Double? {
+        didSet {
+            guard pinnedScrollerY != oldValue else { return }
+            // Zpátky na `nil` znamená „vrať to, kam to patří“ — a to umí AppKit sám. Bez tohohle by
+            // pruh zůstal viset tam, kde byl naposledy přišpendlený.
+            if pinnedScrollerY == nil { tile() } else { placeScroller() }
+        }
+    }
+
+    /// **Rozvržení plochy scroller vrací na dolní hranu**, takže se poloha musí zapsat znovu právě
+    /// tady (změřeno: `tile()` i rozvržení nadřazeného view ho vrátí z 183 na 283). Je to jediné
+    /// místo v aplikaci, které rámec scrolleru zapisuje — kdyby si ho psal i volající, rozešlo by se
+    /// to při první změně šířky okna.
+    override func tile() {
+        super.tile()
+        placeScroller()
+    }
+
+    /// Zápis rámce, **jen když se poloha doopravdy liší**. Redundantní zápis by nebyl chyba kresby,
+    /// ale je to zpětná vazba z každého snímku — a ta se v tomhle repu nepíše bezpodmínečně (#358).
+    private func placeScroller() {
+        guard let scroller = horizontalScroller, let y = pinnedScrollerY else { return }
+        guard Double(scroller.frame.origin.y) != y else { return }
+        scroller.frame.origin.y = y
+    }
+
     /// Výška pásu, který si legacy scroller bere z bloku. **Je to výška, ne šířka** — vodorovný
     /// scroller sloupec nezúží, takže znaků na stranu je stejně jako bez pruhu (změřeno u #422:
     /// 22 ve výchozím okně s otevřenými panely, před i po).
