@@ -9,11 +9,18 @@ extension Policy {
     /// na něm musí být pořád totéž a ve stejném pořadí; a to se dá otestovat jedině tehdy, když
     /// skládání nezávisí na hodinách, na souboru ani na runloopu.
     ///
-    /// **Nula se nezapisuje** (`nil`): mezera v záznamu znamená „aplikace nic nedělala“, což je
-    /// informace. Kdyby se psal řádek každou sekundu, hořící okno by se v tichých řádcích utopilo
-    /// a soubor by rostl i nad nečinnou aplikací.
+    /// **Klid se po sekundách nezapisuje** (`nil`): úsek, ve kterém se nepřeložilo ani jedno tělo
+    /// a nehořelo CPU, jde do minutového souhrnu (`diagnosticQuietLine`), ne na vlastní řádek.
     ///
-    /// **Do „nic“ ale nepatří hořící CPU** (#391, změna proti #386). Zaseknuté kolo z #361 nemá ani
+    /// **Změna proti #391** (#412; do té doby rozhodovalo i „aspoň jedno kolo runloopu“). Změřeno
+    /// nad skutečným záznamem z provozu (985 754 B, 11,5 h, tři sezení): takových úseků bylo
+    /// **9 279 z 10 077**, tedy 89 % hlavních řádků a 60 % objemu souboru — a **ani k jednomu**
+    /// z nich nebyla příloha o grafu, takže se folding nemá čím dotknout toho, na co je záznam
+    /// (příloha se váže na hlavní řádek úseku). Nečinné okno má 1–4 kola a jednotky milisekund CPU
+    /// za sekundu, takže „kolo runloopu“ neodlišovalo práci od spánku; odlišuje ji **průchod tělem
+    /// nebo hoření**. Kola se přitom neztrácejí — sečtená jsou v tom souhrnu.
+    ///
+    /// **Do „klidu“ ale nepatří hořící CPU** (#391, změna proti #386). Zaseknuté kolo z #361 nemá ani
     /// kola runloopu, ani průchody tělem — hlavní vlákno se z transakce nevrátí, takže obojí je
     /// nula a přesně ten stav by se se starým pravidlem nezapsal. Rozhoduje proto ještě CPU:
     /// nad `diagnosticBurnFloor` se řádek napíše, i když je zbytek nulový. Nečinná aplikace tím nic
@@ -41,7 +48,7 @@ extension Policy {
         passes: [String: Int]
     ) -> String? {
         let burns = cpu >= elapsed * diagnosticBurnFloor
-        guard cycles > 0 || !passes.isEmpty || burns else { return nil }
+        guard !passes.isEmpty || burns else { return nil }
         var head = String(
             format: "%@ za %.2f s: %d kol runloopu, %.3f s CPU",
             stamp(of: moment, in: zone),
@@ -66,6 +73,47 @@ extension Policy {
     /// místa a hranice nemusí být přesná. Vyjmenovaná ale být musí, jinak by se soubor plnil i nad
     /// aplikací, která spí.
     static let diagnosticBurnFloor = 0.05
+
+    /// Jak dlouhý klid se sráží do jednoho souhrnu (#412).
+    ///
+    /// Minuta je z měření na skutečném záznamu: klidných úseků je 89 % hlavních řádků, takže
+    /// minutový souhrn z nich udělá **šedesátinu** objemu — a sezení se tím vejde do stropu na
+    /// týdny místo hodin. Delší okno už nic podstatného nešetří a zhoršuje to jediné, co souhrn
+    /// umí říct: **kdy** ten klid byl.
+    static let diagnosticQuietInterval: TimeInterval = 60
+
+    /// Souhrn klidu za `diagnosticQuietInterval` (#412) — **místo** řádků po sekundách, ne k nim.
+    ///
+    /// Souhrn se píše vždycky, i když v něm nic zajímavého není, a je to schválně: **mezera
+    /// v záznamu se nesmí dát zaměnit s vypnutou diagnostikou.** Do #412 mezera znamenala „nic se
+    /// nedělo“, což je informace jen tehdy, když se dá věřit, že nástroj běžel — a právě to se
+    /// u #412 ukázalo jako nepravda (soubor narazil na strop a dalších 42 hodin mlčel z úplně
+    /// jiného důvodu). Souhrn je tedy zároveň puls: dokud přichází, záznam žije.
+    ///
+    /// **`bez kola runloopu` je jediné, co souhrn říká navíc** proti sečtení řádků: úsek s nulou
+    /// kol a bez hoření je hlavní vlákno, které se zaseklo, ale nespaluje CPU (typicky blokující
+    /// I/O) — a to jsou úseky, které do #412 v záznamu nebyly vůbec. Netvrdí to „záchvat“, stejně
+    /// jako věta o runloopu v `diagnosticLine`; je to počet, ne verdikt. Nad skutečným záznamem
+    /// z provozu vyšel **nula z 9 279**, takže to není mez, která by se plnila sama.
+    static func diagnosticQuietLine(
+        at moment: Date,
+        in zone: TimeZone,
+        over elapsed: TimeInterval,
+        sections: Int,
+        cycles: Int,
+        cpu: TimeInterval,
+        stalled: Int
+    ) -> String {
+        String(
+            format: "%@ za %.2f s klid: %d úseků, %d kol runloopu, %.3f s CPU, %d bez kola runloopu",
+            stamp(of: moment, in: zone),
+            elapsed,
+            sections,
+            cycles,
+            cpu,
+            stalled
+        )
+    }
 
     /// Věta, kterou diagnostika **uzavře** soubor, až narazí na strop (#361).
     ///
@@ -110,7 +158,10 @@ extension Policy {
         return "\(stamp(of: moment, in: zone)) \(state)"
     }
 
-    private static func stamp(of moment: Date, in zone: TimeZone) -> String {
+    /// Razítko na začátku každého řádku. **Internal, ne `private`**: od #412 ho skládají i řádky
+    /// o rotaci záznamu (`DiagnosticsArchiving.swift`) a dvě různá razítka v jednom souboru jsou
+    /// zrovna ta věc, kterou u čtení nikdo nečeká.
+    static func stamp(of moment: Date, in zone: TimeZone) -> String {
         moment.formatted(Date.ISO8601FormatStyle(timeZone: zone))
     }
 }

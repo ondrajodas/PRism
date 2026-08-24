@@ -86,10 +86,26 @@ struct DiagnosticLineTests {
         )?.hasSuffix("HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU") == true)
     }
 
-    /// Kolo bez jediného průchodu tělem **je** informace: runloop se probouzí, ale nic se
-    /// nepřekresluje. Takový řádek se proto píše, jen bez sekce `body:`.
-    @Test("Kolo bez průchodů tělem se zapíše bez sekce body")
-    func cyclesWithoutBodies() {
+    /// Kolo bez průchodu tělem a bez hoření je **klid** (#412, změna proti #391): kola runloopu
+    /// nečinné okno má taky (1–4 za sekundu), takže „aspoň jedno kolo“ neodlišovalo práci od spánku
+    /// — a 89 % hlavních řádků ve skutečném záznamu bylo právě tohle. Kola se neztrácejí, sečtená
+    /// jsou v minutovém souhrnu.
+    @Test("Kolo bez průchodů tělem je klid, vlastní řádek nedostane")
+    func cyclesWithoutBodiesAreQuiet() {
+        #expect(Policy.diagnosticLine(
+            at: moment,
+            in: .gmt,
+            over: 1,
+            cycles: 7,
+            cpu: 0.014,
+            passes: [:]
+        ) == nil)
+    }
+
+    /// Ale **hoření s koly řádek dostane**, jen bez sekce `body:` a bez věty o runloopu: drahá práce
+    /// na hlavním vlákně je pořád to, co se hledá.
+    @Test("Hoření s koly a bez průchodů tělem se zapíše")
+    func burningWithCyclesIsWritten() {
         #expect(Policy.diagnosticLine(
             at: moment,
             in: .gmt,
@@ -98,6 +114,40 @@ struct DiagnosticLineTests {
             cpu: 0.125,
             passes: [:]
         ) == "2025-08-19T10:40:00Z za 1.00 s: 7 kol runloopu, 0.125 s CPU")
+    }
+
+    /// **Klid se z záznamu neztratí, jen se sečte.** Souhrn je zároveň puls: dokud přichází, záznam
+    /// žije — a to je věc, kterou mezera v souboru neuměla (u #412 mlčel 42 hodin z úplně jiného
+    /// důvodu než „nic se nedělo“).
+    @Test("Souhrn klidu nese úseky, kola, CPU i ty bez kola")
+    func quietSummary() {
+        #expect(Policy.diagnosticQuietLine(
+            at: moment,
+            in: .gmt,
+            over: 60.04,
+            sections: 60,
+            cycles: 118,
+            cpu: 0.412,
+            stalled: 0
+        ) == "2025-08-19T10:40:00Z za 60.04 s klid: 60 úseků, 118 kol runloopu, 0.412 s CPU,"
+            + " 0 bez kola runloopu")
+    }
+
+    /// **`bez kola runloopu` je to jediné, co souhrn říká navíc**: úsek s nulou kol, ve kterém se
+    /// nehořelo, je hlavní vlákno zaseknuté bez spalování CPU — a takové úseky do #412 v záznamu
+    /// nebyly vůbec.
+    @Test("Zaseknuté úseky bez hoření souhrn spočítá")
+    func quietSummaryCountsStalledSections() {
+        let line = Policy.diagnosticQuietLine(
+            at: moment,
+            in: .gmt,
+            over: 60,
+            sections: 60,
+            cycles: 12,
+            cpu: 0.03,
+            stalled: 48
+        )
+        #expect(line.hasSuffix("48 bez kola runloopu"))
     }
 
     /// Řazení je podle **počtu**, ne podle jména: hledá se ten typ, který se překresluje nejvíc.

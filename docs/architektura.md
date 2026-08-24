@@ -2245,30 +2245,79 @@ který prostě přestane růst, se nedá odlišit od aplikace, která přestala 
 řádek napíše. Chyba zápisu jde na stderr a sezení **zavře**; `try?` by udělal soubor, který mlčí ze
 dvou různých důvodů.
 
-**Že strop platí na soubor, a ne na sezení, je nález Copilota na #386** a je to podmínka, ne detail:
-soubor se přípisuje napříč sezeními, takže s počitadlem od nuly by každý start přidal dalších 8 MB
-a mez by nedělala nic. `written` se proto **seedne velikostí souboru** (`offset()` po `seekToEnd()`
-na tomtéž deskriptoru, do kterého se zapisuje). Sezení nad **už plným** souborem pak nezapíše nic
-a `append` vrátí `false` hned u hlavičky — limitní řádek v souboru už je od toho sezení, které na
-strop narazilo. Je na to test ověřený **vloženou regresí**: s počitadlem od nuly spadne na tom, že
-druhé sezení hlavičku zapsalo.
+**Strop platí na soubor, ne na sezení** (nález Copilota na #386) — a od #412 z toho neplyne, že by
+sezení mělo míň místa než jeho předchůdce: soubor se při startu **rotuje**, takže je prázdný a strop
+je celý pro tohle sezení. `written` se pořád **seedne velikostí souboru** (`offset()` po
+`seekToEnd()` na tomtéž deskriptoru, do kterého se zapisuje), protože bez rotace — v sondách,
+v testech a v případě, že se rotace nepovede — je to ta jediná mez, která drží. Sezení nad už plným
+souborem **bez rotace** nezapíše nic a `append` vrátí `false` hned u hlavičky; je na to test ověřený
+**vloženou regresí** (s počitadlem od nuly spadne na tom, že druhé sezení hlavičku zapsalo).
 
-**Z toho plyne druhá polovina, taky nález z #386: `start()` se láme na hlavičce.** Když se nezapsala,
-`current` zůstane `nil`, vrátí se `false` a důvod jde na stderr — jinak by „diagnostika je zapnutá“
-a „nic se nezapisuje“ splynuly, což je zrovna to, co banner v `bin/run.sh` slibuje, že nenastane.
-Skript to navíc kontroluje **dřív, než aplikaci spustí** (`stat -f%z` nad logem), protože na stderr
-se při spuštění přes `open` nikdo nedívá.
+**Rotace při startu je oprava #412 a byla to podmínka, ne pohodlí.** Naměřeno v provozu: záznam
+narazil na strop v `2026-08-22T04:01:36` a dalších **42 hodin** aplikace běžela bez záznamu — tedy
+zrovna tu dobu, kvůli které se nástroj bere (záchvat z #361 přijde nepředvídatelně). Kořen nebyla
+velikost stropu, ale to, že se počítal **napříč sezeními**: při restartu ve 12:34 hlásil `bin/run.sh`
+4 859 815 B, takže tomu sezení zbývalo 3,5 MB, což je při jednom řádku za sekundu necelých sedm hodin
+— a restartuje se po každém mergi, tedy šestkrát denně.
+
+Drží to `DiagnosticsArchive`, a rotace sedí **uvnitř otevírání souboru** (`DiagnosticsLog`), ne
+u volajícího: kdyby ji spouštěl volající, dalo by se pořadí pokazit a log s otevřeným deskriptorem by
+po přesunu zapisoval **do archivu**, tedy do souboru, na který se nikdo nedívá. Co udělala, si
+`start()` vyzvedne z `log.rotation` a zapíše **do záznamu** hned za hlavičku sezení
+(`Policy.diagnosticsRotationLines`) — soubor, který začíná od nuly, se jinak nedá odlišit od
+aplikace, která o předchozím sezení neví.
+
+Čtyři věci na tom nejsou zjevné:
+
+- **Jméno nese čas posledního zápisu, ne čas rotace** (`diagnostics-do-2026-08-22T04-01-36.log`).
+  Sezení, které skončilo v pátek, má mít v názvu pátek i tehdy, když se aplikace spustí v pondělí.
+  Bez dvojtečky (Finder ji kreslí jako `/`) a bez posunu pásma — ten je na každém řádku uvnitř.
+- **Meze jsou dvě a každá na jinou poruchu**: 20 souborů (jinak by v cache ležely stovky skoro
+  prázdných záznamů, protože jedno spuštění se `--diagnose` je jeden) a 64 MB (jinak by dvacet plných
+  bylo 160 MB). Dvacet je ze měření: šest restartů denně, takže přes tři dny historie — a u #361 se
+  čte zpětně.
+- **Nejnovější se nemaže nikdy**, ani když sám přeteče bajtovou mez. Rotace, která zahodí to, co
+  právě uložila, je horší než strop; ten aspoň nechá v souboru napsáno, co se stalo. Ověřeno
+  vloženou regresí.
+- **Maže se jedině podle vzoru jména** (`Policy.isDiagnosticsArchive`). V kořeni cache leží nálezy,
+  drafty, `sessions.json` i `activity.json`, takže úklid podle času nebo přípony by sáhl na ně; a co
+  se nepodařilo ani přečíst (`resourceValues`), se do výčtu nedostane, tedy se ani nesmaže.
+
+**Z #386 plyne druhá polovina: `start()` se láme na hlavičce.** Když se nezapsala, `current` zůstane
+`nil`, vrátí se `false` a důvod jde na stderr — jinak by „diagnostika je zapnutá“ a „nic se
+nezapisuje“ splynuly, což je zrovna to, co banner v `bin/run.sh` slibuje, že nenastane. Totéž platí
+pro řádky o rotaci a o grafu. Skript **velikost hlásí dřív, než aplikaci spustí** (`stat -f%z` nad
+logem, plus počet uložených záznamů), protože na stderr se při spuštění přes `open` nikdo nedívá; od
+#412 už kvůli plnému souboru **nekončí `exit 1`** — soubor se odloží sám, takže by odmítnutí startu
+znamenalo mazat rukou to, co má dělat aplikace.
+
+**Klid se sráží do minutového souhrnu** (#412), místo řádku za sekundu. Změřeno nad skutečným
+záznamem z provozu (985 754 B, 11,5 h, tři sezení): úseků bez průchodu tělem a bez hoření bylo
+**9 279 z 10 077**, tedy 89 % hlavních řádků a 60 % objemu — a **ani k jednomu** z nich nestála
+příloha o grafu (0 z 2 601), takže se folding nemá čím dotknout toho, na co je záznam. Do #412
+rozhodovalo i „aspoň jedno kolo runloopu“, jenže nečinné okno má 1–4 kola za sekundu, takže to
+neodlišovalo práci od spánku; odlišuje ji **průchod tělem nebo hoření**. Co z toho plyne:
+
+- **Záchvat se pořád zapisuje po sekundách** i s náběhem — hoření klid není. Souhrn se navíc
+  zapisuje **před** tím řádkem, který klid přerušil, takže časy v souboru jdou vzestupně.
+- **Mezera v záznamu už neznamená „nic se nedělo“, protože žádná není.** Souhrn je puls: dokud
+  přichází, záznam žije. Do #412 se mezera nedala odlišit od nástroje, který se vypnul — a přesně to
+  se u #412 stalo.
+- Souhrn říká jednu věc navíc proti sečtení řádků: **kolik úseků bylo bez jediného kola runloopu**.
+  To je hlavní vlákno zaseknuté bez spalování CPU (blokující I/O) a takové úseky v záznamu do #412
+  nebyly vůbec. Nad skutečným záznamem vyšlo 0 z 9 279, takže to není mez, která se plní sama.
 
 **Omezení, které zbylo:** záznam končí s procesem, takže poslední rozepsaný úsek se nezapíše —
 soubor se plní po celých úsecích. A zaseknutou aplikaci nemá kdo zavřít jinak než rukou
 (`bin/run.sh` na Apple event nedostane odpověď, `-1712`), takže z posledního záchvatu chybí ta
-poslední sekunda.
+poslední sekunda. Od #412 k tomu patří i nasbíraný klid: z konce chybí až minuta, ve které se nic
+nedělo.
 
-Skládání řádku je čistá funkce v `Policy` (`diagnosticLine`, `diagnosticHeaderLine`,
-`diagnosticLimitLine`) — soubor se posílá dál a je jediné, co z hořícího okna zbyde, takže na něm
-musí být pořád totéž a ve stejném pořadí. Řadí se **podle počtu**, ne podle jména: hledá se ten
-typ, který se překresluje nejvíc. Pásmo času se předává, aby se dal stamp napsat v testu
-literálem.
+Skládání řádku je čistá funkce v `Policy` (`diagnosticLine`, `diagnosticQuietLine`,
+`diagnosticHeaderLine`, `diagnosticLimitLine` a rozhodnutí o rotaci v `DiagnosticsArchiving.swift`)
+— soubor se posílá dál a je jediné, co z hořícího okna zbyde, takže na něm musí být pořád totéž a ve
+stejném pořadí. Řadí se **podle počtu**, ne podle jména: hledá se ten typ, který se překresluje
+nejvíc. Pásmo času se předává, aby se dal stamp napsat v testu literálem.
 
 Instrumentované jsou zatím `ContentView`, `PullRequestDetailView`, `ConversationView`,
 `ConversationNodeView`, `ConversationEntryView`, `MarkdownText`, `DiffView` a `DiffRowView` —
