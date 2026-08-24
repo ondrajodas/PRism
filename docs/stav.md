@@ -4183,7 +4183,7 @@ kterých dvě neexistují, vrátil data prvního, `errors` ke zbytku a kód 1. T
 fixture (`pr-heads-partial.json`), protože podstatné je právě to, co `gh` udělá se stdoutem. PR, která
 neodpověděla, v mapě **není** a razítko nedostane — „nevíme“ se nesmí zapsat jako „zjištěno“.
 
-Na obrazovce se nemění nic: řádek je nakreslený od #414, jen se objeví dřív. Testů **3906**
+Na obrazovce se nemění nic: řádek je nakreslený od #414, jen se objeví dřív. Testů **3918**
 (38 nových). Vloženými regresemi ověřené dvě věci: datování okamžikem zjištění shodí `Řádek nese datum
 commitu, ne okamžik zjištění` (a s ním restartový test), dotaz po jednotlivých PR shodí `Za tik jde
 jeden dotaz, ne dotaz na každé PR` s hláškou `(gateway.headRequests.count → 3) == 1`.
