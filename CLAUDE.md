@@ -352,7 +352,8 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 
 1. **Jediná cesta ven** (od #67; do té doby tu stálo „nikdy nic neposílat na GitHub“).
    Aplikace **umí** odeslat review, od #73 se **ozvat do vlákna**, od #216 **napsat komentář
-   pod PR** a od #392 **přeštítkovat svůj PR a vyžádat na něm review** — ale jedině přes
+   pod PR**, od #392 **přeštítkovat svůj PR a vyžádat na něm review** a od #413 **založit label,
+   který repozitář ještě nezná** — ale jedině přes
    `ReviewPublishing`, jedině na výslovný pokyn člověka a jedině tam, kde se to **v nastavení
    povolilo**. Pravidlo se skládá z šesti věcí a každá z nich je kontrolovatelná:
 
@@ -366,19 +367,33 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
       odjinud než z jednoho místa.
 
       **Od #333 je na to test, ne jen tenhle grep** (`SingleWayOutTests`): čte zdrojáky v `App/`
-      a tvrdí právě těch šest souborů, šest metod protokolu a že soubory zadání pro agenta nezná
+      a tvrdí právě těch šest souborů, **sedm** metod protokolu a že soubory zadání pro agenta nezná
       publisher, payload, API ani podproces. Komentáře se u toho zahazují stejně jako v grepu
       (`grep -vE ':[0-9]+: *//'`) — o publisheru se v dokumentaci mluví na dalších čtyřech
       místech a právě ta vysvětlení podmínku drží pochopitelnou.
 
-      Protokol má **šest vyjmenovaných metod** — `submit`, `reply`, `setResolved`, `comment`,
-      `setLabels`, `requestReviewers`. Do #73 měl jednu a stálo tu, že cokoli dalšího by byla
-      druhá cesta ven; do #216 tři, do #392 čtyři.
+      Protokol má **sedm vyjmenovaných metod** — `submit`, `reply`, `setResolved`, `comment`,
+      `setLabels`, `requestReviewers`, `createLabel`. Do #73 měl jednu a stálo tu, že cokoli dalšího
+      by byla druhá cesta ven; do #216 tři, do #392 čtyři, do #413 šest.
       Rozšířilo se to pokaždé ze stejného důvodu: ozvat se kolegovi je půlka toho, kvůli čemu
       se u review přepíná do prohlížeče, a přes `GitHubGateway` to jít nesmí (bod 1). Co
       **zůstává**: výčet je krátký, vyjmenovaný na jednom místě a **každá metoda si sama ověří
       bránu z bodu 6** — proto všechny berou adresu, ze které se pozná repo. Roste-li ten výčet,
       roste to, co aplikace umí odeslat, a to má být vidět v jednom souboru.
+
+      **Založení labelu přibylo u #413 a je to první metoda, která zapisuje do repozitáře, ne do
+      PR** — vědomá změna tohohle pravidla, ne obcházení. Předchozích šest sahalo na pull request
+      nebo na diskuzi, tedy na věc vratnou jedním klikem nebo takovou, která se zavřením PR přestane
+      týkat čehokoli dalšího; **label vzniklý omylem zůstane v repu navždycky**. Rozšířilo se to
+      z téhož důvodu jako #73, #216 a #392: štítek, který v repozitáři ještě není, se jinak musí
+      založit v prohlížeči — tedy tím odskokem, kvůli kterému #392 vzniklo. Nevratnost se vyvažuje
+      **potvrzením na druhé obrazovce popoveru** (jméno doslova, slug repa, hex barvy, výstraha),
+      protože přepnutí existujícího labelu má #392 schválně na jedno kliknutí.
+
+      **`deleteLabel` se nepřidá**, a je to hranice, ne opomenutí: smazaný label zmizí ze **všech**
+      issues a PR, na kterých leží, a aplikace tu ztrátu neumí ani ukázat. Mazat i přebarvovat se
+      chodí na GitHub. `SingleWayOutTests` hlídají `deleteLabel` jmenovitě, vedle approve mimo
+      review, `merge`, zavření PR a milníku.
 
       **Labely a vyžádání reviewera přibyly u #392 a je to vědomá změna tohohle pravidla** — do
       té doby tady stálo, že „approve mimo review, **label** ani zavření PR tam pořád nepatří“.
@@ -394,7 +409,9 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
       a přeštítkovat frontu někoho jiného se odsud nedělá nikdy. Zašedlá s důvodem je naopak
       správná podoba tam, kde je vypnutá **brána** — to je stav, který se mění; **důvod je u ní
       napsaný v panelu, ne jen v tooltipu**, jinak je zašedlé tlačítko otázka, na kterou okno
-      neodpovídá.
+      neodpovídá. Platí to i o zakládání: `Policy.newLabelOffer` je vydá **jedině** na vlastním PR
+      s povolenou bránou, a k tomu si žádá **načtenou** nabídku (bez seznamu z repa není proti čemu
+      hledat duplikát) a jméno, které v repu ještě není.
 
       **`requestReviewers` bere lidi i týmy jedním voláním** (`reviewers` + `team_reviewers`), ne
       dvěma metodami: GitHub je bere spolu, takže dvě žádosti by znamenaly mezistav s půlkou
@@ -427,6 +444,22 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
       voláním — přidání jednoho štítku dvěma requesty by mezi nimi nechalo stav, ve kterém PR má
       půlku sady. Sadu skládá `Policy.toggledLabels`, ne publisher; dvě skládání téhož by se
       rozešla.
+
+      **Pro `Založit a přidat` tohle neplatí, a je to vědomá výjimka** (#413). `POST /repos/{repo}/labels`
+      a `PUT /issues/{n}/labels` se spojit nedají, takže mezi nimi existuje stav *label v repozitáři
+      je, na PR není*. Zamítnuté bylo **samotné `Založit`** bez přidání: atomické by bylo, ale
+      v devíti z deseti případů by po něm musel následovat klik na řádek v nabídce, tedy krok navíc
+      za čistotu, kterou vidí jen dokumentace. Výjimka se proto **platí viditelností**, ne mlčením:
+      - **selhání druhého volání nesmí vypadat jako selhání obojího** —
+        `MetadataActionState.createdNotAdded(name:error:)`, ne `failed`; věta v panelu říká oba konce
+        a je u ní důvod, proč to druhé volání spadlo;
+      - **založený label se zapíše do nabídky ještě před druhým voláním**, takže se to dorovná jedním
+        kliknutím na řádek (`loadRepositoryLabels` se podruhé neptá, bez toho zápisu by řádek do
+        restartu nebyl);
+      - **v patce potvrzení stojí `dvě volání`** — je to jediné místo, kde je ta výjimka vidět dřív,
+        než se klikne;
+      - **mezi těmi dvěma voláními se nepustí nic dalšího** (`isBusy`), takže PR nemá jak dostat
+        sadu, kterou první polovina ještě nedokončila.
    6. **Jen tam, kde se to povolilo** — `PublishScope`, složený z `Configuration`
       (`allowsPublishing` globálně i per repo). **Výchozí stav je vypnuto**, a právě to drží
       vlastnost „samo nic neodejde“: dokud si někdo výslovně neřekne o konkrétní repo nebo
@@ -450,11 +483,28 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    různých tlačítkech, u diskuze a labelu jedno pojmenované. **U vyžádání reviewera je to
    potvrzení v nadpisu nabídky** (`Vyžádat review od`), ne druhé okno: request pošle člověku
    upozornění a **odebráním se nedá vzít zpět**, takže je nad seznamem napsané, co klik udělá.
+   **Založení labelu potvrzení má** (#413) — je to jediná akce v tomhle okně, kterou aplikace neumí
+   vzít zpět, a je to **druhá obrazovka téhož popoveru, ne sheet**: potvrzuje se to, co vratné není,
+   a modální okno kvůli jednomu slovu by z panelu udělalo klikačku. **Výchozí akci to potvrzení
+   nemá** — poslední klik před něčím nevratným je klik, tak jako u #68.
    **Sloveso je v nadpisu, ne v každé položce** — u čtrnácti řádků by se opakovalo a ořezalo to
    jediné, čím se od sebe liší (pro čtečku obrazovky celá věta u položky zůstává).
-   Nabídky jsou u obojího **uzavřené** — labely z repozitáře a lidé i týmy z `assignableUsers`
+   **Uzavřený je u obojího `seznam`** — labely z repozitáře a lidé i týmy z `assignableUsers`
    a `orgs/{org}/teams` —, protože z volného textu se dá omylem vyrobit nový label, a ten už z repa
-   sám nezmizí. **Hledání to nemění**: filtruje, nezakládá, a je to podmnožina nabídky. Composer komentáře přitom **nesmí splynout s tabem `Moje review`** — proto sedí
+   sám nezmizí. **Hledání to nemění**: filtruje, nezakládá, a je to podmnožina nabídky.
+
+   **Zakládání labelu (#413) tuhle větu mění o slovo: uzavřený zůstává seznam, ne nabídka.** Řádky
+   nesou dál jen labely repozitáře a `↵` na vybraném pořád jen přepíná; založení je **akce pod
+   děličem** (mimo dosah šipky dolů — jinak by přidržená šipka na konci filtrovaného seznamu mířila
+   na nevratnou věc) se zkratkou **`⌥↵`** na poli, ne na okně: `⌘↵` má v tomhle okně paleta ⌘K
+   a potvrzení odeslání review, a #184 už jednou popsalo, že dvě tlačítka s jednou zkratkou znamenají
+   „vyhraje to zaregistrované později“. **Barvu vybírá aplikace** (`Policy.labelColor`, z jména —
+   stejné jméno dá stejnou barvu, a proto vlastní hash, ne `hashValue`, který je zasetý náhodně při
+   každém spuštění) a **posílá se vždycky**, aby náhled nelhal; vzorník je zamítnutý, protože ve
+   300bodovém popoveru je to třetí prvek, který si říká o šířku, kvůli hodnotě, na kterou se člověk
+   podívá jednou. **Přebarvit ani smazat label odsud nejde** — obojí se dělá na GitHubu.
+
+   Composer komentáře přitom **nesmí splynout s tabem `Moje review`** — proto sedí
    pod osou konverzace, ne v pravém panelu, kde ho kreslí návrh.
 2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit`, u `Bash` se uvádí
    jen `git` — a v `--disallowedTools` jsou `Bash(gh:*)` a `Bash(git push:*)`. `Skill` mezi
@@ -532,10 +582,10 @@ viz tvrdá podmínka č. 1.
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), s jakou
 velikostí se otevře sheet s kódem a kolik řádků se v něm nevešlo na šířku (#417, dva profily podle
-druhu obsahu), odkazy na zadání a soubor se zadáním pro reviewera (#120), proč zadání není celé a jméno nástroje, kterým se text issue tahá (#345), co udělat s osiřelou session po zabité aplikaci (#351), co udělat s klikem na notifikaci (#409), jestli se hover má zapsat do stavu (#358), kde v bloku diffu stojí vodorovný pruh, když blok přesahuje výřez (#428), kdo je v sekci reviewerů a s jakou odpovědí, jak se labely zalomí do dvou řádků a co se s nimi na kterém PR smí, proti kterému kódu nálezy platí, když vedle nich stojí commit, a co sedne na dotaz v nabídce panelu i odkdy v ní hledací pole vůbec je (#392, pravidlo shody sdílené s paletou ⌘K), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), jak dopadl pokus o nástroj a co se u kroku v ose kreslí (#326), jestli reviewer otevřel kód a co z toho plyne pro „čisto“ (#383), které dráhy mají rozbalený živý výpis kroků, jak vysoké je jeho okno a jestli je v něm co rolovat, jestli je odrolovaný na konec a co dělat s tím, co říká geometrie scrollu (#325), kde začíná okno transcriptu a kolik se z něj zahodí, jak se ořeže jedna událost a čím se ten ořez přizná, který stav sheetu co nabídne, s jakou velikostí se otevře a kdy se natažená velikost ukládá, i která dráha umí surovou session vůbec otevřít (#327), o čem se v **dění** hlásí vůbec a co z toho je řádek — jeho text, cíl, barva, chip `bez banneru`, vložení do záznamu se stropem 200, co je nepřečtené, jak se dělí po dnech a která ze tří prázdnot se kreslí (#414), na hlavy kterých PR se tik zeptá a co z odpovědi plyne pro zastaralé nálezy (#420), řádek záznamu diagnostiky kreslení i rozbor evaluačního zásobníku AttributeGraphu, ze kterého se skládá (#361), co je v tom záznamu klid a co souhrn za minutu, jak se jmenuje uložený záznam předchozího sezení a který se maže (#412) | — |
+druhu obsahu), odkazy na zadání a soubor se zadáním pro reviewera (#120), proč zadání není celé a jméno nástroje, kterým se text issue tahá (#345), co udělat s osiřelou session po zabité aplikaci (#351), co udělat s klikem na notifikaci (#409), jestli se hover má zapsat do stavu (#358), kde v bloku diffu stojí vodorovný pruh, když blok přesahuje výřez (#428), kdo je v sekci reviewerů a s jakou odpovědí, jak se labely zalomí do dvou řádků a co se s nimi na kterém PR smí, proti kterému kódu nálezy platí, když vedle nich stojí commit, a co sedne na dotaz v nabídce panelu i odkdy v ní hledací pole vůbec je (#392, pravidlo shody sdílené s paletou ⌘K), jestli se z dotazu nabídne založení nového labelu a jakou dostane barvu (#413, pět důvodů, proč ne), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), jak dopadl pokus o nástroj a co se u kroku v ose kreslí (#326), jestli reviewer otevřel kód a co z toho plyne pro „čisto“ (#383), které dráhy mají rozbalený živý výpis kroků, jak vysoké je jeho okno a jestli je v něm co rolovat, jestli je odrolovaný na konec a co dělat s tím, co říká geometrie scrollu (#325), kde začíná okno transcriptu a kolik se z něj zahodí, jak se ořeže jedna událost a čím se ten ořez přizná, který stav sheetu co nabídne, s jakou velikostí se otevře a kdy se natažená velikost ukládá, i která dráha umí surovou session vůbec otevřít (#327), o čem se v **dění** hlásí vůbec a co z toho je řádek — jeho text, cíl, barva, chip `bez banneru`, vložení do záznamu se stropem 200, co je nepřečtené, jak se dělí po dnech a která ze tří prázdnot se kreslí (#414), na hlavy kterých PR se tik zeptá a co z odpovědi plyne pro zastaralé nálezy (#420), řádek záznamu diagnostiky kreslení i rozbor evaluačního zásobníku AttributeGraphu, ze kterého se skládá (#361), co je v tom záznamu klid a co souhrn za minutu, jak se jmenuje uložený záznam předchozího sezení a který se maže (#412) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
-| `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR a od #392 nastavit labely a vyžádat review na **vlastním** PR; volající jsou `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission` a `MetadataSubmission` | `gh` CLI |
+| `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR, od #392 nastavit labely a vyžádat review na **vlastním** PR a od #413 **založit label v repozitáři** (sedmá metoda, první, která zapisuje mimo PR); volající jsou `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission` a `MetadataSubmission` | `gh` CLI |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle sedmičku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá

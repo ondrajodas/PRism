@@ -38,6 +38,18 @@ enum PublishError: Error, Equatable {
     /// A není to opatrnost — GitHub prázdné pole `reviewers` přijme a neudělá nic, takže by okno
     /// hlásilo vyžádané review, které nevzniklo. Tatáž past jako u prázdného komentáře.
     case noReviewer
+    /// Nový label bez jména. Nic se nevolalo (#413).
+    ///
+    /// Vlastní případ, ne `blankComment`: ta věta radí napsat text do komentáře. Nabídka prázdné
+    /// jméno k založení nenabízí, takže se sem dá dostat jedině obejitím obrazovky — a právě proto
+    /// tady ta kontrola je.
+    case blankLabelName
+    /// Label toho jména už v repozitáři je (#413).
+    ///
+    /// Vlastní případ, ne `unknown`: je to jediná chyba zakládání, po které **není co spravovat** —
+    /// label existuje, takže se stačí podívat do nabídky. `Policy.newLabelOffer` na to nedosáhne,
+    /// protože nabídka je snímek z chvíle otevření; mezitím ho může založit někdo jiný.
+    case labelExists(String)
     /// Vlákno, do kterého se odpovídá, na GitHubu není.
     ///
     /// Vlastní případ, ne `network`: hláška `Could not resolve to a node with the global id`
@@ -91,12 +103,15 @@ extension PublishError {
         switch self {
         // Nic se nevolalo (brány a pre-flight), nebo `gh` vůbec nenaběhl.
         case .publishingNotAllowed, .staleDraft, .nothingToSend, .blankReply, .blankComment,
-             .noReviewer, .pullRequestNotOpen, .toolUnavailable:
+             .noReviewer, .blankLabelName, .pullRequestNotOpen, .toolUnavailable:
             false
         // GitHub požadavek **odmítl** — 422 u rozřazení komentářů, 401 u přihlášení, 403 u
         // limitu, spadlé spojení u sítě. Ve všech případech review nevzniklo.
+        //
+        // `labelExists` je taky odmítnutí (422 `already_exists`), a navíc jediné, u kterého
+        // „možná to prošlo“ nic neznamená: label toho jména v repu **je**, ať ho tam dal kdokoli.
         case .lineOutsideDiff, .pathOutsideDiff, .pendingReviewExists, .ownPullRequest,
-             .notAuthenticated, .rateLimited, .network, .threadNotFound:
+             .notAuthenticated, .rateLimited, .network, .threadNotFound, .labelExists:
             false
         // `timedOut`: `gh` jsme po třiceti vteřinách zabili sami, POST mohl doběhnout.
         // `malformedResponse`: exit kód byl **nula**, takže POST prošel a jen odpovědi
@@ -135,6 +150,17 @@ extension PublishError {
             self = .pathOutsideDiff(text)
         case text.contains("one pending review"):
             self = .pendingReviewExists
+        // 422 při zakládání labelu: `{"resource":"Label","code":"already_exists","field":"name"}`.
+        //
+        // **Obojí naráz, ne `already exists` samo.** Tahle funkce třídí `failureText` **všech sedmi**
+        // cest ven, a „already exists“ je v běžné angličtině GitHubu obvyklá fráze — v repu je
+        // dvakrát ve zprávách commitů (`Tests/Fixtures/gh/pr-commits.json`). Kdyby na ni stačila
+        // shoda, ohlásilo by se jako duplikát labelu kterékoli jiné selhání, jehož výstup ji nese.
+        // Zúžení na strojový kód **a** jméno zdroje může nechat skutečný duplikát propadnout do
+        // `unknown` (věta „Odeslání se nepovedlo: …“ s celým textem), a to je ta správná strana
+        // omylu: neurčitá pravda je lepší než určitá nepravda.
+        case text.contains("already_exists") && text.contains("Label"):
+            self = .labelExists(text)
         case text.contains("Can not approve your own"),
              text.contains("Can not request changes on your own"):
             self = .ownPullRequest(text)
@@ -177,6 +203,12 @@ extension PublishError {
             // **Ne „vyber člověka“**: od #392 se dá vyžádat i tým, a hláška, která nabídku
             // zužuje na lidi, mluví o něčem jiném, než co je na obrazovce (nález Copilota).
             "Nebyl vybraný nikdo, od koho review vyžádat. Vyber ze seznamu člověka nebo tým."
+        case .blankLabelName:
+            "Nový label nemá jméno. Napiš ho do hledacího pole v nabídce."
+        case .labelExists:
+            // **Ne „zkus to znovu“**: label existuje, takže druhý pokus dopadne stejně. Jediný
+            // další krok je otevřít nabídku znovu — v ní už ten řádek bude.
+            "Label toho jména už v repozitáři je. Zavři nabídku a otevři ji znovu, bude v seznamu."
         case .threadNotFound:
             "Vlákno na GitHubu není — někdo ho mezitím smazal, nebo je konverzace v okně stará. Načti ji znovu."
         case .lineOutsideDiff:

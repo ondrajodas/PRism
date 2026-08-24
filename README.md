@@ -12,10 +12,11 @@ pustí na něj několik nezávislých reviewerů a jejich nálezy schválně nes
 názoru.
 
 > **Na GitHub vede jediná cesta a otevírá ji jen člověk.** Aplikace umí odeslat review,
-> odpovědět do vlákna, napsat komentář pod PR a na **vlastním** PR nastavit labely a vyžádat
-> review, ale výhradně přes jeden modul a jen na výslovný pokyn — review navíc proti commitu,
-> který jsi opravdu viděl. Co tudy **nejde**: approve mimo review, merge, zavření PR a milník.
-> Nic se neodesílá samo — ani návrh verdiktu, ani reviewer.
+> odpovědět do vlákna, napsat komentář pod PR a na **vlastním** PR nastavit labely, vyžádat
+> review a založit label, který repozitář ještě nezná, ale výhradně přes jeden modul a jen na
+> výslovný pokyn — review navíc proti commitu,
+> který jsi opravdu viděl. Co tudy **nejde**: approve mimo review, merge, zavření PR, milník
+> a **smazání labelu**. Nic se neodesílá samo — ani návrh verdiktu, ani reviewer.
 >
 > **A jedině tam, kde se to povolilo.** Odesílání je ve výchozím stavu vypnuté — zapíná se
 > v nastavení, globálně nebo u jednoho repa. Dokud si o to někdo výslovně neřekne, neodejde
@@ -783,6 +784,20 @@ panel, se ořeže — puntík u něj zůstane a `chce změny` se neořezává ni
 **nejsou vůbec** (ne zašedlé — u cizí fronty se to nedělá nikdy). Label se vybírá **jen z labelů,
 které repo zná**: je vratný jedním klikem, takže nedostal potvrzovací sheet, ale volný text tam
 nepatří, protože z něj se dá omylem vyrobit nový label a ten už z repozitáře sám nezmizí.
+
+**Nový label se od #413 dá založit z nabídky, ale druhým krokem.** Uzavřený zůstává **seznam**, ne
+nabídka: řádky nesou dál jen labely repozitáře a `↵` na vybraném pořád jen přepíná. Založení je
+vlastní akce **pod děličem** se zkratkou `⌥↵` a vede na **druhou obrazovku téhož popoveru**, kde je
+jméno doslova, slug repozitáře, hex barvy a věta o tom, že to v repu zůstane. **Barvu vybírá aplikace
+podle jména** (stejné jméno = stejná barva, z palety, kterou nabízí GitHub) — přebarvit ani smazat
+label odsud nejde, obojí se dělá na GitHubu. Akce **zmizí**, když label toho jména už existuje, a to
+i v jiné velikosti písmen: `Bug` se vedle `bug` nezaloží. Naopak se nabídne i tehdy, když seznam něco
+našel — `bug-ui` v repu, které zná `bug-ui-legacy`.
+
+`Založit a přidat` jsou **dvě volání** (jedno do repozitáře, druhé na PR), takže existuje stav, ve
+kterém je label v repu a na PR ne. Píše se to proto přímo v patce potvrzení (`dvě volání`) a když
+druhé volání nedopadne, je v panelu věta, která říká **oba konce** i důvod — a dorovná se to jedním
+kliknutím na řádek, který od té chvíle v nabídce je.
 
 **V nabídce je sloveso v nadpisu a v položkách jen jména** (`Vyžádat review od` / `Přepnout label`).
 Kdyby ho nesla každá položka, čtrnáct řádků by opakovalo totéž a předpona by ořezala to jediné, čím
@@ -1919,9 +1934,11 @@ App/                      zdrojáky aplikace — target PRism
                           co na něm od minule udělal někdo jiný, i za jakou cenu se na to ptát (#335),
                           a jestli reviewer vůbec otevřel kód — tedy jestli se z běhu dá tvrdit čisto (#383);
                           o čem se v dění hlásí, co je nepřečtené a jak se dělí po dnech (#414),
-                          na hlavy kterých PR se tik zeptá a čím se datuje zastarání nálezů (#420)
+                          na hlavy kterých PR se tik zeptá a čím se datuje zastarání nálezů (#420);
+                          jestli se z dotazu nabídne založení nového labelu a jakou dostane barvu (#413)
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR,
-                          labely a vyžádání reviewera na vlastním PR (#392), brána z nastavení
+                          labely a vyžádání reviewera na vlastním PR (#392), založení nového labelu
+                          v repozitáři (#413 — sedmá a jediná metoda, která píše mimo PR), brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy;
                           zadání PR pro reviewera vedle pracovního stromu (#120)
                           a dotažení textu issue vlastní krátkou session (#345)

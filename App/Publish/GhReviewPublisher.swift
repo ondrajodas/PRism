@@ -159,6 +159,39 @@ struct GhReviewPublisher: ReviewPublishing {
         )
     }
 
+    // MARK: - Nový label v repozitáři (#413)
+
+    /// Založí label, který repozitář ještě nezná. **Sedmá cesta ven a první, která zapisuje do
+    /// repozitáře** — zdůvodnění je u `ReviewPublishing`.
+    ///
+    /// Pre-flight je stejně široký jako u labelů (scope a stav PR, ne `headSha`), a **je to tady
+    /// důležitější než u ostatních**: hned za tímhle voláním jde `setLabels`, takže na zavřeném PR by
+    /// druhé volání neprošlo a v repozitáři by po tom zbyl label, který nikdo nechtěl.
+    func createLabel(
+        _ label: PullRequestLabel,
+        for pullRequest: PRIdentifier
+    ) async throws -> PullRequestLabel {
+        guard scope.allows(pullRequest.repo) else {
+            throw PublishError.publishingNotAllowed(pullRequest.repo)
+        }
+        // **Prázdné jméno se nevolá** — tatáž sdílená kontrola jako u odpovědi a komentáře. GitHub
+        // by ho odmítl 422, ale nezavolat je lepší než volat a číst odmítnutí.
+        guard PublishRequest.isSendable(label.name) else { throw PublishError.blankLabelName }
+
+        try await preflight(pullRequest, expecting: nil)
+
+        let file = try writePayload(
+            try MetadataRequest.encoded(MetadataRequest.NewLabelPayload(label)),
+            prefix: "prism-new-label"
+        )
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let output = try await call(
+            MetadataRequest.newLabelArguments(in: pullRequest.repo, payload: file)
+        )
+        return try decoded(GhLabel.self, from: output).label
+    }
+
     // MARK: - Pre-flight
 
     /// Ověří, že se posílá na to, co jsme viděli. **Při neshodě se nevolá zápis.**

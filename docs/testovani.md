@@ -620,6 +620,66 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     `tiffRepresentation`**: TIFF ze dvou renderů se liší i u shodného obrázku (obálka nese metadata),
     takže na něm test procházel i s panelem, který notici ignoruje. **Ověřeno vložením regrese** —
     se zadrátovaným `.none` v panelu na bajtech spadne, na TIFFu prošel.
+- **Založení nového labelu z nabídky (#413)** — **sedmá cesta ven, a první, která zapisuje do
+  repozitáře**, takže se u ní hlídá totéž co u těch šesti a k tomu dvě věci, které jinde neexistují:
+  **výčet důvodů, proč se akce nenabídne**, a **mezistav mezi dvěma voláními**.
+  - **`NewLabelOfferTests`** — čistá funkce vyčerpávajícím výčtem. Nejcennější jsou tvrzení, ve
+    kterých akce **není**: prázdné jméno (i samá mezera), existující jméno **bez ohledu na velikost
+    písmen a diakritiku** (`bug` / `Bug` / `BUG` / `nález` / `nalez`), **cizí PR**, **vypnutá brána**
+    a **nenačtená nabídka** — bez seznamu z repa není proti čemu hledat duplikát, takže by `Bug`
+    prošlo vedle `bug` jen kvůli nedotažené odpovědi. Naproti tomu se nabídnout **musí** u prázdného
+    **načteného** repa a u `bug-ui` v repu, které zná `bug-ui-legacy`: podřetězec není tentýž label,
+    a kdyby o existenci rozhodoval, taková jména by nešla založit vůbec.
+
+    Barva se tvrdí **literálem** (`design-debt` → `d4c5f9`), ne tou samou funkcí: jinak by test říkal
+    jen „funkce se rovná sama sobě“ a přesazení hashe by nechytil. K tomu tvar palety (šestnáct
+    šestimístných hexů malými písmeny, **bez bílé**) a že do ní padne každé jméno včetně emoji
+    a pětisetznakového.
+  - **`MetadataPublishingTests`** (rozšířené) — bez povolení, s prázdným jménem a na zavřeném PR
+    **`runner.invocations.isEmpty`**. Dvě tvrzení jsou zvlášť pro tuhle metodu: **v adrese není číslo
+    PR** (`repos/{repo}/labels`, ne `/pulls/` ani `/issues/`) a **payload nese jméno i barvu** na
+    hotových bajtech, protože barva se posílá vždycky — bez ní by ji GitHub vybral sám a náhled
+    v potvrzení by lhal. Jméno se u toho prohání JSONem s uvozovkami, zalomením a emoji (proto jde
+    souborem, ne přes `-f name=…`). Duplikát (422 `already_exists`, **skutečné tělo odpovědi API**) má
+    vlastní chybu a **nepočítá se za „možná to prošlo“** — druhý pokus dopadne stejně.
+  - **`AppStoreMetadataTests`** (rozšířené) — tady bydlí ten mezistav a je k němu vlastní fake `gh`,
+    který odpovídá **podle pořadí volání**. Jeden výstup pro obě volání by stav „label v repu je, na
+    PR není“ nedokázal vyrobit vůbec. Tvrdí se: obě volání proběhnou a label je v nabídce **i** na PR;
+    po pádu **druhého** je stav `createdNotAdded`, `failure` je `nil` (není to `failed` — půlka se
+    stala), řádek v nabídce **je** a na PR label **není**; po pádu **prvního** mezistav nevzniká a
+    v nabídce po tom nezůstane řádek, který neexistuje; a mezistav se **dorovná jedním kliknutím** na
+    ten řádek, tedy tou samou cestou jako u každého jiného labelu. K tomu nula volání na cizím PR,
+    bez brány, u existujícího jména, bez načtené nabídky a s **barvou vymyšlenou mimo `Policy`**.
+
+    **Ověřeno vložením regrese**: bez zápisu do nabídky (`remember(_:in:)`) spadnou tři tvrzení —
+    včetně toho o dorovnání, protože `toggleLabel` label, který repo nezná, odmítne.
+  - **`SingleWayOutTests`** — **sedm** metod jmenovitě a `deleteLabel` v zákazu vedle `merge`,
+    `close`, approve mimo review a milníku. Souborů zůstává **šest**: zakládání je sedmá **metoda**,
+    ne pátý volající, a i to je tvrzení.
+  - **`NewLabelPickerWidthTests`** — že se to do popoveru vejde. Měří se **pixely za hranou**
+    (`OverflowProbe`), ne `fittingSize`: popover má pevný rámec 300 bodů, takže obsah, který se do něj
+    nevejde, přeteče **vizuálně**, aniž by se rámec změnil. Prohání se tím tři jména včetně **39
+    znaků**, na kterých se měřil zákres (akce jméno zalomí, neořeže), a k tomu spočítaný nejdelší
+    řádek potvrzení — barva s hexem, v návrhu 265 b z 278. **Ověřeno vložením regrese**: s
+    `fixedSize()` místo `fixedSize(horizontal: false, vertical: true)` na jménu v akci test spadne na
+    tom nejdelším jménu.
+  - **Sonda, ne tvrzení** (`PanelMetadataRenderProbe`, `TEST_RUNNER_PRISM_MEASURE=1`): dotaz bez
+    shody, dotaz, který něco našel, shoda jen v casingu (tam se akce nekreslí), druhá obrazovka a
+    panel s větou o nepovedeném přidání. Druhá obrazovka se sondě předává **počáteční hodnotou stavu**
+    (`query`, `confirming`) — sonda nemá klávesnici, takže se k ní jinak nedostane; label do ní jde
+    z `Policy`, aby se fotila ta barva, která doopravdy odejde.
+
+    Potvrzení má navíc snímek **v obou režimech**, a ten jde `ImageRenderer`em s nasazeným
+    `NSAppearance` (ne oknem): barvy z palety jsou dynamické `NSColor`y, takže o nich rozhoduje
+    **kreslicí** appearance, ne `colorScheme` v prostředí — a `ScrollView` na téhle obrazovce není,
+    takže se offscreen nakreslí celá. Stojí to za to u dvou věcí, které se v každém motivu chovají
+    z jiné strany: výstraha (`Palette.stale.opacity(0.11)`) a bledý puntík labelu, který drží
+    obtažení `--line`.
+
+  **Co testy neověří:** že `⌥↵` v popoveru doopravdy dojde do pole. Mechanismus je tentýž jako
+  u šipek z #392, ale klávesa v harnessu nemá kam přijít — testovací host **nedostane aktivaci**
+  (změřeno u #392), takže pole nemá key okno. Ověří to člověk v pauze; totéž platí o `POST /labels`
+  proti živému API, protože brána je ve slotové konfiguraci vypnutá schválně.
 - **Místo na diff commitu vedle panelu (#392)** — `CommitPanelRoomTests` je **měření zapsané jako
   test**, ne mez v aplikaci. Počítá produkční funkcí (`Policy.charactersPerSide`) a skutečnými
   rozměry (šířka znaku mono písma, `DiffLineView.contentInset(for:)`), takže čísla nezastarají
@@ -4449,6 +4509,13 @@ testech. Bez key okna nemá fokus kam sednout, takže by taková sonda měřila 
 proto v repu **není** a zůstala jen jako samostatný soubor mimo strom. Co v testech **je**, je ta
 část, která je číslo: `Policy.pickerShowsSearch(count:)` výčtem kolem hranice, protože jestli se
 pole vůbec kreslí, se z okna ptát nemusí. Poslední slovo má proklikání v aplikaci.
+
+**Na `⌥↵` z #413 to platí stejně, a je to tatáž mez.** Klávesa se bere **na poli**
+(`onKeyPress(keys: [.return])`, modifikátor se čte z `KeyPress`), tedy tou samou cestou jako šipky —
+takže bez key okna do ní nemá co přijít. V testech je proto ta část, která je číslo
+(`Policy.newLabelOffer` rozhoduje, jestli se `⌥↵` vůbec na co naváže), a **do popisu PR patří, že
+tuhle jednu věc ověří člověk**. Komentář v kódu, který by fokus nebo klávesu tvrdil bez měření, je
+zrovna to, co u #392 stálo jedno kolo.
 
 Co se **nedá naklikat** (chybějící binárka, chyba sítě, prázdný stav nad plnou frontou), se dá
 vykreslit dočasným testem přes `ImageRenderer` do PNG ve scratchpadu. Před commitem se maže.

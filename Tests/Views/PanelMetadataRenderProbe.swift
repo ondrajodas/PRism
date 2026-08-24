@@ -35,6 +35,7 @@ struct PanelMetadataRenderProbe {
                 labels: Self.shortLabels
             ))),
             ("panel-porucha-300", 300, AnyView(Self.failedPanel)),
+            ("panel-zalozil-nepridal-300", 300, AnyView(Self.createdNotAddedPanel)),
         ]
 
         for (name, width, scene) in scenes {
@@ -50,7 +51,13 @@ struct PanelMetadataRenderProbe {
         let scenes: [(String, AnyView)] = [
             ("nabidka-reviewery", AnyView(Self.reviewerPicker(loaded: true))),
             ("nabidka-reviewery-nenactena", AnyView(Self.reviewerPicker(loaded: false))),
-            ("nabidka-labely", AnyView(Self.labelPicker)),
+            ("nabidka-labely", AnyView(Self.labelPicker())),
+            // Sekce 26: dotaz bez shody, dotaz, který něco našel, shoda jen v casingu (bez akce),
+            // a druhá obrazovka.
+            ("nabidka-labely-zalozit", AnyView(Self.labelPicker(query: "design-debt"))),
+            ("nabidka-labely-zalozit-nalezeno", AnyView(Self.labelPicker(query: "bug-ui"))),
+            ("nabidka-labely-existuje", AnyView(Self.labelPicker(query: "Bug"))),
+            ("nabidka-labely-potvrzeni", AnyView(Self.newLabelConfirmation)),
         ]
 
         for (name, scene) in scenes {
@@ -61,6 +68,35 @@ struct PanelMetadataRenderProbe {
             try Self.render(scene, width: 360, height: 440, to: url)
             print("SONDA \(url.path)")
         }
+    }
+
+    /// Druhá obrazovka nabídky **v obou režimech** (#413).
+    ///
+    /// `ImageRenderer` s nasazeným `NSAppearance`, ne okno: potvrzení nemá `ScrollView`, takže se
+    /// offscreen nakreslí celé — a jedině takhle se dá vyfotit světlý režim, protože barvy z palety
+    /// jsou dynamické `NSColor`y a rozhoduje o nich **kreslicí** appearance, ne `colorScheme`
+    /// v prostředí. Světlý režim má vlastní snímek schválně: výstraha stojí na
+    /// `Palette.stale.opacity(0.11)` a bledý puntík labelu na obtažení `--line`, tedy na dvou
+    /// věcech, které se v každém motivu chovají z jiné strany.
+    @Test("Vyrendrovat potvrzení nového labelu v obou režimech", arguments: [false, true])
+    func rendersTheConfirmationInBothAppearances(dark: Bool) throws {
+        let url = Self.outputDirectory.appending(path: "nabidka-potvrzeni-\(dark ? "tmavy" : "svetly").png")
+        let scene = Self.newLabelConfirmation
+            .environment(\.colorScheme, dark ? .dark : .light)
+            .background(Palette.chrome)
+
+        var image: NSImage?
+        let appearance = try #require(NSAppearance(named: dark ? .darkAqua : .aqua))
+        appearance.performAsCurrentDrawingAppearance {
+            let renderer = ImageRenderer(content: scene)
+            renderer.scale = 2
+            image = renderer.nsImage
+        }
+
+        let rendered = try #require(image)
+        let bitmap = try #require(rendered.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        try #require(bitmap.representation(using: .png, properties: [:])).write(to: url)
+        print("SONDA \(url.path)")
     }
 
     /// Panel u seznamu commitů a u rozkliknutého staršího commitu — sekce 25.
@@ -117,6 +153,7 @@ struct PanelMetadataRenderProbe {
                 updatedAt: Date(timeIntervalSince1970: 100)
             ),
             editing: editing,
+            repo: repo,
             contentWidth: PanelMetadataView.contentWidth(inPanelOf: width),
             known: longLabels,
             candidates: [.person("odinuv"), .team("ajda-swimlane")]
@@ -125,10 +162,32 @@ struct PanelMetadataRenderProbe {
         .background(Palette.chrome)
     }
 
+    /// Panel s větou o tom, že se label založil a přidat se nepovedlo (#413) — druhá obrazovka
+    /// sekce 26.
+    @MainActor private static var createdNotAddedPanel: some View {
+        PanelMetadataView(
+            state: .loaded(
+                PullRequestMetadata(labels: [shortLabels[0]], reviewers: [reviewers[2]]),
+                updatedAt: Date(timeIntervalSince1970: 100)
+            ),
+            editing: .allowed,
+            repo: repo,
+            contentWidth: PanelMetadataView.contentWidth(inPanelOf: 300),
+            known: longLabels,
+            actionState: .createdNotAdded(
+                name: "design-debt",
+                error: .network("dial tcp: lookup api.github.com")
+            )
+        )
+        .frame(width: 300, alignment: .topLeading)
+        .background(Palette.chrome)
+    }
+
     @MainActor private static var failedPanel: some View {
         PanelMetadataView(
             state: .failed(GitHubError.network("dial tcp: lookup api.github.com").userDescription),
             editing: .allowed,
+            repo: repo,
             contentWidth: PanelMetadataView.contentWidth(inPanelOf: 300)
         )
         .frame(width: 300, alignment: .topLeading)
@@ -177,23 +236,60 @@ struct PanelMetadataRenderProbe {
         .background(Palette.chrome)
     }
 
-    @MainActor private static var labelPicker: some View {
+    /// Labely, které v zákresu zná repozitář.
+    private static let repositoryLabels = [
+        PullRequestLabel(name: "bug", color: "D73A4A"),
+        PullRequestLabel(name: "bug-ui-legacy", color: "D73A4A"),
+        PullRequestLabel(name: "dependencies", color: "0366D6"),
+        PullRequestLabel(name: "enhancement", color: "A2EEEF"),
+        PullRequestLabel(name: "go", color: "16E2E2"),
+        PullRequestLabel(name: "needs-design-review", color: "D4C5F9"),
+        PullRequestLabel(name: "ready-for-review", color: "39D965"),
+        PullRequestLabel(name: "unmet-requirements", color: "EE2329"),
+    ]
+
+    @MainActor private static func labelPicker(
+        query: String = "",
+        editing: Policy.MetadataEditing = .allowed
+    ) -> some View {
         LabelPickerView(
-            known: [
-                PullRequestLabel(name: "bug", color: "D73A4A"),
-                PullRequestLabel(name: "dependencies", color: "0366D6"),
-                PullRequestLabel(name: "enhancement", color: "A2EEEF"),
-                PullRequestLabel(name: "go", color: "16E2E2"),
-                PullRequestLabel(name: "needs-design-review", color: "D4C5F9"),
-                PullRequestLabel(name: "ready-for-review", color: "39D965"),
-                PullRequestLabel(name: "unmet-requirements", color: "EE2329"),
-            ],
+            repo: RepoID(owner: "ondrajodas", name: "PRism"),
+            known: repositoryLabels,
             selected: [PullRequestLabel(name: "bug", color: "D73A4A")],
             isLoaded: true,
+            editing: editing,
             toggle: { _ in },
-            load: {}
+            create: { _ in },
+            load: {},
+            // Dotaz se nastaví **jako by ho člověk napsal** — sonda nemá klávesnici, takže se
+            // počáteční hodnota předává parametrem, který kvůli tomu existuje.
+            query: query
         )
-        .frame(width: 340, alignment: .topLeading)
+        .frame(alignment: .topLeading)
+        .background(Palette.chrome)
+    }
+
+    /// Druhá obrazovka nabídky — potvrzení nového labelu (#413).
+    @MainActor private static var newLabelConfirmation: some View {
+        LabelPickerView(
+            repo: RepoID(owner: "ondrajodas", name: "PRism"),
+            known: repositoryLabels,
+            selected: [],
+            isLoaded: true,
+            toggle: { _ in },
+            create: { _ in },
+            load: {},
+            query: "design-debt",
+            // **Label se bere z `Policy`, ne se vypisuje ručně** — sonda pak fotí tu barvu, kterou
+            // aplikace doopravdy pošle.
+            confirming: Policy.newLabelOffer(
+                query: "design-debt",
+                known: repositoryLabels,
+                isLoaded: true,
+                editing: .allowed
+            )
+        )
+        .frame(alignment: .topLeading)
         .background(Palette.chrome)
     }
 

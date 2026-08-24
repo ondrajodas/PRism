@@ -18,6 +18,7 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
     private var commentOutcome: Result<ThreadComment, any Error>?
     private var labelsOutcome: Result<[PullRequestLabel], any Error>?
     private var reviewersOutcome: Result<RequestedReview, any Error>?
+    private var newLabelOutcome: Result<PullRequestLabel, any Error>?
     /// Drží odeslání „rozběhnuté“, dokud se nepustí. Bez toho se nedá otestovat, co se stane
     /// **během** odesílání — a právě tam bydlí zákaz druhého odeslání. Stejný důvod, kvůli
     /// kterému `FakeReviewRunner` umí pozdržet běh.
@@ -41,6 +42,10 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
         /// seznamu všeho, co publisher dostal.
         case labels(PRIdentifier, names: [String])
         case reviewers(PRIdentifier, logins: [String], teams: [String])
+        /// Nový label v repozitáři (#413). Ve stejném výčtu jako ostatní, a hlavně **před**
+        /// `labels`: zakládání jsou dvě volání za sebou, takže na jejich **pořadí** v tomhle seznamu
+        /// stojí tvrzení o mezistavu.
+        case newLabel(PRIdentifier, label: PullRequestLabel)
     }
 
     convenience init(reply outcome: Result<ThreadComment, any Error>) {
@@ -66,6 +71,11 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
     convenience init(reviewers outcome: Result<RequestedReview, any Error>) {
         self.init([])
         lock.withLock { reviewersOutcome = outcome }
+    }
+
+    convenience init(newLabel outcome: Result<PullRequestLabel, any Error>) {
+        self.init([])
+        lock.withLock { newLabelOutcome = outcome }
     }
 
     var threadActions: [ThreadCall] { lock.withLock { threadCalls } }
@@ -146,6 +156,20 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
         if let gate = lock.withLock({ gate }) { await gate() }
         guard let outcome = lock.withLock({ reviewersOutcome }) else {
             throw PublishError.unknown("Fake publisher nemá co vrátit na reviewery.")
+        }
+        return try outcome.get()
+    }
+
+    // MARK: - Nový label v repozitáři (#413)
+
+    func createLabel(
+        _ label: PullRequestLabel,
+        for pullRequest: PRIdentifier
+    ) async throws -> PullRequestLabel {
+        lock.withLock { threadCalls.append(.newLabel(pullRequest, label: label)) }
+        if let gate = lock.withLock({ gate }) { await gate() }
+        guard let outcome = lock.withLock({ newLabelOutcome }) else {
+            throw PublishError.unknown("Fake publisher nemá co vrátit na nový label.")
         }
         return try outcome.get()
     }

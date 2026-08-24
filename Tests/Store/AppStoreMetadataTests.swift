@@ -107,6 +107,50 @@ struct AppStoreMetadataTests {
         return script
     }
 
+    /// Skript, který odpovídá **podle pořadí volání** (#413).
+    ///
+    /// Zakládání labelu jsou **dvě** volání za sebou a jejich odpovědi se liší — a hlavně se liší
+    /// v tom, které z nich spadne. Jeden výstup pro obojí by mezistav „label v repu je, na PR není“
+    /// nedokázal vyrobit vůbec, a to je zrovna ten stav, kvůli kterému pro tuhle akci neplatí tvrdá
+    /// podmínka č. 5.
+    private func fakeGhSequence(
+        _ steps: [(output: String, exitCode: Int32)],
+        delayFirst: Double = 0
+    ) throws -> URL {
+        let script = directory.url.appending(path: "gh-\(UUID().uuidString).sh")
+        let path = calls.path(percentEncoded: false)
+        // `wc -l < soubor`, ne `grep -c … | …`: bez roury nemá co dát SIGPIPE producentovi.
+        let branches = steps.enumerated().map { index, step in
+            let redirect = step.exitCode == 0 ? "" : ">&2"
+            // Zdržení je **jen u prvního** volání, a to je celé, co test dvojkliku potřebuje: druhé
+            // volání se stejně čeká celé, takže druhý spánek by běh jen prodloužil.
+            let delay = index == 0 && delayFirst > 0 ? "sleep \(delayFirst)" : ""
+            return """
+            if [ "$n" -eq \(index + 1) ]; then
+            \(delay)
+            cat \(redirect) <<'PRISMSTEP'
+            \(step.output)
+            PRISMSTEP
+            exit \(step.exitCode)
+            fi
+            """
+        }
+        let text = """
+        #!/bin/sh
+        echo "call" >> "\(path)"
+        n=$(wc -l < "\(path)" | tr -d ' ')
+        \(branches.joined(separator: "\n"))
+        echo "volání \\$n nikdo nečekal" >&2
+        exit 99
+        """
+        try text.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: script.path(percentEncoded: false)
+        )
+        return script
+    }
+
     /// Kolikrát se `gh` doopravdy spustilo. Nula znamená „neodeslalo se nic“.
     private func ghCalls() throws -> Int {
         guard let text = try? String(contentsOf: calls, encoding: .utf8) else { return 0 }
@@ -514,4 +558,181 @@ struct AppStoreMetadataTests {
 
         #expect(try ghCalls() == 1, "druhý klik nic neodeslal")
     }
+
+    // MARK: - Založení nového labelu (#413)
+
+    /// Odpověď `POST /repos/{repo}/labels` — **jeden** label, ne pole.
+    private let newLabelOutput = #"{"id":9,"name":"design-debt","color":"d4c5f9"}"#
+
+    /// Odpověď druhého volání: sada, kterou po přidání potvrdil GitHub.
+    private let addedLabelsOutput = """
+    [{"id":1,"name":"bug","color":"d73a4a"},{"id":9,"name":"design-debt","color":"d4c5f9"}]
+    """
+
+    /// Label tak, jak ho nabídne `Policy` — **barva odsud, ne vypsaná v testu**, jinak by se ta dvě
+    /// místa mohla rozejít a store by pak nabídku odmítl.
+    private static let newLabel = PullRequestLabel(
+        name: "design-debt",
+        color: Policy.labelColor(for: "design-debt")
+    )
+
+    /// **Dvě volání, jedna akce.** Tvrdá podmínka č. 5 pro tuhle akci neplatí, takže se tady tvrdí
+    /// právě to, co za ni platí: obě volání proběhnou, label je v nabídce **i** na PR a stav je
+    /// zpátky na `nil`.
+    @Test("Založení a přidání jsou dvě volání a obojí se povede")
+    func createsAndAddsWithTwoCalls() async throws {
+        let gh = try fakeGhSequence([(newLabelOutput, 0), (addedLabelsOutput, 0)])
+        let (store, _) = await prepared(gh: gh)
+        await store.loadRepositoryLabels(for: pr.repo)
+
+        await store.createLabel(Self.newLabel, on: summary())
+
+        #expect(try ghCalls() == 2, "dvě volání, ne jedno a ne tři")
+        #expect(store.knownLabels(in: pr.repo).map(\.name) == ["bug", "go", "design-debt"])
+        #expect(store.metadata(for: pr)?.labels.map(\.name) == ["bug", "design-debt"])
+        #expect(store.metadataActionState(for: pr) == nil)
+    }
+
+    /// **Selhání druhého volání nesmí vypadat jako selhání obojího.** Label v repozitáři **je**, na
+    /// PR není — a přesně to je stav, který má vlastní případ a vlastní věta v panelu. Řádek v nabídce
+    /// u toho musí být, jinak by věta „přidáš ho kliknutím“ tvrdila víc, než data unesou.
+    @Test("Když se přidání nepovede, mezistav je vidět a dá se dorovnat")
+    func showsTheIntermediateState() async throws {
+        let gh = try fakeGhSequence([(newLabelOutput, 0), ("gh: HTTP 500", 1)])
+        let (store, _) = await prepared(gh: gh)
+        await store.loadRepositoryLabels(for: pr.repo)
+
+        await store.createLabel(Self.newLabel, on: summary())
+
+        #expect(try ghCalls() == 2)
+        #expect(store.metadataActionState(for: pr)?.showsNotice == true)
+        guard case .createdNotAdded(let name, _) = store.metadataActionState(for: pr) else {
+            Issue.record("čekal se mezistav, přišlo \(String(describing: store.metadataActionState(for: pr)))")
+            return
+        }
+        #expect(name == "design-debt")
+        #expect(store.metadataActionState(for: pr)?.failure == nil, "není to `failed` — půlka se stala")
+        #expect(store.knownLabels(in: pr.repo).map(\.name).contains("design-debt"), "řádek v nabídce je")
+        #expect(store.metadata(for: pr)?.labels == Self.metadata.labels, "na PR se nedostal")
+    }
+
+    /// Mezistav se **dorovná jedním kliknutím** na řádek v nabídce — a je to tatáž cesta jako
+    /// u každého jiného labelu, žádná opravná zvláštnost.
+    @Test("Nepřidaný label se dorovná kliknutím v nabídce")
+    func theIntermediateStateIsFixedByOneClick() async throws {
+        let gh = try fakeGhSequence([
+            (newLabelOutput, 0),
+            ("gh: HTTP 500", 1),
+            (addedLabelsOutput, 0),
+        ])
+        let (store, _) = await prepared(gh: gh)
+        await store.loadRepositoryLabels(for: pr.repo)
+        await store.createLabel(Self.newLabel, on: summary())
+
+        let row = try #require(store.knownLabels(in: pr.repo).first { $0.name == "design-debt" })
+        await store.toggleLabel(row, on: summary())
+
+        #expect(store.metadata(for: pr)?.labels.map(\.name) == ["bug", "design-debt"])
+        #expect(store.metadataActionState(for: pr) == nil)
+    }
+
+    /// **Když spadne první volání, mezistav nevzniká** — v repozitáři nic není, takže je to obyčejné
+    /// `failed` a v nabídce po tom nesmí zůstat řádek, který neexistuje.
+    @Test("Spadlé založení není mezistav a nabídku nešpiní")
+    func aFailedCreateLeavesNothingBehind() async throws {
+        let gh = try fakeGhSequence([("gh: HTTP 403", 1)])
+        let (store, _) = await prepared(gh: gh)
+        await store.loadRepositoryLabels(for: pr.repo)
+
+        await store.createLabel(Self.newLabel, on: summary())
+
+        #expect(try ghCalls() == 1, "druhé volání se nemá čeho chytit")
+        #expect(store.metadataActionState(for: pr)?.failure != nil)
+        #expect(!store.knownLabels(in: pr.repo).map(\.name).contains("design-debt"))
+        #expect(store.metadata(for: pr)?.labels == Self.metadata.labels)
+    }
+
+    /// **Na cizím PR se nezakládá nikdy** — akce tam není a i kdyby na ni někdo dosáhl, neodejde nic.
+    @Test("Na cizím PR se label nezaloží a nic se nevolá")
+    func doesNotCreateOnSomebodyElsesPullRequest() async throws {
+        let (store, _) = await prepared(gh: try fakeGh(newLabelOutput), mine: false)
+        await store.loadRepositoryLabels(for: pr.repo)
+
+        await store.createLabel(Self.newLabel, on: summary())
+
+        #expect(try ghCalls() == 0)
+        #expect(store.metadataActionState(for: pr) == nil)
+    }
+
+    /// **Bez povolené brány se nezaloží nic.** Je to tatáž brána jako u všeho ostatního, ne druhý
+    /// přepínač.
+    @Test("Bez povoleného odesílání se label nezaloží")
+    func doesNotCreateWithoutTheGate() async throws {
+        let (store, _) = await prepared(gh: try fakeGh(newLabelOutput), publishing: false)
+        await store.loadRepositoryLabels(for: pr.repo)
+
+        await store.createLabel(Self.newLabel, on: summary())
+
+        #expect(try ghCalls() == 0)
+        #expect(store.metadataEditing(for: pr).reason != nil, "má být vidět, proč to nejde")
+    }
+
+    /// **Label, který v repu už je, se nezaloží** — ani ve jiné velikosti písmen. Store se na to ptá
+    /// **tou samou funkcí**, která akci nabízí, takže se ta dvě místa nemohou rozejít.
+    @Test("Existující jméno se nezakládá", arguments: ["bug", "Bug", "GO"])
+    func doesNotCreateAnExistingLabel(name: String) async throws {
+        let (store, _) = await prepared(gh: try fakeGh(newLabelOutput))
+        await store.loadRepositoryLabels(for: pr.repo)
+
+        await store.createLabel(
+            PullRequestLabel(name: name, color: Policy.labelColor(for: name)),
+            on: summary()
+        )
+
+        #expect(try ghCalls() == 0)
+    }
+
+    /// **Bez načtené nabídky se nezakládá.** Není proti čemu hledat duplikát, takže by `Bug` prošlo
+    /// vedle `bug` jen proto, že se seznam nestihl dotáhnout.
+    @Test("Bez načtené nabídky se label nezaloží")
+    func doesNotCreateWithoutTheRepositoryList() async throws {
+        let (store, _) = await prepared(gh: try fakeGh(newLabelOutput))
+
+        await store.createLabel(Self.newLabel, on: summary())
+
+        #expect(try ghCalls() == 0)
+    }
+
+    /// **Barva musí být ta z `Policy`.** Kdyby si ji směl složit volající, byla by dvě skládání téhož
+    /// — a náhled v potvrzení by mohl ukazovat jinou barvu, než jaká odejde.
+    @Test("Barva vymyšlená mimo Policy se neodešle")
+    func doesNotSendAFabricatedColor() async throws {
+        let (store, _) = await prepared(gh: try fakeGh(newLabelOutput))
+        await store.loadRepositoryLabels(for: pr.repo)
+
+        await store.createLabel(PullRequestLabel(name: "design-debt", color: "ff0000"), on: summary())
+
+        #expect(try ghCalls() == 0)
+    }
+
+    /// **Mezi těmi dvěma voláními se nesmí pustit nic dalšího.** Je to jedna akce, takže klik na
+    /// jiný label během ní by přepsal sadu, kterou první ještě nedokončil.
+    @Test("Klik během zakládání se zahodí")
+    func refusesAClickWhileCreating() async throws {
+        // Zdržení u prvního volání: bez něj by zakládání doběhlo dřív, než druhý klik začne.
+        let gh = try fakeGhSequence([(newLabelOutput, 0), (addedLabelsOutput, 0)], delayFirst: 0.4)
+        let (store, _) = await prepared(gh: gh)
+        await store.loadRepositoryLabels(for: pr.repo)
+
+        let creating = Task { await store.createLabel(Self.newLabel, on: summary()) }
+        await waitUntil("zakládání běží") {
+            store.metadataActionState(for: self.pr) == .creatingLabel
+        }
+        await store.toggleLabel(Self.known[1], on: summary())
+        await creating.value
+
+        #expect(try ghCalls() == 2, "klik uprostřed nepřidal třetí volání")
+        #expect(store.metadata(for: pr)?.labels.map(\.name) == ["bug", "design-debt"])
+    }
+
 }

@@ -499,6 +499,7 @@ struct PullRequestDetailView: View {
         let id = summary.id
         return MetadataActions(
             toggle: { label in Task { await store.toggleLabel(label, on: summary) } },
+            create: { label in Task { await store.createLabel(label, on: summary) } },
             request: { candidate in Task { await store.requestReview(from: candidate, on: summary) } },
             loadLabels: { await store.loadRepositoryLabels(for: id.repo) },
             loadCandidates: { await store.loadAssignableUsers(for: id.repo) },

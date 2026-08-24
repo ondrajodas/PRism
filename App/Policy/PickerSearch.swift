@@ -19,7 +19,27 @@ extension Policy {
     ///
     /// Sdílené s paletou (#184), viz úvod.
     static func searchRange(of token: String, in text: String) -> Range<String.Index>? {
-        text.range(of: token, options: [.caseInsensitive, .diacriticInsensitive])
+        text.range(of: token, options: searchOptions)
+    }
+
+    /// Pravidlo shody na jednom místě (#413).
+    ///
+    /// Vytáhlo se z `searchRange` ve chvíli, kdy se na tomtéž pravidlu začalo rozhodovat i něco
+    /// jiného než filtr: zakládání labelu se **nenabízí**, když label toho jména už existuje, a ta
+    /// shoda má být **tatáž**, jakou má hledání — jinak by `Bug` nešel najít, ale šel založit vedle
+    /// `bug`. Dvě konstanty s týmž obsahem by se rozešly zrovna v diakritice.
+    ///
+    /// Computed, ne `static let`: `String.CompareOptions` je `OptionSet`, a konstanta z něj by v
+    /// Swiftu 6 chtěla `Sendable`, které se u typu z Foundation neslibuje napříč verzemi SDK.
+    static var searchOptions: String.CompareOptions { [.caseInsensitive, .diacriticInsensitive] }
+
+    /// Je to **totéž jméno** podle pravidla hledání? Celý řetězec, ne podřetězec.
+    ///
+    /// Rozdíl proti `searchRange` je schválně: `bug-ui` v repu, který zná `bug-ui-legacy`, se
+    /// **najde** (podřetězec), ale **není** to tentýž label — takže se založit smí. Kdyby o existenci
+    /// rozhodoval podřetězec, nešlo by takové jméno založit vůbec.
+    static func pickerSameName(_ one: String, _ other: String) -> Bool {
+        one.compare(other, options: searchOptions) == .orderedSame
     }
 
     /// Začíná shoda na hranici slova? Předchozí znak nesmí být písmeno ani číslice — `/`, `.`,
@@ -93,8 +113,13 @@ extension Policy {
     /// změny měla každá vlastní `searchFrom = 6`, takže se prahy mohly rozejít potichu — a jediné,
     /// co by z toho bylo vidět, je jedna nabídka s polem a druhá bez. Zároveň je to jediný způsob,
     /// jak se ta hranice dá otestovat výčtem: pole je stav skutečného okna, kdežto tohle je číslo.
-    static func pickerShowsSearch(count: Int) -> Bool {
-        count > searchFrom
+    ///
+    /// **`canCreate` je pro nabídku, ve které se z dotazu něco zakládá** (#413) — u labelů tedy
+    /// vždycky. Jméno nového labelu se bere z dotazu, takže bez pole není kam ho napsat: v repu se
+    /// třemi labely by se nedalo založit nic. Není to druhý prah, je to výjimka s důvodem, který je
+    /// vidět z parametru; u reviewerů zůstává pravidlo nedotčené, protože tam se nic nezakládá.
+    static func pickerShowsSearch(count: Int, canCreate: Bool = false) -> Bool {
+        canCreate || count > searchFrom
     }
 
     /// Od kolika položek má hledání smysl. Kreslí se **nad** touhle hodnotou, viz

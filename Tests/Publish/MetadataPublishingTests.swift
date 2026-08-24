@@ -6,9 +6,13 @@ import Testing
 /// Změna labelů a vyžádání reviewera (#392) — publisher proti `FakeProcessRunner`.
 ///
 /// Nejdůležitější testy tady netvrdí, co se odeslalo, ale že se **nic neodeslalo**: brána, prázdný
-/// seznam reviewerů a zavřený PR musí skončit dřív, než se sáhne na `gh`. Jsou to pátá a šestá
-/// metoda `ReviewPublishing`, a rozšířit tvrdou podmínku č. 1 se smí jedině tak, že si nová cesta
-/// ven ohlídá totéž co ty čtyři předchozí.
+/// seznam reviewerů a zavřený PR musí skončit dřív, než se sáhne na `gh`. Jsou to pátá, šestá
+/// a od #413 i **sedmá** metoda `ReviewPublishing`, a rozšířit tvrdou podmínku č. 1 se smí jedině
+/// tak, že si nová cesta ven ohlídá totéž co ty předchozí.
+///
+/// **Sedmá je první, která zapisuje do repozitáře** (`createLabel`), takže u ní má cenu i to, co se
+/// jinde tvrdit nemusí: že v adrese není číslo PR a že se stav PR ověřuje **stejně** — na zavřeném
+/// PR by po založení zbyl v repozitáři label, který nikdo nechtěl.
 @Suite("Labely a reviewery na GitHub")
 struct MetadataPublishingTests {
     private let gh = URL(filePath: KnownPath.gh)
@@ -309,6 +313,169 @@ struct MetadataPublishingTests {
             try await publisher.setLabels(["bug"], on: sandbox)
         }
     }
+
+    // MARK: - Nový label v repozitáři (#413)
+
+    /// Odpověď `POST /repos/{repo}/labels` je **jeden label**, ne pole — tvar je z `gh api
+    /// repos/cli/cli/labels/bug`, takže sedí na to, co API vrací.
+    private let newLabelOutput = """
+    {"id":208045946,"name":"design-debt","color":"d4c5f9","default":false,"description":null}
+    """
+
+    /// **Ve výchozím nastavení neodejde nic**, a brána je první kontrola v cestě — na nepovolené repo
+    /// se nemá ani ptát na detail. Je to sedmá cesta ven, takže si musí ohlídat totéž co těch šest
+    /// před ní.
+    @Test("Bez povolení se label nezaloží")
+    func doesNotCreateLabelsWithoutPermission() async throws {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: newLabelOutput)
+        let publisher = publisher(runner, scope: .standard)
+
+        await #expect(throws: PublishError.publishingNotAllowed(sandbox.repo)) {
+            try await publisher.createLabel(Self.newLabel, for: sandbox)
+        }
+        #expect(runner.invocations.isEmpty)
+    }
+
+    /// **Prázdné jméno se nevolá.** GitHub by ho odmítl 422, ale nevolat je lepší — a nabídka prázdné
+    /// jméno k založení nenabízí, takže tady je to pojistka proti obejití obrazovky.
+    @Test("Label bez jména se neodešle", arguments: ["", " ", "\n"])
+    func doesNotCreateBlankLabels(name: String) async throws {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: newLabelOutput)
+        let publisher = publisher(runner)
+
+        await #expect(throws: PublishError.blankLabelName) {
+            try await publisher.createLabel(PullRequestLabel(name: name, color: "d4c5f9"), for: sandbox)
+        }
+        #expect(runner.invocations.isEmpty)
+    }
+
+    /// **Stav PR se ověřuje, i když se zapisuje do repozitáře** — a je to tady důležitější než
+    /// u ostatních metod: hned za tímhle voláním jde `setLabels`, takže na zavřeném PR by druhé
+    /// volání neprošlo a v repozitáři by po tom zbyl label, který nikdo nechtěl.
+    @Test("Na zavřený PR se label nezaloží")
+    func doesNotCreateLabelsForAClosedPullRequest() async throws {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: newLabelOutput)
+        let publisher = publisher(runner, detail: .success(detail(state: .closed)))
+
+        await #expect(throws: PublishError.pullRequestNotOpen(.closed)) {
+            try await publisher.createLabel(Self.newLabel, for: sandbox)
+        }
+        #expect(runner.invocations.isEmpty, "pre-flight jde přes gateway, takže se `gh` nespustí")
+    }
+
+    /// Jedno volání, `POST` na **labely repozitáře** (ne na PR) a payload souborem.
+    @Test("Label odejde jedním POST na repozitář")
+    func createsTheLabelWithOnePost() async throws {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: newLabelOutput)
+        let publisher = publisher(runner)
+
+        let created = try await publisher.createLabel(Self.newLabel, for: sandbox)
+
+        #expect(created == PullRequestLabel(name: "design-debt", color: "d4c5f9"))
+        #expect(runner.invocations.count == 1)
+        let arguments = try #require(runner.invocations.first?.arguments)
+        #expect(arguments[0] == "api")
+        #expect(arguments[1] == "repos/ondrajodas/prism-review-sandbox/labels")
+        #expect(arguments.contains("POST"))
+        #expect(arguments.contains("--input"))
+        // Číslo PR v adrese být **nemá**: label vzniká v repozitáři, na PR ho přidá druhé volání.
+        #expect(!arguments.contains { $0.contains("/pulls/") || $0.contains("/issues/") })
+    }
+
+    /// **Barva se posílá vždycky**, jinak by ji GitHub přiřadil sám a náhled v potvrzení by ukazoval
+    /// barvu, která nevznikla. Payload se testuje **na hotových bajtech**: rozešlý tvar by API
+    /// odmítlo 422, tedy až za sítí.
+    @Test("Payload nového labelu nese jméno i barvu")
+    func encodesTheNewLabelPayload() throws {
+        let data = try MetadataRequest.encoded(MetadataRequest.NewLabelPayload(Self.newLabel))
+
+        #expect(String(decoding: data, as: UTF8.self) == #"{"color":"d4c5f9","name":"design-debt"}"#)
+    }
+
+    /// Jméno je text od člověka, takže projde JSONem — uvozovky, zalomení ani emoji nesmí payload
+    /// rozbít. Právě proto jde souborem, ne přes `-f name=…`.
+    @Test("Jméno s uvozovkami a emoji se zakóduje")
+    func encodesAwkwardNames() throws {
+        let label = PullRequestLabel(name: "„bug\" 🐛\nnový", color: "b60205")
+        let data = try MetadataRequest.encoded(MetadataRequest.NewLabelPayload(label))
+        let decoded = try JSONDecoder().decode([String: String].self, from: data)
+
+        #expect(decoded["name"] == "„bug\" 🐛\nnový")
+        #expect(decoded["color"] == "b60205")
+    }
+
+    /// **422 `already_exists` má vlastní chybu**, ne `unknown`: je to jediné selhání zakládání, po
+    /// kterém není co spravovat — label existuje, takže stačí otevřít nabídku znovu. Tělo je skutečná
+    /// odpověď API.
+    @Test("Duplikát se pozná a nehlásí se jako neznámá chyba")
+    func recognizesAnExistingLabel() async throws {
+        let body = """
+        {"message":"Validation Failed","errors":[{"resource":"Label","code":"already_exists",\
+        "field":"name"}],"documentation_url":"https://docs.github.com/rest/issues/labels"}
+        """
+        let runner = FakeProcessRunner(exitCode: 1, standardOutput: "", standardError: "HTTP 422\n\(body)")
+        let publisher = publisher(runner)
+
+        await #expect(throws: PublishError.labelExists("HTTP 422\n\(body)")) {
+            try await publisher.createLabel(Self.newLabel, for: sandbox)
+        }
+    }
+
+    /// **„already exists“ v cizím textu duplikát labelu není.** `PublishError.init(failure:)` třídí
+    /// výstup **všech sedmi** cest ven, a tahle fráze je v angličtině GitHubu běžná — v repu je
+    /// dvakrát ve zprávách commitů (`pr-commits.json`). Kdyby na ni stačila shoda, ohlásilo by okno
+    /// duplikát labelu nad selháním, které o labelech není. Tvrzení je proto o tom, co se
+    /// **nestane**.
+    @Test(
+        "Fráze o existenci v cizím textu se za duplikát nepočítá",
+        arguments: [
+            "gh: The issue already exists once api.IssueCreate returns (HTTP 500)",
+            "gh: branch already exists (HTTP 422)",
+            #"{"resource":"PullRequest","code":"already_exists"}"#,
+        ]
+    )
+    func doesNotMistakeOtherFailuresForAnExistingLabel(text: String) {
+        let error = PublishError(failure: ProcessResult(exitCode: 1, standardOutput: "", standardError: text))
+
+        if case .labelExists = error {
+            Issue.record("\(text) se ohlásilo jako duplikát labelu")
+        }
+    }
+
+    /// Duplikát **nemohl** projít, takže se nenabízí „zkontroluj GitHub“: `mightHaveReachedGitHub`
+    /// rozhoduje o tom, jestli okno smí říct „nic se nestalo“.
+    @Test("Duplikát se počítá za odmítnutí")
+    func anExistingLabelIsARejection() {
+        #expect(!PublishError.labelExists("HTTP 422").mightHaveReachedGitHub)
+        #expect(!PublishError.blankLabelName.mightHaveReachedGitHub)
+    }
+
+    /// **Po pádu na disku nezůstane payload** ani u zakládání — jméno je text od člověka a soubor
+    /// leží ve společné dočasné složce. Cesta se bere z argumentů, které publisher doopravdy poslal.
+    @Test("Po založení nezůstane soubor s payloadem", arguments: [Int32(0), 1])
+    func cleansUpTheNewLabelFile(exitCode: Int32) async throws {
+        let runner = FakeProcessRunner(
+            exitCode: exitCode,
+            standardOutput: exitCode == 0 ? newLabelOutput : "",
+            standardError: exitCode == 0 ? "" : "HTTP 422"
+        )
+        let publisher = publisher(runner)
+
+        _ = try? await publisher.createLabel(Self.newLabel, for: sandbox)
+
+        let arguments = try #require(runner.invocations.first?.arguments)
+        let index = try #require(arguments.firstIndex(of: "--input"))
+        let path = arguments[index + 1]
+        #expect(path.contains("prism-new-label-"), "payload má být poznat i podle jména")
+        #expect(!FileManager.default.fileExists(atPath: path), "zůstal \(path)")
+    }
+
+    /// Label, který nabídne `Policy` — barva je z ní, ne vypsaná v testu, aby se ta dvě místa
+    /// nemohla rozejít.
+    private static let newLabel = PullRequestLabel(
+        name: "design-debt",
+        color: Policy.labelColor(for: "design-debt")
+    )
 
     /// **Po pádu na disku nezůstane payload.** Je v něm jen sada jmen, ale platí tu totéž co
     /// u review: soubor v `/tmp` s naším obsahem se uklízí, ať to dopadne jakkoli.

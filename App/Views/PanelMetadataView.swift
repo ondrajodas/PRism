@@ -18,6 +18,9 @@ struct PanelMetadataView: View {
     /// `nil` = ještě se nenačetlo. Prázdný snímek je platná odpověď, `nil` není.
     let state: MetadataState?
     let editing: Policy.MetadataEditing
+    /// Do kterého repozitáře se nový label založí (#413). Kreslí to potvrzení v nabídce, ne panel —
+    /// ale panel je jediné místo, které tu hodnotu má odkud vzít.
+    let repo: RepoID
     /// Šířka, kterou má panel na obsah — **spočítaná, ne vyjednaná** (pravidlo #220). Zalomení
     /// chipů z ní počítá `Policy`.
     let contentWidth: Double
@@ -60,7 +63,7 @@ struct PanelMetadataView: View {
                     if showsReviewers { reviewers }
                 }
                 if let reason = editing.reason { blocked(reason) }
-                if let error = actionState?.failure { actionFailure(error) }
+                if actionState?.showsNotice == true { notice }
             }
             .padding(.horizontal, Self.insetHorizontal)
             .padding(.vertical, Self.insetVertical)
@@ -212,12 +215,18 @@ struct PanelMetadataView: View {
             .disabled(actionState?.isBusy == true)
             .popover(isPresented: $isPickingLabel, arrowEdge: .bottom) {
                 LabelPickerView(
+                    repo: repo,
                     known: known,
                     selected: metadata.labels,
                     isLoaded: hasLoadedLabels,
                     failure: labelPickerFailure,
+                    editing: editing,
                     // Popover se **nezavírá**: label je přepínač a přidat dva za sebou je běžné.
                     toggle: actions.toggle,
+                    // Zavírá se **taky ne** (#413): založený label se hned objeví v seznamu jako
+                    // zaškrtnutý, takže zavřený popover by schoval zrovna tu odpověď na to, jak to
+                    // dopadlo.
+                    create: actions.create,
                     load: actions.loadLabels
                 )
             }
@@ -273,14 +282,52 @@ struct PanelMetadataView: View {
 
     /// Proč akce nedopadla. Drží se, dokud ji člověk nezavře — chyba, která zmizí sama, je chyba,
     /// kterou nikdo nepřečte.
-    private func actionFailure(_ error: PublishError) -> some View {
+    ///
+    /// **Dvě různé věty, ne jedna** (#413). `failed` mluví o **jedné** akci, která nedopadla;
+    /// `createdNotAdded` znamená, že je jistě hotová **půlka**, a to je stav, který u zakládání labelu
+    /// existovat **musí** — dvě volání se spojit nedají. Slít je do jedné hlášky by bylo přesně to,
+    /// čemu se má vyhnout: text v UI, který tvrdí něco jiného, než co data unesou.
+    @ViewBuilder private var notice: some View {
+        switch actionState {
+        case .createdNotAdded(let name, let error):
+            noticeRow(tint: Palette.crit) {
+                VStack(alignment: .leading, spacing: 3) {
+                    (
+                        Text("Label ") + Text(verbatim: name).bold()
+                            + Text(" se v repozitáři založil, na PR se ho přidat nepovedlo. Je v nabídce — přidáš ho kliknutím.")
+                    )
+                    .foregroundStyle(Palette.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    // **Proč to spadlo, se nezahazuje.** Zákres kreslí jen tu první větu, ale je to
+                    // jediné selhání v tomhle panelu, které by jinak neřeklo důvod — a další krok
+                    // se od důvodu odvozuje (jiná věta u nepřihlášeného `gh` než u zavřeného PR).
+                    Text(verbatim: error.userDescription)
+                        .foregroundStyle(Palette.ink3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        case .failed(let error):
+            noticeRow(tint: Palette.crit) {
+                Text(verbatim: error.userDescription)
+                    .foregroundStyle(Palette.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .settingLabels, .requestingReviewer, .creatingLabel, nil:
+            EmptyView()
+        }
+    }
+
+    private func noticeRow(tint: Color, @ViewBuilder content: () -> some View) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
             Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(Palette.crit)
-            Text(verbatim: error.userDescription)
-                .foregroundStyle(Palette.ink2)
-                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(tint)
+            content()
+            // `.mini`, ne systémové tlačítko: zákres ho kreslí jako `<span class="mini">` a systémový
+            // tvar byl v 300bodovém panelu skoro tak vysoký jako celá věta. `fixedSize` drží
+            // `flex: none` z návrhu — ustupovat má text, ne akce.
             Button("Zavřít", action: actions.clearFailure)
+                .buttonStyle(.mini)
+                .fixedSize()
         }
         .font(.caption)
     }
@@ -313,7 +360,7 @@ struct PanelMetadataView: View {
     /// Je v bloku vůbec co nakreslit? `nil` stav (ještě se nenačetlo) nedá ani jednu sekci — a na
     /// cizím PR bez labelů a reviewerů taky ne.
     private var hasAnything: Bool {
-        state?.failure != nil || showsLabels || showsReviewers || actionState?.failure != nil
+        state?.failure != nil || showsLabels || showsReviewers || actionState?.showsNotice == true
     }
 
     private func answerColor(_ answer: ReviewerAnswer) -> Color {
