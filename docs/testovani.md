@@ -1562,10 +1562,48 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   souborem nezapíše nic** — ani hlavičku, ani druhý limitní řádek —, protože strop platí na
   **soubor**, ne na sezení. Ověřeno **vloženou regresí**: s počitadlem od nuly (`written` bez seedu
   z velikosti souboru) spadnou dvě expectations ze tří, na tom, že druhé sezení hlavičku zapsalo
-  a soubor se změnil. Co se z testů poznat nedá, je chování diagnostiky **zapnuté z prostředí** —
-  `start()` se pouští jedině s `PRISM_DIAGNOSE=1` a v testovacím hostu by psal do **skutečné**
-  cache, protože host má `CFBundleName` hlavní instance. Testy si proto instanci staví samy, se
-  souborem v dočasné složce.
+  a soubor se změnil. Od #412 se to tvrdí **o logu bez rotace** (sondy, testy) a hned pod ním stojí
+  obrácené tvrzení pro aplikaci, viz níž. Co se z testů poznat nedá, je chování diagnostiky
+  **zapnuté z prostředí** — `start()` se pouští jedině s `PRISM_DIAGNOSE=1` a v testovacím hostu by
+  psal do **skutečné** cache, protože host má `CFBundleName` hlavní instance. Testy si proto
+  instanci staví samy, se souborem v dočasné složce.
+- **Rotace záznamu a srážení klidu (#412)** — tři vrstvy a to nejcennější je zase obrácené tvrzení
+  proti #386: **sezení s rotací zapisuje i nad plným souborem.** Skládá se to ze čtyř věcí:
+
+  Čisté funkce (`DiagnosticsArchivingTests`, 11 případů): jméno z **času posledního zápisu** a ne
+  z času rotace (jinak by soubor ze pátku měl v názvu pondělí), přípona `-2` na kolizi, výčet toho,
+  co se za uložený záznam **nepočítá** (`diagnostics.log`, `activity.json`, `sessions.json`,
+  `…log.bak` — v kořeni cache leží i nálezy a drafty, takže úklid podle přípony nebo času by sáhl na
+  ně), mazání od nejstaršího podle **obou** mezí, tie-break jménem a řádky do záznamu včetně toho,
+  že **bez rotace se nepíše nic** a že se nepovedená rotace **přizná**.
+
+  **Nejnovější záznam přežije i nad bajtovou mezí** — ověřeno **vloženou regresí**: bez pravidla
+  „první se počítá vždycky“ vyjde ke smazání ten 9 MB soubor, který rotace právě uložila, tedy zrovna
+  ta historie, kvůli které se u #361 čte zpětně.
+
+  Nad souborem (`RenderDiagnosticsTests`): že sezení s rotací **zapíše** i tam, kde plný předchůdce
+  do #412 zapisovat nedovolil, že **starý soubor leží vedle a je celý** (obsah se porovnává, ne jen
+  existence), že se nad prázdnou cache **nerotuje** (prázdný soubor není historie) a že úklid smaže
+  nejstarší a jméno napíše do `rotation.deleted`. Ověřeno **vloženou regresí**: s rotací vypnutou
+  (`if false, let archive`) spadnou oba testy — první na tom, že `append` vrátí `false`, druhý na tom,
+  že se nic nesmazalo. Časy zápisu se v testu **nastavují** (`setAttributes`), protože jméno i pořadí
+  mazání se berou z nich; jinak by test tvrdil něco o hodinách stroje. A na pole archivů se sahá
+  přes `#require`, ne indexem — test, který s vloženou regresí složí celý běh, sebere výsledky
+  i všem ostatním.
+
+  Srážení klidu: že **klid do minuty nezaloží ani soubor** a po minutě je z 60 úseků jeden souhrn,
+  že souhrn jde **před** řádkem, který klid přerušil (časy v souboru musí jít vzestupně), a že
+  **hořící úseky se nesráží** — tři za sebou jsou tři řádky. To poslední je ta podmínka, na které
+  #412 stojí: zajímavý je náběh záchvatu.
+
+  **Ověřeno i spuštěním** (`PRism-c`, `./bin/run.sh --diagnose` dvakrát za sebou), protože `start()`
+  žádný test nejde: v prvním sezení nejsou řádky o rotaci (prázdná cache), po restartu leží
+  předchozích 848 B jako `diagnostics-do-2026-08-24T10-02-02.log` a nový soubor začíná hlavičkou,
+  řádkem `předchozí záznam (848 B) uložen jako …` a řádkem o grafu. Za 70 s sezení má záznam
+  **11 řádků a 1 055 B** — v tom jeden souhrn `za 61.00 s klid: 57 úseků, 235 kol runloopu, 0.366 s
+  CPU, 1 bez kola runloopu`, který by do #412 byl 57 řádků. Blok v `bin/run.sh` je vyzkoušený i **ve
+  výjimečném stavu** (pravidlo z #61): nad souborem nafouknutým na 8 388 608 B vypíše, že mu chybí
+  konec, a skončí nulou — do #412 tady bylo `exit 1`.
 
   **Nad skutečnou scénou je na to sonda** (`IdleDiffSpinProbe.diagnosticsUnderLoad`,
   `PRISM_MEASURE`): kontrolní seznam se zpětnou vazbou z rozvržení do stavu (`FeedbackLoopList`)
