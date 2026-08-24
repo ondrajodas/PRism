@@ -166,7 +166,7 @@ struct CheckLogRoomProbe {
         // a konverzaci z fake gatewaye.
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))
         // Teprve teď log — jako v aplikaci, kde dorazí ze sítě do rozloženého okna.
-        store.checkDetails[Self.logKey]?.log = .loaded(full: log, tail: Policy.logTail(log))
+        store.checkDetails[Self.logKey]?.log = .loaded(full: Policy.jobLog(log, fetchedAt: .now), tail: Policy.logTail(log))
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))
         let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
         hosting.cacheDisplay(in: hosting.bounds, to: rep)

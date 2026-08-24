@@ -1273,6 +1273,7 @@ dlouhé — a obojí je **zapracované do mockupu** (sekce 20) i do aplikace.
   (celý log a hunk kódu) má `minWidth` 560 a ideál spočítaný z obrazovky až 2 700, takže se v něm
   celé měření #292 neuplatní. Neopravuje se to spolu s tímhle, protože je to **jiná obrazovka**
   a mění se tím její vzhled — patří to pod schvalovací bránu na návrh, tedy do vlastního issue.
+  (Tím issue je **#417**, zakresleno v sekci 28 a vyřízeno níž.)
 - **Výchozí velikost je 1 180 × 760, podlaha 720 × 420, ořez o okraje obrazovky.** Šířka je
   změřená, ne od oka: přepis zalamuje, takže ze 720 na 1 180 bodů ubude nad skutečným transcriptem
   **15 % řádků sazby** (2,4 řádku na bod šířky), dál 0,8 a 0,37 — je to tatáž úvaha jako u #292, jen
@@ -1285,6 +1286,66 @@ dlouhé — a obojí je **zapracované do mockupu** (sekce 20) i do aplikace.
   a slovo „surová“ v něm nese nejmíň: odkud se otevírá, samo říká, o kterou session jde, a *co*
   v sheetu je, vysvětluje nápověda i hlavička sheetu. **Pojem `Surová session` zůstává** v nadpisu
   sheetu, ve specifikaci i v dokumentaci — přejmenoval se popis tlačítka, ne jméno obrazovky.
+
+#### Sheet s kódem a s logem: jeden sheet, dva profily velikosti (#417)
+
+Druhý výskyt třídy z #327, tentokrát nad obrazovkou, která v návrhu nakreslená nebyla — proto se
+napřed kreslila (sekce 28) a schvalovala. Vada v číslech: sheet dostával **560 bodů** místo ideálu,
+tedy 66 znaků na řádek, z nichž 29 sní timestamp, a **68 %** řádků logu se lámalo. Měřeno na
+skutečném `NSTextView`u nastaveném jako `SelectableCodeView` (mono 13 b = 8,036 b na znak) nad pěti
+logy jobů a 128 hunky z pěti PR.
+
+- **Jeden sheet a druh v `CodeText`, ne dvě view.** Co sheet *dělá*, je u hunku i u logu totéž
+  (jeden vybíratelný text, zalamování, `Zkopírovat vše`, `Zavřít`); jak *velký* se otevře, je
+  vlastnost obsahu. Rozhoduje o tom jedna čistá funkce `Policy.codeSheetSizing(kind:screen:)`.
+  **Zamítnuto druhé view**: zdvojilo by patičku, hlavičku, sazbu i stráže, a dva sheety nad týmž
+  druhem obsahu (mono text, který se čte a kopíruje) mají mít ovládání na jednom místě.
+- **Hunk 1 180 × 520 (podlaha 560 × 320), log obrazovka − 152 nejvýš 2 700 × 760 (podlaha 820 × 420).**
+  U hunku bylo kritériem „devět z deseti bez jediného zalomení“ (při 1 180 to platí u 91 %); **netáhne
+  se k 1 600**, kde by bez zalomení byly všechny, protože mediánový řádek hunku má 305 bodů, takže by
+  to byl sheet z devíti desetin prázdný — a je to modální okno nad diffem, ze kterého se právě čte.
+  U logu **žádná šířka nestačí** (p99 řádku 333 znaků, jeden měl 732 087), takže se bere, co obrazovka
+  dovolí; pravidlo v kódu už bylo (#292), jen se dosud neuplatnilo.
+- **Dva klíče pro uloženou velikost, ne jeden.** S jedním by roztažení logu přes monitor otevíralo
+  takhle i hunk o devíti řádcích (ověřeno vloženou regresí: 2 460 bodů). Cena jsou čtyři
+  `@AppStorage` klíče a `switch` nad druhem ve dvou getterech.
+- **Podlaha je odvozená z obsahu, ne kulaté číslo**: u hunku velikost, ve které je mediánový hunk
+  celý, u logu šířka do #292 a 21 řádků. Důvod, proč na tom záleží: **podlaha je přesně to, co sheet
+  dostane, když se ideál pokazí** — a tohle issue je toho dokladem.
+- **ANSI se sundá, timestampy zůstanou** a připravuje se to **při stažení** (`Policy.jobLog` →
+  `JobLog`), ne při kliknutí: průchod celým logem stojí 192 ms na 8,78 MB. **Zamítnuto sundávat
+  timestampy** jako v okýnku v tabu: 29 znaků stojí 240 bodů šířky, ale sheet je ta obrazovka, kde
+  se člověk ptá po *úplném* textu, a timestamp je jediné, čím se řádek přiváže k době běhu jobu.
+  **Zamítnuto obarvovat log** (timestamp, `[ERROR]`): znamenalo by to skládat text po řádcích, tedy
+  155 ms proti 7,9 ms na 8,78MB logu (#214).
+- **Čas ve snímku je z chvíle stažení, ne z chvíle kliknutí** (`JobLog.fetchedAt`). Log leží v paměti
+  od rozbalení checku, takže `Snímek z <čas kliknutí>` by tvrdil, že je text novější, než jaký je —
+  a je to zrovna ta věta, která má před stárnutím textu varovat. Hodiny bere store z `TimeSource`,
+  `Policy.jobLog` je dostane parametrem a zůstává čistá.
+- **Přírůstek se v patičce nepočítá, je tam odkaz na GitHub.** U přepisu session jde o lokální soubor
+  (dotaz na atributy po 2 s), log jobu je na síti — `gh` stahoval 8,78 MB 5,75 až 27,44 s —, takže
+  živé číslo by byl request na tik. **Zamítnuto** proto, že by to byla jediná obrazovka v okně, která
+  kvůli údaji v patičce chodí na síť.
+- **Akce jsou v patičce, ne v hlavičce**, a hlavička má tři řádky; třetí má u logu dvě podoby.
+  Doběhlému jobu se log **nesmí** říkat snímek: slovo „snímek“ nese informaci jen tam, kde se text
+  pod rukama mění, a věty, které varují před nemožným, se pak přehlíží i tam, kde platí.
+- **Tučné zvýraznění uvnitř třetí řádky se nekreslí** a je to vědomá odchylka od mockupu (ten má
+  `log je celý` tučně). V okně jsou uživatelské texty `Text(verbatim:)`, tedy bez markdownu —
+  a skládat věty s interpolovaným jménem jobu přes markdown znamená, že jméno checku s podtržítkem
+  začne text kurzívovat. Věta zůstává celá, jen jednou barvou (`--ink-3`).
+- **Věta „N řádků se nevešlo na šířku“ je jen u hunku.** U logu by to byl scan megabajtů při každém
+  přerovnání šířky (#224) a „dvě třetiny řádků se nevešly“ nikomu nepomůže. Kapacita se počítá ze
+  šířky sheetu; svislý scroller si v legacy stylu ukusuje 17 bodů (změřeno), tedy necelé dva znaky,
+  takže u řádku o znak nad kapacitou může věta **mlčet** — je to ta strana, na které se chybovat má,
+  protože mlčení znamená „není co říct“, kdežto věta o zalomení, které nenastalo, je nepravda.
+- **Stráž v `updateNSView` se nepřidala, a je to změřené.** Tažení za okraj vypadalo jako ten pohon,
+  kvůli kterému stráž u bloku diffu existuje — ale za patnáct kroků tažení skutečného okna sheetu
+  přišlo `updateNSView` **nula krát** a rozdělaný výběr zůstal, protože se hodnota representable
+  nemění. Stráž by tedy nešla ověřit vloženou regresí, což je v `CLAUDE.md` důvod ji **nedávat**;
+  je to potvrzení téhož rozhodnutí z #393, jen z druhé strany.
+- **Krátká sha v hlavičce hunku je `subject`**, tedy to, co se v diffu zrovna kreslí (PR, nebo
+  commit v tabu `Commity`). Návrh kreslí sha, protože kreslí diff commitu; `subject` je totéž o krok
+  obecněji a nad diffem pull requestu nelže.
 
 ## Platformová rozhodnutí
 

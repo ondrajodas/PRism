@@ -20,7 +20,7 @@ struct SelectableCodeTextTests {
     func splitsCRLFIntoLines() {
         let code = "let a = 1\r\nlet b = 2\r\nlet c = 3"
 
-        let attributed = SelectableCodeView.attributed(code, path: "x.swift", colorScheme: .dark)
+        let attributed = SelectableCodeView.attributed(code, language: Language(path: "x.swift"), colorScheme: .dark)
 
         // Sazba vkládá mezi řádky `\n`, takže dva zlomy znamenají tři řádky.
         #expect(TextLines.all(attributed.string).count == 3)
@@ -32,12 +32,12 @@ struct SelectableCodeTextTests {
     func typesetsCRLFSameAsLF() {
         let fromCRLF = SelectableCodeView.attributed(
             "let a = 1\r\n\r\nlet b = 2\r\n",
-            path: "x.swift",
+            language: Language(path: "x.swift"),
             colorScheme: .dark
         )
         let fromLF = SelectableCodeView.attributed(
             "let a = 1\n\nlet b = 2\n",
-            path: "x.swift",
+            language: Language(path: "x.swift"),
             colorScheme: .dark
         )
 
@@ -49,7 +49,7 @@ struct SelectableCodeTextTests {
     func keepsEmptyLines() {
         let attributed = SelectableCodeView.attributed(
             "let a = 1\r\n\r\n\r\nlet b = 2",
-            path: "x.swift",
+            language: Language(path: "x.swift"),
             colorScheme: .dark
         )
 
@@ -58,12 +58,13 @@ struct SelectableCodeTextTests {
 
     /// **Bez známého jazyka se text neskládá po řádcích vůbec** (#214, kvůli ceně) — takže tam
     /// `CR` projde do textu tak, jak přišel. Je to tady zapsané schválně: sheet s logem chodí
-    /// touhle cestou (`path` je jméno checku) a `NSTextView` `CR` jako zlom zobrazí sám.
+    /// touhle cestou (od #417 s `language: nil`, dřív s jménem checku místo cesty) a `NSTextView`
+    /// `CR` jako zlom zobrazí sám.
     @Test("Bez známého jazyka se text nedělí, jde jednolitě")
     func keepsUnknownLanguageTextIntact() {
         let code = "řádek jedna\r\nřádek dva"
 
-        let attributed = SelectableCodeView.attributed(code, path: "job.log", colorScheme: .dark)
+        let attributed = SelectableCodeView.attributed(code, language: Language(path: "job.log"), colorScheme: .dark)
 
         #expect(attributed.string == code)
     }
@@ -78,7 +79,7 @@ struct SelectableCodeTextTests {
         for (label, path) in [("se známým jazykem", "x.swift"), ("bez jazyka", "job.log")] {
             let attributed = SelectableCodeView.attributed(
                 "let total = Version20260729;\nlet b = 2",
-                path: path,
+                language: Language(path: path),
                 colorScheme: .dark
             )
             var uncoloured: [String] = []
@@ -95,7 +96,7 @@ struct SelectableCodeTextTests {
     /// token pro obojí, aby se kód v sheetu a v diffu nerozešel.
     @Test("Obyčejný text má barvu textu z palety")
     func paintsPlainTextWithTheInkColour() {
-        let attributed = SelectableCodeView.attributed("řádek logu", path: "job.log", colorScheme: .dark)
+        let attributed = SelectableCodeView.attributed("řádek logu", language: Language(path: "job.log"), colorScheme: .dark)
         let whole = NSRange(location: 0, length: attributed.length)
 
         var colours: Set<NSColor> = []

@@ -24,7 +24,7 @@ struct ChecksView: View {
     /// Rozbalí nebo sbalí check. `nil` = detail se nenabízí vůbec (nemáme `AppStore`, náhledy).
     var toggle: ((PullRequestCheck) -> Void)?
     var jump: ((String, Int?) -> Void)?
-    var showFullLog: ((PullRequestCheck, String) -> Void)?
+    var showFullLog: ((PullRequestCheck, JobLog) -> Void)?
 
     /// Přeskočené se sbalí za číslo. Na skutečném PR jich bývá většina (změřeno na
     /// `keboola/platform-libraries#557`: 28 checků, 22 přeskočených) a rozepsané by utopily

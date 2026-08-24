@@ -131,7 +131,7 @@ struct CheckLogPerformanceMeasurement {
         let tail = Policy.logTail(text, lines: Policy.logTailLines).text
         for (label, content) in [("ocas \(Policy.logTailLines) řádků", tail), ("celý", text)] {
             let (scroll, textView) = tailView()
-            let attributed = SelectableCodeView.attributed(content, path: "job.log", colorScheme: .dark)
+            let attributed = SelectableCodeView.attributed(content, language: Language(path: "job.log"), colorScheme: .dark)
             let open = ms {
                 textView.textStorage?.setAttributedString(attributed)
                 scroll.displayIfNeeded()
@@ -199,8 +199,8 @@ struct CheckLogPerformanceMeasurement {
     @Test("Obarvování po řádcích proti jednolitému textu")
     func highlightingOverhead() {
         let text = log(lines: 6_000)
-        print("MĚŘENÍ 6000 řádků, po řádcích (job.swift): \(ms { _ = SelectableCodeView.attributed(text, path: "job.swift", colorScheme: .dark) }) ms")
-        print("MĚŘENÍ 6000 řádků, jednolitě (job.log):    \(ms { _ = SelectableCodeView.attributed(text, path: "job.log", colorScheme: .dark) }) ms")
+        print("MĚŘENÍ 6000 řádků, po řádcích (job.swift): \(ms { _ = SelectableCodeView.attributed(text, language: Language(path: "job.swift"), colorScheme: .dark) }) ms")
+        print("MĚŘENÍ 6000 řádků, jednolitě (job.log):    \(ms { _ = SelectableCodeView.attributed(text, language: Language(path: "job.log"), colorScheme: .dark) }) ms")
     }
 
     // MARK: - Pomůcky

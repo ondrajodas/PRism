@@ -219,12 +219,21 @@ struct DiffView: View {
 
     /// Hunk jako text k vybírání. Kód se skládá **stejnou funkcí jako pro schránku**
     /// (`Policy.code(of:)`), takže se vybraný text nemůže rozejít s tím, co dá `Kopírovat hunk`.
+    ///
+    /// Hlavička se skládá tady, ne v sheetu (#417): sheet nemá znát `DiffHunk` ani to, co se
+    /// zrovna kreslí — a `subject` je jediné místo, kde je vidět, jestli je diff z pull requestu,
+    /// nebo z jednoho commitu.
     private func codeText(of hunk: DiffHunk, in file: FileDiff) -> CodeText {
-        CodeText(
+        let code = Policy.code(of: hunk)
+        return CodeText(
+            kind: .hunk,
             id: "\(file.displayPath)#\(hunk.header)",
+            title: CodeSheetText.hunkTitle(path: file.displayPath),
+            slug: CodeSheetText.hunkSlug(header: hunk.header, subject: subject),
+            note: CodeSheetText.hunkNote(code: code),
             path: file.displayPath,
-            heading: hunk.header,
-            code: Policy.code(of: hunk)
+            code: code,
+            link: nil
         )
     }
 

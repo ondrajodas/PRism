@@ -61,6 +61,8 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PullRequestTab` | Který tab PR je vidět: `overview` / `filesChanged` / `commits` / `conversation` / `checks` / `findings` / `progress` (#242, `checks` přidalo #215, `commits` #316). **Všech sedm se kreslí vždycky** (#306) — pruh nemá čím měnit počet položek podle dat. `isReviewerOutput` odděluje **výstup našich reviewerů** od toho, co je na PR — z něj se kreslí dělič v pruhu záložek, takže `Kontroly` (#215) i `Commity` (#316) můžou přijít doprostřed levé skupiny, aniž by se posunul. `showsReviewPanel` říká, jestli je v tabu vidět panel s nálezy (#294) — a **s tím prvním se to nesmí slít**: `Kontroly` i `Commity` mají `isReviewerOutput == false` a panel přesto nemají, takže jedna vlastnost pro dvě otázky by posunula dělič. Jako `ReviewVerdict` **není `Codable`** |
 | `PullRequestTabBadge` | Odznak u záložky (#242): `count` / `blocking` (červeně) / `live` (puntík). Výčtem, ne strukturou s příznaky — „puntík s počtem“ ani „blokující bez počtu“ význam nemá, takže se nemá dát napsat |
 | `ChecksTabState` | Co je v tabu `Kontroly` k vidění (#306): `loading` / `empty` / `list([PullRequestCheck], failure:)` / `failed`. Tab se kreslí i u PR bez CI, takže musí mít odpověď na **každý** stav dat — `empty` znamená „tenhle PR CI nemá“, kdežto `loading` o CI netvrdí nic. Skládá to `Policy.checksTab(checks:failure:)` ze **dvou** map ve store (`checks`, `checkFailures`), jinak by se prázdno slilo s poruchou. Není `Codable` — je to odvozený stav, ne data |
+| `CodeText` | Text, který se otevírá v `CodeTextSheet`u (#157, druh od #417): `kind` (`hunk`/`log`) — **nese profil velikosti**, `title`/`slug`/`note` (hlavička složená volajícím), `path` (jazyk na obarvení; **`nil` u logu = jednou barvou**), `code` a `link` na novější text. Není `Codable` — je to obsah jednoho otevření sheetu |
+| `JobLog` | Celý log jobu připravený k zobrazení (#417): text **bez ANSI, s timestampy**, plus `lineCount`, `byteCount` a `fetchedAt` — vše **z chvíle stažení**. Počty se nesou s textem schválně (hlavička sheetu je vypisuje, takže by se scan megabajtů dělal při každém překreslení, #224) a `fetchedAt` proto, že `Snímek z HH:MM:SS` u běžícího jobu mluví o chvíli **stažení**, ne o chvíli otevření sheetu |
 | `PullRequestCommit` | Jeden commit PR (#316): plné `sha`, celá `message`, `authorName` (z gitu, **vždycky je**), `authorLogin` a `avatarURL` (z účtu, **umí být `nil`**), `committedAt` a `isMerge`. `subject` je první řádka zprávy, `shortSha` sedm znaků. Klíčuje se **celým sha**, ne zkráceným — dvě sha se stejnými sedmi znaky by se v `ForEach`i slila potichu. Počet souborů ani `+X −Y` v něm **nejsou**: seznam z GitHubu je nenese a dotahovat je po commitu je N+1 |
 | `CommitsTabState` | Co je v tabu `Commity` k vidění (#316): `loading` / `list([PullRequestCommit], failure:)` / `failed`. **Tři stavy, ne čtyři** — `empty` tu chybí schválně: pull request bez commitů neexistuje, takže prázdná odpověď je **porucha**, ne stav PR. Je to obrácená volba než u `ChecksTabState`, kde prázdno odpověď **je**. Skládá to `Policy.commitsTab(commits:failure:)` ze dvou map ve store. Není `Codable` |
 | `CommitDiff` | Diff **jednoho commitu** (#317): `sha` a `content` (`loading` / `loaded(Diff)` / `failed`). Sha je **v hodnotě, ne v klíči** — mapa ve store je klíčovaná pull requestem, takže se v okně drží nejvýš jeden diff commitu na PR. Klíč `(PR, sha)` by u PR se stovkou commitů rostl o každý proklik a byly by to megabajty za obrazovky, které nikdo nemá vidět (tatáž úvaha jako u `expandedChecks`). Návratem do seznamu se **nezahazuje**: je to i paměť na to, kde v seznamu člověk byl |
@@ -708,6 +710,11 @@ v `Coordinator`u. Co u toho platí:
   nešla by ověřit vloženou regresí, a stráž, kterou nemá co vyvolat, je stav, který nikdo nečte.
   Drží to `DiffBlockUpdateTests.codeSheetIsNotUpdatedByGeometry`. `LogTailTextView` má vlastní stráž
   od #292 (`shownText`/`shownColor` v koordinátoru) — je to tentýž vzor, jen o tři issues starší.
+
+  **Přeměřeno u #417, když se ten sheet stal roztahovatelným** — a vyšlo to nastejno: za patnáct
+  kroků tažení skutečného okna sheetu (po 12 bodech) přišlo `updateNSView` **nula krát** a rozdělaný
+  výběr zůstal. Tažení tedy hodnotu representable nemění, takže stráž se ani tehdy nepřidala; ověřeno
+  i obráceně, že bez ní tentýž test projde. Podrobnosti v *Sheet s kódem a s logem*.
 
 ### Barvy diffu (#277)
 
@@ -1636,7 +1643,7 @@ Proti dvěma AppKitovým views, které v repu už byly, se to liší takhle:
 | zalamuje | ne (dvě osy scrollu) | ano | **ano** |
 | otevírá se na | konci dokumentu | začátku | **začátku okna** (okno *je* konec) |
 | atributy | jedna barva na celý text | obarvení podle jazyka | **role hlavičky události** |
-| stráž v `updateNSView` | ano (#292) | ne | **ano** |
+| stráž v `updateNSView` | ano (#292) | ne — **změřeno** (#417) | **ano** |
 
 **Zalamování je vědomá odchylka od návrhu**, který má u těla události `white-space: pre`. V jednom
 textovém kontejneru nejde mít zalamované odstavce vedle nezalamovaných (`lineBreakMode` v odstavci
@@ -1664,9 +1671,10 @@ nálezů). Tři věci na tom stojí a všechny jsou **změřené na skutečném 
   v komentáři `CodeTextSheet` („sheet není roztažitelný myší“).
 - **Bez `.fitted` se `idealWidth` zahodí a sheet je široký jako `minWidth`.** Do téhle změny byl tedy
   přepis 720 bodů široký, ne nakreslených 940 — a nerozhodovalo o tom okno za ním (změřeno i nad
-  oknem 2 000 bodů). Je to **třída, ne výskyt**: `CodeTextSheet` (log a hunk) má min 560 a ideál
-  spočítaný z obrazovky až 2 700, takže se v něm celé měření #292 neuplatní. Neopravuje se to tady,
-  protože je to jiná obrazovka a spadá pod schvalovací bránu na vzhled.
+  oknem 2 000 bodů). Je to **třída, ne výskyt**: `CodeTextSheet` (log a hunk) měl min 560 a ideál
+  spočítaný z obrazovky až 2 700, takže se v něm celé měření #292 neuplatnilo. **Druhý výskyt je
+  opravený u #417** (sekce 28 návrhu) — tady se tehdy neopravoval proto, že je to jiná obrazovka,
+  a ta spadá pod schvalovací bránu na vzhled.
 - **Sheet se rozvrhuje dvakrát a v prvním průchodu má podlahu.** Zápis naměřené velikosti bez odmlky
   by proto při každém otevření uložil 720 × 420 a od druhého otevření by se sheet otevíral nejmenší
   možný. Zahazuje ten mezistav `RawSessionSheet.resizeSettle` (400 ms) — je na to test, který tvrdí,
@@ -2957,7 +2965,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffPairBlockView`, `DiffPairBlockContainer`, `DiffPairBlockRowView` | Totéž vedle sebe: dva zarovnané sloupce v clip view |
 | `DiffBlockStyle`, `DiffBlockDrawing` | Dva klíče bloku. `DiffBlockStyle` (jazyk + barevný režim, a z něj paleta) rozhoduje spolu s řádky o tom, jestli se text **znovu sází** (#157; režim v něm je schválně kvůli #278, barvy jsou v tom textu zapečené). `DiffBlockDrawing` (blok + styl + **šířka**) rozhoduje o tom, jestli má `updateNSView` vůbec co dělat (#393) — viz *Stráž v `updateNSView`* |
 | `DiffGutterGeometry`, `DiffBlockPlacement` | Aritmetika gutteru (#252) — kde leží plochy na tažení a pilulka, a poloha bloku v prostoru obsahu **mimo observable stav**. Čistý typ, aby se dal změřit i otestovat bez okna |
-| `CodeText`, `CodeTextSheet`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny |
+| `CodeText`, `CodeTextSheet`, `CodeSheetText`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny — a od #417 týmž sheetem i **celý log jobu**: druh nese `CodeText.Kind`, velikost `Policy.codeSheetSizing`, věty hlavičky a patičky `CodeSheetText`. Viz *Sheet s kódem a s logem* |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R). Od #331 kreslí **obě sekce se seznamem** (`PullRequestListScope`: `queue` / `mine`) — jeden řádek, jeden filtr, jedno řazení; liší se jen množina a věty nad prázdnem. Od #332 stojí **obě** na zúžených getterech (`visibleQueuePullRequests` / `visibleOwnPullRequests`); `PullRequestListScope` zůstává vyjmenovaný typ, ne `PullRequestOwnership`, protože nese i to, mezi kolika prázdny se rozhoduje a jak se mluví o schovaných řádcích |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199). Od #371 je nad nabídkou os odškrtávátko `Jen s blokujícím nálezem`: tu osu zapíná karta `Blokuje` na dashboardu, takže musí být **vidět a vypnutelná tam, kde se filtr nastavuje** — jinak by nabídka nad zapnutým filtrem ukazovala samá neodškrtnutá repa vedle ikony, která hlásí dvanáct schovaných PR. Kreslí se **i nad prázdnou nabídkou**, protože právě tam umí být zapnutá jako jediná |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Od #316 má **tři podoby** (`ViewThatFits`, `Layout`): s popisky a `+X −Y`, s popisky bez ní a od #318 **ikony s odznaky a popiskem jen u aktivní** — díky té třetí se pruh nezalomí ani v nejužším povoleném okně. Viz *Pruh záložek — tři podoby podle šířky* |
@@ -4612,8 +4620,19 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
     offscreen renderem.
   - **Log nejde přes obarvování po řádcích.** `SelectableCodeView` bez známého jazyka sází text
     jednolitě: změřeno **38 ms proti 2,2 ms** na dvoumegovém logu (17×), na 8,78 MB 155 ms proti
-    7,9 ms. `.log` žádný jazyk nemá, takže tudy chodí každý log — a sheetu s kódem to pomůže
-    u souborů, které `Language` nezná.
+    7,9 ms. Od #417 o tom **rozhoduje `CodeText.path`** (`nil` = jednou barvou), ne shoda: do té doby
+    to drželo jen tím, že `path` bylo jméno checku a `Language(path:)` v něm nic nepoznal — což by
+    rozbil check jmenující se `build.rs`.
+  - **Log se pro sheet připraví při stažení, ne při kliknutí** (#417, `Policy.jobLog` → `JobLog`):
+    sundá se z něj ANSI, **timestampy zůstanou** a spolu s textem se nese počet řádků a velikost,
+    které vypisuje hlavička. Sundání ANSI je průchod celým logem (192 ms na 8,78 MB), takže by na
+    hlavním vlákně při kliknutí bylo vidět; platí se **jednou** v témže odloženém úkolu jako ocas
+    (`Policy.logTail(withoutANSI:)`). Scan megabajtů při každém překreslení hlavičky by byl přesně
+    to, co zakazuje #224.
+
+  - **Sheet `Ukázat celý log` a sheet s hunkem jsou jeden sheet se dvěma profily velikosti** (#417)
+    — podrobnosti v *Sheet s kódem a s logem* na konci téhle kapitoly.
+
 - **Tab `Commity`** (#316) — seznam commitů PR, `AppStore+Commits` a `CommitListView`.
 
   **Prohlížeč, ne review.** `Změněné soubory` odpovídají na „co je na PR jinak proti základu“; slitý
@@ -5487,6 +5506,67 @@ Věci, na které se u okna naráží:
   protože nic není“ a „prázdno, protože se to nepovedlo načíst“ vypadají v okně stejně,
   ale znamenají opak; bez toho se u chybové hlášky svítilo zelené „Žádné PR k review“.
 
+### Sheet s kódem a s logem (#417)
+
+Jeden sheet (`CodeTextSheet`) a dvě cesty, kterými se do něj přijde: `Ukázat celý log` v akcích nad
+koncem logu a *hunk k vybrání* z diffu. Co sheet **dělá**, je u obojího totéž (jeden vybíratelný
+text, zalamování, `Zkopírovat vše`, `Zavřít`); jak **velký** se otevře, je vlastnost obsahu —
+a rozhoduje o tom čistá funkce `Policy.codeSheetSizing(kind:screen:)`, druh nese `CodeText.Kind`.
+
+**Do #417 se otevíral 560 bodů široký**, tedy v podlaze: bez `presentationSizing(.fitted)` SwiftUI
+`idealWidth` u sheetu **zahodí** (změřeno u #327 nad skutečným oknem sheetu, i s oknem 2 000 bodů za
+ním). U textu, jehož jediné téma je šířka, to byla ta nejhorší možná odpověď — 66 znaků na řádek,
+z nich 29 na timestamp, a **68 %** řádků logu zalomených. Čísla i zlom jsou v sekci 28 návrhu
+a u konstant v `App/Policy/CodeSheet.swift`.
+
+| | hunk | log |
+|---|---|---|
+| otevře se na | **1 180 × 520** | **obrazovka − 152, nejvýš 2 700 × 760** (na 1512b displeji 1 360) |
+| podlaha | **560 × 320** — mediánový hunk celý | **820 × 420** — šířka do #292 a 21 řádků |
+| kritérium | 91 % hunků bez jediného zalomení; nad 1 180 koupí sto bodů jen +2,8 pb | žádná šířka nestačí (p99 řádku 333 znaků), takže se bere, co obrazovka dovolí |
+| obarvení | podle jazyka souboru | **jednou barvou** (155 ms proti 7,9 ms na 8,78MB logu) |
+| patička | `Zavřít`, kolik řádků se nevešlo na šířku, `Zkopírovat vše` | `Zavřít`, `Otevřít celý log na GitHubu ↗`, `Zkopírovat vše` |
+
+Čtyři věci, které se u toho dají pokazit potichu:
+
+- **Dva klíče pro uloženou velikost jsou podmínka, ne pohodlí.** S jedním by roztažení logu přes celý
+  monitor otevíralo takhle i hunk o devíti řádcích — je na to test, ověřený vloženou regresí (hunk se
+  s jedním klíčem otevřel 2 460 bodů široký). Cena: čtyři `@AppStorage` klíče
+  (`CodeTextSheet.StorageKey`) a `switch` nad druhem ve dvou getterech.
+- **Sheet se rozvrhuje dvakrát a v prvním průchodu má podlahu** (#327). Zápis bez odmlky proto uloží
+  podlahu a od druhého otevření se sheet otevírá nejmenší možný — tedy zpátky do té vady, kterou #417
+  opravuje. Drží to `CodeTextSheet.resizeSettle` (400 ms); vloženou regresí ověřeno, že se bez ní
+  uloží **560 × 320** u hunku a **820 × 420** u logu.
+- **Podlaha je to, co sheet dostane, když se ideál pokazí** — proto není nejmenší číslo, které projde,
+  ale velikost, ve které obsah ještě obstojí. A **ideál se nikdy nespočítá pod podlahu**: `idealWidth`
+  menší než `minWidth` by SwiftUI přebilo podlahou, takže by v rámci stály dvě odpovědi na jednu
+  otázku (nastane to u logu na malinké obrazovce, kde `codeSheetWidth` rozhoduje podle displeje).
+- **Věta o zalomených řádcích je jen u hunku.** U logu by to byl scan megabajtů při každém přerovnání
+  šířky (#224) a „dvě třetiny řádků se nevešly“ nikomu nepomůže. Kapacita řádku se počítá stejnou
+  aritmetikou jako tabulka v návrhu (`Policy.codeSheetCharacters`: šířka bez 2× odsazení a 2×
+  `lineFragmentPadding`, děleno šířkou znaku měřenou **na písmu**) a je proti skutečnému layout
+  manageru ověřená přes pásmo šířek (`CodeSheetWrappingTests`).
+
+**Stráž v `updateNSView` tady není, a je to změřené rozhodnutí** (potvrzuje #393). Roztahovatelný
+sheet vypadal jako ten případ, kvůli kterému stráž u bloku diffu existuje — přeměření plochy při
+každém kroku tažení znamená průchod tělem sheetu a přesázení by zrušilo rozdělaný výběr. Změřeno na
+skutečném okně sheetu (patnáct kroků tažení po 12 bodech): `updateNSView` se **ani jednou nezavolal**
+a výběr zůstal, protože SwiftUI aktualizaci nepošle, dokud se hodnota representable nezmění. Stráž by
+tedy nešla ověřit vloženou regresí (vyzkoušeno — bez ní tentýž test projde), a to je v `CLAUDE.md`
+důvod ji **nedávat**. Výběr při tažení hlídá `DiffBlockUpdateTests.codeSheetKeepsTheSelectionWhileResizing`:
+kdyby si tohle view začalo říkat o vlastní velikost (`sizeThatFits`), aktualizace by přišly a ten test
+spadne.
+
+Hlavička má **tři řádky** a skládá je `CodeSheetText` (ne sheet sám — ten nemá znát `DiffHunk` ani
+`PullRequestCheck`). Třetí řádka má u logu **dvě podoby**: u běžícího jobu snímek s časem, u doběhlého
+`log je celý, nic už k němu nepřibude` — doběhlému jobu se log snímkem nazývat nemá, protože slovo
+„snímek“ nese informaci jen tam, kde se text pod rukama mění. **Přírůstek se nepočítá** (na rozdíl od
+přepisu session, což je lokální soubor): log je na síti, takže by živé číslo byl request na tik —
+místo něj je v patičce odkaz na GitHub. Čas ve snímku je `JobLog.fetchedAt`, tedy z chvíle stažení
+(hodiny bere store z `TimeSource`, `Policy` zůstává čistá) — čas kliknutí by tvrdil, že je text
+novější, než jaký je: leží v paměti od rozbalení checku. Akce jsou v patičce, protože hlavička nese tři řádky a u logu
+je jedna z nich věta, po které by tlačítka plavala.
+
 ## Okno s novinkami (`App/Views/ReleaseNotes/`)
 
 Scéna `Window` s id `release-notes` (menu aplikace, hned pod `O aplikaci PRism`). Vlevo
@@ -5786,6 +5866,9 @@ Věci, které se u toho nemají rozbít:
 | `Policy.jobID(from:)` | Číslo jobu z odkazu na check (#214). Funguje i jako check-run ID pro anotace; `…/runs/<id>` bez `/job/` je **běh**, ne job, takže `nil` |
 | `Policy.strippingANSI(_:)`, `Policy.strippingTimestamps(_:)` | Čistka logu (#214) — bez nich je v okně `^[[36;1m` a 28 znaků timestampu na každém řádku |
 | `Policy.logTail(_:lines:)` | Konec logu a **kolik se ho nevešlo** (`LogTail`, #214). Tiše zkrácený log tvrdí, že job začal uprostřed |
+| `Policy.jobLog(_:)`, `Policy.logTail(withoutANSI:lines:)` | Celý log pro sheet (#417) — **bez ANSI, s timestampy**, i s počtem řádků a velikostí spočítanými při stažení (`JobLog`). Druhá funkce je zbytek `logTail`u, aby se průchod celým logem platil **jednou** |
+| `Policy.codeSheetSizing(kind:screen:)`, `codeSheetSize(kind:storedWidth:storedHeight:screen:)`, `codeSheetResize(kind:opened:measured:)` | Velikost sheetu s kódem (#417) — **dva profily** (hunk 1 180 × 520 s podlahou 560 × 320, log obrazovka − 152 nejvýš 2 700 × 760 s podlahou 820 × 420), uložená velikost ořezaná o obrazovku a rozhodnutí, jestli se vůbec zapsat |
+| `Policy.codeSheetCharacters(width:characterWidth:)`, `codeSheetOverflow(code:width:characterWidth:)`, `codeSheetLines(of:)` | Kolik znaků se vejde na řádek sheetu a kolik řádků se nevešlo (#417). Kapacita je tatáž aritmetika jako tabulka v sekci 28 návrhu; **řádky se počítají na jednom místě**, ať hlavička a patička nemluví každá o jiném počtu |
 | `Policy.logAvailability(bytes:)` | Jde se pro log vůbec? (#214) Nad 2 MB ne — věta s konkrétní velikostí z `Content-Length`, změřený strop. Od #292 se ptá **dvakrát**: na velikost z `HEAD`, a když ta nepřijde, na skutečnou velikost stažených bajtů |
 | `Policy.logLines(of:)` | Řádky logu **na jakémkoli zakončení** — `LF`, `CRLF` i samotné `CR` (#292). `split(separator: "\n")` na `CRLF` nerozdělí, protože `"\r\n"` je ve Swiftu jeden `Character` |
 | `Policy.facts(commits:newCommits:files:filesWithFindings:headSha:findingsHeadSha:)` | Dlaždice s fakty o PR (#198); dlaždice, o které se nedá nic říct, se vynechá |

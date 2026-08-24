@@ -122,10 +122,18 @@ extension AppStore {
             // **808 ms** (ANSI 192 ms, timestampy 348 ms, zbytek dělení a slepení), a `AppStore` je
             // `@MainActor` — okno by tu dobu stálo. Je to čistá funkce nad `String`em, takže mimo
             // actor nic nedrží; zrušení se po návratu kontroluje jako všude jinde.
-            let tail = await Task.detached { Policy.logTail(raw) }.value
+            //
+            // **Připravuje se obojí naráz** (#417): sheet chce log bez ANSI celý a s timestampy,
+            // okýnko v tabu jeho ocas bez nich — a sundání ANSI je průchod celým logem, takže se
+            // platí jednou a `logTail` dostane, co z něj vyšlo.
+            let fetchedAt = time.now
+            let (full, tail) = await Task.detached { () -> (JobLog, LogTail) in
+                let full = Policy.jobLog(raw, fetchedAt: fetchedAt)
+                return (full, Policy.logTail(withoutANSI: full.text))
+            }.value
             guard !Task.isCancelled, checkDetails[key] != nil else { return }
             // Celý text se drží kvůli `Ukázat celý log`; ořez je věc zobrazení, ne stahování.
-            checkDetails[key]?.log = .loaded(full: raw, tail: tail)
+            checkDetails[key]?.log = .loaded(full: full, tail: tail)
         } catch is CancellationError {
             // Sbalený check není porucha.
         } catch {
@@ -187,7 +195,9 @@ struct CheckDetailState: Hashable, Sendable {
         /// u desetimegového stropu se čeká vteřiny až desítky vteřin (#292) a mlčící spinner je
         /// k nerozeznání od zamrznutí. `nil` = velikost neznáme, věta ji tedy neslíbí.
         case loading(bytes: Int?)
-        case loaded(full: String, tail: LogTail)
+        /// `full` je log připravený pro sheet (bez ANSI, s timestampy, s počtem řádků a velikostí),
+        /// `tail` jeho ocas pro okýnko v tabu. Dva tvary téhož textu, každý pro jednu obrazovku.
+        case loaded(full: JobLog, tail: LogTail)
         /// Nad stropem — věta s konkrétní velikostí, log se **nestahoval**.
         case tooLarge(String)
         case failed(String)

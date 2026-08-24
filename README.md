@@ -527,8 +527,16 @@ emituje jen workflow, které si o to řekne, a proto je log ta hlavní cesta.
 zrovna to, kvůli čemu se detail z `Přehledu` stěhoval. Kolik se nevešlo, je nad okýnkem napsané
 (`— starších N řádků se nevešlo —`): **tiše zkrácený log tvrdí, že job začal uprostřed**. ANSI se
 strhává a timestampy se schovávají.
-Celý text je v `Ukázat celý log`, sheet široký podle obrazovky (úzký sheet znamená víc řádků sazby
-na jeden řádek logu), a vedle je odkaz na log na GitHubu.
+Celý text je v `Ukázat celý log` — **sheet, který se dá roztáhnout za okraj a velikost si pamatuje**
+(#417). Otevírá se **široký podle obrazovky** (obrazovka bez 152 bodů, nejvýš 2 700; úzký sheet
+znamená víc řádků sazby na jeden řádek logu — při 560 bodech se láme 68 % řádků logu, při 1 360 už
+jen 13,5 %) a vysoký 760 bodů; pod 820 × 420 nejde. Je v něm log **surový, jen bez ANSI**: s
+timestampy a bez ořezu na 6 000 řádků, a hlavička říká, jestli je log celý, nebo je to snímek
+běžícího jobu. V patičce je `Zavřít`, odkaz na log na GitHubu a `Zkopírovat vše`.
+
+**Tentýž sheet ukazuje i hunk k vybrání** z diffu, jen v jiné velikosti: 1 180 × 520, nejmenší
+560 × 320. Velikost si pamatuje **zvlášť pro hunk a zvlášť pro log** — roztažený log by jinak
+otevíral takhle i hunk o devíti řádcích.
 
 Tři věci, které se u logu **nedělají**. Nestahuje se **dopředu ani pro celý seznam** — jen pro ten
 jeden check, na který se kliklo; log běhu je log všech jeho jobů, takže seznam by byl N+1 past o tři
@@ -620,7 +628,9 @@ zůstává modrý, i když myš odjede jinam, a v pohledu vedle sebe žije **jen
 
 Na to, co blok neumí — vybrat **přes** bubliny — je v kontextovém menu `Vybrat text z hunku…`: otevře
 hunk v samostatném okně jako jeden text, s obarvením a s tlačítkem na zkopírování všeho. Zavírá se
-Escem.
+Escem. Od #417 se to okno **dá roztáhnout za okraj** a otevírá se na 1 180 × 520 (nejmenší
+560 × 320); v hlavičce stojí, že je to nová verze bez znaků změny, a v patičce, kolik řádků se
+nevešlo na šířku. Velikost si pamatuje **zvlášť od sheetu s logem**.
 
 Na víc řádků je **pravé kliknutí**: `Kopírovat řádek`, u řádku, který leží v rozsahu tvého
 rozdělaného komentáře, i `Kopírovat rozsah` s počtem řádků, a na hlavičce hunku `Kopírovat hunk`.
