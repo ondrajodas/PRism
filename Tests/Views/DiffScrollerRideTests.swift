@@ -161,8 +161,14 @@ struct DiffScrollerRideTests {
 
         // Měřidlo funguje: pruh se v bloku doopravdy posunul, a to o tolik, o kolik se rolovalo —
         // tedy zůstal stát na hraně okna. V bloku jde **dolů**, protože blok jde nahoru.
+        //
+        // **Tolerantně, ne na přesnou rovnost** (nález Copilota): `barY` je hodnota po dvou převodech
+        // mezi soustavami, takže na zaokrouhlení nemá cenu stát — rivalní hypotéza je „pruh se
+        // nehnul“, tedy nula, a tu bod tolerance nezachrání. Ostatní tvrzení v téhle sadě zůstávají
+        // přesná schválně: srovnávají naši vlastní aritmetiku (`height(forWidth:)`, rámečky řádků),
+        // ne souřadnice převedené přes hierarchii.
         let after = try #require(try blocks(in: scene).first).barY
-        #expect(after - before == 200, "pruh se posunul o \(after - before), rolovalo se o 200")
+        #expect(abs(after - before - 200) < Self.epsilon, "pruh se posunul o \(after - before), rolovalo se o 200")
 
         #expect(scene.counter.bodies == bodies, "průchodů tělem \(scene.counter.bodies - bodies) navíc")
         #expect(containers.map(\.updates) == updates, "aktualizace: \(containers.map(\.updates)) proti \(updates)")
