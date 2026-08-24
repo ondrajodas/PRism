@@ -13,11 +13,33 @@ import SwiftUI
 /// v diffu končí u bubliny, u hlavičky hunku a u rozbalovacího řádku; tady je hunk celý a naráz.
 struct SelectableCodeView: NSViewRepresentable {
     let code: String
-    /// Cesta k souboru — z ní se pozná jazyk na obarvení.
-    let path: String
+    /// Jazyk na obarvení. **`nil` = jednou barvou**, a u logu je to podmínka, ne shoda: obarvení po
+    /// řádcích stojí na 8,78MB logu 155 ms proti 7,9 ms (změřeno u #214). Do #417 tady byla cesta
+    /// k souboru a o jazyku se rozhodovalo tady — u logu tedy tím, že `Language(path:)` v jméně
+    /// checku nic nepoznal, což je náhoda, ne rozhodnutí.
+    let language: Language?
     let colorScheme: ColorScheme
 
-    func makeNSView(context: Context) -> NSScrollView {
+    /// Šířka jednoho znaku písma, kterým se sází. Mono má všechny znaky stejně široké, takže stačí
+    /// změřit jeden — na tomhle systému 8,036 bodu pro mono 13 b. **Měří se na písmu**, protože je
+    /// to hodnota fontu, ne konstanta aplikace; tatáž úvaha jako u lišty diffu (#188). Patička
+    /// sheetu z ní počítá, kolik řádků se nevešlo na šířku.
+    static let characterWidth = font.maximumAdvancement.width
+
+    /// Písmo, kterým se sází — **jedno místo pro kresbu i pro měření**, jinak by se spočítaná
+    /// kapacita řádku rozešla s tím, co se nakreslí (tatáž past jako u `MiniButtonStyle.labelFont`,
+    /// #284).
+    static let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+
+    func makeNSView(context: Context) -> NSScrollView { Self.makeScrollView() }
+
+    /// Rolovací plocha s textovým view, nastavená tak, jak se kreslí.
+    ///
+    /// **Vlastní továrnička, ne tělo `makeNSView`** — tatáž úvaha jako u `LogTailTextView` (#303):
+    /// `NSViewRepresentableContext` se v testu nepostaví, takže by se odsazení a zalamování daly
+    /// ověřit jedině nad ruční kopií toho nastavení. A druhé místo, kde se to nastavuje, je druhá
+    /// pravda o jedné šířce — přitom se z odsazení počítá kapacita řádku pro patičku sheetu.
+    static func makeScrollView() -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
@@ -27,7 +49,9 @@ struct SelectableCodeView: NSViewRepresentable {
         // Read-only, ale **vybíratelné** — o tohle tu jde.
         textView.isSelectable = true
         textView.drawsBackground = false
-        textView.textContainerInset = NSSize(width: 8, height: 8)
+        // Odsazení je z `Policy`, ne literál: počítá se z něj kapacita řádku (`codeSheetCharacters`),
+        // takže dvě čísla by znamenala dvě pravdy o jedné šířce.
+        textView.textContainerInset = NSSize(width: Policy.codeSheetTextInset, height: 8)
         // Zalamování místo vodorovného scrollu, jako v diffu. Zalomení není znak, takže se do
         // vybraného textu nedostane.
         textView.isHorizontallyResizable = false
@@ -43,19 +67,32 @@ struct SelectableCodeView: NSViewRepresentable {
         return scroll
     }
 
+    /// **Stráž s klíčem v `Coordinator`u tady není, a je to změřené rozhodnutí, ne opomenutí**
+    /// (#417, potvrzuje #393). Roztahovatelný sheet vypadal jako ten případ, kvůli kterému stráž
+    /// existuje u bloku diffu: přeměření plochy při každém kroku tažení znamená průchod tělem
+    /// sheetu, a přesázení by **zrušilo rozdělaný výběr**. Změřeno na skutečném okně sheetu
+    /// (patnáct kroků tažení za okraj po 12 bodech): `updateNSView` se za celé tažení nezavolal
+    /// **ani jednou** a výběr zůstal. SwiftUI aktualizaci nepošle, dokud se hodnota representable
+    /// nezmění — a `code`, `language` ani `colorScheme` se tažením nemění.
+    ///
+    /// Platí proto pravidlo z `CLAUDE.md`: stráž, kterou nemá co vyvolat, **se nedává** — nešla by
+    /// ověřit vloženou regresí (vyzkoušeno: bez stráže tentýž test projde). Co drží výběr, je
+    /// `DiffBlockUpdateTests.codeSheetKeepsTheSelectionWhileResizing` — kdyby si tohle view někdy
+    /// začalo říkat o vlastní velikost (`sizeThatFits`), aktualizace by přišly a ten test spadne.
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let textView = scroll.documentView as? NSTextView else { return }
-        // Přepisuje se celý obsah, ne rozdíl: je to jeden hunk, tedy stovky řádků, a děje se to
-        // při otevření okna a při přepnutí světlého a tmavého režimu.
-        textView.textStorage?.setAttributedString(Self.attributed(code, path: path, colorScheme: colorScheme))
+        // Přepisuje se celý obsah, ne rozdíl: je to jeden hunk nebo celý log, a děje se to při
+        // otevření okna a při přepnutí světlého a tmavého režimu.
+        textView.textStorage?.setAttributedString(
+            Self.attributed(code, language: language, colorScheme: colorScheme)
+        )
     }
 
     /// Obarvení jde přes tentýž `SyntaxHighlighter` jako diff — jedno místo, kde se rozhoduje, co
     /// je klíčové slovo. Jen se výsledek slepí do jednoho `NSAttributedString`, aby to byl **jeden**
     /// text a selekce v něm byla jedna.
-    static func attributed(_ code: String, path: String, colorScheme: ColorScheme) -> NSAttributedString {
-        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        let language = Language(path: path)
+    static func attributed(_ code: String, language: Language?, colorScheme: ColorScheme) -> NSAttributedString {
+        let font = Self.font
         let palette = SyntaxPalette.forScheme(colorScheme)
         // **Barva textu se nasazuje vždycky** (#393): chybějící `.foregroundColor` v atributovaném
         // řetězci znamená černou, ne „dědí z okolí“, takže hunk bez rozpoznaného jazyka i obyčejné

@@ -1152,14 +1152,25 @@ struct PullRequestDetailView: View {
             },
             showFullLog: { check, full in
                 logSheet = CodeText(
+                    kind: .log,
                     id: "log:\(check.name)",
-                    // Jméno checku, ne cesta k souboru — a to je zároveň důvod, proč se log nasází
-                    // **jednolitě**: `Language(path:)` v něm žádný jazyk nepozná, takže
-                    // `SelectableCodeView` obarvování po řádcích přeskočí (2,2 ms místo 38 ms
-                    // na dvoumegovém logu, změřeno u #214).
-                    path: check.name,
-                    heading: "job.log",
-                    code: full
+                    title: CodeSheetText.logTitle(check: check.name),
+                    slug: CodeSheetText.logSlug(full, subject: "\(pullRequest.repo)#\(pullRequest.number)"),
+                    // **Snímek se přiznává jen u běžícího jobu** (#417): u doběhlého by slovo
+                    // „snímek“ varovalo před něčím, co se nemůže stát. A okamžik je u snímku ten,
+                    // kdy se log **stáhl** (`JobLog.fetchedAt`), ne kdy se kliklo — text leží
+                    // v paměti od rozbalení checku a od té doby na GitHubu narostl.
+                    note: CodeSheetText.logNote(
+                        outcome: check.outcome,
+                        duration: check.duration,
+                        at: check.outcome == .running ? full.fetchedAt : check.completedAt
+                    ),
+                    // **`nil`, ne jméno checku** — u logu se nemá co obarvovat, viz `CodeText.path`.
+                    path: nil,
+                    code: full.text,
+                    // Odkaz na běh na GitHubu je cesta k novějšímu textu; `nil` u checku, který
+                    // odkaz nemá (bors odkazuje mimo GitHub, viz `PullRequestCheck.jobID`).
+                    link: check.link
                 )
             }
         )

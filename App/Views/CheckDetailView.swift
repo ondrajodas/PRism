@@ -12,8 +12,8 @@ struct CheckDetailView: View {
     let link: URL?
     /// Skočit na `soubor:řádek` z anotace. `nil` = skákat není kam (diff se nenačetl).
     var jump: ((String, Int?) -> Void)?
-    /// Ukázat celý log v sheetu. Dostane celý text, ne ořezaný.
-    var showFullLog: ((String) -> Void)?
+    /// Ukázat celý log v sheetu. Dostane celý log, ne ořezaný ocas.
+    var showFullLog: ((JobLog) -> Void)?
     let collapse: () -> Void
 
     /// Odsazení obsahu detailu — sedí pod jménem checku, ne pod jeho ikonou (návrh: `padding-left:

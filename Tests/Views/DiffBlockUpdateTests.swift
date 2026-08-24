@@ -184,7 +184,7 @@ struct DiffBlockUpdateTests {
     /// Zůstává tedy bez stráže, a je to rozhodnutí, ne opomenutí: stráž, kterou nemá co vyvolat, je
     /// stav, který nikdo nečte — a **nešla by ověřit vloženou regresí** (zkoušeno: bez ní test
     /// o výběru dál prochází, protože se sazba nespustí).
-    @Test("Hunk v sheetu dostane jednu aktualizaci, ne jednu na průchod")
+    @Test("Hunk v sheetu drží výběr, i když se graf špiní")
     func codeSheetIsNotUpdatedByGeometry() throws {
         let state = DiffBlockProbeState()
         let counter = DiffBlockProbeCounter()
@@ -206,6 +206,43 @@ struct DiffBlockUpdateTests {
         // Výběr přežije, protože se text nepřesázel. Kdyby se sázel při každém průchodu (jako se to
         // dělo v bloku diffu), zmizel by hned při prvním.
         #expect(textView.selectedRange() == selected)
+    }
+
+    /// **Od #417 je sheet s hunkem roztahovatelný, takže tažení za okraj je nová cesta, kterou by se
+    /// výběr mohl ztratit** — a tenhle test tvrdí, že se neztrácí.
+    ///
+    /// Drží to **vlastnost SwiftUI, ne stráž v kódu**, a je to změřené: `updateNSView` se za patnáct
+    /// kroků tažení skutečného okna sheetu nezavolal ani jednou, protože se hodnota representable
+    /// nemění (`code`, `language`, `colorScheme` jsou tažením netknuté). Stráž s klíčem
+    /// v `Coordinator`u se proto **vědomě nepřidala** — nešla by ověřit vloženou regresí, což je
+    /// pravidlo z `CLAUDE.md` u #393; zdůvodnění je u `SelectableCodeView.updateNSView`.
+    ///
+    /// Test tedy hlídá tu vlastnost: kdyby si `SelectableCodeView` začal říkat o vlastní velikost
+    /// (`sizeThatFits`), aktualizace by chodit začaly, text by se přesázel a tady by to spadlo.
+    @Test("Hunk v sheetu drží výběr i po změně šířky")
+    func codeSheetKeepsTheSelectionWhileResizing() throws {
+        let state = DiffBlockProbeState()
+        let counter = DiffBlockProbeCounter()
+        let scene = try hosted(
+            CodeSheetProbe(state: state, counter: counter, code: Self.hunk),
+            warming: state
+        )
+        defer { scene.window.orderOut(nil) }
+        let textView = try #require(Self.plainTextView(in: scene.hosting))
+        textView.setSelectedRange(NSRange(location: 4, length: 12))
+        let selected = textView.selectedRange()
+        #expect(selected.length == 12, "výběr se nepovedlo nastavit, test by netvrdil nic")
+
+        // Tažení okrajem, krok po kroku — ne jeden skok: cena i riziko jsou v tom, co se děje
+        // v každém kroku.
+        for width in stride(from: 560.0, through: 900.0, by: 20.0) {
+            state.width = width
+            pumpUntilQuiet(state, in: scene)
+        }
+
+        // Že se to doopravdy přerovnávalo — bez toho by řádek níž netvrdil nic.
+        #expect(counter.bodies > 1, "sonda se nepřerovnala, průchodů \(counter.bodies)")
+        #expect(textView.selectedRange() == selected, "výběr zmizel, text se při tažení přesázel")
     }
 
     private static let hunk = (0..<40).map { "let value\($0) = compute(\($0))" }.joined(separator: "\n")
@@ -424,7 +461,7 @@ private struct CodeSheetProbe: View {
 
     var body: some View {
         let _ = counter.note()
-        SelectableCodeView(code: code, path: "Cart.swift", colorScheme: state.colorScheme)
+        SelectableCodeView(code: code, language: Language(path: "Cart.swift"), colorScheme: state.colorScheme)
             .frame(width: state.width, height: 300)
             .padding(.top, Double(state.tick % 2))
     }

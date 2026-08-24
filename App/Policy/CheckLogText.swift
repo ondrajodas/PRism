@@ -166,7 +166,33 @@ extension Policy {
     /// jedním requestem, takže text už v paměti je (změřeno u #214). Proto se z něj bere ocas
     /// a celý zůstává k dispozici pro `Ukázat celý log`.
     static func logTail(_ raw: String, lines limit: Int = Policy.logTailLines) -> LogTail {
-        let clean = strippingTimestamps(strippingANSI(raw))
+        logTail(withoutANSI: strippingANSI(raw), lines: limit)
+    }
+
+    /// Celý log k zobrazení v sheetu (#417): **bez ANSI, s timestampy, bez ořezu**.
+    ///
+    /// Sundání ANSI je tady, a ne až ve view, ze dvou důvodů. Stojí to **192 ms na 8,78MB logu**
+    /// (změřeno u #292), takže na hlavním vlákně při kliknutí by to bylo vidět — připravuje se to
+    /// v témže odloženém úkolu jako konec logu. A počet řádků s velikostí, které vypisuje hlavička
+    /// sheetu, jsou tím pádem spočítané **jednou při stažení**, ne při každém překreslení (#224).
+    /// `fetchedAt` se **předává**, ne bere z `Date()` uvnitř: `Policy` je čisté funkce, takže hodiny
+    /// patří volajícímu (store má `TimeSource`) — a v testu je to jediný způsob, jak o tom čase něco
+    /// tvrdit.
+    static func jobLog(_ raw: String, fetchedAt: Date) -> JobLog {
+        let clean = strippingANSI(raw)
+        // Poslední prázdný řádek za koncovým `\n` není řádek logu — jinak by hlavička tvrdila
+        // o jeden řádek víc, než kolik jich v sheetu je. Tatáž úvaha jako u `logTail`.
+        let lines = codeSheetLines(of: clean)
+        return JobLog(text: clean, lineCount: lines.count, byteCount: raw.utf8.count, fetchedAt: fetchedAt)
+    }
+
+    /// Konec logu z textu, ze kterého už se ANSI sundalo — druhá půlka `jobLog(_:)`.
+    ///
+    /// Existuje proto, aby se ta jedna průchodová cena platila **jednou**: sheet potřebuje text bez
+    /// ANSI celý, okýnko v tabu jeho ocas bez timestampů, a `strippingANSI` je průchod znak po znaku
+    /// přes celý log.
+    static func logTail(withoutANSI raw: String, lines limit: Int = Policy.logTailLines) -> LogTail {
+        let clean = strippingTimestamps(raw)
         // Poslední prázdný řádek za koncovým `\n` není řádek logu — jinak by se `nevešlo`
         // počítalo o jeden vedle a u krátkého logu by tvrdilo ořez, který nenastal.
         var all = logLines(of: clean)
