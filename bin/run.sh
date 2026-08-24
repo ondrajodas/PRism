@@ -202,27 +202,43 @@ if ! prism_sweep_registrations "${PWD}/${APP}"; then
 fi
 
 if [ -n "${DIAGNOSE}" ]; then
-    # Strop záznamu platí na **soubor**, ne na sezení, takže nad už plným souborem se aplikace
-    # rozhodne diagnostiku nezapnout (viz `DiagnosticsLog`). Řekne to na stderr, kam se ale při
-    # spuštění přes `open` nikdo nedívá — proto se to pozná **tady**, dřív než se něco spustí.
-    # Banner, který slibuje záznam, a prázdný soubor jsou přesně to splynutí, kterému se vyhýbáme.
-    DIAGNOSTICS_LOG="${HOME}/Library/Application Support/${NAME}/diagnostics.log"
+    # **Velikost záznamu se hlásí při startu** a je to od #412 jediná věc, která se odsud o něm
+    # pozná: aplikace si dosavadní záznam při startu uloží vedle jako `diagnostics-do-<čas>.log`
+    # a začne prázdný, takže plný soubor už spuštění neblokuje (do #412 se tady kvůli němu
+    # končilo `exit 1` a soubor se musel smazat rukou). Hlásit se to musí pořád: záznam, který
+    # prostě přestane růst, se nedá odlišit od aplikace, která se chová dobře.
+    #
+    # `DIAGNOSTICS_LIMIT` je opsaný `DiagnosticsLog.byteLimit` — jediné, k čemu tady je, je věta
+    # o tom, že předchozímu záznamu chybí konec.
+    DIAGNOSTICS_DIR="${HOME}/Library/Application Support/${NAME}"
+    DIAGNOSTICS_LOG="${DIAGNOSTICS_DIR}/diagnostics.log"
     DIAGNOSTICS_LIMIT=8388608
     if [ -f "${DIAGNOSTICS_LOG}" ]; then
         DIAGNOSTICS_SIZE="$(stat -f%z "${DIAGNOSTICS_LOG}")"
+        echo "Záznam předchozího sezení má ${DIAGNOSTICS_SIZE} B, aplikace si ho uloží vedle."
         if [ "${DIAGNOSTICS_SIZE}" -ge "${DIAGNOSTICS_LIMIT}" ]; then
-            echo "Záznam diagnostiky je plný (${DIAGNOSTICS_SIZE} B ze ${DIAGNOSTICS_LIMIT})."
-            echo "       Aplikace by ho nedoplnila, takže jsem nic nespustil:"
-            echo "       ${DIAGNOSTICS_LOG}"
-            echo "       Ulož si ho a smaž, pak spusť znovu."
-            exit 1
+            echo "       Narazil na strop (${DIAGNOSTICS_LIMIT} B), takže mu chybí konec."
         fi
-        echo "Záznam diagnostiky už existuje (${DIAGNOSTICS_SIZE} B), bude se do něj přípisovat."
+    fi
+    # Kolik už uložených záznamů leží vedle. Glob, který nic nenajde, zůstane v bash 3.2 textem,
+    # takže se každá položka ověřuje `-f` — a počítá se `for`em, ne rourou do `wc`: `| grep -q`
+    # a spol. se pod `pipefail` chovají jinak, než jak to vypadá (viz CLAUDE.md).
+    DIAGNOSTICS_KEPT=0
+    DIAGNOSTICS_KEPT_BYTES=0
+    for archived in "${DIAGNOSTICS_DIR}"/diagnostics-do-*.log; do
+        [ -f "${archived}" ] || continue
+        DIAGNOSTICS_KEPT=$((DIAGNOSTICS_KEPT + 1))
+        DIAGNOSTICS_KEPT_BYTES=$((DIAGNOSTICS_KEPT_BYTES + $(stat -f%z "${archived}")))
+    done
+    if [ "${DIAGNOSTICS_KEPT}" -gt 0 ]; then
+        echo "Uložených záznamů z minula: ${DIAGNOSTICS_KEPT} (${DIAGNOSTICS_KEPT_BYTES} B);"
+        echo "       nejstarší maže aplikace sama, viz Policy.diagnosticsArchive*."
     fi
     echo ""
     echo "=========================================================================="
     echo " DIAGNOSTIKA KRESLENÍ JE ZAPNUTÁ (#361)"
     echo " Záznam: ${DIAGNOSTICS_LOG}"
+    echo " Sezení začíná v prázdném souboru, předchozí leží jako diagnostics-do-<čas>.log."
     echo " Vypne se sama tím, že příště spustíš ./bin/run.sh bez --diagnose."
     echo "=========================================================================="
     echo ""

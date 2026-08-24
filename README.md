@@ -1662,9 +1662,23 @@ Když okno začne spálit jádro na nečinnosti, `sample` ukáže, **kde** hlavn
 ./bin/run.sh --diagnose
 ```
 
-Aplikace pak zapisuje do `~/Library/Application Support/PRism/diagnostics.log` — jeden řádek za
-sekundu s časem, počtem kol runloopu, CPU hlavního vlákna a počtem průchodů `body` po typech
-views. Soubor se dá poslat v příloze; ticho v něm znamená, že aplikace nic nedělala.
+Aplikace pak zapisuje do `~/Library/Application Support/PRism/diagnostics.log` — řádek za sekundu
+s časem, počtem kol runloopu, CPU hlavního vlákna a počtem průchodů `body` po typech views. Soubor
+se dá poslat v příloze.
+
+**Sezení má svůj soubor** (#412). Dosavadní záznam se při startu uloží vedle jako
+`diagnostics-do-<čas posledního zápisu>.log` a nové sezení začíná prázdné, takže strop 8 MB platí na
+**tohle** sezení. Do #412 se přípisovalo a strop se počítal napříč sezeními — naměřeno, že záznam
+narazil na strop ve 4:01 ráno a dalších 42 hodin aplikace běžela bez záznamu. Uložených záznamů se
+drží nejvýš dvacet a nejvýš 64 MB; maže se od nejstaršího, nejnovější nikdy, a co rotace udělala
+(kam se uložil předchozí, co se smazalo, co se nepovedlo) je **napsané v záznamu**. Velikost
+předchozího souboru a počet uložených hlásí `bin/run.sh` při startu.
+
+**Klid se sráží do minutového souhrnu** (`za 61.00 s klid: 57 úseků, 235 kol runloopu, 0.366 s CPU,
+1 bez kola runloopu`), místo řádku za sekundu. Změřeno nad skutečným záznamem: klidné úseky byly
+89 % hlavních řádků a 60 % objemu souboru, a příloha o grafu k nim nestála ani jednou. Záchvat se
+naopak zapisuje pořád po sekundách — hoření ani průchod tělem klid není —, takže je z náběhu vidět,
+kdy kolo začalo. Mezera v souboru tím zmizela úplně: dokud souhrny chodí, záznam žije.
 
 **Zaseknuté okno v něm je vidět, a to je celý smysl** (#391). Řádky zapisuje vlastní vlákno, ne
 observer hlavního runloopu, takže se píše dál i tehdy, když hlavní vlákno runloop vůbec nepustí ke
@@ -1885,7 +1899,8 @@ App/                      zdrojáky aplikace — target PRism
                           a značka poslední návštěvy té sekce (#414)
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
   Support/                sdílené drobnosti bez příslušnosti k modulu;
-                          diagnostika kreslení za přepínačem PRISM_DIAGNOSE (#361)
+                          diagnostika kreslení za přepínačem PRISM_DIAGNOSE (#361) —
+                          včetně rotace jejího záznamu při startu sezení (#412)
   Views/                  SwiftUI obrazovky
     ReleaseNotes/         okno s novinkami — historie vydání a release notes vybrané verze
     Settings/             okno nastavení (⌘,) — sedm stránek v boční navigaci (#177)

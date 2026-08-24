@@ -2,19 +2,28 @@ import Foundation
 
 /// Řádkový soubor, do kterého diagnostika kreslení zapisuje (#361).
 ///
-/// **Přípisuje, nepřepisuje**: dvě sezení za sebou jsou dvě části jednoho souboru, protože se
-/// posílá jeden soubor a hlavička každého sezení je v něm vidět.
+/// **Sezení se svým souborem rotuje** (#412), pokud dostane `archive`: dosavadní záznam se uloží
+/// vedle jako `diagnostics-do-<čas>.log` a sezení začíná v prázdném souboru, tedy s celým stropem.
+/// Do #412 se **přípisovalo** a strop platil na soubor napříč sezeními, takže n-té sezení mělo
+/// místa podle toho, kolik zbylo po předchůdcích — naměřeno 3,5 MB, tedy necelých sedm hodin, a po
+/// dalších restartech ještě méně. Proč rotace a ne strop na sezení, je u `DiagnosticsArchive`.
 ///
-/// **Strop platí na soubor, ne na sezení** (nález Copilota na #386). Rozpočet je 8 MB, tedy řádově
-/// sto tisíc řádků; kdyby se počítal od nuly při každém startu, přípisovalo by každé sezení dalších
-/// 8 MB a mez by nedělala nic — což je zrovna ta „vyjmenovaná mez“, kterou má mít. `written` se proto
-/// **seedne velikostí souboru** při jeho otevření.
+/// **Rotuje se u otevírání souboru, ne z volajícího.** Kdyby ji spouštěl volající, dala by se pořadím
+/// pokazit: log s otevřeným deskriptorem by po přesunu zapisoval **do archivu**, takže by sezení
+/// psalo do souboru, na který se nikdo nedívá. Takhle se rotace stane dřív, než existuje deskriptor,
+/// a nedá se to udělat obráceně. Co udělala, si volající vyzvedne přes `rotation` a napíše do
+/// záznamu (`Policy.diagnosticsRotationLines`).
 ///
-/// Z toho plyne, jak se sezení nad **už plným** souborem chová: nezapíše **nic** a `append` vrátí
-/// `false` hned u hlavičky. Limitní řádek už v souboru je od toho sezení, které na strop narazilo,
-/// takže se nepřipisuje znovu; a `RenderDiagnostics.start()` z toho `false` pozná, že se diagnostika
-/// **nezapnula**, a řekne to. Souborem se pak musí zabývat člověk (smazat ho) — samo se to nesmaže,
-/// protože záznam z hořícího okna je to jediné, co z něj zbylo.
+/// **Strop pořád platí na soubor** (nález Copilota na #386). Rozpočet je 8 MB, tedy řádově sto tisíc
+/// řádků; `written` se **seedne velikostí souboru** při jeho otevření. S rotací je to obvykle nula,
+/// ale bez ní (nebo když se rotace nepovede) to je ta jediná mez, která drží: bez seedu by každé
+/// sezení přípisovalo dalších 8 MB a mez by nedělala nic.
+///
+/// Z toho plyne, jak se sezení nad **už plným** souborem chová **bez rotace**: nezapíše **nic**
+/// a `append` vrátí `false` hned u hlavičky. Limitní řádek už v souboru je od toho sezení, které na
+/// strop narazilo, takže se nepřipisuje znovu; a `RenderDiagnostics.start()` z toho `false` pozná, že
+/// se diagnostika **nezapnula**, a řekne to. S rotací se tenhle stav v aplikaci nestává — plný soubor
+/// se odloží a nové sezení zapisuje.
 ///
 /// **Dosažení stropu se zapisuje.** Soubor, který prostě přestane růst, se nedá odlišit od aplikace,
 /// která přestala hořet — a to je zrovna ta věc, kvůli které se záznam bere.
@@ -30,9 +39,16 @@ final class DiagnosticsLog: @unchecked Sendable {
     private let url: URL
     private let limit: Int
     private let zone: TimeZone
+    /// Kam se dosavadní záznam uloží, než sezení začne psát (#412). `nil` = **nerotovat**, jen
+    /// přípisovat — tak to má sonda a testy, které si soubor v dočasné složce zakládají samy.
+    private let archive: DiagnosticsArchive?
     private let lock = NSLock()
     private var handle: FileHandle?
-    /// Kolik už v souboru je — **včetně toho, co tam napsala minulá sezení**, viz dokumentace typu.
+    /// Co rotace udělala. Čte se **po prvním zapsaném řádku** (dřív soubor otevřený není), a to
+    /// proto, aby se to dalo napsat do záznamu.
+    private var rotated = DiagnosticsRotation.none
+    /// Kolik už v souboru je — **včetně toho, co tam zbylo po minulých sezeních**, tedy bez rotace
+    /// všechno, co se do něj kdy napsalo. Viz dokumentace typu.
     private var written = 0
     /// Kolik v souboru bylo, než tohle sezení začalo. Rozhoduje o tom, jestli se má limitní řádek
     /// připsat: nad souborem, který byl plný už při startu, tam jeden takový řádek už je.
@@ -42,10 +58,22 @@ final class DiagnosticsLog: @unchecked Sendable {
 
     /// Pásmo se **předává**, ne bere z `TimeZone.current` uvnitř: řádek o stropu jinak nese jiné
     /// pásmo než řádky s daty, a to je v jednom souboru rozdíl, který nikdo nečeká.
-    init(url: URL, limit: Int = DiagnosticsLog.byteLimit, zone: TimeZone = .current) {
+    init(
+        url: URL,
+        limit: Int = DiagnosticsLog.byteLimit,
+        zone: TimeZone = .current,
+        archive: DiagnosticsArchive? = nil
+    ) {
         self.url = url
         self.limit = limit
         self.zone = zone
+        self.archive = archive
+    }
+
+    /// Co rotace udělala, když se soubor otevíral (#412). Dokud se nic nezapsalo, je to
+    /// `DiagnosticsRotation.none` — soubor se otevírá až u prvního řádku.
+    var rotation: DiagnosticsRotation {
+        lock.withLock { rotated }
     }
 
     /// Připíše jeden řádek. `false` = tenhle ani žádný další už se nezapsal.
@@ -93,6 +121,9 @@ final class DiagnosticsLog: @unchecked Sendable {
     ///
     /// **`written` se tady seedne skutečnou velikostí.** `offset()` po `seekToEnd()` je přesnější
     /// než dotaz na atributy souboru: čte se z toho samého deskriptoru, do kterého se pak zapisuje.
+    ///
+    /// **Rotace je tady, a je to schválně** (#412): musí proběhnout dřív, než existuje deskriptor —
+    /// jinak by sezení zapisovalo do souboru, který se mezitím přesunul do archivu.
     private func openedHandle() throws -> FileHandle {
         if let handle { return handle }
         let manager = FileManager.default
@@ -100,6 +131,7 @@ final class DiagnosticsLog: @unchecked Sendable {
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        if let archive { rotated = archive.rotate() }
         if !manager.fileExists(atPath: url.path) {
             manager.createFile(atPath: url.path, contents: nil)
         }

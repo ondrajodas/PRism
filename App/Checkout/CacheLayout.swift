@@ -108,6 +108,9 @@ struct CacheLayout: Sendable, Equatable {
     /// V kořeni cache, ne pod `reviews/`: netýká se žádného PR ani commitu, je to záznam o té
     /// **instanci aplikace**, která běžela. A `.log`, ne `.json`: čte ho člověk a posílá se
     /// v příloze, takže na řádku musí být všechno, ne zanořený objekt.
+    ///
+    /// **Vedle něj leží záznamy předchozích sezení** jako `diagnostics-do-<čas>.log` (#412) —
+    /// tenhle soubor je vždycky ten běžící a rotuje se při startu, viz `DiagnosticsArchive`.
     var diagnosticsFile: URL { root.appending(path: "diagnostics.log") }
 
     /// Výsledky review jednoho PR na jednom commitu: `reviews/<owner>/<repo>/<pr>-<sha>.json`.

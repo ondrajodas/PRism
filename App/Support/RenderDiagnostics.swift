@@ -54,13 +54,22 @@ import Foundation
 /// - **`pass(_:)` nečte hodiny ani nesahá na disk.** Je to inkrement pod zámkem a nic jiného —
 ///   jediná věc, která se v tom kole opakuje tisíckrát za sekundu. Cena vypnuté diagnostiky je
 ///   načtení jednoho statického `Optional`u.
-/// - **Nula se nezapisuje.** Řádek každou sekundu by nečinnou aplikací utopil to, co se hledá, a
-///   soubor by rostl nad oknem, kde se nic nedělo. Rozhodnutí, co je „nic“, drží
-///   `Policy.diagnosticLine` — a od #391 do něj patří i CPU, protože zaseknuté kolo je zrovna
-///   ten stav, kde nejsou ani kola runloopu, ani průchody tělem.
+/// - **Klid se nezapisuje po sekundách.** Řádek každou sekundu by nečinnou aplikací utopil to, co se
+///   hledá, a soubor by rostl nad oknem, kde se nic nedělo — změřeno nad záznamem z provozu: 89 %
+///   hlavních řádků a 60 % objemu souboru. Rozhodnutí, co je „klid“, drží `Policy.diagnosticLine`
+///   (od #391 v něm je i CPU, protože zaseknuté kolo je zrovna ten stav, kde nejsou ani kola
+///   runloopu, ani průchody tělem) a klidné úseky se sčítají do **minutového souhrnu** (#412).
+///
+/// ## Sezení má svůj soubor
+///
+/// Dosavadní záznam se při startu uloží vedle (`DiagnosticsArchive`), takže strop 8 MB platí na
+/// **tohle** sezení. Do #412 se přípisovalo a strop platil na soubor napříč sezeními — naměřeno, že
+/// záznam narazil na strop ve 4:01 a dalších 42 hodin aplikace běžela bez záznamu, tedy zrovna
+/// v tom, na co nástroj je.
 ///
 /// Zbývá z toho jedno omezení: **záznam končí s procesem.** Zaseknutou aplikaci nemá kdo zavřít
 /// jinak než rukou, a poslední rozepsaná sekunda se nezapíše — soubor se plní po celých úsecích.
+/// Od #412 k tomu patří i nasbíraný klid: z konce chybí až minuta, ve které se nic nedělo.
 final class RenderDiagnostics: @unchecked Sendable {
     /// Kdo právě sbírá. `nil` = diagnostika je vypnutá a `pass(_:)` nedělá nic.
     ///
@@ -126,6 +135,14 @@ final class RenderDiagnostics: @unchecked Sendable {
     /// je to odstup mezi vzorky, ne poloha v úseku.
     private var lastSample: TimeInterval = 0
     private var cycles = 0
+    /// Klid, který čeká na souhrn (#412) — kolik úseků, jak dlouho, kolik kol, kolik CPU a kolik
+    /// z nich bylo **bez jediného kola runloopu**. Pět čísel pod týmž zámkem jako počitadla; nic se
+    /// tím neplánuje a nic to nezapisuje, dokud si o to `flush` neřekne.
+    private var quietSections = 0
+    private var quietElapsed: TimeInterval = 0
+    private var quietCycles = 0
+    private var quietCPU: TimeInterval = 0
+    private var quietStalled = 0
     private var lastFlush: Date
     private var lastCPU: TimeInterval
     private var isStopped = false
@@ -166,8 +183,14 @@ final class RenderDiagnostics: @unchecked Sendable {
     @MainActor @discardableResult static func start() -> Bool {
         guard isEnabled else { return false }
         let layout = CacheLayout.applicationSupport
+        // **Sezení dostane vlastní soubor** (#412): dosavadní záznam se uloží vedle a strop 8 MB
+        // tak platí na tohle sezení, ne na zbytek po předchůdcích. Viz `DiagnosticsArchive`.
         let diagnostics = RenderDiagnostics(
-            log: DiagnosticsLog(url: layout.diagnosticsFile, zone: .current),
+            log: DiagnosticsLog(
+                url: layout.diagnosticsFile,
+                zone: .current,
+                archive: DiagnosticsArchive(url: layout.diagnosticsFile)
+            ),
             now: Date()
         )
         // **Na hlavičce se to láme** (nález Copilota na #386). Když se nezapsala, nezapíše se ani nic
@@ -188,6 +211,25 @@ final class RenderDiagnostics: @unchecked Sendable {
                 \(DiagnosticsLog.byteLimit) B). Smaž ten soubor a spusť aplikaci znovu.\n
                 """.utf8))
             return false
+        }
+        // **Co rotace udělala, jde do záznamu** (#412), hned za hlavičku sezení: kde leží zbytek
+        // a co se cestou smazalo. Bez toho by soubor začínající od nuly vypadal jako aplikace, která
+        // o předchozím sezení neví — a historie by se ztrácela potichu. Láme se to stejně jako
+        // hlavička, ze stejného důvodu jako u řádku o grafu níž.
+        let rotation = Policy.diagnosticsRotationLines(
+            diagnostics.log.rotation,
+            at: Date(),
+            in: .current
+        )
+        for line in rotation {
+            guard diagnostics.log.append(line) else {
+                FileHandle.standardError.write(Data("""
+                    PRism: diagnostika kreslení (#361) se NEZAPNULA — do \
+                    \(layout.diagnosticsFile.path) se vešla hlavička, ale řádek o rotaci už ne \
+                    (strop \(DiagnosticsLog.byteLimit) B). Smaž ten soubor a spusť aplikaci znovu.\n
+                    """.utf8))
+                return false
+            }
         }
         // **Privátní framework se otevírá jedině tady**, tedy jen se zapnutou diagnostikou — a to,
         // jak to dopadlo, se hned zapíše do souboru. Bez té věty by „graf nic neřekl“ a „graf nejde
@@ -277,6 +319,9 @@ final class RenderDiagnostics: @unchecked Sendable {
         lock.withLock {
             passes.removeAll(keepingCapacity: true)
             resetGraph()
+            // I nasbíraný klid (#412): bez toho by souhrn v druhém úseku nesl minuty z prvního
+            // a „po gestu se nic nepřekresluje“ by se z čísel nedalo přečíst.
+            resetQuiet()
         }
     }
 
@@ -324,6 +369,46 @@ final class RenderDiagnostics: @unchecked Sendable {
         }
     }
 
+    /// Přidá klidný úsek do souhrnu (#412). Volá se **pod zámkem**.
+    private func fold(elapsed: TimeInterval, cycles: Int, cpu: TimeInterval) {
+        quietSections += 1
+        quietElapsed += elapsed
+        quietCycles += cycles
+        quietCPU += cpu
+        // Úsek bez jediného kola runloopu, ve kterém se přitom nehořelo, je hlavní vlákno zaseknuté
+        // **bez** spalování CPU. Do #412 takový úsek v záznamu nebyl vůbec, protože se nezapisoval.
+        if cycles == 0 { quietStalled += 1 }
+    }
+
+    /// Souhrn nasbíraného klidu — a **vynuluje ho**. `nil` = není co sečíst. Volá se **pod zámkem**.
+    ///
+    /// Nasbíraný klid, který nikdo nevyzvedne, se s procesem **zahodí**. Je to tatáž mez jako
+    /// u posledního rozepsaného úseku (viz dokumentace typu), jen delší: z konce záznamu chybí až
+    /// minuta, a to zrovna ta, ve které se nic nedělo.
+    private func quietSummary(at moment: Date) -> String? {
+        guard quietSections > 0 else { return nil }
+        let line = Policy.diagnosticQuietLine(
+            at: moment,
+            in: zone,
+            over: quietElapsed,
+            sections: quietSections,
+            cycles: quietCycles,
+            cpu: quietCPU,
+            stalled: quietStalled
+        )
+        resetQuiet()
+        return line
+    }
+
+    /// Zahodí nasbíraný klid. Volá se **pod zámkem**.
+    private func resetQuiet() {
+        quietSections = 0
+        quietElapsed = 0
+        quietCycles = 0
+        quietCPU = 0
+        quietStalled = 0
+    }
+
     /// Proběhlo jedno kolo runloopu. **Jen inkrement pod zámkem** — žádné hodiny, žádný disk:
     /// tohle běží desítky až stovky krát za sekundu a v hořícím okně je to zrovna ta věc, která
     /// se dělat přestane.
@@ -337,28 +422,45 @@ final class RenderDiagnostics: @unchecked Sendable {
     /// Volá to **zapisovací vlákno** (a testy, které si čas i CPU dosazují literálem). Průchody
     /// tělem, kola runloopu i CPU se nulují tady — bez toho by druhý řádek nesl i to, co se stalo
     /// v prvním.
+    ///
+    /// **Klidný úsek se po sekundách nezapisuje** (#412): sečte se do minutového souhrnu
+    /// (`Policy.diagnosticQuietLine`), který jde do souboru buď po minutě, nebo hned, jak se něco
+    /// stane — **před** tím řádkem, ať jsou časy v souboru vzestupně. Záchvat se tím nedotkne:
+    /// hoření ani průchod tělem klid není, takže se pořád zapisuje po sekundách i s náběhem.
     @discardableResult func flush(at moment: Date, cpu: TimeInterval) -> Bool {
         let lines: [String] = lock.withLock {
+            let elapsed = moment.timeIntervalSince(lastFlush)
+            let burned = cpu - lastCPU
             let line = Policy.diagnosticLine(
                 at: moment,
                 in: zone,
-                over: moment.timeIntervalSince(lastFlush),
+                over: elapsed,
                 cycles: cycles,
-                cpu: cpu - lastCPU,
+                cpu: burned,
                 passes: namedPasses()
             )
-            // Řádky o grafu jdou **za** hlavní řádek a jen tehdy, když ten je: bez něj je úsek
-            // ticho, a ticho nemá mít přílohu. Nasbírané se ale zahodí tak i tak, jinak by je
-            // nesl další úsek.
-            let graph = line == nil
-                ? []
-                : Policy.graphDiagnosticLines(sites: sites, stacks: stacks, samples: samples)
+            var out: [String] = []
+            if let line {
+                if let summary = quietSummary(at: moment) { out.append(summary) }
+                out.append(line)
+                // Řádky o grafu jdou **za** hlavní řádek a jen tehdy, když ten je: bez něj je úsek
+                // klid, a klid nemá mít přílohu. Nasbírané se ale zahodí tak i tak, jinak by je
+                // nesl další úsek. Změřeno nad záznamem z provozu: pod klidným řádkem nestála ani
+                // jedna příloha z 2 601, takže se folding nemá čím dotknout toho, na co je záznam.
+                out += Policy.graphDiagnosticLines(sites: sites, stacks: stacks, samples: samples)
+            } else {
+                fold(elapsed: elapsed, cycles: cycles, cpu: burned)
+                if quietElapsed >= Policy.diagnosticQuietInterval,
+                   let summary = quietSummary(at: moment) {
+                    out.append(summary)
+                }
+            }
             cycles = 0
             passes.removeAll(keepingCapacity: true)
             resetGraph()
             lastFlush = moment
             lastCPU = cpu
-            return line.map { [$0] + graph } ?? []
+            return out
         }
         // **Nemám co říct** není konec zapisování: nečinná aplikace se zas rozjede.
         for line in lines {
