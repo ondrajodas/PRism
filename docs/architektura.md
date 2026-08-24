@@ -588,6 +588,9 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   v *Trvalý vodorovný pruh ve split pohledu*: rozhodnutí „pruh je“ i rezervace jeho 17 bodů žije
   v `DiffPairBlockContainer` (jedno místo, pravidlo z #236), styl drží `DiffPairScrollView`
   a šířku dokumentu `DiffTextView.naturalWidth`.
+- **A od #428 ten pruh jede s výřezem** — sedí na dolní hraně **viditelné části svého bloku**
+  (`y = min(vlastní pás, hrana výřezu − 17)`). Výška bloku se tím nemění, mění se jen
+  `frame.origin.y` scrolleru; podrobnosti níž, v *Pruh, který jede s výřezem*.
 - **Výběr žije jen v jednom sloupci** a ruší se **při stisknutí**, ne až při puštění: dvě modré
   selekce vedle sebe po celou dobu tažení tvrdí, že je vybrané obojí. `textViewDidChangeSelection`
   na to nestačí (chodí s hotovým výběrem) a zůstává jen jako záloha pro výběr klávesnicí.
@@ -638,7 +641,8 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   a táhne se ve druhé. Do #252 na tom stál `HStack` se dvěma `Spacer`y a plocha vycházela o půl bodu
   vlevo (nález Copilota na #272). Je to tatáž úvaha jako u šířky pro měření výšky (#236).
 
-Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne přečtené:
+Devatenáct pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne přečtené (poslední tři
+přidalo #428; číslo v téhle větě bylo do té doby o jedenáct pastí pozadu):
 
 | Past | Jak se projevila |
 |---|---|
@@ -657,6 +661,9 @@ Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne p
 | Overlay scroller **nakreslí 0 pixelů**, i když API tvrdí, že je vidět | `isHidden = false`, `alphaValue = 1.0` a `knobProportion = 0.333` má i s `autohidesScrollers = false` — a přesto v nečinném okně není. Z `isHidden` se proto o kresbě nedá usoudit nic; rozhoduje pás výšky, který si plocha vezme (#422) |
 | `usedRect(for:)` umí zahrnout **extra line fragment**, a ten je široký jako celý kontejner | Text končící `\n` (tedy každá půlka s prázdným posledním řádkem, což je každá šrafovaná strana dvojice) dal v neomezeném kontejneru šířku **10 000 000** místo 10. Dokument 22 000× širší než okýnko (`knobProportion` 4,49 × 10⁻⁵): knob velikosti vlasu a rolování do prázdna (#422). Kdy se fragment započítá, se řídit nedá — šířka se proto počítá **výčtem fragmentů**, ten ho nevydá. Do výšky naopak patří, je to skutečný řádek |
 | `NSClipView.scroll(to:)` **neomezuje** na dokument | Je to zápis počátku, takže se plocha poslušně posune i za obsah (`documentVisibleRect.maxX` 10 249 nad dokumentem 1 058) — v testu z toho vyjde zeleno nad jakoukoli šířkou. Omezení dělá `constrainBoundsRect(_:)`, tedy to, co AppKit sám používá při tažení za knob (#422) |
+| `NSScrollView` **je flipped**, `NSClipView` sám o sobě ne | `y` v ploše roste **dolů** a vodorovný scroller stojí na `frame.height − 17` (změřeno: plocha 200 b vysoká má scroller na `y: 183`). Proto se poloha připíchnutého pruhu počítá v souřadnicích **plochy** a ne v okně (#428); `NSClipView.isFlipped` se řídí dokumentem, takže se na něj usuzovat nedá — u SwiftUI `HostingScrollView`u vyjde `true`, nad obyčejným `NSView`em `false` |
+| `tile()` vrací scroller na dolní hranu — a zavolá se i z rozvržení nadřazeného view | Připíchnutá poloha se proto musí zapsat **znovu právě tam** (změřeno: z 183 zpátky na 283 po `tile()` i po `layoutSubtreeIfNeeded()` na hostu). Zápis z volajícího by po první změně šířky okna zmizel (#428) |
+| Legacy scroller **se nekreslí do `cacheDisplay(in:to:)`** | Nad červeným dokumentem vyjde pod pruhem tatáž barva jako vedle něj, takže se offscreen renderem nedá ověřit ani jeho poloha, ani průhlednost jeho drážky (#428, potvrzuje pozorování z #422). `CGWindowListCreateImage` na macOS 26 není — kresba pruhu tedy patří člověku, testům zůstávají čísla |
 | Nastavení `textContainer.size` si AppKit vyloží jako změnu geometrie a **sám zavolá `setFrameSize`** | Měření výšky je dotaz na **budoucí** šířku, takže mu ten zpětný hovor změřenou šířku hned přepsal tou současnou — a měřilo se o jednu šířku pozadu (blok o dvou dlouhých řádcích si při 300 pt řekl o 36 pt a nakreslil 162). Řeší to stráž `isMeasuring` a to, že se šířka kontejneru nastavuje jen při změně (#236) |
 
 **TextKit 1, ne 2.** Geometrie řádků se čte z `NSLayoutManager` (`boundingRect(forGlyphRange:)`) —
@@ -766,6 +773,63 @@ souřadnicích) — nakreslené je to tak i v návrhu (poznámka 45) a přišpen
 ho z rolovací plochy, tedy jiný zákres. A **pohled pod sebou zůstává zalamovací**: pruh by v něm byl
 17 bodů na blok za nic, protože zalomený řádek se přečte celý bez rolování. Je na to test, protože
 je to volba ze tří možností, ne opomenutí.
+
+### Pruh, který jede s výřezem (#428)
+
+U dlouhého bloku je jeho dolní hrana pod dolní hranou okna, takže pruh z #422 nebyl vidět zrovna
+tam, kde je nejvíc potřeba — přeteče **9,6 %** bloků (33 ze 343 z 48 PR) a jejich pás leží pod hranou
+okna o **229 b** (medián, p90 533). Zakresleno v **sekci 30** návrhu. Pravidlo je jedna věta:
+
+```
+y = min(vlastní pás, hrana výřezu − pás)
+```
+
+**Jedna spojitá funkce posunu, ne dva stavy.** Dokud blok hranu výřezu přesahuje, vyhrává druhý člen
+a poloha pruhu **v okně** se rolováním nemění; jak se pás bloku do výřezu dostane, vyhraje první člen
+a pruh jde dál rychlostí kódu. Přechod není animace — vyjde z toho minima sám. **Pruh přitom nikdy
+neopustí svůj blok**, takže na hraně výřezu stojí nejvýš jeden (ten, který k ní dosahuje) a otázka
+„komu patří“ se rozpouští, nerozhoduje.
+
+| Kde | Co drží |
+|---|---|
+| `Policy.pinnedScrollerY(ofBlock:in:band:rowHeight:)` | **Celé rozhodnutí** jako čistá funkce: minimum, heuristika tří řádků a nic jiného. Vrací `y` **v souřadnicích bloku** (nula je horní hrana, `y` roste dolů) |
+| `DiffPairBlockContainer.viewDidMoveToWindow()` | Pozorovatel — `boundsDidChange` **vnějšího** clip view, jeden na viditelný blok. Odhlašuje se bezpodmínečně, protože líný seznam kontejnery recykluje |
+| `DiffPairBlockContainer.pinnedScrollerY()` | Převod souřadnic a `nil` ve dvou případech: blok **mimo rolovací plochu** a blok **bez pruhu** (`showsScroller(forWidth:)` je `false` — bez pruhu není pás rezervovaný, takže by skrytý scroller sedl na poslední řádek kódu) |
+| `DiffPairScrollView.pinnedScrollerY` | **Jediné místo, které rámec scrolleru zapisuje** — a zapisuje ho jen při změně. Znovu se uplatní v `tile()` |
+
+**Souřadnice se počítají v ploše sloupce, a to je celý trik.** `NSScrollView` **je flipped**
+(změřeno) a plocha je vysoká jako celý blok, takže její `bounds` **je** rámec bloku s nulou na horní
+hraně — přesně soustava, ve které se dá výsledek zapsat scrolleru do `frame.origin.y`. Výřez do ní
+srovná `convert(_:from:)`, ať je vnější clip view flipped, nebo ne. Prostor obsahu diffu
+(`DiffView.contentSpace`) by k témuž musel jít přes `DiffBlockPlacement`, tedy přes SwiftUI —
+zbytečná druhá cesta k údaji, který AppKit má.
+
+**Výška bloku se posunem nemění, a to je podmínka.** Rezervace 17 b zůstává tam, kde ji #422
+nechalo (`height(forWidth:)`); připíchnutím se mění **jen** `frame.origin.y` scrolleru. Měnit výšku
+znamená přerovnat líný seznam při každém snímku. Alternativa „ubrat výřezu 17 b, dokud dlouhý blok
+sahá na hranu“ je zamítnutá v zákresu: inset, který přichází a odchází, hýbe veškerým kódem pod
+kurzorem.
+
+**Poloha nesmí do observable stavu** — tatáž past jako u polohy bloku (#252) a u hoveru (#358).
+`pinnedScrollerY` je proto obyčejná vlastnost `NSView`u, kterou nikdo nesleduje, a obsluha
+pozorovatele je **aritmetika a dva zápisy rámců**: nula zápisů do stavu, nula přerolování, nula
+zneplatnění grafu. Změřeno na scéně s `ScrollView`em: dvacet posunů po deseti bodech nepřidalo ani
+jeden průchod tělem, ani jednu aktualizaci `updateNSView` a ani jedno nasazení bloku.
+
+**Jediná heuristika je pojmenovaná:** pod **třemi** viditelnými řádky bloku se pruh nepřišpendlí
+a zůstane ve svém pásu (tedy mimo obrazovku) — jinak by zakryl polovinu toho mála, co z bloku vidět
+je. Tři je odhad, ne měření, a je to jediné číslo v téhle změně bez měřidla. Padá do ní i blok, který
+z výřezu vyjel celý (viditelná výška nula), takže se na to nemusí ptát druhá podmínka.
+
+**Připíchnutý pruh zakrývá 17 b = 1,06 řádku** — prakticky ten řádek, který hrana okna stejně řeže.
+Podklad má **neprůhledný být**, a kreslí si ho legacy scroller sám: vlastní vrstva pod pruhem by byl
+prvek navíc, a těch je v diffu nula (#252). Ověřit to jde jedině okem — legacy scroller se do
+bitmapy z `cacheDisplay(in:to:)` nekreslí vůbec (změřeno, viz tabulka pastí).
+
+**Autohide zůstává beze změny** (#422): blok, který se do šířky vejde, pruh nemá. Poskakující prvek
+z toho nevzniká právě proto, že pruh **nemění vlastníka** — při přejezdu z bloku s pruhem na blok bez
+pruhu nic nezmizí na místě: pruh odjede nahoru se svým blokem a další přijede zdola takový, jaký je.
+Na hraně okna proto někdy nic není a je to správná odpověď, ne chybějící prvek.
 
 ### Stráž v `updateNSView` (#393)
 

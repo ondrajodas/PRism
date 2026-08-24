@@ -3053,6 +3053,32 @@ issue nedělalo nic.
 | **Čísla řádků odjedou s textem** | Přišpendlit gutter mimo rolovací plochu | Kreslí je totéž view jako kód (na `x: 0` ve svých souřadnicích), takže vytáhnout gutter ven znamená rozdělit blok na dvě views a znovu vyřešit zarovnání řádků — jiný zákres a jiné issue. Nakreslené je to tak, jak to vyjde (poznámka 45 v zákresu) |
 | **Vlastní tenká lišta nad kódem zamítnuta** (rozhodnuto už v zákresu) | Nakreslit si pruh sám a mít ho nižší než 17 b | Knob, tažení, klik do drážky i čtečka obrazovky jsou v `NSScroller` hotové; menší výška by je stála všechny |
 
+### Záznam rozhodnutí — pruh, který jede s výřezem (#428)
+
+Pruh z #422 sedí na **dolní hraně bloku**, a ta je u dlouhého bloku pod dolní hranou okna: kdo chce
+posunout kód u horního okraje, musí sjet k pruhu a zpátky. Změřeno, komu to vadí — přes viditelnou
+část diffu (448 b) přeteče **9,6 %** bloků (33 ze 343, 151 souborů, 48 mergnutých PR) a jejich pás
+leží pod hranou okna o **229 b** (medián), p90 i nejvíc **533**; při výřezu 400 b je to 11,7 %, při
+640 b 5,2 %. Zákres je v **sekci 30 návrhu** a schvaloval se dřív, než issue vzniklo — tady jsou
+rozhodnutí o implementaci.
+
+Pravidlo je jedna věta: `y = min(vlastní pás, hrana výřezu − 17)`, tedy **jedna spojitá funkce
+posunu**, ne dva stavy. Tím se rozpouští i otázka „komu pruh patří, když jsou na obrazovce dva“:
+pruh nikdy neopustí svůj blok, takže na hraně stojí nejvýš jeden.
+
+| Rozhodnutí | Zamítnuté alternativy | Proč |
+|---|---|---|
+| **Rozhodnutí je čistá funkce v `Policy`** (`pinnedScrollerY(ofBlock:in:band:rowHeight:)`) | `if` nad geometrií v kontejneru; nebo dvě větve (připíchnuto / ve svém pásu) volané odjinud | Pravidlo z `CLAUDE.md`: rozhodovací logika patří do `Policy`, kde se testuje vyčerpávajícím výčtem bez okna. A dvě větve by byly dva stavy — právě to, co zákres zamítá; minimum je jedno místo, na kterém se dá tvrdit, že pruh **neopustí blok** |
+| **Počítá se v souřadnicích plochy sloupce** (`leftScroll.bounds`, výřez přes `convert(_:from:)`) | Prostor obsahu diffu (`DiffView.contentSpace`) přes `DiffBlockPlacement`; nebo souřadnice okna | `NSScrollView` **je flipped** (změřeno) a plocha je vysoká jako celý blok, takže její `bounds` **je** rámec bloku s nulou na horní hraně — tedy přímo soustava, ve které se výsledek zapisuje scrolleru do `frame.origin.y`. Cesta přes SwiftUI by k témuž údaji šla podruhé a přes stav, který se při rolování mění (#252) |
+| **Pozorovatel je `boundsDidChange` vnějšího clip view**, jeden na viditelný blok | `onGeometryChange` ve SwiftUI a poloha do `@State`; pozorovatel na obou půlkách; sdílená hodnota posunu v `Environment`u | Půlky se při rolování nehýbou — hýbe se výřez, takže dva pozorovatelé na blok jsou dvakrát totéž. Cesta přes SwiftUI stav je zakázaná třída (#358): zpětná vazba z každého snímku, která zapisuje do stavu, zavírá kolo. Obsluha je proto **aritmetika a dva zápisy rámců**; změřeno, že dvacet posunů nepřidá ani jeden průchod tělem, ani jedno `updateNSView`, ani jedno nasazení bloku |
+| **Rámec scrolleru zapisuje jedno místo** (`DiffPairScrollView.pinnedScrollerY`) a uplatní se znovu v `tile()` | Zapisovat rámec z kontejneru, kde se poloha spočítá | `tile()` vrací scroller na dolní hranu a zavolá se i z rozvržení nadřazeného view (změřeno: z 183 zpátky na 283). Zápis z volajícího by tedy po první změně šířky okna zmizel — a ověřeno vloženou regresí, že bez uplatnění v `tile()` padne 29 tvrzení |
+| **Výška bloku se posunem nemění** — rezervace 17 b zůstává u dolní hrany | Ubrat výřezu 17 b, dokud dlouhý blok sahá na hranu (zamítnuto už v zákresu); nebo rezervovat pás tam, kde pruh zrovna je | Měnit výšku bloku znamená přerovnat líný seznam při každém snímku. Inset, který přichází a odchází, navíc hýbe veškerým kódem pod kurzorem. Pruh proto kód **zakrývá** (17 b = 1,06 řádku, prakticky ten řádek, který hrana okna stejně řeže) a je to pojmenované v poznámce 49 zákresu |
+| **`nil` znamená „nech to na AppKitu“** — u bloku mimo rolovací plochu a u bloku bez pruhu | Špendlit vždycky; nebo se ptát `horizontalScroller.isHidden` | Bez pruhu si blok pás **nerezervuje**, takže by skrytý scroller sedl na poslední řádek kódu a při zapnutí pruhu by to byl vlas uprostřed textu. `isHidden` o kresbě nevypovídá (#422), takže se ptáme téhož místa, které o pruhu rozhoduje — `showsScroller(forWidth:)` |
+| **Heuristika tří viditelných řádků**, pojmenovaná jako jediné číslo bez měření | Špendlit vždycky; nebo mez odvodit z výšky pásu (17 b = 1,06 řádku) | Pod třemi řádky by pruh zakryl polovinu toho mála, co z bloku vidět je, a popisoval by kód, který není čím přečíst. Mez z pásu je zdánlivě „změřená“, ale odpovídá na jinou otázku (kolik zakryje) než na tu, o kterou jde (kolik zbude). Tři je odhad a je vypsaný v zákresu i v kódu — druhé číslo by se k němu nepřidávalo |
+| **Podklad pruhu si kreslí `NSScroller` sám** | Vrstva s `Palette.panel` pod scrollerem (jeho `layer.backgroundColor`) | Zákres chce neprůhledný podklad (poznámka 49) a legacy drážka ho kreslí — vlastní vrstva by byla kresba navíc kvůli domněnce. **Ověřit to jde jedině okem**: legacy scroller se do `cacheDisplay` nekreslí (změřeno nad červeným dokumentem — pod pruhem tatáž barva jako vedle něj) a `CGWindowListCreateImage` na macOS 26 není. Kdyby kód přes drážku prosvítal, je to jeden řádek na `layer` toho scrolleru, ne nový prvek |
+| **Prvků navíc nula** (rozhodnuto už v zákresu) | Vlastní tenká lišta kreslená přes kód | Knob, tažení, klik do drážky i čtečka obrazovky jsou v `NSScroller` hotové, a dvě drážky pro jeden posun by lhaly o tom, kolik jich je. Násobení prvků v diffu už dvakrát položilo okno (#252) |
+| **Autohide beze změny** (#422) | Vypnout ho, aby na hraně okna vždycky něco stálo | Poskakující prvek nevzniká, protože pruh **nemění vlastníka**: při přejezdu z bloku s pruhem na blok bez pruhu nic nezmizí na místě — pruh odjede nahoru se svým blokem a další přijede zdola takový, jaký je. Na hraně okna proto někdy nic není a to je správná odpověď, ne chybějící prvek |
+
 ### Záznam rozhodnutí — zastaralých nálezů si všimne tik (#420)
 
 Odložený kus #414. Novinka *nálezy zastaraly* v dění fungovala, jenže se zapsala teprve tehdy, když

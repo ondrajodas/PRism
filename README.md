@@ -660,6 +660,17 @@ výšky nepřijde. Vodorovný pruh sloupec **nezúží**, takže znaků na stran
 posuvník se natrvalo zobrazit nedá (změřeno — nakreslí 0 pixelů, i když API tvrdí, že je vidět)
 a zalamovat se ve splitu nesmí.
 
+**A od #428 ten pruh jede s výřezem.** U dlouhého bloku byla jeho dolní hrana pod dolní hranou okna,
+takže se k pruhu muselo sjet a zpátky nahoru k tomu, co si chce člověk přečíst — a týká se to
+**9,6 %** bloků, u kterých pás leží pod hranou okna o 229 bodů (medián; p90 533). Pruh proto sedí na
+dolní hraně **viditelné části svého bloku**: dokud blok hranu okna přesahuje, stojí na ní, a jak se
+jeho vlastní pás do okna dostane, pruh v něm přistane a jede dál s kódem. Je to jedno pravidlo,
+`y = min(vlastní pás, hrana okna − 17)`, ne přeskakování mezi dvěma stavy — a **pruh nikdy neopustí
+svůj blok**, takže je z okna vidět, který blok řídí, bez popisku. Výška bloku se tím nemění a **prvek
+nepřibyl**: je to tentýž posuvník, jen nakreslený jinde. Zakrývá spodních 17 bodů kódu (1,06 řádku),
+tedy prakticky ten řádek, který hrana okna stejně řeže. Jediná výjimka je pojmenovaná: **pod třemi
+viditelnými řádky** se pruh nepřišpendlí, protože by zakryl polovinu toho mála, co z bloku vidět je.
+
 Vyšlo u toho najevo, že **se tam dosud nedalo rolovat vůbec** — ne že by to jen nebylo vidět:
 plocha se roztahovala podle šířky textu bez sloupce s čísly, a AppKit ji navíc srážel zpátky na
 šířku okýnka, takže konec dlouhého řádku byl z okna nedosažitelný. Od #422 si šířku určuje ten,

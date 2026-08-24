@@ -14,6 +14,11 @@ import SwiftUI
 /// **Od #422 je vodorovný pruh vidět** (legacy scroller, `DiffPairScrollView`) a blok si na něj
 /// rezervuje 17 bodů výšky — jenže jen tehdy, když je co skrývat. Výška bloku tím **začala záležet
 /// na šířce**; kde se to rozhoduje a proč na jednom místě, je u `height(forWidth:)`.
+///
+/// **Od #428 ten pruh jede s výřezem** — sedí na dolní hraně **viditelné části svého bloku**, takže
+/// se u dlouhého bloku nemusí sjíždět dolů a zpátky. Výška bloku se tím **nemění**: mění se jen
+/// `frame.origin.y` scrolleru. Rozhodnutí je čistá funkce (`Policy.pinnedScrollerY`), poloha se
+/// počítá v `pinnedScrollerY()` a zapisuje v `placeScrollers()`.
 struct DiffPairBlockView: NSViewRepresentable {
     let block: DiffPairBlock
     var language: Language?
@@ -143,6 +148,73 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("jen z kódu") }
+
+    /// Blok se dostal do okna (nebo z něj vypadl) — tady se navazuje pozorovatel výřezu (#428).
+    ///
+    /// Je **jeden na viditelný blok** a sedí na `boundsDidChange` **vnějšího** clip view (toho ze
+    /// SwiftUI `ScrollView`u), ne na půlkách bloku: půlky se při rolování okna nehýbou, hýbe se
+    /// výřez. Dva pozorovatelé na blok a přerolování všech viditelných bloků je to, co #422 zamítlo
+    /// u sdíleného posunu na celý soubor — tedy násobení práce, které diff už dvakrát položilo
+    /// (#252).
+    ///
+    /// **Odhlásit se musí, ne jen přihlásit**: líný seznam kontejnery recykluje, takže bez toho by
+    /// tentýž blok slyšel jeden posun několikrát. Registruje se **selektorem, ne blokem** — jako
+    /// u `SpinningRingView`: zaniklému observerovi notifikační centrum nedoručuje, takže tu
+    /// nezůstává token, na který se dá zapomenout.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self, name: NSView.boundsDidChangeNotification, object: nil)
+        guard let clip = enclosingScrollView?.contentView else { return }
+        // `NSClipView` hlásí změnu hranic sám (`postsBoundsChangedNotifications` je u něj zapnuté —
+        // změřeno i na `HostingScrollView`u ze SwiftUI), takže se nic nezapíná a nic nepřenastavuje.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(viewportDidScroll),
+            name: NSView.boundsDidChangeNotification,
+            object: clip
+        )
+        placeScrollers()
+    }
+
+    /// Výřez se posunul. **Celá obsluha rolování**: jedno minimum a dva zápisy rámců.
+    @objc private func viewportDidScroll() {
+        placeScrollers()
+    }
+
+    /// Kam se v tomhle bloku kreslí vodorovný pruh — a zapsat to do **obou** ploch (#428).
+    ///
+    /// Obě půlky mají tentýž svislý rámec, takže je to jedno číslo a dva zápisy. Když se nezměnilo,
+    /// neudělá se ani ten zápis (`DiffPairScrollView.pinnedScrollerY`).
+    private func placeScrollers() {
+        let y = pinnedScrollerY()
+        leftScroll.pinnedScrollerY = y
+        rightScroll.pinnedScrollerY = y
+    }
+
+    /// Poloha pruhu v souřadnicích bloku, nebo `nil`, když se nepřišpendluje.
+    ///
+    /// Souřadnice se berou **v ploše sloupce**, a to je celý důvod, proč se tady nic nepřepočítává:
+    /// `NSScrollView` je flipped (změřeno) a plocha je vysoká jako celý blok, takže její `bounds` je
+    /// rámec bloku s nulou na horní hraně — a `convert(_:from:)` do ní srovná i výřez, ať je vnější
+    /// clip view flipped nebo ne.
+    ///
+    /// `nil` znamená „nech to na AppKitu“ a jsou k němu dva důvody: blok **mimo rolovací plochu**
+    /// (nemá výřez, ke kterému by se špendlil — tak vypadá blok v harnessu) a blok, který
+    /// pruh vůbec nemá (nic nepřetéká do strany, `showsScroller(forWidth:)` je `false`). U toho
+    /// druhého by špendlení bylo horší než zbytečné: bez pruhu si blok pás **nerezervuje**, takže by
+    /// se skrytý scroller posadil na poslední řádek kódu.
+    private func pinnedScrollerY() -> Double? {
+        guard rowHeight > 0,
+              showsScroller(forWidth: Double(bounds.width)),
+              let clip = enclosingScrollView?.contentView
+        else { return nil }
+        return Policy.pinnedScrollerY(
+            ofBlock: leftScroll.bounds,
+            in: leftScroll.convert(clip.bounds, from: clip),
+            band: DiffPairScrollView.scrollerHeight,
+            rowHeight: rowHeight
+        )
+    }
 
     /// Nasadí blok do sloupců. **Volá se jen tehdy, když se něco změnilo** (`DiffBlockDrawing`),
     /// takže si tady všechno pod tím může dovolit být lineární v délce bloku — do #393 to bylo
@@ -307,6 +379,10 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
         rightScroll.frame = NSRect(x: right, y: 0, width: half, height: bounds.height)
         // Znovu po každé změně šířky: minimální šířka sloupce se odsud odvozuje.
         layoutColumns()
+        // A znovu i poloha pruhu (#428): blok se rozvržením mohl posunout a nová šířka mohla
+        // rozhodnout, jestli pruh vůbec je. Vrácení scrolleru na dolní hranu, které si `tile()`
+        // vynutí, dorovnává `DiffPairScrollView` sám — tady jde o **hodnotu**, ne o zápis.
+        placeScrollers()
     }
 
     private func clearSelection(in column: DiffTextView?) {
