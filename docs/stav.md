@@ -3948,3 +3948,46 @@ se to i barvou.
 **Na tomhle je co vidět**, a do plné sekce se klikáním nedostaneš: čerstvá cache dění nemá. Pro
 screenshot se zapíše `activity.json` do cache slotu a značka do jeho domény v `UserDefaults`; postup
 je v [`testovani.md`](testovani.md). Testů 3791 (67 nových).
+
+### #412 — diagnostika se vypínala sama: strop se počítal napříč sezeními
+
+Diagnostika kreslení (#361) se po pár hodinách přestala zapisovat, a to zrovna při tom, na co je.
+Naměřeno v provozu: záznam narazil na strop 8 MB v `2026-08-22T04:01:36` a dalších **42 hodin**
+aplikace běžela bez záznamu — kdyby v nich záchvat byl, nevíme o něm nic. Kořen nebyla velikost
+stropu, ale to, že platil na **soubor**, do kterého se přípisovalo napříč sezeními: při restartu ve
+12:34 zbývalo 3,5 MB, tedy necelých sedm hodin, a restartuje se po každém mergi.
+
+**Sezení má od teď svůj soubor.** Dosavadní záznam se při startu uloží vedle jako
+`diagnostics-do-<čas posledního zápisu>.log` a nové sezení začíná prázdné. Jméno je z času posledního
+zápisu, ne z času rotace — soubor ze pátku má mít v názvu pátek i tehdy, když se aplikace spustí
+v pondělí; sekundy v něm jsou proto, že se restartuje šestkrát denně. Drží se **dvacet souborů a
+64 MB** (dvě meze, každá na jinou poruchu) a **nejnovější se nemaže nikdy**, ani nad bajtovou mezí:
+u #361 se čte zpětně, takže rotace, která zahodí historii, je horší než strop. Maže se **jedině podle
+vzoru jména**, protože v kořeni cache leží i nálezy, drafty a `sessions.json`.
+
+**Co rotace udělala, je napsané v záznamu** — kam se uložil předchozí, co se smazalo, co se nepovedlo.
+Je to tatáž úvaha jako u limitního řádku z #386: soubor, který začíná od nuly, se nedá odlišit od
+aplikace, která o předchozím sezení neví. Rotace přitom sedí **uvnitř otevírání souboru**, ne
+u volajícího: jinak by log s otevřeným deskriptorem po přesunu zapisoval do archivu, a to potichu.
+
+**Klid se sráží do minutového souhrnu** (`za 61.00 s klid: 57 úseků, 235 kol runloopu, 0.366 s CPU,
+1 bez kola runloopu`). Změřeno nad skutečným záznamem z provozu (985 754 B, 11,5 h): úseků bez
+průchodu tělem a bez hoření bylo **9 279 z 10 077** — 89 % hlavních řádků a 60 % objemu —, a **ani
+k jednomu** z nich nestála příloha o grafu, takže se folding nemá čím dotknout toho, na co je záznam.
+Kola runloopu už o „klidu“ nerozhodují (nečinné okno má 1–4 za sekundu, takže neodlišovala práci od
+spánku) a **sečtená jsou v souhrnu**. Záchvat se pořád zapisuje **po sekundách** i s náběhem, a souhrn
+jde **před** ten řádek, který klid přerušil, ať časy jdou vzestupně. Mezera v souboru tím zmizela
+úplně, a to je vlastnost, ne kosmetika: do #412 se nedala odlišit od nástroje, který se vypnul.
+
+**`bin/run.sh` nad plným záznamem už nekončí `exit 1`** — aplikace si ho odloží sama, takže odmítnout
+start by znamenalo mazat rukou to, co má dělat aplikace. Hlášení zůstává: velikost předchozího
+záznamu, věta o tom, že mu chybí konec, a počet uložených záznamů.
+
+**Na tomhle není co vidět** — je to soubor v cache, obrazovka se nemění. Ověřeno spuštěním dvakrát za
+sebou (`PRism-c`): 848 B předchozího sezení leží jako `diagnostics-do-2026-08-24T10-02-02.log`, nový
+soubor začíná hlavičkou a řádkem `předchozí záznam (848 B) uložen jako …`, a za 70 s má **11 řádků
+místo ~66**. Testů 3813 (22 nových), dvě z nich ověřená vloženou regresí. Z Copilot review přišel
+jeden reálný nález: komentář tvrdil, že symlink pojmenovaný jako záznam se smaže („neškodně, smaže se
+odkaz“) — sondou se změřilo, že `resourceValues` odkaz **nerozbaluje**, takže se do úklidu vůbec
+nedostane. Chování zůstalo (bezpečnější strana omylu), komentář se přepsal na změřené a přibyl na to
+test.
