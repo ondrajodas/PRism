@@ -246,7 +246,13 @@ extension AppStoreFeedTests {
         let store = store(FakeGitHubGateway(always: .success([summary("cli/cli#1")])))
         await store.refresh()
         let pr = PRIdentifier("cli/cli#1")!
-        let event = Policy.staleFindingsActivity(for: pr, head: "9c1f0ab", commits: 2, at: start)!
+        let event = Policy.staleFindingsActivity(
+            for: pr,
+            head: "9c1f0ab",
+            commits: 2,
+            headAt: nil,
+            noticedAt: start
+        )!
 
         store.show(event)
 

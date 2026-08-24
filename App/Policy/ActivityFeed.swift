@@ -267,19 +267,38 @@ extension Policy {
 
     /// Řádek o tom, že nálezy zastaraly (tvrdá podmínka č. 5). `nil` = nehlásí se.
     ///
-    /// **Dopočítané, bez volání navíc**: hlavu i commity zná dotažený detail PR, tedy to, co si
-    /// aplikace tahá tak jako tak. Klíčem položky je proto **hlava**, ne okamžik — téhož rozchodu
-    /// si aplikace všimne při každém dalším dotažení detailu a druhý řádek o téže věci by byl šum.
+    /// Klíčem položky je **hlava**, ne okamžik — téhož rozchodu si aplikace všimne při každém
+    /// dalším dotažení detailu i při každém dotazu na hlavy, a druhý řádek o téže věci by byl šum.
     ///
-    /// `commits` je `nil`, když se počet spočítat nedá (hlava nálezů v seznamu commitů není, tedy
-    /// typicky po force-pushi). Pak se o commitech **nemluví** — vymyslet číslo by bylo horší než
-    /// ho neuvést.
+    /// `commits` je `nil`, když se počet spočítat nedá — buď hlava nálezů v seznamu commitů není
+    /// (typicky po force-pushi), nebo se o rozchodu ví z tiku a seznam commitů se kvůli němu
+    /// **netahá** (#420). Pak se o commitech **nemluví**; vymyslet číslo by bylo horší než ho
+    /// neuvést.
+    ///
+    /// **Řádek nese čas události, ne čas zjištění** (#420). Nálezy zastaraly ve chvíli, kdy hlava
+    /// vznikla, takže se datuje `headAt`. Datum zjištění by po restartu tvrdilo, že práce
+    /// z minulého týdne zastarala dneska — a je to schválně **rozhodnutí `Policy`**, ne `??` na
+    /// volajícím: obě cesty (dotažený detail, dávkový dotaz z tiku) musí datovat stejně, jinak by
+    /// tentýž rozchod měl dvě data podle toho, kdo si ho všiml první.
+    ///
+    /// Cena je, že řádek nalezený se zpožděním padne do **svého** dne, tedy pod značku poslední
+    /// návštěvy, a nepočítá se jako nepřečtený. Druhé razítko (událost pro kresbu, zjištění pro
+    /// nepřečtené) by rozbilo invariant, na kterém stojí pruh `Tady jsem skončil` — nové položky
+    /// jsou **předpona** seznamu (`Policy.activityFeed`).
+    ///
+    /// - Parameters:
+    ///   - headAt: kdy vznikla hlava, na kterou se PR posunul. `nil` = nevíme (force-push, commit
+    ///     mimo seznam, odpověď bez data). **Bez výchozí hodnoty schválně**: zapomenutý parametr by
+    ///     tiše vrátil datování okamžikem zjištění, tedy přesně tu chybu, kvůli které #420 vzniklo.
+    ///   - noticedAt: kdy si toho aplikace všimla. Použije se **jedině** bez `headAt` — tvrdit
+    ///     datum, které v datech není, je horší než datum zjištění.
     static func staleFindingsActivity(
         for pr: PRIdentifier,
         ownership: PullRequestOwnership = .theirs,
         head: String,
         commits: Int?,
-        at: Date
+        headAt: Date?,
+        noticedAt: Date
     ) -> ActivityEvent? {
         guard isReported(.staleFindings, on: ownership) else { return nil }
         return ActivityEvent(
@@ -287,7 +306,7 @@ extension Policy {
             id: "\(ActivityEvent.Kind.staleFindings.rawValue)|\(pr)|\(head)",
             kind: .staleFindings,
             pullRequest: pr,
-            at: at,
+            at: headAt ?? noticedAt,
             headline: "Nálezy zastaraly",
             detail: staleCommitsPhrase(commits),
             head: head
@@ -314,6 +333,16 @@ extension Policy {
     static func commitsAfter(_ sha: String, in commits: [PullRequestCommit]) -> Int? {
         guard let index = commits.firstIndex(where: { $0.sha == sha }) else { return nil }
         return commits.count - index - 1
+    }
+
+    /// Kdy vznikl commit s touhle sha. `nil` = v seznamu není, nebo u něj datum nepřišlo.
+    ///
+    /// Tím se datuje řádek o zastaralých nálezech u cesty přes dotažený detail (#420) — je to
+    /// **tatáž hodnota**, jakou u dávkového dotazu na hlavy nese `PullRequestHead.committedAt`,
+    /// jen z druhého zdroje. Dvě různá data pod jedním rozchodem by znamenala, že se řádek mění
+    /// podle toho, kdo si ho všiml první.
+    static func commitDate(of sha: String, in commits: [PullRequestCommit]) -> Date? {
+        commits.first { $0.sha == sha }?.committedAt
     }
 
     /// Řádek o tom, že PR odešel z fronty. `nil` = nehlásí se.

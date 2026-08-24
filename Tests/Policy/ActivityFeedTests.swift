@@ -67,7 +67,8 @@ extension ActivityFeedTests {
             ownership: .mine,
             head: "9c1f0ab",
             commits: 3,
-            at: now
+            headAt: nil,
+            noticedAt: now
         ) == nil)
         #expect(Policy.departureActivity(for: pr, ownership: .mine, at: now) == nil)
         #expect(Policy.reviewActivity(
@@ -294,7 +295,7 @@ extension ActivityFeedTests {
     func staleFindingsAreKeyedByHead() {
         let first = row(commits: 3, at: now)
         let later = row(commits: 3, at: now.addingTimeInterval(3600))
-        let moved = Policy.staleFindingsActivity(for: pr, head: "aa11bb2", commits: 1, at: now)
+        let moved = Policy.staleFindingsActivity(for: pr, head: "aa11bb2", commits: 1, headAt: nil, noticedAt: now)
 
         #expect(first?.id == later?.id)
         #expect(first?.id != moved?.id)
@@ -319,7 +320,15 @@ extension ActivityFeedTests {
     }
 
     private func row(commits: Int?, at date: Date? = nil) -> ActivityEvent? {
-        Policy.staleFindingsActivity(for: pr, head: "9c1f0ab", commits: commits, at: date ?? now)
+        Policy.staleFindingsActivity(
+            for: pr,
+            head: "9c1f0ab",
+            commits: commits,
+            // Datum hlavy tyhle testy nezajímá (jde o text a identitu), takže se řádek datuje
+            // okamžikem zjištění — na to je vlastní sada v `AppStoreStaleHeadTests`.
+            headAt: nil,
+            noticedAt: date ?? now
+        )
     }
 
     private func comment(body: String, id: String = "c1", author: String = "odinuv") -> ThreadComment {
@@ -373,12 +382,19 @@ extension ActivityFeedTests {
     /// o jedné věci je šum.
     @Test("Položka s touž identitou se nezapíše dvakrát")
     func mergesDuplicates() {
-        let stale = Policy.staleFindingsActivity(for: pr, head: "9c1f0ab", commits: 2, at: now)
+        let stale = Policy.staleFindingsActivity(
+            for: pr,
+            head: "9c1f0ab",
+            commits: 2,
+            headAt: nil,
+            noticedAt: now
+        )
         let again = Policy.staleFindingsActivity(
             for: pr,
             head: "9c1f0ab",
             commits: 2,
-            at: now.addingTimeInterval(600)
+            headAt: nil,
+            noticedAt: now.addingTimeInterval(600)
         )
 
         let log = Policy.activityLog([stale!], adding: [again!])

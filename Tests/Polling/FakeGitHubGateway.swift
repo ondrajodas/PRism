@@ -317,6 +317,31 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return assignableTeams
     }
 
+    // MARK: - Hlavy dávkou (#420)
+
+    /// Co vrátí `fetchHeads(of:)`, klíčované PR. **Chybějící klíč není chyba** — je to ta odpověď,
+    /// kterou GitHub dá u repa, na které nevidíme, a která se nesmí splést s „hlava se neposunula“.
+    var heads: [PRIdentifier: PullRequestHead] = [:]
+
+    /// Čím `fetchHeads(of:)` spadne. `nil` = vrátí, co je v `heads`.
+    var headsFailure: (any Error)?
+
+    /// **Na co se kdo ptal, po jednotlivých voláních.** Vnořené pole je tady to podstatné: na něm
+    /// stojí tvrzení, že se za tik pošle **jeden** dotaz na celou frontu, ne jeden na PR ani jeden
+    /// na repozitář. Plochý seznam by ten rozdíl neuměl vyjádřit.
+    var headRequests: [[PRIdentifier]] { lock.withLock { headsAsked } }
+
+    private var headsAsked: [[PRIdentifier]] = []
+
+    func fetchHeads(of ids: [PRIdentifier]) async throws -> [PRIdentifier: PullRequestHead] {
+        // Prázdný dotaz se nezaznamenává ani nespouští — jako ve `GhGateway`, ať se na tom dá
+        // tvrdit, že se na nic neptáme.
+        guard !ids.isEmpty else { return [:] }
+        lock.withLock { headsAsked.append(ids) }
+        if let headsFailure { throw headsFailure }
+        return heads.filter { ids.contains($0.key) }
+    }
+
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {
         let answer: Result<PullRequest, any Error>? = lock.withLock {
             detailsAsked.append(id)

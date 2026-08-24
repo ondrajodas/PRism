@@ -376,6 +376,81 @@ struct GhGatewayTests {
         }
     }
 
+    // MARK: - Hlavy dávkou (#420)
+
+    private var heads: [PRIdentifier] {
+        [
+            PRIdentifier("cli/cli#14252")!,
+            PRIdentifier("microsoft/terminal#20580")!,
+            PRIdentifier("vercel/next.js#97830")!,
+        ]
+    }
+
+    /// **Jedno spuštění `gh` na tři PR z tří repozitářů.** Tohle je to tvrzení, na kterém stojí
+    /// zadání #420: kdyby se z toho stal dotaz na repozitář, byl by z tiku desetinásobek volání
+    /// a výsledek by přitom vypadal stejně.
+    @Test("Hlavy tří PR jdou jedním voláním")
+    func fetchesHeadsInOneCall() async throws {
+        let runner = try FakeProcessRunner(exitCode: 0, standardOutput: Fixture.text("gh/pr-heads.json"))
+
+        let found = try await gateway(runner).fetchHeads(of: heads)
+
+        #expect(found.count == 3)
+        #expect(found[heads[0]]?.sha == "819768f67a82e9b915131fe50adc7a7269bdc17e")
+        #expect(found[heads[0]]?.committedAt == (try date("2026-08-24T14:11:36Z")))
+        #expect(runner.invocations.count == 1)
+        #expect(runner.invocations.first?.arguments.prefix(2) == ["api", "graphql"])
+    }
+
+    /// **Prázdný seznam se nespouští.** `query() { }` není platný dokument a nula PR nemá co
+    /// vracet — je to zároveň to, co drží „na klidný den nula volání“.
+    @Test("Prázdný seznam se na nic neptá")
+    func asksNothingForAnEmptyList() async throws {
+        let runner = FakeProcessRunner(exitCode: 0)
+
+        #expect(try await gateway(runner).fetchHeads(of: []).isEmpty)
+        #expect(runner.invocations.isEmpty)
+    }
+
+    /// **Nenulový kód není chyba volání**, když dorazila data — tentýž případ jako u `gh pr checks`
+    /// (#209). Skutečný výstup: dotaz na tři PR, ze kterých dvě neexistují, vrátil data prvního,
+    /// `errors` ke zbytku a `gh` skončil kódem 1. Kdyby se to bralo jako selhání, přišla by fronta
+    /// o odpověď kvůli jedné PR, na kterou nevidíme.
+    @Test("Částečná odpověď s nenulovým kódem se nezahodí")
+    func keepsPartialAnswers() async throws {
+        let runner = try FakeProcessRunner(
+            exitCode: 1,
+            standardOutput: Fixture.text("gh/pr-heads-partial.json"),
+            standardError: "gh: Could not resolve to a PullRequest with the number of 17000."
+        )
+
+        let found = try await gateway(runner).fetchHeads(of: heads)
+
+        #expect(found.count == 1)
+        #expect(found[heads[0]]?.sha == "cc36d32a212a2b8b6611fb73549fe6d04fb6ec38")
+        #expect(found[heads[1]] == nil)
+    }
+
+    /// Nenulový kód **a** žádná data už selhání je: bez `data` v odpovědi se nedozvíme nic
+    /// a mlčet nad tím by znamenalo, že se rate limit nepozná od klidné fronty.
+    @Test("Nenulový kód bez dat je chyba")
+    func reportsAFailedCall() async {
+        let runner = FakeProcessRunner(exitCode: 1, standardError: "gh: Not Found (HTTP 404)")
+
+        await #expect(throws: GitHubError.notFound("gh: Not Found (HTTP 404)")) {
+            try await gateway(runner).fetchHeads(of: heads)
+        }
+    }
+
+    @Test("Rozbitá odpověď je malformedOutput, ne prázdná mapa")
+    func reportsMalformedHeads() async {
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: "{ tohle není odpověď")
+
+        await #expect(throws: GitHubError.self) {
+            try await gateway(runner).fetchHeads(of: heads)
+        }
+    }
+
     // MARK: - Auth
 
     @Test("Kontrola přihlášení jde přes gh auth status")
