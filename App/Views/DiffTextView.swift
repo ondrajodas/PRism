@@ -144,6 +144,8 @@ final class DiffTextView: NSTextView {
         )
         lineRanges = composed.ranges
         textStorage?.setAttributedString(composed.text)
+        // Nový text = nová šířka nejdelšího řádku, takže zapamatovaná neplatí.
+        rememberedTextWidth = nil
         needsDisplay = true
     }
 
@@ -536,9 +538,55 @@ final class DiffTextView: NSTextView {
         isMeasuring = true
         defer { isMeasuring = false }
         textContainer.size = containerSize(forWidth: width)
+        // Jiná šířka kontejneru = jiné zalomení, takže zapamatovaná šířka textu neplatí. Ve sloupci
+        // dvojice se nezalamuje, takže se nemění nic — zahazuje se to na jednom místě schválně.
+        rememberedTextWidth = nil
         layoutManager.ensureLayout(for: textContainer)
         return layoutManager.usedRect(for: textContainer).height + textContainerInset.height * 2
     }
+
+    /// Šířka, na které je z bloku vidět **všechno** — gutter plus nejdelší vysázený řádek.
+    ///
+    /// **Je to šířka pro kreslení, ne pro sazbu**, a v tom je ten rozdíl: text se kreslí od
+    /// `textContainerOrigin.x`, tedy až za gutterem, takže dokument široký jen jako `usedRect`
+    /// ořeže konec nejdelšího řádku právě o gutter (ve split pohledu 84 pt).
+    ///
+    /// **`sizeToFit()` na to nestačí a je to změřené, ne odhad** (#422): view složené z kódu má
+    /// `maxSize` `(0, 0)` a nikdo ji nenastavuje, takže `sizeToFit()` vrátí rámec **nulové** šířky.
+    /// Dokument sloupce z něj proto vycházel vždycky přesně tak široký jako plocha — nebylo co
+    /// rolovat a autohide vodorovný pruh schoval i tam, kde kód za okraj přetékal.
+    ///
+    /// Ptá se na ni **sloupec dvojice**; v zalamovacím bloku je to šířka plochy, takže o přetečení
+    /// nic neříká (nezalomený řádek tam není).
+    var naturalWidth: Double {
+        gutterWidth + laidOutWidth()
+    }
+
+    /// Šířka vysázeného textu podle layout manageru. **Pamatuje se** (#224): ptá se na ni každý
+    /// dotaz na výšku bloku dvojice, tedy `sizeThatFits` při **každém** přepočtu geometrie (#393),
+    /// a je to funkce vysázeného textu a šířky kontejneru — obojí ji zahazuje. Změřeno: spočítat ji
+    /// stojí totéž co dřívější `sizeToFit()` (39,6 proti 40,1 ms na 54 stranách, jedno sezení),
+    /// z paměti 0,003 ms.
+    ///
+    /// **Zahazuje ji `show(…)`, tedy jediné místo, kde se v aplikaci text mění.** Kdo sáhne na
+    /// `textStorage` mimo něj, dostane hodnotu z minula — dělá to jedno měřidlo v testech a je to
+    /// tam napsané.
+    ///
+    /// Hodnota je pravdivá jen nad **vysázeným celým blokem**; `ensureLayout(for:)` to zajišťuje
+    /// a `allowsNonContiguousLayout` je u těchhle sloupců `false` (změřeno). Že se nejdelší řádek
+    /// najde i na konci šedesátiřádkového bloku, drží `DiffPairScrollerTests`.
+    private func laidOutWidth() -> Double {
+        if let rememberedTextWidth { return rememberedTextWidth }
+        guard let layoutManager, let textContainer else { return 0 }
+        layoutManager.ensureLayout(for: textContainer)
+        let width = layoutManager.usedRect(for: textContainer).width
+        rememberedTextWidth = width
+        return width
+    }
+
+    /// Zapamatovaná šířka vysázeného textu, nebo `nil`, když se od poslední sazby (či změny
+    /// kontejneru) neplatí.
+    private var rememberedTextWidth: Double?
 
     /// Výška bloku o daném počtu **nezalomených** řádků. Sloupec dvojice se nezalamuje, takže se
     /// nemusí měřit layout.
@@ -576,6 +624,7 @@ final class DiffTextView: NSTextView {
         let size = containerSize(forWidth: width)
         guard textContainer.size != size else { return }
         textContainer.size = size
+        rememberedTextWidth = nil
     }
 
     /// Měří se právě teď výška? Nastavení `textContainer.size` si AppKit vyloží jako změnu geometrie
@@ -609,13 +658,24 @@ final class DiffTextView: NSTextView {
 
     /// Sloupec pohledu vedle sebe: **nezalamuje** a posouvá se vodorovně, aby zůstal zarovnaný
     /// s protějškem (viz `DiffPairBlockView`).
+    ///
+    /// **`isHorizontallyResizable` je vypnuté, a to je celá oprava rolování z #422.** Zapnuté
+    /// znamená „šířku si spočítám sám“ — a AppKit ji počítá z `usedRect`, který o gutteru neví,
+    /// takže rámec, který mu nastaví kontejner (`layoutColumns()`), **přepíše zpátky na šířku
+    /// plochy** vždycky, když se do ní vejde samotný text. Změřeno: sloupec s dvanácti znaky
+    /// v poloviční šířce 129,5 b má text nakreslený do 190,4 b, a dokument z toho vyšel 129,5 —
+    /// tedy nebylo co rolovat a autohide vodorovný pruh schoval. `sizeToFit()` je tatáž slepota
+    /// (vrací nulu, dokud `maxSize` nikdo nenastaví).
+    ///
+    /// Šířku proto drží **kontejner** a jediný, kdo ji umí spočítat, je tenhle typ (`naturalWidth`)
+    /// — je to tatáž úvaha jako u výšky v #236: kdo kreslí, ten měří.
     static func pairColumn() -> DiffTextView {
         let textView = textKit1()
         textView.textContainer?.size = NSSize(
             width: CGFloat.greatestFiniteMagnitude,
             height: CGFloat.greatestFiniteMagnitude
         )
-        textView.isHorizontallyResizable = true
+        textView.isHorizontallyResizable = false
         return textView
     }
 

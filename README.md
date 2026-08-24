@@ -636,6 +636,21 @@ Tažení rozsahu pro komentář se s vybíráním textu snese: nad kódem dostan
 **V pohledu vedle sebe se dlouhý řádek nezalamuje, ale posouvá vodorovně** — jinak by jeden sloupec
 narostl o zalomený řádek, druhý ne, a přestalo by platit, že vlevo a vpravo je tentýž řádek.
 
+**A od #422 je to vidět: pod každou půlkou je vodorovný pruh** (klasický posuvník, ne ten
+zmizíkový), takže se z okna pozná, že za pravým okrajem kód pokračuje — a z šířky knobu i kolik ho
+tam je. Pruh dostane **jen blok, který má co skrývat**; co se do sloupce vejde, o jeho 17 bodů
+výšky nepřijde. Vodorovný pruh sloupec **nezúží**, takže znaků na stranu je stejně jako dřív
+(22 ve výchozím okně s otevřeným stromem i panelem). Rozhodl o tom výběr ze tří možností: zmizíkový
+posuvník se natrvalo zobrazit nedá (změřeno — nakreslí 0 pixelů, i když API tvrdí, že je vidět)
+a zalamovat se ve splitu nesmí.
+
+Vyšlo u toho najevo, že **se tam dosud nedalo rolovat vůbec** — ne že by to jen nebylo vidět:
+plocha se roztahovala podle šířky textu bez sloupce s čísly, a AppKit ji navíc srážel zpátky na
+šířku okýnka, takže konec dlouhého řádku byl z okna nedosažitelný. Od #422 si šířku určuje ten,
+kdo kód kreslí. Co se **nemění**: čísla řádků odjedou s textem (kreslí je totéž view jako kód) —
+je to tak i v návrhu a přišpendlit gutter je jiné issue. A **pohled pod sebou zůstává zalamovací**,
+pruh v něm není.
+
 Kód je **obarvený podle jazyka** — vlastní pravidla, žádná externí závislost, paleta
 Darcula v tmavém režimu a IntelliJ Light ve světlém. Barví se řádek po řádku bez paměti,
 protože diff je útržek: víceřádkový komentář se obarví jen tam, kde začíná. Soubor

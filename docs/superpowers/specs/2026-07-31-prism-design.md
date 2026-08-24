@@ -2925,3 +2925,38 @@ o implementaci, tedy to, co zákres nechal na ní.
 | **Řádek o odchodu z fronty vede na GitHub** | Zašedlá šipka `→ Nálezy`; nebo dotáhnout detail a říct, proč PR odešel | PR v seznamu není, takže by šipka do tabu lhala — a `openTab` by otevřel záložku bez obsahu. **Proč** odešel se ze samotné fronty rozlišit nedá (mergnuto od zrušeného requestu od mého odeslaného review) a dotahovat kvůli jednomu řádku detail je volání za nic |
 | **Čtyři odchylky textu od zákresu** (nálezy, čisto, re-review, cizí aktivita) | Nakreslit to, co má zákres | Každá by znamenala data, která by musela vzniknout druhou cestou (seznam skillů a útrata u čista, počet commitů od cizího review) nebo druhou větu o témž počtu. Výčet i důvody jsou v [`stav.md`](../../stav.md) |
 | **Líný seznam po dnech, ne po řádcích** | `LazyVStack` nad všemi řádky s hlavičkami dne uvnitř | Blok je ohraničená karta, takže potřebuje jeden kontejner — a řádků v něm je nejvýš tolik, kolik je strop celého záznamu, takže je nejhorší případ ohraničený. Svislá čára osy je proto **na pozadí bloku**, ne prvek v každém řádku (#252) |
+
+### Záznam rozhodnutí — trvalý vodorovný pruh v diffu vedle sebe (#422)
+
+Ve splitu se nezalamuje (#157), takže dlouhý řádek odjede za pravý okraj sloupce — a z okna se to
+nedalo poznat, protože plochy měly `scrollerStyle = .overlay`, který se kreslí jen během rolování.
+Stížnost je změřená: **64,5 %** řádků diffu je delších než 22 znaků, což je právě to, co se ve
+výchozím okně s otevřeným stromem i panelem do jedné strany vejde; za okrajem zůstává v mediánu
+**34 znaků**, p90 89, nejvíc 1 575. Zákres je v **sekci 29 návrhu** a schvaloval se dřív, než issue
+vzniklo; tady jsou rozhodnutí o implementaci.
+
+**Hlavní věc, která se cestou ukázala: rolovat se tam nedalo vůbec.** Zadání issue předpokládalo, že
+posun funguje odjakživa a chybí jen jeho zviditelnění. Změřeno, že ne — a je to změna proti zadání,
+ne jeho doplněk. `DiffTextView` kreslí čísla řádků v gutteru **uvnitř** textového view (text začíná
+na `textContainerOrigin.x`, ve splitu 84 b), kdežto AppKit si šířku dokumentu počítá z `usedRect`,
+který o gutteru neví: `sizeToFit()` proto vracel nulovou šířku (dokud nikdo nenastaví `maxSize`)
+a `isHorizontallyResizable` navíc **srážel** rámec nastavený kontejnerem zpátky na šířku okýnka
+vždycky, když se do ní vešel samotný text. Dokument tedy nebyl nikdy širší než plocha, takže nebylo
+co rolovat — a s autohide by z téhle změny vyšel pruh, který se nezobrazí nikdy. Bez té opravy by
+issue nedělalo nic.
+
+| Rozhodnutí | Zamítnuté alternativy | Proč |
+|---|---|---|
+| **Rezervace 17 bodů žije tam, kde se rozhoduje o pruhu** (`DiffPairBlockContainer.showsScroller(forWidth:)` a `height(forWidth:)`) | Rezervovat ve `DiffPairBlockView.sizeThatFits`; nebo v `Policy` jako čistou funkci nad délkou nejdelšího řádku | Pravidlo z #236: kdo si říká o velikost, měří ji na tom, na čem kreslí. Dvě místa = dvě pravdy o jedné výšce, a cena je přetečení pod pruh (ověřeno vloženou regresí: 108 tvrzení, `rows 98 <= 83`). `Policy` na to nedosáhne — o pruhu rozhoduje **přirozená šířka vysázeného textu**, a tu zná jedině layout manager sloupce; čistá funkce nad počtem znaků by byla druhý, nepřesný výpočet téhož (proporcionální i monospace glyfy, tabulátory, CJK) |
+| **Kritérium je totéž, podle kterého se rozhoduje AppKit** (`naturalWidth > šířka poloviny`) | Ptát se plochy (`horizontalScroller.isHidden`) a podle toho rezervovat | Odpověď plochy platí až **po** layoutu, kdežto výšku je potřeba znát **před** ním (`sizeThatFits`). Kdo se ptá plochy, měří o průchod pozadu — tatáž past jako `bounds` v `updateNSView` (#393). Předpověď se proto srovnává s plochou v testech, ne za běhu |
+| **Šířku dokumentu určuje sloupec** (`DiffTextView.naturalWidth = gutterWidth + usedRect.width`), self-sizing je vypnuté | Nechat `isHorizontallyResizable` a přičíst gutter do `textContainerInset` | Symetrický inset je zrovna to, co #236 vyhodilo: AppKit ho uplatní na obě strany, takže by za koncem nejdelšího řádku zbylo 84 b prázdna k odrolování a knob by lhal o tom, kolik obsahu je. Vypnuté self-sizing říká pravdu — rámec nastavuje kontejner, protože jediný, kdo umí spočítat „kam text sahá“, je to view, které ho kreslí |
+| **Šířka vysázeného textu se pamatuje** (`rememberedTextWidth`), zahazuje ji sazba a změna kontejneru | Počítat `usedRect` při každém dotazu | Ptá se na ni `sizeThatFits`, tedy **každý** přepočet geometrie bloku (#393). Změřeno: spočítat 39,6 ms na 54 stran, z paměti **0,003 ms**. Cache je funkcí svého klíče (vysázený text + šířka kontejneru), takže do ní nesmí nic jiného — pravidlo z #153 |
+| **Styl `.legacy` drží vlastní podtyp `NSScrollView`** (`DiffPairScrollView`), setter vede zpátky | Přiřadit `scrollerStyle = .legacy` v `init` kontejneru | Je to hodnota, kterou `NSScrollView` srovnává se systémovou volbou *Zobrazovat posuvníky*, takže přiřazení v `init` platí do prvního přepnutí té volby. Getter přitom vrací `super` — lhoucí getter nad ivarem s `.overlay` by znamenal, že se plocha tiluje podle jedné hodnoty a čte podle druhé |
+| **Jen ty dvě plochy, ne globální `NSScroller.preferredScrollerStyle`** | Přepnout styl aplikaci | Trvalý pruh je zadání jednoho pohledu, ne preference celého systému. Zbytek okna (log, konverzace, nálezy) zůstává na tom, co si člověk nastavil |
+| **Autohide zůstává zapnutý** | Vypnout ho a mít pruh vždycky | Prázdná drážka je 17 bodů na sdělení „tady nic není“. Změřeno, že autohide počet pruhů **nesrazí** — při rozpočtu 47 znaků se pruh objeví u 90,3 % bloků —, takže schová právě těch necelých 10 %, kde by lhal |
+| **Pruh je na blok** | Jeden posun na celý soubor (jako GitHub) | Rolovací plocha **je** blok; sdílený posun by se mýlil o 44 znaků (medián rozdílu nejdelšího řádku mezi bloky téhož souboru) a stál by dva pozorovatele na blok plus přerolování všech viditelných bloků — to násobení prvků, které diff už dvakrát položilo (#252). Typický soubor má dva bloky, p99 22 |
+| **Pás se rezervuje na blok, ne na půlku** | Rezervovat každé straně podle jejího nejdelšího řádku | Blok je jeden a půlky musí mít stejně vysoké řádky, jinak přestává platit to jediné, kvůli čemu se kreslí vedle sebe. Půlka bez pruhu má proto v tom pásu prázdno — vzniká to samo tím, že si `NSScrollView` bere pás zespodu |
+| **Prázdnou stranu dvojice drží prázdný řádek** (`DiffLine.blank`), ne minimální výška | `min-height` na řádek, jak to musí dělat zákres v HTML | V okně je prázdná strana **prázdný kontextový řádek**, takže má výšku řádku ze sazby, ne z konstanty. Konstanta by byla druhá pravda o výšce řádku — a rozešla by se s ní při jiné velikosti písma. Rámečky obou půlek se proto dají tvrdit na bod (test) |
+| **Unified se nemění** | Zapnout pruh i tam pro souměrnost | Zalomený řádek se přečte celý bez rolování, takže pruh by tam byl 17 bodů na blok za nic. Je to volba ze tří možností, kterou uživatel udělal, když k nim znal ceny — proto je na to test, ne jen absence změny |
+| **Čísla řádků odjedou s textem** | Přišpendlit gutter mimo rolovací plochu | Kreslí je totéž view jako kód (na `x: 0` ve svých souřadnicích), takže vytáhnout gutter ven znamená rozdělit blok na dvě views a znovu vyřešit zarovnání řádků — jiný zákres a jiné issue. Nakreslené je to tak, jak to vyjde (poznámka 45 v zákresu) |
+| **Vlastní tenká lišta nad kódem zamítnuta** (rozhodnuto už v zákresu) | Nakreslit si pruh sám a mít ho nižší než 17 b | Knob, tažení, klik do drážky i čtečka obrazovky jsou v `NSScroller` hotové; menší výška by je stála všechny |

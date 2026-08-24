@@ -10,6 +10,10 @@ import SwiftUI
 ///
 /// V pohledu pod sebou je to obráceně — tam žádný protějšek není, takže se zalamuje jako dosud.
 /// Rozhodnutí #157; do té doby se v pohledu vedle sebe zalamovalo taky, ale nebyla v něm selekce.
+///
+/// **Od #422 je vodorovný pruh vidět** (legacy scroller, `DiffPairScrollView`) a blok si na něj
+/// rezervuje 17 bodů výšky — jenže jen tehdy, když je co skrývat. Výška bloku tím **začala záležet
+/// na šířce**; kde se to rozhoduje a proč na jednom místě, je u `height(forWidth:)`.
 struct DiffPairBlockView: NSViewRepresentable {
     let block: DiffPairBlock
     var language: Language?
@@ -86,10 +90,10 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
     /// Sloupce jsou v clip view, **jinak přetečou do druhé půlky**: textové view s neomezenou
     /// šířkou containeru si roztáhne vlastní rámec podle nejdelšího řádku a `frame`, který mu
     /// nastaví kontejner, ho nezastaví. Nahlášené při zkoušení #157 („levý sloupec je roztáhnutý
-    /// do pravého“). Scroll view je tu tedy kvůli **ořezu**; vodorovný posun je vedlejší efekt,
-    /// který se hodí, protože se ve split pohledu nezalamuje.
-    private let leftScroll = NSScrollView()
-    private let rightScroll = NSScrollView()
+    /// do pravého“). Scroll view je tu tedy kvůli **ořezu** a od #422 i kvůli **pruhu**, ze kterého
+    /// je vidět, že za okrajem něco je.
+    private let leftScroll = DiffPairScrollView()
+    private let rightScroll = DiffPairScrollView()
     private let separator = NSBox()
     private var rowHeight: Double = 0
     private var rows = 0
@@ -121,8 +125,10 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
             scroll.drawsBackground = false
             scroll.hasVerticalScroller = false
             scroll.hasHorizontalScroller = true
-            // Overlay scroller nezabírá výšku, takže sloupce zůstanou stejně vysoké.
-            scroll.scrollerStyle = .overlay
+            // **Autohide zůstává zapnutý** (#422): pruh dostane jen blok, který má co skrývat, a co
+            // ho nepotřebuje, o těch 17 bodů nepřijde. Skrývání dělá AppKit sám podle toho, jestli
+            // je dokument širší než plocha — neprogramuje se, jen se to musí umět **předpovědět**,
+            // protože na tom teď visí výška bloku (viz `showsScroller(forWidth:)`).
             scroll.autohidesScrollers = true
             addSubview(scroll)
             column.delegate = self
@@ -194,18 +200,25 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
     /// Sloupcům se musí nastavit **vlastní rámec**, ne jen rámec jejich clip view. Textové view
     /// s neomezenou šířkou containeru si velikost samo nedopočítá, takže po přesunu do `NSScrollView`
     /// zůstalo nulové — a v nulovém view nejde ani vybírat, ani nic vidět (nahlášené při zkoušení
-    /// #157: „teď po úpravě nejde už vybírat vůbec“).
+    /// #157: „teď po úpravě nejde už vybírat vůbec“). Od #422 je to navíc rámec, o kterém se
+    /// **nevyjednává**: `isHorizontallyResizable` je vypnuté, protože AppKit ho počítal z `usedRect`
+    /// bez gutteru a srážel zpátky na šířku plochy — podrobnosti u `DiffTextView.pairColumn()`.
     ///
-    /// Šířka je nejdelší řádek, **nejméně však šířka sloupce**: pozadí řádku i pruh rozsahu se
-    /// kreslí přes celou šířku view, takže u krátkého kódu by končilo v polovině.
+    /// Šířka je nejdelší řádek **i s gutterem**, nejméně však šířka sloupce: pozadí řádku i pruh
+    /// rozsahu se kreslí přes celou šířku view, takže u krátkého kódu by končilo v polovině.
+    ///
+    /// **Do #422 to byl `sizeToFit()` a ten vracel nulu** (`maxSize` je u view složeného z kódu
+    /// `(0, 0)`), takže dokument byl vždycky přesně tak široký jako plocha: nebylo **co rolovat**
+    /// a konec dlouhého řádku se z okna nedal dostat vůbec. Šířku proto hlásí sloupec
+    /// (`naturalWidth`) — tentýž typ, který kreslí text na `textContainerOrigin.x`, takže se to,
+    /// kam text sahá, a to, kam se dá odrolovat, nemá jak rozejít.
     private func layoutColumns() {
         let height = left.height(ofRows: rows)
         for (scroll, column) in [(leftScroll, left), (rightScroll, right)] {
-            column.sizeToFit()
             column.frame = NSRect(
                 x: 0,
                 y: 0,
-                width: max(column.frame.width, scroll.contentSize.width),
+                width: max(column.naturalWidth, scroll.contentSize.width),
                 height: height
             )
         }
@@ -223,12 +236,41 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
         right.needsDisplay = true
     }
 
-    /// Výška bloku: řádky × výška řádku plus svislý inset. Bez zalamování je to přesné, takže se
-    /// nemusí měřit layout — počítá to ale **sloupec sám** (`height(ofRows:)`), aby se výška nemohla
-    /// rozejít s tím, kde sloupec kreslí text (#236). Šířka na ni nemá vliv; ve split pohledu se
-    /// nezalamuje.
+    /// Výška bloku: řádky × výška řádku plus svislý inset, a k tomu **pás vodorovného pruhu**, když
+    /// se na téhle šířce kreslí (#422). Bez zalamování je zbytek přesný, takže se nemusí měřit
+    /// layout — počítá to ale **sloupec sám** (`height(ofRows:)`), aby se výška nemohla rozejít
+    /// s tím, kde sloupec kreslí text (#236).
+    ///
+    /// **Na šířce od #422 záleží**, a to je celá past tohohle issue: do té doby nezáleží, protože se
+    /// ve split pohledu nezalamuje. Rezervovat pás musí **totéž místo, které rozhoduje, že pruh
+    /// je** — proto se obojí ptá `showsScroller(forWidth:)` a proto ta funkce žije tady, ne ve
+    /// view. Dvě místa znamenají dvě pravdy o jedné výšce a poslední řádek bloku zmizí pod pruhem
+    /// (u #236 to stálo kód přes bublinu nálezu).
     func height(forWidth width: Double) -> Double {
-        left.height(ofRows: rows)
+        left.height(ofRows: rows) + (showsScroller(forWidth: width) ? DiffPairScrollView.scrollerHeight : 0)
+    }
+
+    /// Kreslí se na téhle šířce bloku vodorovný pruh? **Jedna odpověď pro výšku i pro layout**.
+    ///
+    /// Rozhoduje se to **na blok, ne na půlku** (#422): rolovací plocha je blok a každá strana má
+    /// svůj nejdelší řádek, takže pruh potřebuje občas jen jedna z nich — obě půlky ale musí mít
+    /// pořád stejně vysoké řádky, a to je celé, proč se vedle sebe kreslí. Půlka, která pruh
+    /// nepotřebuje, má proto v tom pásu prázdno.
+    ///
+    /// Kritérium je **totéž, podle kterého se rozhoduje AppKit** (autohide): dokument sloupce je
+    /// široký `max(naturalWidth, plocha)`, takže se pruh objeví právě tehdy, když je přirozená
+    /// šířka větší než plocha. Že to sedí, se netvrdí druhým výpočtem — `DiffPairScrollerTests` to
+    /// srovnávají s tím, co po layoutu hlásí `NSScrollView` sám, a **přes pásmo šířek**: rozejde se
+    /// to jenom v pásmu, u jedné šířky by test prošel (pravidlo z #236).
+    func showsScroller(forWidth width: Double) -> Bool {
+        let column = Self.columnWidth(inBlockOfWidth: width)
+        return left.naturalWidth > column || right.naturalWidth > column
+    }
+
+    /// Šířka jedné poloviny bloku. Bere se z `DiffGutterGeometry` jako v `layout()` — jinak by se
+    /// „vejde se to do sloupce“ počítalo z jiné šířky, než jakou sloupec dostane.
+    private static func columnWidth(inBlockOfWidth width: Double) -> Double {
+        DiffGutterGeometry.rightColumnX(inBlockOfWidth: width) - 1
     }
 
     /// Rámečky řádků — **jeden na dvojici**, protože sloupce jsou zarovnané. Overlay z nich staví
@@ -253,6 +295,11 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
         // Hranice polovin se bere z `DiffGutterGeometry` (#252): podle ní se umisťují i plochy na
         // tažení a pilulka, takže dva výpočty by znamenaly, že pilulka svítí v jedné polovině
         // a táhne se ve druhé.
+        //
+        // Plochy dostanou **celou výšku bloku**, i tu rezervovanou na pruh: pás si `NSScrollView`
+        // bere ze své výšky sám a clip view zůstává nad ním (změřeno u #422 — plocha 200 b vysoká
+        // hlásí `contentSize` 183 a scroller na `y: 183`). Řádky proto zůstávají tam, kde byly,
+        // a `lineFrames()` se pruhem nemění.
         let right = DiffGutterGeometry.rightColumnX(inBlockOfWidth: bounds.width)
         let half = right - 1
         leftScroll.frame = NSRect(x: 0, y: 0, width: half, height: bounds.height)

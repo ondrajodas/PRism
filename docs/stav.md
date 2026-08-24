@@ -3948,3 +3948,49 @@ se to i barvou.
 **Na tomhle je co vidět**, a do plné sekce se klikáním nedostaneš: čerstvá cache dění nemá. Pro
 screenshot se zapíše `activity.json` do cache slotu a značka do jeho domény v `UserDefaults`; postup
 je v [`testovani.md`](testovani.md). Testů 3791 (67 nových).
+
+### #422 — trvalé vodorovné pruhy v diffu vedle sebe (a rolování, které tam nebylo)
+
+Ve splitu se nezalamuje (#157), takže dlouhý řádek odjede za okraj sloupce — a nebylo z čeho poznat,
+že tam pokračuje: plochy měly `scrollerStyle = .overlay`, který se kreslí jen během rolování.
+Stížnost je změřená (**64,5 %** řádků diffu je delších než 22 znaků, což je právě to, co se ve
+výchozím okně s otevřenými panely do jedné strany vejde) a zakreslená v **sekci 29** návrhu.
+Vydáno tak, jak to zákres kreslí: **legacy scroller pod každou půlkou**, autohide zapnutý, unified
+beze změny.
+
+**Hlavní nález je jinde než v zadání: rolovat se tam nedalo vůbec.** Issue předpokládalo, že posun
+funguje odjakživa a chybí jen vidět. Změřeno, že ne — `DiffTextView` kreslí čísla řádků v gutteru
+**uvnitř** textového view (text začíná na 84 b), kdežto AppKit počítá šířku dokumentu z `usedRect`,
+který o gutteru neví: `sizeToFit()` vracel **nulovou** šířku a `isHorizontallyResizable` navíc srazil
+rámec nastavený kontejnerem zpátky na šířku okýnka vždycky, když se do ní vešel samotný text (sloupec
+s 12 znaky v šířce 129,5 b kreslí text do 190,4 b a dokument z toho vyšel 129,5). Dokument tedy nebyl
+nikdy širší než plocha; s autohide by z celé změny vyšel pruh, který se **nezobrazí nikdy**. Šířku
+proto od #422 určuje ten, kdo kreslí (`DiffTextView.naturalWidth = gutter + usedRect.width`),
+self-sizing je vypnuté a hodnota se pamatuje (39,6 ms na 54 stran spočítat, 0,003 ms z paměti).
+
+**Výška bloku začala záležet na šířce, a to je ta past.** Pruh dostane jen blok, který má co skrývat,
+takže rezervovat jeho 17 bodů musí **totéž místo, které o pruhu rozhoduje** —
+`DiffPairBlockContainer.showsScroller(forWidth:)` a `height(forWidth:)`, pravidlo z #236. Kritérium je
+navíc totéž, podle kterého se rozhoduje AppKit (`naturalWidth > šířka poloviny`), takže se nemají jak
+rozejít; ptát se plochy za běhu nešlo, protože výška se musí znát **před** layoutem. Ověřeno vloženou
+regresí: bez rezervace padne **108 tvrzení** a je mezi nimi `rows 98 <= 83`, tedy text pod pruhem.
+
+**Pás se rezervuje na blok, ne na půlku.** Když pruh potřebuje jen jedna strana, má druhá v tom pásu
+prázdno — vzniká to samo tím, že `NSScrollView` bere pás zespodu a clip view zůstává nad ním
+(změřeno: plocha 200 b vysoká hlásí `contentSize` 183 a scroller na `y: 183`). Prázdnou stranu dvojice
+u toho drží prázdný řádek (`DiffLine.blank`), ne minimální výška, takže rámečky obou půlek vyjdou na
+bod stejné.
+
+**Styl drží vlastní podtyp** (`DiffPairScrollView`), protože `scrollerStyle` je hodnota, kterou si
+`NSScrollView` srovnává se systémovou volbou *Zobrazovat posuvníky* — setter proto vede zpátky na
+`.legacy`, getter zůstává `super` (lhoucí getter by znamenal, že se plocha tiluje podle jedné hodnoty
+a čte podle druhé). Systémové nastavení se u toho **nepřebíjí**: mění se ty dvě plochy, ne aplikace.
+
+**Co se nemění:** čísla řádků odjedou s textem (nakreslené je to tak i v návrhu, poznámka 45)
+a pohled pod sebou zůstává zalamovací — je na to vlastní sada testů, protože je to volba ze tří
+možností, ne opomenutí.
+
+Testů **3800** (9 nových). Vloženými regresemi ověřené tři věci a každá padá jinde: bez rezervace
+výšky 108 tvrzení, se vráceným `sizeToFit()` 348 (z toho 182 na nedosažitelném konci řádku), s overlay
+stylem 58 — a `predictionMatchesAppKit` z nich neselže ani jedním, protože overlay se hlásí jako
+viditelný a nekreslí nic.
