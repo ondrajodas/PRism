@@ -3992,6 +3992,34 @@ odkaz“) — sondou se změřilo, že `resourceValues` odkaz **nerozbaluje**, t
 nedostane. Chování zůstalo (bezpečnější strana omylu), komentář se přepsal na změřené a přibyl na to
 test.
 
+### #417 — sheet s logem a s hunkem se otevíral 560 bodů široký
+
+Druhý výskyt třídy z #327: bez `presentationSizing(.fitted)` SwiftUI u sheetu **zahodí `idealWidth`**
+a zbyde `minWidth`. U textu, jehož jediné téma je šířka, to byla ta nejhorší možná odpověď — 66 znaků
+na řádek, z nich 29 sní timestamp, a 68 % řádků logu se lámalo. Zakresleno v sekci 28 návrhu, protože
+tahle obrazovka v mockupu nakreslená nebyla; celé měření i rozhodnutí jsou v
+[`architektura.md`](architektura.md), sekce *Sheet s kódem a s logem*, a ve specifikaci.
+
+Co je na tom jiné než u #327: **jeden sheet, dva profily velikosti** (hunk 1 180 × 520 s podlahou
+560 × 320, log obrazovka − 152 nejvýš 2 700 × 760 s podlahou 820 × 420) a **dva klíče** pro uloženou
+velikost — s jedním by roztažení logu přes monitor otevíralo takhle i hunk o devíti řádcích.
+Rozhoduje o tom čistá funkce `Policy.codeSheetSizing(kind:screen:)`, druh nese `CodeText`.
+
+**Hlavička má tři řádky, akce jsou v patičce.** U logu má třetí řádka dvě podoby: u běžícího jobu
+snímek s časem, u doběhlého `log je celý, nic už k němu nepřibude` — doběhlému jobu se log snímkem
+nazývat nemá. ANSI se z logu sundá, **timestampy zůstávají** (29 znaků = 240 bodů šířky, ale sheet je
+ta obrazovka, kde se člověk ptá po úplném textu) a připravuje se to **při stažení**, ne při kliknutí.
+
+**Dvě věci se cestou vyloučily měřením**, ať to příště nikdo nezkouší znovu. Stráž v `updateNSView`
+vypadala jako nutnost (tažení přeměřuje plochu, přesázení ruší výběr) — za patnáct kroků tažení
+skutečného okna přišlo `updateNSView` **nula krát**, takže by ji nešlo ověřit vloženou regresí a v repu
+není. A **tučné zvýraznění uvnitř třetí řádky** se nekreslí: uživatelské texty jsou `Text(verbatim:)`
+a markdown by u jména jobu s podtržítkem začal kurzívovat.
+
+**Na tomhle je co vidět**, ale k sheetu s logem se klikáním nedostaneš, kdykoli chceš — chce to PR se
+spadlým checkem. Vedle skutečné aplikace je proto sonda `CodeSheetRenderProbe`, která oba druhy
+vyrendruje v obou režimech. Testů **3832** (41 nových proti 3791 u #414), plný běh zelený.
+
 ### #422 — trvalé vodorovné pruhy v diffu vedle sebe (a rolování, které tam nebylo)
 
 Ve splitu se nezalamuje (#157), takže dlouhý řádek odjede za okraj sloupce — a nebylo z čeho poznat,

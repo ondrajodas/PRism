@@ -27,8 +27,8 @@ struct AppStoreCheckDetailTests {
         )
     }
 
-    private func store(_ gateway: FakeGitHubGateway) -> AppStore {
-        AppStore(gateway: gateway, time: FakeTimeSource())
+    private func store(_ gateway: FakeGitHubGateway, time: FakeTimeSource = FakeTimeSource()) -> AppStore {
+        AppStore(gateway: gateway, time: time)
     }
 
     private func gateway() -> FakeGitHubGateway {
@@ -69,7 +69,8 @@ struct AppStoreCheckDetailTests {
         ])
         gateway.jobLog = "2026-08-11T16:09:11.2636913Z [ERROR] Found 2 errors"
         gateway.logSize = 4_096
-        let store = store(gateway)
+        let time = FakeTimeSource()
+        let store = store(gateway, time: time)
         let check = check()
 
         store.toggleCheck(check, in: pr)
@@ -82,9 +83,15 @@ struct AppStoreCheckDetailTests {
             Issue.record("log se nenačetl: \(detail.log)")
             return
         }
-        // Ocas je připravený (bez timestampu), celý text zůstává pro `Ukázat celý log`.
+        // Ocas je připravený (bez timestampu), celý text zůstává pro `Ukázat celý log` — už bez
+        // ANSI, ale **s timestampy** (#417), a s počtem řádků a velikostí spočítanými při stažení.
         #expect(tail.text == "[ERROR] Found 2 errors")
-        #expect(full == gateway.jobLog)
+        #expect(full.text == Policy.jobLog(gateway.jobLog, fetchedAt: full.fetchedAt).text)
+        #expect(full.byteCount == gateway.jobLog.utf8.count)
+        // **Snímek je z chvíle stažení, ne z kliknutí** (#417) — čas je z `TimeSource` storu, takže
+        // se dá porovnat s tím, co fake hlásí. Bez toho by hlavička u běžícího jobu tvrdila, že je
+        // text z chvíle otevření sheetu, kdežto v paměti leží od rozbalení checku.
+        #expect(full.fetchedAt == time.now)
         // Číslo jobu z odkazu — a **totéž** číslo jde na anotace jako check-run ID.
         #expect(gateway.logsAsked == [90_007_149_348])
         #expect(gateway.annotationsAsked == [90_007_149_348])
@@ -254,7 +261,7 @@ struct AppStoreCheckDetailTests {
             Issue.record("mělo být .loaded, je \(detail.log)")
             return
         }
-        #expect(full == "assertace spadla")
+        #expect(full.text == "assertace spadla")
         #expect(tail.text == "assertace spadla")
     }
 

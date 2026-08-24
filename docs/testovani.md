@@ -2409,8 +2409,51 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 
   **`CodeTextSheet` (#157)** se testuje jen tím, čím jde: `Policy.hunk(containing:in:)` na tom, že
   řádek najde **svůj** hunk (u souboru s dvěma hunky by cizí ukázal jiný kód) a že řádek z cizího
-  souboru nenajde žádný. Samotný sheet je `ScrollView` nad jedním `Text`em, takže se offscreen
-  nevykreslí — viz past výš.
+  souboru nenajde žádný.
+
+  **Od #417 má vlastní čtyři sady**, protože se z něj stal roztahovatelný sheet se dvěma profily
+  velikosti (podrobnosti o samotném sheetu v [`architektura.md`](architektura.md)):
+
+  - `CodeSheetTests` — čisté funkce výčtem: oba profily, malá i velká obrazovka, strop 2 700,
+    podlahy, uložená velikost ořezaná o obrazovku, nesmysl v `UserDefaults` a rozhodnutí, jestli se
+    má vůbec zapisovat. A **kapacita řádku proti tabulce ze sekce 28 návrhu** (66 znaků při 560
+    bodech, 143 při 1 180, 332 při 2 700) — šířka znaku se u toho **měří na písmu**, ne opisuje.
+  - `CodeTextSheetSizingTests` — nad **skutečným oknem sheetu**, jako u #327: `.resizable`
+    v `styleMask`u, `contentMinSize` podle profilu, otevření v ideální šířce, natažená velikost se
+    uloží a příště se vezme, **hunk nezdědí velikost natažená u logu** a **otevření bez tažení
+    neuloží nic**.
+  - `CodeSheetTextTests` — věty hlavičky a patičky. To hlavní: **doběhlému jobu se log neříká
+    snímek** a **věta o zalomených řádcích u textu, který se celý vejde, nevznikne**. Na konkrétní
+    oddělovač tisíců se netestuje (tatáž úmluva jako v `PluralTests`).
+  - `CodeSheetWrappingTests` — spočítaná zalomení **proti skutečnému layout manageru**, přes pásmo
+    šířek a s řádky přesně o kapacitě a o znak delšími. U jedné šířky projde i výpočet, kterému
+    chybí odsazení; pásmo ho chytí.
+
+  A `CodeSheetRenderProbe` (sonda, `TEST_RUNNER_PRISM_MEASURE=1`) vyrendruje **oba druhy v obou
+  režimech** a k tomu hunk v podlaze — je to jediná cesta, jak si sheet s logem prohlédnout, aniž by
+  člověk musel mít po ruce PR se spadlým checkem.
+
+  **Čtyři vložené regrese, kterými je to ověřené** (a všechny vyšly na dnešní vadu, ne na teorii):
+
+  | Vložená chyba | Co spadne |
+  |---|---|
+  | `presentationSizing(.fitted)` zahozené | `Bez uložené velikosti se sheet otevře v ideální šířce` — hunk **560 b**, log **820 b**, tedy obojí v podlaze; to je stav před #417 |
+  | jeden `@AppStorage` klíč místo dvou | `Hunk nezdědí velikost natažená u logu` — hunk se otevře **2 460 b** široký |
+  | odmlka 400 ms zahozená | `Otevření bez tažení neuloží nic` — uloží se **560 × 320** u hunku a **820 × 420** u logu, tedy podlaha z prvního průchodu rozvržení |
+  | stráž v `SelectableCodeView` **přidaná** | nic — a proto v repu není, viz *Stráž v `updateNSView`* |
+
+  Past u toho druhého: sdílet **jen šířku** nestačí, test projde. `Policy.codeSheetSize` bere
+  uloženou velikost jen tehdy, když jsou **oba** rozměry nad nulou, takže se regrese musí vložit do
+  obou getterů — jinak vypadá jako neškodná.
+
+  **A jedna past harnessu, která vypadala jako vada aplikace** (změřeno): sheet se kreslí na
+  obrazovce **hostitelského okna** a AppKit ho na ni ořízne, kdežto `CodeTextSheet` si ideál počítá
+  z `NSScreen.main`, tedy z obrazovky s klávesovým oknem. Na stroji s dvěma displeji skončilo okno
+  s origin `(-10 000, -10 000)` na notebooku (1 512 b), zatímco `NSScreen.main` byl externí monitor
+  (3 440 b) — sheet tedy požádal o 2 700 a dostal 1 512. Test pak měřil ořez, ne aplikaci, a rozdíl
+  proti požadované velikosti vypadal jako tažení, takže se uložil. Řeší se to **umístěním okna podle
+  `NSScreen.main`** (za jeho dolní hranu), ne v aplikaci: tam ta situace nenastane, protože sheet
+  vyjede nad klávesovým oknem.
 
   **Bloky řádků (#157)** mají vlastní sadu (`DiffBlockTests`): že se bez bublin slije všechno do
   jednoho bloku a **žádný samostatný `.line` v seznamu nezůstane** (kreslil by se dvakrát), že
@@ -5251,6 +5294,14 @@ dostane **jednu** aktualizaci proti jedenácti u bloku dvojic, protože si neř�
 a jeho hodnota se nemění. Stráž tam proto **není**: zkoušeno, že s ní i bez ní test o výběru
 prochází, tedy že by ji nešlo ověřit vloženou regresí. `LogTailTextView` tentýž klíč
 (`shownText`/`shownColor` v koordinátoru) má od #292.
+
+**Přeměřeno u #417, když se ten sheet stal roztahovatelným** — tažení za okraj vypadalo jako ta
+chybějící pohonná síla, protože se při něm přeměřuje plocha a `body` sheetu jde znovu. Změřeno na
+**skutečném okně sheetu** (dočasná počitadla v `updateNSView` a v klíči, patnáct kroků tažení po
+12 bodech): `updateNSView` **0×**, sazeb **0×**, výběr `{4, 12}` zůstal. Stráž se proto nepřidala ani
+tehdy a ta dočasná počitadla v repu nezůstala — co drží výběr, je
+`DiffBlockUpdateTests.codeSheetKeepsTheSelectionWhileResizing`, který spadne, jakmile si tohle view
+začne říkat o vlastní velikost.
 
 **Cena stráže se měří v harnessu** (`DiffPerformanceMeasurement.blockUpdateGuardCost`, 27 bloků po
 60 řádcích, medián ze tří běhů): klíč nad **týmiž** poli **0,013 ms**, hash s podpisem (to, co tam
