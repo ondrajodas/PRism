@@ -50,7 +50,7 @@ struct DiffPairScrollerTests {
     /// Vzal si AppKit v téhle ploše pás na scroller? Čte se to **z plochy, ne z našeho výpočtu**:
     /// `contentSize` je to, co zbylo na obsah.
     private func reservedBand(of scroll: DiffPairScrollView) -> Double {
-        scroll.frame.height - scroll.contentSize.height
+        Double(scroll.frame.height - scroll.contentSize.height)
     }
 
     /// **Tenhle test je celé #422.** Předpověď kontejneru proti tomu, co scroller doopravdy udělal —
@@ -82,7 +82,7 @@ struct DiffPairScrollerTests {
         for chars in [4, 20, 60] {
             for width in stride(from: 260.0, through: 1_000.0, by: 19.0) {
                 let container = container(left: lines(6, chars: chars), right: lines(6, chars: chars), width: width)
-                let rows = try #require(container.lineFrames().last).rect.maxY
+                let rows = Double(try #require(container.lineFrames().last).rect.maxY)
                 let band = try #require(scrollers(in: container).map { reservedBand(of: $0) }.max())
 
                 #expect(band == container.height(forWidth: width) - rows - 2, "šířka \(width), \(chars) znaků")
@@ -128,9 +128,9 @@ struct DiffPairScrollerTests {
                 let container = container(left: rows, right: rows, width: width)
                 for scroll in try scrollers(in: container) {
                     let column = try #require(scroll.documentView as? DiffTextView)
-                    let drawn = try (0..<rows.count).map { try #require(column.frame(ofLine: $0)).maxX }
+                    let drawn = try (0..<rows.count).map { Double(try #require(column.frame(ofLine: $0)).maxX) }
                     let text = try #require(drawn.max())
-                    #expect(column.frame.width >= text, "šířka \(width), \(chars) znaků")
+                    #expect(Double(column.frame.width) >= text, "šířka \(width), \(chars) znaků")
                 }
             }
         }
@@ -197,7 +197,7 @@ struct DiffPairScrollerTests {
         let container = container(left: lines(4, chars: 4), right: lines(4, chars: 60), width: 500)
         let rows = container.lineFrames().map(\.rect)
         let both = try scrollers(in: container)
-        let bottom = try #require(container.lineFrames().last).rect.maxY
+        let bottom = Double(try #require(container.lineFrames().last).rect.maxY)
 
         #expect(container.height(forWidth: 500) == bottom + 2 + DiffPairScrollView.scrollerHeight)
         #expect(both.first?.horizontalScroller?.isHidden == true)
@@ -271,7 +271,7 @@ struct UnifiedBlockWrappingTests {
         let wrapping = DiffTextView.wrappingBlock()
         wrapping.gutterWidth = gutter
         wrapping.frame = NSRect(x: 0, y: 0, width: 600, height: 100)
-        #expect(try #require(wrapping.textContainer).size.width == 600 - gutter)
+        #expect(Double(try #require(wrapping.textContainer).size.width) == 600 - gutter)
 
         let column = DiffTextView.pairColumn()
         column.gutterWidth = DiffLineView.contentInset(for: .split)

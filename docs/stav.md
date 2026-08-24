@@ -4033,7 +4033,7 @@ a čte podle druhé). Systémové nastavení se u toho **nepřebíjí**: mění 
 a pohled pod sebou zůstává zalamovací — je na to vlastní sada testů, protože je to volba ze tří
 možností, ne opomenutí.
 
-Testů **3800** (9 nových). Vloženými regresemi ověřené tři věci a každá padá jinde: bez rezervace
+Testů **3822** (9 nových). Vloženými regresemi ověřené tři věci a každá padá jinde: bez rezervace
 výšky 108 tvrzení, se vráceným `sizeToFit()` 348 (z toho 182 na nedosažitelném konci řádku), s overlay
 stylem 58 — a `predictionMatchesAppKit` z nich neselže ani jedním, protože overlay se hlásí jako
 viditelný a nekreslí nic.

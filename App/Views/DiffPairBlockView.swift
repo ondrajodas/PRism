@@ -218,7 +218,7 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
             column.frame = NSRect(
                 x: 0,
                 y: 0,
-                width: max(column.naturalWidth, scroll.contentSize.width),
+                width: max(column.naturalWidth, Double(scroll.contentSize.width)),
                 height: height
             )
         }

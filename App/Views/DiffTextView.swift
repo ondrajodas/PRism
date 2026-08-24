@@ -537,10 +537,14 @@ final class DiffTextView: NSTextView {
         guard let layoutManager, let textContainer else { return nil }
         isMeasuring = true
         defer { isMeasuring = false }
-        textContainer.size = containerSize(forWidth: width)
-        // Jiná šířka kontejneru = jiné zalomení, takže zapamatovaná šířka textu neplatí. Ve sloupci
-        // dvojice se nezalamuje, takže se nemění nic — zahazuje se to na jednom místě schválně.
-        rememberedTextWidth = nil
+        // **Jen při skutečné změně**, jako ve `fitContainerWidth` (nález z review na #422): jiná
+        // šířka kontejneru je jiné zalomení, tedy jiná šířka textu — ale měření na tutéž šířku
+        // (a ve sloupci dvojice na neomezenou) zapamatovanou hodnotu zneplatnit nemá.
+        let size = containerSize(forWidth: width)
+        if textContainer.size != size {
+            textContainer.size = size
+            rememberedTextWidth = nil
+        }
         layoutManager.ensureLayout(for: textContainer)
         return layoutManager.usedRect(for: textContainer).height + textContainerInset.height * 2
     }
@@ -556,8 +560,9 @@ final class DiffTextView: NSTextView {
     /// Dokument sloupce z něj proto vycházel vždycky přesně tak široký jako plocha — nebylo co
     /// rolovat a autohide vodorovný pruh schoval i tam, kde kód za okraj přetékal.
     ///
-    /// Ptá se na ni **sloupec dvojice**; v zalamovacím bloku je to šířka plochy, takže o přetečení
-    /// nic neříká (nezalomený řádek tam není).
+    /// Ptá se na ni **sloupec dvojice**; v zalamovacím bloku vyjde přibližně šířka view (text se
+    /// zalomí do kontejneru), takže o přetečení tam neříká nic — a není co, nezalomený řádek tam
+    /// není.
     var naturalWidth: Double {
         gutterWidth + laidOutWidth()
     }
@@ -579,7 +584,10 @@ final class DiffTextView: NSTextView {
         if let rememberedTextWidth { return rememberedTextWidth }
         guard let layoutManager, let textContainer else { return 0 }
         layoutManager.ensureLayout(for: textContainer)
-        let width = layoutManager.usedRect(for: textContainer).width
+        // **Převod je explicitní** (nález z review na #422): `usedRect` vrací `CGFloat`, cache drží
+        // `Double`. Implicitní převod tady sice je (SE-0307), ale právě on se ztrácí v rozkladu
+        // `#expect` — a pak se dvě identická čísla nerovnají, viz `docs/testovani.md`.
+        let width = Double(layoutManager.usedRect(for: textContainer).width)
         rememberedTextWidth = width
         return width
     }

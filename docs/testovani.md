@@ -2515,7 +2515,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Že unified pořád zalamuje, je vlastní sada** (`UnifiedBlockWrappingTests`) — test na to, co se má
   **NEstát**. Výška zalamovacího bloku se porovnává s **počtem vizuálních řádků z layout manageru**
   (`enumerateLineFragments`), ne s `usedRect`, ze kterého sama vychází: kdyby si unified začal
-  rezervovat pás pruhu nebo přestal zalamovat, rovnost padne. Ke tomu tvrzení, že si každý blok drží
+  rezervovat pás pruhu nebo přestal zalamovat, rovnost padne. K tomu tvrzení, že si každý blok drží
   svůj kontejner (zalamovací na šířku plochy, sloupec dvojice neomezený).
 
   Ověřeno **třemi vloženými regresemi** a každá padá jinde, což je na tom to podstatné: bez
