@@ -141,17 +141,18 @@ extension AppStore {
 
     /// Zapíše, že nálezy zastaraly (#414) — **bez volání navíc**.
     ///
-    /// Volá se z `loadDetail(for:)`, tedy ve chvíli, kdy aplikace **poprvé zná novou hlavu**.
-    /// Nastavit se to tikem pollingu nedá: `PullRequestSummary` ze searche `headSha` nenese
-    /// (`gh search prs` ho neumí), takže by za tím musel stát `gh pr view` na každé PR — tedy
-    /// N+1 past, kvůli které se netahá ani detail. Cena je, že se rozchod zapíše teprve tehdy, kdy
-    /// se na PR podívám nebo nad ním něco poběží; přínos je, že od té chvíle **zůstane** —
-    /// dneska je to žlutý proužek, který zmizí s obrazovkou.
+    /// Volá se z `loadDetail(for:)`, tedy ve chvíli, kdy aplikace hlavu zná z jiného důvodu.
+    /// Tikem to od #420 pozná `refreshStaleHeads(in:)`, takže obvykle je řádek na obrazovce dřív,
+    /// než se na PR vůbec podívám; tahle cesta zůstává proto, že o rozchodu ví **s počtem
+    /// commitů** — a je to jediná cesta u PR, na které se dotaz nedostal (strop dotazu, chybějící
+    /// odpověď GitHubu, nebo `updatedAt`, které se od minula nepohnulo).
     ///
     /// Klíčem položky je hlava, takže se druhé všimnutí téhož rozchodu zahodí
-    /// (`Policy.activityLog` odstraňuje duplicity podle identity).
+    /// (`Policy.activityLog` odstraňuje duplicity podle identity) — **včetně** toho z tiku. Kdo je
+    /// první, ten zapíše řádek; datum je z obou cest stejné, protože je to čas vzniku hlavy.
     func noteStaleFindingsActivity(for pr: PRIdentifier) async {
         guard let stale = staleFindings(for: pr), stale.hasFindings else { return }
+        let commits = commits[pr] ?? []
         await recordActivity(Policy.staleFindingsActivity(
             for: pr,
             ownership: ownership(of: pr),
@@ -159,8 +160,83 @@ extension AppStore {
             // Commity zná dotažený detail (`loadDetail` je tahá hned za hlavičkou), takže se
             // počet nedopočítává žádným dalším voláním. `nil` (hlava nálezů v seznamu není,
             // typicky po force-pushi) znamená o commitech nemluvit.
-            commits: Policy.commitsAfter(stale.findingsHead, in: commits[pr] ?? []),
-            at: time.now
+            commits: Policy.commitsAfter(stale.findingsHead, in: commits),
+            // Čas události, ne zjištění (#420) — a je to tatáž hodnota, jakou z druhé strany nese
+            // `PullRequestHead.committedAt`, jen vytažená z už načteného seznamu commitů.
+            headAt: Policy.commitDate(of: stale.head, in: commits),
+            noticedAt: time.now
         ))
+    }
+
+    /// Zeptá se na **hlavy** PR, na kterých leží uložené nálezy, a zapíše, které zastaraly (#420).
+    ///
+    /// Do #420 se rozchod poznal jedině při otevření PR nebo při běhu review — tedy zrovna tehdy,
+    /// když už ho vidím i bez dění (hlavička nad taby ho říká), takže ten řádek nepřinášel nic.
+    /// Novinka, která přijde jedině tehdy, když se na PR koukám, je nakreslená nula.
+    ///
+    /// **Jedno volání na tik, ne jedno na PR ani na repozitář.** Koho se zeptat, rozhoduje
+    /// `Policy.staleHeadProbe`; `gateway.fetchHeads(of:)` z toho složí jeden GraphQL dokument.
+    /// Předfiltr přes `updatedAt` znamená, že se na klidný den neptáme vůbec — a prázdný seznam
+    /// se ani nespouští.
+    ///
+    /// **Bez záznamu dění se neptá vůbec.** Za zastaralé nálezy banner nechodí (jsou to data pro
+    /// tu obrazovku, ne vyrušení), takže je záznam jediný konzument — dotaz bez něj by byl dotaz
+    /// za nic. Je to jiná podmínka než `watchesPullRequestActivity`: ta jmenuje obojí právě proto,
+    /// že u ostatních druhů je druhým konzumentem notifikační centrum.
+    func refreshStaleHeads(in summaries: [PullRequestSummary]) async {
+        guard activityLog != nil else { return }
+        let candidates = Policy.staleHeadProbe(
+            of: summaries,
+            mine: ownLogins,
+            // Uložené nálezy v paměti — `reviewRecords` se plní při startu z disku, takže předfiltr
+            // nestojí ani čtení souboru. Odmítnuté se počítají, viz `Policy.staleFindings(of:head:)`.
+            hasFindings: { reviewRecords[$0].map { !$0.findings.isEmpty } ?? false },
+            probedAt: { headProbes[$0] }
+        )
+        guard !candidates.isEmpty else { return }
+
+        let heads: [PRIdentifier: PullRequestHead]
+        do {
+            heads = try await gateway.fetchHeads(of: candidates)
+        } catch {
+            // **Razítka se neposouvají**, takže se příští tik zeptá znovu — tatáž nesymetrie jako
+            // u razítka rozhlídky (#335). Do okna se to nehlásí schválně: nic v něm netvrdí, že
+            // hlavy zná, a stav GitHubu drží stavový řádek z pollingu (`gitHubCall`). Jediný
+            // následek je řádek dění o tik později, nebo až při otevření PR.
+            return
+        }
+
+        // `updatedAt` se vytáhne **jednou**, ne hledáním v seznamu u každého kandidáta: je to tatáž
+        // úvaha jako u `titles(from:)` v `AppStore+Notifications`.
+        let updates = Dictionary(summaries.map { ($0.id, $0.updatedAt) }, uniquingKeysWith: { first, _ in first })
+
+        var events: [ActivityEvent?] = []
+        for pr in candidates {
+            // Razítko dostane jedině PR, na kterou se **doopravdy ptalo** a odpověď dorazila:
+            // chybějící alias znamená „nevíme“, a to se nesmí zapsat jako „zjištěno“, jinak by se
+            // na tu PR nezeptalo, dokud se `updatedAt` nepohne.
+            guard let head = heads[pr] else { continue }
+            headProbes[pr] = updates[pr]
+            guard let stale = Policy.staleFindings(of: reviewRecords[pr], head: head.sha),
+                  stale.hasFindings
+            else { continue }
+            events.append(Policy.staleFindingsActivity(
+                for: pr,
+                ownership: ownership(of: pr),
+                head: stale.head,
+                // **O commitech se z tiku nemluví.** Kolik jich po hlavě nálezů přišlo, se ze
+                // seznamu commitů dopočítat dá (`Policy.commitsAfter`), jenže ten se tahá až
+                // s detailem — a dotáhnout ho kvůli číslu v řádku je zpátky ta N+1 past. Řádek
+                // proto řekne jen `hlava je teď <sha>`; číslo, které by se nemělo o co opřít, je
+                // horší než žádné.
+                commits: nil,
+                headAt: head.committedAt,
+                noticedAt: time.now
+            ))
+        }
+        // **Jeden zápis za tik, ne jeden na PR** — jako u nových PR v `announceNewPullRequests`.
+        // `recordActivity` sahá na disk, takže zápis v cyklu by u pěti rozchodů znamenal pět
+        // uložení téhož souboru; prázdné pole se navíc nedotkne ničeho.
+        await recordActivity(events)
     }
 }

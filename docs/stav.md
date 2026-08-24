@@ -4137,3 +4137,53 @@ Testů **3880** (12 nových: 8 nad čistou funkcí, 4 nad scénou s `ScrollView`
 ověřené tři věci a každá padá jinde: bez `min(…)` padne 400 tvrzení v průjezdu, 28 v okenní scéně
 a *„blok celý vidět“* (pruh vyjede pod blok, `1073 <= 683`); bez rezervace pásu 114 tvrzení o výšce;
 bez uplatnění polohy v `tile()` 29 tvrzení o hraně výřezu.
+
+### #420 — zastaralých nálezů si všimne tik, ne až otevřené PR
+
+Odložený kus [#414](#414--dění-pátá-sekce-railu-ve-které-notifikace-zůstane). Novinka *nálezy
+zastaraly* v dění fungovala, jenže se zapsala teprve tehdy, když aplikace novou hlavu **poznala** —
+při `loadDetail` nebo při běhu review. To je zrovna ten okamžik, kdy je rozchod vidět i bez dění
+(hlavička nad taby ho říká), takže ta novinka nepřinášela nic. Zadání #414 přitom nové síťové volání
+na tik zakazovalo, protože `gh search prs` `headSha` nenese.
+
+**Rozhodla měřená věc, ne úvaha.** Zadání #420 dávalo tři možnosti a klíčová otázka byla, jestli se
+dá `headRefOid` pro celou frontu vytáhnout **jedním** dotazem, ne jedním na repozitář (u téhle
+instalace je jich devět až jedenáct). Dá: GraphQL bere víc aliasovaných kořenových polí v jednom
+dokumentu. Změřeno na živém API — 12 aliasů z 10 repozitářů **1 bod z 5000/h**, 1,25–2,59 s, odpověď
+1,9 kB; **24 aliasů pořád 1 bod**, 1,25–1,96 s, 4,9 kB. Cena je tedy v tom dotazu, ne v počtu PR,
+takže dotaz na repozitář by byl desetinásobek volání za tutéž odpověď. Nejmenší varianta ze zadání
+(nedělat to tikem a jen datovat řádek zpětně) prohrála právě na tom, že měření dovolilo víc.
+
+**Co to přidá na tik: na klidný den nula.** Ptá se `Policy.staleHeadProbe`, a to jedině na **cizí** PR
+(o vlastních se nehlásí, #332), na kterých leží **uložené nálezy** a kterým se od posledního dotazu
+pohnul **`updatedAt`** — bez toho posunu se hlava nemá čím změnit. Prázdný seznam se nespouští, takže
+z klidného tiku není ani podproces. V bouři je to **jeden** dotaz za tik (~60 bodů z 5000 za hodinu)
+a strop 20 PR na dokument.
+
+**Řádek nese čas vzniku hlavy, ne čas zjištění.** Dotaz si proto říká i o `committedDate` toho commitu
+a datuje jím řádek; bez toho by po každém spuštění aplikace vypadalo, že práce z minulého týdne
+zastarala dneska — a restartuje se po každém mergi. Stojí to `commits(last: 1)` v dotazu, tedy 0,94 s
+→ 1,25–2,15 s (měřeno střídavě A/B/A/B, `cost` v obou případech 1). `oid` v odpovědi je kvůli ověření,
+že poslední commit spojení je opravdu ta hlava (shodovalo se u všech dvanácti měřených PR); neshoda
+znamená **datum nevíme**, ne datum cizího commitu. Datuje o tom `Policy`, ne volající: rozchod umí
+najít dvě cesty a identita řádku je klíčovaná hlavou, takže by tentýž rozchod měl dvě data podle toho,
+kdo si ho všiml první.
+
+**Porovnání sha se nezdvojilo** — vytáhlo se z `AppStore.staleFindings(for:)` do
+`Policy.staleFindings(of:head:)` a store si nechal jen to, odkud dnešní hlavu bere (detail). Dávkový
+dotaz je **druhý zdroj té sha, ne druhá pravda o tom, co je zastaralé** (tvrdá podmínka č. 5).
+
+**Dvě vědomé ceny.** Řádek z tiku **o commitech nemluví** (`hlava je teď <sha>`): počet by se dal
+spočítat jen ze seznamu commitů, a ten se tahá s detailem — tedy zpátky ta `N+1` past. A řádek
+nalezený se zpožděním padne do **svého** dne, takže se nepočítá jako nepřečtený; druhé razítko by
+rozbilo invariant, na kterém stojí pruh `Tady jsem skončil` (nové položky jsou předpona seznamu).
+
+**Nenulový návratový kód `gh` u dávky není selhání volání**, a je to změřené: dotaz na tři PR, ze
+kterých dvě neexistují, vrátil data prvního, `errors` ke zbytku a kód 1. Ta odpověď je uložená jako
+fixture (`pr-heads-partial.json`), protože podstatné je právě to, co `gh` udělá se stdoutem. PR, která
+neodpověděla, v mapě **není** a razítko nedostane — „nevíme“ se nesmí zapsat jako „zjištěno“.
+
+Na obrazovce se nemění nic: řádek je nakreslený od #414, jen se objeví dřív. Testů **3918**
+(38 nových). Vloženými regresemi ověřené dvě věci: datování okamžikem zjištění shodí `Řádek nese datum
+commitu, ne okamžik zjištění` (a s ním restartový test), dotaz po jednotlivých PR shodí `Za tik jde
+jeden dotaz, ne dotaz na každé PR` s hláškou `(gateway.headRequests.count → 3) == 1`.

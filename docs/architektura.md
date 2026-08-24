@@ -21,6 +21,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PRIdentifier` | `owner/repo#číslo` — klíč všeho, co se váže k PR: dedup zdrojů, review stav, uložené nálezy |
 | `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav, **popis** (`body`) |
 | `PullRequestSummary` | Totéž **bez SHA** — co dá vyhledávání. Viz `App/GitHub/` níž |
+| `PullRequestHead` | Hlava PR a **kdy vznikla** (#420) — odpověď dávkového dotazu na `headRefOid`. **Vlastní model vedle `PullRequest`**, ne jeho zúžení: detail je odpověď na „všechno o tomhle PR“ pro jeden pull request, tohle je jedna otázka pro celou frontu naráz. `committedAt == nil` znamená „datum nevíme“, ne dnešek |
 | `Source` | Zdroj PR: jméno pro UI + search dotaz. Výchozí dvojice je `Source.reviewRequested` a `Source.mine` (#330) |
 | `ReportedFinding` | Nález přesně jak ho poslal reviewer; `FindingVerdict` je `CONFIRMED`/`PLAUSIBLE` |
 | `Finding` | `ReportedFinding` + **kdo** ho našel (skill) a **proti čemu** (`headSha`) |
@@ -6414,7 +6415,8 @@ místo, kde ty události zůstanou. Zakreslené v **sekci 27 návrhu**.
 | `Policy` (`ActivityFeed.swift`) | `App/Policy/` | **všechno rozhodování** — brána, skládání textu, vložení do záznamu, strop, co je nepřečtené, dny, prázdno |
 | `ActivityLog` | `App/Store/` | soubor `activity.json` v kořeni cache, aktor, strop **200 položek** |
 | `ActivityVisitLedger` | `App/Store/` | značka poslední návštěvy v předvolbách (`activity.lastVisit`) |
-| `AppStore+Feed` | `App/Store/` | kdy se zapisuje, co je v paměti, kdy se posouvá značka, klik na řádek |
+| `AppStore+Feed` | `App/Store/` | kdy se zapisuje, co je v paměti, kdy se posouvá značka, klik na řádek, dotaz na hlavy z tiku (#420) |
+| `Policy` (`StaleHeadProbe.swift`) | `App/Policy/` | koho se tik zeptá na hlavu a co z odpovědi plyne (#420) — dvě čisté funkce |
 | `ActivityFeedView` | `App/Views/` | obrazovka: bloky po dnech, osa s puntíky, pruh návštěvy, tři prázdna |
 
 **Záznam je na disku a mez je vidět v typu.** `DeliveredNotification` je v paměti schválně (#138) —
@@ -6442,13 +6444,12 @@ cizí aktivita) a **dva se dopočítávají bez jediného volání navíc**:
 - **`leftQueue`** je doplněk k `newcomers(in:)` nad **tímtéž** snímkem. `AnnouncedPullRequests`
   proto od #414 vrací `QueueChanges` (příchody i odchody) jedním voláním: snímek se dotazem
   přepisuje, takže druhé volání by se ptalo už proti přepsanému stavu a vrátilo prázdno.
-- **`staleFindings`** čte `staleFindings(for:)` — tedy to jedno místo, které porovnává sha (#284) —
-  a počet commitů z už načteného seznamu (`Policy.commitsAfter`). **Zapisuje se z `loadDetail`**, ne
-  z tiku, a je to vědomé omezení: `PullRequestSummary` ze searche `headSha` nenese (`gh search prs`
-  ho neumí), takže by za tikem musel stát `gh pr view` na každé PR — tedy N+1 past, kvůli které se
-  netahá ani detail. Rozchod se tak zapíše teprve ve chvíli, kdy se na PR podívám nebo nad ním něco
-  poběží; **přínos je, že od té chvíle zůstane** (dneska je to žlutý proužek, který zmizí
-  s obrazovkou). Tikem to umí až vlastní issue.
+- **`staleFindings`** čte `Policy.staleFindings(of:head:)` — tedy to jedno místo, které porovnává
+  sha (#284) — a počet commitů z už načteného seznamu (`Policy.commitsAfter`). Do #420 se zapisovalo
+  **jedině z `loadDetail`**, protože `PullRequestSummary` ze searche `headSha` nenese; od #420 to
+  pozná i **tik**, a to jedním dávkovým dotazem na celou frontu (viz níž). Cesta přes `loadDetail`
+  zůstává — ví o rozchodu **s počtem commitů** a je to jediná cesta u PR, na které se dotaz
+  nedostal.
 
 **Zamítnuté s důvodem:** spadlé CI (checky se tahají až při zobrazení PR, `loadDetail` z #306, takže
 by za tím musel stát vlastní polling — nový zdroj, ne zápis toho, co proteklo) a poruchy aplikace
@@ -6531,6 +6532,71 @@ soubor i prázdný záznam dají obojí prázdný seznam, takže by nad ztraceno
 dekódováním** (`Data(contentsOf:)` vyhodí u obojího): první spuštění je normální stav, ne porucha.
 Kreslí to prázdný stav sekce, ne stavový řádek — je to odpověď na otázku, kterou si člověk klade
 zrovna nad tou obrazovkou.
+
+### Zastaralé nálezy z tiku (#420)
+
+Novinka *nálezy zastaraly* byla od #414 v dění nakreslená a fungovala, jenže se zapsala teprve
+tehdy, když aplikace novou hlavu **poznala** — tedy při otevření PR nebo při běhu review. To je
+zrovna ten okamžik, kdy je rozchod vidět i bez dění (hlavička nad taby o něm mluví), takže
+**novinka, která přijde jedině tehdy, když se koukám, přináší nulu**. Od #420 to pozná tik.
+
+**Jak to jde bez `N+1`:** `gh search prs` `headSha` nenese, ale to, co z detailu dělá `N+1` past,
+není hlava — je to **volání na PR**. GraphQL bere víc aliasovaných kořenových polí v jednom
+dokumentu, takže `headRefOid` pro celou frontu je **jedno** volání bez ohledu na to, z kolika
+repozitářů fronta je (u téhle instalace devět až jedenáct). Skládá to `PullRequestHeadsQuery`,
+posílá `GhGateway.fetchHeads(of:)`.
+
+Cena se drží třemi věcmi naráz, a je to tatáž škola jako u rozhlídky po diskuzi (#335):
+
+| Co drží cenu | Jak | Změřeno |
+|---|---|---|
+| **Jedno volání, ne jedno na PR ani na repozitář** | aliasovaný dokument, `cost` nezávisí na počtu | 12 aliasů z 10 repozitářů: **1 bod z 5000/h**, 1,25–2,59 s, 1,9 kB. 24 aliasů: **pořád 1 bod**, 1,25–1,96 s, 4,9 kB |
+| **Předfiltr `updatedAt` je zadarmo** | ptáme se jen na PR, jehož `updatedAt` se posunul od posledního dotazu (`AppStore.headProbes`) | na klidný den **nula volání** — prázdný seznam se nespouští |
+| **Jen PR s uloženými nálezy, a jen cizí** | `reviewRecords` v paměti; `Policy.pullRequests(_:ownedBy: .theirs)` | z fronty zbyde hrstka; vlastní PR se neptá **nikdy**, protože o nich se nehlásí (#332) |
+
+**Strop 20 PR na dotaz** (`Policy.staleHeadProbeLimit`) ohraničuje **velikost dokumentu**, ne počet
+volání — cena je podle měření na počtu aliasů nezávislá. Co se nevejde, dojde na příští tik, protože
+razítko dostane jedině PR, na kterou se **doopravdy ptalo** a odpověď dorazila.
+
+**Řádek nese čas události, ne čas zjištění.** Nálezy zastaraly ve chvíli, kdy vznikla nová hlava,
+takže dotaz si říká i o `committedDate` toho commitu (`PullRequestHead.committedAt`) a
+`Policy.staleFindingsActivity` datuje řádek jím. Bez toho by po každém spuštění aplikace vypadalo,
+že práce z minulého týdne zastarala dneska — a restartuje se po každém mergi. Rozhoduje o tom
+**`Policy`**, ne `??` na volajícím: obě cesty (dotažený detail přes `Policy.commitDate(of:in:)`,
+dávkový dotaz přes `committedAt`) musí datovat stejně, jinak by měl tentýž rozchod dvě data podle
+toho, kdo si ho všiml první.
+
+Dvě věci, které z toho plynou a nejsou zjevné:
+
+- **`commits(last: 1)` je jediná drahá část dotazu.** Bez ní přijde odpověď za ~0,94 s, s ní za
+  1,25–2,15 s (měřeno střídavě A/B/A/B, `cost` je v obou případech 1). Platí se to jedině v tiku,
+  ve kterém se doopravdy ptáme. `oid` je v ní kvůli **ověření**, že poslední commit spojení je
+  opravdu ta hlava (změřeno na dvanácti PR, že se shoduje u všech); neshoda znamená **datum nevíme**,
+  ne datum cizího commitu.
+- **Řádek nalezený se zpožděním padne do svého dne**, tedy pod značku poslední návštěvy, a nepočítá
+  se jako nepřečtený. Je to vědomá cena: druhé razítko (událost pro kresbu, zjištění pro nepřečtené)
+  by rozbilo invariant, na kterém stojí pruh `Tady jsem skončil` — nové položky jsou **předpona**
+  seznamu (`Policy.activityFeed`). V běžném provozu ta situace nevzniká, protože aplikace běží
+  a rozdíl mezi událostí a zjištěním je nejvýš jeden tik.
+
+**O commitech se z tiku nemluví.** Kolik jich po hlavě nálezů přišlo, se dopočítat dá
+(`Policy.commitsAfter`), jenže ze seznamu commitů — a ten se tahá až s detailem, takže by to byla
+zpátky ta `N+1` past. Řádek z tiku proto řekne jen `hlava je teď <sha>`; číslo, které by se nemělo
+o co opřít, je horší než žádné. Řádek z `loadDetail` počet má, a protože identita je klíčovaná
+hlavou, zapíše ho ten, kdo je první — datum je z obou cest stejné.
+
+**Selhání a chybějící odpovědi:**
+
+- **Celý dotaz selhal** → razítka se neposunou, takže příští tik zkusí znovu (tatáž nesymetrie jako
+  u razítka rozhlídky, #335). Do okna se to **nehlásí**: nic v něm netvrdí, že hlavy zná, a stav
+  GitHubu drží stavový řádek z pollingu (`gitHubCall`). Jediný následek je řádek o tik později.
+- **Jedna PR neodpověděla** (přejmenované repo, smazaný pull request, chybějící právo) → `gh` skončí
+  nenulově, ale data ostatních pošle, takže se odpověď **nezahazuje** (tentýž případ jako
+  `gh pr checks`, #209). Ta jedna PR v mapě prostě není a razítko nedostane — „nevíme“ se nesmí
+  zapsat jako „zjištěno“, jinak by se na ni nezeptalo, dokud se `updatedAt` nepohne.
+- **Bez záznamu dění se neptá vůbec.** Za zastaralé nálezy banner nechodí, takže je záznam jediný
+  konzument; podmínka je proto `activityLog != nil`, ne `watchesPullRequestActivity` (ta jmenuje
+  i notifikační centrum právě proto, že u ostatních druhů je druhým konzumentem).
 
 ### Které místo chce kterou množinu (#332)
 
@@ -7230,14 +7296,14 @@ Nad odesílatelností draftu (#68) platí:
 
 ## `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má dvacet metod
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má **dvacet jedna** metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu. (Do #330 tu stálo
 „čtrnáct“, ačkoli výčet v tabulce měl patnáct položek; teď je s ním číslo srovnané. Tři přidala
-#392: labely a reviewery PR a nabídky lidí a týmů k nim.)
+#392: labely a reviewery PR a nabídky lidí a týmů k nim. Jednu #420: hlavy víc PR jedním dotazem.)
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol (dvacet metod): `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)`, `fetchMetadata(id:)`, `fetchRepositoryLabels(repo:)`, `fetchAssignableUsers(repo:)`, `fetchAssignableTeams(repo:)` |
+| `GitHubGateway` | Protokol (dvacet jedna metod): `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchHeads(of:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)`, `fetchMetadata(id:)`, `fetchRepositoryLabels(repo:)`, `fetchAssignableUsers(repo:)`, `fetchAssignableTeams(repo:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
@@ -7251,6 +7317,8 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 | `PullRequestState(ghState:isDraft:)` | Mapování stavu — `gh` ho popisuje dvěma poli |
 | `GhPullRequestMetadata`, `GhLabel`, `GhReviewRequest`, `GhLatestReview`, `GhTeam` | Tvar `gh pr view --json labels,reviewRequests,latestReviews` a převod na `PullRequestMetadata` (#392). `GhReviewRequest` rozlišuje člověka od týmu **podle toho, které pole má** (`login` proti `slug`), ne podle `__typename` — z chybějícího pole se to pozná stejně a nemusí se pamatovat jméno GraphQL typu |
 | `AssignableUsersQuery`, `GhAssignableUsersResponse` | GraphQL dotaz na lidi, kteří na repo smí, a jeho odpověď (#392) |
+| `PullRequestHeadsQuery` | GraphQL dokument na hlavy **víc PR naráz** a jeho argumenty — čisté funkce (#420). Aliasy jsou **pozice v dotazu** (`pr0`, `pr1`, …), protože ve jménech repozitářů jsou pomlčky a tečky, které v GraphQL jménu být nesmí |
+| `GhPullRequestHeadsResponse` | Tvar té odpovědi a spárování se vstupním polem (#420). Aliasy nese **slovník**, ne pojmenovaná pole — kolik jich je, ví až volající |
 
 Čtyři věci, které se u toho nemají rozbít:
 
@@ -7260,6 +7328,14 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   Dotahovat detail rovnou v gateway pro každý nalezený PR by z jednoho pollu udělalo N+1
   podprocesů — **kdy se detail dotáhne, rozhoduje polling** (#6), typicky jen u PR se
   změněným `updatedAt`.
+
+  **Samotnou hlavu ale jde vytáhnout dávkou** (#420, `fetchHeads(of:)`). To, co N+1 dělá z detailu,
+  není hlava, ale **volání na PR** — a GraphQL bere víc aliasovaných kořenových polí v jednom
+  dokumentu, takže se `headRefOid` (plus datum hlavy) pro celou frontu vejde do **jednoho** volání
+  bez ohledu na počet repozitářů. Změřeno na živém API: 12 aliasů z 10 repozitářů **1 bod z 5000/h**,
+  1,25–2,59 s, odpověď 1,9 kB; 24 aliasů **pořád 1 bod**, 1,25–1,96 s, 4,9 kB. Nesmí se z toho stát
+  „tak se hlava tahá pořád“: na tik se ptá jedině `Policy.staleHeadProbe`, a to jen na to, co má
+  uložené nálezy a pohnulo se.
 - **Dotaz se posílá po argumentech a uvozovky se respektují** (`GhSearchQuery`).
   `gh search prs` bere každý argument jako jeden výraz a hodnotu s mezerou si sám
   uzávorkuje. Celý dotaz v jednom argumentu proto GitHub odmítne

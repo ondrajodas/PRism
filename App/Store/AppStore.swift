@@ -507,6 +507,18 @@ final class AppStore {
     /// Posouvá se **jen když se doopravdy ptáme**, viz `Policy.activitySweep`.
     var lastActivitySweep: Date?
 
+    /// S jakým `updatedAt` se aplikace naposled ptala na **hlavu** toho PR (#420). Chybějící
+    /// klíč = nikdy.
+    ///
+    /// Je to celý předfiltr dávkového dotazu na hlavy (`Policy.staleHeadProbe`): dokud se
+    /// `updatedAt` nepohne, hlava se změnit nemá čím, takže se neptáme — na klidný den je z toho
+    /// **nula volání**. Razítko dostanou jedině PR, na které se doopravdy ptalo, takže selhaný
+    /// dotaz zkusí příští tik znovu.
+    ///
+    /// **V paměti, ne na disku**, jako `lastActivitySweep`: po restartu je prázdné, takže první
+    /// tik dohoní, co se stalo, když aplikace neběžela — a je to **jeden** dotaz, ne jeden na PR.
+    var headProbes: [PRIdentifier: Date] = [:]
+
     /// Které zadání jsem už předal agentovi (#334). Nepovinná závislost jako ostatní story —
     /// testy, které o razítka nestojí, ji nedostanou a pak je všechno nepředané.
     let handoffs: HandoffLedger?
@@ -658,6 +670,11 @@ final class AppStore {
             // ostatní tady: po výpadku sítě je seznam prázdný, takže by se snímek vyprázdnil
             // a při zotavení by přišlo úplně všechno.
             await self?.announceNewPullRequests(in: summaries)
+            // Zastaralé nálezy (#420) — hlava se posunula pod uloženými nálezy. Uvnitř úspěšného
+            // tiku ze stejného důvodu jako rozhlídka po diskuzi: vejde se to do backoffu pollingu
+            // a nepotřebuje druhý časovač. Kolik dotazů z toho je, rozhoduje
+            // `Policy.staleHeadProbe` — na klidný den nula, jinak **jeden na celou frontu**.
+            await self?.refreshStaleHeads(in: summaries)
             // Cizí aktivita na **vlastních** PR (#335) — komentář kolegy, Copilotovo review.
             // Uvnitř úspěšného tiku schválně: rozhlídka se tím vejde do backoffu pollingu (při rate
             // limitu se netiká, takže se ani nekouká) a nepotřebuje druhý časovač. Kolik dotazů
@@ -1697,6 +1714,12 @@ final class AppStore {
         // výš. Uklízí se **spolu**, jinak by po vypadlém PR zbyl osamocený důvod poruchy.
         commits = commits.filter { wantedPullRequests.contains($0.key) }
         commitFailures = commitFailures.filter { wantedPullRequests.contains($0.key) }
+
+        // Razítka dotazů na hlavu (#420) jsou jen datum, ale drží klíč s celým identifikátorem PR —
+        // bez úklidu by mapa rostla po celé sezení, stejně jako u volby tabu. PR mimo seznam se
+        // navíc neptáme, takže razítko po něm nemá co říct; kdyby se vrátil, zeptáme se znovu a
+        // druhý řádek z toho nevznikne (identita nese hlavu).
+        headProbes = headProbes.filter { wantedPullRequests.contains($0.key) }
 
         // Labely a reviewery (#392) — platí k jednomu PR a mapa drží celý identifikátor, takže by
         // bez úklidu rostla donekonečna. Rozdělané načítání přežije ze stejného důvodu jako

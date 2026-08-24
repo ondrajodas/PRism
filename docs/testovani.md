@@ -415,6 +415,51 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   v `UserDefaults` (`defaults write com.ondrajodas.prism.<slot> activity.lastVisit <ISO>`). Sekce je
   ve `ScrollView`, takže offscreen render nestačí (viz *Jak si zkontrolovat, jak view vypadá*)
   a fotí se **skutečné okno podle ID**.
+- **Zastaralé nálezy z tiku (#420)** — tři sady, a **cenná polovina jsou tvrzení o počtu volání**.
+  Rozbije se to potichu: v okně vypadá stejně, jestli se aplikace zeptala jednou, nebo dvanáctkrát,
+  jen se ten rozdíl platí každou minutu.
+
+  `Policy` výčtem (`StaleHeadProbeTests`): koho se tik zeptá — PR s uloženými nálezy, kterému se
+  pohnul `updatedAt`, a **nikoho jiného**. Negativní tvrzení jsou tři: **klidný tik se neptá**
+  (nepohnuté `updatedAt`), **PR bez nálezů se neptá** (není co zastarat) a **vlastní PR se neptá
+  nikdy** — u toho se rovnou tvrdí i `Policy.isReported(.staleFindings, on: .mine) == false`, aby
+  bylo vidět, že je to brána #332, ne úspora. Dál že se po startu (prázdná razítka) zeptá na
+  všechny naráz, že strop **uřízne konec** seznamu (ne začátek — vstup je od naposledy změněného)
+  a že je zapsaný literálem. K tomu porovnání sha výčtem: rozchod s nálezy, čisté review (rozchod
+  **je**, `hasFindings` není), shodná sha, chybějící záznam a **chybějící hlava** — „nevím“ se nesmí
+  kreslit jako „zastaralo“.
+
+  Dotaz a odpověď (`PullRequestHeadsQueryTests`): že tři PR z tří repozitářů jsou **jeden** argument
+  `query=` se třemi aliasy a **žádný `pr3`**, že hodnoty jdou přes `-F` (devět kusů) a jméno repa
+  **v dokumentu není** (jinak by se do něj vlepovalo z konfigurace), že si dotaz říká o datum hlavy
+  i o `oid` k jeho ověření, a že alias je **pozice**, ne `owner/name#číslo` (pomlčky a tečky ve
+  jménech repozitářů nejsou platné GraphQL jméno).
+
+  Fixtures jsou **skutečné odpovědi z veřejných repozitářů** (`cli/cli`, `microsoft/terminal`,
+  `vercel/next.js`), sebrané tím dotazem, který posílá aplikace. Ta druhá (`pr-heads-partial.json`)
+  je **partial failure z živého API**: dotaz na tři PR, ze kterých dvě neexistují, vrátil data
+  prvního, `errors` ke zbytku a `gh` skončil kódem 1 — přesně ten stav, kvůli kterému gateway
+  nenulový kód nebere jako selhání volání. Vymyslet by se nedal, protože z něj je podstatné právě
+  to, co `gh` udělá se stdoutem. Neshoda `oid` s `headRefOid` se naopak testuje **inline JSONem**
+  a je u toho napsané proč: na živém API se nestává (změřeno na dvanácti PR).
+
+  `GhGateway` proti fake runneru (`GhGatewayTests`): **jedno spuštění `gh` na tři PR**, prázdný
+  seznam **nespustí nic**, částečná odpověď s nenulovým kódem se **nezahodí**, nenulový kód **bez
+  dat** je chyba a rozbitá odpověď je `malformedOutput`, ne prázdná mapa.
+
+  `AppStore` proti skutečnému `ActivityLog`u (`AppStoreStaleHeadTests`): že posunutá hlava dá řádek
+  **už z tiku** (a s detailem `hlava je teď`, protože o commitech se z tiku nemluví), že řádek nese
+  **datum commitu, ne okamžik zjištění** (fixture má hlavu dva dny starou, takže rozdíl je vidět) a
+  že se bez data hlavy datuje zjištěním. A pět negativních: **jeden dotaz na celou frontu** (tři PR
+  = jedno volání se třemi identifikátory, `detailRequests` prázdné), **klidný druhý a třetí tik se
+  neptá**, **bez záznamu dění se neptá vůbec**, **selhaný dotaz razítko neposune** (příští tik
+  zkusí znovu) a **chybějící odpověď razítko nedostane** (`headProbes` zůstane prázdné). Restart
+  se hraje druhým storem nad tímtéž souborem: zeptá se znovu, ale řádek **nezdvojí ani
+  nepředatuje** — identita nese hlavu.
+
+  **Vnořené pole ve fake gateway je součást kontraktu.** `headRequests` je `[[PRIdentifier]]`, ne
+  plochý seznam, protože právě to dovolí odlišit jedno volání na tři PR od tří volání — a plochý
+  seznam by ten rozdíl neuměl vyjádřit.
 - **Konverzace** — proti fixtures, které jsou surové odpovědi z veřejných PR `cli/cli`
   sebrané **tím dotazem, který posílá aplikace** (`ConversationQuery.document`). Kdyby se
   sbíraly jinak, testovaly by tvar, který v provozu nikdy nepřijde; ověřené je to i tak, že

@@ -202,10 +202,16 @@ aplikace ví, co se stalo, a nemá to kde ukázat. Pátá sekce railu `Dění` (
 na disku**, do kterého se chodí zpátky.
 
 **Osm druhů novinky**, čtyři z nich jsou tytéž události, které chodí jako notifikace (nové PR, znovu
-k review, tři výsledky review, cizí aktivita na vlastním PR), a **dva se dopočítávají, aniž by přidaly
-jediné volání**: že **nálezy zastaraly** (hlava se posunula pod uloženými nálezy — dneska to uvidí
-jen ten, kdo PR zrovna otevře, a je to přitom ta událost, po které je práce k zahození) a že **PR
-odešel z fronty**. Za tyhle dva banner nechodí schválně: vyrušovat nemají, dohledat se mají.
+k review, tři výsledky review, cizí aktivita na vlastním PR), a **dva se dopočítávají**: že **nálezy
+zastaraly** (hlava se posunula pod uloženými nálezy — ta událost, po které je práce k zahození) a že
+**PR odešel z fronty**. Za tyhle dva banner nechodí schválně: vyrušovat nemají, dohledat se mají.
+
+**Zastaralých nálezů si aplikace všimne sama, ne až u otevřeného PR** (#420). Vyhledávání `headSha`
+nedává, takže se hlava zjišťuje **jedním dávkovým GraphQL dotazem na celou frontu** — ne jedním na PR
+ani na repozitář; změřeno, že dvanáct PR z deseti repozitářů stojí jeden bod z 5000/h. Ptá se jedině
+na cizí PR, na kterých leží uložené nálezy a kterým se pohnul `updatedAt`, takže **na klidný den to
+je nula volání**. Řádek u toho nese **čas vzniku té hlavy**, ne okamžik zjištění — jinak by po každém
+spuštění aplikace vypadalo, že práce z minulého týdne zastarala dneska.
 
 **Sekce unese věci, které banner unést nesmí — a plní se, i když je aplikace mlčící.** Zápis
 **nezávisí na přepínačích notifikací**: ty rozhodují o vyrušení, ne o záznamu. Řádek, u kterého
@@ -1899,7 +1905,8 @@ App/                      zdrojáky aplikace — target PRism
   Models/                 doménové modely: PR, identifikátory, stav review
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight, notifikace, předvolby
   GitHub/                 čtení PR a konverzace přes gh CLI: gateway, typované chyby, tvar výstupu;
-                          labely a vyžádaní reviewery i nabídky k nim (#392) — pořád bez zápisu
+                          labely a vyžádaní reviewery i nabídky k nim (#392) a hlavy víc PR jedním
+                          dávkovým dotazem (#420) — pořád bez zápisu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Config/                 config.json: globální default, override per repo, čtení a zápis
   Diff/                   parsování unified diffu na soubory, hunky a řádky, slití do dvojic pro pohled
@@ -1911,7 +1918,8 @@ App/                      zdrojáky aplikace — target PRism
                           složení zadání pro agenta na vlastním PR (#333), co z něj zbývá předat (#334),
                           co na něm od minule udělal někdo jiný, i za jakou cenu se na to ptát (#335),
                           a jestli reviewer vůbec otevřel kód — tedy jestli se z běhu dá tvrdit čisto (#383);
-                          o čem se v dění hlásí, co je nepřečtené a jak se dělí po dnech (#414)
+                          o čem se v dění hlásí, co je nepřečtené a jak se dělí po dnech (#414),
+                          na hlavy kterých PR se tik zeptá a čím se datuje zastarání nálezů (#420)
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR,
                           labely a vyžádání reviewera na vlastním PR (#392), brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy;

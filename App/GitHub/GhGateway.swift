@@ -72,6 +72,57 @@ struct GhGateway: GitHubGateway {
             .pullRequest(id: id)
     }
 
+    /// Hlavy víc pull requestů jedním dotazem (#420).
+    ///
+    /// **Nenulový kód tady není chyba volání**, a je to tentýž důvod jako u `fetchChecks(id:)`:
+    /// když GitHub na jeden alias neodpoví, přiloží `errors` a `gh` skončí `1` — data ostatních
+    /// aliasů ale pošle. Kdyby se šlo přes `run(_:)`, přišla by fronta o odpověď kvůli jedné PR,
+    /// na kterou nevidíme, a řádek dění by se neobjevil u žádné z ostatních.
+    ///
+    /// Selhání se proto rozlišuje podle toho, jestli dorazil rozumný JSON: bez `data` v odpovědi
+    /// je nenulový kód selhání a nulový kód nesrozumitelná odpověď.
+    func fetchHeads(of ids: [PRIdentifier]) async throws -> [PRIdentifier: PullRequestHead] {
+        // Prázdný dotaz se **nespouští**: `query() { }` není platný dokument a nula PR nemá co
+        // vracet. Je to zároveň to, co drží „na klidný den nula volání“ — předfiltr běží
+        // v `Policy.staleHeadProbe`, takže sem přijde prázdno pokaždé, když se nic nezměnilo.
+        guard !ids.isEmpty else { return [:] }
+        let result: ProcessResult
+        do {
+            result = try await runner.run(
+                gh,
+                arguments: PullRequestHeadsQuery.arguments(for: ids),
+                timeout: timeout
+            )
+        } catch ProcessError.timedOut {
+            throw GitHubError.timedOut
+        } catch ProcessError.launchFailed(let detail) {
+            throw GitHubError.toolUnavailable(detail)
+        } catch {
+            throw GitHubError.toolUnavailable(error.localizedDescription)
+        }
+
+        let response: GhPullRequestHeadsResponse
+        do {
+            response = try GhOutput.decoder.decode(
+                GhPullRequestHeadsResponse.self,
+                from: Data(result.standardOutput.utf8)
+            )
+        } catch {
+            // Nenulový kód **a** nesrozumitelný výstup je selhání volání; nad nulovým kódem je to
+            // odpověď, které nerozumíme — a v hlášce má být, čím se to pokazilo.
+            guard result.exitCode == 0 else { throw GitHubError(failure: result) }
+            throw GitHubError.malformedOutput("Hlavy pull requestů: \(error)")
+        }
+        // `data` je hranice mezi „částečná odpověď“ a „odpověď nedorazila“. Prázdný slovník uvnitř
+        // je přitom pořád odpověď: znamená, že se o žádné z těch PR nic nedozvíme, a to volající
+        // umí říct — v mapě prostě nebudou.
+        guard response.data != nil else {
+            guard result.exitCode == 0 else { throw GitHubError(failure: result) }
+            throw GitHubError.malformedOutput("Hlavy pull requestů: v odpovědi není `data`.")
+        }
+        return response.heads(of: ids)
+    }
+
     /// `gh pr checks` končí **nenulovým kódem, když něco spadlo** — a to není chyba volání,
     /// ale výsledek, kvůli kterému se ptáme. Selhání se proto rozlišuje podle toho, jestli
     /// dorazil rozumný JSON; prázdný výstup u PR bez checků taky není chyba.
