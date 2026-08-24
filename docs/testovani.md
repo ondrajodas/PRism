@@ -1591,6 +1591,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   přes `#require`, ne indexem — test, který s vloženou regresí složí celý běh, sebere výsledky
   i všem ostatním.
 
+  Ochrana mazání se tvrdí ze dvou stran a **obojí je změřené, ne odvozené**: složka pojmenovaná jako
+  záznam se nesmaže (`removeItem` nad ní smaže celý podstrom) a **symlink taky ne** — nález Copilota
+  na #423 plus sonda, ze které vyšlo, že `resourceValues(forKeys: [.isRegularFileKey])` odkaz
+  **nerozbaluje** (u odkazu na obyčejný soubor `isRegularFile == false`, `isSymbolicLink == true`).
+  Komentář v repu tvrdil původně opak („odkaz se smaže, ale je to neškodné“), takže je to zároveň
+  příklad toho, proč se tvrzení o `FileManager` měří.
+
   Srážení klidu: že **klid do minuty nezaloží ani soubor** a po minutě je z 60 úseků jeden souhrn,
   že souhrn jde **před** řádkem, který klid přerušil (časy v souboru musí jít vzestupně), a že
   **hořící úseky se nesráží** — tři za sebou jsou tři řádky. To poslední je ta podmínka, na které

@@ -23,7 +23,7 @@ struct DiagnosticsArchivingTests {
             == "diagnostics-do-2025-08-19T12-40-00.log")
     }
 
-    /// Kolize je praktiky nemožná (dvě rotace nad souborem s týmž časem zápisu), ale **přepsat cizí
+    /// Kolize je prakticky nemožná (dvě rotace nad souborem s týmž časem zápisu), ale **přepsat cizí
     /// záznam se nesmí** — proto má každý další pokus vlastní jméno.
     @Test("Další pokus o jméno má příponu s číslem")
     func nameCollisionGetsSuffix() {

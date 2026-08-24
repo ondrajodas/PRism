@@ -416,6 +416,32 @@ struct RenderDiagnosticsTests {
         #expect(session.rotation.problems[0].contains("není obyčejný soubor"))
     }
 
+    /// **Symlink pojmenovaný jako záznam se nesmaže** (nález Copilota na #423) — a je to změřená
+    /// vlastnost, ne úvaha: `resourceValues(forKeys: [.isRegularFileKey])` odkaz **nerozbaluje**,
+    /// takže i odkaz na obyčejný soubor vypadne z výčtu jako cokoli, co obyčejný soubor není.
+    /// Bezpečnější strana omylu: člověk, který si takový odkaz udělal, o něj nepřijde, a sám od sebe
+    /// růst nemůže.
+    @Test("Symlink se jménem záznamu se do úklidu nepočítá")
+    func symlinkNamedLikeArchiveSurvives() throws {
+        let directory = try TemporaryDirectory()
+        let file = directory.url.appending(path: "diagnostics.log")
+        let target = directory.url.appending(path: "jinde.log")
+        try write("cizí soubor", to: target, modified: start)
+        let link = directory.url.appending(path: "diagnostics-do-2026-08-20T10-00-00.log")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        try write("aktivní záznam", to: file, modified: start.addingTimeInterval(120))
+
+        var archive = DiagnosticsArchive(url: file, zone: .gmt)
+        archive.keepFiles = 1
+        let session = DiagnosticsLog(url: file, zone: .gmt, archive: archive)
+        #expect(session.append("nové sezení"))
+        #expect(session.rotation.deleted.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: link.path))
+        #expect(FileManager.default.fileExists(atPath: target.path))
+        #expect(session.rotation.problems.count == 1)
+        #expect(session.rotation.problems[0].contains("není obyčejný soubor"))
+    }
+
     /// **Záchvat se zapisuje po sekundách, ne do souhrnu** (#412). Zajímavý je jeho náběh, takže
     /// hoření ani průchod tělem se sráží nesmí — jinak by z minutového souhrnu nebylo poznat, kdy
     /// kolo začalo.

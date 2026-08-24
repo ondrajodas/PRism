@@ -16,7 +16,7 @@ extension Policy {
     static let diagnosticsArchiveBytes = 64 * 1024 * 1024
 
     /// Kolik různých jmen se smí zkusit, než se rotace vzdá. Kolize znamená dvě rotace v jedné
-    /// sekundě nad souborem s týmž časem posledního zápisu — praktiky nemožné, ale jméno se nesmí
+    /// sekundě nad souborem s týmž časem posledního zápisu — prakticky nemožné, ale jméno se nesmí
     /// vybrat tak, že se jím přepíše cizí záznam.
     static let diagnosticsArchiveNameAttempts = 100
 

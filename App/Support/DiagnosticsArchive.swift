@@ -128,8 +128,15 @@ struct DiagnosticsArchive {
     /// **Hranici cache tady nehlídá nic dalšího, a je to schválně.** `CacheEviction` a `ReviewStore`
     /// mají `CacheLayout.contains(_:)` proto, že mažou **rekurzivně podle toho, co našly na disku**;
     /// tady jsou to plochá jména z jednoho `contentsOfDirectory`, takže se mazání z té složky nemá
-    /// kudy dostat jinam. Symlink v položce je navíc neškodný — `removeItem` smaže odkaz, ne to, kam
-    /// ukazuje.
+    /// kudy dostat jinam.
+    ///
+    /// **Symlink se do výčtu nedostane vůbec** (nález Copilota na #423, změřeno sondou):
+    /// `resourceValues(forKeys: [.isRegularFileKey])` odkaz **nerozbaluje** — u odkazu na obyčejný
+    /// soubor vrátí `isRegularFile == false` a `isSymbolicLink == true`. Odkaz pojmenovaný jako
+    /// záznam se tedy nemaže a do bajtové meze se nepočítá; přizná se to řádkem v záznamu. Je to
+    /// bezpečnější strana omylu než ta druhá: člověk, který si takový odkaz udělal, o něj nepřijde,
+    /// a sám od sebe růst nemůže. Ručně **přejmenovaný** záznam (`diagnostics-do-2026-08-22.log`)
+    /// je obyčejný soubor, takže o ten se úklid stará normálně.
     private func entries(into report: inout DiagnosticsRotation) -> [DiagnosticsArchiveEntry] {
         let manager = FileManager.default
         let names: [String]
