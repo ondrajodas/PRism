@@ -210,6 +210,7 @@ extension AppStore {
         // úvaha jako u `titles(from:)` v `AppStore+Notifications`.
         let updates = Dictionary(summaries.map { ($0.id, $0.updatedAt) }, uniquingKeysWith: { first, _ in first })
 
+        var events: [ActivityEvent?] = []
         for pr in candidates {
             // Razítko dostane jedině PR, na kterou se **doopravdy ptalo** a odpověď dorazila:
             // chybějící alias znamená „nevíme“, a to se nesmí zapsat jako „zjištěno“, jinak by se
@@ -219,7 +220,7 @@ extension AppStore {
             guard let stale = Policy.staleFindings(of: reviewRecords[pr], head: head.sha),
                   stale.hasFindings
             else { continue }
-            await recordActivity(Policy.staleFindingsActivity(
+            events.append(Policy.staleFindingsActivity(
                 for: pr,
                 ownership: ownership(of: pr),
                 head: stale.head,
@@ -233,5 +234,9 @@ extension AppStore {
                 noticedAt: time.now
             ))
         }
+        // **Jeden zápis za tik, ne jeden na PR** — jako u nových PR v `announceNewPullRequests`.
+        // `recordActivity` sahá na disk, takže zápis v cyklu by u pěti rozchodů znamenal pět
+        // uložení téhož souboru; prázdné pole se navíc nedotkne ničeho.
+        await recordActivity(events)
     }
 }
