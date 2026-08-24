@@ -44,7 +44,7 @@ protocol GitHubGateway: Sendable {
     /// které se pollingem netahá ani detail, ani konverzace.
     ///
     /// **Jedno volání na celou frontu, ne jedno na repozitář.** Skládá to `PullRequestHeadsQuery`
-    /// z aliasovaných korenových polí; změřeno na živém API, že 12 aliasů z 10 repozitářů stojí
+    /// z aliasovaných kořenových polí; změřeno na živém API, že 12 aliasů z 10 repozitářů stojí
     /// **1 bod z 5000/h** (24 aliasů taky) a odpověď má 1,9 kB. Prázdný seznam se **na nic
     /// neptá** — `query() { }` není platný dokument a nula PR nemá co vracet.
     ///

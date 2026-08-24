@@ -6477,7 +6477,7 @@ zrovna ten okamžik, kdy je rozchod vidět i bez dění (hlavička nad taby o n�
 **novinka, která přijde jedině tehdy, když se koukám, přináší nulu**. Od #420 to pozná tik.
 
 **Jak to jde bez `N+1`:** `gh search prs` `headSha` nenese, ale to, co z detailu dělá `N+1` past,
-není hlava — je to **volání na PR**. GraphQL bere víc aliasovaných korenových polí v jednom
+není hlava — je to **volání na PR**. GraphQL bere víc aliasovaných kořenových polí v jednom
 dokumentu, takže `headRefOid` pro celou frontu je **jedno** volání bez ohledu na to, z kolika
 repozitářů fronta je (u téhle instalace devět až jedenáct). Skládá to `PullRequestHeadsQuery`,
 posílá `GhGateway.fetchHeads(of:)`.
@@ -6486,7 +6486,7 @@ Cena se drží třemi věcmi naráz, a je to tatáž škola jako u rozhlídky po
 
 | Co drží cenu | Jak | Změřeno |
 |---|---|---|
-| **Jedno volání, ne jedno na PR ani na repozitář** | aliasovaný dokument, `cost` nezávisí na počtu | 12 aliasů z 10 repozitářů: **1 bod z 5000/h**, 0,9–2,6 s, 1,9 kB. 24 aliasů: **pořád 1 bod**, 1,25–1,96 s, 4,9 kB |
+| **Jedno volání, ne jedno na PR ani na repozitář** | aliasovaný dokument, `cost` nezávisí na počtu | 12 aliasů z 10 repozitářů: **1 bod z 5000/h**, 1,25–2,59 s, 1,9 kB. 24 aliasů: **pořád 1 bod**, 1,25–1,96 s, 4,9 kB |
 | **Předfiltr `updatedAt` je zadarmo** | ptáme se jen na PR, jehož `updatedAt` se posunul od posledního dotazu (`AppStore.headProbes`) | na klidný den **nula volání** — prázdný seznam se nespouští |
 | **Jen PR s uloženými nálezy, a jen cizí** | `reviewRecords` v paměti; `Policy.pullRequests(_:ownedBy: .theirs)` | z fronty zbyde hrstka; vlastní PR se neptá **nikdy**, protože o nich se nehlásí (#332) |
 
@@ -7266,10 +7266,10 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   změněným `updatedAt`.
 
   **Samotnou hlavu ale jde vytáhnout dávkou** (#420, `fetchHeads(of:)`). To, co N+1 dělá z detailu,
-  není hlava, ale **volání na PR** — a GraphQL bere víc aliasovaných korenových polí v jednom
+  není hlava, ale **volání na PR** — a GraphQL bere víc aliasovaných kořenových polí v jednom
   dokumentu, takže se `headRefOid` (plus datum hlavy) pro celou frontu vejde do **jednoho** volání
   bez ohledu na počet repozitářů. Změřeno na živém API: 12 aliasů z 10 repozitářů **1 bod z 5000/h**,
-  0,9–2,6 s, odpověď 1,9 kB; 24 aliasů **pořád 1 bod**, 1,25–1,96 s, 4,9 kB. Nesmí se z toho stát
+  1,25–2,59 s, odpověď 1,9 kB; 24 aliasů **pořád 1 bod**, 1,25–1,96 s, 4,9 kB. Nesmí se z toho stát
   „tak se hlava tahá pořád“: na tik se ptá jedině `Policy.staleHeadProbe`, a to jen na to, co má
   uložené nálezy a pohnulo se.
 - **Dotaz se posílá po argumentech a uvozovky se respektují** (`GhSearchQuery`).

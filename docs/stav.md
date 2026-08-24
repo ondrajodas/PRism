@@ -4094,8 +4094,8 @@ na tik zakazovalo, protože `gh search prs` `headSha` nenese.
 
 **Rozhodla měřená věc, ne úvaha.** Zadání #420 dávalo tři možnosti a klíčová otázka byla, jestli se
 dá `headRefOid` pro celou frontu vytáhnout **jedním** dotazem, ne jedním na repozitář (u téhle
-instalace je jich devět až jedenáct). Dá: GraphQL bere víc aliasovaných korenových polí v jednom
-dokumentu. Změřeno na živém API — 12 aliasů z 10 repozitářů **1 bod z 5000/h**, 0,9–2,6 s, odpověď
+instalace je jich devět až jedenáct). Dá: GraphQL bere víc aliasovaných kořenových polí v jednom
+dokumentu. Změřeno na živém API — 12 aliasů z 10 repozitářů **1 bod z 5000/h**, 1,25–2,59 s, odpověď
 1,9 kB; **24 aliasů pořád 1 bod**, 1,25–1,96 s, 4,9 kB. Cena je tedy v tom dotazu, ne v počtu PR,
 takže dotaz na repozitář by byl desetinásobek volání za tutéž odpověď. Nejmenší varianta ze zadání
 (nedělat to tikem a jen datovat řádek zpětně) prohrála právě na tom, že měření dovolilo víc.

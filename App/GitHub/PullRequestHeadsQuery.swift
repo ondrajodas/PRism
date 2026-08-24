@@ -4,10 +4,10 @@ import Foundation
 /// Čisté funkce, žádné I/O.
 ///
 /// **Jeden dotaz na celou frontu, ne jeden na repozitář.** GraphQL bere víc pojmenovaných
-/// (aliasovaných) korenových polí v jednom dokumentu, takže se `repository(owner:name:)` napíše
+/// (aliasovaných) kořenových polí v jednom dokumentu, takže se `repository(owner:name:)` napíše
 /// tolikrát, kolik je pull requestů — a je z toho **jedno** volání `gh` bez ohledu na to, z kolika
 /// repozitářů fronta je (u téhle instalace devět až jedenáct). Změřeno na živém API: 12 aliasů
-/// z 10 repozitářů stojí **1 bod z 5000/h** a 0,9–2,6 s, 24 aliasů **pořád 1 bod** a 1,25–1,96 s —
+/// z 10 repozitářů stojí **1 bod z 5000/h** a 1,25–2,59 s, 24 aliasů **pořád 1 bod** a 1,25–1,96 s —
 /// takže cena je v tom dotazu, ne v počtu PR.
 ///
 /// **Owner, jméno a číslo jdou jako typované proměnné, ne do textu dokumentu.** Vlepovat je do

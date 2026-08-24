@@ -172,7 +172,7 @@ extension AppStore {
     ///
     /// Do #420 se rozchod poznal jedině při otevření PR nebo při běhu review — tedy zrovna tehdy,
     /// když už ho vidím i bez dění (hlavička nad taby ho říká), takže ten řádek nepřinášel nic.
-    /// Novinka, která přijde jedině tehdy, když se člověk koukám, je nakreslená nula.
+    /// Novinka, která přijde jedině tehdy, když se na PR koukám, je nakreslená nula.
     ///
     /// **Jedno volání na tik, ne jedno na PR ani na repozitář.** Koho se zeptat, rozhoduje
     /// `Policy.staleHeadProbe`; `gateway.fetchHeads(of:)` z toho složí jeden GraphQL dokument.
