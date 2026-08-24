@@ -651,6 +651,12 @@ kdo kód kreslí. Co se **nemění**: čísla řádků odjedou s textem (kreslí
 je to tak i v návrhu a přišpendlit gutter je jiné issue. A **pohled pod sebou zůstává zalamovací**,
 pruh v něm není.
 
+**Kolik obsahu pruh tvrdí, se počítá půlce zvlášť a po řádcích.** První verze se ptala AppKitu na
+jedno číslo za celý sloupec, a to u půlky, jejíž poslední řádek je prázdný — tedy u každé
+šrafované strany dvojice —, vyšlo jako **deset milionů bodů**: knob velikosti vlasu u levého okraje
+a rolování do prázdna. Půlka, ve které jsou jen šrafované řádky, proto pruh nedostane vůbec: nemá
+co skrývat.
+
 Kód je **obarvený podle jazyka** — vlastní pravidla, žádná externí závislost, paleta
 Darcula v tmavém režimu a IntelliJ Light ve světlém. Barví se řádek po řádku bez paměti,
 protože diff je útržek: víceřádkový komentář se obarví jen tam, kde začíná. Soubor

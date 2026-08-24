@@ -210,6 +210,223 @@ struct DiffPairScrollerTests {
     }
 }
 
+/// **Kam se v půlce dá odrolovat** — a hlavně kam už ne (nahlášeno po #422 jako „moc velký
+/// posuvník, který jede do prázdného místa, kde nic není“).
+///
+/// Vada byla v tom, že šířka dokumentu vycházela z `usedRect(for:)` na celý kontejner, a ten umí
+/// zahrnout **extra line fragment** — řádek za posledním `\n`, který AppKit vysází vždycky, když
+/// text končí zalomením. Tak končí každá půlka, jejíž **poslední řádek je prázdný**, tedy každá
+/// šrafovaná (chybějící) strana dvojice; a protože je kontejner sloupce neomezeně široký, má ten
+/// fragment rámec **10 000 000** bodů. Změřeno: půlka se třemi šrafovanými řádky si řekla
+/// o `naturalWidth` 10 000 084 místo 94.
+///
+/// **Referencí je zase AppKit, ne druhý výpočet téhož**: nejdelší řádek se bere z `frame(ofLine:)`,
+/// tedy z `boundingRect(forGlyphRange:)`, podle kterého se kreslí čísla i pozadí — jiná cesta
+/// v layout manageru než výčet fragmentů, ze kterého vychází `naturalWidth`. A rolování se ověřuje
+/// na `NSScrollView`u (`scroll(to:)`, `documentVisibleRect`), ne na naší předpovědi.
+@Suite("Rolovací šířka půlky")
+@MainActor
+struct DiffPairScrollWidthTests {
+    private static let gutter = DiffLineView.contentInset(for: .split)
+
+    private func line(_ text: String, _ number: Int) -> DiffLine? {
+        DiffLine(kind: .context, oldNumber: number, newNumber: number, text: text)
+    }
+
+    private func xs(_ count: Int, chars: Int) -> [DiffLine?] {
+        (0..<count).map { line(String(repeating: "x", count: chars), $0 + 1) }
+    }
+
+    private func blanks(_ count: Int) -> [DiffLine?] {
+        Array(repeating: nil, count: count)
+    }
+
+    private func container(left: [DiffLine?], right: [DiffLine?], width: Double) -> DiffPairBlockContainer {
+        let container = DiffPairBlockContainer()
+        container.show(
+            DiffPairBlock(left: left, right: right),
+            style: DiffBlockStyle(language: Language(path: "Cart.swift"), colorScheme: .light),
+            gutter: Self.gutter
+        )
+        container.frame = NSRect(x: 0, y: 0, width: width, height: container.height(forWidth: width))
+        container.layoutSubtreeIfNeeded()
+        return container
+    }
+
+    /// Plochy zleva doprava. **Vyžadují se obě**, jinak by tvrzení níž vycházela z prázdného pole.
+    private func scrollers(in container: DiffPairBlockContainer) throws -> [DiffPairScrollView] {
+        let found = container.subviews.compactMap { $0 as? DiffPairScrollView }
+            .sorted { $0.frame.minX < $1.frame.minX }
+        return try #require(found.count == 2 ? found : nil, "plochy dvojice v podviews nejsou dvě, ale \(found.count)")
+    }
+
+    /// Kam v téhle půlce sahá **nejdelší nakreslený řádek**. Bere se z `frame(ofLine:)`, tedy odtud,
+    /// odkud se kreslí čísla a pozadí — takže je to nezávislá reference, ne opsaný výpočet.
+    private func longestDrawnLine(in column: DiffTextView) throws -> Double {
+        let drawn = try (0..<column.lines.count).map { Double(try #require(column.frame(ofLine: $0)).maxX) }
+        return try #require(drawn.max())
+    }
+
+    /// Odsazení fragmentu, které AppKit drží **za** koncem řádku. Je to jediná vůle, kterou smí mít
+    /// dokument nad nejdelší řádkou — čte se z kontejneru, ne z literálu.
+    private func trailingPadding(of column: DiffTextView) throws -> Double {
+        Double(try #require(column.textContainer).lineFragmentPadding)
+    }
+
+    /// Šest tvarů bloku, ve kterých se půlky **liší** — právě na těch se pozná, jestli si strana
+    /// bere šířku sousedky nebo svou. **Šrafování na konci** má čtvrtý a šestý tvar, a to je zrovna
+    /// ten, ze kterého vada z hlášení vyšla; pátý ho má na začátku, aby se poznalo, že rozhoduje
+    /// právě poslední řádek.
+    private var shapes: [(name: String, left: [DiffLine?], right: [DiffLine?])] {
+        [
+            ("obě krátké", xs(3, chars: 6), xs(3, chars: 6)),
+            ("vlevo krátká, vpravo dlouhá", xs(3, chars: 6), xs(3, chars: 90)),
+            ("vlevo dlouhá, vpravo krátká", xs(3, chars: 90), xs(3, chars: 6)),
+            ("vlevo jen šrafování", blanks(3), xs(3, chars: 90)),
+            ("vlevo šrafování s jedním řádkem na konci", blanks(2) + xs(1, chars: 6), xs(3, chars: 90)),
+            (
+                "jako v hlášení: třináct řádků, vlevo převážně šrafování",
+                blanks(4) + xs(2, chars: 12) + blanks(3) + xs(1, chars: 8) + blanks(3),
+                xs(13, chars: 96)
+            ),
+        ]
+    }
+
+    /// **Rolovací šířka půlky se rovná její vlastní nejdelší řádce** — ne nejdelší řádce bloku a ne
+    /// ničemu, co v půlce není. Přes pásmo šířek okna, protože se to rozejde jen v pásmu (#236).
+    ///
+    /// Dvě tvrzení dohromady dokument připíchnou přesně: na nejdelší řádku se musí **dát dorolovat**
+    /// a **za ní už nesmí být nic** než jedno odsazení fragmentu. Vloženou regresí ověřeno, že se
+    /// zpátky na `usedRect(for:)` sada nedá: se šrafovanou půlkou padá horní hranice na
+    /// `10000084.0 <= 94.0`.
+    @Test("Šířka půlky je její vlastní nejdelší řádka")
+    func theScrollWidthIsTheHalfsOwnLongestLine() throws {
+        for shape in shapes {
+            for width in stride(from: 260.0, through: 1_000.0, by: 19.0) {
+                let container = container(left: shape.left, right: shape.right, width: width)
+                for scroll in try scrollers(in: container) {
+                    let column = try #require(scroll.documentView as? DiffTextView)
+                    let longest = try longestDrawnLine(in: column)
+                    let padding = try trailingPadding(of: column)
+                    // Dokument nesmí být užší než okýnko — pozadí řádku se kreslí přes celou šířku.
+                    let pane = Double(scroll.contentSize.width)
+                    let document = Double(column.frame.width)
+
+                    #expect(document >= longest, "\(shape.name), šířka \(width)")
+                    #expect(
+                        document <= max(longest + padding, pane),
+                        "\(shape.name), šířka \(width): dokument \(document), nejdelší řádka \(longest)"
+                    )
+                }
+            }
+        }
+    }
+
+    /// **Půlka, ve které jsou jen šrafované řádky, pruh nedostane vůbec** — nemá co skrývat. To je
+    /// ten případ ze screenshotu: vlevo samé šrafování a pod ním pruh, který jel do prázdna.
+    @Test("Šrafovaná půlka pruh nemá")
+    func aHalfWithOnlyMissingRowsHasNoBar() throws {
+        for rows in [1, 3, 13] {
+            for width in stride(from: 260.0, through: 1_000.0, by: 19.0) {
+                let container = container(left: blanks(rows), right: xs(rows, chars: 96), width: width)
+                let both = try scrollers(in: container)
+                let shaded = try #require(both.first)
+
+                #expect(shaded.horizontalScroller?.isHidden == true, "\(rows) řádků, šířka \(width)")
+                #expect(
+                    Double(shaded.frame.height - shaded.contentSize.height) == 0,
+                    "\(rows) řádků, šířka \(width)"
+                )
+                // A pás si blok bere kvůli **pravé** straně, takže se řádky nemají kde propadnout.
+                #expect(both.last?.horizontalScroller?.isHidden == false, "\(rows) řádků, šířka \(width)")
+            }
+        }
+    }
+
+    /// Posun na pravý konec, **omezený tak, jak ho omezuje AppKit** při tažení za knob —
+    /// `NSClipView.constrainBoundsRect(_:)`. Bez toho omezení je `scroll(to:)` jen zápis počátku
+    /// a plocha se poslušně posune i za dokument, takže by test netvrdil nic.
+    private func scrolledToTheRightEnd(of scroll: DiffPairScrollView) -> NSRect {
+        let clip = scroll.contentView
+        let target = NSRect(origin: NSPoint(x: 10_000, y: 0), size: clip.bounds.size)
+        clip.scroll(to: clip.constrainBoundsRect(target).origin)
+        scroll.reflectScrolledClipView(clip)
+        return scroll.documentVisibleRect
+    }
+
+    /// **Odrolovat do prázdna nejde** — tvrdí to `NSScrollView` sám, ne náš výpočet: požádá se
+    /// o posun na konec dokumentu a přečte se, co je vidět.
+    ///
+    /// U šrafované půlky se přitom nesmí posunout **vůbec**: dokument není širší než okýnko, takže
+    /// `documentVisibleRect` zůstane na nule.
+    @Test("Na konci obsahu rolování končí")
+    func scrollingStopsAtTheEndOfTheContent() throws {
+        let container = container(left: blanks(6), right: xs(6, chars: 120), width: 500)
+        let both = try scrollers(in: container)
+
+        #expect(Double(scrolledToTheRightEnd(of: try #require(both.first)).minX) == 0)
+
+        let code = try #require(both.last)
+        let column = try #require(code.documentView as? DiffTextView)
+        let longest = try longestDrawnLine(in: column)
+        let padding = try trailingPadding(of: column)
+        let visible = scrolledToTheRightEnd(of: code)
+
+        // Posunulo se to (jinak by tvrzení pod tím platilo i pro nehybnou plochu) — a vidět je konec
+        // nejdelší řádky a **nic za ním**: prázdno vpravo znamená, že plocha tvrdí víc obsahu, než
+        // kolik ho je.
+        #expect(Double(visible.minX) > 0)
+        #expect(Double(visible.maxX) <= longest + padding)
+    }
+
+    /// **Recyklace kontejneru** (#422): líný seznam předá tentýž `DiffPairBlockContainer` jinému
+    /// bloku, takže zapamatovaná šířka musí padnout se změnou obsahu. Kdyby na view visela dál,
+    /// zdědil by krátký blok šířku dlouhého — a to je druhá cesta ke pruhu, který jede do prázdna.
+    ///
+    /// Ověřeno vloženou regresí: bez `rememberedTextWidth = nil` v `DiffTextView.show(…)` padne
+    /// obojí — dlouhý blok po krátkém i krátký po dlouhém.
+    @Test("Recyklace kontejneru šířku přepočítá")
+    func recyclingTheContainerRecomputesTheWidth() throws {
+        let width = 500.0
+        let container = container(left: xs(6, chars: 200), right: xs(6, chars: 200), width: width)
+        let wide = try scrollers(in: container).map { Double(try #require($0.documentView as? DiffTextView).frame.width) }
+        #expect(container.showsScroller(forWidth: width))
+
+        // Tentýž kontejner, jiný blok — jako když se v líném seznamu vyměnil obsah pod stejným view.
+        container.show(
+            DiffPairBlock(left: xs(2, chars: 4), right: xs(2, chars: 4)),
+            style: DiffBlockStyle(language: Language(path: "Cart.swift"), colorScheme: .light),
+            gutter: Self.gutter
+        )
+        container.frame = NSRect(x: 0, y: 0, width: width, height: container.height(forWidth: width))
+        container.layoutSubtreeIfNeeded()
+
+        for (index, scroll) in try scrollers(in: container).enumerated() {
+            let column = try #require(scroll.documentView as? DiffTextView)
+            let longest = try longestDrawnLine(in: column)
+            let padding = try trailingPadding(of: column)
+            #expect(Double(column.frame.width) < wide[index])
+            #expect(Double(column.frame.width) <= max(longest + padding, Double(scroll.contentSize.width)))
+            #expect(scroll.horizontalScroller?.isHidden == true)
+        }
+        #expect(!container.showsScroller(forWidth: width))
+
+        // A obráceně: po krátkém bloku se dlouhý musí zase roztáhnout, jinak by konec řádku zmizel.
+        container.show(
+            DiffPairBlock(left: xs(6, chars: 200), right: xs(6, chars: 200)),
+            style: DiffBlockStyle(language: Language(path: "Cart.swift"), colorScheme: .light),
+            gutter: Self.gutter
+        )
+        container.frame = NSRect(x: 0, y: 0, width: width, height: container.height(forWidth: width))
+        container.layoutSubtreeIfNeeded()
+
+        for (index, scroll) in try scrollers(in: container).enumerated() {
+            #expect(Double(try #require(scroll.documentView as? DiffTextView).frame.width) == wide[index])
+        }
+        #expect(container.showsScroller(forWidth: width))
+    }
+}
+
 /// Druhá polovina rozhodnutí #422: **pohled pod sebou se nemění**. Zůstává zalamovací, takže v něm
 /// pruh není a 17 bodů na blok se v něm neplatí.
 ///

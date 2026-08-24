@@ -652,6 +652,8 @@ Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne p
 | …ale se `isHorizontallyResizable` si ho **přepočítá sám** — z `usedRect`, který o gutteru neví | Rámec nastavený kontejnerem AppKit **srazil zpátky na šířku plochy** vždycky, když se do ní vešel samotný text: sloupec s dvanácti znaky v šířce 129,5 b kreslí text do 190,4 b a dokument z toho vyšel 129,5. Ve split pohledu tedy **nebylo co rolovat** a konec dlouhého řádku se z okna nedal dostat (#422). `sizeToFit()` je tatáž slepota, jen tišší: vrací nulovou šířku, dokud `maxSize` nikdo nenastaví |
 | Legacy vodorovný scroller si bere **výšku plochy**, ne šířku | `contentSize` plochy o 200 b vyjde 183 a clip view zůstane nad pruhem (scroller na `y: 183`). Blok si proto musí o těch 17 b říct sám — a jen když se pruh kreslí (#422) |
 | Overlay scroller **nakreslí 0 pixelů**, i když API tvrdí, že je vidět | `isHidden = false`, `alphaValue = 1.0` a `knobProportion = 0.333` má i s `autohidesScrollers = false` — a přesto v nečinném okně není. Z `isHidden` se proto o kresbě nedá usoudit nic; rozhoduje pás výšky, který si plocha vezme (#422) |
+| `usedRect(for:)` umí zahrnout **extra line fragment**, a ten je široký jako celý kontejner | Text končící `\n` (tedy každá půlka s prázdným posledním řádkem, což je každá šrafovaná strana dvojice) dal v neomezeném kontejneru šířku **10 000 000** místo 10. Dokument 22 000× širší než okýnko (`knobProportion` 4,49 × 10⁻⁵): knob velikosti vlasu a rolování do prázdna (#422). Kdy se fragment započítá, se řídit nedá — šířka se proto počítá **výčtem fragmentů**, ten ho nevydá. Do výšky naopak patří, je to skutečný řádek |
+| `NSClipView.scroll(to:)` **neomezuje** na dokument | Je to zápis počátku, takže se plocha poslušně posune i za obsah (`documentVisibleRect.maxX` 10 249 nad dokumentem 1 058) — v testu z toho vyjde zeleno nad jakoukoli šířkou. Omezení dělá `constrainBoundsRect(_:)`, tedy to, co AppKit sám používá při tažení za knob (#422) |
 | Nastavení `textContainer.size` si AppKit vyloží jako změnu geometrie a **sám zavolá `setFrameSize`** | Měření výšky je dotaz na **budoucí** šířku, takže mu ten zpětný hovor změřenou šířku hned přepsal tou současnou — a měřilo se o jednu šířku pozadu (blok o dvou dlouhých řádcích si při 300 pt řekl o 36 pt a nakreslil 162). Řeší to stráž `isMeasuring` a to, že se šířka kontejneru nastavuje jen při změně (#236) |
 
 **TextKit 1, ne 2.** Geometrie řádků se čte z `NSLayoutManager` (`boundingRect(forGlyphRange:)`) —
@@ -681,7 +683,7 @@ Zakresleno v **sekci 29** návrhu. Změna má **tři části** a každá je jind
 |---|---|
 | `DiffPairScrollView` | Styl `.legacy`, který jde vzít jedině přiřazením — a setter ho vede zpátky, takže o pruh nepřijdeme ani přepnutím systémové volby *Zobrazovat posuvníky*. Drží i `scrollerHeight` (pás z AppKitu, 17 b) |
 | `DiffPairBlockContainer` | **Jestli se pruh kreslí** (`showsScroller(forWidth:)`) a **rezervace jeho výšky** (`height(forWidth:)`) — tedy obojí na jednom místě |
-| `DiffTextView.naturalWidth` | Jak široký musí být dokument sloupce, aby byl vidět celý nejdelší řádek: `gutterWidth + usedRect.width` |
+| `DiffTextView.naturalWidth` | Jak široký musí být dokument sloupce, aby byl vidět celý nejdelší řádek: `gutterWidth` plus nejdelší **vysázený fragment téhle půlky** (ne `usedRect(for:)` na celý kontejner, viz níž) |
 
 **Výška bloku od #422 závisí na šířce, a to je ta past.** Do té doby na ní nezáleželo (nezalamuje
 se), takže `height(forWidth:)` parametr ignorovala. Jak se pruh objevuje podle toho, jestli je co
@@ -713,6 +715,48 @@ v zadání issue (tam se předpokládalo, že se rolovat dá „odjakživa“). 
 ji na šířku plochy, takže **dokument nebyl nikdy širší než okýnko**. S autohide by z toho vyšel
 pruh, který se nezobrazí nikdy. Šířku proto určuje sloupec (`naturalWidth`) a self-sizing je vypnuté;
 je to tatáž úvaha jako u výšky v #236 — kdo kreslí, ten měří.
+
+**Šířka je vlastní každé půlce, a musí se počítat po řádcích** (#422, oprava nahlášená po prvním
+kole jako „moc velký posuvník, který jede do prázdného místa, kde nic není“). První verze brala
+`usedRect(for: textContainer)`, tedy jedno číslo za celý kontejner — a to umí zahrnout **extra line
+fragment**: řádek za posledním `\n`, který AppKit vysází vždycky, když text končí zalomením. Tak
+končí každá půlka, jejíž **poslední řádek je prázdný**, a prázdná je každá šrafovaná (chybějící)
+strana dvojice. Kontejner sloupce je přitom neomezeně široký, takže má ten fragment rámec
+**10 000 000** bodů:
+
+| půlka | `usedRect(for:)` | po řádcích |
+|---|---|---|
+| tři obyčejné řádky (`abc`, …) | 34,1 | 34,1 |
+| **tři šrafované řádky** | **10 000 000** | 10,0 |
+| šrafování a mezi ním jeden dlouhý řádek | **10 000 000** | 508,2 |
+
+Z toho vycházel dokument 10 000 084 bodů široký proti okýnku 449,5 — tedy plocha, která tvrdí
+22 000× víc obsahu, než kolik ho je: `knobProportion` **4,49 × 10⁻⁵** (po opravě 0,0, protože
+šrafovaná půlka pruh nedostane vůbec; půlka s dlouhými řádky má 0,471 před i po). Odsud ten vlas
+u levého okraje a rolování do prázdna.
+**Kdy se ten fragment do `usedRect` započítá, se řídit nedá** (změřeno): nad samotným sloupcem
+vyšla 34,1, nad tímtéž sloupcem uvnitř `DiffPairBlockContainer` 10 000 000, a minimální recept je
+zneplatnit layout po jeho vysázení. Odsud to „někdy“ v hlášení.
+`enumerateLineFragments(forGlyphRange:)` extra fragment **nevydá vůbec**, takže se nemá jak vloudit;
+u půlky, kde nic není, vyjde nula a pruh se nekreslí. Nad blokem s neprázdným posledním řádkem
+vychází **týž počet jako dřív**, takže geometrie odsouhlasená u #422 (pás 17 b, knob 11 b, odsazení
+3 b) se nemění.
+
+**Výška zůstává na `usedRect(for:)` schválně.** Tam je extra fragment **skutečný řádek** bloku
+(prázdný řádek souboru se kreslí i s číslem), takže se do výšky započítat má; a je to navíc jen
+zalamovací pohled — `DiffPairBlockContainer.height(forWidth:)` počítá z `height(ofRows:)`, kde se
+layout manageru neptá vůbec. Změřeno u toho jedno **cizí** drobné rozejití, které s #422 nesouvisí
+a **nechává se**: zalamovací blok, jehož poslední řádek je prázdný, vyjde o **2 body** nižší než
+`height(ofRows:)`, protože extra fragment má výšku systémového písma (14), ne toho monospace (16).
+
+**Cena:** výčet fragmentů je 0,005 ms na šedesátiřádkovém bloku proti 0,0001 ms za `usedRect`.
+Pamatuje se (`rememberedTextWidth`), takže se platí jednou na obsah — a proti sazbě, kterou si
+`ensureLayout` na tomtéž místě vynutí, je to nic.
+
+**Zapamatovaná šířka musí padnout se změnou obsahu**, protože kontejnery dvojice recykluje líný
+seznam: tentýž `DiffPairBlockContainer` dostane jiný blok. Zahazuje ji `DiffTextView.show(…)`, tedy
+jediné místo, kde se text mění. Ověřeno vloženou regresí — bez toho zdědí krátký blok šířku dlouhého
+(1701,2 místo 102,0) a pruh mu zůstane i tam, kde nemá co skrývat.
 
 **Co se nemění:** čísla řádků odjedou s textem (kreslí je totéž view jako kód, na `x: 0` ve svých
 souřadnicích) — nakreslené je to tak i v návrhu (poznámka 45) a přišpendlit gutter znamená vytáhnout

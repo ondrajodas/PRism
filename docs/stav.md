@@ -4008,8 +4008,23 @@ který o gutteru neví: `sizeToFit()` vracel **nulovou** šířku a `isHorizonta
 rámec nastavený kontejnerem zpátky na šířku okýnka vždycky, když se do ní vešel samotný text (sloupec
 s 12 znaky v šířce 129,5 b kreslí text do 190,4 b a dokument z toho vyšel 129,5). Dokument tedy nebyl
 nikdy širší než plocha; s autohide by z celé změny vyšel pruh, který se **nezobrazí nikdy**. Šířku
-proto od #422 určuje ten, kdo kreslí (`DiffTextView.naturalWidth = gutter + usedRect.width`),
-self-sizing je vypnuté a hodnota se pamatuje (39,6 ms na 54 stran spočítat, 0,003 ms z paměti).
+proto od #422 určuje ten, kdo kreslí (`DiffTextView.naturalWidth`), self-sizing je vypnuté a hodnota
+se pamatuje (39,6 ms na 54 stran spočítat, 0,003 ms z paměti).
+
+**Druhé kolo: `usedRect(for:)` na celý kontejner byla špatná míra** — nahlášené při zkoušení jako
+„moc velký posuvník, který jede do prázdného místa, kde nic není“. `usedRect` totiž umí zahrnout
+**extra line fragment**, tedy řádek za posledním `\n`, který AppKit vysází vždycky, když text končí
+zalomením — a tak končí každá půlka, jejíž poslední řádek je prázdný, což je každá **šrafovaná**
+(chybějící) strana dvojice. Kontejner sloupce je neomezeně široký, takže má ten fragment rámec
+**10 000 000** bodů: půlka se třemi šrafovanými řádky si řekla o dokument 10 000 084 bodů proti
+okýnku 449,5, tedy `knobProportion` **4,49 × 10⁻⁵** (po opravě 0,0 — šrafovaná půlka pruh nedostane
+vůbec). Odsud ten vlas u levého okraje a rolování do prázdna. **Kdy se fragment započítá, se řídit
+nedá** (nad samotným sloupcem 34,1, nad tímtéž sloupcem v kontejneru 10 000 000) — odsud to
+„někdy“. Šířka se proto počítá **výčtem vysázených
+fragmentů** té půlky (`enumerateLineFragments`), který extra fragment nevydá vůbec; nad blokem
+s neprázdným posledním řádkem vychází **týž počet jako dřív**, takže odsouhlasená geometrie se
+nemění. Cena 0,005 ms na šedesátiřádkovém bloku (proti 0,0001 ms), platí se jednou na obsah. Výška
+zůstává na `usedRect` schválně: tam je ten fragment skutečný řádek bloku.
 
 **Výška bloku začala záležet na šířce, a to je ta past.** Pruh dostane jen blok, který má co skrývat,
 takže rezervovat jeho 17 bodů musí **totéž místo, které o pruhu rozhoduje** —
@@ -4033,7 +4048,10 @@ a čte podle druhé). Systémové nastavení se u toho **nepřebíjí**: mění 
 a pohled pod sebou zůstává zalamovací — je na to vlastní sada testů, protože je to volba ze tří
 možností, ne opomenutí.
 
-Testů **3822** (9 nových). Vloženými regresemi ověřené tři věci a každá padá jinde: bez rezervace
-výšky 108 tvrzení, se vráceným `sizeToFit()` 348 (z toho 182 na nedosažitelném konci řádku), s overlay
-stylem 58 — a `predictionMatchesAppKit` z nich neselže ani jedním, protože overlay se hlásí jako
-viditelný a nekreslí nic.
+Testů **3827** (14 nových, z toho jedna sonda na kresbu). Vloženými regresemi ověřených pět věcí
+a každá padá jinde: bez rezervace výšky 108 tvrzení, se vráceným `sizeToFit()` 348 (z toho 182 na
+nedosažitelném konci řádku), s overlay stylem 58 — a `predictionMatchesAppKit` z nich neselže ani
+jedním, protože overlay se hlásí jako viditelný a nekreslí nic. Ze druhého kola: se `usedRect(for:)`
+zpátky **244 tvrzení** (u šrafované půlky `10000084.0 <= 94.0`) a bez zahození zapamatované šířky
+při změně obsahu **7 tvrzení** na recyklaci kontejneru — krátký blok tam zdědí po dlouhém 1701,2
+místo 102,0.

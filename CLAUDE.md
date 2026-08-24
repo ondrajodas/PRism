@@ -783,7 +783,11 @@ Zvlášť stojí za přečtení, než sáhneš na:
   `DiffPairBlockContainer.showsScroller(forWidth:)`. A **šířku dokumentu si AppKit počítá z `usedRect`,
   který o gutteru neví**: `sizeToFit()` vrací nulu a `isHorizontallyResizable` srazí náš rámec zpátky
   na šířku okýnka, takže ve splitu nebylo **co rolovat**. Kdo kreslí text jinde než na `x: 0`, musí
-  si šířku spočítat sám (`DiffTextView.naturalWidth`).
+  si šířku spočítat sám (`DiffTextView.naturalWidth`) — a spočítat ji **po řádcích**, ne
+  z `usedRect(for:)`: ten umí zahrnout **extra line fragment** (řádek za posledním `\n`, tedy
+  vždycky, když je poslední řádek prázdný — a prázdná je každá šrafovaná strana dvojice), a ten je
+  v neomezeném kontejneru široký **10 000 000** bodů. Kdy se započítá, se řídit nedá, takže z toho
+  byl posuvník, který „někdy“ jel do prázdna.
 
   **A rozměr, ze kterého se počítá, se měří — nenasazuje se rámcem** (#325). Výška okna živého
   výpisu je `min(obsah, strop)`, takže stojí na výšce řádku; `frame(height:)` by ji ale srovnal

@@ -2509,8 +2509,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (rámečky obou půlek jsou na bod stejné jako u plné dvojice) a **pás se rezervuje jednou**, i když
   pruh potřebuje jen jedna strana — jinak by se půlky rozešly o řádek, tedy přesně to, čemu má split
   zabránit. A zvlášť stojí *„na konec dlouhého řádku se dá dorolovat“*: nejdelší řádek je v bloku
-  **poslední** a hledá se maximum přes všechny rámečky, protože šířka dokumentu se čte z `usedRect`
-  a ten je pravdivý jedině nad vysázeným celým blokem.
+  **poslední** a hledá se maximum přes všechny rámečky, protože šířka dokumentu vychází z vysázených
+  fragmentů a ty jsou pravdivé jedině nad vysázeným celým blokem.
 
   **Že unified pořád zalamuje, je vlastní sada** (`UnifiedBlockWrappingTests`) — test na to, co se má
   **NEstát**. Výška zalamovacího bloku se porovnává s **počtem vizuálních řádků z layout manageru**
@@ -2524,11 +2524,50 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (`129,5 >= 1696,2`); s overlay stylem **58 tvrzení** — a `predictionMatchesAppKit` z nich
   neselže ani jedním, protože overlay se hlásí jako viditelný.
 
+  **Kam se v půlce dá odrolovat, je druhá sada** (`DiffPairScrollWidthTests`) a přibyla po prvním
+  kole #422 na hlášení „moc velký posuvník, který jede do prázdného místa, kde nic není“. Je to jiná
+  otázka než ta výš: tam se ptáme, **jestli** je pruh, tady **kolik** obsahu tvrdí. Reference je
+  proto taky jiná — `frame(ofLine:)`, tedy `boundingRect(forGlyphRange:)`, podle kterého se kreslí
+  čísla a pozadí; je to jiná cesta v layout manageru než výčet fragmentů, ze kterého vychází
+  `naturalWidth`, takže to není opsaný výpočet.
+
+  Šířka se připíchne **dvěma tvrzeními naráz**: na nejdelší řádku se musí dát dorolovat a **za ní už
+  nesmí být nic** než jedno `lineFragmentPadding`. Jde se přes tabulku šesti tvarů bloku, ve kterých
+  se půlky liší (včetně toho ze screenshotu: třináct řádků, vlevo převážně šrafování), a přes pásmo
+  šířek — u jedné šířky by prošlo i sdílení šířky mezi půlkami.
+
+  Zvlášť je **šrafovaná půlka**: půlka, ve které jsou jen chybějící řádky, nesmí mít pruh **vůbec**,
+  protože nemá co skrývat. A rolování se tvrdí na `NSScrollView`u, ne na naší předpovědi — jenže
+  `NSClipView.scroll(to:)` **neomezuje** na dokument (je to zápis počátku, takže se plocha posune i za
+  obsah a test by zezelenal nad jakoukoli šířkou), takže se posun vede přes `constrainBoundsRect(_:)`,
+  tedy to, co AppKit sám používá při tažení za knob.
+
+  Dvě vložené regrese: se `usedRect(for:)` zpátky padne **244 tvrzení** ve všech čtyřech testech
+  (u šrafované půlky `10000084.0 <= 94.0`), bez zahození zapamatované šířky v `DiffTextView.show(…)`
+  padne **7 tvrzení** a jsou přesně na recyklaci — krátký blok zdědí po dlouhém 1701,2 místo 102,0.
+
+  **A na to, jak to vypadá, je sonda** (`DiffPairScrollerRenderProbe`, cesta ven
+  `TEST_RUNNER_PRISM_RENDER_DIR`). Tvrzení říkají, že šířka je správná; sonda ukáže **tři bloky
+  z hlášení** (třináct řádků se šrafováním vlevo, půlka bez protějšku, krátký blok) a vypíše
+  u každé půlky dokument, okýnko a **`knobProportion`** — tedy to jedno číslo, které odpovídá na
+  „nelže knob o tom, kolik obsahu je?“. Změřeno na tom bloku z hlášení: **4,49 × 10⁻⁵** před opravou
+  (vlas u levého okraje) a **0,0** po ní, protože šrafovaná půlka pruh nedostane vůbec; na půlce
+  s dlouhými řádky vychází 0,471 před i po.
+
+  Dvě věci, bez kterých je bitmapa průhledná, a odsud ta poznámka o neúspěšném renderu níž: blok
+  musí být v **okně** (mimo obrazovku) a plochám se musí pro render **zapnout pozadí** — v aplikaci
+  ho kreslí obal ve SwiftUI. **Samotný pruh v obrázku ani tak nebude**: legacy scroller nevydá
+  `cacheDisplay` nad plochou ani nad `NSScroller`em samotným (obojí změřeno), a
+  `CGWindowListCreateImage` je na macOS 26 nedostupné. Vidět je jedině na okně na obrazovce
+  (`screencapture -l`, tak se u #422 měřily jeho body); z obrázku se posuzuje šrafování, zarovnání
+  řádků, ořez na hraně okýnka a rezervovaný pás.
+
   **Offscreen render na pruh nedosáhne.** `cacheDisplay(in:to:)` nad `DiffPairBlockContainer`em vrací
   průhlednou bitmapu — nejen bez scrolleru, ale i bez textu, protože sloupce jsou v clip view
-  a nekreslí pozadí. Že je pruh doopravdy vidět, je proto změřené na **běžícím okně**
+  a nekreslí pozadí. **Text se dostat dá** (okno mimo obrazovku a zapnuté pozadí ploch, viz sonda
+  výš), **pruh ne**. Že je pruh doopravdy vidět, je proto změřené na **běžícím okně**
   (`screencapture -l`, viz *Jak si zkontrolovat, jak view vypadá*), a v harnessu se místo toho
-  tvrdí ten pás výšky.
+  tvrdí ten pás výšky a `knobProportion`.
 
   **`#expect` umí spadnout na `17.0 == 17.0`** a stálo to hodinu (#422). `CGFloat` je vlastní typ
   a implicitní převod na `Double` se v **rozkladu** makra ztratí, takže se porovnají dvě identická

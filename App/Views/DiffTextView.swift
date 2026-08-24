@@ -563,6 +563,11 @@ final class DiffTextView: NSTextView {
     /// Ptá se na ni **sloupec dvojice**; v zalamovacím bloku vyjde přibližně šířka view (text se
     /// zalomí do kontejneru), takže o přetečení tam neříká nic — a není co, nezalomený řádek tam
     /// není.
+    ///
+    /// **Je to nejdelší řádek téhle půlky, ne bloku**, a se sousedkou se nesdílí: každá strana má
+    /// svou rolovací plochu, takže sdílená šířka by u půlky s krátkými (nebo šrafovanými) řádky
+    /// znamenala pruh, který jede do prázdna. Zarovnání řádků na tom nevisí — to drží **výška**
+    /// (`height(ofRows:)`) a prázdný řádek na chybějící straně, ne šířka dokumentu.
     var naturalWidth: Double {
         gutterWidth + laidOutWidth()
     }
@@ -580,14 +585,41 @@ final class DiffTextView: NSTextView {
     /// Hodnota je pravdivá jen nad **vysázeným celým blokem**; `ensureLayout(for:)` to zajišťuje
     /// a `allowsNonContiguousLayout` je u těchhle sloupců `false` (změřeno). Že se nejdelší řádek
     /// najde i na konci šedesátiřádkového bloku, drží `DiffPairScrollerTests`.
+    ///
+    /// **Ptá se po řádcích, ne `usedRect(for:)` na celý kontejner** — a je to oprava vady, se kterou
+    /// #422 vyšlo (nahlášená jako „moc velký posuvník, který jede do prázdna“). `usedRect` totiž
+    /// **umí zahrnout extra line fragment**: to je řádek za posledním `\n`, který AppKit vysází
+    /// tehdy, když text končí zalomením — tedy vždycky, když je **poslední řádek půlky prázdný**,
+    /// a prázdná je každá šrafovaná (chybějící) strana dvojice. Jeho rámec je celá šířka kontejneru,
+    /// a ta je tu neomezená, takže se zaokrouhlí na **10 000 000**; z půlky s třemi šrafovanými
+    /// řádky pak vyšla `naturalWidth` 10 000 084 místo 94 — proti okýnku 449,5 b je to
+    /// `knobProportion` **4,49 × 10⁻⁵**, tedy vlas u levého okraje a rolování do prázdna.
+    ///
+    /// **Jestli se ten fragment do `usedRect` započítá, se řídit nedá** (změřeno u #422): nad
+    /// samotným sloupcem vyšla 34,1, nad tímtéž sloupcem v `DiffPairBlockContainer` 10 000 000,
+    /// a minimálně to jde vyrobit tak, že se po jeho vysázení zneplatní layout. Odsud to „někdy“
+    /// v hlášení. `enumerateLineFragments(forGlyphRange:)` extra fragment **nevydá vůbec**, takže
+    /// se nemá jak vloudit — a `usedRect` každého fragmentu je to, co se v něm doopravdy vysázelo.
+    ///
+    /// Nad blokem, kterému poslední řádek prázdný není, vychází **týž počet jako dřív** (změřeno
+    /// znak po znaku: 82,3 / 98,4 / 238,4 / 347,5), takže geometrie odsouhlasená u #422 se nemění.
+    /// Výška zůstává na `usedRect(for:)` schválně: extra fragment je tam **skutečný řádek** bloku
+    /// (prázdný řádek souboru se kreslí i s číslem), takže se do výšky započítat má.
+    ///
+    /// Cena je 0,005 ms na šedesátiřádkovém bloku proti 0,0001 ms za `usedRect` — pamatuje se to,
+    /// takže se platí jednou na obsah, a proti sazbě, kterou si `ensureLayout` vynutí, je to nic.
     private func laidOutWidth() -> Double {
         if let rememberedTextWidth { return rememberedTextWidth }
         guard let layoutManager, let textContainer else { return 0 }
         layoutManager.ensureLayout(for: textContainer)
-        // **Převod je explicitní** (nález z review na #422): `usedRect` vrací `CGFloat`, cache drží
-        // `Double`. Implicitní převod tady sice je (SE-0307), ale právě on se ztrácí v rozkladu
-        // `#expect` — a pak se dvě identická čísla nerovnají, viz `docs/testovani.md`.
-        let width = Double(layoutManager.usedRect(for: textContainer).width)
+        var width = 0.0
+        layoutManager.enumerateLineFragments(forGlyphRange: layoutManager.glyphRange(for: textContainer)) {
+            _, used, _, _, _ in
+            // **Převod je explicitní** (nález z review na #422): geometrie fragmentu je `CGFloat`,
+            // cache drží `Double`. Implicitní převod tady sice je (SE-0307), ale právě on se ztrácí
+            // v rozkladu `#expect` — a pak se dvě identická čísla nerovnají, viz `docs/testovani.md`.
+            width = max(width, Double(used.maxX))
+        }
         rememberedTextWidth = width
         return width
     }
