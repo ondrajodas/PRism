@@ -144,6 +144,8 @@ final class DiffTextView: NSTextView {
         )
         lineRanges = composed.ranges
         textStorage?.setAttributedString(composed.text)
+        // Nový text = nová šířka nejdelšího řádku, takže zapamatovaná neplatí.
+        rememberedTextWidth = nil
         needsDisplay = true
     }
 
@@ -535,10 +537,96 @@ final class DiffTextView: NSTextView {
         guard let layoutManager, let textContainer else { return nil }
         isMeasuring = true
         defer { isMeasuring = false }
-        textContainer.size = containerSize(forWidth: width)
+        // **Jen při skutečné změně**, jako ve `fitContainerWidth` (nález z review na #422): jiná
+        // šířka kontejneru je jiné zalomení, tedy jiná šířka textu — ale měření na tutéž šířku
+        // (a ve sloupci dvojice na neomezenou) zapamatovanou hodnotu zneplatnit nemá.
+        let size = containerSize(forWidth: width)
+        if textContainer.size != size {
+            textContainer.size = size
+            rememberedTextWidth = nil
+        }
         layoutManager.ensureLayout(for: textContainer)
         return layoutManager.usedRect(for: textContainer).height + textContainerInset.height * 2
     }
+
+    /// Šířka, na které je z bloku vidět **všechno** — gutter plus nejdelší vysázený řádek.
+    ///
+    /// **Je to šířka pro kreslení, ne pro sazbu**, a v tom je ten rozdíl: text se kreslí od
+    /// `textContainerOrigin.x`, tedy až za gutterem, takže dokument široký jen jako `usedRect`
+    /// ořeže konec nejdelšího řádku právě o gutter (ve split pohledu 84 pt).
+    ///
+    /// **`sizeToFit()` na to nestačí a je to změřené, ne odhad** (#422): view složené z kódu má
+    /// `maxSize` `(0, 0)` a nikdo ji nenastavuje, takže `sizeToFit()` vrátí rámec **nulové** šířky.
+    /// Dokument sloupce z něj proto vycházel vždycky přesně tak široký jako plocha — nebylo co
+    /// rolovat a autohide vodorovný pruh schoval i tam, kde kód za okraj přetékal.
+    ///
+    /// Ptá se na ni **sloupec dvojice**; v zalamovacím bloku vyjde přibližně šířka view (text se
+    /// zalomí do kontejneru), takže o přetečení tam neříká nic — a není co, nezalomený řádek tam
+    /// není.
+    ///
+    /// **Je to nejdelší řádek téhle půlky, ne bloku**, a se sousedkou se nesdílí: každá strana má
+    /// svou rolovací plochu, takže sdílená šířka by u půlky s krátkými (nebo šrafovanými) řádky
+    /// znamenala pruh, který jede do prázdna. Zarovnání řádků na tom nevisí — to drží **výška**
+    /// (`height(ofRows:)`) a prázdný řádek na chybějící straně, ne šířka dokumentu.
+    var naturalWidth: Double {
+        gutterWidth + laidOutWidth()
+    }
+
+    /// Šířka vysázeného textu podle layout manageru. **Pamatuje se** (#224): ptá se na ni každý
+    /// dotaz na výšku bloku dvojice, tedy `sizeThatFits` při **každém** přepočtu geometrie (#393),
+    /// a je to funkce vysázeného textu a šířky kontejneru — obojí ji zahazuje. Změřeno: spočítat ji
+    /// stojí totéž co dřívější `sizeToFit()` (39,6 proti 40,1 ms na 54 stranách, jedno sezení),
+    /// z paměti 0,003 ms.
+    ///
+    /// **Zahazuje ji `show(…)`, tedy jediné místo, kde se v aplikaci text mění.** Kdo sáhne na
+    /// `textStorage` mimo něj, dostane hodnotu z minula — dělá to jedno měřidlo v testech a je to
+    /// tam napsané.
+    ///
+    /// Hodnota je pravdivá jen nad **vysázeným celým blokem**; `ensureLayout(for:)` to zajišťuje
+    /// a `allowsNonContiguousLayout` je u těchhle sloupců `false` (změřeno). Že se nejdelší řádek
+    /// najde i na konci šedesátiřádkového bloku, drží `DiffPairScrollerTests`.
+    ///
+    /// **Ptá se po řádcích, ne `usedRect(for:)` na celý kontejner** — a je to oprava vady, se kterou
+    /// #422 vyšlo (nahlášená jako „moc velký posuvník, který jede do prázdna“). `usedRect` totiž
+    /// **umí zahrnout extra line fragment**: to je řádek za posledním `\n`, který AppKit vysází
+    /// tehdy, když text končí zalomením — tedy vždycky, když je **poslední řádek půlky prázdný**,
+    /// a prázdná je každá šrafovaná (chybějící) strana dvojice. Jeho rámec je celá šířka kontejneru,
+    /// a ta je tu neomezená, takže se zaokrouhlí na **10 000 000**; z půlky s třemi šrafovanými
+    /// řádky pak vyšla `naturalWidth` 10 000 084 místo 94 — proti okýnku 449,5 b je to
+    /// `knobProportion` **4,49 × 10⁻⁵**, tedy vlas u levého okraje a rolování do prázdna.
+    ///
+    /// **Jestli se ten fragment do `usedRect` započítá, se řídit nedá** (změřeno u #422): nad
+    /// samotným sloupcem vyšla 34,1, nad tímtéž sloupcem v `DiffPairBlockContainer` 10 000 000,
+    /// a minimálně to jde vyrobit tak, že se po jeho vysázení zneplatní layout. Odsud to „někdy“
+    /// v hlášení. `enumerateLineFragments(forGlyphRange:)` extra fragment **nevydá vůbec**, takže
+    /// se nemá jak vloudit — a `usedRect` každého fragmentu je to, co se v něm doopravdy vysázelo.
+    ///
+    /// Nad blokem, kterému poslední řádek prázdný není, vychází **týž počet jako dřív** (změřeno
+    /// znak po znaku: 82,3 / 98,4 / 238,4 / 347,5), takže geometrie odsouhlasená u #422 se nemění.
+    /// Výška zůstává na `usedRect(for:)` schválně: extra fragment je tam **skutečný řádek** bloku
+    /// (prázdný řádek souboru se kreslí i s číslem), takže se do výšky započítat má.
+    ///
+    /// Cena je 0,005 ms na šedesátiřádkovém bloku proti 0,0001 ms za `usedRect` — pamatuje se to,
+    /// takže se platí jednou na obsah, a proti sazbě, kterou si `ensureLayout` vynutí, je to nic.
+    private func laidOutWidth() -> Double {
+        if let rememberedTextWidth { return rememberedTextWidth }
+        guard let layoutManager, let textContainer else { return 0 }
+        layoutManager.ensureLayout(for: textContainer)
+        var width = 0.0
+        layoutManager.enumerateLineFragments(forGlyphRange: layoutManager.glyphRange(for: textContainer)) {
+            _, used, _, _, _ in
+            // **Převod je explicitní** (nález z review na #422): geometrie fragmentu je `CGFloat`,
+            // cache drží `Double`. Implicitní převod tady sice je (SE-0307), ale právě on se ztrácí
+            // v rozkladu `#expect` — a pak se dvě identická čísla nerovnají, viz `docs/testovani.md`.
+            width = max(width, Double(used.maxX))
+        }
+        rememberedTextWidth = width
+        return width
+    }
+
+    /// Zapamatovaná šířka vysázeného textu, nebo `nil`, když se od poslední sazby (či změny
+    /// kontejneru) neplatí.
+    private var rememberedTextWidth: Double?
 
     /// Výška bloku o daném počtu **nezalomených** řádků. Sloupec dvojice se nezalamuje, takže se
     /// nemusí měřit layout.
@@ -576,6 +664,7 @@ final class DiffTextView: NSTextView {
         let size = containerSize(forWidth: width)
         guard textContainer.size != size else { return }
         textContainer.size = size
+        rememberedTextWidth = nil
     }
 
     /// Měří se právě teď výška? Nastavení `textContainer.size` si AppKit vyloží jako změnu geometrie
@@ -609,13 +698,24 @@ final class DiffTextView: NSTextView {
 
     /// Sloupec pohledu vedle sebe: **nezalamuje** a posouvá se vodorovně, aby zůstal zarovnaný
     /// s protějškem (viz `DiffPairBlockView`).
+    ///
+    /// **`isHorizontallyResizable` je vypnuté, a to je celá oprava rolování z #422.** Zapnuté
+    /// znamená „šířku si spočítám sám“ — a AppKit ji počítá z `usedRect`, který o gutteru neví,
+    /// takže rámec, který mu nastaví kontejner (`layoutColumns()`), **přepíše zpátky na šířku
+    /// plochy** vždycky, když se do ní vejde samotný text. Změřeno: sloupec s dvanácti znaky
+    /// v poloviční šířce 129,5 b má text nakreslený do 190,4 b, a dokument z toho vyšel 129,5 —
+    /// tedy nebylo co rolovat a autohide vodorovný pruh schoval. `sizeToFit()` je tatáž slepota
+    /// (vrací nulu, dokud `maxSize` nikdo nenastaví).
+    ///
+    /// Šířku proto drží **kontejner** a jediný, kdo ji umí spočítat, je tenhle typ (`naturalWidth`)
+    /// — je to tatáž úvaha jako u výšky v #236: kdo kreslí, ten měří.
     static func pairColumn() -> DiffTextView {
         let textView = textKit1()
         textView.textContainer?.size = NSSize(
             width: CGFloat.greatestFiniteMagnitude,
             height: CGFloat.greatestFiniteMagnitude
         )
-        textView.isHorizontallyResizable = true
+        textView.isHorizontallyResizable = false
         return textView
     }
 

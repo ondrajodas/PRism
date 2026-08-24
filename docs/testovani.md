@@ -2531,6 +2531,99 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   do výšky řádku) padne 136 tvrzení a je v nich vidět celý rozsah: na řádku 60 je rámeček o 116 pt
   níž než kód, ke kterému patří.
 
+  **Trvalý vodorovný pruh (#422)** má vlastní sadu (`DiffPairScrollerTests`) a je to **pokračování
+  téže třídy chyby**: od #422 závisí výška bloku dvojic na šířce, protože na šířce záleží, jestli se
+  pruh kreslí. Referencí je proto zase někdo jiný než náš druhý výpočet — tady `NSScrollView` sám:
+  kontejner se laid outne na tu výšku, o kterou si řekl, a z plochy se přečte, jestli scroller ukázal
+  (`horizontalScroller.isHidden`) a **kolik výšky si vzal** (`frame.height − contentSize.height`).
+
+  Pásmo šířek je i tady podmínka (260–1000 po 19 pt × šest délek řádku): hranice „vejde se do
+  sloupce / nevejde“ se s šířkou okna posouvá, takže u jedné šířky by test prošel. Přesně to pásmo
+  taky odhalilo, že první verze předpovědi byla vedle — souhlasila u širokých bloků a lhala kolem
+  hranice.
+
+  **`isHidden` samo o kresbě nevypovídá** a to je u téhle oblasti ta hlavní past: overlay scroller
+  hlásí `isHidden = false`, `alphaValue = 1.0` i `knobProportion`, a v nečinném okně nenakreslí nic.
+  Proto se všechno podstatné tvrdí **na pásu výšky**, který si plocha vezme: legacy 17 bodů, overlay
+  nula. Tentýž test drží i to, že styl `.legacy` z plochy **nejde vzít** přiřazením `.overlay` ani
+  notifikací o změně systémového nastavení posuvníků.
+
+  Sada tvrdí i dvě věci, které se dají pokazit potichu: **prázdná strana dvojice nesmí zkolabovat**
+  (rámečky obou půlek jsou na bod stejné jako u plné dvojice) a **pás se rezervuje jednou**, i když
+  pruh potřebuje jen jedna strana — jinak by se půlky rozešly o řádek, tedy přesně to, čemu má split
+  zabránit. A zvlášť stojí *„na konec dlouhého řádku se dá dorolovat“*: nejdelší řádek je v bloku
+  **poslední** a hledá se maximum přes všechny rámečky, protože šířka dokumentu vychází z vysázených
+  fragmentů a ty jsou pravdivé jedině nad vysázeným celým blokem.
+
+  **Že unified pořád zalamuje, je vlastní sada** (`UnifiedBlockWrappingTests`) — test na to, co se má
+  **NEstát**. Výška zalamovacího bloku se porovnává s **počtem vizuálních řádků z layout manageru**
+  (`enumerateLineFragments`), ne s `usedRect`, ze kterého sama vychází: kdyby si unified začal
+  rezervovat pás pruhu nebo přestal zalamovat, rovnost padne. K tomu tvrzení, že si každý blok drží
+  svůj kontejner (zalamovací na šířku plochy, sloupec dvojice neomezený).
+
+  Ověřeno **třemi vloženými regresemi** a každá padá jinde, což je na tom to podstatné: bez
+  rezervace výšky **108 tvrzení** (mezi nimi `rows 98 <= 83`, tedy text pod pruhem); se vráceným
+  `sizeToFit()`/self-sizingem **348 tvrzení**, z toho 182 na tom, že konec řádku je nedosažitelný
+  (`129,5 >= 1696,2`); s overlay stylem **58 tvrzení** — a `predictionMatchesAppKit` z nich
+  neselže ani jedním, protože overlay se hlásí jako viditelný.
+
+  **Kam se v půlce dá odrolovat, je druhá sada** (`DiffPairScrollWidthTests`) a přibyla po prvním
+  kole #422 na hlášení „moc velký posuvník, který jede do prázdného místa, kde nic není“. Je to jiná
+  otázka než ta výš: tam se ptáme, **jestli** je pruh, tady **kolik** obsahu tvrdí. Reference je
+  proto taky jiná — `frame(ofLine:)`, tedy `boundingRect(forGlyphRange:)`, podle kterého se kreslí
+  čísla a pozadí; je to jiná cesta v layout manageru než výčet fragmentů, ze kterého vychází
+  `naturalWidth`, takže to není opsaný výpočet.
+
+  Šířka se připíchne **dvěma tvrzeními naráz**: na nejdelší řádku se musí dát dorolovat a **za ní už
+  nesmí být nic** než jedno `lineFragmentPadding`. Jde se přes tabulku šesti tvarů bloku, ve kterých
+  se půlky liší (včetně toho ze screenshotu: třináct řádků, vlevo převážně šrafování), a přes pásmo
+  šířek — u jedné šířky by prošlo i sdílení šířky mezi půlkami.
+
+  Zvlášť je **šrafovaná půlka**: půlka, ve které jsou jen chybějící řádky, nesmí mít pruh **vůbec**,
+  protože nemá co skrývat. A rolování se tvrdí na `NSScrollView`u, ne na naší předpovědi — jenže
+  `NSClipView.scroll(to:)` **neomezuje** na dokument (je to zápis počátku, takže se plocha posune i za
+  obsah a test by zezelenal nad jakoukoli šířkou), takže se posun vede přes `constrainBoundsRect(_:)`,
+  tedy to, co AppKit sám používá při tažení za knob.
+
+  Dvě vložené regrese: se `usedRect(for:)` zpátky padne **244 tvrzení** ve všech čtyřech testech
+  (u šrafované půlky `10000084.0 <= 94.0`), bez zahození zapamatované šířky v `DiffTextView.show(…)`
+  padne **7 tvrzení** a jsou přesně na recyklaci — krátký blok zdědí po dlouhém 1701,2 místo 102,0.
+
+  **A na to, jak to vypadá, je sonda** (`DiffPairScrollerRenderProbe`, cesta ven
+  `TEST_RUNNER_PRISM_RENDER_DIR`). Tvrzení říkají, že šířka je správná; sonda ukáže **tři bloky
+  z hlášení** (třináct řádků se šrafováním vlevo, půlka bez protějšku, krátký blok) a vypíše
+  u každé půlky dokument, okýnko a **`knobProportion`** — tedy to jedno číslo, které odpovídá na
+  „nelže knob o tom, kolik obsahu je?“. Změřeno na tom bloku z hlášení: **4,49 × 10⁻⁵** před opravou
+  (vlas u levého okraje) a **0,0** po ní, protože šrafovaná půlka pruh nedostane vůbec; na půlce
+  s dlouhými řádky vychází 0,471 před i po.
+
+  Dvě věci, bez kterých je bitmapa průhledná, a odsud ta poznámka o neúspěšném renderu níž: blok
+  musí být v **okně** (mimo obrazovku) a plochám se musí pro render **zapnout pozadí** — v aplikaci
+  ho kreslí obal ve SwiftUI. **Samotný pruh v obrázku ani tak nebude**: legacy scroller nevydá
+  `cacheDisplay` nad plochou ani nad `NSScroller`em samotným (obojí změřeno), a
+  `CGWindowListCreateImage` je na macOS 26 nedostupné. Vidět je jedině na okně na obrazovce
+  (`screencapture -l`, tak se u #422 měřily jeho body); z obrázku se posuzuje šrafování, zarovnání
+  řádků, ořez na hraně okýnka a rezervovaný pás.
+
+  **Offscreen render na pruh nedosáhne.** `cacheDisplay(in:to:)` nad `DiffPairBlockContainer`em vrací
+  průhlednou bitmapu — nejen bez scrolleru, ale i bez textu, protože sloupce jsou v clip view
+  a nekreslí pozadí. **Text se dostat dá** (okno mimo obrazovku a zapnuté pozadí ploch, viz sonda
+  výš), **pruh ne**. Že je pruh doopravdy vidět, je proto změřené na **běžícím okně**
+  (`screencapture -l`, viz *Jak si zkontrolovat, jak view vypadá*), a v harnessu se místo toho
+  tvrdí ten pás výšky a `knobProportion`.
+
+  **`#expect` umí spadnout na `17.0 == 17.0`** a stálo to hodinu (#422). `CGFloat` je vlastní typ
+  a implicitní převod na `Double` se v **rozkladu** makra ztratí, takže se porovnají dvě identická
+  čísla různých typů — a v hlášení jsou obě vypsaná stejně, tedy vypadá to jako chyba v aritmetice.
+  Projeví se to jen u jednoduchého `a == b` (uvnitř `||` už makro výraz nerozkládá, takže tam
+  totéž tvrzení prochází). Poznávací znak: `print` vedle toho tvrdí `equal true`. Geometrie v `App/`
+  je proto `Double`, včetně `DiffPairScrollView.scrollerHeight`.
+
+  A druhá past téhož druhu: **`#require` uvnitř argumentu jiného `#require` se nepřeloží** —
+  `try #require(pole.map { try #require($0) }.max())` skončí na
+  `recursive expansion of macro 'require'`, což vypadá jako chyba v makru, ne v našem zápisu.
+  Rozdělit to na dva příkazy stačí.
+
   **Jak to vypadá, se ověřilo renderem** — `NSView` do bitmapy, viz *Jak si zkontrolovat, jak view
   vypadá*. U #236 na to `NSView` nestačilo: přetečení vzniká teprve tím, jak SwiftUI poskládá blok
   a bublinu pod sebe, takže scéna musela do `NSHostingView` — viz tamtéž.

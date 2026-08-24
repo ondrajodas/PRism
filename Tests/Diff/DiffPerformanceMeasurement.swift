@@ -619,6 +619,29 @@ struct DiffPerformanceMeasurement {
                 }
             }
         }
+
+        // **Co #422 v `layoutColumns()` vyměnilo, změřené vedle sebe** — v jednom procesu, aby to
+        // nebylo srovnání dvou sezení (drift sezení je větší než hledaný rozdíl, #274).
+        //
+        // Měří se ty dvě **operace**, ne `naturalWidth`: tenhle cyklus sahá na `textStorage` mimo
+        // `show(…)`, takže by zapamatovaná šířka nikdy nezneplatněla a měřil by se cache hit (změřeno:
+        // 0,003 ms na 54 stran — což je mimochodem přesně to, co v okně platí `sizeThatFits` při
+        // každém přepočtu geometrie, #393).
+        measure("z toho sizeToFit() (do #422), \(composed.count) stran") {
+            for text in composed {
+                column.textStorage?.setAttributedString(text)
+                column.sizeToFit()
+            }
+        }
+        measure("z toho ensureLayout + usedRect (od #422), \(composed.count) stran") {
+            for text in composed {
+                column.textStorage?.setAttributedString(text)
+                if let layout = column.layoutManager, let container = column.textContainer {
+                    layout.ensureLayout(for: container)
+                    _ = layout.usedRect(for: container).width
+                }
+            }
+        }
     }
 
     // MARK: - Co stojí overlay gutteru (#252)

@@ -554,8 +554,10 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   schválně: je to ta polovina, kterou jde změřit bez sazby, a bez toho seamu se nedá poznat, kolik
   z ceny projíždění je skládání textu a kolik už `NSLayoutManager`.
 - **Sazbu textu se zlevnit nepodařilo a je to změřené, ne odhadnuté** (#275). Z 86 ms na 27 blocích
-  je **36 ms** rozvržení v `NSLayoutManager`u a vynucuje si ho `layoutColumns()` přes `sizeToFit()`,
-  protože z něj čte přirozenou šířku sloupce pro vodorovný posun. **Vyhodit `sizeToFit()` cenu
+  je **36 ms** rozvržení v `NSLayoutManager`u a vynucuje si ho `layoutColumns()`, když se ptá na
+  přirozenou šířku sloupce pro vodorovný posun (do #422 přes `sizeToFit()`, od #422 přes
+  `usedRect` — změřeno v jednom sezení, že je to totéž: **40,1 proti 39,6 ms** na 54 stranách).
+  **Vyhodit ten dotaz cenu
   nesmaže, jen ji přesune do kreslení**: `super.draw` rozvržení potřebuje taky a blok, který vjel
   do okna, se kreslí — samotné vykreslení sloupce do bitmapy stojí 108,7 ms na 54 stranách, tedy
   zhruba dvojnásobek toho, co sazba. **Zamítnuto** proto i počítání šířky z kroku monospace písma
@@ -581,6 +583,10 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   view s neomezenou šířkou containeru si roztáhne vlastní rámec podle nejdelšího řádku a `frame`
   z kontejneru ho nezastaví. Rámec se jim musí nastavit **explicitně** (nejdelší řádek, nejméně
   šířka sloupce) — bez toho zůstaly nulové a nešlo v nich ani vybírat, ani nic vidět.
+- **Vodorovný pruh je vidět pořád, a proto výška bloku závisí na šířce** (#422). Podrobnosti níž,
+  v *Trvalý vodorovný pruh ve split pohledu*: rozhodnutí „pruh je“ i rezervace jeho 17 bodů žije
+  v `DiffPairBlockContainer` (jedno místo, pravidlo z #236), styl drží `DiffPairScrollView`
+  a šířku dokumentu `DiffTextView.naturalWidth`.
 - **Výběr žije jen v jednom sloupci** a ruší se **při stisknutí**, ne až při puštění: dvě modré
   selekce vedle sebe po celou dobu tažení tvrdí, že je vybrané obojí. `textViewDidChangeSelection`
   na to nestačí (chodí s hotovým výběrem) a zůstává jen jako záloha pro výběr klávesnicí.
@@ -645,6 +651,11 @@ Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne p
 | `NSCursor.set()` ze SwiftUI ani `addCursorRect` si proti `NSTextView` **neporadí** | Ruka nad pilulkou blikla jen v rohu, kde se to potkalo, nebo vůbec. Jde to jen přes tracking area a `cursorUpdate` — a i tam se musí rozhodovat v `mouseMoved`, protože `cursorUpdate` chodí jen při vstupu do areay |
 | `contentShape` **před** `frame` tvaruje nulovou velikost | Gesto tažení nemělo kde začít. Vypadá to jako drobnost v pořadí modifikátorů a je z toho nefunkční gesto |
 | `NSTextView` s neomezenou šířkou si **nedopočítá rámec** | Po přesunu do `NSScrollView` zůstal nulový: nic vidět, nic vybrat |
+| …ale se `isHorizontallyResizable` si ho **přepočítá sám** — z `usedRect`, který o gutteru neví | Rámec nastavený kontejnerem AppKit **srazil zpátky na šířku plochy** vždycky, když se do ní vešel samotný text: sloupec s dvanácti znaky v šířce 129,5 b kreslí text do 190,4 b a dokument z toho vyšel 129,5. Ve split pohledu tedy **nebylo co rolovat** a konec dlouhého řádku se z okna nedal dostat (#422). `sizeToFit()` je tatáž slepota, jen tišší: vrací nulovou šířku, dokud `maxSize` nikdo nenastaví |
+| Legacy vodorovný scroller si bere **výšku plochy**, ne šířku | `contentSize` plochy o 200 b vyjde 183 a clip view zůstane nad pruhem (scroller na `y: 183`). Blok si proto musí o těch 17 b říct sám — a jen když se pruh kreslí (#422) |
+| Overlay scroller **nakreslí 0 pixelů**, i když API tvrdí, že je vidět | `isHidden = false`, `alphaValue = 1.0` a `knobProportion = 0.333` má i s `autohidesScrollers = false` — a přesto v nečinném okně není. Z `isHidden` se proto o kresbě nedá usoudit nic; rozhoduje pás výšky, který si plocha vezme (#422) |
+| `usedRect(for:)` umí zahrnout **extra line fragment**, a ten je široký jako celý kontejner | Text končící `\n` (tedy každá půlka s prázdným posledním řádkem, což je každá šrafovaná strana dvojice) dal v neomezeném kontejneru šířku **10 000 000** místo 10. Dokument 22 000× širší než okýnko (`knobProportion` 4,49 × 10⁻⁵): knob velikosti vlasu a rolování do prázdna (#422). Kdy se fragment započítá, se řídit nedá — šířka se proto počítá **výčtem fragmentů**, ten ho nevydá. Do výšky naopak patří, je to skutečný řádek |
+| `NSClipView.scroll(to:)` **neomezuje** na dokument | Je to zápis počátku, takže se plocha poslušně posune i za obsah (`documentVisibleRect.maxX` 10 249 nad dokumentem 1 058) — v testu z toho vyjde zeleno nad jakoukoli šířkou. Omezení dělá `constrainBoundsRect(_:)`, tedy to, co AppKit sám používá při tažení za knob (#422) |
 | Nastavení `textContainer.size` si AppKit vyloží jako změnu geometrie a **sám zavolá `setFrameSize`** | Měření výšky je dotaz na **budoucí** šířku, takže mu ten zpětný hovor změřenou šířku hned přepsal tou současnou — a měřilo se o jednu šířku pozadu (blok o dvou dlouhých řádcích si při 300 pt řekl o 36 pt a nakreslil 162). Řeší to stráž `isMeasuring` a to, že se šířka kontejneru nastavuje jen při změně (#236) |
 
 **TextKit 1, ne 2.** Geometrie řádků se čte z `NSLayoutManager` (`boundingRect(forGlyphRange:)`) —
@@ -663,6 +674,97 @@ dvojici slévá `DiffRow.blockedPairs(_:)` do `pairBlock`u, takže případ `.pa
 nedojde. Drží se dál kvůli konstantám a proto, že je to jediný popis toho, jak dvojice vypadá bez
 bloku; když se v něm něco mění (jako barvy u #277), mění se to **spolu s blokem**, aby se ty dvě
 cesty nerozešly.
+
+### Trvalý vodorovný pruh ve split pohledu (#422)
+
+Ve splitu se nezalamuje, takže dlouhý řádek odjede za okraj sloupce — a do #422 se to z okna
+nedalo poznat: plochy měly `scrollerStyle = .overlay`, který se kreslí jen při rolování.
+Zakresleno v **sekci 29** návrhu. Změna má **tři části** a každá je jinde:
+
+| Kde | Co drží |
+|---|---|
+| `DiffPairScrollView` | Styl `.legacy`, který jde vzít jedině přiřazením — a setter ho vede zpátky, takže o pruh nepřijdeme ani přepnutím systémové volby *Zobrazovat posuvníky*. Drží i `scrollerHeight` (pás z AppKitu, 17 b) |
+| `DiffPairBlockContainer` | **Jestli se pruh kreslí** (`showsScroller(forWidth:)`) a **rezervace jeho výšky** (`height(forWidth:)`) — tedy obojí na jednom místě |
+| `DiffTextView.naturalWidth` | Jak široký musí být dokument sloupce, aby byl vidět celý nejdelší řádek: `gutterWidth` plus nejdelší **vysázený fragment téhle půlky** (ne `usedRect(for:)` na celý kontejner, viz níž) |
+
+**Výška bloku od #422 závisí na šířce, a to je ta past.** Do té doby na ní nezáleželo (nezalamuje
+se), takže `height(forWidth:)` parametr ignorovala. Jak se pruh objevuje podle toho, jestli je co
+skrývat, začíná záležet — a rezervovat těch 17 bodů **musí totéž místo, které rozhoduje, že pruh
+je** (pravidlo z #236). Dvě místa znamenají dvě pravdy o jedné výšce: buď poslední řádek zmizí pod
+pruhem, nebo pod blokem zbyde 17 bodů prázdna. Ověřeno vloženou regresí — bez rezervace padne
+**108 tvrzení** ze `DiffPairScrollerTests`, mezi nimi `rows 98 <= 83`, tedy přesně to přetečení.
+
+**Kritérium je totéž, podle kterého se rozhoduje AppKit** (autohide): dokument je široký
+`max(naturalWidth, plocha)`, takže se pruh objeví právě tehdy, když `naturalWidth > šířka
+poloviny`. Netvrdí se to druhým výpočtem — testy laid out kontejner a čtou z `NSScrollView`, jestli
+scroller ukázal a kolik výšky si vzal, a jde se **přes pásmo šířek**.
+
+**Pruh je na blok, ne na soubor**, a je to dnešní architektura přiznaná: rolovací plocha **je**
+blok. Sdílený posun na celý soubor by se mýlil o **44 znaků** (medián rozdílu nejdelšího řádku mezi
+bloky téhož souboru, p90 132; měřeno na 352 souborech ze 48 PR) a stál by dva pozorovatele na blok
+plus přerolování všech viditelných bloků — tedy to násobení prvků, které diff už dvakrát položilo
+(#252). Typický soubor má **dva** bloky (medián; p99 22).
+
+**Prázdný pás na druhé půlce vzniká sám.** Rezervace se počítá na blok, takže když pruh potřebuje
+jen jedna strana, je druhá plocha o 17 bodů vyšší a řádky v obou začínají na stejném `y` —
+`NSScrollView` si pás bere zespodu a clip view zůstává nad ním. Prázdná strana dvojice se přitom
+nesmí propadnout: řádky drží `DiffLine.blank`, ne minimální výška, takže rámečky obou půlek vyjdou
+na bod stejné (je to na to test).
+
+**Rolování se u toho muselo spravit, ne jen zviditelnit** — a je to změna proti tomu, co stálo
+v zadání issue (tam se předpokládalo, že se rolovat dá „odjakživa“). Změřeno, že nedalo:
+`isHorizontallyResizable` nechal AppKit přepočítat šířku dokumentu z `usedRect` bez gutteru a srazit
+ji na šířku plochy, takže **dokument nebyl nikdy širší než okýnko**. S autohide by z toho vyšel
+pruh, který se nezobrazí nikdy. Šířku proto určuje sloupec (`naturalWidth`) a self-sizing je vypnuté;
+je to tatáž úvaha jako u výšky v #236 — kdo kreslí, ten měří.
+
+**Šířka je vlastní každé půlce, a musí se počítat po řádcích** (#422, oprava nahlášená po prvním
+kole jako „moc velký posuvník, který jede do prázdného místa, kde nic není“). První verze brala
+`usedRect(for: textContainer)`, tedy jedno číslo za celý kontejner — a to umí zahrnout **extra line
+fragment**: řádek za posledním `\n`, který AppKit vysází vždycky, když text končí zalomením. Tak
+končí každá půlka, jejíž **poslední řádek je prázdný**, a prázdná je každá šrafovaná (chybějící)
+strana dvojice. Kontejner sloupce je přitom neomezeně široký, takže má ten fragment rámec
+**10 000 000** bodů:
+
+| půlka | `usedRect(for:)` | po řádcích |
+|---|---|---|
+| tři obyčejné řádky (`abc`, …) | 34,1 | 34,1 |
+| **tři šrafované řádky** | **10 000 000** | 10,0 |
+| šrafování a mezi ním jeden dlouhý řádek | **10 000 000** | 508,2 |
+
+Z toho vycházel dokument 10 000 084 bodů široký proti okýnku 449,5 — tedy plocha, která tvrdí
+22 000× víc obsahu, než kolik ho je: `knobProportion` **4,49 × 10⁻⁵** (po opravě 0,0, protože
+šrafovaná půlka pruh nedostane vůbec; půlka s dlouhými řádky má 0,471 před i po). Odsud ten vlas
+u levého okraje a rolování do prázdna.
+**Kdy se ten fragment do `usedRect` započítá, se řídit nedá** (změřeno): nad samotným sloupcem
+vyšla 34,1, nad tímtéž sloupcem uvnitř `DiffPairBlockContainer` 10 000 000, a minimální recept je
+zneplatnit layout po jeho vysázení. Odsud to „někdy“ v hlášení.
+`enumerateLineFragments(forGlyphRange:)` extra fragment **nevydá vůbec**, takže se nemá jak vloudit;
+u půlky, kde nic není, vyjde nula a pruh se nekreslí. Nad blokem s neprázdným posledním řádkem
+vychází **týž počet jako dřív**, takže geometrie odsouhlasená u #422 (pás 17 b, knob 11 b, odsazení
+3 b) se nemění.
+
+**Výška zůstává na `usedRect(for:)` schválně.** Tam je extra fragment **skutečný řádek** bloku
+(prázdný řádek souboru se kreslí i s číslem), takže se do výšky započítat má; a je to navíc jen
+zalamovací pohled — `DiffPairBlockContainer.height(forWidth:)` počítá z `height(ofRows:)`, kde se
+layout manageru neptá vůbec. Změřeno u toho jedno **cizí** drobné rozejití, které s #422 nesouvisí
+a **nechává se**: zalamovací blok, jehož poslední řádek je prázdný, vyjde o **2 body** nižší než
+`height(ofRows:)`, protože extra fragment má výšku systémového písma (14), ne toho monospace (16).
+
+**Cena:** výčet fragmentů je 0,005 ms na šedesátiřádkovém bloku proti 0,0001 ms za `usedRect`.
+Pamatuje se (`rememberedTextWidth`), takže se platí jednou na obsah — a proti sazbě, kterou si
+`ensureLayout` na tomtéž místě vynutí, je to nic.
+
+**Zapamatovaná šířka musí padnout se změnou obsahu**, protože kontejnery dvojice recykluje líný
+seznam: tentýž `DiffPairBlockContainer` dostane jiný blok. Zahazuje ji `DiffTextView.show(…)`, tedy
+jediné místo, kde se text mění. Ověřeno vloženou regresí — bez toho zdědí krátký blok šířku dlouhého
+(1701,2 místo 102,0) a pruh mu zůstane i tam, kde nemá co skrývat.
+
+**Co se nemění:** čísla řádků odjedou s textem (kreslí je totéž view jako kód, na `x: 0` ve svých
+souřadnicích) — nakreslené je to tak i v návrhu (poznámka 45) a přišpendlit gutter znamená vytáhnout
+ho z rolovací plochy, tedy jiný zákres. A **pohled pod sebou zůstává zalamovací**: pruh by v něm byl
+17 bodů na blok za nic, protože zalomený řádek se přečte celý bez rolování. Je na to test, protože
+je to volba ze tří možností, ne opomenutí.
 
 ### Stráž v `updateNSView` (#393)
 

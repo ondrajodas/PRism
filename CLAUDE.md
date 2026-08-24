@@ -781,6 +781,18 @@ Zvlášť stojí za přečtení, než sáhneš na:
   **layout manageru** a **přes pásmo šířek** — rozejde se to jen v pásmu, takže u jedné šířky test
   projde. Podrobnosti v [`docs/architektura.md`](docs/architektura.md).
 
+  **Do téhle třídy patří i „je tam vodorovný pruh?“** (#422). Od trvalého scrolleru ve split pohledu
+  závisí **výška** bloku dvojic na šířce (pruh dostane jen blok, který má co skrývat), takže
+  rezervovat jeho 17 bodů musí totéž místo, které o pruhu rozhoduje —
+  `DiffPairBlockContainer.showsScroller(forWidth:)`. A **šířku dokumentu si AppKit počítá z `usedRect`,
+  který o gutteru neví**: `sizeToFit()` vrací nulu a `isHorizontallyResizable` srazí náš rámec zpátky
+  na šířku okýnka, takže ve splitu nebylo **co rolovat**. Kdo kreslí text jinde než na `x: 0`, musí
+  si šířku spočítat sám (`DiffTextView.naturalWidth`) — a spočítat ji **po řádcích**, ne
+  z `usedRect(for:)`: ten umí zahrnout **extra line fragment** (řádek za posledním `\n`, tedy
+  vždycky, když je poslední řádek prázdný — a prázdná je každá šrafovaná strana dvojice), a ten je
+  v neomezeném kontejneru široký **10 000 000** bodů. Kdy se započítá, se řídit nedá, takže z toho
+  byl posuvník, který „někdy“ jel do prázdna.
+
   **A rozměr, ze kterého se počítá, se měří — nenasazuje se rámcem** (#325). Výška okna živého
   výpisu je `min(obsah, strop)`, takže stojí na výšce řádku; `frame(height:)` by ji ale srovnal
   s kresbou **na sílu**, a rozejití by pak nebylo jak poznat — měřidlo v testu vrací nasazené číslo
