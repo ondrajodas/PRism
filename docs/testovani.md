@@ -2624,6 +2624,46 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `recursive expansion of macro 'require'`, což vypadá jako chyba v makru, ne v našem zápisu.
   Rozdělit to na dva příkazy stačí.
 
+  **Pruh, který jede s výřezem (#428), se testuje ze dvou stran.** Rozhodnutí je čistá funkce
+  (`DiffScrollerPinTests` nad `Policy.pinnedScrollerY`) a vyjmenovává se **vyčerpávajícím výčtem**:
+  blok celý vidět, přesahující dolů, přesahující nahoru i dolů, se třemi viditelnými řádky (a o bod
+  méně), mimo výřez a bez známé výšky řádku. K tomu **průjezd celým posunem** po jednom bodu, který
+  tvrdí tři věci, jež se u jedné polohy tvrdit nedají: pruh **nikdy neopustí blok**, v připíchnutém
+  pásmu se hýbe **o krok** (spojitá funkce, ne skoky) a hranice obou pásem jsou spočitatelné — první
+  připíchnutí na třech řádcích, poslední o bod dřív, než pás bloku vjede do výřezu.
+
+  Druhá strana je **scéna, jaká je v okně** (`DiffScrollerRideTests`): SwiftUI `ScrollView`
+  s `LazyVStack`em bloků v okně mimo obrazovku. Rolování se dělá **posunem vnějšího clip view**
+  (`scroll(to:)` s `constrainBoundsRect` + `reflectScrolledClipView`), protože přesně to je jev, na
+  který aplikace poslouchá — syntetické scroll eventy se do aplikace nedostanou vůbec a událost
+  s fází se zasekne v `nextEventMatchingMask:` (#422, #325).
+
+  Reference **není** `Policy.pinnedScrollerY` (tou se poloha počítá, takže by test opisoval sám sebe),
+  ale hrana vnějšího clip view a dolní hrana bloku, **obojí převedené do okna**. Okno je
+  nepřevrácené, takže `min` z pravidla je v něm `max`: `pruh = max(hrana výřezu, dolní hrana bloku)`.
+  Test si u toho počítá, kolikrát projel kterou situaci, a **vyžaduje všechny tři** — na hraně
+  výřezu, ve vlastním pásu a pod třemi řádky; jinak by tvrzení platila o průjezdu, ve kterém se nic
+  nedělo.
+
+  Dva testy jsou na to, co se má **NEstát**. *„Výška bloku se posunem nemění“* tvrdí přes celý
+  průjezd jedinou výšku a k tomu, že řádky plus svislý inset plus pás **dají** výšku bloku — tím se
+  do něj skládá i rezervace z #422, takže ji nejde odebrat, aniž by spadl. A *„rolování nepřekládá
+  tělo“* měří průchody tělem řádku, `updateNSView`, nasazení bloku i sazbu: dvacet posunů po deseti
+  bodech (v pásmu, kde do výřezu žádný další blok nevjede) nepřidalo **ani jeden** průchod z žádného
+  z těch čtyř počitadel. Že měřidlo počítá, drží tvrzení, že se pruh v bloku posunul přesně o těch
+  200 bodů.
+
+  Ověřeno **třemi vloženými regresemi** a každá padá jinde: bez `min(…)` v pravidle padne 400 tvrzení
+  v průjezdu, 28 v okenní scéně a *„blok celý vidět“* (pruh vyjede pod blok, `1073 <= 683`); bez
+  rezervace pásu ve `height(forWidth:)` padne 114 tvrzení o výšce; a bez uplatnění polohy v
+  `DiffPairScrollView.tile()` padne 29 tvrzení o hraně výřezu — tedy přesně to rozvržení, po kterém
+  AppKit scroller vrací na dolní hranu.
+
+  **Kresba pruhu do harnessu nepatří a je to změřené**: legacy scroller se do `cacheDisplay(in:to:)`
+  nekreslí — nad červeným dokumentem vyjde pod připíchnutým pruhem tatáž barva jako vedle něj —
+  a `CGWindowListCreateImage` na macOS 26 není. Testům proto zůstávají **čísla** (poloha scrolleru,
+  výška bloku, počty průchodů) a to, jak pruh při rolování vypadá, se posuzuje na běžícím okně.
+
   **Jak to vypadá, se ověřilo renderem** — `NSView` do bitmapy, viz *Jak si zkontrolovat, jak view
   vypadá*. U #236 na to `NSView` nestačilo: přetečení vzniká teprve tím, jak SwiftUI poskládá blok
   a bublinu pod sebe, takže scéna musela do `NSHostingView` — viz tamtéž.
