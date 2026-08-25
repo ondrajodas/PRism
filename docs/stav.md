@@ -4496,3 +4496,59 @@ jsou cizí sady a jiná třída: `SlotCleanupTests` fingerprintují plist běž�
 a `AppStoreCommentTests` skončily na `PublishError.timedOut` po 65 s pod load 19. Všech sedm dotčených sad projde izolovaně za 9,4 s — to je ten způsob, jak se load-flake
 pozná od nálezu.
 
+### #361 — třinácté kolo: ten zápis nezmizel, a „třetí pohon“ není náš (otevřené)
+
+**Nejdůležitější zjištění je oprava čísla, ne nová hypotéza.** Do třináctého kola se pracovalo
+s tím, že `measureEstimates` po opravě z #435 z hořícího kola zmizel („35 z 21 834“). Byla to
+**chyba čtení `sample`u**: 35 je počet **řádků se vzorem** ve stromu volání a 21 834 počet **řádků
+souboru**. Podíl ten uzel drží: **11,3 %** (9. záchvat, 1524 z 13 479), **11,2 %** (11., 1046
+z 9330), **13,2 %** (12., 2173 z 16 486). `fillingSlot()` je tedy **zlevnění** — dotazy na
+`ConversationRow.id` 7,1 M → 3,6 M → 2,3 M —, ne oprava, a dokumentace se dala číst jako opak.
+
+**Ten dotaz na velikost neodstraní žádný tvar té štěrbiny.** O velikost si říká `ScrollView` sám
+(`ScrollViewUtilities.sizeThatFits(in:contentComputer:axes:)` se ptá obsahu na svou šířku), takže ho
+má pružný rámec, `fillingSlot()` i `GeometryReader` **bez** vnitřního rámce — čímž padá i domněnka,
+že se `_FrameLayout` ptá kvůli zarovnání (třetí podoba nemá co centrovat a dotaz tam je). Mění se
+jen odkud: pružný rámec si ho odpovídá **jako kořen** aktualizace (30 z 30 vzorků), měřená štěrbina
+**vnořeně** (18 z 18). Kdo přesně je ten vnější kořen, **není stabilní** a jmenovat ho by bylo
+tvrzení, které jednou vyjde a jednou ne.
+
+**„Třetí pohon“ z aplikace není, protože tam není.** Invariant, který vede všechny tři záchvaty —
+`_External -> State` (182 → 313 → 382) plus `DynamicLayoutComputer<_HStackLayout>` (180 → 312
+→ 365) —, je **downstream** toho zápisu z `LazyLayoutViewCache`: v každém zásobníku je jich pět,
+každý s layout computerem své položky v konstantním odstupu čísel uzlů (1288 B v aplikaci, 676 B
+v harnessu), pětka je řádově počet viditelných uzlů osy, a `AG::Graph::value_set` je v celém vzorku
+jediný a leží pod `updateItemPhases()`. `DynamicLayoutComputer<_HStackLayout>` je pak prostě
+`HStack` v `ConversationNodeView`.
+
+**Třetí největší kus toho kola dostal jméno:** `SecondaryLayerGeometryQuery` →
+`ViewDimensions.subscript.getter` → `explicitAlignment`, tedy `.background(alignment: .topLeading)`
+s linkou osy v `ConversationNodeView` — **2149 z 16 486** vzorků (13,0 %) ve dvanáctém záchvatu,
+ale jen **409 z 13 479 (3,0 %)** v devátém, kdy kolo hořelo stejně.
+Nechává se to tak: dotaz jen **čte** geometrii a v `changed` vstupech kola není ani jednou, takže je
+to práce v kole, ne jeho pohon — a alternativa je vrátit linku do `ZStack`u, což je pružná výška
+v řádku líného seznamu (zakázaná třída z #375).
+
+**Zbývající možnost i s cenou:** přestat na ose používat `LazyVStack`. Je to jediná podoba, u které
+se ta vazba nemá kde utvořit (v grafu ani jeden `LazySubview*` atribut), ale první rozvržení 300 uzlů
+stojí **32–35 ms proti 2,2–3,4 ms** a to s obyčejným `Text`em, ne s markdownem — a diffu (7. záchvat,
+tab `Soubory`) by to nepomohlo. Do repa se to proto nedostalo; je to rozhodnutí k posouzení, ne
+mezera.
+
+**Nové je i to, co je v záznamu těsně před zdí.** Poslední tři sekundy dvanáctého záchvatu nejsou
+zašpiněné rozvržení, ale **průchod tělem odshora** (`ContentView=2 PullRequestDetailView=3
+ConversationView=2 ActivityFeedView=1`), přičemž `ConversationRow.id` je ještě 60 a osmirámcový
+zásobník kola už tam je — ten je tedy i ve **zdravé** sekundě a patologická je jen frekvence
+(60 → 66 → 18 069 → zeď). Předehra ukazuje na **změnu ve storu**, nejspíš tik pollingu; napodobit
+se to ale nepovedlo (čtrnáctý neúspěšný pokus, viz `burnsAfterTheDataStops`).
+
+**#361 zůstává otevřené a oprava z tohohle kola žádná není** — to je celý výsledek a je záměrně
+napsaný takhle. Nové je: sonda (`LazySelfReferenceProbe`, tři měření), guard nad vyloučením
+(`ConversationAxisFeedbackTests` — v uzlu osy není `onGeometryChange`, `onContinuousHover`,
+`GeometryReader`, `ViewThatFits`, `ScrollViewReader` ani `scrollTo(`) a postup, jak se `sample` čte,
+aby se ta chyba s řádky neopakovala. **Třináctý** neúspěšný pokus kolo vyrobit: scéna tvaru celého
+tabu s 300 uzly má po zastavení pumpy 0,000 s CPU ze 4 s.
+
+Na obrazovce se nemění nic — je to měření, dokumentace a testy. Testů **4000**: dvě nová tvrzení
+v `ConversationAxisFeedbackTests` a čtyři měření sondy (ta se v běžném běhu přeskočí); zbytek přidal
+mezitím mergnutý `main`.

@@ -5446,6 +5446,75 @@ a 0,072 s CPU** — tedy k nerozeznání. Chybějící prostor je proto v tom ko
 se počítá, protože se řádek přerovnává), ne jeho zdroj. Sonda se nezachovala, zůstává tenhle
 odstavec.
 
+### Odkud se ptá na velikost líného seznamu (#361, třinácté kolo)
+
+Dvanáctý záchvat hořel na buildu **s** `fillingSlot()`, takže sekce výš popisuje **zlevnění, ne
+opravu**. Co se u třináctého kola měřilo a čím:
+
+- **`Tests/Views/LazySelfReferenceProbe.swift`** (ručně, `TEST_RUNNER_PRISM_MEASURE=1`) — čtyři
+  testy, každý na jednu otázku. `stacksOnTheTimeline` bere **evaluační zásobník AttributeGraphu**
+  (`GraphProbe`) z getteru identity řádku a rozdělí vzorky na to, jestli je dotaz na velikost
+  seznamu vlastní **kořen** aktualizace, nebo je **vnořený** v cizí. `burnsAfterThePumpStops`
+  a `burnsAfterTheDataStops` zkouší scénu tvaru **celého tabu** (hranice obsahu s `GeometryReader`em
+  a předanou šířkou, uzly tvaru `ConversationNodeView` včetně linky v `background`) rozhořet a měří
+  CPU **po zastavení pumpy** — první špiní rozvržení, druhý **přidává řádky**.
+  `eagerLayoutCost` měří, co by stálo se líného seznamu vzdát (střídavě A/B/A/B, #274).
+  Čísla jsou v [`docs/architektura.md`](architektura.md), sekce `fillingSlot()`.
+- **`Tests/Views/ConversationAxisFeedbackTests.swift`** (běží vždycky) — drží **vyloučení**, ne
+  opravu: v uzlu osy (`ConversationNodeView`, `ConversationEntryView`, `ThreadBubbleView`,
+  `ConversationComposerView`) není `onGeometryChange`, `onContinuousHover`, `GeometryReader`,
+  `ViewThatFits`, `ScrollViewReader` ani `scrollTo(`. Tvrdí se to nad zdrojáky, jako
+  `SingleWayOutTests`. Smysl: to vyloučení platí jen tak dlouho, dokud v ose žádný z těch vzorů
+  nepřibude — a přibýt může nevinně (odznak, který se v úzkém uzlu nevejde, si o `ViewThatFits`
+  řekne sám). `ConversationView` sám `GeometryReader` **má** (je z něj `fillingSlot()`)
+  a `ThreadSnippetView` kreslí `DiffLineView` s `onGeometryChange` (to je #438), takže ani jeden
+  ve výčtu není.
+
+**Pumpa musí špinit rozvržení, ne kresbu.** První podoba sondy měnila krytí a naměřila **0 dotazů
+na identitu za 3 s** — líný seznam se po změně krytí nepřerovná vůbec, takže nebylo co vzorkovat.
+Teprve odsazení lišty o bod dá 12 000 dotazů za 3 s.
+
+**A třinácté kolo je třináctý a čtrnáctý neúspěšný pokus scénu rozhořet**: po zastavení pumpy
+**0,000 s CPU ze 4 s** ve všech čtyřech podobách, i s 300 uzly tvaru osy a s hranicí obsahu jako
+v aplikaci — a stejně tak, když pumpa místo rozvržení **přidávala řádky**.
+
+**Ten druhý scénář je z předehry v záznamu, ne z nápadu.** Poslední tři sekundy před zdí
+(`hang10-diag.log`) totiž **nejsou** zašpiněné rozvržení, ale průchod tělem **odshora**:
+
+```
+15:37:35  39 kol, 0,440 s CPU, body: ConversationNodeView=10 ConversationEntryView=8
+                                     PullRequestDetailView=3 ContentView=2 ConversationView=2
+                                     MarkdownText=2 ActivityFeedView=1
+          graf: ConversationRow.id=60          ← ještě normální, a zásobník už má tvar kola
+15:37:36  67 kol, 0,655 s CPU, body: ConversationNodeView=7 …
+          graf: ConversationRow.id=66
+15:37:37  33 kol, 0,573 s CPU, body: ConversationNodeView=4 ConversationEntryView=3 MarkdownText=1
+          graf: ConversationRow.id=18069       ← a tady to ujede
+15:37:38   0 kol, 1,054 s CPU — zeď
+```
+
+Dvě věci z toho pro čtrnácté kolo. **Ten osmirámcový zásobník je v kole i ve zdravé sekundě** (:35
+a :36 ho mají a `ConversationRow.id` je 60 a 66), takže sám o sobě není příznak — patologická je
+**frekvence**. A předehrou je **průchod tělem `ContentView` a `PullRequestDetailView`**, tedy změna
+ve storu, ne pohyb myší: ve zdroji dění je vidět i `ActivityFeedView`, což ukazuje na tik pollingu.
+Napodobit se to zatím **nepovedlo** (viz odstavec výš), ale hledat se má tam.
+
+#### `sample` je strom, takže součet řádků není podíl
+
+Tohle stálo celé jedno kolo, takže je to tady jako postup. `sample` vypisuje **strom volání**
+a číslo na řádku je počet vzorků v tom podstromu. Z toho plynou dvě pasti:
+
+- **`grep -c` nemluví o ceně.** „35 řádků z 21 834“ v zadání jedenáctého kola srovnávalo počet
+  řádků se vzorem proti počtu **řádků souboru** a vyšlo z toho, že `measureEstimates` z hořícího
+  kola zmizel. Ten jeden uzel přitom nese **1046 vzorků z 9330**, tedy 11 % — po opravě z #435
+  úplně stejně jako před ní.
+- **Sečíst všechny řádky se vzorem je taky špatně**: uzly se vnořují, takže se to dvojitě počítá.
+  Bere se **největší nezanořený uzel** (a k němu součet sourozenců mimo jeho podstrom) proti
+  **počtu vzorků hlavního vlákna** — ten je na řádku `com.apple.main-thread`.
+
+Prakticky: najdi si řádek `Thread_… com.apple.main-thread` (to je jmenovatel), pak řádek s hledaným
+jménem a jeho hloubku podle odsazení, a ověř, že nad ním v témže podstromu tentýž vzor není.
+
 ### Projíždění kolečkem, a co z něj u #361 vyšlo (#361)
 
 **`scroll(to:)` kolo z #361 nerozjede, a je to změřené** (1,28 s proti 1,30 s u #375, tedy nic).

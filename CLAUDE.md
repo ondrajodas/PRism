@@ -710,6 +710,21 @@ Zvlášť stojí za přečtení, než sáhneš na:
   grep -rn 'fillingSlot' App/Views | grep -vE ':[0-9]+: *//'    # šest míst + modifikátor sám
   ```
 
+  **Je to ale zlevnění, ne oprava — a ten zápis nezmizel** (#361, třinácté kolo, změřeno na třech
+  záchvatech). `measureEstimates` drží podíl na vzorcích hlavního vlákna **11,3 % → 11,2 % → 13,2 %**
+  (devátý, jedenáctý, dvanáctý záchvat); spadla jen cena (dotazy na `ConversationRow.id`
+  7,1 M → 3,6 M → 2,3 M). **Zbývající dotaz neodstraní žádný tvar té štěrbiny**: o velikost si říká
+  `ScrollView` sám (`ScrollViewUtilities.sizeThatFits(in:contentComputer:axes:)` se ptá obsahu na
+  svou šířku), takže ho má pružný rámec, `fillingSlot()` i `GeometryReader` **bez** vnitřního rámce
+  — zarovnání v tom nehraje roli. Mění se jen odkud: pružný rámec **jako kořen** aktualizace,
+  měřená štěrbina **vnořeně**. Podrobnosti a čísla u `LazySelfReferenceProbe`.
+
+  **A `sample` je strom, takže součet řádků není podíl** — tohle stálo u #361 jedno celé kolo.
+  „35 řádků z 21 834“ srovnávalo počet **řádků se vzorem** proti počtu **řádků souboru** a vyšlo
+  z toho, že `measureEstimates` z kola zmizel; ve skutečnosti ten jeden uzel nese 1046 vzorků
+  z 9330. Čte se **největší nezanořený uzel** proti počtu vzorků hlavního vlákna, nikdy
+  `grep -c`.
+
   **Nevyjednává se ani počet prvků** (#252). Overlay nad blokem kódu měl plochu, gesto a čtení
   geometrie u **každého** řádku a strany — u šedesátiřádkového bloku přes čtyři stovky prvků,
   které líný seznam umisťuje znovu při každém přerovnání obsahu. Polohy přitom hlásí textové view,
