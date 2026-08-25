@@ -4552,3 +4552,12 @@ tabu s 300 uzly má po zastavení pumpy 0,000 s CPU ze 4 s.
 Na obrazovce se nemění nic — je to měření, dokumentace a testy. Testů **4000**: dvě nová tvrzení
 v `ConversationAxisFeedbackTests` a čtyři měření sondy (ta se v běžném běhu přeskočí); zbytek přidal
 mezitím mergnutý `main`.
+
+### M12 — Ergonomie okna (milník #14)
+
+Tři issues z jedné dávky, u kterých je rozvrh naopak krátký: **#441** (klávesové zkratky),
+**#442** (prstýnek místo šipky, dokud se aplikace ptá) a **#443** (pět řádků dění na dashboardu)
+jdou **souběžně**, žádná nestojí na jiné. Milník mají proto, že rozvrh — i když říká „všechno
+naráz“ — je jediná věc, která tu informaci udrží napříč sessions; `Průběžné` je koš bez pořadí.
+Jediná vazba: #441 chce mít `⌘R` zakázané, dokud běží obnovení, a `AppStore.isRefreshing` v repu
+už je, takže na #442 nečeká. Nakreslené jsou #442 a #443 v sekcích 32 a 31 návrhu.
