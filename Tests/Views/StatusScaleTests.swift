@@ -52,7 +52,8 @@ struct StatusScaleTests {
 
     /// **Ani jedno místo v `App/` nekreslí systémovou barvu ze škály.**
     ///
-    /// Hledá se `.green` a spol. s **nepísmenem za sebou**, takže `color.redComponent` ani
+    /// Hledá se `.green` a spol. **s koncem identifikátoru za sebou** (tedy ne písmeno, číslice
+    /// ani podtržítko), takže `color.redComponent` ani
     /// `.redacted` se nepočítají — a `Color.green` se počítá, protože o tom, co je před tečkou,
     /// se nerozhoduje: v `App/` je každé takové jméno barva.
     @Test("V App/ není systémová barva ze škály")
@@ -102,8 +103,8 @@ struct StatusScaleTests {
 
     // MARK: - Měřidlo
 
-    /// Výskyty jehly, za kterou **nestojí písmeno ani podtržítko** — s číslem řádku, ať se z hlášky
-    /// dá jít rovnou na místo.
+    /// Výskyty jehly, za kterou **nestojí písmeno, číslice ani podtržítko** — tedy tam, kde jméno
+    /// končí. S číslem řádku, ať se z hlášky dá jít rovnou na místo.
     private func occurrences(of needle: String, in lines: [(number: Int, text: String)]) -> [String] {
         var found: [String] = []
         for line in lines {

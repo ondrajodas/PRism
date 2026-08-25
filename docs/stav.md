@@ -4374,8 +4374,9 @@ v testu, ne mlčení**.
 a tvrdí, že v `App/` není `.green`, `.red`, `.yellow` ani `.orange` (kolikrát je něco zapsané, se za
 běhu zjistit nedá) — a k tomu na hodnotách, že škála vrací doopravdy token. Prahy
 v `PillTypesettingTests` měří kresbu z bitmapy; guard nad zdrojáky o čitelnosti neříká nic a prahy
-zas nevidí kartu ani prázdný stav. Hledání se u guardu muselo naučit dvě věci: **nepísmeno za
-jehlou** (jinak je `color.redComponent` porušení pravidla) a **číslo řádku z původního souboru**
+zas nevidí kartu ani prázdný stav. Hledání se u guardu muselo naučit dvě věci: **konec
+identifikátoru za jehlou** — ne písmeno, číslice ani podtržítko (jinak je `color.redComponent`
+porušení pravidla) a **číslo řádku z původního souboru**
 (první podoba hlásila řádek v textu bez komentářů, tedy o 68 řádků mimo).
 
 **Vidět je to z renderu, ne z pauzy**: tentýž `PillRenderProbe` před převodem a po něm dá dva

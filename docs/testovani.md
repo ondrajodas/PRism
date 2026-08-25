@@ -2457,7 +2457,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 
   Tři věci na tom nejsou zjevné:
 
-  - **Hledá se s nepísmenem za jehlou**, jinak `color.redComponent` a `.redacted` vyjdou jako
+  - **Hledá se s koncem identifikátoru za jehlou** (ne písmeno, číslice ani podtržítko), jinak
+    `color.redComponent` a `.redacted` vyjdou jako
     porušení pravidla. Na to, že to hledání doopravdy hledá, je vlastní tvrzení — „nikde nic
     nenašel“ projde i tehdy, když je sonda rozbitá.
   - **Číslo řádku musí být z původního souboru.** První podoba hlásila číslo v textu bez komentářů,
