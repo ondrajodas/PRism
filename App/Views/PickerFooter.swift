@@ -8,6 +8,10 @@ import SwiftUI
 /// jen v potvrzení a druhá kopie by se s ní rozešla potichu: jediné, co by z toho bylo vidět, je
 /// jinak vysoká patka v jedné z nabídek.
 struct PickerFooter<Content: View>: View {
+    /// **`@ViewBuilder` na uložené vlastnosti, ne vlastní `init`** — memberwise init si ten atribut
+    /// vezme s sebou, takže z `content` je `@ViewBuilder content: () -> Content` a `PickerFooter { … }`
+    /// funguje. Je to týž vzor jako u `ChecksView` a spol.; psát k tomu vlastní init by byl delší
+    /// zápis téhož (Copilot to u #434 označil za nepřeložitelné, build i 4005 testů říkají opak).
     @ViewBuilder let content: Content
 
     var body: some View {
