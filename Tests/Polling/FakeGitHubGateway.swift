@@ -127,14 +127,25 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     /// v té chvíli neprojde, ho musí spustit odsud. Dotaz se přitom **nedrží** — hook doběhne
     /// a odpověď se vrátí normálně; blokující fake by z čekání udělal další zdroj falešně
     /// červeného `main`u.
-    var duringSearch: (@Sendable () async -> Void)?
+    ///
+    /// **Pod zámkem, jako `detailFromNowOn`**: `searchPullRequests` je `nonisolated async`, takže
+    /// se čte odjinud, než se zapisuje (test píše z `MainActor`u). Fake je `@unchecked Sendable`,
+    /// tedy si tu synchronizaci musí obstarat sám.
+    var duringSearch: (@Sendable () async -> Void)? {
+        get { lock.withLock { searchHook } }
+        set { lock.withLock { searchHook = newValue } }
+    }
+
+    private var searchHook: (@Sendable () async -> Void)?
 
     func searchPullRequests(query: String) async throws -> [PullRequestSummary] {
         let index: Int = lock.withLock {
             asked.append(query)
             return asked.count - 1
         }
-        await duringSearch?()
+        // Kopie **před** zavoláním: zámek se drží jen na čtení, ne přes `await` — `NSLock` se
+        // odemyká na tom vlákně, na kterém se zamkl, a po suspenzi to nemusí být totéž.
+        if let hook = duringSearch { await hook() }
         return try (outcomes[min(index, outcomes.count - 1)]).get()
     }
 

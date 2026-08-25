@@ -27,7 +27,7 @@ struct RefreshButtonTests {
     func drawsTheSharedRingWhileRefreshing() throws {
         let hosting = host(isRefreshing: true)
 
-        let ring = try #require(Self.ring(in: hosting))
+        let ring = try #require(hosting.firstDescendant(ofType: SpinningRingView.self))
         #expect(ring.isSpinningInCoreAnimation)
     }
 
@@ -36,7 +36,7 @@ struct RefreshButtonTests {
     /// pořád ptá.
     @Test("V klidu v tlačítku žádný prstýnek není")
     func drawsNoRingWhenIdle() {
-        #expect(Self.ring(in: host(isRefreshing: false)) == nil)
+        #expect(host(isRefreshing: false).firstDescendant(ofType: SpinningRingView.self) == nil)
     }
 
     /// **Hlavička nesmí poskočit tím, že se aplikace ptá.** Prstýnek má jiný tvar i jinou vnitřní
@@ -73,13 +73,5 @@ struct RefreshButtonTests {
         // že animace není, nad kódem, který ji přidá.
         hosting.layoutSubtreeIfNeeded()
         return hosting
-    }
-
-    private static func ring(in view: NSView) -> SpinningRingView? {
-        if let ring = view as? SpinningRingView { return ring }
-        for child in view.subviews {
-            if let ring = ring(in: child) { return ring }
-        }
-        return nil
     }
 }
