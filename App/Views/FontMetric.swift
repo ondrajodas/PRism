@@ -224,6 +224,10 @@ final class FontMetric: Sendable {
     /// nemají jak potkat. Písma, která se liší **jen transformační maticí**, by se v klíči slila;
     /// aplikace žádné takové nestaví (v `App/` není jediné `NSFontDescriptor` s `.matrix`), a kdyby
     /// je postavila, byl by ten rozdíl vidět na kresbě.
+    ///
+    /// **`NaN` ve velikosti sadu nenafoukne**, i když se nerovná sám sobě: zapisuje se **jen povedené
+    /// měření**, a písmo s `NaN` velikostí nedá použitelnou hodnotu na žádné cestě (naměřeno), takže
+    /// se do sady nedostane vůbec. A i kdyby, drží to mez o dvacet řádků výš.
     private struct Key: Hashable, Sendable {
         let name: String
         let size: Double

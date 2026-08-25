@@ -134,17 +134,25 @@ struct FontMetricProbe {
     }
 
     /// Sbírá histogram a rozbory. `@unchecked Sendable` se zámkem, protože čte několik vláken.
+    ///
+    /// **Klíčem histogramu je vypsaná hodnota, ne `Double`** (nález Copilota na #439), a anomálie se
+    /// posuzuje **tímtéž pravidlem jako v aplikaci** (`Policy.usableFontMetric`). Obojí je o `NaN`,
+    /// tedy o hodnotě, kterou `NSFont` doopravdy vydá — u písma s nekonečnou maticí je naměřená.
+    /// `NaN` se totiž nerovná sám sobě, takže by v `Double` klíči zakládal **novou položku při každém
+    /// čtení** (a sonda jich udělá tři miliony), a `value <= 0` je na něm **nepravda**, takže by
+    /// sonda minula zrovna ten druh vady, na kterou je. Vypsaný klíč obojí zavírá: `nan` je jedna
+    /// přihrádka a rozhoduje `isFinite`.
     private final class Collector: @unchecked Sendable {
         private let lock = NSLock()
-        private var histogram: [String: [Double: Int]] = [:]
+        private var histogram: [String: [String: Int]] = [:]
         private var anomalies: [String] = []
         private let start = Date()
 
         func record(_ name: String, _ value: Double, font: NSFont, reader: Int) {
             lock.lock()
-            histogram[name, default: [:]][value, default: 0] += 1
+            histogram[name, default: [:]][Self.bucket(value), default: 0] += 1
             lock.unlock()
-            guard value <= 0 else { return }
+            guard Policy.usableFontMetric(value) == nil else { return }
             let dump = """
                 ANOMÁLIE \(name)=\(value) v \(String(format: "%.1f", Date().timeIntervalSince(start))) s \
                 (čtenář \(reader)): jméno=\(font.fontName) velikost=\(font.pointSize) \
@@ -160,13 +168,19 @@ struct FontMetricProbe {
             lock.unlock()
         }
 
+        /// Přihrádka histogramu: vypsaná hodnota. `NaN` i `±∞` mají svoje jméno, takže z nich je
+        /// jedna položka, ne milion.
+        private static func bucket(_ value: Double) -> String {
+            value.isFinite ? String(format: "%.4f", value) : "\(value)"
+        }
+
         func report(seconds: Double, readers: Int) -> String {
             lock.lock()
             defer { lock.unlock() }
             var lines = ["čteno \(seconds) s z \(readers) vláken"]
             for (name, values) in histogram.sorted(by: { $0.key < $1.key }) {
                 let text = values.sorted { $0.key < $1.key }
-                    .map { "\(String(format: "%.4f", $0.key))×\($0.value)" }
+                    .map { "\($0.key)×\($0.value)" }
                     .joined(separator: " ")
                 lines.append("\(name): \(text)")
             }

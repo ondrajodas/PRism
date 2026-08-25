@@ -46,6 +46,10 @@ struct FontMetricTests {
             for await values in group { seen.formUnion(values) }
             // Jedna hodnota, ne „hodnoty, které se náhodou nerozešly“: kdyby se měřilo pokaždé,
             // tohle by na zdravém stroji prošlo — proto se k tomu tvrdí i počet měření níž.
+            //
+            // `Set<CGFloat>` tady na rozdíl od sondy vadit nemůže, i když se `NaN` nerovná sám sobě:
+            // měřidlo `NaN` nikdy nevydá (zavírá to `Policy.usableFontMetric`), a kdyby vydalo, je to
+            // právě „různé hodnoty“, tedy pád, který tenhle test má nahlásit.
             #expect(seen.count == 1, "32 000 čtení dalo \(seen.count) různých hodnot: \(seen.sorted())")
         }
 
