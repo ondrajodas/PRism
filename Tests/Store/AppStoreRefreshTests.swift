@@ -8,7 +8,7 @@ import Testing
 /// **Je to tvrzení o tom, co se NEstalo**, tedy ten druh, který se rozbije potichu: druhý dotaz
 /// navíc nic nerozbije viditelně — jen se GitHubu zbytečně dvakrát zaplatí a `isRefreshing` visí
 /// o kolo dýl, než se aplikace doopravdy ptá. Zašedlé tlačítko proti tomu nestačí: tutéž akci
-/// nabízí paleta ⌘K, prázdný stav seznamu (`Zkusit znovu`) a od #441 zkratka `⌘R`.
+/// nabízí paleta ⌘K, prázdný stav seznamu (`Zkusit znovu`) a #441 k tomu přidá zkratku `⌘R`.
 ///
 /// **Tady se to dá ověřit, ve view ne** — accessibility tree se v okně mimo obrazovku nenaplní,
 /// takže na `AXEnabled` hostovaného tlačítka není kde se zeptat. Zkouší se proto ten konec, kde

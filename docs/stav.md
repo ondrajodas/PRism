@@ -4613,5 +4613,5 @@ nestačilo) a **#441 si odsud vezme povolení pro `⌘R`** — tím se ta vazba 
 Rozměr tlačítka se nehnul (27 × 25, `HeaderButtonMetrics`) a je na to tvrzení nad `fittingSize`
 obou stavů — hlavička nemá poskočit tím, že se aplikace ptá. Ověřeno i na běžící aplikaci:
 z dávky snímků hlavičky pořízených hned po startu je na prvních prstýnek a na dalších šipka, ve
-stejné poloze. Testů **4010** (devět nových); nápovědu se zkratkou `Obnovit seznam (⌘R)`, kterou
+stejné poloze. Testů **4016** (devět nových); nápovědu se zkratkou `Obnovit seznam (⌘R)`, kterou
 kreslí návrh, přidá #441, protože do té doby by uváděla zkratku, která v okně není.

@@ -154,9 +154,9 @@ struct ContentView: View {
             ) {
                 openWindow(id: ReleaseNotesWindow.id)
             }
-            // Podobu i to, jestli tlačítko bere klik, rozhoduje `Policy.refreshControl` (#442) —
-            // **jediné místo**, ze kterého se ta podmínka čte — #441 si odsud vezme povolení
-            // pro zkratku `⌘R`.
+            // Podobu i to, jestli tlačítko bere klik, rozhoduje `Policy.refreshControl` (#442).
+            // Je to **jediné místo**, ze kterého se ta podmínka čte: bere si ji odsud
+            // i `AppStore.refresh()` a #441 z ní vyrobí povolení pro zkratku `⌘R`.
             RefreshButton(isRefreshing: store.isRefreshing) {
                 Task { await store.refresh() }
             }
