@@ -4523,7 +4523,8 @@ jediný a leží pod `updateItemPhases()`. `DynamicLayoutComputer<_HStackLayout>
 
 **Třetí největší kus toho kola dostal jméno:** `SecondaryLayerGeometryQuery` →
 `ViewDimensions.subscript.getter` → `explicitAlignment`, tedy `.background(alignment: .topLeading)`
-s linkou osy v `ConversationNodeView` — **2149 z 16 486** vzorků (13,0 %) ve dvanáctém záchvatu.
+s linkou osy v `ConversationNodeView` — **2149 z 16 486** vzorků (13,0 %) ve dvanáctém záchvatu,
+ale jen **409 z 13 479 (3,0 %)** v devátém, kdy kolo hořelo stejně.
 Nechává se to tak: dotaz jen **čte** geometrii a v `changed` vstupech kola není ani jednou, takže je
 to práce v kole, ne jeho pohon — a alternativa je vrátit linku do `ZStack`u, což je pružná výška
 v řádku líného seznamu (zakázaná třída z #375).

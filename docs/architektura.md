@@ -3890,8 +3890,10 @@ SecondaryLayerGeometryQuery.value.getter
       ViewLayoutEngine.explicitAlignment(_:at:)
 ```
 
-tedy **2 149 z 16 486** vzorků (13,0 %) ve dvanáctém záchvatu a 1 033 z 9 330 (11,1 %)
-v jedenáctém. `SecondaryLayerGeometryQuery` je geometrie druhé vrstvy, tedy
+tedy **2 149 z 16 486** vzorků (13,0 %) ve dvanáctém záchvatu, 1 033 z 9 330 (11,1 %)
+v jedenáctém — a **409 z 13 479 (3,0 %)** v devátém, takže na rozdíl od `measureEstimates` to
+napříč záchvaty **konstantní není**. To je i důvod, proč to není pohon: v devátém záchvatu kolo
+hořelo stejně a tenhle dotaz byl na třetině. `SecondaryLayerGeometryQuery` je geometrie druhé vrstvy, tedy
 `ConversationNodeView`: `.background(alignment: .topLeading) { line }`. Zarovnání pozadí si žádá
 `ViewDimensions[.leading]` a `[.top]` na hlavní vrstvě, a ta je `HStack`, takže se dotaz propadne
 do jeho layout engine — u **každého** viditelného uzlu a v **každém** kole.
