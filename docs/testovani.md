@@ -6109,6 +6109,64 @@ v rozvržení líného seznamu a v sazbě textu: `DiffTextView.draw` a spol. **~
 `AttributeGraph` a `NSLayoutManager`. To je ten směr, kterým se dá projíždění zlevnit — a je to
 **samostatná věc**, ne tohle issue.
 
+### Katalog zkratek okna (#441)
+
+Testuje se **katalog, ne stisk**. Že klávesa doopravdy zabere, se v harnessu ověřit nedá:
+testovací host nedostane aktivaci (`NSApp.isActive == false` i po `activate(ignoringOtherApps:)`,
+změřeno u #392 a potvrzeno u #434), takže nemá key okno a stisk nemá kam sednout. `WindowShortcutsTests`
+proto tvrdí sedmnáct věcí o datech a poslední kolo dělá člověk na běžící aplikaci — **na české
+i anglické mapě**, protože právě to je jádro #441.
+
+Co z toho stojí za zapamatování:
+
+- **Nejcennější je tvrzení, že se nic neopakuje.** Dvě tlačítka s jednou kombinací nejsou chyba
+  ani pád — vyhraje to zaregistrované později a druhá zkratka „nefunguje“. Ověřeno **vloženou
+  regresí**: `⌘.` přepsané na `⌘K` shodí `Žádné dvě tlačítka v okně nemají tutéž kombinaci`,
+  `Kreslené zkratky jsou ty skutečné` i `Paleta kreslí u akcí zkratku z katalogu`.
+- **Počet akcí je vyjmenovaný** (dvacet), ne „aspoň tolik“ — tatáž konstrukce jako u
+  `SingleWayOutTests`. Nová zkratka v okně je rozhodnutí, ne přírůstek.
+- **Stráž nad zdrojáky** tvrdí, že `keyboardShortcut(` je v `App/` **jen v deseti jmenovitých
+  souborech**: v překladu katalogu (`WindowShortcutButtons`) a v sheetech, scénách, uvítací bráně
+  a paletě, které si klávesu berou samy. Komentáře se zahazují stejně jako v grepech z `CLAUDE.md`.
+  Ověřeno vloženou regresí: literální `.keyboardShortcut("j", modifiers: .command)` v `ContentView`
+  ji shodí.
+- **Systémové kombinace zůstávají volné** (`⌘W`, `⌘Q`, `⌘M`, `⌘H`, `⌘,`). Je to jediné místo, kde je
+  z testu vidět, proč se záložka zavírá `⌃W`.
+- **Zakázané stavy se testují jako čisté funkce**: `Policy.closableTab(in:)` výčtem (domácí záložka
+  → `nil`) a `⌘R` proti `Policy.refreshControl(isRefreshing:)`, tedy proti **téže** podmínce, ze
+  které si podobu bere tlačítko `⟳` (#442). Dvě kopie by se rozešly potichu — povolená zkratka nad
+  zakázaným tlačítkem vypadá jako nefunkční tlačítko.
+- **Modifikátory u `.cancelAction` se zahodí potichu**, takže na to je vlastní tvrzení. Kdyby je
+  katalog napsal, nikde by se to neprojevilo.
+- **Kapsli sází monospace systémové písmo a dva glyfy v něm nejsou.** Změřeno samostatným
+  `swift` skriptem nad `.AppleSystemUIFontMonospaced-Regular`: `⇥` (U+21E5) a `⎋` (U+238B) vrátí
+  `CTFontGetGlyphsForCharacters` **`false`**, kdežto `⌘`, `⌃`, `⌥`, `⇧`, `⏎`, `↑` a `↓` `true`.
+  Proto se `Tab` a `esc` píšou slovem. Test to tvrdí nad **výčtem znaků**, ne měřením písma za
+  běhu — `NSFont` v hostu pod zátěží vydá přechodně nepoužitelnou metriku (#407) a sáhnout si sem
+  na písmo znamená koupit si falešně červený `main`. Přeměřit se to dá takhle:
+
+  ```swift
+  let ct = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular) as CTFont
+  var chars = Array("⇥".utf16); var glyphs = [CGGlyph](repeating: 0, count: chars.count)
+  print(CTFontGetGlyphsForCharacters(ct, &chars, &glyphs, chars.count))   // false
+  ```
+
+**Na kapsle v paletě se dá podívat offscreen** — `CommandPaletteRenderProbe` má od #441 scénář
+`akce`, který katalog zúží na skupinu `Akce`. V plném katalogu je až za nálezy, soubory a dvěma
+skupinami PR, tedy pod hranou karty; a je to jediná skupina, ve které se zkratky kreslí. Právě
+tenhle render ukázal, že kapsle `⌃1` je v pořádku (`⌃` je U+2303 UP ARROWHEAD, který **vypadá**
+jako stříška) — a při té příležitosti i to, že `⇥` a `⎋` písmo nemá.
+
+```bash
+TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/prism xcodebuild \
+    -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test \
+    -only-testing:PRismTests/CommandPaletteRenderProbe > /tmp/probe.log 2>&1
+```
+
+**Prefix `TEST_RUNNER_` je povinný**: bez něj se proměnná do testovacího hosta nedostane a sonda
+se **přeskočí** — `xcodebuild` skončí `TEST SUCCEEDED` a v cílové složce nic není, což vypadá jako
+rozbitá sonda.
+
 ### `⌃Tab` a shift, který mění klávesu (#245)
 
 **Shift u `⇥` nedělá modifikátor, dělá jinou klávesu.** `⌃⇥` doručí `characters == U+0009`, kdežto

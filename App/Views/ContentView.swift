@@ -69,21 +69,7 @@ struct ContentView: View {
         .sheet(item: $submission) { submission in
             ReviewSubmissionSheet(submission: submission) { self.submission = nil }
         }
-        // ⌘K (#184). Bydlí **na okně**, ne v detailu PR: paleta má jít otevřít i z domácí
-        // záložky, a zkratka, která funguje jen v půlce okna, je horší než žádná.
-        // ⌃Tab / ⌃⇧Tab (#245) bydlí na okně ze stejného důvodu jako ⌘K: pruh záložek je nad
-        // obsahem, ale zkratka má chodit i z domácí záložky a z každého tabu PR — a tlačítko
-        // v pruhu by ji registrovalo jen tam, kde je pruh sám.
-        .hiddenShortcuts {
-            Button("Najít v okně") { store.togglePalette() }
-                .keyboardShortcut("k", modifiers: .command)
-            Button("Další záložka") { store.selectTab(.forward) }
-                .keyboardShortcut(.tab, modifiers: .control)
-            // `.backTab`, ne `.tab` se shiftem: `⌃⇧⇥` je pro AppKit jiná klávesa (`U+0019`) —
-            // podrobnosti i měření u `KeyEquivalent.backTab`.
-            Button("Předchozí záložka") { store.selectTab(.backward) }
-                .keyboardShortcut(.backTab, modifiers: [.control, .shift])
-        }
+        .hiddenShortcuts { shortcuts }
         // Paleta je **překryv okna, ne sheet**: sheet si bere šířku okna a přijíždí shora jako
         // dialog, kdežto návrh má kartu 560 bodů, která visí nad obsahem a zbytek jen ztmaví.
         .overlay(alignment: .top) { palette }
@@ -110,6 +96,41 @@ struct ContentView: View {
             Task { await store.reloadConfiguration() }
         }
     }
+
+    /// Zkratky, které registruje **okno**, ne obsah v něm (#441).
+    ///
+    /// Bydlí tady schválně: paleta ⌘K (#184), přepínání záložek (#245), zavření záložky, obnovení
+    /// i sekce railu mají chodit **i z domácí záložky** — tlačítko v pruhu nebo v railu by je
+    /// registrovalo jen tam, kde je pruh nebo rail sám. Kombinace kláves se tady nepíšou, jsou
+    /// v katalogu (`Policy.windowShortcut`); tady se rozhoduje jen o akci a o tom, kdy je zakázaná.
+    ///
+    /// Zakázané tlačítko klávesu **nebere a propadne dál** — tentýž vzorec jako u `⌘⏎` a `⌘2`
+    /// v detailu PR.
+    @ViewBuilder private var shortcuts: some View {
+        WindowShortcutButtons(action: .palette) { store.togglePalette() }
+        WindowShortcutButtons(action: .nextTab) { store.selectTab(.forward) }
+        WindowShortcutButtons(action: .previousTab) { store.selectTab(.backward) }
+        // Na domácí záložce není co zavírat — rozhoduje `Policy.closableTab`, ne `if` tady.
+        WindowShortcutButtons(action: .closeTab, isEnabled: closableTab != nil) {
+            guard let closableTab else { return }
+            store.closeTab(closableTab)
+        }
+        // Dokud běží dotaz, je zakázané i tlačítko `⟳` — a je to **tatáž podmínka** (#442):
+        // druhý dotaz by ten první nezrychlil.
+        WindowShortcutButtons(
+            action: .refresh,
+            isEnabled: Policy.refreshControl(isRefreshing: store.isRefreshing).isEnabled
+        ) {
+            Task { await store.refresh() }
+        }
+        // Sekce se berou z `allCases`, takže šestá dostane zkratku sama — vybrat jí klávesu si
+        // vynutí `Policy.windowShortcut`, kde je nad `RailSection` vyčerpávající `switch`.
+        ForEach(RailSection.allCases) { section in
+            WindowShortcutButtons(action: .openSection(section)) { store.show(section) }
+        }
+    }
+
+    private var closableTab: PRIdentifier? { Policy.closableTab(in: store.activeTab) }
 
     /// Vlastní hlavička okna (#180) — záložky vedle semaforu a vpravo akce.
     ///

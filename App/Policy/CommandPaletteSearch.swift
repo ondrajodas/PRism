@@ -210,6 +210,7 @@ extension Policy {
             id: "cancel-review",
             title: "Zrušit běžící review na \(paletteLabel(of: pr))",
             symbol: "stop.circle",
+            shortcut: windowShortcut(.cancelReview).display,
             keywords: ["review", "zrušit", pr.repo.description],
             action: .cancelReview(pr)
         )
@@ -229,23 +230,26 @@ extension Policy {
     }
 
     /// Panel s mým review. Zkratka `⌘2` je **skutečná** (registruje ji detail PR), takže se
-    /// smí nakreslit.
+    /// smí nakreslit — a od #441 se bere z katalogu, ne opisuje.
     private static func reviewPanelItem(isExpanded: Bool) -> CommandPalette.Item {
         action(
             id: "review-panel",
             title: isExpanded ? "Složit panel s mým review" : "Rozložit panel s mým review",
             symbol: "sidebar.right",
-            shortcut: "⌘2",
+            shortcut: windowShortcut(.reviewPanel).display,
             keywords: ["panel", "review", "nálezy"],
             action: .setReviewPanel(expanded: !isExpanded)
         )
     }
 
+    /// Sekce railu. Kreslí se **číslicová** kombinace (`⌃1`); česká varianta (`⌃+`) je druhé
+    /// tlačítko na tutéž akci a v řádku palety by z jedné kapsle udělala dvě (#441).
     private static func sectionItem(_ section: RailSection) -> CommandPalette.Item {
         action(
             id: "section-\(section.rawValue)",
             title: "Otevřít \(paletteTitle(of: section))",
             symbol: section.symbol,
+            shortcut: windowShortcut(.openSection(section)).display,
             keywords: [section.title],
             action: .openSection(section)
         )
@@ -276,6 +280,7 @@ extension Policy {
             id: "refresh",
             title: "Obnovit seznam pull requestů",
             symbol: "arrow.clockwise",
+            shortcut: windowShortcut(.refresh).display,
             keywords: ["obnovit", "polling", "github"],
             action: .refresh
         )
@@ -286,6 +291,8 @@ extension Policy {
             id: "settings",
             title: "Otevřít nastavení",
             symbol: "gearshape",
+            // Jediná kreslená zkratka mimo katalog okna (#441): `⌘,` registruje scéna `Settings`,
+            // ne okno, takže se do katalogu kolizí nemá co hlásit.
             shortcut: "⌘,",
             keywords: ["nastavení", "config", "zdroje", "skilly"],
             action: .openSettings

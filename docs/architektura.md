@@ -3297,6 +3297,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace. Sazba je od #404 `designPill` (mono 10,5) a k ní `lineLimit(1)` **i** `fixedSize()` — v řádku fronty se odznak pere o místo s titulkem PR a mono je tam o 10 až 48 bodů širší |
 | `hiddenShortcuts(_:)`, `KeyEquivalent.backTab` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení, okno novinek, paletu i přepínání záložek (#245). `backTab` je tam proto, že `⌃⇧⇥` doručí `U+0019`, tedy jinou klávesu než `⇥` |
+| `WindowShortcutButtons`, `View.windowShortcut(_:)` | Překlad katalogu zkratek (#441) do SwiftUI — **jediné místo v `App/`, kde se `keyboardShortcut` píše nad kombinací**. Kombinací může být víc, každá dostane vlastní tlačítko (česká klávesnice); viditelné tlačítko bere jen tu primární |
 | `CommandPaletteView`, `CommandPaletteRowView` | Command palette ⌘K (#184): pole, skupiny výsledků, zvýrazněná shoda v titulku, pruh s klávesami. Karta 560 bodů jako **překryv okna**, ne sheet |
 | `PullRequestStateAppearance` | Ikona a barva stavu **pull requestu** (ne review) — jedno místo pro řádek seznamu i pro paletu |
 | `AppDelegate` | Ukončení aplikace: dokud běží review, ptá se |
@@ -3460,7 +3461,7 @@ review. Čtyři věci, které z toho plynou a nejsou zjevné:
   většinu času neplatilo.
 - **Podmínka je na jednom místě** (`Policy.refreshControl`) a čte ji **trojice**: tlačítko
   (podoba, `disabled`, popisek pro čtečku), `AppStore.refresh()` (pojistka proti druhému dotazu)
-  a **#441 si odsud vezme povolení pro `⌘R`**. Samotné zašedlé tlačítko by nestačilo — tutéž akci nabízí paleta ⌘K
+  a od #441 **zkratka `⌘R`**. Samotné zašedlé tlačítko by nestačilo — tutéž akci nabízí paleta ⌘K
   i `Zkusit znovu` v prázdném stavu seznamu, takže guard patří tam, kam všechny tři cesty ústí.
   `PollingService.refresh()` guard **nemá**: smyčka si ho volá sama a je sekvenční, kdežto
   „ruční obnovení“ je `AppStore.refresh()`.
@@ -3472,8 +3473,96 @@ review. Čtyři věci, které z toho plynou a nejsou zjevné:
 (#392). Je to vědomý rozdíl: důvod je vidět **v tom samém tlačítku** (točí se, tedy se ptáme)
 a trvá vteřiny, ne dokud si někdo nezmění nastavení.
 
-**Nápovědu se zkratkou** (`Obnovit seznam (⌘R)`, jak ji kreslí návrh) přidá až #441 — do té doby
-by uváděla zkratku, která v okně není.
+**Nápověda nese zkratku** (`Obnovit seznam (⌘R)`, jak ji kreslí návrh) — od #441, kdy `⌘R` v okně
+doopravdy je. Skládá ji `Policy.shortcutHelp`, takže závorka není opsaná vedle klávesy. Za běhu
+dotazu je nápověda jiná (`Ptám se GitHubu…`) a zkratku **nemá**: je zakázaná, a tvrdit u zakázané
+klávesy, že něco udělá, je totéž jako ji nakreslit tam, kde není.
+
+### Katalog klávesových zkratek (#441)
+
+Do #441 se kombinace psaly tam, kde bydlelo tlačítko — `ContentView`, `PullRequestDetailView`,
+`DiffView`, `DashboardView` —, a nakreslená popiska stála **vedle** klávesy (`shortcut: "⌘⇧R"`
+v témže volání jako `key: KeyEquivalent("r")`). Obojí se dá rozejít potichu a obojí se pozná
+jedině používáním. Od #441 je to katalog v `Policy` (`Policy.windowShortcut(_:)`) a k němu jeden
+překlad do SwiftUI (`WindowShortcutButtons`, `View.windowShortcut(_:)`).
+
+Co katalog drží a co se u něj nemá rozbít:
+
+- **Kolize se nedá poznat za běhu.** Dvě tlačítka s jednou kombinací nejsou chyba ani pád —
+  vyhraje to zaregistrované později (#151 u `⌥⇧↓`, #184 u `⌘↵`) a druhá zkratka „nefunguje“.
+  Katalog na jednom místě proto **je** ta kontrola: `WindowShortcutsTests` ho projdou
+  vyčerpávajícím výčtem a tvrdí, že se žádná kombinace neopakuje. Ověřeno vloženou regresí.
+- **Popiska je odvozená, ne opsaná.** `Combination.display` skládá glyfy z modifikátorů a klávesy,
+  takže paleta ⌘K, chip v panelu zadání, řádky dashboardu i nápovědy tlačítek kreslí vždycky to,
+  co je pod klávesou. Pořadí glyfů je `⌘⌃⌥⇧` — **z návrhu** (`⌘⇧P`, `⌘⌥S` v `docs/navrh.html`),
+  ne z menu macOS, které píše `⌃⌥⇧⌘`.
+- **Nápovědu skládá `Policy.shortcutHelp`** (`Obnovit seznam (⌘R)`), a je to jedno místo z téhož
+  důvodu: do #441 leželo v repu devět takových závorek jako literál.
+- **Jedna akce, víc kombinací.** `keyboardShortcut` páruje na **znak**, takže `⌃1` na české mapě
+  nezabere vůbec — pod tou klávesou je `+`. Sekce railu proto mají `primary` (`⌃1`) a `alternates`
+  (`⌃+`), a `WindowShortcutButtons` z toho udělá **dvě tlačítka s jednou akcí**. To je v pořádku;
+  co se rozbíjí, jsou dvě tlačítka s jednou **kombinací**. Alternativa musí mít stejné modifikátory
+  jako primární — je to tentýž hmat na jiné mapě, ne druhá zkratka.
+- **`View.windowShortcut(_:)` bere jen primární kombinaci**, protože na jedno tlačítko se
+  `keyboardShortcut` pověsí jednou. Akce, které visí na **viditelném** tlačítku (`⌘1` strom
+  souborů, `⌘⇧R` a `⌘⇧D` na dashboardu), proto alternativu mít nesmí — je na to tvrzení.
+- **`.cancelAction` je role, ne klávesa s maskou.** Modifikátory u ní `Combination.keyboardShortcut`
+  zahodí, takže je katalog nesmí psát; hlídá to test. Zapisuje se takhle schválně (#317) — `⎋`
+  v tomhle okně berou i sheety a paleta, a míchat `.escape` s `.cancelAction` znamená hádat, který
+  z nich AppKit spáruje dřív.
+- **Katalog je jen o hlavním okně.** Sheety, okno nastavení, okno novinek, uvítací brána a překryv
+  palety v něm nejsou: berou si klávesu samy a s oknem se nepotkají. Tam, kde by se překryly
+  (`⌘⏎` a `⎋` nad otevřenou paletou), je zkratka okna **zakázaná** — zakázané tlačítko klávesu
+  nebere a propadne dál. Že se kombinace nepíše nikde jinde, tvrdí stráž nad zdrojáky
+  s **jmenovitým** výčtem výjimek (tatáž konstrukce jako `SingleWayOutTests`).
+
+Co v okně je (dvacet akcí):
+
+| Zkratka | Akce | Kde je zakázaná |
+|---|---|---|
+| `⌘K` | paleta ⌘K (#184) | — |
+| `⌃⇥` / `⌃⇧⇥` | sousední záložka (#245) | — |
+| `⌃W` | zavřít záložku pull requestu | na domácí záložce (`Policy.closableTab`) |
+| `⌘R` | obnovit seznam | dokud běží dotaz (`Policy.refreshControl`, #442) |
+| `⌃1`–`⌃5` (+ `⌃+ ě š č ř`) | sekce railu | — |
+| `⌥↓` / `⌥↑` | další / předchozí nález (#151) | — |
+| `⌘1` | strom souborů u diffu | — |
+| `⌘2` | panel s mým review (#182) | v tabech bez panelu (#294) |
+| `⎋` | zpět na seznam commitů (#317) | mimo tab `Commity`, nad paletou a nad potvrzením |
+| `⌘⏎` / `⌃⏎` | **potvrzení** odeslání review (#151) | `Policy.canOpenSubmission`, otevřený sheet, otevřená paleta |
+| `⌘⇧P` | zadání pro agenta (#333) | cizí PR, prázdné zadání, otevřený sheet, otevřená paleta |
+| `⌘.` | zastavit běžící review | když na tom PR nic neběží |
+| `⌘⇧R` / `⌘⇧D` | dashboard: pustit vše, dopsat rozdělané (#181) | — |
+
+**`⌃W`, ne `⌘W`**, a sekce railu na `Control`u: `⌘W` patří systému (zavře okno) a `⌘1`/`⌘2` jsou
+uvnitř PR strom a panel. Zavírá se **aktivní záložka**, ne vybraný řádek v seznamu — `selection`
+je „na co se v seznamu kouká“, kdežto zavřít se má to, co je v okně.
+
+**`⌃⏎` je druhá klávesa k `⌘⏎`, ne náhrada, a tvrdou podmínku č. 1 nemění**: otevírá **potvrzení**,
+neodesílá. Přibylo proto, že `⌘⏎` si v tomhle okně bere i paleta (otevřít výsledek na GitHubu),
+takže nad otevřenou paletou je zkratka detailu zakázaná; `⌃⏎` se s ní nepotká. Zakázané jsou přitom
+**obě naráz a za týchž podmínek** — jsou to dvě tlačítka s jednou akcí, ne dvě akce. V samotném
+potvrzovacím sheetu zkratka na odeslání **není a nebude**.
+
+**`⌘.` nezastavuje kontrolu nálezů** (#150), i když běží ve stejném okně. Je to druhá session
+s vlastním tlačítkem a jedna klávesa, která by podle stavu zastavila jednou tohle a jindy tamto,
+by nikdy neřekla, co udělá.
+
+**Co se v harnessu ověřit nedá:** že ty klávesy fungují. Testovací host nedostane aktivaci
+(změřeno u #392, potvrzeno u #434), takže nemá key okno a stisk nemá kam sednout. Testuje se proto
+katalog a jeho zakázané stavy; **na české i anglické klávesnici to zkouší člověk.**
+
+Dvě věci, které se tím ověřují a z kódu je vidět nejsou, protože o nich rozhoduje systém:
+
+- **`⌃1`–`⌃5` může sebrat Mission Control.** `Přepnout na plochu N` je systémová zkratka na
+  `⌃`+číslici a událost se k aplikaci nedostane vůbec — nezáleží na tom, co má okno
+  zaregistrované. Kdo má víc ploch a tu zkratku zapnutou, musí ji vypnout v Nastavení systému,
+  nebo použít českou variantu (`⌃+`, `⌃ě`, …), na kterou Mission Control nesahá.
+- **`⌘.` je v Cocoa druhé jméno pro `cancelOperation:`**, tedy pro `⎋`. Klávesové ekvivalenty
+  tlačítek se vyhodnocují **dřív** než key bindings, takže nad běžícím review vyhraje naše
+  zastavení; ale tam, kde je naše tlačítko **zakázané**, událost propadne dál a `⌘.` se zachová
+  jako Escape (zavře sheet, vrátí ze commitu). Je to standardní chování systému, ne chyba —
+  a je to zapsané proto, že to z katalogu ani z testu vidět není.
 
 ### Odznak v railu (#366)
 
@@ -3714,9 +3803,13 @@ Co se u ní nemá rozbít:
 - **Nabízí se jen akce, které by něco udělaly.** Bez otevřeného PR tedy nic, co na PR visí
   (review, pohled na diff, panel); sekce railu, která je zrovna vidět v domácí záložce, taky ne.
   Tatáž zásada jako u bloku `Co teď` na dashboardu.
-- **Kreslená zkratka musí být skutečná.** V paletě jsou dvě (`⌘2`, `⌘,`). Návrh má u „pustit
-  review“ `⌘⇧R`, ale ta v aplikaci pouští review na **všechno, co neběželo** (dashboard) —
-  nakreslit ji tady by byla lež o tom, co okno umí.
+- **Kreslená zkratka musí být skutečná.** Od #441 se **nekreslí opsaná, ale odvozená** z katalogu
+  (`Policy.windowShortcut(…).display`), takže se s klávesou nedá rozejít: řádky nesou `⌘2`,
+  `⌃1`–`⌃5`, `⌘R` a nad běžícím review `⌘.`. Jediná výjimka je `⌘,` — to registruje scéna
+  `Settings`, ne okno. Návrh má u „pustit review“ `⌘⇧R`, ale ta v aplikaci pouští review na
+  **všechno, co neběželo** (dashboard) — nakreslit ji tady by byla lež o tom, co okno umí.
+- **Kreslí se číslicová varianta sekce** (`⌃1`), ne česká (`⌃+`). V řádku je na kombinaci jedna
+  kapsle a `⌃1 / ⌃+` by z ní udělalo dvě kvůli údaji, který se člověk naučí jednou.
 - **Řádek vlastního PR se od cizího neliší ničím kromě skupiny** (#336) — dvě vědomé odchylky od
   sekce 09 návrhu, obě zapsané ve specifikaci: podtitulek je `PRism#324 · ondrajodas`, ne
   `· 6 k předání` (ten počet se dá napsat teprve s razítkem předání, #334 — tak jak to u řádku

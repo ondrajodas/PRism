@@ -339,7 +339,7 @@ struct DiffView: View {
         Button("Strom souborů") {
             withAnimation(.snappy(duration: 0.15)) { isTreeExpanded.toggle() }
         }
-        .keyboardShortcut("1", modifiers: .command)
+        .windowShortcut(.fileTree)
         .opacity(0)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -377,7 +377,7 @@ struct DiffView: View {
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
-                    .help("Složit strom souborů (⌘1)")
+                    .help(Policy.shortcutHelp("Složit strom souborů", .fileTree))
                     .accessibilityLabel("Složit strom souborů")
                 }
                 .padding(.horizontal, 13)
@@ -433,7 +433,7 @@ struct DiffView: View {
             .buttonStyle(.plain)
             .background(Palette.chrome)
             .overlay(alignment: .trailing) { Rectangle().fill(Palette.lineSoft).frame(width: 1) }
-            .help("Rozložit strom souborů (⌘1)")
+            .help(Policy.shortcutHelp("Rozložit strom souborů", .fileTree))
             .accessibilityLabel("Rozložit strom souborů")
         }
     }
