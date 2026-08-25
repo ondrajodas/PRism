@@ -37,8 +37,14 @@ struct AgentPromptRenderProbe {
         // Šířku panelu si drží uživatel (`@AppStorage`), takže se rendruje i **v obou mezích**:
         // sedm popisků s počty se do 240 bodů vejít musí, jinak se `lineLimit(1)` postará o to,
         // že se rozdíl mezi „Vyřešená vlákna“ a „Odmítnuté nálezy“ pozná až po rozšíření panelu.
+        //
+        // Šířka se dosazuje do **vlastní domény** nasazené na to, co se rendruje (#411). Do #411
+        // se psala do `UserDefaults.standard`, a to byla doména hlavní instance: sonda tím
+        // přepisovala šířku panelu, kterou si nastavil člověk — a `removeObject` po ní ji smazal
+        // úplně, takže po jednom ručním spuštění sondy byl panel v aplikaci zpátky na výchozí.
+        let scratch = try ScratchDefaults("agentPromptPanelWidth")
         for panelWidth in [300.0, 240.0, 520.0] {
-            UserDefaults.standard.set(panelWidth, forKey: "findingsPanelWidth")
+            scratch.store.set(panelWidth, forKey: "findingsPanelWidth")
             let url = directory.appending(path: "zadani-panel-sirka-\(Int(panelWidth)).png")
             let scene = PullRequestDetailView(
                 store: store,
@@ -47,11 +53,15 @@ struct AgentPromptRenderProbe {
             )
             .frame(width: 1400, height: Self.height)
             .background(Palette.background)
+            .defaultAppStorage(scratch.store)
             try render(scene, width: 1400, height: Self.height, to: url)
             print("SONDA \(url.path) — panel \(Int(panelWidth)) b")
         }
-        UserDefaults.standard.removeObject(forKey: "findingsPanelWidth")
 
+        // Tady už panel nemá mít vynucenou šířku — kreslí se ve **výchozí**. Proto se klíč odebere
+        // a doména se nasazuje dál: bez ní by se vzala hodnota z domény hostitele, kterou v souběžném
+        // běhu tří slotů může mít napsanou kdokoli.
+        scratch.store.removeObject(forKey: "findingsPanelWidth")
         for width in [1400.0, 900.0] as [CGFloat] {
             let url = directory.appending(path: "zadani-panel-\(Int(width)).png")
             let scene = PullRequestDetailView(
@@ -61,6 +71,7 @@ struct AgentPromptRenderProbe {
             )
             .frame(width: width, height: Self.height)
             .background(Palette.background)
+            .defaultAppStorage(scratch.store)
             try render(scene, width: width, height: Self.height, to: url)
             print("SONDA \(url.path) — panel, \(Int(width)) b, tab \(store.reviewPanelTab)")
         }
@@ -143,25 +154,29 @@ struct AgentPromptRenderProbe {
         let directory = Self.outputDirectory
         let (store, cache) = try await prepared()
         defer { _ = cache }
+        // Šířku panelu drží `@AppStorage`, takže i tady se rendruje do **vlastní domény** — viz
+        // `rendersThePanelAndTheSheet` a #411. Bez ní by se kreslila šířka, kterou má nastavený
+        // člověk u stroje, a poslední snímek by ji přepsal.
+        let scratch = try ScratchDefaults("agentPromptPanelWidth")
 
-        try renderPanel(store: store, named: "nepredano", in: directory)
+        try renderPanel(store: store, named: "nepredano", in: directory, storage: scratch.store)
 
         // Předáno celé: razítko a věta, že se nové věci objeví tady.
         store.noteHandoff(of: store.agentPrompt(for: pr))
-        try renderPanel(store: store, named: "predano", in: directory)
+        try renderPanel(store: store, named: "predano", in: directory, storage: scratch.store)
 
         // Předáno a **pak přišlo nové vlákno** — stav, ve kterém razítko zůstává a volby se kreslí.
         // Vlákno se dosazuje do stavu store, protože fake gateway drží konverzaci na `updatedAt`
         // shrnutí a sonda pracuje s jedním PR; jinak by se muselo předstírat druhé tiknutí.
         store.conversationStates[pr] = .loaded(try Self.conversationWithNewThread(), updatedAt: Self.summary.updatedAt)
-        try renderPanel(store: store, named: "predano-zbyva", in: directory)
+        try renderPanel(store: store, named: "predano-zbyva", in: directory, storage: scratch.store)
         store.conversationStates[pr] = .loaded(try Self.conversation(), updatedAt: Self.summary.updatedAt)
 
         // Po pushi: agent opravil a poslal dva commity, takže zadání zastaralo.
         store.noteHandoff(of: store.agentPrompt(for: pr))
         store.commits[pr] = Self.commits
         store.detailStates[pr] = .loaded(Self.pushedDetail, updatedAt: Self.summary.updatedAt)
-        try renderPanel(store: store, named: "po-pushi", in: directory)
+        try renderPanel(store: store, named: "po-pushi", in: directory, storage: scratch.store)
         print("SONDA report po pushi: \(store.handoffReport(for: pr))")
 
         // Tentýž stav, ale s **nepředaným vláknem** — přesně to, co kreslí návrh (sekce 22.2):
@@ -172,17 +187,21 @@ struct AgentPromptRenderProbe {
         store.noteHandoff(of: store.agentPrompt(for: pr))
         store.toggleAgentPromptOption(.unresolvedThreads)
         store.detailStates[pr] = .loaded(Self.pushedDetail, updatedAt: Self.summary.updatedAt)
-        try renderPanel(store: store, named: "po-pushi-nove-vlakno", in: directory)
+        try renderPanel(store: store, named: "po-pushi-nove-vlakno", in: directory, storage: scratch.store)
 
         // **A ještě v užší mezi panelu** (240 b, viz `ReviewPanel`): jiná šířka je jiný design —
         // varování, razítko i dva řádky s počty se do ní musí vejít, jinak `lineLimit(1)` schová
         // zrovna to, kvůli čemu tam jsou.
-        UserDefaults.standard.set(240.0, forKey: "findingsPanelWidth")
-        try renderPanel(store: store, named: "po-pushi-uzky", in: directory)
-        UserDefaults.standard.removeObject(forKey: "findingsPanelWidth")
+        scratch.store.set(240.0, forKey: "findingsPanelWidth")
+        try renderPanel(store: store, named: "po-pushi-uzky", in: directory, storage: scratch.store)
     }
 
-    private func renderPanel(store: AppStore, named name: String, in directory: URL) throws {
+    private func renderPanel(
+        store: AppStore,
+        named name: String,
+        in directory: URL,
+        storage: UserDefaults
+    ) throws {
         let url = directory.appending(path: "zadani-\(name).png")
         let scene = PullRequestDetailView(
             store: store,
@@ -191,6 +210,7 @@ struct AgentPromptRenderProbe {
         )
         .frame(width: 1400, height: Self.height)
         .background(Palette.background)
+        .defaultAppStorage(storage)
         try render(scene, width: 1400, height: Self.height, to: url)
         print("SONDA \(url.path) — \(name), stav \(store.handoffReport(for: pr).stage), "
             + "zbývá \(store.handoffReport(for: pr).pending)")
