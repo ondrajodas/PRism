@@ -126,6 +126,22 @@ extension Policy {
     /// `pickerShowsSearch(count:)`.
     static let searchFrom = 6
 
+    /// Kreslí se pod nabídkou o `rowCount` řádcích **patka s nápovědou kláves** (#434)?
+    ///
+    /// **Nad prázdným výsledkem ne, a je to celé pravidlo.** Návrh to tak kreslí (sekce 24: nabídka
+    /// s `.pkr-empty` patku nemá) a důvod je věcný: ze tří položek patky by nad prázdnem dvě lhaly.
+    /// `↑↓` nemá co vybírat a `↵` nemá co potvrdit — `pickerSelection(from:step:count:)` vrátí `nil`,
+    /// takže se po obou klávesách doopravdy nestane nic. **Nápověda nesmí tvrdit klávesu, která
+    /// nefunguje**; zbylo by `esc zavře`, tedy patka kvůli jedné klávese pod větou, která říká, že
+    /// tu nic není.
+    ///
+    /// Rozhoduje se tady, ne ve views, ze stejného důvodu jako u `pickerShowsSearch(count:)`: obě
+    /// nabídky to musí dělat stejně a jestli patka **je**, je stav skutečného okna — kdežto tohle
+    /// je číslo, které se dá otestovat výčtem.
+    static func pickerShowsKeyHints(rowCount: Int) -> Bool {
+        rowCount > 0
+    }
+
     /// Kam se posune vybraný řádek po šipce. `count == 0` znamená, že není co vybírat.
     ///
     /// **Ořezává, necyklí.** V nabídce, která se pod rukama filtruje, je přeskok z konce na začátek
