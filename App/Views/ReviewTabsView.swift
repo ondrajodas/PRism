@@ -54,7 +54,14 @@ struct ReviewTabsView: View {
         // **Na samotném pruhu to nejde** — `.help` nad `ScrollView`em se nikde neprojeví;
         // změřeno na běžící aplikaci: `AXScrollArea` hlavičky zůstal bez `AXHelp`, kdežto
         // tlačítka záložek svoje nápovědy nesou.
-        .help("Fronta a rozdělaná review — mezi záložkami přepíná ⌃Tab a ⌃⇧Tab")
+        .help(
+            // Zkratky z katalogu (#441), ne napsané vedle klávesy.
+            """
+            Fronta a rozdělaná review — mezi záložkami přepíná \
+            \(Policy.windowShortcut(.nextTab).display) a \
+            \(Policy.windowShortcut(.previousTab).display)
+            """
+        )
     }
 
 
@@ -73,7 +80,7 @@ struct ReviewTabsView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Palette.ink3)
-            .help("Zavřít záložku — nic se tím nezahodí")
+            .help("\(Policy.shortcutHelp("Zavřít záložku", .closeTab)) — nic se tím nezahodí")
             .accessibilityLabel("Zavřít \(summary.repo.name)#\(summary.number)")
         }
         .padding(.horizontal, 11)

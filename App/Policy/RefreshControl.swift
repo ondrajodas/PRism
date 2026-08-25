@@ -37,7 +37,7 @@ extension Policy {
                 isSpinning: false,
                 isEnabled: true,
                 label: "Obnovit",
-                help: "Obnovit seznam"
+                help: Policy.shortcutHelp("Obnovit seznam", .refresh)
             )
         }
         return RefreshControl(

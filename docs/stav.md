@@ -4649,3 +4649,45 @@ obou stavů — hlavička nemá poskočit tím, že se aplikace ptá. Ověřeno 
 z dávky snímků hlavičky pořízených hned po startu je na prvních prstýnek a na dalších šipka, ve
 stejné poloze. Testů **4021** (devět nových); nápovědu se zkratkou `Obnovit seznam (⌘R)`, kterou
 kreslí návrh, přidá #441, protože do té doby by uváděla zkratku, která v okně není.
+
+### #441 — zkratky na to, co se v okně dělá denně
+
+**#441 je hotové.** Přibylo pět zkratek: `⌃W` (zavřít záložku pull requestu), `⌘R` (obnovit
+seznam), `⌃1`–`⌃5` (sekce railu), `⌃⏎` jako **druhá** klávesa k `⌘⏎` u potvrzení odeslání
+a `⌘.` (zastavit běžící review na PR v okně). `⌃W` schválně, ne `⌘W`: to patří systému —
+a ze stejného důvodu jsou sekce railu na `Control`u, protože `⌘1` a `⌘2` jsou uvnitř PR strom
+souborů a panel.
+
+**Česká klávesnice byla jádro zadání, ne detail.** `keyboardShortcut` páruje na **znak**, takže
+`⌃1` na české mapě nezabere vůbec — pod tou klávesou je `+`. Každá sekce railu proto dostala
+**dvě** tlačítka s toutéž akcí (`⌃1`+`⌃+`, `⌃2`+`⌃ě`, `⌃3`+`⌃š`, `⌃4`+`⌃č`, `⌃5`+`⌃ř`). Dvě
+tlačítka se stejnou akcí a jinou klávesou jsou v pořádku; dvě se **stejnou kombinací** ne.
+
+**Kombinace se tím posbíraly do katalogu** (`Policy.windowShortcut`) a je to hlavní změna, kterou
+z toho `App/` má. Do #441 se psaly ve čtyřech souborech a nakreslená popiska stála **vedle**
+klávesy (`shortcut: "⌘⇧R"` v témže volání jako `key: KeyEquivalent("r")`) — obojí se dá rozejít
+potichu. Teď je katalog jediné místo, kde se rozhoduje, co je pod kterou klávesou; popisku si
+z něj **odvozuje** paleta ⌘K, chip v panelu zadání, řádky dashboardu i nápovědy tlačítek. Do
+SwiftUI to překládá jedno místo (`WindowShortcutButtons`, `View.windowShortcut(_:)`) a `⌘R` si
+povolení bere z `Policy.refreshControl` (#442), ne z druhé kopie té podmínky.
+
+**Paleta ⌘K u akcí kreslí zkratku** — `⌘R`, `⌃1`–`⌃5` a nad běžícím review `⌘.` k tomu, co v ní
+bylo (`⌘2`, `⌘,`). U sekcí je to **číslicová** varianta; česká by z jedné kapsle udělala dvě kvůli
+údaji, který se člověk naučí jednou. Nápověda tlačítka obnovení má `Obnovit seznam (⌘R)`, jak to
+kreslí návrh — do #441 by uváděla klávesu, která v okně není.
+
+**Tvrdá podmínka č. 1 se nemění**: `⌃⏎` otevírá **potvrzení**, neodesílá, a v potvrzovacím sheetu
+zkratka na odeslání není a nebude. Zakázané je přitom s `⌘⏎` naráz a za týchž podmínek — jsou to
+dvě tlačítka s jednou akcí, ne dvě akce.
+
+Testů **4040** (devatenáct nových, dvě upravená). Devatenáctý přibyl po Copilotovi a je z nich
+nejužitečnější: hlídá, že se kombinace **nekreslí literálem**. Ta první stráž ho nechytala, protože
+nakreslená kapsle žádnou klávesu neregistruje — jen o ní tvrdí. Tímhle způsobem zůstalo `⌘2`
+natvrdo v hlavičce panelu, `⌘K` v kapsli hlavičky okna a `⎋` v nápovědě commitu. Ověřeno **vloženou regresí** z obou stran: kolize
+`⌘K` shodí tvrzení o duplicitě, literální `keyboardShortcut` v `ContentView` shodí stráž nad
+zdrojáky. **Co se v harnessu ověřit nedá:** že klávesy fungují — testovací host nedostane aktivaci
+(#392), takže nemá key okno a stisk nemá kam sednout. Poslední kolo dělá člověk na běžící
+aplikaci, na české i anglické mapě — a s ním dvě věci, o kterých rozhoduje systém: `⌃1`–`⌃5`
+umí sebrat Mission Control (`Přepnout na plochu N`) a `⌘.` je v Cocoa druhé jméno pro Escape,
+takže tam, kde je naše zastavení zakázané, se chová jako `⎋`. Obojí je zapsané v dokumentaci,
+protože z katalogu ani z testu to vidět není.

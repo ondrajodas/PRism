@@ -79,7 +79,9 @@ struct FindingNavigationView: View {
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
-        .help(direction == .forward ? "Další nález (⌥↓)" : "Předchozí nález (⌥↑)")
+        .help(direction == .forward
+            ? Policy.shortcutHelp("Další nález", .nextFinding)
+            : Policy.shortcutHelp("Předchozí nález", .previousFinding))
         .accessibilityLabel(direction == .forward ? "Další nález" : "Předchozí nález")
     }
 

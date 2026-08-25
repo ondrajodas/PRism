@@ -634,8 +634,7 @@ struct DashboardView: View {
                     action(
                         symbol: "play.fill",
                         title: "Pustit review na vše, co neběželo",
-                        shortcut: "⌘⇧R",
-                        key: KeyEquivalent("r"),
+                        shortcut: .runAllReviews,
                         isLast: draft == nil
                     ) { isConfirmingBulkRun = true }
                 }
@@ -643,8 +642,7 @@ struct DashboardView: View {
                     action(
                         symbol: "square.and.pencil",
                         title: "Dopsat review pro \(draft.repo.name)#\(draft.number)",
-                        shortcut: "⌘⇧D",
-                        key: KeyEquivalent("d"),
+                        shortcut: .openDraft,
                         isLast: true
                     ) { open(draft) }
                 }
@@ -654,11 +652,14 @@ struct DashboardView: View {
 
     /// Jeden řádek akce. Zkratka je opravdová (`keyboardShortcut`), ne jen nakreslený chip —
     /// popiska klávesy, která nic nedělá, je lež o tom, co okno umí.
+    ///
+    /// **Kombinace se sem nepíše, bere se z katalogu** (#441): do té doby stál v tomtéž volání
+    /// nakreslený `"⌘⇧R"` vedle `KeyEquivalent("r")`, takže se popiska s klávesou dala rozejít
+    /// změnou jedné z nich.
     private func action(
         symbol: String,
         title: String,
-        shortcut: String,
-        key: KeyEquivalent,
+        shortcut: WindowShortcut.Action,
         isLast: Bool,
         run: @escaping () -> Void
     ) -> some View {
@@ -673,7 +674,7 @@ struct DashboardView: View {
                         .font(.system(size: 12.5))
                         .lineLimit(1)
                     Spacer(minLength: 8)
-                    Text(verbatim: shortcut)
+                    Text(verbatim: Policy.windowShortcut(shortcut).display)
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(Palette.ink3)
                         .padding(.horizontal, 5)
@@ -687,7 +688,7 @@ struct DashboardView: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .keyboardShortcut(key, modifiers: [.command, .shift])
+            .windowShortcut(shortcut)
             if !isLast {
                 Rectangle().fill(Palette.lineSoft).frame(height: 1)
             }

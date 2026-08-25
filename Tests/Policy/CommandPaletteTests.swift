@@ -413,9 +413,16 @@ struct CommandPaletteTests {
     func actionsOnlyDrawRealShortcuts() {
         // `⌘⇧R` v návrhu patří jiné akci (pustit review na vše, co neběželo, na dashboardu),
         // takže na řádku „pustit review na tenhle PR“ by to byla lež o tom, co okno umí.
+        //
+        // Od #441 mají zkratku i sekce railu (`⌃1`–`⌃5`) a obnovení (`⌘R`) — a berou si ji
+        // z katalogu okna, takže se s klávesou nedají rozejít. `Zrušit běžící review` (`⌘.`)
+        // v tomhle výčtu není, protože se nabízí jedině nad běžícím review.
         let items = Policy.paletteActions(open: PRIdentifier("keboola/vault#85")!)
 
-        #expect(items.compactMap(\.shortcut).sorted() == ["⌘,", "⌘2"])
+        #expect(
+            items.compactMap(\.shortcut).sorted()
+                == ["⌃1", "⌃2", "⌃3", "⌃4", "⌃5", "⌘,", "⌘2", "⌘R"]
+        )
     }
 
     @Test("Akce jsou vždycky ve své skupině a nikam neodesílají")

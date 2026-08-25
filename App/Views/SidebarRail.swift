@@ -107,7 +107,7 @@ struct SidebarRail: View {
                 .overlay(alignment: .topTrailing) { badge(count(of: item)) }
         }
         .buttonStyle(.plain)
-        .help(item.title)
+        .help(Policy.shortcutHelp(item.title, .openSection(item)))
         .accessibilityLabel(item.title)
         .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
     }

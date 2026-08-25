@@ -36,6 +36,10 @@ struct CommandPaletteRenderProbe {
         case design = "navrh"
         /// Celý katalog: pět skupin po stropu, takže se karta scrolluje a je vidět, čím začíná.
         case full = "plno"
+        /// Jen skupina `Akce` (#441): v plném katalogu je až za nálezy, soubory a dvěma skupinami
+        /// PR, tedy pod hranou karty — a přitom je to jediná skupina, ve které se **kreslí
+        /// zkratky**. Bez tohohle scénáře se na ně nedá podívat jinak než na klávesnici.
+        case actions = "akce"
     }
 
     @Test("Vyrendrovat paletu se skupinami Pull requesty k review a Moje PR")
@@ -43,7 +47,7 @@ struct CommandPaletteRenderProbe {
         let directory = Self.outputDirectory
         for scenario in Scenario.allCases {
             let store = try await prepared()
-            let items = scenario == .design ? Self.trimmed(store.paletteItems) : store.paletteItems
+            let items = Self.items(for: scenario, from: store.paletteItems)
             let url = directory.appending(path: "paleta-\(scenario.rawValue).png")
             try render(
                 CommandPaletteView(items: items, run: { _ in }, close: {})
@@ -101,6 +105,17 @@ struct CommandPaletteRenderProbe {
     ///
     /// Skupina, která ve výčtu není, se **nechá celá**, ne zahodí: nová skupina má být na snímku
     /// vidět, ne tiše chybět — a přebývající řádky se poznají, kdežto chybějící ne.
+    private static func items(
+        for scenario: Scenario,
+        from items: [CommandPalette.Item]
+    ) -> [CommandPalette.Item] {
+        switch scenario {
+        case .design: trimmed(items)
+        case .full: items
+        case .actions: items.filter { $0.group == .actions }
+        }
+    }
+
     private static func trimmed(_ items: [CommandPalette.Item]) -> [CommandPalette.Item] {
         let limits: [CommandPalette.Group: Int] = [
             .findings: 2, .files: 2, .pullRequests: 1, .myPullRequests: 1, .actions: 2,
