@@ -31,11 +31,13 @@ struct DashboardFooterSeparatorTests {
     ///
     /// Blok `Čeká na moje review`: obrys nahoře, spodní linka hlavičky, čtyři mezi pěti řádky,
     /// **jedna nad patkou** a obrys dole — tedy osm. Blok `Moje PR` je prázdný (vlastní PR ve
-    /// scénáři žádné nejsou), takže z něj jsou tři: obrys, hlavička, obrys. Celkem jedenáct.
+    /// scénáři žádné nejsou), takže z něj jsou tři: obrys, hlavička, obrys. Od #443 stojí pod
+    /// sloupci ještě blok `Dění` a ten je v tomhle scénáři prázdný taky (záznam se neplní), takže
+    /// z něj jsou další tři. Celkem čtrnáct.
     ///
     /// Počet je v tvrzení schválně: bez něj by test prošel i tehdy, kdyby se patka nenakreslila
     /// vůbec — deset stejně silných čar je taky „všechny stejně silné“.
-    private static let expectedLines = 11
+    private static let expectedLines = 14
 
     @Test("Nad patkou je jedna čára, ne dvě")
     func drawsASingleHairlineAboveTheFooter() async throws {

@@ -405,6 +405,30 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   soubor **není** porucha, nečitelný je) a store ten příznak musí donést až do prázdného stavu
   (`AppStoreFeedTests`), protože jinak by zůstal ležet ve storu a nikdo by ho nečetl.
 
+  **Blok na dashboardu (#443)** — `DashboardActivityTests` výčtem a tři tvrzení ve store
+  (`AppStoreFeedTests`). To nejcennější je zase negativní: **dashboard značku poslední návštěvy
+  neposune**. Čte se u toho i klik na řádek, protože ten jde přes store (`show(_ event:)`) a je to
+  jediné místo v tom bloku, které se storu dotýká; kdyby značku posunul, vynulovalo by se nepřečtené
+  pohledem na domácí záložku a odznak v railu by zmizel, aniž bych něco přečetl — proto se v tomtéž
+  testu tvrdí i to, že odznak dál svítí.
+
+  V `Policy`: strop pěti řádků, patka `+37` a to, že se **nekreslí ani při přesně pěti** (tam se
+  pozná `>=` proti `>`), že se **rozházené pořadí srovná před řezem** (jinak by řez ukázal pět jiných
+  položek a pět řádků vypadá platně, ať v nich stojí cokoli) a že duplicita nezabere řádek ani se
+  nepočítá do patky. Nadpis počítá **nepřečtené z celého záznamu**, ne z nakreslených řádků (dvacet
+  položek, jedenáct nových, pět řádků), nula se nepíše a počet se skloňuje. **Den u času** se ověřuje
+  z obou stran: s příznakem `včera v 07:58`, bez něj `v 07:58`, dnešek den nedostane ani s příznakem,
+  starší dostane datum a čerstvá událost zůstane relativní **na obou obrazovkách** — a hranice okna
+  se porovnává přímo se `showsRelativeTime`, aby se ty dvě obrazovky nemohly rozejít v tom, odkdy se
+  píše hodinami. **Čtyři prázdna, čtyři různé věty** (tvrdí se, že je jich tolik, kolik je případů
+  `allCases`), ztracená historie o klidu nemluví a zakázané se pozná od vypnutého.
+
+  Ve store: strop je **o kresbě, ne o množině** (sedm položek → pět řádků, patka `+2`, nadpis
+  i odznak sedm) a blok kreslí **tytéž položky** jako sekce, jen useknuté.
+
+  Čar v levém sloupci dashboardu je proto od #443 **čtrnáct místo jedenácti**
+  (`DashboardFooterSeparatorTests`) — prázdný blok `Dění` přidá obrys, hlavičku a obrys.
+
   **Ověřeno vložením regrese, dvakrát:** posun značky při vstupu (`guard visible || wasActivityVisible`)
   shodil dva testy — `Vstup do sekce značku neposune` i `Klik na tutéž sekci značku nehýbe` —,
   a vrácení notifikační brány do `announceNewPullRequests` shodilo právě ten jeden, který ji má

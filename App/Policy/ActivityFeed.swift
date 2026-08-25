@@ -35,11 +35,29 @@ struct ActivityFeedDay: Identifiable, Hashable, Sendable {
     let rows: [ActivityFeedRow]
 }
 
+/// Jak se u řádku dění napíše čas (#443).
+///
+/// **Rozhodnutí, ne hotový text u obou podob.** Relativní stáří se v okně přepočítává samo
+/// (`Text(_:format:)`), takže řetězec z `Policy` by zamrzl na tom, kdy se poskládal — kdežto
+/// u hodin je den součástí rozhodnutí a skládat ho ve view by znamenalo dvě místa, která si to
+/// počítají sama.
+enum ActivityTimeLabel: Hashable, Sendable {
+    /// `před 2 min` — text skládá view, protože se sám přepočítává.
+    case relative
+    /// Hotový text: `v 07:58`, `včera v 07:58`, `20. srpna v 07:58`.
+    case absolute(String)
+}
+
 /// Co se ukáže, když v dění nic není (#414).
 ///
-/// **Tři prázdna, která se nesmí slít**, ze stejného důvodu jako `čisté review` a `review se
-/// nepovedlo`: první znamená klid, druhé dvě „bannery nechodí“ — a každé se spravuje jinde.
-enum ActivityEmptyState: Hashable, Sendable {
+/// **Čtyři prázdna, která se nesmí slít**, ze stejného důvodu jako `čisté review` a `review se
+/// nepovedlo`: první znamená klid, druhé ztracenou historii a poslední dvě „bannery nechodí“ —
+/// a každé se spravuje jinde.
+///
+/// `CaseIterable` je od #443 a je to tvrzení, ne pohodlí: blok na dashboardu z každého z nich dělá
+/// **jednu větu** a test se ptá, jestli je těch vět tolik, kolik je případů. Bez výčtu by pátý stav
+/// mohl tiše splynout s klidem.
+enum ActivityEmptyState: Hashable, CaseIterable, Sendable {
     /// Nic se nestalo. Klid, ne porucha.
     case calm
     /// Soubor se záznamem byl, ale nepřečetl se — **historie je ztracená**. Vlastní stav proto, že
@@ -563,6 +581,28 @@ extension Policy {
     /// čas se v okně **přepočítává sám** a řetězec z `Policy` by zamrzl na tom, kdy se poskládal.
     static func showsRelativeTime(of date: Date, now: Date) -> Bool {
         now.timeIntervalSince(date) < relativeActivityWindow
+    }
+
+    /// Čas u řádku dění — a jestli si k němu řádek nese **den** (#443).
+    ///
+    /// `carriesDay` je „nese si den **sám řádek**?“. V sekci ne (`false`): den nese **hlavička
+    /// bloku** (`Dnes`, `Včera`, `čtvrtek 20. srpna`), takže se u řádku píše jen `v 07:58`. Na
+    /// dashboardu ano (`true`): blok je jeden a bez dělení po dnech, takže by včerejší událost
+    /// vypadala jako dnešní ráno.
+    ///
+    /// **Jedno rozhodnutí pro obě obrazovky.** Dvě místa, která si to počítají sama, se rozejdou
+    /// právě v tom, co je vidět jen jeden den v roce; formát je proto tentýž jako u `visitLabel`
+    /// (`v 07:58`, `včera v 07:58`, `20. srpna v 07:58`) a jde o **totéž** čtení dne, takže se ty
+    /// dva popisky na jedné obrazovce nemají čím rozejít.
+    static func activityTime(
+        of date: Date,
+        now: Date,
+        carriesDay: Bool,
+        calendar: Calendar = .current
+    ) -> ActivityTimeLabel {
+        if showsRelativeTime(of: date, now: now) { return .relative }
+        guard carriesDay else { return .absolute("v \(date.formatted(.dateTime.hour().minute()))") }
+        return .absolute(visitLabel(date, now: now, calendar: calendar))
     }
 
     /// Věta pod nadpisem sekce. Druhá půlka mluví o **značce poslední návštěvy**, protože ta

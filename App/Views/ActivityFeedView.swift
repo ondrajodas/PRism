@@ -2,9 +2,14 @@ import SwiftUI
 
 /// Sekce railu `Dění` (#414) — co se na pull requestech stalo, když jsem se nekoukal.
 ///
-/// **Sekce, ne blok na dashboardu ani popover.** Dashboard odpovídá na „co hoří teď“ a kreslí
-/// nejvýš pět řádků na blok (#371), takže by z dění byla ukázka, ne místo, kde se dá zůstat;
-/// popover se zavře prvním kliknutím a nedá se v něm rolovat.
+/// **Sekce, ne popover** — a od #443 **taky blok na dashboardu**. Do #443 tady stálo, že dění
+/// blokem na dashboardu není, protože by z něj byla ukázka a ne místo, kde se dá zůstat; ukázalo
+/// se, že ta ukázka je právě to, co chybí. Sekce se do railu musí **jít**, tedy napřed vědět, že je
+/// do čeho koukat — a odznak v railu říká počet, ne co se stalo.
+///
+/// **Co se tím nemění**: rolovat, číst po dnech a dohledávat se chodí sem. Blok na dashboardu
+/// (`DashboardActivity`, návrh sekce 31) je ukázka a rozcestník — bez vlastního prázdna, bez
+/// vlastního pruhu poslední návštěvy a bez vlastního řádku. Kdyby si je pořídil, jsou to dvě dění.
 ///
 /// Rozměry a barvy jsou z návrhu (sekce 27) doslova; kdo je mění, mění návrh.
 struct ActivityFeedView: View {
@@ -122,32 +127,18 @@ struct ActivityFeedView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
     }
 
-    /// Osa dne: svislá čára a na ní puntíky.
+    /// Osa dne (`ActivityTimeline`, sdílená s dashboardem od #443). Sem se do ní vkládá i pruh
+    /// `Tady jsem skončil` — na dashboardu žádný není, protože pět řádků nemá co dělit na dvě
+    /// hromádky.
     ///
-    /// Čára je **na pozadí**, ne prvek v každém řádku: `.tl::before` z návrhu jde přes celý blok
-    /// a prvek na řádek by znamenal jeden prvek navíc na položku (#252 — co se dá spočítat, se
-    /// nevyjednává).
+    /// **Den nese hlavička bloku**, takže si ho řádek nese jen na dashboardu (`showsDay`).
     private func timeline(_ day: ActivityFeedDay) -> some View {
-        VStack(alignment: .leading, spacing: 11) {
+        ActivityTimeline {
             ForEach(day.rows) { row in
                 if row.isFirstSeen { SeenMarker(at: lastVisit, now: now) }
                 ActivityRowView(event: row.event, now: now, open: open)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 14)
-        .padding(.bottom, 16)
-        .background(alignment: .topLeading) { rail }
-    }
-
-    /// Svislá čára osy. `left: 30px` z návrhu je střed puntíku (18 odsazení + 12 poloviny
-    /// dvacetičtyřky), takže se kreslí pod ním, ne vedle.
-    private var rail: some View {
-        Rectangle()
-            .fill(Palette.line)
-            .frame(width: 2)
-            .padding(.vertical, 8)
-            .padding(.leading, 29)
     }
 }
 
@@ -181,191 +172,11 @@ private struct SeenMarker: View {
     }
 }
 
-/// Jeden řádek dění (#414).
+/// Prázdný stav sekce (#414) — **čtyři různá prázdna**, viz `ActivityEmptyState`.
 ///
-/// **Bez pružné výšky** (#220, #375): puntík má rám 24 × 24 a obsah si výšku navrhuje sám. Klikatelný
-/// je celý řádek — cíl je v něm napsaný, takže by tlačítko jen na šipce znamenalo cíl, na který se
-/// nedá kliknout.
-private struct ActivityRowView: View {
-    let event: ActivityEvent
-    /// Hodiny obrazovky, ne `Date()` — viz `ActivityFeedView.now`.
-    let now: Date
-    let open: (ActivityEvent) -> Void
-    /// Odkaz ven otevírá **view**, ne store — jako v paletě ⌘K. Store se o prohlížeči nemá co
-    /// dozvědět a jediný řádek, který ho potřebuje, je ten, který v okně nemá kam vést.
-    @Environment(\.openURL) private var openURL
-
-    var body: some View {
-        Button(action: activate) { face }
-            .buttonStyle(.plain)
-            .pointerStyle(.link)
-            .help(help)
-            .accessibilityLabel(accessibilityLabel)
-    }
-
-    private func activate() {
-        guard case .gitHub = Policy.destination(of: event.kind) else {
-            open(event)
-            return
-        }
-        guard let url = Policy.gitHubURL(of: event.pullRequest) else { return }
-        openURL(url)
-    }
-
-    private var face: some View {
-        HStack(alignment: .top, spacing: 8) {
-            dot
-            line
-        }
-    }
-
-    private var dot: some View {
-        Image(systemName: Policy.symbol(of: event.kind))
-            .font(.system(size: 11))
-            .foregroundStyle(tone)
-            .frame(width: 24, height: 24)
-            .background(Palette.chrome, in: .circle)
-            .overlay { Circle().strokeBorder(tone, lineWidth: 1) }
-    }
-
-    /// Obsah řádku. **Zalomí se, když se nevejde** (`.tl-line` má `flex-wrap: wrap`), takže se
-    /// dlouhý titulek PR nezkrátí na nic — ale cíl vpravo se od něj musí umět odtrhnout, jinak by
-    /// se šipka zalomila doprostřed textu.
-    private var line: some View {
-        HStack(alignment: .center, spacing: 7) {
-            FlowRow(spacing: 7, lineSpacing: 4) {
-                Text(verbatim: event.headline)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(isDimmed ? Palette.ink2 : Palette.ink)
-                if let detail = event.detail {
-                    Text(verbatim: "· \(detail)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(isDimmed ? Palette.ink3 : Palette.ink2)
-                        .lineLimit(1)
-                }
-                if let head = event.head {
-                    ShaChip(sha: head)
-                }
-                if Policy.showsSilentChip(event.kind, announced: event.wasAnnounced) {
-                    SilentChip()
-                }
-                // PR a autor jedním prvkem: `.tl-line` má mezeru 7 bodů, takže by tečku mezi nimi
-                // odsadila od obojího a vypadala by jako oddělovač celého řádku.
-                Text(verbatim: [event.pullRequest.description, event.author]
-                    .compactMap { $0 }
-                    .joined(separator: " · "))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Palette.ink2)
-                    .lineLimit(1)
-                time
-            }
-            Spacer(minLength: 8)
-            destination
-        }
-        .frame(minHeight: 24, alignment: .center)
-    }
-
-    @ViewBuilder private var time: some View {
-        if Policy.showsRelativeTime(of: event.at, now: now) {
-            Text(event.at, format: .relative(presentation: .named))
-                .font(.system(size: 11.5))
-                .foregroundStyle(Palette.ink3)
-        } else {
-            HStack(spacing: 3) {
-                Text("v")
-                Text(event.at, format: .dateTime.hour().minute())
-            }
-            .font(.system(size: 11.5))
-            .foregroundStyle(Palette.ink3)
-        }
-    }
-
-    /// Kam řádek vede. **Napsané, ne šipka bez obsahu** — a řádek, který vede jen ven, to přiznává
-    /// i barvou (návrh, poznámka 92).
-    private var destination: some View {
-        Text(verbatim: destinationLabel)
-            .font(.system(size: 11.5))
-            .foregroundStyle(isDimmed ? Palette.ink3 : Palette.accent)
-            .lineLimit(1)
-    }
-
-    private var destinationLabel: String {
-        switch Policy.destination(of: event.kind) {
-        case .tab(let tab): "→ \(tab.czechLabel)"
-        case .gitHub: "GitHub ↗"
-        }
-    }
-
-    /// Řádek, který do okna nevede, je celý ztlumený: PR z fronty odešel, takže se v seznamu
-    /// nedohledá a fialový cíl by slíbil něco, co se nestane.
-    private var isDimmed: Bool {
-        Policy.destination(of: event.kind) == .gitHub
-    }
-
-    private var tone: Color {
-        switch Policy.tone(of: event.kind) {
-        case .neutral: Palette.line
-        case .ok: Palette.ok
-        case .critical: Palette.crit
-        case .stale: Palette.stale
-        case .accent: Palette.accent
-        }
-    }
-
-    private var help: String {
-        switch Policy.destination(of: event.kind) {
-        case .tab(let tab): "Otevře \(event.pullRequest) a v něm záložku \(tab.czechLabel)"
-        case .gitHub: "Otevře \(event.pullRequest) v prohlížeči — z fronty už odešel"
-        }
-    }
-
-    /// Pro čtečku obrazovky celá věta: řádek se skládá z kusů, které samostatně neříkají nic.
-    private var accessibilityLabel: String {
-        [
-            event.headline,
-            event.detail,
-            event.head,
-            event.pullRequest.description,
-            event.author,
-            destinationLabel
-        ]
-        .compactMap { $0 }
-        .joined(separator: ", ")
-    }
-}
-
-/// Pilulka se sha (`.tl-line .sha`) — hlava, na které PR stojí teď.
-private struct ShaChip: View {
-    let sha: String
-
-    var body: some View {
-        // Zkrácená na sedm znaků jako všude jinde v okně; plná je v tooltipu, ať se dá porovnat.
-        Text(verbatim: String(sha.prefix(7)))
-            .font(.system(size: 11, design: .monospaced))
-            .foregroundStyle(Palette.ink2)
-            .padding(.horizontal, 5)
-            .background(Palette.raised, in: .rect(cornerRadius: 4))
-            .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(Palette.lineSoft, lineWidth: 1) }
-            .help(sha)
-    }
-}
-
-/// Chip `bez banneru` (`.tl-line .botchip`).
-///
-/// **Půlka hodnoty téhle obrazovky.** Záznam se plní i tehdy, když je aplikace mlčící — a tenhle
-/// chip je to, co dělá z „nepřišlo mi to“ odpověď, ne domněnku.
-private struct SilentChip: View {
-    var body: some View {
-        Text("bez banneru")
-            .font(.system(size: 10))
-            .foregroundStyle(Palette.ink3)
-            .padding(.horizontal, 5)
-            .background(Palette.raised, in: .rect(cornerRadius: 20))
-            .help("O téhle události nedorazila notifikace — v záznamu je stejně.")
-    }
-}
-
-/// Prázdný stav sekce (#414) — **tři různá prázdna**, viz `ActivityEmptyState`.
+/// **Tlačítka jsou tady schválně, ne na dashboardu** (#443): odpovídají na „proč je tu prázdno“
+/// a spraví se jimi to, kvůli čemu je — a to je obsah pro obrazovku, na kterou jsem přišel
+/// schválně. Na dashboardu z nich zbude jedna věta (`Policy.dashboardActivity`).
 private struct ActivityFeedEmptyView: View {
     let state: ActivityEmptyState
     let openSettings: () -> Void

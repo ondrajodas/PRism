@@ -341,6 +341,17 @@ extension AppStoreFeedTests {
         #expect(store.railActivityCount == nil)
     }
 
+    /// Prázdný stav jde do bloku na dashboardu **tou samou cestou** (#443) — jedno rozhodnutí, dvě
+    /// obrazovky. Věta je kratší než ta v sekci, ale mluví o téže věci.
+    @Test("Prázdný stav se propíše i do bloku na dashboardu")
+    func explainsTheEmptyBlockOnTheDashboard() async {
+        let store = stored(InMemoryPreferences())
+
+        #expect(store.activityEmptyState == .calm)
+        #expect(store.dashboard.activity.rows.isEmpty)
+        #expect(store.dashboard.activity.emptyExplanation?.contains("nic nestalo") == true)
+    }
+
     @Test("Prázdný záznam dá prázdný stav, plný ne")
     func picksTheEmptyState() async {
         let center = FakeNotificationCenter()
@@ -381,5 +392,80 @@ extension AppStoreFeedTests {
         #expect(store.activityEmptyState == .notificationsOff)
         store.notificationFailure = "Notifikace nemají povolení."
         #expect(store.activityEmptyState == .notificationsDenied)
+    }
+}
+
+// MARK: - Blok na dashboardu (#443)
+
+extension AppStoreFeedTests {
+    /// Fronta o `count` cizích PR ve dvou ticích: první tik jen založí snímek, druhý z těch nových
+    /// udělá řádky dění.
+    private func filled(_ count: Int, preferences: InMemoryPreferences) -> AppStore {
+        let arrivals = (1...count).map { summary("cli/cli#\($0 + 1)") }
+        return store(
+            FakeGitHubGateway([
+                .success([summary("cli/cli#1")]),
+                .success([summary("cli/cli#1")] + arrivals),
+            ]),
+            center: FakeNotificationCenter(),
+            preferences: preferences
+        )
+    }
+
+    /// **Nejcennější tvrzení #443, a rozbije se potichu.** Blok je ukázka, ne návštěva: kdyby
+    /// značku posunul, vynulovalo by se nepřečtené tím, že jsem se podíval na domácí záložku —
+    /// a odznak v railu by zmizel, aniž bych něco přečetl. Posunout ji smí jedině odchod ze sekce.
+    ///
+    /// Čte se u toho **i klik na řádek**: jde přes store (`show(_ event:)`) a je to jediné místo
+    /// v tom bloku, které se storu vůbec dotýká.
+    @Test("Dashboard značku poslední návštěvy neposune")
+    func doesNotMoveTheMarkFromTheDashboard() async {
+        let preferences = InMemoryPreferences()
+        let store = filled(3, preferences: preferences)
+        await store.loadStoredActivity()
+        await store.refresh()
+        await store.refresh()
+
+        // Několik průchodů tělem: blok se čte pokaždé znovu a pokaždé musí značku nechat být.
+        let block = store.dashboard.activity
+        _ = store.dashboard
+        store.show(block.rows[0])
+
+        #expect(block.rows.count == 3)
+        #expect(store.activityVisitSnapshot == nil)
+        #expect(ActivityVisitLedger(preferences: preferences).lastVisit() == nil)
+        // A odznak v railu proto pořád svítí — je to ta škoda, kterou by posun značky napáchal.
+        #expect(store.railActivityCount == 3)
+        #expect(store.dashboard.activity.title == "Dění · 3 nové")
+    }
+
+    /// Strop je **o kresbě, ne o množině**: v bloku pět řádků, v nadpisu i v odznaku celý záznam.
+    @Test("Blok kreslí pět řádků, nadpis a odznak počítají celý záznam")
+    func capsTheBlockButNotTheCount() async {
+        let store = filled(7, preferences: InMemoryPreferences())
+        await store.loadStoredActivity()
+        await store.refresh()
+        await store.refresh()
+
+        #expect(store.activityEvents.count == 7)
+        #expect(store.dashboard.activity.rows.count == Policy.dashboardRowLimit)
+        #expect(store.dashboard.activity.footer?.rest == "+2")
+        #expect(store.dashboard.activity.footer?.section == .activity)
+        #expect(store.dashboard.activity.title == "Dění · 7 nových")
+        #expect(store.railActivityCount == 7)
+    }
+
+    /// Blok kreslí **tytéž položky** jako sekce, jen useknuté — dvě podoby jedné události by se
+    /// rozešly stejně, jako by se rozešly dvě podoby řádku fronty.
+    @Test("Blok a sekce mluví o týchž položkách")
+    func showsTheSameEventsAsTheSection() async {
+        let store = filled(3, preferences: InMemoryPreferences())
+        await store.loadStoredActivity()
+        await store.refresh()
+        await store.refresh()
+
+        let fromSection = store.activityFeed.flatMap { $0.rows.map(\.event) }
+
+        #expect(store.dashboard.activity.rows == Array(fromSection.prefix(Policy.dashboardRowLimit)))
     }
 }

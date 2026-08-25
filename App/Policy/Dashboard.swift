@@ -13,6 +13,12 @@ struct Dashboard: Hashable, Sendable {
     let drafts: DraftsCard
     /// Podíl reviewerů na nálezech za posledních pár dní.
     let reviewers: [ReviewerShareOfFindings]
+    /// Blok `Dění` pod oběma sloupci (#443) — pět nejnovějších řádků a cesta do sekce.
+    ///
+    /// **Je součástí téhož snímku schválně.** `DashboardView` si dashboard bere jednou za
+    /// překreslení, takže vlastní getter na tenhle blok by znamenal druhý průchod záznamem dění při
+    /// každém průchodu tělem — a druhou pravdu o jedné obrazovce.
+    let activity: DashboardActivity
 
     /// Kolik PR čeká a z kolika repozitářů. Repozitáře patří do popisku, protože „pět PR“
     /// z jednoho repa je jiná práce než pět z pěti.
@@ -96,6 +102,10 @@ extension Policy {
     /// práce, takže rozdělané review nemá kde zmizet podle toho, čí je PR. Od #333 na vlastním PR
     /// draft ani nevznikne, takže se ta dvě čísla dneska stejně nerozejdou — kdyby se karta navázala
     /// na frontu, starší draft na vlastním PR by z ní tiše vypadl.
+    ///
+    /// **Blok `Dění` se skládá tady taky** (#443), a je to tentýž důvod jako u karty `Moje PR`:
+    /// dashboard je jeden snímek. Značka poslední návštěvy jde dovnitř jako **vstup**, nikdy se
+    /// odsud neposouvá — to smí jedině odchod ze sekce.
     static func dashboard(
         pullRequests: [PullRequestSummary],
         records: [PRIdentifier: ReviewRecord],
@@ -106,7 +116,10 @@ extension Policy {
         conversation: (PRIdentifier) -> Conversation? = { _ in nil },
         handoff: (PRIdentifier) -> Handoff? = { _ in nil },
         head: (PRIdentifier) -> String? = { _ in nil },
-        tracksOwnSource: Bool = false
+        tracksOwnSource: Bool = false,
+        activity: [ActivityEvent] = [],
+        lastVisit: Date? = nil,
+        activityEmpty: ActivityEmptyState? = nil
     ) -> Dashboard {
         // Jedním průchodem na množinu: `queue` i `blocking` mluví o **frontě**, tedy o cizích PR
         // (#332), kdežto `mine` o mých. Rozřazení se proto udělá tady jednou, ne u každé karty.
@@ -135,7 +148,8 @@ extension Policy {
                 isTracked: tracksOwnSource
             ),
             drafts: draftsCard(of: pullRequests, drafts: drafts),
-            reviewers: reviewerShares(in: records, since: since)
+            reviewers: reviewerShares(in: records, since: since),
+            activity: dashboardActivity(activity, since: lastVisit, empty: activityEmpty)
         )
     }
 

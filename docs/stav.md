@@ -4561,3 +4561,53 @@ jdou **souběžně**, žádná nestojí na jiné. Milník mají proto, že rozvr
 naráz“ — je jediná věc, která tu informaci udrží napříč sessions; `Průběžné` je koš bez pořadí.
 Jediná vazba: #441 chce mít `⌘R` zakázané, dokud běží obnovení, a `AppStore.isRefreshing` v repu
 už je, takže na #442 nečeká. Nakreslené jsou #442 a #443 v sekcích 32 a 31 návrhu.
+
+### #443 — pět řádků dění na dashboardu
+
+Sekce `Dění` (#414) je dobré místo, **když se do ní jde** — jenže se do ní muselo napřed přepnout,
+aby se zjistilo, jestli je do čeho koukat: odznak v railu říká počet, ne co se stalo. Dashboard je
+jediná obrazovka, na kterou se člověk podívá, aniž by se ptal, takže na něm od #443 stojí **pět
+nejnovějších řádků** dění a cesta do celé sekce (návrh, sekce 31).
+
+**Pod oběma sloupci, přes celou šířku**, ne v pravém sloupci pod `Co teď`. Čísla jsou z mockupu
+změřená, ne odhadnutá: v pravém sloupci (456 b z `1.45fr 1fr`) se pět řádků zalomí — 42, 42, 42, 66
+a 42 bodů místo jednotných 24 — a blok vyroste na **380 b**, tedy výš než celý levý sloupec s oběma
+frontami (321). Přes celou šířku (1134 b) má blok **266 b** a každý řádek se vejde na jeden. Blok je
+u toho **poslední na obrazovce**: pořadí *karty → fronty a Co teď → dění* je pořadí otázek a minulost
+nemá vytlačit rozhodnutí.
+
+**Ukázka a rozcestník, ne druhé dění.** Sekce zůstává tím, čím je — rolovat, číst po dnech
+a dohledávat se chodí tam. Blok proto nemá vlastní pruh `Tady jsem skončil`, vlastní hlavičky dní
+ani vlastní řádek: kreslí **týž `ActivityRowView`** jako sekce, jen vyčleněný do vlastního souboru
+spolu s osou (`ActivityTimeline`). V hlavičce `ActivityFeedView` do té doby stálo, že dění blokem na
+dashboardu **není**; ukázalo se, že ta ukázka je právě to, co chybělo, a ten komentář je přepsaný
+i s důvodem.
+
+**Značku poslední návštěvy blok neposouvá** — a je to to nejcennější tvrzení celého issue, protože
+by se rozbilo potichu: kdyby ji posunul pohled na domácí záložku, vynulovalo by se nepřečtené
+a odznak v railu by zmizel, aniž bych něco přečetl. Drží to `isActivityVisible` (rail **a** domácí
+záložka), takže dashboard tou podmínkou neprojde, a testuje se to i přes klik na řádek — jediné
+místo v tom bloku, které se storu vůbec dotýká.
+
+**Rozhodnutí, která k tomu patřila:**
+
+- **Den u času** (`Policy.activityTime(of:now:carriesDay:)`). V sekci nese den hlavička bloku, tady
+  ho nemá kdo nést, takže by `v 07:58` u včerejší události tvrdilo dnešní ráno. Formát je tentýž
+  jako u `visitLabel` (`v 07:58`, `včera v 07:58`, `20. srpna v 07:58`) a rozhodnutí je **jedno** —
+  dva výpočty téhož by se rozešly právě v tom, co je vidět jeden den v roce. Relativní podobu
+  (`před 2 min`) skládá dál view, protože se v okně přepočítává sama.
+- **Blok je součástí `Dashboard`**, ne vlastní getter: view si dashboard bere jednou za překreslení,
+  takže druhý getter by znamenal druhý průchod záznamem při každém průchodu tělem.
+- **Patka je `DashboardBlock.Footer`** z #371, ne nový typ. Tvar i chování jsou totéž (text, počet
+  zbylých, sekce), takže druhá kresba patky by se s tou první rozešla v odsazení a v čáře nad ní.
+- **`celé dění →` v hlavičce je odkaz, ostatní popisky v hlavičkách bloků zůstávají popisky.** Text
+  v barvě akcentu, po kterém se nic nestane, je tatáž lež jako karta bez cíle (#371), jen menší.
+- **Prázdno je jedna věta, ale pořád čtyři různé.** Ze tří prázdných obrazovek sekce zbude důvod;
+  tlačítka (zapnout hlášení, otevřít Nastavení systému) patří tam, kam jsem přišel schválně, a cesta
+  k nim vede tím odkazem v hlavičce. Klid, ztracená historie a dvě mlčení se nesmí slít ani tady.
+- **`LazyVStack` sem nepatří** — pět řádků je strop z `Policy`, ne odhad, takže líný seznam by za
+  měřenou velikost (#361) platil tam, kde se nejhorší případ vejde na obrazovku.
+
+Testů **4024**, všechny zelené: `DashboardActivityTests` výčtem (strop, patka, nadpis, den u času,
+čtyři prázdna) a tři tvrzení ve `AppStoreFeedTests`. `DashboardFooterSeparatorTests` počítá od #443
+**čtrnáct** čar místo jedenácti — prázdný blok `Dění` přidá obrys, hlavičku a obrys.

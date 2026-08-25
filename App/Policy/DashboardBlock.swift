@@ -23,6 +23,11 @@ struct DashboardBlock: Hashable, Sendable {
     /// nakreslil — jinak se patka rozejde s kresbou a nikdo si toho nevšimne, protože obě čísla
     /// vypadají platně.
     ///
+    /// **Sdílí ji od #443 i blok `Dění`** (`DashboardActivity.footer`, `Zobrazit celé dění +37 →`).
+    /// Je to tentýž tvar i totéž chování — text, počet zbylých a sekce, do které se přepne —, takže
+    /// druhý typ by znamenal druhou kresbu patky a ta by se s touhle rozešla v odsazení a v čáře
+    /// nad ní.
+    ///
     /// **Patka není řádek**: nepočítá se do `rows`, takže se nedostane ani do klávesové navigace,
     /// ani do toho, kolik řádků blok hlásí.
     struct Footer: Hashable, Sendable {
