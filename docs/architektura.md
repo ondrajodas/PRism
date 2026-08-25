@@ -3155,6 +3155,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | View | Co dělá |
 |---|---|
 | `ContentView` | Okno: vlastní hlavička se záložkami, pod ní rail a obsah, dole stavový řádek (#180) |
+| `HeaderButton`, `HeaderButtonMetrics`, `RefreshButton` | Tlačítka v pravém koutu hlavičky (`.tbtn` z návrhu, 27 × 25). `RefreshButton` je jediné, které mění podobu podle stavu aplikace — viz *Obnovování je vidět na tlačítku* |
 | `FullSizeContentWindow` | Roztažení obsahu pod titulkovou lištu, aby hlavička mohla být vlastní (#180) — a od #245 **vypnutí systémových záložek oken** (`tabbingMode = .disallowed`), aby se `⌃Tab` nepřetahoval s AppKitem |
 | `AppAppearance`, `AppearanceApplying` | Přepnutí vzhledu celé aplikace (#278) — `NSApp.appearance`, a za protokolem, aby si na hostitele testů nesáhly testy |
 | `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit`. Od #309 `mint` — **dvojice k akcentu**: akcent je to, co se nabízí udělat nebo co běží, mint to, co se jen konstatuje (`2×`, `✓ v mém review`, `odmítnuto`). Světlá větev je **vědomá odchylka od návrhu** (`#0E8F80` → `#0C7E71`), protože hodnota z mockupu byla jediný stavový token pod AA — čísla u `Palette.mint` a v `MintTokenTests` |
@@ -3393,6 +3394,42 @@ schválně chovají jako přerušené, ne jako zrušené:
   `startAutomaticReviews`.
 - **Nic se neukládá jako doběhlé.** To platí i u zrušení (`Task.isCancelled` před zápisem) —
   zabitý běh není doběhlý běh a `čisté` by nad ním lhalo.
+
+### Obnovování je vidět na tlačítku (#442)
+
+Do #442 se o probíhajícím dotazu dozvěděl **jenom dashboard** — `DashboardTick.polling` napsal
+v pravém horním koutu `ptám se…` místo odpočtu. Ten kout je vidět jedině na domácí záložce
+v sekci `Přehled`, takže kdo byl v záložce pull requestu, neměl to kde poznat; klik na `⟳`,
+po kterém se vteřinu neděje nic, se přitom čte jako klik, který nezabral.
+
+Od #442 se místo šipky točí **`SpinningRing`** — týž prstýnek, jaký na záložce znamená běžící
+review. Čtyři věci, které z toho plynou a nejsou zjevné:
+
+- **Není to nový prstýnek, je to tentýž kus kódu.** Nekonečná animace ve SwiftUI je zakázaná
+  třída (#350: `repeatForever` si vyžádá průchod při každém obtažení obrazovky a přes
+  `NSHostingView.layout()` rozvrhne celé okno — 99 % CPU hlavního vlákna na nečinném okně).
+  Druhá kresba téhož by tu past otevřela znovu **a** znamenala by, že se „pracuje se“ čte
+  v jednom okně dvěma tvary. Výchozí `SpinningRing` je navíc `.spin` z návrhu 1 : 1 (11 bodů,
+  2 body obtažení), takže si tlačítko o vlastní rozměr říkat nemusí.
+- **Rozhoduje `AppStore.isRefreshing`, ne to, kdo dotaz spustil.** Prstýnek se točí i při
+  automatickém tiku; kdyby se točil jen po kliknutí, znamenal by „tohle jsi spustil ty“, což by
+  většinu času neplatilo.
+- **Podmínka je na jednom místě** (`Policy.refreshControl`) a čte ji **trojice**: tlačítko
+  (podoba, `disabled`, popisek pro čtečku), `AppStore.refresh()` (pojistka proti druhému dotazu)
+  a **#441 si odsud vezme povolení pro `⌘R`**. Samotné zašedlé tlačítko by nestačilo — tutéž akci nabízí paleta ⌘K
+  i `Zkusit znovu` v prázdném stavu seznamu, takže guard patří tam, kam všechny tři cesty ústí.
+  `PollingService.refresh()` guard **nemá**: smyčka si ho volá sama a je sekvenční, kdežto
+  „ruční obnovení“ je `AppStore.refresh()`.
+- **Rozměr se nesmí hnout.** Prstýnek má jiný tvar i jinou vnitřní velikost než šipka, takže bez
+  pevného rámce by hlavička poskočila při každém tiku. Číslo je jedno (`HeaderButtonMetrics`,
+  27 × 25 z `.tbtn`) a hlídá ho tvrzení nad `fittingSize` obou stavů.
+
+**Zašedlé tlačítko tady nemá vedle sebe větu s důvodem**, na rozdíl od vypnuté brány odesílání
+(#392). Je to vědomý rozdíl: důvod je vidět **v tom samém tlačítku** (točí se, tedy se ptáme)
+a trvá vteřiny, ne dokud si někdo nezmění nastavení.
+
+**Nápovědu se zkratkou** (`Obnovit seznam (⌘R)`, jak ji kreslí návrh) přidá až #441 — do té doby
+by uváděla zkratku, která v okně není.
 
 ### Odznak v railu (#366)
 

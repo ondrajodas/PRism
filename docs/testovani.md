@@ -1007,6 +1007,28 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   překreslení bez okna na obrazovce nedrží, takže by z nich byl test padající nad správným kódem)
   a **jiná šířka tahu** (musí si vyžádat rozvržení, protože cesta je o půl tahu zúžená dovnitř).
   Obojí ověřeno vložením regrese — bez pozorovatele, resp. bez `needsLayout`, padnou.
+- **Tlačítko obnovení (#442)** — tři sady, protože jedno tvrzení tuhle změnu nepokryje.
+  `RefreshControlTests` je vyčerpávající výčet nad jedním `Bool`em a hlídá hlavně to, co se nesmí
+  slít: **prstýnek a zákaz kliku jdou vždycky spolu** (točící se tlačítko, které pustí druhý dotaz,
+  i mrtvé tlačítko bez vysvětlení jsou obojí horší než původní stav) a **popisek pro čtečku
+  obrazovky se v obou stavech liší** — jinak je to pro VoiceOver pořád stejné tlačítko `Obnovit`
+  a celá změna se pro něj nestala.
+
+  `RefreshButtonTests` hostuje `RefreshButton` a ptá se na `SpinningRingView` v hierarchii —
+  tedy na **ten** prstýnek z pruhu záložek, ne na „něco, co se točí“; nový prstýnek nakreslený
+  ve SwiftUI by tím propadl. K tomu obě půlky: v klidu tam prstýnek **není** (bez toho tvrzení
+  by prošla verze, která ho nakreslí a nechá tam navždycky) a `fittingSize` je v obou stavech
+  totožná a rovna 27 × 25 — hlavička nemá poskočit tím, že se aplikace ptá.
+
+  **Zákaz kliku se z hostovaného view přečíst nedá** a je to mez harnessu, ne opomenutí:
+  accessibility tree se v okně mimo obrazovku nenaplní (změřeno u odpočtu i u railu), takže na
+  `AXEnabled` není kde se zeptat, a `.disabled(true)` se u tlačítka s vlastními barvami
+  neprojeví ani v bitmapě. Tvrdí se proto na vrstvě, kde by druhý klik doopravdy něco stál —
+  `AppStoreRefreshTests`: druhé obnovení se pouští **zevnitř** prvního (`FakeGitHubGateway
+  .duringSearch`, protože jindy stav „právě se ptáme“ neexistuje) a gateway smí dostat jen jeden
+  dotaz. Vedle toho tvrzení opačným směrem — **po doběhnutí prvního dotazu druhý projít musí**;
+  zaseknutý příznak by znamenal tlačítko zakázané navždycky, tedy horší stav než ten, který se
+  opravoval.
 - **Cyklení pruhem `⌃Tab` (#245)** — dvě sady. V `Policy` **vyčerpávající výčet** nad `openTabs`:
   oba směry z každé záložky pruhu, obě obtočení (za poslední je domácí, před domácí poslední),
   jediná záložka nevede nikam a aktivní záložka mimo pruh taky ne. K nim invariant „krok tam

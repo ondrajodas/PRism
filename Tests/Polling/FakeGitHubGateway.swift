@@ -120,11 +120,21 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return viewer
     }
 
+    /// Co udělat **uvnitř** běžícího dotazu, ještě než se vrátí odpověď (#442).
+    ///
+    /// Bez toho se nedá zvenčí sáhnout na stav „právě se ptáme“: `isRefreshing` je pravdivé jen po
+    /// dobu, kdy `searchPullRequests` neskončil, takže test, který chce ověřit, že druhé obnovení
+    /// v té chvíli neprojde, ho musí spustit odsud. Dotaz se přitom **nedrží** — hook doběhne
+    /// a odpověď se vrátí normálně; blokující fake by z čekání udělal další zdroj falešně
+    /// červeného `main`u.
+    var duringSearch: (@Sendable () async -> Void)?
+
     func searchPullRequests(query: String) async throws -> [PullRequestSummary] {
         let index: Int = lock.withLock {
             asked.append(query)
             return asked.count - 1
         }
+        await duringSearch?()
         return try (outcomes[min(index, outcomes.count - 1)]).get()
     }
 
