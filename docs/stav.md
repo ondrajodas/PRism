@@ -4187,3 +4187,34 @@ Na obrazovce se nemění nic: řádek je nakreslený od #414, jen se objeví dř
 (38 nových). Vloženými regresemi ověřené dvě věci: datování okamžikem zjištění shodí `Řádek nese datum
 commitu, ne okamžik zjištění` (a s ním restartový test), dotaz po jednotlivých PR shodí `Za tik jde
 jeden dotaz, ne dotaz na každé PR` s hláškou `(gateway.headRequests.count → 3) == 1`.
+
+### #361 — desáté kolo: líný seznam měl dva zapisovatele, teď má jeden (otevřené)
+
+**Poprvé se pracovalo z celého zásobníku hořícího kola, ne z re-armu.** Devátý záchvat
+(2026-08-25, tab `Konverzace`, 58 s nad 0,9 s CPU) měl `ConversationRow.id` 7 109 970× a v `sample`u
+dvě střídající se transakce: aktualizaci grafu (`LazySubviewPlacements.updateValue`) a **graf
+mutation** `LazyLayoutCacheItem.AllItemsPhaseMutation` → `LazyLayoutViewCache.updateItemPhases()` →
+`AG::Graph::value_set` → `propagate_dirty`. Ten `value_set` je **jediný externí zápis v celém
+vzorku** — tedy ten `_External -> State, changed`, který instrumentace vypsala jako změněný vstup.
+
+**Co se z toho dá opravit:** druhý zapisovatel do stavu líného seznamu. Pružný rámec nad
+`ScrollView`em předává dolů všechny dotazy, kterými se stack ptá na pružnost dítěte (`nil`, `0`,
+`∞`), a `LazyVStack` na každý z nich odpovídá funkcí `measureEstimates(**updatingPosition**:…)`,
+tedy zápisem do téže měnitelné krabice, ze které kreslí `placeSubviews`. Naměřeno **33 dotazů** na
+jedno rozvržení, z toho jen 4 se skutečnou velikostí; se změřeným rozměrem (`fillingSlot()`) zbydou
+**4**. Ta řada je v hořícím kole doopravdy: 1524 z 13 479 vzorků v devátém záchvatu, 4274 z 19 930
+v sedmém — v obou tabech, takže to není vlastnost jedné obrazovky.
+
+**Zamítnuto měřením, ne úvahou:** vyplnit pružnému rámci `idealWidth`/`idealHeight` (dotaz `nil`
+zmizí, průzkum `0`/`∞` zůstane celý — 29 dotazů proti 33), a chybějící pojmenovaný prostor
+u `frame(in: .named(DiffView.contentSpace))` v úryvku na ose (s prostorem i bez něj **přesně** 2000
+výpočtů hodnoty a 0,072 s CPU, tedy k nerozeznání).
+
+**#361 zůstává otevřené a je to poctivé, ne opatrnost.** Kolo se v harnessu nepovedlo vyrobit ani
+podesáté (nečinné okno 0,000 s CPU ze 4 s i s 300 zalomenými řádky různých výšek), takže tvrdit
+„už to netuhne“ nelze. Tvrdí se **vazba**: `LazyIdealSizeTests` říká, že se ten druhý zapisovatel
+nemá kde vzít, a je to ověřené vloženou regresí. Ověření v provozu je používat aplikaci s
+`./bin/run.sh --diagnose` a koukat do `diagnostics.log`.
+
+Na obrazovce se nemění nic (změřeno A/B na běžící slotové aplikaci: diff, osa konverzace, strom
+souborů i `Dění` mají stejné rozvržení před i po). Testů **3922** (3 nové).
